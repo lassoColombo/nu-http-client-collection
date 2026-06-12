@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://email.us-east-1.amazonaws.com" "http://email.us-east-2.amazonaws.com" "http://email.us-west-1.amazonaws.com" "http://email.us-west-2.amazonaws.com" "http://email.us-gov-west-1.amazonaws.com" "http://email.us-gov-east-1.amazonaws.com" "http://email.ca-central-1.amazonaws.com" "http://email.eu-north-1.amazonaws.com" "http://email.eu-west-1.amazonaws.com" "http://email.eu-west-2.amazonaws.com" "http://email.eu-west-3.amazonaws.com" "http://email.eu-central-1.amazonaws.com" "http://email.eu-south-1.amazonaws.com" "http://email.af-south-1.amazonaws.com" "http://email.ap-northeast-1.amazonaws.com" "http://email.ap-northeast-2.amazonaws.com" "http://email.ap-northeast-3.amazonaws.com" "http://email.ap-southeast-1.amazonaws.com" "http://email.ap-southeast-2.amazonaws.com" "http://email.ap-east-1.amazonaws.com" "http://email.ap-south-1.amazonaws.com" "http://email.sa-east-1.amazonaws.com" "http://email.me-south-1.amazonaws.com" "https://email.us-east-1.amazonaws.com" "https://email.us-east-2.amazonaws.com" "https://email.us-west-1.amazonaws.com" "https://email.us-west-2.amazonaws.com" "https://email.us-gov-west-1.amazonaws.com" "https://email.us-gov-east-1.amazonaws.com" "https://email.ca-central-1.amazonaws.com" "https://email.eu-north-1.amazonaws.com" "https://email.eu-west-1.amazonaws.com" "https://email.eu-west-2.amazonaws.com" "https://email.eu-west-3.amazonaws.com" "https://email.eu-central-1.amazonaws.com" "https://email.eu-south-1.amazonaws.com" "https://email.af-south-1.amazonaws.com" "https://email.ap-northeast-1.amazonaws.com" "https://email.ap-northeast-2.amazonaws.com" "https://email.ap-northeast-3.amazonaws.com" "https://email.ap-southeast-1.amazonaws.com" "https://email.ap-southeast-2.amazonaws.com" "https://email.ap-east-1.amazonaws.com" "https://email.ap-south-1.amazonaws.com" "https://email.sa-east-1.amazonaws.com" "https://email.me-south-1.amazonaws.com" "http://email.cn-north-1.amazonaws.com.cn" "http://email.cn-northwest-1.amazonaws.com.cn" "https://email.cn-north-1.amazonaws.com.cn" "https://email.cn-northwest-1.amazonaws.com.cn"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -815,7 +814,7 @@ export def "email-deliverability-dashboard PutDeliverabilityDashboardOption" [
   --X-Amz-Security-Token: string
   --X-Amz-Signature: string
   --X-Amz-SignedHeaders: string
-  --DashboardEnabled: string@bool-completer # Specifies whether to enable the Deliverability dashboard for your Amazon Pinpoint account. To enable the dashboard, set this value to <code>true</code>.
+  --DashboardEnabled: oneof<nothing, bool> # Specifies whether to enable the Deliverability dashboard for your Amazon Pinpoint account. To enable the dashboard, set this value to <code>true</code>.
   --SubscribedDomains: list # An object that contains information about the Deliverability dashboard subscription for a verified domain that you use to send email and currently has an active Deliverability dashboard subscription. If a Deliverability dashboard subscription is active for a domain, you gain access to reputation, inbox placement, and other metrics for the domain. — item shape: {Domain?: any, SubscriptionStartDate?: any, InboxPlacementTrackingOption?: any}
 ]: any -> record {
   let input = $in
@@ -1047,7 +1046,7 @@ export def "email-account-dedicated-ips-warmup PutAccountDedicatedIpWarmupAttrib
   --X-Amz-Security-Token: string
   --X-Amz-Signature: string
   --X-Amz-SignedHeaders: string
-  --AutoWarmupEnabled: string@bool-completer # Enables or disables the automatic warm-up feature for dedicated IP addresses that are associated with your Amazon Pinpoint account in the current AWS Region. Set to <code>true</code> to enable the automatic warm-up feature, or set to <code>false</code> to disable it.
+  --AutoWarmupEnabled: oneof<nothing, bool> # Enables or disables the automatic warm-up feature for dedicated IP addresses that are associated with your Amazon Pinpoint account in the current AWS Region. Set to <code>true</code> to enable the automatic warm-up feature, or set to <code>false</code> to disable it.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1081,7 +1080,7 @@ export def "email-account-sending PutAccountSendingAttributes" [
   --X-Amz-Security-Token: string
   --X-Amz-Signature: string
   --X-Amz-SignedHeaders: string
-  --SendingEnabled: string@bool-completer # <p>Enables or disables your account's ability to send email. Set to <code>true</code> to enable email sending, or set to <code>false</code> to disable email sending.</p> <note> <p>If AWS paused your account's ability to send email, you can't use this operation to resume your account's ability to send email.</p> </note>
+  --SendingEnabled: oneof<nothing, bool> # <p>Enables or disables your account's ability to send email. Set to <code>true</code> to enable email sending, or set to <code>false</code> to disable email sending.</p> <note> <p>If AWS paused your account's ability to send email, you can't use this operation to resume your account's ability to send email.</p> </note>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1152,7 +1151,7 @@ export def "email-configuration-sets-reputation-options PutConfigurationSetReput
   --X-Amz-Security-Token: string
   --X-Amz-Signature: string
   --X-Amz-SignedHeaders: string
-  --ReputationMetricsEnabled: string@bool-completer # If <code>true</code>, tracking of reputation metrics is enabled for the configuration set. If <code>false</code>, tracking of reputation metrics is disabled for the configuration set.
+  --ReputationMetricsEnabled: oneof<nothing, bool> # If <code>true</code>, tracking of reputation metrics is enabled for the configuration set. If <code>false</code>, tracking of reputation metrics is disabled for the configuration set.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1187,7 +1186,7 @@ export def "email-configuration-sets-sending PutConfigurationSetSendingOptions" 
   --X-Amz-Security-Token: string
   --X-Amz-Signature: string
   --X-Amz-SignedHeaders: string
-  --SendingEnabled: string@bool-completer # If <code>true</code>, email sending is enabled for the configuration set. If <code>false</code>, email sending is disabled for the configuration set.
+  --SendingEnabled: oneof<nothing, bool> # If <code>true</code>, email sending is enabled for the configuration set. If <code>false</code>, email sending is disabled for the configuration set.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1327,7 +1326,7 @@ export def "email-identities-dkim PutEmailIdentityDkimAttributes" [
   --X-Amz-Security-Token: string
   --X-Amz-Signature: string
   --X-Amz-SignedHeaders: string
-  --SigningEnabled: string@bool-completer # <p>Sets the DKIM signing configuration for the identity.</p> <p>When you set this value <code>true</code>, then the messages that Amazon Pinpoint sends from the identity are DKIM-signed. When you set this value to <code>false</code>, then the messages that Amazon Pinpoint sends from the identity aren't DKIM-signed.</p>
+  --SigningEnabled: oneof<nothing, bool> # <p>Sets the DKIM signing configuration for the identity.</p> <p>When you set this value <code>true</code>, then the messages that Amazon Pinpoint sends from the identity are DKIM-signed. When you set this value to <code>false</code>, then the messages that Amazon Pinpoint sends from the identity aren't DKIM-signed.</p>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1362,7 +1361,7 @@ export def "email-identities-feedback PutEmailIdentityFeedbackAttributes" [
   --X-Amz-Security-Token: string
   --X-Amz-Signature: string
   --X-Amz-SignedHeaders: string
-  --EmailForwardingEnabled: string@bool-completer # <p>Sets the feedback forwarding configuration for the identity.</p> <p>If the value is <code>true</code>, Amazon Pinpoint sends you email notifications when bounce or complaint events occur. Amazon Pinpoint sends this notification to the address that you specified in the Return-Path header of the original email.</p> <p>When you set this value to <code>false</code>, Amazon Pinpoint sends notifications through other mechanisms, such as by notifying an Amazon SNS topic or another event destination. You're required to have a method of tracking bounces and complaints. If you haven't set up another mechanism for receiving bounce or complaint notifications, Amazon Pinpoint sends an email notification when these events occur (even if this setting is disabled).</p>
+  --EmailForwardingEnabled: oneof<nothing, bool> # <p>Sets the feedback forwarding configuration for the identity.</p> <p>If the value is <code>true</code>, Amazon Pinpoint sends you email notifications when bounce or complaint events occur. Amazon Pinpoint sends this notification to the address that you specified in the Return-Path header of the original email.</p> <p>When you set this value to <code>false</code>, Amazon Pinpoint sends notifications through other mechanisms, such as by notifying an Amazon SNS topic or another event destination. You're required to have a method of tracking bounces and complaints. If you haven't set up another mechanism for receiving bounce or complaint notifications, Amazon Pinpoint sends an email notification when these events occur (even if this setting is disabled).</p>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

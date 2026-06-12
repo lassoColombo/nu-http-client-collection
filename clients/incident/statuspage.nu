@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.statuspage.io/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -1006,7 +1005,7 @@ export def "pages-subscribers-unsubscribe post" [
   subscribers: string # The array of subscriber codes to unsubscribe (limited to 100), or "all" to unsubscribe all subscribers if the number of subscribers is less than 100.
   --type: string@type-completer # If this is present, only unsubscribe subscribers of this type.
   --state: string@state-completer # If this is present, only unsubscribe subscribers in this state. Specify state "all" to unsubscribe subscribers in any states. (default: active)
-  --skip-unsubscription-notification: string@bool-completer # If skip_unsubscription_notification is true, the subscribers do not receive any notifications when they are unsubscribed.
+  --skip-unsubscription-notification: oneof<nothing, bool> # If skip_unsubscription_notification is true, the subscribers do not receive any notifications when they are unsubscribed.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1212,7 +1211,7 @@ export def "pages-subscribers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --skip-unsubscription-notification: string@bool-completer # If skip_unsubscription_notification is true, the subscriber does not receive any notifications when they are unsubscribed.
+  --skip-unsubscription-notification: oneof<nothing, bool> # If skip_unsubscription_notification is true, the subscriber does not receive any notifications when they are unsubscribed.
 ]: nothing -> record<id: string, skip_confirmation_notification: bool, mode: string, email: string, endpoint: string, phone_number: string, phone_country: string, display_phone_number: string, obfuscated_channel_name: string, workspace_name: string, quarantined_at: string, purge_at: string, components: string, page_access_user_id: string, created_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

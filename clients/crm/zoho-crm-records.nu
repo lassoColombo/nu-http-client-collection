@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://zohoapis.com/crm/v8" "https://zohoapis.eu/crm/v8" "https://zohoapis.in/crm/v8" "https://zohoapis.cn/crm/v8" "https://zohoapis.au/crm/v8"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -117,7 +116,7 @@ export def "api list" [
   --sort-order: string@sort-order-completer # To sort the available list of records in either ascending or descending order
   --sort-by: string@sort-by-completer # To sort the records based on the fields id, Created_Time, and Modified_Time. The default value is 'id'
   --converted: string@converted-completer # To get the list of converted records
-  --include-child: string@bool-completer # To include records from the child territories
+  --include-child: oneof<nothing, bool> # To include records from the child territories
 ]: nothing -> record<data: table<id: string, Owner: record, Created_Time: string, Modified_Time: string, Created_By: record, Modified_By: record>, info: record<page: int, call: bool, per_page: int, count: int, more_records: bool, email: bool, sort_by: string, sort_order: string, next_page_token: string, previous_page_token: string, page_token_expiry: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

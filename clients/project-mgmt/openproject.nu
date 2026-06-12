@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://community.openproject.org"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -213,7 +212,7 @@ export def "activities activity-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --comment: record # shape: {raw?: string}
-  --internal: string@bool-completer # Determines whether this comment is internal. This is only available to users with `add_internal_comments` permission. It defaults to `false`, if unset. (default: false)
+  --internal: oneof<nothing, bool> # Determines whether this comment is internal. This is only available to users with `add_internal_comments` permission. It defaults to `false`, if unset. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -871,7 +870,7 @@ export def "days-week day-by-day-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   type: string@type-completer-2
-  --working: string@bool-completer # `true` for a working day. `false` for a weekend day.
+  --working: oneof<nothing, bool> # `true` for a working day. `false` for a weekend day.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1065,7 +1064,7 @@ export def "examples result" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --groupBy: string # The column to group by. Note: Aggregation is as of now only supported by the work package collection. You can pass any column name as returned by the [queries](https://www.openproject.org/docs/api/endpoints/queries/) endpoint. (e.g. status)
-  --showSums: string@bool-completer # default: false, e.g. true
+  --showSums: oneof<nothing, bool> # default: false, e.g. true
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1133,7 +1132,7 @@ export def "file-links-open link" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --location: string@bool-completer # Boolean flag indicating, if the file should be opened directly or rather the directory location. (e.g. true)
+  --location: oneof<nothing, bool> # Boolean flag indicating, if the file should be opened directly or rather the directory location. (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1523,8 +1522,8 @@ export def "meetings meeting" [
   --duration: string # The meeting duration as an ISO 8601 duration (e.g. `PT1H` for 1 hour, `PT1H30M` for 1.5 hours).
   --state: string@state-completer # The current state of the meeting. Possible values:  - *open* - *draft* - *in_progress* - *cancelled* - *closed*
   --sharing: string@sharing-completer # How the meeting template is shared. Only applicable for one-time templates.
-  --template: string@bool-completer # Whether this meeting is a template.
-  --notify: string@bool-completer # Whether to send email notifications to participants.
+  --template: oneof<nothing, bool> # Whether this meeting is a template.
+  --notify: oneof<nothing, bool> # Whether to send email notifications to participants.
   --lockVersion: int # The version of the item as used for optimistic locking.  Required for PATCH operations to detect concurrent modifications.
   --links: record # shape: {project?: any}
 ]: any -> any {
@@ -1581,8 +1580,8 @@ export def "meetings meeting-by-id-1" [
   --duration: string # The meeting duration as an ISO 8601 duration (e.g. `PT1H` for 1 hour, `PT1H30M` for 1.5 hours).
   --state: string@state-completer # The current state of the meeting. Possible values:  - *open* - *draft* - *in_progress* - *cancelled* - *closed*
   --sharing: string@sharing-completer # How the meeting template is shared. Only applicable for one-time templates.
-  --template: string@bool-completer # Whether this meeting is a template.
-  --notify: string@bool-completer # Whether to send email notifications to participants.
+  --template: oneof<nothing, bool> # Whether this meeting is a template.
+  --notify: oneof<nothing, bool> # Whether to send email notifications to participants.
   --lockVersion: int # The version of the item as used for optimistic locking.  Required for PATCH operations to detect concurrent modifications.
   --links: record # shape: {project?: any}
 ]: any -> any {
@@ -2240,7 +2239,7 @@ export def "my-preferences UserPreferences" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoHidePopups: string@bool-completer
+  --autoHidePopups: oneof<nothing, bool>
   --timeZone: string
 ]: any -> any {
   let input = $in
@@ -2770,10 +2769,10 @@ export def "portfolios Portfolio-by-id" [
   --body-id: int # Portfolios' id
   --identifier: string
   --name: string
-  --active: string@bool-completer # Indicates whether the portfolio is currently active or already archived
-  --favorited: string@bool-completer # Indicates whether the portfolio is favorited by the current user
+  --active: oneof<nothing, bool> # Indicates whether the portfolio is currently active or already archived
+  --favorited: oneof<nothing, bool> # Indicates whether the portfolio is favorited by the current user
   --statusExplanation: any
-  --public: string@bool-completer # Indicates whether the portfolio is accessible for everybody
+  --public: oneof<nothing, bool> # Indicates whether the portfolio is accessible for everybody
   --description: record # e.g. {format: markdown, raw: I am formatted!, html: I am formatted!} — shape: {raw?: string}
   --createdAt: string # Time of creation. Can be writable by admins with the `apiv3_write_readonly_attributes` setting enabled. (format: date-time)
   --updatedAt: string # Time of the most recent change to the portfolio (format: date-time)
@@ -3036,10 +3035,10 @@ export def "programs Program-by-id" [
   --body-id: int # Programs' id
   --identifier: string
   --name: string
-  --active: string@bool-completer # Indicates whether the program is currently active or already archived
-  --favorited: string@bool-completer # Indicates whether the program is favorited by the current user
+  --active: oneof<nothing, bool> # Indicates whether the program is currently active or already archived
+  --favorited: oneof<nothing, bool> # Indicates whether the program is favorited by the current user
   --statusExplanation: any
-  --public: string@bool-completer # Indicates whether the program is accessible for everybody
+  --public: oneof<nothing, bool> # Indicates whether the program is accessible for everybody
   --description: record # e.g. {format: markdown, raw: I am formatted!, html: I am formatted!} — shape: {raw?: string}
   --createdAt: string # Time of creation. Can be writable by admins with the `apiv3_write_readonly_attributes` setting enabled. (format: date-time)
   --updatedAt: string # Time of the most recent change to the program (format: date-time)
@@ -3278,10 +3277,10 @@ export def "projects project" [
   --id: int # Projects' id
   --identifier: string
   --name: string
-  --active: string@bool-completer # Indicates whether the project is currently active or already archived
-  --favorited: string@bool-completer # Indicates whether the project is favorited by the current user
+  --active: oneof<nothing, bool> # Indicates whether the project is currently active or already archived
+  --favorited: oneof<nothing, bool> # Indicates whether the project is favorited by the current user
   --statusExplanation: any
-  --public: string@bool-completer # Indicates whether the project is accessible for everybody
+  --public: oneof<nothing, bool> # Indicates whether the project is accessible for everybody
   --description: record # e.g. {format: markdown, raw: I am formatted!, html: I am formatted!} — shape: {raw?: string}
   --createdAt: string # Time of creation. Can be writable by admins with the `apiv3_write_readonly_attributes` setting enabled. (format: date-time)
   --updatedAt: string # Time of the most recent change to the project (format: date-time)
@@ -3406,10 +3405,10 @@ export def "projects Project-by-id-1" [
   --body-id: int # Projects' id
   --identifier: string
   --name: string
-  --active: string@bool-completer # Indicates whether the project is currently active or already archived
-  --favorited: string@bool-completer # Indicates whether the project is favorited by the current user
+  --active: oneof<nothing, bool> # Indicates whether the project is currently active or already archived
+  --favorited: oneof<nothing, bool> # Indicates whether the project is favorited by the current user
   --statusExplanation: any
-  --public: string@bool-completer # Indicates whether the project is accessible for everybody
+  --public: oneof<nothing, bool> # Indicates whether the project is accessible for everybody
   --description: record # e.g. {format: markdown, raw: I am formatted!, html: I am formatted!} — shape: {raw?: string}
   --createdAt: string # Time of creation. Can be writable by admins with the `apiv3_write_readonly_attributes` setting enabled. (format: date-time)
   --updatedAt: string # Time of the most recent change to the project (format: date-time)
@@ -3583,10 +3582,10 @@ export def "projects-queries-default project" [
   --pageSize: int # Number of elements to display per page for the queries' result collection of work packages. (e.g. 25)
   --sortBy: string # JSON specifying sort criteria. The sort criteria is applied to the query's result collection of work packages overriding the query's persisted sort criteria. (default: [["id", "asc"]], e.g. [["status", "asc"]])
   --groupBy: string # The column to group by. The grouping criteria is applied to the to the query's result collection of work packages overriding the query's persisted group criteria. (e.g. status)
-  --showSums: string@bool-completer # Indicates whether properties should be summed up if they support it. The showSums parameter is applied to the to the query's result collection of work packages overriding the query's persisted sums property. (default: false, e.g. true)
+  --showSums: oneof<nothing, bool> # Indicates whether properties should be summed up if they support it. The showSums parameter is applied to the to the query's result collection of work packages overriding the query's persisted sums property. (default: false, e.g. true)
   --timestamps: string # Indicates the timestamps to filter by when showing changed attributes on work packages. Values can be either ISO8601 dates, ISO8601 durations and the following relative date keywords: "oneDayAgo@HH:MM+HH:MM", "lastWorkingDay@HH:MM+HH:MM", "oneWeekAgo@HH:MM+HH:MM", "oneMonthAgo@HH:MM+HH:MM". The first "HH:MM" part represents the zero paded hours and minutes. The last "+HH:MM" part represents the timezone offset from UTC associated with the time. Values older than 1 day are accepted only with valid Enterprise Token available.  (default: PT0S, e.g. 2023-01-01,P-1Y,PT0S,lastWorkingDay@12:00)
-  --timelineVisible: string@bool-completer # Indicates whether the timeline should be shown. (default: false, e.g. true)
-  --showHierarchies: string@bool-completer # Indicates whether the hierarchy mode should be enabled. (default: true, e.g. true)
+  --timelineVisible: oneof<nothing, bool> # Indicates whether the timeline should be shown. (default: false, e.g. true)
+  --showHierarchies: oneof<nothing, bool> # Indicates whether the hierarchy mode should be enabled. (default: true, e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3659,7 +3658,7 @@ export def "projects-work-packages Collection" [
   --filters: string # JSON specifying filter conditions. Accepts the same format as returned by the [queries](https://www.openproject.org/docs/api/endpoints/queries/) endpoint. If no filter is to be applied, the client should send an empty array (`[]`). (default: [{ "status_id": { "operator": "o", "values": null }}], e.g. [{ "type_id": { "operator": "=", "values": ['1', '2'] }}])
   --sortBy: string # JSON specifying sort criteria. Accepts the same format as returned by the [queries](https://www.openproject.org/docs/api/endpoints/queries/) endpoint. (default: [["id", "asc"]], e.g. [["status", "asc"]])
   --groupBy: string # The column to group by. (e.g. status)
-  --showSums: string@bool-completer # Indicates whether properties should be summed up if they support it. (default: false, e.g. true)
+  --showSums: oneof<nothing, bool> # Indicates whether properties should be summed up if they support it. (default: false, e.g. true)
   --select: string # Comma separated list of properties to include. (e.g. total,elements/subject,elements/id,self)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3685,11 +3684,11 @@ export def "projects-work-packages Package" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notify: string@bool-completer # Indicates whether change notifications (e.g. via E-Mail) should be sent. Note that this controls notifications for all users interested in changes to the work package (e.g. watchers, author and assignee), not just the current user. (default: true, e.g. false)
+  --notify: oneof<nothing, bool> # Indicates whether change notifications (e.g. via E-Mail) should be sent. Note that this controls notifications for all users interested in changes to the work package (e.g. watchers, author and assignee), not just the current user. (default: true, e.g. false)
   subject: string # Work package subject
   --description: any
-  --scheduleManually: string@bool-completer # Uses manual scheduling mode when true (default). Uses automatic scheduling mode when false. Can be automatic only when predecessors or children are present.
-  --readonly: string@bool-completer # If true, the work package is in a readonly status so with the exception of the status, no other property can be altered.
+  --scheduleManually: oneof<nothing, bool> # Uses manual scheduling mode when true (default). Uses automatic scheduling mode when false. Can be automatic only when predecessors or children are present.
+  --readonly: oneof<nothing, bool> # If true, the work package is in a readonly status so with the exception of the status, no other property can be altered.
   --startDate: string # Scheduled beginning of a work package (nullable, format: date)
   --dueDate: string # Scheduled end of a work package (nullable, format: date)
   --date: string # Date on which a milestone is achieved (nullable, format: date)
@@ -3727,12 +3726,12 @@ export def "projects-work-packages-form project" [
   --allow-errors(-e) # Return full response without error handling
   --subject: string # Work package subject
   --description: any
-  --scheduleManually: string@bool-completer # Uses manual scheduling mode when true (default). Uses automatic scheduling mode when false. Can be automatic only when predecessors or children are present.
+  --scheduleManually: oneof<nothing, bool> # Uses manual scheduling mode when true (default). Uses automatic scheduling mode when false. Can be automatic only when predecessors or children are present.
   --startDate: string # Scheduled beginning of a work package (nullable, format: date)
   --dueDate: string # Scheduled end of a work package (nullable, format: date)
   --estimatedTime: string # Time a work package likely needs to be completed excluding its descendants (nullable, format: duration)
   --duration: string # The amount of time in hours the work package needs to be completed. This value must be bigger or equal to `P1D`, and any the value will get floored to the nearest day.  The duration has no effect, unless either a start date or a due date is set.  Not available for milestone type of work packages. (nullable, format: duration)
-  --ignoreNonWorkingDays: string@bool-completer # When scheduling, whether or not to ignore the non working days being defined. A work package with the flag set to true will be allowed to be scheduled to a non working day.
+  --ignoreNonWorkingDays: oneof<nothing, bool> # When scheduling, whether or not to ignore the non working days being defined. A work package with the flag set to true will be allowed to be scheduled to a non working day.
   --links: record # shape: {category?: any, type?: any, priority?: any, project?: any, status?: any, responsible?: any, assignee?: any, version?: any, parent?: any}
   --meta: record # Meta information for the work package request — shape: {validateCustomFields?: bool}
 ]: any -> record<_type: string, _embedded: record<payload: record<subject: string, description: record, scheduleManually: bool, startDate: string, dueDate: string, estimatedTime: string, duration: string, ignoreNonWorkingDays: bool, _links: record, _meta: record>, schema: record<_type: string, _dependencies: list, _attributeGroups: list, lockVersion: record, id: record, subject: record, description: record, duration: record, scheduleManually: record, ignoreNonWorkingDays: record, startDate: record, dueDate: record, derivedStartDate: record, derivedDueDate: record, estimatedTime: record, derivedEstimatedTime: record, remainingTime: record, derivedRemainingTime: record, percentageDone: record, derivedPercentageDone: record, readonly: record, createdAt: record, updatedAt: record, author: record, position: record, project: record, projectPhase: record, projectPhaseDefinition: record, parent: record, sprint: record, storyPoints: record, assignee: record, responsible: record, type: record, status: record, category: record, version: record, priority: record, _links: record>, validationErrors: record>, _links: record<self: record<href: string, title: string, templated: bool, method: string, payload: record, identifier: string, type: string>, validate: record<href: string, title: string, templated: bool, method: string, payload: record, identifier: string, type: string>, previewMarkup: record<href: string, title: string, templated: bool, method: string, payload: record, identifier: string, type: string>, customFields: record<href: string, title: string, templated: bool, method: string, payload: record, identifier: string, type: string>, configureForm: record<href: string, title: string, templated: bool, method: string, payload: record, identifier: string, type: string>>> {
@@ -4035,11 +4034,11 @@ export def "queries-default query" [
   --pageSize: int # Number of elements to display per page for the queries' result collection of work packages. (e.g. 25)
   --sortBy: string # JSON specifying sort criteria. The sort criteria is applied to the query's result collection of work packages overriding the query's persisted sort criteria. (default: [["id", "asc"]], e.g. [["status", "asc"]])
   --groupBy: string # The column to group by. The grouping criteria is applied to the to the query's result collection of work packages overriding the query's persisted group criteria. (e.g. status)
-  --showSums: string@bool-completer # Indicates whether properties should be summed up if they support it. The showSums parameter is applied to the to the query's result collection of work packages overriding the query's persisted sums property. (default: false, e.g. true)
+  --showSums: oneof<nothing, bool> # Indicates whether properties should be summed up if they support it. The showSums parameter is applied to the to the query's result collection of work packages overriding the query's persisted sums property. (default: false, e.g. true)
   --timestamps: string # Indicates the timestamps to filter by when showing changed attributes on work packages. Values can be either ISO8601 dates, ISO8601 durations and the following relative date keywords: "oneDayAgo@HH:MM+HH:MM", "lastWorkingDay@HH:MM+HH:MM", "oneWeekAgo@HH:MM+HH:MM", "oneMonthAgo@HH:MM+HH:MM". The first "HH:MM" part represents the zero paded hours and minutes. The last "+HH:MM" part represents the timezone offset from UTC associated with the time, the offset can be positive or negative e.g."oneDayAgo@01:00+01:00", "oneDayAgo@01:00-01:00". Values older than 1 day are accepted only with valid Enterprise Token available.  (default: PT0S, e.g. 2023-01-01,P-1Y,PT0S,lastWorkingDay@12:00)
-  --timelineVisible: string@bool-completer # Indicates whether the timeline should be shown. (default: false, e.g. true)
+  --timelineVisible: oneof<nothing, bool> # Indicates whether the timeline should be shown. (default: false, e.g. true)
   --timelineZoomLevel: string # Indicates in what zoom level the timeline should be shown. Valid values are  `days`, `weeks`, `months`, `quarters`, and `years`. (default: days, e.g. days)
-  --showHierarchies: string@bool-completer # Indicates whether the hierarchy mode should be enabled. (default: true, e.g. true)
+  --showHierarchies: oneof<nothing, bool> # Indicates whether the hierarchy mode should be enabled. (default: true, e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4246,13 +4245,13 @@ export def "queries query-by-id-1" [
   --columns: string # Selected columns for the table view. (default: ['type', 'priority'], e.g. [])
   --sortBy: string # JSON specifying sort criteria. The sort criteria is applied to the query's result collection of work packages overriding the query's persisted sort criteria. (default: [["id", "asc"]], e.g. [["status", "asc"]])
   --groupBy: string # The column to group by. The grouping criteria is applied to the to the query's result collection of work packages overriding the query's persisted group criteria. (e.g. status)
-  --showSums: string@bool-completer # Indicates whether properties should be summed up if they support it. The showSums parameter is applied to the to the query's result collection of work packages overriding the query's persisted sums property. (default: false, e.g. true)
+  --showSums: oneof<nothing, bool> # Indicates whether properties should be summed up if they support it. The showSums parameter is applied to the to the query's result collection of work packages overriding the query's persisted sums property. (default: false, e.g. true)
   --timestamps: string # Indicates the timestamps to filter by when showing changed attributes on work packages. Values can be either ISO8601 dates, ISO8601 durations and the following relative date keywords: "oneDayAgo@HH:MM+HH:MM", "lastWorkingDay@HH:MM+HH:MM", "oneWeekAgo@HH:MM+HH:MM", "oneMonthAgo@HH:MM+HH:MM". The first "HH:MM" part represents the zero paded hours and minutes. The last "+HH:MM" part represents the timezone offset from UTC associated with the time, the offset can be positive or negative e.g."oneDayAgo@01:00+01:00", "oneDayAgo@01:00-01:00". Values older than 1 day are accepted only with valid Enterprise Token available.  (default: PT0S, e.g. 2023-01-01,P-1Y,PT0S,lastWorkingDay@12:00)
-  --timelineVisible: string@bool-completer # Indicates whether the timeline should be shown. (default: false, e.g. true)
+  --timelineVisible: oneof<nothing, bool> # Indicates whether the timeline should be shown. (default: false, e.g. true)
   --timelineLabels: string # Overridden labels in the timeline view (default: {}, e.g. {})
   --highlightingMode: string # Highlighting mode for the table view. (default: inline, e.g. inline)
   --highlightedAttributes: string # Highlighted attributes mode for the table view when `highlightingMode` is `inline`. When set to `[]` all highlightable attributes will be returned as `highlightedAttributes`. (default: ['type', 'priority'], e.g. [])
-  --showHierarchies: string@bool-completer # Indicates whether the hierarchy mode should be enabled. (default: true, e.g. true)
+  --showHierarchies: oneof<nothing, bool> # Indicates whether the hierarchy mode should be enabled. (default: true, e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4405,7 +4404,7 @@ export def "recurring-meetings meeting" [
   --startTime: string # The scheduled start time of the recurring meeting. (format: date-time)
   --location: string # The meeting's location.
   --duration: float # The meeting duration in hours.
-  --notify: string@bool-completer # Whether to send email notifications to participants.
+  --notify: oneof<nothing, bool> # Whether to send email notifications to participants.
   --links: record # shape: {project?: any}
 ]: any -> any {
   let input = $in
@@ -4467,7 +4466,7 @@ export def "recurring-meetings meeting-by-id-1" [
   --startTime: string # The scheduled start time of the recurring meeting. (format: date-time)
   --location: string # The meeting's location.
   --duration: float # The meeting duration in hours.
-  --notify: string@bool-completer # Whether to send email notifications to participants.
+  --notify: oneof<nothing, bool> # Whether to send email notifications to participants.
   --links: record # shape: {project?: any}
 ]: any -> any {
   let input = $in
@@ -5307,7 +5306,7 @@ export def "time-entries entry" [
   --comment: any
   --spentOn: string # The date the expenditure is booked for (format: date)
   --hours: string # The time quantifying the expenditure (format: duration)
-  --ongoing: string@bool-completer # Whether the time entry is actively tracking time
+  --ongoing: oneof<nothing, bool> # Whether the time entry is actively tracking time
   --createdAt: string # The time the time entry was created (format: date-time)
   --startTime: string # The time the time entry was started, or null if the time entry does not have a start time.  The time is returned as UTC time, if presented to the user it should be converted to the user's timezone.  This field is only available if the global `allow_tracking_start_and_end_times` setting is enabled. (nullable, format: date-time)
   --endTime: string # The time the time entry was ended, or null if the time entry does not have a start time.  The time is returned as UTC time, if presented to the user it should be converted to the user's timezone.  This field is only available if the global `allow_tracking_start_and_end_times` setting is enabled. (nullable, format: date-time)
@@ -5583,7 +5582,7 @@ export def "users user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --admin: string@bool-completer
+  --admin: oneof<nothing, bool>
   email: string
   login: string
   --password: string # The user's password.  *Conditions:*  Writable on create.  Writable on update only when: - the caller updates their own account - `currentPassword` is provided and valid
@@ -5682,7 +5681,7 @@ export def "users user-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --admin: string@bool-completer
+  --admin: oneof<nothing, bool>
   email: string
   login: string
   --password: string # The user's password.  *Conditions:*  Writable on create.  Writable on update only when: - the caller updates their own account - `currentPassword` is provided and valid
@@ -6486,7 +6485,7 @@ export def "work-packages packages" [
   --filters: string # JSON specifying filter conditions. Accepts the same format as returned by the [queries](https://www.openproject.org/docs/api/endpoints/queries/) endpoint. If no filter is to be applied, the client should send an empty array (`[]`), otherwise a default filter is applied. A Currently supported filters are (there are additional filters added by modules):  - assigned_to - assignee_or_group - attachment_base - attachment_content - attachment_file_name - author - blocked - blocks - category - comment - created_at - custom_field - dates_interval - description - done_ratio - due_date - duplicated - duplicates - duration - estimated_hours - file_link_origin_id - follows - group - id - includes - linkable_to_storage_id - linkable_to_storage_url - manual_sort - milestone - only_subproject - parent - partof - precedes - principal_base - priority - project - relatable - relates - required - requires - responsible - role - search - start_date - status - storage_id - storage_url - subject - subject_or_id - subproject - type - typeahead - updated_at - version - watcher - work_package (default: [{ "status_id": { "operator": "o", "values": null }}], e.g. [{ "type_id": { "operator": "=", "values": ["1", "2"] }}])
   --sortBy: string # JSON specifying sort criteria. Accepts the same format as returned by the [queries](https://www.openproject.org/docs/api/endpoints/queries/) endpoint. (default: [["id", "asc"]], e.g. [["status", "asc"]])
   --groupBy: string # The column to group by. (e.g. status)
-  --showSums: string@bool-completer # Indicates whether properties should be summed up if they support it. (default: false, e.g. true)
+  --showSums: oneof<nothing, bool> # Indicates whether properties should be summed up if they support it. (default: false, e.g. true)
   --select: string # Comma separated list of properties to include. (e.g. total,elements/subject,elements/id,self)
   --timestamps: string # In order to perform a [baseline comparison](/docs/api/baseline-comparisons), you may provide one or several timestamps in ISO-8601 format as comma-separated list. The timestamps may be absolute or relative, such as ISO8601 dates, ISO8601 durations and the following relative date keywords: "oneDayAgo@HH:MM+HH:MM", "lastWorkingDay@HH:MM+HH:MM", "oneWeekAgo@HH:MM+HH:MM", "oneMonthAgo@HH:MM+HH:MM". The first "HH:MM" part represents the zero paded hours and minutes. The last "+HH:MM" part represents the timezone offset from UTC associated with the time, the offset can be positive or negative e.g."oneDayAgo@01:00+01:00", "oneDayAgo@01:00-01:00".  Usually, the first timestamp is the baseline date, the last timestamp is the current date. Values older than 1 day are accepted only with valid Enterprise Token available. (default: PT0S, e.g. 2022-01-01T00:00:00Z,PT0S)
 ]: nothing -> any {
@@ -6512,11 +6511,11 @@ export def "work-packages package" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notify: string@bool-completer # Indicates whether change notifications (e.g. via E-Mail) should be sent. Note that this controls notifications for all users interested in changes to the work package (e.g. watchers, author and assignee), not just the current user. (default: true, e.g. false)
+  --notify: oneof<nothing, bool> # Indicates whether change notifications (e.g. via E-Mail) should be sent. Note that this controls notifications for all users interested in changes to the work package (e.g. watchers, author and assignee), not just the current user. (default: true, e.g. false)
   subject: string # Work package subject
   --description: any
-  --scheduleManually: string@bool-completer # Uses manual scheduling mode when true (default). Uses automatic scheduling mode when false. Can be automatic only when predecessors or children are present.
-  --readonly: string@bool-completer # If true, the work package is in a readonly status so with the exception of the status, no other property can be altered.
+  --scheduleManually: oneof<nothing, bool> # Uses manual scheduling mode when true (default). Uses automatic scheduling mode when false. Can be automatic only when predecessors or children are present.
+  --readonly: oneof<nothing, bool> # If true, the work package is in a readonly status so with the exception of the status, no other property can be altered.
   --startDate: string # Scheduled beginning of a work package (nullable, format: date)
   --dueDate: string # Scheduled end of a work package (nullable, format: date)
   --date: string # Date on which a milestone is achieved (nullable, format: date)
@@ -6553,12 +6552,12 @@ export def "work-packages-form package" [
   --allow-errors(-e) # Return full response without error handling
   --subject: string # Work package subject
   --description: any
-  --scheduleManually: string@bool-completer # Uses manual scheduling mode when true (default). Uses automatic scheduling mode when false. Can be automatic only when predecessors or children are present.
+  --scheduleManually: oneof<nothing, bool> # Uses manual scheduling mode when true (default). Uses automatic scheduling mode when false. Can be automatic only when predecessors or children are present.
   --startDate: string # Scheduled beginning of a work package (nullable, format: date)
   --dueDate: string # Scheduled end of a work package (nullable, format: date)
   --estimatedTime: string # Time a work package likely needs to be completed excluding its descendants (nullable, format: duration)
   --duration: string # The amount of time in hours the work package needs to be completed. This value must be bigger or equal to `P1D`, and any the value will get floored to the nearest day.  The duration has no effect, unless either a start date or a due date is set.  Not available for milestone type of work packages. (nullable, format: duration)
-  --ignoreNonWorkingDays: string@bool-completer # When scheduling, whether or not to ignore the non working days being defined. A work package with the flag set to true will be allowed to be scheduled to a non working day.
+  --ignoreNonWorkingDays: oneof<nothing, bool> # When scheduling, whether or not to ignore the non working days being defined. A work package with the flag set to true will be allowed to be scheduled to a non working day.
   --links: record # shape: {category?: any, type?: any, priority?: any, project?: any, status?: any, responsible?: any, assignee?: any, version?: any, parent?: any}
   --meta: record # Meta information for the work package request — shape: {validateCustomFields?: bool}
 ]: any -> record<_type: string, _embedded: record<payload: record<subject: string, description: record, scheduleManually: bool, startDate: string, dueDate: string, estimatedTime: string, duration: string, ignoreNonWorkingDays: bool, _links: record, _meta: record>, schema: record<_type: string, _dependencies: list, _attributeGroups: list, lockVersion: record, id: record, subject: record, description: record, duration: record, scheduleManually: record, ignoreNonWorkingDays: record, startDate: record, dueDate: record, derivedStartDate: record, derivedDueDate: record, estimatedTime: record, derivedEstimatedTime: record, remainingTime: record, derivedRemainingTime: record, percentageDone: record, derivedPercentageDone: record, readonly: record, createdAt: record, updatedAt: record, author: record, position: record, project: record, projectPhase: record, projectPhaseDefinition: record, parent: record, sprint: record, storyPoints: record, assignee: record, responsible: record, type: record, status: record, category: record, version: record, priority: record, _links: record>, validationErrors: record>, _links: record<self: record<href: string, title: string, templated: bool, method: string, payload: record, identifier: string, type: string>, validate: record<href: string, title: string, templated: bool, method: string, payload: record, identifier: string, type: string>, previewMarkup: record<href: string, title: string, templated: bool, method: string, payload: record, identifier: string, type: string>, customFields: record<href: string, title: string, templated: bool, method: string, payload: record, identifier: string, type: string>, configureForm: record<href: string, title: string, templated: bool, method: string, payload: record, identifier: string, type: string>>> {
@@ -6679,15 +6678,15 @@ export def "work-packages package-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notify: string@bool-completer # Indicates whether change notifications should be sent. Note that this controls notifications for all users interested in changes to the work package (e.g. watchers, author and assignee), not just the current user. (default: true, e.g. false)
+  --notify: oneof<nothing, bool> # Indicates whether change notifications should be sent. Note that this controls notifications for all users interested in changes to the work package (e.g. watchers, author and assignee), not just the current user. (default: true, e.g. false)
   --subject: string # Work package subject
   --description: any
-  --scheduleManually: string@bool-completer # Uses manual scheduling mode when true (default). Uses automatic scheduling mode when false. Can be automatic only when predecessors or children are present.
+  --scheduleManually: oneof<nothing, bool> # Uses manual scheduling mode when true (default). Uses automatic scheduling mode when false. Can be automatic only when predecessors or children are present.
   --startDate: string # Scheduled beginning of a work package (nullable, format: date)
   --dueDate: string # Scheduled end of a work package (nullable, format: date)
   --estimatedTime: string # Time a work package likely needs to be completed excluding its descendants (nullable, format: duration)
   --duration: string # The amount of time in hours the work package needs to be completed. This value must be bigger or equal to `P1D`, and any the value will get floored to the nearest day.  The duration has no effect, unless either a start date or a due date is set.  Not available for milestone type of work packages. (nullable, format: duration)
-  --ignoreNonWorkingDays: string@bool-completer # When scheduling, whether or not to ignore the non working days being defined. A work package with the flag set to true will be allowed to be scheduled to a non working day.
+  --ignoreNonWorkingDays: oneof<nothing, bool> # When scheduling, whether or not to ignore the non working days being defined. A work package with the flag set to true will be allowed to be scheduled to a non working day.
   --links: record # shape: {category?: any, type?: any, priority?: any, project?: any, status?: any, responsible?: any, assignee?: any, version?: any, parent?: any}
   --meta: record # Meta information for the work package request — shape: {validateCustomFields?: bool}
   lockVersion: int # The version of the item as used for optimistic locking
@@ -6740,9 +6739,9 @@ export def "work-packages-activities package" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notify: string@bool-completer # Indicates whether change notifications (e.g. via E-Mail) should be sent. Note that this controls notifications for all users interested in changes to the work package (e.g. watchers, author and assignee), not just the current user. (default: true, e.g. false)
+  --notify: oneof<nothing, bool> # Indicates whether change notifications (e.g. via E-Mail) should be sent. Note that this controls notifications for all users interested in changes to the work package (e.g. watchers, author and assignee), not just the current user. (default: true, e.g. false)
   --comment: record # shape: {raw?: string}
-  --internal: string@bool-completer # Determines whether this comment is internal. This is only available to users with `add_internal_comments` permission. It defaults to `false`, if unset. (default: false)
+  --internal: oneof<nothing, bool> # Determines whether this comment is internal. This is only available to users with `add_internal_comments` permission. It defaults to `false`, if unset. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6984,12 +6983,12 @@ export def "work-packages-form package-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --subject: string # Work package subject
   --description: any
-  --scheduleManually: string@bool-completer # Uses manual scheduling mode when true (default). Uses automatic scheduling mode when false. Can be automatic only when predecessors or children are present.
+  --scheduleManually: oneof<nothing, bool> # Uses manual scheduling mode when true (default). Uses automatic scheduling mode when false. Can be automatic only when predecessors or children are present.
   --startDate: string # Scheduled beginning of a work package (nullable, format: date)
   --dueDate: string # Scheduled end of a work package (nullable, format: date)
   --estimatedTime: string # Time a work package likely needs to be completed excluding its descendants (nullable, format: duration)
   --duration: string # The amount of time in hours the work package needs to be completed. This value must be bigger or equal to `P1D`, and any the value will get floored to the nearest day.  The duration has no effect, unless either a start date or a due date is set.  Not available for milestone type of work packages. (nullable, format: duration)
-  --ignoreNonWorkingDays: string@bool-completer # When scheduling, whether or not to ignore the non working days being defined. A work package with the flag set to true will be allowed to be scheduled to a non working day.
+  --ignoreNonWorkingDays: oneof<nothing, bool> # When scheduling, whether or not to ignore the non working days being defined. A work package with the flag set to true will be allowed to be scheduled to a non working day.
   --links: record # shape: {category?: any, type?: any, priority?: any, project?: any, status?: any, responsible?: any, assignee?: any, version?: any, parent?: any}
   --meta: record # Meta information for the work package request — shape: {validateCustomFields?: bool}
 ]: any -> record<_type: string, _embedded: record<payload: record<subject: string, description: record, scheduleManually: bool, startDate: string, dueDate: string, estimatedTime: string, duration: string, ignoreNonWorkingDays: bool, _links: record, _meta: record>, schema: record<_type: string, _dependencies: list, _attributeGroups: list, lockVersion: record, id: record, subject: record, description: record, duration: record, scheduleManually: record, ignoreNonWorkingDays: record, startDate: record, dueDate: record, derivedStartDate: record, derivedDueDate: record, estimatedTime: record, derivedEstimatedTime: record, remainingTime: record, derivedRemainingTime: record, percentageDone: record, derivedPercentageDone: record, readonly: record, createdAt: record, updatedAt: record, author: record, position: record, project: record, projectPhase: record, projectPhaseDefinition: record, parent: record, sprint: record, storyPoints: record, assignee: record, responsible: record, type: record, status: record, category: record, version: record, priority: record, _links: record>, validationErrors: record>, _links: record<self: record<href: string, title: string, templated: bool, method: string, payload: record, identifier: string, type: string>, validate: record<href: string, title: string, templated: bool, method: string, payload: record, identifier: string, type: string>, previewMarkup: record<href: string, title: string, templated: bool, method: string, payload: record, identifier: string, type: string>, customFields: record<href: string, title: string, templated: bool, method: string, payload: record, identifier: string, type: string>, configureForm: record<href: string, title: string, templated: bool, method: string, payload: record, identifier: string, type: string>>> {
@@ -7308,10 +7307,10 @@ export def "workspaces-queries-default workspace" [
   --pageSize: int # Number of elements to display per page for the queries' result collection of work packages. (e.g. 25)
   --sortBy: string # JSON specifying sort criteria. The sort criteria is applied to the query's result collection of work packages overriding the query's persisted sort criteria. (default: [["id", "asc"]], e.g. [["status", "asc"]])
   --groupBy: string # The column to group by. The grouping criteria is applied to the to the query's result collection of work packages overriding the query's persisted group criteria. (e.g. status)
-  --showSums: string@bool-completer # Indicates whether properties should be summed up if they support it. The showSums parameter is applied to the to the query's result collection of work packages overriding the query's persisted sums property. (default: false, e.g. true)
+  --showSums: oneof<nothing, bool> # Indicates whether properties should be summed up if they support it. The showSums parameter is applied to the to the query's result collection of work packages overriding the query's persisted sums property. (default: false, e.g. true)
   --timestamps: string # Indicates the timestamps to filter by when showing changed attributes on work packages. Values can be either ISO8601 dates, ISO8601 durations and the following relative date keywords: "oneDayAgo@HH:MM+HH:MM", "lastWorkingDay@HH:MM+HH:MM", "oneWeekAgo@HH:MM+HH:MM", "oneMonthAgo@HH:MM+HH:MM". The first "HH:MM" part represents the zero paded hours and minutes. The last "+HH:MM" part represents the timezone offset from UTC associated with the time. Values older than 1 day are accepted only with valid Enterprise Token available.  (default: PT0S, e.g. 2023-01-01,P-1Y,PT0S,lastWorkingDay@12:00)
-  --timelineVisible: string@bool-completer # Indicates whether the timeline should be shown. (default: false, e.g. true)
-  --showHierarchies: string@bool-completer # Indicates whether the hierarchy mode should be enabled. (default: true, e.g. true)
+  --timelineVisible: oneof<nothing, bool> # Indicates whether the timeline should be shown. (default: false, e.g. true)
+  --showHierarchies: oneof<nothing, bool> # Indicates whether the hierarchy mode should be enabled. (default: true, e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7406,7 +7405,7 @@ export def "workspaces-work-packages Collection" [
   --filters: string # JSON specifying filter conditions. Accepts the same format as returned by the [queries](https://www.openproject.org/docs/api/endpoints/queries/) endpoint. If no filter is to be applied, the client should send an empty array (`[]`). (default: [{ "status_id": { "operator": "o", "values": null }}], e.g. [{ "type_id": { "operator": "=", "values": ['1', '2'] }}])
   --sortBy: string # JSON specifying sort criteria. Accepts the same format as returned by the [queries](https://www.openproject.org/docs/api/endpoints/queries/) endpoint. (default: [["id", "asc"]], e.g. [["status", "asc"]])
   --groupBy: string # The column to group by. (e.g. status)
-  --showSums: string@bool-completer # Indicates whether properties should be summed up if they support it. (default: false, e.g. true)
+  --showSums: oneof<nothing, bool> # Indicates whether properties should be summed up if they support it. (default: false, e.g. true)
   --select: string # Comma separated list of properties to include. (e.g. total,elements/subject,elements/id,self)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7432,11 +7431,11 @@ export def "workspaces-work-packages Package" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notify: string@bool-completer # Indicates whether change notifications (e.g. via E-Mail) should be sent. Note that this controls notifications for all users interested in changes to the work package (e.g. watchers, author and assignee), not just the current user. (default: true, e.g. false)
+  --notify: oneof<nothing, bool> # Indicates whether change notifications (e.g. via E-Mail) should be sent. Note that this controls notifications for all users interested in changes to the work package (e.g. watchers, author and assignee), not just the current user. (default: true, e.g. false)
   subject: string # Work package subject
   --description: any
-  --scheduleManually: string@bool-completer # Uses manual scheduling mode when true (default). Uses automatic scheduling mode when false. Can be automatic only when predecessors or children are present.
-  --readonly: string@bool-completer # If true, the work package is in a readonly status so with the exception of the status, no other property can be altered.
+  --scheduleManually: oneof<nothing, bool> # Uses manual scheduling mode when true (default). Uses automatic scheduling mode when false. Can be automatic only when predecessors or children are present.
+  --readonly: oneof<nothing, bool> # If true, the work package is in a readonly status so with the exception of the status, no other property can be altered.
   --startDate: string # Scheduled beginning of a work package (nullable, format: date)
   --dueDate: string # Scheduled end of a work package (nullable, format: date)
   --date: string # Date on which a milestone is achieved (nullable, format: date)
@@ -7474,12 +7473,12 @@ export def "workspaces-work-packages-form workspace" [
   --allow-errors(-e) # Return full response without error handling
   --subject: string # Work package subject
   --description: any
-  --scheduleManually: string@bool-completer # Uses manual scheduling mode when true (default). Uses automatic scheduling mode when false. Can be automatic only when predecessors or children are present.
+  --scheduleManually: oneof<nothing, bool> # Uses manual scheduling mode when true (default). Uses automatic scheduling mode when false. Can be automatic only when predecessors or children are present.
   --startDate: string # Scheduled beginning of a work package (nullable, format: date)
   --dueDate: string # Scheduled end of a work package (nullable, format: date)
   --estimatedTime: string # Time a work package likely needs to be completed excluding its descendants (nullable, format: duration)
   --duration: string # The amount of time in hours the work package needs to be completed. This value must be bigger or equal to `P1D`, and any the value will get floored to the nearest day.  The duration has no effect, unless either a start date or a due date is set.  Not available for milestone type of work packages. (nullable, format: duration)
-  --ignoreNonWorkingDays: string@bool-completer # When scheduling, whether or not to ignore the non working days being defined. A work package with the flag set to true will be allowed to be scheduled to a non working day.
+  --ignoreNonWorkingDays: oneof<nothing, bool> # When scheduling, whether or not to ignore the non working days being defined. A work package with the flag set to true will be allowed to be scheduled to a non working day.
   --links: record # shape: {category?: any, type?: any, priority?: any, project?: any, status?: any, responsible?: any, assignee?: any, version?: any, parent?: any}
   --meta: record # Meta information for the work package request — shape: {validateCustomFields?: bool}
 ]: any -> record<_type: string, _embedded: record<payload: record<subject: string, description: record, scheduleManually: bool, startDate: string, dueDate: string, estimatedTime: string, duration: string, ignoreNonWorkingDays: bool, _links: record, _meta: record>, schema: record<_type: string, _dependencies: list, _attributeGroups: list, lockVersion: record, id: record, subject: record, description: record, duration: record, scheduleManually: record, ignoreNonWorkingDays: record, startDate: record, dueDate: record, derivedStartDate: record, derivedDueDate: record, estimatedTime: record, derivedEstimatedTime: record, remainingTime: record, derivedRemainingTime: record, percentageDone: record, derivedPercentageDone: record, readonly: record, createdAt: record, updatedAt: record, author: record, position: record, project: record, projectPhase: record, projectPhaseDefinition: record, parent: record, sprint: record, storyPoints: record, assignee: record, responsible: record, type: record, status: record, category: record, version: record, priority: record, _links: record>, validationErrors: record>, _links: record<self: record<href: string, title: string, templated: bool, method: string, payload: record, identifier: string, type: string>, validate: record<href: string, title: string, templated: bool, method: string, payload: record, identifier: string, type: string>, previewMarkup: record<href: string, title: string, templated: bool, method: string, payload: record, identifier: string, type: string>, customFields: record<href: string, title: string, templated: bool, method: string, payload: record, identifier: string, type: string>, configureForm: record<href: string, title: string, templated: bool, method: string, payload: record, identifier: string, type: string>>> {

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://openapi.tidal.com/v2"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -4280,7 +4279,7 @@ export def "reactions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --stats: string@stats-completer
-  --statsOnly: string@bool-completer
+  --statsOnly: oneof<nothing, bool>
   --viewerContext: string
   --pagecursor: string # Server-generated cursor value pointing a certain page of items. Optional, targets first page if not specified
   --include: list # Allows the client to customize which related resources should be returned. Available options: ownerProfiles, owners (e.g. ownerProfiles)
@@ -5175,7 +5174,7 @@ export def "track-manifests get" [
   --formats: list
   --uriScheme: string@uriScheme-completer
   --usage: string@usage-completer
-  --adaptive: string@bool-completer
+  --adaptive: oneof<nothing, bool>
   --shareCode: string # Share code that grants access to UNLISTED resources. When provided, allows non-owners to access resources that would otherwise be restricted. (e.g. xyz)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

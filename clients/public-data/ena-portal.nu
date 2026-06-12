@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost/ena/portal/api"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -114,11 +113,11 @@ export def "search search" [
   --qp-fields: string # A list of fields (comma separated) to be returned in the result. If none supplied, the accession and description/title of the main result object will be returned.
   --limit: int # The maximum number of records to retrieve. This interface sets a limit of 10 for usability. Remove it for real use cases.If the full result set is to be fetched, the limit may be set to 0, or omitted. (default: 10)
   --dataPortal: string@dataPortal-completer # The data portal ID. Defaults to 'ena'.
-  --dccDataOnly: string@bool-completer # Whether to limit the search to only DCC records. By default, all public data is also included in the search.
-  --includeMetagenomes: string@bool-completer # Whether to include public metagenome data in the search. By default, these are not included. Note that any metagenome data associated with a DCC hub will always be included in a search against that DCC.
-  --searchCurations: string@bool-completer # Search in curations.
+  --dccDataOnly: oneof<nothing, bool> # Whether to limit the search to only DCC records. By default, all public data is also included in the search.
+  --includeMetagenomes: oneof<nothing, bool> # Whether to include public metagenome data in the search. By default, these are not included. Note that any metagenome data associated with a DCC hub will always be included in a search against that DCC.
+  --searchCurations: oneof<nothing, bool> # Search in curations.
   --format: string@format-completer # What format the results should be returned as: TSV (Tab Separated Values) or JSON. By default, a TSV report is provided. (default: tsv)
-  --download: string@bool-completer # Whether to download the result as a file, rather than read it from the stream. By default, this is false. (default: false)
+  --download: oneof<nothing, bool> # Whether to download the result as a file, rather than read it from the stream. By default, this is false. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -150,11 +149,11 @@ export def "search searchPost" [
   --qp-fields: string # A list of fields (comma separated) to be returned in the result. If none supplied, the accession and description/title of the main result object will be returned.
   --limit: int # The maximum number of records to retrieve. This interface sets a limit of 10 for usability. Remove it for real use cases.If the full result set is to be fetched, the limit may be set to 0, or omitted. (default: 10)
   --dataPortal: string@dataPortal-completer # The data portal ID. Defaults to 'ena'.
-  --dccDataOnly: string@bool-completer # Whether to limit the search to only DCC records. By default, all public data is also included in the search. (default: false)
-  --includeMetagenomes: string@bool-completer # Whether to include public metagenome data in the search. By default, these are not included. Note that any metagenome data associated with a DCC hub will always be included in a search against that DCC. (default: false)
-  --searchCurations: string@bool-completer # Search in curations. (default: false)
+  --dccDataOnly: oneof<nothing, bool> # Whether to limit the search to only DCC records. By default, all public data is also included in the search. (default: false)
+  --includeMetagenomes: oneof<nothing, bool> # Whether to include public metagenome data in the search. By default, these are not included. Note that any metagenome data associated with a DCC hub will always be included in a search against that DCC. (default: false)
+  --searchCurations: oneof<nothing, bool> # Search in curations. (default: false)
   --format: string@format-completer # What format the results should be returned as: TSV (Tab Separated Values) or JSON. By default, a TSV report is provided. (default: tsv)
-  --download: string@bool-completer # Whether to download the result as a file, rather than read it from the stream. By default, this is false. (default: false)
+  --download: oneof<nothing, bool> # Whether to download the result as a file, rather than read it from the stream. By default, this is false. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -187,9 +186,9 @@ export def "files post" [
   --limit: int # The maximum number of records to retrieve. This interface sets a limit of 10 for usability. Remove it for real use cases.If the full result set is to be fetched, the limit may be set to 0, or omitted. (default: 10)
   --dataPortal: string@dataPortal-completer # The data portal ID. Defaults to 'ena'.
   --files: list # A list of files
-  --count: string@bool-completer # If true, returns only the total number and size of files. Default is false. Is ignored if the 'files' list is provided.
+  --count: oneof<nothing, bool> # If true, returns only the total number and size of files. Default is false. Is ignored if the 'files' list is provided.
   --accession: string # Accession of record to get files for.
-  --dccDataOnly: string@bool-completer # default: false
+  --dccDataOnly: oneof<nothing, bool> # default: false
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -221,9 +220,9 @@ export def "count count" [
   --includeAccessions: string # A list of accessions for records that you would like to be included with the results of your query
   --excludeAccessions: string # A list of accessions for records that you would like to be excluded from the results of your query
   --dataPortal: string@dataPortal-completer # The data portal ID. Defaults to 'ena'.
-  --dccDataOnly: string@bool-completer # Whether to limit the search to only DCC records. By default, all public data is also included in the search.
-  --includeMetagenomes: string@bool-completer # Whether to include public metagenome data in the search. By default, these are not included. Note that any metagenome data associated with a DCC hub will always be included in a search against that DCC.
-  --searchCurations: string@bool-completer # Search in curations.
+  --dccDataOnly: oneof<nothing, bool> # Whether to limit the search to only DCC records. By default, all public data is also included in the search.
+  --includeMetagenomes: oneof<nothing, bool> # Whether to include public metagenome data in the search. By default, these are not included. Note that any metagenome data associated with a DCC hub will always be included in a search against that DCC.
+  --searchCurations: oneof<nothing, bool> # Search in curations.
   --field: string # The field to count values of. Only works on controlled value type fields.
   --format: string@format-completer # What format the results should be returned as: TSV (Tab Separated Values) or JSON. By default, a TSV report is provided.
 ]: nothing -> any {
@@ -255,9 +254,9 @@ export def "count countPost" [
   --includeAccessions: string # A list of accessions for records that you would like to be included with the results of your query
   --excludeAccessions: string # A list of accessions for records that you would like to be excluded from the results of your query
   --dataPortal: string@dataPortal-completer # The data portal ID. Defaults to 'ena'.
-  --dccDataOnly: string@bool-completer # Whether to limit the search to only DCC records. By default, all public data is also included in the search. (default: false)
-  --includeMetagenomes: string@bool-completer # Whether to include public metagenome data in the search. By default, these are not included. Note that any metagenome data associated with a DCC hub will always be included in a search against that DCC. (default: false)
-  --searchCurations: string@bool-completer # Search in curations. (default: false)
+  --dccDataOnly: oneof<nothing, bool> # Whether to limit the search to only DCC records. By default, all public data is also included in the search. (default: false)
+  --includeMetagenomes: oneof<nothing, bool> # Whether to include public metagenome data in the search. By default, these are not included. Note that any metagenome data associated with a DCC hub will always be included in a search against that DCC. (default: false)
+  --searchCurations: oneof<nothing, bool> # Search in curations. (default: false)
   --field: string # The field to count values of. Only works on controlled value type fields.
   --format: string@format-completer # What format the results should be returned as: TSV (Tab Separated Values) or JSON. By default, a TSV report is provided.
   --body: record
@@ -439,7 +438,7 @@ export def "links get" [
   --limit: int # The maximum number of records to retrieve. This interface sets a limit of 10 for usability. Remove it for real use cases.If the full result set is to be fetched, the limit may be set to 0, or omitted. (default: 10)
   --subtree: string # Include subtree
   --format: string@format-completer # What format the results should be returned as: TSV (Tab Separated Values) or JSON. By default, a TSV report is provided. (default: tsv)
-  --download: string@bool-completer # Whether to download the result as a file, rather than read it from the stream. By default, this is false. (default: false)
+  --download: oneof<nothing, bool> # Whether to download the result as a file, rather than read it from the stream. By default, this is false. (default: false)
   --offset: int # format: int32
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -493,7 +492,7 @@ export def "filereport fileReport" [
   --qp-fields: string # A list of fields (comma separated) to be returned in the result. If none supplied, the accession and ftp information for fastq,submitted and sra files will be returned.
   --limit: int # The maximum number of records to retrieve. This interface sets a limit of 10 for usability. Remove it for real use cases.If the full result set is to be fetched, the limit may be set to 0, or omitted. (default: 10)
   --format: string@format-completer # What format the results should be returned as: TSV (Tab Separated Values) or JSON. By default, a TSV report is provided.
-  --download: string@bool-completer # Whether to download the result as a file, rather than read it from the stream. By default, this is false.
+  --download: oneof<nothing, bool> # Whether to download the result as a file, rather than read it from the stream. By default, this is false.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)

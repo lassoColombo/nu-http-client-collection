@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://example.org" "http://example.org"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -213,9 +212,9 @@ export def "search searchGet" [
   --offset: int # Page number of results to return (starts at 0). This parameter is currently not used, page by selecting a specific query type and using maxID and minID instead. (default: 0)
   --q: string # Query string to search for. This can be in the following forms: - `@[username]` -- search for an account with the given username on any domain. Can return multiple results. - @[username]@[domain]` -- search for a remote account with exact username and domain. Will only ever return 1 result at most. - `https://example.org/some/arbitrary/url` -- search for an account OR a status with the given URL. Will only ever return 1 result at most. - `#[hashtag_name]` -- search for a hashtag with the given hashtag name, or starting with the given hashtag name. Case insensitive. Can return multiple results. - any arbitrary string -- search for accounts or statuses containing the given string. Can return multiple results.  Arbitrary string queries may include the following operators: - `from:localuser`, `from:remoteuser@instance.tld`: restrict results to statuses created by the specified account.
   --type: string # Type of item to return. One of: - `` -- empty string; return any/all results. - `accounts` -- return only account(s). - `statuses` -- return only status(es). - `hashtags` -- return only hashtag(s). If `type` is specified, paging can be performed using max_id and min_id parameters. If `type` is not specified, see the `offset` parameter for paging.
-  --resolve: string@bool-completer # If searching query is for `@[username]@[domain]`, or a URL, allow the GoToSocial instance to resolve the search by making calls to remote instances (webfinger, ActivityPub, etc). (default: false)
-  --following: string@bool-completer # If search type includes accounts, and search query is an arbitrary string, show only accounts that the requesting account follows. If this is set to `true`, then the GoToSocial instance will enhance the search by also searching within account notes, not just in usernames and display names. (default: false)
-  --exclude-unreviewed: string@bool-completer # If searching for hashtags, exclude those not yet approved by instance admin. Currently this parameter is unused. (default: false)
+  --resolve: oneof<nothing, bool> # If searching query is for `@[username]@[domain]`, or a URL, allow the GoToSocial instance to resolve the search by making calls to remote instances (webfinger, ActivityPub, etc). (default: false)
+  --following: oneof<nothing, bool> # If search type includes accounts, and search query is an arbitrary string, show only accounts that the requesting account follows. If this is set to `true`, then the GoToSocial instance will enhance the search by also searching within account notes, not just in usernames and display names. (default: false)
+  --exclude-unreviewed: oneof<nothing, bool> # If searching for hashtags, exclude those not yet approved by instance admin. Currently this parameter is unused. (default: false)
   --account-id: string # Restrict results to statuses created by the specified account.
 ]: nothing -> record<accounts: table<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, hashtags: list<any>, statuses: table<account: record, application: record, bookmarked: bool, card: record, content: string, content_type: string, created_at: string, edited_at: string, emojis: list, favourited: bool, favourites_count: int, filtered: list, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record, language: string, local_only: bool, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: record, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -243,7 +242,7 @@ export def "accounts accountCreate" [
   --username: string # The desired username for the account.
   --email: string # The email address to be used for login.
   --password: string # The password to be used for login. This will be hashed before storage.
-  --agreement: string@bool-completer # The user agrees to the terms, conditions, and policies of the instance.
+  --agreement: oneof<nothing, bool> # The user agrees to the terms, conditions, and policies of the instance.
   --locale: string # The preferred language of the account user (optional).
 ]: nothing -> record<access_token: string, created_at: int, scope: string, token_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -334,8 +333,8 @@ export def "accounts-follow accountFollow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --reblogs: string@bool-completer # Show reblogs from this account.
-  --notify: string@bool-completer # Notify when this account posts.
+  --reblogs: oneof<nothing, bool> # Show reblogs from this account.
+  --notify: oneof<nothing, bool> # Notify when this account posts.
 ]: any -> record<blocked_by: bool, blocking: bool, domain_blocking: bool, endorsed: bool, followed_by: bool, following: bool, id: string, muting: bool, muting_notifications: bool, note: string, notifying: bool, requested: bool, requested_by: bool, showing_reblogs: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -437,7 +436,7 @@ export def "accounts-mute accountMute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notifications: string@bool-completer # Mute notifications as well as posts.
+  --notifications: oneof<nothing, bool> # Mute notifications as well as posts.
   --duration: float # How long the mute should last, in seconds. If 0 or not provided, mute lasts indefinitely.
 ]: any -> record<blocked_by: bool, blocking: bool, domain_blocking: bool, endorsed: bool, followed_by: bool, following: bool, id: string, muting: bool, muting_notifications: bool, note: string, notifying: bool, requested: bool, requested_by: bool, showing_reblogs: bool> {
   let input = $in
@@ -491,13 +490,13 @@ export def "accounts-statuses accountStatuses" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Number of statuses to return. (default: 30)
-  --exclude-replies: string@bool-completer # Exclude statuses that are a reply to another status. (default: false)
-  --exclude-reblogs: string@bool-completer # Exclude statuses that are a reblog/boost of another status. (default: false)
+  --exclude-replies: oneof<nothing, bool> # Exclude statuses that are a reply to another status. (default: false)
+  --exclude-reblogs: oneof<nothing, bool> # Exclude statuses that are a reblog/boost of another status. (default: false)
   --max-id: string # Return only statuses *OLDER* than the given max status ID. The status with the specified ID will not be included in the response.
   --min-id: string # Return only statuses *NEWER* than the given min status ID. The status with the specified ID will not be included in the response.
-  --pinned: string@bool-completer # Show only pinned statuses. In other words, exclude statuses that are not pinned to the given account ID. (default: false)
-  --only-media: string@bool-completer # Show only statuses with media attachments. (default: false)
-  --only-public: string@bool-completer # Show only statuses with a privacy setting of 'public'. (default: false)
+  --pinned: oneof<nothing, bool> # Show only pinned statuses. In other words, exclude statuses that are not pinned to the given account ID. (default: false)
+  --only-media: oneof<nothing, bool> # Show only statuses with media attachments. (default: false)
+  --only-public: oneof<nothing, bool> # Show only statuses with a privacy setting of 'public'. (default: false)
 ]: nothing -> table<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record, application: record, bookmarked: bool, card: record, content: string, content_type: string, created_at: string, edited_at: string, emojis: list, favourited: bool, favourites_count: int, filtered: list, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record, language: string, local_only: bool, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -711,8 +710,8 @@ export def "accounts-search accountSearchGet" [
   --limit: int # Number of results to try to return. (default: 40)
   --offset: int # Page number of results to return (starts at 0). This parameter is currently not used, offsets over 0 will always return 0 results. (default: 0)
   --q: string # Query string to search for. This can be in the following forms: - `@[username]` -- search for an account with the given username on any domain. Can return multiple results. - `@[username]@[domain]` -- search for a remote account with exact username and domain. Will only ever return 1 result at most. - any arbitrary string -- search for accounts containing the given string in their username or display name. Can return multiple results.
-  --resolve: string@bool-completer # If query is for `@[username]@[domain]`, or a URL, allow the GoToSocial instance to resolve the search by making calls to remote instances (webfinger, ActivityPub, etc). (default: false)
-  --following: string@bool-completer # Show only accounts that the requesting account follows. If this is set to `true`, then the GoToSocial instance will enhance the search by also searching within account notes, not just in usernames and display names. (default: false)
+  --resolve: oneof<nothing, bool> # If query is for `@[username]@[domain]`, or a URL, allow the GoToSocial instance to resolve the search by making calls to remote instances (webfinger, ActivityPub, etc). (default: false)
+  --following: oneof<nothing, bool> # Show only accounts that the requesting account follows. If this is set to `true`, then the GoToSocial instance will enhance the search by also searching within account notes, not just in usernames and display names. (default: false)
 ]: nothing -> table<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -756,27 +755,27 @@ export def "accounts-update-credentials accountUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --discoverable: string@bool-completer # Account should be made discoverable and shown in the profile directory (if enabled).
-  --indexable: string@bool-completer # Account's posts should be made indexable by full-text search features (if enabled).
-  --bot: string@bool-completer # Account is flagged as a bot.
+  --discoverable: oneof<nothing, bool> # Account should be made discoverable and shown in the profile directory (if enabled).
+  --indexable: oneof<nothing, bool> # Account's posts should be made indexable by full-text search features (if enabled).
+  --bot: oneof<nothing, bool> # Account is flagged as a bot.
   --display-name: string # The display name to use for the account.
   --note: string # Bio/description of this account.
   --avatar: path # Avatar of the user.
   --avatar-description: string # Description of avatar image, for alt-text.
   --header: path # Header of the user.
   --header-description: string # Description of header image, for alt-text.
-  --locked: string@bool-completer # Require manual approval of follow requests.
+  --locked: oneof<nothing, bool> # Require manual approval of follow requests.
   --sourceprivacy: string # Default post privacy for authored statuses.
-  --sourcesensitive: string@bool-completer # Mark authored statuses as sensitive by default.
+  --sourcesensitive: oneof<nothing, bool> # Mark authored statuses as sensitive by default.
   --sourcelanguage: string # Default language to use for authored statuses (ISO 6391).
   --sourcestatus-content-type: string # Default content type to use for authored statuses (text/plain or text/markdown).
   --theme: string # FileName of the theme to use when rendering this account's profile or statuses. The theme must exist on this server, as indicated by /api/v1/accounts/themes. Empty string unsets theme and returns to the default GoToSocial theme.
   --custom-css: string # Custom CSS to use when rendering this account's profile or statuses. String must be no more than 5,000 characters (~5kb).
-  --enable-rss: string@bool-completer # Enable RSS feed for this account's Public posts at `/[username]/feed.rss`
-  --hide-collections: string@bool-completer # Hide the account's following/followers collections.
+  --enable-rss: oneof<nothing, bool> # Enable RSS feed for this account's Public posts at `/[username]/feed.rss`
+  --hide-collections: oneof<nothing, bool> # Hide the account's following/followers collections.
   --web-visibility: string # Posts to show on the web view of the account. "public": default, show only Public visibility posts on the web. "unlisted": show Public *and* Unlisted visibility posts on the web. "none": show no posts on the web, not even Public ones.
   --web-layout: string # Layout to use for the web view of the account. "microblog": default, classic microblog layout. "gallery": gallery layout with media only.
-  --web-include-boosts: string@bool-completer # Include boosts created by the account on the web view of the account.
+  --web-include-boosts: oneof<nothing, bool> # Include boosts created by the account on the web view of the account.
   --fields-attributes0name: string # Name of 1st profile field to be added to this account's profile. (The index may be any string; add more indexes to send more fields.)
   --fields-attributes0value: string # Value of 1st profile field to be added to this account's profile. (The index may be any string; add more indexes to send more fields.)
   --fields-attributes1name: string # Name of 2nd profile field to be added to this account's profile.
@@ -836,20 +835,20 @@ export def "admin-accounts adminAccountsGetV1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --local: string@bool-completer # Filter for local accounts. (default: false)
-  --remote: string@bool-completer # Filter for remote accounts. (default: false)
-  --active: string@bool-completer # Filter for currently active accounts. (default: false)
-  --pending: string@bool-completer # Filter for currently pending accounts. (default: false)
-  --disabled: string@bool-completer # Filter for currently disabled accounts. (default: false)
-  --silenced: string@bool-completer # Filter for currently silenced accounts. (default: false)
-  --suspended: string@bool-completer # Filter for currently suspended accounts. (default: false)
-  --sensitized: string@bool-completer # Filter for accounts force-marked as sensitive. (default: false)
+  --local: oneof<nothing, bool> # Filter for local accounts. (default: false)
+  --remote: oneof<nothing, bool> # Filter for remote accounts. (default: false)
+  --active: oneof<nothing, bool> # Filter for currently active accounts. (default: false)
+  --pending: oneof<nothing, bool> # Filter for currently pending accounts. (default: false)
+  --disabled: oneof<nothing, bool> # Filter for currently disabled accounts. (default: false)
+  --silenced: oneof<nothing, bool> # Filter for currently silenced accounts. (default: false)
+  --suspended: oneof<nothing, bool> # Filter for currently suspended accounts. (default: false)
+  --sensitized: oneof<nothing, bool> # Filter for accounts force-marked as sensitive. (default: false)
   --username: string # Search for the given username.
   --display-name: string # Search for the given display name.
   --by-domain: string # Filter by the given domain.
   --email: string # Lookup a user with this email.
   --ip: string # Lookup users with this IP address.
-  --staff: string@bool-completer # Filter for staff accounts. (default: false)
+  --staff: oneof<nothing, bool> # Filter for staff accounts. (default: false)
   --max-id: string # max_id in the form `[domain]/@[username]`. All results returned will be later in the alphabet than `[domain]/@[username]`. For example, if max_id = `example.org/@someone` then returned entries might contain `example.org/@someone_else`, `later.example.org/@someone`, etc. Local account IDs in this form use an empty string for the `[domain]` part, for example local account with username `someone` would be `/@someone`.
   --min-id: string # min_id in the form `[domain]/@[username]`. All results returned will be earlier in the alphabet than `[domain]/@[username]`. For example, if min_id = `example.org/@someone` then returned entries might contain `example.org/@earlier_account`, `earlier.example.org/@someone`, etc. Local account IDs in this form use an empty string for the `[domain]` part, for example local account with username `someone` would be `/@someone`.
   --limit: int # Maximum number of results to return. (default: 50)
@@ -949,7 +948,7 @@ export def "admin-accounts-reject adminAccountReject" [
   --allow-errors(-e) # Return full response without error handling
   --private-comment: string # Comment to leave on why the account was denied. The comment will be visible to admins only.
   --message: string # Message to include in email to applicant. Will be included only if send_email is true.
-  --send-email: string@bool-completer # Send an email to the applicant informing them that their sign-up has been rejected.
+  --send-email: oneof<nothing, bool> # Send an email to the applicant informing them that their sign-up has been rejected.
 ]: any -> record<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, approved: bool, confirmed: bool, created_at: string, created_by_application_id: string, disabled: bool, domain: string, email: string, id: string, invite_request: string, invited_by_account_id: string, ip: string, ips: list<any>, locale: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, silenced: bool, suspended: bool, username: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1123,7 +1122,7 @@ export def "admin-domain-allows domainAllowsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-export: string@bool-completer # If set to `true`, then each entry in the returned list of domain allows will only consist of the fields `domain` and `public_comment`. This is perfect for when you want to save and share a list of all the domains you have allowed on your instance, so that someone else can easily import them, but you don't want them to see the database IDs of your allows, or private comments etc.
+  --qp-export: oneof<nothing, bool> # If set to `true`, then each entry in the returned list of domain allows will only consist of the fields `domain` and `public_comment`. This is perfect for when you want to save and share a list of all the domains you have allowed on your instance, so that someone else can easily import them, but you don't want them to see the database IDs of your allows, or private comments etc.
 ]: nothing -> table<comment: string, created_at: string, created_by: string, domain: string, id: string, obfuscate: bool, permission_type: string, private_comment: string, public_comment: string, severity: string, silenced_at: string, subscription_id: string, suspended_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1146,10 +1145,10 @@ export def "admin-domain-allows domainAllowCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --import: string@bool-completer # Signal that a list of domain allows is being imported as a file. If set to `true`, then 'domains' must be present as a JSON-formatted file. If set to `false`, then `domains` will be ignored, and `domain` must be present. (default: false)
+  --import: oneof<nothing, bool> # Signal that a list of domain allows is being imported as a file. If set to `true`, then 'domains' must be present as a JSON-formatted file. If set to `false`, then `domains` will be ignored, and `domain` must be present. (default: false)
   --domains: path # JSON-formatted list of domain allows to import. This is only used if `import` is set to `true`.
   --domain: string # Single domain to allow. Used only if `import` is not `true`.
-  --obfuscate: string@bool-completer # Obfuscate the name of the domain when serving it publicly. Eg., `example.org` becomes something like `ex***e.org`. Used only if `import` is not `true`.
+  --obfuscate: oneof<nothing, bool> # Obfuscate the name of the domain when serving it publicly. Eg., `example.org` becomes something like `ex***e.org`. Used only if `import` is not `true`.
   --public-comment: string # Public comment about this domain allow. This will be displayed alongside the domain allow if you choose to share allows. Used only if `import` is not `true`.
   --private-comment: string # Private comment about this domain allow. Will only be shown to other admins, so this is a useful way of internally keeping track of why a certain domain ended up allowed. Used only if `import` is not `true`.
 ]: any -> record<comment: string, created_at: string, created_by: string, domain: string, id: string, obfuscate: bool, permission_type: string, private_comment: string, public_comment: string, severity: string, silenced_at: string, subscription_id: string, suspended_at: string> {
@@ -1223,7 +1222,7 @@ export def "admin-domain-allows domainAllowUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --obfuscate: string@bool-completer # Obfuscate the name of the domain when serving it publicly. Eg., `example.org` becomes something like `ex***e.org`.
+  --obfuscate: oneof<nothing, bool> # Obfuscate the name of the domain when serving it publicly. Eg., `example.org` becomes something like `ex***e.org`.
   --public-comment: string # Public comment about this domain allow. This will be displayed alongside the domain allow if you choose to share allows.
   --private-comment: string # Private comment about this domain allow. Will only be shown to other admins, so this is a useful way of internally keeping track of why a certain domain ended up allowed.
 ]: any -> record<comment: string, created_at: string, created_by: string, domain: string, id: string, obfuscate: bool, permission_type: string, private_comment: string, public_comment: string, severity: string, silenced_at: string, subscription_id: string, suspended_at: string> {
@@ -1250,7 +1249,7 @@ export def "admin-domain-blocks domainBlocksGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-export: string@bool-completer # If set to `true`, then each entry in the returned list of domain blocks will only consist of the fields `domain` and `public_comment`. This is perfect for when you want to save and share a list of all the domains you have blocked on your instance, so that someone else can easily import them, but you don't want them to see the database IDs of your blocks, or private comments etc.
+  --qp-export: oneof<nothing, bool> # If set to `true`, then each entry in the returned list of domain blocks will only consist of the fields `domain` and `public_comment`. This is perfect for when you want to save and share a list of all the domains you have blocked on your instance, so that someone else can easily import them, but you don't want them to see the database IDs of your blocks, or private comments etc.
 ]: nothing -> table<comment: string, created_at: string, created_by: string, domain: string, id: string, obfuscate: bool, permission_type: string, private_comment: string, public_comment: string, severity: string, silenced_at: string, subscription_id: string, suspended_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1273,10 +1272,10 @@ export def "admin-domain-blocks domainBlockCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --import: string@bool-completer # Signal that a list of domain blocks is being imported as a file. If set to `true`, then 'domains' must be present as a JSON-formatted file. If set to `false`, then `domains` will be ignored, and `domain` must be present. (default: false)
+  --import: oneof<nothing, bool> # Signal that a list of domain blocks is being imported as a file. If set to `true`, then 'domains' must be present as a JSON-formatted file. If set to `false`, then `domains` will be ignored, and `domain` must be present. (default: false)
   --domains: path # JSON-formatted list of domain blocks to import. This is only used if `import` is set to `true`.
   --domain: string # Single domain to block. Used only if `import` is not `true`.
-  --obfuscate: string@bool-completer # Obfuscate the name of the domain when serving it publicly. Eg., `example.org` becomes something like `ex***e.org`. Used only if `import` is not `true`.
+  --obfuscate: oneof<nothing, bool> # Obfuscate the name of the domain when serving it publicly. Eg., `example.org` becomes something like `ex***e.org`. Used only if `import` is not `true`.
   --public-comment: string # Public comment about this domain block. This will be displayed alongside the domain block if you choose to share blocks. Used only if `import` is not `true`.
   --private-comment: string # Private comment about this domain block. Will only be shown to other admins, so this is a useful way of internally keeping track of why a certain domain ended up blocked. Used only if `import` is not `true`.
 ]: any -> record<comment: string, created_at: string, created_by: string, domain: string, id: string, obfuscate: bool, permission_type: string, private_comment: string, public_comment: string, severity: string, silenced_at: string, subscription_id: string, suspended_at: string> {
@@ -1350,7 +1349,7 @@ export def "admin-domain-blocks domainBlockUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --obfuscate: string@bool-completer # Obfuscate the name of the domain when serving it publicly. Eg., `example.org` becomes something like `ex***e.org`.
+  --obfuscate: oneof<nothing, bool> # Obfuscate the name of the domain when serving it publicly. Eg., `example.org` becomes something like `ex***e.org`.
   --public-comment: string # Public comment about this domain block. This will be displayed alongside the domain block if you choose to share blocks.
   --private-comment: string # Private comment about this domain block. Will only be shown to other admins, so this is a useful way of internally keeping track of why a certain domain ended up blocked.
 ]: any -> record<comment: string, created_at: string, created_by: string, domain: string, id: string, obfuscate: bool, permission_type: string, private_comment: string, public_comment: string, severity: string, silenced_at: string, subscription_id: string, suspended_at: string> {
@@ -1545,7 +1544,7 @@ export def "admin-domain-permission-drafts domainPermissionDraftCreate" [
   --allow-errors(-e) # Return full response without error handling
   --domain: string # Domain to create the permission draft for.
   --permission-type: string # Create a draft "allow" or a draft "block".
-  --obfuscate: string@bool-completer # Obfuscate the name of the domain when serving it publicly. Eg., `example.org` becomes something like `ex***e.org`.
+  --obfuscate: oneof<nothing, bool> # Obfuscate the name of the domain when serving it publicly. Eg., `example.org` becomes something like `ex***e.org`.
   --public-comment: string # Public comment about this domain permission. This will be displayed alongside the domain permission if you choose to share permissions.
   --private-comment: string # Private comment about this domain permission. Will only be shown to other admins, so this is a useful way of internally keeping track of why a certain domain ended up permissioned.
 ]: any -> record<comment: string, created_at: string, created_by: string, domain: string, id: string, obfuscate: bool, permission_type: string, private_comment: string, public_comment: string, severity: string, silenced_at: string, subscription_id: string, suspended_at: string> {
@@ -1595,7 +1594,7 @@ export def "admin-domain-permission-drafts-accept domainPermissionDraftAccept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --overwrite: string@bool-completer # If a domain permission already exists with the same domain and permission type as the draft, overwrite the existing permission with fields from the draft.
+  --overwrite: oneof<nothing, bool> # If a domain permission already exists with the same domain and permission type as the draft, overwrite the existing permission with fields from the draft.
 ]: any -> record<comment: string, created_at: string, created_by: string, domain: string, id: string, obfuscate: bool, permission_type: string, private_comment: string, public_comment: string, severity: string, silenced_at: string, subscription_id: string, suspended_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1621,7 +1620,7 @@ export def "admin-domain-permission-drafts-remove domainPermissionDraftRemove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --exclude-target: string@bool-completer # When removing the domain permission draft, also create a domain exclude entry for the target domain, so that drafts will not be created for this domain in the future.
+  --exclude-target: oneof<nothing, bool> # When removing the domain permission draft, also create a domain exclude entry for the target domain, so that drafts will not be created for this domain in the future.
 ]: any -> record<comment: string, created_at: string, created_by: string, domain: string, id: string, obfuscate: bool, permission_type: string, private_comment: string, public_comment: string, severity: string, silenced_at: string, subscription_id: string, suspended_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1773,9 +1772,9 @@ export def "admin-domain-permission-subscriptions domainPermissionSubscriptionCr
   --priority: float # Priority of this subscription compared to others of the same permission type. 0-255 (higher = higher priority). Higher priority subscriptions will overwrite permissions generated by lower priority subscriptions. When two subscriptions have the same `priority` value, priority is indeterminate, so it's recommended to always set this value manually.
   --title: string # Optional title for this subscription.
   permission_type: string # Type of permissions to create by parsing the targeted file/list. One of "allow" or "block".
-  --as-draft: string@bool-completer # If true, domain permissions arising from this subscription will be created as drafts that must be approved by a moderator to take effect. If false, domain permissions from this subscription will come into force immediately. Defaults to "true".
-  --adopt-orphans: string@bool-completer # If true, this domain permission subscription will "adopt" domain permissions which already exist on the instance, and which meet the following conditions: 1) they have no subscription ID (ie., they're "orphaned") and 2) they are present in the subscribed list. Such orphaned domain permissions will be given this subscription's subscription ID value and be managed by this subscription.
-  --remove-retracted: string@bool-completer # If true, then when a list is processed, if the list does *not* contain entries that it *did* contain previously, ie., retracted entries, then domain permissions corresponding to those entries will be removed. If false, they will just be orphaned instead.
+  --as-draft: oneof<nothing, bool> # If true, domain permissions arising from this subscription will be created as drafts that must be approved by a moderator to take effect. If false, domain permissions from this subscription will come into force immediately. Defaults to "true".
+  --adopt-orphans: oneof<nothing, bool> # If true, this domain permission subscription will "adopt" domain permissions which already exist on the instance, and which meet the following conditions: 1) they have no subscription ID (ie., they're "orphaned") and 2) they are present in the subscribed list. Such orphaned domain permissions will be given this subscription's subscription ID value and be managed by this subscription.
+  --remove-retracted: oneof<nothing, bool> # If true, then when a list is processed, if the list does *not* contain entries that it *did* contain previously, ie., retracted entries, then domain permissions corresponding to those entries will be removed. If false, they will just be orphaned instead.
   uri: string # URI to call in order to fetch the permissions list.
   content_type: string # MIME content type to use when parsing the permissions list. One of "text/plain", "text/csv", and "application/json".
   --fetch-username: string # Optional basic auth username to provide when fetching given uri. If set, will be transmitted along with `fetch_password` when doing the fetch.
@@ -1808,9 +1807,9 @@ export def "admin-domain-permission-subscriptions-id domainPermissionSubscriptio
   --priority: float # Priority of this subscription compared to others of the same permission type. 0-255 (higher = higher priority). Higher priority subscriptions will overwrite permissions generated by lower priority subscriptions. When two subscriptions have the same `priority` value, priority is indeterminate, so it's recommended to always set this value manually.
   --title: string # Optional title for this subscription.
   --uri: string # URI to call in order to fetch the permissions list.
-  --as-draft: string@bool-completer # If true, domain permissions arising from this subscription will be created as drafts that must be approved by a moderator to take effect. If false, domain permissions from this subscription will come into force immediately. Defaults to "true".
-  --adopt-orphans: string@bool-completer # If true, this domain permission subscription will "adopt" domain permissions which already exist on the instance, and which meet the following conditions: 1) they have no subscription ID (ie., they're "orphaned") and 2) they are present in the subscribed list. Such orphaned domain permissions will be given this subscription's subscription ID value and be managed by this subscription.
-  --remove-retracted: string@bool-completer # If true, then when a list is processed, if the list does *not* contain entries that it *did* contain previously, ie., retracted entries, then domain permissions corresponding to those entries will be removed. If false, they will just be orphaned instead.
+  --as-draft: oneof<nothing, bool> # If true, domain permissions arising from this subscription will be created as drafts that must be approved by a moderator to take effect. If false, domain permissions from this subscription will come into force immediately. Defaults to "true".
+  --adopt-orphans: oneof<nothing, bool> # If true, this domain permission subscription will "adopt" domain permissions which already exist on the instance, and which meet the following conditions: 1) they have no subscription ID (ie., they're "orphaned") and 2) they are present in the subscribed list. Such orphaned domain permissions will be given this subscription's subscription ID value and be managed by this subscription.
+  --remove-retracted: oneof<nothing, bool> # If true, then when a list is processed, if the list does *not* contain entries that it *did* contain previously, ie., retracted entries, then domain permissions corresponding to those entries will be removed. If false, they will just be orphaned instead.
   --content-type: string # MIME content type to use when parsing the permissions list. One of "text/plain", "text/csv", and "application/json".
   --fetch-username: string # Optional basic auth username to provide when fetching given uri. If set, will be transmitted along with `fetch_password` when doing the fetch.
   --fetch-password: string # Optional basic auth password to provide when fetching given uri. If set, will be transmitted along with `fetch_username` when doing the fetch.
@@ -1861,7 +1860,7 @@ export def "admin-domain-permission-subscriptions-remove domainPermissionSubscri
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --remove-children: string@bool-completer # When removing the domain permission subscription, also remove children of this subscription, ie., domain permissions that are managed by this subscription. If false, then children will instead be orphaned but not removed. Note that removed permissions may end up being created again later by another domain permission subscription of lower priority than the removed subscription. Likewise, orphaned children may be later adopted by another subscription.
+  --remove-children: oneof<nothing, bool> # When removing the domain permission subscription, also remove children of this subscription, ie., domain permissions that are managed by this subscription. If false, then children will instead be orphaned but not removed. Note that removed permissions may end up being created again later by another domain permission subscription of lower priority than the removed subscription. Likewise, orphaned children may be later adopted by another subscription.
 ]: any -> record<adopt_orphans: bool, as_draft: bool, content_type: string, count: int, created_at: string, created_by: string, error: string, fetch_password: string, fetch_username: string, fetched_at: string, id: string, permission_type: string, priority: int, remove_retracted: bool, successfully_fetched_at: string, title: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2257,7 +2256,7 @@ export def "admin-instances adminInstances" [
   --allow-errors(-e) # Return full response without error handling
   --domain: string # Filter by the given domain.
   --order: string # Order by default "first_seen" (newest -> oldest) or "alphabetical" (a -> z). (default: latest)
-  --with-errors-only: string@bool-completer # Only include instances that have one or more delivery errors since the last successful delivery. (default: false)
+  --with-errors-only: oneof<nothing, bool> # Only include instances that have one or more delivery errors since the last successful delivery. (default: false)
   --max-id: string # Return only items *OLDER* than the given max ID (for paging downwards). The item with the specified ID will not be included in the response.
   --since-id: string # Return only items *NEWER* than the given since ID. The item with the specified ID will not be included in the response.
   --min-id: string # Return only items immediately *NEWER* than the given min ID (for paging upwards). The item with the specified ID will not be included in the response.
@@ -2419,12 +2418,12 @@ export def "admin-relay-subscriptions relaySubscriptionCreate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   relay_actor_uri: string # The ActivityPub URI of the remote relay actor.
-  --public: string@bool-completer # Ingest public posts. If false, never ingest public posts via this subscription.
-  --unlisted: string@bool-completer # Ingest unlisted posts. If false, never ingest unlisted posts via this subscription.
-  --match-by-default: string@bool-completer # Controls whether the relay subscription should ingest all non-ignored posts by default. If set true, and no "exclude"-type matchers are set on the subscription, then all included, non-ignored posts will be ingested.
-  --ignore-sensitive: string@bool-completer # Never ingest sensitive posts via this subscription.
-  --ignore-media: string@bool-completer # Never ingest posts with media attachments via this subscription.
-  --ignore-replies: string@bool-completer # Never ingest non-self-replies (ie., comments) via this subscription.
+  --public: oneof<nothing, bool> # Ingest public posts. If false, never ingest public posts via this subscription.
+  --unlisted: oneof<nothing, bool> # Ingest unlisted posts. If false, never ingest unlisted posts via this subscription.
+  --match-by-default: oneof<nothing, bool> # Controls whether the relay subscription should ingest all non-ignored posts by default. If set true, and no "exclude"-type matchers are set on the subscription, then all included, non-ignored posts will be ingested.
+  --ignore-sensitive: oneof<nothing, bool> # Never ingest sensitive posts via this subscription.
+  --ignore-media: oneof<nothing, bool> # Never ingest posts with media attachments via this subscription.
+  --ignore-replies: oneof<nothing, bool> # Never ingest non-self-replies (ie., comments) via this subscription.
 ]: any -> record<account_id: string, approved: bool, created_at: string, id: string, ignore_media: bool, ignore_replies: bool, ignore_sensitive: bool, match_by_default: bool, matchers: table<exclude: bool, id: string, keyword: string, whole_word: bool>, public: bool, relay_actor_uri: string, unlisted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2494,12 +2493,12 @@ export def "admin-relay-subscriptions relaySubscriptionUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --public: string@bool-completer # Ingest public posts. If false, never ingest public posts via this subscription.
-  --unlisted: string@bool-completer # Ingest unlisted posts. If false, never ingest unlisted posts via this subscription.
-  --match-by-default: string@bool-completer # Controls whether the relay subscription should ingest all non-ignored posts by default. If set true, and no "exclude"-type matchers are set on the subscription, then all included, non-ignored posts will be ingested.
-  --ignore-sensitive: string@bool-completer # Never ingest sensitive posts via this subscription.
-  --ignore-media: string@bool-completer # Never ingest posts with media attachments via this subscription.
-  --ignore-replies: string@bool-completer # Never ingest non-self-replies (ie., comments) via this subscription.
+  --public: oneof<nothing, bool> # Ingest public posts. If false, never ingest public posts via this subscription.
+  --unlisted: oneof<nothing, bool> # Ingest unlisted posts. If false, never ingest unlisted posts via this subscription.
+  --match-by-default: oneof<nothing, bool> # Controls whether the relay subscription should ingest all non-ignored posts by default. If set true, and no "exclude"-type matchers are set on the subscription, then all included, non-ignored posts will be ingested.
+  --ignore-sensitive: oneof<nothing, bool> # Never ingest sensitive posts via this subscription.
+  --ignore-media: oneof<nothing, bool> # Never ingest posts with media attachments via this subscription.
+  --ignore-replies: oneof<nothing, bool> # Never ingest non-self-replies (ie., comments) via this subscription.
 ]: any -> record<account_id: string, approved: bool, created_at: string, id: string, ignore_media: bool, ignore_replies: bool, ignore_sensitive: bool, match_by_default: bool, matchers: table<exclude: bool, id: string, keyword: string, whole_word: bool>, public: bool, relay_actor_uri: string, unlisted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2526,8 +2525,8 @@ export def "admin-relay-subscriptions-matchers relaySubscriptionMatcherPost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   keyword: string # The text to be matched.
-  --whole-word: string@bool-completer # Matcher should consider word boundaries.
-  --exclude: string@bool-completer # Matcher should cause matched posts to be excluded from relaying rather than included.
+  --whole-word: oneof<nothing, bool> # Matcher should consider word boundaries.
+  --exclude: oneof<nothing, bool> # Matcher should cause matched posts to be excluded from relaying rather than included.
 ]: any -> record<account_id: string, approved: bool, created_at: string, id: string, ignore_media: bool, ignore_replies: bool, ignore_sensitive: bool, match_by_default: bool, matchers: table<exclude: bool, id: string, keyword: string, whole_word: bool>, public: bool, relay_actor_uri: string, unlisted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2578,8 +2577,8 @@ export def "admin-relay-subscriptions-matchers relaySubscriptionMatcherPut" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   keyword: string # The text to be matched.
-  --whole-word: string@bool-completer # Matcher should consider word boundaries.
-  --exclude: string@bool-completer # Matcher should cause matched posts to be excluded from relaying rather than included.
+  --whole-word: oneof<nothing, bool> # Matcher should consider word boundaries.
+  --exclude: oneof<nothing, bool> # Matcher should cause matched posts to be excluded from relaying rather than included.
 ]: any -> record<account_id: string, approved: bool, created_at: string, id: string, ignore_media: bool, ignore_replies: bool, ignore_sensitive: bool, match_by_default: bool, matchers: table<exclude: bool, id: string, keyword: string, whole_word: bool>, public: bool, relay_actor_uri: string, unlisted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2604,8 +2603,8 @@ export def "admin-reports adminReports" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --resolved: string@bool-completer # If present, resolved reports will be returned. If not present, unresolved reports will be returned.
-  --unresolved: string@bool-completer # If present, unresolved reports will always be returned. If not present, unresolved reports will be returned only if the resolved parameter is not present. Can be used with `resolved` to return both resolved and unresolved reports in the same query.
+  --resolved: oneof<nothing, bool> # If present, resolved reports will be returned. If not present, unresolved reports will be returned.
+  --unresolved: oneof<nothing, bool> # If present, unresolved reports will always be returned. If not present, unresolved reports will be returned only if the resolved parameter is not present. Can be used with `resolved` to return both resolved and unresolved reports in the same query.
   --account-id: string # Return only reports created by the given account id.
   --target-account-id: string # Return only reports that target the given account id.
   --max-id: string # Return only reports *OLDER* than the given max ID (for paging downwards). The report with the specified ID will not be included in the response.
@@ -3234,8 +3233,8 @@ export def "filters filterV1Post" [
   phrase: string # The text to be filtered.  Sample: fnord
   context: list # The contexts in which the filter should be applied.  Sample: home, public
   --expires-in: float # Number of seconds from now that the filter should expire. If omitted, filter never expires.  Sample: 86400
-  --irreversible: string@bool-completer # Should matching entities be removed from the user's timelines/views, instead of hidden? Not supported yet.  Sample: false
-  --whole-word: string@bool-completer # Should the filter consider word boundaries?  Sample: true
+  --irreversible: oneof<nothing, bool> # Should matching entities be removed from the user's timelines/views, instead of hidden? Not supported yet.  Sample: false
+  --whole-word: oneof<nothing, bool> # Should the filter consider word boundaries?  Sample: true
 ]: any -> record<context: list<string>, expires_at: string, id: string, irreversible: bool, phrase: string, whole_word: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3308,8 +3307,8 @@ export def "filters filterV1Put" [
   phrase: string # The text to be filtered.  Sample: fnord
   context: list # The contexts in which the filter should be applied.  Sample: home, public
   --expires-in: float # Number of seconds from now that the filter should expire. If omitted, filter never expires.  Sample: 86400
-  --irreversible: string@bool-completer # Should matching entities be removed from the user's timelines/views, instead of hidden? Not supported yet.  Sample: false
-  --whole-word: string@bool-completer # Should the filter consider word boundaries?  Sample: true
+  --irreversible: oneof<nothing, bool> # Should matching entities be removed from the user's timelines/views, instead of hidden? Not supported yet.  Sample: false
+  --whole-word: oneof<nothing, bool> # Should the filter consider word boundaries?  Sample: true
 ]: any -> record<context: list<string>, expires_at: string, id: string, irreversible: bool, phrase: string, whole_word: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3583,7 +3582,7 @@ export def "instance-peers instancePeersGet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string # Comma-separated list of filters to apply to results. Recognized filters are:   - `open` -- include known domains that are not in the domain blocklist   - `allowed` -- include domains that are in the domain allowlist   - `blocked` -- include domains that are in the domain blocklist   - `suspended` -- DEPRECATED! Use `blocked` instead. Same as `blocked`: include domains that are in the domain blocklist;  If filter is `open`, only domains that aren't in the blocklist will be shown.  If filter is `blocked`, only domains that *are* in the blocklist will be shown.  If filter is `allowed`, only domains that are in the allowlist will be shown.  If filter is `open,blocked`, then blocked domains and known domains not on the blocklist will be shown.  If filter is `open,allowed`, then allowed domains and known domains not on the blocklist will be shown.  If filter is an empty string or not set, then `open` will be assumed as the default. (default: flat)
-  --flat: string@bool-completer # If true, a "flat" array of strings will be returned corresponding to just domain names. (default: false)
+  --flat: oneof<nothing, bool> # If true, a "flat" array of strings will be returned corresponding to just domain names. (default: false)
 ]: nothing -> table<comment: string, domain: string, public_comment: string, severity: string, silenced_at: string, suspended_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3697,9 +3696,9 @@ export def "interaction-requests list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --status-id: string # If set, then only interactions targeting the given status_id will be included in the results.
-  --favourites: string@bool-completer # If true or not set, pending favourites will be included in the results. At least one of favourites, replies, and reblogs must be true. (default: true)
-  --replies: string@bool-completer # If true or not set, pending replies will be included in the results. At least one of favourites, replies, and reblogs must be true. (default: true)
-  --reblogs: string@bool-completer # If true or not set, pending reblogs will be included in the results. At least one of favourites, replies, and reblogs must be true. (default: true)
+  --favourites: oneof<nothing, bool> # If true or not set, pending favourites will be included in the results. At least one of favourites, replies, and reblogs must be true. (default: true)
+  --replies: oneof<nothing, bool> # If true or not set, pending replies will be included in the results. At least one of favourites, replies, and reblogs must be true. (default: true)
+  --reblogs: oneof<nothing, bool> # If true or not set, pending reblogs will be included in the results. At least one of favourites, replies, and reblogs must be true. (default: true)
   --max-id: string # Return only interaction requests *OLDER* than the given max ID. The interaction with the specified ID will not be included in the response.
   --since-id: string # Return only interaction requests *NEWER* than the given since ID. The interaction with the specified ID will not be included in the response.
   --min-id: string # Return only interaction requests *IMMEDIATELY NEWER* than the given min ID. The interaction with the specified ID will not be included in the response.
@@ -3815,7 +3814,7 @@ export def "lists listCreate" [
   --allow-errors(-e) # Return full response without error handling
   title: string # Title of this list. Sample: Cool People
   --replies-policy: string@replies-policy-completer # RepliesPolicy for this list. followed = Show replies to any followed user list = Show replies to members of the list none = Show replies to no one Sample: list
-  --exclusive: string@bool-completer # Hide posts from members of this list from your home timeline.
+  --exclusive: oneof<nothing, bool> # Hide posts from members of this list from your home timeline.
 ]: any -> record<exclusive: bool, id: string, replies_policy: string, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3887,7 +3886,7 @@ export def "lists listUpdate" [
   --allow-errors(-e) # Return full response without error handling
   --title: string # Title of this list. Sample: Cool People
   --replies-policy: string@replies-policy-completer # RepliesPolicy for this list. followed = Show replies to any followed user list = Show replies to members of the list none = Show replies to no one Sample: list
-  --exclusive: string@bool-completer # Hide posts from members of this list from your home timeline.
+  --exclusive: oneof<nothing, bool> # Hide posts from members of this list from your home timeline.
 ]: any -> record<exclusive: bool, id: string, replies_policy: string, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4342,19 +4341,19 @@ export def "push-subscription pushSubscriptionPost" [
   subscriptionendpoint: string # The URL to which Web Push notifications will be sent.
   subscriptionkeysauth: string # The auth secret, a Base64 encoded string of 16 bytes of random data.
   subscriptionkeysp256dh: string # The user agent public key, a Base64 encoded string of a public key from an ECDH keypair using the prime256v1 curve.
-  --dataalertsfollow: string@bool-completer # Receive a push notification when someone has followed you?
-  --dataalertsfollow-request: string@bool-completer # Receive a push notification when someone has requested to follow you?
-  --dataalertsfavourite: string@bool-completer # Receive a push notification when a status you created has been favourited by someone else?
-  --dataalertsmention: string@bool-completer # Receive a push notification when someone else has mentioned you in a status?
-  --dataalertsreblog: string@bool-completer # Receive a push notification when a status you created has been boosted by someone else?
-  --dataalertspoll: string@bool-completer # Receive a push notification when a poll you voted in or created has ended?
-  --dataalertsstatus: string@bool-completer # Receive a push notification when a subscribed account posts a status?
-  --dataalertsupdate: string@bool-completer # Receive a push notification when a status you interacted with has been edited?
-  --dataalertsadminsign-up: string@bool-completer # Receive a push notification when a new user has signed up?
-  --dataalertsadminreport: string@bool-completer # Receive a push notification when a new report has been filed?
-  --dataalertspendingfavourite: string@bool-completer # Receive a push notification when a fave is pending?
-  --dataalertspendingreply: string@bool-completer # Receive a push notification when a reply is pending?
-  --dataalertspendingreblog: string@bool-completer # Receive a push notification when a boost is pending?
+  --dataalertsfollow: oneof<nothing, bool> # Receive a push notification when someone has followed you?
+  --dataalertsfollow-request: oneof<nothing, bool> # Receive a push notification when someone has requested to follow you?
+  --dataalertsfavourite: oneof<nothing, bool> # Receive a push notification when a status you created has been favourited by someone else?
+  --dataalertsmention: oneof<nothing, bool> # Receive a push notification when someone else has mentioned you in a status?
+  --dataalertsreblog: oneof<nothing, bool> # Receive a push notification when a status you created has been boosted by someone else?
+  --dataalertspoll: oneof<nothing, bool> # Receive a push notification when a poll you voted in or created has ended?
+  --dataalertsstatus: oneof<nothing, bool> # Receive a push notification when a subscribed account posts a status?
+  --dataalertsupdate: oneof<nothing, bool> # Receive a push notification when a status you interacted with has been edited?
+  --dataalertsadminsign-up: oneof<nothing, bool> # Receive a push notification when a new user has signed up?
+  --dataalertsadminreport: oneof<nothing, bool> # Receive a push notification when a new report has been filed?
+  --dataalertspendingfavourite: oneof<nothing, bool> # Receive a push notification when a fave is pending?
+  --dataalertspendingreply: oneof<nothing, bool> # Receive a push notification when a reply is pending?
+  --dataalertspendingreblog: oneof<nothing, bool> # Receive a push notification when a boost is pending?
   --datapolicy: string@datapolicy-completer # Which accounts to receive push notifications from.
 ]: any -> record<alerts: record<admin_report: bool, admin_sign_up: bool, favourite: bool, follow: bool, follow_request: bool, mention: bool, pending_favourite: bool, pending_reblog: bool, pending_reply: bool, poll: bool, reblog: bool, status: bool, update: bool>, endpoint: string, id: string, policy: string, server_key: string, standard: bool> {
   let input = $in
@@ -4380,19 +4379,19 @@ export def "push-subscription pushSubscriptionPut" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dataalertsfollow: string@bool-completer # Receive a push notification when someone has followed you?
-  --dataalertsfollow-request: string@bool-completer # Receive a push notification when someone has requested to follow you?
-  --dataalertsfavourite: string@bool-completer # Receive a push notification when a status you created has been favourited by someone else?
-  --dataalertsmention: string@bool-completer # Receive a push notification when someone else has mentioned you in a status?
-  --dataalertsreblog: string@bool-completer # Receive a push notification when a status you created has been boosted by someone else?
-  --dataalertspoll: string@bool-completer # Receive a push notification when a poll you voted in or created has ended?
-  --dataalertsstatus: string@bool-completer # Receive a push notification when a subscribed account posts a status?
-  --dataalertsupdate: string@bool-completer # Receive a push notification when a status you interacted with has been edited?
-  --dataalertsadminsign-up: string@bool-completer # Receive a push notification when a new user has signed up?
-  --dataalertsadminreport: string@bool-completer # Receive a push notification when a new report has been filed?
-  --dataalertspendingfavourite: string@bool-completer # Receive a push notification when a fave is pending?
-  --dataalertspendingreply: string@bool-completer # Receive a push notification when a reply is pending?
-  --dataalertspendingreblog: string@bool-completer # Receive a push notification when a boost is pending?
+  --dataalertsfollow: oneof<nothing, bool> # Receive a push notification when someone has followed you?
+  --dataalertsfollow-request: oneof<nothing, bool> # Receive a push notification when someone has requested to follow you?
+  --dataalertsfavourite: oneof<nothing, bool> # Receive a push notification when a status you created has been favourited by someone else?
+  --dataalertsmention: oneof<nothing, bool> # Receive a push notification when someone else has mentioned you in a status?
+  --dataalertsreblog: oneof<nothing, bool> # Receive a push notification when a status you created has been boosted by someone else?
+  --dataalertspoll: oneof<nothing, bool> # Receive a push notification when a poll you voted in or created has ended?
+  --dataalertsstatus: oneof<nothing, bool> # Receive a push notification when a subscribed account posts a status?
+  --dataalertsupdate: oneof<nothing, bool> # Receive a push notification when a status you interacted with has been edited?
+  --dataalertsadminsign-up: oneof<nothing, bool> # Receive a push notification when a new user has signed up?
+  --dataalertsadminreport: oneof<nothing, bool> # Receive a push notification when a new report has been filed?
+  --dataalertspendingfavourite: oneof<nothing, bool> # Receive a push notification when a fave is pending?
+  --dataalertspendingreply: oneof<nothing, bool> # Receive a push notification when a reply is pending?
+  --dataalertspendingreblog: oneof<nothing, bool> # Receive a push notification when a boost is pending?
   --datapolicy: string@datapolicy-completer # Which accounts to receive push notifications from.
 ]: any -> record<alerts: record<admin_report: bool, admin_sign_up: bool, favourite: bool, follow: bool, follow_request: bool, mention: bool, pending_favourite: bool, pending_reblog: bool, pending_reply: bool, poll: bool, reblog: bool, status: bool, update: bool>, endpoint: string, id: string, policy: string, server_key: string, standard: bool> {
   let input = $in
@@ -4440,12 +4439,12 @@ export def "relay-pushes relayPushCreate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   relay_actor_uri: string # The ActivityPub URI of the remote relay actor.
-  --public: string@bool-completer # Push public posts. If false, never send public posts to this relay.
-  --unlisted: string@bool-completer # Push unlisted posts. If false, never send unlisted posts to this relay.
-  --match-by-default: string@bool-completer # Controls whether the relay push should send all non-ignored posts by default. If set true, and no "exclude"-type matchers are set on the push, then all included, non-ignored posts will be sent.
-  --ignore-sensitive: string@bool-completer # Never send sensitive posts to this relay.
-  --ignore-media: string@bool-completer # Never send posts with media attachments to this relay.
-  --ignore-replies: string@bool-completer # Never send non-self-replies (ie., comments) to this relay.
+  --public: oneof<nothing, bool> # Push public posts. If false, never send public posts to this relay.
+  --unlisted: oneof<nothing, bool> # Push unlisted posts. If false, never send unlisted posts to this relay.
+  --match-by-default: oneof<nothing, bool> # Controls whether the relay push should send all non-ignored posts by default. If set true, and no "exclude"-type matchers are set on the push, then all included, non-ignored posts will be sent.
+  --ignore-sensitive: oneof<nothing, bool> # Never send sensitive posts to this relay.
+  --ignore-media: oneof<nothing, bool> # Never send posts with media attachments to this relay.
+  --ignore-replies: oneof<nothing, bool> # Never send non-self-replies (ie., comments) to this relay.
 ]: any -> record<account_id: string, approved: bool, created_at: string, id: string, ignore_media: bool, ignore_replies: bool, ignore_sensitive: bool, match_by_default: bool, matchers: table<exclude: bool, id: string, keyword: string, whole_word: bool>, public: bool, relay_actor_uri: string, unlisted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4515,12 +4514,12 @@ export def "relay-pushes relayPushUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --public: string@bool-completer # Push public posts. If false, never send public posts to this relay.
-  --unlisted: string@bool-completer # Push unlisted posts. If false, never send unlisted posts to this relay.
-  --match-by-default: string@bool-completer # Controls whether the relay push should send all non-ignored posts by default. If set true, and no "exclude"-type matchers are set on the push, then all included, non-ignored posts will be sent.
-  --ignore-sensitive: string@bool-completer # Never send sensitive posts to this relay.
-  --ignore-media: string@bool-completer # Never send posts with media attachments to this relay.
-  --ignore-replies: string@bool-completer # Never send non-self-replies (ie., comments) to this relay.
+  --public: oneof<nothing, bool> # Push public posts. If false, never send public posts to this relay.
+  --unlisted: oneof<nothing, bool> # Push unlisted posts. If false, never send unlisted posts to this relay.
+  --match-by-default: oneof<nothing, bool> # Controls whether the relay push should send all non-ignored posts by default. If set true, and no "exclude"-type matchers are set on the push, then all included, non-ignored posts will be sent.
+  --ignore-sensitive: oneof<nothing, bool> # Never send sensitive posts to this relay.
+  --ignore-media: oneof<nothing, bool> # Never send posts with media attachments to this relay.
+  --ignore-replies: oneof<nothing, bool> # Never send non-self-replies (ie., comments) to this relay.
 ]: any -> record<account_id: string, approved: bool, created_at: string, id: string, ignore_media: bool, ignore_replies: bool, ignore_sensitive: bool, match_by_default: bool, matchers: table<exclude: bool, id: string, keyword: string, whole_word: bool>, public: bool, relay_actor_uri: string, unlisted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4547,8 +4546,8 @@ export def "relay-pushes-matchers relayPushMatcherPost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   keyword: string # The text to be matched.
-  --whole-word: string@bool-completer # Matcher should consider word boundaries.
-  --exclude: string@bool-completer # Matcher should cause matched posts to be excluded from relaying rather than included.
+  --whole-word: oneof<nothing, bool> # Matcher should consider word boundaries.
+  --exclude: oneof<nothing, bool> # Matcher should cause matched posts to be excluded from relaying rather than included.
 ]: any -> record<account_id: string, approved: bool, created_at: string, id: string, ignore_media: bool, ignore_replies: bool, ignore_sensitive: bool, match_by_default: bool, matchers: table<exclude: bool, id: string, keyword: string, whole_word: bool>, public: bool, relay_actor_uri: string, unlisted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4599,8 +4598,8 @@ export def "relay-pushes-matchers relayPushMatcherPut" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   keyword: string # The text to be matched.
-  --whole-word: string@bool-completer # Matcher should consider word boundaries.
-  --exclude: string@bool-completer # Matcher should cause matched posts to be excluded from relaying rather than included.
+  --whole-word: oneof<nothing, bool> # Matcher should consider word boundaries.
+  --exclude: oneof<nothing, bool> # Matcher should cause matched posts to be excluded from relaying rather than included.
 ]: any -> record<account_id: string, approved: bool, created_at: string, id: string, ignore_media: bool, ignore_replies: bool, ignore_sensitive: bool, match_by_default: bool, matchers: table<exclude: bool, id: string, keyword: string, whole_word: bool>, public: bool, relay_actor_uri: string, unlisted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4625,7 +4624,7 @@ export def "reports reports" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --resolved: string@bool-completer # If set to true, only resolved reports will be returned. If false, only unresolved reports will be returned. If unset, reports will not be filtered on their resolved status.
+  --resolved: oneof<nothing, bool> # If set to true, only resolved reports will be returned. If false, only unresolved reports will be returned. If unset, reports will not be filtered on their resolved status.
   --target-account-id: string # Return only reports that target the given account id.
   --max-id: string # Return only reports *OLDER* than the given max ID (for paging downwards). The report with the specified ID will not be included in the response.
   --since-id: string # Return only reports *NEWER* than the given since ID. The report with the specified ID will not be included in the response.
@@ -4656,7 +4655,7 @@ export def "reports reportCreate" [
   account_id: string # ID of the account to report. Sample: 01GPE75FXSH2EGFBF85NXPH3KP
   --status-ids: list # IDs of statuses to attach to the report to provide additional context. Sample: ["01GPE76N4SBVRZ8K24TW51ZZQ4","01GPE76WN9JZE62EPT3Q9FRRD4"]
   --comment: string # The reason for the report. Default maximum of 1000 characters. Sample: Anti-Blackness, transphobia.
-  --forward: string@bool-completer # If the account is remote, should the report be forwarded to the remote admin? Sample: true
+  --forward: oneof<nothing, bool> # If the account is remote, should the report be forwarded to the remote admin? Sample: true
   --category: string # Specify if the report is due to spam, violation of enumerated instance rules, or some other reason. Currently only 'other' is supported. Sample: other
   --rule-ids: list # IDs of rules on this instance which have been broken according to the reporter. Sample: ["01GPBN5YDY6JKBWE44H7YQBDCQ","01GPBN65PDWSBPWVDD0SQCFFY3"]
 ]: any -> record<action_taken: bool, action_taken_at: string, action_taken_comment: string, category: string, comment: string, created_at: string, forwarded: bool, id: string, rule_ids: list<string>, status_ids: list<string>, target_account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list<record>, enable_rss: bool, fields: list<record>, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record<color: string, highlighted: bool, id: string, name: string, permissions: string>, roles: list<record>, source: record<also_known_as_uris: list, fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool, status_content_type: string, web_include_boosts: bool, web_layout: string, web_visibility: string>, statuses_count: int, suspended: bool, theme: string, url: string, username: string>> {
@@ -4828,14 +4827,14 @@ export def "statuses statusCreate" [
   --media-ids: list # Array of Attachment ids to be attached as media. If provided, status becomes optional, and poll cannot be used.  If the status is being submitted as a form, the key is 'media_ids[]', but if it's json or xml, the key is 'media_ids'.
   --polloptions: list # Array of possible poll answers. If provided, media_ids cannot be used, and poll[expires_in] must be provided.
   --pollexpires-in: int # Duration the poll should be open, in seconds. If provided, media_ids cannot be used, and poll[options] must be provided.
-  --pollmultiple: string@bool-completer # Allow multiple choices on this poll.
-  --pollhide-totals: string@bool-completer # Hide vote counts until the poll ends.
+  --pollmultiple: oneof<nothing, bool> # Allow multiple choices on this poll.
+  --pollhide-totals: oneof<nothing, bool> # Hide vote counts until the poll ends.
   --in-reply-to-id: string # ID of the status being replied to, if status is a reply.
-  --sensitive: string@bool-completer # Status and attached media should be marked as sensitive.
+  --sensitive: oneof<nothing, bool> # Status and attached media should be marked as sensitive.
   --spoiler-text: string # Text to be shown as a warning or subject before the actual content. Statuses are generally collapsed behind this field.
   --visibility: string@visibility-completer # Visibility of the posted status.
-  --local-only: string@bool-completer # If set to true, this status will be "local only" and will NOT be federated beyond the local timeline(s). If set to false (default), this status will be federated to your followers beyond the local timeline(s).
-  --federated: string@bool-completer # ***DEPRECATED***. Included for back compat only. Only used if set and local_only is not yet. If set to true, this status will be federated beyond the local timeline(s). If set to false, this status will NOT be federated beyond the local timeline(s).
+  --local-only: oneof<nothing, bool> # If set to true, this status will be "local only" and will NOT be federated beyond the local timeline(s). If set to false (default), this status will be federated to your followers beyond the local timeline(s).
+  --federated: oneof<nothing, bool> # ***DEPRECATED***. Included for back compat only. Only used if set and local_only is not yet. If set to true, this status will be federated beyond the local timeline(s). If set to false, this status will NOT be federated beyond the local timeline(s).
   --scheduled-at: string # ISO 8601 Datetime at which to schedule a status.  Providing this parameter with a *future* time will cause ScheduledStatus to be returned instead of Status. Must be at least 5 minutes in the future.  Providing this parameter with a *past* time will cause the status to be backdated, and will not push it to the user's followers. This is intended for importing old statuses.
   --language: string # ISO 639 language code for this status.
   --content-type: string@content-type-completer # Content type to use when parsing this status.
@@ -4918,9 +4917,9 @@ export def "statuses statusEdit" [
   --media-ids: list # Array of Attachment ids to be attached as media. If provided, status becomes optional, and poll cannot be used.  If the status is being submitted as a form, the key is 'media_ids[]', but if it's json or xml, the key is 'media_ids'.
   --polloptions: list # Array of possible poll answers. If provided, media_ids cannot be used, and poll[expires_in] must be provided.
   --pollexpires-in: int # Duration the poll should be open, in seconds. If provided, media_ids cannot be used, and poll[options] must be provided.
-  --pollmultiple: string@bool-completer # Allow multiple choices on this poll.
-  --pollhide-totals: string@bool-completer # Hide vote counts until the poll ends.
-  --sensitive: string@bool-completer # Status and attached media should be marked as sensitive.
+  --pollmultiple: oneof<nothing, bool> # Allow multiple choices on this poll.
+  --pollhide-totals: oneof<nothing, bool> # Hide vote counts until the poll ends.
+  --sensitive: oneof<nothing, bool> # Status and attached media should be marked as sensitive.
   --spoiler-text: string # Text to be shown as a warning or subject before the actual content. Statuses are generally collapsed behind this field.
   --language: string # ISO 639 language code for this status.
   --content-type: string@content-type-completer # Content type to use when parsing this status.
@@ -5395,7 +5394,7 @@ export def "timelines-home homeTimeline" [
   --since-id: string # Return only statuses *newer* than the given since status ID. The status with the specified ID will not be included in the response.
   --min-id: string # Return only statuses *immediately newer* than the given since status ID. The status with the specified ID will not be included in the response.
   --limit: int # Number of statuses to return. (default: 20)
-  --local: string@bool-completer # Show only statuses posted by local accounts. (default: false)
+  --local: oneof<nothing, bool> # Show only statuses posted by local accounts. (default: false)
 ]: nothing -> table<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record, application: record, bookmarked: bool, card: record, content: string, content_type: string, created_at: string, edited_at: string, emojis: list, favourited: bool, favourites_count: int, filtered: list, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record, language: string, local_only: bool, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5449,7 +5448,7 @@ export def "timelines-public publicTimeline" [
   --since-id: string # Return only statuses *NEWER* than the given since status ID. The status with the specified ID will not be included in the response.
   --min-id: string # Return only statuses *NEWER* than the given since status ID. The status with the specified ID will not be included in the response.
   --limit: int # Number of statuses to return. (default: 20)
-  --local: string@bool-completer # Show only statuses posted by local accounts. (default: false)
+  --local: oneof<nothing, bool> # Show only statuses posted by local accounts. (default: false)
 ]: nothing -> table<account: record<acct: string, avatar: string, avatar_description: string, avatar_media_id: string, avatar_static: string, bot: bool, created_at: string, custom_css: string, discoverable: bool, display_name: string, emojis: list, enable_rss: bool, fields: list, followers_count: int, following_count: int, group: bool, header: string, header_description: string, header_media_id: string, header_static: string, hide_collections: bool, id: string, indexable: bool, last_status_at: string, locked: bool, moved: any, noindex: bool, note: string, role: record, roles: list, source: record, statuses_count: int, suspended: bool, theme: string, url: string, username: string>, application: record<client_id: string, client_secret: string, created_at: string, id: string, name: string, redirect_uri: string, redirect_uris: list, scopes: list, vapid_key: string, website: string>, bookmarked: bool, card: record<author_name: string, author_url: string, blurhash: string, description: string, embed_url: string, height: int, html: string, image: string, provider_name: string, provider_url: string, title: string, type: string, url: string, width: int>, content: string, content_type: string, created_at: string, edited_at: string, emojis: list<record>, favourited: bool, favourites_count: int, filtered: list<record>, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record<can_favourite: record, can_reblog: record, can_reply: record>, language: string, local_only: bool, media_attachments: list<record>, mentions: list<record>, muted: bool, pinned: bool, poll: record<emojis: list, expired: bool, expires_at: string, id: string, multiple: bool, options: list, own_votes: list, voted: bool, voters_count: int, votes_count: int>, reblog: record<account: record, application: record, bookmarked: bool, card: record, content: string, content_type: string, created_at: string, edited_at: string, emojis: list, favourited: bool, favourites_count: int, filtered: list, id: string, in_reply_to_account_id: string, in_reply_to_id: string, interaction_policy: record, language: string, local_only: bool, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list<record>, text: string, uri: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6007,7 +6006,7 @@ export def "filters-keywords filterKeywordPost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   keyword: string # The text to be filtered  Sample: fnord
-  --whole-word: string@bool-completer # Should the filter consider word boundaries?  Sample: true
+  --whole-word: oneof<nothing, bool> # Should the filter consider word boundaries?  Sample: true
 ]: any -> record<id: string, keyword: string, whole_word: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6126,7 +6125,7 @@ export def "filters-keywords-id filterKeywordPut" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   keyword: string # The text to be filtered  Sample: fnord
-  --whole-word: string@bool-completer # Should the filter consider word boundaries?  Sample: true
+  --whole-word: oneof<nothing, bool> # Should the filter consider word boundaries?  Sample: true
 ]: any -> record<id: string, keyword: string, whole_word: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6373,7 +6372,7 @@ export def "users-outbox s2sOutboxGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --page: string@bool-completer # Return response as a CollectionPage. (default: false)
+  --page: oneof<nothing, bool> # Return response as a CollectionPage. (default: false)
   --min-id: string # Minimum ID of the next status, used for paging.
   --max-id: string # Maximum ID of the next status, used for paging.
 ]: nothing -> record<_context: any, first: record<id: string, items: list<string>, next: string, partOf: string, type: string>, id: string, last: record<id: string, items: list<string>, next: string, partOf: string, type: string>, type: string> {
@@ -6400,8 +6399,8 @@ export def "users-statuses-replies s2sRepliesGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --page: string@bool-completer # Return response as a CollectionPage. (default: false)
-  --only-other-accounts: string@bool-completer # Return replies only from accounts other than the status owner. (default: false)
+  --page: oneof<nothing, bool> # Return response as a CollectionPage. (default: false)
+  --only-other-accounts: oneof<nothing, bool> # Return replies only from accounts other than the status owner. (default: false)
   --min-id: string # Minimum ID of the next status, used for paging.
 ]: nothing -> record<_context: any, first: record<id: string, items: list<string>, next: string, partOf: string, type: string>, id: string, last: record<id: string, items: list<string>, next: string, partOf: string, type: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

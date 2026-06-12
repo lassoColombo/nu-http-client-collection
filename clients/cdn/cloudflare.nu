@@ -64,7 +64,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.cloudflare.com/client/v4"] }
 def auth-scheme-completer [] { ["x-auth-email" "x-auth-key" "bearer" "x-auth-user-service-key"] }
 
@@ -197,11 +196,11 @@ def sortBy-completer [] { ["application-tests-usage" "fleet-status-usage"] }
 def command-type-completer [] { ["pcap" "speed-test" "warp-diag"] }
 def status-completer-10 [] { ["FAILED" "PENDING_EXEC" "PENDING_UPLOAD" "SUCCESS"] }
 def kind-completer-2 [] { ["http" "traceroute"] }
+def interval-completer [] { ["hour" "minute"] }
 def sort-by-completer-3 [] { ["time_start"] }
 def sort-order-completer-1 [] { ["ASC" "DESC"] }
 def sort-by-completer-4 [] { ["colo" "device_id" "mode" "platform" "status" "timestamp" "version"] }
 def source-completer [] { ["hourly" "last_seen" "raw"] }
-def interval-completer [] { ["hour" "minute"] }
 def sort-by-completer-5 [] { ["created_at" "name" "updated_at"] }
 def type-completer-10 [] { ["config" "toggle"] }
 def toggle-completer [] { ["off" "on"] }
@@ -1099,12 +1098,12 @@ export def "accounts-access-ai-controls-mcp-portals mcp-portals-api-create-porta
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-code-mode: string@bool-completer # Allow remote code execution in Dynamic Workers (beta) (default: true, e.g. true)
+  --allow-code-mode: oneof<nothing, bool> # Allow remote code execution in Dynamic Workers (beta) (default: true, e.g. true)
   --description: string # e.g. This is my custom MCP Portal
   hostname: string # e.g. exmaple.com
   id: string # portal id (e.g. my-mcp-portal)
   name: string # e.g. My MCP Portal
-  --secure-web-gateway: string@bool-completer # Route outbound MCP traffic through Zero Trust Secure Web Gateway (default: false, e.g. false)
+  --secure-web-gateway: oneof<nothing, bool> # Route outbound MCP traffic through Zero Trust Secure Web Gateway (default: false, e.g. false)
   --servers: list # item shape: {default_disabled?: bool, on_behalf?: bool, server_id: string, updated_prompts?: list, updated_tools?: list}
 ]: any -> record<result: record<allow_code_mode: bool, created_at: string, created_by: string, description: string, hostname: string, id: string, modified_at: string, modified_by: string, name: string, secure_web_gateway: bool, servers: list<record>>, success: bool> {
   let input = $in
@@ -1179,11 +1178,11 @@ export def "accounts-access-ai-controls-mcp-portals mcp-portals-api-update-porta
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-code-mode: string@bool-completer # Allow remote code execution in Dynamic Workers (beta) (default: true, e.g. true)
+  --allow-code-mode: oneof<nothing, bool> # Allow remote code execution in Dynamic Workers (beta) (default: true, e.g. true)
   --description: string # e.g. This is my custom MCP Portal
   --hostname: string # e.g. exmaple.com
   --name: string # e.g. My MCP Portal
-  --secure-web-gateway: string@bool-completer # Route outbound MCP traffic through Zero Trust Secure Web Gateway (default: false, e.g. false)
+  --secure-web-gateway: oneof<nothing, bool> # Route outbound MCP traffic through Zero Trust Secure Web Gateway (default: false, e.g. false)
   --servers: list # item shape: {default_disabled?: bool, on_behalf?: bool, server_id: string, updated_prompts?: list, updated_tools?: list}
 ]: any -> record<result: record<allow_code_mode: bool, created_at: string, created_by: string, description: string, hostname: string, id: string, modified_at: string, modified_by: string, name: string, secure_web_gateway: bool, servers: list<record>>, success: bool> {
   let input = $in
@@ -1243,9 +1242,9 @@ export def "accounts-access-ai-controls-mcp-servers mcp-portals-api-create-serve
   --description: string # nullable, e.g. This is one remote mcp server
   hostname: string # format: uri, e.g. https://example.com/mcp
   id: string # server id (e.g. my-mcp-server)
-  --is-shared-oauth-callback-enabled: string@bool-completer # When true, the gateway worker uses the shared Cloudflare-owned OAuth callback endpoint as the redirect_uri for upstream on-behalf OAuth, instead of the customer portal hostname. New public server creates default to true; existing servers default to false from migration until explicitly updated. Effective behavior is gated by the gateway worker's per-env rollout mode KV key.
+  --is-shared-oauth-callback-enabled: oneof<nothing, bool> # When true, the gateway worker uses the shared Cloudflare-owned OAuth callback endpoint as the redirect_uri for upstream on-behalf OAuth, instead of the customer portal hostname. New public server creates default to true; existing servers default to false from migration until explicitly updated. Effective behavior is gated by the gateway worker's per-env rollout mode KV key.
   name: string # e.g. My MCP Server
-  --secure-web-gateway: string@bool-completer # Route outbound traffic to this MCP server through Zero Trust Secure Web Gateway (default: false, e.g. false)
+  --secure-web-gateway: oneof<nothing, bool> # Route outbound traffic to this MCP server through Zero Trust Secure Web Gateway (default: false, e.g. false)
   --updated-prompts: list # item shape: {alias?: string, description?: string, enabled?: bool, name: string}
   --updated-tools: list # item shape: {alias?: string, description?: string, enabled?: bool, name: string}
 ]: any -> record<result: record<auth_type: string, created_at: string, created_by: string, description: string, error: string, error_details: record<cause: string, is_upstream: bool, mcp_code: float, retryable: bool, status_code: float>, hostname: string, id: string, is_shared_oauth_callback_enabled: bool, last_successful_sync: string, last_synced: string, modified_at: string, modified_by: string, name: string, prompts: list<record>, secure_web_gateway: bool, status: string, tools: list<record>, updated_prompts: list<record>, updated_tools: list<record>>, success: bool> {
@@ -1324,9 +1323,9 @@ export def "accounts-access-ai-controls-mcp-servers mcp-portals-api-update-serve
   --allow-errors(-e) # Return full response without error handling
   --auth-credentials: string
   --description: string # nullable, e.g. This is one remote mcp server
-  --is-shared-oauth-callback-enabled: string@bool-completer # When true, the gateway worker uses the shared Cloudflare-owned OAuth callback endpoint as the redirect_uri for upstream on-behalf OAuth, instead of the customer portal hostname. New public server creates default to true; existing servers default to false from migration until explicitly updated. Effective behavior is gated by the gateway worker's per-env rollout mode KV key.
+  --is-shared-oauth-callback-enabled: oneof<nothing, bool> # When true, the gateway worker uses the shared Cloudflare-owned OAuth callback endpoint as the redirect_uri for upstream on-behalf OAuth, instead of the customer portal hostname. New public server creates default to true; existing servers default to false from migration until explicitly updated. Effective behavior is gated by the gateway worker's per-env rollout mode KV key.
   --name: string # e.g. My MCP Server
-  --secure-web-gateway: string@bool-completer # Route outbound traffic to this MCP server through Zero Trust Secure Web Gateway (default: false, e.g. false)
+  --secure-web-gateway: oneof<nothing, bool> # Route outbound traffic to this MCP server through Zero Trust Secure Web Gateway (default: false, e.g. false)
   --updated-prompts: list # item shape: {alias?: string, description?: string, enabled?: bool, name: string}
   --updated-tools: list # item shape: {alias?: string, description?: string, enabled?: bool, name: string}
 ]: any -> record<result: record<auth_type: string, created_at: string, created_by: string, description: string, error: string, error_details: record<cause: string, is_upstream: bool, mcp_code: float, retryable: bool, status_code: float>, hostname: string, id: string, is_shared_oauth_callback_enabled: bool, last_successful_sync: string, last_synced: string, modified_at: string, modified_by: string, name: string, prompts: list<record>, secure_web_gateway: bool, status: string, tools: list<record>, updated_prompts: list<record>, updated_tools: list<record>>, success: bool> {
@@ -1381,7 +1380,7 @@ export def "accounts-access-apps access-applications-list-access-applications" [
   --domain: string
   --aud: string
   --target-attributes: string
-  --exact: string@bool-completer
+  --exact: oneof<nothing, bool>
   --search: string
   --page: int # default: 1
   --per-page: int # default: 1000
@@ -1631,12 +1630,12 @@ export def "accounts-access-apps-policies access-policies-create-an-access-polic
   --allow-errors(-e) # Return full response without error handling
   --precedence: int # The order of execution for this policy. Must be unique for each policy within an app.
   --approval-groups: list # Administrators who can approve a temporary authentication request. (e.g. [{approvals_needed: 1, email_addresses: [test1@cloudflare.com, test2@cloudflare.com]}, {approvals_needed: 3, email_list_uuid: 597147a1-976b-4ef2-9af0-81d5d007fc34}]) — item shape: {approvals_needed: float, email_addresses?: list, email_list_uuid?: string}
-  --approval-required: string@bool-completer # Requires the user to request access from an administrator at the start of each session. (e.g. true)
+  --approval-required: oneof<nothing, bool> # Requires the user to request access from an administrator at the start of each session. (e.g. true)
   --connection-rules: record # The rules that define how users may connect to targets secured by your application. — shape: {rdp?: record}
-  --isolation-required: string@bool-completer # Require this application to be served in an isolated browser for users matching this policy. 'Client Web Isolation' must be on for the account in order to use this feature. (e.g. false)
+  --isolation-required: oneof<nothing, bool> # Require this application to be served in an isolated browser for users matching this policy. 'Client Web Isolation' must be on for the account in order to use this feature. (e.g. false)
   --mfa-config: record # Configures multi-factor authentication (MFA) settings. — shape: {allowed_authenticators?: list, mfa_disabled?: bool, session_duration?: string}
   --purpose-justification-prompt: string # A custom message that will appear on the purpose justification screen. (e.g. Please enter a justification for entering this protected domain.)
-  --purpose-justification-required: string@bool-completer # Require users to enter a justification when they log in to the application. (e.g. true)
+  --purpose-justification-required: oneof<nothing, bool> # Require users to enter a justification when they log in to the application. (e.g. true)
   --session-duration: string # The amount of time that tokens issued for the application will be valid. Must be in the format `300ms` or `2h45m`. Valid time units are: ns, us (or µs), ms, s, m, h. (default: 24h, e.g. 24h)
 ]: any -> record {
   let input = $in
@@ -1718,12 +1717,12 @@ export def "accounts-access-apps-policies access-policies-update-an-access-polic
   --allow-errors(-e) # Return full response without error handling
   --precedence: int # The order of execution for this policy. Must be unique for each policy within an app.
   --approval-groups: list # Administrators who can approve a temporary authentication request. (e.g. [{approvals_needed: 1, email_addresses: [test1@cloudflare.com, test2@cloudflare.com]}, {approvals_needed: 3, email_list_uuid: 597147a1-976b-4ef2-9af0-81d5d007fc34}]) — item shape: {approvals_needed: float, email_addresses?: list, email_list_uuid?: string}
-  --approval-required: string@bool-completer # Requires the user to request access from an administrator at the start of each session. (e.g. true)
+  --approval-required: oneof<nothing, bool> # Requires the user to request access from an administrator at the start of each session. (e.g. true)
   --connection-rules: record # The rules that define how users may connect to targets secured by your application. — shape: {rdp?: record}
-  --isolation-required: string@bool-completer # Require this application to be served in an isolated browser for users matching this policy. 'Client Web Isolation' must be on for the account in order to use this feature. (e.g. false)
+  --isolation-required: oneof<nothing, bool> # Require this application to be served in an isolated browser for users matching this policy. 'Client Web Isolation' must be on for the account in order to use this feature. (e.g. false)
   --mfa-config: record # Configures multi-factor authentication (MFA) settings. — shape: {allowed_authenticators?: list, mfa_disabled?: bool, session_duration?: string}
   --purpose-justification-prompt: string # A custom message that will appear on the purpose justification screen. (e.g. Please enter a justification for entering this protected domain.)
-  --purpose-justification-required: string@bool-completer # Require users to enter a justification when they log in to the application. (e.g. true)
+  --purpose-justification-required: oneof<nothing, bool> # Require users to enter a justification when they log in to the application. (e.g. true)
   --session-duration: string # The amount of time that tokens issued for the application will be valid. Must be in the format `300ms` or `2h45m`. Valid time units are: ns, us (or µs), ms, s, m, h. (default: 24h, e.g. 24h)
 ]: any -> record {
   let input = $in
@@ -1798,8 +1797,8 @@ export def "accounts-access-apps-settings access-applications-patch-update-acces
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-iframe: string@bool-completer # Enables loading application content in an iFrame. (e.g. true)
-  --skip-interstitial: string@bool-completer # Enables automatic authentication through cloudflared. (e.g. true)
+  --allow-iframe: oneof<nothing, bool> # Enables loading application content in an iFrame. (e.g. true)
+  --skip-interstitial: oneof<nothing, bool> # Enables automatic authentication through cloudflared. (e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -1826,8 +1825,8 @@ export def "accounts-access-apps-settings access-applications-put-update-access-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-iframe: string@bool-completer # Enables loading application content in an iFrame. (e.g. true)
-  --skip-interstitial: string@bool-completer # Enables automatic authentication through cloudflared. (e.g. true)
+  --allow-iframe: oneof<nothing, bool> # Enables loading application content in an iFrame. (e.g. true)
+  --skip-interstitial: oneof<nothing, bool> # Enables automatic authentication through cloudflared. (e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -2439,7 +2438,7 @@ export def "accounts-access-groups access-groups-create-an-access-group" [
   --allow-errors(-e) # Return full response without error handling
   --exclude: list # Rules evaluated with a NOT logical operator. To match a policy, a user cannot meet any of the Exclude rules.
   include: list # Rules evaluated with an OR logical operator. A user needs to meet only one of the Include rules.
-  --is-default: string@bool-completer # Whether this is the default group
+  --is-default: oneof<nothing, bool> # Whether this is the default group
   name: string # The name of the Access group. (e.g. Allow devs)
   --require: list # Rules evaluated with an AND logical operator. To match a policy, a user must meet all of the Require rules.
 ]: any -> record {
@@ -2516,7 +2515,7 @@ export def "accounts-access-groups access-groups-update-an-access-group" [
   --allow-errors(-e) # Return full response without error handling
   --exclude: list # Rules evaluated with a NOT logical operator. To match a policy, a user cannot meet any of the Exclude rules.
   include: list # Rules evaluated with an OR logical operator. A user needs to meet only one of the Include rules.
-  --is-default: string@bool-completer # Whether this is the default group
+  --is-default: oneof<nothing, bool> # Whether this is the default group
   name: string # The name of the Access group. (e.g. Allow devs)
   --require: list # Rules evaluated with an AND logical operator. To match a policy, a user must meet all of the Require rules.
 ]: any -> record {
@@ -2923,7 +2922,7 @@ export def "accounts-access-logs-access-requests access-authentication-logs-get-
   --page: int # default: 1
   --per-page: int # default: 25
   --email: string # Filter by user email. Match mode is controlled by `emailOp` (preferred) or the legacy `email_exact` flag. - Default (no `emailOp`, `email_exact=false` or unset): substring match — `email=@example.com` returns all events with that domain. - Exact match: set `emailOp=eq` (preferred) or `email_exact=true` — e.g. `email=user@example.com&email_exact=true` returns only that user. - Explicit substring match: set `emailOp=contains` (without `email_exact=true`). When both are set, `email_exact=true` takes precedence and the match is exact. - Exclusion: set `emailOp=neq`. With `email_exact=true` this is an exact-value exclusion; without it, a fuzzy substring exclusion.  (format: email, e.g. user@example.com)
-  --email-exact: string@bool-completer # When true, `email` is matched exactly instead of substring matching. (default: false, e.g. true)
+  --email-exact: oneof<nothing, bool> # When true, `email` is matched exactly instead of substring matching. (default: false, e.g. true)
   --user-id: string # Deprecated. Accepted for backward compatibility but no longer applied as a filter. Use `email` instead.  (DEPRECATED, format: uuid, e.g. f757c5c3-c1b2-50f7-9126-150a099b6f7e)
   --allowedOp: string@allowedOp-completer # Operator for the `allowed` filter. (default: eq)
   --country-codeOp: string@country-codeOp-completer # Operator for the `country_code` filter. (default: eq)
@@ -3020,15 +3019,15 @@ export def "accounts-access-organizations zero-trust-organization-create-your-ze
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-authenticate-via-warp: string@bool-completer # When set to true, users can authenticate via WARP for any application in your organization. Application settings will take precedence over this value. (default: false, e.g. false)
+  --allow-authenticate-via-warp: oneof<nothing, bool> # When set to true, users can authenticate via WARP for any application in your organization. Application settings will take precedence over this value. (default: false, e.g. false)
   auth_domain: string # The unique subdomain assigned to your Zero Trust organization. (e.g. test.cloudflareaccess.com)
-  --auto-redirect-to-identity: string@bool-completer # When set to `true`, users skip the identity provider selection step during login. (default: false)
-  --deny-unmatched-requests: string@bool-completer # Determines whether to deny all requests to Cloudflare-protected resources that lack an associated Access application. If enabled, you must explicitly configure an Access application and policy to allow traffic to your Cloudflare-protected resources. For domains you want to be public across all subdomains, add the domain to the `deny_unmatched_requests_exempted_zone_names` array. (e.g. true)
+  --auto-redirect-to-identity: oneof<nothing, bool> # When set to `true`, users skip the identity provider selection step during login. (default: false)
+  --deny-unmatched-requests: oneof<nothing, bool> # Determines whether to deny all requests to Cloudflare-protected resources that lack an associated Access application. If enabled, you must explicitly configure an Access application and policy to allow traffic to your Cloudflare-protected resources. For domains you want to be public across all subdomains, add the domain to the `deny_unmatched_requests_exempted_zone_names` array. (e.g. true)
   --deny-unmatched-requests-exempted-zone-names: list # Contains zone names to exempt from the `deny_unmatched_requests` feature. Requests to a subdomain in an exempted zone will block unauthenticated traffic by default if there is a configured Access application and policy that matches the request. (e.g. [example.com])
-  --is-ui-read-only: string@bool-completer # Lock all settings as Read-Only in the Dashboard, regardless of user permission. Updates may only be made via the API or Terraform for this account when enabled. (default: false, e.g. false)
+  --is-ui-read-only: oneof<nothing, bool> # Lock all settings as Read-Only in the Dashboard, regardless of user permission. Updates may only be made via the API or Terraform for this account when enabled. (default: false, e.g. false)
   --login-design: record # shape: {background_color?: string, footer_text?: string, header_text?: string, logo_path?: string, text_color?: string}
   --mfa-config: record # Configures multi-factor authentication (MFA) settings for an organization. — shape: {allowed_authenticators?: list, amr_matching_session_duration?: string, required_aaguids?: string, session_duration?: string}
-  --mfa-required-for-all-apps: string@bool-completer # Determines whether global MFA settings apply to applications by default. The organization must have MFA enabled with at least one authentication method and a session duration configured. Note: 'allowed_authenticators' cannot only contain 'ssh_piv_key' if the organization has any non-infrastructure applications because PIV keys are only compatible with infrastructure apps. (default: false, e.g. false)
+  --mfa-required-for-all-apps: oneof<nothing, bool> # Determines whether global MFA settings apply to applications by default. The organization must have MFA enabled with at least one authentication method and a session duration configured. Note: 'allowed_authenticators' cannot only contain 'ssh_piv_key' if the organization has any non-infrastructure applications because PIV keys are only compatible with infrastructure apps. (default: false, e.g. false)
   --mfa-ssh-piv-key-requirements: record # Configures SSH PIV key requirements for MFA using hardware security keys. — shape: {pin_policy?: "never"|"once"|"always", require_fips_device?: bool, ssh_key_size?: list, ssh_key_type?: list, touch_policy?: "never"|"always"|"cached"}
   name: string # The name of your Zero Trust organization. (e.g. Widget Corps Internal Applications)
   --session-duration: string # The amount of time that tokens issued for applications will be valid. Must be in the format `300ms` or `2h45m`. Valid time units are: ns, us (or µs), ms, s, m, h. (e.g. 24h)
@@ -3064,16 +3063,16 @@ export def "accounts-access-organizations zero-trust-organization-update-your-ze
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-authenticate-via-warp: string@bool-completer # When set to true, users can authenticate via WARP for any application in your organization. Application settings will take precedence over this value. (default: false, e.g. false)
+  --allow-authenticate-via-warp: oneof<nothing, bool> # When set to true, users can authenticate via WARP for any application in your organization. Application settings will take precedence over this value. (default: false, e.g. false)
   --auth-domain: string # The unique subdomain assigned to your Zero Trust organization. (e.g. test.cloudflareaccess.com)
-  --auto-redirect-to-identity: string@bool-completer # When set to `true`, users skip the identity provider selection step during login. (default: false)
+  --auto-redirect-to-identity: oneof<nothing, bool> # When set to `true`, users skip the identity provider selection step during login. (default: false)
   --custom-pages: record # shape: {forbidden?: string, identity_denied?: string}
-  --deny-unmatched-requests: string@bool-completer # Determines whether to deny all requests to Cloudflare-protected resources that lack an associated Access application. If enabled, you must explicitly configure an Access application and policy to allow traffic to your Cloudflare-protected resources. For domains you want to be public across all subdomains, add the domain to the `deny_unmatched_requests_exempted_zone_names` array. (e.g. true)
+  --deny-unmatched-requests: oneof<nothing, bool> # Determines whether to deny all requests to Cloudflare-protected resources that lack an associated Access application. If enabled, you must explicitly configure an Access application and policy to allow traffic to your Cloudflare-protected resources. For domains you want to be public across all subdomains, add the domain to the `deny_unmatched_requests_exempted_zone_names` array. (e.g. true)
   --deny-unmatched-requests-exempted-zone-names: list # Contains zone names to exempt from the `deny_unmatched_requests` feature. Requests to a subdomain in an exempted zone will block unauthenticated traffic by default if there is a configured Access application and policy that matches the request. (e.g. [example.com])
-  --is-ui-read-only: string@bool-completer # Lock all settings as Read-Only in the Dashboard, regardless of user permission. Updates may only be made via the API or Terraform for this account when enabled. (default: false, e.g. false)
+  --is-ui-read-only: oneof<nothing, bool> # Lock all settings as Read-Only in the Dashboard, regardless of user permission. Updates may only be made via the API or Terraform for this account when enabled. (default: false, e.g. false)
   --login-design: record # shape: {background_color?: string, footer_text?: string, header_text?: string, logo_path?: string, text_color?: string}
   --mfa-config: record # Configures multi-factor authentication (MFA) settings for an organization. — shape: {allowed_authenticators?: list, amr_matching_session_duration?: string, required_aaguids?: string, session_duration?: string}
-  --mfa-required-for-all-apps: string@bool-completer # Determines whether global MFA settings apply to applications by default. The organization must have MFA enabled with at least one authentication method and a session duration configured. Note: 'allowed_authenticators' cannot only contain 'ssh_piv_key' if the organization has any non-infrastructure applications because PIV keys are only compatible with infrastructure apps. (default: false, e.g. false)
+  --mfa-required-for-all-apps: oneof<nothing, bool> # Determines whether global MFA settings apply to applications by default. The organization must have MFA enabled with at least one authentication method and a session duration configured. Note: 'allowed_authenticators' cannot only contain 'ssh_piv_key' if the organization has any non-infrastructure applications because PIV keys are only compatible with infrastructure apps. (default: false, e.g. false)
   --mfa-ssh-piv-key-requirements: record # Configures SSH PIV key requirements for MFA using hardware security keys. — shape: {pin_policy?: "never"|"once"|"always", require_fips_device?: bool, ssh_key_size?: list, ssh_key_type?: list, touch_policy?: "never"|"always"|"cached"}
   --name: string # The name of your Zero Trust organization. (e.g. Widget Corps Internal Applications)
   --session-duration: string # The amount of time that tokens issued for applications will be valid. Must be in the format `300ms` or `2h45m`. Valid time units are: ns, us (or µs), ms, s, m, h. (e.g. 24h)
@@ -3154,11 +3153,11 @@ export def "accounts-access-organizations-revoke-user zero-trust-organization-re
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --devices: string@bool-completer # When set to `true`, all devices associated with the user will be revoked. (e.g. true)
-  --devices: string@bool-completer # When set to `true`, all devices associated with the user will be revoked. (e.g. true)
+  --devices: oneof<nothing, bool> # When set to `true`, all devices associated with the user will be revoked. (e.g. true)
+  --devices: oneof<nothing, bool> # When set to `true`, all devices associated with the user will be revoked. (e.g. true)
   email: string # The email of the user to revoke. (e.g. test@example.com)
   --user-uid: string # The uuid of the user to revoke. (e.g. 699d98642c564d2e855e9661899b7252)
-  --warp-session-reauth: string@bool-completer # When set to `true`, the user will be required to re-authenticate to WARP for all Gateway policies that enforce a WARP client session duration. When `false`, the user’s WARP session will remain active (e.g. true)
+  --warp-session-reauth: oneof<nothing, bool> # When set to `true`, the user will be required to re-authenticate to WARP for all Gateway policies that enforce a WARP client session duration. When `false`, the user’s WARP session will remain active (e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -3214,12 +3213,12 @@ export def "accounts-access-policies access-policies-create-an-access-reusable-p
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --approval-groups: list # Administrators who can approve a temporary authentication request. (e.g. [{approvals_needed: 1, email_addresses: [test1@cloudflare.com, test2@cloudflare.com]}, {approvals_needed: 3, email_list_uuid: 597147a1-976b-4ef2-9af0-81d5d007fc34}]) — item shape: {approvals_needed: float, email_addresses?: list, email_list_uuid?: string}
-  --approval-required: string@bool-completer # Requires the user to request access from an administrator at the start of each session. (e.g. true)
+  --approval-required: oneof<nothing, bool> # Requires the user to request access from an administrator at the start of each session. (e.g. true)
   --connection-rules: record # The rules that define how users may connect to targets secured by your application. — shape: {rdp?: record}
-  --isolation-required: string@bool-completer # Require this application to be served in an isolated browser for users matching this policy. 'Client Web Isolation' must be on for the account in order to use this feature. (e.g. false)
+  --isolation-required: oneof<nothing, bool> # Require this application to be served in an isolated browser for users matching this policy. 'Client Web Isolation' must be on for the account in order to use this feature. (e.g. false)
   --mfa-config: record # Configures multi-factor authentication (MFA) settings. — shape: {allowed_authenticators?: list, mfa_disabled?: bool, session_duration?: string}
   --purpose-justification-prompt: string # A custom message that will appear on the purpose justification screen. (e.g. Please enter a justification for entering this protected domain.)
-  --purpose-justification-required: string@bool-completer # Require users to enter a justification when they log in to the application. (e.g. true)
+  --purpose-justification-required: oneof<nothing, bool> # Require users to enter a justification when they log in to the application. (e.g. true)
   --session-duration: string # The amount of time that tokens issued for the application will be valid. Must be in the format `300ms` or `2h45m`. Valid time units are: ns, us (or µs), ms, s, m, h. (default: 24h, e.g. 24h)
   decision: string@decision-completer # The action Access will take if a user matches this policy. Infrastructure application policies can only use the Allow action. (e.g. allow)
   --exclude: list # Rules evaluated with a NOT logical operator. To match the policy, a user cannot meet any of the Exclude rules. (default: [])
@@ -3302,12 +3301,12 @@ export def "accounts-access-policies access-policies-update-an-access-reusable-p
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --approval-groups: list # Administrators who can approve a temporary authentication request. (e.g. [{approvals_needed: 1, email_addresses: [test1@cloudflare.com, test2@cloudflare.com]}, {approvals_needed: 3, email_list_uuid: 597147a1-976b-4ef2-9af0-81d5d007fc34}]) — item shape: {approvals_needed: float, email_addresses?: list, email_list_uuid?: string}
-  --approval-required: string@bool-completer # Requires the user to request access from an administrator at the start of each session. (e.g. true)
+  --approval-required: oneof<nothing, bool> # Requires the user to request access from an administrator at the start of each session. (e.g. true)
   --connection-rules: record # The rules that define how users may connect to targets secured by your application. — shape: {rdp?: record}
-  --isolation-required: string@bool-completer # Require this application to be served in an isolated browser for users matching this policy. 'Client Web Isolation' must be on for the account in order to use this feature. (e.g. false)
+  --isolation-required: oneof<nothing, bool> # Require this application to be served in an isolated browser for users matching this policy. 'Client Web Isolation' must be on for the account in order to use this feature. (e.g. false)
   --mfa-config: record # Configures multi-factor authentication (MFA) settings. — shape: {allowed_authenticators?: list, mfa_disabled?: bool, session_duration?: string}
   --purpose-justification-prompt: string # A custom message that will appear on the purpose justification screen. (e.g. Please enter a justification for entering this protected domain.)
-  --purpose-justification-required: string@bool-completer # Require users to enter a justification when they log in to the application. (e.g. true)
+  --purpose-justification-required: oneof<nothing, bool> # Require users to enter a justification when they log in to the application. (e.g. true)
   --session-duration: string # The amount of time that tokens issued for the application will be valid. Must be in the format `300ms` or `2h45m`. Valid time units are: ns, us (or µs), ms, s, m, h. (default: 24h, e.g. 24h)
   decision: string@decision-completer # The action Access will take if a user matches this policy. Infrastructure application policies can only use the Allow action. (e.g. allow)
   --exclude: list # Rules evaluated with a NOT logical operator. To match the policy, a user cannot meet any of the Exclude rules. (default: [])
@@ -4113,7 +4112,7 @@ export def "accounts-addressing-address-maps ip-address-management-address-maps-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # An optional description field which may be used to describe the types of IPs or zones on the map. (nullable, e.g. My Ecommerce zones)
-  --enabled: string@bool-completer # Whether the Address Map is enabled or not. Cloudflare's DNS will not respond with IP addresses on an Address Map until the map is enabled. (nullable, default: false, e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the Address Map is enabled or not. Cloudflare's DNS will not respond with IP addresses on an Address Map until the map is enabled. (nullable, default: false, e.g. true)
   --ips: list # e.g. [192.0.2.1]
   --memberships: list # Zones and Accounts which will be assigned IPs on this Address Map. A zone membership will take priority over an account membership. (e.g. [{identifier: 023e105f4ecef8ad9ca31a8372d0c353, kind: zone}]) — item shape: {identifier?: string, kind?: "zone"|"account"}
 ]: any -> record<result: record<can_delete: bool, can_modify_ips: bool, created_at: string, default_sni: string, description: string, enabled: bool, id: string, modified_at: string, ips: list<record>, memberships: list<record>>> {
@@ -4193,7 +4192,7 @@ export def "accounts-addressing-address-maps ip-address-management-address-maps-
   --allow-errors(-e) # Return full response without error handling
   --default-sni: string # If you have legacy TLS clients which do not send the TLS server name indicator, then you can specify one default SNI on the map. If Cloudflare receives a TLS handshake from a client without an SNI, it will respond with the default SNI on those IPs. The default SNI can be any valid zone or subdomain owned by the account. (nullable, e.g. *.example.com)
   --description: string # An optional description field which may be used to describe the types of IPs or zones on the map. (nullable, e.g. My Ecommerce zones)
-  --enabled: string@bool-completer # Whether the Address Map is enabled or not. Cloudflare's DNS will not respond with IP addresses on an Address Map until the map is enabled. (nullable, default: false, e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the Address Map is enabled or not. Cloudflare's DNS will not respond with IP addresses on an Address Map until the map is enabled. (nullable, default: false, e.g. true)
 ]: any -> record<result: record<can_delete: bool, can_modify_ips: bool, created_at: string, default_sni: string, description: string, enabled: bool, id: string, modified_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -4474,7 +4473,7 @@ export def "accounts-addressing-prefixes ip-address-management-prefixes-add-pref
   --allow-errors(-e) # Return full response without error handling
   asn: int # Autonomous System Number (ASN) the prefix will be advertised under. (e.g. 13335)
   cidr: string # IP Prefix in Classless Inter-Domain Routing format. (e.g. 192.0.2.0/24)
-  --delegate-loa-creation: string@bool-completer # Whether Cloudflare is allowed to generate the LOA document on behalf of the prefix owner. (default: false, e.g. true)
+  --delegate-loa-creation: oneof<nothing, bool> # Whether Cloudflare is allowed to generate the LOA document on behalf of the prefix owner. (default: false, e.g. true)
   --description: string # Description of the prefix. (e.g. Internal test prefix)
   --loa-document-id: string # Identifier for the uploaded LOA document. (nullable, e.g. d933b1530bc56c9953cf8ce166da8004)
 ]: any -> record<result: record<account_id: string, advertised: bool, advertised_modified_at: string, approved: string, asn: int, cidr: string, created_at: string, delegate_loa_creation: bool, description: string, id: string, irr_validation_state: string, loa_document_id: string, modified_at: string, on_demand_enabled: bool, on_demand_locked: bool, ownership_validation_state: string, ownership_validation_token: string, rpki_validation_state: string>> {
@@ -4680,7 +4679,7 @@ export def "accounts-addressing-prefixes-bgp-prefixes ip-address-management-pref
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --asn-prepend-count: int # Number of times to prepend the Cloudflare ASN to the BGP AS-Path attribute (default: 0, e.g. 2)
-  --auto-advertise-withdraw: string@bool-completer # Determines if Cloudflare advertises a BYOIP BGP prefix even when there is no matching BGP prefix in the Magic routing table. When true, Cloudflare will automatically withdraw the BGP prefix when there are no matching BGP routes, and will resume advertising when there is at least one matching BGP route. (default: false, e.g. true)
+  --auto-advertise-withdraw: oneof<nothing, bool> # Determines if Cloudflare advertises a BYOIP BGP prefix even when there is no matching BGP prefix in the Magic routing table. When true, Cloudflare will automatically withdraw the BGP prefix when there are no matching BGP routes, and will resume advertising when there is at least one matching BGP route. (default: false, e.g. true)
   --on-demand: record # shape: {advertised?: bool}
 ]: any -> record<result: record<asn: int, asn_prepend_count: int, auto_advertise_withdraw: bool, bgp_signal_opts: record<enabled: bool, modified_at: string>, cidr: string, created_at: string, id: string, modified_at: string, on_demand: record<advertised: bool, advertised_modified_at: string, on_demand_enabled: bool, on_demand_locked: bool>>> {
   let input = $in
@@ -4735,7 +4734,7 @@ export def "accounts-addressing-prefixes-bgp-status ip-address-management-dynami
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --advertised: string@bool-completer # Advertisement status of the prefix. If `true`, the BGP route for the prefix is advertised to the Internet. If  `false`, the BGP route is withdrawn.  (e.g. true)
+  --advertised: oneof<nothing, bool> # Advertisement status of the prefix. If `true`, the BGP route for the prefix is advertised to the Internet. If  `false`, the BGP route is withdrawn.  (e.g. true)
 ]: any -> record<result: record<advertised: bool, advertised_modified_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -5318,8 +5317,8 @@ export def "accounts-ai-gateway-custom-providers aig-config-list-account-provide
   --allow-errors(-e) # Return full response without error handling
   --page: int # default: 1
   --per-page: int # default: 20
-  --beta: string@bool-completer
-  --enable: string@bool-completer
+  --beta: oneof<nothing, bool>
+  --enable: oneof<nothing, bool>
   --search: string
 ]: nothing -> record<result: table<base_url: string, beta: bool, created_at: string, curl_example: string, description: string, enable: bool, headers: string, id: string, js_example: string, link: string, logo: string, modified_at: string, name: string, position: int, slug: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5345,10 +5344,10 @@ export def "accounts-ai-gateway-custom-providers aig-config-create-account-provi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-base-url: string # format: uri
-  --beta: string@bool-completer
+  --beta: oneof<nothing, bool>
   --curl-example: string
   --description: string
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --headers: string
   --js-example: string
   --link: string
@@ -5382,7 +5381,7 @@ export def "accounts-ai-gateway-custom-providers-costs aig-config-list-account-p
   --allow-errors(-e) # Return full response without error handling
   --page: int # default: 1
   --per-page: int # default: 20
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --account-provider-id: string # format: uuid
   --model-rule: string@model-rule-completer # default: equals
   --cost-type: string # default: tokens
@@ -5415,7 +5414,7 @@ export def "accounts-ai-gateway-custom-providers-costs aig-config-create-account
   --cost-in: float
   --cost-out: float
   --cost-type: string # default: tokens
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   model: string
   --model-rule: string@model-rule-completer # default: equals
   --token-pricing: record # shape: {input_audio_tokens?: float, input_cache_creation_tokens?: float, input_cached_tokens?: float, input_image_count?: float, input_image_tokens?: float, input_text_tokens?: float, input_tokens?: float, input_video_tokens?: float, output_image_count?: float, output_reasoning_tokens?: float, output_tokens?: float, total_tokens?: float}
@@ -5495,7 +5494,7 @@ export def "accounts-ai-gateway-custom-providers-costs aig-config-update-account
   --cost-in: float
   --cost-out: float
   --cost-type: string # default: tokens
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --model: string
   --model-rule: string@model-rule-completer # default: equals
   --token-pricing: record # shape: {input_audio_tokens?: float, input_cache_creation_tokens?: float, input_cached_tokens?: float, input_image_count?: float, input_image_tokens?: float, input_text_tokens?: float, input_tokens?: float, input_video_tokens?: float, output_image_count?: float, output_reasoning_tokens?: float, output_tokens?: float, total_tokens?: float}
@@ -5572,10 +5571,10 @@ export def "accounts-ai-gateway-custom-providers aig-config-update-account-provi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-base-url: string # format: uri
-  --beta: string@bool-completer
+  --beta: oneof<nothing, bool>
   --curl-example: string
   --description: string
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --headers: string
   --js-example: string
   --link: string
@@ -5661,14 +5660,14 @@ export def "accounts-ai-gateway-gateways aig-config-create-gateway" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --authentication: string@bool-completer
-  --cache-invalidate-on-update: string@bool-completer
+  --authentication: oneof<nothing, bool>
+  --cache-invalidate-on-update: oneof<nothing, bool>
   --cache-ttl: int # nullable
-  --collect-logs: string@bool-completer
+  --collect-logs: oneof<nothing, bool>
   id: string # gateway id (e.g. my-gateway)
   --log-management: int # nullable
   --log-management-strategy: string@log-management-strategy-completer # nullable
-  --logpush: string@bool-completer
+  --logpush: oneof<nothing, bool>
   --logpush-public-key: string # nullable
   --rate-limiting-interval: int # nullable
   --rate-limiting-limit: int # nullable
@@ -5677,7 +5676,7 @@ export def "accounts-ai-gateway-gateways aig-config-create-gateway" [
   --retry-delay: int # Delay between retry attempts in milliseconds (0-5000) (nullable)
   --retry-max-attempts: int # Maximum number of retry attempts for failed requests (1-5) (nullable)
   --workers-ai-billing-mode: string@workers-ai-billing-mode-completer # Controls how Workers AI inference calls routed through this gateway are billed. Only 'postpaid' is currently supported. (default: postpaid)
-  --zdr: string@bool-completer
+  --zdr: oneof<nothing, bool>
 ]: any -> record<result: record<authentication: bool, cache_invalidate_on_update: bool, cache_ttl: int, collect_logs: bool, created_at: string, dlp: any, guardrails: record<prompt: record, response: record>, id: string, is_default: bool, log_management: int, log_management_strategy: string, logpush: bool, logpush_public_key: string, modified_at: string, otel: list<record>, rate_limiting_interval: int, rate_limiting_limit: int, rate_limiting_technique: string, retry_backoff: string, retry_delay: int, retry_max_attempts: int, spend_limits: record<enabled: bool, rules: list>, store_id: string, stripe: record<authorization: string, usage_events: list>, workers_ai_billing_mode: string, zdr: bool>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5707,7 +5706,7 @@ export def "accounts-ai-gateway-gateways-datasets aig-config-list-dataset" [
   --page: int # default: 1
   --per-page: int # default: 20
   --name: string
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --search: string
 ]: nothing -> record<result: table<created_at: string, enable: bool, filters: list, gateway_id: string, id: string, modified_at: string, name: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5734,7 +5733,7 @@ export def "accounts-ai-gateway-gateways-datasets aig-config-create-dataset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   filters: list # item shape: {key: "created_at"|"request_content_type"|"response_content_type"|"success"|"cached"|"provider"|"model"|"cost"|"tokens"|"tokens_in"|"tokens_out"|"duration"|"feedback", operator: "eq"|"contains"|"lt"|"gt", value: list}
   name: string
 ]: any -> record<result: record<created_at: string, enable: bool, filters: list<record>, gateway_id: string, id: string, modified_at: string, name: string>, success: bool> {
@@ -5813,7 +5812,7 @@ export def "accounts-ai-gateway-gateways-datasets aig-config-update-dataset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   filters: list # item shape: {key: "created_at"|"request_content_type"|"response_content_type"|"success"|"cached"|"provider"|"model"|"cost"|"tokens"|"tokens_in"|"tokens_out"|"duration"|"feedback", operator: "eq"|"contains"|"lt"|"gt", value: list}
   name: string
 ]: any -> record<result: record<created_at: string, enable: bool, filters: list<record>, gateway_id: string, id: string, modified_at: string, name: string>, success: bool> {
@@ -5845,7 +5844,7 @@ export def "accounts-ai-gateway-gateways-evaluations aig-config-list-evaluations
   --page: int # default: 1
   --per-page: int # default: 20
   --name: string
-  --processed: string@bool-completer
+  --processed: oneof<nothing, bool>
   --search: string
 ]: nothing -> record<result: table<created_at: string, datasets: list, gateway_id: string, id: string, modified_at: string, name: string, processed: bool, results: list, total_logs: float>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5982,7 +5981,7 @@ export def "accounts-ai-gateway-gateways-logs aig-config-list-gateway-logs" [
   --order-by: string@order-by-completer-1 # default: created_at
   --order-by-direction: string@order-by-direction-completer # default: desc
   --filters: list
-  --meta-info: string@bool-completer
+  --meta-info: oneof<nothing, bool>
   --direction: string@direction-completer
   --start-date: string # format: date-time
   --end-date: string # format: date-time
@@ -5997,8 +5996,8 @@ export def "accounts-ai-gateway-gateways-logs aig-config-list-gateway-logs" [
   --min-duration: float
   --max-duration: float
   --feedback: string
-  --success: string@bool-completer
-  --cached: string@bool-completer
+  --success: oneof<nothing, bool>
+  --cached: oneof<nothing, bool>
   --model: string
   --model-type: string
   --provider: string
@@ -6157,7 +6156,7 @@ export def "accounts-ai-gateway-gateways-provider-configs aig-config-create-prov
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   alias: string
-  --default-config: string@bool-completer
+  --default-config: oneof<nothing, bool>
   provider_slug: string
   --rate-limit: float
   --rate-limit-period: float # default: 60
@@ -6574,15 +6573,15 @@ export def "accounts-ai-gateway-gateways aig-config-update-gateway" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --authentication: string@bool-completer
-  --cache-invalidate-on-update: string@bool-completer
+  --authentication: oneof<nothing, bool>
+  --cache-invalidate-on-update: oneof<nothing, bool>
   --cache-ttl: int # nullable
-  --collect-logs: string@bool-completer
+  --collect-logs: oneof<nothing, bool>
   --dlp: any
   --guardrails: record # nullable — shape: {prompt: record, response: record}
   --log-management: int # nullable
   --log-management-strategy: string@log-management-strategy-completer # nullable
-  --logpush: string@bool-completer
+  --logpush: oneof<nothing, bool>
   --logpush-public-key: string # nullable
   --otel: list # nullable — item shape: {authorization?: string, content_type?: "json"|"protobuf", headers: record, url: string}
   --rate-limiting-interval: int # nullable
@@ -6595,7 +6594,7 @@ export def "accounts-ai-gateway-gateways aig-config-update-gateway" [
   --store-id: string # nullable
   --stripe: record # nullable — shape: {authorization: string, usage_events: list}
   --workers-ai-billing-mode: string@workers-ai-billing-mode-completer # Controls how Workers AI inference calls routed through this gateway are billed. Only 'postpaid' is currently supported. (default: postpaid)
-  --zdr: string@bool-completer
+  --zdr: oneof<nothing, bool>
 ]: any -> record<result: record<authentication: bool, cache_invalidate_on_update: bool, cache_ttl: int, collect_logs: bool, created_at: string, dlp: any, guardrails: record<prompt: record, response: record>, id: string, is_default: bool, log_management: int, log_management_strategy: string, logpush: bool, logpush_public_key: string, modified_at: string, otel: list<record>, rate_limiting_interval: int, rate_limiting_limit: int, rate_limiting_technique: string, retry_backoff: string, retry_delay: int, retry_max_attempts: int, spend_limits: record<enabled: bool, rules: list>, store_id: string, stripe: record<authorization: string, usage_events: list>, workers_ai_billing_mode: string, zdr: bool>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6660,27 +6659,27 @@ export def "accounts-ai-search-instances ai-search-create-instance" [
   --allow-errors(-e) # Return full response without error handling
   --ai-gateway-id: string # nullable
   --ai-search-model: string@ai-search-model-completer # nullable
-  --cache: string@bool-completer # default: true
+  --cache: oneof<nothing, bool> # default: true
   --cache-threshold: string@cache-threshold-completer # default: close_enough
   --cache-ttl: any # Cache entry TTL in seconds. Allowed values: 600 (10min), 1800 (30min), 3600 (1h), 7200 (2h), 21600 (6h), 43200 (12h), 86400 (24h), 172800 (48h), 259200 (72h), 518400 (6d). (default: 172800)
-  --chunk: string@bool-completer # default: true
+  --chunk: oneof<nothing, bool> # default: true
   --chunk-overlap: int # default: 10
   --chunk-size: int
   --custom-metadata: list # item shape: {data_type: "text"|"number"|"boolean"|"datetime", field_name: string}
   --embedding-model: string@embedding-model-completer # nullable
   --fusion-method: string@fusion-method-completer # default: rrf
-  --hybrid-search-enabled: string@bool-completer # Deprecated — use index_method instead. (DEPRECATED, default: false)
+  --hybrid-search-enabled: oneof<nothing, bool> # Deprecated — use index_method instead. (DEPRECATED, default: false)
   id: string # AI Search instance ID. Lowercase alphanumeric, hyphens, and underscores. (e.g. my-ai-search)
   --index-method: record # Controls which storage backends are used during indexing. Defaults to vector-only. (default: {keyword: false, vector: true}) — shape: {keyword: bool, vector: bool}
   --indexing-options: record # nullable — shape: {keyword_tokenizer?: "porter"|"trigram"}
   --max-num-results: int # default: 10
   --metadata: record # shape: {created_from_aisearch_wizard?: bool, worker_domain?: string}
   --public-endpoint-params: record # shape: {authorized_hosts?: list, chat_completions_endpoint?: record, enabled?: bool, mcp?: record, rate_limit?: record, search_endpoint?: record}
-  --reranking: string@bool-completer # default: false
+  --reranking: oneof<nothing, bool> # default: false
   --reranking-model: string@reranking-model-completer # nullable
   --retrieval-options: record # nullable — shape: {boost_by?: list, keyword_match_mode?: "and"|"or"}
   --rewrite-model: string@rewrite-model-completer # nullable
-  --rewrite-query: string@bool-completer # default: false
+  --rewrite-query: oneof<nothing, bool> # default: false
   --score-threshold: float # default: 0.4
   --body-source: string # nullable
   --source-params: record # nullable — shape: {exclude_items?: list, include_items?: list, prefix?: string, r2_jurisdiction?: string, web_crawler?: record}
@@ -6768,10 +6767,10 @@ export def "accounts-ai-search-instances ai-search-update-instance" [
   --allow-errors(-e) # Return full response without error handling
   --ai-gateway-id: string # nullable
   --ai-search-model: string@ai-search-model-completer # nullable
-  --cache: string@bool-completer # default: true
+  --cache: oneof<nothing, bool> # default: true
   --cache-threshold: string@cache-threshold-completer # default: close_enough
   --cache-ttl: any # Cache entry TTL in seconds. Allowed values: 600 (10min), 1800 (30min), 3600 (1h), 7200 (2h), 21600 (6h), 43200 (12h), 86400 (24h), 172800 (48h), 259200 (72h), 518400 (6d). (default: 172800)
-  --chunk: string@bool-completer # default: true
+  --chunk: oneof<nothing, bool> # default: true
   --chunk-overlap: int # default: 10
   --chunk-size: int
   --custom-metadata: list # item shape: {data_type: "text"|"number"|"boolean"|"datetime", field_name: string}
@@ -6781,16 +6780,16 @@ export def "accounts-ai-search-instances ai-search-update-instance" [
   --indexing-options: record # nullable — shape: {keyword_tokenizer?: "porter"|"trigram"}
   --max-num-results: int # default: 10
   --metadata: record # shape: {created_from_aisearch_wizard?: bool, worker_domain?: string}
-  --paused: string@bool-completer # default: false
+  --paused: oneof<nothing, bool> # default: false
   --public-endpoint-params: record # shape: {authorized_hosts?: list, chat_completions_endpoint?: record, enabled?: bool, mcp?: record, rate_limit?: record, search_endpoint?: record}
-  --reranking: string@bool-completer # default: false
+  --reranking: oneof<nothing, bool> # default: false
   --reranking-model: string@reranking-model-completer # nullable
   --retrieval-options: record # nullable — shape: {boost_by?: list, keyword_match_mode?: "and"|"or"}
   --rewrite-model: string@rewrite-model-completer # nullable
-  --rewrite-query: string@bool-completer # default: false
+  --rewrite-query: oneof<nothing, bool> # default: false
   --score-threshold: float # default: 0.4
   --source-params: record # nullable — shape: {exclude_items?: list, include_items?: list, prefix?: string, r2_jurisdiction?: string, web_crawler?: record}
-  --summarization: string@bool-completer # default: false
+  --summarization: oneof<nothing, bool> # default: false
   --summarization-model: string@summarization-model-completer # nullable
   --sync-interval: any # Interval between automatic syncs, in seconds. Allowed values: 900 (15min), 1800 (30min), 3600 (1h), 7200 (2h), 14400 (4h), 21600 (6h), 43200 (12h), 86400 (24h). (default: 21600)
   --system-prompt-ai-search: string # nullable
@@ -6828,7 +6827,7 @@ export def "accounts-ai-search-instances-chat-completions ai-search-instance-cha
   --ai-search-options: record # shape: {cache?: record, query_rewrite?: record, reranking?: record, retrieval?: record}
   messages: list # item shape: {content: string, role: "system"|"developer"|"user"|"assistant"|"tool"}
   --model: any
-  --stream: string@bool-completer
+  --stream: oneof<nothing, bool>
 ]: any -> record<choices: table<index: int, message: record>, chunks: table<id: string, item: record, score: float, scoring_details: record, text: string, type: string>, id: string, model: string, object: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7172,7 +7171,7 @@ export def "accounts-ai-search-namespaces-chat-completions ai-search-namespace-m
   ai_search_options: record # shape: {cache?: record, instance_ids: list, query_rewrite?: record, reranking?: record, retrieval?: record}
   messages: list # item shape: {content: string, role: "system"|"developer"|"user"|"assistant"|"tool"}
   --model: any
-  --stream: string@bool-completer
+  --stream: oneof<nothing, bool>
 ]: any -> record<choices: table<index: int, message: record>, chunks: table<id: string, instance_id: string, item: record, score: float, scoring_details: record, text: string, type: string>, errors: table<instance_id: string, message: string>, id: string, model: string, object: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7239,27 +7238,27 @@ export def "accounts-ai-search-namespaces-instances ai-search-namespace-create-i
   --allow-errors(-e) # Return full response without error handling
   --ai-gateway-id: string # nullable
   --ai-search-model: string@ai-search-model-completer # nullable
-  --cache: string@bool-completer # default: true
+  --cache: oneof<nothing, bool> # default: true
   --cache-threshold: string@cache-threshold-completer # default: close_enough
   --cache-ttl: any # Cache entry TTL in seconds. Allowed values: 600 (10min), 1800 (30min), 3600 (1h), 7200 (2h), 21600 (6h), 43200 (12h), 86400 (24h), 172800 (48h), 259200 (72h), 518400 (6d). (default: 172800)
-  --chunk: string@bool-completer # default: true
+  --chunk: oneof<nothing, bool> # default: true
   --chunk-overlap: int # default: 10
   --chunk-size: int
   --custom-metadata: list # item shape: {data_type: "text"|"number"|"boolean"|"datetime", field_name: string}
   --embedding-model: string@embedding-model-completer # nullable
   --fusion-method: string@fusion-method-completer # default: rrf
-  --hybrid-search-enabled: string@bool-completer # Deprecated — use index_method instead. (DEPRECATED, default: false)
+  --hybrid-search-enabled: oneof<nothing, bool> # Deprecated — use index_method instead. (DEPRECATED, default: false)
   id: string # AI Search instance ID. Lowercase alphanumeric, hyphens, and underscores. (e.g. my-ai-search)
   --index-method: record # Controls which storage backends are used during indexing. Defaults to vector-only. (default: {keyword: false, vector: true}) — shape: {keyword: bool, vector: bool}
   --indexing-options: record # nullable — shape: {keyword_tokenizer?: "porter"|"trigram"}
   --max-num-results: int # default: 10
   --metadata: record # shape: {created_from_aisearch_wizard?: bool, worker_domain?: string}
   --public-endpoint-params: record # shape: {authorized_hosts?: list, chat_completions_endpoint?: record, enabled?: bool, mcp?: record, rate_limit?: record, search_endpoint?: record}
-  --reranking: string@bool-completer # default: false
+  --reranking: oneof<nothing, bool> # default: false
   --reranking-model: string@reranking-model-completer # nullable
   --retrieval-options: record # nullable — shape: {boost_by?: list, keyword_match_mode?: "and"|"or"}
   --rewrite-model: string@rewrite-model-completer # nullable
-  --rewrite-query: string@bool-completer # default: false
+  --rewrite-query: oneof<nothing, bool> # default: false
   --score-threshold: float # default: 0.4
   --body-source: string # nullable
   --source-params: record # nullable — shape: {exclude_items?: list, include_items?: list, prefix?: string, r2_jurisdiction?: string, web_crawler?: record}
@@ -7378,10 +7377,10 @@ export def "accounts-ai-search-namespaces-instances ai-search-namespace-update-i
   --allow-errors(-e) # Return full response without error handling
   --ai-gateway-id: string # nullable
   --ai-search-model: string@ai-search-model-completer # nullable
-  --cache: string@bool-completer # default: true
+  --cache: oneof<nothing, bool> # default: true
   --cache-threshold: string@cache-threshold-completer # default: close_enough
   --cache-ttl: any # Cache entry TTL in seconds. Allowed values: 600 (10min), 1800 (30min), 3600 (1h), 7200 (2h), 21600 (6h), 43200 (12h), 86400 (24h), 172800 (48h), 259200 (72h), 518400 (6d). (default: 172800)
-  --chunk: string@bool-completer # default: true
+  --chunk: oneof<nothing, bool> # default: true
   --chunk-overlap: int # default: 10
   --chunk-size: int
   --custom-metadata: list # item shape: {data_type: "text"|"number"|"boolean"|"datetime", field_name: string}
@@ -7391,16 +7390,16 @@ export def "accounts-ai-search-namespaces-instances ai-search-namespace-update-i
   --indexing-options: record # nullable — shape: {keyword_tokenizer?: "porter"|"trigram"}
   --max-num-results: int # default: 10
   --metadata: record # shape: {created_from_aisearch_wizard?: bool, worker_domain?: string}
-  --paused: string@bool-completer # default: false
+  --paused: oneof<nothing, bool> # default: false
   --public-endpoint-params: record # shape: {authorized_hosts?: list, chat_completions_endpoint?: record, enabled?: bool, mcp?: record, rate_limit?: record, search_endpoint?: record}
-  --reranking: string@bool-completer # default: false
+  --reranking: oneof<nothing, bool> # default: false
   --reranking-model: string@reranking-model-completer # nullable
   --retrieval-options: record # nullable — shape: {boost_by?: list, keyword_match_mode?: "and"|"or"}
   --rewrite-model: string@rewrite-model-completer # nullable
-  --rewrite-query: string@bool-completer # default: false
+  --rewrite-query: oneof<nothing, bool> # default: false
   --score-threshold: float # default: 0.4
   --source-params: record # nullable — shape: {exclude_items?: list, include_items?: list, prefix?: string, r2_jurisdiction?: string, web_crawler?: record}
-  --summarization: string@bool-completer # default: false
+  --summarization: oneof<nothing, bool> # default: false
   --summarization-model: string@summarization-model-completer # nullable
   --sync-interval: any # Interval between automatic syncs, in seconds. Allowed values: 900 (15min), 1800 (30min), 3600 (1h), 7200 (2h), 14400 (4h), 21600 (6h), 43200 (12h), 86400 (24h). (default: 21600)
   --system-prompt-ai-search: string # nullable
@@ -7439,7 +7438,7 @@ export def "accounts-ai-search-namespaces-instances-chat-completions ai-search-n
   --ai-search-options: record # shape: {cache?: record, query_rewrite?: record, reranking?: record, retrieval?: record}
   messages: list # item shape: {content: string, role: "system"|"developer"|"user"|"assistant"|"tool"}
   --model: any
-  --stream: string@bool-completer
+  --stream: oneof<nothing, bool>
 ]: any -> record<choices: table<index: int, message: record>, chunks: table<id: string, item: record, score: float, scoring_details: record, text: string, type: string>, id: string, model: string, object: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7502,7 +7501,7 @@ export def "accounts-ai-search-namespaces-instances-items ai-search-namespace-in
   --allow-errors(-e) # Return full response without error handling
   file: string # The file to upload (max 4MB). Filename must not exceed 128 characters. (format: binary)
   --metadata: string # JSON string of custom metadata key-value pairs.
-  --wait-for-completion: string@bool-completer # Wait for indexing to fully complete before responding. On RAGs with vector indexing enabled, this additionally waits for Vectorize ingestion confirmation (up to 40s) so the returned item reflects a queryable state. On timeout the item is returned in `running` state and the background alarm continues polling. Defaults to false. (default: false)
+  --wait-for-completion: oneof<nothing, bool> # Wait for indexing to fully complete before responding. On RAGs with vector indexing enabled, this additionally waits for Vectorize ingestion confirmation (up to 40s) so the returned item reflects a queryable state. On timeout the item is returned in `running` state and the background alarm continues polling. Defaults to false. (default: false)
 ]: any -> record<result: record<checksum: string, chunks_count: int, created_at: string, error: string, file_size: float, id: string, key: string, last_seen_at: string, namespace: string, next_action: string, source_id: string, status: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7532,7 +7531,7 @@ export def "accounts-ai-search-namespaces-instances-items ai-search-namespace-in
   --allow-errors(-e) # Return full response without error handling
   key: string # Item key / filename. Must not exceed 128 characters.
   next_action: string@next-action-completer
-  --wait-for-completion: string@bool-completer # Wait for indexing to fully complete before responding. On RAGs with vector indexing enabled, this additionally waits for Vectorize ingestion confirmation (up to 40s) so the returned item reflects a queryable state. On timeout the item is returned in `running` state and the background alarm continues polling. Defaults to false. (default: false)
+  --wait-for-completion: oneof<nothing, bool> # Wait for indexing to fully complete before responding. On RAGs with vector indexing enabled, this additionally waits for Vectorize ingestion confirmation (up to 40s) so the returned item reflects a queryable state. On timeout the item is returned in `running` state and the background alarm continues polling. Defaults to false. (default: false)
 ]: any -> record<result: record<checksum: string, chunks_count: int, created_at: string, error: string, file_size: float, id: string, key: string, last_seen_at: string, namespace: string, next_action: string, source_id: string, status: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7612,7 +7611,7 @@ export def "accounts-ai-search-namespaces-instances-items ai-search-namespace-in
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   next_action: string@next-action-completer
-  --wait-for-completion: string@bool-completer # Wait for indexing to fully complete before responding. On RAGs with vector indexing enabled, this additionally waits for Vectorize ingestion confirmation (up to 40s) so the returned item reflects a queryable state. On timeout the item is returned in `running` state and the background alarm continues polling. Defaults to false. (default: false)
+  --wait-for-completion: oneof<nothing, bool> # Wait for indexing to fully complete before responding. On RAGs with vector indexing enabled, this additionally waits for Vectorize ingestion confirmation (up to 40s) so the returned item reflects a queryable state. On timeout the item is returned in `running` state and the background alarm continues polling. Defaults to false. (default: false)
 ]: any -> record<result: record<checksum: string, chunks_count: int, created_at: string, error: string, file_size: float, id: string, key: string, last_seen_at: string, namespace: string, next_action: string, source_id: string, status: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7971,7 +7970,7 @@ export def "accounts-ai-search-tokens ai-search-create-tokens" [
   --allow-errors(-e) # Return full response without error handling
   cf_api_id: string # e.g. a1b2c3d4e5f6
   cf_api_key: string # e.g. abc123
-  --legacy: string@bool-completer # default: true
+  --legacy: oneof<nothing, bool> # default: true
   name: string # e.g. my-token
 ]: any -> record<result: record<cf_api_id: string, created_at: string, created_by: string, enabled: bool, id: string, legacy: bool, modified_at: string, modified_by: string, name: string>, success: bool> {
   let input = $in
@@ -8047,7 +8046,7 @@ export def "accounts-ai-search-tokens ai-search-update-tokens" [
   --allow-errors(-e) # Return full response without error handling
   cf_api_id: string # e.g. a1b2c3d4e5f6
   cf_api_key: string # e.g. abc123
-  --legacy: string@bool-completer # default: true
+  --legacy: oneof<nothing, bool> # default: true
   name: string # e.g. my-token
 ]: any -> record<result: record<cf_api_id: string, created_at: string, created_by: string, enabled: bool, id: string, legacy: bool, modified_at: string, modified_by: string, name: string>, success: bool> {
   let input = $in
@@ -8121,7 +8120,7 @@ export def "accounts-ai-finetunes workers-ai-create-finetune" [
   --description: string
   model: string
   name: string
-  --public: string@bool-completer # default: false
+  --public: oneof<nothing, bool> # default: false
 ]: any -> record<result: record<created_at: string, description: string, id: string, model: string, modified_at: string, name: string, public: bool>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8230,9 +8229,9 @@ export def "accounts-ai-models-search workers-ai-search-model" [
   --task: string # Filter by Task Name (default: , e.g. Text Generation)
   --author: string # Filter by Author (default: )
   --qp-source: float # Filter by Source Id
-  --hide-experimental: string@bool-completer # Filter to hide experimental models (default: false)
+  --hide-experimental: oneof<nothing, bool> # Filter to hide experimental models (default: false)
   --search: string # Search (default: )
-  --include-deprecated: string@bool-completer # If true, include models whose planned_deprecation_date is in the past — but only within a three-month grace window after that date. Models whose planned_deprecation_date is more than three months in the past remain hidden regardless of this flag. Future planned-deprecation dates are always included regardless of this flag. Defaults to false, preserving the existing behavior of hiding all past-dated deprecations. (default: false)
+  --include-deprecated: oneof<nothing, bool> # If true, include models whose planned_deprecation_date is in the past — but only within a three-month grace window after that date. Models whose planned_deprecation_date is more than three months in the past remain hidden regardless of this flag. Future planned-deprecation dates are always included regardless of this flag. Defaults to false, preserving the existing behavior of hiding all past-dated deprecations. (default: false)
   --format: string@format-completer # If set, return models in the requested marketplace format instead of the default response.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8357,11 +8356,11 @@ export def "accounts-ai-run-cf-aisingapore-gemma-sea-lion-v4-27b-it workers-ai-p
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 2000)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -8464,7 +8463,7 @@ export def "accounts-ai-run-cf-baai-bge-m3 workers-ai-post-run-cf-baai-bge-m3" [
   --tags: string # e.g. tag1,tag2,tag3
   --contexts: list # List of provided contexts. Note that the index in this array is important, as the response will refer to it. — item shape: {text?: string}
   --body-query: string # A query you wish to perform against the provided contexts. If no query is provided the model with respond with embeddings for contexts
-  --truncate-inputs: string@bool-completer # When provided with too long context should the model error out or truncate the context to fit? (default: false)
+  --truncate-inputs: oneof<nothing, bool> # When provided with too long context should the model error out or truncate the context to fit? (default: false)
   --text: any
   --requests: list # Batch of the embeddings requests to run using async-queue
 ]: any -> record {
@@ -8626,7 +8625,7 @@ export def "accounts-ai-run-cf-baai-nonomni-bge-m3 workers-ai-post-run-cf-baai-n
   --tags: string # e.g. tag1,tag2,tag3
   --contexts: list # List of provided contexts. Note that the index in this array is important, as the response will refer to it. — item shape: {text?: string}
   --body-query: string # A query you wish to perform against the provided contexts. If no query is provided the model with respond with embeddings for contexts
-  --truncate-inputs: string@bool-completer # When provided with too long context should the model error out or truncate the context to fit? (default: false)
+  --truncate-inputs: oneof<nothing, bool> # When provided with too long context should the model error out or truncate the context to fit? (default: false)
   --text: any
   --requests: list # Batch of the embeddings requests to run using async-queue
 ]: any -> record {
@@ -9195,36 +9194,36 @@ export def "accounts-ai-run-cf-deepgram-nova-3 workers-ai-post-run-cf-deepgram-n
   --custom-intent-mode: string@custom-intent-mode-completer # Sets how the model will interpret intents submitted to the custom_intent param. When strict, the model will only return intents submitted using the custom_intent param. When extended, the model will return its own detected intents in addition those submitted using the custom_intents param
   --custom-topic: string # Custom topics you want the model to detect within your input audio or text if present Submit up to 100
   --custom-topic-mode: string@custom-topic-mode-completer # Sets how the model will interpret strings submitted to the custom_topic param. When strict, the model will only return topics submitted using the custom_topic param. When extended, the model will return its own detected topics in addition to those submitted using the custom_topic param.
-  --detect-entities: string@bool-completer # Identifies and extracts key entities from content in submitted audio
-  --detect-language: string@bool-completer # Identifies the dominant language spoken in submitted audio
-  --diarize: string@bool-completer # Recognize speaker changes. Each word in the transcript will be assigned a speaker number starting at 0
-  --dictation: string@bool-completer # Identify and extract key entities from content in submitted audio
+  --detect-entities: oneof<nothing, bool> # Identifies and extracts key entities from content in submitted audio
+  --detect-language: oneof<nothing, bool> # Identifies the dominant language spoken in submitted audio
+  --diarize: oneof<nothing, bool> # Recognize speaker changes. Each word in the transcript will be assigned a speaker number starting at 0
+  --dictation: oneof<nothing, bool> # Identify and extract key entities from content in submitted audio
   --encoding: string@encoding-completer-2 # Specify the expected encoding of your submitted audio
   --endpointing: string # Indicates how long model will wait to detect whether a speaker has finished speaking or pauses for a significant period of time. When set to a value, the streaming endpoint immediately finalizes the transcription for the processed time range and returns the transcript with a speech_final parameter set to true. Can also be set to false to disable endpointing
   --extra: string # Arbitrary key-value pairs that are attached to the API response for usage in downstream processing
-  --filler-words: string@bool-completer # Filler Words can help transcribe interruptions in your audio, like 'uh' and 'um'
-  --interim-results: string@bool-completer # Specifies whether the streaming endpoint should provide ongoing transcription updates as more audio is received. When set to true, the endpoint sends continuous updates, meaning transcription results may evolve over time. Note: Supported only for webosockets.
+  --filler-words: oneof<nothing, bool> # Filler Words can help transcribe interruptions in your audio, like 'uh' and 'um'
+  --interim-results: oneof<nothing, bool> # Specifies whether the streaming endpoint should provide ongoing transcription updates as more audio is received. When set to true, the endpoint sends continuous updates, meaning transcription results may evolve over time. Note: Supported only for webosockets.
   --keyterm: string # Key term prompting can boost or suppress specialized terminology and brands.
   --keywords: string # Keywords can boost or suppress specialized terminology and brands.
   --language: string # The BCP-47 language tag that hints at the primary spoken language. Depending on the Model and API endpoint you choose only certain languages are available.
-  --measurements: string@bool-completer # Spoken measurements will be converted to their corresponding abbreviations.
-  --mip-opt-out: string@bool-completer # Opts out requests from the Deepgram Model Improvement Program. Refer to our Docs for pricing impacts before setting this to true. https://dpgr.am/deepgram-mip.
+  --measurements: oneof<nothing, bool> # Spoken measurements will be converted to their corresponding abbreviations.
+  --mip-opt-out: oneof<nothing, bool> # Opts out requests from the Deepgram Model Improvement Program. Refer to our Docs for pricing impacts before setting this to true. https://dpgr.am/deepgram-mip.
   --mode: string@mode-completer # Mode of operation for the model representing broad area of topic that will be talked about in the supplied audio
-  --multichannel: string@bool-completer # Transcribe each audio channel independently.
-  --numerals: string@bool-completer # Numerals converts numbers from written format to numerical format.
-  --paragraphs: string@bool-completer # Splits audio into paragraphs to improve transcript readability.
-  --profanity-filter: string@bool-completer # Profanity Filter looks for recognized profanity and converts it to the nearest recognized non-profane word or removes it from the transcript completely.
-  --punctuate: string@bool-completer # Add punctuation and capitalization to the transcript.
+  --multichannel: oneof<nothing, bool> # Transcribe each audio channel independently.
+  --numerals: oneof<nothing, bool> # Numerals converts numbers from written format to numerical format.
+  --paragraphs: oneof<nothing, bool> # Splits audio into paragraphs to improve transcript readability.
+  --profanity-filter: oneof<nothing, bool> # Profanity Filter looks for recognized profanity and converts it to the nearest recognized non-profane word or removes it from the transcript completely.
+  --punctuate: oneof<nothing, bool> # Add punctuation and capitalization to the transcript.
   --redact: string # Redaction removes sensitive information from your transcripts.
   --replace: string # Search for terms or phrases in submitted audio and replaces them.
   --search: string # Search for terms or phrases in submitted audio.
-  --sentiment: string@bool-completer # Recognizes the sentiment throughout a transcript or text.
-  --smart-format: string@bool-completer # Apply formatting to transcript output. When set to true, additional formatting will be applied to transcripts to improve readability.
-  --topics: string@bool-completer # Detect topics throughout a transcript or text.
+  --sentiment: oneof<nothing, bool> # Recognizes the sentiment throughout a transcript or text.
+  --smart-format: oneof<nothing, bool> # Apply formatting to transcript output. When set to true, additional formatting will be applied to transcripts to improve readability.
+  --topics: oneof<nothing, bool> # Detect topics throughout a transcript or text.
   --utt-split: float # Seconds to wait before detecting a pause between words in submitted audio.
-  --utterance-end-ms: string@bool-completer # Indicates how long model will wait to send an UtteranceEnd message after a word has been transcribed. Use with interim_results. Note: Supported only for webosockets.
-  --utterances: string@bool-completer # Segments speech into meaningful semantic units.
-  --vad-events: string@bool-completer # Indicates that speech has started. You'll begin receiving Speech Started messages upon speech starting. Note: Supported only for webosockets.
+  --utterance-end-ms: oneof<nothing, bool> # Indicates how long model will wait to send an UtteranceEnd message after a word has been transcribed. Use with interim_results. Note: Supported only for webosockets.
+  --utterances: oneof<nothing, bool> # Segments speech into meaningful semantic units.
+  --vad-events: oneof<nothing, bool> # Indicates that speech has started. You'll begin receiving Speech Started messages upon speech starting. Note: Supported only for webosockets.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9306,11 +9305,11 @@ export def "accounts-ai-run-cf-deepseek-ai-deepseek-math-7b-instruct workers-ai-
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -9354,11 +9353,11 @@ export def "accounts-ai-run-cf-deepseek-ai-deepseek-r1-distill-qwen-32b workers-
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -9402,11 +9401,11 @@ export def "accounts-ai-run-cf-defog-sqlcoder-7b-2 workers-ai-post-run-cf-defog-
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -9538,11 +9537,11 @@ export def "accounts-ai-run-cf-fblgit-una-cybertron-7b-v2-bf16 workers-ai-post-r
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -9615,11 +9614,11 @@ export def "accounts-ai-run-cf-google-gemma-2b-it-lora workers-ai-post-run-cf-go
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -9662,10 +9661,10 @@ export def "accounts-ai-run-cf-google-gemma-3-12b-it workers-ai-post-run-cf-goog
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -9739,11 +9738,11 @@ export def "accounts-ai-run-cf-google-gemma-7b-it-lora workers-ai-post-run-cf-go
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -9874,11 +9873,11 @@ export def "accounts-ai-run-cf-ibm-granite-granite-40-h-micro workers-ai-post-ru
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -10033,11 +10032,11 @@ export def "accounts-ai-run-cf-meta-llama-llama-2-7b-chat-hf-lora workers-ai-pos
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -10081,11 +10080,11 @@ export def "accounts-ai-run-cf-meta-llama-2-7b-chat-fp16 workers-ai-post-run-cf-
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -10129,11 +10128,11 @@ export def "accounts-ai-run-cf-meta-llama-2-7b-chat-int8 workers-ai-post-run-cf-
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -10177,11 +10176,11 @@ export def "accounts-ai-run-cf-meta-llama-3-8b-instruct workers-ai-post-run-cf-m
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -10225,11 +10224,11 @@ export def "accounts-ai-run-cf-meta-llama-3-8b-instruct-awq workers-ai-post-run-
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -10273,11 +10272,11 @@ export def "accounts-ai-run-cf-meta-llama-31-70b-instruct-fp8-fast workers-ai-po
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -10321,11 +10320,11 @@ export def "accounts-ai-run-cf-meta-llama-31-8b-instruct-awq workers-ai-post-run
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -10369,11 +10368,11 @@ export def "accounts-ai-run-cf-meta-llama-31-8b-instruct-fp8 workers-ai-post-run
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -10417,11 +10416,11 @@ export def "accounts-ai-run-cf-meta-llama-31-8b-instruct-fp8-fast workers-ai-pos
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -10465,10 +10464,10 @@ export def "accounts-ai-run-cf-meta-llama-32-11b-vision-instruct workers-ai-post
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -10512,11 +10511,11 @@ export def "accounts-ai-run-cf-meta-llama-32-1b-instruct workers-ai-post-run-cf-
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -10560,11 +10559,11 @@ export def "accounts-ai-run-cf-meta-llama-32-3b-instruct workers-ai-post-run-cf-
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -10609,11 +10608,11 @@ export def "accounts-ai-run-cf-meta-llama-33-70b-instruct-fp8-fast workers-ai-po
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -10658,11 +10657,11 @@ export def "accounts-ai-run-cf-meta-llama-4-scout-17b-16e-instruct workers-ai-po
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.15)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -10802,11 +10801,11 @@ export def "accounts-ai-run-cf-microsoft-phi-2 workers-ai-post-run-cf-microsoft-
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -10878,11 +10877,11 @@ export def "accounts-ai-run-cf-mistral-mistral-7b-instruct-v01 workers-ai-post-r
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -10926,11 +10925,11 @@ export def "accounts-ai-run-cf-mistral-mistral-7b-instruct-v02-lora workers-ai-p
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -10973,10 +10972,10 @@ export def "accounts-ai-run-cf-mistralai-mistral-small-31-24b-instruct workers-a
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.15)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -11110,14 +11109,14 @@ export def "accounts-ai-run-cf-nvidia-nemotron-3-120b-a12b workers-ai-post-run-c
   --function-call: any
   --functions: list # item shape: {description?: string, name: string, parameters?: record, strict?: bool}
   --logit-bias: record # nullable
-  --logprobs: string@bool-completer # nullable
+  --logprobs: oneof<nothing, bool> # nullable
   --max-completion-tokens: int # nullable
   --max-tokens: int # nullable
   --metadata: record # nullable
   --modalities: list # nullable
   --model: string # ID of the model to use (e.g. '@cf/zai-org/glm-4.7-flash, etc').
   --n: int # nullable
-  --parallel-tool-calls: string@bool-completer # Whether to enable parallel function calling during tool use. (default: true)
+  --parallel-tool-calls: oneof<nothing, bool> # Whether to enable parallel function calling during tool use. (default: true)
   --prediction: any
   --presence-penalty: float # nullable
   --prompt: string # The input text prompt for the model to generate a response.
@@ -11126,8 +11125,8 @@ export def "accounts-ai-run-cf-nvidia-nemotron-3-120b-a12b workers-ai-post-run-c
   --seed: int # nullable
   --service-tier: string@service-tier-completer # nullable
   --stop: any
-  --store: string@bool-completer # nullable
-  --stream: string@bool-completer # nullable
+  --store: oneof<nothing, bool> # nullable
+  --stream: oneof<nothing, bool> # nullable
   --stream-options: any
   --temperature: float # nullable
   --tool-choice: any
@@ -11286,7 +11285,7 @@ export def "accounts-ai-run-cf-openai-whisper-large-v3-turbo workers-ai-post-run
   audio: any
   --beam-size: int # The number of beams to use in beam search decoding. Higher values may improve accuracy at the cost of speed. (default: 5)
   --compression-ratio-threshold: float # Threshold for filtering out segments with high compression ratio, which often indicate repetitive or hallucinated text. (default: 2.4)
-  --condition-on-previous-text: string@bool-completer # Whether to condition on previous text during transcription. Setting to false may help prevent hallucination loops. (default: true)
+  --condition-on-previous-text: oneof<nothing, bool> # Whether to condition on previous text during transcription. Setting to false may help prevent hallucination loops. (default: true)
   --hallucination-silence-threshold: float # Optional threshold (in seconds) to skip silent periods that may cause hallucinations.
   --initial-prompt: string # A text prompt to help provide context to the model on the contents of the audio.
   --language: string # The language of the audio being transcribed or translated.
@@ -11294,7 +11293,7 @@ export def "accounts-ai-run-cf-openai-whisper-large-v3-turbo workers-ai-post-run
   --no-speech-threshold: float # Threshold for detecting no-speech segments. Segments with no-speech probability above this value are skipped. (default: 0.6)
   --prefix: string # The prefix appended to the beginning of the output of the transcription and can guide the transcription result.
   --task: string # Supported tasks are 'translate' or 'transcribe'. (default: transcribe)
-  --vad-filter: string@bool-completer # Preprocess the audio with a voice activity detection model. (default: false)
+  --vad-filter: oneof<nothing, bool> # Preprocess the audio with a voice activity detection model. (default: false)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11360,11 +11359,11 @@ export def "accounts-ai-run-cf-openchat-openchat-35-0106 workers-ai-post-run-cf-
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -11481,11 +11480,11 @@ export def "accounts-ai-run-cf-qwen-qwen15-05b-chat workers-ai-post-run-cf-qwen-
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -11529,11 +11528,11 @@ export def "accounts-ai-run-cf-qwen-qwen15-18b-chat workers-ai-post-run-cf-qwen-
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -11577,11 +11576,11 @@ export def "accounts-ai-run-cf-qwen-qwen15-14b-chat-awq workers-ai-post-run-cf-q
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -11625,11 +11624,11 @@ export def "accounts-ai-run-cf-qwen-qwen15-7b-chat-awq workers-ai-post-run-cf-qw
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -11673,11 +11672,11 @@ export def "accounts-ai-run-cf-qwen-qwen25-coder-32b-instruct workers-ai-post-ru
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -11721,11 +11720,11 @@ export def "accounts-ai-run-cf-qwen-qwen3-30b-a3b-fp8 workers-ai-post-run-cf-qwe
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 2000)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -11801,10 +11800,10 @@ export def "accounts-ai-run-cf-qwen-qwq-32b workers-ai-post-run-cf-qwen-qwq-32b"
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.15)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -12012,11 +12011,11 @@ export def "accounts-ai-run-cf-thebloke-discolm-german-7b-v1-awq workers-ai-post
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -12060,11 +12059,11 @@ export def "accounts-ai-run-cf-tiiuae-falcon-7b-instruct workers-ai-post-run-cf-
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -12108,11 +12107,11 @@ export def "accounts-ai-run-cf-tinyllama-tinyllama-11b-chat-v10 workers-ai-post-
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -12156,14 +12155,14 @@ export def "accounts-ai-run-cf-zai-org-glm-47-flash workers-ai-post-run-cf-zai-o
   --function-call: any
   --functions: list # item shape: {description?: string, name: string, parameters?: record, strict?: bool}
   --logit-bias: record # nullable
-  --logprobs: string@bool-completer # nullable
+  --logprobs: oneof<nothing, bool> # nullable
   --max-completion-tokens: int # nullable
   --max-tokens: int # nullable
   --metadata: record # nullable
   --modalities: list # nullable
   --model: string # ID of the model to use (e.g. '@cf/zai-org/glm-4.7-flash, etc').
   --n: int # nullable
-  --parallel-tool-calls: string@bool-completer # Whether to enable parallel function calling during tool use. (default: true)
+  --parallel-tool-calls: oneof<nothing, bool> # Whether to enable parallel function calling during tool use. (default: true)
   --prediction: any
   --presence-penalty: float # nullable
   --prompt: string # The input text prompt for the model to generate a response.
@@ -12172,8 +12171,8 @@ export def "accounts-ai-run-cf-zai-org-glm-47-flash workers-ai-post-run-cf-zai-o
   --seed: int # nullable
   --service-tier: string@service-tier-completer # nullable
   --stop: any
-  --store: string@bool-completer # nullable
-  --stream: string@bool-completer # nullable
+  --store: oneof<nothing, bool> # nullable
+  --stream: oneof<nothing, bool> # nullable
   --stream-options: any
   --temperature: float # nullable
   --tool-choice: any
@@ -12220,11 +12219,11 @@ export def "accounts-ai-run-hf-google-gemma-7b-it workers-ai-post-run-hf-google-
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -12268,11 +12267,11 @@ export def "accounts-ai-run-hf-mistral-mistral-7b-instruct-v02 workers-ai-post-r
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -12316,11 +12315,11 @@ export def "accounts-ai-run-hf-nexusflow-starling-lm-7b-beta workers-ai-post-run
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -12364,11 +12363,11 @@ export def "accounts-ai-run-hf-nousresearch-hermes-2-pro-mistral-7b workers-ai-p
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -12412,11 +12411,11 @@ export def "accounts-ai-run-hf-thebloke-deepseek-coder-67b-base-awq workers-ai-p
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -12460,11 +12459,11 @@ export def "accounts-ai-run-hf-thebloke-deepseek-coder-67b-instruct-awq workers-
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -12508,11 +12507,11 @@ export def "accounts-ai-run-hf-thebloke-llama-2-13b-chat-awq workers-ai-post-run
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -12556,11 +12555,11 @@ export def "accounts-ai-run-hf-thebloke-mistral-7b-instruct-v01-awq workers-ai-p
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -12604,11 +12603,11 @@ export def "accounts-ai-run-hf-thebloke-neural-chat-7b-v3-1-awq workers-ai-post-
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -12652,11 +12651,11 @@ export def "accounts-ai-run-hf-thebloke-openhermes-25-mistral-7b-awq workers-ai-
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -12700,11 +12699,11 @@ export def "accounts-ai-run-hf-thebloke-zephyr-7b-beta-awq workers-ai-post-run-h
   --max-tokens: int # The maximum number of tokens to generate in the response. (default: 256)
   --presence-penalty: float # Increases the likelihood of the model introducing new topics.
   --prompt: string # The input text prompt for the model to generate a response.
-  --body-raw: string@bool-completer # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
+  --body-raw: oneof<nothing, bool> # If true, a chat template is not applied and you must adhere to the specific model's expected formatting. (default: false)
   --repetition-penalty: float # Penalty for repeated tokens; higher values discourage repetition.
   --response-format: record # shape: {json_schema?: any, type?: "json_object"|"json_schema"}
   --seed: int # Random seed for reproducibility of the generation.
-  --stream: string@bool-completer # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
+  --stream: oneof<nothing, bool> # If true, the response will be streamed back incrementally using SSE, Server Sent Events. (default: false)
   --temperature: float # Controls the randomness of the output; higher values produce more random results. (default: 0.6)
   --top-k: int # Limits the AI to choose from the top 'k' most probable words. Lower values make responses more focused; higher values introduce more variety and potential surprises.
   --top-p: float # Adjusts the creativity of the AI's responses by controlling how many possible words it considers. Lower values make outputs more predictable; higher values allow for more varied and creative responses.
@@ -13162,7 +13161,7 @@ export def "accounts-alerting-policies notification-policies-create-a-notificati
   --alert-interval: string # Optional specification of how often to re-alert from the same incident, not support on all alert types. (e.g. 30m)
   alert_type: string@alert-type-completer # Refers to which event will trigger a Notification dispatch. You can use the endpoint to get available alert types which then will give you a list of possible values. (e.g. universal_ssl_event_type)
   --description: string # Optional description for the Notification policy. (e.g. Something describing the policy.)
-  --enabled: string@bool-completer # Whether or not the Notification policy is enabled. (default: true, e.g. true)
+  --enabled: oneof<nothing, bool> # Whether or not the Notification policy is enabled. (default: true, e.g. true)
   --filters: record # Optional filters that allow you to be alerted only on a subset of events for that alert type based on some criteria. This is only available for select alert types. See alert type documentation for more details. (e.g. {slo: [99.9]}) — shape: {actions?: list, affected_asns?: list, affected_components?: list, affected_locations?: list, airport_code?: list, alert_trigger_preferences?: list, alert_trigger_preferences_value?: list, enabled?: list, environment?: list, event?: list, event_source?: list, event_type?: list, group_by?: list, health_check_id?: list, incident_impact?: list, input_id?: list, insight_class?: list, limit?: list, logo_tag?: list, megabits_per_second?: list, new_health?: list, new_status?: list, packets_per_second?: list, pool_id?: list, pop_names?: list, product?: list, project_id?: list, protocol?: list, query_tag?: list, requests_per_second?: list, selectors?: list, services?: list, slo?: list, status?: list, target_hostname?: list, target_ip?: list, target_zone_name?: list, traffic_exclusions?: list, tunnel_id?: list, tunnel_name?: list, type?: list, where?: list, zones?: list}
   mechanisms: record # List of IDs that will be used when dispatching a notification. IDs for email type will be the email address. (e.g. {email: [{id: test@example.com}], pagerduty: [{id: e8133a15-00a4-4d69-aec1-32f70c51f6e5}], webhooks: [{id: 14cc1190-5d2b-4b98-a696-c424cb2ad05f}]}) — shape: {email?: list, pagerduty?: list, webhooks?: list}
   name: string # Name of the policy. (e.g. SSL Notification Event Policy)
@@ -13243,7 +13242,7 @@ export def "accounts-alerting-policies notification-policies-update-a-notificati
   --alert-interval: string # Optional specification of how often to re-alert from the same incident, not support on all alert types. (e.g. 30m)
   --alert-type: string@alert-type-completer # Refers to which event will trigger a Notification dispatch. You can use the endpoint to get available alert types which then will give you a list of possible values. (e.g. universal_ssl_event_type)
   --description: string # Optional description for the Notification policy. (e.g. Something describing the policy.)
-  --enabled: string@bool-completer # Whether or not the Notification policy is enabled. (default: true, e.g. true)
+  --enabled: oneof<nothing, bool> # Whether or not the Notification policy is enabled. (default: true, e.g. true)
   --filters: record # Optional filters that allow you to be alerted only on a subset of events for that alert type based on some criteria. This is only available for select alert types. See alert type documentation for more details. (e.g. {slo: [99.9]}) — shape: {actions?: list, affected_asns?: list, affected_components?: list, affected_locations?: list, airport_code?: list, alert_trigger_preferences?: list, alert_trigger_preferences_value?: list, enabled?: list, environment?: list, event?: list, event_source?: list, event_type?: list, group_by?: list, health_check_id?: list, incident_impact?: list, input_id?: list, insight_class?: list, limit?: list, logo_tag?: list, megabits_per_second?: list, new_health?: list, new_status?: list, packets_per_second?: list, pool_id?: list, pop_names?: list, product?: list, project_id?: list, protocol?: list, query_tag?: list, requests_per_second?: list, selectors?: list, services?: list, slo?: list, status?: list, target_hostname?: list, target_ip?: list, target_zone_name?: list, traffic_exclusions?: list, tunnel_id?: list, tunnel_name?: list, type?: list, where?: list, zones?: list}
   --mechanisms: record # List of IDs that will be used when dispatching a notification. IDs for email type will be the email address. (e.g. {email: [{id: test@example.com}], pagerduty: [{id: e8133a15-00a4-4d69-aec1-32f70c51f6e5}], webhooks: [{id: 14cc1190-5d2b-4b98-a696-c424cb2ad05f}]}) — shape: {email?: list, pagerduty?: list, webhooks?: list}
   --name: string # Name of the policy. (e.g. SSL Notification Event Policy)
@@ -13915,7 +13914,7 @@ export def "accounts-audit-logs audit-logs-get-account-audit-logs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string # e.g. f174be97-19b1-40d6-954d-70cd5fbd52db
-  --qp-export: string@bool-completer # e.g. true
+  --qp-export: oneof<nothing, bool> # e.g. true
   --actiontype: string # e.g. add
   --actorip: string # e.g. 17.168.228.63
   --actoremail: string # format: email, e.g. alice@example.com
@@ -13925,7 +13924,7 @@ export def "accounts-audit-logs audit-logs-get-account-audit-logs" [
   --direction: string@direction-completer # default: desc, e.g. desc
   --per-page: float # default: 100, e.g. 25
   --page: float # default: 1, e.g. 50
-  --hide-user-logs: string@bool-completer # default: false
+  --hide-user-logs: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13958,8 +13957,8 @@ export def "accounts-autorag-rags-ai-search autorag-config-ai-search" [
   --body-query: string
   --ranking-options: record # default: {} — shape: {ranker?: string, score_threshold?: float}
   --reranking: record # shape: {enabled?: bool, model?: any}
-  --rewrite-query: string@bool-completer # default: false
-  --stream: string@bool-completer # default: false
+  --rewrite-query: oneof<nothing, bool> # default: false
+  --stream: oneof<nothing, bool> # default: false
   --system-prompt: string
 ]: any -> record<result: record<data: list<record>, has_more: bool, next_page: string, object: string, response: string, search_query: string>, success: bool> {
   let input = $in
@@ -14099,7 +14098,7 @@ export def "accounts-autorag-rags-search autorag-config-search" [
   --body-query: string
   --ranking-options: record # default: {} — shape: {ranker?: string, score_threshold?: float}
   --reranking: record # shape: {enabled?: bool, model?: any}
-  --rewrite-query: string@bool-completer # default: false
+  --rewrite-query: oneof<nothing, bool> # default: false
 ]: any -> record<result: record<data: list<record>, has_more: bool, next_page: string, object: string, search_query: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -14710,7 +14709,7 @@ export def "accounts-brand-protection-matches get" [
   --id: string
   --offset: int
   --limit: int
-  --include-domain-id: string@bool-completer
+  --include-domain-id: oneof<nothing, bool>
 ]: nothing -> record<matches: list<record>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14736,7 +14735,7 @@ export def "accounts-brand-protection-matches-download get" [
   --id: string
   --offset: int
   --limit: int
-  --include-domain-id: string@bool-completer
+  --include-domain-id: oneof<nothing, bool>
 ]: nothing -> record<matches: list<record>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14761,7 +14760,7 @@ export def "accounts-brand-protection-queries delete" [
   --allow-errors(-e) # Return full response without error handling
   --id: string
   --tag: string
-  --scan: string@bool-completer
+  --scan: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14807,7 +14806,7 @@ export def "accounts-brand-protection-queries patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: int # The query ID to update (required when updating tag or scan)
-  --scan: string@bool-completer # Whether to scan matches
+  --scan: oneof<nothing, bool> # Whether to scan matches
   --string-matches: list # Updated pattern match constraints. When provided, replaces the existing string_matches. — item shape: {max_edit_distance?: float, pattern: string}
   --tag: string # Query tag. Required as identifier when updating string_matches.
 ]: any -> any {
@@ -14836,10 +14835,10 @@ export def "accounts-brand-protection-queries post" [
   --allow-errors(-e) # Return full response without error handling
   --id: string
   --tag: string
-  --scan: string@bool-completer
+  --scan: oneof<nothing, bool>
   --body-max-time: string # nullable, format: date-time
   --min-time: string # nullable, format: date-time
-  --scan: string@bool-completer
+  --scan: oneof<nothing, bool>
   --string-matches: any
   --tag: string
 ]: any -> any {
@@ -15230,8 +15229,8 @@ export def "accounts-browser-rendering-devtools-browser DevtoolsBrowserAcquire" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --keep-alive: float # Keep-alive time in ms (only valid when acquiring new session). (default: 60000)
-  --lab: string@bool-completer # Use experimental browser. (default: false)
-  --recording: string@bool-completer # default: false
+  --lab: oneof<nothing, bool> # Use experimental browser. (default: false)
+  --recording: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -15256,9 +15255,9 @@ export def "accounts-browser-rendering-devtools-browser DevtoolsAcquire" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --keep-alive: float # Keep-alive time in milliseconds. (default: 60000)
-  --lab: string@bool-completer # Use experimental browser. (default: false)
-  --targets: string@bool-completer # Include browser targets in response. (default: false)
-  --recording: string@bool-completer # default: false
+  --lab: oneof<nothing, bool> # Use experimental browser. (default: false)
+  --targets: oneof<nothing, bool> # Include browser targets in response. (default: false)
+  --recording: oneof<nothing, bool> # default: false
 ]: nothing -> record<sessionId: string, webSocketDebuggerUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -15307,8 +15306,8 @@ export def "accounts-browser-rendering-devtools-browser DevtoolsBrowser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --keep-alive: float # Keep-alive time in ms (only valid when acquiring new session). (default: 60000)
-  --lab: string@bool-completer # Use experimental browser. (default: false)
-  --recording: string@bool-completer # default: false
+  --lab: oneof<nothing, bool> # Use experimental browser. (default: false)
+  --recording: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -16083,7 +16082,7 @@ export def "accounts-builds-triggers createTrigger" [
   --allow-errors(-e) # Return full response without error handling
   branch_excludes: list # e.g. []
   branch_includes: list # e.g. [main]
-  --build-caching-enabled: string@bool-completer # default: false, e.g. false
+  --build-caching-enabled: oneof<nothing, bool> # default: false, e.g. false
   build_command: string # e.g. npm run build
   build_token_uuid: string # Build token UUID. (format: uuid)
   deploy_command: string # e.g. npx wrangler deploy
@@ -16144,7 +16143,7 @@ export def "accounts-builds-triggers updateTrigger" [
   --allow-errors(-e) # Return full response without error handling
   --branch-excludes: list # e.g. []
   --branch-includes: list # e.g. [main]
-  --build-caching-enabled: string@bool-completer # default: false, e.g. false
+  --build-caching-enabled: oneof<nothing, bool> # default: false, e.g. false
   --build-command: string # e.g. npm run build
   --build-token-uuid: string # Build token UUID. (format: uuid)
   --deploy-command: string # e.g. npx wrangler deploy
@@ -16723,7 +16722,7 @@ export def "accounts-cfd-tunnel cloudflare-tunnel-list-cloudflare-tunnels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # e.g. blog
-  --is-deleted: string@bool-completer # e.g. true
+  --is-deleted: oneof<nothing, bool> # e.g. true
   --existed-at: string # format: url-encoded-date-time, e.g. 2019-10-12T07%3A20%3A50.52Z
   --uuid: string # format: uuid, e.g. f70ff985-a4ef-4643-bbbc-4a0ed4fc8415
   --was-active-at: string # format: date-time, e.g. 2009-11-10T23:00:00Z
@@ -17070,13 +17069,13 @@ export def "accounts-challenges-widgets accounts-turnstile-widget-create" [
   --order: string@order-completer # e.g. id
   --direction: string@direction-completer # e.g. asc
   --filter: string # Filter widgets by field using case-insensitive substring matching. Format: `field:value`  Supported fields: - `name` - Filter by widget name (e.g., `filter=name:login-form`) - `sitekey` - Filter by sitekey (e.g., `filter=sitekey:0x4AAA`)  Returns 400 Bad Request if the field is unsupported or format is invalid. An empty filter value returns all results.  (e.g. name:my-widget)
-  --bot-fight-mode: string@bool-completer # If bot_fight_mode is set to `true`, Cloudflare issues computationally expensive challenges in response to malicious bots (ENT only).  (e.g. false)
+  --bot-fight-mode: oneof<nothing, bool> # If bot_fight_mode is set to `true`, Cloudflare issues computationally expensive challenges in response to malicious bots (ENT only).  (e.g. false)
   --clearance-level: string@clearance-level-completer # If Turnstile is embedded on a Cloudflare site and the widget should grant challenge clearance, this setting can determine the clearance level to be set  (e.g. interactive)
   domains: list # e.g. [203.0.113.1, cloudflare.com, blog.example.com]
-  --ephemeral-id: string@bool-completer # Return the Ephemeral ID in /siteverify (ENT only).  (e.g. false)
+  --ephemeral-id: oneof<nothing, bool> # Return the Ephemeral ID in /siteverify (ENT only).  (e.g. false)
   mode: string@mode-completer-1 # Widget Mode (e.g. invisible)
   name: string # Human readable widget name. Not unique. Cloudflare suggests that you set this to a meaningful string to make it easier to identify your widget, and where it is used.  (e.g. blog.cloudflare.com login form)
-  --offlabel: string@bool-completer # Do not show any Cloudflare branding on the widget (ENT only).  (e.g. false)
+  --offlabel: oneof<nothing, bool> # Do not show any Cloudflare branding on the widget (ENT only).  (e.g. false)
   --region: string@region-completer # Region where this widget can be used. This cannot be changed after creation.  (default: world)
 ]: any -> record {
   let input = $in
@@ -17151,13 +17150,13 @@ export def "accounts-challenges-widgets accounts-turnstile-widget-update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --bot-fight-mode: string@bool-completer # If bot_fight_mode is set to `true`, Cloudflare issues computationally expensive challenges in response to malicious bots (ENT only).  (e.g. false)
+  --bot-fight-mode: oneof<nothing, bool> # If bot_fight_mode is set to `true`, Cloudflare issues computationally expensive challenges in response to malicious bots (ENT only).  (e.g. false)
   --clearance-level: string@clearance-level-completer # If Turnstile is embedded on a Cloudflare site and the widget should grant challenge clearance, this setting can determine the clearance level to be set  (e.g. interactive)
   domains: list # e.g. [203.0.113.1, cloudflare.com, blog.example.com]
-  --ephemeral-id: string@bool-completer # Return the Ephemeral ID in /siteverify (ENT only).  (e.g. false)
+  --ephemeral-id: oneof<nothing, bool> # Return the Ephemeral ID in /siteverify (ENT only).  (e.g. false)
   mode: string@mode-completer-1 # Widget Mode (e.g. invisible)
   name: string # Human readable widget name. Not unique. Cloudflare suggests that you set this to a meaningful string to make it easier to identify your widget, and where it is used.  (e.g. blog.cloudflare.com login form)
-  --offlabel: string@bool-completer # Do not show any Cloudflare branding on the widget (ENT only).  (e.g. false)
+  --offlabel: oneof<nothing, bool> # Do not show any Cloudflare branding on the widget (ENT only).  (e.g. false)
   --region: string@region-completer # Region where this widget can be used. This cannot be changed after creation.  (default: world)
 ]: any -> record {
   let input = $in
@@ -17185,7 +17184,7 @@ export def "accounts-challenges-widgets-rotate-secret accounts-turnstile-widget-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --invalidate-immediately: string@bool-completer # If `invalidate_immediately` is set to `false`, the previous secret will remain valid for two hours. Otherwise, the secret is immediately invalidated, and requests using it will be rejected.  (default: false)
+  --invalidate-immediately: oneof<nothing, bool> # If `invalidate_immediately` is set to `false`, the previous secret will remain valid for two hours. Otherwise, the secret is immediately invalidated, and requests using it will be rejected.  (default: false)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -17267,7 +17266,7 @@ export def "accounts-cloudforce-one-events EventListGet" [
   --orderBy: string
   --order: string@order-completer-1
   --datasetId: list
-  --forceRefresh: string@bool-completer
+  --forceRefresh: oneof<nothing, bool>
   --format: string@format-completer-1
 ]: nothing -> table<attacker: string, attackerCountry: string, category: string, datasetId: string, date: string, event: string, hasChildren: bool, indicator: string, indicatorType: string, indicatorTypeId: float, insight: string, killChain: float, mitreAttack: list<string>, mitreCapec: list<string>, numReferenced: float, numReferences: float, rawId: string, referenced: list<string>, referencedIds: list<float>, references: list<string>, referencesIds: list<float>, releasabilityId: string, tags: list<string>, targetCountry: string, targetIndustry: string, tlp: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -17296,7 +17295,7 @@ export def "accounts-cloudforce-one-events-aggregate EventAggregate" [
   --datasetId: list # Dataset ID(s) to filter by. Can be a single dataset ID, comma-separated list, or array. If not provided, uses default dataset
   --startDate: string # Start date for filtering (ISO 8601 format, e.g., '2024-01-01')
   --endDate: string # End date for filtering (ISO 8601 format, e.g., '2024-12-31')
-  --groupByDate: string@bool-completer # Whether to group results by date (daily aggregation)
+  --groupByDate: oneof<nothing, bool> # Whether to group results by date (daily aggregation)
   --limit: float # Maximum number of results to return (default: 100)
 ]: nothing -> record<aggregateBy: string, aggregations: table<count: float, date: string>, dateRange: record<endDate: string, startDate: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -17597,7 +17596,7 @@ export def "accounts-cloudforce-one-events-create-bulk EventCreateBulk" [
   --allow-errors(-e) # Return full response without error handling
   data: list # item shape: {accountId?: float, attacker?: string, attackerCountry?: string, category: string, datasetId?: string, date: string, event: string, indicator?: string, indicatorType?: string, indicators?: list, insight?: string, raw: record, tags?: list, targetCountry?: string, targetIndustry?: string, tlp: string}
   datasetId: string # e.g. durableObjectName
-  --includeCreatedEvents: string@bool-completer # When true, response includes array of created event UUIDs and shard IDs. Useful for tracking which events were created and where.
+  --includeCreatedEvents: oneof<nothing, bool> # When true, response includes array of created event UUIDs and shard IDs. Useful for tracking which events were created and where.
 ]: any -> record<createBulkEventsRequestId: string, createdEvents: table<eventIndex: float, shardId: string, uuid: string>, createdEventsCount: float, createdTagsCount: float, errorCount: float, errors: table<error: string, eventIndex: float>, queuedIndicatorsCount: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -17873,7 +17872,7 @@ export def "accounts-cloudforce-one-events-dataset-create DatasetCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isPublic: string@bool-completer # If true, then anyone can search the dataset. If false, then its limited to the account.
+  --isPublic: oneof<nothing, bool> # If true, then anyone can search the dataset. If false, then its limited to the account.
   name: string # Used to describe the dataset within the account context.
 ]: any -> record<isPublic: bool, name: string, uuid: string> {
   let input = $in
@@ -17947,7 +17946,7 @@ export def "accounts-cloudforce-one-events-dataset DatasetUpdate-by-account_id-d
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isPublic: string@bool-completer # If true, then anyone can search the dataset. If false, then its limited to the account.
+  --isPublic: oneof<nothing, bool> # If true, then anyone can search the dataset. If false, then its limited to the account.
   name: string # Used to describe the dataset within the account context.
 ]: any -> record<isPublic: bool, name: string, uuid: string> {
   let input = $in
@@ -17975,7 +17974,7 @@ export def "accounts-cloudforce-one-events-dataset DatasetUpdate-by-account_id-d
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isPublic: string@bool-completer # If true, then anyone can search the dataset. If false, then its limited to the account.
+  --isPublic: oneof<nothing, bool> # If true, then anyone can search the dataset. If false, then its limited to the account.
   name: string # Used to describe the dataset within the account context.
 ]: any -> record<isPublic: bool, name: string, uuid: string> {
   let input = $in
@@ -18003,7 +18002,7 @@ export def "accounts-cloudforce-one-events-dataset-copy EventCopyToNewDS" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --keepRawData: string@bool-completer # If true, copies raw data to the destination dataset. Default is false (raw data is stripped/not copied).
+  --keepRawData: oneof<nothing, bool> # If true, copies raw data to the destination dataset. Default is false (raw data is stripped/not copied).
   destDatasetId: string # e.g. 12345678-1234-1234-1234-1234567890ab
   eventIds: list
 ]: any -> record<copied: float, indicatorsCopied: float, insertFailures: table<index: float, reason: string>, relationshipsCopied: float> {
@@ -18117,7 +18116,7 @@ export def "accounts-cloudforce-one-events-dataset-indicators-bulk IndicatorCrea
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoCreateType: string@bool-completer # Global flag to automatically create indicator types if they don't exist. Individual indicators can override this with their own autoCreateType flag.
+  --autoCreateType: oneof<nothing, bool> # Global flag to automatically create indicator types if they don't exist. Individual indicators can override this with their own autoCreateType flag.
   indicators: list # item shape: {autoCreateType?: bool, indicatorType: string, relatedEvents?: list, tags?: list, value: string}
 ]: any -> float {
   let input = $in
@@ -18146,7 +18145,7 @@ export def "accounts-cloudforce-one-events-dataset-indicators-create IndicatorCr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoCreateType: string@bool-completer # If true, automatically create the indicator type if it doesn't exist. If false (default), throw an error when the indicator type doesn't exist.
+  --autoCreateType: oneof<nothing, bool> # If true, automatically create the indicator type if it doesn't exist. If false (default), throw an error when the indicator type doesn't exist.
   indicatorType: string # e.g. domain
   --relatedEvents: list # item shape: {datasetId: string, eventId: string}
   --tags: list
@@ -18280,7 +18279,7 @@ export def "accounts-cloudforce-one-events-dataset-move EventMoveToNewDS" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --keepRawData: string@bool-completer # If true, copies raw data to the destination dataset. Default is false (raw data is stripped/not copied). Raw data is always deleted from the source.
+  --keepRawData: oneof<nothing, bool> # If true, copies raw data to the destination dataset. Default is false (raw data is stripped/not copied). Raw data is always deleted from the source.
   destDatasetId: string # e.g. 12345678-1234-1234-1234-1234567890ab
   eventIds: list
 ]: any -> record<deletionFailures: table<datasetId: string, reason: string>, indicatorsCopied: float, insertFailures: table<index: float, reason: string>, moved: float, relationshipsCopied: float> {
@@ -18623,8 +18622,8 @@ export def "accounts-cloudforce-one-events-indicators IndicatorList" [
   --createdAfter: string # Filter indicators created on or after this date. Must use ISO 8601 format (e.g., '2024-01-15T00:00:00Z'). (format: date-time)
   --createdBefore: string # Filter indicators created on or before this date. Must use ISO 8601 format (e.g., '2024-12-31T23:59:59Z'). (format: date-time)
   --relatedEventsLimit: float # Limit the number of related events returned per indicator. Default: 2. Set to 0 for none, -1 for all events. (e.g. 2)
-  --includeTags: string@bool-completer # Whether to include full tag details for each indicator. Defaults to true.
-  --includeTotalCount: string@bool-completer # Whether to compute accurate total count via COUNT(*). Defaults to false for performance. When false, total_count is an approximation.
+  --includeTags: oneof<nothing, bool> # Whether to include full tag details for each indicator. Defaults to true.
+  --includeTotalCount: oneof<nothing, bool> # Whether to compute accurate total count via COUNT(*). Defaults to false for performance. When false, total_count is an approximation.
   --format: string@format-completer-1 # Output format for indicator data. 'json' returns the default format, 'stix2' returns STIX 2.1 Indicator SDOs, 'taxii' returns a TAXII 2.1 Envelope with Content-Type application/taxii+json;version=2.1. (e.g. json)
 ]: nothing -> record<properties: record<indicators: record<items: record, type: string>, pagination: record<properties: record, type: string>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -18671,11 +18670,11 @@ export def "accounts-cloudforce-one-events-queries-create EventQueryCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --alert-enabled: string@bool-completer # Enable alerts for this query
-  --alert-rollup-enabled: string@bool-completer # Enable alert rollup for this query
+  --alert-enabled: oneof<nothing, bool> # Enable alerts for this query
+  --alert-rollup-enabled: oneof<nothing, bool> # Enable alert rollup for this query
   name: string # Unique name for the saved query
   query_json: string # JSON string containing the query parameters
-  --rule-enabled: string@bool-completer # Enable rule for this query
+  --rule-enabled: oneof<nothing, bool> # Enable rule for this query
   --rule-scope: string # Scope for the rule
 ]: any -> record<account_id: int, alert_enabled: bool, alert_rollup_enabled: bool, created_at: string, custom_threat_feed_id: int, id: int, name: string, query_json: string, rule_enabled: bool, rule_list_id: string, rule_scope: string, updated_at: string, user_email: string> {
   let input = $in
@@ -18749,11 +18748,11 @@ export def "accounts-cloudforce-one-events-queries EventQueryUpdate-by-account_i
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --alert-enabled: string@bool-completer # Enable alerts for this query
-  --alert-rollup-enabled: string@bool-completer # Enable alert rollup for this query
+  --alert-enabled: oneof<nothing, bool> # Enable alerts for this query
+  --alert-rollup-enabled: oneof<nothing, bool> # Enable alert rollup for this query
   --name: string # Unique name for the saved query
   --query-json: string # JSON string containing the query parameters
-  --rule-enabled: string@bool-completer # Enable rule for this query
+  --rule-enabled: oneof<nothing, bool> # Enable rule for this query
   --rule-scope: string # Scope for the rule
 ]: any -> record<account_id: int, alert_enabled: bool, alert_rollup_enabled: bool, created_at: string, custom_threat_feed_id: int, id: int, name: string, query_json: string, rule_enabled: bool, rule_list_id: string, rule_scope: string, updated_at: string, user_email: string> {
   let input = $in
@@ -18781,11 +18780,11 @@ export def "accounts-cloudforce-one-events-queries EventQueryUpdate-by-account_i
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --alert-enabled: string@bool-completer # Enable alerts for this query
-  --alert-rollup-enabled: string@bool-completer # Enable alert rollup for this query
+  --alert-enabled: oneof<nothing, bool> # Enable alerts for this query
+  --alert-rollup-enabled: oneof<nothing, bool> # Enable alert rollup for this query
   --name: string # Unique name for the saved query
   --query-json: string # JSON string containing the query parameters
-  --rule-enabled: string@bool-completer # Enable rule for this query
+  --rule-enabled: oneof<nothing, bool> # Enable rule for this query
   --rule-scope: string # Scope for the rule
 ]: any -> record<account_id: int, alert_enabled: bool, alert_rollup_enabled: bool, created_at: string, custom_threat_feed_id: int, id: int, name: string, query_json: string, rule_enabled: bool, rule_list_id: string, rule_scope: string, updated_at: string, user_email: string> {
   let input = $in
@@ -19452,7 +19451,7 @@ export def "accounts-cloudforce-one-events-relationships EventRelationships" [
   --relationshipTypes: string # An optional array of relationship types to filter by.
   --indicatorTypeIds: list # An optional array of indicator type IDs to filter the results by.
   --datasetId: string # The dataset ID to search within.
-  --includeParent: string@bool-completer # Whether to include the starting event in the results. Defaults to true. (default: true)
+  --includeParent: oneof<nothing, bool> # Whether to include the starting event in the results. Defaults to true. (default: true)
   --page: float
   --pageSize: float
 ]: nothing -> table<attacker: string, attackerCountry: string, category: string, datasetId: string, date: string, event: string, hasChildren: bool, indicator: string, indicatorType: string, indicatorTypeId: float, insight: string, killChain: float, mitreAttack: list<string>, mitreCapec: list<string>, numReferenced: float, numReferences: float, rawId: string, referenced: list<string>, referencedIds: list<float>, references: list<string>, referencesIds: list<float>, releasabilityId: string, tags: list<string>, targetCountry: string, targetIndustry: string, tlp: string, uuid: string> {
@@ -20137,8 +20136,8 @@ export def "accounts-cloudforce-one-rules cloudforce-one-create-rule" [
   --actions: list # item shape: {action_config: record, action_type: "alert_gchat"|"webhook"|"logging"|"email"|"pipeline"|"remediation"|"throttle"|"delete", enabled?: bool}
   content: string # e.g. rule example { condition: true }
   --description: string # Human-readable description of the rule. Auto-extracted from YARA meta if present. (e.g. Detects malicious proxy workers)
-  --enabled: string@bool-completer # Whether this rule is active for dice consumers. (default: true, e.g. true)
-  --is-public: string@bool-completer # Whether this rule is visible to other internal accounts. (default: false, e.g. false)
+  --enabled: oneof<nothing, bool> # Whether this rule is active for dice consumers. (default: true, e.g. true)
+  --is-public: oneof<nothing, bool> # Whether this rule is visible to other internal accounts. (default: false, e.g. false)
   name: string # e.g. block-malicious-workers
   namespaces: list # e.g. [yara/workers]
 ]: any -> record<content: string, created_at: float, created_by: string, description: string, enabled: bool, id: string, is_public: bool, name: string, namespaces: list<string>, pending_approval_id: float, updated_at: float, updated_by: string> {
@@ -20342,8 +20341,8 @@ export def "accounts-cloudforce-one-rules cloudforce-one-update-rule" [
   --allow-errors(-e) # Return full response without error handling
   --content: string # e.g. rule example { condition: true }
   --description: string # Human-readable description of the rule. Auto-extracted from YARA meta if present. (e.g. Detects malicious proxy workers)
-  --enabled: string@bool-completer # Whether this rule is active for dice consumers. (e.g. true)
-  --is-public: string@bool-completer # Whether this rule is visible to other internal accounts. (e.g. false)
+  --enabled: oneof<nothing, bool> # Whether this rule is active for dice consumers. (e.g. true)
+  --is-public: oneof<nothing, bool> # Whether this rule is visible to other internal accounts. (e.g. false)
   --name: string # e.g. block-malicious-workers
   --namespaces: list # e.g. [yara/workers]
 ]: any -> record<content: string, created_at: float, created_by: string, description: string, enabled: bool, id: string, is_public: bool, name: string, namespaces: list<string>, pending_approval_id: float, updated_at: float, updated_by: string> {
@@ -20554,7 +20553,7 @@ export def "accounts-cloudforce-one-brand-protection-letter-generate LetterGener
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-7 # Response content type
-  --createNotice: string@bool-completer # default: false
+  --createNotice: oneof<nothing, bool> # default: false
   --body-fields: record # shape: {discoveryDate?: string, domain?: string, generationDate?: string, jurisdiction?: string, registrantEmail?: string, registrar?: string, registrarEmail?: string, resolutionByDate?: string, senderCompany?: string, senderEmail?: string, senderName?: string, senderTitle?: string, trademarkName?: string, trademarkNumber?: string, trademarkOwner?: string}
   --format: string@format-completer-2 # default: text
   --noticeParams: record # shape: {domain: string, queryId?: int, status?: "draft"|"sent"|"resolved"|"expired"}
@@ -20788,7 +20787,7 @@ export def "accounts-cloudforce-one-brand-protection-logo-queries InsertLogoQuer
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   image_data: string # Base64 encoded image data. Can include data URI prefix (e.g., 'data:image/png;base64,...') or just the base64 string.
-  --search-lookback: string@bool-completer # If true, search historic scanned images for matches above the similarity threshold (default: true)
+  --search-lookback: oneof<nothing, bool> # If true, search historic scanned images for matches above the similarity threshold (default: true)
   similarity_threshold: float # Minimum similarity score (0-1) required for visual matches
   tag: string # Unique identifier for the logo query
 ]: any -> record<message: string, query_id: int, success: bool> {
@@ -21309,7 +21308,7 @@ export def "accounts-cloudforce-one-collections-columns ColumnAdd" [
   --allow-errors(-e) # Return full response without error handling
   --default: record # nullable
   name: string
-  --required: string@bool-completer # default: false
+  --required: oneof<nothing, bool> # default: false
   type: string@type-completer-6
 ]: any -> record<result: record<id: string, name: string, position: float, required: bool, type: string>, success: bool> {
   let input = $in
@@ -21364,7 +21363,7 @@ export def "accounts-cloudforce-one-collections-columns ColumnUpdate" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # New column name (must be unique)
   --position: float # Column display order
-  --required: string@bool-completer # Whether column is required
+  --required: oneof<nothing, bool> # Whether column is required
   --type: string@type-completer-6 # Column type: text, number, boolean, or date
 ]: any -> record<result: record<id: string, name: string, position: float, required: bool, type: string>> {
   let input = $in
@@ -21393,7 +21392,7 @@ export def "accounts-cloudforce-one-collections-export CollectionExportEndpoint"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-8 # Response content type
-  --include-ids: string@bool-completer # Include item IDs in export (default: false)
+  --include-ids: oneof<nothing, bool> # Include item IDs in export (default: false)
   --hdr-accept: string # Requested format: text/csv (default), application/x-ndjson, text/markdown
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -21940,7 +21939,7 @@ export def "accounts-cni-slots slots" [
   --address-contains: string # If specified, only show slots with the given text in their address field (nullable)
   --site: string # If specified, only show slots located at the given site (nullable)
   --speed: string # If specified, only show slots that support the given speed (nullable)
-  --occupied: string@bool-completer # If specified, only show slots with a specific occupied/unoccupied state (nullable)
+  --occupied: oneof<nothing, bool> # If specified, only show slots with a specific occupied/unoccupied state (nullable)
   --cursor: int # nullable, format: int32
   --limit: int # nullable
 ]: nothing -> record<items: table<account: string, facility: record, id: string, occupied: bool, site: string, speed: string>, next: int> {
@@ -22366,7 +22365,7 @@ export def "accounts-containers-registries createImageRegistry" [
   --allow-errors(-e) # Return full response without error handling
   --body-auth: record # Credentials needed to authenticate with an external image registry. — shape: {private_credential: any, public_credential: string}
   domain: string # A string representation of a domain name. See RFC-1034 (https://www.ietf.org/rfc/rfc1034.txt). Consider that the limit of a domain name is min 3 and max 253 ASCII characters. (e.g. docker.io)
-  --is-public: string@bool-completer # If you own the registry and is private, this should be false or not defined. If it's a public registry like docker.io, you should set this to true
+  --is-public: oneof<nothing, bool> # If you own the registry and is private, this should be false or not defined. If it's a public registry like docker.io, you should set this to true
   --kind: string@kind-completer-1 # The type of external registry that is being configured. (e.g. ECR)
 ]: any -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record<created_at: string, domain: string, kind: any, private_credential: record<secret_name: string, store_id: string>, public_key: string>> {
   let input = $in
@@ -23187,7 +23186,7 @@ export def "accounts-devices-ip-profiles create-ip-profile" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # An optional description of the Device IP profile. (nullable, e.g. example comment)
-  --enabled: string@bool-completer # Whether the Device IP profile will be applied to matching devices. (default: true, e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the Device IP profile will be applied to matching devices. (default: true, e.g. true)
   --body-match: string # The wirefilter expression to match registrations. Available values: "identity.name", "identity.email", "identity.groups.id", "identity.groups.name", "identity.groups.email", "identity.saml_attributes". (e.g. identity.email == "test@cloudflare.com")
   name: string # A user-friendly name for the Device IP profile. (e.g. IPv4 Cloudflare Source IPs)
   precedence: int # The precedence of the Device IP profile. Lower values indicate higher precedence. Device IP profile will be evaluated in ascending order of this field. (e.g. 100)
@@ -23265,7 +23264,7 @@ export def "accounts-devices-ip-profiles update-ip-profile" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # An optional description of the Device IP profile. (e.g. example comment)
-  --enabled: string@bool-completer # Whether the Device IP profile is enabled. (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the Device IP profile is enabled. (e.g. true)
   --body-match: string # The wirefilter expression to match registrations. Available values: "identity.name", "identity.email", "identity.groups.id", "identity.groups.name", "identity.groups.email", "identity.saml_attributes". (e.g. identity.email == "test@cloudflare.com")
   --name: string # A user-friendly name for the Device IP profile. (e.g. IPv4 Cloudflare Source IPs)
   --precedence: int # The precedence of the Device IP profile. Lower values indicate higher precedence. Device IP profile will be evaluated in ascending order of this field. (e.g. 100)
@@ -23577,23 +23576,23 @@ export def "accounts-devices-policy devices-update-default-device-settings-polic
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-mode-switch: string@bool-completer # Whether to allow the user to switch WARP between modes. (default: false, e.g. true)
-  --allow-updates: string@bool-completer # Whether to receive update notifications when a new version of the client is available. (default: false, e.g. true)
-  --allowed-to-leave: string@bool-completer # Whether to allow devices to leave the organization. (default: true, e.g. true)
+  --allow-mode-switch: oneof<nothing, bool> # Whether to allow the user to switch WARP between modes. (default: false, e.g. true)
+  --allow-updates: oneof<nothing, bool> # Whether to receive update notifications when a new version of the client is available. (default: false, e.g. true)
+  --allowed-to-leave: oneof<nothing, bool> # Whether to allow devices to leave the organization. (default: true, e.g. true)
   --auto-connect: float # The amount of time in seconds to reconnect after having been disabled. (default: 0, e.g. 0)
   --captive-portal: float # Turn on the captive portal after the specified amount of time. (default: 180, e.g. 180)
-  --disable-auto-fallback: string@bool-completer # If the `dns_server` field of a fallback domain is not present, the client will fall back to a best guess of the default/system DNS resolvers unless this policy option is set to `true`. (default: false, e.g. true)
+  --disable-auto-fallback: oneof<nothing, bool> # If the `dns_server` field of a fallback domain is not present, the client will fall back to a best guess of the default/system DNS resolvers unless this policy option is set to `true`. (default: false, e.g. true)
   --dns-search-suffixes: list # List of DNS search suffixes to apply to clients. Suffixes are evaluated in order. Use an empty array to clear. (default: []) — item shape: {description?: string, suffix: string}
   --exclude: list # List of routes excluded in the WARP client's tunnel. Both 'exclude' and 'include' cannot be set in the same request.
-  --exclude-office-ips: string@bool-completer # Whether to add Microsoft IPs to Split Tunnel exclusions. (default: false, e.g. true)
+  --exclude-office-ips: oneof<nothing, bool> # Whether to add Microsoft IPs to Split Tunnel exclusions. (default: false, e.g. true)
   --include: list # List of routes included in the WARP client's tunnel. Both 'exclude' and 'include' cannot be set in the same request.
   --lan-allow-minutes: float # The amount of time in minutes a user is allowed access to their LAN. A value of 0 will allow LAN access until the next WARP reconnection, such as a reboot or a laptop waking from sleep. Note that this field is omitted from the response if null or unset. (e.g. 30)
   --lan-allow-subnet-size: float # The size of the subnet for the local access network. Note that this field is omitted from the response if null or unset. (e.g. 24)
-  --register-interface-ip-with-dns: string@bool-completer # Determines if the operating system will register WARP's local interface IP with your on-premises DNS server. (default: true, e.g. true)
-  --sccm-vpn-boundary-support: string@bool-completer # Determines whether the WARP client indicates to SCCM that it is inside a VPN boundary. (Windows only). (default: false, e.g. false)
+  --register-interface-ip-with-dns: oneof<nothing, bool> # Determines if the operating system will register WARP's local interface IP with your on-premises DNS server. (default: true, e.g. true)
+  --sccm-vpn-boundary-support: oneof<nothing, bool> # Determines whether the WARP client indicates to SCCM that it is inside a VPN boundary. (Windows only). (default: false, e.g. false)
   --service-mode-v2: record # shape: {mode?: string, port?: float}
   --support-url: string # The URL to launch when the Send Feedback button is clicked. (default: , e.g. https://1.1.1.1/help)
-  --switch-locked: string@bool-completer # Whether to allow the user to turn off the WARP switch and disconnect the client. (default: false, e.g. true)
+  --switch-locked: oneof<nothing, bool> # Whether to allow the user to turn off the WARP switch and disconnect the client. (default: false, e.g. true)
   --tunnel-protocol: string # Determines which tunnel protocol to use. (default: , e.g. wireguard)
   --virtual-networks: record # Virtual network access settings for the device. (nullable) — shape: {allowed: list, default: string}
 ]: any -> record<result: record<allow_mode_switch: bool, allow_updates: bool, allowed_to_leave: bool, auto_connect: float, captive_portal: float, default: bool, disable_auto_fallback: bool, dns_search_suffixes: list<record>, enabled: bool, exclude: list<record>, exclude_office_ips: bool, fallback_domains: list<record>, gateway_unique_id: string, include: list<record>, policy_id: string, register_interface_ip_with_dns: bool, sccm_vpn_boundary_support: bool, service_mode_v2: record<mode: string, port: float>, support_url: string, switch_locked: bool, tunnel_protocol: string, virtual_networks: record<allowed: list, default: string>>> {
@@ -23624,28 +23623,28 @@ export def "accounts-devices-policy devices-create-device-settings-policy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-mode-switch: string@bool-completer # Whether to allow the user to switch WARP between modes. (default: false, e.g. true)
-  --allow-updates: string@bool-completer # Whether to receive update notifications when a new version of the client is available. (default: false, e.g. true)
-  --allowed-to-leave: string@bool-completer # Whether to allow devices to leave the organization. (default: true, e.g. true)
+  --allow-mode-switch: oneof<nothing, bool> # Whether to allow the user to switch WARP between modes. (default: false, e.g. true)
+  --allow-updates: oneof<nothing, bool> # Whether to receive update notifications when a new version of the client is available. (default: false, e.g. true)
+  --allowed-to-leave: oneof<nothing, bool> # Whether to allow devices to leave the organization. (default: true, e.g. true)
   --auto-connect: float # The amount of time in seconds to reconnect after having been disabled. (default: 0, e.g. 0)
   --captive-portal: float # Turn on the captive portal after the specified amount of time. (default: 180, e.g. 180)
   --description: any
-  --disable-auto-fallback: string@bool-completer # If the `dns_server` field of a fallback domain is not present, the client will fall back to a best guess of the default/system DNS resolvers unless this policy option is set to `true`. (default: false, e.g. true)
+  --disable-auto-fallback: oneof<nothing, bool> # If the `dns_server` field of a fallback domain is not present, the client will fall back to a best guess of the default/system DNS resolvers unless this policy option is set to `true`. (default: false, e.g. true)
   --dns-search-suffixes: list # List of DNS search suffixes to apply to clients. Suffixes are evaluated in order. Use an empty array to clear. (default: []) — item shape: {description?: string, suffix: string}
-  --enabled: string@bool-completer # Whether the policy will be applied to matching devices. (default: true, e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the policy will be applied to matching devices. (default: true, e.g. true)
   --exclude: list # List of routes excluded in the WARP client's tunnel. Both 'exclude' and 'include' cannot be set in the same request.
-  --exclude-office-ips: string@bool-completer # Whether to add Microsoft IPs to Split Tunnel exclusions. (default: false, e.g. true)
+  --exclude-office-ips: oneof<nothing, bool> # Whether to add Microsoft IPs to Split Tunnel exclusions. (default: false, e.g. true)
   --include: list # List of routes included in the WARP client's tunnel. Both 'exclude' and 'include' cannot be set in the same request.
   --lan-allow-minutes: float # The amount of time in minutes a user is allowed access to their LAN. A value of 0 will allow LAN access until the next WARP reconnection, such as a reboot or a laptop waking from sleep. Note that this field is omitted from the response if null or unset. (e.g. 30)
   --lan-allow-subnet-size: float # The size of the subnet for the local access network. Note that this field is omitted from the response if null or unset. (e.g. 24)
   --body-match: string # The wirefilter expression to match devices. Available values: "identity.email", "identity.groups.id", "identity.groups.name", "identity.groups.email", "identity.service_token_uuid", "identity.saml_attributes", "network", "os.name", "os.version". (e.g. identity.email == "test@cloudflare.com")
   name: string # The name of the device settings profile. (e.g. Allow Developers)
   precedence: float # The precedence of the policy. Lower values indicate higher precedence. Policies will be evaluated in ascending order of this field. (e.g. 100)
-  --register-interface-ip-with-dns: string@bool-completer # Determines if the operating system will register WARP's local interface IP with your on-premises DNS server. (default: true, e.g. true)
-  --sccm-vpn-boundary-support: string@bool-completer # Determines whether the WARP client indicates to SCCM that it is inside a VPN boundary. (Windows only). (default: false, e.g. false)
+  --register-interface-ip-with-dns: oneof<nothing, bool> # Determines if the operating system will register WARP's local interface IP with your on-premises DNS server. (default: true, e.g. true)
+  --sccm-vpn-boundary-support: oneof<nothing, bool> # Determines whether the WARP client indicates to SCCM that it is inside a VPN boundary. (Windows only). (default: false, e.g. false)
   --service-mode-v2: record # shape: {mode?: string, port?: float}
   --support-url: string # The URL to launch when the Send Feedback button is clicked. (default: , e.g. https://1.1.1.1/help)
-  --switch-locked: string@bool-completer # Whether to allow the user to turn off the WARP switch and disconnect the client. (default: false, e.g. true)
+  --switch-locked: oneof<nothing, bool> # Whether to allow the user to turn off the WARP switch and disconnect the client. (default: false, e.g. true)
   --tunnel-protocol: string # Determines which tunnel protocol to use. (default: , e.g. wireguard)
   --virtual-networks: record # Virtual network access settings for the device. (nullable) — shape: {allowed: list, default: string}
 ]: any -> record<result: record<allow_mode_switch: bool, allow_updates: bool, allowed_to_leave: bool, auto_connect: float, captive_portal: float, default: bool, description: string, disable_auto_fallback: bool, dns_search_suffixes: list<record>, enabled: bool, exclude: list<record>, exclude_office_ips: bool, fallback_domains: list<record>, gateway_unique_id: string, include: list<record>, lan_allow_minutes: float, lan_allow_subnet_size: float, match: string, name: string, policy_id: string, precedence: float, register_interface_ip_with_dns: bool, sccm_vpn_boundary_support: bool, service_mode_v2: record<mode: string, port: float>, support_url: string, switch_locked: bool, target_tests: list<record>, tunnel_protocol: string, virtual_networks: record<allowed: list, default: string>>> {
@@ -23867,28 +23866,28 @@ export def "accounts-devices-policy devices-update-device-settings-policy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-mode-switch: string@bool-completer # Whether to allow the user to switch WARP between modes. (default: false, e.g. true)
-  --allow-updates: string@bool-completer # Whether to receive update notifications when a new version of the client is available. (default: false, e.g. true)
-  --allowed-to-leave: string@bool-completer # Whether to allow devices to leave the organization. (default: true, e.g. true)
+  --allow-mode-switch: oneof<nothing, bool> # Whether to allow the user to switch WARP between modes. (default: false, e.g. true)
+  --allow-updates: oneof<nothing, bool> # Whether to receive update notifications when a new version of the client is available. (default: false, e.g. true)
+  --allowed-to-leave: oneof<nothing, bool> # Whether to allow devices to leave the organization. (default: true, e.g. true)
   --auto-connect: float # The amount of time in seconds to reconnect after having been disabled. (default: 0, e.g. 0)
   --captive-portal: float # Turn on the captive portal after the specified amount of time. (default: 180, e.g. 180)
   --description: string # A description of the policy. (e.g. Policy for test teams.)
-  --disable-auto-fallback: string@bool-completer # If the `dns_server` field of a fallback domain is not present, the client will fall back to a best guess of the default/system DNS resolvers unless this policy option is set to `true`. (default: false, e.g. true)
+  --disable-auto-fallback: oneof<nothing, bool> # If the `dns_server` field of a fallback domain is not present, the client will fall back to a best guess of the default/system DNS resolvers unless this policy option is set to `true`. (default: false, e.g. true)
   --dns-search-suffixes: list # List of DNS search suffixes to apply to clients. Suffixes are evaluated in order. Use an empty array to clear. (default: []) — item shape: {description?: string, suffix: string}
-  --enabled: string@bool-completer # Whether the policy will be applied to matching devices. (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the policy will be applied to matching devices. (e.g. true)
   --exclude: list # List of routes excluded in the WARP client's tunnel. Both 'exclude' and 'include' cannot be set in the same request.
-  --exclude-office-ips: string@bool-completer # Whether to add Microsoft IPs to Split Tunnel exclusions. (default: false, e.g. true)
+  --exclude-office-ips: oneof<nothing, bool> # Whether to add Microsoft IPs to Split Tunnel exclusions. (default: false, e.g. true)
   --include: list # List of routes included in the WARP client's tunnel. Both 'exclude' and 'include' cannot be set in the same request.
   --lan-allow-minutes: float # The amount of time in minutes a user is allowed access to their LAN. A value of 0 will allow LAN access until the next WARP reconnection, such as a reboot or a laptop waking from sleep. Note that this field is omitted from the response if null or unset. (e.g. 30)
   --lan-allow-subnet-size: float # The size of the subnet for the local access network. Note that this field is omitted from the response if null or unset. (e.g. 24)
   --body-match: string # The wirefilter expression to match devices. Available values: "identity.email", "identity.groups.id", "identity.groups.name", "identity.groups.email", "identity.service_token_uuid", "identity.saml_attributes", "network", "os.name", "os.version". (e.g. identity.email == "test@cloudflare.com")
   --name: string # The name of the device settings profile. (e.g. Allow Developers)
   --precedence: float # The precedence of the policy. Lower values indicate higher precedence. Policies will be evaluated in ascending order of this field. (e.g. 100)
-  --register-interface-ip-with-dns: string@bool-completer # Determines if the operating system will register WARP's local interface IP with your on-premises DNS server. (default: true, e.g. true)
-  --sccm-vpn-boundary-support: string@bool-completer # Determines whether the WARP client indicates to SCCM that it is inside a VPN boundary. (Windows only). (default: false, e.g. false)
+  --register-interface-ip-with-dns: oneof<nothing, bool> # Determines if the operating system will register WARP's local interface IP with your on-premises DNS server. (default: true, e.g. true)
+  --sccm-vpn-boundary-support: oneof<nothing, bool> # Determines whether the WARP client indicates to SCCM that it is inside a VPN boundary. (Windows only). (default: false, e.g. false)
   --service-mode-v2: record # shape: {mode?: string, port?: float}
   --support-url: string # The URL to launch when the Send Feedback button is clicked. (default: , e.g. https://1.1.1.1/help)
-  --switch-locked: string@bool-completer # Whether to allow the user to turn off the WARP switch and disconnect the client. (default: false, e.g. true)
+  --switch-locked: oneof<nothing, bool> # Whether to allow the user to turn off the WARP switch and disconnect the client. (default: false, e.g. true)
   --tunnel-protocol: string # Determines which tunnel protocol to use. (default: , e.g. wireguard)
   --virtual-networks: record # Virtual network access settings for the device. (nullable) — shape: {allowed: list, default: string}
 ]: any -> record<result: record<allow_mode_switch: bool, allow_updates: bool, allowed_to_leave: bool, auto_connect: float, captive_portal: float, default: bool, description: string, disable_auto_fallback: bool, dns_search_suffixes: list<record>, enabled: bool, exclude: list<record>, exclude_office_ips: bool, fallback_domains: list<record>, gateway_unique_id: string, include: list<record>, lan_allow_minutes: float, lan_allow_subnet_size: float, match: string, name: string, policy_id: string, precedence: float, register_interface_ip_with_dns: bool, sccm_vpn_boundary_support: bool, service_mode_v2: record<mode: string, port: float>, support_url: string, switch_locked: bool, target_tests: list<record>, tunnel_protocol: string, virtual_networks: record<allowed: list, default: string>>> {
@@ -24535,7 +24534,7 @@ export def "accounts-devices-resilience-disconnect devices-resilience-set-global
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --disconnect: string@bool-completer # Disconnects all devices on the account using Global WARP override. (e.g. false)
+  --disconnect: oneof<nothing, bool> # Disconnects all devices on the account using Global WARP override. (e.g. false)
   --justification: string # Reasoning for setting the Global WARP override state. This will be surfaced in the audit log. (e.g. Turning off WARP for testing purposes.)
 ]: any -> record {
   let input = $in
@@ -24634,14 +24633,14 @@ export def "accounts-devices-settings zero-trust-accounts-patch-device-settings-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --disable-for-time: float # Sets the time limit, in seconds, that a user can use an override code to bypass WARP.
-  --external-emergency-signal-enabled: string@bool-completer # Controls whether the external emergency disconnect feature is enabled. (e.g. true)
+  --external-emergency-signal-enabled: oneof<nothing, bool> # Controls whether the external emergency disconnect feature is enabled. (e.g. true)
   --external-emergency-signal-fingerprint: string # The SHA256 fingerprint (64 hexadecimal characters) of the HTTPS server certificate for the external_emergency_signal_url. If provided, the WARP client will use this value to verify the server's identity. The device will ignore any response if the server's certificate fingerprint does not exactly match this value. (e.g. abcd1234567890abcd1234567890abcd1234567890abcd1234567890abcd1234)
   --external-emergency-signal-interval: string # The interval at which the WARP client fetches the emergency disconnect signal, formatted as a duration string (e.g., "5m", "2m30s", "1h"). Minimum 30 seconds. (e.g. 5m)
   --external-emergency-signal-url: string # The HTTPS URL from which to fetch the emergency disconnect signal. Must use HTTPS and have an IPv4 or IPv6 address as the host. (e.g. https://192.0.2.1/signal)
-  --gateway-proxy-enabled: string@bool-completer # Enable gateway proxy filtering on TCP. (e.g. true)
-  --gateway-udp-proxy-enabled: string@bool-completer # Enable gateway proxy filtering on UDP. (e.g. true)
-  --root-certificate-installation-enabled: string@bool-completer # Enable installation of cloudflare managed root certificate. (e.g. true)
-  --use-zt-virtual-ip: string@bool-completer # Enable using CGNAT virtual IPv4. (e.g. true)
+  --gateway-proxy-enabled: oneof<nothing, bool> # Enable gateway proxy filtering on TCP. (e.g. true)
+  --gateway-udp-proxy-enabled: oneof<nothing, bool> # Enable gateway proxy filtering on UDP. (e.g. true)
+  --root-certificate-installation-enabled: oneof<nothing, bool> # Enable installation of cloudflare managed root certificate. (e.g. true)
+  --use-zt-virtual-ip: oneof<nothing, bool> # Enable using CGNAT virtual IPv4. (e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -24668,14 +24667,14 @@ export def "accounts-devices-settings zero-trust-accounts-update-device-settings
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --disable-for-time: float # Sets the time limit, in seconds, that a user can use an override code to bypass WARP.
-  --external-emergency-signal-enabled: string@bool-completer # Controls whether the external emergency disconnect feature is enabled. (e.g. true)
+  --external-emergency-signal-enabled: oneof<nothing, bool> # Controls whether the external emergency disconnect feature is enabled. (e.g. true)
   --external-emergency-signal-fingerprint: string # The SHA256 fingerprint (64 hexadecimal characters) of the HTTPS server certificate for the external_emergency_signal_url. If provided, the WARP client will use this value to verify the server's identity. The device will ignore any response if the server's certificate fingerprint does not exactly match this value. (e.g. abcd1234567890abcd1234567890abcd1234567890abcd1234567890abcd1234)
   --external-emergency-signal-interval: string # The interval at which the WARP client fetches the emergency disconnect signal, formatted as a duration string (e.g., "5m", "2m30s", "1h"). Minimum 30 seconds. (e.g. 5m)
   --external-emergency-signal-url: string # The HTTPS URL from which to fetch the emergency disconnect signal. Must use HTTPS and have an IPv4 or IPv6 address as the host. (e.g. https://192.0.2.1/signal)
-  --gateway-proxy-enabled: string@bool-completer # Enable gateway proxy filtering on TCP. (e.g. true)
-  --gateway-udp-proxy-enabled: string@bool-completer # Enable gateway proxy filtering on UDP. (e.g. true)
-  --root-certificate-installation-enabled: string@bool-completer # Enable installation of cloudflare managed root certificate. (e.g. true)
-  --use-zt-virtual-ip: string@bool-completer # Enable using CGNAT virtual IPv4. (e.g. true)
+  --gateway-proxy-enabled: oneof<nothing, bool> # Enable gateway proxy filtering on TCP. (e.g. true)
+  --gateway-udp-proxy-enabled: oneof<nothing, bool> # Enable gateway proxy filtering on UDP. (e.g. true)
+  --root-certificate-installation-enabled: oneof<nothing, bool> # Enable installation of cloudflare managed root certificate. (e.g. true)
+  --use-zt-virtual-ip: oneof<nothing, bool> # Enable using CGNAT virtual IPv4. (e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -24778,8 +24777,8 @@ export def "accounts-dex-colos dex-endpoints-list-colos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-from: string # Start time for connection period in ISO (RFC3339 - ISO 8601) format (e.g. 2023-08-20T20:45:00Z)
-  --qp-to: string # End time for connection period in ISO (RFC3339 - ISO 8601) format (e.g. 2023-08-24T20:45:00Z)
+  --qp-from: string # Start time for connection period in ISO (RFC3339 - ISO 8601) format. (e.g. 2023-08-20T20:45:00Z)
+  --qp-to: string # End time for connection period in ISO (RFC3339 - ISO 8601) format. (e.g. 2023-08-24T20:45:00Z)
   --sortBy: string@sortBy-completer # Type of usage that colos should be sorted by. If unspecified, returns all Cloudflare colos sorted alphabetically.
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: table<airportCode: string, city: string, countryCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -24804,14 +24803,14 @@ export def "accounts-dex-commands get-commands" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --page: float # Page number for pagination (e.g. 1)
-  --per-page: float # Number of results per page (e.g. 50)
-  --qp-from: string # Start time for the query in ISO (RFC3339 - ISO 8601) format (format: date-time, e.g. 2023-08-20T20:45:00Z)
-  --qp-to: string # End time for the query in ISO (RFC3339 - ISO 8601) format (format: date-time, e.g. 2023-08-24T20:45:00Z)
-  --device-id: string # Unique identifier for a device
-  --user-email: string # Email tied to the device
-  --command-type: string@command-type-completer # Optionally filter executed commands by command type
-  --status: string@status-completer-10 # Optionally filter executed commands by status
+  --page: float # Page number of paginated results. (default: 1, e.g. 1)
+  --per-page: float # Number of results per page. (e.g. 10)
+  --qp-from: string # Start time for the query in ISO (RFC3339 - ISO 8601) format. (format: date-time, e.g. 2023-08-20T20:45:00Z)
+  --qp-to: string # End time for the query in ISO (RFC3339 - ISO 8601) format. (format: date-time, e.g. 2023-08-24T20:45:00Z)
+  --device-id: string # Unique identifier for a device.
+  --user-email: string # Email tied to the device.
+  --command-type: string@command-type-completer # Optionally filter executed commands by command type.
+  --status: string@status-completer-10 # Optionally filter executed commands by status.
 ]: nothing -> record<result: record<commands: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -24862,9 +24861,9 @@ export def "accounts-dex-commands-devices get-commands-eligible-devices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --page: float # Page number of paginated results
-  --per-page: float # Number of items per page
-  --search: string # Filter devices by name or email
+  --page: float # Page number of paginated results. (default: 1, e.g. 1)
+  --per-page: float # Number of results per page. (e.g. 10)
+  --search: string # Filter devices by name or email.
 ]: nothing -> record<result: record<devices: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -24934,11 +24933,11 @@ export def "accounts-dex-devices-dex-tests device-dex-test-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --page: float # Page number of paginated results (default: 1)
-  --per-page: float # Number of items per page (default: 10)
-  --testName: string # Filter by test name
-  --kind: string@kind-completer-2 # Filter by test type
-]: nothing -> record<result: table<data: record, description: string, enabled: bool, interval: string, name: string, target_policies: list, targeted: bool, test_id: string>> {
+  --page: float # Page number of paginated results. (default: 1, e.g. 1)
+  --per-page: float # Number of results per page. (default: 10, e.g. 10)
+  --testName: string # Filter by test name.
+  --kind: string@kind-completer-2 # Filter by test type.
+]: nothing -> record<result: table<data: record, description: string, enabled: bool, interval: string, name: string, target_policies: record, targeted: bool, test_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "testName" $testName "scalar") (serialize-qp "kind" $kind "scalar")] | flatten | str join "&"
@@ -24953,7 +24952,6 @@ export def "accounts-dex-devices-dex-tests device-dex-test-details" [
 # POST /accounts/{account_id}/dex/devices/dex_tests
 # operationId: device-dex-test-create-device-dex-test
 # --data shape: {host: string, kind: "http"|"traceroute", method?: "GET"}
-# --target_policies item shape: {default?: bool, id: string, name?: string}
 export def "accounts-dex-devices-dex-tests device-dex-test-create-device-dex-test" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -24965,12 +24963,12 @@ export def "accounts-dex-devices-dex-tests device-dex-test-create-device-dex-tes
   --allow-errors(-e) # Return full response without error handling
   data: record # The configuration object which contains the details for the WARP client to conduct the test. (e.g. {host: https://dash.cloudflare.com, kind: http, method: GET}) — shape: {host: string, kind: "http"|"traceroute", method?: "GET"}
   --description: string # Additional details about the test. (e.g. Checks the dash endpoint every 30 minutes)
-  --enabled: string@bool-completer # Determines whether or not the test is active. (e.g. true)
+  --enabled: oneof<nothing, bool> # Determines whether or not the test is active. (e.g. true)
   interval: string # How often the test will run. (e.g. 30m)
   name: string # The name of the DEX test. Must be unique. (e.g. HTTP dash health check)
-  --target-policies: list # DEX rules targeted by this test — item shape: {default?: bool, id: string, name?: string}
-  --targeted: string@bool-completer
-]: any -> record<result: record<data: record<host: string, kind: string, method: string>, description: string, enabled: bool, interval: string, name: string, target_policies: list<record>, targeted: bool, test_id: string>> {
+  --target-policies: any
+  --targeted: oneof<nothing, bool>
+]: any -> record<result: record<data: record<host: string, kind: string, method: string>, description: string, enabled: bool, interval: string, name: string, target_policies: record, targeted: bool, test_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -25019,7 +25017,7 @@ export def "accounts-dex-devices-dex-tests device-dex-test-get-device-dex-test" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<result: record<data: record<host: string, kind: string, method: string>, description: string, enabled: bool, interval: string, name: string, target_policies: list<record>, targeted: bool, test_id: string>> {
+]: nothing -> record<result: record<data: record<host: string, kind: string, method: string>, description: string, enabled: bool, interval: string, name: string, target_policies: record, targeted: bool, test_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/dex/devices/dex_tests/($dex_test_id)")
@@ -25033,7 +25031,6 @@ export def "accounts-dex-devices-dex-tests device-dex-test-get-device-dex-test" 
 # PUT /accounts/{account_id}/dex/devices/dex_tests/{dex_test_id}
 # operationId: device-dex-test-update-device-dex-test
 # --data shape: {host: string, kind: "http"|"traceroute", method?: "GET"}
-# --target_policies item shape: {default?: bool, id: string, name?: string}
 export def "accounts-dex-devices-dex-tests device-dex-test-update-device-dex-test" [
   account_id: string
   dex_test_id: string
@@ -25046,12 +25043,12 @@ export def "accounts-dex-devices-dex-tests device-dex-test-update-device-dex-tes
   --allow-errors(-e) # Return full response without error handling
   data: record # The configuration object which contains the details for the WARP client to conduct the test. (e.g. {host: https://dash.cloudflare.com, kind: http, method: GET}) — shape: {host: string, kind: "http"|"traceroute", method?: "GET"}
   --description: string # Additional details about the test. (e.g. Checks the dash endpoint every 30 minutes)
-  --enabled: string@bool-completer # Determines whether or not the test is active. (e.g. true)
+  --enabled: oneof<nothing, bool> # Determines whether or not the test is active. (e.g. true)
   interval: string # How often the test will run. (e.g. 30m)
   name: string # The name of the DEX test. Must be unique. (e.g. HTTP dash health check)
-  --target-policies: list # DEX rules targeted by this test — item shape: {default?: bool, id: string, name?: string}
-  --targeted: string@bool-completer
-]: any -> record<result: record<data: record<host: string, kind: string, method: string>, description: string, enabled: bool, interval: string, name: string, target_policies: list<record>, targeted: bool, test_id: string>> {
+  --target-policies: any
+  --targeted: oneof<nothing, bool>
+]: any -> record<result: record<data: record<host: string, kind: string, method: string>, description: string, enabled: bool, interval: string, name: string, target_policies: record, targeted: bool, test_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -25067,6 +25064,7 @@ export def "accounts-dex-devices-dex-tests device-dex-test-update-device-dex-tes
 #
 # GET /accounts/{account_id}/dex/devices/{device_id}/fleet-status/live
 # operationId: devices-live-status
+@deprecated --flag time-now
 export def "accounts-dex-devices-fleet-status-live devices-live-status" [
   account_id: string
   device_id: string
@@ -25077,14 +25075,42 @@ export def "accounts-dex-devices-fleet-status-live devices-live-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --since-minutes: float # Number of minutes before current time (default: 10, e.g. 10)
-  --time-now: string # Number of minutes before current time (e.g. 2023-10-11T00:00:00Z)
-  --colo: string # List of data centers to filter results (e.g. SJC)
-]: nothing -> record<alwaysOn: bool, batteryCharging: bool, batteryCycles: int, batteryPct: float, colo: string, connectionType: string, cpuPct: float, cpuPctByApp: list<list<record>>, deviceId: string, deviceIpv4: record<address: string, asn: int, aso: string, location: record<city: string, country_iso: string, state_iso: string, zip: string>, netmask: string, version: string>, deviceIpv6: record<address: string, asn: int, aso: string, location: record<city: string, country_iso: string, state_iso: string, zip: string>, netmask: string, version: string>, deviceName: string, deviceRegistration: string, diskReadBps: int, diskUsagePct: float, diskWriteBps: int, dohSubdomain: string, estimatedLossPct: float, firewallEnabled: bool, gatewayIpv4: record<address: string, asn: int, aso: string, location: record<city: string, country_iso: string, state_iso: string, zip: string>, netmask: string, version: string>, gatewayIpv6: record<address: string, asn: int, aso: string, location: record<city: string, country_iso: string, state_iso: string, zip: string>, netmask: string, version: string>, handshakeLatencyMs: float, ispIpv4: record<address: string, asn: int, aso: string, location: record<city: string, country_iso: string, state_iso: string, zip: string>, netmask: string, version: string>, ispIpv6: record<address: string, asn: int, aso: string, location: record<city: string, country_iso: string, state_iso: string, zip: string>, netmask: string, version: string>, metal: string, mode: string, networkRcvdBps: int, networkSentBps: int, networkSsid: string, personEmail: string, platform: string, ramAvailableKb: int, ramUsedPct: float, ramUsedPctByApp: list<list<record>>, registrationId: string, status: string, switchLocked: bool, timestamp: string, version: string, wifiStrengthDbm: int> {
+  --since-minutes: float # Number of minutes before current time. (default: 10, e.g. 10)
+  --time-now: string # Current time in ISO format. (DEPRECATED, e.g. 2023-10-11T00:00:00Z)
+  --colo: string # List of data centers to filter results. (e.g. SJC)
+]: nothing -> record<alwaysOn: bool, batteryCharging: bool, batteryCycles: int, batteryPct: float, colo: string, connectionType: string, cpuPct: float, cpuPctByApp: table<cpu_pct: float, name: string>, deviceId: string, deviceIpv4: record, deviceIpv6: record, deviceName: string, deviceRegistration: string, diskReadBps: int, diskUsagePct: float, diskWriteBps: int, dohSubdomain: string, estimatedLossPct: float, firewallEnabled: bool, gatewayIpv4: record, gatewayIpv6: record, handshakeLatencyMs: float, ispIpv4: record, ispIpv6: record, metal: string, mode: string, networkRcvdBps: int, networkSentBps: int, networkSsid: string, personEmail: string, platform: string, ramAvailableKb: int, ramUsedPct: float, ramUsedPctByApp: table<name: string, ram_used_pct: float>, registrationId: string, rtt: record, status: string, switchLocked: bool, timestamp: string, tunnelStats: record, tunnelType: string, version: string, wifiStrengthDbm: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since_minutes" $since_minutes "scalar") (serialize-qp "time_now" $time_now "scalar") (serialize-qp "colo" $colo "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/accounts/($account_id)/dex/devices/($device_id)/fleet-status/live" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Get the status over time for a device
+#
+# GET /accounts/{account_id}/dex/devices/{device_id}/fleet-status/over-time
+# operationId: dex-device-status-over-time
+export def "accounts-dex-devices-fleet-status-over-time dex-device-status-over-time" [
+  account_id: string
+  device_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --qp-from: string # Start of the time range to query. Timestamp can be provided in ISO 8601 datetime format or milliseconds since epoch. (e.g. 2023-10-11 00:00:00+00)
+  --qp-to: string # End of the time range to query. Timestamp can be provided in ISO 8601 datetime format or milliseconds since epoch. (e.g. 2023-10-11 00:00:00+00)
+  --interval: string@interval-completer # Time interval for aggregate time slots.
+  --colo: string # List of data centers to filter results. (e.g. SJC)
+]: nothing -> record<result: record<over_time: record<battery_cycles: list, battery_pct: list, connection_type: list, cpu_pct: list, disk_read_bps: list, disk_usage_pct: list, disk_write_bps: list, mode: list, network_rcvd_bps: list, network_sent_bps: list, network_ssid: list, ram_available_kb: list, ram_used_pct: list, rtt: list, status: list, top_cpu_applications: list, top_ram_applications: list, tunnel_stats: list, tunnel_type: list, unique_networks: list, wifi_strength_dbm: list>, top_networks: list<record>>> {
+  let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "colo" $colo "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/accounts/($account_id)/dex/devices/($device_id)/fleet-status/over-time" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
@@ -25104,13 +25130,13 @@ export def "accounts-dex-devices-isps dex-endpoints-list-device-isps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --page: int # Page number of paginated results. Mutually exclusive with cursor.
-  --per-page: int # Number of items per page
+  --page: int # Page number of paginated results. Mutually exclusive with cursor. (default: 1, e.g. 1)
+  --per-page: int # Number of items per page (e.g. 10)
   --cursor: string # Cursor for cursor-based pagination. Mutually exclusive with page.
-  --sort-by: string@sort-by-completer-3 # The field to sort results by (default: time_start)
-  --sort-order: string@sort-order-completer-1 # The order to sort results (default: DESC)
-  --qp-from: string # Start time for the query in ISO 8601 format (format: date-time)
-  --qp-to: string # End time for the query in ISO 8601 format (format: date-time)
+  --sort-by: string@sort-by-completer-3 # The field to sort results by. (default: time_start)
+  --sort-order: string@sort-order-completer-1 # The order to sort results. (default: DESC)
+  --qp-from: string # Start time for the query in ISO 8601 format. (format: date-time)
+  --qp-to: string # End time for the query in ISO 8601 format. (format: date-time)
 ]: nothing -> record<result: record<isps: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -25134,19 +25160,19 @@ export def "accounts-dex-fleet-status-devices dex-fleet-status-devices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-to: string # Time range end in ISO format (e.g. 2023-10-11T00:00:00Z)
-  --qp-from: string # Time range beginning in ISO format (e.g. 2023-10-11T00:00:00Z)
-  --page: float # Page number (default: 1, e.g. 1)
-  --per-page: float # Number of results per page (e.g. 10)
-  --sort-by: string@sort-by-completer-4 # Dimension to sort results by (default: timestamp)
-  --colo: string # Cloudflare colo (e.g. SJC)
-  --device-id: string # Device-specific ID, given as UUID v4 (e.g. cb49c27f-7f97-49c5-b6f3-f7c01ead0fd7)
-  --mode: string # The mode under which the WARP client is run (e.g. proxy)
-  --status: string # Network status (e.g. connected)
-  --platform: string # Operating system (e.g. windows)
-  --version: string # WARP client version (e.g. 1.0.0)
+  --qp-to: string # End of the time range to query. Timestamp can be provided in ISO 8601 datetime format or milliseconds since epoch. (e.g. 2023-10-11 00:00:00+00)
+  --qp-from: string # Start of the time range to query. Timestamp can be provided in ISO 8601 datetime format or milliseconds since epoch. (e.g. 2023-10-11 00:00:00+00)
+  --page: float # Page number of paginated results. (default: 1, e.g. 1)
+  --per-page: float # Number of results per page. (e.g. 10)
+  --sort-by: string@sort-by-completer-4 # Dimension to sort results by. (default: timestamp)
+  --colo: string # Cloudflare colo airport code. (e.g. SJC)
+  --device-id: string # Device-specific ID, given as UUID. (e.g. cb49c27f-7f97-49c5-b6f3-f7c01ead0fd7)
+  --mode: string # The mode under which the WARP client is run. (e.g. proxy)
+  --status: string # Network status. (e.g. connected)
+  --platform: string # Operating system. (e.g. windows)
+  --version: string # WARP client version. (e.g. 1.0.0)
   --qp-source: string@source-completer # Source:   * `hourly` - device details aggregated hourly, up to 7 days prior   * `last_seen` - device details, up to 60 minutes prior. Time windows exceeding 60 minutes will be rejected from June 1st, 2026. Please use 'hourly' or 'raw' instead for longer time ranges.   * `raw` - device details, up to 7 days prior  (default: last_seen, e.g. last_seen)
-]: nothing -> record<result: table<alwaysOn: bool, batteryCharging: bool, batteryCycles: int, batteryPct: float, colo: string, connectionType: string, cpuPct: float, cpuPctByApp: list, deviceId: string, deviceIpv4: record, deviceIpv6: record, deviceName: string, deviceRegistration: string, diskReadBps: int, diskUsagePct: float, diskWriteBps: int, dohSubdomain: string, estimatedLossPct: float, firewallEnabled: bool, gatewayIpv4: record, gatewayIpv6: record, handshakeLatencyMs: float, ispIpv4: record, ispIpv6: record, metal: string, mode: string, networkRcvdBps: int, networkSentBps: int, networkSsid: string, personEmail: string, platform: string, ramAvailableKb: int, ramUsedPct: float, ramUsedPctByApp: list, registrationId: string, status: string, switchLocked: bool, timestamp: string, version: string, wifiStrengthDbm: int>> {
+]: nothing -> record<result: table<alwaysOn: bool, batteryCharging: bool, batteryCycles: int, batteryPct: float, colo: string, connectionType: string, cpuPct: float, cpuPctByApp: list, deviceId: string, deviceIpv4: record, deviceIpv6: record, deviceName: string, deviceRegistration: string, diskReadBps: int, diskUsagePct: float, diskWriteBps: int, dohSubdomain: string, estimatedLossPct: float, firewallEnabled: bool, gatewayIpv4: record, gatewayIpv6: record, handshakeLatencyMs: float, ispIpv4: record, ispIpv6: record, metal: string, mode: string, networkRcvdBps: int, networkSentBps: int, networkSsid: string, personEmail: string, platform: string, ramAvailableKb: int, ramUsedPct: float, ramUsedPctByApp: list, registrationId: string, rtt: record, status: string, switchLocked: bool, timestamp: string, tunnelStats: record, tunnelType: string, version: string, wifiStrengthDbm: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "to" $qp_to "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "colo" $colo "scalar") (serialize-qp "device_id" $device_id "scalar") (serialize-qp "mode" $mode "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "platform" $platform "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
@@ -25169,7 +25195,7 @@ export def "accounts-dex-fleet-status-live dex-fleet-status-live" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --since-minutes: float # Number of minutes before current time (default: 10, e.g. 10)
+  --since-minutes: float # Number of minutes before current time. (default: 10, e.g. 10)
 ]: nothing -> record<result: record<deviceStats: record<byColo: list, byMode: list, byPlatform: list, byStatus: list, byVersion: list, uniqueDevicesTotal: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -25193,10 +25219,10 @@ export def "accounts-dex-fleet-status-over-time dex-fleet-status-over-time" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-to: string # Time range end in ISO format (e.g. 2023-10-11T00:00:00Z)
-  --qp-from: string # Time range beginning in ISO format (e.g. 2023-10-11T00:00:00Z)
-  --colo: string # Cloudflare colo (e.g. SJC)
-  --device-id: string # Device-specific ID, given as UUID v4 (e.g. cb49c27f-7f97-49c5-b6f3-f7c01ead0fd7)
+  --qp-to: string # End of the time range to query. Timestamp can be provided in ISO 8601 datetime format or milliseconds since epoch. (e.g. 2023-10-11 00:00:00+00)
+  --qp-from: string # Start of the time range to query. Timestamp can be provided in ISO 8601 datetime format or milliseconds since epoch. (e.g. 2023-10-11 00:00:00+00)
+  --colo: string # Cloudflare colo airport code. (e.g. SJC)
+  --device-id: string # Device-specific ID, given as UUID. (e.g. cb49c27f-7f97-49c5-b6f3-f7c01ead0fd7)
 ]: nothing -> record<result: record<deviceStats: record<byMode: list, byStatus: list, uniqueDevicesTotal: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -25222,10 +25248,10 @@ export def "accounts-dex-http-tests dex-endpoints-http-test-details" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --deviceId: list # Optionally filter result stats to a specific device(s). Cannot be used in combination with colo param.
-  --qp-from: string # Start time for aggregate metrics in ISO ms (e.g. 1689520412000)
-  --qp-to: string # End time for aggregate metrics in ISO ms (e.g. 1689606812000)
+  --qp-from: string # Start time for aggregate metrics in ISO ms. (e.g. 1689520412000)
+  --qp-to: string # End time for aggregate metrics in ISO ms. (e.g. 1689606812000)
   --interval: string@interval-completer # Time interval for aggregate time slots.
-  --colo: string # Optionally filter result stats to a Cloudflare colo. Cannot be used in combination with deviceId param.
+  --colo: string # Optionally filter result stats to a Cloudflare colo. Cannot be used in combination with deviceId param. (e.g. SJC)
 ]: nothing -> record<result: record<host: string, httpStats: record<availabilityPct: record, dnsResponseTimeMs: record, httpStatusCode: list, resourceFetchTimeMs: record, serverResponseTimeMs: record, uniqueDevicesTotal: int>, httpStatsByColo: list<record>, interval: string, kind: any, method: string, name: string, target_policies: list<record>, targeted: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -25251,9 +25277,9 @@ export def "accounts-dex-http-tests-percentiles dex-endpoints-http-test-percenti
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --deviceId: list # Optionally filter result stats to a specific device(s). Cannot be used in combination with colo param.
-  --qp-from: string # Start time for the query in ISO (RFC3339 - ISO 8601) format (e.g. 2023-09-20T17:00:00Z)
-  --qp-to: string # End time for the query in ISO (RFC3339 - ISO 8601) format (e.g. 2023-09-20T17:00:00Z)
-  --colo: string # Optionally filter result stats to a Cloudflare colo. Cannot be used in combination with deviceId param.
+  --qp-from: string # Start time for the query in ISO (RFC3339 - ISO 8601) format. (e.g. 2023-09-20T17:00:00Z)
+  --qp-to: string # End time for the query in ISO (RFC3339 - ISO 8601) format. (e.g. 2023-09-20T17:00:00Z)
+  --colo: string # Optionally filter result stats to a Cloudflare colo. Cannot be used in combination with deviceId param. (e.g. SJC)
 ]: nothing -> record<result: record<dnsResponseTimeMs: record<p50: float, p90: float, p95: float, p99: float>, resourceFetchTimeMs: record<p50: float, p90: float, p95: float, p99: float>, serverResponseTimeMs: record<p50: float, p90: float, p95: float, p99: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -25277,11 +25303,11 @@ export def "accounts-dex-rules list-dex-rules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --page: float # Page number of paginated results
-  --per-page: float # Number of items per page
-  --sort-order: string@sort-order-completer-1 # Sort direction for sort_by property (default: ASC)
-  --sort-by: string@sort-by-completer-5 # Which property to sort results by (default: name)
-  --name: string # Filter results by rule name
+  --page: float # Page number of paginated results. (default: 1, e.g. 1)
+  --per-page: float # Number of results per page. (e.g. 10)
+  --sort-order: string@sort-order-completer-1 # Sort direction for sort_by property. (default: ASC)
+  --sort-by: string@sort-by-completer-5 # Which property to sort results by. (default: name)
+  --name: string # Filter results by rule name.
 ]: nothing -> record<result: record<rules: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -25308,7 +25334,7 @@ export def "accounts-dex-rules create-dex-rule" [
   --description: string
   --body-match: string # The wirefilter expression to match.
   name: string # The name of the Rule.
-]: any -> record<result: record<created_at: string, description: string, id: string, match: string, name: string, targeted_tests: list<record>, updated_at: string>> {
+]: any -> record<result: record<created_at: string, description: string, id: record, match: string, name: string, targeted_tests: list<record>, updated_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -25357,7 +25383,7 @@ export def "accounts-dex-rules get-dex-rule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<result: record<created_at: string, description: string, id: string, match: string, name: string, targeted_tests: list<record>, updated_at: string>> {
+]: nothing -> record<result: record<created_at: string, description: string, id: record, match: string, name: string, targeted_tests: list<record>, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/dex/rules/($rule_id)")
@@ -25383,7 +25409,7 @@ export def "accounts-dex-rules update-dex-rule" [
   --description: string
   --body-match: string # The wirefilter expression to match.
   --name: string # The name of the Rule.
-]: any -> record<result: record<created_at: string, description: string, id: string, match: string, name: string, targeted_tests: list<record>, updated_at: string>> {
+]: any -> record<result: record<created_at: string, description: string, id: record, match: string, name: string, targeted_tests: list<record>, updated_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -25408,13 +25434,13 @@ export def "accounts-dex-tests-overview dex-endpoints-list-tests-overview" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --colo: string # Optionally filter result stats to a Cloudflare colo. Cannot be used in combination with deviceId param.
-  --testName: string # Optionally filter results by test name
+  --colo: string # Optionally filter result stats to a Cloudflare colo. Cannot be used in combination with deviceId param. (e.g. SJC)
+  --testName: string # Optionally filter results by test name.
   --deviceId: list # Optionally filter result stats to a specific device(s). Cannot be used in combination with colo param.
-  --registration-id: string # Optionally filter results to a specific device registration. Must be used in combination with a single deviceId.
-  --page: float # Page number of paginated results (default: 1)
-  --per-page: float # Number of items per page (default: 10)
-  --kind: string@kind-completer-2 # Filter by test type
+  --registration-id: string # Optionally filter results to a specific device registration. Must be used in combination with a single deviceId. (e.g. a1b2c3d4-e5f6-7890-abcd-ef1234567890)
+  --page: float # Page number of paginated results (default: 1, e.g. 1)
+  --per-page: float # Number of items per page (default: 10, e.g. 10)
+  --kind: string@kind-completer-2 # Filter by test type.
 ]: nothing -> record<result: record<overviewMetrics: record<avgHttpAvailabilityPct: float, avgTracerouteAvailabilityPct: float, testsTotal: int>, tests: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -25438,7 +25464,7 @@ export def "accounts-dex-tests-unique-devices dex-endpoints-tests-unique-devices
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --testName: string # Optionally filter results by test name
+  --testName: string # Optionally filter results by test name.
   --deviceId: list # Optionally filter result stats to a specific device(s). Cannot be used in combination with colo param.
 ]: nothing -> record<result: record<uniqueDevicesTotal: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -25464,7 +25490,7 @@ export def "accounts-dex-traceroute-test-results-network-path dex-endpoints-trac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<result: record<deviceName: string, hops: list<record>, resultId: string, testId: string, testName: string>> {
+]: nothing -> record<result: record<colo: string, deviceName: string, execution_context: record, hops: list<record>, resultId: string, testId: string, testName: string, time_start: string, tunnel_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/accounts/($account_id)/dex/traceroute-test-results/($test_result_id)/network-path")
@@ -25488,8 +25514,8 @@ export def "accounts-dex-traceroute-tests dex-endpoints-traceroute-test-details"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --deviceId: list # Optionally filter result stats to a specific device(s). Cannot be used in combination with colo param.
-  --qp-from: string # Start time for aggregate metrics in ISO ms (e.g. 1689520412000)
-  --qp-to: string # End time for aggregate metrics in ISO ms (e.g. 1689606812000)
+  --qp-from: string # Start time for aggregate metrics in ISO ms. (e.g. 1689520412000)
+  --qp-to: string # End time for aggregate metrics in ISO ms. (e.g. 1689606812000)
   --interval: string@interval-completer # Time interval for aggregate time slots.
   --colo: string # Optionally filter result stats to a Cloudflare colo. Cannot be used in combination with deviceId param.
 ]: nothing -> record<result: record<host: string, interval: string, kind: any, name: string, target_policies: list<record>, targeted: bool, tracerouteStats: record<availabilityPct: record, hopsCount: record, packetLossPct: record, roundTripTimeMs: record, uniqueDevicesTotal: int>, tracerouteStatsByColo: list<record>>> {
@@ -25516,9 +25542,9 @@ export def "accounts-dex-traceroute-tests-network-path dex-endpoints-traceroute-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deviceId: string # Device to filter tracroute result runs to
-  --qp-from: string # Start time for aggregate metrics in ISO ms (e.g. 1689520412000)
-  --qp-to: string # End time for aggregate metrics in ISO ms (e.g. 1689606812000)
+  --deviceId: string # Device to filter traceroute result runs to.
+  --qp-from: string # Start time for aggregate metrics in ISO ms. (e.g. 1689520412000)
+  --qp-to: string # End time for aggregate metrics in ISO ms. (e.g. 1689606812000)
   --interval: string@interval-completer # Time interval for aggregate time slots.
 ]: nothing -> record<result: record<deviceName: string, id: string, interval: string, kind: any, name: string, networkPath: record<sampling: record, slots: list>, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -25545,8 +25571,8 @@ export def "accounts-dex-traceroute-tests-percentiles dex-endpoints-traceroute-t
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --deviceId: list # Optionally filter result stats to a specific device(s). Cannot be used in combination with colo param.
-  --qp-from: string # Start time for the query in ISO (RFC3339 - ISO 8601) format (e.g. 2023-09-20T17:00:00Z)
-  --qp-to: string # End time for the query in ISO (RFC3339 - ISO 8601) format (e.g. 2023-09-20T17:00:00Z)
+  --qp-from: string # Start time for the query in ISO (RFC3339 - ISO 8601) format. (e.g. 2023-09-20T17:00:00Z)
+  --qp-to: string # End time for the query in ISO (RFC3339 - ISO 8601) format. (e.g. 2023-09-20T17:00:00Z)
   --colo: string # Optionally filter result stats to a Cloudflare colo. Cannot be used in combination with deviceId param.
 ]: nothing -> record<result: record<hopsCount: record<p50: float, p90: float, p95: float, p99: float>, packetLossPct: record<p50: float, p90: float, p95: float, p99: float>, roundTripTimeMs: record<p50: float, p90: float, p95: float, p99: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -25571,11 +25597,11 @@ export def "accounts-dex-warp-change-events list-warp-change-events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --page: float # Page number of paginated results
-  --per-page: float # Number of items per page
-  --qp-from: string # Start time for the query in ISO (RFC3339 - ISO 8601) format (e.g. 2023-09-20T17:00:00Z)
-  --qp-to: string # End time for the query in ISO (RFC3339 - ISO 8601) format (e.g. 2023-09-20T17:00:00Z)
-  --type: string@type-completer-10 # Filter events by type 'config' or 'toggle'
+  --page: float # Page number of paginated results. (default: 1, e.g. 1)
+  --per-page: float # Number of results per page. (e.g. 10)
+  --qp-from: string # Start time for the query in ISO (RFC3339 - ISO 8601) format. (e.g. 2023-09-20T17:00:00Z)
+  --qp-to: string # End time for the query in ISO (RFC3339 - ISO 8601) format. (e.g. 2023-09-20T17:00:00Z)
+  --type: string@type-completer-10 # Filter events by type 'config' or 'toggle'.
   --toggle: string@toggle-completer # Filter events by type toggle value. Applicable to type='toggle' events only.
   --config-name: string # Filter events by WARP configuration name changed from or to. Applicable to type='config' events only. (e.g. MASQUE)
   --account-name: string # Filter events by account name. (e.g. Myorg)
@@ -25780,7 +25806,7 @@ export def "accounts-dlp-custom-prompt-topics dlp-custom-prompt-topics-create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # nullable
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   name: string
   --profile-id: string # format: uuid
   topic: string
@@ -25857,7 +25883,7 @@ export def "accounts-dlp-custom-prompt-topics dlp-custom-prompt-topics-update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # nullable
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   name: string
   topic: string
 ]: any -> record<result: record<created_at: string, description: string, enabled: bool, id: string, name: string, profile_id: string, topic: string, updated_at: string>> {
@@ -26339,11 +26365,11 @@ export def "accounts-dlp-datasets dlp-datasets-create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --case-sensitive: string@bool-completer # Only applies to custom word lists. Determines if the words should be matched in a case-sensitive manner Cannot be set to false if `secret` is true or undefined
+  --case-sensitive: oneof<nothing, bool> # Only applies to custom word lists. Determines if the words should be matched in a case-sensitive manner Cannot be set to false if `secret` is true or undefined
   --description: string # The description of the dataset. (nullable)
   --encoding-version: int # Dataset encoding version  Non-secret custom word lists with no header are always version 1. Secret EDM lists with no header are version 1. Multicolumn CSV with headers are version 2. Omitting this field provides the default value 0, which is interpreted the same as 1. (format: int32)
   name: string
-  --secret: string@bool-completer # Generate a secret dataset.  If true, the response will include a secret to use with the EDM encoder. If false, the response has no secret and the dataset is uploaded in plaintext.
+  --secret: oneof<nothing, bool> # Generate a secret dataset.  If true, the response will include a secret to use with the EDM encoder. If false, the response has no secret and the dataset is uploaded in plaintext.
 ]: any -> record<result: record<dataset: record<case_sensitive: bool, columns: list, created_at: string, description: string, encoding_version: int, id: string, name: string, num_cells: int, secret: bool, status: string, updated_at: string, uploads: list>, encoding_version: int, max_cells: int, secret: string, version: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -26416,7 +26442,7 @@ export def "accounts-dlp-datasets dlp-datasets-update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --case-sensitive: string@bool-completer # Determines if the words should be matched in a case-sensitive manner.  Only required for custom word lists.
+  --case-sensitive: oneof<nothing, bool> # Determines if the words should be matched in a case-sensitive manner.  Only required for custom word lists.
   --description: string # The description of the dataset. (nullable)
   --name: string # The name of the dataset, must be unique. (nullable)
 ]: any -> record<result: record<case_sensitive: bool, columns: list<record>, created_at: string, description: string, encoding_version: int, id: string, name: string, num_cells: int, secret: bool, status: string, updated_at: string, uploads: list<record>>> {
@@ -26801,7 +26827,7 @@ export def "accounts-dlp-email-rules dlp-email-scanner-create-rule" [
   action: any
   conditions: list # Triggered if all conditions match. — item shape: {operator: "InList"|"NotInList"|"MatchRegex"|"NotMatchRegex", selector: "Recipients"|"Sender"|"DLPProfiles", value: any}
   --description: string # nullable
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   name: string
 ]: any -> record<result: record<action: any, conditions: list<record>, created_at: string, description: string, enabled: bool, name: string, priority: int, rule_id: string, updated_at: string>> {
   let input = $in
@@ -26879,7 +26905,7 @@ export def "accounts-dlp-email-rules dlp-email-scanner-update-rule" [
   action: any
   conditions: list # Triggered if all conditions match. — item shape: {operator: "InList"|"NotInList"|"MatchRegex"|"NotMatchRegex", selector: "Recipients"|"Sender"|"DLPProfiles", value: any}
   --description: string # nullable
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   name: string
 ]: any -> record<result: record<action: any, conditions: list<record>, created_at: string, description: string, enabled: bool, name: string, priority: int, rule_id: string, updated_at: string>> {
   let input = $in
@@ -26930,7 +26956,7 @@ export def "accounts-dlp-entries dlp-entries-create-entry" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # nullable
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   name: string
   pattern: record # shape: {regex: string, validation?: any}
   --profile-id: string # format: uuid
@@ -26964,7 +26990,7 @@ export def "accounts-dlp-entries-custom dlp-entries-update-custom-entry" [
   --description: string # nullable
   name: string
   pattern: record # shape: {regex: string, validation?: any}
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<result: record<created_at: string, description: string, enabled: bool, id: string, name: string, pattern: record<regex: string, validation: record>, profile_id: string, updated_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -26990,7 +27016,7 @@ export def "accounts-dlp-entries-integration dlp-entries-create-integration-entr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   entry_id: string # format: uuid
   --profile-id: string # This field is not used as the owning profile. For predefined entries it is already set to a predefined profile. (nullable, format: uuid)
 ]: any -> record<result: record<created_at: string, enabled: bool, id: string, name: string, profile_id: string, updated_at: string>> {
@@ -27042,7 +27068,7 @@ export def "accounts-dlp-entries-integration dlp-entries-update-integration-entr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<result: record<created_at: string, enabled: bool, id: string, name: string, profile_id: string, updated_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -27068,7 +27094,7 @@ export def "accounts-dlp-entries-predefined dlp-entries-create-predefined-entry"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   entry_id: string # format: uuid
   --profile-id: string # This field is not used as the owning profile. For predefined entries it is already set to a predefined profile. (nullable, format: uuid)
 ]: any -> record<result: record<confidence: record<ai_context_available: bool, available: bool>, enabled: bool, id: string, name: string, profile_id: string, variant: record>> {
@@ -27120,7 +27146,7 @@ export def "accounts-dlp-entries-predefined dlp-entries-update-predefined-entry"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<result: record<confidence: record<ai_context_available: bool, available: bool>, enabled: bool, id: string, name: string, profile_id: string, variant: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -27193,7 +27219,7 @@ export def "accounts-dlp-entries dlp-entries-update-entry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<result: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -27317,7 +27343,7 @@ export def "accounts-dlp-profiles dlp-profiles-list-all-profiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # Return all profiles, including those that current account does not have access to.
+  --all: oneof<nothing, bool> # Return all profiles, including those that current account does not have access to.
 ]: nothing -> record<result: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -27367,7 +27393,7 @@ export def "accounts-dlp-profiles-custom dlp-profiles-create-custom-profiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ai-context-enabled: string@bool-completer # default: false
+  --ai-context-enabled: oneof<nothing, bool> # default: false
   --allowed-match-count: int # Related DLP policies will trigger when the match count exceeds the number set. (format: int32, default: 0, e.g. 5)
   --confidence-threshold: string # nullable, default: low
   --context-awareness: record # Scan the context of predefined entries to only return matches surrounded by keywords. (DEPRECATED) — shape: {enabled: bool, skip: record}
@@ -27376,7 +27402,7 @@ export def "accounts-dlp-profiles-custom dlp-profiles-create-custom-profiles" [
   --description: string # The description of the profile. (nullable)
   --entries: list
   name: string
-  --ocr-enabled: string@bool-completer # default: false
+  --ocr-enabled: oneof<nothing, bool> # default: false
   --sensitivity-levels: list # Sensitivity levels to associate with the profile. — item shape: {group_id: string, level_id: string}
   --shared-entries: list # Entries from other profiles (e.g. pre-defined Cloudflare profiles, or your Microsoft Information Protection profiles). — item shape: {enabled: bool, entry_id: string}
 ]: any -> record<result: any> {
@@ -27456,7 +27482,7 @@ export def "accounts-dlp-profiles-custom dlp-profiles-update-custom-profile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ai-context-enabled: string@bool-completer # default: false
+  --ai-context-enabled: oneof<nothing, bool> # default: false
   --allowed-match-count: int # nullable, format: int32
   --confidence-threshold: string # nullable, default: low
   --context-awareness: record # Scan the context of predefined entries to only return matches surrounded by keywords. (DEPRECATED) — shape: {enabled: bool, skip: record}
@@ -27465,7 +27491,7 @@ export def "accounts-dlp-profiles-custom dlp-profiles-update-custom-profile" [
   --description: string # The description of the profile. (nullable)
   --entries: list # Custom entries from this profile. If this field is omitted, entries owned by this profile will not be changed. (DEPRECATED, nullable)
   name: string
-  --ocr-enabled: string@bool-completer # default: false
+  --ocr-enabled: oneof<nothing, bool> # default: false
   --sensitivity-levels: list # Sensitivity levels to associate with the profile. If omitted, existing associations are unchanged. (nullable) — item shape: {group_id: string, level_id: string}
   --shared-entries: list # Other entries, e.g. predefined or integration. — item shape: {enabled: bool, entry_id: string}
 ]: any -> record<result: any> {
@@ -27497,12 +27523,12 @@ export def "accounts-dlp-profiles-predefined dlp-profiles-create-predefined-prof
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ai-context-enabled: string@bool-completer # default: false
+  --ai-context-enabled: oneof<nothing, bool> # default: false
   --allowed-match-count: int # nullable, format: int32, default: 0, e.g. 5
   --confidence-threshold: string # nullable, default: low
   --context-awareness: record # Scan the context of predefined entries to only return matches surrounded by keywords. (DEPRECATED) — shape: {enabled: bool, skip: record}
   --entries: list # DEPRECATED — item shape: {enabled: bool, id: string}
-  --ocr-enabled: string@bool-completer # default: false
+  --ocr-enabled: oneof<nothing, bool> # default: false
   profile_id: string # format: uuid
 ]: any -> record<result: any> {
   let input = $in
@@ -27580,12 +27606,12 @@ export def "accounts-dlp-profiles-predefined dlp-profiles-update-predefined-prof
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ai-context-enabled: string@bool-completer # default: false
+  --ai-context-enabled: oneof<nothing, bool> # default: false
   --allowed-match-count: int # nullable, format: int32, default: 0, e.g. 5
   --confidence-threshold: string # nullable, default: low
   --context-awareness: record # Scan the context of predefined entries to only return matches surrounded by keywords. (DEPRECATED) — shape: {enabled: bool, skip: record}
   --entries: list # DEPRECATED — item shape: {enabled: bool, id: string}
-  --ocr-enabled: string@bool-completer # default: false
+  --ocr-enabled: oneof<nothing, bool> # default: false
 ]: any -> record<result: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -27637,12 +27663,12 @@ export def "accounts-dlp-profiles-predefined-config dlp-profiles-create-predefin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ai-context-enabled: string@bool-completer # default: false
+  --ai-context-enabled: oneof<nothing, bool> # default: false
   --allowed-match-count: int # nullable, format: int32, default: 0, e.g. 5
   --confidence-threshold: string # nullable, default: low
   --enabled-entries: list # nullable
   --entries: list # DEPRECATED — item shape: {enabled: bool, id: string}
-  --ocr-enabled: string@bool-completer # default: false
+  --ocr-enabled: oneof<nothing, bool> # default: false
 ]: any -> record<result: record<ai_context_enabled: bool, allowed_match_count: int, confidence_threshold: string, enabled_entries: list<string>, entries: list<any>, id: string, name: string, ocr_enabled: bool, open_access: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -27671,12 +27697,12 @@ export def "accounts-dlp-profiles-predefined-config dlp-profiles-update-predefin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ai-context-enabled: string@bool-completer # default: false
+  --ai-context-enabled: oneof<nothing, bool> # default: false
   --allowed-match-count: int # nullable, format: int32, default: 0, e.g. 5
   --confidence-threshold: string # nullable, default: low
   --enabled-entries: list # nullable
   --entries: list # DEPRECATED — item shape: {enabled: bool, id: string}
-  --ocr-enabled: string@bool-completer # default: false
+  --ocr-enabled: oneof<nothing, bool> # default: false
 ]: any -> record<result: record<ai_context_enabled: bool, allowed_match_count: int, confidence_threshold: string, enabled_entries: list<string>, entries: list<any>, id: string, name: string, ocr_enabled: bool, open_access: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -28120,8 +28146,8 @@ export def "accounts-dlp-settings dlp-settings-edit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ai-context-analysis: string@bool-completer # Whether AI context analysis is enabled at the account level. (nullable, default: false)
-  --ocr: string@bool-completer # Whether OCR is enabled at the account level. (nullable, default: false)
+  --ai-context-analysis: oneof<nothing, bool> # Whether AI context analysis is enabled at the account level. (nullable, default: false)
+  --ocr: oneof<nothing, bool> # Whether OCR is enabled at the account level. (nullable, default: false)
   --payload-logging: any
 ]: any -> record<result: record<ai_context_analysis: bool, ocr: bool, payload_logging: record<masking_level: record, public_key: string, updated_at: string>>> {
   let input = $in
@@ -28148,8 +28174,8 @@ export def "accounts-dlp-settings dlp-settings-update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ai-context-analysis: string@bool-completer # Whether AI context analysis is enabled at the account level. (nullable, default: false)
-  --ocr: string@bool-completer # Whether OCR is enabled at the account level. (nullable, default: false)
+  --ai-context-analysis: oneof<nothing, bool> # Whether AI context analysis is enabled at the account level. (nullable, default: false)
+  --ocr: oneof<nothing, bool> # Whether OCR is enabled at the account level. (nullable, default: false)
   --payload-logging: any
 ]: any -> record<result: record<ai_context_analysis: bool, ocr: bool, payload_logging: record<masking_level: record, public_key: string, updated_at: string>>> {
   let input = $in
@@ -28378,8 +28404,8 @@ export def "accounts-dns-firewall dns-firewall-create-dns-firewall-cluster" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --attack-mitigation: record # Attack mitigation settings (nullable) — shape: {enabled?: bool, only_when_upstream_unhealthy?: bool}
-  --deprecate-any-requests: string@bool-completer # Whether to refuse to answer queries for the ANY type (e.g. true)
-  --ecs-fallback: string@bool-completer # Whether to forward client IP (resolver) subnet if no EDNS Client Subnet is sent (e.g. false)
+  --deprecate-any-requests: oneof<nothing, bool> # Whether to refuse to answer queries for the ANY type (e.g. true)
+  --ecs-fallback: oneof<nothing, bool> # Whether to forward client IP (resolver) subnet if no EDNS Client Subnet is sent (e.g. false)
   --maximum-cache-ttl: float # By default, Cloudflare attempts to cache responses for as long as indicated by the TTL received from upstream nameservers. This setting sets an upper bound on this duration. For caching purposes, higher TTLs will be decreased to the maximum value defined by this setting.  This setting does not affect the TTL value in the DNS response Cloudflare returns to clients. Cloudflare will always forward the TTL value received from upstream nameservers.  (default: 900, e.g. 900)
   --minimum-cache-ttl: float # By default, Cloudflare attempts to cache responses for as long as indicated by the TTL received from upstream nameservers. This setting sets a lower bound on this duration. For caching purposes, lower TTLs will be increased to the minimum value defined by this setting.  This setting does not affect the TTL value in the DNS response Cloudflare returns to clients. Cloudflare will always forward the TTL value received from upstream nameservers.  Note that, even with this setting, there is no guarantee that a response will be cached for at least the specified duration. Cached responses may be removed earlier for capacity or other operational reasons.  (default: 60, e.g. 60)
   name: string # DNS Firewall cluster name (e.g. My Awesome DNS Firewall cluster)
@@ -28465,8 +28491,8 @@ export def "accounts-dns-firewall dns-firewall-update-dns-firewall-cluster" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --attack-mitigation: record # Attack mitigation settings (nullable) — shape: {enabled?: bool, only_when_upstream_unhealthy?: bool}
-  --deprecate-any-requests: string@bool-completer # Whether to refuse to answer queries for the ANY type (e.g. true)
-  --ecs-fallback: string@bool-completer # Whether to forward client IP (resolver) subnet if no EDNS Client Subnet is sent (e.g. false)
+  --deprecate-any-requests: oneof<nothing, bool> # Whether to refuse to answer queries for the ANY type (e.g. true)
+  --ecs-fallback: oneof<nothing, bool> # Whether to forward client IP (resolver) subnet if no EDNS Client Subnet is sent (e.g. false)
   --maximum-cache-ttl: float # By default, Cloudflare attempts to cache responses for as long as indicated by the TTL received from upstream nameservers. This setting sets an upper bound on this duration. For caching purposes, higher TTLs will be decreased to the maximum value defined by this setting.  This setting does not affect the TTL value in the DNS response Cloudflare returns to clients. Cloudflare will always forward the TTL value received from upstream nameservers.  (default: 900, e.g. 900)
   --minimum-cache-ttl: float # By default, Cloudflare attempts to cache responses for as long as indicated by the TTL received from upstream nameservers. This setting sets a lower bound on this duration. For caching purposes, lower TTLs will be increased to the minimum value defined by this setting.  This setting does not affect the TTL value in the DNS response Cloudflare returns to clients. Cloudflare will always forward the TTL value received from upstream nameservers.  Note that, even with this setting, there is no guarantee that a response will be cached for at least the specified duration. Cached responses may be removed earlier for capacity or other operational reasons.  (default: 60, e.g. 60)
   --name: string # DNS Firewall cluster name (e.g. My Awesome DNS Firewall cluster)
@@ -28657,7 +28683,7 @@ export def "accounts-dns-settings dns-settings-for-an-account-update-dns-setting
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enforce-dns-only: string@bool-completer # When enabled, forces all proxied DNS records in the account to behave as DNS-only at the edge, regardless of each record's individual proxy setting. Note that this account-level override does not modify the records themselves; it only affects how they are served at the edge. See more on [Enforce DNS-only](https://developers.cloudflare.com/dns/proxy-status/enforce-dns-only). (e.g. false)
+  --enforce-dns-only: oneof<nothing, bool> # When enabled, forces all proxied DNS records in the account to behave as DNS-only at the edge, regardless of each record's individual proxy setting. Note that this account-level override does not modify the records themselves; it only affects how they are served at the edge. See more on [Enforce DNS-only](https://developers.cloudflare.com/dns/proxy-status/enforce-dns-only). (e.g. false)
   --zone-defaults: record # shape: {nameservers?: record}
 ]: any -> record {
   let input = $in
@@ -28827,7 +28853,7 @@ export def "accounts-email-security-investigate investigate" [
   --start: string # The beginning of the search date range. Defaults to `now - 30 days`. (format: date-time, e.g. 2022-06-25T14:30:00Z)
   --end: string # The end of the search date range. Defaults to `now`. (format: date-time, e.g. 2022-07-25T14:30:00Z)
   --qp-query: string # Space-delimited search term. Case-insensitive. (e.g. bob jones)
-  --detections-only: string@bool-completer # Whether to include only detections in search results. (default: true)
+  --detections-only: oneof<nothing, bool> # Whether to include only detections in search results. (default: true)
   --final-disposition: string@final-disposition-completer # Dispositions to filter by.
   --metric: string
   --message-action: string@message-action-completer # Message actions to filter by.
@@ -28945,7 +28971,7 @@ export def "accounts-email-security-investigate message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --submission: string@bool-completer # When true, search the submissions datastore only. When false or omitted, search the regular datastore only.
+  --submission: oneof<nothing, bool> # When true, search the submissions datastore only. When false or omitted, search the regular datastore only.
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record<action_log: list<record>, alert_id: string, client_recipients: list<string>, delivery_mode: string, delivery_status: list<string>, detection_reasons: list<string>, edf_hash: string, envelope_from: string, envelope_to: list<string>, final_disposition: string, findings: list<record>, from: string, from_name: string, htmltext_structure_hash: string, id: record, is_phish_submission: bool, is_quarantined: bool, message_id: string, post_delivery_operations: list<string>, postfix_id: string, postfix_id_outbound: string, properties: record<allowlisted_pattern: string, allowlisted_pattern_type: string, blocklisted_message: bool, blocklisted_pattern: string, whitelisted_pattern_type: string>, replyto: string, scanned_at: string, sent_at: string, sent_date: string, smtp_helo_server_ip: string, smtp_previous_hop_ip: string, subject: string, threat_categories: list<string>, to: list<string>, to_name: list<string>, ts: string, validation: record<comment: string, dkim: string, dmarc: string, spf: string>, x_originating_ip: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -29174,10 +29200,10 @@ export def "accounts-email-security-settings-allow-policies policies" [
   --search: string # Search term for filtering records. Behavior may change.
   --order: string@order-completer-3 # Field to sort by.
   --direction: string@direction-completer # The sorting direction.
-  --is-exempt-recipient: string@bool-completer # Filter to show only policies where messages to the recipient bypass all detections.
-  --is-trusted-sender: string@bool-completer # Filter to show only policies where messages from the sender bypass all detections and link following.
-  --is-acceptable-sender: string@bool-completer # Filter to show only policies where messages from the sender are exempted from Spam, Spoof, and Bulk dispositions (not Malicious or Suspicious).
-  --verify-sender: string@bool-completer # Filter to show only policies that enforce DMARC, SPF, or DKIM authentication.
+  --is-exempt-recipient: oneof<nothing, bool> # Filter to show only policies where messages to the recipient bypass all detections.
+  --is-trusted-sender: oneof<nothing, bool> # Filter to show only policies where messages from the sender bypass all detections and link following.
+  --is-acceptable-sender: oneof<nothing, bool> # Filter to show only policies where messages from the sender are exempted from Spam, Spoof, and Bulk dispositions (not Malicious or Suspicious).
+  --verify-sender: oneof<nothing, bool> # Filter to show only policies that enforce DMARC, SPF, or DKIM authentication.
   --pattern-type: string
   --pattern: string
 ]: nothing -> record<result: table<comments: string, created_at: record, id: record, is_acceptable_sender: bool, is_exempt_recipient: bool, is_recipient: bool, is_regex: bool, is_sender: bool, is_spoof: bool, is_trusted_sender: bool, last_modified: record, modified_at: record, pattern: string, pattern_type: string, verify_sender: bool>> {
@@ -29207,16 +29233,16 @@ export def "accounts-email-security-settings-allow-policies policy-by-account_id
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --comments: string # nullable, e.g. Trust all messages send from test@example.com
-  --is-acceptable-sender: string@bool-completer # Messages from this sender will be exempted from Spam, Spoof and Bulk dispositions. Note - This will not exempt messages with Malicious or Suspicious dispositions. (e.g. false)
-  --is-exempt-recipient: string@bool-completer # Messages to this recipient will bypass all detections (e.g. false)
-  --is-recipient: string@bool-completer # Deprecated as of July 1, 2025. Use `is_exempt_recipient` instead. End of life: July 1, 2026. (DEPRECATED, e.g. false)
-  --is-regex: string@bool-completer # e.g. false
-  --is-sender: string@bool-completer # Deprecated as of July 1, 2025. Use `is_trusted_sender` instead. End of life: July 1, 2026. (DEPRECATED, e.g. true)
-  --is-spoof: string@bool-completer # Deprecated as of July 1, 2025. Use `is_acceptable_sender` instead. End of life: July 1, 2026. (DEPRECATED, e.g. false)
-  --is-trusted-sender: string@bool-completer # Messages from this sender will bypass all detections and link following (e.g. true)
+  --is-acceptable-sender: oneof<nothing, bool> # Messages from this sender will be exempted from Spam, Spoof and Bulk dispositions. Note - This will not exempt messages with Malicious or Suspicious dispositions. (e.g. false)
+  --is-exempt-recipient: oneof<nothing, bool> # Messages to this recipient will bypass all detections (e.g. false)
+  --is-recipient: oneof<nothing, bool> # Deprecated as of July 1, 2025. Use `is_exempt_recipient` instead. End of life: July 1, 2026. (DEPRECATED, e.g. false)
+  --is-regex: oneof<nothing, bool> # e.g. false
+  --is-sender: oneof<nothing, bool> # Deprecated as of July 1, 2025. Use `is_trusted_sender` instead. End of life: July 1, 2026. (DEPRECATED, e.g. true)
+  --is-spoof: oneof<nothing, bool> # Deprecated as of July 1, 2025. Use `is_acceptable_sender` instead. End of life: July 1, 2026. (DEPRECATED, e.g. false)
+  --is-trusted-sender: oneof<nothing, bool> # Messages from this sender will bypass all detections and link following (e.g. true)
   pattern: string # e.g. test@example.com
   pattern_type: string@pattern-type-completer # Type of pattern matching. Note: UNKNOWN is deprecated and cannot be used when creating or updating policies, but may be returned for existing entries.  (e.g. EMAIL)
-  --verify-sender: string@bool-completer # Enforce DMARC, SPF or DKIM authentication. When on, Email Security only honors policies that pass authentication. (e.g. true)
+  --verify-sender: oneof<nothing, bool> # Enforce DMARC, SPF or DKIM authentication. When on, Email Security only honors policies that pass authentication. (e.g. true)
 ]: any -> record<result: record<comments: string, created_at: record, id: record, is_acceptable_sender: bool, is_exempt_recipient: bool, is_recipient: bool, is_regex: bool, is_sender: bool, is_spoof: bool, is_trusted_sender: bool, last_modified: record, modified_at: record, pattern: string, pattern_type: string, verify_sender: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -29326,16 +29352,16 @@ export def "accounts-email-security-settings-allow-policies policy-by-account_id
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --comments: string # nullable, e.g. Trust all messages send from test@example.com
-  --is-acceptable-sender: string@bool-completer # Messages from this sender will be exempted from Spam, Spoof and Bulk dispositions. Note - This will not exempt messages with Malicious or Suspicious dispositions. (e.g. false)
-  --is-exempt-recipient: string@bool-completer # Messages to this recipient will bypass all detections (e.g. false)
-  --is-recipient: string@bool-completer # Deprecated as of July 1, 2025. Use `is_exempt_recipient` instead. End of life: July 1, 2026. (DEPRECATED, e.g. false)
-  --is-regex: string@bool-completer # e.g. false
-  --is-sender: string@bool-completer # Deprecated as of July 1, 2025. Use `is_trusted_sender` instead. End of life: July 1, 2026. (DEPRECATED, e.g. true)
-  --is-spoof: string@bool-completer # Deprecated as of July 1, 2025. Use `is_acceptable_sender` instead. End of life: July 1, 2026. (DEPRECATED, e.g. false)
-  --is-trusted-sender: string@bool-completer # Messages from this sender will bypass all detections and link following (e.g. true)
+  --is-acceptable-sender: oneof<nothing, bool> # Messages from this sender will be exempted from Spam, Spoof and Bulk dispositions. Note - This will not exempt messages with Malicious or Suspicious dispositions. (e.g. false)
+  --is-exempt-recipient: oneof<nothing, bool> # Messages to this recipient will bypass all detections (e.g. false)
+  --is-recipient: oneof<nothing, bool> # Deprecated as of July 1, 2025. Use `is_exempt_recipient` instead. End of life: July 1, 2026. (DEPRECATED, e.g. false)
+  --is-regex: oneof<nothing, bool> # e.g. false
+  --is-sender: oneof<nothing, bool> # Deprecated as of July 1, 2025. Use `is_trusted_sender` instead. End of life: July 1, 2026. (DEPRECATED, e.g. true)
+  --is-spoof: oneof<nothing, bool> # Deprecated as of July 1, 2025. Use `is_acceptable_sender` instead. End of life: July 1, 2026. (DEPRECATED, e.g. false)
+  --is-trusted-sender: oneof<nothing, bool> # Messages from this sender will bypass all detections and link following (e.g. true)
   --pattern: string # e.g. test@example.com
   --pattern-type: string@pattern-type-completer # Type of pattern matching. Note: UNKNOWN is deprecated and cannot be used when creating or updating policies, but may be returned for existing entries.  (e.g. EMAIL)
-  --verify-sender: string@bool-completer # Enforce DMARC, SPF or DKIM authentication. When on, Email Security only honors policies that pass authentication. (e.g. true)
+  --verify-sender: oneof<nothing, bool> # Enforce DMARC, SPF or DKIM authentication. When on, Email Security only honors policies that pass authentication. (e.g. true)
 ]: any -> record<result: record<comments: string, created_at: record, id: record, is_acceptable_sender: bool, is_exempt_recipient: bool, is_recipient: bool, is_regex: bool, is_sender: bool, is_spoof: bool, is_trusted_sender: bool, last_modified: record, modified_at: record, pattern: string, pattern_type: string, verify_sender: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -29392,7 +29418,7 @@ export def "accounts-email-security-settings-block-senders sender-by-account_id"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --comments: string # nullable, e.g. Block sender with email test@example.com
-  --is-regex: string@bool-completer # e.g. false
+  --is-regex: oneof<nothing, bool> # e.g. false
   pattern: string # e.g. test@example.com
   pattern_type: string@pattern-type-completer # Type of pattern matching. Note: UNKNOWN is deprecated and cannot be used when creating or updating policies, but may be returned for existing entries.  (e.g. EMAIL)
 ]: any -> record<result: record<comments: string, created_at: record, id: record, is_regex: bool, last_modified: record, modified_at: record, pattern: string, pattern_type: string>> {
@@ -29501,7 +29527,7 @@ export def "accounts-email-security-settings-block-senders sender-by-account_id-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --comments: string # nullable, e.g. Block sender with email test@example.com
-  --is-regex: string@bool-completer # e.g. false
+  --is-regex: oneof<nothing, bool> # e.g. false
   --pattern: string # e.g. test@example.com
   --pattern-type: string@pattern-type-completer # Type of pattern matching. Note: UNKNOWN is deprecated and cannot be used when creating or updating policies, but may be returned for existing entries.  (e.g. EMAIL)
 ]: any -> record<result: record<comments: string, created_at: record, id: record, is_regex: bool, last_modified: record, modified_at: record, pattern: string, pattern_type: string>> {
@@ -29617,8 +29643,8 @@ export def "accounts-email-security-settings-domains domain-by-account_id-domain
   --ip-restrictions: list # e.g. [192.0.2.0/24, 2001:db8::/32]
   --lookback-hops: int
   --regions: list
-  --require-tls-inbound: string@bool-completer
-  --require-tls-outbound: string@bool-completer
+  --require-tls-inbound: oneof<nothing, bool>
+  --require-tls-outbound: oneof<nothing, bool>
   --transport: string
 ]: any -> record<result: record<allowed_delivery_modes: list<string>, authorization: record<authorized: bool, status_message: string, timestamp: string>, created_at: record, dmarc_status: string, domain: string, drop_dispositions: list<string>, emails_processed: record<timestamp: string, total_emails_processed: int, total_emails_processed_previous: int>, folder: string, id: string, inbox_provider: string, integration_id: string, ip_restrictions: list<string>, last_modified: record, lookback_hops: int, modified_at: record, o365_tenant_id: string, regions: list<string>, require_tls_inbound: bool, require_tls_outbound: bool, spf_status: string, status: string, transport: string>> {
   let input = $in
@@ -29680,7 +29706,7 @@ export def "accounts-email-security-settings-impersonation-registry registry-by-
   --directory-node-id: int # nullable
   email: string # e.g. john.doe@example.com
   --external-directory-node-id: string # DEPRECATED, nullable
-  --is-email-regex: string@bool-completer # e.g. false
+  --is-email-regex: oneof<nothing, bool> # e.g. false
   name: string # e.g. John Doe
   --provenance: string@provenance-completer
 ]: any -> record<result: record<comments: string, created_at: record, directory_id: int, directory_node_id: int, email: string, external_directory_node_id: string, id: record, is_email_regex: bool, last_modified: record, modified_at: record, name: string, provenance: string>> {
@@ -29761,7 +29787,7 @@ export def "accounts-email-security-settings-impersonation-registry registry-by-
   --directory-node-id: int # nullable
   --email: string # e.g. john.doe@example.com
   --external-directory-node-id: string # DEPRECATED, nullable
-  --is-email-regex: string@bool-completer # e.g. false
+  --is-email-regex: oneof<nothing, bool> # e.g. false
   --name: string # e.g. John Doe
   --provenance: string@provenance-completer
 ]: any -> record<result: record<comments: string, created_at: record, directory_id: int, directory_node_id: int, email: string, external_directory_node_id: string, id: record, is_email_regex: bool, last_modified: record, modified_at: record, name: string, provenance: string>> {
@@ -29952,8 +29978,8 @@ export def "accounts-email-security-settings-trusted-domains domains" [
   --search: string # Search term for filtering records. Behavior may change.
   --order: string@order-completer-3 # Field to sort by.
   --direction: string@direction-completer # The sorting direction.
-  --is-recent: string@bool-completer # Filter to show only recently registered domains that are trusted to prevent triggering Suspicious or Malicious dispositions.
-  --is-similarity: string@bool-completer # Filter to show only proximity domains (partner or approved domains with similar spelling to connected domains) that prevent Spoof dispositions.
+  --is-recent: oneof<nothing, bool> # Filter to show only recently registered domains that are trusted to prevent triggering Suspicious or Malicious dispositions.
+  --is-similarity: oneof<nothing, bool> # Filter to show only proximity domains (partner or approved domains with similar spelling to connected domains) that prevent Spoof dispositions.
   --pattern: string
 ]: nothing -> record<result: table<comments: string, created_at: record, id: record, is_recent: bool, is_regex: bool, is_similarity: bool, last_modified: record, modified_at: record, pattern: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -29979,9 +30005,9 @@ export def "accounts-email-security-settings-trusted-domains domain-by-account_i
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --comments: string # nullable, e.g. Trusted partner domain
-  --is-recent: string@bool-completer # Select to prevent recently registered domains from triggering a Suspicious or Malicious disposition. (e.g. true)
-  --is-regex: string@bool-completer # e.g. false
-  --is-similarity: string@bool-completer # Select for partner or other approved domains that have similar spelling to your connected domains. Prevents listed domains from triggering a Spoof disposition. (e.g. false)
+  --is-recent: oneof<nothing, bool> # Select to prevent recently registered domains from triggering a Suspicious or Malicious disposition. (e.g. true)
+  --is-regex: oneof<nothing, bool> # e.g. false
+  --is-similarity: oneof<nothing, bool> # Select for partner or other approved domains that have similar spelling to your connected domains. Prevents listed domains from triggering a Spoof disposition. (e.g. false)
   pattern: string # e.g. example.com
 ]: any -> record<result: record<comments: string, created_at: record, id: record, is_recent: bool, is_regex: bool, is_similarity: bool, last_modified: record, modified_at: record, pattern: string>> {
   let input = $in
@@ -30089,9 +30115,9 @@ export def "accounts-email-security-settings-trusted-domains domain-by-account_i
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --comments: string # nullable, e.g. Trusted partner domain
-  --is-recent: string@bool-completer # Select to prevent recently registered domains from triggering a Suspicious or Malicious disposition. (e.g. true)
-  --is-regex: string@bool-completer # e.g. false
-  --is-similarity: string@bool-completer # Select for partner or other approved domains that have similar spelling to your connected domains. Prevents listed domains from triggering a Spoof disposition. (e.g. false)
+  --is-recent: oneof<nothing, bool> # Select to prevent recently registered domains from triggering a Suspicious or Malicious disposition. (e.g. true)
+  --is-regex: oneof<nothing, bool> # e.g. false
+  --is-similarity: oneof<nothing, bool> # Select for partner or other approved domains that have similar spelling to your connected domains. Prevents listed domains from triggering a Spoof disposition. (e.g. false)
   --pattern: string # e.g. example.com
 ]: any -> record<result: record<comments: string, created_at: record, id: record, is_recent: bool, is_regex: bool, is_similarity: bool, last_modified: record, modified_at: record, pattern: string>> {
   let input = $in
@@ -30286,7 +30312,7 @@ export def "accounts-email-security-submissions submissions" [
   --outcome-disposition: string@outcome-disposition-completer
   --status: string
   --qp-query: string # nullable
-  --escalated-from-user: string@bool-completer # When true, return only submissions that were escalated by an end user (vs. by the security team). When false, return only submissions that were not escalated by an end user. When omitted, no filter is applied.
+  --escalated-from-user: oneof<nothing, bool> # When true, return only submissions that were escalated by an end user (vs. by the security team). When false, return only submissions that were not escalated by an end user. When omitted, no filter is applied.
   --page: int # Current page within paginated list of results. (default: 1, e.g. 1)
   --per-page: int # The number of results per page. Maximum value is 1000. (default: 20, e.g. 20)
 ]: nothing -> record<result: table<customer_status: string, escalated_as: string, escalated_at: string, escalated_by: string, escalated_submission_id: string, original_disposition: string, original_edf_hash: string, original_postfix_id: string, outcome: string, outcome_disposition: string, requested_at: string, requested_by: string, requested_disposition: string, requested_ts: string, status: string, subject: string, submission_id: string, type: string>> {
@@ -30315,7 +30341,7 @@ export def "accounts-email-routing-addresses email-routing-destination-addresses
   --page: float # default: 1
   --per-page: float # default: 20
   --direction: string@direction-completer # default: asc, e.g. asc
-  --verified: string@bool-completer # default: true, e.g. true
+  --verified: oneof<nothing, bool> # default: true, e.g. true
 ]: nothing -> record<result: list<record>, result_info: record<count: any, page: any, per_page: any, total_count: any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -30867,7 +30893,7 @@ export def "accounts-event-subscriptions-subscriptions subscriptions-create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --destination: record # Destination configuration for the subscription — shape: {queue_id?: string, type?: "queues.queue"}
-  --enabled: string@bool-completer # Whether the subscription is active
+  --enabled: oneof<nothing, bool> # Whether the subscription is active
   --events: list # List of event types this subscription handles
   --name: string # Name of the subscription
   --body-source: record # Source configuration for the subscription — shape: {type?: "images", model_name?: string, worker_name?: string, workflow_name?: string}
@@ -30945,7 +30971,7 @@ export def "accounts-event-subscriptions-subscriptions subscriptions-patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --destination: record # Destination configuration for the subscription — shape: {queue_id?: string, type?: "queues.queue"}
-  --enabled: string@bool-completer # Whether the subscription is active
+  --enabled: oneof<nothing, bool> # Whether the subscription is active
   --events: list # List of event types this subscription handles
   --name: string # Name of the subscription
 ]: any -> record {
@@ -31291,7 +31317,7 @@ export def "accounts-flagship-apps-flags flag-by-account_id-app_id" [
   --allow-errors(-e) # Return full response without error handling
   default_variation: string # Variation served when no rule matches or the flag is disabled. Must be a key in `variations`.
   --description: string # nullable
-  --enabled: string@bool-completer # When false, the flag bypasses all rules and always serves `default_variation`.
+  --enabled: oneof<nothing, bool> # When false, the flag bypasses all rules and always serves `default_variation`.
   key: string # Unique identifier for the flag within an app. Used in all evaluation and SDK calls.
   rules: list # Targeting rules evaluated in ascending `priority`; the first matching rule wins. An empty array means the flag always serves `default_variation`. — item shape: {conditions: list, priority: int, rollout?: record, serve_variation: string}
   --type: string@type-completer-13 # Value type of the flag's variations. Inferred from the variation values on write, so it may be omitted in requests.
@@ -31374,7 +31400,7 @@ export def "accounts-flagship-apps-flags flag-by-account_id-app_id-flag_key-2" [
   --allow-errors(-e) # Return full response without error handling
   default_variation: string # Variation served when no rule matches or the flag is disabled. Must be a key in `variations`.
   --description: string # nullable
-  --enabled: string@bool-completer # When false, the flag bypasses all rules and always serves `default_variation`.
+  --enabled: oneof<nothing, bool> # When false, the flag bypasses all rules and always serves `default_variation`.
   key: string # Unique identifier for the flag within an app. Used in all evaluation and SDK calls.
   rules: list # Targeting rules evaluated in ascending `priority`; the first matching rule wins. An empty array means the flag always serves `default_variation`. — item shape: {conditions: list, priority: int, rollout?: record, serve_variation: string}
   --type: string@type-completer-13 # Value type of the flag's variations. Inferred from the variation values on write, so it may be omitted in requests.
@@ -32167,9 +32193,9 @@ export def "accounts-gateway-locations zero-trust-gateway-locations-create-zero-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --client-default: string@bool-completer # Indicate whether this location is the default location. (default: false, e.g. false)
+  --client-default: oneof<nothing, bool> # Indicate whether this location is the default location. (default: false, e.g. false)
   --dns-destination-ips-id: string # Specify the identifier of the pair of IPv4 addresses assigned to this location. When creating a location, if this field is absent or set to null, the pair of shared IPv4 addresses (0e4a32c6-6fb8-4858-9296-98f51631e8e6) is auto-assigned. When updating a location, if this field is absent or set to null, the pre-assigned pair remains unchanged. (e.g. 0e4a32c6-6fb8-4858-9296-98f51631e8e6)
-  --ecs-support: string@bool-completer # Indicate whether the location must resolve EDNS queries. (default: false, e.g. false)
+  --ecs-support: oneof<nothing, bool> # Indicate whether the location must resolve EDNS queries. (default: false, e.g. false)
   --endpoints: record # Configure the destination endpoints for this location. (nullable) — shape: {doh: record, dot: record, ipv4: record, ipv6: record}
   name: string # Specify the location name. (e.g. Austin Office Location)
   --networks: list # Specify the list of network ranges from which requests at this location originate. The list takes effect only if it is non-empty and the IPv4 endpoint is enabled for this location. (nullable) — item shape: {network: string}
@@ -32250,9 +32276,9 @@ export def "accounts-gateway-locations zero-trust-gateway-locations-update-zero-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --client-default: string@bool-completer # Indicate whether this location is the default location. (default: false, e.g. false)
+  --client-default: oneof<nothing, bool> # Indicate whether this location is the default location. (default: false, e.g. false)
   --dns-destination-ips-id: string # Specify the identifier of the pair of IPv4 addresses assigned to this location. When creating a location, if this field is absent or set to null, the pair of shared IPv4 addresses (0e4a32c6-6fb8-4858-9296-98f51631e8e6) is auto-assigned. When updating a location, if this field is absent or set to null, the pre-assigned pair remains unchanged. (e.g. 0e4a32c6-6fb8-4858-9296-98f51631e8e6)
-  --ecs-support: string@bool-completer # Indicate whether the location must resolve EDNS queries. (default: false, e.g. false)
+  --ecs-support: oneof<nothing, bool> # Indicate whether the location must resolve EDNS queries. (default: false, e.g. false)
   --endpoints: record # Configure the destination endpoints for this location. (nullable) — shape: {doh: record, dot: record, ipv4: record, ipv6: record}
   name: string # Specify the location name. (e.g. Austin Office Location)
   --networks: list # Specify the list of network ranges from which requests at this location originate. The list takes effect only if it is non-empty and the IPv4 endpoint is enabled for this location. (nullable) — item shape: {network: string}
@@ -32304,7 +32330,7 @@ export def "accounts-gateway-logging zero-trust-accounts-update-logging-settings
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --redact-pii: string@bool-completer # Indicate whether to redact personally identifiable information from activity logging (PII fields include source IP, user email, user ID, device ID, URL, referrer, and user agent). (default: false, e.g. true)
+  --redact-pii: oneof<nothing, bool> # Indicate whether to redact personally identifiable information from activity logging (PII fields include source IP, user email, user ID, device ID, URL, referrer, and user agent). (default: false, e.g. true)
   --settings-by-rule-type: record # Configure logging settings for each rule type. — shape: {dns?: any, http?: any, l4?: any}
 ]: any -> record<result: record<redact_pii: bool, settings_by_rule_type: record<dns: record, http: record, l4: record>>> {
   let input = $in
@@ -32682,7 +32708,7 @@ export def "accounts-gateway-rules zero-trust-gateway-rules-create-zero-trust-ga
   action: string@action-completer-2 # Specify the action to perform when the associated traffic, identity, and device posture expressions either absent or evaluate to `true`. (e.g. allow)
   --description: string # Specify the rule description. (e.g. Block bad websites based on their host name.)
   --device-posture: string # Specify the wirefilter expression used for device posture check. The API automatically formats and sanitizes expressions before storing them. To prevent Terraform state drift, use the formatted expression returned in the API response. (default: , e.g. any(device_posture.checks.passed[*] in {"1308749e-fcfb-4ebc-b051-fe022b632644"}))
-  --enabled: string@bool-completer # Specify whether the rule is enabled. (default: false, e.g. true)
+  --enabled: oneof<nothing, bool> # Specify whether the rule is enabled. (default: false, e.g. true)
   --expiration: record # Defines the expiration time stamp and default duration of a DNS policy. Takes precedence over the policy's `schedule` configuration, if any. This  does not apply to HTTP or network policies. Settable only for `dns` rules. (nullable) — shape: {duration?: int, expires_at: any}
   --filters: list # Specify the protocol or layer to evaluate the traffic, identity, and device posture expressions. Can only contain a single value. (e.g. [http])
   --identity: string # Specify the wirefilter expression used for identity matching. The API automatically formats and sanitizes expressions before storing them. To prevent Terraform state drift, use the formatted expression returned in the API response. (default: , e.g. any(identity.groups.name[*] in {"finance"}))
@@ -32789,7 +32815,7 @@ export def "accounts-gateway-rules zero-trust-gateway-rules-patch-zero-trust-gat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # Specify the rule description. (e.g. Block bad websites based on their host name.)
-  --enabled: string@bool-completer # Specify whether the rule is enabled. (default: false, e.g. true)
+  --enabled: oneof<nothing, bool> # Specify whether the rule is enabled. (default: false, e.g. true)
   --name: string # Specify the rule name. (e.g. block bad websites)
   --precedence: int # Set the order of your rules. Lower values indicate higher precedence. At each processing phase, evaluate applicable rules in ascending order of this value. Refer to [Order of enforcement](http://developers.cloudflare.com/learning-paths/secure-internet-traffic/understand-policies/order-of-enforcement/#manage-precedence-with-terraform) to manage precedence via Terraform.
 ]: any -> record {
@@ -32824,7 +32850,7 @@ export def "accounts-gateway-rules zero-trust-gateway-rules-update-zero-trust-ga
   action: string@action-completer-2 # Specify the action to perform when the associated traffic, identity, and device posture expressions either absent or evaluate to `true`. (e.g. allow)
   --description: string # Specify the rule description. (e.g. Block bad websites based on their host name.)
   --device-posture: string # Specify the wirefilter expression used for device posture check. The API automatically formats and sanitizes expressions before storing them. To prevent Terraform state drift, use the formatted expression returned in the API response. (default: , e.g. any(device_posture.checks.passed[*] in {"1308749e-fcfb-4ebc-b051-fe022b632644"}))
-  --enabled: string@bool-completer # Specify whether the rule is enabled. (default: false, e.g. true)
+  --enabled: oneof<nothing, bool> # Specify whether the rule is enabled. (default: false, e.g. true)
   --expiration: record # Defines the expiration time stamp and default duration of a DNS policy. Takes precedence over the policy's `schedule` configuration, if any. This  does not apply to HTTP or network policies. Settable only for `dns` rules. (nullable) — shape: {duration?: int, expires_at: any}
   --filters: list # Specify the protocol or layer to evaluate the traffic, identity, and device posture expressions. Can only contain a single value. (e.g. [http])
   --identity: string # Specify the wirefilter expression used for identity matching. The API automatically formats and sanitizes expressions before storing them. To prevent Terraform state drift, use the formatted expression returned in the API response. (default: , e.g. any(identity.groups.name[*] in {"finance"}))
@@ -33519,7 +33545,7 @@ export def "accounts-images cloudflare-images-upload-an-image-via-url" [
   --file: string # An image binary data. Only needed when type is uploading a file. (format: binary)
   --id: string # An optional custom unique identifier for your image.
   --metadata: record # User modifiable key-value store. Can use used for keeping references to another system of record for managing images.
-  --requireSignedURLs: string@bool-completer # Indicates whether the image requires a signature token for the access. (default: false, e.g. true)
+  --requireSignedURLs: oneof<nothing, bool> # Indicates whether the image requires a signature token for the access. (default: false, e.g. true)
   --body-url: string # A URL to fetch an image from origin. Only needed when type is uploading from a URL. (e.g. https://example.com/path/to/logo.png)
 ]: any -> record<result: record<creator: string, filename: string, id: string, meta: record, requireSignedURLs: bool, uploaded: string, variants: list<any>>> {
   let input = $in
@@ -33660,7 +33686,7 @@ export def "accounts-images-variants cloudflare-images-variants-create-a-variant
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   id: string # e.g. hero
-  --neverRequireSignedURLs: string@bool-completer # Indicates whether the variant can access an image without a signature, regardless of image access control. (default: false, e.g. true)
+  --neverRequireSignedURLs: oneof<nothing, bool> # Indicates whether the variant can access an image without a signature, regardless of image access control. (default: false, e.g. true)
   options: record # Allows you to define image resizing sizes for different use cases. — shape: {fit: "scale-down"|"contain"|"cover"|"crop"|"pad", height: float, metadata: "keep"|"copyright"|"none", width: float}
 ]: any -> record<result: record<variant: record<id: string, neverRequireSignedURLs: bool, options: record>>> {
   let input = $in
@@ -33738,7 +33764,7 @@ export def "accounts-images-variants cloudflare-images-variants-update-a-variant
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --neverRequireSignedURLs: string@bool-completer # Indicates whether the variant can access an image without a signature, regardless of image access control. (default: false, e.g. true)
+  --neverRequireSignedURLs: oneof<nothing, bool> # Indicates whether the variant can access an image without a signature, regardless of image access control. (default: false, e.g. true)
   options: record # Allows you to define image resizing sizes for different use cases. — shape: {fit: "scale-down"|"contain"|"cover"|"crop"|"pad", height: float, metadata: "keep"|"copyright"|"none", width: float}
 ]: any -> record<result: record<variant: record<id: string, neverRequireSignedURLs: bool, options: record>>> {
   let input = $in
@@ -33840,7 +33866,7 @@ export def "accounts-images cloudflare-images-update-image" [
   --allow-errors(-e) # Return full response without error handling
   --creator: string # Can set the creator field with an internal user ID.
   --metadata: record # User modifiable key-value store. Can be used for keeping references to another system of record for managing images. No change if not specified.
-  --requireSignedURLs: string@bool-completer # Indicates whether the image can be accessed using only its UID. If set to `true`, a signed token needs to be generated with a signing key to view the image. Returns a new UID on a change. No change if not specified. (e.g. true)
+  --requireSignedURLs: oneof<nothing, bool> # Indicates whether the image can be accessed using only its UID. If set to `true`, a signed token needs to be generated with a signing key to view the image. Returns a new UID on a change. No change if not specified. (e.g. true)
 ]: any -> record<result: record<creator: string, filename: string, id: string, meta: record, requireSignedURLs: bool, uploaded: string, variants: list<any>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -33921,7 +33947,7 @@ export def "accounts-images-direct-upload cloudflare-images-create-authenticated
   --expiry: string # The date after which the upload will not be accepted. Minimum: Now + 2 minutes. Maximum: Now + 6 hours. (format: date-time, default: Now + 30 minutes, e.g. 2021-01-02T02:20:00Z)
   --id: string # Optional Image Custom ID. Up to 1024 chars. Can include any number of subpaths, and utf8 characters. Cannot start nor end with a / (forward slash). Cannot be a UUID. (e.g. this/is/my-customid)
   --metadata: record # User modifiable key-value store. Can be used for keeping references to another system of record, for managing images.
-  --requireSignedURLs: string@bool-completer # Indicates whether the image requires a signature token to be accessed. (default: false, e.g. true)
+  --requireSignedURLs: oneof<nothing, bool> # Indicates whether the image requires a signature token to be accessed. (default: false, e.g. true)
 ]: any -> record<result: record<id: string, uploadURL: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -34242,7 +34268,7 @@ export def "accounts-intel-attack-surface-report-issues get-security-center-issu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string@bool-completer # e.g. false
+  --dismissed: oneof<nothing, bool> # e.g. false
   --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
   --issue-type: list # e.g. [compliance_violation, email_security]
   --product: list # e.g. [access, dns]
@@ -34280,7 +34306,7 @@ export def "accounts-intel-attack-surface-report-issues-class get-security-cente
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string@bool-completer # e.g. false
+  --dismissed: oneof<nothing, bool> # e.g. false
   --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
   --issue-type: list # e.g. [compliance_violation, email_security]
   --product: list # e.g. [access, dns]
@@ -34316,7 +34342,7 @@ export def "accounts-intel-attack-surface-report-issues-severity get-security-ce
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string@bool-completer # e.g. false
+  --dismissed: oneof<nothing, bool> # e.g. false
   --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
   --issue-type: list # e.g. [compliance_violation, email_security]
   --product: list # e.g. [access, dns]
@@ -34352,7 +34378,7 @@ export def "accounts-intel-attack-surface-report-issues-type get-security-center
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string@bool-completer # e.g. false
+  --dismissed: oneof<nothing, bool> # e.g. false
   --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
   --issue-type: list # e.g. [compliance_violation, email_security]
   --product: list # e.g. [access, dns]
@@ -34389,7 +34415,7 @@ export def "accounts-intel-attack-surface-report-dismiss archive-security-center
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismiss: string@bool-completer # default: true
+  --dismiss: oneof<nothing, bool> # default: true
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -34443,7 +34469,7 @@ export def "accounts-intel-domain domain-intelligence-get-domain-details" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --domain: string
-  --skip-dns: string@bool-completer # Skip DNS resolution lookups for faster response.
+  --skip-dns: oneof<nothing, bool> # Skip DNS resolution lookups for faster response.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -34692,9 +34718,9 @@ export def "accounts-intel-indicator-feeds custom-indicator-feeds-update-indicat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # The new description of the feed (e.g. This is an example description)
-  --is-attributable: string@bool-completer # The new is_attributable value of the feed (e.g. true)
-  --is-downloadable: string@bool-completer # The new is_downloadable value of the feed (e.g. true)
-  --is-public: string@bool-completer # The new is_public value of the feed (e.g. true)
+  --is-attributable: oneof<nothing, bool> # The new is_attributable value of the feed (e.g. true)
+  --is-downloadable: oneof<nothing, bool> # The new is_downloadable value of the feed (e.g. true)
+  --is-public: oneof<nothing, bool> # The new is_public value of the feed (e.g. true)
   --name: string # The new name of the feed (e.g. indicator_list)
 ]: any -> record<result: record<created_on: string, description: string, id: int, is_attributable: bool, is_downloadable: bool, is_public: bool, modified_on: string, name: string>> {
   let input = $in
@@ -35270,13 +35296,13 @@ export def "accounts-load-balancers-monitors account-load-balancer-monitors-crea
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-insecure: string@bool-completer # Do not validate the certificate when monitor use HTTPS. This parameter is currently only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
+  --allow-insecure: oneof<nothing, bool> # Do not validate the certificate when monitor use HTTPS. This parameter is currently only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
   --consecutive-down: int # To be marked unhealthy the monitored origin must fail this healthcheck N consecutive times.
   --consecutive-up: int # To be marked healthy the monitored origin must pass this healthcheck N consecutive times.
   --description: string # Object description. (default: , e.g. Login page monitor)
   --expected-body: string # A case-insensitive sub-string to look for in the response body. If this string is not found, the origin will be marked as unhealthy. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. alive)
   --expected-codes: string # The expected HTTP response code or code range of the health check. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. 2xx)
-  --follow-redirects: string@bool-completer # Follow redirects if returned by the origin. This parameter is only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
+  --follow-redirects: oneof<nothing, bool> # Follow redirects if returned by the origin. This parameter is only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
   --header: record # The HTTP request headers to send in the health check. It is recommended you set a Host header by default. The User-Agent header cannot be overridden. This parameter is only valid for HTTP and HTTPS monitors. (e.g. {Host: [example.com], X-App-ID: [abc123]})
   --interval: int # The interval between each health check. Shorter intervals may improve failover time, but will increase load on the origins as we check from multiple locations. (default: 60)
   --method: string # The method to use for the health check. This defaults to 'GET' for HTTP/HTTPS based checks and 'connection_established' for TCP based health checks. (e.g. GET)
@@ -35361,13 +35387,13 @@ export def "accounts-load-balancers-monitors account-load-balancer-monitors-patc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-insecure: string@bool-completer # Do not validate the certificate when monitor use HTTPS. This parameter is currently only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
+  --allow-insecure: oneof<nothing, bool> # Do not validate the certificate when monitor use HTTPS. This parameter is currently only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
   --consecutive-down: int # To be marked unhealthy the monitored origin must fail this healthcheck N consecutive times.
   --consecutive-up: int # To be marked healthy the monitored origin must pass this healthcheck N consecutive times.
   --description: string # Object description. (default: , e.g. Login page monitor)
   --expected-body: string # A case-insensitive sub-string to look for in the response body. If this string is not found, the origin will be marked as unhealthy. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. alive)
   --expected-codes: string # The expected HTTP response code or code range of the health check. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. 2xx)
-  --follow-redirects: string@bool-completer # Follow redirects if returned by the origin. This parameter is only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
+  --follow-redirects: oneof<nothing, bool> # Follow redirects if returned by the origin. This parameter is only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
   --header: record # The HTTP request headers to send in the health check. It is recommended you set a Host header by default. The User-Agent header cannot be overridden. This parameter is only valid for HTTP and HTTPS monitors. (e.g. {Host: [example.com], X-App-ID: [abc123]})
   --interval: int # The interval between each health check. Shorter intervals may improve failover time, but will increase load on the origins as we check from multiple locations. (default: 60)
   --method: string # The method to use for the health check. This defaults to 'GET' for HTTP/HTTPS based checks and 'connection_established' for TCP based health checks. (e.g. GET)
@@ -35403,13 +35429,13 @@ export def "accounts-load-balancers-monitors account-load-balancer-monitors-upda
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-insecure: string@bool-completer # Do not validate the certificate when monitor use HTTPS. This parameter is currently only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
+  --allow-insecure: oneof<nothing, bool> # Do not validate the certificate when monitor use HTTPS. This parameter is currently only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
   --consecutive-down: int # To be marked unhealthy the monitored origin must fail this healthcheck N consecutive times.
   --consecutive-up: int # To be marked healthy the monitored origin must pass this healthcheck N consecutive times.
   --description: string # Object description. (default: , e.g. Login page monitor)
   --expected-body: string # A case-insensitive sub-string to look for in the response body. If this string is not found, the origin will be marked as unhealthy. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. alive)
   --expected-codes: string # The expected HTTP response code or code range of the health check. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. 2xx)
-  --follow-redirects: string@bool-completer # Follow redirects if returned by the origin. This parameter is only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
+  --follow-redirects: oneof<nothing, bool> # Follow redirects if returned by the origin. This parameter is only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
   --header: record # The HTTP request headers to send in the health check. It is recommended you set a Host header by default. The User-Agent header cannot be overridden. This parameter is only valid for HTTP and HTTPS monitors. (e.g. {Host: [example.com], X-App-ID: [abc123]})
   --interval: int # The interval between each health check. Shorter intervals may improve failover time, but will increase load on the origins as we check from multiple locations. (default: 60)
   --method: string # The method to use for the health check. This defaults to 'GET' for HTTP/HTTPS based checks and 'connection_established' for TCP based health checks. (e.g. GET)
@@ -35445,13 +35471,13 @@ export def "accounts-load-balancers-monitors-preview account-load-balancer-monit
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-insecure: string@bool-completer # Do not validate the certificate when monitor use HTTPS. This parameter is currently only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
+  --allow-insecure: oneof<nothing, bool> # Do not validate the certificate when monitor use HTTPS. This parameter is currently only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
   --consecutive-down: int # To be marked unhealthy the monitored origin must fail this healthcheck N consecutive times.
   --consecutive-up: int # To be marked healthy the monitored origin must pass this healthcheck N consecutive times.
   --description: string # Object description. (default: , e.g. Login page monitor)
   --expected-body: string # A case-insensitive sub-string to look for in the response body. If this string is not found, the origin will be marked as unhealthy. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. alive)
   --expected-codes: string # The expected HTTP response code or code range of the health check. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. 2xx)
-  --follow-redirects: string@bool-completer # Follow redirects if returned by the origin. This parameter is only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
+  --follow-redirects: oneof<nothing, bool> # Follow redirects if returned by the origin. This parameter is only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
   --header: record # The HTTP request headers to send in the health check. It is recommended you set a Host header by default. The User-Agent header cannot be overridden. This parameter is only valid for HTTP and HTTPS monitors. (e.g. {Host: [example.com], X-App-ID: [abc123]})
   --interval: int # The interval between each health check. Shorter intervals may improve failover time, but will increase load on the origins as we check from multiple locations. (default: 60)
   --method: string # The method to use for the health check. This defaults to 'GET' for HTTP/HTTPS based checks and 'connection_established' for TCP based health checks. (e.g. GET)
@@ -35564,7 +35590,7 @@ export def "accounts-load-balancers-pools account-load-balancer-pools-create-poo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # A human-readable description of the pool. (default: , e.g. Primary data center - Provider XYZ)
-  --enabled: string@bool-completer # Whether to enable (the default) or disable this pool. Disabled pools will not receive traffic and are excluded from health checks. Disabling a pool will cause any load balancers using it to failover to the next pool (if any). (default: true, e.g. false)
+  --enabled: oneof<nothing, bool> # Whether to enable (the default) or disable this pool. Disabled pools will not receive traffic and are excluded from health checks. Disabling a pool will cause any load balancers using it to failover to the next pool (if any). (default: true, e.g. false)
   --latitude: float # The latitude of the data center containing the origins used in this pool in decimal degrees. If this is set, longitude must also be set.
   --load-shedding: record # Configures load shedding policies and percentages for the pool. (nullable) — shape: {default_percent?: float, default_policy?: "random"|"hash", session_percent?: float, session_policy?: "hash"}
   --longitude: float # The longitude of the data center containing the origins used in this pool in decimal degrees. If this is set, latitude must also be set.
@@ -35657,7 +35683,7 @@ export def "accounts-load-balancers-pools account-load-balancer-pools-patch-pool
   --allow-errors(-e) # Return full response without error handling
   --check-regions: list # A list of regions from which to run health checks. Null means every Cloudflare data center. (nullable, e.g. [WEU, ENAM])
   --description: string # A human-readable description of the pool. (default: , e.g. Primary data center - Provider XYZ)
-  --enabled: string@bool-completer # Whether to enable (the default) or disable this pool. Disabled pools will not receive traffic and are excluded from health checks. Disabling a pool will cause any load balancers using it to failover to the next pool (if any). (default: true, e.g. false)
+  --enabled: oneof<nothing, bool> # Whether to enable (the default) or disable this pool. Disabled pools will not receive traffic and are excluded from health checks. Disabling a pool will cause any load balancers using it to failover to the next pool (if any). (default: true, e.g. false)
   --latitude: float # The latitude of the data center containing the origins used in this pool in decimal degrees. If this is set, longitude must also be set.
   --load-shedding: record # Configures load shedding policies and percentages for the pool. (nullable) — shape: {default_percent?: float, default_policy?: "random"|"hash", session_percent?: float, session_policy?: "hash"}
   --longitude: float # The longitude of the data center containing the origins used in this pool in decimal degrees. If this is set, latitude must also be set.
@@ -35701,7 +35727,7 @@ export def "accounts-load-balancers-pools account-load-balancer-pools-update-poo
   --allow-errors(-e) # Return full response without error handling
   --check-regions: list # A list of regions from which to run health checks. Null means every Cloudflare data center. (nullable, e.g. [WEU, ENAM])
   --description: string # A human-readable description of the pool. (default: , e.g. Primary data center - Provider XYZ)
-  --enabled: string@bool-completer # Whether to enable (the default) or disable this pool. Disabled pools will not receive traffic and are excluded from health checks. Disabling a pool will cause any load balancers using it to failover to the next pool (if any). (default: true, e.g. false)
+  --enabled: oneof<nothing, bool> # Whether to enable (the default) or disable this pool. Disabled pools will not receive traffic and are excluded from health checks. Disabling a pool will cause any load balancers using it to failover to the next pool (if any). (default: true, e.g. false)
   --latitude: float # The latitude of the data center containing the origins used in this pool in decimal degrees. If this is set, longitude must also be set.
   --load-shedding: record # Configures load shedding policies and percentages for the pool. (nullable) — shape: {default_percent?: float, default_policy?: "random"|"hash", session_percent?: float, session_policy?: "hash"}
   --longitude: float # The longitude of the data center containing the origins used in this pool in decimal degrees. If this is set, latitude must also be set.
@@ -35762,13 +35788,13 @@ export def "accounts-load-balancers-pools-preview account-load-balancer-pools-pr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-insecure: string@bool-completer # Do not validate the certificate when monitor use HTTPS. This parameter is currently only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
+  --allow-insecure: oneof<nothing, bool> # Do not validate the certificate when monitor use HTTPS. This parameter is currently only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
   --consecutive-down: int # To be marked unhealthy the monitored origin must fail this healthcheck N consecutive times.
   --consecutive-up: int # To be marked healthy the monitored origin must pass this healthcheck N consecutive times.
   --description: string # Object description. (default: , e.g. Login page monitor)
   --expected-body: string # A case-insensitive sub-string to look for in the response body. If this string is not found, the origin will be marked as unhealthy. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. alive)
   --expected-codes: string # The expected HTTP response code or code range of the health check. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. 2xx)
-  --follow-redirects: string@bool-completer # Follow redirects if returned by the origin. This parameter is only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
+  --follow-redirects: oneof<nothing, bool> # Follow redirects if returned by the origin. This parameter is only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
   --header: record # The HTTP request headers to send in the health check. It is recommended you set a Host header by default. The User-Agent header cannot be overridden. This parameter is only valid for HTTP and HTTPS monitors. (e.g. {Host: [example.com], X-App-ID: [abc123]})
   --interval: int # The interval between each health check. Shorter intervals may improve failover time, but will increase load on the origins as we check from multiple locations. (default: 60)
   --method: string # The method to use for the health check. This defaults to 'GET' for HTTP/HTTPS based checks and 'connection_established' for TCP based health checks. (e.g. GET)
@@ -35998,7 +36024,7 @@ export def "accounts-logpush-jobs id-logpush-jobs-by-account_id-1" [
   --allow-errors(-e) # Return full response without error handling
   --dataset: string@dataset-completer # Name of the dataset. A list of supported datasets can be found on the [Developer Docs](https://developers.cloudflare.com/logs/reference/log-fields/). (nullable, default: http_requests, e.g. http_requests)
   destination_conf: string # Uniquely identifies a resource (such as an s3 bucket) where data. will be pushed. Additional configuration parameters supported by the destination may be included. (format: uri, e.g. s3://mybucket/logs?region=us-west-2)
-  --enabled: string@bool-completer # Flag that indicates if the job is enabled. (default: false, e.g. false)
+  --enabled: oneof<nothing, bool> # Flag that indicates if the job is enabled. (default: false, e.g. false)
   --filter: string # The filters to select the events to include and/or remove from your logs. For more information, refer to [Filters](https://developers.cloudflare.com/logs/reference/filters/). (nullable, e.g. {"where":{"and":[{"key":"ClientRequestPath","operator":"contains","value":"/static"},{"key":"ClientRequestHost","operator":"eq","value":"example.com"}]}})
   --frequency: string@frequency-completer # This field is deprecated. Please use `max_upload_*` parameters instead. . The frequency at which Cloudflare sends batches of logs to your destination. Setting frequency to high sends your logs in larger quantities of smaller files. Setting frequency to low sends logs in smaller quantities of larger files. (DEPRECATED, nullable, default: high, e.g. high)
   --kind: string@kind-completer-4 # The kind parameter (optional) is used to differentiate between Logpush and Edge Log Delivery jobs (when supported by the dataset). (default: , e.g. )
@@ -36088,7 +36114,7 @@ export def "accounts-logpush-jobs id-by-job_id-account_id-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --destination-conf: string # Uniquely identifies a resource (such as an s3 bucket) where data. will be pushed. Additional configuration parameters supported by the destination may be included. (format: uri, e.g. s3://mybucket/logs?region=us-west-2)
-  --enabled: string@bool-completer # Flag that indicates if the job is enabled. (default: false, e.g. false)
+  --enabled: oneof<nothing, bool> # Flag that indicates if the job is enabled. (default: false, e.g. false)
   --filter: string # The filters to select the events to include and/or remove from your logs. For more information, refer to [Filters](https://developers.cloudflare.com/logs/reference/filters/). (nullable, e.g. {"where":{"and":[{"key":"ClientRequestPath","operator":"contains","value":"/static"},{"key":"ClientRequestHost","operator":"eq","value":"example.com"}]}})
   --frequency: string@frequency-completer # This field is deprecated. Please use `max_upload_*` parameters instead. . The frequency at which Cloudflare sends batches of logs to your destination. Setting frequency to high sends your logs in larger quantities of smaller files. Setting frequency to low sends logs in smaller quantities of larger files. (DEPRECATED, nullable, default: high, e.g. high)
   --kind: string@kind-completer-4 # The kind parameter (optional) is used to differentiate between Logpush and Edge Log Delivery jobs (when supported by the dataset). (default: , e.g. )
@@ -36375,7 +36401,7 @@ export def "accounts-logs-control-cmb-config id-logs-control-cmb-config-by-accou
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-out-of-region-access: string@bool-completer # Allow out of region access (e.g. false)
+  --allow-out-of-region-access: oneof<nothing, bool> # Allow out of region access (e.g. false)
   --regions: string # Name of the region. (e.g. eu)
 ]: any -> record<result: record<allow_out_of_region_access: bool, regions: string>> {
   let input = $in
@@ -36402,7 +36428,7 @@ export def "accounts-logs-explorer-datasets accounts-logs-explorer-datasets-list
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-zones: string@bool-completer # Set to true to include zone-scoped datasets belonging to this account.
+  --include-zones: oneof<nothing, bool> # Set to true to include zone-scoped datasets belonging to this account.
 ]: nothing -> record<errors: table<code: int, message: string>, messages: list<string>, result: table<created_at: string, dataset: string, dataset_id: string, enabled: bool, object_id: string, object_type: string, updated_at: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -36501,7 +36527,7 @@ export def "accounts-logs-explorer-datasets accounts-logs-explorer-datasets-upda
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether to enable or disable log ingest for this dataset.
+  --enabled: oneof<nothing, bool> # Whether to enable or disable log ingest for this dataset.
   --body-fields: list # Controls which fields the API ingests after the update. Defaults to all available fields when absent. — item shape: {enabled: bool, name: string}
 ]: any -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<created_at: string, dataset: string, dataset_id: string, enabled: bool, object_id: string, object_type: string, updated_at: string, fields: list<record>>, success: bool> {
   let input = $in
@@ -36785,7 +36811,7 @@ export def "accounts-magic-advanced-tcp-protection-configs-allowlist createAllow
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   comment: string # An comment describing the allowlist prefix.
-  --enabled: string@bool-completer # Whether to enable the allowlist prefix into effect.
+  --enabled: oneof<nothing, bool> # Whether to enable the allowlist prefix into effect.
   prefix: string # The allowlist prefix to add in CIDR format.
 ]: any -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record<comment: string, created_on: string, enabled: bool, id: string, modified_on: string, prefix: string>> {
   let input = $in
@@ -36860,7 +36886,7 @@ export def "accounts-magic-advanced-tcp-protection-configs-allowlist updateAllow
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --comment: string # A comment describing the allowlist prefix. Optional.
-  --enabled: string@bool-completer # Whether to enable the allowlist prefix into effect. Optional.
+  --enabled: oneof<nothing, bool> # Whether to enable the allowlist prefix into effect. Optional.
 ]: any -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record<comment: string, created_on: string, enabled: bool, id: string, modified_on: string, prefix: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -36936,7 +36962,7 @@ export def "accounts-magic-advanced-tcp-protection-configs-prefixes createPrefix
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   comment: string # A comment describing the prefix.
-  --excluded: string@bool-completer # Whether to exclude the prefix from protection.
+  --excluded: oneof<nothing, bool> # Whether to exclude the prefix from protection.
   prefix: string # The prefix to add in CIDR format. (e.g. 192.0.2.0/24)
 ]: any -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record<comment: string, created_on: string, excluded: bool, id: string, modified_on: string, prefix: string>> {
   let input = $in
@@ -37036,7 +37062,7 @@ export def "accounts-magic-advanced-tcp-protection-configs-prefixes updatePrefix
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --comment: string # A new comment for the prefix. Optional.
-  --excluded: string@bool-completer # Whether to exclude the prefix from protection. Optional.
+  --excluded: oneof<nothing, bool> # Whether to exclude the prefix from protection. Optional.
 ]: any -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record<comment: string, created_on: string, excluded: bool, id: string, modified_on: string, prefix: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -37696,7 +37722,7 @@ export def "accounts-magic-advanced-tcp-protection-configs-tcp-protection-status
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Enables or disables protection.
+  --enabled: oneof<nothing, bool> # Enables or disables protection.
 ]: any -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record<enabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -38079,7 +38105,7 @@ export def "accounts-magic-cf-interconnects magic-interconnects-list-interconnec
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --x-magic-new-hc-target: string@bool-completer # If true, the health check target in the response body will be presented using the new object format. Defaults to false.
+  --x-magic-new-hc-target: oneof<nothing, bool> # If true, the health check target in the response body will be presented using the new object format. Defaults to false.
 ]: nothing -> record<result: record<interconnects: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -38104,7 +38130,7 @@ export def "accounts-magic-cf-interconnects magic-interconnects-update-multiple-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --x-magic-new-hc-target: string@bool-completer # If true, the health check target in the request and response bodies will be presented using the new object format. Defaults to false.
+  --x-magic-new-hc-target: oneof<nothing, bool> # If true, the health check target in the request and response bodies will be presented using the new object format. Defaults to false.
   --body: record
 ]: any -> record<result: record<modified: bool, modified_interconnects: list<record>>> {
   let input = $in
@@ -38133,7 +38159,7 @@ export def "accounts-magic-cf-interconnects magic-interconnects-list-interconnec
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --x-magic-new-hc-target: string@bool-completer # If true, the health check target in the response body will be presented using the new object format. Defaults to false.
+  --x-magic-new-hc-target: oneof<nothing, bool> # If true, the health check target in the response body will be presented using the new object format. Defaults to false.
 ]: nothing -> record<result: record<interconnect: record<automatic_return_routing: bool, colo_name: string, created_on: string, description: string, gre: record, health_check: record, id: string, interface_address: string, interface_address6: string, modified_on: string, mtu: int, name: string, virtual_port_reservation_id: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -38161,8 +38187,8 @@ export def "accounts-magic-cf-interconnects magic-interconnects-update-interconn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --x-magic-new-hc-target: string@bool-completer # If true, the health check target in the request and response bodies will be presented using the new object format. Defaults to false.
-  --automatic-return-routing: string@bool-completer # True if automatic stateful return routing should be enabled for a tunnel, false otherwise. Requires the `coupler_integration` account flag to be enabled; requests setting this to `true` without that flag will be rejected. (default: false, e.g. true)
+  --x-magic-new-hc-target: oneof<nothing, bool> # If true, the health check target in the request and response bodies will be presented using the new object format. Defaults to false.
+  --automatic-return-routing: oneof<nothing, bool> # True if automatic stateful return routing should be enabled for a tunnel, false otherwise. Requires the `coupler_integration` account flag to be enabled; requests setting this to `true` without that flag will be rejected. (default: false, e.g. true)
   --description: string # An optional description of the interconnect. (e.g. Tunnel for Interconnect to ORD)
   --gre: record # The configuration specific to GRE interconnects. — shape: {cloudflare_endpoint?: string}
   --health-check: record # shape: {enabled?: bool, rate?: "low"|"mid"|"high", target?: any, type?: "reply"|"request"}
@@ -38277,7 +38303,7 @@ export def "accounts-magic-cloud-catalog-syncs catalog-syncs-delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete-destination: string@bool-completer
+  --delete-destination: oneof<nothing, bool>
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -38408,9 +38434,9 @@ export def "accounts-magic-cloud-onramps onramps-list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --order-by: string # One of ["updated_at", "id", "cloud_type", "name"].
-  --desc: string@bool-completer
-  --status: string@bool-completer
-  --vpcs: string@bool-completer
+  --desc: oneof<nothing, bool>
+  --status: oneof<nothing, bool>
+  --vpcs: oneof<nothing, bool>
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -38441,12 +38467,12 @@ export def "accounts-magic-cloud-onramps onramps-create" [
   --cloud-asn: int # Sets the cloud-side ASN. If unset or zero, the cloud's default ASN takes effect. (format: uint32)
   cloud_type: string@cloud-type-completer
   --description: string
-  --dynamic-routing: string@bool-completer # Enables BGP routing. When enabling this feature, set both install_routes_in_cloud and install_routes_in_magic_wan to false.
+  --dynamic-routing: oneof<nothing, bool> # Enables BGP routing. When enabling this feature, set both install_routes_in_cloud and install_routes_in_magic_wan to false.
   --hub-provider-id: string # format: uuid
-  --install-routes-in-cloud: string@bool-completer
-  --install-routes-in-magic-wan: string@bool-completer
-  --manage-hub-to-hub-attachments: string@bool-completer
-  --manage-vpc-to-hub-attachments: string@bool-completer
+  --install-routes-in-cloud: oneof<nothing, bool>
+  --install-routes-in-magic-wan: oneof<nothing, bool>
+  --manage-hub-to-hub-attachments: oneof<nothing, bool>
+  --manage-vpc-to-hub-attachments: oneof<nothing, bool>
   name: string
   --region: string
   type: string@type-completer-16
@@ -38553,8 +38579,8 @@ export def "accounts-magic-cloud-onramps onramps-delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --destroy: string@bool-completer
-  --force: string@bool-completer
+  --destroy: oneof<nothing, bool>
+  --force: oneof<nothing, bool>
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -38579,10 +38605,10 @@ export def "accounts-magic-cloud-onramps onramps-read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string@bool-completer
-  --vpcs: string@bool-completer
-  --post-apply-resources: string@bool-completer
-  --planned-resources: string@bool-completer
+  --status: oneof<nothing, bool>
+  --vpcs: oneof<nothing, bool>
+  --post-apply-resources: oneof<nothing, bool>
+  --planned-resources: oneof<nothing, bool>
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -38610,10 +38636,10 @@ export def "accounts-magic-cloud-onramps onramps-patch" [
   --attached-hubs: list
   --attached-vpcs: list
   --description: string
-  --install-routes-in-cloud: string@bool-completer
-  --install-routes-in-magic-wan: string@bool-completer
-  --manage-hub-to-hub-attachments: string@bool-completer
-  --manage-vpc-to-hub-attachments: string@bool-completer
+  --install-routes-in-cloud: oneof<nothing, bool>
+  --install-routes-in-magic-wan: oneof<nothing, bool>
+  --manage-hub-to-hub-attachments: oneof<nothing, bool>
+  --manage-vpc-to-hub-attachments: oneof<nothing, bool>
   --name: string
   --vpc: string # format: uuid
 ]: any -> record {
@@ -38645,10 +38671,10 @@ export def "accounts-magic-cloud-onramps onramps-update" [
   --attached-hubs: list
   --attached-vpcs: list
   --description: string
-  --install-routes-in-cloud: string@bool-completer
-  --install-routes-in-magic-wan: string@bool-completer
-  --manage-hub-to-hub-attachments: string@bool-completer
-  --manage-vpc-to-hub-attachments: string@bool-completer
+  --install-routes-in-cloud: oneof<nothing, bool>
+  --install-routes-in-magic-wan: oneof<nothing, bool>
+  --manage-hub-to-hub-attachments: oneof<nothing, bool>
+  --manage-vpc-to-hub-attachments: oneof<nothing, bool>
   --name: string
   --vpc: string # format: uuid
 ]: any -> record {
@@ -38745,10 +38771,10 @@ export def "accounts-magic-cloud-providers providers-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string@bool-completer
+  --status: oneof<nothing, bool>
   --order-by: string # One of ["updated_at", "id", "cloud_type", "name"].
-  --desc: string@bool-completer
-  --cloudflare: string@bool-completer
+  --desc: oneof<nothing, bool>
+  --cloudflare: oneof<nothing, bool>
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -38849,7 +38875,7 @@ export def "accounts-magic-cloud-providers providers-read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string@bool-completer
+  --status: oneof<nothing, bool>
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -38940,7 +38966,7 @@ export def "accounts-magic-cloud-providers-discover providers-discover" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --v2: string@bool-completer
+  --v2: oneof<nothing, bool>
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -38992,14 +39018,14 @@ export def "accounts-magic-cloud-resources resources-catalog-list" [
   --resource-id: list
   --region: string
   --resource-group: string
-  --managed: string@bool-completer
+  --managed: oneof<nothing, bool>
   --search: list
   --order-by: string # One of ["id", "resource_type", "region"].
-  --desc: string@bool-completer
+  --desc: oneof<nothing, bool>
   --per-page: int
   --page: int
-  --cloudflare: string@bool-completer
-  --v2: string@bool-completer
+  --cloudflare: oneof<nothing, bool>
+  --v2: oneof<nothing, bool>
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -39030,8 +39056,8 @@ export def "accounts-magic-cloud-resources-export resources-catalog-export" [
   --resource-group: string
   --search: list
   --order-by: string # One of ["id", "resource_type", "region"].
-  --desc: string@bool-completer
-  --v2: string@bool-completer
+  --desc: oneof<nothing, bool>
+  --v2: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -39082,7 +39108,7 @@ export def "accounts-magic-cloud-resources resources-catalog-read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --v2: string@bool-completer
+  --v2: oneof<nothing, bool>
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -39132,7 +39158,7 @@ export def "accounts-magic-connectors mconn-connector-create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   device: record # Exactly one of id, serial_number, or provision_license must be provided. — shape: {id?: string, provision_license?: bool, serial_number?: string}
-  --activated: string@bool-completer
+  --activated: oneof<nothing, bool>
   --interrupt-window-days-of-week: list # Allowed days of the week for upgrades. Default is all days.
   --interrupt-window-duration-hours: float
   --interrupt-window-embargo-dates: list # List of dates (YYYY-MM-DD) when upgrades are blocked.
@@ -39211,14 +39237,14 @@ export def "accounts-magic-connectors mconn-connector-update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --activated: string@bool-completer
+  --activated: oneof<nothing, bool>
   --interrupt-window-days-of-week: list # Allowed days of the week for upgrades. Default is all days.
   --interrupt-window-duration-hours: float
   --interrupt-window-embargo-dates: list # List of dates (YYYY-MM-DD) when upgrades are blocked.
   --interrupt-window-hour-of-day: float
   --notes: string
   --timezone: string
-  --provision-license: string@bool-completer # When true, regenerate license key for the connector.
+  --provision-license: oneof<nothing, bool> # When true, regenerate license key for the connector.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -39245,14 +39271,14 @@ export def "accounts-magic-connectors mconn-connector-replace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --activated: string@bool-completer
+  --activated: oneof<nothing, bool>
   --interrupt-window-days-of-week: list # Allowed days of the week for upgrades. Default is all days.
   --interrupt-window-duration-hours: float
   --interrupt-window-embargo-dates: list # List of dates (YYYY-MM-DD) when upgrades are blocked.
   --interrupt-window-hour-of-day: float
   --notes: string
   --timezone: string
-  --provision-license: string@bool-completer # When true, regenerate license key for the connector.
+  --provision-license: oneof<nothing, bool> # When true, regenerate license key for the connector.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -39430,7 +39456,7 @@ export def "accounts-magic-gre-tunnels magic-gre-tunnels-list-gre-tunnels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --x-magic-new-hc-target: string@bool-completer # If true, the health check target in the response body will be presented using the new object format. Defaults to false.
+  --x-magic-new-hc-target: oneof<nothing, bool> # If true, the health check target in the response body will be presented using the new object format. Defaults to false.
 ]: nothing -> record<result: record<gre_tunnels: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -39456,8 +39482,8 @@ export def "accounts-magic-gre-tunnels magic-gre-tunnels-create-gre-tunnels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --x-magic-new-hc-target: string@bool-completer # If true, the health check target in the request and response bodies will be presented using the new object format. Defaults to false.
-  --automatic-return-routing: string@bool-completer # True if automatic stateful return routing should be enabled for a tunnel, false otherwise. Requires the `coupler_integration` account flag to be enabled; requests setting this to `true` without that flag will be rejected. (default: false, e.g. true)
+  --x-magic-new-hc-target: oneof<nothing, bool> # If true, the health check target in the request and response bodies will be presented using the new object format. Defaults to false.
+  --automatic-return-routing: oneof<nothing, bool> # True if automatic stateful return routing should be enabled for a tunnel, false otherwise. Requires the `coupler_integration` account flag to be enabled; requests setting this to `true` without that flag will be rejected. (default: false, e.g. true)
   --bgp: record # shape: {customer_asn: int, extra_prefixes?: list, md5_key?: string}
   cloudflare_gre_endpoint: string # The IP address assigned to the Cloudflare side of the GRE tunnel. (e.g. 203.0.113.1)
   customer_gre_endpoint: string # The IP address assigned to the customer side of the GRE tunnel. (e.g. 203.0.113.1)
@@ -39495,7 +39521,7 @@ export def "accounts-magic-gre-tunnels magic-gre-tunnels-update-multiple-gre-tun
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --x-magic-new-hc-target: string@bool-completer # If true, the health check target in the request and response bodies will be presented using the new object format. Defaults to false.
+  --x-magic-new-hc-target: oneof<nothing, bool> # If true, the health check target in the request and response bodies will be presented using the new object format. Defaults to false.
   --body: record
 ]: any -> record<result: record<modified: bool, modified_gre_tunnels: list<record>>> {
   let input = $in
@@ -39524,7 +39550,7 @@ export def "accounts-magic-gre-tunnels magic-gre-tunnels-delete-gre-tunnel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --x-magic-new-hc-target: string@bool-completer # If true, the health check target in the response body will be presented using the new object format. Defaults to false.
+  --x-magic-new-hc-target: oneof<nothing, bool> # If true, the health check target in the response body will be presented using the new object format. Defaults to false.
   --body: record
 ]: any -> record<result: record<deleted: bool, deleted_gre_tunnel: record<automatic_return_routing: bool, bgp: record, bgp_status: record, cloudflare_gre_endpoint: string, created_on: string, customer_gre_endpoint: string, description: string, health_check: record, id: string, interface_address: string, interface_address6: string, modified_on: string, mtu: int, name: string, ttl: int>>> {
   let input = $in
@@ -39553,7 +39579,7 @@ export def "accounts-magic-gre-tunnels magic-gre-tunnels-list-gre-tunnel-details
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --x-magic-new-hc-target: string@bool-completer # If true, the health check target in the response body will be presented using the new object format. Defaults to false.
+  --x-magic-new-hc-target: oneof<nothing, bool> # If true, the health check target in the response body will be presented using the new object format. Defaults to false.
 ]: nothing -> record<result: record<gre_tunnel: record<automatic_return_routing: bool, bgp: record, bgp_status: record, cloudflare_gre_endpoint: string, created_on: string, customer_gre_endpoint: string, description: string, health_check: record, id: string, interface_address: string, interface_address6: string, modified_on: string, mtu: int, name: string, ttl: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -39579,8 +39605,8 @@ export def "accounts-magic-gre-tunnels magic-gre-tunnels-update-gre-tunnel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --x-magic-new-hc-target: string@bool-completer # If true, the health check target in the request and response bodies will be presented using the new object format. Defaults to false.
-  --automatic-return-routing: string@bool-completer # True if automatic stateful return routing should be enabled for a tunnel, false otherwise. Requires the `coupler_integration` account flag to be enabled; requests setting this to `true` without that flag will be rejected. (default: false, e.g. true)
+  --x-magic-new-hc-target: oneof<nothing, bool> # If true, the health check target in the request and response bodies will be presented using the new object format. Defaults to false.
+  --automatic-return-routing: oneof<nothing, bool> # True if automatic stateful return routing should be enabled for a tunnel, false otherwise. Requires the `coupler_integration` account flag to be enabled; requests setting this to `true` without that flag will be rejected. (default: false, e.g. true)
   cloudflare_gre_endpoint: string # The IP address assigned to the Cloudflare side of the GRE tunnel. (e.g. 203.0.113.1)
   customer_gre_endpoint: string # The IP address assigned to the customer side of the GRE tunnel. (e.g. 203.0.113.1)
   --description: string # An optional description of the GRE tunnel. (e.g. Tunnel for ISP X)
@@ -39617,7 +39643,7 @@ export def "accounts-magic-ipsec-tunnels magic-ipsec-tunnels-list-ipsec-tunnels"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --x-magic-new-hc-target: string@bool-completer # If true, the health check target in the response body will be presented using the new object format. Defaults to false.
+  --x-magic-new-hc-target: oneof<nothing, bool> # If true, the health check target in the response body will be presented using the new object format. Defaults to false.
 ]: nothing -> record<result: record<ipsec_tunnels: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -39644,8 +39670,8 @@ export def "accounts-magic-ipsec-tunnels magic-ipsec-tunnels-create-ipsec-tunnel
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --x-magic-new-hc-target: string@bool-completer # If true, the health check target in the request and response bodies will be presented using the new object format. Defaults to false.
-  --automatic-return-routing: string@bool-completer # True if automatic stateful return routing should be enabled for a tunnel, false otherwise. Requires the `coupler_integration` account flag to be enabled; requests setting this to `true` without that flag will be rejected. (default: false, e.g. true)
+  --x-magic-new-hc-target: oneof<nothing, bool> # If true, the health check target in the request and response bodies will be presented using the new object format. Defaults to false.
+  --automatic-return-routing: oneof<nothing, bool> # True if automatic stateful return routing should be enabled for a tunnel, false otherwise. Requires the `coupler_integration` account flag to be enabled; requests setting this to `true` without that flag will be rejected. (default: false, e.g. true)
   --bgp: record # shape: {customer_asn: int, extra_prefixes?: list, md5_key?: string}
   cloudflare_endpoint: string # The IP address assigned to the Cloudflare side of the IPsec tunnel. (e.g. 203.0.113.1)
   --custom-remote-identities: record # shape: {fqdn_id?: string}
@@ -39656,7 +39682,7 @@ export def "accounts-magic-ipsec-tunnels magic-ipsec-tunnels-create-ipsec-tunnel
   --interface-address6: string # A 127 bit IPV6 prefix from within the virtual_subnet6 prefix space with the address being the first IP of the subnet and not same as the address of virtual_subnet6. Eg if virtual_subnet6 is 2606:54c1:7:0:a9fe:12d2::/127 , interface_address6 could be 2606:54c1:7:0:a9fe:12d2:1:200/127 (e.g. 2606:54c1:7:0:a9fe:12d2:1:200/127)
   name: string # The name of the IPsec tunnel. The name cannot share a name with other tunnels. (e.g. IPsec_1)
   --psk: string # A randomly generated or provided string for use in the IPsec tunnel. (e.g. O3bwKSjnaoCxDoUxjcq4Rk8ZKkezQUiy)
-  --replay-protection: string@bool-completer # If `true`, then IPsec replay protection will be supported in the Cloudflare-to-customer direction. (default: false, e.g. false)
+  --replay-protection: oneof<nothing, bool> # If `true`, then IPsec replay protection will be supported in the Cloudflare-to-customer direction. (default: false, e.g. false)
 ]: any -> record<result: record<allow_null_cipher: bool, automatic_return_routing: bool, bgp: record<customer_asn: int, extra_prefixes: list, md5_key: string>, bgp_status: record<bgp_state: string, cf_speaker_ip: string, cf_speaker_port: int, customer_speaker_ip: string, customer_speaker_port: int, state: string, tcp_established: bool, updated_at: string>, cloudflare_endpoint: string, created_on: string, custom_remote_identities: record<fqdn_id: string>, customer_endpoint: string, description: string, health_check: record<enabled: bool, rate: string, target: any, type: string, direction: string>, id: string, interface_address: string, interface_address6: string, modified_on: string, name: string, psk_metadata: record<last_generated_on: string>, replay_protection: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -39684,7 +39710,7 @@ export def "accounts-magic-ipsec-tunnels magic-ipsec-tunnels-update-multiple-ips
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --x-magic-new-hc-target: string@bool-completer # If true, the health check target in the request and response bodies will be presented using the new object format. Defaults to false.
+  --x-magic-new-hc-target: oneof<nothing, bool> # If true, the health check target in the request and response bodies will be presented using the new object format. Defaults to false.
   --body: record
 ]: any -> record<result: record<modified: bool, modified_ipsec_tunnels: list<record>>> {
   let input = $in
@@ -39713,7 +39739,7 @@ export def "accounts-magic-ipsec-tunnels-psk magic-ipsec-tunnels-set-pre-shared-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --validate-only: string@bool-completer # If `true`, only run validation without persisting changes.
+  --validate-only: oneof<nothing, bool> # If `true`, only run validation without persisting changes.
   psks: list # List of tunnel ID and PSK pairs. — item shape: {id: any, psk: string}
 ]: any -> record<result: record<successfully_applied_psks: record, unapplied_psks: record>> {
   let input = $in
@@ -39742,7 +39768,7 @@ export def "accounts-magic-ipsec-tunnels magic-ipsec-tunnels-delete-ipsec-tunnel
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --x-magic-new-hc-target: string@bool-completer # If true, the health check target in the response body will be presented using the new object format. Defaults to false.
+  --x-magic-new-hc-target: oneof<nothing, bool> # If true, the health check target in the response body will be presented using the new object format. Defaults to false.
   --body: record
 ]: any -> record<result: record<deleted: bool, deleted_ipsec_tunnel: record<allow_null_cipher: bool, automatic_return_routing: bool, bgp: record, bgp_status: record, cloudflare_endpoint: string, created_on: string, custom_remote_identities: record, customer_endpoint: string, description: string, health_check: record, id: string, interface_address: string, interface_address6: string, modified_on: string, name: string, psk_metadata: record, replay_protection: bool>>> {
   let input = $in
@@ -39771,7 +39797,7 @@ export def "accounts-magic-ipsec-tunnels magic-ipsec-tunnels-list-ipsec-tunnel-d
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --x-magic-new-hc-target: string@bool-completer # If true, the health check target in the response body will be presented using the new object format. Defaults to false.
+  --x-magic-new-hc-target: oneof<nothing, bool> # If true, the health check target in the response body will be presented using the new object format. Defaults to false.
 ]: nothing -> record<result: record<ipsec_tunnel: record<allow_null_cipher: bool, automatic_return_routing: bool, bgp: record, bgp_status: record, cloudflare_endpoint: string, created_on: string, custom_remote_identities: record, customer_endpoint: string, description: string, health_check: record, id: string, interface_address: string, interface_address6: string, modified_on: string, name: string, psk_metadata: record, replay_protection: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -39799,8 +39825,8 @@ export def "accounts-magic-ipsec-tunnels magic-ipsec-tunnels-update-ipsec-tunnel
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --x-magic-new-hc-target: string@bool-completer # If true, the health check target in the request and response bodies will be presented using the new object format. Defaults to false.
-  --automatic-return-routing: string@bool-completer # True if automatic stateful return routing should be enabled for a tunnel, false otherwise. Requires the `coupler_integration` account flag to be enabled; requests setting this to `true` without that flag will be rejected. (default: false, e.g. true)
+  --x-magic-new-hc-target: oneof<nothing, bool> # If true, the health check target in the request and response bodies will be presented using the new object format. Defaults to false.
+  --automatic-return-routing: oneof<nothing, bool> # True if automatic stateful return routing should be enabled for a tunnel, false otherwise. Requires the `coupler_integration` account flag to be enabled; requests setting this to `true` without that flag will be rejected. (default: false, e.g. true)
   --bgp: record # shape: {customer_asn: int, extra_prefixes?: list, md5_key?: string}
   cloudflare_endpoint: string # The IP address assigned to the Cloudflare side of the IPsec tunnel. (e.g. 203.0.113.1)
   --custom-remote-identities: record # shape: {fqdn_id?: string}
@@ -39811,7 +39837,7 @@ export def "accounts-magic-ipsec-tunnels magic-ipsec-tunnels-update-ipsec-tunnel
   --interface-address6: string # A 127 bit IPV6 prefix from within the virtual_subnet6 prefix space with the address being the first IP of the subnet and not same as the address of virtual_subnet6. Eg if virtual_subnet6 is 2606:54c1:7:0:a9fe:12d2::/127 , interface_address6 could be 2606:54c1:7:0:a9fe:12d2:1:200/127 (e.g. 2606:54c1:7:0:a9fe:12d2:1:200/127)
   name: string # The name of the IPsec tunnel. The name cannot share a name with other tunnels. (e.g. IPsec_1)
   --psk: string # A randomly generated or provided string for use in the IPsec tunnel. (e.g. O3bwKSjnaoCxDoUxjcq4Rk8ZKkezQUiy)
-  --replay-protection: string@bool-completer # If `true`, then IPsec replay protection will be supported in the Cloudflare-to-customer direction. (default: false, e.g. false)
+  --replay-protection: oneof<nothing, bool> # If `true`, then IPsec replay protection will be supported in the Cloudflare-to-customer direction. (default: false, e.g. false)
 ]: any -> record<result: record<modified: bool, modified_ipsec_tunnel: record<allow_null_cipher: bool, automatic_return_routing: bool, bgp: record, bgp_status: record, cloudflare_endpoint: string, created_on: string, custom_remote_identities: record, customer_endpoint: string, description: string, health_check: record, id: string, interface_address: string, interface_address6: string, modified_on: string, name: string, psk_metadata: record, replay_protection: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -40208,7 +40234,7 @@ export def "accounts-magic-sites magic-sites-create-site" [
   --allow-errors(-e) # Return full response without error handling
   --connector-id: string # Magic Connector identifier tag. (e.g. ac60d3d0435248289d446cedd870bcf4)
   --description: string
-  --ha-mode: string@bool-completer # Site high availability mode. If set to true, the site can have two connectors and runs in high availability mode. (e.g. true)
+  --ha-mode: oneof<nothing, bool> # Site high availability mode. If set to true, the site can have two connectors and runs in high availability mode. (e.g. true)
   --location: record # Location of site in latitude and longitude. — shape: {lat?: string, lon?: string}
   name: string # The name of the site. (e.g. site_1)
   --secondary-connector-id: string # Magic Connector identifier tag. Used when high availability mode is on. (e.g. 8d67040d3835dbcf46ce29da440dc482)
@@ -40264,7 +40290,7 @@ export def "accounts-magic-sites magic-sites-site-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --x-magic-new-hc-target: string@bool-completer # If true, the health check target in the response body will be presented using the new object format. Defaults to false.
+  --x-magic-new-hc-target: oneof<nothing, bool> # If true, the health check target in the response body will be presented using the new object format. Defaults to false.
 ]: nothing -> record<result: record<connector_id: string, description: string, ha_mode: bool, id: string, location: record<lat: string, lon: string>, name: string, secondary_connector_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -40380,12 +40406,12 @@ export def "accounts-magic-sites-acls magic-site-acls-create-acl" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # Description for the ACL. (e.g. Allows local traffic between PIN pads and cash register.)
-  --forward-locally: string@bool-completer # The desired forwarding action for this ACL policy. If set to "false", the policy will forward traffic to Cloudflare. If set to "true", the policy will forward traffic locally on the Magic Connector. If not included in request, will default to false.
+  --forward-locally: oneof<nothing, bool> # The desired forwarding action for this ACL policy. If set to "false", the policy will forward traffic to Cloudflare. If set to "true", the policy will forward traffic locally on the Magic Connector. If not included in request, will default to false.
   lan_1: record # shape: {lan_id: string, lan_name?: string, port_ranges?: list, ports?: list, subnets?: list}
   lan_2: record # shape: {lan_id: string, lan_name?: string, port_ranges?: list, ports?: list, subnets?: list}
   name: string # The name of the ACL. (e.g. PIN Pad - Cash Register)
   --protocols: list
-  --unidirectional: string@bool-completer # The desired traffic direction for this ACL policy. If set to "false", the policy will allow bidirectional traffic. If set to "true", the policy will only allow traffic in one direction. If not included in request, will default to false.
+  --unidirectional: oneof<nothing, bool> # The desired traffic direction for this ACL policy. If set to "false", the policy will allow bidirectional traffic. If set to "true", the policy will only allow traffic in one direction. If not included in request, will default to false.
 ]: any -> record<result: record<description: string, forward_locally: bool, id: string, lan_1: record<lan_id: string, lan_name: string, port_ranges: list, ports: list, subnets: list>, lan_2: record<lan_id: string, lan_name: string, port_ranges: list, ports: list, subnets: list>, name: string, protocols: list<string>, unidirectional: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -40467,12 +40493,12 @@ export def "accounts-magic-sites-acls magic-site-acls-patch-acl" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # Description for the ACL. (e.g. Allows local traffic between PIN pads and cash register.)
-  --forward-locally: string@bool-completer # The desired forwarding action for this ACL policy. If set to "false", the policy will forward traffic to Cloudflare. If set to "true", the policy will forward traffic locally on the Magic Connector. If not included in request, will default to false.
+  --forward-locally: oneof<nothing, bool> # The desired forwarding action for this ACL policy. If set to "false", the policy will forward traffic to Cloudflare. If set to "true", the policy will forward traffic locally on the Magic Connector. If not included in request, will default to false.
   --lan-1: record # shape: {lan_id: string, lan_name?: string, port_ranges?: list, ports?: list, subnets?: list}
   --lan-2: record # shape: {lan_id: string, lan_name?: string, port_ranges?: list, ports?: list, subnets?: list}
   --name: string # The name of the ACL. (e.g. PIN Pad - Cash Register)
   --protocols: list
-  --unidirectional: string@bool-completer # The desired traffic direction for this ACL policy. If set to "false", the policy will allow bidirectional traffic. If set to "true", the policy will only allow traffic in one direction. If not included in request, will default to false.
+  --unidirectional: oneof<nothing, bool> # The desired traffic direction for this ACL policy. If set to "false", the policy will allow bidirectional traffic. If set to "true", the policy will only allow traffic in one direction. If not included in request, will default to false.
 ]: any -> record<result: record<description: string, forward_locally: bool, id: string, lan_1: record<lan_id: string, lan_name: string, port_ranges: list, ports: list, subnets: list>, lan_2: record<lan_id: string, lan_name: string, port_ranges: list, ports: list, subnets: list>, name: string, protocols: list<string>, unidirectional: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -40503,12 +40529,12 @@ export def "accounts-magic-sites-acls magic-site-acls-update-acl" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # Description for the ACL. (e.g. Allows local traffic between PIN pads and cash register.)
-  --forward-locally: string@bool-completer # The desired forwarding action for this ACL policy. If set to "false", the policy will forward traffic to Cloudflare. If set to "true", the policy will forward traffic locally on the Magic Connector. If not included in request, will default to false.
+  --forward-locally: oneof<nothing, bool> # The desired forwarding action for this ACL policy. If set to "false", the policy will forward traffic to Cloudflare. If set to "true", the policy will forward traffic locally on the Magic Connector. If not included in request, will default to false.
   --lan-1: record # shape: {lan_id: string, lan_name?: string, port_ranges?: list, ports?: list, subnets?: list}
   --lan-2: record # shape: {lan_id: string, lan_name?: string, port_ranges?: list, ports?: list, subnets?: list}
   --name: string # The name of the ACL. (e.g. PIN Pad - Cash Register)
   --protocols: list
-  --unidirectional: string@bool-completer # The desired traffic direction for this ACL policy. If set to "false", the policy will allow bidirectional traffic. If set to "true", the policy will only allow traffic in one direction. If not included in request, will default to false.
+  --unidirectional: oneof<nothing, bool> # The desired traffic direction for this ACL policy. If set to "false", the policy will allow bidirectional traffic. If set to "true", the policy will only allow traffic in one direction. If not included in request, will default to false.
 ]: any -> record<result: record<description: string, forward_locally: bool, id: string, lan_1: record<lan_id: string, lan_name: string, port_ranges: list, ports: list, subnets: list>, lan_2: record<lan_id: string, lan_name: string, port_ranges: list, ports: list, subnets: list>, name: string, protocols: list<string>, unidirectional: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -40558,7 +40584,7 @@ export def "accounts-magic-sites-app-configs magic-site-app-configs-add-app-conf
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --breakout: string@bool-completer # Whether to breakout traffic to the app's endpoints directly. Null preserves default behavior. (e.g. true)
+  --breakout: oneof<nothing, bool> # Whether to breakout traffic to the app's endpoints directly. Null preserves default behavior. (e.g. true)
   --preferred-wans: list # WAN interfaces to prefer over default WANs, highest-priority first. Can only be specified for breakout rules (breakout must be true).
   --priority: int # Priority of traffic. 0 is default, anything greater is prioritized. (Currently only 0 and 1 are supported)
 ]: any -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, result: record, success: bool> {
@@ -40613,7 +40639,7 @@ export def "accounts-magic-sites-app-configs magic-site-app-configs-patch-app-co
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --account-app-id: string # Magic account app ID. (e.g. ac60d3d0435248289d446cedd870bcf4)
-  --breakout: string@bool-completer # Whether to breakout traffic to the app's endpoints directly. Null preserves default behavior. (e.g. true)
+  --breakout: oneof<nothing, bool> # Whether to breakout traffic to the app's endpoints directly. Null preserves default behavior. (e.g. true)
   --managed-app-id: string # Managed app ID. (e.g. cloudflare)
   --preferred-wans: list # WAN interfaces to prefer over default WANs, highest-priority first. Can only be specified for breakout rules (breakout must be true).
   --priority: int # Priority of traffic. 0 is default, anything greater is prioritized. (Currently only 0 and 1 are supported)
@@ -40645,7 +40671,7 @@ export def "accounts-magic-sites-app-configs magic-site-app-configs-update-app-c
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --account-app-id: string # Magic account app ID. (e.g. ac60d3d0435248289d446cedd870bcf4)
-  --breakout: string@bool-completer # Whether to breakout traffic to the app's endpoints directly. Null preserves default behavior. (e.g. true)
+  --breakout: oneof<nothing, bool> # Whether to breakout traffic to the app's endpoints directly. Null preserves default behavior. (e.g. true)
   --managed-app-id: string # Managed app ID. (e.g. cloudflare)
   --preferred-wans: list # WAN interfaces to prefer over default WANs, highest-priority first. Can only be specified for breakout rules (breakout must be true).
   --priority: int # Priority of traffic. 0 is default, anything greater is prioritized. (Currently only 0 and 1 are supported)
@@ -40702,9 +40728,9 @@ export def "accounts-magic-sites-lans magic-site-lans-create-lan" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --bond-id: int # e.g. 2
-  --ha-link: string@bool-completer # mark true to use this LAN for HA probing. only works for site with HA turned on. only one LAN can be set as the ha_link.
-  --is-breakout: string@bool-completer # mark true to use this LAN for source-based breakout traffic
-  --is-prioritized: string@bool-completer # mark true to use this LAN for source-based prioritized traffic
+  --ha-link: oneof<nothing, bool> # mark true to use this LAN for HA probing. only works for site with HA turned on. only one LAN can be set as the ha_link.
+  --is-breakout: oneof<nothing, bool> # mark true to use this LAN for source-based breakout traffic
+  --is-prioritized: oneof<nothing, bool> # mark true to use this LAN for source-based prioritized traffic
   --name: string
   --nat: record # shape: {static_prefix?: string}
   --physport: int # e.g. 1
@@ -40793,8 +40819,8 @@ export def "accounts-magic-sites-lans magic-site-lans-patch-lan" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --bond-id: int # e.g. 2
-  --is-breakout: string@bool-completer # mark true to use this LAN for source-based breakout traffic
-  --is-prioritized: string@bool-completer # mark true to use this LAN for source-based prioritized traffic
+  --is-breakout: oneof<nothing, bool> # mark true to use this LAN for source-based breakout traffic
+  --is-prioritized: oneof<nothing, bool> # mark true to use this LAN for source-based prioritized traffic
   --name: string
   --nat: record # shape: {static_prefix?: string}
   --physport: int # e.g. 1
@@ -40832,8 +40858,8 @@ export def "accounts-magic-sites-lans magic-site-lans-update-lan" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --bond-id: int # e.g. 2
-  --is-breakout: string@bool-completer # mark true to use this LAN for source-based breakout traffic
-  --is-prioritized: string@bool-completer # mark true to use this LAN for source-based prioritized traffic
+  --is-breakout: oneof<nothing, bool> # mark true to use this LAN for source-based breakout traffic
+  --is-prioritized: oneof<nothing, bool> # mark true to use this LAN for source-based prioritized traffic
   --name: string
   --nat: record # shape: {static_prefix?: string}
   --physport: int # e.g. 1
@@ -41498,7 +41524,7 @@ export def "accounts-mnm-rules magic-network-monitoring-rules-create-rules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --automatic-advertisement: string@bool-completer # Toggle on if you would like Cloudflare to automatically advertise the IP Prefixes within the rule via Magic Transit when the rule is triggered. Only available for users of Magic Transit. (nullable, e.g. false)
+  --automatic-advertisement: oneof<nothing, bool> # Toggle on if you would like Cloudflare to automatically advertise the IP Prefixes within the rule via Magic Transit when the rule is triggered. Only available for users of Magic Transit. (nullable, e.g. false)
   --bandwidth-threshold: float # The number of bits per second for the rule. When this value is exceeded for the set duration, an alert notification is sent. Minimum of 1 and no maximum. (e.g. 1000)
   --duration: string@duration-completer-1 # The amount of time that the rule threshold must be exceeded to send an alert notification. The final value must be equivalent to one of the following 8 values ["1m","5m","10m","15m","20m","30m","45m","60m"]. (default: 1m, e.g. 300s)
   name: string # The name of the rule. Must be unique. Supports characters A-Z, a-z, 0-9, underscore (_), dash (-), period (.), and tilde (~). You can’t have a space in the rule name. Max 256 characters. (e.g. my_rule_1)
@@ -41533,7 +41559,7 @@ export def "accounts-mnm-rules magic-network-monitoring-rules-update-rules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --automatic-advertisement: string@bool-completer # Toggle on if you would like Cloudflare to automatically advertise the IP Prefixes within the rule via Magic Transit when the rule is triggered. Only available for users of Magic Transit. (nullable, e.g. false)
+  --automatic-advertisement: oneof<nothing, bool> # Toggle on if you would like Cloudflare to automatically advertise the IP Prefixes within the rule via Magic Transit when the rule is triggered. Only available for users of Magic Transit. (nullable, e.g. false)
   --bandwidth-threshold: float # The number of bits per second for the rule. When this value is exceeded for the set duration, an alert notification is sent. Minimum of 1 and no maximum. (e.g. 1000)
   --duration: string@duration-completer-1 # The amount of time that the rule threshold must be exceeded to send an alert notification. The final value must be equivalent to one of the following 8 values ["1m","5m","10m","15m","20m","30m","45m","60m"]. (default: 1m, e.g. 300s)
   name: string # The name of the rule. Must be unique. Supports characters A-Z, a-z, 0-9, underscore (_), dash (-), period (.), and tilde (~). You can’t have a space in the rule name. Max 256 characters. (e.g. my_rule_1)
@@ -41618,7 +41644,7 @@ export def "accounts-mnm-rules magic-network-monitoring-rules-update-rule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --automatic-advertisement: string@bool-completer # Toggle on if you would like Cloudflare to automatically advertise the IP Prefixes within the rule via Magic Transit when the rule is triggered. Only available for users of Magic Transit. (nullable, e.g. false)
+  --automatic-advertisement: oneof<nothing, bool> # Toggle on if you would like Cloudflare to automatically advertise the IP Prefixes within the rule via Magic Transit when the rule is triggered. Only available for users of Magic Transit. (nullable, e.g. false)
   --bandwidth-threshold: float # The number of bits per second for the rule. When this value is exceeded for the set duration, an alert notification is sent. Minimum of 1 and no maximum. (e.g. 1000)
   --duration: string@duration-completer-1 # The amount of time that the rule threshold must be exceeded to send an alert notification. The final value must be equivalent to one of the following 8 values ["1m","5m","10m","15m","20m","30m","45m","60m"]. (default: 1m, e.g. 300s)
   name: string # The name of the rule. Must be unique. Supports characters A-Z, a-z, 0-9, underscore (_), dash (-), period (.), and tilde (~). You can’t have a space in the rule name. Max 256 characters. (e.g. my_rule_1)
@@ -41703,7 +41729,7 @@ export def "accounts-moq-relays list" [
   --created-before: string # Cursor for pagination. Returns relays created strictly before this RFC 3339 timestamp (typically the `created` value of the first item on the current page, to fetch the previous page).  (format: date-time, e.g. 2026-03-27T15:00:00Z)
   --created-after: string # Cursor for pagination. Returns relays created strictly after this RFC 3339 timestamp (typically the `created` value of the last item on the current page, to fetch the next page).  (format: date-time, e.g. 2026-03-27T15:00:00Z)
   --per-page: int # Maximum number of relays to return per page. (e.g. 50)
-  --asc: string@bool-completer # Sort order by `created`. When true, results are returned oldest-first (ascending); otherwise newest-first (descending, the default).  (default: false)
+  --asc: oneof<nothing, bool> # Sort order by `created`. When true, results are returned oldest-first (ascending); otherwise newest-first (descending, the default).  (default: false)
 ]: nothing -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, success: bool, result: table<created: string, modified: string, name: string, uid: string>, result_info: record<count: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -41900,7 +41926,7 @@ export def "accounts-mtls-certificates m-tls-certificate-management-upload-m-tls
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ca: string@bool-completer # Indicates whether the certificate is a CA or leaf certificate. (e.g. true)
+  --ca: oneof<nothing, bool> # Indicates whether the certificate is a CA or leaf certificate. (e.g. true)
   certificates: string # The uploaded root CA certificate. (e.g. -----BEGIN CERTIFICATE----- MIIDmDCCAoCgAwIBAgIUKTOAZNjcXVZRj4oQt0SHsl1c1vMwDQYJKoZIhvcNAQEL BQAwUTELMAkGA1UEBhMCVVMxFjAUBgNVBAgMDVNhbiBGcmFuY2lzY28xEzARBgNV BAcMCkNhbGlmb3JuaWExFTATBgNVBAoMDEV4YW1wbGUgSW5jLjAgFw0yMjExMjIx NjU5NDdaGA8yMTIyMTAyOTE2NTk0N1owUTELMAkGA1UEBhMCVVMxFjAUBgNVBAgM DVNhbiBGcmFuY2lzY28xEzARBgNVBAcMCkNhbGlmb3JuaWExFTATBgNVBAoMDEV4 YW1wbGUgSW5jLjCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAMRcORwg JFTdcG/2GKI+cFYiOBNDKjCZUXEOvXWY42BkH9wxiMT869CO+enA1w5pIrXow6kC M1sQspHHaVmJUlotEMJxyoLFfA/8Kt1EKFyobOjuZs2SwyVyJ2sStvQuUQEosULZ CNGZEqoH5g6zhMPxaxm7ZLrrsDZ9maNGVqo7EWLWHrZ57Q/5MtTrbxQL+eXjUmJ9 K3kS+3uEwMdqR6Z3BluU1ivanpPc1CN2GNhdO0/hSY4YkGEnuLsqJyDd3cIiB1Mx uCBJ4ZaqOd2viV1WcP3oU3dxVPm4MWyfYIldMWB14FahScxLhWdRnM9YZ/i9IFcL ypXsuz7DjrJPtPUCAwEAAaNmMGQwHQYDVR0OBBYEFP5JzLUawNF+c3AXsYTEWHh7 z2czMB8GA1UdIwQYMBaAFP5JzLUawNF+c3AXsYTEWHh7z2czMA4GA1UdDwEB/wQE AwIBBjASBgNVHRMBAf8ECDAGAQH/AgEBMA0GCSqGSIb3DQEBCwUAA4IBAQBc+Be7 NDhpE09y7hLPZGRPl1cSKBw4RI0XIv6rlbSTFs5EebpTGjhx/whNxwEZhB9HZ711 1Oa1YlT8xkI9DshB78mjAHCKBAJ76moK8tkG0aqdYpJ4ZcJTVBB7l98Rvgc7zfTi i7WemTy72deBbSeiEtXavm4EF0mWjHhQ5Nxpnp00Bqn5g1x8CyTDypgmugnep+xG +iFzNmTdsz7WI9T/7kDMXqB7M/FPWBORyS98OJqNDswCLF8bIZYwUBEe+bRHFomo ShMzaC3tvim7WCb16noDkSTMlfKO4pnvKhpcVdSgwcruATV7y+W+Lvmz2OT/Gui4 JhqeoTewsxndhDDE -----END CERTIFICATE-----)
   --name: string # Optional unique name for the certificate. Only used for human readability. (e.g. example_ca_cert)
   --private-key: string # The private key for the certificate. This field is only needed for specific use cases such as using a custom certificate with Zero Trust's block page. (e.g. -----BEGIN PRIVATE KEY----- MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDEXDkcICRU3XBv 9hiiPnBWIjgTQyowmVFxDr11mONgZB/cMYjE/OvQjvnpwNcOaSK16MOpAjNbELKR x2lZiVJaLRDCccqCxXwP/CrdRChcqGzo7mbNksMlcidrErb0LlEBKLFC2QjRmRKq B+YOs4TD8WsZu2S667A2fZmjRlaqOxFi1h62ee0P+TLU628UC/nl41JifSt5Evt7 hMDHakemdwZblNYr2p6T3NQjdhjYXTtP4UmOGJBhJ7i7Kicg3d3CIgdTMbggSeGW qjndr4ldVnD96FN3cVT5uDFsn2CJXTFgdeBWoUnMS4VnUZzPWGf4vSBXC8qV7Ls+ w46yT7T1AgMBAAECggEAQZnp/oqCeNPOR6l5S2L+1tfx0gWjZ78hJVteUpZ0iHSK 7F6kKeOxyOird7vUXV0kmo+cJq+0hp0Ke4eam640FCpwKfYoSQ4/R3vgujGWJnai hCN5tv5sMet0XeJPuz5qE7ALoKCvwI6aXLHs20aAeZIDTQJ9QbGSGnJVzOWn+JDT idIgZpN57RpXfSAwnJPTQK/PN8i5z108hsaDOdEgGmxYZ7kYqMqzX20KXmth58LD fPixs5JGtS60iiKC/wOcGzkB2/AdTSojR76oEU77cANP/3zO25NG//whUdYlW0t0 d7PgXxIeJe+xgYnamDQJx3qonVyt4H77ha0ObRAj9QKBgQDicZr+VTwFMnELP3a+ FXGnjehRiuS1i7MXGKxNweCD+dFlML0FplSQS8Ro2n+d8lu8BBXGx0qm6VXu8Rhn 7TAUL6q+PCgfarzxfIhacb/TZCqfieIHsMlVBfhV5HCXnk+kis0tuC/PRArcWTwD HJUJXkBhvkUsNswvQzavDPI7KwKBgQDd/WgLkj7A3X5fgIHZH/GbDSBiXwzKb+rF 4ZCT2XFgG/OAW7vapfcX/w+v+5lBLyrocmOAS3PGGAhM5T3HLnUCQfnK4qgps1Lq ibkc9Tmnsn60LanUjuUMsYv/zSw70tozbzhJ0pioEpWfRxRZBztO2Rr8Ntm7h6Fk 701EXGNAXwKBgQCD1xsjy2J3sCerIdcz0u5qXLAPkeuZW+34m4/ucdwTWwc0gEz9 lhsULFj9p4G351zLuiEnq+7mAWLcDJlmIO3mQt6JhiLiL9Y0T4pgBmxmWqKKYtAs JB0EmMY+1BNN44mBRqMxZFTJu1cLdhT/xstrOeoIPqytknYNanfTMZlzIwKBgHrL Xe5oq0XMP8dcMneEcAUwsaU4pr6kQd3L9EmUkl5zl7J9C+DaxWAEuwzBw/iGutlx zRB+rD/7szu14wJ29EqXbDGKRzMp+se5/yfBjm7xEZ1hVPw7PwBShfqt57X/4Ktq 7lwHnmH6RcGhc+P7WBc5iO/S94YAdIp8xOT3pf9JAoGAE0QkqJUY+5Mgr+fBO0VN V72ZoPveGpW+De59uhKAOnu1zljQCUtk59m6+DXfm0tNYKtawa5n8iN71Zh+s62x XSt3pYi1Y5CCCmv8Y4BhwIcPwXKk3zEvLgSHVTpC0bayA9aSO4bbZgVXa5w+Z0w/ vvfp9DWo1IS3EnQRrz6WMYA= -----END PRIVATE KEY-----)
@@ -42419,7 +42445,7 @@ export def "accounts-pages-projects-deployments pages-deployment-delete-deployme
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # e.g. true
+  --force: oneof<nothing, bool> # e.g. true
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -44241,7 +44267,7 @@ export def "accounts-queues-purge queues-purge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete-messages-permanently: string@bool-completer # Confimation that all messages will be deleted permanently. (e.g. true)
+  --delete-messages-permanently: oneof<nothing, bool> # Confimation that all messages will be deleted permanently. (e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -44442,8 +44468,8 @@ export def "accounts-r2-catalog-namespaces list-namespaces" [
   --page-token: string # Opaque pagination token from a previous response. Use this to fetch the next page of results.  (e.g. MSYxNzU5NzU1NTc4NTA0MTk0JjAxOTliOTliLTJjODgtNzNiMy04ZGJiLTQyMWUwZThmMjc1Nw)
   --page-size: int # Maximum number of namespaces to return per page. Defaults to 100, maximum 1000.  (default: 100, e.g. 100)
   --parent: string # Parent namespace to filter by. Only returns direct children of this namespace. For nested namespaces, use %1F as separator (e.g., "bronze%1Fanalytics"). Omit this parameter to list top-level namespaces.  (e.g. bronze)
-  --return-uuids: string@bool-completer # Whether to include namespace UUIDs in the response. Set to true to receive the namespace_uuids array.  (default: false, e.g. true)
-  --return-details: string@bool-completer # Whether to include additional metadata (timestamps). When true, response includes created_at and updated_at arrays.  (default: false, e.g. true)
+  --return-uuids: oneof<nothing, bool> # Whether to include namespace UUIDs in the response. Set to true to receive the namespace_uuids array.  (default: false, e.g. true)
+  --return-details: oneof<nothing, bool> # Whether to include additional metadata (timestamps). When true, response includes created_at and updated_at arrays.  (default: false, e.g. true)
 ]: nothing -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, success: bool, result: record<details: list<record>, namespace_uuids: list<string>, namespaces: list<list>, next_page_token: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -44471,8 +44497,8 @@ export def "accounts-r2-catalog-namespaces-tables list-tables" [
   --allow-errors(-e) # Return full response without error handling
   --page-token: string # Opaque pagination token from a previous response. Use this to fetch the next page of results.  (e.g. MSYxNzU5NzU2MTI4NTU2Njk2JjAxOTliOWEzLTkxMmUtN2ZhMS05YzllLTg5MTAxMGQzYTg0MQ)
   --page-size: int # Maximum number of tables to return per page. Defaults to 100, maximum 1000.  (default: 100, e.g. 100)
-  --return-uuids: string@bool-completer # Whether to include table UUIDs in the response. Set to true to receive the table_uuids array.  (default: false, e.g. true)
-  --return-details: string@bool-completer # Whether to include additional metadata (timestamps, locations). When true, response includes created_at, updated_at, metadata_locations, and locations arrays.  (default: false, e.g. true)
+  --return-uuids: oneof<nothing, bool> # Whether to include table UUIDs in the response. Set to true to receive the table_uuids array.  (default: false, e.g. true)
+  --return-details: oneof<nothing, bool> # Whether to include additional metadata (timestamps, locations). When true, response includes created_at, updated_at, metadata_locations, and locations arrays.  (default: false, e.g. true)
 ]: nothing -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, success: bool, result: record<details: list<record>, identifiers: list<record>, next_page_token: string, table_uuids: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -44808,7 +44834,7 @@ export def "accounts-r2-buckets-domains-custom r2-add-custom-domain" [
   --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
   --ciphers: list # An allowlist of ciphers for TLS termination. These ciphers must be in the BoringSSL format.
   domain: string # Name of the custom domain to be added.
-  --enabled: string@bool-completer # Whether to enable public bucket access at the custom domain. If undefined, the domain will be enabled.
+  --enabled: oneof<nothing, bool> # Whether to enable public bucket access at the custom domain. If undefined, the domain will be enabled.
   --minTLS: string@minTLS-completer # Minimum TLS Version the custom domain will accept for incoming connections. If not set, defaults to 1.0.
   zoneId: string # Zone ID of the custom domain.
 ]: any -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<ciphers: list<string>, domain: string, enabled: bool, minTLS: string, zoneId: string>, success: bool> {
@@ -44896,7 +44922,7 @@ export def "accounts-r2-buckets-domains-custom r2-edit-custom-domain-settings" [
   --allow-errors(-e) # Return full response without error handling
   --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
   --ciphers: list # An allowlist of ciphers for TLS termination. These ciphers must be in the BoringSSL format.
-  --enabled: string@bool-completer # Whether to enable public bucket access at the specified custom domain.
+  --enabled: oneof<nothing, bool> # Whether to enable public bucket access at the specified custom domain.
   --minTLS: string@minTLS-completer # Minimum TLS Version the custom domain will accept for incoming connections. If not set, defaults to previous value.
 ]: any -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<ciphers: list<string>, domain: string, enabled: bool, minTLS: string>, success: bool> {
   let input = $in
@@ -44953,7 +44979,7 @@ export def "accounts-r2-buckets-domains-managed r2-put-bucket-public-policy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
-  --enabled: string@bool-completer # Whether to enable public bucket access at the r2.dev domain.
+  --enabled: oneof<nothing, bool> # Whether to enable public bucket access at the r2.dev domain.
 ]: any -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<bucketId: string, domain: string, enabled: bool>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -45062,7 +45088,7 @@ export def "accounts-r2-buckets-local-uploads r2-put-bucket-local-uploads-config
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether to enable local uploads for this bucket.
+  --enabled: oneof<nothing, bool> # Whether to enable local uploads for this bucket.
 ]: any -> record<errors: table<code: int, message: string>, messages: list<string>, result: record, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -45592,7 +45618,7 @@ export def "accounts-realtime-kit-livestreams livestreams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --exclude-meetings: string@bool-completer # Exclude the RealtimeKit meetings that are livestreamed. (default: false)
+  --exclude-meetings: oneof<nothing, bool> # Exclude the RealtimeKit meetings that are livestreamed. (default: false)
   --per-page: int # Number of results per page.
   --page-no: int # The page number from which you want your page search results to be displayed.
   --status: string@status-completer-14 # Specifies the status of the operation.
@@ -45757,14 +45783,14 @@ export def "accounts-realtime-kit-meetings meeting-by-account_id-app_id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ai-config: record # The AI Config allows you to customize the behavior of meeting transcriptions and summaries — shape: {summarization?: record, transcription?: record}
-  --live-stream-on-start: string@bool-completer # Specifies if the meeting should start getting livestreamed on start. (nullable, default: false)
-  --persist-chat: string@bool-completer # If a meeting is set to persist_chat, meeting chat would remain for a week within the meeting space. (default: false)
-  --record-on-start: string@bool-completer # Specifies if the meeting should start getting recorded as soon as someone joins the meeting. (nullable, default: false)
+  --live-stream-on-start: oneof<nothing, bool> # Specifies if the meeting should start getting livestreamed on start. (nullable, default: false)
+  --persist-chat: oneof<nothing, bool> # If a meeting is set to persist_chat, meeting chat would remain for a week within the meeting space. (default: false)
+  --record-on-start: oneof<nothing, bool> # Specifies if the meeting should start getting recorded as soon as someone joins the meeting. (nullable, default: false)
   --recording-config: record # Recording Configurations to be used for this meeting. This level of configs takes higher preference over App level configs on the RealtimeKit developer portal. — shape: {audio_config?: record, file_name_prefix?: string, live_streaming_config?: record, max_seconds?: float, realtimekit_bucket_config?: record, storage_config?: record, video_config?: record}
   --session-keep-alive-time-in-secs: float # Time in seconds, for which a session remains active, after the last participant has left the meeting. (default: 60)
-  --summarize-on-end: string@bool-completer # Automatically generate summary of meetings using transcripts. Requires Transcriptions to be enabled, and can be retrieved via Webhooks or summary API. (default: false)
+  --summarize-on-end: oneof<nothing, bool> # Automatically generate summary of meetings using transcripts. Requires Transcriptions to be enabled, and can be retrieved via Webhooks or summary API. (default: false)
   --title: string # Title of the meeting (nullable)
-  --transcribe-on-end: string@bool-completer # Automatically generate transcripts when the meeting ends. (default: false)
+  --transcribe-on-end: oneof<nothing, bool> # Automatically generate transcripts when the meeting ends. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -45823,15 +45849,15 @@ export def "accounts-realtime-kit-meetings meeting-by-account_id-app_id-meeting_
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ai-config: record # The AI Config allows you to customize the behavior of meeting transcriptions and summaries — shape: {summarization?: record, transcription?: record}
-  --live-stream-on-start: string@bool-completer # Specifies if the meeting should start getting livestreamed on start. (default: false)
-  --persist-chat: string@bool-completer # If a meeting is updated to persist_chat, meeting chat would remain for a week within the meeting space. (default: false)
-  --record-on-start: string@bool-completer # Specifies if the meeting should start getting recorded as soon as someone joins the meeting. (default: false)
+  --live-stream-on-start: oneof<nothing, bool> # Specifies if the meeting should start getting livestreamed on start. (default: false)
+  --persist-chat: oneof<nothing, bool> # If a meeting is updated to persist_chat, meeting chat would remain for a week within the meeting space. (default: false)
+  --record-on-start: oneof<nothing, bool> # Specifies if the meeting should start getting recorded as soon as someone joins the meeting. (default: false)
   --recording-config: record # Recording Configurations to be used for this meeting. This level of configs takes higher preference over App level configs on the RealtimeKit developer portal. — shape: {audio_config?: record, file_name_prefix?: string, live_streaming_config?: record, max_seconds?: float, realtimekit_bucket_config?: record, storage_config?: record, video_config?: record}
   --session-keep-alive-time-in-secs: float # Time in seconds, for which a session remains active, after the last participant has left the meeting. (default: 60)
   --status: string@status-completer-15 # Whether the meeting is `ACTIVE` or `INACTIVE`. Users will not be able to join an `INACTIVE` meeting. (e.g. INACTIVE)
-  --summarize-on-end: string@bool-completer # Automatically generate summary of meetings using transcripts. Requires Transcriptions to be enabled, and can be retrieved via Webhooks or summary API. (default: false)
+  --summarize-on-end: oneof<nothing, bool> # Automatically generate summary of meetings using transcripts. Requires Transcriptions to be enabled, and can be retrieved via Webhooks or summary API. (default: false)
   --title: string # Title of the meeting
-  --transcribe-on-end: string@bool-completer # Automatically generate transcripts when the meeting ends. (default: false)
+  --transcribe-on-end: oneof<nothing, bool> # Automatically generate transcripts when the meeting ends. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -45863,14 +45889,14 @@ export def "accounts-realtime-kit-meetings meeting-by-account_id-app_id-meeting_
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ai-config: record # The AI Config allows you to customize the behavior of meeting transcriptions and summaries — shape: {summarization?: record, transcription?: record}
-  --live-stream-on-start: string@bool-completer # Specifies if the meeting should start getting livestreamed on start. (nullable, default: false)
-  --persist-chat: string@bool-completer # If a meeting is set to persist_chat, meeting chat would remain for a week within the meeting space. (default: false)
-  --record-on-start: string@bool-completer # Specifies if the meeting should start getting recorded as soon as someone joins the meeting. (nullable, default: false)
+  --live-stream-on-start: oneof<nothing, bool> # Specifies if the meeting should start getting livestreamed on start. (nullable, default: false)
+  --persist-chat: oneof<nothing, bool> # If a meeting is set to persist_chat, meeting chat would remain for a week within the meeting space. (default: false)
+  --record-on-start: oneof<nothing, bool> # Specifies if the meeting should start getting recorded as soon as someone joins the meeting. (nullable, default: false)
   --recording-config: record # Recording Configurations to be used for this meeting. This level of configs takes higher preference over App level configs on the RealtimeKit developer portal. — shape: {audio_config?: record, file_name_prefix?: string, live_streaming_config?: record, max_seconds?: float, realtimekit_bucket_config?: record, storage_config?: record, video_config?: record}
   --session-keep-alive-time-in-secs: float # Time in seconds, for which a session remains active, after the last participant has left the meeting. (default: 60)
-  --summarize-on-end: string@bool-completer # Automatically generate summary of meetings using transcripts. Requires Transcriptions to be enabled, and can be retrieved via Webhooks or summary API. (default: false)
+  --summarize-on-end: oneof<nothing, bool> # Automatically generate summary of meetings using transcripts. Requires Transcriptions to be enabled, and can be retrieved via Webhooks or summary API. (default: false)
   --title: string # Title of the meeting (nullable)
-  --transcribe-on-end: string@bool-completer # Automatically generate transcripts when the meeting ends. (default: false)
+  --transcribe-on-end: oneof<nothing, bool> # Automatically generate transcripts when the meeting ends. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -46057,7 +46083,7 @@ export def "accounts-realtime-kit-meetings-active-session-mute-all MuteAllPartic
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-unmute: string@bool-completer # if false, participants won't be able to unmute themselves after they are muted
+  --allow-unmute: oneof<nothing, bool> # if false, participants won't be able to unmute themselves after they are muted
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -46085,8 +46111,8 @@ export def "accounts-realtime-kit-meetings-active-session-poll CreatePoll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --anonymous: string@bool-completer # if voters on a poll are anonymous
-  --hide-votes: string@bool-completer # if votes on an option are visible before a person votes
+  --anonymous: oneof<nothing, bool> # if voters on a poll are anonymous
+  --hide-votes: oneof<nothing, bool> # if votes on an option are visible before a person votes
   options: list # Different options for the question
   question: string # Question of the poll
 ]: any -> any {
@@ -46553,7 +46579,7 @@ export def "accounts-realtime-kit-recordings recordings" [
   --meeting-id: string # ID of a meeting. Optional. Will limit results to only this meeting if passed. (format: uuid)
   --page-no: float # The page number from which you want your page search results to be displayed. (allows empty value)
   --per-page: float # Number of results per page (allows empty value)
-  --expired: string@bool-completer # If passed, only shows expired/non-expired recordings on RealtimeKit's bucket
+  --expired: oneof<nothing, bool> # If passed, only shows expired/non-expired recordings on RealtimeKit's bucket
   --search: string # The search query string. You can search using the meeting ID or title.
   --sort-by: string@sort-by-completer-6
   --sort-order: string@sort-order-completer-1
@@ -46590,7 +46616,7 @@ export def "accounts-realtime-kit-recordings recording-by-account_id-app_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-multiple-recordings: string@bool-completer # By default, a meeting allows only one recording to run at a time. Enabling the `allow_multiple_recordings` parameter to true allows you to initiate multiple recordings concurrently in the same meeting. This allows you to record separate videos of the same meeting with different configurations, such as portrait mode or landscape mode. (default: false)
+  --allow-multiple-recordings: oneof<nothing, bool> # By default, a meeting allows only one recording to run at a time. Enabling the `allow_multiple_recordings` parameter to true allows you to initiate multiple recordings concurrently in the same meeting. This allows you to record separate videos of the same meeting with different configurations, such as portrait mode or landscape mode. (default: false)
   --audio-config: record # Object containing configuration regarding the audio that is being recorded. — shape: {channel?: "mono"|"stereo", codec?: "MP3"|"AAC", export_file?: bool}
   --file-name-prefix: string # Update the recording file name.
   --interactive-config: record # Allows you to add timed metadata to your recordings, which are digital markers inserted into a video file to provide contextual information at specific points in the content range. The ID3 tags containing this information are available to clients on the playback timeline in HLS format. The output files are generated in a compressed .tar format. — shape: {type?: "ID3"}
@@ -46768,7 +46794,7 @@ export def "accounts-realtime-kit-sessions-peer-report GetParticipantDataFromPee
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filters: string@filters-completer # Filter to apply to the peer report. (e.g. device_info)
-  --include-peer-events: string@bool-completer # if true, response includes all the peer events of participant. (default: false)
+  --include-peer-events: oneof<nothing, bool> # if true, response includes all the peer events of participant. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -46794,7 +46820,7 @@ export def "accounts-realtime-kit-sessions GetSessionDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-breakout-rooms: string@bool-completer # List all breakout rooms (default: false)
+  --include-breakout-rooms: oneof<nothing, bool> # List all breakout rooms (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -46876,7 +46902,7 @@ export def "accounts-realtime-kit-sessions-participants GetSessionParticipants" 
   --per-page: float # Number of results per page (allows empty value)
   --sort-order: string@sort-order-completer-1
   --sort-by: string@sort-by-completer-8
-  --include-peer-events: string@bool-completer # if true, response includes all the peer events of participants. (default: false)
+  --include-peer-events: oneof<nothing, bool> # if true, response includes all the peer events of participants. (default: false)
   --view: string@view-completer # In breakout room sessions, the view parameter can be set to `raw` for session specific duration for participants or `consolidated` to accumulate breakout room durations. (default: raw)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -46905,7 +46931,7 @@ export def "accounts-realtime-kit-sessions-participants GetParticipantDetails" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filters: string@filters-completer # Comma separated list of filters to apply. Note that there must be no spaces between the filters. (e.g. device_info,ip_information,events, allows empty value)
-  --include-peer-events: string@bool-completer # if true, response includes all the peer events of participant. (default: false)
+  --include-peer-events: oneof<nothing, bool> # if true, response includes all the peer events of participant. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -47027,7 +47053,7 @@ export def "accounts-realtime-kit-webhooks addWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Set whether or not the webhook should be active when created (default: true)
+  --enabled: oneof<nothing, bool> # Set whether or not the webhook should be active when created (default: true)
   events: list # Events that this webhook will get triggered by (e.g. [meeting.started, meeting.ended, meeting.participantJoined, meeting.participantLeft, meeting.chatSynced, recording.statusUpdate, livestreaming.statusUpdate, meeting.transcript, meeting.summary])
   name: string # Name of the webhook (e.g. All events webhook)
   --body-url: string # URL this webhook will send events to (format: uri, e.g. https://webhook.site/b23a5bbd-c7b0-4ced-a9e2-78ae7889897e)
@@ -47129,7 +47155,7 @@ export def "accounts-realtime-kit-webhooks editWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # default: true
+  --enabled: oneof<nothing, bool> # default: true
   --events: list # Events that the webhook will get triggered by
   --name: string # Name of the webhook
   --body-url: string # URL the webhook will send events to (format: uri, e.g. https://webhook.site/b23a5bbd-c7b0-4ced-a9e2-78ae7889897e)
@@ -47160,7 +47186,7 @@ export def "accounts-realtime-kit-webhooks replaceWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Set whether or not the webhook should be active when created (default: true)
+  --enabled: oneof<nothing, bool> # Set whether or not the webhook should be active when created (default: true)
   events: list # Events that this webhook will get triggered by (e.g. [meeting.started, meeting.ended, meeting.participantJoined, meeting.participantLeft, meeting.chatSynced, recording.statusUpdate, livestreaming.statusUpdate, meeting.transcript, meeting.summary])
   name: string # Name of the webhook (e.g. All events webhook)
   --body-url: string # URL this webhook will send events to (format: uri, e.g. https://webhook.site/b23a5bbd-c7b0-4ced-a9e2-78ae7889897e)
@@ -47293,9 +47319,9 @@ export def "accounts-registrar-domains registrar-domains-update-domain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --auto-renew: string@bool-completer # Auto-renew controls whether subscription is automatically renewed upon domain expiration. (e.g. true)
-  --locked: string@bool-completer # Shows whether a registrar lock is in place for a domain. (e.g. false)
-  --privacy: string@bool-completer # Privacy option controls redacting WHOIS information. (e.g. true)
+  --auto-renew: oneof<nothing, bool> # Auto-renew controls whether subscription is automatically renewed upon domain expiration. (e.g. true)
+  --locked: oneof<nothing, bool> # Shows whether a registrar lock is in place for a domain. (e.g. false)
+  --privacy: oneof<nothing, bool> # Privacy option controls redacting WHOIS information. (e.g. true)
 ]: any -> record<result: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -47350,7 +47376,7 @@ export def "accounts-registrar-registrations registrar-domain-registration-creat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Prefer: string # Set to `respond-async` to receive an immediate `202 Accepted` without waiting for the operation to complete (RFC 7240).  The header may be combined with other preferences using standard comma-separated syntax.
-  --auto-renew: string@bool-completer # Enable or disable automatic renewal. Defaults to `false` if omitted. Setting this field to `true` is an explicit opt-in authorizing Cloudflare to charge the account's default payment method up to 30 days before domain expiry to renew the domain automatically. Renewal pricing may change over time based on registry pricing.  (default: false, e.g. false)
+  --auto-renew: oneof<nothing, bool> # Enable or disable automatic renewal. Defaults to `false` if omitted. Setting this field to `true` is an explicit opt-in authorizing Cloudflare to charge the account's default payment method up to 30 days before domain expiry to renew the domain automatically. Renewal pricing may change over time based on registry pricing.  (default: false, e.g. false)
   --contacts: record # Contact data for the registration request.  If the `contacts` object is omitted entirely from the request, or if `contacts.registrant` is not provided, the system will use the account's default address book entry as the registrant contact. This default must be pre-configured by the account owner at `https://dash.cloudflare.com/{account_id}/domains/registrations`, where they can create or update the address book entry and accept the required agreement. No API exists for managing address book entries at this time.  If no default address book entry exists and no registrant contact is provided, the registration request will fail with a validation error. — shape: {registrant?: record}
   domain_name: string # Fully qualified domain name (FQDN) including the extension (e.g., `example.com`, `mybrand.app`). The domain name uniquely identifies a registration — the same domain cannot be registered twice, making it a natural idempotency key for registration requests.  (e.g. example.com)
   --privacy-mode: string@privacy-mode-completer # WHOIS privacy mode for the registration. Defaults to `redaction`. - `off`: Do not request WHOIS privacy. - `redaction`: Request WHOIS redaction where supported by the extension.   Some extensions do not support privacy/redaction.  (default: redaction, e.g. redaction)
@@ -47407,7 +47433,7 @@ export def "accounts-registrar-registrations registrar-domain-registration-updat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Prefer: string@Prefer-completer # Set to `respond-async` to receive an immediate `202 Accepted` without waiting for the operation to complete (RFC 7240).
-  --auto-renew: string@bool-completer # Enable or disable automatic renewal. Setting this field to `true` authorizes Cloudflare to charge the account's default payment method up to 30 days before domain expiry to renew the domain automatically. Renewal pricing may change over time based on registry pricing.  (e.g. true)
+  --auto-renew: oneof<nothing, bool> # Enable or disable automatic renewal. Setting this field to `true` authorizes Cloudflare to charge the account's default payment method up to 30 days before domain expiry to renew the domain automatically. Renewal pricing may change over time based on registry pricing.  (e.g. true)
 ]: any -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, result: record<completed: bool, context: record, created_at: string, error: record<code: string, message: string>, links: record<resource: string, self: string>, state: string, updated_at: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -47489,7 +47515,7 @@ export def "accounts-request-tracer-trace account-request-tracer-request-trace" 
   --headers: record # Headers added to tracing request (e.g. {header_name_1: header_value_1, header_name_2: header_value_2})
   method: string # HTTP Method of tracing request (e.g. PUT)
   --protocol: string # HTTP Protocol of tracing request (e.g. HTTP/1.1)
-  --skip-response: string@bool-completer # Skip sending the request to the Origin server after all rules evaluation
+  --skip-response: oneof<nothing, bool> # Skip sending the request to the Origin server after all rules evaluation
   --body-url: string # URL to which perform tracing request (e.g. https://some.zone/some_path)
 ]: any -> record {
   let input = $in
@@ -48355,7 +48381,7 @@ export def "accounts-rum-site-info web-analytics-create-site" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --auto-install: string@bool-completer # If enabled, the JavaScript snippet is automatically injected for orange-clouded sites. (e.g. true)
+  --auto-install: oneof<nothing, bool> # If enabled, the JavaScript snippet is automatically injected for orange-clouded sites. (e.g. true)
   --host: string # The hostname to use for gray-clouded sites. (e.g. example.com)
   --zone-tag: string # The zone identifier. (e.g. 023e105f4ecef8ad9ca31a8372d0c353)
 ]: any -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, success: bool, result: record<auto_install: bool, created: string, rules: list<record>, ruleset: record<enabled: bool, id: string, zone_name: string, zone_tag: string>, site_tag: string, site_token: string, snippet: string>> {
@@ -48409,7 +48435,7 @@ export def "accounts-rum-site-info-site-tag-list web-analytics-list-site-tags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # When true, includes sites that are disabled or paused. (e.g. false)
+  --all: oneof<nothing, bool> # When true, includes sites that are disabled or paused. (e.g. false)
 ]: nothing -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, success: bool, result: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -48525,10 +48551,10 @@ export def "accounts-rum-site-info web-analytics-update-site" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --auto-install: string@bool-completer # If enabled, the JavaScript snippet is automatically injected for orange-clouded sites. (e.g. true)
-  --enabled: string@bool-completer # Enables or disables RUM. This option can be used only when auto_install is set to true. (e.g. true)
+  --auto-install: oneof<nothing, bool> # If enabled, the JavaScript snippet is automatically injected for orange-clouded sites. (e.g. true)
+  --enabled: oneof<nothing, bool> # Enables or disables RUM. This option can be used only when auto_install is set to true. (e.g. true)
   --host: string # The hostname to use for gray-clouded sites. (e.g. example.com)
-  --lite: string@bool-completer # If enabled, the JavaScript snippet will not be injected for visitors from the EU.
+  --lite: oneof<nothing, bool> # If enabled, the JavaScript snippet will not be injected for visitors from the EU.
   --zone-tag: string # The zone identifier. (e.g. 023e105f4ecef8ad9ca31a8372d0c353)
 ]: any -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, success: bool, result: record<auto_install: bool, created: string, rules: list<record>, ruleset: record<enabled: bool, id: string, zone_name: string, zone_tag: string>, site_tag: string, site_token: string, snippet: string>> {
   let input = $in
@@ -48557,8 +48583,8 @@ export def "accounts-rum-rule web-analytics-create-rule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --host: string # e.g. example.com
-  --inclusive: string@bool-completer # Whether the rule includes or excludes traffic from being measured. (e.g. true)
-  --is-paused: string@bool-completer # Whether the rule is paused or not. (e.g. false)
+  --inclusive: oneof<nothing, bool> # Whether the rule includes or excludes traffic from being measured. (e.g. true)
+  --is-paused: oneof<nothing, bool> # Whether the rule is paused or not. (e.g. false)
   --paths: list # e.g. [*]
 ]: any -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, success: bool, result: record<created: string, host: string, id: string, inclusive: bool, is_paused: bool, paths: list<string>, priority: float>> {
   let input = $in
@@ -48612,8 +48638,8 @@ export def "accounts-rum-rule web-analytics-update-rule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --host: string # e.g. example.com
-  --inclusive: string@bool-completer # Whether the rule includes or excludes traffic from being measured. (e.g. true)
-  --is-paused: string@bool-completer # Whether the rule is paused or not. (e.g. false)
+  --inclusive: oneof<nothing, bool> # Whether the rule includes or excludes traffic from being measured. (e.g. true)
+  --is-paused: oneof<nothing, bool> # Whether the rule is paused or not. (e.g. false)
   --paths: list # e.g. [*]
 ]: any -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, success: bool, result: record<created: string, host: string, id: string, inclusive: bool, is_paused: bool, paths: list<string>, priority: float>> {
   let input = $in
@@ -49278,7 +49304,7 @@ export def "accounts-secondary-dns-peers secondary-dns--peer-update-peer" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ip: string # IPv4/IPv6 address of primary or secondary nameserver, depending on what zone this peer is linked to. For primary zones this IP defines the IP of the secondary nameserver Cloudflare will NOTIFY upon zone changes. For secondary zones this IP defines the IP of the primary nameserver Cloudflare will send AXFR/IXFR requests to. (e.g. 192.0.2.53)
-  --ixfr-enable: string@bool-completer # Enable IXFR transfer protocol, default is AXFR. Only applicable to secondary zones. (e.g. false)
+  --ixfr-enable: oneof<nothing, bool> # Enable IXFR transfer protocol, default is AXFR. Only applicable to secondary zones. (e.g. false)
   name: string # The name of the peer. (e.g. my-peer-1)
   --port: float # DNS port of primary or secondary nameserver, depending on what zone this peer is linked to. (e.g. 53)
   --tsig-id: string # TSIG authentication will be used for zone transfer if configured. (e.g. 69cd1e104af3e6ed3cb344f263fd0d5a)
@@ -49511,7 +49537,7 @@ export def "accounts-secrets-store-stores secrets-store-delete-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # When true, cascade-deletes all secrets in the store before deleting the store itself. Required when deleting a non-empty store. Without this parameter, attempting to delete a non-empty store returns 409.  (default: false)
+  --force: oneof<nothing, bool> # When true, cascade-deletes all secrets in the store before deleting the store itself. Required when deleting a non-empty store. Without this parameter, attempting to delete a non-empty store returns 409.  (default: false)
 ]: nothing -> record<result: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -49749,7 +49775,7 @@ export def "accounts-security-center-insights get-security-center-insights" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string@bool-completer # e.g. false
+  --dismissed: oneof<nothing, bool> # e.g. false
   --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
   --issue-type: list # e.g. [compliance_violation, email_security]
   --product: list # e.g. [access, dns]
@@ -49815,7 +49841,7 @@ export def "accounts-security-center-insights-class get-security-center-insight-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string@bool-completer # e.g. false
+  --dismissed: oneof<nothing, bool> # e.g. false
   --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
   --issue-type: list # e.g. [compliance_violation, email_security]
   --product: list # e.g. [access, dns]
@@ -49898,7 +49924,7 @@ export def "accounts-security-center-insights-severity get-security-center-insig
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string@bool-completer # e.g. false
+  --dismissed: oneof<nothing, bool> # e.g. false
   --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
   --issue-type: list # e.g. [compliance_violation, email_security]
   --product: list # e.g. [access, dns]
@@ -49932,7 +49958,7 @@ export def "accounts-security-center-insights-type get-security-center-insight-c
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string@bool-completer # e.g. false
+  --dismissed: oneof<nothing, bool> # e.g. false
   --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
   --issue-type: list # e.g. [compliance_violation, email_security]
   --product: list # e.g. [access, dns]
@@ -50049,7 +50075,7 @@ export def "accounts-security-center-insights-dismiss archive-security-center-in
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismiss: string@bool-completer # default: true
+  --dismiss: oneof<nothing, bool> # default: true
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -50083,8 +50109,8 @@ export def "accounts-shares shares-list" [
   --direction: string@direction-completer # Direction to sort objects. (default: asc)
   --page: int # Page number. Defaults to `1` when `per_page` is supplied without `page`. May be omitted entirely along with `per_page` to receive a non-paginated response. (default: 1, e.g. 2)
   --per-page: int # Number of objects to return per page. Defaults to `20` when `page` is supplied without `per_page`. May be omitted entirely along with `page` to receive a non-paginated response. (default: 20, e.g. 20)
-  --include-resources: string@bool-completer # Include resources in the response. (e.g. true)
-  --include-recipient-counts: string@bool-completer # Include recipient counts in the response. (e.g. true)
+  --include-resources: oneof<nothing, bool> # Include resources in the response. (e.g. true)
+  --include-recipient-counts: oneof<nothing, bool> # Include recipient counts in the response. (e.g. true)
   --tag: list # Filter shares by tag. Each value is either `key=value` (matches shares whose tags contain that key/value pair) or `key` alone (matches shares that have any value for that key). May be repeated; multiple `tag` parameters are ANDed together. Maximum 20 `tag` parameters per request.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -50163,8 +50189,8 @@ export def "accounts-shares shares-get-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-resources: string@bool-completer # Include resources in the response. (e.g. true)
-  --include-recipient-counts: string@bool-completer # Include recipient counts in the response. (e.g. true)
+  --include-resources: oneof<nothing, bool> # Include resources in the response. (e.g. true)
+  --include-recipient-counts: oneof<nothing, bool> # Include recipient counts in the response. (e.g. true)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -50216,7 +50242,7 @@ export def "accounts-shares-recipients share-recipients-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-resources: string@bool-completer # Include resources in the response. (e.g. true)
+  --include-resources: oneof<nothing, bool> # Include resources in the response. (e.g. true)
   --page: int # Page number. Defaults to `1` when `per_page` is supplied without `page`. May be omitted entirely along with `per_page` to receive a non-paginated response. (default: 1, e.g. 2)
   --per-page: int # Number of objects to return per page. Defaults to `20` when `page` is supplied without `per_page`. May be omitted entirely along with `page` to receive a non-paginated response. (default: 20, e.g. 20)
 ]: nothing -> record {
@@ -50324,7 +50350,7 @@ export def "accounts-shares-recipients share-recipients-get-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-resources: string@bool-completer # Include resources in the response. (e.g. true)
+  --include-resources: oneof<nothing, bool> # Include resources in the response. (e.g. true)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -50509,7 +50535,7 @@ export def "accounts-slurper-jobs slurper-create-job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --overwrite: string@bool-completer # default: true
+  --overwrite: oneof<nothing, bool> # default: true
   --body-source: record # shape: {bucket?: string, endpoint?: string, keys?: list, pathPrefix?: string, region?: string, secret?: record, vendor?: "s3", jurisdiction?: "default"|"eu"|"fedramp"}
   --target: record # shape: {bucket: string, jurisdiction?: "default"|"eu"|"fedramp", secret: record, vendor: "r2"}
 ]: any -> record {
@@ -50809,9 +50835,9 @@ export def "accounts-sso-connectors init-new-sso-connector" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --begin-verification: string@bool-completer # Begin the verification process after creation (default: true, e.g. true)
+  --begin-verification: oneof<nothing, bool> # Begin the verification process after creation (default: true, e.g. true)
   email_domain: string # Email domain of the new SSO connector (e.g. example.com)
-  --use-fedramp-language: string@bool-completer # Controls the display of FedRAMP language to the user during SSO login (default: false, e.g. false)
+  --use-fedramp-language: oneof<nothing, bool> # Controls the display of FedRAMP language to the user during SSO login (default: false, e.g. false)
 ]: any -> record<result: record<created_on: string, email_domain: string, enabled: bool, id: record, updated_on: string, use_fedramp_language: bool, verification: record<code: string, status: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -50884,8 +50910,8 @@ export def "accounts-sso-connectors update-sso-connector-state" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # SSO Connector enabled state (e.g. true)
-  --use-fedramp-language: string@bool-completer # Controls the display of FedRAMP language to the user during SSO login (default: false, e.g. false)
+  --enabled: oneof<nothing, bool> # SSO Connector enabled state (e.g. true)
+  --use-fedramp-language: oneof<nothing, bool> # Controls the display of FedRAMP language to the user during SSO login (default: false, e.g. false)
 ]: any -> record<result: record<created_on: string, email_domain: string, enabled: bool, id: record, updated_on: string, use_fedramp_language: bool, verification: record<code: string, status: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -51146,7 +51172,7 @@ export def "accounts-storage-kv-namespaces-bulk-get workers-kv-namespace-get-mul
   --allow-errors(-e) # Return full response without error handling
   keys: list # Array of keys to retrieve (maximum of 100).
   --type: string@type-completer-23 # Whether to parse JSON values in the response. (default: text)
-  --withMetadata: string@bool-completer # Whether to include metadata in the response. (default: false)
+  --withMetadata: oneof<nothing, bool> # Whether to include metadata in the response. (default: false)
 ]: any -> record<result: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -51309,12 +51335,12 @@ export def "accounts-stream stream-videos-list-videos" [
   --status: string@status-completer-18 # e.g. inprogress
   --creator: string # e.g. creator-id_abcde12345
   --type: string # e.g. live
-  --asc: string@bool-completer # default: false, e.g. true
+  --asc: oneof<nothing, bool> # default: false, e.g. true
   --video-name: string # e.g. puppy.mp4
   --search: string # e.g. puppy.mp4
   --start: string # format: date-time, e.g. 2014-01-02T02:20:00Z
   --end: string # format: date-time, e.g. 2014-01-02T02:20:00Z
-  --include-counts: string@bool-completer # default: false, e.g. true
+  --include-counts: oneof<nothing, bool> # default: false, e.g. true
   --id: string # Filter by video ID(s). Can be a single ID or a comma-separated list of IDs. (e.g. ea95132c15732412d22c1476fa83f27a)
   --name: string # Filter by video name/UID(s). Can be a single name or a comma-separated list.
   --live-input-id: string # Filter by live input ID to find videos associated with a specific live stream.
@@ -51344,7 +51370,7 @@ export def "accounts-stream stream-videos-initiate-video-uploads-using-tus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --direct-user: string@bool-completer # default: false, e.g. true
+  --direct-user: oneof<nothing, bool> # default: false, e.g. true
   --Tus-Resumable: string@Tus-Resumable-completer # e.g. 1.0.0
   --Upload-Creator: string # e.g. creator-id_abcde12345
   --Upload-Length: int
@@ -51382,7 +51408,7 @@ export def "accounts-stream-clip stream-video-clipping-clip-videos-given-a-start
   --input: string # A video's URL. Preferred over 'url'. (format: uri, e.g. https://example.com/myvideo.mp4)
   --meta: record # A user modifiable key-value store used to reference other systems of record for managing videos. (e.g. {name: video12345.mp4})
   --name: string # A name for the video. (e.g. myvideo.mp4)
-  --requireSignedURLs: string@bool-completer # Indicates whether the video can be a accessed using the UID. When set to `true`, a signed token must be generated with a signing key to view the video. (default: false, e.g. true)
+  --requireSignedURLs: oneof<nothing, bool> # Indicates whether the video can be a accessed using the UID. When set to `true`, a signed token must be generated with a signing key to view the video. (default: false, e.g. true)
   --scheduledDeletion: string # Indicates the date and time at which the video will be deleted. Omit the field to indicate no change, or include with a `null` value to remove an existing scheduled deletion. If specified, must be at least 30 days from upload time. (format: date-time, e.g. 2014-01-02T02:20:00Z)
   startTimeSeconds: int # Specifies the start time for the video clip in seconds.
   --thumbnailTimestampPct: float # The timestamp for a thumbnail image calculated as a percentage value of the video's duration. To convert from a second-wise timestamp to a percentage, divide the desired timestamp by the total duration of the video.  If this value is not set, the default thumbnail image is taken from 0s of the video. (default: 0, e.g. 0.529241)
@@ -51420,7 +51446,7 @@ export def "accounts-stream-copy stream-videos-upload-videos-from-a-url" [
   --input: string # A video's URL. The server must be publicly routable and support `HTTP HEAD` requests and `HTTP GET` range requests. The server should respond to `HTTP HEAD` requests with a `content-range` header that includes the size of the file. This is the preferred field over `url`. (format: uri, e.g. https://example.com/myvideo.mp4)
   --meta: record # A user modifiable key-value store used to reference other systems of record for managing videos. (e.g. {name: video12345.mp4})
   --name: string # A video's name. Used for legacy compatibility. (e.g. myvideo.mp4)
-  --requireSignedURLs: string@bool-completer # Indicates whether the video can be a accessed using the UID. When set to `true`, a signed token must be generated with a signing key to view the video. (default: false, e.g. true)
+  --requireSignedURLs: oneof<nothing, bool> # Indicates whether the video can be a accessed using the UID. When set to `true`, a signed token must be generated with a signing key to view the video. (default: false, e.g. true)
   --scheduledDeletion: string # Indicates the date and time at which the video will be deleted. Omit the field to indicate no change, or include with a `null` value to remove an existing scheduled deletion. If specified, must be at least 30 days from upload time. (format: date-time, e.g. 2014-01-02T02:20:00Z)
   --thumbnailTimestampPct: float # The timestamp for a thumbnail image calculated as a percentage value of the video's duration. To convert from a second-wise timestamp to a percentage, divide the desired timestamp by the total duration of the video.  If this value is not set, the default thumbnail image is taken from 0s of the video. (default: 0, e.g. 0.529241)
   --body-url: string # A video's URL. The server must be publicly routable and support `HTTP HEAD` requests and `HTTP GET` range requests. The server should respond to `HTTP HEAD` requests with a `content-range` header that includes the size of the file. This field is deprecated in favor of `input`. (format: uri, e.g. https://example.com/myvideo.mp4)
@@ -51459,7 +51485,7 @@ export def "accounts-stream-direct-upload stream-videos-upload-videos-via-direct
   --expiry: string # The date and time after upload when videos will not be accepted. (format: date-time, default: Now + 30 minutes, e.g. 2021-01-02T02:20:00Z)
   maxDurationSeconds: int # The maximum duration in seconds for a video upload. Can be set for a video that is not yet uploaded to limit its duration. Uploads that exceed the specified duration will fail during processing. A value of `-1` means the value is unknown.
   --meta: record # A user modifiable key-value store used to reference other systems of record for managing videos. (e.g. {name: video12345.mp4})
-  --requireSignedURLs: string@bool-completer # Indicates whether the video can be a accessed using the UID. When set to `true`, a signed token must be generated with a signing key to view the video. (default: false, e.g. true)
+  --requireSignedURLs: oneof<nothing, bool> # Indicates whether the video can be a accessed using the UID. When set to `true`, a signed token must be generated with a signing key to view the video. (default: false, e.g. true)
   --scheduledDeletion: string # Indicates the date and time at which the video will be deleted. Omit the field to indicate no change, or include with a `null` value to remove an existing scheduled deletion. If specified, must be at least 30 days from upload time. (format: date-time, e.g. 2014-01-02T02:20:00Z)
   --thumbnailTimestampPct: float # The timestamp for a thumbnail image calculated as a percentage value of the video's duration. To convert from a second-wise timestamp to a percentage, divide the desired timestamp by the total duration of the video.  If this value is not set, the default thumbnail image is taken from 0s of the video. (default: 0, e.g. 0.529241)
   --watermark: record # shape: {uid?: string}
@@ -51563,7 +51589,7 @@ export def "accounts-stream-live-inputs stream-live-inputs-list-live-inputs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-counts: string@bool-completer # default: false, e.g. true
+  --include-counts: oneof<nothing, bool> # default: false, e.g. true
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record<liveInputs: list<record>, range: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -51590,7 +51616,7 @@ export def "accounts-stream-live-inputs stream-live-inputs-create-a-live-input" 
   --allow-errors(-e) # Return full response without error handling
   --defaultCreator: string # Sets the creator ID asssociated with this live input.
   --deleteRecordingAfterDays: float # Indicates the number of days after which the live inputs recordings will be deleted. When a stream completes and the recording is ready, the value is used to calculate a scheduled deletion date for that recording. Omit the field to indicate no change, or include with a `null` value to remove an existing scheduled deletion. (e.g. 45)
-  --enabled: string@bool-completer # Indicates whether the live input is enabled and can accept streams. (default: true, e.g. true)
+  --enabled: oneof<nothing, bool> # Indicates whether the live input is enabled and can accept streams. (default: true, e.g. true)
   --meta: record # A user modifiable key-value store used to reference other systems of record for managing live inputs. (e.g. {name: test stream 1})
   --recording: record # Records the input to a Cloudflare Stream video. Behavior depends on the mode. In most cases, the video will initially be viewable as a live video and transition to on-demand after a condition is satisfied. (e.g. {hideLiveViewerCount: false, mode: off, requireSignedURLs: false, timeoutSeconds: 0}) — shape: {allowedOrigins?: list, hideLiveViewerCount?: bool, mode?: "off"|"automatic", requireSignedURLs?: bool, timeoutSeconds?: int}
 ]: any -> record<result: record<created: string, deleteRecordingAfterDays: float, enabled: bool, meta: record, modified: string, recording: record<allowedOrigins: list, hideLiveViewerCount: bool, mode: string, requireSignedURLs: bool, timeoutSeconds: int>, rtmps: record<streamKey: string, url: string>, rtmpsPlayback: record<streamKey: string, url: string>, srt: record<passphrase: string, streamId: string, url: string>, srtPlayback: record<passphrase: string, streamId: string, url: string>, status: string, uid: string, webRTC: record<url: string>, webRTCPlayback: record<url: string>>> {
@@ -51671,7 +51697,7 @@ export def "accounts-stream-live-inputs stream-live-inputs-update-a-live-input" 
   --allow-errors(-e) # Return full response without error handling
   --defaultCreator: string # Sets the creator ID asssociated with this live input.
   --deleteRecordingAfterDays: float # Indicates the number of days after which the live inputs recordings will be deleted. When a stream completes and the recording is ready, the value is used to calculate a scheduled deletion date for that recording. Omit the field to indicate no change, or include with a `null` value to remove an existing scheduled deletion. (e.g. 45)
-  --enabled: string@bool-completer # Indicates whether the live input is enabled and can accept streams. (default: true, e.g. true)
+  --enabled: oneof<nothing, bool> # Indicates whether the live input is enabled and can accept streams. (default: true, e.g. true)
   --meta: record # A user modifiable key-value store used to reference other systems of record for managing live inputs. (e.g. {name: test stream 1})
   --recording: record # Records the input to a Cloudflare Stream video. Behavior depends on the mode. In most cases, the video will initially be viewable as a live video and transition to on-demand after a condition is satisfied. (e.g. {hideLiveViewerCount: false, mode: off, requireSignedURLs: false, timeoutSeconds: 0}) — shape: {allowedOrigins?: list, hideLiveViewerCount?: bool, mode?: "off"|"automatic", requireSignedURLs?: bool, timeoutSeconds?: int}
 ]: any -> record<result: record<created: string, deleteRecordingAfterDays: float, enabled: bool, meta: record, modified: string, recording: record<allowedOrigins: list, hideLiveViewerCount: bool, mode: string, requireSignedURLs: bool, timeoutSeconds: int>, rtmps: record<streamKey: string, url: string>, rtmpsPlayback: record<streamKey: string, url: string>, srt: record<passphrase: string, streamId: string, url: string>, srtPlayback: record<passphrase: string, streamId: string, url: string>, status: string, uid: string, webRTC: record<url: string>, webRTCPlayback: record<url: string>>> {
@@ -51769,7 +51795,7 @@ export def "accounts-stream-live-inputs-outputs stream-live-inputs-create-a-new-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # When enabled, live video streamed to the associated live input will be sent to the output URL. When disabled, live video will not be sent to the output URL, even when streaming to the associated live input. Use this to control precisely when you start and stop simulcasting to specific destinations like YouTube and Twitch. (default: true, e.g. true)
+  --enabled: oneof<nothing, bool> # When enabled, live video streamed to the associated live input will be sent to the output URL. When disabled, live video will not be sent to the output URL, even when streaming to the associated live input. Use this to control precisely when you start and stop simulcasting to specific destinations like YouTube and Twitch. (default: true, e.g. true)
   streamKey: string # The streamKey used to authenticate against an output's target. (e.g. uzya-f19y-g2g9-a2ee-51j2)
   --body-url: string # The URL an output uses to restream. (e.g. rtmp://a.rtmp.youtube.com/live2)
 ]: any -> record<result: record<enabled: bool, streamKey: string, uid: string, url: string>> {
@@ -51826,7 +51852,7 @@ export def "accounts-stream-live-inputs-outputs stream-live-inputs-update-an-out
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # When enabled, live video streamed to the associated live input will be sent to the output URL. When disabled, live video will not be sent to the output URL, even when streaming to the associated live input. Use this to control precisely when you start and stop simulcasting to specific destinations like YouTube and Twitch. (default: true, e.g. true)
+  --enabled: oneof<nothing, bool> # When enabled, live video streamed to the associated live input will be sent to the output URL. When disabled, live video will not be sent to the output URL, even when streaming to the associated live input. Use this to control precisely when you start and stop simulcasting to specific destinations like YouTube and Twitch. (default: true, e.g. true)
 ]: any -> record<result: record<enabled: bool, streamKey: string, uid: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -52099,7 +52125,7 @@ export def "accounts-stream stream-videos-update-video-details" [
   --maxDurationSeconds: int # The maximum duration in seconds for a video upload. Can be set for a video that is not yet uploaded to limit its duration. Uploads that exceed the specified duration will fail during processing. A value of `-1` means the value is unknown.
   --meta: record # A user modifiable key-value store used to reference other systems of record for managing videos. (e.g. {name: video12345.mp4})
   --publicDetails: record # Public details for the video including title, share link, channel link, and logo. — shape: {channel_link?: string, logo?: string, share_link?: string, title?: string}
-  --requireSignedURLs: string@bool-completer # Indicates whether the video can be a accessed using the UID. When set to `true`, a signed token must be generated with a signing key to view the video. (default: false, e.g. true)
+  --requireSignedURLs: oneof<nothing, bool> # Indicates whether the video can be a accessed using the UID. When set to `true`, a signed token must be generated with a signing key to view the video. (default: false, e.g. true)
   --scheduledDeletion: string # Indicates the date and time at which the video will be deleted. Omit the field to indicate no change, or include with a `null` value to remove an existing scheduled deletion. If specified, must be at least 30 days from upload time. (format: date-time, e.g. 2014-01-02T02:20:00Z)
   --thumbnailTimestampPct: float # The timestamp for a thumbnail image calculated as a percentage value of the video's duration. To convert from a second-wise timestamp to a percentage, divide the desired timestamp by the total duration of the video.  If this value is not set, the default thumbnail image is taken from 0s of the video. (default: 0, e.g. 0.529241)
   --uid: string # The unique identifier for the video. Can be used to verify the video being updated. (e.g. ea95132c15732412d22c1476fa83f27a)
@@ -52206,7 +52232,7 @@ export def "accounts-stream-audio edit-audio-tracks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --default: string@bool-completer # Denotes whether the audio track will be played by default in a player. (default: false)
+  --default: oneof<nothing, bool> # Denotes whether the audio track will be played by default in a player. (default: false)
   --label: string # A string to uniquely identify the track amongst other audio track labels for the specified video. (e.g. director commentary)
 ]: any -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record<default: bool, label: string, status: string, uid: string>> {
   let input = $in
@@ -52524,7 +52550,7 @@ export def "accounts-stream-token stream-videos-create-signed-url-tokens-for-vid
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accessRules: list # The optional list of access rule constraints on the token. Access can be blocked or allowed based on an IP, IP range, or by country. Access rules are evaluated from first to last. If a rule matches, the associated action is applied and no further rules are evaluated. (e.g. [{action: block, country: [US, MX], type: ip.geoip.country}, {action: allow, ip: [93.184.216.0/24, 2400:cb00::/32], type: ip.src}, {action: block, type: any}]) — item shape: {action?: "allow"|"block", country?: list, ip?: list, type?: "any"|"ip.src"|"ip.geoip.country"}
-  --downloadable: string@bool-completer # The optional boolean value that enables using signed tokens to access MP4 download links for a video. (default: false)
+  --downloadable: oneof<nothing, bool> # The optional boolean value that enables using signed tokens to access MP4 download links for a video. (default: false)
   --exp: int # The optional unix epoch timestamp that specficies the time after a token is not accepted. The maximum time specification is 24 hours from issuing time. If this field is not set, the default is one hour after issuing.
   --flags: record # Optional flags for the signed token. — shape: {original?: bool}
   --id: string # The optional ID of a Stream signing key. If present, the `pem` field is also required. (e.g. ab0d4ef71g4425f8dcba9041231813000)
@@ -52833,7 +52859,7 @@ export def "accounts-teamnet-routes tunnel-route-list-tunnel-routes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --comment: string # default: , e.g. Example comment for this route.
-  --is-deleted: string@bool-completer
+  --is-deleted: oneof<nothing, bool>
   --network-subset: string
   --network-superset: string
   --existed-at: string # format: url-encoded-date-time, e.g. 2019-10-12T07%3A20%3A50.52Z
@@ -52896,7 +52922,7 @@ export def "accounts-teamnet-routes-ip tunnel-route-get-tunnel-route-by-ip" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --virtual-network-id: string # format: uuid, e.g. f70ff985-a4ef-4643-bbbc-4a0ed4fc8415
-  --default-virtual-network-fallback: string@bool-completer # When the virtual_network_id parameter is not provided the request filter will default search routes that are in the default virtual network for the account. If this parameter is set to false, the search will include routes that do not have a virtual network. (default: true)
+  --default-virtual-network-fallback: oneof<nothing, bool> # When the virtual_network_id parameter is not provided the request filter will default search routes that are in the default virtual network for the account. If this parameter is set to false, the search will include routes that do not have a virtual network. (default: true)
 ]: nothing -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, result: record<comment: string, created_at: string, deleted_at: string, id: string, network: string, tun_type: string, tunnel_id: string, tunnel_name: string, virtual_network_id: string, virtual_network_name: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -53082,9 +53108,9 @@ export def "accounts-teamnet-virtual-networks tunnel-virtual-network-list-virtua
   --allow-errors(-e) # Return full response without error handling
   --id: string # format: uuid, e.g. f70ff985-a4ef-4643-bbbc-4a0ed4fc8415
   --name: string # e.g. us-east-1-vpc
-  --is-default: string@bool-completer # DEPRECATED
-  --is-default-network: string@bool-completer
-  --is-deleted: string@bool-completer
+  --is-default: oneof<nothing, bool> # DEPRECATED
+  --is-default-network: oneof<nothing, bool>
+  --is-deleted: oneof<nothing, bool>
 ]: nothing -> record<result: table<comment: string, created_at: string, deleted_at: string, id: string, is_default_network: bool, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -53110,8 +53136,8 @@ export def "accounts-teamnet-virtual-networks tunnel-virtual-network-create-a-vi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --comment: string # Optional remark describing the virtual network. (default: , e.g. Staging VPC for data science)
-  --is-default: string@bool-completer # If `true`, this virtual network is the default for the account. (DEPRECATED, e.g. true)
-  --is-default-network: string@bool-completer # If `true`, this virtual network is the default for the account. (default: false, e.g. false)
+  --is-default: oneof<nothing, bool> # If `true`, this virtual network is the default for the account. (DEPRECATED, e.g. true)
+  --is-default-network: oneof<nothing, bool> # If `true`, this virtual network is the default for the account. (default: false, e.g. false)
   name: string # A user-friendly name for the virtual network. (e.g. us-east-1-vpc)
 ]: any -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, result: record<comment: string, created_at: string, deleted_at: string, id: string, is_default_network: bool, name: string>, success: bool> {
   let input = $in
@@ -53166,7 +53192,7 @@ export def "accounts-teamnet-virtual-networks tunnel-virtual-network-get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --comment: string # Optional remark describing the virtual network. (default: , e.g. Staging VPC for data science)
-  --is-default-network: string@bool-completer # If `true`, this virtual network is the default for the account. (e.g. true)
+  --is-default-network: oneof<nothing, bool> # If `true`, this virtual network is the default for the account. (e.g. true)
   --name: string # A user-friendly name for the virtual network. (e.g. us-east-1-vpc)
 ]: any -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, result: record<comment: string, created_at: string, deleted_at: string, id: string, is_default_network: bool, name: string>, success: bool> {
   let input = $in
@@ -53195,7 +53221,7 @@ export def "accounts-teamnet-virtual-networks tunnel-virtual-network-update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --comment: string # Optional remark describing the virtual network. (default: , e.g. Staging VPC for data science)
-  --is-default-network: string@bool-completer # If `true`, this virtual network is the default for the account. (default: false, e.g. false)
+  --is-default-network: oneof<nothing, bool> # If `true`, this virtual network is the default for the account. (default: false, e.g. false)
   --name: string # A user-friendly name for the virtual network. (e.g. us-east-1-vpc)
 ]: any -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, result: record<comment: string, created_at: string, deleted_at: string, id: string, is_default_network: bool, name: string>, success: bool> {
   let input = $in
@@ -53437,7 +53463,7 @@ export def "accounts-tunnels cloudflare-tunnel-list-all-tunnels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # e.g. blog
-  --is-deleted: string@bool-completer # e.g. true
+  --is-deleted: oneof<nothing, bool> # e.g. true
   --existed-at: string # format: url-encoded-date-time, e.g. 2019-10-12T07%3A20%3A50.52Z
   --uuid: string # format: uuid, e.g. f70ff985-a4ef-4643-bbbc-4a0ed4fc8415
   --was-active-at: string # format: date-time, e.g. 2009-11-10T23:00:00Z
@@ -53513,8 +53539,8 @@ export def "accounts-urlscanner-scan urlscanner-search-scans" [
   --page-path: string # Filter scans by exact match of effective URL path (also supports suffix search).
   --page-asn: string # Filter scans by main page Autonomous System Number (ASN).
   --page-ip: string # Filter scans by  main page IP address (IPv4 or IPv6).
-  --account-scans: string@bool-completer # Return only scans created by account.
-  --is-malicious: string@bool-completer # Filter scans by malicious verdict.
+  --account-scans: oneof<nothing, bool> # Return only scans created by account.
+  --is-malicious: oneof<nothing, bool> # Filter scans by malicious verdict.
 ]: nothing -> record<errors: table<message: string>, messages: table<message: string>, result: record<tasks: list<record>>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -53573,7 +53599,7 @@ export def "accounts-urlscanner-scan urlscanner-get-scan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --full: string@bool-completer # Whether to return full report (scan summary and network log).
+  --full: oneof<nothing, bool> # Whether to return full report (scan summary and network log).
 ]: nothing -> record<errors: table<message: string>, messages: table<message: string>, result: record<scan: record<asns: record, certificates: list, domains: record, geo: record, ips: record, links: record, meta: record, page: record, performance: list, task: record, verdicts: record>>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -53767,7 +53793,7 @@ export def "accounts-urlscanner-scan urlscanner-create-scan-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --agentReadiness: string@bool-completer # Enable agent readiness checks.
+  --agentReadiness: oneof<nothing, bool> # Enable agent readiness checks.
   --country: string@country-completer # Country to geo egress from
   --customHeaders: record # Set custom headers.
   --customagent: string
@@ -54073,8 +54099,8 @@ export def "accounts-vectorize-indexes-query vectorize--deprecated-query-vector"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: record # A metadata filter expression used to limit nearest neighbor results. (e.g. {has_viewed: {$ne: true}, streaming_platform: netflix})
-  --returnMetadata: string@bool-completer # Whether to return the metadata associated with the closest vectors. (default: false)
-  --returnValues: string@bool-completer # Whether to return the values associated with the closest vectors. (default: false)
+  --returnMetadata: oneof<nothing, bool> # Whether to return the metadata associated with the closest vectors. (default: false)
+  --returnValues: oneof<nothing, bool> # Whether to return the values associated with the closest vectors. (default: false)
   --topK: float # The number of nearest neighbors to find. (default: 5, e.g. 5)
   vector: list # The search vector that will be used to find the nearest neighbors. (e.g. [0.5, 0.5, 0.5])
 ]: any -> record<result: record<count: int, matches: list<record>>> {
@@ -54438,7 +54464,7 @@ export def "accounts-vectorize-indexes-query vectorize-query-vector" [
   --allow-errors(-e) # Return full response without error handling
   --filter: record # A metadata filter expression used to limit nearest neighbor results. (e.g. {has_viewed: {$ne: true}, streaming_platform: netflix})
   --returnMetadata: string@returnMetadata-completer # Whether to return no metadata, indexed metadata or all metadata associated with the closest vectors. (default: none)
-  --returnValues: string@bool-completer # Whether to return the values associated with the closest vectors. (default: false)
+  --returnValues: oneof<nothing, bool> # Whether to return the values associated with the closest vectors. (default: false)
   --topK: float # The number of nearest neighbors to find. (default: 5, e.g. 5)
   vector: list # The search vector that will be used to find the nearest neighbors. (e.g. [0.5, 0.5, 0.5])
 ]: any -> record<result: record<count: int, matches: list<record>>> {
@@ -55096,7 +55122,7 @@ export def "accounts-warp-connector cloudflare-tunnel-list-warp-connector-tunnel
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # e.g. blog
-  --is-deleted: string@bool-completer # e.g. true
+  --is-deleted: oneof<nothing, bool> # e.g. true
   --existed-at: string # format: url-encoded-date-time, e.g. 2019-10-12T07%3A20%3A50.52Z
   --uuid: string # format: uuid, e.g. f70ff985-a4ef-4643-bbbc-4a0ed4fc8415
   --was-active-at: string # format: date-time, e.g. 2009-11-10T23:00:00Z
@@ -55129,7 +55155,7 @@ export def "accounts-warp-connector cloudflare-tunnel-create-a-warp-connector-tu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ha: string@bool-completer # Indicates that the tunnel will be created to be highly available. If omitted, defaults to false. (default: false)
+  --ha: oneof<nothing, bool> # Indicates that the tunnel will be created to be highly available. If omitted, defaults to false. (default: false)
   name: string # A user-friendly name for a tunnel. (e.g. blog)
 ]: any -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, result: record<account_tag: string, connections: list<record>, conns_active_at: string, conns_inactive_at: string, created_at: string, deleted_at: string, id: string, metadata: record, name: string, status: string, tun_type: string>, success: bool> {
   let input = $in
@@ -55405,7 +55431,7 @@ export def "accounts-workers-account-settings worker-account-settings-create-wor
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --default-usage-model: string
-  --green-compute: string@bool-completer
+  --green-compute: oneof<nothing, bool>
 ]: any -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record<default_usage_model: string, green_compute: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -55431,7 +55457,7 @@ export def "accounts-workers-assets-upload worker-assets-upload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --base64: string@bool-completer
+  --base64: oneof<nothing, bool>
   --body: record
 ]: any -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record<jwt: string>> {
   let input = $in
@@ -55554,7 +55580,7 @@ export def "accounts-workers-dispatch-namespaces namespace-worker-patch-namespac
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name of the dispatch namespace. (e.g. my-dispatch-namespace)
-  --trusted-workers: string@bool-completer # Whether the Workers in the namespace are executed in a "trusted" manner. When a Worker is trusted, it has access to the shared caches for the zone in the Cache API, and has access to the `request.cf` object on incoming Requests. When a Worker is untrusted, caches are not shared across the zone, and `request.cf` is undefined. By default, Workers in a namespace are "untrusted". (default: false, e.g. false)
+  --trusted-workers: oneof<nothing, bool> # Whether the Workers in the namespace are executed in a "trusted" manner. When a Worker is trusted, it has access to the shared caches for the zone in the Cache API, and has access to the `request.cf` object on incoming Requests. When a Worker is untrusted, caches are not shared across the zone, and `request.cf` is undefined. By default, Workers in a namespace are "untrusted". (default: false, e.g. false)
 ]: any -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record<created_by: string, created_on: string, modified_by: string, modified_on: string, namespace_id: string, namespace_name: string, script_count: int, trusted_workers: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -55582,7 +55608,7 @@ export def "accounts-workers-dispatch-namespaces namespace-worker-put-namespace"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name of the dispatch namespace. (e.g. my-dispatch-namespace)
-  --trusted-workers: string@bool-completer # Whether the Workers in the namespace are executed in a "trusted" manner. When a Worker is trusted, it has access to the shared caches for the zone in the Cache API, and has access to the `request.cf` object on incoming Requests. When a Worker is untrusted, caches are not shared across the zone, and `request.cf` is undefined. By default, Workers in a namespace are "untrusted". (default: false, e.g. false)
+  --trusted-workers: oneof<nothing, bool> # Whether the Workers in the namespace are executed in a "trusted" manner. When a Worker is trusted, it has access to the shared caches for the zone in the Cache API, and has access to the `request.cf` object on incoming Requests. When a Worker is untrusted, caches are not shared across the zone, and `request.cf` is undefined. By default, Workers in a namespace are "untrusted". (default: false, e.g. false)
 ]: any -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record<created_by: string, created_on: string, modified_by: string, modified_on: string, namespace_id: string, namespace_name: string, script_count: int, trusted_workers: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -55661,7 +55687,7 @@ export def "accounts-workers-dispatch-namespaces-scripts namespace-worker-script
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # If set to true, delete will not be stopped by associated service binding, durable object, or other binding. Any of these associated bindings/durable objects will be deleted along with the script.
+  --force: oneof<nothing, bool> # If set to true, delete will not be stopped by associated service binding, durable object, or other binding. Any of these associated bindings/durable objects will be deleted along with the script.
   --body: record
 ]: any -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record> {
   let input = $in
@@ -55944,7 +55970,7 @@ export def "accounts-workers-dispatch-namespaces-scripts-secrets namespace-worke
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --url-encoded: string@bool-completer # e.g. true
+  --url-encoded: oneof<nothing, bool> # e.g. true
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -55971,7 +55997,7 @@ export def "accounts-workers-dispatch-namespaces-scripts-secrets namespace-worke
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --url-encoded: string@bool-completer # e.g. true
+  --url-encoded: oneof<nothing, bool> # e.g. true
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -56334,9 +56360,9 @@ export def "accounts-workers-observability-destinations destinationcreate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   configuration: record # shape: {headers: record, logpushDataset: any, type: "logpush", url: string}
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   name: string
-  --skipPreflightCheck: string@bool-completer
+  --skipPreflightCheck: oneof<nothing, bool>
 ]: any -> record<errors: table<message: string>, messages: table<message: string>, result: record<configuration: record<destination_conf: string, logpushDataset: any, logpushJob: float, type: string, url: string>, enabled: bool, name: string, scripts: list<string>, slug: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -56388,7 +56414,7 @@ export def "accounts-workers-observability-destinations destinationupdate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   configuration: record # shape: {headers: record, type: "logpush", url: string}
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<errors: table<message: string>, messages: table<message: string>, result: record<configuration: record<destination_conf: string, logpushDataset: any, logpushJob: float, type: string, url: string>, enabled: bool, name: string, scripts: list<string>, slug: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -56548,11 +56574,11 @@ export def "accounts-workers-observability-shared-query sharedquerypost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --chart: string@bool-completer # When true, includes time-series data in the response.
-  --compare: string@bool-completer # When true, includes a comparison dataset from the previous time period of equal length.
-  --dry: string@bool-completer # When true, executes the query without persisting the results. Useful for validation or previewing. (default: false)
+  --chart: oneof<nothing, bool> # When true, includes time-series data in the response.
+  --compare: oneof<nothing, bool> # When true, includes a comparison dataset from the previous time period of equal length.
+  --dry: oneof<nothing, bool> # When true, executes the query without persisting the results. Useful for validation or previewing. (default: false)
   --granularity: float # Number of time-series buckets. Only used when view is 'calculations'. Omit to let the system auto-detect an appropriate granularity.
-  --ignoreSeries: string@bool-completer # When true, omits time-series data from the response and returns only aggregated values. Reduces response size when series are not needed. (default: false)
+  --ignoreSeries: oneof<nothing, bool> # When true, omits time-series data from the response and returns only aggregated values. Reduces response size when series are not needed. (default: false)
   --limit: float # Maximum number of events to return when view is 'events'. Also controls the number of group-by rows when view is 'calculations'. (default: 50)
   --offset: string # Cursor for pagination in event, trace, and invocation views. Pass the $metadata.id of the last returned item to fetch the next page.
   --offsetBy: float # Numeric offset for paginating grouped/pattern results (top-N lists). Use together with limit. Not used by cursor-based pagination.
@@ -56701,11 +56727,11 @@ export def "accounts-workers-observability-telemetry-query telemetryquery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --chart: string@bool-completer # When true, includes time-series data in the response.
-  --compare: string@bool-completer # When true, includes a comparison dataset from the previous time period of equal length.
-  --dry: string@bool-completer # When true, executes the query without persisting the results. Useful for validation or previewing. (default: false)
+  --chart: oneof<nothing, bool> # When true, includes time-series data in the response.
+  --compare: oneof<nothing, bool> # When true, includes a comparison dataset from the previous time period of equal length.
+  --dry: oneof<nothing, bool> # When true, executes the query without persisting the results. Useful for validation or previewing. (default: false)
   --granularity: float # Number of time-series buckets. Only used when view is 'calculations'. Omit to let the system auto-detect an appropriate granularity.
-  --ignoreSeries: string@bool-completer # When true, omits time-series data from the response and returns only aggregated values. Reduces response size when series are not needed. (default: false)
+  --ignoreSeries: oneof<nothing, bool> # When true, omits time-series data from the response and returns only aggregated values. Reduces response size when series are not needed. (default: false)
   --limit: float # Maximum number of events to return when view is 'events'. Also controls the number of group-by rows when view is 'calculations'. (default: 50)
   --offset: string # Cursor for pagination in event, trace, and invocation views. Pass the $metadata.id of the last returned item to fetch the next page.
   --offsetBy: float # Numeric offset for paginating grouped/pattern results (top-N lists). Use together with limit. Not used by cursor-based pagination.
@@ -56873,7 +56899,7 @@ export def "accounts-workers-scripts worker-script-delete-worker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # If set to true, delete will not be stopped by associated service binding, durable object, or other binding. Any of these associated bindings/durable objects will be deleted along with the script.
+  --force: oneof<nothing, bool> # If set to true, delete will not be stopped by associated service binding, durable object, or other binding. Any of these associated bindings/durable objects will be deleted along with the script.
   --body: record
 ]: any -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record> {
   let input = $in
@@ -57064,7 +57090,7 @@ export def "accounts-workers-scripts-deployments worker-deployments-create-deplo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # If set to true, the deployment will be created even if normally blocked by something such rolling back to an older version when a secret has changed.
+  --force: oneof<nothing, bool> # If set to true, the deployment will be created even if normally blocked by something such rolling back to an older version when a secret has changed.
   --annotations: record # shape: {workers/message?: string}
   strategy: string@strategy-completer-2
   versions: list # item shape: {percentage: float, version_id: string}
@@ -57216,7 +57242,7 @@ export def "accounts-workers-scripts-script-settings worker-script-settings-patc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --logpush: string@bool-completer # Whether Logpush is turned on for the Worker. (default: false, e.g. false)
+  --logpush: oneof<nothing, bool> # Whether Logpush is turned on for the Worker. (default: false, e.g. false)
   --observability: any
   --tags: any
   --tail-consumers: list # List of Workers that will consume logs from the attached Worker. (nullable) — item shape: {environment?: string, namespace?: string, service: string}
@@ -57331,7 +57357,7 @@ export def "accounts-workers-scripts-secrets worker-delete-script-secret" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --url-encoded: string@bool-completer # e.g. true
+  --url-encoded: oneof<nothing, bool> # e.g. true
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -57357,7 +57383,7 @@ export def "accounts-workers-scripts-secrets worker-get-script-secret" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --url-encoded: string@bool-completer # e.g. true
+  --url-encoded: oneof<nothing, bool> # e.g. true
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -57479,8 +57505,8 @@ export def "accounts-workers-scripts-subdomain worker-script-post-subdomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether the Worker should be available on the workers.dev subdomain. (e.g. true)
-  --previews-enabled: string@bool-completer # Whether the Worker's Preview URLs should be available on the workers.dev subdomain. (e.g. false)
+  --enabled: oneof<nothing, bool> # Whether the Worker should be available on the workers.dev subdomain. (e.g. true)
+  --previews-enabled: oneof<nothing, bool> # Whether the Worker's Preview URLs should be available on the workers.dev subdomain. (e.g. false)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -57634,7 +57660,7 @@ export def "accounts-workers-scripts-versions worker-versions-list-versions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deployable: string@bool-completer # Only return versions that can be used in a deployment. Ignores pagination. (default: false)
+  --deployable: oneof<nothing, bool> # Only return versions that can be used in a deployment. Ignores pagination. (default: false)
   --page: int # Current page. (default: 1)
   --per-page: int # Items per-page.
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record<items: list<record>>> {
@@ -57804,7 +57830,7 @@ export def "accounts-workers-services-environments-settings worker-script-enviro
   --allow-errors(-e) # Return full response without error handling
   errors: list # e.g. [] — item shape: {code: int, documentation_url?: string, message: string, source?: record}
   messages: list # e.g. [] — item shape: {code: int, documentation_url?: string, message: string, source?: record}
-  --success: string@bool-completer # Whether the API call was successful. (e.g. true)
+  --success: oneof<nothing, bool> # Whether the API call was successful. (e.g. true)
   --body-result: record # shape: {logpush?: bool, observability?: any, tags?: any, tail_consumers?: list}
 ]: any -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record<logpush: bool, observability: record<enabled: bool, head_sampling_rate: float, logs: record, traces: record>, tags: record, tail_consumers: list<record>>> {
   let input = $in
@@ -57932,7 +57958,7 @@ export def "accounts-workers-workers createWorker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --logpush: string@bool-completer # Whether logpush is enabled for the Worker. (default: false)
+  --logpush: oneof<nothing, bool> # Whether logpush is enabled for the Worker. (default: false)
   name: string # Name of the Worker. (e.g. my-worker)
   observability: record # Observability settings for the Worker. — shape: {enabled?: bool, head_sampling_rate?: float, logs?: record, traces?: record}
   subdomain: record # Subdomain settings for the Worker. — shape: {enabled?: bool, previews_enabled?: bool}
@@ -58014,7 +58040,7 @@ export def "accounts-workers-workers editWorker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --logpush: string@bool-completer # Whether logpush is enabled for the Worker. (default: false)
+  --logpush: oneof<nothing, bool> # Whether logpush is enabled for the Worker. (default: false)
   name: string # Name of the Worker. (e.g. my-worker)
   observability: record # Observability settings for the Worker. — shape: {enabled?: bool, head_sampling_rate?: float, logs?: record, traces?: record}
   subdomain: record # Subdomain settings for the Worker. — shape: {enabled?: bool, previews_enabled?: bool}
@@ -58050,7 +58076,7 @@ export def "accounts-workers-workers updateWorker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --logpush: string@bool-completer # Whether logpush is enabled for the Worker. (default: false)
+  --logpush: oneof<nothing, bool> # Whether logpush is enabled for the Worker. (default: false)
   name: string # Name of the Worker. (e.g. my-worker)
   observability: record # Observability settings for the Worker. — shape: {enabled?: bool, head_sampling_rate?: float, logs?: record, traces?: record}
   subdomain: record # Subdomain settings for the Worker. — shape: {enabled?: bool, previews_enabled?: bool}
@@ -58115,7 +58141,7 @@ export def "accounts-workers-workers-versions createWorkerVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deploy: string@bool-completer
+  --deploy: oneof<nothing, bool>
   --annotations: record # Metadata about the version. — shape: {workers/message?: string, workers/tag?: string}
   --assets: record # Configuration for assets within a Worker.  [`_headers`](https://developers.cloudflare.com/workers/static-assets/headers/#custom-headers) and [`_redirects`](https://developers.cloudflare.com/workers/static-assets/redirects/) files should be included as modules named `_headers` and `_redirects` with content type `text/plain`. — shape: {config?: record, jwt?: string}
   --bindings: list # List of bindings attached to a Worker. You can find more about bindings on our docs: https://developers.cloudflare.com/workers/configuration/multipart-upload-metadata/#bindings. (e.g. [{name: MY_ENV_VAR, text: my_data, type: plain_text}])
@@ -58503,7 +58529,7 @@ export def "accounts-workflows-instances-status wor-change-status-workflow-insta
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --status: string@status-completer-21
-  --rollback: string@bool-completer # Run rollback before terminating.
+  --rollback: oneof<nothing, bool> # Run rollback before terminating.
   --body-from: record # Step to restart from. — shape: {count?: int, name: string, type?: "do"|"sleep"|"waitForEvent"}
 ]: any -> record<errors: table<code: float, message: string>, messages: table<code: float, message: string>, result: record<status: string, timestamp: string>, result_info: record<count: float, cursor: string, page: float, per_page: float, total_count: float, total_pages: float>, success: bool> {
   let input = $in
@@ -58679,8 +58705,8 @@ export def "accounts-zerotrust-connectivity-settings zero-trust-accounts-patch-c
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --icmp-proxy-enabled: string@bool-completer # A flag to enable the ICMP proxy for the account network. (e.g. true)
-  --offramp-warp-enabled: string@bool-completer # A flag to enable WARP to WARP traffic. (e.g. true)
+  --icmp-proxy-enabled: oneof<nothing, bool> # A flag to enable the ICMP proxy for the account network. (e.g. true)
+  --offramp-warp-enabled: oneof<nothing, bool> # A flag to enable WARP to WARP traffic. (e.g. true)
 ]: any -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, result: record<icmp_proxy_enabled: bool, offramp_warp_enabled: bool>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -58711,7 +58737,7 @@ export def "accounts-zerotrust-routes-hostname zero-trust-networks-route-hostnam
   --tunnel-id: string # If set, only list hostname routes that point to a specific tunnel. (format: uuid, e.g. f70ff985-a4ef-4643-bbbc-4a0ed4fc8415)
   --comment: string # e.g. example%20comment
   --existed-at: string # format: url-encoded-date-time, e.g. 2019-10-12T07%3A20%3A50.52Z
-  --is-deleted: string@bool-completer # default: false, e.g. true
+  --is-deleted: oneof<nothing, bool> # default: false, e.g. true
   --per-page: float
   --page: float # default: 1
 ]: nothing -> record<result: table<comment: string, created_at: string, deleted_at: string, hostname: string, id: string, tun_type: record, tunnel_id: string, tunnel_name: string>> {
@@ -58845,8 +58871,8 @@ export def "accounts-zerotrust-subnets zero-trust-networks-subnets-list" [
   --network: string
   --existed-at: string # format: url-encoded-date-time, e.g. 2019-10-12T07%3A20%3A50.52Z
   --address-family: string@address-family-completer # If set, only include subnets in the given address family - `v4` or `v6` (e.g. v4)
-  --is-default-network: string@bool-completer
-  --is-deleted: string@bool-completer
+  --is-default-network: oneof<nothing, bool>
+  --is-deleted: oneof<nothing, bool>
   --sort-order: string@sort-order-completer
   --subnet-types: string@subnet-types-completer # e.g. cloudflare_source,warp
   --per-page: float
@@ -58904,7 +58930,7 @@ export def "accounts-zerotrust-subnets-warp zero-trust-networks-subnet-create-wa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --comment: string # An optional description of the subnet. (default: , e.g. example comment)
-  --is-default-network: string@bool-completer # If `true`, this is the default subnet for the account. There can only be one default subnet per account. (default: false)
+  --is-default-network: oneof<nothing, bool> # If `true`, this is the default subnet for the account. There can only be one default subnet per account. (default: false)
   name: string # A user-friendly name for the subnet. (e.g. IPv4 Cloudflare Source IPs)
   network: string # The private IPv4 or IPv6 range defining the subnet, in CIDR notation. (e.g. 100.64.0.0/12)
 ]: any -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, result: record<comment: string, created_at: string, deleted_at: string, id: string, is_default_network: bool, name: string, network: string, subnet_type: string>, success: bool> {
@@ -58980,7 +59006,7 @@ export def "accounts-zerotrust-subnets-warp zero-trust-networks-subnet-update-wa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --comment: string # An optional description of the subnet. (default: , e.g. example comment)
-  --is-default-network: string@bool-completer # If `true`, this is the default subnet for the account. There can only be one default subnet per account. (default: false)
+  --is-default-network: oneof<nothing, bool> # If `true`, this is the default subnet for the account. There can only be one default subnet per account. (default: false)
   --name: string # A user-friendly name for the subnet. (e.g. IPv4 Cloudflare Source IPs)
   --network: string # The private IPv4 or IPv6 range defining the subnet, in CIDR notation. (e.g. 100.64.0.0/12)
 ]: any -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, result: record<comment: string, created_at: string, deleted_at: string, id: string, is_default_network: bool, name: string, network: string, subnet_type: string>, success: bool> {
@@ -59176,7 +59202,7 @@ export def "accounts-zt-risk-scoring-integrations dlp-zt-risk-score-integration-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Whether this integration is enabled. If disabled, no risk changes will be exported to the third-party.
+  --active: oneof<nothing, bool> # Whether this integration is enabled. If disabled, no risk changes will be exported to the third-party.
   --reference-id: string # A reference id that can be supplied by the client. Currently this should be set to the Access-Okta IDP ID (a UUIDv4). https://developers.cloudflare.com/api/operations/access-identity-providers-get-an-access-identity-provider (nullable)
   tenant_url: string # The base url of the tenant, e.g. "https://tenant.okta.com". (format: uri)
 ]: any -> record<result: record<account_tag: string, active: bool, created_at: string, id: string, integration_type: string, reference_id: string, tenant_url: string, well_known_url: string>> {
@@ -62875,7 +62901,7 @@ export def "radar-bgp-ips-timeseries radar-get-bgp-ips-timeseries" [
   --asn: list # Filters results by Autonomous System. Specify one or more Autonomous System Numbers (ASNs) as a comma-separated list. Prefix with `-` to exclude ASNs from results. For example, `-174, 3356` excludes results from AS174, but includes results from AS3356. (e.g. 15169)
   --location: list # Filters results by location. Specify a comma-separated list of alpha-2 location codes. (e.g. US)
   --ipVersion: list # Filters results by IP version (Ipv4 vs. IPv6). (e.g. IPv4)
-  --includeDelay: string@bool-completer # Includes data delay meta information.
+  --includeDelay: oneof<nothing, bool> # Includes data delay meta information.
   --format: string@format-completer-5 # Format in which results will be returned. (e.g. json)
 ]: nothing -> record<result: record<meta: record<aggInterval: string, confidenceInfo: record, dateRange: list, delay: record, lastUpdated: string, normalization: string, units: list>, serie_0: record<ipv4: list, ipv6: list, timestamps: list>>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -62989,7 +63015,7 @@ export def "radar-bgp-routes-moas radar-get-bgp-pfx2as-moas" [
   --allow-errors(-e) # Return full response without error handling
   --origin: int # Lookup MOASes originated by the given ASN.
   --prefix: string # e.g. 1.1.1.0/24
-  --invalid-only: string@bool-completer # Lookup only RPKI invalid MOASes.
+  --invalid-only: oneof<nothing, bool> # Lookup only RPKI invalid MOASes.
   --format: string@format-completer-5 # Format in which results will be returned. (e.g. json)
 ]: nothing -> record<result: record<meta: record<data_time: string, query_time: string, total_peers: int>, moas: list<record>>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -63016,7 +63042,7 @@ export def "radar-bgp-routes-pfx2as radar-get-bgp-pfx2as" [
   --prefix: string # e.g. 1.1.1.0/24
   --origin: int # Lookup prefixes originated by the given ASN.
   --rpkiStatus: string@rpkiStatus-completer # Return only results with matching rpki status: valid, invalid or unknown. (e.g. INVALID)
-  --longestPrefixMatch: string@bool-completer # Return only results with the longest prefix match for the given prefix. For example, specify a /32 prefix to lookup the origin ASN for an IPv4 address. (e.g. true)
+  --longestPrefixMatch: oneof<nothing, bool> # Return only results with the longest prefix match for the given prefix. For example, specify a /32 prefix to lookup the origin ASN for an IPv4 address. (e.g. true)
   --format: string@format-completer-5 # Format in which results will be returned. (e.g. json)
 ]: nothing -> record<result: record<meta: record<data_time: string, query_time: string, total_peers: int>, prefix_origins: list<record>>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -63092,7 +63118,7 @@ export def "radar-bgp-rpki-aspa-changes radar-get-bgp-rpki-aspa-changes" [
   --dateStart: string # Start of the date range (inclusive). (format: date-time, e.g. 2023-09-01T11:41:33.782Z)
   --dateEnd: string # End of the date range (inclusive). (format: date-time, e.g. 2023-09-01T11:41:33.782Z)
   --asn: int # Filter changes involving this ASN (as customer or provider). (e.g. 13335)
-  --includeAsnInfo: string@bool-completer # Include ASN metadata (name, country) in response.
+  --includeAsnInfo: oneof<nothing, bool> # Include ASN metadata (name, country) in response.
   --format: string@format-completer-5 # Format in which results will be returned. (e.g. json)
 ]: nothing -> record<result: record<asnInfo: record<13335: record>, changes: list<record>, meta: record<dataTime: string, queryTime: string>>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -63119,7 +63145,7 @@ export def "radar-bgp-rpki-aspa-snapshot radar-get-bgp-rpki-aspa-snapshot" [
   --customerAsn: int # Filter by customer ASN (the ASN publishing the ASPA object). (e.g. 13335)
   --providerAsn: int # Filter by provider ASN (an authorized upstream provider in ASPA objects). (e.g. 174)
   --date: string # Filters results by the specified datetime (ISO 8601). (format: date-time, e.g. 2024-09-19T00:00:00Z)
-  --includeAsnInfo: string@bool-completer # Include ASN metadata (name, country) in response.
+  --includeAsnInfo: oneof<nothing, bool> # Include ASN metadata (name, country) in response.
   --format: string@format-completer-5 # Format in which results will be returned. (e.g. json)
 ]: nothing -> record<result: record<asnInfo: record<13335: record>, aspaObjects: list<record>, meta: record<dataTime: string, queryTime: string, totalCount: int>>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -68742,7 +68768,7 @@ export def "radar-quality-iqi-timeseries-groups radar-get-quality-index-timeseri
   --asn: list # Filters results by Autonomous System. Specify one or more Autonomous System Numbers (ASNs) as a comma-separated list. Prefix with `-` to exclude ASNs from results. For example, `-174, 3356` excludes results from AS174, but includes results from AS3356. (e.g. 15169)
   --location: list # Filters results by location. Specify a comma-separated list of alpha-2 codes. Prefix with `-` to exclude locations from results. For example, `-US,PT` excludes results from the US, but includes results from PT. (e.g. US,CA)
   --continent: list # Filters results by continent. Specify a comma-separated list of alpha-2 codes. Prefix with `-` to exclude continents from results. For example, `-EU,NA` excludes results from EU, but includes results from NA. (e.g. EU,NA)
-  --interpolation: string@bool-completer # Enables interpolation for all series (using the average).
+  --interpolation: oneof<nothing, bool> # Enables interpolation for all series (using the average).
   --metric: string@metric-completer-5 # Defines which metric to return (bandwidth, latency, or DNS response time). (e.g. latency)
   --format: string@format-completer-5 # Format in which results will be returned. (e.g. json)
 ]: nothing -> record<result: record<meta: record<aggInterval: string, confidenceInfo: record, dateRange: list, lastUpdated: string, normalization: string, units: list>, serie_0: record<timestamps: list>>, success: bool> {
@@ -68832,7 +68858,7 @@ export def "radar-quality-speed-top-ases radar-get-quality-speed-top-ases" [
   --location: list # Filters results by location. Specify a comma-separated list of alpha-2 codes. Prefix with `-` to exclude locations from results. For example, `-US,PT` excludes results from the US, but includes results from PT. (e.g. US,CA)
   --continent: list # Filters results by continent. Specify a comma-separated list of alpha-2 codes. Prefix with `-` to exclude continents from results. For example, `-EU,NA` excludes results from EU, but includes results from NA. (e.g. EU,NA)
   --orderBy: string@orderBy-completer-4 # Specifies the metric to order the results by. (default: BANDWIDTH_DOWNLOAD)
-  --reverse: string@bool-completer # Reverses the order of results.
+  --reverse: oneof<nothing, bool> # Reverses the order of results.
   --format: string@format-completer-5 # Format in which results will be returned. (e.g. json)
 ]: nothing -> record<result: record<meta: record<confidenceInfo: record, dateRange: list, lastUpdated: string, normalization: string, units: list>, top_0: list<record>>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -68863,7 +68889,7 @@ export def "radar-quality-speed-top-locations radar-get-quality-speed-top-locati
   --location: list # Filters results by location. Specify a comma-separated list of alpha-2 codes. Prefix with `-` to exclude locations from results. For example, `-US,PT` excludes results from the US, but includes results from PT. (e.g. US,CA)
   --continent: list # Filters results by continent. Specify a comma-separated list of alpha-2 codes. Prefix with `-` to exclude continents from results. For example, `-EU,NA` excludes results from EU, but includes results from NA. (e.g. EU,NA)
   --orderBy: string@orderBy-completer-4 # Specifies the metric to order the results by. (default: BANDWIDTH_DOWNLOAD)
-  --reverse: string@bool-completer # Reverses the order of results.
+  --reverse: oneof<nothing, bool> # Reverses the order of results.
   --format: string@format-completer-5 # Format in which results will be returned. (e.g. json)
 ]: nothing -> record<result: record<meta: record<confidenceInfo: record, dateRange: list, lastUpdated: string, normalization: string, units: list>, top_0: list<record>>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -68891,7 +68917,7 @@ export def "radar-ranking-domain radar-get-ranking-domain-details" [
   --limit: int # Limits the number of objects returned in the response. (default: 5, e.g. 5)
   --rankingType: string@rankingType-completer # The ranking type. (default: POPULAR, e.g. POPULAR)
   --name: list # Array of names used to label the series in the response.
-  --includeTopLocations: string@bool-completer # Includes top locations in the response.
+  --includeTopLocations: oneof<nothing, bool> # Includes top locations in the response.
   --date: list # Filters results by the specified array of dates. (e.g. 2022-09-19)
   --format: string@format-completer-5 # Format in which results will be returned. (e.g. json)
 ]: nothing -> record<result: record<details_0: record<bucket: string, categories: list, rank: int, top_locations: list>, meta: record<dateRange: list>>, success: bool> {
@@ -69546,7 +69572,7 @@ export def "system-accounts-stores secrets-store-system-delete-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # When true, cascade-deletes all secrets in the store before deleting the store itself. Required when deleting a non-empty store. Without this parameter, attempting to delete a non-empty store returns 409.  (default: false)
+  --force: oneof<nothing, bool> # When true, cascade-deletes all secrets in the store before deleting the store itself. Required when deleting a non-empty store. Without this parameter, attempting to delete a non-empty store returns 409.  (default: false)
 ]: nothing -> record<result: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -70016,7 +70042,7 @@ export def "user-audit-logs audit-logs-get-user-audit-logs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string # e.g. f174be97-19b1-40d6-954d-70cd5fbd52db
-  --qp-export: string@bool-completer # e.g. true
+  --qp-export: oneof<nothing, bool> # e.g. true
   --actiontype: string # e.g. add
   --actorip: string # e.g. 17.168.228.63
   --actoremail: string # format: email, e.g. alice@example.com
@@ -70026,7 +70052,7 @@ export def "user-audit-logs audit-logs-get-user-audit-logs" [
   --direction: string@direction-completer # default: desc, e.g. desc
   --per-page: float # default: 100, e.g. 25
   --page: float # default: 1, e.g. 50
-  --hide-user-logs: string@bool-completer # default: false
+  --hide-user-logs: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -70325,13 +70351,13 @@ export def "user-load-balancers-monitors load-balancer-monitors-create-monitor" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-insecure: string@bool-completer # Do not validate the certificate when monitor use HTTPS. This parameter is currently only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
+  --allow-insecure: oneof<nothing, bool> # Do not validate the certificate when monitor use HTTPS. This parameter is currently only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
   --consecutive-down: int # To be marked unhealthy the monitored origin must fail this healthcheck N consecutive times.
   --consecutive-up: int # To be marked healthy the monitored origin must pass this healthcheck N consecutive times.
   --description: string # Object description. (default: , e.g. Login page monitor)
   --expected-body: string # A case-insensitive sub-string to look for in the response body. If this string is not found, the origin will be marked as unhealthy. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. alive)
   --expected-codes: string # The expected HTTP response code or code range of the health check. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. 2xx)
-  --follow-redirects: string@bool-completer # Follow redirects if returned by the origin. This parameter is only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
+  --follow-redirects: oneof<nothing, bool> # Follow redirects if returned by the origin. This parameter is only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
   --header: record # The HTTP request headers to send in the health check. It is recommended you set a Host header by default. The User-Agent header cannot be overridden. This parameter is only valid for HTTP and HTTPS monitors. (e.g. {Host: [example.com], X-App-ID: [abc123]})
   --interval: int # The interval between each health check. Shorter intervals may improve failover time, but will increase load on the origins as we check from multiple locations. (default: 60)
   --method: string # The method to use for the health check. This defaults to 'GET' for HTTP/HTTPS based checks and 'connection_established' for TCP based health checks. (e.g. GET)
@@ -70413,13 +70439,13 @@ export def "user-load-balancers-monitors load-balancer-monitors-patch-monitor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-insecure: string@bool-completer # Do not validate the certificate when monitor use HTTPS. This parameter is currently only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
+  --allow-insecure: oneof<nothing, bool> # Do not validate the certificate when monitor use HTTPS. This parameter is currently only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
   --consecutive-down: int # To be marked unhealthy the monitored origin must fail this healthcheck N consecutive times.
   --consecutive-up: int # To be marked healthy the monitored origin must pass this healthcheck N consecutive times.
   --description: string # Object description. (default: , e.g. Login page monitor)
   --expected-body: string # A case-insensitive sub-string to look for in the response body. If this string is not found, the origin will be marked as unhealthy. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. alive)
   --expected-codes: string # The expected HTTP response code or code range of the health check. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. 2xx)
-  --follow-redirects: string@bool-completer # Follow redirects if returned by the origin. This parameter is only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
+  --follow-redirects: oneof<nothing, bool> # Follow redirects if returned by the origin. This parameter is only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
   --header: record # The HTTP request headers to send in the health check. It is recommended you set a Host header by default. The User-Agent header cannot be overridden. This parameter is only valid for HTTP and HTTPS monitors. (e.g. {Host: [example.com], X-App-ID: [abc123]})
   --interval: int # The interval between each health check. Shorter intervals may improve failover time, but will increase load on the origins as we check from multiple locations. (default: 60)
   --method: string # The method to use for the health check. This defaults to 'GET' for HTTP/HTTPS based checks and 'connection_established' for TCP based health checks. (e.g. GET)
@@ -70454,13 +70480,13 @@ export def "user-load-balancers-monitors load-balancer-monitors-update-monitor" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-insecure: string@bool-completer # Do not validate the certificate when monitor use HTTPS. This parameter is currently only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
+  --allow-insecure: oneof<nothing, bool> # Do not validate the certificate when monitor use HTTPS. This parameter is currently only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
   --consecutive-down: int # To be marked unhealthy the monitored origin must fail this healthcheck N consecutive times.
   --consecutive-up: int # To be marked healthy the monitored origin must pass this healthcheck N consecutive times.
   --description: string # Object description. (default: , e.g. Login page monitor)
   --expected-body: string # A case-insensitive sub-string to look for in the response body. If this string is not found, the origin will be marked as unhealthy. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. alive)
   --expected-codes: string # The expected HTTP response code or code range of the health check. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. 2xx)
-  --follow-redirects: string@bool-completer # Follow redirects if returned by the origin. This parameter is only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
+  --follow-redirects: oneof<nothing, bool> # Follow redirects if returned by the origin. This parameter is only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
   --header: record # The HTTP request headers to send in the health check. It is recommended you set a Host header by default. The User-Agent header cannot be overridden. This parameter is only valid for HTTP and HTTPS monitors. (e.g. {Host: [example.com], X-App-ID: [abc123]})
   --interval: int # The interval between each health check. Shorter intervals may improve failover time, but will increase load on the origins as we check from multiple locations. (default: 60)
   --method: string # The method to use for the health check. This defaults to 'GET' for HTTP/HTTPS based checks and 'connection_established' for TCP based health checks. (e.g. GET)
@@ -70495,13 +70521,13 @@ export def "user-load-balancers-monitors-preview load-balancer-monitors-preview-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-insecure: string@bool-completer # Do not validate the certificate when monitor use HTTPS. This parameter is currently only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
+  --allow-insecure: oneof<nothing, bool> # Do not validate the certificate when monitor use HTTPS. This parameter is currently only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
   --consecutive-down: int # To be marked unhealthy the monitored origin must fail this healthcheck N consecutive times.
   --consecutive-up: int # To be marked healthy the monitored origin must pass this healthcheck N consecutive times.
   --description: string # Object description. (default: , e.g. Login page monitor)
   --expected-body: string # A case-insensitive sub-string to look for in the response body. If this string is not found, the origin will be marked as unhealthy. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. alive)
   --expected-codes: string # The expected HTTP response code or code range of the health check. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. 2xx)
-  --follow-redirects: string@bool-completer # Follow redirects if returned by the origin. This parameter is only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
+  --follow-redirects: oneof<nothing, bool> # Follow redirects if returned by the origin. This parameter is only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
   --header: record # The HTTP request headers to send in the health check. It is recommended you set a Host header by default. The User-Agent header cannot be overridden. This parameter is only valid for HTTP and HTTPS monitors. (e.g. {Host: [example.com], X-App-ID: [abc123]})
   --interval: int # The interval between each health check. Shorter intervals may improve failover time, but will increase load on the origins as we check from multiple locations. (default: 60)
   --method: string # The method to use for the health check. This defaults to 'GET' for HTTP/HTTPS based checks and 'connection_established' for TCP based health checks. (e.g. GET)
@@ -70611,7 +70637,7 @@ export def "user-load-balancers-pools load-balancer-pools-create-pool" [
   --allow-errors(-e) # Return full response without error handling
   --check-regions: list # A list of regions from which to run health checks. Null means every Cloudflare data center. (nullable, e.g. [WEU, ENAM])
   --description: string # A human-readable description of the pool. (default: , e.g. Primary data center - Provider XYZ)
-  --enabled: string@bool-completer # Whether to enable (the default) or disable this pool. Disabled pools will not receive traffic and are excluded from health checks. Disabling a pool will cause any load balancers using it to failover to the next pool (if any). (default: true, e.g. false)
+  --enabled: oneof<nothing, bool> # Whether to enable (the default) or disable this pool. Disabled pools will not receive traffic and are excluded from health checks. Disabling a pool will cause any load balancers using it to failover to the next pool (if any). (default: true, e.g. false)
   --latitude: float # The latitude of the data center containing the origins used in this pool in decimal degrees. If this is set, longitude must also be set.
   --load-shedding: record # Configures load shedding policies and percentages for the pool. (nullable) — shape: {default_percent?: float, default_policy?: "random"|"hash", session_percent?: float, session_policy?: "hash"}
   --longitude: float # The longitude of the data center containing the origins used in this pool in decimal degrees. If this is set, latitude must also be set.
@@ -70702,7 +70728,7 @@ export def "user-load-balancers-pools load-balancer-pools-patch-pool" [
   --allow-errors(-e) # Return full response without error handling
   --check-regions: list # A list of regions from which to run health checks. Null means every Cloudflare data center. (nullable, e.g. [WEU, ENAM])
   --description: string # A human-readable description of the pool. (default: , e.g. Primary data center - Provider XYZ)
-  --enabled: string@bool-completer # Whether to enable (the default) or disable this pool. Disabled pools will not receive traffic and are excluded from health checks. Disabling a pool will cause any load balancers using it to failover to the next pool (if any). (default: true, e.g. false)
+  --enabled: oneof<nothing, bool> # Whether to enable (the default) or disable this pool. Disabled pools will not receive traffic and are excluded from health checks. Disabling a pool will cause any load balancers using it to failover to the next pool (if any). (default: true, e.g. false)
   --latitude: float # The latitude of the data center containing the origins used in this pool in decimal degrees. If this is set, longitude must also be set.
   --load-shedding: record # Configures load shedding policies and percentages for the pool. (nullable) — shape: {default_percent?: float, default_policy?: "random"|"hash", session_percent?: float, session_policy?: "hash"}
   --longitude: float # The longitude of the data center containing the origins used in this pool in decimal degrees. If this is set, latitude must also be set.
@@ -70745,7 +70771,7 @@ export def "user-load-balancers-pools load-balancer-pools-update-pool" [
   --allow-errors(-e) # Return full response without error handling
   --check-regions: list # A list of regions from which to run health checks. Null means every Cloudflare data center. (nullable, e.g. [WEU, ENAM])
   --description: string # A human-readable description of the pool. (default: , e.g. Primary data center - Provider XYZ)
-  --enabled: string@bool-completer # Whether to enable (the default) or disable this pool. Disabled pools will not receive traffic and are excluded from health checks. Disabling a pool will cause any load balancers using it to failover to the next pool (if any). (default: true, e.g. false)
+  --enabled: oneof<nothing, bool> # Whether to enable (the default) or disable this pool. Disabled pools will not receive traffic and are excluded from health checks. Disabling a pool will cause any load balancers using it to failover to the next pool (if any). (default: true, e.g. false)
   --latitude: float # The latitude of the data center containing the origins used in this pool in decimal degrees. If this is set, longitude must also be set.
   --load-shedding: record # Configures load shedding policies and percentages for the pool. (nullable) — shape: {default_percent?: float, default_policy?: "random"|"hash", session_percent?: float, session_policy?: "hash"}
   --longitude: float # The longitude of the data center containing the origins used in this pool in decimal degrees. If this is set, latitude must also be set.
@@ -70805,13 +70831,13 @@ export def "user-load-balancers-pools-preview load-balancer-pools-preview-pool" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-insecure: string@bool-completer # Do not validate the certificate when monitor use HTTPS. This parameter is currently only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
+  --allow-insecure: oneof<nothing, bool> # Do not validate the certificate when monitor use HTTPS. This parameter is currently only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
   --consecutive-down: int # To be marked unhealthy the monitored origin must fail this healthcheck N consecutive times.
   --consecutive-up: int # To be marked healthy the monitored origin must pass this healthcheck N consecutive times.
   --description: string # Object description. (default: , e.g. Login page monitor)
   --expected-body: string # A case-insensitive sub-string to look for in the response body. If this string is not found, the origin will be marked as unhealthy. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. alive)
   --expected-codes: string # The expected HTTP response code or code range of the health check. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. 2xx)
-  --follow-redirects: string@bool-completer # Follow redirects if returned by the origin. This parameter is only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
+  --follow-redirects: oneof<nothing, bool> # Follow redirects if returned by the origin. This parameter is only valid for HTTP and HTTPS monitors. (default: false, e.g. true)
   --header: record # The HTTP request headers to send in the health check. It is recommended you set a Host header by default. The User-Agent header cannot be overridden. This parameter is only valid for HTTP and HTTPS monitors. (e.g. {Host: [example.com], X-App-ID: [abc123]})
   --interval: int # The interval between each health check. Shorter intervals may improve failover time, but will increase load on the origins as we check from multiple locations. (default: 60)
   --method: string # The method to use for the health check. This defaults to 'GET' for HTTP/HTTPS based checks and 'connection_established' for TCP based health checks. (e.g. GET)
@@ -70891,11 +70917,11 @@ export def "user-load-balancing-analytics-events load-balancer-healthcheck-event
   --allow-errors(-e) # Return full response without error handling
   --until: string # format: date-time, e.g. 2016-11-11T13:00:00Z
   --pool-name: string # e.g. primary-dc
-  --origin-healthy: string@bool-completer # default: true, e.g. true
+  --origin-healthy: oneof<nothing, bool> # default: true, e.g. true
   --pool-id: string # e.g. 17b5962d775c646f3f9725cbc7a53df4
   --since: string # format: date-time, e.g. 2016-11-11T12:00:00Z
   --origin-name: string # e.g. primary-dc-1
-  --pool-healthy: string@bool-completer # default: true, e.g. true
+  --pool-healthy: oneof<nothing, bool> # default: true, e.g. true
 ]: nothing -> record<result: table<id: int, origins: list, pool: record, timestamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -71393,7 +71419,7 @@ export def "zones-analytics-colos zone-analytics--deprecated-get-analytics-by-co
   --allow-errors(-e) # Return full response without error handling
   --until: string # default: 0, e.g. 2015-01-02T12:23:00Z
   --since: string # default: -10080, e.g. 2015-01-01T12:23:00Z
-  --continuous: string@bool-completer # default: true
+  --continuous: oneof<nothing, bool> # default: true
 ]: nothing -> record<query: record<since: any, time_delta: int, until: any>, result: table<colo_id: string, timeseries: list, totals: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -71421,7 +71447,7 @@ export def "zones-analytics-dashboard zone-analytics--deprecated-get-dashboard" 
   --allow-errors(-e) # Return full response without error handling
   --until: string # default: 0, e.g. 2015-01-02T12:23:00Z
   --since: string # default: -10080, e.g. 2015-01-01T12:23:00Z
-  --continuous: string@bool-completer # default: true
+  --continuous: oneof<nothing, bool> # default: true
 ]: nothing -> record<query: record<since: any, time_delta: int, until: any>, result: record<timeseries: list<record>, totals: record<bandwidth: record, pageviews: record, requests: record, since: any, threats: record, uniques: record, until: any>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -71721,7 +71747,7 @@ export def "zones zones-0-patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --paused: string@bool-completer # Indicates whether the zone is only using Cloudflare DNS services. A true value means the zone will not receive security or performance benefits.  (default: false)
+  --paused: oneof<nothing, bool> # Indicates whether the zone is only using Cloudflare DNS services. A true value means the zone will not receive security or performance benefits.  (default: false)
   --plan: record # (Deprecated) Please use the `/zones/{zone_id}/subscription` API to update a zone's plan. Changing this value will create/cancel associated subscriptions. To view available plans for this zone, see Zone Plans. — shape: {id?: string}
   --type: string@type-completer-28 # A full zone implies that DNS is hosted with Cloudflare. A partial zone is typically a partner-hosted zone or a CNAME setup. This parameter is only available to Enterprise customers or if it has been explicitly enabled on a zone.  (e.g. full)
   --vanity-name-servers: list # An array of domains used for custom name servers. This is only available for Business and Enterprise plans. (default: [], e.g. [ns1.example.com, ns2.example.com])
@@ -71986,15 +72012,15 @@ export def "zones-access-apps-policies zone-level-access-policies-create-an-acce
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --approval-groups: list # Administrators who can approve a temporary authentication request. (e.g. [{approvals_needed: 1, email_addresses: [test1@cloudflare.com, test2@cloudflare.com]}, {approvals_needed: 3, email_list_uuid: 597147a1-976b-4ef2-9af0-81d5d007fc34}]) — item shape: {approvals_needed: float, email_addresses?: list, email_list_uuid?: string}
-  --approval-required: string@bool-completer # Requires the user to request access from an administrator at the start of each session. (default: false, e.g. true)
+  --approval-required: oneof<nothing, bool> # Requires the user to request access from an administrator at the start of each session. (default: false, e.g. true)
   decision: string@decision-completer # The action Access will take if a user matches this policy. (e.g. allow)
   --exclude: list # Rules evaluated with a NOT logical operator. To match the policy, a user cannot meet any of the Exclude rules.
   include: list # Rules evaluated with an OR logical operator. A user needs to meet only one of the Include rules.
-  --isolation-required: string@bool-completer # Require this application to be served in an isolated browser for users matching this policy. (default: false, e.g. false)
+  --isolation-required: oneof<nothing, bool> # Require this application to be served in an isolated browser for users matching this policy. (default: false, e.g. false)
   name: string # The name of the Access policy. (e.g. Allow devs)
   --precedence: int # The order of execution for this policy. Must be unique for each policy.
   --purpose-justification-prompt: string # A custom message that will appear on the purpose justification screen. (e.g. Please enter a justification for entering this protected domain.)
-  --purpose-justification-required: string@bool-completer # Require users to enter a justification when they log in to the application. (default: false, e.g. true)
+  --purpose-justification-required: oneof<nothing, bool> # Require users to enter a justification when they log in to the application. (default: false, e.g. true)
   --require: list # Rules evaluated with an AND logical operator. To match the policy, a user must meet all of the Require rules.
 ]: any -> record {
   let input = $in
@@ -72073,15 +72099,15 @@ export def "zones-access-apps-policies zone-level-access-policies-update-an-acce
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --approval-groups: list # Administrators who can approve a temporary authentication request. (e.g. [{approvals_needed: 1, email_addresses: [test1@cloudflare.com, test2@cloudflare.com]}, {approvals_needed: 3, email_list_uuid: 597147a1-976b-4ef2-9af0-81d5d007fc34}]) — item shape: {approvals_needed: float, email_addresses?: list, email_list_uuid?: string}
-  --approval-required: string@bool-completer # Requires the user to request access from an administrator at the start of each session. (default: false, e.g. true)
+  --approval-required: oneof<nothing, bool> # Requires the user to request access from an administrator at the start of each session. (default: false, e.g. true)
   decision: string@decision-completer # The action Access will take if a user matches this policy. (e.g. allow)
   --exclude: list # Rules evaluated with a NOT logical operator. To match the policy, a user cannot meet any of the Exclude rules.
   include: list # Rules evaluated with an OR logical operator. A user needs to meet only one of the Include rules.
-  --isolation-required: string@bool-completer # Require this application to be served in an isolated browser for users matching this policy. (default: false, e.g. false)
+  --isolation-required: oneof<nothing, bool> # Require this application to be served in an isolated browser for users matching this policy. (default: false, e.g. false)
   name: string # The name of the Access policy. (e.g. Allow devs)
   --precedence: int # The order of execution for this policy. Must be unique for each policy.
   --purpose-justification-prompt: string # A custom message that will appear on the purpose justification screen. (e.g. Please enter a justification for entering this protected domain.)
-  --purpose-justification-required: string@bool-completer # Require users to enter a justification when they log in to the application. (default: false, e.g. true)
+  --purpose-justification-required: oneof<nothing, bool> # Require users to enter a justification when they log in to the application. (default: false, e.g. true)
   --require: list # Rules evaluated with an AND logical operator. To match the policy, a user must meet all of the Require rules.
 ]: any -> record {
   let input = $in
@@ -72132,8 +72158,8 @@ export def "zones-access-apps-settings zone-level-access-applications-patch-upda
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-iframe: string@bool-completer # Enables loading application content in an iFrame. (e.g. true)
-  --skip-interstitial: string@bool-completer # Enables automatic authentication through cloudflared. (e.g. true)
+  --allow-iframe: oneof<nothing, bool> # Enables loading application content in an iFrame. (e.g. true)
+  --skip-interstitial: oneof<nothing, bool> # Enables automatic authentication through cloudflared. (e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -72160,8 +72186,8 @@ export def "zones-access-apps-settings zone-level-access-applications-put-update
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-iframe: string@bool-completer # Enables loading application content in an iFrame. (e.g. true)
-  --skip-interstitial: string@bool-completer # Enables automatic authentication through cloudflared. (e.g. true)
+  --allow-iframe: oneof<nothing, bool> # Enables loading application content in an iFrame. (e.g. true)
+  --skip-interstitial: oneof<nothing, bool> # Enables automatic authentication through cloudflared. (e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -72653,7 +72679,7 @@ export def "zones-access-organizations zone-level-zero-trust-organization-create
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   auth_domain: string # The unique subdomain assigned to your Zero Trust organization. (e.g. test.cloudflareaccess.com)
-  --is-ui-read-only: string@bool-completer # Lock all settings as Read-Only in the Dashboard, regardless of user permission. Updates may only be made via the API or Terraform for this account when enabled. (e.g. false)
+  --is-ui-read-only: oneof<nothing, bool> # Lock all settings as Read-Only in the Dashboard, regardless of user permission. Updates may only be made via the API or Terraform for this account when enabled. (e.g. false)
   --login-design: any # shape: {background_color?: string, footer_text?: string, header_text?: string, logo_path?: string, text_color?: string}
   name: string # The name of your Zero Trust organization. (e.g. Widget Corps Internal Applications)
   --ui-read-only-toggle-reason: string # A description of the reason why the UI read only field is being toggled. (e.g. Temporarily turn off the UI read only lock to make a change via the UI)
@@ -72685,7 +72711,7 @@ export def "zones-access-organizations zone-level-zero-trust-organization-update
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --auth-domain: string # The unique subdomain assigned to your Zero Trust organization. (e.g. test.cloudflareaccess.com)
-  --is-ui-read-only: string@bool-completer # Lock all settings as Read-Only in the Dashboard, regardless of user permission. Updates may only be made via the API or Terraform for this account when enabled. (e.g. false)
+  --is-ui-read-only: oneof<nothing, bool> # Lock all settings as Read-Only in the Dashboard, regardless of user permission. Updates may only be made via the API or Terraform for this account when enabled. (e.g. false)
   --login-design: any # shape: {background_color?: string, footer_text?: string, header_text?: string, logo_path?: string, text_color?: string}
   --name: string # The name of your Zero Trust organization. (e.g. Widget Corps Internal Applications)
   --ui-read-only-toggle-reason: string # A description of the reason why the UI read only field is being toggled. (e.g. Temporarily turn off the UI read only lock to make a change via the UI)
@@ -72990,7 +73016,7 @@ export def "zones-acm-total-tls total-tls-enable-or-disable-total-tls" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --certificate-authority: string@certificate-authority-completer # The Certificate Authority that Total TLS certificates will be issued through. (e.g. google)
-  --enabled: string@bool-completer # If enabled, Total TLS will order a hostname specific TLS certificate for any proxied A, AAAA, or CNAME record in your zone. (e.g. true)
+  --enabled: oneof<nothing, bool> # If enabled, Total TLS will order a hostname specific TLS certificate for any proxied A, AAAA, or CNAME record in your zone. (e.g. true)
 ]: any -> record<result: record<certificate_authority: string, enabled: bool, validity_period: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -73232,7 +73258,7 @@ export def "zones-ai-security-settings ai-security-settings-put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether AI Security for Apps is enabled on the zone. (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether AI Security for Apps is enabled on the zone. (e.g. true)
 ]: any -> record<result: record<enabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -73304,7 +73330,7 @@ export def "zones-api-gateway-configuration api-shield-settings-retrieve-informa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --normalize: string@bool-completer # Ensures that the configuration is written or retrieved in normalized fashion
+  --normalize: oneof<nothing, bool> # Ensures that the configuration is written or retrieved in normalized fashion
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -73328,7 +73354,7 @@ export def "zones-api-gateway-configuration api-shield-settings-set-configuratio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --normalize: string@bool-completer # Ensures that the configuration is written or retrieved in normalized fashion
+  --normalize: oneof<nothing, bool> # Ensures that the configuration is written or retrieved in normalized fashion
   auth_id_characteristics: list
 ]: any -> any {
   let input = $in
@@ -73385,7 +73411,7 @@ export def "zones-api-gateway-discovery-operations api-shield-api-discovery-retr
   --endpoint: string # e.g. /api/v1
   --direction: string@direction-completer # e.g. desc
   --order: string@order-completer-19 # e.g. method
-  --diff: string@bool-completer
+  --diff: oneof<nothing, bool>
   --origin: string@origin-completer # Filter results to only include discovery results sourced from a particular discovery engine   * `ML` - Discovered operations that were sourced using ML API Discovery   * `SessionIdentifier` - Discovered operations that were sourced using Session Identifier API Discovery
   --state: string@state-completer-2 # Filter results to only include discovery results in a particular state. States are as follows   * `review` - Discovered operations that are not saved into API Shield Endpoint Management   * `saved` - Discovered operations that are already saved into API Shield Endpoint Management   * `ignored` - Discovered operations that have been marked as ignored
 ]: nothing -> record<result: table<features: record, id: record, last_updated: record, origin: list, state: string, endpoint: string, host: string, method: string>> {
@@ -73518,7 +73544,7 @@ export def "zones-api-gateway-labels api-shield-labels-get-labels" [
   --direction: string@direction-completer # e.g. desc
   --qp-source: string@source-completer-1 # Filter for labels with source
   --filter: string # Filter for labels where the name or description matches using substring match (e.g. login)
-  --with-mapped-resource-counts: string@bool-completer # Include `mapped_resources` for each label (default: false, e.g. true)
+  --with-mapped-resource-counts: oneof<nothing, bool> # Include `mapped_resources` for each label (default: false, e.g. true)
 ]: nothing -> record<result: table<mapped_resources: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -73543,7 +73569,7 @@ export def "zones-api-gateway-labels-managed api-shield-labels-get-managed-label
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-mapped-resource-counts: string@bool-completer # Include `mapped_resources` for each label (default: false, e.g. true)
+  --with-mapped-resource-counts: oneof<nothing, bool> # Include `mapped_resources` for each label (default: false, e.g. true)
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record<source: any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -73669,7 +73695,7 @@ export def "zones-api-gateway-labels-user api-shield-labels-get-user-label" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-mapped-resource-counts: string@bool-completer # Include `mapped_resources` for each label (default: false, e.g. true)
+  --with-mapped-resource-counts: oneof<nothing, bool> # Include `mapped_resources` for each label (default: false, e.g. true)
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record<mapped_resources: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -74031,7 +74057,7 @@ export def "zones-api-gateway-operations api-shield-endpoint-management-retrieve
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --feature: list # Add feature(s) to the results. The feature name that is given here corresponds to the resulting feature object. Have a look at the top-level object description for more details on the specific meaning. (e.g. [thresholds])
-  --with-schemas: string@bool-completer # When true, includes OpenAPI schemas (both uploaded and learned) for the operation in the response. Due to the conversion overhead, this parameter is only supported on single-operation retrieval. (default: false)
+  --with-schemas: oneof<nothing, bool> # When true, includes OpenAPI schemas (both uploaded and learned) for the operation in the response. Due to the conversion overhead, this parameter is only supported on single-operation retrieval. (default: false)
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record<schemas: record<learned: record, uploaded: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -74304,8 +74330,8 @@ export def "zones-api-gateway-user-schemas api-shield-schema-validation-retrieve
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page number of paginated results. (default: 1)
   --per-page: int # Maximum number of results per page. (default: 20)
-  --omit-source: string@bool-completer # Omit the source-files of schemas and only retrieve their meta-data. (default: false)
-  --validation-enabled: string@bool-completer
+  --omit-source: oneof<nothing, bool> # Omit the source-files of schemas and only retrieve their meta-data. (default: false)
+  --validation-enabled: oneof<nothing, bool>
 ]: nothing -> record<result: table<created_at: record, kind: string, name: string, schema_id: record, source: string, validation_enabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -74415,7 +74441,7 @@ export def "zones-api-gateway-user-schemas api-shield-schema-validation-retrieve
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --omit-source: string@bool-completer # Omit the source-files of schemas and only retrieve their meta-data. (default: false)
+  --omit-source: oneof<nothing, bool> # Omit the source-files of schemas and only retrieve their meta-data. (default: false)
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record<created_at: record, kind: string, name: string, schema_id: record, source: string, validation_enabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -75475,7 +75501,7 @@ export def "zones-client-certificates client-certificate-for-a-zone-edit-client-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --reactivate: string@bool-completer # e.g. true
+  --reactivate: oneof<nothing, bool> # e.g. true
 ]: any -> record<result: record<certificate: string, certificate_authority: record<id: string, name: string>, common_name: string, country: string, csr: string, expires_on: string, fingerprint_sha256: string, id: string, issued_on: string, location: string, organization: string, organizational_unit: string, serial_number: string, signature: string, ski: string, state: string, status: string, validity_days: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -75733,7 +75759,7 @@ export def "zones-ct-alerting ct-alerting-update-subscription" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --emails: list # Email addresses that receive CT alert notifications. Only present and configurable for Business and Enterprise zones. Maximum of 10 addresses. For Free and Pro zones, notifications are sent to all users with SSL permissions on the zone.  (e.g. [security@example.com, admin@example.com])
-  --enabled: string@bool-completer # Whether CT alerting is enabled for the zone. (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether CT alerting is enabled for the zone. (e.g. true)
 ]: any -> record<result: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -76049,7 +76075,7 @@ export def "zones-custom-hostnames custom-hostname-for-a-zone-list-custom-hostna
   --ssl-status: string@ssl-status-completer # e.g. active
   --hostname-status: string@hostname-status-completer # e.g. provisioned
   --certificate-authority: string@certificate-authority-completer # e.g. google
-  --wildcard: string@bool-completer # e.g. false
+  --wildcard: oneof<nothing, bool> # e.g. false
   --custom-origin-server: string # e.g. origin2.example.com
   --ssl: int@ssl-completer # default: 0
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: list<string>, success: bool, result: table<hostname: string, id: string, ssl: record>, result_info: record<count: float, page: float, per_page: float, total_count: float, total_pages: float>> {
@@ -76363,7 +76389,7 @@ export def "zones-custom-ns account-level-custom-nameservers-usage-for-a-zone-se
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether zone uses account-level custom nameservers. (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether zone uses account-level custom nameservers. (e.g. true)
   --ns-set: float # The number of the name server set to assign to the zone. (default: 1, e.g. 1)
 ]: any -> record {
   let input = $in
@@ -76434,7 +76460,7 @@ export def "zones-devices-policy-certificates devices-update-policy-certificates
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # The current status of the device policy certificate provisioning feature for WARP clients. (e.g. true)
+  --enabled: oneof<nothing, bool> # The current status of the device policy certificate provisioning feature for WARP clients. (e.g. true)
 ]: any -> record<result: record<enabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -76532,7 +76558,7 @@ export def "zones-dns-records dns-records-for-a-zone-list-dns-records" [
   --contentcontains: string # e.g. 7.0.0.
   --contentstartswith: string # e.g. 127.0.
   --contentendswith: string # e.g. .0.1
-  --proxied: string@bool-completer # default: false, e.g. true
+  --proxied: oneof<nothing, bool> # default: false, e.g. true
   --qp-match: string@match-completer # default: all, e.g. any
   --comment: string # e.g. Hello, world
   --commentpresent: string
@@ -77004,9 +77030,9 @@ export def "zones-dnssec dnssec-edit-dnssec-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dnssec-multi-signer: string@bool-completer # If true, multi-signer DNSSEC is enabled on the zone, allowing multiple providers to serve a DNSSEC-signed zone at the same time. This is required for DNSKEY records (except those automatically generated by Cloudflare) to be added to the zone.  See [Multi-signer DNSSEC](https://developers.cloudflare.com/dns/dnssec/multi-signer-dnssec/) for details. (e.g. false)
-  --dnssec-presigned: string@bool-completer # If true, allows Cloudflare to transfer in a DNSSEC-signed zone including signatures from an external provider, without requiring Cloudflare to sign any records on the fly.  Note that this feature has some limitations. See [Cloudflare as Secondary](https://developers.cloudflare.com/dns/zone-setups/zone-transfers/cloudflare-as-secondary/setup/#dnssec) for details. (e.g. true)
-  --dnssec-use-nsec3: string@bool-completer # If true, enables the use of NSEC3 together with DNSSEC on the zone. Combined with setting dnssec_presigned to true, this enables the use of NSEC3 records when transferring in from an external provider. If dnssec_presigned is instead set to false (default), NSEC3 records will be generated and signed at request time.  See [DNSSEC with NSEC3](https://developers.cloudflare.com/dns/dnssec/enable-nsec3/) for details. (e.g. false)
+  --dnssec-multi-signer: oneof<nothing, bool> # If true, multi-signer DNSSEC is enabled on the zone, allowing multiple providers to serve a DNSSEC-signed zone at the same time. This is required for DNSKEY records (except those automatically generated by Cloudflare) to be added to the zone.  See [Multi-signer DNSSEC](https://developers.cloudflare.com/dns/dnssec/multi-signer-dnssec/) for details. (e.g. false)
+  --dnssec-presigned: oneof<nothing, bool> # If true, allows Cloudflare to transfer in a DNSSEC-signed zone including signatures from an external provider, without requiring Cloudflare to sign any records on the fly.  Note that this feature has some limitations. See [Cloudflare as Secondary](https://developers.cloudflare.com/dns/zone-setups/zone-transfers/cloudflare-as-secondary/setup/#dnssec) for details. (e.g. true)
+  --dnssec-use-nsec3: oneof<nothing, bool> # If true, enables the use of NSEC3 together with DNSSEC on the zone. Combined with setting dnssec_presigned to true, this enables the use of NSEC3 records when transferring in from an external provider. If dnssec_presigned is instead set to false (default), NSEC3 records will be generated and signed at request time.  See [DNSSEC with NSEC3](https://developers.cloudflare.com/dns/dnssec/enable-nsec3/) for details. (e.g. false)
   --status: string@status-completer-28 # Status of DNSSEC, based on user-desired state and presence of necessary records. (e.g. active)
 ]: any -> record<result: record<algorithm: string, digest: string, digest_algorithm: string, digest_type: string, dnssec_multi_signer: bool, dnssec_presigned: bool, dnssec_use_nsec3: bool, ds: string, flags: float, key_tag: float, key_type: string, modified_on: string, public_key: string, status: any>> {
   let input = $in
@@ -77077,8 +77103,8 @@ export def "zones-email-auth-dmarc-reports reports" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Enable or disable DMARC reports for this zone (nullable, e.g. true)
-  --skip-wizard: string@bool-completer # Skip the DMARC setup wizard (nullable, e.g. false)
+  --enabled: oneof<nothing, bool> # Enable or disable DMARC reports for this zone (nullable, e.g. true)
+  --skip-wizard: oneof<nothing, bool> # Skip the DMARC setup wizard (nullable, e.g. false)
 ]: any -> record<result: record<approved_sources: list<record>, created: string, created_at: string, enabled: bool, modified: string, modified_at: string, records: record<bimi_records: list, cname_dkim_records: list, cname_dmarc_records: list, cname_spf_records: list, dkim_records: list, dmarc_records: list, spf_records: list>, rua_prefix: string, skip_wizard: bool, status: string, tag: string, zone_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -77308,7 +77334,7 @@ export def "zones-email-routing-rules email-routing-routing-rules-list-routing-r
   --allow-errors(-e) # Return full response without error handling
   --page: float # default: 1
   --per-page: float # default: 20
-  --enabled: string@bool-completer # e.g. true
+  --enabled: oneof<nothing, bool> # e.g. true
 ]: nothing -> record<result: list<record>, result_info: record<count: any, page: any, per_page: any, total_count: any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -77335,7 +77361,7 @@ export def "zones-email-routing-rules email-routing-routing-rules-create-routing
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   actions: list # List actions patterns. — item shape: {type: "drop"|"forward"|"worker", value?: list}
-  --enabled: string@bool-completer # Routing rule status. (default: true, e.g. true)
+  --enabled: oneof<nothing, bool> # Routing rule status. (default: true, e.g. true)
   matchers: list # Matching patterns to forward to your actions. — item shape: {field?: "to", type: "all"|"literal", value?: string}
   --name: string # Routing rule name. (e.g. Send to user@example.net rule.)
   --priority: float # Priority of the routing rule. (default: 0)
@@ -77389,7 +77415,7 @@ export def "zones-email-routing-rules-catch-all email-routing-routing-rules-upda
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   actions: list # List actions for the catch-all routing rule. — item shape: {type: "drop"|"forward"|"worker", value?: list}
-  --enabled: string@bool-completer # Routing rule status. (default: true, e.g. true)
+  --enabled: oneof<nothing, bool> # Routing rule status. (default: true, e.g. true)
   matchers: list # List of matchers for the catch-all routing rule. — item shape: {type: "all"}
   --name: string # Routing rule name. (e.g. Send to user@example.net rule.)
 ]: any -> record<result: record<actions: list<record>, enabled: bool, id: string, matchers: list<record>, name: string, tag: string>> {
@@ -77467,7 +77493,7 @@ export def "zones-email-routing-rules email-routing-routing-rules-update-routing
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   actions: list # List actions patterns. — item shape: {type: "drop"|"forward"|"worker", value?: list}
-  --enabled: string@bool-completer # Routing rule status. (default: true, e.g. true)
+  --enabled: oneof<nothing, bool> # Routing rule status. (default: true, e.g. true)
   matchers: list # Matching patterns to forward to your actions. — item shape: {field?: "to", type: "all"|"literal", value?: string}
   --name: string # Routing rule name. (e.g. Send to user@example.net rule.)
   --priority: float # Priority of the routing rule. (default: 0)
@@ -78015,7 +78041,7 @@ export def "zones-environments-purge-cache zone-environment-purge" [
   --tags: list # For more information on cache tags and purging by tags, please refer to [purge by cache-tags documentation page](https://developers.cloudflare.com/cache/how-to/purge-cache/purge-by-tags/). (e.g. [a-cache-tag, another-cache-tag])
   --hosts: list # For more information purging by hostnames, please refer to [purge by hostname documentation page](https://developers.cloudflare.com/cache/how-to/purge-cache/purge-by-hostname/). (e.g. [www.example.com, images.example.com])
   --prefixes: list # For more information on purging by prefixes, please refer to [purge by prefix documentation page](https://developers.cloudflare.com/cache/how-to/purge-cache/purge_by_prefix/). (e.g. [www.example.com/foo, images.example.com/bar/baz])
-  --purge-everything: string@bool-completer # For more information, please refer to [purge everything documentation page](https://developers.cloudflare.com/cache/how-to/purge-cache/purge-everything/). (e.g. true)
+  --purge-everything: oneof<nothing, bool> # For more information, please refer to [purge everything documentation page](https://developers.cloudflare.com/cache/how-to/purge-cache/purge-everything/). (e.g. true)
   --files: list # For more information on purging files, please refer to [purge by single-file documentation page](https://developers.cloudflare.com/cache/how-to/purge-cache/purge-by-single-file/). (e.g. [http://www.example.com/css/styles.css, http://www.example.com/js/index.js])
 ]: any -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, result: record<id: string>, success: bool> {
   let input = $in
@@ -78232,7 +78258,7 @@ export def "zones-filters filters-update-a-filter" [
   --allow-errors(-e) # Return full response without error handling
   --description: string # An informative summary of the filter. (e.g. Restrict access from these browsers on this address range.)
   --expression: string # The filter expression. For more information, refer to [Expressions](https://developers.cloudflare.com/ruleset-engine/rules-language/expressions/). (e.g. (http.request.uri.path ~ ".*wp-login.php" or http.request.uri.path ~ ".*xmlrpc.php") and ip.addr ne 172.16.22.155)
-  --paused: string@bool-completer # When true, indicates that the filter is currently paused. (e.g. false)
+  --paused: oneof<nothing, bool> # When true, indicates that the filter is currently paused. (e.g. false)
   --ref: string # A short reference tag. Allows you to select related filters. (e.g. FIL-100)
 ]: any -> record<result: record<description: string, expression: string, id: string, paused: bool, ref: string>> {
   let input = $in
@@ -78411,7 +78437,7 @@ export def "zones-firewall-lockdowns zone-lockdown-create-a-zone-lockdown-rule" 
   --allow-errors(-e) # Return full response without error handling
   configurations: list # A list of IP addresses or CIDR ranges that will be allowed to access the URLs specified in the Zone Lockdown rule. You can include any number of `ip` or `ip_range` configurations.
   --description: string # An informative summary of the rule. This value is sanitized and any tags will be removed. (e.g. Prevent multiple login failures to mitigate brute force attacks)
-  --paused: string@bool-completer # When true, indicates that the rule is currently paused. (e.g. false)
+  --paused: oneof<nothing, bool> # When true, indicates that the rule is currently paused. (e.g. false)
   --priority: float # The priority of the rule to control the processing order. A lower number indicates higher priority. If not provided, any rules with a configured priority will be processed before rules without a priority. (e.g. 5)
   urls: list # The URLs to include in the current WAF override. You can use wildcards. Each entered URL will be escaped before use, which means you can only use simple wildcard patterns.
 ]: any -> record<result: record<configurations: list<any>, created_on: string, description: string, id: string, modified_on: string, paused: bool, urls: list<string>>> {
@@ -78550,7 +78576,7 @@ export def "zones-firewall-rules firewall-rules-list-firewall-rules" [
   --page: float # default: 1
   --per-page: float # default: 25
   --id: string # e.g. 372e67954025e0ba6aaa6d586b9e0b60
-  --paused: string@bool-completer # e.g. false
+  --paused: oneof<nothing, bool> # e.g. false
 ]: nothing -> record<result: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -78662,7 +78688,7 @@ export def "zones-firewall-rules firewall-rules-delete-a-firewall-rule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete-filter-if-unused: string@bool-completer # When true, indicates that Cloudflare should also delete the associated filter if there are no other firewall rules referencing the filter.
+  --delete-filter-if-unused: oneof<nothing, bool> # When true, indicates that Cloudflare should also delete the associated filter if there are no other firewall rules referencing the filter.
 ]: any -> record<result: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -78779,7 +78805,7 @@ export def "zones-firewall-ua-rules user-agent-blocking-rules-list-user-agent-bl
   --description: string
   --per-page: float # default: 20
   --user-agent: string # e.g. Safari
-  --paused: string@bool-completer # e.g. false
+  --paused: oneof<nothing, bool> # e.g. false
 ]: nothing -> record<result: table<configuration: record, description: string, id: string, mode: any, paused: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -78807,7 +78833,7 @@ export def "zones-firewall-ua-rules user-agent-blocking-rules-create-a-user-agen
   configuration: record # shape: {target?: "ua", value?: string}
   --description: string # An informative summary of the rule. This value is sanitized and any tags will be removed. (e.g. Prevent multiple login failures to mitigate brute force attacks)
   mode: string@mode-completer-3 # The action to apply to a matched request. (e.g. challenge)
-  --paused: string@bool-completer # When true, indicates that the rule is currently paused. (e.g. false)
+  --paused: oneof<nothing, bool> # When true, indicates that the rule is currently paused. (e.g. false)
 ]: any -> record<result: record<configuration: record<target: string, value: string>, description: string, id: string, mode: any, paused: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -78887,7 +78913,7 @@ export def "zones-firewall-ua-rules user-agent-blocking-rules-update-a-user-agen
   configuration: record # The rule configuration. — shape: {target?: "ip", value?: string}
   --description: string # An informative summary of the rule. This value is sanitized and any tags will be removed. (e.g. Prevent multiple login failures to mitigate brute force attacks)
   mode: string@mode-completer-3 # The action to apply to a matched request. (e.g. challenge)
-  --paused: string@bool-completer # When true, indicates that the rule is currently paused. (e.g. false)
+  --paused: oneof<nothing, bool> # When true, indicates that the rule is currently paused. (e.g. false)
 ]: any -> record<result: record<configuration: record<target: string, value: string>, description: string, id: string, mode: any, paused: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -79407,7 +79433,7 @@ export def "zones-healthchecks health-checks-create-health-check" [
   --interval: int # The interval between each health check. Shorter intervals may give quicker notifications if the origin status changes, but will increase load on the origin as we check from multiple locations. (default: 60)
   name: string # A short name to identify the health check. Only alphanumeric characters, hyphens and underscores are allowed. (e.g. server-1)
   --retries: int # The number of retries to attempt in case of a timeout before marking the origin as unhealthy. Retries are attempted immediately. (default: 2)
-  --suspended: string@bool-completer # If suspended, no health checks are sent to the origin. (default: false)
+  --suspended: oneof<nothing, bool> # If suspended, no health checks are sent to the origin. (default: false)
   --tcp-config: record # Parameters specific to TCP health check. (nullable) — shape: {method?: "connection_established", port?: int}
   --timeout: int # The timeout (in seconds) before marking the health check as failed. (default: 5)
   --type: string # The protocol to use for the health check. Currently supported protocols are 'HTTP', 'HTTPS' and 'TCP'. (default: HTTP, e.g. HTTPS)
@@ -79447,7 +79473,7 @@ export def "zones-healthchecks-preview health-checks-create-preview-health-check
   --interval: int # The interval between each health check. Shorter intervals may give quicker notifications if the origin status changes, but will increase load on the origin as we check from multiple locations. (default: 60)
   name: string # A short name to identify the health check. Only alphanumeric characters, hyphens and underscores are allowed. (e.g. server-1)
   --retries: int # The number of retries to attempt in case of a timeout before marking the origin as unhealthy. Retries are attempted immediately. (default: 2)
-  --suspended: string@bool-completer # If suspended, no health checks are sent to the origin. (default: false)
+  --suspended: oneof<nothing, bool> # If suspended, no health checks are sent to the origin. (default: false)
   --tcp-config: record # Parameters specific to TCP health check. (nullable) — shape: {method?: "connection_established", port?: int}
   --timeout: int # The timeout (in seconds) before marking the health check as failed. (default: 5)
   --type: string # The protocol to use for the health check. Currently supported protocols are 'HTTP', 'HTTPS' and 'TCP'. (default: HTTP, e.g. HTTPS)
@@ -79586,7 +79612,7 @@ export def "zones-healthchecks health-checks-patch-health-check" [
   --interval: int # The interval between each health check. Shorter intervals may give quicker notifications if the origin status changes, but will increase load on the origin as we check from multiple locations. (default: 60)
   name: string # A short name to identify the health check. Only alphanumeric characters, hyphens and underscores are allowed. (e.g. server-1)
   --retries: int # The number of retries to attempt in case of a timeout before marking the origin as unhealthy. Retries are attempted immediately. (default: 2)
-  --suspended: string@bool-completer # If suspended, no health checks are sent to the origin. (default: false)
+  --suspended: oneof<nothing, bool> # If suspended, no health checks are sent to the origin. (default: false)
   --tcp-config: record # Parameters specific to TCP health check. (nullable) — shape: {method?: "connection_established", port?: int}
   --timeout: int # The timeout (in seconds) before marking the health check as failed. (default: 5)
   --type: string # The protocol to use for the health check. Currently supported protocols are 'HTTP', 'HTTPS' and 'TCP'. (default: HTTP, e.g. HTTPS)
@@ -79627,7 +79653,7 @@ export def "zones-healthchecks health-checks-update-health-check" [
   --interval: int # The interval between each health check. Shorter intervals may give quicker notifications if the origin status changes, but will increase load on the origin as we check from multiple locations. (default: 60)
   name: string # A short name to identify the health check. Only alphanumeric characters, hyphens and underscores are allowed. (e.g. server-1)
   --retries: int # The number of retries to attempt in case of a timeout before marking the origin as unhealthy. Retries are attempted immediately. (default: 2)
-  --suspended: string@bool-completer # If suspended, no health checks are sent to the origin. (default: false)
+  --suspended: oneof<nothing, bool> # If suspended, no health checks are sent to the origin. (default: false)
   --tcp-config: record # Parameters specific to TCP health check. (nullable) — shape: {method?: "connection_established", port?: int}
   --timeout: int # The timeout (in seconds) before marking the health check as failed. (default: 5)
   --type: string # The protocol to use for the health check. Currently supported protocols are 'HTTP', 'HTTPS' and 'TCP'. (default: HTTP, e.g. HTTPS)
@@ -79703,7 +79729,7 @@ export def "zones-hold zones-0-hold-patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --hold-after: string # If `hold_after` is provided and future-dated, the hold will be temporarily disabled, then automatically re-enabled by the system at the time specified in this RFC3339-formatted timestamp. A past-dated `hold_after` value will have no effect on an existing, enabled hold. Providing an empty string will set its value to the current time. Providing `null` will disable the hold indefinitely. (nullable, default: , e.g. 2023-01-31T15:56:36+00:00)
-  --include-subdomains: string@bool-completer # If `true`, the zone hold will extend to block any subdomain of the given zone, as well as SSL4SaaS Custom Hostnames. For example, a zone hold on a zone with the hostname 'example.com' and include_subdomains=true will block 'example.com', 'staging.example.com', 'api.staging.example.com', etc. (default: false, e.g. true)
+  --include-subdomains: oneof<nothing, bool> # If `true`, the zone hold will extend to block any subdomain of the given zone, as well as SSL4SaaS Custom Hostnames. For example, a zone hold on a zone with the hostname 'example.com' and include_subdomains=true will block 'example.com', 'staging.example.com', 'api.staging.example.com', etc. (default: false, e.g. true)
 ]: any -> record<result: record<hold: bool, hold_after: string, include_subdomains: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -79729,7 +79755,7 @@ export def "zones-hold zones-0-hold-post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-subdomains: string@bool-completer # If provided, the zone hold will extend to block any subdomain of the given zone, as well as SSL4SaaS Custom Hostnames. For example, a zone hold on a zone with the hostname 'example.com' and include_subdomains=true will block 'example.com', 'staging.example.com', 'api.staging.example.com', etc. (e.g. true)
+  --include-subdomains: oneof<nothing, bool> # If provided, the zone hold will extend to block any subdomain of the given zone, as well as SSL4SaaS Custom Hostnames. For example, a zone hold on a zone with the hostname 'example.com' and include_subdomains=true will block 'example.com', 'staging.example.com', 'api.staging.example.com', etc. (e.g. true)
 ]: nothing -> record<result: record<hold: bool, hold_after: string, include_subdomains: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -80061,7 +80087,7 @@ export def "zones-keyless-certificates keyless-ssl-for-a-zone-edit-keyless-ssl-c
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether or not the Keyless SSL is on or off. (DEPRECATED, e.g. false)
+  --enabled: oneof<nothing, bool> # Whether or not the Keyless SSL is on or off. (DEPRECATED, e.g. false)
   --host: string # The keyless SSL name. (format: hostname, e.g. example.com)
   --name: string # The keyless SSL name. (e.g. example.com Keyless SSL)
   --port: float # The keyless SSL port used to communicate between Cloudflare and the client's Keyless SSL server. (default: 24008, e.g. 24008)
@@ -80113,7 +80139,7 @@ export def "zones-leaked-credential-checks waf-product-api-leaked-credentials-se
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Determines whether or not Leaked Credential Checks are enabled. (e.g. true)
+  --enabled: oneof<nothing, bool> # Determines whether or not Leaked Credential Checks are enabled. (e.g. true)
 ]: any -> record<result: record<enabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -80300,7 +80326,7 @@ export def "zones-load-balancers load-balancers-create-load-balancer" [
   name: string # The DNS hostname to associate with your Load Balancer. If this hostname already exists as a DNS record in Cloudflare's DNS, the Load Balancer will take precedence and the DNS record will not be used. (e.g. www.example.com)
   --networks: list # List of networks where Load Balancer or Pool is enabled.
   --pop-pools: record # Enterprise only: A mapping of Cloudflare PoP identifiers to a list of pool IDs (ordered by their failover priority) for the PoP (datacenter). Any PoPs not explicitly defined will fall back to using the corresponding country_pool, then region_pool mapping if it exists else to default_pools. (e.g. {LAX: [de90f38ced07c2e2f4df50b1f61d4194, 9290f38c5d07c2e2f4df57b1f61d4196], LHR: [abd90f38ced07c2e2f4df50b1f61d4194, f9138c5d07c2e2f4df57b1f61d4196], SJC: [00920f38ce07c2e2f4df50b1f61d4194]})
-  --proxied: string@bool-completer # Whether the hostname should be gray clouded (false) or orange clouded (true). (default: false, e.g. true)
+  --proxied: oneof<nothing, bool> # Whether the hostname should be gray clouded (false) or orange clouded (true). (default: false, e.g. true)
   --random-steering: record # Configures pool weights. - `steering_policy="random"`: A random pool is selected with probability proportional to pool weights. - `steering_policy="least_outstanding_requests"`: Use pool weights to scale each pool's outstanding requests. - `steering_policy="least_connections"`: Use pool weights to scale each pool's open connections. — shape: {default_weight?: float, pool_weights?: record}
   --region-pools: record # A mapping of region codes to a list of pool IDs (ordered by their failover priority) for the given region. Any regions not explicitly defined will fall back to using default_pools. (e.g. {ENAM: [00920f38ce07c2e2f4df50b1f61d4194], WNAM: [de90f38ced07c2e2f4df50b1f61d4194, 9290f38c5d07c2e2f4df57b1f61d4196]})
   --rules: list # BETA Field Not General Access: A list of rules for this load balancer to execute. — item shape: {condition?: string, disabled?: bool, fixed_response?: record, name?: string, overrides?: record, priority?: int, terminates?: bool}
@@ -80393,12 +80419,12 @@ export def "zones-load-balancers load-balancers-patch-load-balancer" [
   --country-pools: record # A mapping of country codes to a list of pool IDs (ordered by their failover priority) for the given country. Any country not explicitly defined will fall back to using the corresponding region_pool mapping if it exists else to default_pools. (e.g. {GB: [abd90f38ced07c2e2f4df50b1f61d4194], US: [de90f38ced07c2e2f4df50b1f61d4194, 00920f38ce07c2e2f4df50b1f61d4194]})
   --default-pools: list # A list of pool IDs ordered by their failover priority. Pools defined here are used by default, or when region_pools are not configured for a given region. (e.g. [17b5962d775c646f3f9725cbc7a53df4, 9290f38c5d07c2e2f4df57b1f61d4196, 00920f38ce07c2e2f4df50b1f61d4194])
   --description: string # Object description. (e.g. Load Balancer for www.example.com)
-  --enabled: string@bool-completer # Whether to enable (the default) this load balancer. (default: true, e.g. true)
+  --enabled: oneof<nothing, bool> # Whether to enable (the default) this load balancer. (default: true, e.g. true)
   --fallback-pool: string # The pool ID to use when all other pools are detected as unhealthy.
   --location-strategy: record # Controls location-based steering for non-proxied requests. See `steering_policy` to learn how steering is affected. — shape: {mode?: "pop"|"resolver_ip", prefer_ecs?: "always"|"never"|"proximity"|"geo"}
   --name: string # The DNS hostname to associate with your Load Balancer. If this hostname already exists as a DNS record in Cloudflare's DNS, the Load Balancer will take precedence and the DNS record will not be used. (e.g. www.example.com)
   --pop-pools: record # Enterprise only: A mapping of Cloudflare PoP identifiers to a list of pool IDs (ordered by their failover priority) for the PoP (datacenter). Any PoPs not explicitly defined will fall back to using the corresponding country_pool, then region_pool mapping if it exists else to default_pools. (e.g. {LAX: [de90f38ced07c2e2f4df50b1f61d4194, 9290f38c5d07c2e2f4df57b1f61d4196], LHR: [abd90f38ced07c2e2f4df50b1f61d4194, f9138c5d07c2e2f4df57b1f61d4196], SJC: [00920f38ce07c2e2f4df50b1f61d4194]})
-  --proxied: string@bool-completer # Whether the hostname should be gray clouded (false) or orange clouded (true). (default: false, e.g. true)
+  --proxied: oneof<nothing, bool> # Whether the hostname should be gray clouded (false) or orange clouded (true). (default: false, e.g. true)
   --random-steering: record # Configures pool weights. - `steering_policy="random"`: A random pool is selected with probability proportional to pool weights. - `steering_policy="least_outstanding_requests"`: Use pool weights to scale each pool's outstanding requests. - `steering_policy="least_connections"`: Use pool weights to scale each pool's open connections. — shape: {default_weight?: float, pool_weights?: record}
   --region-pools: record # A mapping of region codes to a list of pool IDs (ordered by their failover priority) for the given region. Any regions not explicitly defined will fall back to using default_pools. (e.g. {ENAM: [00920f38ce07c2e2f4df50b1f61d4194], WNAM: [de90f38ced07c2e2f4df50b1f61d4194, 9290f38c5d07c2e2f4df57b1f61d4196]})
   --rules: list # BETA Field Not General Access: A list of rules for this load balancer to execute. — item shape: {condition?: string, disabled?: bool, fixed_response?: record, name?: string, overrides?: record, priority?: int, terminates?: bool}
@@ -80442,13 +80468,13 @@ export def "zones-load-balancers load-balancers-update-load-balancer" [
   --country-pools: record # A mapping of country codes to a list of pool IDs (ordered by their failover priority) for the given country. Any country not explicitly defined will fall back to using the corresponding region_pool mapping if it exists else to default_pools. (e.g. {GB: [abd90f38ced07c2e2f4df50b1f61d4194], US: [de90f38ced07c2e2f4df50b1f61d4194, 00920f38ce07c2e2f4df50b1f61d4194]})
   default_pools: list # A list of pool IDs ordered by their failover priority. Pools defined here are used by default, or when region_pools are not configured for a given region. (e.g. [17b5962d775c646f3f9725cbc7a53df4, 9290f38c5d07c2e2f4df57b1f61d4196, 00920f38ce07c2e2f4df50b1f61d4194])
   --description: string # Object description. (e.g. Load Balancer for www.example.com)
-  --enabled: string@bool-completer # Whether to enable (the default) this load balancer. (default: true, e.g. true)
+  --enabled: oneof<nothing, bool> # Whether to enable (the default) this load balancer. (default: true, e.g. true)
   fallback_pool: string # The pool ID to use when all other pools are detected as unhealthy.
   --location-strategy: record # Controls location-based steering for non-proxied requests. See `steering_policy` to learn how steering is affected. — shape: {mode?: "pop"|"resolver_ip", prefer_ecs?: "always"|"never"|"proximity"|"geo"}
   name: string # The DNS hostname to associate with your Load Balancer. If this hostname already exists as a DNS record in Cloudflare's DNS, the Load Balancer will take precedence and the DNS record will not be used. (e.g. www.example.com)
   --networks: list # List of networks where Load Balancer or Pool is enabled.
   --pop-pools: record # Enterprise only: A mapping of Cloudflare PoP identifiers to a list of pool IDs (ordered by their failover priority) for the PoP (datacenter). Any PoPs not explicitly defined will fall back to using the corresponding country_pool, then region_pool mapping if it exists else to default_pools. (e.g. {LAX: [de90f38ced07c2e2f4df50b1f61d4194, 9290f38c5d07c2e2f4df57b1f61d4196], LHR: [abd90f38ced07c2e2f4df50b1f61d4194, f9138c5d07c2e2f4df57b1f61d4196], SJC: [00920f38ce07c2e2f4df50b1f61d4194]})
-  --proxied: string@bool-completer # Whether the hostname should be gray clouded (false) or orange clouded (true). (default: false, e.g. true)
+  --proxied: oneof<nothing, bool> # Whether the hostname should be gray clouded (false) or orange clouded (true). (default: false, e.g. true)
   --random-steering: record # Configures pool weights. - `steering_policy="random"`: A random pool is selected with probability proportional to pool weights. - `steering_policy="least_outstanding_requests"`: Use pool weights to scale each pool's outstanding requests. - `steering_policy="least_connections"`: Use pool weights to scale each pool's open connections. — shape: {default_weight?: float, pool_weights?: record}
   --region-pools: record # A mapping of region codes to a list of pool IDs (ordered by their failover priority) for the given region. Any regions not explicitly defined will fall back to using default_pools. (e.g. {ENAM: [00920f38ce07c2e2f4df50b1f61d4194], WNAM: [de90f38ced07c2e2f4df50b1f61d4194, 9290f38c5d07c2e2f4df57b1f61d4196]})
   --rules: list # BETA Field Not General Access: A list of rules for this load balancer to execute. — item shape: {condition?: string, disabled?: bool, fixed_response?: record, name?: string, overrides?: record, priority?: int, terminates?: bool}
@@ -80605,7 +80631,7 @@ export def "zones-logpush-jobs id-logpush-jobs-by-zone_id-1" [
   --allow-errors(-e) # Return full response without error handling
   --dataset: string@dataset-completer # Name of the dataset. A list of supported datasets can be found on the [Developer Docs](https://developers.cloudflare.com/logs/reference/log-fields/). (nullable, default: http_requests, e.g. http_requests)
   destination_conf: string # Uniquely identifies a resource (such as an s3 bucket) where data. will be pushed. Additional configuration parameters supported by the destination may be included. (format: uri, e.g. s3://mybucket/logs?region=us-west-2)
-  --enabled: string@bool-completer # Flag that indicates if the job is enabled. (default: false, e.g. false)
+  --enabled: oneof<nothing, bool> # Flag that indicates if the job is enabled. (default: false, e.g. false)
   --filter: string # The filters to select the events to include and/or remove from your logs. For more information, refer to [Filters](https://developers.cloudflare.com/logs/reference/filters/). (nullable, e.g. {"where":{"and":[{"key":"ClientRequestPath","operator":"contains","value":"/static"},{"key":"ClientRequestHost","operator":"eq","value":"example.com"}]}})
   --frequency: string@frequency-completer # This field is deprecated. Please use `max_upload_*` parameters instead. . The frequency at which Cloudflare sends batches of logs to your destination. Setting frequency to high sends your logs in larger quantities of smaller files. Setting frequency to low sends logs in smaller quantities of larger files. (DEPRECATED, nullable, default: high, e.g. high)
   --kind: string@kind-completer-4 # The kind parameter (optional) is used to differentiate between Logpush and Edge Log Delivery jobs (when supported by the dataset). (default: , e.g. )
@@ -80695,7 +80721,7 @@ export def "zones-logpush-jobs id-by-job_id-zone_id-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --destination-conf: string # Uniquely identifies a resource (such as an s3 bucket) where data. will be pushed. Additional configuration parameters supported by the destination may be included. (format: uri, e.g. s3://mybucket/logs?region=us-west-2)
-  --enabled: string@bool-completer # Flag that indicates if the job is enabled. (default: false, e.g. false)
+  --enabled: oneof<nothing, bool> # Flag that indicates if the job is enabled. (default: false, e.g. false)
   --filter: string # The filters to select the events to include and/or remove from your logs. For more information, refer to [Filters](https://developers.cloudflare.com/logs/reference/filters/). (nullable, e.g. {"where":{"and":[{"key":"ClientRequestPath","operator":"contains","value":"/static"},{"key":"ClientRequestHost","operator":"eq","value":"example.com"}]}})
   --frequency: string@frequency-completer # This field is deprecated. Please use `max_upload_*` parameters instead. . The frequency at which Cloudflare sends batches of logs to your destination. Setting frequency to high sends your logs in larger quantities of smaller files. Setting frequency to low sends logs in smaller quantities of larger files. (DEPRECATED, nullable, default: high, e.g. high)
   --kind: string@kind-completer-4 # The kind parameter (optional) is used to differentiate between Logpush and Edge Log Delivery jobs (when supported by the dataset). (default: , e.g. )
@@ -80885,7 +80911,7 @@ export def "zones-logs-control-retention-flag id-logs-control-retention-flag-by-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --flag: string@bool-completer # The log retention flag for Logpull API. (e.g. true)
+  --flag: oneof<nothing, bool> # The log retention flag for Logpull API. (e.g. true)
 ]: any -> record<result: record<flag: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -81008,7 +81034,7 @@ export def "zones-logs-explorer-datasets zones-logs-explorer-datasets-update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether to enable or disable log ingest for this dataset.
+  --enabled: oneof<nothing, bool> # Whether to enable or disable log ingest for this dataset.
   --body-fields: list # Controls which fields the API ingests after the update. Defaults to all available fields when absent. — item shape: {enabled: bool, name: string}
 ]: any -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<created_at: string, dataset: string, dataset_id: string, enabled: bool, object_id: string, object_type: string, updated_at: string, fields: list<record>>, success: bool> {
   let input = $in
@@ -81653,7 +81679,7 @@ export def "zones-origin-tls-client-auth-settings zone-level-authenticated-origi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Indicates whether zone-level authenticated origin pulls is enabled. (e.g. true)
+  --enabled: oneof<nothing, bool> # Indicates whether zone-level authenticated origin pulls is enabled. (e.g. true)
 ]: any -> record<result: record<enabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -81750,9 +81776,9 @@ export def "zones-page-shield page-shield-update-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # When true, indicates that Page Shield is enabled. (e.g. true)
-  --use-cloudflare-reporting-endpoint: string@bool-completer # When true, CSP reports will be sent to https://csp-reporting.cloudflare.com/cdn-cgi/script_monitor/report (e.g. true)
-  --use-connection-url-path: string@bool-completer # When true, the paths associated with connections URLs will also be analyzed. (e.g. true)
+  --enabled: oneof<nothing, bool> # When true, indicates that Page Shield is enabled. (e.g. true)
+  --use-cloudflare-reporting-endpoint: oneof<nothing, bool> # When true, CSP reports will be sent to https://csp-reporting.cloudflare.com/cdn-cgi/script_monitor/report (e.g. true)
+  --use-connection-url-path: oneof<nothing, bool> # When true, the paths associated with connections URLs will also be analyzed. (e.g. true)
 ]: any -> record<result: record<enabled: bool, updated_at: string, use_cloudflare_reporting_endpoint: bool, use_connection_url_path: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -81785,8 +81811,8 @@ export def "zones-page-shield-connections page-shield-list-connections" [
   --per-page: float # e.g. 100
   --order-by: string@order-by-completer-7 # e.g. first_seen_at
   --direction: string@direction-completer # e.g. asc
-  --prioritize-malicious: string@bool-completer # e.g. true
-  --exclude-cdn-cgi: string@bool-completer # e.g. true
+  --prioritize-malicious: oneof<nothing, bool> # e.g. true
+  --exclude-cdn-cgi: oneof<nothing, bool> # e.g. true
   --status: string # e.g. active,inactive
   --page-url: string # e.g. example.com/page,*/checkout,example.com/*,*checkout*
   --qp-export: string@export-completer # e.g. csv
@@ -81844,8 +81870,8 @@ export def "zones-page-shield-cookies page-shield-list-cookies" [
   --page-url: string # e.g. example.com/page,*/checkout,example.com/*,*checkout*
   --qp-export: string@export-completer # e.g. csv
   --name: string # e.g. session_id
-  --secure: string@bool-completer # e.g. true
-  --http-only: string@bool-completer # e.g. true
+  --secure: oneof<nothing, bool> # e.g. true
+  --http-only: oneof<nothing, bool> # e.g. true
   --same-site: string@same-site-completer # e.g. strict
   --type: string@type-completer-32 # e.g. first_party
   --path: string # e.g. /
@@ -81920,7 +81946,7 @@ export def "zones-page-shield-policies page-shield-create-policy" [
   --allow-errors(-e) # Return full response without error handling
   action: string@action-completer-4 # The action to take if the expression matches (e.g. allow)
   description: string # A description for the policy (e.g. Checkout page CSP policy)
-  --enabled: string@bool-completer # Whether the policy is enabled (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the policy is enabled (e.g. true)
   expression: string # The expression which must match for the policy to be applied, using the Cloudflare Firewall rule expression syntax (e.g. ends_with(http.request.uri.path, "/checkout"))
   value: string # The policy which will be applied (e.g. script-src 'none';)
 ]: any -> record<result: record<action: string, description: string, enabled: bool, expression: string, value: string, id: string>> {
@@ -81997,7 +82023,7 @@ export def "zones-page-shield-policies page-shield-update-policy" [
   --allow-errors(-e) # Return full response without error handling
   --action: string@action-completer-4 # The action to take if the expression matches (e.g. allow)
   --description: string # A description for the policy (e.g. Checkout page CSP policy)
-  --enabled: string@bool-completer # Whether the policy is enabled (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the policy is enabled (e.g. true)
   --expression: string # The expression which must match for the policy to be applied, using the Cloudflare Firewall rule expression syntax (e.g. ends_with(http.request.uri.path, "/checkout"))
   --value: string # The policy which will be applied (e.g. script-src 'none';)
 ]: any -> record<result: record<action: string, description: string, enabled: bool, expression: string, value: string, id: string>> {
@@ -82032,9 +82058,9 @@ export def "zones-page-shield-scripts page-shield-list-scripts" [
   --per-page: float # e.g. 100
   --order-by: string@order-by-completer-7 # e.g. first_seen_at
   --direction: string@direction-completer # e.g. asc
-  --prioritize-malicious: string@bool-completer # e.g. true
-  --exclude-cdn-cgi: string@bool-completer # default: true, e.g. true
-  --exclude-duplicates: string@bool-completer # default: true, e.g. true
+  --prioritize-malicious: oneof<nothing, bool> # e.g. true
+  --exclude-cdn-cgi: oneof<nothing, bool> # default: true, e.g. true
+  --exclude-duplicates: oneof<nothing, bool> # default: true, e.g. true
   --status: string # e.g. active,inactive
   --page-url: string # e.g. example.com/page,*/checkout,example.com/*,*checkout*
   --qp-export: string@export-completer # e.g. csv
@@ -82293,7 +82319,7 @@ export def "zones-pay-per-crawl-configuration pay-per-crawlpatchConfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --bot-overrides: record
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --price-usd-microcents: int # Price in microcents 1 USD = 100,000,000 microcents. Must be 0 or a multiple of 100,000 $0.001. Range: $0.001–$9,999.999.
 ]: any -> record<errors: table<code: int, documentation_url: string, error_chain: list, message: string, meta: any, source: record>, messages: table<code: int, documentation_url: string, error_chain: list, message: string, meta: any, source: record>, result: record<bot_overrides: record, enabled: bool, price_usd_microcents: int>, result_info: record<count: int, page: int, per_page: int, total_count: int, total_pages: int>, success: bool> {
   let input = $in
@@ -82321,7 +82347,7 @@ export def "zones-pay-per-crawl-configuration pay-per-crawlcreateConfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --bot-overrides: record
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --price-usd-microcents: int # Price in microcents 1 USD = 100,000,000 microcents. Must be 0 or a multiple of 100,000 $0.001. Range: $0.001–$9,999.999.
 ]: any -> record<errors: table<code: int, documentation_url: string, error_chain: list, message: string, meta: any, source: record>, messages: table<code: int, documentation_url: string, error_chain: list, message: string, meta: any, source: record>, result: record<bot_overrides: record, enabled: bool, price_usd_microcents: int>, result_info: record<count: int, page: int, per_page: int, total_count: int, total_pages: int>, success: bool> {
   let input = $in
@@ -82351,7 +82377,7 @@ export def "zones-purge-cache zone-purge" [
   --tags: list # For more information on cache tags and purging by tags, please refer to [purge by cache-tags documentation page](https://developers.cloudflare.com/cache/how-to/purge-cache/purge-by-tags/). (e.g. [a-cache-tag, another-cache-tag])
   --hosts: list # For more information purging by hostnames, please refer to [purge by hostname documentation page](https://developers.cloudflare.com/cache/how-to/purge-cache/purge-by-hostname/). (e.g. [www.example.com, images.example.com])
   --prefixes: list # For more information on purging by prefixes, please refer to [purge by prefix documentation page](https://developers.cloudflare.com/cache/how-to/purge-cache/purge_by_prefix/). (e.g. [www.example.com/foo, images.example.com/bar/baz])
-  --purge-everything: string@bool-completer # For more information, please refer to [purge everything documentation page](https://developers.cloudflare.com/cache/how-to/purge-cache/purge-everything/). (e.g. true)
+  --purge-everything: oneof<nothing, bool> # For more information, please refer to [purge everything documentation page](https://developers.cloudflare.com/cache/how-to/purge-cache/purge-everything/). (e.g. true)
   --files: list # For more information on purging files, please refer to [purge by single-file documentation page](https://developers.cloudflare.com/cache/how-to/purge-cache/purge-by-single-file/). (e.g. [http://www.example.com/css/styles.css, http://www.example.com/js/index.js])
 ]: any -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, result: record<id: string>, success: bool> {
   let input = $in
@@ -82939,8 +82965,8 @@ export def "zones-schema-validation-schemas schema-validation-list-schemas-pagin
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page number of paginated results. (default: 1)
   --per-page: int # Maximum number of results per page. (default: 20)
-  --omit-source: string@bool-completer # Omit the source-files of schemas and only retrieve their meta-data. (default: false)
-  --validation-enabled: string@bool-completer # Filter for enabled schemas
+  --omit-source: oneof<nothing, bool> # Omit the source-files of schemas and only retrieve their meta-data. (default: false)
+  --validation-enabled: oneof<nothing, bool> # Filter for enabled schemas
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -82967,7 +82993,7 @@ export def "zones-schema-validation-schemas schema-validation-create-schema" [
   kind: string@kind-completer-9 # The kind of the schema (e.g. openapi_v3)
   name: string # A human-readable name for the schema (e.g. petstore schema)
   --body-source: string # The raw schema, e.g., the OpenAPI schema, either as JSON or YAML (e.g. <schema file contents>)
-  --validation-enabled: string@bool-completer # An indicator if this schema is enabled
+  --validation-enabled: oneof<nothing, bool> # An indicator if this schema is enabled
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -83042,7 +83068,7 @@ export def "zones-schema-validation-schemas schema-validation-get-schema" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --omit-source: string@bool-completer # Omit the source-files of schemas and only retrieve their meta-data. (default: false)
+  --omit-source: oneof<nothing, bool> # Omit the source-files of schemas and only retrieve their meta-data. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -83067,7 +83093,7 @@ export def "zones-schema-validation-schemas schema-validation-edit-schema" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --validation-enabled: string@bool-completer # Flag whether schema is enabled for validation.
+  --validation-enabled: oneof<nothing, bool> # Flag whether schema is enabled for validation.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -83649,7 +83675,7 @@ export def "zones-security-center-insights get-zone-security-center-insights" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string@bool-completer # e.g. false
+  --dismissed: oneof<nothing, bool> # e.g. false
   --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
   --issue-type: list # e.g. [compliance_violation, email_security]
   --product: list # e.g. [access, dns]
@@ -83715,7 +83741,7 @@ export def "zones-security-center-insights-class get-zone-security-center-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string@bool-completer # e.g. false
+  --dismissed: oneof<nothing, bool> # e.g. false
   --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
   --issue-type: list # e.g. [compliance_violation, email_security]
   --product: list # e.g. [access, dns]
@@ -83798,7 +83824,7 @@ export def "zones-security-center-insights-severity get-zone-security-center-ins
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string@bool-completer # e.g. false
+  --dismissed: oneof<nothing, bool> # e.g. false
   --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
   --issue-type: list # e.g. [compliance_violation, email_security]
   --product: list # e.g. [access, dns]
@@ -83832,7 +83858,7 @@ export def "zones-security-center-insights-type get-zone-security-center-insight
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string@bool-completer # e.g. false
+  --dismissed: oneof<nothing, bool> # e.g. false
   --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
   --issue-type: list # e.g. [compliance_violation, email_security]
   --product: list # e.g. [access, dns]
@@ -83926,7 +83952,7 @@ export def "zones-security-center-insights-dismiss archive-zone-security-center-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismiss: string@bool-completer # default: true
+  --dismiss: oneof<nothing, bool> # default: true
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -83999,7 +84025,7 @@ export def "zones-security-center-securitytxt update-security-txt" [
   --acknowledgments: list # e.g. [https://example.com/hall-of-fame.html]
   --canonical: list # e.g. [https://www.example.com/.well-known/security.txt]
   --contact: list # e.g. [mailto:security@example.com, tel:+1-201-555-0123, https://example.com/security-contact.html]
-  --enabled: string@bool-completer # e.g. true
+  --enabled: oneof<nothing, bool> # e.g. true
   --encryption: list # e.g. [https://example.com/pgp-key.txt, dns:5d2d37ab76d47d36._openpgpkey.example.com?type=OPENPGPKEY, openpgp4fpr:5f2de5521c63a801ab59ccb603d49de44b29100f]
   --expires: string # format: date-time
   --hiring: list # e.g. [https://example.com/jobs.html]
@@ -84250,11 +84276,11 @@ export def "zones-settings-google-tag-gateway-config zone-settings-change-google
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Enables or disables Google Tag Gateway for this zone. (e.g. true)
+  --enabled: oneof<nothing, bool> # Enables or disables Google Tag Gateway for this zone. (e.g. true)
   endpoint: string # Specifies the endpoint path for proxying Google Tag Manager requests. Use an absolute path starting with '/', with no nested paths and alphanumeric characters only (e.g. /metrics). (e.g. /metrics)
-  --hideOriginalIp: string@bool-completer # Hides the original client IP address from Google when enabled. (e.g. true)
+  --hideOriginalIp: oneof<nothing, bool> # Hides the original client IP address from Google when enabled. (e.g. true)
   measurementId: string # Specify the Google Tag Manager container or measurement ID (e.g. GTM-XXXXXXX or G-XXXXXXXXXX). (e.g. GTM-P2F3N47Q)
-  --setUpTag: string@bool-completer # Set up the associated Google Tag on the zone automatically when enabled. (nullable, e.g. true)
+  --setUpTag: oneof<nothing, bool> # Set up the associated Google Tag on the zone automatically when enabled. (nullable, e.g. true)
 ]: any -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record<enabled: bool, endpoint: string, hideOriginalIp: bool, measurementId: string, setUpTag: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -84547,9 +84573,9 @@ export def "zones-settings-zaraz-config identifier-zaraz-config-by-zone_id-1" [
   --allow-errors(-e) # Return full response without error handling
   --analytics: record # Cloudflare Monitoring settings. — shape: {defaultPurpose?: string, enabled?: bool, sessionExpTime?: int}
   --consent: record # Consent management configuration. — shape: {buttonTextTranslations?: record, companyEmail?: string, companyName?: string, companyStreetAddress?: string, consentModalIntroHTML?: string, consentModalIntroHTMLWithTranslations?: record, cookieName?: string, customCSS?: string, customIntroDisclaimerDismissed?: bool, defaultLanguage?: string, enabled: bool, hideModal?: bool, purposes?: record, purposesWithTranslations?: record, tcfCompliant?: bool}
-  --dataLayer: string@bool-completer # Data layer compatibility mode enabled.
+  --dataLayer: oneof<nothing, bool> # Data layer compatibility mode enabled.
   debugKey: string # The key for Zaraz debug mode.
-  --historyChange: string@bool-completer # Single Page Application support enabled.
+  --historyChange: oneof<nothing, bool> # Single Page Application support enabled.
   settings: record # General Zaraz settings. — shape: {autoInjectScript: bool, contextEnricher?: record, cookieDomain?: string, ecommerce?: bool, eventsApiPath?: string, hideExternalReferer?: bool, hideIPAddress?: bool, hideQueryParams?: bool, hideUserAgent?: bool, initPath?: string, injectIframes?: bool, mcRootPath?: string, scriptPath?: string, trackPath?: string}
   triggers: record # Triggers set up under Zaraz configuration, where key is the trigger alpha-numeric ID and value is the trigger configuration.
   --body-variables: record # Variables set up under Zaraz configuration, where key is the variable alpha-numeric ID and value is the variable configuration. Values of variables of type secret are not included.
@@ -84796,7 +84822,7 @@ export def "zones-settings zone-settings-edit-single-setting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # ssl-recommender enrollment setting. (default: false)
+  --enabled: oneof<nothing, bool> # ssl-recommender enrollment setting. (default: false)
   --value: any
 ]: any -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, success: bool, result: record> {
   let input = $in
@@ -84961,7 +84987,7 @@ export def "zones-smart-shield-healthchecks smart-shield-create-health-check" [
   --interval: int # The interval between each health check. Shorter intervals may give quicker notifications if the origin status changes, but will increase load on the origin as we check from multiple locations. (default: 60)
   name: string # A short name to identify the health check. Only alphanumeric characters, hyphens and underscores are allowed. (e.g. server-1)
   --retries: int # The number of retries to attempt in case of a timeout before marking the origin as unhealthy. Retries are attempted immediately. (default: 2)
-  --suspended: string@bool-completer # If suspended, no health checks are sent to the origin. (default: false)
+  --suspended: oneof<nothing, bool> # If suspended, no health checks are sent to the origin. (default: false)
   --tcp-config: record # Parameters specific to TCP health check. (nullable) — shape: {method?: "connection_established", port?: int}
   --timeout: int # The timeout (in seconds) before marking the health check as failed. (default: 5)
   --type: string # The protocol to use for the health check. Currently supported protocols are 'HTTP', 'HTTPS' and 'TCP'. (default: HTTP, e.g. HTTPS)
@@ -85051,7 +85077,7 @@ export def "zones-smart-shield-healthchecks smart-shield-patch-health-check" [
   --interval: int # The interval between each health check. Shorter intervals may give quicker notifications if the origin status changes, but will increase load on the origin as we check from multiple locations. (default: 60)
   name: string # A short name to identify the health check. Only alphanumeric characters, hyphens and underscores are allowed. (e.g. server-1)
   --retries: int # The number of retries to attempt in case of a timeout before marking the origin as unhealthy. Retries are attempted immediately. (default: 2)
-  --suspended: string@bool-completer # If suspended, no health checks are sent to the origin. (default: false)
+  --suspended: oneof<nothing, bool> # If suspended, no health checks are sent to the origin. (default: false)
   --tcp-config: record # Parameters specific to TCP health check. (nullable) — shape: {method?: "connection_established", port?: int}
   --timeout: int # The timeout (in seconds) before marking the health check as failed. (default: 5)
   --type: string # The protocol to use for the health check. Currently supported protocols are 'HTTP', 'HTTPS' and 'TCP'. (default: HTTP, e.g. HTTPS)
@@ -85817,7 +85843,7 @@ export def "zones-ssl-certificate-packs-order certificate-packs-order-advanced-c
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   certificate_authority: string@certificate-authority-completer # Certificate Authority selected for the order.  For information on any certificate authority specific details or restrictions [see this page for more details](https://developers.cloudflare.com/ssl/reference/certificate-authorities). (e.g. lets_encrypt)
-  --cloudflare-branding: string@bool-completer # Whether or not to add Cloudflare Branding for the order.  This will add a subdomain of sni.cloudflaressl.com as the Common Name if set to true. (e.g. false)
+  --cloudflare-branding: oneof<nothing, bool> # Whether or not to add Cloudflare Branding for the order.  This will add a subdomain of sni.cloudflaressl.com as the Common Name if set to true. (e.g. false)
   hosts: list # Comma separated list of valid host names for the certificate packs. Must contain the zone apex, may not contain more than 50 hosts, and may not be empty. (e.g. [example.com, *.example.com, www.example.com])
   type: string@type-completer-33 # Type of certificate pack. (e.g. advanced)
   validation_method: string@validation-method-completer # Validation Method selected for the order. (e.g. txt)
@@ -85919,7 +85945,7 @@ export def "zones-ssl-certificate-packs certificate-packs-restart-validation-for
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cloudflare-branding: string@bool-completer # Whether or not to add Cloudflare Branding for the order.  This will add a subdomain of sni.cloudflaressl.com as the Common Name if set to true. (e.g. false)
+  --cloudflare-branding: oneof<nothing, bool> # Whether or not to add Cloudflare Branding for the order.  This will add a subdomain of sni.cloudflaressl.com as the Common Name if set to true. (e.g. false)
 ]: any -> record<result: record<certificate_authority: string, certificates: list<record>, cloudflare_branding: bool, dcv_delegation_records: list<record>, hosts: list<string>, id: string, primary_certificate: string, status: string, type: string, validation_errors: list<record>, validation_method: string, validation_records: list<record>, validity_days: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -85991,7 +86017,7 @@ export def "zones-ssl-universal-settings universal-ssl-settings-for-a-zone-edit-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Disabling Universal SSL removes any currently active Universal SSL certificates for your zone from the edge and prevents any future Universal SSL certificates from being ordered. If there are no advanced certificates or custom certificates uploaded for the domain, visitors will be unable to access the domain over HTTPS.  By disabling Universal SSL, you understand that the following Cloudflare settings and preferences will result in visitors being unable to visit your domain unless you have uploaded a custom certificate or purchased an advanced certificate.  * HSTS * Always Use HTTPS * Opportunistic Encryption * Onion Routing * Any Page Rules redirecting traffic to HTTPS  Similarly, any HTTP redirect to HTTPS at the origin while the Cloudflare proxy is enabled will result in users being unable to visit your site without a valid certificate at Cloudflare's edge.  If you do not have a valid custom or advanced certificate at Cloudflare's edge and are unsure if any of the above Cloudflare settings are enabled, or if any HTTP redirects exist at your origin, we advise leaving Universal SSL enabled for your domain. (e.g. true)
+  --enabled: oneof<nothing, bool> # Disabling Universal SSL removes any currently active Universal SSL certificates for your zone from the edge and prevents any future Universal SSL certificates from being ordered. If there are no advanced certificates or custom certificates uploaded for the domain, visitors will be unable to access the domain over HTTPS.  By disabling Universal SSL, you understand that the following Cloudflare settings and preferences will result in visitors being unable to visit your domain unless you have uploaded a custom certificate or purchased an advanced certificate.  * HSTS * Always Use HTTPS * Opportunistic Encryption * Onion Routing * Any Page Rules redirecting traffic to HTTPS  Similarly, any HTTP redirect to HTTPS at the origin while the Cloudflare proxy is enabled will result in users being unable to visit your site without a valid certificate at Cloudflare's edge.  If you do not have a valid custom or advanced certificate at Cloudflare's edge and are unsure if any of the above Cloudflare settings are enabled, or if any HTTP redirects exist at your origin, we advise leaving Universal SSL enabled for your domain. (e.g. true)
 ]: any -> record<result: record<enabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -86017,7 +86043,7 @@ export def "zones-ssl-verification ssl-verification-ssl-verification-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --retry: string@bool-completer # e.g. true
+  --retry: oneof<nothing, bool> # e.g. true
 ]: nothing -> record<result: table<brand_check: bool, cert_pack_uuid: string, certificate_status: string, signature: string, validation_method: string, verification_info: record, verification_status: bool, verification_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -86411,7 +86437,7 @@ export def "zones-token-validation-rules token-validation-rules-list" [
   --page: int # Page number of paginated results. (default: 1)
   --token-configuration: list # Select rules using any of these token configurations.
   --action: string@action-completer-5 # e.g. log
-  --enabled: string@bool-completer # e.g. true
+  --enabled: oneof<nothing, bool> # e.g. true
   --id: string # Select rules with these IDs.
   --rule-id: string # Select rules with these IDs.
   --host: string # Select rules with this host in `include`. (format: hostname, e.g. www.example.com)
@@ -86443,7 +86469,7 @@ export def "zones-token-validation-rules token-validation-rules-create" [
   --allow-errors(-e) # Return full response without error handling
   action: string@action-completer-5 # Action to take on requests that match operations included in `selector` and fail `expression`. (e.g. log)
   description: string # A human-readable description that gives more details than `title`. (e.g. Long description for Token Validation Rule)
-  --enabled: string@bool-completer # Toggle rule on or off. (e.g. true)
+  --enabled: oneof<nothing, bool> # Toggle rule on or off. (e.g. true)
   expression: string # Rule expression. Requests that fail to match this expression will be subject to `action`.  For details on expressions, see the [Cloudflare Docs](https://developers.cloudflare.com/api-shield/security/jwt-validation/).  (e.g. is_jwt_valid("52973293-cb04-4a97-8f55-e7d2ad1107dd") or is_jwt_valid("46eab8d1-6376-45e3-968f-2c649d77d423"))
   selector: record # Select operations covered by this rule.  For details on selectors, see the [Cloudflare Docs](https://developers.cloudflare.com/api-shield/security/jwt-validation/). — shape: {exclude?: list, include?: list}
   title: string # A human-readable name for the rule. (e.g. Example Token Validation Rule)
@@ -86616,7 +86642,7 @@ export def "zones-token-validation-rules token-validation-rules-edit" [
   --allow-errors(-e) # Return full response without error handling
   --action: string@action-completer-5 # Action to take on requests that match operations included in `selector` and fail `expression`. (e.g. log)
   --description: string # A human-readable description that gives more details than `title`. (e.g. Long description for Token Validation Rule)
-  --enabled: string@bool-completer # Toggle rule on or off. (e.g. true)
+  --enabled: oneof<nothing, bool> # Toggle rule on or off. (e.g. true)
   --expression: string # Rule expression. Requests that fail to match this expression will be subject to `action`.  For details on expressions, see the [Cloudflare Docs](https://developers.cloudflare.com/api-shield/security/jwt-validation/).  (e.g. is_jwt_valid("52973293-cb04-4a97-8f55-e7d2ad1107dd") or is_jwt_valid("46eab8d1-6376-45e3-968f-2c649d77d423"))
   --selector: record # Select operations covered by this rule.  For details on selectors, see the [Cloudflare Docs](https://developers.cloudflare.com/api-shield/security/jwt-validation/). — shape: {exclude?: list, include?: list}
   --title: string # A human-readable name for the rule. (e.g. Example Token Validation Rule)
@@ -86750,18 +86776,18 @@ export def "zones-waiting-rooms waiting-room-create-waiting-room" [
   --custom-page-html: string # Only available for the Waiting Room Advanced subscription. This is a template html file that will be rendered at the edge. If no custom_page_html is provided, the default waiting room will be used. The template is based on mustache ( https://mustache.github.io/ ). There are several variables that are evaluated by the Cloudflare edge: 1. {{`waitTimeKnown`}} Acts like a boolean value that indicates the behavior to take when wait time is not available, for instance when queue_all is **true**. 2. {{`waitTimeFormatted`}} Estimated wait time for the user. For example, five minutes. Alternatively, you can use: 3. {{`waitTime`}} Number of minutes of estimated wait for a user. 4. {{`waitTimeHours`}} Number of hours of estimated wait for a user (`Math.floor(waitTime/60)`). 5. {{`waitTimeHourMinutes`}} Number of minutes above the `waitTimeHours` value (`waitTime%60`). 6. {{`queueIsFull`}} Changes to **true** when no more people can be added to the queue.  To view the full list of variables, look at the `cfWaitingRoom` object described under the `json_response_enabled` property in other Waiting Room API calls. (default: , e.g. {{#waitTimeKnown}} {{waitTime}} mins {{/waitTimeKnown}} {{^waitTimeKnown}} Queue all enabled {{/waitTimeKnown}})
   --default-template-language: string@default-template-language-completer # The language of the default page template. If no default_template_language is provided, then `en-US` (English) will be used. (default: en-US, e.g. es-ES)
   --description: string # A note that you can use to add more details about the waiting room. (default: , e.g. Production - DO NOT MODIFY)
-  --disable-session-renewal: string@bool-completer # Only available for the Waiting Room Advanced subscription. Disables automatic renewal of session cookies. If `true`, an accepted user will have session_duration minutes to browse the site. After that, they will have to go through the waiting room again. If `false`, a user's session cookie will be automatically renewed on every request. (default: false, e.g. false)
+  --disable-session-renewal: oneof<nothing, bool> # Only available for the Waiting Room Advanced subscription. Disables automatic renewal of session cookies. If `true`, an accepted user will have session_duration minutes to browse the site. After that, they will have to go through the waiting room again. If `false`, a user's session cookie will be automatically renewed on every request. (default: false, e.g. false)
   --enabled-origin-commands: list # A list of enabled origin commands. (default: [])
   host: string # The host name to which the waiting room will be applied (no wildcards). Please do not include the scheme (http:// or https://). The host and path combination must be unique. (e.g. shop.example.com)
-  --json-response-enabled: string@bool-completer # Only available for the Waiting Room Advanced subscription. If `true`, requests to the waiting room with the header `Accept: application/json` will receive a JSON response object with information on the user's status in the waiting room as opposed to the configured static HTML page. This JSON response object has one property `cfWaitingRoom` which is an object containing the following fields: 1. `inWaitingRoom`: Boolean indicating if the user is in the waiting room (always **true**). 2. `waitTimeKnown`: Boolean indicating if the current estimated wait times are accurate. If **false**, they are not available. 3. `waitTime`: Valid only when `waitTimeKnown` is **true**. Integer indicating the current estimated time in minutes the user will wait in the waiting room. When `queueingMethod` is **random**, this is set to `waitTime50Percentile`. 4. `waitTime25Percentile`: Valid only when `queueingMethod` is **random** and `waitTimeKnown` is **true**. Integer indicating the current estimated maximum wait time for the 25% of users that gain entry the fastest (25th percentile). 5. `waitTime50Percentile`: Valid only when `queueingMethod` is **random** and `waitTimeKnown` is **true**. Integer indicating the current estimated maximum wait time for the 50% of users that gain entry the fastest (50th percentile). In other words, half of the queued users are expected to let into the origin website before `waitTime50Percentile` and half are expected to be let in after it. 6. `waitTime75Percentile`: Valid only when `queueingMethod` is **random** and `waitTimeKnown` is **true**. Integer indicating the current estimated maximum wait time for the 75% of users that gain entry the fastest (75th percentile). 7. `waitTimeFormatted`: String displaying the `waitTime` formatted in English for users. If `waitTimeKnown` is **false**, `waitTimeFormatted` will display **unavailable**. 8. `queueIsFull`: Boolean indicating if the waiting room's queue is currently full and not accepting new users at the moment. 9. `queueAll`: Boolean indicating if all users will be queued in the waiting room and no one will be let into the origin website. 10. `lastUpdated`: String displaying the timestamp as an ISO 8601 string of the user's last attempt to leave the waiting room and be let into the origin website. The user is able to make another attempt after `refreshIntervalSeconds` past this time. If the user makes a request too soon, it will be ignored and `lastUpdated` will not change. 11. `refreshIntervalSeconds`: Integer indicating the number of seconds after `lastUpdated` until the user is able to make another attempt to leave the waiting room and be let into the origin website. When the `queueingMethod` is `reject`, there is no specified refresh time —\_it will always be **zero**. 12. `queueingMethod`: The queueing method currently used by the waiting room. It is either **fifo**, **random**, **passthrough**, or **reject**. 13. `isFIFOQueue`: Boolean indicating if the waiting room uses a FIFO (First-In-First-Out) queue. 14. `isRandomQueue`: Boolean indicating if the waiting room uses a Random queue where users gain access randomly. 15. `isPassthroughQueue`: Boolean indicating if the waiting room uses a passthrough queue. Keep in mind that when passthrough is enabled, this JSON response will only exist when `queueAll` is **true** or `isEventPrequeueing` is **true** because in all other cases requests will go directly to the origin. 16. `isRejectQueue`: Boolean indicating if the waiting room uses a reject queue. 17. `isEventActive`: Boolean indicating if an event is currently occurring. Events are able to change a waiting room's behavior during a specified period of time. For additional information, look at the event properties `prequeue_start_time`, `event_start_time`, and `event_end_time` in the documentation for creating waiting room events. Events are considered active between these start and end times, as well as during the prequeueing period if it exists. 18. `isEventPrequeueing`: Valid only when `isEventActive` is **true**. Boolean indicating if an event is currently prequeueing users before it starts. 19. `timeUntilEventStart`: Valid only when `isEventPrequeueing` is **true**. Integer indicating the number of minutes until the event starts. 20. `timeUntilEventStartFormatted`: String displaying the `timeUntilEventStart` formatted in English for users. If `isEventPrequeueing` is **false**, `timeUntilEventStartFormatted` will display **unavailable**. 21. `timeUntilEventEnd`: Valid only when `isEventActive` is **true**. Integer indicating the number of minutes until the event ends. 22. `timeUntilEventEndFormatted`: String displaying the `timeUntilEventEnd` formatted in English for users. If `isEventActive` is **false**, `timeUntilEventEndFormatted` will display **unavailable**. 23. `shuffleAtEventStart`: Valid only when `isEventActive` is **true**. Boolean indicating if the users in the prequeue are shuffled randomly when the event starts. 24. `turnstile`: Empty when turnstile isn't enabled. String displaying an html tag to display the Turnstile widget. Please add the `{{{turnstile}}}` tag to the `custom_html` template to ensure the Turnstile widget appears. 25. `infiniteQueue`: Boolean indicating whether the response is for a user in the infinite queue.  An example cURL to a waiting room could be:  	curl -X GET "https://example.com/waitingroom" \ 		-H "Accept: application/json"  If `json_response_enabled` is **true** and the request hits the waiting room, an example JSON response when `queueingMethod` is **fifo** and no event is active could be:  	{ 		"cfWaitingRoom": { 			"inWaitingRoom": true, 			"waitTimeKnown": true, 			"waitTime": 10, 			"waitTime25Percentile": 0, 			"waitTime50Percentile": 0, 			"waitTime75Percentile": 0, 			"waitTimeFormatted": "10 minutes", 			"queueIsFull": false, 			"queueAll": false, 			"lastUpdated": "2020-08-03T23:46:00.000Z", 			"refreshIntervalSeconds": 20, 			"queueingMethod": "fifo", 			"isFIFOQueue": true, 			"isRandomQueue": false, 			"isPassthroughQueue": false, 			"isRejectQueue": false, 			"isEventActive": false, 			"isEventPrequeueing": false, 			"timeUntilEventStart": 0, 			"timeUntilEventStartFormatted": "unavailable", 			"timeUntilEventEnd": 0, 			"timeUntilEventEndFormatted": "unavailable", 			"shuffleAtEventStart": false 		} 	}  If `json_response_enabled` is **true** and the request hits the waiting room, an example JSON response when `queueingMethod` is **random** and an event is active could be:  	{ 		"cfWaitingRoom": { 			"inWaitingRoom": true, 			"waitTimeKnown": true, 			"waitTime": 10, 			"waitTime25Percentile": 5, 			"waitTime50Percentile": 10, 			"waitTime75Percentile": 15, 			"waitTimeFormatted": "5 minutes to 15 minutes", 			"queueIsFull": false, 			"queueAll": false, 			"lastUpdated": "2020-08-03T23:46:00.000Z", 			"refreshIntervalSeconds": 20, 			"queueingMethod": "random", 			"isFIFOQueue": false, 			"isRandomQueue": true, 			"isPassthroughQueue": false, 			"isRejectQueue": false, 			"isEventActive": true, 			"isEventPrequeueing": false, 			"timeUntilEventStart": 0, 			"timeUntilEventStartFormatted": "unavailable", 			"timeUntilEventEnd": 15, 			"timeUntilEventEndFormatted": "15 minutes", 			"shuffleAtEventStart": true 		} 	} (default: false, e.g. false)
+  --json-response-enabled: oneof<nothing, bool> # Only available for the Waiting Room Advanced subscription. If `true`, requests to the waiting room with the header `Accept: application/json` will receive a JSON response object with information on the user's status in the waiting room as opposed to the configured static HTML page. This JSON response object has one property `cfWaitingRoom` which is an object containing the following fields: 1. `inWaitingRoom`: Boolean indicating if the user is in the waiting room (always **true**). 2. `waitTimeKnown`: Boolean indicating if the current estimated wait times are accurate. If **false**, they are not available. 3. `waitTime`: Valid only when `waitTimeKnown` is **true**. Integer indicating the current estimated time in minutes the user will wait in the waiting room. When `queueingMethod` is **random**, this is set to `waitTime50Percentile`. 4. `waitTime25Percentile`: Valid only when `queueingMethod` is **random** and `waitTimeKnown` is **true**. Integer indicating the current estimated maximum wait time for the 25% of users that gain entry the fastest (25th percentile). 5. `waitTime50Percentile`: Valid only when `queueingMethod` is **random** and `waitTimeKnown` is **true**. Integer indicating the current estimated maximum wait time for the 50% of users that gain entry the fastest (50th percentile). In other words, half of the queued users are expected to let into the origin website before `waitTime50Percentile` and half are expected to be let in after it. 6. `waitTime75Percentile`: Valid only when `queueingMethod` is **random** and `waitTimeKnown` is **true**. Integer indicating the current estimated maximum wait time for the 75% of users that gain entry the fastest (75th percentile). 7. `waitTimeFormatted`: String displaying the `waitTime` formatted in English for users. If `waitTimeKnown` is **false**, `waitTimeFormatted` will display **unavailable**. 8. `queueIsFull`: Boolean indicating if the waiting room's queue is currently full and not accepting new users at the moment. 9. `queueAll`: Boolean indicating if all users will be queued in the waiting room and no one will be let into the origin website. 10. `lastUpdated`: String displaying the timestamp as an ISO 8601 string of the user's last attempt to leave the waiting room and be let into the origin website. The user is able to make another attempt after `refreshIntervalSeconds` past this time. If the user makes a request too soon, it will be ignored and `lastUpdated` will not change. 11. `refreshIntervalSeconds`: Integer indicating the number of seconds after `lastUpdated` until the user is able to make another attempt to leave the waiting room and be let into the origin website. When the `queueingMethod` is `reject`, there is no specified refresh time —\_it will always be **zero**. 12. `queueingMethod`: The queueing method currently used by the waiting room. It is either **fifo**, **random**, **passthrough**, or **reject**. 13. `isFIFOQueue`: Boolean indicating if the waiting room uses a FIFO (First-In-First-Out) queue. 14. `isRandomQueue`: Boolean indicating if the waiting room uses a Random queue where users gain access randomly. 15. `isPassthroughQueue`: Boolean indicating if the waiting room uses a passthrough queue. Keep in mind that when passthrough is enabled, this JSON response will only exist when `queueAll` is **true** or `isEventPrequeueing` is **true** because in all other cases requests will go directly to the origin. 16. `isRejectQueue`: Boolean indicating if the waiting room uses a reject queue. 17. `isEventActive`: Boolean indicating if an event is currently occurring. Events are able to change a waiting room's behavior during a specified period of time. For additional information, look at the event properties `prequeue_start_time`, `event_start_time`, and `event_end_time` in the documentation for creating waiting room events. Events are considered active between these start and end times, as well as during the prequeueing period if it exists. 18. `isEventPrequeueing`: Valid only when `isEventActive` is **true**. Boolean indicating if an event is currently prequeueing users before it starts. 19. `timeUntilEventStart`: Valid only when `isEventPrequeueing` is **true**. Integer indicating the number of minutes until the event starts. 20. `timeUntilEventStartFormatted`: String displaying the `timeUntilEventStart` formatted in English for users. If `isEventPrequeueing` is **false**, `timeUntilEventStartFormatted` will display **unavailable**. 21. `timeUntilEventEnd`: Valid only when `isEventActive` is **true**. Integer indicating the number of minutes until the event ends. 22. `timeUntilEventEndFormatted`: String displaying the `timeUntilEventEnd` formatted in English for users. If `isEventActive` is **false**, `timeUntilEventEndFormatted` will display **unavailable**. 23. `shuffleAtEventStart`: Valid only when `isEventActive` is **true**. Boolean indicating if the users in the prequeue are shuffled randomly when the event starts. 24. `turnstile`: Empty when turnstile isn't enabled. String displaying an html tag to display the Turnstile widget. Please add the `{{{turnstile}}}` tag to the `custom_html` template to ensure the Turnstile widget appears. 25. `infiniteQueue`: Boolean indicating whether the response is for a user in the infinite queue.  An example cURL to a waiting room could be:  	curl -X GET "https://example.com/waitingroom" \ 		-H "Accept: application/json"  If `json_response_enabled` is **true** and the request hits the waiting room, an example JSON response when `queueingMethod` is **fifo** and no event is active could be:  	{ 		"cfWaitingRoom": { 			"inWaitingRoom": true, 			"waitTimeKnown": true, 			"waitTime": 10, 			"waitTime25Percentile": 0, 			"waitTime50Percentile": 0, 			"waitTime75Percentile": 0, 			"waitTimeFormatted": "10 minutes", 			"queueIsFull": false, 			"queueAll": false, 			"lastUpdated": "2020-08-03T23:46:00.000Z", 			"refreshIntervalSeconds": 20, 			"queueingMethod": "fifo", 			"isFIFOQueue": true, 			"isRandomQueue": false, 			"isPassthroughQueue": false, 			"isRejectQueue": false, 			"isEventActive": false, 			"isEventPrequeueing": false, 			"timeUntilEventStart": 0, 			"timeUntilEventStartFormatted": "unavailable", 			"timeUntilEventEnd": 0, 			"timeUntilEventEndFormatted": "unavailable", 			"shuffleAtEventStart": false 		} 	}  If `json_response_enabled` is **true** and the request hits the waiting room, an example JSON response when `queueingMethod` is **random** and an event is active could be:  	{ 		"cfWaitingRoom": { 			"inWaitingRoom": true, 			"waitTimeKnown": true, 			"waitTime": 10, 			"waitTime25Percentile": 5, 			"waitTime50Percentile": 10, 			"waitTime75Percentile": 15, 			"waitTimeFormatted": "5 minutes to 15 minutes", 			"queueIsFull": false, 			"queueAll": false, 			"lastUpdated": "2020-08-03T23:46:00.000Z", 			"refreshIntervalSeconds": 20, 			"queueingMethod": "random", 			"isFIFOQueue": false, 			"isRandomQueue": true, 			"isPassthroughQueue": false, 			"isRejectQueue": false, 			"isEventActive": true, 			"isEventPrequeueing": false, 			"timeUntilEventStart": 0, 			"timeUntilEventStartFormatted": "unavailable", 			"timeUntilEventEnd": 15, 			"timeUntilEventEndFormatted": "15 minutes", 			"shuffleAtEventStart": true 		} 	} (default: false, e.g. false)
   name: string # A unique name to identify the waiting room. Only alphanumeric characters, hyphens and underscores are allowed. (e.g. production_webinar)
   new_users_per_minute: int # Sets the number of new users that will be let into the route every minute. This value is used as baseline for the number of users that are let in per minute. So it is possible that there is a little more or little less traffic coming to the route based on the traffic patterns at that time around the world.
   --path: string # Sets the path within the host to enable the waiting room on. The waiting room will be enabled for all subpaths as well. If there are two waiting rooms on the same subpath, the waiting room for the most specific path will be chosen. Wildcards and query parameters are not supported. (default: /, e.g. /shop/checkout)
-  --queue-all: string@bool-completer # If queue_all is `true`, all the traffic that is coming to a route will be sent to the waiting room. No new traffic can get to the route once this field is set and estimated time will become unavailable. (default: false, e.g. true)
+  --queue-all: oneof<nothing, bool> # If queue_all is `true`, all the traffic that is coming to a route will be sent to the waiting room. No new traffic can get to the route once this field is set and estimated time will become unavailable. (default: false, e.g. true)
   --queueing-method: string@queueing-method-completer # Sets the queueing method used by the waiting room. Changing this parameter from the **default** queueing method is only available for the Waiting Room Advanced subscription. Regardless of the queueing method, if `queue_all` is enabled or an event is prequeueing, users in the waiting room will not be accepted to the origin. These users will always see a waiting room page that refreshes automatically. The valid queueing methods are: 1. `fifo` **(default)**: First-In-First-Out queue where customers gain access in the order they arrived. 2. `random`: Random queue where customers gain access randomly, regardless of arrival time. 3. `passthrough`: Users will pass directly through the waiting room and into the origin website. As a result, any configured limits will not be respected while this is enabled. This method can be used as an alternative to disabling a waiting room (with `suspended`) so that analytics are still reported. This can be used if you wish to allow all traffic normally, but want to restrict traffic during a waiting room event, or vice versa. 4. `reject`: Users will be immediately rejected from the waiting room. As a result, no users will reach the origin website while this is enabled. This can be used if you wish to reject all traffic while performing maintenance, block traffic during a specified period of time (an event), or block traffic while events are not occurring. Consider a waiting room used for vaccine distribution that only allows traffic during sign-up events, and otherwise blocks all traffic. For this case, the waiting room uses `reject`, and its events override this with `fifo`, `random`, or `passthrough`. When this queueing method is enabled and neither `queueAll` is enabled nor an event is prequeueing, the waiting room page **will not refresh automatically**. (default: fifo, e.g. fifo)
   --queueing-status-code: int@queueing-status-code-completer # HTTP status code returned to a user while in the queue. (default: 200, e.g. 202)
   --session-duration: int # Lifetime of a cookie (in minutes) set by Cloudflare for users who get access to the route. If a user is not seen by Cloudflare again in that time period, they will be treated as a new user that visits the route. (default: 5)
-  --suspended: string@bool-completer # Suspends or allows traffic going to the waiting room. If set to `true`, the traffic will not go to the waiting room. (default: false)
+  --suspended: oneof<nothing, bool> # Suspends or allows traffic going to the waiting room. If set to `true`, the traffic will not go to the waiting room. (default: false)
   total_active_users: int # Sets the total number of active user sessions on the route at a point in time. A route is a combination of host and path on which a waiting room is available. This value is used as a baseline for the total number of active user sessions on the route. It is possible to have a situation where there are more or less active users sessions on the route based on the traffic patterns at that time around the world.
   --turnstile-action: string@turnstile-action-completer # Which action to take when a bot is detected using Turnstile. `log` will have no impact on queueing behavior, simply keeping track of how many bots are detected in Waiting Room Analytics. `infinite_queue` will send bots to a false queueing state, where they will never reach your origin. `infinite_queue` requires Advanced Waiting Room.  (default: log)
   --turnstile-mode: string@turnstile-mode-completer # Which Turnstile widget type to use for detecting bot traffic. See [the Turnstile documentation](https://developers.cloudflare.com/turnstile/concepts/widget/#widget-types) for the definitions of these widget types. Set to `off` to disable the Turnstile integration entirely. Setting this to anything other than `off` or `invisible` requires Advanced Waiting Room.  (default: invisible)
@@ -86838,7 +86864,7 @@ export def "zones-waiting-rooms-settings waiting-room-patch-zone-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --search-engine-crawler-bypass: string@bool-completer # Whether to allow verified search engine crawlers to bypass all waiting rooms on this zone. Verified search engine crawlers will not be tracked or counted by the waiting room system, and will not appear in waiting room analytics.  (default: false, e.g. true)
+  --search-engine-crawler-bypass: oneof<nothing, bool> # Whether to allow verified search engine crawlers to bypass all waiting rooms on this zone. Verified search engine crawlers will not be tracked or counted by the waiting room system, and will not appear in waiting room analytics.  (default: false, e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -86864,7 +86890,7 @@ export def "zones-waiting-rooms-settings waiting-room-update-zone-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --search-engine-crawler-bypass: string@bool-completer # Whether to allow verified search engine crawlers to bypass all waiting rooms on this zone. Verified search engine crawlers will not be tracked or counted by the waiting room system, and will not appear in waiting room analytics.  (default: false, e.g. true)
+  --search-engine-crawler-bypass: oneof<nothing, bool> # Whether to allow verified search engine crawlers to bypass all waiting rooms on this zone. Verified search engine crawlers will not be tracked or counted by the waiting room system, and will not appear in waiting room analytics.  (default: false, e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -86948,18 +86974,18 @@ export def "zones-waiting-rooms waiting-room-patch-waiting-room" [
   --custom-page-html: string # Only available for the Waiting Room Advanced subscription. This is a template html file that will be rendered at the edge. If no custom_page_html is provided, the default waiting room will be used. The template is based on mustache ( https://mustache.github.io/ ). There are several variables that are evaluated by the Cloudflare edge: 1. {{`waitTimeKnown`}} Acts like a boolean value that indicates the behavior to take when wait time is not available, for instance when queue_all is **true**. 2. {{`waitTimeFormatted`}} Estimated wait time for the user. For example, five minutes. Alternatively, you can use: 3. {{`waitTime`}} Number of minutes of estimated wait for a user. 4. {{`waitTimeHours`}} Number of hours of estimated wait for a user (`Math.floor(waitTime/60)`). 5. {{`waitTimeHourMinutes`}} Number of minutes above the `waitTimeHours` value (`waitTime%60`). 6. {{`queueIsFull`}} Changes to **true** when no more people can be added to the queue.  To view the full list of variables, look at the `cfWaitingRoom` object described under the `json_response_enabled` property in other Waiting Room API calls. (default: , e.g. {{#waitTimeKnown}} {{waitTime}} mins {{/waitTimeKnown}} {{^waitTimeKnown}} Queue all enabled {{/waitTimeKnown}})
   --default-template-language: string@default-template-language-completer # The language of the default page template. If no default_template_language is provided, then `en-US` (English) will be used. (default: en-US, e.g. es-ES)
   --description: string # A note that you can use to add more details about the waiting room. (default: , e.g. Production - DO NOT MODIFY)
-  --disable-session-renewal: string@bool-completer # Only available for the Waiting Room Advanced subscription. Disables automatic renewal of session cookies. If `true`, an accepted user will have session_duration minutes to browse the site. After that, they will have to go through the waiting room again. If `false`, a user's session cookie will be automatically renewed on every request. (default: false, e.g. false)
+  --disable-session-renewal: oneof<nothing, bool> # Only available for the Waiting Room Advanced subscription. Disables automatic renewal of session cookies. If `true`, an accepted user will have session_duration minutes to browse the site. After that, they will have to go through the waiting room again. If `false`, a user's session cookie will be automatically renewed on every request. (default: false, e.g. false)
   --enabled-origin-commands: list # A list of enabled origin commands. (default: [])
   host: string # The host name to which the waiting room will be applied (no wildcards). Please do not include the scheme (http:// or https://). The host and path combination must be unique. (e.g. shop.example.com)
-  --json-response-enabled: string@bool-completer # Only available for the Waiting Room Advanced subscription. If `true`, requests to the waiting room with the header `Accept: application/json` will receive a JSON response object with information on the user's status in the waiting room as opposed to the configured static HTML page. This JSON response object has one property `cfWaitingRoom` which is an object containing the following fields: 1. `inWaitingRoom`: Boolean indicating if the user is in the waiting room (always **true**). 2. `waitTimeKnown`: Boolean indicating if the current estimated wait times are accurate. If **false**, they are not available. 3. `waitTime`: Valid only when `waitTimeKnown` is **true**. Integer indicating the current estimated time in minutes the user will wait in the waiting room. When `queueingMethod` is **random**, this is set to `waitTime50Percentile`. 4. `waitTime25Percentile`: Valid only when `queueingMethod` is **random** and `waitTimeKnown` is **true**. Integer indicating the current estimated maximum wait time for the 25% of users that gain entry the fastest (25th percentile). 5. `waitTime50Percentile`: Valid only when `queueingMethod` is **random** and `waitTimeKnown` is **true**. Integer indicating the current estimated maximum wait time for the 50% of users that gain entry the fastest (50th percentile). In other words, half of the queued users are expected to let into the origin website before `waitTime50Percentile` and half are expected to be let in after it. 6. `waitTime75Percentile`: Valid only when `queueingMethod` is **random** and `waitTimeKnown` is **true**. Integer indicating the current estimated maximum wait time for the 75% of users that gain entry the fastest (75th percentile). 7. `waitTimeFormatted`: String displaying the `waitTime` formatted in English for users. If `waitTimeKnown` is **false**, `waitTimeFormatted` will display **unavailable**. 8. `queueIsFull`: Boolean indicating if the waiting room's queue is currently full and not accepting new users at the moment. 9. `queueAll`: Boolean indicating if all users will be queued in the waiting room and no one will be let into the origin website. 10. `lastUpdated`: String displaying the timestamp as an ISO 8601 string of the user's last attempt to leave the waiting room and be let into the origin website. The user is able to make another attempt after `refreshIntervalSeconds` past this time. If the user makes a request too soon, it will be ignored and `lastUpdated` will not change. 11. `refreshIntervalSeconds`: Integer indicating the number of seconds after `lastUpdated` until the user is able to make another attempt to leave the waiting room and be let into the origin website. When the `queueingMethod` is `reject`, there is no specified refresh time —\_it will always be **zero**. 12. `queueingMethod`: The queueing method currently used by the waiting room. It is either **fifo**, **random**, **passthrough**, or **reject**. 13. `isFIFOQueue`: Boolean indicating if the waiting room uses a FIFO (First-In-First-Out) queue. 14. `isRandomQueue`: Boolean indicating if the waiting room uses a Random queue where users gain access randomly. 15. `isPassthroughQueue`: Boolean indicating if the waiting room uses a passthrough queue. Keep in mind that when passthrough is enabled, this JSON response will only exist when `queueAll` is **true** or `isEventPrequeueing` is **true** because in all other cases requests will go directly to the origin. 16. `isRejectQueue`: Boolean indicating if the waiting room uses a reject queue. 17. `isEventActive`: Boolean indicating if an event is currently occurring. Events are able to change a waiting room's behavior during a specified period of time. For additional information, look at the event properties `prequeue_start_time`, `event_start_time`, and `event_end_time` in the documentation for creating waiting room events. Events are considered active between these start and end times, as well as during the prequeueing period if it exists. 18. `isEventPrequeueing`: Valid only when `isEventActive` is **true**. Boolean indicating if an event is currently prequeueing users before it starts. 19. `timeUntilEventStart`: Valid only when `isEventPrequeueing` is **true**. Integer indicating the number of minutes until the event starts. 20. `timeUntilEventStartFormatted`: String displaying the `timeUntilEventStart` formatted in English for users. If `isEventPrequeueing` is **false**, `timeUntilEventStartFormatted` will display **unavailable**. 21. `timeUntilEventEnd`: Valid only when `isEventActive` is **true**. Integer indicating the number of minutes until the event ends. 22. `timeUntilEventEndFormatted`: String displaying the `timeUntilEventEnd` formatted in English for users. If `isEventActive` is **false**, `timeUntilEventEndFormatted` will display **unavailable**. 23. `shuffleAtEventStart`: Valid only when `isEventActive` is **true**. Boolean indicating if the users in the prequeue are shuffled randomly when the event starts. 24. `turnstile`: Empty when turnstile isn't enabled. String displaying an html tag to display the Turnstile widget. Please add the `{{{turnstile}}}` tag to the `custom_html` template to ensure the Turnstile widget appears. 25. `infiniteQueue`: Boolean indicating whether the response is for a user in the infinite queue.  An example cURL to a waiting room could be:  	curl -X GET "https://example.com/waitingroom" \ 		-H "Accept: application/json"  If `json_response_enabled` is **true** and the request hits the waiting room, an example JSON response when `queueingMethod` is **fifo** and no event is active could be:  	{ 		"cfWaitingRoom": { 			"inWaitingRoom": true, 			"waitTimeKnown": true, 			"waitTime": 10, 			"waitTime25Percentile": 0, 			"waitTime50Percentile": 0, 			"waitTime75Percentile": 0, 			"waitTimeFormatted": "10 minutes", 			"queueIsFull": false, 			"queueAll": false, 			"lastUpdated": "2020-08-03T23:46:00.000Z", 			"refreshIntervalSeconds": 20, 			"queueingMethod": "fifo", 			"isFIFOQueue": true, 			"isRandomQueue": false, 			"isPassthroughQueue": false, 			"isRejectQueue": false, 			"isEventActive": false, 			"isEventPrequeueing": false, 			"timeUntilEventStart": 0, 			"timeUntilEventStartFormatted": "unavailable", 			"timeUntilEventEnd": 0, 			"timeUntilEventEndFormatted": "unavailable", 			"shuffleAtEventStart": false 		} 	}  If `json_response_enabled` is **true** and the request hits the waiting room, an example JSON response when `queueingMethod` is **random** and an event is active could be:  	{ 		"cfWaitingRoom": { 			"inWaitingRoom": true, 			"waitTimeKnown": true, 			"waitTime": 10, 			"waitTime25Percentile": 5, 			"waitTime50Percentile": 10, 			"waitTime75Percentile": 15, 			"waitTimeFormatted": "5 minutes to 15 minutes", 			"queueIsFull": false, 			"queueAll": false, 			"lastUpdated": "2020-08-03T23:46:00.000Z", 			"refreshIntervalSeconds": 20, 			"queueingMethod": "random", 			"isFIFOQueue": false, 			"isRandomQueue": true, 			"isPassthroughQueue": false, 			"isRejectQueue": false, 			"isEventActive": true, 			"isEventPrequeueing": false, 			"timeUntilEventStart": 0, 			"timeUntilEventStartFormatted": "unavailable", 			"timeUntilEventEnd": 15, 			"timeUntilEventEndFormatted": "15 minutes", 			"shuffleAtEventStart": true 		} 	} (default: false, e.g. false)
+  --json-response-enabled: oneof<nothing, bool> # Only available for the Waiting Room Advanced subscription. If `true`, requests to the waiting room with the header `Accept: application/json` will receive a JSON response object with information on the user's status in the waiting room as opposed to the configured static HTML page. This JSON response object has one property `cfWaitingRoom` which is an object containing the following fields: 1. `inWaitingRoom`: Boolean indicating if the user is in the waiting room (always **true**). 2. `waitTimeKnown`: Boolean indicating if the current estimated wait times are accurate. If **false**, they are not available. 3. `waitTime`: Valid only when `waitTimeKnown` is **true**. Integer indicating the current estimated time in minutes the user will wait in the waiting room. When `queueingMethod` is **random**, this is set to `waitTime50Percentile`. 4. `waitTime25Percentile`: Valid only when `queueingMethod` is **random** and `waitTimeKnown` is **true**. Integer indicating the current estimated maximum wait time for the 25% of users that gain entry the fastest (25th percentile). 5. `waitTime50Percentile`: Valid only when `queueingMethod` is **random** and `waitTimeKnown` is **true**. Integer indicating the current estimated maximum wait time for the 50% of users that gain entry the fastest (50th percentile). In other words, half of the queued users are expected to let into the origin website before `waitTime50Percentile` and half are expected to be let in after it. 6. `waitTime75Percentile`: Valid only when `queueingMethod` is **random** and `waitTimeKnown` is **true**. Integer indicating the current estimated maximum wait time for the 75% of users that gain entry the fastest (75th percentile). 7. `waitTimeFormatted`: String displaying the `waitTime` formatted in English for users. If `waitTimeKnown` is **false**, `waitTimeFormatted` will display **unavailable**. 8. `queueIsFull`: Boolean indicating if the waiting room's queue is currently full and not accepting new users at the moment. 9. `queueAll`: Boolean indicating if all users will be queued in the waiting room and no one will be let into the origin website. 10. `lastUpdated`: String displaying the timestamp as an ISO 8601 string of the user's last attempt to leave the waiting room and be let into the origin website. The user is able to make another attempt after `refreshIntervalSeconds` past this time. If the user makes a request too soon, it will be ignored and `lastUpdated` will not change. 11. `refreshIntervalSeconds`: Integer indicating the number of seconds after `lastUpdated` until the user is able to make another attempt to leave the waiting room and be let into the origin website. When the `queueingMethod` is `reject`, there is no specified refresh time —\_it will always be **zero**. 12. `queueingMethod`: The queueing method currently used by the waiting room. It is either **fifo**, **random**, **passthrough**, or **reject**. 13. `isFIFOQueue`: Boolean indicating if the waiting room uses a FIFO (First-In-First-Out) queue. 14. `isRandomQueue`: Boolean indicating if the waiting room uses a Random queue where users gain access randomly. 15. `isPassthroughQueue`: Boolean indicating if the waiting room uses a passthrough queue. Keep in mind that when passthrough is enabled, this JSON response will only exist when `queueAll` is **true** or `isEventPrequeueing` is **true** because in all other cases requests will go directly to the origin. 16. `isRejectQueue`: Boolean indicating if the waiting room uses a reject queue. 17. `isEventActive`: Boolean indicating if an event is currently occurring. Events are able to change a waiting room's behavior during a specified period of time. For additional information, look at the event properties `prequeue_start_time`, `event_start_time`, and `event_end_time` in the documentation for creating waiting room events. Events are considered active between these start and end times, as well as during the prequeueing period if it exists. 18. `isEventPrequeueing`: Valid only when `isEventActive` is **true**. Boolean indicating if an event is currently prequeueing users before it starts. 19. `timeUntilEventStart`: Valid only when `isEventPrequeueing` is **true**. Integer indicating the number of minutes until the event starts. 20. `timeUntilEventStartFormatted`: String displaying the `timeUntilEventStart` formatted in English for users. If `isEventPrequeueing` is **false**, `timeUntilEventStartFormatted` will display **unavailable**. 21. `timeUntilEventEnd`: Valid only when `isEventActive` is **true**. Integer indicating the number of minutes until the event ends. 22. `timeUntilEventEndFormatted`: String displaying the `timeUntilEventEnd` formatted in English for users. If `isEventActive` is **false**, `timeUntilEventEndFormatted` will display **unavailable**. 23. `shuffleAtEventStart`: Valid only when `isEventActive` is **true**. Boolean indicating if the users in the prequeue are shuffled randomly when the event starts. 24. `turnstile`: Empty when turnstile isn't enabled. String displaying an html tag to display the Turnstile widget. Please add the `{{{turnstile}}}` tag to the `custom_html` template to ensure the Turnstile widget appears. 25. `infiniteQueue`: Boolean indicating whether the response is for a user in the infinite queue.  An example cURL to a waiting room could be:  	curl -X GET "https://example.com/waitingroom" \ 		-H "Accept: application/json"  If `json_response_enabled` is **true** and the request hits the waiting room, an example JSON response when `queueingMethod` is **fifo** and no event is active could be:  	{ 		"cfWaitingRoom": { 			"inWaitingRoom": true, 			"waitTimeKnown": true, 			"waitTime": 10, 			"waitTime25Percentile": 0, 			"waitTime50Percentile": 0, 			"waitTime75Percentile": 0, 			"waitTimeFormatted": "10 minutes", 			"queueIsFull": false, 			"queueAll": false, 			"lastUpdated": "2020-08-03T23:46:00.000Z", 			"refreshIntervalSeconds": 20, 			"queueingMethod": "fifo", 			"isFIFOQueue": true, 			"isRandomQueue": false, 			"isPassthroughQueue": false, 			"isRejectQueue": false, 			"isEventActive": false, 			"isEventPrequeueing": false, 			"timeUntilEventStart": 0, 			"timeUntilEventStartFormatted": "unavailable", 			"timeUntilEventEnd": 0, 			"timeUntilEventEndFormatted": "unavailable", 			"shuffleAtEventStart": false 		} 	}  If `json_response_enabled` is **true** and the request hits the waiting room, an example JSON response when `queueingMethod` is **random** and an event is active could be:  	{ 		"cfWaitingRoom": { 			"inWaitingRoom": true, 			"waitTimeKnown": true, 			"waitTime": 10, 			"waitTime25Percentile": 5, 			"waitTime50Percentile": 10, 			"waitTime75Percentile": 15, 			"waitTimeFormatted": "5 minutes to 15 minutes", 			"queueIsFull": false, 			"queueAll": false, 			"lastUpdated": "2020-08-03T23:46:00.000Z", 			"refreshIntervalSeconds": 20, 			"queueingMethod": "random", 			"isFIFOQueue": false, 			"isRandomQueue": true, 			"isPassthroughQueue": false, 			"isRejectQueue": false, 			"isEventActive": true, 			"isEventPrequeueing": false, 			"timeUntilEventStart": 0, 			"timeUntilEventStartFormatted": "unavailable", 			"timeUntilEventEnd": 15, 			"timeUntilEventEndFormatted": "15 minutes", 			"shuffleAtEventStart": true 		} 	} (default: false, e.g. false)
   name: string # A unique name to identify the waiting room. Only alphanumeric characters, hyphens and underscores are allowed. (e.g. production_webinar)
   new_users_per_minute: int # Sets the number of new users that will be let into the route every minute. This value is used as baseline for the number of users that are let in per minute. So it is possible that there is a little more or little less traffic coming to the route based on the traffic patterns at that time around the world.
   --path: string # Sets the path within the host to enable the waiting room on. The waiting room will be enabled for all subpaths as well. If there are two waiting rooms on the same subpath, the waiting room for the most specific path will be chosen. Wildcards and query parameters are not supported. (default: /, e.g. /shop/checkout)
-  --queue-all: string@bool-completer # If queue_all is `true`, all the traffic that is coming to a route will be sent to the waiting room. No new traffic can get to the route once this field is set and estimated time will become unavailable. (default: false, e.g. true)
+  --queue-all: oneof<nothing, bool> # If queue_all is `true`, all the traffic that is coming to a route will be sent to the waiting room. No new traffic can get to the route once this field is set and estimated time will become unavailable. (default: false, e.g. true)
   --queueing-method: string@queueing-method-completer # Sets the queueing method used by the waiting room. Changing this parameter from the **default** queueing method is only available for the Waiting Room Advanced subscription. Regardless of the queueing method, if `queue_all` is enabled or an event is prequeueing, users in the waiting room will not be accepted to the origin. These users will always see a waiting room page that refreshes automatically. The valid queueing methods are: 1. `fifo` **(default)**: First-In-First-Out queue where customers gain access in the order they arrived. 2. `random`: Random queue where customers gain access randomly, regardless of arrival time. 3. `passthrough`: Users will pass directly through the waiting room and into the origin website. As a result, any configured limits will not be respected while this is enabled. This method can be used as an alternative to disabling a waiting room (with `suspended`) so that analytics are still reported. This can be used if you wish to allow all traffic normally, but want to restrict traffic during a waiting room event, or vice versa. 4. `reject`: Users will be immediately rejected from the waiting room. As a result, no users will reach the origin website while this is enabled. This can be used if you wish to reject all traffic while performing maintenance, block traffic during a specified period of time (an event), or block traffic while events are not occurring. Consider a waiting room used for vaccine distribution that only allows traffic during sign-up events, and otherwise blocks all traffic. For this case, the waiting room uses `reject`, and its events override this with `fifo`, `random`, or `passthrough`. When this queueing method is enabled and neither `queueAll` is enabled nor an event is prequeueing, the waiting room page **will not refresh automatically**. (default: fifo, e.g. fifo)
   --queueing-status-code: int@queueing-status-code-completer # HTTP status code returned to a user while in the queue. (default: 200, e.g. 202)
   --session-duration: int # Lifetime of a cookie (in minutes) set by Cloudflare for users who get access to the route. If a user is not seen by Cloudflare again in that time period, they will be treated as a new user that visits the route. (default: 5)
-  --suspended: string@bool-completer # Suspends or allows traffic going to the waiting room. If set to `true`, the traffic will not go to the waiting room. (default: false)
+  --suspended: oneof<nothing, bool> # Suspends or allows traffic going to the waiting room. If set to `true`, the traffic will not go to the waiting room. (default: false)
   total_active_users: int # Sets the total number of active user sessions on the route at a point in time. A route is a combination of host and path on which a waiting room is available. This value is used as a baseline for the total number of active user sessions on the route. It is possible to have a situation where there are more or less active users sessions on the route based on the traffic patterns at that time around the world.
   --turnstile-action: string@turnstile-action-completer # Which action to take when a bot is detected using Turnstile. `log` will have no impact on queueing behavior, simply keeping track of how many bots are detected in Waiting Room Analytics. `infinite_queue` will send bots to a false queueing state, where they will never reach your origin. `infinite_queue` requires Advanced Waiting Room.  (default: log)
   --turnstile-mode: string@turnstile-mode-completer # Which Turnstile widget type to use for detecting bot traffic. See [the Turnstile documentation](https://developers.cloudflare.com/turnstile/concepts/widget/#widget-types) for the definitions of these widget types. Set to `off` to disable the Turnstile integration entirely. Setting this to anything other than `off` or `invisible` requires Advanced Waiting Room.  (default: invisible)
@@ -86997,18 +87023,18 @@ export def "zones-waiting-rooms waiting-room-update-waiting-room" [
   --custom-page-html: string # Only available for the Waiting Room Advanced subscription. This is a template html file that will be rendered at the edge. If no custom_page_html is provided, the default waiting room will be used. The template is based on mustache ( https://mustache.github.io/ ). There are several variables that are evaluated by the Cloudflare edge: 1. {{`waitTimeKnown`}} Acts like a boolean value that indicates the behavior to take when wait time is not available, for instance when queue_all is **true**. 2. {{`waitTimeFormatted`}} Estimated wait time for the user. For example, five minutes. Alternatively, you can use: 3. {{`waitTime`}} Number of minutes of estimated wait for a user. 4. {{`waitTimeHours`}} Number of hours of estimated wait for a user (`Math.floor(waitTime/60)`). 5. {{`waitTimeHourMinutes`}} Number of minutes above the `waitTimeHours` value (`waitTime%60`). 6. {{`queueIsFull`}} Changes to **true** when no more people can be added to the queue.  To view the full list of variables, look at the `cfWaitingRoom` object described under the `json_response_enabled` property in other Waiting Room API calls. (default: , e.g. {{#waitTimeKnown}} {{waitTime}} mins {{/waitTimeKnown}} {{^waitTimeKnown}} Queue all enabled {{/waitTimeKnown}})
   --default-template-language: string@default-template-language-completer # The language of the default page template. If no default_template_language is provided, then `en-US` (English) will be used. (default: en-US, e.g. es-ES)
   --description: string # A note that you can use to add more details about the waiting room. (default: , e.g. Production - DO NOT MODIFY)
-  --disable-session-renewal: string@bool-completer # Only available for the Waiting Room Advanced subscription. Disables automatic renewal of session cookies. If `true`, an accepted user will have session_duration minutes to browse the site. After that, they will have to go through the waiting room again. If `false`, a user's session cookie will be automatically renewed on every request. (default: false, e.g. false)
+  --disable-session-renewal: oneof<nothing, bool> # Only available for the Waiting Room Advanced subscription. Disables automatic renewal of session cookies. If `true`, an accepted user will have session_duration minutes to browse the site. After that, they will have to go through the waiting room again. If `false`, a user's session cookie will be automatically renewed on every request. (default: false, e.g. false)
   --enabled-origin-commands: list # A list of enabled origin commands. (default: [])
   host: string # The host name to which the waiting room will be applied (no wildcards). Please do not include the scheme (http:// or https://). The host and path combination must be unique. (e.g. shop.example.com)
-  --json-response-enabled: string@bool-completer # Only available for the Waiting Room Advanced subscription. If `true`, requests to the waiting room with the header `Accept: application/json` will receive a JSON response object with information on the user's status in the waiting room as opposed to the configured static HTML page. This JSON response object has one property `cfWaitingRoom` which is an object containing the following fields: 1. `inWaitingRoom`: Boolean indicating if the user is in the waiting room (always **true**). 2. `waitTimeKnown`: Boolean indicating if the current estimated wait times are accurate. If **false**, they are not available. 3. `waitTime`: Valid only when `waitTimeKnown` is **true**. Integer indicating the current estimated time in minutes the user will wait in the waiting room. When `queueingMethod` is **random**, this is set to `waitTime50Percentile`. 4. `waitTime25Percentile`: Valid only when `queueingMethod` is **random** and `waitTimeKnown` is **true**. Integer indicating the current estimated maximum wait time for the 25% of users that gain entry the fastest (25th percentile). 5. `waitTime50Percentile`: Valid only when `queueingMethod` is **random** and `waitTimeKnown` is **true**. Integer indicating the current estimated maximum wait time for the 50% of users that gain entry the fastest (50th percentile). In other words, half of the queued users are expected to let into the origin website before `waitTime50Percentile` and half are expected to be let in after it. 6. `waitTime75Percentile`: Valid only when `queueingMethod` is **random** and `waitTimeKnown` is **true**. Integer indicating the current estimated maximum wait time for the 75% of users that gain entry the fastest (75th percentile). 7. `waitTimeFormatted`: String displaying the `waitTime` formatted in English for users. If `waitTimeKnown` is **false**, `waitTimeFormatted` will display **unavailable**. 8. `queueIsFull`: Boolean indicating if the waiting room's queue is currently full and not accepting new users at the moment. 9. `queueAll`: Boolean indicating if all users will be queued in the waiting room and no one will be let into the origin website. 10. `lastUpdated`: String displaying the timestamp as an ISO 8601 string of the user's last attempt to leave the waiting room and be let into the origin website. The user is able to make another attempt after `refreshIntervalSeconds` past this time. If the user makes a request too soon, it will be ignored and `lastUpdated` will not change. 11. `refreshIntervalSeconds`: Integer indicating the number of seconds after `lastUpdated` until the user is able to make another attempt to leave the waiting room and be let into the origin website. When the `queueingMethod` is `reject`, there is no specified refresh time —\_it will always be **zero**. 12. `queueingMethod`: The queueing method currently used by the waiting room. It is either **fifo**, **random**, **passthrough**, or **reject**. 13. `isFIFOQueue`: Boolean indicating if the waiting room uses a FIFO (First-In-First-Out) queue. 14. `isRandomQueue`: Boolean indicating if the waiting room uses a Random queue where users gain access randomly. 15. `isPassthroughQueue`: Boolean indicating if the waiting room uses a passthrough queue. Keep in mind that when passthrough is enabled, this JSON response will only exist when `queueAll` is **true** or `isEventPrequeueing` is **true** because in all other cases requests will go directly to the origin. 16. `isRejectQueue`: Boolean indicating if the waiting room uses a reject queue. 17. `isEventActive`: Boolean indicating if an event is currently occurring. Events are able to change a waiting room's behavior during a specified period of time. For additional information, look at the event properties `prequeue_start_time`, `event_start_time`, and `event_end_time` in the documentation for creating waiting room events. Events are considered active between these start and end times, as well as during the prequeueing period if it exists. 18. `isEventPrequeueing`: Valid only when `isEventActive` is **true**. Boolean indicating if an event is currently prequeueing users before it starts. 19. `timeUntilEventStart`: Valid only when `isEventPrequeueing` is **true**. Integer indicating the number of minutes until the event starts. 20. `timeUntilEventStartFormatted`: String displaying the `timeUntilEventStart` formatted in English for users. If `isEventPrequeueing` is **false**, `timeUntilEventStartFormatted` will display **unavailable**. 21. `timeUntilEventEnd`: Valid only when `isEventActive` is **true**. Integer indicating the number of minutes until the event ends. 22. `timeUntilEventEndFormatted`: String displaying the `timeUntilEventEnd` formatted in English for users. If `isEventActive` is **false**, `timeUntilEventEndFormatted` will display **unavailable**. 23. `shuffleAtEventStart`: Valid only when `isEventActive` is **true**. Boolean indicating if the users in the prequeue are shuffled randomly when the event starts. 24. `turnstile`: Empty when turnstile isn't enabled. String displaying an html tag to display the Turnstile widget. Please add the `{{{turnstile}}}` tag to the `custom_html` template to ensure the Turnstile widget appears. 25. `infiniteQueue`: Boolean indicating whether the response is for a user in the infinite queue.  An example cURL to a waiting room could be:  	curl -X GET "https://example.com/waitingroom" \ 		-H "Accept: application/json"  If `json_response_enabled` is **true** and the request hits the waiting room, an example JSON response when `queueingMethod` is **fifo** and no event is active could be:  	{ 		"cfWaitingRoom": { 			"inWaitingRoom": true, 			"waitTimeKnown": true, 			"waitTime": 10, 			"waitTime25Percentile": 0, 			"waitTime50Percentile": 0, 			"waitTime75Percentile": 0, 			"waitTimeFormatted": "10 minutes", 			"queueIsFull": false, 			"queueAll": false, 			"lastUpdated": "2020-08-03T23:46:00.000Z", 			"refreshIntervalSeconds": 20, 			"queueingMethod": "fifo", 			"isFIFOQueue": true, 			"isRandomQueue": false, 			"isPassthroughQueue": false, 			"isRejectQueue": false, 			"isEventActive": false, 			"isEventPrequeueing": false, 			"timeUntilEventStart": 0, 			"timeUntilEventStartFormatted": "unavailable", 			"timeUntilEventEnd": 0, 			"timeUntilEventEndFormatted": "unavailable", 			"shuffleAtEventStart": false 		} 	}  If `json_response_enabled` is **true** and the request hits the waiting room, an example JSON response when `queueingMethod` is **random** and an event is active could be:  	{ 		"cfWaitingRoom": { 			"inWaitingRoom": true, 			"waitTimeKnown": true, 			"waitTime": 10, 			"waitTime25Percentile": 5, 			"waitTime50Percentile": 10, 			"waitTime75Percentile": 15, 			"waitTimeFormatted": "5 minutes to 15 minutes", 			"queueIsFull": false, 			"queueAll": false, 			"lastUpdated": "2020-08-03T23:46:00.000Z", 			"refreshIntervalSeconds": 20, 			"queueingMethod": "random", 			"isFIFOQueue": false, 			"isRandomQueue": true, 			"isPassthroughQueue": false, 			"isRejectQueue": false, 			"isEventActive": true, 			"isEventPrequeueing": false, 			"timeUntilEventStart": 0, 			"timeUntilEventStartFormatted": "unavailable", 			"timeUntilEventEnd": 15, 			"timeUntilEventEndFormatted": "15 minutes", 			"shuffleAtEventStart": true 		} 	} (default: false, e.g. false)
+  --json-response-enabled: oneof<nothing, bool> # Only available for the Waiting Room Advanced subscription. If `true`, requests to the waiting room with the header `Accept: application/json` will receive a JSON response object with information on the user's status in the waiting room as opposed to the configured static HTML page. This JSON response object has one property `cfWaitingRoom` which is an object containing the following fields: 1. `inWaitingRoom`: Boolean indicating if the user is in the waiting room (always **true**). 2. `waitTimeKnown`: Boolean indicating if the current estimated wait times are accurate. If **false**, they are not available. 3. `waitTime`: Valid only when `waitTimeKnown` is **true**. Integer indicating the current estimated time in minutes the user will wait in the waiting room. When `queueingMethod` is **random**, this is set to `waitTime50Percentile`. 4. `waitTime25Percentile`: Valid only when `queueingMethod` is **random** and `waitTimeKnown` is **true**. Integer indicating the current estimated maximum wait time for the 25% of users that gain entry the fastest (25th percentile). 5. `waitTime50Percentile`: Valid only when `queueingMethod` is **random** and `waitTimeKnown` is **true**. Integer indicating the current estimated maximum wait time for the 50% of users that gain entry the fastest (50th percentile). In other words, half of the queued users are expected to let into the origin website before `waitTime50Percentile` and half are expected to be let in after it. 6. `waitTime75Percentile`: Valid only when `queueingMethod` is **random** and `waitTimeKnown` is **true**. Integer indicating the current estimated maximum wait time for the 75% of users that gain entry the fastest (75th percentile). 7. `waitTimeFormatted`: String displaying the `waitTime` formatted in English for users. If `waitTimeKnown` is **false**, `waitTimeFormatted` will display **unavailable**. 8. `queueIsFull`: Boolean indicating if the waiting room's queue is currently full and not accepting new users at the moment. 9. `queueAll`: Boolean indicating if all users will be queued in the waiting room and no one will be let into the origin website. 10. `lastUpdated`: String displaying the timestamp as an ISO 8601 string of the user's last attempt to leave the waiting room and be let into the origin website. The user is able to make another attempt after `refreshIntervalSeconds` past this time. If the user makes a request too soon, it will be ignored and `lastUpdated` will not change. 11. `refreshIntervalSeconds`: Integer indicating the number of seconds after `lastUpdated` until the user is able to make another attempt to leave the waiting room and be let into the origin website. When the `queueingMethod` is `reject`, there is no specified refresh time —\_it will always be **zero**. 12. `queueingMethod`: The queueing method currently used by the waiting room. It is either **fifo**, **random**, **passthrough**, or **reject**. 13. `isFIFOQueue`: Boolean indicating if the waiting room uses a FIFO (First-In-First-Out) queue. 14. `isRandomQueue`: Boolean indicating if the waiting room uses a Random queue where users gain access randomly. 15. `isPassthroughQueue`: Boolean indicating if the waiting room uses a passthrough queue. Keep in mind that when passthrough is enabled, this JSON response will only exist when `queueAll` is **true** or `isEventPrequeueing` is **true** because in all other cases requests will go directly to the origin. 16. `isRejectQueue`: Boolean indicating if the waiting room uses a reject queue. 17. `isEventActive`: Boolean indicating if an event is currently occurring. Events are able to change a waiting room's behavior during a specified period of time. For additional information, look at the event properties `prequeue_start_time`, `event_start_time`, and `event_end_time` in the documentation for creating waiting room events. Events are considered active between these start and end times, as well as during the prequeueing period if it exists. 18. `isEventPrequeueing`: Valid only when `isEventActive` is **true**. Boolean indicating if an event is currently prequeueing users before it starts. 19. `timeUntilEventStart`: Valid only when `isEventPrequeueing` is **true**. Integer indicating the number of minutes until the event starts. 20. `timeUntilEventStartFormatted`: String displaying the `timeUntilEventStart` formatted in English for users. If `isEventPrequeueing` is **false**, `timeUntilEventStartFormatted` will display **unavailable**. 21. `timeUntilEventEnd`: Valid only when `isEventActive` is **true**. Integer indicating the number of minutes until the event ends. 22. `timeUntilEventEndFormatted`: String displaying the `timeUntilEventEnd` formatted in English for users. If `isEventActive` is **false**, `timeUntilEventEndFormatted` will display **unavailable**. 23. `shuffleAtEventStart`: Valid only when `isEventActive` is **true**. Boolean indicating if the users in the prequeue are shuffled randomly when the event starts. 24. `turnstile`: Empty when turnstile isn't enabled. String displaying an html tag to display the Turnstile widget. Please add the `{{{turnstile}}}` tag to the `custom_html` template to ensure the Turnstile widget appears. 25. `infiniteQueue`: Boolean indicating whether the response is for a user in the infinite queue.  An example cURL to a waiting room could be:  	curl -X GET "https://example.com/waitingroom" \ 		-H "Accept: application/json"  If `json_response_enabled` is **true** and the request hits the waiting room, an example JSON response when `queueingMethod` is **fifo** and no event is active could be:  	{ 		"cfWaitingRoom": { 			"inWaitingRoom": true, 			"waitTimeKnown": true, 			"waitTime": 10, 			"waitTime25Percentile": 0, 			"waitTime50Percentile": 0, 			"waitTime75Percentile": 0, 			"waitTimeFormatted": "10 minutes", 			"queueIsFull": false, 			"queueAll": false, 			"lastUpdated": "2020-08-03T23:46:00.000Z", 			"refreshIntervalSeconds": 20, 			"queueingMethod": "fifo", 			"isFIFOQueue": true, 			"isRandomQueue": false, 			"isPassthroughQueue": false, 			"isRejectQueue": false, 			"isEventActive": false, 			"isEventPrequeueing": false, 			"timeUntilEventStart": 0, 			"timeUntilEventStartFormatted": "unavailable", 			"timeUntilEventEnd": 0, 			"timeUntilEventEndFormatted": "unavailable", 			"shuffleAtEventStart": false 		} 	}  If `json_response_enabled` is **true** and the request hits the waiting room, an example JSON response when `queueingMethod` is **random** and an event is active could be:  	{ 		"cfWaitingRoom": { 			"inWaitingRoom": true, 			"waitTimeKnown": true, 			"waitTime": 10, 			"waitTime25Percentile": 5, 			"waitTime50Percentile": 10, 			"waitTime75Percentile": 15, 			"waitTimeFormatted": "5 minutes to 15 minutes", 			"queueIsFull": false, 			"queueAll": false, 			"lastUpdated": "2020-08-03T23:46:00.000Z", 			"refreshIntervalSeconds": 20, 			"queueingMethod": "random", 			"isFIFOQueue": false, 			"isRandomQueue": true, 			"isPassthroughQueue": false, 			"isRejectQueue": false, 			"isEventActive": true, 			"isEventPrequeueing": false, 			"timeUntilEventStart": 0, 			"timeUntilEventStartFormatted": "unavailable", 			"timeUntilEventEnd": 15, 			"timeUntilEventEndFormatted": "15 minutes", 			"shuffleAtEventStart": true 		} 	} (default: false, e.g. false)
   name: string # A unique name to identify the waiting room. Only alphanumeric characters, hyphens and underscores are allowed. (e.g. production_webinar)
   new_users_per_minute: int # Sets the number of new users that will be let into the route every minute. This value is used as baseline for the number of users that are let in per minute. So it is possible that there is a little more or little less traffic coming to the route based on the traffic patterns at that time around the world.
   --path: string # Sets the path within the host to enable the waiting room on. The waiting room will be enabled for all subpaths as well. If there are two waiting rooms on the same subpath, the waiting room for the most specific path will be chosen. Wildcards and query parameters are not supported. (default: /, e.g. /shop/checkout)
-  --queue-all: string@bool-completer # If queue_all is `true`, all the traffic that is coming to a route will be sent to the waiting room. No new traffic can get to the route once this field is set and estimated time will become unavailable. (default: false, e.g. true)
+  --queue-all: oneof<nothing, bool> # If queue_all is `true`, all the traffic that is coming to a route will be sent to the waiting room. No new traffic can get to the route once this field is set and estimated time will become unavailable. (default: false, e.g. true)
   --queueing-method: string@queueing-method-completer # Sets the queueing method used by the waiting room. Changing this parameter from the **default** queueing method is only available for the Waiting Room Advanced subscription. Regardless of the queueing method, if `queue_all` is enabled or an event is prequeueing, users in the waiting room will not be accepted to the origin. These users will always see a waiting room page that refreshes automatically. The valid queueing methods are: 1. `fifo` **(default)**: First-In-First-Out queue where customers gain access in the order they arrived. 2. `random`: Random queue where customers gain access randomly, regardless of arrival time. 3. `passthrough`: Users will pass directly through the waiting room and into the origin website. As a result, any configured limits will not be respected while this is enabled. This method can be used as an alternative to disabling a waiting room (with `suspended`) so that analytics are still reported. This can be used if you wish to allow all traffic normally, but want to restrict traffic during a waiting room event, or vice versa. 4. `reject`: Users will be immediately rejected from the waiting room. As a result, no users will reach the origin website while this is enabled. This can be used if you wish to reject all traffic while performing maintenance, block traffic during a specified period of time (an event), or block traffic while events are not occurring. Consider a waiting room used for vaccine distribution that only allows traffic during sign-up events, and otherwise blocks all traffic. For this case, the waiting room uses `reject`, and its events override this with `fifo`, `random`, or `passthrough`. When this queueing method is enabled and neither `queueAll` is enabled nor an event is prequeueing, the waiting room page **will not refresh automatically**. (default: fifo, e.g. fifo)
   --queueing-status-code: int@queueing-status-code-completer # HTTP status code returned to a user while in the queue. (default: 200, e.g. 202)
   --session-duration: int # Lifetime of a cookie (in minutes) set by Cloudflare for users who get access to the route. If a user is not seen by Cloudflare again in that time period, they will be treated as a new user that visits the route. (default: 5)
-  --suspended: string@bool-completer # Suspends or allows traffic going to the waiting room. If set to `true`, the traffic will not go to the waiting room. (default: false)
+  --suspended: oneof<nothing, bool> # Suspends or allows traffic going to the waiting room. If set to `true`, the traffic will not go to the waiting room. (default: false)
   total_active_users: int # Sets the total number of active user sessions on the route at a point in time. A route is a combination of host and path on which a waiting room is available. This value is used as a baseline for the total number of active user sessions on the route. It is possible to have a situation where there are more or less active users sessions on the route based on the traffic patterns at that time around the world.
   --turnstile-action: string@turnstile-action-completer # Which action to take when a bot is detected using Turnstile. `log` will have no impact on queueing behavior, simply keeping track of how many bots are detected in Waiting Room Analytics. `infinite_queue` will send bots to a false queueing state, where they will never reach your origin. `infinite_queue` requires Advanced Waiting Room.  (default: log)
   --turnstile-mode: string@turnstile-mode-completer # Which Turnstile widget type to use for detecting bot traffic. See [the Turnstile documentation](https://developers.cloudflare.com/turnstile/concepts/widget/#widget-types) for the definitions of these widget types. Set to `off` to disable the Turnstile integration entirely. Setting this to anything other than `off` or `invisible` requires Advanced Waiting Room.  (default: invisible)
@@ -87066,7 +87092,7 @@ export def "zones-waiting-rooms-events waiting-room-create-event" [
   --allow-errors(-e) # Return full response without error handling
   --custom-page-html: string # If set, the event will override the waiting room's `custom_page_html` property while it is active. If null, the event will inherit it. (nullable, e.g. {{#waitTimeKnown}} {{waitTime}} mins {{/waitTimeKnown}} {{^waitTimeKnown}} Event is prequeueing / Queue all enabled {{/waitTimeKnown}})
   --description: string # A note that you can use to add more details about the event. (default: , e.g. Production event - DO NOT MODIFY)
-  --disable-session-renewal: string@bool-completer # If set, the event will override the waiting room's `disable_session_renewal` property while it is active. If null, the event will inherit it. (nullable)
+  --disable-session-renewal: oneof<nothing, bool> # If set, the event will override the waiting room's `disable_session_renewal` property while it is active. If null, the event will inherit it. (nullable)
   event_end_time: string # An ISO 8601 timestamp that marks the end of the event. (e.g. 2021-09-28T17:00:00.000Z)
   event_start_time: string # An ISO 8601 timestamp that marks the start of the event. At this time, queued users will be processed with the event's configuration. The start time must be at least one minute before `event_end_time`. (e.g. 2021-09-28T15:30:00.000Z)
   name: string # A unique name to identify the event. Only alphanumeric characters, hyphens and underscores are allowed. (e.g. production_webinar_event)
@@ -87074,8 +87100,8 @@ export def "zones-waiting-rooms-events waiting-room-create-event" [
   --prequeue-start-time: string # An ISO 8601 timestamp that marks when to begin queueing all users before the event starts. The prequeue must start at least five minutes before `event_start_time`. (nullable, e.g. 2021-09-28T15:00:00.000Z)
   --queueing-method: string # If set, the event will override the waiting room's `queueing_method` property while it is active. If null, the event will inherit it. (nullable, e.g. random)
   --session-duration: int # If set, the event will override the waiting room's `session_duration` property while it is active. If null, the event will inherit it. (nullable)
-  --shuffle-at-event-start: string@bool-completer # If enabled, users in the prequeue will be shuffled randomly at the `event_start_time`. Requires that `prequeue_start_time` is not null. This is useful for situations when many users will join the event prequeue at the same time and you want to shuffle them to ensure fairness. Naturally, it makes the most sense to enable this feature when the `queueing_method` during the event respects ordering such as **fifo**, or else the shuffling may be unnecessary. (default: false)
-  --suspended: string@bool-completer # Suspends or allows an event. If set to `true`, the event is ignored and traffic will be handled based on the waiting room configuration. (default: false)
+  --shuffle-at-event-start: oneof<nothing, bool> # If enabled, users in the prequeue will be shuffled randomly at the `event_start_time`. Requires that `prequeue_start_time` is not null. This is useful for situations when many users will join the event prequeue at the same time and you want to shuffle them to ensure fairness. Naturally, it makes the most sense to enable this feature when the `queueing_method` during the event respects ordering such as **fifo**, or else the shuffling may be unnecessary. (default: false)
+  --suspended: oneof<nothing, bool> # Suspends or allows an event. If set to `true`, the event is ignored and traffic will be handled based on the waiting room configuration. (default: false)
   --total-active-users: int # If set, the event will override the waiting room's `total_active_users` property while it is active. If null, the event will inherit it. This can only be set if the event's `new_users_per_minute` property is also set. (nullable)
   --turnstile-action: string@turnstile-action-completer # If set, the event will override the waiting room's `turnstile_action` property while it is active. If null, the event will inherit it. (nullable)
   --turnstile-mode: string@turnstile-mode-completer # If set, the event will override the waiting room's `turnstile_mode` property while it is active. If null, the event will inherit it. (nullable)
@@ -87159,7 +87185,7 @@ export def "zones-waiting-rooms-events waiting-room-patch-event" [
   --allow-errors(-e) # Return full response without error handling
   --custom-page-html: string # If set, the event will override the waiting room's `custom_page_html` property while it is active. If null, the event will inherit it. (nullable, e.g. {{#waitTimeKnown}} {{waitTime}} mins {{/waitTimeKnown}} {{^waitTimeKnown}} Event is prequeueing / Queue all enabled {{/waitTimeKnown}})
   --description: string # A note that you can use to add more details about the event. (default: , e.g. Production event - DO NOT MODIFY)
-  --disable-session-renewal: string@bool-completer # If set, the event will override the waiting room's `disable_session_renewal` property while it is active. If null, the event will inherit it. (nullable)
+  --disable-session-renewal: oneof<nothing, bool> # If set, the event will override the waiting room's `disable_session_renewal` property while it is active. If null, the event will inherit it. (nullable)
   event_end_time: string # An ISO 8601 timestamp that marks the end of the event. (e.g. 2021-09-28T17:00:00.000Z)
   event_start_time: string # An ISO 8601 timestamp that marks the start of the event. At this time, queued users will be processed with the event's configuration. The start time must be at least one minute before `event_end_time`. (e.g. 2021-09-28T15:30:00.000Z)
   name: string # A unique name to identify the event. Only alphanumeric characters, hyphens and underscores are allowed. (e.g. production_webinar_event)
@@ -87167,8 +87193,8 @@ export def "zones-waiting-rooms-events waiting-room-patch-event" [
   --prequeue-start-time: string # An ISO 8601 timestamp that marks when to begin queueing all users before the event starts. The prequeue must start at least five minutes before `event_start_time`. (nullable, e.g. 2021-09-28T15:00:00.000Z)
   --queueing-method: string # If set, the event will override the waiting room's `queueing_method` property while it is active. If null, the event will inherit it. (nullable, e.g. random)
   --session-duration: int # If set, the event will override the waiting room's `session_duration` property while it is active. If null, the event will inherit it. (nullable)
-  --shuffle-at-event-start: string@bool-completer # If enabled, users in the prequeue will be shuffled randomly at the `event_start_time`. Requires that `prequeue_start_time` is not null. This is useful for situations when many users will join the event prequeue at the same time and you want to shuffle them to ensure fairness. Naturally, it makes the most sense to enable this feature when the `queueing_method` during the event respects ordering such as **fifo**, or else the shuffling may be unnecessary. (default: false)
-  --suspended: string@bool-completer # Suspends or allows an event. If set to `true`, the event is ignored and traffic will be handled based on the waiting room configuration. (default: false)
+  --shuffle-at-event-start: oneof<nothing, bool> # If enabled, users in the prequeue will be shuffled randomly at the `event_start_time`. Requires that `prequeue_start_time` is not null. This is useful for situations when many users will join the event prequeue at the same time and you want to shuffle them to ensure fairness. Naturally, it makes the most sense to enable this feature when the `queueing_method` during the event respects ordering such as **fifo**, or else the shuffling may be unnecessary. (default: false)
+  --suspended: oneof<nothing, bool> # Suspends or allows an event. If set to `true`, the event is ignored and traffic will be handled based on the waiting room configuration. (default: false)
   --total-active-users: int # If set, the event will override the waiting room's `total_active_users` property while it is active. If null, the event will inherit it. This can only be set if the event's `new_users_per_minute` property is also set. (nullable)
   --turnstile-action: string@turnstile-action-completer # If set, the event will override the waiting room's `turnstile_action` property while it is active. If null, the event will inherit it. (nullable)
   --turnstile-mode: string@turnstile-mode-completer # If set, the event will override the waiting room's `turnstile_mode` property while it is active. If null, the event will inherit it. (nullable)
@@ -87201,7 +87227,7 @@ export def "zones-waiting-rooms-events waiting-room-update-event" [
   --allow-errors(-e) # Return full response without error handling
   --custom-page-html: string # If set, the event will override the waiting room's `custom_page_html` property while it is active. If null, the event will inherit it. (nullable, e.g. {{#waitTimeKnown}} {{waitTime}} mins {{/waitTimeKnown}} {{^waitTimeKnown}} Event is prequeueing / Queue all enabled {{/waitTimeKnown}})
   --description: string # A note that you can use to add more details about the event. (default: , e.g. Production event - DO NOT MODIFY)
-  --disable-session-renewal: string@bool-completer # If set, the event will override the waiting room's `disable_session_renewal` property while it is active. If null, the event will inherit it. (nullable)
+  --disable-session-renewal: oneof<nothing, bool> # If set, the event will override the waiting room's `disable_session_renewal` property while it is active. If null, the event will inherit it. (nullable)
   event_end_time: string # An ISO 8601 timestamp that marks the end of the event. (e.g. 2021-09-28T17:00:00.000Z)
   event_start_time: string # An ISO 8601 timestamp that marks the start of the event. At this time, queued users will be processed with the event's configuration. The start time must be at least one minute before `event_end_time`. (e.g. 2021-09-28T15:30:00.000Z)
   name: string # A unique name to identify the event. Only alphanumeric characters, hyphens and underscores are allowed. (e.g. production_webinar_event)
@@ -87209,8 +87235,8 @@ export def "zones-waiting-rooms-events waiting-room-update-event" [
   --prequeue-start-time: string # An ISO 8601 timestamp that marks when to begin queueing all users before the event starts. The prequeue must start at least five minutes before `event_start_time`. (nullable, e.g. 2021-09-28T15:00:00.000Z)
   --queueing-method: string # If set, the event will override the waiting room's `queueing_method` property while it is active. If null, the event will inherit it. (nullable, e.g. random)
   --session-duration: int # If set, the event will override the waiting room's `session_duration` property while it is active. If null, the event will inherit it. (nullable)
-  --shuffle-at-event-start: string@bool-completer # If enabled, users in the prequeue will be shuffled randomly at the `event_start_time`. Requires that `prequeue_start_time` is not null. This is useful for situations when many users will join the event prequeue at the same time and you want to shuffle them to ensure fairness. Naturally, it makes the most sense to enable this feature when the `queueing_method` during the event respects ordering such as **fifo**, or else the shuffling may be unnecessary. (default: false)
-  --suspended: string@bool-completer # Suspends or allows an event. If set to `true`, the event is ignored and traffic will be handled based on the waiting room configuration. (default: false)
+  --shuffle-at-event-start: oneof<nothing, bool> # If enabled, users in the prequeue will be shuffled randomly at the `event_start_time`. Requires that `prequeue_start_time` is not null. This is useful for situations when many users will join the event prequeue at the same time and you want to shuffle them to ensure fairness. Naturally, it makes the most sense to enable this feature when the `queueing_method` during the event respects ordering such as **fifo**, or else the shuffling may be unnecessary. (default: false)
+  --suspended: oneof<nothing, bool> # Suspends or allows an event. If set to `true`, the event is ignored and traffic will be handled based on the waiting room configuration. (default: false)
   --total-active-users: int # If set, the event will override the waiting room's `total_active_users` property while it is active. If null, the event will inherit it. This can only be set if the event's `new_users_per_minute` property is also set. (nullable)
   --turnstile-action: string@turnstile-action-completer # If set, the event will override the waiting room's `turnstile_action` property while it is active. If null, the event will inherit it. (nullable)
   --turnstile-mode: string@turnstile-mode-completer # If set, the event will override the waiting room's `turnstile_mode` property while it is active. If null, the event will inherit it. (nullable)
@@ -87289,7 +87315,7 @@ export def "zones-waiting-rooms-rules waiting-room-create-waiting-room-rule" [
   --allow-errors(-e) # Return full response without error handling
   action: string@action-completer-6 # The action to take when the expression matches. (e.g. bypass_waiting_room)
   --description: string # The description of the rule. (default: , e.g. allow all traffic from 10.20.30.40)
-  --enabled: string@bool-completer # When set to true, the rule is enabled. (default: true, e.g. true)
+  --enabled: oneof<nothing, bool> # When set to true, the rule is enabled. (default: true, e.g. true)
   expression: string # Criteria defining when there is a match for the current rule. (e.g. ip.src in {10.20.30.40})
 ]: any -> record {
   let input = $in
@@ -87374,7 +87400,7 @@ export def "zones-waiting-rooms-rules waiting-room-patch-waiting-room-rule" [
   --allow-errors(-e) # Return full response without error handling
   action: string@action-completer-6 # The action to take when the expression matches. (e.g. bypass_waiting_room)
   --description: string # The description of the rule. (default: , e.g. allow all traffic from 10.20.30.40)
-  --enabled: string@bool-completer # When set to true, the rule is enabled. (default: true, e.g. true)
+  --enabled: oneof<nothing, bool> # When set to true, the rule is enabled. (default: true, e.g. true)
   expression: string # Criteria defining when there is a match for the current rule. (e.g. ip.src in {10.20.30.40})
   --position: record # Reorder the position of a rule — shape: {index?: int, before?: string, after?: string}
 ]: any -> record {

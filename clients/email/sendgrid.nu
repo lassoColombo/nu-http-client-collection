@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://api.sendgrid.com/v3"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -608,7 +607,7 @@ export def "asm-groups asm-groups-1" [
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
   --description: string # A brief description of your suppression group. Required when creating a group.
-  --is-default: string@bool-completer # Indicates if you would like this to be your default suppression group.
+  --is-default: oneof<nothing, bool> # Indicates if you would like this to be your default suppression group.
   --name: string # The name of your suppression group. Required when creating a group.
 ]: any -> record<description: string, id: int, is_default: bool, name: string> {
   let input = $in
@@ -689,7 +688,7 @@ export def "asm-groups id-by-group_id-2" [
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
   --description: string # A brief description of your suppression group. Required when creating a group.
-  --is-default: string@bool-completer # Indicates if you would like this to be your default suppression group.
+  --is-default: oneof<nothing, bool> # Indicates if you would like this to be your default suppression group.
   --name: string # The name of your suppression group. Required when creating a group.
 ]: any -> record<description: string, id: float, is_default: bool, last_email_sent_at: any, name: string, unsubscribes: int> {
   let input = $in
@@ -1626,7 +1625,7 @@ export def "contactdb-lists id-by-list_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete-contacts: string@bool-completer # Adds the ability to delete all contacts on the list in addition to deleting the list.
+  --delete-contacts: oneof<nothing, bool> # Adds the ability to delete all contacts on the list in addition to deleting the list.
   --on-behalf-of: string
   --body: record
 ]: any -> any {
@@ -2192,7 +2191,7 @@ export def "contactdb-segments id-by-segment_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete-contacts: string@bool-completer # True to delete all contacts matching the segment in addition to deleting the segment
+  --delete-contacts: oneof<nothing, bool> # True to delete all contacts matching the segment in addition to deleting the segment
   --on-behalf-of: string
   --body: record
 ]: any -> any {
@@ -2336,7 +2335,7 @@ export def "designs LIST-designs" [
   --allow-errors(-e) # Return full response without error handling
   --page-size: int # number of results to return (default: 100)
   --page-token: string # token corresponding to a specific page of results, as provided by metadata
-  --summary: string@bool-completer # set to false to return all fields (default: true)
+  --summary: oneof<nothing, bool> # set to false to return all fields (default: true)
 ]: nothing -> record<_metadata: record<count: int, next: string, prev: string, self: string>, result: table<created_at: string, id: string, thumbnail_url: string, updated_at: string, editor: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2388,7 +2387,7 @@ export def "designs-pre-builts LIST-Sendgrid-Pre-built-designs" [
   --allow-errors(-e) # Return full response without error handling
   --page-size: int # number of results to return (default: 100)
   --page-token: string # token corresponding to a specific page of results, as provided by metadata
-  --summary: string@bool-completer # set to false to return all fields (default: true)
+  --summary: oneof<nothing, bool> # set to false to return all fields (default: true)
 ]: nothing -> record<_metadata: record<count: int, next: string, prev: string, self: string>, result: table<created_at: string, id: string, thumbnail_url: string, updated_at: string, editor: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2506,7 +2505,7 @@ export def "designs PUT-design" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --categories: list # The list of categories applied to the design
-  --generate-plain-content: string@bool-completer # If true, plain_content is always generated from html_content. If false, plain_content is not altered. (default: true)
+  --generate-plain-content: oneof<nothing, bool> # If true, plain_content is always generated from html_content. If false, plain_content is not altered. (default: true)
   --html-content: string # The HTML content of the Design.
   --name: string # Name of the Design. (default: My Design)
   --plain-content: string # Plain text content of the Design. (default: <generated from html_content if left empty>)
@@ -2624,7 +2623,7 @@ export def "ips ips" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ip: string # The IP address to get
-  --exclude-whitelabels: string@bool-completer # Should we exclude reverse DNS records (whitelabels)?
+  --exclude-whitelabels: oneof<nothing, bool> # Should we exclude reverse DNS records (whitelabels)?
   --limit: int # The number of IPs you want returned at the same time. (default: 10)
   --offset: int # The offset for the number of IPs that you are requesting. (default: 0)
   --subuser: string # The subuser you are requesting for.
@@ -2653,7 +2652,7 @@ export def "ips ips-1" [
   --allow-errors(-e) # Return full response without error handling
   count: int # The amount of IPs to add to the account.
   --subusers: list # Array of usernames to be assigned a send IP.
-  --warmup: string@bool-completer # Whether or not to warmup the IPs being added. (default: false)
+  --warmup: oneof<nothing, bool> # Whether or not to warmup the IPs being added. (default: false)
 ]: any -> record<ips: table<ip: string, subusers: list>, remaining_ips: int, warmup: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3148,7 +3147,7 @@ export def "mail-settings-address-whitelist whitelist-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
-  --enabled: string@bool-completer # Indicates if your email address whitelist is enabled.
+  --enabled: oneof<nothing, bool> # Indicates if your email address whitelist is enabled.
   --list: list # Either a single email address that you want whitelisted or a domain, for which all email addresses belonging to this domain will be whitelisted.
 ]: any -> record<enabled: bool, list: list<string>> {
   let input = $in
@@ -3201,7 +3200,7 @@ export def "mail-settings-bounce-purge purge-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
-  --enabled: string@bool-completer # Indicates if the bounce purge mail setting is enabled.
+  --enabled: oneof<nothing, bool> # Indicates if the bounce purge mail setting is enabled.
   --hard-bounces: int # The number of days after which SendGrid will purge all contacts from your hard bounces suppression lists. (nullable)
   --soft-bounces: int # The number of days after which SendGrid will purge all contacts from your soft bounces suppression lists. (nullable)
 ]: any -> record<enabled: bool, hard_bounces: int, soft_bounces: int> {
@@ -3255,7 +3254,7 @@ export def "mail-settings-footer settings-footer-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
-  --enabled: string@bool-completer # Indicates if the Footer mail setting is currently enabled.
+  --enabled: oneof<nothing, bool> # Indicates if the Footer mail setting is currently enabled.
   --html-content: string # The custom HTML content of your email footer.
   --plain-content: string # The plain text content of your email footer.
 ]: any -> record<enabled: bool, html_content: string, plain_content: string> {
@@ -3310,7 +3309,7 @@ export def "mail-settings-forward-bounce bounce-1" [
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
   --email: string # The email address that you would like your bounce reports forwarded to. (nullable)
-  --enabled: string@bool-completer # Indicates if the bounce forwarding mail setting is enabled.
+  --enabled: oneof<nothing, bool> # Indicates if the bounce forwarding mail setting is enabled.
 ]: any -> record<email: string, enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3363,7 +3362,7 @@ export def "mail-settings-forward-spam spam-1" [
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
   --email: string # The email address where you would like the spam reports to be forwarded.
-  --enabled: string@bool-completer # Indicates if the Forward Spam setting is enabled.
+  --enabled: oneof<nothing, bool> # Indicates if the Forward Spam setting is enabled.
 ]: any -> record<email: string, enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3415,7 +3414,7 @@ export def "mail-settings-template settings-template-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
-  --enabled: string@bool-completer # Indicates if you want to enable the legacy email template mail setting.
+  --enabled: oneof<nothing, bool> # Indicates if you want to enable the legacy email template mail setting.
   --html-content: string # The new HTML content for your legacy email template.
 ]: any -> record<enabled: bool, html_content: string> {
   let input = $in
@@ -3931,7 +3930,7 @@ export def "marketing-lists lists-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete-contacts: string@bool-completer # Flag indicates that all contacts on the list are also to be deleted. (default: false)
+  --delete-contacts: oneof<nothing, bool> # Flag indicates that all contacts on the list are also to be deleted. (default: false)
 ]: nothing -> record<job_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3955,7 +3954,7 @@ export def "marketing-lists mc-lists-id-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --contact-sample: string@bool-completer # Setting this parameter to the true  will cause the contact_sample to be returned (default: false)
+  --contact-sample: oneof<nothing, bool> # Setting this parameter to the true  will cause the contact_sample to be returned (default: false)
 ]: nothing -> record<_metadata: record<self: string>, contact_count: int, id: string, name: string, contact_sample: record<_metadata: record<self: string>, address_line_1: string, address_line_2: string, alternate_emails: list<string>, city: string, country: string, created_at: string, custom_fields: record, email: string, facebook: string, first_name: string, id: string, last_name: string, line: string, list_ids: list<string>, phone_number: string, postal_code: string, segment_ids: list<string>, state_province_region: string, unique_name: string, updated_at: string, whatsapp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4051,7 +4050,7 @@ export def "marketing-segments marketing-segments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --parent-list-ids: string # A comma separated list of list ids to be used when searching for segments with the specified parent_list_id, no more than 50 is allowed
-  --no-parent-list-id: string@bool-completer # If set to `true` segments with an empty value of `parent_list_id` will be returned in the filter.  If the value is not present it defaults to 'false'. (default: false)
+  --no-parent-list-id: oneof<nothing, bool> # If set to `true` segments with an empty value of `parent_list_id` will be returned in the filter.  If the value is not present it defaults to 'false'. (default: false)
 ]: nothing -> record<results: table<contacts_count: int, created_at: string, id: string, name: string, next_sample_update: string, parent_list_id: string, sample_updated_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4103,7 +4102,7 @@ export def "marketing-segments-20 segments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --parent-list-ids: string # A comma separated list up to 50 in size, to filter segments on.  Only segments that have any of these list ids as the parent list will be retrieved. This is different from the parameter of the same name used when creating a segment.
-  --no-parent-list-id: string@bool-completer # If set to `true` segments with an empty value of `parent_list_id` will be returned in the filter.  If the value is not present it defaults to 'false'. (default: false)
+  --no-parent-list-id: oneof<nothing, bool> # If set to `true` segments with an empty value of `parent_list_id` will be returned in the filter.  If the value is not present it defaults to 'false'. (default: false)
 ]: nothing -> record<_metadata: record<count: int, next: string, prev: string, self: string>, contacts_count: int, created_at: string, id: string, name: string, next_sample_update: string, parent_list_ids: list<string>, query_version: string, sample_updated_at: string, status: record<error_message: string, query_validation: string>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4176,7 +4175,7 @@ export def "marketing-segments-20 id-by-segment_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --contacts-sample: string@bool-completer # Defaults to `true`. Set to `false` to exclude the contacts_sample in the response.
+  --contacts-sample: oneof<nothing, bool> # Defaults to `true`. Set to `false` to exclude the contacts_sample in the response.
 ]: nothing -> record<contacts_count: int, contacts_sample: table<address_line_1: string, address_line_2: string, alternate_emails: list, city: string, country: string, custom_fields: record, email: string, first_name: string, id: string, last_name: string, list_ids: list, postal_code: int, segment_ids: list, state_province_region: string>, created_at: string, id: string, name: string, next_sample_update: string, parent_list_ids: list<string>, query_dsl: string, query_version: string, sample_updated_at: string, status: record<error_message: string, query_validation: string>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4274,7 +4273,7 @@ export def "marketing-segments id-by-segment_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --query-json: string@bool-completer # Defaults to `false`.  Set to `true` to return the parsed SQL AST as a JSON object in the field `query_json`
+  --query-json: oneof<nothing, bool> # Defaults to `false`.  Set to `true` to return the parsed SQL AST as a JSON object in the field `query_json`
 ]: nothing -> record<contacts_count: int, created_at: string, id: string, name: string, next_sample_update: string, parent_list_id: string, sample_updated_at: string, updated_at: string, contacts_sample: table<address_line_1: string, address_line_2: string, alternate_emails: list, city: string, country: string, custom_fields: record, email: string, first_name: string, id: string, last_name: string, list_ids: list, postal_code: int, segment_ids: list, state_province_region: string>, query_json: record, parent_list_ids: list<string>, query_dsl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5044,8 +5043,8 @@ export def "partner-settings-new-relic relic-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
-  --enable-subuser-statistics: string@bool-completer # Indicates if your subuser statistics will be sent to your New Relic Dashboard.
-  --enabled: string@bool-completer # Indicates if this partner setting is enabled.
+  --enable-subuser-statistics: oneof<nothing, bool> # Indicates if your subuser statistics will be sent to your New Relic Dashboard.
+  --enabled: oneof<nothing, bool> # Indicates if this partner setting is enabled.
   --license-key: string # The license key for your New Relic account.
 ]: any -> record<enable_subuser_statistics: bool, enabled: bool, license_key: string> {
   let input = $in
@@ -5339,7 +5338,7 @@ export def "sso-certificates sso-certificates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Indicates if the certificate is enabled.
+  --enabled: oneof<nothing, bool> # Indicates if the certificate is enabled.
   integration_id: string # An ID that matches a certificate to a specific IdP integration. This is the `id` returned by the "Get All SSO Integrations" endpoint.
   public_certificate: string # This public certificate allows SendGrid to verify that SAML requests it receives are signed by an IdP that it recognizes.
 ]: any -> record<id: float, intergration_id: string, not_after: float, not_before: float, public_certificate: string> {
@@ -5411,7 +5410,7 @@ export def "sso-certificates id-by-cert_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Indicates whether or not the certificate is enabled.
+  --enabled: oneof<nothing, bool> # Indicates whether or not the certificate is enabled.
   --integration-id: string # An ID that matches a certificate to a specific IdP integration.
   --public-certificate: string # This public certificate allows SendGrid to verify that SAML requests it receives are signed by an IdP that it recognizes.
 ]: any -> any {
@@ -5438,7 +5437,7 @@ export def "sso-integrations sso-integrations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --si: string@bool-completer # If this parameter is set to `true`, the response will include the `completed_integration` field.
+  --si: oneof<nothing, bool> # If this parameter is set to `true`, the response will include the `completed_integration` field.
 ]: nothing -> table<completed_integration: bool, enabled: bool, entity_id: string, name: string, signin_url: string, signout_url: string, audience_url: string, id: string, last_updated: float, single_signon_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5461,8 +5460,8 @@ export def "sso-integrations sso-integrations-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --completed-integration: string@bool-completer # Indicates if the integration is complete.
-  --enabled: string@bool-completer # Indicates if the integration is enabled.
+  --completed-integration: oneof<nothing, bool> # Indicates if the integration is complete.
+  --enabled: oneof<nothing, bool> # Indicates if the integration is enabled.
   entity_id: string # An identifier provided by your IdP to identify Twilio SendGrid in the SAML interaction. This is called the "SAML Issuer ID" in the Twilio SendGrid UI.
   name: string # The name of your integration. This name can be anything that makes sense for your organization (eg. Twilio SendGrid)
   signin_url: string # The IdP's SAML POST endpoint. This endpoint should receive requests and initiate an SSO login flow. This is called the "Embed Link" in the Twilio SendGrid UI.
@@ -5514,7 +5513,7 @@ export def "sso-integrations sso-integrations-id-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --si: string@bool-completer # If this parameter is set to `true`, the response will include the `completed_integration` field.
+  --si: oneof<nothing, bool> # If this parameter is set to `true`, the response will include the `completed_integration` field.
 ]: nothing -> record<completed_integration: bool, enabled: bool, entity_id: string, name: string, signin_url: string, signout_url: string, audience_url: string, id: string, last_updated: float, single_signon_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5538,9 +5537,9 @@ export def "sso-integrations sso-integrations-id-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --si: string@bool-completer # If this parameter is set to `true`, the response will include the `completed_integration` field.
-  --completed-integration: string@bool-completer # Indicates if the integration is complete.
-  --enabled: string@bool-completer # Indicates if the integration is enabled.
+  --si: oneof<nothing, bool> # If this parameter is set to `true`, the response will include the `completed_integration` field.
+  --completed-integration: oneof<nothing, bool> # Indicates if the integration is complete.
+  --enabled: oneof<nothing, bool> # Indicates if the integration is enabled.
   entity_id: string # An identifier provided by your IdP to identify Twilio SendGrid in the SAML interaction. This is called the "SAML Issuer ID" in the Twilio SendGrid UI.
   name: string # The name of your integration. This name can be anything that makes sense for your organization (eg. Twilio SendGrid)
   signin_url: string # The IdP's SAML POST endpoint. This endpoint should receive requests and initiate an SSO login flow. This is called the "Embed Link" in the Twilio SendGrid UI.
@@ -5594,8 +5593,8 @@ export def "sso-teammates sso-teammates" [
   --allow-errors(-e) # Return full response without error handling
   email: string # The Teammate’s email address. This email address will also function as the Teammate’s username and must match the address assigned to the user in your IdP. This address cannot be changed after the Teammate is created. (format: email)
   first_name: string # The Teammate’s first name.
-  --is-admin: string@bool-completer # Indicates if the Teammate has admin permissions.
-  --is-read-only: string@bool-completer # Indicates if the Teammate has read_only permissions.
+  --is-admin: oneof<nothing, bool> # Indicates if the Teammate has admin permissions.
+  --is-read-only: oneof<nothing, bool> # Indicates if the Teammate has read_only permissions.
   last_name: string # The Teammate’s last name.
   scopes: list # The permission scopes assigned to the Teammate.
 ]: any -> record<email: string, first_name: string, is_admin: bool, is_read_only: bool, last_name: string, is_sso: bool, username: string> {
@@ -5624,7 +5623,7 @@ export def "sso-teammates sso-teammates-username" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --first-name: string
-  --is-admin: string@bool-completer
+  --is-admin: oneof<nothing, bool>
   --last-name: string
   --scopes: list
 ]: any -> record<address: string, address2: string, city: string, company: string, country: string, email: string, phone: string, scopes: list<string>, state: string, user_type: string, website: string, zip: string> {
@@ -5865,7 +5864,7 @@ export def "subusers name-by-subuser_name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --disabled: string@bool-completer # Whether or not this subuser is disabled. True means disabled, False means enabled.
+  --disabled: oneof<nothing, bool> # Whether or not this subuser is disabled. True means disabled, False means enabled.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6042,7 +6041,7 @@ export def "suppression-blocks suppression-blocks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
-  --delete-all: string@bool-completer # Indicates if you want to delete all blocked email addresses.
+  --delete-all: oneof<nothing, bool> # Indicates if you want to delete all blocked email addresses.
   --emails: list # The specific blocked email addresses that you want to delete.
 ]: any -> any {
   let input = $in
@@ -6150,7 +6149,7 @@ export def "suppression-bounces suppression-bounces" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
-  --delete-all: string@bool-completer # This parameter allows you to delete **every** email in your bounce list. This should not be used with the emails parameter.
+  --delete-all: oneof<nothing, bool> # This parameter allows you to delete **every** email in your bounce list. This should not be used with the emails parameter.
   --emails: list # Delete multiple emails from your bounce list at the same time. This should not be used with the delete_all parameter.
 ]: any -> any {
   let input = $in
@@ -6262,7 +6261,7 @@ export def "suppression-invalid-emails emails" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
-  --delete-all: string@bool-completer # Indicates if you want to remove all email address from the invalid emails list.
+  --delete-all: oneof<nothing, bool> # Indicates if you want to remove all email address from the invalid emails list.
   --emails: list # The list of specific email addresses that you want to remove.
 ]: any -> any {
   let input = $in
@@ -6370,7 +6369,7 @@ export def "suppression-spam-reports reports" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
-  --delete-all: string@bool-completer # Indicates if you want to delete all email addresses on the spam report list.
+  --delete-all: oneof<nothing, bool> # Indicates if you want to delete all email addresses on the spam report list.
   --emails: list # A list of specific email addresses that you want to remove from the spam report list.
 ]: any -> any {
   let input = $in
@@ -6535,7 +6534,7 @@ export def "teammates v3-teammates-1" [
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
   email: string # New teammate's email
-  --is-admin: string@bool-completer # Set to true if teammate should be an admin user (default: false)
+  --is-admin: oneof<nothing, bool> # Set to true if teammate should be an admin user (default: false)
   scopes: list # Set to specify list of scopes that teammate should have. Should be empty if teammate is an admin.
 ]: any -> record<email: string, is_admin: bool, scopes: list<any>, token: string> {
   let input = $in
@@ -6689,7 +6688,7 @@ export def "teammates v3-teammates-username-by-username-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
-  --is-admin: string@bool-completer # Set to True if this teammate should be promoted to an admin user. If True, scopes should be an empty array.
+  --is-admin: oneof<nothing, bool> # Set to True if this teammate should be promoted to an admin user. If True, scopes should be an empty array.
   scopes: list # Provide list of scopes that should be given to teammate. If specifying list of scopes, is_admin should be set to False.
 ]: any -> record<address: string, address2: string, city: string, country: string, email: string, first_name: string, is_admin: bool, last_name: string, phone: string, scopes: list<string>, state: string, user_type: string, username: string, website: string, zip: string> {
   let input = $in
@@ -6886,7 +6885,7 @@ export def "templates-versions id-versions" [
   --on-behalf-of: string
   --active: int@active-completer # Set the version as the active version associated with the template (0 is inactive, 1 is active). Only one version of a template can be active. The first version created for a template will automatically be set to Active.
   --editor: string@editor-completer # The editor used in the UI.
-  --generate-plain-content: string@bool-completer # If true, plain_content is always generated from html_content. If false, plain_content is not altered. (default: true)
+  --generate-plain-content: oneof<nothing, bool> # If true, plain_content is always generated from html_content. If false, plain_content is not altered. (default: true)
   --html-content: string # The HTML content of the version. Maximum of 1048576 bytes allowed.
   name: string # Name of the transactional template version.
   --plain-content: string # Text/plain content of the transactional template version. Maximum of 1048576 bytes allowed. (default: <generated from html_content if left empty>)
@@ -6975,7 +6974,7 @@ export def "templates-versions id-by-template_id-version_id-2" [
   --on-behalf-of: string
   --active: int@active-completer # Set the version as the active version associated with the template (0 is inactive, 1 is active). Only one version of a template can be active. The first version created for a template will automatically be set to Active.
   --editor: string@editor-completer # The editor used in the UI.
-  --generate-plain-content: string@bool-completer # If true, plain_content is always generated from html_content. If false, plain_content is not altered. (default: true)
+  --generate-plain-content: oneof<nothing, bool> # If true, plain_content is always generated from html_content. If false, plain_content is not altered. (default: true)
   --html-content: string # The HTML content of the version. Maximum of 1048576 bytes allowed.
   name: string # Name of the transactional template version.
   --plain-content: string # Text/plain content of the transactional template version. Maximum of 1048576 bytes allowed. (default: <generated from html_content if left empty>)
@@ -7082,7 +7081,7 @@ export def "tracking-settings-click settings-click-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
-  --enabled: string@bool-completer # The setting you want to use for click tracking.
+  --enabled: oneof<nothing, bool> # The setting you want to use for click tracking.
 ]: any -> record<enable_text: bool, enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7134,7 +7133,7 @@ export def "tracking-settings-google-analytics analytics-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
-  --enabled: string@bool-completer # Indicates if Google Analytics is enabled.
+  --enabled: oneof<nothing, bool> # Indicates if Google Analytics is enabled.
   --utm-campaign: string # The name of the campaign.
   --utm-content: string # Used to differentiate ads
   --utm-medium: string # Name of the marketing medium (e.g. "Email").
@@ -7191,7 +7190,7 @@ export def "tracking-settings-open settings-open-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
-  --enabled: string@bool-completer # The new status that you want to set for open tracking.
+  --enabled: oneof<nothing, bool> # The new status that you want to set for open tracking.
 ]: any -> record<enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7243,7 +7242,7 @@ export def "tracking-settings-subscription settings-subscription-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
-  --enabled: string@bool-completer # Indicates if subscription tracking is enabled.
+  --enabled: oneof<nothing, bool> # Indicates if subscription tracking is enabled.
   --html-content: string # The information and HTML for your unsubscribe link. 
   --landing: string # The HTML that will be displayed on the page that your customers will see after clicking unsubscribe, hosted on SendGrid’s server.
   --plain-content: string # The information in plain text for your unsubscribe link. You should have the “<% %>” tag in your content, otherwise the user will have no URL for unsubscribing.
@@ -7623,8 +7622,8 @@ export def "user-settings-enforced-tls tls-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
-  --require-tls: string@bool-completer # Indicates if you want to require your recipients to support TLS. 
-  --require-valid-cert: string@bool-completer # Indicates if you want to require your recipients to have a valid certificate.
+  --require-tls: oneof<nothing, bool> # Indicates if you want to require your recipients to support TLS. 
+  --require-valid-cert: oneof<nothing, bool> # Indicates if you want to require your recipients to have a valid certificate.
 ]: any -> record<require_tls: bool, require_valid_cert: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7728,21 +7727,21 @@ export def "user-webhooks-event-settings user-webhooks-event-settings-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
-  --bounce: string@bool-completer # Receiving server could not or would not accept message.
-  --click: string@bool-completer # Recipient clicked on a link within the message. You need to enable Click Tracking for getting this type of event.
-  --deferred: string@bool-completer # Recipient's email server temporarily rejected message.
-  --delivered: string@bool-completer # Message has been successfully delivered to the receiving server.
-  --dropped: string@bool-completer # You may see the following drop reasons: Invalid SMTPAPI header, Spam Content (if spam checker app enabled), Unsubscribed Address, Bounced Address, Spam Reporting Address, Invalid, Recipient List over Package Quota
-  --enabled: string@bool-completer # Indicates if the event webhook is enabled.
-  --group-resubscribe: string@bool-completer # Recipient resubscribes to specific group by updating preferences. You need to enable Subscription Tracking for getting this type of event.
-  --group-unsubscribe: string@bool-completer # Recipient unsubscribe from specific group, by either direct link or updating preferences. You need to enable Subscription Tracking for getting this type of event.
+  --bounce: oneof<nothing, bool> # Receiving server could not or would not accept message.
+  --click: oneof<nothing, bool> # Recipient clicked on a link within the message. You need to enable Click Tracking for getting this type of event.
+  --deferred: oneof<nothing, bool> # Recipient's email server temporarily rejected message.
+  --delivered: oneof<nothing, bool> # Message has been successfully delivered to the receiving server.
+  --dropped: oneof<nothing, bool> # You may see the following drop reasons: Invalid SMTPAPI header, Spam Content (if spam checker app enabled), Unsubscribed Address, Bounced Address, Spam Reporting Address, Invalid, Recipient List over Package Quota
+  --enabled: oneof<nothing, bool> # Indicates if the event webhook is enabled.
+  --group-resubscribe: oneof<nothing, bool> # Recipient resubscribes to specific group by updating preferences. You need to enable Subscription Tracking for getting this type of event.
+  --group-unsubscribe: oneof<nothing, bool> # Recipient unsubscribe from specific group, by either direct link or updating preferences. You need to enable Subscription Tracking for getting this type of event.
   --oauth-client-id: string # The client ID Twilio SendGrid sends to your OAuth server or service provider to generate an OAuth access token. When passing data in this field, you must also include the oauth_token_url field.
   --oauth-client-secret: string # This secret is needed only once to create an access token. SendGrid will store this secret, allowing you to update your Client ID and Token URL without passing the secret to SendGrid again.  When passing data in this field, you must also include the oauth_client_id and oauth_token_url fields.
   --oauth-token-url: string # The URL where Twilio SendGrid sends the Client ID and Client Secret to generate an access token. This should be your OAuth server or service provider. When passing data in this field, you must also include the oauth_client_id field.
-  --body-open: string@bool-completer # Recipient has opened the HTML message. You need to enable Open Tracking for getting this type of event.
-  --processed: string@bool-completer # Message has been received and is ready to be delivered.
-  --spam-report: string@bool-completer # Recipient marked a message as spam.
-  --unsubscribe: string@bool-completer # Recipient clicked on message's subscription management link. You need to enable Subscription Tracking for getting this type of event.
+  --body-open: oneof<nothing, bool> # Recipient has opened the HTML message. You need to enable Open Tracking for getting this type of event.
+  --processed: oneof<nothing, bool> # Message has been received and is ready to be delivered.
+  --spam-report: oneof<nothing, bool> # Recipient marked a message as spam.
+  --unsubscribe: oneof<nothing, bool> # Recipient clicked on message's subscription management link. You need to enable Subscription Tracking for getting this type of event.
   --body-url: string # The URL that you want the event webhook to POST to.
 ]: any -> record<bounce: bool, click: bool, deferred: bool, delivered: bool, dropped: bool, enabled: bool, group_resubscribe: bool, group_unsubscribe: bool, oauth_client_id: string, oauth_token_url: string, open: bool, processed: bool, spam_report: bool, unsubscribe: bool, url: string> {
   let input = $in
@@ -7795,7 +7794,7 @@ export def "user-webhooks-event-settings-signed user-webhooks-event-settings-sig
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<public_key: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7879,8 +7878,8 @@ export def "user-webhooks-parse-settings user-webhooks-parse-settings-1" [
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
   --hostname: string # A specific and unique domain or subdomain that you have created to use exclusively to parse your incoming email. For example, `parse.yourdomain.com`.
-  --send-raw: string@bool-completer # Indicates if you would like SendGrid to post the original MIME-type content of your parsed email. When this parameter is set to `true`, SendGrid will send a JSON payload of the content of your email.
-  --spam-check: string@bool-completer # Indicates if you would like SendGrid to check the content parsed from your emails for spam before POSTing them to your domain.
+  --send-raw: oneof<nothing, bool> # Indicates if you would like SendGrid to post the original MIME-type content of your parsed email. When this parameter is set to `true`, SendGrid will send a JSON payload of the content of your email.
+  --spam-check: oneof<nothing, bool> # Indicates if you would like SendGrid to check the content parsed from your emails for spam before POSTing them to your domain.
   --body-url: string # The public URL where you would like SendGrid to POST the data parsed from your email. Any emails sent with the given hostname provided (whose MX records have been updated to point to SendGrid) will be parsed and POSTed to this URL.
 ]: any -> record<hostname: string, send_raw: bool, spam_check: bool, url: string> {
   let input = $in
@@ -7961,8 +7960,8 @@ export def "user-webhooks-parse-settings user-webhooks-parse-settings-hostname-b
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
   --body-hostname: string # A specific and unique domain or subdomain that you have created to use exclusively to parse your incoming email. For example, `parse.yourdomain.com`.
-  --send-raw: string@bool-completer # Indicates if you would like SendGrid to post the original MIME-type content of your parsed email. When this parameter is set to `true`, SendGrid will send a JSON payload of the content of your email.
-  --spam-check: string@bool-completer # Indicates if you would like SendGrid to check the content parsed from your emails for spam before POSTing them to your domain.
+  --send-raw: oneof<nothing, bool> # Indicates if you would like SendGrid to post the original MIME-type content of your parsed email. When this parameter is set to `true`, SendGrid will send a JSON payload of the content of your email.
+  --spam-check: oneof<nothing, bool> # Indicates if you would like SendGrid to check the content parsed from your emails for spam before POSTing them to your domain.
   --body-url: string # The public URL where you would like SendGrid to POST the data parsed from your email. Any emails sent with the given hostname provided (whose MX records have been updated to point to SendGrid) will be parsed and POSTed to this URL.
 ]: any -> record<hostname: string, send_raw: bool, spam_check: bool, url: string> {
   let input = $in
@@ -8280,7 +8279,7 @@ export def "whitelabel-domains whitelabel-domains" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Number of domains to return.
   --offset: int # Paging offset.
-  --exclude-subusers: string@bool-completer # Exclude subuser domains from the result.
+  --exclude-subusers: oneof<nothing, bool> # Exclude subuser domains from the result.
   --username: string # The username associated with an authenticated domain.
   --domain: string # Search for authenticated domains.
   --on-behalf-of: string
@@ -8309,10 +8308,10 @@ export def "whitelabel-domains whitelabel-domains-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
-  --automatic-security: string@bool-completer # Whether to allow SendGrid to manage your SPF records, DKIM keys, and DKIM key rotation.
+  --automatic-security: oneof<nothing, bool> # Whether to allow SendGrid to manage your SPF records, DKIM keys, and DKIM key rotation.
   --custom-dkim-selector: string # Add a custom DKIM selector. Accepts three letters or numbers.
-  --custom-spf: string@bool-completer # Specify whether to use a custom SPF or allow SendGrid to manage your SPF. This option is only available to authenticated domains set up for manual security.
-  --default: string@bool-completer # Whether to use this authenticated domain as the fallback if no authenticated domains match the sender's domain.
+  --custom-spf: oneof<nothing, bool> # Specify whether to use a custom SPF or allow SendGrid to manage your SPF. This option is only available to authenticated domains set up for manual security.
+  --default: oneof<nothing, bool> # Whether to use this authenticated domain as the fallback if no authenticated domains match the sender's domain.
   domain: string # Domain being authenticated.
   --ips: list # The IP addresses that will be included in the custom SPF record for this authenticated domain.
   --subdomain: string # The subdomain to use for this authenticated domain.
@@ -8467,8 +8466,8 @@ export def "whitelabel-domains id-by-domain_id-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
-  --custom-spf: string@bool-completer # Indicates whether to generate a custom SPF record for manual security. (default: false)
-  --default: string@bool-completer # Indicates whether this is the default authenticated domain. (default: false)
+  --custom-spf: oneof<nothing, bool> # Indicates whether to generate a custom SPF record for manual security. (default: false)
+  --default: oneof<nothing, bool> # Indicates whether this is the default authenticated domain. (default: false)
 ]: any -> table<automatic_security: bool, custom_spf: bool, default: bool, dns: record<dkim1: record, dkim2: record, mail_cname: record>, domain: string, id: float, ips: list<string>, legacy: bool, subdomain: string, user_id: float, username: string, valid: bool, last_validation_attempt_at: int, subusers: list<record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8761,7 +8760,7 @@ export def "whitelabel-links whitelabel-links-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
-  --default: string@bool-completer # Indicates if you want to use this link branding as the default or fallback. When setting a new default, the existing default link branding will have its default status removed automatically.
+  --default: oneof<nothing, bool> # Indicates if you want to use this link branding as the default or fallback. When setting a new default, the existing default link branding will have its default status removed automatically.
   domain: string # The root domain for the subdomain that you are creating the link branding for. This should match your FROM email address.
   --subdomain: string # The subdomain to create the link branding for. Must be different from the subdomain you used for authenticating your domain.
 ]: any -> record<default: bool, dns: record<domain_cname: record<data: string, host: string, type: string, valid: bool>, owner_cname: record<data: string, host: string, type: string, valid: bool>>, domain: string, id: int, legacy: bool, subdomain: string, user_id: int, username: string, valid: bool> {
@@ -8914,7 +8913,7 @@ export def "whitelabel-links whitelabel-links-id-by-id-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --on-behalf-of: string
-  --default: string@bool-completer # Indicates if the branded link is set as the default. When setting a new default, the existing default link branding will have its default status removed automatically.
+  --default: oneof<nothing, bool> # Indicates if the branded link is set as the default. When setting a new default, the existing default link branding will have its default status removed automatically.
 ]: any -> record<default: bool, dns: record<domain_cname: record<data: string, host: string, type: string, valid: bool>, owner_cname: record<data: string, host: string, type: string, valid: bool>>, domain: string, id: int, legacy: bool, subdomain: string, user_id: int, username: string, valid: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.pinecone.io"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -128,7 +127,7 @@ export def "admin-projects project" [
   --X-Pinecone-Api-Version: string # Required date-based version header
   name: string # The name of the new project. (e.g. chatbot-prod)
   --max-pods: int # The maximum number of Pods that can be created in the project. Default is `0` (serverless only).
-  --force-encryption-with-cmek: string@bool-completer # Whether to force encryption with a customer-managed encryption key (CMEK). Default is `false`.
+  --force-encryption-with-cmek: oneof<nothing, bool> # Whether to force encryption with a customer-managed encryption key (CMEK). Default is `false`.
 ]: any -> record<id: string, name: string, max_pods: int, force_encryption_with_cmek: bool, organization_id: string, created_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -233,7 +232,7 @@ export def "admin-projects project-by-project_id-2" [
   --X-Pinecone-Api-Version: string # Required date-based version header
   --name: string # The name of the new project. (e.g. chatbot-prod)
   --max-pods: int # The maximum number of Pods that can be created in the project.
-  --force-encryption-with-cmek: string@bool-completer # Whether to force encryption with a customer-managed encryption key (CMEK). Once enabled, CMEK encryption cannot be disabled.
+  --force-encryption-with-cmek: oneof<nothing, bool> # Whether to force encryption with a customer-managed encryption key (CMEK). Once enabled, CMEK encryption cannot be disabled.
 ]: any -> record<id: string, name: string, max_pods: int, force_encryption_with_cmek: bool, organization_id: string, created_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

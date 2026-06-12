@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://chat.googleapis.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -113,7 +112,7 @@ export def "media chatmediadownload" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
@@ -146,7 +145,7 @@ export def "spaces chatspaceslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
@@ -182,7 +181,7 @@ export def "spaces chatspacesmessagesdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
@@ -216,7 +215,7 @@ export def "spaces chatspacesmessagesattachmentsget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
@@ -259,11 +258,11 @@ export def "spaces chatspacesmessagespatch" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --allowMissing: string@bool-completer # Optional. If `true` and the message is not found, a new message is created and `updateMask` is ignored. The specified message ID must be [client-assigned](https://developers.google.com/chat/api/guides/crudl/messages#name_a_created_message) or the request fails.
+  --allowMissing: oneof<nothing, bool> # Optional. If `true` and the message is not found, a new message is created and `updateMask` is ignored. The specified message ID must be [client-assigned](https://developers.google.com/chat/api/guides/crudl/messages#name_a_created_message) or the request fails.
   --updateMask: string # Required. The field paths to update. Separate multiple values with commas. Currently supported field paths: - text - cards (Requires [service account authentication](/chat/api/guides/auth/service-accounts).) - cards_v2 
   --actionResponse: record # Parameters that a Chat app can use to configure how its response is posted. — shape: {dialogAction?: record, type?: "TYPE_UNSPECIFIED"|"NEW_MESSAGE"|"UPDATE_MESSAGE"|"UPDATE_USER_MESSAGE_CARDS"|"REQUEST_CONFIG"|"DIALOG", url?: string}
   --attachment: list # User-uploaded attachment. — item shape: {attachmentDataRef?: record, contentName?: string, contentType?: string, driveDataRef?: record, name?: string, source?: "SOURCE_UNSPECIFIED"|"DRIVE_FILE"|"UPLOADED_CONTENT"}
@@ -320,11 +319,11 @@ export def "spaces chatspacesmessagesupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --allowMissing: string@bool-completer # Optional. If `true` and the message is not found, a new message is created and `updateMask` is ignored. The specified message ID must be [client-assigned](https://developers.google.com/chat/api/guides/crudl/messages#name_a_created_message) or the request fails.
+  --allowMissing: oneof<nothing, bool> # Optional. If `true` and the message is not found, a new message is created and `updateMask` is ignored. The specified message ID must be [client-assigned](https://developers.google.com/chat/api/guides/crudl/messages#name_a_created_message) or the request fails.
   --updateMask: string # Required. The field paths to update. Separate multiple values with commas. Currently supported field paths: - text - cards (Requires [service account authentication](/chat/api/guides/auth/service-accounts).) - cards_v2 
   --actionResponse: record # Parameters that a Chat app can use to configure how its response is posted. — shape: {dialogAction?: record, type?: "TYPE_UNSPECIFIED"|"NEW_MESSAGE"|"UPDATE_MESSAGE"|"UPDATE_USER_MESSAGE_CARDS"|"REQUEST_CONFIG"|"DIALOG", url?: string}
   --attachment: list # User-uploaded attachment. — item shape: {attachmentDataRef?: record, contentName?: string, contentType?: string, driveDataRef?: record, name?: string, source?: "SOURCE_UNSPECIFIED"|"DRIVE_FILE"|"UPLOADED_CONTENT"}
@@ -372,7 +371,7 @@ export def "members chatspacesmemberslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
@@ -417,7 +416,7 @@ export def "messages chatspacesmessagescreate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").

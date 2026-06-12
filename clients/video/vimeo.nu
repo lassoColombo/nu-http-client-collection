@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.vimeo.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -147,7 +146,7 @@ export def "api-information endpoints" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --openapi: string@bool-completer # Return an OpenAPI specification. (e.g. true)
+  --openapi: oneof<nothing, bool> # Return an OpenAPI specification. (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -277,7 +276,7 @@ export def "categories-videos videos" [
   --allow-errors(-e) # Return full response without error handling
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --filter: string@filter-completer # The attribute by which to filter the results.  Option descriptions:  * `conditional_featured` - Featured (promoted) videos
-  --filter-embeddable: string@bool-completer # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
+  --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
@@ -988,7 +987,7 @@ export def "channels-videos videos" [
   --containing-uri: string # The page that contains the video URI. (e.g. /videos/258684937)
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --filter: string@filter-completer-3 # The attribute by which to filter the results.
-  --filter-embeddable: string@bool-completer # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
+  --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
@@ -1566,7 +1565,7 @@ export def "groups-videos videos" [
   --allow-errors(-e) # Return full response without error handling
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --filter: string@filter-completer-3 # The attribute by which to filter the results.
-  --filter-embeddable: string@bool-completer # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
+  --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
@@ -1854,13 +1853,13 @@ export def "me-albums-videos alt1-by-album_id" [
   --containing-uri: string # The page containing the video URI. (e.g. /videos/258684937)
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --filter: string@filter-completer-3 # The attribute by which to filter the results.
-  --filter-embeddable: string@bool-completer # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
+  --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --password: string # The password of the album. (e.g. hunter1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-9 # The way to sort the results.
-  --weak-search: string@bool-completer # Whether to include private videos in the search. Please note that a separate search service provides this functionality. The service performs a partial text search on the video's name. (e.g. false)
+  --weak-search: oneof<nothing, bool> # Whether to include private videos in the search. Please note that a separate search service provides this functionality. The service performs a partial text search on the video's name. (e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2009,7 +2008,7 @@ export def "me-appearances alt1" [
   --allow-errors(-e) # Return full response without error handling
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --filter: string@filter-completer-3 # The attribute by which to filter the results.
-  --filter-embeddable: string@bool-completer # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
+  --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
@@ -2553,7 +2552,7 @@ export def "me-likes alt1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string@filter-completer-3 # The attribute by which to filter the results.
-  --filter-embeddable: string@bool-completer # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
+  --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
@@ -2927,7 +2926,7 @@ export def "me-portfolios-videos alt1-by-portfolio_id" [
   --allow-errors(-e) # Return full response without error handling
   --containing-uri: string # The page that contains the video URI. (e.g. /videos/258684937)
   --filter: string@filter-completer-3 # The attribute by which to filter the results.
-  --filter-embeddable: string@bool-completer # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
+  --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-sort: string@sort-completer-13 # The way to sort the results.  Option descriptions:  * `default` - This will sort to the default sort set on the portfolio.
@@ -3170,7 +3169,7 @@ export def "me-projects alt1-by-project_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --should-delete-clips: string@bool-completer # Whether to delete all the videos in the project along with the project itself. (e.g. true)
+  --should-delete-clips: oneof<nothing, bool> # Whether to delete all the videos in the project along with the project itself. (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3242,7 +3241,7 @@ export def "me-projects-videos alt1-by-project_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --should-delete-clips: string@bool-completer # Whether to delete the videos when removing them from the project. (e.g. false)
+  --should-delete-clips: oneof<nothing, bool> # Whether to delete the videos when removing them from the project. (e.g. false)
   --uris: string # A comma-separated list of the video URIs to remove. (e.g. /videos/258684937,/videos/273576296)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3366,8 +3365,8 @@ export def "me-videos alt1" [
   --containing-uri: string # The page that contains the video URI. Only available when not paired with `query`. (e.g. /videos/258684937)
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --filter: string@filter-completer-9 # The attribute by which to filter the results.
-  --filter-embeddable: string@bool-completer # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
-  --filter-playable: string@bool-completer # Whether to filter by all playable videos or by all videos that are not  playable. (e.g. true)
+  --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
+  --filter-playable: oneof<nothing, bool> # Whether to filter by all playable videos or by all videos that are not  playable. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
@@ -3509,7 +3508,7 @@ export def "me-watchlater alt1" [
   --allow-errors(-e) # Return full response without error handling
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --filter: string@filter-completer-3 # The attribute by which to filter the results.
-  --filter-embeddable: string@bool-completer # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
+  --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
@@ -5201,13 +5200,13 @@ export def "users-albums-videos videos" [
   --containing-uri: string # The page containing the video URI. (e.g. /videos/258684937)
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --filter: string@filter-completer-3 # The attribute by which to filter the results.
-  --filter-embeddable: string@bool-completer # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
+  --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --password: string # The password of the album. (e.g. hunter1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-9 # The way to sort the results.
-  --weak-search: string@bool-completer # Whether to include private videos in the search. Please note that a separate search service provides this functionality. The service performs a partial text search on the video's name. (e.g. false)
+  --weak-search: oneof<nothing, bool> # Whether to include private videos in the search. Please note that a separate search service provides this functionality. The service performs a partial text search on the video's name. (e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5362,7 +5361,7 @@ export def "users-appearances appearances" [
   --allow-errors(-e) # Return full response without error handling
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --filter: string@filter-completer-3 # The attribute by which to filter the results.
-  --filter-embeddable: string@bool-completer # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
+  --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
@@ -5929,7 +5928,7 @@ export def "users-likes likes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string@filter-completer-3 # The attribute by which to filter the results.
-  --filter-embeddable: string@bool-completer # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
+  --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
@@ -6289,7 +6288,7 @@ export def "users-portfolios-videos videos" [
   --allow-errors(-e) # Return full response without error handling
   --containing-uri: string # The page that contains the video URI. (e.g. /videos/258684937)
   --filter: string@filter-completer-3 # The attribute by which to filter the results.
-  --filter-embeddable: string@bool-completer # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
+  --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-sort: string@sort-completer-13 # The way to sort the results.  Option descriptions:  * `default` - This will sort to the default sort set on the portfolio.
@@ -6542,7 +6541,7 @@ export def "users-projects project-by-project_id-user_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --should-delete-clips: string@bool-completer # Whether to delete all the videos in the project along with the project itself. (e.g. true)
+  --should-delete-clips: oneof<nothing, bool> # Whether to delete all the videos in the project along with the project itself. (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6617,7 +6616,7 @@ export def "users-projects-videos project-by-project_id-user_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --should-delete-clips: string@bool-completer # Whether to delete the videos when removing them from the project. (e.g. false)
+  --should-delete-clips: oneof<nothing, bool> # Whether to delete the videos when removing them from the project. (e.g. false)
   --uris: string # A comma-separated list of the video URIs to remove. (e.g. /videos/258684937,/videos/273576296)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6795,8 +6794,8 @@ export def "users-videos videos" [
   --containing-uri: string # The page that contains the video URI. Only available when not paired with `query`. (e.g. /videos/258684937)
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --filter: string@filter-completer-9 # The attribute by which to filter the results.
-  --filter-embeddable: string@bool-completer # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
-  --filter-playable: string@bool-completer # Whether to filter by all playable videos or by all videos that are not  playable. (e.g. true)
+  --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
+  --filter-playable: oneof<nothing, bool> # Whether to filter by all playable videos or by all videos that are not  playable. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)
@@ -6874,7 +6873,7 @@ export def "users-watchlater list" [
   --allow-errors(-e) # Return full response without error handling
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --filter: string@filter-completer-3 # The attribute by which to filter the results.
-  --filter-embeddable: string@bool-completer # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
+  --filter-embeddable: oneof<nothing, bool> # Whether to filter the results by embeddable videos (`true`) or non-embeddable videos (`false`). Required only if **filter** is `embeddable`. (e.g. true)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-query: string # The search query to use to filter the results. (e.g. Stop motion)

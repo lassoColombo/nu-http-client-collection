@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.pinecone.io"] }
 def auth-scheme-completer [] { ["api-key"] }
 
@@ -136,7 +135,7 @@ export def "rerank rerank" [
   model: string # The [model](https://docs.pinecone.io/guides/search/rerank-results#reranking-models) to use for reranking. (e.g. bge-reranker-v2-m3)
   --body-query: string # The query to rerank documents against. (e.g. What is the capital of France?)
   --top-n: int # The number of results to return sorted by relevance. Defaults to the number of inputs. (e.g. 5)
-  --return-documents: string@bool-completer # Whether to return the documents in the response. (default: true, e.g. true)
+  --return-documents: oneof<nothing, bool> # Whether to return the documents in the response. (default: true, e.g. true)
   --rank-fields: list # The field(s) to consider for reranking. If not provided, the default is `["text"]`.  The number of fields supported is [model-specific](https://docs.pinecone.io/guides/search/rerank-results#reranking-models).  (default: [text])
   documents: list # The documents to rerank.
   --parameters: record # Additional model-specific parameters. Refer to the [model guide](https://docs.pinecone.io/guides/search/rerank-results#reranking-models) for available model parameters. (e.g. {truncate: END})

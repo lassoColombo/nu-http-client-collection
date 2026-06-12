@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.vercel.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -738,7 +737,7 @@ export def "bulk-redirects stageRedirects" [
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   projectId: string
   teamId: string
-  --overwrite: string@bool-completer
+  --overwrite: oneof<nothing, bool>
   --name: string
   --redirects: list # default: [] — item shape: {source: string, destination: string, statusCode?: any, permanent?: bool, caseSensitive?: bool, query?: bool, preserveQueryParams?: bool}
 ]: any -> record<alias: string, version: record<id: string, key: string, lastModified: float, createdBy: string, name: string, isStaging: bool, isLive: bool, redirectCount: float, alias: string>> {
@@ -834,7 +833,7 @@ export def "bulk-redirects editRedirect" [
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --name: string
   redirect: record # The redirect object to edit. The source field is used to match the redirect to modify. — shape: {source: string, destination?: string, statusCode?: float, permanent?: bool, caseSensitive?: bool, query?: bool, preserveQueryParams?: bool}
-  --restore: string@bool-completer # If true, restores the redirect from the latest production version to staging.
+  --restore: oneof<nothing, bool> # If true, restores the redirect from the latest production version to staging.
 ]: any -> record<alias: string, version: record<id: string, key: string, lastModified: float, createdBy: string, name: string, isStaging: bool, isLive: bool, redirectCount: float, alias: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -977,7 +976,7 @@ export def "projects-checks createProjectCheck" [
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   name: string
-  --isRerequestable: string@bool-completer
+  --isRerequestable: oneof<nothing, bool>
   requires: string@requires-completer # default: deployment-url
   --targets: list
   --blocks: string@blocks-completer # default: deployment-alias
@@ -1039,7 +1038,7 @@ export def "projects-checks updateProjectCheck" [
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --name: string
-  --isRerequestable: string@bool-completer
+  --isRerequestable: oneof<nothing, bool>
   --requires: string@requires-completer-1 # default: deployment-url
   --targets: list
   --blocks: string@blocks-completer # default: deployment-alias
@@ -1244,10 +1243,10 @@ export def "deployments-checks createCheck" [
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   name: string # The name of the check being created (e.g. Performance Check)
   --path: string # Path of the page that is being checked (e.g. /)
-  --blocking: string@bool-completer # Whether the check should block a deployment from succeeding (e.g. true)
+  --blocking: oneof<nothing, bool> # Whether the check should block a deployment from succeeding (e.g. true)
   --detailsUrl: string # URL to display for further details (e.g. http://example.com)
   --externalId: string # An identifier that can be used as an external reference (e.g. 1234abc)
-  --rerequestable: string@bool-completer # Whether a user should be able to request for the check to be rerun if it fails (e.g. true)
+  --rerequestable: oneof<nothing, bool> # Whether a user should be able to request for the check to be rerun if it fails (e.g. true)
 ]: any -> record<id: string, name: string, createdAt: float, updatedAt: float, deploymentId: string, status: string, conclusion: string, externalId: string, output: record<metrics: record<FCP: record, LCP: record, CLS: record, TBT: record, virtualExperienceScore: record>>, completedAt: float, path: string, blocking: bool, detailsUrl: string, integrationId: string, startedAt: float, rerequestable: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1371,7 +1370,7 @@ export def "deployments-checks-rerequest rerequestCheck" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoUpdate: string@bool-completer # Mark the check as running
+  --autoUpdate: oneof<nothing, bool> # Mark the check as running
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record {
@@ -1396,9 +1395,9 @@ export def "connect-networks listNetworks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeHostedZones: string@bool-completer # Whether to include Hosted Zones in the response (default: true)
-  --includePeeringConnections: string@bool-completer # Whether to include VPC Peering connections in the response (default: true)
-  --includeProjects: string@bool-completer # Whether to include projects in the response (default: true)
+  --includeHostedZones: oneof<nothing, bool> # Whether to include Hosted Zones in the response (default: true)
+  --includePeeringConnections: oneof<nothing, bool> # Whether to include VPC Peering connections in the response (default: true)
+  --includeProjects: oneof<nothing, bool> # Whether to include projects in the response (default: true)
   --search: string # The query to use as a filter for returned networks
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -1540,7 +1539,7 @@ export def "connect-connectors createConnector" [
   --name: string
   --projectId: string # Link to the specified project when specified. See environments.
   --environments: list # Use these environments when linking to the project specified by the projectId.
-  --triggers: string@bool-completer # Whether the triggers are enabled for this connector.
+  --triggers: oneof<nothing, bool> # Whether the triggers are enabled for this connector.
   --events: list # The list of the defaults trigger events for this connector.
   --icon: string # Branding icon. Either a SHA-1 hash already uploaded to the Vercel avatar service or an https:// URL that will be downloaded and rehosted.
   --backgroundColor: string # Branding background color (6-digit hex, e.g. "#000000").
@@ -1615,7 +1614,7 @@ export def "connect-authorize createConnectorAuthorizationRequest" [
   --returnUrl: string
   --webhook: string
   --prompt: string
-  --deviceCode: string@bool-completer
+  --deviceCode: oneof<nothing, bool>
   --expiresInMs: float
   --additionalParams: record
 ]: any -> record<url: string, request: string, verifier: string, deviceCode: string, expiresAt: float> {
@@ -1752,7 +1751,7 @@ export def "deployments createDeployment" [
   --project: string # The target project identifier in which the deployment will be created. When defined, this parameter overrides name (e.g. my-deployment-project)
   --projectSettings: record # Project settings that will be applied to the deployment. It is required for the first deployment of a project and will be saved for any following deployments — shape: {buildCommand?: string, commandForIgnoringBuildStep?: string, devCommand?: string, framework?: ""|"blitzjs"|"nextjs"|"gatsby"|"remix"|"react-router"|"astro"|"hexo"|"eleventy"|"docusaurus-2"|"docusaurus"|"preact"|"solidstart-1"|"solidstart"|"dojo"|"ember"|"vue"|"scully"|"ionic-angular"|"angular"|"polymer"|"svelte"|"sveltekit"|"sveltekit-1"|"ionic-react"|"create-react-app"|"gridsome"|"umijs"|"sapper"|"saber"|"stencil"|"nuxtjs"|"redwoodjs"|"hugo"|"jekyll"|"brunch"|"middleman"|"zola"|"hydrogen"|"vite"|"tanstack-start"|"vitepress"|"vuepress"|"parcel"|"fastapi"|"flask"|"fasthtml"|"django"|"ash"|"eve"|"sanity"|"sanity-v2"|"storybook"|"nitro"|"hono"|"express"|"h3"|"koa"|"nestjs"|"elysia"|"fastify"|"xmcp"|"python"|"ruby"|"rust"|"axum"|"actix-web"|"node"|"go"|"services"|"mastra", installCommand?: string, nodeVersion?: "24.x"|"22.x"|"20.x"|"18.x"|"16.x"|"14.x"|"12.x"|"10.x"|"8.10.x", outputDirectory?: string, rootDirectory?: string, serverlessFunctionRegion?: string, skipGitConnectDuringLink?: bool, sourceFilesOutsideRootDirectory?: bool}
   --target: string # Either not defined, `staging`, `production`, or a custom environment identifier. If `staging`, a staging alias in the format `<project>-<team>.vercel.app` will be assigned. If `production`, any aliases defined in `alias` will be assigned. If omitted, the target will be `preview`. (e.g. production)
-  --withLatestCommit: string@bool-completer # When `true` and `deploymentId` is passed in, the sha from the previous deployment's `gitSource` is removed forcing the latest commit to be used.
+  --withLatestCommit: oneof<nothing, bool> # When `true` and `deploymentId` is passed in, the sha from the previous deployment's `gitSource` is removed forcing the latest commit to be used.
 ]: any -> record<aliasAssignedAt: any, alwaysRefuseToBuild: bool, build: record<env: list<string>>, buildArtifactUrls: list<string>, builds: table<use: string, src: string, config: record>, env: list<string>, inspectorUrl: string, isInConcurrentBuildsQueue: bool, isInSystemBuildsQueue: bool, projectSettings: record<nodeVersion: string, buildCommand: string, devCommand: string, framework: string, commandForIgnoringBuildStep: string, installCommand: string, outputDirectory: string, speedInsights: record<id: string, enabledAt: float, disabledAt: float, canceledAt: float, hasData: bool, paidAt: float>, webAnalytics: record<id: string, disabledAt: float, canceledAt: float, enabledAt: float, hasData: bool>>, integrations: record<status: string, startedAt: float, claimedAt: float, completedAt: float, skippedAt: float, skippedBy: string>, images: record<sizes: list<float>, qualities: list<float>, domains: list<string>, remotePatterns: list<record>, localPatterns: list<record>, minimumCacheTTL: float, formats: list<string>, dangerouslyAllowSVG: bool, contentSecurityPolicy: string, contentDispositionType: string>, alias: list<string>, aliasAssigned: bool, bootedAt: float, buildingAt: float, buildContainerFinishedAt: float, buildSkipped: bool, creator: record<uid: string, username: string, avatar: string>, initReadyAt: float, isFirstBranchDeployment: bool, lambdas: table<id: string, createdAt: float, readyState: string, entrypoint: string, readyStateAt: float, output: list>, public: bool, ready: float, status: string, team: record<id: string, name: string, slug: string, avatar: string>, userAliases: list<string>, previewCommentsEnabled: bool, ttyBuildLogs: bool, customEnvironment: any, oomReport: string, readyStateReason: string, aliasWarning: record<code: string, message: string, link: string, action: string>, id: string, createdAt: float, readyState: string, name: string, type: string, errorMessage: string, aliasError: record<code: string, message: string>, aliasFinal: string, autoAssignCustomDomains: bool, automaticAliases: list<string>, buildErrorAt: float, checksState: string, checksConclusion: string, deletedAt: float, defaultRoute: string, canceledAt: float, errorCode: string, errorLink: string, errorStep: string, passiveRegions: list<string>, gitSource: any, manualProvisioning: record<state: string, completedAt: float>, meta: record, originCacheRegion: string, nodeVersion: string, project: record<id: string, name: string, framework: string>, prebuilt: bool, readySubstate: string, regions: list<string>, softDeletedByRetention: bool, source: string, target: string, undeletedAt: float, url: string, userConfiguredDeploymentId: string, version: float, oidcTokenClaims: record<iss: string, sub: string, scope: string, aud: string, owner: string, owner_id: string, project: string, project_id: string, environment: string, custom_environment_id: string, plan: string>, projectId: string, plan: string, platform: record<source: record<name: string>, origin: record<type: string, value: string>, creator: record<name: string, avatar: string>, meta: record>, connectBuildsEnabled: bool, connectConfigurationId: string, createdIn: string, crons: table<schedule: string, path: string>, functions: record, monorepoManager: string, ownerId: string, passiveConnectConfigurationId: string, routes: list<any>, gitRepo: any, flags: any, microfrontends: any, config: record<version: float, functionType: string, functionMemoryType: string, functionTimeout: float, secureComputePrimaryRegion: string, secureComputeFallbackRegion: string, isUsingActiveCPU: bool, resourceConfig: record<buildQueue: record, elasticConcurrency: string, buildMachine: record>>, checks: record<deployment_alias: record<state: string, startedAt: float, completedAt: float>>, seatBlock: record<blockCode: string, userId: string, isVerified: bool, gitUserId: any, gitProvider: string>, attribution: record<commitMeta: record<email: string, name: string, isVerified: bool>, gitUser: record<id: any, login: string, type: string, provider: string>, vercelUser: record<id: string, username: string, teamRoles: list>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2108,7 +2107,7 @@ export def "registrar-domains-buy buySingleDomain" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --teamId: string # e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l
-  --autoRenew: string@bool-completer # Whether the domain should be auto-renewed before it expires. This can be configured later through the Vercel Dashboard or the [Update auto-renew for a domain](https://vercel.com/docs/rest-api/reference/endpoints/domains-registrar/update-auto-renew-for-a-domain) endpoint.
+  --autoRenew: oneof<nothing, bool> # Whether the domain should be auto-renewed before it expires. This can be configured later through the Vercel Dashboard or the [Update auto-renew for a domain](https://vercel.com/docs/rest-api/reference/endpoints/domains-registrar/update-auto-renew-for-a-domain) endpoint.
   years: float # The number of years to purchase the domain for.
   expectedPrice: float
   contactInformation: record # The contact information for the domain. Some TLDs require additional contact information. Use the [Get contact info schema](https://vercel.com/docs/rest-api/reference/endpoints/domains-registrar/get-contact-info-schema) endpoint to retrieve the required fields. — shape: {firstName: string, lastName: string, email: string, phone: string, address1: string, address2?: string, city: string, state: string, zip: string, country: string, companyName?: string, fax?: string, additional?: record}
@@ -2172,7 +2171,7 @@ export def "registrar-domains-transfer transferInDomain" [
   --allow-errors(-e) # Return full response without error handling
   --teamId: string # e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l
   authCode: string # The auth code for the domain. You must obtain this code from the losing registrar.
-  --autoRenew: string@bool-completer # Whether the domain should be auto-renewed before it expires. This can be configured later through the Vercel Dashboard or the [Update auto-renew for a domain](https://vercel.com/docs/rest-api/reference/endpoints/domains-registrar/update-auto-renew-for-a-domain) endpoint.
+  --autoRenew: oneof<nothing, bool> # Whether the domain should be auto-renewed before it expires. This can be configured later through the Vercel Dashboard or the [Update auto-renew for a domain](https://vercel.com/docs/rest-api/reference/endpoints/domains-registrar/update-auto-renew-for-a-domain) endpoint.
   years: float # The number of years to renew the domain for once it is transferred in. This must be a valid number of transfer years for the TLD.
   expectedPrice: float
   contactInformation: record # shape: {firstName: string, lastName: string, email: string, phone: string, address1: string, address2?: string, city: string, state: string, zip: string, country: string, companyName?: string, fax?: string}
@@ -2258,7 +2257,7 @@ export def "registrar-domains-auto-renew updateDomainAutoRenew" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --teamId: string # e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l
-  --autoRenew: string@bool-completer
+  --autoRenew: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2493,8 +2492,8 @@ export def "domains createOrTransferDomain" [
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --method: string # The domain operation to perform. It can be either `add` or `move-in`. (e.g. add)
   --name: string # The domain name you want to add. (e.g. example.com)
-  --cdnEnabled: string@bool-completer # Whether the domain has the Vercel Edge Network enabled or not. (e.g. true)
-  --zone: string@bool-completer # Whether to create a DNS zone on Vercel. Set `true` if using Vercel nameservers.
+  --cdnEnabled: oneof<nothing, bool> # Whether the domain has the Vercel Edge Network enabled or not. (e.g. true)
+  --zone: oneof<nothing, bool> # Whether to create a DNS zone on Vercel. Set `true` if using Vercel nameservers.
   --body-token: string # The move-in token from Move Requested email. (e.g. fdhfr820ad#@FAdlj$$)
 ]: any -> record<domain: record<expiresAt: float, verified: bool, nameservers: list<string>, intendedNameservers: list<string>, customNameservers: list<string>, creator: record<username: string, email: string, customerId: string, isDomainReseller: bool, id: string>, name: string, teamId: string, boughtAt: float, createdAt: float, id: string, renew: bool, serviceType: string, transferredAt: float, transferStartedAt: float, userId: string>> {
   let input = $in
@@ -2527,9 +2526,9 @@ export def "domains patch" [
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --op: string # e.g. update
-  --renew: string@bool-completer # This field is deprecated. Please use PATCH /v1/registrar/domains/{domainName}/auto-renew instead. (DEPRECATED)
+  --renew: oneof<nothing, bool> # This field is deprecated. Please use PATCH /v1/registrar/domains/{domainName}/auto-renew instead. (DEPRECATED)
   --customNameservers: list # This field is deprecated. Please use PATCH /v1/registrar/domains/{domainName}/nameservers instead. (DEPRECATED)
-  --zone: string@bool-completer # Specifies whether this is a DNS zone that intends to use Vercel's nameservers.
+  --zone: oneof<nothing, bool> # Specifies whether this is a DNS zone that intends to use Vercel's nameservers.
   --destination: string # User or team to move domain to
 ]: any -> any {
   let input = $in
@@ -2633,7 +2632,7 @@ export def "log-drains list" [
   --allow-errors(-e) # Return full response without error handling
   --projectId: string
   --projectIdOrName: string
-  --includeMetadata: string@bool-completer # default: false
+  --includeMetadata: oneof<nothing, bool> # default: false
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -2736,7 +2735,7 @@ export def "drains list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --projectId: string
-  --includeMetadata: string@bool-completer # default: false
+  --includeMetadata: oneof<nothing, bool> # default: false
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<drains: any> {
@@ -3692,7 +3691,7 @@ export def "projects-feature-flags-flags listFlagsV2" [
   --cursor: string # Pagination cursor to continue from.
   --search: string # Search flags by their slug or description. Case-insensitive.
   --tags: list # Filter flags by tag. Repeat the parameter for multiple tags (all must match).
-  --includeMarketplaceFlags: string@bool-completer # Whether to include Marketplace experimentation items in the paginated response. Defaults to false.
+  --includeMarketplaceFlags: oneof<nothing, bool> # Whether to include Marketplace experimentation items in the paginated response. Defaults to false.
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<pagination: record<next: string>, data: list<any>> {
@@ -3719,7 +3718,7 @@ export def "projects-feature-flags-flags listFlags" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --state: string@state-completer # The state of the flags to retrieve. Defaults to `active`.
-  --withMetadata: string@bool-completer # Deprecated. Whether to include creator metadata in each flag in the response. Resolve creator identity client-side (e.g. via the team members endpoint) instead; this parameter will be removed in a future release. Use `GET /v1/projects/:id/feature-flags/flags/:flagIdOrSlug?withMetadata=true` for single-flag lookups that need creator metadata.
+  --withMetadata: oneof<nothing, bool> # Deprecated. Whether to include creator metadata in each flag in the response. Resolve creator identity client-side (e.g. via the team members endpoint) instead; this parameter will be removed in a future release. Use `GET /v1/projects/:id/feature-flags/flags/:flagIdOrSlug?withMetadata=true` for single-flag lookups that need creator metadata.
   --limit: int # Maximum number of flags to return. When not set, all flags are returned.
   --cursor: string # Pagination cursor to continue from.
   --search: string # Search flags by their slug or description. Case-insensitive.
@@ -3760,7 +3759,7 @@ export def "projects-feature-flags-flags createFlag" [
   --description: string # A description of the flag
   --state: string@state-completer
   --maintainerIds: list # The user ids of the maintainers of the flag
-  --permanent: string@bool-completer # Whether this flag is marked as permanent, indicating it should not be removed
+  --permanent: oneof<nothing, bool> # Whether this flag is marked as permanent, indicating it should not be removed
   --tags: list # Tags for categorizing the flag
 ]: any -> record<description: string, maintainerIds: list<string>, permanent: bool, tags: list<string>, experiment: record<id: string, name: string, numVariants: float, surfaceArea: string, stickyRequirement: bool, layer: string, guardrailMetrics: list<record>, hypothesis: string, device: string, controlVariantId: string, startedAt: float, endedAt: float, decision: string, decisionReason: string, duration: float, durationUnit: string, allocationPercent: float, allocationUnit: string, primaryMetrics: list<record>, status: string>, variants: list<record>, id: string, environments: record, kind: string, revision: float, seed: float, state: string, slug: string, createdAt: float, updatedAt: float, createdBy: string, ownerId: string, projectId: string, typeName: string> {
   let input = $in
@@ -3790,7 +3789,7 @@ export def "projects-feature-flags-flags get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ifMatch: string # Etag to match, can be used interchangeably with the `if-match` header
-  --withMetadata: string@bool-completer # Whether to include metadata in the response
+  --withMetadata: oneof<nothing, bool> # Whether to include metadata in the response
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<description: string, maintainerIds: list<string>, permanent: bool, tags: list<string>, experiment: record<id: string, name: string, numVariants: float, surfaceArea: string, stickyRequirement: bool, layer: string, guardrailMetrics: list<record>, hypothesis: string, device: string, controlVariantId: string, startedAt: float, endedAt: float, decision: string, decisionReason: string, duration: float, durationUnit: string, allocationPercent: float, allocationUnit: string, primaryMetrics: list<record>, status: string>, variants: list<record>, id: string, environments: record, kind: string, revision: float, seed: float, state: string, slug: string, createdAt: float, updatedAt: float, createdBy: string, ownerId: string, projectId: string, typeName: string, metadata: record<creator: record<id: string, name: string>>> {
@@ -3819,7 +3818,7 @@ export def "projects-feature-flags-flags updateFlag" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ifMatch: string # Etag to match, can be used interchangeably with the `if-match` header
-  --withMetadata: string@bool-completer # Whether to include metadata in the response
+  --withMetadata: oneof<nothing, bool> # Whether to include metadata in the response
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --createdBy: string # The user who created this patch
@@ -3830,7 +3829,7 @@ export def "projects-feature-flags-flags updateFlag" [
   --description: string # A description of the flag
   --state: string@state-completer
   --maintainerIds: list # The user ids of the maintainers of the flag
-  --permanent: string@bool-completer # Whether this flag is marked as permanent, indicating it should not be removed
+  --permanent: oneof<nothing, bool> # Whether this flag is marked as permanent, indicating it should not be removed
   --tags: list # Tags for categorizing the flag
 ]: any -> any {
   let input = $in
@@ -3860,7 +3859,7 @@ export def "projects-feature-flags-flags delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ifMatch: string # Etag to match, can be used interchangeably with the `if-match` header
-  --withMetadata: string@bool-completer # Whether to include metadata in the response
+  --withMetadata: oneof<nothing, bool> # Whether to include metadata in the response
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -3890,7 +3889,7 @@ export def "projects-feature-flags-flags-versions listFlagVersions" [
   --limit: float # default: 20
   --cursor: string # Pagination cursor
   --environment: string # Environment to filter by
-  --withMetadata: string@bool-completer # Whether to include metadata (default: false)
+  --withMetadata: oneof<nothing, bool> # Whether to include metadata (default: false)
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<versions: table<createdBy: string, message: string, data: record, id: string, revision: float, createdAt: float, flagId: string, changedEnvironments: list, metadata: record>, pagination: record> {
@@ -3944,7 +3943,7 @@ export def "projects-feature-flags-settings updateFlagSettings" [
   --allow-errors(-e) # Return full response without error handling
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --entities: list # item shape: {kind: string, label: string, attributes: list}
   --environments: list # The environments to sync
 ]: any -> record<typeName: string, projectId: string, ownerId: string, enabled: bool, environments: list<string>, connections: table<edgeConfigId: string, edgeConfigItemKey: string>, entities: table<kind: string, label: string, attributes: list>, createdAt: float, updatedAt: float, metadata: record<activeFlagCount: float, archivedFlagCount: float, segmentCount: float, packSizeInBytes: float, packRevision: float, configUpdatedAt: float>> {
@@ -4005,7 +4004,7 @@ export def "teams-feature-flags-flags listTeamFlagsV2" [
   --search: string # Search flags by their slug or description. Case-insensitive.
   --kind: string@kind-completer # The kind of flags to retrieve.
   --tags: list # Filter flags by tag. Repeat the parameter for multiple tags (all must match).
-  --includeMarketplaceFlags: string@bool-completer # Whether to include Marketplace experimentation items in the paginated response. Defaults to false.
+  --includeMarketplaceFlags: oneof<nothing, bool> # Whether to include Marketplace experimentation items in the paginated response. Defaults to false.
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<pagination: record<next: string>, data: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4031,7 +4030,7 @@ export def "teams-feature-flags-flags listTeamFlags" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --state: string@state-completer # The state of the flags to retrieve. Defaults to `active`.
-  --withMetadata: string@bool-completer # Deprecated. Whether to include creator metadata in each flag in the response. Resolve creator identity client-side (e.g. via the team members endpoint) instead; this parameter will be removed in a future release.
+  --withMetadata: oneof<nothing, bool> # Deprecated. Whether to include creator metadata in each flag in the response. Resolve creator identity client-side (e.g. via the team members endpoint) instead; this parameter will be removed in a future release.
   --limit: int # Maximum number of flags to return. (default: 20)
   --cursor: string # Pagination cursor to continue from.
   --search: string # Search flags by their slug or description. Case-insensitive.
@@ -4096,7 +4095,7 @@ export def "projects-feature-flags-segments listFlagSegments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --withMetadata: string@bool-completer # Whether to include metadata (default: false)
+  --withMetadata: oneof<nothing, bool> # Whether to include metadata (default: false)
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<data: table<description: string, createdBy: string, usedByFlags: list, usedBySegments: list, data: record, id: string, label: string, slug: string, createdAt: float, updatedAt: float, projectId: string, typeName: string, hint: string, metadata: record>> {
@@ -4123,7 +4122,7 @@ export def "projects-feature-flags-segments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --withMetadata: string@bool-completer # Whether to include metadata (default: false)
+  --withMetadata: oneof<nothing, bool> # Whether to include metadata (default: false)
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<description: string, createdBy: string, usedByFlags: list<string>, usedBySegments: list<string>, data: record<rules: list<record>, include: record, exclude: record>, id: string, label: string, slug: string, createdAt: float, updatedAt: float, projectId: string, typeName: string, hint: string, metadata: record<creator: record<id: string, name: string>>> {
@@ -4150,7 +4149,7 @@ export def "projects-feature-flags-segments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --withMetadata: string@bool-completer # Whether to include metadata (default: false)
+  --withMetadata: oneof<nothing, bool> # Whether to include metadata (default: false)
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -4179,7 +4178,7 @@ export def "projects-feature-flags-segments updateFlagSegment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --withMetadata: string@bool-completer # Whether to include metadata (default: false)
+  --withMetadata: oneof<nothing, bool> # Whether to include metadata (default: false)
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --operations: list # item shape: {action: "add"|"remove", field: "include"|"exclude", entity: string, attribute: string, value: record}
@@ -4321,7 +4320,7 @@ export def "integrations-git-namespaces gitNamespaces" [
   --allow-errors(-e) # Return full response without error handling
   --host: string # The custom Git host if using a custom Git provider, like GitHub Enterprise Server (e.g. ghes-test.now.systems)
   --provider: string@provider-completer
-  --viewerMetadata: string@bool-completer # When true, includes the viewer object for each namespace.
+  --viewerMetadata: oneof<nothing, bool> # When true, includes the viewer object for each namespace.
 ]: nothing -> table<provider: string, slug: string, id: any, ownerType: string, name: string, isAccessRestricted: bool, installationId: float, requireReauth: bool, viewer: record<canCreateApp: bool, role: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4408,7 +4407,7 @@ export def "integrations-installations-resources-connections connectIntegrationR
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   projectId: string
   --envVarEnvironments: list
-  --makeEnvVarsSensitive: string@bool-completer
+  --makeEnvVarsSensitive: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4719,7 +4718,7 @@ export def "installations-billing-invoices submit-invoice" [
   period: record # Subscription period for this billing cycle. — shape: {start: string, end: string}
   items: list # item shape: {resourceId?: string, billingPlanId: string, start?: string, end?: string, name: string, details?: string, price: string, quantity: float, units: string, total: string}
   --discounts: list # item shape: {resourceId?: string, billingPlanId: string, start?: string, end?: string, name: string, details?: string, amount: string}
-  --final: string@bool-completer # Set this to `true` if this is the final invoice for the installation. Can only be set when the installation is pending deletion.
+  --final: oneof<nothing, bool> # Set this to `true` if this is the final invoice for the installation. Can only be set when the installation is pending deletion.
   --test: record # Test mode — shape: {validate?: bool, result?: "paid"|"notpaid"}
 ]: any -> record<invoiceId: string, test: bool, validationErrors: list<string>> {
   let input = $in
@@ -4854,7 +4853,7 @@ export def "installations-products-resources-secrets update-resource-secrets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   secrets: list # item shape: {name: string, value: string, prefix?: string, environmentOverrides?: record}
-  --partial: string@bool-completer # If true, will only update the provided secrets
+  --partial: oneof<nothing, bool> # If true, will only update the provided secrets
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4883,7 +4882,7 @@ export def "installations-resources-secrets update-resource-secrets-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   secrets: list # item shape: {name: string, value: string, prefix?: string, environmentOverrides?: record}
-  --partial: string@bool-completer # If true, will only overwrite the provided secrets instead of replacing all secrets.
+  --partial: oneof<nothing, bool> # If true, will only overwrite the provided secrets instead of replacing all secrets.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5187,7 +5186,7 @@ export def "installations-resources-experimentation-items updateInstallationsByI
   --name: string
   --category: string@category-completer
   --description: string
-  --isArchived: string@bool-completer
+  --isArchived: oneof<nothing, bool>
   --createdAt: float
   --updatedAt: float
 ]: any -> any {
@@ -5469,7 +5468,7 @@ export def "observability-manage-configuration-projects updateObservabilityConfi
   --allow-errors(-e) # Return full response without error handling
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
-  --disabled: string@bool-completer # Whether Observability Plus should be disabled for the project
+  --disabled: oneof<nothing, bool> # Whether Observability Plus should be disabled for the project
 ]: any -> record<id: string, disabledAt: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5615,7 +5614,7 @@ export def "projects-routes stageRoutes" [
   --allow-errors(-e) # Return full response without error handling
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
-  --overwrite: string@bool-completer
+  --overwrite: oneof<nothing, bool>
   --routes: list # default: [] — item shape: {id: string, name: string, description?: string, enabled?: bool, route: record}
 ]: any -> record<version: record<id: string, s3Key: string, lastModified: float, createdBy: string, isStaging: bool, isLive: bool, ruleCount: float, alias: string>> {
   let input = $in
@@ -5709,7 +5708,7 @@ export def "projects-routes editRoute" [
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --route: record # The full route object to replace the existing route with — shape: {name: string, description?: string, enabled?: bool, srcSyntax?: "equals"|"path-to-regexp"|"regex", route: record}
-  --restore: string@bool-completer # If true, restores the staged route to the value in the production version.
+  --restore: oneof<nothing, bool> # If true, restores the staged route to the value in the production version.
 ]: any -> record<route: record<routeType: string, id: string, name: string, description: string, enabled: bool, staged: bool, route: record<src: string, dest: string, headers: record, methods: list, continue: bool, override: bool, caseSensitive: bool, check: bool, important: bool, status: float, has: list, missing: list, mitigate: record, transforms: list, env: list, locale: record, source: string, destination: any, statusCode: float, middlewarePath: string, middlewareRawSrc: list, middleware: float, respectOriginCacheControl: bool>, rawSrc: string, rawDest: string, srcSyntax: string>, version: record<id: string, s3Key: string, lastModified: float, createdBy: string, isStaging: bool, isLive: bool, ruleCount: float, alias: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5831,7 +5830,7 @@ export def "projects list" [
   --excludeRepos: string # Filter results by excluding those projects that belong to a repo
   --edgeConfigId: string # Filter results by connected Edge Config ID
   --edgeConfigTokenId: string # Filter results by connected Edge Config Token ID
-  --deprecated: string@bool-completer
+  --deprecated: oneof<nothing, bool>
   --elasticConcurrencyEnabled: string@elasticConcurrencyEnabled-completer # Filter results by projects with elastic concurrency enabled (e.g. 1)
   --staticIpsEnabled: string@staticIpsEnabled-completer # Filter results by projects with Static IPs enabled (e.g. 1)
   --buildMachineTypes: string # Filter results by build machine types. Accepts comma-separated values. Use "default" for projects without a build machine type set. (e.g. default,enhanced)
@@ -5868,9 +5867,9 @@ export def "projects createProject" [
   --allow-errors(-e) # Return full response without error handling
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
-  --enablePreviewFeedback: string@bool-completer # Opt-in to preview toolbar on the project level (nullable)
-  --enableProductionFeedback: string@bool-completer # Opt-in to production toolbar on the project level (nullable)
-  --previewDeploymentsDisabled: string@bool-completer # Specifies whether preview deployments are disabled for this project. (nullable)
+  --enablePreviewFeedback: oneof<nothing, bool> # Opt-in to preview toolbar on the project level (nullable)
+  --enableProductionFeedback: oneof<nothing, bool> # Opt-in to production toolbar on the project level (nullable)
+  --previewDeploymentsDisabled: oneof<nothing, bool> # Specifies whether preview deployments are disabled for this project. (nullable)
   --previewDeploymentSuffix: string # Custom domain suffix for preview deployments. Takes precedence over team-level suffix. Must be a domain owned by the team. (nullable)
   --buildCommand: string # The build command for this project. When `null` is used this value will be automatically detected (nullable)
   --commandForIgnoringBuildStep: string # nullable
@@ -5880,15 +5879,15 @@ export def "projects createProject" [
   --gitRepository: record # The Git Repository that will be connected to the project. When this is defined, any pushes to the specified connected Git Repository will be automatically deployed — shape: {repo: string, type: "github"|"github-limited"|"gitlab"|"bitbucket"|"vercel"}
   --installCommand: string # The install command for this project. When `null` is used this value will be automatically detected (nullable)
   name: string # The desired name for the project (e.g. a-project-name)
-  --skipGitConnectDuringLink: string@bool-completer # Opts-out of the message prompting a CLI user to connect a Git repository in `vercel link`. (DEPRECATED)
+  --skipGitConnectDuringLink: oneof<nothing, bool> # Opts-out of the message prompting a CLI user to connect a Git repository in `vercel link`. (DEPRECATED)
   --ssoProtection: record # The Vercel Auth setting for the project (historically named \"SSO Protection\") (nullable) — shape: {deploymentType: "all"|"preview"|"prod_deployment_urls_and_all_previews"|"all_except_custom_domains"}
   --outputDirectory: string # The output directory of the project. When `null` is used this value will be automatically detected (nullable)
-  --publicSource: string@bool-completer # Specifies whether the source code and logs of the deployments for this project should be public or not (nullable)
+  --publicSource: oneof<nothing, bool> # Specifies whether the source code and logs of the deployments for this project should be public or not (nullable)
   --rootDirectory: string # The name of a directory or relative path to the source code of your project. When `null` is used it will default to the project root (nullable)
   --serverlessFunctionRegion: string # The region to deploy Serverless Functions in this project (nullable)
   --serverlessFunctionZeroConfigFailover: any # Specifies whether Zero Config Failover is enabled for this project.
   --oidcTokenConfig: record # OpenID Connect JSON Web Token generation configuration. — shape: {enabled?: bool, issuerMode?: "team"|"global"}
-  --enableAffectedProjectsDeployments: string@bool-completer # Opt-in to skip deployments when there are no changes to the root directory and its dependencies
+  --enableAffectedProjectsDeployments: oneof<nothing, bool> # Opt-in to skip deployments when there are no changes to the root directory and its dependencies
   --resourceConfig: record # Specifies resource override configuration for the project — shape: {buildMachineType?: "enhanced"|"turbo"|"standard"|"elastic", fluid?: bool, functionDefaultRegions?: list, functionDefaultTimeout?: float, functionDefaultMemoryType?: "standard_legacy"|"standard"|"performance", functionZeroConfigFailover?: any, elasticConcurrencyEnabled?: bool, buildMachineSelection?: "elastic"|"fixed", buildMachineElasticLastUpdated?: float, isNSNBDisabled?: bool, buildQueue?: record, enableFunctionsBeta?: bool}
 ]: any -> record<accountId: string, analytics: record<id: string, canceledAt: float, disabledAt: float, enabledAt: float, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, appliedCve55182Migration: bool, speedInsights: record<id: string, enabledAt: float, disabledAt: float, canceledAt: float, hasData: bool, paidAt: float>, autoExposeSystemEnvs: bool, autoAssignCustomDomains: bool, autoAssignCustomDomainsUpdatedBy: string, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurations: table<envId: any, connectConfigurationId: string, dc: string, passive: bool, buildsEnabled: bool, aws: record, createdAt: float, updatedAt: float>, connectConfigurationId: string, connectBuildsEnabled: bool, passiveConnectConfigurationId: string, createdAt: float, customerSupportCodeVisibility: bool, crons: record<enabledAt: float, disabledAt: float, updatedAt: float, deploymentId: string, definitions: list<record>>, dataCache: record<userDisabled: bool, storageSizeBytes: float, unlimited: bool>, deploymentExpiration: record<expirationDays: float, expirationDaysProduction: float, expirationDaysCanceled: float, expirationDaysErrored: float, deploymentsToKeep: float>, expiration: any, devCommand: string, directoryListing: bool, installCommand: string, env: table<target: any, type: string, sunsetSecretId: string, legacyValue: string, decrypted: bool, value: string, vsmValue: string, id: string, key: string, configurationId: string, createdAt: float, updatedAt: float, createdBy: string, updatedBy: string, gitBranch: string, edgeConfigId: string, edgeConfigTokenId: string, contentHint: any, internalContentHint: record, comment: string, customEnvironmentIds: list>, customEnvironments: table<id: string, slug: string, type: string, description: string, branchMatcher: record, domains: list, currentDeploymentAliases: list, createdAt: float, updatedAt: float>, framework: string, services: table<serviceName: string, serviceType: string, framework: string, runtime: string>, gitForkProtection: bool, gitLFS: bool, id: string, ipBuckets: table<bucket: string, default: bool, supportUntil: float>, jobs: record<lint: record<targets: list>, typecheck: record<targets: list>, mfe_config_present: record<targets: list>>, latestDeployments: table<alias: list, aliasAssigned: any, builds: list, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, name: string, forced: bool, id: string, meta: record, plan: string, private: bool, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, microfrontends: any, name: string, nodeVersion: string, optionsAllowlist: record<paths: list<record>>, outputDirectory: string, passwordProtection: record, passport: record<deploymentType: string, connectorId: string>, protectionConfig: record<sandboxUrls: record<inheritDeploymentProtection: bool>>, productionDeploymentsFastLane: bool, publicSource: bool, resourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rollbackDescription: record<userId: string, username: string, description: string, createdAt: float>, rollingRelease: record<target: string, stages: list<record>, canaryResponseHeader: bool>, defaultResourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rootDirectory: string, serverlessFunctionZeroConfigFailover: bool, skewProtectionBoundaryAt: float, skewProtectionMaxAge: float, skewProtectionAllowedDomains: list<string>, skipGitConnectDuringLink: bool, staticIps: record<builds: bool, enabled: bool, regions: list<string>>, sourceFilesOutsideRootDirectory: bool, enableAffectedProjectsDeployments: bool, enableExternalRewriteCaching: bool, ssoProtection: record<deploymentType: string, cve55182MigrationAppliedFrom: string, april2026SecurityIncidentMigrationAppliedFrom: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float, live: bool, enablePreviewFeedback: bool, enableProductionFeedback: bool, permissions: record<oauth2Connection: list<string>, user: list<string>, userConnection: list<string>, userMfaConfiguration: list<string>, userPreference: list<string>, userSudo: list<string>, webAuthn: list<string>, accessGroup: list<string>, agent: list<string>, aiGatewayUsage: list<string>, alerts: list<string>, alertRules: list<string>, aliasGlobal: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, apiKey: list<string>, apiKeyAiGateway: list<string>, apiKeyOwnedBySelf: list<string>, oauth2Application: list<string>, vercelAppInstallation: list<string>, vercelAppInstallationRequest: list<string>, auditLog: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingRefund: list<string>, billingTaxId: list<string>, blob: list<string>, blobStoreTokenSet: list<string>, budget: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, codeChecks: list<string>, ciInvocations: list<string>, ciLogs: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connexClient: list<string>, connexClientProject: list<string>, connexToken: list<string>, buildMachineDefault: list<string>, dataCacheBillingSettings: list<string>, defaultDeploymentProtection: list<string>, deploymentPolicy: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, drain: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigSchema: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, flagsExplorerSubscription: list<string>, gitRepository: list<string>, imageOptimizationNewPrice: list<string>, integration: list<string>, integrationAccount: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationRole: list<string>, integrationConfigurationTransfer: list<string>, integrationDeploymentAction: list<string>, integrationEvent: list<string>, integrationLog: list<string>, integrationResource: list<string>, integrationResourceData: list<string>, integrationResourceReplCommand: list<string>, integrationResourceSecrets: list<string>, integrationSSOSession: list<string>, integrationStrict: list<string>, integrationStoreTokenSet: list<string>, integrationVercelConfigurationOverride: list<string>, integrationPullRequest: list<string>, ipBlocking: list<string>, jobGlobal: list<string>, kmsIssuer: list<string>, kmsProjectGrant: list<string>, logDrain: list<string>, marketplaceBillingData: list<string>, marketplaceExperimentationEdgeConfigData: list<string>, marketplaceExperimentationItem: list<string>, marketplaceInstallationMember: list<string>, marketplaceInvoice: list<string>, marketplaceSettings: list<string>, Monitoring: list<string>, monitoringAlert: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, monitoringSettings: list<string>, notificationCustomerBudget: list<string>, notificationDeploymentFailed: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, NotificationMonitoringAlert: list<string>, notificationPaymentFailed: list<string>, notificationPreferences: list<string>, notificationStatementOfReasons: list<string>, notificationUsageAlert: list<string>, oidcFederationPolicy: list<string>, observabilityConfiguration: list<string>, observabilityFunnel: list<string>, observabilityNotebook: list<string>, openTelemetryEndpoint: list<string>, ownEvent: list<string>, organization: list<string>, organizationDomain: list<string>, organizationTeam: list<string>, passwordProtectionInvoiceItem: list<string>, paymentMethod: list<string>, permissions: list<string>, postgres: list<string>, postgresStoreTokenSet: list<string>, previewDeploymentSuffix: list<string>, privateCloudAccount: list<string>, projectTransferIn: list<string>, proTrialOnboarding: list<string>, rateLimit: list<string>, redis: list<string>, redisStoreTokenSet: list<string>, remoteCaching: list<string>, repository: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, space: list<string>, spaceRun: list<string>, storeIsLocked: list<string>, storeTokenSetSensitive: list<string>, storeTransfer: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamGitExclusivity: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamInviteLink: list<string>, teamJoin: list<string>, teamMemberMfaStatus: list<string>, teamMicrofrontends: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, teamSudo: list<string>, teamTokenInvalidation: list<string>, token: list<string>, toolbarComment: list<string>, usage: list<string>, usageCycle: list<string>, vcrRepository: list<string>, vercelRun: list<string>, vpcPeeringConnection: list<string>, webAnalyticsPlan: list<string>, webhook: list<string>, webhook_event: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, bulkRedirects: list<string>, buildMachine: list<string>, connectConfigurationLink: list<string>, dataCacheNamespace: list<string>, deployment: list<string>, deploymentBuildLogs: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentCheckReRunFromProductionBranch: list<string>, deploymentProductionGit: list<string>, deploymentV0: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentPromote: list<string>, deploymentRollback: list<string>, edgeCacheNamespace: list<string>, environments: list<string>, job: list<string>, logs: list<string>, logsPreset: list<string>, observabilityData: list<string>, onDemandBuild: list<string>, onDemandConcurrency: list<string>, optionsAllowlist: list<string>, passwordProtection: list<string>, privateLinkEndpoint: list<string>, productionAliasProtectionBypass: list<string>, project: list<string>, projectAccessGroup: list<string>, projectAnalyticsSampling: list<string>, projectAnalyticsUsage: list<string>, projectCheck: list<string>, projectCheckRun: list<string>, projectDeploymentExpiration: list<string>, projectDeploymentHook: list<string>, projectDeploymentProtectionStrict: list<string>, projectDomain: list<string>, projectDomainCheckConfig: list<string>, projectDomainMove: list<string>, projectEvent: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectFlags: list<string>, projectFlagsProduction: list<string>, projectFlagsSdkKey: list<string>, projectFromV0: list<string>, projectId: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectMonitoring: list<string>, projectOIDCToken: list<string>, projectPermissions: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectRollingRelease: list<string>, projectRoutes: list<string>, projectSupportCase: list<string>, projectSupportCaseComment: list<string>, projectTier: list<string>, projectTransfer: list<string>, projectTransferOut: list<string>, projectUsage: list<string>, pageIntegrity: list<string>, seawallConfig: list<string>, securityPlusConfiguration: list<string>, shareableLinkStrict: list<string>, sharedEnvVarConnection: list<string>, skewProtection: list<string>, analytics: list<string>, trustedIps: list<string>, trustedSources: list<string>, v0Chat: list<string>, webAnalytics: list<string>>, lastRollbackTarget: record, lastAliasRequest: record<fromDeploymentId: string, toDeploymentId: string, fromRollingReleaseId: string, jobStatus: string, requestedAt: float, type: string>, protectionBypass: record, hasActiveBranches: bool, trustedIps: any, trustedSources: record<projects: record, oidcProviders: record>, gitComments: record<onPullRequest: bool, onCommit: bool>, gitProviderOptions: record<createDeployments: string, disableRepositoryDispatchEvents: bool, requireVerifiedCommits: bool, gitCommitStatus: bool, consolidatedGitCommitStatus: record<enabled: bool, propagateFailures: bool>>, paused: bool, concurrencyBucketName: string, webAnalytics: record<id: string, disabledAt: float, canceledAt: float, enabledAt: float, hasData: bool>, security: record<attackModeEnabled: bool, attackModeUpdatedAt: float, firewallEnabled: bool, firewallUpdatedAt: float, attackModeActiveUntil: float, firewallConfigVersion: float, firewallSeawallEnabled: bool, ja3Enabled: bool, ja4Enabled: bool, firewallBypassIps: list<string>, managedRules: record<vercel_ruleset: record, bot_filter: record, ai_bots: record, owasp: record>, botIdEnabled: bool, log_headers: any, securityPlus: bool, securityPlusMetadata: record<updatedAt: float, firstEnabledAt: float>, pageIntegrityEnabled: bool>, oidcTokenConfig: record<enabled: bool, issuerMode: string>, deploymentPolicy: record<gitSources: list<record>, deploymentSources: list<record>>, tier: string, flatRateTier: string, usageStatus: record<kind: string, exceededAllowanceUntil: float, bypassThrottleUntil: float, throttled: bool>, features: record<webAnalytics: bool>, v0: bool, v0Created: bool, abuse: record<scanner: string, history: list<record>, updatedAt: float, block: record<action: string, reason: string, statusCode: float, createdAt: float, caseId: string, actor: string, comment: string, ineligibleForAppeal: bool, isCascading: bool>, blockHistory: list<any>, interstitial: bool, interstitialHistory: list<record>>, internalRoutes: list<any>, hasDeployments: bool, dismissedToasts: table<key: string, dismissedAt: float, action: string, value: any>, protectedSourcemaps: bool, tracing: record<domains: string, ignorePaths: list<string>, samplingRules: list<record>>, avatar: string> {
   let input = $in
@@ -5956,25 +5955,25 @@ export def "projects updateProject" [
   --allow-errors(-e) # Return full response without error handling
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
-  --autoExposeSystemEnvs: string@bool-completer
-  --autoAssignCustomDomains: string@bool-completer
+  --autoExposeSystemEnvs: oneof<nothing, bool>
+  --autoAssignCustomDomains: oneof<nothing, bool>
   --autoAssignCustomDomainsUpdatedBy: string
   --buildCommand: string # The build command for this project. When `null` is used this value will be automatically detected (nullable)
   --commandForIgnoringBuildStep: string # nullable
-  --customerSupportCodeVisibility: string@bool-completer # Specifies whether customer support can see git source for a deployment
+  --customerSupportCodeVisibility: oneof<nothing, bool> # Specifies whether customer support can see git source for a deployment
   --devCommand: string # The dev command for this project. When `null` is used this value will be automatically detected (nullable)
-  --directoryListing: string@bool-completer
+  --directoryListing: oneof<nothing, bool>
   --framework: string@framework-completer # The framework that is being used for this project. When `null` is used no framework is selected (nullable)
-  --gitForkProtection: string@bool-completer # Specifies whether PRs from Git forks should require a team member's authorization before it can be deployed
-  --gitLFS: string@bool-completer # Specifies whether Git LFS is enabled for this project.
-  --protectedSourcemaps: string@bool-completer # Specifies whether sourcemaps are protected and require authentication to access.
+  --gitForkProtection: oneof<nothing, bool> # Specifies whether PRs from Git forks should require a team member's authorization before it can be deployed
+  --gitLFS: oneof<nothing, bool> # Specifies whether Git LFS is enabled for this project.
+  --protectedSourcemaps: oneof<nothing, bool> # Specifies whether sourcemaps are protected and require authentication to access.
   --installCommand: string # The install command for this project. When `null` is used this value will be automatically detected (nullable)
   --name: string # The desired name for the project (e.g. a-project-name)
   --nodeVersion: string@nodeVersion-completer
   --outputDirectory: string # The output directory of the project. When `null` is used this value will be automatically detected (nullable)
-  --previewDeploymentsDisabled: string@bool-completer # Specifies whether preview deployments are disabled for this project. (nullable)
+  --previewDeploymentsDisabled: oneof<nothing, bool> # Specifies whether preview deployments are disabled for this project. (nullable)
   --previewDeploymentSuffix: string # Custom domain suffix for preview deployments. Takes precedence over team-level suffix. Must be a domain owned by the team. (nullable)
-  --publicSource: string@bool-completer # Specifies whether the source code and logs of the deployments for this project should be public or not (nullable)
+  --publicSource: oneof<nothing, bool> # Specifies whether the source code and logs of the deployments for this project should be public or not (nullable)
   --resourceConfig: record # Specifies resource override configuration for the project — shape: {buildMachineType?: ""|"enhanced"|"turbo"|"standard"|"elastic", buildQueue?: record, fluid?: bool, functionDefaultRegions?: list, functionDefaultTimeout?: float, functionDefaultMemoryType?: "standard_legacy"|"standard"|"performance", functionZeroConfigFailover?: any, elasticConcurrencyEnabled?: bool, buildMachineSelection?: "elastic"|"fixed", buildMachineElasticLastUpdated?: float, isNSNBDisabled?: bool, enableFunctionsBeta?: bool}
   --rootDirectory: string # The name of a directory or relative path to the source code of your project. When `null` is used it will default to the project root (nullable)
   --serverlessFunctionRegion: string # The region to deploy Serverless Functions in this project (nullable)
@@ -5982,12 +5981,12 @@ export def "projects updateProject" [
   --skewProtectionBoundaryAt: int # Deployments created before this absolute datetime have Skew Protection disabled. Value is in milliseconds since epoch to match \"createdAt\" fields.
   --skewProtectionMaxAge: int # Deployments created before this rolling window have Skew Protection disabled. Value is in seconds to match \"revalidate\" fields.
   --skewProtectionAllowedDomains: list # Cross-site domains allowed to fetch skew-protected assets (hostnames, optionally with leading wildcard like *.example.com).
-  --skipGitConnectDuringLink: string@bool-completer # Opts-out of the message prompting a CLI user to connect a Git repository in `vercel link`. (DEPRECATED)
-  --sourceFilesOutsideRootDirectory: string@bool-completer # Indicates if there are source files outside of the root directory
-  --enablePreviewFeedback: string@bool-completer # Opt-in to preview toolbar on the project level (nullable)
-  --enableProductionFeedback: string@bool-completer # Opt-in to production toolbar on the project level (nullable)
-  --enableAffectedProjectsDeployments: string@bool-completer # Opt-in to skip deployments when there are no changes to the root directory and its dependencies
-  --enableExternalRewriteCaching: string@bool-completer # Specifies whether external rewrite caching is enabled for this project.
+  --skipGitConnectDuringLink: oneof<nothing, bool> # Opts-out of the message prompting a CLI user to connect a Git repository in `vercel link`. (DEPRECATED)
+  --sourceFilesOutsideRootDirectory: oneof<nothing, bool> # Indicates if there are source files outside of the root directory
+  --enablePreviewFeedback: oneof<nothing, bool> # Opt-in to preview toolbar on the project level (nullable)
+  --enableProductionFeedback: oneof<nothing, bool> # Opt-in to production toolbar on the project level (nullable)
+  --enableAffectedProjectsDeployments: oneof<nothing, bool> # Opt-in to skip deployments when there are no changes to the root directory and its dependencies
+  --enableExternalRewriteCaching: oneof<nothing, bool> # Specifies whether external rewrite caching is enabled for this project.
   --staticIps: record # Manage Static IPs for this project — shape: {enabled: bool}
   --tracing: record # Tracing configuration for this project (nullable) — shape: {domains?: string, ignorePaths?: list, samplingRules?: list}
   --oidcTokenConfig: record # OpenID Connect JSON Web Token generation configuration. — shape: {enabled?: bool, issuerMode?: "team"|"global"}
@@ -6081,7 +6080,7 @@ export def "projects-shared-connect-links updateStaticIps" [
   --allow-errors(-e) # Return full response without error handling
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
-  --builds: string@bool-completer # Whether to use Static IPs for builds.
+  --builds: oneof<nothing, bool> # Whether to use Static IPs for builds.
   --regions: list
 ]: any -> table<envId: any, connectConfigurationId: string, dc: string, passive: bool, buildsEnabled: bool, aws: record<subnetIds: list, securityGroupId: string>, createdAt: float, updatedAt: float> {
   let input = $in
@@ -6230,7 +6229,7 @@ export def "projects-custom-environments removeCustomEnvironment" [
   --allow-errors(-e) # Return full response without error handling
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
-  --deleteUnassignedEnvironmentVariables: string@bool-completer # Delete Environment Variables that are not assigned to any environments.
+  --deleteUnassignedEnvironmentVariables: oneof<nothing, bool> # Delete Environment Variables that are not assigned to any environments.
 ]: any -> record<id: string, slug: string, type: string, description: string, branchMatcher: record<type: string, pattern: string>, domains: table<name: string, apexName: string, projectId: string, redirect: string, redirectStatusCode: float, gitBranch: string, customEnvironmentId: string, updatedAt: float, createdAt: float, verified: bool, verification: list>, currentDeploymentAliases: list<string>, createdAt: float, updatedAt: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6354,7 +6353,7 @@ export def "projects-domains removeProjectDomain" [
   --allow-errors(-e) # Return full response without error handling
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
-  --removeRedirects: string@bool-completer # Whether to remove all domains from this project that redirect to the domain being removed.
+  --removeRedirects: oneof<nothing, bool> # Whether to remove all domains from this project that redirect to the domain being removed.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6925,7 +6924,7 @@ export def "projects-protection-bypass updateProjectProtectionBypass" [
   do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
 }
 
-# Points all production domains for a project to the given deploy
+# Point production traffic to a previous production deployment by ID
 #
 # POST /v1/projects/{projectId}/rollback/{deploymentId}
 # operationId: requestRollback
@@ -6995,11 +6994,11 @@ export def "projects-microfrontends updateMicrofrontends" [
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --microfrontendsGroupId: string # The unique group identifier to add this microfrontend to (e.g. mfe_12HKQaOmR5t5Uy6vdcQsNIiZgHGB)
-  --enabled: string@bool-completer # Enable or disable microfrontends for the project (e.g. true)
-  --isDefaultApp: string@bool-completer # Whether the application is the default application for the microfrontends group (e.g. true)
+  --enabled: oneof<nothing, bool> # Enable or disable microfrontends for the project (e.g. true)
+  --isDefaultApp: oneof<nothing, bool> # Whether the application is the default application for the microfrontends group (e.g. true)
   --defaultRoute: string # The default route used for screenshots and preview links for the project (e.g. /home)
-  --routeObservabilityToThisProject: string@bool-completer # Whether observability data should be routed to this project or a root project. Can only be set for child applications.
-  --doNotRouteWithMicrofrontendsRouting: string@bool-completer # Whether domains in this project should route as a microfrontend. Can only be set for child applications.
+  --routeObservabilityToThisProject: oneof<nothing, bool> # Whether observability data should be routed to this project or a root project. Can only be set for child applications.
+  --doNotRouteWithMicrofrontendsRouting: oneof<nothing, bool> # Whether domains in this project should route as a microfrontend. Can only be set for child applications.
 ]: any -> record<accountId: string, analytics: record<id: string, canceledAt: float, disabledAt: float, enabledAt: float, paidAt: float, sampleRatePercent: float, spendLimitInDollars: float>, appliedCve55182Migration: bool, speedInsights: record<id: string, enabledAt: float, disabledAt: float, canceledAt: float, hasData: bool, paidAt: float>, autoExposeSystemEnvs: bool, autoAssignCustomDomains: bool, autoAssignCustomDomainsUpdatedBy: string, buildCommand: string, commandForIgnoringBuildStep: string, connectConfigurations: table<envId: any, connectConfigurationId: string, dc: string, passive: bool, buildsEnabled: bool, aws: record, createdAt: float, updatedAt: float>, connectConfigurationId: string, connectBuildsEnabled: bool, passiveConnectConfigurationId: string, createdAt: float, customerSupportCodeVisibility: bool, crons: record<enabledAt: float, disabledAt: float, updatedAt: float, deploymentId: string, definitions: list<record>>, dataCache: record<userDisabled: bool, storageSizeBytes: float, unlimited: bool>, deploymentExpiration: record<expirationDays: float, expirationDaysProduction: float, expirationDaysCanceled: float, expirationDaysErrored: float, deploymentsToKeep: float>, expiration: any, devCommand: string, directoryListing: bool, installCommand: string, env: table<target: any, type: string, sunsetSecretId: string, legacyValue: string, decrypted: bool, value: string, vsmValue: string, id: string, key: string, configurationId: string, createdAt: float, updatedAt: float, createdBy: string, updatedBy: string, gitBranch: string, edgeConfigId: string, edgeConfigTokenId: string, contentHint: any, internalContentHint: record, comment: string, customEnvironmentIds: list>, customEnvironments: table<id: string, slug: string, type: string, description: string, branchMatcher: record, domains: list, currentDeploymentAliases: list, createdAt: float, updatedAt: float>, framework: string, services: table<serviceName: string, serviceType: string, framework: string, runtime: string>, gitForkProtection: bool, gitLFS: bool, id: string, ipBuckets: table<bucket: string, default: bool, supportUntil: float>, jobs: record<lint: record<targets: list>, typecheck: record<targets: list>, mfe_config_present: record<targets: list>>, latestDeployments: table<alias: list, aliasAssigned: any, builds: list, createdAt: float, createdIn: string, creator: record, deploymentHostname: string, name: string, forced: bool, id: string, meta: record, plan: string, private: bool, readyState: string, requestedAt: float, target: string, teamId: string, type: string, url: string, userId: string, withCache: bool>, link: any, microfrontends: any, name: string, nodeVersion: string, optionsAllowlist: record<paths: list<record>>, outputDirectory: string, passwordProtection: record, passport: record<deploymentType: string, connectorId: string>, protectionConfig: record<sandboxUrls: record<inheritDeploymentProtection: bool>>, productionDeploymentsFastLane: bool, publicSource: bool, resourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rollbackDescription: record<userId: string, username: string, description: string, createdAt: float>, rollingRelease: record<target: string, stages: list<record>, canaryResponseHeader: bool>, defaultResourceConfig: record<elasticConcurrencyEnabled: bool, fluid: bool, functionDefaultRegions: list<string>, functionDefaultTimeout: float, functionDefaultMemoryType: string, functionZeroConfigFailover: bool, buildMachineType: string, buildMachineSelection: string, buildMachineElasticLastUpdated: float, isNSNBDisabled: bool, buildQueue: record<configuration: string>, enableFunctionsBeta: bool>, rootDirectory: string, serverlessFunctionZeroConfigFailover: bool, skewProtectionBoundaryAt: float, skewProtectionMaxAge: float, skewProtectionAllowedDomains: list<string>, skipGitConnectDuringLink: bool, staticIps: record<builds: bool, enabled: bool, regions: list<string>>, sourceFilesOutsideRootDirectory: bool, enableAffectedProjectsDeployments: bool, enableExternalRewriteCaching: bool, ssoProtection: record<deploymentType: string, cve55182MigrationAppliedFrom: string, april2026SecurityIncidentMigrationAppliedFrom: string>, targets: record, transferCompletedAt: float, transferStartedAt: float, transferToAccountId: string, transferredFromAccountId: string, updatedAt: float, live: bool, enablePreviewFeedback: bool, enableProductionFeedback: bool, permissions: record<oauth2Connection: list<string>, user: list<string>, userConnection: list<string>, userMfaConfiguration: list<string>, userPreference: list<string>, userSudo: list<string>, webAuthn: list<string>, accessGroup: list<string>, agent: list<string>, aiGatewayUsage: list<string>, alerts: list<string>, alertRules: list<string>, aliasGlobal: list<string>, analyticsSampling: list<string>, analyticsUsage: list<string>, apiKey: list<string>, apiKeyAiGateway: list<string>, apiKeyOwnedBySelf: list<string>, oauth2Application: list<string>, vercelAppInstallation: list<string>, vercelAppInstallationRequest: list<string>, auditLog: list<string>, billingAddress: list<string>, billingInformation: list<string>, billingInvoice: list<string>, billingInvoiceEmailRecipient: list<string>, billingInvoiceLanguage: list<string>, billingPlan: list<string>, billingPurchaseOrder: list<string>, billingRefund: list<string>, billingTaxId: list<string>, blob: list<string>, blobStoreTokenSet: list<string>, budget: list<string>, cacheArtifact: list<string>, cacheArtifactUsageEvent: list<string>, codeChecks: list<string>, ciInvocations: list<string>, ciLogs: list<string>, concurrentBuilds: list<string>, connect: list<string>, connectConfiguration: list<string>, connexClient: list<string>, connexClientProject: list<string>, connexToken: list<string>, buildMachineDefault: list<string>, dataCacheBillingSettings: list<string>, defaultDeploymentProtection: list<string>, deploymentPolicy: list<string>, domain: list<string>, domainAcceptDelegation: list<string>, domainAuthCodes: list<string>, domainCertificate: list<string>, domainCheckConfig: list<string>, domainMove: list<string>, domainPurchase: list<string>, domainRecord: list<string>, domainTransferIn: list<string>, drain: list<string>, edgeConfig: list<string>, edgeConfigItem: list<string>, edgeConfigSchema: list<string>, edgeConfigToken: list<string>, endpointVerification: list<string>, event: list<string>, fileUpload: list<string>, flagsExplorerSubscription: list<string>, gitRepository: list<string>, imageOptimizationNewPrice: list<string>, integration: list<string>, integrationAccount: list<string>, integrationConfiguration: list<string>, integrationConfigurationProjects: list<string>, integrationConfigurationRole: list<string>, integrationConfigurationTransfer: list<string>, integrationDeploymentAction: list<string>, integrationEvent: list<string>, integrationLog: list<string>, integrationResource: list<string>, integrationResourceData: list<string>, integrationResourceReplCommand: list<string>, integrationResourceSecrets: list<string>, integrationSSOSession: list<string>, integrationStrict: list<string>, integrationStoreTokenSet: list<string>, integrationVercelConfigurationOverride: list<string>, integrationPullRequest: list<string>, ipBlocking: list<string>, jobGlobal: list<string>, kmsIssuer: list<string>, kmsProjectGrant: list<string>, logDrain: list<string>, marketplaceBillingData: list<string>, marketplaceExperimentationEdgeConfigData: list<string>, marketplaceExperimentationItem: list<string>, marketplaceInstallationMember: list<string>, marketplaceInvoice: list<string>, marketplaceSettings: list<string>, Monitoring: list<string>, monitoringAlert: list<string>, monitoringChart: list<string>, monitoringQuery: list<string>, monitoringSettings: list<string>, notificationCustomerBudget: list<string>, notificationDeploymentFailed: list<string>, notificationDomainConfiguration: list<string>, notificationDomainExpire: list<string>, notificationDomainMoved: list<string>, notificationDomainPurchase: list<string>, notificationDomainRenewal: list<string>, notificationDomainTransfer: list<string>, notificationDomainUnverified: list<string>, NotificationMonitoringAlert: list<string>, notificationPaymentFailed: list<string>, notificationPreferences: list<string>, notificationStatementOfReasons: list<string>, notificationUsageAlert: list<string>, oidcFederationPolicy: list<string>, observabilityConfiguration: list<string>, observabilityFunnel: list<string>, observabilityNotebook: list<string>, openTelemetryEndpoint: list<string>, ownEvent: list<string>, organization: list<string>, organizationDomain: list<string>, organizationTeam: list<string>, passwordProtectionInvoiceItem: list<string>, paymentMethod: list<string>, permissions: list<string>, postgres: list<string>, postgresStoreTokenSet: list<string>, previewDeploymentSuffix: list<string>, privateCloudAccount: list<string>, projectTransferIn: list<string>, proTrialOnboarding: list<string>, rateLimit: list<string>, redis: list<string>, redisStoreTokenSet: list<string>, remoteCaching: list<string>, repository: list<string>, samlConfig: list<string>, secret: list<string>, sensitiveEnvironmentVariablePolicy: list<string>, sharedEnvVars: list<string>, sharedEnvVarsProduction: list<string>, space: list<string>, spaceRun: list<string>, storeIsLocked: list<string>, storeTokenSetSensitive: list<string>, storeTransfer: list<string>, supportCase: list<string>, supportCaseComment: list<string>, team: list<string>, teamAccessRequest: list<string>, teamFellowMembership: list<string>, teamGitExclusivity: list<string>, teamInvite: list<string>, teamInviteCode: list<string>, teamInviteLink: list<string>, teamJoin: list<string>, teamMemberMfaStatus: list<string>, teamMicrofrontends: list<string>, teamOwnMembership: list<string>, teamOwnMembershipDisconnectSAML: list<string>, teamSudo: list<string>, teamTokenInvalidation: list<string>, token: list<string>, toolbarComment: list<string>, usage: list<string>, usageCycle: list<string>, vcrRepository: list<string>, vercelRun: list<string>, vpcPeeringConnection: list<string>, webAnalyticsPlan: list<string>, webhook: list<string>, webhook_event: list<string>, aliasProject: list<string>, aliasProtectionBypass: list<string>, bulkRedirects: list<string>, buildMachine: list<string>, connectConfigurationLink: list<string>, dataCacheNamespace: list<string>, deployment: list<string>, deploymentBuildLogs: list<string>, deploymentCheck: list<string>, deploymentCheckPreview: list<string>, deploymentCheckReRunFromProductionBranch: list<string>, deploymentProductionGit: list<string>, deploymentV0: list<string>, deploymentPreview: list<string>, deploymentPrivate: list<string>, deploymentPromote: list<string>, deploymentRollback: list<string>, edgeCacheNamespace: list<string>, environments: list<string>, job: list<string>, logs: list<string>, logsPreset: list<string>, observabilityData: list<string>, onDemandBuild: list<string>, onDemandConcurrency: list<string>, optionsAllowlist: list<string>, passwordProtection: list<string>, privateLinkEndpoint: list<string>, productionAliasProtectionBypass: list<string>, project: list<string>, projectAccessGroup: list<string>, projectAnalyticsSampling: list<string>, projectAnalyticsUsage: list<string>, projectCheck: list<string>, projectCheckRun: list<string>, projectDeploymentExpiration: list<string>, projectDeploymentHook: list<string>, projectDeploymentProtectionStrict: list<string>, projectDomain: list<string>, projectDomainCheckConfig: list<string>, projectDomainMove: list<string>, projectEvent: list<string>, projectEnvVars: list<string>, projectEnvVarsProduction: list<string>, projectEnvVarsUnownedByIntegration: list<string>, projectFlags: list<string>, projectFlagsProduction: list<string>, projectFlagsSdkKey: list<string>, projectFromV0: list<string>, projectId: list<string>, projectIntegrationConfiguration: list<string>, projectLink: list<string>, projectMember: list<string>, projectMonitoring: list<string>, projectOIDCToken: list<string>, projectPermissions: list<string>, projectProductionBranch: list<string>, projectProtectionBypass: list<string>, projectRollingRelease: list<string>, projectRoutes: list<string>, projectSupportCase: list<string>, projectSupportCaseComment: list<string>, projectTier: list<string>, projectTransfer: list<string>, projectTransferOut: list<string>, projectUsage: list<string>, pageIntegrity: list<string>, seawallConfig: list<string>, securityPlusConfiguration: list<string>, shareableLinkStrict: list<string>, sharedEnvVarConnection: list<string>, skewProtection: list<string>, analytics: list<string>, trustedIps: list<string>, trustedSources: list<string>, v0Chat: list<string>, webAnalytics: list<string>>, lastRollbackTarget: record, lastAliasRequest: record<fromDeploymentId: string, toDeploymentId: string, fromRollingReleaseId: string, jobStatus: string, requestedAt: float, type: string>, protectionBypass: record, hasActiveBranches: bool, trustedIps: any, trustedSources: record<projects: record, oidcProviders: record>, gitComments: record<onPullRequest: bool, onCommit: bool>, gitProviderOptions: record<createDeployments: string, disableRepositoryDispatchEvents: bool, requireVerifiedCommits: bool, gitCommitStatus: bool, consolidatedGitCommitStatus: record<enabled: bool, propagateFailures: bool>>, paused: bool, concurrencyBucketName: string, webAnalytics: record<id: string, disabledAt: float, canceledAt: float, enabledAt: float, hasData: bool>, security: record<attackModeEnabled: bool, attackModeUpdatedAt: float, firewallEnabled: bool, firewallUpdatedAt: float, attackModeActiveUntil: float, firewallConfigVersion: float, firewallSeawallEnabled: bool, ja3Enabled: bool, ja4Enabled: bool, firewallBypassIps: list<string>, managedRules: record<vercel_ruleset: record, bot_filter: record, ai_bots: record, owasp: record>, botIdEnabled: bool, log_headers: any, securityPlus: bool, securityPlusMetadata: record<updatedAt: float, firstEnabledAt: float>, pageIntegrityEnabled: bool>, oidcTokenConfig: record<enabled: bool, issuerMode: string>, deploymentPolicy: record<gitSources: list<record>, deploymentSources: list<record>>, tier: string, flatRateTier: string, usageStatus: record<kind: string, exceededAllowanceUntil: float, bypassThrottleUntil: float, throttled: bool>, features: record<webAnalytics: bool>, v0: bool, v0Created: bool, abuse: record<scanner: string, history: list<record>, updatedAt: float, block: record<action: string, reason: string, statusCode: float, createdAt: float, caseId: string, actor: string, comment: string, ineligibleForAppeal: bool, isCascading: bool>, blockHistory: list<any>, interstitial: bool, interstitialHistory: list<record>>, internalRoutes: list<any>, hasDeployments: bool, dismissedToasts: table<key: string, dismissedAt: float, action: string, value: any>, protectedSourcemaps: bool, tracing: record<domains: string, ignorePaths: list<string>, samplingRules: list<record>>, avatar: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7013,7 +7012,7 @@ export def "projects-microfrontends updateMicrofrontends" [
   do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
 }
 
-# Points all production domains for a project to the given deploy
+# Point production traffic to a given deployment
 #
 # POST /v10/projects/{projectId}/promote/{deploymentId}
 # operationId: requestPromote
@@ -7055,7 +7054,7 @@ export def "projects-promote-aliases listPromoteAliases" [
   --limit: float # Maximum number of aliases to list from a request (max 100). (e.g. 20)
   --since: float # Get aliases created after this epoch timestamp. (e.g. 1609499532000)
   --until: float # Get aliases created before this epoch timestamp. (e.g. 1612264332000)
-  --failedOnly: string@bool-completer # Filter results down to aliases that failed to map to the requested deployment
+  --failedOnly: oneof<nothing, bool> # Filter results down to aliases that failed to map to the requested deployment
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> any {
@@ -7175,7 +7174,7 @@ export def "sandboxes createSandboxes" [
   --env: record # Default environment variables for the sandbox. These are inherited by all commands unless overridden. (default: {}, e.g. {NODE_ENV: production, HELLO: world})
   --mounts: record # List of drives to mount to the sandbox at the provided path.
   --name: string # Name for the sandbox. Must be unique per project and URL-safe (alphanumeric, hyphens, underscores). (e.g. my-sandbox)
-  --persistent: string@bool-completer # Whether the sandbox persists its state across restarts via automatic snapshots. Defaults to true. (default: true)
+  --persistent: oneof<nothing, bool> # Whether the sandbox persists its state across restarts via automatic snapshots. Defaults to true. (default: true)
   --snapshotExpiration: any # Default snapshot expiration time in milliseconds. Set to 0 to disable expiration. When set, this value is used as the default expiration for all snapshots created for this sandbox. (e.g. 604800000)
   --keepLastSnapshots: record # Protect the N most recent snapshots with different expiration/deletion behavior. — shape: {count: int, expiration?: any, deleteEvicted?: bool}
   --tags: record # Key-value tags to associate with the sandbox. Maximum 5 tags. (e.g. {env: staging, team: platform})
@@ -7425,7 +7424,7 @@ export def "sandboxes get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --projectId: string # The project ID or name (required when not using OIDC token). (e.g. prj_abc123)
-  --resume: string@bool-completer # Whether to automatically resume a stopped named sandbox by creating a new instance from its snapshot. Defaults to false. (default: false)
+  --resume: oneof<nothing, bool> # Whether to automatically resume a stopped named sandbox by creating a new instance from its snapshot. Defaults to false. (default: false)
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
 ]: nothing -> record<sandbox: record<name: string, currentSnapshotId: string, currentSessionId: string, status: string, statusUpdatedAt: float, persistent: bool, region: string, vcpus: float, memory: float, runtime: string, timeout: float, snapshotExpiration: float, keepLastSnapshots: record<count: float, expiration: float, deleteEvicted: bool>, networkPolicy: record<mode: string, allowedDomains: list, allowedCIDRs: list, deniedCIDRs: list>, totalEgressBytes: float, totalIngressBytes: float, totalActiveCpuDurationMs: float, totalDurationMs: float, cwd: string, tags: record, mounts: record, createdAt: float, updatedAt: float>, session: record<sourceSandboxName: string, projectId: string, id: string, memory: float, vcpus: float, region: string, runtime: string, timeout: float, status: string, requestedAt: float, startedAt: float, cwd: string, requestedStopAt: float, stoppedAt: float, abortedAt: float, duration: float, sourceSnapshotId: string, snapshottedAt: float, createdAt: float, updatedAt: float, networkPolicy: record<mode: string, allowedDomains: list, allowedCIDRs: list, deniedCIDRs: list, injectionRules: list>, activeCpuDurationMs: float, networkTransfer: record<ingress: float, egress: float>>, routes: table<url: string, port: float, subdomain: string, system: bool>, resumed: bool> {
@@ -7453,13 +7452,13 @@ export def "sandboxes updateSandbox" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --projectId: string # The project ID that owns the named sandbox. When provided, takes precedence over OIDC project context.
-  --resume: string@bool-completer # Whether to automatically resume a stopped named sandbox by creating a new instance from its snapshot. Defaults to false. (default: false)
+  --resume: oneof<nothing, bool> # Whether to automatically resume a stopped named sandbox by creating a new instance from its snapshot. Defaults to false. (default: false)
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --resources: record # Resources to define the VM — shape: {vcpus?: int, memory?: int}
   --runtime: string@runtime-completer # The runtime environment for the sandbox. Determines the pre-installed language runtimes and tools available. (e.g. node24)
   --timeout: int # Maximum duration in milliseconds that the sandbox can run before being automatically stopped. (e.g. 300000)
-  --persistent: string@bool-completer # Whether the sandbox persists its state across restarts via automatic snapshots.
+  --persistent: oneof<nothing, bool> # Whether the sandbox persists its state across restarts via automatic snapshots.
   --snapshotExpiration: any # Default snapshot expiration time in milliseconds. Set to 0 to disable expiration. When set, this value is used as the default expiration for all snapshots created for this sandbox. (e.g. 604800000)
   --keepLastSnapshots: any # Protect the N most recent snapshots with different expiration/deletion behavior. Set to null to clear.
   --networkPolicy: any
@@ -7552,9 +7551,9 @@ export def "sandboxes-sessions-cmd runSessionCommand" [
   --args: list # Arguments to pass to the command. Each argument should be a separate array element. (e.g. [install, --save, lodash])
   --cwd: string # The working directory in which to execute the command. Defaults to the sandbox home directory if not specified. (e.g. /home/vercel-sandbox)
   --env: record # Additional environment variables to set for this command. These are merged with the sandbox environment. (default: {}, e.g. {NODE_ENV: production, DEBUG: true})
-  --sudo: string@bool-completer # Execute the command with root (superuser) privileges. (default: false)
-  --wait: string@bool-completer # If true, returns an ND-JSON stream that emits the command status when started and again when finished. Useful for synchronously waiting for command completion. (default: false)
-  --logs: string@bool-completer # If true, stream the logs of the command execution in real-time via ND-JSON. This is only applicable if `wait` is also true. (default: false)
+  --sudo: oneof<nothing, bool> # Execute the command with root (superuser) privileges. (default: false)
+  --wait: oneof<nothing, bool> # If true, returns an ND-JSON stream that emits the command status when started and again when finished. Useful for synchronously waiting for command completion. (default: false)
+  --logs: oneof<nothing, bool> # If true, stream the logs of the command execution in real-time via ND-JSON. This is only applicable if `wait` is also true. (default: false)
   --timeout: int # Maximum duration in milliseconds the command may run before it is killed with SIGKILL. Enforced at exec time, independently of `wait`. (e.g. 30000)
 ]: any -> record<command: record<id: string, name: string, args: list<string>, cwd: string, sessionId: string, exitCode: float, startedAt: float>> {
   let input = $in
@@ -7790,7 +7789,7 @@ export def "sandboxes-sessions-fs-mkdir createSessionDirectory" [
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --cwd: string # The base directory for resolving relative paths. If not specified, paths are resolved from the sandbox home directory. (e.g. /home/vercel-sandbox)
   path: string # The path of the directory to create. Can be absolute or relative to the working directory. (e.g. src/components)
-  --recursive: string@bool-completer # If true, creates parent directories as needed (like `mkdir -p`). If false, fails if parent directories do not exist. (default: true)
+  --recursive: oneof<nothing, bool> # If true, creates parent directories as needed (like `mkdir -p`). If false, fails if parent directories do not exist. (default: true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7876,7 +7875,7 @@ export def "security-attack-mode updateAttackChallengeMode" [
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --projectId: string
-  --attackModeEnabled: string@bool-completer
+  --attackModeEnabled: oneof<nothing, bool>
   --attackModeActiveUntil: float
 ]: any -> record<attackModeEnabled: bool, attackModeUpdatedAt: float> {
   let input = $in
@@ -7909,12 +7908,12 @@ export def "security-firewall-config put" [
   --projectId: string
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
-  --firewallEnabled: string@bool-completer
+  --firewallEnabled: oneof<nothing, bool>
   --managedRules: record
   --crs: record # Custom Ruleset — shape: {sd?: record, ma?: record, lfi?: record, rfi?: record, rce?: record, php?: record, gen?: record, xss?: record, sqli?: record, sf?: record, java?: record}
   --rules: list # item shape: {id?: string, name: string, description?: string, active: bool, conditionGroup: list, action: record, valid?: bool, validationErrors?: any}
   --ips: list # item shape: {id?: string, hostname: string, ip: string, notes?: string, action: "deny"|"challenge"|"log"|"bypass"}
-  --botIdEnabled: string@bool-completer
+  --botIdEnabled: oneof<nothing, bool>
   --logHeaders: any
 ]: any -> record<active: record<ownerId: string, projectKey: string, id: string, version: float, updatedAt: string, firewallEnabled: bool, crs: record<sd: record, ma: record, lfi: record, rfi: record, rce: record, php: record, gen: record, xss: record, sqli: record, sf: record, java: record>, rules: list<any>, ips: list<record>, changes: list<record>, managedRules: record<bot_protection: record, ai_bots: record, owasp: record, vercel_ruleset: record>, botIdEnabled: bool, logHeaders: any>> {
   let input = $in
@@ -7946,7 +7945,7 @@ export def "security-firewall-config updateFirewallConfig" [
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --action: string@action-completer-2
   --id: any # nullable
-  --value: string@bool-completer
+  --value: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8028,7 +8027,7 @@ export def "security-firewall-bypass get" [
   --limit: float # e.g. 10
   --sourceIp: string # Filter by source IP
   --domain: string # Filter by domain
-  --projectScope: string@bool-completer # Filter by project scoped rules
+  --projectScope: oneof<nothing, bool> # Filter by project scoped rules
   --offset: string # Used for pagination. Retrieves results after the provided id
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -8058,9 +8057,9 @@ export def "security-firewall-bypass addBypassIp" [
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --domain: string
-  --projectScope: string@bool-completer # If the specified bypass will apply to all domains for a project.
+  --projectScope: oneof<nothing, bool> # If the specified bypass will apply to all domains for a project.
   --sourceIp: string
-  --allSources: string@bool-completer
+  --allSources: oneof<nothing, bool>
   --ttl: float # Time to live in milliseconds
   --note: string
 ]: any -> any {
@@ -8092,9 +8091,9 @@ export def "security-firewall-bypass removeBypassIp" [
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --domain: string
-  --projectScope: string@bool-completer
+  --projectScope: oneof<nothing, bool>
   --sourceIp: string
-  --allSources: string@bool-completer
+  --allSources: oneof<nothing, bool>
   --note: string
 ]: any -> record<ok: bool> {
   let input = $in
@@ -8322,7 +8321,7 @@ export def "teams-members updateTeamMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # Accept a user who requested access to the team. (e.g. true)
+  --confirmed: oneof<nothing, bool> # Accept a user who requested access to the team. (e.g. true)
   --role: string # The role in the team of the member. (default: MEMBER, e.g. VIEWER)
   --teamPermissions: list # The team permissions to set for the member. Permissions must be compatible with the team roles assigned to the member. (e.g. [CreateProject, FullProductionDeployment])
   --projects: list # item shape: {projectId: string, role: "ADMIN"|"PROJECT_VIEWER"|"PROJECT_DEVELOPER"|""}
@@ -8415,18 +8414,18 @@ export def "teams patch" [
   --emailDomain: string # nullable, format: regex, e.g. example.com
   --name: string # The name of the team. (e.g. My Team)
   --previewDeploymentSuffix: string # Suffix that will be used for all preview deployments. (nullable, format: hostname, e.g. example.dev)
-  --regenerateInviteCode: string@bool-completer # Create a new invite code and replace the current one. (e.g. true)
+  --regenerateInviteCode: oneof<nothing, bool> # Create a new invite code and replace the current one. (e.g. true)
   --saml: record # shape: {enforced?: bool, roles?: record}
   --slug: string # A new slug for the team. (e.g. my-team)
   --enablePreviewFeedback: string # Enable preview toolbar: one of on, off or default. (e.g. on)
   --enableProductionFeedback: string # Enable production toolbar: one of on, off or default. (e.g. on)
   --sensitiveEnvironmentVariablePolicy: string # Sensitive environment variable policy: one of on, off or default. (e.g. on)
   --remoteCaching: record # Whether or not remote caching is enabled for the team — shape: {enabled?: bool}
-  --hideIpAddresses: string@bool-completer # Display or hide IP addresses in Monitoring queries. (e.g. false)
-  --hideIpAddressesInLogDrains: string@bool-completer # Display or hide IP addresses in Log Drains. (e.g. false)
+  --hideIpAddresses: oneof<nothing, bool> # Display or hide IP addresses in Monitoring queries. (e.g. false)
+  --hideIpAddressesInLogDrains: oneof<nothing, bool> # Display or hide IP addresses in Log Drains. (e.g. false)
   --dpAccessRequestsMode: string@dpAccessRequestsMode-completer # Controls who can request access to protected deployments. (e.g. none)
-  --requireVerifiedCommits: string@bool-completer # When enabled, all projects in the team require commits to be signed and verified by the git provider before deployments will be created. (e.g. true)
-  --disableRepositoryDispatchEvents: string@bool-completer # Default for projects in the team. When `true`, projects in this team will not emit GitHub repository-dispatch events on deployment events unless the project explicitly overrides this setting. (e.g. false)
+  --requireVerifiedCommits: oneof<nothing, bool> # When enabled, all projects in the team require commits to be signed and verified by the git provider before deployments will be created. (e.g. true)
+  --disableRepositoryDispatchEvents: oneof<nothing, bool> # Default for projects in the team. When `true`, projects in this team will not emit GitHub repository-dispatch events on deployment events unless the project explicitly overrides this setting. (e.g. false)
   --defaultDeploymentProtection: record # Default deployment protection settings for new projects. — shape: {passwordProtection?: record, ssoProtection?: record}
   --defaultPassport: record # Default Passport configuration for new projects. (nullable) — shape: {connectorId: string, deploymentType: "all"|"preview"|"prod_deployment_urls_and_all_previews"|"all_except_custom_domains"}
   --defaultExpirationSettings: record # shape: {expiration?: "3y"|"2y"|"1y"|"6m"|"3m"|"2m"|"1m"|"2w"|"1w"|"1d"|"unlimited", expirationProduction?: "3y"|"2y"|"1y"|"6m"|"3m"|"2m"|"1m"|"2w"|"1w"|"1d"|"unlimited", expirationCanceled?: "1y"|"6m"|"3m"|"2m"|"1m"|"2w"|"1w"|"1d"|"unlimited", expirationErrored?: "1y"|"6m"|"3m"|"2m"|"1m"|"2w"|"1w"|"1d"|"unlimited"}
@@ -9187,7 +9186,7 @@ export def "certs uploadCert" [
   ca: string # The certificate authority
   key: string # The certificate key
   cert: string # The certificate
-  --skipValidation: string@bool-completer # Skip validation of the certificate
+  --skipValidation: oneof<nothing, bool> # Skip validation of the certificate
 ]: any -> record<id: string, createdAt: float, expiresAt: float, autoRenew: bool, cns: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9276,7 +9275,7 @@ export def "deployments list" [
   --since: float # Get Deployments created after this JavaScript timestamp. (e.g. 1540095775941)
   --until: float # Get Deployments created before this JavaScript timestamp. (e.g. 1540095775951)
   --state: string # Filter deployments based on their state (`BUILDING`, `ERROR`, `INITIALIZING`, `QUEUED`, `READY`, `CANCELED`, `BLOCKED`) (e.g. BUILDING,READY)
-  --rollbackCandidate: string@bool-completer # Filter deployments based on their rollback candidacy
+  --rollbackCandidate: oneof<nothing, bool> # Filter deployments based on their rollback candidacy
   --branch: string # Filter deployments based on the branch name
   --sha: string # Filter deployments based on the SHA
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)

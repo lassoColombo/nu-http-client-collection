@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -159,7 +158,7 @@ export def "alerts alertlist" [
   --page-size: int # Number of results to return per page.
   --search: string # A search term.
   --ordering: string@ordering-completer # Order results by this field.
-  --state-is-up: string@bool-completer # Filter by alert state up/down.
+  --state-is-up: oneof<nothing, bool> # Filter by alert state up/down.
   --check-pk: float # Filter by check ID.
   --check-monitoring-service-type: string@check-monitoring-service-type-completer # Filter by check type.
   --check-tag: string # Filter by tag name (can be specified multiple times.)
@@ -591,10 +590,10 @@ export def "checks servicelist" [
   --search: string # A search term.
   --ordering: string@ordering-completer-2 # Order results by this field.
   --monitoring-service-type: string@monitoring-service-type-completer # Filter by check type.
-  --is-paused: string@bool-completer # Filter by paused status.
-  --is-under-maintenance: string@bool-completer # Filter for checks currently under maintenance.
-  --state-is-up: string@bool-completer # Filter by check up/down state.
-  --has-maintenance-schedule: string@bool-completer # Filter by checks that have a maintenance schedule.
+  --is-paused: oneof<nothing, bool> # Filter by paused status.
+  --is-under-maintenance: oneof<nothing, bool> # Filter for checks currently under maintenance.
+  --state-is-up: oneof<nothing, bool> # Filter by check up/down state.
+  --has-maintenance-schedule: oneof<nothing, bool> # Filter by checks that have a maintenance schedule.
   --tag: string # Filter by tag name (can be specified multiple times.)
 ]: nothing -> record<count: int, next: string, previous: string, results: table<pk: int, url: string, stats_url: string, alerts_url: string, share_url: string, name: string, cached_response_time: float, contact_groups: list, created_at: string, modified_at: string, locations: list, tags: list, check_type: string, escalations: string, maintenance: string, monitoring_service_type: string, is_paused: bool, send_resolved_notifications: bool, is_under_maintenance: string, state_is_up: bool, state_changed_at: string, maintenance_schedules: list, msp_interval: int, msp_address: string, msp_port: int, msp_username: string, msp_password: string, msp_proxy: string, msp_dns_server: string, msp_dns_record_type: string, msp_status_code: string, msp_send_string: string, msp_expect_string: string, msp_expect_string_type: string, msp_encryption: string, msp_threshold: int, msp_headers: string, msp_script: string, msp_version: int, msp_sensitivity: int, msp_num_retries: int, msp_use_ip_version: string, msp_uptime_sla: string, msp_response_time_sla: string, msp_notes: string, msp_include_in_global_metrics: bool, webhook_url: string, heartbeat_url: string, rumconfig: record, groupcheckconfig: record, sslconfig: record, pagespeedconfig: record, cloudstatusconfig: record, ftpconfig: record, sftpconfig: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -622,8 +621,8 @@ export def "checks-add-api api" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   msp_interval: int # default: 5
   --msp-threshold: int # nullable, default: 30
@@ -634,7 +633,7 @@ export def "checks-add-api api" [
   --msp-uptime-sla: string # format: decimal, default: 0.99
   --msp-response-time-sla: string # nullable, format: decimal, default: 4.0
   --msp-notes: string
-  --msp-include-in-global-metrics: string@bool-completer # default: true
+  --msp-include-in-global-metrics: oneof<nothing, bool> # default: true
 ]: any -> record<pk: int, url: string, stats_url: string, alerts_url: string, share_url: string, name: string, cached_response_time: float, contact_groups: list<string>, created_at: string, modified_at: string, locations: list<string>, tags: list<string>, check_type: string, escalations: string, maintenance: string, monitoring_service_type: string, is_paused: bool, send_resolved_notifications: bool, is_under_maintenance: string, state_is_up: bool, state_changed_at: string, maintenance_schedules: list<int>, msp_interval: int, msp_threshold: int, msp_script: string, msp_sensitivity: int, msp_num_retries: int, msp_use_ip_version: string, msp_uptime_sla: string, msp_response_time_sla: string, msp_notes: string, msp_include_in_global_metrics: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -663,8 +662,8 @@ export def "checks-add-blacklist blacklist" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Locations are auto-assigned for this check type if left empty or omitted. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   msp_address: string
   --msp-num-retries: int # default: 2
@@ -699,8 +698,8 @@ export def "checks-add-cloudstatus cloudstatus" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   cloudstatusconfig: record # shape: {notify_only_on_down?: bool, service_name?: string, group?: int, monitoring_type?: "ALL"|"SPECIFIC", services?: list, service_titles?: list}
 ]: any -> record<pk: int, url: string, stats_url: string, alerts_url: string, share_url: string, name: string, cached_response_time: float, contact_groups: list<string>, created_at: string, modified_at: string, locations: list<string>, tags: list<string>, check_type: string, escalations: string, maintenance: string, monitoring_service_type: string, is_paused: bool, send_resolved_notifications: bool, is_under_maintenance: string, state_is_up: bool, state_changed_at: string, maintenance_schedules: list<int>, cloudstatusconfig: record<notify_only_on_down: bool, service_name: string, group: int, monitoring_type: string, services: list<int>, service_titles: list<string>>> {
@@ -731,8 +730,8 @@ export def "checks-add-dns dns" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   msp_interval: int # default: 5
   msp_address: string
@@ -745,7 +744,7 @@ export def "checks-add-dns dns" [
   --msp-uptime-sla: string # format: decimal, default: 0.99
   --msp-response-time-sla: string # nullable, format: decimal, default: 2.2
   --msp-notes: string
-  --msp-include-in-global-metrics: string@bool-completer # default: true
+  --msp-include-in-global-metrics: oneof<nothing, bool> # default: true
 ]: any -> record<pk: int, url: string, stats_url: string, alerts_url: string, share_url: string, name: string, cached_response_time: float, contact_groups: list<string>, created_at: string, modified_at: string, locations: list<string>, tags: list<string>, check_type: string, escalations: string, maintenance: string, monitoring_service_type: string, is_paused: bool, send_resolved_notifications: bool, is_under_maintenance: string, state_is_up: bool, state_changed_at: string, maintenance_schedules: list<int>, msp_interval: int, msp_address: string, msp_dns_server: string, msp_dns_record_type: string, msp_expect_string: string, msp_threshold: int, msp_sensitivity: int, msp_num_retries: int, msp_uptime_sla: string, msp_response_time_sla: string, msp_notes: string, msp_include_in_global_metrics: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -775,8 +774,8 @@ export def "checks-add-ftp ftp" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   msp_interval: int # default: 5
   msp_address: string
@@ -789,7 +788,7 @@ export def "checks-add-ftp ftp" [
   --msp-uptime-sla: string # format: decimal, default: 0.99
   --msp-response-time-sla: string # nullable, format: decimal, default: 2.2
   --msp-notes: string
-  --msp-include-in-global-metrics: string@bool-completer # default: true
+  --msp-include-in-global-metrics: oneof<nothing, bool> # default: true
   --ftpconfig: record # nullable — shape: {ftp_paths?: string, ftp_skip_cert_verification?: bool, ftp_explicit_tls?: bool}
 ]: any -> record<pk: int, url: string, stats_url: string, alerts_url: string, share_url: string, name: string, cached_response_time: float, contact_groups: list<string>, created_at: string, modified_at: string, locations: list<string>, tags: list<string>, check_type: string, escalations: string, maintenance: string, monitoring_service_type: string, is_paused: bool, send_resolved_notifications: bool, is_under_maintenance: string, state_is_up: bool, state_changed_at: string, maintenance_schedules: list<int>, msp_interval: int, msp_address: string, msp_port: int, msp_username: string, msp_password: string, msp_threshold: int, msp_sensitivity: int, msp_num_retries: int, msp_uptime_sla: string, msp_response_time_sla: string, msp_notes: string, msp_include_in_global_metrics: bool, ftpconfig: record<ftp_paths: string, ftp_skip_cert_verification: bool, ftp_explicit_tls: bool>> {
   let input = $in
@@ -820,13 +819,13 @@ export def "checks-add-group group" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   --msp-uptime-sla: string # format: decimal, default: 0.99
   --msp-response-time-sla: string # nullable, format: decimal
   --msp-notes: string
-  --msp-include-in-global-metrics: string@bool-completer # default: true
+  --msp-include-in-global-metrics: oneof<nothing, bool> # default: true
   --groupcheckconfig: record # nullable — shape: {group_check_services?: list, group_check_tags?: list, group_check_down_condition?: "ANY"|"TWO"|"THREE"|"FOUR"|"FIVE"|"TEN"|"ONE_PCT"|"THREE_PCT"|"FIVE_PCT"|"TEN_PCT"|"TWENTYFIVE_PCT"|"FIFTY_PCT"|"ALL", group_uptime_percent_calculation?: "UP_DOWN_STATES"|"AVERAGE", group_response_time_calculation_mode?: "NONE"|"COPY"|"AVERAGE", group_response_time_check_type?: "HTTP"|"TRANSACTION"|"API"|"ICMP"|"HEARTBEAT"|"WEBHOOK", group_response_time_single_check?: string}
 ]: any -> record<pk: int, url: string, stats_url: string, alerts_url: string, share_url: string, name: string, cached_response_time: float, contact_groups: list<string>, created_at: string, modified_at: string, locations: list<string>, tags: list<string>, check_type: string, escalations: string, maintenance: string, monitoring_service_type: string, is_paused: bool, send_resolved_notifications: bool, is_under_maintenance: string, state_is_up: bool, state_changed_at: string, maintenance_schedules: list<int>, msp_uptime_sla: string, msp_response_time_sla: string, msp_notes: string, msp_include_in_global_metrics: bool, groupcheckconfig: record<group_check_services: list<string>, group_check_tags: list<string>, group_check_down_condition: string, group_uptime_percent_calculation: string, group_response_time_calculation_mode: string, group_response_time_check_type: string, group_response_time_single_check: string>> {
   let input = $in
@@ -856,14 +855,14 @@ export def "checks-add-heartbeat heartbeat" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   msp_interval: int # default: 5
   --msp-uptime-sla: string # format: decimal, default: 0.99
   --msp-response-time-sla: string # nullable, format: decimal
   --msp-notes: string
-  --msp-include-in-global-metrics: string@bool-completer # default: true
+  --msp-include-in-global-metrics: oneof<nothing, bool> # default: true
 ]: any -> record<pk: int, url: string, stats_url: string, alerts_url: string, share_url: string, name: string, cached_response_time: float, contact_groups: list<string>, created_at: string, modified_at: string, locations: list<string>, tags: list<string>, check_type: string, escalations: string, maintenance: string, monitoring_service_type: string, is_paused: bool, send_resolved_notifications: bool, is_under_maintenance: string, state_is_up: bool, state_changed_at: string, maintenance_schedules: list<int>, msp_interval: int, msp_uptime_sla: string, msp_response_time_sla: string, msp_notes: string, msp_include_in_global_metrics: bool, heartbeat_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -892,8 +891,8 @@ export def "checks-add-http http" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   msp_interval: int # default: 5
   msp_address: string
@@ -915,7 +914,7 @@ export def "checks-add-http http" [
   --msp-uptime-sla: string # format: decimal, default: 0.99
   --msp-response-time-sla: string # nullable, format: decimal, default: 2.2
   --msp-notes: string
-  --msp-include-in-global-metrics: string@bool-completer # default: true
+  --msp-include-in-global-metrics: oneof<nothing, bool> # default: true
 ]: any -> record<pk: int, url: string, stats_url: string, alerts_url: string, share_url: string, name: string, cached_response_time: float, contact_groups: list<string>, created_at: string, modified_at: string, locations: list<string>, tags: list<string>, check_type: string, escalations: string, maintenance: string, monitoring_service_type: string, is_paused: bool, send_resolved_notifications: bool, is_under_maintenance: string, state_is_up: bool, state_changed_at: string, maintenance_schedules: list<int>, msp_interval: int, msp_address: string, msp_port: int, msp_username: string, msp_password: string, msp_proxy: string, msp_status_code: string, msp_send_string: string, msp_expect_string: string, msp_expect_string_type: string, msp_encryption: string, msp_threshold: int, msp_headers: string, msp_version: int, msp_sensitivity: int, msp_num_retries: int, msp_use_ip_version: string, msp_uptime_sla: string, msp_response_time_sla: string, msp_notes: string, msp_include_in_global_metrics: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -944,8 +943,8 @@ export def "checks-add-icmp icmp" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   msp_interval: int # default: 5
   msp_address: string
@@ -955,7 +954,7 @@ export def "checks-add-icmp icmp" [
   --msp-uptime-sla: string # format: decimal, default: 0.99
   --msp-response-time-sla: string # nullable, format: decimal, default: 1.2
   --msp-notes: string
-  --msp-include-in-global-metrics: string@bool-completer # default: true
+  --msp-include-in-global-metrics: oneof<nothing, bool> # default: true
 ]: any -> record<pk: int, url: string, stats_url: string, alerts_url: string, share_url: string, name: string, cached_response_time: float, contact_groups: list<string>, created_at: string, modified_at: string, locations: list<string>, tags: list<string>, check_type: string, escalations: string, maintenance: string, monitoring_service_type: string, is_paused: bool, send_resolved_notifications: bool, is_under_maintenance: string, state_is_up: bool, state_changed_at: string, maintenance_schedules: list<int>, msp_interval: int, msp_address: string, msp_sensitivity: int, msp_num_retries: int, msp_use_ip_version: string, msp_uptime_sla: string, msp_response_time_sla: string, msp_notes: string, msp_include_in_global_metrics: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -984,8 +983,8 @@ export def "checks-add-imap imap" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   msp_interval: int # default: 5
   msp_address: string
@@ -998,7 +997,7 @@ export def "checks-add-imap imap" [
   --msp-uptime-sla: string # format: decimal, default: 0.99
   --msp-response-time-sla: string # nullable, format: decimal, default: 2.2
   --msp-notes: string
-  --msp-include-in-global-metrics: string@bool-completer # default: true
+  --msp-include-in-global-metrics: oneof<nothing, bool> # default: true
 ]: any -> record<pk: int, url: string, stats_url: string, alerts_url: string, share_url: string, name: string, cached_response_time: float, contact_groups: list<string>, created_at: string, modified_at: string, locations: list<string>, tags: list<string>, check_type: string, escalations: string, maintenance: string, monitoring_service_type: string, is_paused: bool, send_resolved_notifications: bool, is_under_maintenance: string, state_is_up: bool, state_changed_at: string, maintenance_schedules: list<int>, msp_interval: int, msp_address: string, msp_port: int, msp_expect_string: string, msp_encryption: string, msp_sensitivity: int, msp_num_retries: int, msp_use_ip_version: string, msp_uptime_sla: string, msp_response_time_sla: string, msp_notes: string, msp_include_in_global_metrics: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1027,8 +1026,8 @@ export def "checks-add-malware malware" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Locations are auto-assigned for this check type if left empty or omitted. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   msp_address: string
   --msp-num-retries: int # default: 2
@@ -1062,8 +1061,8 @@ export def "checks-add-ntp ntp" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   msp_interval: int # default: 5
   msp_address: string
@@ -1075,7 +1074,7 @@ export def "checks-add-ntp ntp" [
   --msp-uptime-sla: string # format: decimal, default: 0.99
   --msp-response-time-sla: string # nullable, format: decimal, default: 1.0
   --msp-notes: string
-  --msp-include-in-global-metrics: string@bool-completer # default: true
+  --msp-include-in-global-metrics: oneof<nothing, bool> # default: true
 ]: any -> record<pk: int, url: string, stats_url: string, alerts_url: string, share_url: string, name: string, cached_response_time: float, contact_groups: list<string>, created_at: string, modified_at: string, locations: list<string>, tags: list<string>, check_type: string, escalations: string, maintenance: string, monitoring_service_type: string, is_paused: bool, send_resolved_notifications: bool, is_under_maintenance: string, state_is_up: bool, state_changed_at: string, maintenance_schedules: list<int>, msp_interval: int, msp_address: string, msp_port: int, msp_threshold: int, msp_sensitivity: int, msp_num_retries: int, msp_use_ip_version: string, msp_uptime_sla: string, msp_response_time_sla: string, msp_notes: string, msp_include_in_global_metrics: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1105,8 +1104,8 @@ export def "checks-add-pagespeed pagespeed" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   msp_interval: int # default: 1440
   --msp-username: string
@@ -1144,8 +1143,8 @@ export def "checks-add-pop pop" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   msp_interval: int # default: 5
   msp_address: string
@@ -1158,7 +1157,7 @@ export def "checks-add-pop pop" [
   --msp-uptime-sla: string # format: decimal, default: 0.99
   --msp-response-time-sla: string # nullable, format: decimal, default: 2.2
   --msp-notes: string
-  --msp-include-in-global-metrics: string@bool-completer # default: true
+  --msp-include-in-global-metrics: oneof<nothing, bool> # default: true
 ]: any -> record<pk: int, url: string, stats_url: string, alerts_url: string, share_url: string, name: string, cached_response_time: float, contact_groups: list<string>, created_at: string, modified_at: string, locations: list<string>, tags: list<string>, check_type: string, escalations: string, maintenance: string, monitoring_service_type: string, is_paused: bool, send_resolved_notifications: bool, is_under_maintenance: string, state_is_up: bool, state_changed_at: string, maintenance_schedules: list<int>, msp_interval: int, msp_address: string, msp_port: int, msp_expect_string: string, msp_encryption: string, msp_sensitivity: int, msp_num_retries: int, msp_use_ip_version: string, msp_uptime_sla: string, msp_response_time_sla: string, msp_notes: string, msp_include_in_global_metrics: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1187,8 +1186,8 @@ export def "checks-add-rdap rdap" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Locations are auto-assigned for this check type if left empty or omitted. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   msp_address: string
   --msp-expect-string: string
@@ -1225,13 +1224,13 @@ export def "checks-add-rum2 rum2" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   msp_address: string
   --msp-uptime-sla: string # format: decimal, default: 0.99
   --msp-notes: string
-  --msp-include-in-global-metrics: string@bool-completer # default: true
+  --msp-include-in-global-metrics: oneof<nothing, bool> # default: true
   --rumconfig: record # nullable — shape: {aggregation_type?: "MED"|"AVG"|"P75"|"P90"|"P95"|"P98"|"P99", exclude_useragents?: string, apdex_threshold?: int, url_groups?: string, external_domains?: string, exclude_get_params?: string, is_ajax_disabled?: bool}
 ]: any -> record<pk: int, url: string, stats_url: string, alerts_url: string, share_url: string, name: string, cached_response_time: float, contact_groups: list<string>, created_at: string, modified_at: string, locations: list<string>, tags: list<string>, check_type: string, escalations: string, maintenance: string, monitoring_service_type: string, is_paused: bool, send_resolved_notifications: bool, is_under_maintenance: string, state_is_up: bool, state_changed_at: string, maintenance_schedules: list<int>, msp_address: string, msp_uptime_sla: string, msp_notes: string, msp_include_in_global_metrics: bool, rumconfig: record<aggregation_type: string, exclude_useragents: string, apdex_threshold: int, url_groups: string, external_domains: string, exclude_get_params: string, is_ajax_disabled: bool>> {
   let input = $in
@@ -1262,8 +1261,8 @@ export def "checks-add-sftp sftp" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   msp_interval: int # default: 5
   msp_address: string
@@ -1276,7 +1275,7 @@ export def "checks-add-sftp sftp" [
   --msp-uptime-sla: string # format: decimal, default: 0.99
   --msp-response-time-sla: string # nullable, format: decimal, default: 2.2
   --msp-notes: string
-  --msp-include-in-global-metrics: string@bool-completer # default: true
+  --msp-include-in-global-metrics: oneof<nothing, bool> # default: true
   --sftpconfig: record # nullable — shape: {ftp_paths?: string, sftp_private_key?: string, sftp_passphrase?: string, sftp_known_hosts?: string}
 ]: any -> record<pk: int, url: string, stats_url: string, alerts_url: string, share_url: string, name: string, cached_response_time: float, contact_groups: list<string>, created_at: string, modified_at: string, locations: list<string>, tags: list<string>, check_type: string, escalations: string, maintenance: string, monitoring_service_type: string, is_paused: bool, send_resolved_notifications: bool, is_under_maintenance: string, state_is_up: bool, state_changed_at: string, maintenance_schedules: list<int>, msp_interval: int, msp_address: string, msp_port: int, msp_username: string, msp_password: string, msp_threshold: int, msp_sensitivity: int, msp_num_retries: int, msp_uptime_sla: string, msp_response_time_sla: string, msp_notes: string, msp_include_in_global_metrics: bool, sftpconfig: record<ftp_paths: string, sftp_private_key: string, sftp_passphrase: string, sftp_known_hosts: string>> {
   let input = $in
@@ -1306,8 +1305,8 @@ export def "checks-add-smtp smtp" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   msp_interval: int # default: 5
   msp_address: string
@@ -1322,7 +1321,7 @@ export def "checks-add-smtp smtp" [
   --msp-uptime-sla: string # format: decimal, default: 0.99
   --msp-response-time-sla: string # nullable, format: decimal, default: 2.2
   --msp-notes: string
-  --msp-include-in-global-metrics: string@bool-completer # default: true
+  --msp-include-in-global-metrics: oneof<nothing, bool> # default: true
 ]: any -> record<pk: int, url: string, stats_url: string, alerts_url: string, share_url: string, name: string, cached_response_time: float, contact_groups: list<string>, created_at: string, modified_at: string, locations: list<string>, tags: list<string>, check_type: string, escalations: string, maintenance: string, monitoring_service_type: string, is_paused: bool, send_resolved_notifications: bool, is_under_maintenance: string, state_is_up: bool, state_changed_at: string, maintenance_schedules: list<int>, msp_interval: int, msp_address: string, msp_port: int, msp_username: string, msp_password: string, msp_expect_string: string, msp_encryption: string, msp_sensitivity: int, msp_num_retries: int, msp_use_ip_version: string, msp_uptime_sla: string, msp_response_time_sla: string, msp_notes: string, msp_include_in_global_metrics: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1351,8 +1350,8 @@ export def "checks-add-ssh ssh" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   msp_interval: int # default: 5
   msp_address: string
@@ -1363,7 +1362,7 @@ export def "checks-add-ssh ssh" [
   --msp-uptime-sla: string # format: decimal, default: 0.99
   --msp-response-time-sla: string # nullable, format: decimal, default: 2.2
   --msp-notes: string
-  --msp-include-in-global-metrics: string@bool-completer # default: true
+  --msp-include-in-global-metrics: oneof<nothing, bool> # default: true
 ]: any -> record<pk: int, url: string, stats_url: string, alerts_url: string, share_url: string, name: string, cached_response_time: float, contact_groups: list<string>, created_at: string, modified_at: string, locations: list<string>, tags: list<string>, check_type: string, escalations: string, maintenance: string, monitoring_service_type: string, is_paused: bool, send_resolved_notifications: bool, is_under_maintenance: string, state_is_up: bool, state_changed_at: string, maintenance_schedules: list<int>, msp_interval: int, msp_address: string, msp_port: int, msp_sensitivity: int, msp_num_retries: int, msp_use_ip_version: string, msp_uptime_sla: string, msp_response_time_sla: string, msp_notes: string, msp_include_in_global_metrics: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1393,8 +1392,8 @@ export def "checks-add-ssl-cert cert" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Locations are auto-assigned for this check type if left empty or omitted. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   msp_address: string
   --msp-port: int # nullable
@@ -1431,8 +1430,8 @@ export def "checks-add-tcp tcp" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   msp_interval: int # default: 5
   msp_address: string
@@ -1446,7 +1445,7 @@ export def "checks-add-tcp tcp" [
   --msp-uptime-sla: string # format: decimal, default: 0.99
   --msp-response-time-sla: string # nullable, format: decimal, default: 2.2
   --msp-notes: string
-  --msp-include-in-global-metrics: string@bool-completer # default: true
+  --msp-include-in-global-metrics: oneof<nothing, bool> # default: true
 ]: any -> record<pk: int, url: string, stats_url: string, alerts_url: string, share_url: string, name: string, cached_response_time: float, contact_groups: list<string>, created_at: string, modified_at: string, locations: list<string>, tags: list<string>, check_type: string, escalations: string, maintenance: string, monitoring_service_type: string, is_paused: bool, send_resolved_notifications: bool, is_under_maintenance: string, state_is_up: bool, state_changed_at: string, maintenance_schedules: list<int>, msp_interval: int, msp_address: string, msp_port: int, msp_send_string: string, msp_expect_string: string, msp_encryption: string, msp_sensitivity: int, msp_num_retries: int, msp_use_ip_version: string, msp_uptime_sla: string, msp_response_time_sla: string, msp_notes: string, msp_include_in_global_metrics: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1475,8 +1474,8 @@ export def "checks-add-transaction transaction" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   msp_interval: int # default: 5
   --msp-threshold: int # nullable, default: 60
@@ -1486,7 +1485,7 @@ export def "checks-add-transaction transaction" [
   --msp-uptime-sla: string # format: decimal, default: 0.99
   --msp-response-time-sla: string # nullable, format: decimal, default: 32.0
   --msp-notes: string
-  --msp-include-in-global-metrics: string@bool-completer # default: true
+  --msp-include-in-global-metrics: oneof<nothing, bool> # default: true
 ]: any -> record<pk: int, url: string, stats_url: string, alerts_url: string, share_url: string, name: string, cached_response_time: float, contact_groups: list<string>, created_at: string, modified_at: string, locations: list<string>, tags: list<string>, check_type: string, escalations: string, maintenance: string, monitoring_service_type: string, is_paused: bool, send_resolved_notifications: bool, is_under_maintenance: string, state_is_up: bool, state_changed_at: string, maintenance_schedules: list<int>, msp_interval: int, msp_threshold: int, msp_script: string, msp_sensitivity: int, msp_num_retries: int, msp_uptime_sla: string, msp_response_time_sla: string, msp_notes: string, msp_include_in_global_metrics: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1515,8 +1514,8 @@ export def "checks-add-udp udp" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   msp_interval: int # default: 5
   msp_address: string
@@ -1529,7 +1528,7 @@ export def "checks-add-udp udp" [
   --msp-uptime-sla: string # format: decimal, default: 0.99
   --msp-response-time-sla: string # nullable, format: decimal, default: 2.2
   --msp-notes: string
-  --msp-include-in-global-metrics: string@bool-completer # default: true
+  --msp-include-in-global-metrics: oneof<nothing, bool> # default: true
 ]: any -> record<pk: int, url: string, stats_url: string, alerts_url: string, share_url: string, name: string, cached_response_time: float, contact_groups: list<string>, created_at: string, modified_at: string, locations: list<string>, tags: list<string>, check_type: string, escalations: string, maintenance: string, monitoring_service_type: string, is_paused: bool, send_resolved_notifications: bool, is_under_maintenance: string, state_is_up: bool, state_changed_at: string, maintenance_schedules: list<int>, msp_interval: int, msp_address: string, msp_port: int, msp_send_string: string, msp_expect_string: string, msp_sensitivity: int, msp_num_retries: int, msp_use_ip_version: string, msp_uptime_sla: string, msp_response_time_sla: string, msp_notes: string, msp_include_in_global_metrics: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1558,13 +1557,13 @@ export def "checks-add-webhook webhook" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   --msp-uptime-sla: string # format: decimal, default: 0.99
   --msp-response-time-sla: string # nullable, format: decimal
   --msp-notes: string
-  --msp-include-in-global-metrics: string@bool-completer # default: true
+  --msp-include-in-global-metrics: oneof<nothing, bool> # default: true
 ]: any -> record<pk: int, url: string, stats_url: string, alerts_url: string, share_url: string, name: string, cached_response_time: float, contact_groups: list<string>, created_at: string, modified_at: string, locations: list<string>, tags: list<string>, check_type: string, escalations: string, maintenance: string, monitoring_service_type: string, is_paused: bool, send_resolved_notifications: bool, is_under_maintenance: string, state_is_up: bool, state_changed_at: string, maintenance_schedules: list<int>, msp_uptime_sla: string, msp_response_time_sla: string, msp_notes: string, msp_include_in_global_metrics: bool, webhook_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1593,8 +1592,8 @@ export def "checks-add-whois whois" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Locations are auto-assigned for this check type if left empty or omitted. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   msp_address: string
   msp_expect_string: string
@@ -1735,7 +1734,7 @@ export def "checks-bulk-stats stats" [
   --pk: list
   --start-date: string # The first day to show statistics for in ISO 8601 (YYYY-MM-DDTHH:MM:SSZ) format.
   --end-date: string # The last day to show statistics for in ISO 8601 (YYYY-MM-DDTHH:MM:SSZ) format.
-  --include-alerts: string@bool-completer # Include alert data for each outage in the period.
+  --include-alerts: oneof<nothing, bool> # Include alert data for each outage in the period.
 ]: nothing -> record<pk: list<int>, start_date: string, end_date: string, include_alerts: bool, checks: list<record>, totals: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1854,7 +1853,7 @@ export def "checks-locations locations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --monitoring-service-type: string@monitoring-service-type-completer-1 # Filter locations to only those valid for this Check type.
-  --include-monitoring-service-types: string@bool-completer # Set to true to include monitoring_service_types metadata for each location. Changes response items from strings to objects.
+  --include-monitoring-service-types: oneof<nothing, bool> # Set to true to include monitoring_service_types metadata for each location. Changes response items from strings to objects.
 ]: nothing -> record<locations: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1883,10 +1882,10 @@ export def "checks-checks servicegrouplist" [
   --search: string # A search term.
   --ordering: string@ordering-completer-2 # Order results by this field.
   --monitoring-service-type: string@monitoring-service-type-completer # Filter by check type.
-  --is-paused: string@bool-completer # Filter by paused status.
-  --is-under-maintenance: string@bool-completer # Filter for checks currently under maintenance.
-  --state-is-up: string@bool-completer # Filter by check up/down state.
-  --has-maintenance-schedule: string@bool-completer # Filter by checks that have a maintenance schedule.
+  --is-paused: oneof<nothing, bool> # Filter by paused status.
+  --is-under-maintenance: oneof<nothing, bool> # Filter for checks currently under maintenance.
+  --state-is-up: oneof<nothing, bool> # Filter by check up/down state.
+  --has-maintenance-schedule: oneof<nothing, bool> # Filter by checks that have a maintenance schedule.
   --tag: string # Filter by tag name (can be specified multiple times.)
 ]: nothing -> record<count: int, next: string, previous: string, results: table<pk: int, url: string, stats_url: string, alerts_url: string, share_url: string, name: string, cached_response_time: float, contact_groups: list, created_at: string, modified_at: string, locations: list, tags: list, check_type: string, escalations: string, maintenance: string, monitoring_service_type: string, is_paused: bool, send_resolved_notifications: bool, is_under_maintenance: string, state_is_up: bool, state_changed_at: string, maintenance_schedules: list, msp_interval: int, msp_address: string, msp_port: int, msp_username: string, msp_password: string, msp_proxy: string, msp_dns_server: string, msp_dns_record_type: string, msp_status_code: string, msp_send_string: string, msp_expect_string: string, msp_expect_string_type: string, msp_encryption: string, msp_threshold: int, msp_headers: string, msp_script: string, msp_version: int, msp_sensitivity: int, msp_num_retries: int, msp_use_ip_version: string, msp_uptime_sla: string, msp_response_time_sla: string, msp_notes: string, msp_include_in_global_metrics: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1944,8 +1943,8 @@ export def "checks detail-by-pk-1" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   --msp-interval: int
   msp_address: string
@@ -1970,7 +1969,7 @@ export def "checks detail-by-pk-1" [
   --msp-uptime-sla: string # format: decimal
   --msp-response-time-sla: string # nullable, format: decimal
   --msp-notes: string
-  --msp-include-in-global-metrics: string@bool-completer
+  --msp-include-in-global-metrics: oneof<nothing, bool>
   --rumconfig: record # nullable — shape: {aggregation_type?: "MED"|"AVG"|"P75"|"P90"|"P95"|"P98"|"P99", exclude_useragents?: string, apdex_threshold?: int, url_groups?: string, external_domains?: string, exclude_get_params?: string, is_ajax_disabled?: bool}
   --groupcheckconfig: record # nullable — shape: {group_check_services?: list, group_check_tags?: list, group_check_down_condition?: "ANY"|"TWO"|"THREE"|"FOUR"|"FIVE"|"TEN"|"ONE_PCT"|"THREE_PCT"|"FIVE_PCT"|"TEN_PCT"|"TWENTYFIVE_PCT"|"FIFTY_PCT"|"ALL", group_uptime_percent_calculation?: "UP_DOWN_STATES"|"AVERAGE", group_response_time_calculation_mode?: "NONE"|"COPY"|"AVERAGE", group_response_time_check_type?: "HTTP"|"TRANSACTION"|"API"|"ICMP"|"HEARTBEAT"|"WEBHOOK", group_response_time_single_check?: string}
   --sslconfig: record # nullable — shape: {ssl_cert_protocol?: "https"|"ftp"|"ftps"|"http"|"h2"|"imap"|"imaps"|"irc"|"ircs"|"ldap"|"ldaps"|"mysql"|"pop3"|"pop3s"|"postgres"|"sieve"|"smtp"|"smtps"|"xmpp"|"xmpp-server", ssl_cert_crl?: bool, ssl_cert_first_element_only?: bool, ssl_cert_match?: string, ssl_cert_issuer?: string, ssl_cert_resolve?: string, ssl_cert_minimum_ssl_tls_version?: "sslv3"|"tlsv1"|"tlsv11"|"tlsv12"|"tlsv13", ssl_cert_fingerprint?: string, ssl_cert_selfsigned?: bool, ssl_cert_file?: string, ssl_ignore_authority_warnings?: bool, ssl_ignore_sct?: bool}
@@ -2014,8 +2013,8 @@ export def "checks detail-by-pk-2" [
   contact_groups: list # Array of contact names or IDs associated with this check. Use GET /api/v1/contacts/ to list available contacts.
   --locations: list # Array of locations associated with this check. Use GET /api/v1/checks/locations/ to list available locations.
   --tags: list # Array of tag names or IDs associated with this check. Use GET /api/v1/check-tags/ to list available tags.
-  --is-paused: string@bool-completer
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --is-paused: oneof<nothing, bool>
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
   --maintenance-schedules: list # Array of maintenance schedule IDs associated with this check.
   --msp-interval: int
   msp_address: string
@@ -2040,7 +2039,7 @@ export def "checks detail-by-pk-2" [
   --msp-uptime-sla: string # format: decimal
   --msp-response-time-sla: string # nullable, format: decimal
   --msp-notes: string
-  --msp-include-in-global-metrics: string@bool-completer
+  --msp-include-in-global-metrics: oneof<nothing, bool>
   --rumconfig: record # nullable — shape: {aggregation_type?: "MED"|"AVG"|"P75"|"P90"|"P95"|"P98"|"P99", exclude_useragents?: string, apdex_threshold?: int, url_groups?: string, external_domains?: string, exclude_get_params?: string, is_ajax_disabled?: bool}
   --groupcheckconfig: record # nullable — shape: {group_check_services?: list, group_check_tags?: list, group_check_down_condition?: "ANY"|"TWO"|"THREE"|"FOUR"|"FIVE"|"TEN"|"ONE_PCT"|"THREE_PCT"|"FIVE_PCT"|"TEN_PCT"|"TWENTYFIVE_PCT"|"FIFTY_PCT"|"ALL", group_uptime_percent_calculation?: "UP_DOWN_STATES"|"AVERAGE", group_response_time_calculation_mode?: "NONE"|"COPY"|"AVERAGE", group_response_time_check_type?: "HTTP"|"TRANSACTION"|"API"|"ICMP"|"HEARTBEAT"|"WEBHOOK", group_response_time_single_check?: string}
   --sslconfig: record # nullable — shape: {ssl_cert_protocol?: "https"|"ftp"|"ftps"|"http"|"h2"|"imap"|"imaps"|"irc"|"ircs"|"ldap"|"ldaps"|"mysql"|"pop3"|"pop3s"|"postgres"|"sieve"|"smtp"|"smtps"|"xmpp"|"xmpp-server", ssl_cert_crl?: bool, ssl_cert_first_element_only?: bool, ssl_cert_match?: string, ssl_cert_issuer?: string, ssl_cert_resolve?: string, ssl_cert_minimum_ssl_tls_version?: "sslv3"|"tlsv1"|"tlsv11"|"tlsv12"|"tlsv13", ssl_cert_fingerprint?: string, ssl_cert_selfsigned?: bool, ssl_cert_file?: string, ssl_ignore_authority_warnings?: bool, ssl_ignore_sct?: bool}
@@ -2247,7 +2246,7 @@ export def "checks-maintenance maintenance" [
   --allow-errors(-e) # Return full response without error handling
   state: string@state-completer # Current state of the check; ACTIVE (alerts sent normally), SUPPRESSED (under maintenance), SCHEDULED (maintenance windows as defined in the schedule)
   --schedule: list # The schedule entries for maintenance windows; see example above. (default: []) — item shape: {weekdays?: list, monthday?: int, start_date?: string, to_time?: string, type: "WEEKLY"|"MONTHLY"|"ONCE", once_start_date?: string, once_end_date?: string, from_time?: string, monthday_from?: int, monthday_to?: int}
-  --pause-on-scheduled-maintenance: string@bool-completer # Stop check execution during maintenance mode (affects SCHEDULED only). (default: false)
+  --pause-on-scheduled-maintenance: oneof<nothing, bool> # Stop check execution during maintenance mode (affects SCHEDULED only). (default: false)
 ]: any -> record<state: string, schedule: table<id: int, weekdays: list, monthday: int, start_date: string, to_time: string, type: string, once_start_date: string, once_end_date: string, from_time: string, monthday_from: int, monthday_to: int>, pause_on_scheduled_maintenance: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2273,7 +2272,7 @@ export def "checks-pause pause" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --send-resolved-notifications: string@bool-completer # Send resolve notifications when pausing the check (default: false)
+  --send-resolved-notifications: oneof<nothing, bool> # Send resolve notifications when pausing the check (default: false)
 ]: any -> record<send_resolved_notifications: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2427,10 +2426,10 @@ export def "checks-stats stats" [
   --start-date: string # The first day to show statistics for in ISO 8601 (YYYY-MM-DDTHH:MM:SSZ) format.
   --end-date: string # The last day to show statistics for in ISO 8601 (YYYY-MM-DDTHH:MM:SSZ) format.
   --location: string # Show response time for specified location only.
-  --locations-response-times: string@bool-completer # Include response time datapoints for all locations.
-  --include-alerts: string@bool-completer # Include alert data for each outage in the period.
-  --download: string@bool-completer # Set this paramater to download an XLS containing the stats.
-  --pdf: string@bool-completer # Set this paramater to download a PDF report.
+  --locations-response-times: oneof<nothing, bool> # Include response time datapoints for all locations.
+  --include-alerts: oneof<nothing, bool> # Include alert data for each outage in the period.
+  --download: oneof<nothing, bool> # Set this paramater to download an XLS containing the stats.
+  --pdf: oneof<nothing, bool> # Set this paramater to download a PDF report.
 ]: nothing -> record<start_date: string, end_date: string, location: string, locations_response_times: bool, include_alerts: bool, download: bool, pdf: bool, available_locations: list<any>, pk: int, statistics: list<record>, totals: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2457,7 +2456,7 @@ export def "contacts contactgrouplist" [
   --page-size: int # Number of results to return per page.
   --search: string # A search term.
   --ordering: string@ordering-completer-3 # Order results by this field.
-  --has-on-call-schedule: string@bool-completer # Filter by contacts that have on-call schedules defined.
+  --has-on-call-schedule: oneof<nothing, bool> # Filter by contacts that have on-call schedules defined.
 ]: nothing -> record<count: int, next: string, previous: string, results: table<pk: int, url: string, created_at: string, modified_at: string, name: string, sms_list: list, email_list: list, phonecall_list: list, integrations: list, push_notification_profiles: list, oncall_schedule: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2805,24 +2804,24 @@ export def "dashboards dashboardlist-1" [
   --services-tags: list # Include checks with one or more of the selected tags
   --ordering: int # Sidebar ordering for this dashboard
   --name: string # The displayed name for this dashboard
-  --is-pinned: string@bool-completer # Whether this dashboard is pinned to the sidebar
-  --metrics-show-section: string@bool-completer # Show/hide the Summary Metrics section at the top of this dashboard
-  --metrics-for-all-checks: string@bool-completer # Include metrics from all checks, not just the selected checks
-  --services-show-section: string@bool-completer # Show/hide the check cards from this dashboard
+  --is-pinned: oneof<nothing, bool> # Whether this dashboard is pinned to the sidebar
+  --metrics-show-section: oneof<nothing, bool> # Show/hide the Summary Metrics section at the top of this dashboard
+  --metrics-for-all-checks: oneof<nothing, bool> # Include metrics from all checks, not just the selected checks
+  --services-show-section: oneof<nothing, bool> # Show/hide the check cards from this dashboard
   --services-num-to-show: int@services-num-to-show-completer # Number of check cards to show in the Checks section
-  --match-all-tags: string@bool-completer # When true, checks must have all selected tags; when false, checks need only one
-  --services-include-up: string@bool-completer # Include/exclude checks which are currently up
-  --services-include-down: string@bool-completer # Include/exclude checks which are currently down
-  --services-include-paused: string@bool-completer # Include/exclude checks which are currently paused
-  --services-include-maintenance: string@bool-completer # Include/exclude checks which are manually marked for maintenance
+  --match-all-tags: oneof<nothing, bool> # When true, checks must have all selected tags; when false, checks need only one
+  --services-include-up: oneof<nothing, bool> # Include/exclude checks which are currently up
+  --services-include-down: oneof<nothing, bool> # Include/exclude checks which are currently down
+  --services-include-paused: oneof<nothing, bool> # Include/exclude checks which are currently paused
+  --services-include-maintenance: oneof<nothing, bool> # Include/exclude checks which are manually marked for maintenance
   --services-primary-sort: string@services-primary-sort-completer # The primary value for ordering the checks
   --services-secondary-sort: string@services-secondary-sort-completer # The secondary value for ordering the checks, if the primary value is the same
-  --services-show-uptime: string@bool-completer # Show the 24h uptime percentage on each check card
-  --services-show-response-time: string@bool-completer # Show the response time graph or metric on each check card
-  --alerts-show-section: string@bool-completer # Show/hide the Latest Alerts section from this dashboard
-  --alerts-for-all-checks: string@bool-completer # Show/hide alerts globally across all checks, rather than only for checks selected in the Checks tab
-  --alerts-include-ignored: string@bool-completer # Include/exclude alerts marked as "ignored" in the alerts listing
-  --alerts-include-resolved: string@bool-completer # Include/exclude alerts that are no longer down in the alerts listing
+  --services-show-uptime: oneof<nothing, bool> # Show the 24h uptime percentage on each check card
+  --services-show-response-time: oneof<nothing, bool> # Show the response time graph or metric on each check card
+  --alerts-show-section: oneof<nothing, bool> # Show/hide the Latest Alerts section from this dashboard
+  --alerts-for-all-checks: oneof<nothing, bool> # Show/hide alerts globally across all checks, rather than only for checks selected in the Checks tab
+  --alerts-include-ignored: oneof<nothing, bool> # Include/exclude alerts marked as "ignored" in the alerts listing
+  --alerts-include-resolved: oneof<nothing, bool> # Include/exclude alerts that are no longer down in the alerts listing
   --alerts-num-to-show: int@alerts-num-to-show-completer # Number of alerts to show in the Latest Alerts section
 ]: any -> record<pk: int, url: string, stats_url: string, services_selected: list<string>, services_tags: list<string>, ordering: int, created_at: string, name: string, is_pinned: bool, metrics_show_section: bool, metrics_for_all_checks: bool, services_show_section: bool, services_num_to_show: int, match_all_tags: bool, services_include_up: bool, services_include_down: bool, services_include_paused: bool, services_include_maintenance: bool, services_primary_sort: string, services_secondary_sort: string, services_show_uptime: bool, services_show_response_time: bool, alerts_show_section: bool, alerts_for_all_checks: bool, alerts_include_ignored: bool, alerts_include_resolved: bool, alerts_num_to_show: int> {
   let input = $in
@@ -2897,24 +2896,24 @@ export def "dashboards detail-by-pk-1" [
   --services-tags: list # Include checks with one or more of the selected tags
   --ordering: int # Sidebar ordering for this dashboard
   --name: string # The displayed name for this dashboard
-  --is-pinned: string@bool-completer # Whether this dashboard is pinned to the sidebar
-  --metrics-show-section: string@bool-completer # Show/hide the Summary Metrics section at the top of this dashboard
-  --metrics-for-all-checks: string@bool-completer # Include metrics from all checks, not just the selected checks
-  --services-show-section: string@bool-completer # Show/hide the check cards from this dashboard
+  --is-pinned: oneof<nothing, bool> # Whether this dashboard is pinned to the sidebar
+  --metrics-show-section: oneof<nothing, bool> # Show/hide the Summary Metrics section at the top of this dashboard
+  --metrics-for-all-checks: oneof<nothing, bool> # Include metrics from all checks, not just the selected checks
+  --services-show-section: oneof<nothing, bool> # Show/hide the check cards from this dashboard
   --services-num-to-show: int@services-num-to-show-completer # Number of check cards to show in the Checks section
-  --match-all-tags: string@bool-completer # When true, checks must have all selected tags; when false, checks need only one
-  --services-include-up: string@bool-completer # Include/exclude checks which are currently up
-  --services-include-down: string@bool-completer # Include/exclude checks which are currently down
-  --services-include-paused: string@bool-completer # Include/exclude checks which are currently paused
-  --services-include-maintenance: string@bool-completer # Include/exclude checks which are manually marked for maintenance
+  --match-all-tags: oneof<nothing, bool> # When true, checks must have all selected tags; when false, checks need only one
+  --services-include-up: oneof<nothing, bool> # Include/exclude checks which are currently up
+  --services-include-down: oneof<nothing, bool> # Include/exclude checks which are currently down
+  --services-include-paused: oneof<nothing, bool> # Include/exclude checks which are currently paused
+  --services-include-maintenance: oneof<nothing, bool> # Include/exclude checks which are manually marked for maintenance
   --services-primary-sort: string@services-primary-sort-completer # The primary value for ordering the checks
   --services-secondary-sort: string@services-secondary-sort-completer # The secondary value for ordering the checks, if the primary value is the same
-  --services-show-uptime: string@bool-completer # Show the 24h uptime percentage on each check card
-  --services-show-response-time: string@bool-completer # Show the response time graph or metric on each check card
-  --alerts-show-section: string@bool-completer # Show/hide the Latest Alerts section from this dashboard
-  --alerts-for-all-checks: string@bool-completer # Show/hide alerts globally across all checks, rather than only for checks selected in the Checks tab
-  --alerts-include-ignored: string@bool-completer # Include/exclude alerts marked as "ignored" in the alerts listing
-  --alerts-include-resolved: string@bool-completer # Include/exclude alerts that are no longer down in the alerts listing
+  --services-show-uptime: oneof<nothing, bool> # Show the 24h uptime percentage on each check card
+  --services-show-response-time: oneof<nothing, bool> # Show the response time graph or metric on each check card
+  --alerts-show-section: oneof<nothing, bool> # Show/hide the Latest Alerts section from this dashboard
+  --alerts-for-all-checks: oneof<nothing, bool> # Show/hide alerts globally across all checks, rather than only for checks selected in the Checks tab
+  --alerts-include-ignored: oneof<nothing, bool> # Include/exclude alerts marked as "ignored" in the alerts listing
+  --alerts-include-resolved: oneof<nothing, bool> # Include/exclude alerts that are no longer down in the alerts listing
   --alerts-num-to-show: int@alerts-num-to-show-completer # Number of alerts to show in the Latest Alerts section
 ]: any -> record<pk: int, url: string, stats_url: string, services_selected: list<string>, services_tags: list<string>, ordering: int, created_at: string, name: string, is_pinned: bool, metrics_show_section: bool, metrics_for_all_checks: bool, services_show_section: bool, services_num_to_show: int, match_all_tags: bool, services_include_up: bool, services_include_down: bool, services_include_paused: bool, services_include_maintenance: bool, services_primary_sort: string, services_secondary_sort: string, services_show_uptime: bool, services_show_response_time: bool, alerts_show_section: bool, alerts_for_all_checks: bool, alerts_include_ignored: bool, alerts_include_resolved: bool, alerts_num_to_show: int> {
   let input = $in
@@ -2946,24 +2945,24 @@ export def "dashboards detail-by-pk-2" [
   --services-tags: list # Include checks with one or more of the selected tags
   --ordering: int # Sidebar ordering for this dashboard
   --name: string # The displayed name for this dashboard
-  --is-pinned: string@bool-completer # Whether this dashboard is pinned to the sidebar
-  --metrics-show-section: string@bool-completer # Show/hide the Summary Metrics section at the top of this dashboard
-  --metrics-for-all-checks: string@bool-completer # Include metrics from all checks, not just the selected checks
-  --services-show-section: string@bool-completer # Show/hide the check cards from this dashboard
+  --is-pinned: oneof<nothing, bool> # Whether this dashboard is pinned to the sidebar
+  --metrics-show-section: oneof<nothing, bool> # Show/hide the Summary Metrics section at the top of this dashboard
+  --metrics-for-all-checks: oneof<nothing, bool> # Include metrics from all checks, not just the selected checks
+  --services-show-section: oneof<nothing, bool> # Show/hide the check cards from this dashboard
   --services-num-to-show: int@services-num-to-show-completer # Number of check cards to show in the Checks section
-  --match-all-tags: string@bool-completer # When true, checks must have all selected tags; when false, checks need only one
-  --services-include-up: string@bool-completer # Include/exclude checks which are currently up
-  --services-include-down: string@bool-completer # Include/exclude checks which are currently down
-  --services-include-paused: string@bool-completer # Include/exclude checks which are currently paused
-  --services-include-maintenance: string@bool-completer # Include/exclude checks which are manually marked for maintenance
+  --match-all-tags: oneof<nothing, bool> # When true, checks must have all selected tags; when false, checks need only one
+  --services-include-up: oneof<nothing, bool> # Include/exclude checks which are currently up
+  --services-include-down: oneof<nothing, bool> # Include/exclude checks which are currently down
+  --services-include-paused: oneof<nothing, bool> # Include/exclude checks which are currently paused
+  --services-include-maintenance: oneof<nothing, bool> # Include/exclude checks which are manually marked for maintenance
   --services-primary-sort: string@services-primary-sort-completer # The primary value for ordering the checks
   --services-secondary-sort: string@services-secondary-sort-completer # The secondary value for ordering the checks, if the primary value is the same
-  --services-show-uptime: string@bool-completer # Show the 24h uptime percentage on each check card
-  --services-show-response-time: string@bool-completer # Show the response time graph or metric on each check card
-  --alerts-show-section: string@bool-completer # Show/hide the Latest Alerts section from this dashboard
-  --alerts-for-all-checks: string@bool-completer # Show/hide alerts globally across all checks, rather than only for checks selected in the Checks tab
-  --alerts-include-ignored: string@bool-completer # Include/exclude alerts marked as "ignored" in the alerts listing
-  --alerts-include-resolved: string@bool-completer # Include/exclude alerts that are no longer down in the alerts listing
+  --services-show-uptime: oneof<nothing, bool> # Show the 24h uptime percentage on each check card
+  --services-show-response-time: oneof<nothing, bool> # Show the response time graph or metric on each check card
+  --alerts-show-section: oneof<nothing, bool> # Show/hide the Latest Alerts section from this dashboard
+  --alerts-for-all-checks: oneof<nothing, bool> # Show/hide alerts globally across all checks, rather than only for checks selected in the Checks tab
+  --alerts-include-ignored: oneof<nothing, bool> # Include/exclude alerts marked as "ignored" in the alerts listing
+  --alerts-include-resolved: oneof<nothing, bool> # Include/exclude alerts that are no longer down in the alerts listing
   --alerts-num-to-show: int@alerts-num-to-show-completer # Number of alerts to show in the Latest Alerts section
 ]: any -> record<pk: int, url: string, stats_url: string, services_selected: list<string>, services_tags: list<string>, ordering: int, created_at: string, name: string, is_pinned: bool, metrics_show_section: bool, metrics_for_all_checks: bool, services_show_section: bool, services_num_to_show: int, match_all_tags: bool, services_include_up: bool, services_include_down: bool, services_include_paused: bool, services_include_maintenance: bool, services_primary_sort: string, services_secondary_sort: string, services_show_uptime: bool, services_show_response_time: bool, alerts_show_section: bool, alerts_for_all_checks: bool, alerts_include_ignored: bool, alerts_include_resolved: bool, alerts_num_to_show: int> {
   let input = $in
@@ -3038,7 +3037,7 @@ export def "integrations integrationlist" [
   --search: string # A search term.
   --ordering: string@ordering-completer-6 # Order results by this field.
   --qp-module: string@module-completer # Filter by integration provider.
-  --is-errored: string@bool-completer # Filter by whether this integration has stopped due to errors.
+  --is-errored: oneof<nothing, bool> # Filter by whether this integration has stopped due to errors.
 ]: nothing -> record<count: int, next: string, previous: string, results: table<pk: int, url: string, name: string, module: string, contact_groups: list, is_errored: bool, last_error: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3443,7 +3442,7 @@ export def "integrations-add-opsgenie opsgenie" [
   --api-key: string # Listed on the Integrations / Configured Integrations page in OpsGenie.
   --teams: string # A comma separated list of team names which will be responsible for the alert.
   --tags: string # A comma separated list of labels attached to the alert. You may overwrite the quiet hours setting for urgent alerts by adding the OverwriteQuietHours tag. Leave blank to automatically pull the tags from the check instead.
-  --autoresolve: string@bool-completer # Automatically resolve incident once the check is back up.
+  --autoresolve: oneof<nothing, bool> # Automatically resolve incident once the check is back up.
 ]: any -> record<pk: int, url: string, name: string, module: string, contact_groups: list<string>, is_errored: bool, last_error: string, api_endpoint: string, api_key: string, teams: string, tags: string, autoresolve: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3471,7 +3470,7 @@ export def "integrations-add-pagerduty pagerduty" [
   name: string # Your preferred name for this integration.
   --contact-groups: list # Array of contact names or IDs this integration is assigned to
   --service-key: string # Listed on the Service's details page, Integrations tab.
-  --autoresolve: string@bool-completer # Automatically resolve this incident once the check is back up.
+  --autoresolve: oneof<nothing, bool> # Automatically resolve this incident once the check is back up.
 ]: any -> record<pk: int, url: string, name: string, module: string, contact_groups: list<string>, is_errored: bool, last_error: string, service_key: string, autoresolve: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3732,7 +3731,7 @@ export def "integrations-add-webhook webhook" [
   --contact-groups: list # Array of contact names or IDs this integration is assigned to
   --postback-url: string # The URL you would like the alert details sent by HTTP POST. (format: uri)
   --headers: string # Optional custom HTTP headers in "Name: Value" format.
-  --use-legacy-payload: string@bool-completer # Maintain compatibility with legacy handlers.
+  --use-legacy-payload: oneof<nothing, bool> # Maintain compatibility with legacy handlers.
 ]: any -> record<pk: int, url: string, name: string, module: string, contact_groups: list<string>, is_errored: bool, last_error: string, postback_url: string, headers: string, use_legacy_payload: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3792,7 +3791,7 @@ export def "integrations-add-zendesk zendesk" [
   --priority: string@priority-completer-1 # Priority to assign to tickets created by this integration.
   --ticket-type: string@ticket-type-completer # Type to assign to tickets created by this integration.
   --tags: string # A comma separated list of tags to attach to each ticket created. Check tags are appended automatically.
-  --autoresolve: string@bool-completer # Automatically mark the ticket as solved once the check is back up.
+  --autoresolve: oneof<nothing, bool> # Automatically mark the ticket as solved once the check is back up.
 ]: any -> record<pk: int, url: string, name: string, module: string, contact_groups: list<string>, is_errored: bool, last_error: string, api_email: string, api_token: string, zendesk_subdomain: string, priority: string, ticket_type: string, tags: string, autoresolve: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4382,7 +4381,7 @@ export def "outages outagelist" [
   --check-tag: string # Filter by tag name (can be specified multiple times.)
   --start-date: string # Start date in ISO 8601 (YYYY-MM-DDTHH:MM:SSZ) format.
   --end-date: string # End date in ISO 8601 (YYYY-MM-DDTHH:MM:SSZ) format.
-  --ongoing: string@bool-completer # Whether the outage is ongoing (true) or resolved (false).
+  --ongoing: oneof<nothing, bool> # Whether the outage is ongoing (true) or resolved (false).
 ]: nothing -> record<count: int, next: string, previous: string, results: table<pk: int, url: string, created_at: string, resolved_at: string, duration_secs: string, ignore_alert_url: string, check_pk: int, check_url: string, check_address: string, check_name: string, check_is_paused: bool, check_monitoring_service_type: string, state_is_up: bool, ignored: bool, num_locations_down: int, all_alerts: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4658,7 +4657,7 @@ export def "scheduled-reports scheduledreportlist-1" [
   --default-date-range-override: string@default-date-range-override-completer # Override default date range for this report
   --on-weekday: int@on-weekday-completer # Weekly reports will be sent on this day
   --at-time: int@at-time-completer # Reports will be sent at this time (local time)
-  --is-enabled: string@bool-completer
+  --is-enabled: oneof<nothing, bool>
   --recipient-emails: record # Additional emails that will receive this report
 ]: any -> record<pk: int, url: string, sla_report: string, recipient_users: list<string>, created_at: string, name: string, file_type: string, recurrence: string, default_date_range_override: string, on_weekday: int, at_time: int, is_enabled: bool, recipient_emails: record> {
   let input = $in
@@ -4715,7 +4714,7 @@ export def "scheduled-reports detail-by-pk-1" [
   --default-date-range-override: string@default-date-range-override-completer # Override default date range for this report
   --on-weekday: int@on-weekday-completer # Weekly reports will be sent on this day
   --at-time: int@at-time-completer # Reports will be sent at this time (local time)
-  --is-enabled: string@bool-completer
+  --is-enabled: oneof<nothing, bool>
   --recipient-emails: record # Additional emails that will receive this report
 ]: any -> record<pk: int, url: string, sla_report: string, recipient_users: list<string>, created_at: string, name: string, file_type: string, recurrence: string, default_date_range_override: string, on_weekday: int, at_time: int, is_enabled: bool, recipient_emails: record> {
   let input = $in
@@ -4750,7 +4749,7 @@ export def "scheduled-reports detail-by-pk-2" [
   --default-date-range-override: string@default-date-range-override-completer # Override default date range for this report
   --on-weekday: int@on-weekday-completer # Weekly reports will be sent on this day
   --at-time: int@at-time-completer # Reports will be sent at this time (local time)
-  --is-enabled: string@bool-completer
+  --is-enabled: oneof<nothing, bool>
   --recipient-emails: record # Additional emails that will receive this report
 ]: any -> record<pk: int, url: string, sla_report: string, recipient_users: list<string>, created_at: string, name: string, file_type: string, recurrence: string, default_date_range_override: string, on_weekday: int, at_time: int, is_enabled: bool, recipient_emails: record> {
   let input = $in
@@ -4956,15 +4955,15 @@ export def "sla-reports slareportlist-1" [
   --reporting-groups: list # item shape: {group_services: list, name: string}
   name: string # Name of this SLA report
   --default-date-range: string@default-date-range-completer
-  --show-uptime-section: string@bool-completer
-  --show-uptime-sla: string@bool-completer
-  --filter-with-downtime: string@bool-completer
-  --filter-uptime-sla-violations: string@bool-completer
+  --show-uptime-section: oneof<nothing, bool>
+  --show-uptime-sla: oneof<nothing, bool>
+  --filter-with-downtime: oneof<nothing, bool>
+  --filter-uptime-sla-violations: oneof<nothing, bool>
   --uptime-section-sort: string@uptime-section-sort-completer
-  --show-response-time-section: string@bool-completer
-  --show-response-time-sla: string@bool-completer
-  --filter-slowest: string@bool-completer
-  --filter-response-time-sla-violations: string@bool-completer
+  --show-response-time-section: oneof<nothing, bool>
+  --show-response-time-sla: oneof<nothing, bool>
+  --filter-slowest: oneof<nothing, bool>
+  --filter-response-time-sla-violations: oneof<nothing, bool>
   --response-time-section-sort: string@response-time-section-sort-completer
   --logo: string # nullable, format: binary
 ]: any -> record<pk: int, url: string, stats_url: string, services_tags: list<string>, services_selected: list<string>, reporting_groups: table<id: int, group_services: list, created_at: string, modified_at: string, name: string>, created_at: string, name: string, default_date_range: string, show_uptime_section: bool, show_uptime_sla: bool, filter_with_downtime: bool, filter_uptime_sla_violations: bool, uptime_section_sort: string, show_response_time_section: bool, show_response_time_sla: bool, filter_slowest: bool, filter_response_time_sla_violations: bool, response_time_section_sort: string, logo: string> {
@@ -5020,15 +5019,15 @@ export def "sla-reports detail-by-pk-1" [
   --reporting-groups: list # item shape: {group_services: list, name: string}
   name: string # Name of this SLA report
   --default-date-range: string@default-date-range-completer
-  --show-uptime-section: string@bool-completer
-  --show-uptime-sla: string@bool-completer
-  --filter-with-downtime: string@bool-completer
-  --filter-uptime-sla-violations: string@bool-completer
+  --show-uptime-section: oneof<nothing, bool>
+  --show-uptime-sla: oneof<nothing, bool>
+  --filter-with-downtime: oneof<nothing, bool>
+  --filter-uptime-sla-violations: oneof<nothing, bool>
   --uptime-section-sort: string@uptime-section-sort-completer
-  --show-response-time-section: string@bool-completer
-  --show-response-time-sla: string@bool-completer
-  --filter-slowest: string@bool-completer
-  --filter-response-time-sla-violations: string@bool-completer
+  --show-response-time-section: oneof<nothing, bool>
+  --show-response-time-sla: oneof<nothing, bool>
+  --filter-slowest: oneof<nothing, bool>
+  --filter-response-time-sla-violations: oneof<nothing, bool>
   --response-time-section-sort: string@response-time-section-sort-completer
   --logo: string # nullable, format: binary
 ]: any -> record<pk: int, url: string, stats_url: string, services_tags: list<string>, services_selected: list<string>, reporting_groups: table<id: int, group_services: list, created_at: string, modified_at: string, name: string>, created_at: string, name: string, default_date_range: string, show_uptime_section: bool, show_uptime_sla: bool, filter_with_downtime: bool, filter_uptime_sla_violations: bool, uptime_section_sort: string, show_response_time_section: bool, show_response_time_sla: bool, filter_slowest: bool, filter_response_time_sla_violations: bool, response_time_section_sort: string, logo: string> {
@@ -5062,15 +5061,15 @@ export def "sla-reports detail-by-pk-2" [
   --reporting-groups: list # item shape: {group_services: list, name: string}
   name: string # Name of this SLA report
   --default-date-range: string@default-date-range-completer
-  --show-uptime-section: string@bool-completer
-  --show-uptime-sla: string@bool-completer
-  --filter-with-downtime: string@bool-completer
-  --filter-uptime-sla-violations: string@bool-completer
+  --show-uptime-section: oneof<nothing, bool>
+  --show-uptime-sla: oneof<nothing, bool>
+  --filter-with-downtime: oneof<nothing, bool>
+  --filter-uptime-sla-violations: oneof<nothing, bool>
   --uptime-section-sort: string@uptime-section-sort-completer
-  --show-response-time-section: string@bool-completer
-  --show-response-time-sla: string@bool-completer
-  --filter-slowest: string@bool-completer
-  --filter-response-time-sla-violations: string@bool-completer
+  --show-response-time-section: oneof<nothing, bool>
+  --show-response-time-sla: oneof<nothing, bool>
+  --filter-slowest: oneof<nothing, bool>
+  --filter-response-time-sla-violations: oneof<nothing, bool>
   --response-time-section-sort: string@response-time-section-sort-completer
   --logo: string # nullable, format: binary
 ]: any -> record<pk: int, url: string, stats_url: string, services_tags: list<string>, services_selected: list<string>, reporting_groups: table<id: int, group_services: list, created_at: string, modified_at: string, name: string>, created_at: string, name: string, default_date_range: string, show_uptime_section: bool, show_uptime_sla: bool, filter_with_downtime: bool, filter_uptime_sla_violations: bool, uptime_section_sort: string, show_response_time_section: bool, show_response_time_sla: bool, filter_slowest: bool, filter_response_time_sla_violations: bool, response_time_section_sort: string, logo: string> {
@@ -5277,34 +5276,34 @@ export def "statuspages statuspagelist-1" [
   page_type: string@page-type-completer
   --slug: string # nullable
   --cname: string # nullable
-  --allow-subscriptions-slack: string@bool-completer
-  --allow-subscriptions-sms: string@bool-completer
-  --allow-subscriptions-webhook: string@bool-completer
-  --allow-subscriptions-rss: string@bool-completer
-  --allow-subscriptions-email: string@bool-completer
-  --allow-notifications: string@bool-completer
-  --allow-search-indexing: string@bool-completer
-  --allow-drill-down: string@bool-completer
+  --allow-subscriptions-slack: oneof<nothing, bool>
+  --allow-subscriptions-sms: oneof<nothing, bool>
+  --allow-subscriptions-webhook: oneof<nothing, bool>
+  --allow-subscriptions-rss: oneof<nothing, bool>
+  --allow-subscriptions-email: oneof<nothing, bool>
+  --allow-notifications: oneof<nothing, bool>
+  --allow-search-indexing: oneof<nothing, bool>
+  --allow-drill-down: oneof<nothing, bool>
   --auth-username: string
   --auth-password: string
   --max-visible-component-days: int # nullable
-  --show-status-tab: string@bool-completer
+  --show-status-tab: oneof<nothing, bool>
   --default-status-date-range: int
-  --show-active-incidents: string@bool-completer
-  --show-component-response-time: string@bool-completer
-  --show-history-tab: string@bool-completer
+  --show-active-incidents: oneof<nothing, bool>
+  --show-component-response-time: oneof<nothing, bool>
+  --show-history-tab: oneof<nothing, bool>
   --default-history-date-range: int
   --uptime-calculation-type: string@uptime-calculation-type-completer
-  --show-history-snake: string@bool-completer
-  --show-component-history: string@bool-completer
-  --hide-empty-tabs-status: string@bool-completer
-  --hide-empty-tabs-history: string@bool-completer
-  --show-summary-metrics: string@bool-completer
-  --show-past-incidents: string@bool-completer
-  --allow-pdf-report: string@bool-completer
+  --show-history-snake: oneof<nothing, bool>
+  --show-component-history: oneof<nothing, bool>
+  --hide-empty-tabs-status: oneof<nothing, bool>
+  --hide-empty-tabs-history: oneof<nothing, bool>
+  --show-summary-metrics: oneof<nothing, bool>
+  --show-past-incidents: oneof<nothing, bool>
+  --allow-pdf-report: oneof<nothing, bool>
   --layout-preset: string@layout-preset-completer
-  --show-component-bars: string@bool-completer
-  --show-component-group-descriptions: string@bool-completer
+  --show-component-bars: oneof<nothing, bool>
+  --show-component-group-descriptions: oneof<nothing, bool>
   --google-analytics-code: string
   --contact-email: string # format: email
   --email-from: string # format: email
@@ -5373,34 +5372,34 @@ export def "statuspages detail-by-pk-1" [
   page_type: string@page-type-completer
   --slug: string # nullable
   --cname: string # nullable
-  --allow-subscriptions-slack: string@bool-completer
-  --allow-subscriptions-sms: string@bool-completer
-  --allow-subscriptions-webhook: string@bool-completer
-  --allow-subscriptions-rss: string@bool-completer
-  --allow-subscriptions-email: string@bool-completer
-  --allow-notifications: string@bool-completer
-  --allow-search-indexing: string@bool-completer
-  --allow-drill-down: string@bool-completer
+  --allow-subscriptions-slack: oneof<nothing, bool>
+  --allow-subscriptions-sms: oneof<nothing, bool>
+  --allow-subscriptions-webhook: oneof<nothing, bool>
+  --allow-subscriptions-rss: oneof<nothing, bool>
+  --allow-subscriptions-email: oneof<nothing, bool>
+  --allow-notifications: oneof<nothing, bool>
+  --allow-search-indexing: oneof<nothing, bool>
+  --allow-drill-down: oneof<nothing, bool>
   --auth-username: string
   --auth-password: string
   --max-visible-component-days: int # nullable
-  --show-status-tab: string@bool-completer
+  --show-status-tab: oneof<nothing, bool>
   --default-status-date-range: int
-  --show-active-incidents: string@bool-completer
-  --show-component-response-time: string@bool-completer
-  --show-history-tab: string@bool-completer
+  --show-active-incidents: oneof<nothing, bool>
+  --show-component-response-time: oneof<nothing, bool>
+  --show-history-tab: oneof<nothing, bool>
   --default-history-date-range: int
   --uptime-calculation-type: string@uptime-calculation-type-completer
-  --show-history-snake: string@bool-completer
-  --show-component-history: string@bool-completer
-  --hide-empty-tabs-status: string@bool-completer
-  --hide-empty-tabs-history: string@bool-completer
-  --show-summary-metrics: string@bool-completer
-  --show-past-incidents: string@bool-completer
-  --allow-pdf-report: string@bool-completer
+  --show-history-snake: oneof<nothing, bool>
+  --show-component-history: oneof<nothing, bool>
+  --hide-empty-tabs-status: oneof<nothing, bool>
+  --hide-empty-tabs-history: oneof<nothing, bool>
+  --show-summary-metrics: oneof<nothing, bool>
+  --show-past-incidents: oneof<nothing, bool>
+  --allow-pdf-report: oneof<nothing, bool>
   --layout-preset: string@layout-preset-completer
-  --show-component-bars: string@bool-completer
-  --show-component-group-descriptions: string@bool-completer
+  --show-component-bars: oneof<nothing, bool>
+  --show-component-group-descriptions: oneof<nothing, bool>
   --google-analytics-code: string
   --contact-email: string # format: email
   --email-from: string # format: email
@@ -5447,34 +5446,34 @@ export def "statuspages detail-by-pk-2" [
   page_type: string@page-type-completer
   --slug: string # nullable
   --cname: string # nullable
-  --allow-subscriptions-slack: string@bool-completer
-  --allow-subscriptions-sms: string@bool-completer
-  --allow-subscriptions-webhook: string@bool-completer
-  --allow-subscriptions-rss: string@bool-completer
-  --allow-subscriptions-email: string@bool-completer
-  --allow-notifications: string@bool-completer
-  --allow-search-indexing: string@bool-completer
-  --allow-drill-down: string@bool-completer
+  --allow-subscriptions-slack: oneof<nothing, bool>
+  --allow-subscriptions-sms: oneof<nothing, bool>
+  --allow-subscriptions-webhook: oneof<nothing, bool>
+  --allow-subscriptions-rss: oneof<nothing, bool>
+  --allow-subscriptions-email: oneof<nothing, bool>
+  --allow-notifications: oneof<nothing, bool>
+  --allow-search-indexing: oneof<nothing, bool>
+  --allow-drill-down: oneof<nothing, bool>
   --auth-username: string
   --auth-password: string
   --max-visible-component-days: int # nullable
-  --show-status-tab: string@bool-completer
+  --show-status-tab: oneof<nothing, bool>
   --default-status-date-range: int
-  --show-active-incidents: string@bool-completer
-  --show-component-response-time: string@bool-completer
-  --show-history-tab: string@bool-completer
+  --show-active-incidents: oneof<nothing, bool>
+  --show-component-response-time: oneof<nothing, bool>
+  --show-history-tab: oneof<nothing, bool>
   --default-history-date-range: int
   --uptime-calculation-type: string@uptime-calculation-type-completer
-  --show-history-snake: string@bool-completer
-  --show-component-history: string@bool-completer
-  --hide-empty-tabs-status: string@bool-completer
-  --hide-empty-tabs-history: string@bool-completer
-  --show-summary-metrics: string@bool-completer
-  --show-past-incidents: string@bool-completer
-  --allow-pdf-report: string@bool-completer
+  --show-history-snake: oneof<nothing, bool>
+  --show-component-history: oneof<nothing, bool>
+  --hide-empty-tabs-status: oneof<nothing, bool>
+  --hide-empty-tabs-history: oneof<nothing, bool>
+  --show-summary-metrics: oneof<nothing, bool>
+  --show-past-incidents: oneof<nothing, bool>
+  --allow-pdf-report: oneof<nothing, bool>
   --layout-preset: string@layout-preset-completer
-  --show-component-bars: string@bool-completer
-  --show-component-group-descriptions: string@bool-completer
+  --show-component-bars: oneof<nothing, bool>
+  --show-component-group-descriptions: oneof<nothing, bool>
   --google-analytics-code: string
   --contact-email: string # format: email
   --email-from: string # format: email
@@ -5588,7 +5587,7 @@ export def "statuspages-components componentslist-by-statuspage_id" [
   --page-size: int # Number of results to return per page.
   --search: string # A search term.
   --group-id: float # Filter by whether this component belongs to group with this ID
-  --is-group: string@bool-completer # Filter by whether this component is a group
+  --is-group: oneof<nothing, bool> # Filter by whether this component is a group
 ]: nothing -> record<count: int, next: string, previous: string, results: table<pk: int, created_at: string, name: string, description: string, is_group: bool, group_id: int, service_id: int, service_url: string, status: string, auto_status_down: string, auto_status_up: string, sorting_weight: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5614,7 +5613,7 @@ export def "statuspages-components componentslist-by-statuspage_id-1" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   --description: string
-  --is-group: string@bool-completer
+  --is-group: oneof<nothing, bool>
   --group-id: int # nullable
   --service-id: int # nullable
   --status: string@status-completer
@@ -5672,7 +5671,7 @@ export def "statuspages-components detail-by-statuspage_id-pk-1" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   --description: string
-  --is-group: string@bool-completer
+  --is-group: oneof<nothing, bool>
   --group-id: int # nullable
   --service-id: int # nullable
   --status: string@status-completer
@@ -5707,7 +5706,7 @@ export def "statuspages-components detail-by-statuspage_id-pk-2" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   --description: string
-  --is-group: string@bool-completer
+  --is-group: oneof<nothing, bool>
   --group-id: int # nullable
   --service-id: int # nullable
   --status: string@status-completer
@@ -5797,14 +5796,14 @@ export def "statuspages-incidents incidentlist-by-statuspage_id-1" [
   name: string # The name of incident, eg. a problem or resolution
   starts_at: string # When this incident occurred in GMT (format: date-time)
   --ends-at: string # nullable, format: date-time
-  --include-in-global-metrics: string@bool-completer
+  --include-in-global-metrics: oneof<nothing, bool>
   updates: list # item shape: {updated_at: string, description?: string, incident_state: "investigating"|"identified"|"monitoring"|"resolved"|"notification"|"maintenance", notify_subscribers?: bool, resolve_components?: bool, resolve_incident?: bool}
   --affected-components: list # nullable — item shape: {id?: int, status: "major-outage"|"partial-outage"|"degraded-performance"|"under-maintenance", component: record}
   incident_type: string@incident-type-completer
-  --update-component-status: string@bool-completer
-  --notify-subscribers: string@bool-completer # Send notifications to subscribers of this Status Page
-  --send-maintenance-start-notification: string@bool-completer
-  --resolve-components: string@bool-completer # Resolve all affected components to 'Operational'. Requires 'ends_at' to be set. (default: false)
+  --update-component-status: oneof<nothing, bool>
+  --notify-subscribers: oneof<nothing, bool> # Send notifications to subscribers of this Status Page
+  --send-maintenance-start-notification: oneof<nothing, bool>
+  --resolve-components: oneof<nothing, bool> # Resolve all affected components to 'Operational'. Requires 'ends_at' to be set. (default: false)
 ]: any -> record<pk: int, name: string, description: string, starts_at: string, ends_at: string, duration: string, include_in_global_metrics: bool, incident_type_display: string, updates: table<id: int, created_at: string, updated_at: string, description: string, incident_state: string, incident_state_display: string, notify_subscribers: bool, resolve_components: bool, resolve_incident: bool>, affected_components: table<id: int, status: string, name: string, description: string, component: record>, created_at: string, incident_state: string, incident_type: string, url: string, update_component_status: bool, notify_subscribers: bool, send_maintenance_start_notification: bool, resolve_components: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5861,9 +5860,9 @@ export def "statuspages-incidents-updates incidentupdatelist-by-statuspage_id-in
   updated_at: string # format: date-time
   --description: string
   incident_state: string@incident-state-completer
-  --notify-subscribers: string@bool-completer # Send notifications to subscribers of this Status Page
-  --resolve-components: string@bool-completer # Resolve all affected components to 'Operational'. Requires 'ends_at' to be set on the parent Incident. (default: false)
-  --resolve-incident: string@bool-completer # Resolve the parent Incident. (default: false)
+  --notify-subscribers: oneof<nothing, bool> # Send notifications to subscribers of this Status Page
+  --resolve-components: oneof<nothing, bool> # Resolve all affected components to 'Operational'. Requires 'ends_at' to be set on the parent Incident. (default: false)
+  --resolve-incident: oneof<nothing, bool> # Resolve the parent Incident. (default: false)
 ]: any -> record<id: int, created_at: string, updated_at: string, description: string, incident_state: string, incident_state_display: string, notify_subscribers: bool, resolve_components: bool, resolve_incident: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5918,9 +5917,9 @@ export def "statuspages-incidents-updates detail-by-statuspage_id-incident_id-pk
   updated_at: string # format: date-time
   --description: string
   incident_state: string@incident-state-completer
-  --notify-subscribers: string@bool-completer # Send notifications to subscribers of this Status Page
-  --resolve-components: string@bool-completer # Resolve all affected components to 'Operational'. Requires 'ends_at' to be set on the parent Incident. (default: false)
-  --resolve-incident: string@bool-completer # Resolve the parent Incident. (default: false)
+  --notify-subscribers: oneof<nothing, bool> # Send notifications to subscribers of this Status Page
+  --resolve-components: oneof<nothing, bool> # Resolve all affected components to 'Operational'. Requires 'ends_at' to be set on the parent Incident. (default: false)
+  --resolve-incident: oneof<nothing, bool> # Resolve the parent Incident. (default: false)
 ]: any -> record<id: int, created_at: string, updated_at: string, description: string, incident_state: string, incident_state_display: string, notify_subscribers: bool, resolve_components: bool, resolve_incident: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5951,9 +5950,9 @@ export def "statuspages-incidents-updates detail-by-statuspage_id-incident_id-pk
   updated_at: string # format: date-time
   --description: string
   incident_state: string@incident-state-completer
-  --notify-subscribers: string@bool-completer # Send notifications to subscribers of this Status Page
-  --resolve-components: string@bool-completer # Resolve all affected components to 'Operational'. Requires 'ends_at' to be set on the parent Incident. (default: false)
-  --resolve-incident: string@bool-completer # Resolve the parent Incident. (default: false)
+  --notify-subscribers: oneof<nothing, bool> # Send notifications to subscribers of this Status Page
+  --resolve-components: oneof<nothing, bool> # Resolve all affected components to 'Operational'. Requires 'ends_at' to be set on the parent Incident. (default: false)
+  --resolve-incident: oneof<nothing, bool> # Resolve the parent Incident. (default: false)
 ]: any -> record<id: int, created_at: string, updated_at: string, description: string, incident_state: string, incident_state_display: string, notify_subscribers: bool, resolve_components: bool, resolve_incident: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6032,14 +6031,14 @@ export def "statuspages-incidents detail-by-statuspage_id-pk-1" [
   name: string # The name of incident, eg. a problem or resolution
   starts_at: string # When this incident occurred in GMT (format: date-time)
   --ends-at: string # nullable, format: date-time
-  --include-in-global-metrics: string@bool-completer
+  --include-in-global-metrics: oneof<nothing, bool>
   updates: list # item shape: {updated_at: string, description?: string, incident_state: "investigating"|"identified"|"monitoring"|"resolved"|"notification"|"maintenance", notify_subscribers?: bool, resolve_components?: bool, resolve_incident?: bool}
   --affected-components: list # nullable — item shape: {id?: int, status: "major-outage"|"partial-outage"|"degraded-performance"|"under-maintenance", component: record}
   incident_type: string@incident-type-completer
-  --update-component-status: string@bool-completer
-  --notify-subscribers: string@bool-completer # Send notifications to subscribers of this Status Page
-  --send-maintenance-start-notification: string@bool-completer
-  --resolve-components: string@bool-completer # Resolve all affected components to 'Operational'. Requires 'ends_at' to be set. (default: false)
+  --update-component-status: oneof<nothing, bool>
+  --notify-subscribers: oneof<nothing, bool> # Send notifications to subscribers of this Status Page
+  --send-maintenance-start-notification: oneof<nothing, bool>
+  --resolve-components: oneof<nothing, bool> # Resolve all affected components to 'Operational'. Requires 'ends_at' to be set. (default: false)
 ]: any -> record<pk: int, name: string, description: string, starts_at: string, ends_at: string, duration: string, include_in_global_metrics: bool, incident_type_display: string, updates: table<id: int, created_at: string, updated_at: string, description: string, incident_state: string, incident_state_display: string, notify_subscribers: bool, resolve_components: bool, resolve_incident: bool>, affected_components: table<id: int, status: string, name: string, description: string, component: record>, created_at: string, incident_state: string, incident_type: string, url: string, update_component_status: bool, notify_subscribers: bool, send_maintenance_start_notification: bool, resolve_components: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6071,14 +6070,14 @@ export def "statuspages-incidents detail-by-statuspage_id-pk-2" [
   name: string # The name of incident, eg. a problem or resolution
   starts_at: string # When this incident occurred in GMT (format: date-time)
   --ends-at: string # nullable, format: date-time
-  --include-in-global-metrics: string@bool-completer
+  --include-in-global-metrics: oneof<nothing, bool>
   updates: list # item shape: {updated_at: string, description?: string, incident_state: "investigating"|"identified"|"monitoring"|"resolved"|"notification"|"maintenance", notify_subscribers?: bool, resolve_components?: bool, resolve_incident?: bool}
   --affected-components: list # nullable — item shape: {id?: int, status: "major-outage"|"partial-outage"|"degraded-performance"|"under-maintenance", component: record}
   incident_type: string@incident-type-completer
-  --update-component-status: string@bool-completer
-  --notify-subscribers: string@bool-completer # Send notifications to subscribers of this Status Page
-  --send-maintenance-start-notification: string@bool-completer
-  --resolve-components: string@bool-completer # Resolve all affected components to 'Operational'. Requires 'ends_at' to be set. (default: false)
+  --update-component-status: oneof<nothing, bool>
+  --notify-subscribers: oneof<nothing, bool> # Send notifications to subscribers of this Status Page
+  --send-maintenance-start-notification: oneof<nothing, bool>
+  --resolve-components: oneof<nothing, bool> # Resolve all affected components to 'Operational'. Requires 'ends_at' to be set. (default: false)
 ]: any -> record<pk: int, name: string, description: string, starts_at: string, ends_at: string, duration: string, include_in_global_metrics: bool, incident_type_display: string, updates: table<id: int, created_at: string, updated_at: string, description: string, incident_state: string, incident_state_display: string, notify_subscribers: bool, resolve_components: bool, resolve_incident: bool>, affected_components: table<id: int, status: string, name: string, description: string, component: record>, created_at: string, incident_state: string, incident_type: string, url: string, update_component_status: bool, notify_subscribers: bool, send_maintenance_start_notification: bool, resolve_components: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6130,7 +6129,7 @@ export def "statuspages-metrics metricslist-by-statuspage_id" [
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --search: string # A search term.
-  --is-visible: string@bool-completer # Filter by whether this metric is visible to Status Page visitors
+  --is-visible: oneof<nothing, bool> # Filter by whether this metric is visible to Status Page visitors
 ]: nothing -> record<count: int, next: string, previous: string, results: table<pk: int, name: string, service_type: string, service_name: string, service_id: int, service_url: string, url: string, is_visible: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6156,7 +6155,7 @@ export def "statuspages-metrics metricslist-by-statuspage_id-1" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   service_id: int
-  --is-visible: string@bool-completer
+  --is-visible: oneof<nothing, bool>
 ]: any -> record<pk: int, name: string, service_type: string, service_name: string, service_id: int, service_url: string, url: string, is_visible: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6208,7 +6207,7 @@ export def "statuspages-metrics detail-by-statuspage_id-pk-1" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   service_id: int
-  --is-visible: string@bool-completer
+  --is-visible: oneof<nothing, bool>
 ]: any -> record<pk: int, name: string, service_type: string, service_name: string, service_id: int, service_url: string, url: string, is_visible: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6237,7 +6236,7 @@ export def "statuspages-metrics detail-by-statuspage_id-pk-2" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   service_id: int
-  --is-visible: string@bool-completer
+  --is-visible: oneof<nothing, bool>
 ]: any -> record<pk: int, name: string, service_type: string, service_name: string, service_id: int, service_url: string, url: string, is_visible: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6317,7 +6316,7 @@ export def "statuspages-subscribers statuspagesubscriberslist-by-statuspage_id-1
   --target: string
   type: string@type-completer
   --created-at: string # nullable, format: date-time
-  --force-validation-sms: string@bool-completer # default: false
+  --force-validation-sms: oneof<nothing, bool> # default: false
 ]: any -> record<id: int, target: string, type: string, created_at: string, target_verified_on: string, force_validation_sms: bool, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6640,7 +6639,7 @@ export def "statuspages-users statuspageexternaluserlist-by-statuspage_id" [
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --search: string # A search term.
-  --is-active: string@bool-completer # Filter by whether this user can view the status page or not.
+  --is-active: oneof<nothing, bool> # Filter by whether this user can view the status page or not.
 ]: nothing -> record<count: int, next: string, previous: string, results: table<pk: int, email: string, first_name: string, last_name: string, is_active: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6668,7 +6667,7 @@ export def "statuspages-users statuspageexternaluserlist-by-statuspage_id-1" [
   email: string # format: email
   first_name: string
   last_name: string
-  --is-active: string@bool-completer
+  --is-active: oneof<nothing, bool>
 ]: any -> record<pk: int, email: string, first_name: string, last_name: string, is_active: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6722,7 +6721,7 @@ export def "statuspages-users detail-by-statuspage_id-pk-1" [
   email: string # format: email
   first_name: string
   last_name: string
-  --is-active: string@bool-completer
+  --is-active: oneof<nothing, bool>
 ]: any -> record<pk: int, email: string, first_name: string, last_name: string, is_active: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6753,7 +6752,7 @@ export def "statuspages-users detail-by-statuspage_id-pk-2" [
   email: string # format: email
   first_name: string
   last_name: string
-  --is-active: string@bool-completer
+  --is-active: oneof<nothing, bool>
 ]: any -> record<pk: int, email: string, first_name: string, last_name: string, is_active: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6808,9 +6807,9 @@ export def "users userlist" [
   --email: string # Filter by email address.
   --access-level: string@access-level-completer # Filter by access level.
   --subaccount: string # Filter by users that have access to this subaccount ID.
-  --is-active: string@bool-completer # Filter by whether the user is active.
-  --is-api-enabled: string@bool-completer # Filter by whether the API is enabled for this user.
-  --notify-paid-invoices: string@bool-completer # Filter by whether invoices are sent to this user.
+  --is-active: oneof<nothing, bool> # Filter by whether the user is active.
+  --is-api-enabled: oneof<nothing, bool> # Filter by whether the API is enabled for this user.
+  --notify-paid-invoices: oneof<nothing, bool> # Filter by whether invoices are sent to this user.
 ]: nothing -> record<count: int, next: string, previous: string, results: table<pk: int, url: string, first_name: string, last_name: string, email: string, password: string, is_active: bool, is_primary: bool, access_level: string, is_api_enabled: bool, notify_paid_invoices: bool, assigned_subaccounts: list, require_two_factor: string, must_two_factor: string, timezone: string, account: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6839,8 +6838,8 @@ export def "users userlist-1" [
   email: string # The user's email address, used as their username (format: email)
   --password: string # The user's password
   --access-level: string@access-level-completer # The permission level for this user
-  --is-api-enabled: string@bool-completer # Whether this user may access the API
-  --notify-paid-invoices: string@bool-completer # Whether this user should receive new invoices
+  --is-api-enabled: oneof<nothing, bool> # Whether this user may access the API
+  --notify-paid-invoices: oneof<nothing, bool> # Whether this user should receive new invoices
   --assigned-subaccounts: list # Which subaccounts this user may access, or empty for All Subaccounts.
   --require-two-factor: string@require-two-factor-completer
 ]: any -> record<pk: int, url: string, first_name: string, last_name: string, email: string, password: string, is_active: bool, is_primary: bool, access_level: string, is_api_enabled: bool, notify_paid_invoices: bool, assigned_subaccounts: list<string>, require_two_factor: string, must_two_factor: string, timezone: string, account: record<name: string, timezone: string, data_region: string, free_trial_expires_at: string>> {
@@ -6896,8 +6895,8 @@ export def "users detail-by-pk-1" [
   email: string # The user's email address, used as their username (format: email)
   --password: string # The user's password
   --access-level: string@access-level-completer # The permission level for this user
-  --is-api-enabled: string@bool-completer # Whether this user may access the API
-  --notify-paid-invoices: string@bool-completer # Whether this user should receive new invoices
+  --is-api-enabled: oneof<nothing, bool> # Whether this user may access the API
+  --notify-paid-invoices: oneof<nothing, bool> # Whether this user should receive new invoices
   --assigned-subaccounts: list # Which subaccounts this user may access, or empty for All Subaccounts.
   --require-two-factor: string@require-two-factor-completer
 ]: any -> record<pk: int, url: string, first_name: string, last_name: string, email: string, password: string, is_active: bool, is_primary: bool, access_level: string, is_api_enabled: bool, notify_paid_invoices: bool, assigned_subaccounts: list<string>, require_two_factor: string, must_two_factor: string, timezone: string, account: record<name: string, timezone: string, data_region: string, free_trial_expires_at: string>> {
@@ -6931,8 +6930,8 @@ export def "users detail-by-pk-2" [
   email: string # The user's email address, used as their username (format: email)
   --password: string # The user's password
   --access-level: string@access-level-completer # The permission level for this user
-  --is-api-enabled: string@bool-completer # Whether this user may access the API
-  --notify-paid-invoices: string@bool-completer # Whether this user should receive new invoices
+  --is-api-enabled: oneof<nothing, bool> # Whether this user may access the API
+  --notify-paid-invoices: oneof<nothing, bool> # Whether this user should receive new invoices
   --assigned-subaccounts: list # Which subaccounts this user may access, or empty for All Subaccounts.
   --require-two-factor: string@require-two-factor-completer
 ]: any -> record<pk: int, url: string, first_name: string, last_name: string, email: string, password: string, is_active: bool, is_primary: bool, access_level: string, is_api_enabled: bool, notify_paid_invoices: bool, assigned_subaccounts: list<string>, require_two_factor: string, must_two_factor: string, timezone: string, account: record<name: string, timezone: string, data_region: string, free_trial_expires_at: string>> {

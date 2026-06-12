@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.tvmaze.com/v1" "http://api.tvmaze.com/v1"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -131,7 +130,7 @@ export def "auth-start post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --email: string # The user's email address
-  --email-confirmation: string@bool-completer # Whether to email the user a confirmation link (default: true)
+  --email-confirmation: oneof<nothing, bool> # Whether to email the user a confirmation link (default: true)
 ]: any -> record<confirm_url: string, token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))

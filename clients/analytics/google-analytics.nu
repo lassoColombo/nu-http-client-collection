@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://analytics.googleapis.com/analytics/v3"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -109,7 +108,7 @@ export def "data-ga analyticsdatagaget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --ids: string # Unique table ID for retrieving Analytics data. Table ID is of the form ga:XXXX, where XXXX is the Analytics view (profile) ID.
@@ -118,7 +117,7 @@ export def "data-ga analyticsdatagaget" [
   --metrics: string # A comma-separated list of Analytics metrics. E.g., 'ga:sessions,ga:pageviews'. At least one metric must be specified.
   --dimensions: string # A comma-separated list of Analytics dimensions. E.g., 'ga:browser,ga:city'.
   --filters: string # A comma-separated list of dimension or metric filters to be applied to Analytics data.
-  --include-empty-rows: string@bool-completer # The response will include empty rows if this parameter is set to true, the default is true
+  --include-empty-rows: oneof<nothing, bool> # The response will include empty rows if this parameter is set to true, the default is true
   --max-results: int # The maximum number of entries to include in this feed.
   --output: string@output-completer # The selected format for the response. Default format is JSON.
   --samplingLevel: string@samplingLevel-completer # The desired sampling level.
@@ -151,7 +150,7 @@ export def "data-mcf analyticsdatamcfget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --ids: string # Unique table ID for retrieving Analytics data. Table ID is of the form ga:XXXX, where XXXX is the Analytics view (profile) ID.
@@ -190,7 +189,7 @@ export def "data-realtime analyticsdatarealtimeget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --ids: string # Unique table ID for retrieving real time data. Table ID is of the form ga:XXXX, where XXXX is the Analytics view (profile) ID.
@@ -225,7 +224,7 @@ export def "management-account-summaries analyticsmanagementaccountSummarieslist
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --max-results: int # The maximum number of account summaries to include in this response, where the largest acceptable value is 1000.
@@ -256,7 +255,7 @@ export def "management-accounts analyticsmanagementaccountslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --max-results: int # The maximum number of accounts to include in this response.
@@ -288,7 +287,7 @@ export def "management-accounts-entity-user-links analyticsmanagementaccountUser
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --max-results: int # The maximum number of account-user links to include in this response.
@@ -323,7 +322,7 @@ export def "management-accounts-entity-user-links analyticsmanagementaccountUser
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --entity: record # Entity for this link. It can be an account, a web property, or a view (profile). — shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
@@ -363,7 +362,7 @@ export def "management-accounts-entity-user-links analyticsmanagementaccountUser
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
@@ -397,7 +396,7 @@ export def "management-accounts-entity-user-links analyticsmanagementaccountUser
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --entity: record # Entity for this link. It can be an account, a web property, or a view (profile). — shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
@@ -436,7 +435,7 @@ export def "management-accounts-filters analyticsmanagementfilterslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --max-results: int # The maximum number of filters to include in this response.
@@ -475,7 +474,7 @@ export def "management-accounts-filters analyticsmanagementfiltersinsert" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # Account ID to which this filter belongs.
@@ -520,7 +519,7 @@ export def "management-accounts-filters analyticsmanagementfiltersdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<accountId: string, advancedDetails: record<caseSensitive: bool, extractA: string, extractB: string, fieldA: string, fieldAIndex: int, fieldARequired: bool, fieldB: string, fieldBIndex: int, fieldBRequired: bool, outputConstructor: string, outputToField: string, outputToFieldIndex: int, overrideOutputField: bool>, created: string, excludeDetails: record<caseSensitive: bool, expressionValue: string, field: string, fieldIndex: int, kind: string, matchType: string>, id: string, includeDetails: record<caseSensitive: bool, expressionValue: string, field: string, fieldIndex: int, kind: string, matchType: string>, kind: string, lowercaseDetails: record<field: string, fieldIndex: int>, name: string, parentLink: record<href: string, type: string>, searchAndReplaceDetails: record<caseSensitive: bool, field: string, fieldIndex: int, replaceString: string, searchString: string>, selfLink: string, type: string, updated: string, uppercaseDetails: record<field: string, fieldIndex: int>> {
@@ -551,7 +550,7 @@ export def "management-accounts-filters analyticsmanagementfiltersget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<accountId: string, advancedDetails: record<caseSensitive: bool, extractA: string, extractB: string, fieldA: string, fieldAIndex: int, fieldARequired: bool, fieldB: string, fieldBIndex: int, fieldBRequired: bool, outputConstructor: string, outputToField: string, outputToFieldIndex: int, overrideOutputField: bool>, created: string, excludeDetails: record<caseSensitive: bool, expressionValue: string, field: string, fieldIndex: int, kind: string, matchType: string>, id: string, includeDetails: record<caseSensitive: bool, expressionValue: string, field: string, fieldIndex: int, kind: string, matchType: string>, kind: string, lowercaseDetails: record<field: string, fieldIndex: int>, name: string, parentLink: record<href: string, type: string>, searchAndReplaceDetails: record<caseSensitive: bool, field: string, fieldIndex: int, replaceString: string, searchString: string>, selfLink: string, type: string, updated: string, uppercaseDetails: record<field: string, fieldIndex: int>> {
@@ -589,7 +588,7 @@ export def "management-accounts-filters analyticsmanagementfilterspatch" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # Account ID to which this filter belongs.
@@ -641,7 +640,7 @@ export def "management-accounts-filters analyticsmanagementfiltersupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # Account ID to which this filter belongs.
@@ -685,7 +684,7 @@ export def "management-accounts-webproperties analyticsmanagementwebpropertiesli
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --max-results: int # The maximum number of web properties to include in this response.
@@ -719,12 +718,12 @@ export def "management-accounts-webproperties analyticsmanagementwebpropertiesin
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # Account ID to which this web property belongs.
   --childLink: record # Child link for this web property. Points to the list of views (profiles) for this web property. — shape: {href?: string, type?: string}
-  --dataRetentionResetOnNewActivity: string@bool-completer # Set to true to reset the retention period of the user identifier with each new event from that user (thus setting the expiration date to current time plus retention period). Set to false to delete data associated with the user identifier automatically after the rentention period. This property cannot be set on insert.
+  --dataRetentionResetOnNewActivity: oneof<nothing, bool> # Set to true to reset the retention period of the user identifier with each new event from that user (thus setting the expiration date to current time plus retention period). Set to false to delete data associated with the user identifier automatically after the rentention period. This property cannot be set on insert.
   --dataRetentionTtl: string # The length of time for which user and event data is retained. This property cannot be set on insert.
   --defaultProfileId: string # Default view (profile) ID. (format: int64)
   --id: string # Web property ID of the form UA-XXXXX-YY.
@@ -732,7 +731,7 @@ export def "management-accounts-webproperties analyticsmanagementwebpropertiesin
   --name: string # Name of this web property.
   --parentLink: record # Parent link for this web property. Points to the account to which this web property belongs. — shape: {href?: string, type?: string}
   --permissions: record # Permissions the user has for this web property.
-  --starred: string@bool-completer # Indicates whether this web property is starred or not.
+  --starred: oneof<nothing, bool> # Indicates whether this web property is starred or not.
   --websiteUrl: string # Website url for this web property.
 ]: any -> record<accountId: string, childLink: record<href: string, type: string>, created: string, dataRetentionResetOnNewActivity: bool, dataRetentionTtl: string, defaultProfileId: string, id: string, industryVertical: string, internalWebPropertyId: string, kind: string, level: string, name: string, parentLink: record<href: string, type: string>, permissions: record<effective: list<string>>, profileCount: int, selfLink: string, starred: bool, updated: string, websiteUrl: string> {
   let input = $in
@@ -765,7 +764,7 @@ export def "management-accounts-webproperties analyticsmanagementwebpropertiesge
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<accountId: string, childLink: record<href: string, type: string>, created: string, dataRetentionResetOnNewActivity: bool, dataRetentionTtl: string, defaultProfileId: string, id: string, industryVertical: string, internalWebPropertyId: string, kind: string, level: string, name: string, parentLink: record<href: string, type: string>, permissions: record<effective: list<string>>, profileCount: int, selfLink: string, starred: bool, updated: string, websiteUrl: string> {
@@ -798,12 +797,12 @@ export def "management-accounts-webproperties analyticsmanagementwebpropertiespa
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # Account ID to which this web property belongs.
   --childLink: record # Child link for this web property. Points to the list of views (profiles) for this web property. — shape: {href?: string, type?: string}
-  --dataRetentionResetOnNewActivity: string@bool-completer # Set to true to reset the retention period of the user identifier with each new event from that user (thus setting the expiration date to current time plus retention period). Set to false to delete data associated with the user identifier automatically after the rentention period. This property cannot be set on insert.
+  --dataRetentionResetOnNewActivity: oneof<nothing, bool> # Set to true to reset the retention period of the user identifier with each new event from that user (thus setting the expiration date to current time plus retention period). Set to false to delete data associated with the user identifier automatically after the rentention period. This property cannot be set on insert.
   --dataRetentionTtl: string # The length of time for which user and event data is retained. This property cannot be set on insert.
   --defaultProfileId: string # Default view (profile) ID. (format: int64)
   --id: string # Web property ID of the form UA-XXXXX-YY.
@@ -811,7 +810,7 @@ export def "management-accounts-webproperties analyticsmanagementwebpropertiespa
   --name: string # Name of this web property.
   --parentLink: record # Parent link for this web property. Points to the account to which this web property belongs. — shape: {href?: string, type?: string}
   --permissions: record # Permissions the user has for this web property.
-  --starred: string@bool-completer # Indicates whether this web property is starred or not.
+  --starred: oneof<nothing, bool> # Indicates whether this web property is starred or not.
   --websiteUrl: string # Website url for this web property.
 ]: any -> record<accountId: string, childLink: record<href: string, type: string>, created: string, dataRetentionResetOnNewActivity: bool, dataRetentionTtl: string, defaultProfileId: string, id: string, industryVertical: string, internalWebPropertyId: string, kind: string, level: string, name: string, parentLink: record<href: string, type: string>, permissions: record<effective: list<string>>, profileCount: int, selfLink: string, starred: bool, updated: string, websiteUrl: string> {
   let input = $in
@@ -846,12 +845,12 @@ export def "management-accounts-webproperties analyticsmanagementwebpropertiesup
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # Account ID to which this web property belongs.
   --childLink: record # Child link for this web property. Points to the list of views (profiles) for this web property. — shape: {href?: string, type?: string}
-  --dataRetentionResetOnNewActivity: string@bool-completer # Set to true to reset the retention period of the user identifier with each new event from that user (thus setting the expiration date to current time plus retention period). Set to false to delete data associated with the user identifier automatically after the rentention period. This property cannot be set on insert.
+  --dataRetentionResetOnNewActivity: oneof<nothing, bool> # Set to true to reset the retention period of the user identifier with each new event from that user (thus setting the expiration date to current time plus retention period). Set to false to delete data associated with the user identifier automatically after the rentention period. This property cannot be set on insert.
   --dataRetentionTtl: string # The length of time for which user and event data is retained. This property cannot be set on insert.
   --defaultProfileId: string # Default view (profile) ID. (format: int64)
   --id: string # Web property ID of the form UA-XXXXX-YY.
@@ -859,7 +858,7 @@ export def "management-accounts-webproperties analyticsmanagementwebpropertiesup
   --name: string # Name of this web property.
   --parentLink: record # Parent link for this web property. Points to the account to which this web property belongs. — shape: {href?: string, type?: string}
   --permissions: record # Permissions the user has for this web property.
-  --starred: string@bool-completer # Indicates whether this web property is starred or not.
+  --starred: oneof<nothing, bool> # Indicates whether this web property is starred or not.
   --websiteUrl: string # Website url for this web property.
 ]: any -> record<accountId: string, childLink: record<href: string, type: string>, created: string, dataRetentionResetOnNewActivity: bool, dataRetentionTtl: string, defaultProfileId: string, id: string, industryVertical: string, internalWebPropertyId: string, kind: string, level: string, name: string, parentLink: record<href: string, type: string>, permissions: record<effective: list<string>>, profileCount: int, selfLink: string, starred: bool, updated: string, websiteUrl: string> {
   let input = $in
@@ -892,7 +891,7 @@ export def "management-accounts-webproperties-custom-data-sources analyticsmanag
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --max-results: int # The maximum number of custom data sources to include in this response.
@@ -926,7 +925,7 @@ export def "management-accounts-webproperties-custom-data-sources-delete-upload-
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --customDataImportUids: list # A list of upload UIDs.
@@ -962,7 +961,7 @@ export def "management-accounts-webproperties-custom-data-sources-uploads analyt
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --max-results: int # The maximum number of uploads to include in this response.
@@ -996,7 +995,7 @@ export def "management-accounts-webproperties-custom-data-sources-uploads analyt
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<accountId: string, customDataSourceId: string, errors: list<string>, id: string, kind: string, status: string, uploadTime: string> {
@@ -1029,7 +1028,7 @@ export def "management-accounts-webproperties-custom-data-sources-uploads analyt
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<accountId: string, customDataSourceId: string, errors: list<string>, id: string, kind: string, status: string, uploadTime: string> {
@@ -1060,7 +1059,7 @@ export def "management-accounts-webproperties-custom-dimensions analyticsmanagem
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --max-results: int # The maximum number of custom dimensions to include in this response.
@@ -1094,11 +1093,11 @@ export def "management-accounts-webproperties-custom-dimensions analyticsmanagem
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # Account ID.
-  --active: string@bool-completer # Boolean indicating whether the custom dimension is active.
+  --active: oneof<nothing, bool> # Boolean indicating whether the custom dimension is active.
   --id: string # Custom dimension ID.
   --name: string # Name of the custom dimension.
   --parentLink: record # Parent link for the custom dimension. Points to the property to which the custom dimension belongs. — shape: {href?: string, type?: string}
@@ -1136,7 +1135,7 @@ export def "management-accounts-webproperties-custom-dimensions analyticsmanagem
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<accountId: string, active: bool, created: string, id: string, index: int, kind: string, name: string, parentLink: record<href: string, type: string>, scope: string, selfLink: string, updated: string, webPropertyId: string> {
@@ -1169,12 +1168,12 @@ export def "management-accounts-webproperties-custom-dimensions analyticsmanagem
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --ignoreCustomDataSourceLinks: string@bool-completer # Force the update and ignore any warnings related to the custom dimension being linked to a custom data source / data set.
+  --ignoreCustomDataSourceLinks: oneof<nothing, bool> # Force the update and ignore any warnings related to the custom dimension being linked to a custom data source / data set.
   --body-accountId: string # Account ID.
-  --active: string@bool-completer # Boolean indicating whether the custom dimension is active.
+  --active: oneof<nothing, bool> # Boolean indicating whether the custom dimension is active.
   --id: string # Custom dimension ID.
   --name: string # Name of the custom dimension.
   --parentLink: record # Parent link for the custom dimension. Points to the property to which the custom dimension belongs. — shape: {href?: string, type?: string}
@@ -1213,12 +1212,12 @@ export def "management-accounts-webproperties-custom-dimensions analyticsmanagem
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --ignoreCustomDataSourceLinks: string@bool-completer # Force the update and ignore any warnings related to the custom dimension being linked to a custom data source / data set.
+  --ignoreCustomDataSourceLinks: oneof<nothing, bool> # Force the update and ignore any warnings related to the custom dimension being linked to a custom data source / data set.
   --body-accountId: string # Account ID.
-  --active: string@bool-completer # Boolean indicating whether the custom dimension is active.
+  --active: oneof<nothing, bool> # Boolean indicating whether the custom dimension is active.
   --id: string # Custom dimension ID.
   --name: string # Name of the custom dimension.
   --parentLink: record # Parent link for the custom dimension. Points to the property to which the custom dimension belongs. — shape: {href?: string, type?: string}
@@ -1255,7 +1254,7 @@ export def "management-accounts-webproperties-custom-metrics analyticsmanagement
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --max-results: int # The maximum number of custom metrics to include in this response.
@@ -1289,11 +1288,11 @@ export def "management-accounts-webproperties-custom-metrics analyticsmanagement
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # Account ID.
-  --active: string@bool-completer # Boolean indicating whether the custom metric is active.
+  --active: oneof<nothing, bool> # Boolean indicating whether the custom metric is active.
   --id: string # Custom metric ID.
   --max-value: string # Max value of custom metric.
   --min-value: string # Min value of custom metric.
@@ -1334,7 +1333,7 @@ export def "management-accounts-webproperties-custom-metrics analyticsmanagement
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<accountId: string, active: bool, created: string, id: string, index: int, kind: string, max_value: string, min_value: string, name: string, parentLink: record<href: string, type: string>, scope: string, selfLink: string, type: string, updated: string, webPropertyId: string> {
@@ -1367,12 +1366,12 @@ export def "management-accounts-webproperties-custom-metrics analyticsmanagement
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --ignoreCustomDataSourceLinks: string@bool-completer # Force the update and ignore any warnings related to the custom metric being linked to a custom data source / data set.
+  --ignoreCustomDataSourceLinks: oneof<nothing, bool> # Force the update and ignore any warnings related to the custom metric being linked to a custom data source / data set.
   --body-accountId: string # Account ID.
-  --active: string@bool-completer # Boolean indicating whether the custom metric is active.
+  --active: oneof<nothing, bool> # Boolean indicating whether the custom metric is active.
   --id: string # Custom metric ID.
   --max-value: string # Max value of custom metric.
   --min-value: string # Min value of custom metric.
@@ -1414,12 +1413,12 @@ export def "management-accounts-webproperties-custom-metrics analyticsmanagement
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --ignoreCustomDataSourceLinks: string@bool-completer # Force the update and ignore any warnings related to the custom metric being linked to a custom data source / data set.
+  --ignoreCustomDataSourceLinks: oneof<nothing, bool> # Force the update and ignore any warnings related to the custom metric being linked to a custom data source / data set.
   --body-accountId: string # Account ID.
-  --active: string@bool-completer # Boolean indicating whether the custom metric is active.
+  --active: oneof<nothing, bool> # Boolean indicating whether the custom metric is active.
   --id: string # Custom metric ID.
   --max-value: string # Max value of custom metric.
   --min-value: string # Min value of custom metric.
@@ -1459,7 +1458,7 @@ export def "management-accounts-webproperties-entity-ad-words-links analyticsman
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --max-results: int # The maximum number of webProperty-Google Ads links to include in this response.
@@ -1494,7 +1493,7 @@ export def "management-accounts-webproperties-entity-ad-words-links analyticsman
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --adWordsAccounts: list # A list of Google Ads client accounts. These cannot be MCC accounts. This field is required when creating a Google Ads link. It cannot be empty. — item shape: {autoTaggingEnabled?: bool, customerId?: string, kind?: string}
@@ -1536,7 +1535,7 @@ export def "management-accounts-webproperties-entity-ad-words-links analyticsman
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
@@ -1568,7 +1567,7 @@ export def "management-accounts-webproperties-entity-ad-words-links analyticsman
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<adWordsAccounts: table<autoTaggingEnabled: bool, customerId: string, kind: string>, entity: record<webPropertyRef: record<accountId: string, href: string, id: string, internalWebPropertyId: string, kind: string, name: string>>, id: string, kind: string, name: string, profileIds: list<string>, selfLink: string> {
@@ -1602,7 +1601,7 @@ export def "management-accounts-webproperties-entity-ad-words-links analyticsman
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --adWordsAccounts: list # A list of Google Ads client accounts. These cannot be MCC accounts. This field is required when creating a Google Ads link. It cannot be empty. — item shape: {autoTaggingEnabled?: bool, customerId?: string, kind?: string}
@@ -1646,7 +1645,7 @@ export def "management-accounts-webproperties-entity-ad-words-links analyticsman
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --adWordsAccounts: list # A list of Google Ads client accounts. These cannot be MCC accounts. This field is required when creating a Google Ads link. It cannot be empty. — item shape: {autoTaggingEnabled?: bool, customerId?: string, kind?: string}
@@ -1687,7 +1686,7 @@ export def "management-accounts-webproperties-entity-user-links analyticsmanagem
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --max-results: int # The maximum number of webProperty-user Links to include in this response.
@@ -1723,7 +1722,7 @@ export def "management-accounts-webproperties-entity-user-links analyticsmanagem
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --entity: record # Entity for this link. It can be an account, a web property, or a view (profile). — shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
@@ -1764,7 +1763,7 @@ export def "management-accounts-webproperties-entity-user-links analyticsmanagem
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
@@ -1799,7 +1798,7 @@ export def "management-accounts-webproperties-entity-user-links analyticsmanagem
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --entity: record # Entity for this link. It can be an account, a web property, or a view (profile). — shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
@@ -1839,7 +1838,7 @@ export def "management-accounts-webproperties-profiles analyticsmanagementprofil
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --max-results: int # The maximum number of views (profiles) to include in this response.
@@ -1874,16 +1873,16 @@ export def "management-accounts-webproperties-profiles analyticsmanagementprofil
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # Account ID to which this view (profile) belongs.
-  --botFilteringEnabled: string@bool-completer # Indicates whether bot filtering is enabled for this view (profile).
+  --botFilteringEnabled: oneof<nothing, bool> # Indicates whether bot filtering is enabled for this view (profile).
   --childLink: record # Child link for this view (profile). Points to the list of goals for this view (profile). — shape: {href?: string, type?: string}
   --currency: string # The currency type associated with this view (profile), defaults to USD. The supported values are: USD, JPY, EUR, GBP, AUD, KRW, BRL, CNY, DKK, RUB, SEK, NOK, PLN, TRY, TWD, HKD, THB, IDR, ARS, MXN, VND, PHP, INR, CHF, CAD, CZK, NZD, HUF, BGN, LTL, ZAR, UAH, AED, BOB, CLP, COP, EGP, HRK, ILS, MAD, MYR, PEN, PKR, RON, RSD, SAR, SGD, VEF, LVL
   --defaultPage: string # Default page for this view (profile).
-  --eCommerceTracking: string@bool-completer # Indicates whether ecommerce tracking is enabled for this view (profile).
-  --enhancedECommerceTracking: string@bool-completer # Indicates whether enhanced ecommerce tracking is enabled for this view (profile). This property can only be enabled if ecommerce tracking is enabled.
+  --eCommerceTracking: oneof<nothing, bool> # Indicates whether ecommerce tracking is enabled for this view (profile).
+  --enhancedECommerceTracking: oneof<nothing, bool> # Indicates whether enhanced ecommerce tracking is enabled for this view (profile). This property can only be enabled if ecommerce tracking is enabled.
   --excludeQueryParameters: string # The query parameters that are excluded from this view (profile).
   --id: string # View (Profile) ID.
   --name: string # Name of this view (profile).
@@ -1891,9 +1890,9 @@ export def "management-accounts-webproperties-profiles analyticsmanagementprofil
   --permissions: record # Permissions the user has for this view (profile).
   --siteSearchCategoryParameters: string # Site search category parameters for this view (profile).
   --siteSearchQueryParameters: string # The site search query parameters for this view (profile).
-  --starred: string@bool-completer # Indicates whether this view (profile) is starred or not.
-  --stripSiteSearchCategoryParameters: string@bool-completer # Whether or not Analytics will strip search category parameters from the URLs in your reports.
-  --stripSiteSearchQueryParameters: string@bool-completer # Whether or not Analytics will strip search query parameters from the URLs in your reports.
+  --starred: oneof<nothing, bool> # Indicates whether this view (profile) is starred or not.
+  --stripSiteSearchCategoryParameters: oneof<nothing, bool> # Whether or not Analytics will strip search category parameters from the URLs in your reports.
+  --stripSiteSearchQueryParameters: oneof<nothing, bool> # Whether or not Analytics will strip search query parameters from the URLs in your reports.
   --timezone: string # Time zone for which this view (profile) has been configured. Time zones are identified by strings from the TZ database.
   --type: string # View (Profile) type. Supported types: WEB or APP.
   --websiteUrl: string # Website URL for this view (profile).
@@ -1929,7 +1928,7 @@ export def "management-accounts-webproperties-profiles analyticsmanagementprofil
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
@@ -1961,7 +1960,7 @@ export def "management-accounts-webproperties-profiles analyticsmanagementprofil
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<accountId: string, botFilteringEnabled: bool, childLink: record<href: string, type: string>, created: string, currency: string, defaultPage: string, eCommerceTracking: bool, enhancedECommerceTracking: bool, excludeQueryParameters: string, id: string, internalWebPropertyId: string, kind: string, name: string, parentLink: record<href: string, type: string>, permissions: record<effective: list<string>>, selfLink: string, siteSearchCategoryParameters: string, siteSearchQueryParameters: string, starred: bool, stripSiteSearchCategoryParameters: bool, stripSiteSearchQueryParameters: bool, timezone: string, type: string, updated: string, webPropertyId: string, websiteUrl: string> {
@@ -1995,16 +1994,16 @@ export def "management-accounts-webproperties-profiles analyticsmanagementprofil
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # Account ID to which this view (profile) belongs.
-  --botFilteringEnabled: string@bool-completer # Indicates whether bot filtering is enabled for this view (profile).
+  --botFilteringEnabled: oneof<nothing, bool> # Indicates whether bot filtering is enabled for this view (profile).
   --childLink: record # Child link for this view (profile). Points to the list of goals for this view (profile). — shape: {href?: string, type?: string}
   --currency: string # The currency type associated with this view (profile), defaults to USD. The supported values are: USD, JPY, EUR, GBP, AUD, KRW, BRL, CNY, DKK, RUB, SEK, NOK, PLN, TRY, TWD, HKD, THB, IDR, ARS, MXN, VND, PHP, INR, CHF, CAD, CZK, NZD, HUF, BGN, LTL, ZAR, UAH, AED, BOB, CLP, COP, EGP, HRK, ILS, MAD, MYR, PEN, PKR, RON, RSD, SAR, SGD, VEF, LVL
   --defaultPage: string # Default page for this view (profile).
-  --eCommerceTracking: string@bool-completer # Indicates whether ecommerce tracking is enabled for this view (profile).
-  --enhancedECommerceTracking: string@bool-completer # Indicates whether enhanced ecommerce tracking is enabled for this view (profile). This property can only be enabled if ecommerce tracking is enabled.
+  --eCommerceTracking: oneof<nothing, bool> # Indicates whether ecommerce tracking is enabled for this view (profile).
+  --enhancedECommerceTracking: oneof<nothing, bool> # Indicates whether enhanced ecommerce tracking is enabled for this view (profile). This property can only be enabled if ecommerce tracking is enabled.
   --excludeQueryParameters: string # The query parameters that are excluded from this view (profile).
   --id: string # View (Profile) ID.
   --name: string # Name of this view (profile).
@@ -2012,9 +2011,9 @@ export def "management-accounts-webproperties-profiles analyticsmanagementprofil
   --permissions: record # Permissions the user has for this view (profile).
   --siteSearchCategoryParameters: string # Site search category parameters for this view (profile).
   --siteSearchQueryParameters: string # The site search query parameters for this view (profile).
-  --starred: string@bool-completer # Indicates whether this view (profile) is starred or not.
-  --stripSiteSearchCategoryParameters: string@bool-completer # Whether or not Analytics will strip search category parameters from the URLs in your reports.
-  --stripSiteSearchQueryParameters: string@bool-completer # Whether or not Analytics will strip search query parameters from the URLs in your reports.
+  --starred: oneof<nothing, bool> # Indicates whether this view (profile) is starred or not.
+  --stripSiteSearchCategoryParameters: oneof<nothing, bool> # Whether or not Analytics will strip search category parameters from the URLs in your reports.
+  --stripSiteSearchQueryParameters: oneof<nothing, bool> # Whether or not Analytics will strip search query parameters from the URLs in your reports.
   --timezone: string # Time zone for which this view (profile) has been configured. Time zones are identified by strings from the TZ database.
   --type: string # View (Profile) type. Supported types: WEB or APP.
   --websiteUrl: string # Website URL for this view (profile).
@@ -2052,16 +2051,16 @@ export def "management-accounts-webproperties-profiles analyticsmanagementprofil
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # Account ID to which this view (profile) belongs.
-  --botFilteringEnabled: string@bool-completer # Indicates whether bot filtering is enabled for this view (profile).
+  --botFilteringEnabled: oneof<nothing, bool> # Indicates whether bot filtering is enabled for this view (profile).
   --childLink: record # Child link for this view (profile). Points to the list of goals for this view (profile). — shape: {href?: string, type?: string}
   --currency: string # The currency type associated with this view (profile), defaults to USD. The supported values are: USD, JPY, EUR, GBP, AUD, KRW, BRL, CNY, DKK, RUB, SEK, NOK, PLN, TRY, TWD, HKD, THB, IDR, ARS, MXN, VND, PHP, INR, CHF, CAD, CZK, NZD, HUF, BGN, LTL, ZAR, UAH, AED, BOB, CLP, COP, EGP, HRK, ILS, MAD, MYR, PEN, PKR, RON, RSD, SAR, SGD, VEF, LVL
   --defaultPage: string # Default page for this view (profile).
-  --eCommerceTracking: string@bool-completer # Indicates whether ecommerce tracking is enabled for this view (profile).
-  --enhancedECommerceTracking: string@bool-completer # Indicates whether enhanced ecommerce tracking is enabled for this view (profile). This property can only be enabled if ecommerce tracking is enabled.
+  --eCommerceTracking: oneof<nothing, bool> # Indicates whether ecommerce tracking is enabled for this view (profile).
+  --enhancedECommerceTracking: oneof<nothing, bool> # Indicates whether enhanced ecommerce tracking is enabled for this view (profile). This property can only be enabled if ecommerce tracking is enabled.
   --excludeQueryParameters: string # The query parameters that are excluded from this view (profile).
   --id: string # View (Profile) ID.
   --name: string # Name of this view (profile).
@@ -2069,9 +2068,9 @@ export def "management-accounts-webproperties-profiles analyticsmanagementprofil
   --permissions: record # Permissions the user has for this view (profile).
   --siteSearchCategoryParameters: string # Site search category parameters for this view (profile).
   --siteSearchQueryParameters: string # The site search query parameters for this view (profile).
-  --starred: string@bool-completer # Indicates whether this view (profile) is starred or not.
-  --stripSiteSearchCategoryParameters: string@bool-completer # Whether or not Analytics will strip search category parameters from the URLs in your reports.
-  --stripSiteSearchQueryParameters: string@bool-completer # Whether or not Analytics will strip search query parameters from the URLs in your reports.
+  --starred: oneof<nothing, bool> # Indicates whether this view (profile) is starred or not.
+  --stripSiteSearchCategoryParameters: oneof<nothing, bool> # Whether or not Analytics will strip search category parameters from the URLs in your reports.
+  --stripSiteSearchQueryParameters: oneof<nothing, bool> # Whether or not Analytics will strip search query parameters from the URLs in your reports.
   --timezone: string # Time zone for which this view (profile) has been configured. Time zones are identified by strings from the TZ database.
   --type: string # View (Profile) type. Supported types: WEB or APP.
   --websiteUrl: string # Website URL for this view (profile).
@@ -2107,7 +2106,7 @@ export def "management-accounts-webproperties-profiles-entity-user-links analyti
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --max-results: int # The maximum number of profile-user links to include in this response.
@@ -2144,7 +2143,7 @@ export def "management-accounts-webproperties-profiles-entity-user-links analyti
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --entity: record # Entity for this link. It can be an account, a web property, or a view (profile). — shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
@@ -2186,7 +2185,7 @@ export def "management-accounts-webproperties-profiles-entity-user-links analyti
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
@@ -2222,7 +2221,7 @@ export def "management-accounts-webproperties-profiles-entity-user-links analyti
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --entity: record # Entity for this link. It can be an account, a web property, or a view (profile). — shape: {accountRef?: record, profileRef?: record, webPropertyRef?: record}
@@ -2263,7 +2262,7 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --max-results: int # The maximum number of experiments to include in this response.
@@ -2299,15 +2298,15 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # Account ID to which this experiment belongs. This field is read-only.
   --created: string # Time the experiment was created. This field is read-only. (format: date-time)
   --description: string # Notes about this experiment.
-  --editableInGaUi: string@bool-completer # If true, the end user will be able to edit the experiment via the Google Analytics user interface.
+  --editableInGaUi: oneof<nothing, bool> # If true, the end user will be able to edit the experiment via the Google Analytics user interface.
   --endTime: string # The ending time of the experiment (the time the status changed from RUNNING to ENDED). This field is present only if the experiment has ended. This field is read-only. (format: date-time)
-  --equalWeighting: string@bool-completer # Boolean specifying whether to distribute traffic evenly across all variations. If the value is False, content experiments follows the default behavior of adjusting traffic dynamically based on variation performance. Optional -- defaults to False. This field may not be changed for an experiment whose status is ENDED.
+  --equalWeighting: oneof<nothing, bool> # Boolean specifying whether to distribute traffic evenly across all variations. If the value is False, content experiments follows the default behavior of adjusting traffic dynamically based on variation performance. Optional -- defaults to False. This field may not be changed for an experiment whose status is ENDED.
   --id: string # Experiment ID. Required for patch and update. Disallowed for create.
   --internalWebPropertyId: string # Internal ID for the web property to which this experiment belongs. This field is read-only.
   --kind: string # Resource type for an Analytics experiment. This field is read-only. (default: analytics#experiment)
@@ -2318,7 +2317,7 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
   --parentLink: record # Parent link for an experiment. Points to the view (profile) to which this experiment belongs. — shape: {href?: string, type?: string}
   --body-profileId: string # View (Profile) ID to which this experiment belongs. This field is read-only.
   --reasonExperimentEnded: string # Why the experiment ended. Possible values: "STOPPED_BY_USER", "WINNER_FOUND", "EXPERIMENT_EXPIRED", "ENDED_WITH_NO_WINNER", "GOAL_OBJECTIVE_CHANGED". "ENDED_WITH_NO_WINNER" means that the experiment didn't expire but no winner was projected to be found. If the experiment status is changed via the API to ENDED this field is set to STOPPED_BY_USER. This field is read-only.
-  --rewriteVariationUrlsAsOriginal: string@bool-completer # Boolean specifying whether variations URLS are rewritten to match those of the original. This field may not be changed for an experiments whose status is ENDED.
+  --rewriteVariationUrlsAsOriginal: oneof<nothing, bool> # Boolean specifying whether variations URLS are rewritten to match those of the original. This field may not be changed for an experiments whose status is ENDED.
   --selfLink: string # Link for this experiment. This field is read-only.
   --servingFramework: string # The framework used to serve the experiment variations and evaluate the results. One of:   - REDIRECT: Google Analytics redirects traffic to different variation pages, reports the chosen variation and evaluates the results. - API: Google Analytics chooses and reports the variation to serve and evaluates the results; the caller is responsible for serving the selected variation. - EXTERNAL: The variations will be served externally and the chosen variation reported to Google Analytics. The caller is responsible for serving the selected variation and evaluating the results.
   --snippet: string # The snippet of code to include on the control page(s). This field is read-only.
@@ -2329,7 +2328,7 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
   --variations: list # Array of variations. The first variation in the array is the original. The number of variations may not change once an experiment is in the RUNNING state. At least two variations are required before status can be set to RUNNING. — item shape: {name?: string, status?: string, url?: string, weight?: float, won?: bool}
   --body-webPropertyId: string # Web property ID to which this experiment belongs. The web property ID is of the form UA-XXXXX-YY. This field is read-only.
   --winnerConfidenceLevel: float # A floating-point number in (0, 1). Specifies the necessary confidence level to choose a winner. This field may not be changed for an experiments whose status is ENDED. (format: double)
-  --winnerFound: string@bool-completer # Boolean specifying whether a winner has been found for this experiment. This field is read-only.
+  --winnerFound: oneof<nothing, bool> # Boolean specifying whether a winner has been found for this experiment. This field is read-only.
 ]: any -> record<accountId: string, created: string, description: string, editableInGaUi: bool, endTime: string, equalWeighting: bool, id: string, internalWebPropertyId: string, kind: string, minimumExperimentLengthInDays: int, name: string, objectiveMetric: string, optimizationType: string, parentLink: record<href: string, type: string>, profileId: string, reasonExperimentEnded: string, rewriteVariationUrlsAsOriginal: bool, selfLink: string, servingFramework: string, snippet: string, startTime: string, status: string, trafficCoverage: float, updated: string, variations: table<name: string, status: string, url: string, weight: float, won: bool>, webPropertyId: string, winnerConfidenceLevel: float, winnerFound: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2363,7 +2362,7 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
@@ -2396,7 +2395,7 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<accountId: string, created: string, description: string, editableInGaUi: bool, endTime: string, equalWeighting: bool, id: string, internalWebPropertyId: string, kind: string, minimumExperimentLengthInDays: int, name: string, objectiveMetric: string, optimizationType: string, parentLink: record<href: string, type: string>, profileId: string, reasonExperimentEnded: string, rewriteVariationUrlsAsOriginal: bool, selfLink: string, servingFramework: string, snippet: string, startTime: string, status: string, trafficCoverage: float, updated: string, variations: table<name: string, status: string, url: string, weight: float, won: bool>, webPropertyId: string, winnerConfidenceLevel: float, winnerFound: bool> {
@@ -2431,15 +2430,15 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # Account ID to which this experiment belongs. This field is read-only.
   --created: string # Time the experiment was created. This field is read-only. (format: date-time)
   --description: string # Notes about this experiment.
-  --editableInGaUi: string@bool-completer # If true, the end user will be able to edit the experiment via the Google Analytics user interface.
+  --editableInGaUi: oneof<nothing, bool> # If true, the end user will be able to edit the experiment via the Google Analytics user interface.
   --endTime: string # The ending time of the experiment (the time the status changed from RUNNING to ENDED). This field is present only if the experiment has ended. This field is read-only. (format: date-time)
-  --equalWeighting: string@bool-completer # Boolean specifying whether to distribute traffic evenly across all variations. If the value is False, content experiments follows the default behavior of adjusting traffic dynamically based on variation performance. Optional -- defaults to False. This field may not be changed for an experiment whose status is ENDED.
+  --equalWeighting: oneof<nothing, bool> # Boolean specifying whether to distribute traffic evenly across all variations. If the value is False, content experiments follows the default behavior of adjusting traffic dynamically based on variation performance. Optional -- defaults to False. This field may not be changed for an experiment whose status is ENDED.
   --id: string # Experiment ID. Required for patch and update. Disallowed for create.
   --internalWebPropertyId: string # Internal ID for the web property to which this experiment belongs. This field is read-only.
   --kind: string # Resource type for an Analytics experiment. This field is read-only. (default: analytics#experiment)
@@ -2450,7 +2449,7 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
   --parentLink: record # Parent link for an experiment. Points to the view (profile) to which this experiment belongs. — shape: {href?: string, type?: string}
   --body-profileId: string # View (Profile) ID to which this experiment belongs. This field is read-only.
   --reasonExperimentEnded: string # Why the experiment ended. Possible values: "STOPPED_BY_USER", "WINNER_FOUND", "EXPERIMENT_EXPIRED", "ENDED_WITH_NO_WINNER", "GOAL_OBJECTIVE_CHANGED". "ENDED_WITH_NO_WINNER" means that the experiment didn't expire but no winner was projected to be found. If the experiment status is changed via the API to ENDED this field is set to STOPPED_BY_USER. This field is read-only.
-  --rewriteVariationUrlsAsOriginal: string@bool-completer # Boolean specifying whether variations URLS are rewritten to match those of the original. This field may not be changed for an experiments whose status is ENDED.
+  --rewriteVariationUrlsAsOriginal: oneof<nothing, bool> # Boolean specifying whether variations URLS are rewritten to match those of the original. This field may not be changed for an experiments whose status is ENDED.
   --selfLink: string # Link for this experiment. This field is read-only.
   --servingFramework: string # The framework used to serve the experiment variations and evaluate the results. One of:   - REDIRECT: Google Analytics redirects traffic to different variation pages, reports the chosen variation and evaluates the results. - API: Google Analytics chooses and reports the variation to serve and evaluates the results; the caller is responsible for serving the selected variation. - EXTERNAL: The variations will be served externally and the chosen variation reported to Google Analytics. The caller is responsible for serving the selected variation and evaluating the results.
   --snippet: string # The snippet of code to include on the control page(s). This field is read-only.
@@ -2461,7 +2460,7 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
   --variations: list # Array of variations. The first variation in the array is the original. The number of variations may not change once an experiment is in the RUNNING state. At least two variations are required before status can be set to RUNNING. — item shape: {name?: string, status?: string, url?: string, weight?: float, won?: bool}
   --body-webPropertyId: string # Web property ID to which this experiment belongs. The web property ID is of the form UA-XXXXX-YY. This field is read-only.
   --winnerConfidenceLevel: float # A floating-point number in (0, 1). Specifies the necessary confidence level to choose a winner. This field may not be changed for an experiments whose status is ENDED. (format: double)
-  --winnerFound: string@bool-completer # Boolean specifying whether a winner has been found for this experiment. This field is read-only.
+  --winnerFound: oneof<nothing, bool> # Boolean specifying whether a winner has been found for this experiment. This field is read-only.
 ]: any -> record<accountId: string, created: string, description: string, editableInGaUi: bool, endTime: string, equalWeighting: bool, id: string, internalWebPropertyId: string, kind: string, minimumExperimentLengthInDays: int, name: string, objectiveMetric: string, optimizationType: string, parentLink: record<href: string, type: string>, profileId: string, reasonExperimentEnded: string, rewriteVariationUrlsAsOriginal: bool, selfLink: string, servingFramework: string, snippet: string, startTime: string, status: string, trafficCoverage: float, updated: string, variations: table<name: string, status: string, url: string, weight: float, won: bool>, webPropertyId: string, winnerConfidenceLevel: float, winnerFound: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2497,15 +2496,15 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # Account ID to which this experiment belongs. This field is read-only.
   --created: string # Time the experiment was created. This field is read-only. (format: date-time)
   --description: string # Notes about this experiment.
-  --editableInGaUi: string@bool-completer # If true, the end user will be able to edit the experiment via the Google Analytics user interface.
+  --editableInGaUi: oneof<nothing, bool> # If true, the end user will be able to edit the experiment via the Google Analytics user interface.
   --endTime: string # The ending time of the experiment (the time the status changed from RUNNING to ENDED). This field is present only if the experiment has ended. This field is read-only. (format: date-time)
-  --equalWeighting: string@bool-completer # Boolean specifying whether to distribute traffic evenly across all variations. If the value is False, content experiments follows the default behavior of adjusting traffic dynamically based on variation performance. Optional -- defaults to False. This field may not be changed for an experiment whose status is ENDED.
+  --equalWeighting: oneof<nothing, bool> # Boolean specifying whether to distribute traffic evenly across all variations. If the value is False, content experiments follows the default behavior of adjusting traffic dynamically based on variation performance. Optional -- defaults to False. This field may not be changed for an experiment whose status is ENDED.
   --id: string # Experiment ID. Required for patch and update. Disallowed for create.
   --internalWebPropertyId: string # Internal ID for the web property to which this experiment belongs. This field is read-only.
   --kind: string # Resource type for an Analytics experiment. This field is read-only. (default: analytics#experiment)
@@ -2516,7 +2515,7 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
   --parentLink: record # Parent link for an experiment. Points to the view (profile) to which this experiment belongs. — shape: {href?: string, type?: string}
   --body-profileId: string # View (Profile) ID to which this experiment belongs. This field is read-only.
   --reasonExperimentEnded: string # Why the experiment ended. Possible values: "STOPPED_BY_USER", "WINNER_FOUND", "EXPERIMENT_EXPIRED", "ENDED_WITH_NO_WINNER", "GOAL_OBJECTIVE_CHANGED". "ENDED_WITH_NO_WINNER" means that the experiment didn't expire but no winner was projected to be found. If the experiment status is changed via the API to ENDED this field is set to STOPPED_BY_USER. This field is read-only.
-  --rewriteVariationUrlsAsOriginal: string@bool-completer # Boolean specifying whether variations URLS are rewritten to match those of the original. This field may not be changed for an experiments whose status is ENDED.
+  --rewriteVariationUrlsAsOriginal: oneof<nothing, bool> # Boolean specifying whether variations URLS are rewritten to match those of the original. This field may not be changed for an experiments whose status is ENDED.
   --selfLink: string # Link for this experiment. This field is read-only.
   --servingFramework: string # The framework used to serve the experiment variations and evaluate the results. One of:   - REDIRECT: Google Analytics redirects traffic to different variation pages, reports the chosen variation and evaluates the results. - API: Google Analytics chooses and reports the variation to serve and evaluates the results; the caller is responsible for serving the selected variation. - EXTERNAL: The variations will be served externally and the chosen variation reported to Google Analytics. The caller is responsible for serving the selected variation and evaluating the results.
   --snippet: string # The snippet of code to include on the control page(s). This field is read-only.
@@ -2527,7 +2526,7 @@ export def "management-accounts-webproperties-profiles-experiments analyticsmana
   --variations: list # Array of variations. The first variation in the array is the original. The number of variations may not change once an experiment is in the RUNNING state. At least two variations are required before status can be set to RUNNING. — item shape: {name?: string, status?: string, url?: string, weight?: float, won?: bool}
   --body-webPropertyId: string # Web property ID to which this experiment belongs. The web property ID is of the form UA-XXXXX-YY. This field is read-only.
   --winnerConfidenceLevel: float # A floating-point number in (0, 1). Specifies the necessary confidence level to choose a winner. This field may not be changed for an experiments whose status is ENDED. (format: double)
-  --winnerFound: string@bool-completer # Boolean specifying whether a winner has been found for this experiment. This field is read-only.
+  --winnerFound: oneof<nothing, bool> # Boolean specifying whether a winner has been found for this experiment. This field is read-only.
 ]: any -> record<accountId: string, created: string, description: string, editableInGaUi: bool, endTime: string, equalWeighting: bool, id: string, internalWebPropertyId: string, kind: string, minimumExperimentLengthInDays: int, name: string, objectiveMetric: string, optimizationType: string, parentLink: record<href: string, type: string>, profileId: string, reasonExperimentEnded: string, rewriteVariationUrlsAsOriginal: bool, selfLink: string, servingFramework: string, snippet: string, startTime: string, status: string, trafficCoverage: float, updated: string, variations: table<name: string, status: string, url: string, weight: float, won: bool>, webPropertyId: string, winnerConfidenceLevel: float, winnerFound: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2560,7 +2559,7 @@ export def "management-accounts-webproperties-profiles-goals analyticsmanagement
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --max-results: int # The maximum number of goals to include in this response.
@@ -2599,11 +2598,11 @@ export def "management-accounts-webproperties-profiles-goals analyticsmanagement
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # Account ID to which this goal belongs.
-  --active: string@bool-completer # Determines whether this goal is active.
+  --active: oneof<nothing, bool> # Determines whether this goal is active.
   --created: string # Time this goal was created. (format: date-time)
   --eventDetails: record # Details for the goal of the type EVENT. — shape: {eventConditions?: list, useEventValue?: bool}
   --id: string # Goal ID.
@@ -2653,7 +2652,7 @@ export def "management-accounts-webproperties-profiles-goals analyticsmanagement
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<accountId: string, active: bool, created: string, eventDetails: record<eventConditions: list<record>, useEventValue: bool>, id: string, internalWebPropertyId: string, kind: string, name: string, parentLink: record<href: string, type: string>, profileId: string, selfLink: string, type: string, updated: string, urlDestinationDetails: record<caseSensitive: bool, firstStepRequired: bool, matchType: string, steps: list<record>, url: string>, value: float, visitNumPagesDetails: record<comparisonType: string, comparisonValue: string>, visitTimeOnSiteDetails: record<comparisonType: string, comparisonValue: string>, webPropertyId: string> {
@@ -2691,11 +2690,11 @@ export def "management-accounts-webproperties-profiles-goals analyticsmanagement
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # Account ID to which this goal belongs.
-  --active: string@bool-completer # Determines whether this goal is active.
+  --active: oneof<nothing, bool> # Determines whether this goal is active.
   --created: string # Time this goal was created. (format: date-time)
   --eventDetails: record # Details for the goal of the type EVENT. — shape: {eventConditions?: list, useEventValue?: bool}
   --id: string # Goal ID.
@@ -2750,11 +2749,11 @@ export def "management-accounts-webproperties-profiles-goals analyticsmanagement
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # Account ID to which this goal belongs.
-  --active: string@bool-completer # Determines whether this goal is active.
+  --active: oneof<nothing, bool> # Determines whether this goal is active.
   --created: string # Time this goal was created. (format: date-time)
   --eventDetails: record # Details for the goal of the type EVENT. — shape: {eventConditions?: list, useEventValue?: bool}
   --id: string # Goal ID.
@@ -2803,7 +2802,7 @@ export def "management-accounts-webproperties-profiles-profile-filter-links anal
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --max-results: int # The maximum number of profile filter links to include in this response.
@@ -2839,7 +2838,7 @@ export def "management-accounts-webproperties-profiles-profile-filter-links anal
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --filterRef: record # JSON template for a profile filter link. — shape: {href?: string, id?: string, kind?: string}
@@ -2879,7 +2878,7 @@ export def "management-accounts-webproperties-profiles-profile-filter-links anal
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
@@ -2912,7 +2911,7 @@ export def "management-accounts-webproperties-profiles-profile-filter-links anal
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<filterRef: record<accountId: string, href: string, id: string, kind: string, name: string>, id: string, kind: string, profileRef: record<accountId: string, href: string, id: string, internalWebPropertyId: string, kind: string, name: string, webPropertyId: string>, rank: int, selfLink: string> {
@@ -2947,7 +2946,7 @@ export def "management-accounts-webproperties-profiles-profile-filter-links anal
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --filterRef: record # JSON template for a profile filter link. — shape: {href?: string, id?: string, kind?: string}
@@ -2989,7 +2988,7 @@ export def "management-accounts-webproperties-profiles-profile-filter-links anal
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --filterRef: record # JSON template for a profile filter link. — shape: {href?: string, id?: string, kind?: string}
@@ -3028,7 +3027,7 @@ export def "management-accounts-webproperties-profiles-unsampled-reports analyti
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --max-results: int # The maximum number of unsampled reports to include in this response.
@@ -3064,7 +3063,7 @@ export def "management-accounts-webproperties-profiles-unsampled-reports analyti
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # Account ID to which this unsampled report belongs.
@@ -3111,7 +3110,7 @@ export def "management-accounts-webproperties-profiles-unsampled-reports analyti
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
@@ -3144,7 +3143,7 @@ export def "management-accounts-webproperties-profiles-unsampled-reports analyti
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<accountId: string, cloudStorageDownloadDetails: record<bucketId: string, objectId: string>, created: string, dimensions: string, downloadType: string, driveDownloadDetails: record<documentId: string>, end_date: string, filters: string, id: string, kind: string, metrics: string, profileId: string, segment: string, selfLink: string, start_date: string, status: string, title: string, updated: string, webPropertyId: string> {
@@ -3175,7 +3174,7 @@ export def "management-accounts-webproperties-remarketing-audiences analyticsman
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --max-results: int # The maximum number of remarketing audiences to include in this response.
@@ -3212,7 +3211,7 @@ export def "management-accounts-webproperties-remarketing-audiences analyticsman
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # Account ID to which this remarketing audience belongs.
@@ -3257,7 +3256,7 @@ export def "management-accounts-webproperties-remarketing-audiences analyticsman
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
@@ -3289,7 +3288,7 @@ export def "management-accounts-webproperties-remarketing-audiences analyticsman
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<accountId: string, audienceDefinition: record<includeConditions: record<daysToLookBack: int, isSmartList: bool, kind: string, membershipDurationDays: int, segment: string>>, audienceType: string, created: string, description: string, id: string, internalWebPropertyId: string, kind: string, linkedAdAccounts: table<accountId: string, eligibleForSearch: bool, id: string, internalWebPropertyId: string, kind: string, linkedAccountId: string, remarketingAudienceId: string, status: string, type: string, webPropertyId: string>, linkedViews: list<string>, name: string, stateBasedAudienceDefinition: record<excludeConditions: record<exclusionDuration: string, segment: string>, includeConditions: record<daysToLookBack: int, isSmartList: bool, kind: string, membershipDurationDays: int, segment: string>>, updated: string, webPropertyId: string> {
@@ -3324,7 +3323,7 @@ export def "management-accounts-webproperties-remarketing-audiences analyticsman
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # Account ID to which this remarketing audience belongs.
@@ -3372,7 +3371,7 @@ export def "management-accounts-webproperties-remarketing-audiences analyticsman
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # Account ID to which this remarketing audience belongs.
@@ -3414,7 +3413,7 @@ export def "management-client-id-hash-client-id analyticsmanagementclientIdhashC
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --clientId: string
@@ -3449,7 +3448,7 @@ export def "management-segments analyticsmanagementsegmentslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --max-results: int # The maximum number of segments to include in this response.
@@ -3481,7 +3480,7 @@ export def "metadata-columns analyticsmetadatacolumnslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<attributeNames: list<string>, etag: string, items: table<attributes: record, id: string, kind: string>, kind: string, totalResults: int> {
@@ -3513,7 +3512,7 @@ export def "provisioning-create-account-ticket analyticsprovisioningcreateAccoun
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --account: record # JSON template for Analytics account entry. — shape: {childLink?: record, created?: string, id?: string, kind?: string, name?: string, permissions?: record, selfLink?: string, starred?: bool, updated?: string}
@@ -3551,7 +3550,7 @@ export def "provisioning-create-account-tree analyticsprovisioningcreateAccountT
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --accountName: string
@@ -3590,7 +3589,7 @@ export def "user-deletion-user-deletion-requests-upsert analyticsuserDeletionuse
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --firebaseProjectId: string # Firebase Project Id

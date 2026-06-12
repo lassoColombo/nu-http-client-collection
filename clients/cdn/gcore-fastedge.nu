@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.gcore.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -145,7 +144,7 @@ export def "fastedge-apps addApp" [
   --env: record # Environment variables (e.g. {var1: value1, var2: value2})
   --rsp-headers: record # Extra headers to add to the response (e.g. {header1: value1, header2: value2})
   --log: string@log-completer # DEPRECATED, nullable
-  --debug: string@bool-completer # Enable verbose debug logging for 30 minutes. Automatically expires to prevent performance impact. (default: false, e.g. false)
+  --debug: oneof<nothing, bool> # Enable verbose debug logging for 30 minutes. Automatically expires to prevent performance impact. (default: false, e.g. false)
   --comment: string # Optional human-readable description of the application's purpose (e.g. Production API gateway for customer portal)
   --secrets: record # Application secrets
   --stores: record # Application edge stores
@@ -226,7 +225,7 @@ export def "fastedge-apps patch" [
   --env: record # Environment variables (e.g. {var1: value1, var2: value2})
   --rsp-headers: record # Extra headers to add to the response (e.g. {header1: value1, header2: value2})
   --log: string@log-completer # DEPRECATED, nullable
-  --debug: string@bool-completer # Enable verbose debug logging for 30 minutes. Automatically expires to prevent performance impact. (default: false, e.g. false)
+  --debug: oneof<nothing, bool> # Enable verbose debug logging for 30 minutes. Automatically expires to prevent performance impact. (default: false, e.g. false)
   --comment: string # Optional human-readable description of the application's purpose (e.g. Production API gateway for customer portal)
   --secrets: record # Application secrets
   --stores: record # Application edge stores
@@ -263,7 +262,7 @@ export def "fastedge-apps updateApp" [
   --env: record # Environment variables (e.g. {var1: value1, var2: value2})
   --rsp-headers: record # Extra headers to add to the response (e.g. {header1: value1, header2: value2})
   --log: string@log-completer # DEPRECATED, nullable
-  --debug: string@bool-completer # Enable verbose debug logging for 30 minutes. Automatically expires to prevent performance impact. (default: false, e.g. false)
+  --debug: oneof<nothing, bool> # Enable verbose debug logging for 30 minutes. Automatically expires to prevent performance impact. (default: false, e.g. false)
   --comment: string # Optional human-readable description of the application's purpose (e.g. Production API gateway for customer portal)
   --secrets: record # Application secrets
   --stores: record # Application edge stores
@@ -592,7 +591,7 @@ export def "fastedge-kv-data modifyStoreData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # Force data type change (default: false)
+  --force: oneof<nothing, bool> # Force data type change (default: false)
   --body: record
 ]: any -> record<del_count: int, revision: int, store_size: int, write_count: int, write_size: int> {
   let input = $in
@@ -722,7 +721,7 @@ export def "fastedge-secrets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # When true, deletes secret even if used by applications. Defaults to false.
+  --force: oneof<nothing, bool> # When true, deletes secret even if used by applications. Defaults to false.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -904,7 +903,7 @@ export def "fastedge-template listTemplates" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --api-type: string@api-type-completer # API type:   wasi-http - WASI with HTTP entry point   proxy-wasm - Proxy-Wasm app, callable from CDN (e.g. wasi-http)
-  --only-mine: string@bool-completer # When true, returns only templates created by the client. When false, includes shared templates. (default: false, e.g. false)
+  --only-mine: oneof<nothing, bool> # When true, returns only templates created by the client. When false, includes shared templates. (default: false, e.g. false)
   --limit: int # Maximum number of results to return (default: 50, e.g. 50)
   --offset: int # Number of results to skip for pagination (default: 0, e.g. 0)
 ]: nothing -> record<count: int, templates: table<id: int, name: string, short_descr: string, long_descr: string, api_type: string, owned: bool>> {
@@ -934,7 +933,7 @@ export def "fastedge-template addTemplate" [
   name: string # Unique name for the template (used for identification and searching) (e.g. api-gateway-template)
   --short-descr: string # Brief one-line description displayed in template listings (e.g. HTTP API gateway with authentication)
   --long-descr: string # Detailed markdown description explaining template features and usage (e.g. Complete API gateway solution with JWT authentication, rate limiting, and request transformation capabilities.)
-  --owned: string@bool-completer # Is the template owned by user?
+  --owned: oneof<nothing, bool> # Is the template owned by user?
   params: list # Parameters — item shape: {name: string, data_type: "string"|"number"|"date"|"time"|"secret"|"store"|"bool"|"json"|"enum", mandatory: bool, descr?: string, metadata?: string}
 ]: any -> record<id: int, name: string, short_descr: string, long_descr: string, api_type: string, owned: bool> {
   let input = $in
@@ -961,7 +960,7 @@ export def "fastedge-template delTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # When true, deletes template even if shared with groups. Defaults to false.
+  --force: oneof<nothing, bool> # When true, deletes template even if shared with groups. Defaults to false.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1012,7 +1011,7 @@ export def "fastedge-template updateTemplate" [
   name: string # Unique name for the template (used for identification and searching) (e.g. api-gateway-template)
   --short-descr: string # Brief one-line description displayed in template listings (e.g. HTTP API gateway with authentication)
   --long-descr: string # Detailed markdown description explaining template features and usage (e.g. Complete API gateway solution with JWT authentication, rate limiting, and request transformation capabilities.)
-  --owned: string@bool-completer # Is the template owned by user?
+  --owned: oneof<nothing, bool> # Is the template owned by user?
   params: list # Parameters — item shape: {name: string, data_type: "string"|"number"|"date"|"time"|"secret"|"store"|"bool"|"json"|"enum", mandatory: bool, descr?: string, metadata?: string}
 ]: any -> record<id: int, name: string, short_descr: string, long_descr: string, api_type: string, owned: bool> {
   let input = $in

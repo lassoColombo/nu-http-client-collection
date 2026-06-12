@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.postmarkapp.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -109,7 +108,7 @@ export def "bounces list" [
   --count: int # Number of bounces to return per request. Max 500.
   --offset: int # Number of bounces to skip.
   --type: string@type-completer # Filter by type of bounce
-  --inactive: string@bool-completer # Filter by emails that were deactivated by Postmark due to the bounce. Set to true or false. If this isn't specified it will return both active and inactive.
+  --inactive: oneof<nothing, bool> # Filter by emails that were deactivated by Postmark due to the bounce. Set to true or false. If this isn't specified it will return both active and inactive.
   --emailFilter: string # Filter by email address (format: email)
   --messageID: string # Filter by messageID
   --tag: string # Filter by tag
@@ -253,7 +252,7 @@ export def "email sendEmail" [
   --TextBody: string # If no HtmlBody specified Plain text email message
   --To: string # Recipient email address. Multiple addresses are comma seperated. Max 50.
   --TrackLinks: string@TrackLinks-completer # Replace links in content to enable "click tracking" stats. Default is 'null', which uses the server's LinkTracking setting'.
-  --TrackOpens: string@bool-completer # Activate open tracking for this email.
+  --TrackOpens: oneof<nothing, bool> # Activate open tracking for this email.
 ]: any -> record<ErrorCode: int, Message: string, MessageID: string, SubmittedAt: string, To: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -344,7 +343,7 @@ export def "email-with-template sendEmailWithTemplate" [
   --Cc: string # format: email
   From: string # format: email
   --Headers: list # item shape: {Name?: string, Value?: string}
-  --InlineCss: string@bool-completer # default: true
+  --InlineCss: oneof<nothing, bool> # default: true
   --ReplyTo: string
   --Tag: string
   TemplateAlias: string # Required if 'TemplateId' is not specified.
@@ -352,7 +351,7 @@ export def "email-with-template sendEmailWithTemplate" [
   TemplateModel: record
   To: string # format: email
   --TrackLinks: string@TrackLinks-completer # Replace links in content to enable "click tracking" stats. Default is 'null', which uses the server's LinkTracking setting'.
-  --TrackOpens: string@bool-completer # Activate open tracking for this email.
+  --TrackOpens: oneof<nothing, bool> # Activate open tracking for this email.
 ]: any -> record<ErrorCode: int, Message: string, MessageID: string, SubmittedAt: string, To: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -740,11 +739,11 @@ export def "server editCurrentServerConfiguration" [
   --InboundSpamThreshold: int
   --Name: string
   --OpenHookUrl: string
-  --PostFirstOpenOnly: string@bool-completer
-  --RawEmailEnabled: string@bool-completer
-  --SmtpApiActivated: string@bool-completer
+  --PostFirstOpenOnly: oneof<nothing, bool>
+  --RawEmailEnabled: oneof<nothing, bool>
+  --SmtpApiActivated: oneof<nothing, bool>
   --TrackLinks: string@TrackLinks-completer
-  --TrackOpens: string@bool-completer
+  --TrackOpens: oneof<nothing, bool>
 ]: any -> record<ApiTokens: list<string>, BounceHookUrl: string, ClickHookUrl: string, Color: string, DeliveryHookUrl: string, ID: int, InboundAddress: string, InboundDomain: string, InboundHash: string, InboundHookUrl: string, InboundSpamThreshold: int, Name: string, OpenHookUrl: string, PostFirstOpenOnly: bool, RawEmailEnabled: bool, ServerLink: string, SmtpApiActivated: bool, TrackLinks: string, TrackOpens: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1167,7 +1166,7 @@ export def "templates-validate testTemplateContent" [
   --allow-errors(-e) # Return full response without error handling
   --X-Postmark-Server-Token: string # The token associated with the Server on which this request will operate.
   --HtmlBody: string # The html body content to validate. Must be specified if Subject or TextBody are not. See our template language documentation for more information on the syntax for this field.
-  --InlineCssForHtmlTestRender: string@bool-completer # When HtmlBody is specified, the test render will have style blocks inlined as style attributes on matching html elements. You may disable the css inlining behavior by passing false for this parameter.  (default: true)
+  --InlineCssForHtmlTestRender: oneof<nothing, bool> # When HtmlBody is specified, the test render will have style blocks inlined as style attributes on matching html elements. You may disable the css inlining behavior by passing false for this parameter.  (default: true)
   --Subject: string # The subject content to validate. Must be specified if HtmlBody or TextBody are not. See our template language documentation for more information on the syntax for this field.
   --TestRenderModel: record # The model to be used when rendering test content.
   --TextBody: string # The text body content to validate. Must be specified if HtmlBody or Subject are not. See our template language documentation for more information on the syntax for this field.

@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -173,7 +172,7 @@ export def "booking post" [
   --firstname: string # First name of the guest who made the booking
   --lastname: string # Last name for the guest who made the booking
   --totalprice: int # The total price for the booking
-  --depositpaid: string@bool-completer # Whether the deposit has been paid or not
+  --depositpaid: oneof<nothing, bool> # Whether the deposit has been paid or not
   --bookingdates: record # shape: {checkin?: string, checkout?: string}
   --additionalneeds: string # Any other needs the guest has
 ]: any -> record<bookingid: int, booking: record<firstname: string, lastname: string, totalprice: int, depositpaid: bool, bookingdates: record<checkin: string, checkout: string>, additionalneeds: string>> {
@@ -226,7 +225,7 @@ export def "booking put" [
   --firstname: string # First name of the guest who made the booking
   --lastname: string # Last name for the guest who made the booking
   --totalprice: int # The total price for the booking
-  --depositpaid: string@bool-completer # Whether the deposit has been paid or not
+  --depositpaid: oneof<nothing, bool> # Whether the deposit has been paid or not
   --bookingdates: record # shape: {checkin?: string, checkout?: string}
   --additionalneeds: string # Any other needs the guest has
 ]: any -> record<firstname: string, lastname: string, totalprice: int, depositpaid: bool, bookingdates: record<checkin: string, checkout: string>, additionalneeds: string> {
@@ -260,7 +259,7 @@ export def "booking patch" [
   --firstname: string # First name of the guest who made the booking
   --lastname: string # Last name for the guest who made the booking
   --totalprice: int # The total price for the booking
-  --depositpaid: string@bool-completer # Whether the deposit has been paid or not
+  --depositpaid: oneof<nothing, bool> # Whether the deposit has been paid or not
   --bookingdates: record # shape: {checkin?: string, checkout?: string}
   --additionalneeds: string # Any other needs the guest has
 ]: any -> record<firstname: string, lastname: string, totalprice: int, depositpaid: bool, bookingdates: record<checkin: string, checkout: string>, additionalneeds: string> {

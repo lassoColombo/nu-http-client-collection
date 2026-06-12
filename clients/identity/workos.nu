@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.workos.com" "https://api.workos-test.com" "https://auth.workos.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -988,7 +987,7 @@ export def "authorization-organizations-resources delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cascade-delete: string@bool-completer # If true, deletes all descendant resources and role assignments. If not set and the resource has children or assignments, the request will fail. (default: false, e.g. false)
+  --cascade-delete: oneof<nothing, bool> # If true, deletes all descendant resources and role assignments. If not set and the resource has children or assignments, the request will fail. (default: false, e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1308,7 +1307,7 @@ export def "authorization-resources delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cascade-delete: string@bool-completer # If true, deletes all descendant resources and role assignments. If not set and the resource has children or assignments, the request will fail. (default: false, e.g. false)
+  --cascade-delete: oneof<nothing, bool> # If true, deletes all descendant resources and role assignments. If not set and the resource has children or assignments, the request will fail. (default: false, e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1571,8 +1570,8 @@ export def "connect-applications create" [
   --description: string # A description for the application. (nullable, e.g. An application for managing user access)
   --scopes: list # The OAuth scopes granted to the application. (nullable, e.g. [openid, profile, email])
   --redirect-uris: list # Redirect URIs for the application. (nullable, e.g. [{uri: https://example.com/callback, default: true}]) — item shape: {uri: string, default?: bool}
-  --uses-pkce: string@bool-completer # Whether the application uses PKCE (Proof Key for Code Exchange). (nullable, e.g. true)
-  --is-first-party: string@bool-completer # Whether this is a first-party application. Third-party applications require an organization_id. (e.g. true)
+  --uses-pkce: oneof<nothing, bool> # Whether the application uses PKCE (Proof Key for Code Exchange). (nullable, e.g. true)
+  --is-first-party: oneof<nothing, bool> # Whether this is a first-party application. Third-party applications require an organization_id. (e.g. true)
   --organization-id: string # The organization ID this application belongs to. Required when is_first_party is false. (nullable, e.g. org_01EHZNVPK3SFK441A1RGBFSHRT)
 ]: any -> record<object: string, id: string, client_id: string, description: string, name: string, scopes: list<string>, created_at: string, updated_at: string> {
   let input = $in
@@ -2334,7 +2333,7 @@ export def "organizations create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string # The name of the organization. (e.g. Foo Corp)
-  --allow-profiles-outside-organization: string@bool-completer # Whether the organization allows profiles from outside the organization to sign in. (e.g. false)
+  --allow-profiles-outside-organization: oneof<nothing, bool> # Whether the organization allows profiles from outside the organization to sign in. (e.g. false)
   --domains: list # The domains associated with the organization. Deprecated in favor of `domain_data`. (e.g. [example.com])
   --domain-data: list # The domains associated with the organization, including verification state. — item shape: {domain: string, state: "pending"|"verified"}
   --metadata: record # Object containing [metadata](/authkit/metadata) key/value pairs associated with the Organization. (nullable, e.g. {tier: diamond})
@@ -2411,7 +2410,7 @@ export def "organizations updateOrganization" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name of the organization. (e.g. Foo Corp)
-  --allow-profiles-outside-organization: string@bool-completer # Whether the organization allows profiles from outside the organization to sign in. (e.g. false)
+  --allow-profiles-outside-organization: oneof<nothing, bool> # Whether the organization allows profiles from outside the organization to sign in. (e.g. false)
   --domains: list # The domains associated with the organization. Deprecated in favor of `domain_data`. (DEPRECATED, e.g. [foo-corp.com])
   --domain-data: list # The domains associated with the organization, including verification state. — item shape: {domain: string, state: "pending"|"verified"}
   --stripe-customer-id: string # The Stripe customer ID associated with the organization. (e.g. cus_R9qWAGMQ6nGE7V)
@@ -3917,7 +3916,7 @@ export def "user-management-users create0" [
   --first-name: string # The first name of the user. (nullable, e.g. Marcelina)
   --last-name: string # The last name of the user. (nullable, e.g. Davis)
   --name: string # The user's full name. (nullable, e.g. Marcelina Davis)
-  --email-verified: string@bool-completer # Whether the user's email has been verified. (nullable, e.g. true)
+  --email-verified: oneof<nothing, bool> # Whether the user's email has been verified. (nullable, e.g. true)
   --metadata: record # Object containing metadata key/value pairs associated with the user. (nullable, e.g. {timezone: America/New_York})
   --external-id: string # The external ID of the user. (nullable, e.g. f1ffa2b2-c20b-4d39-be5c-212726e11222)
 ]: any -> record<object: string, id: string, first_name: string, last_name: string, name: string, profile_picture_url: string, email: string, email_verified: bool, external_id: string, metadata: record, last_sign_in_at: string, locale: string, created_at: string, updated_at: string> {
@@ -3971,7 +3970,7 @@ export def "user-management-users update0" [
   --first-name: string # The first name of the user. (e.g. Marcelina)
   --last-name: string # The last name of the user. (e.g. Davis)
   --name: string # The user's full name. (e.g. Marcelina Davis)
-  --email-verified: string@bool-completer # Whether the user's email has been verified. (e.g. true)
+  --email-verified: oneof<nothing, bool> # Whether the user's email has been verified. (e.g. true)
   --metadata: record # Object containing metadata key/value pairs associated with the user. (nullable, e.g. {timezone: America/New_York})
   --external-id: string # The external ID of the user. (nullable, e.g. f1ffa2b2-c20b-4d39-be5c-212726e11222)
   --locale: string # The user's preferred locale. (nullable, e.g. en-US)

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.themoviedb.org/3"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -368,7 +367,7 @@ export def "keyword-movies KeywordMovies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-adult: string@bool-completer # default: false
+  --include-adult: oneof<nothing, bool> # default: false
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
   --page: int # format: int32, default: 1
 ]: nothing -> record<page: int, total_pages: int, total_results: int, results: table<id: int, title: string, original_language: string, original_title: string, adult: bool, backdrop_path: string, genre_ids: list, overview: string, popularity: float, poster_path: string, release_date: string, video: bool, vote_average: float, vote_count: int>> {
@@ -659,7 +658,7 @@ export def "search-collection SearchCollection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string
-  --include-adult: string@bool-completer # default: false
+  --include-adult: oneof<nothing, bool> # default: false
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
   --page: int # format: int32, default: 1
   --region: string # `ISO-3166-1` code
@@ -710,7 +709,7 @@ export def "search-movie SearchMovie" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string
-  --include-adult: string@bool-completer # default: false
+  --include-adult: oneof<nothing, bool> # default: false
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
   --primary-release-year: int # format: int32
   --page: int # format: int32, default: 1
@@ -739,7 +738,7 @@ export def "search-multi SearchMulti" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string
-  --include-adult: string@bool-completer # default: false
+  --include-adult: oneof<nothing, bool> # default: false
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
   --page: int # format: int32, default: 1
 ]: nothing -> record<page: int, total_pages: int, total_results: int, results: list<any>> {
@@ -765,7 +764,7 @@ export def "search-person SearchPerson" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string
-  --include-adult: string@bool-completer # default: false
+  --include-adult: oneof<nothing, bool> # default: false
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
   --page: int # format: int32, default: 1
 ]: nothing -> record<page: int, total_pages: int, total_results: int, results: table<id: int, name: string, original_name: string, adult: bool, gender: int, known_for_department: string, popularity: float, profile_path: string, known_for: list>> {
@@ -792,7 +791,7 @@ export def "search-tv SearchTV" [
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string
   --first-air-date-year: string
-  --include-adult: string@bool-completer # default: false
+  --include-adult: oneof<nothing, bool> # default: false
   --language: string # `ISO-639-1`-`ISO-3166-1` code (default: en-US)
   --page: int # format: int32, default: 1
   --year: string

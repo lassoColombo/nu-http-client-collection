@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://geocoder.api.gov.bc.ca" "https://geocodertst.api.gov.bc.ca" "https://geocoderdlv.api.gov.bc.ca"] }
 def auth-scheme-completer [] { ["apikey"] }
 
@@ -111,9 +110,9 @@ export def "addresses-output-format get" [
   --locationDescriptor: string@locationDescriptor-completer # Describes the nature of the address location. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#locationDescriptor target="_blank">locationDescriptor</a> (default: any)
   --maxResults: int # The maximum number of search results to return. (default: 1)
   --interpolation: string@interpolation-completer # accessPoint interpolation method. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#interpolation target="_blank">interpolation</a> (default: adaptive)
-  --echo: string@bool-completer # If true, include unmatched address details such as site name in results. (default: true)
-  --brief: string@bool-completer # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
-  --autoComplete: string@bool-completer # If true, addressString is expected to contain a partial address that requires completion. Not supported for shp, csv, gml formats. (default: false)
+  --echo: oneof<nothing, bool> # If true, include unmatched address details such as site name in results. (default: true)
+  --brief: oneof<nothing, bool> # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
+  --autoComplete: oneof<nothing, bool> # If true, addressString is expected to contain a partial address that requires completion. Not supported for shp, csv, gml formats. (default: false)
   --setBack: int # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: 0)
   --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --minScore: int # The minimum score required for a match to be returned. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#minScore target="_blank">minScore</a> (default: 1)
@@ -136,7 +135,7 @@ export def "addresses-output-format get" [
   --bbox: string # Example: -126.07929,49.7628,-126.0163,49.7907.  A bounding box (xmin,ymin,xmax,ymax) that limits the search area. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#bbox target="_blank">bbox</a>
   --centre: string # Example: -124.0165926,49.2296251 .  The coordinates of a centre point (x,y) used to define a bounding circle that will limit the search area. This parameter must be specified together with 'maxDistance'. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#centre target='_blank'>centre</a>
   --maxDistance: float # The maximum distance (in metres) to search from the given point.  If not specified, the search distance is unlimited.
-  --extrapolate: string@bool-completer # If true, uses supplied parcelPoint to derive an appropriate accessPoint.           See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#extrapolate target="_blank">extrapolate</a>
+  --extrapolate: oneof<nothing, bool> # If true, uses supplied parcelPoint to derive an appropriate accessPoint.           See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#extrapolate target="_blank">extrapolate</a>
   --parcelPoint: string # The coordinates of a point (x,y) known to be inside the parcel containing a given address. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#parcelPoint target="_blank">parcelPoint</a>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
@@ -271,9 +270,9 @@ export def "occupants-addresses-output-format get" [
   --locationDescriptor: string@locationDescriptor-completer # Describes the nature of the address location. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#locationDescriptor target="_blank">locationDescriptor</a> (default: any)
   --maxResults: int # The maximum number of search results to return. (default: 1)
   --interpolation: string@interpolation-completer # accessPoint interpolation method. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#interpolation target="_blank">interpolation</a> (default: adaptive)
-  --echo: string@bool-completer # If true, include unmatched address details such as site name in results. (default: false)
-  --brief: string@bool-completer # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
-  --autoComplete: string@bool-completer # If true, addressString is expected to contain a partial address that requires completion. Not supported for shp, csv, gml formats. (default: false)
+  --echo: oneof<nothing, bool> # If true, include unmatched address details such as site name in results. (default: false)
+  --brief: oneof<nothing, bool> # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
+  --autoComplete: oneof<nothing, bool> # If true, addressString is expected to contain a partial address that requires completion. Not supported for shp, csv, gml formats. (default: false)
   --setBack: int # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: 0)
   --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --minScore: int # The minimum score required for a match to be returned. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#minScore target="_blank">minScore</a> (default: 1)
@@ -296,7 +295,7 @@ export def "occupants-addresses-output-format get" [
   --bbox: string # Example: -126.07929,49.7628,-126.0163,49.7907.  A bounding box (xmin,ymin,xmax,ymax) that limits the search area. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#bbox target="_blank">bbox</a>
   --centre: string # Example: -124.0165926,49.2296251 .  The coordinates of a centre point (x,y) used to define a bounding circle that will limit the search area. This parameter must be specified together with 'maxDistance'. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#centre target='_blank'>centre</a>
   --maxDistance: float # The maximum distance (in metres) to search from the given point.  If not specified, the search distance is unlimited.
-  --extrapolate: string@bool-completer # If true, uses supplied parcelPoint to derive an appropriate accessPoint.           See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#extrapolate target="_blank">extrapolate</a>
+  --extrapolate: oneof<nothing, bool> # If true, uses supplied parcelPoint to derive an appropriate accessPoint.           See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#extrapolate target="_blank">extrapolate</a>
   --parcelPoint: string # The coordinates of a point (x,y) known to be inside the parcel containing a given address. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#parcelPoint target="_blank">parcelPoint</a>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
@@ -326,7 +325,7 @@ export def "occupants-near-output-format get" [
   --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --maxResults: int # The maximum number of search results to return. (default: 1)
   --locationDescriptor: string@locationDescriptor-completer # Describes the nature of the address location. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#locationDescriptor target="_blank">locationDescriptor</a> (default: any)
-  --brief: string@bool-completer # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
+  --brief: oneof<nothing, bool> # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
   --setBack: int # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: 0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
@@ -355,7 +354,7 @@ export def "occupants-nearest-output-format get" [
   --tags: string # Example: schools;courts;employment<br>A list of tags separated by semicolons.
   --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --locationDescriptor: string@locationDescriptor-completer # Describes the nature of the address location. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#locationDescriptor target="_blank">locationDescriptor</a> (default: any)
-  --brief: string@bool-completer # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
+  --brief: oneof<nothing, bool> # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
   --setBack: int # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: 0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
@@ -384,7 +383,7 @@ export def "occupants-within-output-format get" [
   --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --maxResults: int # The maximum number of search results to return. (default: 200)
   --locationDescriptor: string@locationDescriptor-completer # Describes the nature of the address location. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#locationDescriptor target="_blank">locationDescriptor</a> (default: any)
-  --brief: string@bool-completer # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
+  --brief: oneof<nothing, bool> # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
   --setBack: int # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: 0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
@@ -411,7 +410,7 @@ export def "occupants get" [
   --allow-errors(-e) # Return full response without error handling
   --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --locationDescriptor: string@locationDescriptor-completer # Describes the nature of the address location. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#locationDescriptor target="_blank">locationDescriptor</a> (default: any)
-  --brief: string@bool-completer # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
+  --brief: oneof<nothing, bool> # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
   --setBack: int # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: 0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
@@ -463,9 +462,9 @@ export def "sites-near-output-format get" [
   --maxResults: int # The maximum number of search results to return. (default: 1)
   --locationDescriptor: string@locationDescriptor-completer # Describes the nature of the address location. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#locationDescriptor target="_blank">locationDescriptor</a> (default: any)
   --setBack: int # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: 0)
-  --brief: string@bool-completer # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
-  --excludeUnits: string@bool-completer # If true, excludes sites that are units of a parent site (default: false)
-  --onlyCivic: string@bool-completer # If true, excludes sites without a civic address (default: false)
+  --brief: oneof<nothing, bool> # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
+  --excludeUnits: oneof<nothing, bool> # If true, excludes sites that are units of a parent site (default: false)
+  --onlyCivic: oneof<nothing, bool> # If true, excludes sites without a civic address (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -493,9 +492,9 @@ export def "sites-nearest-output-format get" [
   --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --locationDescriptor: string@locationDescriptor-completer # Describes the nature of the address location. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#locationDescriptor target="_blank">locationDescriptor</a> (default: any)
   --setBack: int # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: 0)
-  --brief: string@bool-completer # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
-  --excludeUnits: string@bool-completer # If true, excludes sites that are units of a parent site (default: false)
-  --onlyCivic: string@bool-completer # If true, excludes sites without a civic address (default: false)
+  --brief: oneof<nothing, bool> # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
+  --excludeUnits: oneof<nothing, bool> # If true, excludes sites that are units of a parent site (default: false)
+  --onlyCivic: oneof<nothing, bool> # If true, excludes sites without a civic address (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -523,9 +522,9 @@ export def "sites-within-output-format get" [
   --maxResults: int # The maximum number of search results to return. (default: 1)
   --locationDescriptor: string@locationDescriptor-completer # Describes the nature of the address location. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#locationDescriptor target="_blank">locationDescriptor</a> (default: any)
   --setBack: int # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: 0)
-  --brief: string@bool-completer # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
-  --excludeUnits: string@bool-completer # If true, excludes sites that are units of a parent site (default: false)
-  --onlyCivic: string@bool-completer # If true, excludes sites without a civic address (default: false)
+  --brief: oneof<nothing, bool> # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
+  --excludeUnits: oneof<nothing, bool> # If true, excludes sites that are units of a parent site (default: false)
+  --onlyCivic: oneof<nothing, bool> # If true, excludes sites without a civic address (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -551,7 +550,7 @@ export def "sites get" [
   --allow-errors(-e) # Return full response without error handling
   --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --locationDescriptor: string@locationDescriptor-completer # Describes the nature of the address location. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#locationDescriptor target="_blank">locationDescriptor</a> (default: any)
-  --brief: string@bool-completer # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
+  --brief: oneof<nothing, bool> # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
   --setBack: int # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: 0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
@@ -578,7 +577,7 @@ export def "sites-subsites-output-format get" [
   --allow-errors(-e) # Return full response without error handling
   --outputSRS: int@outputSRS-completer # The EPSG code of the spatial reference system (SRS) to use for output geometries. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#outputSRS target="_blank">outputSRS</a> (default: 4326)
   --locationDescriptor: string@locationDescriptor-completer # Describes the nature of the address location. See <a href=https://github.com/bcgov/ols-geocoder/blob/gh-pages/glossary.md#locationDescriptor target="_blank">locationDescriptor</a> (default: any)
-  --brief: string@bool-completer # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
+  --brief: oneof<nothing, bool> # If true, include only basic match and address details in results. Not supported for shp, csv, and gml formats. (default: false)
   --setBack: int # The distance to move the accessPoint away from the curb and towards the inside of the parcel (in metres). Ignored if locationDescriptor not set to accessPoint. (default: 0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))

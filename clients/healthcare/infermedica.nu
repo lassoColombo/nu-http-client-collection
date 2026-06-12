@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.infermedica.com/v2"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -149,7 +148,7 @@ export def "conditions list" [
   --allow-errors(-e) # Return full response without error handling
   --agevalue: int # age value (format: int32, e.g. 18)
   --ageunit: string@ageunit-completer # unit in which age value was provided (default: year, e.g. year)
-  --enable-triage-5: string@bool-completer # enable 5-level triage values
+  --enable-triage-5: oneof<nothing, bool> # enable 5-level triage values
 ]: nothing -> table<acuteness: string, categories: list<string>, common_name: string, extras: record, id: string, name: string, prevalence: string, severity: string, sex_filter: string, triage_level: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -175,7 +174,7 @@ export def "conditions get" [
   --allow-errors(-e) # Return full response without error handling
   --agevalue: int # age value (format: int32, e.g. 18)
   --ageunit: string@ageunit-completer # unit in which age value was provided (default: year, e.g. year)
-  --enable-triage-5: string@bool-completer # enable 5-level triage values
+  --enable-triage-5: oneof<nothing, bool> # enable 5-level triage values
 ]: nothing -> record<acuteness: string, categories: list<string>, common_name: string, extras: record, id: string, name: string, prevalence: string, severity: string, sex_filter: string, triage_level: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -358,8 +357,8 @@ export def "parse post" [
   --allow-errors(-e) # Return full response without error handling
   --concept-types: list # list of concept types that should be captured
   --context: list # ordered list of ids of present symptoms that were already captured and can be used as context
-  --correct-spelling: string@bool-completer # correct spelling of input text before proper analysis
-  --include-tokens: string@bool-completer # include tokenization details in output
+  --correct-spelling: oneof<nothing, bool> # correct spelling of input text before proper analysis
+  --include-tokens: oneof<nothing, bool> # include tokenization details in output
   text: string # user text to process
 ]: any -> record<mentions: table<choice_id: string, common_name: string, head_position: int, id: string, name: string, orth: string, positions: list>, obvious: bool, tokens: list<string>> {
   let input = $in
@@ -447,7 +446,7 @@ export def "risk-factors list" [
   --allow-errors(-e) # Return full response without error handling
   --agevalue: int # age value (format: int32, e.g. 18)
   --ageunit: string@ageunit-completer # unit in which age value was provided (default: year, e.g. year)
-  --enable-triage-5: string@bool-completer # enable 5-level triage values
+  --enable-triage-5: oneof<nothing, bool> # enable 5-level triage values
 ]: nothing -> table<category: string, common_name: string, extras: record, id: string, image_source: string, image_url: string, name: string, sex_filter: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -473,7 +472,7 @@ export def "risk-factors get" [
   --allow-errors(-e) # Return full response without error handling
   --agevalue: int # age value (format: int32, e.g. 18)
   --ageunit: string@ageunit-completer # unit in which age value was provided (default: year, e.g. year)
-  --enable-triage-5: string@bool-completer # enable 5-level triage values
+  --enable-triage-5: oneof<nothing, bool> # enable 5-level triage values
 ]: nothing -> record<category: string, common_name: string, extras: record, id: string, image_source: string, image_url: string, name: string, question: string, sex_filter: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -557,7 +556,7 @@ export def "symptoms list" [
   --allow-errors(-e) # Return full response without error handling
   --agevalue: int # age value (format: int32, e.g. 18)
   --ageunit: string@ageunit-completer # unit in which age value was provided (default: year, e.g. year)
-  --enable-triage-5: string@bool-completer # enable 5-level triage values
+  --enable-triage-5: oneof<nothing, bool> # enable 5-level triage values
 ]: nothing -> table<category: string, children: record, common_name: string, extras: record, id: string, image_source: string, image_url: string, name: string, parent_id: string, parent_relation: string, sex_filter: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -583,7 +582,7 @@ export def "symptoms get" [
   --allow-errors(-e) # Return full response without error handling
   --agevalue: int # age value (format: int32, e.g. 18)
   --ageunit: string@ageunit-completer # unit in which age value was provided (default: year, e.g. year)
-  --enable-triage-5: string@bool-completer # enable 5-level triage values
+  --enable-triage-5: oneof<nothing, bool> # enable 5-level triage values
 ]: nothing -> record<category: string, children: record, common_name: string, extras: record, id: string, image_source: string, image_url: string, name: string, parent_id: string, parent_relation: string, question: string, sex_filter: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

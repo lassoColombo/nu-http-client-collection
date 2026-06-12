@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.languagetoolplus.com/v2"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -113,7 +112,7 @@ export def "check post" [
   --disabledRules: string # IDs of rules to be disabled, comma-separated
   --enabledCategories: string # IDs of categories to be enabled, comma-separated
   --disabledCategories: string # IDs of categories to be disabled, comma-separated
-  --enabledOnly: string@bool-completer # If true, only the rules and categories whose IDs are specified with `enabledRules` or `enabledCategories` are enabled.
+  --enabledOnly: oneof<nothing, bool> # If true, only the rules and categories whose IDs are specified with `enabledRules` or `enabledCategories` are enabled.
   --level: string@level-completer # If set to `picky`, additional rules will be activated, i.e. rules that you might only find useful when checking formal text.
 ]: any -> record<language: record<code: string, detectedLanguage: record<code: string, name: string>, name: string>, matches: table<context: record, length: int, message: string, offset: int, replacements: list, rule: record, sentence: string, shortMessage: string>, software: record<apiVersion: int, buildDate: string, name: string, premium: bool, status: string, version: string>> {
   let input = $in

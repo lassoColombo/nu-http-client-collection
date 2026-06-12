@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://clouddirectory.us-east-1.amazonaws.com" "http://clouddirectory.us-east-2.amazonaws.com" "http://clouddirectory.us-west-1.amazonaws.com" "http://clouddirectory.us-west-2.amazonaws.com" "http://clouddirectory.us-gov-west-1.amazonaws.com" "http://clouddirectory.us-gov-east-1.amazonaws.com" "http://clouddirectory.ca-central-1.amazonaws.com" "http://clouddirectory.eu-north-1.amazonaws.com" "http://clouddirectory.eu-west-1.amazonaws.com" "http://clouddirectory.eu-west-2.amazonaws.com" "http://clouddirectory.eu-west-3.amazonaws.com" "http://clouddirectory.eu-central-1.amazonaws.com" "http://clouddirectory.eu-south-1.amazonaws.com" "http://clouddirectory.af-south-1.amazonaws.com" "http://clouddirectory.ap-northeast-1.amazonaws.com" "http://clouddirectory.ap-northeast-2.amazonaws.com" "http://clouddirectory.ap-northeast-3.amazonaws.com" "http://clouddirectory.ap-southeast-1.amazonaws.com" "http://clouddirectory.ap-southeast-2.amazonaws.com" "http://clouddirectory.ap-east-1.amazonaws.com" "http://clouddirectory.ap-south-1.amazonaws.com" "http://clouddirectory.sa-east-1.amazonaws.com" "http://clouddirectory.me-south-1.amazonaws.com" "https://clouddirectory.us-east-1.amazonaws.com" "https://clouddirectory.us-east-2.amazonaws.com" "https://clouddirectory.us-west-1.amazonaws.com" "https://clouddirectory.us-west-2.amazonaws.com" "https://clouddirectory.us-gov-west-1.amazonaws.com" "https://clouddirectory.us-gov-east-1.amazonaws.com" "https://clouddirectory.ca-central-1.amazonaws.com" "https://clouddirectory.eu-north-1.amazonaws.com" "https://clouddirectory.eu-west-1.amazonaws.com" "https://clouddirectory.eu-west-2.amazonaws.com" "https://clouddirectory.eu-west-3.amazonaws.com" "https://clouddirectory.eu-central-1.amazonaws.com" "https://clouddirectory.eu-south-1.amazonaws.com" "https://clouddirectory.af-south-1.amazonaws.com" "https://clouddirectory.ap-northeast-1.amazonaws.com" "https://clouddirectory.ap-northeast-2.amazonaws.com" "https://clouddirectory.ap-northeast-3.amazonaws.com" "https://clouddirectory.ap-southeast-1.amazonaws.com" "https://clouddirectory.ap-southeast-2.amazonaws.com" "https://clouddirectory.ap-east-1.amazonaws.com" "https://clouddirectory.ap-south-1.amazonaws.com" "https://clouddirectory.sa-east-1.amazonaws.com" "https://clouddirectory.me-south-1.amazonaws.com" "http://clouddirectory.cn-north-1.amazonaws.com.cn" "http://clouddirectory.cn-northwest-1.amazonaws.com.cn" "https://clouddirectory.cn-north-1.amazonaws.com.cn" "https://clouddirectory.cn-northwest-1.amazonaws.com.cn"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -497,7 +496,7 @@ export def "amazonclouddirectory-2017-01-11-indexx-amz-data-partition CreateInde
   --X-Amz-SignedHeaders: string
   --x-amz-data-partition: string # The ARN of the directory where the index should be created.
   OrderedIndexedAttributeList: list # Specifies the attributes that should be indexed on. Currently only a single attribute is supported. — item shape: {SchemaArn: any, FacetName: any, Name: any}
-  --IsUnique: string@bool-completer # Indicates whether the attribute that is being indexed has unique values or not.
+  --IsUnique: oneof<nothing, bool> # Indicates whether the attribute that is being indexed has unique values or not.
   --ParentReference: record # The reference that identifies an object. — shape: {Selector?: any}
   --LinkName: string # The name of the link between the parent object and the index object.
 ]: any -> record<ObjectIdentifier: record> {
@@ -1876,7 +1875,7 @@ export def "amazonclouddirectory-2017-01-11-object-parentx-amz-data-partition Li
   ObjectReference: record # The reference that identifies an object. — shape: {Selector?: any}
   --NextToken: string # The pagination token.
   --MaxResults: int # The maximum number of items to be retrieved in a single call. This is an approximate number.
-  --IncludeAllLinksToEachParent: string@bool-completer # When set to True, returns all <a>ListObjectParentsResponse$ParentLinks</a>. There could be multiple links between a parent-child pair.
+  --IncludeAllLinksToEachParent: oneof<nothing, bool> # When set to True, returns all <a>ListObjectParentsResponse$ParentLinks</a>. There could be multiple links between a parent-child pair.
 ]: any -> record<Parents: record, NextToken: record, ParentLinks: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2533,7 +2532,7 @@ export def "amazonclouddirectory-2017-01-11-schema-upgradeapplied UpgradeApplied
   --X-Amz-SignedHeaders: string
   PublishedSchemaArn: string # The revision of the published schema to upgrade the directory to.
   DirectoryArn: string # The ARN for the directory to which the upgraded schema will be applied.
-  --DryRun: string@bool-completer # Used for testing whether the major version schemas are backward compatible or not. If schema compatibility fails, an exception would be thrown else the call would succeed but no changes will be saved. This parameter is optional.
+  --DryRun: oneof<nothing, bool> # Used for testing whether the major version schemas are backward compatible or not. If schema compatibility fails, an exception would be thrown else the call would succeed but no changes will be saved. This parameter is optional.
 ]: any -> record<UpgradedSchemaArn: record, DirectoryArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2570,7 +2569,7 @@ export def "amazonclouddirectory-2017-01-11-schema-upgradepublished UpgradePubli
   DevelopmentSchemaArn: string # The ARN of the development schema with the changes used for the upgrade.
   PublishedSchemaArn: string # The ARN of the published schema to be upgraded.
   MinorVersion: string # Identifies the minor version of the published schema that will be created. This parameter is NOT optional.
-  --DryRun: string@bool-completer # Used for testing whether the Development schema provided is backwards compatible, or not, with the publish schema provided by the user to be upgraded. If schema compatibility fails, an exception would be thrown else the call would succeed. This parameter is optional and defaults to false.
+  --DryRun: oneof<nothing, bool> # Used for testing whether the Development schema provided is backwards compatible, or not, with the publish schema provided by the user to be upgraded. If schema compatibility fails, an exception would be thrown else the call would succeed. This parameter is optional and defaults to false.
 ]: any -> record<UpgradedSchemaArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

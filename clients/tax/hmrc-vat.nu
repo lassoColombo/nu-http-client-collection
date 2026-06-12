@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://test-api.service.hmrc.gov.uk" "https://api.service.hmrc.gov.uk"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -142,7 +141,7 @@ export def "organisations-vat-returns SubmitVATreturnforperiod" [
   totalValuePurchasesExVAT: float # Defines a monetary value (to 2 zeroed decimal places), between -9,999,999,999,999.00 and 9,999,999,999,999.00
   totalValueGoodsSuppliedExVAT: float # Defines a monetary value (to 2 zeroed decimal places), between -9,999,999,999,999.00 and 9,999,999,999,999.00
   totalAcquisitionsExVAT: float # Defines a monetary value (to 2 zeroed decimal places), between -9,999,999,999,999.00 and 9,999,999,999,999.00
-  --finalised: string@bool-completer # Declaration that the user has finalised their VAT return. (e.g. true)
+  --finalised: oneof<nothing, bool> # Declaration that the user has finalised their VAT return. (e.g. true)
 ]: any -> record<processingDate: string, formBundleNumber: string, paymentIndicator: string, chargeRefNumber: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

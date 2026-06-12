@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.trello.com/1"] }
 def auth-scheme-completer [] { ["query-key" "query-token"] }
 
@@ -169,12 +168,12 @@ export def "actions get-actions-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --display: string@bool-completer # default: true
-  --entities: string@bool-completer # default: false
+  --display: oneof<nothing, bool> # default: true
+  --entities: oneof<nothing, bool> # default: false
   --qp-fields: string # `all` or a comma-separated list of action [fields](/cloud/trello/guides/rest-api/object-definitions/#action-object) (default: all)
-  --member: string@bool-completer # default: true
+  --member: oneof<nothing, bool> # default: true
   --member-fields: string # `all` or a comma-separated list of member [fields](/cloud/trello/guides/rest-api/object-definitions/) (default: avatarHash,fullName,initials,username)
-  --memberCreator: string@bool-completer # Whether to include the member object for the creator of the action (default: true)
+  --memberCreator: oneof<nothing, bool> # Whether to include the member object for the creator of the action (default: true)
   --memberCreator-fields: string # `all` or a comma-separated list of member [fields](/cloud/trello/guides/rest-api/object-definitions/) (default: avatarHash,fullName,initials,username)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
@@ -436,8 +435,8 @@ export def "actions-reactions get-actions-idaction-reactions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --member: string@bool-completer # Whether to load the member as a nested resource. See [Members Nested Resource](/cloud/trello/guides/rest-api/nested-resources/#members-nested-resource) (default: true)
-  --emoji: string@bool-completer # Whether to load the emoji as a nested resource. (default: true)
+  --member: oneof<nothing, bool> # Whether to load the member as a nested resource. See [Members Nested Resource](/cloud/trello/guides/rest-api/nested-resources/#members-nested-resource) (default: true)
+  --emoji: oneof<nothing, bool> # Whether to load the emoji as a nested resource. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -491,8 +490,8 @@ export def "actions-reactions get-actions-idaction-reactions-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --member: string@bool-completer # Whether to load the member as a nested resource. See [Members Nested Resource](/cloud/trello/guides/rest-api/nested-resources/#members-nested-resource) (default: true)
-  --emoji: string@bool-completer # Whether to load the emoji as a nested resource. (default: true)
+  --member: oneof<nothing, bool> # Whether to load the member as a nested resource. See [Members Nested Resource](/cloud/trello/guides/rest-api/nested-resources/#members-nested-resource) (default: true)
+  --emoji: oneof<nothing, bool> # Whether to load the emoji as a nested resource. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -607,9 +606,9 @@ export def "boards-memberships get-boards-id-memberships" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string@filter-completer # One of `admins`, `all`, `none`, `normal` (default: all)
-  --activity: string@bool-completer # Works for premium organizations only. (default: false)
-  --orgMemberType: string@bool-completer # Shows the type of member to the org the user is. For instance, an org admin will have a `orgMemberType` of `admin`. (default: false)
-  --member: string@bool-completer # Determines whether to include a [nested member object](/cloud/trello/guides/rest-api/nested-resources/). (default: false)
+  --activity: oneof<nothing, bool> # Works for premium organizations only. (default: false)
+  --orgMemberType: oneof<nothing, bool> # Shows the type of member to the org the user is. For instance, an org admin will have a `orgMemberType` of `admin`. (default: false)
+  --member: oneof<nothing, bool> # Determines whether to include a [nested member object](/cloud/trello/guides/rest-api/nested-resources/). (default: false)
   --member-fields: string@member-fields-completer # Fields to show if `member=true`. Valid values: [nested member resource fields](/cloud/trello/guides/rest-api/nested-resources/).
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
@@ -637,19 +636,19 @@ export def "boards get-boards-id" [
   --actions: string # This is a nested resource. Read more about actions as nested resources [here](/cloud/trello/guides/rest-api/nested-resources/). (default: all)
   --boardStars: string # Valid values are one of: `mine` or `none`. (default: none)
   --cards: string # This is a nested resource. Read more about cards as nested resources [here](/cloud/trello/guides/rest-api/nested-resources/). (default: none)
-  --card-pluginData: string@bool-completer # Use with the `cards` param to include card pluginData with the response (default: false)
+  --card-pluginData: oneof<nothing, bool> # Use with the `cards` param to include card pluginData with the response (default: false)
   --checklists: string # This is a nested resource. Read more about checklists as nested resources [here](/cloud/trello/guides/rest-api/nested-resources/). (default: none)
-  --customFields: string@bool-completer # This is a nested resource. Read more about custom fields as nested resources [here](#custom-fields-nested-resource). (default: false)
+  --customFields: oneof<nothing, bool> # This is a nested resource. Read more about custom fields as nested resources [here](#custom-fields-nested-resource). (default: false)
   --qp-fields: string # The fields of the board to be included in the response. Valid values: all or a comma-separated list of: closed, dateLastActivity, dateLastView, desc, descData, idMemberCreator, idOrganization, invitations, invited, labelNames, memberships, name, pinned, powerUps, prefs, shortLink, shortUrl, starred, subscribed, url (default: name,desc,descData,closed,idOrganization,pinned,url,shortUrl,prefs,labelNames)
   --labels: string # This is a nested resource. Read more about labels as nested resources [here](/cloud/trello/guides/rest-api/nested-resources/).
   --lists: string # This is a nested resource. Read more about lists as nested resources [here](/cloud/trello/guides/rest-api/nested-resources/). (default: open)
   --members: string # This is a nested resource. Read more about members as nested resources [here](/cloud/trello/guides/rest-api/nested-resources/). (default: none)
   --memberships: string # This is a nested resource. Read more about memberships as nested resources [here](/cloud/trello/guides/rest-api/nested-resources/). (default: none)
-  --pluginData: string@bool-completer # Determines whether the pluginData for this board should be returned. Valid values: true or false. (default: false)
-  --organization: string@bool-completer # This is a nested resource. Read more about organizations as nested resources [here](/cloud/trello/guides/rest-api/nested-resources/). (default: false)
-  --organization-pluginData: string@bool-completer # Use with the `organization` param to include organization pluginData with the response (default: false)
-  --myPrefs: string@bool-completer # default: false
-  --tags: string@bool-completer # Also known as collections, tags, refer to the collection(s) that a Board belongs to. (default: false)
+  --pluginData: oneof<nothing, bool> # Determines whether the pluginData for this board should be returned. Valid values: true or false. (default: false)
+  --organization: oneof<nothing, bool> # This is a nested resource. Read more about organizations as nested resources [here](/cloud/trello/guides/rest-api/nested-resources/). (default: false)
+  --organization-pluginData: oneof<nothing, bool> # Use with the `organization` param to include organization pluginData with the response (default: false)
+  --myPrefs: oneof<nothing, bool> # default: false
+  --tags: oneof<nothing, bool> # Also known as collections, tags, refer to the collection(s) that a Board belongs to. (default: false)
 ]: nothing -> record<id: string, name: string, desc: string, descData: string, closed: bool, idMemberCreator: string, idOrganization: string, pinned: bool, url: string, shortUrl: string, prefs: record<permissionLevel: string, hideVotes: bool, voting: string, comments: string, invitations: any, selfJoin: bool, cardCovers: bool, isTemplate: bool, cardAging: string, calendarFeedEnabled: bool, background: string, backgroundImage: string, backgroundImageScaled: list<record>, backgroundTile: bool, backgroundBrightness: string, backgroundBottomColor: string, backgroundTopColor: string, canBePublic: bool, canBeEnterprise: bool, canBeOrg: bool, canBePrivate: bool, canInvite: bool>, labelNames: record<green: string, yellow: string, orange: string, red: string, purple: string, blue: string, sky: string, lime: string, pink: string, black: string>, limits: record<attachments: record<perBoard: record>>, starred: bool, memberships: string, shortLink: string, subscribed: bool, powerUps: string, dateLastActivity: string, dateLastView: string, idTags: string, datePluginDisable: string, creationMethod: string, ixUpdate: int, templateGallery: string, enterpriseOwned: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -675,19 +674,19 @@ export def "boards put-boards-id" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # The new name for the board. 1 to 16384 characters long.
   --desc: string # A new description for the board, 0 to 16384 characters long
-  --closed: string@bool-completer # Whether the board is closed
+  --closed: oneof<nothing, bool> # Whether the board is closed
   --subscribed: string # Whether the acting user is subscribed to the board (e.g. 5abbe4b7ddc1b351ef961414)
   --idOrganization: string # The id of the Workspace the board should be moved to
   --prefspermissionLevel: string # One of: org, private, public
-  --prefsselfJoin: string@bool-completer # Whether Workspace members can join the board themselves
-  --prefscardCovers: string@bool-completer # Whether card covers should be displayed on this board
-  --prefshideVotes: string@bool-completer # Determines whether the Voting Power-Up should hide who voted on cards or not.
+  --prefsselfJoin: oneof<nothing, bool> # Whether Workspace members can join the board themselves
+  --prefscardCovers: oneof<nothing, bool> # Whether card covers should be displayed on this board
+  --prefshideVotes: oneof<nothing, bool> # Determines whether the Voting Power-Up should hide who voted on cards or not.
   --prefsinvitations: string # Who can invite people to this board. One of: admins, members
   --prefsvoting: string # Who can vote on this board. One of disabled, members, observers, org, public
   --prefscomments: string # Who can comment on cards on this board. One of: disabled, members, observers, org, public
   --prefsbackground: string # The id of a custom background or one of: blue, orange, green, red, purple, pink, lime, sky, grey
   --prefscardAging: string # One of: pirate, regular
-  --prefscalendarFeedEnabled: string@bool-completer # Determines whether the calendar feed is enabled or not.
+  --prefscalendarFeedEnabled: oneof<nothing, bool> # Determines whether the calendar feed is enabled or not.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -761,12 +760,12 @@ export def "boards-actions get-boards-id-actions" [
   --format: string # The format of the returned Actions. Either list or count. (default: list)
   --idModels: string # A comma-separated list of idModels. Only actions related to these models will be returned.
   --limit: float # The limit of the number of responses, between 0 and 1000. (default: 50)
-  --member: string@bool-completer # Whether to return the member object for each action. (default: true)
+  --member: oneof<nothing, bool> # Whether to return the member object for each action. (default: true)
   --member-fields: string # The fields of the [member](/cloud/trello/guides/rest-api/object-definitions/#member-object) to return. (default: activityBlocked,avatarHash,avatarUrl,fullName,idMemberReferrer,initials,nonPublic,nonPublicAvailable,username)
-  --memberCreator: string@bool-completer # Whether to return the memberCreator object for each action. (default: true)
+  --memberCreator: oneof<nothing, bool> # Whether to return the memberCreator object for each action. (default: true)
   --memberCreator-fields: string # The fields of the [member](/cloud/trello/guides/rest-api/object-definitions/#member-object) creator to return (default: activityBlocked,avatarHash,avatarUrl,fullName,idMemberReferrer,initials,nonPublic,nonPublicAvailable,username)
   --page: float # The page of results for actions. (default: 0)
-  --reactions: string@bool-completer # Whether to show reactions on comments or not.
+  --reactions: oneof<nothing, bool> # Whether to show reactions on comments or not.
   --before: string # A date string in the form of YYYY-MM-DDThh:mm:ssZ or a mongo object ID. Only objects created before this date will be returned.
   --since: string # A date string in the form of YYYY-MM-DDThh:mm:ssZ or a mongo object ID. Only objects created since this date will be returned.
 ]: nothing -> any {
@@ -1083,7 +1082,7 @@ export def "boards-members put-boards-id-members-idmember" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer # One of: admin, normal, observer. Determines the type of member this user will be on the board.
-  --allowBillableGuest: string@bool-completer # Optional param that allows organization admins to add multi-board guests onto a board. (default: false)
+  --allowBillableGuest: oneof<nothing, bool> # Optional param that allows organization admins to add multi-board guests onto a board. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1204,7 +1203,7 @@ export def "boards-my-prefs-show-sidebar put-boards-id-myPrefs-showsidebar" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --value: string@bool-completer # Determines whether to show the side bar.
+  --value: oneof<nothing, bool> # Determines whether to show the side bar.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1228,7 +1227,7 @@ export def "boards-my-prefs-show-sidebar-activity put-boards-id-myPrefs-showside
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --value: string@bool-completer # Determines whether to show sidebar activity.
+  --value: oneof<nothing, bool> # Determines whether to show sidebar activity.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1252,7 +1251,7 @@ export def "boards-my-prefs-show-sidebar-board-actions put-boards-id-myPrefs-sho
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --value: string@bool-completer # Determines whether to show the sidebar board actions.
+  --value: oneof<nothing, bool> # Determines whether to show the sidebar board actions.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1276,7 +1275,7 @@ export def "boards-my-prefs-show-sidebar-members put-boards-id-myPrefs-showsideb
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --value: string@bool-completer # Determines whether to show members of the board in the sidebar.
+  --value: oneof<nothing, bool> # Determines whether to show members of the board in the sidebar.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1300,8 +1299,8 @@ export def "boards post-boards" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # The new name for the board. 1 to 16384 characters long.
-  --defaultLabels: string@bool-completer # Determines whether to use the default set of labels. (default: true)
-  --defaultLists: string@bool-completer # Determines whether to add the default set of lists to a board (To Do, Doing, Done). It is ignored if `idBoardSource` is provided. (default: true)
+  --defaultLabels: oneof<nothing, bool> # Determines whether to use the default set of labels. (default: true)
+  --defaultLists: oneof<nothing, bool> # Determines whether to add the default set of lists to a board (To Do, Doing, Done). It is ignored if `idBoardSource` is provided. (default: true)
   --desc: string # A new description for the board, 0 to 16384 characters long
   --idOrganization: string # The id or name of the Workspace the board should belong to. (e.g. 5abbe4b7ddc1b351ef961414)
   --idBoardSource: string # The id of a board to copy into the new board. (e.g. 5abbe4b7ddc1b351ef961414)
@@ -1311,8 +1310,8 @@ export def "boards post-boards" [
   --prefs-voting: string@prefs-voting-completer # Who can vote on this board. One of `disabled`, `members`, `observers`, `org`, `public`. (default: disabled)
   --prefs-comments: string@prefs-comments-completer # Who can comment on cards on this board. One of: `disabled`, `members`, `observers`, `org`, `public`. (default: members)
   --prefs-invitations: string@prefs-invitations-completer # Determines what types of members can invite users to join. One of: `admins`, `members`. (default: members)
-  --prefs-selfJoin: string@bool-completer # Determines whether users can join the boards themselves or whether they have to be invited. (default: true)
-  --prefs-cardCovers: string@bool-completer # Determines whether card covers are enabled. (default: true)
+  --prefs-selfJoin: oneof<nothing, bool> # Determines whether users can join the boards themselves or whether they have to be invited. (default: true)
+  --prefs-cardCovers: oneof<nothing, bool> # Determines whether card covers are enabled. (default: true)
   --prefs-background: string@prefs-background-completer # The id of a custom background or one of: `blue`, `orange`, `green`, `red`, `purple`, `pink`, `lime`, `sky`, `grey`. (default: blue)
   --prefs-cardAging: string@prefs-cardAging-completer # Determines the type of card aging that should take place on the board if card aging is enabled. One of: `pirate`, `regular`. (default: regular)
 ]: nothing -> any {
@@ -1529,7 +1528,7 @@ export def "cards post-cards" [
   --pos: string # The position of the new card. `top`, `bottom`, or a positive float
   --due: string # A due date for the card (format: date)
   --start: string # The start date of a card, or `null` (nullable, format: date)
-  --dueComplete: string@bool-completer # Whether the status of the card is complete
+  --dueComplete: oneof<nothing, bool> # Whether the status of the card is complete
   --idList: string # The ID of the list the card should be created in (e.g. 5abbe4b7ddc1b351ef961414)
   --idMembers: list # Comma-separated list of member IDs to add to the card
   --idLabels: list # Comma-separated list of label IDs to add to the card
@@ -1569,20 +1568,20 @@ export def "cards get-cards-id" [
   --actions: string # See the [Actions Nested Resource](/cloud/trello/guides/rest-api/nested-resources/#actions-nested-resource)
   --attachments: string # `true`, `false`, or `cover` (default: false)
   --attachment-fields: string # `all` or a comma-separated list of attachment [fields](/cloud/trello/guides/rest-api/object-definitions/) (default: all)
-  --members: string@bool-completer # Whether to return member objects for members on the card (default: false)
+  --members: oneof<nothing, bool> # Whether to return member objects for members on the card (default: false)
   --member-fields: string # `all` or a comma-separated list of member [fields](/cloud/trello/guides/rest-api/object-definitions/). **Defaults**: `avatarHash, fullName, initials, username`
-  --membersVoted: string@bool-completer # Whether to return member objects for members who voted on the card (default: false)
+  --membersVoted: oneof<nothing, bool> # Whether to return member objects for members who voted on the card (default: false)
   --memberVoted-fields: string # `all` or a comma-separated list of member [fields](/cloud/trello/guides/rest-api/object-definitions/). **Defaults**: `avatarHash, fullName, initials, username`
-  --checkItemStates: string@bool-completer # default: false
+  --checkItemStates: oneof<nothing, bool> # default: false
   --checklists: string # Whether to return the checklists on the card. `all` or `none` (default: none)
   --checklist-fields: string # `all` or a comma-separated list of `idBoard,idCard,name,pos` (default: all)
-  --board: string@bool-completer # Whether to return the board object the card is on (default: false)
+  --board: oneof<nothing, bool> # Whether to return the board object the card is on (default: false)
   --board-fields: string # `all` or a comma-separated list of board [fields](/cloud/trello/guides/rest-api/object-definitions/#board-object). **Defaults**: `name, desc, descData, closed, idOrganization, pinned, url, prefs`
-  --list: string@bool-completer # See the [Lists Nested Resource](/cloud/trello/guides/rest-api/nested-resources/) (default: false)
-  --pluginData: string@bool-completer # Whether to include pluginData on the card with the response (default: false)
-  --stickers: string@bool-completer # Whether to include sticker models with the response (default: false)
+  --list: oneof<nothing, bool> # See the [Lists Nested Resource](/cloud/trello/guides/rest-api/nested-resources/) (default: false)
+  --pluginData: oneof<nothing, bool> # Whether to include pluginData on the card with the response (default: false)
+  --stickers: oneof<nothing, bool> # Whether to include sticker models with the response (default: false)
   --sticker-fields: string # `all` or a comma-separated list of sticker [fields](/cloud/trello/guides/rest-api/object-definitions/) (default: all)
-  --customFieldItems: string@bool-completer # Whether to include the customFieldItems (default: false)
+  --customFieldItems: oneof<nothing, bool> # Whether to include the customFieldItems (default: false)
 ]: nothing -> record<id: string, address: string, badges: record<attachmentsByType: record<trello: record>, location: bool, votes: int, viewingMemberVoted: bool, subscribed: bool, fogbugz: string, checkItems: int, checkItemsChecked: int, comments: int, attachments: int, description: bool, due: string, start: string, dueComplete: bool>, cardRole: string, checkItemStates: list<any>, closed: bool, coordinates: string, creationMethod: string, dateLastActivity: string, desc: string, descData: record<emoji: record>, due: string, dueReminder: string, idBoard: string, idChecklists: list<any>, idLabels: list<any>, idList: string, idMembers: list<any>, idMembersVoted: list<any>, idShort: int, idAttachmentCover: string, labels: list<any>, limits: record<attachments: record<perBoard: record>>, locationName: string, manualCoverAttachment: bool, mirrorSourceId: string, name: string, pos: float, shortLink: string, shortUrl: string, subscribed: bool, url: string, cover: record<idAttachment: string, color: string, idUploadedBackground: bool, size: string, brightness: string, isTemplate: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1608,7 +1607,7 @@ export def "cards put-cards-id" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # The new name for the card
   --desc: string # The new description for the card
-  --closed: string@bool-completer # Whether the card should be archived (closed: true)
+  --closed: oneof<nothing, bool> # Whether the card should be archived (closed: true)
   --idMembers: string # Comma-separated list of member IDs (e.g. 5abbe4b7ddc1b351ef961414)
   --idAttachmentCover: string # The ID of the image attachment the card should use as its cover, or null for none (e.g. 5abbe4b7ddc1b351ef961414)
   --idList: string # The ID of the list the card should be in (e.g. 5abbe4b7ddc1b351ef961414)
@@ -1617,8 +1616,8 @@ export def "cards put-cards-id" [
   --pos: string # The position of the card in its list. `top`, `bottom`, or a positive float
   --due: string # When the card is due, or `null` (nullable, format: date)
   --start: string # The start date of a card, or `null` (nullable, format: date)
-  --dueComplete: string@bool-completer # Whether the status of the card is complete
-  --subscribed: string@bool-completer # Whether the member is should be subscribed to the card
+  --dueComplete: oneof<nothing, bool> # Whether the status of the card is complete
+  --subscribed: oneof<nothing, bool> # Whether the member is should be subscribed to the card
   --address: string # For use with/by the Map View
   --locationName: string # For use with/by the Map View
   --coordinates: string # For use with/by the Map View. Should be latitude,longitude
@@ -1745,7 +1744,7 @@ export def "cards-attachments post-cards-id-attachments" [
   --file: string # The file to attach, as multipart/form-data (format: binary)
   --mimeType: string # The mimeType of the attachment. Max length 256
   --qp-url: string # A URL to attach. Must start with `http://` or `https://`
-  --setCover: string@bool-completer # Determines whether to use the new attachment as a cover for the Card. (default: false)
+  --setCover: oneof<nothing, bool> # Determines whether to use the new attachment as a cover for the Card. (default: false)
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2827,7 +2826,7 @@ export def "checklists-check-items post-checklists-id-checkitems" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name of the new check item on the checklist. Should be a string of length 1 to 16384.
   --pos: string # The position of the check item in the checklist. One of: `top`, `bottom`, or a positive number.
-  --checked: string@bool-completer # Determines whether the check item is already checked when created. (default: false)
+  --checked: oneof<nothing, bool> # Determines whether the check item is already checked when created. (default: false)
   --due: string # A due date for the checkitem (format: date)
   --dueReminder: float # A dueReminder for the due date on the checkitem (nullable)
   --idMember: string # An ID of a member resource. (e.g. 5abbe4b7ddc1b351ef961414)
@@ -2907,7 +2906,7 @@ export def "custom-fields post-customfields" [
   type: string@type-completer-1 # The type of Custom Field to create.
   --options: string # If the type is `checkbox` 
   pos: any
-  --display-cardFront: string@bool-completer # Whether this Custom Field should be shown on the front of Cards (default: true)
+  --display-cardFront: oneof<nothing, bool> # Whether this Custom Field should be shown on the front of Cards (default: true)
 ]: any -> record<id: string, idModel: string, modelType: string, fieldGroup: string, display: record<cardFront: bool, name: string, pos: string, options: list<record>>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
@@ -2957,7 +2956,7 @@ export def "custom-fields put-customfields-id" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name of the Custom Field
   --pos: any
-  --displaycardFront: string@bool-completer # Whether to display this custom field on the front of cards
+  --displaycardFront: oneof<nothing, bool> # Whether to display this custom field on the front of cards
 ]: any -> record<id: string, idModel: string, modelType: string, fieldGroup: string, display: record<cardFront: bool, name: string, pos: string, options: list<record>>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
@@ -3095,7 +3094,7 @@ export def "emoji emoji" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --locale: string # The locale to return emoji descriptions and names in. Defaults to the logged in member's locale.
-  --spritesheets: string@bool-completer # `true` to return spritesheet URLs in the response (default: false)
+  --spritesheets: oneof<nothing, bool> # `true` to return spritesheet URLs in the response (default: false)
 ]: nothing -> record<trello: table<unified: string, name: string, native: string, shortName: string, shortNames: list, text: string, texts: string, category: string, sheetX: float, sheetY: float, tts: string, keywords: list>> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3130,7 +3129,7 @@ export def "enterprises get-enterprises-id" [
   --member-count: int # 0 to 100 (format: int32, default: 10)
   --organizations: string # One of: `none`, `members`, `public`, `all` (default: none)
   --organization-fields: string # Any valid value that the [nested organization field resource]() accepts. (default: none)
-  --organization-paid-accounts: string@bool-completer # Whether or not to include paid account information in the returned workspace objects (default: false)
+  --organization-paid-accounts: oneof<nothing, bool> # Whether or not to include paid account information in the returned workspace objects (default: false)
   --organization-memberships: string # Comma-seperated list of: `me`, `normal`, `admin`, `active`, `deactivated` (default: none)
 ]: nothing -> record<id: string, name: string, displayName: string, logoHash: string, logoUrl: string, prefs: record<ssoOnly: bool, signup: record<banner: string, bannerHtml: string>, mandatoryTransferDate: string, brandingColor: string, autoJoinOrganizations: bool, notifications: record, maxMembers: float>, organizationPrefs: record<boardVisibilityRestrict: record, boardDeleteRestrict: record, attachmentRestrictions: list<string>, permissionLevel: string>, ssoActivationFailed: bool, idAdmins: list<string>, enterpriseDomains: list<string>, isRealEnterprise: bool, pluginWhitelistingEnabled: list<string>, idOrganizations: list<string>, products: list<float>, licenses: record<maxMembers: float, totalMembers: float, relatedEnterprises: list<record>>, domains: list<string>, dateOrganizationPrefsLastUpdated: string, idp: record<requestSigned: bool, certificate: string, loginUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
@@ -3201,10 +3200,10 @@ export def "enterprises-signup-url get-enterprises-id-signupurl" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --authenticate: string@bool-completer # default: false
-  --confirmationAccepted: string@bool-completer # default: false
+  --authenticate: oneof<nothing, bool> # default: false
+  --confirmationAccepted: oneof<nothing, bool> # default: false
   --returnUrl: string # Any valid URL. (nullable, format: url)
-  --tosAccepted: string@bool-completer # Designates whether the user has seen/consented to the Trello ToS prior to being redirected to the enterprise signup page/their IdP. (default: false)
+  --tosAccepted: oneof<nothing, bool> # Designates whether the user has seen/consented to the Trello ToS prior to being redirected to the enterprise signup page/their IdP. (default: false)
 ]: nothing -> record<signupUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3228,11 +3227,11 @@ export def "enterprises-members-query get-users-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --licensed: string@bool-completer # When true, returns members who possess a license for the corresponding Trello Enterprise; when false, returns members who do not. If unspecified, both licensed and unlicensed members will be returned. (default: false)
-  --deactivated: string@bool-completer # When true, returns members who have been deactivated for the corresponding Trello Enterprise; when false, returns members who have not. If unspecified, both active and deactivated members will be returned. (default: false)
-  --collaborator: string@bool-completer # When true, returns members who are guests on one or more boards in the corresponding Trello Enterprise (but do not possess a license); when false, returns members who are not. If unspecified, both guests and non-guests will be returned. (default: false)
-  --managed: string@bool-completer # When true, returns members who are managed by the corresponding Trello Enterprise; when false, returns members who are not. If unspecified, both managed and unmanaged members will be returned. (default: none)
-  --admin: string@bool-completer # When true, returns members who are administrators of the corresponding Trello Enterprise; when false, returns members who are not. If unspecified, both admin and non-admin members will be returned. (default: false)
+  --licensed: oneof<nothing, bool> # When true, returns members who possess a license for the corresponding Trello Enterprise; when false, returns members who do not. If unspecified, both licensed and unlicensed members will be returned. (default: false)
+  --deactivated: oneof<nothing, bool> # When true, returns members who have been deactivated for the corresponding Trello Enterprise; when false, returns members who have not. If unspecified, both active and deactivated members will be returned. (default: false)
+  --collaborator: oneof<nothing, bool> # When true, returns members who are guests on one or more boards in the corresponding Trello Enterprise (but do not possess a license); when false, returns members who are not. If unspecified, both guests and non-guests will be returned. (default: false)
+  --managed: oneof<nothing, bool> # When true, returns members who are managed by the corresponding Trello Enterprise; when false, returns members who are not. If unspecified, both managed and unmanaged members will be returned. (default: none)
+  --admin: oneof<nothing, bool> # When true, returns members who are administrators of the corresponding Trello Enterprise; when false, returns members who are not. If unspecified, both admin and non-admin members will be returned. (default: false)
   --activeSince: string # Returns only Trello users active since this date (inclusive). (default: none)
   --inactiveSince: string # Returns only Trello users active since this date (inclusive). (default: none)
   --search: string # Returns members with email address or full name that start with the search value. (default: none)
@@ -3518,7 +3517,7 @@ export def "enterprises-members-licensed put-enterprises-id-members-idmember-lic
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --value: string@bool-completer # Boolean value to determine whether the user should be given an Enterprise license (true) or not (false).
+  --value: oneof<nothing, bool> # Boolean value to determine whether the user should be given an Enterprise license (true) or not (false).
 ]: nothing -> record<id: string, activityBlocked: bool, avatarHash: string, avatarUrl: string, bio: string, bioData: record<emoji: record>, confirmed: bool, fullName: string, idEnterprise: string, idEnterprisesDeactivated: list<string>, idMemberReferrer: string, idPremOrgsAdmin: list<string>, initials: string, memberType: string, nonPublic: record<fullName: string, initials: string, avatarUrl: string, avatarHash: string>, nonPublicAvailable: bool, products: list<int>, url: string, username: string, status: string, aaEmail: string, aaEnrolledDate: string, aaId: string, avatarSource: string, email: string, gravatarHash: string, idBoards: list<string>, idOrganizations: list<string>, idEnterprisesAdmin: list<string>, limits: record<status: string, disableAt: float, warnAt: float>, loginTypes: list<string>, marketingOptIn: record<optedIn: bool, date: string>, messagesDismissed: record<name: string, count: string, lastDismissed: string, _id: string>, oneTimeMessagesDismissed: list<string>, prefs: record<timezoneInfo: record<offsetCurrent: int, timezoneCurrent: string, offsetNext: int, dateNext: string, timezoneNext: string>, privacy: record<fullName: string, avatar: string>, sendSummaries: bool, minutesBetweenSummaries: int, minutesBeforeDeadlineToNotify: int, colorBlind: bool, locale: string, timezone: string, twoFactor: record<enabled: bool, needsNewBackups: bool>>, trophies: list<string>, uploadedAvatarHash: string, uploadedAvatarUrl: string, premiumFeatures: list<string>, isAaMastered: bool, ixUpdate: float, idBoardsPinned: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3543,7 +3542,7 @@ export def "enterprises-members-deactivated enterprises-id-members-idMember-deac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --value: string@bool-completer # Determines whether the user is deactivated or not.
+  --value: oneof<nothing, bool> # Determines whether the user is deactivated or not.
   --qp-fields: string@fields-completer-2 # A comma separated list of any valid values that the [nested member field resource]() accepts.
   --organization-fields: string@organization-fields-completer # Any valid value that the [nested organization resource](/cloud/trello/guides/rest-api/nested-resources/) accepts.
   --board-fields: string@board-fields-completer # Any valid value that the [nested board resource](/cloud/trello/guides/rest-api/nested-resources/) accepts.
@@ -3808,10 +3807,10 @@ export def "lists put-lists-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # New name for the list
-  --closed: string@bool-completer # Whether the list should be closed (archived)
+  --closed: oneof<nothing, bool> # Whether the list should be closed (archived)
   --idBoard: string # ID of a board the list should be moved to (e.g. 5abbe4b7ddc1b351ef961414)
   --pos: string # New position for the list: `top`, `bottom`, or a positive floating point number
-  --subscribed: string@bool-completer # Whether the active member is subscribed to this list
+  --subscribed: oneof<nothing, bool> # Whether the active member is subscribed to this list
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4057,7 +4056,7 @@ export def "members get-membersid" [
   --boardBackgrounds: string@boardBackgrounds-completer # One of: `all`, `custom`, `default`, `none`, `premium` (default: none)
   --boardsInvited: string@boardsInvited-completer # `all` or a comma-separated list of: closed, members, open, organization, pinned, public, starred, unpinned
   --boardsInvited-fields: string@boardsInvited-fields-completer # `all` or a comma-separated list of board [fields](/cloud/trello/guides/rest-api/object-definitions/)
-  --boardStars: string@bool-completer # Whether to return the boardStars or not (default: false)
+  --boardStars: oneof<nothing, bool> # Whether to return the boardStars or not (default: false)
   --cards: string # See the [Cards Nested Resource](/cloud/trello/guides/rest-api/nested-resources/#cards-nested-resource) for additional options (default: none)
   --customBoardBackgrounds: string@customBoardBackgrounds-completer # `all` or `none` (default: none)
   --customEmoji: string@customEmoji-completer # `all` or `none` (default: none)
@@ -4066,11 +4065,11 @@ export def "members get-membersid" [
   --notifications: string # See the [Notifications Nested Resource](/cloud/trello/guides/rest-api/nested-resources/#notifications-nested-resource)
   --organizations: string@organizations-completer # One of: `all`, `members`, `none`, `public` (default: none)
   --organization-fields: string@organization-fields-completer # `all` or a comma-separated list of organization [fields](/cloud/trello/guides/rest-api/object-definitions/)
-  --organization-paid-account: string@bool-completer # Whether or not to include paid account information in the returned workspace object (default: false)
+  --organization-paid-account: oneof<nothing, bool> # Whether or not to include paid account information in the returned workspace object (default: false)
   --organizationsInvited: string@organizationsInvited-completer # One of: `all`, `members`, `none`, `public` (default: none)
   --organizationsInvited-fields: string@organizationsInvited-fields-completer # `all` or a comma-separated list of organization [fields](/cloud/trello/guides/rest-api/object-definitions/)
-  --paid-account: string@bool-completer # Whether or not to include paid account information in the returned member object (DEPRECATED, default: false)
-  --savedSearches: string@bool-completer # default: false
+  --paid-account: oneof<nothing, bool> # Whether or not to include paid account information in the returned member object (DEPRECATED, default: false)
+  --savedSearches: oneof<nothing, bool> # default: false
   --tokens: string@tokens-completer # `all` or `none` (default: none)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
@@ -4100,7 +4099,7 @@ export def "members put-members-id" [
   --username: string # New username for the member. At least 3 characters long, only lowercase letters, underscores, and numbers. Must be unique.
   --bio: string
   --avatarSource: string@avatarSource-completer # One of: `gravatar`, `none`, `upload`
-  --prefscolorBlind: string@bool-completer
+  --prefscolorBlind: oneof<nothing, bool>
   --prefslocale: string
   --prefsminutesBetweenSummaries: int # `-1` for disabled, `1`, or `60` (format: int32)
 ]: nothing -> any {
@@ -4248,7 +4247,7 @@ export def "members-board-backgrounds put-members-id-boardbackgrounds-idbackgrou
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --brightness: string@brightness-completer # One of: `dark`, `light`, `unknown`
-  --tile: string@bool-completer # Whether the background should be tiled
+  --tile: oneof<nothing, bool> # Whether the background should be tiled
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4416,7 +4415,7 @@ export def "members-boards get-members-id-boards" [
   --filter: string@filter-completer-5 # `all` or a comma-separated list of: `closed`, `members`, `open`, `organization`, `public`, `starred` (default: all)
   --qp-fields: string@fields-completer # `all` or a comma-separated list of board [fields](/cloud/trello/guides/rest-api/object-definitions/)
   --lists: string@lists-completer # Which lists to include with the boards. One of: `all`, `closed`, `none`, `open` (default: none)
-  --organization: string@bool-completer # Whether to include the Organization object with the Boards (default: false)
+  --organization: oneof<nothing, bool> # Whether to include the Organization object with the Boards (default: false)
   --organization-fields: string@organization-fields-completer # `all` or a comma-separated list of organization [fields](/cloud/trello/guides/rest-api/object-definitions/)
 ]: nothing -> table<id: string, name: string, desc: string, descData: string, closed: bool, idMemberCreator: string, idOrganization: string, pinned: bool, url: string, shortUrl: string, prefs: record<permissionLevel: string, hideVotes: bool, voting: string, comments: string, invitations: any, selfJoin: bool, cardCovers: bool, isTemplate: bool, cardAging: string, calendarFeedEnabled: bool, background: string, backgroundImage: string, backgroundImageScaled: list, backgroundTile: bool, backgroundBrightness: string, backgroundBottomColor: string, backgroundTopColor: string, canBePublic: bool, canBeEnterprise: bool, canBeOrg: bool, canBePrivate: bool, canInvite: bool>, labelNames: record<green: string, yellow: string, orange: string, red: string, purple: string, blue: string, sky: string, lime: string, pink: string, black: string>, limits: record<attachments: record>, starred: bool, memberships: string, shortLink: string, subscribed: bool, powerUps: string, dateLastActivity: string, dateLastView: string, idTags: string, datePluginDisable: string, creationMethod: string, ixUpdate: int, templateGallery: string, enterpriseOwned: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
@@ -4560,7 +4559,7 @@ export def "members-custom-board-backgrounds put-members-id-customboardbackgroun
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --brightness: string@brightness-completer # One of: `dark`, `light`, `unknown`
-  --tile: string@bool-completer # Whether to tile the background
+  --tile: oneof<nothing, bool> # Whether to tile the background
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4773,8 +4772,8 @@ export def "members-notifications get-members-id-notifications" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --entities: string@bool-completer # default: false
-  --display: string@bool-completer # default: false
+  --entities: oneof<nothing, bool> # default: false
+  --display: oneof<nothing, bool> # default: false
   --filter: string # default: all
   --read-filter: string # One of: `all`, `read`, `unread` (default: all)
   --qp-fields: string # `all` or a comma-separated list of notification [fields](/cloud/trello/guides/rest-api/object-definitions/) (default: all)
@@ -4782,7 +4781,7 @@ export def "members-notifications get-members-id-notifications" [
   --page: int # Max 100 (format: int32, default: 0)
   --before: string # A notification ID
   --since: string # A notification ID
-  --memberCreator: string@bool-completer # default: true
+  --memberCreator: oneof<nothing, bool> # default: true
   --memberCreator-fields: string # `all` or a comma-separated list of member [fields](/cloud/trello/guides/rest-api/object-definitions/) (default: avatarHash,fullName,initials,username)
 ]: nothing -> table<id: string, unread: bool, type: string, date: string, dateRead: string, data: string, card: record<id: string, address: string, badges: record, cardRole: string, checkItemStates: list, closed: bool, coordinates: string, creationMethod: string, dateLastActivity: string, desc: string, descData: record, due: string, dueReminder: string, idBoard: string, idChecklists: list, idLabels: list, idList: string, idMembers: list, idMembersVoted: list, idShort: int, idAttachmentCover: string, labels: list, limits: record, locationName: string, manualCoverAttachment: bool, mirrorSourceId: string, name: string, pos: float, shortLink: string, shortUrl: string, subscribed: bool, url: string, cover: record>, board: record<id: string, name: string, desc: string, descData: string, closed: bool, idMemberCreator: string, idOrganization: string, pinned: bool, url: string, shortUrl: string, prefs: record, labelNames: record, limits: record, starred: bool, memberships: string, shortLink: string, subscribed: bool, powerUps: string, dateLastActivity: string, dateLastView: string, idTags: string, datePluginDisable: string, creationMethod: string, ixUpdate: int, templateGallery: string, enterpriseOwned: bool>, idMemberCreator: string, idAction: string, reactions: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
@@ -4809,7 +4808,7 @@ export def "members-organizations get-members-id-organizations" [
   --allow-errors(-e) # Return full response without error handling
   --filter: string@filter-completer-7 # One of: `all`, `members`, `none`, `public` (Note: `members` filters to only private Workspaces) (default: all)
   --qp-fields: string@fields-completer-3 # `all` or a comma-separated list of organization [fields](/cloud/trello/guides/rest-api/object-definitions/)
-  --paid-account: string@bool-completer # Whether or not to include paid account information in the returned workspace object (default: false)
+  --paid-account: oneof<nothing, bool> # Whether or not to include paid account information in the returned workspace object (default: false)
 ]: nothing -> table<id: string, name: string, displayName: string, dateLastActivity: string, prefs: record<boardVisibilityRestrict: record, boardDeleteRestrict: record, attachmentRestrictions: list, permissionLevel: string>, idEnterprise: string, offering: string, url: string, idBoards: list<string>, memberships: list<string>, premiumFeatures: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4978,7 +4977,7 @@ export def "members-tokens get-members-id-tokens" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --webhooks: string@bool-completer # Whether to include webhooks (default: false)
+  --webhooks: oneof<nothing, bool> # Whether to include webhooks (default: false)
 ]: nothing -> table<id: string, identifier: string, idMember: string, dateCreated: string, dateExpires: string, permissions: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5173,19 +5172,19 @@ export def "notifications get-notifications-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --board: string@bool-completer # Whether to include the board object (default: false)
+  --board: oneof<nothing, bool> # Whether to include the board object (default: false)
   --board-fields: string@board-fields-completer # `all` or a comma-separated list of board [fields](/cloud/trello/guides/rest-api/object-definitions/)
-  --card: string@bool-completer # Whether to include the card object (default: false)
+  --card: oneof<nothing, bool> # Whether to include the card object (default: false)
   --card-fields: string@card-fields-completer # `all` or a comma-separated list of card [fields](/cloud/trello/guides/rest-api/object-definitions/)
-  --display: string@bool-completer # Whether to include the display object with the results (default: false)
-  --entities: string@bool-completer # Whether to include the entities object with the results (default: false)
+  --display: oneof<nothing, bool> # Whether to include the display object with the results (default: false)
+  --entities: oneof<nothing, bool> # Whether to include the entities object with the results (default: false)
   --qp-fields: string@fields-completer-10 # `all` or a comma-separated list of notification [fields](/cloud/trello/guides/rest-api/object-definitions/)
-  --list: string@bool-completer # Whether to include the list object (default: false)
-  --member: string@bool-completer # Whether to include the member object (default: true)
+  --list: oneof<nothing, bool> # Whether to include the list object (default: false)
+  --member: oneof<nothing, bool> # Whether to include the member object (default: true)
   --member-fields: string@member-fields-completer # `all` or a comma-separated list of member [fields](/cloud/trello/guides/rest-api/object-definitions/)
-  --memberCreator: string@bool-completer # Whether to include the member object of the creator (default: true)
+  --memberCreator: oneof<nothing, bool> # Whether to include the member object of the creator (default: true)
   --memberCreator-fields: string@memberCreator-fields-completer # `all` or a comma-separated list of member [fields](/cloud/trello/guides/rest-api/object-definitions/)
-  --organization: string@bool-completer # Whether to include the organization object (default: false)
+  --organization: oneof<nothing, bool> # Whether to include the organization object (default: false)
   --organization-fields: string@organization-fields-completer # `all` or a comma-separated list of organization [fields](/cloud/trello/guides/rest-api/object-definitions/)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
@@ -5210,7 +5209,7 @@ export def "notifications put-notifications-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --unread: string@bool-completer # Whether the notification should be marked as read or not
+  --unread: oneof<nothing, bool> # Whether the notification should be marked as read or not
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5256,7 +5255,7 @@ export def "notifications-all-read post-notifications-all-read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --read: string@bool-completer # Boolean to specify whether to mark as read or unread (defaults to `true`, marking as read) (default: true)
+  --read: oneof<nothing, bool> # Boolean to specify whether to mark as read or unread (defaults to `true`, marking as read) (default: true)
   --ids: list # A comma-seperated list of IDs. Allows specifying an array of notification IDs to change the read state for. This will become useful as we add grouping of notifications to the UI, with a single button to mark all notifications in the group as read/unread.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
@@ -5502,7 +5501,7 @@ export def "organizations put-organizations-id" [
   --desc: string # A new description for the organization
   --website: string # A URL starting with `http://`, `https://`, or `null`
   --prefsassociatedDomain: string # The Google Apps domain to link this org to.
-  --prefsexternalMembersDisabled: string@bool-completer # Whether non-workspace members can be added to boards inside the Workspace
+  --prefsexternalMembersDisabled: oneof<nothing, bool> # Whether non-workspace members can be added to boards inside the Workspace
   --prefsgoogleAppsVersion: int # `1` or `2` (format: int32)
   --prefsboardVisibilityRestrictorg: string # Who on the Workspace can make Workspace visible boards. One of `admin`, `none`, `org`
   --prefsboardVisibilityRestrictprivate: string # Who can make private boards. One of: `admin`, `none`, `org`
@@ -5624,7 +5623,7 @@ export def "organizations-exports post-organizations-id-exports" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --attachments: string@bool-completer # Whether the CSV should include attachments or not. (default: true)
+  --attachments: oneof<nothing, bool> # Whether the CSV should include attachments or not. (default: true)
 ]: nothing -> record<id: string, status: record<attempts: float, finished: bool, stage: string>, startedAt: string, size: string, exportUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5719,7 +5718,7 @@ export def "organizations-memberships get-organizations-id-memberships" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string@filter-completer-9 # `all` or a comma-separated list of: `active`, `admin`, `deactivated`, `me`, `normal` (default: all)
-  --member: string@bool-completer # Whether to include the Member objects with the Memberships (default: false)
+  --member: oneof<nothing, bool> # Whether to include the Member objects with the Memberships (default: false)
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5744,7 +5743,7 @@ export def "organizations-memberships get-organizations-id-memberships-idmembers
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --member: string@bool-completer # Whether to include the Member object in the response (default: false)
+  --member: oneof<nothing, bool> # Whether to include the Member object in the response (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5883,7 +5882,7 @@ export def "organizations-members-deactivated put-organizations-id-members-idmem
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --value: string@bool-completer
+  --value: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6197,20 +6196,20 @@ export def "search get-search" [
   --modelTypes: string # What type or types of Trello objects you want to search. all or a comma-separated list of: `actions`, `boards`, `cards`, `members`, `organizations` (default: all)
   --board-fields: string # all or a comma-separated list of: `closed`, `dateLastActivity`, `dateLastView`, `desc`, `descData`, `idOrganization`, `invitations`, `invited`, `labelNames`, `memberships`, `name`, `pinned`, `powerUps`, `prefs`, `shortLink`, `shortUrl`, `starred`, `subscribed`, `url` (default: name,idOrganization)
   --boards-limit: int # The maximum number of boards returned. Maximum: 1000 (default: 10)
-  --board-organization: string@bool-completer # Whether to include the parent organization with board results (default: false)
+  --board-organization: oneof<nothing, bool> # Whether to include the parent organization with board results (default: false)
   --card-fields: string # all or a comma-separated list of: `badges`, `checkItemStates`, `closed`, `dateLastActivity`, `desc`, `descData`, `due`, `idAttachmentCover`, `idBoard`, `idChecklists`, `idLabels`, `idList`, `idMembers`, `idMembersVoted`, `idShort`, `labels`, `manualCoverAttachment`, `name`, `pos`, `shortLink`, `shortUrl`, `subscribed`, `url` (default: all)
   --cards-limit: int # The maximum number of cards to return. Maximum: 1000 (default: 10)
   --cards-page: float # The page of results for cards. Maximum: 100 (default: 0)
-  --card-board: string@bool-completer # Whether to include the parent board with card results (default: false)
-  --card-list: string@bool-completer # Whether to include the parent list with card results (default: false)
-  --card-members: string@bool-completer # Whether to include member objects with card results (default: false)
-  --card-stickers: string@bool-completer # Whether to include sticker objects with card results (default: false)
+  --card-board: oneof<nothing, bool> # Whether to include the parent board with card results (default: false)
+  --card-list: oneof<nothing, bool> # Whether to include the parent list with card results (default: false)
+  --card-members: oneof<nothing, bool> # Whether to include member objects with card results (default: false)
+  --card-stickers: oneof<nothing, bool> # Whether to include sticker objects with card results (default: false)
   --card-attachments: string # Whether to include attachment objects with card results. A boolean value (true or false) or cover for only card cover attachments. (default: false)
   --organization-fields: string # all or a comma-separated list of billableMemberCount, desc, descData, displayName, idBoards, invitations, invited, logoHash, memberships, name, powerUps, prefs, premiumFeatures, products, url, website (default: name,displayName)
   --organizations-limit: int # The maximum number of Workspaces to return. Maximum 1000 (format: int32, default: 10)
   --member-fields: string # all or a comma-separated list of: avatarHash, bio, bioData, confirmed, fullName, idPremOrgsAdmin, initials, memberType, products, status, url, username (default: avatarHash,fullName,initials,username,confirmed)
   --members-limit: int # The maximum number of members to return. Maximum 1000 (format: int32, default: 10)
-  --partial: string@bool-completer # By default, Trello searches for each word in your query against exactly matching words within Member content. Specifying partial to be true means that we will look for content that starts with any of the words in your query.  If you are looking for a Card titled "My Development Status Report", by default you would need to search for "Development". If you have partial enabled, you will be able to search for "dev" but not "velopment". (default: false)
+  --partial: oneof<nothing, bool> # By default, Trello searches for each word in your query against exactly matching words within Member content. Specifying partial to be true means that we will look for content that starts with any of the words in your query.  If you are looking for a Card titled "My Development Status Report", by default you would need to search for "Development". If you have partial enabled, you will be able to search for "dev" but not "velopment". (default: false)
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6237,7 +6236,7 @@ export def "search-members get-search-members" [
   --limit: int # The maximum number of results to return. Maximum of 20. (format: int32, default: 8)
   --idBoard: string # e.g. 5abbe4b7ddc1b351ef961414
   --idOrganization: string # e.g. 5abbe4b7ddc1b351ef961414
-  --onlyOrgMembers: string@bool-completer # default: false
+  --onlyOrgMembers: oneof<nothing, bool> # default: false
 ]: nothing -> table<id: string, activityBlocked: bool, avatarHash: string, avatarUrl: string, bio: string, bioData: record<emoji: record>, confirmed: bool, fullName: string, idEnterprise: string, idEnterprisesDeactivated: list<string>, idMemberReferrer: string, idPremOrgsAdmin: list<string>, initials: string, memberType: string, nonPublic: record<fullName: string, initials: string, avatarUrl: string, avatarHash: string>, nonPublicAvailable: bool, products: list<int>, url: string, username: string, status: string, aaEmail: string, aaEnrolledDate: string, aaId: string, avatarSource: string, email: string, gravatarHash: string, idBoards: list<string>, idOrganizations: list<string>, idEnterprisesAdmin: list<string>, limits: record<status: string, disableAt: float, warnAt: float>, loginTypes: list<string>, marketingOptIn: record<optedIn: bool, date: string>, messagesDismissed: record<name: string, count: string, lastDismissed: string, _id: string>, oneTimeMessagesDismissed: list<string>, prefs: record<timezoneInfo: record, privacy: record, sendSummaries: bool, minutesBetweenSummaries: int, minutesBeforeDeadlineToNotify: int, colorBlind: bool, locale: string, timezone: string, twoFactor: record>, trophies: list<string>, uploadedAvatarHash: string, uploadedAvatarUrl: string, premiumFeatures: list<string>, isAaMastered: bool, ixUpdate: float, idBoardsPinned: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6262,7 +6261,7 @@ export def "tokens get-tokens-token" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: string@fields-completer-11 # `all` or a comma-separated list of `dateCreated`, `dateExpires`, `idMember`, `identifier`, `permissions`
-  --webhooks: string@bool-completer # Determines whether to include webhooks. (default: false)
+  --webhooks: oneof<nothing, bool> # Determines whether to include webhooks. (default: false)
 ]: nothing -> record<id: string, identifier: string, idMember: string, dateCreated: string, dateExpires: string, permissions: table<idModel: any, modelType: string, read: bool, write: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6455,7 +6454,7 @@ export def "webhooks post-webhooks" [
   --description: string # A string with a length from `0` to `16384`.
   --callbackURL: string # A valid URL that is reachable with a `HEAD` and `POST` request. (format: url)
   --idModel: string # ID of the model to be monitored (e.g. 5abbe4b7ddc1b351ef961414)
-  --active: string@bool-completer # Determines whether the webhook is active and sending `POST` requests.
+  --active: oneof<nothing, bool> # Determines whether the webhook is active and sending `POST` requests.
 ]: nothing -> record<id: string, description: string, idModel: string, callbackURL: string, active: bool, consecutiveFailures: float, firstConsecutiveFailDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6504,7 +6503,7 @@ export def "webhooks put-webhooks-id" [
   --description: string # A string with a length from `0` to `16384`.
   --callbackURL: string # A valid URL that is reachable with a `HEAD` and `POST` request. (format: url)
   --idModel: string # ID of the model to be monitored (e.g. 5abbe4b7ddc1b351ef961414)
-  --active: string@bool-completer # Determines whether the webhook is active and sending `POST` requests.
+  --active: oneof<nothing, bool> # Determines whether the webhook is active and sending `POST` requests.
 ]: nothing -> record<id: string, description: string, idModel: string, callbackURL: string, active: bool, consecutiveFailures: float, firstConsecutiveFailDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)

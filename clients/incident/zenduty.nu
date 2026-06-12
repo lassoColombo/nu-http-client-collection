@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://www.zenduty.com" "https://events.zenduty.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -1287,12 +1286,12 @@ export def "account-teams-services post" [
   --auto-resolve-timeout: int # An integer that represents the timeout for automatically resolving an Incident (default: 0)
   team_priority: string # A system-generated string that represents the Priority object's unique_id
   --task-template: string # A system-generated string that represents the Task Template object's unique_id
-  --acknowledgement-timeout-enabled: string@bool-completer # An boolean flag that represents whether a service has acknowledgement timeout is enabled. If true, the "acknowledgement_timeout" field value needs to be set (default: false)
+  --acknowledgement-timeout-enabled: oneof<nothing, bool> # An boolean flag that represents whether a service has acknowledgement timeout is enabled. If true, the "acknowledgement_timeout" field value needs to be set (default: false)
   --acknowledgement-timeout: int # An integer that represents the acknowledgement timeout value in seconds. If an incident is acknowledged and unresolved within this time window, the incident will be retriggered. This value must be above 600 seconds. (default: 600)
   --status: int # An integer that represents the Service object's status 0 is disabled, 1 is active, 2 is a warning, 3 is critical, and 4 is under maintenance (default: 1)
   escalation_policy: string # A system-generated string that represents the Escalation Policy object's unique_id
   sla: string # A system-generated string that represents the SLA object's unique_id
-  --under-maintenance: string@bool-completer # A boolean flag that represents whether the service object is under maintenance or not (default: false)
+  --under-maintenance: oneof<nothing, bool> # A boolean flag that represents whether the service object is under maintenance or not (default: false)
   --collation: int # An integer that represents the Service object's collation type. 0 is off, 1 is time-based. (default: 0)
   --collation-time: int # An integer that represents the Service object's collation_time. When collation is turned on it needs to be greater than 1 minute & less than 1440 minutes. (default: 0)
 ]: any -> record<name: string, creation_date: string, summary: string, description: string, unique_id: string, auto_resolve_timeout: int, created_by: string, team_priority: string, task_template: string, acknowlegement_timeout: int, status: int, escalation_policy: string, team: string, sla: string, collation_time: int, collation: int, under_maintenance: bool> {
@@ -1372,12 +1371,12 @@ export def "account-teams-services put" [
   --auto-resolve-timeout: int # An integer that represents the timeout for automatically resolving an Incident (default: 0)
   team_priority: string # A system-generated string that represents the Priority object's unique_id
   --task-template: string # A system-generated string that represents the Task Template object's unique_id
-  --acknowledgement-timeout-enabled: string@bool-completer # An boolean flag that represents whether a service has acknowledgement timeout is enabled. If true, the "acknowledgement_timeout" field value needs to be set (default: false)
+  --acknowledgement-timeout-enabled: oneof<nothing, bool> # An boolean flag that represents whether a service has acknowledgement timeout is enabled. If true, the "acknowledgement_timeout" field value needs to be set (default: false)
   --acknowledgement-timeout: int # An integer that represents the acknowledgement timeout value in seconds. If an incident is acknowledged and unresolved within this time window, the incident will be retriggered. This value must be above 600 seconds. (default: 600)
   --status: int # An integer that represents the Service object's status 0 is disabled, 1 is active, 2 is a warning, 3 is critical, and 4 is under maintenance (default: 1)
   escalation_policy: string # A system-generated string that represents the Escalation Policy object's unique_id
   sla: string # A system-generated string that represents the SLA object's unique_id
-  --under-maintenance: string@bool-completer # A boolean flag that represents whether the service object is under maintenance or not (default: false)
+  --under-maintenance: oneof<nothing, bool> # A boolean flag that represents whether the service object is under maintenance or not (default: false)
   --collation: int # An integer that represents the Service object's collation type. 0 is off, 1 is time-based. (default: 0)
   --collation-time: int # An integer that represents the Service object's collation_time. When collation is turned on it needs to be greater than 1 minute & less than 1440 minutes. (default: 0)
 ]: any -> record<name: string, creation_date: string, summary: string, description: string, unique_id: string, auto_resolve_timeout: int, created_by: string, team_priority: string, task_template: string, acknowlegement_timeout: int, status: int, escalation_policy: string, team: string, sla: string, collation_time: int, collation: int, under_maintenance: bool> {
@@ -1431,7 +1430,7 @@ export def "account-teams-services-integrations post" [
   --name: string # A string that represents the Integration object's name
   --summary: string # A string that represents the Integration object's summary
   application: string # A system-generated string that represents the Application object's unique_id. To get application id, vist https://www.zenduty.com/api/account/applications/ and get unique_id of the application.
-  --is-enabled: string@bool-completer # A boolean flag that represents whether an Integration is enabled or not (default: true)
+  --is-enabled: oneof<nothing, bool> # A boolean flag that represents whether an Integration is enabled or not (default: true)
   --create-incidents-for: int # An integer that represents the type of the Incidents this Integration object will create. 0 is do not create incidents. 1 is critical, 2 is critical and errors, and 3 is critical, errors and warnings. (default: 1)
   --integration-type: int # An integer that represents the Integration object's integration_type. 0 is alert and 1 is outbound. (default: 0)
   --default-urgency: int # An integer that represents the Integration object's default_urgency. 0 is low and 1 is high. (default: 1)
@@ -1512,7 +1511,7 @@ export def "account-teams-services-integrations put" [
   --name: string # A string that represents the Integration object's name
   --summary: string # A string that represents the Integration object's summary
   application: string # A system-generated string that represents the Application object's unique_id. To get application id, vist https://www.zenduty.com/api/account/applications/ and get unique_id of the application.
-  --is-enabled: string@bool-completer # A boolean flag that represents whether an Integration is enabled or not (default: true)
+  --is-enabled: oneof<nothing, bool> # A boolean flag that represents whether an Integration is enabled or not (default: true)
   --create-incidents-for: int # An integer that represents the type of the Incidents this Integration object will create. 0 is do not create incidents. 1 is critical, 2 is critical and errors, and 3 is critical, errors and warnings. (default: 1)
   --integration-type: int # An integer that represents the Integration object's integration_type. 0 is alert and 1 is outbound. (default: 0)
   --default-urgency: int # An integer that represents the Integration object's default_urgency. 0 is low and 1 is high. (default: 1)
@@ -2564,7 +2563,7 @@ export def "account-teams-sla post" [
   --accept: string@accept-completer # Response content type
   --name: string # An arbitary string that represents the SLA object's name
   escalations: list # An array of SLA Escalation objects — item shape: {responder?: list, unique_id?: string, time?: int, type?: int}
-  --is-active: string@bool-completer # A boolean flag that represents whether the SLA object is active or not (default: true)
+  --is-active: oneof<nothing, bool> # A boolean flag that represents whether the SLA object is active or not (default: true)
   --acknowledge-time: int # An integer that represents the SLA object's acknowledge_time
   --resolve-time: int # An integer that represents the SLA object's resolve_time
 ]: any -> record<escalations: table<responder: list, unique_id: string, time: int, type: int>, unique_id: string, name: string, description: string, is_active: bool, conditions: record, acknowledge_time: int, resolve_time: int, team: int> {
@@ -2641,7 +2640,7 @@ export def "account-teams-sla put" [
   --accept: string@accept-completer # Response content type
   --name: string # An arbitary string that represents the SLA object's name
   escalations: list # An array of SLA Escalation objects — item shape: {responder?: list, unique_id?: string, time?: int, type?: int}
-  --is-active: string@bool-completer # A boolean flag that represents whether the SLA object is active or not (default: true)
+  --is-active: oneof<nothing, bool> # A boolean flag that represents whether the SLA object is active or not (default: true)
   --acknowledge-time: int # An integer that represents the SLA object's acknowledge_time
   --resolve-time: int # An integer that represents the SLA object's resolve_time
 ]: any -> record<escalations: table<responder: list, unique_id: string, time: int, type: int>, unique_id: string, name: string, description: string, is_active: bool, conditions: record, acknowledge_time: int, resolve_time: int, team: int> {

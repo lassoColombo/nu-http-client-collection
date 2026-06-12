@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://.turbopuffer.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -240,7 +239,7 @@ export def "namespaces-debug-recall post" [
   --num: int # The number of searches to run.
   --top-k: int # Search for `top_k` nearest neighbors.
   --filters: any # Filter by attributes. Same syntax as the query endpoint.
-  --include-ground-truth: string@bool-completer # Include ground truth data (query vectors and true nearest neighbors) in the response. (default: false)
+  --include-ground-truth: oneof<nothing, bool> # Include ground truth data (query vectors and true nearest neighbors) in the response. (default: false)
   --rank-by: any # The ranking function to evaluate recall for. If provided, `num` must be either null or 1.
 ]: any -> record<avg_recall: float, avg_exhaustive_count: float, avg_ann_count: float, ground_truth: table<query_vector: list, nearest_neighbors: list>> {
   let input = $in
@@ -284,12 +283,12 @@ export def "namespaces post-by-namespace" [
   --branch-from-namespace: any
   --copy-from-namespace: any
   --delete-by-filter: any # The filter specifying which documents to delete.
-  --delete-by-filter-allow-partial: string@bool-completer # Allow partial completion when filter matches too many documents.
+  --delete-by-filter-allow-partial: oneof<nothing, bool> # Allow partial completion when filter matches too many documents.
   --patch-by-filter: any # The patch and filter specifying which documents to patch. — shape: {patch: record, filters: any}
-  --patch-by-filter-allow-partial: string@bool-completer # Allow partial completion when filter matches too many documents.
-  --return-affected-ids: string@bool-completer # If true, return the IDs of affected rows (deleted, patched, upserted) in the response. For filtered and conditional writes, only IDs for writes that succeeded will be included.  (default: false)
+  --patch-by-filter-allow-partial: oneof<nothing, bool> # Allow partial completion when filter matches too many documents.
+  --return-affected-ids: oneof<nothing, bool> # If true, return the IDs of affected rows (deleted, patched, upserted) in the response. For filtered and conditional writes, only IDs for writes that succeeded will be included.  (default: false)
   --encryption: any # The encryption configuration for a namespace.
-  --disable-backpressure: string@bool-completer # Disables write throttling (HTTP 429 responses) during high-volume ingestion.
+  --disable-backpressure: oneof<nothing, bool> # Disables write throttling (HTTP 429 responses) during high-volume ingestion.
 ]: any -> record<status: any, message: string, rows_affected: int, rows_upserted: int, rows_patched: int, rows_deleted: int, rows_remaining: bool, upserted_ids: list<any>, patched_ids: list<any>, deleted_ids: list<any>, billing: record<billable_logical_bytes_written: int, query: record<billable_logical_bytes_queried: int, billable_logical_bytes_returned: int>>, performance: record<server_total_ms: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

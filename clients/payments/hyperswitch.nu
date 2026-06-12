@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://sandbox.hyperswitch.io"] }
 def auth-scheme-completer [] { ["api-key" "bearer"] }
 
@@ -115,6 +114,7 @@ export def commands []: nothing -> table {
 # operationId: Create a Payment
 # --order_details item shape: {product_name: string, quantity: int, amount: int, tax_rate?: float, total_tax_amount?: int, requires_shipping?: bool, product_img_link?: string, product_id?: string, category?: string, sub_category?: string, brand?: string, product_type?: any, product_tax_code?: string, description?: string, sku?: string, upc?: string, commodity_code?: string, unit_of_measure?: string, total_amount?: int, unit_discount_amount?: int}
 # --installment_options item shape: {payment_method: "card"|"card_redirect"|"pay_later"|"wallet"|"bank_redirect"|"bank_transfer"|"crypto"|"bank_debit"|"reward"|"real_time_payment"|"upi"|"voucher"|"gift_card"|"open_banking"|"mobile_payment"|"network_token", installments: list}
+@deprecated --flag customer-id
 @deprecated --flag statement-descriptor-name
 @deprecated --flag statement-descriptor-suffix
 @deprecated --flag mandate-id
@@ -138,10 +138,10 @@ export def "payments Create-a-Payment" [
   --capture-method: any # nullable
   --authentication-type: any # nullable, default: three_ds
   --billing: any # nullable
-  --confirm: string@bool-completer # If set to `true`, Hyperswitch attempts to confirm and authorize the payment immediately after creation, provided sufficient payment method details are included. If `false` or omitted (default is `false`), the payment is created with a status such as `requires_payment_method` or `requires_confirmation`, and a separate `POST /payments/{payment_id}/confirm` call is necessary to proceed with authorization. (nullable, default: false, e.g. true)
+  --confirm: oneof<nothing, bool> # If set to `true`, Hyperswitch attempts to confirm and authorize the payment immediately after creation, provided sufficient payment method details are included. If `false` or omitted (default is `false`), the payment is created with a status such as `requires_payment_method` or `requires_confirmation`, and a separate `POST /payments/{payment_id}/confirm` call is necessary to proceed with authorization. (nullable, default: false, e.g. true)
   --customer: any # nullable
-  --customer-id: string # The identifier for the customer (nullable, e.g. cus_y3oqhf46pyzuxjbcn2giaqnb44)
-  --off-session: string@bool-completer # Set to true to indicate that the customer is not in your checkout flow during this payment, and therefore is unable to authenticate. This parameter is intended for scenarios where you collect card details and charge them later. When making a recurring payment by passing a mandate_id, this parameter is mandatory (nullable, e.g. true)
+  --customer-id: string # The identifier for the customer (DEPRECATED, nullable, e.g. cus_y3oqhf46pyzuxjbcn2giaqnb44)
+  --off-session: oneof<nothing, bool> # Set to true to indicate that the customer is not in your checkout flow during this payment, and therefore is unable to authenticate. This parameter is intended for scenarios where you collect card details and charge them later. When making a recurring payment by passing a mandate_id, this parameter is mandatory (nullable, e.g. true)
   --description: string # An arbitrary string attached to the payment. Often useful for displaying to users or for your own internal record-keeping. (nullable, e.g. It's my first payment request)
   --return-url: string # The URL to redirect the customer to after they complete the payment process or authentication. This is crucial for flows that involve off-site redirection (e.g., 3DS, some bank redirects, wallet payments). (nullable, e.g. https://hyperswitch.io)
   --setup-future-usage: any # nullable
@@ -164,37 +164,37 @@ export def "payments Create-a-Payment" [
   --allowed-payment-method-types: list # Use this parameter to restrict the Payment Method Types to show for a given PaymentIntent (nullable)
   --metadata: record # You can specify up to 50 keys, with key names up to 40 characters long and values up to 500 characters long. Metadata is useful for storing additional, structured information on an object. (nullable)
   --connector-metadata: any # nullable
-  --payment-link: string@bool-completer # Whether to generate the payment link for this payment or not (if applicable) (nullable, default: false, e.g. true)
+  --payment-link: oneof<nothing, bool> # Whether to generate the payment link for this payment or not (if applicable) (nullable, default: false, e.g. true)
   --payment-link-config: any # nullable
   --payment-link-config-id: string # Custom payment link config id set at business profile, send only if business_specific_configs is configured (nullable)
   --profile-id: string # The business profile to be used for this payment, if not passed the default business profile associated with the merchant account will be used. It is mandatory in case multiple business profiles have been set up. (nullable)
   --surcharge-details: any # nullable
   --payment-type: any # nullable
-  --request-incremental-authorization: string@bool-completer # Request an incremental authorization, i.e., increase the authorized amount on a confirmed payment before you capture it. (nullable)
+  --request-incremental-authorization: oneof<nothing, bool> # Request an incremental authorization, i.e., increase the authorized amount on a confirmed payment before you capture it. (nullable)
   --session-expiry: int # Will be used to expire client secret after certain amount of time to be supplied in seconds (900) for 15 mins (nullable, format: int32, e.g. 900)
   --frm-metadata: record # Additional data related to some frm(Fraud Risk Management) connectors (nullable)
-  --request-external-three-ds-authentication: string@bool-completer # Whether to perform external authentication (if applicable) (nullable, e.g. true)
+  --request-external-three-ds-authentication: oneof<nothing, bool> # Whether to perform external authentication (if applicable) (nullable, e.g. true)
   --three-ds-data: any # nullable
   --recurring-details: any # nullable
   --split-payments: any # nullable
-  --request-extended-authorization: string@bool-completer # Optional boolean value to extent authorization period of this payment  capture method must be manual or manual_multiple (nullable, default: false)
+  --request-extended-authorization: oneof<nothing, bool> # Optional boolean value to extent authorization period of this payment  capture method must be manual or manual_multiple (nullable, default: false)
   --merchant-order-reference-id: string # Your unique identifier for this payment or order. This ID helps you reconcile payments on your system. If provided, it is passed to the connector if supported. (nullable, e.g. Custom_Order_id_123)
-  --skip-external-tax-calculation: string@bool-completer # Whether to calculate tax for this payment intent (nullable)
+  --skip-external-tax-calculation: oneof<nothing, bool> # Whether to calculate tax for this payment intent (nullable)
   --psd2-sca-exemption-type: any # nullable
   --ctp-service-details: any # nullable
-  --force-3ds-challenge: string@bool-completer # Indicates if 3ds challenge is forced (nullable)
+  --force-3ds-challenge: oneof<nothing, bool> # Indicates if 3ds challenge is forced (nullable)
   --threeds-method-comp-ind: any # nullable
-  --is-iframe-redirection-enabled: string@bool-completer # Indicates if the redirection has to open in the iframe (nullable)
-  --all-keys-required: string@bool-completer # If enabled, provides whole connector response (nullable)
+  --is-iframe-redirection-enabled: oneof<nothing, bool> # Indicates if the redirection has to open in the iframe (nullable)
+  --all-keys-required: oneof<nothing, bool> # If enabled, provides whole connector response (nullable)
   --payment-channel: any # nullable
   --tax-status: any # nullable
   --discount-amount: int # Total amount of the discount you have applied to the order or transaction. (nullable, format: int64, e.g. 6540)
   --shipping-amount-tax: any # nullable
   --duty-amount: any # nullable
   --order-date: string # Date the payer placed the order. (nullable, format: date-time)
-  --enable-partial-authorization: string@bool-completer # Allow partial authorization for this payment (nullable, default: false)
-  --enable-overcapture: string@bool-completer # Boolean indicating whether to enable overcapture for this payment (nullable, e.g. true)
-  --is-stored-credential: string@bool-completer # Boolean flag indicating whether this payment method is stored and has been previously used for payments (nullable, e.g. true)
+  --enable-partial-authorization: oneof<nothing, bool> # Allow partial authorization for this payment (nullable, default: false)
+  --enable-overcapture: oneof<nothing, bool> # Boolean indicating whether to enable overcapture for this payment (nullable, e.g. true)
+  --is-stored-credential: oneof<nothing, bool> # Boolean flag indicating whether this payment method is stored and has been previously used for payments (nullable, e.g. true)
   --mit-category: any # nullable
   --billing-descriptor: any # nullable
   --tokenization: any # nullable
@@ -221,6 +221,7 @@ export def "payments Create-a-Payment" [
 # operationId: Update a Payment
 # --order_details item shape: {product_name: string, quantity: int, amount: int, tax_rate?: float, total_tax_amount?: int, requires_shipping?: bool, product_img_link?: string, product_id?: string, category?: string, sub_category?: string, brand?: string, product_type?: any, product_tax_code?: string, description?: string, sku?: string, upc?: string, commodity_code?: string, unit_of_measure?: string, total_amount?: int, unit_discount_amount?: int}
 # --installment_options item shape: {payment_method: "card"|"card_redirect"|"pay_later"|"wallet"|"bank_redirect"|"bank_transfer"|"crypto"|"bank_debit"|"reward"|"real_time_payment"|"upi"|"voucher"|"gift_card"|"open_banking"|"mobile_payment"|"network_token", installments: list}
+@deprecated --flag customer-id
 @deprecated --flag statement-descriptor-name
 @deprecated --flag statement-descriptor-suffix
 export def "payments Update-a-Payment" [
@@ -243,10 +244,10 @@ export def "payments Update-a-Payment" [
   --capture-method: any # nullable
   --authentication-type: any # nullable, default: three_ds
   --billing: any # nullable
-  --confirm: string@bool-completer # If set to `true`, Hyperswitch attempts to confirm and authorize the payment immediately after creation, provided sufficient payment method details are included. If `false` or omitted (default is `false`), the payment is created with a status such as `requires_payment_method` or `requires_confirmation`, and a separate `POST /payments/{payment_id}/confirm` call is necessary to proceed with authorization. (nullable, default: false, e.g. true)
+  --confirm: oneof<nothing, bool> # If set to `true`, Hyperswitch attempts to confirm and authorize the payment immediately after creation, provided sufficient payment method details are included. If `false` or omitted (default is `false`), the payment is created with a status such as `requires_payment_method` or `requires_confirmation`, and a separate `POST /payments/{payment_id}/confirm` call is necessary to proceed with authorization. (nullable, default: false, e.g. true)
   --customer: any # nullable
-  --customer-id: string # The identifier for the customer (nullable, e.g. cus_y3oqhf46pyzuxjbcn2giaqnb44)
-  --off-session: string@bool-completer # Set to true to indicate that the customer is not in your checkout flow during this payment, and therefore is unable to authenticate. This parameter is intended for scenarios where you collect card details and charge them later. When making a recurring payment by passing a mandate_id, this parameter is mandatory (nullable, e.g. true)
+  --customer-id: string # The identifier for the customer (DEPRECATED, nullable, e.g. cus_y3oqhf46pyzuxjbcn2giaqnb44)
+  --off-session: oneof<nothing, bool> # Set to true to indicate that the customer is not in your checkout flow during this payment, and therefore is unable to authenticate. This parameter is intended for scenarios where you collect card details and charge them later. When making a recurring payment by passing a mandate_id, this parameter is mandatory (nullable, e.g. true)
   --description: string # An arbitrary string attached to the payment. Often useful for displaying to users or for your own internal record-keeping. (nullable, e.g. It's my first payment request)
   --return-url: string # The URL to redirect the customer to after they complete the payment process or authentication. This is crucial for flows that involve off-site redirection (e.g., 3DS, some bank redirects, wallet payments). (nullable, e.g. https://hyperswitch.io)
   --setup-future-usage: any # nullable
@@ -267,36 +268,36 @@ export def "payments Update-a-Payment" [
   --retry-action: any # nullable
   --metadata: record # You can specify up to 50 keys, with key names up to 40 characters long and values up to 500 characters long. Metadata is useful for storing additional, structured information on an object. (nullable)
   --connector-metadata: any # nullable
-  --payment-link: string@bool-completer # Whether to generate the payment link for this payment or not (if applicable) (nullable, default: false, e.g. true)
+  --payment-link: oneof<nothing, bool> # Whether to generate the payment link for this payment or not (if applicable) (nullable, default: false, e.g. true)
   --payment-link-config: any # nullable
   --payment-link-config-id: string # Custom payment link config id set at business profile, send only if business_specific_configs is configured (nullable)
   --surcharge-details: any # nullable
   --payment-type: any # nullable
-  --request-incremental-authorization: string@bool-completer # Request an incremental authorization, i.e., increase the authorized amount on a confirmed payment before you capture it. (nullable)
+  --request-incremental-authorization: oneof<nothing, bool> # Request an incremental authorization, i.e., increase the authorized amount on a confirmed payment before you capture it. (nullable)
   --session-expiry: int # Will be used to expire client secret after certain amount of time to be supplied in seconds (900) for 15 mins (nullable, format: int32, e.g. 900)
   --frm-metadata: record # Additional data related to some frm(Fraud Risk Management) connectors (nullable)
-  --request-external-three-ds-authentication: string@bool-completer # Whether to perform external authentication (if applicable) (nullable, e.g. true)
+  --request-external-three-ds-authentication: oneof<nothing, bool> # Whether to perform external authentication (if applicable) (nullable, e.g. true)
   --three-ds-data: any # nullable
   --recurring-details: any # nullable
   --split-payments: any # nullable
-  --request-extended-authorization: string@bool-completer # Optional boolean value to extent authorization period of this payment  capture method must be manual or manual_multiple (nullable, default: false)
+  --request-extended-authorization: oneof<nothing, bool> # Optional boolean value to extent authorization period of this payment  capture method must be manual or manual_multiple (nullable, default: false)
   --merchant-order-reference-id: string # Your unique identifier for this payment or order. This ID helps you reconcile payments on your system. If provided, it is passed to the connector if supported. (nullable, e.g. Custom_Order_id_123)
-  --skip-external-tax-calculation: string@bool-completer # Whether to calculate tax for this payment intent (nullable)
+  --skip-external-tax-calculation: oneof<nothing, bool> # Whether to calculate tax for this payment intent (nullable)
   --psd2-sca-exemption-type: any # nullable
   --ctp-service-details: any # nullable
-  --force-3ds-challenge: string@bool-completer # Indicates if 3ds challenge is forced (nullable)
+  --force-3ds-challenge: oneof<nothing, bool> # Indicates if 3ds challenge is forced (nullable)
   --threeds-method-comp-ind: any # nullable
-  --is-iframe-redirection-enabled: string@bool-completer # Indicates if the redirection has to open in the iframe (nullable)
-  --all-keys-required: string@bool-completer # If enabled, provides whole connector response (nullable)
+  --is-iframe-redirection-enabled: oneof<nothing, bool> # Indicates if the redirection has to open in the iframe (nullable)
+  --all-keys-required: oneof<nothing, bool> # If enabled, provides whole connector response (nullable)
   --payment-channel: any # nullable
   --tax-status: any # nullable
   --discount-amount: int # Total amount of the discount you have applied to the order or transaction. (nullable, format: int64, e.g. 6540)
   --shipping-amount-tax: any # nullable
   --duty-amount: any # nullable
   --order-date: string # Date the payer placed the order. (nullable, format: date-time)
-  --enable-partial-authorization: string@bool-completer # Allow partial authorization for this payment (nullable, default: false)
-  --enable-overcapture: string@bool-completer # Boolean indicating whether to enable overcapture for this payment (nullable, e.g. true)
-  --is-stored-credential: string@bool-completer # Boolean flag indicating whether this payment method is stored and has been previously used for payments (nullable, e.g. true)
+  --enable-partial-authorization: oneof<nothing, bool> # Allow partial authorization for this payment (nullable, default: false)
+  --enable-overcapture: oneof<nothing, bool> # Boolean indicating whether to enable overcapture for this payment (nullable, e.g. true)
+  --is-stored-credential: oneof<nothing, bool> # Boolean flag indicating whether this payment method is stored and has been previously used for payments (nullable, e.g. true)
   --mit-category: any # nullable
   --billing-descriptor: any # nullable
   --tokenization: any # nullable
@@ -330,10 +331,10 @@ export def "payments Retrieve-a-Payment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force-sync: string@bool-completer # Decider to enable or disable the connector call for retrieve request (nullable)
+  --force-sync: oneof<nothing, bool> # Decider to enable or disable the connector call for retrieve request (nullable)
   --client-secret: string # This is a token which expires after 15 minutes, used from the client to authenticate and create sessions from the SDK (nullable)
-  --expand-attempts: string@bool-completer # If enabled provides list of attempts linked to payment intent (nullable)
-  --expand-captures: string@bool-completer # If enabled provides list of captures linked to latest attempt (nullable)
+  --expand-attempts: oneof<nothing, bool> # If enabled provides list of attempts linked to payment intent (nullable)
+  --expand-captures: oneof<nothing, bool> # If enabled provides list of captures linked to latest attempt (nullable)
 ]: nothing -> record<payment_id: string, merchant_id: string, status: record, amount: int, net_amount: int, shipping_cost: int, amount_capturable: int, amount_received: int, processor_merchant_id: string, initiator: record, sdk_authorization: string, connector: string, state_metadata: record<total_refunded_amount: record, total_disputed_amount: record, post_capture_void: record<status: string, connector_reference_id: string, description: string, updated_at: string>>, client_secret: string, created: string, modified_at: string, connector_customer_id: string, currency: string, customer_id: string, customer: record<id: string, name: string, email: string, phone: string, phone_country_code: string, customer_document_details: record<document_type: string, document_number: string>>, description: string, refunds: table<refund_id: string, payment_id: string, amount: int, currency: string, status: string, reason: string, metadata: record, error_message: string, error_code: string, unified_code: string, unified_message: string, created_at: string, updated_at: string, connector: string, profile_id: string, merchant_connector_id: string, split_refunds: record, issuer_error_code: string, issuer_error_message: string, raw_connector_response: string, connector_refund_id: string>, disputes: table<dispute_id: string, amount: string, dispute_stage: string, dispute_status: string, connector_status: string, connector_dispute_id: string, connector_reason: string, connector_reason_code: string, challenge_required_by: string, connector_created_at: string, connector_updated_at: string, created_at: string>, attempts: table<attempt_id: string, status: string, amount: int, order_tax_amount: int, currency: record, connector: string, error_message: string, payment_method: record, connector_transaction_id: string, capture_method: record, authentication_type: record, created_at: string, modified_at: string, cancellation_reason: string, mandate_id: string, error_code: string, payment_token: string, connector_metadata: any, payment_experience: record, payment_method_type: record, reference_id: string, unified_code: string, unified_message: string, client_source: string, client_version: string, error_details: record>, captures: table<capture_id: string, status: string, amount: int, currency: record, connector: string, authorized_attempt_id: string, connector_capture_id: string, capture_sequence: int, error_message: string, error_code: string, error_reason: string, reference_id: string>, mandate_id: string, mandate_data: record<update_mandate_id: string, customer_acceptance: record<acceptance_type: string, accepted_at: string, online: record>, mandate_type: record>, setup_future_usage: record, off_session: bool, capture_on: string, capture_method: record, payment_method: string, payment_method_data: record, payment_token: string, shipping: record<address: record<city: string, country: record, line1: string, line2: string, line3: string, zip: string, state: string, first_name: string, last_name: string, origin_zip: string>, phone: record<number: string, country_code: string>, email: string>, billing: record<address: record<city: string, country: record, line1: string, line2: string, line3: string, zip: string, state: string, first_name: string, last_name: string, origin_zip: string>, phone: record<number: string, country_code: string>, email: string>, order_details: table<product_name: string, quantity: int, amount: int, tax_rate: float, total_tax_amount: int, requires_shipping: bool, product_img_link: string, product_id: string, category: string, sub_category: string, brand: string, product_type: record, product_tax_code: string, description: string, sku: string, upc: string, commodity_code: string, unit_of_measure: string, total_amount: int, unit_discount_amount: int>, email: string, name: string, phone: string, return_url: string, authentication_type: record, statement_descriptor_name: string, statement_descriptor_suffix: string, next_action: record, cancellation_reason: string, error_code: string, error_message: string, unified_code: string, unified_message: string, error_details: record<unified_details: record<category: record, message: string, standardised_code: record, description: string, user_guidance_message: string, recommended_action: record>, issuer_details: record<code: string, message: string, network_details: record>, connector_details: record<code: string, message: string, reason: string>>, payment_experience: record, payment_method_type: record, connector_label: string, business_country: record, business_label: string, business_sub_label: string, allowed_payment_method_types: list<string>, manual_retry_allowed: bool, connector_transaction_id: string, frm_message: record<frm_name: string, frm_transaction_id: string, frm_transaction_type: string, frm_status: string, frm_score: int, frm_reason: any, frm_error: string>, metadata: record, connector_metadata: record<apple_pay: record<session_token_data: record>, airwallex: record<payload: string>, noon: record<order_category: string>, braintree: record<merchant_account_id: string, merchant_config_currency: string>, adyen: record<testing: record>, peachpayments: record<rrn: string>, santander: record<boleto: record>>, connector_response_metadata: record, feature_metadata: record<redirect_response: record<param: string, json_payload: record>, search_tags: list<string>, apple_pay_recurring_details: record<payment_description: string, regular_billing: record, billing_agreement: string, management_url: string>, pix_additional_details: record, boleto_additional_details: record<due_date: string, document_kind: record, payment_type: record, covenant_code: string, pix_key: record>, pix_automatico_additional_details: record, finix_additional_details: record<fraud_session_id: string>>, reference_id: string, payment_link: record<link: string, secure_link: string, payment_link_id: string>, profile_id: string, surcharge_details: record<surcharge_amount: int, tax_amount: record>, attempt_count: int, merchant_decision: string, merchant_connector_id: string, incremental_authorization_allowed: bool, authorization_count: int, incremental_authorizations: table<authorization_id: string, amount: int, status: string, error_code: string, error_message: string, previously_authorized_amount: int>, external_authentication_details: record<authentication_flow: record, electronic_commerce_indicator: string, status: string, ds_transaction_id: string, version: string, error_code: string, error_message: string>, external_3ds_authentication_attempted: bool, expires_on: string, fingerprint: string, browser_info: record<color_depth: int, java_enabled: bool, java_script_enabled: bool, language: string, screen_height: int, screen_width: int, time_zone: int, ip_address: string, accept_header: string, user_agent: string, os_type: string, os_version: string, device_model: string, accept_language: string, referer: string>, payment_channel: record, payment_method_id: string, network_transaction_id: string, network_transaction_link_id: string, payment_method_status: record, updated: string, split_payments: record, frm_metadata: record, extended_authorization_applied: bool, extended_authorization_last_applied_at: string, request_extended_authorization: bool, capture_before: string, merchant_order_reference_id: string, order_tax_amount: record, connector_mandate_id: string, card_discovery: record, force_3ds_challenge: bool, force_3ds_challenge_trigger: bool, issuer_error_code: string, issuer_error_message: string, is_iframe_redirection_enabled: bool, whole_connector_response: string, enable_partial_authorization: bool, enable_overcapture: bool, is_overcapture_enabled: bool, network_details: record<network_advice_code: string>, is_stored_credential: bool, mit_category: record, billing_descriptor: record<name: string, city: string, phone: string, statement_descriptor: string, statement_descriptor_suffix: string, reference: string>, tokenization: record, partner_merchant_identifier_details: record<partner_details: record<name: string, version: string, integrator: string>, merchant_details: record<name: string, version: string>>, payment_method_tokenization_details: record<payment_method_id: string, payment_method_status: record, psp_tokenization: bool, network_tokenization: bool, network_transaction_id: string, network_transaction_link_id: string, is_eligible_for_mit_payment: bool>, installment_options: table<payment_method: string, installments: list>, installment_data: record<number_of_installments: int, billing_frequency: string, installment_interest: record>, sender_payment_instrument_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -350,6 +351,7 @@ export def "payments Retrieve-a-Payment" [
 # operationId: Confirm a Payment
 # --order_details item shape: {product_name: string, quantity: int, amount: int, tax_rate?: float, total_tax_amount?: int, requires_shipping?: bool, product_img_link?: string, product_id?: string, category?: string, sub_category?: string, brand?: string, product_type?: any, product_tax_code?: string, description?: string, sku?: string, upc?: string, commodity_code?: string, unit_of_measure?: string, total_amount?: int, unit_discount_amount?: int}
 # --installment_options item shape: {payment_method: "card"|"card_redirect"|"pay_later"|"wallet"|"bank_redirect"|"bank_transfer"|"crypto"|"bank_debit"|"reward"|"real_time_payment"|"upi"|"voucher"|"gift_card"|"open_banking"|"mobile_payment"|"network_token", installments: list}
+@deprecated --flag customer-id
 @deprecated --flag statement-descriptor-name
 @deprecated --flag statement-descriptor-suffix
 @deprecated --flag mandate-id
@@ -373,10 +375,10 @@ export def "payments-confirm Confirm-a-Payment" [
   --capture-method: any # nullable
   --authentication-type: any # nullable, default: three_ds
   --billing: any # nullable
-  --confirm: string@bool-completer # If set to `true`, Hyperswitch attempts to confirm and authorize the payment immediately after creation, provided sufficient payment method details are included. If `false` or omitted (default is `false`), the payment is created with a status such as `requires_payment_method` or `requires_confirmation`, and a separate `POST /payments/{payment_id}/confirm` call is necessary to proceed with authorization. (nullable, default: false, e.g. true)
+  --confirm: oneof<nothing, bool> # If set to `true`, Hyperswitch attempts to confirm and authorize the payment immediately after creation, provided sufficient payment method details are included. If `false` or omitted (default is `false`), the payment is created with a status such as `requires_payment_method` or `requires_confirmation`, and a separate `POST /payments/{payment_id}/confirm` call is necessary to proceed with authorization. (nullable, default: false, e.g. true)
   --customer: any # nullable
-  --customer-id: string # The identifier for the customer (nullable, e.g. cus_y3oqhf46pyzuxjbcn2giaqnb44)
-  --off-session: string@bool-completer # Set to true to indicate that the customer is not in your checkout flow during this payment, and therefore is unable to authenticate. This parameter is intended for scenarios where you collect card details and charge them later. When making a recurring payment by passing a mandate_id, this parameter is mandatory (nullable, e.g. true)
+  --customer-id: string # The identifier for the customer (DEPRECATED, nullable, e.g. cus_y3oqhf46pyzuxjbcn2giaqnb44)
+  --off-session: oneof<nothing, bool> # Set to true to indicate that the customer is not in your checkout flow during this payment, and therefore is unable to authenticate. This parameter is intended for scenarios where you collect card details and charge them later. When making a recurring payment by passing a mandate_id, this parameter is mandatory (nullable, e.g. true)
   --description: string # An arbitrary string attached to the payment. Often useful for displaying to users or for your own internal record-keeping. (nullable, e.g. It's my first payment request)
   --return-url: string # The URL to redirect the customer to after they complete the payment process or authentication. This is crucial for flows that involve off-site redirection (e.g., 3DS, some bank redirects, wallet payments). (nullable, e.g. https://hyperswitch.io)
   --setup-future-usage: any # nullable
@@ -399,34 +401,34 @@ export def "payments-confirm Confirm-a-Payment" [
   --retry-action: any # nullable
   --metadata: record # You can specify up to 50 keys, with key names up to 40 characters long and values up to 500 characters long. Metadata is useful for storing additional, structured information on an object. (nullable)
   --connector-metadata: any # nullable
-  --payment-link: string@bool-completer # Whether to generate the payment link for this payment or not (if applicable) (nullable, default: false, e.g. true)
+  --payment-link: oneof<nothing, bool> # Whether to generate the payment link for this payment or not (if applicable) (nullable, default: false, e.g. true)
   --payment-link-config: any # nullable
   --payment-link-config-id: string # Custom payment link config id set at business profile, send only if business_specific_configs is configured (nullable)
   --payment-type: any # nullable
-  --request-incremental-authorization: string@bool-completer # Request an incremental authorization, i.e., increase the authorized amount on a confirmed payment before you capture it. (nullable)
+  --request-incremental-authorization: oneof<nothing, bool> # Request an incremental authorization, i.e., increase the authorized amount on a confirmed payment before you capture it. (nullable)
   --session-expiry: int # Will be used to expire client secret after certain amount of time to be supplied in seconds (900) for 15 mins (nullable, format: int32, e.g. 900)
   --frm-metadata: record # Additional data related to some frm(Fraud Risk Management) connectors (nullable)
-  --request-external-three-ds-authentication: string@bool-completer # Whether to perform external authentication (if applicable) (nullable, e.g. true)
+  --request-external-three-ds-authentication: oneof<nothing, bool> # Whether to perform external authentication (if applicable) (nullable, e.g. true)
   --three-ds-data: any # nullable
   --recurring-details: any # nullable
   --split-payments: any # nullable
-  --request-extended-authorization: string@bool-completer # Optional boolean value to extent authorization period of this payment  capture method must be manual or manual_multiple (nullable, default: false)
+  --request-extended-authorization: oneof<nothing, bool> # Optional boolean value to extent authorization period of this payment  capture method must be manual or manual_multiple (nullable, default: false)
   --merchant-order-reference-id: string # Your unique identifier for this payment or order. This ID helps you reconcile payments on your system. If provided, it is passed to the connector if supported. (nullable, e.g. Custom_Order_id_123)
-  --skip-external-tax-calculation: string@bool-completer # Whether to calculate tax for this payment intent (nullable)
+  --skip-external-tax-calculation: oneof<nothing, bool> # Whether to calculate tax for this payment intent (nullable)
   --psd2-sca-exemption-type: any # nullable
   --ctp-service-details: any # nullable
-  --force-3ds-challenge: string@bool-completer # Indicates if 3ds challenge is forced (nullable)
+  --force-3ds-challenge: oneof<nothing, bool> # Indicates if 3ds challenge is forced (nullable)
   --threeds-method-comp-ind: any # nullable
-  --is-iframe-redirection-enabled: string@bool-completer # Indicates if the redirection has to open in the iframe (nullable)
-  --all-keys-required: string@bool-completer # If enabled, provides whole connector response (nullable)
+  --is-iframe-redirection-enabled: oneof<nothing, bool> # Indicates if the redirection has to open in the iframe (nullable)
+  --all-keys-required: oneof<nothing, bool> # If enabled, provides whole connector response (nullable)
   --payment-channel: any # nullable
   --tax-status: any # nullable
   --discount-amount: int # Total amount of the discount you have applied to the order or transaction. (nullable, format: int64, e.g. 6540)
   --shipping-amount-tax: any # nullable
   --duty-amount: any # nullable
   --order-date: string # Date the payer placed the order. (nullable, format: date-time)
-  --enable-partial-authorization: string@bool-completer # Allow partial authorization for this payment (nullable, default: false)
-  --is-stored-credential: string@bool-completer # Boolean flag indicating whether this payment method is stored and has been previously used for payments (nullable, e.g. true)
+  --enable-partial-authorization: oneof<nothing, bool> # Allow partial authorization for this payment (nullable, default: false)
+  --is-stored-credential: oneof<nothing, bool> # Boolean flag indicating whether this payment method is stored and has been previously used for payments (nullable, e.g. true)
   --mit-category: any # nullable
   --billing-descriptor: any # nullable
   --tokenization: any # nullable
@@ -451,6 +453,7 @@ export def "payments-confirm Confirm-a-Payment" [
 #
 # POST /payments/{payment_id}/capture
 # operationId: Capture a Payment
+@deprecated --flag statement-descriptor-suffix
 export def "payments-capture Capture-a-Payment" [
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -462,11 +465,11 @@ export def "payments-capture Capture-a-Payment" [
   --allow-errors(-e) # Return full response without error handling
   --merchant-id: string # The unique identifier for the merchant. This is usually inferred from the API key. (nullable)
   --amount-to-capture: int # The amount to capture, in the lowest denomination of the currency. If omitted, the entire `amount_capturable` of the payment will be captured. Must be less than or equal to the current `amount_capturable`. (nullable, format: int64, e.g. 6540)
-  --refund-uncaptured-amount: string@bool-completer # Decider to refund the uncaptured amount. (Currently not fully supported or behavior may vary by connector). (nullable)
-  --statement-descriptor-suffix: string # A dynamic suffix that appears on your customer's credit card statement. This is concatenated with the (shortened) descriptor prefix set on your account to form the complete statement descriptor. The combined length should not exceed connector-specific limits (typically 22 characters). (nullable)
+  --refund-uncaptured-amount: oneof<nothing, bool> # Decider to refund the uncaptured amount. (Currently not fully supported or behavior may vary by connector). (nullable)
+  --statement-descriptor-suffix: string # A dynamic suffix that appears on your customer's credit card statement. This is concatenated with the (shortened) descriptor prefix set on your account to form the complete statement descriptor. The combined length should not exceed connector-specific limits (typically 22 characters). To be deprecated soon, use billing_descriptor instead. (DEPRECATED, nullable)
   --statement-descriptor-prefix: string # An optional prefix for the statement descriptor that appears on your customer's credit card statement. This can override the default prefix set on your merchant account. The combined length of prefix and suffix should not exceed connector-specific limits (typically 22 characters). (nullable)
   --merchant-connector-details: any # nullable
-  --all-keys-required: string@bool-completer # If true, returns stringified connector raw response body (nullable)
+  --all-keys-required: oneof<nothing, bool> # If true, returns stringified connector raw response body (nullable)
 ]: any -> record<payment_id: string, merchant_id: string, status: record, amount: int, net_amount: int, shipping_cost: int, amount_capturable: int, amount_received: int, processor_merchant_id: string, initiator: record, sdk_authorization: string, connector: string, state_metadata: record<total_refunded_amount: record, total_disputed_amount: record, post_capture_void: record<status: string, connector_reference_id: string, description: string, updated_at: string>>, client_secret: string, created: string, modified_at: string, connector_customer_id: string, currency: string, customer_id: string, customer: record<id: string, name: string, email: string, phone: string, phone_country_code: string, customer_document_details: record<document_type: string, document_number: string>>, description: string, refunds: table<refund_id: string, payment_id: string, amount: int, currency: string, status: string, reason: string, metadata: record, error_message: string, error_code: string, unified_code: string, unified_message: string, created_at: string, updated_at: string, connector: string, profile_id: string, merchant_connector_id: string, split_refunds: record, issuer_error_code: string, issuer_error_message: string, raw_connector_response: string, connector_refund_id: string>, disputes: table<dispute_id: string, amount: string, dispute_stage: string, dispute_status: string, connector_status: string, connector_dispute_id: string, connector_reason: string, connector_reason_code: string, challenge_required_by: string, connector_created_at: string, connector_updated_at: string, created_at: string>, attempts: table<attempt_id: string, status: string, amount: int, order_tax_amount: int, currency: record, connector: string, error_message: string, payment_method: record, connector_transaction_id: string, capture_method: record, authentication_type: record, created_at: string, modified_at: string, cancellation_reason: string, mandate_id: string, error_code: string, payment_token: string, connector_metadata: any, payment_experience: record, payment_method_type: record, reference_id: string, unified_code: string, unified_message: string, client_source: string, client_version: string, error_details: record>, captures: table<capture_id: string, status: string, amount: int, currency: record, connector: string, authorized_attempt_id: string, connector_capture_id: string, capture_sequence: int, error_message: string, error_code: string, error_reason: string, reference_id: string>, mandate_id: string, mandate_data: record<update_mandate_id: string, customer_acceptance: record<acceptance_type: string, accepted_at: string, online: record>, mandate_type: record>, setup_future_usage: record, off_session: bool, capture_on: string, capture_method: record, payment_method: string, payment_method_data: record, payment_token: string, shipping: record<address: record<city: string, country: record, line1: string, line2: string, line3: string, zip: string, state: string, first_name: string, last_name: string, origin_zip: string>, phone: record<number: string, country_code: string>, email: string>, billing: record<address: record<city: string, country: record, line1: string, line2: string, line3: string, zip: string, state: string, first_name: string, last_name: string, origin_zip: string>, phone: record<number: string, country_code: string>, email: string>, order_details: table<product_name: string, quantity: int, amount: int, tax_rate: float, total_tax_amount: int, requires_shipping: bool, product_img_link: string, product_id: string, category: string, sub_category: string, brand: string, product_type: record, product_tax_code: string, description: string, sku: string, upc: string, commodity_code: string, unit_of_measure: string, total_amount: int, unit_discount_amount: int>, email: string, name: string, phone: string, return_url: string, authentication_type: record, statement_descriptor_name: string, statement_descriptor_suffix: string, next_action: record, cancellation_reason: string, error_code: string, error_message: string, unified_code: string, unified_message: string, error_details: record<unified_details: record<category: record, message: string, standardised_code: record, description: string, user_guidance_message: string, recommended_action: record>, issuer_details: record<code: string, message: string, network_details: record>, connector_details: record<code: string, message: string, reason: string>>, payment_experience: record, payment_method_type: record, connector_label: string, business_country: record, business_label: string, business_sub_label: string, allowed_payment_method_types: list<string>, manual_retry_allowed: bool, connector_transaction_id: string, frm_message: record<frm_name: string, frm_transaction_id: string, frm_transaction_type: string, frm_status: string, frm_score: int, frm_reason: any, frm_error: string>, metadata: record, connector_metadata: record<apple_pay: record<session_token_data: record>, airwallex: record<payload: string>, noon: record<order_category: string>, braintree: record<merchant_account_id: string, merchant_config_currency: string>, adyen: record<testing: record>, peachpayments: record<rrn: string>, santander: record<boleto: record>>, connector_response_metadata: record, feature_metadata: record<redirect_response: record<param: string, json_payload: record>, search_tags: list<string>, apple_pay_recurring_details: record<payment_description: string, regular_billing: record, billing_agreement: string, management_url: string>, pix_additional_details: record, boleto_additional_details: record<due_date: string, document_kind: record, payment_type: record, covenant_code: string, pix_key: record>, pix_automatico_additional_details: record, finix_additional_details: record<fraud_session_id: string>>, reference_id: string, payment_link: record<link: string, secure_link: string, payment_link_id: string>, profile_id: string, surcharge_details: record<surcharge_amount: int, tax_amount: record>, attempt_count: int, merchant_decision: string, merchant_connector_id: string, incremental_authorization_allowed: bool, authorization_count: int, incremental_authorizations: table<authorization_id: string, amount: int, status: string, error_code: string, error_message: string, previously_authorized_amount: int>, external_authentication_details: record<authentication_flow: record, electronic_commerce_indicator: string, status: string, ds_transaction_id: string, version: string, error_code: string, error_message: string>, external_3ds_authentication_attempted: bool, expires_on: string, fingerprint: string, browser_info: record<color_depth: int, java_enabled: bool, java_script_enabled: bool, language: string, screen_height: int, screen_width: int, time_zone: int, ip_address: string, accept_header: string, user_agent: string, os_type: string, os_version: string, device_model: string, accept_language: string, referer: string>, payment_channel: record, payment_method_id: string, network_transaction_id: string, network_transaction_link_id: string, payment_method_status: record, updated: string, split_payments: record, frm_metadata: record, extended_authorization_applied: bool, extended_authorization_last_applied_at: string, request_extended_authorization: bool, capture_before: string, merchant_order_reference_id: string, order_tax_amount: record, connector_mandate_id: string, card_discovery: record, force_3ds_challenge: bool, force_3ds_challenge_trigger: bool, issuer_error_code: string, issuer_error_message: string, is_iframe_redirection_enabled: bool, whole_connector_response: string, enable_partial_authorization: bool, enable_overcapture: bool, is_overcapture_enabled: bool, network_details: record<network_advice_code: string>, is_stored_credential: bool, mit_category: record, billing_descriptor: record<name: string, city: string, phone: string, statement_descriptor: string, statement_descriptor_suffix: string, reference: string>, tokenization: record, partner_merchant_identifier_details: record<partner_details: record<name: string, version: string, integrator: string>, merchant_details: record<name: string, version: string>>, payment_method_tokenization_details: record<payment_method_id: string, payment_method_status: record, psp_tokenization: bool, network_tokenization: bool, network_transaction_id: string, network_transaction_link_id: string, is_eligible_for_mit_payment: bool>, installment_options: table<payment_method: string, installments: list>, installment_data: record<number_of_installments: int, billing_frequency: string, installment_interest: record>, sender_payment_instrument_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -522,7 +525,7 @@ export def "payments-cancel Cancel-a-Payment" [
   --allow-errors(-e) # Return full response without error handling
   --cancellation-reason: string # The reason for the payment cancel (nullable)
   --merchant-connector-details: any # nullable
-  --all-keys-required: string@bool-completer # If enabled, provides whole connector response (nullable)
+  --all-keys-required: oneof<nothing, bool> # If enabled, provides whole connector response (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -939,7 +942,7 @@ export def "refunds Create-a-Refund" [
   --metadata: record # You can specify up to 50 keys, with key names up to 40 characters long and values up to 500 characters long. Metadata is useful for storing additional, structured information on an object. (nullable)
   --merchant-connector-details: any # nullable
   --split-refunds: any # nullable
-  --all-keys-required: string@bool-completer # If true, returns stringified connector raw response body (nullable)
+  --all-keys-required: oneof<nothing, bool> # If true, returns stringified connector raw response body (nullable)
 ]: any -> record<refund_id: string, payment_id: string, amount: int, currency: string, status: string, reason: string, metadata: record, error_message: string, error_code: string, unified_code: string, unified_message: string, created_at: string, updated_at: string, connector: string, profile_id: string, merchant_connector_id: string, split_refunds: record, issuer_error_code: string, issuer_error_message: string, raw_connector_response: string, connector_refund_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -1131,11 +1134,11 @@ export def "accounts Create-a-Merchant-Account" [
   --return-url: string # The URL to redirect after the completion of the operation (nullable, e.g. https://www.example.com/success)
   --webhook-details: any # nullable
   --payout-routing-algorithm: any # nullable
-  --sub-merchants-enabled: string@bool-completer # A boolean value to indicate if the merchant is a sub-merchant under a master or a parent merchant. By default, its value is false. (nullable, default: false, e.g. false)
+  --sub-merchants-enabled: oneof<nothing, bool> # A boolean value to indicate if the merchant is a sub-merchant under a master or a parent merchant. By default, its value is false. (nullable, default: false, e.g. false)
   --parent-merchant-id: string # Refers to the Parent Merchant ID if the merchant being created is a sub-merchant (nullable, e.g. xkkdf909012sdjki2dkh5sdf)
-  --enable-payment-response-hash: string@bool-completer # A boolean value to indicate if payment response hash needs to be enabled (nullable, default: false, e.g. true)
+  --enable-payment-response-hash: oneof<nothing, bool> # A boolean value to indicate if payment response hash needs to be enabled (nullable, default: false, e.g. true)
   --payment-response-hash-key: string # Refers to the hash key used for calculating the signature for webhooks and redirect response. If the value is not provided, a value is automatically generated. (nullable)
-  --redirect-to-merchant-with-http-post: string@bool-completer # A boolean value to indicate if redirect to merchant with http post needs to be enabled. (nullable, default: false, e.g. true)
+  --redirect-to-merchant-with-http-post: oneof<nothing, bool> # A boolean value to indicate if redirect to merchant with http post needs to be enabled. (nullable, default: false, e.g. true)
   --metadata: record # Metadata is useful for storing additional, unstructured information on an object (nullable)
   --publishable-key: string # API key that will be used for client side API access. A publishable key has to be always paired with a `client_secret`. A `client_secret` can be obtained by creating a payment with `confirm` set to false (nullable, e.g. AH3423bkjbkjdsfbkj)
   --locker-id: string # An identifier for the vault used to store payment method information. (nullable, e.g. locker_abc123)
@@ -1200,11 +1203,11 @@ export def "accounts Update-a-Merchant-Account" [
   --return-url: string # The URL to redirect after the completion of the operation (nullable, e.g. https://www.example.com/success)
   --webhook-details: any # nullable
   --payout-routing-algorithm: any # nullable
-  --sub-merchants-enabled: string@bool-completer # A boolean value to indicate if the merchant is a sub-merchant under a master or a parent merchant. By default, its value is false. (nullable, default: false, e.g. false)
+  --sub-merchants-enabled: oneof<nothing, bool> # A boolean value to indicate if the merchant is a sub-merchant under a master or a parent merchant. By default, its value is false. (nullable, default: false, e.g. false)
   --parent-merchant-id: string # Refers to the Parent Merchant ID if the merchant being created is a sub-merchant (nullable, e.g. xkkdf909012sdjki2dkh5sdf)
-  --enable-payment-response-hash: string@bool-completer # A boolean value to indicate if payment response hash needs to be enabled (nullable, default: false, e.g. true)
+  --enable-payment-response-hash: oneof<nothing, bool> # A boolean value to indicate if payment response hash needs to be enabled (nullable, default: false, e.g. true)
   --payment-response-hash-key: string # Refers to the hash key used for calculating the signature for webhooks and redirect response. (nullable)
-  --redirect-to-merchant-with-http-post: string@bool-completer # A boolean value to indicate if redirect to merchant with http post needs to be enabled (nullable, default: false, e.g. true)
+  --redirect-to-merchant-with-http-post: oneof<nothing, bool> # A boolean value to indicate if redirect to merchant with http post needs to be enabled (nullable, default: false, e.g. true)
   --metadata: record # Metadata is useful for storing additional, unstructured information on an object. (nullable)
   --publishable-key: string # API key that will be used for server side API access (nullable, e.g. AH3423bkjbkjdsfbkj)
   --locker-id: string # An identifier for the vault used to store payment method information. (nullable, e.g. locker_abc123)
@@ -1260,7 +1263,7 @@ export def "accounts-kv Enable/Disable-KV-for-a-Merchant-Account" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --kv-enabled: string@bool-completer # Status of KV for the specific merchant (e.g. true)
+  --kv-enabled: oneof<nothing, bool> # Status of KV for the specific merchant (e.g. true)
 ]: any -> record<merchant_id: string, kv_enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -1298,8 +1301,8 @@ export def "account-connectors Create-a-Merchant-Connector" [
   --payment-methods-enabled: list # An object containing the details about the payment methods that need to be enabled under this merchant connector account (nullable, e.g. [{accepted_countries: {list: [FR, DE, IN], type: disable_only}, accepted_currencies: {list: [USD, EUR], type: enable_only}, installment_payment_enabled: true, maximum_amount: 68607706, minimum_amount: 1, payment_method: wallet, payment_method_issuers: [labore magna ipsum, aute], payment_method_types: [upi_collect, upi_intent], payment_schemes: [Discover, Discover], recurring_enabled: true}]) — item shape: {payment_method: "card"|"card_redirect"|"pay_later"|"wallet"|"bank_redirect"|"bank_transfer"|"crypto"|"bank_debit"|"reward"|"real_time_payment"|"upi"|"voucher"|"gift_card"|"open_banking"|"mobile_payment"|"network_token", payment_method_types?: list}
   --connector-webhook-details: any # nullable
   --metadata: record # Metadata is useful for storing additional, unstructured information on an object. (nullable)
-  --test-mode: string@bool-completer # A boolean value to indicate if the connector is in Test mode. By default, its value is false. (nullable, default: false, e.g. false)
-  --disabled: string@bool-completer # A boolean value to indicate if the connector is disabled. By default, its value is false. (nullable, default: false, e.g. false)
+  --test-mode: oneof<nothing, bool> # A boolean value to indicate if the connector is in Test mode. By default, its value is false. (nullable, default: false, e.g. false)
+  --disabled: oneof<nothing, bool> # A boolean value to indicate if the connector is disabled. By default, its value is false. (nullable, default: false, e.g. false)
   --frm-configs: list # Contains the frm configs for the merchant connector (nullable, e.g.  [{"gateway":"stripe","payment_methods":[{"payment_method":"card","payment_method_types":[{"payment_method_type":"credit","card_networks":["Visa"],"flow":"pre","action":"cancel_txn"},{"payment_method_type":"debit","card_networks":["Visa"],"flow":"pre"}]}]}] ) — item shape: {gateway: "payment_processor"|"payment_vas"|"fin_operations"|"fiz_operations"|"networks"|"banking_entities"|"non_banking_finance"|"payout_processor"|"payment_method_auth"|"authentication_processor"|"tax_processor"|"surcharge_processor"|"billing_processor"|"vault_processor", payment_methods: list}
   --business-country: any # nullable
   --business-label: string # The business label to which the connector account is attached. To be deprecated soon. Use the 'profile_id' instead (DEPRECATED, nullable)
@@ -1388,8 +1391,8 @@ export def "account-connectors Update-a-Merchant-Connector" [
   --payment-methods-enabled: list # An object containing the details about the payment methods that need to be enabled under this merchant connector account (nullable, e.g. [{accepted_countries: {list: [FR, DE, IN], type: disable_only}, accepted_currencies: {list: [USD, EUR], type: enable_only}, installment_payment_enabled: true, maximum_amount: 68607706, minimum_amount: 1, payment_method: wallet, payment_method_issuers: [labore magna ipsum, aute], payment_method_types: [upi_collect, upi_intent], payment_schemes: [Discover, Discover], recurring_enabled: true}]) — item shape: {payment_method: "card"|"card_redirect"|"pay_later"|"wallet"|"bank_redirect"|"bank_transfer"|"crypto"|"bank_debit"|"reward"|"real_time_payment"|"upi"|"voucher"|"gift_card"|"open_banking"|"mobile_payment"|"network_token", payment_method_types?: list}
   --connector-webhook-details: any # nullable
   --metadata: record # Metadata is useful for storing additional, unstructured information on an object. (nullable)
-  --test-mode: string@bool-completer # A boolean value to indicate if the connector is in Test mode. By default, its value is false. (nullable, default: false, e.g. false)
-  --disabled: string@bool-completer # A boolean value to indicate if the connector is disabled. By default, its value is false. (nullable, default: false, e.g. false)
+  --test-mode: oneof<nothing, bool> # A boolean value to indicate if the connector is in Test mode. By default, its value is false. (nullable, default: false, e.g. false)
+  --disabled: oneof<nothing, bool> # A boolean value to indicate if the connector is disabled. By default, its value is false. (nullable, default: false, e.g. false)
   --frm-configs: list # Contains the frm configs for the merchant connector (nullable, e.g.  [{"gateway":"stripe","payment_methods":[{"payment_method":"card","payment_method_types":[{"payment_method_type":"credit","card_networks":["Visa"],"flow":"pre","action":"cancel_txn"},{"payment_method_type":"debit","card_networks":["Visa"],"flow":"pre"}]}]}] ) — item shape: {gateway: "payment_processor"|"payment_vas"|"fin_operations"|"fiz_operations"|"networks"|"banking_entities"|"non_banking_finance"|"payout_processor"|"payment_method_auth"|"authentication_processor"|"tax_processor"|"surcharge_processor"|"billing_processor"|"vault_processor", payment_methods: list}
   --pm-auth-config: record # pm_auth_config will relate MCA records to their respective chosen auth services, based on payment_method and pmt (nullable)
   status: string@status-completer
@@ -1479,11 +1482,11 @@ export def "gsm Create-Gsm-Rule" [
   status: string # status provided by the router
   --router-error: string # optional error provided by the router (nullable)
   decision: string@decision-completer
-  --step-up-possible: string@bool-completer # indicates if step_up retry is possible **Deprecated**: This field is now included as part of `feature_data` under the `Retry` variant. (DEPRECATED)
+  --step-up-possible: oneof<nothing, bool> # indicates if step_up retry is possible **Deprecated**: This field is now included as part of `feature_data` under the `Retry` variant. (DEPRECATED)
   --unified-code: string # error code unified across the connectors (nullable)
   --unified-message: string # error message unified across the connectors (nullable)
   --error-category: any # nullable
-  --clear-pan-possible: string@bool-completer # indicates if retry with pan is possible **Deprecated**: This field is now included as part of `feature_data` under the `Retry` variant. (DEPRECATED)
+  --clear-pan-possible: oneof<nothing, bool> # indicates if retry with pan is possible **Deprecated**: This field is now included as part of `feature_data` under the `Retry` variant. (DEPRECATED)
   --feature: any # nullable
   --feature-data: any # nullable
   --standardised-code: any # nullable
@@ -1552,11 +1555,11 @@ export def "gsm-update Update-Gsm-Rule" [
   --status: string # status provided by the router (nullable)
   --router-error: string # optional error provided by the router (nullable)
   --decision: any # nullable
-  --step-up-possible: string@bool-completer # indicates if step_up retry is possible **Deprecated**: This field is now included as part of `feature_data` under the `Retry` variant. (DEPRECATED, nullable)
+  --step-up-possible: oneof<nothing, bool> # indicates if step_up retry is possible **Deprecated**: This field is now included as part of `feature_data` under the `Retry` variant. (DEPRECATED, nullable)
   --unified-code: string # error code unified across the connectors (nullable)
   --unified-message: string # error message unified across the connectors (nullable)
   --error-category: any # nullable
-  --clear-pan-possible: string@bool-completer # indicates if retry with pan is possible **Deprecated**: This field is now included as part of `feature_data` under the `Retry` variant. (DEPRECATED, nullable)
+  --clear-pan-possible: oneof<nothing, bool> # indicates if retry with pan is possible **Deprecated**: This field is now included as part of `feature_data` under the `Retry` variant. (DEPRECATED, nullable)
   --feature: any # nullable
   --feature-data: any # nullable
   --standardised-code: any # nullable
@@ -1859,8 +1862,8 @@ export def "account-payment-methods List-all-Payment-Methods-for-a-Merchant" [
   --accepted-countries: list # The two-letter ISO currency code (nullable)
   --accepted-currencies: list # The three-letter ISO currency code (nullable)
   --amount: int # The amount accepted for processing by the particular payment method. (nullable, format: int64)
-  --recurring-enabled: string@bool-completer # Indicates whether the payment method is eligible for recurring payments (nullable)
-  --installment-payment-enabled: string@bool-completer # Indicates whether the payment method is eligible for installment payments (nullable)
+  --recurring-enabled: oneof<nothing, bool> # Indicates whether the payment method is eligible for recurring payments (nullable)
+  --installment-payment-enabled: oneof<nothing, bool> # Indicates whether the payment method is eligible for installment payments (nullable)
   --limit: int # Indicates the limit of last used payment methods (nullable, format: int64)
   --card-networks: list # Indicates whether the payment method is eligible for card netwotks (nullable)
 ]: nothing -> record<redirect_url: string, currency: string, payment_methods: table<payment_method: string, payment_method_types: list>, mandate_payment: any, merchant_name: string, show_surcharge_breakup_screen: bool, payment_type: record, request_external_three_ds_authentication: bool, collect_shipping_details_from_wallets: bool, collect_billing_details_from_wallets: bool, is_tax_calculation_enabled: bool, sdk_next_action: record<next_action: any, should_block_confirm: bool>, is_guest_customer: bool, intent_data: record<payment_id: string, status: string, amount: int, currency: record, client_secret: string, description: string, customer_id: string, return_url: string, setup_future_usage: record, billing: record<address: record, phone: record, email: string>, shipping: record<address: record, phone: record, email: string>, metadata: record, order_details: list<record>, created: string, expires_on: string, profile_id: string, merchant_order_reference_id: string, attempt_count: int, installment_options: list<record>, capture_method: record, merchant_name: string, mandate_payment: record<update_mandate_id: string, customer_acceptance: record, mandate_type: record>, payment_type: record, request_external_three_ds_authentication: bool, is_tax_calculation_enabled: bool, is_guest_customer: bool>> {
@@ -1890,8 +1893,8 @@ export def "customers-payment-methods List-all-Payment-Methods-for-a-Customer" [
   --accepted-countries: list # The two-letter ISO currency code (nullable)
   --accepted-currencies: list # The three-letter ISO currency code (nullable)
   --amount: int # The amount accepted for processing by the particular payment method. (nullable, format: int64)
-  --recurring-enabled: string@bool-completer # Indicates whether the payment method is eligible for recurring payments (nullable)
-  --installment-payment-enabled: string@bool-completer # Indicates whether the payment method is eligible for installment payments (nullable)
+  --recurring-enabled: oneof<nothing, bool> # Indicates whether the payment method is eligible for recurring payments (nullable)
+  --installment-payment-enabled: oneof<nothing, bool> # Indicates whether the payment method is eligible for installment payments (nullable)
   --limit: int # Indicates the limit of last used payment methods (nullable, format: int64)
   --card-networks: list # Indicates whether the payment method is eligible for card netwotks (nullable)
 ]: nothing -> record<customer_payment_methods: table<payment_token: string, payment_method_id: string, customer_id: string, payment_method: string, payment_method_type: record, payment_method_issuer: string, payment_method_issuer_code: record, recurring_enabled: bool, installment_payment_enabled: bool, payment_experience: list, card: record, metadata: record, created: string, bank_transfer: record, bank: record, surcharge_details: record, requires_cvv: bool, last_used_at: string, default_payment_method_set: bool, billing: record>, is_guest_customer: bool> {
@@ -1920,8 +1923,8 @@ export def "customers-payment-methods List-Customer-Payment-Methods-via-Client-S
   --accepted-countries: list # The two-letter ISO currency code (nullable)
   --accepted-currencies: list # The three-letter ISO currency code (nullable)
   --amount: int # The amount accepted for processing by the particular payment method. (nullable, format: int64)
-  --recurring-enabled: string@bool-completer # Indicates whether the payment method is eligible for recurring payments (nullable)
-  --installment-payment-enabled: string@bool-completer # Indicates whether the payment method is eligible for installment payments (nullable)
+  --recurring-enabled: oneof<nothing, bool> # Indicates whether the payment method is eligible for recurring payments (nullable)
+  --installment-payment-enabled: oneof<nothing, bool> # Indicates whether the payment method is eligible for installment payments (nullable)
   --limit: int # Indicates the limit of last used payment methods (nullable, format: int64)
   --card-networks: list # Indicates whether the payment method is eligible for card netwotks (nullable)
 ]: nothing -> record<customer_payment_methods: table<payment_token: string, payment_method_id: string, customer_id: string, payment_method: string, payment_method_type: record, payment_method_issuer: string, payment_method_issuer_code: record, recurring_enabled: bool, installment_payment_enabled: bool, payment_experience: list, card: record, metadata: record, created: string, bank_transfer: record, bank: record, surcharge_details: record, requires_cvv: bool, last_used_at: string, default_payment_method_set: bool, billing: record>, is_guest_customer: bool> {
@@ -2044,9 +2047,9 @@ export def "account-business-profile Create-A-Profile" [
   --allow-errors(-e) # Return full response without error handling
   --profile-name: string # The name of profile (nullable)
   --return-url: string # The URL to redirect after the completion of the operation (nullable, e.g. https://www.example.com/success)
-  --enable-payment-response-hash: string@bool-completer # A boolean value to indicate if payment response hash needs to be enabled (nullable, default: true, e.g. true)
+  --enable-payment-response-hash: oneof<nothing, bool> # A boolean value to indicate if payment response hash needs to be enabled (nullable, default: true, e.g. true)
   --payment-response-hash-key: string # Refers to the hash key used for calculating the signature for webhooks and redirect response. If the value is not provided, a value is automatically generated. (nullable)
-  --redirect-to-merchant-with-http-post: string@bool-completer # A boolean value to indicate if redirect to merchant with http post needs to be enabled (nullable, default: false, e.g. true)
+  --redirect-to-merchant-with-http-post: oneof<nothing, bool> # A boolean value to indicate if redirect to merchant with http post needs to be enabled (nullable, default: false, e.g. true)
   --webhook-details: any # nullable
   --metadata: record # Metadata is useful for storing additional, unstructured information on an object. (nullable)
   --routing-algorithm: record # The routing algorithm to be used for routing payments to desired connectors (nullable)
@@ -2057,39 +2060,39 @@ export def "account-business-profile Create-A-Profile" [
   --session-expiry: int # Client Secret Default expiry for all payments created under this profile (nullable, format: int32, e.g. 900)
   --payment-link-config: any # nullable
   --authentication-connector-details: any # nullable
-  --use-billing-as-payment-method-billing: string@bool-completer # Whether to use the billing details passed when creating the intent as payment method billing (nullable)
-  --collect-shipping-details-from-wallet-connector: string@bool-completer # A boolean value to indicate if customer shipping details needs to be collected from wallet connector only if it is required field for connector (Eg. Apple Pay, Google Pay etc) (nullable, default: false, e.g. false)
-  --collect-billing-details-from-wallet-connector: string@bool-completer # A boolean value to indicate if customer billing details needs to be collected from wallet connector only if it is required field for connector (Eg. Apple Pay, Google Pay etc) (nullable, default: false, e.g. false)
-  --always-collect-shipping-details-from-wallet-connector: string@bool-completer # A boolean value to indicate if customer shipping details needs to be collected from wallet connector irrespective of connector required fields (Eg. Apple pay, Google pay etc) (nullable, default: false, e.g. false)
-  --always-collect-billing-details-from-wallet-connector: string@bool-completer # A boolean value to indicate if customer billing details needs to be collected from wallet connector irrespective of connector required fields (Eg. Apple pay, Google pay etc) (nullable, default: false, e.g. false)
-  --is-connector-agnostic-mit-enabled: string@bool-completer # Indicates if the MIT (merchant initiated transaction) payments can be made connector agnostic, i.e., MITs may be processed through different connector than CIT (customer initiated transaction) based on the routing rules. If set to `false`, MIT will go through the same connector as the CIT. (nullable)
+  --use-billing-as-payment-method-billing: oneof<nothing, bool> # Whether to use the billing details passed when creating the intent as payment method billing (nullable)
+  --collect-shipping-details-from-wallet-connector: oneof<nothing, bool> # A boolean value to indicate if customer shipping details needs to be collected from wallet connector only if it is required field for connector (Eg. Apple Pay, Google Pay etc) (nullable, default: false, e.g. false)
+  --collect-billing-details-from-wallet-connector: oneof<nothing, bool> # A boolean value to indicate if customer billing details needs to be collected from wallet connector only if it is required field for connector (Eg. Apple Pay, Google Pay etc) (nullable, default: false, e.g. false)
+  --always-collect-shipping-details-from-wallet-connector: oneof<nothing, bool> # A boolean value to indicate if customer shipping details needs to be collected from wallet connector irrespective of connector required fields (Eg. Apple pay, Google pay etc) (nullable, default: false, e.g. false)
+  --always-collect-billing-details-from-wallet-connector: oneof<nothing, bool> # A boolean value to indicate if customer billing details needs to be collected from wallet connector irrespective of connector required fields (Eg. Apple pay, Google pay etc) (nullable, default: false, e.g. false)
+  --is-connector-agnostic-mit-enabled: oneof<nothing, bool> # Indicates if the MIT (merchant initiated transaction) payments can be made connector agnostic, i.e., MITs may be processed through different connector than CIT (customer initiated transaction) based on the routing rules. If set to `false`, MIT will go through the same connector as the CIT. (nullable)
   --payout-link-config: any # nullable
   --outgoing-webhook-custom-http-headers: record # These key-value pairs are sent as additional custom headers in the outgoing webhook request. It is recommended not to use more than four key-value pairs. (nullable)
   --tax-connector-id: string # Merchant Connector id to be stored for tax_calculator connector (nullable)
-  --is-tax-connector-enabled: string@bool-completer # Indicates if tax_calculator connector is enabled or not. If set to `true` tax_connector_id will be checked.
-  --is-network-tokenization-enabled: string@bool-completer # Indicates if network tokenization is enabled or not.
-  --is-auto-retries-enabled: string@bool-completer # Indicates if is_auto_retries_enabled is enabled or not. (nullable)
+  --is-tax-connector-enabled: oneof<nothing, bool> # Indicates if tax_calculator connector is enabled or not. If set to `true` tax_connector_id will be checked.
+  --is-network-tokenization-enabled: oneof<nothing, bool> # Indicates if network tokenization is enabled or not.
+  --is-auto-retries-enabled: oneof<nothing, bool> # Indicates if is_auto_retries_enabled is enabled or not. (nullable)
   --max-auto-retries-enabled: int # Maximum number of auto retries allowed for a payment (nullable, format: int32)
-  --always-request-extended-authorization: string@bool-completer # Bool indicating if extended authentication must be requested for all payments (nullable)
-  --is-click-to-pay-enabled: string@bool-completer # Indicates if click to pay is enabled or not.
+  --always-request-extended-authorization: oneof<nothing, bool> # Bool indicating if extended authentication must be requested for all payments (nullable)
+  --is-click-to-pay-enabled: oneof<nothing, bool> # Indicates if click to pay is enabled or not.
   --authentication-product-ids: record # Product authentication ids (nullable)
   --card-testing-guard-config: any # nullable
-  --is-clear-pan-retries-enabled: string@bool-completer # Indicates if clear pan retries is enabled or not. (nullable)
-  --force-3ds-challenge: string@bool-completer # Indicates if 3ds challenge is forced (nullable)
-  --is-debit-routing-enabled: string@bool-completer # Indicates if debit routing is enabled or not (nullable)
+  --is-clear-pan-retries-enabled: oneof<nothing, bool> # Indicates if clear pan retries is enabled or not. (nullable)
+  --force-3ds-challenge: oneof<nothing, bool> # Indicates if 3ds challenge is forced (nullable)
+  --is-debit-routing-enabled: oneof<nothing, bool> # Indicates if debit routing is enabled or not (nullable)
   --merchant-business-country: any # nullable
-  --is-iframe-redirection-enabled: string@bool-completer # Indicates if the redirection has to open in the iframe (nullable, e.g. false)
-  --is-pre-network-tokenization-enabled: string@bool-completer # Indicates if pre network tokenization is enabled or not (nullable)
+  --is-iframe-redirection-enabled: oneof<nothing, bool> # Indicates if the redirection has to open in the iframe (nullable, e.g. false)
+  --is-pre-network-tokenization-enabled: oneof<nothing, bool> # Indicates if pre network tokenization is enabled or not (nullable)
   --merchant-category-code: any # nullable
   --merchant-country-code: any # nullable
   --dispute-polling-interval: int # Time interval (in hours) for polling the connector to check  for new disputes (nullable, format: int32, e.g. 2)
-  --is-manual-retry-enabled: string@bool-completer # Indicates if manual retry for payment is enabled or not (nullable)
-  --always-enable-overcapture: string@bool-completer # Bool indicating if overcapture  must be requested for all payments (nullable)
+  --is-manual-retry-enabled: oneof<nothing, bool> # Indicates if manual retry for payment is enabled or not (nullable)
+  --always-enable-overcapture: oneof<nothing, bool> # Bool indicating if overcapture  must be requested for all payments (nullable)
   --is-external-vault-enabled: any # nullable
   --external-vault-connector-details: any # nullable
   --billing-processor-id: string # Merchant Connector id to be stored for billing_processor connector (nullable)
   --surcharge-connector-details: any # nullable
-  --is-l2-l3-enabled: string@bool-completer # Flag to enable Level 2 and Level 3 processing data for card transactions (nullable)
+  --is-l2-l3-enabled: oneof<nothing, bool> # Flag to enable Level 2 and Level 3 processing data for card transactions (nullable)
   --network-tokenization-credentials: any # nullable
   --payment-method-blocking: any # nullable
 ]: any -> record<merchant_id: string, profile_id: string, profile_name: string, return_url: string, enable_payment_response_hash: bool, payment_response_hash_key: string, redirect_to_merchant_with_http_post: bool, webhook_details: record<webhook_version: string, webhook_username: string, webhook_password: string, webhook_url: string, payment_created_enabled: bool, payment_succeeded_enabled: bool, payment_failed_enabled: bool, payment_statuses_enabled: list<string>, refund_statuses_enabled: list<string>, payout_statuses_enabled: list<string>>, metadata: record, routing_algorithm: record, intent_fulfillment_time: int, frm_routing_algorithm: record, payout_routing_algorithm: record, applepay_verified_domains: list<string>, session_expiry: int, payment_link_config: record, authentication_connector_details: record<authentication_connectors: list<string>, three_ds_requestor_url: string, three_ds_requestor_app_url: string>, use_billing_as_payment_method_billing: bool, extended_card_info_config: record<public_key: string, ttl_in_secs: int>, collect_shipping_details_from_wallet_connector: bool, collect_billing_details_from_wallet_connector: bool, always_collect_shipping_details_from_wallet_connector: bool, always_collect_billing_details_from_wallet_connector: bool, is_connector_agnostic_mit_enabled: bool, payout_link_config: record, outgoing_webhook_custom_http_headers: record, tax_connector_id: string, is_tax_connector_enabled: bool, is_network_tokenization_enabled: bool, is_auto_retries_enabled: bool, max_auto_retries_enabled: int, always_request_extended_authorization: bool, is_click_to_pay_enabled: bool, authentication_product_ids: record, card_testing_guard_config: record<card_ip_blocking_status: string, card_ip_blocking_threshold: int, guest_user_card_blocking_status: string, guest_user_card_blocking_threshold: int, customer_id_blocking_status: string, customer_id_blocking_threshold: int, card_testing_guard_expiry: int>, is_clear_pan_retries_enabled: bool, force_3ds_challenge: bool, is_debit_routing_enabled: bool, merchant_business_country: record, is_pre_network_tokenization_enabled: bool, acquirer_configs: table<profile_acquirer_id: string, acquirer_assigned_merchant_id: string, merchant_name: string, network: string, acquirer_bin: string, acquirer_ica: string, acquirer_fraud_rate: float, acquirer_country_code: string, profile_id: string, is_default: bool>, acquirer_config_bucket: record<default_acquirer_config: string, configs: record>, is_iframe_redirection_enabled: bool, merchant_category_code: record, merchant_country_code: record, dispute_polling_interval: int, is_manual_retry_enabled: bool, always_enable_overcapture: bool, is_external_vault_enabled: record, external_vault_connector_details: record<vault_connector_id: string, vault_sdk: record, vault_token_selector: list<record>>, billing_processor_id: string, surcharge_connector_details: record<surcharge_connector_id: string>, is_l2_l3_enabled: bool, network_tokenization_credentials: record, payment_method_blocking: record<card: record<issuing_country: list, card_types: list, card_subtypes: list, issuers: list, block_if_bin_info_unavailable: bool>, wallet: record<card_types: list>>> {
@@ -2165,9 +2168,9 @@ export def "account-business-profile Update-a-Profile" [
   --allow-errors(-e) # Return full response without error handling
   --profile-name: string # The name of profile (nullable)
   --return-url: string # The URL to redirect after the completion of the operation (nullable, e.g. https://www.example.com/success)
-  --enable-payment-response-hash: string@bool-completer # A boolean value to indicate if payment response hash needs to be enabled (nullable, default: true, e.g. true)
+  --enable-payment-response-hash: oneof<nothing, bool> # A boolean value to indicate if payment response hash needs to be enabled (nullable, default: true, e.g. true)
   --payment-response-hash-key: string # Refers to the hash key used for calculating the signature for webhooks and redirect response. If the value is not provided, a value is automatically generated. (nullable)
-  --redirect-to-merchant-with-http-post: string@bool-completer # A boolean value to indicate if redirect to merchant with http post needs to be enabled (nullable, default: false, e.g. true)
+  --redirect-to-merchant-with-http-post: oneof<nothing, bool> # A boolean value to indicate if redirect to merchant with http post needs to be enabled (nullable, default: false, e.g. true)
   --webhook-details: any # nullable
   --metadata: record # Metadata is useful for storing additional, unstructured information on an object. (nullable)
   --routing-algorithm: record # The routing algorithm to be used for routing payments to desired connectors (nullable)
@@ -2178,39 +2181,39 @@ export def "account-business-profile Update-a-Profile" [
   --session-expiry: int # Client Secret Default expiry for all payments created under this profile (nullable, format: int32, e.g. 900)
   --payment-link-config: any # nullable
   --authentication-connector-details: any # nullable
-  --use-billing-as-payment-method-billing: string@bool-completer # Whether to use the billing details passed when creating the intent as payment method billing (nullable)
-  --collect-shipping-details-from-wallet-connector: string@bool-completer # A boolean value to indicate if customer shipping details needs to be collected from wallet connector only if it is required field for connector (Eg. Apple Pay, Google Pay etc) (nullable, default: false, e.g. false)
-  --collect-billing-details-from-wallet-connector: string@bool-completer # A boolean value to indicate if customer billing details needs to be collected from wallet connector only if it is required field for connector (Eg. Apple Pay, Google Pay etc) (nullable, default: false, e.g. false)
-  --always-collect-shipping-details-from-wallet-connector: string@bool-completer # A boolean value to indicate if customer shipping details needs to be collected from wallet connector irrespective of connector required fields (Eg. Apple pay, Google pay etc) (nullable, default: false, e.g. false)
-  --always-collect-billing-details-from-wallet-connector: string@bool-completer # A boolean value to indicate if customer billing details needs to be collected from wallet connector irrespective of connector required fields (Eg. Apple pay, Google pay etc) (nullable, default: false, e.g. false)
-  --is-connector-agnostic-mit-enabled: string@bool-completer # Indicates if the MIT (merchant initiated transaction) payments can be made connector agnostic, i.e., MITs may be processed through different connector than CIT (customer initiated transaction) based on the routing rules. If set to `false`, MIT will go through the same connector as the CIT. (nullable)
+  --use-billing-as-payment-method-billing: oneof<nothing, bool> # Whether to use the billing details passed when creating the intent as payment method billing (nullable)
+  --collect-shipping-details-from-wallet-connector: oneof<nothing, bool> # A boolean value to indicate if customer shipping details needs to be collected from wallet connector only if it is required field for connector (Eg. Apple Pay, Google Pay etc) (nullable, default: false, e.g. false)
+  --collect-billing-details-from-wallet-connector: oneof<nothing, bool> # A boolean value to indicate if customer billing details needs to be collected from wallet connector only if it is required field for connector (Eg. Apple Pay, Google Pay etc) (nullable, default: false, e.g. false)
+  --always-collect-shipping-details-from-wallet-connector: oneof<nothing, bool> # A boolean value to indicate if customer shipping details needs to be collected from wallet connector irrespective of connector required fields (Eg. Apple pay, Google pay etc) (nullable, default: false, e.g. false)
+  --always-collect-billing-details-from-wallet-connector: oneof<nothing, bool> # A boolean value to indicate if customer billing details needs to be collected from wallet connector irrespective of connector required fields (Eg. Apple pay, Google pay etc) (nullable, default: false, e.g. false)
+  --is-connector-agnostic-mit-enabled: oneof<nothing, bool> # Indicates if the MIT (merchant initiated transaction) payments can be made connector agnostic, i.e., MITs may be processed through different connector than CIT (customer initiated transaction) based on the routing rules. If set to `false`, MIT will go through the same connector as the CIT. (nullable)
   --payout-link-config: any # nullable
   --outgoing-webhook-custom-http-headers: record # These key-value pairs are sent as additional custom headers in the outgoing webhook request. It is recommended not to use more than four key-value pairs. (nullable)
   --tax-connector-id: string # Merchant Connector id to be stored for tax_calculator connector (nullable)
-  --is-tax-connector-enabled: string@bool-completer # Indicates if tax_calculator connector is enabled or not. If set to `true` tax_connector_id will be checked.
-  --is-network-tokenization-enabled: string@bool-completer # Indicates if network tokenization is enabled or not.
-  --is-auto-retries-enabled: string@bool-completer # Indicates if is_auto_retries_enabled is enabled or not. (nullable)
+  --is-tax-connector-enabled: oneof<nothing, bool> # Indicates if tax_calculator connector is enabled or not. If set to `true` tax_connector_id will be checked.
+  --is-network-tokenization-enabled: oneof<nothing, bool> # Indicates if network tokenization is enabled or not.
+  --is-auto-retries-enabled: oneof<nothing, bool> # Indicates if is_auto_retries_enabled is enabled or not. (nullable)
   --max-auto-retries-enabled: int # Maximum number of auto retries allowed for a payment (nullable, format: int32)
-  --always-request-extended-authorization: string@bool-completer # Bool indicating if extended authentication must be requested for all payments (nullable)
-  --is-click-to-pay-enabled: string@bool-completer # Indicates if click to pay is enabled or not.
+  --always-request-extended-authorization: oneof<nothing, bool> # Bool indicating if extended authentication must be requested for all payments (nullable)
+  --is-click-to-pay-enabled: oneof<nothing, bool> # Indicates if click to pay is enabled or not.
   --authentication-product-ids: record # Product authentication ids (nullable)
   --card-testing-guard-config: any # nullable
-  --is-clear-pan-retries-enabled: string@bool-completer # Indicates if clear pan retries is enabled or not. (nullable)
-  --force-3ds-challenge: string@bool-completer # Indicates if 3ds challenge is forced (nullable)
-  --is-debit-routing-enabled: string@bool-completer # Indicates if debit routing is enabled or not (nullable)
+  --is-clear-pan-retries-enabled: oneof<nothing, bool> # Indicates if clear pan retries is enabled or not. (nullable)
+  --force-3ds-challenge: oneof<nothing, bool> # Indicates if 3ds challenge is forced (nullable)
+  --is-debit-routing-enabled: oneof<nothing, bool> # Indicates if debit routing is enabled or not (nullable)
   --merchant-business-country: any # nullable
-  --is-iframe-redirection-enabled: string@bool-completer # Indicates if the redirection has to open in the iframe (nullable, e.g. false)
-  --is-pre-network-tokenization-enabled: string@bool-completer # Indicates if pre network tokenization is enabled or not (nullable)
+  --is-iframe-redirection-enabled: oneof<nothing, bool> # Indicates if the redirection has to open in the iframe (nullable, e.g. false)
+  --is-pre-network-tokenization-enabled: oneof<nothing, bool> # Indicates if pre network tokenization is enabled or not (nullable)
   --merchant-category-code: any # nullable
   --merchant-country-code: any # nullable
   --dispute-polling-interval: int # Time interval (in hours) for polling the connector to check  for new disputes (nullable, format: int32, e.g. 2)
-  --is-manual-retry-enabled: string@bool-completer # Indicates if manual retry for payment is enabled or not (nullable)
-  --always-enable-overcapture: string@bool-completer # Bool indicating if overcapture  must be requested for all payments (nullable)
+  --is-manual-retry-enabled: oneof<nothing, bool> # Indicates if manual retry for payment is enabled or not (nullable)
+  --always-enable-overcapture: oneof<nothing, bool> # Bool indicating if overcapture  must be requested for all payments (nullable)
   --is-external-vault-enabled: any # nullable
   --external-vault-connector-details: any # nullable
   --billing-processor-id: string # Merchant Connector id to be stored for billing_processor connector (nullable)
   --surcharge-connector-details: any # nullable
-  --is-l2-l3-enabled: string@bool-completer # Flag to enable Level 2 and Level 3 processing data for card transactions (nullable)
+  --is-l2-l3-enabled: oneof<nothing, bool> # Flag to enable Level 2 and Level 3 processing data for card transactions (nullable)
   --network-tokenization-credentials: any # nullable
   --payment-method-blocking: any # nullable
 ]: any -> record<merchant_id: string, profile_id: string, profile_name: string, return_url: string, enable_payment_response_hash: bool, payment_response_hash_key: string, redirect_to_merchant_with_http_post: bool, webhook_details: record<webhook_version: string, webhook_username: string, webhook_password: string, webhook_url: string, payment_created_enabled: bool, payment_succeeded_enabled: bool, payment_failed_enabled: bool, payment_statuses_enabled: list<string>, refund_statuses_enabled: list<string>, payout_statuses_enabled: list<string>>, metadata: record, routing_algorithm: record, intent_fulfillment_time: int, frm_routing_algorithm: record, payout_routing_algorithm: record, applepay_verified_domains: list<string>, session_expiry: int, payment_link_config: record, authentication_connector_details: record<authentication_connectors: list<string>, three_ds_requestor_url: string, three_ds_requestor_app_url: string>, use_billing_as_payment_method_billing: bool, extended_card_info_config: record<public_key: string, ttl_in_secs: int>, collect_shipping_details_from_wallet_connector: bool, collect_billing_details_from_wallet_connector: bool, always_collect_shipping_details_from_wallet_connector: bool, always_collect_billing_details_from_wallet_connector: bool, is_connector_agnostic_mit_enabled: bool, payout_link_config: record, outgoing_webhook_custom_http_headers: record, tax_connector_id: string, is_tax_connector_enabled: bool, is_network_tokenization_enabled: bool, is_auto_retries_enabled: bool, max_auto_retries_enabled: int, always_request_extended_authorization: bool, is_click_to_pay_enabled: bool, authentication_product_ids: record, card_testing_guard_config: record<card_ip_blocking_status: string, card_ip_blocking_threshold: int, guest_user_card_blocking_status: string, guest_user_card_blocking_threshold: int, customer_id_blocking_status: string, customer_id_blocking_threshold: int, card_testing_guard_expiry: int>, is_clear_pan_retries_enabled: bool, force_3ds_challenge: bool, is_debit_routing_enabled: bool, merchant_business_country: record, is_pre_network_tokenization_enabled: bool, acquirer_configs: table<profile_acquirer_id: string, acquirer_assigned_merchant_id: string, merchant_name: string, network: string, acquirer_bin: string, acquirer_ica: string, acquirer_fraud_rate: float, acquirer_country_code: string, profile_id: string, is_default: bool>, acquirer_config_bucket: record<default_acquirer_config: string, configs: record>, is_iframe_redirection_enabled: bool, merchant_category_code: record, merchant_country_code: record, dispute_polling_interval: int, is_manual_retry_enabled: bool, always_enable_overcapture: bool, is_external_vault_enabled: record, external_vault_connector_details: record<vault_connector_id: string, vault_sdk: record, vault_token_selector: list<record>>, billing_processor_id: string, surcharge_connector_details: record<surcharge_connector_id: string>, is_l2_l3_enabled: bool, network_tokenization_credentials: record, payment_method_blocking: record<card: record<issuing_country: list, card_types: list, card_subtypes: list, issuers: list, block_if_bin_info_unavailable: bool>, wallet: record<card_types: list>>> {
@@ -2261,7 +2264,7 @@ export def "disputes Retrieve-a-Dispute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force-sync: string@bool-completer # Decider to enable or disable the connector call for dispute retrieve request (nullable)
+  --force-sync: oneof<nothing, bool> # Decider to enable or disable the connector call for dispute retrieve request (nullable)
 ]: nothing -> record<dispute_id: string, payment_id: string, attempt_id: string, amount: string, currency: string, dispute_stage: string, dispute_status: string, connector: string, connector_status: string, connector_dispute_id: string, connector_reason: string, connector_reason_code: string, challenge_required_by: string, connector_created_at: string, connector_updated_at: string, created_at: string, profile_id: string, merchant_connector_id: string, is_already_refunded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2771,7 +2774,7 @@ export def "routing-evaluate Evaluate-routing-rules" [
   merchantId: string # Profile ID of the merchant (e.g. pro_aMoPnEkgCVnh2WVsFe32)
   --eligibleGatewayList: list # List of eligible gateways for routing consideration (nullable, e.g. ["stripe:mca_123", "adyen:mca_456"])
   --rankingAlgorithm: any # nullable
-  --eliminationEnabled: string@bool-completer # Whether elimination logic is enabled for filtering gateways (nullable, e.g. true)
+  --eliminationEnabled: oneof<nothing, bool> # Whether elimination logic is enabled for filtering gateways (nullable, e.g. true)
 ]: any -> record<decided_gateway: string, gateway_priority_map: record, filter_wise_gateways: record, priority_logic_tag: string, routing_approach: string, gateway_before_evaluation: string, priority_logic_output: record<isEnforcement: bool, gws: list<string>, priorityLogicTag: string, gatewayReferenceIds: record, primaryLogic: record<name: string, status: string, failure_reason: string>, fallbackLogic: record<name: string, status: string, failure_reason: string>>, reset_approach: string, routing_dimension: string, routing_dimension_level: string, is_scheduled_outage: bool, is_dynamic_mga_enabled: bool, gateway_mga_id_map: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -2926,7 +2929,7 @@ export def "blocklist-toggle Toggle-blocklist-guard-for-a-particular-merchant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string@bool-completer # Boolean value to enable/disable blocklist
+  --status: oneof<nothing, bool> # Boolean value to enable/disable blocklist
 ]: nothing -> record<blocklist_guard_status: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3027,12 +3030,12 @@ export def "payouts-create Create-a-Payout" [
   currency: string@currency-completer # The three-letter ISO 4217 currency code (e.g., "USD", "EUR") for the payment amount. This field is mandatory for creating a payment.
   --routing: any # nullable
   --connector: list # This field allows the merchant to manually select a connector with which the payout can go through. (nullable, e.g. [wise, adyen])
-  --confirm: string@bool-completer # This field is used when merchant wants to confirm the payout, thus useful for the payout _Confirm_ request. Ideally merchants should _Create_ a payout, _Update_ it (if required), then _Confirm_ it. (nullable, default: false, e.g. true)
+  --confirm: oneof<nothing, bool> # This field is used when merchant wants to confirm the payout, thus useful for the payout _Confirm_ request. Ideally merchants should _Create_ a payout, _Update_ it (if required), then _Confirm_ it. (nullable, default: false, e.g. true)
   --payout-type: any # nullable
   --payout-method-data: any # nullable
   --source-bank-data: any # nullable
   --billing: any # nullable
-  --auto-fulfill: string@bool-completer # Set to true to confirm the payout without review, no further action required (nullable, default: false, e.g. true)
+  --auto-fulfill: oneof<nothing, bool> # Set to true to confirm the payout without review, no further action required (nullable, default: false, e.g. true)
   --customer-id: string # The identifier for the customer object. If not provided the customer ID will be autogenerated. _Deprecated: Use customer_id instead._ (DEPRECATED, nullable, e.g. cus_y3oqhf46pyzuxjbcn2giaqnb44)
   --customer: any # nullable
   --return-url: string # The URL to redirect after the completion of the operation (nullable, e.g. https://hyperswitch.io)
@@ -3040,12 +3043,12 @@ export def "payouts-create Create-a-Payout" [
   --business-label: string # Business label of the merchant for this payout. _Deprecated: Use profile_id instead._ (DEPRECATED, nullable, e.g. food)
   --description: string # A description of the payout (nullable, e.g. It's my first payout request)
   --entity-type: any # nullable
-  --recurring: string@bool-completer # Specifies whether or not the payout request is recurring (nullable, default: false)
+  --recurring: oneof<nothing, bool> # Specifies whether or not the payout request is recurring (nullable, default: false)
   --metadata: record # You can specify up to 50 keys, with key names up to 40 characters long and values up to 500 characters long. Metadata is useful for storing additional, structured information on an object. (nullable)
   --payout-token: string # Provide a reference to a stored payout method, used to process the payout. (nullable, e.g. 187282ab-40ef-47a9-9206-5099ba31e432)
   --profile-id: string # The business profile to use for this payout, especially if there are multiple business profiles associated with the account, otherwise default business profile associated with the merchant account will be used. (nullable)
   --priority: any # nullable
-  --payout-link: string@bool-completer # Whether to get the payout link (if applicable). Merchant need to specify this during the Payout _Create_, this field can not be updated during Payout _Update_. (nullable, default: false, e.g. true)
+  --payout-link: oneof<nothing, bool> # Whether to get the payout link (if applicable). Merchant need to specify this during the Payout _Create_, this field can not be updated during Payout _Update_. (nullable, default: false, e.g. true)
   --payout-link-config: any # nullable
   --session-expiry: int # Will be used to expire client secret after certain amount of time to be supplied in seconds (900) for 15 mins (nullable, format: int32, e.g. 900)
   --email: string # Customer's email. _Deprecated: Use customer object instead._ (DEPRECATED, nullable, e.g. johntest@test.com)
@@ -3079,7 +3082,7 @@ export def "payouts Retrieve-a-Payout" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force-sync: string@bool-completer # Sync with the connector to get the payout details (defaults to false) (nullable)
+  --force-sync: oneof<nothing, bool> # Sync with the connector to get the payout details (defaults to false) (nullable)
 ]: nothing -> record<payout_id: string, merchant_id: string, merchant_order_reference_id: string, amount: int, currency: string, connector: string, payout_type: record, payout_method_data: record, source_bank_data: record, billing: record<address: record<city: string, country: record, line1: string, line2: string, line3: string, zip: string, state: string, first_name: string, last_name: string, origin_zip: string>, phone: record<number: string, country_code: string>, email: string>, auto_fulfill: bool, customer_id: string, customer: record<id: string, name: string, email: string, phone: string, phone_country_code: string, customer_document_details: record<document_type: string, document_number: string>>, client_secret: string, return_url: string, business_country: string, business_label: string, description: string, entity_type: string, recurring: bool, metadata: record, merchant_connector_id: string, status: string, error_message: string, error_code: string, profile_id: string, created: string, connector_transaction_id: string, priority: record, attempts: table<attempt_id: string, status: string, amount: int, currency: record, connector: string, error_code: string, error_message: string, payment_method: record, payout_method_type: record, connector_transaction_id: string, cancellation_reason: string, unified_code: string, unified_message: string>, payout_link: record<payout_link_id: string, link: string>, email: string, name: string, phone: string, phone_country_code: string, unified_code: string, unified_message: string, payout_method_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3114,12 +3117,12 @@ export def "payouts Update-a-Payout" [
   --currency: any # nullable
   --routing: any # nullable
   --connector: list # This field allows the merchant to manually select a connector with which the payout can go through. (nullable, e.g. [wise, adyen])
-  --confirm: string@bool-completer # This field is used when merchant wants to confirm the payout, thus useful for the payout _Confirm_ request. Ideally merchants should _Create_ a payout, _Update_ it (if required), then _Confirm_ it. (nullable, default: false, e.g. true)
+  --confirm: oneof<nothing, bool> # This field is used when merchant wants to confirm the payout, thus useful for the payout _Confirm_ request. Ideally merchants should _Create_ a payout, _Update_ it (if required), then _Confirm_ it. (nullable, default: false, e.g. true)
   --payout-type: any # nullable
   --payout-method-data: any # nullable
   --source-bank-data: any # nullable
   --billing: any # nullable
-  --auto-fulfill: string@bool-completer # Set to true to confirm the payout without review, no further action required (nullable, default: false, e.g. true)
+  --auto-fulfill: oneof<nothing, bool> # Set to true to confirm the payout without review, no further action required (nullable, default: false, e.g. true)
   --customer-id: string # The identifier for the customer object. If not provided the customer ID will be autogenerated. _Deprecated: Use customer_id instead._ (DEPRECATED, nullable, e.g. cus_y3oqhf46pyzuxjbcn2giaqnb44)
   --customer: any # nullable
   --client-secret: string # It's a token used for client side verification. (nullable, e.g. pay_U42c409qyHwOkWo3vK60_secret_el9ksDkiB8hi6j9N78yo)
@@ -3128,12 +3131,12 @@ export def "payouts Update-a-Payout" [
   --business-label: string # Business label of the merchant for this payout. _Deprecated: Use profile_id instead._ (DEPRECATED, nullable, e.g. food)
   --description: string # A description of the payout (nullable, e.g. It's my first payout request)
   --entity-type: any # nullable
-  --recurring: string@bool-completer # Specifies whether or not the payout request is recurring (nullable, default: false)
+  --recurring: oneof<nothing, bool> # Specifies whether or not the payout request is recurring (nullable, default: false)
   --metadata: record # You can specify up to 50 keys, with key names up to 40 characters long and values up to 500 characters long. Metadata is useful for storing additional, structured information on an object. (nullable)
   --payout-token: string # Provide a reference to a stored payout method, used to process the payout. (nullable, e.g. 187282ab-40ef-47a9-9206-5099ba31e432)
   --profile-id: string # The business profile to use for this payout, especially if there are multiple business profiles associated with the account, otherwise default business profile associated with the merchant account will be used. (nullable)
   --priority: any # nullable
-  --payout-link: string@bool-completer # Whether to get the payout link (if applicable). Merchant need to specify this during the Payout _Create_, this field can not be updated during Payout _Update_. (nullable, default: false, e.g. true)
+  --payout-link: oneof<nothing, bool> # Whether to get the payout link (if applicable). Merchant need to specify this during the Payout _Create_, this field can not be updated during Payout _Update_. (nullable, default: false, e.g. true)
   --payout-link-config: any # nullable
   --session-expiry: int # Will be used to expire client secret after certain amount of time to be supplied in seconds (900) for 15 mins (nullable, format: int32, e.g. 900)
   --email: string # Customer's email. _Deprecated: Use customer object instead._ (DEPRECATED, nullable, e.g. johntest@test.com)
@@ -3297,7 +3300,7 @@ export def "payouts-confirm Confirm-a-Payout" [
   --payout-method-data: any # nullable
   --source-bank-data: any # nullable
   --billing: any # nullable
-  --auto-fulfill: string@bool-completer # Set to true to confirm the payout without review, no further action required (nullable, default: false, e.g. true)
+  --auto-fulfill: oneof<nothing, bool> # Set to true to confirm the payout without review, no further action required (nullable, default: false, e.g. true)
   --customer-id: string # The identifier for the customer object. If not provided the customer ID will be autogenerated. _Deprecated: Use customer_id instead._ (DEPRECATED, nullable, e.g. cus_y3oqhf46pyzuxjbcn2giaqnb44)
   --customer: any # nullable
   client_secret: string # It's a token used for client side verification.
@@ -3306,12 +3309,12 @@ export def "payouts-confirm Confirm-a-Payout" [
   --business-label: string # Business label of the merchant for this payout. _Deprecated: Use profile_id instead._ (DEPRECATED, nullable, e.g. food)
   --description: string # A description of the payout (nullable, e.g. It's my first payout request)
   --entity-type: any # nullable
-  --recurring: string@bool-completer # Specifies whether or not the payout request is recurring (nullable, default: false)
+  --recurring: oneof<nothing, bool> # Specifies whether or not the payout request is recurring (nullable, default: false)
   --metadata: record # You can specify up to 50 keys, with key names up to 40 characters long and values up to 500 characters long. Metadata is useful for storing additional, structured information on an object. (nullable)
   --payout-token: string # Provide a reference to a stored payout method, used to process the payout. (nullable, e.g. 187282ab-40ef-47a9-9206-5099ba31e432)
   --profile-id: string # The business profile to use for this payout, especially if there are multiple business profiles associated with the account, otherwise default business profile associated with the merchant account will be used. (nullable)
   --priority: any # nullable
-  --payout-link: string@bool-completer # Whether to get the payout link (if applicable). Merchant need to specify this during the Payout _Create_, this field can not be updated during Payout _Update_. (nullable, default: false, e.g. true)
+  --payout-link: oneof<nothing, bool> # Whether to get the payout link (if applicable). Merchant need to specify this during the Payout _Create_, this field can not be updated during Payout _Update_. (nullable, default: false, e.g. true)
   --payout-link-config: any # nullable
   --session-expiry: int # Will be used to expire client secret after certain amount of time to be supplied in seconds (900) for 15 mins (nullable, format: int32, e.g. 900)
   --email: string # Customer's email. _Deprecated: Use customer object instead._ (DEPRECATED, nullable, e.g. johntest@test.com)
@@ -3508,7 +3511,7 @@ export def "events List-all-Events-associated-with-a-Merchant-Account-or-Profile
   --profile-id: string # Filter all events associated with the specified business profile ID. (nullable)
   --event-classes: list # Filter events by their class. (nullable)
   --event-types: list # Filter events by their type. (nullable)
-  --is-delivered: string@bool-completer # Filter all events by `is_overall_delivery_successful` field of the event. (nullable)
+  --is-delivered: oneof<nothing, bool> # Filter all events by `is_overall_delivery_successful` field of the event. (nullable)
 ]: any -> record<events: table<event_id: string, merchant_id: string, profile_id: string, object_id: string, event_type: string, event_class: string, is_delivery_successful: bool, initial_attempt_id: string, processor_merchant_id: string, created: string>, total_count: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -3542,7 +3545,7 @@ export def "events-profile-list List-all-Events-associated-with-a-Profile" [
   --profile-id: string # Filter all events associated with the specified business profile ID. (nullable)
   --event-classes: list # Filter events by their class. (nullable)
   --event-types: list # Filter events by their type. (nullable)
-  --is-delivered: string@bool-completer # Filter all events by `is_overall_delivery_successful` field of the event. (nullable)
+  --is-delivered: oneof<nothing, bool> # Filter all events by `is_overall_delivery_successful` field of the event. (nullable)
 ]: any -> record<events: table<event_id: string, merchant_id: string, profile_id: string, object_id: string, event_type: string, event_class: string, is_delivery_successful: bool, initial_attempt_id: string, processor_merchant_id: string, created: string>, total_count: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3643,7 +3646,7 @@ export def "profile-acquirers Create-a-Profile-Acquirer" [
   --acquirer-fraud-rate: float # Fraud rate for the particular acquirer configuration (nullable, format: double, e.g. 0.01)
   --acquirer-country-code: string # Acquirer country code (nullable, e.g. US)
   profile_id: string # Parent profile id to link the acquirer account with (e.g. pro_ky0yNyOXXlA5hF8JzE5q)
-  --is-default: string@bool-completer # Whether this configuration bucket is the default fallback for the profile. (nullable)
+  --is-default: oneof<nothing, bool> # Whether this configuration bucket is the default fallback for the profile. (nullable)
 ]: any -> record<profile_acquirer_id: string, acquirer_assigned_merchant_id: string, merchant_name: string, network: string, acquirer_bin: string, acquirer_ica: string, acquirer_fraud_rate: float, acquirer_country_code: string, profile_id: string, is_default: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -3677,7 +3680,7 @@ export def "profile-acquirers Update-a-Profile-Acquirer" [
   --acquirer-ica: string # nullable, e.g. 501299
   --acquirer-fraud-rate: float # nullable, format: double, e.g. 0.02
   --acquirer-country-code: string # nullable, e.g. US
-  --is-default: string@bool-completer # Whether this configuration bucket is the default fallback for the profile. (nullable)
+  --is-default: oneof<nothing, bool> # Whether this configuration bucket is the default fallback for the profile. (nullable)
 ]: any -> record<profile_acquirer_id: string, acquirer_assigned_merchant_id: string, merchant_name: string, network: string, acquirer_bin: string, acquirer_ica: string, acquirer_fraud_rate: float, acquirer_country_code: string, profile_id: string, is_default: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -3739,7 +3742,7 @@ export def "authentication Create-an-Authentication" [
   --authentication-connector: any # nullable
   currency: string@currency-completer # The three-letter ISO 4217 currency code (e.g., "USD", "EUR") for the payment amount. This field is mandatory for creating a payment.
   --return-url: string # The URL to which the user should be redirected after authentication. (nullable, e.g. https://example.com/redirect)
-  --force-3ds-challenge: string@bool-completer # Force 3DS challenge. (nullable)
+  --force-3ds-challenge: oneof<nothing, bool> # Force 3DS challenge. (nullable)
   --psd2-sca-exemption-type: any # nullable
   --profile-acquirer-id: string # Profile Acquirer ID get from profile acquirer configuration (nullable)
   --acquirer-details: any # nullable

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.mailersend.com/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -438,7 +437,7 @@ export def "domains-settings updateDomainSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --track-content: string@bool-completer
+  --track-content: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -721,7 +720,7 @@ export def "inbound addAnInboundRoute" [
   --allow-errors(-e) # Return full response without error handling
   domain_id: string
   name: string
-  --domain-enabled: string@bool-completer
+  --domain-enabled: oneof<nothing, bool>
   --inbound-subdomain: string
   --inbound-priority: int
   --match-filter: record # shape: {type?: string}
@@ -778,7 +777,7 @@ export def "inbound updateAnInboundRoute" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --domain-enabled: string@bool-completer
+  --domain-enabled: oneof<nothing, bool>
   --inbound-priority: int
   --match-filter: record # shape: {type?: string}
   --catch-filter: record # shape: {type?: string}
@@ -984,7 +983,7 @@ export def "suppressions-blocklist delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer
+  --all: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1056,7 +1055,7 @@ export def "suppressions-hard-bounces delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer
+  --all: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1128,7 +1127,7 @@ export def "suppressions-spam-complaints delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer
+  --all: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1200,7 +1199,7 @@ export def "suppressions-unsubscribes delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer
+  --all: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1385,7 +1384,7 @@ export def "webhooks updateAWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1411,7 +1410,7 @@ export def "webhooks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1860,7 +1859,7 @@ export def "sms-numbers updateSingleSmsPhoneNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --paused: string@bool-completer
+  --paused: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2136,7 +2135,7 @@ export def "sms-webhooks updateSingleSmsWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2162,7 +2161,7 @@ export def "sms-webhooks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2213,7 +2212,7 @@ export def "sms-inbounds addAnSmsInboundRoute" [
   name: string
   forward_url: string # format: uri
   filter: record # shape: {comparer?: string, value?: string}
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2266,7 +2265,7 @@ export def "sms-inbounds updateSmsInboundRoute" [
   name: string
   forward_url: string # format: uri
   filter: record # shape: {comparer?: string, value?: string}
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2361,7 +2360,7 @@ export def "domains-smtp-users updateSmtpUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

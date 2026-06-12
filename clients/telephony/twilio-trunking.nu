@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://trunking.twilio.com"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -345,7 +344,7 @@ export def "trunks-origination-urls UpdateOriginationUrl" [
   --allow-errors(-e) # Return full response without error handling
   --Weight: int # The value that determines the relative share of the load the URI should receive compared to other URIs with the same priority. Can be an integer from 1 to 65535, inclusive, and the default is 10. URLs with higher values receive more load than those with lower ones with the same priority.
   --Priority: int # The relative importance of the URI. Can be an integer from 0 to 65535, inclusive, and the default is 10. The lowest number represents the most important URI.
-  --Enabled: string@bool-completer # Whether the URL is enabled. The default is `true`.
+  --Enabled: oneof<nothing, bool> # Whether the URL is enabled. The default is `true`.
   --FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
   --SipUrl: string # The SIP address you want Twilio to route your Origination calls to. This must be a `sip:` schema. `sips` is NOT supported. (format: uri)
 ]: any -> record<account_sid: string, sid: string, trunk_sid: string, weight: int, enabled: bool, sip_url: string, friendly_name: string, priority: int, date_created: string, date_updated: string, url: string> {
@@ -374,7 +373,7 @@ export def "trunks-origination-urls CreateOriginationUrl" [
   --allow-errors(-e) # Return full response without error handling
   Weight: int # The value that determines the relative share of the load the URI should receive compared to other URIs with the same priority. Can be an integer from 1 to 65535, inclusive, and the default is 10. URLs with higher values receive more load than those with lower ones with the same priority.
   Priority: int # The relative importance of the URI. Can be an integer from 0 to 65535, inclusive, and the default is 10. The lowest number represents the most important URI.
-  --Enabled: string@bool-completer # Whether the URL is enabled. The default is `true`.
+  --Enabled: oneof<nothing, bool> # Whether the URL is enabled. The default is `true`.
   FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
   SipUrl: string # The SIP address you want Twilio to route your Origination calls to. This must be a `sip:` schema. (format: uri)
 ]: any -> record<account_sid: string, sid: string, trunk_sid: string, weight: int, enabled: bool, sip_url: string, friendly_name: string, priority: int, date_created: string, date_updated: string, url: string> {
@@ -614,8 +613,8 @@ export def "trunks UpdateTrunk" [
   --DisasterRecoveryUrl: string # The URL we should call using the `disaster_recovery_method` if an error occurs while sending SIP traffic towards the configured Origination URL. We retrieve TwiML from the URL and execute the instructions like any other normal TwiML call. See [Disaster Recovery](https://www.twilio.com/docs/sip-trunking#disaster-recovery) for more information. (format: uri)
   --DisasterRecoveryMethod: string@DisasterRecoveryMethod-completer # The HTTP method we should use to call the `disaster_recovery_url`. Can be: `GET` or `POST`. (format: http-method)
   --TransferMode: string@TransferMode-completer # The call transfer settings for the trunk. Can be: `enable-all`, `sip-only` and `disable-all`. See [Transfer](https://www.twilio.com/docs/sip-trunking/call-transfer) for more information.
-  --Secure: string@bool-completer # Whether Secure Trunking is enabled for the trunk. If enabled, all calls going through the trunk will be secure using SRTP for media and TLS for signaling. If disabled, then RTP will be used for media. See [Secure Trunking](https://www.twilio.com/docs/sip-trunking#securetrunking) for more information.
-  --CnamLookupEnabled: string@bool-completer # Whether Caller ID Name (CNAM) lookup should be enabled for the trunk. If enabled, all inbound calls to the SIP Trunk from the United States and Canada automatically perform a CNAM Lookup and display Caller ID data on your phone. See [CNAM Lookups](https://www.twilio.com/docs/sip-trunking#CNAM) for more information.
+  --Secure: oneof<nothing, bool> # Whether Secure Trunking is enabled for the trunk. If enabled, all calls going through the trunk will be secure using SRTP for media and TLS for signaling. If disabled, then RTP will be used for media. See [Secure Trunking](https://www.twilio.com/docs/sip-trunking#securetrunking) for more information.
+  --CnamLookupEnabled: oneof<nothing, bool> # Whether Caller ID Name (CNAM) lookup should be enabled for the trunk. If enabled, all inbound calls to the SIP Trunk from the United States and Canada automatically perform a CNAM Lookup and display Caller ID data on your phone. See [CNAM Lookups](https://www.twilio.com/docs/sip-trunking#CNAM) for more information.
   --TransferCallerId: string@TransferCallerId-completer # Caller Id for transfer target. Can be: `from-transferee` (default) or `from-transferor`.
 ]: any -> record<account_sid: string, domain_name: string, disaster_recovery_method: string, disaster_recovery_url: string, friendly_name: string, secure: bool, recording: any, transfer_mode: string, transfer_caller_id: string, cnam_lookup_enabled: bool, auth_type: string, symmetric_rtp_enabled: bool, auth_type_set: list<string>, date_created: string, date_updated: string, sid: string, url: string, links: record> {
   let input = $in
@@ -645,8 +644,8 @@ export def "trunks CreateTrunk" [
   --DisasterRecoveryUrl: string # The URL we should call using the `disaster_recovery_method` if an error occurs while sending SIP traffic towards the configured Origination URL. We retrieve TwiML from the URL and execute the instructions like any other normal TwiML call. See [Disaster Recovery](https://www.twilio.com/docs/sip-trunking#disaster-recovery) for more information. (format: uri)
   --DisasterRecoveryMethod: string@DisasterRecoveryMethod-completer # The HTTP method we should use to call the `disaster_recovery_url`. Can be: `GET` or `POST`. (format: http-method)
   --TransferMode: string@TransferMode-completer # The call transfer settings for the trunk. Can be: `enable-all`, `sip-only` and `disable-all`. See [Transfer](https://www.twilio.com/docs/sip-trunking/call-transfer) for more information.
-  --Secure: string@bool-completer # Whether Secure Trunking is enabled for the trunk. If enabled, all calls going through the trunk will be secure using SRTP for media and TLS for signaling. If disabled, then RTP will be used for media. See [Secure Trunking](https://www.twilio.com/docs/sip-trunking#securetrunking) for more information.
-  --CnamLookupEnabled: string@bool-completer # Whether Caller ID Name (CNAM) lookup should be enabled for the trunk. If enabled, all inbound calls to the SIP Trunk from the United States and Canada automatically perform a CNAM Lookup and display Caller ID data on your phone. See [CNAM Lookups](https://www.twilio.com/docs/sip-trunking#CNAM) for more information.
+  --Secure: oneof<nothing, bool> # Whether Secure Trunking is enabled for the trunk. If enabled, all calls going through the trunk will be secure using SRTP for media and TLS for signaling. If disabled, then RTP will be used for media. See [Secure Trunking](https://www.twilio.com/docs/sip-trunking#securetrunking) for more information.
+  --CnamLookupEnabled: oneof<nothing, bool> # Whether Caller ID Name (CNAM) lookup should be enabled for the trunk. If enabled, all inbound calls to the SIP Trunk from the United States and Canada automatically perform a CNAM Lookup and display Caller ID data on your phone. See [CNAM Lookups](https://www.twilio.com/docs/sip-trunking#CNAM) for more information.
   --TransferCallerId: string@TransferCallerId-completer # Caller Id for transfer target. Can be: `from-transferee` (default) or `from-transferor`.
 ]: any -> record<account_sid: string, domain_name: string, disaster_recovery_method: string, disaster_recovery_url: string, friendly_name: string, secure: bool, recording: any, transfer_mode: string, transfer_caller_id: string, cnam_lookup_enabled: bool, auth_type: string, symmetric_rtp_enabled: bool, auth_type_set: list<string>, date_created: string, date_updated: string, sid: string, url: string, links: record> {
   let input = $in

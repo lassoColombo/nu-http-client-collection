@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://example.meilisearch.com:7700" "http://example.meilisearch.com:7700"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -555,7 +554,7 @@ export def "indexes-search indexesdocumentssearchGet" [
   --limit: float # Maximum number of results to return. (default: 20)
   --page: float # Sets the specific results page. (default: 1)
   --hitsPerPage: float # Sets the number of results returned for a query. If hitsPerPage is not provided as a query parameter, this parameter is ignored. (default: 20)
-  --showMatchesPosition: string@bool-completer # Defines whether an `_matchesPosition` object that contains information about the matches should be returned or not. (default: false)
+  --showMatchesPosition: oneof<nothing, bool> # Defines whether an `_matchesPosition` object that contains information about the matches should be returned or not. (default: false)
   --matchingStrategy: string@matchingStrategy-completer # Defines which strategy to use to match the query terms within the documents as search results. Two different strategies are available, `last` and `all`. By default, the `last` strategy is chosen. (default: last)
 ]: nothing -> record<hits: table<_formatted: record, _matchesPosition: record, _rankingScore: float, _rankingScoreDetails: record, attribute: string, _geoDistance: float>, offset: int, limit: int, estimatedTotalHits: int, page: int, hitsPerPage: int, totalHits: int, totalPages: int, facetDistribution: record, facetStats: record, processingTimeMs: int, query: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -590,9 +589,9 @@ export def "indexes-search indexesdocumentssearch" [
   --attributesToCrop: list # Array of attributes whose values have to be cropped. Cropped attributes are returned in `_formatted` response object.
   --cropMarker: string # Sets the crop marker to apply before and/or after cropped part selected within an attribute defined in `attributesToCrop` parameter. (default: …)
   --cropLength: float # Sets the total number of **words** to keep for the cropped part of an attribute specified in the `attributesToCrop` parameter. (default: 10)
-  --showMatchesPosition: string@bool-completer # Defines whether an `_matchesPosition` object that contains information about the matches should be returned or not. (default: false)
-  --showRankingScore: string@bool-completer # Defines whether a `_rankingScore` number representing the relevancy score of that document should be returned or not. (default: false)
-  --showRankingScoreDetails: string@bool-completer # Defines whether a `_rankingScoreDetails` object containing information about the score of that document for each ranking rule should be returned or not. (default: false)
+  --showMatchesPosition: oneof<nothing, bool> # Defines whether an `_matchesPosition` object that contains information about the matches should be returned or not. (default: false)
+  --showRankingScore: oneof<nothing, bool> # Defines whether a `_rankingScore` number representing the relevancy score of that document should be returned or not. (default: false)
+  --showRankingScoreDetails: oneof<nothing, bool> # Defines whether a `_rankingScoreDetails` object containing information about the score of that document for each ranking rule should be returned or not. (default: false)
   --matchingStrategy: string # Defines which strategy to use to match the query terms within the documents as search results. Two different strategies are available, `last` and `all`. By default, the `last` strategy is chosen. (default: last)
   --attributesToSearchOn: list # Defines which `searchableAttributes` the query will search on. (default: ["*"])
   --filter: any # Attribute(s) to filter on.  Can be made of 3 syntaxes  - Nested Array: `["something > 1", "genres=comedy", ["genres=horror", "title=batman"]]` - String: `"something > 1 AND genres=comedy AND (genres=horror OR title=batman)"` - Mixed: `["something > 1 AND genres=comedy", "genres=horror OR title=batman"]`  > info > _geoRadius({lat}, {lng}, {distance_in_meters}) and _geoBoundingBox([{lat, lng}], [{lat}, {lng}]) built-in filter rules can be used to filter documents within geo shapes.  > warn > Attribute(s) used in `filter` should be declared as filterable attributes. See [Filtering and Faceted Search](https://docs.meilisearch.com/reference/features/filtering_and_faceted_search.html).  (e.g. [director:Mati Diop, [genres:Comedy, genres:Romance]])
@@ -1060,7 +1059,7 @@ export def "indexes-settings-typo-tolerance indexessettingstypoToleranceupdate" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Content-Type: string@Content-Type-completer # Payload content-type
-  --enabled: string@bool-completer # Enable the typo tolerance feature. (default: true)
+  --enabled: oneof<nothing, bool> # Enable the typo tolerance feature. (default: true)
   --disableOnAttributes: list # Disable the typo tolerance feature on the specified attributes. (default: [])
   --disableOnWords: list # Disable the typo tolerance feature for a set of query terms given for a search query. (default: [])
   --minWordSizeForTypos: record # shape: {oneTypo?: int, twoTypos?: int}
@@ -1943,9 +1942,9 @@ export def "experimental-features experimentalupdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --vectorStore: string@bool-completer
-  --metrics: string@bool-completer
-  --exportPuffinReports: string@bool-completer
+  --vectorStore: oneof<nothing, bool>
+  --metrics: oneof<nothing, bool>
+  --exportPuffinReports: oneof<nothing, bool>
 ]: any -> record<vectorStore: bool, metrics: bool, exportPuffinReports: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

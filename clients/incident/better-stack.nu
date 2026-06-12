@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://uptime.betterstack.com/api/v2" "https://uptime.betterstack.com/api/v3" "https://betterstack.com/api/v2"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -134,11 +133,11 @@ export def "monitors createMonitor" [
   --pronounceable-name: string # Human-readable name for the monitor. (e.g. Production API)
   --monitor-type: string@monitor-type-completer # Type of monitoring check. (e.g. status)
   --check-frequency: int # Check interval in seconds. (e.g. 180)
-  --verify-ssl: string@bool-completer # Whether to verify SSL certificate. (e.g. true)
-  --email: string@bool-completer # Alert via email. (e.g. true)
-  --sms: string@bool-completer # Alert via SMS. (e.g. false)
-  --call: string@bool-completer # Alert via phone call. (e.g. false)
-  --push: string@bool-completer # Alert via push notification. (e.g. true)
+  --verify-ssl: oneof<nothing, bool> # Whether to verify SSL certificate. (e.g. true)
+  --email: oneof<nothing, bool> # Alert via email. (e.g. true)
+  --sms: oneof<nothing, bool> # Alert via SMS. (e.g. false)
+  --call: oneof<nothing, bool> # Alert via phone call. (e.g. false)
+  --push: oneof<nothing, bool> # Alert via push notification. (e.g. true)
   --regions: list # Regions to monitor from. (e.g. [us, eu])
   --policy-id: string # Escalation policy ID. (nullable, e.g. 300010)
 ]: any -> record<data: record<id: string, type: string, attributes: record<url: string, pronounceable_name: string, monitor_type: string, status: string, monitor_group_id: string, policy_id: string, check_frequency: int, verify_ssl: bool, ssl_expiration: int, call: bool, sms: bool, email: bool, push: bool, regions: list, created_at: string, updated_at: string, paused_at: string>>> {
@@ -191,11 +190,11 @@ export def "monitors updateMonitor" [
   --body-url: string # New URL to monitor. (format: uri, e.g. https://example.com)
   --pronounceable-name: string # New human-readable name. (e.g. Updated API Monitor)
   --check-frequency: int # New check interval in seconds. (e.g. 300)
-  --verify-ssl: string@bool-completer # SSL verification setting. (e.g. true)
-  --email: string@bool-completer # Alert via email. (e.g. true)
-  --sms: string@bool-completer # Alert via SMS. (e.g. false)
-  --call: string@bool-completer # Alert via phone call. (e.g. false)
-  --push: string@bool-completer # Alert via push notification. (e.g. true)
+  --verify-ssl: oneof<nothing, bool> # SSL verification setting. (e.g. true)
+  --email: oneof<nothing, bool> # Alert via email. (e.g. true)
+  --sms: oneof<nothing, bool> # Alert via SMS. (e.g. false)
+  --call: oneof<nothing, bool> # Alert via phone call. (e.g. false)
+  --push: oneof<nothing, bool> # Alert via push notification. (e.g. true)
 ]: any -> record<data: record<id: string, type: string, attributes: record<url: string, pronounceable_name: string, monitor_type: string, status: string, monitor_group_id: string, policy_id: string, check_frequency: int, verify_ssl: bool, ssl_expiration: int, call: bool, sms: bool, email: bool, push: bool, regions: list, created_at: string, updated_at: string, paused_at: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -312,10 +311,10 @@ export def "heartbeats createHeartbeat" [
   name: string # Name for the heartbeat. (e.g. Daily Backup Job)
   period: int # Expected period in seconds. (e.g. 86400)
   --grace: int # Grace period in seconds. (e.g. 3600)
-  --email: string@bool-completer # Alert via email. (e.g. true)
-  --sms: string@bool-completer # Alert via SMS. (e.g. false)
-  --call: string@bool-completer # Alert via phone call. (e.g. false)
-  --push: string@bool-completer # Alert via push notification. (e.g. true)
+  --email: oneof<nothing, bool> # Alert via email. (e.g. true)
+  --sms: oneof<nothing, bool> # Alert via SMS. (e.g. false)
+  --call: oneof<nothing, bool> # Alert via phone call. (e.g. false)
+  --push: oneof<nothing, bool> # Alert via push notification. (e.g. true)
 ]: any -> record<data: record<id: string, type: string, attributes: record<name: string, url: string, period: int, grace: int, status: string, call: bool, sms: bool, email: bool, push: bool, created_at: string, updated_at: string, paused_at: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -439,8 +438,8 @@ export def "incidents listIncidents" [
   --qp-to: string # Filter incidents up to this date (YYYY-MM-DD). (format: date, e.g. 2026-04-19)
   --monitor-id: int # Filter incidents by monitor ID. (e.g. 500123)
   --heartbeat-id: int # Filter incidents by heartbeat ID. (e.g. 100200)
-  --resolved: string@bool-completer # Filter by resolved status. (e.g. false)
-  --acknowledged: string@bool-completer # Filter by acknowledged status. (e.g. false)
+  --resolved: oneof<nothing, bool> # Filter by resolved status. (e.g. false)
+  --acknowledged: oneof<nothing, bool> # Filter by acknowledged status. (e.g. false)
 ]: nothing -> record<data: table<id: string, type: string, attributes: record>, pagination: record<first: string, last: string, prev: string, next: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -464,10 +463,10 @@ export def "incidents createIncident" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string # Name or description of the incident. (e.g. Database degraded)
-  --email: string@bool-completer # Alert via email. (e.g. true)
-  --sms: string@bool-completer # Alert via SMS. (e.g. false)
-  --call: string@bool-completer # Alert via phone call. (e.g. false)
-  --push: string@bool-completer # Alert via push notification. (e.g. true)
+  --email: oneof<nothing, bool> # Alert via email. (e.g. true)
+  --sms: oneof<nothing, bool> # Alert via SMS. (e.g. false)
+  --call: oneof<nothing, bool> # Alert via phone call. (e.g. false)
+  --push: oneof<nothing, bool> # Alert via push notification. (e.g. true)
 ]: any -> record<data: record<id: string, type: string, attributes: record<name: string, url: string, http_method: string, cause: string, started_at: string, acknowledged_at: string, resolved_at: string, status: string, team_name: string, regions: list>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

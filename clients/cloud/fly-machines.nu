@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.machines.dev/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -129,7 +128,7 @@ export def "apps create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-subdomains: string@bool-completer
+  --enable-subdomains: oneof<nothing, bool>
   --name: string
   --network: string
   --org-slug: string
@@ -498,10 +497,10 @@ export def "apps-machines list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-deleted: string@bool-completer # Include deleted machines
+  --include-deleted: oneof<nothing, bool> # Include deleted machines
   --region: string # Region filter
   --state: string # comma separated list of states to filter (created, started, stopped, suspended)
-  --summary: string@bool-completer # Only return summary info about machines (omit config, checks, events, host_status, nonce, etc.)
+  --summary: oneof<nothing, bool> # Only return summary info about machines (omit config, checks, events, host_status, nonce, etc.)
 ]: nothing -> table<checks: list<record>, config: record<auto_destroy: bool, cache_drive: record, checks: record, containers: list, disable_machine_autostart: bool, dns: record, env: record, files: list, guest: record, image: string, init: record, metadata: record, metrics: record, mounts: list, processes: list, restart: record, rootfs: record, schedule: string, services: list, size: string, spot: record, standbys: list, statics: list, stop_config: record>, created_at: string, events: list<record>, host_status: string, id: string, image_ref: record<digest: string, labels: record, registry: string, repository: string, tag: string>, incomplete_config: record<auto_destroy: bool, cache_drive: record, checks: record, containers: list, disable_machine_autostart: bool, dns: record, env: record, files: list, guest: record, image: string, init: record, metadata: record, metrics: record, mounts: list, processes: list, restart: record, rootfs: record, schedule: string, services: list, size: string, spot: record, standbys: list, statics: list, stop_config: record>, instance_id: string, name: string, nonce: string, private_ip: string, region: string, state: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -530,9 +529,9 @@ export def "apps-machines create" [
   --min-secrets-version: int
   --name: string # Unique name for this Machine. If omitted, one is generated for you
   --region: string # The target region. Omitting this param launches in the same region as your WireGuard peer connection (somewhere near you).
-  --skip-launch: string@bool-completer
-  --skip-secrets: string@bool-completer
-  --skip-service-registration: string@bool-completer
+  --skip-launch: oneof<nothing, bool>
+  --skip-secrets: oneof<nothing, bool>
+  --skip-service-registration: oneof<nothing, bool>
 ]: any -> record<checks: table<name: string, output: string, status: string, updated_at: string>, config: record<auto_destroy: bool, cache_drive: record<size_mb: int>, checks: record, containers: list<record>, disable_machine_autostart: bool, dns: record<dns_forward_rules: list, hostname: string, hostname_fqdn: string, nameservers: list, options: list, searches: list, skip_registration: bool>, env: record, files: list<record>, guest: record<cpu_kind: string, cpus: int, gpu_kind: string, gpus: int, host_dedication_id: string, kernel_args: list, max_memory_mb: int, memory_mb: int, persist_rootfs: string>, image: string, init: record<cmd: list, entrypoint: list, exec: list, kernel_args: list, swap_size_mb: int, tty: bool>, metadata: record, metrics: record<https: bool, path: string, port: int>, mounts: list<record>, processes: list<record>, restart: record<gpu_bid_price: float, max_retries: int, policy: string>, rootfs: record<persist: string, size_gb: int>, schedule: string, services: list<record>, size: string, spot: record<max_price_fraction: float>, standbys: list<string>, statics: list<record>, stop_config: record<signal: string, timeout: string>>, created_at: string, events: table<id: string, request: any, source: string, status: string, timestamp: int, type: string>, host_status: string, id: string, image_ref: record<digest: string, labels: record, registry: string, repository: string, tag: string>, incomplete_config: record<auto_destroy: bool, cache_drive: record<size_mb: int>, checks: record, containers: list<record>, disable_machine_autostart: bool, dns: record<dns_forward_rules: list, hostname: string, hostname_fqdn: string, nameservers: list, options: list, searches: list, skip_registration: bool>, env: record, files: list<record>, guest: record<cpu_kind: string, cpus: int, gpu_kind: string, gpus: int, host_dedication_id: string, kernel_args: list, max_memory_mb: int, memory_mb: int, persist_rootfs: string>, image: string, init: record<cmd: list, entrypoint: list, exec: list, kernel_args: list, swap_size_mb: int, tty: bool>, metadata: record, metrics: record<https: bool, path: string, port: int>, mounts: list<record>, processes: list<record>, restart: record<gpu_bid_price: float, max_retries: int, policy: string>, rootfs: record<persist: string, size_gb: int>, schedule: string, services: list<record>, size: string, spot: record<max_price_fraction: float>, standbys: list<string>, statics: list<record>, stop_config: record<signal: string, timeout: string>>, instance_id: string, name: string, nonce: string, private_ip: string, region: string, state: string, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -588,9 +587,9 @@ export def "apps-machines update" [
   --min-secrets-version: int
   --name: string # Unique name for this Machine. If omitted, one is generated for you
   --region: string # The target region. Omitting this param launches in the same region as your WireGuard peer connection (somewhere near you).
-  --skip-launch: string@bool-completer
-  --skip-secrets: string@bool-completer
-  --skip-service-registration: string@bool-completer
+  --skip-launch: oneof<nothing, bool>
+  --skip-secrets: oneof<nothing, bool>
+  --skip-service-registration: oneof<nothing, bool>
 ]: any -> record<checks: table<name: string, output: string, status: string, updated_at: string>, config: record<auto_destroy: bool, cache_drive: record<size_mb: int>, checks: record, containers: list<record>, disable_machine_autostart: bool, dns: record<dns_forward_rules: list, hostname: string, hostname_fqdn: string, nameservers: list, options: list, searches: list, skip_registration: bool>, env: record, files: list<record>, guest: record<cpu_kind: string, cpus: int, gpu_kind: string, gpus: int, host_dedication_id: string, kernel_args: list, max_memory_mb: int, memory_mb: int, persist_rootfs: string>, image: string, init: record<cmd: list, entrypoint: list, exec: list, kernel_args: list, swap_size_mb: int, tty: bool>, metadata: record, metrics: record<https: bool, path: string, port: int>, mounts: list<record>, processes: list<record>, restart: record<gpu_bid_price: float, max_retries: int, policy: string>, rootfs: record<persist: string, size_gb: int>, schedule: string, services: list<record>, size: string, spot: record<max_price_fraction: float>, standbys: list<string>, statics: list<record>, stop_config: record<signal: string, timeout: string>>, created_at: string, events: table<id: string, request: any, source: string, status: string, timestamp: int, type: string>, host_status: string, id: string, image_ref: record<digest: string, labels: record, registry: string, repository: string, tag: string>, incomplete_config: record<auto_destroy: bool, cache_drive: record<size_mb: int>, checks: record, containers: list<record>, disable_machine_autostart: bool, dns: record<dns_forward_rules: list, hostname: string, hostname_fqdn: string, nameservers: list, options: list, searches: list, skip_registration: bool>, env: record, files: list<record>, guest: record<cpu_kind: string, cpus: int, gpu_kind: string, gpus: int, host_dedication_id: string, kernel_args: list, max_memory_mb: int, memory_mb: int, persist_rootfs: string>, image: string, init: record<cmd: list, entrypoint: list, exec: list, kernel_args: list, swap_size_mb: int, tty: bool>, metadata: record, metrics: record<https: bool, path: string, port: int>, mounts: list<record>, processes: list<record>, restart: record<gpu_bid_price: float, max_retries: int, policy: string>, rootfs: record<persist: string, size_gb: int>, schedule: string, services: list<record>, size: string, spot: record<max_price_fraction: float>, standbys: list<string>, statics: list<record>, stop_config: record<signal: string, timeout: string>>, instance_id: string, name: string, nonce: string, private_ip: string, region: string, state: string, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -617,7 +616,7 @@ export def "apps-machines delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # Force kill the machine if it's running
+  --force: oneof<nothing, bool> # Force kill the machine if it's running
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1513,7 +1512,7 @@ export def "apps-secrets list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --min-version: string # Minimum secrets version to return. Returned when setting a new secret
-  --show-secrets: string@bool-completer # Show the secret values.
+  --show-secrets: oneof<nothing, bool> # Show the secret values.
 ]: nothing -> record<secrets: table<created_at: string, digest: string, name: string, updated_at: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1565,7 +1564,7 @@ export def "apps-secrets get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --min-version: string # Minimum secrets version to return. Returned when setting a new secret
-  --show-secrets: string@bool-completer # Show the secret value.
+  --show-secrets: oneof<nothing, bool> # Show the secret value.
 ]: nothing -> record<created_at: string, digest: string, name: string, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1639,7 +1638,7 @@ export def "apps-volumes list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --summary: string@bool-completer # Only return summary info about volumes (omit blocks, block size, etc)
+  --summary: oneof<nothing, bool> # Only return summary info about volumes (omit blocks, block size, etc)
 ]: nothing -> table<attached_alloc_id: string, attached_machine_id: string, auto_backup_enabled: bool, block_size: int, blocks: int, blocks_avail: int, blocks_free: int, bytes_total: int, bytes_used: int, created_at: string, encrypted: bool, fstype: string, host_status: string, id: string, name: string, region: string, size_gb: int, snapshot_retention: int, state: string, type: string, zone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1664,19 +1663,19 @@ export def "apps-volumes create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --auto-backup-enabled: string@bool-completer # enable scheduled automatic snapshots. Defaults to `true`
+  --auto-backup-enabled: oneof<nothing, bool> # enable scheduled automatic snapshots. Defaults to `true`
   --compute: record # shape: {cpu_kind?: string, cpus?: int, gpu_kind?: string, gpus?: int, host_dedication_id?: string, kernel_args?: list, max_memory_mb?: int, memory_mb?: int, persist_rootfs?: "never"|"always"|"restart"}
   --compute-image: string
-  --encrypted: string@bool-completer
+  --encrypted: oneof<nothing, bool>
   --fstype: string
   --name: string
   --region: string
-  --require-unique-zone: string@bool-completer
+  --require-unique-zone: oneof<nothing, bool>
   --size-gb: int
   --snapshot-id: string # restore from snapshot
   --snapshot-retention: int
   --source-volume-id: string # fork from remote volume
-  --unique-zone-app-wide: string@bool-completer
+  --unique-zone-app-wide: oneof<nothing, bool>
 ]: any -> record<attached_alloc_id: string, attached_machine_id: string, auto_backup_enabled: bool, block_size: int, blocks: int, blocks_avail: int, blocks_free: int, bytes_total: int, bytes_used: int, created_at: string, encrypted: bool, fstype: string, host_status: string, id: string, name: string, region: string, size_gb: int, snapshot_retention: int, state: string, type: string, zone: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1726,7 +1725,7 @@ export def "apps-volumes update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --auto-backup-enabled: string@bool-completer
+  --auto-backup-enabled: oneof<nothing, bool>
   --snapshot-retention: int
 ]: any -> record<attached_alloc_id: string, attached_machine_id: string, auto_backup_enabled: bool, block_size: int, blocks: int, blocks_avail: int, blocks_free: int, bytes_total: int, bytes_used: int, created_at: string, encrypted: bool, fstype: string, host_status: string, id: string, name: string, region: string, size_gb: int, snapshot_retention: int, state: string, type: string, zone: string> {
   let input = $in
@@ -1849,10 +1848,10 @@ export def "orgs-machines list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-deleted: string@bool-completer # Include deleted machines
+  --include-deleted: oneof<nothing, bool> # Include deleted machines
   --region: string # Region filter
   --state: string # Comma separated list of states to filter (created, started, stopped, suspended)
-  --summary: string@bool-completer # Omit config from responses
+  --summary: oneof<nothing, bool> # Omit config from responses
   --updated-after: string # Only return machines updated after this time. Timestamp must be in the RFC 3339 format
   --cursor: string # Pagination cursor from previous response (takes precedence over updated_after). Note that there is no guarantee that all machines returned by this endpoint are sorted by their updated_at fields. Pagination may reveal machines older than the last updated_at.
   --limit: int # The number of machines to fetch (max of 1000). This limit is advisory. Responses may be shorter, or even empty, even when more machines remain. If omitted, the maximum is used
@@ -1879,10 +1878,10 @@ export def "orgs-volumes list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-deleted: string@bool-completer # Include deleted volumes
+  --include-deleted: oneof<nothing, bool> # Include deleted volumes
   --region: string # Region filter
   --state: string # Comma separated list of volume states to filter
-  --summary: string@bool-completer # Only return summary info about volumes (omit blocks, block size, etc)
+  --summary: oneof<nothing, bool> # Only return summary info about volumes (omit blocks, block size, etc)
   --updated-after: string # Only return volumes updated after this time. Timestamp must be in the RFC 3339 format
   --cursor: string # Pagination cursor from previous response (takes precedence over updated_after)
   --limit: int # The number of volumes to fetch (max of 1000). This limit is advisory. Responses may be shorter, even when more volumes remain. If omitted, the maximum is used
@@ -2055,7 +2054,7 @@ export def "tokens-oidc OIDC" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --aud: string # e.g. https://fly.io/org-slug
-  --aws-principal-tags: string@bool-completer
+  --aws-principal-tags: oneof<nothing, bool>
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

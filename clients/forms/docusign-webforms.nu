@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://apps-d.docusign.com/api/webforms"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -108,8 +107,8 @@ export def "v11-accounts-forms ListForms" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --user-filter: string@user-filter-completer # Set to `owned_by_me` to return only forms owned by the authenticated user. By default, all forms are returned. (default: all)
-  --is-standalone: string@bool-completer # Set to `true` or `false` to filter by whether forms are [stand-alone (not tied to a template)](https://support.docusign.com/s/document-item?bundleId=yff1696971835267&topicId=gua1698120920620.html). By default, all forms are returned.
-  --is-published: string@bool-completer # When `true`, only published forms are returned. By default, published and unpublished forms are both returned.
+  --is-standalone: oneof<nothing, bool> # Set to `true` or `false` to filter by whether forms are [stand-alone (not tied to a template)](https://support.docusign.com/s/document-item?bundleId=yff1696971835267&topicId=gua1698120920620.html). By default, all forms are returned.
+  --is-published: oneof<nothing, bool> # When `true`, only published forms are returned. By default, published and unpublished forms are both returned.
   --sort-by: string # Sorts the results. You can sort by the time that the web forms were created or last modified, in descending or ascending order. Valid values:  * `lastModifiedDateTime:desc` (default) * `lastModifiedDateTime:asc` * `createdDateTime:desc` * `createdDateTime:asc`
   --search: string # When set, filters results by whether each web form configuration contains the given text in its `formProperties.name` property.
   --start-position: string # The zero-based index of the result from which to start returning results.  Use with `count` to limit the number of results.  The default value is 0.

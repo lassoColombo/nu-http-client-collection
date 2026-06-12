@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.onesignal.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -156,7 +155,7 @@ export def "apps create-an-app" [
   --apns-bundle-id: string # The Bundle ID for your app. Use with `apns_p8`. See [p8 Token-based connection to APNS](/docs/ios-p8-token-based-connection-to-apns).
   --apns-p12: string # A Base64 encoded p12 certificate for iOS mobile push notifications. Omit if using `apns_p8`. See [p12 APNS Authentication](/docs/ios-p12-generate-certificates).
   --apns-p12-password: string # The password for the `apns_p12` file if applicable.
-  --additional-data-is-root-payload: string@bool-completer # If set to `true`, the `data` paramater in your push notification payload will be added to the root payload of the notification. Helpful for customizations that require access to the data outside of our [OSNotification payload `additionalData` property](/docs/osnotification-payload). (default: false)
+  --additional-data-is-root-payload: oneof<nothing, bool> # If set to `true`, the `data` paramater in your push notification payload will be added to the root payload of the notification. Helpful for customizations that require access to the data outside of our [OSNotification payload `additionalData` property](/docs/osnotification-payload). (default: false)
 ]: any -> record<id: string, name: string, players: int, messageable_players: int, created_at: string, updated_at: string, organization_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -229,7 +228,7 @@ export def "apps update-an-app" [
   --apns-bundle-id: string # The Bundle ID for your app. Use with `apns_p8`. See [p8 Token-based connection to APNS](/docs/ios-p8-token-based-connection-to-apns).
   --apns-p12: string # A Base64 encoded p12 certificate for iOS mobile push notifications. Omit if using `apns_p8`. See [p12 APNS Authentication](/docs/ios-p12-generate-certificates).
   --apns-p12-password: string # The password for the `apns_p12` file if applicable.
-  --additional-data-is-root-payload: string@bool-completer # If set to `true`, the `data` paramater in your push notification payload will be added to the root payload of the notification. Helpful for customizations that require access to the data outside of our [OSNotification payload `additionalData` property](/docs/osnotification-payload). (default: false)
+  --additional-data-is-root-payload: oneof<nothing, bool> # If set to `true`, the `data` paramater in your push notification payload will be added to the root payload of the notification. Helpful for customizations that require access to the data outside of our [OSNotification payload `additionalData` property](/docs/osnotification-payload). (default: false)
 ]: any -> record<id: string, name: string, players: int, messageable_players: int, created_at: string, updated_at: string, organization_id: string, fcm_v1_service_account_json: string, fcm_sender_id: string, chrome_web_key: string, chrome_web_origin: string, chrome_web_gcm_sender_id: string, chrome_web_default_notification_icon: string, chrome_web_sub_domain: string, apns_env: string, apns_certificates: string, apns_p8: string, apns_team_id: string, apns_key_id: string, apns_bundle_id: string, site_name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -261,7 +260,7 @@ export def "players-csv-export csv-export" [
   --extra-fields: list # Additional properties that you can include in the CSV. (default: [external_user_id, country, timezone_id])
   --last-active-since: string # A Unix timestamp (in seconds) used to filter Subscriptions based on recent activity. Only Subscriptions with a `last_session` timestamp after this value will be included in the export. Example: To export Subscriptions active since January 1st, 2024, use `1704067200`.
   --segment-name: string # The name of a specific segment to filter the export. Only subscriptions that belong to this segment will be included in the CSV. Omit this field to export all subscriptions in the app.
-  --include-unsubscribed: string@bool-completer # When used with `segment_name`, set to `true` to include unsubscribed subscriptions in the export. By default, segment-filtered exports only return subscribed subscriptions. This parameter has no effect when `segment_name` is not provided. (default: false)
+  --include-unsubscribed: oneof<nothing, bool> # When used with `segment_name`, set to `true` to include unsubscribed subscriptions in the export. By default, segment-filtered exports only return subscribed subscriptions. This parameter has no effect when `segment_name` is not provided. (default: false)
 ]: any -> record<csv_file_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -383,7 +382,7 @@ export def "apps-segments view-segment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-segment-detail: string@bool-completer # Set to `true` to include segment metadata and filters in the response. (default: false)
+  --include-segment-detail: oneof<nothing, bool> # Set to `true` to include segment metadata and filters in the response. (default: false)
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
 ]: nothing -> record<subscriber_count: int, payload: record<id: string, name: string, description: string, created_at: int, source: string, filters: list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -991,9 +990,9 @@ export def "templates update-template" [
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
   name: string # An internal name you set to help organize and track Templates. Maximum 128 characters. (default: YOUR_TEMPLATE_NAME)
   --contents: record # The main message body with [language-specific values](/docs/en/multi-language-messaging#supported-languages). Supports [Message Personalization](/docs/message-personalization). — shape: {en: string}
-  --isEmail: string@bool-completer # Required to be set `true` for email templates.
+  --isEmail: oneof<nothing, bool> # Required to be set `true` for email templates.
   --email-body: string # The body of the email in HTML format. Required for email templates. Supports [Message Personalization](/docs/message-personalization).
-  --isSMS: string@bool-completer # Required to be set `true` for SMS templates.
+  --isSMS: oneof<nothing, bool> # Required to be set `true` for SMS templates.
   --dynamic-content: record # Add personalization to your templates programmatically. No need to upload a CSV. See [Dynamic Content](/docs/dynamic-content) for details. (e.g. {"campaign_id": {"A": {"title": "Custom Title A", "message": "Custom Message A", "url": "https://www.onesignal.com"}, "B": {"title": "Custom Title B", "message": "Custom Message B", "url": "https://www.onesignal.com/login"}}})
 ]: any -> record<id: string, name: string, channel: string, created_at: string, updated_at: string, content: record<isAndroid: bool, isIos: bool, isMacOSX: bool, isAdm: bool, isAlexa: bool, isWP: bool, isWP_WNS: bool, isChrome: bool, isChromeWeb: bool, isSafari: bool, isFirefox: bool, isEdge: bool, isHuawei: bool, headings: record, subtitle: record, contents: record, global_image: string, url: string, isEmail: bool, email_body: string, email_subject: string, email_preheader: string, email_from_address: string, email_from_name: string, email_reply_to_address: string, email_bcc: list<string>, disable_email_click_tracking: bool, isSMS: bool, sms_from: string, sms_media_urls: list<string>, huawei_badge_add_num: int, huawei_badge_class: string, huawei_badge_set_num: int>> {
   let input = $in
@@ -1061,10 +1060,10 @@ export def "templates create-template" [
   app_id: string # Your OneSignal App ID in UUID v4 format. See [Keys & IDs](/docs/en/keys-and-ids). (default: YOUR_APP_ID)
   name: string # An internal name you set to help organize and track Templates. Maximum 128 characters. (default: YOUR_TEMPLATE_NAME)
   --contents: record # The main message body with [language-specific values](/docs/en/multi-language-messaging#supported-languages). Required for push and SMS templates. Supports [Message Personalization](/docs/message-personalization). — shape: {en: string}
-  --isEmail: string@bool-completer # Required to be set `true` for email templates.
+  --isEmail: oneof<nothing, bool> # Required to be set `true` for email templates.
   --email-subject: string # Required for email templates. The subject of the email. Supports [Message Personalization](/docs/message-personalization).
   --email-body: string # The body of the email in HTML format. Required for email templates. Supports [Message Personalization](/docs/message-personalization).
-  --isSMS: string@bool-completer # Required to be set `true` for SMS templates.
+  --isSMS: oneof<nothing, bool> # Required to be set `true` for SMS templates.
   --dynamic-content: record # Add personalization to your templates programmatically. No need to upload a CSV. See [Dynamic Content](/docs/dynamic-content) for details. (e.g. {"campaign_id": {"A": {"title": "Custom Title A", "message": "Custom Message A", "url": "https://www.onesignal.com"}, "B": {"title": "Custom Title B", "message": "Custom Message B", "url": "https://www.onesignal.com/login"}}})
 ]: any -> record<id: string, name: string, channel: string, created_at: string, updated_at: string, content: record<isAndroid: bool, isIos: bool, isMacOSX: bool, isAdm: bool, isAlexa: bool, isWP: bool, isWP_WNS: bool, isChrome: bool, isChromeWeb: bool, isSafari: bool, isFirefox: bool, isEdge: bool, isHuawei: bool, headings: record, subtitle: record, contents: record, global_image: string, url: string, isEmail: bool, email_body: string, email_subject: string, email_preheader: string, email_from_address: string, email_from_name: string, email_reply_to_address: string, email_bcc: list<string>, disable_email_click_tracking: bool, isSMS: bool, sms_from: string, sms_media_urls: list<string>, huawei_badge_add_num: int, huawei_badge_class: string, huawei_badge_set_num: int>> {
   let input = $in
@@ -1139,8 +1138,8 @@ export def "notifications-cemail email" [
   --email-sender-domain: string # The authenticated sending domain used for email delivery. This domain must be verified in your DNS records and will determine which domain handles the mail transfer. It may not always exactly match the domain in the `email_from_address` (e.g., `email_from_address = news@example.com` while `email_sender_domain = mail.example.com`), but the root domain must align for DMARC compliance. If not specified, OneSignal uses the default sender email's domain configured in your Dashboard. See [Email setup](/docs/email-setup) and [Senders](/docs/senders).
   --email-reply-to-address: string # The email address users reply to. Defaults to the 'Reply-To' address in the Email Settings of your OneSignal Dashboard. See [Email setup](/docs/email-setup).
   --email-bcc: list # BCC recipients for the email. Maximum 5 addresses. Only supported when the email service provider is OneSignal Email. For every email sent, an additional billable email is sent to each BCC address.  See [BCC Emails](/docs/en/email-bcc).
-  --include-unsubscribed: string@bool-completer # Used for important account-related, non-marking emails. If set to `true` it will send the email to unsubscribed email addresses. Defaults to `false`. See [Email unsubscribe links & headers](/docs/unsubscribe-links-email-subscriptions).
-  --disable-email-click-tracking: string@bool-completer # If set to `true`, the URLs sent within the email will not include link tracking and will be the same as originally set; otherwise, all the URLs in the email will be tracked. See [Email unsubscribe links & headers](/docs/unsubscribe-links-email-subscriptions). Defaults to `false`.
+  --include-unsubscribed: oneof<nothing, bool> # Used for important account-related, non-marking emails. If set to `true` it will send the email to unsubscribed email addresses. Defaults to `false`. See [Email unsubscribe links & headers](/docs/unsubscribe-links-email-subscriptions).
+  --disable-email-click-tracking: oneof<nothing, bool> # If set to `true`, the URLs sent within the email will not include link tracking and will be the same as originally set; otherwise, all the URLs in the email will be tracked. See [Email unsubscribe links & headers](/docs/unsubscribe-links-email-subscriptions). Defaults to `false`.
   --send-after: string # Schedule delivery for a future date/time (in UTC). The format must be valid per the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) standard and compatible with [`JavaScript’s Date() parser`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/Date#datestring). Example: `2025-09-24T14:00:00-07:00`
   --delayed-option: string # Controls how messages are delivered on a per-user basis: `'timezone'` — Sends at the same local time across time zones. `'last-active'` — Delivers based on each user’s most recent session. Not compatible with [Push Throttling](/docs/throttling). If enabled, set `throttle_rate_per_minute` to `0`.
   --delivery-time-of-day: string # Use with `delayed_option: 'timezone'` to set a consistent local delivery time. Accepted formats: `'9:00AM'` (12-hour), `'21:45'` (24-hour), `'09:45:30'` (HH:mm:ss).
@@ -1237,23 +1236,23 @@ export def "notifications-cpush push-notification" [
   --collapse-id: string # An ID that replaces older notifications with newer ones that have the same identifier. For mobile push only. See [Push: Collapse ID](/docs/push#collapse-id).
   --web-push-topic: string # An ID that prevents replacement of older notifications with newer ones that have different identifiers. For web push only. See [Push: Web Push Topic](/docs/push#web-push-topic).
   --data: record # Bundle a custom data map within your notification, which is then passed to your app. See [Push: Additional Data](/docs/push#additional-data). (format: json)
-  --content-available: string@bool-completer # Allows for sending data/background notifications to the Android and iOS apps. Set to `true` and omit `contents`. Apple interprets this as `content-available=1`. See [Data & background notifications](/docs/data-notifications).
+  --content-available: oneof<nothing, bool> # Allows for sending data/background notifications to the Android and iOS apps. Set to `true` and omit `contents`. Apple interprets this as `content-available=1`. See [Data & background notifications](/docs/data-notifications).
   --ios-category: string # Enable users to respond directly to a notification without launching the app. The [Category](https://developer.apple.com/documentation/usernotifications/unnotificationcategory) will activate the corresponding [Notification Content Extension](https://developer.apple.com/documentation/usernotificationsui/unnotificationcontentextension/) in your app when the push is interacted with.
   --apns-push-type-override: string # Use only for VoIP notifications. Corresponds to the [`apns-push-type`](https://developer.apple.com/documentation/usernotifications/sending-notification-requests-to-apns#Send-a-POST-request-to-APNs). OneSignal automatically sets this value to `alert` or `background` based on the notification content. Pass `voip` to initiate VoIP calls or alert the user to incoming VoIP calls.
-  --isIos: string@bool-completer # Specifies if the notification should target iOS mobile apps only. Defaults to `true`. If set to `true`, all other platforms are disabled unless explicitly enabled.
-  --isAndroid: string@bool-completer # Specifies if the notification should target Google Android mobile apps only. Defaults to `true`. If set to `true`, all other platforms are disabled unless explicitly enabled.
-  --isHuawei: string@bool-completer # Specifies if the notification should target Huawei mobile apps only. Defaults to `true`. If set to `true`, all other platforms are disabled unless explicitly enabled.
-  --isAnyWeb: string@bool-completer # Specifies if the notification should target web push only. Defaults to `true`. If set to `true`, all other platforms are disabled unless explicitly enabled.
-  --isChromeWeb: string@bool-completer # Specifies if the notification should target Chrome only. Defaults to `true`. If set to `true`, all other platforms are disabled unless explicitly enabled.
-  --isFirefox: string@bool-completer # Specifies if the notification should target Firefox only. Defaults to `true`. If set to `true`, all other platforms are disabled unless explicitly enabled.
-  --isSafari: string@bool-completer # Specifies if the notification should target Safari only. Defaults to `true`. If set to `true`, all other platforms are disabled unless explicitly enabled
-  --isWP-WNS: string@bool-completer # Specifies if the notification should target Windows apps only. Defaults to `true`. If set to `true`, all other platforms are disabled unless explicitly enabled
-  --isAdm: string@bool-completer # Specifies if the notification should target Amazon devices only. Defaults to `true`. If set to `true`, all other platforms are disabled unless explicitly enabled
+  --isIos: oneof<nothing, bool> # Specifies if the notification should target iOS mobile apps only. Defaults to `true`. If set to `true`, all other platforms are disabled unless explicitly enabled.
+  --isAndroid: oneof<nothing, bool> # Specifies if the notification should target Google Android mobile apps only. Defaults to `true`. If set to `true`, all other platforms are disabled unless explicitly enabled.
+  --isHuawei: oneof<nothing, bool> # Specifies if the notification should target Huawei mobile apps only. Defaults to `true`. If set to `true`, all other platforms are disabled unless explicitly enabled.
+  --isAnyWeb: oneof<nothing, bool> # Specifies if the notification should target web push only. Defaults to `true`. If set to `true`, all other platforms are disabled unless explicitly enabled.
+  --isChromeWeb: oneof<nothing, bool> # Specifies if the notification should target Chrome only. Defaults to `true`. If set to `true`, all other platforms are disabled unless explicitly enabled.
+  --isFirefox: oneof<nothing, bool> # Specifies if the notification should target Firefox only. Defaults to `true`. If set to `true`, all other platforms are disabled unless explicitly enabled.
+  --isSafari: oneof<nothing, bool> # Specifies if the notification should target Safari only. Defaults to `true`. If set to `true`, all other platforms are disabled unless explicitly enabled
+  --isWP-WNS: oneof<nothing, bool> # Specifies if the notification should target Windows apps only. Defaults to `true`. If set to `true`, all other platforms are disabled unless explicitly enabled
+  --isAdm: oneof<nothing, bool> # Specifies if the notification should target Amazon devices only. Defaults to `true`. If set to `true`, all other platforms are disabled unless explicitly enabled
   --send-after: string # Schedule delivery for a future date/time (in UTC). The format must be valid per the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) standard and compatible with [`JavaScript’s Date() parser`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/Date#datestring). Example: `2025-09-24T14:00:00-07:00`
   --delayed-option: string # Controls how messages are delivered on a per-user basis: `'timezone'` — Sends at the same local time across time zones. `'last-active'` — Delivers based on each user’s most recent session. Not compatible with [Push Throttling](/docs/throttling). If enabled, set `throttle_rate_per_minute` to `0`.
   --delivery-time-of-day: string # Use with `delayed_option: 'timezone'` to set a consistent local delivery time. Accepted formats: `'9:00AM'` (12-hour), `'21:45'` (24-hour), `'09:45:30'` (HH:mm:ss).
   --throttle-rate-per-minute: float # Overrides the throttle limit set in the OneSignal dashboard settings. Must be enabled through the dashboard. Only available with push notifications. See [Push Throttling](/docs/throttling). If `throttle_rate_per_minute` is set to `0`, then the message will be sent immediately without any rate limiting.
-  --enable-frequency-cap: string@bool-completer # Overrides the frequency cap set in the OneSignal dashboard settings. Must be enabled through the dashboard first. Only available with push notifications. See [Frequency Capping](/docs/frequency-capping). Set to `false` to disable frequency capping.
+  --enable-frequency-cap: oneof<nothing, bool> # Overrides the frequency cap set in the OneSignal dashboard settings. Must be enabled through the dashboard first. Only available with push notifications. See [Frequency Capping](/docs/frequency-capping). Set to `false` to disable frequency capping.
   --idempotency-key: string # A unique identifier used to prevent duplicate messages from repeat API calls. See [Idempotent notification requests](/reference/idempotent-notification-requests). Any RFC 9562 UUID supported. Valid for 30 days. Previously called `external_id`.
 ]: any -> any {
   let input = $in
@@ -1648,9 +1647,9 @@ export def "apps-users-by-inbox-last-message-id-message-id bulk-update-or-delete
   --allow-errors(-e) # Return full response without error handling
   --last-message-id: string # The inclusive upper bound of messages to update.
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
-  --is-read: string@bool-completer # Indicates whether to mark message(s) as read.
-  --is-deleted: string@bool-completer # Indicates whether to mark message(s) as deleted.
-  --is-opened: string@bool-completer # Indicates whether to mark message(s) as opened.
+  --is-read: oneof<nothing, bool> # Indicates whether to mark message(s) as read.
+  --is-deleted: oneof<nothing, bool> # Indicates whether to mark message(s) as deleted.
+  --is-opened: oneof<nothing, bool> # Indicates whether to mark message(s) as opened.
 ]: any -> record<count: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1710,9 +1709,9 @@ export def "apps-users-by-inbox update-message-state" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Authorization: string # Your App API key with prefix `Key `. See [Keys & IDs](/docs/en/keys-and-ids).
-  --is-read: string@bool-completer # Indicates whether to mark message(s) as read.
-  --is-deleted: string@bool-completer # Indicates whether to mark message(s) as deleted.
-  --is-opened: string@bool-completer # Indicates whether to mark message(s) as opened.
+  --is-read: oneof<nothing, bool> # Indicates whether to mark message(s) as read.
+  --is-deleted: oneof<nothing, bool> # Indicates whether to mark message(s) as deleted.
+  --is-opened: oneof<nothing, bool> # Indicates whether to mark message(s) as opened.
 ]: any -> record<count: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

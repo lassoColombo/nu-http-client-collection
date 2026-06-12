@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://registry.my-netdata.io" "http://registry.my-netdata.io" "http://localhost:19999"] }
 def auth-scheme-completer [] { ["bearer" "x-forwarded-for"] }
 
@@ -1985,8 +1984,8 @@ export def "alarms alerts1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # If passed, all enabled alarms are returned. (allows empty value)
-  --active: string@bool-completer # If passed, the raised alarms in state WARNING or CRITICAL are returned. (allows empty value)
+  --all: oneof<nothing, bool> # If passed, all enabled alarms are returned. (allows empty value)
+  --active: oneof<nothing, bool> # If passed, the raised alarms in state WARNING or CRITICAL are returned. (allows empty value)
 ]: nothing -> record<hostname: string, latest_alarm_log_unique_id: int, status: bool, now: int, alarms: record<chart_name_alarm_name: record<id: int, name: string, chart: string, family: string, active: bool, disabled: bool, silenced: bool, exec: string, recipient: string, source: string, units: string, info: string, status: string, last_status_change: int, last_updated: int, next_update: int, update_every: int, delay_up_duration: int, delay_down_duration: int, delay_max_duration: int, delay_multiplier: int, delay: int, delay_up_to_timestamp: int, value_string: string, no_clear_notification: bool, lookup_dimensions: string, db_after: int, db_before: int, lookup_method: string, lookup_after: int, lookup_before: int, lookup_options: string, calc: string, calc_parsed: string, warn: string, warn_parsed: string, crit: string, crit_parsed: string, warn_repeat_every: int, crit_repeat_every: int, green: string, red: string, value: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2011,8 +2010,8 @@ export def "alarms-values alertValues1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # If passed, all enabled alarms are returned. (allows empty value)
-  --active: string@bool-completer # If passed, the raised alarms in state WARNING or CRITICAL are returned. (allows empty value)
+  --all: oneof<nothing, bool> # If passed, all enabled alarms are returned. (allows empty value)
+  --active: oneof<nothing, bool> # If passed, the raised alarms in state WARNING or CRITICAL are returned. (allows empty value)
 ]: nothing -> record<hostname: string, alarms: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

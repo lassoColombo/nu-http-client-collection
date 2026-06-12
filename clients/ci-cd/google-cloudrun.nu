@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://run.googleapis.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -114,12 +113,12 @@ export def "projects runprojectslocationsservicesrevisionsdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --etag: string # A system-generated fingerprint for this version of the resource. This may be used to detect modification conflict during updates.
-  --validateOnly: string@bool-completer # Indicates that the request should be validated without actually deleting any resources.
+  --validateOnly: oneof<nothing, bool> # Indicates that the request should be validated without actually deleting any resources.
 ]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -150,7 +149,7 @@ export def "projects runprojectslocationsservicesrevisionsget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
@@ -190,12 +189,12 @@ export def "projects runprojectslocationsservicespatch" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --allowMissing: string@bool-completer # This field is currently not used by Cloud Run; setting it does not have any effect.
-  --validateOnly: string@bool-completer # Indicates that the request should be validated and default values populated, without persisting the request or updating any resources.
+  --allowMissing: oneof<nothing, bool> # This field is currently not used by Cloud Run; setting it does not have any effect.
+  --validateOnly: oneof<nothing, bool> # Indicates that the request should be validated and default values populated, without persisting the request or updating any resources.
   --annotations: record # Unstructured key value map that may be set by external tools to store and arbitrary metadata. They are not queryable and should be preserved when modifying objects. Cloud Run API v2 does not support annotations with `run.googleapis.com`, `cloud.googleapis.com`, `serving.knative.dev`, or `autoscaling.knative.dev` namespaces, and they will be rejected in new resources. All system annotations in v1 now have a corresponding field in v2 Service. This field follows Kubernetes annotations' namespacing, limits, and rules.
   --binaryAuthorization: record # Settings for Binary Authorization feature. — shape: {breakglassJustification?: string, useDefault?: bool}
   --client: string # Arbitrary identifier for the API client.
@@ -241,7 +240,7 @@ export def "operations runprojectslocationsoperationslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
@@ -278,12 +277,12 @@ export def "projects runprojectslocationsjobsrun" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --etag: string # A system-generated fingerprint for this version of the resource. May be used to detect modification conflict during updates.
-  --validateOnly: string@bool-completer # Indicates that the request should be validated without actually deleting any resources.
+  --validateOnly: oneof<nothing, bool> # Indicates that the request should be validated without actually deleting any resources.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -317,7 +316,7 @@ export def "projects runprojectslocationsoperationswait" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
@@ -355,13 +354,13 @@ export def "executions runprojectslocationsjobsexecutionslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --pageSize: int # Maximum number of Executions to return in this call.
   --pageToken: string # A page token received from a previous call to ListExecutions. All other parameters must match.
-  --showDeleted: string@bool-completer # If true, returns deleted (but unexpired) resources along with active ones.
+  --showDeleted: oneof<nothing, bool> # If true, returns deleted (but unexpired) resources along with active ones.
 ]: nothing -> record<executions: table<annotations: record, cancelledCount: int, completionTime: string, conditions: list, createTime: string, deleteTime: string, etag: string, expireTime: string, failedCount: int, generation: string, job: string, labels: record, launchStage: string, logUri: string, name: string, observedGeneration: string, parallelism: int, reconciling: bool, retriedCount: int, runningCount: int, satisfiesPzs: bool, startTime: string, succeededCount: int, taskCount: int, template: record, uid: string, updateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -392,13 +391,13 @@ export def "jobs runprojectslocationsjobslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --pageSize: int # Maximum number of Jobs to return in this call.
   --pageToken: string # A page token received from a previous call to ListJobs. All other parameters must match.
-  --showDeleted: string@bool-completer # If true, returns deleted (but unexpired) resources along with active ones.
+  --showDeleted: oneof<nothing, bool> # If true, returns deleted (but unexpired) resources along with active ones.
 ]: nothing -> record<jobs: table<annotations: record, binaryAuthorization: record, client: string, clientVersion: string, conditions: list, createTime: string, creator: string, deleteTime: string, etag: string, executionCount: int, expireTime: string, generation: string, labels: record, lastModifier: string, latestCreatedExecution: record, launchStage: string, name: string, observedGeneration: string, reconciling: bool, satisfiesPzs: bool, template: record, terminalCondition: record, uid: string, updateTime: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -434,12 +433,12 @@ export def "jobs runprojectslocationsjobscreate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --jobId: string # Required. The unique identifier for the Job. The name of the job becomes {parent}/jobs/{job_id}.
-  --validateOnly: string@bool-completer # Indicates that the request should be validated and default values populated, without persisting the request or creating any resources.
+  --validateOnly: oneof<nothing, bool> # Indicates that the request should be validated and default values populated, without persisting the request or creating any resources.
   --annotations: record # KRM-style annotations for the resource. Unstructured key value map that may be set by external tools to store and arbitrary metadata. They are not queryable and should be preserved when modifying objects. Cloud Run API v2 does not support annotations with `run.googleapis.com`, `cloud.googleapis.com`, `serving.knative.dev`, or `autoscaling.knative.dev` namespaces, and they will be rejected on new resources. All system annotations in v1 now have a corresponding field in v2 Job. This field follows Kubernetes annotations' namespacing, limits, and rules.
   --binaryAuthorization: record # Settings for Binary Authorization feature. — shape: {breakglassJustification?: string, useDefault?: bool}
   --client: string # Arbitrary identifier for the API client.
@@ -483,13 +482,13 @@ export def "revisions runprojectslocationsservicesrevisionslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --pageSize: int # Maximum number of revisions to return in this call.
   --pageToken: string # A page token received from a previous call to ListRevisions. All other parameters must match.
-  --showDeleted: string@bool-completer # If true, returns deleted (but unexpired) resources along with active ones.
+  --showDeleted: oneof<nothing, bool> # If true, returns deleted (but unexpired) resources along with active ones.
 ]: nothing -> record<nextPageToken: string, revisions: table<annotations: record, conditions: list, containers: list, createTime: string, deleteTime: string, encryptionKey: string, encryptionKeyRevocationAction: string, encryptionKeyShutdownDuration: string, etag: string, executionEnvironment: string, expireTime: string, generation: string, labels: record, launchStage: string, logUri: string, maxInstanceRequestConcurrency: int, name: string, observedGeneration: string, reconciling: bool, satisfiesPzs: bool, scaling: record, service: string, serviceAccount: string, timeout: string, uid: string, updateTime: string, volumes: list, vpcAccess: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -520,13 +519,13 @@ export def "services runprojectslocationsserviceslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --pageSize: int # Maximum number of Services to return in this call.
   --pageToken: string # A page token received from a previous call to ListServices. All other parameters must match.
-  --showDeleted: string@bool-completer # If true, returns deleted (but unexpired) resources along with active ones.
+  --showDeleted: oneof<nothing, bool> # If true, returns deleted (but unexpired) resources along with active ones.
 ]: nothing -> record<nextPageToken: string, services: table<annotations: record, binaryAuthorization: record, client: string, clientVersion: string, conditions: list, createTime: string, creator: string, deleteTime: string, description: string, etag: string, expireTime: string, generation: string, ingress: string, labels: record, lastModifier: string, latestCreatedRevision: string, latestReadyRevision: string, launchStage: string, name: string, observedGeneration: string, reconciling: bool, satisfiesPzs: bool, template: record, terminalCondition: record, traffic: list, trafficStatuses: list, uid: string, updateTime: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -563,12 +562,12 @@ export def "services runprojectslocationsservicescreate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --serviceId: string # Required. The unique identifier for the Service. It must begin with letter, and cannot end with hyphen; must contain fewer than 50 characters. The name of the service becomes {parent}/services/{service_id}.
-  --validateOnly: string@bool-completer # Indicates that the request should be validated and default values populated, without persisting the request or creating any resources.
+  --validateOnly: oneof<nothing, bool> # Indicates that the request should be validated and default values populated, without persisting the request or creating any resources.
   --annotations: record # Unstructured key value map that may be set by external tools to store and arbitrary metadata. They are not queryable and should be preserved when modifying objects. Cloud Run API v2 does not support annotations with `run.googleapis.com`, `cloud.googleapis.com`, `serving.knative.dev`, or `autoscaling.knative.dev` namespaces, and they will be rejected in new resources. All system annotations in v1 now have a corresponding field in v2 Service. This field follows Kubernetes annotations' namespacing, limits, and rules.
   --binaryAuthorization: record # Settings for Binary Authorization feature. — shape: {breakglassJustification?: string, useDefault?: bool}
   --client: string # Arbitrary identifier for the API client.
@@ -614,13 +613,13 @@ export def "tasks runprojectslocationsjobsexecutionstaskslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --pageSize: int # Maximum number of Tasks to return in this call.
   --pageToken: string # A page token received from a previous call to ListTasks. All other parameters must match.
-  --showDeleted: string@bool-completer # If true, returns deleted (but unexpired) resources along with active ones.
+  --showDeleted: oneof<nothing, bool> # If true, returns deleted (but unexpired) resources along with active ones.
 ]: nothing -> record<nextPageToken: string, tasks: table<annotations: record, completionTime: string, conditions: list, containers: list, createTime: string, deleteTime: string, encryptionKey: string, etag: string, execution: string, executionEnvironment: string, expireTime: string, generation: string, index: int, job: string, labels: record, lastAttemptResult: record, logUri: string, maxRetries: int, name: string, observedGeneration: string, reconciling: bool, retried: int, satisfiesPzs: bool, serviceAccount: string, startTime: string, timeout: string, uid: string, updateTime: string, volumes: list, vpcAccess: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -651,7 +650,7 @@ export def "projects runprojectslocationsservicesgetIamPolicy" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
@@ -687,7 +686,7 @@ export def "projects runprojectslocationsservicessetIamPolicy" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
@@ -726,7 +725,7 @@ export def "projects runprojectslocationsservicestestIamPermissions" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").

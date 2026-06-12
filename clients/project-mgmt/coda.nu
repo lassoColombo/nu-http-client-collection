@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://coda.io/apis/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -152,12 +151,12 @@ export def "docs listDocs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isOwner: string@bool-completer # Show only docs owned by the user.
-  --isPublished: string@bool-completer # Show only published docs.
+  --isOwner: oneof<nothing, bool> # Show only docs owned by the user.
+  --isPublished: oneof<nothing, bool> # Show only published docs.
   --qp-query: string # Search term used to filter down results. (e.g. Supercalifragilisticexpialidocious)
   --sourceDoc: string # Show only docs copied from the specified doc ID.
-  --isStarred: string@bool-completer # If true, returns docs that are starred. If false, returns docs that are not starred.
-  --inGallery: string@bool-completer # Show only docs visible within the gallery.
+  --isStarred: oneof<nothing, bool> # If true, returns docs that are starred. If false, returns docs that are not starred.
+  --inGallery: oneof<nothing, bool> # Show only docs visible within the gallery.
   --workspaceId: string # Show only docs belonging to the given workspace.
   --folderId: string # Show only docs belonging to the given folder.
   --limit: int # Maximum number of results to return in this query. (default: 25, e.g. 10)
@@ -334,7 +333,7 @@ export def "docs-acl-permissions addPermission" [
   --allow-errors(-e) # Return full response without error handling
   access: string@access-completer # Type of access (excluding none).
   principal: any # Metadata about a principal to add to a doc.
-  --suppressEmail: string@bool-completer # When true suppresses email notification
+  --suppressEmail: oneof<nothing, bool> # When true suppresses email notification
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -429,9 +428,9 @@ export def "docs-acl-settings updateAclSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowEditorsToChangePermissions: string@bool-completer # When true, allows editors to change doc permissions. When false, only doc owner can change doc permissions.
-  --allowCopying: string@bool-completer # When true, allows doc viewers to copy the doc.
-  --allowViewersToRequestEditing: string@bool-completer # When true, allows doc viewers to request editing permissions.
+  --allowEditorsToChangePermissions: oneof<nothing, bool> # When true, allows editors to change doc permissions. When false, only doc owner can change doc permissions.
+  --allowCopying: oneof<nothing, bool> # When true, allows doc viewers to copy the doc.
+  --allowViewersToRequestEditing: oneof<nothing, bool> # When true, allows doc viewers to request editing permissions.
 ]: any -> record<allowEditorsToChangePermissions: bool, allowCopying: bool, allowViewersToRequestEditing: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -458,8 +457,8 @@ export def "docs-publish publishDoc" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --slug: string # Slug for the published doc. (e.g. my-doc)
-  --discoverable: string@bool-completer # If true, indicates that the doc is discoverable. (e.g. true)
-  --earnCredit: string@bool-completer # If true, new users may be required to sign in to view content within this document. You will receive Coda credit for each user who signs up via your doc.  (e.g. true)
+  --discoverable: oneof<nothing, bool> # If true, indicates that the doc is discoverable. (e.g. true)
+  --earnCredit: oneof<nothing, bool> # If true, new users may be required to sign in to view content within this document. You will receive Coda credit for each user who signs up via your doc.  (e.g. true)
   --categoryNames: list # The names of categories to apply to the document. (e.g. [Project management])
   --mode: string@mode-completer # Which interaction mode the published doc should use.
 ]: any -> record<requestId: string> {
@@ -593,7 +592,7 @@ export def "docs-pages updatePage" [
   --subtitle: string # Subtitle of the page. (e.g. See the status of launch-related tasks.)
   --iconName: string # Name of the icon. (e.g. rocket)
   --imageUrl: string # Url of the cover image to use. (e.g. https://example.com/image.jpg)
-  --isHidden: string@bool-completer # Whether the page is hidden or not. Note that for pages that cannot be hidden, like the sole top-level page in a doc, this will be ignored. (e.g. true)
+  --isHidden: oneof<nothing, bool> # Whether the page is hidden or not. Note that for pages that cannot be hidden, like the sole top-level page in a doc, this will be ignored. (e.g. true)
   --contentUpdate: any
 ]: any -> record<requestId: string, id: string> {
   let input = $in
@@ -776,7 +775,7 @@ export def "docs-tables get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --useUpdatedTableLayouts: string@bool-completer # Return "detail" and "form" for the `layout` field of detail and form layouts respectively (instead of "masterDetail" for both)
+  --useUpdatedTableLayouts: oneof<nothing, bool> # Return "detail" and "form" for the `layout` field of detail and form layouts respectively (instead of "masterDetail" for both)
 ]: nothing -> record<id: string, type: string, tableType: string, href: string, browserLink: string, name: string, parent: record<id: string, type: string, href: string, browserLink: string, name: string>, parentTable: record<id: string, type: string, tableType: string, href: string, browserLink: string, name: string, parent: record<id: string, type: string, href: string, browserLink: string, name: string>>, displayColumn: record<id: string, type: string, href: string>, rowCount: int, sorts: table<column: record, direction: string>, layout: string, filter: record<valid: bool, isVolatile: bool, hasUserFormula: bool, hasTodayFormula: bool, hasNowFormula: bool>, createdAt: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -803,7 +802,7 @@ export def "docs-tables-columns listColumns" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Maximum number of results to return in this query. (default: 25, e.g. 10)
   --pageToken: string # An opaque token used to fetch the next page of results. (e.g. eyJsaW1pd)
-  --visibleOnly: string@bool-completer # If true, returns only visible columns for the table. This parameter only applies to base tables, and not views. (e.g. true)
+  --visibleOnly: oneof<nothing, bool> # If true, returns only visible columns for the table. This parameter only applies to base tables, and not views. (e.g. true)
 ]: nothing -> record<items: table<id: string, type: string, href: string, name: string, display: bool, calculated: bool, formula: string, defaultValue: string, format: any>, href: string, nextPageToken: string, nextPageLink: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -830,9 +829,9 @@ export def "docs-tables-rows listRows" [
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string # Query used to filter returned rows, specified as `<column_id_or_name>:<value>`. If you'd like to use a column name instead of an ID, you must quote it (e.g., `"My Column":123`). Also note that `value` is a JSON value; if you'd like to use a string, you must surround it in quotes (e.g., `"groceries"`).  (e.g. c-tuVwxYz:"Apple")
   --sortBy: string@sortBy-completer-1 # Specifies the sort order of the rows returned. If left unspecified, rows are returned by creation time ascending. "UpdatedAt" sort ordering is the order of rows based upon when they were last updated. This does not include updates to calculated values. "Natural" sort ordering is the order that the rows appear in the table view in the application. This ordering is only meaningfully defined for rows that are visible (unfiltered). Because of this, using this sort order will imply visibleOnly=true, that is, to only return visible rows. If you pass sortBy=natural and visibleOnly=false explicitly, this will result in a Bad Request error as this condition cannot be satisfied.
-  --useColumnNames: string@bool-completer # Use column names instead of column IDs in the returned output. This is generally discouraged as it is fragile. If columns are renamed, code using original names may throw errors.  (e.g. true)
+  --useColumnNames: oneof<nothing, bool> # Use column names instead of column IDs in the returned output. This is generally discouraged as it is fragile. If columns are renamed, code using original names may throw errors.  (e.g. true)
   --valueFormat: string@valueFormat-completer # The format that cell values are returned as.
-  --visibleOnly: string@bool-completer # If true, returns only visible rows and columns for the table. (e.g. true)
+  --visibleOnly: oneof<nothing, bool> # If true, returns only visible rows and columns for the table. (e.g. true)
   --limit: int # Maximum number of results to return in this query. (default: 25, e.g. 10)
   --pageToken: string # An opaque token used to fetch the next page of results. (e.g. eyJsaW1pd)
   --syncToken: string # An opaque token returned from a previous call that can be used to return results that are relevant to the query since the call where the syncToken was generated.  (e.g. eyJsaW1pd)
@@ -861,7 +860,7 @@ export def "docs-tables-rows upsertRows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --disableParsing: string@bool-completer # If true, the API will not attempt to parse the data in any way. (e.g. true)
+  --disableParsing: oneof<nothing, bool> # If true, the API will not attempt to parse the data in any way. (e.g. true)
   rows: list # item shape: {cells: list}
   --keyColumns: list # Optional column IDs, URLs, or names (fragile and discouraged), specifying columns to be used as upsert keys. (e.g. [c-bCdeFgh])
 ]: any -> record<requestId: string, addedRowIds: list<string>> {
@@ -919,7 +918,7 @@ export def "docs-tables-rows get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --useColumnNames: string@bool-completer # Use column names instead of column IDs in the returned output. This is generally discouraged as it is fragile. If columns are renamed, code using original names may throw errors.  (e.g. true)
+  --useColumnNames: oneof<nothing, bool> # Use column names instead of column IDs in the returned output. This is generally discouraged as it is fragile. If columns are renamed, code using original names may throw errors.  (e.g. true)
   --valueFormat: string@valueFormat-completer # The format that cell values are returned as.
 ]: nothing -> record<id: string, type: string, href: string, name: string, index: int, browserLink: string, createdAt: string, updatedAt: string, values: record, parent: record<id: string, type: string, tableType: string, href: string, browserLink: string, name: string, parent: record<id: string, type: string, href: string, browserLink: string, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -947,7 +946,7 @@ export def "docs-tables-rows updateRow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --disableParsing: string@bool-completer # If true, the API will not attempt to parse the data in any way. (e.g. true)
+  --disableParsing: oneof<nothing, bool> # If true, the API will not attempt to parse the data in any way. (e.g. true)
   row: record # An edit made to a particular row. — shape: {cells: list}
 ]: any -> record<requestId: string, id: string> {
   let input = $in
@@ -1265,7 +1264,7 @@ export def "folders listFolders" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --workspaceId: string # Show only folders belonging to the given workspace. (e.g. ws-1Ab234)
-  --isStarred: string@bool-completer # If true, returns folders that are starred. If false, returns folders that are not starred. If not specified, returns all folders.
+  --isStarred: oneof<nothing, bool> # If true, returns folders that are starred. If false, returns folders that are not starred. If not specified, returns all folders.
   --limit: int # Maximum number of results to return in this query. (default: 25, e.g. 10)
   --pageToken: string # An opaque token used to fetch the next page of results. (e.g. eyJsaW1pd)
 ]: nothing -> record<items: table<id: string, type: string, name: string, browserLink: string, description: string, icon: record, createdAt: string, canEdit: bool, workspace: record>, href: string, nextPageToken: string, nextPageLink: record> {
@@ -1410,7 +1409,7 @@ export def "resolve-browser-link resolveBrowserLink" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-url: string # The browser link to try to resolve. (format: url, e.g. https://coda.io/d/_dAbCDeFGH/Launch-Status_sumnO)
-  --degradeGracefully: string@bool-completer # By default, attempting to resolve the Coda URL of a deleted object will result in an error. If this flag is set, the next-available object, all the way up to the doc itself, will be resolved.  (e.g. true)
+  --degradeGracefully: oneof<nothing, bool> # By default, attempting to resolve the Coda URL of a deleted object will result in an error. If this flag is set, the next-available object, all the way up to the doc itself, will be resolved.  (e.g. true)
 ]: nothing -> record<type: string, href: string, browserLink: string, resource: record<type: string, id: string, name: string, href: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1484,7 +1483,7 @@ export def "analytics-docs listDocAnalytics" [
   --docIds: list # List of docIds to fetch.
   --workspaceId: string # ID of the workspace. (e.g. ws-1Ab234)
   --qp-query: string # Search term used to filter down results. (e.g. Supercalifragilisticexpialidocious)
-  --isPublished: string@bool-completer # Limit results to only published items.
+  --isPublished: oneof<nothing, bool> # Limit results to only published items.
   --sinceDate: string # Limit results to activity on or after this date. (format: date, e.g. 2020-08-01)
   --untilDate: string # Limit results to activity on or before this date. (format: date, e.g. 2020-08-05)
   --scale: string@scale-completer # Quantization period over which to view analytics. Defaults to daily. (e.g. daily)
@@ -1541,7 +1540,7 @@ export def "analytics-docs-summary listDocAnalyticsSummary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isPublished: string@bool-completer # Limit results to only published items.
+  --isPublished: oneof<nothing, bool> # Limit results to only published items.
   --sinceDate: string # Limit results to activity on or after this date. (format: date, e.g. 2020-08-01)
   --untilDate: string # Limit results to activity on or before this date. (format: date, e.g. 2020-08-05)
   --workspaceId: string # ID of the workspace. (e.g. ws-1Ab234)
@@ -1576,7 +1575,7 @@ export def "analytics-packs listPackAnalytics" [
   --pageToken: string # An opaque token used to fetch the next page of results. (e.g. eyJsaW1pd)
   --orderBy: string@orderBy-completer-1 # Use this parameter to order the Pack analytics returned.
   --direction: string@direction-completer # Direction to sort results in.
-  --isPublished: string@bool-completer # Limit results to only published items. If false or unspecified, returns all items including published ones.
+  --isPublished: oneof<nothing, bool> # Limit results to only published items. If false or unspecified, returns all items including published ones.
   --limit: int # Maximum number of results to return in this query. (default: 1000, e.g. 10)
 ]: nothing -> record<items: table<pack: record, metrics: list>, nextPageToken: string, nextPageLink: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1602,7 +1601,7 @@ export def "analytics-packs-summary listPackAnalyticsSummary" [
   --allow-errors(-e) # Return full response without error handling
   --packIds: list # Which Pack IDs to fetch.
   --workspaceId: string # ID of the workspace. (e.g. ws-1Ab234)
-  --isPublished: string@bool-completer # Limit results to only published items. If false or unspecified, returns all items including published ones.
+  --isPublished: oneof<nothing, bool> # Limit results to only published items. If false or unspecified, returns all items including published ones.
   --sinceDate: string # Limit results to activity on or after this date. (format: date, e.g. 2020-08-01)
   --untilDate: string # Limit results to activity on or before this date. (format: date, e.g. 2020-08-05)
 ]: nothing -> record<totalDocInstalls: int, totalWorkspaceInstalls: int, totalInvocations: int> {
@@ -1762,7 +1761,7 @@ export def "packs listPacks" [
   --pageToken: string # An opaque token used to fetch the next page of results. (e.g. eyJsaW1pd)
   --onlyWorkspaceId: string # Use only this workspace (not all of a user's workspaces) to check for Packs shared via workspace ACL.
   --parentWorkspaceIds: list # Filter to only Packs whose parent workspace is one of the given IDs.
-  --excludePublicPacks: string@bool-completer # Only get Packs shared with users/workspaces, not publicly.
+  --excludePublicPacks: oneof<nothing, bool> # Only get Packs shared with users/workspaces, not publicly.
   --packEntrypoint: string@packEntrypoint-completer # Entrypoint for which this pack call is being made. Used to filter non relevant packs
 ]: nothing -> record<items: table<id: float, logoUrl: string, coverUrl: string, exampleImages: list, agentImages: list, workspaceId: string, categories: list, certified: bool, certifiedAgent: bool, sourceCodeVisibility: string, packEntrypoints: list, verifiedVersion: string, name: string, description: string, shortDescription: string, agentShortDescription: string, agentDescription: string, supportEmail: string, termsOfServiceUrl: string, privacyPolicyUrl: string>, nextPageToken: string, nextPageLink: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2034,7 +2033,7 @@ export def "packs-versions-upload-complete packVersionUploadComplete" [
   --allow-errors(-e) # Return full response without error handling
   --notes: string # Developer notes of the new Pack version. (e.g. Adding a new formula HelloWorld.)
   --body-source: string@source-completer
-  --allowOlderSdkVersion: string@bool-completer # Bypass Coda's protection against SDK version regression when multiple makers build versions.
+  --allowOlderSdkVersion: oneof<nothing, bool> # Bypass Coda's protection against SDK version regression when multiple makers build versions.
 ]: any -> record<deprecationWarnings: table<path: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2646,7 +2645,7 @@ export def "packs-invitations-reply replyToPackInvitation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --body-accept: string@bool-completer # True to accept the invitation, false to reject it
+  --body-accept: oneof<nothing, bool> # True to accept the invitation, false to reject it
 ]: any -> record<permissionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2949,9 +2948,9 @@ export def "packs-listings listPackListings" [
   --packIds: list # Which Pack IDs to fetch.
   --onlyWorkspaceId: string # Use only this workspace (not all of a user's workspaces) to check for Packs shared via workspace ACL.
   --parentWorkspaceIds: list # Filter to only Packs whose parent workspace is one of the given IDs.
-  --excludePublicPacks: string@bool-completer # Only get Packs shared with users/workspaces, not publicly.
+  --excludePublicPacks: oneof<nothing, bool> # Only get Packs shared with users/workspaces, not publicly.
   --packEntrypoint: string@packEntrypoint-completer # Entrypoint for which this pack call is being made. Used to filter non relevant packs
-  --certifiedAgentsOnly: string@bool-completer # Only include Packs that are certified for agent use. Depending on server configuration, may also include Packs that the user is an admin of.  (default: false)
+  --certifiedAgentsOnly: oneof<nothing, bool> # Only include Packs that are certified for agent use. Depending on server configuration, may also include Packs that the user is an admin of.  (default: false)
   --packCategories: list # Filter Packs by one or more category types.
   --sortBy: string@sortBy-completer-3 # Specify a sort order for the returned Pack listings returned.
   --orderBy: string@orderBy-completer-3 # Deprecated: use sortBy instead.
@@ -3051,7 +3050,7 @@ export def "packs-tenant-id-root-ingestion-id-logs listIngestionLogs" [
   --beforeTimestamp: string # Only return logs before the given time (non-inclusive).  (format: date-time, e.g. 2018-04-11T00:18:57.946Z)
   --afterTimestamp: string # Only return logs after the given time (non-inclusive).  (format: date-time, e.g. 2018-04-11T00:18:57.946Z)
   --ingestionStatus: string@ingestionStatus-completer # Only fetch logs with the given ingestion status. This only works in combination with the onlyExecutionCompletions parameter.
-  --onlyExecutionCompletions: string@bool-completer # Only fetch logs that represent the completion of a child execution.
+  --onlyExecutionCompletions: oneof<nothing, bool> # Only fetch logs that represent the completion of a child execution.
   --order: string@order-completer # Specifies if the logs will be returned in time desc or asc. Default is desc.
   --q: string # A search query that follows Lucene syntax.  (e.g. context.doc_id:"fleHfrkw3L" AND event.action:"FormulaRequest")
   --requestIds: list # Only return logs matching provided request IDs. (e.g. 416faabf,4127faag)
@@ -3146,7 +3145,7 @@ export def "packs-tenant-id-root-ingestion-id-ingestion-batch-executions listIng
   --limit: int # Maximum number of results to return in this query. (default: 25, e.g. 10)
   --datasource: string # Only show batch executions for this datasource (sync table).
   --executionType: string@executionType-completer # Only show batch executions with this execution type.
-  --includeDeletedIngestions: string@bool-completer # Include deleted ingestion executions in the response
+  --includeDeletedIngestions: oneof<nothing, bool> # Include deleted ingestion executions in the response
   --ingestionExecutionId: string # Only retrieve this single batch execution.
   --ingestionId: string # Only show batch executions for this sync table ingestion.
   --ingestionStatus: string@ingestionStatus-completer # Only show batch executions with this status.

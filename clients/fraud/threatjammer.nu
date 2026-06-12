@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -774,7 +773,7 @@ export def "assess-ip-csv post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --strict-parse: string@bool-completer # When `true`, if any IP address entry in the file is malformed, the assessment is canceled. If `false`, the malformed IP addresses are ignored. Default is `false`. (default: false)
+  --strict-parse: oneof<nothing, bool> # When `true`, if any IP address entry in the file is malformed, the assessment is canceled. If `false`, the malformed IP addresses are ignored. Default is `false`. (default: false)
   csv_file: string # The CSV file with the IP addresses (format: binary)
 ]: any -> record<results: table<allowlisted: string, asn: string, asn_prefix: string, datacenter: string, datacenter_prefix: string, datasets: list, denylisted: string, first_appearance: list, last_appearance: list, reason: string, risk: string, score: int, self: string, sources: list>, self: string> {
   let input = $in
@@ -1543,7 +1542,7 @@ export def "geo-csv post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --strict-parse: string@bool-completer # When `true`, if any IP address entry in the file is malformed, the assessment is canceled. If `false`, the malformed IP addresses are ignored. Default is `false`. (default: false)
+  --strict-parse: oneof<nothing, bool> # When `true`, if any IP address entry in the file is malformed, the assessment is canceled. If `false`, the malformed IP addresses are ignored. Default is `false`. (default: false)
   csv_file: string # The CSV file with the IP addresses (format: binary)
 ]: any -> record<results: table<accuracy_radius: float, asn_country_iso_code: string, city_geoname_code: int, city_name: string, continent_code: string, country_iso_code: string, hostnames: list, latitude: float, longitude: float, postal_code: string, region_geoname_code: int, region_name: string, self: string, time_zone: string>, self: string> {
   let input = $in

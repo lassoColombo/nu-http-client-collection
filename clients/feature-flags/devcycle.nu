@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.devcycle.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -313,7 +312,7 @@ export def "projects-staleness get" [
   --sortOrder: string@sortOrder-completer # default: desc
   --search: string
   --createdBy: string
-  --includeSilenced: string@bool-completer # default: false
+  --includeSilenced: oneof<nothing, bool> # default: false
 ]: nothing -> table<key: string, name: string, _feature: string, stale: bool, updatedAt: string, disabled: bool, snoozedUntil: string, reason: string, metaData: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -542,9 +541,9 @@ export def "projects-environments-sdk-keys generate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --client: string@bool-completer
-  --server: string@bool-completer
-  --mobile: string@bool-completer
+  --client: oneof<nothing, bool>
+  --server: oneof<nothing, bool>
+  --mobile: oneof<nothing, bool>
 ]: any -> record<name: string, key: string, description: string, color: string, _id: string, _project: string, type: string, _createdBy: string, createdAt: string, updatedAt: string, sdkKeys: record<mobile: list<record>, client: list<record>, server: list<record>>, settings: record<appIconURI: string>, readonly: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -630,7 +629,7 @@ export def "projects-audiences findAll" [
   --sortOrder: string@sortOrder-completer # default: desc
   --search: string
   --createdBy: string
-  --includeUsage: string@bool-completer
+  --includeUsage: oneof<nothing, bool>
 ]: nothing -> table<name: string, key: string, description: string, _id: string, _project: string, filters: record<filters: list, operator: string>, source: string, _createdBy: string, createdAt: string, updatedAt: string, tags: list<string>, readonly: bool, hasUsage: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -846,7 +845,7 @@ export def "projects-variables update" [
   --body-key: string # Unique Variable identifier, can be used in the SDK / API to reference by key rather then ID. Must only contain lower-case characters and `_`, `-` or `.`. (e.g. show-new-dashboard)
   --type: string@type-completer-1 # The type of Variable. Must be one of [String | Boolean | Number | JSON] (e.g. Boolean)
   --validationSchema: any # Validation schema for variable values
-  --persistent: string@bool-completer # Boolean indicating if the variable is intended to be long-lived within a feature
+  --persistent: oneof<nothing, bool> # Boolean indicating if the variable is intended to be long-lived within a feature
   --tags: list # Tags to organize Variables on the dashboard (e.g. [Dashboard, QA])
 ]: any -> record<name: string, description: string, key: string, _id: string, _project: string, _feature: string, type: string, status: string, source: string, _createdBy: string, createdAt: string, updatedAt: string, validationSchema: record<schemaType: record, enumValues: record, regexPattern: string, jsonSchema: string, description: string, exampleValue: record>, persistent: bool, tags: list<string>> {
   let input = $in
@@ -1085,7 +1084,7 @@ export def "projects-features v1-by-feature-key-project-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deleteVariables: string@bool-completer # Controls whether the feature's associated variables should also be deleted
+  --deleteVariables: oneof<nothing, bool> # Controls whether the feature's associated variables should also be deleted
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1644,7 +1643,7 @@ export def "projects-custom-properties findAll" [
   --sortOrder: string@sortOrder-completer # default: desc
   --search: string
   --type: string@type-completer-3
-  --includeUsage: string@bool-completer
+  --includeUsage: oneof<nothing, bool>
 ]: nothing -> table<name: string, key: string, _id: string, _project: string, _createdBy: string, propertyKey: string, type: string, createdAt: string, updatedAt: string, schema: record<schemaType: string, required: bool, enumSchema: record>, hasUsage: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2096,7 +2095,7 @@ export def "projects-features-overrides findOverridesForFeature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --addMetadata: string@bool-completer
+  --addMetadata: oneof<nothing, bool>
   --environment: string # A Environment key or ID
 ]: nothing -> record<overrides: record, uniqueTeamMembers: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2306,7 +2305,7 @@ export def "projects-features findAll" [
   --status: string@status-completer-1
   --customStatus: list
   --keys: list
-  --includeLatestUpdate: string@bool-completer
+  --includeLatestUpdate: oneof<nothing, bool>
   --staleness: string@staleness-completer
 ]: nothing -> table<_id: string, _project: string, source: string, status: string, type: string, name: string, key: string, description: string, _createdBy: string, createdAt: string, updatedAt: string, prodTargetingUpdatedAt: string, variations: list<record>, controlVariation: string, staticVariation: string, variables: list<record>, tags: list<string>, ldLink: string, readonly: bool, settings: record<publicName: string, publicDescription: string, optInEnabled: bool>, sdkVisibility: record<mobile: bool, client: bool, server: bool>, configurations: list<record>, latestUpdate: record<date: string, a0_user: string, changes: list>, changeRequests: list<record>, staleness: record, customStatus: record<_status: string, updatedAt: string>, summary: record<maintainers: list, links: list, markdown: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2447,7 +2446,7 @@ export def "projects-features-staleness updateStaleness" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --snoozedUntil: string
-  --disabled: string@bool-completer
+  --disabled: oneof<nothing, bool>
   --metaData: record
 ]: any -> record<key: string, name: string, _feature: string, stale: bool, updatedAt: string, disabled: bool, snoozedUntil: string, reason: string, metaData: record> {
   let input = $in
@@ -2665,7 +2664,7 @@ export def "projects-features-change-requests-review reviewFeatureChangeRequest"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --apply: string@bool-completer # Controls whether the review should also apply the change request to the feature
+  --apply: oneof<nothing, bool> # Controls whether the review should also apply the change request to the feature
   action: string@action-completer
   comment: string
 ]: any -> any {

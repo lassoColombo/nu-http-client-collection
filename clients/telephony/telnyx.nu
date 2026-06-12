@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.telnyx.com/v2" "https://api.telnyx.com" "wss://api.telnyx.com/v2"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -433,8 +432,8 @@ export def "10dlc-brand CreateBrandPost" [
   --ipAddress: string # IP address of the browser requesting to create brand identity.
   --website: string # Brand website URL. (e.g. http://www.abcmobile.com)
   vertical: any # Vertical or industry segment of the brand.
-  --isReseller: string@bool-completer # default: false
-  --mock: string@bool-completer # Mock brand for testing purposes. Defaults to false. (default: false)
+  --isReseller: oneof<nothing, bool> # default: false
+  --mock: oneof<nothing, bool> # Mock brand for testing purposes. Defaults to false. (default: false)
   --mobilePhone: string # Valid mobile phone number in e.164 international format. (e.g. +12024567890)
   --businessContactEmail: string # Business contact email.  Required if `entityType` is `PUBLIC_PROFIT`. Otherwise, it is recommended to either omit this field or set it to `null`. (e.g. name@example.com)
   --webhookURL: string # Webhook URL for brand status updates. (e.g. https://webhook.com/67ea78a8-9f32-4d04-b62d-f9502e8e5f93)
@@ -573,7 +572,7 @@ export def "10dlc-brand UpdateBrand" [
   --website: string # Brand website URL. (e.g. http://www.abcmobile.com)
   vertical: any # Vertical or industry segment of the brand.
   --altBusinessIdType: string@altBusinessIdType-completer # An enumeration.
-  --isReseller: string@bool-completer
+  --isReseller: oneof<nothing, bool>
   --identityStatus: string@identityStatus-completer # The verification status of an active brand
   --businessContactEmail: string # Business contact email.  Required if `entityType` will be changed to `PUBLIC_PROFIT`. Otherwise, it is recommended to either omit this field or set it to `null`. (e.g. name@example.com)
   --webhookURL: string # Webhook URL for brand status updates. (e.g. https://webhook.com/67ea78a8-9f32-4d04-b62d-f9502e8e5f93)
@@ -923,7 +922,7 @@ export def "10dlc-campaign UpdateCampaign" [
   --sample5: string # Message sample. Some campaign tiers require 5 or more message samples.
   --messageFlow: string # Message flow description.
   --helpMessage: string # Help message of the campaign.
-  --autoRenewal: string@bool-completer # Help message of the campaign. (default: true)
+  --autoRenewal: oneof<nothing, bool> # Help message of the campaign. (default: true)
   --webhookURL: string # Webhook to which campaign status updates are sent.
   --webhookFailoverURL: string # Webhook failover to which campaign status updates are sent.
 ]: any -> record<ageGated: bool, autoRenewal: bool, billedDate: string, brandId: string, brandDisplayName: string, campaignId: string, tcrBrandId: string, tcrCampaignId: string, createDate: string, cspId: string, description: string, directLending: bool, embeddedLink: bool, embeddedPhone: bool, helpKeywords: string, helpMessage: string, messageFlow: string, mock: bool, nextRenewalOrExpirationDate: string, numberPool: bool, optinKeywords: string, optinMessage: string, optoutKeywords: string, optoutMessage: string, referenceId: string, resellerId: string, sample1: string, sample2: string, sample3: string, sample4: string, sample5: string, status: string, subUsecases: list<string>, subscriberHelp: bool, subscriberOptin: bool, subscriberOptout: bool, termsAndConditions: bool, usecase: string, vertical: string, webhookURL: string, webhookFailoverURL: string, isTMobileRegistered: bool, isTMobileSuspended: bool, isTMobileNumberPoolingEnabled: bool, failureReasons: string, submissionStatus: string, campaignStatus: string, privacyPolicyLink: string, termsAndConditionsLink: string, embeddedLinkSample: string> {
@@ -1064,18 +1063,18 @@ export def "10dlc-campaign-builder PostCampaign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ageGated: string@bool-completer # Age gated message content in campaign.
-  --autoRenewal: string@bool-completer # Campaign subscription auto-renewal option. If set to true, then campaign will automatically renewal at end of billing cycle.
+  --ageGated: oneof<nothing, bool> # Age gated message content in campaign.
+  --autoRenewal: oneof<nothing, bool> # Campaign subscription auto-renewal option. If set to true, then campaign will automatically renewal at end of billing cycle.
   brandId: string # Alphanumeric identifier of the brand associated with this campaign.
   description: string # Summary description of this campaign.
-  --directLending: string@bool-completer # Direct lending or loan arrangement
-  --embeddedLink: string@bool-completer # Does message generated by the campaign include URL link in SMS?
-  --embeddedPhone: string@bool-completer # Does message generated by the campaign include phone number in SMS?
+  --directLending: oneof<nothing, bool> # Direct lending or loan arrangement
+  --embeddedLink: oneof<nothing, bool> # Does message generated by the campaign include URL link in SMS?
+  --embeddedPhone: oneof<nothing, bool> # Does message generated by the campaign include phone number in SMS?
   --helpKeywords: string # Subscriber help keywords. Multiple keywords are comma separated without space.
   --helpMessage: string # Help message of the campaign.
   --messageFlow: string # Message flow description.
   --mnoIds: list # Submit campaign to given list of MNOs by MNO's network ID. Default is all MNOs if no value provided.
-  --numberPool: string@bool-completer # Does campaign utilize pool of phone numbers?
+  --numberPool: oneof<nothing, bool> # Does campaign utilize pool of phone numbers?
   --optinKeywords: string # Subscriber opt-in keywords. Multiple keywords are comma separated without space.
   --optinMessage: string # Subscriber opt-in message.
   --optoutKeywords: string # Subscriber opt-out keywords. Multiple keywords are comma separated without space.
@@ -1088,11 +1087,11 @@ export def "10dlc-campaign-builder PostCampaign" [
   --sample4: string # Message sample. Some campaign tiers require 4 or more message samples.
   --sample5: string # Message sample. Some campaign tiers require 5 or more message samples.
   --subUsecases: list # Campaign sub-usecases. Must be of defined valid sub-usecase types. Use `/10dlc/enum/usecase` operation to retrieve list of valid sub-usecases
-  --subscriberHelp: string@bool-completer # Does campaign responds to help keyword(s)?
-  --subscriberOptin: string@bool-completer # Does campaign require subscriber to opt-in before SMS is sent to subscriber?
-  --subscriberOptout: string@bool-completer # Does campaign support subscriber opt-out keyword(s)?
+  --subscriberHelp: oneof<nothing, bool> # Does campaign responds to help keyword(s)?
+  --subscriberOptin: oneof<nothing, bool> # Does campaign require subscriber to opt-in before SMS is sent to subscriber?
+  --subscriberOptout: oneof<nothing, bool> # Does campaign support subscriber opt-out keyword(s)?
   --tag: list # Tags to be set on the Campaign.
-  --termsAndConditions: string@bool-completer # Is terms and conditions accepted?
+  --termsAndConditions: oneof<nothing, bool> # Is terms and conditions accepted?
   --privacyPolicyLink: string # Link to the campaign's privacy policy.
   --termsAndConditionsLink: string # Link to the campaign's terms and conditions.
   --embeddedLinkSample: string # Sample of an embedded link that will be sent to subscribers.
@@ -1747,8 +1746,8 @@ export def "addresses CreateAddress" [
   --borough: string # The borough of the address. This field is not used for addresses in the US but is used for some international addresses. (e.g. Guadalajara)
   --postal-code: string # The postal code of the address. (e.g. 78701)
   country_code: string # The two-character (ISO 3166-1 alpha-2) country code of the address. (e.g. US)
-  --address-book: string@bool-completer # Indicates whether or not the address should be considered part of your list of addresses that appear for regular use. (default: true, e.g. false)
-  --validate-address: string@bool-completer # Indicates whether or not the address should be validated for emergency use upon creation or not. This should be left with the default value of `true` unless you have used the `/addresses/actions/validate` endpoint to validate the address separately prior to creation. If an address is not validated for emergency use upon creation and it is not valid, it will not be able to be used for emergency services. (default: true, e.g. true)
+  --address-book: oneof<nothing, bool> # Indicates whether or not the address should be considered part of your list of addresses that appear for regular use. (default: true, e.g. false)
+  --validate-address: oneof<nothing, bool> # Indicates whether or not the address should be validated for emergency use upon creation or not. This should be left with the default value of `true` unless you have used the `/addresses/actions/validate` endpoint to validate the address separately prior to creation. If an address is not validated for emergency use upon creation and it is not valid, it will not be able to be used for emergency services. (default: true, e.g. true)
 ]: any -> record<data: record<id: string, record_type: string, customer_reference: string, first_name: string, last_name: string, business_name: string, phone_number: string, street_address: string, extended_address: string, locality: string, administrative_area: string, neighborhood: string, borough: string, postal_code: string, country_code: string, address_book: bool, validate_address: bool, created_at: string, updated_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2424,7 +2423,7 @@ export def "ai-assistants get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --fetch-dynamic-variables-from-webhook: string@bool-completer # Whether to fetch dynamic variables from the configured webhook. (default: false)
+  --fetch-dynamic-variables-from-webhook: oneof<nothing, bool> # Whether to fetch dynamic variables from the configured webhook. (default: false)
   --qp-from: string # Start of the filter range.
   --qp-to: string # End of the filter range.
   --call-control-id: string # Filter results by call control id.
@@ -2495,7 +2494,7 @@ export def "ai-assistants post-by-assistant_id" [
   --version-name: string # Human-readable name for the assistant version. (default: New assistant)
   --post-conversation-settings: record # Configuration for post-conversation processing. When enabled, the assistant receives one additional LLM turn after the conversation ends, allowing it to execute tool calls such as logging to a CRM or sending a summary. The assistant can execute multiple parallel or sequential tools during this phase. Telephony-control tools (e.g. hangup, transfer) are unavailable post-conversation. Beta feature. — shape: {enabled?: bool}
   --conversation-flow: record # Conversation flow as supplied by API clients (create / update).  A directed graph of `FlowNodeReq` connected by `FlowEdge`s. Validation enforces unique node/edge IDs, that `start_node_id` references a real node, and that every edge's endpoints reference real nodes. (e.g. {edges: [{condition: {prompt: The caller is asking about a bill or charge., type: llm}, id: e_intake_to_billing, start_node_id: n_intake, target: {node_id: n_billing, type: node}}, {condition: {prompt: The caller has explicitly asked for a human., type: llm}, id: e_intake_to_escalation_assistant, start_node_id: n_intake, target: {assistant_id: assistant-human-handoff, position: {x: 600, y: 80}, type: assistant, voice_mode: distinct}}], nodes: [{type: prompt, id: n_intake, instructions: Greet the caller and ask what they're calling about., name: Intake, position: {x: 120, y: 80}, shared_tool_ids: [tool-faq-kb]}, {type: prompt, id: n_billing, instructions: Focus on billing questions. Look up the caller's latest invoice with the billing tool before answering., instructions_mode: append, model: moonshotai/Kimi-K2.6, name: Billing, position: {x: 420, y: 80}, shared_tool_ids: [tool-billing-lookup], tools_mode: append}], start_node_id: n_intake}) — shape: {edges?: list, nodes: list, start_node_id: string}
-  --promote-to-main: string@bool-completer # Indicates whether the assistant should be promoted to the main version. Defaults to true. (default: true)
+  --promote-to-main: oneof<nothing, bool> # Indicates whether the assistant should be promoted to the main version. Defaults to true. (default: true)
 ]: any -> record<id: string, name: string, created_at: string, version_id: string, version_created_at: string, description: string, model: string, instructions: string, tools: list<any>, mcp_servers: table<id: string, allowed_tools: list>, greeting: string, llm_api_key_ref: string, external_llm: record<model: string, base_url: string, llm_api_key_ref: string, authentication_method: string, certificate_ref: string, token_retrieval_url: string, forward_metadata: bool>, fallback_config: record<model: string, llm_api_key_ref: string, external_llm: record<model: string, base_url: string, llm_api_key_ref: string, authentication_method: string, certificate_ref: string, token_retrieval_url: string, forward_metadata: bool>>, voice_settings: record<voice: string, voice_speed: float, api_key_ref: string, temperature: float, similarity_boost: float, use_speaker_boost: bool, style: float, speed: float, language_boost: string, expressive_mode: bool, background_audio: any>, transcription: record<model: string, language: string, api_key_ref: string, region: string, settings: record<smart_format: bool, numerals: bool, eot_threshold: float, eot_timeout_ms: int, eager_eot_threshold: float, keyterm: string, end_of_turn_confidence_threshold: float, min_turn_silence: int, max_turn_silence: int, interim_results: bool, enable_endpoint_detection: bool, max_endpoint_delay_ms: int>>, telephony_settings: record<default_texml_app_id: string, supports_unauthenticated_web_calls: bool, noise_suppression: string, noise_suppression_config: record<attenuation_limit: int, mode: string>, time_limit_secs: int, user_idle_timeout_secs: int, user_idle_reply_secs: int, voicemail_detection: record<on_voicemail_detected: record>, recording_settings: record<enabled: bool, channels: string, format: string, stop_on_conversation_end: bool>>, messaging_settings: record<default_messaging_profile_id: string, delivery_status_webhook_url: string, conversation_inactivity_minutes: int>, enabled_features: list<string>, insight_settings: record<insight_group_id: string>, privacy_settings: record<data_retention: bool>, dynamic_variables_webhook_url: string, dynamic_variables_webhook_timeout_ms: int, dynamic_variables: record, import_metadata: record<import_provider: string, import_id: string>, widget_settings: record<theme: string, audio_visualizer_config: record<color: string, preset: string>, start_call_text: string, default_state: string, position: string, view_history_url: string, report_issue_url: string, give_feedback_url: string, agent_thinking_text: string, speak_to_interrupt_text: string, logo_icon_url: string>, interruption_settings: record<enable: bool, disable_greeting_interruption: bool, start_speaking_plan: record<wait_seconds: float, transcription_endpointing_plan: record>>, integrations: table<integration_id: string, allowed_list: list>, observability_settings: record<status: string, secret_key_ref: string, public_key_ref: string, host: string, prompt_name: string, prompt_version: int, prompt_label: string, prompt_sync: string>, version_name: string, related_mission_ids: list<string>, tags: list<string>, post_conversation_settings: record<enabled: bool>, conversation_flow: record<edges: list<record>, nodes: list<any>, start_node_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2651,7 +2650,7 @@ export def "ai-assistants-chat-sms post" [
   --body-to: string
   --text: string
   --conversation-metadata: record
-  --should-create-conversation: string@bool-completer
+  --should-create-conversation: oneof<nothing, bool>
 ]: any -> record<conversation_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2999,7 +2998,7 @@ export def "ai-assistants-versions GetAssistantVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-mcp-servers: string@bool-completer # Whether to include MCP servers in the response.
+  --include-mcp-servers: oneof<nothing, bool> # Whether to include MCP servers in the response.
 ]: nothing -> record<id: string, name: string, created_at: string, version_id: string, version_created_at: string, description: string, model: string, instructions: string, tools: list<any>, mcp_servers: table<id: string, allowed_tools: list>, greeting: string, llm_api_key_ref: string, external_llm: record<model: string, base_url: string, llm_api_key_ref: string, authentication_method: string, certificate_ref: string, token_retrieval_url: string, forward_metadata: bool>, fallback_config: record<model: string, llm_api_key_ref: string, external_llm: record<model: string, base_url: string, llm_api_key_ref: string, authentication_method: string, certificate_ref: string, token_retrieval_url: string, forward_metadata: bool>>, voice_settings: record<voice: string, voice_speed: float, api_key_ref: string, temperature: float, similarity_boost: float, use_speaker_boost: bool, style: float, speed: float, language_boost: string, expressive_mode: bool, background_audio: any>, transcription: record<model: string, language: string, api_key_ref: string, region: string, settings: record<smart_format: bool, numerals: bool, eot_threshold: float, eot_timeout_ms: int, eager_eot_threshold: float, keyterm: string, end_of_turn_confidence_threshold: float, min_turn_silence: int, max_turn_silence: int, interim_results: bool, enable_endpoint_detection: bool, max_endpoint_delay_ms: int>>, telephony_settings: record<default_texml_app_id: string, supports_unauthenticated_web_calls: bool, noise_suppression: string, noise_suppression_config: record<attenuation_limit: int, mode: string>, time_limit_secs: int, user_idle_timeout_secs: int, user_idle_reply_secs: int, voicemail_detection: record<on_voicemail_detected: record>, recording_settings: record<enabled: bool, channels: string, format: string, stop_on_conversation_end: bool>>, messaging_settings: record<default_messaging_profile_id: string, delivery_status_webhook_url: string, conversation_inactivity_minutes: int>, enabled_features: list<string>, insight_settings: record<insight_group_id: string>, privacy_settings: record<data_retention: bool>, dynamic_variables_webhook_url: string, dynamic_variables_webhook_timeout_ms: int, dynamic_variables: record, import_metadata: record<import_provider: string, import_id: string>, widget_settings: record<theme: string, audio_visualizer_config: record<color: string, preset: string>, start_call_text: string, default_state: string, position: string, view_history_url: string, report_issue_url: string, give_feedback_url: string, agent_thinking_text: string, speak_to_interrupt_text: string, logo_icon_url: string>, interruption_settings: record<enable: bool, disable_greeting_interruption: bool, start_speaking_plan: record<wait_seconds: float, transcription_endpointing_plan: record>>, integrations: table<integration_id: string, allowed_list: list>, observability_settings: record<status: string, secret_key_ref: string, public_key_ref: string, host: string, prompt_name: string, prompt_version: int, prompt_label: string, prompt_sync: string>, version_name: string, related_mission_ids: list<string>, tags: list<string>, post_conversation_settings: record<enabled: bool>, conversation_flow: record<edges: list<record>, nodes: list<any>, start_node_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3153,7 +3152,7 @@ export def "ai-chat-completions post" [
   messages: list # A list of the previous chat messages for context. (e.g. [{role: system, content: You are a friendly chatbot.}, {role: user, content: Hello, world!}]) — item shape: {content: any, role: "system"|"user"|"assistant"|"tool"}
   --model: string # The language model to chat with. (default: meta-llama/Meta-Llama-3.1-8B-Instruct)
   --api-key-ref: string # If you are using an external inference provider like xAI or OpenAI, this field allows you to pass along a reference to your API key. After creating an [integration secret](https://developers.telnyx.com/api-reference/integration-secrets/create-a-secret) for you API key, pass the secret's `identifier` in this field.
-  --stream: string@bool-completer # Whether or not to stream data-only server-sent events as they become available. (default: false)
+  --stream: oneof<nothing, bool> # Whether or not to stream data-only server-sent events as they become available. (default: false)
   --temperature: float # Adjusts the "creativity" of the model. Lower values make the model more deterministic and repetitive, while higher values make the model more random and creative. (default: 0.1)
   --max-tokens: int # Maximum number of completion tokens the model should generate.
   --tools: list # The `function` tool type follows the same schema as the [OpenAI Chat Completions API](https://platform.openai.com/docs/api-reference/chat). The `retrieval` tool type is unique to Telnyx. You may pass a list of [embedded storage buckets](https://developers.telnyx.com/api-reference/embeddings/embed-documents) for retrieval-augmented generation.
@@ -3164,18 +3163,18 @@ export def "ai-chat-completions post" [
   --guided-choice: list # If specified, the output will be exactly one of the choices.
   --min-p: float # This is an alternative to `top_p` that [many prefer](https://github.com/huggingface/transformers/issues/27670). Must be in [0, 1].
   --n: float # This will return multiple choices for you instead of a single chat completion.
-  --use-beam-search: string@bool-completer # Setting this to `true` will allow the model to [explore more completion options](https://huggingface.co/blog/how-to-generate#beam-search). This is not supported by OpenAI. (default: false)
+  --use-beam-search: oneof<nothing, bool> # Setting this to `true` will allow the model to [explore more completion options](https://huggingface.co/blog/how-to-generate#beam-search). This is not supported by OpenAI. (default: false)
   --best-of: int # This is used with `use_beam_search` to determine how many candidate beams to explore.
   --length-penalty: float # This is used with `use_beam_search` to prefer shorter or longer completions. (default: 1)
-  --early-stopping: string@bool-completer # This is used with `use_beam_search`. If `true`, generation stops as soon as there are `best_of` complete candidates; if `false`, a heuristic is applied and the generation stops when is it very unlikely to find better candidates. (default: false)
-  --logprobs: string@bool-completer # Whether to return log probabilities of the output tokens or not. If true, returns the log probabilities of each output token returned in the `content` of `message`. (default: false)
+  --early-stopping: oneof<nothing, bool> # This is used with `use_beam_search`. If `true`, generation stops as soon as there are `best_of` complete candidates; if `false`, a heuristic is applied and the generation stops when is it very unlikely to find better candidates. (default: false)
+  --logprobs: oneof<nothing, bool> # Whether to return log probabilities of the output tokens or not. If true, returns the log probabilities of each output token returned in the `content` of `message`. (default: false)
   --top-logprobs: int # This is used with `logprobs`. An integer between 0 and 20 specifying the number of most likely tokens to return at each token position, each with an associated log probability.
   --frequency-penalty: float # Higher values will penalize the model from repeating the same output tokens. (default: 0)
   --presence-penalty: float # Higher values will penalize the model from repeating the same output tokens. (default: 0)
   --top-p: float # An alternative or complement to `temperature`. This adjusts how many of the top possibilities to consider.
   --stop: any # Up to 4 sequences where the API will stop generating further tokens. The returned text will not contain the stop sequence.
   --seed: int # If specified, the system will make a best effort to sample deterministically, such that repeated requests with the same `seed` and parameters should return the same result.
-  --enable-thinking: string@bool-completer # Whether to enable the thinking/reasoning phase for models that support it (e.g., QwQ, Qwen3). When set to false, the model will skip the internal reasoning step and respond directly, which can reduce latency. Defaults to true. (default: true)
+  --enable-thinking: oneof<nothing, bool> # Whether to enable the thinking/reasoning phase for models that support it (e.g., QwQ, Qwen3). When set to false, the model will skip the internal reasoning step and respond directly, which can reduce latency. Defaults to true. (default: true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3276,7 +3275,7 @@ export def "ai-clusters get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --top-n-nodes: int # The number of nodes in the cluster to return in the response. Nodes will be sorted by their centrality within the cluster. (default: 0)
-  --show-subclusters: string@bool-completer # Whether or not to include subclusters and their nodes in the response. (default: false)
+  --show-subclusters: oneof<nothing, bool> # Whether or not to include subclusters and their nodes in the response. (default: false)
 ]: nothing -> record<data: record<status: string, bucket: string, clusters: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5385,7 +5384,7 @@ export def "ai-openai-chat-completions completion" [
   messages: list # A list of the previous chat messages for context. (e.g. [{role: system, content: You are a friendly chatbot.}, {role: user, content: Hello, world!}]) — item shape: {content: any, role: "system"|"user"|"assistant"|"tool"}
   --model: string # The language model to chat with. (default: meta-llama/Meta-Llama-3.1-8B-Instruct)
   --api-key-ref: string # If you are using an external inference provider like xAI or OpenAI, this field allows you to pass along a reference to your API key. After creating an [integration secret](https://developers.telnyx.com/api-reference/integration-secrets/create-a-secret) for you API key, pass the secret's `identifier` in this field.
-  --stream: string@bool-completer # Whether or not to stream data-only server-sent events as they become available. (default: false)
+  --stream: oneof<nothing, bool> # Whether or not to stream data-only server-sent events as they become available. (default: false)
   --temperature: float # Adjusts the "creativity" of the model. Lower values make the model more deterministic and repetitive, while higher values make the model more random and creative. (default: 0.1)
   --max-tokens: int # Maximum number of completion tokens the model should generate.
   --tools: list # The `function` tool type follows the same schema as the [OpenAI Chat Completions API](https://platform.openai.com/docs/api-reference/chat). The `retrieval` tool type is unique to Telnyx. You may pass a list of [embedded storage buckets](https://developers.telnyx.com/api-reference/embeddings/embed-documents) for retrieval-augmented generation.
@@ -5396,18 +5395,18 @@ export def "ai-openai-chat-completions completion" [
   --guided-choice: list # If specified, the output will be exactly one of the choices.
   --min-p: float # This is an alternative to `top_p` that [many prefer](https://github.com/huggingface/transformers/issues/27670). Must be in [0, 1].
   --n: float # This will return multiple choices for you instead of a single chat completion.
-  --use-beam-search: string@bool-completer # Setting this to `true` will allow the model to [explore more completion options](https://huggingface.co/blog/how-to-generate#beam-search). This is not supported by OpenAI. (default: false)
+  --use-beam-search: oneof<nothing, bool> # Setting this to `true` will allow the model to [explore more completion options](https://huggingface.co/blog/how-to-generate#beam-search). This is not supported by OpenAI. (default: false)
   --best-of: int # This is used with `use_beam_search` to determine how many candidate beams to explore.
   --length-penalty: float # This is used with `use_beam_search` to prefer shorter or longer completions. (default: 1)
-  --early-stopping: string@bool-completer # This is used with `use_beam_search`. If `true`, generation stops as soon as there are `best_of` complete candidates; if `false`, a heuristic is applied and the generation stops when is it very unlikely to find better candidates. (default: false)
-  --logprobs: string@bool-completer # Whether to return log probabilities of the output tokens or not. If true, returns the log probabilities of each output token returned in the `content` of `message`. (default: false)
+  --early-stopping: oneof<nothing, bool> # This is used with `use_beam_search`. If `true`, generation stops as soon as there are `best_of` complete candidates; if `false`, a heuristic is applied and the generation stops when is it very unlikely to find better candidates. (default: false)
+  --logprobs: oneof<nothing, bool> # Whether to return log probabilities of the output tokens or not. If true, returns the log probabilities of each output token returned in the `content` of `message`. (default: false)
   --top-logprobs: int # This is used with `logprobs`. An integer between 0 and 20 specifying the number of most likely tokens to return at each token position, each with an associated log probability.
   --frequency-penalty: float # Higher values will penalize the model from repeating the same output tokens. (default: 0)
   --presence-penalty: float # Higher values will penalize the model from repeating the same output tokens. (default: 0)
   --top-p: float # An alternative or complement to `temperature`. This adjusts how many of the top possibilities to consider.
   --stop: any # Up to 4 sequences where the API will stop generating further tokens. The returned text will not contain the stop sequence.
   --seed: int # If specified, the system will make a best effort to sample deterministically, such that repeated requests with the same `seed` and parameters should return the same result.
-  --enable-thinking: string@bool-completer # Whether to enable the thinking/reasoning phase for models that support it (e.g., QwQ, Qwen3). When set to false, the model will skip the internal reasoning step and respond directly, which can reduce latency. Defaults to true. (default: true)
+  --enable-thinking: oneof<nothing, bool> # Whether to enable the thinking/reasoning phase for models that support it (e.g., QwQ, Qwen3). When set to false, the model will skip the internal reasoning step and respond directly, which can reduce latency. Defaults to true. (default: true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5507,7 +5506,7 @@ export def "ai-openai-responses post" [
   --input: any # The input items for this turn, using the OpenAI Responses API input format.
   --conversation: string # Optional Telnyx Conversation ID from `POST /ai/conversations`. When provided, Telnyx stores this turn on that conversation and uses the conversation's prior messages as context. Reuse the same ID for subsequent turns and tool-result followups. Omit it for a non-persisted, stateless response. (format: uuid)
   --instructions: string # Optional system/developer instructions for the model. When used with a persisted `conversation`, send these on the first request that creates the thread; subsequent turns can rely on the stored history.
-  --stream: string@bool-completer # Set to `true` to stream Server-Sent Events, matching OpenAI's Responses streaming format.
+  --stream: oneof<nothing, bool> # Set to `true` to stream Server-Sent Events, matching OpenAI's Responses streaming format.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5868,7 +5867,7 @@ export def "authentication-providers CreateAuthenticationProvider" [
   --allow-errors(-e) # Return full response without error handling
   name: string # The name associated with the authentication provider. (e.g. Okta)
   short_name: string # The short name associated with the authentication provider. This must be unique and URL-friendly, as it's going to be part of the login URL. (e.g. myorg)
-  --active: string@bool-completer # The active status of the authentication provider (default: true, e.g. true)
+  --active: oneof<nothing, bool> # The active status of the authentication provider (default: true, e.g. true)
   settings: record # The settings associated with the authentication provider. — shape: {idp_entity_id: string, idp_sso_target_url: string, idp_cert_fingerprint: string, idp_cert_fingerprint_algorithm?: "sha1"|"sha256"|"sha384"|"sha512"}
   --settings-url: string # The URL for the identity provider metadata file to populate the settings automatically. If the settings attribute is provided, that will be used instead. (format: uri, e.g. https://myorg.myidp.com/saml/metadata)
 ]: any -> record<data: record<id: string, record_type: string, name: string, short_name: string, organization_id: string, active: bool, activated_at: string, settings: record<assertion_consumer_service_url: string, service_provider_entity_id: string, service_provider_login_url: string, idp_entity_id: string, idp_sso_target_url: string, idp_cert_fingerprint: string, idp_cert_fingerprint_algorithm: string, name_identifier_format: string, idp_slo_target_url: string, idp_certificate: string, idp_attribute_names: record, provision_groups: bool>, created_at: string, updated_at: string>> {
@@ -5943,7 +5942,7 @@ export def "authentication-providers UpdateAuthenticationProvider" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name associated with the authentication provider. (e.g. Okta)
   --short-name: string # The short name associated with the authentication provider. This must be unique and URL-friendly, as it's going to be part of the login URL. (e.g. myorg)
-  --active: string@bool-completer # The active status of the authentication provider (default: true, e.g. true)
+  --active: oneof<nothing, bool> # The active status of the authentication provider (default: true, e.g. true)
   --settings: record # The settings associated with the authentication provider. — shape: {idp_entity_id: string, idp_sso_target_url: string, idp_cert_fingerprint: string, idp_cert_fingerprint_algorithm?: "sha1"|"sha256"|"sha384"|"sha512"}
   --settings-url: string # The URL for the identity provider metadata file to populate the settings automatically. If the settings attribute is provided, that will be used instead. (format: uri, e.g. https://myorg.myidp.com/saml/metadata)
 ]: any -> record<data: record<id: string, record_type: string, name: string, short_name: string, organization_id: string, active: bool, activated_at: string, settings: record<assertion_consumer_service_url: string, service_provider_entity_id: string, service_provider_login_url: string, idp_entity_id: string, idp_sso_target_url: string, idp_cert_fingerprint: string, idp_cert_fingerprint_algorithm: string, name_identifier_format: string, idp_slo_target_url: string, idp_certificate: string, idp_attribute_names: record, provision_groups: bool>, created_at: string, updated_at: string>> {
@@ -6441,18 +6440,18 @@ export def "call-control-applications CreateCallControlApplication" [
   --allow-errors(-e) # Return full response without error handling
   application_name: string # A user-assigned name to help manage the application. (e.g. call-router)
   webhook_event_url: string # The URL where webhooks related to this connection will be sent. Must include a scheme, such as 'https'. (format: url, e.g. https://example.com)
-  --active: string@bool-completer # Specifies whether the connection can be used. (default: true)
+  --active: oneof<nothing, bool> # Specifies whether the connection can be used. (default: true)
   --anchorsite-override: string@anchorsite-override-completer # <code>Latency</code> directs Telnyx to route media through the site with the lowest round-trip time to the user's connection. Telnyx calculates this time using ICMP ping messages. This can be disabled by specifying a site to handle all media.  (default: Latency, e.g. Amsterdam, Netherlands)
   --dtmf-type: string@dtmf-type-completer # Sets the type of DTMF digits sent from Telnyx to this Connection. Note that DTMF digits sent to Telnyx will be accepted in all formats. (default: RFC 2833, e.g. Inband)
-  --first-command-timeout: string@bool-completer # Specifies whether calls to phone numbers associated with this connection should hangup after timing out. (default: false, e.g. true)
+  --first-command-timeout: oneof<nothing, bool> # Specifies whether calls to phone numbers associated with this connection should hangup after timing out. (default: false, e.g. true)
   --first-command-timeout-secs: int # Specifies how many seconds to wait before timing out a dial command. (default: 30, e.g. 10)
   --inbound: record # shape: {channel_limit?: int, shaken_stir_enabled?: bool, sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone"}
   --outbound: record # shape: {channel_limit?: int, outbound_voice_profile_id?: string}
   --webhook-api-version: string@webhook-api-version-completer # Determines which webhook format will be used, Telnyx API v1 or v2. (default: 1, e.g. 1)
   --webhook-event-failover-url: string # The failover URL where webhooks related to this connection will be sent if sending to the primary URL fails. Must include a scheme, such as 'https'. (nullable, format: url, default: , e.g. https://failover.example.com)
   --webhook-timeout-secs: int # Specifies how many seconds to wait before timing out a webhook. (nullable, e.g. 25)
-  --call-cost-in-webhooks: string@bool-completer # Specifies if call cost webhooks should be sent for this Call Control Application. (default: false)
-  --redact-dtmf-debug-logging: string@bool-completer # When enabled, DTMF digits entered by users will be redacted in debug logs to protect PII data entered through IVR interactions. (default: false, e.g. true)
+  --call-cost-in-webhooks: oneof<nothing, bool> # Specifies if call cost webhooks should be sent for this Call Control Application. (default: false)
+  --redact-dtmf-debug-logging: oneof<nothing, bool> # When enabled, DTMF digits entered by users will be redacted in debug logs to protect PII data entered through IVR interactions. (default: false, e.g. true)
 ]: any -> record<data: record<active: bool, anchorsite_override: string, application_name: string, created_at: string, dtmf_type: string, first_command_timeout: bool, first_command_timeout_secs: int, tags: list<string>, id: string, inbound: record<channel_limit: int, shaken_stir_enabled: bool, sip_subdomain: string, sip_subdomain_receive_settings: string>, outbound: record<channel_limit: int, outbound_voice_profile_id: string>, record_type: string, updated_at: string, webhook_api_version: string, webhook_event_failover_url: string, webhook_event_url: string, webhook_timeout_secs: int, call_cost_in_webhooks: bool, redact_dtmf_debug_logging: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6526,11 +6525,11 @@ export def "call-control-applications UpdateCallControlApplication" [
   --allow-errors(-e) # Return full response without error handling
   application_name: string # A user-assigned name to help manage the application. (e.g. call-router)
   webhook_event_url: string # The URL where webhooks related to this connection will be sent. Must include a scheme, such as 'https'. (format: url, e.g. https://example.com)
-  --call-cost-in-webhooks: string@bool-completer # Specifies if call cost webhooks should be sent for this Call Control Application. (default: false)
-  --active: string@bool-completer # Specifies whether the connection can be used. (default: true)
+  --call-cost-in-webhooks: oneof<nothing, bool> # Specifies if call cost webhooks should be sent for this Call Control Application. (default: false)
+  --active: oneof<nothing, bool> # Specifies whether the connection can be used. (default: true)
   --anchorsite-override: string@anchorsite-override-completer # <code>Latency</code> directs Telnyx to route media through the site with the lowest round-trip time to the user's connection. Telnyx calculates this time using ICMP ping messages. This can be disabled by specifying a site to handle all media.  (default: Latency, e.g. Amsterdam, Netherlands)
   --dtmf-type: string@dtmf-type-completer # Sets the type of DTMF digits sent from Telnyx to this Connection. Note that DTMF digits sent to Telnyx will be accepted in all formats. (default: RFC 2833, e.g. Inband)
-  --first-command-timeout: string@bool-completer # Specifies whether calls to phone numbers associated with this connection should hangup after timing out. (default: false, e.g. true)
+  --first-command-timeout: oneof<nothing, bool> # Specifies whether calls to phone numbers associated with this connection should hangup after timing out. (default: false, e.g. true)
   --first-command-timeout-secs: int # Specifies how many seconds to wait before timing out a dial command. (default: 30, e.g. 10)
   --tags: list # Tags assigned to the Call Control Application. (e.g. [tag1, tag2])
   --inbound: record # shape: {channel_limit?: int, shaken_stir_enabled?: bool, sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone"}
@@ -6538,7 +6537,7 @@ export def "call-control-applications UpdateCallControlApplication" [
   --webhook-api-version: string@webhook-api-version-completer # Determines which webhook format will be used, Telnyx API v1 or v2. (default: 1, e.g. 1)
   --webhook-event-failover-url: string # The failover URL where webhooks related to this connection will be sent if sending to the primary URL fails. Must include a scheme, such as 'https'. (nullable, format: url, default: , e.g. https://failover.example.com)
   --webhook-timeout-secs: int # Specifies how many seconds to wait before timing out a webhook. (nullable, e.g. 25)
-  --redact-dtmf-debug-logging: string@bool-completer # When enabled, DTMF digits entered by users will be redacted in debug logs to protect PII data entered through IVR interactions. (default: false, e.g. true)
+  --redact-dtmf-debug-logging: oneof<nothing, bool> # When enabled, DTMF digits entered by users will be redacted in debug logs to protect PII data entered through IVR interactions. (default: false, e.g. true)
 ]: any -> record<data: record<active: bool, anchorsite_override: string, application_name: string, created_at: string, dtmf_type: string, first_command_timeout: bool, first_command_timeout_secs: int, tags: list<string>, id: string, inbound: record<channel_limit: int, shaken_stir_enabled: bool, sip_subdomain: string, sip_subdomain_receive_settings: string>, outbound: record<channel_limit: int, outbound_voice_profile_id: string>, record_type: string, updated_at: string, webhook_api_version: string, webhook_event_failover_url: string, webhook_event_url: string, webhook_timeout_secs: int, call_cost_in_webhooks: bool, redact_dtmf_debug_logging: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6667,9 +6666,9 @@ export def "calls DialCall" [
   --client-state: string # Use this field to add state to every subsequent webhook. It must be a valid Base-64 encoded string. (e.g. aGF2ZSBhIG5pY2UgZGF5ID1d)
   --command-id: string # Use this field to avoid duplicate commands. Telnyx will ignore others Dial commands with the same `command_id`. (e.g. 891510ac-f3e4-11e8-af5b-de00688a4901)
   --link-to: string # Use another call's control id for sharing the same call session id (e.g. ilditnZK_eVysupV21KzmzN_sM29ygfauQojpm4BgFtfX5hXAcjotg==)
-  --bridge-intent: string@bool-completer # Indicates the intent to bridge this call with the call specified in link_to. When bridge_intent is true, link_to becomes required and the from number will be overwritten by the from number from the linked call. (default: false, e.g. true)
-  --bridge-on-answer: string@bool-completer # Whether to automatically bridge answered call to the call specified in link_to. When bridge_on_answer is true, link_to becomes required. (default: false, e.g. true)
-  --prevent-double-bridge: string@bool-completer # Prevents bridging and hangs up the call if the target is already bridged. Disabled by default. (default: false, e.g. true)
+  --bridge-intent: oneof<nothing, bool> # Indicates the intent to bridge this call with the call specified in link_to. When bridge_intent is true, link_to becomes required and the from number will be overwritten by the from number from the linked call. (default: false, e.g. true)
+  --bridge-on-answer: oneof<nothing, bool> # Whether to automatically bridge answered call to the call specified in link_to. When bridge_on_answer is true, link_to becomes required. (default: false, e.g. true)
+  --prevent-double-bridge: oneof<nothing, bool> # Prevents bridging and hangs up the call if the target is already bridged. Disabled by default. (default: false, e.g. true)
   --park-after-unbridge: string # If supplied with the value `self`, the current leg will be parked after unbridge. If not set, the default behavior is to hang up the leg. When park_after_unbridge is set, link_to becomes required. (e.g. self)
   --media-encryption: string@media-encryption-completer # Defines whether media should be encrypted on the call. For SIP URI destinations, media encryption can also be requested per endpoint with the `secure` URI parameter: `;secure=true` or `;secure=srtp` enables SRTP, and `;secure=dtls` enables DTLS. This parameter, when set to `SRTP` or `DTLS`, takes precedence over the per-endpoint `secure` value. (default: disabled)
   --sip-auth-username: string # SIP Authentication username used for SIP challenges.
@@ -6684,8 +6683,8 @@ export def "calls DialCall" [
   --stream-bidirectional-codec: string@stream-bidirectional-codec-completer # Indicates codec for bidirectional streaming RTP payloads. Used only with stream_bidirectional_mode=rtp. Case sensitive. (default: PCMU, e.g. G722)
   --stream-bidirectional-target-legs: string@stream-bidirectional-target-legs-completer # Specifies which call legs should receive the bidirectional stream audio. (default: opposite, e.g. both)
   --stream-bidirectional-sampling-rate: int@stream-bidirectional-sampling-rate-completer # Audio sampling rate. (default: 8000, e.g. 16000)
-  --stream-establish-before-call-originate: string@bool-completer # Establish websocket connection before dialing the destination. This is useful for cases where the websocket connection takes a long time to establish. (default: false, e.g. true)
-  --send-silence-when-idle: string@bool-completer # Generate silence RTP packets when no transmission available. (default: false, e.g. true)
+  --stream-establish-before-call-originate: oneof<nothing, bool> # Establish websocket connection before dialing the destination. This is useful for cases where the websocket connection takes a long time to establish. (default: false, e.g. true)
+  --send-silence-when-idle: oneof<nothing, bool> # Generate silence RTP packets when no transmission available. (default: false, e.g. true)
   --webhook-url: string # Use this field to override the URL for which Telnyx will send subsequent webhooks to for this call. (e.g. https://www.example.com/server-b/)
   --webhook-url-method: string@webhook-url-method-completer # HTTP request type used for `webhook_url`. (default: POST, e.g. GET)
   --webhook-urls: record # A map of event types to webhook URLs. When an event of the specified type occurs, the webhook URL associated with that event type will be called instead of the default webhook URL. Events not mapped here will use the default webhook URL. (e.g. {call.hangup: https://www.example.com/webhooks/hangup, call.bridge: https://www.example.com/webhooks/bridge})
@@ -6701,9 +6700,9 @@ export def "calls DialCall" [
   --record-custom-file-name: string # The custom recording file name to be used instead of the default `call_leg_id`. Telnyx will still add a Unix timestamp suffix. (e.g. my_recording_file_name)
   --supervise-call-control-id: string # The call leg which will be supervised by the new call. (e.g. v3:MdI91X4lWFEs7IgbBEOT9M4AigoY08M0WWZFISt1Yw2axZ_IiE4pqg)
   --supervisor-role: string@supervisor-role-completer # The role of the supervisor call. 'barge' means that supervisor call hears and is being heard by both ends of the call (caller & callee). 'whisper' means that only supervised_call_control_id hears supervisor but supervisor can hear everything. 'monitor' means that nobody can hear supervisor call, but supervisor can hear everything on the call. (default: barge)
-  --enable-dialogflow: string@bool-completer # Enables Dialogflow for the current call. The default value is false. (default: false, e.g. true)
+  --enable-dialogflow: oneof<nothing, bool> # Enables Dialogflow for the current call. The default value is false. (default: false, e.g. true)
   --dialogflow-config: record # shape: {analyze_sentiment?: bool, partial_automated_agent_reply?: bool}
-  --transcription: string@bool-completer # Enable transcription upon call answer. The default value is false. (default: false, e.g. true)
+  --transcription: oneof<nothing, bool> # Enable transcription upon call answer. The default value is false. (default: false, e.g. true)
   --transcription-config: record # e.g. {transcription_engine: Google, transcription_engine_config: {transcription_engine: Google, language: en}, client_state: aGF2ZSBhIG5pY2UgZGF5ID1d, command_id: 891510ac-f3e4-11e8-af5b-de00688a4901} — shape: {transcription_engine?: "Google"|"Telnyx"|"Deepgram"|"Azure"|"xAI"|"AssemblyAI"|"Speechmatics"|"Soniox"|"A"|"B", transcription_engine_config?: any, client_state?: string, transcription_tracks?: string, command_id?: string}
   --sip-region: string@sip-region-completer # Defines the SIP region to be used for the call. (default: US, e.g. Canada)
   --stream-auth-token: string # An authentication token to be sent as part of the WebSocket connection when using streaming. Maximum length is 4000 characters. (e.g. your-auth-token)
@@ -6823,7 +6822,7 @@ export def "calls-actions-ai-assistant-start CallStartAIAssistant" [
   --interruption-settings: record # Settings for handling user interruptions during assistant speech — shape: {enable?: bool}
   --transcription: record # The settings associated with speech to text for the voice assistant. This is only relevant if the assistant uses a text-to-text language model. Any assistant using a model with native audio support (e.g. `fixie-ai/ultravox-v0_4`) will ignore this field. — shape: {model?: "deepgram/flux"|"flux"|"deepgram/nova-3"|"deepgram/nova-2"|"speechmatics/standard"|"speechmatics/enhanced"|"assemblyai/universal-streaming"|"xai/grok-stt"|"soniox/stt-rt-v4"|"azure/fast"|"azure/realtime"|"google/latest_long"|"distil-whisper/distil-large-v2"|"openai/whisper-large-v3-turbo", language?: string}
   --message-history: list # A list of messages to seed the conversation history before the assistant starts. Follows the same message format as the `ai_assistant_add_messages` command. (default: [])
-  --send-message-history-updates: string@bool-completer # When `true`, a webhook is sent each time the conversation message history is updated. (default: false)
+  --send-message-history-updates: oneof<nothing, bool> # When `true`, a webhook is sent each time the conversation message history is updated. (default: false)
   --participants: list # A list of participants to add to the conversation when it starts. (default: []) — item shape: {id: string, role: "user", name?: string, on_hangup?: "continue_conversation"|"end_conversation"}
   --client-state: string # Use this field to add state to every subsequent webhook. It must be a valid Base-64 encoded string. (e.g. aGF2ZSBhIG5pY2UgZGF5ID1d)
   --command-id: string # Use this field to avoid duplicate commands. Telnyx will ignore any command with the same `command_id` for the same `call_control_id`. (e.g. 891510ac-f3e4-11e8-af5b-de00688a4901)
@@ -6901,10 +6900,10 @@ export def "calls-actions-answer AnswerCall" [
   --stream-bidirectional-mode: string@stream-bidirectional-mode-completer # Configures method of bidirectional streaming (mp3, rtp). (default: mp3, e.g. rtp)
   --stream-bidirectional-codec: string@stream-bidirectional-codec-completer # Indicates codec for bidirectional streaming RTP payloads. Used only with stream_bidirectional_mode=rtp. Case sensitive. (default: PCMU, e.g. G722)
   --stream-bidirectional-target-legs: string@stream-bidirectional-target-legs-completer # Specifies which call legs should receive the bidirectional stream audio. (default: opposite, e.g. both)
-  --send-silence-when-idle: string@bool-completer # Generate silence RTP packets when no transmission available. (default: false, e.g. true)
+  --send-silence-when-idle: oneof<nothing, bool> # Generate silence RTP packets when no transmission available. (default: false, e.g. true)
   --webhook-url: string # Use this field to override the URL for which Telnyx will send subsequent webhooks to for this call. (e.g. https://www.example.com/server-b/)
   --webhook-url-method: string@webhook-url-method-completer # HTTP request type used for `webhook_url`. (default: POST, e.g. GET)
-  --transcription: string@bool-completer # Enable transcription upon call answer. The default value is false. (default: false, e.g. true)
+  --transcription: oneof<nothing, bool> # Enable transcription upon call answer. The default value is false. (default: false, e.g. true)
   --transcription-config: record # e.g. {transcription_engine: Google, transcription_engine_config: {transcription_engine: Google, language: en}, client_state: aGF2ZSBhIG5pY2UgZGF5ID1d, command_id: 891510ac-f3e4-11e8-af5b-de00688a4901} — shape: {transcription_engine?: "Google"|"Telnyx"|"Deepgram"|"Azure"|"xAI"|"AssemblyAI"|"Speechmatics"|"Soniox"|"A"|"B", transcription_engine_config?: any, client_state?: string, transcription_tracks?: string, command_id?: string}
   --record: string@record-completer # Start recording automatically after an event. Disabled by default. (e.g. record-from-answer)
   --record-channels: string@record-channels-completer # Defines which channel should be recorded ('single' or 'dual') when `record` is specified. (default: dual, e.g. single)
@@ -6949,9 +6948,9 @@ export def "calls-actions-bridge BridgeCall" [
   --queue: string # The name of the queue you want to bridge with, can't be used together with call_control_id parameter or video_room_id parameter. Bridging with a queue means bridging with the first call in the queue. The call will always be removed from the queue regardless of whether bridging succeeds. Returns an error when the queue is empty. (e.g. support)
   --video-room-id: string # The ID of the video room you want to bridge with, can't be used together with call_control_id parameter or queue parameter. (format: uuid, e.g. 0ccc7b54-4df3-4bca-a65a-3da1ecc777f0)
   --video-room-context: string # The additional parameter that will be passed to the video conference. It is a text field and the user can decide how to use it. For example, you can set the participant name or pass JSON text. It can be used only with video_room_id parameter. (e.g. Alice)
-  --prevent-double-bridge: string@bool-completer # When set to `true`, it prevents bridging if the target call is already bridged to another call. Disabled by default. (default: false, e.g. true)
+  --prevent-double-bridge: oneof<nothing, bool> # When set to `true`, it prevents bridging if the target call is already bridged to another call. Disabled by default. (default: false, e.g. true)
   --park-after-unbridge: string # Specifies behavior after the bridge ends (i.e. the opposite leg either hangs up or is transferred). If supplied with the value `self`, the current leg will be parked after unbridge. If not set, the default behavior is to hang up the leg. (e.g. self)
-  --play-ringtone: string@bool-completer # Specifies whether to play a ringtone if the call you want to bridge with has not yet been answered. (default: false, e.g. true)
+  --play-ringtone: oneof<nothing, bool> # Specifies whether to play a ringtone if the call you want to bridge with has not yet been answered. (default: false, e.g. true)
   --ringtone: string@ringtone-completer # Specifies which country ringtone to play when `play_ringtone` is set to `true`. If not set, the US ringtone will be played. (default: us, e.g. pl)
   --record: string@record-completer # Start recording automatically after an event. Disabled by default. (e.g. record-from-answer)
   --record-channels: string@record-channels-completer # Defines which channel should be recorded ('single' or 'dual') when `record` is specified. (default: dual, e.g. single)
@@ -6962,7 +6961,7 @@ export def "calls-actions-bridge BridgeCall" [
   --record-trim: string@record-trim-completer # When set to `trim-silence`, silence will be removed from the beginning and end of the recording. (e.g. trim-silence)
   --record-custom-file-name: string # The custom recording file name to be used instead of the default `call_leg_id`. Telnyx will still add a Unix timestamp suffix. (e.g. my_recording_file_name)
   --mute-dtmf: string@mute-dtmf-completer # When enabled, DTMF tones are not passed to the call participant. The webhooks containing the DTMF information will be sent. (default: none, e.g. opposite)
-  --hold-after-unbridge: string@bool-completer # Specifies behavior after the bridge ends. If set to `true`, the current leg will be put on hold after unbridge instead of being hung up. (e.g. true)
+  --hold-after-unbridge: oneof<nothing, bool> # Specifies behavior after the bridge ends. If set to `true`, the current leg will be put on hold after unbridge instead of being hung up. (e.g. true)
 ]: any -> record<data: record<result: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7021,9 +7020,9 @@ export def "calls-actions-conversation-relay-start CallStartConversationRelay" [
   --allow-errors(-e) # Return full response without error handling
   --conversation-relay-settings: record # Conversation Relay connection settings. This object can provide `url`, `dtmf_detection`, `interruptible`, `interruptible_greeting`, and `languages`. Top-level aliases override nested values when both are present. (e.g. {url: wss://example.com/conversation-relay, dtmf_detection: true, interruptible: speech, interruptible_greeting: dtmf, languages: [{language: en-US, tts_provider: telnyx, voice: Telnyx.KokoroTTS.af, transcription_engine: Deepgram, transcription_engine_config: {transcription_model: deepgram/nova-3}}]}) — shape: {url: string, dtmf_detection?: bool, interruptible?: "none"|"any"|"speech"|"dtmf", interruptible_greeting?: "none"|"any"|"speech"|"dtmf", languages?: list}
   --body-url: string # Public alias for `conversation_relay_url`. Must start with `ws://` or `wss://`. If both are present, this value wins. (e.g. wss://example.com/conversation-relay)
-  --dtmf-detection: string@bool-completer # Public alias for `conversation_relay_dtmf_detection`. If both are present, this value wins. (default: false, e.g. true)
+  --dtmf-detection: oneof<nothing, bool> # Public alias for `conversation_relay_dtmf_detection`. If both are present, this value wins. (default: false, e.g. true)
   --conversation-relay-url: string # WebSocket URL for your Conversation Relay server. Must start with `ws://` or `wss://`. (e.g. wss://example.com/conversation-relay)
-  --conversation-relay-dtmf-detection: string@bool-completer # Enable DTMF detection for the relay session. (default: false, e.g. true)
+  --conversation-relay-dtmf-detection: oneof<nothing, bool> # Enable DTMF detection for the relay session. (default: false, e.g. true)
   --voice: string # The voice to be used by the voice assistant. Currently we support ElevenLabs, Telnyx and AWS voices.   **Supported Providers:** - **AWS:** Use `AWS.Polly.<VoiceId>` (e.g., `AWS.Polly.Joanna`). For neural voices, which provide more realistic, human-like speech, append `-Neural` to the `VoiceId` (e.g., `AWS.Polly.Joanna-Neural`). Check the [available voices](https://docs.aws.amazon.com/polly/latest/dg/available-voices.html) for compatibility. - **Azure:** Use `Azure.<VoiceId>. (e.g. Azure.en-CA-ClaraNeural, Azure.en-CA-LiamNeural, Azure.en-US-BrianMultilingualNeural, Azure.en-US-Ava:DragonHDLatestNeural. For a complete list of voices, go to [Azure Voice Gallery](https://speech.microsoft.com/portal/voicegallery).) - **ElevenLabs:** Use `ElevenLabs.<ModelId>.<VoiceId>` (e.g., `ElevenLabs.BaseModel.John`). The `ModelId` part is optional. To use ElevenLabs, you must provide your ElevenLabs API key as an integration secret under `"voice_settings": {"api_key_ref": "<secret_id>"}`. See [integration secrets documentation](https://developers.telnyx.com/api/secrets-manager/integration-secrets/create-integration-secret) for details. Check [available voices](https://elevenlabs.io/docs/api-reference/get-voices).  - **Telnyx:** Use `Telnyx.<model_id>.<voice_id>` - **Inworld:** Use `Inworld.<ModelId>.<VoiceId>` (e.g., `Inworld.Mini.Loretta`, `Inworld.Max.Oliver`). Supported models: `Mini`, `Max`. - **xAI:** Use `xAI.<VoiceId>` (e.g., `xAI.eve`). Available voices: `eve`, `ara`, `rex`, `sal`, `leo`. (default: Telnyx.KokoroTTS.af, e.g. Telnyx.KokoroTTS.af)
   --voice-settings: any # The settings associated with the voice selected
   --greeting: string # Text played when the relay session starts. (e.g. Hi! Ask me anything!)
@@ -7099,7 +7098,7 @@ export def "calls-actions-enqueue EnqueueCall" [
   --command-id: string # Use this field to avoid duplicate commands. Telnyx will ignore any command with the same `command_id` for the same `call_control_id`. (e.g. 891510ac-f3e4-11e8-af5b-de00688a4901)
   --max-wait-time-secs: int # The number of seconds after which the call will be removed from the queue. (e.g. 600)
   --max-size: int # The maximum number of calls allowed in the queue at a given time. Can't be modified for an existing queue. (default: 100, e.g. 200)
-  --keep-after-hangup: string@bool-completer # If set to true, the call will remain in the queue after hangup. In this case bridging to such call will fail with necessary information needed to re-establish the call. (default: false, e.g. true)
+  --keep-after-hangup: oneof<nothing, bool> # If set to true, the call will remain in the queue after hangup. In this case bridging to such call will fail with necessary information needed to re-establish the call. (default: false, e.g. true)
 ]: any -> record<data: record<result: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7256,8 +7255,8 @@ export def "calls-actions-gather-using-ai callGatherUsingAI" [
   --voice: string # The voice to be used by the voice assistant. Currently we support ElevenLabs, Telnyx and AWS voices.   **Supported Providers:** - **AWS:** Use `AWS.Polly.<VoiceId>` (e.g., `AWS.Polly.Joanna`). For neural voices, which provide more realistic, human-like speech, append `-Neural` to the `VoiceId` (e.g., `AWS.Polly.Joanna-Neural`). Check the [available voices](https://docs.aws.amazon.com/polly/latest/dg/available-voices.html) for compatibility. - **Azure:** Use `Azure.<VoiceId>. (e.g. Azure.en-CA-ClaraNeural, Azure.en-CA-LiamNeural, Azure.en-US-BrianMultilingualNeural, Azure.en-US-Ava:DragonHDLatestNeural. For a complete list of voices, go to [Azure Voice Gallery](https://speech.microsoft.com/portal/voicegallery).) - **ElevenLabs:** Use `ElevenLabs.<ModelId>.<VoiceId>` (e.g., `ElevenLabs.BaseModel.John`). The `ModelId` part is optional. To use ElevenLabs, you must provide your ElevenLabs API key as an integration secret under `"voice_settings": {"api_key_ref": "<secret_id>"}`. See [integration secrets documentation](https://developers.telnyx.com/api/secrets-manager/integration-secrets/create-integration-secret) for details. Check [available voices](https://elevenlabs.io/docs/api-reference/get-voices).  - **Telnyx:** Use `Telnyx.<model_id>.<voice_id>` - **Inworld:** Use `Inworld.<ModelId>.<VoiceId>` (e.g., `Inworld.Mini.Loretta`, `Inworld.Max.Oliver`). Supported models: `Mini`, `Max`. - **xAI:** Use `xAI.<VoiceId>` (e.g., `xAI.eve`). Available voices: `eve`, `ara`, `rex`, `sal`, `leo`. (default: Telnyx.KokoroTTS.af, e.g. Telnyx.KokoroTTS.af)
   --voice-settings: any # The settings associated with the voice selected
   --greeting: string # Text that will be played when the gathering starts, if none then nothing will be played when the gathering starts. The greeting can be text for any voice or SSML for `AWS.Polly.<voice_id>` voices. There is a 3,000 character limit. (e.g. Hello, can you tell me your age and where you live?)
-  --send-partial-results: string@bool-completer # Default is `false`. If set to `true`, the voice assistant will send partial results via the `call.ai_gather.partial_results` callback in real time as individual fields are gathered. If set to `false`, the voice assistant will only send the final result via the `call.ai_gather.ended` callback. (e.g. false)
-  --send-message-history-updates: string@bool-completer # Default is `false`. If set to `true`, the voice assistant will send updates to the message history via the `call.ai_gather.message_history_updated` callback in real time as the message history is updated. (e.g. false)
+  --send-partial-results: oneof<nothing, bool> # Default is `false`. If set to `true`, the voice assistant will send partial results via the `call.ai_gather.partial_results` callback in real time as individual fields are gathered. If set to `false`, the voice assistant will only send the final result via the `call.ai_gather.ended` callback. (e.g. false)
+  --send-message-history-updates: oneof<nothing, bool> # Default is `false`. If set to `true`, the voice assistant will send updates to the message history via the `call.ai_gather.message_history_updated` callback in real time as the message history is updated. (e.g. false)
   --message-history: list # The message history you want the voice assistant to be aware of, this can be useful to keep the context of the conversation, or to pass additional information to the voice assistant. — item shape: {content?: string, role?: "assistant"|"user"}
   --client-state: string # Use this field to add state to every subsequent webhook. It must be a valid Base-64 encoded string. (e.g. aGF2ZSBhIG5pY2UgZGF5ID1d)
   --command-id: string # Use this field to avoid duplicate commands. Telnyx will ignore any command with the same `command_id` for the same `call_control_id`. (e.g. 891510ac-f3e4-11e8-af5b-de00688a4901)
@@ -7427,10 +7426,10 @@ export def "calls-actions-playback-start StartCallPlayback" [
   --audio-url: string # The URL of a file to be played back on the call. The URL can point to either a WAV or MP3 file. media_name and audio_url cannot be used together in one request. (e.g. http://example.com/message.wav)
   --media-name: string # The media_name of a file to be played back on the call. The media_name must point to a file previously uploaded to api.telnyx.com/v2/media by the same user/organization. The file must either be a WAV or MP3 file. (e.g. my_media_uploaded_to_media_storage_api)
   --body-loop: any
-  --body-overlay: string@bool-completer # When enabled, audio will be mixed on top of any other audio that is actively being played back. Note that `overlay: true` will only work if there is another audio file already being played on the call. (default: false, e.g. true)
+  --body-overlay: oneof<nothing, bool> # When enabled, audio will be mixed on top of any other audio that is actively being played back. Note that `overlay: true` will only work if there is another audio file already being played on the call. (default: false, e.g. true)
   --stop: string # When specified, it stops the current audio being played. Specify `current` to stop the current audio being played, and to play the next file in the queue. Specify `all` to stop the current audio file being played and to also clear all audio files from the queue. (e.g. current)
   --target-legs: string # Specifies the leg or legs on which audio will be played. If supplied, the value must be either `self`, `opposite` or `both`. (default: self, e.g. self)
-  --cache-audio: string@bool-completer # Caches the audio file. Useful when playing the same audio file multiple times during the call. (default: true, e.g. true)
+  --cache-audio: oneof<nothing, bool> # Caches the audio file. Useful when playing the same audio file multiple times during the call. (default: true, e.g. true)
   --audio-type: string@audio-type-completer # Specifies the type of audio provided in `audio_url` or `playback_content`. (default: mp3, e.g. wav)
   --playback-content: string # Allows a user to provide base64 encoded mp3 or wav. Note: when using this parameter, `media_url` and `media_name` in the `playback_started` and `playback_ended` webhooks will be empty (e.g. SUQzAwAAAAADf1...)
   --client-state: string # Use this field to add state to every subsequent webhook. It must be a valid Base-64 encoded string. (e.g. aGF2ZSBhIG5pY2UgZGF5ID1d)
@@ -7460,7 +7459,7 @@ export def "calls-actions-playback-stop StopCallPlayback" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --body-overlay: string@bool-completer # When enabled, it stops the audio being played in the overlay queue. (default: false, e.g. true)
+  --body-overlay: oneof<nothing, bool> # When enabled, it stops the audio being played in the overlay queue. (default: false, e.g. true)
   --stop: string # Use `current` to stop the current audio being played. Use `all` to stop the current audio file being played and clear all audio files from the queue. (default: all, e.g. current)
   --client-state: string # Use this field to add state to every subsequent webhook. It must be a valid Base-64 encoded string. (e.g. aGF2ZSBhIG5pY2UgZGF5ID1d)
   --command-id: string # Use this field to avoid duplicate commands. Telnyx will ignore any command with the same `command_id` for the same `call_control_id`. (e.g. 891510ac-f3e4-11e8-af5b-de00688a4901)
@@ -7549,17 +7548,17 @@ export def "calls-actions-record-start StartCallRecord" [
   channels: string@channels-completer # When `dual`, final audio file will be stereo recorded with the first leg on channel A, and the rest on channel B. (e.g. single)
   --client-state: string # Use this field to add state to every subsequent webhook. It must be a valid Base-64 encoded string. (e.g. aGF2ZSBhIG5pY2UgZGF5ID1d)
   --command-id: string # Use this field to avoid duplicate commands. Telnyx will ignore any command with the same `command_id` for the same `call_control_id`. (e.g. 891510ac-f3e4-11e8-af5b-de00688a4901)
-  --play-beep: string@bool-completer # If enabled, a beep sound will be played at the start of a recording. (e.g. true)
+  --play-beep: oneof<nothing, bool> # If enabled, a beep sound will be played at the start of a recording. (e.g. true)
   --max-length: int # Defines the maximum length for the recording in seconds. The minimum value is 0. The maximum value is 14400. The default value is 0 (infinite) (format: int32, default: 0, e.g. 100)
   --timeout-secs: int # The number of seconds that Telnyx will wait for the recording to be stopped if silence is detected. The timer only starts when the speech is detected. Please note that call transcription is used to detect silence and the related charge will be applied. The minimum value is 0. The default value is 0 (infinite) (format: int32, default: 0, e.g. 100)
   --recording-track: string@recording-track-completer # The audio track to be recorded. Can be either `both`, `inbound` or `outbound`. If only single track is specified (`inbound`, `outbound`), `channels` configuration is ignored and it will be recorded as mono (single channel). (default: both, e.g. outbound)
   --trim: string@trim-completer # When set to `trim-silence`, silence will be removed from the beginning and end of the recording. (e.g. trim-silence)
   --custom-file-name: string # The custom recording file name to be used instead of the default `call_leg_id`. Telnyx will still add a Unix timestamp suffix. (e.g. my_recording_file_name)
-  --transcription: string@bool-completer # Enable post recording transcription. The default value is false. (default: false, e.g. true)
+  --transcription: oneof<nothing, bool> # Enable post recording transcription. The default value is false. (default: false, e.g. true)
   --transcription-engine: string@transcription-engine-completer-1 # Engine to use for speech recognition. `A` - `Google`, `B` - `Telnyx`, `deepgram/nova-3` - `Deepgram Nova-3`. Note: `deepgram/nova-3` supports only `en` and `en-{Region}` languages. (default: A, e.g. A)
   --transcription-language: string@transcription-language-completer # Language code for transcription. Note: Not all languages are supported by all transcription engines (google, telnyx, deepgram). See engine-specific documentation for supported values. (default: en-US, e.g. en-US)
-  --transcription-profanity-filter: string@bool-completer # Enables profanity_filter. Applies to `google` engine only. (default: false, e.g. true)
-  --transcription-speaker-diarization: string@bool-completer # Enables speaker diarization. Applies to `google` engine only. (default: false, e.g. true)
+  --transcription-profanity-filter: oneof<nothing, bool> # Enables profanity_filter. Applies to `google` engine only. (default: false, e.g. true)
+  --transcription-speaker-diarization: oneof<nothing, bool> # Enables speaker diarization. Applies to `google` engine only. (default: false, e.g. true)
   --transcription-min-speaker-count: int # Defines minimum number of speakers in the conversation. Applies to `google` engine only. (format: int32, default: 2, e.g. 4)
   --transcription-max-speaker-count: int # Defines maximum number of speakers in the conversation. Applies to `google` engine only. (format: int32, default: 6, e.g. 4)
 ]: any -> record<data: record<result: string>> {
@@ -7738,8 +7737,8 @@ export def "calls-actions-siprec-start StartSiprecSession" [
   --connector-name: string # Name of configured SIPREC connector to be used. (e.g. my-siprec-connector)
   --sip-transport: string@sip-transport-completer # Specifies SIP transport protocol. (default: udp, e.g. tcp)
   --siprec-track: string@siprec-track-completer # Specifies which track should be sent on siprec session. (default: both_tracks, e.g. outbound_track)
-  --include-metadata-custom-headers: string@bool-completer # When set, custom parameters will be added as metadata (recording.session.ExtensionParameters). Otherwise, they’ll be added to sip headers. (e.g. true)
-  --secure: string@bool-completer # Controls whether to encrypt media sent to your SRS using SRTP and TLS. When set you need to configure SRS port in your connector to 5061. (e.g. true)
+  --include-metadata-custom-headers: oneof<nothing, bool> # When set, custom parameters will be added as metadata (recording.session.ExtensionParameters). Otherwise, they’ll be added to sip headers. (e.g. true)
+  --secure: oneof<nothing, bool> # Controls whether to encrypt media sent to your SRS using SRTP and TLS. When set you need to configure SRS port in your connector to 5061. (e.g. true)
   --session-timeout-secs: int # Sets `Session-Expires` header to the INVITE. A reinvite is sent every half the value set. Usefull for session keep alive. Minimum value is 90, set to 0 to disable. (default: 1800, e.g. 900)
   --client-state: string # Use this field to add state to every subsequent webhook. It must be a valid Base-64 encoded string. (e.g. aGF2ZSBhIG5pY2UgZGF5ID1d)
 ]: any -> record<data: record<result: string>> {
@@ -7839,7 +7838,7 @@ export def "calls-actions-streaming-start StartCallStreaming" [
   --stream-bidirectional-codec: string@stream-bidirectional-codec-completer # Indicates codec for bidirectional streaming RTP payloads. Used only with stream_bidirectional_mode=rtp. Case sensitive. (default: PCMU, e.g. G722)
   --stream-bidirectional-target-legs: string@stream-bidirectional-target-legs-completer # Specifies which call legs should receive the bidirectional stream audio. (default: opposite, e.g. both)
   --stream-bidirectional-sampling-rate: int@stream-bidirectional-sampling-rate-completer # Audio sampling rate. (default: 8000, e.g. 16000)
-  --enable-dialogflow: string@bool-completer # Enables Dialogflow for the current call. The default value is false. (default: false, e.g. true)
+  --enable-dialogflow: oneof<nothing, bool> # Enables Dialogflow for the current call. The default value is false. (default: false, e.g. true)
   --dialogflow-config: record # shape: {analyze_sentiment?: bool, partial_automated_agent_reply?: bool}
   --client-state: string # Use this field to add state to every subsequent webhook. It must be a valid Base-64 encoded string. (e.g. aGF2ZSBhIG5pY2UgZGF5ID1d)
   --command-id: string # Use this field to avoid duplicate commands. Telnyx will ignore any command with the same `command_id` for the same `call_control_id`. (e.g. 891510ac-f3e4-11e8-af5b-de00688a4901)
@@ -8049,7 +8048,7 @@ export def "calls-actions-transfer TransferCall" [
   --privacy: string@privacy-completer # Indicates the privacy level to be used for the call. When set to `id`, caller ID information (name and number) will be hidden from the called party. When set to `none` or omitted, caller ID will be shown normally. (e.g. id)
   --audio-url: string # The URL of a file to be played back when the transfer destination answers before bridging the call. The URL can point to either a WAV or MP3 file. media_name and audio_url cannot be used together in one request. (e.g. http://example.com/message.wav)
   --send-digits-on-answer: string # DTMF digits to send automatically after the transfer destination answers. Useful for reaching an extension behind an IVR (e.g. `"200"` to dial extension 200 once the called party picks up). Allowed characters: `0-9`, `A-D`, `w` (0.5s pause), `W` (1s pause), `*`, `#`. Maximum 64 characters. When omitted, no automatic DTMF is sent. May also be supplied inline by appending `,<digits>` to `to` (e.g. `to=+18004247767,200`); if both forms are present, this explicit field takes precedence. (e.g. wwww200)
-  --early-media: string@bool-completer # If set to false, early media will not be passed to the originating leg. (default: true, e.g. false)
+  --early-media: oneof<nothing, bool> # If set to false, early media will not be passed to the originating leg. (default: true, e.g. false)
   --media-name: string # The media_name of a file to be played back when the transfer destination answers before bridging the call. The media_name must point to a file previously uploaded to api.telnyx.com/v2/media by the same user/organization. The file must either be a WAV or MP3 file. (e.g. my_media_uploaded_to_media_storage_api)
   --timeout-secs: int # The number of seconds that Telnyx will wait for the call to be answered by the destination to which it is being transferred. If the timeout is reached before an answer is received, the call will hangup and a `call.hangup` webhook with a `hangup_cause` of `timeout` will be sent. Minimum value is 5 seconds. Maximum value is 600 seconds. (format: int32, default: 30, e.g. 60)
   --time-limit-secs: int # Sets the maximum duration of a Call Control Leg in seconds. If the time limit is reached, the call will hangup and a `call.hangup` webhook with a `hangup_cause` of `time_limit` will be sent. For example, by setting a time limit of 120 seconds, a Call Leg will be automatically terminated two minutes after being answered. The default time limit is 14400 seconds or 4 hours and this is also the maximum allowed call length. (format: int32, default: 14400, e.g. 600)
@@ -8328,13 +8327,13 @@ export def "conferences CreateConference" [
   name: string # Name of the conference (e.g. Business)
   --beep-enabled: string@beep-enabled-completer # Whether a beep sound should be played when participants join and/or leave the conference. (default: never, e.g. on_exit)
   --client-state: string # Use this field to add state to every subsequent webhook. It must be a valid Base-64 encoded string. The client_state will be updated for the creator call leg and will be used for all webhooks related to the created conference. (e.g. aGF2ZSBhIG5pY2UgZGF5ID1d)
-  --comfort-noise: string@bool-completer # Toggle background comfort noise. (default: true, e.g. false)
+  --comfort-noise: oneof<nothing, bool> # Toggle background comfort noise. (default: true, e.g. false)
   --command-id: string # Use this field to avoid execution of duplicate commands. Telnyx will ignore subsequent commands with the same `command_id` as one that has already been executed. (e.g. 891510ac-f3e4-11e8-af5b-de00688a4901)
   --duration-minutes: int # Time length (minutes) after which the conference will end. (e.g. 5)
   --hold-audio-url: string # The URL of a file to be played to participants joining the conference. The URL can point to either a WAV or MP3 file. hold_media_name and hold_audio_url cannot be used together in one request. Takes effect only when "start_conference_on_create" is set to "false". (e.g. http://example.com/message.wav)
   --hold-media-name: string # The media_name of a file to be played to participants joining the conference. The media_name must point to a file previously uploaded to api.telnyx.com/v2/media by the same user/organization. The file must either be a WAV or MP3 file. Takes effect only when "start_conference_on_create" is set to "false". (e.g. my_media_uploaded_to_media_storage_api)
   --max-participants: int # The maximum number of active conference participants to allow. Must be between 2 and 800. Defaults to 250 (e.g. 3)
-  --start-conference-on-create: string@bool-completer # Whether the conference should be started on creation. If the conference isn't started all participants that join are automatically put on hold. Defaults to "true". (e.g. false)
+  --start-conference-on-create: oneof<nothing, bool> # Whether the conference should be started on creation. If the conference isn't started all participants that join are automatically put on hold. Defaults to "true". (e.g. false)
   --region: string@region-completer # Sets the region where the conference data will be hosted. Defaults to the region defined in user's data locality settings (Europe or US). (e.g. US)
 ]: any -> record<data: record<record_type: string, id: string, name: string, created_at: string, expires_at: string, updated_at: string, region: string, status: string, end_reason: string, ended_by: record<call_control_id: string, call_session_id: string>, connection_id: string>> {
   let input = $in
@@ -8448,7 +8447,7 @@ export def "conferences-actions-gather-using-audio ConferenceGatherUsingAudio" [
   --valid-digits: string # Digits that are valid for gathering. All other digits will be ignored. (default: 0123456789#*, e.g. 0123456789)
   --inter-digit-timeout-millis: int # Duration in milliseconds to wait between digits. (default: 5000, e.g. 3000)
   --initial-timeout-millis: int # Duration in milliseconds to wait for the first digit before timing out. (e.g. 10000)
-  --stop-playback-on-dtmf: string@bool-completer # Whether to stop the audio playback when a DTMF digit is received. (default: true, e.g. true)
+  --stop-playback-on-dtmf: oneof<nothing, bool> # Whether to stop the audio playback when a DTMF digit is received. (default: true, e.g. true)
   --invalid-audio-url: string # URL of audio file to play when invalid input is received.
   --invalid-media-name: string # Name of media file to play when invalid input is received.
   --gather-id: string # Identifier for this gather command. Will be included in the gather ended webhook. Maximum 100 characters.
@@ -8510,13 +8509,13 @@ export def "conferences-actions-join JoinConference" [
   call_control_id: string # Unique identifier and token for controlling the call (e.g. v2:T02llQxIyaRkhfRKxgAP8nY511EhFLizdvdUKJiSw8d6A9BborherQczRrZvZakpWxBlpw48KyZQ==)
   --client-state: string # Use this field to add state to every subsequent webhook. It must be a valid Base-64 encoded string. Please note that the client_state will be updated for the participient call leg and the change will not affect conferencing webhooks unless the participient is the owner of the conference. (e.g. aGF2ZSBhIG5pY2UgZGF5ID1d)
   --command-id: string # Use this field to avoid execution of duplicate commands. Telnyx will ignore subsequent commands with the same `command_id` as one that has already been executed. (e.g. 891510ac-f3e4-11e8-af5b-de00688a4901)
-  --end-conference-on-exit: string@bool-completer # Whether the conference should end and all remaining participants be hung up after the participant leaves the conference. Defaults to "false". (e.g. true)
-  --soft-end-conference-on-exit: string@bool-completer # Whether the conference should end after the participant leaves the conference. NOTE this doesn't hang up the other participants. Defaults to "false". (e.g. true)
-  --hold: string@bool-completer # Whether the participant should be put on hold immediately after joining the conference. Defaults to "false". (e.g. true)
+  --end-conference-on-exit: oneof<nothing, bool> # Whether the conference should end and all remaining participants be hung up after the participant leaves the conference. Defaults to "false". (e.g. true)
+  --soft-end-conference-on-exit: oneof<nothing, bool> # Whether the conference should end after the participant leaves the conference. NOTE this doesn't hang up the other participants. Defaults to "false". (e.g. true)
+  --hold: oneof<nothing, bool> # Whether the participant should be put on hold immediately after joining the conference. Defaults to "false". (e.g. true)
   --hold-audio-url: string # The URL of a file to be played to the participant when they are put on hold after joining the conference. hold_media_name and hold_audio_url cannot be used together in one request. Takes effect only when "start_conference_on_create" is set to "false". This property takes effect only if "hold" is set to "true". (e.g. http://example.com/message.wav)
   --hold-media-name: string # The media_name of a file to be played to the participant when they are put on hold after joining the conference. The media_name must point to a file previously uploaded to api.telnyx.com/v2/media by the same user/organization. The file must either be a WAV or MP3 file. Takes effect only when "start_conference_on_create" is set to "false". This property takes effect only if "hold" is set to "true". (e.g. my_media_uploaded_to_media_storage_api)
-  --mute: string@bool-completer # Whether the participant should be muted immediately after joining the conference. Defaults to "false". (e.g. true)
-  --start-conference-on-enter: string@bool-completer # Whether the conference should be started after the participant joins the conference. Defaults to "false". (e.g. true)
+  --mute: oneof<nothing, bool> # Whether the participant should be muted immediately after joining the conference. Defaults to "false". (e.g. true)
+  --start-conference-on-enter: oneof<nothing, bool> # Whether the conference should be started after the participant joins the conference. Defaults to "false". (e.g. true)
   --supervisor-role: string@supervisor-role-completer-1 # Sets the joining participant as a supervisor for the conference. A conference can have multiple supervisors. "barge" means the supervisor enters the conference as a normal participant. This is the same as "none". "monitor" means the supervisor is muted but can hear all participants. "whisper" means that only the specified "whisper_call_control_ids" can hear the supervisor. Defaults to "none". (e.g. whisper)
   --whisper-call-control-ids: list # Array of unique call_control_ids the joining supervisor can whisper to. If none provided, the supervisor will join the conference as a monitoring participant only. (e.g. [v2:Sg1xxxQ_U3ixxxyXT_VDNI3xxxazZdg6Vxxxs4-GNYxxxVaJPOhFMRQ, v2:qqpb0mmvd-ovhhBr0BUQQn0fld5jIboaaX3-De0DkqXHzbf8d75xkw])
   --beep-enabled: string@beep-enabled-completer # Whether a beep sound should be played when the participant joins and/or leaves the conference. Can be used to override the conference-level setting. (e.g. on_exit)
@@ -8691,7 +8690,7 @@ export def "conferences-actions-record-start StartConferenceRecording" [
   format: string@format-completer # The audio file format used when storing the conference recording. Can be either `mp3` or `wav`. (e.g. mp3)
   --command-id: string # Use this field to avoid duplicate commands. Telnyx will ignore any command with the same `command_id` for the same `conference_id`. (e.g. 891510ac-f3e4-11e8-af5b-de00688a4901)
   --channels: string@channels-completer # When `dual`, final audio file will be stereo recorded with the conference creator on the first channel, and the rest on the second channel. (default: single, e.g. dual)
-  --play-beep: string@bool-completer # If enabled, a beep sound will be played at the start of a recording. (e.g. true)
+  --play-beep: oneof<nothing, bool> # If enabled, a beep sound will be played at the start of a recording. (e.g. true)
   --trim: string@trim-completer # When set to `trim-silence`, silence will be removed from the beginning and end of the recording. (e.g. trim-silence)
   --custom-file-name: string # The custom recording file name to be used instead of the default `call_leg_id`. Telnyx will still add a Unix timestamp suffix. (e.g. my_recording_file_name)
   --region: string@region-completer # Region where the conference data is located. Defaults to the region defined in user's data locality settings (Europe or US). (e.g. US)
@@ -8946,8 +8945,8 @@ export def "conferences-participants UpdateConferenceParticipant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --end-conference-on-exit: string@bool-completer # Whether the conference should end when this participant exits. (e.g. false)
-  --soft-end-conference-on-exit: string@bool-completer # Whether the conference should soft-end when this participant exits. A soft end will stop new participants from joining but allow existing participants to remain. (e.g. false)
+  --end-conference-on-exit: oneof<nothing, bool> # Whether the conference should end when this participant exits. (e.g. false)
+  --soft-end-conference-on-exit: oneof<nothing, bool> # Whether the conference should soft-end when this participant exits. A soft end will stop new participants from joining but allow existing participants to remain. (e.g. false)
   --beep-enabled: string@beep-enabled-completer # Whether entry/exit beeps are enabled for this participant. (e.g. always)
 ]: any -> record<data: record<id: string, call_control_id: string, call_leg_id: string, conference_id: string, label: string, status: string, muted: bool, on_hold: bool, whisper_call_control_ids: list<string>, created_at: string, updated_at: string, end_conference_on_exit: bool, soft_end_conference_on_exit: bool>> {
   let input = $in
@@ -9117,24 +9116,24 @@ export def "credential-connections CreateCredentialConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Defaults to true
+  --active: oneof<nothing, bool> # Defaults to true
   user_name: string # The user name to be used as part of the credentials. Must be 4-32 characters long and alphanumeric values only (no spaces or special characters). (e.g. myusername123)
   password: string # The password to be used as part of the credentials. Must be 8 to 128 characters long. (e.g. my123secure456password789)
   --anchorsite-override: string@anchorsite-override-completer-1 # `Latency` directs Telnyx to route media through the site with the lowest round-trip time to the user's connection. Telnyx calculates this time using ICMP ping messages. This can be disabled by specifying a site to handle all media. (default: Latency, e.g. Amsterdam, Netherlands)
   connection_name: string # A user-assigned name to help manage the connection. (e.g. office-connection)
   --sip-uri-calling-preference: string@sip-uri-calling-preference-completer # This feature enables inbound SIP URI calls to your Credential Auth Connection. If enabled for all (unrestricted) then anyone who calls the SIP URI <your-username>@telnyx.com will be connected to your Connection. You can also choose to allow only calls that are originated on any Connections under your account (internal).
-  --default-on-hold-comfort-noise-enabled: string@bool-completer # When enabled, Telnyx will generate comfort noise when you place the call on hold. If disabled, you will need to generate comfort noise or on hold music to avoid RTP timeout. (default: false)
+  --default-on-hold-comfort-noise-enabled: oneof<nothing, bool> # When enabled, Telnyx will generate comfort noise when you place the call on hold. If disabled, you will need to generate comfort noise or on hold music to avoid RTP timeout. (default: false)
   --dtmf-type: string@dtmf-type-completer # Sets the type of DTMF digits sent from Telnyx to this Connection. Note that DTMF digits sent to Telnyx will be accepted in all formats. (default: RFC 2833, e.g. Inband)
-  --encode-contact-header-enabled: string@bool-completer # Encode the SIP contact header sent by Telnyx to avoid issues for NAT or ALG scenarios. (default: false)
+  --encode-contact-header-enabled: oneof<nothing, bool> # Encode the SIP contact header sent by Telnyx to avoid issues for NAT or ALG scenarios. (default: false)
   --encrypted-media: string@encrypted-media-completer # Enable use of SRTP for encryption. Cannot be set if the transport_portocol is TLS. (nullable, e.g. SRTP)
-  --onnet-t38-passthrough-enabled: string@bool-completer # Enable on-net T38 if you prefer the sender and receiver negotiating T38 directly if both are on the Telnyx network. If this is disabled, Telnyx will be able to use T38 on just one leg of the call depending on each leg's settings. (default: false)
+  --onnet-t38-passthrough-enabled: oneof<nothing, bool> # Enable on-net T38 if you prefer the sender and receiver negotiating T38 directly if both are on the Telnyx network. If this is disabled, Telnyx will be able to use T38 on just one leg of the call depending on each leg's settings. (default: false)
   --ios-push-credential-id: string # The uuid of the push credential for Ios (nullable, e.g. ec0c8e5d-439e-4620-a0c1-9d9c8d02a836)
   --android-push-credential-id: string # The uuid of the push credential for Android (nullable, e.g. 06b09dfd-7154-4980-8b75-cebf7a9d4f8e)
   --webhook-event-url: string # The URL where webhooks related to this connection will be sent. Must include a scheme, such as 'https'. (format: uri, e.g. https://example.com)
   --webhook-event-failover-url: string # The failover URL where webhooks related to this connection will be sent if sending to the primary URL fails. Must include a scheme, such as 'https'. (nullable, format: uri, default: , e.g. https://failover.example.com)
   --webhook-api-version: string@webhook-api-version-completer-1 # Determines which webhook format will be used, Telnyx API v1, v2 or texml. Note - texml can only be set when the outbound object parameter call_parking_enabled is included and set to true. (default: 1, e.g. 1)
   --webhook-timeout-secs: int # Specifies how many seconds to wait before timing out a webhook. (nullable, e.g. 25)
-  --call-cost-in-webhooks: string@bool-completer # Specifies if call cost webhooks should be sent for this connection. (default: false)
+  --call-cost-in-webhooks: oneof<nothing, bool> # Specifies if call cost webhooks should be sent for this connection. (default: false)
   --tags: list # Tags associated with the connection. (e.g. [tag1, tag2])
   --rtcp-settings: record # e.g. {port: rtcp-mux, capture_enabled: true, report_frequency_secs: 10} — shape: {port?: "rtcp-mux"|"rtp+1", capture_enabled?: bool, report_frequency_secs?: int}
   --inbound: record # e.g. {ani_number_format: +E.164, dnis_number_format: +e164, codecs: [G722], default_routing_method: sequential, channel_limit: 10, generate_ringback_tone: true, isup_headers_enabled: true, prack_enabled: true, sip_compact_headers_enabled: true, timeout_1xx_secs: 10, timeout_2xx_secs: 20, shaken_stir_enabled: true, simultaneous_ringing: enabled} — shape: {ani_number_format?: "+E.164"|"E.164"|"+E.164-national"|"E.164-national", dnis_number_format?: "+e164"|"e164"|"national"|"sip_username", codecs?: list, default_routing_method?: "sequential"|"round-robin", channel_limit?: int, generate_ringback_tone?: bool, isup_headers_enabled?: bool, prack_enabled?: bool, sip_compact_headers_enabled?: bool, timeout_1xx_secs?: int, timeout_2xx_secs?: int, shaken_stir_enabled?: bool, simultaneous_ringing?: "disabled"|"enabled"}
@@ -9216,24 +9215,24 @@ export def "credential-connections UpdateCredentialConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Defaults to true
+  --active: oneof<nothing, bool> # Defaults to true
   --user-name: string # The user name to be used as part of the credentials. Must be 4-32 characters long and alphanumeric values only (no spaces or special characters). (e.g. myusername123)
   --password: string # The password to be used as part of the credentials. Must be 8 to 128 characters long. (e.g. my123secure456password789)
   --anchorsite-override: string@anchorsite-override-completer-1 # `Latency` directs Telnyx to route media through the site with the lowest round-trip time to the user's connection. Telnyx calculates this time using ICMP ping messages. This can be disabled by specifying a site to handle all media. (default: Latency, e.g. Amsterdam, Netherlands)
   --connection-name: string # A user-assigned name to help manage the connection. (e.g. office-connection)
   --sip-uri-calling-preference: string@sip-uri-calling-preference-completer # This feature enables inbound SIP URI calls to your Credential Auth Connection. If enabled for all (unrestricted) then anyone who calls the SIP URI <your-username>@telnyx.com will be connected to your Connection. You can also choose to allow only calls that are originated on any Connections under your account (internal).
-  --default-on-hold-comfort-noise-enabled: string@bool-completer # When enabled, Telnyx will generate comfort noise when you place the call on hold. If disabled, you will need to generate comfort noise or on hold music to avoid RTP timeout. (default: false)
+  --default-on-hold-comfort-noise-enabled: oneof<nothing, bool> # When enabled, Telnyx will generate comfort noise when you place the call on hold. If disabled, you will need to generate comfort noise or on hold music to avoid RTP timeout. (default: false)
   --dtmf-type: string@dtmf-type-completer # Sets the type of DTMF digits sent from Telnyx to this Connection. Note that DTMF digits sent to Telnyx will be accepted in all formats. (default: RFC 2833, e.g. Inband)
-  --encode-contact-header-enabled: string@bool-completer # Encode the SIP contact header sent by Telnyx to avoid issues for NAT or ALG scenarios. (default: false)
+  --encode-contact-header-enabled: oneof<nothing, bool> # Encode the SIP contact header sent by Telnyx to avoid issues for NAT or ALG scenarios. (default: false)
   --encrypted-media: string@encrypted-media-completer # Enable use of SRTP for encryption. Cannot be set if the transport_portocol is TLS. (nullable, e.g. SRTP)
-  --onnet-t38-passthrough-enabled: string@bool-completer # Enable on-net T38 if you prefer the sender and receiver negotiating T38 directly if both are on the Telnyx network. If this is disabled, Telnyx will be able to use T38 on just one leg of the call depending on each leg's settings. (default: false)
+  --onnet-t38-passthrough-enabled: oneof<nothing, bool> # Enable on-net T38 if you prefer the sender and receiver negotiating T38 directly if both are on the Telnyx network. If this is disabled, Telnyx will be able to use T38 on just one leg of the call depending on each leg's settings. (default: false)
   --ios-push-credential-id: string # The uuid of the push credential for Ios (nullable, e.g. ec0c8e5d-439e-4620-a0c1-9d9c8d02a836)
   --android-push-credential-id: string # The uuid of the push credential for Android (nullable, e.g. 06b09dfd-7154-4980-8b75-cebf7a9d4f8e)
   --webhook-event-url: string # The URL where webhooks related to this connection will be sent. Must include a scheme, such as 'https'. (format: uri, e.g. https://example.com)
   --webhook-event-failover-url: string # The failover URL where webhooks related to this connection will be sent if sending to the primary URL fails. Must include a scheme, such as 'https'. (nullable, format: uri, default: , e.g. https://failover.example.com)
   --webhook-api-version: string@webhook-api-version-completer # Determines which webhook format will be used, Telnyx API v1 or v2. (default: 1, e.g. 1)
   --webhook-timeout-secs: int # Specifies how many seconds to wait before timing out a webhook. (nullable, e.g. 25)
-  --call-cost-in-webhooks: string@bool-completer # Specifies if call cost webhooks should be sent for this connection. (default: false)
+  --call-cost-in-webhooks: oneof<nothing, bool> # Specifies if call cost webhooks should be sent for this connection. (default: false)
   --tags: list # Tags associated with the connection. (e.g. [tag1, tag2])
   --rtcp-settings: record # e.g. {port: rtcp-mux, capture_enabled: true, report_frequency_secs: 10} — shape: {port?: "rtcp-mux"|"rtp+1", capture_enabled?: bool, report_frequency_secs?: int}
   --inbound: record # e.g. {ani_number_format: +E.164, dnis_number_format: +e164, codecs: [G722], default_routing_method: sequential, channel_limit: 10, generate_ringback_tone: true, isup_headers_enabled: true, prack_enabled: true, sip_compact_headers_enabled: true, timeout_1xx_secs: 10, timeout_2xx_secs: 20, shaken_stir_enabled: true, simultaneous_ringing: enabled} — shape: {ani_number_format?: "+E.164"|"E.164"|"+E.164-national"|"E.164-national", dnis_number_format?: "+e164"|"e164"|"national"|"sip_username", codecs?: list, default_routing_method?: "sequential"|"round-robin", channel_limit?: int, generate_ringback_tone?: bool, isup_headers_enabled?: bool, prack_enabled?: bool, sip_compact_headers_enabled?: bool, timeout_1xx_secs?: int, timeout_2xx_secs?: int, shaken_stir_enabled?: bool, simultaneous_ringing?: "disabled"|"enabled"}
@@ -9713,14 +9712,14 @@ export def "dir updateDirSimple" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --display-name: string # Name shown to call recipients. 1–35 characters, no emoji, not whitespace-only.
-  --reselling: string@bool-completer # Set to true if your organization places calls on behalf of other enterprises (BPO/reseller). Updating this triggers re-vetting on next submit.
+  --reselling: oneof<nothing, bool> # Set to true if your organization places calls on behalf of other enterprises (BPO/reseller). Updating this triggers re-vetting on next submit.
   --authorizer-name: string # Name of the person at your enterprise authorizing this DIR. Must be a real individual.
   --authorizer-email: string # Contact email of the authorizer. Telnyx may send verification or infringement notices here. (format: email)
   --logo-url: string # Publicly accessible HTTPS URL (max 128 chars) to a 256x256 BMP logo (max 1 MB). (format: uri)
   --call-reasons: list # 1–10 reasons your business calls customers. Validate phrasing against `POST /call_reasons/validate`.
-  --certify-brand-is-accurate: string@bool-completer # Certification that the DIR information is accurate. Must be `true` for the DIR to be submitted for vetting. (e.g. true)
-  --certify-no-shaft-content: string@bool-completer # Certification that this DIR is not used for SHAFT content (Sex, Hate, Alcohol, Firearms, Tobacco) where prohibited. Must be `true` for the DIR to be submitted for vetting. (e.g. true)
-  --certify-ip-ownership: string@bool-completer # Certification of ownership of any logos/trademarks shown. Must be `true` for the DIR to be submitted for vetting. (e.g. true)
+  --certify-brand-is-accurate: oneof<nothing, bool> # Certification that the DIR information is accurate. Must be `true` for the DIR to be submitted for vetting. (e.g. true)
+  --certify-no-shaft-content: oneof<nothing, bool> # Certification that this DIR is not used for SHAFT content (Sex, Hate, Alcohol, Firearms, Tobacco) where prohibited. Must be `true` for the DIR to be submitted for vetting. (e.g. true)
+  --certify-ip-ownership: oneof<nothing, bool> # Certification of ownership of any logos/trademarks shown. Must be `true` for the DIR to be submitted for vetting. (e.g. true)
   --documents: list # Additional supporting documents to attach. Append-only: existing documents are never removed or replaced, and an empty or omitted list is a no-op. Each `document_id` may appear at most once on a DIR. — item shape: {document_id: string, document_type: "letter_of_authorization"|"business_registration"|"articles_of_incorporation"|"tax_document"|"ein_letter"|"trademark_registration"|"website_ownership"|"business_license"|"professional_license"|"government_id"|"utility_bill"|"bank_statement"|"other", description?: string}
 ]: any -> record<data: record<id: string, enterprise_id: string, display_name: string, reselling: bool, certify_brand_is_accurate: bool, certify_no_shaft_content: bool, certify_ip_ownership: bool, authorizer_name: string, authorizer_email: string, logo_url: string, call_reasons: list<record>, documents: list<record>, status: string, rejection_reasons: list<record>, rejected_at: string, created_at: string, updated_at: string, submitted_at: string, verified_at: string, expiring_at: string>> {
   let input = $in
@@ -9826,10 +9825,10 @@ export def "dir-infringement-update updateDirInfringement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --certify-no-infringement: string@bool-completer # Must be `true`.
-  --certify-brand-is-accurate: string@bool-completer # Must be `true`.
-  --certify-no-shaft-content: string@bool-completer # Must be `true`.
-  --certify-ip-ownership: string@bool-completer # Must be `true`.
+  --certify-no-infringement: oneof<nothing, bool> # Must be `true`.
+  --certify-brand-is-accurate: oneof<nothing, bool> # Must be `true`.
+  --certify-no-shaft-content: oneof<nothing, bool> # Must be `true`.
+  --certify-ip-ownership: oneof<nothing, bool> # Must be `true`.
   infringement_resolution_notes: string # Explanation of how the infringement concern was addressed.
   --display-name: string # nullable
   --logo-url: string # Publicly accessible HTTPS URL (max 128 chars) to a 256x256 BMP logo (max 1 MB). (nullable)
@@ -10649,10 +10648,10 @@ export def "enterprises-dir createDir" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   display_name: string # Name shown to call recipients. No emoji; not whitespace-only. (e.g. Acme Plumbing)
-  --reselling: string@bool-completer # Set to true if your organization places calls on behalf of other enterprises (BPO/reseller). (default: false, e.g. false)
-  --certify-brand-is-accurate: string@bool-completer # Must be `true`. (e.g. true)
-  --certify-no-shaft-content: string@bool-completer # Must be `true`. Confirms this DIR is not used for SHAFT content (Sex, Hate, Alcohol, Firearms, Tobacco) where prohibited. (e.g. true)
-  --certify-ip-ownership: string@bool-completer # Must be `true`. Confirms ownership of any logos/trademarks shown. (e.g. true)
+  --reselling: oneof<nothing, bool> # Set to true if your organization places calls on behalf of other enterprises (BPO/reseller). (default: false, e.g. false)
+  --certify-brand-is-accurate: oneof<nothing, bool> # Must be `true`. (e.g. true)
+  --certify-no-shaft-content: oneof<nothing, bool> # Must be `true`. Confirms this DIR is not used for SHAFT content (Sex, Hate, Alcohol, Firearms, Tobacco) where prohibited. (e.g. true)
+  --certify-ip-ownership: oneof<nothing, bool> # Must be `true`. Confirms ownership of any logos/trademarks shown. (e.g. true)
   authorizer_name: string # Name of the person at your enterprise who is authorizing this DIR registration. Must be a real individual (used for audit and trademark-claim contests). (e.g. Sam Owner)
   authorizer_email: string # Contact email of the authorizer. Telnyx may send verification or infringement-notice email here; use a monitored mailbox. (format: email, e.g. sam@acmeplumbing.example.com)
   --logo-url: string # Publicly accessible HTTPS URL (max 128 chars) to a 256x256 BMP logo (max 1 MB). (format: uri, e.g. https://acmeplumbing.example.com/logo-256.bmp)
@@ -10938,7 +10937,7 @@ export def "enterprises-reputation-numbers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --fresh: string@bool-completer # When true, fetches fresh reputation data (incurs API cost). When false (default), returns cached data. (default: false)
+  --fresh: oneof<nothing, bool> # When true, fetches fresh reputation data (incurs API cost). When false (default), returns cached data. (default: false)
 ]: nothing -> record<data: record<id: string, enterprise_id: string, phone_number: string, reputation_data: record<spam_risk: string, spam_category: string, maturity_score: int, connection_score: int, engagement_score: int, sentiment_score: int, last_refreshed_at: string>, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11067,7 +11066,7 @@ export def "external-connections CreateExternalConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Specifies whether the connection can be used. (default: true, e.g. false)
+  --active: oneof<nothing, bool> # Specifies whether the connection can be used. (default: true, e.g. false)
   external_sip_connection: string@external-sip-connection-completer # The service that will be consuming this connection. (default: zoom, e.g. zoom)
   --tags: list # Tags associated with the connection. (e.g. [tag1, tag2])
   --webhook-event-url: string # The URL where webhooks related to this connection will be sent. Must include a scheme, such as 'https'. (format: uri, e.g. https://example.com)
@@ -11214,7 +11213,7 @@ export def "external-connections UpdateExternalConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Specifies whether the connection can be used. (default: true, e.g. false)
+  --active: oneof<nothing, bool> # Specifies whether the connection can be used. (default: true, e.g. false)
   --webhook-event-url: string # The URL where webhooks related to this connection will be sent. Must include a scheme, such as 'https'. (format: uri, e.g. https://example.com)
   --webhook-event-failover-url: string # The failover URL where webhooks related to this connection will be sent if sending to the primary URL fails. Must include a scheme, such as 'https'. (nullable, format: uri, default: , e.g. https://failover.example.com)
   --tags: list # Tags associated with the connection. (e.g. [tag1, tag2])
@@ -11615,7 +11614,7 @@ export def "fax-applications CreateFaxApplication" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   application_name: string # A user-assigned name to help manage the application. (e.g. call-router)
-  --active: string@bool-completer # Specifies whether the connection can be used. (default: true, e.g. false)
+  --active: oneof<nothing, bool> # Specifies whether the connection can be used. (default: true, e.g. false)
   --anchorsite-override: string@anchorsite-override-completer-1 # `Latency` directs Telnyx to route media through the site with the lowest round-trip time to the user's connection. Telnyx calculates this time using ICMP ping messages. This can be disabled by specifying a site to handle all media. (default: Latency, e.g. Amsterdam, Netherlands)
   webhook_event_url: string # The URL where webhooks related to this connection will be sent. Must include a scheme, such as 'https'. (format: uri, e.g. https://example.com)
   --webhook-event-failover-url: string # The failover URL where webhooks related to this connection will be sent if sending to the primary URL fails. Must include a scheme, such as 'https'. (nullable, format: uri, default: , e.g. https://failover.example.com)
@@ -11695,7 +11694,7 @@ export def "fax-applications UpdateFaxApplication" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   application_name: string # A user-assigned name to help manage the application. (e.g. call-router)
-  --active: string@bool-completer # Specifies whether the connection can be used. (default: true, e.g. false)
+  --active: oneof<nothing, bool> # Specifies whether the connection can be used. (default: true, e.g. false)
   --anchorsite-override: string@anchorsite-override-completer-1 # `Latency` directs Telnyx to route media through the site with the lowest round-trip time to the user's connection. Telnyx calculates this time using ICMP ping messages. This can be disabled by specifying a site to handle all media. (default: Latency, e.g. Amsterdam, Netherlands)
   webhook_event_url: string # The URL where webhooks related to this connection will be sent. Must include a scheme, such as 'https'. (format: uri, e.g. https://example.com)
   --webhook-event-failover-url: string # The failover URL where webhooks related to this connection will be sent if sending to the primary URL fails. Must include a scheme, such as 'https'. (nullable, format: uri, default: , e.g. https://failover.example.com)
@@ -11759,11 +11758,11 @@ export def "faxes SendFax" [
   --body-from: string # The phone number, in E.164 format, the fax will be sent from. (e.g. +13125790015)
   --from-display-name: string # The `from_display_name` string to be used as the caller id name (SIP From Display Name) presented to the destination (`to` number). The string should have a maximum of 128 characters, containing only letters, numbers, spaces, and -_~!.+ special characters. If ommited, the display name will be the same as the number in the `from` field. (e.g. Company Name)
   --quality: string@quality-completer # The quality of the fax. The `ultra` settings provides the highest quality available, but also present longer fax processing times. `ultra_light` is best suited for images, wihle `ultra_dark` is best suited for text. (default: high, e.g. high)
-  --t38-enabled: string@bool-completer # The flag to disable the T.38 protocol. (default: true)
-  --monochrome: string@bool-completer # The flag to enable monochrome, true black and white fax results. (default: false)
+  --t38-enabled: oneof<nothing, bool> # The flag to disable the T.38 protocol. (default: true)
+  --monochrome: oneof<nothing, bool> # The flag to enable monochrome, true black and white fax results. (default: false)
   --black-threshold: int # The black threshold percentage for monochrome faxes. Only applicable if `monochrome` is set to `true`. (default: 95)
-  --store-media: string@bool-completer # Should fax media be stored on temporary URL. It does not support media_name, they can't be submitted together. (default: false)
-  --store-preview: string@bool-completer # Should fax preview be stored on temporary URL. (default: false)
+  --store-media: oneof<nothing, bool> # Should fax media be stored on temporary URL. It does not support media_name, they can't be submitted together. (default: false)
+  --store-preview: oneof<nothing, bool> # Should fax preview be stored on temporary URL. (default: false)
   --preview-format: string@preview-format-completer # The format for the preview file in case the `store_preview` is `true`. (default: tiff)
   --webhook-url: string # Use this field to override the URL to which Telnyx will send subsequent webhooks for this fax. (e.g. https://www.example.com/server-b/)
   --client-state: string # Use this field to add state to every subsequent webhook. It must be a valid Base-64 encoded string. (e.g. aGF2ZSBhIG5pY2UgZGF5ID1d)
@@ -11909,23 +11908,23 @@ export def "fqdn-connections CreateFqdnConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Defaults to true (default: true)
+  --active: oneof<nothing, bool> # Defaults to true (default: true)
   --anchorsite-override: string@anchorsite-override-completer-1 # `Latency` directs Telnyx to route media through the site with the lowest round-trip time to the user's connection. Telnyx calculates this time using ICMP ping messages. This can be disabled by specifying a site to handle all media. (default: Latency, e.g. Amsterdam, Netherlands)
   connection_name: string # A user-assigned name to help manage the connection. (e.g. office-connection)
   --transport-protocol: string@transport-protocol-completer # One of UDP, TLS, or TCP. Applies only to connections with IP authentication or FQDN authentication. (default: UDP)
-  --default-on-hold-comfort-noise-enabled: string@bool-completer # When enabled, Telnyx will generate comfort noise when you place the call on hold. If disabled, you will need to generate comfort noise or on hold music to avoid RTP timeout. (default: true)
+  --default-on-hold-comfort-noise-enabled: oneof<nothing, bool> # When enabled, Telnyx will generate comfort noise when you place the call on hold. If disabled, you will need to generate comfort noise or on hold music to avoid RTP timeout. (default: true)
   --dtmf-type: string@dtmf-type-completer # Sets the type of DTMF digits sent from Telnyx to this Connection. Note that DTMF digits sent to Telnyx will be accepted in all formats. (default: RFC 2833, e.g. Inband)
-  --encode-contact-header-enabled: string@bool-completer # Encode the SIP contact header sent by Telnyx to avoid issues for NAT or ALG scenarios. (default: false)
+  --encode-contact-header-enabled: oneof<nothing, bool> # Encode the SIP contact header sent by Telnyx to avoid issues for NAT or ALG scenarios. (default: false)
   --encrypted-media: string@encrypted-media-completer # Enable use of SRTP for encryption. Cannot be set if the transport_portocol is TLS. (nullable, e.g. SRTP)
-  --microsoft-teams-sbc: string@bool-completer # When enabled, the connection will be created for Microsoft Teams Direct Routing. A *.mstsbc.telnyx.tech FQDN will be created for the connection automatically. (default: false)
-  --onnet-t38-passthrough-enabled: string@bool-completer # Enable on-net T38 if you prefer the sender and receiver negotiating T38 directly if both are on the Telnyx network. If this is disabled, Telnyx will be able to use T38 on just one leg of the call depending on each leg's settings. (default: false)
+  --microsoft-teams-sbc: oneof<nothing, bool> # When enabled, the connection will be created for Microsoft Teams Direct Routing. A *.mstsbc.telnyx.tech FQDN will be created for the connection automatically. (default: false)
+  --onnet-t38-passthrough-enabled: oneof<nothing, bool> # Enable on-net T38 if you prefer the sender and receiver negotiating T38 directly if both are on the Telnyx network. If this is disabled, Telnyx will be able to use T38 on just one leg of the call depending on each leg's settings. (default: false)
   --tags: list # Tags associated with the connection. (e.g. [tag1, tag2])
   --ios-push-credential-id: string # The uuid of the push credential for Ios (nullable, e.g. ec0c8e5d-439e-4620-a0c1-9d9c8d02a836)
   --android-push-credential-id: string # The uuid of the push credential for Android (nullable, e.g. 06b09dfd-7154-4980-8b75-cebf7a9d4f8e)
   --webhook-event-url: string # The URL where webhooks related to this connection will be sent. Must include a scheme, such as 'https'. (format: uri, e.g. https://example.com)
   --webhook-event-failover-url: string # The failover URL where webhooks related to this connection will be sent if sending to the primary URL fails. Must include a scheme, such as 'https'. (nullable, format: uri, default: , e.g. https://failover.example.com)
   --webhook-api-version: string@webhook-api-version-completer # Determines which webhook format will be used, Telnyx API v1 or v2. (default: 1, e.g. 1)
-  --call-cost-in-webhooks: string@bool-completer # Specifies if call cost webhooks should be sent for this connection. (default: false)
+  --call-cost-in-webhooks: oneof<nothing, bool> # Specifies if call cost webhooks should be sent for this connection. (default: false)
   --webhook-timeout-secs: int # Specifies how many seconds to wait before timing out a webhook. (nullable, e.g. 25)
   --rtcp-settings: record # e.g. {port: rtcp-mux, capture_enabled: true, report_frequency_secs: 10} — shape: {port?: "rtcp-mux"|"rtp+1", capture_enabled?: bool, report_frequency_secs?: int}
   --inbound: record # e.g. {ani_number_format: +E.164, dnis_number_format: +e164, codecs: [G722], default_routing_method: sequential, default_primary_fqdn_id: 1293384261075731497, default_secondary_fqdn_id: 1293384261075731498, default_tertiary_fqdn_id: 1293384261075731499, channel_limit: 10, generate_ringback_tone: true, isup_headers_enabled: true, prack_enabled: true, sip_compact_headers_enabled: true, sip_region: US, sip_subdomain: test, sip_subdomain_receive_settings: only_my_connections, timeout_1xx_secs: 10, timeout_2xx_secs: 20, shaken_stir_enabled: true} — shape: {ani_number_format?: "+E.164"|"E.164"|"+E.164-national"|"E.164-national", dnis_number_format?: "+e164"|"e164"|"national"|"sip_username", codecs?: list, default_routing_method?: "sequential"|"round-robin"|"", default_primary_fqdn_id?: string, default_secondary_fqdn_id?: string, default_tertiary_fqdn_id?: string, channel_limit?: int, generate_ringback_tone?: bool, isup_headers_enabled?: bool, prack_enabled?: bool, sip_compact_headers_enabled?: bool, sip_region?: "US"|"Europe"|"Australia", sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone", timeout_1xx_secs?: int, timeout_2xx_secs?: int, shaken_stir_enabled?: bool}
@@ -12007,22 +12006,22 @@ export def "fqdn-connections UpdateFqdnConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Defaults to true
+  --active: oneof<nothing, bool> # Defaults to true
   --anchorsite-override: string@anchorsite-override-completer-1 # `Latency` directs Telnyx to route media through the site with the lowest round-trip time to the user's connection. Telnyx calculates this time using ICMP ping messages. This can be disabled by specifying a site to handle all media. (default: Latency, e.g. Amsterdam, Netherlands)
   --connection-name: string # A user-assigned name to help manage the connection. (e.g. office-connection)
   --transport-protocol: string@transport-protocol-completer # One of UDP, TLS, or TCP. Applies only to connections with IP authentication or FQDN authentication. (default: UDP)
-  --default-on-hold-comfort-noise-enabled: string@bool-completer # When enabled, Telnyx will generate comfort noise when you place the call on hold. If disabled, you will need to generate comfort noise or on hold music to avoid RTP timeout. (default: true)
+  --default-on-hold-comfort-noise-enabled: oneof<nothing, bool> # When enabled, Telnyx will generate comfort noise when you place the call on hold. If disabled, you will need to generate comfort noise or on hold music to avoid RTP timeout. (default: true)
   --dtmf-type: string@dtmf-type-completer # Sets the type of DTMF digits sent from Telnyx to this Connection. Note that DTMF digits sent to Telnyx will be accepted in all formats. (default: RFC 2833, e.g. Inband)
-  --encode-contact-header-enabled: string@bool-completer # Encode the SIP contact header sent by Telnyx to avoid issues for NAT or ALG scenarios. (default: false)
+  --encode-contact-header-enabled: oneof<nothing, bool> # Encode the SIP contact header sent by Telnyx to avoid issues for NAT or ALG scenarios. (default: false)
   --encrypted-media: string@encrypted-media-completer # Enable use of SRTP for encryption. Cannot be set if the transport_portocol is TLS. (nullable, e.g. SRTP)
-  --onnet-t38-passthrough-enabled: string@bool-completer # Enable on-net T38 if you prefer that the sender and receiver negotiate T38 directly when both are on the Telnyx network. If this is disabled, Telnyx will be able to use T38 on just one leg of the call according to each leg's settings. (default: false)
+  --onnet-t38-passthrough-enabled: oneof<nothing, bool> # Enable on-net T38 if you prefer that the sender and receiver negotiate T38 directly when both are on the Telnyx network. If this is disabled, Telnyx will be able to use T38 on just one leg of the call according to each leg's settings. (default: false)
   --tags: list # Tags associated with the connection. (e.g. [tag1, tag2])
   --ios-push-credential-id: string # The uuid of the push credential for Ios (nullable, e.g. ec0c8e5d-439e-4620-a0c1-9d9c8d02a836)
   --android-push-credential-id: string # The uuid of the push credential for Android (nullable, e.g. 06b09dfd-7154-4980-8b75-cebf7a9d4f8e)
   --webhook-event-url: string # The URL where webhooks related to this connection will be sent. Must include a scheme, such as 'https'. (format: uri, e.g. https://example.com)
   --webhook-event-failover-url: string # The failover URL where webhooks related to this connection will be sent if sending to the primary URL fails. Must include a scheme, such as 'https'. (nullable, format: uri, default: , e.g. https://failover.example.com)
   --webhook-api-version: string@webhook-api-version-completer # Determines which webhook format will be used, Telnyx API v1 or v2. (default: 1, e.g. 1)
-  --call-cost-in-webhooks: string@bool-completer # Specifies if call cost webhooks should be sent for this connection. (default: false)
+  --call-cost-in-webhooks: oneof<nothing, bool> # Specifies if call cost webhooks should be sent for this connection. (default: false)
   --webhook-timeout-secs: int # Specifies how many seconds to wait before timing out a webhook. (nullable, e.g. 25)
   --rtcp-settings: record # e.g. {port: rtcp-mux, capture_enabled: true, report_frequency_secs: 10} — shape: {port?: "rtcp-mux"|"rtp+1", capture_enabled?: bool, report_frequency_secs?: int}
   --inbound: record # e.g. {ani_number_format: +E.164, dnis_number_format: +e164, codecs: [G722], default_routing_method: sequential, default_primary_fqdn_id: 1293384261075731497, default_secondary_fqdn_id: 1293384261075731498, default_tertiary_fqdn_id: 1293384261075731499, channel_limit: 10, generate_ringback_tone: true, isup_headers_enabled: true, prack_enabled: true, sip_compact_headers_enabled: true, sip_region: US, sip_subdomain: test, sip_subdomain_receive_settings: only_my_connections, timeout_1xx_secs: 10, timeout_2xx_secs: 20, shaken_stir_enabled: true} — shape: {ani_number_format?: "+E.164"|"E.164"|"+E.164-national"|"E.164-national", dnis_number_format?: "+e164"|"e164"|"national"|"sip_username", codecs?: list, default_routing_method?: "sequential"|"round-robin"|"", default_primary_fqdn_id?: string, default_secondary_fqdn_id?: string, default_tertiary_fqdn_id?: string, channel_limit?: int, generate_ringback_tone?: bool, isup_headers_enabled?: bool, prack_enabled?: bool, sip_compact_headers_enabled?: bool, sip_region?: "US"|"Europe"|"Australia", sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone", timeout_1xx_secs?: int, timeout_2xx_secs?: int, shaken_stir_enabled?: bool}
@@ -12248,7 +12247,7 @@ export def "global-ip-assignments CreateGlobalIpAssignment" [
   --allow-errors(-e) # Return full response without error handling
   --global-ip-id: string # Global IP ID. (format: uuid, e.g. a836125b-20b6-452e-9c03-2653f09c7ed7)
   --wireguard-peer-id: string # Wireguard peer ID. (format: uuid, e.g. e66c496d-4a85-423b-8b2a-8e63fac20320)
-  --is-in-maintenance: string@bool-completer # Enable/disable BGP announcement.
+  --is-in-maintenance: oneof<nothing, bool> # Enable/disable BGP announcement.
 ]: any -> record<data: record<id: string, record_type: string, created_at: string, updated_at: string, global_ip_id: string, wireguard_peer_id: string, status: string, is_connected: bool, is_in_maintenance: bool, is_announced: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12989,22 +12988,22 @@ export def "ip-connections CreateIpConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Defaults to true (e.g. true)
+  --active: oneof<nothing, bool> # Defaults to true (e.g. true)
   --anchorsite-override: string@anchorsite-override-completer-1 # `Latency` directs Telnyx to route media through the site with the lowest round-trip time to the user's connection. Telnyx calculates this time using ICMP ping messages. This can be disabled by specifying a site to handle all media. (default: Latency, e.g. Amsterdam, Netherlands)
   --connection-name: string # e.g. string
   --transport-protocol: string@transport-protocol-completer # One of UDP, TLS, or TCP. Applies only to connections with IP authentication or FQDN authentication. (default: UDP, e.g. UDP)
-  --default-on-hold-comfort-noise-enabled: string@bool-completer # When enabled, Telnyx will generate comfort noise when you place the call on hold. If disabled, you will need to generate comfort noise or on hold music to avoid RTP timeout. (default: true, e.g. true)
+  --default-on-hold-comfort-noise-enabled: oneof<nothing, bool> # When enabled, Telnyx will generate comfort noise when you place the call on hold. If disabled, you will need to generate comfort noise or on hold music to avoid RTP timeout. (default: true, e.g. true)
   --dtmf-type: string@dtmf-type-completer # Sets the type of DTMF digits sent from Telnyx to this Connection. Note that DTMF digits sent to Telnyx will be accepted in all formats. (default: RFC 2833, e.g. Inband)
-  --encode-contact-header-enabled: string@bool-completer # Encode the SIP contact header sent by Telnyx to avoid issues for NAT or ALG scenarios. (default: false, e.g. true)
+  --encode-contact-header-enabled: oneof<nothing, bool> # Encode the SIP contact header sent by Telnyx to avoid issues for NAT or ALG scenarios. (default: false, e.g. true)
   --encrypted-media: string@encrypted-media-completer # Enable use of SRTP for encryption. Cannot be set if the transport_portocol is TLS. (nullable, e.g. SRTP)
-  --onnet-t38-passthrough-enabled: string@bool-completer # Enable on-net T38 if you prefer the sender and receiver negotiating T38 directly if both are on the Telnyx network. If this is disabled, Telnyx will be able to use T38 on just one leg of the call depending on each leg's settings. (default: false, e.g. false)
+  --onnet-t38-passthrough-enabled: oneof<nothing, bool> # Enable on-net T38 if you prefer the sender and receiver negotiating T38 directly if both are on the Telnyx network. If this is disabled, Telnyx will be able to use T38 on just one leg of the call depending on each leg's settings. (default: false, e.g. false)
   --ios-push-credential-id: string # The uuid of the push credential for Ios (nullable, e.g. ec0c8e5d-439e-4620-a0c1-9d9c8d02a836)
   --android-push-credential-id: string # The uuid of the push credential for Android (nullable, e.g. 06b09dfd-7154-4980-8b75-cebf7a9d4f8e)
   --webhook-event-url: string # The URL where webhooks related to this connection will be sent. Must include a scheme, such as 'https'. (format: uri, e.g. https://example.com)
   --webhook-event-failover-url: string # The failover URL where webhooks related to this connection will be sent if sending to the primary URL fails. Must include a scheme, such as 'https'. (nullable, format: uri, default: , e.g. https://failover.example.com)
   --webhook-api-version: string@webhook-api-version-completer # Determines which webhook format will be used, Telnyx API v1 or v2. (default: 1, e.g. 1)
   --webhook-timeout-secs: int # Specifies how many seconds to wait before timing out a webhook. (nullable, e.g. 25)
-  --call-cost-in-webhooks: string@bool-completer # Specifies if call cost webhooks should be sent for this connection. (default: false)
+  --call-cost-in-webhooks: oneof<nothing, bool> # Specifies if call cost webhooks should be sent for this connection. (default: false)
   --tags: list # Tags associated with the connection. (e.g. [tag1, tag2])
   --rtcp-settings: record # e.g. {port: rtcp-mux, capture_enabled: true, report_frequency_secs: 10} — shape: {port?: "rtcp-mux"|"rtp+1", capture_enabled?: bool, report_frequency_secs?: int}
   --inbound: record # e.g. {ani_number_format: +E.164, dnis_number_format: +e164, codecs: [G722], default_routing_method: sequential, channel_limit: 10, generate_ringback_tone: true, isup_headers_enabled: true, prack_enabled: true, sip_compact_headers_enabled: true, sip_region: US, sip_subdomain: test, sip_subdomain_receive_settings: only_my_connections, timeout_1xx_secs: 10, timeout_2xx_secs: 20, shaken_stir_enabled: true} — shape: {ani_number_format?: "+E.164"|"E.164"|"+E.164-national"|"E.164-national", dnis_number_format?: "+e164"|"e164"|"national"|"sip_username", codecs?: list, default_routing_method?: "sequential"|"round-robin", channel_limit?: int, generate_ringback_tone?: bool, isup_headers_enabled?: bool, prack_enabled?: bool, sip_compact_headers_enabled?: bool, sip_region?: "US"|"Europe"|"Australia", sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone", timeout_1xx_secs?: int, timeout_2xx_secs?: int, shaken_stir_enabled?: bool}
@@ -13086,22 +13085,22 @@ export def "ip-connections UpdateIpConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Defaults to true
+  --active: oneof<nothing, bool> # Defaults to true
   --anchorsite-override: string@anchorsite-override-completer-1 # `Latency` directs Telnyx to route media through the site with the lowest round-trip time to the user's connection. Telnyx calculates this time using ICMP ping messages. This can be disabled by specifying a site to handle all media. (default: Latency, e.g. Amsterdam, Netherlands)
   --connection-name: string
   --transport-protocol: string@transport-protocol-completer # One of UDP, TLS, or TCP. Applies only to connections with IP authentication or FQDN authentication. (default: UDP)
-  --default-on-hold-comfort-noise-enabled: string@bool-completer # When enabled, Telnyx will generate comfort noise when you place the call on hold. If disabled, you will need to generate comfort noise or on hold music to avoid RTP timeout. (default: true)
+  --default-on-hold-comfort-noise-enabled: oneof<nothing, bool> # When enabled, Telnyx will generate comfort noise when you place the call on hold. If disabled, you will need to generate comfort noise or on hold music to avoid RTP timeout. (default: true)
   --dtmf-type: string@dtmf-type-completer # Sets the type of DTMF digits sent from Telnyx to this Connection. Note that DTMF digits sent to Telnyx will be accepted in all formats. (default: RFC 2833, e.g. Inband)
-  --encode-contact-header-enabled: string@bool-completer # Encode the SIP contact header sent by Telnyx to avoid issues for NAT or ALG scenarios. (default: false)
+  --encode-contact-header-enabled: oneof<nothing, bool> # Encode the SIP contact header sent by Telnyx to avoid issues for NAT or ALG scenarios. (default: false)
   --encrypted-media: string@encrypted-media-completer # Enable use of SRTP for encryption. Cannot be set if the transport_portocol is TLS. (nullable, e.g. SRTP)
-  --onnet-t38-passthrough-enabled: string@bool-completer # Enable on-net T38 if you prefer the sender and receiver negotiating T38 directly if both are on the Telnyx network. If this is disabled, Telnyx will be able to use T38 on just one leg of the call depending on each leg's settings. (default: false)
+  --onnet-t38-passthrough-enabled: oneof<nothing, bool> # Enable on-net T38 if you prefer the sender and receiver negotiating T38 directly if both are on the Telnyx network. If this is disabled, Telnyx will be able to use T38 on just one leg of the call depending on each leg's settings. (default: false)
   --ios-push-credential-id: string # The uuid of the push credential for Ios (nullable, e.g. ec0c8e5d-439e-4620-a0c1-9d9c8d02a836)
   --android-push-credential-id: string # The uuid of the push credential for Android (nullable, e.g. 06b09dfd-7154-4980-8b75-cebf7a9d4f8e)
   --webhook-event-url: string # The URL where webhooks related to this connection will be sent. Must include a scheme, such as 'https'. (format: uri, e.g. https://example.com)
   --webhook-event-failover-url: string # The failover URL where webhooks related to this connection will be sent if sending to the primary URL fails. Must include a scheme, such as 'https'. (nullable, format: uri, default: , e.g. https://failover.example.com)
   --webhook-api-version: string@webhook-api-version-completer # Determines which webhook format will be used, Telnyx API v1 or v2. (default: 1, e.g. 1)
   --webhook-timeout-secs: int # Specifies how many seconds to wait before timing out a webhook. (nullable, e.g. 25)
-  --call-cost-in-webhooks: string@bool-completer # Specifies if call cost webhooks should be sent for this connection. (default: false)
+  --call-cost-in-webhooks: oneof<nothing, bool> # Specifies if call cost webhooks should be sent for this connection. (default: false)
   --tags: list # Tags associated with the connection. (e.g. [tag1, tag2])
   --rtcp-settings: record # e.g. {port: rtcp-mux, capture_enabled: true, report_frequency_secs: 10} — shape: {port?: "rtcp-mux"|"rtp+1", capture_enabled?: bool, report_frequency_secs?: int}
   --inbound: record # e.g. {ani_number_format: +E.164, dnis_number_format: +e164, codecs: [G722], default_primary_ip_id: 192.168.0.0, default_tertiary_ip_id: 192.168.0.0, default_secondary_ip_id: 192.168.0.0, default_routing_method: sequential, channel_limit: 10, generate_ringback_tone: true, isup_headers_enabled: true, prack_enabled: true, sip_compact_headers_enabled: true, sip_region: US, sip_subdomain: test, sip_subdomain_receive_settings: only_my_connections, timeout_1xx_secs: 10, timeout_2xx_secs: 20, shaken_stir_enabled: true} — shape: {ani_number_format?: "+E.164"|"E.164"|"+E.164-national"|"E.164-national", dnis_number_format?: "+e164"|"e164"|"national"|"sip_username", codecs?: list, default_primary_ip_id?: string, default_secondary_ip_id?: string, default_tertiary_ip_id?: string, default_routing_method?: "sequential"|"round-robin", channel_limit?: int, generate_ringback_tone?: bool, isup_headers_enabled?: bool, prack_enabled?: bool, sip_compact_headers_enabled?: bool, sip_region?: "US"|"Europe"|"Australia", sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone", timeout_1xx_secs?: int, timeout_2xx_secs?: int, shaken_stir_enabled?: bool}
@@ -13333,11 +13332,11 @@ export def "legacy-reporting-batch-detail-records-messaging submitMdrRequest" [
   --record-types: list # List of record types to filter by (Complete = 1, Incomplete = 2, Errors = 3) (e.g. [1, 2])
   --connections: list # List of connections to filter by (e.g. [123, 456])
   --report-name: string # Name of the report (e.g. My MDR Report)
-  --include-message-body: string@bool-completer # Whether to include message body in the report (e.g. true)
+  --include-message-body: oneof<nothing, bool> # Whether to include message body in the report (e.g. true)
   --filters: list # List of filters to apply — item shape: {filter_type?: "and"|"or", cli?: string, cli_filter?: "contains"|"starts_with"|"ends_with", cld?: string, cld_filter?: "contains"|"starts_with"|"ends_with", tags_list?: string, billing_group?: string}
   --profiles: list # List of messaging profile IDs to filter by (e.g. [3fa85f64-5717-4562-b3fc-2c963f66afa6, 7d4e3f8a-9b2c-4e1d-8f5a-1a2b3c4d5e6f])
   --managed-accounts: list # List of managed accounts to include (e.g. [f47ac10b-58cc-4372-a567-0e02b2c3d479, 6ba7b810-9dad-11d1-80b4-00c04fd430c8])
-  --select-all-managed-accounts: string@bool-completer # Whether to select all managed accounts (e.g. false)
+  --select-all-managed-accounts: oneof<nothing, bool> # Whether to select all managed accounts (e.g. false)
 ]: any -> record<data: record<id: string, start_date: string, end_date: string, directions: list<string>, record_types: list<string>, connections: list<int>, report_name: string, status: string, report_url: string, filters: list<record>, created_at: string, updated_at: string, profiles: list<string>, record_type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -13527,11 +13526,11 @@ export def "legacy-reporting-batch-detail-records-voice submitCdrRequest" [
   --connections: list # List of connections to filter by (e.g. [123, 456])
   --report-name: string # Name of the report (e.g. My CDR Report)
   --body-source: string # Source of the report. Valid values: calls (default), call-control, fax-api, webrtc (e.g. calls)
-  --include-all-metadata: string@bool-completer # Whether to include all metadata (e.g. true)
+  --include-all-metadata: oneof<nothing, bool> # Whether to include all metadata (e.g. true)
   --filters: list # List of filters to apply — item shape: {filter_type?: "and"|"or", cli?: string, cli_filter?: "contains"|"starts_with"|"ends_with", cld?: string, cld_filter?: "contains"|"starts_with"|"ends_with", tags_list?: string, billing_group?: string}
   --body-fields: list # Set of fields to include in the report (e.g. [call_leg_id, start_time, end_time])
   --managed-accounts: list # List of managed accounts to include (e.g. [f47ac10b-58cc-4372-a567-0e02b2c3d479, 6ba7b810-9dad-11d1-80b4-00c04fd430c8])
-  --select-all-managed-accounts: string@bool-completer # Whether to select all managed accounts (e.g. false)
+  --select-all-managed-accounts: oneof<nothing, bool> # Whether to select all managed accounts (e.g. false)
 ]: any -> record<data: record<id: string, start_time: string, end_time: string, call_types: list<int>, record_types: list<int>, connections: list<int>, report_name: string, status: int, report_url: string, filters: list<record>, created_at: string, updated_at: string, timezone: string, source: string, retry: int, managed_accounts: list<string>, record_type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -13649,7 +13648,7 @@ export def "legacy-reporting-usage-reports-messaging submitMdrUsageReport" [
   --end-time: string # format: date-time, e.g. 2020-01-02T00:00:00Z
   aggregation_type: int # Aggregation type: No aggregation = 0, By Messaging Profile = 1, By Tags = 2 (format: int32, e.g. 0)
   --profiles: list # List of messaging profile IDs to filter by (e.g. [3fa85f64-5717-4562-b3fc-2c963f66afa6, 7d4e3f8a-9b2c-4e1d-8f5a-1a2b3c4d5e6f])
-  --select-all-managed-accounts: string@bool-completer # e.g. true
+  --select-all-managed-accounts: oneof<nothing, bool> # e.g. true
   --managed-accounts: list # List of managed accounts to include (e.g. [f47ac10b-58cc-4372-a567-0e02b2c3d479, 6ba7b810-9dad-11d1-80b4-00c04fd430c8])
 ]: any -> record<data: record<id: string, start_time: string, end_time: string, connections: list<string>, aggregation_type: int, status: int, report_url: string, result: record, created_at: string, updated_at: string, profiles: list<string>, record_type: string>> {
   let input = $in
@@ -13866,7 +13865,7 @@ export def "legacy-reporting-usage-reports-voice submitCdrUsageReport" [
   --connections: list # List of connections to filter by (e.g. [123, 456])
   --product-breakdown: int # Product breakdown type: No breakdown = 0, DID vs Toll-free = 1, Country = 2, DID vs Toll-free per Country = 3 (format: int32, e.g. 0)
   --managed-accounts: list # List of managed accounts to include (e.g. [f47ac10b-58cc-4372-a567-0e02b2c3d479, 6ba7b810-9dad-11d1-80b4-00c04fd430c8])
-  --select-all-managed-accounts: string@bool-completer # Whether to select all managed accounts (e.g. false)
+  --select-all-managed-accounts: oneof<nothing, bool> # Whether to select all managed accounts (e.g. false)
 ]: any -> record<data: record<id: string, start_time: string, end_time: string, connections: list<string>, aggregation_type: int, status: int, report_url: string, result: record, created_at: string, updated_at: string, record_type: string, product_breakdown: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -13981,7 +13980,7 @@ export def "managed-accounts ListManagedAccounts" [
   --filter: record # Consolidated filter parameter (deepObject style). Originally: filter[email][contains], filter[email][eq], filter[organization_name][contains], filter[organization_name][eq] (e.g. {email: {contains: john}, organization_name: {eq: Example Company LLC}})
   --page: record # Consolidated page parameter (deepObject style). Originally: page[number], page[size]
   --qp-sort: string@sort-completer-12 # Specifies the sort order for results. By default sorting direction is ascending. To have the results sorted in descending order add the <code> -</code> prefix.<br/><br/> That is: <ul>   <li>     <code>email</code>: sorts the result by the     <code>email</code> field in ascending order.   </li>    <li>     <code>-email</code>: sorts the result by the     <code>email</code> field in descending order.   </li> </ul> <br/> If not given, results are sorted by <code>created_at</code> in descending order. (default: created_at, e.g. email)
-  --include-cancelled-accounts: string@bool-completer # Specifies if cancelled accounts should be included in the results. (default: false, e.g. true)
+  --include-cancelled-accounts: oneof<nothing, bool> # Specifies if cancelled accounts should be included in the results. (default: false, e.g. true)
 ]: nothing -> record<data: table<record_type: string, id: string, email: string, api_user: string, organization_name: string, manager_account_id: string, created_at: string, updated_at: string, managed_account_allow_custom_pricing: bool, rollup_billing: bool>, meta: record<total_pages: int, total_results: int, page_number: int, page_size: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14007,8 +14006,8 @@ export def "managed-accounts CreateManagedAccount" [
   --email: string # The email address for the managed account. If not provided, the email address will be generated based on the email address of the manager account. (e.g. new_managed_account@customer.org)
   --password: string # Password for the managed account. If a password is not supplied, the account will not be able to be signed into directly. (A password reset may still be performed later to enable sign-in via password.) (e.g. 3jVjLq!tMuWKyWx4NN*CvhnB)
   business_name: string # The name of the business for which the new managed account is being created, that will be used as the managed accounts's organization's name. (e.g. Larry's Cat Food Inc)
-  --managed-account-allow-custom-pricing: string@bool-completer # Boolean value that indicates if the managed account is able to have custom pricing set for it or not. If false, uses the pricing of the manager account. Defaults to false. This value may be changed after creation, but there may be time lag between when the value is changed and pricing changes take effect. (e.g. false)
-  --rollup-billing: string@bool-completer # Boolean value that indicates if the billing information and charges to the managed account "roll up" to the manager account. If true, the managed account will not have its own balance and will use the shared balance with the manager account. This value cannot be changed after account creation without going through Telnyx support as changes require manual updates to the account ledger. Defaults to false. (e.g. false)
+  --managed-account-allow-custom-pricing: oneof<nothing, bool> # Boolean value that indicates if the managed account is able to have custom pricing set for it or not. If false, uses the pricing of the manager account. Defaults to false. This value may be changed after creation, but there may be time lag between when the value is changed and pricing changes take effect. (e.g. false)
+  --rollup-billing: oneof<nothing, bool> # Boolean value that indicates if the billing information and charges to the managed account "roll up" to the manager account. If true, the managed account will not have its own balance and will use the shared balance with the manager account. This value cannot be changed after account creation without going through Telnyx support as changes require manual updates to the account ledger. Defaults to false. (e.g. false)
 ]: any -> record<data: record<record_type: string, id: string, email: string, api_key: string, api_user: string, api_token: string, organization_name: string, manager_account_id: string, balance: record<record_type: string, balance: string, credit_limit: string, available_credit: string, currency: string>, created_at: string, updated_at: string, managed_account_allow_custom_pricing: bool, rollup_billing: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -14077,7 +14076,7 @@ export def "managed-accounts UpdateManagedAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --managed-account-allow-custom-pricing: string@bool-completer # Boolean value that indicates if the managed account is able to have custom pricing set for it or not. If false, uses the pricing of the manager account. Defaults to false. This value may be changed, but there may be time lag between when the value is changed and pricing changes take effect. (e.g. false)
+  --managed-account-allow-custom-pricing: oneof<nothing, bool> # Boolean value that indicates if the managed account is able to have custom pricing set for it or not. If false, uses the pricing of the manager account. Defaults to false. This value may be changed, but there may be time lag between when the value is changed and pricing changes take effect. (e.g. false)
 ]: any -> record<data: record<record_type: string, id: string, email: string, api_key: string, api_user: string, api_token: string, organization_name: string, manager_account_id: string, balance: record<record_type: string, balance: string, credit_limit: string, available_credit: string, currency: string>, created_at: string, updated_at: string, managed_account_allow_custom_pricing: bool, rollup_billing: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -14125,7 +14124,7 @@ export def "managed-accounts-actions-enable EnableManagedAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --reenable-all-connections: string@bool-completer # When true, all connections owned by this managed account will automatically be re-enabled. Note: Any connections that do not pass validations will not be re-enabled. (default: false, e.g. true)
+  --reenable-all-connections: oneof<nothing, bool> # When true, all connections owned by this managed account will automatically be re-enabled. Note: Any connections that do not pass validations will not be re-enabled. (default: false, e.g. true)
 ]: any -> record<data: record<record_type: string, id: string, email: string, api_key: string, api_user: string, api_token: string, organization_name: string, manager_account_id: string, balance: record<record_type: string, balance: string, credit_limit: string, available_credit: string, currency: string>, created_at: string, updated_at: string, managed_account_allow_custom_pricing: bool, rollup_billing: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -14327,9 +14326,9 @@ export def "messages SendMessage" [
   --media-urls: list # A list of media URLs. The total media size must be less than 1 MB.  **Required for MMS**
   --webhook-url: string # The URL where webhooks related to this message will be sent. (format: url)
   --webhook-failover-url: string # The failover URL where webhooks related to this message will be sent if sending to the primary URL fails. (format: url)
-  --use-profile-webhooks: string@bool-completer # If the profile this number is associated with has webhooks, use them for delivery notifications. If webhooks are also specified on the message itself, they will be attempted first, then those on the profile. (default: true)
+  --use-profile-webhooks: oneof<nothing, bool> # If the profile this number is associated with has webhooks, use them for delivery notifications. If webhooks are also specified on the message itself, they will be attempted first, then those on the profile. (default: true)
   --type: string@type-completer-2 # The protocol for sending the message, either SMS or MMS.
-  --auto-detect: string@bool-completer # Automatically detect if an SMS message is unusually long and exceeds a recommended limit of message parts. (default: false)
+  --auto-detect: oneof<nothing, bool> # Automatically detect if an SMS message is unusually long and exceeds a recommended limit of message parts. (default: false)
   --send-at: string # ISO 8601 formatted date indicating when to send the message - accurate up till a minute. (nullable, format: date-time)
   --encoding: string@encoding-completer # Encoding to use for the message. `auto` (default) uses smart encoding to automatically select the most efficient encoding. `gsm7` forces GSM-7 encoding (returns 400 if message contains characters that cannot be encoded). `ucs2` forces UCS-2 encoding and disables smart encoding. When set, this overrides the messaging profile's `smart_encoding` setting. (default: auto)
 ]: any -> record<data: record<record_type: string, direction: string, id: string, type: string, messaging_profile_id: string, organization_id: string, from: record<phone_number: string, carrier: string, line_type: string>, to: list<record>, cc: list<record>, text: string, num_chars: int, subject: string, media: list<record>, webhook_url: string, webhook_failover_url: string, encoding: string, parts: int, tags: list<string>, cost: record<amount: string, currency: string>, cost_breakdown: record<carrier_fee: record, rate: record>, tcr_campaign_id: string, tcr_campaign_billable: bool, tcr_campaign_registered: string, received_at: string, sent_at: string, completed_at: string, valid_until: string, errors: list<record>, smart_encoding_applied: bool, wait_seconds: float>> {
@@ -14362,7 +14361,7 @@ export def "messages-alphanumeric-sender-id SendAlphanumericSenderIdMessage" [
   messaging_profile_id: string # The messaging profile ID to use. (format: uuid)
   --webhook-url: string # Callback URL for delivery status updates. (nullable, format: url)
   --webhook-failover-url: string # Failover callback URL for delivery status updates. (nullable, format: url)
-  --use-profile-webhooks: string@bool-completer # If true, use the messaging profile's webhook settings.
+  --use-profile-webhooks: oneof<nothing, bool> # If true, use the messaging profile's webhook settings.
 ]: any -> record<data: record<record_type: string, direction: string, id: string, type: string, messaging_profile_id: string, organization_id: string, from: record<phone_number: string, carrier: string, line_type: string>, to: list<record>, cc: list<record>, text: string, num_chars: int, subject: string, media: list<record>, webhook_url: string, webhook_failover_url: string, encoding: string, parts: int, tags: list<string>, cost: record<amount: string, currency: string>, cost_breakdown: record<carrier_fee: record, rate: record>, tcr_campaign_id: string, tcr_campaign_billable: bool, tcr_campaign_registered: string, received_at: string, sent_at: string, completed_at: string, valid_until: string, errors: list<record>, smart_encoding_applied: bool, wait_seconds: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -14416,7 +14415,7 @@ export def "messages-group-mms CreateGroupMmsMessage" [
   --media-urls: list # A list of media URLs. The total media size must be less than 1 MB.
   --webhook-url: string # The URL where webhooks related to this message will be sent. (format: url)
   --webhook-failover-url: string # The failover URL where webhooks related to this message will be sent if sending to the primary URL fails. (format: url)
-  --use-profile-webhooks: string@bool-completer # If the profile this number is associated with has webhooks, use them for delivery notifications. If webhooks are also specified on the message itself, they will be attempted first, then those on the profile. (default: true)
+  --use-profile-webhooks: oneof<nothing, bool> # If the profile this number is associated with has webhooks, use them for delivery notifications. If webhooks are also specified on the message itself, they will be attempted first, then those on the profile. (default: true)
 ]: any -> record<data: record<record_type: string, direction: string, id: string, type: string, messaging_profile_id: string, organization_id: string, from: record<phone_number: string, carrier: string, line_type: string>, to: list<record>, cc: list<record>, text: string, num_chars: int, subject: string, media: list<record>, webhook_url: string, webhook_failover_url: string, encoding: string, parts: int, tags: list<string>, cost: record<amount: string, currency: string>, cost_breakdown: record<carrier_fee: record, rate: record>, tcr_campaign_id: string, tcr_campaign_billable: bool, tcr_campaign_registered: string, received_at: string, sent_at: string, completed_at: string, valid_until: string, errors: list<record>, smart_encoding_applied: bool, wait_seconds: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -14448,9 +14447,9 @@ export def "messages-long-code CreateLongCodeMessage" [
   --media-urls: list # A list of media URLs. The total media size must be less than 1 MB.  **Required for MMS**
   --webhook-url: string # The URL where webhooks related to this message will be sent. (format: url)
   --webhook-failover-url: string # The failover URL where webhooks related to this message will be sent if sending to the primary URL fails. (format: url)
-  --use-profile-webhooks: string@bool-completer # If the profile this number is associated with has webhooks, use them for delivery notifications. If webhooks are also specified on the message itself, they will be attempted first, then those on the profile. (default: true)
+  --use-profile-webhooks: oneof<nothing, bool> # If the profile this number is associated with has webhooks, use them for delivery notifications. If webhooks are also specified on the message itself, they will be attempted first, then those on the profile. (default: true)
   --type: string@type-completer-2 # The protocol for sending the message, either SMS or MMS.
-  --auto-detect: string@bool-completer # Automatically detect if an SMS message is unusually long and exceeds a recommended limit of message parts. (default: false)
+  --auto-detect: oneof<nothing, bool> # Automatically detect if an SMS message is unusually long and exceeds a recommended limit of message parts. (default: false)
   --encoding: string@encoding-completer # Encoding to use for the message. `auto` (default) uses smart encoding to automatically select the most efficient encoding. `gsm7` forces GSM-7 encoding (returns 400 if message contains characters that cannot be encoded). `ucs2` forces UCS-2 encoding and disables smart encoding. When set, this overrides the messaging profile's `smart_encoding` setting. (default: auto)
 ]: any -> record<data: record<record_type: string, direction: string, id: string, type: string, messaging_profile_id: string, organization_id: string, from: record<phone_number: string, carrier: string, line_type: string>, to: list<record>, cc: list<record>, text: string, num_chars: int, subject: string, media: list<record>, webhook_url: string, webhook_failover_url: string, encoding: string, parts: int, tags: list<string>, cost: record<amount: string, currency: string>, cost_breakdown: record<carrier_fee: record, rate: record>, tcr_campaign_id: string, tcr_campaign_billable: bool, tcr_campaign_registered: string, received_at: string, sent_at: string, completed_at: string, valid_until: string, errors: list<record>, smart_encoding_applied: bool, wait_seconds: float>> {
   let input = $in
@@ -14483,9 +14482,9 @@ export def "messages-number-pool CreateNumberPoolMessage" [
   --media-urls: list # A list of media URLs. The total media size must be less than 1 MB.  **Required for MMS**
   --webhook-url: string # The URL where webhooks related to this message will be sent. (format: url)
   --webhook-failover-url: string # The failover URL where webhooks related to this message will be sent if sending to the primary URL fails. (format: url)
-  --use-profile-webhooks: string@bool-completer # If the profile this number is associated with has webhooks, use them for delivery notifications. If webhooks are also specified on the message itself, they will be attempted first, then those on the profile. (default: true)
+  --use-profile-webhooks: oneof<nothing, bool> # If the profile this number is associated with has webhooks, use them for delivery notifications. If webhooks are also specified on the message itself, they will be attempted first, then those on the profile. (default: true)
   --type: string@type-completer-2 # The protocol for sending the message, either SMS or MMS.
-  --auto-detect: string@bool-completer # Automatically detect if an SMS message is unusually long and exceeds a recommended limit of message parts. (default: false)
+  --auto-detect: oneof<nothing, bool> # Automatically detect if an SMS message is unusually long and exceeds a recommended limit of message parts. (default: false)
   --encoding: string@encoding-completer # Encoding to use for the message. `auto` (default) uses smart encoding to automatically select the most efficient encoding. `gsm7` forces GSM-7 encoding (returns 400 if message contains characters that cannot be encoded). `ucs2` forces UCS-2 encoding and disables smart encoding. When set, this overrides the messaging profile's `smart_encoding` setting. (default: auto)
 ]: any -> record<data: record<record_type: string, direction: string, id: string, type: string, messaging_profile_id: string, organization_id: string, from: record<phone_number: string, carrier: string, line_type: string>, to: list<record>, cc: list<record>, text: string, num_chars: int, subject: string, media: list<record>, webhook_url: string, webhook_failover_url: string, encoding: string, parts: int, tags: list<string>, cost: record<amount: string, currency: string>, cost_breakdown: record<carrier_fee: record, rate: record>, tcr_campaign_id: string, tcr_campaign_billable: bool, tcr_campaign_registered: string, received_at: string, sent_at: string, completed_at: string, valid_until: string, errors: list<record>, smart_encoding_applied: bool, wait_seconds: float>> {
   let input = $in
@@ -14579,9 +14578,9 @@ export def "messages-schedule ScheduleMessage" [
   --media-urls: list # A list of media URLs. The total media size must be less than 1 MB.  **Required for MMS**
   --webhook-url: string # The URL where webhooks related to this message will be sent. (format: url)
   --webhook-failover-url: string # The failover URL where webhooks related to this message will be sent if sending to the primary URL fails. (format: url)
-  --use-profile-webhooks: string@bool-completer # If the profile this number is associated with has webhooks, use them for delivery notifications. If webhooks are also specified on the message itself, they will be attempted first, then those on the profile. (default: true)
+  --use-profile-webhooks: oneof<nothing, bool> # If the profile this number is associated with has webhooks, use them for delivery notifications. If webhooks are also specified on the message itself, they will be attempted first, then those on the profile. (default: true)
   --type: string@type-completer-2 # The protocol for sending the message, either SMS or MMS.
-  --auto-detect: string@bool-completer # Automatically detect if an SMS message is unusually long and exceeds a recommended limit of message parts. (default: false)
+  --auto-detect: oneof<nothing, bool> # Automatically detect if an SMS message is unusually long and exceeds a recommended limit of message parts. (default: false)
   --send-at: string # ISO 8601 formatted date indicating when to send the message - accurate up till a minute. (format: date-time)
 ]: any -> record<data: record<record_type: string, direction: string, id: string, type: string, messaging_profile_id: string, organization_id: string, from: record<phone_number: string, carrier: string, line_type: string>, to: list<record>, cc: list<record>, text: string, num_chars: int, subject: string, media: list<record>, webhook_url: string, webhook_failover_url: string, encoding: string, parts: int, tags: list<string>, cost: record<amount: string, currency: string>, cost_breakdown: record<carrier_fee: record, rate: record>, tcr_campaign_id: string, tcr_campaign_billable: bool, tcr_campaign_registered: string, received_at: string, sent_at: string, completed_at: string, valid_until: string, errors: list<record>, smart_encoding_applied: bool, wait_seconds: float>> {
   let input = $in
@@ -14614,9 +14613,9 @@ export def "messages-short-code CreateShortCodeMessage" [
   --media-urls: list # A list of media URLs. The total media size must be less than 1 MB.  **Required for MMS**
   --webhook-url: string # The URL where webhooks related to this message will be sent. (format: url)
   --webhook-failover-url: string # The failover URL where webhooks related to this message will be sent if sending to the primary URL fails. (format: url)
-  --use-profile-webhooks: string@bool-completer # If the profile this number is associated with has webhooks, use them for delivery notifications. If webhooks are also specified on the message itself, they will be attempted first, then those on the profile. (default: true)
+  --use-profile-webhooks: oneof<nothing, bool> # If the profile this number is associated with has webhooks, use them for delivery notifications. If webhooks are also specified on the message itself, they will be attempted first, then those on the profile. (default: true)
   --type: string@type-completer-2 # The protocol for sending the message, either SMS or MMS.
-  --auto-detect: string@bool-completer # Automatically detect if an SMS message is unusually long and exceeds a recommended limit of message parts. (default: false)
+  --auto-detect: oneof<nothing, bool> # Automatically detect if an SMS message is unusually long and exceeds a recommended limit of message parts. (default: false)
   --encoding: string@encoding-completer # Encoding to use for the message. `auto` (default) uses smart encoding to automatically select the most efficient encoding. `gsm7` forces GSM-7 encoding (returns 400 if message contains characters that cannot be encoded). `ucs2` forces UCS-2 encoding and disables smart encoding. When set, this overrides the messaging profile's `smart_encoding` setting. (default: auto)
 ]: any -> record<data: record<record_type: string, direction: string, id: string, type: string, messaging_profile_id: string, organization_id: string, from: record<phone_number: string, carrier: string, line_type: string>, to: list<record>, cc: list<record>, text: string, num_chars: int, subject: string, media: list<record>, webhook_url: string, webhook_failover_url: string, encoding: string, parts: int, tags: list<string>, cost: record<amount: string, currency: string>, cost_breakdown: record<carrier_fee: record, rate: record>, tcr_campaign_id: string, tcr_campaign_billable: bool, tcr_campaign_registered: string, received_at: string, sent_at: string, completed_at: string, valid_until: string, errors: list<record>, smart_encoding_applied: bool, wait_seconds: float>> {
   let input = $in
@@ -15163,7 +15162,7 @@ export def "messaging-numbers-bulk-updates BulkUpdateMessagingSettingsOnPhoneNum
   --allow-errors(-e) # Return full response without error handling
   messaging_profile_id: string # Configure the messaging profile these phone numbers are assigned to:  * Set this field to `""` to unassign each number from their respective messaging profile * Set this field to a quoted UUID of a messaging profile to assign these numbers to that messaging profile
   numbers: list # The list of phone numbers to update.
-  --assign-only: string@bool-completer # If true, only assign numbers to the profile without changing other settings. (default: false)
+  --assign-only: oneof<nothing, bool> # If true, only assign numbers to the profile without changing other settings. (default: false)
 ]: any -> record<data: record<record_type: string, order_id: string, success: list<string>, pending: list<string>, failed: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15289,7 +15288,7 @@ export def "messaging-profiles CreateMessagingProfile" [
   --allow-errors(-e) # Return full response without error handling
   name: string # A user friendly name for the messaging profile.
   whitelisted_destinations: list # Destinations to which the messaging profile is allowed to send. The elements in the list must be valid ISO 3166-1 alpha-2 country codes. If set to `["*"]` all destinations will be allowed.
-  --enabled: string@bool-completer # Specifies whether the messaging profile is enabled or not. (default: true)
+  --enabled: oneof<nothing, bool> # Specifies whether the messaging profile is enabled or not. (default: true)
   --webhook-url: string # The URL where webhooks related to this messaging profile will be sent. (nullable, format: url, default: )
   --webhook-failover-url: string # The failover URL where webhooks related to this messaging profile will be sent if sending to the primary URL fails. (nullable, format: url, default: )
   --webhook-api-version: string@webhook-api-version-completer-2 # Determines which webhook format will be used, Telnyx API v1, v2, or a legacy 2010-04-01 format. (default: 2)
@@ -15297,11 +15296,11 @@ export def "messaging-profiles CreateMessagingProfile" [
   --url-shortener-settings: record # The URL shortener feature allows automatic replacement of URLs that were generated using a public URL shortener service. Some examples include bit.do, bit.ly, goo.gl, ht.ly, is.gd, ow.ly, rebrand.ly, t.co, tiny.cc, and tinyurl.com. Such URLs are replaced with with links generated by Telnyx. The use of custom links can improve branding and message deliverability.  To disable this feature, set the object field to `null`.  (nullable, e.g. {domain: example.ex, prefix: , replace_blacklist_only: true, send_webhooks: false}) — shape: {domain: string, prefix?: string, replace_blacklist_only?: bool, send_webhooks?: bool}
   --alpha-sender: string # The alphanumeric sender ID to use when sending to destinations that require an alphanumeric sender ID. (nullable)
   --daily-spend-limit: string # The maximum amount of money (in USD) that can be spent by this profile before midnight UTC.
-  --daily-spend-limit-enabled: string@bool-completer # Whether to enforce the value configured by `daily_spend_limit`.
-  --mms-fall-back-to-sms: string@bool-completer # enables SMS fallback for MMS messages. (default: false)
-  --mms-transcoding: string@bool-completer # enables automated resizing of MMS media. (default: false)
-  --mobile-only: string@bool-completer # Send messages only to mobile phone numbers. (default: false)
-  --smart-encoding: string@bool-completer # Enables automatic character encoding optimization for SMS messages. When enabled, the system automatically selects the most efficient encoding (GSM-7 or UCS-2) based on message content to maximize character limits and minimize costs. (default: false)
+  --daily-spend-limit-enabled: oneof<nothing, bool> # Whether to enforce the value configured by `daily_spend_limit`.
+  --mms-fall-back-to-sms: oneof<nothing, bool> # enables SMS fallback for MMS messages. (default: false)
+  --mms-transcoding: oneof<nothing, bool> # enables automated resizing of MMS media. (default: false)
+  --mobile-only: oneof<nothing, bool> # Send messages only to mobile phone numbers. (default: false)
+  --smart-encoding: oneof<nothing, bool> # Enables automatic character encoding optimization for SMS messages. When enabled, the system automatically selects the most efficient encoding (GSM-7 or UCS-2) based on message content to maximize character limits and minimize costs. (default: false)
   --resource-group-id: string # The resource group ID to associate with this messaging profile. (nullable)
   --health-webhook-url: string # A URL to receive health check webhooks for numbers in this profile. (nullable, format: url)
   --ai-assistant-id: string # The AI assistant ID to associate with this messaging profile. (nullable)
@@ -15377,7 +15376,7 @@ export def "messaging-profiles UpdateMessagingProfile" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # A user friendly name for the messaging profile.
-  --enabled: string@bool-completer # Specifies whether the messaging profile is enabled or not.
+  --enabled: oneof<nothing, bool> # Specifies whether the messaging profile is enabled or not.
   --webhook-url: string # The URL where webhooks related to this messaging profile will be sent. (nullable, format: url)
   --webhook-failover-url: string # The failover URL where webhooks related to this messaging profile will be sent if sending to the primary URL fails. (nullable, format: url)
   --webhook-api-version: string@webhook-api-version-completer-2 # Determines which webhook format will be used, Telnyx API v1, v2, or a legacy 2010-04-01 format.
@@ -15387,11 +15386,11 @@ export def "messaging-profiles UpdateMessagingProfile" [
   --url-shortener-settings: record # The URL shortener feature allows automatic replacement of URLs that were generated using a public URL shortener service. Some examples include bit.do, bit.ly, goo.gl, ht.ly, is.gd, ow.ly, rebrand.ly, t.co, tiny.cc, and tinyurl.com. Such URLs are replaced with with links generated by Telnyx. The use of custom links can improve branding and message deliverability.  To disable this feature, set the object field to `null`.  (nullable, e.g. {domain: example.ex, prefix: , replace_blacklist_only: true, send_webhooks: false}) — shape: {domain: string, prefix?: string, replace_blacklist_only?: bool, send_webhooks?: bool}
   --alpha-sender: string # The alphanumeric sender ID to use when sending to destinations that require an alphanumeric sender ID. (nullable)
   --daily-spend-limit: string # The maximum amount of money (in USD) that can be spent by this profile before midnight UTC.
-  --daily-spend-limit-enabled: string@bool-completer # Whether to enforce the value configured by `daily_spend_limit`.
-  --mms-fall-back-to-sms: string@bool-completer # enables SMS fallback for MMS messages. (default: false)
-  --mms-transcoding: string@bool-completer # enables automated resizing of MMS media. (default: false)
-  --mobile-only: string@bool-completer # Send messages only to mobile phone numbers. (default: false)
-  --smart-encoding: string@bool-completer # Enables automatic character encoding optimization for SMS messages. When enabled, the system automatically selects the most efficient encoding (GSM-7 or UCS-2) based on message content to maximize character limits and minimize costs. (default: false)
+  --daily-spend-limit-enabled: oneof<nothing, bool> # Whether to enforce the value configured by `daily_spend_limit`.
+  --mms-fall-back-to-sms: oneof<nothing, bool> # enables SMS fallback for MMS messages. (default: false)
+  --mms-transcoding: oneof<nothing, bool> # enables automated resizing of MMS media. (default: false)
+  --mobile-only: oneof<nothing, bool> # Send messages only to mobile phone numbers. (default: false)
+  --smart-encoding: oneof<nothing, bool> # Enables automatic character encoding optimization for SMS messages. When enabled, the system automatically selects the most efficient encoding (GSM-7 or UCS-2) based on message content to maximize character limits and minimize costs. (default: false)
   --ai-assistant-id: string # The ID of the AI assistant associated with this messaging profile. (nullable, e.g. ai_assistant-a80a9d4a-728c-4593-852c-2e93ad890000)
 ]: any -> record<data: record<record_type: string, id: string, mms_fall_back_to_sms: bool, mms_transcoding: bool, name: string, enabled: bool, webhook_url: string, webhook_failover_url: string, webhook_api_version: string, health_webhook_url: string, whitelisted_destinations: list<string>, created_at: string, updated_at: string, v1_secret: string, number_pool_settings: record<toll_free_weight: float, long_code_weight: float, skip_unhealthy: bool, sticky_sender: bool, geomatch: bool>, url_shortener_settings: record<domain: string, prefix: string, replace_blacklist_only: bool, send_webhooks: bool>, alpha_sender: string, daily_spend_limit: string, daily_spend_limit_enabled: bool, redaction_enabled: bool, redaction_level: int, mobile_only: bool, smart_encoding: bool, organization_id: string, ai_assistant_id: string, resource_group_id: string>> {
   let input = $in
@@ -15728,7 +15727,7 @@ export def "messaging-tollfree-verification-requests SubmitVerificationRequest" 
   --helpMessageResponse: string # The message returned when users text 'HELP' (nullable, e.g. Reply HELP for assistance or STOP to unsubscribe. Contact: support@example.com)
   --privacyPolicyURL: string # URL pointing to the business's privacy policy. Plain string, no URL format validation. (nullable, e.g. https://example.com/privacy)
   --termsAndConditionURL: string # URL pointing to the business's terms and conditions. Plain string, no URL format validation. (nullable, e.g. https://example.com/terms)
-  --ageGatedContent: string@bool-completer # Indicates if messaging content requires age gating (e.g., 18+). Defaults to false if not provided. (default: false)
+  --ageGatedContent: oneof<nothing, bool> # Indicates if messaging content requires age gating (e.g., 18+). Defaults to false if not provided. (default: false)
   --optInKeywords: string # Keywords used to collect and process consumer opt-ins (nullable, e.g. START, YES, SUBSCRIBE)
   --campaignVerifyAuthorizationToken: string # Campaign Verify Authorization Token required for Political use case submissions starting February 17, 2026. This token is validated by Zipwhip and must be provided for all Political use case verifications after the deadline. (nullable, e.g. cv_token_abc123xyz)
 ]: any -> record<businessName: string, corporateWebsite: string, businessAddr1: string, businessAddr2: string, businessCity: string, businessState: string, businessZip: string, businessContactFirstName: string, businessContactLastName: string, businessContactEmail: string, businessContactPhone: string, messageVolume: record, phoneNumbers: table<phoneNumber: string>, useCase: record, useCaseSummary: string, productionMessageContent: string, optInWorkflow: string, optInWorkflowImageURLs: table<url: string>, additionalInformation: string, isvReseller: string, webhookUrl: string, businessRegistrationNumber: string, businessRegistrationType: string, businessRegistrationCountry: string, doingBusinessAs: string, entityType: record, optInConfirmationResponse: string, helpMessageResponse: string, privacyPolicyURL: string, termsAndConditionURL: string, ageGatedContent: bool, optInKeywords: string, campaignVerifyAuthorizationToken: string, id: string, verificationRequestId: string, verificationStatus: record> {
@@ -15832,7 +15831,7 @@ export def "messaging-tollfree-verification-requests UpdateVerificationRequest" 
   --helpMessageResponse: string # The message returned when users text 'HELP' (nullable, e.g. Reply HELP for assistance or STOP to unsubscribe. Contact: support@example.com)
   --privacyPolicyURL: string # URL pointing to the business's privacy policy. Plain string, no URL format validation. (nullable, e.g. https://example.com/privacy)
   --termsAndConditionURL: string # URL pointing to the business's terms and conditions. Plain string, no URL format validation. (nullable, e.g. https://example.com/terms)
-  --ageGatedContent: string@bool-completer # Indicates if messaging content requires age gating (e.g., 18+). Defaults to false if not provided. (default: false)
+  --ageGatedContent: oneof<nothing, bool> # Indicates if messaging content requires age gating (e.g., 18+). Defaults to false if not provided. (default: false)
   --optInKeywords: string # Keywords used to collect and process consumer opt-ins (nullable, e.g. START, YES, SUBSCRIBE)
   --campaignVerifyAuthorizationToken: string # Campaign Verify Authorization Token required for Political use case submissions starting February 17, 2026. This token is validated by Zipwhip and must be provided for all Political use case verifications after the deadline. (nullable, e.g. cv_token_abc123xyz)
 ]: any -> record<businessName: string, corporateWebsite: string, businessAddr1: string, businessAddr2: string, businessCity: string, businessState: string, businessZip: string, businessContactFirstName: string, businessContactLastName: string, businessContactEmail: string, businessContactPhone: string, messageVolume: record, phoneNumbers: table<phoneNumber: string>, useCase: record, useCaseSummary: string, productionMessageContent: string, optInWorkflow: string, optInWorkflowImageURLs: table<url: string>, additionalInformation: string, isvReseller: string, webhookUrl: string, businessRegistrationNumber: string, businessRegistrationType: string, businessRegistrationCountry: string, doingBusinessAs: string, entityType: record, optInConfirmationResponse: string, helpMessageResponse: string, privacyPolicyURL: string, termsAndConditionURL: string, ageGatedContent: bool, optInKeywords: string, campaignVerifyAuthorizationToken: string, id: string, verificationRequestId: string, verificationStatus: record> {
@@ -17167,7 +17166,7 @@ export def "oauth-grants CreateOAuthGrant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowed: string@bool-completer # Whether the grant is allowed
+  --allowed: oneof<nothing, bool> # Whether the grant is allowed
   consent_token: string # Consent token
 ]: any -> record<redirect_uri: string> {
   let input = $in
@@ -17307,7 +17306,7 @@ export def "oauth-clients ListOAuthClients" [
   --pagesize: int # Number of results per page (default: 20)
   --pagenumber: int # Page number (default: 1)
   --filterclient-type: string@filterclient-type-completer # Filter by client type
-  --filterverified: string@bool-completer # Filter by verification status
+  --filterverified: oneof<nothing, bool> # Filter by verification status
   --filterallowed-grant-typescontains: string@filterallowed-grant-typescontains-completer # Filter by allowed grant type
   --filtername: string # Filter by exact client name
   --filternamecontains: string # Filter by client name containing text
@@ -17337,7 +17336,7 @@ export def "oauth-clients CreateOAuthClient" [
   name: string # The name of the OAuth client (e.g. My OAuth client)
   allowed_scopes: list # List of allowed OAuth scopes (e.g. [admin])
   client_type: string@client-type-completer # OAuth client type
-  --require-pkce: string@bool-completer # Whether PKCE (Proof Key for Code Exchange) is required for this client (default: false)
+  --require-pkce: oneof<nothing, bool> # Whether PKCE (Proof Key for Code Exchange) is required for this client (default: false)
   allowed_grant_types: list # List of allowed OAuth grant types
   --redirect-uris: list # List of redirect URIs (required for authorization_code flow) (default: [])
   --logo-uri: string # URL of the client logo (format: uri)
@@ -17414,7 +17413,7 @@ export def "oauth-clients UpdateOAuthClient" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name of the OAuth client
   --allowed-scopes: list # List of allowed OAuth scopes (e.g. [admin])
-  --require-pkce: string@bool-completer # Whether PKCE (Proof Key for Code Exchange) is required for this client
+  --require-pkce: oneof<nothing, bool> # Whether PKCE (Proof Key for Code Exchange) is required for this client
   --allowed-grant-types: list # List of allowed OAuth grant types
   --redirect-uris: list # List of redirect URIs
   --logo-uri: string # URL of the client logo (format: uri)
@@ -17537,7 +17536,7 @@ export def "organizations-users ListOrganizationUsers" [
   --pagesize: int # The size of the page (default: 250)
   --filteruser-status: string@filteruser-status-completer # Filter by user status
   --filteremail: string # Filter by email address (partial match)
-  --include-groups: string@bool-completer # When set to true, includes the groups array for each user in the response. The groups array contains objects with id and name for each group the user belongs to. (default: false)
+  --include-groups: oneof<nothing, bool> # When set to true, includes the groups array for each user in the response. The groups array contains objects with id and name for each group the user belongs to. (default: false)
 ]: nothing -> record<data: table<id: string, record_type: string, email: string, user_status: string, organization_user_bypasses_sso: bool, created_at: string, last_sign_in_at: string, groups: list>, meta: record<total_pages: int, total_results: int, page_number: int, page_size: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17586,7 +17585,7 @@ export def "organizations-users GetOrganizationUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-groups: string@bool-completer # When set to true, includes the groups array for each user in the response. The groups array contains objects with id and name for each group the user belongs to. (default: false)
+  --include-groups: oneof<nothing, bool> # When set to true, includes the groups array for each user in the response. The groups array contains objects with id and name for each group the user belongs to. (default: false)
 ]: nothing -> record<data: record<id: string, record_type: string, email: string, user_status: string, organization_user_bypasses_sso: bool, created_at: string, last_sign_in_at: string, groups: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17708,13 +17707,13 @@ export def "outbound-voice-profiles CreateVoiceProfile" [
   --traffic-type: string@traffic-type-completer # Specifies the type of traffic allowed in this profile. (default: conversational, e.g. conversational)
   --service-plan: string@service-plan-completer # Indicates the coverage of the termination regions. (default: global, e.g. global)
   --concurrent-call-limit: int # Must be no more than your global concurrent call limit. Null means no limit. (nullable, e.g. 10)
-  --enabled: string@bool-completer # Specifies whether the outbound voice profile can be used. Disabled profiles will result in outbound calls being blocked for the associated Connections. (default: true, e.g. true)
+  --enabled: oneof<nothing, bool> # Specifies whether the outbound voice profile can be used. Disabled profiles will result in outbound calls being blocked for the associated Connections. (default: true, e.g. true)
   --tags: list # e.g. [office-profile]
   --usage-payment-method: string@usage-payment-method-completer # Setting for how costs for outbound profile are calculated. (default: rate-deck, e.g. rate-deck)
   --whitelisted-destinations: list # The list of destinations you want to be able to call using this outbound voice profile formatted in alpha2. (default: [US, CA], e.g. [US, BR, AU])
   --max-destination-rate: float # Maximum rate (price per minute) for a Destination to be allowed when making outbound calls.
   --daily-spend-limit: string # The maximum amount of usage charges, in USD, you want Telnyx to allow on this outbound voice profile in a day before disallowing new calls. (e.g. 100.00)
-  --daily-spend-limit-enabled: string@bool-completer # Specifies whether to enforce the daily_spend_limit on this outbound voice profile. (default: false, e.g. true)
+  --daily-spend-limit-enabled: oneof<nothing, bool> # Specifies whether to enforce the daily_spend_limit on this outbound voice profile. (default: false, e.g. true)
   --call-recording: record # e.g. {call_recording_type: by_caller_phone_number, call_recording_caller_phone_numbers: [+19705555098], call_recording_channels: dual, call_recording_format: mp3} — shape: {call_recording_type?: "all"|"none"|"by_caller_phone_number", call_recording_caller_phone_numbers?: list, call_recording_channels?: "single"|"dual", call_recording_format?: "wav"|"mp3"}
   --billing-group-id: string # The ID of the billing group associated with the outbound proflile. Defaults to null (for no group assigned). (nullable, format: uuid, e.g. 6a09cdc3-8948-47f0-aa62-74ac943d6c58)
   --calling-window: record # (BETA) Specifies the time window and call limits for calls made using this outbound voice profile. Note that all times are UTC in 24-hour clock time. (e.g. {start_time: 08:00:00.00Z, end_time: 20:00:00.00Z, calls_per_cld: 5}) — shape: {start_time?: string, end_time?: string, calls_per_cld?: int}
@@ -17793,13 +17792,13 @@ export def "outbound-voice-profiles UpdateOutboundVoiceProfile" [
   --traffic-type: string@traffic-type-completer # Specifies the type of traffic allowed in this profile. (default: conversational, e.g. conversational)
   --service-plan: string@service-plan-completer # Indicates the coverage of the termination regions. (default: global, e.g. global)
   --concurrent-call-limit: int # Must be no more than your global concurrent call limit. Null means no limit. (nullable, e.g. 10)
-  --enabled: string@bool-completer # Specifies whether the outbound voice profile can be used. Disabled profiles will result in outbound calls being blocked for the associated Connections. (default: true, e.g. true)
+  --enabled: oneof<nothing, bool> # Specifies whether the outbound voice profile can be used. Disabled profiles will result in outbound calls being blocked for the associated Connections. (default: true, e.g. true)
   --tags: list # e.g. [office-profile]
   --usage-payment-method: string@usage-payment-method-completer # Setting for how costs for outbound profile are calculated. (default: rate-deck, e.g. rate-deck)
   --whitelisted-destinations: list # The list of destinations you want to be able to call using this outbound voice profile formatted in alpha2. (default: [US, CA], e.g. [US, BR, AU])
   --max-destination-rate: float # Maximum rate (price per minute) for a Destination to be allowed when making outbound calls.
   --daily-spend-limit: string # The maximum amount of usage charges, in USD, you want Telnyx to allow on this outbound voice profile in a day before disallowing new calls. (e.g. 100.00)
-  --daily-spend-limit-enabled: string@bool-completer # Specifies whether to enforce the daily_spend_limit on this outbound voice profile. (default: false, e.g. true)
+  --daily-spend-limit-enabled: oneof<nothing, bool> # Specifies whether to enforce the daily_spend_limit on this outbound voice profile. (default: false, e.g. true)
   --call-recording: record # e.g. {call_recording_type: by_caller_phone_number, call_recording_caller_phone_numbers: [+19705555098], call_recording_channels: dual, call_recording_format: mp3} — shape: {call_recording_type?: "all"|"none"|"by_caller_phone_number", call_recording_caller_phone_numbers?: list, call_recording_channels?: "single"|"dual", call_recording_format?: "wav"|"mp3"}
   --billing-group-id: string # The ID of the billing group associated with the outbound proflile. Defaults to null (for no group assigned). (nullable, format: uuid, e.g. 6a09cdc3-8948-47f0-aa62-74ac943d6c58)
   --calling-window: record # (BETA) Specifies the time window and call limits for calls made using this outbound voice profile. (e.g. {start_time: 08:00:00.00Z, end_time: 20:00:00.00Z, calls_per_cld: 5}) — shape: {start_time?: string, end_time?: string, calls_per_cld?: int}
@@ -17850,8 +17849,8 @@ export def "payment-auto-recharge-prefs UpdateAutoRechargePrefs" [
   --allow-errors(-e) # Return full response without error handling
   --threshold-amount: string # The threshold amount at which the account will be recharged. (e.g. 104.00)
   --recharge-amount: string # The amount to recharge the account, the actual recharge amount will be the amount necessary to reach the threshold amount plus the recharge amount. (e.g. 104.00)
-  --enabled: string@bool-completer # Whether auto recharge is enabled. (e.g. true)
-  --invoice-enabled: string@bool-completer # e.g. true
+  --enabled: oneof<nothing, bool> # Whether auto recharge is enabled. (e.g. true)
+  --invoice-enabled: oneof<nothing, bool> # e.g. true
   --preference: string@preference-completer # The payment preference for auto recharge. (e.g. credit_paypal)
 ]: any -> record<data: record<id: string, record_type: string, threshold_amount: string, recharge_amount: string, enabled: bool, invoice_enabled: bool, preference: string>> {
   let input = $in
@@ -18120,7 +18119,7 @@ export def "phone-numbers-jobs-update-emergency-settings CreatePhoneNumbersJobUp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   phone_numbers: list
-  --emergency-enabled: string@bool-completer # Indicates whether to enable or disable emergency services on the numbers.
+  --emergency-enabled: oneof<nothing, bool> # Indicates whether to enable or disable emergency services on the numbers.
   --emergency-address-id: string # Identifies the address to be used with emergency services. Required if emergency_enabled is true, must be null or omitted if emergency_enabled is false. (nullable)
 ]: any -> record<data: record<id: string, record_type: string, status: string, type: string, etc: string, created_at: string, updated_at: string, phone_numbers: list<record>, successful_operations: list<record>, pending_operations: list<record>, failed_operations: list<record>>> {
   let input = $in
@@ -18154,8 +18153,8 @@ export def "phone-numbers-jobs-update-phone-numbers CreateUpdatePhoneNumbersJob"
   --customer-reference: string # A customer reference string for customer look ups. (e.g. MY REF 001)
   --connection-id: string # Identifies the connection associated with the phone number.
   --billing-group-id: string # Identifies the billing group associated with the phone number.
-  --hd-voice-enabled: string@bool-completer # Indicates whether to enable or disable HD Voice on each phone number. HD Voice is a paid feature and may not be available for all phone numbers, more details about it can be found in the Telnyx support documentation.
-  --deletion-lock-enabled: string@bool-completer # Indicates whether to enable or disable the deletion lock on each phone number. When enabled, this prevents the phone number from being deleted via the API or Telnyx portal.
+  --hd-voice-enabled: oneof<nothing, bool> # Indicates whether to enable or disable HD Voice on each phone number. HD Voice is a paid feature and may not be available for all phone numbers, more details about it can be found in the Telnyx support documentation.
+  --deletion-lock-enabled: oneof<nothing, bool> # Indicates whether to enable or disable the deletion lock on each phone number. When enabled, this prevents the phone number from being deleted via the API or Telnyx portal.
   --voice: record # e.g. {tech_prefix_enabled: true, translated_number: +13035559999, caller_id_name_enabled: true, call_forwarding: {call_forwarding_enabled: true, forwards_to: +13035559123, forwarding_type: always}, cnam_listing: {cnam_listing_enabled: true, cnam_listing_details: example}, usage_payment_method: pay-per-minute, media_features: {rtp_auto_adjust_enabled: true, accept_any_rtp_packets_enabled: true, t38_fax_gateway_enabled: true}, call_recording: {inbound_call_recording_enabled: true, inbound_call_recording_format: wav, inbound_call_recording_channels: single}, inbound_call_screening: disabled} — shape: {tech_prefix_enabled?: bool, translated_number?: string, caller_id_name_enabled?: bool, call_forwarding?: record, cnam_listing?: record, usage_payment_method?: "pay-per-minute"|"channel", media_features?: record, call_recording?: record, inbound_call_screening?: "disabled"|"reject_calls"|"flag_calls"}
 ]: any -> record<data: record<id: string, record_type: string, status: string, type: string, etc: string, created_at: string, updated_at: string, phone_numbers: list<record>, successful_operations: list<record>, pending_operations: list<record>, failed_operations: list<record>>> {
   let input = $in
@@ -18233,8 +18232,8 @@ export def "phone-numbers-slim SlimListPhoneNumbers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --page: record # Consolidated page parameter (deepObject style). Originally: page[size], page[number]
-  --include-connection: string@bool-completer # Include the connection associated with the phone number. (default: false)
-  --include-tags: string@bool-completer # Include the tags associated with the phone number. (default: false)
+  --include-connection: oneof<nothing, bool> # Include the connection associated with the phone number. (default: false)
+  --include-tags: oneof<nothing, bool> # Include the tags associated with the phone number. (default: false)
   --qp-sort: string@sort-completer-15 # Specifies the sort order for results. If not given, results are sorted by created_at in descending order. (e.g. connection_name)
   --filter: record # Consolidated filter parameter (deepObject style). Originally: filter[tag], filter[phone_number], filter[status], filter[country_iso_alpha2], filter[connection_id], filter[voice.connection_name], filter[voice.usage_payment_method], filter[billing_group_id], filter[emergency_address_id], filter[customer_reference], filter[number_type], filter[source]
 ]: nothing -> record<data: table<id: string, record_type: string, phone_number: string, country_iso_alpha2: string, status: string, external_pin: string, connection_id: string, customer_reference: string, billing_group_id: string, emergency_enabled: bool, emergency_address_id: string, emergency_status: string, call_forwarding_enabled: bool, cnam_listing_enabled: bool, caller_id_name_enabled: bool, call_recording_enabled: bool, t38_fax_gateway_enabled: bool, purchased_at: string, created_at: string, phone_number_type: string, updated_at: string, hd_voice_enabled: bool, inbound_call_screening: string>, meta: record<total_pages: int, total_results: int, page_number: int, page_size: int>> {
@@ -18331,7 +18330,7 @@ export def "phone-numbers UpdatePhoneNumber" [
   --allow-errors(-e) # Return full response without error handling
   --tags: list # A list of user-assigned tags to help organize phone numbers.
   --external-pin: string # If someone attempts to port your phone number away from Telnyx and your phone number has an external PIN set, we will attempt to verify that you provided the correct external PIN to the winning carrier. Note that not all carriers cooperate with this security mechanism.
-  --hd-voice-enabled: string@bool-completer # Indicates whether HD voice is enabled for this number. (e.g. true)
+  --hd-voice-enabled: oneof<nothing, bool> # Indicates whether HD voice is enabled for this number. (e.g. true)
   --customer-reference: string # A customer reference string for customer look ups. (e.g. MY REF 001)
   --address-id: string # Identifies the address associated with the phone number.
   --connection-id: string # Identifies the connection associated with the phone number.
@@ -18387,7 +18386,7 @@ export def "phone-numbers-actions-enable-emergency EnablePhoneNumberEmergency" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --emergency-enabled: string@bool-completer # Indicates whether to enable emergency services on this number.
+  --emergency-enabled: oneof<nothing, bool> # Indicates whether to enable emergency services on this number.
   emergency_address_id: string # Identifies the address to be used with emergency services.
 ]: any -> record<data: record<id: string, record_type: string, phone_number: string, connection_id: string, customer_reference: string, tech_prefix_enabled: bool, translated_number: string, call_forwarding: record<call_forwarding_enabled: bool, forwards_to: string, forwarding_type: string>, cnam_listing: record<cnam_listing_enabled: bool, cnam_listing_details: string>, emergency: record<emergency_enabled: bool, emergency_address_id: string, emergency_status: string>, usage_payment_method: string, media_features: record<rtp_auto_adjust_enabled: bool, accept_any_rtp_packets_enabled: bool, t38_fax_gateway_enabled: bool>, call_recording: record<inbound_call_recording_enabled: bool, inbound_call_recording_format: string, inbound_call_recording_channels: string>, inbound_call_screening: string>> {
   let input = $in
@@ -18490,9 +18489,9 @@ export def "phone-numbers-voice UpdatePhoneNumberVoiceSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --tech-prefix-enabled: string@bool-completer # Controls whether a tech prefix is enabled for this phone number. (default: false)
+  --tech-prefix-enabled: oneof<nothing, bool> # Controls whether a tech prefix is enabled for this phone number. (default: false)
   --translated-number: string # This field allows you to rewrite the destination number of an inbound call before the call is routed to you. The value of this field may be any alphanumeric value, and the value will replace the number originally dialed.
-  --caller-id-name-enabled: string@bool-completer # Controls whether the caller ID name is enabled for this phone number. (default: false)
+  --caller-id-name-enabled: oneof<nothing, bool> # Controls whether the caller ID name is enabled for this phone number. (default: false)
   --call-forwarding: record # The call forwarding settings for a phone number. (e.g. {call_forwarding_enabled: true, forwards_to: +13035559123, forwarding_type: always}) — shape: {call_forwarding_enabled?: bool, forwards_to?: string, forwarding_type?: "always"|"on-failure"}
   --cnam-listing: record # The CNAM listing settings for a phone number. (e.g. {cnam_listing_enabled: true, cnam_listing_details: example}) — shape: {cnam_listing_enabled?: bool, cnam_listing_details?: string}
   --usage-payment-method: string@usage-payment-method-completer-1 # Controls whether a number is billed per minute or uses your concurrent channels. (default: pay-per-minute)
@@ -18547,7 +18546,7 @@ export def "phone-numbers-voicemail UpdateVoicemail" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --pin: string # The pin used for voicemail (e.g. 1234)
-  --enabled: string@bool-completer # Whether voicemail is enabled. (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether voicemail is enabled. (e.g. true)
 ]: any -> record<data: record<enabled: bool, pin: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -18574,7 +18573,7 @@ export def "phone-numbers-voicemail CreateVoicemail" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --pin: string # The pin used for voicemail (e.g. 1234)
-  --enabled: string@bool-completer # Whether voicemail is enabled. (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether voicemail is enabled. (e.g. true)
 ]: any -> record<data: record<enabled: bool, pin: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -18995,7 +18994,7 @@ export def "porting-orders ListPortingOrders" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --page: record # Consolidated page parameter (deepObject style). Originally: page[size], page[number]
-  --include-phone-numbers: string@bool-completer # Include the first 50 phone number objects in the results (default: true)
+  --include-phone-numbers: oneof<nothing, bool> # Include the first 50 phone number objects in the results (default: true)
   --filter: record # Consolidated filter parameter (deepObject style). Originally: filter[customer_reference], filter[customer_group_reference], filter[parent_support_key], filter[phone_numbers.country_code], filter[phone_numbers.carrier_name], filter[misc.type], filter[end_user.admin.entity_name], filter[end_user.admin.auth_person_name], filter[activation_settings.fast_port_eligible], filter[activation_settings.foc_datetime_requested][gt], filter[activation_settings.foc_datetime_requested][lt], filter[phone_numbers.phone_number][contains]
   --qp-sort: record # Consolidated sort parameter (deepObject style). Originally: sort[value]
 ]: nothing -> record<data: table<id: string, customer_reference: string, customer_group_reference: string, created_at: string, updated_at: string, status: record, support_key: string, parent_support_key: string, porting_phone_numbers_count: int, old_service_provider_ocn: string, phone_numbers: list, documents: record, misc: any, end_user: record, activation_settings: record, phone_number_configuration: record, phone_number_type: string, description: string, requirements: list, requirements_met: bool, user_feedback: record, user_id: string, webhook_url: string, record_type: string, messaging: record, additional_steps: list>, meta: record<total_pages: int, total_results: int, page_number: int, page_size: int>> {
@@ -19142,7 +19141,7 @@ export def "porting-orders GetPortingOrder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-phone-numbers: string@bool-completer # Include the first 50 phone number objects in the results (default: true)
+  --include-phone-numbers: oneof<nothing, bool> # Include the first 50 phone number objects in the results (default: true)
 ]: nothing -> record<data: record<id: string, customer_reference: string, customer_group_reference: string, created_at: string, updated_at: string, status: record<details: list, value: string>, support_key: string, parent_support_key: string, porting_phone_numbers_count: int, old_service_provider_ocn: string, phone_numbers: list<record>, documents: record<loa: string, invoice: string>, misc: any, end_user: record<admin: record, location: record>, activation_settings: record<foc_datetime_requested: string, foc_datetime_actual: string, fast_port_eligible: bool, activation_status: any>, phone_number_configuration: record<billing_group_id: string, connection_id: string, messaging_profile_id: string, emergency_address_id: string, tags: list>, phone_number_type: string, description: string, requirements: list<record>, requirements_met: bool, user_feedback: record<user_rating: int, user_comment: string>, user_id: string, webhook_url: string, record_type: string, messaging: record<messaging_capable: bool, enable_messaging: bool, messaging_port_status: string, messaging_port_completed: bool>, additional_steps: list<string>>, meta: record<phone_numbers_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -20296,7 +20295,7 @@ export def "portouts UpdatePortoutStatus" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   reason: string # Provide a reason if rejecting the port out request (e.g. I do not recognize this transaction)
-  --host-messaging: string@bool-completer # Indicates whether messaging services should be maintained with Telnyx after the port out completes (default: false, e.g. false)
+  --host-messaging: oneof<nothing, bool> # Indicates whether messaging services should be maintained with Telnyx after the port out completes (default: false, e.g. false)
 ]: any -> record<data: record<id: string, record_type: string, phone_numbers: list<string>, authorized_name: string, carrier_name: string, current_carrier: string, end_user_name: string, city: string, state: string, zip: string, lsr: list<string>, pon: string, reason: string, rejection_code: int, service_address: string, foc_date: string, requested_foc_date: string, spid: string, support_key: string, status: string, already_ported: bool, user_id: string, vendor: string, created_at: string, inserted_at: string, updated_at: string, host_messaging: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -20826,7 +20825,7 @@ export def "queues-calls UpdateCallInQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --keep-after-hangup: string@bool-completer # Whether the call should remain in queue after hangup. (e.g. true)
+  --keep-after-hangup: oneof<nothing, bool> # Whether the call should remain in queue after hangup. (e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -21319,7 +21318,7 @@ export def "reputation-numbers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --fresh: string@bool-completer # When true, fetches fresh reputation data (incurs API cost). When false (default), returns cached data. (default: false)
+  --fresh: oneof<nothing, bool> # When true, fetches fresh reputation data (incurs API cost). When false (default), returns cached data. (default: false)
 ]: nothing -> record<data: record<id: string, enterprise_id: string, phone_number: string, reputation_data: record<spam_risk: string, spam_category: string, maturity_score: int, connection_score: int, engagement_score: int, sentiment_score: int, last_refreshed_at: string>, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -21819,7 +21818,7 @@ export def "room-sessions ListRoomSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-participants: string@bool-completer # To decide if room participants should be included in the response. (e.g. true)
+  --include-participants: oneof<nothing, bool> # To decide if room participants should be included in the response. (e.g. true)
   --filter: record # Consolidated filter parameter (deepObject style). Originally: filter[date_created_at][eq], filter[date_created_at][gte], filter[date_created_at][lte], filter[date_updated_at][eq], filter[date_updated_at][gte], filter[date_updated_at][lte], filter[date_ended_at][eq], filter[date_ended_at][gte], filter[date_ended_at][lte], filter[room_id], filter[active]
   --page: record # Consolidated page parameter (deepObject style). Originally: page[size], page[number]
 ]: nothing -> record<data: table<id: string, room_id: string, active: bool, created_at: string, updated_at: string, ended_at: string, participants: list, record_type: string>, meta: record<total_pages: int, total_results: int, page_number: int, page_size: int>> {
@@ -21845,7 +21844,7 @@ export def "room-sessions ViewRoomSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-participants: string@bool-completer # To decide if room participants should be included in the response. (e.g. true)
+  --include-participants: oneof<nothing, bool> # To decide if room participants should be included in the response. (e.g. true)
 ]: nothing -> record<data: record<id: string, room_id: string, active: bool, created_at: string, updated_at: string, ended_at: string, participants: list<record>, record_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -21996,7 +21995,7 @@ export def "rooms ListRooms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-sessions: string@bool-completer # To decide if room sessions should be included in the response. (e.g. true)
+  --include-sessions: oneof<nothing, bool> # To decide if room sessions should be included in the response. (e.g. true)
   --filter: record # Consolidated filter parameter (deepObject style). Originally: filter[date_created_at][eq], filter[date_created_at][gte], filter[date_created_at][lte], filter[date_updated_at][eq], filter[date_updated_at][gte], filter[date_updated_at][lte], filter[unique_name]
   --page: record # Consolidated page parameter (deepObject style). Originally: page[size], page[number]
 ]: nothing -> record<data: table<id: string, max_participants: int, unique_name: string, created_at: string, updated_at: string, active_session_id: string, sessions: list, enable_recording: bool, webhook_event_url: string, webhook_event_failover_url: string, webhook_timeout_secs: int, record_type: string>, meta: record<total_pages: int, total_results: int, page_number: int, page_size: int>> {
@@ -22023,7 +22022,7 @@ export def "rooms CreateRoom" [
   --allow-errors(-e) # Return full response without error handling
   --unique-name: string # The unique (within the Telnyx account scope) name of the room. (e.g. My room)
   --max-participants: int # The maximum amount of participants allowed in a room. If new participants try to join after that limit is reached, their request will be rejected. (default: 10, e.g. 10)
-  --enable-recording: string@bool-completer # Enable or disable recording for that room. (default: false, e.g. true)
+  --enable-recording: oneof<nothing, bool> # Enable or disable recording for that room. (default: false, e.g. true)
   --webhook-event-url: string # The URL where webhooks related to this room will be sent. Must include a scheme, such as 'https'. (format: uri, e.g. https://example.com)
   --webhook-event-failover-url: string # The failover URL where webhooks related to this room will be sent if sending to the primary URL fails. Must include a scheme, such as 'https'. (format: uri, default: , e.g. https://failover.example.com)
   --webhook-timeout-secs: int # Specifies how many seconds to wait before timing out a webhook. (e.g. 25)
@@ -22074,7 +22073,7 @@ export def "rooms ViewRoom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-sessions: string@bool-completer # To decide if room sessions should be included in the response. (e.g. true)
+  --include-sessions: oneof<nothing, bool> # To decide if room sessions should be included in the response. (e.g. true)
 ]: nothing -> record<data: record<id: string, max_participants: int, unique_name: string, created_at: string, updated_at: string, active_session_id: string, sessions: list<record>, enable_recording: bool, webhook_event_url: string, webhook_event_failover_url: string, webhook_timeout_secs: int, record_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -22100,7 +22099,7 @@ export def "rooms UpdateRoom" [
   --allow-errors(-e) # Return full response without error handling
   --unique-name: string # The unique (within the Telnyx account scope) name of the room. (e.g. My room)
   --max-participants: int # The maximum amount of participants allowed in a room. If new participants try to join after that limit is reached, their request will be rejected. (default: 10, e.g. 10)
-  --enable-recording: string@bool-completer # Enable or disable recording for that room. (default: false, e.g. true)
+  --enable-recording: oneof<nothing, bool> # Enable or disable recording for that room. (default: false, e.g. true)
   --webhook-event-url: string # The URL where webhooks related to this room will be sent. Must include a scheme, such as 'https'. (format: uri, e.g. https://example.com)
   --webhook-event-failover-url: string # The failover URL where webhooks related to this room will be sent if sending to the primary URL fails. Must include a scheme, such as 'https'. (format: uri, default: , e.g. https://failover.example.com)
   --webhook-timeout-secs: int # Specifies how many seconds to wait before timing out a webhook. (e.g. 25)
@@ -22183,7 +22182,7 @@ export def "rooms-sessions RetrieveListRoomSessions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-participants: string@bool-completer # To decide if room participants should be included in the response. (e.g. true)
+  --include-participants: oneof<nothing, bool> # To decide if room participants should be included in the response. (e.g. true)
   --filter: record # Consolidated filter parameter (deepObject style). Originally: filter[date_created_at][eq], filter[date_created_at][gte], filter[date_created_at][lte], filter[date_updated_at][eq], filter[date_updated_at][gte], filter[date_updated_at][lte], filter[date_ended_at][eq], filter[date_ended_at][gte], filter[date_ended_at][lte], filter[active]
   --page: record # Consolidated page parameter (deepObject style). Originally: page[size], page[number]
 ]: nothing -> record<data: table<id: string, room_id: string, active: bool, created_at: string, updated_at: string, ended_at: string, participants: list, record_type: string>, meta: record<total_pages: int, total_results: int, page_number: int, page_size: int>> {
@@ -22253,7 +22252,7 @@ export def "session-analysis GetSessionAnalysis" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-children: string@bool-completer # Whether to include child events in the response. (default: true)
+  --include-children: oneof<nothing, bool> # Whether to include child events in the response. (default: true)
   --max-depth: int # Maximum traversal depth for the event tree. (default: 2)
   --expand: string@expand-completer # Controls what data to expand on each event node. (default: record)
   --date-time: string # ISO 8601 timestamp or date to narrow index selection for faster lookups. Accepts full datetime (e.g., 2026-03-17T10:00:00Z) or date-only format (e.g., 2026-03-17). (format: date-time)
@@ -22671,7 +22670,7 @@ export def "sim-card-groups GetSimCardGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-iccids: string@bool-completer # It includes a list of associated ICCIDs. (default: false, e.g. true)
+  --include-iccids: oneof<nothing, bool> # It includes a list of associated ICCIDs. (default: false, e.g. true)
 ]: nothing -> record<data: record<id: string, record_type: string, default: bool, name: string, data_limit: record<amount: string, unit: string>, consumed_data: record<unit: string, amount: string>, private_wireless_gateway_id: string, wireless_blocklist_id: string, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -22918,7 +22917,7 @@ export def "sim-cards GetSimCards" [
   --allow-errors(-e) # Return full response without error handling
   --filter: record # Consolidated filter parameter for SIM cards (deepObject style). Originally: filter[iccid], filter[msisdn], filter[status], filter[tags]
   --page: record # Consolidated pagination parameter (deepObject style). Originally: page[number], page[size]
-  --include-sim-card-group: string@bool-completer # It includes the associated SIM card group object in the response when present. (default: false, e.g. true)
+  --include-sim-card-group: oneof<nothing, bool> # It includes the associated SIM card group object in the response when present. (default: false, e.g. true)
   --filtersim-card-group-id: string # A valid SIM card group ID. (format: uuid, e.g. 47a1c2b0-cc7b-4ab1-bb98-b33fb0fc61b9)
   --qp-sort: string@sort-completer-16 # Sorts SIM cards by the given field. Defaults to ascending order unless field is prefixed with a minus sign. (e.g. -current_billing_period_consumed_data.amount)
 ]: nothing -> record<data: table<id: string, record_type: string, status: record, type: string, iccid: string, imsi: string, msisdn: string, sim_card_group_id: string, tags: list, data_limit: record, current_billing_period_consumed_data: record, actions_in_progress: bool, created_at: string, updated_at: string, esim_installation_status: string, version: string, resources_with_in_progress_actions: list, eid: string, authorized_imeis: list, voice_enabled: bool>, meta: record<total_pages: int, total_results: int, page_number: int, page_size: int>> {
@@ -23044,7 +23043,7 @@ export def "sim-cards DeleteSimCard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --report-lost: string@bool-completer # Enables deletion of disabled eSIMs that can't be uninstalled from a device. This is irreversible and the eSIM cannot be re-registered. (default: false)
+  --report-lost: oneof<nothing, bool> # Enables deletion of disabled eSIMs that can't be uninstalled from a device. This is irreversible and the eSIM cannot be re-registered. (default: false)
 ]: nothing -> record<data: record<id: string, record_type: string, status: record<value: string, reason: string>, type: string, iccid: string, imsi: string, msisdn: string, sim_card_group_id: string, tags: list<string>, authorized_imeis: list<string>, current_imei: string, data_limit: record<amount: string, unit: string>, current_billing_period_consumed_data: record<amount: string, unit: string>, actions_in_progress: bool, created_at: string, updated_at: string, ipv4: string, ipv6: string, current_device_location: record<latitude: string, longitude: string, accuracy: int, accuracy_unit: string>, current_mnc: string, current_mcc: string, live_data_session: string, pin_puk_codes: record<pin1: string, pin2: string, puk1: string, puk2: string>, esim_installation_status: string, version: string, resources_with_in_progress_actions: list<record>, eid: string, voice_enabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -23068,8 +23067,8 @@ export def "sim-cards GetSimCard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-sim-card-group: string@bool-completer # It includes the associated SIM card group object in the response when present. (default: false, e.g. true)
-  --include-pin-puk-codes: string@bool-completer # When set to true, includes the PIN and PUK codes in the response. These codes are used for SIM card security and unlocking purposes. Available for both physical SIM cards and eSIMs. (default: false)
+  --include-sim-card-group: oneof<nothing, bool> # It includes the associated SIM card group object in the response when present. (default: false, e.g. true)
+  --include-pin-puk-codes: oneof<nothing, bool> # When set to true, includes the PIN and PUK codes in the response. These codes are used for SIM card security and unlocking purposes. Available for both physical SIM cards and eSIMs. (default: false)
 ]: nothing -> record<data: record<id: string, record_type: string, status: record<value: string, reason: string>, type: string, iccid: string, imsi: string, msisdn: string, sim_card_group_id: string, tags: list<string>, authorized_imeis: list<string>, current_imei: string, data_limit: record<amount: string, unit: string>, current_billing_period_consumed_data: record<amount: string, unit: string>, actions_in_progress: bool, created_at: string, updated_at: string, ipv4: string, ipv6: string, current_device_location: record<latitude: string, longitude: string, accuracy: int, accuracy_unit: string>, current_mnc: string, current_mcc: string, live_data_session: string, pin_puk_codes: record<pin1: string, pin2: string, puk1: string, puk2: string>, esim_installation_status: string, version: string, resources_with_in_progress_actions: list<record>, eid: string, voice_enabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -23480,7 +23479,7 @@ export def "speech-to-text-transcription TranscriptionOverWs" [
   --transcription-engine: string@transcription-engine-completer-2 # The transcription engine to use for processing the audio stream. (e.g. Telnyx)
   --input-format: string@input-format-completer # The format of input audio stream. (e.g. mp3)
   --language: string # The language spoken in the audio stream. (e.g. en-US)
-  --interim-results: string@bool-completer # Whether to receive interim transcription results. (e.g. true)
+  --interim-results: oneof<nothing, bool> # Whether to receive interim transcription results. (e.g. true)
   --model: string # The specific model to use within the selected transcription engine.
   --endpointing: int # Silence duration (in milliseconds) that triggers end-of-speech detection. When set, the engine uses this value to determine when a speaker has stopped talking. Supported by `xAI`, `Deepgram`, `Google`, `Speechmatics`, and `Soniox`. `Soniox` accepts values between 500 and 3000. Other engines may not support this parameter. (e.g. 500)
   --redact: string # Enable redaction of sensitive information (e.g., PCI data, SSN) from transcription results. Supported values depend on the transcription engine. (e.g. pci)
@@ -23794,7 +23793,7 @@ export def "storage-migrations CreateMigration" [
   source_id: string # ID of the Migration Source from which to migrate data.
   target_bucket_name: string # Bucket name to migrate the data into. Will default to the same name as the `source_bucket_name`.
   target_region: string # Telnyx Cloud Storage region to migrate the data to.
-  --refresh: string@bool-completer # If true, will continue to poll the source bucket to ensure new data is continually migrated over.
+  --refresh: oneof<nothing, bool> # If true, will continue to poll the source bucket to ensure new data is continually migrated over.
 ]: any -> record<data: record<id: string, source_id: string, target_bucket_name: string, target_region: string, refresh: bool, last_copy: string, status: string, bytes_to_migrate: int, bytes_migrated: int, speed: int, eta: string, created_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -24390,7 +24389,7 @@ export def "texml-accounts-calls InitiateTexmlCall" [
   --StatusCallbackEvent: string@StatusCallbackEvent-completer # The call events for which Telnyx should send a webhook. Multiple events can be defined when separated by a space. (default: completed, e.g. initiated)
   --MachineDetection: string@MachineDetection-completer # Enables Answering Machine Detection. (default: Disable, e.g. Enable)
   --DetectionMode: string@DetectionMode-completer # Allows you to choose between Regular, Premium, and PremiumCallScreening detections. See https://developers.telnyx.com/docs/voice/programmable-voice/answering-machine-detection (default: Regular, e.g. Premium)
-  --AsyncAmd: string@bool-completer # Select whether to perform answering machine detection in the background. By default execution is blocked until Answering Machine Detection is completed. (default: false, e.g. true)
+  --AsyncAmd: oneof<nothing, bool> # Select whether to perform answering machine detection in the background. By default execution is blocked until Answering Machine Detection is completed. (default: false, e.g. true)
   --AsyncAmdStatusCallback: string # URL destination for Telnyx to send AMD callback events to for the call. (e.g. https://www.example.com/callback)
   --AsyncAmdStatusCallbackMethod: string@AsyncAmdStatusCallbackMethod-completer # HTTP request type used for `AsyncAmdStatusCallback`. The default value is inherited from TeXML Application setting. (default: POST, e.g. GET)
   --MachineDetectionTimeout: int # Maximum timeout threshold in milliseconds for overall detection. (default: 30000, e.g. 5000)
@@ -24398,20 +24397,20 @@ export def "texml-accounts-calls InitiateTexmlCall" [
   --MachineDetectionSpeechThreshold: int # Maximum threshold of a human greeting. If greeting longer than this value, considered machine. Ignored when `premium` detection is used. (default: 3500, e.g. 2000)
   --MachineDetectionSpeechEndThreshold: int # Silence duration threshold after a greeting message or voice for it be considered human. Ignored when `premium` detection is used. (default: 800, e.g. 2000)
   --MachineDetectionSilenceTimeout: int # If initial silence duration is greater than this value, consider it a machine. Ignored when `premium` detection is used. (default: 3500, e.g. 2000)
-  --CancelPlaybackOnMachineDetection: string@bool-completer # Whether to cancel ongoing playback on `machine` detection. Defaults to `true`. (default: true, e.g. false)
-  --CancelPlaybackOnDetectMessageEnd: string@bool-completer # Whether to cancel ongoing playback on `greeting ended` detection. Defaults to `true`. (default: true, e.g. false)
+  --CancelPlaybackOnMachineDetection: oneof<nothing, bool> # Whether to cancel ongoing playback on `machine` detection. Defaults to `true`. (default: true, e.g. false)
+  --CancelPlaybackOnDetectMessageEnd: oneof<nothing, bool> # Whether to cancel ongoing playback on `greeting ended` detection. Defaults to `true`. (default: true, e.g. false)
   --DeepfakeDetection: string@DeepfakeDetection-completer # Enables Deepfake Detection on the dialed call. When enabled, audio from the remote party is analyzed to determine whether the voice is AI-generated. Results are delivered asynchronously via a callback. (e.g. Enable)
   --DeepfakeDetectionCallbackUrl: string # URL destination for Telnyx to send deepfake detection callback events to for the call. (e.g. https://www.example.com/deepfake-callback)
   --DeepfakeDetectionCallbackMethod: string@DeepfakeDetectionCallbackMethod-completer # HTTP request type used for `DeepfakeDetectionCallbackUrl`. (default: POST, e.g. GET)
   --PreferredCodecs: string # The list of comma-separated codecs to be offered on a call. (e.g. PCMA,PCMU)
-  --Record: string@bool-completer # Whether to record the entire participant's call leg. Defaults to `false`. (e.g. false)
+  --Record: oneof<nothing, bool> # Whether to record the entire participant's call leg. Defaults to `false`. (e.g. false)
   --RecordingChannels: string@RecordingChannels-completer # The number of channels in the final recording. Defaults to `mono`. (e.g. dual)
   --RecordingStatusCallback: string # The URL the recording callbacks will be sent to. (e.g. https://example.com/recording_status_callback)
   --RecordingStatusCallbackMethod: string@RecordingStatusCallbackMethod-completer # HTTP request type used for `RecordingStatusCallback`. Defaults to `POST`. (e.g. GET)
   --RecordingStatusCallbackEvent: string # The changes to the recording's state that should generate a call to `RecoridngStatusCallback`. Can be: `in-progress`, `completed` and `absent`. Separate multiple values with a space. Defaults to `completed`. (e.g. in-progress completed absent)
   --RecordingTimeout: int # The number of seconds that Telnyx will wait for the recording to be stopped if silence is detected. The timer only starts when the speech is detected. Please note that the transcription is used to detect silence and the related charge will be applied. The minimum value is 0. The default value is 0 (infinite) (default: 0, e.g. 5)
   --RecordingTrack: string@RecordingTrack-completer # The audio track to record for the call. The default is `both`. (e.g. inbound)
-  --SendRecordingUrl: string@bool-completer # Whether to send RecordingUrl in webhooks. (default: true, e.g. false)
+  --SendRecordingUrl: oneof<nothing, bool> # Whether to send RecordingUrl in webhooks. (default: true, e.g. false)
   --SipAuthPassword: string # The password to use for SIP authentication. (e.g. 1234)
   --SipAuthUsername: string # The username to use for SIP authentication. (e.g. user)
   --Trim: string@Trim-completer # Whether to trim any leading and trailing silence from the recording. Defaults to `trim-silence`. (e.g. trim-silence)
@@ -24529,13 +24528,13 @@ export def "texml-accounts-calls-recordingsjson StartTeXMLCallRecording" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --PlayBeep: string@bool-completer # Whether to play a beep when recording is started. (default: true, e.g. false)
+  --PlayBeep: oneof<nothing, bool> # Whether to play a beep when recording is started. (default: true, e.g. false)
   --RecordingStatusCallbackEvent: string # The changes to the recording's state that should generate a call to `RecoridngStatusCallback`. Can be: `in-progress`, `completed` and `absent`. Separate multiple values with a space. Defaults to `completed`. (e.g. in-progress completed absent)
   --RecordingStatusCallback: string # Url where status callbacks will be sent. (format: uri, e.g. http://webhook.com/callback)
   --RecordingStatusCallbackMethod: string@RecordingStatusCallbackMethod-completer # HTTP method used to send status callbacks. (default: POST, e.g. GET)
   --RecordingChannels: string@RecordingChannels-completer-1 # When `dual`, final audio file has the first leg on channel A, and the rest on channel B. `single` mixes both tracks into a single channel. (default: dual, e.g. single)
   --RecordingTrack: string@RecordingTrack-completer # The audio track to record for the call. The default is `both`. (e.g. inbound)
-  --SendRecordingUrl: string@bool-completer # Whether to send RecordingUrl in webhooks. (default: true, e.g. false)
+  --SendRecordingUrl: oneof<nothing, bool> # Whether to send RecordingUrl in webhooks. (default: true, e.g. false)
 ]: any -> record<account_sid: string, call_sid: string, conference_sid: string, channels: int, date_created: string, date_updated: string, start_time: string, price: string, price_unit: string, duration: string, sid: string, source: string, error_code: string, track: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -24593,8 +24592,8 @@ export def "texml-accounts-calls-siprecjson StartTeXMLSiprecSession" [
   --ConnectorName: string # The name of the connector to use for the SIPREC session. (e.g. my_connector)
   --Name: string # Name of the SIPREC session. May be used to stop the SIPREC session from TeXML instruction. (e.g. my_siprec_session)
   --Track: string@Track-completer # The track to be used for siprec session. Can be `both_tracks`, `inbound_track` or `outbound_track`. Defaults to `both_tracks`. (e.g. both_tracks)
-  --IncludeMetadataCustomHeaders: string@bool-completer # When set, custom parameters will be added as metadata (recording.session.ExtensionParameters). Otherwise, they’ll be added to sip headers. (e.g. true)
-  --Secure: string@bool-completer # Controls whether to encrypt media sent to your SRS using SRTP and TLS. When set you need to configure SRS port in your connector to 5061. (e.g. true)
+  --IncludeMetadataCustomHeaders: oneof<nothing, bool> # When set, custom parameters will be added as metadata (recording.session.ExtensionParameters). Otherwise, they’ll be added to sip headers. (e.g. true)
+  --Secure: oneof<nothing, bool> # Controls whether to encrypt media sent to your SRS using SRTP and TLS. When set you need to configure SRS port in your connector to 5061. (e.g. true)
   --SessionTimeoutSecs: int # Sets `Session-Expires` header to the INVITE. A reinvite is sent every half the value set. Usefull for session keep alive. Minimum value is 90, set to 0 to disable. (default: 1800, e.g. 900)
   --SipTransport: string@SipTransport-completer # Specifies SIP transport protocol. (default: udp, e.g. tcp)
   --StatusCallback: string # URL destination for Telnyx to send status callback events to for the siprec session. (e.g. https://www.example.com/callback)
@@ -24827,17 +24826,17 @@ export def "texml-accounts-conferences-participants DialTexmlConferenceParticipa
   --To: string # The phone number of the called party. Phone numbers are formatted with a `+` and country code. (e.g. +16175551212)
   --From: string # The phone number of the party that initiated the call. Phone numbers are formatted with a `+` and country code. (e.g. +16175551212)
   --Timeout: int # The number of seconds that we should allow the phone to ring before assuming there is no answer. Can be an integer between 5 and 120, inclusive. The default value is 30. (e.g. 30)
-  --Muted: string@bool-completer # Whether the participant should be muted. (e.g. true)
-  --StartConferenceOnEnter: string@bool-completer # Whether to start the conference when the participant enters. Defaults to `true`. (e.g. false)
-  --EndConferenceOnExit: string@bool-completer # Whether to end the conference when the participant leaves. Defaults to `false`. (e.g. true)
+  --Muted: oneof<nothing, bool> # Whether the participant should be muted. (e.g. true)
+  --StartConferenceOnEnter: oneof<nothing, bool> # Whether to start the conference when the participant enters. Defaults to `true`. (e.g. false)
+  --EndConferenceOnExit: oneof<nothing, bool> # Whether to end the conference when the participant leaves. Defaults to `false`. (e.g. true)
   --Label: string # A unique label for the participant that will be added to the conference. The label can be used to reference the participant for updates via the TeXML REST API. (e.g. customer)
-  --EarlyMedia: string@bool-completer # Whether participant shall be bridged to conference before the participant answers (from early media if available). Defaults to `false`. (default: false, e.g. true)
+  --EarlyMedia: oneof<nothing, bool> # Whether participant shall be bridged to conference before the participant answers (from early media if available). Defaults to `false`. (default: false, e.g. true)
   --ConferenceStatusCallback: string # The URL the conference callbacks will be sent to. (e.g. https://example.com/conference_status_callback)
   --ConferenceStatusCallbackMethod: string@ConferenceStatusCallbackMethod-completer # HTTP request type used for `ConferenceStatusCallback`. Defaults to `POST`. (e.g. GET)
   --ConferenceStatusCallbackEvent: string # The changes to the conference's state that should generate a call to `ConferenceStatusCallback`. Can be: `start`, `end`, `join` and `leave`. Separate multiple values with a space. By default no callbacks are sent. (e.g. start end join leave)
   --WaitUrl: string # The URL to call for an audio file to play while the participant is waiting for the conference to start. (e.g. https://www.example.com/wait_music.mp3)
   --MaxParticipants: int # The maximum number of participants in the conference. Can be a positive integer from 2 to 800. The default value is 250. (e.g. 30)
-  --Coaching: string@bool-completer # Whether the participant is coaching another call. When `true`, `CallSidToCoach` has to be given. (e.g. false)
+  --Coaching: oneof<nothing, bool> # Whether the participant is coaching another call. When `true`, `CallSidToCoach` has to be given. (e.g. false)
   --CallSidToCoach: string # The SID of the participant who is being coached. The participant being coached is the only participant who can hear the participant who is coaching. (e.g. v3:9X2vxPDFY2RHSJ1EdMS0RHRksMTg7ldNxdjWbVr9zBjbGjGsSe-aiQ)
   --CallerId: string # To be used as the caller id name (SIP From Display Name) presented to the destination (`To` number). The string should have a maximum of 128 characters, containing only letters, numbers, spaces, and `-_~!.+` special characters. If ommited, the display name will be the same as the number in the `From` field. (e.g. Info)
   --TimeLimit: int # The maximum duration of the call in seconds. (e.g. 30)
@@ -24849,10 +24848,10 @@ export def "texml-accounts-conferences-participants DialTexmlConferenceParticipa
   --AmdStatusCallback: string # The URL the result of answering machine detection will be sent to. (e.g. https://www.example.com/amd_result)
   --AmdStatusCallbackMethod: string@AmdStatusCallbackMethod-completer # HTTP request type used for `AmdStatusCallback`. Defaults to `POST`. (e.g. GET)
   --ApplicationSid: string # The SID of the TeXML application that will handle the new participant's call. Required unless joining an existing conference by its ConferenceSid. (e.g. 1846572522338780702)
-  --CancelPlaybackOnMachineDetection: string@bool-completer # Whether to cancel ongoing playback on `machine` detection. Defaults to `true`. (default: true, e.g. false)
-  --CancelPlaybackOnDetectMessageEnd: string@bool-completer # Whether to cancel ongoing playback on `greeting ended` detection. Defaults to `true`. (default: true, e.g. false)
+  --CancelPlaybackOnMachineDetection: oneof<nothing, bool> # Whether to cancel ongoing playback on `machine` detection. Defaults to `true`. (default: true, e.g. false)
+  --CancelPlaybackOnDetectMessageEnd: oneof<nothing, bool> # Whether to cancel ongoing playback on `greeting ended` detection. Defaults to `true`. (default: true, e.g. false)
   --PreferredCodecs: string # The list of comma-separated codecs to be offered on a call. (e.g. PCMA,PCMU)
-  --Record: string@bool-completer # Whether to record the entire participant's call leg. Defaults to `false`. (e.g. false)
+  --Record: oneof<nothing, bool> # Whether to record the entire participant's call leg. Defaults to `false`. (e.g. false)
   --RecordingChannels: string@RecordingChannels-completer # The number of channels in the final recording. Defaults to `mono`. (e.g. dual)
   --RecordingStatusCallback: string # The URL the recording callbacks will be sent to. (e.g. https://example.com/recording_status_callback)
   --RecordingStatusCallbackMethod: string@RecordingStatusCallbackMethod-completer # HTTP request type used for `RecordingStatusCallback`. Defaults to `POST`. (e.g. GET)
@@ -24943,16 +24942,16 @@ export def "texml-accounts-conferences-participants UpdateTexmlConferencePartici
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Muted: string@bool-completer # Whether the participant should be muted. (e.g. true)
-  --Hold: string@bool-completer # Whether the participant should be on hold. (e.g. true)
+  --Muted: oneof<nothing, bool> # Whether the participant should be muted. (e.g. true)
+  --Hold: oneof<nothing, bool> # Whether the participant should be on hold. (e.g. true)
   --HoldUrl: string # The URL to be called using the `HoldMethod` for music that plays when the participant is on hold. The URL may return an MP3 file, a WAV file, or a TwiML document that contains `<Play>`, `<Say>`, `<Pause>`, or `<Redirect>` verbs. (e.g. https://www.example.com/hold-music.xml)
   --HoldMethod: string@HoldMethod-completer # The HTTP method to use when calling the `HoldUrl`. (e.g. POST)
   --AnnounceUrl: string # The URL to call to announce something to the participant. The URL may return an MP3 fileo a WAV file, or a TwiML document that contains `<Play>`, `<Say>`, `<Pause>`, or `<Redirect>` verbs. (e.g. https://www.example.com/announce.xml)
   --AnnounceMethod: string@AnnounceMethod-completer # The HTTP method used to call the `AnnounceUrl`. Defaults to `POST`. (e.g. GET)
   --WaitUrl: string # The URL to call for an audio file to play while the participant is waiting for the conference to start. (e.g. https://www.example.com/wait_music.mp3)
-  --BeepOnExit: string@bool-completer # Whether to play a notification beep to the conference when the participant exits. (e.g. false)
-  --EndConferenceOnExit: string@bool-completer # Whether to end the conference when the participant leaves. (e.g. false)
-  --Coaching: string@bool-completer # Whether the participant is coaching another call. When `true`, `CallSidToCoach` has to be given. (e.g. false)
+  --BeepOnExit: oneof<nothing, bool> # Whether to play a notification beep to the conference when the participant exits. (e.g. false)
+  --EndConferenceOnExit: oneof<nothing, bool> # Whether to end the conference when the participant leaves. (e.g. false)
+  --Coaching: oneof<nothing, bool> # Whether the participant is coaching another call. When `true`, `CallSidToCoach` has to be given. (e.g. false)
   --CallSidToCoach: string # The SID of the participant who is being coached. The participant being coached is the only participant who can hear the participant who is coaching. (e.g. v3:9X2vxPDFY2RHSJ1EdMS0RHRksMTg7ldNxdjWbVr9zBjbGjGsSe-aiQ)
 ]: any -> record<account_sid: string, api_version: string, call_sid: string, call_sid_legacy: string, coaching: bool, coaching_call_sid: string, coaching_call_sid_legacy: string, date_created: string, date_updated: string, end_conference_on_exit: bool, hold: bool, muted: bool, status: string, uri: string, conference_sid: string> {
   let input = $in
@@ -25313,7 +25312,7 @@ export def "texml-ai-calls InitiateTexmlAICall" [
   --ConversationCallbacks: list # Array of URL destinations for AI conversation callback events for this call. Events include `conversation_created` and `conversation_ended`. (e.g. [https://www.example.com/conversation-callback1, https://www.example.com/conversation-callback2])
   --MachineDetection: string@MachineDetection-completer # Enables Answering Machine Detection. (default: Disable, e.g. Enable)
   --DetectionMode: string@DetectionMode-completer # Allows you to choose between Regular, Premium, and PremiumCallScreening detections. See https://developers.telnyx.com/docs/voice/programmable-voice/answering-machine-detection (default: Regular, e.g. Premium)
-  --AsyncAmd: string@bool-completer # Select whether to perform answering machine detection in the background. By default execution is blocked until Answering Machine Detection is completed. (default: false, e.g. true)
+  --AsyncAmd: oneof<nothing, bool> # Select whether to perform answering machine detection in the background. By default execution is blocked until Answering Machine Detection is completed. (default: false, e.g. true)
   --AsyncAmdStatusCallback: string # URL destination for Telnyx to send AMD callback events to for the call. (e.g. https://www.example.com/callback)
   --AsyncAmdStatusCallbackMethod: string@AsyncAmdStatusCallbackMethod-completer # HTTP request type used for `AsyncAmdStatusCallback`. (default: POST, e.g. GET)
   --MachineDetectionTimeout: int # Maximum timeout threshold in milliseconds for overall detection. (default: 30000, e.g. 5000)
@@ -25324,7 +25323,7 @@ export def "texml-ai-calls InitiateTexmlAICall" [
   --Passports: string # A string of passport identifiers to associate with the call.
   --TimeLimit: int # The maximum duration of the call in seconds. The minimum value is 30 and the maximum value is 14400 (4 hours). Default is 14400 seconds. (default: 14400, e.g. 3600)
   --Timeout: int # The number of seconds to wait for the called party to answer the call before the call is canceled. The minimum value is 5 and the maximum value is 120. Default is 30 seconds. (default: 30, e.g. 60)
-  --Record: string@bool-completer # Whether to record the entire participant's call leg. Defaults to `false`. (e.g. false)
+  --Record: oneof<nothing, bool> # Whether to record the entire participant's call leg. Defaults to `false`. (e.g. false)
   --RecordingChannels: string@RecordingChannels-completer # The number of channels in the final recording. Defaults to `mono`. (e.g. dual)
   --RecordingStatusCallback: string # The URL the recording callbacks will be sent to. (e.g. https://example.com/recording_status_callback)
   --RecordingStatusCallbackMethod: string@RecordingStatusCallbackMethod-completer # HTTP request type used for `RecordingStatusCallback`. Defaults to `POST`. (e.g. GET)
@@ -25332,7 +25331,7 @@ export def "texml-ai-calls InitiateTexmlAICall" [
   --RecordingTimeout: int # The number of seconds that Telnyx will wait for the recording to be stopped if silence is detected. The timer only starts when the speech is detected. The minimum value is 0. The default value is 0 (infinite). (default: 0, e.g. 5)
   --RecordingTrack: string@RecordingTrack-completer # The audio track to record for the call. The default is `both`. (e.g. inbound)
   --Trim: string@Trim-completer # Whether to trim any leading and trailing silence from the recording. Defaults to `trim-silence`. (e.g. trim-silence)
-  --SendRecordingUrl: string@bool-completer # Whether to send RecordingUrl in webhooks. (default: true, e.g. false)
+  --SendRecordingUrl: oneof<nothing, bool> # Whether to send RecordingUrl in webhooks. (default: true, e.g. false)
   --PreferredCodecs: string # The list of comma-separated codecs to be offered on a call. (e.g. PCMA,PCMU)
   --SipAuthUsername: string # The username to use for SIP authentication. (e.g. user)
   --SipAuthPassword: string # The password to use for SIP authentication. (e.g. 1234)
@@ -25415,15 +25414,15 @@ export def "texml-applications CreateTexmlApplication" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   friendly_name: string # A user-assigned name to help manage the application. (e.g. call-router)
-  --active: string@bool-completer # Specifies whether the connection can be used. (default: true, e.g. false)
+  --active: oneof<nothing, bool> # Specifies whether the connection can be used. (default: true, e.g. false)
   --anchorsite-override: string@anchorsite-override-completer-1 # `Latency` directs Telnyx to route media through the site with the lowest round-trip time to the user's connection. Telnyx calculates this time using ICMP ping messages. This can be disabled by specifying a site to handle all media. (default: Latency, e.g. Amsterdam, Netherlands)
   --dtmf-type: string@dtmf-type-completer # Sets the type of DTMF digits sent from Telnyx to this Connection. Note that DTMF digits sent to Telnyx will be accepted in all formats. (default: RFC 2833, e.g. Inband)
-  --first-command-timeout: string@bool-completer # Specifies whether calls to phone numbers associated with this connection should hangup after timing out. (default: false, e.g. true)
+  --first-command-timeout: oneof<nothing, bool> # Specifies whether calls to phone numbers associated with this connection should hangup after timing out. (default: false, e.g. true)
   --first-command-timeout-secs: int # Specifies how many seconds to wait before timing out a dial command. (default: 30, e.g. 10)
   --tags: list # Tags associated with the Texml Application. (e.g. [tag1, tag2])
   voice_url: string # URL to which Telnyx will deliver your XML Translator webhooks. (format: uri, e.g. https://example.com)
   --voice-fallback-url: string # URL to which Telnyx will deliver your XML Translator webhooks if we get an error response from your voice_url. (format: uri, e.g. https://fallback.example.com)
-  --call-cost-in-webhooks: string@bool-completer # Specifies if call cost webhooks should be sent for this TeXML Application. (default: false)
+  --call-cost-in-webhooks: oneof<nothing, bool> # Specifies if call cost webhooks should be sent for this TeXML Application. (default: false)
   --voice-method: string@voice-method-completer # HTTP request method Telnyx will use to interact with your XML Translator webhooks. Either 'get' or 'post'. (default: post, e.g. get)
   --status-callback: string # URL for Telnyx to send requests to containing information about call progress events. (format: uri, e.g. https://example.com)
   --status-callback-method: string@status-callback-method-completer # HTTP request method Telnyx should use when requesting the status_callback URL. (default: post, e.g. get)
@@ -25501,14 +25500,14 @@ export def "texml-applications UpdateTexmlApplication" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   friendly_name: string # A user-assigned name to help manage the application. (e.g. call-router)
-  --active: string@bool-completer # Specifies whether the connection can be used. (default: true, e.g. false)
+  --active: oneof<nothing, bool> # Specifies whether the connection can be used. (default: true, e.g. false)
   --anchorsite-override: string@anchorsite-override-completer-1 # `Latency` directs Telnyx to route media through the site with the lowest round-trip time to the user's connection. Telnyx calculates this time using ICMP ping messages. This can be disabled by specifying a site to handle all media. (default: Latency, e.g. Amsterdam, Netherlands)
   --dtmf-type: string@dtmf-type-completer # Sets the type of DTMF digits sent from Telnyx to this Connection. Note that DTMF digits sent to Telnyx will be accepted in all formats. (default: RFC 2833, e.g. Inband)
-  --first-command-timeout: string@bool-completer # Specifies whether calls to phone numbers associated with this connection should hangup after timing out. (default: false, e.g. true)
+  --first-command-timeout: oneof<nothing, bool> # Specifies whether calls to phone numbers associated with this connection should hangup after timing out. (default: false, e.g. true)
   --first-command-timeout-secs: int # Specifies how many seconds to wait before timing out a dial command. (default: 30, e.g. 10)
   voice_url: string # URL to which Telnyx will deliver your XML Translator webhooks. (format: uri, e.g. https://example.com)
   --voice-fallback-url: string # URL to which Telnyx will deliver your XML Translator webhooks if we get an error response from your voice_url. (format: uri, e.g. https://fallback.example.com)
-  --call-cost-in-webhooks: string@bool-completer # Specifies if call cost webhooks should be sent for this TeXML Application. (default: false)
+  --call-cost-in-webhooks: oneof<nothing, bool> # Specifies if call cost webhooks should be sent for this TeXML Application. (default: false)
   --voice-method: string@voice-method-completer # HTTP request method Telnyx will use to interact with your XML Translator webhooks. Either 'get' or 'post'. (default: post, e.g. get)
   --status-callback: string # URL for Telnyx to send requests to containing information about call progress events. (format: uri, e.g. https://example.com)
   --status-callback-method: string@status-callback-method-completer # HTTP request method Telnyx should use when requesting the status_callback URL. (default: post, e.g. get)
@@ -25543,7 +25542,7 @@ export def "text-to-speech-speech TextToSpeechOverWs" [
   --provider: string@provider-completer-3 # TTS provider. Defaults to `telnyx` if not specified. Ignored when `voice` is provided. (default: telnyx)
   --model-id: string # Model identifier for the chosen provider. Examples: `Natural`, `NaturalHD`, `Ultra` (Telnyx); `Polly.Generative` (AWS).
   --voice-id: string # Voice identifier for the chosen provider.
-  --disable-cache: string@bool-completer # When `true`, bypass the audio cache and generate fresh audio. (default: false)
+  --disable-cache: oneof<nothing, bool> # When `true`, bypass the audio cache and generate fresh audio. (default: false)
   --audio-format: string@audio-format-completer # Audio output format override. Supported for Telnyx models. `pcm` and `wav` are available for `Natural`/`NaturalHD` models. The `Ultra` model outputs PCM at 24kHz s16le or MP3 at 128kbps 24kHz.
   --socket-id: string # Client-provided socket identifier for tracking. If not provided, one is generated server-side.
 ]: nothing -> any {
@@ -25583,7 +25582,7 @@ export def "text-to-speech-speech generateSpeech" [
   --language: string # Language code (e.g. `en-US`). Usage varies by provider.
   --text-type: string@text-type-completer # Text type. Use `ssml` for SSML-formatted input (supported by AWS and Azure).
   --output-type: string@output-type-completer # Determines the response format. `binary_output` returns raw audio bytes, `base64_output` returns base64-encoded audio in JSON. (default: binary_output)
-  --disable-cache: string@bool-completer # When `true`, bypass the audio cache and generate fresh audio. (default: false)
+  --disable-cache: oneof<nothing, bool> # When `true`, bypass the audio cache and generate fresh audio. (default: false)
   --voice-settings: record # Provider-specific voice settings. Contents vary by provider — see provider-specific parameter objects below.
   --aws: record # AWS Polly provider-specific parameters. — shape: {language_code?: string, text_type?: "text"|"ssml", lexicon_names?: list, output_format?: string, sample_rate?: string}
   --telnyx: record # Telnyx provider-specific parameters. Use `voice_speed` and `temperature` for `Natural` and `NaturalHD` models. For the `Ultra` model, use `voice_speed`, `volume`, and `emotion`. — shape: {voice_speed?: float, response_format?: string, sampling_rate?: int, temperature?: float, volume?: float, emotion?: "neutral"|"happy"|"sad"|"angry"|"fearful"|"disgusted"|"surprised"}
@@ -25829,24 +25828,24 @@ export def "uac-connections CreateUacConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Defaults to true
+  --active: oneof<nothing, bool> # Defaults to true
   --user-name: string # The user name to be used as part of the credentials. Must be 4-32 characters long and alphanumeric values only (no spaces or special characters). (e.g. myusername123)
   --password: string # The password to be used as part of the credentials. Must be 8 to 128 characters long. (e.g. my123secure456password789)
   --anchorsite-override: string@anchorsite-override-completer-1 # `Latency` directs Telnyx to route media through the site with the lowest round-trip time to the user's connection. Telnyx calculates this time using ICMP ping messages. This can be disabled by specifying a site to handle all media. (default: Latency, e.g. Amsterdam, Netherlands)
   connection_name: string # A user-assigned name to help manage the connection. (e.g. office-connection)
   --sip-uri-calling-preference: string@sip-uri-calling-preference-completer # This feature enables inbound SIP URI calls to your Credential Auth Connection. If enabled for all (unrestricted) then anyone who calls the SIP URI <your-username>@telnyx.com will be connected to your Connection. You can also choose to allow only calls that are originated on any Connections under your account (internal).
-  --default-on-hold-comfort-noise-enabled: string@bool-completer # When enabled, Telnyx will generate comfort noise when you place the call on hold. If disabled, you will need to generate comfort noise or on hold music to avoid RTP timeout. (default: false)
+  --default-on-hold-comfort-noise-enabled: oneof<nothing, bool> # When enabled, Telnyx will generate comfort noise when you place the call on hold. If disabled, you will need to generate comfort noise or on hold music to avoid RTP timeout. (default: false)
   --dtmf-type: string@dtmf-type-completer # Sets the type of DTMF digits sent from Telnyx to this Connection. Note that DTMF digits sent to Telnyx will be accepted in all formats. (default: RFC 2833, e.g. Inband)
-  --encode-contact-header-enabled: string@bool-completer # Encode the SIP contact header sent by Telnyx to avoid issues for NAT or ALG scenarios. (default: false)
+  --encode-contact-header-enabled: oneof<nothing, bool> # Encode the SIP contact header sent by Telnyx to avoid issues for NAT or ALG scenarios. (default: false)
   --encrypted-media: string@encrypted-media-completer # Enable use of SRTP for encryption. Cannot be set if the transport_portocol is TLS. (nullable, e.g. SRTP)
-  --onnet-t38-passthrough-enabled: string@bool-completer # Enable on-net T38 if you prefer the sender and receiver negotiating T38 directly if both are on the Telnyx network. If this is disabled, Telnyx will be able to use T38 on just one leg of the call depending on each leg's settings. (default: false)
+  --onnet-t38-passthrough-enabled: oneof<nothing, bool> # Enable on-net T38 if you prefer the sender and receiver negotiating T38 directly if both are on the Telnyx network. If this is disabled, Telnyx will be able to use T38 on just one leg of the call depending on each leg's settings. (default: false)
   --ios-push-credential-id: string # The uuid of the push credential for Ios (nullable, e.g. ec0c8e5d-439e-4620-a0c1-9d9c8d02a836)
   --android-push-credential-id: string # The uuid of the push credential for Android (nullable, e.g. 06b09dfd-7154-4980-8b75-cebf7a9d4f8e)
   --webhook-event-url: string # The URL where webhooks related to this connection will be sent. Must include a scheme, such as 'https'. (format: uri, e.g. https://example.com)
   --webhook-event-failover-url: string # The failover URL where webhooks related to this connection will be sent if sending to the primary URL fails. Must include a scheme, such as 'https'. (nullable, format: uri, default: , e.g. https://failover.example.com)
   --webhook-api-version: string@webhook-api-version-completer-1 # Determines which webhook format will be used, Telnyx API v1, v2 or texml. Note - texml can only be set when the outbound object parameter call_parking_enabled is included and set to true. (default: 1, e.g. 1)
   --webhook-timeout-secs: int # Specifies how many seconds to wait before timing out a webhook. (nullable, e.g. 25)
-  --call-cost-in-webhooks: string@bool-completer # Specifies if call cost webhooks should be sent for this connection. (default: false)
+  --call-cost-in-webhooks: oneof<nothing, bool> # Specifies if call cost webhooks should be sent for this connection. (default: false)
   --tags: list # Tags associated with the connection. (e.g. [tag1, tag2])
   --rtcp-settings: record # e.g. {port: rtcp-mux, capture_enabled: true, report_frequency_secs: 10} — shape: {port?: "rtcp-mux"|"rtp+1", capture_enabled?: bool, report_frequency_secs?: int}
   --inbound: record # Inbound settings that can be supplied when creating or updating a UAC connection. The SIP subdomain fields returned in UAC connection responses are generated by Telnyx and are not accepted as request parameters. (e.g. {ani_number_format: +E.164, dnis_number_format: +e164, codecs: [G722], default_routing_method: sequential, channel_limit: 10, generate_ringback_tone: true, isup_headers_enabled: true, prack_enabled: true, sip_compact_headers_enabled: true, timeout_1xx_secs: 10, timeout_2xx_secs: 20, shaken_stir_enabled: true, simultaneous_ringing: enabled}) — shape: {ani_number_format?: "+E.164"|"E.164"|"+E.164-national"|"E.164-national", dnis_number_format?: "+e164"|"e164"|"national"|"sip_username", codecs?: list, default_routing_method?: "sequential"|"round-robin", channel_limit?: int, generate_ringback_tone?: bool, isup_headers_enabled?: bool, prack_enabled?: bool, sip_compact_headers_enabled?: bool, timeout_1xx_secs?: int, timeout_2xx_secs?: int, shaken_stir_enabled?: bool, simultaneous_ringing?: "disabled"|"enabled"}
@@ -25932,24 +25931,24 @@ export def "uac-connections UpdateUacConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Defaults to true
+  --active: oneof<nothing, bool> # Defaults to true
   --user-name: string # The user name to be used as part of the credentials. Must be 4-32 characters long and alphanumeric values only (no spaces or special characters). (e.g. myusername123)
   --password: string # The password to be used as part of the credentials. Must be 8 to 128 characters long. (e.g. my123secure456password789)
   --anchorsite-override: string@anchorsite-override-completer-1 # `Latency` directs Telnyx to route media through the site with the lowest round-trip time to the user's connection. Telnyx calculates this time using ICMP ping messages. This can be disabled by specifying a site to handle all media. (default: Latency, e.g. Amsterdam, Netherlands)
   --connection-name: string # A user-assigned name to help manage the connection. (e.g. office-connection)
   --sip-uri-calling-preference: string@sip-uri-calling-preference-completer # This feature enables inbound SIP URI calls to your Credential Auth Connection. If enabled for all (unrestricted) then anyone who calls the SIP URI <your-username>@telnyx.com will be connected to your Connection. You can also choose to allow only calls that are originated on any Connections under your account (internal).
-  --default-on-hold-comfort-noise-enabled: string@bool-completer # When enabled, Telnyx will generate comfort noise when you place the call on hold. If disabled, you will need to generate comfort noise or on hold music to avoid RTP timeout. (default: false)
+  --default-on-hold-comfort-noise-enabled: oneof<nothing, bool> # When enabled, Telnyx will generate comfort noise when you place the call on hold. If disabled, you will need to generate comfort noise or on hold music to avoid RTP timeout. (default: false)
   --dtmf-type: string@dtmf-type-completer # Sets the type of DTMF digits sent from Telnyx to this Connection. Note that DTMF digits sent to Telnyx will be accepted in all formats. (default: RFC 2833, e.g. Inband)
-  --encode-contact-header-enabled: string@bool-completer # Encode the SIP contact header sent by Telnyx to avoid issues for NAT or ALG scenarios. (default: false)
+  --encode-contact-header-enabled: oneof<nothing, bool> # Encode the SIP contact header sent by Telnyx to avoid issues for NAT or ALG scenarios. (default: false)
   --encrypted-media: string@encrypted-media-completer # Enable use of SRTP for encryption. Cannot be set if the transport_portocol is TLS. (nullable, e.g. SRTP)
-  --onnet-t38-passthrough-enabled: string@bool-completer # Enable on-net T38 if you prefer the sender and receiver negotiating T38 directly if both are on the Telnyx network. If this is disabled, Telnyx will be able to use T38 on just one leg of the call depending on each leg's settings. (default: false)
+  --onnet-t38-passthrough-enabled: oneof<nothing, bool> # Enable on-net T38 if you prefer the sender and receiver negotiating T38 directly if both are on the Telnyx network. If this is disabled, Telnyx will be able to use T38 on just one leg of the call depending on each leg's settings. (default: false)
   --ios-push-credential-id: string # The uuid of the push credential for Ios (nullable, e.g. ec0c8e5d-439e-4620-a0c1-9d9c8d02a836)
   --android-push-credential-id: string # The uuid of the push credential for Android (nullable, e.g. 06b09dfd-7154-4980-8b75-cebf7a9d4f8e)
   --webhook-event-url: string # The URL where webhooks related to this connection will be sent. Must include a scheme, such as 'https'. (format: uri, e.g. https://example.com)
   --webhook-event-failover-url: string # The failover URL where webhooks related to this connection will be sent if sending to the primary URL fails. Must include a scheme, such as 'https'. (nullable, format: uri, default: , e.g. https://failover.example.com)
   --webhook-api-version: string@webhook-api-version-completer # Determines which webhook format will be used, Telnyx API v1 or v2. (default: 1, e.g. 1)
   --webhook-timeout-secs: int # Specifies how many seconds to wait before timing out a webhook. (nullable, e.g. 25)
-  --call-cost-in-webhooks: string@bool-completer # Specifies if call cost webhooks should be sent for this connection. (default: false)
+  --call-cost-in-webhooks: oneof<nothing, bool> # Specifies if call cost webhooks should be sent for this connection. (default: false)
   --tags: list # Tags associated with the connection. (e.g. [tag1, tag2])
   --rtcp-settings: record # e.g. {port: rtcp-mux, capture_enabled: true, report_frequency_secs: 10} — shape: {port?: "rtcp-mux"|"rtp+1", capture_enabled?: bool, report_frequency_secs?: int}
   --inbound: record # Inbound settings that can be supplied when creating or updating a UAC connection. The SIP subdomain fields returned in UAC connection responses are generated by Telnyx and are not accepted as request parameters. (e.g. {ani_number_format: +E.164, dnis_number_format: +e164, codecs: [G722], default_routing_method: sequential, channel_limit: 10, generate_ringback_tone: true, isup_headers_enabled: true, prack_enabled: true, sip_compact_headers_enabled: true, timeout_1xx_secs: 10, timeout_2xx_secs: 20, shaken_stir_enabled: true, simultaneous_ringing: enabled}) — shape: {ani_number_format?: "+E.164"|"E.164"|"+E.164-national"|"E.164-national", dnis_number_format?: "+e164"|"e164"|"national"|"sip_username", codecs?: list, default_routing_method?: "sequential"|"round-robin", channel_limit?: int, generate_ringback_tone?: bool, isup_headers_enabled?: bool, prack_enabled?: bool, sip_compact_headers_enabled?: bool, timeout_1xx_secs?: int, timeout_2xx_secs?: int, shaken_stir_enabled?: bool, simultaneous_ringing?: "disabled"|"enabled"}
@@ -26013,7 +26012,7 @@ export def "usage-reports GetUsageReports" [
   --end-date: string # The end date for the time range you are interested in. The maximum time range is 31 days. Format: YYYY-MM-DDTHH:mm:ssZ
   --date-range: string # A more user-friendly way to specify the timespan you want to filter by. More options can be found in the Telnyx API Reference docs.
   --filter: string # Filter records on dimensions
-  --managed-accounts: string@bool-completer # Return the aggregations for all Managed Accounts under the user making the request.
+  --managed-accounts: oneof<nothing, bool> # Return the aggregations for all Managed Accounts under the user making the request.
   --qp-sort: list # Specifies the sort order for results
   --format: string@format-completer-1 # Specify the response format (csv or json). JSON is returned by default, even if not specified.
   --page: record # Consolidated page parameter (deepObject style). Originally: page[number], page[size]
@@ -26106,7 +26105,7 @@ export def "user-addresses CreateUserAddress" [
   --borough: string # The borough of the user address. This field is not used for addresses in the US but is used for some international addresses. (e.g. Guadalajara)
   --postal-code: string # The postal code of the user address. (e.g. 78701)
   country_code: string # The two-character (ISO 3166-1 alpha-2) country code of the user address. (e.g. US)
-  --skip-address-verification: string@bool-completer # An optional boolean value specifying if verification of the address should be skipped or not. UserAddresses are generally used for shipping addresses, and failure to validate your shipping address will likely result in a failure to deliver SIM cards or other items ordered from Telnyx. Do not use this parameter unless you are sure that the address is correct even though it cannot be validated. If this is set to any value other than true, verification of the address will be attempted, and the user address will not be allowed if verification fails. If verification fails but suggested values are available that might make the address correct, they will be present in the response as well. If this value is set to true, then the verification will not be attempted. Defaults to false (verification will be performed). (default: false)
+  --skip-address-verification: oneof<nothing, bool> # An optional boolean value specifying if verification of the address should be skipped or not. UserAddresses are generally used for shipping addresses, and failure to validate your shipping address will likely result in a failure to deliver SIM cards or other items ordered from Telnyx. Do not use this parameter unless you are sure that the address is correct even though it cannot be validated. If this is set to any value other than true, verification of the address will be attempted, and the user address will not be allowed if verification fails. If verification fails but suggested values are available that might make the address correct, they will be present in the response as well. If this value is set to true, then the verification will not be attempted. Defaults to false (verification will be performed). (default: false)
 ]: any -> record<data: record<id: string, record_type: string, customer_reference: string, first_name: string, last_name: string, business_name: string, phone_number: string, street_address: string, extended_address: string, locality: string, administrative_area: string, neighborhood: string, borough: string, postal_code: string, country_code: string, created_at: string, updated_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -26230,9 +26229,9 @@ export def "mobile-phone-numbers updateMobilePhoneNumber" [
   --allow-errors(-e) # Return full response without error handling
   --customer-reference: string # nullable
   --connection-id: string # nullable
-  --noise-suppression: string@bool-completer
+  --noise-suppression: oneof<nothing, bool>
   --inbound-call-screening: string@inbound-call-screening-completer
-  --caller-id-name-enabled: string@bool-completer
+  --caller-id-name-enabled: oneof<nothing, bool>
   --tags: list
   --inbound: record # shape: {interception_app_id?: string}
   --outbound: record # shape: {interception_app_id?: string}
@@ -26291,7 +26290,7 @@ export def "mobile-voice-connections createMobileVoiceConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # default: true
+  --active: oneof<nothing, bool> # default: true
   --connection-name: string # default: Telnyx Mobile Voice IMS
   --webhook-event-url: string # nullable
   --webhook-event-failover-url: string # nullable
@@ -26371,7 +26370,7 @@ export def "mobile-voice-connections updateMobileVoiceConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --connection-name: string
   --webhook-event-url: string # nullable
   --webhook-event-failover-url: string # nullable
@@ -26576,7 +26575,7 @@ export def "whatsapp-business-accounts-settings PatchWabaSettings" [
   --timezone: string # IANA timezone identifier (e.g. America/New_York)
   --webhook-url: string # URL to send Whatsapp events (format: url)
   --webhook-failover-url: string # Failover URL to send Whatsapp events (format: url)
-  --webhook-enabled: string@bool-completer # Enable/disable receiving Whatsapp events
+  --webhook-enabled: oneof<nothing, bool> # Enable/disable receiving Whatsapp events
   --webhook-events: list
 ]: any -> any {
   let input = $in
@@ -26726,7 +26725,7 @@ export def "whatsapp-phone-numbers-calling-settings PatchWhatsappCallingSettings
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -27466,7 +27465,7 @@ export def "verify-profiles CreateVerifyProfile" [
   --call: record # shape: {messaging_template_id?: string, app_name?: string, code_length?: int, whitelisted_destinations?: list, default_verification_timeout_secs?: int}
   --flashcall: record # shape: {whitelisted_destinations?: list, app_name?: string, default_verification_timeout_secs?: int}
   --whatsapp: record # shape: {whitelisted_destinations?: list, default_verification_timeout_secs?: int, waba_id?: string, sender_phone_number?: string, template_id?: string}
-  --daily-spend-limit-enabled: string@bool-completer # Whether the daily spend limit is enforced for this verify profile. (default: false, e.g. true)
+  --daily-spend-limit-enabled: oneof<nothing, bool> # Whether the daily spend limit is enforced for this verify profile. (default: false, e.g. true)
   --daily-spend-limit: float # The maximum daily spend allowed on this verify profile, in USD. (e.g. 100.0)
 ]: any -> record<data: record<id: string, name: string, webhook_url: string, webhook_failover_url: string, daily_spend_limit_enabled: bool, daily_spend_limit: float, record_type: string, created_at: string, updated_at: string, language: string, sms: record<messaging_template_id: string, app_name: string, alpha_sender: string, code_length: int, whitelisted_destinations: list, default_verification_timeout_secs: int>, call: record<messaging_template_id: string, app_name: string, code_length: int, whitelisted_destinations: list, default_verification_timeout_secs: int>, flashcall: record<app_name: string, default_verification_timeout_secs: int>, whatsapp: record<messaging_template_id: string, app_name: string, code_length: int, whitelisted_destinations: list, default_verification_timeout_secs: int, waba_id: string, sender_phone_number: string, template_id: string>>> {
   let input = $in
@@ -27619,7 +27618,7 @@ export def "verify-profiles UpdateVerifyProfile" [
   --call: record # shape: {messaging_template_id?: string, app_name?: string, code_length?: int, whitelisted_destinations?: list, default_verification_timeout_secs?: int}
   --whatsapp: record # shape: {whitelisted_destinations?: list, default_verification_timeout_secs?: int, waba_id?: string, sender_phone_number?: string, template_id?: string}
   --language: string # e.g. en-US
-  --daily-spend-limit-enabled: string@bool-completer # Whether the daily spend limit is enforced for this verify profile. (e.g. true)
+  --daily-spend-limit-enabled: oneof<nothing, bool> # Whether the daily spend limit is enforced for this verify profile. (e.g. true)
   --daily-spend-limit: float # The maximum daily spend allowed on this verify profile, in USD. (e.g. 100.0)
 ]: any -> record<data: record<id: string, name: string, webhook_url: string, webhook_failover_url: string, daily_spend_limit_enabled: bool, daily_spend_limit: float, record_type: string, created_at: string, updated_at: string, language: string, sms: record<messaging_template_id: string, app_name: string, alpha_sender: string, code_length: int, whitelisted_destinations: list, default_verification_timeout_secs: int>, call: record<messaging_template_id: string, app_name: string, code_length: int, whitelisted_destinations: list, default_verification_timeout_secs: int>, flashcall: record<app_name: string, default_verification_timeout_secs: int>, whatsapp: record<messaging_template_id: string, app_name: string, code_length: int, whitelisted_destinations: list, default_verification_timeout_secs: int, waba_id: string, sender_phone_number: string, template_id: string>>> {
   let input = $in
@@ -27739,11 +27738,11 @@ export def "virtual-cross-connects UpdateVirtualCrossConnect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --primary-enabled: string@bool-completer # Indicates whether the primary circuit is enabled. Setting this to `false` will disable the circuit. (e.g. true)
-  --primary-routing-announcement: string@bool-completer # Whether the primary BGP route is being announced. (e.g. false)
+  --primary-enabled: oneof<nothing, bool> # Indicates whether the primary circuit is enabled. Setting this to `false` will disable the circuit. (e.g. true)
+  --primary-routing-announcement: oneof<nothing, bool> # Whether the primary BGP route is being announced. (e.g. false)
   --primary-cloud-ip: string # The IP address assigned for your side of the Virtual Cross Connect.<br /><br />If none is provided, one will be generated for you.<br /><br />This value can not be patched once the VXC has bene provisioned. (e.g. 169.254.0.2)
-  --secondary-enabled: string@bool-completer # Indicates whether the secondary circuit is enabled. Setting this to `false` will disable the circuit. (e.g. true)
-  --secondary-routing-announcement: string@bool-completer # Whether the secondary BGP route is being announced. (e.g. false)
+  --secondary-enabled: oneof<nothing, bool> # Indicates whether the secondary circuit is enabled. Setting this to `false` will disable the circuit. (e.g. true)
+  --secondary-routing-announcement: oneof<nothing, bool> # Whether the secondary BGP route is being announced. (e.g. false)
   --secondary-cloud-ip: string # The IP address assigned for your side of the Virtual Cross Connect.<br /><br />If none is provided, one will be generated for you.<br /><br />This value can not be patched once the VXC has bene provisioned. (e.g. 169.254.0.4)
 ]: any -> record<data: record<region_code: string, region: record<code: string, name: string, record_type: string>>> {
   let input = $in

@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://ALGOLIA_APPLICATION_ID.algolia.net" "https://ALGOLIA_APPLICATION_ID-1.algolianet.com" "https://ALGOLIA_APPLICATION_ID-2.algolianet.com" "https://ALGOLIA_APPLICATION_ID-3.algolianet.com" "https://ALGOLIA_APPLICATION_ID-dsn.algolia.net"] }
 def auth-scheme-completer [] { ["x-algolia-application-id" "x-algolia-api-key"] }
 
@@ -504,7 +503,7 @@ export def "1-indexes-partial partialUpdateObject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --createIfNotExists: string@bool-completer # Whether to create a new record if it doesn't exist. (default: true)
+  --createIfNotExists: oneof<nothing, bool> # Whether to create a new record if it doesn't exist. (default: true)
   --body: record
 ]: any -> any {
   let input = $in
@@ -636,7 +635,7 @@ export def "1-indexes-settings setSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forwardToReplicas: string@bool-completer # Whether changes are applied to replica indices.
+  --forwardToReplicas: oneof<nothing, bool> # Whether changes are applied to replica indices.
   --attributesForFaceting: list # Attributes used for [faceting](https://www.algolia.com/doc/guides/managing-results/refine-results/faceting).  Facets are attributes that let you categorize search results. They can be used for filtering search results. By default, no attribute is used for faceting. Attribute names are case-sensitive.  **Modifiers**  - `filterOnly("ATTRIBUTE")`.   Allows the attribute to be used as a filter but doesn't evaluate the facet values.  - `searchable("ATTRIBUTE")`.   Allows searching for facet values.  - `afterDistinct("ATTRIBUTE")`.   Evaluates the facet count _after_ deduplication with `distinct`.   This ensures accurate facet counts.   You can apply this modifier to searchable facets: `afterDistinct(searchable(ATTRIBUTE))`.  (default: [], e.g. [author, filterOnly(isbn), searchable(edition), afterDistinct(category), afterDistinct(searchable(publisher))])
   --replicas: list # Creates [replica indices](https://www.algolia.com/doc/guides/managing-results/refine-results/sorting/in-depth/replicas).  Replicas are copies of a primary index with the same records but different settings, synonyms, or rules. If you want to offer a different ranking or sorting of your search results, you'll use replica indices. All index operations on a primary index are automatically forwarded to its replicas. To add a replica index, you must provide the complete set of replicas to this parameter. If you omit a replica from this list, the replica turns into a regular, standalone index that will no longer be synced with the primary index.  **Modifier**  - `virtual("REPLICA")`.   Create a virtual replica,   Virtual replicas don't increase the number of records and are optimized for [Relevant sorting](https://www.algolia.com/doc/guides/managing-results/refine-results/sorting/in-depth/relevant-sort).  (default: [], e.g. [virtual(prod_products_price_asc), dev_products_replica])
   --paginationLimitedTo: int # Maximum number of search results that can be obtained through pagination.  Higher pagination limits might slow down your search. For pagination limits above 1,000, the sorting of results beyond the 1,000th hit can't be guaranteed.  (default: 1000, e.g. 100)
@@ -647,7 +646,7 @@ export def "1-indexes-settings setSettings" [
   --decompoundedAttributes: record # Searchable attributes to which Algolia should apply [word segmentation](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/handling-natural-languages-nlp/how-to/customize-segmentation) (decompounding). Attribute names are case-sensitive.  Compound words are formed by combining two or more individual words, and are particularly prevalent in Germanic languages—for example, "firefighter". With decompounding, the individual components are indexed separately.  You can specify different lists for different languages. Decompounding is supported for these languages: Dutch (`nl`), German (`de`), Finnish (`fi`), Danish (`da`), Swedish (`sv`), and Norwegian (`no`). Decompounding doesn't work for words with [non-spacing mark Unicode characters](https://www.charactercodes.net/category/non-spacing_mark). For example, `Gartenstühle` won't be decompounded if the `ü` consists of `u` (U+0075) and `◌̈` (U+0308).  (default: {}, e.g. {de: [name]})
   --indexLanguages: list # Languages for language-specific processing steps, such as word detection and dictionary settings.  **Always specify an indexing language.** If you don't specify an indexing language, the search engine uses all [supported languages](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/handling-natural-languages-nlp/in-depth/supported-languages), or the languages you specified with the `ignorePlurals` or `removeStopWords` parameters. This can lead to unexpected search results. For more information, see [Language-specific configuration](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/handling-natural-languages-nlp/in-depth/language-specific-configurations).  (default: [], e.g. [ja])
   --disablePrefixOnAttributes: list # Searchable attributes for which you want to turn off [prefix matching](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/override-search-engine-defaults/#adjusting-prefix-search). Attribute names are case-sensitive.  (default: [], e.g. [sku])
-  --allowCompressionOfIntegerArray: string@bool-completer # Whether arrays with exclusively non-negative integers should be compressed for better performance. If true, the compressed arrays may be reordered.  (default: false)
+  --allowCompressionOfIntegerArray: oneof<nothing, bool> # Whether arrays with exclusively non-negative integers should be compressed for better performance. If true, the compressed arrays may be reordered.  (default: false)
   --numericAttributesForFiltering: list # Numeric attributes that can be used as [numerical filters](https://www.algolia.com/doc/guides/managing-results/rules/detecting-intent/how-to/applying-a-custom-filter-for-a-specific-query/#numerical-filters). Attribute names are case-sensitive.  By default, all numeric attributes are available as numerical filters. For faster indexing, reduce the number of numeric attributes.  To turn off filtering for all numeric attributes, specify an attribute that doesn't exist in your index, such as `NO_NUMERIC_FILTERING`.  **Modifier**  - `equalOnly("ATTRIBUTE")`.   Support only filtering based on equality comparisons `=` and `!=`.  (default: [], e.g. [equalOnly(quantity), popularity])
   --separatorsToIndex: string # Control which non-alphanumeric characters are indexed.  By default, Algolia ignores [non-alphanumeric characters](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/typo-tolerance/how-to/how-to-search-in-hyphenated-attributes/#handling-non-alphanumeric-characters) like hyphen (`-`), plus (`+`), and parentheses (`(`,`)`). To include such characters, define them with `separatorsToIndex`.  Separators are all non-letter characters except spaces and currency characters, such as $€£¥.  With `separatorsToIndex`, Algolia treats separator characters as separate words. For example, in a search for "Disney+", Algolia considers "Disney" and "+" as two separate words.  (default: , e.g. +#)
   --searchableAttributes: list # Attributes used for searching. Attribute names are case-sensitive.  By default, all attributes are searchable and the [Attribute](https://www.algolia.com/doc/guides/managing-results/relevance-overview/in-depth/ranking-criteria/#attribute) ranking criterion is turned off. With a non-empty list, Algolia only returns results with matches in the selected attributes. In addition, the Attribute ranking criterion is turned on: matches in attributes that are higher in the list of `searchableAttributes` rank first. To make matches in two attributes rank equally, include them in a comma-separated string, such as `"title,alternate_title"`. Attributes with the same priority are always unordered.  For more information, see [Searchable attributes](https://www.algolia.com/doc/guides/sending-and-managing-data/prepare-your-data/how-to/setting-searchable-attributes).  **Modifier**  - `unordered("ATTRIBUTE")`.   Ignore the position of a match within the attribute.  Without a modifier, matches at the beginning of an attribute rank higher than matches at the end.  (default: [], e.g. [title,alternative_title, author, unordered(text), emails.personal])
@@ -665,38 +664,38 @@ export def "1-indexes-settings setSettings" [
   --highlightPreTag: string # HTML tag to insert before the highlighted parts in all highlighted results and snippets. (default: <em>)
   --highlightPostTag: string # HTML tag to insert after the highlighted parts in all highlighted results and snippets. (default: </em>)
   --snippetEllipsisText: string # String used as an ellipsis indicator when a snippet is truncated. (default: …)
-  --restrictHighlightAndSnippetArrays: string@bool-completer # Whether to restrict highlighting and snippeting to items that at least partially matched the search query. By default, all items are highlighted and snippeted.  (default: false)
+  --restrictHighlightAndSnippetArrays: oneof<nothing, bool> # Whether to restrict highlighting and snippeting to items that at least partially matched the search query. By default, all items are highlighted and snippeted.  (default: false)
   --hitsPerPage: int # Number of hits per page. (default: 20)
   --minWordSizefor1Typo: int # Minimum number of characters a word in the search query must contain to accept matches with [one typo](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/typo-tolerance/in-depth/configuring-typo-tolerance/#configuring-word-length-for-typos). (default: 4)
   --minWordSizefor2Typos: int # Minimum number of characters a word in the search query must contain to accept matches with [two typos](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/typo-tolerance/in-depth/configuring-typo-tolerance/#configuring-word-length-for-typos). (default: 8)
   --typoTolerance: any # Whether [typo tolerance](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/typo-tolerance) is enabled and how it is applied.  If typo tolerance is true, `min`, or `strict`, [word splitting and concatenation](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/handling-natural-languages-nlp/in-depth/splitting-and-concatenation) are also active.
-  --allowTyposOnNumericTokens: string@bool-completer # Whether to allow typos on numbers in the search query Turn off this setting to reduce the number of irrelevant matches when searching in large sets of similar numbers.  (default: true)
+  --allowTyposOnNumericTokens: oneof<nothing, bool> # Whether to allow typos on numbers in the search query Turn off this setting to reduce the number of irrelevant matches when searching in large sets of similar numbers.  (default: true)
   --disableTypoToleranceOnAttributes: list # Attributes for which you want to turn off [typo tolerance](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/typo-tolerance). Attribute names are case-sensitive Returning only exact matches can help when - [Searching in hyphenated attributes](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/typo-tolerance/how-to/how-to-search-in-hyphenated-attributes). - Reducing the number of matches when you have too many.   This can happen with attributes that are long blocks of text, such as product descriptions Consider alternatives such as `disableTypoToleranceOnWords` or adding synonyms if your attributes have intentional unusual spellings that might look like typos.  (default: [], e.g. [sku])
   --ignorePlurals: any # Treat singular, plurals, and other forms of declensions as equivalent. Only use this feature for the languages used in your index.  (e.g. [ca, es])
   --removeStopWords: any # Removes stop words from the search query.  Stop words are common words like articles, conjunctions, prepositions, or pronouns that have little or no meaning on their own. In English, "the", "a", or "and" are stop words.  Only use this feature for the languages used in your index.  (e.g. [ca, es])
   --queryLanguages: list # Languages for language-specific query processing steps such as plurals, stop-word removal, and word-detection dictionaries. This setting sets a default list of languages used by the `removeStopWords` and `ignorePlurals` settings. This setting also sets a dictionary for word detection in the logogram-based [CJK](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/handling-natural-languages-nlp/in-depth/normalization/#normalization-for-logogram-based-languages-cjk) languages. To support this, place the CJK language **first**. **Always specify a query language.** If you don't specify an indexing language, the search engine uses all [supported languages](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/handling-natural-languages-nlp/in-depth/supported-languages), or the languages you specified with the `ignorePlurals` or `removeStopWords` parameters. This can lead to unexpected search results. For more information, see [Language-specific configuration](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/handling-natural-languages-nlp/in-depth/language-specific-configurations).  (default: [], e.g. [es])
-  --decompoundQuery: string@bool-completer # Whether to split compound words in the query into their building blocks For more information, see [Word segmentation](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/handling-natural-languages-nlp/in-depth/language-specific-configurations/#splitting-compound-words). Word segmentation is supported for these languages: German, Dutch, Finnish, Swedish, and Norwegian. Decompounding doesn't work for words with [non-spacing mark Unicode characters](https://www.charactercodes.net/category/non-spacing_mark). For example, `Gartenstühle` won't be decompounded if the `ü` consists of `u` (U+0075) and `◌̈` (U+0308).  (default: true)
-  --enableRules: string@bool-completer # Whether to enable rules. (default: true)
-  --enablePersonalization: string@bool-completer # Whether to enable Personalization. (default: false)
+  --decompoundQuery: oneof<nothing, bool> # Whether to split compound words in the query into their building blocks For more information, see [Word segmentation](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/handling-natural-languages-nlp/in-depth/language-specific-configurations/#splitting-compound-words). Word segmentation is supported for these languages: German, Dutch, Finnish, Swedish, and Norwegian. Decompounding doesn't work for words with [non-spacing mark Unicode characters](https://www.charactercodes.net/category/non-spacing_mark). For example, `Gartenstühle` won't be decompounded if the `ü` consists of `u` (U+0075) and `◌̈` (U+0308).  (default: true)
+  --enableRules: oneof<nothing, bool> # Whether to enable rules. (default: true)
+  --enablePersonalization: oneof<nothing, bool> # Whether to enable Personalization. (default: false)
   --queryType: string@queryType-completer # Determines if and how query words are interpreted as prefixes.  By default, only the last query word is treated as a prefix (`prefixLast`). To turn off prefix search, use `prefixNone`. Avoid `prefixAll`, which treats all query words as prefixes. This might lead to counterintuitive results and makes your search slower.  For more information, see [Prefix searching](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/override-search-engine-defaults/in-depth/prefix-searching).  (default: prefixLast)
   --removeWordsIfNoResults: string@removeWordsIfNoResults-completer # Strategy for removing words from the query when it doesn't return any results. This helps to avoid returning empty search results.  - `none`.   No words are removed when a query doesn't return results.  - `lastWords`.   Treat the last (then second to last, then third to last) word as optional,   until there are results or at most 5 words have been removed.  - `firstWords`.   Treat the first (then second, then third) word as optional,   until there are results or at most 5 words have been removed.  - `allOptional`.   Treat all words as optional.  For more information, see [Remove words to improve results](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/empty-or-insufficient-results/in-depth/why-use-remove-words-if-no-results).  (default: none, e.g. firstWords)
   --mode: string@mode-completer # Search mode the index will use to query for results.  This setting only applies to indices, for which Algolia enabled NeuralSearch for you.  (default: keywordSearch)
   --semanticSearch: record # Settings for the semantic search part of NeuralSearch. Only used when `mode` is `neuralSearch`. — shape: {eventSources?: any}
-  --advancedSyntax: string@bool-completer # Whether to support phrase matching and excluding words from search queries Use the `advancedSyntaxFeatures` parameter to control which feature is supported.  (default: false)
+  --advancedSyntax: oneof<nothing, bool> # Whether to support phrase matching and excluding words from search queries Use the `advancedSyntaxFeatures` parameter to control which feature is supported.  (default: false)
   --optionalWords: any # Words that should be considered optional when found in the query.  By default, records must match all words in the search query to be included in the search results. Adding optional words can increase the number of search results by running an additional search query that doesn't include the optional words. For example, if the search query is "action video" and "video" is optional, the search engine runs two queries: one for "action video" and one for "action". Records that match all words are ranked higher.  For a search query with 4 or more words **and** all its words are optional, the number of matched words required for a record to be included in the search results increases for every 1,000 records:  - If `optionalWords` has fewer than 10 words, the required number of matched words increases by 1:   results 1 to 1,000 require 1 matched word; results 1,001 to 2,000 need 2 matched words. - If `optionalWords` has 10 or more words, the required number of matched words increases by the number of optional words divided by 5 (rounded down).   Example: with 18 optional words, results 1 to 1,000 require 1 matched word; results 1,001 to 2,000 need 4 matched words.  For more information, see [Optional words](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/empty-or-insufficient-results/#creating-a-list-of-optional-words).
   --disableExactOnAttributes: list # Searchable attributes for which you want to [turn off the Exact ranking criterion](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/override-search-engine-defaults/in-depth/adjust-exact-settings/#turn-off-exact-for-some-attributes). Attribute names are case-sensitive This can be useful for attributes with long values, where the likelihood of an exact match is high, such as product descriptions. Turning off the Exact ranking criterion for these attributes favors exact matching on other attributes. This reduces the impact of individual attributes with a lot of content on ranking.  (default: [], e.g. [description])
   --exactOnSingleWordQuery: string@exactOnSingleWordQuery-completer # Determines how the [Exact ranking criterion](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/override-search-engine-defaults/in-depth/adjust-exact-settings/#turn-off-exact-for-some-attributes) is computed when the search query has only one word.  - `attribute`.   The Exact ranking criterion is 1 if the query word and attribute value are the same.   For example, a search for "road" will match the value "road", but not "road trip".  - `none`.   The Exact ranking criterion is ignored on single-word searches.  - `word`.   The Exact ranking criterion is 1 if the query word is found in the attribute value.   The query word must have at least 3 characters and must not be a stop word.   Only exact matches will be highlighted,   partial and prefix matches won't.  (default: attribute)
   --alternativesAsExact: list # Determine which plurals and synonyms should be considered an exact matches By default, Algolia treats singular and plural forms of a word, and single-word synonyms, as [exact](https://www.algolia.com/doc/guides/managing-results/relevance-overview/in-depth/ranking-criteria/#exact) matches when searching. For example - "swimsuit" and "swimsuits" are treated the same - "swimsuit" and "swimwear" are treated the same (if they are [synonyms](https://www.algolia.com/doc/guides/managing-results/optimize-search-results/adding-synonyms/#regular-synonyms)) - `ignorePlurals`.   Plurals and similar declensions added by the `ignorePlurals` setting are considered exact matches - `singleWordSynonym`.   Single-word synonyms, such as "NY" = "NYC", are considered exact matches - `multiWordsSynonym`.   Multi-word synonyms, such as "NY" = "New York", are considered exact matches.  (default: [ignorePlurals, singleWordSynonym])
   --advancedSyntaxFeatures: list # Advanced search syntax features you want to support - `exactPhrase`.   Phrases in quotes must match exactly.   For example, `sparkly blue "iPhone case"` only returns records with the exact string "iPhone case" - `excludeWords`.   Query words prefixed with a `-` must not occur in a record.   For example, `search -engine` matches records that contain "search" but not "engine" This setting only has an effect if `advancedSyntax` is true.  (default: [exactPhrase, excludeWords])
   --distinct: any # Determines how many records of a group are included in the search results.  Records with the same value for the `attributeForDistinct` attribute are considered a group. The `distinct` setting controls how many members of the group are returned. This is useful for [deduplication and grouping](https://www.algolia.com/doc/guides/managing-results/refine-results/grouping/#introducing-algolias-distinct-feature).  The `distinct` setting is ignored if `attributeForDistinct` is not set.  (e.g. 1)
-  --replaceSynonymsInHighlight: string@bool-completer # Whether to replace a highlighted word with the matched synonym By default, the original words are highlighted even if a synonym matches. For example, with `home` as a synonym for `house` and a search for `home`, records matching either "home" or "house" are included in the search results, and either "home" or "house" are highlighted With `replaceSynonymsInHighlight` set to `true`, a search for `home` still matches the same records, but all occurrences of "house" are replaced by "home" in the highlighted response.  (default: false)
+  --replaceSynonymsInHighlight: oneof<nothing, bool> # Whether to replace a highlighted word with the matched synonym By default, the original words are highlighted even if a synonym matches. For example, with `home` as a synonym for `house` and a search for `home`, records matching either "home" or "house" are included in the search results, and either "home" or "house" are highlighted With `replaceSynonymsInHighlight` set to `true`, a search for `home` still matches the same records, but all occurrences of "house" are replaced by "home" in the highlighted response.  (default: false)
   --minProximity: int # Minimum proximity score for two matching words This adjusts the [Proximity ranking criterion](https://www.algolia.com/doc/guides/managing-results/relevance-overview/in-depth/ranking-criteria/#proximity) by equally scoring matches that are farther apart For example, if `minProximity` is 2, neighboring matches and matches with one word between them would have the same score.  (default: 1)
   --responseFields: list # Properties to include in the API response of search and browse requests By default, all response properties are included. To reduce the response size, you can select which properties should be included An empty list may lead to an empty API response (except properties you can't exclude) You can't exclude these properties: `message`, `warning`, `cursor`, `abTestVariantID`, or any property added by setting `getRankingInfo` to true Your search depends on the `hits` field. If you omit this field, searches won't return any results. Your UI might also depend on other properties, for example, for pagination. Before restricting the response size, check the impact on your search experience.  (default: [*])
   --maxValuesPerFacet: int # Maximum number of facet values to return for each facet. (default: 100)
   --sortFacetValuesBy: string # Order in which to retrieve facet values - `count`.   Facet values are retrieved by decreasing count.   The count is the number of matching records containing this facet value - `alpha`.   Retrieve facet values alphabetically This setting doesn't influence how facet values are displayed in your UI (see `renderingContent`). For more information, see [facet value display](https://www.algolia.com/doc/guides/building-search-ui/ui-and-ux-patterns/facet-display/js).  (default: count)
-  --attributeCriteriaComputedByMinProximity: string@bool-completer # Whether the best matching attribute should be determined by minimum proximity This setting only affects ranking if the Attribute ranking criterion comes before Proximity in the `ranking` setting. If true, the best matching attribute is selected based on the minimum proximity of multiple matches. Otherwise, the best matching attribute is determined by the order in the `searchableAttributes` setting.  (default: false)
+  --attributeCriteriaComputedByMinProximity: oneof<nothing, bool> # Whether the best matching attribute should be determined by minimum proximity This setting only affects ranking if the Attribute ranking criterion comes before Proximity in the `ranking` setting. If true, the best matching attribute is selected based on the minimum proximity of multiple matches. Otherwise, the best matching attribute is determined by the order in the `searchableAttributes` setting.  (default: false)
   --renderingContent: record # Extra data that can be used in the search UI.  You can use this to control aspects of your search UI, such as the order of facet names and values without changing your frontend code. — shape: {facetOrdering?: record, redirect?: record, widgets?: record}
-  --enableReRanking: string@bool-completer # Whether this search will use [Dynamic Re-Ranking](https://www.algolia.com/doc/guides/algolia-ai/re-ranking) This setting only has an effect if you activated Dynamic Re-Ranking for this index in the Algolia dashboard.  (default: true)
+  --enableReRanking: oneof<nothing, bool> # Whether this search will use [Dynamic Re-Ranking](https://www.algolia.com/doc/guides/algolia-ai/re-ranking) This setting only has an effect if you activated Dynamic Re-Ranking for this index in the Algolia dashboard.  (default: true)
   --reRankingApplyFilter: any
 ]: any -> any {
   let input = $in
@@ -748,7 +747,7 @@ export def "1-indexes-synonyms saveSynonym" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forwardToReplicas: string@bool-completer # Whether changes are applied to replica indices.
+  --forwardToReplicas: oneof<nothing, bool> # Whether changes are applied to replica indices.
   --body-objectID: string # Unique identifier of a synonym object. (e.g. synonymID)
   type: string@type-completer # Synonym type. (e.g. onewaysynonym)
   --synonyms: list # Words or phrases considered equivalent. (e.g. [vehicle, auto])
@@ -784,7 +783,7 @@ export def "1-indexes-synonyms delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forwardToReplicas: string@bool-completer # Whether changes are applied to replica indices.
+  --forwardToReplicas: oneof<nothing, bool> # Whether changes are applied to replica indices.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
@@ -808,8 +807,8 @@ export def "1-indexes-synonyms-batch saveSynonyms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forwardToReplicas: string@bool-completer # Whether changes are applied to replica indices.
-  --replaceExistingSynonyms: string@bool-completer # Whether to replace all synonyms in the index with the ones sent with this request.
+  --forwardToReplicas: oneof<nothing, bool> # Whether changes are applied to replica indices.
+  --replaceExistingSynonyms: oneof<nothing, bool> # Whether to replace all synonyms in the index with the ones sent with this request.
   --body: record
 ]: any -> any {
   let input = $in
@@ -836,7 +835,7 @@ export def "1-indexes-synonyms-clear clearSynonyms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forwardToReplicas: string@bool-completer # Whether changes are applied to replica indices.
+  --forwardToReplicas: oneof<nothing, bool> # Whether changes are applied to replica indices.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1069,12 +1068,12 @@ export def "1-indexes-rules saveRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forwardToReplicas: string@bool-completer # Whether changes are applied to replica indices.
+  --forwardToReplicas: oneof<nothing, bool> # Whether changes are applied to replica indices.
   --body-objectID: string # Unique identifier of a rule object.
   --conditions: list # Conditions that trigger a rule.  Some consequences require specific conditions or don't require any condition. For more information, see [Conditions](https://www.algolia.com/doc/guides/managing-results/rules/rules-overview/#conditions). — item shape: {pattern?: string, anchoring?: "is"|"startsWith"|"endsWith"|"contains", alternatives?: bool, context?: string, filters?: string}
   consequence: record # Effect of the rule.  For more information, see [Consequences](https://www.algolia.com/doc/guides/managing-results/rules/rules-overview/#consequences). — shape: {params?: any, promote?: list, filterPromotes?: bool, hide?: list, redirect?: record, userData?: record}
   --description: string # Description of the rule's purpose to help you distinguish between different rules. (e.g. Display a promotional banner)
-  --enabled: string@bool-completer # Whether the rule is active. (default: true)
+  --enabled: oneof<nothing, bool> # Whether the rule is active. (default: true)
   --validity: list # Time periods when the rule is active. — item shape: {from?: int, until?: int}
   --tags: list
   --scope: string
@@ -1106,7 +1105,7 @@ export def "1-indexes-rules delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forwardToReplicas: string@bool-completer # Whether changes are applied to replica indices.
+  --forwardToReplicas: oneof<nothing, bool> # Whether changes are applied to replica indices.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1130,8 +1129,8 @@ export def "1-indexes-rules-batch saveRules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forwardToReplicas: string@bool-completer # Whether changes are applied to replica indices.
-  --clearExistingRules: string@bool-completer # Whether existing rules should be deleted before adding this batch.
+  --forwardToReplicas: oneof<nothing, bool> # Whether changes are applied to replica indices.
+  --clearExistingRules: oneof<nothing, bool> # Whether existing rules should be deleted before adding this batch.
   --body: record
 ]: any -> any {
   let input = $in
@@ -1158,7 +1157,7 @@ export def "1-indexes-rules-clear clearRules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forwardToReplicas: string@bool-completer # Whether changes are applied to replica indices.
+  --forwardToReplicas: oneof<nothing, bool> # Whether changes are applied to replica indices.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1214,7 +1213,7 @@ export def "1-dictionaries-batch batchDictionaryEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --clearExistingDictionaryEntries: string@bool-completer # Whether to replace all custom entries in the dictionary with the ones sent with this request. (default: false)
+  --clearExistingDictionaryEntries: oneof<nothing, bool> # Whether to replace all custom entries in the dictionary with the ones sent with this request. (default: false)
   requests: list # List of additions and deletions to your dictionaries. — item shape: {action: "addEntry"|"deleteEntry", body: record}
 ]: any -> any {
   let input = $in
@@ -1551,7 +1550,7 @@ export def "1-clusters-mapping-pending hasPendingMappings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --getClusters: string@bool-completer # Whether to include the cluster's pending mapping state in the response.
+  --getClusters: oneof<nothing, bool> # Whether to include the cluster's pending mapping state in the response.
 ]: nothing -> record<pending: bool, clusters: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1992,7 +1991,7 @@ export def "chunked-batch chunkedBatch" [
   --indexName: string # The `indexName` to replace `objects` in.
   --objects: list # List of objects to replace the current objects with.
   --action: string@action-completer # The `batch` `action` to perform on the given array of `objects`, defaults to `addObject`.
-  --waitForTasks: string@bool-completer # Whether to wait until every `batch` task has been processed. This may take longer but is more reliable.
+  --waitForTasks: oneof<nothing, bool> # Whether to wait until every `batch` task has been processed. This may take longer but is more reliable.
   --batchSize: int # The size of the chunk of `objects`. The number of `batch` calls will be equal to `length(objects) / batchSize`. Defaults to 1,000.
 ]: nothing -> table<taskID: int, objectIDs: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
@@ -2018,7 +2017,7 @@ export def "save-objects saveObjects" [
   --allow-errors(-e) # Return full response without error handling
   --indexName: string # The `indexName` to save `objects` into.
   --objects: list # The objects to save in the index.
-  --waitForTasks: string@bool-completer # Whether to wait until every `batch` task has been processed. This may take longer but is more reliable. (default: false)
+  --waitForTasks: oneof<nothing, bool> # Whether to wait until every `batch` task has been processed. This may take longer but is more reliable. (default: false)
   --batchSize: int # The size of the chunk of `objects`. The number of `batch` calls will be equal to `length(objects) / batchSize`. Defaults to 1,000. (default: 1000)
   --requestOptions: record # The request options to pass to the `batch` method.
 ]: nothing -> table<taskID: int, objectIDs: list<string>> {
@@ -2045,7 +2044,7 @@ export def "save-objects-with-transformation saveObjectsWithTransformation" [
   --allow-errors(-e) # Return full response without error handling
   --indexName: string # The `indexName` to save `objects` into.
   --objects: list # The objects to save in the index.
-  --waitForTasks: string@bool-completer # Whether to wait until every `batch` task has been processed. This may take longer but is more reliable. (default: false)
+  --waitForTasks: oneof<nothing, bool> # Whether to wait until every `batch` task has been processed. This may take longer but is more reliable. (default: false)
   --batchSize: int # The size of the chunk of `objects`. The number of `batch` calls will be equal to `length(objects) / batchSize`. Defaults to 1,000. (default: 1000)
   --requestOptions: record # The request options to pass to the `batch` method.
 ]: nothing -> table<runID: string, eventID: string, data: list<record>, events: list<record>, message: string, createdAt: string> {
@@ -2072,7 +2071,7 @@ export def "delete-objects post" [
   --allow-errors(-e) # Return full response without error handling
   --indexName: string # The `indexName` to delete `objectIDs` from.
   --objectIDs: list # The objectIDs to delete.
-  --waitForTasks: string@bool-completer # Whether to wait until every `batch` task has been processed. This may take longer but is more reliable.
+  --waitForTasks: oneof<nothing, bool> # Whether to wait until every `batch` task has been processed. This may take longer but is more reliable.
   --batchSize: int # The size of the chunk of `objects`. The number of `batch` calls will be equal to `length(objects) / batchSize`. Defaults to 1,000.
   --requestOptions: record # The request options to pass to the `batch` method.
 ]: nothing -> table<taskID: int, objectIDs: list<string>> {
@@ -2099,8 +2098,8 @@ export def "partial-update-objects partialUpdateObjects" [
   --allow-errors(-e) # Return full response without error handling
   --indexName: string # The `indexName` where to update `objects`.
   --objects: list # The objects to update.
-  --createIfNotExists: string@bool-completer # To be provided if non-existing objects are passed, otherwise, the call will fail. (default: false)
-  --waitForTasks: string@bool-completer # Whether to wait until every `batch` task has been processed. This may take longer but is more reliable. (default: false)
+  --createIfNotExists: oneof<nothing, bool> # To be provided if non-existing objects are passed, otherwise, the call will fail. (default: false)
+  --waitForTasks: oneof<nothing, bool> # Whether to wait until every `batch` task has been processed. This may take longer but is more reliable. (default: false)
   --batchSize: int # The size of the chunk of `objects`. The number of `batch` calls will be equal to `length(objects) / batchSize`. Defaults to 1,000. (default: 1000)
   --requestOptions: record # The request options to pass to the `batch` method.
 ]: nothing -> table<taskID: int, objectIDs: list<string>> {
@@ -2127,8 +2126,8 @@ export def "partial-update-objects-with-transformation partialUpdateObjectsWithT
   --allow-errors(-e) # Return full response without error handling
   --indexName: string # The `indexName` where to update `objects`.
   --objects: list # The objects to update.
-  --createIfNotExists: string@bool-completer # To be provided if non-existing objects are passed, otherwise, the call will fail. (default: false)
-  --waitForTasks: string@bool-completer # Whether to wait until every `batch` task has been processed. This may take longer but is more reliable. (default: false)
+  --createIfNotExists: oneof<nothing, bool> # To be provided if non-existing objects are passed, otherwise, the call will fail. (default: false)
+  --waitForTasks: oneof<nothing, bool> # Whether to wait until every `batch` task has been processed. This may take longer but is more reliable. (default: false)
   --batchSize: int # The size of the chunk of `objects`. The number of `batch` calls will be equal to `length(objects) / batchSize`. Defaults to 1,000. (default: 1000)
   --requestOptions: record # The request options to pass to the `batch` method.
 ]: nothing -> table<runID: string, eventID: string, data: list<record>, events: list<record>, message: string, createdAt: string> {

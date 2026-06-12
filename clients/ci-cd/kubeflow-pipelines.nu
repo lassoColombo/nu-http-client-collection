@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost" "https://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -469,7 +468,7 @@ export def "apis-v2beta1-pipelines DeletePipeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cascade: string@bool-completer # Optional. If true, the pipeline and all its versions will be deleted. If false (default), only the pipeline will be deleted if it has no versions.
+  --cascade: oneof<nothing, bool> # Optional. If true, the pipeline and all its versions will be deleted. If false (default), only the pipeline will be deleted if it has no versions.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -749,7 +748,7 @@ export def "apis-v2beta1-recurringruns CreateRecurringRun" [
   --updated-at: string # Output. The last time this recurring run was updated. (format: date-time)
   --status: string@status-completer # Output. The status of the recurring run. (default: STATUS_UNSPECIFIED)
   --body-error: record # The `Status` type defines a logical error model that is suitable for different programming environments, including REST APIs and RPC APIs. It is used by [gRPC](https://github.com/grpc). Each `Status` message contains three pieces of data: error code, error message, and error details.  You can find out more about this error model and how to work with it in the [API Design Guide](https://cloud.google.com/apis/design/errors). — shape: {code?: int, message?: string, details?: list}
-  --no-catchup: string@bool-completer # Optional input field. Whether the recurring run should catch up if behind schedule. If true, the recurring run will only schedule the latest interval if behind schedule. If false, the recurring run will catch up on each past interval.
+  --no-catchup: oneof<nothing, bool> # Optional input field. Whether the recurring run should catch up if behind schedule. If true, the recurring run will only schedule the latest interval if behind schedule. If false, the recurring run will catch up on each past interval.
   --experiment-id: string # ID of the parent experiment this recurring run belongs to.
   --plugins-input: record # Optional input. Plugin inputs to propagate to each triggered run. Each triggered run will inherit these values in its plugins_input field.
 ]: any -> record<recurring_run_id: string, display_name: string, description: string, pipeline_version_id: string, pipeline_spec: record, pipeline_version_reference: record<pipeline_id: string, pipeline_version_id: string>, runtime_config: record<parameters: record, pipeline_root: string>, service_account: string, max_concurrency: string, trigger: record<cron_schedule: record<start_time: string, end_time: string, cron: string>, periodic_schedule: record<start_time: string, end_time: string, interval_second: string>>, mode: string, created_at: string, updated_at: string, status: string, error: record<code: int, message: string, details: list<record>>, no_catchup: bool, namespace: string, experiment_id: string, plugins_input: record> {

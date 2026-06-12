@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost" "https://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -173,7 +172,7 @@ export def "policies policies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --detail: string@bool-completer # Include policy bundle detail in the form of the full bundle content for each entry
+  --detail: oneof<nothing, bool> # Include policy bundle detail in the form of the full bundle content for each entry
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
 ]: nothing -> table<created_at: string, last_updated: string, policyId: string, active: bool, userId: string, policy_source: string, policybundle: record<id: string, name: string, comment: string, version: string, whitelists: list, policies: list, mappings: list, whitelisted_images: list, blacklisted_images: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -241,7 +240,7 @@ export def "policies policy-by-policyId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --detail: string@bool-completer # Include policy bundle detail in the form of the full bundle content for each entry
+  --detail: oneof<nothing, bool> # Include policy bundle detail in the form of the full bundle content for each entry
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
 ]: nothing -> table<created_at: string, last_updated: string, policyId: string, active: bool, userId: string, policy_source: string, policybundle: record<id: string, name: string, comment: string, version: string, whitelists: list, policies: list, mappings: list, whitelisted_images: list, blacklisted_images: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -269,12 +268,12 @@ export def "policies policy-by-policyId-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Mark policy as active
+  --active: oneof<nothing, bool> # Mark policy as active
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
   --created-at: string # format: date-time
   --last-updated: string # format: date-time
   --body-policyId: string # The bundle's identifier
-  --active: string@bool-completer # True if the bundle is currently defined to be used automatically
+  --active: oneof<nothing, bool> # True if the bundle is currently defined to be used automatically
   --userId: string # UserId of the user that owns the bundle
   --policy-source: string # Source location of where the policy bundle originated
   --policybundle: record # A bundle containing a set of policies, whitelists, and rules for mapping them to specific images — shape: {id: string, name?: string, comment?: string, version: string, whitelists?: list, policies: list, mappings: list, whitelisted_images?: list, blacklisted_images?: list}
@@ -415,7 +414,7 @@ export def "subscriptions subscription-by-subscriptionId-1" [
   --allow-errors(-e) # Return full response without error handling
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
   --subscription-value: string # The new subscription value, e.g. the new tag to be subscribed to
-  --active: string@bool-completer # Toggle the subscription processing on or off
+  --active: oneof<nothing, bool> # Toggle the subscription processing on or off
 ]: any -> table<subscription_key: string, subscription_type: string, subscription_value: string, userId: string, active: bool, subscription_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -494,8 +493,8 @@ export def "images image" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # Override any existing entry in the system
-  --autosubscribe: string@bool-completer # Instruct engine to automatically begin watching the added tag for updates from registry
+  --force: oneof<nothing, bool> # Override any existing entry in the system
+  --autosubscribe: oneof<nothing, bool> # Instruct engine to automatically begin watching the added tag for updates from registry
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
   --dockerfile: string # Base64 encoded content of the dockerfile for the image, if available. Deprecated in favor of the 'source' field.
   --digest: string # A digest string for an image, maybe a pull string or just a digest. e.g. nginx@sha256:123 or sha256:abc123. If a pull string, it must have same regisry/repo as the tag field. Deprecated in favor of the 'source' field
@@ -531,7 +530,7 @@ export def "images images" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --history: string@bool-completer # Include image history in the response
+  --history: oneof<nothing, bool> # Include image history in the response
   --fulltag: string # Full docker-pull string to filter results by (e.g. docker.io/library/nginx:latest, or myhost.com:5000/testimages:v1.1.1)
   --image-status: string@image-status-completer # Filter by image_status value on the record. Default if omitted is 'active'. (default: active)
   --analysis-status: string@analysis-status-completer # Filter by analysis_status value on the record.
@@ -561,7 +560,7 @@ export def "images async" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --imageDigests: list
-  --force: string@bool-completer
+  --force: oneof<nothing, bool>
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
 ]: nothing -> table<digest: string, status: string, detail: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -639,7 +638,7 @@ export def "images image-by-imageDigest-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer
+  --force: oneof<nothing, bool>
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
 ]: nothing -> record<digest: string, status: string, detail: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -691,7 +690,7 @@ export def "images-by-id imageId-by-imageId-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer
+  --force: oneof<nothing, bool>
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
 ]: nothing -> record<digest: string, status: string, detail: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -720,9 +719,9 @@ export def "images-check check" [
   --allow-errors(-e) # Return full response without error handling
   --policyId: string
   --tag: string
-  --detail: string@bool-completer
-  --history: string@bool-completer
-  --interactive: string@bool-completer
+  --detail: oneof<nothing, bool>
+  --history: oneof<nothing, bool>
+  --interactive: oneof<nothing, bool>
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -751,8 +750,8 @@ export def "images-by-id-check imageId" [
   --allow-errors(-e) # Return full response without error handling
   --policyId: string
   --tag: string
-  --detail: string@bool-completer
-  --history: string@bool-completer
+  --detail: oneof<nothing, bool>
+  --history: oneof<nothing, bool>
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -805,8 +804,8 @@ export def "images-vuln type" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force-refresh: string@bool-completer
-  --vendor-only: string@bool-completer # Filter results to include only vulnerabilities that are not marked as invalid by upstream OS vendor data. When set to true, it will filter out all vulnerabilities where `will_not_fix` is False. If false all vulnerabilities are returned regardless of `will_not_fix`
+  --force-refresh: oneof<nothing, bool>
+  --vendor-only: oneof<nothing, bool> # Filter results to include only vulnerabilities that are not marked as invalid by upstream OS vendor data. When set to true, it will filter out all vulnerabilities where `will_not_fix` is False. If false all vulnerabilities are returned regardless of `will_not_fix`
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
 ]: nothing -> record<imageDigest: string, vulnerability_type: string, vulnerabilities: table<vuln: string, fix: string, severity: string, package: string, url: string, feed: string, feed_group: string, package_name: string, package_version: string, package_type: string, package_cpe: string, package_path: string, will_not_fix: bool, nvd_data: list, vendor_data: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1253,8 +1252,8 @@ export def "repositories repository" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --repository: string # full repository to add e.g. docker.io/library/alpine
-  --autosubscribe: string@bool-completer # flag to enable/disable auto tag_update activation when new images from a repo are added
-  --dryrun: string@bool-completer # flag to return tags in the repository without actually watching the repository, default is false
+  --autosubscribe: oneof<nothing, bool> # flag to enable/disable auto tag_update activation when new images from a repo are added
+  --dryrun: oneof<nothing, bool> # flag to return tags in the repository without actually watching the repository, default is false
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
 ]: nothing -> table<subscription_key: string, subscription_type: string, subscription_value: string, userId: string, active: bool, subscription_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1304,14 +1303,14 @@ export def "registries registry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --validate: string@bool-completer # flag to determine whether or not to validate registry/credential at registry add time
+  --validate: oneof<nothing, bool> # flag to determine whether or not to validate registry/credential at registry add time
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
   --registry-user: string # Username portion of credential to use for this registry
   --registry-pass: string # Password portion of credential to use for this registry
   --registry-type: string # Type of registry
   --registry: string # hostname:port string for accessing the registry, as would be used in a docker pull operation. May include some or all of a repository and wildcards (e.g. docker.io/library/* or gcr.io/myproject/myrepository)
   --registry-name: string # human readable name associated with registry record
-  --registry-verify: string@bool-completer # Use TLS/SSL verification for the registry URL
+  --registry-verify: oneof<nothing, bool> # Use TLS/SSL verification for the registry URL
 ]: any -> table<created_at: string, last_upated: string, registry_user: string, registry_type: string, userId: string, registry: string, registry_name: string, registry_verify: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1365,14 +1364,14 @@ export def "registries registry-by-registry-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --validate: string@bool-completer # flag to determine whether or not to validate registry/credential at registry update time
+  --validate: oneof<nothing, bool> # flag to determine whether or not to validate registry/credential at registry update time
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
   --registry-user: string # Username portion of credential to use for this registry
   --registry-pass: string # Password portion of credential to use for this registry
   --registry-type: string # Type of registry
   --body-registry: string # hostname:port string for accessing the registry, as would be used in a docker pull operation. May include some or all of a repository and wildcards (e.g. docker.io/library/* or gcr.io/myproject/myrepository)
   --registry-name: string # human readable name associated with registry record
-  --registry-verify: string@bool-completer # Use TLS/SSL verification for the registry URL
+  --registry-verify: oneof<nothing, bool> # Use TLS/SSL verification for the registry URL
 ]: any -> table<created_at: string, last_upated: string, registry_user: string, registry_type: string, userId: string, registry: string, registry_name: string, registry_verify: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1488,8 +1487,8 @@ export def "system-feeds feeds-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --flush: string@bool-completer # instruct system to flush existing data feeds records from anchore-engine
-  --sync: string@bool-completer # instruct system to re-sync data feeds
+  --flush: oneof<nothing, bool> # instruct system to flush existing data feeds records from anchore-engine
+  --sync: oneof<nothing, bool> # instruct system to re-sync data feeds
 ]: nothing -> table<feed: string, status: string, total_time_seconds: float, groups: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1513,7 +1512,7 @@ export def "system-feeds enabled-by-feed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: nothing -> record<name: string, created_at: string, updated_at: string, groups: table<name: string, created_at: string, last_sync: string, record_count: int>, last_full_sync: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1560,7 +1559,7 @@ export def "system-feeds enabled-by-feed-group" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: nothing -> table<name: string, created_at: string, updated_at: string, groups: list<record>, last_full_sync: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1875,7 +1874,7 @@ export def "query-images-by-vulnerability vulnerability" [
   --namespace: string # Filter results to images within the given vulnerability namespace (e.g. debian:8, ubuntu:14.04)
   --affected-package: string # Filter results to images with vulnable packages with the given package name (e.g. libssl)
   --severity: string@severity-completer # Filter results to vulnerable package/vulnerability with the given severity
-  --vendor-only: string@bool-completer # Filter results to include only vulnerabilities that are not marked as invalid by upstream OS vendor data (default: true)
+  --vendor-only: oneof<nothing, bool> # Filter results to include only vulnerabilities that are not marked as invalid by upstream OS vendor data (default: true)
   --page: int # The page of results to fetch. Pages start at 1
   --limit: int # Limit the number of records for the requested page. If omitted or set to 0, return all results in a single page
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
@@ -2361,7 +2360,7 @@ export def "archives-rules rules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --system-global: string@bool-completer # If true include system global rules (owned by admin) even for non-admin users. Defaults to true if not set. Can be set to false to exclude globals
+  --system-global: oneof<nothing, bool> # If true include system global rules (owned by admin) even for non-admin users. Defaults to true if not set. Can be set to false to exclude globals
 ]: nothing -> table<selector: record<registry: string, repository: string, tag: string>, rule_id: string, tag_versions_newer: int, analysis_age_days: int, transition: string, system_global: bool, created_at: string, last_updated: string, exclude: record<selector: record, expiration_days: int>, max_images_per_account: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2390,7 +2389,7 @@ export def "archives-rules rule" [
   --tag-versions-newer: int # Number of images mapped to the tag that are newer
   --analysis-age-days: int # Matches if the analysis is strictly older than this number of days
   transition: string@transition-completer # The type of transition to make. If "archive", then archive an image from the working set and remove it from the working set. If "delete", then match against archived images and delete from the archive if match.
-  --system-global: string@bool-completer # True if the rule applies to all accounts in the system. This is only available to admin users to update/modify, but all users with permission to list rules can see them
+  --system-global: oneof<nothing, bool> # True if the rule applies to all accounts in the system. This is only available to admin users to update/modify, but all users with permission to list rules can see them
   --created-at: string # format: date-time
   --last-updated: string # format: date-time
   --exclude: record # Which Images to exclude from auto-archiving logic — shape: {selector?: record, expiration_days?: int}
@@ -2527,7 +2526,7 @@ export def "archives-images analysis-by-imageDigest-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer
+  --force: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

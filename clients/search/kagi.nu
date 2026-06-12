@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://kagi.com/api/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -119,7 +118,7 @@ export def "search search" [
   --limit: int # Maximum number of results to return. Must be between 1 and 1024.  **NOTE:** This does not change the amount of results requested, it only limits the maximum amount returned. If omitted, the API always gives you the most results we can get in a single pass.
   --filters: record # Filters to apply to search results for more targeted queries.  **NOTE:** Any parameter here that overlaps with lenses will take priority over the lens. — shape: {region?: string, after?: string, before?: string}
   --extract: record # Configuration for extracting page content from search results. When provided, the API will fetch and extract the content from the specified number of result pages.  The resulting page markdown will update the value of the `snippet` field on the respective result item.  **NOTE:** Use of this option incurs additional cost, billed at your account's rate for the Extract API based on the number of units requested. You will not be charged if there were no results to extract. — shape: {count?: int, timeout?: float}
-  --safe-search: string@bool-completer # Whether safe search is enabled, omitting potentially NSFW content. (default: true)
+  --safe-search: oneof<nothing, bool> # Whether safe search is enabled, omitting potentially NSFW content. (default: true)
   --personalizations: record # Personalization rules to customize search result ranking. Allows specifying domain biases and regex-based replacements. — shape: {domains?: list, regexes?: list}
 ]: any -> record<meta: record<trace: string, node: string, ms: int>, data: record<search: list<record>, image: list<record>, video: list<record>, podcast: list<record>, podcast_creator: list<record>, news: list<record>, adjacent_question: list<record>, direct_answer: list<record>, interesting_news: list<record>, interesting_finds: list<record>, infobox: list<record>, code: list<record>, package_tracking: list<record>, public_records: list<record>, weather: list<record>, related_search: list<record>, listicle: list<record>, web_archive: list<record>>> {
   let input = $in

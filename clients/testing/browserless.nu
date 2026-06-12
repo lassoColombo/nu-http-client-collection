@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -113,7 +112,7 @@ export def "chrome-content post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -122,7 +121,7 @@ export def "chrome-content post" [
   --addScriptTag: list
   --addStyleTag: list
   --authenticate: any
-  --bestAttempt: string@bool-completer # When bestAttempt is set to true, browserless attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
+  --bestAttempt: oneof<nothing, bool> # When bestAttempt is set to true, browserless attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
   --cookies: list
   --emulateMediaType: string
   --gotoOptions: any
@@ -131,7 +130,7 @@ export def "chrome-content post" [
   --rejectResourceTypes: list
   --requestInterceptors: list # item shape: {pattern: string, response: record}
   --setExtraHTTPHeaders: record
-  --setJavaScriptEnabled: string@bool-completer # Whether or not to allow JavaScript to run on the page.
+  --setJavaScriptEnabled: oneof<nothing, bool> # Whether or not to allow JavaScript to run on the page.
   --body-url: string
   --userAgent: record # shape: {userAgent?: string, userAgentMetadata?: any, platform?: string}
   --viewport: any
@@ -163,7 +162,7 @@ export def "chrome-download post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -193,7 +192,7 @@ export def "chrome-function post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -298,7 +297,7 @@ export def "chrome-pdf post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -307,7 +306,7 @@ export def "chrome-pdf post" [
   --addScriptTag: list
   --addStyleTag: list
   --authenticate: any
-  --bestAttempt: string@bool-completer # When bestAttempt is set to true, browserless attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
+  --bestAttempt: oneof<nothing, bool> # When bestAttempt is set to true, browserless attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
   --cookies: list
   --emulateMediaType: string
   --gotoOptions: any
@@ -317,7 +316,7 @@ export def "chrome-pdf post" [
   --rejectResourceTypes: list
   --requestInterceptors: list # item shape: {pattern: string, response: record}
   --setExtraHTTPHeaders: record
-  --setJavaScriptEnabled: string@bool-completer
+  --setJavaScriptEnabled: oneof<nothing, bool>
   --body-url: string
   --userAgent: record # shape: {userAgent?: string, userAgentMetadata?: any, platform?: string}
   --viewport: any
@@ -349,7 +348,7 @@ export def "chrome-performance post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -387,7 +386,7 @@ export def "chrome-scrape post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -396,7 +395,7 @@ export def "chrome-scrape post" [
   --addScriptTag: list
   --addStyleTag: list
   --authenticate: any
-  --bestAttempt: string@bool-completer # When bestAttempt is set to true, browserless attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
+  --bestAttempt: oneof<nothing, bool> # When bestAttempt is set to true, browserless attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
   --cookies: list
   --debugOpts: any
   elements: list
@@ -407,7 +406,7 @@ export def "chrome-scrape post" [
   --rejectResourceTypes: list
   --requestInterceptors: list # item shape: {pattern: string, response: record}
   --setExtraHTTPHeaders: record
-  --setJavaScriptEnabled: string@bool-completer
+  --setJavaScriptEnabled: oneof<nothing, bool>
   --body-url: string
   --userAgent: record # shape: {userAgent?: string, userAgentMetadata?: any, platform?: string}
   --viewport: any
@@ -445,7 +444,7 @@ export def "chrome-screenshot post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -454,7 +453,7 @@ export def "chrome-screenshot post" [
   --addScriptTag: list
   --addStyleTag: list
   --authenticate: any
-  --bestAttempt: string@bool-completer # When bestAttempt is set to true, browserless attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
+  --bestAttempt: oneof<nothing, bool> # When bestAttempt is set to true, browserless attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
   --cookies: list
   --emulateMediaType: string
   --gotoOptions: any
@@ -463,10 +462,10 @@ export def "chrome-screenshot post" [
   --rejectRequestPattern: list
   --rejectResourceTypes: list
   --requestInterceptors: list # item shape: {pattern: string, response: record}
-  --scrollPage: string@bool-completer
+  --scrollPage: oneof<nothing, bool>
   --selector: string
   --setExtraHTTPHeaders: record
-  --setJavaScriptEnabled: string@bool-completer
+  --setJavaScriptEnabled: oneof<nothing, bool>
   --body-url: string
   --userAgent: record # shape: {userAgent?: string, userAgentMetadata?: any, platform?: string}
   --viewport: any
@@ -503,7 +502,7 @@ export def "chromium-content post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -512,7 +511,7 @@ export def "chromium-content post" [
   --addScriptTag: list
   --addStyleTag: list
   --authenticate: any
-  --bestAttempt: string@bool-completer # When bestAttempt is set to true, browserless attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
+  --bestAttempt: oneof<nothing, bool> # When bestAttempt is set to true, browserless attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
   --cookies: list
   --emulateMediaType: string
   --gotoOptions: any
@@ -521,7 +520,7 @@ export def "chromium-content post" [
   --rejectResourceTypes: list
   --requestInterceptors: list # item shape: {pattern: string, response: record}
   --setExtraHTTPHeaders: record
-  --setJavaScriptEnabled: string@bool-completer # Whether or not to allow JavaScript to run on the page.
+  --setJavaScriptEnabled: oneof<nothing, bool> # Whether or not to allow JavaScript to run on the page.
   --body-url: string
   --userAgent: record # shape: {userAgent?: string, userAgentMetadata?: any, platform?: string}
   --viewport: any
@@ -553,7 +552,7 @@ export def "chromium-download post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -583,7 +582,7 @@ export def "chromium-function post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -613,7 +612,7 @@ export def "chromium-performance post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -651,7 +650,7 @@ export def "chromium-scrape post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -660,7 +659,7 @@ export def "chromium-scrape post" [
   --addScriptTag: list
   --addStyleTag: list
   --authenticate: any
-  --bestAttempt: string@bool-completer # When bestAttempt is set to true, browserless attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
+  --bestAttempt: oneof<nothing, bool> # When bestAttempt is set to true, browserless attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
   --cookies: list
   --debugOpts: any
   elements: list
@@ -671,7 +670,7 @@ export def "chromium-scrape post" [
   --rejectResourceTypes: list
   --requestInterceptors: list # item shape: {pattern: string, response: record}
   --setExtraHTTPHeaders: record
-  --setJavaScriptEnabled: string@bool-completer
+  --setJavaScriptEnabled: oneof<nothing, bool>
   --body-url: string
   --userAgent: record # shape: {userAgent?: string, userAgentMetadata?: any, platform?: string}
   --viewport: any
@@ -708,7 +707,7 @@ export def "edge-content post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -717,7 +716,7 @@ export def "edge-content post" [
   --addScriptTag: list
   --addStyleTag: list
   --authenticate: any
-  --bestAttempt: string@bool-completer # When bestAttempt is set to true, browserless attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
+  --bestAttempt: oneof<nothing, bool> # When bestAttempt is set to true, browserless attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
   --cookies: list
   --emulateMediaType: string
   --gotoOptions: any
@@ -726,7 +725,7 @@ export def "edge-content post" [
   --rejectResourceTypes: list
   --requestInterceptors: list # item shape: {pattern: string, response: record}
   --setExtraHTTPHeaders: record
-  --setJavaScriptEnabled: string@bool-completer # Whether or not to allow JavaScript to run on the page.
+  --setJavaScriptEnabled: oneof<nothing, bool> # Whether or not to allow JavaScript to run on the page.
   --body-url: string
   --userAgent: record # shape: {userAgent?: string, userAgentMetadata?: any, platform?: string}
   --viewport: any
@@ -758,7 +757,7 @@ export def "edge-download post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -788,7 +787,7 @@ export def "edge-function post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -824,7 +823,7 @@ export def "edge-pdf post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -833,7 +832,7 @@ export def "edge-pdf post" [
   --addScriptTag: list
   --addStyleTag: list
   --authenticate: any
-  --bestAttempt: string@bool-completer # When bestAttempt is set to true, browserless attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
+  --bestAttempt: oneof<nothing, bool> # When bestAttempt is set to true, browserless attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
   --cookies: list
   --emulateMediaType: string
   --gotoOptions: any
@@ -843,7 +842,7 @@ export def "edge-pdf post" [
   --rejectResourceTypes: list
   --requestInterceptors: list # item shape: {pattern: string, response: record}
   --setExtraHTTPHeaders: record
-  --setJavaScriptEnabled: string@bool-completer
+  --setJavaScriptEnabled: oneof<nothing, bool>
   --body-url: string
   --userAgent: record # shape: {userAgent?: string, userAgentMetadata?: any, platform?: string}
   --viewport: any
@@ -875,7 +874,7 @@ export def "edge-performance post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -913,7 +912,7 @@ export def "edge-scrape post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -922,7 +921,7 @@ export def "edge-scrape post" [
   --addScriptTag: list
   --addStyleTag: list
   --authenticate: any
-  --bestAttempt: string@bool-completer # When bestAttempt is set to true, browserless attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
+  --bestAttempt: oneof<nothing, bool> # When bestAttempt is set to true, browserless attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
   --cookies: list
   --debugOpts: any
   elements: list
@@ -933,7 +932,7 @@ export def "edge-scrape post" [
   --rejectResourceTypes: list
   --requestInterceptors: list # item shape: {pattern: string, response: record}
   --setExtraHTTPHeaders: record
-  --setJavaScriptEnabled: string@bool-completer
+  --setJavaScriptEnabled: oneof<nothing, bool>
   --body-url: string
   --userAgent: record # shape: {userAgent?: string, userAgentMetadata?: any, platform?: string}
   --viewport: any
@@ -971,7 +970,7 @@ export def "edge-screenshot post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -980,7 +979,7 @@ export def "edge-screenshot post" [
   --addScriptTag: list
   --addStyleTag: list
   --authenticate: any
-  --bestAttempt: string@bool-completer # When bestAttempt is set to true, browserless attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
+  --bestAttempt: oneof<nothing, bool> # When bestAttempt is set to true, browserless attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
   --cookies: list
   --emulateMediaType: string
   --gotoOptions: any
@@ -989,10 +988,10 @@ export def "edge-screenshot post" [
   --rejectRequestPattern: list
   --rejectResourceTypes: list
   --requestInterceptors: list # item shape: {pattern: string, response: record}
-  --scrollPage: string@bool-completer
+  --scrollPage: oneof<nothing, bool>
   --selector: string
   --setExtraHTTPHeaders: record
-  --setJavaScriptEnabled: string@bool-completer
+  --setJavaScriptEnabled: oneof<nothing, bool>
   --body-url: string
   --userAgent: record # shape: {userAgent?: string, userAgentMetadata?: any, platform?: string}
   --viewport: any
@@ -1047,7 +1046,7 @@ export def "kill-0-9a-z-a-z get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --browserId: string
   --launch: string
   --profile: string
@@ -1101,7 +1100,7 @@ export def "browser-web-socket-ap-is get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --externalProxyServer: string
   --integrations: string
   --launch: string
@@ -1113,9 +1112,9 @@ export def "browser-web-socket-ap-is get" [
   --proxyPreset: string
   --proxyState: string
   --proxySticky: string@proxySticky-completer
-  --record: string@bool-completer
-  --replay: string@bool-completer
-  --solveCaptchas: string@bool-completer
+  --record: oneof<nothing, bool>
+  --replay: oneof<nothing, bool>
+  --solveCaptchas: oneof<nothing, bool>
   --timeout: float
   --qp-token: string
   --trackingId: string
@@ -1143,7 +1142,7 @@ export def "devtools-browser get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -1173,7 +1172,7 @@ export def "chrome get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --externalProxyServer: string
   --integrations: string
   --launch: string
@@ -1185,9 +1184,9 @@ export def "chrome get" [
   --proxyPreset: string
   --proxyState: string
   --proxySticky: string@proxySticky-completer
-  --record: string@bool-completer
-  --replay: string@bool-completer
-  --solveCaptchas: string@bool-completer
+  --record: oneof<nothing, bool>
+  --replay: oneof<nothing, bool>
+  --solveCaptchas: oneof<nothing, bool>
   --timeout: float
   --qp-token: string
   --trackingId: string
@@ -1215,7 +1214,7 @@ export def "function-connect get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -1245,7 +1244,7 @@ export def "devtools-page get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -1275,7 +1274,7 @@ export def "chrome-playwright get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -1305,7 +1304,7 @@ export def "chromium get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -1335,7 +1334,7 @@ export def "chromium-playwright get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -1365,7 +1364,7 @@ export def "edge get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --externalProxyServer: string
   --integrations: string
   --launch: string
@@ -1377,9 +1376,9 @@ export def "edge get" [
   --proxyPreset: string
   --proxyState: string
   --proxySticky: string@proxySticky-completer
-  --record: string@bool-completer
-  --replay: string@bool-completer
-  --solveCaptchas: string@bool-completer
+  --record: oneof<nothing, bool>
+  --replay: oneof<nothing, bool>
+  --solveCaptchas: oneof<nothing, bool>
   --timeout: float
   --qp-token: string
   --trackingId: string
@@ -1407,7 +1406,7 @@ export def "edge-playwright get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -1437,7 +1436,7 @@ export def "firefox-playwright get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: record
   --profile: string
   --timeout: float
@@ -1467,7 +1466,7 @@ export def "webkit-playwright get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -1523,7 +1522,7 @@ export def "chrome-export post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --externalProxyServer: string
   --launch: string
   --profile: string
@@ -1537,7 +1536,7 @@ export def "chrome-export post" [
   --timeout: float
   --qp-token: string
   --trackingId: string
-  --bestAttempt: string@bool-completer # When bestAttempt is set to true, browserless will attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
+  --bestAttempt: oneof<nothing, bool> # When bestAttempt is set to true, browserless will attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
   --body-url: string # The URL of the site you want to archive.
   --gotoOptions: any # An optional goto parameter object for considering when the page is done loading.
   --waitForEvent: record # Options for waiting for a specific event to be fired on the page. — shape: {event: string, timeout?: float}
@@ -1545,7 +1544,7 @@ export def "chrome-export post" [
   --waitForSelector: record # Options for waiting for a specific CSS selector to appear on the page. — shape: {hidden?: bool, selector: string, timeout?: float, visible?: bool}
   --waitForTimeout: float # The amount of time in milliseconds to wait before proceeding.
   --headers: record # An object containing additional HTTP headers to send with every request.
-  --includeResources: string@bool-completer # Whether to include all linked resources (images, CSS, JS) in a zip file. When true, the response will be a zip file containing the HTML and all resources. When false or not provided, the response will be the raw content (default behavior).
+  --includeResources: oneof<nothing, bool> # Whether to include all linked resources (images, CSS, JS) in a zip file. When true, the response will be a zip file containing the HTML and all resources. When false or not provided, the response will be the raw content (default behavior).
 ]: any -> record<html: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1573,7 +1572,7 @@ export def "chrome-unblock post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --externalProxyServer: string
   --launch: string
   --profile: string
@@ -1587,12 +1586,12 @@ export def "chrome-unblock post" [
   --timeout: float
   --qp-token: string
   --trackingId: string
-  --bestAttempt: string@bool-completer # When bestAttempt is set to true, browserless will attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
+  --bestAttempt: oneof<nothing, bool> # When bestAttempt is set to true, browserless will attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
   --body-url: string # The URL of the site you want to unblock.
-  --browserWSEndpoint: string@bool-completer # Whether or not to keep the underlying browser alive and around for future reconnects. Defaults to false.
-  --cookies: string@bool-completer # Whether or not to to return cookies for the site, defaults to true.
-  --content: string@bool-completer # Whether or not to to return content for the site, defaults to true.
-  --screenshot: string@bool-completer # Whether or not to to return a full-page screenshot for the site, defaults to true.
+  --browserWSEndpoint: oneof<nothing, bool> # Whether or not to keep the underlying browser alive and around for future reconnects. Defaults to false.
+  --cookies: oneof<nothing, bool> # Whether or not to to return cookies for the site, defaults to true.
+  --content: oneof<nothing, bool> # Whether or not to to return content for the site, defaults to true.
+  --screenshot: oneof<nothing, bool> # Whether or not to to return a full-page screenshot for the site, defaults to true.
   --ttl: float # When the browserWSEndpoint is requested this tells browserless how long to keep this browser alive for re-connection until shutting it down completely. Maximum of 30000 for 30 seconds (30,000ms).
   --gotoOptions: any # An optional goto parameter object for considering when the page is done loading.
   --waitForEvent: record # Options for waiting for a specific event to be fired on the page. — shape: {event: string, timeout?: float}
@@ -1626,7 +1625,7 @@ export def "chromium-export post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --externalProxyServer: string
   --launch: string
   --profile: string
@@ -1640,7 +1639,7 @@ export def "chromium-export post" [
   --timeout: float
   --qp-token: string
   --trackingId: string
-  --bestAttempt: string@bool-completer # When bestAttempt is set to true, browserless will attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
+  --bestAttempt: oneof<nothing, bool> # When bestAttempt is set to true, browserless will attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
   --body-url: string # The URL of the site you want to archive.
   --gotoOptions: any # An optional goto parameter object for considering when the page is done loading.
   --waitForEvent: record # Options for waiting for a specific event to be fired on the page. — shape: {event: string, timeout?: float}
@@ -1648,7 +1647,7 @@ export def "chromium-export post" [
   --waitForSelector: record # Options for waiting for a specific CSS selector to appear on the page. — shape: {hidden?: bool, selector: string, timeout?: float, visible?: bool}
   --waitForTimeout: float # The amount of time in milliseconds to wait before proceeding.
   --headers: record # An object containing additional HTTP headers to send with every request.
-  --includeResources: string@bool-completer # Whether to include all linked resources (images, CSS, JS) in a zip file. When true, the response will be a zip file containing the HTML and all resources. When false or not provided, the response will be the raw content (default behavior).
+  --includeResources: oneof<nothing, bool> # Whether to include all linked resources (images, CSS, JS) in a zip file. When true, the response will be a zip file containing the HTML and all resources. When false or not provided, the response will be the raw content (default behavior).
 ]: any -> record<html: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1676,7 +1675,7 @@ export def "unblock post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --externalProxyServer: string
   --launch: string
   --profile: string
@@ -1690,12 +1689,12 @@ export def "unblock post" [
   --timeout: float
   --qp-token: string
   --trackingId: string
-  --bestAttempt: string@bool-completer # When bestAttempt is set to true, browserless will attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
+  --bestAttempt: oneof<nothing, bool> # When bestAttempt is set to true, browserless will attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
   --body-url: string # The URL of the site you want to unblock.
-  --browserWSEndpoint: string@bool-completer # Whether or not to keep the underlying browser alive and around for future reconnects. Defaults to false.
-  --cookies: string@bool-completer # Whether or not to to return cookies for the site, defaults to true.
-  --content: string@bool-completer # Whether or not to to return content for the site, defaults to true.
-  --screenshot: string@bool-completer # Whether or not to to return a full-page screenshot for the site, defaults to true.
+  --browserWSEndpoint: oneof<nothing, bool> # Whether or not to keep the underlying browser alive and around for future reconnects. Defaults to false.
+  --cookies: oneof<nothing, bool> # Whether or not to to return cookies for the site, defaults to true.
+  --content: oneof<nothing, bool> # Whether or not to to return content for the site, defaults to true.
+  --screenshot: oneof<nothing, bool> # Whether or not to to return a full-page screenshot for the site, defaults to true.
   --ttl: float # When the browserWSEndpoint is requested this tells browserless how long to keep this browser alive for re-connection until shutting it down completely. Maximum of 30000 for 30 seconds (30,000ms).
   --gotoOptions: any # An optional goto parameter object for considering when the page is done loading.
   --waitForEvent: record # Options for waiting for a specific event to be fired on the page. — shape: {event: string, timeout?: float}
@@ -1726,7 +1725,7 @@ export def "proxy-cities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --country: string
   --launch: string
   --profile: string
@@ -1765,8 +1764,8 @@ export def "map post" [
   --limit: float # Maximum number of links to return (default: 5000, max: 5000)
   --timeout: float # Request timeout in milliseconds
   --sitemap: string@sitemap-completer # Controls sitemap behavior: "include" (default), "skip", "only"
-  --includeSubdomains: string@bool-completer # Whether to include URLs from subdomains (default: true)
-  --ignoreQueryParameters: string@bool-completer # Exclude URLs with query parameters (default: true)
+  --includeSubdomains: oneof<nothing, bool> # Whether to include URLs from subdomains (default: true)
+  --ignoreQueryParameters: oneof<nothing, bool> # Exclude URLs with query parameters (default: true)
   --location: record # Geo-targeting settings — shape: {country?: string, languages?: list}
   --proxy: string@proxy-completer # Proxy network to route through: `"residential"` (default) or `"datacenter"`.
 ]: any -> any {
@@ -1799,7 +1798,7 @@ export def "pdf post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --externalProxyServer: string
   --launch: string
   --profile: string
@@ -1813,12 +1812,12 @@ export def "pdf post" [
   --timeout: float
   --qp-token: string
   --trackingId: string
-  --blockConsentModals: string@bool-completer # Whether to automatically block cookie consent modals and popups.
+  --blockConsentModals: oneof<nothing, bool> # Whether to automatically block cookie consent modals and popups.
   --options: record # PDF generation options based on Puppeteer's PDFOptions interface. Includes properties like `format`, `margin`, `printBackground`, `landscape`, etc. — shape: {scale?: float, displayHeaderFooter?: bool, headerTemplate?: string, footerTemplate?: string, printBackground?: bool, landscape?: bool, pageRanges?: string, format?: any, width?: string, height?: string, preferCSSPageSize?: bool, margin?: any, path?: string, omitBackground?: bool, tagged?: bool, outline?: bool, timeout?: float, waitForFonts?: bool, fullPage?: bool}
   --addScriptTag: list # An array of script tags to add to the page before performing actions. Each object can contain either a `url`, or a `content` property.
   --addStyleTag: list # An array of style tags to add to the page before performing actions. Each object can contain either a `url`, or a `content` property.
   --authenticate: any # Credentials for HTTP authentication. Contains `username` and `password` properties.
-  --bestAttempt: string@bool-completer # When bestAttempt is set to true, browserless will attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
+  --bestAttempt: oneof<nothing, bool> # When bestAttempt is set to true, browserless will attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
   --cookies: list # An array of cookies to set on the page before navigation. Each cookie object should contain at least `name` and `value` properties.
   --emulateMediaType: string # Changes the CSS media type of the page. Accepts values like "screen" or "print".
   --gotoOptions: any # Options to configure the page navigation, such as `timeout` and `waitUntil`.
@@ -1827,7 +1826,7 @@ export def "pdf post" [
   --rejectResourceTypes: list # An array of resource types to reject during page load. Common types include "image", "stylesheet", "font", "script", etc.
   --requestInterceptors: list # An array of request interceptors that can modify or mock network requests. Each interceptor has a `pattern` to match URLs and a `response` to return. — item shape: {pattern: string, response: record}
   --setExtraHTTPHeaders: record # An object containing additional HTTP headers to send with every request.
-  --setJavaScriptEnabled: string@bool-completer # Whether or not to allow JavaScript to run on the page.
+  --setJavaScriptEnabled: oneof<nothing, bool> # Whether or not to allow JavaScript to run on the page.
   --body-url: string # The URL to navigate to before performing actions.
   --userAgent: record # The user agent string to use for the page. — shape: {userAgent?: string, userAgentMetadata?: any, platform?: string}
   --viewport: any # The viewport dimensions and settings for the page. Includes properties like `width`, `height`, `deviceScaleFactor`, etc.
@@ -1865,7 +1864,7 @@ export def "screenshot post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --externalProxyServer: string
   --launch: string
   --profile: string
@@ -1879,12 +1878,12 @@ export def "screenshot post" [
   --timeout: float
   --qp-token: string
   --trackingId: string
-  --blockConsentModals: string@bool-completer # Whether to automatically block cookie consent modals and popups.
+  --blockConsentModals: oneof<nothing, bool> # Whether to automatically block cookie consent modals and popups.
   --options: any # Screenshot options based on Puppeteer's ScreenshotOptions interface. Includes properties like `type`, `quality`, `fullPage`, `clip`, etc.
   --addScriptTag: list # An array of script tags to add to the page before performing actions. Each object can contain either a `url`, or a `content` property.
   --addStyleTag: list # An array of style tags to add to the page before performing actions. Each object can contain either a `url`, or a `content` property.
   --authenticate: any # Credentials for HTTP authentication. Contains `username` and `password` properties.
-  --bestAttempt: string@bool-completer # When bestAttempt is set to true, browserless will attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
+  --bestAttempt: oneof<nothing, bool> # When bestAttempt is set to true, browserless will attempt to proceed when "awaited" events fail or timeout. This includes things like goto, waitForSelector, and more.
   --cookies: list # An array of cookies to set on the page before navigation. Each cookie object should contain at least `name` and `value` properties.
   --emulateMediaType: string # Changes the CSS media type of the page. Accepts values like "screen" or "print".
   --gotoOptions: any # Options to configure the page navigation, such as `timeout` and `waitUntil`.
@@ -1893,7 +1892,7 @@ export def "screenshot post" [
   --rejectResourceTypes: list # An array of resource types to reject during page load. Common types include "image", "stylesheet", "font", "script", etc.
   --requestInterceptors: list # An array of request interceptors that can modify or mock network requests. Each interceptor has a `pattern` to match URLs and a `response` to return. — item shape: {pattern: string, response: record}
   --setExtraHTTPHeaders: record # An object containing additional HTTP headers to send with every request.
-  --setJavaScriptEnabled: string@bool-completer # Whether or not to allow JavaScript to run on the page.
+  --setJavaScriptEnabled: oneof<nothing, bool> # Whether or not to allow JavaScript to run on the page.
   --body-url: string # The URL to navigate to before performing actions.
   --userAgent: record # The user agent string to use for the page. — shape: {userAgent?: string, userAgentMetadata?: any, platform?: string}
   --viewport: any # The viewport dimensions and settings for the page. Includes properties like `width`, `height`, `deviceScaleFactor`, etc.
@@ -1901,7 +1900,7 @@ export def "screenshot post" [
   --waitForFunction: record # Options for waiting for a JavaScript function to execute. — shape: {fn: string, polling?: string, timeout?: float}
   --waitForSelector: record # Options for waiting for a specific CSS selector to appear on the page. — shape: {hidden?: bool, selector: string, timeout?: float, visible?: bool}
   --waitForTimeout: float # The amount of time in milliseconds to wait before proceeding.
-  --scrollPage: string@bool-completer # Whether to scroll through the entire page before capturing content. Useful for triggering lazy-loaded content.
+  --scrollPage: oneof<nothing, bool> # Whether to scroll through the entire page before capturing content. Useful for triggering lazy-loaded content.
   --selector: string # A CSS selector to target a specific element instead of the full page.
 ]: any -> any {
   let input = $in
@@ -1968,14 +1967,14 @@ export def "session post" [
   --allow-errors(-e) # Return full response without error handling
   ttl: float # The time-to-live (TTL) for the session in milliseconds. Once reached, will be forcefully terminated and all files and processes will be cleaned up. Must be a non-negative number greater than 0.
   --processKeepAlive: float # An optional time, in milliseconds, to keep the underlying browser process alive after a connection to the session closes. If a connection happens within the keep-alive window, the browser process will remain running and the session can be reconnected to. If a connection happens after the keep-alive window has expired, a new browser process will be launched for the session, with the prior session data. Defaults to 0 (no keep-alive).
-  --stealth: string@bool-completer # Whether or not to enable advanced stealth mode. Defaults to false.
-  --blockAds: string@bool-completer # Whether or not to enable ad-blocking. Defaults to false.
-  --headless: string@bool-completer # Whether the browser should be launched in headless mode. Ignored if `stealth` is true, defaults to "true".
+  --stealth: oneof<nothing, bool> # Whether or not to enable advanced stealth mode. Defaults to false.
+  --blockAds: oneof<nothing, bool> # Whether or not to enable ad-blocking. Defaults to false.
+  --headless: oneof<nothing, bool> # Whether the browser should be launched in headless mode. Ignored if `stealth` is true, defaults to "true".
   --args: list # An array of command-line arguments to pass to the browser. Defaults to an empty array.
   --browser: string@browser-completer # The type of browser to use for the session. 'stealth' uses the Brave browser with advanced anti-detection. Defaults to 'chromium'.
   --body-url: string # The underlying page URL you're attempting to automate. Some pages may required special handling in order to work correctly or unblock. This is not required, but can be useful or required for certain sites.
   --proxy: record # Proxy Parameters for the session if desired. If not specified, the session will use the default network settings. — shape: {type?: "datacenter"|"residential", sticky?: bool, country?: string, city?: string, state?: string, preset?: string}
-  --replay: string@bool-completer # Whether to enable session recording for replay. When true, the session will be recorded and can be replayed later.
+  --replay: oneof<nothing, bool> # Whether to enable session recording for replay. When true, the session will be recorded and can be replayed later.
   --extensions: list # An array of extension IDs to load into the browser session. Extensions must be previously uploaded to the browserless extension storage. This allows sessions to start with extensions pre-loaded without specifying them in launch arguments at connection time.
   --profile: string # Optional name of an authentication profile to use as initial browser state. The profile's cookies, localStorage, and IndexedDB entries are injected via CDP before your code runs. sessionStorage is intentionally not restored — it is tab-scoped and stale values break OAuth/CSRF flows. Changes during the session do not affect the source profile.
 ]: any -> record<id: string, connect: string, ttl: float, stop: string, browserQL: string, cloudEndpointId: string> {
@@ -2001,8 +2000,8 @@ export def "session delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
-  --force: string@bool-completer
+  --blockAds: oneof<nothing, bool>
+  --force: oneof<nothing, bool>
   --launch: string
   --profile: string
   --timeout: float
@@ -2062,10 +2061,10 @@ export def "stealth-bql post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
-  --blockConsentModals: string@bool-completer
+  --blockAds: oneof<nothing, bool>
+  --blockConsentModals: oneof<nothing, bool>
   --externalProxyServer: string
-  --humanlike: string@bool-completer
+  --humanlike: oneof<nothing, bool>
   --launch: string
   --profile: string
   --proxy: string
@@ -2075,7 +2074,7 @@ export def "stealth-bql post" [
   --proxyPreset: string
   --proxyState: string
   --proxySticky: string@proxySticky-completer
-  --replay: string@bool-completer
+  --replay: oneof<nothing, bool>
   --timeout: float
   --qp-token: string
   --trackingId: string
@@ -2106,10 +2105,10 @@ export def "stealth-bql get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
-  --blockConsentModals: string@bool-completer
+  --blockAds: oneof<nothing, bool>
+  --blockConsentModals: oneof<nothing, bool>
   --externalProxyServer: string
-  --humanlike: string@bool-completer
+  --humanlike: oneof<nothing, bool>
   --launch: string
   --profile: string
   --proxy: string
@@ -2119,7 +2118,7 @@ export def "stealth-bql get" [
   --proxyPreset: string
   --proxyState: string
   --proxySticky: string@proxySticky-completer
-  --replay: string@bool-completer
+  --replay: oneof<nothing, bool>
   --timeout: float
   --qp-token: string
   --trackingId: string
@@ -2147,10 +2146,10 @@ export def "chrome-bql post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
-  --blockConsentModals: string@bool-completer
+  --blockAds: oneof<nothing, bool>
+  --blockConsentModals: oneof<nothing, bool>
   --externalProxyServer: string
-  --humanlike: string@bool-completer
+  --humanlike: oneof<nothing, bool>
   --launch: string
   --profile: string
   --proxy: string
@@ -2160,7 +2159,7 @@ export def "chrome-bql post" [
   --proxyPreset: string
   --proxyState: string
   --proxySticky: string@proxySticky-completer
-  --replay: string@bool-completer
+  --replay: oneof<nothing, bool>
   --timeout: float
   --qp-token: string
   --trackingId: string
@@ -2191,10 +2190,10 @@ export def "chrome-bql get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
-  --blockConsentModals: string@bool-completer
+  --blockAds: oneof<nothing, bool>
+  --blockConsentModals: oneof<nothing, bool>
   --externalProxyServer: string
-  --humanlike: string@bool-completer
+  --humanlike: oneof<nothing, bool>
   --launch: string
   --profile: string
   --proxy: string
@@ -2204,7 +2203,7 @@ export def "chrome-bql get" [
   --proxyPreset: string
   --proxyState: string
   --proxySticky: string@proxySticky-completer
-  --replay: string@bool-completer
+  --replay: oneof<nothing, bool>
   --timeout: float
   --qp-token: string
   --trackingId: string
@@ -2232,10 +2231,10 @@ export def "chromium-bql post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
-  --blockConsentModals: string@bool-completer
+  --blockAds: oneof<nothing, bool>
+  --blockConsentModals: oneof<nothing, bool>
   --externalProxyServer: string
-  --humanlike: string@bool-completer
+  --humanlike: oneof<nothing, bool>
   --launch: string
   --profile: string
   --proxy: string
@@ -2245,7 +2244,7 @@ export def "chromium-bql post" [
   --proxyPreset: string
   --proxyState: string
   --proxySticky: string@proxySticky-completer
-  --replay: string@bool-completer
+  --replay: oneof<nothing, bool>
   --timeout: float
   --qp-token: string
   --trackingId: string
@@ -2276,10 +2275,10 @@ export def "chromium-bql get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
-  --blockConsentModals: string@bool-completer
+  --blockAds: oneof<nothing, bool>
+  --blockConsentModals: oneof<nothing, bool>
   --externalProxyServer: string
-  --humanlike: string@bool-completer
+  --humanlike: oneof<nothing, bool>
   --launch: string
   --profile: string
   --proxy: string
@@ -2289,7 +2288,7 @@ export def "chromium-bql get" [
   --proxyPreset: string
   --proxyState: string
   --proxySticky: string@proxySticky-completer
-  --replay: string@bool-completer
+  --replay: oneof<nothing, bool>
   --timeout: float
   --qp-token: string
   --trackingId: string
@@ -2317,10 +2316,10 @@ export def "session-bql post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --profile: string
-  --replay: string@bool-completer
+  --replay: oneof<nothing, bool>
   --timeout: float
   --qp-token: string
   --trackingId: string
@@ -2438,8 +2437,8 @@ export def "crawl post" [
   --limit: float # Maximum number of pages to crawl. Clamped to your plan's limit. (default: 100)
   --maxDepth: float # Maximum link-follow depth from the root URL. (default: 5)
   --maxRetries: float # Number of retry attempts per failed page. (default: 1)
-  --allowExternalLinks: string@bool-completer # Whether to follow links to external domains. (default: false)
-  --allowSubdomains: string@bool-completer # Whether to follow links to subdomains of the root URL. (default: false)
+  --allowExternalLinks: oneof<nothing, bool> # Whether to follow links to external domains. (default: false)
+  --allowSubdomains: oneof<nothing, bool> # Whether to follow links to subdomains of the root URL. (default: false)
   --sitemap: string@sitemap-completer-1 # Sitemap handling strategy. (default: auto)
   --includePaths: list # Regex patterns for URL paths to include. (default: [])
   --excludePaths: list # Regex patterns for URL paths to exclude. (default: [])
@@ -2472,7 +2471,7 @@ export def "profile post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string # A user-visible name for the profile. Must be unique per token.
-  --stealth: string@bool-completer # Whether or not to enable advanced stealth mode. Defaults to false.
+  --stealth: oneof<nothing, bool> # Whether or not to enable advanced stealth mode. Defaults to false.
   --browser: string@browser-completer # The type of browser to use. Defaults to 'stealth'.
   --args: list # An array of command-line arguments to pass to the browser.
   --proxy: record # Proxy parameters for the profile creation session. — shape: {type?: "datacenter"|"residential", sticky?: bool, country?: string, city?: string, state?: string, preset?: string}
@@ -2569,7 +2568,7 @@ export def "profiles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --launch: string
   --limit: float
   --offset: float
@@ -2651,7 +2650,7 @@ export def "stealth get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --externalProxyServer: string
   --integrations: string
   --launch: string
@@ -2663,9 +2662,9 @@ export def "stealth get" [
   --proxyPreset: string
   --proxyState: string
   --proxySticky: string@proxySticky-completer
-  --record: string@bool-completer
-  --replay: string@bool-completer
-  --solveCaptchas: string@bool-completer
+  --record: oneof<nothing, bool>
+  --replay: oneof<nothing, bool>
+  --solveCaptchas: oneof<nothing, bool>
   --timeout: float
   --qp-token: string
   --trackingId: string
@@ -2716,7 +2715,7 @@ export def "chrome-stealth get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --externalProxyServer: string
   --integrations: string
   --launch: string
@@ -2728,9 +2727,9 @@ export def "chrome-stealth get" [
   --proxyPreset: string
   --proxyState: string
   --proxySticky: string@proxySticky-completer
-  --record: string@bool-completer
-  --replay: string@bool-completer
-  --solveCaptchas: string@bool-completer
+  --record: oneof<nothing, bool>
+  --replay: oneof<nothing, bool>
+  --solveCaptchas: oneof<nothing, bool>
   --timeout: float
   --qp-token: string
   --trackingId: string
@@ -2806,7 +2805,7 @@ export def "chromium-stealth get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --externalProxyServer: string
   --integrations: string
   --launch: string
@@ -2818,9 +2817,9 @@ export def "chromium-stealth get" [
   --proxyPreset: string
   --proxyState: string
   --proxySticky: string@proxySticky-completer
-  --record: string@bool-completer
-  --replay: string@bool-completer
-  --solveCaptchas: string@bool-completer
+  --record: oneof<nothing, bool>
+  --replay: oneof<nothing, bool>
+  --solveCaptchas: oneof<nothing, bool>
   --timeout: float
   --qp-token: string
   --trackingId: string
@@ -2848,12 +2847,12 @@ export def "reconnect get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
+  --blockAds: oneof<nothing, bool>
   --integrations: string
   --launch: string
   --profile: string
-  --replay: string@bool-completer
-  --solveCaptchas: string@bool-completer
+  --replay: oneof<nothing, bool>
+  --solveCaptchas: oneof<nothing, bool>
   --timeout: float
   --qp-token: string
   --trackingId: string
@@ -2882,7 +2881,7 @@ export def "session-connect get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --launch: string
-  --replay: string@bool-completer
+  --replay: oneof<nothing, bool>
   --timeout: float
   --qp-token: string
   --body: record
@@ -2909,10 +2908,10 @@ export def "chromium-agent get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blockAds: string@bool-completer
-  --blockConsentModals: string@bool-completer
+  --blockAds: oneof<nothing, bool>
+  --blockConsentModals: oneof<nothing, bool>
   --externalProxyServer: string
-  --humanlike: string@bool-completer
+  --humanlike: oneof<nothing, bool>
   --launch: string
   --profile: string
   --proxy: string
@@ -2922,7 +2921,7 @@ export def "chromium-agent get" [
   --proxyPreset: string
   --proxyState: string
   --proxySticky: string@proxySticky-completer
-  --replay: string@bool-completer
+  --replay: oneof<nothing, bool>
   --timeout: float
   --qp-token: string
   --trackingId: string

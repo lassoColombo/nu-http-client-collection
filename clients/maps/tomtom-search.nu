@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.tomtom.com"] }
 def auth-scheme-completer [] { ["query-key"] }
 
@@ -133,7 +132,7 @@ export def "search-c-s get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --typeahead: string@bool-completer # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter <b>predictive</b> mode. (default: false)
+  --typeahead: oneof<nothing, bool> # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter <b>predictive</b> mode. (default: false)
   --limit: int # Maximum number of search results that will be returned. (default: 10)
   --ofs: int # Starting offset of the returned results within the full result set. (default: 0)
   --countrySet: string # Comma separated string of country codes. This will limit the search to the specified countries. (e.g. FR)
@@ -169,7 +168,7 @@ export def "search-category-search get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --typeahead: string@bool-completer # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter <b>predictive</b> mode. (default: false)
+  --typeahead: oneof<nothing, bool> # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter <b>predictive</b> mode. (default: false)
   --limit: int # Maximum number of search results that will be returned. (default: 10)
   --ofs: int # Starting offset of the returned results within the full result set. (default: 0)
   --countrySet: string # Comma separated string of country codes. This will limit the search to the specified countries. (e.g. FR)
@@ -206,8 +205,8 @@ export def "search-geocode get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --storeResult: string@bool-completer # If the "storeResult" flag is set, the query will be interpreted as a stored geocode and will be billed according to the terms of use. (DEPRECATED, default: false)
-  --typeahead: string@bool-completer # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter <b>predictive</b> mode. (default: false)
+  --storeResult: oneof<nothing, bool> # If the "storeResult" flag is set, the query will be interpreted as a stored geocode and will be billed according to the terms of use. (DEPRECATED, default: false)
+  --typeahead: oneof<nothing, bool> # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter <b>predictive</b> mode. (default: false)
   --limit: int # Maximum number of search results that will be returned. (default: 10)
   --ofs: int # Starting offset of the returned results within the full result set. (default: 0)
   --countrySet: string # Comma separated string of country codes. This will limit the search to the specified countries. (e.g. FR)
@@ -398,7 +397,7 @@ export def "search-poi-search get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --typeahead: string@bool-completer # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter <b>predictive</b> mode. (default: false)
+  --typeahead: oneof<nothing, bool> # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter <b>predictive</b> mode. (default: false)
   --limit: int # Maximum number of search results that will be returned. (default: 10)
   --ofs: int # Starting offset of the returned results within the full result set. (default: 0)
   --countrySet: string # Comma separated string of country codes. This will limit the search to the specified countries. (e.g. FR)
@@ -436,7 +435,7 @@ export def "search-reverse-geocode-cross-street get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Maximum number of cross-streets to return. (default: 1)
-  --spatialKeys: string@bool-completer # If the "spatialKeys" flag is set, the response will also contain a proprietary geospatial keys for a specified location. (DEPRECATED, default: false)
+  --spatialKeys: oneof<nothing, bool> # If the "spatialKeys" flag is set, the response will also contain a proprietary geospatial keys for a specified location. (DEPRECATED, default: false)
   --heading: float # The directional heading in degrees, usually similar to the course along a road segment. Entered in degrees, measured clockwise from north (so north is 0, east is 90, etc.) (format: float)
   --radius: int # The maximum distance in meters from the specified position for the reverse geocoder to consider. (default: 10000)
   --language: string # Language in which search results should be returned. Should be one of <a href="/search-api/search-api-documentation/supported-languages">supported IETF language tags</a>, case insensitive.
@@ -465,12 +464,12 @@ export def "search-reverse-geocode get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --spatialKeys: string@bool-completer # If the "spatialKeys" flag is set, the response will also contain a proprietary geospatial keys for a specified location. (DEPRECATED, default: false)
-  --returnSpeedLimit: string@bool-completer # To enable return of the posted speed limit (where available). (default: false)
+  --spatialKeys: oneof<nothing, bool> # If the "spatialKeys" flag is set, the response will also contain a proprietary geospatial keys for a specified location. (DEPRECATED, default: false)
+  --returnSpeedLimit: oneof<nothing, bool> # To enable return of the posted speed limit (where available). (default: false)
   --heading: float # The directional heading in degrees, usually similar to the course along a road segment. Entered in degrees, measured clockwise from north (so north is 0, east is 90, etc.) (format: float)
   --radius: int # The maximum distance in meters from the specified position for the reverse geocoder to consider. (default: 10000)
   --number: string # If a number is sent in along with the request, the response may include the side of the street (Left/Right) and an offset position for that number.
-  --returnRoadUse: string@bool-completer # Enables return of the road use array for reverse geocodes at street level. (default: false)
+  --returnRoadUse: oneof<nothing, bool> # Enables return of the road use array for reverse geocodes at street level. (default: false)
   --roadUse: string # Restricts reverse geocodes to a certain type of road use. The road use array for reverse geocodes can be one or more of: ["LimitedAccess", "Arterial", "Terminal", "Ramp", "Rotary", "LocalStreet"].
   --callback: string # Specifies the jsonp callback method. (default: cb)
 ]: nothing -> any {
@@ -563,7 +562,7 @@ export def "search-routed-search get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --typeahead: string@bool-completer # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter <b>predictive</b> mode. (default: false)
+  --typeahead: oneof<nothing, bool> # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter <b>predictive</b> mode. (default: false)
   --limit: int # Maximum number of search results that will be returned. (default: 10)
   --multiplier: int # Multiplies the limit by N to gather more candidate POIs, which will then be sorted by drive distance, returning only the top candidates according to the limit. (default: 2)
   --routingTimeout: int # Only return results that arrive from routing engine within this time limit. (default: 4000)
@@ -596,7 +595,7 @@ export def "search-s get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --typeahead: string@bool-completer # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter <b>predictive</b> mode. (default: false)
+  --typeahead: oneof<nothing, bool> # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter <b>predictive</b> mode. (default: false)
   --limit: int # Maximum number of search results that will be returned. (default: 10)
   --ofs: int # Starting offset of the returned results within the full result set. (default: 0)
   --countrySet: string # Comma separated string of country codes. This will limit the search to the specified countries. (e.g. FR)
@@ -632,7 +631,7 @@ export def "search-search get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --typeahead: string@bool-completer # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter <b>predictive</b> mode. (default: false)
+  --typeahead: oneof<nothing, bool> # If the "typeahead" flag is set, the query will be interpreted as a partial input and the search will enter <b>predictive</b> mode. (default: false)
   --limit: int # Maximum number of search results that will be returned. (default: 10)
   --ofs: int # Starting offset of the returned results within the full result set. (default: 0)
   --countrySet: string # Comma separated string of country codes. This will limit the search to the specified countries. (e.g. FR)

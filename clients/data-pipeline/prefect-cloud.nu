@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -651,8 +650,8 @@ export def "accounts-account-memberships-filter post" [
   --offset: int # default: 0
   --account-memberships: any
   --body-sort: any
-  --only-users: string@bool-completer # default: false
-  --only-bots: string@bool-completer # default: false
+  --only-users: oneof<nothing, bool> # default: false
+  --only-bots: oneof<nothing, bool> # default: false
   --active: any
 ]: any -> table<id: string, actor_id: string, user_id: any, first_name: any, last_name: any, handle: any, email: any, account_role_name: string, account_role_id: string, last_login: any, active: bool> {
   let input = $in
@@ -703,8 +702,8 @@ export def "accounts-account-memberships-count post" [
   --allow-errors(-e) # Return full response without error handling
   --account-memberships: any
   --filter: any
-  --only-users: string@bool-completer # default: false
-  --only-bots: string@bool-completer # default: false
+  --only-users: oneof<nothing, bool> # default: false
+  --only-bots: oneof<nothing, bool> # default: false
   --active: any
 ]: any -> int {
   let input = $in
@@ -851,7 +850,7 @@ export def "accounts-account-memberships-active patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -878,7 +877,7 @@ export def "accounts-account-memberships-set-active post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   membership_ids: list
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3642,7 +3641,7 @@ export def "accounts-workspaces-flow-runs-events get" [
   --allow-errors(-e) # Return full response without error handling
   --offset: int # default: 0
   --order: string@order-completer
-  --with-task-runs: string@bool-completer # default: true
+  --with-task-runs: oneof<nothing, bool> # default: true
   --limit: int # Defaults to PREFECT_ORION_API_DEFAULT_LIMIT if not provided.
   --if-none-match: string
 ]: nothing -> any {
@@ -3942,7 +3941,7 @@ export def "accounts-workspaces-automations post" [
   --allow-errors(-e) # Return full response without error handling
   name: string # The name of this automation
   --description: string # A longer description of this automation (default: )
-  --enabled: string@bool-completer # Whether this automation will be evaluated (default: true)
+  --enabled: oneof<nothing, bool> # Whether this automation will be evaluated (default: true)
   trigger: any # The criteria for which events this Automation covers and how it will respond to the presence or absence of those events
   actions: list # The actions to perform when this Automation triggers
   --actions-on-trigger: list # The actions to perform when an Automation goes into a triggered state
@@ -3979,7 +3978,7 @@ export def "accounts-workspaces-automations put" [
   --allow-errors(-e) # Return full response without error handling
   name: string # The name of this automation
   --description: string # A longer description of this automation (default: )
-  --enabled: string@bool-completer # Whether this automation will be evaluated (default: true)
+  --enabled: oneof<nothing, bool> # Whether this automation will be evaluated (default: true)
   trigger: any # The criteria for which events this Automation covers and how it will respond to the presence or absence of those events
   actions: list # The actions to perform when this Automation triggers
   --actions-on-trigger: list # The actions to perform when an Automation goes into a triggered state
@@ -4013,7 +4012,7 @@ export def "accounts-workspaces-automations patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether this automation will be evaluated (default: true)
+  --enabled: oneof<nothing, bool> # Whether this automation will be evaluated (default: true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4213,7 +4212,7 @@ export def "accounts-workspaces-automations-managed put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # default: true
+  --enabled: oneof<nothing, bool> # default: true
   --settings: record
 ]: any -> record<type: string, settings: record, enabled: bool, automation: record<name: string, description: string, enabled: bool, trigger: any, actions: list<any>, actions_on_trigger: list<any>, actions_on_resolve: list<any>, labels: any, tags: list<string>, id: string, created: any, updated: any, account: string, workspace: any, actor: any>> {
   let input = $in
@@ -4504,7 +4503,7 @@ export def "accounts-workspaces-slas patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether this SLA will be evaluated
+  --enabled: oneof<nothing, bool> # Whether this SLA will be evaluated
 ]: any -> bool {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4684,7 +4683,7 @@ export def "accounts-workspaces-webhooks post" [
   --allow-errors(-e) # Return full response without error handling
   name: string # The name of the webhook
   --description: string # A longer description of the webhook (default: )
-  --enabled: string@bool-completer # Whether the webhook is enabled (default: true)
+  --enabled: oneof<nothing, bool> # Whether the webhook is enabled (default: true)
   --service-account-id: any # The Service Account to which this webhook belongs
   template: string # The template which translates the incoming HTTP headers and body into a Prefect Event
 ]: any -> record<name: string, description: string, enabled: bool, service_account_id: any, template: string, id: string, created: any, updated: any, account: string, workspace: any, slug: string> {
@@ -4716,7 +4715,7 @@ export def "accounts-workspaces-webhooks put" [
   --allow-errors(-e) # Return full response without error handling
   name: string # The name of the webhook
   --description: string # A longer description of the webhook (default: )
-  --enabled: string@bool-completer # Whether the webhook is enabled (default: true)
+  --enabled: oneof<nothing, bool> # Whether the webhook is enabled (default: true)
   --service-account-id: any # The Service Account to which this webhook belongs
   template: string # The template which translates the incoming HTTP headers and body into a Prefect Event
 ]: any -> any {
@@ -4746,7 +4745,7 @@ export def "accounts-workspaces-webhooks patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether the webhook is enabled (default: true)
+  --enabled: oneof<nothing, bool> # Whether the webhook is enabled (default: true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7084,9 +7083,9 @@ export def "accounts-workspaces-flow-runs-bulk-set-state post" [
   --x-prefect-api-version: string
   flow_runs: record # Filter flow runs. Only flow runs matching all criteria will be returned — shape: {operator?: "and_"|"or_", id?: any, name?: any, tags?: any, flow_id?: any, deployment_id?: any, deployment_version_id?: any, deployment_version_info?: any, work_queue_id?: any, work_queue_name?: any, state?: any, flow_version?: any, start_time?: any, expected_start_time?: any, next_scheduled_start_time?: any, end_time?: any, parent_flow_run_id?: any, parent_task_run_id?: any, idempotency_key?: any, created_by?: any}
   state: record # Data used by the Orion API to create a new state. — shape: {type: "SCHEDULED"|"PENDING"|"RUNNING"|"COMPLETED"|"FAILED"|"CANCELLED"|"CRASHED"|"PAUSED"|"CANCELLING", name?: any, message?: any, data?: any, state_details?: record}
-  --force: string@bool-completer # If false, orchestration rules will be applied that may alter or prevent the state transition. If True, orchestration rules are not applied. (default: false)
+  --force: oneof<nothing, bool> # If false, orchestration rules will be applied that may alter or prevent the state transition. If True, orchestration rules are not applied. (default: false)
   --limit: int # Maximum number of flow runs to update (default: 50)
-  --emit-event: string@bool-completer # If False, state changes will not be emitted as events server side, which may disable automations that fire when state changes occur. (default: true)
+  --emit-event: oneof<nothing, bool> # If False, state changes will not be emitted as events server side, which may disable automations that fire when state changes occur. (default: true)
 ]: any -> record<results: table<flow_run_id: string, status: string, state: any, details: any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7119,8 +7118,8 @@ export def "accounts-workspaces-flow-runs-set-state post" [
   --allow-errors(-e) # Return full response without error handling
   --x-prefect-api-version: string
   state: record # Data used by the Orion API to create a new state. — shape: {type: "SCHEDULED"|"PENDING"|"RUNNING"|"COMPLETED"|"FAILED"|"CANCELLED"|"CRASHED"|"PAUSED"|"CANCELLING", name?: any, message?: any, data?: any, state_details?: record}
-  --force: string@bool-completer # If false, orchestration rules will be applied that may alter or prevent the state transition. If True, orchestration rules are not applied. (default: false)
-  --emit-event: string@bool-completer # If False, the state change will not be emitted as an event server side, expecting the client to do so instead. If True, the state change will be emitted as an event. (default: true)
+  --force: oneof<nothing, bool> # If false, orchestration rules will be applied that may alter or prevent the state transition. If True, orchestration rules are not applied. (default: false)
+  --emit-event: oneof<nothing, bool> # If False, the state change will not be emitted as an event server side, expecting the client to do so instead. If True, the state change will be emitted as an event. (default: true)
 ]: any -> record<state: any, status: string, details: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7736,7 +7735,7 @@ export def "accounts-workspaces-task-runs-set-state post" [
   --allow-errors(-e) # Return full response without error handling
   --x-prefect-api-version: string
   state: record # Data used by the Orion API to create a new state. — shape: {type: "SCHEDULED"|"PENDING"|"RUNNING"|"COMPLETED"|"FAILED"|"CANCELLED"|"CRASHED"|"PAUSED"|"CANCELLING", name?: any, message?: any, data?: any, state_details?: record}
-  --force: string@bool-completer # If false, orchestration rules will be applied that may alter or prevent the state transition. If True, orchestration rules are not applied. (default: false)
+  --force: oneof<nothing, bool> # If false, orchestration rules will be applied that may alter or prevent the state transition. If True, orchestration rules are not applied. (default: false)
 ]: any -> record<state: any, status: string, details: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7951,14 +7950,14 @@ export def "accounts-workspaces-deployments post" [
   --version: any
   --version-info: any
   flow_id: string # The ID of the flow associated with the deployment. (format: uuid)
-  --is-schedule-active: string@bool-completer # Whether the schedule is active. (default: true)
-  --paused: string@bool-completer # Whether or not the deployment is paused. (default: false)
-  --disabled: string@bool-completer # Whether or not the deployment is disabled. (default: false)
+  --is-schedule-active: oneof<nothing, bool> # Whether the schedule is active. (default: true)
+  --paused: oneof<nothing, bool> # Whether or not the deployment is paused. (default: false)
+  --disabled: oneof<nothing, bool> # Whether or not the deployment is disabled. (default: false)
   --schedules: list # A list of schedules for the deployment. — item shape: {active?: bool, max_active_runs?: any, max_scheduled_runs?: any, catchup?: bool, schedule: any, parameters?: record, slug?: any, replaces?: any}
   --concurrency-limit: any # The deployment's concurrency limit.
   --concurrency-options: any # Options for configuring deployment concurrency.
   --global-concurrency-limit-id: any # The ID of the global concurrency limit to apply to the deployment.
-  --enforce-parameter-schema: string@bool-completer # Whether or not the deployment should enforce the parameter schema. (default: false)
+  --enforce-parameter-schema: oneof<nothing, bool> # Whether or not the deployment should enforce the parameter schema. (default: false)
   --parameter-openapi-schema: any # The parameter schema of the flow, including defaults.
   --parameters: record # Parameters for flow runs scheduled by the deployment.
   --tags: list # A list of deployment tags.
@@ -8044,8 +8043,8 @@ export def "accounts-workspaces-deployments patch" [
   --version-info: any
   --schedule: any # The schedule for the deployment.
   --description: any
-  --is-schedule-active: string@bool-completer # Whether the schedule is active. (default: true)
-  --paused: string@bool-completer # Whether or not the deployment is paused. (default: false)
+  --is-schedule-active: oneof<nothing, bool> # Whether the schedule is active. (default: true)
+  --paused: oneof<nothing, bool> # Whether or not the deployment is paused. (default: false)
   --schedules: list # A list of schedule updates for the deployment. — item shape: {active?: any, schedule?: any, max_active_runs?: any, max_scheduled_runs?: any, catchup?: any, parameters?: any, slug?: any, replaces?: any}
   --concurrency-limit: any # The deployment's concurrency limit.
   --concurrency-options: any # Options for configuring deployment concurrency.
@@ -9453,7 +9452,7 @@ export def "accounts-workspaces-concurrency-limits post-by-account_id-workspace_
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --x-prefect-api-version: string
-  --active: string@bool-completer # Whether the concurrency limit is active. (default: true)
+  --active: oneof<nothing, bool> # Whether the concurrency limit is active. (default: true)
   name: string # The name of the concurrency limit.
   limit: int # The concurrency limit.
   --active-slots: int # The number of active slots. (default: 0)
@@ -9986,7 +9985,7 @@ export def "accounts-workspaces-block-types-slug-block-documents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-secrets: string@bool-completer # Whether to include sensitive values in the block document. (default: false)
+  --include-secrets: oneof<nothing, bool> # Whether to include sensitive values in the block document. (default: false)
   --x-prefect-api-version: string
 ]: nothing -> table<id: string, created: any, updated: any, name: any, data: record, block_schema_id: string, block_schema: any, block_type_id: string, block_type_name: any, block_type: any, block_document_references: record, is_anonymous: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10016,7 +10015,7 @@ export def "accounts-workspaces-block-types-slug-block-documents-name get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-secrets: string@bool-completer # Whether to include sensitive values in the block document. (default: false)
+  --include-secrets: oneof<nothing, bool> # Whether to include sensitive values in the block document. (default: false)
   --x-prefect-api-version: string
 ]: nothing -> record<id: string, created: any, updated: any, name: any, data: record, block_schema_id: string, block_schema: any, block_type_id: string, block_type_name: any, block_type: any, block_document_references: record, is_anonymous: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10075,7 +10074,7 @@ export def "accounts-workspaces-block-documents post" [
   --data: record # The block document's data
   block_schema_id: string # A block schema ID (format: uuid)
   block_type_id: string # A block type ID (format: uuid)
-  --is-anonymous: string@bool-completer # Whether the block is anonymous (anonymous blocks are usually created by Prefect automatically) (default: false)
+  --is-anonymous: oneof<nothing, bool> # Whether the block is anonymous (anonymous blocks are usually created by Prefect automatically) (default: false)
 ]: any -> record<id: string, created: any, updated: any, name: any, data: record, block_schema_id: string, block_schema: any, block_type_id: string, block_type_name: any, block_type: any, block_document_references: record, is_anonymous: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10109,7 +10108,7 @@ export def "accounts-workspaces-block-documents put" [
   --data: record # The block document's data
   block_schema_id: string # A block schema ID (format: uuid)
   block_type_id: string # A block type ID (format: uuid)
-  --is-anonymous: string@bool-completer # Whether the block is anonymous (anonymous blocks are usually created by Prefect automatically) (default: false)
+  --is-anonymous: oneof<nothing, bool> # Whether the block is anonymous (anonymous blocks are usually created by Prefect automatically) (default: false)
 ]: any -> record<id: string, created: any, updated: any, name: any, data: record, block_schema_id: string, block_schema: any, block_type_id: string, block_type_name: any, block_type: any, block_document_references: record, is_anonymous: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10142,7 +10141,7 @@ export def "accounts-workspaces-block-documents-filter post" [
   --block-documents: any
   --block-types: any
   --block-schemas: any
-  --include-secrets: string@bool-completer # Whether to include sensitive values in the block document. (default: false)
+  --include-secrets: oneof<nothing, bool> # Whether to include sensitive values in the block document. (default: false)
   --body-sort: any # default: NAME_ASC
   --offset: int # default: 0
   --limit: int # Defaults to PREFECT_ORION_API_DEFAULT_LIMIT if not provided.
@@ -10207,7 +10206,7 @@ export def "accounts-workspaces-block-documents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-secrets: string@bool-completer # Whether to include sensitive values in the block document. (default: false)
+  --include-secrets: oneof<nothing, bool> # Whether to include sensitive values in the block document. (default: false)
   --x-prefect-api-version: string
 ]: nothing -> record<id: string, created: any, updated: any, name: any, data: record, block_schema_id: string, block_schema: any, block_type_id: string, block_type_name: any, block_type: any, block_document_references: record, is_anonymous: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10266,7 +10265,7 @@ export def "accounts-workspaces-block-documents patch" [
   --x-prefect-api-version: string
   --block-schema-id: any # A block schema ID
   --data: record # The block document's data
-  --merge-existing-data: string@bool-completer # default: true
+  --merge-existing-data: oneof<nothing, bool> # default: true
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10690,7 +10689,7 @@ export def "accounts-workspaces-work-pools post" [
   --description: any # The work pool description.
   --type: string # The work pool type. (default: prefect-agent)
   --base-job-template: record # The work pool's base job template.
-  --is-paused: string@bool-completer # Pausing the work pool stops the delivery of all work. (default: false)
+  --is-paused: oneof<nothing, bool> # Pausing the work pool stops the delivery of all work. (default: false)
   --concurrency-limit: any # A concurrency limit for the work pool.
   --storage-configuration: record # A representation of a work pool's storage configuration — shape: {bundle_upload_step?: any, bundle_execution_step?: any, default_result_storage_block_id?: any}
 ]: any -> record<id: string, created: any, updated: any, name: string, description: any, type: string, base_job_template: record, is_paused: bool, concurrency_limit: any, is_push_pool: bool, is_mex_pool: bool, status: any, default_queue_id: string, storage_configuration: record<bundle_upload_step: any, bundle_execution_step: any, default_result_storage_block_id: any>, last_polled: any, created_by: any, updated_by: any, active_slots: any> {
@@ -10815,7 +10814,7 @@ export def "accounts-workspaces-work-pools-filter post" [
   --work-pools: any
   --offset: int # default: 0
   --body-sort: string@sort-completer-9 # Defines work pool sorting options.
-  --exclude-base-job-template: string@bool-completer # If True, exclude base_job_template from responses to reduce payload size. Use when listing work pools and the full template is not needed. (default: false)
+  --exclude-base-job-template: oneof<nothing, bool> # If True, exclude base_job_template from responses to reduce payload size. Use when listing work pools and the full template is not needed. (default: false)
   --limit: int # Defaults to PREFECT_ORION_API_DEFAULT_LIMIT if not provided.
 ]: any -> table<id: string, created: any, updated: any, name: string, description: any, type: string, base_job_template: record, is_paused: bool, concurrency_limit: any, is_push_pool: bool, is_mex_pool: bool, status: any, default_queue_id: string, storage_configuration: record<bundle_upload_step: any, bundle_execution_step: any, default_result_storage_block_id: any>, last_polled: any, created_by: any, updated_by: any, active_slots: any> {
   let input = $in
@@ -10849,7 +10848,7 @@ export def "accounts-workspaces-work-pools-paginate post" [
   --work-pools: any
   --page: int # default: 1
   --body-sort: string@sort-completer-9 # Defines work pool sorting options.
-  --include-base-job-template: string@bool-completer # If True, include base_job_template in responses. Defaults to False to reduce payload size when the full template is not needed. (default: false)
+  --include-base-job-template: oneof<nothing, bool> # If True, include base_job_template in responses. Defaults to False to reduce payload size when the full template is not needed. (default: false)
   --limit: int # Defaults to PREFECT_ORION_API_DEFAULT_LIMIT if not provided.
 ]: any -> record<results: table<id: string, created: any, updated: any, name: string, description: any, type: string, base_job_template: record, is_paused: bool, concurrency_limit: any, is_push_pool: bool, is_mex_pool: bool, status: any, default_queue_id: string, storage_configuration: record, last_polled: any, created_by: any, updated_by: any, active_slots: any>, count: int, limit: int, pages: int, page: int> {
   let input = $in
@@ -11039,7 +11038,7 @@ export def "accounts-workspaces-work-pools-queues post" [
   --x-prefect-api-version: string
   name: string # The name of the work queue.
   --description: any # An optional description for the work queue. (default: )
-  --is-paused: string@bool-completer # Whether or not the work queue is paused. (default: false)
+  --is-paused: oneof<nothing, bool> # Whether or not the work queue is paused. (default: false)
   --concurrency-limit: any # The work queue's concurrency limit.
   --priority: any # The queue's priority. Lower values are higher priority (1 is the highest).
   --filter: any # DEPRECATED: Filter criteria for the work queue. (DEPRECATED)
@@ -11105,7 +11104,7 @@ export def "accounts-workspaces-work-pools-queues patch" [
   --x-prefect-api-version: string
   --body-name: any
   --description: any
-  --is-paused: string@bool-completer # Whether or not the work queue is paused. (default: false)
+  --is-paused: oneof<nothing, bool> # Whether or not the work queue is paused. (default: false)
   --concurrency-limit: any
   --priority: any
   --last-polled: any
@@ -11236,7 +11235,7 @@ export def "accounts-workspaces-work-pools-workers-heartbeat post" [
   --x-prefect-api-version: string
   name: string # The worker process name
   --heartbeat-interval-seconds: any # The worker's heartbeat interval in seconds
-  --return-id: string@bool-completer # Whether to return the worker ID. If False, returns 204. (default: false)
+  --return-id: oneof<nothing, bool> # Whether to return the worker ID. If False, returns 204. (default: false)
   --metadata: any # The worker's metadata
 ]: any -> any {
   let input = $in
@@ -11427,7 +11426,7 @@ export def "accounts-workspaces-work-queues post" [
   --x-prefect-api-version: string
   name: string # The name of the work queue.
   --description: any # An optional description for the work queue. (default: )
-  --is-paused: string@bool-completer # Whether or not the work queue is paused. (default: false)
+  --is-paused: oneof<nothing, bool> # Whether or not the work queue is paused. (default: false)
   --concurrency-limit: any # The work queue's concurrency limit.
   --priority: any # The queue's priority. Lower values are higher priority (1 is the highest).
   --filter: any # DEPRECATED: Filter criteria for the work queue. (DEPRECATED)
@@ -11464,7 +11463,7 @@ export def "accounts-workspaces-work-queues patch" [
   --x-prefect-api-version: string
   --name: any
   --description: any
-  --is-paused: string@bool-completer # Whether or not the work queue is paused. (default: false)
+  --is-paused: oneof<nothing, bool> # Whether or not the work queue is paused. (default: false)
   --concurrency-limit: any
   --priority: any
   --last-polled: any

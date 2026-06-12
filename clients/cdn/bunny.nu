@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.bunny.net"] }
 def auth-scheme-completer [] { ["accesskey" "bearer"] }
 
@@ -201,14 +200,14 @@ export def "dnszone Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CustomNameserversEnabled: string@bool-completer # nullable
+  --CustomNameserversEnabled: oneof<nothing, bool> # nullable
   --Nameserver1: string # nullable
   --Nameserver2: string # nullable
   --SoaEmail: string # nullable
-  --LoggingEnabled: string@bool-completer # nullable
+  --LoggingEnabled: oneof<nothing, bool> # nullable
   --LogAnonymizationType: any # Gets the log anonymization type for this zone (nullable)
   --CertificateKeyType: any # Sets the certificate private key type for wildcard certificates for this zone (nullable)
-  --LoggingIPAnonymizationEnabled: string@bool-completer # Determines if the log anonoymization should be enabled (nullable)
+  --LoggingIPAnonymizationEnabled: oneof<nothing, bool> # Determines if the log anonoymization should be enabled (nullable)
 ]: any -> record<Id: int, Domain: string, Records: table<Id: int, Type: int, Ttl: int, Value: string, Name: string, Weight: int, Priority: int, Port: int, Flags: int, Tag: string, Accelerated: bool, AcceleratedPullZoneId: int, LinkName: string, IPGeoLocationInfo: any, GeolocationInfo: any, MonitorStatus: int, MonitorType: int, GeolocationLatitude: float, GeolocationLongitude: float, EnviromentalVariables: list, LatencyZone: string, SmartRoutingType: int, Disabled: bool, Comment: string, AutoSslIssuance: bool, AccelerationStatus: int>, DateModified: string, DateCreated: string, NameserversDetected: bool, CustomNameserversEnabled: bool, Nameserver1: string, Nameserver2: string, SoaEmail: string, NameserversNextCheck: string, LoggingEnabled: bool, LoggingIPAnonymizationEnabled: bool, LogAnonymizationType: any, DnsSecEnabled: bool, CertificateKeyType: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
@@ -314,16 +313,16 @@ export def "dnszone-records AddRecord" [
   --Port: int # nullable, format: int32
   --PullZoneId: int # nullable, format: int64
   --ScriptId: int # nullable, format: int64
-  --Accelerated: string@bool-completer # nullable
+  --Accelerated: oneof<nothing, bool> # nullable
   --MonitorType: any # nullable
   --GeolocationLatitude: float # nullable, format: double
   --GeolocationLongitude: float # nullable, format: double
   --LatencyZone: string # nullable
   --SmartRoutingType: any # nullable
-  --Disabled: string@bool-completer # nullable
+  --Disabled: oneof<nothing, bool> # nullable
   --EnviromentalVariables: list # nullable — item shape: {Name?: string, Value?: string}
   --Comment: string # nullable
-  --AutoSslIssuance: string@bool-completer # nullable
+  --AutoSslIssuance: oneof<nothing, bool> # nullable
 ]: any -> record<Id: int, Type: int, Ttl: int, Value: string, Name: string, Weight: int, Priority: int, Port: int, Flags: int, Tag: string, Accelerated: bool, AcceleratedPullZoneId: int, LinkName: string, IPGeoLocationInfo: any, GeolocationInfo: any, MonitorStatus: int, MonitorType: int, GeolocationLatitude: float, GeolocationLongitude: float, EnviromentalVariables: table<Name: string, Value: string>, LatencyZone: string, SmartRoutingType: int, Disabled: bool, Comment: string, AutoSslIssuance: bool, AccelerationStatus: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
@@ -362,16 +361,16 @@ export def "dnszone-records UpdateRecord" [
   --Port: int # nullable, format: int32
   --PullZoneId: int # nullable, format: int64
   --ScriptId: int # nullable, format: int64
-  --Accelerated: string@bool-completer # nullable
+  --Accelerated: oneof<nothing, bool> # nullable
   --MonitorType: any # nullable
   --GeolocationLatitude: float # nullable, format: double
   --GeolocationLongitude: float # nullable, format: double
   --LatencyZone: string # nullable
   --SmartRoutingType: any # nullable
-  --Disabled: string@bool-completer # nullable
+  --Disabled: oneof<nothing, bool> # nullable
   --EnviromentalVariables: list # nullable — item shape: {Name?: string, Value?: string}
   --Comment: string # nullable
-  --AutoSslIssuance: string@bool-completer # nullable
+  --AutoSslIssuance: oneof<nothing, bool> # nullable
   --Id: int # format: int64
 ]: any -> any {
   let input = $in
@@ -471,7 +470,7 @@ export def "pullzone IndexAll" [
   --page: int # The page number to return. When set to 0 (default), all items are returned as a plain array. When set to a value greater than 0, items are returned in a paginated response object. (format: int32, default: 0)
   --perPage: int # format: int32, default: 1000
   --search: string # The search term that will be used to filter the results (nullable)
-  --includeCertificate: string@bool-completer # Determines if the result hostnames should contain the SSL certificate (default: false)
+  --includeCertificate: oneof<nothing, bool> # Determines if the result hostnames should contain the SSL certificate (default: false)
 ]: nothing -> table<Id: int, Name: string, OriginUrl: string, Enabled: bool, Suspended: bool, Hostnames: list<record>, StorageZoneId: int, EdgeScriptId: int, EdgeScriptExecutionPhase: any, MiddlewareScriptId: int, MagicContainersAppId: string, MagicContainersEndpointId: string, AllowedReferrers: list<string>, BlockedReferrers: list<string>, BlockedIps: list<string>, EnableGeoZoneUS: bool, EnableGeoZoneEU: bool, EnableGeoZoneASIA: bool, EnableGeoZoneSA: bool, EnableGeoZoneAF: bool, ZoneSecurityEnabled: bool, ZoneSecurityKey: string, ZoneSecurityIncludeHashRemoteIP: bool, IgnoreQueryStrings: bool, MonthlyBandwidthLimit: int, MonthlyBandwidthUsed: int, MonthlyCharges: float, AddHostHeader: bool, OriginHostHeader: string, Type: any, AccessControlOriginHeaderExtensions: list<string>, EnableAccessControlOriginHeader: bool, DisableCookies: bool, BudgetRedirectedCountries: list<string>, BlockedCountries: list<string>, EnableOriginShield: bool, CacheControlMaxAgeOverride: int, CacheControlPublicMaxAgeOverride: int, BurstSize: int, RequestLimit: int, BlockRootPathAccess: bool, BlockPostRequests: bool, LimitRatePerSecond: float, LimitRateAfter: float, ConnectionLimitPerIPCount: int, PriceOverride: float, OptimizerPricing: float, AddCanonicalHeader: bool, EnableLogging: bool, EnableCacheSlice: bool, EnableSmartCache: bool, EdgeRules: list<record>, EnableWebPVary: bool, EnableAvifVary: bool, EnableCountryCodeVary: bool, EnableCountryStateCodeVary: bool, EnableMobileVary: bool, EnableCookieVary: bool, CookieVaryParameters: list<string>, EnableHostnameVary: bool, CnameDomain: string, AWSSigningEnabled: bool, AWSSigningKey: string, AWSSigningSecret: string, AWSSigningRegionName: string, LoggingIPAnonymizationEnabled: bool, EnableTLS1: bool, EnableTLS1_1: bool, VerifyOriginSSL: bool, ErrorPageEnableCustomCode: bool, ErrorPageCustomCode: string, ErrorPageEnableStatuspageWidget: bool, ErrorPageStatuspageCode: string, ErrorPageWhitelabel: bool, OriginShieldZoneCode: string, LogForwardingEnabled: bool, LogForwardingHostname: string, LogForwardingPort: int, LogForwardingToken: string, LogForwardingProtocol: any, LoggingSaveToStorage: bool, LoggingStorageZoneId: int, FollowRedirects: bool, VideoLibraryId: int, DnsRecordId: int, DnsZoneId: int, DnsRecordValue: string, OptimizerEnabled: bool, OptimizerTunnelEnabled: bool, OptimizerDesktopMaxWidth: int, OptimizerMobileMaxWidth: int, OptimizerImageQuality: int, OptimizerMobileImageQuality: int, OptimizerEnableWebP: bool, OptimizerPrerenderHtml: bool, OptimizerEnableManipulationEngine: bool, OptimizerMinifyCSS: bool, OptimizerMinifyJavaScript: bool, OptimizerWatermarkEnabled: bool, OptimizerWatermarkUrl: string, OptimizerWatermarkPosition: any, OptimizerWatermarkOffset: float, OptimizerWatermarkMinImageSize: int, OptimizerAutomaticOptimizationEnabled: bool, PermaCacheStorageZoneId: int, PermaCacheType: any, OriginRetries: int, OriginConnectTimeout: int, OriginResponseTimeout: int, UseStaleWhileUpdating: bool, UseStaleWhileOffline: bool, OriginRetry5XXResponses: bool, OriginRetryConnectionTimeout: bool, OriginRetryResponseTimeout: bool, OriginRetryDelay: int, QueryStringVaryParameters: list<string>, OriginShieldEnableConcurrencyLimit: bool, OriginShieldMaxConcurrentRequests: int, EnableSafeHop: bool, CacheErrorResponses: bool, OriginShieldQueueMaxWaitTime: int, OriginShieldMaxQueuedRequests: int, OptimizerClasses: list<record>, OptimizerForceClasses: bool, OptimizerStaticHtmlEnabled: bool, OptimizerStaticHtmlWordPressPath: string, OptimizerStaticHtmlWordPressBypassCookie: string, UseBackgroundUpdate: bool, EnableAutoSSL: bool, EnableQueryStringOrdering: bool, LogAnonymizationType: any, LogFormat: int, LogForwardingFormat: int, ShieldDDosProtectionType: int, ShieldDDosProtectionEnabled: bool, OriginType: any, EnableRequestCoalescing: bool, RequestCoalescingTimeout: int, OriginLinkValue: string, DisableLetsEncrypt: bool, EnableBunnyImageAi: bool, BunnyAiImageBlueprints: list<record>, PreloadingScreenEnabled: bool, PreloadingScreenShowOnFirstVisit: bool, PreloadingScreenCode: string, PreloadingScreenLogoUrl: string, PreloadingScreenCodeEnabled: bool, PreloadingScreenTheme: any, PreloadingScreenDelay: int, EUUSDiscount: int, SouthAmericaDiscount: int, AfricaDiscount: int, AsiaOceaniaDiscount: int, RoutingFilters: list<string>, BlockNoneReferrer: bool, StickySessionType: any, StickySessionCookieName: string, StickySessionClientHeaders: string, UserId: string, CacheVersion: int, OptimizerEnableUpscaling: bool, EnableWebSockets: bool, MaxWebSocketConnections: int, EnableExtendedLogging: bool, CacheKeyHeaders: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
@@ -499,113 +498,113 @@ export def "pullzone Add" [
   --OriginUrl: string # Sets the origin URL of the Pull Zone (nullable)
   --AllowedReferrers: list # Sets the list of referrer hostnames that are allowed to access the pull zone. Requests containing the header Referer: hostname that is not on the list will be rejected. If empty, all the referrers are allowed (nullable)
   --BlockedReferrers: list # Sets the list of referrer hostnames that are blocked from accessing the pull zone. (nullable)
-  --BlockNoneReferrer: string@bool-completer # nullable
+  --BlockNoneReferrer: oneof<nothing, bool> # nullable
   --BlockedIps: list # Sets the list of IPs that are blocked from accessing the pull zone. Requests coming from the following IPs will be rejected. If empty, all the IPs will be allowed (nullable)
-  --EnableGeoZoneUS: string@bool-completer # Determines if the delivery from the North America region should be enabled for this pull zone (nullable)
-  --EnableGeoZoneEU: string@bool-completer # Determines if the delivery from the Europe region should be enabled for this pull zone (nullable)
-  --EnableGeoZoneASIA: string@bool-completer # Determines if the delivery from the Asia / Oceania regions should be enabled for this pull zone (nullable)
-  --EnableGeoZoneSA: string@bool-completer # Determines if the delivery from the South America region should be enabled for this pull zone (nullable)
-  --EnableGeoZoneAF: string@bool-completer # Determines if the delivery from the Africa region should be enabled for this pull zone (nullable)
-  --BlockRootPathAccess: string@bool-completer # Determines if the zone should block requests to the root of the zone. (nullable)
-  --BlockPostRequests: string@bool-completer # Determines if the POST requests to this zone should be rejected. (nullable)
-  --EnableQueryStringOrdering: string@bool-completer # Determines if the query string ordering should be enabled. (nullable)
-  --EnableWebpVary: string@bool-completer # Determines if the WebP Vary feature should be enabled. (nullable)
-  --EnableAvifVary: string@bool-completer # Determines if the AVIF Vary feature should be enabled. (nullable)
-  --EnableMobileVary: string@bool-completer # Determines if the Mobile Vary feature is enabled. (nullable)
-  --EnableCountryCodeVary: string@bool-completer # Determines if the Country Code Vary feature should be enabled. (nullable)
-  --EnableCountryStateCodeVary: string@bool-completer # Determines if the Country State Code Vary feature should be enabled. (nullable)
-  --EnableHostnameVary: string@bool-completer # Determines if the Hostname Vary feature should be enabled. (nullable)
-  --EnableCacheSlice: string@bool-completer # Determines if cache slicing (Optimize for video) should be enabled for this zone (nullable)
-  --ZoneSecurityEnabled: string@bool-completer # Determines if the zone token authentication security should be enabled (nullable)
-  --ZoneSecurityIncludeHashRemoteIP: string@bool-completer # Determines if the token authentication IP validation should be enabled (nullable)
-  --IgnoreQueryStrings: string@bool-completer # Determines if the Pull Zone should ignore query strings when serving cached objects (Vary by Query String) (nullable)
+  --EnableGeoZoneUS: oneof<nothing, bool> # Determines if the delivery from the North America region should be enabled for this pull zone (nullable)
+  --EnableGeoZoneEU: oneof<nothing, bool> # Determines if the delivery from the Europe region should be enabled for this pull zone (nullable)
+  --EnableGeoZoneASIA: oneof<nothing, bool> # Determines if the delivery from the Asia / Oceania regions should be enabled for this pull zone (nullable)
+  --EnableGeoZoneSA: oneof<nothing, bool> # Determines if the delivery from the South America region should be enabled for this pull zone (nullable)
+  --EnableGeoZoneAF: oneof<nothing, bool> # Determines if the delivery from the Africa region should be enabled for this pull zone (nullable)
+  --BlockRootPathAccess: oneof<nothing, bool> # Determines if the zone should block requests to the root of the zone. (nullable)
+  --BlockPostRequests: oneof<nothing, bool> # Determines if the POST requests to this zone should be rejected. (nullable)
+  --EnableQueryStringOrdering: oneof<nothing, bool> # Determines if the query string ordering should be enabled. (nullable)
+  --EnableWebpVary: oneof<nothing, bool> # Determines if the WebP Vary feature should be enabled. (nullable)
+  --EnableAvifVary: oneof<nothing, bool> # Determines if the AVIF Vary feature should be enabled. (nullable)
+  --EnableMobileVary: oneof<nothing, bool> # Determines if the Mobile Vary feature is enabled. (nullable)
+  --EnableCountryCodeVary: oneof<nothing, bool> # Determines if the Country Code Vary feature should be enabled. (nullable)
+  --EnableCountryStateCodeVary: oneof<nothing, bool> # Determines if the Country State Code Vary feature should be enabled. (nullable)
+  --EnableHostnameVary: oneof<nothing, bool> # Determines if the Hostname Vary feature should be enabled. (nullable)
+  --EnableCacheSlice: oneof<nothing, bool> # Determines if cache slicing (Optimize for video) should be enabled for this zone (nullable)
+  --ZoneSecurityEnabled: oneof<nothing, bool> # Determines if the zone token authentication security should be enabled (nullable)
+  --ZoneSecurityIncludeHashRemoteIP: oneof<nothing, bool> # Determines if the token authentication IP validation should be enabled (nullable)
+  --IgnoreQueryStrings: oneof<nothing, bool> # Determines if the Pull Zone should ignore query strings when serving cached objects (Vary by Query String) (nullable)
   --MonthlyBandwidthLimit: int # Sets the monthly limit of bandwidth in bytes that the pullzone is allowed to use (nullable, format: int64)
   --AccessControlOriginHeaderExtensions: list # Sets the list of extensions that will return the CORS headers (nullable)
-  --EnableAccessControlOriginHeader: string@bool-completer # Determines if CORS headers should be enabled (nullable)
-  --DisableCookies: string@bool-completer # Determines if the Pull Zone should automatically remove cookies from the responses (nullable)
+  --EnableAccessControlOriginHeader: oneof<nothing, bool> # Determines if CORS headers should be enabled (nullable)
+  --DisableCookies: oneof<nothing, bool> # Determines if the Pull Zone should automatically remove cookies from the responses (nullable)
   --BudgetRedirectedCountries: list # Sets the list of two letter Alpha2 country codes that will be redirected to the cheapest possible region (nullable)
   --BlockedCountries: list # Sets the list of two letter Alpha2 country codes that will be blocked from accessing the zone (nullable)
   --CacheControlMaxAgeOverride: int # Sets the cache control override setting for this zone (nullable, format: int64)
   --CacheControlPublicMaxAgeOverride: int # Sets the browser cache control override setting for this zone (nullable, format: int64)
   --CacheControlBrowserMaxAgeOverride: int # (Deprecated) Sets the browser cache control override setting for this zone (nullable, format: int64)
-  --AddHostHeader: string@bool-completer # Determines if the zone should forward the requested host header to the origin (nullable)
-  --AddCanonicalHeader: string@bool-completer # Determines if the canonical header should be added by this zone (nullable)
-  --EnableLogging: string@bool-completer # Determines if the logging should be enabled for this zone (nullable)
-  --LoggingIPAnonymizationEnabled: string@bool-completer # Determines if the log anonoymization should be enabled (nullable)
+  --AddHostHeader: oneof<nothing, bool> # Determines if the zone should forward the requested host header to the origin (nullable)
+  --AddCanonicalHeader: oneof<nothing, bool> # Determines if the canonical header should be added by this zone (nullable)
+  --EnableLogging: oneof<nothing, bool> # Determines if the logging should be enabled for this zone (nullable)
+  --LoggingIPAnonymizationEnabled: oneof<nothing, bool> # Determines if the log anonoymization should be enabled (nullable)
   --PermaCacheStorageZoneId: int # The ID of the storage zone that should be used as the Perma-Cache (nullable, format: int64)
   --PermaCacheType: any # Determines Perma-Cache behavior (nullable)
-  --AWSSigningEnabled: string@bool-completer # Determines if the AWS signing should be enabled or not (nullable)
+  --AWSSigningEnabled: oneof<nothing, bool> # Determines if the AWS signing should be enabled or not (nullable)
   --AWSSigningKey: string # Sets the AWS signing key (nullable)
   --AWSSigningRegionName: string # Sets the AWS signing region name (nullable)
   --AWSSigningSecret: string # Sets the AWS signing secret key (nullable)
-  --EnableOriginShield: string@bool-completer # Determines if the origin shield should be enabled (nullable)
+  --EnableOriginShield: oneof<nothing, bool> # Determines if the origin shield should be enabled (nullable)
   --OriginShieldZoneCode: string # Determines the zone code where the origin shield should be set up (nullable)
-  --EnableTLS1: string@bool-completer # Determines if the TLS 1 should be enabled on this zone (nullable)
-  --EnableTLS1-1: string@bool-completer # Determines if the TLS 1.1 should be enabled on this zone (nullable)
-  --CacheErrorResponses: string@bool-completer # Determines if the cache error responses should be enabled on the zone (nullable)
-  --VerifyOriginSSL: string@bool-completer # Determines if the SSL certificate should be verified when connecting to the origin (nullable)
-  --LogForwardingEnabled: string@bool-completer # Sets the log forwarding token for the zone (nullable)
+  --EnableTLS1: oneof<nothing, bool> # Determines if the TLS 1 should be enabled on this zone (nullable)
+  --EnableTLS1-1: oneof<nothing, bool> # Determines if the TLS 1.1 should be enabled on this zone (nullable)
+  --CacheErrorResponses: oneof<nothing, bool> # Determines if the cache error responses should be enabled on the zone (nullable)
+  --VerifyOriginSSL: oneof<nothing, bool> # Determines if the SSL certificate should be verified when connecting to the origin (nullable)
+  --LogForwardingEnabled: oneof<nothing, bool> # Sets the log forwarding token for the zone (nullable)
   --LogForwardingHostname: string # Sets the log forwarding destination hostname for the zone (nullable)
   --LogForwardingPort: int # Sets the log forwarding port for the zone (nullable, format: int32)
   --LogForwardingToken: string # Sets the log forwarding token for the zone (nullable)
   --LogForwardingProtocol: any # Sets the log forwarding protocol type (nullable)
-  --LoggingSaveToStorage: string@bool-completer # Determines if the logging permanent storage should be enabled (nullable)
+  --LoggingSaveToStorage: oneof<nothing, bool> # Determines if the logging permanent storage should be enabled (nullable)
   --LoggingStorageZoneId: int # Sets the Storage Zone id that should contain the logs from this Pull Zone (nullable, format: int64)
-  --FollowRedirects: string@bool-completer # Determines if the zone should follow redirects return by the oprigin and cache the response (nullable)
+  --FollowRedirects: oneof<nothing, bool> # Determines if the zone should follow redirects return by the oprigin and cache the response (nullable)
   --ConnectionLimitPerIPCount: int # Determines the maximum number of connections per IP that will be allowed to connect to this Pull Zone (nullable, format: int32)
   --RequestLimit: int # Determines the maximum number of requests per second that will be allowed to connect to this Pull Zone (nullable, format: int32)
   --LimitRateAfter: float # Determines the amount of traffic transferred before the client is limited (nullable, format: double)
   --LimitRatePerSecond: int # Determines the maximum number of requests per second coming from a single IP before it is blocked. (nullable, format: int32)
   --BurstSize: int # Determines the maximum burst requests before an IP is blocked (nullable, format: int32)
-  --ErrorPageEnableCustomCode: string@bool-completer # Determines if custom error page code should be enabled. (nullable)
+  --ErrorPageEnableCustomCode: oneof<nothing, bool> # Determines if custom error page code should be enabled. (nullable)
   --ErrorPageCustomCode: string # Contains the custom error page code that will be returned (nullable)
-  --ErrorPageEnableStatuspageWidget: string@bool-completer # Determines if the statuspage widget should be displayed on the error pages (nullable)
+  --ErrorPageEnableStatuspageWidget: oneof<nothing, bool> # Determines if the statuspage widget should be displayed on the error pages (nullable)
   --ErrorPageStatuspageCode: string # The statuspage code that will be used to build the status widget (nullable)
-  --ErrorPageWhitelabel: string@bool-completer # Determines if the error pages should be whitelabel or not (nullable)
-  --OptimizerEnabled: string@bool-completer # Determines if the optimizer should be enabled for this zone (nullable)
-  --OptimizerTunnelEnabled: string@bool-completer # Determines if the optimizer origin tunnel system should be enabled for this zone (nullable)
+  --ErrorPageWhitelabel: oneof<nothing, bool> # Determines if the error pages should be whitelabel or not (nullable)
+  --OptimizerEnabled: oneof<nothing, bool> # Determines if the optimizer should be enabled for this zone (nullable)
+  --OptimizerTunnelEnabled: oneof<nothing, bool> # Determines if the optimizer origin tunnel system should be enabled for this zone (nullable)
   --OptimizerDesktopMaxWidth: int # Determines the maximum automatic image size for desktop clients (nullable, format: int32)
   --OptimizerMobileMaxWidth: int # Determines the maximum automatic image size for mobile clients (nullable, format: int32)
   --OptimizerImageQuality: int # Determines the image quality for desktop clients (nullable, format: int32)
   --OptimizerMobileImageQuality: int # Determines the image quality for mobile clients (nullable, format: int32)
-  --OptimizerEnableWebP: string@bool-completer # Determines if the WebP optimization should be enabled (nullable)
-  --OptimizerPrerenderHtml: string@bool-completer # Determines if the SEO HTML prerender should be enabled (nullable)
-  --OptimizerEnableManipulationEngine: string@bool-completer # Determines the image manipulation should be enabled (nullable)
-  --OptimizerMinifyCSS: string@bool-completer # Determines if the CSS minifcation should be enabled (nullable)
-  --OptimizerMinifyJavaScript: string@bool-completer # Determines if the JavaScript minifcation should be enabled (nullable)
-  --OptimizerWatermarkEnabled: string@bool-completer # Determines if image watermarking should be enabled (nullable)
+  --OptimizerEnableWebP: oneof<nothing, bool> # Determines if the WebP optimization should be enabled (nullable)
+  --OptimizerPrerenderHtml: oneof<nothing, bool> # Determines if the SEO HTML prerender should be enabled (nullable)
+  --OptimizerEnableManipulationEngine: oneof<nothing, bool> # Determines the image manipulation should be enabled (nullable)
+  --OptimizerMinifyCSS: oneof<nothing, bool> # Determines if the CSS minifcation should be enabled (nullable)
+  --OptimizerMinifyJavaScript: oneof<nothing, bool> # Determines if the JavaScript minifcation should be enabled (nullable)
+  --OptimizerWatermarkEnabled: oneof<nothing, bool> # Determines if image watermarking should be enabled (nullable)
   --OptimizerWatermarkUrl: string # Sets the URL of the watermark image (nullable)
   --OptimizerWatermarkPosition: any # Sets the position of the watermark image (nullable)
   --OptimizerWatermarkOffset: float # Sets the offset of the watermark image (nullable, format: double)
   --OptimizerWatermarkMinImageSize: int # Sets the minimum image size to which the watermark will be added (nullable, format: int32)
-  --OptimizerAutomaticOptimizationEnabled: string@bool-completer # Determines if the automatic image optimization should be enabled (nullable)
+  --OptimizerAutomaticOptimizationEnabled: oneof<nothing, bool> # Determines if the automatic image optimization should be enabled (nullable)
   --OptimizerClasses: list # Determines the list of optimizer classes (nullable) — item shape: {Name?: string, Properties?: record}
-  --OptimizerForceClasses: string@bool-completer # Determines if the optimizer classes should be forced (nullable)
-  --OptimizerStaticHtmlEnabled: string@bool-completer # Determines whether optimizer static html feature enabled (nullable)
+  --OptimizerForceClasses: oneof<nothing, bool> # Determines if the optimizer classes should be forced (nullable)
+  --OptimizerStaticHtmlEnabled: oneof<nothing, bool> # Determines whether optimizer static html feature enabled (nullable)
   --OptimizerStaticHtmlWordPressPath: string # Wordpress html path which should be bypassed by permacache in edge rule (nullable)
   --OptimizerStaticHtmlWordPressBypassCookie: string # Wordpress cookie which should be bypassed by permacache in edge rule (nullable)
   --Type: any # The type of the pull zone. Premium = 0, Volume = 1 (nullable)
   --OriginRetries: int # The number of retries to the origin server (nullable, format: int32)
   --OriginConnectTimeout: int # The amount of seconds to wait when connecting to the origin. Otherwise the request will fail or retry. (nullable, format: int32)
   --OriginResponseTimeout: int # The amount of seconds to wait when waiting for the origin reply. Otherwise the request will fail or retry. (nullable, format: int32)
-  --UseStaleWhileUpdating: string@bool-completer # Determines if we should use stale cache while cache is updating (nullable)
-  --UseStaleWhileOffline: string@bool-completer # Determines if we should use stale cache while the origin is offline (nullable)
-  --OriginRetry5XXResponses: string@bool-completer # Determines if we should retry the request in case of a 5XX response. (nullable)
-  --OriginRetryConnectionTimeout: string@bool-completer # Determines if we should retry the request in case of a connection timeout. (nullable)
-  --OriginRetryResponseTimeout: string@bool-completer # Determines if we should retry the request in case of a response timeout. (nullable)
+  --UseStaleWhileUpdating: oneof<nothing, bool> # Determines if we should use stale cache while cache is updating (nullable)
+  --UseStaleWhileOffline: oneof<nothing, bool> # Determines if we should use stale cache while the origin is offline (nullable)
+  --OriginRetry5XXResponses: oneof<nothing, bool> # Determines if we should retry the request in case of a 5XX response. (nullable)
+  --OriginRetryConnectionTimeout: oneof<nothing, bool> # Determines if we should retry the request in case of a connection timeout. (nullable)
+  --OriginRetryResponseTimeout: oneof<nothing, bool> # Determines if we should retry the request in case of a response timeout. (nullable)
   --OriginRetryDelay: int # Determines the amount of time that the CDN should wait before retrying an origin request. (nullable, format: int32)
   --DnsOriginPort: int # Determines the origin port of the pull zone. (nullable, format: int32)
   --DnsOriginScheme: string # Determines the origin scheme of the pull zone. (nullable)
   --QueryStringVaryParameters: list # Contains the list of vary parameters that will be used for vary cache by query string. Only alphanumeric characters, dashes and underscores are allowed (values that contain other characters are ignorred). If empty, all parameters will be used to construct the key. (nullable)
-  --OriginShieldEnableConcurrencyLimit: string@bool-completer # Determines if the origin shield concurrency limit is enabled. (nullable)
+  --OriginShieldEnableConcurrencyLimit: oneof<nothing, bool> # Determines if the origin shield concurrency limit is enabled. (nullable)
   --OriginShieldMaxConcurrentRequests: int # Determines the number of maximum concurrent requests allowed to the origin. (nullable, format: int32)
-  --EnableCookieVary: string@bool-completer # Determines if the Cookie Vary feature is enabled. (nullable)
+  --EnableCookieVary: oneof<nothing, bool> # Determines if the Cookie Vary feature is enabled. (nullable)
   --CookieVaryParameters: list # Contains the list of vary parameters that will be used for vary cache by cookie string.Only alphanumeric characters, dashes and underscores are allowed (values that contain other characters are ignorred). If empty, cookie vary will not be used. (nullable)
-  --EnableSafeHop: string@bool-completer # nullable
+  --EnableSafeHop: oneof<nothing, bool> # nullable
   --OriginShieldQueueMaxWaitTime: int # Determines the max queue wait time (nullable, format: int32)
   --OriginShieldMaxQueuedRequests: int # Determines the max number of origin requests that will remain in the queue (nullable, format: int32)
-  --UseBackgroundUpdate: string@bool-completer # Determines if cache update is performed in the background. (nullable)
-  --EnableAutoSSL: string@bool-completer # If set to true, any hostnames added to this Pull Zone will automatically enable SSL. (nullable)
+  --UseBackgroundUpdate: oneof<nothing, bool> # Determines if cache update is performed in the background. (nullable)
+  --EnableAutoSSL: oneof<nothing, bool> # If set to true, any hostnames added to this Pull Zone will automatically enable SSL. (nullable)
   --LogAnonymizationType: any # Sets the log anonymization type for this pull zone (nullable)
   --StorageZoneId: int # The ID of the storage zone that will be used as the origin (nullable, format: int64)
   --EdgeScriptId: int # The ID of the edge script that will be used as the origin (nullable, format: int64)
@@ -617,27 +616,27 @@ export def "pullzone Add" [
   --LogFormat: any # nullable
   --LogForwardingFormat: any # nullable
   --ShieldDDosProtectionType: any # nullable
-  --ShieldDDosProtectionEnabled: string@bool-completer # nullable
+  --ShieldDDosProtectionEnabled: oneof<nothing, bool> # nullable
   --OriginHostHeader: string # Sets the host header that will be sent to the origin (nullable)
-  --EnableSmartCache: string@bool-completer # nullable
-  --EnableRequestCoalescing: string@bool-completer # Determines if request coalescing is currently enabled. (nullable)
+  --EnableSmartCache: oneof<nothing, bool> # nullable
+  --EnableRequestCoalescing: oneof<nothing, bool> # Determines if request coalescing is currently enabled. (nullable)
   --RequestCoalescingTimeout: int # Determines the lock time for coalesced requests. (nullable, format: int32)
-  --DisableLetsEncrypt: string@bool-completer # If set to true, the built-in let's encrypt will be disabled and requests are passed to the origin. (nullable)
-  --EnableBunnyImageAi: string@bool-completer # nullable
+  --DisableLetsEncrypt: oneof<nothing, bool> # If set to true, the built-in let's encrypt will be disabled and requests are passed to the origin. (nullable)
+  --EnableBunnyImageAi: oneof<nothing, bool> # nullable
   --BunnyAiImageBlueprints: list # nullable — item shape: {Name?: string, Properties?: record}
-  --PreloadingScreenEnabled: string@bool-completer # Determines if the preloading screen is currently enabled (nullable)
+  --PreloadingScreenEnabled: oneof<nothing, bool> # Determines if the preloading screen is currently enabled (nullable)
   --PreloadingScreenCode: string # The custom preloading screen coed (nullable)
   --PreloadingScreenLogoUrl: string # The preloading screen logo URL (nullable)
-  --PreloadingScreenShowOnFirstVisit: string@bool-completer # Determines if the preloading screen is shown on the first load from a user.
+  --PreloadingScreenShowOnFirstVisit: oneof<nothing, bool> # Determines if the preloading screen is shown on the first load from a user.
   --PreloadingScreenTheme: any # The currently configured preloading screem theme. (0 - Light, 1 - Dark) (nullable)
-  --PreloadingScreenCodeEnabled: string@bool-completer # Determines if the custom preloader screen should be enabled (nullable)
+  --PreloadingScreenCodeEnabled: oneof<nothing, bool> # Determines if the custom preloader screen should be enabled (nullable)
   --PreloadingScreenDelay: int # The delay in miliseconds after which the preloading screen will be displayed (0 - 10000ms) (nullable, format: int32)
   --RoutingFilters: list # The list of routing filters enabled for this zone (nullable)
   --StickySessionType: any # Whether to use a Sticky Session mechanism for this pull zone (nullable)
   --StickySessionCookieName: string # Sticky Session Cookie Name (nullable)
   --StickySessionClientHeaders: string # A set of comma-separated header names used to identify clients (nullable)
-  --OptimizerEnableUpscaling: string@bool-completer # Determines if Optimizer is allowed to upscale images (nullable)
-  --EnableWebSockets: string@bool-completer # Determines if WebSocket connections are allowed for this Pull Zone. (nullable)
+  --OptimizerEnableUpscaling: oneof<nothing, bool> # Determines if Optimizer is allowed to upscale images (nullable)
+  --EnableWebSockets: oneof<nothing, bool> # Determines if WebSocket connections are allowed for this Pull Zone. (nullable)
   --MaxWebSocketConnections: int # The maximum global simultaneous WebSocket connections allowed for this Pull Zone. Allowed tiers: 500, 1,000, 2,500, 5,000, 10,000, 25,000. If you send a non-tier value, the value is rounded up to the next tier. Values over 25,000 are rejected, please contact sales if required. (nullable, format: int32)
   --CacheKeyHeaders: string # Vary Cache by Request Headers (comma delimited) (nullable)
   Name: string # The name of the pull zone.
@@ -687,7 +686,7 @@ export def "pullzone Index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeCertificate: string@bool-completer # Determines if the result hostnames should contain the SSL certificate (default: false)
+  --includeCertificate: oneof<nothing, bool> # Determines if the result hostnames should contain the SSL certificate (default: false)
 ]: nothing -> record<Id: int, Name: string, OriginUrl: string, Enabled: bool, Suspended: bool, Hostnames: table<Id: int, Value: string, ForceSSL: bool, IsSystemHostname: bool, IsManagedHostname: bool, HasCertificate: bool, Certificate: string, CertificateKey: string, CertificateKeyType: any, CertificateProvisionType: any>, StorageZoneId: int, EdgeScriptId: int, EdgeScriptExecutionPhase: any, MiddlewareScriptId: int, MagicContainersAppId: string, MagicContainersEndpointId: string, AllowedReferrers: list<string>, BlockedReferrers: list<string>, BlockedIps: list<string>, EnableGeoZoneUS: bool, EnableGeoZoneEU: bool, EnableGeoZoneASIA: bool, EnableGeoZoneSA: bool, EnableGeoZoneAF: bool, ZoneSecurityEnabled: bool, ZoneSecurityKey: string, ZoneSecurityIncludeHashRemoteIP: bool, IgnoreQueryStrings: bool, MonthlyBandwidthLimit: int, MonthlyBandwidthUsed: int, MonthlyCharges: float, AddHostHeader: bool, OriginHostHeader: string, Type: any, AccessControlOriginHeaderExtensions: list<string>, EnableAccessControlOriginHeader: bool, DisableCookies: bool, BudgetRedirectedCountries: list<string>, BlockedCountries: list<string>, EnableOriginShield: bool, CacheControlMaxAgeOverride: int, CacheControlPublicMaxAgeOverride: int, BurstSize: int, RequestLimit: int, BlockRootPathAccess: bool, BlockPostRequests: bool, LimitRatePerSecond: float, LimitRateAfter: float, ConnectionLimitPerIPCount: int, PriceOverride: float, OptimizerPricing: float, AddCanonicalHeader: bool, EnableLogging: bool, EnableCacheSlice: bool, EnableSmartCache: bool, EdgeRules: table<Guid: string, ActionType: any, ActionParameter1: string, ActionParameter2: string, ActionParameter3: string, Triggers: list, ExtraActions: list, TriggerMatchingType: any, Description: string, Enabled: bool, OrderIndex: int, ReadOnly: bool>, EnableWebPVary: bool, EnableAvifVary: bool, EnableCountryCodeVary: bool, EnableCountryStateCodeVary: bool, EnableMobileVary: bool, EnableCookieVary: bool, CookieVaryParameters: list<string>, EnableHostnameVary: bool, CnameDomain: string, AWSSigningEnabled: bool, AWSSigningKey: string, AWSSigningSecret: string, AWSSigningRegionName: string, LoggingIPAnonymizationEnabled: bool, EnableTLS1: bool, EnableTLS1_1: bool, VerifyOriginSSL: bool, ErrorPageEnableCustomCode: bool, ErrorPageCustomCode: string, ErrorPageEnableStatuspageWidget: bool, ErrorPageStatuspageCode: string, ErrorPageWhitelabel: bool, OriginShieldZoneCode: string, LogForwardingEnabled: bool, LogForwardingHostname: string, LogForwardingPort: int, LogForwardingToken: string, LogForwardingProtocol: any, LoggingSaveToStorage: bool, LoggingStorageZoneId: int, FollowRedirects: bool, VideoLibraryId: int, DnsRecordId: int, DnsZoneId: int, DnsRecordValue: string, OptimizerEnabled: bool, OptimizerTunnelEnabled: bool, OptimizerDesktopMaxWidth: int, OptimizerMobileMaxWidth: int, OptimizerImageQuality: int, OptimizerMobileImageQuality: int, OptimizerEnableWebP: bool, OptimizerPrerenderHtml: bool, OptimizerEnableManipulationEngine: bool, OptimizerMinifyCSS: bool, OptimizerMinifyJavaScript: bool, OptimizerWatermarkEnabled: bool, OptimizerWatermarkUrl: string, OptimizerWatermarkPosition: any, OptimizerWatermarkOffset: float, OptimizerWatermarkMinImageSize: int, OptimizerAutomaticOptimizationEnabled: bool, PermaCacheStorageZoneId: int, PermaCacheType: any, OriginRetries: int, OriginConnectTimeout: int, OriginResponseTimeout: int, UseStaleWhileUpdating: bool, UseStaleWhileOffline: bool, OriginRetry5XXResponses: bool, OriginRetryConnectionTimeout: bool, OriginRetryResponseTimeout: bool, OriginRetryDelay: int, QueryStringVaryParameters: list<string>, OriginShieldEnableConcurrencyLimit: bool, OriginShieldMaxConcurrentRequests: int, EnableSafeHop: bool, CacheErrorResponses: bool, OriginShieldQueueMaxWaitTime: int, OriginShieldMaxQueuedRequests: int, OptimizerClasses: table<Name: string, Properties: record>, OptimizerForceClasses: bool, OptimizerStaticHtmlEnabled: bool, OptimizerStaticHtmlWordPressPath: string, OptimizerStaticHtmlWordPressBypassCookie: string, UseBackgroundUpdate: bool, EnableAutoSSL: bool, EnableQueryStringOrdering: bool, LogAnonymizationType: any, LogFormat: int, LogForwardingFormat: int, ShieldDDosProtectionType: int, ShieldDDosProtectionEnabled: bool, OriginType: any, EnableRequestCoalescing: bool, RequestCoalescingTimeout: int, OriginLinkValue: string, DisableLetsEncrypt: bool, EnableBunnyImageAi: bool, BunnyAiImageBlueprints: table<Name: string, Properties: record>, PreloadingScreenEnabled: bool, PreloadingScreenShowOnFirstVisit: bool, PreloadingScreenCode: string, PreloadingScreenLogoUrl: string, PreloadingScreenCodeEnabled: bool, PreloadingScreenTheme: any, PreloadingScreenDelay: int, EUUSDiscount: int, SouthAmericaDiscount: int, AfricaDiscount: int, AsiaOceaniaDiscount: int, RoutingFilters: list<string>, BlockNoneReferrer: bool, StickySessionType: any, StickySessionCookieName: string, StickySessionClientHeaders: string, UserId: string, CacheVersion: int, OptimizerEnableUpscaling: bool, EnableWebSockets: bool, MaxWebSocketConnections: int, EnableExtendedLogging: bool, CacheKeyHeaders: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
@@ -716,113 +715,113 @@ export def "pullzone UpdatePullZone" [
   --OriginUrl: string # Sets the origin URL of the Pull Zone (nullable)
   --AllowedReferrers: list # Sets the list of referrer hostnames that are allowed to access the pull zone. Requests containing the header Referer: hostname that is not on the list will be rejected. If empty, all the referrers are allowed (nullable)
   --BlockedReferrers: list # Sets the list of referrer hostnames that are blocked from accessing the pull zone. (nullable)
-  --BlockNoneReferrer: string@bool-completer # nullable
+  --BlockNoneReferrer: oneof<nothing, bool> # nullable
   --BlockedIps: list # Sets the list of IPs that are blocked from accessing the pull zone. Requests coming from the following IPs will be rejected. If empty, all the IPs will be allowed (nullable)
-  --EnableGeoZoneUS: string@bool-completer # Determines if the delivery from the North America region should be enabled for this pull zone (nullable)
-  --EnableGeoZoneEU: string@bool-completer # Determines if the delivery from the Europe region should be enabled for this pull zone (nullable)
-  --EnableGeoZoneASIA: string@bool-completer # Determines if the delivery from the Asia / Oceania regions should be enabled for this pull zone (nullable)
-  --EnableGeoZoneSA: string@bool-completer # Determines if the delivery from the South America region should be enabled for this pull zone (nullable)
-  --EnableGeoZoneAF: string@bool-completer # Determines if the delivery from the Africa region should be enabled for this pull zone (nullable)
-  --BlockRootPathAccess: string@bool-completer # Determines if the zone should block requests to the root of the zone. (nullable)
-  --BlockPostRequests: string@bool-completer # Determines if the POST requests to this zone should be rejected. (nullable)
-  --EnableQueryStringOrdering: string@bool-completer # Determines if the query string ordering should be enabled. (nullable)
-  --EnableWebpVary: string@bool-completer # Determines if the WebP Vary feature should be enabled. (nullable)
-  --EnableAvifVary: string@bool-completer # Determines if the AVIF Vary feature should be enabled. (nullable)
-  --EnableMobileVary: string@bool-completer # Determines if the Mobile Vary feature is enabled. (nullable)
-  --EnableCountryCodeVary: string@bool-completer # Determines if the Country Code Vary feature should be enabled. (nullable)
-  --EnableCountryStateCodeVary: string@bool-completer # Determines if the Country State Code Vary feature should be enabled. (nullable)
-  --EnableHostnameVary: string@bool-completer # Determines if the Hostname Vary feature should be enabled. (nullable)
-  --EnableCacheSlice: string@bool-completer # Determines if cache slicing (Optimize for video) should be enabled for this zone (nullable)
-  --ZoneSecurityEnabled: string@bool-completer # Determines if the zone token authentication security should be enabled (nullable)
-  --ZoneSecurityIncludeHashRemoteIP: string@bool-completer # Determines if the token authentication IP validation should be enabled (nullable)
-  --IgnoreQueryStrings: string@bool-completer # Determines if the Pull Zone should ignore query strings when serving cached objects (Vary by Query String) (nullable)
+  --EnableGeoZoneUS: oneof<nothing, bool> # Determines if the delivery from the North America region should be enabled for this pull zone (nullable)
+  --EnableGeoZoneEU: oneof<nothing, bool> # Determines if the delivery from the Europe region should be enabled for this pull zone (nullable)
+  --EnableGeoZoneASIA: oneof<nothing, bool> # Determines if the delivery from the Asia / Oceania regions should be enabled for this pull zone (nullable)
+  --EnableGeoZoneSA: oneof<nothing, bool> # Determines if the delivery from the South America region should be enabled for this pull zone (nullable)
+  --EnableGeoZoneAF: oneof<nothing, bool> # Determines if the delivery from the Africa region should be enabled for this pull zone (nullable)
+  --BlockRootPathAccess: oneof<nothing, bool> # Determines if the zone should block requests to the root of the zone. (nullable)
+  --BlockPostRequests: oneof<nothing, bool> # Determines if the POST requests to this zone should be rejected. (nullable)
+  --EnableQueryStringOrdering: oneof<nothing, bool> # Determines if the query string ordering should be enabled. (nullable)
+  --EnableWebpVary: oneof<nothing, bool> # Determines if the WebP Vary feature should be enabled. (nullable)
+  --EnableAvifVary: oneof<nothing, bool> # Determines if the AVIF Vary feature should be enabled. (nullable)
+  --EnableMobileVary: oneof<nothing, bool> # Determines if the Mobile Vary feature is enabled. (nullable)
+  --EnableCountryCodeVary: oneof<nothing, bool> # Determines if the Country Code Vary feature should be enabled. (nullable)
+  --EnableCountryStateCodeVary: oneof<nothing, bool> # Determines if the Country State Code Vary feature should be enabled. (nullable)
+  --EnableHostnameVary: oneof<nothing, bool> # Determines if the Hostname Vary feature should be enabled. (nullable)
+  --EnableCacheSlice: oneof<nothing, bool> # Determines if cache slicing (Optimize for video) should be enabled for this zone (nullable)
+  --ZoneSecurityEnabled: oneof<nothing, bool> # Determines if the zone token authentication security should be enabled (nullable)
+  --ZoneSecurityIncludeHashRemoteIP: oneof<nothing, bool> # Determines if the token authentication IP validation should be enabled (nullable)
+  --IgnoreQueryStrings: oneof<nothing, bool> # Determines if the Pull Zone should ignore query strings when serving cached objects (Vary by Query String) (nullable)
   --MonthlyBandwidthLimit: int # Sets the monthly limit of bandwidth in bytes that the pullzone is allowed to use (nullable, format: int64)
   --AccessControlOriginHeaderExtensions: list # Sets the list of extensions that will return the CORS headers (nullable)
-  --EnableAccessControlOriginHeader: string@bool-completer # Determines if CORS headers should be enabled (nullable)
-  --DisableCookies: string@bool-completer # Determines if the Pull Zone should automatically remove cookies from the responses (nullable)
+  --EnableAccessControlOriginHeader: oneof<nothing, bool> # Determines if CORS headers should be enabled (nullable)
+  --DisableCookies: oneof<nothing, bool> # Determines if the Pull Zone should automatically remove cookies from the responses (nullable)
   --BudgetRedirectedCountries: list # Sets the list of two letter Alpha2 country codes that will be redirected to the cheapest possible region (nullable)
   --BlockedCountries: list # Sets the list of two letter Alpha2 country codes that will be blocked from accessing the zone (nullable)
   --CacheControlMaxAgeOverride: int # Sets the cache control override setting for this zone (nullable, format: int64)
   --CacheControlPublicMaxAgeOverride: int # Sets the browser cache control override setting for this zone (nullable, format: int64)
   --CacheControlBrowserMaxAgeOverride: int # (Deprecated) Sets the browser cache control override setting for this zone (nullable, format: int64)
-  --AddHostHeader: string@bool-completer # Determines if the zone should forward the requested host header to the origin (nullable)
-  --AddCanonicalHeader: string@bool-completer # Determines if the canonical header should be added by this zone (nullable)
-  --EnableLogging: string@bool-completer # Determines if the logging should be enabled for this zone (nullable)
-  --LoggingIPAnonymizationEnabled: string@bool-completer # Determines if the log anonoymization should be enabled (nullable)
+  --AddHostHeader: oneof<nothing, bool> # Determines if the zone should forward the requested host header to the origin (nullable)
+  --AddCanonicalHeader: oneof<nothing, bool> # Determines if the canonical header should be added by this zone (nullable)
+  --EnableLogging: oneof<nothing, bool> # Determines if the logging should be enabled for this zone (nullable)
+  --LoggingIPAnonymizationEnabled: oneof<nothing, bool> # Determines if the log anonoymization should be enabled (nullable)
   --PermaCacheStorageZoneId: int # The ID of the storage zone that should be used as the Perma-Cache (nullable, format: int64)
   --PermaCacheType: any # Determines Perma-Cache behavior (nullable)
-  --AWSSigningEnabled: string@bool-completer # Determines if the AWS signing should be enabled or not (nullable)
+  --AWSSigningEnabled: oneof<nothing, bool> # Determines if the AWS signing should be enabled or not (nullable)
   --AWSSigningKey: string # Sets the AWS signing key (nullable)
   --AWSSigningRegionName: string # Sets the AWS signing region name (nullable)
   --AWSSigningSecret: string # Sets the AWS signing secret key (nullable)
-  --EnableOriginShield: string@bool-completer # Determines if the origin shield should be enabled (nullable)
+  --EnableOriginShield: oneof<nothing, bool> # Determines if the origin shield should be enabled (nullable)
   --OriginShieldZoneCode: string # Determines the zone code where the origin shield should be set up (nullable)
-  --EnableTLS1: string@bool-completer # Determines if the TLS 1 should be enabled on this zone (nullable)
-  --EnableTLS1-1: string@bool-completer # Determines if the TLS 1.1 should be enabled on this zone (nullable)
-  --CacheErrorResponses: string@bool-completer # Determines if the cache error responses should be enabled on the zone (nullable)
-  --VerifyOriginSSL: string@bool-completer # Determines if the SSL certificate should be verified when connecting to the origin (nullable)
-  --LogForwardingEnabled: string@bool-completer # Sets the log forwarding token for the zone (nullable)
+  --EnableTLS1: oneof<nothing, bool> # Determines if the TLS 1 should be enabled on this zone (nullable)
+  --EnableTLS1-1: oneof<nothing, bool> # Determines if the TLS 1.1 should be enabled on this zone (nullable)
+  --CacheErrorResponses: oneof<nothing, bool> # Determines if the cache error responses should be enabled on the zone (nullable)
+  --VerifyOriginSSL: oneof<nothing, bool> # Determines if the SSL certificate should be verified when connecting to the origin (nullable)
+  --LogForwardingEnabled: oneof<nothing, bool> # Sets the log forwarding token for the zone (nullable)
   --LogForwardingHostname: string # Sets the log forwarding destination hostname for the zone (nullable)
   --LogForwardingPort: int # Sets the log forwarding port for the zone (nullable, format: int32)
   --LogForwardingToken: string # Sets the log forwarding token for the zone (nullable)
   --LogForwardingProtocol: any # Sets the log forwarding protocol type (nullable)
-  --LoggingSaveToStorage: string@bool-completer # Determines if the logging permanent storage should be enabled (nullable)
+  --LoggingSaveToStorage: oneof<nothing, bool> # Determines if the logging permanent storage should be enabled (nullable)
   --LoggingStorageZoneId: int # Sets the Storage Zone id that should contain the logs from this Pull Zone (nullable, format: int64)
-  --FollowRedirects: string@bool-completer # Determines if the zone should follow redirects return by the oprigin and cache the response (nullable)
+  --FollowRedirects: oneof<nothing, bool> # Determines if the zone should follow redirects return by the oprigin and cache the response (nullable)
   --ConnectionLimitPerIPCount: int # Determines the maximum number of connections per IP that will be allowed to connect to this Pull Zone (nullable, format: int32)
   --RequestLimit: int # Determines the maximum number of requests per second that will be allowed to connect to this Pull Zone (nullable, format: int32)
   --LimitRateAfter: float # Determines the amount of traffic transferred before the client is limited (nullable, format: double)
   --LimitRatePerSecond: int # Determines the maximum number of requests per second coming from a single IP before it is blocked. (nullable, format: int32)
   --BurstSize: int # Determines the maximum burst requests before an IP is blocked (nullable, format: int32)
-  --ErrorPageEnableCustomCode: string@bool-completer # Determines if custom error page code should be enabled. (nullable)
+  --ErrorPageEnableCustomCode: oneof<nothing, bool> # Determines if custom error page code should be enabled. (nullable)
   --ErrorPageCustomCode: string # Contains the custom error page code that will be returned (nullable)
-  --ErrorPageEnableStatuspageWidget: string@bool-completer # Determines if the statuspage widget should be displayed on the error pages (nullable)
+  --ErrorPageEnableStatuspageWidget: oneof<nothing, bool> # Determines if the statuspage widget should be displayed on the error pages (nullable)
   --ErrorPageStatuspageCode: string # The statuspage code that will be used to build the status widget (nullable)
-  --ErrorPageWhitelabel: string@bool-completer # Determines if the error pages should be whitelabel or not (nullable)
-  --OptimizerEnabled: string@bool-completer # Determines if the optimizer should be enabled for this zone (nullable)
-  --OptimizerTunnelEnabled: string@bool-completer # Determines if the optimizer origin tunnel system should be enabled for this zone (nullable)
+  --ErrorPageWhitelabel: oneof<nothing, bool> # Determines if the error pages should be whitelabel or not (nullable)
+  --OptimizerEnabled: oneof<nothing, bool> # Determines if the optimizer should be enabled for this zone (nullable)
+  --OptimizerTunnelEnabled: oneof<nothing, bool> # Determines if the optimizer origin tunnel system should be enabled for this zone (nullable)
   --OptimizerDesktopMaxWidth: int # Determines the maximum automatic image size for desktop clients (nullable, format: int32)
   --OptimizerMobileMaxWidth: int # Determines the maximum automatic image size for mobile clients (nullable, format: int32)
   --OptimizerImageQuality: int # Determines the image quality for desktop clients (nullable, format: int32)
   --OptimizerMobileImageQuality: int # Determines the image quality for mobile clients (nullable, format: int32)
-  --OptimizerEnableWebP: string@bool-completer # Determines if the WebP optimization should be enabled (nullable)
-  --OptimizerPrerenderHtml: string@bool-completer # Determines if the SEO HTML prerender should be enabled (nullable)
-  --OptimizerEnableManipulationEngine: string@bool-completer # Determines the image manipulation should be enabled (nullable)
-  --OptimizerMinifyCSS: string@bool-completer # Determines if the CSS minifcation should be enabled (nullable)
-  --OptimizerMinifyJavaScript: string@bool-completer # Determines if the JavaScript minifcation should be enabled (nullable)
-  --OptimizerWatermarkEnabled: string@bool-completer # Determines if image watermarking should be enabled (nullable)
+  --OptimizerEnableWebP: oneof<nothing, bool> # Determines if the WebP optimization should be enabled (nullable)
+  --OptimizerPrerenderHtml: oneof<nothing, bool> # Determines if the SEO HTML prerender should be enabled (nullable)
+  --OptimizerEnableManipulationEngine: oneof<nothing, bool> # Determines the image manipulation should be enabled (nullable)
+  --OptimizerMinifyCSS: oneof<nothing, bool> # Determines if the CSS minifcation should be enabled (nullable)
+  --OptimizerMinifyJavaScript: oneof<nothing, bool> # Determines if the JavaScript minifcation should be enabled (nullable)
+  --OptimizerWatermarkEnabled: oneof<nothing, bool> # Determines if image watermarking should be enabled (nullable)
   --OptimizerWatermarkUrl: string # Sets the URL of the watermark image (nullable)
   --OptimizerWatermarkPosition: any # Sets the position of the watermark image (nullable)
   --OptimizerWatermarkOffset: float # Sets the offset of the watermark image (nullable, format: double)
   --OptimizerWatermarkMinImageSize: int # Sets the minimum image size to which the watermark will be added (nullable, format: int32)
-  --OptimizerAutomaticOptimizationEnabled: string@bool-completer # Determines if the automatic image optimization should be enabled (nullable)
+  --OptimizerAutomaticOptimizationEnabled: oneof<nothing, bool> # Determines if the automatic image optimization should be enabled (nullable)
   --OptimizerClasses: list # Determines the list of optimizer classes (nullable) — item shape: {Name?: string, Properties?: record}
-  --OptimizerForceClasses: string@bool-completer # Determines if the optimizer classes should be forced (nullable)
-  --OptimizerStaticHtmlEnabled: string@bool-completer # Determines whether optimizer static html feature enabled (nullable)
+  --OptimizerForceClasses: oneof<nothing, bool> # Determines if the optimizer classes should be forced (nullable)
+  --OptimizerStaticHtmlEnabled: oneof<nothing, bool> # Determines whether optimizer static html feature enabled (nullable)
   --OptimizerStaticHtmlWordPressPath: string # Wordpress html path which should be bypassed by permacache in edge rule (nullable)
   --OptimizerStaticHtmlWordPressBypassCookie: string # Wordpress cookie which should be bypassed by permacache in edge rule (nullable)
   --Type: any # The type of the pull zone. Premium = 0, Volume = 1 (nullable)
   --OriginRetries: int # The number of retries to the origin server (nullable, format: int32)
   --OriginConnectTimeout: int # The amount of seconds to wait when connecting to the origin. Otherwise the request will fail or retry. (nullable, format: int32)
   --OriginResponseTimeout: int # The amount of seconds to wait when waiting for the origin reply. Otherwise the request will fail or retry. (nullable, format: int32)
-  --UseStaleWhileUpdating: string@bool-completer # Determines if we should use stale cache while cache is updating (nullable)
-  --UseStaleWhileOffline: string@bool-completer # Determines if we should use stale cache while the origin is offline (nullable)
-  --OriginRetry5XXResponses: string@bool-completer # Determines if we should retry the request in case of a 5XX response. (nullable)
-  --OriginRetryConnectionTimeout: string@bool-completer # Determines if we should retry the request in case of a connection timeout. (nullable)
-  --OriginRetryResponseTimeout: string@bool-completer # Determines if we should retry the request in case of a response timeout. (nullable)
+  --UseStaleWhileUpdating: oneof<nothing, bool> # Determines if we should use stale cache while cache is updating (nullable)
+  --UseStaleWhileOffline: oneof<nothing, bool> # Determines if we should use stale cache while the origin is offline (nullable)
+  --OriginRetry5XXResponses: oneof<nothing, bool> # Determines if we should retry the request in case of a 5XX response. (nullable)
+  --OriginRetryConnectionTimeout: oneof<nothing, bool> # Determines if we should retry the request in case of a connection timeout. (nullable)
+  --OriginRetryResponseTimeout: oneof<nothing, bool> # Determines if we should retry the request in case of a response timeout. (nullable)
   --OriginRetryDelay: int # Determines the amount of time that the CDN should wait before retrying an origin request. (nullable, format: int32)
   --DnsOriginPort: int # Determines the origin port of the pull zone. (nullable, format: int32)
   --DnsOriginScheme: string # Determines the origin scheme of the pull zone. (nullable)
   --QueryStringVaryParameters: list # Contains the list of vary parameters that will be used for vary cache by query string. Only alphanumeric characters, dashes and underscores are allowed (values that contain other characters are ignorred). If empty, all parameters will be used to construct the key. (nullable)
-  --OriginShieldEnableConcurrencyLimit: string@bool-completer # Determines if the origin shield concurrency limit is enabled. (nullable)
+  --OriginShieldEnableConcurrencyLimit: oneof<nothing, bool> # Determines if the origin shield concurrency limit is enabled. (nullable)
   --OriginShieldMaxConcurrentRequests: int # Determines the number of maximum concurrent requests allowed to the origin. (nullable, format: int32)
-  --EnableCookieVary: string@bool-completer # Determines if the Cookie Vary feature is enabled. (nullable)
+  --EnableCookieVary: oneof<nothing, bool> # Determines if the Cookie Vary feature is enabled. (nullable)
   --CookieVaryParameters: list # Contains the list of vary parameters that will be used for vary cache by cookie string.Only alphanumeric characters, dashes and underscores are allowed (values that contain other characters are ignorred). If empty, cookie vary will not be used. (nullable)
-  --EnableSafeHop: string@bool-completer # nullable
+  --EnableSafeHop: oneof<nothing, bool> # nullable
   --OriginShieldQueueMaxWaitTime: int # Determines the max queue wait time (nullable, format: int32)
   --OriginShieldMaxQueuedRequests: int # Determines the max number of origin requests that will remain in the queue (nullable, format: int32)
-  --UseBackgroundUpdate: string@bool-completer # Determines if cache update is performed in the background. (nullable)
-  --EnableAutoSSL: string@bool-completer # If set to true, any hostnames added to this Pull Zone will automatically enable SSL. (nullable)
+  --UseBackgroundUpdate: oneof<nothing, bool> # Determines if cache update is performed in the background. (nullable)
+  --EnableAutoSSL: oneof<nothing, bool> # If set to true, any hostnames added to this Pull Zone will automatically enable SSL. (nullable)
   --LogAnonymizationType: any # Sets the log anonymization type for this pull zone (nullable)
   --StorageZoneId: int # The ID of the storage zone that will be used as the origin (nullable, format: int64)
   --EdgeScriptId: int # The ID of the edge script that will be used as the origin (nullable, format: int64)
@@ -834,27 +833,27 @@ export def "pullzone UpdatePullZone" [
   --LogFormat: any # nullable
   --LogForwardingFormat: any # nullable
   --ShieldDDosProtectionType: any # nullable
-  --ShieldDDosProtectionEnabled: string@bool-completer # nullable
+  --ShieldDDosProtectionEnabled: oneof<nothing, bool> # nullable
   --OriginHostHeader: string # Sets the host header that will be sent to the origin (nullable)
-  --EnableSmartCache: string@bool-completer # nullable
-  --EnableRequestCoalescing: string@bool-completer # Determines if request coalescing is currently enabled. (nullable)
+  --EnableSmartCache: oneof<nothing, bool> # nullable
+  --EnableRequestCoalescing: oneof<nothing, bool> # Determines if request coalescing is currently enabled. (nullable)
   --RequestCoalescingTimeout: int # Determines the lock time for coalesced requests. (nullable, format: int32)
-  --DisableLetsEncrypt: string@bool-completer # If set to true, the built-in let's encrypt will be disabled and requests are passed to the origin. (nullable)
-  --EnableBunnyImageAi: string@bool-completer # nullable
+  --DisableLetsEncrypt: oneof<nothing, bool> # If set to true, the built-in let's encrypt will be disabled and requests are passed to the origin. (nullable)
+  --EnableBunnyImageAi: oneof<nothing, bool> # nullable
   --BunnyAiImageBlueprints: list # nullable — item shape: {Name?: string, Properties?: record}
-  --PreloadingScreenEnabled: string@bool-completer # Determines if the preloading screen is currently enabled (nullable)
+  --PreloadingScreenEnabled: oneof<nothing, bool> # Determines if the preloading screen is currently enabled (nullable)
   --PreloadingScreenCode: string # The custom preloading screen coed (nullable)
   --PreloadingScreenLogoUrl: string # The preloading screen logo URL (nullable)
-  --PreloadingScreenShowOnFirstVisit: string@bool-completer # Determines if the preloading screen is shown on the first load from a user.
+  --PreloadingScreenShowOnFirstVisit: oneof<nothing, bool> # Determines if the preloading screen is shown on the first load from a user.
   --PreloadingScreenTheme: any # The currently configured preloading screem theme. (0 - Light, 1 - Dark) (nullable)
-  --PreloadingScreenCodeEnabled: string@bool-completer # Determines if the custom preloader screen should be enabled (nullable)
+  --PreloadingScreenCodeEnabled: oneof<nothing, bool> # Determines if the custom preloader screen should be enabled (nullable)
   --PreloadingScreenDelay: int # The delay in miliseconds after which the preloading screen will be displayed (0 - 10000ms) (nullable, format: int32)
   --RoutingFilters: list # The list of routing filters enabled for this zone (nullable)
   --StickySessionType: any # Whether to use a Sticky Session mechanism for this pull zone (nullable)
   --StickySessionCookieName: string # Sticky Session Cookie Name (nullable)
   --StickySessionClientHeaders: string # A set of comma-separated header names used to identify clients (nullable)
-  --OptimizerEnableUpscaling: string@bool-completer # Determines if Optimizer is allowed to upscale images (nullable)
-  --EnableWebSockets: string@bool-completer # Determines if WebSocket connections are allowed for this Pull Zone. (nullable)
+  --OptimizerEnableUpscaling: oneof<nothing, bool> # Determines if Optimizer is allowed to upscale images (nullable)
+  --EnableWebSockets: oneof<nothing, bool> # Determines if WebSocket connections are allowed for this Pull Zone. (nullable)
   --MaxWebSocketConnections: int # The maximum global simultaneous WebSocket connections allowed for this Pull Zone. Allowed tiers: 500, 1,000, 2,500, 5,000, 10,000, 25,000. If you send a non-tier value, the value is rounded up to the next tier. Values over 25,000 are rejected, please contact sales if required. (nullable, format: int32)
   --CacheKeyHeaders: string # Vary Cache by Request Headers (comma delimited) (nullable)
 ]: any -> record<Id: int, Name: string, OriginUrl: string, Enabled: bool, Suspended: bool, Hostnames: table<Id: int, Value: string, ForceSSL: bool, IsSystemHostname: bool, IsManagedHostname: bool, HasCertificate: bool, Certificate: string, CertificateKey: string, CertificateKeyType: any, CertificateProvisionType: any>, StorageZoneId: int, EdgeScriptId: int, EdgeScriptExecutionPhase: any, MiddlewareScriptId: int, MagicContainersAppId: string, MagicContainersEndpointId: string, AllowedReferrers: list<string>, BlockedReferrers: list<string>, BlockedIps: list<string>, EnableGeoZoneUS: bool, EnableGeoZoneEU: bool, EnableGeoZoneASIA: bool, EnableGeoZoneSA: bool, EnableGeoZoneAF: bool, ZoneSecurityEnabled: bool, ZoneSecurityKey: string, ZoneSecurityIncludeHashRemoteIP: bool, IgnoreQueryStrings: bool, MonthlyBandwidthLimit: int, MonthlyBandwidthUsed: int, MonthlyCharges: float, AddHostHeader: bool, OriginHostHeader: string, Type: any, AccessControlOriginHeaderExtensions: list<string>, EnableAccessControlOriginHeader: bool, DisableCookies: bool, BudgetRedirectedCountries: list<string>, BlockedCountries: list<string>, EnableOriginShield: bool, CacheControlMaxAgeOverride: int, CacheControlPublicMaxAgeOverride: int, BurstSize: int, RequestLimit: int, BlockRootPathAccess: bool, BlockPostRequests: bool, LimitRatePerSecond: float, LimitRateAfter: float, ConnectionLimitPerIPCount: int, PriceOverride: float, OptimizerPricing: float, AddCanonicalHeader: bool, EnableLogging: bool, EnableCacheSlice: bool, EnableSmartCache: bool, EdgeRules: table<Guid: string, ActionType: any, ActionParameter1: string, ActionParameter2: string, ActionParameter3: string, Triggers: list, ExtraActions: list, TriggerMatchingType: any, Description: string, Enabled: bool, OrderIndex: int, ReadOnly: bool>, EnableWebPVary: bool, EnableAvifVary: bool, EnableCountryCodeVary: bool, EnableCountryStateCodeVary: bool, EnableMobileVary: bool, EnableCookieVary: bool, CookieVaryParameters: list<string>, EnableHostnameVary: bool, CnameDomain: string, AWSSigningEnabled: bool, AWSSigningKey: string, AWSSigningSecret: string, AWSSigningRegionName: string, LoggingIPAnonymizationEnabled: bool, EnableTLS1: bool, EnableTLS1_1: bool, VerifyOriginSSL: bool, ErrorPageEnableCustomCode: bool, ErrorPageCustomCode: string, ErrorPageEnableStatuspageWidget: bool, ErrorPageStatuspageCode: string, ErrorPageWhitelabel: bool, OriginShieldZoneCode: string, LogForwardingEnabled: bool, LogForwardingHostname: string, LogForwardingPort: int, LogForwardingToken: string, LogForwardingProtocol: any, LoggingSaveToStorage: bool, LoggingStorageZoneId: int, FollowRedirects: bool, VideoLibraryId: int, DnsRecordId: int, DnsZoneId: int, DnsRecordValue: string, OptimizerEnabled: bool, OptimizerTunnelEnabled: bool, OptimizerDesktopMaxWidth: int, OptimizerMobileMaxWidth: int, OptimizerImageQuality: int, OptimizerMobileImageQuality: int, OptimizerEnableWebP: bool, OptimizerPrerenderHtml: bool, OptimizerEnableManipulationEngine: bool, OptimizerMinifyCSS: bool, OptimizerMinifyJavaScript: bool, OptimizerWatermarkEnabled: bool, OptimizerWatermarkUrl: string, OptimizerWatermarkPosition: any, OptimizerWatermarkOffset: float, OptimizerWatermarkMinImageSize: int, OptimizerAutomaticOptimizationEnabled: bool, PermaCacheStorageZoneId: int, PermaCacheType: any, OriginRetries: int, OriginConnectTimeout: int, OriginResponseTimeout: int, UseStaleWhileUpdating: bool, UseStaleWhileOffline: bool, OriginRetry5XXResponses: bool, OriginRetryConnectionTimeout: bool, OriginRetryResponseTimeout: bool, OriginRetryDelay: int, QueryStringVaryParameters: list<string>, OriginShieldEnableConcurrencyLimit: bool, OriginShieldMaxConcurrentRequests: int, EnableSafeHop: bool, CacheErrorResponses: bool, OriginShieldQueueMaxWaitTime: int, OriginShieldMaxQueuedRequests: int, OptimizerClasses: table<Name: string, Properties: record>, OptimizerForceClasses: bool, OptimizerStaticHtmlEnabled: bool, OptimizerStaticHtmlWordPressPath: string, OptimizerStaticHtmlWordPressBypassCookie: string, UseBackgroundUpdate: bool, EnableAutoSSL: bool, EnableQueryStringOrdering: bool, LogAnonymizationType: any, LogFormat: int, LogForwardingFormat: int, ShieldDDosProtectionType: int, ShieldDDosProtectionEnabled: bool, OriginType: any, EnableRequestCoalescing: bool, RequestCoalescingTimeout: int, OriginLinkValue: string, DisableLetsEncrypt: bool, EnableBunnyImageAi: bool, BunnyAiImageBlueprints: table<Name: string, Properties: record>, PreloadingScreenEnabled: bool, PreloadingScreenShowOnFirstVisit: bool, PreloadingScreenCode: string, PreloadingScreenLogoUrl: string, PreloadingScreenCodeEnabled: bool, PreloadingScreenTheme: any, PreloadingScreenDelay: int, EUUSDiscount: int, SouthAmericaDiscount: int, AfricaDiscount: int, AsiaOceaniaDiscount: int, RoutingFilters: list<string>, BlockNoneReferrer: bool, StickySessionType: any, StickySessionCookieName: string, StickySessionClientHeaders: string, UserId: string, CacheVersion: int, OptimizerEnableUpscaling: bool, EnableWebSockets: bool, MaxWebSocketConnections: int, EnableExtendedLogging: bool, CacheKeyHeaders: string> {
@@ -938,9 +937,9 @@ export def "pullzone-edgerules-add-or-update AddEdgeRule" [
   --ExtraActions: list # nullable — item shape: {ActionType?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20"|"21"|"22"|"23"|"24"|"25"|"26"|"27"|"28"|"29"|"30"|"31"|"32"|"33"|"34", ActionParameter1?: string, ActionParameter2?: string, ActionParameter3?: string}
   --TriggerMatchingType: any # The trigger matching type. MatchAny = 0, MatchAll = 1, MatchNone = 2
   --Description: string # The description of the edge rule (nullable)
-  --Enabled: string@bool-completer # Determines if the edge rule is currently enabled or not
+  --Enabled: oneof<nothing, bool> # Determines if the edge rule is currently enabled or not
   --OrderIndex: int # The index of the edge rule in the list of execution priority (format: int32)
-  --ReadOnly: string@bool-completer # Determines if the edge rule is read-only and cannot be modified or deleted
+  --ReadOnly: oneof<nothing, bool> # Determines if the edge rule is read-only and cannot be modified or deleted
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
@@ -968,7 +967,7 @@ export def "pullzone-edgerules-set-edge-rule-enabled SetEdgeRuleEnabled" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Id: int # format: int64
-  --Value: string@bool-completer
+  --Value: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
@@ -1021,7 +1020,7 @@ export def "pullzone-load-free-certificate LoadFreeCertificate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --hostname: string # The hostname that the certificate will be loaded for (nullable)
-  --useOnlyHttp01: string@bool-completer # If false and a Bunny DNS Zone exists for the domain, DNS01 validation we be attempted. This has no effect on wildcard domains, as this can only use DNS01 (default: true)
+  --useOnlyHttp01: oneof<nothing, bool> # If false and a Bunny DNS Zone exists for the domain, DNS01 validation we be attempted. This has no effect on wildcard domains, as this can only use DNS01 (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
@@ -1253,7 +1252,7 @@ export def "pullzone-set-force-ssl SetForceSSL" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   Hostname: string # The hostname that will be updated
-  --ForceSSL: string@bool-completer # Set to true to force SSL on the given pull zone hostname
+  --ForceSSL: oneof<nothing, bool> # Set to true to force SSL on the given pull zone hostname
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
@@ -1461,8 +1460,8 @@ export def "purge IndexPost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-url: string # The URL that will be purged from cache. (nullable)
-  --async: string@bool-completer # (Optional) Determines if the call should wait for the purge logic to complete (default: false)
-  --exactPath: string@bool-completer # (Optional) When true and the URL ends with '/', purges only the exact path without adding a wildcard suffix. Only applies when the pull zone has IgnoreQueryStrings disabled. (default: false)
+  --async: oneof<nothing, bool> # (Optional) Determines if the call should wait for the purge logic to complete (default: false)
+  --exactPath: oneof<nothing, bool> # (Optional) When true and the URL ends with '/', purges only the exact path without adding a wildcard suffix. Only applies when the pull zone has IgnoreQueryStrings disabled. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
@@ -1508,7 +1507,7 @@ export def "storagezone IndexAll" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # The page number to return. When set to 0 (default), all items are returned as a plain array. When set to a value greater than 0, items are returned in a paginated response object. (format: int32, default: 0)
   --perPage: int # format: int32, default: 1000
-  --includeDeleted: string@bool-completer # default: false
+  --includeDeleted: oneof<nothing, bool> # default: false
   --search: string # The search term that will be used to filter the results (nullable)
 ]: nothing -> table<Id: int, UserId: string, Name: string, Password: string, DateModified: string, Deleted: bool, StorageUsed: int, FilesStored: int, Region: string, ReplicationRegions: list<string>, PullZones: list<record>, ReadOnlyPassword: string, Rewrite404To200: bool, Custom404FilePath: string, StorageHostname: string, ZoneTier: any, ReplicationChangeInProgress: bool, PriceOverride: float, Discount: int, StorageZoneType: any> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
@@ -1612,7 +1611,7 @@ export def "storagezone Update" [
   --ReplicationZones: list # The list of replication zones enabld for the storage zone (nullable)
   --OriginUrl: string # The origin URL of the storage zone (nullable)
   --Custom404FilePath: string # The path to the custom file that will be returned in a case of 404 (nullable)
-  --Rewrite404To200: string@bool-completer # Rewrite 404 status code to 200 for URLs without extension (nullable)
+  --Rewrite404To200: oneof<nothing, bool> # Rewrite 404 status code to 200 for URLs without extension (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
@@ -1638,7 +1637,7 @@ export def "storagezone Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deleteLinkedPullZones: string@bool-completer # Deletes all pull zones linked to this storage zone (default behavior) (default: true)
+  --deleteLinkedPullZones: oneof<nothing, bool> # Deletes all pull zones linked to this storage zone (default behavior) (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
@@ -1762,21 +1761,21 @@ export def "videolibrary AddVideoLibrary" [
   --ReplicationRegions: list # The geo-replication regions of the underlying storage zone (nullable)
   --PlayerVersion: int # (Optional) Sets player version used for this library (nullable, format: int32)
   --EncodingTier: any # (Optional) Defines encoding tier. Premium is a paid tier that offers prioritized encoding and extra codec support. (nullable)
-  --JitEncodingEnabled: string@bool-completer # (Optional) Determines whether JIT encoding should be used for the library. Supported in premium encoding only. (nullable)
+  --JitEncodingEnabled: oneof<nothing, bool> # (Optional) Determines whether JIT encoding should be used for the library. Supported in premium encoding only. (nullable)
   --OutputCodecs: string # (Optional) Specifies which video codecs are used for encoding, provided as a comma-separated (CSV) string. Free encoding tier supports only x264. A premium encoding tier adds support for vp9, hevc, and av1. (nullable)
   --EnabledResolutions: string # (Optional) Sets the enabled resolutions for the transcoding. At least one resolution should be enabled. Possible values: 240p, 360p, 480p, 720p, 1080p, 1440p, 2160p (nullable)
-  --BlockNoneReferrer: string@bool-completer # (Optional) Determines if requests without a referer should be blocked. (nullable)
-  --EnableMP4Fallback: string@bool-completer # (Optional) Determines if MP4 fallback should be enabled for this library. (nullable)
-  --KeepOriginalFiles: string@bool-completer # (Optional) Determines if the original file should be kept after the video is processed. (nullable)
-  --AllowDirectPlay: string@bool-completer # (Optional) Determines if direct play URLs should be enabled for the library (nullable)
-  --EnableMultiAudioTrackSupport: string@bool-completer # (Optional) Determines if multiple output audio track support is enabled on video library. (nullable)
-  --EnableTranscribing: string@bool-completer # (Optional) Enables automatic audio transcribing for this library. (nullable)
+  --BlockNoneReferrer: oneof<nothing, bool> # (Optional) Determines if requests without a referer should be blocked. (nullable)
+  --EnableMP4Fallback: oneof<nothing, bool> # (Optional) Determines if MP4 fallback should be enabled for this library. (nullable)
+  --KeepOriginalFiles: oneof<nothing, bool> # (Optional) Determines if the original file should be kept after the video is processed. (nullable)
+  --AllowDirectPlay: oneof<nothing, bool> # (Optional) Determines if direct play URLs should be enabled for the library (nullable)
+  --EnableMultiAudioTrackSupport: oneof<nothing, bool> # (Optional) Determines if multiple output audio track support is enabled on video library. (nullable)
+  --EnableTranscribing: oneof<nothing, bool> # (Optional) Enables automatic audio transcribing for this library. (nullable)
   --TranscribingCaptionLanguages: list # (Optional) Languages that captions will be automatically transcribed to. (nullable)
-  --EnableTranscribingTitleGeneration: string@bool-completer # (Optional) Determines if automatic transcribing title generation is enabled for this library. Enabling any smart generation feature turns on transcribing automatically. (nullable)
-  --EnableTranscribingDescriptionGeneration: string@bool-completer # (Optional) Determines if automatic transcribing description generation is enabled for this library. Enabling any smart generation feature turns on transcribing automatically. (nullable)
-  --EnableTranscribingChaptersGeneration: string@bool-completer # (Optional) Determines if automatic transcribing chapters generation is enabled for this library. Enabling any smart generation feature turns on transcribing automatically. (nullable)
-  --EnableTranscribingMomentsGeneration: string@bool-completer # (Optional) Determines if automatic transcribing moments generation is enabled for this library. Enabling any smart generation feature turns on transcribing automatically. (nullable)
-  --AllowEarlyPlay: string@bool-completer # (Optional) Enables Early Play. Enabling this also exposes originals via CDN settings consistent with the video library update API. (nullable)
+  --EnableTranscribingTitleGeneration: oneof<nothing, bool> # (Optional) Determines if automatic transcribing title generation is enabled for this library. Enabling any smart generation feature turns on transcribing automatically. (nullable)
+  --EnableTranscribingDescriptionGeneration: oneof<nothing, bool> # (Optional) Determines if automatic transcribing description generation is enabled for this library. Enabling any smart generation feature turns on transcribing automatically. (nullable)
+  --EnableTranscribingChaptersGeneration: oneof<nothing, bool> # (Optional) Determines if automatic transcribing chapters generation is enabled for this library. Enabling any smart generation feature turns on transcribing automatically. (nullable)
+  --EnableTranscribingMomentsGeneration: oneof<nothing, bool> # (Optional) Determines if automatic transcribing moments generation is enabled for this library. Enabling any smart generation feature turns on transcribing automatically. (nullable)
+  --AllowEarlyPlay: oneof<nothing, bool> # (Optional) Enables Early Play. Enabling this also exposes originals via CDN settings consistent with the video library update API. (nullable)
 ]: any -> record<Id: int, Name: string, VideoCount: int, TrafficUsage: int, StorageUsage: int, DateCreated: string, DateModified: string, ReplicationRegions: list<string>, ApiKey: string, ReadOnlyApiKey: string, HasWatermark: bool, WatermarkPositionLeft: int, WatermarkPositionTop: int, WatermarkWidth: int, PullZoneId: int, StorageZoneId: int, WatermarkHeight: int, EnabledResolutions: string, ViAiPublisherId: string, VastTagUrl: string, WebhookUrl: string, CaptionsFontSize: int, CaptionsFontColor: string, CaptionsBackground: string, UILanguage: string, AllowEarlyPlay: bool, PlayerTokenAuthenticationEnabled: bool, AllowedReferrers: list<string>, BlockedReferrers: list<string>, BlockNoneReferrer: bool, EnableMP4Fallback: bool, KeepOriginalFiles: bool, AllowDirectPlay: bool, EnableDRM: bool, DrmVersion: any, AppleFairPlayDrm: any, GoogleWidevineDrm: any, Bitrate240p: int, Bitrate360p: int, Bitrate480p: int, Bitrate720p: int, Bitrate1080p: int, Bitrate1440p: int, Bitrate2160p: int, ApiAccessKey: string, ShowHeatmap: bool, EnableContentTagging: bool, PullZoneType: any, CustomHTML: string, Controls: string, PlaybackSpeeds: string, PlayerKeyColor: string, FontFamily: string, WatermarkVersion: int, EnableTranscribing: bool, EnableTranscribingTitleGeneration: bool, EnableTranscribingDescriptionGeneration: bool, EnableTranscribingChaptersGeneration: bool, EnableTranscribingMomentsGeneration: bool, TranscribingCaptionLanguages: list<string>, EnableCaptionsInPlaylist: bool, RememberPlayerPosition: bool, EnableMultiAudioTrackSupport: bool, UseSeparateAudioStream: bool, JitEncodingEnabled: bool, EncodingTier: any, OutputCodecs: string, DrmBasePriceOverride: float, DrmCostPerLicenseOverride: float, TranscribingPriceOverride: float, PremiumEncodingPriceOverride: float, MonthlyChargesTranscribing: float, MonthlyChargesPremiumEncoding: float, MonthlyChargesEnterpriseDrm: float, FeatureFlags: string, PlayerVersion: int, RemoveMetadataFromFallbackVideos: bool, ScaleVideoUsingBothDimensions: bool, ExposeOriginals: bool, ExposeVideoMetadata: bool, EnableCompactControls: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
@@ -1918,9 +1917,9 @@ export def "videolibrary UpdateVideoLibrary" [
   --Name: string # (Optional) Sets name of the video library (nullable)
   --CustomHTML: string # (Optional) Sets the player custom HTML code (nullable)
   --PlayerKeyColor: string # (Optional) Sets the player key control color (nullable)
-  --EnableTokenAuthentication: string@bool-completer # (Optional) Determines if the token authentication should be enabled (nullable)
-  --EnableTokenIPVerification: string@bool-completer # (Optional) Determines if the token IP verification should be enabled (nullable)
-  --ResetToken: string@bool-completer # (Optional) Set to true to reset the CDN and embed view token key (nullable)
+  --EnableTokenAuthentication: oneof<nothing, bool> # (Optional) Determines if the token authentication should be enabled (nullable)
+  --EnableTokenIPVerification: oneof<nothing, bool> # (Optional) Determines if the token IP verification should be enabled (nullable)
+  --ResetToken: oneof<nothing, bool> # (Optional) Set to true to reset the CDN and embed view token key (nullable)
   --WatermarkPositionLeft: int # (Optional) Sets the left offset of the watermark position (in %) (nullable, format: int32)
   --WatermarkPositionTop: int # (Optional) Sets the top offset of the watermark position (in %) (nullable, format: int32)
   --WatermarkWidth: int # (Optional) Sets the width of the watermark (in %) (nullable, format: int32)
@@ -1933,13 +1932,13 @@ export def "videolibrary UpdateVideoLibrary" [
   --CaptionsFontColor: string # (Optional) Sets the captions display font color (nullable)
   --CaptionsBackground: string # (Optional) Sets the captions display background color (nullable)
   --UILanguage: string # (Optional) Sets the UI language of the video player. (nullable)
-  --AllowEarlyPlay: string@bool-completer # (Optional) Determines if the Early-Play feature should be enabled. Enabling this will enable Expose Originals. (nullable)
-  --PlayerTokenAuthenticationEnabled: string@bool-completer # (Optional) Determines if the token authentication should be enabled. (nullable)
-  --BlockNoneReferrer: string@bool-completer # (Optional) Determines if requests without a referer should be blocked. (nullable)
-  --EnableMP4Fallback: string@bool-completer # (Optional) Determines if MP4 fallback should be enabled for this library. (nullable)
-  --KeepOriginalFiles: string@bool-completer # (Optional) Determines if the original file should be kept after the video is processed. (nullable)
-  --AllowDirectPlay: string@bool-completer # (Optional) Determines if direct play URLs should be enabled for the library (nullable)
-  --EnableDRM: string@bool-completer # (Optional) Determines if MediaCage DRM should be enabled for this library (nullable)
+  --AllowEarlyPlay: oneof<nothing, bool> # (Optional) Determines if the Early-Play feature should be enabled. Enabling this will enable Expose Originals. (nullable)
+  --PlayerTokenAuthenticationEnabled: oneof<nothing, bool> # (Optional) Determines if the token authentication should be enabled. (nullable)
+  --BlockNoneReferrer: oneof<nothing, bool> # (Optional) Determines if requests without a referer should be blocked. (nullable)
+  --EnableMP4Fallback: oneof<nothing, bool> # (Optional) Determines if MP4 fallback should be enabled for this library. (nullable)
+  --KeepOriginalFiles: oneof<nothing, bool> # (Optional) Determines if the original file should be kept after the video is processed. (nullable)
+  --AllowDirectPlay: oneof<nothing, bool> # (Optional) Determines if direct play URLs should be enabled for the library (nullable)
+  --EnableDRM: oneof<nothing, bool> # (Optional) Determines if MediaCage DRM should be enabled for this library (nullable)
   --DrmVersion: any # (Optional) Determines MediaCage DRM version to be used for this library (nullable)
   --Controls: string # (Optional) The comma separated list of controls that will be displayed in the video player. Possible values: play-large, play, progress, current-time, mute, volume, captions, settings, pip, airplay, fullscreen. (nullable)
   --PlaybackSpeeds: string # (Optional) The comma separated list of playback speeds that will be available in the video player. Possible values: 0.25,0.5,0.75,1.0,1.25,1.5,1.75,2.0,2.5,3,3.5,4 (nullable)
@@ -1950,30 +1949,30 @@ export def "videolibrary UpdateVideoLibrary" [
   --Bitrate1080p: int # (Optional) The bitrate used for encoding 1080p videos (nullable, format: int32)
   --Bitrate1440p: int # (Optional) The bitrate used for encoding 1440p videos (nullable, format: int32)
   --Bitrate2160p: int # (Optional) The bitrate used for encoding 2160p videos (nullable, format: int32)
-  --ShowHeatmap: string@bool-completer # (Optional) Determines if the video watch heatmap should be displayed in the player. (nullable)
-  --EnableContentTagging: string@bool-completer # (Optional) Determines if content tagging should be enabled for this library. (nullable)
+  --ShowHeatmap: oneof<nothing, bool> # (Optional) Determines if the video watch heatmap should be displayed in the player. (nullable)
+  --EnableContentTagging: oneof<nothing, bool> # (Optional) Determines if content tagging should be enabled for this library. (nullable)
   --FontFamily: string # (Optional) The captions font family. (nullable)
-  --EnableTranscribing: string@bool-completer # (Optional) Determines if the automatic audio transcribing is currently enabled for this zone. (nullable)
-  --EnableTranscribingTitleGeneration: string@bool-completer # (Optional) Determines if automatic transcribing title generation is currently enabled. (nullable)
-  --EnableTranscribingDescriptionGeneration: string@bool-completer # (Optional) Determines if automatic transcribing description generation is currently enabled. (nullable)
-  --EnableTranscribingChaptersGeneration: string@bool-completer # (Optional) Determines if automatic transcribing chapters generation is currently enabled. (nullable)
-  --EnableTranscribingMomentsGeneration: string@bool-completer # (Optional) Determines if automatic transcribing moments generation is currently enabled. (nullable)
+  --EnableTranscribing: oneof<nothing, bool> # (Optional) Determines if the automatic audio transcribing is currently enabled for this zone. (nullable)
+  --EnableTranscribingTitleGeneration: oneof<nothing, bool> # (Optional) Determines if automatic transcribing title generation is currently enabled. (nullable)
+  --EnableTranscribingDescriptionGeneration: oneof<nothing, bool> # (Optional) Determines if automatic transcribing description generation is currently enabled. (nullable)
+  --EnableTranscribingChaptersGeneration: oneof<nothing, bool> # (Optional) Determines if automatic transcribing chapters generation is currently enabled. (nullable)
+  --EnableTranscribingMomentsGeneration: oneof<nothing, bool> # (Optional) Determines if automatic transcribing moments generation is currently enabled. (nullable)
   --TranscribingCaptionLanguages: list # (Optional) The list of languages that the captions will be automatically transcribed to. (nullable)
-  --EnableCaptionsInPlaylist: string@bool-completer # (Optional) Determines if any associated captions will be automatically signaled in the HLS master playlist via EXT-X-MEDIA tags, allowing client players to show captions. (nullable)
-  --RememberPlayerPosition: string@bool-completer # (Optional) Determines if the player will automatically remember the playback position. (nullable)
-  --EnableMultiAudioTrackSupport: string@bool-completer # (Optional) Determines if multiple output audio track support is enabled on video library. (nullable)
-  --UseSeparateAudioStream: string@bool-completer # (Optional) Determines whether output audio stream should be split from video stream segments. (nullable)
-  --JitEncodingEnabled: string@bool-completer # (Optional) Determines whether JIT encoding should be used for the library. Supported in premium encoding only. (nullable)
+  --EnableCaptionsInPlaylist: oneof<nothing, bool> # (Optional) Determines if any associated captions will be automatically signaled in the HLS master playlist via EXT-X-MEDIA tags, allowing client players to show captions. (nullable)
+  --RememberPlayerPosition: oneof<nothing, bool> # (Optional) Determines if the player will automatically remember the playback position. (nullable)
+  --EnableMultiAudioTrackSupport: oneof<nothing, bool> # (Optional) Determines if multiple output audio track support is enabled on video library. (nullable)
+  --UseSeparateAudioStream: oneof<nothing, bool> # (Optional) Determines whether output audio stream should be split from video stream segments. (nullable)
+  --JitEncodingEnabled: oneof<nothing, bool> # (Optional) Determines whether JIT encoding should be used for the library. Supported in premium encoding only. (nullable)
   --EncodingTier: any # (Optional) Defines encoding tier to be used with video library. premium is a paid tier that offers either JIT encoding or prioritized encoding and extra codec support. (nullable)
   --OutputCodecs: string # (Optional) Specifies which video codecs are used for encoding, provided as a comma-separated (CSV) string. Free encoding tier supports only x264. A premium encoding tier adds support for vp9, hevc, and av1. (nullable)
   --AppleFairPlayDrm: any # (Optional) Configure Apple FairPlay DRM. Works only if Enterprise DRM is set up. (nullable)
   --GoogleWidevineDrm: any # (Optional) Configure Google Widevine DRM. Works only if Enterprise DRM is set up. (nullable)
   --PlayerVersion: int # (Optional) Sets player version used for this library (nullable, format: int32)
-  --RemoveMetadataFromFallbackVideos: string@bool-completer # (Optional) Marks whether all potential video metadata should be removed from the fallback files (nullable)
-  --ScaleVideoUsingBothDimensions: string@bool-completer # (Optional) Marks whether videos should be scaled using both dimensions. Prevents videos being upscaled or unexpected aspect ratio changes. (nullable)
-  --ExposeOriginals: string@bool-completer # (Optional) Marks whether original video files should be exposed via CDN. Originals are not protected by DRM. Enabling Early-Play will enable this. (nullable)
-  --ExposeVideoMetadata: string@bool-completer # (Optional) Marks whether video metadata in form of schema meta tags and LD+JSON should be exposed. (nullable)
-  --EnableCompactControls: string@bool-completer # (Optional) Marks whether compact controls should be enabled for the player. (nullable)
+  --RemoveMetadataFromFallbackVideos: oneof<nothing, bool> # (Optional) Marks whether all potential video metadata should be removed from the fallback files (nullable)
+  --ScaleVideoUsingBothDimensions: oneof<nothing, bool> # (Optional) Marks whether videos should be scaled using both dimensions. Prevents videos being upscaled or unexpected aspect ratio changes. (nullable)
+  --ExposeOriginals: oneof<nothing, bool> # (Optional) Marks whether original video files should be exposed via CDN. Originals are not protected by DRM. Enabling Early-Play will enable this. (nullable)
+  --ExposeVideoMetadata: oneof<nothing, bool> # (Optional) Marks whether video metadata in form of schema meta tags and LD+JSON should be exposed. (nullable)
+  --EnableCompactControls: oneof<nothing, bool> # (Optional) Marks whether compact controls should be enabled for the player. (nullable)
 ]: any -> record<Id: int, Name: string, VideoCount: int, TrafficUsage: int, StorageUsage: int, DateCreated: string, DateModified: string, ReplicationRegions: list<string>, ApiKey: string, ReadOnlyApiKey: string, HasWatermark: bool, WatermarkPositionLeft: int, WatermarkPositionTop: int, WatermarkWidth: int, PullZoneId: int, StorageZoneId: int, WatermarkHeight: int, EnabledResolutions: string, ViAiPublisherId: string, VastTagUrl: string, WebhookUrl: string, CaptionsFontSize: int, CaptionsFontColor: string, CaptionsBackground: string, UILanguage: string, AllowEarlyPlay: bool, PlayerTokenAuthenticationEnabled: bool, AllowedReferrers: list<string>, BlockedReferrers: list<string>, BlockNoneReferrer: bool, EnableMP4Fallback: bool, KeepOriginalFiles: bool, AllowDirectPlay: bool, EnableDRM: bool, DrmVersion: any, AppleFairPlayDrm: any, GoogleWidevineDrm: any, Bitrate240p: int, Bitrate360p: int, Bitrate480p: int, Bitrate720p: int, Bitrate1080p: int, Bitrate1440p: int, Bitrate2160p: int, ApiAccessKey: string, ShowHeatmap: bool, EnableContentTagging: bool, PullZoneType: any, CustomHTML: string, Controls: string, PlaybackSpeeds: string, PlayerKeyColor: string, FontFamily: string, WatermarkVersion: int, EnableTranscribing: bool, EnableTranscribingTitleGeneration: bool, EnableTranscribingDescriptionGeneration: bool, EnableTranscribingChaptersGeneration: bool, EnableTranscribingMomentsGeneration: bool, TranscribingCaptionLanguages: list<string>, EnableCaptionsInPlaylist: bool, RememberPlayerPosition: bool, EnableMultiAudioTrackSupport: bool, UseSeparateAudioStream: bool, JitEncodingEnabled: bool, EncodingTier: any, OutputCodecs: string, DrmBasePriceOverride: float, DrmCostPerLicenseOverride: float, TranscribingPriceOverride: float, PremiumEncodingPriceOverride: float, MonthlyChargesTranscribing: float, MonthlyChargesPremiumEncoding: float, MonthlyChargesEnterpriseDrm: float, FeatureFlags: string, PlayerVersion: int, RemoveMetadataFromFallbackVideos: bool, ScaleVideoUsingBothDimensions: bool, ExposeOriginals: bool, ExposeVideoMetadata: bool, EnableCompactControls: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
@@ -2357,7 +2356,7 @@ export def "pullzone-optimizer-statistics GetOptimizerStatistics" [
   --allow-errors(-e) # Return full response without error handling
   --dateFrom: string # (Optional) The start date of the statistics. If no value is passed, the last 30 days will be returned. (nullable, format: date-time)
   --dateTo: string # (Optional) The end date of the statistics. If no value is passed, the last 30 days will be returned. (nullable, format: date-time)
-  --hourly: string@bool-completer # (Optional) If true, the statistics data will be returned in hourly groupping. (default: false)
+  --hourly: oneof<nothing, bool> # (Optional) If true, the statistics data will be returned in hourly groupping. (default: false)
 ]: nothing -> record<RequestsOptimizedChart: record, AverageCompressionChart: record, TrafficSavedChart: record, AverageProcessingTimeChart: record, TotalRequestsOptimized: float, TotalTrafficSaved: float, AverageProcessingTime: float, AverageCompressionRatio: float> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
@@ -2383,7 +2382,7 @@ export def "pullzone-originshield-queuestatistics GetOriginShieldConcurrencyStat
   --allow-errors(-e) # Return full response without error handling
   --dateFrom: string # (Optional) The start date of the statistics. If no value is passed, the last 30 days will be returned. (nullable, format: date-time)
   --dateTo: string # (Optional) The end date of the statistics. If no value is passed, the last 30 days will be returned. (nullable, format: date-time)
-  --hourly: string@bool-completer # (Optional) If true, the statistics data will be returned in hourly groupping. (default: false)
+  --hourly: oneof<nothing, bool> # (Optional) If true, the statistics data will be returned in hourly groupping. (default: false)
 ]: nothing -> record<ConcurrentRequestsChart: record, QueuedRequestsChart: record> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
@@ -2409,7 +2408,7 @@ export def "pullzone-safehop-statistics GetSafeHopStatistics" [
   --allow-errors(-e) # Return full response without error handling
   --dateFrom: string # (Optional) The start date of the statistics. If no value is passed, the last 30 days will be returned. (nullable, format: date-time)
   --dateTo: string # (Optional) The end date of the statistics. If no value is passed, the last 30 days will be returned. (nullable, format: date-time)
-  --hourly: string@bool-completer # (Optional) If true, the statistics data will be returned in hourly groupping. (default: false)
+  --hourly: oneof<nothing, bool> # (Optional) If true, the statistics data will be returned in hourly groupping. (default: false)
 ]: nothing -> record<RequestsRetriedChart: record, RequestsSavedChart: record, TotalRequestsRetried: float, TotalRequestsSaved: float> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
@@ -2436,16 +2435,16 @@ export def "statistics GetStatistics" [
   --dateTo: string # (Optional) The end date of the statistics. If no value is passed, the last 30 days will be returned. (nullable, format: date-time)
   --pullZone: int # (Optional) If set, the statistics will be only returned for the given Pull Zone (format: int64, default: -1)
   --serverZoneId: int # (Optional) If set, the statistics will be only returned for the given region ID (format: int64, default: -1)
-  --loadErrors: string@bool-completer # (Optional) If set, the respose will contain the non-2xx response (default: false)
-  --hourly: string@bool-completer # (Optional) If true, the statistics data will be returned in hourly groupping. (default: false)
-  --exactRange: string@bool-completer # (Optional) If true and hourly=true, the exact hour components of dateFrom and dateTo will be preserved instead of rounding to full-day boundaries. (default: false)
-  --loadOriginResponseTimes: string@bool-completer # Load Origin Response Times (default: false)
-  --loadOriginTraffic: string@bool-completer # Load Origin Traffic (default: false)
-  --loadRequestsServed: string@bool-completer # Load Requests Served (default: false)
-  --loadBandwidthUsed: string@bool-completer # Load Bandwidth Used (default: false)
-  --loadOriginShieldBandwidth: string@bool-completer # Load Origin Shield Bandwidth (default: false)
-  --loadGeographicTrafficDistribution: string@bool-completer # Load Geographic Traffic Distribution (default: false)
-  --loadUserBalanceHistory: string@bool-completer # Load User Balance History (default: false)
+  --loadErrors: oneof<nothing, bool> # (Optional) If set, the respose will contain the non-2xx response (default: false)
+  --hourly: oneof<nothing, bool> # (Optional) If true, the statistics data will be returned in hourly groupping. (default: false)
+  --exactRange: oneof<nothing, bool> # (Optional) If true and hourly=true, the exact hour components of dateFrom and dateTo will be preserved instead of rounding to full-day boundaries. (default: false)
+  --loadOriginResponseTimes: oneof<nothing, bool> # Load Origin Response Times (default: false)
+  --loadOriginTraffic: oneof<nothing, bool> # Load Origin Traffic (default: false)
+  --loadRequestsServed: oneof<nothing, bool> # Load Requests Served (default: false)
+  --loadBandwidthUsed: oneof<nothing, bool> # Load Bandwidth Used (default: false)
+  --loadOriginShieldBandwidth: oneof<nothing, bool> # Load Origin Shield Bandwidth (default: false)
+  --loadGeographicTrafficDistribution: oneof<nothing, bool> # Load Geographic Traffic Distribution (default: false)
+  --loadUserBalanceHistory: oneof<nothing, bool> # Load User Balance History (default: false)
 ]: nothing -> record<TotalBandwidthUsed: int, TotalOriginTraffic: int, AverageOriginResponseTime: int, OriginResponseTimeChart: record, TotalRequestsServed: int, CacheHitRate: float, BandwidthUsedChart: record, BandwidthCachedChart: record, CacheHitRateChart: record, RequestsServedChart: record, PullRequestsPulledChart: record, OriginShieldBandwidthUsedChart: record, OriginShieldInternalBandwidthUsedChart: record, OriginTrafficChart: record, UserBalanceHistoryChart: record, GeoTrafficDistribution: record, Error3xxChart: record, Error4xxChart: record, Error5xxChart: record> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)

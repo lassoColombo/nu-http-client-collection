@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -171,7 +170,7 @@ export def "players-state setPlayerState" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --async: string@bool-completer
+  --async: oneof<nothing, bool>
   --currentTrack: record # shape: {favourite?: string, playlist?: string, clip?: string, text?: string, skip?: string, source?: string, lineinSource?: string, artistTopTracks?: string, artistRadio?: string, song?: string, ?: string}
   --volume: int
   --mute: string@mute-completer
@@ -227,7 +226,7 @@ export def "players-nowplaying setPlayerNowPlaying" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --async: string@bool-completer
+  --async: oneof<nothing, bool>
   --uri: string
   --metadata: string
 ]: any -> record<artist: string, title: string, album: string, albumArtUri: string, duration: int, uri: string, type: string, stationName: string, absoluteAlbumArtUri: string, uriMetadata: string, avTransportUri: string> {
@@ -256,7 +255,7 @@ export def "players-queue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --detailed: string@bool-completer # Flag to indicate if detailed information should be returned. Default is false
+  --detailed: oneof<nothing, bool> # Flag to indicate if detailed information should be returned. Default is false
 ]: nothing -> table<uri: string, albumArtURI: string, title: string, artist: string, album: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -280,10 +279,10 @@ export def "players-queue addToPlayerQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --async: string@bool-completer
+  --async: oneof<nothing, bool>
   --uri: string
   --metadata: string
-  --enqueAsNext: string@bool-completer
+  --enqueAsNext: oneof<nothing, bool>
   --desiredFirstTrackNumberEnqueued: int
 ]: any -> record {
   let input = $in
@@ -311,7 +310,7 @@ export def "players-queue clearPlayerQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --async: string@bool-completer
+  --async: oneof<nothing, bool>
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -335,10 +334,10 @@ export def "players-queue replacePlayerQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --async: string@bool-completer
+  --async: oneof<nothing, bool>
   --uri: string
   --metadata: string
-  --enqueAsNext: string@bool-completer
+  --enqueAsNext: oneof<nothing, bool>
   --desiredFirstTrackNumberEnqueued: int
 ]: any -> record {
   let input = $in
@@ -433,7 +432,7 @@ export def "zones-state setZoneState" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --async: string@bool-completer
+  --async: oneof<nothing, bool>
   --currentTrack: record # shape: {favourite?: string, playlist?: string, clip?: string, text?: string, skip?: string, source?: string, lineinSource?: string, artistTopTracks?: string, artistRadio?: string, song?: string, ?: string}
   --volume: int
   --mute: string@mute-completer
@@ -489,7 +488,7 @@ export def "zones-nowplaying setZoneNowPlaying" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --async: string@bool-completer
+  --async: oneof<nothing, bool>
   --uri: string
   --metadata: string
 ]: any -> record {
@@ -518,7 +517,7 @@ export def "zones-queue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --detailed: string@bool-completer # Flag to indicate if detailed information should be returned. Default is false
+  --detailed: oneof<nothing, bool> # Flag to indicate if detailed information should be returned. Default is false
 ]: nothing -> table<uri: string, albumArtURI: string, title: string, artist: string, album: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -542,10 +541,10 @@ export def "zones-queue addToZoneQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --async: string@bool-completer
+  --async: oneof<nothing, bool>
   --uri: string
   --metadata: string
-  --enqueAsNext: string@bool-completer
+  --enqueAsNext: oneof<nothing, bool>
   --desiredFirstTrackNumberEnqueued: int
 ]: any -> record {
   let input = $in
@@ -573,7 +572,7 @@ export def "zones-queue clearZoneQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --async: string@bool-completer
+  --async: oneof<nothing, bool>
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -597,10 +596,10 @@ export def "zones-queue replaceZoneQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --async: string@bool-completer
+  --async: oneof<nothing, bool>
   --uri: string
   --metadata: string
-  --enqueAsNext: string@bool-completer
+  --enqueAsNext: oneof<nothing, bool>
   --desiredFirstTrackNumberEnqueued: int
 ]: any -> record {
   let input = $in
@@ -650,7 +649,7 @@ export def "zones-members addZoneMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --async: string@bool-completer
+  --async: oneof<nothing, bool>
   player: string
 ]: any -> table<playerName: string, state: record<currentTrack: record, nextTrack: record, volume: int, mute: string, trackNo: int, elapsedTime: int, elapsedTimeFormatted: string, playbackState: string, playMode: record>, uuid: string> {
   let input = $in
@@ -679,7 +678,7 @@ export def "zones-members removeZoneMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --async: string@bool-completer
+  --async: oneof<nothing, bool>
 ]: nothing -> table<playerName: string, state: record<currentTrack: record, nextTrack: record, volume: int, mute: string, trackNo: int, elapsedTime: int, elapsedTimeFormatted: string, playbackState: string, playMode: record>, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -729,7 +728,7 @@ export def "favourites list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --detailed: string@bool-completer # Used to specify if return just the names of the favourites or full details. Defaults to false
+  --detailed: oneof<nothing, bool> # Used to specify if return just the names of the favourites or full details. Defaults to false
 ]: nothing -> table<uri: string, title: string, metadata: string, albumArtUri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

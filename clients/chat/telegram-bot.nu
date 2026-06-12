@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.telegram.org/bot123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -135,7 +134,7 @@ export def "answer-callback-query post" [
   --allow-errors(-e) # Return full response without error handling
   --cache-time: int # The maximum amount of time in seconds that the result of the callback query may be cached client-side. Telegram apps will support caching starting in version 3.14. Defaults to 0. (default: 0)
   callback_query_id: string # Unique identifier for the query to be answered
-  --show-alert: string@bool-completer # If *true*, an alert will be shown by the client instead of a notification at the top of the chat screen. Defaults to *false*. (default: false)
+  --show-alert: oneof<nothing, bool> # If *true*, an alert will be shown by the client instead of a notification at the top of the chat screen. Defaults to *false*. (default: false)
   --text: string # Text of the notification. If not specified, nothing will be shown to the user, 0-200 characters
   --body-url: string # URL that will be opened by the user's client. If you have created a [Game](https://core.telegram.org/bots/api/#game) and accepted the conditions via [@Botfather](https://t.me/botfather), specify the URL that opens your game — note that this will only work if the query comes from a [*callback\_game*](https://core.telegram.org/bots/api/#inlinekeyboardbutton) button.    Otherwise, you may use links like `t.me/your_bot?start=XXXX` that open your bot with a parameter.
 ]: any -> record<ok: bool, result: bool> {
@@ -164,7 +163,7 @@ export def "answer-inline-query post" [
   --allow-errors(-e) # Return full response without error handling
   --cache-time: int # The maximum amount of time in seconds that the result of the inline query may be cached on the server. Defaults to 300. (default: 300)
   inline_query_id: string # Unique identifier for the answered query
-  --is-personal: string@bool-completer # Pass *True*, if results may be cached on the server side only for the user that sent the query. By default, results may be returned to any user who sends the same query
+  --is-personal: oneof<nothing, bool> # Pass *True*, if results may be cached on the server side only for the user that sent the query. By default, results may be returned to any user who sends the same query
   --next-offset: string # Pass the offset that a client should send in the next query with the same text to receive more results. Pass an empty string if there are no more results or if you don't support pagination. Offset length can't exceed 64 bytes.
   results: list # A JSON-serialized array of results for the inline query
   --switch-pm-parameter: string # [Deep-linking](/bots#deep-linking) parameter for the /start message sent to the bot when user presses the switch button. 1-64 characters, only `A-Z`, `a-z`, `0-9`, `_` and `-` are allowed.    *Example:* An inline bot that sends YouTube videos can ask the user to connect the bot to their YouTube account to adapt search results accordingly. To do this, it displays a 'Connect your YouTube account' button above the results, or even before showing any. The user presses the button, switches to a private chat with the bot and, in doing so, passes a start parameter that instructs the bot to return an oauth link. Once done, the bot can offer a [*switch\_inline*](https://core.telegram.org/bots/api/#inlinekeyboardmarkup) button so that the user can easily return to the chat where they wanted to use the bot's inline capabilities.
@@ -194,7 +193,7 @@ export def "answer-pre-checkout-query post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --error-message: string # Required if *ok* is *False*. Error message in human readable form that explains the reason for failure to proceed with the checkout (e.g. "Sorry, somebody just bought the last of our amazing black T-shirts while you were busy filling out your payment details. Please choose a different color or garment!"). Telegram will display this message to the user.
-  --ok: string@bool-completer # Specify *True* if everything is alright (goods are available, etc.) and the bot is ready to proceed with the order. Use *False* if there are any problems.
+  --ok: oneof<nothing, bool> # Specify *True* if everything is alright (goods are available, etc.) and the bot is ready to proceed with the order. Use *False* if there are any problems.
   pre_checkout_query_id: string # Unique identifier for the query to be answered
 ]: any -> record<ok: bool, result: bool> {
   let input = $in
@@ -222,7 +221,7 @@ export def "answer-shipping-query post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --error-message: string # Required if *ok* is False. Error message in human readable form that explains why it is impossible to complete the order (e.g. "Sorry, delivery to your desired address is unavailable'). Telegram will display this message to the user.
-  --ok: string@bool-completer # Specify True if delivery to the specified address is possible and False if there are any problems (for example, if delivery to the specified address is not possible)
+  --ok: oneof<nothing, bool> # Specify True if delivery to the specified address is possible and False if there are any problems (for example, if delivery to the specified address is not possible)
   --shipping-options: list # Required if *ok* is True. A JSON-serialized array of available shipping options. — item shape: {id: string, prices: list, title: string}
   shipping_query_id: string # Unique identifier for the query to be answered
 ]: any -> record<ok: bool, result: bool> {
@@ -271,11 +270,11 @@ export def "copy-message post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-sending-without-reply: string@bool-completer # Pass *True*, if the message should be sent even if the specified replied-to message is not found
+  --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   --caption: string # New caption for media, 0-1024 characters after entities parsing. If not specified, the original caption is kept
   --caption-entities: list # List of special entities that appear in the new caption, which can be specified instead of *parse\_mode* — item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
-  --disable-notification: string@bool-completer # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
+  --disable-notification: oneof<nothing, bool> # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
   from_chat_id: any # Unique identifier for the chat where the original message was sent (or channel username in the format `@channelusername`)
   message_id: int # Message identifier in the chat specified in *from\_chat\_id*
   --parse-mode: string # Mode for parsing entities in the new caption. See [formatting options](https://core.telegram.org/bots/api/#formatting-options) for more details.
@@ -306,7 +305,7 @@ export def "create-new-sticker-set post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --contains-masks: string@bool-completer # Pass *True*, if a set of mask stickers should be created
+  --contains-masks: oneof<nothing, bool> # Pass *True*, if a set of mask stickers should be created
   emojis: string # One or more emoji corresponding to the sticker
   --mask-position: record # This object describes the position on faces where a mask should be placed by default. — shape: {point: "forehead"|"eyes"|"mouth"|"chin", scale: float, x_shift: float, y_shift: float}
   name: string # Short name of sticker set, to be used in `t.me/addstickers/` URLs (e.g., *animals*). Can contain only english letters, digits and underscores. Must begin with a letter, can't contain consecutive underscores and must end in *“\_by\_<bot username>”*. *<bot\_username>* is case insensitive. 1-64 characters.
@@ -439,7 +438,7 @@ export def "delete-webhook post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --drop-pending-updates: string@bool-completer # Pass *True* to drop all pending updates
+  --drop-pending-updates: oneof<nothing, bool> # Pass *True* to drop all pending updates
 ]: any -> record<ok: bool, result: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -593,7 +592,7 @@ export def "edit-message-text post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --chat-id: any # Required if *inline\_message\_id* is not specified. Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
-  --disable-web-page-preview: string@bool-completer # Disables link previews for links in this message
+  --disable-web-page-preview: oneof<nothing, bool> # Disables link previews for links in this message
   --entities: list # List of special entities that appear in message text, which can be specified instead of *parse\_mode* — item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
   --inline-message-id: string # Required if *chat\_id* and *message\_id* are not specified. Identifier of the inline message
   --message-id: int # Required if *inline\_message\_id* is not specified. Identifier of the message to edit
@@ -650,7 +649,7 @@ export def "forward-message post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
-  --disable-notification: string@bool-completer # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
+  --disable-notification: oneof<nothing, bool> # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
   from_chat_id: any # Unique identifier for the chat where the original message was sent (or channel username in the format `@channelusername`)
   message_id: int # Message identifier in the chat specified in *from\_chat\_id*
 ]: any -> record<ok: bool, result: record<animation: record<duration: int, file_id: string, file_name: string, file_size: int, file_unique_id: string, height: int, mime_type: string, thumb: record, width: int>, audio: record<duration: int, file_id: string, file_name: string, file_size: int, file_unique_id: string, mime_type: string, performer: string, thumb: record, title: string>, author_signature: string, caption: string, caption_entities: list<record>, channel_chat_created: bool, chat: record<bio: string, can_set_sticker_set: bool, description: string, first_name: string, id: int, invite_link: string, last_name: string, linked_chat_id: int, location: record, permissions: record, photo: record, pinned_message: any, slow_mode_delay: int, sticker_set_name: string, title: string, type: string, username: string>, connected_website: string, contact: record<first_name: string, last_name: string, phone_number: string, user_id: int, vcard: string>, date: int, delete_chat_photo: bool, dice: record<emoji: string, value: int>, document: record<file_id: string, file_name: string, file_size: int, file_unique_id: string, mime_type: string, thumb: record>, edit_date: int, entities: list<record>, forward_date: int, forward_from: record<can_join_groups: bool, can_read_all_group_messages: bool, first_name: string, id: int, is_bot: bool, language_code: string, last_name: string, supports_inline_queries: bool, username: string>, forward_from_chat: record<bio: string, can_set_sticker_set: bool, description: string, first_name: string, id: int, invite_link: string, last_name: string, linked_chat_id: int, location: record, permissions: record, photo: record, pinned_message: any, slow_mode_delay: int, sticker_set_name: string, title: string, type: string, username: string>, forward_from_message_id: int, forward_sender_name: string, forward_signature: string, from: record<can_join_groups: bool, can_read_all_group_messages: bool, first_name: string, id: int, is_bot: bool, language_code: string, last_name: string, supports_inline_queries: bool, username: string>, game: record<animation: record, description: string, photo: list, text: string, text_entities: list, title: string>, group_chat_created: bool, invoice: record<currency: string, description: string, start_parameter: string, title: string, total_amount: int>, left_chat_member: record<can_join_groups: bool, can_read_all_group_messages: bool, first_name: string, id: int, is_bot: bool, language_code: string, last_name: string, supports_inline_queries: bool, username: string>, location: record<heading: int, horizontal_accuracy: float, latitude: float, live_period: int, longitude: float, proximity_alert_radius: int>, media_group_id: string, message_id: int, migrate_from_chat_id: int, migrate_to_chat_id: int, new_chat_members: list<record>, new_chat_photo: list<record>, new_chat_title: string, passport_data: record<credentials: record, data: list>, photo: list<record>, pinned_message: any, poll: record<allows_multiple_answers: bool, close_date: int, correct_option_id: int, explanation: string, explanation_entities: list, id: string, is_anonymous: bool, is_closed: bool, open_period: int, options: list, question: string, total_voter_count: int, type: string>, proximity_alert_triggered: record<distance: int, traveler: record, watcher: record>, reply_markup: record<inline_keyboard: list>, reply_to_message: any, sender_chat: record<bio: string, can_set_sticker_set: bool, description: string, first_name: string, id: int, invite_link: string, last_name: string, linked_chat_id: int, location: record, permissions: record, photo: record, pinned_message: any, slow_mode_delay: int, sticker_set_name: string, title: string, type: string, username: string>, sticker: record<emoji: string, file_id: string, file_size: int, file_unique_id: string, height: int, is_animated: bool, mask_position: record, set_name: string, thumb: record, width: int>, successful_payment: record<currency: string, invoice_payload: string, order_info: record, provider_payment_charge_id: string, shipping_option_id: string, telegram_payment_charge_id: string, total_amount: int>, supergroup_chat_created: bool, text: string, venue: record<address: string, foursquare_id: string, foursquare_type: string, google_place_id: string, google_place_type: string, location: record, title: string>, via_bot: record<can_join_groups: bool, can_read_all_group_messages: bool, first_name: string, id: int, is_bot: bool, language_code: string, last_name: string, supports_inline_queries: bool, username: string>, video: record<duration: int, file_id: string, file_name: string, file_size: int, file_unique_id: string, height: int, mime_type: string, thumb: record, width: int>, video_note: record<duration: int, file_id: string, file_size: int, file_unique_id: string, length: int, thumb: record>, voice: record<duration: int, file_id: string, file_size: int, file_unique_id: string, mime_type: string>>> {
@@ -1048,7 +1047,7 @@ export def "pin-chat-message post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
-  --disable-notification: string@bool-completer # Pass *True*, if it is not necessary to send a notification to all chat members about the new pinned message. Notifications are always disabled in channels and private chats.
+  --disable-notification: oneof<nothing, bool> # Pass *True*, if it is not necessary to send a notification to all chat members about the new pinned message. Notifications are always disabled in channels and private chats.
   message_id: int # Identifier of a message to pin
 ]: any -> record<ok: bool, result: bool> {
   let input = $in
@@ -1074,16 +1073,16 @@ export def "promote-chat-member post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --can-change-info: string@bool-completer # Pass True, if the administrator can change chat title, photo and other settings
-  --can-delete-messages: string@bool-completer # Pass True, if the administrator can delete messages of other users
-  --can-edit-messages: string@bool-completer # Pass True, if the administrator can edit messages of other users and can pin messages, channels only
-  --can-invite-users: string@bool-completer # Pass True, if the administrator can invite new users to the chat
-  --can-pin-messages: string@bool-completer # Pass True, if the administrator can pin messages, supergroups only
-  --can-post-messages: string@bool-completer # Pass True, if the administrator can create channel posts, channels only
-  --can-promote-members: string@bool-completer # Pass True, if the administrator can add new administrators with a subset of their own privileges or demote administrators that he has promoted, directly or indirectly (promoted by administrators that were appointed by him)
-  --can-restrict-members: string@bool-completer # Pass True, if the administrator can restrict, ban or unban chat members
+  --can-change-info: oneof<nothing, bool> # Pass True, if the administrator can change chat title, photo and other settings
+  --can-delete-messages: oneof<nothing, bool> # Pass True, if the administrator can delete messages of other users
+  --can-edit-messages: oneof<nothing, bool> # Pass True, if the administrator can edit messages of other users and can pin messages, channels only
+  --can-invite-users: oneof<nothing, bool> # Pass True, if the administrator can invite new users to the chat
+  --can-pin-messages: oneof<nothing, bool> # Pass True, if the administrator can pin messages, supergroups only
+  --can-post-messages: oneof<nothing, bool> # Pass True, if the administrator can create channel posts, channels only
+  --can-promote-members: oneof<nothing, bool> # Pass True, if the administrator can add new administrators with a subset of their own privileges or demote administrators that he has promoted, directly or indirectly (promoted by administrators that were appointed by him)
+  --can-restrict-members: oneof<nothing, bool> # Pass True, if the administrator can restrict, ban or unban chat members
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
-  --is-anonymous: string@bool-completer # Pass *True*, if the administrator's presence in the chat is hidden
+  --is-anonymous: oneof<nothing, bool> # Pass *True*, if the administrator's presence in the chat is hidden
   user_id: int # Unique identifier of the target user
 ]: any -> record<ok: bool, result: bool> {
   let input = $in
@@ -1139,12 +1138,12 @@ export def "send-animation post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-sending-without-reply: string@bool-completer # Pass *True*, if the message should be sent even if the specified replied-to message is not found
+  --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   animation: any # Animation to send. Pass a file\_id as String to send an animation that exists on the Telegram servers (recommended), pass an HTTP URL as a String for Telegram to get an animation from the Internet, or upload a new animation using multipart/form-data. [More info on Sending Files »](https://core.telegram.org/bots/api/#sending-files)
   --caption: string # Animation caption (may also be used when resending animation by *file\_id*), 0-1024 characters after entities parsing
   --caption-entities: list # List of special entities that appear in the caption, which can be specified instead of *parse\_mode* — item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
-  --disable-notification: string@bool-completer # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
+  --disable-notification: oneof<nothing, bool> # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
   --duration: int # Duration of sent animation in seconds
   --height: int # Animation height
   --parse-mode: string # Mode for parsing entities in the animation caption. See [formatting options](https://core.telegram.org/bots/api/#formatting-options) for more details.
@@ -1177,12 +1176,12 @@ export def "send-audio post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-sending-without-reply: string@bool-completer # Pass *True*, if the message should be sent even if the specified replied-to message is not found
+  --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   audio: any # Audio file to send. Pass a file\_id as String to send an audio file that exists on the Telegram servers (recommended), pass an HTTP URL as a String for Telegram to get an audio file from the Internet, or upload a new one using multipart/form-data. [More info on Sending Files »](https://core.telegram.org/bots/api/#sending-files)
   --caption: string # Audio caption, 0-1024 characters after entities parsing
   --caption-entities: list # List of special entities that appear in the caption, which can be specified instead of *parse\_mode* — item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
-  --disable-notification: string@bool-completer # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
+  --disable-notification: oneof<nothing, bool> # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
   --duration: int # Duration of the audio in seconds
   --parse-mode: string # Mode for parsing entities in the audio caption. See [formatting options](https://core.telegram.org/bots/api/#formatting-options) for more details.
   --performer: string # Performer
@@ -1240,9 +1239,9 @@ export def "send-contact post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-sending-without-reply: string@bool-completer # Pass *True*, if the message should be sent even if the specified replied-to message is not found
+  --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
-  --disable-notification: string@bool-completer # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
+  --disable-notification: oneof<nothing, bool> # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
   first_name: string # Contact's first name
   --last-name: string # Contact's last name
   phone_number: string # Contact's phone number
@@ -1273,9 +1272,9 @@ export def "send-dice post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-sending-without-reply: string@bool-completer # Pass *True*, if the message should be sent even if the specified replied-to message is not found
+  --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
-  --disable-notification: string@bool-completer # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
+  --disable-notification: oneof<nothing, bool> # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
   --emoji: string@emoji-completer # Emoji on which the dice throw animation is based. Currently, must be one of “<img alt="🎲" src="//telegram.org/img/emoji/40/F09F8EB2.png" height="20" width="20" />”, “<img alt="🎯" src="//telegram.org/img/emoji/40/F09F8EAF.png" height="20" width="20" />”, “<img alt="🏀" src="//telegram.org/img/emoji/40/F09F8F80.png" height="20" width="20" />”, “<img alt="⚽" src="//telegram.org/img/emoji/40/E29ABD.png" height="20" width="20" />”, or “<img alt="🎰" src="//telegram.org/img/emoji/40/F09F8EB0.png" height="20" width="20" />”. Dice can have values 1-6 for “<img alt="🎲" src="//telegram.org/img/emoji/40/F09F8EB2.png" height="20" width="20" />” and “<img alt="🎯" src="//telegram.org/img/emoji/40/F09F8EAF.png" height="20" width="20" />”, values 1-5 for “<img alt="🏀" src="//telegram.org/img/emoji/40/F09F8F80.png" height="20" width="20" />” and “<img alt="⚽" src="//telegram.org/img/emoji/40/E29ABD.png" height="20" width="20" />”, and values 1-64 for “<img alt="🎰" src="//telegram.org/img/emoji/40/F09F8EB0.png" height="20" width="20" />”. Defaults to “<img alt="🎲" src="//telegram.org/img/emoji/40/F09F8EB2.png" height="20" width="20" />” (default: 🎲)
   --reply-markup: any # Additional interface options. A JSON-serialized object for an [inline keyboard](https://core.telegram.org/bots#inline-keyboards-and-on-the-fly-updating), [custom reply keyboard](https://core.telegram.org/bots#keyboards), instructions to remove reply keyboard or to force a reply from the user.
   --reply-to-message-id: int # If the message is a reply, ID of the original message
@@ -1304,12 +1303,12 @@ export def "send-document post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-sending-without-reply: string@bool-completer # Pass *True*, if the message should be sent even if the specified replied-to message is not found
+  --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   --caption: string # Document caption (may also be used when resending documents by *file\_id*), 0-1024 characters after entities parsing
   --caption-entities: list # List of special entities that appear in the caption, which can be specified instead of *parse\_mode* — item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
-  --disable-content-type-detection: string@bool-completer # Disables automatic server-side content type detection for files uploaded using multipart/form-data
-  --disable-notification: string@bool-completer # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
+  --disable-content-type-detection: oneof<nothing, bool> # Disables automatic server-side content type detection for files uploaded using multipart/form-data
+  --disable-notification: oneof<nothing, bool> # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
   document: any # File to send. Pass a file\_id as String to send a file that exists on the Telegram servers (recommended), pass an HTTP URL as a String for Telegram to get a file from the Internet, or upload a new one using multipart/form-data. [More info on Sending Files »](https://core.telegram.org/bots/api/#sending-files)
   --parse-mode: string # Mode for parsing entities in the document caption. See [formatting options](https://core.telegram.org/bots/api/#formatting-options) for more details.
   --reply-markup: any # Additional interface options. A JSON-serialized object for an [inline keyboard](https://core.telegram.org/bots#inline-keyboards-and-on-the-fly-updating), [custom reply keyboard](https://core.telegram.org/bots#keyboards), instructions to remove reply keyboard or to force a reply from the user.
@@ -1340,9 +1339,9 @@ export def "send-game post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-sending-without-reply: string@bool-completer # Pass *True*, if the message should be sent even if the specified replied-to message is not found
+  --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   chat_id: int # Unique identifier for the target chat
-  --disable-notification: string@bool-completer # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
+  --disable-notification: oneof<nothing, bool> # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
   game_short_name: string # Short name of the game, serves as the unique identifier for the game. Set up your games via [Botfather](https://t.me/botfather).
   --reply-markup: record # This object represents an [inline keyboard](https://core.telegram.org/bots#inline-keyboards-and-on-the-fly-updating) that appears right next to the message it belongs to. — shape: {inline_keyboard: list}
   --reply-to-message-id: int # If the message is a reply, ID of the original message
@@ -1372,16 +1371,16 @@ export def "send-invoice post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-sending-without-reply: string@bool-completer # Pass *True*, if the message should be sent even if the specified replied-to message is not found
+  --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   chat_id: int # Unique identifier for the target private chat
   currency: string # Three-letter ISO 4217 currency code, see [more on currencies](/bots/payments#supported-currencies)
   description: string # Product description, 1-255 characters
-  --disable-notification: string@bool-completer # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
-  --is-flexible: string@bool-completer # Pass *True*, if the final price depends on the shipping method
-  --need-email: string@bool-completer # Pass *True*, if you require the user's email address to complete the order
-  --need-name: string@bool-completer # Pass *True*, if you require the user's full name to complete the order
-  --need-phone-number: string@bool-completer # Pass *True*, if you require the user's phone number to complete the order
-  --need-shipping-address: string@bool-completer # Pass *True*, if you require the user's shipping address to complete the order
+  --disable-notification: oneof<nothing, bool> # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
+  --is-flexible: oneof<nothing, bool> # Pass *True*, if the final price depends on the shipping method
+  --need-email: oneof<nothing, bool> # Pass *True*, if you require the user's email address to complete the order
+  --need-name: oneof<nothing, bool> # Pass *True*, if you require the user's full name to complete the order
+  --need-phone-number: oneof<nothing, bool> # Pass *True*, if you require the user's phone number to complete the order
+  --need-shipping-address: oneof<nothing, bool> # Pass *True*, if you require the user's shipping address to complete the order
   payload: string # Bot-defined invoice payload, 1-128 bytes. This will not be displayed to the user, use for your internal processes.
   --photo-height: int # Photo height
   --photo-size: int # Photo size
@@ -1392,8 +1391,8 @@ export def "send-invoice post" [
   provider_token: string # Payments provider token, obtained via [Botfather](https://t.me/botfather)
   --reply-markup: record # This object represents an [inline keyboard](https://core.telegram.org/bots#inline-keyboards-and-on-the-fly-updating) that appears right next to the message it belongs to. — shape: {inline_keyboard: list}
   --reply-to-message-id: int # If the message is a reply, ID of the original message
-  --send-email-to-provider: string@bool-completer # Pass *True*, if user's email address should be sent to provider
-  --send-phone-number-to-provider: string@bool-completer # Pass *True*, if user's phone number should be sent to provider
+  --send-email-to-provider: oneof<nothing, bool> # Pass *True*, if user's email address should be sent to provider
+  --send-phone-number-to-provider: oneof<nothing, bool> # Pass *True*, if user's phone number should be sent to provider
   start_parameter: string # Unique deep-linking parameter that can be used to generate this invoice when used as a start parameter
   title: string # Product name, 1-32 characters
 ]: any -> record<ok: bool, result: record<animation: record<duration: int, file_id: string, file_name: string, file_size: int, file_unique_id: string, height: int, mime_type: string, thumb: record, width: int>, audio: record<duration: int, file_id: string, file_name: string, file_size: int, file_unique_id: string, mime_type: string, performer: string, thumb: record, title: string>, author_signature: string, caption: string, caption_entities: list<record>, channel_chat_created: bool, chat: record<bio: string, can_set_sticker_set: bool, description: string, first_name: string, id: int, invite_link: string, last_name: string, linked_chat_id: int, location: record, permissions: record, photo: record, pinned_message: any, slow_mode_delay: int, sticker_set_name: string, title: string, type: string, username: string>, connected_website: string, contact: record<first_name: string, last_name: string, phone_number: string, user_id: int, vcard: string>, date: int, delete_chat_photo: bool, dice: record<emoji: string, value: int>, document: record<file_id: string, file_name: string, file_size: int, file_unique_id: string, mime_type: string, thumb: record>, edit_date: int, entities: list<record>, forward_date: int, forward_from: record<can_join_groups: bool, can_read_all_group_messages: bool, first_name: string, id: int, is_bot: bool, language_code: string, last_name: string, supports_inline_queries: bool, username: string>, forward_from_chat: record<bio: string, can_set_sticker_set: bool, description: string, first_name: string, id: int, invite_link: string, last_name: string, linked_chat_id: int, location: record, permissions: record, photo: record, pinned_message: any, slow_mode_delay: int, sticker_set_name: string, title: string, type: string, username: string>, forward_from_message_id: int, forward_sender_name: string, forward_signature: string, from: record<can_join_groups: bool, can_read_all_group_messages: bool, first_name: string, id: int, is_bot: bool, language_code: string, last_name: string, supports_inline_queries: bool, username: string>, game: record<animation: record, description: string, photo: list, text: string, text_entities: list, title: string>, group_chat_created: bool, invoice: record<currency: string, description: string, start_parameter: string, title: string, total_amount: int>, left_chat_member: record<can_join_groups: bool, can_read_all_group_messages: bool, first_name: string, id: int, is_bot: bool, language_code: string, last_name: string, supports_inline_queries: bool, username: string>, location: record<heading: int, horizontal_accuracy: float, latitude: float, live_period: int, longitude: float, proximity_alert_radius: int>, media_group_id: string, message_id: int, migrate_from_chat_id: int, migrate_to_chat_id: int, new_chat_members: list<record>, new_chat_photo: list<record>, new_chat_title: string, passport_data: record<credentials: record, data: list>, photo: list<record>, pinned_message: any, poll: record<allows_multiple_answers: bool, close_date: int, correct_option_id: int, explanation: string, explanation_entities: list, id: string, is_anonymous: bool, is_closed: bool, open_period: int, options: list, question: string, total_voter_count: int, type: string>, proximity_alert_triggered: record<distance: int, traveler: record, watcher: record>, reply_markup: record<inline_keyboard: list>, reply_to_message: any, sender_chat: record<bio: string, can_set_sticker_set: bool, description: string, first_name: string, id: int, invite_link: string, last_name: string, linked_chat_id: int, location: record, permissions: record, photo: record, pinned_message: any, slow_mode_delay: int, sticker_set_name: string, title: string, type: string, username: string>, sticker: record<emoji: string, file_id: string, file_size: int, file_unique_id: string, height: int, is_animated: bool, mask_position: record, set_name: string, thumb: record, width: int>, successful_payment: record<currency: string, invoice_payload: string, order_info: record, provider_payment_charge_id: string, shipping_option_id: string, telegram_payment_charge_id: string, total_amount: int>, supergroup_chat_created: bool, text: string, venue: record<address: string, foursquare_id: string, foursquare_type: string, google_place_id: string, google_place_type: string, location: record, title: string>, via_bot: record<can_join_groups: bool, can_read_all_group_messages: bool, first_name: string, id: int, is_bot: bool, language_code: string, last_name: string, supports_inline_queries: bool, username: string>, video: record<duration: int, file_id: string, file_name: string, file_size: int, file_unique_id: string, height: int, mime_type: string, thumb: record, width: int>, video_note: record<duration: int, file_id: string, file_size: int, file_unique_id: string, length: int, thumb: record>, voice: record<duration: int, file_id: string, file_size: int, file_unique_id: string, mime_type: string>>> {
@@ -1420,9 +1419,9 @@ export def "send-location post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-sending-without-reply: string@bool-completer # Pass *True*, if the message should be sent even if the specified replied-to message is not found
+  --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
-  --disable-notification: string@bool-completer # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
+  --disable-notification: oneof<nothing, bool> # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
   --heading: int # For live locations, a direction in which the user is moving, in degrees. Must be between 1 and 360 if specified.
   --horizontal-accuracy: float # The radius of uncertainty for the location, measured in meters; 0-1500
   latitude: float # Latitude of the location
@@ -1455,9 +1454,9 @@ export def "send-media-group post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-sending-without-reply: string@bool-completer # Pass *True*, if the message should be sent even if the specified replied-to message is not found
+  --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
-  --disable-notification: string@bool-completer # Sends messages [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
+  --disable-notification: oneof<nothing, bool> # Sends messages [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
   media: list # A JSON-serialized array describing messages to be sent, must include 2-10 items
   --reply-to-message-id: int # If the messages are a reply, ID of the original message
 ]: any -> record<ok: bool, result: table<animation: record, audio: record, author_signature: string, caption: string, caption_entities: list, channel_chat_created: bool, chat: record, connected_website: string, contact: record, date: int, delete_chat_photo: bool, dice: record, document: record, edit_date: int, entities: list, forward_date: int, forward_from: record, forward_from_chat: record, forward_from_message_id: int, forward_sender_name: string, forward_signature: string, from: record, game: record, group_chat_created: bool, invoice: record, left_chat_member: record, location: record, media_group_id: string, message_id: int, migrate_from_chat_id: int, migrate_to_chat_id: int, new_chat_members: list, new_chat_photo: list, new_chat_title: string, passport_data: record, photo: list, pinned_message: any, poll: record, proximity_alert_triggered: record, reply_markup: record, reply_to_message: any, sender_chat: record, sticker: record, successful_payment: record, supergroup_chat_created: bool, text: string, venue: record, via_bot: record, video: record, video_note: record, voice: record>> {
@@ -1485,10 +1484,10 @@ export def "send-message post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-sending-without-reply: string@bool-completer # Pass *True*, if the message should be sent even if the specified replied-to message is not found
+  --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
-  --disable-notification: string@bool-completer # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
-  --disable-web-page-preview: string@bool-completer # Disables link previews for links in this message
+  --disable-notification: oneof<nothing, bool> # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
+  --disable-web-page-preview: oneof<nothing, bool> # Disables link previews for links in this message
   --entities: list # List of special entities that appear in message text, which can be specified instead of *parse\_mode* — item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
   --parse-mode: string # Mode for parsing entities in the message text. See [formatting options](https://core.telegram.org/bots/api/#formatting-options) for more details.
   --reply-markup: any # Additional interface options. A JSON-serialized object for an [inline keyboard](https://core.telegram.org/bots#inline-keyboards-and-on-the-fly-updating), [custom reply keyboard](https://core.telegram.org/bots#keyboards), instructions to remove reply keyboard or to force a reply from the user.
@@ -1519,11 +1518,11 @@ export def "send-photo post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-sending-without-reply: string@bool-completer # Pass *True*, if the message should be sent even if the specified replied-to message is not found
+  --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   --caption: string # Photo caption (may also be used when resending photos by *file\_id*), 0-1024 characters after entities parsing
   --caption-entities: list # List of special entities that appear in the caption, which can be specified instead of *parse\_mode* — item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
-  --disable-notification: string@bool-completer # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
+  --disable-notification: oneof<nothing, bool> # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
   --parse-mode: string # Mode for parsing entities in the photo caption. See [formatting options](https://core.telegram.org/bots/api/#formatting-options) for more details.
   photo: any # Photo to send. Pass a file\_id as String to send a photo that exists on the Telegram servers (recommended), pass an HTTP URL as a String for Telegram to get a photo from the Internet, or upload a new photo using multipart/form-data. The photo must be at most 10 MB in size. The photo's width and height must not exceed 10000 in total. Width and height ratio must be at most 20. [More info on Sending Files »](https://core.telegram.org/bots/api/#sending-files)
   --reply-markup: any # Additional interface options. A JSON-serialized object for an [inline keyboard](https://core.telegram.org/bots#inline-keyboards-and-on-the-fly-updating), [custom reply keyboard](https://core.telegram.org/bots#keyboards), instructions to remove reply keyboard or to force a reply from the user.
@@ -1553,17 +1552,17 @@ export def "send-poll post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-sending-without-reply: string@bool-completer # Pass *True*, if the message should be sent even if the specified replied-to message is not found
-  --allows-multiple-answers: string@bool-completer # True, if the poll allows multiple answers, ignored for polls in quiz mode, defaults to *False*
+  --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
+  --allows-multiple-answers: oneof<nothing, bool> # True, if the poll allows multiple answers, ignored for polls in quiz mode, defaults to *False*
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
   --close-date: int # Point in time (Unix timestamp) when the poll will be automatically closed. Must be at least 5 and no more than 600 seconds in the future. Can't be used together with *open\_period*.
   --correct-option-id: int # 0-based identifier of the correct answer option, required for polls in quiz mode
-  --disable-notification: string@bool-completer # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
+  --disable-notification: oneof<nothing, bool> # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
   --explanation: string # Text that is shown when a user chooses an incorrect answer or taps on the lamp icon in a quiz-style poll, 0-200 characters with at most 2 line feeds after entities parsing
   --explanation-entities: list # List of special entities that appear in the poll explanation, which can be specified instead of *parse\_mode* — item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
   --explanation-parse-mode: string # Mode for parsing entities in the explanation. See [formatting options](https://core.telegram.org/bots/api/#formatting-options) for more details.
-  --is-anonymous: string@bool-completer # True, if the poll needs to be anonymous, defaults to *True*
-  --is-closed: string@bool-completer # Pass *True*, if the poll needs to be immediately closed. This can be useful for poll preview.
+  --is-anonymous: oneof<nothing, bool> # True, if the poll needs to be anonymous, defaults to *True*
+  --is-closed: oneof<nothing, bool> # Pass *True*, if the poll needs to be immediately closed. This can be useful for poll preview.
   --open-period: int # Amount of time in seconds the poll will be active after creation, 5-600. Can't be used together with *close\_date*.
   options: list # A JSON-serialized list of answer options, 2-10 strings 1-100 characters each
   question: string # Poll question, 1-300 characters
@@ -1594,9 +1593,9 @@ export def "send-sticker post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-sending-without-reply: string@bool-completer # Pass *True*, if the message should be sent even if the specified replied-to message is not found
+  --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
-  --disable-notification: string@bool-completer # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
+  --disable-notification: oneof<nothing, bool> # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
   --reply-markup: any # Additional interface options. A JSON-serialized object for an [inline keyboard](https://core.telegram.org/bots#inline-keyboards-and-on-the-fly-updating), [custom reply keyboard](https://core.telegram.org/bots#keyboards), instructions to remove reply keyboard or to force a reply from the user.
   --reply-to-message-id: int # If the message is a reply, ID of the original message
   sticker: any # Sticker to send. Pass a file\_id as String to send a file that exists on the Telegram servers (recommended), pass an HTTP URL as a String for Telegram to get a .WEBP file from the Internet, or upload a new one using multipart/form-data. [More info on Sending Files »](https://core.telegram.org/bots/api/#sending-files)
@@ -1625,9 +1624,9 @@ export def "send-venue post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   address: string # Address of the venue
-  --allow-sending-without-reply: string@bool-completer # Pass *True*, if the message should be sent even if the specified replied-to message is not found
+  --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
-  --disable-notification: string@bool-completer # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
+  --disable-notification: oneof<nothing, bool> # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
   --foursquare-id: string # Foursquare identifier of the venue
   --foursquare-type: string # Foursquare type of the venue, if known. (For example, “arts\_entertainment/default”, “arts\_entertainment/aquarium” or “food/icecream”.)
   --google-place-id: string # Google Places identifier of the venue
@@ -1662,17 +1661,17 @@ export def "send-video post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-sending-without-reply: string@bool-completer # Pass *True*, if the message should be sent even if the specified replied-to message is not found
+  --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   --caption: string # Video caption (may also be used when resending videos by *file\_id*), 0-1024 characters after entities parsing
   --caption-entities: list # List of special entities that appear in the caption, which can be specified instead of *parse\_mode* — item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
-  --disable-notification: string@bool-completer # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
+  --disable-notification: oneof<nothing, bool> # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
   --duration: int # Duration of sent video in seconds
   --height: int # Video height
   --parse-mode: string # Mode for parsing entities in the video caption. See [formatting options](https://core.telegram.org/bots/api/#formatting-options) for more details.
   --reply-markup: any # Additional interface options. A JSON-serialized object for an [inline keyboard](https://core.telegram.org/bots#inline-keyboards-and-on-the-fly-updating), [custom reply keyboard](https://core.telegram.org/bots#keyboards), instructions to remove reply keyboard or to force a reply from the user.
   --reply-to-message-id: int # If the message is a reply, ID of the original message
-  --supports-streaming: string@bool-completer # Pass *True*, if the uploaded video is suitable for streaming
+  --supports-streaming: oneof<nothing, bool> # Pass *True*, if the uploaded video is suitable for streaming
   --thumb: any # Thumbnail of the file sent; can be ignored if thumbnail generation for the file is supported server-side. The thumbnail should be in JPEG format and less than 200 kB in size. A thumbnail's width and height should not exceed 320. Ignored if the file is not uploaded using multipart/form-data. Thumbnails can't be reused and can be only uploaded as a new file, so you can pass “attach://<file\_attach\_name>” if the thumbnail was uploaded using multipart/form-data under <file\_attach\_name>. [More info on Sending Files »](https://core.telegram.org/bots/api/#sending-files)
   video: any # Video to send. Pass a file\_id as String to send a video that exists on the Telegram servers (recommended), pass an HTTP URL as a String for Telegram to get a video from the Internet, or upload a new video using multipart/form-data. [More info on Sending Files »](https://core.telegram.org/bots/api/#sending-files)
   --width: int # Video width
@@ -1700,9 +1699,9 @@ export def "send-video-note post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-sending-without-reply: string@bool-completer # Pass *True*, if the message should be sent even if the specified replied-to message is not found
+  --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
-  --disable-notification: string@bool-completer # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
+  --disable-notification: oneof<nothing, bool> # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
   --duration: int # Duration of sent video in seconds
   --length: int # Video width and height, i.e. diameter of the video message
   --reply-markup: any # Additional interface options. A JSON-serialized object for an [inline keyboard](https://core.telegram.org/bots#inline-keyboards-and-on-the-fly-updating), [custom reply keyboard](https://core.telegram.org/bots#keyboards), instructions to remove reply keyboard or to force a reply from the user.
@@ -1734,11 +1733,11 @@ export def "send-voice post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-sending-without-reply: string@bool-completer # Pass *True*, if the message should be sent even if the specified replied-to message is not found
+  --allow-sending-without-reply: oneof<nothing, bool> # Pass *True*, if the message should be sent even if the specified replied-to message is not found
   --caption: string # Voice message caption, 0-1024 characters after entities parsing
   --caption-entities: list # List of special entities that appear in the caption, which can be specified instead of *parse\_mode* — item shape: {language?: string, length: int, offset: int, type: "mention"|"hashtag"|"cashtag"|"bot_command"|"url"|"email"|"phone_number"|"bold"|"italic"|"underline"|"strikethrough"|"code"|"pre"|"text_link"|"text_mention", url?: string, user?: record}
   chat_id: any # Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
-  --disable-notification: string@bool-completer # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
+  --disable-notification: oneof<nothing, bool> # Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound.
   --duration: int # Duration of the voice message in seconds
   --parse-mode: string # Mode for parsing entities in the voice message caption. See [formatting options](https://core.telegram.org/bots/api/#formatting-options) for more details.
   --reply-markup: any # Additional interface options. A JSON-serialized object for an [inline keyboard](https://core.telegram.org/bots#inline-keyboards-and-on-the-fly-updating), [custom reply keyboard](https://core.telegram.org/bots#keyboards), instructions to remove reply keyboard or to force a reply from the user.
@@ -1927,8 +1926,8 @@ export def "set-game-score post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --chat-id: int # Required if *inline\_message\_id* is not specified. Unique identifier for the target chat
-  --disable-edit-message: string@bool-completer # Pass True, if the game message should not be automatically edited to include the current scoreboard
-  --force: string@bool-completer # Pass True, if the high score is allowed to decrease. This can be useful when fixing mistakes or banning cheaters
+  --disable-edit-message: oneof<nothing, bool> # Pass True, if the game message should not be automatically edited to include the current scoreboard
+  --force: oneof<nothing, bool> # Pass True, if the high score is allowed to decrease. This can be useful when fixing mistakes or banning cheaters
   --inline-message-id: string # Required if *chat\_id* and *message\_id* are not specified. Identifier of the inline message
   --message-id: int # Required if *inline\_message\_id* is not specified. Identifier of the sent message
   score: int # New score, must be non-negative
@@ -2064,7 +2063,7 @@ export def "set-webhook post" [
   --allow-errors(-e) # Return full response without error handling
   --allowed-updates: list # A JSON-serialized list of the update types you want your bot to receive. For example, specify [“message”, “edited\_channel\_post”, “callback\_query”] to only receive updates of these types. See [Update](https://core.telegram.org/bots/api/#update) for a complete list of available update types. Specify an empty list to receive all updates regardless of type (default). If not specified, the previous setting will be used.   Please note that this parameter doesn't affect updates created before the call to the setWebhook, so unwanted updates may be received for a short period of time.
   --certificate: any # This object represents the contents of a file to be uploaded. Must be posted using multipart/form-data in the usual way that files are uploaded via the browser.
-  --drop-pending-updates: string@bool-completer # Pass *True* to drop all pending updates
+  --drop-pending-updates: oneof<nothing, bool> # Pass *True* to drop all pending updates
   --ip-address: string # The fixed IP address which will be used to send webhook requests instead of the IP address resolved through DNS
   --max-connections: int # Maximum allowed number of simultaneous HTTPS connections to the webhook for update delivery, 1-100. Defaults to *40*. Use lower values to limit the load on your bot's server, and higher values to increase your bot's throughput. (default: 40)
   --body-url: string # HTTPS url to send updates to. Use an empty string to remove webhook integration
@@ -2150,7 +2149,7 @@ export def "unban-chat-member post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   chat_id: any # Unique identifier for the target group or username of the target supergroup or channel (in the format `@username`)
-  --only-if-banned: string@bool-completer # Do nothing if the user is not banned
+  --only-if-banned: oneof<nothing, bool> # Do nothing if the user is not banned
   user_id: int # Unique identifier of the target user
 ]: any -> record<ok: bool, result: bool> {
   let input = $in

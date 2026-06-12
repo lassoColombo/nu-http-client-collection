@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -459,7 +458,7 @@ export def "admin-identities-sessions listIdentitySessions" [
   --page: int # Deprecated Pagination Page  DEPRECATED: Please use `page_token` instead. This parameter will be removed in the future.  This value is currently an integer, but it is not sequential. The value is not the page number, but a reference. The next page can be any number and some numbers might return an empty list.  For example, page 2 might not follow after page 1. And even if page 3 and 5 exist, but page 4 might not exist. The first page can be retrieved by omitting this parameter. Following page pointers will be returned in the `Link` header. (format: int64)
   --page-size: int # Page Size  This is the number of items per page to return. For details on pagination please head over to the [pagination documentation](https://www.ory.com/docs/ecosystem/api-design#pagination). (format: int64, default: 250)
   --page-token: string # Next Page Token  The next page token. For details on pagination please head over to the [pagination documentation](https://www.ory.com/docs/ecosystem/api-design#pagination).
-  --active: string@bool-completer # Active is a boolean flag that filters out sessions based on the state. If no value is provided, all sessions are returned.
+  --active: oneof<nothing, bool> # Active is a boolean flag that filters out sessions based on the state. If no value is provided, all sessions are returned.
 ]: nothing -> record<error: record<code: int, debug: string, details: record, id: string, message: string, reason: string, request: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -539,7 +538,7 @@ export def "admin-sessions listSessions" [
   --allow-errors(-e) # Return full response without error handling
   --page-size: int # Items per Page  This is the number of items per page to return. For details on pagination please head over to the [pagination documentation](https://www.ory.com/docs/ecosystem/api-design#pagination). (format: int64, default: 250)
   --page-token: string # Next Page Token  The next page token. For details on pagination please head over to the [pagination documentation](https://www.ory.com/docs/ecosystem/api-design#pagination).
-  --active: string@bool-completer # Active is a boolean flag that filters out sessions based on the state. If no value is provided, all sessions are returned.
+  --active: oneof<nothing, bool> # Active is a boolean flag that filters out sessions based on the state. If no value is provided, all sessions are returned.
   --expand: list # ExpandOptions is a query parameter encoded list of all properties that must be expanded in the Session. If no value is provided, the expandable properties are skipped.
 ]: nothing -> record<error: record<code: int, debug: string, details: record, id: string, message: string, reason: string, request: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -896,9 +895,9 @@ export def "self-service-login createNativeLoginFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --refresh: string@bool-completer # Refresh a login session  If set to true, this will refresh an existing login session by asking the user to sign in again. This will reset the authenticated_at time of the session.
+  --refresh: oneof<nothing, bool> # Refresh a login session  If set to true, this will refresh an existing login session by asking the user to sign in again. This will reset the authenticated_at time of the session.
   --aal: string # Request a Specific AuthenticationMethod Assurance Level  Use this parameter to upgrade an existing session's authenticator assurance level (AAL). This allows you to ask for multi-factor authentication. When an identity sign in using e.g. username+password, the AAL is 1. If you wish to "upgrade" the session's security by asking the user to perform TOTP / WebAuth/ ... you would set this to "aal2".
-  --return-session-token-exchange-code: string@bool-completer # EnableSessionTokenExchangeCode requests the login flow to include a code that can be used to retrieve the session token after the login flow has been completed.
+  --return-session-token-exchange-code: oneof<nothing, bool> # EnableSessionTokenExchangeCode requests the login flow to include a code that can be used to retrieve the session token after the login flow has been completed.
   --return-to: string # The URL to return the browser to after the flow was completed.
   --organization: string # An optional organization ID that should be used for logging this user in. This parameter is only effective in the Ory Network.
   --via: string # Via should contain the identity's credential the code should be sent to. Only relevant in aal2 flows.  DEPRECATED: This field is deprecated. Please remove it from your requests. The user will now see a choice of MFA credentials to choose from to perform the second factor instead.
@@ -928,7 +927,7 @@ export def "self-service-login-browser createBrowserLoginFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --refresh: string@bool-completer # Refresh a login session  If set to true, this will refresh an existing login session by asking the user to sign in again. This will reset the authenticated_at time of the session.
+  --refresh: oneof<nothing, bool> # Refresh a login session  If set to true, this will refresh an existing login session by asking the user to sign in again. This will reset the authenticated_at time of the session.
   --aal: string # Request a Specific AuthenticationMethod Assurance Level  Use this parameter to upgrade an existing session's authenticator assurance level (AAL). This allows you to ask for multi-factor authentication. When an identity sign in using e.g. username+password, the AAL is 1. If you wish to "upgrade" the session's security by asking the user to perform TOTP / WebAuth/ ... you would set this to "aal2".
   --return-to: string # The URL to return the browser to after the flow was completed.
   --login-challenge: string # An optional Hydra login challenge. If present, Kratos will cooperate with Ory Hydra to act as an OAuth2 identity provider.  The value for this parameter comes from `login_challenge` URL Query parameter sent to your application (e.g. `/login?login_challenge=abcde`).
@@ -1246,7 +1245,7 @@ export def "self-service-registration createNativeRegistrationFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --return-session-token-exchange-code: string@bool-completer # EnableSessionTokenExchangeCode requests the login flow to include a code that can be used to retrieve the session token after the login flow has been completed.
+  --return-session-token-exchange-code: oneof<nothing, bool> # EnableSessionTokenExchangeCode requests the login flow to include a code that can be used to retrieve the session token after the login flow has been completed.
   --return-to: string # The URL to return the browser to after the flow was completed.
   --organization: string # An optional organization ID that should be used to register this user. This parameter is only effective in the Ory Network.
   --identity-schema: string # An optional identity schema to use for the registration flow.
@@ -1339,14 +1338,14 @@ export def "self-service-settings updateSettingsFlow" [
   --unlink: string # Unlink this provider  Either this or `link` must be set.  type: string in: body
   --upstream-parameters: record # UpstreamParameters are the parameters that are passed to the upstream identity provider.  These parameters are optional and depend on what the upstream identity provider supports. Supported parameters are: `login_hint` (string): The `login_hint` parameter suppresses the account chooser and either pre-fills the email box on the sign-in form, or selects the proper session. `hd` (string): The `hd` parameter limits the login/registration process to a Google Organization, e.g. `mycollege.edu`. `prompt` (string): The `prompt` specifies whether the Authorization Server prompts the End-User for reauthentication and consent, e.g. `select_account`. `acr_values` (string): The `acr_values` specifies the Authentication Context Class Reference values for the authorization request.
   --totp-code: string # ValidationTOTP must contain a valid TOTP based on the
-  --totp-unlink: string@bool-completer # UnlinkTOTP if true will remove the TOTP pairing, effectively removing the credential. This can be used to set up a new TOTP device.
+  --totp-unlink: oneof<nothing, bool> # UnlinkTOTP if true will remove the TOTP pairing, effectively removing the credential. This can be used to set up a new TOTP device.
   --webauthn-register: string # Register a WebAuthn Security Key  It is expected that the JSON returned by the WebAuthn registration process is included here.
   --webauthn-register-displayname: string # Name of the WebAuthn Security Key to be Added  A human-readable name for the security key which will be added.
   --webauthn-remove: string # Remove a WebAuthn Security Key  This must contain the ID of the WebAuthN connection.
-  --lookup-secret-confirm: string@bool-completer # If set to true will save the regenerated lookup secrets
-  --lookup-secret-disable: string@bool-completer # Disables this method if true.
-  --lookup-secret-regenerate: string@bool-completer # If set to true will regenerate the lookup secrets
-  --lookup-secret-reveal: string@bool-completer # If set to true will reveal the lookup secrets
+  --lookup-secret-confirm: oneof<nothing, bool> # If set to true will save the regenerated lookup secrets
+  --lookup-secret-disable: oneof<nothing, bool> # Disables this method if true.
+  --lookup-secret-regenerate: oneof<nothing, bool> # If set to true will regenerate the lookup secrets
+  --lookup-secret-reveal: oneof<nothing, bool> # If set to true will reveal the lookup secrets
   --passkey-remove: string # Remove a WebAuthn Security Key  This must contain the ID of the WebAuthN connection.
   --passkey-settings-register: string # Register a WebAuthn Security Key  It is expected that the JSON returned by the WebAuthn registration process is included here.
 ]: any -> record<active: string, continue_with: list<record>, expires_at: string, id: string, identity: record<created_at: string, credentials: record, external_id: string, id: string, metadata_admin: any, metadata_public: any, organization_id: string, recovery_addresses: list<record>, region: string, schema_id: string, schema_url: string, state: string, state_changed_at: string, traits: any, updated_at: string, verifiable_addresses: list<record>>, issued_at: string, organization_id: string, request_url: string, return_to: string, state: any, transient_payload: record, type: string, ui: record<action: string, messages: list<record>, method: string, nodes: list<record>>> {

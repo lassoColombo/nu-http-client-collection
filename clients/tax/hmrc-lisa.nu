@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://test-api.service.hmrc.gov.uk" "https://api.service.hmrc.gov.uk"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -552,7 +551,7 @@ export def "lifetime-isa-manager-accounts-withdrawal-charges reportWithdrawalCha
   withdrawalAmount: float # This is the amount that the investor has withdrawn from the LISA account.  You can include a value up to 2 decimal places.
   withdrawalChargeAmount: float # This is the amount charged for the withdrawal. You can include a value up to 2 decimal places. If there is a charge made during withdrawal, withdrawalChargeAmount and automaticRecoveryAmount must be the same.
   withdrawalChargeAmountYTD: float # This is the total value of withdrawal charges reported to HMRC for the current tax year to date. You can include a value up to 2 decimal places.
-  --fundsDeductedDuringWithdrawal: string@bool-completer # This confirms if the investor was charged and funds were deducted at the time of the withdrawal.
+  --fundsDeductedDuringWithdrawal: oneof<nothing, bool> # This confirms if the investor was charged and funds were deducted at the time of the withdrawal.
   withdrawalReason: string@withdrawalReason-completer # This is used by HMRC to decide how the withdrawal charge is processed.
   --automaticRecoveryAmount: float # This is the amount HMRC can collect from the LISA manager when a withdrawal charge is due from the investor. This cannot be greater than the withdrawalChargeAmount. If there are no funds available, this value must be 0. If there is a charge made during withdrawal, automaticRecoveryAmount and withdrawalChargeAmount must be the same.
   --supersede: record # Correct an existing withdrawal charge. You can request an additional charge, reduce a charge, or refund a charge. — shape: {originalTransactionId: string, originalWithdrawalChargeAmount: float, transactionResult: float, reason: "Additional withdrawal"|"Withdrawal reduction"|"Withdrawal refund"}

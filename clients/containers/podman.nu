@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://podman.io" "https://podman.io"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -143,16 +142,16 @@ export def "build ImageBuild" [
   --dockerfile: string # Path within the build context to the `Dockerfile`. This is ignored if remote is specified and points to an external `Dockerfile`.  (default: Dockerfile)
   --t: string # A name and optional tag to apply to the image in the `name:tag` format. If you omit the tag, the default latest value is assumed. You can provide several t parameters. (default: latest)
   --extrahosts: string # TBD Extra hosts to add to /etc/hosts (As of version 1.xx)
-  --nohosts: string@bool-completer # Not to create /etc/hosts when building the image
+  --nohosts: oneof<nothing, bool> # Not to create /etc/hosts when building the image
   --remote: string # A Git repository URI or HTTP/HTTPS context URI. If the URI points to a single text file, the file’s contents are placed into a file called Dockerfile and the image is built from that file. If the URI points to a tarball, the file is downloaded by the daemon and the contents therein used as the context for the build. If the URI points to a tarball and the dockerfile parameter is also specified, there must be a file with the corresponding path inside the tarball. (As of version 1.xx)
   --retry: int # Number of times to retry in case of failure when performing push/pull.  (default: 3)
   --retry-delay: string # Delay between retries in case of push/pull failures.  (default: 2s)
-  --q: string@bool-completer # Suppress verbose build output  (default: false)
-  --nocache: string@bool-completer # Do not use the cache when building the image (As of version 1.xx)  (default: false)
+  --q: oneof<nothing, bool> # Suppress verbose build output  (default: false)
+  --nocache: oneof<nothing, bool> # Do not use the cache when building the image (As of version 1.xx)  (default: false)
   --cachefrom: string # JSON array of images used to build cache resolution (As of version 1.xx)
-  --pull: string@bool-completer # Attempt to pull the image even if an older image exists locally (As of version 1.xx)  (default: false)
-  --rm: string@bool-completer # Remove intermediate containers after a successful build (As of version 1.xx)  (default: true)
-  --forcerm: string@bool-completer # Always remove intermediate containers, even upon failure (As of version 1.xx)  (default: false)
+  --pull: oneof<nothing, bool> # Attempt to pull the image even if an older image exists locally (As of version 1.xx)  (default: false)
+  --rm: oneof<nothing, bool> # Remove intermediate containers after a successful build (As of version 1.xx)  (default: true)
+  --forcerm: oneof<nothing, bool> # Always remove intermediate containers, even upon failure (As of version 1.xx)  (default: false)
   --memory: int # Memory is the upper limit (in bytes) on how much memory running containers can use (As of version 1.xx)
   --memswap: int # MemorySwap limits the amount of memory and swap together (As of version 1.xx)
   --cpushares: int # CPUShares (relative weight (As of version 1.xx)
@@ -161,9 +160,9 @@ export def "build ImageBuild" [
   --cpuquota: int # CPUQuota limits the CPU CFS (Completely Fair Scheduler) quota (As of version 1.xx)
   --buildargs: string # JSON map of string pairs denoting build-time variables. For example, the build argument `Foo` with the value of `bar` would be encoded in JSON as `["Foo":"bar"]`.  For example, buildargs={"Foo":"bar"}.  Note(s): * This should not be used to pass secrets. * The value of buildargs should be URI component encoded before being passed to the API.  (As of version 1.xx)
   --shmsize: int # ShmSize is the "size" value to use when mounting an shmfs on the container's /dev/shm directory. Default is 64MB (As of version 1.xx)  (default: 67108864)
-  --squash: string@bool-completer # Silently ignored. Squash the resulting images layers into a single layer (As of version 1.xx)  (default: false)
-  --save-stages: string@bool-completer # Preserve intermediate stage images instead of removing them after the build completes. By default, they are removed to save space. However, they can be useful for debugging multi-stage builds or reusing stages in subsequent builds.  (default: false)
-  --stage-labels: string@bool-completer # Add metadata labels to all intermediate stage images of a multistage build, including the final image. If set to true, save-stages must also be set to true. If enabled, the labels 'io.buildah.stage.name' and 'io.buildah.stage.base' will be added.  (default: false)
+  --squash: oneof<nothing, bool> # Silently ignored. Squash the resulting images layers into a single layer (As of version 1.xx)  (default: false)
+  --save-stages: oneof<nothing, bool> # Preserve intermediate stage images instead of removing them after the build completes. By default, they are removed to save space. However, they can be useful for debugging multi-stage builds or reusing stages in subsequent builds.  (default: false)
+  --stage-labels: oneof<nothing, bool> # Add metadata labels to all intermediate stage images of a multistage build, including the final image. If set to true, save-stages must also be set to true. If enabled, the labels 'io.buildah.stage.name' and 'io.buildah.stage.base' will be added.  (default: false)
   --labels: string # JSON map of key, value pairs to set as labels on the new image (As of version 1.xx)
   --networkmode: string # Sets the networking mode for the run commands during build. Supported standard values are:   * `bridge` limited to containers within a single host, port mapping required for external access   * `host` no isolation between host and containers on this network   * `none` disable all networking for this container   * container:<nameOrID> share networking with given container   ---All other values are assumed to be a custom network's name (As of version 1.xx)  (default: bridge)
   --platform: string # Platform format os[/arch[/variant]] Can be comma separated list for multi arch builds. (As of version 1.xx)
@@ -203,9 +202,9 @@ export def "commit ImageCommit" [
   --tag: string # tag name for the created image
   --comment: string # commit message
   --author: string # author of the image
-  --pause: string@bool-completer # pause the container before committing it
+  --pause: oneof<nothing, bool> # pause the container before committing it
   --changes: string # instructions to apply while committing in Dockerfile format
-  --squash: string@bool-completer # squash newly built layers into a single new layer
+  --squash: oneof<nothing, bool> # squash newly built layers into a single new layer
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -229,13 +228,13 @@ export def "containers ContainerDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # If the container is running, kill it before removing it. (default: false)
-  --v: string@bool-completer # Remove the volumes associated with the container. (default: false)
-  --link: string@bool-completer # not supported
-  --ignore: string@bool-completer # Ignore if a specified container does not exist. (default: false)
-  --depend: string@bool-completer # Remove container dependencies. (default: false)
+  --force: oneof<nothing, bool> # If the container is running, kill it before removing it. (default: false)
+  --v: oneof<nothing, bool> # Remove the volumes associated with the container. (default: false)
+  --link: oneof<nothing, bool> # not supported
+  --ignore: oneof<nothing, bool> # Ignore if a specified container does not exist. (default: false)
+  --depend: oneof<nothing, bool> # Remove container dependencies. (default: false)
   --timeout: int # Number of seconds to wait before forcibly stopping the container.
-  --volumes: string@bool-completer # Remove anonymous volumes associated with the container. (default: false)
+  --volumes: oneof<nothing, bool> # Remove anonymous volumes associated with the container. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -313,11 +312,11 @@ export def "containers-attach ContainerAttach" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --detachKeys: string # keys to use for detaching from the container
-  --logs: string@bool-completer # Stream all logs from the container across the connection. Happens before streaming attach (if requested). At least one of logs or stream must be set
-  --stream: string@bool-completer # Attach to the container. If unset, and logs is set, only the container's logs will be sent. At least one of stream or logs must be set (default: true)
-  --stdout: string@bool-completer # Attach to container STDOUT
-  --stderr: string@bool-completer # Attach to container STDERR
-  --stdin: string@bool-completer # Attach to container STDIN
+  --logs: oneof<nothing, bool> # Stream all logs from the container across the connection. Happens before streaming attach (if requested). At least one of logs or stream must be set
+  --stream: oneof<nothing, bool> # Attach to the container. If unset, and logs is set, only the container's logs will be sent. At least one of stream or logs must be set (default: true)
+  --stdout: oneof<nothing, bool> # Attach to container STDOUT
+  --stderr: oneof<nothing, bool> # Attach to container STDERR
+  --stdin: oneof<nothing, bool> # Attach to container STDIN
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -367,14 +366,14 @@ export def "containers-exec ContainerExec" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AttachStderr: string@bool-completer # Attach to stderr of the exec command
-  --AttachStdin: string@bool-completer # Attach to stdin of the exec command
-  --AttachStdout: string@bool-completer # Attach to stdout of the exec command
+  --AttachStderr: oneof<nothing, bool> # Attach to stderr of the exec command
+  --AttachStdin: oneof<nothing, bool> # Attach to stdin of the exec command
+  --AttachStdout: oneof<nothing, bool> # Attach to stdout of the exec command
   --Cmd: list # Command to run, as a string or array of strings.
   --DetachKeys: string # "Override the key sequence for detaching a container. Format is a single character [a-Z] or ctrl-<value> where <value> is one of: a-z, @, ^, [, , or _."
   --Env: list # A list of environment variables in the form ["VAR=value", ...]
-  --Privileged: string@bool-completer # Runs the exec process with extended privileges (default: false)
-  --Tty: string@bool-completer # Allocate a pseudo-TTY
+  --Privileged: oneof<nothing, bool> # Runs the exec process with extended privileges (default: false)
+  --Tty: oneof<nothing, bool> # Allocate a pseudo-TTY
   --User: string # "The user, and optionally, group to run the exec process inside the container. Format is one of: user, user:group, uid, or uid:gid."
   --WorkingDir: string # The working directory for the exec process inside the container.
 ]: any -> any {
@@ -424,7 +423,7 @@ export def "containers-json ContainerInspect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --size: string@bool-completer # include the size of the container (default: false)
+  --size: oneof<nothing, bool> # include the size of the container (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -448,7 +447,7 @@ export def "containers-kill ContainerKill" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # Send kill signal to all containers (default: false)
+  --all: oneof<nothing, bool> # Send kill signal to all containers (default: false)
   --signal: string # signal to be sent to container (default: SIGKILL)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -473,12 +472,12 @@ export def "containers-logs ContainerLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --follow: string@bool-completer # Keep connection after returning logs.
-  --stdout: string@bool-completer # Return logs from stdout
-  --stderr: string@bool-completer # Return logs from stderr
+  --follow: oneof<nothing, bool> # Keep connection after returning logs.
+  --stdout: oneof<nothing, bool> # Return logs from stdout
+  --stderr: oneof<nothing, bool> # Return logs from stderr
   --since: string # Only return logs since this time, as a UNIX timestamp
   --until: string # Only return logs before this time, as a UNIX timestamp
-  --timestamps: string@bool-completer # Add timestamps to every log line (default: false)
+  --timestamps: oneof<nothing, bool> # Add timestamps to every log line (default: false)
   --tail: string # Only return this number of log lines from the end of the logs (default: all)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -551,7 +550,7 @@ export def "containers-resize ContainerResize" [
   --allow-errors(-e) # Return full response without error handling
   --h: int # Height to set for the terminal, in characters
   --w: int # Width to set for the terminal, in characters
-  --running: string@bool-completer # Ignore containers not running errors
+  --running: oneof<nothing, bool> # Ignore containers not running errors
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -623,8 +622,8 @@ export def "containers-stats ContainerStats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --stream: string@bool-completer # Stream the output (default: true)
-  --one-shot: string@bool-completer # Provide a one-shot response in which preCPU stats are blank, resulting in a single cycle return. (default: false)
+  --stream: oneof<nothing, bool> # Stream the output (default: true)
+  --one-shot: oneof<nothing, bool> # Provide a one-shot response in which preCPU stats are blank, resulting in a single cycle return. (default: false)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -650,7 +649,7 @@ export def "containers-stop ContainerStop" [
   --allow-errors(-e) # Return full response without error handling
   --t: int # number of seconds to wait before killing container
   --timeout: int # Number of seconds to wait before killing the container (libpod alias for `t`).
-  --ignore: string@bool-completer # Do not return an error if the container is already stopped. (default: false)
+  --ignore: oneof<nothing, bool> # Do not return an error if the container is already stopped. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -754,7 +753,7 @@ export def "containers-update ContainerUpdate" [
   --MemorySwap: int # format: int64
   --MemorySwappiness: int # format: int64
   --NanoCpus: int # format: int64
-  --OomKillDisable: string@bool-completer
+  --OomKillDisable: oneof<nothing, bool>
   --PidsLimit: int # format: int64
   --RestartPolicy: record # shape: {MaximumRetryCount?: int, Name?: string}
   --Ulimits: list
@@ -809,10 +808,10 @@ export def "containers-create ContainerCreate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # container name
-  --ArgsEscaped: string@bool-completer
-  --AttachStderr: string@bool-completer
-  --AttachStdin: string@bool-completer
-  --AttachStdout: string@bool-completer
+  --ArgsEscaped: oneof<nothing, bool>
+  --AttachStderr: oneof<nothing, bool>
+  --AttachStdin: oneof<nothing, bool>
+  --AttachStdout: oneof<nothing, bool>
   --Cmd: list
   --Domainname: string
   --Entrypoint: list
@@ -826,17 +825,17 @@ export def "containers-create ContainerCreate" [
   --Labels: record
   --MacAddress: string
   --Name: string
-  --NetworkDisabled: string@bool-completer
+  --NetworkDisabled: oneof<nothing, bool>
   --NetworkingConfig: record # NetworkingConfig represents the container's networking configuration for each of its interfaces Carries the networking configs specified in the `docker run` and `docker network connect` commands — shape: {EndpointsConfig?: record}
   --OnBuild: list
-  --OpenStdin: string@bool-completer
+  --OpenStdin: oneof<nothing, bool>
   --Shell: list
-  --StdinOnce: string@bool-completer
+  --StdinOnce: oneof<nothing, bool>
   --StopSignal: string
   --StopTimeout: int # format: int64
-  --Tty: string@bool-completer
+  --Tty: oneof<nothing, bool>
   --UnsetEnv: list
-  --UnsetEnvAll: string@bool-completer
+  --UnsetEnvAll: oneof<nothing, bool>
   --User: string
   --Volumes: record
   --WorkingDir: string
@@ -865,10 +864,10 @@ export def "containers-json ContainerList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # Return all containers. By default, only running containers are shown (default: false)
-  --external: string@bool-completer # Return containers in storage not controlled by Podman (default: false)
+  --all: oneof<nothing, bool> # Return all containers. By default, only running containers are shown (default: false)
+  --external: oneof<nothing, bool> # Return containers in storage not controlled by Podman (default: false)
   --limit: int # Return this number of most recently created containers, including non-running ones.
-  --size: string@bool-completer # Return the size of container as fields SizeRw and SizeRootFs. (default: false)
+  --size: oneof<nothing, bool> # Return the size of container as fields SizeRw and SizeRootFs. (default: false)
   --filters: string # A JSON encoded value of the filters (a `map[string][]string`) to process on the containers list. Available filters: - `ancestor`=(`<image-name>[:<tag>]`, `<image id>`, or `<image@digest>`) - `annotation`=(`key` or `"key=value"`) of a container annotation - `before`=(`<container id>` or `<container name>`) - `exited=<int>` containers with exit code of `<int>` - `expose`=(`<port>[/<proto>]` or `<startport-endport>/[<proto>]`) - `health`=(`starting`, `healthy`, `unhealthy` or `none`) - `id=<ID>` a container's ID - `is-task`=(`true` or `false`) - `label`=(`key` or `"key=value"`) of a container label - `name=<name>` a container's name - `network`=(`<network id>` or `<network name>`) - `publish`=(`<port>[/<proto>]` or `<startport-endport>/[<proto>]`) - `since`=(`<container id>` or `<container name>`) - `status`=(`created`, `restarting`, `running`, `removing`, `paused`, `exited` or `dead`) - `volume`=(`<volume name>` or `<mount point destination>`)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -965,7 +964,7 @@ export def "exec-resize ExecResize" [
   --allow-errors(-e) # Return full response without error handling
   --h: int # Height of the TTY session in characters
   --w: int # Width of the TTY session in characters
-  --running: string@bool-completer # Ignore containers not running errors
+  --running: oneof<nothing, bool> # Ignore containers not running errors
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -989,8 +988,8 @@ export def "exec-start ExecStart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Detach: string@bool-completer # Detach from the command. Not presently supported.
-  --Tty: string@bool-completer # Allocate a pseudo-TTY. Presently ignored.
+  --Detach: oneof<nothing, bool> # Detach from the command. Not presently supported.
+  --Tty: oneof<nothing, bool> # Allocate a pseudo-TTY. Presently ignored.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1016,9 +1015,9 @@ export def "images ImageDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # Remove the image even if it is being used by stopped containers or has other tags
-  --noprune: string@bool-completer # do not remove dangling parent images
-  --ignore: string@bool-completer # Ignore if a specified image does not exist and do not throw an error. (default: false)
+  --force: oneof<nothing, bool> # Remove the image even if it is being used by stopped containers or has other tags
+  --noprune: oneof<nothing, bool> # do not remove dangling parent images
+  --ignore: oneof<nothing, bool> # Ignore if a specified image does not exist and do not throw an error. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1109,14 +1108,14 @@ export def "images-push ImagePush" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --tag: string # The tag to associate with the image on the registry.
-  --all: string@bool-completer # All indicates whether to push all images related to the image list
-  --compress: string@bool-completer # Use compression on image.
+  --all: oneof<nothing, bool> # All indicates whether to push all images related to the image list
+  --compress: oneof<nothing, bool> # Use compression on image.
   --compressionFormat: string # The type of compression to apply to layer blobs pushed to build caches in registries.
   --compressionLevel: int # The level of compression to apply to layer blobs pushed to build caches in registries. The range of acceptable values varies based on the compression format.
-  --forceCompressionFormat: string@bool-completer # Use the specified compression format for layer blobs, even when pushing to a location where an equivalent blob which differs only in how it's compressed could be reused.
+  --forceCompressionFormat: oneof<nothing, bool> # Use the specified compression format for layer blobs, even when pushing to a location where an equivalent blob which differs only in how it's compressed could be reused.
   --destination: string # Allows for pushing the image to a different destination than the image refers to.
   --format: string # Manifest type (oci, v2s1, or v2s2) to use when pushing an image. Default is manifest type of source, with fallbacks.
-  --tlsVerify: string@bool-completer # Require TLS verification. (default: true)
+  --tlsVerify: oneof<nothing, bool> # Require TLS verification. (default: true)
   --X-Registry-Auth: string # A base64-encoded auth configuration.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1226,10 +1225,10 @@ export def "images-json ImageList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # Show all images. Only images from a final layer (no children) are shown by default. (default: false)
+  --all: oneof<nothing, bool> # Show all images. Only images from a final layer (no children) are shown by default. (default: false)
   --filters: string # JSON-encoded string containing filters as a `map[string][]string` to process on the images list. Available filters: - `before`=(`<image-name>[:<tag>]`,  `<image id>` or `<image@digest>`) - `dangling=true` - `label=key` or `label="key=value"` of an image label - `reference`=(`<image-name>[:<tag>]`) - `since`=(`<image-name>[:<tag>]`,  `<image id>` or `<image@digest>`)
-  --digests: string@bool-completer # Not supported (default: false)
-  --shared-size: string@bool-completer # Compute and show shared size as a SharedSize field on each image. (default: false)
+  --digests: oneof<nothing, bool> # Not supported (default: false)
+  --shared-size: oneof<nothing, bool> # Compute and show shared size as a SharedSize field on each image. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1252,7 +1251,7 @@ export def "images-load ImageLoad" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --quiet: string@bool-completer # not supported
+  --quiet: oneof<nothing, bool> # not supported
   --body: record
 ]: any -> any {
   let input = $in
@@ -1304,8 +1303,8 @@ export def "images-search ImageSearch" [
   --term: string # term to search
   --limit: int # maximum number of results (default: 25)
   --filters: string # JSON-encoded string containing filters as a `map[string][]string` to process on the images list. Available filters: - `is-automated=(true|false)` - `is-official=(true|false)` - `stars=<number>` Matches images that have at least 'number' stars.
-  --tlsVerify: string@bool-completer # Require HTTPS and verify signatures when contacting registries. (default: true)
-  --listTags: string@bool-completer # list the available tags in the repository
+  --tlsVerify: oneof<nothing, bool> # Require HTTPS and verify signatures when contacting registries. (default: true)
+  --listTags: oneof<nothing, bool> # list the available tags in the repository
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1395,7 +1394,7 @@ export def "libpod-artifacts-extract ArtifactExtractLibpod" [
   --allow-errors(-e) # Return full response without error handling
   --title: string # Only extract the file with the given title
   --digest: string # Only extract the file with the given digest
-  --excludeTitle: string@bool-completer # When extracting a single file from an artifact, don't use the files title as the file name in the tar archive
+  --excludeTitle: oneof<nothing, bool> # When extracting a single file from an artifact, don't use the files title as the file name in the tar archive
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1443,7 +1442,7 @@ export def "libpod-artifacts-push ArtifactPushLibpod" [
   --allow-errors(-e) # Return full response without error handling
   --retry: int # Number of times to retry in case of failure when performing pull (default: 3)
   --retryDelay: string # Delay between retries in case of pull failures (e.g., 10s) (default: 1s)
-  --tlsVerify: string@bool-completer # Require TLS verification (default: true)
+  --tlsVerify: oneof<nothing, bool> # Require TLS verification (default: true)
   --X-Registry-Auth: string # base-64 encoded auth config. Must include the following four values: username, password, email and server address OR simply just an identity token.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1474,8 +1473,8 @@ export def "libpod-artifacts-add ArtifactAddLibpod" [
   --fileMIMEType: string # Optionally set the type of file
   --annotations: list # Array of annotation strings e.g "test=true"
   --artifactMIMEType: string # Use type to describe an artifact
-  --append: string@bool-completer # Append files to an existing artifact (default: false)
-  --replace: string@bool-completer # Replace an existing artifact with the same name (default: false)
+  --append: oneof<nothing, bool> # Append files to an existing artifact (default: false)
+  --replace: oneof<nothing, bool> # Replace an existing artifact with the same name (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -1528,8 +1527,8 @@ export def "libpod-artifacts-local-add ArtifactLocalLibpod" [
   --fileMIMEType: string # Optionally set the MIME type of the file
   --annotations: list # Array of annotation strings e.g "test=true"
   --artifactMIMEType: string # Use type to describe an artifact
-  --append: string@bool-completer # Append files to an existing artifact (default: false)
-  --replace: string@bool-completer # Replace an existing artifact with the same name (default: false)
+  --append: oneof<nothing, bool> # Append files to an existing artifact (default: false)
+  --replace: oneof<nothing, bool> # Replace an existing artifact with the same name (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1555,7 +1554,7 @@ export def "libpod-artifacts-pull ArtifactPullLibpod" [
   --name: string # Mandatory reference to the artifact (e.g., quay.io/image/artifact:tag)
   --retry: int # Number of times to retry in case of failure when performing pull (default: 3)
   --retryDelay: string # Delay between retries in case of pull failures (e.g., 10s) (default: 1s)
-  --tlsVerify: string@bool-completer # Require TLS verification (default: true)
+  --tlsVerify: oneof<nothing, bool> # Require TLS verification (default: true)
   --X-Registry-Auth: string # base-64 encoded auth config. Must include the following four values: username, password, email and server address OR simply just an identity token.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1582,8 +1581,8 @@ export def "libpod-artifacts-remove ArtifactDeleteAllLibpod" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --artifacts: list # List of artifact names/IDs to remove
-  --all: string@bool-completer # Remove all artifacts
-  --ignore: string@bool-completer # Ignore errors if artifact does not exist
+  --all: oneof<nothing, bool> # Remove all artifacts
+  --ignore: oneof<nothing, bool> # Ignore errors if artifact does not exist
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1608,24 +1607,24 @@ export def "libpod-build ImageBuildLibpod" [
   --allow-errors(-e) # Return full response without error handling
   --dockerfile: string # Path within the build context to the `Dockerfile`. This is ignored if remote is specified and points to an external `Dockerfile`.  (default: Dockerfile)
   --t: string # A name and optional tag to apply to the image in the `name:tag` format.  If you omit the tag, the default latest value is assumed. You can provide several t parameters. (default: latest)
-  --allplatforms: string@bool-completer # Instead of building for a set of platforms specified using the platform option, inspect the build's base images, and build for all of the platforms that are available.  Stages that use *scratch* as a starting point can not be inspected, so at least one non-*scratch* stage must be present for detection to work usefully.  (default: false)
+  --allplatforms: oneof<nothing, bool> # Instead of building for a set of platforms specified using the platform option, inspect the build's base images, and build for all of the platforms that are available.  Stages that use *scratch* as a starting point can not be inspected, so at least one non-*scratch* stage must be present for detection to work usefully.  (default: false)
   --additionalbuildcontexts: list # Additional build contexts for builds that require more than one context. Each additional context must be specified as a key-value pair in the format "name=value".  The value can be specified in two formats: - URL context: Use the prefix "url:" followed by a URL to a tar archive   Example: "mycontext=url:https://example.com/context.tar" - Image context: Use the prefix "image:" followed by an image reference   Example: "mycontext=image:alpine:latest" or "mycontext=image:docker.io/library/ubuntu:22.04"  Local contexts are provided via multipart/form-data upload. When using multipart/form-data, include additional build contexts as separate form fields with names prefixed by "build-context-". For example, a local context named "mycontext" should be uploaded as a tar file in a field named "build-context-mycontext".  (As of version 5.6.0)  (default: [])
   --extrahosts: string # TBD Extra hosts to add to /etc/hosts (As of version 1.xx)
-  --nohosts: string@bool-completer # Not to create /etc/hosts when building the image
+  --nohosts: oneof<nothing, bool> # Not to create /etc/hosts when building the image
   --remote: string # A Git repository URI or HTTP/HTTPS context URI. If the URI points to a single text file, the file’s contents are placed into a file called Dockerfile and the image is built from that file. If the URI points to a tarball, the file is downloaded by the daemon and the contents therein used as the context for the build. If the URI points to a tarball and the dockerfile parameter is also specified, there must be a file with the corresponding path inside the tarball. (As of version 1.xx)
-  --q: string@bool-completer # Suppress verbose build output  (default: false)
-  --compatvolumes: string@bool-completer # Contents of volume locations to be modified on ADD or COPY only (As of Podman version v5.2)  (default: false)
-  --createdannotation: string@bool-completer # Add an "org.opencontainers.image.created" annotation to the image. (As of Podman version v5.6)  (default: true)
+  --q: oneof<nothing, bool> # Suppress verbose build output  (default: false)
+  --compatvolumes: oneof<nothing, bool> # Contents of volume locations to be modified on ADD or COPY only (As of Podman version v5.2)  (default: false)
+  --createdannotation: oneof<nothing, bool> # Add an "org.opencontainers.image.created" annotation to the image. (As of Podman version v5.6)  (default: true)
   --sourcedateepoch: float # Timestamp to use for newly-added history entries and the image's creation date. (As of Podman version v5.6)
-  --rewritetimestamp: string@bool-completer # If sourcedateepoch is set, force new content added in layers to have timestamps no later than the sourcedateepoch date. (As of Podman version v5.6)  (default: false)
+  --rewritetimestamp: oneof<nothing, bool> # If sourcedateepoch is set, force new content added in layers to have timestamps no later than the sourcedateepoch date. (As of Podman version v5.6)  (default: false)
   --timestamp: float # Timestamp to use for newly-added history entries, the image's creation date, and for new content added in layers.
-  --inheritlabels: string@bool-completer # Inherit the labels from the base image or base stages (As of Podman version v5.5)  (default: true)
-  --inheritannotations: string@bool-completer # Inherit the annotations from the base image or base stages (As of Podman version v5.6)  (default: true)
-  --nocache: string@bool-completer # Do not use the cache when building the image (As of version 1.xx)  (default: false)
+  --inheritlabels: oneof<nothing, bool> # Inherit the labels from the base image or base stages (As of Podman version v5.5)  (default: true)
+  --inheritannotations: oneof<nothing, bool> # Inherit the annotations from the base image or base stages (As of Podman version v5.6)  (default: true)
+  --nocache: oneof<nothing, bool> # Do not use the cache when building the image (As of version 1.xx)  (default: false)
   --cachefrom: string # JSON array of images used to build cache resolution (As of version 1.xx)
-  --pull: string@bool-completer # Attempt to pull the image even if an older image exists locally (As of version 1.xx)  (default: false)
-  --rm: string@bool-completer # Remove intermediate containers after a successful build (As of version 1.xx)  (default: true)
-  --forcerm: string@bool-completer # Always remove intermediate containers, even upon failure (As of version 1.xx)  (default: false)
+  --pull: oneof<nothing, bool> # Attempt to pull the image even if an older image exists locally (As of version 1.xx)  (default: false)
+  --rm: oneof<nothing, bool> # Remove intermediate containers after a successful build (As of version 1.xx)  (default: true)
+  --forcerm: oneof<nothing, bool> # Always remove intermediate containers, even upon failure (As of version 1.xx)  (default: false)
   --memory: int # Memory is the upper limit (in bytes) on how much memory running containers can use (As of version 1.xx)
   --memswap: int # MemorySwap limits the amount of memory and swap together (As of version 1.xx)
   --cpushares: int # CPUShares (relative weight (As of version 1.xx)
@@ -1634,15 +1633,15 @@ export def "libpod-build ImageBuildLibpod" [
   --cpuquota: int # CPUQuota limits the CPU CFS (Completely Fair Scheduler) quota (As of version 1.xx)
   --buildargs: string # JSON map of string pairs denoting build-time variables. For example, the build argument `Foo` with the value of `bar` would be encoded in JSON as `["Foo":"bar"]`.  For example, buildargs={"Foo":"bar"}.  Note(s): * This should not be used to pass secrets. * The value of buildargs should be URI component encoded before being passed to the API.  (As of version 1.xx)
   --shmsize: int # ShmSize is the "size" value to use when mounting an shmfs on the container's /dev/shm directory. Default is 64MB (As of version 1.xx)  (default: 67108864)
-  --squash: string@bool-completer # Silently ignored. Squash the resulting images layers into a single layer (As of version 1.xx)  (default: false)
+  --squash: oneof<nothing, bool> # Silently ignored. Squash the resulting images layers into a single layer (As of version 1.xx)  (default: false)
   --labels: string # JSON map of key, value pairs to set as labels on the new image (As of version 1.xx)
   --layerLabel: list # Add an intermediate image *label* (e.g. label=*value*) to the intermediate image metadata.
-  --layers: string@bool-completer # Cache intermediate layers during build. (As of version 1.xx)  (default: true)
+  --layers: oneof<nothing, bool> # Cache intermediate layers during build. (As of version 1.xx)  (default: true)
   --networkmode: string # Sets the networking mode for the run commands during build. Supported standard values are:   * `bridge` limited to containers within a single host, port mapping required for external access   * `host` no isolation between host and containers on this network   * `none` disable all networking for this container   * container:<nameOrID> share networking with given container   ---All other values are assumed to be a custom network's name (As of version 1.xx)  (default: bridge)
   --platform: string # Platform format os[/arch[/variant]] (As of version 1.xx)
   --target: string # Target build stage (As of version 1.xx)
   --outputs: string # output configuration TBD (As of version 1.xx)
-  --httpproxy: string@bool-completer # Inject http proxy environment variables into container (As of version 2.0.0)
+  --httpproxy: oneof<nothing, bool> # Inject http proxy environment variables into container (As of version 2.0.0)
   --unsetenv: list # Unset environment variables from the final image.
   --unsetlabel: list # Unset the image label, causing the label not to be inherited from the base image.
   --unsetannotation: list # Unset the image annotation, causing the annotation not to be inherited from the base image. (As of Podman version v5.6)
@@ -1679,10 +1678,10 @@ export def "libpod-commit ImageCommitLibpod" [
   --changes: list # instructions to apply while committing in Dockerfile format (i.e. "CMD=/bin/foo")
   --comment: string # commit message
   --format: string # format of the image manifest and metadata (default "oci")
-  --pause: string@bool-completer # pause the container before committing it
-  --squash: string@bool-completer # squash the container before committing it
+  --pause: oneof<nothing, bool> # pause the container before committing it
+  --squash: oneof<nothing, bool> # squash the container before committing it
   --repo: string # the repository name for the created image
-  --stream: string@bool-completer # output from commit process
+  --stream: oneof<nothing, bool> # output from commit process
   --tag: string # tag name for the created image
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1707,11 +1706,11 @@ export def "libpod-containers ContainerDeleteLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --depend: string@bool-completer # additionally remove containers that depend on the container to be removed
-  --force: string@bool-completer # force stop container if running
-  --ignore: string@bool-completer # ignore errors when the container to be removed does not existxo
+  --depend: oneof<nothing, bool> # additionally remove containers that depend on the container to be removed
+  --force: oneof<nothing, bool> # force stop container if running
+  --ignore: oneof<nothing, bool> # ignore errors when the container to be removed does not existxo
   --timeout: int # number of seconds to wait before killing container when force removing (default: 10)
-  --v: string@bool-completer # delete volumes
+  --v: oneof<nothing, bool> # delete volumes
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1761,7 +1760,7 @@ export def "libpod-containers-archive PutContainerArchiveLibpod" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --path: string # Path to a directory in the container to extract
-  --pause: string@bool-completer # pause the container while copying (defaults to true) (default: true)
+  --pause: oneof<nothing, bool> # pause the container while copying (defaults to true) (default: true)
   --body: record
 ]: any -> any {
   let input = $in
@@ -1789,11 +1788,11 @@ export def "libpod-containers-attach ContainerAttachLibpod" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --detachKeys: string # keys to use for detaching from the container
-  --logs: string@bool-completer # Stream all logs from the container across the connection. Happens before streaming attach (if requested). At least one of logs or stream must be set
-  --stream: string@bool-completer # Attach to the container. If unset, and logs is set, only the container's logs will be sent. At least one of stream or logs must be set (default: true)
-  --stdout: string@bool-completer # Attach to container STDOUT
-  --stderr: string@bool-completer # Attach to container STDERR
-  --stdin: string@bool-completer # Attach to container STDIN
+  --logs: oneof<nothing, bool> # Stream all logs from the container across the connection. Happens before streaming attach (if requested). At least one of logs or stream must be set
+  --stream: oneof<nothing, bool> # Attach to the container. If unset, and logs is set, only the container's logs will be sent. At least one of stream or logs must be set (default: true)
+  --stdout: oneof<nothing, bool> # Attach to container STDOUT
+  --stderr: oneof<nothing, bool> # Attach to container STDERR
+  --stdin: oneof<nothing, bool> # Attach to container STDIN
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1843,16 +1842,16 @@ export def "libpod-containers-checkpoint ContainerCheckpointLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --keep: string@bool-completer # keep all temporary checkpoint files
-  --leaveRunning: string@bool-completer # leave the container running after writing checkpoint to disk
-  --tcpEstablished: string@bool-completer # checkpoint a container with established TCP connections
-  --qp-export: string@bool-completer # export the checkpoint image to a tar.gz
-  --ignoreRootFS: string@bool-completer # do not include root file-system changes when exporting. can only be used with export
-  --ignoreVolumes: string@bool-completer # do not include associated volumes. can only be used with export
-  --preCheckpoint: string@bool-completer # dump the container's memory information only, leaving the container running. only works on runc 1.0-rc or higher
-  --withPrevious: string@bool-completer # check out the container with previous criu image files in pre-dump. only works on runc 1.0-rc or higher
-  --fileLocks: string@bool-completer # checkpoint a container with filelocks
-  --printStats: string@bool-completer # add checkpoint statistics to the returned CheckpointReport
+  --keep: oneof<nothing, bool> # keep all temporary checkpoint files
+  --leaveRunning: oneof<nothing, bool> # leave the container running after writing checkpoint to disk
+  --tcpEstablished: oneof<nothing, bool> # checkpoint a container with established TCP connections
+  --qp-export: oneof<nothing, bool> # export the checkpoint image to a tar.gz
+  --ignoreRootFS: oneof<nothing, bool> # do not include root file-system changes when exporting. can only be used with export
+  --ignoreVolumes: oneof<nothing, bool> # do not include associated volumes. can only be used with export
+  --preCheckpoint: oneof<nothing, bool> # dump the container's memory information only, leaving the container running. only works on runc 1.0-rc or higher
+  --withPrevious: oneof<nothing, bool> # check out the container with previous criu image files in pre-dump. only works on runc 1.0-rc or higher
+  --fileLocks: oneof<nothing, bool> # checkpoint a container with filelocks
+  --printStats: oneof<nothing, bool> # add checkpoint statistics to the returned CheckpointReport
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1876,14 +1875,14 @@ export def "libpod-containers-exec ContainerExecLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AttachStderr: string@bool-completer # Attach to stderr of the exec command
-  --AttachStdin: string@bool-completer # Attach to stdin of the exec command
-  --AttachStdout: string@bool-completer # Attach to stdout of the exec command
+  --AttachStderr: oneof<nothing, bool> # Attach to stderr of the exec command
+  --AttachStdin: oneof<nothing, bool> # Attach to stdin of the exec command
+  --AttachStdout: oneof<nothing, bool> # Attach to stdout of the exec command
   --Cmd: list # Command to run, as a string or array of strings.
   --DetachKeys: string # "Override the key sequence for detaching a container. Format is a single character [a-Z] or ctrl-<value> where <value> is one of: a-z, @, ^, [, , or _."
   --Env: list # A list of environment variables in the form ["VAR=value", ...]
-  --Privileged: string@bool-completer # Runs the exec process with extended privileges (default: false)
-  --Tty: string@bool-completer # Allocate a pseudo-TTY
+  --Privileged: oneof<nothing, bool> # Runs the exec process with extended privileges (default: false)
+  --Tty: oneof<nothing, bool> # Allocate a pseudo-TTY
   --User: string # "The user, and optionally, group to run the exec process inside the container. Format is one of: user, user:group, uid, or uid:gid."
   --WorkingDir: string # The working directory for the exec process inside the container.
 ]: any -> any {
@@ -1999,7 +1998,7 @@ export def "libpod-containers-json ContainerInspectLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --size: string@bool-completer # display filesystem usage
+  --size: oneof<nothing, bool> # display filesystem usage
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2047,12 +2046,12 @@ export def "libpod-containers-logs ContainerLogsLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --follow: string@bool-completer # Keep connection after returning logs.
-  --stdout: string@bool-completer # Return logs from stdout
-  --stderr: string@bool-completer # Return logs from stderr
+  --follow: oneof<nothing, bool> # Keep connection after returning logs.
+  --stdout: oneof<nothing, bool> # Return logs from stdout
+  --stderr: oneof<nothing, bool> # Return logs from stderr
   --since: string # Only return logs since this time, as a UNIX timestamp
   --until: string # Only return logs before this time, as a UNIX timestamp
-  --timestamps: string@bool-completer # Add timestamps to every log line (default: false)
+  --timestamps: oneof<nothing, bool> # Add timestamps to every log line (default: false)
   --tail: string # Only return this number of log lines from the end of the logs (default: all)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2077,7 +2076,7 @@ export def "libpod-containers-mount ContainerMountLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --external: string@bool-completer # Include external containers that are not managed by Podman. (default: false)
+  --external: oneof<nothing, bool> # Include external containers that are not managed by Podman. (default: false)
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2149,7 +2148,7 @@ export def "libpod-containers-resize ContainerResizeLibpod" [
   --allow-errors(-e) # Return full response without error handling
   --h: int # Height to set for the terminal, in characters
   --w: int # Width to set for the terminal, in characters
-  --running: string@bool-completer # Ignore containers not running errors
+  --running: oneof<nothing, bool> # Ignore containers not running errors
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2199,16 +2198,16 @@ export def "libpod-containers-restore ContainerRestoreLibpod" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # the name of the container when restored from a tar. can only be used with import
-  --keep: string@bool-completer # keep all temporary checkpoint files
-  --tcpEstablished: string@bool-completer # restore a container with established TCP connections
-  --tcpClose: string@bool-completer # restore a container but close the TCP connections
-  --import: string@bool-completer # import the restore from a checkpoint tar.gz
-  --ignoreRootFS: string@bool-completer # do not include root file-system changes when exporting. can only be used with import
-  --ignoreVolumes: string@bool-completer # do not restore associated volumes. can only be used with import
-  --ignoreStaticIP: string@bool-completer # ignore IP address if set statically
-  --ignoreStaticMAC: string@bool-completer # ignore MAC address if set statically
-  --fileLocks: string@bool-completer # restore a container with file locks
-  --printStats: string@bool-completer # add restore statistics to the returned RestoreReport
+  --keep: oneof<nothing, bool> # keep all temporary checkpoint files
+  --tcpEstablished: oneof<nothing, bool> # restore a container with established TCP connections
+  --tcpClose: oneof<nothing, bool> # restore a container but close the TCP connections
+  --import: oneof<nothing, bool> # import the restore from a checkpoint tar.gz
+  --ignoreRootFS: oneof<nothing, bool> # do not include root file-system changes when exporting. can only be used with import
+  --ignoreVolumes: oneof<nothing, bool> # do not restore associated volumes. can only be used with import
+  --ignoreStaticIP: oneof<nothing, bool> # ignore IP address if set statically
+  --ignoreStaticMAC: oneof<nothing, bool> # ignore MAC address if set statically
+  --fileLocks: oneof<nothing, bool> # restore a container with file locks
+  --printStats: oneof<nothing, bool> # add restore statistics to the returned RestoreReport
   --pod: string # pod to restore into
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2257,7 +2256,7 @@ export def "libpod-containers-stats ContainerStatsLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --stream: string@bool-completer # Stream the output (default: true)
+  --stream: oneof<nothing, bool> # Stream the output (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2282,7 +2281,7 @@ export def "libpod-containers-stop ContainerStopLibpod" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --timeout: int # number of seconds to wait before killing container (default: 10)
-  --ignore: string@bool-completer # do not return error if container is already stopped (default: false)
+  --ignore: oneof<nothing, bool> # do not return error if container is already stopped (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2306,7 +2305,7 @@ export def "libpod-containers-top ContainerTopLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --stream: string@bool-completer # when true, repeatedly stream the latest output (As of version 4.0)
+  --stream: oneof<nothing, bool> # when true, repeatedly stream the latest output (As of version 4.0)
   --delay: int # if streaming, delay in seconds between updates. Must be >1. (As of version 4.0) (default: 5)
   --ps-args: list # arguments to pass to ps such as aux.
 ]: nothing -> any {
@@ -2418,7 +2417,7 @@ export def "libpod-containers-update ContainerUpdateLibpod" [
   --hugepageLimits: list # Hugetlb limits (in bytes). Default to reservation limits if supported. — item shape: {limit?: int, pageSize?: string}
   --memory: record # LinuxMemory for Linux cgroup 'memory' resource management — shape: {checkBeforeUpdate?: bool, disableOOMKiller?: bool, kernel?: int, kernelTCP?: int, limit?: int, reservation?: int, swap?: int, swappiness?: int, useHierarchy?: bool}
   --network: record # LinuxNetwork identification and priority configuration — shape: {classID?: int, priorities?: list}
-  --no-healthcheck: string@bool-completer # Disable healthchecks on container.
+  --no-healthcheck: oneof<nothing, bool> # Disable healthchecks on container.
   --pids: record # LinuxPids for Linux cgroup 'pids' resource management (Linux 4.3) — shape: {limit?: int}
   --r-limits: list # item shape: {hard?: int, soft?: int, type?: string}
   --rdma: record # Rdma resource restriction configuration. Limits are a set of key value pairs that define RDMA resource limits, where the key is device name and value is resource limits.
@@ -2512,7 +2511,7 @@ export def "libpod-containers-create ContainerCreateLibpod" [
   --command: list # Command is the container's command. If not given and Image is specified, this will be populated by the image's configuration. Optional.
   --conmon-pid-file: string # ConmonPidFile is a path at which a PID file for Conmon will be placed. If not given, a default location will be used. Optional.
   --containerCreateCommand: list # ContainerCreateCommand is the command that was used to create this container. This will be shown in the output of Inspect() on the container, and may also be used by some tools that wish to recreate the container (e.g. `podman generate systemd --new`). Optional.
-  --create-working-dir: string@bool-completer # Create the working directory if it doesn't exist. If unset, it doesn't create it. Optional.
+  --create-working-dir: oneof<nothing, bool> # Create the working directory if it doesn't exist. If unset, it doesn't create it. Optional.
   --dependencyContainers: list # DependencyContainers is an array of containers this container depends on. Dependency containers must be started before this container. Dependencies can be specified by name or full/partial ID. Optional.
   --device-cgroup-rule: list # DeviceCgroupRule are device cgroup rules that allow containers to use additional types of devices. — item shape: {access?: string, allow?: bool, major?: int, minor?: int, type?: string}
   --devices: list # Devices are devices that will be added to the container. Optional. — item shape: {fileMode?: int, gid?: int, major?: int, minor?: int, path?: string, type?: string, uid?: int}
@@ -2522,7 +2521,7 @@ export def "libpod-containers-create ContainerCreateLibpod" [
   --dns-server: list # DNSServers is a set of DNS servers that will be used in the container's resolv.conf, replacing the host's DNS Servers which are used by default. Conflicts with UseImageResolvConf. Optional.
   --entrypoint: list # Entrypoint is the container's entrypoint. If not given and Image is specified, this will be populated by the image's configuration. Optional.
   --env: record # Env is a set of environment variables that will be set in the container. Optional.
-  --env-host: string@bool-completer # EnvHost indicates that the host environment should be added to container Optional.
+  --env-host: oneof<nothing, bool> # EnvHost indicates that the host environment should be added to container Optional.
   --envmerge: list # EnvMerge takes the specified environment variables from image and preprocess them before injecting them into the container. Optional.
   --expose: any # Expose is a number of ports that will be forwarded to the container if PublishExposedPorts is set. Expose is a map of uint16 (port number) to a string representing protocol i.e map[uint16]string. Allowed protocols are "tcp", "udp", and "sctp", or some combination of the three separated by commas. If protocol is set to "" we will assume TCP. Only available if NetNS is set to Bridge or Pasta, and PublishExposedPorts is set. Optional.
   --gpus: list # GPUs contains GPU device identifiers for CDI resolution. These will be resolved to full CDI device paths on the server side. Optional.
@@ -2537,7 +2536,7 @@ export def "libpod-containers-create ContainerCreateLibpod" [
   --hostadd: list # HostAdd is a set of hosts which will be added to the container's etc/hosts file. Conflicts with UseImageHosts. Optional.
   --hostname: string # Hostname is the container's hostname. If not set, the hostname will not be modified (if UtsNS is not private) or will be set to the container ID (if UtsNS is private). Conflicts with UtsNS if UtsNS is not set to private. Optional.
   --hostusers: list # HostUsers is a list of host usernames or UIDs to add to the container etc/passwd file
-  --httpproxy: string@bool-completer # EnvHTTPProxy indicates that the http host proxy environment variables should be added to container Optional.
+  --httpproxy: oneof<nothing, bool> # EnvHTTPProxy indicates that the http host proxy environment variables should be added to container Optional.
   --idmappings: record # IDMappingOptions are used for specifying how ID mapping should be set up for a layer or container. — shape: {AutoUserNs?: bool, AutoUserNsOpts?: record, GIDMap?: list, HostGIDMapping?: bool, HostUIDMapping?: bool, UIDMap?: list}
   --image: string # Image is the image the container will be based on. The image will be used as the container's root filesystem, and its environment vars, volumes, and other configuration will be applied to the container. Conflicts with Rootfs. At least one of Image or Rootfs must be specified.
   --image-arch: string # ImageArch is the user-specified image architecture. Used to select a different variant from a manifest list. Optional.
@@ -2545,22 +2544,22 @@ export def "libpod-containers-create ContainerCreateLibpod" [
   --image-variant: string # ImageVariant is the user-specified image variant. Used to select a different variant from a manifest list. Optional.
   --image-volume-mode: string # ImageVolumeMode indicates how image volumes will be created. Supported modes are "ignore" (do not create), "tmpfs" (create as tmpfs), and "anonymous" (create as anonymous volumes). The default if unset is anonymous. Optional.
   --image-volumes: list # Image volumes bind-mount a container-image mount into the container. Optional. — item shape: {Destination?: string, ReadWrite?: bool, Source?: string, subPath?: string}
-  --init: string@bool-completer # Init specifies that an init binary will be mounted into the container, and will be used as PID1. Optional.
+  --init: oneof<nothing, bool> # Init specifies that an init binary will be mounted into the container, and will be used as PID1. Optional.
   --init-container-type: string # InitContainerType describes if this container is an init container and if so, what type: always or once. Optional.
   --init-path: string # InitPath specifies the path to the init binary that will be added if Init is specified above. If not specified, the default set in the Libpod config will be used. Ignored if Init above is not set. Optional.
   --intelRdt: record # LinuxIntelRdt has container runtime resource constraints for Intel RDT CAT and MBA features and flags enabling Intel RDT CMT and MBM features. Intel RDT features are available in Linux 4.14 and newer kernel versions. — shape: {closID?: string, enableMonitoring?: bool, l3CacheSchema?: string, memBwSchema?: string, schemata?: list}
   --ipcns: record # Namespace describes the namespace — shape: {nsmode?: string, value?: string}
-  --label-nested: string@bool-completer # LabelNested indicates whether or not the container is allowed to run fully nested containers including SELinux labelling. Optional.
+  --label-nested: oneof<nothing, bool> # LabelNested indicates whether or not the container is allowed to run fully nested containers including SELinux labelling. Optional.
   --labels: record # Labels are key-value pairs that are used to add metadata to containers. Optional.
   --log-configuration: record # LogConfig describes the logging characteristics for a container — shape: {driver?: string, labels?: record, options?: record, path?: string, size?: int}
-  --manage-password: string@bool-completer # Passwd is a container run option that determines if we are validating users/groups before running the container
+  --manage-password: oneof<nothing, bool> # Passwd is a container run option that determines if we are validating users/groups before running the container
   --mask: list # Mask is the path we want to mask in the container. This masks the paths given in addition to the default list. Optional
   --mounts: list # Mounts are mounts that will be added to the container. These will supersede Image Volumes and VolumesFrom volumes where there are conflicts. Optional. — item shape: {BindOptions?: record, ClusterOptions?: record, Consistency?: string, ImageOptions?: record, ReadOnly?: bool, Source?: string, Target?: string, TmpfsOptions?: record, Type?: string, VolumeOptions?: record}
   --name: string # Name is the name the container will be given. If no name is provided, one will be randomly generated. Optional.
   --netns: record # Namespace describes the namespace — shape: {nsmode?: string, value?: string}
   --network-options: record # NetworkOptions are additional options for each network Optional.
   --networkOrder: list # The order that networks will be configured in. If not set, alphabetical order based on network name will be used. If set: Must be the same length as Networks and its contents must be every key in the Networks map. Optional.
-  --no-new-privileges: string@bool-completer # NoNewPrivileges is whether the container will set the no new privileges flag on create, which disables gaining additional privileges (e.g. via setuid) in the container. Optional.
+  --no-new-privileges: oneof<nothing, bool> # NoNewPrivileges is whether the container will set the no new privileges flag on create, which disables gaining additional privileges (e.g. via setuid) in the container. Optional.
   --oci-runtime: string # OCIRuntime is the name of the OCI runtime that will be used to create the container. If not specified, the default will be used. Optional.
   --oom-score-adj: int # OOMScoreAdj adjusts the score used by the OOM killer to determine processes to kill for the container's process. Optional. (format: int64)
   --overlay-volumes: list # Overlay volumes are named volumes that will be added to the container. Optional. — item shape: {destination?: string, options?: list, source?: string}
@@ -2569,21 +2568,21 @@ export def "libpod-containers-create ContainerCreateLibpod" [
   --pidns: record # Namespace describes the namespace — shape: {nsmode?: string, value?: string}
   --pod: string # Pod is the ID of the pod the container will join. Optional.
   --portmappings: list # PortBindings is a set of ports to map into the container. Only available if NetNS is set to bridge or pasta. Optional. — item shape: {container_port?: int, host_ip?: string, host_port?: int, protocol?: string, range?: int}
-  --privileged: string@bool-completer # Privileged is whether the container is privileged. Privileged does the following: Adds all devices on the system to the container. Adds all capabilities to the container. Disables Seccomp, SELinux, and Apparmor confinement. (Though SELinux can be manually re-enabled). TODO: this conflicts with things. TODO: this does more. Optional.
+  --privileged: oneof<nothing, bool> # Privileged is whether the container is privileged. Privileged does the following: Adds all devices on the system to the container. Adds all capabilities to the container. Disables Seccomp, SELinux, and Apparmor confinement. (Though SELinux can be manually re-enabled). TODO: this conflicts with things. TODO: this does more. Optional.
   --procfs-opts: list # ProcOpts are the options used for the proc mount.
-  --publish-image-ports: string@bool-completer # PublishExposedPorts will publish ports specified in the image to random unused ports (guaranteed to be above 1024) on the host. This is based on ports set in Expose below, and any ports specified by the Image (if one is given). Only available if NetNS is set to Bridge or Pasta. Optional.
+  --publish-image-ports: oneof<nothing, bool> # PublishExposedPorts will publish ports specified in the image to random unused ports (guaranteed to be above 1024) on the host. This is based on ports set in Expose below, and any ports specified by the Image (if one is given). Only available if NetNS is set to Bridge or Pasta. Optional.
   --r-limits: list # Rlimits are POSIX rlimits to apply to the container. Optional. — item shape: {hard?: int, soft?: int, type?: string}
   --raw-image-name: string # RawImageName is the user-specified and unprocessed input referring to a local or a remote image. Optional, but strongly encouraged to be set if Image is set.
-  --read-only-filesystem: string@bool-completer # ReadOnlyFilesystem indicates that everything will be mounted as read-only. Optional.
-  --read-write-tmpfs: string@bool-completer # ReadWriteTmpfs indicates that when running with a ReadOnlyFilesystem mount temporary file systems. Optional.
-  --remove: string@bool-completer # Remove indicates if the container should be removed once it has been started and exits. Optional.
-  --removeImage: string@bool-completer # RemoveImage indicates that the container should remove the image it was created from after it exits. Only allowed if Remove is set to true and Image, not Rootfs, is in use. Optional.
+  --read-only-filesystem: oneof<nothing, bool> # ReadOnlyFilesystem indicates that everything will be mounted as read-only. Optional.
+  --read-write-tmpfs: oneof<nothing, bool> # ReadWriteTmpfs indicates that when running with a ReadOnlyFilesystem mount temporary file systems. Optional.
+  --remove: oneof<nothing, bool> # Remove indicates if the container should be removed once it has been started and exits. Optional.
+  --removeImage: oneof<nothing, bool> # RemoveImage indicates that the container should remove the image it was created from after it exits. Only allowed if Remove is set to true and Image, not Rootfs, is in use. Optional.
   --resource-limits: record # LinuxResources has container runtime resource constraints — shape: {blockIO?: record, cpu?: record, devices?: list, hugepageLimits?: list, memory?: record, network?: record, pids?: record, rdma?: record, unified?: record}
   --restart-policy: string # RestartPolicy is the container's restart policy - an action which will be taken when the container exits. If not given, the default policy, which does nothing, will be used. Optional.
   --restart-tries: int # RestartRetries is the number of attempts that will be made to restart the container. Only available when RestartPolicy is set to "on-failure". Optional. (format: uint64)
   --rootfs: string # Rootfs is the path to a directory that will be used as the container's root filesystem. No modification will be made to the directory, it will be directly mounted into the container as root. Conflicts with Image. At least one of Image or Rootfs must be specified.
   --rootfs-mapping: string # RootfsMapping specifies if there are UID/GID mappings to apply to the rootfs. Optional.
-  --rootfs-overlay: string@bool-completer # RootfsOverlay tells if rootfs is actually an overlay on top of base path. Optional.
+  --rootfs-overlay: oneof<nothing, bool> # RootfsOverlay tells if rootfs is actually an overlay on top of base path. Optional.
   --rootfs-propagation: string # RootfsPropagation is the rootfs propagation mode for the container. If not set, the default of rslave will be used. Optional.
   --sdnotifyMode: string # Determine how to handle the NOTIFY_SOCKET - do we participate or pass it through "container" - let the OCI runtime deal with it, advertise conmon's MAINPID "conmon-only" - advertise conmon's MAINPID, send READY when started, don't pass to OCI "ignore" - unset NOTIFY_SOCKET Optional.
   --seccomp-policy: string # SeccompPolicy determines which seccomp profile gets applied the container. valid values: empty,default,image
@@ -2594,13 +2593,13 @@ export def "libpod-containers-create ContainerCreateLibpod" [
   --shm-size: int # ShmSize is the size of the tmpfs to mount in at /dev/shm, in bytes. Conflicts with ShmSize if IpcNS is not private. Optional. (format: int64)
   --shm-size-systemd: int # ShmSizeSystemd is the size of systemd-specific tmpfs mounts specifically /run, /run/lock, /var/log/journal and /tmp. Optional (format: int64)
   --startupHealthConfig: record # shape: {Interval?: int, Retries?: int, StartInterval?: int, StartPeriod?: int, Successes?: int, Test?: list, Timeout?: int}
-  --stdin: string@bool-completer # Stdin is whether the container will keep its STDIN open. Optional.
+  --stdin: oneof<nothing, bool> # Stdin is whether the container will keep its STDIN open. Optional.
   --stop-signal: int # It implements the [os.Signal] interface. (format: int64)
   --stop-timeout: int # StopTimeout is a timeout between the container's stop signal being sent and SIGKILL being sent. If not provided, the default will be used. If 0 is used, stop signal will not be sent, and SIGKILL will be sent instead. Optional. (format: uint64)
   --storage-opts: record # StorageOpts is the container's storage options Optional.
   --sysctl: record # Sysctl sets kernel parameters for the container
   --systemd: string # Systemd is whether the container will be started in systemd mode. Valid options are "true", "false", and "always". "true" enables this mode only if the binary run in the container is sbin/init or systemd. "always" unconditionally enables systemd mode. "false" unconditionally disables systemd mode. If enabled, mounts and stop signal will be modified. If set to "always" or set to "true" and conditionally triggered, conflicts with StopSignal. If not specified, "false" will be assumed. Optional.
-  --terminal: string@bool-completer # Terminal is whether the container will create a PTY. Optional.
+  --terminal: oneof<nothing, bool> # Terminal is whether the container will create a PTY. Optional.
   --throttleReadBpsDevice: record # IO read rate limit per cgroup per device, bytes per second
   --throttleReadIOPSDevice: record # IO read rate limit per cgroup per device, IO per second
   --throttleWriteBpsDevice: record # IO write rate limit per cgroup per device, bytes per second
@@ -2611,14 +2610,14 @@ export def "libpod-containers-create ContainerCreateLibpod" [
   --unified: record # CgroupConf are key-value options passed into the container runtime that are used to configure cgroup v2. Optional.
   --unmask: list # Unmask a path in the container. Some paths are masked by default, preventing them from being accessed within the container; this undoes that masking. If ALL is passed, all paths will be unmasked. Optional.
   --unsetenv: list # UnsetEnv unsets the specified default environment variables from the image or from built-in or containers.conf Optional.
-  --unsetenvall: string@bool-completer # UnsetEnvAll unsetall default environment variables from the image or from built-in or containers.conf UnsetEnvAll unsets all default environment variables from the image or from built-in Optional.
-  --use-image-hostname: string@bool-completer # UseImageHostname indicates that /etc/hostname should not be managed by Podman, and instead sourced from the image. Optional.
-  --use-image-hosts: string@bool-completer # UseImageHosts indicates that /etc/hosts should not be managed by Podman, and instead sourced from the image. Conflicts with HostAdd. Optional.
-  --use-image-resolve-conf: string@bool-completer # UseImageResolvConf indicates that resolv.conf should not be managed by Podman, but instead sourced from the image. Conflicts with DNSServer, DNSSearch, DNSOption. Optional.
+  --unsetenvall: oneof<nothing, bool> # UnsetEnvAll unsetall default environment variables from the image or from built-in or containers.conf UnsetEnvAll unsets all default environment variables from the image or from built-in Optional.
+  --use-image-hostname: oneof<nothing, bool> # UseImageHostname indicates that /etc/hostname should not be managed by Podman, and instead sourced from the image. Optional.
+  --use-image-hosts: oneof<nothing, bool> # UseImageHosts indicates that /etc/hosts should not be managed by Podman, and instead sourced from the image. Conflicts with HostAdd. Optional.
+  --use-image-resolve-conf: oneof<nothing, bool> # UseImageResolvConf indicates that resolv.conf should not be managed by Podman, but instead sourced from the image. Conflicts with DNSServer, DNSSearch, DNSOption. Optional.
   --user: string # User is the user the container will be run as. Can be given as a UID or a username; if a username, it will be resolved within the container, using the container's /etc/passwd. If unset, the container will be run as root. Optional.
   --userns: record # Namespace describes the namespace — shape: {nsmode?: string, value?: string}
   --utsns: record # Namespace describes the namespace — shape: {nsmode?: string, value?: string}
-  --volatile: string@bool-completer # Volatile specifies whether the container storage can be optimized at the cost of not syncing all the dirty files in memory. Optional.
+  --volatile: oneof<nothing, bool> # Volatile specifies whether the container storage can be optimized at the cost of not syncing all the dirty files in memory. Optional.
   --volumes: list # Volumes are named volumes that will be added to the container. These will supersede Image Volumes and VolumesFrom volumes where there are conflicts. Optional. — item shape: {Dest?: string, IsAnonymous?: bool, Name?: string, Options?: list, SubPath?: string}
   --volumes-from: list # VolumesFrom is a set of containers whose volumes will be added to this container. The name or ID of the container must be provided, and may optionally be followed by a : and then one or more comma-separated options. Valid options are 'ro', 'rw', and 'z'. Options will be used for all volumes sourced from the container. Optional.
   --weightDevice: record # Weight per cgroup per device, can override BlkioWeight
@@ -2647,14 +2646,14 @@ export def "libpod-containers-json ContainerListLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # Return all containers. By default, only running containers are shown (default: false)
+  --all: oneof<nothing, bool> # Return all containers. By default, only running containers are shown (default: false)
   --limit: int # Return this number of most recently created containers, including non-running ones.
   --last: int # Alias for `limit`. Return this number of most recently created containers.
-  --external: string@bool-completer # Return containers created by external tools that use container storage. (default: false)
-  --namespace: string@bool-completer # Include namespace information (default: false)
-  --pod: string@bool-completer # Ignored. Previously included details on pod name and ID that are currently included by default. (default: false)
-  --size: string@bool-completer # Return the size of container as fields SizeRw and SizeRootFs. (default: false)
-  --sync: string@bool-completer # Sync container state with OCI runtime (default: false)
+  --external: oneof<nothing, bool> # Return containers created by external tools that use container storage. (default: false)
+  --namespace: oneof<nothing, bool> # Include namespace information (default: false)
+  --pod: oneof<nothing, bool> # Ignored. Previously included details on pod name and ID that are currently included by default. (default: false)
+  --size: oneof<nothing, bool> # Return the size of container as fields SizeRw and SizeRootFs. (default: false)
+  --sync: oneof<nothing, bool> # Sync container state with OCI runtime (default: false)
   --filters: string # A JSON encoded value of the filters (a `map[string][]string`) to process on the containers list. Available filters: - `ancestor`=(`<image-name>[:<tag>]`, `<image id>`, or `<image@digest>`) - `annotation`=(`key` or `"key=value"`) of a container annotation - `before`=(`<container id>` or `<container name>`) - `exited=<int>` containers with exit code of `<int>` - `expose`=(`<port>[/<proto>]` or `<startport-endport>/[<proto>]`) - `health`=(`starting`, `healthy`, `unhealthy` or `none`) - `id=<ID>` a container's ID - `is-task`=(`true` or `false`) - `label`=(`key` or `"key=value"`) of a container label - `name=<name>` a container's name - `network`=(`<network id>` or `<network name>`) - `pod`=(`<pod id>` or `<pod name>`) - `publish`=(`<port>[/<proto>]` or `<startport-endport>/[<proto>]`) - `since`=(`<container id>` or `<container name>`) - `status`=(`created`, `restarting`, `running`, `removing`, `paused`, `exited` or `dead`) - `volume`=(`<volume name>` or `<mount point destination>`)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2723,9 +2722,9 @@ export def "libpod-containers-stats ContainersStatsAllLibpod" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --containers: list # names or IDs of containers
-  --stream: string@bool-completer # Stream the output (default: true)
+  --stream: oneof<nothing, bool> # Stream the output (default: true)
   --interval: int # Time in seconds between stats reports (default: 5)
-  --all: string@bool-completer # Provide statistics for all running containers (default: false)
+  --all: oneof<nothing, bool> # Provide statistics for all running containers (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2751,7 +2750,7 @@ export def "libpod-events SystemEventsLibpod" [
   --since: string # start streaming events from this time
   --until: string # stop streaming events later than this
   --filters: string # JSON encoded map[string][]string of constraints
-  --stream: string@bool-completer # when false, do not follow events (default: true)
+  --stream: oneof<nothing, bool> # when false, do not follow events (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2799,7 +2798,7 @@ export def "libpod-exec-resize ExecResizeLibpod" [
   --allow-errors(-e) # Return full response without error handling
   --h: int # Height of the TTY session in characters
   --w: int # Width of the TTY session in characters
-  --running: string@bool-completer # Ignore containers not running errors
+  --running: oneof<nothing, bool> # Ignore containers not running errors
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2823,8 +2822,8 @@ export def "libpod-exec-start ExecStartLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Detach: string@bool-completer # Detach from the command.
-  --Tty: string@bool-completer # Allocate a pseudo-TTY.
+  --Detach: oneof<nothing, bool> # Detach from the command.
+  --Tty: oneof<nothing, bool> # Allocate a pseudo-TTY.
   --h: int # Height of the TTY session in characters. Tty must be set to true to use it.
   --w: int # Width of the TTY session in characters. Tty must be set to true to use it.
 ]: any -> any {
@@ -2852,9 +2851,9 @@ export def "libpod-generate-systemd GenerateSystemdLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --useName: string@bool-completer # Use container/pod names instead of IDs. (default: false)
-  --new: string@bool-completer # Create a new container instead of starting an existing one. (default: false)
-  --noHeader: string@bool-completer # Do not generate the header including the Podman version and the timestamp. (default: false)
+  --useName: oneof<nothing, bool> # Use container/pod names instead of IDs. (default: false)
+  --new: oneof<nothing, bool> # Create a new container instead of starting an existing one. (default: false)
+  --noHeader: oneof<nothing, bool> # Do not generate the header including the Podman version and the timestamp. (default: false)
   --startTimeout: int # Start timeout in seconds. (default: 0)
   --stopTimeout: int # Stop timeout in seconds. (default: 10)
   --restartPolicy: string@restartPolicy-completer # Systemd restart-policy. (default: on-failure)
@@ -2866,7 +2865,7 @@ export def "libpod-generate-systemd GenerateSystemdLibpod" [
   --after: list # Systemd After list for the container or pods. (default: [])
   --requires: list # Systemd Requires list for the container or pods. (default: [])
   --additionalEnvVariables: list # Set environment variables to the systemd unit files. (default: [])
-  --templateUnitFile: string@bool-completer # Add template specifier for the systemd unit file names. (default: false)
+  --templateUnitFile: oneof<nothing, bool> # Add template specifier for the systemd unit file names. (default: false)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2891,11 +2890,11 @@ export def "libpod-generate-kube GenerateKubeLibpod" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-2 # Response content type
   --names: list # Name or ID of the container or pod.
-  --service: string@bool-completer # Generate YAML for a Kubernetes service object. (default: false)
+  --service: oneof<nothing, bool> # Generate YAML for a Kubernetes service object. (default: false)
   --type: string # Generate YAML for the given Kubernetes kind. (default: pod)
   --replicas: int # Set the replica number for Deployment kind. (format: int32, default: 0)
-  --noTrunc: string@bool-completer # don't truncate annotations to the Kubernetes maximum length of 63 characters (default: false)
-  --podmanOnly: string@bool-completer # add podman-only reserved annotations in generated YAML file (cannot be used by Kubernetes) (default: false)
+  --noTrunc: oneof<nothing, bool> # don't truncate annotations to the Kubernetes maximum length of 63 characters (default: false)
+  --podmanOnly: oneof<nothing, bool> # add podman-only reserved annotations in generated YAML file (cannot be used by Kubernetes) (default: false)
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2919,9 +2918,9 @@ export def "libpod-images ImageDeleteLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # remove the image even if used by containers or has other tags
-  --ignore: string@bool-completer # Ignore if a specified image does not exist and do not throw an error. (default: false)
-  --lookupManifest: string@bool-completer # Resolve to a manifest list instead of an image.
+  --force: oneof<nothing, bool> # remove the image even if used by containers or has other tags
+  --ignore: oneof<nothing, bool> # Ignore if a specified image does not exist and do not throw an error. (default: false)
+  --lookupManifest: oneof<nothing, bool> # Resolve to a manifest list instead of an image.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2994,7 +2993,7 @@ export def "libpod-images-get ImageGetLibpod" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --format: string # format for exported image
-  --compress: string@bool-completer # use compression on image
+  --compress: oneof<nothing, bool> # use compression on image
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3063,14 +3062,14 @@ export def "libpod-images-push ImagePushLibpod" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --destination: string # Allows for pushing the image to a different destination than the image refers to.
-  --forceCompressionFormat: string@bool-completer # Enforce compressing the layers with the specified --compression and do not reuse differently compressed blobs on the registry. (default: false)
+  --forceCompressionFormat: oneof<nothing, bool> # Enforce compressing the layers with the specified --compression and do not reuse differently compressed blobs on the registry. (default: false)
   --compressionFormat: string # Compression format used to compress image layers.
   --compressionLevel: int # Compression level used to compress image layers.
-  --tlsVerify: string@bool-completer # Require TLS verification. (default: true)
-  --quiet: string@bool-completer # Silences extra stream data on push. (default: true)
+  --tlsVerify: oneof<nothing, bool> # Require TLS verification. (default: true)
+  --quiet: oneof<nothing, bool> # Silences extra stream data on push. (default: true)
   --format: string # Manifest type (oci, v2s1, or v2s2) to use when pushing an image. Default is manifest type of source, with fallbacks.
-  --all: string@bool-completer # All indicates whether to push all images related to the image list.
-  --removeSignatures: string@bool-completer # Discard any pre-existing signatures in the image.
+  --all: oneof<nothing, bool> # All indicates whether to push all images related to the image list.
+  --removeSignatures: oneof<nothing, bool> # Discard any pre-existing signatures in the image.
   --retry: int # Number of times to retry push in case of failure.
   --retryDelay: string # Delay between retries in case of push failures. Duration format such as "412ms", or "3.5h".
   --X-Registry-Auth: string # A base64-encoded auth configuration.
@@ -3146,7 +3145,7 @@ export def "libpod-images-tree ImageTreeLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --whatrequires: string@bool-completer # show all child images and layers of the specified image
+  --whatrequires: oneof<nothing, bool> # show all child images and layers of the specified image
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3196,8 +3195,8 @@ export def "libpod-images-export ImageExportLibpod" [
   --allow-errors(-e) # Return full response without error handling
   --format: string # format for exported image (only docker-archive is supported)
   --references: list # references to images to export
-  --compress: string@bool-completer # use compression on image
-  --ociAcceptUncompressedLayers: string@bool-completer # accept uncompressed layers when copying OCI images
+  --compress: oneof<nothing, bool> # use compression on image
+  --ociAcceptUncompressedLayers: oneof<nothing, bool> # accept uncompressed layers when copying OCI images
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3252,7 +3251,7 @@ export def "libpod-images-json ImageListLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # Show all images. Only images from a final layer (no children) are shown by default. (default: false)
+  --all: oneof<nothing, bool> # Show all images. Only images from a final layer (no children) are shown by default. (default: false)
   --filters: string # JSON-encoded string containing filters as a `map[string][]string` to process on the images list. Available filters: - `before`=(`<image-name>[:<tag>]`,  `<image id>` or `<image@digest>`) - `dangling=true` - `label=key` or `label="key=value"` of an image label - `reference`=(`<image-name>[:<tag>]`) - `id`=(`<image-id>`) - `since`=(`<image-name>[:<tag>]`,  `<image id>` or `<image@digest>`)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3300,9 +3299,9 @@ export def "libpod-images-prune ImagePruneLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # Remove all images not in use by containers, not just dangling ones  (default: false)
-  --external: string@bool-completer # Remove images even when they are used by external containers (e.g, by build containers)  (default: false)
-  --buildcache: string@bool-completer # Remove persistent build cache created by build instructions such as `--mount=type=cache`.  (default: false)
+  --all: oneof<nothing, bool> # Remove all images not in use by containers, not just dangling ones  (default: false)
+  --external: oneof<nothing, bool> # Remove images even when they are used by external containers (e.g, by build containers)  (default: false)
+  --buildcache: oneof<nothing, bool> # Remove persistent build cache created by build instructions such as `--mount=type=cache`.  (default: false)
   --filters: string # filters to apply to image pruning, encoded as JSON (map[string][]string). Available filters:   - `dangling=<boolean>` When set to `true` (or `1`), prune only      unused *and* untagged images. When set to `false`      (or `0`), all unused images are pruned.   - `until=<string>` Prune images created before this timestamp. The `<timestamp>` can be Unix timestamps, date formatted timestamps, or Go duration strings (e.g. `10m`, `1h30m`) computed relative to the daemon machine’s time.   - `label` (`label=<key>`, `label=<key>=<value>`, `label!=<key>`, or `label!=<key>=<value>`) Prune images with (or without, in case `label!=...` is used) the specified labels.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3327,15 +3326,15 @@ export def "libpod-images-pull ImagePullLibpod" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --reference: string # Mandatory reference to the image (e.g., quay.io/image/name:tag)
-  --quiet: string@bool-completer # Silence extra stream data on pull. Cannot be used with 'compatMode' or 'pullProgress'. (default: false)
-  --compatMode: string@bool-completer # Return the same JSON payload as the Docker-compat endpoint. Cannot be used with 'pullProgress' or 'quiet'. (default: false)
-  --pullProgress: string@bool-completer # Send reports about the progress of the pull. Cannot be used with 'compatMode' or 'quiet'. (default: false)
+  --quiet: oneof<nothing, bool> # Silence extra stream data on pull. Cannot be used with 'compatMode' or 'pullProgress'. (default: false)
+  --compatMode: oneof<nothing, bool> # Return the same JSON payload as the Docker-compat endpoint. Cannot be used with 'pullProgress' or 'quiet'. (default: false)
+  --pullProgress: oneof<nothing, bool> # Send reports about the progress of the pull. Cannot be used with 'compatMode' or 'quiet'. (default: false)
   --Arch: string # Pull image for the specified architecture.
   --OS: string # Pull image for the specified operating system.
   --Variant: string # Pull image for the specified variant.
   --policy: string # Pull policy, "always" (default), "missing", "newer", "never".
-  --tlsVerify: string@bool-completer # Require TLS verification. (default: true)
-  --allTags: string@bool-completer # Pull all tagged images in the repository.
+  --tlsVerify: oneof<nothing, bool> # Require TLS verification. (default: true)
+  --allTags: oneof<nothing, bool> # Pull all tagged images in the repository.
   --X-Registry-Auth: string # base-64 encoded auth config. Must include the following four values: username, password, email and server address OR simply just an identity token.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3362,10 +3361,10 @@ export def "libpod-images-remove ImageDeleteAllLibpod" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --images: list # Images IDs or names to remove.
-  --all: string@bool-completer # Remove all images. (default: true)
-  --force: string@bool-completer # Force image removal (including containers using the images).
-  --ignore: string@bool-completer # Ignore if a specified image does not exist and do not throw an error.
-  --lookupManifest: string@bool-completer # Resolves to manifest list instead of image.
+  --all: oneof<nothing, bool> # Remove all images. (default: true)
+  --force: oneof<nothing, bool> # Force image removal (including containers using the images).
+  --ignore: oneof<nothing, bool> # Ignore if a specified image does not exist and do not throw an error.
+  --lookupManifest: oneof<nothing, bool> # Resolves to manifest list instead of image.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3390,7 +3389,7 @@ export def "libpod-images-scp ImageScpLibpod" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --destination: string # dest connection/image
-  --quiet: string@bool-completer # quiet output (default: false)
+  --quiet: oneof<nothing, bool> # quiet output (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3416,8 +3415,8 @@ export def "libpod-images-search ImageSearchLibpod" [
   --term: string # term to search
   --limit: int # maximum number of results (default: 25)
   --filters: string # JSON-encoded string containing filters as a `map[string][]string` to process on the images list. Available filters: - `is-automated=(true|false)` - `is-official=(true|false)` - `stars=<number>` Matches images that have at least 'number' stars.
-  --tlsVerify: string@bool-completer # Require HTTPS and verify signatures when contacting registries. (default: true)
-  --listTags: string@bool-completer # list the available tags in the repository (default: false)
+  --tlsVerify: oneof<nothing, bool> # Require HTTPS and verify signatures when contacting registries. (default: true)
+  --listTags: oneof<nothing, bool> # list the available tags in the repository (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3464,7 +3463,7 @@ export def "libpod-kube-apply KubeApplyLibpod" [
   --caCertFile: string # Path to the CA cert file for the Kubernetes cluster.
   --kubeConfig: string # Path to the kubeconfig file for the Kubernetes cluster.
   --namespace: string # The namespace to deploy the workload to on the Kubernetes cluster.
-  --service: string@bool-completer # Create a service object for the container being deployed.
+  --service: oneof<nothing, bool> # Create a service object for the container being deployed.
   --file: string # Path to the Kubernetes yaml file to deploy.
   --body: record
 ]: any -> string {
@@ -3494,24 +3493,24 @@ export def "libpod-local-build LocalBuildLibpod" [
   --localcontextdir: string # Absolute path to the build context directory on the server filesystem. This directory must contain all files needed for the build.
   --dockerfile: string # Absolute path within the build context to the `Dockerfile`. This is ignored if remote is specified and points to an external `Dockerfile`.  (default: Dockerfile)
   --t: string # A name and optional tag to apply to the image in the `name:tag` format.  If you omit the tag, the default latest value is assumed. You can provide several t parameters. (default: latest)
-  --allplatforms: string@bool-completer # Instead of building for a set of platforms specified using the platform option, inspect the build's base images, and build for all of the platforms that are available.  Stages that use *scratch* as a starting point can not be inspected, so at least one non-*scratch* stage must be present for detection to work usefully.  (default: false)
+  --allplatforms: oneof<nothing, bool> # Instead of building for a set of platforms specified using the platform option, inspect the build's base images, and build for all of the platforms that are available.  Stages that use *scratch* as a starting point can not be inspected, so at least one non-*scratch* stage must be present for detection to work usefully.  (default: false)
   --additionalbuildcontexts: list # Additional build contexts for builds that require more than one context. Each additional context must be specified as a key-value pair in the format "name=value".  The value can be specified in three formats: - URL context: Use the prefix "url:" followed by a URL to a tar archive   Example: "mycontext=url:https://example.com/context.tar" - Image context: Use the prefix "image:" followed by an image reference   Example: "mycontext=image:alpine:latest" or "mycontext=image:docker.io/library/ubuntu:22.04" - Local path context: Use the prefix "localpath:" followed by an absolute path on the server filesystem   Example: "mycontext=localpath:/path/to/context/dir"  (As of version 5.6.0)  (default: [])
   --extrahosts: string # TBD Extra hosts to add to /etc/hosts (As of version 1.xx)
-  --nohosts: string@bool-completer # Not to create /etc/hosts when building the image
+  --nohosts: oneof<nothing, bool> # Not to create /etc/hosts when building the image
   --remote: string # A Git repository URI or HTTP/HTTPS context URI. If the URI points to a single text file, the file's contents are placed into a file called Dockerfile and the image is built from that file. If the URI points to a tarball, the file is downloaded by the daemon and the contents therein used as the context for the build. If the URI points to a tarball and the dockerfile parameter is also specified, there must be a file with the corresponding path inside the tarball. (As of version 1.xx)
-  --q: string@bool-completer # Suppress verbose build output  (default: false)
-  --compatvolumes: string@bool-completer # Contents of volume locations to be modified on ADD or COPY only (As of Podman version v5.2)  (default: false)
-  --createdannotation: string@bool-completer # Add an "org.opencontainers.image.created" annotation to the image. (As of Podman version v5.6)  (default: true)
+  --q: oneof<nothing, bool> # Suppress verbose build output  (default: false)
+  --compatvolumes: oneof<nothing, bool> # Contents of volume locations to be modified on ADD or COPY only (As of Podman version v5.2)  (default: false)
+  --createdannotation: oneof<nothing, bool> # Add an "org.opencontainers.image.created" annotation to the image. (As of Podman version v5.6)  (default: true)
   --sourcedateepoch: float # Timestamp to use for newly-added history entries and the image's creation date. (As of Podman version v5.6)
-  --rewritetimestamp: string@bool-completer # If sourcedateepoch is set, force new content added in layers to have timestamps no later than the sourcedateepoch date. (As of Podman version v5.6)  (default: false)
+  --rewritetimestamp: oneof<nothing, bool> # If sourcedateepoch is set, force new content added in layers to have timestamps no later than the sourcedateepoch date. (As of Podman version v5.6)  (default: false)
   --timestamp: float # Timestamp to use for newly-added history entries, the image's creation date, and for new content added in layers.
-  --inheritlabels: string@bool-completer # Inherit the labels from the base image or base stages (As of Podman version v5.5)  (default: true)
-  --inheritannotations: string@bool-completer # Inherit the annotations from the base image or base stages (As of Podman version v5.6)  (default: true)
-  --nocache: string@bool-completer # Do not use the cache when building the image (As of version 1.xx)  (default: false)
+  --inheritlabels: oneof<nothing, bool> # Inherit the labels from the base image or base stages (As of Podman version v5.5)  (default: true)
+  --inheritannotations: oneof<nothing, bool> # Inherit the annotations from the base image or base stages (As of Podman version v5.6)  (default: true)
+  --nocache: oneof<nothing, bool> # Do not use the cache when building the image (As of version 1.xx)  (default: false)
   --cachefrom: string # JSON array of images used to build cache resolution (As of version 1.xx)
-  --pull: string@bool-completer # Attempt to pull the image even if an older image exists locally (As of version 1.xx)  (default: false)
-  --rm: string@bool-completer # Remove intermediate containers after a successful build (As of version 1.xx)  (default: true)
-  --forcerm: string@bool-completer # Always remove intermediate containers, even upon failure (As of version 1.xx)  (default: false)
+  --pull: oneof<nothing, bool> # Attempt to pull the image even if an older image exists locally (As of version 1.xx)  (default: false)
+  --rm: oneof<nothing, bool> # Remove intermediate containers after a successful build (As of version 1.xx)  (default: true)
+  --forcerm: oneof<nothing, bool> # Always remove intermediate containers, even upon failure (As of version 1.xx)  (default: false)
   --memory: int # Memory is the upper limit (in bytes) on how much memory running containers can use (As of version 1.xx)
   --memswap: int # MemorySwap limits the amount of memory and swap together (As of version 1.xx)
   --cpushares: int # CPUShares (relative weight (As of version 1.xx)
@@ -3520,15 +3519,15 @@ export def "libpod-local-build LocalBuildLibpod" [
   --cpuquota: int # CPUQuota limits the CPU CFS (Completely Fair Scheduler) quota (As of version 1.xx)
   --buildargs: string # JSON map of string pairs denoting build-time variables. For example, the build argument `Foo` with the value of `bar` would be encoded in JSON as `["Foo":"bar"]`.  For example, buildargs={"Foo":"bar"}.  Note(s): * This should not be used to pass secrets. * The value of buildargs should be URI component encoded before being passed to the API.  (As of version 1.xx)
   --shmsize: int # ShmSize is the "size" value to use when mounting an shmfs on the container's /dev/shm directory. Default is 64MB (As of version 1.xx)  (default: 67108864)
-  --squash: string@bool-completer # Silently ignored. Squash the resulting images layers into a single layer (As of version 1.xx)  (default: false)
+  --squash: oneof<nothing, bool> # Silently ignored. Squash the resulting images layers into a single layer (As of version 1.xx)  (default: false)
   --labels: string # JSON map of key, value pairs to set as labels on the new image (As of version 1.xx)
   --layerLabel: list # Add an intermediate image *label* (e.g. label=*value*) to the intermediate image metadata.
-  --layers: string@bool-completer # Cache intermediate layers during build. (As of version 1.xx)  (default: true)
+  --layers: oneof<nothing, bool> # Cache intermediate layers during build. (As of version 1.xx)  (default: true)
   --networkmode: string # Sets the networking mode for the run commands during build. Supported standard values are:   * `bridge` limited to containers within a single host, port mapping required for external access   * `host` no isolation between host and containers on this network   * `none` disable all networking for this container   * container:<nameOrID> share networking with given container   ---All other values are assumed to be a custom network's name (As of version 1.xx)  (default: bridge)
   --platform: string # Platform format os[/arch[/variant]] (As of version 1.xx)
   --target: string # Target build stage (As of version 1.xx)
   --outputs: string # output configuration TBD (As of version 1.xx)
-  --httpproxy: string@bool-completer # Inject http proxy environment variables into container (As of version 2.0.0)
+  --httpproxy: oneof<nothing, bool> # Inject http proxy environment variables into container (As of version 2.0.0)
   --unsetenv: list # Unset environment variables from the final image.
   --unsetlabel: list # Unset the image label, causing the label not to be inherited from the base image.
   --unsetannotation: list # Unset the image annotation, causing the annotation not to be inherited from the base image. (As of Podman version v5.6)
@@ -3583,7 +3582,7 @@ export def "libpod-manifests ManifestDeleteLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ignore: string@bool-completer # Ignore if a specified manifest does not exist and do not throw an error.
+  --ignore: oneof<nothing, bool> # Ignore if a specified manifest does not exist and do not throw an error.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3608,16 +3607,16 @@ export def "libpod-manifests ManifestCreateLibpod" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --images: string # One or more names of an image or a manifest list. Repeat parameter as needed.  Support for multiple images, as of version 4.0.0 Alias of `image` is support for compatibility with < 4.0.0 Response status code is 200 with < 4.0.0 for compatibility
-  --all: string@bool-completer # add all contents if given list
-  --amend: string@bool-completer # modify an existing list if one with the desired name already exists
-  --all: string@bool-completer # True when operating on a list to include all images
+  --all: oneof<nothing, bool> # add all contents if given list
+  --amend: oneof<nothing, bool> # modify an existing list if one with the desired name already exists
+  --all: oneof<nothing, bool> # True when operating on a list to include all images
   --annotation: list # Annotation to add to the item in the manifest list
   --annotations: record # Annotations to add to the item in the manifest list by a map which is preferred over Annotation
   --arch: string # Arch overrides the architecture for the item in the manifest list
   --artifact-annotations: record
   --artifact-config: string
   --artifact-config-type: string
-  --artifact-exclude-titles: string@bool-completer
+  --artifact-exclude-titles: oneof<nothing, bool>
   --artifact-files: list
   --artifact-layer-type: string
   --artifact-subject: string
@@ -3658,15 +3657,15 @@ export def "libpod-manifests ManifestModifyLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --tlsVerify: string@bool-completer # Require HTTPS and verify signatures when contacting registries. (default: true)
-  --all: string@bool-completer # True when operating on a list to include all images
+  --tlsVerify: oneof<nothing, bool> # Require HTTPS and verify signatures when contacting registries. (default: true)
+  --all: oneof<nothing, bool> # True when operating on a list to include all images
   --annotation: list # Annotation to add to the item in the manifest list
   --annotations: record # Annotations to add to the item in the manifest list by a map which is preferred over Annotation
   --arch: string # Arch overrides the architecture for the item in the manifest list
   --artifact-annotations: record
   --artifact-config: string
   --artifact-config-type: string
-  --artifact-exclude-titles: string@bool-completer
+  --artifact-exclude-titles: oneof<nothing, bool>
   --artifact-files: list
   --artifact-layer-type: string
   --artifact-subject: string
@@ -3707,7 +3706,7 @@ export def "libpod-manifests-add ManifestAddLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # True when operating on a list to include all images
+  --all: oneof<nothing, bool> # True when operating on a list to include all images
   --annotation: list # Annotation to add to the item in the manifest list
   --annotations: record # Annotations to add to the item in the manifest list by a map which is preferred over Annotation
   --arch: string # Arch overrides the architecture for the item in the manifest list
@@ -3767,7 +3766,7 @@ export def "libpod-manifests-json ManifestInspectLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --tlsVerify: string@bool-completer # Require HTTPS and verify signatures when contacting registries. (default: true)
+  --tlsVerify: oneof<nothing, bool> # Require HTTPS and verify signatures when contacting registries. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3792,7 +3791,7 @@ export def "libpod-manifests-push ManifestPushV3Libpod" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --destination: string # the destination for the manifest
-  --all: string@bool-completer # push all images
+  --all: oneof<nothing, bool> # push all images
 ]: nothing -> record<Id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3818,10 +3817,10 @@ export def "libpod-manifests-registry ManifestPushLibpod" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --addCompression: list # add existing instances with requested compression algorithms to manifest list
-  --forceCompressionFormat: string@bool-completer # Enforce compressing the layers with the specified --compression and do not reuse differently compressed blobs on the registry. (default: false)
-  --all: string@bool-completer # push all images (default: true)
-  --tlsVerify: string@bool-completer # Require HTTPS and verify signatures when contacting registries. (default: true)
-  --quiet: string@bool-completer # silences extra stream data on push (default: true)
+  --forceCompressionFormat: oneof<nothing, bool> # Enforce compressing the layers with the specified --compression and do not reuse differently compressed blobs on the registry. (default: false)
+  --all: oneof<nothing, bool> # push all images (default: true)
+  --tlsVerify: oneof<nothing, bool> # Require HTTPS and verify signatures when contacting registries. (default: true)
+  --quiet: oneof<nothing, bool> # silences extra stream data on push (default: true)
 ]: nothing -> record<Id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3845,7 +3844,7 @@ export def "libpod-networks NetworkDeleteLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # remove containers associated with network
+  --force: oneof<nothing, bool> # remove containers associated with network
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3895,7 +3894,7 @@ export def "libpod-networks-disconnect NetworkDisconnectLibpod" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   Container: string # The ID or name of the container to disconnect from the network. (e.g. 3613f73ba0e4)
-  --Force: string@bool-completer # Force the container to disconnect from the network. (e.g. false)
+  --Force: oneof<nothing, bool> # Force the container to disconnect from the network. (e.g. false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3993,14 +3992,14 @@ export def "libpod-networks-create NetworkCreateLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ignoreIfExists: string@bool-completer # Ignore the request if a network with the same name already exists. (default: false)
+  --ignoreIfExists: oneof<nothing, bool> # Ignore the request if a network with the same name already exists. (default: false)
   --created: string # Created contains the timestamp when this network was created. (format: date-time)
-  --dns-enabled: string@bool-completer # DNSEnabled is whether name resolution is active for container on this Network. Only supported with the bridge driver.
+  --dns-enabled: oneof<nothing, bool> # DNSEnabled is whether name resolution is active for container on this Network. Only supported with the bridge driver.
   --driver: string # Driver for this Network, e.g. bridge, macvlan...
   --id: string # ID of the Network.
-  --internal: string@bool-completer # Internal is whether the Network should not have external routes to public or other Networks.
+  --internal: oneof<nothing, bool> # Internal is whether the Network should not have external routes to public or other Networks.
   --ipam-options: record # IPAMOptions contains options used for the ip assignment.
-  --ipv6-enabled: string@bool-completer # IPv6Enabled if set to true an ipv6 subnet should be created for this net.
+  --ipv6-enabled: oneof<nothing, bool> # IPv6Enabled if set to true an ipv6 subnet should be created for this net.
   --labels: record # Labels is a set of key-value labels that have been applied to the Network.
   --name: string # Name of the Network.
   --network-dns-servers: list # List of custom DNS server for podman's DNS resolver at network level, all the containers attached to this network will consider resolvers configured at network level.
@@ -4079,7 +4078,7 @@ export def "libpod-play-kube PlayKubeDownLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # Remove volumes. (default: false)
+  --force: oneof<nothing, bool> # Remove volumes. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4106,19 +4105,19 @@ export def "libpod-play-kube PlayKubeLibpod" [
   --logDriver: string # Logging driver for the containers in the pod.
   --logOptions: list # logging driver options
   --network: list # USe the network mode or specify an array of networks.
-  --noHosts: string@bool-completer # do not setup /etc/hosts file in container (default: false)
-  --noTrunc: string@bool-completer # use annotations that are not truncated to the Kubernetes maximum length of 63 characters (default: false)
+  --noHosts: oneof<nothing, bool> # do not setup /etc/hosts file in container (default: false)
+  --noTrunc: oneof<nothing, bool> # use annotations that are not truncated to the Kubernetes maximum length of 63 characters (default: false)
   --publishPorts: list # publish a container's port, or a range of ports, to the host
-  --publishAllPorts: string@bool-completer # Whether to publish all ports defined in the K8S YAML file (containerPort, hostPort), if false only hostPort will be published
-  --replace: string@bool-completer # replace existing pods and containers (default: false)
-  --serviceContainer: string@bool-completer # Starts a service container before all pods. (default: false)
-  --start: string@bool-completer # Start the pod after creating it. (default: true)
+  --publishAllPorts: oneof<nothing, bool> # Whether to publish all ports defined in the K8S YAML file (containerPort, hostPort), if false only hostPort will be published
+  --replace: oneof<nothing, bool> # replace existing pods and containers (default: false)
+  --serviceContainer: oneof<nothing, bool> # Starts a service container before all pods. (default: false)
+  --start: oneof<nothing, bool> # Start the pod after creating it. (default: true)
   --staticIPs: list # Static IPs used for the pods.
   --staticMACs: list # Static MACs used for the pods.
-  --tlsVerify: string@bool-completer # Require HTTPS and verify signatures when contacting registries. (default: true)
+  --tlsVerify: oneof<nothing, bool> # Require HTTPS and verify signatures when contacting registries. (default: true)
   --userns: string # Set the user namespace mode for the pods.
-  --wait: string@bool-completer # Clean up all objects created when a SIGTERM is received or pods exit. (default: false)
-  --build: string@bool-completer # Build the images with corresponding context.
+  --wait: oneof<nothing, bool> # Clean up all objects created when a SIGTERM is received or pods exit. (default: false)
+  --build: oneof<nothing, bool> # Build the images with corresponding context.
   --Content-Type: string@Content-Type-completer-2
   --body: record
 ]: any -> any {
@@ -4148,7 +4147,7 @@ export def "libpod-pods PodDeleteLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # force removal of a running pod by first stopping all containers, then removing all containers in the pod
+  --force: oneof<nothing, bool> # force removal of a running pod by first stopping all containers, then removing all containers in the pod
   --timeout: int # number of seconds to wait before killing containers in pod
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4331,7 +4330,7 @@ export def "libpod-pods-top PodTopLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --stream: string@bool-completer # when true, repeatedly stream the latest output (As of version 4.0)
+  --stream: oneof<nothing, bool> # when true, repeatedly stream the latest output (As of version 4.0)
   --delay: int # if streaming, delay in seconds between updates. Must be >1. (As of version 4.0) (default: 5)
   --ps-args: string # arguments to pass to ps such as aux.
 ]: nothing -> any {
@@ -4411,10 +4410,10 @@ export def "libpod-pods-create PodCreateLibpod" [
   --name: string # Name is the name of the pod. If not provided, a name will be generated when the pod is created. Optional.
   --netns: record # Namespace describes the namespace — shape: {nsmode?: string, value?: string}
   --network-options: record # NetworkOptions are additional options for each network Optional.
-  --no-infra: string@bool-completer # NoInfra tells the pod not to create an infra container. If this is done, many networking-related options will become unavailable. Conflicts with setting any options in PodNetworkConfig, and the InfraCommand and InfraImages in this struct. Optional.
-  --no-manage-hostname: string@bool-completer # NoManageHostname indicates that /etc/hostname should not be managed by the pod. Instead, each container will create a separate etc/hostname as they would if not in a pod.
-  --no-manage-hosts: string@bool-completer # NoManageHosts indicates that /etc/hosts should not be managed by the pod. Instead, each container will create a separate /etc/hosts as they would if not in a pod. Conflicts with HostAdd.
-  --no-manage-resolv-conf: string@bool-completer # NoManageResolvConf indicates that /etc/resolv.conf should not be managed by the pod. Instead, each container will create and manage a separate resolv.conf as if they had not joined a pod. Conflicts with NoInfra=true and DNSServer, DNSSearch, DNSOption. Optional.
+  --no-infra: oneof<nothing, bool> # NoInfra tells the pod not to create an infra container. If this is done, many networking-related options will become unavailable. Conflicts with setting any options in PodNetworkConfig, and the InfraCommand and InfraImages in this struct. Optional.
+  --no-manage-hostname: oneof<nothing, bool> # NoManageHostname indicates that /etc/hostname should not be managed by the pod. Instead, each container will create a separate etc/hostname as they would if not in a pod.
+  --no-manage-hosts: oneof<nothing, bool> # NoManageHosts indicates that /etc/hosts should not be managed by the pod. Instead, each container will create a separate /etc/hosts as they would if not in a pod. Conflicts with HostAdd.
+  --no-manage-resolv-conf: oneof<nothing, bool> # NoManageResolvConf indicates that /etc/resolv.conf should not be managed by the pod. Instead, each container will create and manage a separate resolv.conf as if they had not joined a pod. Conflicts with NoInfra=true and DNSServer, DNSSearch, DNSOption. Optional.
   --overlay-volumes: list # Overlay volumes are named volumes that will be added to the pod. Optional. — item shape: {destination?: string, options?: list, source?: string}
   --pidns: record # Namespace describes the namespace — shape: {nsmode?: string, value?: string}
   --pod-create-command: list
@@ -4425,7 +4424,7 @@ export def "libpod-pods-create PodCreateLibpod" [
   --restart-tries: int # RestartRetries is the number of attempts that will be made to restart the container. Only available when RestartPolicy is set to "on-failure". Optional. (format: uint64)
   --security-opt: list
   --serviceContainerID: string # The ID of the pod's service container.
-  --share-parent: string@bool-completer # PodCreateCommand is the command used to create this pod. This will be shown in the output of Inspect() on the pod, and may also be used by some tools that wish to recreate the pod (e.g. `podman generate systemd --new`). Optional. ShareParent determines if all containers in the pod will share the pod's cgroup as the cgroup parent
+  --share-parent: oneof<nothing, bool> # PodCreateCommand is the command used to create this pod. This will be shown in the output of Inspect() on the pod, and may also be used by some tools that wish to recreate the pod (e.g. `podman generate systemd --new`). Optional. ShareParent determines if all containers in the pod will share the pod's cgroup as the cgroup parent
   --shared-namespaces: list # SharedNamespaces instructs the pod to share a set of namespaces. Shared namespaces will be joined (by default) by every container which joins the pod. If not set and NoInfra is false, the pod will set a default set of namespaces to share. Conflicts with NoInfra=true. Optional.
   --shm-size: int # ShmSize is the size of the tmpfs to mount in at /dev/shm, in bytes. Conflicts with ShmSize if IpcNS is not private. Optional. (format: int64)
   --shm-size-systemd: int # ShmSizeSystemd is the size of systemd-specific tmpfs mounts specifically /run, /run/lock, /var/log/journal and /tmp. Optional (format: int64)
@@ -4502,9 +4501,9 @@ export def "libpod-pods-stats PodStatsAllLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # Provide statistics for all running pods.
+  --all: oneof<nothing, bool> # Provide statistics for all running pods.
   --namesOrIDs: list # Names or IDs of pods.
-  --stream: string@bool-completer # Stream the output (default: false)
+  --stream: oneof<nothing, bool> # Stream the output (default: false)
   --delay: int # Time in seconds between stats reports (default: 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4529,10 +4528,10 @@ export def "libpod-quadlets QuadletDeleteAllLibpod" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --quadlets: list # Names of quadlets to remove (e.g., "myapp.container"). Required unless all=true
-  --all: string@bool-completer # Remove all quadlets for the current user (default: false)
-  --force: string@bool-completer # Remove running quadlets by stopping them first (default: false)
-  --ignore: string@bool-completer # Do not error for quadlets that do not exist (default: false)
-  --reload-systemd: string@bool-completer # Reload systemd after removing quadlets (default: true)
+  --all: oneof<nothing, bool> # Remove all quadlets for the current user (default: false)
+  --force: oneof<nothing, bool> # Remove running quadlets by stopping them first (default: false)
+  --ignore: oneof<nothing, bool> # Do not error for quadlets that do not exist (default: false)
+  --reload-systemd: oneof<nothing, bool> # Reload systemd after removing quadlets (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4555,8 +4554,8 @@ export def "libpod-quadlets QuadletInstallLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --replace: string@bool-completer # Replace the installation files even if the files already exists (default: false)
-  --reload-systemd: string@bool-completer # Reload systemd after installing quadlets (default: true)
+  --replace: oneof<nothing, bool> # Replace the installation files even if the files already exists (default: false)
+  --reload-systemd: oneof<nothing, bool> # Reload systemd after installing quadlets (default: true)
   --body: record
 ]: any -> record<InstalledQuadlets: record, QuadletErrors: record> {
   let input = $in
@@ -4583,9 +4582,9 @@ export def "libpod-quadlets QuadletDeleteLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # Remove running quadlet by stopping it first (default: false)
-  --ignore: string@bool-completer # Do not error if the quadlet does not exist (default: false)
-  --reload-systemd: string@bool-completer # Reload systemd after removing the quadlet (default: true)
+  --force: oneof<nothing, bool> # Remove running quadlet by stopping it first (default: false)
+  --ignore: oneof<nothing, bool> # Do not error if the quadlet does not exist (default: false)
+  --reload-systemd: oneof<nothing, bool> # Reload systemd after removing the quadlet (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4676,7 +4675,7 @@ export def "libpod-secrets SecretDeleteLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # Remove all secrets (default: false)
+  --all: oneof<nothing, bool> # Remove all secrets (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4722,7 +4721,7 @@ export def "libpod-secrets-json SecretInspectLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --showsecret: string@bool-completer # Display Secret (default: false)
+  --showsecret: oneof<nothing, bool> # Display Secret (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4749,8 +4748,8 @@ export def "libpod-secrets-create SecretCreateLibpod" [
   --driver: string # Secret driver (default: file)
   --driveropts: string # JSON-encoded string containing secret driver options as a `map[string]string`.
   --labels: string # JSON-encoded string containing labels as a `map[string]string`.
-  --replace: string@bool-completer # Replace an existing secret with the same name. (default: false)
-  --ignore: string@bool-completer # Ignore the request if a secret with the same name already exists. (default: false)
+  --replace: oneof<nothing, bool> # Replace an existing secret with the same name. (default: false)
+  --ignore: oneof<nothing, bool> # Ignore the request if a secret with the same name already exists. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -4799,9 +4798,9 @@ export def "libpod-system-check SystemCheckLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --quick: string@bool-completer # Skip time-consuming checks
-  --repair: string@bool-completer # Remove inconsistent images
-  --repair-lossy: string@bool-completer # Remove inconsistent containers and images
+  --quick: oneof<nothing, bool> # Skip time-consuming checks
+  --repair: oneof<nothing, bool> # Remove inconsistent images
+  --repair-lossy: oneof<nothing, bool> # Remove inconsistent containers and images
   --unreferenced-layer-max-age: string # Maximum allowed age of unreferenced layers (default: 24h0m0s)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4846,10 +4845,10 @@ export def "libpod-system-prune SystemPruneLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # Remove all unused data, not just dangling data
-  --volumes: string@bool-completer # Prune volumes
-  --external: string@bool-completer # Remove images used by external containers (e.g., build containers)
-  --build: string@bool-completer # Remove build cache
+  --all: oneof<nothing, bool> # Remove all unused data, not just dangling data
+  --volumes: oneof<nothing, bool> # Prune volumes
+  --external: oneof<nothing, bool> # Remove images used by external containers (e.g., build containers)
+  --build: oneof<nothing, bool> # Remove build cache
   --filters: string # JSON encoded value of filters (a map[string][]string) to match data against before pruning. Available filters:   - `until=<timestamp>` Prune data created before this timestamp. The `<timestamp>` can be Unix timestamps, date formatted timestamps, or Go duration strings (e.g. `10m`, `1h30m`) computed relative to the daemon machine's time.   - `label` (`label=<key>`, `label=<key>=<value>`, `label!=<key>`, or `label!=<key>=<value>`) Prune data with (or without, in case `label!=...` is used) the specified labels.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4895,7 +4894,7 @@ export def "libpod-volumes VolumeDeleteLibpod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # force removal
+  --force: oneof<nothing, bool> # force removal
   --timeout: int # timeout before forcibly killing any containers using the volume
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5012,7 +5011,7 @@ export def "libpod-volumes-create VolumeCreateLibpod" [
   --allow-errors(-e) # Return full response without error handling
   --Driver: string # Volume driver to use
   --GID: int # GID that the volume will be created as (format: int64)
-  --IgnoreIfExists: string@bool-completer # Ignore existing volumes
+  --IgnoreIfExists: oneof<nothing, bool> # Ignore existing volumes
   --Label: record # User-defined key/value metadata. Provided for compatibility
   --Labels: record # User-defined key/value metadata. Preferred field, will override Label
   --Name: string # New volume's name. Can be left blank
@@ -5066,7 +5065,7 @@ export def "libpod-volumes-prune VolumePruneLibpod" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filters: string # JSON encoded value of filters (a map[string][]string) to match volumes against before pruning. Available filters:   - `all` When true, prune all unused volumes; when false or unset, only anonymous unused volumes.   - `anonymous` When true/false, restrict to anonymous or named volumes only.   - `until=<timestamp>` Prune volumes created before this timestamp. The `<timestamp>` can be Unix timestamps, date formatted timestamps, or Go duration strings (e.g. `10m`, `1h30m`) computed relative to the daemon machine’s time.   - `label` (`label=<key>`, `label=<key>=<value>`, `label!=<key>`, or `label!=<key>=<value>`) Prune volumes with (or without, in case `label!=...` is used) the specified labels.
-  --dryrun: string@bool-completer # Show which volumes would be pruned without removing them. (default: false)
+  --dryrun: oneof<nothing, bool> # Show which volumes would be pruned without removing them. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5113,7 +5112,7 @@ export def "networks NetworkDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # Remove containers associated with the network. (default: false)
+  --force: oneof<nothing, bool> # Remove containers associated with the network. (default: false)
   --timeout: int # Seconds to wait for container removal when force is set.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5138,7 +5137,7 @@ export def "networks NetworkInspect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --verbose: string@bool-completer # Detailed inspect output for troubleshooting
+  --verbose: oneof<nothing, bool> # Detailed inspect output for troubleshooting
   --scope: string # Filter the network by scope (swarm, global, or local)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5192,7 +5191,7 @@ export def "networks-disconnect NetworkDisconnect" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   Container: string # The ID or name of the container to disconnect from the network. (e.g. 3613f73ba0e4)
-  --Force: string@bool-completer # Force the container to disconnect from the network. (e.g. false)
+  --Force: oneof<nothing, bool> # Force the container to disconnect from the network. (e.g. false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5219,15 +5218,15 @@ export def "networks-create NetworkCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Attachable: string@bool-completer
+  --Attachable: oneof<nothing, bool>
   --ConfigFrom: record # ConfigReference The config-only network source to provide the configuration for this network. — shape: {Network?: string}
-  --ConfigOnly: string@bool-completer
+  --ConfigOnly: oneof<nothing, bool>
   --Driver: string
-  --EnableIPv4: string@bool-completer
-  --EnableIPv6: string@bool-completer
+  --EnableIPv4: oneof<nothing, bool>
+  --EnableIPv6: oneof<nothing, bool>
   --IPAM: record # IPAM represents IP Address Management — shape: {Config?: list, Driver?: string, Options?: record}
-  --Ingress: string@bool-completer
-  --Internal: string@bool-completer
+  --Ingress: oneof<nothing, bool>
+  --Internal: oneof<nothing, bool>
   --Labels: record
   --Name: string
   --Options: record
@@ -5440,7 +5439,7 @@ export def "volumes VolumeDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # Force removal of the volume. This actually only causes errors due to the names volume not being found to be suppressed, which is the behaviour Docker implements.
+  --force: oneof<nothing, bool> # Force removal of the volume. This actually only causes errors due to the names volume not being found to be suppressed, which is the behaviour Docker implements.
   --timeout: int # timeout before forcibly killing any containers using the volume
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

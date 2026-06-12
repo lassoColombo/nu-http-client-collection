@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://conversations.twilio.com"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -192,7 +191,7 @@ export def "configuration-addresses CreateConfigurationAddress" [
   Type: string@Type-completer # Type of Address, value can be `whatsapp` or `sms`.
   Address: string # The unique address to be configured. The address can be a whatsapp address or phone number
   --FriendlyName: string # The human-readable name of this configuration, limited to 256 characters. Optional.
-  --AutoCreationEnabled: string@bool-completer # Enable/Disable auto-creating conversations for messages to this address
+  --AutoCreationEnabled: oneof<nothing, bool> # Enable/Disable auto-creating conversations for messages to this address
   --AutoCreationType: string@AutoCreationType-completer
   --AutoCreationConversationServiceSid: string # Conversation Service for the auto-created conversation. If not set, the conversation is created in the default service.
   --AutoCreationWebhookUrl: string # For type `webhook`, the url for the webhook request.
@@ -249,7 +248,7 @@ export def "configuration-addresses UpdateConfigurationAddress" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --FriendlyName: string # The human-readable name of this configuration, limited to 256 characters. Optional.
-  --AutoCreationEnabled: string@bool-completer # Enable/Disable auto-creating conversations for messages to this address
+  --AutoCreationEnabled: oneof<nothing, bool> # Enable/Disable auto-creating conversations for messages to this address
   --AutoCreationType: string@AutoCreationType-completer
   --AutoCreationConversationServiceSid: string # Conversation Service for the auto-created conversation. If not set, the conversation is created in the default service.
   --AutoCreationWebhookUrl: string # For type `webhook`, the url for the webhook request.
@@ -1029,7 +1028,7 @@ export def "credentials CreateCredential" [
   --FriendlyName: string # A descriptive string that you create to describe the new resource. It can be up to 64 characters long.
   --Certificate: string # [APN only] The URL encoded representation of the certificate. For example,  `-----BEGIN CERTIFICATE----- MIIFnTCCBIWgAwIBAgIIAjy9H849+E8wDQYJKoZIhvcNAQEF.....A== -----END CERTIFICATE-----`.
   --PrivateKey: string # [APN only] The URL encoded representation of the private key. For example, `-----BEGIN RSA PRIVATE KEY----- MIIEpQIBAAKCAQEAuyf/lNrH9ck8DmNyo3fG... -----END RSA PRIVATE KEY-----`.
-  --Sandbox: string@bool-completer # [APN only] Whether to send the credential to sandbox APNs. Can be `true` to send to sandbox APNs or `false` to send to production.
+  --Sandbox: oneof<nothing, bool> # [APN only] Whether to send the credential to sandbox APNs. Can be `true` to send to sandbox APNs or `false` to send to production.
   --ApiKey: string # [GCM only] The API key for the project that was obtained from the Google Developer console for your GCM Service application credential.
   --Secret: string # [FCM only] The **Server key** of your project from the Firebase console, found under Settings / Cloud messaging.
 ]: any -> record<sid: string, account_sid: string, friendly_name: string, type: string, sandbox: string, date_created: string, date_updated: string, url: string> {
@@ -1086,7 +1085,7 @@ export def "credentials UpdateCredential" [
   --FriendlyName: string # A descriptive string that you create to describe the new resource. It can be up to 64 characters long.
   --Certificate: string # [APN only] The URL encoded representation of the certificate. For example,  `-----BEGIN CERTIFICATE----- MIIFnTCCBIWgAwIBAgIIAjy9H849+E8wDQYJKoZIhvcNAQEF.....A== -----END CERTIFICATE-----`.
   --PrivateKey: string # [APN only] The URL encoded representation of the private key. For example, `-----BEGIN RSA PRIVATE KEY----- MIIEpQIBAAKCAQEAuyf/lNrH9ck8DmNyo3fG... -----END RSA PRIVATE KEY-----`.
-  --Sandbox: string@bool-completer # [APN only] Whether to send the credential to sandbox APNs. Can be `true` to send to sandbox APNs or `false` to send to production.
+  --Sandbox: oneof<nothing, bool> # [APN only] Whether to send the credential to sandbox APNs. Can be `true` to send to sandbox APNs or `false` to send to production.
   --ApiKey: string # [GCM only] The API key for the project that was obtained from the Google Developer console for your GCM Service application credential.
   --Secret: string # [FCM only] The **Server key** of your project from the Firebase console, found under Settings / Cloud messaging.
 ]: any -> record<sid: string, account_sid: string, friendly_name: string, type: string, sandbox: string, date_created: string, date_updated: string, url: string> {
@@ -1500,7 +1499,7 @@ export def "services-configuration UpdateServiceConfiguration" [
   --DefaultConversationCreatorRoleSid: string # The conversation-level role assigned to a conversation creator when they join a new conversation. See [Conversation Role](https://www.twilio.com/docs/conversations/api/role-resource) for more info about roles.
   --DefaultConversationRoleSid: string # The conversation-level role assigned to users when they are added to a conversation. See [Conversation Role](https://www.twilio.com/docs/conversations/api/role-resource) for more info about roles.
   --DefaultChatServiceRoleSid: string # The service-level role assigned to users when they are added to the service. See [Conversation Role](https://www.twilio.com/docs/conversations/api/role-resource) for more info about roles.
-  --ReachabilityEnabled: string@bool-completer # Whether the [Reachability Indicator](https://www.twilio.com/docs/conversations/reachability) is enabled for this Conversations Service. The default is `false`.
+  --ReachabilityEnabled: oneof<nothing, bool> # Whether the [Reachability Indicator](https://www.twilio.com/docs/conversations/reachability) is enabled for this Conversations Service. The default is `false`.
 ]: any -> record<chat_service_sid: string, default_conversation_creator_role_sid: string, default_conversation_role_sid: string, default_chat_service_role_sid: string, url: string, links: record, reachability_enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2223,18 +2222,18 @@ export def "services-configuration-notifications UpdateServiceNotification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --LogEnabled: string@bool-completer # Weather the notification logging is enabled.
-  --NewMessageEnabled: string@bool-completer # Whether to send a notification when a new message is added to a conversation. The default is `false`.
+  --LogEnabled: oneof<nothing, bool> # Weather the notification logging is enabled.
+  --NewMessageEnabled: oneof<nothing, bool> # Whether to send a notification when a new message is added to a conversation. The default is `false`.
   --NewMessageTemplate: string # The template to use to create the notification text displayed when a new message is added to a conversation and `new_message.enabled` is `true`.
   --NewMessageSound: string # The name of the sound to play when a new message is added to a conversation and `new_message.enabled` is `true`.
-  --NewMessageBadgeCountEnabled: string@bool-completer # Whether the new message badge is enabled. The default is `false`.
-  --AddedToConversationEnabled: string@bool-completer # Whether to send a notification when a participant is added to a conversation. The default is `false`.
+  --NewMessageBadgeCountEnabled: oneof<nothing, bool> # Whether the new message badge is enabled. The default is `false`.
+  --AddedToConversationEnabled: oneof<nothing, bool> # Whether to send a notification when a participant is added to a conversation. The default is `false`.
   --AddedToConversationTemplate: string # The template to use to create the notification text displayed when a participant is added to a conversation and `added_to_conversation.enabled` is `true`.
   --AddedToConversationSound: string # The name of the sound to play when a participant is added to a conversation and `added_to_conversation.enabled` is `true`.
-  --RemovedFromConversationEnabled: string@bool-completer # Whether to send a notification to a user when they are removed from a conversation. The default is `false`.
+  --RemovedFromConversationEnabled: oneof<nothing, bool> # Whether to send a notification to a user when they are removed from a conversation. The default is `false`.
   --RemovedFromConversationTemplate: string # The template to use to create the notification text displayed to a user when they are removed from a conversation and `removed_from_conversation.enabled` is `true`.
   --RemovedFromConversationSound: string # The name of the sound to play to a user when they are removed from a conversation and `removed_from_conversation.enabled` is `true`.
-  --NewMessageWithMediaEnabled: string@bool-completer # Whether to send a notification when a new message with media/file attachments is added to a conversation. The default is `false`.
+  --NewMessageWithMediaEnabled: oneof<nothing, bool> # Whether to send a notification when a new message with media/file attachments is added to a conversation. The default is `false`.
   --NewMessageWithMediaTemplate: string # The template to use to create the notification text displayed when a new message with media/file attachments is added to a conversation and `new_message.attachments.enabled` is `true`.
 ]: any -> record<account_sid: string, chat_service_sid: string, new_message: any, added_to_conversation: any, removed_from_conversation: any, log_enabled: bool, url: string> {
   let input = $in

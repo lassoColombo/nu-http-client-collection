@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.callfire.com/v2"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -126,7 +125,7 @@ export def "calls findCalls" [
   --label: string # A label for a specific call
   --states: string # Searches for all calls which correspond to statuses listed in a comma separated string. Available values: READY, SELECTED, CALLBACK, FINISHED, DISABLED, DNC, DUP, INVALID, TIMEOUT, PERIOD_LIMIT. See [call states and results](https://developers.callfire.com/results-responses-errors.html)
   --results: string # Searches for all calls with statuses listed in a comma separated string. Available values: SENT, RECEIVED, DNT, TOO_BIG, INTERNAL_ERROR, CARRIER_ERROR, CARRIER_TEMP_ERROR, UNDIALED. See [call states and results](https://developers.callfire.com/results-responses-errors.html)
-  --inbound: string@bool-completer # Filters inbound calls for "true" value and outbound calls for "false" value
+  --inbound: oneof<nothing, bool> # Filters inbound calls for "true" value and outbound calls for "false" value
   --intervalBegin: int # Start of the find time interval, formatted in unix time milliseconds. Example: 1473781817000 for Sat, 05 Jan 1985 14:03:37 GMT (format: int64)
   --intervalEnd: int # End of the find time interval, formatted in unix time milliseconds. Example: 1473781817000 for Sat, 05 Jan 1985 14:03:37 GMT (format: int64)
 ]: nothing -> record<items: table<agentCall: bool, attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalCallResult: string, fromNumber: string, id: int, inbound: bool, labels: list, modified: int, notes: list, records: list, state: string, toNumber: string>, limit: int, offset: int, totalCount: int> {
@@ -158,7 +157,7 @@ export def "calls sendCalls" [
   --defaultLiveMessageSoundId: int # Id of sound file to play if phone is answered. Parameter can be overridden for any particular CallRecipient (format: int64)
   --defaultMachineMessageSoundId: int # An id of a sound file to play if answering machine is detected. Parameter can be overridden for any particular CallRecipient (format: int64)
   --defaultVoice: string@defaultVoice-completer # The voice set by default for all text-to-speech messages defined in CallRecipient objects or as default *Message properties
-  --strictValidation: string@bool-completer # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
+  --strictValidation: oneof<nothing, bool> # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
   --body: record
 ]: any -> record<items: table<agentCall: bool, attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalCallResult: string, fromNumber: string, id: int, inbound: bool, labels: list, modified: int, notes: list, records: list, state: string, toNumber: string>> {
   let input = $in
@@ -189,8 +188,8 @@ export def "calls-broadcasts findCallBroadcasts" [
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
   --label: string # A label of a voice broadcast
   --name: string # A name of voice broadcast
-  --running: string@bool-completer # Specify whether the campaigns should be running or not
-  --scheduled: string@bool-completer # Specify whether the campaigns should be scheduled or not
+  --running: oneof<nothing, bool> # Specify whether the campaigns should be running or not
+  --scheduled: oneof<nothing, bool> # Specify whether the campaigns should be scheduled or not
   --intervalBegin: int # Start of the find time interval, formatted in unix time milliseconds. Example: 1473781817000 for Sat, 05 Jan 1985 14:03:37 GMT (format: int64)
   --intervalEnd: int # End of the find time interval, formatted in unix time milliseconds. Example: 1473781817000 for Sat, 05 Jan 1985 14:03:37 GMT (format: int64)
 ]: nothing -> record<items: table<answeringMachineConfig: string, dialplanXml: string, fromNumber: string, id: int, labels: list, lastModified: int, localTimeRestriction: record, maxActive: int, maxActiveTransfers: int, name: string, recipients: list, resumeNextDay: bool, retryConfig: record, schedules: list, sounds: record, status: string>, limit: int, offset: int, totalCount: int> {
@@ -220,8 +219,8 @@ export def "calls-broadcasts createCallBroadcast" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --start: string@bool-completer # Specify whether to immediately start this campaign (not required)
-  --strictValidation: string@bool-completer # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
+  --start: oneof<nothing, bool> # Specify whether to immediately start this campaign (not required)
+  --strictValidation: oneof<nothing, bool> # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
   --answeringMachineConfig: string@answeringMachineConfig-completer # Specifies which action should be taken if answering machine was detected, default value: AM_AND_LIVE. Available values: AM_ONLY - run AMD (Answering Machine Detection), hang up if LA (Live Answer); AM_AND_LIVE - run AMD, play separate live vs. machine sound; LIVE_WITH_AMD, run AMD, hang up if machine answers; LIVE_IMMEDIATE - no AMD, play live sound immediately
   --dialplanXml: string # IVR xml is a document which describes the dialplan to setup the IVR broadcast
   --fromNumber: string # Phone number in E.164 format (11-digit) or short code for text. Example: 12132000384, 67076
@@ -232,7 +231,7 @@ export def "calls-broadcasts createCallBroadcast" [
   --maxActiveTransfers: int # A maximum number of active transfers (format: int32)
   --name: string # A name of a broadcast
   --recipients: list # Recipients of a call broadcast, can be either existing contacts or a new ones — item shape: {attributes?: record, contactId?: int, fromNumber?: string, phoneNumber?: string}
-  --resumeNextDay: string@bool-completer # If true resumes the unfinished campaign to the next day
+  --resumeNextDay: oneof<nothing, bool> # If true resumes the unfinished campaign to the next day
   --retryConfig: record # Retry configuration will help you to resend a call or text if it was not delivered first time — shape: {maxAttempts?: int, minutesBetweenAttempts?: int, retryPhoneTypes?: list, retryResults?: list}
   --schedules: list # A list of schedule objects which specifies a range of time when broadcast should be started and stopped. Supports the scheduling per day of week — item shape: {campaignId?: int, daysOfWeek?: list, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
   --sounds: record # A set of sounds assigned to a voice broadcast to play according to an answering machine configuration. You can add the existing sounds from the account's sound library or to provide a text which will be converted into a speech. There are four sound options available for a Voice Broadcast campaign — shape: {dncDigit?: string, dncSoundId?: int, dncSoundText?: string, dncSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", liveSoundId?: int, liveSoundText?: string, liveSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", machineSoundId?: int, machineSoundText?: string, machineSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", transferDigit?: string, transferNumber?: string, transferSoundId?: int, transferSoundText?: string, transferSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1"}
@@ -291,7 +290,7 @@ export def "calls-broadcasts updateCallBroadcast" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --strictValidation: string@bool-completer # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
+  --strictValidation: oneof<nothing, bool> # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
   --answeringMachineConfig: string@answeringMachineConfig-completer # Specifies which action should be taken if answering machine was detected, default value: AM_AND_LIVE. Available values: AM_ONLY - run AMD (Answering Machine Detection), hang up if LA (Live Answer); AM_AND_LIVE - run AMD, play separate live vs. machine sound; LIVE_WITH_AMD, run AMD, hang up if machine answers; LIVE_IMMEDIATE - no AMD, play live sound immediately
   --dialplanXml: string # IVR xml is a document which describes the dialplan to setup the IVR broadcast
   --fromNumber: string # Phone number in E.164 format (11-digit) or short code for text. Example: 12132000384, 67076
@@ -302,7 +301,7 @@ export def "calls-broadcasts updateCallBroadcast" [
   --maxActiveTransfers: int # A maximum number of active transfers (format: int32)
   --name: string # A name of a broadcast
   --recipients: list # Recipients of a call broadcast, can be either existing contacts or a new ones — item shape: {attributes?: record, contactId?: int, fromNumber?: string, phoneNumber?: string}
-  --resumeNextDay: string@bool-completer # If true resumes the unfinished campaign to the next day
+  --resumeNextDay: oneof<nothing, bool> # If true resumes the unfinished campaign to the next day
   --retryConfig: record # Retry configuration will help you to resend a call or text if it was not delivered first time — shape: {maxAttempts?: int, minutesBetweenAttempts?: int, retryPhoneTypes?: list, retryResults?: list}
   --schedules: list # A list of schedule objects which specifies a range of time when broadcast should be started and stopped. Supports the scheduling per day of week — item shape: {campaignId?: int, daysOfWeek?: list, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
   --sounds: record # A set of sounds assigned to a voice broadcast to play according to an answering machine configuration. You can add the existing sounds from the account's sound library or to provide a text which will be converted into a speech. There are four sound options available for a Voice Broadcast campaign — shape: {dncDigit?: string, dncSoundId?: int, dncSoundText?: string, dncSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", liveSoundId?: int, liveSoundText?: string, liveSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", machineSoundId?: int, machineSoundText?: string, machineSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", transferDigit?: string, transferNumber?: string, transferSoundId?: int, transferSoundText?: string, transferSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1"}
@@ -381,11 +380,11 @@ export def "calls-broadcasts-batches addCallBroadcastBatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --strictValidation: string@bool-completer # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
+  --strictValidation: oneof<nothing, bool> # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
   --contactListId: int # An id of existing contact list (format: int64)
   --name: string # A name of batch
   --recipients: list # A list of Recipient objects. For each recipient you can set its phone number or existing contact id to use contact which already exists in account — item shape: {attributes?: record, contactId?: int, fromNumber?: string, phoneNumber?: string}
-  --scrubDuplicates: string@bool-completer # Removes duplicate recipients from batch if true
+  --scrubDuplicates: oneof<nothing, bool> # Removes duplicate recipients from batch if true
 ]: any -> record<id: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -440,7 +439,7 @@ export def "calls-broadcasts-recipients addCallBroadcastRecipients" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-  --strictValidation: string@bool-completer # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
+  --strictValidation: oneof<nothing, bool> # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
   --body: record
 ]: any -> record<items: table<agentCall: bool, attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalCallResult: string, fromNumber: string, id: int, inbound: bool, labels: list, modified: int, notes: list, records: list, state: string, toNumber: string>> {
   let input = $in
@@ -537,7 +536,7 @@ export def "calls-broadcasts-toggle-recipients-status toggleCallBroadcastRecipie
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable: string@bool-completer # Flag which indicate what to do with calls (true will enable call in DISABLED status and vice versa) (default: false)
+  --enable: oneof<nothing, bool> # Flag which indicate what to do with calls (true will enable call in DISABLED status and vice versa) (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -731,7 +730,7 @@ export def "campaigns-batches updateCampaignBatch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --broadcastId: int # An id of broadcast which batch belongs to (format: int64)
-  --enabled: string@bool-completer # An enabled batch. If batch is disabled its contacts remain undialed/untexted
+  --enabled: oneof<nothing, bool> # An enabled batch. If batch is disabled its contacts remain undialed/untexted
   --body-id: int # A id of a batch (format: int64)
   --name: string # A batch name
   --status: string@status-completer # A status of batch (NEW, VALIDATING, ERRORS, SOURCE_ERROR, ACTIVE). NEW - batch is queued for validation; VALIDATING - batch is currently validating; ERRORS - batch is processed, some validation errors occurred; SOURCE_ERROR - if contact source is contact list in CallFire system and it has an error; ACTIVE - batch is processed and ready
@@ -762,9 +761,9 @@ export def "campaigns-sounds findCampaignSounds" [
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
   --filter: string # value to filter file names again; this value is used to check if the filename contains the filter value.
-  --includeArchived: string@bool-completer # Includes ARCHIVED sounds for "true" value
-  --includePending: string@bool-completer # Includes UPLOAD/RECORDING sounds for "true" value
-  --includeScrubbed: string@bool-completer # Includes SCRUBBED sounds for "true" value
+  --includeArchived: oneof<nothing, bool> # Includes ARCHIVED sounds for "true" value
+  --includePending: oneof<nothing, bool> # Includes UPLOAD/RECORDING sounds for "true" value
+  --includeScrubbed: oneof<nothing, bool> # Includes SCRUBBED sounds for "true" value
   --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<items: table<created: int, duplicate: bool, id: int, lengthInSeconds: int, name: string, status: string>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1022,10 +1021,10 @@ export def "contacts-dncs findDoNotContacts" [
   --prefix: string # Prefix (1-10 digits) of phone numbers
   --campaignId: int # A campaign id which was used to send a message to a DNC number (format: int64)
   --qp-source: string # A DNC source name to search for DNCs
-  --call: string@bool-completer # Show only Do-Not-Call numbers
-  --text: string@bool-completer # Show only Do-Not-Text numbers
-  --inboundCall: string@bool-completer # ~
-  --inboundText: string@bool-completer # ~
+  --call: oneof<nothing, bool> # Show only Do-Not-Call numbers
+  --text: oneof<nothing, bool> # Show only Do-Not-Text numbers
+  --inboundCall: oneof<nothing, bool> # ~
+  --inboundText: oneof<nothing, bool> # ~
   --number: list # ~
 ]: nothing -> record<items: table<call: bool, campaignId: int, created: int, inboundCall: bool, inboundText: bool, number: string, source: string, text: bool>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1049,12 +1048,12 @@ export def "contacts-dncs addDoNotContacts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --call: string@bool-completer # If set to true add all given numbers to Do-Not-Call list. Default value: true
-  --inboundCall: string@bool-completer # ~
-  --inboundText: string@bool-completer # ~
+  --call: oneof<nothing, bool> # If set to true add all given numbers to Do-Not-Call list. Default value: true
+  --inboundCall: oneof<nothing, bool> # ~
+  --inboundText: oneof<nothing, bool> # ~
   --numbers: list # A list of phone numbers in E.164 format (11-digit), example: 12132000384, 14142777322
   --body-source: string # A list of new contact objects which need to be added. Default value: Api V2
-  --text: string@bool-completer # If set to true add all given numbers to Do-Not-Text list. Default value: true
+  --text: oneof<nothing, bool> # If set to true add all given numbers to Do-Not-Text list. Default value: true
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1171,12 +1170,12 @@ export def "contacts-dncs updateDoNotContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --call: string@bool-completer # A number on Do-Not-Call list
-  --inboundCall: string@bool-completer # ~
-  --inboundText: string@bool-completer # ~
+  --call: oneof<nothing, bool> # A number on Do-Not-Call list
+  --inboundCall: oneof<nothing, bool> # ~
+  --inboundText: oneof<nothing, bool> # ~
   --body-number: string # A single DNC number in E.164 format (11-digit). Example: 12132000384
   --body-source: string # The name of DNC source (can be the name of DNC list that user uploads to CallFire)
-  --text: string@bool-completer # A number on Do-Not-Text list
+  --text: oneof<nothing, bool> # A number on Do-Not-Text list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1205,7 +1204,7 @@ export def "contacts-lists findContactLists" [
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 100)
   --offset: int # Offset to the start of a given page. The default is 0. Check [pagination](https://developers.callfire.com/docs.html#pagination) page for more information about pagination in CallFire API. (format: int32, default: 0)
   --name: string # A name or a partial name of a contact list
-  --exactMatch: string@bool-completer # ~
+  --exactMatch: oneof<nothing, bool> # ~
   --contactCount: int # ~ (format: int32)
   --orderBy: string # ~
 ]: nothing -> record<items: table<created: int, id: int, name: string, size: int, status: string>, limit: int, offset: int, totalCount: int> {
@@ -1237,7 +1236,7 @@ export def "contacts-lists createContactList" [
   --contactNumbersField: string # A type of a phone number (homePhone, workPhone, mobilePhone). This parameter is used with contactNumbers and specifies which types of phone numbers are included to a contact list
   --contacts: list # A list of new contact objects to be added — item shape: {deleted?: bool, externalId?: string, externalSystem?: string, extraPhone1?: string, extraPhone2?: string, extraPhone3?: string, firstName?: string, homePhone?: string, id?: int, lastName?: string, mobilePhone?: string, properties?: record, workPhone?: string, zipcode?: string}
   --name: string # A name of a contact list
-  --useCustomFields: string@bool-completer # A flag to indicate how to define property names for contacts. If true, uses the field and property names exactly as defined. If false will assign custom properties and fields to A, B, C, etc
+  --useCustomFields: oneof<nothing, bool> # A flag to indicate how to define property names for contacts. If true, uses the field and property names exactly as defined. If false will assign custom properties and fields to A, B, C, etc
 ]: any -> record<created: int, id: int, name: string, size: int, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1265,7 +1264,7 @@ export def "contacts-lists-upload createContactListFromFile" [
   --allow-errors(-e) # Return full response without error handling
   file: string # CSV file to be uploaded (format: binary)
   --name: string # A name of a contact list
-  --useCustomFields: string@bool-completer # A flag to indicate how to define property names for contacts. If true, uses the field and property names exactly as defined. If false will assign custom properties and fields to A, B, C, etc
+  --useCustomFields: oneof<nothing, bool> # A flag to indicate how to define property names for contacts. If true, uses the field and property names exactly as defined. If false will assign custom properties and fields to A, B, C, etc
 ]: any -> record<id: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1418,7 +1417,7 @@ export def "contacts-lists-items addContactListItems" [
   --contactNumbers: list # A phone number in E.164 format (11-digit). Examples: 12132000384
   --contactNumbersField: string # A type of phone number (homePhone, workPhone, mobilePhone). This parameter works together with contactNumbers and specifies which types of numbers are included to a list
   --contacts: list # A list of new contact objects which need to be added — item shape: {deleted?: bool, externalId?: string, externalSystem?: string, extraPhone1?: string, extraPhone2?: string, extraPhone3?: string, firstName?: string, homePhone?: string, id?: int, lastName?: string, mobilePhone?: string, properties?: record, workPhone?: string, zipcode?: string}
-  --useCustomFields: string@bool-completer # A flag to indicate how to define property names for contacts. If true, uses the field and property names exactly as defined. If false will assign custom properties and fields to A, B, C, etc
+  --useCustomFields: oneof<nothing, bool> # A flag to indicate how to define property names for contacts. If true, uses the field and property names exactly as defined. If false will assign custom properties and fields to A, B, C, etc
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1513,7 +1512,7 @@ export def "contacts updateContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deleted: string@bool-completer # A deleted contact, deleted contacts are hidden from search results
+  --deleted: oneof<nothing, bool> # A deleted contact, deleted contacts are hidden from search results
   --externalId: string # An external id of a contact for syncing with external sources
   --externalSystem: string # External system that external id refers to
   --extraPhone1: string # Phone number in E.164 format (11-digit). Example: 12132000384
@@ -1755,9 +1754,9 @@ export def "keywords-leases updateKeywordLease" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoRenew: string@bool-completer # Enables the auto renewal of a keyword lease at the end of each billing cycle
+  --autoRenew: oneof<nothing, bool> # Enables the auto renewal of a keyword lease at the end of each billing cycle
   --contactListId: int # Existing contact list ID (format: int64)
-  --doubleOptInEnabled: string@bool-completer # Enable/disable double opt in feature
+  --doubleOptInEnabled: oneof<nothing, bool> # Enable/disable double opt in feature
   --body-keyword: string # A text used as a keyword
   --labels: list # ~
   --leaseBegin: int # A time of a lease timestamp, formatted in unix time milliseconds (read only). Example: 1473781817000 for Sat, 05 Jan 1985 14:03:37 GMT (format: int64)
@@ -1862,7 +1861,7 @@ export def "me-credentials createApiCredential" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Is credential enabled
+  --enabled: oneof<nothing, bool> # Is credential enabled
   --id: int # An id of an API credential (format: int64)
   --name: string # A name of an API credential
 ]: any -> record<enabled: bool, id: int, name: string, password: string, username: string> {
@@ -2246,7 +2245,7 @@ export def "numbers-leases findNumberLeases" [
   --state: string # A two-letter state code. Example: CA, IL, etc.
   --zipcode: string # A five-digit Zipcode
   --labelName: string # A label name
-  --tollFree: string@bool-completer # ~
+  --tollFree: oneof<nothing, bool> # ~
   --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
 ]: nothing -> record<items: table<autoRenew: bool, callFeatureStatus: string, labels: list, leaseBegin: int, leaseEnd: int, nationalFormat: string, number: string, region: record, sendEmailOnCreate: bool, status: string, textFeatureStatus: string, tollFree: bool, type: string>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2383,7 +2382,7 @@ export def "numbers-leases updateNumberLease" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoRenew: string@bool-completer # Enables the auto renewal of number lease at end of each billing cycle
+  --autoRenew: oneof<nothing, bool> # Enables the auto renewal of number lease at end of each billing cycle
   --callFeatureStatus: string@callFeatureStatus-completer # A status of a call feature. Available values: DISABLED, ENABLED
   --labels: list # ~
   --leaseBegin: int # A date and time of a lease start. Timestamp, formatted in unix time milliseconds (read only). Example: 1473781817000 (format: int64)
@@ -2391,9 +2390,9 @@ export def "numbers-leases updateNumberLease" [
   --nationalFormat: string # Formatted number with a country code
   --body-number: string # A phone number in E.164 format (11-digit). Example: 12132000384
   --region: record # Every local number associated with a region. You can query regions to use them in subsequent purchase requests — shape: {city?: string, country?: string, latitude?: float, longitude?: float, prefix?: string, state?: string, timeZone?: string, zipcode?: string}
-  --sendEmailOnCreate: string@bool-completer # ~
+  --sendEmailOnCreate: oneof<nothing, bool> # ~
   --textFeatureStatus: string@textFeatureStatus-completer # A status of a text feature. Available values: DISABLED, ENABLED
-  --tollFree: string@bool-completer # A  toll-free number
+  --tollFree: oneof<nothing, bool> # A  toll-free number
   --type: string@type-completer # ~
 ]: any -> any {
   let input = $in
@@ -2657,7 +2656,7 @@ export def "texts findTexts" [
   --label: string # A label of a text message
   --states: string # Expected text statuses in comma separated string, available values: READY, SELECTED, CALLBACK, FINISHED, DISABLED, DNC, DUP, INVALID, TIMEOUT, PERIOD_LIMIT. See [call states and results](https://developers.callfire.com/results-responses-errors.html)
   --results: string # Expected text results in comma separated string, available values: SENT, RECEIVED, DNT, TOO_BIG, INTERNAL_ERROR, CARRIER_ERROR, CARRIER_TEMP_ERROR, UNDIALED. See [call states and results](https://developers.callfire.com/results-responses-errors.html)
-  --inbound: string@bool-completer # Specify true for inbound or false for outbounds. Do not specify this parameter if you need to get both inbound and outbound texts listed in response
+  --inbound: oneof<nothing, bool> # Specify true for inbound or false for outbounds. Do not specify this parameter if you need to get both inbound and outbound texts listed in response
   --intervalBegin: int # Start of the find time interval, formatted in unix time milliseconds. Example: 1473781817000 (format: int64)
   --intervalEnd: int # End of the find time interval, formatted in unix time milliseconds. Example: 1473781817000 (format: int64)
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 10)
@@ -2688,7 +2687,7 @@ export def "texts sendTexts" [
   --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
   --campaignId: int # Specifies a campaignId to send texts through a previously created campaign (format: int64)
   --defaultMessage: string # Text message can be overridden by TextRecipient.message field. If multiple recipients have the same text message to a different recipients it is better to specify a single default message and do not duplicate it in each recipient.
-  --strictValidation: string@bool-completer # Turns on strict validation for recipients
+  --strictValidation: oneof<nothing, bool> # Turns on strict validation for recipients
   --body: record
 ]: any -> record<items: table<attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalTextResult: string, fromNumber: string, id: int, inbound: bool, labels: list, media: list, message: string, modified: int, records: list, state: string, toNumber: string>> {
   let input = $in
@@ -2817,8 +2816,8 @@ export def "texts-broadcasts findTextBroadcasts" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # A name of text broadcast
   --label: string # A label of a text broadcast
-  --running: string@bool-completer # Returns broadcasts only in running state.
-  --scheduled: string@bool-completer # Specify whether the campaigns should be scheduled or not
+  --running: oneof<nothing, bool> # Returns broadcasts only in running state.
+  --scheduled: oneof<nothing, bool> # Specify whether the campaigns should be scheduled or not
   --intervalBegin: int # Start of the find time interval, formatted in unix time milliseconds. Example: 1473781817000 for Sat, 05 Jan 1985 14:03:37 GMT (format: int64)
   --intervalEnd: int # End of the find time interval, formatted in unix time milliseconds. Example: 1473781817000 for Sat, 05 Jan 1985 14:03:37 GMT (format: int64)
   --limit: int # To set the maximum number of records to return in a paged list response. The default is 100 (format: int32, default: 10)
@@ -2850,8 +2849,8 @@ export def "texts-broadcasts createTextBroadcast" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --start: string@bool-completer # If true then starts the campaign immediately (not required).
-  --strictValidation: string@bool-completer # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
+  --start: oneof<nothing, bool> # If true then starts the campaign immediately (not required).
+  --strictValidation: oneof<nothing, bool> # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
   --bigMessageStrategy: string@bigMessageStrategy-completer # If message length exceeds 160 characters, multiple messages will be sent, SEND_MULTIPLE strategy is chosen by default. Available values: SEND_MULTIPLE - send text as multiple messages, DO_NOT_SEND - do not send text if it exceeds 160 characters, TRIM - trims text message to 160 characters
   --fromNumber: string # A phone number in E.164 format (11-digit) or short code. Example: 12132000384, 67076, etc
   --id: int # A unique id of a broadcast (format: int64)
@@ -2862,7 +2861,7 @@ export def "texts-broadcasts createTextBroadcast" [
   --message: string # A text message
   --name: string # A name of a broadcast
   --recipients: list # Recipients of a text campaign, can be an existing contacts or a new one — item shape: {attributes?: record, contactId?: int, fromNumber?: string, media?: list, message?: string, phoneNumber?: string}
-  --resumeNextDay: string@bool-completer # ~
+  --resumeNextDay: oneof<nothing, bool> # ~
   --schedules: list # ~ — item shape: {campaignId?: int, daysOfWeek?: list, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
 ]: any -> record<id: int> {
   let input = $in
@@ -2918,7 +2917,7 @@ export def "texts-broadcasts updateTextBroadcast" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --strictValidation: string@bool-completer # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
+  --strictValidation: oneof<nothing, bool> # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
   --bigMessageStrategy: string@bigMessageStrategy-completer # If message length exceeds 160 characters, multiple messages will be sent, SEND_MULTIPLE strategy is chosen by default. Available values: SEND_MULTIPLE - send text as multiple messages, DO_NOT_SEND - do not send text if it exceeds 160 characters, TRIM - trims text message to 160 characters
   --fromNumber: string # A phone number in E.164 format (11-digit) or short code. Example: 12132000384, 67076, etc
   --body-id: int # A unique id of a broadcast (format: int64)
@@ -2929,7 +2928,7 @@ export def "texts-broadcasts updateTextBroadcast" [
   --message: string # A text message
   --name: string # A name of a broadcast
   --recipients: list # Recipients of a text campaign, can be an existing contacts or a new one — item shape: {attributes?: record, contactId?: int, fromNumber?: string, media?: list, message?: string, phoneNumber?: string}
-  --resumeNextDay: string@bool-completer # ~
+  --resumeNextDay: oneof<nothing, bool> # ~
   --schedules: list # ~ — item shape: {campaignId?: int, daysOfWeek?: list, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
 ]: any -> record<id: int> {
   let input = $in
@@ -3006,11 +3005,11 @@ export def "texts-broadcasts-batches addTextBroadcastBatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --strictValidation: string@bool-completer # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
+  --strictValidation: oneof<nothing, bool> # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
   --contactListId: int # An id of existing contact list (format: int64)
   --name: string # A name of batch
   --recipients: list # A list of Recipient objects. For each recipient you can set its phone number or existing contact id to use contact which already exists in account — item shape: {attributes?: record, contactId?: int, fromNumber?: string, phoneNumber?: string}
-  --scrubDuplicates: string@bool-completer # Removes duplicate recipients from batch if true
+  --scrubDuplicates: oneof<nothing, bool> # Removes duplicate recipients from batch if true
 ]: any -> record<id: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3038,7 +3037,7 @@ export def "texts-broadcasts-recipients addTextBroadcastRecipients" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: string # Limit fields received in response. E.g. fields: id, name or fields items (id, name), see more at [partial response](https://developers.callfire.com/docs.html#partial-response) page.
-  --strictValidation: string@bool-completer # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
+  --strictValidation: oneof<nothing, bool> # Turns on strict validation for recipients. System will reply with BAD_REQUEST(400) if strictValidation = true and one of numbers didn't pass validation
   --body: record
 ]: any -> record<items: table<attributes: record, batchId: int, campaignId: int, contact: record, created: int, finalTextResult: string, fromNumber: string, id: int, inbound: bool, labels: list, media: list, message: string, modified: int, records: list, state: string, toNumber: string>> {
   let input = $in
@@ -3162,7 +3161,7 @@ export def "texts-broadcasts-toggle-recipients-status toggleTextBroadcastRecipie
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable: string@bool-completer # Flag which indicate what to do with texts (true will enable texts in DISABLED status and vice versa) (default: false)
+  --enable: oneof<nothing, bool> # Flag which indicate what to do with texts (true will enable texts in DISABLED status and vice versa) (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -3219,7 +3218,7 @@ export def "webhooks findWebhooks" [
   --resource: string # A name of a resource, available values: 'CccCampaign', 'CallBroadcast', 'TextBroadcast',  'OutboundCall', 'OutboundText', 'InboundCall', 'InboundText', 'ContactList'
   --event: string # A name of event, available values: 'started', 'stopped', 'finished'
   --callback: string # A callback URL
-  --enabled: string@bool-completer # Specifies whether webhook is enabled
+  --enabled: oneof<nothing, bool> # Specifies whether webhook is enabled
 ]: nothing -> record<items: table<callback: string, createdAt: int, enabled: bool, events: list, expiresAt: int, fields: string, id: int, name: string, nonStrictSsl: bool, resource: string, secret: string, singleUse: bool, updatedAt: int>, limit: int, offset: int, totalCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3243,16 +3242,16 @@ export def "webhooks createWebhook" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --callback: string # URL that webhook will send POST to on resource event trigger
-  --enabled: string@bool-completer # A parameter which allows the webhook to send requests to unknown ssl endpoints (ssl certificate verification is disabled)
+  --enabled: oneof<nothing, bool> # A parameter which allows the webhook to send requests to unknown ssl endpoints (ssl certificate verification is disabled)
   --events: list # Comma separated list of events on resource that will trigger callbacks (ex: STARTED, STOPPED, FINISHED, etc...). 
   --expiresAt: int # ~ (format: int64)
   --body-fields: string # A limit callback response to a particular fields
   --id: int # An id of a webhook (format: int64)
   --name: string # A name of a webhook
-  --nonStrictSsl: string@bool-completer # A parameter which allows the webhook to send requests to unknown ssl endpoints (ssl certificate verification is disabled)
+  --nonStrictSsl: oneof<nothing, bool> # A parameter which allows the webhook to send requests to unknown ssl endpoints (ssl certificate verification is disabled)
   --resource: string # A resource name that webhook is watching events on. Use GET /webhooks/resources to determine resources and events available (ex: InboundCall, OutboundCall, InboundText, OutboundText, CallBroadcast, TextBroadcast, etc...)
   --secret: string # Webhook secret token which is used as a signing key to HmacSHA1 hash of json payload which is returned in 'X-CallFire-Signature' header. This header can be used to verify callback POST is coming from CallFire. See [security guide](https://developers.callfire.com/security-guide.html)
-  --singleUse: string@bool-completer # If true is set then webhook triggers only once. Afterwards the webhook will be deleted
+  --singleUse: oneof<nothing, bool> # If true is set then webhook triggers only once. Afterwards the webhook will be deleted
 ]: any -> record<id: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3372,16 +3371,16 @@ export def "webhooks updateWebhook" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --callback: string # URL that webhook will send POST to on resource event trigger
-  --enabled: string@bool-completer # A parameter which allows the webhook to send requests to unknown ssl endpoints (ssl certificate verification is disabled)
+  --enabled: oneof<nothing, bool> # A parameter which allows the webhook to send requests to unknown ssl endpoints (ssl certificate verification is disabled)
   --events: list # Comma separated list of events on resource that will trigger callbacks (ex: STARTED, STOPPED, FINISHED, etc...). 
   --expiresAt: int # ~ (format: int64)
   --body-fields: string # A limit callback response to a particular fields
   --body-id: int # An id of a webhook (format: int64)
   --name: string # A name of a webhook
-  --nonStrictSsl: string@bool-completer # A parameter which allows the webhook to send requests to unknown ssl endpoints (ssl certificate verification is disabled)
+  --nonStrictSsl: oneof<nothing, bool> # A parameter which allows the webhook to send requests to unknown ssl endpoints (ssl certificate verification is disabled)
   --resource: string # A resource name that webhook is watching events on. Use GET /webhooks/resources to determine resources and events available (ex: InboundCall, OutboundCall, InboundText, OutboundText, CallBroadcast, TextBroadcast, etc...)
   --secret: string # Webhook secret token which is used as a signing key to HmacSHA1 hash of json payload which is returned in 'X-CallFire-Signature' header. This header can be used to verify callback POST is coming from CallFire. See [security guide](https://developers.callfire.com/security-guide.html)
-  --singleUse: string@bool-completer # If true is set then webhook triggers only once. Afterwards the webhook will be deleted
+  --singleUse: oneof<nothing, bool> # If true is set then webhook triggers only once. Afterwards the webhook will be deleted
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))

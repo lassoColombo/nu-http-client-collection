@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://analyticsdata.googleapis.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -113,7 +112,7 @@ export def "v1beta analyticsdatapropertiesgetMetadata" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
@@ -148,7 +147,7 @@ export def "v1beta analyticsdatapropertiesbatchRunPivotReports" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
@@ -187,7 +186,7 @@ export def "v1beta analyticsdatapropertiesbatchRunReports" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
@@ -229,7 +228,7 @@ export def "v1beta analyticsdatapropertiescheckCompatibility" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
@@ -278,7 +277,7 @@ export def "v1beta analyticsdatapropertiesrunPivotReport" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
@@ -287,12 +286,12 @@ export def "v1beta analyticsdatapropertiesrunPivotReport" [
   --dateRanges: list # The date range to retrieve event data for the report. If multiple date ranges are specified, event data from each date range is used in the report. A special dimension with field name "dateRange" can be included in a Pivot's field names; if included, the report compares between date ranges. In a cohort request, this `dateRanges` must be unspecified. — item shape: {endDate?: string, name?: string, startDate?: string}
   --dimensionFilter: record # To express dimension or metric filters. The fields in the same FilterExpression need to be either all dimensions or all metrics. — shape: {andGroup?: record, filter?: record, notExpression?: record, orGroup?: record}
   --dimensions: list # The dimensions requested. All defined dimensions must be used by one of the following: dimension_expression, dimension_filter, pivots, order_bys. — item shape: {dimensionExpression?: record, name?: string}
-  --keepEmptyRows: string@bool-completer # If false or unspecified, each row with all metrics equal to 0 will not be returned. If true, these rows will be returned if they are not separately removed by a filter. Regardless of this `keep_empty_rows` setting, only data recorded by the Google Analytics (GA4) property can be displayed in a report. For example if a property never logs a `purchase` event, then a query for the `eventName` dimension and `eventCount` metric will not have a row eventName: "purchase" and eventCount: 0.
+  --keepEmptyRows: oneof<nothing, bool> # If false or unspecified, each row with all metrics equal to 0 will not be returned. If true, these rows will be returned if they are not separately removed by a filter. Regardless of this `keep_empty_rows` setting, only data recorded by the Google Analytics (GA4) property can be displayed in a report. For example if a property never logs a `purchase` event, then a query for the `eventName` dimension and `eventCount` metric will not have a row eventName: "purchase" and eventCount: 0.
   --metricFilter: record # To express dimension or metric filters. The fields in the same FilterExpression need to be either all dimensions or all metrics. — shape: {andGroup?: record, filter?: record, notExpression?: record, orGroup?: record}
   --metrics: list # The metrics requested, at least one metric needs to be specified. All defined metrics must be used by one of the following: metric_expression, metric_filter, order_bys. — item shape: {expression?: string, invisible?: bool, name?: string}
   --pivots: list # Describes the visual format of the report's dimensions in columns or rows. The union of the fieldNames (dimension names) in all pivots must be a subset of dimension names defined in Dimensions. No two pivots can share a dimension. A dimension is only visible if it appears in a pivot. — item shape: {fieldNames?: list, limit?: string, metricAggregations?: list, offset?: string, orderBys?: list}
   --body-property: string # A Google Analytics GA4 property identifier whose events are tracked. Specified in the URL path and not the body. To learn more, see [where to find your Property ID](https://developers.google.com/analytics/devguides/reporting/data/v1/property-id). Within a batch request, this property should either be unspecified or consistent with the batch-level property. Example: properties/1234
-  --returnPropertyQuota: string@bool-completer # Toggles whether to return the current state of this Analytics Property's quota. Quota is returned in [PropertyQuota](#PropertyQuota).
+  --returnPropertyQuota: oneof<nothing, bool> # Toggles whether to return the current state of this Analytics Property's quota. Quota is returned in [PropertyQuota](#PropertyQuota).
 ]: any -> record<aggregates: table<dimensionValues: list, metricValues: list>, dimensionHeaders: table<name: string>, kind: string, metadata: record<currencyCode: string, dataLossFromOtherRow: bool, emptyReason: string, schemaRestrictionResponse: record<activeMetricRestrictions: list>, subjectToThresholding: bool, timeZone: string>, metricHeaders: table<name: string, type: string>, pivotHeaders: table<pivotDimensionHeaders: list, rowCount: int>, propertyQuota: record<concurrentRequests: record<consumed: int, remaining: int>, potentiallyThresholdedRequestsPerHour: record<consumed: int, remaining: int>, serverErrorsPerProjectPerHour: record<consumed: int, remaining: int>, tokensPerDay: record<consumed: int, remaining: int>, tokensPerHour: record<consumed: int, remaining: int>, tokensPerProjectPerHour: record<consumed: int, remaining: int>>, rows: table<dimensionValues: list, metricValues: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -332,7 +331,7 @@ export def "v1beta analyticsdatapropertiesrunRealtimeReport" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
@@ -344,7 +343,7 @@ export def "v1beta analyticsdatapropertiesrunRealtimeReport" [
   --metrics: list # The metrics requested and displayed. — item shape: {expression?: string, invisible?: bool, name?: string}
   --minuteRanges: list # The minute ranges of event data to read. If unspecified, one minute range for the last 30 minutes will be used. If multiple minute ranges are requested, each response row will contain a zero based minute range index. If two minute ranges overlap, the event data for the overlapping minutes is included in the response rows for both minute ranges. — item shape: {endMinutesAgo?: int, name?: string, startMinutesAgo?: int}
   --orderBys: list # Specifies how rows are ordered in the response. — item shape: {desc?: bool, dimension?: record, metric?: record, pivot?: record}
-  --returnPropertyQuota: string@bool-completer # Toggles whether to return the current state of this Analytics Property's Realtime quota. Quota is returned in [PropertyQuota](#PropertyQuota).
+  --returnPropertyQuota: oneof<nothing, bool> # Toggles whether to return the current state of this Analytics Property's Realtime quota. Quota is returned in [PropertyQuota](#PropertyQuota).
 ]: any -> record<dimensionHeaders: table<name: string>, kind: string, maximums: table<dimensionValues: list, metricValues: list>, metricHeaders: table<name: string, type: string>, minimums: table<dimensionValues: list, metricValues: list>, propertyQuota: record<concurrentRequests: record<consumed: int, remaining: int>, potentiallyThresholdedRequestsPerHour: record<consumed: int, remaining: int>, serverErrorsPerProjectPerHour: record<consumed: int, remaining: int>, tokensPerDay: record<consumed: int, remaining: int>, tokensPerHour: record<consumed: int, remaining: int>, tokensPerProjectPerHour: record<consumed: int, remaining: int>>, rowCount: int, rows: table<dimensionValues: list, metricValues: list>, totals: table<dimensionValues: list, metricValues: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -385,7 +384,7 @@ export def "v1beta analyticsdatapropertiesrunReport" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
@@ -394,7 +393,7 @@ export def "v1beta analyticsdatapropertiesrunReport" [
   --dateRanges: list # Date ranges of data to read. If multiple date ranges are requested, each response row will contain a zero based date range index. If two date ranges overlap, the event data for the overlapping days is included in the response rows for both date ranges. In a cohort request, this `dateRanges` must be unspecified. — item shape: {endDate?: string, name?: string, startDate?: string}
   --dimensionFilter: record # To express dimension or metric filters. The fields in the same FilterExpression need to be either all dimensions or all metrics. — shape: {andGroup?: record, filter?: record, notExpression?: record, orGroup?: record}
   --dimensions: list # The dimensions requested and displayed. — item shape: {dimensionExpression?: record, name?: string}
-  --keepEmptyRows: string@bool-completer # If false or unspecified, each row with all metrics equal to 0 will not be returned. If true, these rows will be returned if they are not separately removed by a filter. Regardless of this `keep_empty_rows` setting, only data recorded by the Google Analytics (GA4) property can be displayed in a report. For example if a property never logs a `purchase` event, then a query for the `eventName` dimension and `eventCount` metric will not have a row eventName: "purchase" and eventCount: 0.
+  --keepEmptyRows: oneof<nothing, bool> # If false or unspecified, each row with all metrics equal to 0 will not be returned. If true, these rows will be returned if they are not separately removed by a filter. Regardless of this `keep_empty_rows` setting, only data recorded by the Google Analytics (GA4) property can be displayed in a report. For example if a property never logs a `purchase` event, then a query for the `eventName` dimension and `eventCount` metric will not have a row eventName: "purchase" and eventCount: 0.
   --limit: string # The number of rows to return. If unspecified, 10,000 rows are returned. The API returns a maximum of 250,000 rows per request, no matter how many you ask for. `limit` must be positive. The API can also return fewer rows than the requested `limit`, if there aren't as many dimension values as the `limit`. For instance, there are fewer than 300 possible values for the dimension `country`, so when reporting on only `country`, you can't get more than 300 rows, even if you set `limit` to a higher value. To learn more about this pagination parameter, see [Pagination](https://developers.google.com/analytics/devguides/reporting/data/v1/basics#pagination). (format: int64)
   --metricAggregations: list # Aggregation of metrics. Aggregated metric values will be shown in rows where the dimension_values are set to "RESERVED_(MetricAggregation)".
   --metricFilter: record # To express dimension or metric filters. The fields in the same FilterExpression need to be either all dimensions or all metrics. — shape: {andGroup?: record, filter?: record, notExpression?: record, orGroup?: record}
@@ -402,7 +401,7 @@ export def "v1beta analyticsdatapropertiesrunReport" [
   --offset: string # The row count of the start row. The first row is counted as row 0. When paging, the first request does not specify offset; or equivalently, sets offset to 0; the first request returns the first `limit` of rows. The second request sets offset to the `limit` of the first request; the second request returns the second `limit` of rows. To learn more about this pagination parameter, see [Pagination](https://developers.google.com/analytics/devguides/reporting/data/v1/basics#pagination). (format: int64)
   --orderBys: list # Specifies how rows are ordered in the response. — item shape: {desc?: bool, dimension?: record, metric?: record, pivot?: record}
   --body-property: string # A Google Analytics GA4 property identifier whose events are tracked. Specified in the URL path and not the body. To learn more, see [where to find your Property ID](https://developers.google.com/analytics/devguides/reporting/data/v1/property-id). Within a batch request, this property should either be unspecified or consistent with the batch-level property. Example: properties/1234
-  --returnPropertyQuota: string@bool-completer # Toggles whether to return the current state of this Analytics Property's quota. Quota is returned in [PropertyQuota](#PropertyQuota).
+  --returnPropertyQuota: oneof<nothing, bool> # Toggles whether to return the current state of this Analytics Property's quota. Quota is returned in [PropertyQuota](#PropertyQuota).
 ]: any -> record<dimensionHeaders: table<name: string>, kind: string, maximums: table<dimensionValues: list, metricValues: list>, metadata: record<currencyCode: string, dataLossFromOtherRow: bool, emptyReason: string, schemaRestrictionResponse: record<activeMetricRestrictions: list>, subjectToThresholding: bool, timeZone: string>, metricHeaders: table<name: string, type: string>, minimums: table<dimensionValues: list, metricValues: list>, propertyQuota: record<concurrentRequests: record<consumed: int, remaining: int>, potentiallyThresholdedRequestsPerHour: record<consumed: int, remaining: int>, serverErrorsPerProjectPerHour: record<consumed: int, remaining: int>, tokensPerDay: record<consumed: int, remaining: int>, tokensPerHour: record<consumed: int, remaining: int>, tokensPerProjectPerHour: record<consumed: int, remaining: int>>, rowCount: int, rows: table<dimensionValues: list, metricValues: list>, totals: table<dimensionValues: list, metricValues: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

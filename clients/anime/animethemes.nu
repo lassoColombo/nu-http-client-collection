@@ -71,7 +71,6 @@ def unwrap-graphql [resp: any, field: string] {
   $resp.data? | get -o $field | default $resp.data?
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://graphql.animethemes.moe"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -560,7 +559,7 @@ export def "query animetheme-shuffle" [
   --format: string@format-completer
   --year-lte: int
   --year-gte: int
-  --spoiler: string@bool-completer
+  --spoiler: oneof<nothing, bool>
   --first: int
   --page: int
 ]: any -> list {
@@ -1245,9 +1244,9 @@ export def "query video-pagination" [
   --id: int
   --basename: string
   --filename: string
-  --lyrics: string@bool-completer
+  --lyrics: oneof<nothing, bool>
   --mimetype: string
-  --nc: string@bool-completer
+  --nc: oneof<nothing, bool>
   --overlap: string@overlap-completer
   --path: string
   --path-like: string
@@ -1257,8 +1256,8 @@ export def "query video-pagination" [
   --size-lesser: int
   --size-greater: int
   --qp-source: string@source-completer
-  --subbed: string@bool-completer
-  --uncen: string@bool-completer
+  --subbed: oneof<nothing, bool>
+  --uncen: oneof<nothing, bool>
   --qp-sort: string@sort-completer-8
   --first: int # Limits number of fetched items. Maximum allowed value: 100.
   --page: int # The offset from which items are returned.
@@ -1355,8 +1354,8 @@ export def "query animethemeentry-pagination" [
   --query: string # Raw GraphQL query (overrides auto-generated)
   --episodes: string
   --episodes-like: string
-  --nsfw: string@bool-completer
-  --spoiler: string@bool-completer
+  --nsfw: oneof<nothing, bool>
+  --spoiler: oneof<nothing, bool>
   --version: int
   --version-lesser: int
   --version-greater: int

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.paystack.co"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -186,7 +185,7 @@ export def "transaction-charge-authorization chargeAuthorization" [
   --transaction-charge: string # A flat fee to charge the subaccount for a transaction.  This overrides the split percentage set when the subaccount was created
   --bearer: string@bearer-completer # The bearer of the transaction charge
   --metadata: string # Stringified JSON object of custom data
-  --queue: string@bool-completer # If you are making a scheduled charge call, it is a good idea to queue them so the processing system does not get overloaded causing transaction processing errors.
+  --queue: oneof<nothing, bool> # If you are making a scheduled charge call, it is a good idea to queue them so the processing system does not get overloaded causing transaction processing errors.
 ]: any -> record<status: bool, message: string, data: record<amount: int, currency: string, transaction_date: string, status: string, reference: string, domain: string, metadata: string, gateway_response: string, message: string, channel: string, ip_address: any, log: record<start_time: int, time_spent: int, attempts: int, errors: int, success: bool, mobile: bool, input: list, history: list>, fees: int, authorization: record<authorization_code: string, bin: string, last4: string, exp_month: string, exp_year: string, channel: string, card_type: string, bank: string, country_code: string, brand: string, reusable: bool, signature: string, account_name: any>, customer: record<id: int, first_name: string, last_name: string, email: string, customer_code: string, phone: string, metadata: record, risk_action: string, international_format_phone: string>, plan: any, id: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -263,7 +262,7 @@ export def "transaction list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --use-cursor: string@bool-completer # A flag to indicate if cursor based pagination should be used (e.g. true)
+  --use-cursor: oneof<nothing, bool> # A flag to indicate if cursor based pagination should be used (e.g. true)
   --next: string # An alphanumeric value returned for every cursor based retrieval, used to retrieve the next set of data
   --previous: string # An alphanumeric value returned for every cursor based retrieval, used to retrieve the previous set of data
   --per-page: int # The number of records to fetch per request
@@ -769,7 +768,7 @@ export def "subaccount list" [
   --allow-errors(-e) # Return full response without error handling
   --perPage: int # Number of records to fetch per request (default: 50)
   --page: int # The offset to retrieve data from (default: 1)
-  --active: string@bool-completer # Filter by the state of the subaccounts
+  --active: oneof<nothing, bool> # Filter by the state of the subaccounts
 ]: nothing -> record<status: bool, message: string, data: table<id: int, subaccount_code: string, business_name: string, description: string, primary_contact_name: string, primary_contact_email: string, primary_contact_phone: string, metadata: string, percentage_charge: float, settlement_bank: string, bank_id: int, account_number: string, currency: string, active: int, is_verified: bool>, meta: record<total: int, skipped: int, perPage: int, page: int, pageCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -818,7 +817,7 @@ export def "subaccount update" [
   --business-name: string # Name of business for subaccount
   --settlement-bank: string # Bank code for the bank. You can get the list of Bank Codes by calling the List Banks endpoint.
   --account-number: string # Bank account number
-  --active: string@bool-completer # Activate or deactivate a subaccount
+  --active: oneof<nothing, bool> # Activate or deactivate a subaccount
   --percentage-charge: float # Customer's phone number (format: float)
   --description: string # A description for this subaccount
   --primary-contact-email: string # A contact email for the subaccount
@@ -882,7 +881,7 @@ export def "split list" [
   --allow-errors(-e) # Return full response without error handling
   --subaccount-code: string # Filter by subaccount code (e.g. ACCT_dskvlw3y3dMukmt)
   --name: string # The name of the split
-  --active: string@bool-completer # The status of the split
+  --active: oneof<nothing, bool> # The status of the split
   --per-page: int # The number of records to fetch per request
   --page: int # The offset to retrieve data from
   --qp-from: string # The start date (format: date-time)
@@ -933,7 +932,7 @@ export def "split update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # Name of the transaction split
-  --active: string@bool-completer # Toggle status of split. When true, the split is active, else it's inactive
+  --active: oneof<nothing, bool> # Toggle status of split. When true, the split is active, else it's inactive
   --bearer-type: string@bearer-type-completer # This allows you specify how the transaction charge should be processed
   --bearer-subaccount: string # This is the subaccount code of the customer or partner that would bear the transaction charge if you specified subaccount as the bearer type
 ]: any -> record<status: bool, message: string, data: record<id: int, name: string, type: string, currency: string, integration: int, domain: string, split_code: string, active: bool, bearer_type: string, bearer_subaccount: int, createdAt: string, updatedAt: string, is_dynamic: bool, subaccounts: list<record>, total_subaccounts: int>> {
@@ -1469,7 +1468,7 @@ export def "customer list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --use-cursor: string@bool-completer # A flag to indicate if cursor based pagination should be used
+  --use-cursor: oneof<nothing, bool> # A flag to indicate if cursor based pagination should be used
   --next: string # An alphanumeric value returned for every cursor based retrieval, used to retrieve the next set of data
   --previous: string # An alphanumeric value returned for every cursor based retrieval, used to retrieve the previous set of data
   --qp-from: string # The start date (format: date-time)
@@ -1842,7 +1841,7 @@ export def "dedicated-account list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Status of the dedicated virtual account (e.g. true)
+  --active: oneof<nothing, bool> # Status of the dedicated virtual account (e.g. true)
   --customer: int # The customer's ID (e.g. 297346561)
   --currency: string@currency-completer-2 # The currency of the dedicated virtual account
   --provider-slug: string # The bank's slug in lowercase, without spaces (e.g. titan-paystack)
@@ -2073,7 +2072,7 @@ export def "apple-pay-domain listDomain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --use-cursor: string@bool-completer # A flag to indicate if cursor based pagination should be used (e.g. true)
+  --use-cursor: oneof<nothing, bool> # A flag to indicate if cursor based pagination should be used (e.g. true)
   --next: string # An alphanumeric value returned for every cursor based retrieval, used to retrieve the next set of data
   --previous: string # An alphanumeric value returned for every cursor based retrieval, used to retrieve the previous set of data
 ]: nothing -> any {
@@ -2127,8 +2126,8 @@ export def "plan create" [
   amount: int # Amount should be in kobo if currency is NGN, pesewas, if currency is GHS, and cents, if currency is ZAR
   interval: string@interval-completer # Payment interval
   --description: string # A description for this plan
-  --send-invoices: string@bool-completer # Set to false if you don't want invoices to be sent to your customers
-  --send-sms: string@bool-completer # Set to false if you don't want text messages to be sent to your customers
+  --send-invoices: oneof<nothing, bool> # Set to false if you don't want invoices to be sent to your customers
+  --send-sms: oneof<nothing, bool> # Set to false if you don't want text messages to be sent to your customers
   --currency: string # Currency in which amount is set. Allowed values are NGN, GHS, ZAR or USD
   --invoice-limit: int # Number of invoices to raise during subscription to this plan.  Can be overridden by specifying an invoice_limit while subscribing.
 ]: any -> any {
@@ -2209,9 +2208,9 @@ export def "plan update" [
   --name: string # Name of plan
   --amount: int # Amount should be in kobo if currency is NGN, pesewas, if currency is GHS, and cents, if currency is ZAR
   --interval: string@interval-completer # Payment interval
-  --description: string@bool-completer # A description for this plan
-  --send-invoices: string@bool-completer # Set to false if you don't want invoices to be sent to your customers
-  --send-sms: string@bool-completer # Set to false if you don't want text messages to be sent to your customers
+  --description: oneof<nothing, bool> # A description for this plan
+  --send-invoices: oneof<nothing, bool> # Set to false if you don't want invoices to be sent to your customers
+  --send-sms: oneof<nothing, bool> # Set to false if you don't want text messages to be sent to your customers
   --currency: string # Currency in which amount is set. Allowed values are NGN, GHS, ZAR or USD
   --invoice-limit: int # Number of invoices to raise during subscription to this plan.  Can be overridden by specifying an invoice_limit while subscribing.
 ]: any -> any {
@@ -2444,7 +2443,7 @@ export def "transferrecipient list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --use-cursor: string@bool-completer # A flag to indicate if cursor based pagination should be used
+  --use-cursor: oneof<nothing, bool> # A flag to indicate if cursor based pagination should be used
   --next: string # An alphanumeric value returned for every cursor based retrieval, used to retrieve the next set of data
   --previous: string # An alphanumeric value returned for every cursor based retrieval, used to retrieve the previous set of data
   --per-page: int # The number of records to fetch per request
@@ -2598,7 +2597,7 @@ export def "transfer list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --use-cursor: string@bool-completer # A flag to indicate if cursor based pagination should be used (e.g. true)
+  --use-cursor: oneof<nothing, bool> # A flag to indicate if cursor based pagination should be used (e.g. true)
   --next: string # An alphanumeric value returned for every cursor based retrieval, used to retrieve the next set of data
   --previous: string # An alphanumeric value returned for every cursor based retrieval, used to retrieve the previous set of data
   --per-page: int # The number of records to fetch per request
@@ -2900,9 +2899,9 @@ export def "paymentrequest create" [
   --description: string # A short description of the payment request
   --line-items: list # Array of line items
   --tax: list # Array of taxes
-  --send-notification: string@bool-completer # Indicates whether Paystack sends an email notification to customer. Defaults to true
-  --draft: string@bool-completer # Indicate if request should be saved as draft. Defaults to false and overrides send_notification
-  --has-invoice: string@bool-completer # Set to true to create a draft invoice (adds an auto incrementing invoice number if none is provided) even if there are no line_items or tax passed
+  --send-notification: oneof<nothing, bool> # Indicates whether Paystack sends an email notification to customer. Defaults to true
+  --draft: oneof<nothing, bool> # Indicate if request should be saved as draft. Defaults to false and overrides send_notification
+  --has-invoice: oneof<nothing, bool> # Set to true to create a draft invoice (adds an auto incrementing invoice number if none is provided) even if there are no line_items or tax passed
   --invoice-number: int # Numeric value of invoice. Invoice will start from 1 and auto increment from there.  This field is to help override whatever value Paystack decides. Auto increment for  subsequent invoices continue from this point.
   --split-code: string # The split code of the transaction split.
 ]: any -> any {
@@ -2988,9 +2987,9 @@ export def "paymentrequest update" [
   --description: string # A short description of the payment request
   --line-items: list # Array of line items
   --tax: list # Array of taxes
-  --send-notification: string@bool-completer # Indicates whether Paystack sends an email notification to customer. Defaults to true
-  --draft: string@bool-completer # Indicate if request should be saved as draft. Defaults to false and overrides send_notification
-  --has-invoice: string@bool-completer # Set to true to create a draft invoice (adds an auto incrementing invoice number if none is provided) even if there are no line_items or tax passed
+  --send-notification: oneof<nothing, bool> # Indicates whether Paystack sends an email notification to customer. Defaults to true
+  --draft: oneof<nothing, bool> # Indicate if request should be saved as draft. Defaults to false and overrides send_notification
+  --has-invoice: oneof<nothing, bool> # Set to true to create a draft invoice (adds an auto incrementing invoice number if none is provided) even if there are no line_items or tax passed
   --invoice-number: int # Numeric value of invoice. Invoice will start from 1 and auto increment from there. This field is to help override whatever value Paystack decides.  Auto increment for subsequent invoices continue from this point.
   --split-code: string # The split code of the transaction split.
 ]: any -> any {
@@ -3130,7 +3129,7 @@ export def "product create" [
   description: string # The description of the product
   price: int # Price should be in kobo if currency is NGN, pesewas, if currency is GHS, and cents, if currency is ZAR
   currency: string # Currency in which price is set. Allowed values are: NGN, GHS, ZAR or USD
-  --unlimited: string@bool-completer # Set to true if the product has unlimited stock. Leave as false if the product has limited stock
+  --unlimited: oneof<nothing, bool> # Set to true if the product has unlimited stock. Leave as false if the product has limited stock
   --quantity: int # Number of products in stock. Use if limited is true
   --split-code: string # The split code if sharing the transaction with partners
   --metadata: string # Stringified JSON object of custom data
@@ -3160,7 +3159,7 @@ export def "product list" [
   --allow-errors(-e) # Return full response without error handling
   --perPage: int # Number of records to fetch per page
   --page: int # The section to retrieve
-  --active: string@bool-completer # The state of the product (e.g. true)
+  --active: oneof<nothing, bool> # The state of the product (e.g. true)
   --qp-from: string # The start date (format: date-time)
   --qp-to: string # The end date (format: date-time)
 ]: nothing -> any {
@@ -3212,7 +3211,7 @@ export def "product update" [
   --description: string # The description of the product
   --price: int # Price should be in kobo if currency is NGN, pesewas, if currency is GHS, and cents, if currency is ZAR
   --currency: string # Currency in which price is set. Allowed values are: NGN, GHS, ZAR or USD
-  --unlimited: string@bool-completer # Set to true if the product has unlimited stock. Leave as false if the product has limited stock
+  --unlimited: oneof<nothing, bool> # Set to true if the product has unlimited stock. Leave as false if the product has limited stock
   --quantity: int # Number of products in stock. Use if limited is true
   --split-code: string # The split code if sharing the transaction with partners
   --metadata: record # JSON object of custom data
@@ -3532,8 +3531,8 @@ export def "order create" [
   currency: string@currency-completer # Currency in which amount is set
   items: list # item shape: {item: int, type: string, quantity: int, amount: int}
   shipping: record # The shipping details of the order (e.g. {street_line: Somewhere on Earth, city: Atlantic, state: Pacific, country: Equator, shipping_fee: 10000}) — shape: {street_line: string, city: string, state: string, country: string, shipping_fee: int, delivery_note?: string}
-  --is-gift: string@bool-completer # A flag to indicate if the order is for someone else
-  --pay-for-me: string@bool-completer # A flag to indicate if the someone else should pay for the order
+  --is-gift: oneof<nothing, bool> # A flag to indicate if the order is for someone else
+  --pay-for-me: oneof<nothing, bool> # A flag to indicate if the someone else should pay for the order
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3657,13 +3656,13 @@ export def "page create" [
   --slug: string # URL slug you would like to be associated with this page. Page will be accessible at `https://paystack.com/pay/[slug]`
   --type: string@type-completer-3 # The type of payment page to create. Defaults to `payment` if no type is specified.
   --plan: string # The ID of the plan to subscribe customers on this payment page to when `type` is set to `subscription`.
-  --fixed-amount: string@bool-completer # Specifies whether to collect a fixed amount on the payment page. If true, `amount` must be passed.
+  --fixed-amount: oneof<nothing, bool> # Specifies whether to collect a fixed amount on the payment page. If true, `amount` must be passed.
   --split-code: string # The split code of the transaction split. e.g. `SPL_98WF13Eb3w`
   --metadata: record # JSON object of custom data
   --redirect-url: string # If you would like Paystack to redirect to a URL upon successful payment, specify the URL here.
   --success-message: string # A success message to display to the customer after a successful transaction
   --notification-email: string # An email address that will receive transaction notifications for this payment page
-  --collect-phone: string@bool-completer # Specify whether to collect phone numbers on the payment page
+  --collect-phone: oneof<nothing, bool> # Specify whether to collect phone numbers on the payment page
   --custom-fields: list # If you would like to accept custom fields, specify them here.
 ]: any -> any {
   let input = $in
@@ -3741,7 +3740,7 @@ export def "page update" [
   --name: string # Name of page
   --description: string # The description of the page
   --amount: int # Amount should be in the subunit of the currency
-  --active: string@bool-completer # Set to false to deactivate page url
+  --active: oneof<nothing, bool> # Set to false to deactivate page url
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4221,17 +4220,17 @@ export def "bank list" [
   --allow-errors(-e) # Return full response without error handling
   --country: string@country-completer-1 # The country from which to obtain the list of supported banks (e.g. nigeria)
   --currency: string@currency-completer-3 # The country from which to obtain the list of supported banks (e.g. NGN)
-  --use-cursor: string@bool-completer # A flag to indicate if cursor based pagination should be used
+  --use-cursor: oneof<nothing, bool> # A flag to indicate if cursor based pagination should be used
   --perPage: int # The number of records to fetch per request
   --page: int # The offset to retrieve data from
   --next: string # An alphanumeric value returned for every cursor based retrieval, used to retrieve the next set of data
   --previous: string # An alphanumeric value returned for every cursor based retrieval, used to retrieve the previous set of data
-  --pay-with-bank-transfer: string@bool-completer # A flag to filter for available banks a customer can make a transfer to complete a payment
-  --pay-with-bank: string@bool-completer # A flag to filter for banks a customer can pay directly from
-  --enabled-for-verification: string@bool-completer # A flag to filter the banks that are supported for account verification in South Africa. You need to combine this with either the `currency` or `country` filter.
+  --pay-with-bank-transfer: oneof<nothing, bool> # A flag to filter for available banks a customer can make a transfer to complete a payment
+  --pay-with-bank: oneof<nothing, bool> # A flag to filter for banks a customer can pay directly from
+  --enabled-for-verification: oneof<nothing, bool> # A flag to filter the banks that are supported for account verification in South Africa. You need to combine this with either the `currency` or `country` filter.
   --gateway: string@gateway-completer # The type of gateway for a Nigerian bank
   --type: string@type-completer-4 # Type of financial channel
-  --include-nip-sort-code: string@bool-completer # A flag that returns Nigerian banks with their NIP institution code.  The returned value can be used in identifying institutions on NIP.
+  --include-nip-sort-code: oneof<nothing, bool> # A flag that returns Nigerian banks with their NIP institution code.  The returned value can be used in identifying institutions on NIP.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

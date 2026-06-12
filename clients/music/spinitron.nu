@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://spinitron.com/api"] }
 def auth-scheme-completer [] { ["query-access-token" "bearer"] }
 
@@ -300,7 +299,7 @@ export def "spins post" [
   --genre: string
   --isrc: string
   --label: string
-  --live: string@bool-completer # Only when automation params are configured with the "Pass through" mode. Enables "live assist" mode. Default mode is "full automation".
+  --live: oneof<nothing, bool> # Only when automation params are configured with the "Pass through" mode. Enables "live assist" mode. Default mode is "full automation".
   --release: string
   song: string
   --start: string # format: date-time

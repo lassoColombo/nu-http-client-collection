@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.box.com/2.0" "https://account.box.com/api/oauth2" "https://api.box.com" "https://upload.box.com/api/2.0" "https://dl.boxcloud.com/2.0" "https://{box-upload-server}/api/2.0"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -1469,8 +1468,8 @@ export def "file-requests id-by-file_request_id-1" [
   --title: string # An optional new title for the file request. This can be used to change the title of the file request.  This will default to the value on the existing file request. (e.g. Please upload required documents)
   --description: string # An optional new description for the file request. This can be used to change the description of the file request.  This will default to the value on the existing file request. (e.g. Please upload required documents)
   --status: string@status-completer # An optional new status of the file request.  When the status is set to `inactive`, the file request will no longer accept new submissions, and any visitor to the file request URL will receive a `HTTP 404` status code.  This will default to the value on the existing file request. (e.g. active)
-  --is-email-required: string@bool-completer # Whether a file request submitter is required to provide their email address.  When this setting is set to true, the Box UI will show an email field on the file request form.  This will default to the value on the existing file request. (e.g. true)
-  --is-description-required: string@bool-completer # Whether a file request submitter is required to provide a description of the files they are submitting.  When this setting is set to true, the Box UI will show a description field on the file request form.  This will default to the value on the existing file request. (e.g. true)
+  --is-email-required: oneof<nothing, bool> # Whether a file request submitter is required to provide their email address.  When this setting is set to true, the Box UI will show an email field on the file request form.  This will default to the value on the existing file request. (e.g. true)
+  --is-description-required: oneof<nothing, bool> # Whether a file request submitter is required to provide a description of the files they are submitting.  When this setting is set to true, the Box UI will show a description field on the file request form.  This will default to the value on the existing file request. (e.g. true)
   --expires-at: string # The date after which a file request will no longer accept new submissions.  After this date, the `status` will automatically be set to `inactive`.  This will default to the value on the existing file request. (format: date-time, e.g. 2020-09-28T10:53:43-08:00)
 ]: any -> record<id: string, type: string, title: string, description: string, status: string, is_email_required: bool, is_description_required: bool, expires_at: string, folder: record, url: string, etag: string, created_by: record, created_at: string, updated_by: record, updated_at: string> {
   let input = $in
@@ -1525,8 +1524,8 @@ export def "file-requests-copy copy" [
   --title: string # An optional new title for the file request. This can be used to change the title of the file request.  This will default to the value on the existing file request. (e.g. Please upload required documents)
   --description: string # An optional new description for the file request. This can be used to change the description of the file request.  This will default to the value on the existing file request. (e.g. Please upload required documents)
   --status: string@status-completer # An optional new status of the file request.  When the status is set to `inactive`, the file request will no longer accept new submissions, and any visitor to the file request URL will receive a `HTTP 404` status code.  This will default to the value on the existing file request. (e.g. active)
-  --is-email-required: string@bool-completer # Whether a file request submitter is required to provide their email address.  When this setting is set to true, the Box UI will show an email field on the file request form.  This will default to the value on the existing file request. (e.g. true)
-  --is-description-required: string@bool-completer # Whether a file request submitter is required to provide a description of the files they are submitting.  When this setting is set to true, the Box UI will show a description field on the file request form.  This will default to the value on the existing file request. (e.g. true)
+  --is-email-required: oneof<nothing, bool> # Whether a file request submitter is required to provide their email address.  When this setting is set to true, the Box UI will show an email field on the file request form.  This will default to the value on the existing file request. (e.g. true)
+  --is-description-required: oneof<nothing, bool> # Whether a file request submitter is required to provide a description of the files they are submitting.  When this setting is set to true, the Box UI will show a description field on the file request form.  This will default to the value on the existing file request. (e.g. true)
   --expires-at: string # The date after which a file request will no longer accept new submissions.  After this date, the `status` will automatically be set to `inactive`.  This will default to the value on the existing file request. (format: date-time, e.g. 2020-09-28T10:53:43-08:00)
   folder: record # The folder to associate the new file request to. — shape: {type?: "folder", id: string}
 ]: any -> record<id: string, type: string, title: string, description: string, status: string, is_email_required: bool, is_description_required: bool, expires_at: string, folder: record, url: string, etag: string, created_by: record, created_at: string, updated_by: record, updated_at: string> {
@@ -1621,14 +1620,14 @@ export def "folders id-by-folder_id-2" [
   --name: string # The optional new name for this folder.  The following restrictions to folder names apply: names containing non-printable ASCII characters, forward and backward slashes (`/`, `\`), names with trailing spaces, and names `.` and `..` are not allowed.  Folder names must be unique within their parent folder. The name check is case-insensitive, so a folder named `New Folder` cannot be created in a parent folder that already contains a folder named `new folder`. (e.g. New Folder)
   --description: string # The optional description of this folder. (e.g. Legal contracts for the new ACME deal)
   --sync-state: string@sync-state-completer # Specifies whether a folder should be synced to a user's device or not. This is used by Box Sync (discontinued) and is not used by Box Drive. (e.g. synced)
-  --can-non-owners-invite: string@bool-completer # Specifies if users who are not the owner of the folder can invite new collaborators to the folder. (e.g. true)
+  --can-non-owners-invite: oneof<nothing, bool> # Specifies if users who are not the owner of the folder can invite new collaborators to the folder. (e.g. true)
   --parent: any
   --shared-link: any
   --folder-upload-email: any # nullable
   --tags: list # The tags for this item. These tags are shown in the Box web app and mobile apps next to an item.  To add or remove a tag, retrieve the item's current tags, modify them, and then update this field.  There is a limit of 100 tags per item, and 10,000 unique tags per enterprise. (e.g. [approved])
-  --is-collaboration-restricted-to-enterprise: string@bool-completer # Specifies if new invites to this folder are restricted to users within the enterprise. This does not affect existing collaborations. (e.g. true)
+  --is-collaboration-restricted-to-enterprise: oneof<nothing, bool> # Specifies if new invites to this folder are restricted to users within the enterprise. This does not affect existing collaborations. (e.g. true)
   --collections: list # An array of collections to make this folder a member of. Currently we only support the `favorites` collection.  To get the ID for a collection, use the [List all collections][1] endpoint.  Passing an empty array `[]` or `null` will remove the folder from all collections.  [1]: https://developer.box.com/reference/get-collections (nullable) — item shape: {id?: string, type?: string}
-  --can-non-owners-view-collaborators: string@bool-completer # Restricts collaborators who are not the owner of this folder from viewing other collaborations on this folder.  It also restricts non-owners from inviting new collaborators.  When setting this field to `false`, it is required to also set `can_non_owners_invite_collaborators` to `false` if it has not already been set. (e.g. true)
+  --can-non-owners-view-collaborators: oneof<nothing, bool> # Restricts collaborators who are not the owner of this folder from viewing other collaborations on this folder.  It also restricts non-owners from inviting new collaborators.  When setting this field to `false`, it is required to also set `can_non_owners_invite_collaborators` to `false` if it has not already been set. (e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1657,7 +1656,7 @@ export def "folders id-by-folder_id-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --recursive: string@bool-completer # Delete a folder that is not empty by recursively deleting the folder and all of its content. (e.g. true)
+  --recursive: oneof<nothing, bool> # Delete a folder that is not empty by recursively deleting the folder and all of its content. (e.g. true)
   --if-match: string # Ensures this item hasn't recently changed before making changes.  Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `412 Precondition Failed` if it has changed since. (e.g. 1)
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1711,7 +1710,7 @@ export def "folders-items items" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested.  Additionally this field can be used to query any metadata applied to the file by specifying the `metadata` field as well as the scope and key of the template to retrieve, for example `?fields=metadata.enterprise_12345.contractTemplate`. (e.g. [id, type, name])
-  --usemarker: string@bool-completer # Specifies whether to use marker-based pagination instead of offset-based pagination. Only one pagination method can be used at a time.  By setting this value to true, the API will return a `marker` field that can be passed as a parameter to this endpoint to get the next page of the response. (e.g. true)
+  --usemarker: oneof<nothing, bool> # Specifies whether to use marker-based pagination instead of offset-based pagination. Only one pagination method can be used at a time.  By setting this value to true, the API will return a `marker` field that can be passed as a parameter to this endpoint to get the next page of the response. (e.g. true)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --offset: int # The offset of the item at which to begin the response.  Offset-based pagination is not guaranteed to work reliably for high offset values and may fail for large datasets. In those cases, use marker-based pagination by setting `usemarker` to `true`. (format: int64, default: 0, e.g. 1000)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
@@ -2099,7 +2098,7 @@ export def "folders-trash-items items" [
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
-  --usemarker: string@bool-completer # Specifies whether to use marker-based pagination instead of offset-based pagination. Only one pagination method can be used at a time.  By setting this value to true, the API will return a `marker` field that can be passed as a parameter to this endpoint to get the next page of the response. (e.g. true)
+  --usemarker: oneof<nothing, bool> # Specifies whether to use marker-based pagination instead of offset-based pagination. Only one pagination method can be used at a time.  By setting this value to true, the API will return a `marker` field that can be passed as a parameter to this endpoint to get the next page of the response. (e.g. true)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --direction: string@direction-completer # The direction to sort results in. This can be either in alphabetical ascending (`ASC`) or descending (`DESC`) order. (e.g. ASC)
   --qp-sort: string@sort-completer-1 # Defines the **second** attribute by which items are sorted.  Items are always sorted by their `type` first, with folders listed before files, and files listed before web links.  This parameter is not supported when using marker-based pagination. (e.g. name)
@@ -2509,9 +2508,9 @@ export def "metadata-templates-schema schema" [
   scope: string # The scope of the metadata template to create. Applications can only create templates for use within the authenticated user's enterprise.  This value needs to be set to `enterprise`, as `global` scopes can not be created by applications. (e.g. enterprise)
   --templateKey: string # A unique identifier for the template. This identifier needs to be unique across the enterprise for which the metadata template is being created.  When not provided, the API will create a unique `templateKey` based on the value of the `displayName`. (e.g. productInfo)
   displayName: string # The display name of the template. (e.g. Product Info)
-  --hidden: string@bool-completer # Defines if this template is visible in the Box web app UI, or if it is purely intended for usage through the API. (default: false, e.g. true)
+  --hidden: oneof<nothing, bool> # Defines if this template is visible in the Box web app UI, or if it is purely intended for usage through the API. (default: false, e.g. true)
   --body-fields: list # An ordered list of template fields which are part of the template. Each field can be a regular text field, date field, number field, as well as a single or multi-select list. — item shape: {type: "string"|"float"|"date"|"enum"|"multiSelect"|"taxonomy", key: string, displayName: string, description?: string, hidden?: bool, options?: list, taxonomyKey?: string, taxonomyId?: string, namespace?: string, optionsRules?: record}
-  --copyInstanceOnItemCopy: string@bool-completer # Whether or not to copy any metadata attached to a file or folder when it is copied. By default, metadata is not copied along with a file or folder when it is copied. (default: false, e.g. true)
+  --copyInstanceOnItemCopy: oneof<nothing, bool> # Whether or not to copy any metadata attached to a file or folder when it is copied. By default, metadata is not copied along with a file or folder when it is copied. (default: false, e.g. true)
 ]: any -> record<id: string, type: string, scope: string, templateKey: string, displayName: string, hidden: bool, fields: list<record>, copyInstanceOnItemCopy: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2540,8 +2539,8 @@ export def "metadata-templates-schemaclassifications schemaclassifications" [
   scope: string@scope-completer # The scope in which to create the classifications. This should be `enterprise` or `enterprise_{id}` where `id` is the unique ID of the enterprise. (e.g. enterprise)
   templateKey: string@templateKey-completer # Defines the list of metadata templates. (e.g. securityClassification-6VMVochwUWo)
   displayName: string@displayName-completer # The name of the template as shown in web and mobile interfaces. (e.g. Classification)
-  --hidden: string@bool-completer # Determines if the classification template is hidden or available on web and mobile devices. (e.g. false)
-  --copyInstanceOnItemCopy: string@bool-completer # Determines if classifications are copied along when the file or folder is copied. (e.g. false)
+  --hidden: oneof<nothing, bool> # Determines if the classification template is hidden or available on web and mobile devices. (e.g. false)
+  --copyInstanceOnItemCopy: oneof<nothing, bool> # Determines if classifications are copied along when the file or folder is copied. (e.g. false)
   --body-fields: list # The classification template requires exactly one field, which holds all the valid classification values. — item shape: {type: "enum", key: "Box__Security__Classification__Key", displayName: "Classification", hidden?: bool, options: list}
 ]: any -> record<id: string, type: string, scope: string, templateKey: string, displayName: string, hidden: bool, copyInstanceOnItemCopy: bool, fields: table<id: string, type: string, key: string, displayName: string, hidden: bool, options: list>> {
   let input = $in
@@ -2855,7 +2854,7 @@ export def "collaborations id-by-collaboration_id-1" [
   --role: string@role-completer # The level of access granted. (e.g. editor)
   --status: string@status-completer-1 # Set the status of a `pending` collaboration invitation, effectively accepting, or rejecting the invite. (e.g. accepted)
   --expires-at: string # Update the expiration date for the collaboration. At this date, the collaboration will be automatically removed from the item.  This feature will only work if the **Automatically remove invited collaborators: Allow folder owners to extend the expiry date** setting has been enabled in the **Enterprise Settings** of the **Admin Console**. When the setting is not enabled, collaborations can not have an expiry date and a value for this field will be result in an error.  Additionally, a collaboration can only be given an expiration if it was created after the **Automatically remove invited collaborator** setting was enabled. (format: date-time, e.g. 2019-08-29T23:59:00-07:00)
-  --can-view-path: string@bool-completer # Determines if the invited users can see the entire parent path to the associated folder. The user will not gain privileges in any parent folder and therefore can not see content the user is not collaborated on.  Be aware that this meaningfully increases the time required to load the invitee's **All Files** page. We recommend you limit the number of collaborations with `can_view_path` enabled to 1,000 per user.  Only an owner or co-owners can invite collaborators with a `can_view_path` of `true`. Only an owner can update `can_view_path` on existing collaborations.  `can_view_path` can only be used for folder collaborations.  When you delete a folder with `can_view_path=true`, collaborators may still see the parent path.  For instructions on how to remove this, see  [Even though a folder invited via can_view_path is deleted, the path remains displayed](https://support.box.com/hc/en-us/articles/37472814319891-Even-though-a-folder-invited-via-can-view-path-is-deleted-the-path-remains-displayed). (e.g. true)
+  --can-view-path: oneof<nothing, bool> # Determines if the invited users can see the entire parent path to the associated folder. The user will not gain privileges in any parent folder and therefore can not see content the user is not collaborated on.  Be aware that this meaningfully increases the time required to load the invitee's **All Files** page. We recommend you limit the number of collaborations with `can_view_path` enabled to 1,000 per user.  Only an owner or co-owners can invite collaborators with a `can_view_path` of `true`. Only an owner can update `can_view_path` on existing collaborations.  `can_view_path` can only be used for folder collaborations.  When you delete a folder with `can_view_path=true`, collaborators may still see the parent path.  For instructions on how to remove this, see  [Even though a folder invited via can_view_path is deleted, the path remains displayed](https://support.box.com/hc/en-us/articles/37472814319891-Even-though-a-folder-invited-via-can-view-path-is-deleted-the-path-remains-displayed). (e.g. true)
 ]: any -> record<id: string, type: string, item: record, app_item: record<id: string, type: string, application_type: string>, accessible_by: record, invite_email: string, role: string, expires_at: string, is_access_only: bool, status: string, acknowledged_at: string, created_by: record, created_at: string, modified_at: string, acceptance_requirements_status: record<terms_of_service_requirement: record<is_accepted: bool, terms_of_service: record>, strong_password_requirement: record<enterprise_has_strong_password_required_for_external_users: bool, user_has_strong_password: bool>, two_factor_authentication_requirement: record<enterprise_has_two_factor_auth_enabled: bool, user_has_two_factor_authentication_enabled: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2931,12 +2930,12 @@ export def "collaborations collaborations-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
-  --notify: string@bool-completer # Determines if users should receive email notification for the action performed. (e.g. true)
+  --notify: oneof<nothing, bool> # Determines if users should receive email notification for the action performed. (e.g. true)
   item: record # The item to attach the comment to. — shape: {type?: "file"|"folder", id?: string}
   accessible_by: record # The user or group to give access to the item. — shape: {type: "user"|"group", id?: string, login?: string}
   role: string@role-completer-1 # The level of access granted. (e.g. editor)
-  --is-access-only: string@bool-completer # If set to `true`, collaborators have access to shared items, but such items won't be visible in the All Files list. Additionally, collaborators won't see the path to the root folder for the shared item. (e.g. true)
-  --can-view-path: string@bool-completer # Determines if the invited users can see the entire parent path to the associated folder. The user will not gain privileges in any parent folder and therefore can not see content the user is not collaborated on.  Be aware that this meaningfully increases the time required to load the invitee's **All Files** page. We recommend you limit the number of collaborations with `can_view_path` enabled to 1,000 per user.  Only an owner or co-owners can invite collaborators with a `can_view_path` of `true`. Only an owner can update `can_view_path` on existing collaborations.  `can_view_path` can only be used for folder collaborations.  When you delete a folder with `can_view_path=true`, collaborators may still see the parent path.  For instructions on how to remove this, see  [Even though a folder invited via can_view_path is deleted, the path remains displayed](https://support.box.com/hc/en-us/articles/37472814319891-Even-though-a-folder-invited-via-can-view-path-is-deleted-the-path-remains-displayed). (e.g. true)
+  --is-access-only: oneof<nothing, bool> # If set to `true`, collaborators have access to shared items, but such items won't be visible in the All Files list. Additionally, collaborators won't see the path to the root folder for the shared item. (e.g. true)
+  --can-view-path: oneof<nothing, bool> # Determines if the invited users can see the entire parent path to the associated folder. The user will not gain privileges in any parent folder and therefore can not see content the user is not collaborated on.  Be aware that this meaningfully increases the time required to load the invitee's **All Files** page. We recommend you limit the number of collaborations with `can_view_path` enabled to 1,000 per user.  Only an owner or co-owners can invite collaborators with a `can_view_path` of `true`. Only an owner can update `can_view_path` on existing collaborations.  `can_view_path` can only be used for folder collaborations.  When you delete a folder with `can_view_path=true`, collaborators may still see the parent path.  For instructions on how to remove this, see  [Even though a folder invited via can_view_path is deleted, the path remains displayed](https://support.box.com/hc/en-us/articles/37472814319891-Even-though-a-folder-invited-via-can-view-path-is-deleted-the-path-remains-displayed). (e.g. true)
   --expires-at: string # Set the expiration date for the collaboration. At this date, the collaboration will be automatically removed from the item.  This feature will only work if the **Automatically remove invited collaborators: Allow folder owners to extend the expiry date** setting has been enabled in the **Enterprise Settings** of the **Admin Console**. When the setting is not enabled, collaborations can not have an expiry date and a value for this field will be result in an error. (format: date-time, e.g. 2019-08-29T23:59:00-07:00)
 ]: any -> record<id: string, type: string, item: record, app_item: record<id: string, type: string, application_type: string>, accessible_by: record, invite_email: string, role: string, expires_at: string, is_access_only: bool, status: string, acknowledged_at: string, created_by: record, created_at: string, modified_at: string, acceptance_requirements_status: record<terms_of_service_requirement: record<is_accepted: bool, terms_of_service: record>, strong_password_requirement: record<enterprise_has_strong_password_required_for_external_users: bool, user_has_strong_password: bool>, two_factor_authentication_requirement: record<enterprise_has_two_factor_auth_enabled: bool, user_has_two_factor_authentication_enabled: bool>>> {
   let input = $in
@@ -2979,7 +2978,7 @@ export def "search search" [
   --qp-sort: string@sort-completer-2 # Defines the order in which search results are returned. This API defaults to returning items by relevance unless this parameter is explicitly specified.  * `relevance` (default) returns the results sorted by relevance to the query search term. The relevance is based on the occurrence of the search term in the items name, description, content, and additional properties. * `modified_at` returns the results ordered in descending order by date at which the item was last modified. (default: relevance, e.g. modified_at)
   --direction: string@direction-completer # Defines the direction in which search results are ordered. This API defaults to returning items in descending (`DESC`) order unless this parameter is explicitly specified.  When results are sorted by `relevance` the ordering is locked to returning items in descending order of relevance, and this parameter is ignored. (default: DESC, e.g. ASC)
   --limit: int # Defines the maximum number of items to return as part of a page of results. (format: int64, default: 30, e.g. 100)
-  --include-recent-shared-links: string@bool-completer # Defines whether the search results should include any items that the user recently accessed through a shared link.  When this parameter has been set to true, the format of the response of this API changes to return a list of [Search Results with Shared Links](https://developer.box.com/reference/resources/search-results-with-shared-links). (default: false, e.g. true)
+  --include-recent-shared-links: oneof<nothing, bool> # Defines whether the search results should include any items that the user recently accessed through a shared link.  When this parameter has been set to true, the format of the response of this API changes to return a list of [Search Results with Shared Links](https://developer.box.com/reference/resources/search-results-with-shared-links). (default: false, e.g. true)
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
   --deleted-user-ids: list # Limits the search results to items that were deleted by the given list of users, defined as a list of comma separated user IDs.  The `trash_content` parameter needs to be set to `trashed_only`.  If searching in trash is not performed, an empty result set is returned. The items need to be owned or shared with the currently authenticated user for them to show up in the search results.  If the user does not have access to any files owned by any of the users, an empty result set is returned.  Data available from 2023-02-01 onwards. (e.g. [123422, 23532, 3241212])
@@ -3853,7 +3852,7 @@ export def "users users" [
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --offset: int # The offset of the item at which to begin the response.  Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-  --usemarker: string@bool-completer # Specifies whether to use marker-based pagination instead of offset-based pagination. Only one pagination method can be used at a time.  By setting this value to true, the API will return a `marker` field that can be passed as a parameter to this endpoint to get the next page of the response. (e.g. true)
+  --usemarker: oneof<nothing, bool> # Specifies whether to use marker-based pagination instead of offset-based pagination. Only one pagination method can be used at a time.  By setting this value to true, the API will return a `marker` field that can be passed as a parameter to this endpoint to get the next page of the response. (e.g. true)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3881,20 +3880,20 @@ export def "users users-1" [
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   name: string # The name of the user. (e.g. Aaron Levie)
   --login: string # The email address the user uses to log in  Required, unless `is_platform_access_only` is set to `true`. (e.g. boss@box.com)
-  --is-platform-access-only: string@bool-completer # Specifies that the user is an app user. (e.g. true)
+  --is-platform-access-only: oneof<nothing, bool> # Specifies that the user is an app user. (e.g. true)
   --role: string@role-completer-2 # The user’s enterprise role. (e.g. user)
   --language: string # The language of the user, formatted in modified version of the [ISO 639-1](https://developer.box.com/guides/api-calls/language-codes) format. (e.g. en)
-  --is-sync-enabled: string@bool-completer # Whether the user can use Box Sync. (e.g. true)
+  --is-sync-enabled: oneof<nothing, bool> # Whether the user can use Box Sync. (e.g. true)
   --job-title: string # The user’s job title. (e.g. CEO)
   --phone: string # The user’s phone number. (e.g. 6509241374)
   --address: string # The user’s address. (e.g. 900 Jefferson Ave, Redwood City, CA 94063)
   --space-amount: int # The user’s total available space in bytes. Set this to `-1` to indicate unlimited storage. (format: int64, e.g. 11345156112)
   --tracking-codes: list # Tracking codes allow an admin to generate reports from the admin console and assign an attribute to a specific group of users. This setting must be enabled for an enterprise before it can be used. — item shape: {type?: "tracking_code", name?: string, value?: string}
-  --can-see-managed-users: string@bool-completer # Whether the user can see other enterprise users in their contact list. (e.g. true)
+  --can-see-managed-users: oneof<nothing, bool> # Whether the user can see other enterprise users in their contact list. (e.g. true)
   --timezone: string # The user's timezone. (format: timezone, e.g. Africa/Bujumbura)
-  --is-external-collab-restricted: string@bool-completer # Whether the user is allowed to collaborate with users outside their enterprise. (e.g. true)
-  --is-exempt-from-device-limits: string@bool-completer # Whether to exempt the user from enterprise device limits. (e.g. true)
-  --is-exempt-from-login-verification: string@bool-completer # Whether the user must use two-factor authentication. (e.g. true)
+  --is-external-collab-restricted: oneof<nothing, bool> # Whether the user is allowed to collaborate with users outside their enterprise. (e.g. true)
+  --is-exempt-from-device-limits: oneof<nothing, bool> # Whether to exempt the user from enterprise device limits. (e.g. true)
+  --is-exempt-from-login-verification: oneof<nothing, bool> # Whether the user must use two-factor authentication. (e.g. true)
   --status: string@status-completer-3 # The user's account status. (e.g. active)
   --external-app-user-id: string # An external identifier for an app user, which can be used to look up the user. This can be used to tie user IDs from external identity providers to Box users. (e.g. my-user-1234)
 ]: any -> record {
@@ -4000,22 +3999,22 @@ export def "users id-by-user_id-1" [
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --enterprise: string # Set this to `null` to roll the user out of the enterprise and make them a free user. (nullable)
-  --notify: string@bool-completer # Whether the user should receive an email when they are rolled out of an enterprise. (e.g. true)
+  --notify: oneof<nothing, bool> # Whether the user should receive an email when they are rolled out of an enterprise. (e.g. true)
   --name: string # The name of the user. (e.g. Aaron Levie)
   --login: string # The email address the user uses to log in  Note: If the target user's email is not confirmed, then the primary login address cannot be changed. (e.g. somename@box.com)
   --role: string@role-completer-2 # The user’s enterprise role. (e.g. user)
   --language: string # The language of the user, formatted in modified version of the [ISO 639-1](https://developer.box.com/guides/api-calls/language-codes) format. (e.g. en)
-  --is-sync-enabled: string@bool-completer # Whether the user can use Box Sync. (e.g. true)
+  --is-sync-enabled: oneof<nothing, bool> # Whether the user can use Box Sync. (e.g. true)
   --job-title: string # The user’s job title. (e.g. CEO)
   --phone: string # The user’s phone number. (e.g. 6509241374)
   --address: string # The user’s address. (e.g. 900 Jefferson Ave, Redwood City, CA 94063)
   --tracking-codes: list # Tracking codes allow an admin to generate reports from the admin console and assign an attribute to a specific group of users. This setting must be enabled for an enterprise before it can be used. — item shape: {type?: "tracking_code", name?: string, value?: string}
-  --can-see-managed-users: string@bool-completer # Whether the user can see other enterprise users in their contact list. (e.g. true)
+  --can-see-managed-users: oneof<nothing, bool> # Whether the user can see other enterprise users in their contact list. (e.g. true)
   --timezone: string # The user's timezone. (format: timezone, e.g. Africa/Bujumbura)
-  --is-external-collab-restricted: string@bool-completer # Whether the user is allowed to collaborate with users outside their enterprise. (e.g. true)
-  --is-exempt-from-device-limits: string@bool-completer # Whether to exempt the user from enterprise device limits. (e.g. true)
-  --is-exempt-from-login-verification: string@bool-completer # Whether the user must use two-factor authentication. (e.g. true)
-  --is-password-reset-required: string@bool-completer # Whether the user is required to reset their password. (e.g. true)
+  --is-external-collab-restricted: oneof<nothing, bool> # Whether the user is allowed to collaborate with users outside their enterprise. (e.g. true)
+  --is-exempt-from-device-limits: oneof<nothing, bool> # Whether to exempt the user from enterprise device limits. (e.g. true)
+  --is-exempt-from-login-verification: oneof<nothing, bool> # Whether the user must use two-factor authentication. (e.g. true)
+  --is-password-reset-required: oneof<nothing, bool> # Whether the user is required to reset their password. (e.g. true)
   --status: string@status-completer-3 # The user's account status. (e.g. active)
   --space-amount: int # The user’s total available space in bytes. Set this to `-1` to indicate unlimited storage. (format: int64, e.g. 11345156112)
   --notification-email: record # An alternate notification email address to which email notifications are sent. When it's confirmed, this will be the email address to which notifications are sent instead of to the primary email address.  Set this value to `null` to remove the notification email. (nullable) — shape: {email?: string}
@@ -4046,8 +4045,8 @@ export def "users id-by-user_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notify: string@bool-completer # Whether the user will receive email notification of the deletion. (e.g. true)
-  --force: string@bool-completer # Specifies whether to delete the user even if they still own files. (e.g. true)
+  --notify: oneof<nothing, bool> # Whether the user will receive email notification of the deletion. (e.g. true)
+  --force: oneof<nothing, bool> # Specifies whether to delete the user even if they still own files. (e.g. true)
 ]: nothing -> record<type: string, status: int, code: string, message: string, context_info: record, help_url: string, request_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4144,7 +4143,7 @@ export def "users-folders-0 folders-by-user_id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: list # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response.  Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
-  --notify: string@bool-completer # Determines if users should receive email notification for the action performed. (e.g. true)
+  --notify: oneof<nothing, bool> # Determines if users should receive email notification for the action performed. (e.g. true)
   owned_by: record # The user who the folder will be transferred to. — shape: {id: string}
 ]: any -> record {
   let input = $in
@@ -4981,9 +4980,9 @@ export def "retention-policies policies-1" [
   disposition_action: string@disposition-action-completer # The disposition action of the retention policy. `permanently_delete` deletes the content retained by the policy permanently. `remove_retention` lifts retention policy from the content, allowing it to be deleted by users once the retention policy has expired. (e.g. permanently_delete)
   --retention-length: any # The length of the retention policy. This value specifies the duration in days that the retention policy will be active for after being assigned to content.  If the policy has a `policy_type` of `indefinite`, the `retention_length` will also be `indefinite`. (e.g. 365)
   --retention-type: string@retention-type-completer # Specifies the retention type:  * `modifiable`: You can modify the retention policy. For example, you can add or remove folders, shorten or lengthen the policy duration, or delete the assignment. Use this type if your retention policy is not related to any regulatory purposes.  * `non_modifiable`: You can modify the retention policy only in a limited way: add a folder, lengthen the duration, retire the policy, change the disposition action or notification settings. You cannot perform other actions, such as deleting the assignment or shortening the policy duration. Use this type to ensure compliance with regulatory retention policies. (e.g. modifiable)
-  --can-owner-extend-retention: string@bool-completer # Whether the owner of a file will be allowed to extend the retention. (e.g. true)
+  --can-owner-extend-retention: oneof<nothing, bool> # Whether the owner of a file will be allowed to extend the retention. (e.g. true)
   --max-extension-length: any # The maximum extension length of the retention date. This value specifies the duration in days for which the retention date of the file under policy can be extended. It can be specified only for the 'finite' policy type where the disposition action is 'permanently delete', otherwise the server will return status 400. If this value is 'none', it won't be possible to extend the retention. (e.g. 365)
-  --are-owners-notified: string@bool-completer # Whether owner and co-owners of a file are notified when the policy nears expiration. (e.g. true)
+  --are-owners-notified: oneof<nothing, bool> # Whether owner and co-owners of a file are notified when the policy nears expiration. (e.g. true)
   --custom-notification-recipients: list # A list of users notified when the retention policy duration is about to end. — item shape: {id: string, type: "user", name?: string, login?: string}
 ]: any -> record {
   let input = $in
@@ -5041,9 +5040,9 @@ export def "retention-policies id-by-retention_policy_id-1" [
   --retention-type: string # Specifies the retention type:  * `modifiable`: You can modify the retention policy. For example, you can add or remove folders, shorten or lengthen the policy duration, or delete the assignment. Use this type if your retention policy is not related to any regulatory purposes. * `non-modifiable`: You can modify the retention policy only in a limited way: add a folder, lengthen the duration, retire the policy, change the disposition action or notification settings. You cannot perform other actions, such as deleting the assignment or shortening the policy duration. Use this type to ensure compliance with regulatory retention policies.  When updating a retention policy, you can use `non-modifiable` type only. You can convert a `modifiable` policy to `non-modifiable`, but not the other way around. (nullable, e.g. non-modifiable)
   --retention-length: any # The length of the retention policy. This value specifies the duration in days that the retention policy will be active for after being assigned to content.  If the policy has a `policy_type` of `indefinite`, the `retention_length` will also be `indefinite`. (e.g. 365)
   --status: string # Used to retire a retention policy.  If not retiring a policy, do not include this parameter or set it to `null`. (nullable, e.g. retired)
-  --can-owner-extend-retention: string@bool-completer # Determines if the owner of items under the policy can extend the retention when the original retention duration is about to end. (nullable, e.g. false)
+  --can-owner-extend-retention: oneof<nothing, bool> # Determines if the owner of items under the policy can extend the retention when the original retention duration is about to end. (nullable, e.g. false)
   --max-extension-length: any # The maximum extension length of the retention date. This value specifies the duration in days for which the retention date of the file under policy can be extended. It can be specified only for the 'finite' policy type where the disposition action is 'permanently delete', otherwise the server will return status 400. If this value is 'none', it won't be possible to extend the retention. (e.g. 365)
-  --are-owners-notified: string@bool-completer # Determines if owners and co-owners of items under the policy are notified when the retention duration is about to end. (nullable, e.g. false)
+  --are-owners-notified: oneof<nothing, bool> # Determines if owners and co-owners of items under the policy are notified when the retention duration is about to end. (nullable, e.g. false)
   --custom-notification-recipients: list # A list of users notified when the retention duration is about to end. (nullable) — item shape: {id: string, type: "user"}
 ]: any -> record {
   let input = $in
@@ -5274,7 +5273,7 @@ export def "legal-hold-policies policies-1" [
   --description: string # A description for the policy. (e.g. A custom policy for the sales team)
   --filter-started-at: string # The filter start date.  When this policy is applied using a `custodian` legal hold assignments, it will only apply to file versions created or uploaded inside of the date range. Other assignment types, such as folders and files, will ignore the date filter.  Required if `is_ongoing` is set to `false`. (format: date-time, e.g. 2012-12-12T10:53:43-08:00)
   --filter-ended-at: string # The filter end date.  When this policy is applied using a `custodian` legal hold assignments, it will only apply to file versions created or uploaded inside of the date range. Other assignment types, such as folders and files, will ignore the date filter.  Required if `is_ongoing` is set to `false`. (format: date-time, e.g. 2012-12-18T10:53:43-08:00)
-  --is-ongoing: string@bool-completer # Whether new assignments under this policy should continue applying to files even after initialization.  When this policy is applied using a legal hold assignment, it will continue applying the policy to any new file versions even after it has been applied.  For example, if a legal hold assignment is placed on a user today, and that user uploads a file tomorrow, that file will get held. This will continue until the policy is retired.  Required if no filter dates are set. (e.g. true)
+  --is-ongoing: oneof<nothing, bool> # Whether new assignments under this policy should continue applying to files even after initialization.  When this policy is applied using a legal hold assignment, it will continue applying the policy to any new file versions even after it has been applied.  For example, if a legal hold assignment is placed on a user today, and that user uploads a file tomorrow, that file will get held. This will continue until the policy is retired.  Required if no filter dates are set. (e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6311,7 +6310,7 @@ export def "terms-of-service-user-statuses statuses-1" [
   --allow-errors(-e) # Return full response without error handling
   tos: record # The terms of service to set the status for. — shape: {type: "terms_of_service", id: string}
   user: record # The user to set the status for. — shape: {type: "user", id: string}
-  --is-accepted: string@bool-completer # Whether the user has accepted the terms. (e.g. true)
+  --is-accepted: oneof<nothing, bool> # Whether the user has accepted the terms. (e.g. true)
 ]: any -> record<id: string, type: string, tos: record<id: string, type: string>, user: record, is_accepted: bool, created_at: string, modified_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6337,7 +6336,7 @@ export def "terms-of-service-user-statuses id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-accepted: string@bool-completer # Whether the user has accepted the terms. (e.g. true)
+  --is-accepted: oneof<nothing, bool> # Whether the user has accepted the terms. (e.g. true)
 ]: any -> record<id: string, type: string, tos: record<id: string, type: string>, user: record, is_accepted: bool, created_at: string, modified_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6866,7 +6865,7 @@ export def "sign-requests requests" [
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --senders: list # A list of sender emails to filter the signature requests by sender. If provided, `shared_requests` must be set to `true`. (e.g. [sender1@boxdemo.com, sender2@boxdemo.com])
-  --shared-requests: string@bool-completer # If set to `true`, only includes requests that user is not an owner, but user is a collaborator. Collaborator access is determined by the user access level of the sign files of the request. Default is `false`. Must be set to `true` if `senders` are provided. (default: false, e.g. true)
+  --shared-requests: oneof<nothing, bool> # If set to `true`, only includes requests that user is not an owner, but user is a collaborator. Collaborator access is determined by the user access level of the sign files of the request. Default is `false`. Must be set to `true` if `senders` are provided. (default: false, e.g. true)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6892,13 +6891,13 @@ export def "sign-requests requests-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-document-preparation-needed: string@bool-completer # Indicates if the sender should receive a `prepare_url` in the response to complete document preparation using the UI. (e.g. true)
+  --is-document-preparation-needed: oneof<nothing, bool> # Indicates if the sender should receive a `prepare_url` in the response to complete document preparation using the UI. (e.g. true)
   --redirect-url: string # When specified, the signature request will be redirected to this url when a document is signed. (nullable, e.g. https://www.example.com)
   --declined-redirect-url: string # The uri that a signer will be redirected to after declining to sign a document. (nullable, e.g. https://declined-redirect.com)
-  --are-text-signatures-enabled: string@bool-completer # Disables the usage of signatures generated by typing (text). (default: true, e.g. true)
+  --are-text-signatures-enabled: oneof<nothing, bool> # Disables the usage of signatures generated by typing (text). (default: true, e.g. true)
   --email-subject: string # Subject of sign request email. This is cleaned by sign request. If this field is not passed, a default subject will be used. (nullable, e.g. Sign Request from Acme)
   --email-message: string # Message to include in sign request email. The field is cleaned through sanitization of specific characters. However, some html tags are allowed. Links included in the message are also converted to hyperlinks in the email. The message may contain the following html tags including `a`, `abbr`, `acronym`, `b`, `blockquote`, `code`, `em`, `i`, `ul`, `li`, `ol`, and `strong`. Be aware that when the text to html ratio is too high, the email may end up in spam filters. Custom styles on these tags are not allowed. If this field is not passed, a default message will be used. (nullable, e.g. Hello! Please sign the document below)
-  --are-reminders-enabled: string@bool-completer # Reminds signers to sign a document on day 3, 8, 13 and 18. Reminders are only sent to outstanding signers. (e.g. true)
+  --are-reminders-enabled: oneof<nothing, bool> # Reminds signers to sign a document on day 3, 8, 13 and 18. Reminders are only sent to outstanding signers. (e.g. true)
   --name: string # Name of the signature request. (e.g. name)
   --prefill-tags: list # When a document contains sign-related tags in the content, you can prefill them using this `prefill_tags` by referencing the 'id' of the tag as the `external_id` field of the prefill tag. — item shape: {document_tag_id?: string, text_value?: string, checkbox_value?: bool, date_value?: string}
   --days-valid: int # Set the number of days after which the created signature request will automatically expire if not completed. By default, we do not apply any expiration date on signature requests, and the signature request does not expire. (nullable, e.g. 2)
@@ -7045,7 +7044,7 @@ export def "integration-mappings-slack slack" [
   --partner-item-id: string # ID of the mapped item, for which the mapping should be returned. (e.g. 12345)
   --box-item-id: string # Box item ID, for which the mappings should be returned. (e.g. 12345)
   --box-item-type: string@box-item-type-completer # Box item type, for which the mappings should be returned. (e.g. folder)
-  --is-manually-created: string@bool-completer # Whether the mapping has been manually created. (e.g. true)
+  --is-manually-created: oneof<nothing, bool> # Whether the mapping has been manually created. (e.g. true)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7250,7 +7249,7 @@ export def "ai-ask ask" [
   prompt: string # The prompt provided by the client to be answered by the LLM. The prompt's length is limited to 10000 characters. (e.g. What is the value provided by public APIs based on this document?)
   items: list # The items to be processed by the LLM, often files. — item shape: {id: string, type: "file"|"hubs", content?: string}
   --dialogue-history: list # The history of prompts and answers previously passed to the LLM. This provides additional context to the LLM in generating the response. — item shape: {prompt?: string, answer?: string, created_at?: string}
-  --include-citations: string@bool-completer # A flag to indicate whether citations should be returned. (e.g. true)
+  --include-citations: oneof<nothing, bool> # A flag to indicate whether citations should be returned. (e.g. true)
   --ai-agent: any
 ]: any -> record {
   let input = $in
@@ -7366,8 +7365,8 @@ export def "ai-extract-structured structured" [
   --metadata-template: record # The metadata template containing the fields to extract. For your request to work, you must provide either `metadata_template` or `fields`, but not both. — shape: {template_key?: string, type?: "metadata_template", scope?: string}
   --body-fields: list # The fields to be extracted from the provided items. For your request to work, you must provide either `metadata_template` or `fields`, but not both. — item shape: {key: string, description?: string, displayName?: string, prompt?: string, type?: string, options?: list, fields?: list, taxonomy_key?: string, namespace?: string, options_rules?: any}
   --ai-agent: any
-  --include-confidence-score: string@bool-completer # A flag to indicate whether confidence scores for every extracted field should be returned. (e.g. true)
-  --include-reference: string@bool-completer # A flag to indicate whether references for every extracted field should be returned. (e.g. true)
+  --include-confidence-score: oneof<nothing, bool> # A flag to indicate whether confidence scores for every extracted field should be returned. (e.g. true)
+  --include-reference: oneof<nothing, bool> # A flag to indicate whether references for every extracted field should be returned. (e.g. true)
   --taxonomy-sources: list # The taxonomy sources to be used for the structured extraction. They can either be an existing file or a taxonomy. For your request to work, `fields` must also be provided. `taxonomy_sources` is not supported with `metadata_template`. (e.g. [{type: taxonomy, taxonomy_key: certification_taxonomy, namespace: enterprise_123}, {type: file, taxonomy_key: industry_taxonomy, id: 1234567890}])
 ]: any -> record<answer: record, created_at: string, completion_reason: string, confidence_score: record, reference: record, ai_agent_info: record<models: list<record>, processor: string>> {
   let input = $in
@@ -7396,7 +7395,7 @@ export def "ai-agents agents" [
   --mode: list # The mode to filter the agent config to return. Possible values are: `ask`, `text_gen`, and `extract`. (e.g. [ask, text_gen, extract])
   --qp-fields: list # The fields to return in the response. (e.g. [ask, text_gen, extract])
   --agent-state: list # The state of the agents to return. Possible values are: `enabled`, `disabled` and `enabled_for_selected_users`. (e.g. [enabled])
-  --include-box-default: string@bool-completer # Whether to include the Box default agents in the response. (default: false, e.g. true)
+  --include-box-default: oneof<nothing, bool> # Whether to include the Box default agents in the response. (default: false, e.g. true)
   --marker: string # Defines the position marker at which to begin returning results. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
 ]: nothing -> record {
@@ -7775,7 +7774,7 @@ export def "metadata-taxonomies-nodes nodes-by-namespace-taxonomy_key" [
   --parent: list # Node identifier of a direct parent node. Multiple values can be provided.  Results include nodes that match any of the specified values. (e.g. [c73a9bf3-f377-4210-9159-3df06a481905])
   --ancestor: list # Node identifier of any ancestor node. Multiple values can be provided.  Results include nodes that match any of the specified values. (e.g. [c73a9bf3-f377-4210-9159-3df06a481905, bf8b8213-be1f-4011-bd45-533c0713fa0a])
   --qp-query: string # Query text to search for the taxonomy nodes. (e.g. France)
-  --include-total-result-count: string@bool-completer # When set to `true` this provides the total number of nodes that matched the query.  The response will compute counts of up to 10,000 elements. Defaults to `false`. (e.g. true)
+  --include-total-result-count: oneof<nothing, bool> # When set to `true` this provides the total number of nodes that matched the query.  The response will compute counts of up to 10,000 elements. Defaults to `false`. (e.g. true)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
 ]: nothing -> record {
@@ -7912,8 +7911,8 @@ export def "metadata-templates-fields-options options" [
   --parent: list # Node identifier of a direct parent node. Multiple values can be provided.  Results include nodes that match any of the specified values. (e.g. [c73a9bf3-f377-4210-9159-3df06a481905])
   --ancestor: list # Node identifier of any ancestor node. Multiple values can be provided.  Results include nodes that match any of the specified values. (e.g. [c73a9bf3-f377-4210-9159-3df06a481905, bf8b8213-be1f-4011-bd45-533c0713fa0a])
   --qp-query: string # Query text to search for the taxonomy nodes. (e.g. France)
-  --include-total-result-count: string@bool-completer # When set to `true` this provides the total number of nodes that matched the query.  The response will compute counts of up to 10,000 elements. Defaults to `false`. (e.g. true)
-  --only-selectable-options: string@bool-completer # When set to `true`, this only returns valid selectable options for this template taxonomy field. Otherwise, it returns all taxonomy nodes, whether or not they are selectable. Defaults to `true`. (e.g. true)
+  --include-total-result-count: oneof<nothing, bool> # When set to `true` this provides the total number of nodes that matched the query.  The response will compute counts of up to 10,000 elements. Defaults to `false`. (e.g. true)
+  --only-selectable-options: oneof<nothing, bool> # When set to `true`, this only returns valid selectable options for this template taxonomy field. Otherwise, it returns all taxonomy nodes, whether or not they are selectable. Defaults to `true`. (e.g. true)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination.  This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
 ]: nothing -> record {

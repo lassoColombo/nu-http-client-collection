@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://mastodon.local" "https://mastodon.social"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -200,7 +199,7 @@ export def "accounts-search get" [
   --q: string # What to search for
   --limit: int # Maximum number of results. Defaults to 40. (default: 40)
   --resolve: string # Attempt WebFinger lookup. Defaults to false. Use this when `q` is an exact address.
-  --following: string@bool-completer # Only who the user is following. Defaults to false.
+  --following: oneof<nothing, bool> # Only who the user is following. Defaults to false.
 ]: nothing -> table<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -616,15 +615,15 @@ export def "admin-accounts list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --local: string@bool-completer # Filter for local accounts?
-  --remote: string@bool-completer # Filter for remote accounts?
+  --local: oneof<nothing, bool> # Filter for local accounts?
+  --remote: oneof<nothing, bool> # Filter for remote accounts?
   --by-domain: string # Filter by the given domain
-  --active: string@bool-completer # Filter for currently active accounts?
-  --pending: string@bool-completer # Filter for currently pending accounts?
-  --disabled: string@bool-completer # Filter for currently disabled accounts?
-  --silenced: string@bool-completer # Filter for currently silenced accounts?
-  --suspended: string@bool-completer # Filter for currently suspended accounts?
-  --staff: string@bool-completer # Filter for staff accounts?
+  --active: oneof<nothing, bool> # Filter for currently active accounts?
+  --pending: oneof<nothing, bool> # Filter for currently pending accounts?
+  --disabled: oneof<nothing, bool> # Filter for currently disabled accounts?
+  --silenced: oneof<nothing, bool> # Filter for currently silenced accounts?
+  --suspended: oneof<nothing, bool> # Filter for currently suspended accounts?
+  --staff: oneof<nothing, bool> # Filter for staff accounts?
   --username: string # Username to search for
   --display-name: string # Display name to search for
   --email: string # Lookup a user with this email
@@ -673,7 +672,7 @@ export def "admin-accounts-action post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --report-id: string # ID of an associated report that caused this action to be taken
-  --send-email-notification: string@bool-completer # Whether an email should be sent to the user with the above information.
+  --send-email-notification: oneof<nothing, bool> # Whether an email should be sent to the user with the above information.
   --text: string # Additional text for clarification of why this action was taken
   --type: string@type-completer # Type of action to be taken. Enumerable oneOf: none disable silence suspend
   --warning-preset-id: string # ID of a preset warning
@@ -805,7 +804,7 @@ export def "admin-reports list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --resolved: string@bool-completer
+  --resolved: oneof<nothing, bool>
   --account-id: string
   --target-account-id: string
 ]: nothing -> table<account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list, fields: list, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record, statuses_count: int, suspended: bool, url: string, username: string>, action_taken: string, assigned_account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list, fields: list, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record, statuses_count: int, suspended: bool, url: string, username: string>, comment: string, created_at: string, id: string, statuses: list<record>, target_account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list, fields: list, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record, statuses_count: int, suspended: bool, url: string, username: string>, updated_at: string> {
@@ -934,7 +933,7 @@ export def "announcements get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-dismissed: string@bool-completer # If true, response will include announcements dismissed by the user. Defaults to false.
+  --with-dismissed: oneof<nothing, bool> # If true, response will include announcements dismissed by the user. Defaults to false.
 ]: nothing -> table<all_day: bool, created_at: string, ends_at: string, id: string, published: bool, read: bool, scheduled_at: string, starts_at: string, text: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1203,7 +1202,7 @@ export def "directory get" [
   --limit: int # How many accounts to load. Default 40. (default: 40)
   --offset: int # How many accounts to skip before returning results. Default 0. (default: 0)
   --order: string@order-completer # the `active` to sort by most recently posted statuses (default) or `new` to sort by most recently created profiles. (default: active)
-  --local: string@bool-completer # Only return local accounts.
+  --local: oneof<nothing, bool> # Only return local accounts.
 ]: nothing -> table<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2223,7 +2222,7 @@ export def "reports post" [
   --allow-errors(-e) # Return full response without error handling
   account_id: string # ID of the account to report
   --comment: string # Reason for the report (default max 1000 characters)
-  --forward: string@bool-completer # If the account is remote, should the report be forwarded to the remote admin?
+  --forward: oneof<nothing, bool> # If the account is remote, should the report be forwarded to the remote admin?
   --status-ids: list # Array of Statuses to attach to the report, for context
 ]: any -> record<action_taken: bool, action_taken_at: string, category: string, comment: string, created_at: string, forwarded: bool, id: string, rule_ids: list<int>, status_ids: list<int>, target_account: record<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list<record>, fields: list<record>, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record<fields: list, follow_requests_count: int, language: string, note: string, privacy: string, sensitive: bool>, statuses_count: int, suspended: bool, url: string, username: string>> {
   let input = $in
@@ -2720,7 +2719,7 @@ export def "timelines-home get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --local: string@bool-completer # Show only local statuses? Defaults to false. (default: false)
+  --local: oneof<nothing, bool> # Show only local statuses? Defaults to false. (default: false)
   --limit: int # Max number of results to return. Defaults to 20. (default: 20)
   --max-id: string # Return results older than ID
   --since-id: string # Return results newer than ID
@@ -2772,9 +2771,9 @@ export def "timelines-public get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --local: string@bool-completer # Show only local statuses? Defaults to false. (default: false)
-  --remote: string@bool-completer # Show only local statuses? Defaults to false. (default: false)
-  --only-media: string@bool-completer # Show only statuses with media attached? Defaults to false.. (default: false)
+  --local: oneof<nothing, bool> # Show only local statuses? Defaults to false. (default: false)
+  --remote: oneof<nothing, bool> # Show only local statuses? Defaults to false. (default: false)
+  --only-media: oneof<nothing, bool> # Show only statuses with media attached? Defaults to false.. (default: false)
   --limit: int # Max number of results to return. Defaults to 20. (default: 20)
   --max-id: string # Return results older than ID
   --since-id: string # Return results newer than ID
@@ -2801,9 +2800,9 @@ export def "timelines-tag get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --local: string@bool-completer # Show only local statuses? Defaults to false. (default: false)
-  --remote: string@bool-completer # Show only local statuses? Defaults to false. (default: false)
-  --only-media: string@bool-completer # Show only statuses with media attached? Defaults to false.. (default: false)
+  --local: oneof<nothing, bool> # Show only local statuses? Defaults to false. (default: false)
+  --remote: oneof<nothing, bool> # Show only local statuses? Defaults to false. (default: false)
+  --only-media: oneof<nothing, bool> # Show only statuses with media attached? Defaults to false.. (default: false)
   --limit: int # Max number of results to return. Defaults to 20. (default: 20)
   --max-id: string # Return results older than ID
   --since-id: string # Return results newer than ID
@@ -2854,12 +2853,12 @@ export def "search get" [
   --q: string # What to search for
   --limit: int # Maximum number of results. Defaults to 40. (default: 20)
   --resolve: string # Attempt WebFinger lookup.
-  --following: string@bool-completer # Only who the user is following. Defaults to false.
+  --following: oneof<nothing, bool> # Only who the user is following. Defaults to false.
   --account-id: string # If provided, statuses returned will be authored only by this account
   --max-id: string # Return results older than this id
   --min-id: string # Return results immediately newer than this id
   --type: string@type-completer-1 # Enum(accounts, hashtags, statuses)
-  --exclude-unreviewed: string@bool-completer # Filter out unreviewed tags? Defaults to false. Use true when trying to find trending tags.
+  --exclude-unreviewed: oneof<nothing, bool> # Filter out unreviewed tags? Defaults to false. Use true when trying to find trending tags.
   --offset: int # Offset in search results. Used for pagination. Defaults to 0.
 ]: nothing -> record<accounts: table<acct: string, avatar: string, avatar_static: string, bot: bool, created_at: string, discoverable: bool, display_name: string, emojis: list, fields: list, followers_count: int, following_count: int, header: string, header_static: string, id: string, last_status_at: string, locked: bool, moved: any, mute_expires_at: string, note: string, source: record, statuses_count: int, suspended: bool, url: string, username: string>, hashtags: table<account: record, application: record, bookmarked: bool, card: record, content: string, created_at: string, emojis: list, favourited: bool, favourites_count: int, id: string, in_reply_to_account_id: string, in_reply_to_id: string, language: string, media_attachments: list, mentions: list, muted: bool, pinned: bool, poll: record, reblog: any, reblogged: bool, reblogs_count: int, replies_count: int, sensitive: bool, spoiler_text: string, tags: list, text: string, uri: string, url: string, visibility: string>, statuses: table<history: list, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2886,7 +2885,7 @@ export def "oauth-authorize get" [
   --client-id: string # Client ID, obtained during app registration.
   --redirect-uri: string # Set a URI to redirect the user to. If this parameter is set to urn:ietf:wg:oauth:2.0:oob then the authorization code will be shown instead. Must match one of the redirect URIs declared during app registration.
   --scope: string # List of requested OAuth scopes, separated by spaces (or by pluses, if using query parameters). Must be a subset of scopes declared during app registration. If not provided, defaults to read.
-  --force-login: string@bool-completer # Added in 2.6.0. Forces the user to re-login, which is necessary for authorizing with multiple accounts from the same instance.
+  --force-login: oneof<nothing, bool> # Added in 2.6.0. Forces the user to re-login, which is necessary for authorizing with multiple accounts from the same instance.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

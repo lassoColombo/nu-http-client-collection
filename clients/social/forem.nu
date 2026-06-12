@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://dev.to/api"] }
 def auth-scheme-completer [] { ["api-key"] }
 
@@ -1054,7 +1053,7 @@ export def "pages post" [
   --description: string # For internal use, helps similar pages from one another
   --body-markdown: string # The text (in markdown) of the ad (required)
   --body-json: string # For JSON pages, the JSON body
-  --is-top-level-path: string@bool-completer # If true, the page is available at '/{slug}' instead of '/page/{slug}', use with caution
+  --is-top-level-path: oneof<nothing, bool> # If true, the page is available at '/{slug}' instead of '/page/{slug}', use with caution
   --template: string@template-completer # Controls what kind of layout the page is rendered in (default: contained)
 ]: any -> any {
   let input = $in
@@ -1106,7 +1105,7 @@ export def "pages put" [
   description: string # For internal use, helps similar pages from one another
   --body-markdown: string # The text (in markdown) of the ad (required) (nullable)
   --body-json: string # For JSON pages, the JSON body (nullable)
-  --is-top-level-path: string@bool-completer # If true, the page is available at '/{slug}' instead of '/page/{slug}', use with caution
+  --is-top-level-path: oneof<nothing, bool> # If true, the page is available at '/{slug}' instead of '/page/{slug}', use with caution
   --social-image: record # nullable
   template: string@template-completer # Controls what kind of layout the page is rendered in (default: contained)
 ]: any -> record<title: string, slug: string, description: string, body_markdown: string, body_json: string, is_top_level_path: bool, social_image: record, template: string> {
@@ -1275,7 +1274,7 @@ export def "surveys list" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Pagination page (format: int32, default: 1)
   --per-page: int # Page size (the number of items to return per page). The default maximum value can be overridden by "API_PER_PAGE_MAX" environment variable. (format: int32, default: 30)
-  --active: string@bool-completer # Filter by active status. Omit to return all surveys.
+  --active: oneof<nothing, bool> # Filter by active status. Omit to return all surveys.
 ]: nothing -> table<type_of: string, id: int, title: string, slug: string, survey_type_of: string, active: bool, display_title: bool, allow_resubmission: bool, created_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)

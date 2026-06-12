@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://gateway.marvel.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -157,7 +156,7 @@ export def "public-characters-comics get" [
   --allow-errors(-e) # Return full response without error handling
   --format: string # Filter by the issue format (e.g. comic, digital comic, hardcover).
   --formatType: string # Filter by the issue format type (comic or collection).
-  --noVariants: string@bool-completer # Exclude variant comics from the result set.
+  --noVariants: oneof<nothing, bool> # Exclude variant comics from the result set.
   --dateDescriptor: string # Return comics within a predefined date range.
   --dateRange: list # Return comics within a predefined date range.  Dates must be specified as date1,date2 (e.g. 2013-01-01,2013-01-02).  Dates are preferably formatted as YYYY-MM-DD but may be sent as any common date format.
   --title: string # Return only issues in series whose title matches the input.
@@ -170,7 +169,7 @@ export def "public-characters-comics get" [
   --isbn: string # Filter by ISBN.
   --ean: string # Filter by EAN.
   --issn: string # Filter by ISSN.
-  --hasDigitalIssue: string@bool-completer # Include only results which are available digitally.
+  --hasDigitalIssue: oneof<nothing, bool> # Include only results which are available digitally.
   --modifiedSince: string # Return only comics which have been modified since the specified date. (format: date)
   --creators: list # Return only comics which feature work by the specified creators (accepts a comma-separated list of ids).
   --series: list # Return only comics which are part of the specified series (accepts a comma-separated list of ids).
@@ -305,7 +304,7 @@ export def "public-comics list" [
   --allow-errors(-e) # Return full response without error handling
   --format: string # Filter by the issue format (e.g. comic, digital comic, hardcover).
   --formatType: string # Filter by the issue format type (comic or collection).
-  --noVariants: string@bool-completer # Exclude variants (alternate covers, secondary printings, director's cuts, etc.) from the result set.
+  --noVariants: oneof<nothing, bool> # Exclude variants (alternate covers, secondary printings, director's cuts, etc.) from the result set.
   --dateDescriptor: string # Return comics within a predefined date range.
   --dateRange: list # Return comics within a predefined date range.  Dates must be specified as date1,date2 (e.g. 2013-01-01,2013-01-02).  Dates are preferably formatted as YYYY-MM-DD but may be sent as any common date format.
   --title: string # Return only issues in series whose title matches the input.
@@ -318,7 +317,7 @@ export def "public-comics list" [
   --isbn: string # Filter by ISBN.
   --ean: string # Filter by EAN.
   --issn: string # Filter by ISSN.
-  --hasDigitalIssue: string@bool-completer # Include only results which are available digitally.
+  --hasDigitalIssue: oneof<nothing, bool> # Include only results which are available digitally.
   --modifiedSince: string # Return only comics which have been modified since the specified date. (format: date)
   --creators: list # Return only comics which feature work by the specified creators (accepts a comma-separated list of ids).
   --characters: list # Return only comics which feature the specified characters (accepts a comma-separated list of ids).
@@ -571,7 +570,7 @@ export def "public-creators-comics get" [
   --allow-errors(-e) # Return full response without error handling
   --format: string # Filter by the issue format (e.g. comic, digital comic, hardcover).
   --formatType: string # Filter by the issue format type (comic or collection).
-  --noVariants: string@bool-completer # Exclude variant comics from the result set.
+  --noVariants: oneof<nothing, bool> # Exclude variant comics from the result set.
   --dateDescriptor: string # Return comics within a predefined date range.
   --dateRange: list # Return comics within a predefined date range.  Dates must be specified as date1,date2 (e.g. 2013-01-01,2013-01-02).  Dates are preferably formatted as YYYY-MM-DD but may be sent as any common date format.
   --title: string # Return only issues in series whose title matches the input.

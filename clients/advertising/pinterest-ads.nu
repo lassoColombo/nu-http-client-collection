@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.pinterest.com/v5"] }
 def auth-scheme-completer [] { ["bearer" "basic"] }
 
@@ -165,7 +164,7 @@ export def "ad-accounts accounts/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-shared-accounts: string@bool-completer # Include shared ad accounts (default: true)
+  --include-shared-accounts: oneof<nothing, bool> # Include shared ad accounts (default: true)
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
 ]: nothing -> record<bookmark: string, items: table<country: string, created_time: int, currency: string, id: string, name: string, owner: record, permissions: list, time_zone: string, updated_time: int>> {
@@ -248,7 +247,7 @@ export def "ad-accounts-ad-groups groups/list" [
   --campaign-ids: list # List of Campaign Ids to use to filter the results.
   --ad-group-ids: list # List of Ad group Ids to retrieve keywords from. This feature is currently in BETA and is not available to all users.
   --entity-statuses: list # Entity status (default: [ACTIVE, PAUSED])
-  --translate-interests-to-names: string@bool-completer # Return interests as text names (if value is true) rather than topic IDs. (default: false)
+  --translate-interests-to-names: oneof<nothing, bool> # Return interests as text names (if value is true) rather than topic IDs. (default: false)
 ]: nothing -> record<bookmark: string, items: table<auto_targeting_enabled: bool, bid_multiplier: float, budget_type: string, pacing_delivery_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -331,7 +330,7 @@ export def "ad-accounts-ad-groups-analytics groups/analytics" [
   --engagement-window-days: float@engagement-window-days-completer # Number of days to use as the conversion attribution window for an engagement action. Engagements include saves, closeups, link clicks, and carousel card swipes. Applies to Pinterest Tag conversion metrics. Prior conversion tags use their defined attribution windows. If not specified, defaults to `30` days. **Note:** This parameter no longer returns new data. However, you can still access historic data through **Sept 30, 2027**. (default: 30)
   --view-window-days: float@view-window-days-completer # Number of days to use as the conversion attribution window for a view action. Applies to Pinterest Tag conversion metrics. Prior conversion tags use their defined attribution windows. If not specified, defaults to `1` day. (default: 1)
   --conversion-report-time: string@conversion-report-time-completer # The date by which the conversion metrics returned from this endpoint will be reported. There are two dates associated with a conversion event: the date that the user interacted with the ad, and the date that the user completed a conversion event. (default: TIME_OF_AD_ACTION)
-  --aggregate-report-rows: string@bool-completer # Determines if report rows should be aggregated across all requested entities. This feature is currently in BETA and is not available to all users. (default: false)
+  --aggregate-report-rows: oneof<nothing, bool> # Determines if report rows should be aggregated across all requested entities. This feature is currently in BETA and is not available to all users. (default: false)
   --reporting-timezone: string@reporting-timezone-completer # Specify the timezone to be applied for the reporting. This feature is currently in BETA and is not available to all users. (e.g. PINTEREST_TIME_ZONE)
 ]: nothing -> table<AD_GROUP_ID: string, DATE: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -358,7 +357,7 @@ export def "ad-accounts-ad-groups-audience-sizing sizing" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --auto-targeting-enabled: string@bool-completer # Enable auto-targeting for ad group. Default value is True. Also known as [Pinterest Performance+ targeting](https://help.pinterest.com/en/business/article/performance-plus-targeting). (default: true)
+  --auto-targeting-enabled: oneof<nothing, bool> # Enable auto-targeting for ad group. Default value is True. Also known as [Pinterest Performance+ targeting](https://help.pinterest.com/en/business/article/performance-plus-targeting). (default: true)
   --creative-types: list # Pin creative types filter. **Note:** SHOP_THE_PIN has been deprecated. Please use COLLECTION instead. (nullable)
   --keywords: list # Array of keyword objects. If the keywords field is missing, all keywords will be targeted. (nullable) — item shape: {match_type: "BROAD"|"PHRASE"|"EXACT"|"EXACT_NEGATIVE"|"PHRASE_NEGATIVE", value: string}
   --placement-group: any # [Placement group](/docs/redoc/#section/Placement-group). (default: ALL)
@@ -402,7 +401,7 @@ export def "ad-accounts-ad-groups-targeting-analytics analytics/get" [
   --attribution-types: list # List of types of attribution for the conversion report
   --reporting-timezone: string@reporting-timezone-completer # Specify the timezone to be applied for the reporting. This feature is currently in BETA and is not available to all users. (e.g. PINTEREST_TIME_ZONE)
   --sort-columns: list # Sort Columns.
-  --sort-ascending: string@bool-completer # Sort ascending.
+  --sort-ascending: oneof<nothing, bool> # Sort ascending.
 ]: nothing -> record<data: table<metrics: record, targeting_type: string, targeting_value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -558,7 +557,7 @@ export def "ad-accounts-ad-previews previews/create" [
   --image-tag: string # Multi image template tag. (e.g. Christmas Sale)
   --item-id: string # Item id for product to preview standard shopping ads, optional and only applicable when creative type is SHOPPING. (e.g. 111111111)
   --preferred-media-type: any # Preferred media type. (e.g. IMAGE)
-  --show-promotion: string@bool-completer # Include promotion data in preview when available on catalog item. Defaults to false.
+  --show-promotion: oneof<nothing, bool> # Include promotion data in preview when available on catalog item. Defaults to false.
   --video-tag: string # Multi video template tag, image_tag and video_tag are mutual exclusive. (e.g. Black Friday Sale)
 ]: any -> record<url: string> {
   let input = $in
@@ -713,7 +712,7 @@ export def "ad-accounts-ads-targeting-analytics analytics/get" [
   --attribution-types: list # List of types of attribution for the conversion report
   --reporting-timezone: string@reporting-timezone-completer # Specify the timezone to be applied for the reporting. This feature is currently in BETA and is not available to all users. (e.g. PINTEREST_TIME_ZONE)
   --sort-columns: list # Sort Columns.
-  --sort-ascending: string@bool-completer # Sort ascending.
+  --sort-ascending: oneof<nothing, bool> # Sort ascending.
 ]: nothing -> record<data: table<metrics: record, targeting_type: string, targeting_value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -786,7 +785,7 @@ export def "ad-accounts-ads-credit-redeem credit/redeem" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   offerCodeHash: string # Takes in a SHA256 hash of the offerCode. (e.g. 138e9e0ff7e38cf511b880975eb574c09aa9d5e1657590ab0431040da68caa67)
-  --validateOnly: string@bool-completer # If true, only validate if we can redeem offer code. Otherwise it will actually apply the offer code to the account (e.g. true)
+  --validateOnly: oneof<nothing, bool> # If true, only validate if we can redeem offer code. Otherwise it will actually apply the offer code to the account (e.g. true)
 ]: any -> record<errorCode: int, errorMessage: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1003,7 +1002,7 @@ export def "ad-accounts-audiences audiences/list" [
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --order: string@order-completer # The order in which to sort the items returned: "ASCENDING" or "DESCENDING" by ID. Note that higher-value IDs are associated with more-recently added items.
   --ownership-type: string@ownership-type-completer
-  --exclude-nca: string@bool-completer # When true, excludes audiences derived from new customer acquisition (expanded matching) customer lists from the result. Defaults to false (include all). (default: false)
+  --exclude-nca: oneof<nothing, bool> # When true, excludes audiences derived from new customer acquisition (expanded matching) customer lists from the result. Defaults to false (include all). (default: false)
 ]: nothing -> record<bookmark: string, items: table<ad_account_id: string, audience_type: record, created_by_company_name: string, created_timestamp: int, description: string, id: string, is_nca: bool, name: string, rule: record, size: int, status: record, type: string, updated_timestamp: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1248,7 +1247,7 @@ export def "ad-accounts-billing-profiles profiles/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-active: string@bool-completer # Return active billing profiles, if false return all billing profiles.
+  --is-active: oneof<nothing, bool> # Return active billing profiles, if false return all billing profiles.
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
 ]: nothing -> record<bookmark: string, items: table<advertiser_id: string, billing_type: record, card_type: record, id: string, payment_method_brand: record, status: record>> {
@@ -1335,7 +1334,7 @@ export def "ad-accounts-bulk request/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-details: string@bool-completer # If set to True then attach the errors/details to all the requests (default: false)
+  --include-details: oneof<nothing, bool> # If set to True then attach the errors/details to all the requests (default: false)
 ]: nothing -> record<result_url: string, status: string, workload_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1519,7 +1518,7 @@ export def "ad-accounts-campaigns-analytics campaigns/analytics" [
   --engagement-window-days: float@engagement-window-days-completer # Number of days to use as the conversion attribution window for an engagement action. Engagements include saves, closeups, link clicks, and carousel card swipes. Applies to Pinterest Tag conversion metrics. Prior conversion tags use their defined attribution windows. If not specified, defaults to `30` days. **Note:** This parameter no longer returns new data. However, you can still access historic data through **Sept 30, 2027**. (default: 30)
   --view-window-days: float@view-window-days-completer # Number of days to use as the conversion attribution window for a view action. Applies to Pinterest Tag conversion metrics. Prior conversion tags use their defined attribution windows. If not specified, defaults to `1` day. (default: 1)
   --conversion-report-time: string@conversion-report-time-completer # The date by which the conversion metrics returned from this endpoint will be reported. There are two dates associated with a conversion event: the date that the user interacted with the ad, and the date that the user completed a conversion event. (default: TIME_OF_AD_ACTION)
-  --aggregate-report-rows: string@bool-completer # Determines if report rows should be aggregated across all requested entities. This feature is currently in BETA and is not available to all users. (default: false)
+  --aggregate-report-rows: oneof<nothing, bool> # Determines if report rows should be aggregated across all requested entities. This feature is currently in BETA and is not available to all users. (default: false)
   --reporting-timezone: string@reporting-timezone-completer # Specify the timezone to be applied for the reporting. This feature is currently in BETA and is not available to all users. (e.g. PINTEREST_TIME_ZONE)
 ]: nothing -> table<CAMPAIGN_ID: string, DATE: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1751,13 +1750,13 @@ export def "ad-accounts-conversion-tags tags/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --aem-db-enabled: string@bool-completer # Whether Automatic Enhanced Match birthdate is enabled. See [Enhanced match](https://help.pinterest.com/en/business/article/enhanced-match) for more information. (nullable, default: false)
-  --aem-enabled: string@bool-completer # Whether Automatic Enhanced Match email is enabled. See [Enhanced match](https://help.pinterest.com/en/business/article/enhanced-match) for more information. (nullable, default: false)
-  --aem-external-id-enabled: string@bool-completer # Whether Automatic Enhanced Match location is enabled. See [Enhanced match](https://help.pinterest.com/en/business/article/enhanced-match) for more information. (nullable, default: false)
-  --aem-fnln-enabled: string@bool-completer # Whether Automatic Enhanced Match name is enabled. See [Enhanced match](https://help.pinterest.com/en/business/article/enhanced-match) for more information. (nullable, default: false)
-  --aem-ge-enabled: string@bool-completer # Whether Automatic Enhanced Match gender is enabled. See [Enhanced match](https://help.pinterest.com/en/business/article/enhanced-match) for more information. (nullable, default: false)
-  --aem-loc-enabled: string@bool-completer # Whether Automatic Enhanced Match location is enabled. See [Enhanced match](https://help.pinterest.com/en/business/article/enhanced-match) for more information. (nullable, default: false)
-  --aem-ph-enabled: string@bool-completer # Whether Automatic Enhanced Match phone is enabled. See [Enhanced match](https://help.pinterest.com/en/business/article/enhanced-match) for more information. (nullable, default: false)
+  --aem-db-enabled: oneof<nothing, bool> # Whether Automatic Enhanced Match birthdate is enabled. See [Enhanced match](https://help.pinterest.com/en/business/article/enhanced-match) for more information. (nullable, default: false)
+  --aem-enabled: oneof<nothing, bool> # Whether Automatic Enhanced Match email is enabled. See [Enhanced match](https://help.pinterest.com/en/business/article/enhanced-match) for more information. (nullable, default: false)
+  --aem-external-id-enabled: oneof<nothing, bool> # Whether Automatic Enhanced Match location is enabled. See [Enhanced match](https://help.pinterest.com/en/business/article/enhanced-match) for more information. (nullable, default: false)
+  --aem-fnln-enabled: oneof<nothing, bool> # Whether Automatic Enhanced Match name is enabled. See [Enhanced match](https://help.pinterest.com/en/business/article/enhanced-match) for more information. (nullable, default: false)
+  --aem-ge-enabled: oneof<nothing, bool> # Whether Automatic Enhanced Match gender is enabled. See [Enhanced match](https://help.pinterest.com/en/business/article/enhanced-match) for more information. (nullable, default: false)
+  --aem-loc-enabled: oneof<nothing, bool> # Whether Automatic Enhanced Match location is enabled. See [Enhanced match](https://help.pinterest.com/en/business/article/enhanced-match) for more information. (nullable, default: false)
+  --aem-ph-enabled: oneof<nothing, bool> # Whether Automatic Enhanced Match phone is enabled. See [Enhanced match](https://help.pinterest.com/en/business/article/enhanced-match) for more information. (nullable, default: false)
   --md-frequency: float # Metadata ingestion frequency. (nullable, default: 1, e.g. 0.6)
   name: string # Conversion tag name. (e.g. download_picture)
 ]: any -> record<ad_account_id: string, status: record> {
@@ -1785,7 +1784,7 @@ export def "ad-accounts-conversion-tags tags/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --filter-deleted: string@bool-completer # Filter by deleted status (default: false)
+  --filter-deleted: oneof<nothing, bool> # Filter by deleted status (default: false)
 ]: nothing -> record<items: table<ad_account_id: string, status: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1883,7 +1882,7 @@ export def "ad-accounts-customer-lists lists/list" [
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --order: string@order-completer # The order in which to sort the items returned: "ASCENDING" or "DESCENDING" by ID. Note that higher-value IDs are associated with more-recently added items.
-  --exclude-nca: string@bool-completer # When true, excludes customer lists uploaded for new customer acquisition (expanded matching) from the result. Defaults to false (include all). (default: false)
+  --exclude-nca: oneof<nothing, bool> # When true, excludes customer lists uploaded for new customer acquisition (expanded matching) from the result. Defaults to false (include all). (default: false)
 ]: nothing -> record<bookmark: string, items: table<ad_account_id: string, created_time: float, exceptions: record, id: string, is_nca: bool, name: string, num_batches: float, num_removed_user_records: float, num_uploaded_user_records: float, status: record, type: string, updated_time: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1908,7 +1907,7 @@ export def "ad-accounts-customer-lists lists/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-nca: string@bool-completer # Whether the list was uploaded for new customer acquisition (expanded matching). Immutable after creation.
+  --is-nca: oneof<nothing, bool> # Whether the list was uploaded for new customer acquisition (expanded matching). Immutable after creation.
   --list-type: any # Type of customer list (e.g., EMAIL, IDFA, MAID). (default: EMAIL)
   name: string # Customer list name. (e.g. The Glengarry Glen Ross leads)
   --records: string # Records list. Can be any combination of emails, MAIDs, or IDFAs. Emails must be lowercase and can be plain text or hashed using SHA1, SHA256, or MD5. MAIDs and IDFAs must be hashed with SHA1, SHA256, or MD5. (e.g. email1@pinterest.com,email2@pinterest.com,..<more records>)
@@ -2070,7 +2069,7 @@ export def "ad-accounts-customer-segments segment/list" [
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --order: string@order-completer # The order in which to sort the items returned: "ASCENDING" or "DESCENDING" by ID. Note that higher-value IDs are associated with more-recently added items.
-  --include-sizing: string@bool-completer # Include audience sizing in result or not (default: false)
+  --include-sizing: oneof<nothing, bool> # Include audience sizing in result or not (default: false)
   --search-query: string # Search query. Can contain pin description keywords or comma-separated pin IDs.
 ]: nothing -> record<bookmark: string, items: table<ad_account_id: string, audience_ids: list, created_time: int, id: string, name: string, status: record, updated_time: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2151,7 +2150,7 @@ export def "ad-accounts-events events/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --test: string@bool-completer # Include query param ?test=true to mark the request as a test request. The events will not be recorded but the API will still return the same response messages. Use this mode to verify your requests are working and your events are constructed correctly. Warning: If you use this query parameter, be certain that it is off (set to false or deleted) before sending a legitimate (non-testing) request.
+  --test: oneof<nothing, bool> # Include query param ?test=true to mark the request as a test request. The events will not be recorded but the API will still return the same response messages. Use this mode to verify your requests are working and your events are constructed correctly. Warning: If you use this query parameter, be certain that it is off (set to false or deleted) before sending a legitimate (non-testing) request.
   data: list # A list of events (one or more) encapsulated by a data object. (e.g. [{event_name: checkout, action_source: app_ios, event_time: 1769818893, event_id: eventId0001, event_source_url: https://www.my-clothing-shop.org/, opt_out: false, advertiser_tracking_enabled: true, partner_name: ss-partnername, user_data: {em: [411e44ce1261728ffd2c0686e44e3fffe413c0e2c5adc498bc7da883d476b9c8, 09831ea51bd1b7b32a836683a00a9ccaf3d05f59499f42d9883412ed79289969], hashed_maids: [0192518eb84137ccfe82c8b6322d29631dae7e28ed9d0f6dd5f245d73a58c5f1, 837b850ac46d62b2272a71de73c27801ff011ac1e36c5432620c8755cf90db46], client_ip_address: 216.3.128.12, client_user_agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/67.0.3396.87 Safari/537.36, ph: [45df139772a81b6011bdc1c9cc3d1cb408fc0b10ec0c5cb9d4d4e107f0ddc49d], ge: [0d248e82c62c9386878327d491c762a002152d42ab2c391a31c44d9f62675ddf], db: [d4426a0086d10f12ad265539ae8d54221dc67786053d511407204b76e99d7739], ln: [7e546b3aa43f989dd359672e6c3409d4f9d4e8f155ae1e9b90ee060985468c19], fn: [ec1e6a072231703f1bc41429052fff8c00a7e0c6aaec2e7107241ca8f3ceb6b2], ct: [4ac01a129bfd10385c9278c2cf2c46fac5ab57350841234f587c8522a2e4ce36], st: [49a6d05b8e4b516656e464271d9dd38d0a7e0142f7f49546f4dabd2720cafc34], zp: [fd5f56b40a79a385708428e7b32ab996a681080a166a2206e750eb4819186145], country: [9b202ecbc6d45c6d8901d989a918878397a3eb9d00e8f48022fc051b19d21a1d], external_id: [6a7a73766627eb611720883d5a11cc62b5bfee237b00a6658d78c50032ec4aee], click_id: dj0yJnU9b2JDcFFHekV4SHJNcmVrbFBkUEdqakh0akdUT1VjVVUmcD0yJm49cnNBQ3F2Q2dOVDBXWWhkWklrUGxBUSZ0PUFBQUFBR1BaY3Bv, partner_id: BUJrTlRRzGJmWhRXFZdkioV6wKPBve7Lom__GU9J74hq2NIQj4O3nOZJrp3mcUr5MptkXsI14juMOIM9mNZnM4zEUFT2JLVaFhcOfuuWz3IWEDtBf6I0DPc}, custom_data: {currency: USD, value: 66.95, content_ids: [product-id-001, product-id-002], content_name: pinterest-themed-clothing, content_category: shirts, content_brand: pinterest-brand, contents: [{id: product-id-001, item_price: 14.99, quantity: 3, item_name: pinterest-shirt-girl, item_category: pinterest-clothing-shirts, item_brand: pinterest}, {id: product-id-002, item_price: 10.99, quantity: 2, item_name: pinterest-shirt-men, item_category: pinterest-clothing-shirts, item_brand: pinterest}], num_items: 5, order_id: my_order_id, search_string: sample string, opt_out_type: LDP, predicted_ltv: 2794.82}, app_id: 429047995, app_name: Pinterest, app_version: 7.9, device_brand: Apple, device_carrier: T-Mobile, device_model: iPhone X, device_type: iPhone, os_version: 12.1.4, wifi: false, language: en, device_info: {brand: Apple, Samsung, Motorola, type: iPhone, Android, model: 16 Pro, Galaxy S25 Ultra, form_factor: cellphone, os_family: ios, os_name: 10, os_version: 18.3, os_release_name: 18.3, kernel_version: 6.15, carrier: T-Mobile, screen_width: 1320, screen_height: 2868, screen_density: 460, cpu_cores: 8, storage_size: 256, storage_free_space: 184, external_storage_size: 512, external_storage_free_space: 126, locale: en-us, languages: [en, de, lt], timezone: USA/New York, timezone_abbr: PDT, network_type: wifi, battery_level: 78}, app_info: {app_name: MyAwesomeApp, app_package_name: com.company.myawesomeapp, app_id: 429047995, app_version: 7.9, app_store: Google Play Store, window_width: 1678, window_height: 900, install_time: 1739222269, user_agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36}}]) — item shape: {action_source: string, app_id?: string, app_info?: record, app_name?: string, app_version?: string, custom_data?: record, device_brand?: string, device_carrier?: string, device_info?: record, device_model?: string, device_type?: string, event_id: string, event_name: string, event_source_url?: string, event_time: int, language?: string, opt_out?: bool, os_version?: string, partner_name?: string, user_data: any, wifi?: bool}
 ]: any -> record<events: table<error_message: string, status: record, warning_message: string>, num_events_processed: int, num_events_received: int> {
   let input = $in
@@ -3236,7 +3235,7 @@ export def "ad-accounts-reports report-by-ad_account_id-1" [
   --campaign-statuses: list # List of status values for filtering
   --click-window-days: any # Number of days to use as the conversion attribution window for a pin click action. (default: 30)
   --columns: list # Metric and entity columns. Pin promotion and ad related columns are not supported for Product Item level reports.
-  --combine-targeting-types: string@bool-completer # Determines if the targeting types included in the request should be consolidated into a single breakdown. (default: false)
+  --combine-targeting-types: oneof<nothing, bool> # Determines if the targeting types included in the request should be consolidated into a single breakdown. (default: false)
   --conversion-report-time: any # Date dimension for conversion metrics. (default: TIME_OF_AD_ACTION)
   --custom-conversion-event-metrics: list # List of advertiser-defined custom conversion event metrics to include in the report — item shape: {custom_event_metrics_type: "ADE_COST_PER_ACTION"|"ADE_ROAS"|"ADE_TOTAL_CONVERSIONS"|"ADE_TOTAL_VALUE_IN_MICRO_DOLLAR"|"ADE_AVERAGE_VALUE_IN_MICRO_DOLLAR"|"ADE_TOTAL_CLICK"|"ADE_TOTAL_CLICK_VALUE_IN_MICRO_DOLLAR"|"ADE_TOTAL_VIEW"|"ADE_TOTAL_VIEW_VALUE_IN_MICRO_DOLLAR"|"ADE_TOTAL_CONVERSION_RATE"|"ADE_WEB_COST_PER_ACTION"|"ADE_WEB_ROAS"|"ADE_TOTAL_WEB_CONVERSIONS"|"ADE_TOTAL_WEB_VALUE_IN_MICRO_DOLLAR"|"ADE_TOTAL_WEB_CLICK"|"ADE_TOTAL_WEB_CLICK_VALUE_IN_MICRO_DOLLAR"|"ADE_TOTAL_WEB_VIEW"|"ADE_TOTAL_WEB_VIEW_VALUE_IN_MICRO_DOLLAR"|"ADE_INAPP_COST_PER_ACTION"|"ADE_INAPP_ROAS"|"ADE_TOTAL_INAPP_CONVERSIONS"|"ADE_TOTAL_INAPP_VALUE_IN_MICRO_DOLLAR"|"ADE_TOTAL_INAPP_CLICK"|"ADE_TOTAL_INAPP_CLICK_VALUE_IN_MICRO_DOLLAR"|"ADE_TOTAL_INAPP_VIEW"|"ADE_TOTAL_INAPP_VIEW_VALUE_IN_MICRO_DOLLAR"|"ADE_OFFLINE_COST_PER_ACTION"|"ADE_OFFLINE_ROAS"|"ADE_TOTAL_OFFLINE_CONVERSIONS"|"ADE_TOTAL_OFFLINE_VALUE_IN_MICRO_DOLLAR"|"ADE_TOTAL_OFFLINE_CLICK"|"ADE_TOTAL_OFFLINE_CLICK_VALUE_IN_MICRO_DOLLAR"|"ADE_TOTAL_OFFLINE_VIEW"|"ADE_TOTAL_OFFLINE_VIEW_VALUE_IN_MICRO_DOLLAR"|"ADE_TOTAL_CONVERSION_PRODUCT_QUANTITY"|"ADE_TOTAL_CONVERSION_PRODUCT_VALUE"|"ADE_TOTAL_CONVERSION_PRODUCT_VALUE_IN_MICRO_UNITS"|"ADE_TOTAL_CONVERSION_PRODUCT_VALUE_IN_USD"|"ADE_TOTAL_CONVERSION_PRODUCT_VALUE_IN_MICRO_USD"|"ADE_TOTAL_WEB_CONVERSION_PRODUCT_QUANTITY"|"ADE_TOTAL_WEB_CONVERSION_PRODUCT_VALUE"|"ADE_TOTAL_WEB_CONVERSION_PRODUCT_VALUE_IN_MICRO_UNITS"|"ADE_TOTAL_WEB_CONVERSION_PRODUCT_VALUE_IN_USD"|"ADE_TOTAL_WEB_CONVERSION_PRODUCT_VALUE_IN_MICRO_USD"|"ADE_TOTAL_INAPP_CONVERSION_PRODUCT_QUANTITY"|"ADE_TOTAL_INAPP_CONVERSION_PRODUCT_VALUE"|"ADE_TOTAL_INAPP_CONVERSION_PRODUCT_VALUE_IN_MICRO_UNITS"|"ADE_TOTAL_INAPP_CONVERSION_PRODUCT_VALUE_IN_USD"|"ADE_TOTAL_INAPP_CONVERSION_PRODUCT_VALUE_IN_MICRO_USD"|"ADE_TOTAL_OFFLINE_CONVERSION_PRODUCT_QUANTITY"|"ADE_TOTAL_OFFLINE_CONVERSION_PRODUCT_VALUE"|"ADE_TOTAL_OFFLINE_CONVERSION_PRODUCT_VALUE_IN_MICRO_UNITS"|"ADE_TOTAL_OFFLINE_CONVERSION_PRODUCT_VALUE_IN_USD"|"ADE_TOTAL_OFFLINE_CONVERSION_PRODUCT_VALUE_IN_MICRO_USD", custom_event_name: string}
   end_date: string # Metric report end date (UTC). Format: YYYY-MM-DD
@@ -3666,7 +3665,7 @@ export def "ad-accounts-targeting-templates template/list" [
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --order: string@order-completer # The order in which to sort the items returned: "ASCENDING" or "DESCENDING" by ID. Note that higher-value IDs are associated with more-recently added items.
-  --include-sizing: string@bool-completer # Include audience sizing in result or not (default: false)
+  --include-sizing: oneof<nothing, bool> # Include audience sizing in result or not (default: false)
   --search-query: string # Search query. Can contain pin description keywords or comma-separated pin IDs.
 ]: nothing -> record<bookmark: string, items: table<ad_account_id: string, auto_targeting_enabled: bool, created_time: int, id: string, keywords: list, name: string, placement_group: string, sizing: record, status: record, targeting_attributes: record, tracking_urls: record, updated_time: int, valid: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3693,7 +3692,7 @@ export def "ad-accounts-targeting-templates template/create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --auto-targeting-enabled: string@bool-completer # Enable auto-targeting for ad group. Also known as ["expanded targeting"](https://help.pinterest.com/en/business/article/expanded-targeting). (default: true)
+  --auto-targeting-enabled: oneof<nothing, bool> # Enable auto-targeting for ad group. Also known as ["expanded targeting"](https://help.pinterest.com/en/business/article/expanded-targeting). (default: true)
   --keywords: list # item shape: {match_type?: "BROAD"|"PHRASE"|"EXACT"|"EXACT_NEGATIVE"|"PHRASE_NEGATIVE", value?: string}
   name: string # targeting template name
   --placement-group: string@placement-group-completer # Campaign placement group type (default: ALL, e.g. ALL)
@@ -3805,7 +3804,7 @@ export def "ad-accounts-terms-of-service service/get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-html: string@bool-completer # Return HTML in TOS text. (default: false)
+  --include-html: oneof<nothing, bool> # Return HTML in TOS text. (default: false)
   --tos-type: string # Request type.
 ]: nothing -> record<ad_account_id: string, has_accepted: bool, html: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3888,7 +3887,7 @@ export def "boards boards/create" [
   --allow-errors(-e) # Return full response without error handling
   --ad-account-id: string # Unique identifier of an ad account.
   --description: string # nullable, e.g. My favorite summer recipes
-  --is-ads-only: string@bool-completer # If set to `true`, the board will be ad-only and can store ad-only Pins. (default: false, e.g. true)
+  --is-ads-only: oneof<nothing, bool> # If set to `true`, the board will be ad-only and can store ad-only Pins. (default: false, e.g. true)
   name: string #     Name of the board.      **Note:** If you create an ad-only board by setting `is_ads_only`     to `true`, the board name automatically becomes "Ad-only Pins". (e.g. Summer recipes)
   --privacy: any #     Privacy setting for a board. Learn more about [secret](https://help.pinterest.com/en/article/secret-boards)     boards and [protected](https://help.pinterest.com/en/business/article/protected-boards) boards.      **Note:** If you create an ad-only board by setting `is_ads_only`     to `true`, the `privacy` settng automatically becomes `PROTECTED`.  (default: PUBLIC)
 ]: any -> record<privacy: record> {
@@ -4023,7 +4022,7 @@ export def "boards-pins pins" [
   --allow-errors(-e) # Return full response without error handling
   --creative-types: list # Pin creative types filter. **Note:** SHOP_THE_PIN has been deprecated. Please use COLLECTION instead.
   --ad-account-id: string # Unique identifier of an ad account.
-  --pin-metrics: string@bool-completer # Specify whether to return 90d and lifetime Pin metrics. Total comments and total reactions are only available with lifetime Pin metrics. If Pin was created before `2023-03-20` lifetime metrics will only be available for Video and Idea Pin formats. Lifetime metrics are available for all Pin formats since then. (default: false)
+  --pin-metrics: oneof<nothing, bool> # Specify whether to return 90d and lifetime Pin metrics. Total comments and total reactions are only available with lifetime Pin metrics. If Pin was created before `2023-03-20` lifetime metrics will only be available for Video and Idea Pin formats. Lifetime metrics are available for all Pin formats since then. (default: false)
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
 ]: nothing -> record<bookmark: string, items: table<alt_text: string, description: string, link: string, title: string>> {
@@ -4250,7 +4249,7 @@ export def "businesses-employers employers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --assets-summary: string@bool-completer # Include assets summary in the response if this is true. Defaults to true.  The assets summary returns a dictionary representing a summary of the assets for the business user ID, with information like the ad accounts and profiles the user has permissions for and what those permissions are (default: true)
+  --assets-summary: oneof<nothing, bool> # Include assets summary in the response if this is true. Defaults to true.  The assets summary returns a dictionary representing a summary of the assets for the business user ID, with information like the ad accounts and profiles the user has permissions for and what those permissions are (default: true)
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
 ]: nothing -> record<bookmark: string, items: table<assets_summary: record, business_roles: list, created_by_business: record, created_by_user: record, created_time: int, id: string, is_shared_partner: bool, user: record>> {
@@ -4419,7 +4418,7 @@ export def "businesses-assets-members members/get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --start-index: int # An index to start fetching the results from. Only the results starting from this index will be returned. (default: 0)
-  --fetch-system-users: string@bool-completer # Fetches system users if True. Fetches regular user employees if False. (default: false)
+  --fetch-system-users: oneof<nothing, bool> # Fetches system users if True. Fetches regular user employees if False. (default: false)
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
 ]: nothing -> record<bookmark: string, items: table<permissions: list, user: record>> {
@@ -4581,7 +4580,7 @@ export def "businesses-invites get/invites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-member: string@bool-completer # A boolean field to indicate whether the invite is to create a partnership or a membership. (default: true)
+  --is-member: oneof<nothing, bool> # A boolean field to indicate whether the invite is to create a partnership or a membership. (default: true)
   --invite-status: list # A list of invite statuses to filter invites by. Only invites whose status is in the provided statuses will be returned.
   --invite-type: string@invite-type-completer # Invite type to filter invites by. Only invites of the specified type will be returned. (e.g. MEMBER_INVITE)
   --bookmark: string # Cursor used to fetch the next page of items
@@ -4691,8 +4690,8 @@ export def "businesses-members members" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --fetch-system-users: string@bool-completer # Fetches system users if True. Fetches regular user employees if False. (default: false)
-  --assets-summary: string@bool-completer # Include assets summary in the response if this is true.  The assets summary returns a dictionary representing a summary of the assets for the business user ID, with information like the ad accounts and profiles the user has permissions for and what those permissions are (default: false)
+  --fetch-system-users: oneof<nothing, bool> # Fetches system users if True. Fetches regular user employees if False. (default: false)
+  --assets-summary: oneof<nothing, bool> # Include assets summary in the response if this is true.  The assets summary returns a dictionary representing a summary of the assets for the business user ID, with information like the ad accounts and profiles the user has permissions for and what those permissions are (default: false)
   --business-roles: list # A list of business roles to filter the members by. Only members whose roles are in the specified roles will be returned.
   --member-ids: string # A list of business members ids separated by comma.
   --start-index: int # An index to start fetching the results from. Only the results starting from this index will be returned. (default: 0)
@@ -4831,7 +4830,7 @@ export def "businesses-members-assets assets/get" [
   --asset-type: string@asset-type-completer-1 # A resource type to filter the assets by. Only assets of the specified type will be returned. (default: AD_ACCOUNT)
   --start-index: int # An index to start fetching the results from. Only the results starting from this index will be returned. (default: 0)
   --sort-by: string@sort-by-completer # The field to sort member assets by (e.g. NAME)
-  --sort-ascending: string@bool-completer # Sort assets in ascending order (default: true)
+  --sort-ascending: oneof<nothing, bool> # Sort assets in ascending order (default: true)
   --search-by: string@search-by-completer # The field to search member assets by (e.g. NAME)
   --search-value: string # The value to search for
   --asset-permission-type: string@asset-permission-type-completer # The type of asset permission to filter by (e.g. AGGREGATED_PERMISSION)
@@ -4861,11 +4860,11 @@ export def "businesses-partners partners-by-business_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --assets-summary: string@bool-completer # Include assets summary in the response if this is true.  The assets summary returns a dictionary representing a summary of the assets for the business user ID, with information like the ad accounts and profiles the user has permissions for and what those permissions are (default: false)
+  --assets-summary: oneof<nothing, bool> # Include assets summary in the response if this is true.  The assets summary returns a dictionary representing a summary of the assets for the business user ID, with information like the ad accounts and profiles the user has permissions for and what those permissions are (default: false)
   --partner-type: string@partner-type-completer # Specifies whether to fetch internal or external (shared) partners. If partner_type=INTERNAL, the asset being queried is for accesses the partner has to your business assets. If partner_type=EXTERNAL, the asset being queried is for the accesses you have to the partner's business asset. (e.g. INTERNAL)
   --partner-ids: string # A list of business partner ids separated by commas used to filter the results. Only partners with the specified ids will be returned.
   --start-index: int # An index to start fetching the results from. Only the results starting from this index will be returned. (default: 0)
-  --sort-ascending: string@bool-completer # Sort ascending.
+  --sort-ascending: oneof<nothing, bool> # Sort ascending.
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
 ]: nothing -> record<bookmark: string, items: table<assets_summary: record, business_roles: list, created_by_business: record, created_by_user: record, created_time: int, id: string, is_shared_partner: bool, user: record>> {
@@ -4977,7 +4976,7 @@ export def "businesses-partners-assets access/get" [
   --asset-type: string@asset-type-completer-2 # A resource type to filter the assets by. Only assets of the specified type will be returned. (default: AD_ACCOUNT)
   --start-index: int # An index to start fetching the results from. Only the results starting from this index will be returned. (default: 0)
   --sort-by: string@sort-by-completer # The field to sort member assets by (e.g. NAME)
-  --sort-ascending: string@bool-completer # Sort assets in ascending order (default: true)
+  --sort-ascending: oneof<nothing, bool> # Sort assets in ascending order (default: true)
   --search-by: string@search-by-completer # The field to search member assets by (e.g. NAME)
   --search-value: string # The value to search for
   --bookmark: string # Cursor used to fetch the next page of items
@@ -5486,7 +5485,7 @@ export def "catalogs-product-groups groups/create" [
   --description: string # nullable
   --feed-id: string # Catalog Feed id pertaining to the catalog product group. (e.g. 2680059592705)
   --filters: any # Object holding a group of filters for request on catalog product group.  This is a distinct schema. It is not possible to create or update a Product Group with empty filters. But some automatically generated Product Groups might have empty filters.
-  --is-featured: string@bool-completer # boolean indicator of whether the product group is being featured or not (DEPRECATED)
+  --is-featured: oneof<nothing, bool> # boolean indicator of whether the product group is being featured or not (DEPRECATED)
   --name: string
 ]: any -> record {
   let input = $in
@@ -5594,7 +5593,7 @@ export def "catalogs-product-groups groups/update" [
   --ad-account-id: string # Unique identifier of an ad account.
   --description: string # nullable
   --filters: any # Object holding a group of filters for request on catalog product group.  This is a distinct schema. It is not possible to create or update a Product Group with empty filters. But some automatically generated Product Groups might have empty filters.
-  --is-featured: string@bool-completer # boolean indicator of whether the product group is being featured or not (DEPRECATED)
+  --is-featured: oneof<nothing, bool> # boolean indicator of whether the product group is being featured or not (DEPRECATED)
   --name: string
 ]: any -> record {
   let input = $in
@@ -5673,7 +5672,7 @@ export def "catalogs-product-groups-products pins/list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ad-account-id: string # Unique identifier of an ad account.
-  --pin-metrics: string@bool-completer # Specify whether to return 90d and lifetime Pin metrics. Total comments and total reactions are only available with lifetime Pin metrics. If Pin was created before `2023-03-20` lifetime metrics will only be available for Video and Idea Pin formats. Lifetime metrics are available for all Pin formats since then. (default: false)
+  --pin-metrics: oneof<nothing, bool> # Specify whether to return 90d and lifetime Pin metrics. Total comments and total reactions are only available with lifetime Pin metrics. If Pin was created before `2023-03-20` lifetime metrics will only be available for Video and Idea Pin formats. Lifetime metrics are available for all Pin formats since then. (default: false)
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
 ]: nothing -> record<bookmark: string, items: list<record>> {
@@ -5701,7 +5700,7 @@ export def "catalogs-products-get-by-product-group-filters filter/list" [
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
   --ad-account-id: string # Unique identifier of an ad account.
-  --pin-metrics: string@bool-completer # Specify whether to return 90d and lifetime Pin metrics. Total comments and total reactions are only available with lifetime Pin metrics. If Pin was created before `2023-03-20` lifetime metrics will only be available for Video and Idea Pin formats. Lifetime metrics are available for all Pin formats since then. (default: false)
+  --pin-metrics: oneof<nothing, bool> # Specify whether to return 90d and lifetime Pin metrics. Total comments and total reactions are only available with lifetime Pin metrics. If Pin was created before `2023-03-20` lifetime metrics will only be available for Video and Idea Pin formats. Lifetime metrics are available for all Pin formats since then. (default: false)
   --feed-id: string # Catalog Feed id pertaining to the catalog product group filter. (e.g. 2680059592705)
   --filters: any # Object holding a group of filters for a catalog product group
 ]: any -> record<bookmark: string, items: list<record>> {
@@ -6398,14 +6397,14 @@ export def "pins pins/list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --pin-filter: string@pin-filter-completer # The filter to apply to the pins
-  --pin-metrics: string@bool-completer # Specify whether to return 90d and lifetime Pin metrics. Total comments and total reactions are only available with lifetime Pin metrics. If Pin was created before `2023-03-20` lifetime metrics will only be available for Video and Idea Pin formats. Lifetime metrics are available for all Pin formats since then. (default: false)
-  --include-protected-pins: string@bool-completer # Whether to include protected pins in the results (default: false)
+  --pin-metrics: oneof<nothing, bool> # Specify whether to return 90d and lifetime Pin metrics. Total comments and total reactions are only available with lifetime Pin metrics. If Pin was created before `2023-03-20` lifetime metrics will only be available for Video and Idea Pin formats. Lifetime metrics are available for all Pin formats since then. (default: false)
+  --include-protected-pins: oneof<nothing, bool> # Whether to include protected pins in the results (default: false)
   --pin-type: string@pin-type-completer # The type of pins to return, currently only enabled for private pins
   --creative-types: list # Pin creative types filter. **Note:** SHOP_THE_PIN has been deprecated. Please use COLLECTION instead.
   --ad-account-id: string # Unique identifier of an ad account.
   --domain: string # Only return pins with links that match the exact domain. Domain should not include 'www.' prefix. For example, 'pinterest.com' is a valid domain, but 'www.pinterest.com' is not (will not match any pins).
   --domains: list # Only return pins with links whose domain matches any value in the list. Values are joined comma-separated on the wire (e.g. `?domains=instagram.com,jcpenney.com`).
-  --include-product-tag-obj: string@bool-completer # Include product tag objects in the response with their associated links.
+  --include-product-tag-obj: oneof<nothing, bool> # Include product tag objects in the response with their associated links.
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
 ]: nothing -> record<bookmark: string, items: table<alt_text: string, description: string, link: string, title: string>> {
@@ -6460,7 +6459,7 @@ export def "pins pins/get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ad-account-id: string # Unique identifier of an ad account.
-  --pin-metrics: string@bool-completer # Specify whether to return 90d and lifetime Pin metrics. Total comments and total reactions are only available with lifetime Pin metrics. If Pin was created before `2023-03-20` lifetime metrics will only be available for Video and Idea Pin formats. Lifetime metrics are available for all Pin formats since then. (default: false)
+  --pin-metrics: oneof<nothing, bool> # Specify whether to return 90d and lifetime Pin metrics. Total comments and total reactions are only available with lifetime Pin metrics. If Pin was created before `2023-03-20` lifetime metrics will only be available for Video and Idea Pin formats. Lifetime metrics are available for all Pin formats since then. (default: false)
 ]: nothing -> record<alt_text: string, description: string, link: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6968,9 +6967,9 @@ export def "trends-keywords-top keywords/list" [
   --genders: list # If set, filters the results to trends among users who identify with the specified gender(s). If unset, trends among all genders will be returned. The `unknown` group includes users with unspecified or customized gender profile settings.
   --ages: list # If set, filters the results to trends among users in the specified age range(s). If unset, trends among all age groups will be returned.
   --include-keywords: list # If set, filters the results to top trends which include at least one of the specified keywords. If unset, no keyword filtering logic is applied. (e.g. [recipes, dessert])
-  --normalize-against-group: string@bool-completer #  Governs how the resulting time series data will be normalized to a [0-100] scale.    By default (`false`), the data will be normalized independently for each keyword.  The peak search volume observation in *each* keyword's time series will be represented by the value 100.  This is ideal for analyzing when an individual keyword is expected to peak in interest.    If set to `true`, the data will be normalized as a group.  The peak search volume observation across *all* keywords in the response will be represented by the value 100, and all other values scaled accordingly.  Use this option when you wish to compare relative search volume between multiple keywords. (default: false)
+  --normalize-against-group: oneof<nothing, bool> #  Governs how the resulting time series data will be normalized to a [0-100] scale.    By default (`false`), the data will be normalized independently for each keyword.  The peak search volume observation in *each* keyword's time series will be represented by the value 100.  This is ideal for analyzing when an individual keyword is expected to peak in interest.    If set to `true`, the data will be normalized as a group.  The peak search volume observation across *all* keywords in the response will be represented by the value 100, and all other values scaled accordingly.  Use this option when you wish to compare relative search volume between multiple keywords. (default: false)
   --limit: int # The maximum number of trending keywords that will be returned. Keywords are returned in trend-ranked order, so a `limit` of 50 will return the top 50 trends. (default: 50)
-  --include-demographics: string@bool-completer # Including the age and gender distribution for each keyword. By default (`false`), the response will not include demographics data. (default: false)
+  --include-demographics: oneof<nothing, bool> # Including the age and gender distribution for each keyword. By default (`false`), the response will not include demographics data. (default: false)
 ]: nothing -> record<trends: table<demographics: record, has_prediction: bool, keyword: string, pct_growth_mom: int, pct_growth_wow: int, pct_growth_yoy: int, predicted_time_series: record, time_series: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7239,7 +7238,7 @@ export def "user-account-following following/get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ad-account-id: string # Unique identifier of an ad account.
-  --explicit-following: string@bool-completer # Whether or not to include implicit user follows, which means followees with board follows. When explicit_following is True, it means we only want explicit user follows. (default: false)
+  --explicit-following: oneof<nothing, bool> # Whether or not to include implicit user follows, which means followees with board follows. When explicit_following is True, it means we only want explicit user follows. (default: false)
   --feed-type: string@feed-type-completer # Thrift param specifying what type of followees will be kept. Default to include all followees. (default: ALL, e.g. CREATOR_ONLY)
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
@@ -7266,7 +7265,7 @@ export def "user-account-following-boards follows/list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ad-account-id: string # Unique identifier of an ad account.
-  --explicit-following: string@bool-completer # Whether or not to include implicit user follows, which means followees with board follows. When explicit_following is True, it means we only want explicit user follows. (default: false)
+  --explicit-following: oneof<nothing, bool> # Whether or not to include implicit user follows, which means followees with board follows. When explicit_following is True, it means we only want explicit user follows. (default: false)
   --bookmark: string # Cursor used to fetch the next page of items
   --page-size: int # Maximum number of items to include in a single page. See documentation on [Pagination](/docs/reference/pagination/) for more information. (default: 25)
 ]: nothing -> record<bookmark: string, items: table<privacy: record>> {
@@ -7292,7 +7291,7 @@ export def "user-account-following user/update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --auto-follow: string@bool-completer #   Whether this request comes as result of auto-follow after clicking on a link.   Follow links can be used by partners on their site or in emails.   Only selected partners can be followed this way. We verify that partner can be auto-followed.
+  --auto-follow: oneof<nothing, bool> #   Whether this request comes as result of auto-follow after clicking on a link.   Follow links can be used by partners on their site or in emails.   Only selected partners can be followed this way. We verify that partner can be auto-followed.
 ]: any -> record<type: string, username: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

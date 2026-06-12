@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://paper-api.alpaca.markets" "https://api.alpaca.markets"] }
 def auth-scheme-completer [] { ["apca-api-key-id" "apca-api-secret-key"] }
 
@@ -162,7 +161,7 @@ export def "orders post" [
   --limit-price: string # Limit price (nullable)
   --stop-price: string # Stop price (nullable)
   --status: string@status-completer # An order executed through Alpaca can experience several status changes during its lifecycle. The most common statuses are described in detail below:  - new   The order has been received by Alpaca, and routed to exchanges for execution. This is the usual initial state of an order.  - partially_filled   The order has been partially filled.  - filled   The order has been filled, and no further updates will occur for the order.  - done_for_day   The order is done executing for the day, and will not receive further updates until the next trading day.  - canceled   The order has been canceled, and no further updates will occur for the order. This can be either due to a cancel request by the user, or the order has been canceled by the exchanges due to its time-in-force.  - expired   The order has expired, and no further updates will occur for the order.  - replaced   The order was replaced by another order, or was updated due to a market event such as corporate action.  - pending_cancel   The order is waiting to be canceled.  - pending_replace   The order is waiting to be replaced by another order. The order will reject cancel request while in this state.  Less common states are described below. Note that these states only occur on very rare occasions, and most users will likely never see their orders reach these states:  - accepted   The order has been received by Alpaca, but hasn’t yet been routed to the execution venue. This could be seen often out side of trading session hours.  - pending_new   The order has been received by Alpaca, and routed to the exchanges, but has not yet been accepted for execution. This state only occurs on rare occasions.  - accepted_for_bidding   The order has been received by exchanges, and is evaluated for pricing. This state only occurs on rare occasions.  - stopped   The order has been stopped, and a trade is guaranteed for the order, usually at a stated price or better, but has not yet occurred. This state only occurs on rare occasions.  - rejected   The order has been rejected, and no further updates will occur for the order. This state occurs on rare occasions and may occur based on various conditions decided by the exchanges.  - suspended   The order has been suspended, and is not eligible for trading. This state only occurs on rare occasions.  - calculated   The order has been completed for the day (either filled or done for day), but remaining settlement calculations are still pending. This state only occurs on rare occasions.   An order may be canceled through the API up until the point it reaches a state of either filled, canceled, or expired. (e.g. new)
-  --extended-hours: string@bool-completer # If true, eligible for execution outside regular trading hours.
+  --extended-hours: oneof<nothing, bool> # If true, eligible for execution outside regular trading hours.
   --legs: list # When querying non-simple order_class orders in a nested style, an array of Order entities associated with this order. Otherwise, null. (nullable) — item shape: {id?: string, client_order_id?: string, created_at?: string, updated_at?: string, submitted_at?: string, filled_at?: string, expired_at?: string, canceled_at?: string, failed_at?: string, replaced_at?: string, replaced_by?: string, replaces?: string, asset_id?: string, symbol: string, asset_class?: "us_equity"|"crypto", notional: string, qty: string, filled_qty?: string, filled_avg_price?: string, order_class?: "simple"|"bracket"|"oco"|"oto"|"", order_type?: string, type: "market"|"limit"|"stop"|"stop_limit"|"trailing_stop", side: "buy"|"sell", time_in_force: "day"|"gtc"|"opg"|"cls"|"ioc"|"fok", limit_price?: string, stop_price?: string, status?: "new"|"partially_filled"|"filled"|"done_for_day"|"canceled"|"expired"|"replaced"|"pending_cancel"|"pending_replace"|"accepted"|"pending_new"|"accepted_for_bidding"|"stopped"|"rejected"|"suspended"|"calculated", extended_hours?: bool, legs?: list, trail_percent?: string, trail_price?: string, hwm?: string}
   --trail-percent: string # The percent value away from the high water mark for trailing stop orders.
   --trail-price: string # The dollar value away from the high water mark for trailing stop orders.
@@ -196,7 +195,7 @@ export def "orders list" [
   --after: string # The response will include only ones submitted after this timestamp (exclusive.)
   --until: string # The response will include only ones submitted until this timestamp (exclusive.)
   --direction: string@direction-completer # The chronological order of response based on the submission time. asc or desc. Defaults to desc.
-  --nested: string@bool-completer # If true, the result will roll up multi-leg orders under the legs field of primary order.
+  --nested: oneof<nothing, bool> # If true, the result will roll up multi-leg orders under the legs field of primary order.
   --symbols: string # A comma-separated list of symbols to filter by (ex. “AAPL,TSLA,MSFT”). A currency pair is required for crypto orders (ex. “BTCUSD,BCHUSD,LTCUSD,ETCUSD”).
 ]: nothing -> table<id: string, client_order_id: string, created_at: string, updated_at: string, submitted_at: string, filled_at: string, expired_at: string, canceled_at: string, failed_at: string, replaced_at: string, replaced_by: string, replaces: string, asset_id: string, symbol: string, asset_class: string, notional: string, qty: string, filled_qty: string, filled_avg_price: string, order_class: string, order_type: string, type: string, side: string, time_in_force: string, limit_price: string, stop_price: string, status: string, extended_hours: bool, legs: list<any>, trail_percent: string, trail_price: string, hwm: string> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
@@ -242,7 +241,7 @@ export def "orders get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --nested: string@bool-completer # If true, the result will roll up multi-leg orders under the legs field of primary order.
+  --nested: oneof<nothing, bool> # If true, the result will roll up multi-leg orders under the legs field of primary order.
 ]: nothing -> record<id: string, client_order_id: string, created_at: string, updated_at: string, submitted_at: string, filled_at: string, expired_at: string, canceled_at: string, failed_at: string, replaced_at: string, replaced_by: string, replaces: string, asset_id: string, symbol: string, asset_class: string, notional: string, qty: string, filled_qty: string, filled_avg_price: string, order_class: string, order_type: string, type: string, side: string, time_in_force: string, limit_price: string, stop_price: string, status: string, extended_hours: bool, legs: list<any>, trail_percent: string, trail_price: string, hwm: string> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
   let base = ($base_url | default $BASE_URL)
@@ -339,7 +338,7 @@ export def "positions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cancel-orders: string@bool-completer # If true is specified, cancel all open orders before liquidating all positions.
+  --cancel-orders: oneof<nothing, bool> # If true is specified, cancel all open orders before liquidating all positions.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
   let base = ($base_url | default $BASE_URL)
@@ -726,9 +725,9 @@ export def "account-configurations patch" [
   --allow-errors(-e) # Return full response without error handling
   --dtbp-check: string@dtbp-check-completer # both, entry, or exit. Controls Day Trading Margin Call (DTMC) checks.
   --trade-confirm-email: string # all or none. If none, emails for order fills are not sent.
-  --suspend-trade: string@bool-completer # If true, new orders are blocked.
-  --no-shorting: string@bool-completer # If true, account becomes long-only mode.
-  --fractional-trading: string@bool-completer # If true, account is able to participate in fractional trading
+  --suspend-trade: oneof<nothing, bool> # If true, new orders are blocked.
+  --no-shorting: oneof<nothing, bool> # If true, account becomes long-only mode.
+  --fractional-trading: oneof<nothing, bool> # If true, account is able to participate in fractional trading
   --max-margin-multiplier: string # Can be "1" or "2"
   --pdt-check: string # e.g. entry
 ]: any -> record<dtbp_check: string, trade_confirm_email: string, suspend_trade: bool, no_shorting: bool, fractional_trading: bool, max_margin_multiplier: string, pdt_check: string> {

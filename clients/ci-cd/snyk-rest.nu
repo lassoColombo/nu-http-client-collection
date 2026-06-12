@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.snyk.io/rest"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -138,7 +137,7 @@ export def "custom-base-images list" [
   --group-id: string # The group ID of the custom base image (format: uuid)
   --repository: string # The image repository
   --tag: string # The image tag
-  --include-in-recommendations: string@bool-completer # Whether this image should be recommended as a base image upgrade
+  --include-in-recommendations: oneof<nothing, bool> # Whether this image should be recommended as a base image upgrade
   --sort-by: string@sort-by-completer # Which column to sort by.  If sorting by version, the versioning schema is used.
   --sort-direction: string@sort-direction-completer # Which direction to sort (default: ASC)
 ]: nothing -> any {
@@ -713,7 +712,7 @@ export def "groups-inventory-assets-filters-values get" [
   --limit: int # Number of results to return (default: 10)
   --starting-after: string # Cursor for fetching the next page of results
   --ending-before: string # Cursor for fetching the previous page of results
-  --keys-only: string@bool-completer # Return only the keys of the object filter values
+  --keys-only: oneof<nothing, bool> # Return only the keys of the object filter values
   --key: string # Return only the value for a specific key of the object filter values
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -982,7 +981,7 @@ export def "groups-issues listGroupIssues" [
   --created-after: string # A filter to select issues created after this date. (format: date-time)
   --effective-severity-level: list # One or more effective severity levels to filter issues.
   --status: list # An issue's status
-  --ignored: string@bool-completer # Whether an issue is ignored or not.
+  --ignored: oneof<nothing, bool> # Whether an issue is ignored or not.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1066,7 +1065,7 @@ export def "groups-memberships listGroupMemberships" [
   --user-id: string # Filter the response by Users that match the provided user ID
   --username: string # Filter the response by Users that match the provided username
   --role-name: string # Filter the response for results only with the specified role.
-  --include-group-membership-count: string@bool-completer # indicates whether the count of group memberships is included
+  --include-group-membership-count: oneof<nothing, bool> # indicates whether the count of group memberships is included
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1118,7 +1117,7 @@ export def "groups-memberships delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cascade: string@bool-completer # indicates whether to delete the child org memberships of the group membership.
+  --cascade: oneof<nothing, bool> # indicates whether to delete the child org memberships of the group membership.
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1886,7 +1885,7 @@ export def "orgs listOrgs" [
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --limit: int # Number of results to return per page (format: int32, default: 10, e.g. 10)
   --group-id: string # If set, only return organizations within the specified group (format: uuid)
-  --is-personal: string@bool-completer # If true, only return organizations that are not part of a group.
+  --is-personal: oneof<nothing, bool> # If true, only return organizations that are not part of a group.
   --slug: string # Only return orgs whose slug exactly matches this value.
   --name: string # Only return orgs whose name contains this value.
   --expand: list # Expand the specified related resources in the response to include their attributes.
@@ -2778,7 +2777,7 @@ export def "orgs-cloud-resources listResources" [
   --name: string # Filter resources by name (multi-value, comma-separated) (e.g. example-bucket)
   --kind: string # Filter resources by kind (multi-value, comma-separated): cloud (e.g. cloud - cloud - iac)
   --location: string # Filter resources by location (multi-value, comma-separated) (AWS region) (e.g. us-west-2)
-  --removed: string@bool-completer # Filter resources by whether they have been removed or not. (e.g. true)
+  --removed: oneof<nothing, bool> # Filter resources by whether they have been removed or not. (e.g. true)
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
@@ -2892,7 +2891,7 @@ export def "orgs-collections list" [
   --qp-sort: string@sort-completer-1 # Return collections sorted by the specified attributes
   --direction: string@direction-completer # Return collections sorted in the specified direction (default: DESC)
   --name: string # Return collections which names include the provided string (allows empty value)
-  --is-generated: string@bool-completer # Return collections where is_generated matches the provided boolean (allows empty value)
+  --is-generated: oneof<nothing, bool> # Return collections where is_generated matches the provided boolean (allows empty value)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3420,7 +3419,7 @@ export def "orgs-inventory-assets-filters-values get" [
   --limit: int # Number of results to return (default: 10)
   --starting-after: string # Cursor for fetching the next page of results
   --ending-before: string # Cursor for fetching the previous page of results
-  --keys-only: string@bool-completer # Return only the keys of the object filter values
+  --keys-only: oneof<nothing, bool> # Return only the keys of the object filter values
   --key: string # Return only the value for a specific key of the object filter values
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3768,7 +3767,7 @@ export def "orgs-issues listOrgIssues" [
   --created-after: string # A filter to select issues created after this date. (format: date-time)
   --effective-severity-level: list # One or more effective severity levels to filter issues.
   --status: list # An issue's status
-  --ignored: string@bool-completer # Whether an issue is ignored or not.
+  --ignored: oneof<nothing, bool> # Whether an issue is ignored or not.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4222,7 +4221,7 @@ export def "orgs-policies list" [
   --review: list # Policy rule review state e.g. approved
   --expires-before: string # Select only policies with an expiry strictly before the given time. (format: date-time, e.g. 2024-03-16T00:00:00Z)
   --expires-after: string # Select only policies with an expiry strictly past the given time. (format: date-time, e.g. 2024-03-16T00:00:00Z)
-  --expires-never: string@bool-completer # Select only policies that never expire. (e.g. true)
+  --expires-never: oneof<nothing, bool> # Select only policies that never expire. (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4390,8 +4389,8 @@ export def "orgs-projects listOrgProjects" [
   --origins: list # Return projects that match the provided origins.
   --types: list # Return projects that match the provided types.
   --expand: list # Expand relationships.
-  --metalatest-issue-counts: string@bool-completer # Include a summary count for the issues found in the most recent scan of this project
-  --metalatest-dependency-total: string@bool-completer # Include the total number of dependencies found in the most recent scan of this project
+  --metalatest-issue-counts: oneof<nothing, bool> # Include a summary count for the issues found in the most recent scan of this project
+  --metalatest-dependency-total: oneof<nothing, bool> # Include the total number of dependencies found in the most recent scan of this project
   --cli-monitored-before: string # Filter projects uploaded and monitored before this date (encoded value) (format: date-time, e.g. 2021-05-29T09:50:54.014Z)
   --cli-monitored-after: string # Filter projects uploaded and monitored after this date (encoded value) (format: date-time, e.g. 2021-05-29T09:50:54.014Z)
   --importing-user-public-id: list # Return projects that match the provided importing user public ids.
@@ -4453,8 +4452,8 @@ export def "orgs-projects get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --expand: list # Expand relationships.
-  --metalatest-issue-counts: string@bool-completer # Include a summary count for the issues found in the most recent scan of this project
-  --metalatest-dependency-total: string@bool-completer # Include the total number of dependencies found in the most recent scan of this project
+  --metalatest-issue-counts: oneof<nothing, bool> # Include a summary count for the issues found in the most recent scan of this project
+  --metalatest-dependency-total: oneof<nothing, bool> # Include the total number of dependencies found in the most recent scan of this project
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4513,7 +4512,7 @@ export def "orgs-projects-sbom get" [
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --format: string@format-completer # The desired SBOM format of the response. (e.g. cyclonedx1.6+json)
   --exclude: list # An array of features to be excluded from the generated SBOM.
-  --go-module-level: string@bool-completer # When true, consolidate Go package-level dependencies into module-level components in the SBOM. Only applies to gomodules graphs; default is false. (default: false)
+  --go-module-level: oneof<nothing, bool> # When true, consolidate Go package-level dependencies into module-level components in the SBOM. Only applies to gomodules graphs; default is false. (default: false)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5441,10 +5440,10 @@ export def "orgs-targets list" [
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
-  --count: string@bool-completer # Calculate total amount of filtered results
+  --count: oneof<nothing, bool> # Calculate total amount of filtered results
   --limit: int # Number of results to return per page (format: int32, default: 10, e.g. 10)
-  --is-private: string@bool-completer # Return targets that match the provided value of is_private
-  --exclude-empty: string@bool-completer # Return only the targets that has projects (default: true)
+  --is-private: oneof<nothing, bool> # Return targets that match the provided value of is_private
+  --exclude-empty: oneof<nothing, bool> # Return only the targets that has projects (default: true)
   --qp-url: string # Return targets that match the provided remote_url.
   --source-types: list # Return targets that match the provided source_types
   --display-name: string # Return targets with display names starting with the provided string
@@ -6916,7 +6915,7 @@ export def "tenants-inventory-assets-filters-values get" [
   --limit: int # Number of results to return (default: 10)
   --starting-after: string # Cursor for fetching the next page of results
   --ending-before: string # Cursor for fetching the previous page of results
-  --keys-only: string@bool-completer # Return only the keys of the object filter values
+  --keys-only: oneof<nothing, bool> # Return only the keys of the object filter values
   --key: string # Return only the value for a specific key of the object filter values
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7262,9 +7261,9 @@ export def "tenants-roles listTenantRoles" [
   --allow-errors(-e) # Return full response without error handling
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
   --name: string # Role name filter. (e.g. examplename)
-  --custom: string@bool-completer # Whether role is custom or not. (e.g. false)
-  --assignable-by-me: string@bool-completer # When true, only return roles that the current user can assign to others in the tenant. (e.g. false)
-  --expand-permissions: string@bool-completer # option to show all permission types (default: false)
+  --custom: oneof<nothing, bool> # Whether role is custom or not. (e.g. false)
+  --assignable-by-me: oneof<nothing, bool> # When true, only return roles that the current user can assign to others in the tenant. (e.g. false)
+  --expand-permissions: oneof<nothing, bool> # option to show all permission types (default: false)
   --starting-after: string # Return the page of results immediately after this cursor (e.g. v1.eyJpZCI6IjEwMDAifQo=)
   --ending-before: string # Return the page of results immediately before this cursor (e.g. v1.eyJpZCI6IjExMDAifQo=)
   --limit: int # Number of results to return per page (format: int32, default: 10, e.g. 10)
@@ -7345,7 +7344,7 @@ export def "tenants-roles get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
-  --has-users-assigned: string@bool-completer # returns current memberships of the role in the meta relationships section (default: false)
+  --has-users-assigned: oneof<nothing, bool> # returns current memberships of the role in the meta relationships section (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7371,7 +7370,7 @@ export def "tenants-roles updateTenantRole" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --version: string # The requested version of the endpoint to process the request (e.g. 2024-10-15)
-  --force: string@bool-completer # flag to force the update of a role, required if users are assigned to the role (e.g. false)
+  --force: oneof<nothing, bool> # flag to force the update of a role, required if users are assigned to the role (e.g. false)
   --body: record
 ]: any -> any {
   let input = $in

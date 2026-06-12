@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://video.twilio.com"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -110,7 +109,7 @@ export def "composition-hooks ListCompositionHook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Enabled: string@bool-completer # Read only CompositionHook resources with an `enabled` value that matches this parameter.
+  --Enabled: oneof<nothing, bool> # Read only CompositionHook resources with an `enabled` value that matches this parameter.
   --DateCreatedAfter: string # Read only CompositionHook resources created on or after this [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) datetime with time zone. (format: date-time)
   --DateCreatedBefore: string # Read only CompositionHook resources created before this [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) datetime with time zone. (format: date-time)
   --FriendlyName: string # Read only CompositionHook resources with friendly names that match this string. The match is not case sensitive and can include asterisk `*` characters as wildcard match.
@@ -140,13 +139,13 @@ export def "composition-hooks CreateCompositionHook" [
   --allow-errors(-e) # Return full response without error handling
   --AudioSources: list # An array of track names from the same group room to merge into the compositions created by the composition hook. Can include zero or more track names. A composition triggered by the composition hook includes all audio sources specified in `audio_sources` except those specified in `audio_sources_excluded`. The track names in this parameter can include an asterisk as a wild card character, which matches zero or more characters in a track name. For example, `student*` includes tracks named `student` as well as `studentTeam`.
   --AudioSourcesExcluded: list # An array of track names to exclude. A composition triggered by the composition hook includes all audio sources specified in `audio_sources` except for those specified in `audio_sources_excluded`. The track names in this parameter can include an asterisk as a wild card character, which matches zero or more characters in a track name. For example, `student*` excludes `student` as well as `studentTeam`. This parameter can also be empty.
-  --Enabled: string@bool-completer # Whether the composition hook is active. When `true`, the composition hook will be triggered for every completed Group Room in the account. When `false`, the composition hook will never be triggered.
+  --Enabled: oneof<nothing, bool> # Whether the composition hook is active. When `true`, the composition hook will be triggered for every completed Group Room in the account. When `false`, the composition hook will never be triggered.
   --Format: string@Format-completer
   FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to  100 characters long and it must be unique within the account.
   --Resolution: string # A string that describes the columns (width) and rows (height) of the generated composed video in pixels. Defaults to `640x480`.  The string's format is `{width}x{height}` where:   * 16 <= `{width}` <= 1280 * 16 <= `{height}` <= 1280 * `{width}` * `{height}` <= 921,600  Typical values are:   * HD = `1280x720` * PAL = `1024x576` * VGA = `640x480` * CIF = `320x240`  Note that the `resolution` imposes an aspect ratio to the resulting composition. When the original video tracks are constrained by the aspect ratio, they are scaled to fit. See [Specifying Video Layouts](https://www.twilio.com/docs/video/api/compositions-resource#specifying-video-layouts) for more info.
   --StatusCallback: string # The URL we should call using the `status_callback_method` to send status information to your application on every composition event. If not provided, status callback events will not be dispatched. (format: uri)
   --StatusCallbackMethod: string@StatusCallbackMethod-completer # The HTTP method we should use to call `status_callback`. Can be: `POST` or `GET` and the default is `POST`. (format: http-method)
-  --Trim: string@bool-completer # Whether to clip the intervals where there is no active media in the Compositions triggered by the composition hook. The default is `true`. Compositions with `trim` enabled are shorter when the Room is created and no Participant joins for a while as well as if all the Participants leave the room and join later, because those gaps will be removed. See [Specifying Video Layouts](https://www.twilio.com/docs/video/api/compositions-resource#specifying-video-layouts) for more info.
+  --Trim: oneof<nothing, bool> # Whether to clip the intervals where there is no active media in the Compositions triggered by the composition hook. The default is `true`. Compositions with `trim` enabled are shorter when the Room is created and no Participant joins for a while as well as if all the Participants leave the room and join later, because those gaps will be removed. See [Specifying Video Layouts](https://www.twilio.com/docs/video/api/compositions-resource#specifying-video-layouts) for more info.
   --VideoLayout: any # An object that describes the video layout of the composition hook in terms of regions. See [Specifying Video Layouts](https://www.twilio.com/docs/video/api/compositions-resource#specifying-video-layouts) for more info.
 ]: any -> record<account_sid: string, audio_sources: list<string>, audio_sources_excluded: list<string>, date_created: string, date_updated: string, enabled: bool, format: string, friendly_name: string, resolution: string, sid: string, status_callback: string, status_callback_method: string, trim: bool, url: string, video_layout: any> {
   let input = $in
@@ -218,13 +217,13 @@ export def "composition-hooks UpdateCompositionHook" [
   --allow-errors(-e) # Return full response without error handling
   --AudioSources: list # An array of track names from the same group room to merge into the compositions created by the composition hook. Can include zero or more track names. A composition triggered by the composition hook includes all audio sources specified in `audio_sources` except those specified in `audio_sources_excluded`. The track names in this parameter can include an asterisk as a wild card character, which matches zero or more characters in a track name. For example, `student*` includes tracks named `student` as well as `studentTeam`.
   --AudioSourcesExcluded: list # An array of track names to exclude. A composition triggered by the composition hook includes all audio sources specified in `audio_sources` except for those specified in `audio_sources_excluded`. The track names in this parameter can include an asterisk as a wild card character, which matches zero or more characters in a track name. For example, `student*` excludes `student` as well as `studentTeam`. This parameter can also be empty.
-  --Enabled: string@bool-completer # Whether the composition hook is active. When `true`, the composition hook will be triggered for every completed Group Room in the account. When `false`, the composition hook never triggers.
+  --Enabled: oneof<nothing, bool> # Whether the composition hook is active. When `true`, the composition hook will be triggered for every completed Group Room in the account. When `false`, the composition hook never triggers.
   --Format: string@Format-completer
   FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to  100 characters long and it must be unique within the account.
   --Resolution: string # A string that describes the columns (width) and rows (height) of the generated composed video in pixels. Defaults to `640x480`.  The string's format is `{width}x{height}` where:   * 16 <= `{width}` <= 1280 * 16 <= `{height}` <= 1280 * `{width}` * `{height}` <= 921,600  Typical values are:   * HD = `1280x720` * PAL = `1024x576` * VGA = `640x480` * CIF = `320x240`  Note that the `resolution` imposes an aspect ratio to the resulting composition. When the original video tracks are constrained by the aspect ratio, they are scaled to fit. See [Specifying Video Layouts](https://www.twilio.com/docs/video/api/compositions-resource#specifying-video-layouts) for more info.
   --StatusCallback: string # The URL we should call using the `status_callback_method` to send status information to your application on every composition event. If not provided, status callback events will not be dispatched. (format: uri)
   --StatusCallbackMethod: string@StatusCallbackMethod-completer # The HTTP method we should use to call `status_callback`. Can be: `POST` or `GET` and the default is `POST`. (format: http-method)
-  --Trim: string@bool-completer # Whether to clip the intervals where there is no active media in the compositions triggered by the composition hook. The default is `true`. Compositions with `trim` enabled are shorter when the Room is created and no Participant joins for a while as well as if all the Participants leave the room and join later, because those gaps will be removed. See [Specifying Video Layouts](https://www.twilio.com/docs/video/api/compositions-resource#specifying-video-layouts) for more info.
+  --Trim: oneof<nothing, bool> # Whether to clip the intervals where there is no active media in the compositions triggered by the composition hook. The default is `true`. Compositions with `trim` enabled are shorter when the Room is created and no Participant joins for a while as well as if all the Participants leave the room and join later, because those gaps will be removed. See [Specifying Video Layouts](https://www.twilio.com/docs/video/api/compositions-resource#specifying-video-layouts) for more info.
   --VideoLayout: any # A JSON object that describes the video layout of the composition hook in terms of regions. See [Specifying Video Layouts](https://www.twilio.com/docs/video/api/compositions-resource#specifying-video-layouts) for more info.
 ]: any -> record<account_sid: string, audio_sources: list<string>, audio_sources_excluded: list<string>, date_created: string, date_updated: string, enabled: bool, format: string, friendly_name: string, resolution: string, sid: string, status_callback: string, status_callback_method: string, trim: bool, url: string, video_layout: any> {
   let input = $in
@@ -271,8 +270,8 @@ export def "composition-settings-default CreateCompositionSettings" [
   --allow-errors(-e) # Return full response without error handling
   --AwsCredentialsSid: string # The SID of the stored Credential resource.
   --AwsS3Url: string # The URL of the AWS S3 bucket where the compositions should be stored. We only support DNS-compliant URLs like `https://documentation-example-twilio-bucket/compositions`, where `compositions` is the path in which you want the compositions to be stored. This URL accepts only URI-valid characters, as described in the <a href='https://tools.ietf.org/html/rfc3986#section-2'>RFC 3986</a>. (format: uri)
-  --AwsStorageEnabled: string@bool-completer # Whether all compositions should be written to the `aws_s3_url`. When `false`, all compositions are stored in our cloud.
-  --EncryptionEnabled: string@bool-completer # Whether all compositions should be stored in an encrypted form. The default is `false`.
+  --AwsStorageEnabled: oneof<nothing, bool> # Whether all compositions should be written to the `aws_s3_url`. When `false`, all compositions are stored in our cloud.
+  --EncryptionEnabled: oneof<nothing, bool> # Whether all compositions should be stored in an encrypted form. The default is `false`.
   --EncryptionKeySid: string # The SID of the Public Key resource to use for encryption.
   FriendlyName: string # A descriptive string that you create to describe the resource and show to the user in the console
 ]: any -> record<account_sid: string, aws_credentials_sid: string, aws_s3_url: string, aws_storage_enabled: bool, encryption_enabled: bool, encryption_key_sid: string, friendly_name: string, url: string> {
@@ -334,7 +333,7 @@ export def "compositions CreateComposition" [
   RoomSid: string # The SID of the Group Room with the media tracks to be used as composition sources.
   --StatusCallback: string # The URL we should call using the `status_callback_method` to send status information to your application on every composition event. If not provided, status callback events will not be dispatched. (format: uri)
   --StatusCallbackMethod: string@StatusCallbackMethod-completer # The HTTP method we should use to call `status_callback`. Can be: `POST` or `GET` and the default is `POST`. (format: http-method)
-  --Trim: string@bool-completer # Whether to clip the intervals where there is no active media in the composition. The default is `true`. Compositions with `trim` enabled are shorter when the Room is created and no Participant joins for a while as well as if all the Participants leave the room and join later, because those gaps will be removed. See [Specifying Video Layouts](https://www.twilio.com/docs/video/api/compositions-resource#specifying-video-layouts) for more info.
+  --Trim: oneof<nothing, bool> # Whether to clip the intervals where there is no active media in the composition. The default is `true`. Compositions with `trim` enabled are shorter when the Room is created and no Participant joins for a while as well as if all the Participants leave the room and join later, because those gaps will be removed. See [Specifying Video Layouts](https://www.twilio.com/docs/video/api/compositions-resource#specifying-video-layouts) for more info.
   --VideoLayout: any # An object that describes the video layout of the composition in terms of regions. See [Specifying Video Layouts](https://www.twilio.com/docs/video/api/compositions-resource#specifying-video-layouts) for more info. Please, be aware that either video_layout or audio_sources have to be provided to get a valid creation request
 ]: any -> record<account_sid: string, audio_sources: list<string>, audio_sources_excluded: list<string>, bitrate: int, date_completed: string, date_created: string, date_deleted: string, duration: int, format: string, links: record, media_external_location: string, resolution: string, room_sid: string, sid: string, size: int, status: string, status_callback: string, status_callback_method: string, trim: bool, url: string, video_layout: any> {
   let input = $in
@@ -425,8 +424,8 @@ export def "recording-settings-default CreateRecordingSettings" [
   --allow-errors(-e) # Return full response without error handling
   --AwsCredentialsSid: string # The SID of the stored Credential resource.
   --AwsS3Url: string # The URL of the AWS S3 bucket where the recordings should be stored. We only support DNS-compliant URLs like `https://documentation-example-twilio-bucket/recordings`, where `recordings` is the path in which you want the recordings to be stored. This URL accepts only URI-valid characters, as described in the <a href='https://tools.ietf.org/html/rfc3986#section-2'>RFC 3986</a>. (format: uri)
-  --AwsStorageEnabled: string@bool-completer # Whether all recordings should be written to the `aws_s3_url`. When `false`, all recordings are stored in our cloud.
-  --EncryptionEnabled: string@bool-completer # Whether all recordings should be stored in an encrypted form. The default is `false`.
+  --AwsStorageEnabled: oneof<nothing, bool> # Whether all recordings should be written to the `aws_s3_url`. When `false`, all recordings are stored in our cloud.
+  --EncryptionEnabled: oneof<nothing, bool> # Whether all recordings should be stored in an encrypted form. The default is `false`.
   --EncryptionKeySid: string # The SID of the Public Key resource to use for encryption.
   FriendlyName: string # A descriptive string that you create to describe the resource and be shown to users in the console
 ]: any -> record<account_sid: string, aws_credentials_sid: string, aws_s3_url: string, aws_storage_enabled: bool, encryption_enabled: bool, encryption_key_sid: string, friendly_name: string, url: string> {
@@ -555,14 +554,14 @@ export def "rooms CreateRoom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AudioOnly: string@bool-completer # When set to true, indicates that the participants in the room will only publish audio. No video tracks will be allowed. Group rooms only.
+  --AudioOnly: oneof<nothing, bool> # When set to true, indicates that the participants in the room will only publish audio. No video tracks will be allowed. Group rooms only.
   --EmptyRoomTimeout: int # Configures how long (in minutes) a room will remain active after last participant leaves. Valid values range from 1 to 60 minutes (no fractions).
-  --EnableTurn: string@bool-completer # Deprecated, now always considered to be true.
-  --LargeRoom: string@bool-completer # When set to true, indicated that this is the large room.
+  --EnableTurn: oneof<nothing, bool> # Deprecated, now always considered to be true.
+  --LargeRoom: oneof<nothing, bool> # When set to true, indicated that this is the large room.
   --MaxParticipantDuration: int # The maximum number of seconds a Participant can be connected to the room. The maximum possible value is 86400 seconds (24 hours). The default is 14400 seconds (4 hours).
   --MaxParticipants: int # The maximum number of concurrent Participants allowed in the room. Peer-to-peer rooms can have up to 10 Participants. Small Group rooms can have up to 4 Participants. Group rooms can have up to 50 Participants.
   --MediaRegion: string # The region for the media server in Group Rooms.  Can be: one of the [available Media Regions](https://www.twilio.com/docs/video/ip-address-whitelisting#group-rooms-media-servers). ***This feature is not available in `peer-to-peer` rooms.***
-  --RecordParticipantsOnConnect: string@bool-completer # Whether to start recording when Participants connect. ***This feature is not available in `peer-to-peer` rooms.***
+  --RecordParticipantsOnConnect: oneof<nothing, bool> # Whether to start recording when Participants connect. ***This feature is not available in `peer-to-peer` rooms.***
   --RecordingRules: any # A collection of Recording Rules that describe how to include or exclude matching tracks for recording
   --StatusCallback: string # The URL we should call using the `status_callback_method` to send status information to your application on every room event. See [Status Callbacks](https://www.twilio.com/docs/video/api/status-callbacks) for more info. (format: uri)
   --StatusCallbackMethod: string@StatusCallbackMethod-completer # The HTTP method we should use to call `status_callback`. Can be `POST` or `GET`. (format: http-method)

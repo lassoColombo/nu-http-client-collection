@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.discogs.com"] }
 def auth-scheme-completer [] { ["bearer" "oauth"] }
 
@@ -359,7 +358,7 @@ export def "marketplace-listings editListing" [
   --sleeve-condition: string@sleeve-condition-completer
   price: float # The price of the item in the seller's currency. (format: float)
   --comments: string # Any remarks about the item.
-  --allow-offers: string@bool-completer # default: false
+  --allow-offers: oneof<nothing, bool> # default: false
   status: string@status-completer # The status of the listing. (default: For Sale)
   --external-id: string # Private comments for the seller.
   --location: string # Physical location of the item.
@@ -416,7 +415,7 @@ export def "marketplace-listings createListing" [
   --sleeve-condition: string@sleeve-condition-completer
   price: float # The price of the item in the seller's currency. (format: float)
   --comments: string # Any remarks about the item.
-  --allow-offers: string@bool-completer # default: false
+  --allow-offers: oneof<nothing, bool> # default: false
   status: string@status-completer # The status of the listing. (default: For Sale)
   --external-id: string # Private comments for the seller.
   --location: string # Physical location of the item.

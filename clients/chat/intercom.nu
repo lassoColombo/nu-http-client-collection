@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.intercom.io" "https://api.eu.intercom.io" "https://api.au.intercom.io"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -143,8 +142,8 @@ export def "admins-away setAwayAdmin" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
-  --away-mode-enabled: string@bool-completer # Set to "true" to change the status of the admin to away. (default: true, e.g. true)
-  --away-mode-reassign: string@bool-completer # Set to "true" to assign any new conversation replies to your default inbox. (default: false, e.g. false)
+  --away-mode-enabled: oneof<nothing, bool> # Set to "true" to change the status of the admin to away. (default: true, e.g. true)
+  --away-mode-reassign: oneof<nothing, bool> # Set to "true" to assign any new conversation replies to your default inbox. (default: false, e.g. false)
 ]: any -> record<type: string, id: string, name: string, email: string, job_title: string, away_mode_enabled: bool, away_mode_reassign: bool, has_inbox_seat: bool, team_ids: list<int>, avatar: record<image_url: string>, team_priority_level: record<primary_team_ids: list<int>, secondary_team_ids: list<int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -198,7 +197,7 @@ export def "admins listAdmins" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --display-avatar: string@bool-completer # If set to true, the response will include the admin's avatar object containing the image URL. Defaults to false. (e.g. true)
+  --display-avatar: oneof<nothing, bool> # If set to true, the response will include the admin's avatar object containing the image URL. Defaults to false. (e.g. true)
   --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, admins: table<type: string, id: string, name: string, email: string, job_title: string, away_mode_enabled: bool, away_mode_reassign: bool, has_inbox_seat: bool, team_ids: list, avatar: record, team_priority_level: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -402,7 +401,7 @@ export def "articles-search searchArticles" [
   --phrase: string # The phrase within your articles to search for. (e.g. Getting started)
   --state: string # The state of the Articles returned. One of `published`, `draft` or `all`. (e.g. published)
   --help-center-id: int # The ID of the Help Center to search in. (e.g. 123)
-  --highlight: string@bool-completer # Return a highlighted version of the matching content within your articles. Refer to the response schema for more details. (e.g. false)
+  --highlight: oneof<nothing, bool> # Return a highlighted version of the matching content within your articles. Refer to the response schema for more details. (e.g. false)
   --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, total_count: int, data: record<articles: list<record>, highlights: list<record>>, pages: record<type: string, page: int, next: record<per_page: int, starting_after: string>, per_page: int, total_pages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1210,7 +1209,7 @@ export def "contacts UpdateContact" [
   --signed-up-at: int # (Unix timestamp in seconds) The time specified for when a contact signed up. (nullable, format: date-time, e.g. 1571672154)
   --last-seen-at: int # (Unix timestamp in seconds) The time when the contact was last seen (either where the Intercom Messenger was installed or when specified manually). (nullable, format: date-time, e.g. 1571672154)
   --owner-id: int # The id of an admin that has been assigned account ownership of the contact (nullable, e.g. 123)
-  --unsubscribed-from-emails: string@bool-completer # Whether the contact is unsubscribed from emails (nullable, e.g. true)
+  --unsubscribed-from-emails: oneof<nothing, bool> # Whether the contact is unsubscribed from emails (nullable, e.g. true)
   --custom-attributes: record # The custom attributes which are set for the contact (nullable)
 ]: any -> record<type: string, id: string, external_id: string, workspace_id: string, role: string, email: string, email_domain: string, phone: string, formatted_phone: string, name: string, owner_id: int, has_hard_bounced: bool, marked_email_as_spam: bool, unsubscribed_from_emails: bool, created_at: int, updated_at: int, signed_up_at: int, last_seen_at: int, last_replied_at: int, last_contacted_at: int, last_email_opened_at: int, last_email_clicked_at: int, language_override: string, browser: string, browser_version: string, browser_language: string, os: string, android_app_name: string, android_app_version: string, android_device: string, android_os_version: string, android_sdk_version: string, android_last_seen_at: int, ios_app_name: string, ios_app_version: string, ios_device: string, ios_os_version: string, ios_sdk_version: string, ios_last_seen_at: int, custom_attributes: record, avatar: record<type: string, image_url: string>, tags: record<data: list<record>, url: string, total_count: int, has_more: bool>, notes: record<data: list<record>, url: string, total_count: int, has_more: bool>, companies: record<type: string, data: list<record>, url: string, total_count: int, has_more: bool>, location: record<type: string, country: string, region: string, city: string>, social_profiles: record<data: list<record>>> {
   let input = $in
@@ -1385,7 +1384,7 @@ export def "contacts CreateContact" [
   --signed-up-at: int # (Unix timestamp in seconds) The time specified for when a contact signed up. (nullable, format: date-time, e.g. 1571672154)
   --last-seen-at: int # (Unix timestamp in seconds) The time when the contact was last seen (either where the Intercom Messenger was installed or when specified manually). (nullable, format: date-time, e.g. 1571672154)
   --owner-id: int # The id of an admin that has been assigned account ownership of the contact (nullable, e.g. 123)
-  --unsubscribed-from-emails: string@bool-completer # Whether the contact is unsubscribed from emails (nullable, e.g. true)
+  --unsubscribed-from-emails: oneof<nothing, bool> # Whether the contact is unsubscribed from emails (nullable, e.g. true)
   --custom-attributes: record # The custom attributes which are set for the contact (nullable, e.g. {paid_subscriber: true, monthly_spend: 155.5, team_mates: 1})
 ]: any -> record<type: string, id: string, external_id: string, workspace_id: string, role: string, email: string, email_domain: string, phone: string, formatted_phone: string, name: string, owner_id: int, has_hard_bounced: bool, marked_email_as_spam: bool, unsubscribed_from_emails: bool, created_at: int, updated_at: int, signed_up_at: int, last_seen_at: int, last_replied_at: int, last_contacted_at: int, last_email_opened_at: int, last_email_clicked_at: int, language_override: string, browser: string, browser_version: string, browser_language: string, os: string, android_app_name: string, android_app_version: string, android_device: string, android_os_version: string, android_sdk_version: string, android_last_seen_at: int, ios_app_name: string, ios_app_version: string, ios_device: string, ios_os_version: string, ios_sdk_version: string, ios_last_seen_at: int, custom_attributes: record, avatar: record<type: string, image_url: string>, tags: record<data: list<record>, url: string, total_count: int, has_more: bool>, notes: record<data: list<record>, url: string, total_count: int, has_more: bool>, companies: record<type: string, data: list<record>, url: string, total_count: int, has_more: bool>, location: record<type: string, country: string, region: string, city: string>, social_profiles: record<data: list<record>>> {
   let input = $in
@@ -1613,7 +1612,7 @@ export def "conversations updateConversation" [
   --allow-errors(-e) # Return full response without error handling
   --display-as: string # Set to plaintext to retrieve conversation messages in plain text. (e.g. plaintext)
   --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
-  --read: string@bool-completer # Mark a conversation as read within Intercom. (e.g. true)
+  --read: oneof<nothing, bool> # Mark a conversation as read within Intercom. (e.g. true)
   --custom-attributes: any
 ]: any -> record<type: string, id: string, title: string, created_at: int, updated_at: int, waiting_since: int, snoozed_until: int, open: bool, state: string, read: bool, priority: string, admin_assignee_id: int, team_assignee_id: int, tags: record<type: string, tags: list<record>>, conversation_rating: record<rating: int, remark: string, created_at: int, contact: record<type: string, id: string, external_id: string>, teammate: record<type: string, id: string>>, source: record<type: string, id: string, delivered_as: string, subject: string, body: string, author: record<type: string, id: string, name: string, email: string>, attachments: list<record>, url: string, redacted: bool>, contacts: record<type: string, contacts: list<record>>, teammates: record<type: string, teammates: list<record>>, custom_attributes: any, first_contact_reply: record<created_at: int, type: string, url: string>, sla_applied: record<type: string, sla_name: string, sla_status: string>, statistics: record<type: string, time_to_assignment: int, time_to_admin_reply: int, time_to_first_close: int, time_to_last_close: int, median_time_to_reply: int, first_contact_reply_at: int, first_assignment_at: int, first_admin_reply_at: int, first_close_at: int, last_assignment_at: int, last_assignment_admin_reply_at: int, last_contact_reply_at: int, last_admin_reply_at: int, last_close_at: int, last_closed_by_id: string, count_reopens: int, count_assignments: int, count_conversation_parts: int>, conversation_parts: record<type: string, conversation_parts: list<record>, total_count: int>, linked_objects: record<type: string, total_count: int, has_more: bool, data: list<record>>, ai_agent_participated: bool, ai_agent: record<source_type: string, source_title: string, last_answer_type: string, resolution_state: string, rating: int, rating_remark: string, content_sources: record<type: string, total_count: int, content_sources: list>>> {
   let input = $in
@@ -1890,7 +1889,7 @@ export def "data-attributes listDataAttributes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --model: string@model-completer # Specify the data attribute model to return. (e.g. company)
-  --include-archived: string@bool-completer # Include archived attributes in the list. By default we return only non archived data attributes. (e.g. false)
+  --include-archived: oneof<nothing, bool> # Include archived attributes in the list. By default we return only non archived data attributes. (e.g. false)
   --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, data: table<type: string, id: int, model: string, name: string, full_name: string, label: string, description: string, data_type: string, options: list, api_writable: bool, messenger_writable: bool, ui_writable: bool, custom: bool, archived: bool, created_at: int, updated_at: int, admin_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1922,7 +1921,7 @@ export def "data-attributes createDataAttribute" [
   data_type: string@data-type-completer # The type of data stored for this attribute. (e.g. string)
   --description: string # The readable description you see in the UI for the attribute. (e.g. My Data Attribute Description)
   --options: list # To create list attributes. Provide a set of hashes with `value` as the key of the options you want to make. `data_type` must be `string`. (e.g. [option1, option2])
-  --messenger-writable: string@bool-completer # Can this attribute be updated by the Messenger (e.g. false)
+  --messenger-writable: oneof<nothing, bool> # Can this attribute be updated by the Messenger (e.g. false)
 ]: any -> record<type: string, id: int, model: string, name: string, full_name: string, label: string, description: string, data_type: string, options: list<string>, api_writable: bool, messenger_writable: bool, ui_writable: bool, custom: bool, archived: bool, created_at: int, updated_at: int, admin_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1952,10 +1951,10 @@ export def "data-attributes updateDataAttribute" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
-  --archived: string@bool-completer # Whether the attribute is to be archived or not. (e.g. false)
+  --archived: oneof<nothing, bool> # Whether the attribute is to be archived or not. (e.g. false)
   --description: string # The readable description you see in the UI for the attribute. (e.g. My Data Attribute Description)
   --options: list # To create list attributes. Provide a set of hashes with `value` as the key of the options you want to make. `data_type` must be `string`. (e.g. [option1, option2]) — item shape: {value: string}
-  --messenger-writable: string@bool-completer # Can this attribute be updated by the Messenger (e.g. false)
+  --messenger-writable: oneof<nothing, bool> # Can this attribute be updated by the Messenger (e.g. false)
 ]: any -> record<type: string, id: int, model: string, name: string, full_name: string, label: string, description: string, data_type: string, options: list<string>, api_writable: bool, messenger_writable: bool, ui_writable: bool, custom: bool, archived: bool, created_at: int, updated_at: int, admin_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2017,7 +2016,7 @@ export def "events lisDataEvents" [
   --allow-errors(-e) # Return full response without error handling
   --filter: record
   --type: string # The value must be user
-  --summary: string@bool-completer # summary flag
+  --summary: oneof<nothing, bool> # summary flag
   --per-page: int # How many results to display per page. Defaults to 15 (e.g. 15)
   --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, email: string, intercom_user_id: string, user_id: string, events: table<name: string, first: string, last: string, count: int, description: string>> {
@@ -2188,7 +2187,7 @@ export def "messages createMessage" [
   --body-from: record # The sender of the message. If not provided, the default sender will be used. — shape: {type: "lead"|"user"|"contact"|"admin", id: int}
   --body-to: record # The recipient of the message. If not provided, the default recipient will be used. — shape: {type: "user"|"lead", id: string}
   --created-at: int # The time the message was created. If not provided, the current time will be used. (e.g. 1590000000)
-  --create-conversation-without-contact-reply: string@bool-completer # Whether a conversation should be opened in the inbox for the message without the contact replying. Defaults to false if not provided. (default: false, e.g. true)
+  --create-conversation-without-contact-reply: oneof<nothing, bool> # Whether a conversation should be opened in the inbox for the message without the contact replying. Defaults to false if not provided. (default: false, e.g. true)
 ]: any -> record<type: string, id: string, created_at: int, subject: string, body: string, message_type: string, conversation_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2245,7 +2244,7 @@ export def "news-news-items createNewsItem" [
   --body-body: string # The news item body, which may contain HTML. (e.g. <p>New costumes in store for this spooky season</p>)
   sender_id: int # The id of the sender of the news item. Must be a teammate on the workspace. (e.g. 123)
   --state: string@state-completer-1 # News items will not be visible to your users in the assigned newsfeeds until they are set live. (e.g. live)
-  --deliver-silently: string@bool-completer # When set to `true`, the news item will appear in the messenger newsfeed without showing a notification badge. (e.g. true)
+  --deliver-silently: oneof<nothing, bool> # When set to `true`, the news item will appear in the messenger newsfeed without showing a notification badge. (e.g. true)
   --labels: list # Label names displayed to users to categorize the news item. (e.g. [Product, Update, New])
   --reactions: list # Ordered list of emoji reactions to the news item. When empty, reactions are disabled. (e.g. [😆, 😅])
   --newsfeed-assignments: list # A list of newsfeed_assignments to assign to the specified newsfeed. — item shape: {newsfeed_id: int, published_at: int}
@@ -2307,7 +2306,7 @@ export def "news-news-items updateNewsItem" [
   --body-body: string # The news item body, which may contain HTML. (e.g. <p>New costumes in store for this spooky season</p>)
   sender_id: int # The id of the sender of the news item. Must be a teammate on the workspace. (e.g. 123)
   --state: string@state-completer-1 # News items will not be visible to your users in the assigned newsfeeds until they are set live. (e.g. live)
-  --deliver-silently: string@bool-completer # When set to `true`, the news item will appear in the messenger newsfeed without showing a notification badge. (e.g. true)
+  --deliver-silently: oneof<nothing, bool> # When set to `true`, the news item will appear in the messenger newsfeed without showing a notification badge. (e.g. true)
   --labels: list # Label names displayed to users to categorize the news item. (e.g. [Product, Update, New])
   --reactions: list # Ordered list of emoji reactions to the news item. When empty, reactions are disabled. (e.g. [😆, 😅])
   --newsfeed-assignments: list # A list of newsfeed_assignments to assign to the specified newsfeed. — item shape: {newsfeed_id: int, published_at: int}
@@ -2461,7 +2460,7 @@ export def "segments listSegments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-count: string@bool-completer # It includes the count of contacts that belong to each segment. (e.g. true)
+  --include-count: oneof<nothing, bool> # It includes the count of contacts that belong to each segment. (e.g. true)
   --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, segments: table<type: string, id: string, name: string, created_at: int, updated_at: int, person_type: string, count: int>, pages: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2726,13 +2725,13 @@ export def "ticket-types-attributes createTicketTypeAttribute" [
   name: string # The name of the ticket type attribute (e.g. Bug Priority)
   description: string # The description of the attribute presented to the teammate or contact (e.g. Priority level of the bug)
   data_type: string@data-type-completer-1 # The data type of the attribute (e.g. string)
-  --required-to-create: string@bool-completer # Whether the attribute is required to be filled in when teammates are creating the ticket in Inbox. (default: false, e.g. false)
-  --required-to-create-for-contacts: string@bool-completer # Whether the attribute is required to be filled in when contacts are creating the ticket in Messenger. (default: false, e.g. false)
-  --visible-on-create: string@bool-completer # Whether the attribute is visible to teammates when creating a ticket in Inbox. (default: true, e.g. true)
-  --visible-to-contacts: string@bool-completer # Whether the attribute is visible to contacts when creating a ticket in Messenger. (default: true, e.g. true)
-  --multiline: string@bool-completer # Whether the attribute allows multiple lines of text (only applicable to string attributes) (e.g. false)
+  --required-to-create: oneof<nothing, bool> # Whether the attribute is required to be filled in when teammates are creating the ticket in Inbox. (default: false, e.g. false)
+  --required-to-create-for-contacts: oneof<nothing, bool> # Whether the attribute is required to be filled in when contacts are creating the ticket in Messenger. (default: false, e.g. false)
+  --visible-on-create: oneof<nothing, bool> # Whether the attribute is visible to teammates when creating a ticket in Inbox. (default: true, e.g. true)
+  --visible-to-contacts: oneof<nothing, bool> # Whether the attribute is visible to contacts when creating a ticket in Messenger. (default: true, e.g. true)
+  --multiline: oneof<nothing, bool> # Whether the attribute allows multiple lines of text (only applicable to string attributes) (e.g. false)
   --list-items: string # A comma delimited list of items for the attribute value (only applicable to list attributes) (e.g. Low Priority,Medium Priority,High Priority)
-  --allow-multiple-values: string@bool-completer # Whether the attribute allows multiple files to be attached to it (only applicable to file attributes) (e.g. false)
+  --allow-multiple-values: oneof<nothing, bool> # Whether the attribute allows multiple files to be attached to it (only applicable to file attributes) (e.g. false)
 ]: any -> record<type: string, id: string, workspace_id: string, name: string, description: string, data_type: string, input_options: record, order: int, required_to_create: bool, required_to_create_for_contacts: bool, visible_on_create: bool, visible_to_contacts: bool, default: bool, ticket_type_id: int, archived: bool, created_at: int, updated_at: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2764,14 +2763,14 @@ export def "ticket-types-attributes updateTicketTypeAttribute" [
   --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --name: string # The name of the ticket type attribute (e.g. Bug Priority)
   --description: string # The description of the attribute presented to the teammate or contact (e.g. Priority level of the bug)
-  --required-to-create: string@bool-completer # Whether the attribute is required to be filled in when teammates are creating the ticket in Inbox. (default: false, e.g. false)
-  --required-to-create-for-contacts: string@bool-completer # Whether the attribute is required to be filled in when contacts are creating the ticket in Messenger. (default: false, e.g. false)
-  --visible-on-create: string@bool-completer # Whether the attribute is visible to teammates when creating a ticket in Inbox. (default: true, e.g. true)
-  --visible-to-contacts: string@bool-completer # Whether the attribute is visible to contacts when creating a ticket in Messenger. (default: true, e.g. true)
-  --multiline: string@bool-completer # Whether the attribute allows multiple lines of text (only applicable to string attributes) (e.g. false)
+  --required-to-create: oneof<nothing, bool> # Whether the attribute is required to be filled in when teammates are creating the ticket in Inbox. (default: false, e.g. false)
+  --required-to-create-for-contacts: oneof<nothing, bool> # Whether the attribute is required to be filled in when contacts are creating the ticket in Messenger. (default: false, e.g. false)
+  --visible-on-create: oneof<nothing, bool> # Whether the attribute is visible to teammates when creating a ticket in Inbox. (default: true, e.g. true)
+  --visible-to-contacts: oneof<nothing, bool> # Whether the attribute is visible to contacts when creating a ticket in Messenger. (default: true, e.g. true)
+  --multiline: oneof<nothing, bool> # Whether the attribute allows multiple lines of text (only applicable to string attributes) (e.g. false)
   --list-items: string # A comma delimited list of items for the attribute value (only applicable to list attributes) (e.g. Low Priority,Medium Priority,High Priority)
-  --allow-multiple-values: string@bool-completer # Whether the attribute allows multiple files to be attached to it (only applicable to file attributes) (e.g. false)
-  --archived: string@bool-completer # Whether the attribute should be archived and not shown during creation of the ticket (it will still be present on previously created tickets) (e.g. false)
+  --allow-multiple-values: oneof<nothing, bool> # Whether the attribute allows multiple files to be attached to it (only applicable to file attributes) (e.g. false)
+  --archived: oneof<nothing, bool> # Whether the attribute should be archived and not shown during creation of the ticket (it will still be present on previously created tickets) (e.g. false)
 ]: any -> record<type: string, id: string, workspace_id: string, name: string, description: string, data_type: string, input_options: record, order: int, required_to_create: bool, required_to_create_for_contacts: bool, visible_on_create: bool, visible_to_contacts: bool, default: bool, ticket_type_id: int, archived: bool, created_at: int, updated_at: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2827,7 +2826,7 @@ export def "ticket-types createTicketType" [
   --description: string # The description of the ticket type. (e.g. Used for tracking bugs)
   --category: string@category-completer # Category of the Ticket Type. (e.g. Customer)
   --icon: string # The icon of the ticket type. (default: 🎟️, e.g. 🐞)
-  --is-internal: string@bool-completer # Whether the tickets associated with this ticket type are intended for internal use only or will be shared with customers. This is currently a limited attribute. (default: false, e.g. false)
+  --is-internal: oneof<nothing, bool> # Whether the tickets associated with this ticket type are intended for internal use only or will be shared with customers. This is currently a limited attribute. (default: false, e.g. false)
 ]: any -> record<type: string, id: string, category: string, name: string, description: string, icon: string, workspace_id: string, ticket_type_attributes: record<type: string, ticket_type_attributes: list<record>>, archived: bool, created_at: int, updated_at: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2885,8 +2884,8 @@ export def "ticket-types updateTicketType" [
   --description: string # The description of the ticket type. (e.g. A bug has been occured)
   --category: string@category-completer # Category of the Ticket Type. (e.g. Customer)
   --icon: string # The icon of the ticket type. (default: 🎟️, e.g. 🐞)
-  --archived: string@bool-completer # The archived status of the ticket type. (e.g. false)
-  --is-internal: string@bool-completer # Whether the tickets associated with this ticket type are intended for internal use only or will be shared with customers. This is currently a limited attribute. (default: false, e.g. false)
+  --archived: oneof<nothing, bool> # The archived status of the ticket type. (e.g. false)
+  --is-internal: oneof<nothing, bool> # Whether the tickets associated with this ticket type are intended for internal use only or will be shared with customers. This is currently a limited attribute. (default: false, e.g. false)
 ]: any -> record<type: string, id: string, category: string, name: string, description: string, icon: string, workspace_id: string, ticket_type_attributes: record<type: string, ticket_type_attributes: list<record>>, archived: bool, created_at: int, updated_at: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2923,7 +2922,7 @@ export def "tickets-reply replyTicket" [
   --created-at: int # The time the reply was created. If not provided, the current time will be used. (e.g. 1590000000)
   --reply-options: list # The quick reply options to display. Must be present for quick_reply message types. — item shape: {text: string, uuid: string}
   --attachment-urls: list # A list of image URLs that will be added as attachments. You can include up to 10 URLs.
-  --cross-post: string@bool-completer # If set to true, the note will be cross-posted to all linked conversations. Only applicable to note message types on back-office tickets. (e.g. true)
+  --cross-post: oneof<nothing, bool> # If set to true, the note will be cross-posted to all linked conversations. Only applicable to note message types on back-office tickets. (e.g. true)
 ]: any -> record<type: string, id: string, part_type: string, body: string, created_at: int, updated_at: int, author: record<type: string, id: string, name: string, email: string>, attachments: table<type: string, name: string, url: string, content_type: string, filesize: int, width: int, height: int>, redacted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3047,8 +3046,8 @@ export def "tickets updateTicket" [
   --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --ticket-attributes: record # The attributes set on the ticket. (e.g. {_default_title_: example, _default_description_: having a problem})
   --state: string@state-completer-2 # The state of the ticket. (e.g. submitted)
-  --body-open: string@bool-completer # Specify if a ticket is open. Set to false to close a ticket. Closing a ticket will also unsnooze it. (e.g. true)
-  --is-shared: string@bool-completer # Specify whether the ticket is visible to users. (e.g. true)
+  --body-open: oneof<nothing, bool> # Specify if a ticket is open. Set to false to close a ticket. Closing a ticket will also unsnooze it. (e.g. true)
+  --is-shared: oneof<nothing, bool> # Specify whether the ticket is visible to users. (e.g. true)
   --snoozed-until: int # The time you want the ticket to reopen. (format: timestamp, e.g. 1673609604)
   --assignment: record # shape: {admin_id?: string, assignee_id?: string}
 ]: any -> record<type: string, id: string, ticket_id: string, category: string, ticket_attributes: record, ticket_state: string, ticket_type: record<type: string, id: string, category: string, name: string, description: string, icon: string, workspace_id: string, ticket_type_attributes: record<type: string, ticket_type_attributes: list>, archived: bool, created_at: int, updated_at: int>, contacts: record<type: string, contacts: list<record>>, admin_assignee_id: string, team_assignee_id: string, created_at: int, updated_at: int, open: bool, snoozed_until: int, linked_objects: record<type: string, total_count: int, has_more: bool, data: list<record>>, ticket_parts: record<type: string, ticket_parts: list<record>, total_count: int>, is_shared: bool, ticket_state_internal_label: string, ticket_state_external_label: string> {

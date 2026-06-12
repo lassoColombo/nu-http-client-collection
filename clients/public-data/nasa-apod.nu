@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.nasa.gov/planetary" "http://api.nasa.gov/planetary"] }
 def auth-scheme-completer [] { ["query-api_key"] }
 
@@ -101,7 +100,7 @@ export def "apod get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --date: string # The date of the APOD image to retrieve
-  --hd: string@bool-completer # Retrieve the URL for the high resolution image
+  --hd: oneof<nothing, bool> # Retrieve the URL for the high resolution image
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)

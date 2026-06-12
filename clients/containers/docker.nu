@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost/v1.55" "https://localhost/v1.55"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -110,9 +109,9 @@ export def "containers-json ContainerList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # Return all containers. By default, only running containers are shown.  (default: false)
+  --all: oneof<nothing, bool> # Return all containers. By default, only running containers are shown.  (default: false)
   --limit: int # Return this number of most recently created containers, including non-running ones.
-  --size: string@bool-completer # Return the size of container as fields `SizeRw` and `SizeRootFs`.  (default: false)
+  --size: oneof<nothing, bool> # Return the size of container as fields `SizeRw` and `SizeRootFs`.  (default: false)
   --filters: string # Filters to process on the container list, encoded as JSON (a `map[string][]string`). For example, `{"status": ["paused"]}` will only return paused containers.  Available filters:  - `ancestor`=(`<image-name>[:<tag>]`, `<image id>`, or `<image@digest>`) - `before`=(`<container id>` or `<container name>`) - `expose`=(`<port>[/<proto>]`|`<startport-endport>/[<proto>]`) - `exited=<int>` containers with exit code of `<int>` - `health`=(`starting`|`healthy`|`unhealthy`|`none`) - `id=<ID>` a container's ID - `isolation=`(`default`|`process`|`hyperv`) (Windows daemon only) - `is-task=`(`true`|`false`) - `label=key` or `label="key=value"` of a container label - `name=<name>` a container's name - `network`=(`<network id>` or `<network name>`) - `publish`=(`<port>[/<proto>]`|`<startport-endport>/[<proto>]`) - `since`=(`<container id>` or `<container name>`) - `status=`(`created`|`restarting`|`running`|`removing`|`paused`|`exited`|`dead`) - `volume`=(`<volume name>` or `<mount point destination>`)
 ]: nothing -> table<Id: string, Names: list<string>, Image: string, ImageID: string, ImageManifestDescriptor: record<mediaType: string, digest: string, size: int, urls: list, annotations: record, data: string, platform: record, artifactType: string>, Command: string, Created: int, Ports: list<record>, SizeRw: int, SizeRootFs: int, Labels: record, State: string, Status: string, HostConfig: record<NetworkMode: string, Annotations: record>, NetworkSettings: record<Networks: record>, Mounts: list<record>, Health: record<Status: string, FailingStreak: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -143,22 +142,22 @@ export def "containers-create ContainerCreate" [
   --Hostname: string # The hostname to use for the container, as a valid RFC 1123 hostname.  (e.g. 439f4e91bd1d)
   --Domainname: string # The domain name to use for the container.
   --User: string # Commands run as this user inside the container. If omitted, commands run as the user specified in the image the container was started from.  Can be either user-name or UID, and optional group-name or GID, separated by a colon (`<user-name|UID>[<:group-name|GID>]`). (e.g. 123:456)
-  --AttachStdin: string@bool-completer # Whether to attach to `stdin`. (default: false)
-  --AttachStdout: string@bool-completer # Whether to attach to `stdout`. (default: true)
-  --AttachStderr: string@bool-completer # Whether to attach to `stderr`. (default: true)
+  --AttachStdin: oneof<nothing, bool> # Whether to attach to `stdin`. (default: false)
+  --AttachStdout: oneof<nothing, bool> # Whether to attach to `stdout`. (default: true)
+  --AttachStderr: oneof<nothing, bool> # Whether to attach to `stderr`. (default: true)
   --ExposedPorts: record # An object mapping ports to an empty object in the form:  `{"<port>/<tcp|udp|sctp>": {}}`  (e.g. {80/tcp: {}, 443/tcp: {}})
-  --Tty: string@bool-completer # Attach standard streams to a TTY, including `stdin` if it is not closed.  (default: false)
-  --OpenStdin: string@bool-completer # Open `stdin` (default: false)
-  --StdinOnce: string@bool-completer # Close `stdin` after one attached client disconnects (default: false)
+  --Tty: oneof<nothing, bool> # Attach standard streams to a TTY, including `stdin` if it is not closed.  (default: false)
+  --OpenStdin: oneof<nothing, bool> # Open `stdin` (default: false)
+  --StdinOnce: oneof<nothing, bool> # Close `stdin` after one attached client disconnects (default: false)
   --Env: list # A list of environment variables to set inside the container in the form `["VAR=value", ...]`. A variable without `=` is removed from the environment, rather than to have an empty value.  (e.g. [PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin])
   --Cmd: list # Command to run specified as a string or an array of strings.  (e.g. [/bin/sh])
   --Healthcheck: record # A test to perform to check that the container is healthy. Healthcheck commands should be side-effect free. — shape: {Test?: list, Interval?: int, Timeout?: int, Retries?: int, StartPeriod?: int, StartInterval?: int}
-  --ArgsEscaped: string@bool-completer # Command is already escaped (Windows only) (default: false, e.g. false)
+  --ArgsEscaped: oneof<nothing, bool> # Command is already escaped (Windows only) (default: false, e.g. false)
   --Image: string # The name (or reference) of the image to use when creating the container, or which was used when the container was created.  (e.g. example-image:1.0)
   --Volumes: record # An object mapping mount point paths inside the container to empty objects.
   --WorkingDir: string # The working directory for commands to run in. (e.g. /public/)
   --Entrypoint: list # The entry point for the container as a string or an array of strings.  If the array consists of exactly one empty string (`[""]`) then the entry point is reset to system default (i.e., the entry point used by docker when there is no `ENTRYPOINT` instruction in the `Dockerfile`).  (e.g. [])
-  --NetworkDisabled: string@bool-completer # Disable networking for the container.
+  --NetworkDisabled: oneof<nothing, bool> # Disable networking for the container.
   --OnBuild: list # `ONBUILD` metadata that were defined in the image's `Dockerfile`.  (e.g. [])
   --Labels: record # User-defined key/value metadata. (e.g. {com.example.some-label: some-value, com.example.some-other-label: some-other-value})
   --StopSignal: string # Signal to stop a container as a string or unsigned integer.  (e.g. SIGTERM)
@@ -192,7 +191,7 @@ export def "containers-json ContainerInspect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --size: string@bool-completer # Return the size of container as fields `SizeRw` and `SizeRootFs` (default: false)
+  --size: oneof<nothing, bool> # Return the size of container as fields `SizeRw` and `SizeRootFs` (default: false)
 ]: nothing -> record<Id: string, Created: string, Path: string, Args: list<string>, State: record<Status: string, Running: bool, Paused: bool, Restarting: bool, OOMKilled: bool, Dead: bool, Pid: int, ExitCode: int, Error: string, StartedAt: string, FinishedAt: string, Health: record<Status: string, FailingStreak: int, Log: list>>, Image: string, ResolvConfPath: string, HostnamePath: string, HostsPath: string, LogPath: string, Name: string, RestartCount: int, Driver: string, Platform: string, ImageManifestDescriptor: record<mediaType: string, digest: string, size: int, urls: list<string>, annotations: record, data: string, platform: record<architecture: string, os: string, os_version: string, os_features: list, variant: string>, artifactType: string>, MountLabel: string, ProcessLabel: string, AppArmorProfile: string, ExecIDs: list<string>, HostConfig: record<CpuShares: int, Memory: int, CgroupParent: string, BlkioWeight: int, BlkioWeightDevice: list<record>, BlkioDeviceReadBps: list<record>, BlkioDeviceWriteBps: list<record>, BlkioDeviceReadIOps: list<record>, BlkioDeviceWriteIOps: list<record>, CpuPeriod: int, CpuQuota: int, CpuRealtimePeriod: int, CpuRealtimeRuntime: int, CpusetCpus: string, CpusetMems: string, Devices: list<record>, DeviceCgroupRules: list<string>, DeviceRequests: list<record>, MemoryReservation: int, MemorySwap: int, MemorySwappiness: int, NanoCpus: int, OomKillDisable: bool, Init: bool, PidsLimit: int, Ulimits: list<record>, CpuCount: int, CpuPercent: int, IOMaximumIOps: int, IOMaximumBandwidth: int, Binds: list<string>, ContainerIDFile: string, LogConfig: record<Type: string, Config: record>, NetworkMode: string, PortBindings: record, RestartPolicy: record<Name: string, MaximumRetryCount: int>, AutoRemove: bool, VolumeDriver: string, VolumesFrom: list<string>, Mounts: list<record>, ConsoleSize: list<int>, Annotations: record, CapAdd: list<string>, CapDrop: list<string>, CgroupnsMode: string, Dns: list<string>, DnsOptions: list<string>, DnsSearch: list<string>, ExtraHosts: list<string>, GroupAdd: list<string>, IpcMode: string, Cgroup: string, Links: list<string>, OomScoreAdj: int, PidMode: string, Privileged: bool, PublishAllPorts: bool, ReadonlyRootfs: bool, SecurityOpt: list<string>, StorageOpt: record, Tmpfs: record, UTSMode: string, UsernsMode: string, ShmSize: int, Sysctls: record, Runtime: string, Isolation: string, MaskedPaths: list<string>, ReadonlyPaths: list<string>>, GraphDriver: record<Name: string, Data: record>, Storage: record<RootFS: record<Snapshot: record>>, SizeRw: int, SizeRootFs: int, Mounts: table<Type: record, Name: string, Source: string, Destination: string, Driver: string, Mode: string, RW: bool, Propagation: string>, Config: record<Hostname: string, Domainname: string, User: string, AttachStdin: bool, AttachStdout: bool, AttachStderr: bool, ExposedPorts: record, Tty: bool, OpenStdin: bool, StdinOnce: bool, Env: list<string>, Cmd: list<string>, Healthcheck: record<Test: list, Interval: int, Timeout: int, Retries: int, StartPeriod: int, StartInterval: int>, ArgsEscaped: bool, Image: string, Volumes: record, WorkingDir: string, Entrypoint: list<string>, NetworkDisabled: bool, OnBuild: list<string>, Labels: record, StopSignal: string, StopTimeout: int, Shell: list<string>>, NetworkSettings: record<SandboxID: string, SandboxKey: string, Ports: record, Networks: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -242,12 +241,12 @@ export def "containers-logs ContainerLogs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --follow: string@bool-completer # Keep connection after returning logs. (default: false)
-  --stdout: string@bool-completer # Return logs from `stdout` (default: false)
-  --stderr: string@bool-completer # Return logs from `stderr` (default: false)
+  --follow: oneof<nothing, bool> # Keep connection after returning logs. (default: false)
+  --stdout: oneof<nothing, bool> # Return logs from `stdout` (default: false)
+  --stderr: oneof<nothing, bool> # Return logs from `stderr` (default: false)
   --since: int # Only return logs since this time, as a UNIX timestamp (default: 0)
   --until: int # Only return logs before this time, as a UNIX timestamp (default: 0)
-  --timestamps: string@bool-completer # Add timestamps to every log line (default: false)
+  --timestamps: oneof<nothing, bool> # Add timestamps to every log line (default: false)
   --tail: string # Only return this number of log lines from the end of the logs. Specify as an integer or `all` to output all log lines.  (default: all)
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -316,8 +315,8 @@ export def "containers-stats ContainerStats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --stream: string@bool-completer # Stream the output. If false, the stats will be output once and then it will disconnect.  (default: true)
-  --one-shot: string@bool-completer # Only get a single stat instead of waiting for 2 cycles. Must be used with `stream=false`.  (default: false)
+  --stream: oneof<nothing, bool> # Stream the output. If false, the stats will be output once and then it will disconnect.  (default: true)
+  --one-shot: oneof<nothing, bool> # Only get a single stat instead of waiting for 2 cycles. Must be used with `stream=false`.  (default: false)
 ]: nothing -> record<id: string, name: string, os_type: string, read: string, cpu_stats: record<cpu_usage: record<total_usage: int, percpu_usage: list, usage_in_kernelmode: int, usage_in_usermode: int>, system_cpu_usage: int, online_cpus: int, throttling_data: record<periods: int, throttled_periods: int, throttled_time: int>>, memory_stats: record<usage: int, max_usage: int, stats: record, failcnt: int, limit: int, commitbytes: int, commitpeakbytes: int, privateworkingset: int>, networks: any, pids_stats: record<current: int, limit: int>, blkio_stats: record<io_service_bytes_recursive: list<record>, io_serviced_recursive: list<record>, io_queue_recursive: list<record>, io_service_time_recursive: list<record>, io_wait_time_recursive: list<record>, io_merged_recursive: list<record>, io_time_recursive: list<record>, sectors_recursive: list<record>>, num_procs: int, storage_stats: record<read_count_normalized: int, read_size_bytes: int, write_count_normalized: int, write_size_bytes: int>, preread: string, precpu_stats: record<cpu_usage: record<total_usage: int, percpu_usage: list, usage_in_kernelmode: int, usage_in_usermode: int>, system_cpu_usage: int, online_cpus: int, throttling_data: record<periods: int, throttled_periods: int, throttled_time: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -499,8 +498,8 @@ export def "containers-update ContainerUpdate" [
   --MemorySwap: int # Total memory limit (memory + swap). Set as `-1` to enable unlimited swap.  (format: int64)
   --MemorySwappiness: int # Tune a container's memory swappiness behavior. Accepts an integer between 0 and 100.  (format: int64)
   --NanoCpus: int # CPU quota in units of 10<sup>-9</sup> CPUs. (format: int64)
-  --OomKillDisable: string@bool-completer # Disable OOM Killer for the container.
-  --Init: string@bool-completer # Run an init inside the container that forwards signals and reaps processes. This field is omitted if empty, and the default (as configured on the daemon) is used.
+  --OomKillDisable: oneof<nothing, bool> # Disable OOM Killer for the container.
+  --Init: oneof<nothing, bool> # Run an init inside the container that forwards signals and reaps processes. This field is omitted if empty, and the default (as configured on the daemon) is used.
   --PidsLimit: int # Tune a container's PIDs limit. Set `0` or `-1` for unlimited, or `null` to not change.  (format: int64)
   --Ulimits: list # A list of resource limits to set in the container. For example:  ``` {"Name": "nofile", "Soft": 1024, "Hard": 2048} ``` — item shape: {Name?: string, Soft?: int, Hard?: int}
   --CpuCount: int # The number of usable CPUs (Windows only).  On Windows Server containers, the processor resource controls are mutually exclusive. The order of precedence is `CPUCount` first, then `CPUShares`, and `CPUPercent` last.  (format: int64)
@@ -606,11 +605,11 @@ export def "containers-attach ContainerAttach" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
   --detachKeys: string # Override the key sequence for detaching a container.Format is a single character `[a-Z]` or `ctrl-<value>` where `<value>` is one of: `a-z`, `@`, `^`, `[`, `,` or `_`.
-  --logs: string@bool-completer # Replay previous logs from the container.  This is useful for attaching to a container that has started and you want to output everything since the container started.  If `stream` is also enabled, once all the previous output has been returned, it will seamlessly transition into streaming current output.  (default: false)
-  --stream: string@bool-completer # Stream attached streams from the time the request was made onwards.  (default: false)
-  --stdin: string@bool-completer # Attach to `stdin` (default: false)
-  --stdout: string@bool-completer # Attach to `stdout` (default: false)
-  --stderr: string@bool-completer # Attach to `stderr` (default: false)
+  --logs: oneof<nothing, bool> # Replay previous logs from the container.  This is useful for attaching to a container that has started and you want to output everything since the container started.  If `stream` is also enabled, once all the previous output has been returned, it will seamlessly transition into streaming current output.  (default: false)
+  --stream: oneof<nothing, bool> # Stream attached streams from the time the request was made onwards.  (default: false)
+  --stdin: oneof<nothing, bool> # Attach to `stdin` (default: false)
+  --stdout: oneof<nothing, bool> # Attach to `stdout` (default: false)
+  --stderr: oneof<nothing, bool> # Attach to `stderr` (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -636,11 +635,11 @@ export def "containers-attach-ws ContainerAttachWebsocket" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --detachKeys: string # Override the key sequence for detaching a container.Format is a single character `[a-Z]` or `ctrl-<value>` where `<value>` is one of: `a-z`, `@`, `^`, `[`, `,`, or `_`.
-  --logs: string@bool-completer # Return logs (default: false)
-  --stream: string@bool-completer # Return stream (default: false)
-  --stdin: string@bool-completer # Attach to `stdin` (default: false)
-  --stdout: string@bool-completer # Attach to `stdout` (default: false)
-  --stderr: string@bool-completer # Attach to `stderr` (default: false)
+  --logs: oneof<nothing, bool> # Return logs (default: false)
+  --stream: oneof<nothing, bool> # Return stream (default: false)
+  --stdin: oneof<nothing, bool> # Attach to `stdin` (default: false)
+  --stdout: oneof<nothing, bool> # Attach to `stdout` (default: false)
+  --stderr: oneof<nothing, bool> # Attach to `stderr` (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -689,9 +688,9 @@ export def "containers ContainerDelete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --v: string@bool-completer # Remove anonymous volumes associated with the container. (default: false)
-  --force: string@bool-completer # If the container is running, kill it before removing it. (default: false)
-  --link: string@bool-completer # Remove the specified link associated with the container. (default: false)
+  --v: oneof<nothing, bool> # Remove anonymous volumes associated with the container. (default: false)
+  --force: oneof<nothing, bool> # If the container is running, kill it before removing it. (default: false)
+  --link: oneof<nothing, bool> # Remove the specified link associated with the container. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -816,12 +815,12 @@ export def "images-json ImageList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # Show all images. Only images from a final layer (no children) are shown by default. (default: false)
+  --all: oneof<nothing, bool> # Show all images. Only images from a final layer (no children) are shown by default. (default: false)
   --filters: string # A JSON encoded value of the filters (a `map[string][]string`) to process on the images list.  Available filters:  - `before`=(`<image-name>[:<tag>]`,  `<image id>` or `<image@digest>`) - `dangling=true` - `label=key` or `label="key=value"` of an image label - `reference`=(`<image-name>[:<tag>]`) - `since`=(`<image-name>[:<tag>]`,  `<image id>` or `<image@digest>`) - `until=<timestamp>`
-  --shared-size: string@bool-completer # Compute and show shared size as a `SharedSize` field on each image. (default: false)
-  --digests: string@bool-completer # Show digest information as a `RepoDigests` field on each image. (default: false)
-  --manifests: string@bool-completer # Include `Manifests` in the image summary. (default: false)
-  --identity: string@bool-completer # Include `Identity` in each manifest summary. Requires `manifests=1`. (default: false)
+  --shared-size: oneof<nothing, bool> # Compute and show shared size as a `SharedSize` field on each image. (default: false)
+  --digests: oneof<nothing, bool> # Show digest information as a `RepoDigests` field on each image. (default: false)
+  --manifests: oneof<nothing, bool> # Include `Manifests` in the image summary. (default: false)
+  --identity: oneof<nothing, bool> # Include `Identity` in each manifest summary. Requires `manifests=1`. (default: false)
 ]: nothing -> table<Id: string, ParentId: string, RepoTags: list<string>, RepoDigests: list<string>, Created: int, Size: int, SharedSize: int, Labels: record, Containers: int, Manifests: list<record>, Descriptor: record<mediaType: string, digest: string, size: int, urls: list, annotations: record, data: string, platform: record, artifactType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -848,12 +847,12 @@ export def "build ImageBuild" [
   --t: string # A name and optional tag to apply to the image in the `name:tag` format. If you omit the tag the default `latest` value is assumed. You can provide several `t` parameters.
   --extrahosts: string # Extra hosts to add to /etc/hosts
   --remote: string # A Git repository URI or HTTP/HTTPS context URI. If the URI points to a single text file, the file’s contents are placed into a file called `Dockerfile` and the image is built from that file. If the URI points to a tarball, the file is downloaded by the daemon and the contents therein used as the context for the build. If the URI points to a tarball and the `dockerfile` parameter is also specified, there must be a file with the corresponding path inside the tarball.
-  --q: string@bool-completer # Suppress verbose build output. (default: false)
-  --nocache: string@bool-completer # Do not use the cache when building the image. (default: false)
+  --q: oneof<nothing, bool> # Suppress verbose build output. (default: false)
+  --nocache: oneof<nothing, bool> # Do not use the cache when building the image. (default: false)
   --cachefrom: string # JSON array of images used for build cache resolution.
   --pull: string # Attempt to pull the image even if an older image exists locally.
-  --rm: string@bool-completer # Remove intermediate containers after a successful build. (default: true)
-  --forcerm: string@bool-completer # Always remove intermediate containers, even upon failure. (default: false)
+  --rm: oneof<nothing, bool> # Remove intermediate containers after a successful build. (default: true)
+  --forcerm: oneof<nothing, bool> # Always remove intermediate containers, even upon failure. (default: false)
   --memory: int # Set memory limit for build.
   --memswap: int # Total memory (memory + swap). Set as `-1` to disable swap.
   --cpushares: int # CPU shares (relative weight).
@@ -862,7 +861,7 @@ export def "build ImageBuild" [
   --cpuquota: int # Microseconds of CPU time that the container can get in a CPU period.
   --buildargs: string # JSON map of string pairs for build-time variables. Users pass these values at build-time. Docker uses the buildargs as the environment context for commands run via the `Dockerfile` RUN instruction, or for variable expansion in other `Dockerfile` instructions. This is not meant for passing secret values.  For example, the build arg `FOO=bar` would become `{"FOO":"bar"}` in JSON. This would result in the query parameter `buildargs={"FOO":"bar"}`. Note that `{"FOO":"bar"}` should be URI component encoded.  [Read more about the buildargs instruction.](https://docs.docker.com/engine/reference/builder/#arg)
   --shmsize: int # Size of `/dev/shm` in bytes. The size must be greater than 0. If omitted the system uses 64MB.
-  --squash: string@bool-completer # Squash the resulting images layers into a single layer. *(Experimental release only.)*
+  --squash: oneof<nothing, bool> # Squash the resulting images layers into a single layer. *(Experimental release only.)*
   --labels: string # Arbitrary key/value labels to set on the image, as a JSON map of string pairs.
   --networkmode: string # Sets the networking mode for the run commands during build. Supported standard values are: `bridge`, `host`, `none`, and `container:<name|id>`. Any other value is taken as a custom network's name or ID to which this container should connect to.
   --platform: string # Platform in the format os[/arch[/variant]] (default: )
@@ -901,7 +900,7 @@ export def "build-prune BuildPrune" [
   --reserved-space: int # Amount of disk space in bytes to keep for cache (format: int64)
   --max-used-space: int # Maximum amount of disk space allowed to keep for cache (format: int64)
   --min-free-space: int # Target amount of free disk space after pruning (format: int64)
-  --all: string@bool-completer # Remove all types of build cache
+  --all: oneof<nothing, bool> # Remove all types of build cache
   --filters: string # A JSON encoded value of the filters (a `map[string][]string`) to process on the list of build cache objects.  Available filters:  - `until=<timestamp>` remove cache older than `<timestamp>`. The `<timestamp>` can be Unix timestamps, date formatted timestamps, or Go duration strings (e.g. `10m`, `1h30m`) computed relative to the daemon's local time. - `id=<id>` - `parent=<id>` - `type=<string>` - `description=<string>` - `inuse` - `shared` - `private`
 ]: nothing -> record<CachesDeleted: list<string>, SpaceReclaimed: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -961,7 +960,7 @@ export def "images-json ImageInspect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --manifests: string@bool-completer # Include Manifests in the image summary.  The `manifests` and `platform` options are mutually exclusive, and an error is produced if both are set. (default: false)
+  --manifests: oneof<nothing, bool> # Include Manifests in the image summary.  The `manifests` and `platform` options are mutually exclusive, and an error is produced if both are set. (default: false)
   --platform: string # JSON-encoded OCI platform to select the platform-variant. If omitted, it defaults to any locally available platform, prioritizing the daemon's host platform.  If the daemon provides a multi-platform image store, this selects the platform-variant to show inspect. If the image is a single-platform image, or if the multi-platform image does not provide a variant matching the given platform, an error is returned.  The `platform` and `manifests` options are mutually exclusive, and an error is produced if both are set.  Example: `{"os": "linux", "architecture": "arm", "variant": "v5"}`
 ]: nothing -> record<Id: string, Descriptor: record<mediaType: string, digest: string, size: int, urls: list<string>, annotations: record, data: string, platform: record<architecture: string, os: string, os_version: string, os_features: list, variant: string>, artifactType: string>, Identity: record<Signature: list<record>, Pull: list<record>, Build: list<record>>, Manifests: table<ID: string, Descriptor: record, Available: bool, Size: record, Kind: string, ImageData: record, AttestationData: record>, RepoTags: list<string>, RepoDigests: list<string>, Comment: string, Created: string, Author: string, Config: record<User: string, ExposedPorts: record, Env: list<string>, Cmd: list<string>, Healthcheck: record<Test: list, Interval: int, Timeout: int, Retries: int, StartPeriod: int, StartInterval: int>, ArgsEscaped: bool, Volumes: record, WorkingDir: string, Entrypoint: list<string>, OnBuild: list<string>, Labels: record, StopSignal: string, Shell: list<string>>, Architecture: string, Variant: string, Os: string, OsVersion: string, Size: int, GraphDriver: record<Name: string, Data: record>, RootFS: record<Type: string, Layers: list<string>>, Metadata: record<LastTagTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1065,8 +1064,8 @@ export def "images ImageDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # Remove the image even if it is being used by stopped containers or has other tags (default: false)
-  --noprune: string@bool-completer # Do not delete untagged parent images (default: false)
+  --force: oneof<nothing, bool> # Remove the image even if it is being used by stopped containers or has other tags (default: false)
+  --noprune: oneof<nothing, bool> # Do not delete untagged parent images (default: false)
   --platforms: list # Select platform-specific content to delete. Multiple values are accepted. Each platform is a OCI platform encoded as a JSON string.
 ]: nothing -> table<Untagged: string, Deleted: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1255,27 +1254,27 @@ export def "commit ImageCommit" [
   --tag: string # Tag name for the create image
   --comment: string # Commit message
   --author: string # Author of the image (e.g., `John Hannibal Smith <hannibal@a-team.com>`)
-  --pause: string@bool-completer # Whether to pause the container before committing (default: true)
+  --pause: oneof<nothing, bool> # Whether to pause the container before committing (default: true)
   --changes: string # `Dockerfile` instructions to apply while committing
   --Hostname: string # The hostname to use for the container, as a valid RFC 1123 hostname.  (e.g. 439f4e91bd1d)
   --Domainname: string # The domain name to use for the container.
   --User: string # Commands run as this user inside the container. If omitted, commands run as the user specified in the image the container was started from.  Can be either user-name or UID, and optional group-name or GID, separated by a colon (`<user-name|UID>[<:group-name|GID>]`). (e.g. 123:456)
-  --AttachStdin: string@bool-completer # Whether to attach to `stdin`. (default: false)
-  --AttachStdout: string@bool-completer # Whether to attach to `stdout`. (default: true)
-  --AttachStderr: string@bool-completer # Whether to attach to `stderr`. (default: true)
+  --AttachStdin: oneof<nothing, bool> # Whether to attach to `stdin`. (default: false)
+  --AttachStdout: oneof<nothing, bool> # Whether to attach to `stdout`. (default: true)
+  --AttachStderr: oneof<nothing, bool> # Whether to attach to `stderr`. (default: true)
   --ExposedPorts: record # An object mapping ports to an empty object in the form:  `{"<port>/<tcp|udp|sctp>": {}}`  (e.g. {80/tcp: {}, 443/tcp: {}})
-  --Tty: string@bool-completer # Attach standard streams to a TTY, including `stdin` if it is not closed.  (default: false)
-  --OpenStdin: string@bool-completer # Open `stdin` (default: false)
-  --StdinOnce: string@bool-completer # Close `stdin` after one attached client disconnects (default: false)
+  --Tty: oneof<nothing, bool> # Attach standard streams to a TTY, including `stdin` if it is not closed.  (default: false)
+  --OpenStdin: oneof<nothing, bool> # Open `stdin` (default: false)
+  --StdinOnce: oneof<nothing, bool> # Close `stdin` after one attached client disconnects (default: false)
   --Env: list # A list of environment variables to set inside the container in the form `["VAR=value", ...]`. A variable without `=` is removed from the environment, rather than to have an empty value.  (e.g. [PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin])
   --Cmd: list # Command to run specified as a string or an array of strings.  (e.g. [/bin/sh])
   --Healthcheck: record # A test to perform to check that the container is healthy. Healthcheck commands should be side-effect free. — shape: {Test?: list, Interval?: int, Timeout?: int, Retries?: int, StartPeriod?: int, StartInterval?: int}
-  --ArgsEscaped: string@bool-completer # Command is already escaped (Windows only) (default: false, e.g. false)
+  --ArgsEscaped: oneof<nothing, bool> # Command is already escaped (Windows only) (default: false, e.g. false)
   --Image: string # The name (or reference) of the image to use when creating the container, or which was used when the container was created.  (e.g. example-image:1.0)
   --Volumes: record # An object mapping mount point paths inside the container to empty objects.
   --WorkingDir: string # The working directory for commands to run in. (e.g. /public/)
   --Entrypoint: list # The entry point for the container as a string or an array of strings.  If the array consists of exactly one empty string (`[""]`) then the entry point is reset to system default (i.e., the entry point used by docker when there is no `ENTRYPOINT` instruction in the `Dockerfile`).  (e.g. [])
-  --NetworkDisabled: string@bool-completer # Disable networking for the container.
+  --NetworkDisabled: oneof<nothing, bool> # Disable networking for the container.
   --OnBuild: list # `ONBUILD` metadata that were defined in the image's `Dockerfile`.  (e.g. [])
   --Labels: record # User-defined key/value metadata. (e.g. {com.example.some-label: some-value, com.example.some-other-label: some-other-value})
   --StopSignal: string # Signal to stop a container as a string or unsigned integer.  (e.g. SIGTERM)
@@ -1334,7 +1333,7 @@ export def "system-df SystemDataUsage" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --type: list # Object types, for which to compute and return data.
-  --verbose: string@bool-completer # Show detailed information on space usage.  (default: false)
+  --verbose: oneof<nothing, bool> # Show detailed information on space usage.  (default: false)
 ]: nothing -> record<ImageUsage: record<ActiveCount: int, TotalCount: int, Reclaimable: int, TotalSize: int, Items: list<any>>, ContainerUsage: record<ActiveCount: int, TotalCount: int, Reclaimable: int, TotalSize: int, Items: list<any>>, VolumeUsage: record<ActiveCount: int, TotalCount: int, Reclaimable: int, TotalSize: int, Items: list<any>>, BuildCacheUsage: record<ActiveCount: int, TotalCount: int, Reclaimable: int, TotalSize: int, Items: list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1405,7 +1404,7 @@ export def "images-load ImageLoad" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --quiet: string@bool-completer # Suppress progress details during load. (default: false)
+  --quiet: oneof<nothing, bool> # Suppress progress details during load. (default: false)
   --platform: list # JSON encoded OCI platform(s) which will be used to select the platform-specific image(s) to load if the image is multi-platform. If not provided, the full multi-platform image will be loaded.  Example: `{"os": "linux", "architecture": "arm", "variant": "v5"}`
   --body: record
 ]: any -> any {
@@ -1433,15 +1432,15 @@ export def "containers-exec ContainerExec" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AttachStdin: string@bool-completer # Attach to `stdin` of the exec command.
-  --AttachStdout: string@bool-completer # Attach to `stdout` of the exec command.
-  --AttachStderr: string@bool-completer # Attach to `stderr` of the exec command.
+  --AttachStdin: oneof<nothing, bool> # Attach to `stdin` of the exec command.
+  --AttachStdout: oneof<nothing, bool> # Attach to `stdout` of the exec command.
+  --AttachStderr: oneof<nothing, bool> # Attach to `stderr` of the exec command.
   --ConsoleSize: list # Initial console size, as an `[height, width]` array. (e.g. [80, 64])
   --DetachKeys: string # Override the key sequence for detaching a container. Format is a single character `[a-Z]` or `ctrl-<value>` where `<value>` is one of: `a-z`, `@`, `^`, `[`, `,` or `_`.
-  --Tty: string@bool-completer # Allocate a pseudo-TTY.
+  --Tty: oneof<nothing, bool> # Allocate a pseudo-TTY.
   --Env: list # A list of environment variables in the form `["VAR=value", ...]`.
   --Cmd: list # Command to run, as a string or array of strings.
-  --Privileged: string@bool-completer # Runs the exec process with extended privileges. (default: false)
+  --Privileged: oneof<nothing, bool> # Runs the exec process with extended privileges. (default: false)
   --User: string # The user, and optionally, group to run the exec process inside the container. Format is one of: `user`, `user:group`, `uid`, or `uid:gid`.
   --WorkingDir: string # The working directory for the exec process inside the container.
 ]: any -> record<Id: string> {
@@ -1470,8 +1469,8 @@ export def "exec-start ExecStart" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --Detach: string@bool-completer # Detach from the command. (e.g. false)
-  --Tty: string@bool-completer # Allocate a pseudo-TTY. (e.g. true)
+  --Detach: oneof<nothing, bool> # Detach from the command. (e.g. false)
+  --Tty: oneof<nothing, bool> # Allocate a pseudo-TTY. (e.g. true)
   --ConsoleSize: list # Initial console size, as an `[height, width]` array. (e.g. [80, 64])
 ]: any -> any {
   let input = $in
@@ -1651,7 +1650,7 @@ export def "volumes VolumeDelete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --force: string@bool-completer # Force the removal of the volume (default: false)
+  --force: oneof<nothing, bool> # Force the removal of the volume (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1721,7 +1720,7 @@ export def "networks NetworkInspect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --verbose: string@bool-completer # Detailed inspect output for troubleshooting (default: false)
+  --verbose: oneof<nothing, bool> # Detailed inspect output for troubleshooting (default: false)
   --scope: string # Filter the network by scope (swarm, global, or local)
 ]: nothing -> record<Containers: record, Services: record, Status: record<IPAM: record<Subnets: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1773,14 +1772,14 @@ export def "networks-create NetworkCreate" [
   Name: string # The network's name. (e.g. my_network)
   --Driver: string # Name of the network driver plugin to use. (default: bridge, e.g. bridge)
   --Scope: string # The level at which the network exists (e.g. `swarm` for cluster-wide or `local` for machine level).
-  --Internal: string@bool-completer # Restrict external access to the network.
-  --Attachable: string@bool-completer # Globally scoped network is manually attachable by regular containers from workers in swarm mode.  (e.g. true)
-  --Ingress: string@bool-completer # Ingress network is the network which provides the routing-mesh in swarm mode.  (e.g. false)
-  --ConfigOnly: string@bool-completer # Creates a config-only network. Config-only networks are placeholder networks for network configurations to be used by other networks. Config-only networks cannot be used directly to run containers or services.  (default: false, e.g. false)
+  --Internal: oneof<nothing, bool> # Restrict external access to the network.
+  --Attachable: oneof<nothing, bool> # Globally scoped network is manually attachable by regular containers from workers in swarm mode.  (e.g. true)
+  --Ingress: oneof<nothing, bool> # Ingress network is the network which provides the routing-mesh in swarm mode.  (e.g. false)
+  --ConfigOnly: oneof<nothing, bool> # Creates a config-only network. Config-only networks are placeholder networks for network configurations to be used by other networks. Config-only networks cannot be used directly to run containers or services.  (default: false, e.g. false)
   --ConfigFrom: record # The config-only network source to provide the configuration for this network. — shape: {Network?: string}
   --IPAM: record # shape: {Driver?: string, Config?: list, Options?: record}
-  --EnableIPv4: string@bool-completer # Enable IPv4 on the network. (e.g. true)
-  --EnableIPv6: string@bool-completer # Enable IPv6 on the network. (e.g. true)
+  --EnableIPv4: oneof<nothing, bool> # Enable IPv4 on the network. (e.g. true)
+  --EnableIPv6: oneof<nothing, bool> # Enable IPv6 on the network. (e.g. true)
   --Options: record # Network specific options to be used by the drivers. (e.g. {com.docker.network.bridge.default_bridge: true, com.docker.network.bridge.enable_icc: true, com.docker.network.bridge.enable_ip_masquerade: true, com.docker.network.bridge.host_binding_ipv4: 0.0.0.0, com.docker.network.bridge.name: docker0, com.docker.network.driver.mtu: 1500})
   --Labels: record # User-defined key/value metadata. (e.g. {com.example.some-label: some-value, com.example.some-other-label: some-other-value})
 ]: any -> record<Id: string, Warning: string> {
@@ -1839,7 +1838,7 @@ export def "networks-disconnect NetworkDisconnect" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   Container: string # The ID or name of the container to disconnect from the network. (e.g. 3613f73ba0e4)
-  --Force: string@bool-completer # Force the container to disconnect from the network. (default: false, e.g. false)
+  --Force: oneof<nothing, bool> # Force the container to disconnect from the network. (default: false, e.g. false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1989,7 +1988,7 @@ export def "plugins PluginDelete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --force: string@bool-completer # Disable the plugin before removing. This may result in issues if the plugin is in use by a container.  (default: false)
+  --force: oneof<nothing, bool> # Disable the plugin before removing. This may result in issues if the plugin is in use by a container.  (default: false)
 ]: nothing -> record<Id: string, Name: string, Enabled: bool, Settings: record<Mounts: list<record>, Env: list<string>, Args: list<string>, Devices: list<record>>, PluginReference: string, Config: record<Description: string, Documentation: string, Interface: record<Types: list, Socket: string, ProtocolScheme: string>, Entrypoint: list<string>, WorkDir: string, User: record<UID: int, GID: int>, Network: record<Type: string>, Linux: record<Capabilities: list, AllowAllDevices: bool, Devices: list>, PropagatedMount: string, IpcHost: bool, PidHost: bool, Mounts: list<record>, Env: list<record>, Args: record<Name: string, Description: string, Settable: list, Value: list>, rootfs: record<type: string, diff_ids: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2039,7 +2038,7 @@ export def "plugins-disable PluginDisable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --force: string@bool-completer # Force disable a plugin even if still in use.
+  --force: oneof<nothing, bool> # Force disable a plugin even if still in use.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2218,7 +2217,7 @@ export def "nodes NodeDelete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --force: string@bool-completer # Force remove a node from the swarm (default: false)
+  --force: oneof<nothing, bool> # Force remove a node from the swarm (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2302,7 +2301,7 @@ export def "swarm-init SwarmInit" [
   --DataPathAddr: string # Address or interface to use for data path traffic (format: `<ip|interface>`), for example,  `192.168.1.1`, or an interface, like `eth0`. If `DataPathAddr` is unspecified, the same address as `AdvertiseAddr` is used.  The `DataPathAddr` specifies the address that global scope network drivers will publish towards other  nodes in order to reach the containers running on this node. Using this parameter it is possible to separate the container data traffic from the management traffic of the cluster.
   --DataPathPort: int # DataPathPort specifies the data path port number for data traffic. Acceptable port range is 1024 to 49151. if no port is set or is set to 0, default port 4789 will be used.  (format: uint32)
   --DefaultAddrPool: list # Default Address Pool specifies default subnet pools for global scope networks.
-  --ForceNewCluster: string@bool-completer # Force creation of a new swarm.
+  --ForceNewCluster: oneof<nothing, bool> # Force creation of a new swarm.
   --SubnetSize: int # SubnetSize specifies the subnet size of the networks created from the default subnet pool.  (format: uint32)
   --Spec: record # User modifiable swarm configuration. — shape: {Name?: string, Labels?: record, Orchestration?: record, Raft?: record, Dispatcher?: record, CAConfig?: record, EncryptionConfig?: record, TaskDefaults?: record}
 ]: any -> string {
@@ -2360,7 +2359,7 @@ export def "swarm-leave SwarmLeave" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --force: string@bool-completer # Force leave swarm, even if this is the last manager or that it will break the cluster.  (default: false)
+  --force: oneof<nothing, bool> # Force leave swarm, even if this is the last manager or that it will break the cluster.  (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2391,9 +2390,9 @@ export def "swarm-update SwarmUpdate" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --version: int # The version number of the swarm object being updated. This is required to avoid conflicting writes.  (format: int64)
-  --rotateWorkerToken: string@bool-completer # Rotate the worker join token. (default: false)
-  --rotateManagerToken: string@bool-completer # Rotate the manager join token. (default: false)
-  --rotateManagerUnlockKey: string@bool-completer # Rotate the manager unlock key. (default: false)
+  --rotateWorkerToken: oneof<nothing, bool> # Rotate the worker join token. (default: false)
+  --rotateManagerToken: oneof<nothing, bool> # Rotate the manager join token. (default: false)
+  --rotateManagerUnlockKey: oneof<nothing, bool> # Rotate the manager unlock key. (default: false)
   --Name: string # Name of the swarm. (e.g. default)
   --Labels: record # User-defined key/value metadata. (e.g. {com.example.corp.type: production, com.example.corp.department: engineering})
   --Orchestration: record # Orchestration configuration. — shape: {TaskHistoryRetentionLimit?: int}
@@ -2476,7 +2475,7 @@ export def "services ServiceList" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --filters: string # A JSON encoded value of the filters (a `map[string][]string`) to process on the services list.  Available filters:  - `id=<service id>` - `label=<service label>` - `mode=["replicated"|"global"]` - `name=<service name>`
-  --status: string@bool-completer # Include service status, with count of running and desired tasks.
+  --status: oneof<nothing, bool> # Include service status, with count of running and desired tasks.
 ]: nothing -> table<ID: string, Version: record<Index: int>, CreatedAt: string, UpdatedAt: string, Spec: record<Name: string, Labels: record, TaskTemplate: record, Mode: record, UpdateConfig: record, RollbackConfig: record, Networks: list, EndpointSpec: record>, Endpoint: record<Spec: record, Ports: list, VirtualIPs: list>, UpdateStatus: record<State: string, StartedAt: string, CompletedAt: string, Message: string>, ServiceStatus: record<RunningTasks: int, DesiredTasks: int, CompletedTasks: int>, JobStatus: record<JobIteration: record, LastExecution: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2542,7 +2541,7 @@ export def "services ServiceInspect" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --insertDefaults: string@bool-completer # Fill empty fields with default values. (default: false)
+  --insertDefaults: oneof<nothing, bool> # Fill empty fields with default values. (default: false)
 ]: nothing -> record<ID: string, Version: record<Index: int>, CreatedAt: string, UpdatedAt: string, Spec: record<Name: string, Labels: record, TaskTemplate: record<PluginSpec: record, ContainerSpec: record, NetworkAttachmentSpec: record, Resources: record, RestartPolicy: record, Placement: record, ForceUpdate: int, Runtime: string, Networks: list, LogDriver: record>, Mode: record<Replicated: record, Global: record, ReplicatedJob: record, GlobalJob: record>, UpdateConfig: record<Parallelism: int, Delay: int, FailureAction: string, Monitor: int, MaxFailureRatio: float, Order: string>, RollbackConfig: record<Parallelism: int, Delay: int, FailureAction: string, Monitor: int, MaxFailureRatio: float, Order: string>, Networks: list<record>, EndpointSpec: record<Mode: string, Ports: list>>, Endpoint: record<Spec: record<Mode: string, Ports: list>, Ports: list<record>, VirtualIPs: list<record>>, UpdateStatus: record<State: string, StartedAt: string, CompletedAt: string, Message: string>, ServiceStatus: record<RunningTasks: int, DesiredTasks: int, CompletedTasks: int>, JobStatus: record<JobIteration: record<Index: int>, LastExecution: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2636,12 +2635,12 @@ export def "services-logs ServiceLogs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --details: string@bool-completer # Show service context and extra details provided to logs. (default: false)
-  --follow: string@bool-completer # Keep connection after returning logs. (default: false)
-  --stdout: string@bool-completer # Return logs from `stdout` (default: false)
-  --stderr: string@bool-completer # Return logs from `stderr` (default: false)
+  --details: oneof<nothing, bool> # Show service context and extra details provided to logs. (default: false)
+  --follow: oneof<nothing, bool> # Keep connection after returning logs. (default: false)
+  --stdout: oneof<nothing, bool> # Return logs from `stdout` (default: false)
+  --stderr: oneof<nothing, bool> # Return logs from `stderr` (default: false)
   --since: int # Only return logs since this time, as a UNIX timestamp (default: 0)
-  --timestamps: string@bool-completer # Add timestamps to every log line (default: false)
+  --timestamps: oneof<nothing, bool> # Add timestamps to every log line (default: false)
   --tail: string # Only return this number of log lines from the end of the logs. Specify as an integer or `all` to output all log lines.  (default: all)
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2712,12 +2711,12 @@ export def "tasks-logs TaskLogs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --details: string@bool-completer # Show task context and extra details provided to logs. (default: false)
-  --follow: string@bool-completer # Keep connection after returning logs. (default: false)
-  --stdout: string@bool-completer # Return logs from `stdout` (default: false)
-  --stderr: string@bool-completer # Return logs from `stderr` (default: false)
+  --details: oneof<nothing, bool> # Show task context and extra details provided to logs. (default: false)
+  --follow: oneof<nothing, bool> # Keep connection after returning logs. (default: false)
+  --stdout: oneof<nothing, bool> # Return logs from `stdout` (default: false)
+  --stderr: oneof<nothing, bool> # Return logs from `stderr` (default: false)
   --since: int # Only return logs since this time, as a UNIX timestamp (default: 0)
-  --timestamps: string@bool-completer # Add timestamps to every log line (default: false)
+  --timestamps: oneof<nothing, bool> # Add timestamps to every log line (default: false)
   --tail: string # Only return this number of log lines from the end of the logs. Specify as an integer or `all` to output all log lines.  (default: all)
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api-d.docusign.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -378,9 +377,9 @@ export def "accounts-workspaces-upload-requests updateWorkspaceUploadRequest" [
   due_date: string # The due date for the upload request (editable) (format: date-time)
   --sent-date: string # The date the upload request was sent (nullable)
   --completed-date: string # The date the upload request was completed (nullable)
-  --can-view: string@bool-completer # Whether the current user can view the upload request (nullable)
-  --can-edit: string@bool-completer # Whether the current user can edit the upload request (nullable)
-  --can-delete: string@bool-completer # Whether the current user can delete the upload request (nullable)
+  --can-view: oneof<nothing, bool> # Whether the current user can view the upload request (nullable)
+  --can-edit: oneof<nothing, bool> # Whether the current user can edit the upload request (nullable)
+  --can-delete: oneof<nothing, bool> # Whether the current user can delete the upload request (nullable)
 ]: any -> record<upload_request_id: string, workspace_id: string, name: string, description: string, upload_request_owner: record<user_id: string>, status: string, documents: table<document_name: string, document_id: string>, assignments: table<assignee_user_id: string, upload_request_responsibility_type_id: string>, created_date: string, updated_date: string, due_date: string, sent_date: string, completed_date: string, can_view: bool, can_edit: bool, can_delete: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://www.bungie.net/Platform"] }
 def auth-scheme-completer [] { ["x-api-key" "bearer"] }
 
@@ -375,7 +374,7 @@ export def "content-get-content-by-id ContentGetContentById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --head: string@bool-completer # false
+  --head: oneof<nothing, bool> # false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -401,7 +400,7 @@ export def "content-get-content-by-tag-and-type ContentGetContentByTagAndType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --head: string@bool-completer # Not used.
+  --head: oneof<nothing, bool> # Not used.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -427,7 +426,7 @@ export def "content-search ContentSearchContentWithText" [
   --allow-errors(-e) # Return full response without error handling
   --ctype: string # Content type tag: Help, News, etc. Supply multiple ctypes separated by space.
   --currentpage: int # Page number for the search results, starting with page 1. (format: int32)
-  --head: string@bool-completer # Not used.
+  --head: oneof<nothing, bool> # Not used.
   --searchtext: string # Word or phrase for the search.
   --qp-source: string # For analytics, hint at the part of the app that triggered the search. Optional.
   --tag: string # Tag used on the content to be searched.
@@ -457,7 +456,7 @@ export def "content-search-content-by-tag-and-type ContentSearchContentByTagAndT
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --currentpage: int # Page number for the search results starting with page 1. (format: int32)
-  --head: string@bool-completer # Not used.
+  --head: oneof<nothing, bool> # Not used.
   --itemsperpage: int # Not used. (format: int32)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -506,7 +505,7 @@ export def "content-rss-news-articles ContentRssNewsArticles" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --categoryfilter: string # Optionally filter response to only include news items in a certain category.
-  --includebody: string@bool-completer # Optionally include full content body for each news item.
+  --includebody: oneof<nothing, bool> # Optionally include full content body for each news item.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1005,15 +1004,15 @@ export def "group-v2-edit GroupV2EditGroup" [
   --theme: string
   --avatarImageIndex: int # nullable, format: int32
   --tags: string
-  --isPublic: string@bool-completer # nullable
+  --isPublic: oneof<nothing, bool> # nullable
   --membershipOption: int # nullable, format: int32
-  --isPublicTopicAdminOnly: string@bool-completer # nullable
-  --allowChat: string@bool-completer # nullable
+  --isPublicTopicAdminOnly: oneof<nothing, bool> # nullable
+  --allowChat: oneof<nothing, bool> # nullable
   --chatSecurity: int # nullable, format: int32
   --callsign: string
   --locale: string
   --homepage: int # nullable, format: int32
-  --enableInvitationMessagingForAdmins: string@bool-completer # nullable
+  --enableInvitationMessagingForAdmins: oneof<nothing, bool> # nullable
   --defaultPublicity: int # nullable, format: int32
 ]: any -> any {
   let input = $in
@@ -1072,10 +1071,10 @@ export def "group-v2-edit-founder-options GroupV2EditFounderOptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --InvitePermissionOverride: string@bool-completer # Minimum Member Level allowed to invite new members to group Always Allowed: Founder, Acting Founder True means admins have this power, false means they don't Default is false for clans, true for groups. (nullable)
-  --UpdateCulturePermissionOverride: string@bool-completer # Minimum Member Level allowed to update group culture Always Allowed: Founder, Acting Founder True means admins have this power, false means they don't Default is false for clans, true for groups. (nullable)
+  --InvitePermissionOverride: oneof<nothing, bool> # Minimum Member Level allowed to invite new members to group Always Allowed: Founder, Acting Founder True means admins have this power, false means they don't Default is false for clans, true for groups. (nullable)
+  --UpdateCulturePermissionOverride: oneof<nothing, bool> # Minimum Member Level allowed to update group culture Always Allowed: Founder, Acting Founder True means admins have this power, false means they don't Default is false for clans, true for groups. (nullable)
   --HostGuidedGamePermissionOverride: int # Minimum Member Level allowed to host guided games Always Allowed: Founder, Acting Founder, Admin Allowed Overrides: None, Member, Beginner Default is Member for clans, None for groups, although this means nothing for groups. (nullable, format: int32)
-  --UpdateBannerPermissionOverride: string@bool-completer # Minimum Member Level allowed to update banner Always Allowed: Founder, Acting Founder True means admins have this power, false means they don't Default is false for clans, true for groups. (nullable)
+  --UpdateBannerPermissionOverride: oneof<nothing, bool> # Minimum Member Level allowed to update banner Always Allowed: Founder, Acting Founder True means admins have this power, false means they don't Default is false for clans, true for groups. (nullable)
   --JoinLevel: int # Level to join a member at when accepting an invite, application, or joining an open clan Default is Beginner. (nullable, format: int32)
 ]: any -> any {
   let input = $in
@@ -1130,7 +1129,7 @@ export def "group-v2-optional-conversations-edit GroupV2EditOptionalConversation
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --chatEnabled: string@bool-completer # nullable
+  --chatEnabled: oneof<nothing, bool> # nullable
   --chatName: string
   --chatSecurity: int # nullable, format: int32
 ]: any -> any {
@@ -1942,7 +1941,7 @@ export def "destiny2-profile-linked-profiles Destiny2GetLinkedProfiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --getAllMemberships: string@bool-completer # (optional) if set to 'true', all memberships regardless of whether they're obscured by overrides will be returned. Normal privacy restrictions on account linking will still apply no matter what.
+  --getAllMemberships: oneof<nothing, bool> # (optional) if set to 'true', all memberships regardless of whether they're obscured by overrides will be returned. Normal privacy restrictions on account linking will still apply no matter what.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2191,7 +2190,7 @@ export def "destiny2-actions-items-transfer-item Destiny2TransferItem" [
   --allow-errors(-e) # Return full response without error handling
   --itemReferenceHash: int # format: uint32
   --stackSize: int # format: int32
-  --transferToVault: string@bool-completer
+  --transferToVault: oneof<nothing, bool>
   --itemId: int # The instance ID of the item for this action request. (format: int64)
   --characterId: int # format: int64
   --membershipType: int # format: int32
@@ -2416,7 +2415,7 @@ export def "destiny2-actions-items-set-lock-state Destiny2SetItemLockState" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --state: string@bool-completer
+  --state: oneof<nothing, bool>
   --itemId: int # The instance ID of the item for this action request. (format: int64)
   --characterId: int # format: int64
   --membershipType: int # format: int32
@@ -2444,7 +2443,7 @@ export def "destiny2-actions-items-set-tracked-state Destiny2SetQuestTrackedStat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --state: string@bool-completer
+  --state: oneof<nothing, bool>
   --itemId: int # The instance ID of the item for this action request. (format: int64)
   --characterId: int # format: int64
   --membershipType: int # format: int32
@@ -3103,7 +3102,7 @@ export def "fireteam-clan-available FireteamGetAvailableClanFireteams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --excludeImmediate: string@bool-completer # If you wish the result to exclude immediate fireteams, set this to true. Immediate-only can be forced using the dateRange enum.
+  --excludeImmediate: oneof<nothing, bool> # If you wish the result to exclude immediate fireteams, set this to true. Immediate-only can be forced using the dateRange enum.
   --langFilter: string # An optional language filter.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3132,7 +3131,7 @@ export def "fireteam-search-available FireteamSearchPublicAvailableClanFireteams
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --excludeImmediate: string@bool-completer # If you wish the result to exclude immediate fireteams, set this to true. Immediate-only can be forced using the dateRange enum.
+  --excludeImmediate: oneof<nothing, bool> # If you wish the result to exclude immediate fireteams, set this to true. Immediate-only can be forced using the dateRange enum.
   --langFilter: string # An optional language filter.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3160,7 +3159,7 @@ export def "fireteam-clan-my FireteamGetMyClanFireteams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --groupFilter: string@bool-completer # If true, filter by clan. Otherwise, ignore the clan and show all of the user's fireteams.
+  --groupFilter: oneof<nothing, bool> # If true, filter by clan. Otherwise, ignore the clan and show all of the user's fireteams.
   --langFilter: string # An optional language filter.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3445,7 +3444,7 @@ export def "global-alerts GetGlobalAlerts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includestreaming: string@bool-completer # Determines whether Streaming Alerts are included in results
+  --includestreaming: oneof<nothing, bool> # Determines whether Streaming Alerts are included in results
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)

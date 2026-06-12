@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.brevo.com/v3"] }
 def auth-scheme-completer [] { ["api-key"] }
 
@@ -160,7 +159,7 @@ export def "email-campaigns list" [
   --limit: int # Number of documents per page (format: int64, default: 50)
   --offset: int # Index of the first document in the page (format: int64, default: 0)
   --qp-sort: string@sort-completer # Sort the results in the ascending/descending order of record creation. Default order is **descending** if `sort` is not passed (default: desc)
-  --excludeHtmlContent: string@bool-completer # Use this flag to exclude htmlContent from the response body. If set to **true**, htmlContent field will be returned as empty string in the response body
+  --excludeHtmlContent: oneof<nothing, bool> # Use this flag to exclude htmlContent from the response body. If set to **true**, htmlContent field will be returned as empty string in the response body
 ]: nothing -> record<campaigns: list<record>, count: int> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -199,20 +198,20 @@ export def "email-campaigns createEmailCampaign" [
   --toField: string # To personalize the **To** Field. If you want to include the first name and last name of your recipient, add **{FNAME} {LNAME}**. These contact attributes must already exist in your Brevo account. If input parameter **params** used please use **{{contact.FNAME}} {{contact.LNAME}}** for personalization  (e.g. {FNAME} {LNAME})
   --recipients: record # Segment ids and List ids to include/exclude from campaign — shape: {exclusionListIds?: list, listIds?: list, segmentIds?: list, exclusionSegmentIds?: list}
   --attachmentUrl: string # Absolute url of the attachment (no local file). Extension allowed: #### xlsx, xls, ods, docx, docm, doc, csv, pdf, txt, gif, jpg, jpeg, png, tif, tiff, rtf, bmp, cgm, css, shtml, html, htm, zip, xml, ppt, pptx, tar, ez, ics, mobi, msg, pub and eps  (format: url, e.g. https://attachment.domain.com)
-  --inlineImageActivation: string@bool-completer # Use true to embedded the images in your email. Final size of the email should be less than **4MB**. Campaigns with embedded images can _not be sent to more than 5000 contacts_  (default: false, e.g. true)
-  --mirrorActive: string@bool-completer # Use true to enable the mirror link (e.g. true)
+  --inlineImageActivation: oneof<nothing, bool> # Use true to embedded the images in your email. Final size of the email should be less than **4MB**. Campaigns with embedded images can _not be sent to more than 5000 contacts_  (default: false, e.g. true)
+  --mirrorActive: oneof<nothing, bool> # Use true to enable the mirror link (e.g. true)
   --footer: string # Footer of the email campaign (e.g. [DEFAULT_FOOTER])
   --header: string # Header of the email campaign (e.g. [DEFAULT_HEADER])
   --utmCampaign: string # Customize the utm_campaign value. If this field is empty, the campaign name will be used. Only alphanumeric characters and spaces are allowed (e.g. NL_05_2017)
   --params: record # Pass the set of attributes to customize the type classic campaign. For example: **{"FNAME":"Joe", "LNAME":"Doe"}**. Only available if **type** is **classic**. It's considered only if campaign is in _New Template Language format_. The New Template Language is dependent on the values of **subject, htmlContent/htmlUrl, sender.name & toField**  (e.g. {FNAME: Joe, LNAME: Doe})
-  --sendAtBestTime: string@bool-completer # Set this to true if you want to send your campaign at best time. (default: false, e.g. true)
-  --abTesting: string@bool-completer # Status of A/B Test. abTesting = false means it is disabled & abTesting = true means it is enabled. **subjectA, subjectB, splitRule, winnerCriteria & winnerDelay** will be considered when abTesting is set to true. subjectA & subjectB are mandatory together & subject if passed is ignored. **Can be set to true only if sendAtBestTime is false**. You will be able to set up two subject lines for your campaign and send them to a random sample of your total recipients. Half of the test group will receive version A, and the other half will receive version B  (default: false, e.g. true)
+  --sendAtBestTime: oneof<nothing, bool> # Set this to true if you want to send your campaign at best time. (default: false, e.g. true)
+  --abTesting: oneof<nothing, bool> # Status of A/B Test. abTesting = false means it is disabled & abTesting = true means it is enabled. **subjectA, subjectB, splitRule, winnerCriteria & winnerDelay** will be considered when abTesting is set to true. subjectA & subjectB are mandatory together & subject if passed is ignored. **Can be set to true only if sendAtBestTime is false**. You will be able to set up two subject lines for your campaign and send them to a random sample of your total recipients. Half of the test group will receive version A, and the other half will receive version B  (default: false, e.g. true)
   --subjectA: string # Subject A of the campaign. **Mandatory if abTesting = true**. subjectA & subjectB should have unique value  (e.g. Discover the New Collection!)
   --subjectB: string # Subject B of the campaign. **Mandatory if abTesting = true**. subjectA & subjectB should have unique value  (e.g. Want to discover the New Collection?)
   --splitRule: int # Add the size of your test groups. **Mandatory if abTesting = true & 'recipients' is passed**. We'll send version A and B to a random sample of recipients, and then the winning version to everyone else  (format: int64, e.g. 50)
   --winnerCriteria: string@winnerCriteria-completer # Choose the metrics that will determinate the winning version. **Mandatory if _splitRule_ >= 1 and < 50**. If splitRule = 50, `winnerCriteria` is ignored if passed  (e.g. open)
   --winnerDelay: int # Choose the duration of the test in hours. Maximum is 7 days, pass 24*7 = 168 hours. The winning version will be sent at the end of the test. **Mandatory if _splitRule_ >= 1 and < 50**. If splitRule = 50, `winnerDelay` is ignored if passed  (format: int64, e.g. 50)
-  --ipWarmupEnable: string@bool-completer # **Available for dedicated ip clients**. Set this to true if you wish to warm up your ip.  (default: false, e.g. true)
+  --ipWarmupEnable: oneof<nothing, bool> # **Available for dedicated ip clients**. Set this to true if you wish to warm up your ip.  (default: false, e.g. true)
   --initialQuota: int # **Mandatory if ipWarmupEnable is set to true**. Set an initial quota greater than 1 for warming up your ip. We recommend you set a value of 3000.  (format: int64, e.g. 3000)
   --increaseRate: int # **Mandatory if ipWarmupEnable is set to true**. Set a percentage increase rate for warming up your ip. We recommend you set the increase rate to 30% per day. If you want to send the same number of emails every day, set the daily increase value to 0%.  (format: int64, e.g. 70)
   --unsubscriptionPageId: string # Enter an unsubscription page id. The page id is a 24 digit alphanumeric id that can be found in the URL when editing the page. If not entered, then the default unsubscription page will be used.  (e.g. 62cbb7fabbe85021021aac52)
@@ -282,21 +281,21 @@ export def "email-campaigns updateEmailCampaign" [
   --toField: string # To personalize the **To** Field. If you want to include the first name and last name of your recipient, add **{FNAME} {LNAME}**. These contact attributes must already exist in your Brevo account. If input parameter **params** used please use **{{contact.FNAME}} {{contact.LNAME}}** for personalization  (e.g. {FNAME} {LNAME})
   --recipients: record # Segment ids and List ids to include/exclude from campaign — shape: {exclusionListIds?: list, listIds?: list, segmentIds?: list, exclusionSegmentIds?: list}
   --attachmentUrl: string # Absolute url of the attachment (no local file). Extension allowed: #### xlsx, xls, ods, docx, docm, doc, csv, pdf, txt, gif, jpg, jpeg, png, tif, tiff, rtf, bmp, cgm, css, shtml, html, htm, zip, xml, ppt, pptx, tar, ez, ics, mobi, msg, pub and eps'  (format: url, e.g. https://attachment.domain.com)
-  --inlineImageActivation: string@bool-completer # Status of inline image. inlineImageActivation = false means image can’t be embedded, & inlineImageActivation = true means image can be embedded, in the email. You cannot send a campaign of more than **4MB** with images embedded in the email. Campaigns with the images embedded in the email _must be sent to less than 5000 contacts_.  (default: false, e.g. true)
-  --mirrorActive: string@bool-completer # Status of mirror links in campaign. mirrorActive = false means mirror links are deactivated, & mirrorActive = true means mirror links are activated, in the campaign (e.g. true)
-  --recurring: string@bool-completer # **FOR TRIGGER ONLY !** Type of trigger campaign.recurring = false means contact can receive the same Trigger campaign only once, & recurring = true means contact can receive the same Trigger campaign several times  (default: false, e.g. false)
+  --inlineImageActivation: oneof<nothing, bool> # Status of inline image. inlineImageActivation = false means image can’t be embedded, & inlineImageActivation = true means image can be embedded, in the email. You cannot send a campaign of more than **4MB** with images embedded in the email. Campaigns with the images embedded in the email _must be sent to less than 5000 contacts_.  (default: false, e.g. true)
+  --mirrorActive: oneof<nothing, bool> # Status of mirror links in campaign. mirrorActive = false means mirror links are deactivated, & mirrorActive = true means mirror links are activated, in the campaign (e.g. true)
+  --recurring: oneof<nothing, bool> # **FOR TRIGGER ONLY !** Type of trigger campaign.recurring = false means contact can receive the same Trigger campaign only once, & recurring = true means contact can receive the same Trigger campaign several times  (default: false, e.g. false)
   --footer: string # Footer of the email campaign (e.g. [DEFAULT_FOOTER])
   --header: string # Header of the email campaign (e.g. [DEFAULT_HEADER])
   --utmCampaign: string # Customize the utm_campaign value. If this field is empty, the campaign name will be used. Only alphanumeric characters and spaces are allowed (e.g. NL_05_2017)
   --params: record # Pass the set of attributes to customize the type classic campaign. For example: **{"FNAME":"Joe", "LNAME":"Doe"}**. Only available if **type** is **classic**. It's considered only if campaign is in _New Template Language format_. The New Template Language is dependent on the values of **subject, htmlContent/htmlUrl, sender.name & toField**  (e.g. {FNAME: Joe, LNAME: Doe})
-  --sendAtBestTime: string@bool-completer # Set this to true if you want to send your campaign at best time. Note:- **if true, warmup ip will be disabled.**  (e.g. true)
-  --abTesting: string@bool-completer # Status of A/B Test. abTesting = false means it is disabled & abTesting = true means it is enabled. **subjectA, subjectB, splitRule, winnerCriteria & winnerDelay** will be considered when abTesting is set to true. subjectA & subjectB are mandatory together & subject if passed is ignored. **Can be set to true only if sendAtBestTime is false**. You will be able to set up two subject lines for your campaign and send them to a random sample of your total recipients. Half of the test group will receive version A, and the other half will receive version B  (default: false, e.g. true)
+  --sendAtBestTime: oneof<nothing, bool> # Set this to true if you want to send your campaign at best time. Note:- **if true, warmup ip will be disabled.**  (e.g. true)
+  --abTesting: oneof<nothing, bool> # Status of A/B Test. abTesting = false means it is disabled & abTesting = true means it is enabled. **subjectA, subjectB, splitRule, winnerCriteria & winnerDelay** will be considered when abTesting is set to true. subjectA & subjectB are mandatory together & subject if passed is ignored. **Can be set to true only if sendAtBestTime is false**. You will be able to set up two subject lines for your campaign and send them to a random sample of your total recipients. Half of the test group will receive version A, and the other half will receive version B  (default: false, e.g. true)
   --subjectA: string # Subject A of the campaign. **Mandatory if abTesting = true**. subjectA & subjectB should have unique value  (e.g. Discover the New Collection!)
   --subjectB: string # Subject B of the campaign. **Mandatory if abTesting = true**. subjectA & subjectB should have unique value  (e.g. Want to discover the New Collection?)
   --splitRule: int # Add the size of your test groups. **Mandatory if abTesting = true & 'recipients' is passed**. We'll send version A and B to a random sample of recipients, and then the winning version to everyone else  (format: int64, e.g. 50)
   --winnerCriteria: string@winnerCriteria-completer # Choose the metrics that will determinate the winning version. **Mandatory if _splitRule_ >= 1 and < 50**. If splitRule = 50, `winnerCriteria` is ignored if passed  (e.g. open)
   --winnerDelay: int # Choose the duration of the test in hours. Maximum is 7 days, pass 24*7 = 168 hours. The winning version will be sent at the end of the test. **Mandatory if _splitRule_ >= 1 and < 50**. If splitRule = 50, `winnerDelay` is ignored if passed  (format: int64, e.g. 50)
-  --ipWarmupEnable: string@bool-completer # **Available for dedicated ip clients**. Set this to true if you wish to warm up your ip.  (default: false, e.g. true)
+  --ipWarmupEnable: oneof<nothing, bool> # **Available for dedicated ip clients**. Set this to true if you wish to warm up your ip.  (default: false, e.g. true)
   --initialQuota: int # Set an initial quota greater than 1 for warming up your ip. We recommend you set a value of 3000.  (format: int64, e.g. 3000)
   --increaseRate: int # Set a percentage increase rate for warming up your ip. We recommend you set the increase rate to 30% per day. If you want to send the same number of emails every day, set the daily increase value to 0%.  (format: int64, e.g. 70)
   --unsubscriptionPageId: string # Enter an unsubscription page id. The page id is a 24 digit alphanumeric id that can be found in the URL when editing the page.  (e.g. 62cbb7fabbe85021021aac52)
@@ -668,7 +667,7 @@ export def "smtp-templates list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --templateStatus: string@bool-completer # Filter on the status of the template. Active = true, inactive = false
+  --templateStatus: oneof<nothing, bool> # Filter on the status of the template. Active = true, inactive = false
   --limit: int # Number of documents returned per page (format: int64, default: 50)
   --offset: int # Index of the first document in the page (format: int64, default: 0)
   --qp-sort: string@sort-completer # Sort the results in the ascending/descending order of record creation. Default order is **descending** if `sort` is not passed (default: desc)
@@ -704,7 +703,7 @@ export def "smtp-templates createSmtpTemplate" [
   --replyTo: string # Email on which campaign recipients will be able to reply to (format: email, e.g. support@myshop.com)
   --toField: string # To personalize the **To** Field. If you want to include the first name and last name of your recipient, add **{FNAME} {LNAME}**. These contact attributes must already exist in your Brevo account. If input parameter **params** used please use **{{contact.FNAME}} {{contact.LNAME}}** for personalization  (e.g. {FNAME} {LNAME})
   --attachmentUrl: string # Absolute url of the attachment (**no local file**). Extension allowed: #### xlsx, xls, ods, docx, docm, doc, csv, pdf, txt, gif, jpg, jpeg, png, tif, tiff, rtf, bmp, cgm, css, shtml, html, htm, zip, xml, ppt, pptx, tar, ez, ics, mobi, msg, pub and eps'  (format: url, e.g. https://attachment.domain.com)
-  --isActive: string@bool-completer # Status of template. isActive = true means template is active and isActive = false means template is inactive (e.g. true)
+  --isActive: oneof<nothing, bool> # Status of template. isActive = true means template is active and isActive = false means template is inactive (e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -762,7 +761,7 @@ export def "smtp-templates updateSmtpTemplate" [
   --replyTo: string # Email on which campaign recipients will be able to reply to (format: email, e.g. support@myshop.com)
   --toField: string # To personalize the **To** Field. If you want to include the first name and last name of your recipient, add **{FNAME} {LNAME}**. These contact attributes must already exist in your Brevo account. If input parameter **params** used please use **{{contact.FNAME}} {{contact.LNAME}}** for personalization  (e.g. {FNAME} {LNAME})
   --attachmentUrl: string # Absolute url of the attachment (**no local file**). Extensions allowed: #### xlsx, xls, ods, docx, docm, doc, csv, pdf, txt, gif, jpg, jpeg, png, tif, tiff, rtf, bmp, cgm, css, shtml, html, htm, zip, xml, ppt, pptx, tar, ez, ics, mobi, msg, pub and eps  (format: url, e.g. https://attachment.domain.com)
-  --isActive: string@bool-completer # Status of the template. isActive = false means template is inactive, isActive = true means template is active (e.g. true)
+  --isActive: oneof<nothing, bool> # Status of the template. isActive = false means template is inactive, isActive = true means template is active (e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -1178,10 +1177,10 @@ export def "contacts createContact" [
   --email: string # Email address of the user. **Mandatory if "ext_id"  & "SMS" field is not passed.**  (format: email, e.g. elly@example.com)
   --ext-id: string # Pass your own Id to create a contact. (e.g. externalId)
   --attributes: record # Pass the set of attributes and their values. The attribute's parameter should be passed in capital letter while creating a contact. Values that don't match the attribute type (e.g. text or string in a date attribute) will be ignored. **These attributes must be present in your Brevo account.**. For eg: **{"FNAME":"Elly", "LNAME":"Roger", "COUNTRIES":["India","China"]}**  (e.g. {FNAME: Elly, LNAME: Roger, COUNTRIES: [India, China]})
-  --emailBlacklisted: string@bool-completer # Set this field to blacklist the contact for emails (emailBlacklisted = true) (e.g. false)
-  --smsBlacklisted: string@bool-completer # Set this field to blacklist the contact for SMS (smsBlacklisted = true) (e.g. false)
+  --emailBlacklisted: oneof<nothing, bool> # Set this field to blacklist the contact for emails (emailBlacklisted = true) (e.g. false)
+  --smsBlacklisted: oneof<nothing, bool> # Set this field to blacklist the contact for SMS (smsBlacklisted = true) (e.g. false)
   --listIds: list # Ids of the lists to add the contact to
-  --updateEnabled: string@bool-completer # Facilitate to update the existing contact in the same request (updateEnabled = true) (default: false, e.g. false)
+  --updateEnabled: oneof<nothing, bool> # Facilitate to update the existing contact in the same request (updateEnabled = true) (default: false, e.g. false)
   --smtpBlacklistSender: list # transactional email forbidden sender for contact. Use only for email Contact ( only available if updateEnabled = true )
 ]: any -> record<id: int> {
   let input = $in
@@ -1291,8 +1290,8 @@ export def "contacts updateContact" [
   --identifierType: string@identifierType-completer # email_id for Email, contact_id for ID of the contact, ext_id for EXT_ID attribute, phone_id for SMS attribute, whatsapp_id for WHATSAPP attribute, landline_number_id for LANDLINE attribute
   --attributes: record # Pass the set of attributes to be updated. **These attributes must be present in your account**. To update existing email address of a contact with the new one please pass EMAIL in attributes. For example, **{ "EMAIL":"newemail@domain.com", "FNAME":"Ellie", "LNAME":"Roger", "COUNTRIES":["India","China"]}**. The attribute's parameter should be passed in capital letter while updating a contact. Values that don't match the attribute type (e.g. text or string in a date attribute) will be ignored. Keep in mind transactional attributes can be updated the same way as normal attributes. Mobile Number in **SMS** field should be passed with proper country code. For example: **{"SMS":"+91xxxxxxxxxx"} or {"SMS":"0091xxxxxxxxxx"}**  (e.g. {EMAIL: newemail@domain.com, FNAME: Ellie, LNAME: Roger, COUNTRIES: [India, China]})
   --ext-id: string # Pass your own Id to update ext_id of a contact. (e.g. updateExternalId)
-  --emailBlacklisted: string@bool-completer # Set/unset this field to blacklist/allow the contact for emails (emailBlacklisted = true) (e.g. false)
-  --smsBlacklisted: string@bool-completer # Set/unset this field to blacklist/allow the contact for SMS (smsBlacklisted = true) (e.g. true)
+  --emailBlacklisted: oneof<nothing, bool> # Set/unset this field to blacklist/allow the contact for emails (emailBlacklisted = true) (e.g. false)
+  --smsBlacklisted: oneof<nothing, bool> # Set/unset this field to blacklist/allow the contact for SMS (smsBlacklisted = true) (e.g. true)
   --listIds: list # Ids of the lists to add the contact to
   --unlinkListIds: list # Ids of the lists to remove the contact from
   --smtpBlacklistSender: list # transactional email forbidden sender for contact. Use only for email Contact
@@ -1427,7 +1426,7 @@ export def "contacts-attributes createAttribute" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --value: string # Value of the attribute. **Use only if the attribute's category is 'calculated' or 'global'**  (e.g. COUNT[BLACKLISTED,BLACKLISTED,<,NOW()])
-  --isRecurring: string@bool-completer # Type of the attribute. **Use only if the attribute's category is 'calculated' or 'global'**  (e.g. true)
+  --isRecurring: oneof<nothing, bool> # Type of the attribute. **Use only if the attribute's category is 'calculated' or 'global'**  (e.g. true)
   --enumeration: list # List of values and labels that the attribute can take. **Use only if the attribute's category is "category"**. None of the category options can exceed max 200 characters. For example: **[{"value":1, "label":"male"}, {"value":2, "label":"female"}]** — item shape: {value: int, label: string}
   --multiCategoryOptions: list # List of options you want to add for multiple-choice attribute. **Use only if the attribute's category is "normal" and attribute's type is "multiple-choice". None of the multicategory options can exceed max 200 characters.** For example: **["USA","INDIA"]**
   --type: string@type-completer-1 # Type of the attribute. **Use only if the attribute's category is 'normal', 'category' or 'transactional'** Type **user and multiple-choice** is only available if the category is **normal** attribute Type **id** is only available if the category is **transactional** attribute Type **category** is only available if the category is **category** attribute  (e.g. text)
@@ -1856,7 +1855,7 @@ export def "contacts-lists-contacts-remove removeContactFromList" [
   --allow-errors(-e) # Return full response without error handling
   --emails: list # **Required if 'all' is false and 'ids', 'extIds' are empty.** Emails to remove from a list. You can pass a **maximum of 150 emails** for removal in one request.
   --ids: list # **Required if 'all' is false and 'emails', 'extIds' are empty.** IDs to remove from a list. You can pass a **maximum of 150 IDs** for removal in one request.
-  --all: string@bool-completer # **Required if 'emails', 'extIds' and 'ids' are empty.** Remove all existing contacts from a list. A process will be created in this scenario. You can fetch the process details to know about the progress  (e.g. true)
+  --all: oneof<nothing, bool> # **Required if 'emails', 'extIds' and 'ids' are empty.** Remove all existing contacts from a list. A process will be created in this scenario. You can fetch the process details to know about the progress  (e.g. true)
   --extIds: list # **Required if 'all' is false, 'ids' and 'emails' are empty.** EXT_ID attributes to remove from a list. You can pass a **maximum of 150 EXT_ID attributes** for removal in one request.
 ]: any -> record<contacts: record<success: any, failure: any, total: int, processId: int>> {
   let input = $in
@@ -1886,8 +1885,8 @@ export def "contacts-export requestContactExport" [
   --exportAttributes: list # List of all the attributes that you want to export. **These attributes must be present in your contact database. It is required if exportMandatoryAttributes is set false. ** For example: **['fname', 'lname', 'email']**
   customContactFilter: record # Set the filter for the contacts to be exported. — shape: {actionForContacts?: "allContacts"|"subscribed"|"unsubscribed"|"unsubscribedPerList", actionForEmailCampaigns?: "openers"|"nonOpeners"|"clickers"|"nonClickers"|"unsubscribed"|"hardBounces"|"softBounces", actionForSmsCampaigns?: "hardBounces"|"softBounces"|"unsubscribed", listId?: int, segmentId?: int, emailCampaignId?: int, smsCampaignId?: int}
   --notifyUrl: string # Webhook that will be called once the export process is finished. For reference, https://help.brevo.com/hc/en-us/articles/360007666479 (format: url, e.g. http://requestb.in/173lyyx1)
-  --disableNotification: string@bool-completer # To avoid generating the email notification upon contact export, pass **true** (default: false, e.g. false)
-  --exportMandatoryAttributes: string@bool-completer # To export mandatory attributes like EMAIL, ADDED_TIME, MODIFIED_TIME (default: true, e.g. false)
+  --disableNotification: oneof<nothing, bool> # To avoid generating the email notification upon contact export, pass **true** (default: false, e.g. false)
+  --exportMandatoryAttributes: oneof<nothing, bool> # To export mandatory attributes like EMAIL, ADDED_TIME, MODIFIED_TIME (default: true, e.g. false)
   --exportSubscriptionStatus: list # Export subscription status of contacts for email & sms marketting. Pass email_marketing to obtain the marketing email subscription status & sms_marketing to retrieve the marketing SMS status of the contact.
   --exportMetadata: list # Export metadata of contacts such as _listIds, ADDED_TIME, MODIFIED_TIME.
 ]: any -> any {
@@ -1922,11 +1921,11 @@ export def "contacts-import importContacts" [
   --listIds: list # **Mandatory if newList is not defined.** Ids of the lists in which the contacts shall be imported. For example, **[2, 4, 7]**.
   --notifyUrl: string # URL that will be called once the import process is finished. For reference, https://help.brevo.com/hc/en-us/articles/360007666479 (format: url, e.g. http://requestb.in/173lyyx1)
   --newList: record # To create a new list and import the contacts into it, pass the listName and an optional folderId. — shape: {listName?: string, folderId?: int}
-  --emailBlacklist: string@bool-completer # To blacklist all the contacts for email (default: false, e.g. false)
-  --disableNotification: string@bool-completer # To disable email notification (default: false, e.g. false)
-  --smsBlacklist: string@bool-completer # To blacklist all the contacts for sms (default: false, e.g. false)
-  --updateExistingContacts: string@bool-completer # To facilitate the choice to update the existing contacts (default: true, e.g. true)
-  --emptyContactsAttributes: string@bool-completer # To facilitate the choice to erase any attribute of the existing contacts with empty value. emptyContactsAttributes = true means the empty fields in your import will erase any attribute that currently contain data in Brevo, & emptyContactsAttributes = false means the empty fields will not affect your existing data ( **only available if `updateExistingContacts` set to true **)  (default: false, e.g. true)
+  --emailBlacklist: oneof<nothing, bool> # To blacklist all the contacts for email (default: false, e.g. false)
+  --disableNotification: oneof<nothing, bool> # To disable email notification (default: false, e.g. false)
+  --smsBlacklist: oneof<nothing, bool> # To blacklist all the contacts for sms (default: false, e.g. false)
+  --updateExistingContacts: oneof<nothing, bool> # To facilitate the choice to update the existing contacts (default: true, e.g. true)
+  --emptyContactsAttributes: oneof<nothing, bool> # To facilitate the choice to erase any attribute of the existing contacts with empty value. emptyContactsAttributes = true means the empty fields in your import will erase any attribute that currently contain data in Brevo, & emptyContactsAttributes = false means the empty fields will not affect your existing data ( **only available if `updateExistingContacts` set to true **)  (default: false, e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -2038,7 +2037,7 @@ export def "sms-campaigns createSmsCampaign" [
   content: string # Content of the message. The **maximum characters used per SMS is 160**, if used more than that, it will be counted as more than one SMS  (e.g. Get a discount by visiting our NY store and saying : Happy Spring!)
   --recipients: record # shape: {listIds: list, exclusionListIds?: list}
   --scheduledAt: string # UTC date-time on which the campaign has to run (YYYY-MM-DDTHH:mm:ss.SSSZ). **Prefer to pass your timezone in date-time format for accurate result.**  (e.g. 2017-05-05T12:30:00+02:00)
-  --unicodeEnabled: string@bool-completer # Format of the message. It indicates whether the content should be treated as unicode or not.  (default: false, e.g. true)
+  --unicodeEnabled: oneof<nothing, bool> # Format of the message. It indicates whether the content should be treated as unicode or not.  (default: false, e.g. true)
   --organisationPrefix: string # A recognizable prefix will ensure your audience knows who you are. Recommended by U.S. carriers. This will be added as your Brand Name before the message content. **Prefer verifying maximum length of 160 characters including this prefix in message content to avoid multiple sending of same sms.** (e.g. MyCompany)
   --unsubscribeInstruction: string # Instructions to unsubscribe from future communications. Recommended by U.S. carriers. Must include **STOP** keyword. This will be added as instructions after the end of message content. **Prefer verifying maximum length of 160 characters including this instructions in message content to avoid multiple sending of same sms.** (e.g. send Stop if you want to unsubscribe.)
 ]: any -> any {
@@ -2094,7 +2093,7 @@ export def "sms-campaigns updateSmsCampaign" [
   --content: string # Content of the message. The **maximum characters used per SMS is 160**, if used more than that, it will be counted as more than one SMS  (e.g. Get a discount by visiting our NY store and saying : Happy Spring!)
   --recipients: record # shape: {listIds: list, exclusionListIds?: list}
   --scheduledAt: string # UTC date-time on which the campaign has to run (YYYY-MM-DDTHH:mm:ss.SSSZ). **Prefer to pass your timezone in date-time format for accurate result.**  (e.g. 2017-05-05T12:30:00+02:00)
-  --unicodeEnabled: string@bool-completer # Format of the message. It indicates whether the content should be treated as unicode or not.  (default: false, e.g. true)
+  --unicodeEnabled: oneof<nothing, bool> # Format of the message. It indicates whether the content should be treated as unicode or not.  (default: false, e.g. true)
   --organisationPrefix: string # A recognizable prefix will ensure your audience knows who you are. Recommended by U.S. carriers. This will be added as your Brand Name before the message content. **Prefer verifying maximum length of 160 characters including this prefix in message content to avoid multiple sending of same sms.** (e.g. MyCompany)
   --unsubscribeInstruction: string # Instructions to unsubscribe from future communications. Recommended by U.S. carriers. Must include **STOP** keyword. This will be added as instructions after the end of message content. **Prefer verifying maximum length of 160 characters including this instructions in message content to avoid multiple sending of same sms.** (e.g. send Stop if you want to unsubscribe.)
 ]: any -> any {
@@ -2278,7 +2277,7 @@ export def "transactional-sms-send sendAsyncTransactionalSms" [
   --type: string@type-completer-2 # Type of the SMS. Marketing SMS messages are those sent typically with marketing content. Transactional SMS messages are sent to individuals and are triggered in response to some action, such as a sign-up, purchase, etc. (default: transactional, e.g. marketing)
   --tag: string # A tag can have two types of values, either a string or an array of strings. (e.g. "tag1" OR ["tag1", "tag2"])
   --webUrl: string # Webhook to call for each event triggered by the message (delivered etc.) (format: url, e.g. http://requestb.in/173lyyx1)
-  --unicodeEnabled: string@bool-completer # Format of the message. It indicates whether the content should be treated as unicode or not.  (default: false, e.g. true)
+  --unicodeEnabled: oneof<nothing, bool> # Format of the message. It indicates whether the content should be treated as unicode or not.  (default: false, e.g. true)
   --organisationPrefix: string # A recognizable prefix will ensure your audience knows who you are. Recommended by U.S. carriers. This will be added as your Brand Name before the message content. **Prefer verifying maximum length of 160 characters including this prefix in message content to avoid multiple sending of same sms.** (e.g. MyCompany)
 ]: any -> record<messageId: int> {
   let input = $in
@@ -2310,7 +2309,7 @@ export def "transactional-sms-sms sendTransacSms" [
   --type: string@type-completer-2 # Type of the SMS. Marketing SMS messages are those sent typically with marketing content. Transactional SMS messages are sent to individuals and are triggered in response to some action, such as a sign-up, purchase, etc. (default: transactional, e.g. marketing)
   --tag: string # A tag can have two types of values, either a string or an array of strings. (e.g. "tag1" OR ["tag1", "tag2"])
   --webUrl: string # Webhook to call for each event triggered by the message (delivered etc.) (format: url, e.g. http://requestb.in/173lyyx1)
-  --unicodeEnabled: string@bool-completer # Format of the message. It indicates whether the content should be treated as unicode or not.  (default: false, e.g. true)
+  --unicodeEnabled: oneof<nothing, bool> # Format of the message. It indicates whether the content should be treated as unicode or not.  (default: false, e.g. true)
   --organisationPrefix: string # A recognizable prefix will ensure your audience knows who you are. Recommended by U.S. carriers. This will be added as your Brand Name before the message content. **Prefer verifying maximum length of 160 characters including this prefix in message content to avoid multiple sending of same sms.** (e.g. MyCompany)
 ]: any -> record<reference: string, messageId: int, smsCount: int, usedCredits: float, remainingCredits: float> {
   let input = $in
@@ -3371,7 +3370,7 @@ export def "loyalty-balance-programs-balance-definitions-limits createBalanceLim
   constraintType: string@constraintType-completer # Defines whether the limit applies to transaction count or amount.
   durationUnit: string@durationUnit-completer # Unit of time for which the limit is applicable.
   durationValue: int # Number of time units for the balance limit.
-  --slidingSchedule: string@bool-completer # Determines if the limit resets on a rolling schedule.
+  --slidingSchedule: oneof<nothing, bool> # Determines if the limit resets on a rolling schedule.
   transactionType: string@transactionType-completer # Specifies whether the limit applies to credit or debit transactions.
   value: int # Maximum allowed value for the specified constraint type.
 ]: any -> record<balanceDefinitionId: string, constraintType: string, createdAt: string, durationUnit: string, durationValue: int, id: string, slidingSchedule: bool, transactionType: string, updatedAt: string, value: int> {
@@ -3454,7 +3453,7 @@ export def "loyalty-balance-programs-balance-definitions-limits updateBalanceLim
   constraintType: string@constraintType-completer # Defines whether the limit applies to transaction count or amount.
   durationUnit: string@durationUnit-completer # Unit of time for which the limit is applicable.
   durationValue: int # Number of time units for the balance limit.
-  --slidingSchedule: string@bool-completer # Determines if the limit resets on a rolling schedule.
+  --slidingSchedule: oneof<nothing, bool> # Determines if the limit resets on a rolling schedule.
   transactionType: string@transactionType-completer # Specifies whether the limit applies to credit or debit transactions.
   value: int # Maximum allowed value for the specified constraint type.
 ]: any -> record<balanceDefinitionId: string, constraintType: string, createdAt: string, durationUnit: string, durationValue: int, id: string, slidingSchedule: bool, transactionType: string, updatedAt: string, value: int> {
@@ -3555,7 +3554,7 @@ export def "loyalty-balance-programs-transactions beginTransaction" [
   --allow-errors(-e) # Return full response without error handling
   --LoyaltySubscriptionId: string # Unique identifier for the loyalty subscription (required unless `contactId` is provided).
   amount: float # Transaction amount (must be provided).
-  --autoComplete: string@bool-completer # Whether the transaction should be automatically completed.
+  --autoComplete: oneof<nothing, bool> # Whether the transaction should be automatically completed.
   balanceDefinitionId: string # Unique identifier (UUID) of the associated balance definition.
   --balanceExpiryInMinutes: int # Optional expiry time for the balance in minutes (must be greater than 0 if provided).
   --contactId: int # Unique identifier of the contact involved in the transaction (required unless `LoyaltySubscriptionId` is provided).
@@ -4301,7 +4300,7 @@ export def "webhooks createWebhook" [
   --type: string@type-completer-3 # Type of the webhook (default: transactional, e.g. marketing)
   --channel: string@channel-completer # channel of webhook (default: email, e.g. sms)
   --domain: string # Inbound domain of webhook, required in case of event type `inbound` (e.g. example.com)
-  --batched: string@bool-completer # Batching configuration of the webhook, we send batched webhooks if its true (e.g. true)
+  --batched: oneof<nothing, bool> # Batching configuration of the webhook, we send batched webhooks if its true (e.g. true)
   --body-auth: record # Authentication header to be send with the webhook requests (e.g. {type: bearer, token: test-auth-token1234})
   --headers: list
 ]: any -> any {
@@ -4355,7 +4354,7 @@ export def "webhooks updateWebhook" [
   --description: string # Description of the webhook (e.g. Webhook triggered on contact hardbounce)
   --events: list # - Events triggering the webhook. Possible values for **Transactional** type webhook: #### `sent` OR `request`, `delivered`, `hardBounce`, `softBounce`, `blocked`, `spam`, `invalid`, `deferred`, `click`, `opened`, `uniqueOpened` and `unsubscribed` - Possible values for **Marketing** type webhook: #### `spam`, `opened`, `click`, `hardBounce`, `softBounce`, `unsubscribed`, `listAddition` & `delivered` - Possible values for **Inbound** type webhook: #### `inboundEmailProcessed`
   --domain: string # Inbound domain of webhook, used in case of event type `inbound` (e.g. example.com)
-  --batched: string@bool-completer # Batching configuration of the webhook, we send batched webhooks if its true (e.g. true)
+  --batched: oneof<nothing, bool> # Batching configuration of the webhook, we send batched webhooks if its true (e.g. true)
   --body-auth: record # Authentication header to be send with the webhook requests (e.g. {type: bearer, token: test-auth-token1234})
   --headers: list
 ]: any -> any {
@@ -4576,7 +4575,7 @@ export def "organization-user-invitation-send inviteuser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   email: string # Email address for the organization (format: email, e.g. inviteuser@example.com)
-  --all-features-access: string@bool-completer # All access to the features (e.g. true)
+  --all-features-access: oneof<nothing, bool> # All access to the features (e.g. true)
   privileges: list # item shape: {feature?: "email_campaigns"|"sms_campaigns"|"contacts"|"templates"|"workflows"|"landing_pages"|"transactional_emails"|"smtp_api"|"user_management"|"sales_platform"|"phone"|"conversations"|"senders_domains_dedicated_ips"|"push_notifications"|"companies", permissions?: list}
 ]: any -> record<status: string, invoice_id: string> {
   let input = $in
@@ -4604,7 +4603,7 @@ export def "organization-user-update-permissions EditUserPermission" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   email: string # Email address for the organization (format: email, e.g. inviteuser@example.com)
-  --all-features-access: string@bool-completer # All access to the features (e.g. true)
+  --all-features-access: oneof<nothing, bool> # All access to the features (e.g. true)
   privileges: list # item shape: {feature?: "email_campaigns"|"sms_campaigns"|"contacts"|"templates"|"workflows"|"landing_pages"|"transactional_emails"|"smtp_api"|"user_management"|"sales_platform"|"phone"|"conversations"|"senders_domains_dedicated_ips"|"push_notifications"|"companies", permissions?: list}
 ]: any -> record<status: string, credit_notes: list<string>, invoice_id: string> {
   let input = $in
@@ -4994,19 +4993,19 @@ export def "corporate-sub-account-applications-toggle put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --inbox: string@bool-completer # Set this field to enable or disable Inbox on the sub-account / Not applicable on ENTv2
-  --whatsapp: string@bool-completer # Set this field to enable or disable Whatsapp campaigns on the sub-account
-  --automation: string@bool-completer # Set this field to enable or disable Automation on the sub-account
-  --email-campaigns: string@bool-completer # Set this field to enable or disable Email Campaigns on the sub-account
-  --sms-campaigns: string@bool-completer # Set this field to enable or disable SMS Marketing on the sub-account
-  --landing-pages: string@bool-completer # Set this field to enable or disable Landing pages on the sub-account
-  --transactional-emails: string@bool-completer # Set this field to enable or disable Transactional Email on the sub-account
-  --transactional-sms: string@bool-completer # Set this field to enable or disable Transactional SMS on the sub-account
-  --facebook-ads: string@bool-completer # Set this field to enable or disable Facebook ads on the sub-account
-  --web-push: string@bool-completer # Set this field to enable or disable Web Push on the sub-account
-  --meetings: string@bool-completer # Set this field to enable or disable Meetings on the sub-account
-  --conversations: string@bool-completer # Set this field to enable or disable Conversations on the sub-account
-  --crm: string@bool-completer # Set this field to enable or disable Sales CRM on the sub-account
+  --inbox: oneof<nothing, bool> # Set this field to enable or disable Inbox on the sub-account / Not applicable on ENTv2
+  --whatsapp: oneof<nothing, bool> # Set this field to enable or disable Whatsapp campaigns on the sub-account
+  --automation: oneof<nothing, bool> # Set this field to enable or disable Automation on the sub-account
+  --email-campaigns: oneof<nothing, bool> # Set this field to enable or disable Email Campaigns on the sub-account
+  --sms-campaigns: oneof<nothing, bool> # Set this field to enable or disable SMS Marketing on the sub-account
+  --landing-pages: oneof<nothing, bool> # Set this field to enable or disable Landing pages on the sub-account
+  --transactional-emails: oneof<nothing, bool> # Set this field to enable or disable Transactional Email on the sub-account
+  --transactional-sms: oneof<nothing, bool> # Set this field to enable or disable Transactional SMS on the sub-account
+  --facebook-ads: oneof<nothing, bool> # Set this field to enable or disable Facebook ads on the sub-account
+  --web-push: oneof<nothing, bool> # Set this field to enable or disable Web Push on the sub-account
+  --meetings: oneof<nothing, bool> # Set this field to enable or disable Meetings on the sub-account
+  --conversations: oneof<nothing, bool> # Set this field to enable or disable Conversations on the sub-account
+  --crm: oneof<nothing, bool> # Set this field to enable or disable Sales CRM on the sub-account
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -5221,7 +5220,7 @@ export def "corporate-user-invitation-send inviteAdminUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   email: string # Email address for the organization (format: email, e.g. inviteuser@example.com)
-  --all-features-access: string@bool-completer # All access to the features (e.g. true)
+  --all-features-access: oneof<nothing, bool> # All access to the features (e.g. true)
   --groupIds: list # Ids of Group (e.g. [2baxxxxxxxxxxxxxxxxxxxxxcaa, 65axxxxxxxxxxxxxxxxxxxxxc5a])
   privileges: list # item shape: {feature?: "my_plan"|"api"|"user_management"|"app_management"|"sub_organization_groups"|"create_sub_organizations"|"manage_sub_organizations"|"analytics"|"security", permissions?: list}
 ]: any -> record<id: string> {
@@ -5335,7 +5334,7 @@ export def "corporate-user-permissions put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all-features-access: string@bool-completer # All access to the features (e.g. true)
+  --all-features-access: oneof<nothing, bool> # All access to the features (e.g. true)
   privileges: list # item shape: {feature?: "user_management"|"api"|"my_plan"|"apps_management"|"analytics"|"sub_organization_groups"|"create_sub_organizations"|"manage_sub_organizations"|"security", permissions?: list}
 ]: any -> any {
   let input = $in
@@ -5933,7 +5932,7 @@ export def "crm-tasks post" [
   taskTypeId: string # Id for type of task e.g Call / Email / Meeting etc. (e.g. 61a5cd07ca1347c82306ad09)
   date: string # Task due date and time (format: date-time, e.g. 2021-11-01T17:44:54.668Z)
   --notes: string # Notes added to a task (e.g. In communication with client for resolution of queries.)
-  --done: string@bool-completer # Task marked as done (e.g. false)
+  --done: oneof<nothing, bool> # Task marked as done (e.g. false)
   --assignToId: string # To assign a task to a user you can use either the account email or ID. (e.g. 5faab4b7f195bb3c4c31e62a)
   --contactsIds: list # Contact ids for contacts linked to this task (e.g. [1, 2, 3])
   --dealsIds: list # Deal ids for deals a task is linked to (e.g. [61a5ce58c5d4795761045990, 61a5ce58c5d4795761045991, 61a5ce58c5d4795761045992])
@@ -6011,7 +6010,7 @@ export def "crm-tasks patch" [
   --taskTypeId: string # Id for type of task e.g Call / Email / Meeting etc. (e.g. 61a5cd07ca1347c82306ad09)
   --date: string # Task date/time (format: date-time, e.g. 2021-11-01T17:44:54.668Z)
   --notes: string # Notes added to a task (e.g. In communication with client for resolution of queries.)
-  --done: string@bool-completer # Task marked as done (e.g. false)
+  --done: oneof<nothing, bool> # Task marked as done (e.g. false)
   --assignToId: string # To assign a task to a user you can use either the account email or ID. (e.g. 5faab4b7f195bb3c4c31e62a)
   --contactsIds: list # Contact ids for contacts linked to this task (e.g. [1, 2, 3])
   --dealsIds: list # Deal ids for deals a task is linked to (e.g. [61a5ce58c5d4795761045990, 61a5ce58c5d4795761045991, 61a5ce58c5d4795761045992])
@@ -6705,7 +6704,7 @@ export def "orders-status-batch createBatchOrder" [
   --allow-errors(-e) # Return full response without error handling
   orders: list # array of order objects — item shape: {id: string, createdAt: string, updatedAt: string, status: string, amount: float, storeId?: string, identifiers?: record, products: list, billing?: record, coupons?: list, metaInfo?: record}
   --notifyUrl: string # Notify Url provided by client to get the status of batch request (e.g. https://en.wikipedia.org/wiki/Webhook)
-  --historical: string@bool-completer # Defines wether you want your orders to be considered as live data or as historical data (import of past data, synchronising data). True: orders will not trigger any automation workflows. False: orders will trigger workflows as usual. (default: true, e.g. true)
+  --historical: oneof<nothing, bool> # Defines wether you want your orders to be considered as live data or as historical data (import of past data, synchronising data). True: orders will not trigger any automation workflows. False: orders will trigger workflows as usual. (default: true, e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -6792,9 +6791,9 @@ export def "categories createUpdateCategory" [
   id: string # Unique Category ID as saved in the shop  (format: email, e.g. CAT123)
   --name: string # **Mandatory in case of creation**. Name of the Category, as displayed in the shop  (e.g. Electronics)
   --body-url: string # URL to the category (e.g. http://mydomain.com/category/electronics)
-  --updateEnabled: string@bool-completer # Facilitate to update the existing category in the same request (updateEnabled = true) (default: false, e.g. false)
+  --updateEnabled: oneof<nothing, bool> # Facilitate to update the existing category in the same request (updateEnabled = true) (default: false, e.g. false)
   --deletedAt: string # UTC date-time (YYYY-MM-DDTHH:mm:ss.SSSZ) of the category deleted from the shop's database (e.g. 2017-05-12T12:30:00Z)
-  --isDeleted: string@bool-completer # category deleted from the shop's database (e.g. true)
+  --isDeleted: oneof<nothing, bool> # category deleted from the shop's database (e.g. true)
 ]: any -> record<id: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -6843,7 +6842,7 @@ export def "categories-batch createUpdateBatchCategory" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   categories: list # array of categories objects — item shape: {id: string, name?: string, url?: string, deletedAt?: string, isDeleted?: bool}
-  --updateEnabled: string@bool-completer # Facilitate to update the existing categories in the same request (updateEnabled = true)
+  --updateEnabled: oneof<nothing, bool> # Facilitate to update the existing categories in the same request (updateEnabled = true)
 ]: any -> record<createdCount: int, updatedCount: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -6913,9 +6912,9 @@ export def "products createUpdateProduct" [
   --categories: list # Category ID-s of the product
   --parentId: string # Parent product id of the product (format: string)
   --metaInfo: record # Meta data of product such as description, vendor, producer, stock level. The size of cumulative metaInfo shall not exceed **1000 KB**. Maximum length of metaInfo object can be 20. (e.g. {description: Shoes for sports, brand: addidas})
-  --updateEnabled: string@bool-completer # Facilitate to update the existing category in the same request (updateEnabled = true) (default: false, e.g. false)
+  --updateEnabled: oneof<nothing, bool> # Facilitate to update the existing category in the same request (updateEnabled = true) (default: false, e.g. false)
   --deletedAt: string # UTC date-time (YYYY-MM-DDTHH:mm:ss.SSSZ) of the product deleted from the shop's database
-  --isDeleted: string@bool-completer # product deleted from the shop's database (e.g. true)
+  --isDeleted: oneof<nothing, bool> # product deleted from the shop's database (e.g. true)
   --stock: float # Current stock value of the product from the shop's database (e.g. 100)
 ]: any -> record<id: int> {
   let input = $in
@@ -6965,7 +6964,7 @@ export def "products-batch createUpdateBatchProducts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   products: list # array of products objects — item shape: {id: string, name: string, url?: string, imageUrl?: string, sku?: string, price?: float, categories?: list, parentId?: string, metaInfo?: record, deletedAt?: string, isDeleted?: bool, stock?: float}
-  --updateEnabled: string@bool-completer # Facilitate to update the existing categories in the same request (updateEnabled = true)
+  --updateEnabled: oneof<nothing, bool> # Facilitate to update the existing categories in the same request (updateEnabled = true)
 ]: any -> record<createdCount: int, updatedCount: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -7219,7 +7218,7 @@ export def "feeds createExternalFeed" [
   --body-token: string # Token for authType `token` (e.g. eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c)
   --headers: list # Custom headers for the feed (e.g. [{name: header1, value: value1}, {name: header2, value: value2}]) — item shape: {name?: string, value?: string}
   --maxRetries: int # Maximum number of retries on the feed url (default: 5, e.g. 5)
-  --cache: string@bool-completer # Toggle caching of feed url response (default: false, e.g. true)
+  --cache: oneof<nothing, bool> # Toggle caching of feed url response (default: false, e.g. true)
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -7276,7 +7275,7 @@ export def "feeds updateExternalFeed" [
   --body-token: string # Token for authType `token` (e.g. eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c)
   --headers: list # Custom headers for the feed (e.g. [{name: header1, value: value1}, {name: header2, value: value2}]) — item shape: {name?: string, value?: string}
   --maxRetries: int # Maximum number of retries on the feed url (default: 5, e.g. 5)
-  --cache: string@bool-completer # Toggle caching of feed url response (default: false, e.g. true)
+  --cache: oneof<nothing, bool> # Toggle caching of feed url response (default: false, e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))

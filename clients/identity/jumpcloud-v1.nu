@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://console.jumpcloud.com/api" "https://console.eu.jumpcloud.com/api" "https://console.in.jumpcloud.com/api"] }
 def auth-scheme-completer [] { ["x-api-key"] }
 
@@ -205,8 +204,8 @@ export def "applications post" [
   --allow-errors(-e) # Return full response without error handling
   --x-org-id: string
   --id: string
-  --active: string@bool-completer
-  --beta: string@bool-completer
+  --active: oneof<nothing, bool>
+  --beta: oneof<nothing, bool>
   --color: string@color-completer
   config: record # Only required for SAML configuration (not required for Bookmarks) — shape: {spErrorFlow?: record, signAssertion?: record, signResponse?: record, acsUrl?: record, constantAttributes?: record, databaseAttributes?: record, idpCertificate?: record, idpEntityId?: record, idpPrivateKey?: record, spEntityId?: record, authClaimConfiguration?: record}
   --created: string
@@ -278,8 +277,8 @@ export def "applications put" [
   --allow-errors(-e) # Return full response without error handling
   --x-org-id: string
   --body-id: string
-  --active: string@bool-completer
-  --beta: string@bool-completer
+  --active: oneof<nothing, bool>
+  --beta: oneof<nothing, bool>
   --color: string@color-completer
   config: record # Only required for SAML configuration (not required for Bookmarks) — shape: {spErrorFlow?: record, signAssertion?: record, signResponse?: record, acsUrl?: record, constantAttributes?: record, databaseAttributes?: record, idpCertificate?: record, idpEntityId?: record, idpPrivateKey?: record, spEntityId?: record, authClaimConfiguration?: record}
   --created: string
@@ -497,7 +496,7 @@ export def "commands post" [
   --organization: string # The ID of the organization.
   --schedule: string # A crontab that consists of: [ (seconds) (minutes) (hours) (days of month) (months) (weekdays) ] or [ immediate ]. If you send this as an empty string, it will run immediately.
   --scheduleRepeatType: string # When the command will repeat.
-  --sudo: string@bool-completer
+  --sudo: oneof<nothing, bool>
   --systems: list # Not used. Use /api/v2/commands/{id}/associations to bind commands to systems.
   --template: string # The template this command was created from
   --timeout: string # The time in seconds to allow the command to run for. The maximum value is 86400 seconds (1 day).
@@ -508,8 +507,8 @@ export def "commands post" [
   --scheduleYear: int # The year that a scheduled command will launch in.
   --filesS3: list # An array of file stored in S3 to include with the command. — item shape: {objectStorageId: string, name: string, destination: string, sha256: string}
   --description: string # Description of the command.
-  --aiGenerated: string@bool-completer # Whether this command was generated with AI assistance.
-  --templatingRequired: string@bool-completer # Whether this command requires templating before execution.
+  --aiGenerated: oneof<nothing, bool> # Whether this command was generated with AI assistance.
+  --templatingRequired: oneof<nothing, bool> # Whether this command requires templating before execution.
 ]: any -> record<command: string, commandRunners: list<string>, commandType: string, files: list<string>, launchType: string, listensTo: string, name: string, organization: string, schedule: string, scheduleRepeatType: string, sudo: bool, systems: list<string>, template: string, timeout: string, trigger: string, user: string, shell: string, timeToLiveSeconds: int, scheduleYear: int, filesS3: table<objectStorageId: string, name: string, destination: string, sha256: string>, description: string, aiGenerated: bool, templatingRequired: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -576,7 +575,7 @@ export def "commands put" [
   --organization: string # The ID of the organization.
   --schedule: string # A crontab that consists of: [ (seconds) (minutes) (hours) (days of month) (months) (weekdays) ] or [ immediate ]. If you send this as an empty string, it will run immediately.
   --scheduleRepeatType: string # When the command will repeat.
-  --sudo: string@bool-completer
+  --sudo: oneof<nothing, bool>
   --systems: list # Not used. Use /api/v2/commands/{id}/associations to bind commands to systems.
   --template: string # The template this command was created from
   --timeout: string # The time in seconds to allow the command to run for. The maximum value is 86400 seconds (1 day).
@@ -587,8 +586,8 @@ export def "commands put" [
   --scheduleYear: int # The year that a scheduled command will launch in.
   --filesS3: list # An array of file stored in S3 to include with the command. — item shape: {objectStorageId: string, name: string, destination: string, sha256: string}
   --description: string # Description of the command.
-  --aiGenerated: string@bool-completer # Whether this command was generated with AI assistance.
-  --templatingRequired: string@bool-completer # Whether this command requires templating before execution.
+  --aiGenerated: oneof<nothing, bool> # Whether this command was generated with AI assistance.
+  --templatingRequired: oneof<nothing, bool> # Whether this command requires templating before execution.
 ]: any -> record<command: string, commandRunners: list<string>, commandType: string, files: list<string>, launchType: string, listensTo: string, name: string, organization: string, schedule: string, scheduleRepeatType: string, sudo: bool, systems: list<string>, template: string, timeout: string, trigger: string, user: string, shell: string, timeToLiveSeconds: int, scheduleYear: int, filesS3: table<objectStorageId: string, name: string, destination: string, sha256: string>, description: string, aiGenerated: bool, templatingRequired: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -789,13 +788,13 @@ export def "radiusservers post" [
   --tagNames: list
   --userLockoutAction: string
   --userPasswordExpirationAction: string
-  --userPasswordEnabled: string@bool-completer
-  --userCertEnabled: string@bool-completer
-  --deviceCertEnabled: string@bool-completer
+  --userPasswordEnabled: oneof<nothing, bool>
+  --userCertEnabled: oneof<nothing, bool>
+  --deviceCertEnabled: oneof<nothing, bool>
   --caCert: string
-  --requireTlsAuth: string@bool-completer
-  --radsecEnabled: string@bool-completer
-  --requireRadsec: string@bool-completer
+  --requireTlsAuth: oneof<nothing, bool>
+  --radsecEnabled: oneof<nothing, bool>
+  --requireRadsec: oneof<nothing, bool>
   --caSource: string@caSource-completer # default: NONE
 ]: any -> record<_id: string, authIdp: string, mfa: string, name: string, networkSourceIp: string, organization: string, sharedSecret: string, tagNames: list<string>, tags: list<string>, userLockoutAction: string, userPasswordExpirationAction: string, userPasswordEnabled: bool, userCertEnabled: bool, deviceCertEnabled: bool, caCert: string, requireTlsAuth: bool, radsecEnabled: bool, requireRadsec: bool, caSource: string> {
   let input = $in
@@ -857,13 +856,13 @@ export def "radiusservers put" [
   --userLockoutAction: string
   --userPasswordExpirationAction: string
   sharedSecret: string
-  --userPasswordEnabled: string@bool-completer
-  --userCertEnabled: string@bool-completer
-  --deviceCertEnabled: string@bool-completer
+  --userPasswordEnabled: oneof<nothing, bool>
+  --userCertEnabled: oneof<nothing, bool>
+  --deviceCertEnabled: oneof<nothing, bool>
   --caCert: string
-  --requireTlsAuth: string@bool-completer
-  --radsecEnabled: string@bool-completer
-  --requireRadsec: string@bool-completer
+  --requireTlsAuth: oneof<nothing, bool>
+  --radsecEnabled: oneof<nothing, bool>
+  --requireRadsec: oneof<nothing, bool>
   --caSource: string@caSource-completer # default: NONE
 ]: any -> record<_id: string, authIdp: string, mfa: string, name: string, networkSourceIp: string, tagNames: list<string>, userLockoutAction: string, userPasswordExpirationAction: string, userPasswordEnabled: bool, userCertEnabled: bool, deviceCertEnabled: bool, caCert: string, requireTlsAuth: bool, radsecEnabled: bool, requireRadsec: bool, caSource: string> {
   let input = $in
@@ -953,7 +952,7 @@ export def "search-systems post" [
   --skip: int # The offset into the records to return. (default: 0)
   --filter: string # A filter to apply to the query. See the supported operators below. For more complex searches, see the related `/search/<domain>` endpoints, e.g. `/search/systems`.  **Filter structure**: The filter syntax follows a consistent pattern of `<field>:<operator>:<value>` (e.g. `department:$eq:Finance`)  **field** = Populate with a valid field from an endpoint response.  **operator** = Supported operators are: - `$eq` - equals (exact match) - `$in` - equals (multiple match terms). Separate terms by `|` character: `<field>:$in:<term one>|<term two>`   - any item with `<field>` that matches ANY of the match terms will be returned   - to use a literal `|` character inside a match term, it must be "escaped" using a backslash `\` (`"\|"`)     - for `GET` endpoints, only ONE backslash is needed: `costCenter:$in:Atlanta\|Tampa|Chicago`     - for `POST` endpoints, TWO backslashes are needed due to the nature of JSON: `costCenter:$in:Atlanta\\|Tampa|Chicago`     - resulting match terms: `"Atlanta|Tampa", "Chicago"` - `$ne` - does not equal - `$nin` - does not equal (multiple match terms). Separate terms by `|` character: `<field>:$nin:<term one>|<term two>`   - any item with `<field>` that DOES NOT match ANY of the match terms will be returned   - refer to above `$in` documentation on using literal `|` character in match terms - `$lt` - is less than - `$lte` - is less than or equal to - `$gt` - is greater than - `$gte` - is greater than or equal to - `$sw` - Finds items where the field value begins with the specified term.  **Eventually Consistent Operators** = These advanced operators support multiple-term matching and **require the `x-eventually-consistent` API request header** to be set as `true`. Terms within the `value` must be separated by the `|` character. - `$sw` - Matches any item where the field value **begins** with **any one** of the provided terms. E.g `<field>:$sw:<term one>|<term two>` - `$ew` - Matches any item where the field value **ends** with **any one** of the provided terms. E.g `<field>:$ew:<term one>|<term two>` - `$co` - Matches any item where the field value **contains** **any one** of the provided terms. E.g `<field>:$co:<term one>|<term two>` - `$nco` - Matches any item where the field value **does not contain** any of the provided terms. E.g `<field>:$nco:<term one>|<term two>`  _Note: v1 operators differ from v2 operators._  _Note: For v1 operators, excluding the `$` will result in undefined behavior **and is not recommended.**_  **value** = Populate with the value you want to search for. **Case sensitive**.  **Examples** - `GET /users?filter=username:$eq:testuser` - `GET /systemusers?filter=department:$in:Finance|IT|Shipping & Receiving` - an item with `{ department: "IT" }` will match - `GET /systemusers?filter=department:$in:Finance \| Sales|IT` - an item with `{ department: "Finance | Sales" }` will match - `GET /systemusers?filter=department:$ne:Accounting` - `GET /systemusers?filter=department:$nin:Finance|IT|Shipping & Receiving` - an item with `{ department: "HR" }` will match - `GET /systemusers?filter=password_expiration_date:$lte:2021-10-24` - `GET /systems?filter[0]=firstname:$eq:foo&filter[1]=lastname:$eq:bar` - this will AND the filters together. - `GET /systems?filter[or][0]=lastname:$eq:foo&filter[or][1]=lastname:$eq:bar` - this will OR the filters together. - `GET /systemusers?filter=department:$sw:Shipping` - an item with `{ department: "Shipping & Receiving" }` will match - `GET /systemusers?filter=department:$sw:Shipping\|Receiving` - an item with `{ department: "Shipping|Receiving Item" }` will match - `GET /systemusers?filter=department:$sw:Shipping|Receiving` - an item with `{ department: "Shipping Item" }` will match or an item with `{ department: "Receiving Item" }` will match. **Use it with `x-eventually-consistent` header set to `true`:**
   --x-org-id: string
-  --x-eventually-consistent: string@bool-completer # EXPERIMENTAL! Use to acknowledge eventually consistent data in response.
+  --x-eventually-consistent: oneof<nothing, bool> # EXPERIMENTAL! Use to acknowledge eventually consistent data in response.
   --body-fields: string
   --filter: record
   --searchFilter: record
@@ -989,7 +988,7 @@ export def "search-systemusers post" [
   --limit: int # The number of records to return at once. Limited to 100. (default: 10)
   --skip: int # The offset into the records to return. (default: 0)
   --x-org-id: string
-  --x-eventually-consistent: string@bool-completer # EXPERIMENTAL! Use to acknowledge eventually consistent data in response.
+  --x-eventually-consistent: oneof<nothing, bool> # EXPERIMENTAL! Use to acknowledge eventually consistent data in response.
   --body-fields: string
   --filter: record
   --searchFilter: record
@@ -1158,10 +1157,10 @@ export def "systems put" [
   --Authorization: string # Authorization header for the System Context API
   --x-org-id: string
   --agentBoundMessages: list # item shape: {cmd?: string}
-  --allowMultiFactorAuthentication: string@bool-completer
-  --allowPublicKeyAuthentication: string@bool-completer
-  --allowSshPasswordAuthentication: string@bool-completer
-  --allowSshRootLogin: string@bool-completer
+  --allowMultiFactorAuthentication: oneof<nothing, bool>
+  --allowPublicKeyAuthentication: oneof<nothing, bool>
+  --allowSshPasswordAuthentication: oneof<nothing, bool>
+  --allowSshRootLogin: oneof<nothing, bool>
   --displayName: string
   --attributes: list # item shape: {name?: string, value?: string}
   --tags: list
@@ -1258,46 +1257,46 @@ export def "systemusers post" [
   --allow-errors(-e) # Return full response without error handling
   --fullValidationDetails: string # Pass this query parameter when a client wants all validation errors to be returned with a detailed error response for the form field specified. The current form fields are allowed:  * `password`  #### Password validation flag Use the `password` validation flag to receive details on a possible bad request response ``` ?fullValidationDetails=password ``` Without the flag, default behavior will be a normal 400 with only a single validation string error #### Expected Behavior Clients can expect a list of validation error mappings for the validation query field in the details provided on the response: ``` {   "code": 400,   "message": "Password validation fail",   "status": "INVALID_ARGUMENT",   "details": [       {         "fieldViolationsList": [           {"field": "password", "description": "specialCharacter"}         ],         '@type': 'type.googleapis.com/google.rpc.BadRequest',       },   ], }, ```
   --x-org-id: string
-  --account-locked: string@bool-completer
-  --activated: string@bool-completer
+  --account-locked: oneof<nothing, bool>
+  --activated: oneof<nothing, bool>
   --addresses: list # item shape: {country?: string, extendedAddress?: string, locality?: string, poBox?: string, postalCode?: string, region?: string, streetAddress?: string, type?: string}
-  --allow-public-key: string@bool-completer
+  --allow-public-key: oneof<nothing, bool>
   --alternateEmail: string
   --attributes: list # item shape: {name?: string, value?: string}
   --company: string
   --costCenter: string
   --department: string
   --description: string
-  --disableDeviceMaxLoginAttempts: string@bool-completer
+  --disableDeviceMaxLoginAttempts: oneof<nothing, bool>
   --displayname: string
   email: string
   --employeeIdentifier: string # Must be unique per user. 
   --employeeType: string
-  --enable-managed-uid: string@bool-completer
-  --enable-user-portal-multifactor: string@bool-completer
+  --enable-managed-uid: oneof<nothing, bool>
+  --enable-user-portal-multifactor: oneof<nothing, bool>
   --external-dn: string
   --external-password-expiration-date: string # format: date-time
   --external-source-type: string
-  --externally-managed: string@bool-completer # The externally_managed property has been deprecated. Whenever a user has their externally_managed field modified their restrictedFields property gets populated with the appropriate value, even if it is already set to a value an administrator manually set.
+  --externally-managed: oneof<nothing, bool> # The externally_managed property has been deprecated. Whenever a user has their externally_managed field modified their restrictedFields property gets populated with the appropriate value, even if it is already set to a value an administrator manually set.
   --firstname: string
   --jobTitle: string
   --lastname: string
-  --ldap-binding-user: string@bool-completer
+  --ldap-binding-user: oneof<nothing, bool>
   --location: string
   --manager: string # Relation with another systemuser to identify the last as a manager.
   --mfa: record # shape: {configured?: bool, exclusion?: bool, exclusionUntil?: string, exclusionDays?: int}
   --middlename: string
   --password: string
-  --password-never-expires: string@bool-completer
-  --passwordless-sudo: string@bool-completer
+  --password-never-expires: oneof<nothing, bool>
+  --passwordless-sudo: oneof<nothing, bool>
   --phoneNumbers: list # item shape: {number?: string, type?: string}
   --public-key: string
   --recoveryEmail: record # shape: {address?: string}
   --relationships: list # item shape: {type?: string, value?: string}
-  --samba-service-user: string@bool-completer
+  --samba-service-user: oneof<nothing, bool>
   --state: string@state-completer
-  --sudo: string@bool-completer
-  --suspended: string@bool-completer
+  --sudo: oneof<nothing, bool>
+  --suspended: oneof<nothing, bool>
   --tags: list
   --unix-guid: int
   --unix-uid: int
@@ -1370,44 +1369,44 @@ export def "systemusers put" [
   --allow-errors(-e) # Return full response without error handling
   --fullValidationDetails: string # This endpoint can take in a query when a client wants all validation errors to be returned with error response for the form field specified, i.e. 'password' #### Password validation flag Use the "password" validation flag to receive details on a possible bad request response Without the `password` flag, default behavior will be a normal 400 with only a validation string message ``` ?fullValidationDetails=password ``` #### Expected Behavior Clients can expect a list of validation error mappings for the validation query field in the details provided on the response: ``` {   "code": 400,   "message": "Password validation fail",   "status": "INVALID_ARGUMENT",   "details": [       {         "fieldViolationsList": [{ "field": "password", "description": "passwordHistory" }],         '@type': 'type.googleapis.com/google.rpc.BadRequest',       },   ], }, ```
   --x-org-id: string
-  --account-locked: string@bool-completer
+  --account-locked: oneof<nothing, bool>
   --addresses: list # type, poBox, extendedAddress, streetAddress, locality, region, postalCode, country — item shape: {country?: string, extendedAddress?: string, locality?: string, poBox?: string, postalCode?: string, region?: string, streetAddress?: string, type?: string}
-  --allow-public-key: string@bool-completer
+  --allow-public-key: oneof<nothing, bool>
   --alternateEmail: string
   --attributes: list # item shape: {name?: string, value?: string}
   --company: string
   --costCenter: string
   --department: string
   --description: string
-  --disableDeviceMaxLoginAttempts: string@bool-completer
+  --disableDeviceMaxLoginAttempts: oneof<nothing, bool>
   --displayname: string
   --email: string
   --employeeIdentifier: string # Must be unique per user. 
   --employeeType: string
-  --enable-managed-uid: string@bool-completer
-  --enable-user-portal-multifactor: string@bool-completer
+  --enable-managed-uid: oneof<nothing, bool>
+  --enable-user-portal-multifactor: oneof<nothing, bool>
   --external-dn: string
   --external-password-expiration-date: string
   --external-source-type: string
-  --externally-managed: string@bool-completer # The externally_managed property has been deprecated. Whenever a user has their externally_managed field modified their restrictedFields property gets populated with the appropriate value, even if it is already set to a value an administrator manually set.
+  --externally-managed: oneof<nothing, bool> # The externally_managed property has been deprecated. Whenever a user has their externally_managed field modified their restrictedFields property gets populated with the appropriate value, even if it is already set to a value an administrator manually set.
   --firstname: string
   --jobTitle: string
   --lastname: string
-  --ldap-binding-user: string@bool-completer
+  --ldap-binding-user: oneof<nothing, bool>
   --location: string
   --manager: string # Relation with another systemuser to identify the last as a manager.
   --mfa: record # shape: {configured?: bool, exclusion?: bool, exclusionUntil?: string, exclusionDays?: int}
   --middlename: string
   --password: string
-  --password-never-expires: string@bool-completer
+  --password-never-expires: oneof<nothing, bool>
   --phoneNumbers: list # item shape: {number?: string, type?: string}
   --public-key: string
   --relationships: list # item shape: {type?: string, value?: string}
-  --samba-service-user: string@bool-completer
+  --samba-service-user: oneof<nothing, bool>
   --ssh-keys: list # item shape: {name: string, public_key: string}
   --state: string@state-completer-1
-  --sudo: string@bool-completer
-  --suspended: string@bool-completer
+  --sudo: oneof<nothing, bool>
+  --suspended: oneof<nothing, bool>
   --tags: list
   --unix-guid: int
   --unix-uid: int
@@ -1527,7 +1526,7 @@ export def "systemusers-mfa-enforce enforce" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --x-org-id: string
-  --enable-user-portal-multifactor: string@bool-completer # Whether to require MFA for user portal login
+  --enable-user-portal-multifactor: oneof<nothing, bool> # Whether to require MFA for user portal login
   --mfa: record # shape: {configured?: bool, exclusion?: bool, exclusionUntil?: string, exclusionDays?: int}
 ]: any -> any {
   let input = $in
@@ -1558,7 +1557,7 @@ export def "systemusers-resetmfa resetmfa" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --x-org-id: string
-  --exclusion: string@bool-completer
+  --exclusion: oneof<nothing, bool>
   --exclusionUntil: string # format: date-time
   --exclusionDays: float
 ]: any -> string {
@@ -1814,9 +1813,9 @@ export def "users put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --x-org-id: string
-  --apiKeyAllowed: string@bool-completer
+  --apiKeyAllowed: oneof<nothing, bool>
   --email: string # format: email
-  --enableMultiFactor: string@bool-completer
+  --enableMultiFactor: oneof<nothing, bool>
   --firstname: string
   --growthData: record
   --lastWhatsNewChecked: string # format: date

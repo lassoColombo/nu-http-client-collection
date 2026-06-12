@@ -63,7 +63,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://demo.octopus.app/api"] }
 def auth-scheme-completer [] { ["x-octopus-apikey" "query-ApiKey" "x-nuget-apikey"] }
 
@@ -1163,7 +1162,7 @@ export def "actiontemplates LegacyDefaultSpace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ids: list # IDs of the action templates to fetch.
-  --isCommunityActionTemplate: string@bool-completer # Filters the results based on whether the action is a community template.
+  --isCommunityActionTemplate: oneof<nothing, bool> # Filters the results based on whether the action is a community template.
   --partialName: string # A partial or complete name to search on. This will perform a \"contains\" style match against the supplied name or name-fragment.
   --skip: int # Number of items to skip. Defaults to zero (format: int32)
   --take: int # Number of items to take. Defaults to 30 (format: int32)
@@ -1513,7 +1512,7 @@ export def "actiontemplates-usage LegacyDefaultSpace" [
   --branch: string # Optionally filter usages associated with a config as code branch
   --process: string@process-completer # Optionally filter by process type
   --project: string # Optionally filter version controlled usages by project
-  --withUpdates: string@bool-completer # Optionally filter for only version controlled usages with updates
+  --withUpdates: oneof<nothing, bool> # Optionally filter for only version controlled usages with updates
 ]: nothing -> table<ActionId: string, ActionName: string, ActionTemplateId: string, Branch: string, DeploymentProcessId: string, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, ProcessId: string, ProcessType: string, ProjectId: string, ProjectName: string, ProjectSlug: string, Release: string, RunbookId: string, RunbookName: string, StepId: string, StepName: string, Version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -1651,7 +1650,7 @@ export def "actiontemplates get-by-spaceId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ids: list # IDs of the action templates to fetch.
-  --isCommunityActionTemplate: string@bool-completer # Filters the results based on whether the action is a community template.
+  --isCommunityActionTemplate: oneof<nothing, bool> # Filters the results based on whether the action is a community template.
   --partialName: string # A partial or complete name to search on. This will perform a \"contains\" style match against the supplied name or name-fragment.
   --skip: int # Number of items to skip. Defaults to zero (format: int32)
   --take: int # Number of items to take. Defaults to 30 (format: int32)
@@ -2014,7 +2013,7 @@ export def "actiontemplates-usage get" [
   --branch: string # Optionally filter usages associated with a config as code branch
   --process: string@process-completer # Optionally filter by process type
   --project: string # Optionally filter version controlled usages by project
-  --withUpdates: string@bool-completer # Optionally filter for only version controlled usages with updates
+  --withUpdates: oneof<nothing, bool> # Optionally filter for only version controlled usages with updates
 ]: nothing -> table<ActionId: string, ActionName: string, ActionTemplateId: string, Branch: string, DeploymentProcessId: string, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, ProcessId: string, ProcessType: string, ProjectId: string, ProjectName: string, ProjectSlug: string, Release: string, RunbookId: string, RunbookName: string, StepId: string, StepName: string, Version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -2157,7 +2156,7 @@ export def "spaces-actiontemplates get-by-spaceIdentifier" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ids: list # IDs of the action templates to fetch.
-  --isCommunityActionTemplate: string@bool-completer # Filters the results based on whether the action is a community template.
+  --isCommunityActionTemplate: oneof<nothing, bool> # Filters the results based on whether the action is a community template.
   --partialName: string # A partial or complete name to search on. This will perform a \"contains\" style match against the supplied name or name-fragment.
   --skip: int # Number of items to skip. Defaults to zero (format: int32)
   --take: int # Number of items to take. Defaults to 30 (format: int32)
@@ -2520,7 +2519,7 @@ export def "spaces-actiontemplates-usage get" [
   --branch: string # Optionally filter usages associated with a config as code branch
   --process: string@process-completer # Optionally filter by process type
   --project: string # Optionally filter version controlled usages by project
-  --withUpdates: string@bool-completer # Optionally filter for only version controlled usages with updates
+  --withUpdates: oneof<nothing, bool> # Optionally filter for only version controlled usages with updates
 ]: nothing -> table<ActionId: string, ActionName: string, ActionTemplateId: string, Branch: string, DeploymentProcessId: string, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, ProcessId: string, ProcessType: string, ProjectId: string, ProjectName: string, ProjectSlug: string, Release: string, RunbookId: string, RunbookName: string, StepId: string, StepName: string, Version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -3327,7 +3326,7 @@ export def "audit-stream modifyAuditStreamConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Active: string@bool-completer
+  --Active: oneof<nothing, bool>
   --Description: string
   --StreamConfigurationResource: record
 ]: any -> record<Active: bool, Description: string, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StreamConfigurationResource: record> {
@@ -3954,8 +3953,8 @@ export def "build-information LegacyDefaultSpace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string # A version to look for.
-  --includeWorkItems: string@bool-completer
-  --latest: string@bool-completer # If true, returns only the latest build information.
+  --includeWorkItems: oneof<nothing, bool>
+  --latest: oneof<nothing, bool> # If true, returns only the latest build information.
   --packageId: string # An exact package to look for.
   --partialPackageId: string # A partial package ID used for a sub-string search.
   --skip: int # Number of items to skip. Defaults to zero (format: int32)
@@ -3986,7 +3985,7 @@ export def "build-information LegacyDefaultSpace-1" [
   OctopusBuildInformation: record # shape: {Branch?: string, BuildEnvironment?: string, BuildNumber?: string, BuildUrl?: string, Commits?: list, VcsCommitNumber?: string, VcsRoot?: string, VcsType?: string}
   --OverwriteMode: string@OverwriteMode-completer
   PackageId: string
-  --Replace: string@bool-completer
+  --Replace: oneof<nothing, bool>
   SpaceId: string
   Version: string
 ]: any -> record<Branch: string, BuildEnvironment: string, BuildNumber: string, BuildUrl: string, Commits: table<Comment: string, Id: string, LinkUrl: string>, Created: string, Id: string, IncompleteDataWarning: string, IssueTrackerName: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, PackageId: string, VcsCommitNumber: string, VcsCommitUrl: string, VcsRoot: string, VcsType: string, Version: string, WorkItems: table<Description: string, Id: string, LinkUrl: string, Source: string>> {
@@ -4085,8 +4084,8 @@ export def "build-information list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string # A version to look for.
-  --includeWorkItems: string@bool-completer
-  --latest: string@bool-completer # If true, returns only the latest build information.
+  --includeWorkItems: oneof<nothing, bool>
+  --latest: oneof<nothing, bool> # If true, returns only the latest build information.
   --packageId: string # An exact package to look for.
   --partialPackageId: string # A partial package ID used for a sub-string search.
   --skip: int # Number of items to skip. Defaults to zero (format: int32)
@@ -4118,7 +4117,7 @@ export def "build-information createBuildInformationBySpace" [
   OctopusBuildInformation: record # shape: {Branch?: string, BuildEnvironment?: string, BuildNumber?: string, BuildUrl?: string, Commits?: list, VcsCommitNumber?: string, VcsRoot?: string, VcsType?: string}
   --OverwriteMode: string@OverwriteMode-completer
   PackageId: string
-  --Replace: string@bool-completer
+  --Replace: oneof<nothing, bool>
   SpaceId: string
   Version: string
 ]: any -> record<Branch: string, BuildEnvironment: string, BuildNumber: string, BuildUrl: string, Commits: table<Comment: string, Id: string, LinkUrl: string>, Created: string, Id: string, IncompleteDataWarning: string, IssueTrackerName: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, PackageId: string, VcsCommitNumber: string, VcsCommitUrl: string, VcsRoot: string, VcsType: string, Version: string, WorkItems: table<Description: string, Id: string, LinkUrl: string, Source: string>> {
@@ -4220,8 +4219,8 @@ export def "spaces-build-information list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string # A version to look for.
-  --includeWorkItems: string@bool-completer
-  --latest: string@bool-completer # If true, returns only the latest build information.
+  --includeWorkItems: oneof<nothing, bool>
+  --latest: oneof<nothing, bool> # If true, returns only the latest build information.
   --packageId: string # An exact package to look for.
   --partialPackageId: string # A partial package ID used for a sub-string search.
   --skip: int # Number of items to skip. Defaults to zero (format: int32)
@@ -4253,7 +4252,7 @@ export def "spaces-build-information createBuildInformation" [
   OctopusBuildInformation: record # shape: {Branch?: string, BuildEnvironment?: string, BuildNumber?: string, BuildUrl?: string, Commits?: list, VcsCommitNumber?: string, VcsRoot?: string, VcsType?: string}
   --OverwriteMode: string@OverwriteMode-completer
   PackageId: string
-  --Replace: string@bool-completer
+  --Replace: oneof<nothing, bool>
   SpaceId: string
   Version: string
 ]: any -> record<Branch: string, BuildEnvironment: string, BuildNumber: string, BuildUrl: string, Commits: table<Comment: string, Id: string, LinkUrl: string>, Created: string, Id: string, IncompleteDataWarning: string, IssueTrackerName: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, PackageId: string, VcsCommitNumber: string, VcsCommitUrl: string, VcsRoot: string, VcsType: string, Version: string, WorkItems: table<Description: string, Id: string, LinkUrl: string, Source: string>> {
@@ -4396,7 +4395,7 @@ export def "certificates LegacyDefaultSpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # If true, returns only archived Certificates. Otherwise, returns only non-archived Certificates.
+  --archived: oneof<nothing, bool> # If true, returns only archived Certificates. Otherwise, returns only non-archived Certificates.
   --firstResult: string # Certificate ID which if specified, adds the Certificate with matching ID to the result if it is not already included.
   --ids: string # Comma delimited list of Certificate IDs which if specified, filters the result to only include Certificates with matching IDs.
   --orderBy: string # If the value is 'recent' (case-insensitive), then the result will be sorted by Created instead of NotAfter.
@@ -4514,9 +4513,9 @@ export def "certificates-generate LegacyDefaultSpace" [
   --CertificateData: record # shape: {HasValue?: bool, Hint?: string, NewValue?: string}
   --CertificateDataFormat: string@CertificateDataFormat-completer
   --EnvironmentIds: list
-  --HasPrivateKey: string@bool-completer
+  --HasPrivateKey: oneof<nothing, bool>
   --Id: string
-  --IsExpired: string@bool-completer
+  --IsExpired: oneof<nothing, bool>
   --IssuerCommonName: string
   --IssuerDistinguishedName: string
   --IssuerOrganization: string
@@ -4529,7 +4528,7 @@ export def "certificates-generate LegacyDefaultSpace" [
   --Notes: string
   --Password: record # shape: {HasValue?: bool, Hint?: string, NewValue?: string}
   --ReplacedBy: string
-  --SelfSigned: string@bool-completer
+  --SelfSigned: oneof<nothing, bool>
   --SelfSignedCertificateCurve: string
   --SerialNumber: string
   --SignatureAlgorithmName: string
@@ -4691,7 +4690,7 @@ export def "certificates-export LegacyDefaultSpace" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-2 # Response content type
   --format: string@format-completer # The file format in which to export the certificate
-  --includePrivateKey: string@bool-completer # Whether the private key should be included in the exported file
+  --includePrivateKey: oneof<nothing, bool> # Whether the private key should be included in the exported file
   --password: string # The password to read the stored certificate
   --pemOptions: string@pemOptions-completer # Whether the exported PEM file should include the certificate chain
 ]: nothing -> string {
@@ -4881,7 +4880,7 @@ export def "certificates list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # If true, returns only archived Certificates. Otherwise, returns only non-archived Certificates.
+  --archived: oneof<nothing, bool> # If true, returns only archived Certificates. Otherwise, returns only non-archived Certificates.
   --firstResult: string # Certificate ID which if specified, adds the Certificate with matching ID to the result if it is not already included.
   --ids: string # Comma delimited list of Certificate IDs which if specified, filters the result to only include Certificates with matching IDs.
   --orderBy: string # If the value is 'recent' (case-insensitive), then the result will be sorted by Created instead of NotAfter.
@@ -4981,9 +4980,9 @@ export def "certificates-generate createSelfSignedCertificateBySpace" [
   --CertificateData: record # shape: {HasValue?: bool, Hint?: string, NewValue?: string}
   --CertificateDataFormat: string@CertificateDataFormat-completer
   --EnvironmentIds: list
-  --HasPrivateKey: string@bool-completer
+  --HasPrivateKey: oneof<nothing, bool>
   --Id: string
-  --IsExpired: string@bool-completer
+  --IsExpired: oneof<nothing, bool>
   --IssuerCommonName: string
   --IssuerDistinguishedName: string
   --IssuerOrganization: string
@@ -4996,7 +4995,7 @@ export def "certificates-generate createSelfSignedCertificateBySpace" [
   --Notes: string
   --Password: record # shape: {HasValue?: bool, Hint?: string, NewValue?: string}
   --ReplacedBy: string
-  --SelfSigned: string@bool-completer
+  --SelfSigned: oneof<nothing, bool>
   --SelfSignedCertificateCurve: string
   --SerialNumber: string
   --SignatureAlgorithmName: string
@@ -5164,7 +5163,7 @@ export def "certificates-export exportCertificateBySpace" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-2 # Response content type
   --format: string@format-completer # The file format in which to export the certificate
-  --includePrivateKey: string@bool-completer # Whether the private key should be included in the exported file
+  --includePrivateKey: oneof<nothing, bool> # Whether the private key should be included in the exported file
   --password: string # The password to read the stored certificate
   --pemOptions: string@pemOptions-completer # Whether the exported PEM file should include the certificate chain
 ]: nothing -> string {
@@ -5289,7 +5288,7 @@ export def "spaces-certificates list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # If true, returns only archived Certificates. Otherwise, returns only non-archived Certificates.
+  --archived: oneof<nothing, bool> # If true, returns only archived Certificates. Otherwise, returns only non-archived Certificates.
   --firstResult: string # Certificate ID which if specified, adds the Certificate with matching ID to the result if it is not already included.
   --ids: string # Comma delimited list of Certificate IDs which if specified, filters the result to only include Certificates with matching IDs.
   --orderBy: string # If the value is 'recent' (case-insensitive), then the result will be sorted by Created instead of NotAfter.
@@ -5389,9 +5388,9 @@ export def "spaces-certificates-generate createSelfSignedCertificate" [
   --CertificateData: record # shape: {HasValue?: bool, Hint?: string, NewValue?: string}
   --CertificateDataFormat: string@CertificateDataFormat-completer
   --EnvironmentIds: list
-  --HasPrivateKey: string@bool-completer
+  --HasPrivateKey: oneof<nothing, bool>
   --Id: string
-  --IsExpired: string@bool-completer
+  --IsExpired: oneof<nothing, bool>
   --IssuerCommonName: string
   --IssuerDistinguishedName: string
   --IssuerOrganization: string
@@ -5404,7 +5403,7 @@ export def "spaces-certificates-generate createSelfSignedCertificate" [
   --Notes: string
   --Password: record # shape: {HasValue?: bool, Hint?: string, NewValue?: string}
   --ReplacedBy: string
-  --SelfSigned: string@bool-completer
+  --SelfSigned: oneof<nothing, bool>
   --SelfSignedCertificateCurve: string
   --SerialNumber: string
   --SignatureAlgorithmName: string
@@ -5572,7 +5571,7 @@ export def "spaces-certificates-export exportCertificate" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-2 # Response content type
   --format: string@format-completer # The file format in which to export the certificate
-  --includePrivateKey: string@bool-completer # Whether the private key should be included in the exported file
+  --includePrivateKey: oneof<nothing, bool> # Whether the private key should be included in the exported file
   --password: string # The password to read the stored certificate
   --pemOptions: string@pemOptions-completer # Whether the exported PEM file should include the certificate chain
 ]: nothing -> string {
@@ -5727,13 +5726,13 @@ export def "channels LegacyDefaultSpace-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AutomaticEphemeralEnvironmentDeployments: string@bool-completer
+  --AutomaticEphemeralEnvironmentDeployments: oneof<nothing, bool>
   --CustomFieldDefinitions: list # item shape: {Description?: string, FieldName?: string}
   --Description: string
   --EphemeralEnvironmentNameTemplate: string
   --GitReferenceRules: list
   --GitResourceRules: list # item shape: {GitDependencyActions?: list, Id?: string, Rules?: list}
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   --LifecycleId: string # The lifecycle for this channel. Must be null for ephemeral environment channels.
   Name: string
   --ParentEnvironmentId: string # The parent environment for all ephemeral environments created in this channel. Required for ephemeral environment channels.
@@ -5934,14 +5933,14 @@ export def "channels LegacyDefaultSpace-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AutomaticEphemeralEnvironmentDeployments: string@bool-completer
+  --AutomaticEphemeralEnvironmentDeployments: oneof<nothing, bool>
   --CustomFieldDefinitions: list # item shape: {Description?: string, FieldName?: string}
   --Description: string
   --EphemeralEnvironmentNameTemplate: string
   --GitReferenceRules: list
   --GitResourceRules: list # item shape: {GitDependencyActions?: list, Id?: string, Rules?: list}
   Id: string
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   --LifecycleId: string # The lifecycle for this channel. Must be null for ephemeral environment channels.
   Name: string
   --ParentEnvironmentId: string # The parent environment for all ephemeral environments created in this channel. Required for ephemeral environment channels.
@@ -6026,13 +6025,13 @@ export def "projects-channels LegacyDefaultSpace-by-projectId-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AutomaticEphemeralEnvironmentDeployments: string@bool-completer
+  --AutomaticEphemeralEnvironmentDeployments: oneof<nothing, bool>
   --CustomFieldDefinitions: list # item shape: {Description?: string, FieldName?: string}
   --Description: string
   --EphemeralEnvironmentNameTemplate: string
   --GitReferenceRules: list
   --GitResourceRules: list # item shape: {GitDependencyActions?: list, Id?: string, Rules?: list}
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   --LifecycleId: string # The lifecycle for this channel. Must be null for ephemeral environment channels.
   Name: string
   --ParentEnvironmentId: string # The parent environment for all ephemeral environments created in this channel. Required for ephemeral environment channels.
@@ -6094,14 +6093,14 @@ export def "projects-channels LegacyDefaultSpace-by-projectId-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AutomaticEphemeralEnvironmentDeployments: string@bool-completer
+  --AutomaticEphemeralEnvironmentDeployments: oneof<nothing, bool>
   --CustomFieldDefinitions: list # item shape: {Description?: string, FieldName?: string}
   --Description: string
   --EphemeralEnvironmentNameTemplate: string
   --GitReferenceRules: list
   --GitResourceRules: list # item shape: {GitDependencyActions?: list, Id?: string, Rules?: list}
   Id: string
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   --LifecycleId: string # The lifecycle for this channel. Must be null for ephemeral environment channels.
   Name: string
   --ParentEnvironmentId: string # The parent environment for all ephemeral environments created in this channel. Required for ephemeral environment channels.
@@ -6213,13 +6212,13 @@ export def "channels LegacyInferProjectBySpace-by-spaceId-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AutomaticEphemeralEnvironmentDeployments: string@bool-completer
+  --AutomaticEphemeralEnvironmentDeployments: oneof<nothing, bool>
   --CustomFieldDefinitions: list # item shape: {Description?: string, FieldName?: string}
   --Description: string
   --EphemeralEnvironmentNameTemplate: string
   --GitReferenceRules: list
   --GitResourceRules: list # item shape: {GitDependencyActions?: list, Id?: string, Rules?: list}
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   --LifecycleId: string # The lifecycle for this channel. Must be null for ephemeral environment channels.
   Name: string
   --ParentEnvironmentId: string # The parent environment for all ephemeral environments created in this channel. Required for ephemeral environment channels.
@@ -6427,14 +6426,14 @@ export def "channels LegacyInferProjectBySpace-by-spaceId-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AutomaticEphemeralEnvironmentDeployments: string@bool-completer
+  --AutomaticEphemeralEnvironmentDeployments: oneof<nothing, bool>
   --CustomFieldDefinitions: list # item shape: {Description?: string, FieldName?: string}
   --Description: string
   --EphemeralEnvironmentNameTemplate: string
   --GitReferenceRules: list
   --GitResourceRules: list # item shape: {GitDependencyActions?: list, Id?: string, Rules?: list}
   Id: string
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   --LifecycleId: string # The lifecycle for this channel. Must be null for ephemeral environment channels.
   Name: string
   --ParentEnvironmentId: string # The parent environment for all ephemeral environments created in this channel. Required for ephemeral environment channels.
@@ -6522,13 +6521,13 @@ export def "projects-channels createChannelBySpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AutomaticEphemeralEnvironmentDeployments: string@bool-completer
+  --AutomaticEphemeralEnvironmentDeployments: oneof<nothing, bool>
   --CustomFieldDefinitions: list # item shape: {Description?: string, FieldName?: string}
   --Description: string
   --EphemeralEnvironmentNameTemplate: string
   --GitReferenceRules: list
   --GitResourceRules: list # item shape: {GitDependencyActions?: list, Id?: string, Rules?: list}
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   --LifecycleId: string # The lifecycle for this channel. Must be null for ephemeral environment channels.
   Name: string
   --ParentEnvironmentId: string # The parent environment for all ephemeral environments created in this channel. Required for ephemeral environment channels.
@@ -6646,14 +6645,14 @@ export def "projects-channels modifyChannelBySpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AutomaticEphemeralEnvironmentDeployments: string@bool-completer
+  --AutomaticEphemeralEnvironmentDeployments: oneof<nothing, bool>
   --CustomFieldDefinitions: list # item shape: {Description?: string, FieldName?: string}
   --Description: string
   --EphemeralEnvironmentNameTemplate: string
   --GitReferenceRules: list
   --GitResourceRules: list # item shape: {GitDependencyActions?: list, Id?: string, Rules?: list}
   Id: string
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   --LifecycleId: string # The lifecycle for this channel. Must be null for ephemeral environment channels.
   Name: string
   --ParentEnvironmentId: string # The parent environment for all ephemeral environments created in this channel. Required for ephemeral environment channels.
@@ -6767,13 +6766,13 @@ export def "spaces-channels LegacyInferProject-by-spaceIdentifier-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AutomaticEphemeralEnvironmentDeployments: string@bool-completer
+  --AutomaticEphemeralEnvironmentDeployments: oneof<nothing, bool>
   --CustomFieldDefinitions: list # item shape: {Description?: string, FieldName?: string}
   --Description: string
   --EphemeralEnvironmentNameTemplate: string
   --GitReferenceRules: list
   --GitResourceRules: list # item shape: {GitDependencyActions?: list, Id?: string, Rules?: list}
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   --LifecycleId: string # The lifecycle for this channel. Must be null for ephemeral environment channels.
   Name: string
   --ParentEnvironmentId: string # The parent environment for all ephemeral environments created in this channel. Required for ephemeral environment channels.
@@ -6981,14 +6980,14 @@ export def "spaces-channels LegacyInferProject-by-spaceIdentifier-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AutomaticEphemeralEnvironmentDeployments: string@bool-completer
+  --AutomaticEphemeralEnvironmentDeployments: oneof<nothing, bool>
   --CustomFieldDefinitions: list # item shape: {Description?: string, FieldName?: string}
   --Description: string
   --EphemeralEnvironmentNameTemplate: string
   --GitReferenceRules: list
   --GitResourceRules: list # item shape: {GitDependencyActions?: list, Id?: string, Rules?: list}
   Id: string
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   --LifecycleId: string # The lifecycle for this channel. Must be null for ephemeral environment channels.
   Name: string
   --ParentEnvironmentId: string # The parent environment for all ephemeral environments created in this channel. Required for ephemeral environment channels.
@@ -7076,13 +7075,13 @@ export def "spaces-projects-channels createChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AutomaticEphemeralEnvironmentDeployments: string@bool-completer
+  --AutomaticEphemeralEnvironmentDeployments: oneof<nothing, bool>
   --CustomFieldDefinitions: list # item shape: {Description?: string, FieldName?: string}
   --Description: string
   --EphemeralEnvironmentNameTemplate: string
   --GitReferenceRules: list
   --GitResourceRules: list # item shape: {GitDependencyActions?: list, Id?: string, Rules?: list}
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   --LifecycleId: string # The lifecycle for this channel. Must be null for ephemeral environment channels.
   Name: string
   --ParentEnvironmentId: string # The parent environment for all ephemeral environments created in this channel. Required for ephemeral environment channels.
@@ -7200,14 +7199,14 @@ export def "spaces-projects-channels modifyChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AutomaticEphemeralEnvironmentDeployments: string@bool-completer
+  --AutomaticEphemeralEnvironmentDeployments: oneof<nothing, bool>
   --CustomFieldDefinitions: list # item shape: {Description?: string, FieldName?: string}
   --Description: string
   --EphemeralEnvironmentNameTemplate: string
   --GitReferenceRules: list
   --GitResourceRules: list # item shape: {GitDependencyActions?: list, Id?: string, Rules?: list}
   Id: string
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   --LifecycleId: string # The lifecycle for this channel. Must be null for ephemeral environment channels.
   Name: string
   --ParentEnvironmentId: string # The parent environment for all ephemeral environments created in this channel. Required for ephemeral environment channels.
@@ -7575,7 +7574,7 @@ export def "platformhub-policies-versions-modify-status modifyCompliancePolicyVe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --IsActive: string@bool-completer
+  --IsActive: oneof<nothing, bool>
   Slug: string
   Version: string
 ]: any -> record<Description: string, GitCommit: string, GitRef: string, Id: string, IsActive: bool, Name: string, PublishedDate: string, RegoConditions: string, RegoScope: string, Slug: string, Version: string, ViolationAction: string, ViolationReason: string> {
@@ -7861,12 +7860,12 @@ export def "dashboard LegacyDefaultSpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --highestLatestVersionPerProjectAndEnvironment: string@bool-completer
+  --highestLatestVersionPerProjectAndEnvironment: oneof<nothing, bool>
   --projectId: string
   --releaseId: string
   --selectedTags: list
   --selectedTenants: list
-  --showAll: string@bool-completer
+  --showAll: oneof<nothing, bool>
 ]: nothing -> record<Environments: table<Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string>, Id: string, IsFiltered: bool, Items: table<ChannelId: string, CompletedTime: string, Created: string, DeploymentId: string, Duration: string, EnvironmentId: string, ErrorMessage: string, HasPendingInterruptions: bool, HasPendingPreconditions: bool, HasWarningsOrErrors: bool, Id: string, IsCompleted: bool, IsCurrent: bool, IsPrevious: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, PendingInterruptionTypes: list, PendingPreconditionTypes: list, ProjectId: string, QueueTime: string, ReleaseId: string, ReleaseVersion: string, StartTime: string, State: string, TaskId: string, TenantId: string>, LastModifiedBy: string, LastModifiedOn: string, Links: record, ProjectGroups: table<EnvironmentIds: list, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string>, ProjectLimit: int, Projects: table<CanPerformUntenantedDeployment: bool, EnvironmentIds: list, Id: string, IsDisabled: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, ProjectGroupId: string, Slug: string, TenantedDeploymentMode: string>, Tenants: table<Id: string, IsDisabled: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, ProjectEnvironments: record, TenantTags: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -7890,7 +7889,7 @@ export def "dashboard-dynamic LegacyDefaultSpace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --environments: list
-  --includePrevious: string@bool-completer
+  --includePrevious: oneof<nothing, bool>
   --projects: list
 ]: nothing -> record<Environments: table<Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string>, Id: string, IsFiltered: bool, Items: table<ChannelId: string, CompletedTime: string, Created: string, DeploymentId: string, Duration: string, EnvironmentId: string, ErrorMessage: string, HasPendingInterruptions: bool, HasPendingPreconditions: bool, HasWarningsOrErrors: bool, Id: string, IsCompleted: bool, IsCurrent: bool, IsPrevious: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, PendingInterruptionTypes: list, PendingPreconditionTypes: list, ProjectId: string, QueueTime: string, ReleaseId: string, ReleaseVersion: string, StartTime: string, State: string, TaskId: string, TenantId: string>, LastModifiedBy: string, LastModifiedOn: string, Links: record, ProjectGroups: table<EnvironmentIds: list, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string>, ProjectLimit: int, Projects: table<CanPerformUntenantedDeployment: bool, EnvironmentIds: list, Id: string, IsDisabled: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, ProjectGroupId: string, Slug: string, TenantedDeploymentMode: string>, Tenants: table<Id: string, IsDisabled: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, ProjectEnvironments: record, TenantTags: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -7915,12 +7914,12 @@ export def "dashboard get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --highestLatestVersionPerProjectAndEnvironment: string@bool-completer
+  --highestLatestVersionPerProjectAndEnvironment: oneof<nothing, bool>
   --projectId: string
   --releaseId: string
   --selectedTags: list
   --selectedTenants: list
-  --showAll: string@bool-completer
+  --showAll: oneof<nothing, bool>
 ]: nothing -> record<Environments: table<Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string>, Id: string, IsFiltered: bool, Items: table<ChannelId: string, CompletedTime: string, Created: string, DeploymentId: string, Duration: string, EnvironmentId: string, ErrorMessage: string, HasPendingInterruptions: bool, HasPendingPreconditions: bool, HasWarningsOrErrors: bool, Id: string, IsCompleted: bool, IsCurrent: bool, IsPrevious: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, PendingInterruptionTypes: list, PendingPreconditionTypes: list, ProjectId: string, QueueTime: string, ReleaseId: string, ReleaseVersion: string, StartTime: string, State: string, TaskId: string, TenantId: string>, LastModifiedBy: string, LastModifiedOn: string, Links: record, ProjectGroups: table<EnvironmentIds: list, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string>, ProjectLimit: int, Projects: table<CanPerformUntenantedDeployment: bool, EnvironmentIds: list, Id: string, IsDisabled: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, ProjectGroupId: string, Slug: string, TenantedDeploymentMode: string>, Tenants: table<Id: string, IsDisabled: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, ProjectEnvironments: record, TenantTags: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -7945,7 +7944,7 @@ export def "dashboard-dynamic get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --environments: list
-  --includePrevious: string@bool-completer
+  --includePrevious: oneof<nothing, bool>
   --projects: list
 ]: nothing -> record<Environments: table<Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string>, Id: string, IsFiltered: bool, Items: table<ChannelId: string, CompletedTime: string, Created: string, DeploymentId: string, Duration: string, EnvironmentId: string, ErrorMessage: string, HasPendingInterruptions: bool, HasPendingPreconditions: bool, HasWarningsOrErrors: bool, Id: string, IsCompleted: bool, IsCurrent: bool, IsPrevious: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, PendingInterruptionTypes: list, PendingPreconditionTypes: list, ProjectId: string, QueueTime: string, ReleaseId: string, ReleaseVersion: string, StartTime: string, State: string, TaskId: string, TenantId: string>, LastModifiedBy: string, LastModifiedOn: string, Links: record, ProjectGroups: table<EnvironmentIds: list, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string>, ProjectLimit: int, Projects: table<CanPerformUntenantedDeployment: bool, EnvironmentIds: list, Id: string, IsDisabled: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, ProjectGroupId: string, Slug: string, TenantedDeploymentMode: string>, Tenants: table<Id: string, IsDisabled: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, ProjectEnvironments: record, TenantTags: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -7970,12 +7969,12 @@ export def "spaces-dashboard get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --highestLatestVersionPerProjectAndEnvironment: string@bool-completer
+  --highestLatestVersionPerProjectAndEnvironment: oneof<nothing, bool>
   --projectId: string
   --releaseId: string
   --selectedTags: list
   --selectedTenants: list
-  --showAll: string@bool-completer
+  --showAll: oneof<nothing, bool>
 ]: nothing -> record<Environments: table<Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string>, Id: string, IsFiltered: bool, Items: table<ChannelId: string, CompletedTime: string, Created: string, DeploymentId: string, Duration: string, EnvironmentId: string, ErrorMessage: string, HasPendingInterruptions: bool, HasPendingPreconditions: bool, HasWarningsOrErrors: bool, Id: string, IsCompleted: bool, IsCurrent: bool, IsPrevious: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, PendingInterruptionTypes: list, PendingPreconditionTypes: list, ProjectId: string, QueueTime: string, ReleaseId: string, ReleaseVersion: string, StartTime: string, State: string, TaskId: string, TenantId: string>, LastModifiedBy: string, LastModifiedOn: string, Links: record, ProjectGroups: table<EnvironmentIds: list, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string>, ProjectLimit: int, Projects: table<CanPerformUntenantedDeployment: bool, EnvironmentIds: list, Id: string, IsDisabled: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, ProjectGroupId: string, Slug: string, TenantedDeploymentMode: string>, Tenants: table<Id: string, IsDisabled: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, ProjectEnvironments: record, TenantTags: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -8000,7 +7999,7 @@ export def "spaces-dashboard-dynamic get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --environments: list
-  --includePrevious: string@bool-completer
+  --includePrevious: oneof<nothing, bool>
   --projects: list
 ]: nothing -> record<Environments: table<Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string>, Id: string, IsFiltered: bool, Items: table<ChannelId: string, CompletedTime: string, Created: string, DeploymentId: string, Duration: string, EnvironmentId: string, ErrorMessage: string, HasPendingInterruptions: bool, HasPendingPreconditions: bool, HasWarningsOrErrors: bool, Id: string, IsCompleted: bool, IsCurrent: bool, IsPrevious: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, PendingInterruptionTypes: list, PendingPreconditionTypes: list, ProjectId: string, QueueTime: string, ReleaseId: string, ReleaseVersion: string, StartTime: string, State: string, TaskId: string, TenantId: string>, LastModifiedBy: string, LastModifiedOn: string, Links: record, ProjectGroups: table<EnvironmentIds: list, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string>, ProjectLimit: int, Projects: table<CanPerformUntenantedDeployment: bool, EnvironmentIds: list, Id: string, IsDisabled: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, ProjectGroupId: string, Slug: string, TenantedDeploymentMode: string>, Tenants: table<Id: string, IsDisabled: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, ProjectEnvironments: record, TenantTags: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -8193,7 +8192,7 @@ export def "deploymentfreezes list" [
   --effectiveDate: string # URL encoded timestamp to search recurring deployment freezes at a given point in time (format: date-time)
   --environmentIds: list # List of Environment IDs which if specified, filters the result to only include DeploymentFreeze with matching Environment IDs.
   --ids: list # List of DeploymentFreeze IDs which if specified, filters the result to only include DeploymentFreeze with matching IDs.
-  --includeComplete: string@bool-completer # Set to false to only return active Deployment Freezes
+  --includeComplete: oneof<nothing, bool> # Set to false to only return active Deployment Freezes
   --partialName: string # A partial or complete name to search on. This will perform a "contains" style match against the supplied name or name-fragment
   --projectIds: list # List of Project IDs which if specified, filters the result to only include DeploymentFreeze with matching Project IDs.
   --skip: int # Number of items to skip. Defaults to zero (format: int32)
@@ -9534,10 +9533,10 @@ export def "deployments LegacyDefaultSpace-1" [
   --ExcludedMachineIds: list
   --ExcludedTargetTagIds: list
   --ExecutionPlanLogContext: record # shape: {Steps: list}
-  --FailTargetDiscovery: string@bool-completer
-  --FailureEncountered: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
-  --ForcePackageRedeployment: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --FailureEncountered: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
+  --ForcePackageRedeployment: oneof<nothing, bool>
   --FormValues: record
   --Id: string
   --LastModifiedBy: string
@@ -9557,7 +9556,7 @@ export def "deployments LegacyDefaultSpace-1" [
   --TaskId: string
   --TenantId: string
   --TentacleRetentionPeriod: record # shape: {QuantityToKeep?: int, Strategy?: string, Unit?: "Days"|"Items"}
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> record<ChangeRequestSettings: table<Type: string>, Changes: table<BuildInformation: list, Commits: list, ReleaseNotes: string, Version: string, WorkItems: list>, ChangesMarkdown: string, ChannelId: string, Comments: string, Created: string, DebugMode: string, DeployedBy: string, DeployedById: string, DeployedToMachineIds: list<string>, DeploymentProcessId: string, EnvironmentId: string, ExcludedMachineIds: list<string>, ExcludedTargetTagIds: list<string>, ExecutionPlanLogContext: record<Steps: list<record>>, FailTargetDiscovery: bool, FailureEncountered: bool, ForcePackageDownload: bool, ForcePackageRedeployment: bool, FormValues: record, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, ManifestVariableSetId: string, Name: string, Priority: string, ProjectId: string, QueueTime: string, QueueTimeExpiry: string, ReleaseId: string, SkipActions: list<string>, SpaceId: string, SpecificMachineIds: list<string>, SpecificTargetTagIds: list<string>, TaskId: string, TenantId: string, TentacleRetentionPeriod: record<QuantityToKeep: int, ShouldKeepForever: bool, Strategy: string, Unit: string>, UseGuidedFailure: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -9600,10 +9599,10 @@ export def "deployments LegacyDefaultSpace-2" [
   --ExcludedMachineIds: list
   --ExcludedTargetTagIds: list
   --ExecutionPlanLogContext: record # shape: {Steps: list}
-  --FailTargetDiscovery: string@bool-completer
-  --FailureEncountered: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
-  --ForcePackageRedeployment: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --FailureEncountered: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
+  --ForcePackageRedeployment: oneof<nothing, bool>
   --FormValues: record
   --Id: string
   --LastModifiedBy: string
@@ -9623,7 +9622,7 @@ export def "deployments LegacyDefaultSpace-2" [
   --TaskId: string
   --TenantId: string
   --TentacleRetentionPeriod: record # shape: {QuantityToKeep?: int, Strategy?: string, Unit?: "Days"|"Items"}
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> record<Deployment: record<ChangeRequestSettings: list<record>, Changes: list<record>, ChangesMarkdown: string, ChannelId: string, Comments: string, Created: string, DebugMode: string, DeployedBy: string, DeployedById: string, DeployedToMachineIds: list<string>, DeploymentProcessId: string, EnvironmentId: string, ExcludedMachineIds: list<string>, ExcludedTargetTagIds: list<string>, ExecutionPlanLogContext: record<Steps: list>, FailTargetDiscovery: bool, FailureEncountered: bool, ForcePackageDownload: bool, ForcePackageRedeployment: bool, FormValues: record, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, ManifestVariableSetId: string, Name: string, Priority: string, ProjectId: string, QueueTime: string, QueueTimeExpiry: string, ReleaseId: string, SkipActions: list<string>, SpaceId: string, SpecificMachineIds: list<string>, SpecificTargetTagIds: list<string>, TaskId: string, TenantId: string, TentacleRetentionPeriod: record<QuantityToKeep: int, ShouldKeepForever: bool, Strategy: string, Unit: string>, UseGuidedFailure: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -9743,10 +9742,10 @@ export def "deployments createDeploymentBySpace" [
   --ExcludedMachineIds: list
   --ExcludedTargetTagIds: list
   --ExecutionPlanLogContext: record # shape: {Steps: list}
-  --FailTargetDiscovery: string@bool-completer
-  --FailureEncountered: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
-  --ForcePackageRedeployment: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --FailureEncountered: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
+  --ForcePackageRedeployment: oneof<nothing, bool>
   --FormValues: record
   --Id: string
   --LastModifiedBy: string
@@ -9766,7 +9765,7 @@ export def "deployments createDeploymentBySpace" [
   --TaskId: string
   --TenantId: string
   --TentacleRetentionPeriod: record # shape: {QuantityToKeep?: int, Strategy?: string, Unit?: "Days"|"Items"}
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> record<ChangeRequestSettings: table<Type: string>, Changes: table<BuildInformation: list, Commits: list, ReleaseNotes: string, Version: string, WorkItems: list>, ChangesMarkdown: string, ChannelId: string, Comments: string, Created: string, DebugMode: string, DeployedBy: string, DeployedById: string, DeployedToMachineIds: list<string>, DeploymentProcessId: string, EnvironmentId: string, ExcludedMachineIds: list<string>, ExcludedTargetTagIds: list<string>, ExecutionPlanLogContext: record<Steps: list<record>>, FailTargetDiscovery: bool, FailureEncountered: bool, ForcePackageDownload: bool, ForcePackageRedeployment: bool, FormValues: record, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, ManifestVariableSetId: string, Name: string, Priority: string, ProjectId: string, QueueTime: string, QueueTimeExpiry: string, ReleaseId: string, SkipActions: list<string>, SpaceId: string, SpecificMachineIds: list<string>, SpecificTargetTagIds: list<string>, TaskId: string, TenantId: string, TentacleRetentionPeriod: record<QuantityToKeep: int, ShouldKeepForever: bool, Strategy: string, Unit: string>, UseGuidedFailure: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -9798,8 +9797,8 @@ export def "deployments-create-tenanted createDeploymentTenantedV1BySpace" [
   EnvironmentName: string
   --ExcludedMachineNames: list
   --ExcludedTargetTagNames: list
-  --ForcePackageDownload: string@bool-completer
-  --ForcePackageRedeployment: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
+  --ForcePackageRedeployment: oneof<nothing, bool>
   --NoRunAfter: string # format: date-time
   --Priority: string
   ProjectName: string
@@ -9812,8 +9811,8 @@ export def "deployments-create-tenanted createDeploymentTenantedV1BySpace" [
   --SpecificTargetTagNames: list
   --Tenants: list
   --TenantTags: list
-  --UpdateVariableSnapshot: string@bool-completer
-  --UseGuidedFailure: string@bool-completer
+  --UpdateVariableSnapshot: oneof<nothing, bool>
+  --UseGuidedFailure: oneof<nothing, bool>
   --Variables: record
 ]: any -> record<DeploymentServerTasks: table<DeploymentId: string, ServerTaskId: string>> {
   let input = $in
@@ -9846,8 +9845,8 @@ export def "deployments-create-untenanted createDeploymentUntenantedV1BySpace" [
   EnvironmentNames: list
   --ExcludedMachineNames: list
   --ExcludedTargetTagNames: list
-  --ForcePackageDownload: string@bool-completer
-  --ForcePackageRedeployment: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
+  --ForcePackageRedeployment: oneof<nothing, bool>
   --NoRunAfter: string # format: date-time
   --Priority: string
   ProjectName: string
@@ -9858,8 +9857,8 @@ export def "deployments-create-untenanted createDeploymentUntenantedV1BySpace" [
   SpaceIdOrName: string
   --SpecificMachineNames: list
   --SpecificTargetTagNames: list
-  --UpdateVariableSnapshot: string@bool-completer
-  --UseGuidedFailure: string@bool-completer
+  --UpdateVariableSnapshot: oneof<nothing, bool>
+  --UseGuidedFailure: oneof<nothing, bool>
   --Variables: record
 ]: any -> record<DeploymentServerTasks: table<DeploymentId: string, ServerTaskId: string>> {
   let input = $in
@@ -9904,10 +9903,10 @@ export def "deployments createDeploymentV1BySpace" [
   --ExcludedMachineIds: list
   --ExcludedTargetTagIds: list
   --ExecutionPlanLogContext: record # shape: {Steps: list}
-  --FailTargetDiscovery: string@bool-completer
-  --FailureEncountered: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
-  --ForcePackageRedeployment: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --FailureEncountered: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
+  --ForcePackageRedeployment: oneof<nothing, bool>
   --FormValues: record
   --Id: string
   --LastModifiedBy: string
@@ -9927,7 +9926,7 @@ export def "deployments createDeploymentV1BySpace" [
   --TaskId: string
   --TenantId: string
   --TentacleRetentionPeriod: record # shape: {QuantityToKeep?: int, Strategy?: string, Unit?: "Days"|"Items"}
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> record<Deployment: record<ChangeRequestSettings: list<record>, Changes: list<record>, ChangesMarkdown: string, ChannelId: string, Comments: string, Created: string, DebugMode: string, DeployedBy: string, DeployedById: string, DeployedToMachineIds: list<string>, DeploymentProcessId: string, EnvironmentId: string, ExcludedMachineIds: list<string>, ExcludedTargetTagIds: list<string>, ExecutionPlanLogContext: record<Steps: list>, FailTargetDiscovery: bool, FailureEncountered: bool, ForcePackageDownload: bool, ForcePackageRedeployment: bool, FormValues: record, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, ManifestVariableSetId: string, Name: string, Priority: string, ProjectId: string, QueueTime: string, QueueTimeExpiry: string, ReleaseId: string, SkipActions: list<string>, SpaceId: string, SpecificMachineIds: list<string>, SpecificTargetTagIds: list<string>, TaskId: string, TenantId: string, TentacleRetentionPeriod: record<QuantityToKeep: int, ShouldKeepForever: bool, Strategy: string, Unit: string>, UseGuidedFailure: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -10049,10 +10048,10 @@ export def "spaces-deployments createDeployment" [
   --ExcludedMachineIds: list
   --ExcludedTargetTagIds: list
   --ExecutionPlanLogContext: record # shape: {Steps: list}
-  --FailTargetDiscovery: string@bool-completer
-  --FailureEncountered: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
-  --ForcePackageRedeployment: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --FailureEncountered: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
+  --ForcePackageRedeployment: oneof<nothing, bool>
   --FormValues: record
   --Id: string
   --LastModifiedBy: string
@@ -10072,7 +10071,7 @@ export def "spaces-deployments createDeployment" [
   --TaskId: string
   --TenantId: string
   --TentacleRetentionPeriod: record # shape: {QuantityToKeep?: int, Strategy?: string, Unit?: "Days"|"Items"}
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> record<ChangeRequestSettings: table<Type: string>, Changes: table<BuildInformation: list, Commits: list, ReleaseNotes: string, Version: string, WorkItems: list>, ChangesMarkdown: string, ChannelId: string, Comments: string, Created: string, DebugMode: string, DeployedBy: string, DeployedById: string, DeployedToMachineIds: list<string>, DeploymentProcessId: string, EnvironmentId: string, ExcludedMachineIds: list<string>, ExcludedTargetTagIds: list<string>, ExecutionPlanLogContext: record<Steps: list<record>>, FailTargetDiscovery: bool, FailureEncountered: bool, ForcePackageDownload: bool, ForcePackageRedeployment: bool, FormValues: record, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, ManifestVariableSetId: string, Name: string, Priority: string, ProjectId: string, QueueTime: string, QueueTimeExpiry: string, ReleaseId: string, SkipActions: list<string>, SpaceId: string, SpecificMachineIds: list<string>, SpecificTargetTagIds: list<string>, TaskId: string, TenantId: string, TentacleRetentionPeriod: record<QuantityToKeep: int, ShouldKeepForever: bool, Strategy: string, Unit: string>, UseGuidedFailure: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -10104,8 +10103,8 @@ export def "spaces-deployments-create-tenanted createDeploymentTenantedV1" [
   EnvironmentName: string
   --ExcludedMachineNames: list
   --ExcludedTargetTagNames: list
-  --ForcePackageDownload: string@bool-completer
-  --ForcePackageRedeployment: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
+  --ForcePackageRedeployment: oneof<nothing, bool>
   --NoRunAfter: string # format: date-time
   --Priority: string
   ProjectName: string
@@ -10118,8 +10117,8 @@ export def "spaces-deployments-create-tenanted createDeploymentTenantedV1" [
   --SpecificTargetTagNames: list
   --Tenants: list
   --TenantTags: list
-  --UpdateVariableSnapshot: string@bool-completer
-  --UseGuidedFailure: string@bool-completer
+  --UpdateVariableSnapshot: oneof<nothing, bool>
+  --UseGuidedFailure: oneof<nothing, bool>
   --Variables: record
 ]: any -> record<DeploymentServerTasks: table<DeploymentId: string, ServerTaskId: string>> {
   let input = $in
@@ -10152,8 +10151,8 @@ export def "spaces-deployments-create-untenanted createDeploymentUntenantedV1" [
   EnvironmentNames: list
   --ExcludedMachineNames: list
   --ExcludedTargetTagNames: list
-  --ForcePackageDownload: string@bool-completer
-  --ForcePackageRedeployment: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
+  --ForcePackageRedeployment: oneof<nothing, bool>
   --NoRunAfter: string # format: date-time
   --Priority: string
   ProjectName: string
@@ -10164,8 +10163,8 @@ export def "spaces-deployments-create-untenanted createDeploymentUntenantedV1" [
   SpaceIdOrName: string
   --SpecificMachineNames: list
   --SpecificTargetTagNames: list
-  --UpdateVariableSnapshot: string@bool-completer
-  --UseGuidedFailure: string@bool-completer
+  --UpdateVariableSnapshot: oneof<nothing, bool>
+  --UseGuidedFailure: oneof<nothing, bool>
   --Variables: record
 ]: any -> record<DeploymentServerTasks: table<DeploymentId: string, ServerTaskId: string>> {
   let input = $in
@@ -10210,10 +10209,10 @@ export def "spaces-deployments createDeploymentV1" [
   --ExcludedMachineIds: list
   --ExcludedTargetTagIds: list
   --ExecutionPlanLogContext: record # shape: {Steps: list}
-  --FailTargetDiscovery: string@bool-completer
-  --FailureEncountered: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
-  --ForcePackageRedeployment: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --FailureEncountered: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
+  --ForcePackageRedeployment: oneof<nothing, bool>
   --FormValues: record
   --Id: string
   --LastModifiedBy: string
@@ -10233,7 +10232,7 @@ export def "spaces-deployments createDeploymentV1" [
   --TaskId: string
   --TenantId: string
   --TentacleRetentionPeriod: record # shape: {QuantityToKeep?: int, Strategy?: string, Unit?: "Days"|"Items"}
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> record<Deployment: record<ChangeRequestSettings: list<record>, Changes: list<record>, ChangesMarkdown: string, ChannelId: string, Comments: string, Created: string, DebugMode: string, DeployedBy: string, DeployedById: string, DeployedToMachineIds: list<string>, DeploymentProcessId: string, EnvironmentId: string, ExcludedMachineIds: list<string>, ExcludedTargetTagIds: list<string>, ExecutionPlanLogContext: record<Steps: list>, FailTargetDiscovery: bool, FailureEncountered: bool, ForcePackageDownload: bool, ForcePackageRedeployment: bool, FormValues: record, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, ManifestVariableSetId: string, Name: string, Priority: string, ProjectId: string, QueueTime: string, QueueTimeExpiry: string, ReleaseId: string, SkipActions: list<string>, SpaceId: string, SpecificMachineIds: list<string>, SpecificTargetTagIds: list<string>, TaskId: string, TenantId: string, TentacleRetentionPeriod: record<QuantityToKeep: int, ShouldKeepForever: bool, Strategy: string, Unit: string>, UseGuidedFailure: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -10333,15 +10332,15 @@ export def "deploymentsettings Legacy0-by-projectId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CancelQueuedTasks: string@bool-completer
-  --CancelRunningTasks: string@bool-completer
+  --CancelQueuedTasks: oneof<nothing, bool>
+  --CancelRunningTasks: oneof<nothing, bool>
   --ChangeDescription: string
   --ConnectivityPolicy: record # shape: {AllowDeploymentsToNoTargets?: bool, ExcludeUnhealthyTargets?: bool, SkipMachineBehavior?: "None"|"SkipUnavailableMachines", TargetRoles?: list}
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
-  --DefaultToSkipIfAlreadyInstalled: string@bool-completer
+  --DefaultToSkipIfAlreadyInstalled: oneof<nothing, bool>
   --DeploymentChangesTemplate: string
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   ProjectId: string
   --ReleaseNotesTemplate: string
   SpaceId: string
@@ -10395,15 +10394,15 @@ export def "projects-deploymentsettings LegacyDefaultSpace-by-projectId-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CancelQueuedTasks: string@bool-completer
-  --CancelRunningTasks: string@bool-completer
+  --CancelQueuedTasks: oneof<nothing, bool>
+  --CancelRunningTasks: oneof<nothing, bool>
   --ChangeDescription: string
   --ConnectivityPolicy: record # shape: {AllowDeploymentsToNoTargets?: bool, ExcludeUnhealthyTargets?: bool, SkipMachineBehavior?: "None"|"SkipUnavailableMachines", TargetRoles?: list}
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
-  --DefaultToSkipIfAlreadyInstalled: string@bool-completer
+  --DefaultToSkipIfAlreadyInstalled: oneof<nothing, bool>
   --DeploymentChangesTemplate: string
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   ProjectId: string
   --ReleaseNotesTemplate: string
   SpaceId: string
@@ -10459,15 +10458,15 @@ export def "projects-deploymentsettings LegacyDefaultSpace-by-projectId-gitRef-1
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CancelQueuedTasks: string@bool-completer
-  --CancelRunningTasks: string@bool-completer
+  --CancelQueuedTasks: oneof<nothing, bool>
+  --CancelRunningTasks: oneof<nothing, bool>
   --ChangeDescription: string
   --ConnectivityPolicy: record # shape: {AllowDeploymentsToNoTargets?: bool, ExcludeUnhealthyTargets?: bool, SkipMachineBehavior?: "None"|"SkipUnavailableMachines", TargetRoles?: list}
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
-  --DefaultToSkipIfAlreadyInstalled: string@bool-completer
+  --DefaultToSkipIfAlreadyInstalled: oneof<nothing, bool>
   --DeploymentChangesTemplate: string
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   GitRef: string
   ProjectId: string
   --ReleaseNotesTemplate: string
@@ -10528,15 +10527,15 @@ export def "deploymentsettings Legacy0-by-spaceId-projectId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CancelQueuedTasks: string@bool-completer
-  --CancelRunningTasks: string@bool-completer
+  --CancelQueuedTasks: oneof<nothing, bool>
+  --CancelRunningTasks: oneof<nothing, bool>
   --ChangeDescription: string
   --ConnectivityPolicy: record # shape: {AllowDeploymentsToNoTargets?: bool, ExcludeUnhealthyTargets?: bool, SkipMachineBehavior?: "None"|"SkipUnavailableMachines", TargetRoles?: list}
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
-  --DefaultToSkipIfAlreadyInstalled: string@bool-completer
+  --DefaultToSkipIfAlreadyInstalled: oneof<nothing, bool>
   --DeploymentChangesTemplate: string
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   ProjectId: string
   --ReleaseNotesTemplate: string
   SpaceId: string
@@ -10592,15 +10591,15 @@ export def "projects-deploymentsettings modifyDeploymentSettingsInDatabaseBySpac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CancelQueuedTasks: string@bool-completer
-  --CancelRunningTasks: string@bool-completer
+  --CancelQueuedTasks: oneof<nothing, bool>
+  --CancelRunningTasks: oneof<nothing, bool>
   --ChangeDescription: string
   --ConnectivityPolicy: record # shape: {AllowDeploymentsToNoTargets?: bool, ExcludeUnhealthyTargets?: bool, SkipMachineBehavior?: "None"|"SkipUnavailableMachines", TargetRoles?: list}
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
-  --DefaultToSkipIfAlreadyInstalled: string@bool-completer
+  --DefaultToSkipIfAlreadyInstalled: oneof<nothing, bool>
   --DeploymentChangesTemplate: string
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   ProjectId: string
   --ReleaseNotesTemplate: string
   SpaceId: string
@@ -10658,15 +10657,15 @@ export def "projects-deploymentsettings modifyDeploymentSettingsInGitBySpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CancelQueuedTasks: string@bool-completer
-  --CancelRunningTasks: string@bool-completer
+  --CancelQueuedTasks: oneof<nothing, bool>
+  --CancelRunningTasks: oneof<nothing, bool>
   --ChangeDescription: string
   --ConnectivityPolicy: record # shape: {AllowDeploymentsToNoTargets?: bool, ExcludeUnhealthyTargets?: bool, SkipMachineBehavior?: "None"|"SkipUnavailableMachines", TargetRoles?: list}
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
-  --DefaultToSkipIfAlreadyInstalled: string@bool-completer
+  --DefaultToSkipIfAlreadyInstalled: oneof<nothing, bool>
   --DeploymentChangesTemplate: string
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   GitRef: string
   ProjectId: string
   --ReleaseNotesTemplate: string
@@ -10727,15 +10726,15 @@ export def "spaces-deploymentsettings Legacy0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CancelQueuedTasks: string@bool-completer
-  --CancelRunningTasks: string@bool-completer
+  --CancelQueuedTasks: oneof<nothing, bool>
+  --CancelRunningTasks: oneof<nothing, bool>
   --ChangeDescription: string
   --ConnectivityPolicy: record # shape: {AllowDeploymentsToNoTargets?: bool, ExcludeUnhealthyTargets?: bool, SkipMachineBehavior?: "None"|"SkipUnavailableMachines", TargetRoles?: list}
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
-  --DefaultToSkipIfAlreadyInstalled: string@bool-completer
+  --DefaultToSkipIfAlreadyInstalled: oneof<nothing, bool>
   --DeploymentChangesTemplate: string
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   ProjectId: string
   --ReleaseNotesTemplate: string
   SpaceId: string
@@ -10791,15 +10790,15 @@ export def "spaces-projects-deploymentsettings modifyDeploymentSettingsInDatabas
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CancelQueuedTasks: string@bool-completer
-  --CancelRunningTasks: string@bool-completer
+  --CancelQueuedTasks: oneof<nothing, bool>
+  --CancelRunningTasks: oneof<nothing, bool>
   --ChangeDescription: string
   --ConnectivityPolicy: record # shape: {AllowDeploymentsToNoTargets?: bool, ExcludeUnhealthyTargets?: bool, SkipMachineBehavior?: "None"|"SkipUnavailableMachines", TargetRoles?: list}
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
-  --DefaultToSkipIfAlreadyInstalled: string@bool-completer
+  --DefaultToSkipIfAlreadyInstalled: oneof<nothing, bool>
   --DeploymentChangesTemplate: string
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   ProjectId: string
   --ReleaseNotesTemplate: string
   SpaceId: string
@@ -10857,15 +10856,15 @@ export def "spaces-projects-deploymentsettings modifyDeploymentSettingsInGit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CancelQueuedTasks: string@bool-completer
-  --CancelRunningTasks: string@bool-completer
+  --CancelQueuedTasks: oneof<nothing, bool>
+  --CancelRunningTasks: oneof<nothing, bool>
   --ChangeDescription: string
   --ConnectivityPolicy: record # shape: {AllowDeploymentsToNoTargets?: bool, ExcludeUnhealthyTargets?: bool, SkipMachineBehavior?: "None"|"SkipUnavailableMachines", TargetRoles?: list}
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
-  --DefaultToSkipIfAlreadyInstalled: string@bool-completer
+  --DefaultToSkipIfAlreadyInstalled: oneof<nothing, bool>
   --DeploymentChangesTemplate: string
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   GitRef: string
   ProjectId: string
   --ReleaseNotesTemplate: string
@@ -10900,7 +10899,7 @@ export def "machines LegacyDefaultSpace" [
   --environmentIds: list # List of Environment IDs which if specified, filters the result to only include Deployment Targets with matching Environment IDs.
   --healthStatuses: list # List of health statuses which if specified, filters the result to only include Deployment Targets with matching health statuses.
   --ids: list # List of Deployment Target IDs which if specified, filters the result to only include Deployment Targets with matching IDs.
-  --isDisabled: string@bool-completer # A filter to return only disabled/enabled Deployment Targets
+  --isDisabled: oneof<nothing, bool> # A filter to return only disabled/enabled Deployment Targets
   --name: string # The exact name of a deployment target to be matched
   --operatingSystemNames: list # List of operating system names which if specified, filters the result to only include Deployment Targets with matching operating systems.
   --partialName: string # A partial or complete name to search on. This will perform a "contains" style match against the supplied name or name-fragment
@@ -10936,11 +10935,11 @@ export def "machines LegacyDefaultSpace-1" [
   --allow-errors(-e) # Return full response without error handling
   --Endpoint: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
   EnvironmentIds: list
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   --MachinePolicyId: string
   Name: string
   Roles: list
-  --SkipInitialHealthCheck: string@bool-completer
+  --SkipInitialHealthCheck: oneof<nothing, bool>
   --Slug: string
   SpaceId: string
   --TenantedDeploymentParticipation: string@TenantedDeploymentParticipation-completer
@@ -11093,7 +11092,7 @@ export def "machines LegacyDefaultSpace-2" [
   --environmentIds: list # List of Environment IDs which if specified, filters the result to only include Deployment Targets with matching Environment IDs.
   --healthStatuses: list # List of health statuses which if specified, filters the result to only include Deployment Targets with matching health statuses.
   --ids: list # List of Deployment Target IDs which if specified, filters the result to only include Deployment Targets with matching IDs.
-  --isDisabled: string@bool-completer # A filter to return only disabled/enabled Deployment Targets
+  --isDisabled: oneof<nothing, bool> # A filter to return only disabled/enabled Deployment Targets
   --name: string # The exact name of a deployment target to be matched
   --operatingSystemNames: list # List of operating system names which if specified, filters the result to only include Deployment Targets with matching operating systems.
   --partialName: string # A partial or complete name to search on. This will perform a "contains" style match against the supplied name or name-fragment
@@ -11252,7 +11251,7 @@ export def "machines LegacyDefaultSpace-by-machineid" [
   --allow-errors(-e) # Return full response without error handling
   --Endpoint: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
   EnvironmentIds: list
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   MachineId: string
   --MachinePolicyId: string
   Name: string
@@ -11316,7 +11315,7 @@ export def "machines get-by-spaceId" [
   --environmentIds: list # List of Environment IDs which if specified, filters the result to only include Deployment Targets with matching Environment IDs.
   --healthStatuses: list # List of health statuses which if specified, filters the result to only include Deployment Targets with matching health statuses.
   --ids: list # List of Deployment Target IDs which if specified, filters the result to only include Deployment Targets with matching IDs.
-  --isDisabled: string@bool-completer # A filter to return only disabled/enabled Deployment Targets
+  --isDisabled: oneof<nothing, bool> # A filter to return only disabled/enabled Deployment Targets
   --name: string # The exact name of a deployment target to be matched
   --operatingSystemNames: list # List of operating system names which if specified, filters the result to only include Deployment Targets with matching operating systems.
   --partialName: string # A partial or complete name to search on. This will perform a "contains" style match against the supplied name or name-fragment
@@ -11353,11 +11352,11 @@ export def "machines createDeploymentTargetBySpace" [
   --allow-errors(-e) # Return full response without error handling
   --Endpoint: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
   EnvironmentIds: list
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   --MachinePolicyId: string
   Name: string
   Roles: list
-  --SkipInitialHealthCheck: string@bool-completer
+  --SkipInitialHealthCheck: oneof<nothing, bool>
   --Slug: string
   SpaceId: string
   --TenantedDeploymentParticipation: string@TenantedDeploymentParticipation-completer
@@ -11516,7 +11515,7 @@ export def "machines get-by-spaceId-1" [
   --environmentIds: list # List of Environment IDs which if specified, filters the result to only include Deployment Targets with matching Environment IDs.
   --healthStatuses: list # List of health statuses which if specified, filters the result to only include Deployment Targets with matching health statuses.
   --ids: list # List of Deployment Target IDs which if specified, filters the result to only include Deployment Targets with matching IDs.
-  --isDisabled: string@bool-completer # A filter to return only disabled/enabled Deployment Targets
+  --isDisabled: oneof<nothing, bool> # A filter to return only disabled/enabled Deployment Targets
   --name: string # The exact name of a deployment target to be matched
   --operatingSystemNames: list # List of operating system names which if specified, filters the result to only include Deployment Targets with matching operating systems.
   --partialName: string # A partial or complete name to search on. This will perform a "contains" style match against the supplied name or name-fragment
@@ -11681,7 +11680,7 @@ export def "machines modifyDeploymentTargetBySpace" [
   --allow-errors(-e) # Return full response without error handling
   --Endpoint: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
   EnvironmentIds: list
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   MachineId: string
   --MachinePolicyId: string
   Name: string
@@ -11746,7 +11745,7 @@ export def "spaces-machines get-by-spaceIdentifier" [
   --environmentIds: list # List of Environment IDs which if specified, filters the result to only include Deployment Targets with matching Environment IDs.
   --healthStatuses: list # List of health statuses which if specified, filters the result to only include Deployment Targets with matching health statuses.
   --ids: list # List of Deployment Target IDs which if specified, filters the result to only include Deployment Targets with matching IDs.
-  --isDisabled: string@bool-completer # A filter to return only disabled/enabled Deployment Targets
+  --isDisabled: oneof<nothing, bool> # A filter to return only disabled/enabled Deployment Targets
   --name: string # The exact name of a deployment target to be matched
   --operatingSystemNames: list # List of operating system names which if specified, filters the result to only include Deployment Targets with matching operating systems.
   --partialName: string # A partial or complete name to search on. This will perform a "contains" style match against the supplied name or name-fragment
@@ -11783,11 +11782,11 @@ export def "spaces-machines createDeploymentTarget" [
   --allow-errors(-e) # Return full response without error handling
   --Endpoint: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
   EnvironmentIds: list
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   --MachinePolicyId: string
   Name: string
   Roles: list
-  --SkipInitialHealthCheck: string@bool-completer
+  --SkipInitialHealthCheck: oneof<nothing, bool>
   --Slug: string
   SpaceId: string
   --TenantedDeploymentParticipation: string@TenantedDeploymentParticipation-completer
@@ -11946,7 +11945,7 @@ export def "spaces-machines get-by-spaceIdentifier-1" [
   --environmentIds: list # List of Environment IDs which if specified, filters the result to only include Deployment Targets with matching Environment IDs.
   --healthStatuses: list # List of health statuses which if specified, filters the result to only include Deployment Targets with matching health statuses.
   --ids: list # List of Deployment Target IDs which if specified, filters the result to only include Deployment Targets with matching IDs.
-  --isDisabled: string@bool-completer # A filter to return only disabled/enabled Deployment Targets
+  --isDisabled: oneof<nothing, bool> # A filter to return only disabled/enabled Deployment Targets
   --name: string # The exact name of a deployment target to be matched
   --operatingSystemNames: list # List of operating system names which if specified, filters the result to only include Deployment Targets with matching operating systems.
   --partialName: string # A partial or complete name to search on. This will perform a "contains" style match against the supplied name or name-fragment
@@ -12111,7 +12110,7 @@ export def "spaces-machines modifyDeploymentTarget" [
   --allow-errors(-e) # Return full response without error handling
   --Endpoint: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
   EnvironmentIds: list
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   MachineId: string
   --MachinePolicyId: string
   Name: string
@@ -12467,7 +12466,7 @@ export def "deprecations-toggle toggleDeprecation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   Deprecation: string
-  --Enabled: string@bool-completer
+  --Enabled: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -12493,7 +12492,7 @@ export def "deprecations-toggle toggleDeprecationV1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   Deprecation: string
-  --Enabled: string@bool-completer
+  --Enabled: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -12655,7 +12654,7 @@ export def "environments LegacyDefaultSpace-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AllowDynamicInfrastructure: string@bool-completer
+  --AllowDynamicInfrastructure: oneof<nothing, bool>
   --Description: string
   --EnvironmentTags: list
   --ExtensionSettings: list # item shape: {ExtensionId?: string, Values?: any}
@@ -12663,7 +12662,7 @@ export def "environments LegacyDefaultSpace-1" [
   --Slug: string
   --SortOrder: int # format: int32
   SpaceId: string
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> record<AllowDynamicInfrastructure: bool, Description: string, EnvironmentTags: list<string>, ExtensionSettings: table<ExtensionId: string, Values: any>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, Slug: string, SortOrder: int, SpaceId: string, UseGuidedFailure: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -12766,9 +12765,9 @@ export def "environments-summary LegacyDefaultSpace" [
   --deploymentTargetTypes: list
   --environmentTags: list
   --healthStatuses: list
-  --hideEmptyEnvironments: string@bool-completer
+  --hideEmptyEnvironments: oneof<nothing, bool>
   --ids: list
-  --isDisabled: string@bool-completer
+  --isDisabled: oneof<nothing, bool>
   --machinePartialName: string
   --partialName: string
   --roles: list
@@ -12827,7 +12826,7 @@ export def "environments LegacyDefaultSpace-by-environmentId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AllowDynamicInfrastructure: string@bool-completer
+  --AllowDynamicInfrastructure: oneof<nothing, bool>
   --Description: string
   EnvironmentId: string
   --EnvironmentTags: list
@@ -12836,7 +12835,7 @@ export def "environments LegacyDefaultSpace-by-environmentId" [
   --Slug: string
   --SortOrder: int # format: int32
   SpaceId: string
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> record<AllowDynamicInfrastructure: bool, Description: string, EnvironmentTags: list<string>, ExtensionSettings: table<ExtensionId: string, Values: any>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, Slug: string, SortOrder: int, SpaceId: string, UseGuidedFailure: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -12953,7 +12952,7 @@ export def "environments-machines LegacyDefaultSpace" [
   --commStyles: list
   --deploymentTargetTypes: list
   --healthStatuses: list
-  --isDisabled: string@bool-completer
+  --isDisabled: oneof<nothing, bool>
   --partialName: string
   --roles: list
   --shellNames: list
@@ -13014,7 +13013,7 @@ export def "environments createEnvironmentBySpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AllowDynamicInfrastructure: string@bool-completer
+  --AllowDynamicInfrastructure: oneof<nothing, bool>
   --Description: string
   --EnvironmentTags: list
   --ExtensionSettings: list # item shape: {ExtensionId?: string, Values?: any}
@@ -13022,7 +13021,7 @@ export def "environments createEnvironmentBySpace" [
   --Slug: string
   --SortOrder: int # format: int32
   SpaceId: string
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> record<AllowDynamicInfrastructure: bool, Description: string, EnvironmentTags: list<string>, ExtensionSettings: table<ExtensionId: string, Values: any>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, Slug: string, SortOrder: int, SpaceId: string, UseGuidedFailure: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -13129,9 +13128,9 @@ export def "environments-summary get-by-spaceId" [
   --deploymentTargetTypes: list
   --environmentTags: list
   --healthStatuses: list
-  --hideEmptyEnvironments: string@bool-completer
+  --hideEmptyEnvironments: oneof<nothing, bool>
   --ids: list
-  --isDisabled: string@bool-completer
+  --isDisabled: oneof<nothing, bool>
   --machinePartialName: string
   --partialName: string
   --roles: list
@@ -13166,9 +13165,9 @@ export def "environments-summary get-by-spaceId-1" [
   --deploymentTargetTypes: list
   --environmentTags: list
   --healthStatuses: list
-  --hideEmptyEnvironments: string@bool-completer
+  --hideEmptyEnvironments: oneof<nothing, bool>
   --ids: list
-  --isDisabled: string@bool-completer
+  --isDisabled: oneof<nothing, bool>
   --machinePartialName: string
   --partialName: string
   --roles: list
@@ -13259,7 +13258,7 @@ export def "environments modifyEnvironmentBySpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AllowDynamicInfrastructure: string@bool-completer
+  --AllowDynamicInfrastructure: oneof<nothing, bool>
   --Description: string
   EnvironmentId: string
   --EnvironmentTags: list
@@ -13268,7 +13267,7 @@ export def "environments modifyEnvironmentBySpace" [
   --Slug: string
   --SortOrder: int # format: int32
   SpaceId: string
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> record<AllowDynamicInfrastructure: bool, Description: string, EnvironmentTags: list<string>, ExtensionSettings: table<ExtensionId: string, Values: any>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, Slug: string, SortOrder: int, SpaceId: string, UseGuidedFailure: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -13390,7 +13389,7 @@ export def "environments-machines get" [
   --commStyles: list
   --deploymentTargetTypes: list
   --healthStatuses: list
-  --isDisabled: string@bool-completer
+  --isDisabled: oneof<nothing, bool>
   --partialName: string
   --roles: list
   --shellNames: list
@@ -13502,7 +13501,7 @@ export def "spaces-environments createEnvironment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AllowDynamicInfrastructure: string@bool-completer
+  --AllowDynamicInfrastructure: oneof<nothing, bool>
   --Description: string
   --EnvironmentTags: list
   --ExtensionSettings: list # item shape: {ExtensionId?: string, Values?: any}
@@ -13510,7 +13509,7 @@ export def "spaces-environments createEnvironment" [
   --Slug: string
   --SortOrder: int # format: int32
   SpaceId: string
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> record<AllowDynamicInfrastructure: bool, Description: string, EnvironmentTags: list<string>, ExtensionSettings: table<ExtensionId: string, Values: any>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, Slug: string, SortOrder: int, SpaceId: string, UseGuidedFailure: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -13617,9 +13616,9 @@ export def "spaces-environments-summary get-by-spaceIdentifier" [
   --deploymentTargetTypes: list
   --environmentTags: list
   --healthStatuses: list
-  --hideEmptyEnvironments: string@bool-completer
+  --hideEmptyEnvironments: oneof<nothing, bool>
   --ids: list
-  --isDisabled: string@bool-completer
+  --isDisabled: oneof<nothing, bool>
   --machinePartialName: string
   --partialName: string
   --roles: list
@@ -13654,9 +13653,9 @@ export def "spaces-environments-summary get-by-spaceIdentifier-1" [
   --deploymentTargetTypes: list
   --environmentTags: list
   --healthStatuses: list
-  --hideEmptyEnvironments: string@bool-completer
+  --hideEmptyEnvironments: oneof<nothing, bool>
   --ids: list
-  --isDisabled: string@bool-completer
+  --isDisabled: oneof<nothing, bool>
   --machinePartialName: string
   --partialName: string
   --roles: list
@@ -13747,7 +13746,7 @@ export def "spaces-environments modifyEnvironment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AllowDynamicInfrastructure: string@bool-completer
+  --AllowDynamicInfrastructure: oneof<nothing, bool>
   --Description: string
   EnvironmentId: string
   --EnvironmentTags: list
@@ -13756,7 +13755,7 @@ export def "spaces-environments modifyEnvironment" [
   --Slug: string
   --SortOrder: int # format: int32
   SpaceId: string
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> record<AllowDynamicInfrastructure: bool, Description: string, EnvironmentTags: list<string>, ExtensionSettings: table<ExtensionId: string, Values: any>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, Slug: string, SortOrder: int, SpaceId: string, UseGuidedFailure: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -13878,7 +13877,7 @@ export def "spaces-environments-machines get" [
   --commStyles: list
   --deploymentTargetTypes: list
   --healthStatuses: list
-  --isDisabled: string@bool-completer
+  --isDisabled: oneof<nothing, bool>
   --partialName: string
   --roles: list
   --shellNames: list
@@ -14467,17 +14466,17 @@ export def "events list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --asCsv: string@bool-completer # Returns list of events as a csv file when set to true
+  --asCsv: oneof<nothing, bool> # Returns list of events as a csv file when set to true
   --documentTypes: list # The document types to be matched, provided as a comma separated list of strings
   --environments: list # The environment ids to be matched, provided as a comma separated list of strings
   --eventAgents: list # The event agents to be matched, provided as a comma separated list of strings
   --eventCategories: list # The event categories to be matched, provided as a comma separated list of strings
   --eventGroups: list # The event groups to be matched, provided as a comma separated list of strings
-  --excludeDifference: string@bool-completer # Omits the change details of all events when set to true
+  --excludeDifference: oneof<nothing, bool> # Omits the change details of all events when set to true
   --qp-from: string # Filter events that occurred after this datetime (format: date-time)
   --fromAutoId: int # Filter events after specified autoId (format: int64)
   --ids: string # The event ids to be matched, provided as a comma separated list of strings
-  --includeInternalEvents: string@bool-completer # Exclude the machine-related CRUD events that were added for auto-deploy events
+  --includeInternalEvents: oneof<nothing, bool> # Exclude the machine-related CRUD events that were added for auto-deploy events
   --projectGroups: list # The project group ids to be matched, provided as a comma separated list of strings
   --projects: list # The project ids to be matched, provided as a comma separated list of strings
   --regarding: list # The related document ids to be matched, provided as a comma separated list of strings
@@ -14623,17 +14622,17 @@ export def "events list-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --asCsv: string@bool-completer # Returns list of events as a csv file when set to true
+  --asCsv: oneof<nothing, bool> # Returns list of events as a csv file when set to true
   --documentTypes: list # The document types to be matched, provided as a comma separated list of strings
   --environments: list # The environment ids to be matched, provided as a comma separated list of strings
   --eventAgents: list # The event agents to be matched, provided as a comma separated list of strings
   --eventCategories: list # The event categories to be matched, provided as a comma separated list of strings
   --eventGroups: list # The event groups to be matched, provided as a comma separated list of strings
-  --excludeDifference: string@bool-completer # Omits the change details of all events when set to true
+  --excludeDifference: oneof<nothing, bool> # Omits the change details of all events when set to true
   --qp-from: string # Filter events that occurred after this datetime (format: date-time)
   --fromAutoId: int # Filter events after specified autoId (format: int64)
   --ids: string # The event ids to be matched, provided as a comma separated list of strings
-  --includeInternalEvents: string@bool-completer # Exclude the machine-related CRUD events that were added for auto-deploy events
+  --includeInternalEvents: oneof<nothing, bool> # Exclude the machine-related CRUD events that were added for auto-deploy events
   --projectGroups: list # The project group ids to be matched, provided as a comma separated list of strings
   --projects: list # The project ids to be matched, provided as a comma separated list of strings
   --regarding: list # The related document ids to be matched, provided as a comma separated list of strings
@@ -14784,17 +14783,17 @@ export def "spaces-events list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --asCsv: string@bool-completer # Returns list of events as a csv file when set to true
+  --asCsv: oneof<nothing, bool> # Returns list of events as a csv file when set to true
   --documentTypes: list # The document types to be matched, provided as a comma separated list of strings
   --environments: list # The environment ids to be matched, provided as a comma separated list of strings
   --eventAgents: list # The event agents to be matched, provided as a comma separated list of strings
   --eventCategories: list # The event categories to be matched, provided as a comma separated list of strings
   --eventGroups: list # The event groups to be matched, provided as a comma separated list of strings
-  --excludeDifference: string@bool-completer # Omits the change details of all events when set to true
+  --excludeDifference: oneof<nothing, bool> # Omits the change details of all events when set to true
   --qp-from: string # Filter events that occurred after this datetime (format: date-time)
   --fromAutoId: int # Filter events after specified autoId (format: int64)
   --ids: string # The event ids to be matched, provided as a comma separated list of strings
-  --includeInternalEvents: string@bool-completer # Exclude the machine-related CRUD events that were added for auto-deploy events
+  --includeInternalEvents: oneof<nothing, bool> # Exclude the machine-related CRUD events that were added for auto-deploy events
   --projectGroups: list # The project group ids to be matched, provided as a comma separated list of strings
   --projects: list # The project ids to be matched, provided as a comma separated list of strings
   --regarding: list # The related document ids to be matched, provided as a comma separated list of strings
@@ -14990,18 +14989,18 @@ export def "featuresconfiguration updateFeaturesConfiguration" [
   --HelpSidebarSupportLink: string
   --HelpSidebarSupportLinkLabel: string
   --Id: string
-  --IsAutomaticStepUpdatesEnabled: string@bool-completer
-  --IsBuiltInWorkerEnabled: string@bool-completer
-  --IsCommunityActionTemplatesEnabled: string@bool-completer
-  --IsCompositeDockerHubRegistryFeedEnabled: string@bool-completer
-  --IsConfigureFeedsWithLocalOrSmbPathsEnabled: string@bool-completer
-  --IsExperimentalUIFeatureEnabled: string@bool-completer
-  --IsGitHubAppEnabled: string@bool-completer
-  --IsHelpSidebarEnabled: string@bool-completer
-  --IsKubernetesCloudTargetDiscoveryEnabled: string@bool-completer
-  --IsNavigationVisualUpliftEnabled: string@bool-completer
-  --IsProjectsPageOnboardingEnabled: string@bool-completer
-  --IsProjectsPageOptimizationEnabled: string@bool-completer
+  --IsAutomaticStepUpdatesEnabled: oneof<nothing, bool>
+  --IsBuiltInWorkerEnabled: oneof<nothing, bool>
+  --IsCommunityActionTemplatesEnabled: oneof<nothing, bool>
+  --IsCompositeDockerHubRegistryFeedEnabled: oneof<nothing, bool>
+  --IsConfigureFeedsWithLocalOrSmbPathsEnabled: oneof<nothing, bool>
+  --IsExperimentalUIFeatureEnabled: oneof<nothing, bool>
+  --IsGitHubAppEnabled: oneof<nothing, bool>
+  --IsHelpSidebarEnabled: oneof<nothing, bool>
+  --IsKubernetesCloudTargetDiscoveryEnabled: oneof<nothing, bool>
+  --IsNavigationVisualUpliftEnabled: oneof<nothing, bool>
+  --IsProjectsPageOnboardingEnabled: oneof<nothing, bool>
+  --IsProjectsPageOptimizationEnabled: oneof<nothing, bool>
 ]: any -> record<DefaultPowerShellEdition: string, HelpSidebarSupportLink: string, HelpSidebarSupportLinkLabel: string, Id: string, IsAutomaticStepUpdatesEnabled: bool, IsBuiltInWorkerEnabled: bool, IsCommunityActionTemplatesEnabled: bool, IsCompositeDockerHubRegistryFeedEnabled: bool, IsConfigureFeedsWithLocalOrSmbPathsEnabled: bool, IsExperimentalUIFeatureEnabled: bool, IsGitHubAppEnabled: bool, IsHelpSidebarEnabled: bool, IsKubernetesCloudTargetDiscoveryEnabled: bool, IsProjectsPageOnboardingEnabled: bool, IsProjectsPageOptimizationEnabled: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -15122,7 +15121,7 @@ export def "projects-featuretoggles-rotate-client-identifier-signing-key rotateF
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CompleteRotation: string@bool-completer
+  --CompleteRotation: oneof<nothing, bool>
   ProjectId: string
   SpaceId: string
 ]: any -> record {
@@ -15177,7 +15176,7 @@ export def "projects-featuretoggles modifyFeatureToggleBySpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --DefaultIsEnabled: string@bool-completer
+  --DefaultIsEnabled: oneof<nothing, bool>
   --Description: string
   Environments: list # item shape: {ClientRolloutPercentage?: int, DeploymentEnvironmentId: string, ExcludedTenantIds?: list, ExcludedTenantTags?: list, IsEnabled: bool, MinimumVersion?: string, RolloutPercentage?: int, Segments?: list, TenantIds?: list, TenantTags?: list}
   Id: string
@@ -15331,7 +15330,7 @@ export def "spaces-projects-featuretoggles-rotate-client-identifier-signing-key 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CompleteRotation: string@bool-completer
+  --CompleteRotation: oneof<nothing, bool>
   ProjectId: string
   SpaceId: string
 ]: any -> record {
@@ -15386,7 +15385,7 @@ export def "spaces-projects-featuretoggles modifyFeatureToggle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --DefaultIsEnabled: string@bool-completer
+  --DefaultIsEnabled: oneof<nothing, bool>
   --Description: string
   Environments: list # item shape: {ClientRolloutPercentage?: int, DeploymentEnvironmentId: string, ExcludedTenantIds?: list, ExcludedTenantTags?: list, IsEnabled: bool, MinimumVersion?: string, RolloutPercentage?: int, Segments?: list, TenantIds?: list, TenantTags?: list}
   Id: string
@@ -15665,8 +15664,8 @@ export def "feeds-packages-versions LegacyDefaultSpace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string # Version number text to filter by.
-  --includePreRelease: string@bool-completer # Flag to include pre-release versions, defaults to true.
-  --includeReleaseNotes: string@bool-completer # Flag to include release notes, defaults to false.
+  --includePreRelease: oneof<nothing, bool> # Flag to include pre-release versions, defaults to true.
+  --includeReleaseNotes: oneof<nothing, bool> # Flag to include release notes, defaults to false.
   --packageId: string # The id of the package.
   --preReleaseTag: string # The semver tag regex pattern to filter by.
   --skip: int # Number of items to skip. Defaults to zero (format: int32)
@@ -15924,8 +15923,8 @@ export def "feeds-packages-versions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string # Version number text to filter by.
-  --includePreRelease: string@bool-completer # Flag to include pre-release versions, defaults to true.
-  --includeReleaseNotes: string@bool-completer # Flag to include release notes, defaults to false.
+  --includePreRelease: oneof<nothing, bool> # Flag to include pre-release versions, defaults to true.
+  --includeReleaseNotes: oneof<nothing, bool> # Flag to include release notes, defaults to false.
   --packageId: string # The id of the package.
   --preReleaseTag: string # The semver tag regex pattern to filter by.
   --skip: int # Number of items to skip. Defaults to zero (format: int32)
@@ -16183,8 +16182,8 @@ export def "spaces-feeds-packages-versions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string # Version number text to filter by.
-  --includePreRelease: string@bool-completer # Flag to include pre-release versions, defaults to true.
-  --includeReleaseNotes: string@bool-completer # Flag to include release notes, defaults to false.
+  --includePreRelease: oneof<nothing, bool> # Flag to include pre-release versions, defaults to true.
+  --includeReleaseNotes: oneof<nothing, bool> # Flag to include release notes, defaults to false.
   --packageId: string # The id of the package.
   --preReleaseTag: string # The semver tag regex pattern to filter by.
   --skip: int # Number of items to skip. Defaults to zero (format: int32)
@@ -16373,7 +16372,7 @@ export def "github-user-app-authorization-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeUserDetails: string@bool-completer
+  --includeUserDetails: oneof<nothing, bool>
 ]: nothing -> record<CanAuthorize: bool, IsAuthorized: bool, UserDetails: record<AvatarUrl: string, Login: string, Name: string, PrimaryEmail: string, RefreshTokenValidTo: string, TokenValidTo: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -16773,7 +16772,7 @@ export def "github-installations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --excludeConnected: string@bool-completer
+  --excludeConnected: oneof<nothing, bool>
 ]: nothing -> record<Installations: table<AccountAvatarUrl: string, AccountId: string, AccountLogin: string, AccountType: string, AllRepositories: bool, InstallationId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -17030,7 +17029,7 @@ export def "spaces-github-installations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --excludeConnected: string@bool-completer
+  --excludeConnected: oneof<nothing, bool>
 ]: nothing -> record<Installations: table<AccountAvatarUrl: string, AccountId: string, AccountLogin: string, AccountType: string, AllRepositories: bool, InstallationId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -18519,7 +18518,7 @@ export def "interruptions list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ids: list # List of specific interruption IDs to load
-  --pendingOnly: string@bool-completer # If true, lists only pending interruptions
+  --pendingOnly: oneof<nothing, bool> # If true, lists only pending interruptions
   --regarding: string # Lists interruptions related to a specific other item, specified by its ID.
   --skip: int # Number of items to skip. Defaults to zero (format: int32)
   --take: int # Number of items to take. Defaults to 30 (format: int32)
@@ -18644,7 +18643,7 @@ export def "interruptions listInterruptionsBySpace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ids: list # List of specific interruption IDs to load
-  --pendingOnly: string@bool-completer # If true, lists only pending interruptions
+  --pendingOnly: oneof<nothing, bool> # If true, lists only pending interruptions
   --regarding: string # Lists interruptions related to a specific other item, specified by its ID.
   --skip: int # Number of items to skip. Defaults to zero (format: int32)
   --take: int # Number of items to take. Defaults to 30 (format: int32)
@@ -18773,7 +18772,7 @@ export def "spaces-interruptions listInterruptions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ids: list # List of specific interruption IDs to load
-  --pendingOnly: string@bool-completer # If true, lists only pending interruptions
+  --pendingOnly: oneof<nothing, bool> # If true, lists only pending interruptions
   --regarding: string # Lists interruptions related to a specific other item, specified by its ID.
   --skip: int # Number of items to skip. Defaults to zero (format: int32)
   --take: int # Number of items to take. Defaults to 30 (format: int32)
@@ -19172,7 +19171,7 @@ export def "letsencryptconfiguration modifyLetsEncryptConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Enabled: string@bool-completer
+  --Enabled: oneof<nothing, bool>
 ]: any -> record<AcceptLetsEncryptTermsOfService: bool, CertificateExpiryDate: string, CertificateThumbprint: string, DnsName: string, Enabled: bool, HttpsPort: int, Id: string, IPAddress: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, Path: string, RegistrationEmailAddress: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -20754,7 +20753,7 @@ export def "machinepolicies LegacyDefaultSpace-1" [
   --ConnectionRetrySleepInterval: string # format: date-span
   --ConnectionRetryTimeLimit: string # format: date-span
   --Description: string
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   --MachineCleanupPolicy: record # shape: {DeleteMachinesBehavior?: "DoNotDelete"|"DeleteUnavailableMachines", DeleteMachinesElapsedTimeSpan?: string}
   --MachineConnectivityPolicy: record # shape: {MachineConnectivityBehavior?: "ExpectedToBeOnline"|"MayBeOfflineAndCanBeSkipped"}
   --MachineHealthCheckPolicy: record # shape: {BashHealthCheckPolicy?: record, HealthCheckCron?: string, HealthCheckCronTimezone?: string, HealthCheckInterval?: string, HealthCheckType?: "RunScript"|"OnlyConnectivity", PowerShellHealthCheckPolicy?: record}
@@ -20865,7 +20864,7 @@ export def "machinepolicies LegacyDefaultSpace-by-id-1" [
   --ConnectionRetryTimeLimit: string # format: date-span
   --Description: string
   Id: string # The Machine Policy ID
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   --MachineCleanupPolicy: record # shape: {DeleteMachinesBehavior?: "DoNotDelete"|"DeleteUnavailableMachines", DeleteMachinesElapsedTimeSpan?: string}
   --MachineConnectivityPolicy: record # shape: {MachineConnectivityBehavior?: "ExpectedToBeOnline"|"MayBeOfflineAndCanBeSkipped"}
   --MachineHealthCheckPolicy: record # shape: {BashHealthCheckPolicy?: record, HealthCheckCron?: string, HealthCheckCronTimezone?: string, HealthCheckInterval?: string, HealthCheckType?: "RunScript"|"OnlyConnectivity", PowerShellHealthCheckPolicy?: record}
@@ -21032,7 +21031,7 @@ export def "machinepolicies createMachinePolicyBySpace" [
   --ConnectionRetrySleepInterval: string # format: date-span
   --ConnectionRetryTimeLimit: string # format: date-span
   --Description: string
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   --MachineCleanupPolicy: record # shape: {DeleteMachinesBehavior?: "DoNotDelete"|"DeleteUnavailableMachines", DeleteMachinesElapsedTimeSpan?: string}
   --MachineConnectivityPolicy: record # shape: {MachineConnectivityBehavior?: "ExpectedToBeOnline"|"MayBeOfflineAndCanBeSkipped"}
   --MachineHealthCheckPolicy: record # shape: {BashHealthCheckPolicy?: record, HealthCheckCron?: string, HealthCheckCronTimezone?: string, HealthCheckInterval?: string, HealthCheckType?: "RunScript"|"OnlyConnectivity", PowerShellHealthCheckPolicy?: record}
@@ -21147,7 +21146,7 @@ export def "machinepolicies modifyMachinePolicyBySpace" [
   --ConnectionRetryTimeLimit: string # format: date-span
   --Description: string
   Id: string # The Machine Policy ID
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   --MachineCleanupPolicy: record # shape: {DeleteMachinesBehavior?: "DoNotDelete"|"DeleteUnavailableMachines", DeleteMachinesElapsedTimeSpan?: string}
   --MachineConnectivityPolicy: record # shape: {MachineConnectivityBehavior?: "ExpectedToBeOnline"|"MayBeOfflineAndCanBeSkipped"}
   --MachineHealthCheckPolicy: record # shape: {BashHealthCheckPolicy?: record, HealthCheckCron?: string, HealthCheckCronTimezone?: string, HealthCheckInterval?: string, HealthCheckType?: "RunScript"|"OnlyConnectivity", PowerShellHealthCheckPolicy?: record}
@@ -21318,7 +21317,7 @@ export def "spaces-machinepolicies createMachinePolicy" [
   --ConnectionRetrySleepInterval: string # format: date-span
   --ConnectionRetryTimeLimit: string # format: date-span
   --Description: string
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   --MachineCleanupPolicy: record # shape: {DeleteMachinesBehavior?: "DoNotDelete"|"DeleteUnavailableMachines", DeleteMachinesElapsedTimeSpan?: string}
   --MachineConnectivityPolicy: record # shape: {MachineConnectivityBehavior?: "ExpectedToBeOnline"|"MayBeOfflineAndCanBeSkipped"}
   --MachineHealthCheckPolicy: record # shape: {BashHealthCheckPolicy?: record, HealthCheckCron?: string, HealthCheckCronTimezone?: string, HealthCheckInterval?: string, HealthCheckType?: "RunScript"|"OnlyConnectivity", PowerShellHealthCheckPolicy?: record}
@@ -21433,7 +21432,7 @@ export def "spaces-machinepolicies modifyMachinePolicy" [
   --ConnectionRetryTimeLimit: string # format: date-span
   --Description: string
   Id: string # The Machine Policy ID
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   --MachineCleanupPolicy: record # shape: {DeleteMachinesBehavior?: "DoNotDelete"|"DeleteUnavailableMachines", DeleteMachinesElapsedTimeSpan?: string}
   --MachineConnectivityPolicy: record # shape: {MachineConnectivityBehavior?: "ExpectedToBeOnline"|"MayBeOfflineAndCanBeSkipped"}
   --MachineHealthCheckPolicy: record # shape: {BashHealthCheckPolicy?: record, HealthCheckCron?: string, HealthCheckCronTimezone?: string, HealthCheckInterval?: string, HealthCheckType?: "RunScript"|"OnlyConnectivity", PowerShellHealthCheckPolicy?: record}
@@ -21784,7 +21783,7 @@ export def "maintenanceconfiguration modifyMaintenanceConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --IsInMaintenanceMode: string@bool-completer
+  --IsInMaintenanceMode: oneof<nothing, bool>
 ]: any -> record<Id: string, IsInMaintenanceMode: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -21809,7 +21808,7 @@ export def "maintenanceconfiguration modifyMaintenanceConfigurationV1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --IsInMaintenanceMode: string@bool-completer
+  --IsInMaintenanceMode: oneof<nothing, bool>
 ]: any -> record<Resource: record<Id: string, IsInMaintenanceMode: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -21834,11 +21833,11 @@ export def "migrations-import createMigrationImportTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --DeletePackageOnCompletion: string@bool-completer
+  --DeletePackageOnCompletion: oneof<nothing, bool>
   --FailureCallbackUri: string
-  --IsDryRun: string@bool-completer
-  --IsEncryptedPackage: string@bool-completer
-  --OverwriteExisting: string@bool-completer
+  --IsDryRun: oneof<nothing, bool>
+  --IsEncryptedPackage: oneof<nothing, bool>
+  --OverwriteExisting: oneof<nothing, bool>
   --PackageFeedSpaceId: string
   PackageId: string
   PackageVersion: string
@@ -21871,13 +21870,13 @@ export def "migrations-partialexport createMigrationPartialExportTask" [
   --DestinationApiKey: string
   --DestinationPackageFeed: string
   --DestinationPackageFeedSpaceId: string
-  --EncryptPackage: string@bool-completer
+  --EncryptPackage: oneof<nothing, bool>
   --FailureCallbackUri: string
-  --IgnoreCertificates: string@bool-completer
-  --IgnoreDeployments: string@bool-completer
-  --IgnoreMachines: string@bool-completer
-  --IgnoreTenants: string@bool-completer
-  --IncludeTaskLogs: string@bool-completer
+  --IgnoreCertificates: oneof<nothing, bool>
+  --IgnoreDeployments: oneof<nothing, bool>
+  --IgnoreMachines: oneof<nothing, bool>
+  --IgnoreTenants: oneof<nothing, bool>
+  --IncludeTaskLogs: oneof<nothing, bool>
   --PackageId: string
   --PackageVersion: string
   Password: string
@@ -21954,7 +21953,7 @@ export def "observability-agents Legacy0" [
   --allow-errors(-e) # Return full response without error handling
   InstallationId: string # format: uuid
   MachineId: string
-  --PreserveAuthenticationToken: string@bool-completer
+  --PreserveAuthenticationToken: oneof<nothing, bool>
   SpaceId: string
 ]: any -> record<AuthenticationToken: string, CertificateThumbprint: string, Resource: record<Id: string, InstallationId: string, MachineId: string, SpaceId: string>> {
   let input = $in
@@ -22037,7 +22036,7 @@ export def "observability-kubernetes-monitors registerKubernetesMonitorBySpace" 
   --allow-errors(-e) # Return full response without error handling
   InstallationId: string # format: uuid
   MachineId: string
-  --PreserveAuthenticationToken: string@bool-completer
+  --PreserveAuthenticationToken: oneof<nothing, bool>
   SpaceId: string
 ]: any -> record<AuthenticationToken: string, CertificateThumbprint: string, Resource: record<Id: string, InstallationId: string, MachineId: string, SpaceId: string>> {
   let input = $in
@@ -22116,7 +22115,7 @@ export def "observability-logs-sessions beginContainerLogsSessionBySpace" [
   MachineId: string
   PodName: string
   ProjectId: string
-  --ShowPreviousContainer: string@bool-completer
+  --ShowPreviousContainer: oneof<nothing, bool>
   SpaceId: string
   --TenantId: string
 ]: any -> record<SessionId: string> {
@@ -22170,8 +22169,8 @@ export def "projects-environments-tenants-livestatus get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --orphansOnly: string@bool-completer
-  --summaryOnly: string@bool-completer
+  --orphansOnly: oneof<nothing, bool>
+  --summaryOnly: oneof<nothing, bool>
 ]: nothing -> record<MachineStatuses: table<MachineId: string, Resources: list, Status: string>, Summary: record<HealthStatus: string, LastUpdated: string, Status: string, SyncStatus: string, SyncStatusMessage: string, TotalOrphanCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -22278,8 +22277,8 @@ export def "projects-environments-untenanted-livestatus Legacy0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --orphansOnly: string@bool-completer
-  --summaryOnly: string@bool-completer
+  --orphansOnly: oneof<nothing, bool>
+  --summaryOnly: oneof<nothing, bool>
   --tenantId: string
 ]: nothing -> record<MachineStatuses: table<MachineId: string, Resources: list, Status: string>, Summary: record<HealthStatus: string, LastUpdated: string, Status: string, SyncStatus: string, SyncStatusMessage: string, TotalOrphanCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -22390,7 +22389,7 @@ export def "spaces-observability-agents Legacy0" [
   --allow-errors(-e) # Return full response without error handling
   InstallationId: string # format: uuid
   MachineId: string
-  --PreserveAuthenticationToken: string@bool-completer
+  --PreserveAuthenticationToken: oneof<nothing, bool>
   SpaceId: string
 ]: any -> record<AuthenticationToken: string, CertificateThumbprint: string, Resource: record<Id: string, InstallationId: string, MachineId: string, SpaceId: string>> {
   let input = $in
@@ -22473,7 +22472,7 @@ export def "spaces-observability-kubernetes-monitors registerKubernetesMonitor" 
   --allow-errors(-e) # Return full response without error handling
   InstallationId: string # format: uuid
   MachineId: string
-  --PreserveAuthenticationToken: string@bool-completer
+  --PreserveAuthenticationToken: oneof<nothing, bool>
   SpaceId: string
 ]: any -> record<AuthenticationToken: string, CertificateThumbprint: string, Resource: record<Id: string, InstallationId: string, MachineId: string, SpaceId: string>> {
   let input = $in
@@ -22552,7 +22551,7 @@ export def "spaces-observability-logs-sessions beginContainerLogsSession" [
   MachineId: string
   PodName: string
   ProjectId: string
-  --ShowPreviousContainer: string@bool-completer
+  --ShowPreviousContainer: oneof<nothing, bool>
   SpaceId: string
   --TenantId: string
 ]: any -> record<SessionId: string> {
@@ -22606,8 +22605,8 @@ export def "spaces-projects-environments-tenants-livestatus get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --orphansOnly: string@bool-completer
-  --summaryOnly: string@bool-completer
+  --orphansOnly: oneof<nothing, bool>
+  --summaryOnly: oneof<nothing, bool>
 ]: nothing -> record<MachineStatuses: table<MachineId: string, Resources: list, Status: string>, Summary: record<HealthStatus: string, LastUpdated: string, Status: string, SyncStatus: string, SyncStatusMessage: string, TotalOrphanCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -22714,8 +22713,8 @@ export def "spaces-projects-environments-untenanted-livestatus Legacy0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --orphansOnly: string@bool-completer
-  --summaryOnly: string@bool-completer
+  --orphansOnly: oneof<nothing, bool>
+  --summaryOnly: oneof<nothing, bool>
   --tenantId: string
 ]: nothing -> record<MachineStatuses: table<MachineId: string, Resources: list, Status: string>, Summary: record<HealthStatus: string, LastUpdated: string, Status: string, SyncStatus: string, SyncStatusMessage: string, TotalOrphanCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -22936,7 +22935,7 @@ export def "octopusservernodes modifyOctopusServerNode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   Id: string
-  --IsInMaintenanceMode: string@bool-completer
+  --IsInMaintenanceMode: oneof<nothing, bool>
   --MaxConcurrentTasks: int # format: int32
 ]: any -> record<Id: string, IsInMaintenanceMode: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, MaxConcurrentTasks: int, Name: string> {
   let input = $in
@@ -23348,7 +23347,7 @@ export def "configuration-open-telemetry-trace-file-export modifyOpenTelemetryTr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Enabled: string@bool-completer
+  --Enabled: oneof<nothing, bool>
   MaxStorageSizeMegabytes: int # format: int32
   RetentionDays: int # format: int32
 ]: any -> record<Enabled: bool, MaxStorageSizeMegabytes: int, RetentionDays: int> {
@@ -23376,14 +23375,14 @@ export def "feeds-packages LegacyDefaultSpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --descriptionsOptional: string@bool-completer
-  --includeMultipleVersions: string@bool-completer
-  --includeNotes: string@bool-completer
-  --includePreRelease: string@bool-completer
-  --includeWorkItems: string@bool-completer
+  --descriptionsOptional: oneof<nothing, bool>
+  --includeMultipleVersions: oneof<nothing, bool>
+  --includeNotes: oneof<nothing, bool>
+  --includePreRelease: oneof<nothing, bool>
+  --includeWorkItems: oneof<nothing, bool>
   --packageId: string
   --packageIds: list
-  --partialMatch: string@bool-completer
+  --partialMatch: oneof<nothing, bool>
   --preReleaseTag: string
   --take: int # format: int32
   --versionRange: string
@@ -23435,9 +23434,9 @@ export def "packages LegacyDefaultSpace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string # Only return the latest versions of packages which contain this value, if specified.
-  --includeNotes: string@bool-completer # Include release notes in the response.
-  --includeWorkItems: string@bool-completer
-  --latest: string@bool-completer # Indicates whether or not to only return the latest version of any packages found.
+  --includeNotes: oneof<nothing, bool> # Include release notes in the response.
+  --includeWorkItems: oneof<nothing, bool>
+  --latest: oneof<nothing, bool> # Indicates whether or not to only return the latest version of any packages found.
   --nuGetPackageId: string # Return versions of the NuGet package with this id, if specified.
   --skip: int # Number of items to skip. Defaults to zero (format: int32)
   --take: int # Number of items to take. Defaults to 30 (format: int32)
@@ -23560,8 +23559,8 @@ export def "packages LegacyDefaultSpace-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeNotes: string@bool-completer # Include release notes in the response.
-  --includeWorkItems: string@bool-completer
+  --includeNotes: oneof<nothing, bool> # Include release notes in the response.
+  --includeWorkItems: oneof<nothing, bool>
 ]: nothing -> record<Description: string, FeedId: string, FileExtension: string, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, NuGetFeedId: string, NuGetPackageId: string, PackageId: string, PackageVersionBuildInformation: record<Branch: string, BuildEnvironment: string, BuildNumber: string, BuildUrl: string, Commits: list<record>, Created: string, Id: string, IncompleteDataWarning: string, IssueTrackerName: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, PackageId: string, VcsCommitNumber: string, VcsCommitUrl: string, VcsRoot: string, VcsType: string, Version: string, WorkItems: list<record>>, Published: string, ReleaseNotes: string, Summary: string, Title: string, Version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -23699,14 +23698,14 @@ export def "feeds-packages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --descriptionsOptional: string@bool-completer
-  --includeMultipleVersions: string@bool-completer
-  --includeNotes: string@bool-completer
-  --includePreRelease: string@bool-completer
-  --includeWorkItems: string@bool-completer
+  --descriptionsOptional: oneof<nothing, bool>
+  --includeMultipleVersions: oneof<nothing, bool>
+  --includeNotes: oneof<nothing, bool>
+  --includePreRelease: oneof<nothing, bool>
+  --includeWorkItems: oneof<nothing, bool>
   --packageId: string
   --packageIds: list
-  --partialMatch: string@bool-completer
+  --partialMatch: oneof<nothing, bool>
   --preReleaseTag: string
   --take: int # format: int32
   --versionRange: string
@@ -23760,9 +23759,9 @@ export def "packages list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string # Only return the latest versions of packages which contain this value, if specified.
-  --includeNotes: string@bool-completer # Include release notes in the response.
-  --includeWorkItems: string@bool-completer
-  --latest: string@bool-completer # Indicates whether or not to only return the latest version of any packages found.
+  --includeNotes: oneof<nothing, bool> # Include release notes in the response.
+  --includeWorkItems: oneof<nothing, bool>
+  --latest: oneof<nothing, bool> # Indicates whether or not to only return the latest version of any packages found.
   --nuGetPackageId: string # Return versions of the NuGet package with this id, if specified.
   --skip: int # Number of items to skip. Defaults to zero (format: int32)
   --take: int # Number of items to take. Defaults to 30 (format: int32)
@@ -23890,8 +23889,8 @@ export def "packages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeNotes: string@bool-completer # Include release notes in the response.
-  --includeWorkItems: string@bool-completer
+  --includeNotes: oneof<nothing, bool> # Include release notes in the response.
+  --includeWorkItems: oneof<nothing, bool>
 ]: nothing -> record<Description: string, FeedId: string, FileExtension: string, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, NuGetFeedId: string, NuGetPackageId: string, PackageId: string, PackageVersionBuildInformation: record<Branch: string, BuildEnvironment: string, BuildNumber: string, BuildUrl: string, Commits: list<record>, Created: string, Id: string, IncompleteDataWarning: string, IssueTrackerName: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, PackageId: string, VcsCommitNumber: string, VcsCommitUrl: string, VcsRoot: string, VcsType: string, Version: string, WorkItems: list<record>>, Published: string, ReleaseNotes: string, Summary: string, Title: string, Version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -24034,14 +24033,14 @@ export def "spaces-feeds-packages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --descriptionsOptional: string@bool-completer
-  --includeMultipleVersions: string@bool-completer
-  --includeNotes: string@bool-completer
-  --includePreRelease: string@bool-completer
-  --includeWorkItems: string@bool-completer
+  --descriptionsOptional: oneof<nothing, bool>
+  --includeMultipleVersions: oneof<nothing, bool>
+  --includeNotes: oneof<nothing, bool>
+  --includePreRelease: oneof<nothing, bool>
+  --includeWorkItems: oneof<nothing, bool>
   --packageId: string
   --packageIds: list
-  --partialMatch: string@bool-completer
+  --partialMatch: oneof<nothing, bool>
   --preReleaseTag: string
   --take: int # format: int32
   --versionRange: string
@@ -24095,9 +24094,9 @@ export def "spaces-packages list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string # Only return the latest versions of packages which contain this value, if specified.
-  --includeNotes: string@bool-completer # Include release notes in the response.
-  --includeWorkItems: string@bool-completer
-  --latest: string@bool-completer # Indicates whether or not to only return the latest version of any packages found.
+  --includeNotes: oneof<nothing, bool> # Include release notes in the response.
+  --includeWorkItems: oneof<nothing, bool>
+  --latest: oneof<nothing, bool> # Indicates whether or not to only return the latest version of any packages found.
   --nuGetPackageId: string # Return versions of the NuGet package with this id, if specified.
   --skip: int # Number of items to skip. Defaults to zero (format: int32)
   --take: int # Number of items to take. Defaults to 30 (format: int32)
@@ -24225,8 +24224,8 @@ export def "spaces-packages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeNotes: string@bool-completer # Include release notes in the response.
-  --includeWorkItems: string@bool-completer
+  --includeNotes: oneof<nothing, bool> # Include release notes in the response.
+  --includeWorkItems: oneof<nothing, bool>
 ]: nothing -> record<Description: string, FeedId: string, FileExtension: string, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, NuGetFeedId: string, NuGetPackageId: string, PackageId: string, PackageVersionBuildInformation: record<Branch: string, BuildEnvironment: string, BuildNumber: string, BuildUrl: string, Commits: list<record>, Created: string, Id: string, IncompleteDataWarning: string, IssueTrackerName: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, PackageId: string, VcsCommitNumber: string, VcsCommitUrl: string, VcsRoot: string, VcsType: string, Version: string, WorkItems: list<record>>, Published: string, ReleaseNotes: string, Summary: string, Title: string, Version: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -24374,7 +24373,7 @@ export def "parent-environments createParentEnvironmentBySpace" [
   Name: string
   --Slug: string
   SpaceId: string
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -24409,7 +24408,7 @@ export def "parent-environments modifyParentEnvironmentBySpace" [
   --Slug: string
   --SortOrder: int # format: int32
   SpaceId: string
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> record<AutomaticDeprovisioningRule: record<ExpiryDays: int, ExpiryHours: int>, Description: string, Id: string, Name: string, Slug: string, SortOrder: int, SpaceId: string, UseGuidedFailure: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -24487,7 +24486,7 @@ export def "spaces-parent-environments createParentEnvironment" [
   Name: string
   --Slug: string
   SpaceId: string
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -24522,7 +24521,7 @@ export def "spaces-parent-environments modifyParentEnvironment" [
   --Slug: string
   --SortOrder: int # format: int32
   SpaceId: string
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> record<AutomaticDeprovisioningRule: record<ExpiryDays: int, ExpiryHours: int>, Description: string, Id: string, Name: string, Slug: string, SortOrder: int, SpaceId: string, UseGuidedFailure: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -24788,7 +24787,7 @@ export def "platformhub-certificates list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # If true, returns only archived certificates. Otherwise, returns only non-archived certificates.
+  --archived: oneof<nothing, bool> # If true, returns only archived certificates. Otherwise, returns only non-archived certificates.
   --firstResult: string # Certificate ID which if specified, adds the certificate with matching ID to the result if it is not already included.
   --ids: string # Comma delimited list of certificate IDs used to filter the result.
   --orderBy: string # If the value is 'recent' (case-insensitive), the result is sorted by Created instead of NotAfter.
@@ -24856,9 +24855,9 @@ export def "platformhub-certificates-generate createSelfSignedPlatformHubCertifi
   --CertificateChain: list # item shape: {IssuerDistinguishedName?: string, NotAfter?: string, NotBefore?: string, SerialNumber?: string, SignatureAlgorithmName?: string, SubjectDistinguishedName?: string, Thumbprint?: string, Version?: int}
   --CertificateData: record # shape: {HasValue?: bool, Hint?: string, NewValue?: string}
   --CertificateDataFormat: string@CertificateDataFormat-completer
-  --HasPrivateKey: string@bool-completer
+  --HasPrivateKey: oneof<nothing, bool>
   --Id: string
-  --IsExpired: string@bool-completer
+  --IsExpired: oneof<nothing, bool>
   --IssuerCommonName: string
   --IssuerDistinguishedName: string
   --IssuerOrganization: string
@@ -24871,7 +24870,7 @@ export def "platformhub-certificates-generate createSelfSignedPlatformHubCertifi
   --Notes: string
   --Password: record # shape: {HasValue?: bool, Hint?: string, NewValue?: string}
   --ReplacedBy: string
-  --SelfSigned: string@bool-completer
+  --SelfSigned: oneof<nothing, bool>
   --SelfSignedCertificateCurve: string
   --SerialNumber: string
   --SignatureAlgorithmName: string
@@ -25004,7 +25003,7 @@ export def "platformhub-certificates-export exportPlatformHubCertificate" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-2 # Response content type
   --format: string@format-completer
-  --includePrivateKey: string@bool-completer
+  --includePrivateKey: oneof<nothing, bool>
   --password: string
   --pemOptions: string@pemOptions-completer
 ]: nothing -> string {
@@ -25259,8 +25258,8 @@ export def "platformhub-feeds-packages-versions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string # Version number text to filter by.
-  --includePreRelease: string@bool-completer # Flag to include pre-release versions, defaults to true.
-  --includeReleaseNotes: string@bool-completer # Flag to include release notes, defaults to false.
+  --includePreRelease: oneof<nothing, bool> # Flag to include pre-release versions, defaults to true.
+  --includeReleaseNotes: oneof<nothing, bool> # Flag to include release notes, defaults to false.
   --packageId: string # The id of the package.
   --preReleaseTag: string # The semver tag regex pattern to filter by.
   --skip: int # Number of items to skip. Defaults to zero (format: int32)
@@ -25774,7 +25773,7 @@ export def "platformhub-github-installations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --excludeConnected: string@bool-completer
+  --excludeConnected: oneof<nothing, bool>
 ]: nothing -> record<Installations: table<AccountAvatarUrl: string, AccountId: string, AccountLogin: string, AccountType: string, AllRepositories: bool, InstallationId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -26066,7 +26065,7 @@ export def "platformhub-processtemplates-share shareProcessTemplateByGitRef" [
   --allow-errors(-e) # Return full response without error handling
   GitRef: string
   IndividuallySharedSpaceIds: list
-  --ShareToAllSpaces: string@bool-completer
+  --ShareToAllSpaces: oneof<nothing, bool>
   Slug: string
 ]: any -> record<IndividuallySharedSpaceIds: list<string>, IndividuallyUnsharedSpaceIds: list<string>, SharedToAllSpaces: bool> {
   let input = $in
@@ -26118,7 +26117,7 @@ export def "platformhub-processtemplates-versions createProcessTemplateVersionBy
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   GitRef: string
-  --IsPreRelease: string@bool-completer
+  --IsPreRelease: oneof<nothing, bool>
   Slug: string
   Version: string
 ]: any -> record<Description: string, GitCommit: string, GitRef: string, Icon: record<Color: string, Id: string>, Id: string, IsPreRelease: bool, Name: string, Parameters: table<DisplaySettings: record, HelpText: string, IsOptional: bool, Label: string, Name: string, Values: list>, PublishedDate: string, Slug: string, Steps: table<Actions: list, Condition: string, Id: string, Name: string, PackageRequirement: string, Properties: record, Slug: string, StartTrigger: string, Type: string>, Version: string> {
@@ -27269,21 +27268,21 @@ export def "projects LegacyDefaultSpace-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AllowIgnoreChannelRules: string@bool-completer
-  --AutoCreateRelease: string@bool-completer
+  --AllowIgnoreChannelRules: oneof<nothing, bool>
+  --AutoCreateRelease: oneof<nothing, bool>
   --AutoDeployReleaseOverrides: list # item shape: {EnvironmentId?: string, ReleaseId?: string, TenantId?: string}
   --Clone: string
-  --CombineHealthAndSyncStatusInDashboardLiveStatus: string@bool-completer
+  --CombineHealthAndSyncStatusInDashboardLiveStatus: oneof<nothing, bool>
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
-  --DefaultToSkipIfAlreadyInstalled: string@bool-completer
+  --DefaultToSkipIfAlreadyInstalled: oneof<nothing, bool>
   --DeploymentChangesTemplate: string
   --Description: string
-  --DiscreteChannelRelease: string@bool-completer
-  --ExecuteDeploymentsOnResilientPipeline: string@bool-completer
+  --DiscreteChannelRelease: oneof<nothing, bool>
+  --ExecuteDeploymentsOnResilientPipeline: oneof<nothing, bool>
   --ExtensionSettings: list # item shape: {ExtensionId?: string, Values?: any}
-  --ForcePackageDownload: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
   --IncludedLibraryVariableSetIds: list
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   LifecycleId: string
   Name: string
   --PersistenceSettings: record
@@ -27292,7 +27291,7 @@ export def "projects LegacyDefaultSpace-1" [
   --ProjectTags: list
   --ReleaseCreationStrategy: record # shape: {ChannelId?: string, ReleaseCreationPackage?: record}
   --ReleaseNotesTemplate: string
-  --RetainTenantConnections: string@bool-completer
+  --RetainTenantConnections: oneof<nothing, bool>
   --Slug: string
   SpaceId: string
   --Templates: list # item shape: {DefaultValue?: record, DisplaySettings?: record, HelpText?: string, Id?: string, Label?: string, Name?: string}
@@ -27397,24 +27396,24 @@ export def "projects LegacyDefaultSpace-by-projectId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AllowIgnoreChannelRules: string@bool-completer
-  --AutoCreateRelease: string@bool-completer
+  --AllowIgnoreChannelRules: oneof<nothing, bool>
+  --AutoCreateRelease: oneof<nothing, bool>
   --AutoDeployReleaseOverrides: list # item shape: {EnvironmentId?: string, ReleaseId?: string, TenantId?: string}
   --ChangeDescription: string
   --ClonedFromProjectId: string
-  --CombineHealthAndSyncStatusInDashboardLiveStatus: string@bool-completer
+  --CombineHealthAndSyncStatusInDashboardLiveStatus: oneof<nothing, bool>
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
   --DefaultPowerShellEdition: string
-  --DefaultToSkipIfAlreadyInstalled: string@bool-completer
+  --DefaultToSkipIfAlreadyInstalled: oneof<nothing, bool>
   --DeploymentChangesTemplate: string
   --DeprovisioningRunbookId: string
   --Description: string
-  --DiscreteChannelRelease: string@bool-completer
-  --ExecuteDeploymentsOnResilientPipeline: string@bool-completer
+  --DiscreteChannelRelease: oneof<nothing, bool>
+  --ExecuteDeploymentsOnResilientPipeline: oneof<nothing, bool>
   --ExtensionSettings: list # item shape: {ExtensionId?: string, Values?: any}
-  --ForcePackageDownload: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
   --IncludedLibraryVariableSetIds: list
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   LifecycleId: string
   Name: string
   --PersistenceSettings: record
@@ -27784,21 +27783,21 @@ export def "projects createProjectBySpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AllowIgnoreChannelRules: string@bool-completer
-  --AutoCreateRelease: string@bool-completer
+  --AllowIgnoreChannelRules: oneof<nothing, bool>
+  --AutoCreateRelease: oneof<nothing, bool>
   --AutoDeployReleaseOverrides: list # item shape: {EnvironmentId?: string, ReleaseId?: string, TenantId?: string}
   --Clone: string
-  --CombineHealthAndSyncStatusInDashboardLiveStatus: string@bool-completer
+  --CombineHealthAndSyncStatusInDashboardLiveStatus: oneof<nothing, bool>
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
-  --DefaultToSkipIfAlreadyInstalled: string@bool-completer
+  --DefaultToSkipIfAlreadyInstalled: oneof<nothing, bool>
   --DeploymentChangesTemplate: string
   --Description: string
-  --DiscreteChannelRelease: string@bool-completer
-  --ExecuteDeploymentsOnResilientPipeline: string@bool-completer
+  --DiscreteChannelRelease: oneof<nothing, bool>
+  --ExecuteDeploymentsOnResilientPipeline: oneof<nothing, bool>
   --ExtensionSettings: list # item shape: {ExtensionId?: string, Values?: any}
-  --ForcePackageDownload: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
   --IncludedLibraryVariableSetIds: list
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   LifecycleId: string
   Name: string
   --PersistenceSettings: record
@@ -27807,7 +27806,7 @@ export def "projects createProjectBySpace" [
   --ProjectTags: list
   --ReleaseCreationStrategy: record # shape: {ChannelId?: string, ReleaseCreationPackage?: record}
   --ReleaseNotesTemplate: string
-  --RetainTenantConnections: string@bool-completer
+  --RetainTenantConnections: oneof<nothing, bool>
   --Slug: string
   SpaceId: string
   --Templates: list # item shape: {DefaultValue?: record, DisplaySettings?: record, HelpText?: string, Id?: string, Label?: string, Name?: string}
@@ -27916,24 +27915,24 @@ export def "projects modifyProjectBySpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AllowIgnoreChannelRules: string@bool-completer
-  --AutoCreateRelease: string@bool-completer
+  --AllowIgnoreChannelRules: oneof<nothing, bool>
+  --AutoCreateRelease: oneof<nothing, bool>
   --AutoDeployReleaseOverrides: list # item shape: {EnvironmentId?: string, ReleaseId?: string, TenantId?: string}
   --ChangeDescription: string
   --ClonedFromProjectId: string
-  --CombineHealthAndSyncStatusInDashboardLiveStatus: string@bool-completer
+  --CombineHealthAndSyncStatusInDashboardLiveStatus: oneof<nothing, bool>
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
   --DefaultPowerShellEdition: string
-  --DefaultToSkipIfAlreadyInstalled: string@bool-completer
+  --DefaultToSkipIfAlreadyInstalled: oneof<nothing, bool>
   --DeploymentChangesTemplate: string
   --DeprovisioningRunbookId: string
   --Description: string
-  --DiscreteChannelRelease: string@bool-completer
-  --ExecuteDeploymentsOnResilientPipeline: string@bool-completer
+  --DiscreteChannelRelease: oneof<nothing, bool>
+  --ExecuteDeploymentsOnResilientPipeline: oneof<nothing, bool>
   --ExtensionSettings: list # item shape: {ExtensionId?: string, Values?: any}
-  --ForcePackageDownload: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
   --IncludedLibraryVariableSetIds: list
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   LifecycleId: string
   Name: string
   --PersistenceSettings: record
@@ -28065,7 +28064,7 @@ export def "projects-git-migrate-runbooks convertProjectRunbooksToGitBySpace" [
   --allow-errors(-e) # Return full response without error handling
   --Branch: string
   --CommitMessage: string
-  --CreateBranch: string@bool-completer
+  --CreateBranch: oneof<nothing, bool>
   ProjectId: string
   SpaceId: string
 ]: any -> record<DraftRunbooks: table<RunbookId: string, RunbookName: string>, PublishedRunbooks: table<RunbookId: string, RunbookName: string>, ServerTaskId: string> {
@@ -28369,21 +28368,21 @@ export def "spaces-projects createProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AllowIgnoreChannelRules: string@bool-completer
-  --AutoCreateRelease: string@bool-completer
+  --AllowIgnoreChannelRules: oneof<nothing, bool>
+  --AutoCreateRelease: oneof<nothing, bool>
   --AutoDeployReleaseOverrides: list # item shape: {EnvironmentId?: string, ReleaseId?: string, TenantId?: string}
   --Clone: string
-  --CombineHealthAndSyncStatusInDashboardLiveStatus: string@bool-completer
+  --CombineHealthAndSyncStatusInDashboardLiveStatus: oneof<nothing, bool>
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
-  --DefaultToSkipIfAlreadyInstalled: string@bool-completer
+  --DefaultToSkipIfAlreadyInstalled: oneof<nothing, bool>
   --DeploymentChangesTemplate: string
   --Description: string
-  --DiscreteChannelRelease: string@bool-completer
-  --ExecuteDeploymentsOnResilientPipeline: string@bool-completer
+  --DiscreteChannelRelease: oneof<nothing, bool>
+  --ExecuteDeploymentsOnResilientPipeline: oneof<nothing, bool>
   --ExtensionSettings: list # item shape: {ExtensionId?: string, Values?: any}
-  --ForcePackageDownload: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
   --IncludedLibraryVariableSetIds: list
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   LifecycleId: string
   Name: string
   --PersistenceSettings: record
@@ -28392,7 +28391,7 @@ export def "spaces-projects createProject" [
   --ProjectTags: list
   --ReleaseCreationStrategy: record # shape: {ChannelId?: string, ReleaseCreationPackage?: record}
   --ReleaseNotesTemplate: string
-  --RetainTenantConnections: string@bool-completer
+  --RetainTenantConnections: oneof<nothing, bool>
   --Slug: string
   SpaceId: string
   --Templates: list # item shape: {DefaultValue?: record, DisplaySettings?: record, HelpText?: string, Id?: string, Label?: string, Name?: string}
@@ -28501,24 +28500,24 @@ export def "spaces-projects modifyProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AllowIgnoreChannelRules: string@bool-completer
-  --AutoCreateRelease: string@bool-completer
+  --AllowIgnoreChannelRules: oneof<nothing, bool>
+  --AutoCreateRelease: oneof<nothing, bool>
   --AutoDeployReleaseOverrides: list # item shape: {EnvironmentId?: string, ReleaseId?: string, TenantId?: string}
   --ChangeDescription: string
   --ClonedFromProjectId: string
-  --CombineHealthAndSyncStatusInDashboardLiveStatus: string@bool-completer
+  --CombineHealthAndSyncStatusInDashboardLiveStatus: oneof<nothing, bool>
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
   --DefaultPowerShellEdition: string
-  --DefaultToSkipIfAlreadyInstalled: string@bool-completer
+  --DefaultToSkipIfAlreadyInstalled: oneof<nothing, bool>
   --DeploymentChangesTemplate: string
   --DeprovisioningRunbookId: string
   --Description: string
-  --DiscreteChannelRelease: string@bool-completer
-  --ExecuteDeploymentsOnResilientPipeline: string@bool-completer
+  --DiscreteChannelRelease: oneof<nothing, bool>
+  --ExecuteDeploymentsOnResilientPipeline: oneof<nothing, bool>
   --ExtensionSettings: list # item shape: {ExtensionId?: string, Values?: any}
-  --ForcePackageDownload: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
   --IncludedLibraryVariableSetIds: list
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   LifecycleId: string
   Name: string
   --PersistenceSettings: record
@@ -28650,7 +28649,7 @@ export def "spaces-projects-git-migrate-runbooks convertProjectRunbooksToGit" [
   --allow-errors(-e) # Return full response without error handling
   --Branch: string
   --CommitMessage: string
-  --CreateBranch: string@bool-completer
+  --CreateBranch: oneof<nothing, bool>
   ProjectId: string
   SpaceId: string
 ]: any -> record<DraftRunbooks: table<RunbookId: string, RunbookName: string>, PublishedRunbooks: table<RunbookId: string, RunbookName: string>, ServerTaskId: string> {
@@ -28922,7 +28921,7 @@ export def "platformhub-projecttemplates-share shareProjectTemplateByGitRef" [
   --allow-errors(-e) # Return full response without error handling
   GitRef: string
   IndividuallySharedSpaceIds: list
-  --ShareToAllSpaces: string@bool-completer
+  --ShareToAllSpaces: oneof<nothing, bool>
   Slug: string
 ]: any -> record<IndividuallySharedSpaceIds: list<string>, IndividuallyUnsharedSpaceIds: list<string>, SharedToAllSpaces: bool> {
   let input = $in
@@ -28984,7 +28983,7 @@ export def "projects-triggers LegacyDefaultSpace-by-projectId-1" [
   Action: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
   --Description: string
   Filter: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   Name: string
   ProjectId: string
   SpaceId: string
@@ -29043,7 +29042,7 @@ export def "projects-triggers LegacyDefaultSpace-by-projectId-id-1" [
   --Description: string
   --Filter: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
   Id: string
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   --Name: string
   ProjectId: string
   SpaceId: string
@@ -29124,7 +29123,7 @@ export def "projecttriggers LegacyDefaultSpace-1" [
   Action: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
   --Description: string
   Filter: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   Name: string
   ProjectId: string
   SpaceId: string
@@ -29181,7 +29180,7 @@ export def "projecttriggers LegacyDefaultSpace-by-id-1" [
   --Description: string
   --Filter: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
   Id: string
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   --Name: string
   ProjectId: string
   SpaceId: string
@@ -29269,7 +29268,7 @@ export def "projects-triggers createProjectTriggerBySpace" [
   Action: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
   --Description: string
   Filter: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   Name: string
   ProjectId: string
   SpaceId: string
@@ -29330,7 +29329,7 @@ export def "projects-triggers modifyProjectTriggerBySpace" [
   --Description: string
   --Filter: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
   Id: string
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   --Name: string
   ProjectId: string
   SpaceId: string
@@ -29414,7 +29413,7 @@ export def "projecttriggers LegacyInferProjectBySpace-by-spaceId" [
   Action: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
   --Description: string
   Filter: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   Name: string
   ProjectId: string
   SpaceId: string
@@ -29473,7 +29472,7 @@ export def "projecttriggers LegacyInferProjectBySpace-by-spaceId-id" [
   --Description: string
   --Filter: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
   Id: string
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   --Name: string
   ProjectId: string
   SpaceId: string
@@ -29562,7 +29561,7 @@ export def "spaces-projects-triggers createProjectTrigger" [
   Action: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
   --Description: string
   Filter: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   Name: string
   ProjectId: string
   SpaceId: string
@@ -29623,7 +29622,7 @@ export def "spaces-projects-triggers modifyProjectTrigger" [
   --Description: string
   --Filter: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
   Id: string
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   --Name: string
   ProjectId: string
   SpaceId: string
@@ -29707,7 +29706,7 @@ export def "spaces-projecttriggers LegacyInferProject-by-spaceIdentifier" [
   Action: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
   --Description: string
   Filter: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   Name: string
   ProjectId: string
   SpaceId: string
@@ -29766,7 +29765,7 @@ export def "spaces-projecttriggers LegacyInferProject-by-spaceIdentifier-id" [
   --Description: string
   --Filter: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
   Id: string
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   --Name: string
   ProjectId: string
   SpaceId: string
@@ -30456,7 +30455,7 @@ export def "releases LegacyDefaultSpace-1" [
   --Assembled: string # format: date-time
   --ChannelId: string
   --CustomFields: record
-  --IgnoreChannelRules: string@bool-completer
+  --IgnoreChannelRules: oneof<nothing, bool>
   ProjectId: string
   --ReleaseNotes: string
   --SelectedGitResources: list # item shape: {ActionName: string, GitReferenceResource: record, GitResourceReferenceName?: string}
@@ -30493,8 +30492,8 @@ export def "releases-create LegacyDefaultSpace" [
   --GitCommit: string
   --GitRef: string
   --GitResources: list
-  --IgnoreChannelRules: string@bool-completer
-  --IgnoreIfAlreadyExists: string@bool-completer
+  --IgnoreChannelRules: oneof<nothing, bool>
+  --IgnoreIfAlreadyExists: oneof<nothing, bool>
   --PackagePrerelease: string
   --Packages: list
   --PackageVersion: string
@@ -30555,7 +30554,7 @@ export def "releases LegacyDefaultSpace-by-id-1" [
   ChannelId: string
   --CustomFields: record
   Id: string
-  --IgnoreChannelRules: string@bool-completer
+  --IgnoreChannelRules: oneof<nothing, bool>
   ProjectId: string
   --ReleaseNotes: string
   --SelectedGitResources: list # item shape: {ActionName: string, GitReferenceResource: record, GitResourceReferenceName?: string}
@@ -30730,7 +30729,7 @@ export def "releases-deployments-preview list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Whether to include Disabled Steps in the preview
+  --includeDisabledSteps: oneof<nothing, bool> # Whether to include Disabled Steps in the preview
   --tenantId: string # ID of the tenant
 ]: nothing -> record<Changes: table<BuildInformation: list, Commits: list, ReleaseNotes: string, Version: string, WorkItems: list>, ChangesMarkdown: string, Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -30757,7 +30756,7 @@ export def "releases-deployments-preview LegacyDefaultSpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Whether to include Disabled Steps in the preview
+  --includeDisabledSteps: oneof<nothing, bool> # Whether to include Disabled Steps in the preview
 ]: nothing -> record<Changes: table<BuildInformation: list, Commits: list, ReleaseNotes: string, Version: string, WorkItems: list>, ChangesMarkdown: string, Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -30783,7 +30782,7 @@ export def "releases-deployments-previews LegacyDefaultSpace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   DeploymentPreviews: list # item shape: {EnvironmentId?: string, TenantId?: string}
-  --IncludeDisabledSteps: string@bool-completer
+  --IncludeDisabledSteps: oneof<nothing, bool>
   ReleaseId: string
   SpaceId: string
 ]: any -> table<Changes: list<record>, ChangesMarkdown: string, Form: record<Elements: list, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: list<record>, UseGuidedFailureModeByDefault: bool> {
@@ -31017,7 +31016,7 @@ export def "releases createReleaseBySpace" [
   --Assembled: string # format: date-time
   --ChannelId: string
   --CustomFields: record
-  --IgnoreChannelRules: string@bool-completer
+  --IgnoreChannelRules: oneof<nothing, bool>
   ProjectId: string
   --ReleaseNotes: string
   --SelectedGitResources: list # item shape: {ActionName: string, GitReferenceResource: record, GitResourceReferenceName?: string}
@@ -31055,8 +31054,8 @@ export def "releases-create createReleaseV1BySpace" [
   --GitCommit: string
   --GitRef: string
   --GitResources: list
-  --IgnoreChannelRules: string@bool-completer
-  --IgnoreIfAlreadyExists: string@bool-completer
+  --IgnoreChannelRules: oneof<nothing, bool>
+  --IgnoreIfAlreadyExists: oneof<nothing, bool>
   --PackagePrerelease: string
   --Packages: list
   --PackageVersion: string
@@ -31119,7 +31118,7 @@ export def "releases modifyReleaseBySpace" [
   ChannelId: string
   --CustomFields: record
   Id: string
-  --IgnoreChannelRules: string@bool-completer
+  --IgnoreChannelRules: oneof<nothing, bool>
   ProjectId: string
   --ReleaseNotes: string
   --SelectedGitResources: list # item shape: {ActionName: string, GitReferenceResource: record, GitResourceReferenceName?: string}
@@ -31301,7 +31300,7 @@ export def "releases-deployments-preview Legacy0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Whether to include Disabled Steps in the preview
+  --includeDisabledSteps: oneof<nothing, bool> # Whether to include Disabled Steps in the preview
   --tenantId: string # ID of the tenant
 ]: nothing -> record<Changes: table<BuildInformation: list, Commits: list, ReleaseNotes: string, Version: string, WorkItems: list>, ChangesMarkdown: string, Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -31329,7 +31328,7 @@ export def "releases-deployments-preview get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Whether to include Disabled Steps in the preview
+  --includeDisabledSteps: oneof<nothing, bool> # Whether to include Disabled Steps in the preview
 ]: nothing -> record<Changes: table<BuildInformation: list, Commits: list, ReleaseNotes: string, Version: string, WorkItems: list>, ChangesMarkdown: string, Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -31356,7 +31355,7 @@ export def "releases-deployments-previews post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   DeploymentPreviews: list # item shape: {EnvironmentId?: string, TenantId?: string}
-  --IncludeDisabledSteps: string@bool-completer
+  --IncludeDisabledSteps: oneof<nothing, bool>
   ReleaseId: string
   SpaceId: string
 ]: any -> table<Changes: list<record>, ChangesMarkdown: string, Form: record<Elements: list, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: list<record>, UseGuidedFailureModeByDefault: bool> {
@@ -31615,7 +31614,7 @@ export def "spaces-releases createRelease" [
   --Assembled: string # format: date-time
   --ChannelId: string
   --CustomFields: record
-  --IgnoreChannelRules: string@bool-completer
+  --IgnoreChannelRules: oneof<nothing, bool>
   ProjectId: string
   --ReleaseNotes: string
   --SelectedGitResources: list # item shape: {ActionName: string, GitReferenceResource: record, GitResourceReferenceName?: string}
@@ -31653,8 +31652,8 @@ export def "spaces-releases-create createReleaseV1" [
   --GitCommit: string
   --GitRef: string
   --GitResources: list
-  --IgnoreChannelRules: string@bool-completer
-  --IgnoreIfAlreadyExists: string@bool-completer
+  --IgnoreChannelRules: oneof<nothing, bool>
+  --IgnoreIfAlreadyExists: oneof<nothing, bool>
   --PackagePrerelease: string
   --Packages: list
   --PackageVersion: string
@@ -31717,7 +31716,7 @@ export def "spaces-releases modifyRelease" [
   ChannelId: string
   --CustomFields: record
   Id: string
-  --IgnoreChannelRules: string@bool-completer
+  --IgnoreChannelRules: oneof<nothing, bool>
   ProjectId: string
   --ReleaseNotes: string
   --SelectedGitResources: list # item shape: {ActionName: string, GitReferenceResource: record, GitResourceReferenceName?: string}
@@ -31899,7 +31898,7 @@ export def "spaces-releases-deployments-preview Legacy0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Whether to include Disabled Steps in the preview
+  --includeDisabledSteps: oneof<nothing, bool> # Whether to include Disabled Steps in the preview
   --tenantId: string # ID of the tenant
 ]: nothing -> record<Changes: table<BuildInformation: list, Commits: list, ReleaseNotes: string, Version: string, WorkItems: list>, ChangesMarkdown: string, Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -31927,7 +31926,7 @@ export def "spaces-releases-deployments-preview get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Whether to include Disabled Steps in the preview
+  --includeDisabledSteps: oneof<nothing, bool> # Whether to include Disabled Steps in the preview
 ]: nothing -> record<Changes: table<BuildInformation: list, Commits: list, ReleaseNotes: string, Version: string, WorkItems: list>, ChangesMarkdown: string, Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -31954,7 +31953,7 @@ export def "spaces-releases-deployments-previews post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   DeploymentPreviews: list # item shape: {EnvironmentId?: string, TenantId?: string}
-  --IncludeDisabledSteps: string@bool-completer
+  --IncludeDisabledSteps: oneof<nothing, bool>
   ReleaseId: string
   SpaceId: string
 ]: any -> table<Changes: list<record>, ChangesMarkdown: string, Form: record<Elements: list, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: list<record>, UseGuidedFailureModeByDefault: bool> {
@@ -33496,8 +33495,8 @@ export def "projects-runbook-runs LegacyDefaultSpace-by-projectId-1" [
   EnvironmentId: string
   --ExcludedMachineIds: list
   --ExcludedTargetTagIds: list
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   --FormValues: record
   --Priority: string
   --ProjectId: string
@@ -33510,7 +33509,7 @@ export def "projects-runbook-runs LegacyDefaultSpace-by-projectId-1" [
   --SpecificMachineIds: list
   --SpecificTargetTagIds: list
   --TenantId: string
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> record<ChangeRequestSettings: table<Type: string>, Comments: string, Created: string, DebugMode: string, DeployedBy: string, DeployedById: string, DeployedToMachineIds: list<string>, EnvironmentId: string, ExcludedMachineIds: list<string>, ExcludedTargetTagIds: list<string>, ExecutionPlanLogContext: record<Steps: list<record>>, FailTargetDiscovery: bool, FailureEncountered: bool, ForcePackageDownload: bool, FormValues: record, FrozenRunbookProcessId: string, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, ManifestVariableSetId: string, Name: string, Priority: string, ProjectId: string, QueueTime: string, QueueTimeExpiry: string, RunbookId: string, RunbookName: string, RunbookSnapshotId: string, SkipActions: list<string>, SpaceId: string, SpecificMachineIds: list<string>, SpecificTargetTagIds: list<string>, TaskId: string, TenantId: string, TentacleRetentionPeriod: record<QuantityToKeep: int, ShouldKeepForever: bool, Strategy: string, Unit: string>, UseGuidedFailure: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -33648,7 +33647,7 @@ export def "runbook-runs-create LegacyDefaultSpace" [
   EnvironmentNames: list
   --ExcludedMachineNames: list
   --ExcludedTargetTagNames: list
-  --ForcePackageDownload: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
   --NoRunAfter: string # format: date-time
   --Priority: string
   ProjectName: string
@@ -33662,7 +33661,7 @@ export def "runbook-runs-create LegacyDefaultSpace" [
   --SpecificTargetTagNames: list
   --Tenants: list
   --TenantTags: list
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
   --Variables: record
 ]: any -> record<RunbookRunServerTasks: table<RunbookRunId: string, ServerTaskId: string>> {
   let input = $in
@@ -33725,8 +33724,8 @@ export def "runbook-runs LegacyDefaultSpace-1" [
   EnvironmentId: string
   --ExcludedMachineIds: list
   --ExcludedTargetTagIds: list
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   --FormValues: record
   --Priority: string
   --ProjectId: string
@@ -33739,7 +33738,7 @@ export def "runbook-runs LegacyDefaultSpace-1" [
   --SpecificMachineIds: list
   --SpecificTargetTagIds: list
   --TenantId: string
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> record<ChangeRequestSettings: table<Type: string>, Comments: string, Created: string, DebugMode: string, DeployedBy: string, DeployedById: string, DeployedToMachineIds: list<string>, EnvironmentId: string, ExcludedMachineIds: list<string>, ExcludedTargetTagIds: list<string>, ExecutionPlanLogContext: record<Steps: list<record>>, FailTargetDiscovery: bool, FailureEncountered: bool, ForcePackageDownload: bool, FormValues: record, FrozenRunbookProcessId: string, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, ManifestVariableSetId: string, Name: string, Priority: string, ProjectId: string, QueueTime: string, QueueTimeExpiry: string, RunbookId: string, RunbookName: string, RunbookSnapshotId: string, SkipActions: list<string>, SpaceId: string, SpecificMachineIds: list<string>, SpecificTargetTagIds: list<string>, TaskId: string, TenantId: string, TentacleRetentionPeriod: record<QuantityToKeep: int, ShouldKeepForever: bool, Strategy: string, Unit: string>, UseGuidedFailure: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -33851,8 +33850,8 @@ export def "projects-runbook-runs createRunbookRunBySpace" [
   EnvironmentId: string
   --ExcludedMachineIds: list
   --ExcludedTargetTagIds: list
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   --FormValues: record
   --Priority: string
   --ProjectId: string
@@ -33865,7 +33864,7 @@ export def "projects-runbook-runs createRunbookRunBySpace" [
   --SpecificMachineIds: list
   --SpecificTargetTagIds: list
   --TenantId: string
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> record<ChangeRequestSettings: table<Type: string>, Comments: string, Created: string, DebugMode: string, DeployedBy: string, DeployedById: string, DeployedToMachineIds: list<string>, EnvironmentId: string, ExcludedMachineIds: list<string>, ExcludedTargetTagIds: list<string>, ExecutionPlanLogContext: record<Steps: list<record>>, FailTargetDiscovery: bool, FailureEncountered: bool, ForcePackageDownload: bool, FormValues: record, FrozenRunbookProcessId: string, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, ManifestVariableSetId: string, Name: string, Priority: string, ProjectId: string, QueueTime: string, QueueTimeExpiry: string, RunbookId: string, RunbookName: string, RunbookSnapshotId: string, SkipActions: list<string>, SpaceId: string, SpecificMachineIds: list<string>, SpecificTargetTagIds: list<string>, TaskId: string, TenantId: string, TentacleRetentionPeriod: record<QuantityToKeep: int, ShouldKeepForever: bool, Strategy: string, Unit: string>, UseGuidedFailure: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -34008,7 +34007,7 @@ export def "runbook-runs-create createRunbookRunV1BySpace" [
   EnvironmentNames: list
   --ExcludedMachineNames: list
   --ExcludedTargetTagNames: list
-  --ForcePackageDownload: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
   --NoRunAfter: string # format: date-time
   --Priority: string
   ProjectName: string
@@ -34022,7 +34021,7 @@ export def "runbook-runs-create createRunbookRunV1BySpace" [
   --SpecificTargetTagNames: list
   --Tenants: list
   --TenantTags: list
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
   --Variables: record
 ]: any -> record<RunbookRunServerTasks: table<RunbookRunId: string, ServerTaskId: string>> {
   let input = $in
@@ -34087,8 +34086,8 @@ export def "runbook-runs LegacyInferProjectBySpace-by-spaceId-1" [
   EnvironmentId: string
   --ExcludedMachineIds: list
   --ExcludedTargetTagIds: list
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   --FormValues: record
   --Priority: string
   --ProjectId: string
@@ -34101,7 +34100,7 @@ export def "runbook-runs LegacyInferProjectBySpace-by-spaceId-1" [
   --SpecificMachineIds: list
   --SpecificTargetTagIds: list
   --TenantId: string
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> record<ChangeRequestSettings: table<Type: string>, Comments: string, Created: string, DebugMode: string, DeployedBy: string, DeployedById: string, DeployedToMachineIds: list<string>, EnvironmentId: string, ExcludedMachineIds: list<string>, ExcludedTargetTagIds: list<string>, ExecutionPlanLogContext: record<Steps: list<record>>, FailTargetDiscovery: bool, FailureEncountered: bool, ForcePackageDownload: bool, FormValues: record, FrozenRunbookProcessId: string, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, ManifestVariableSetId: string, Name: string, Priority: string, ProjectId: string, QueueTime: string, QueueTimeExpiry: string, RunbookId: string, RunbookName: string, RunbookSnapshotId: string, SkipActions: list<string>, SpaceId: string, SpecificMachineIds: list<string>, SpecificTargetTagIds: list<string>, TaskId: string, TenantId: string, TentacleRetentionPeriod: record<QuantityToKeep: int, ShouldKeepForever: bool, Strategy: string, Unit: string>, UseGuidedFailure: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -34215,8 +34214,8 @@ export def "spaces-projects-runbook-runs createRunbookRun" [
   EnvironmentId: string
   --ExcludedMachineIds: list
   --ExcludedTargetTagIds: list
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   --FormValues: record
   --Priority: string
   --ProjectId: string
@@ -34229,7 +34228,7 @@ export def "spaces-projects-runbook-runs createRunbookRun" [
   --SpecificMachineIds: list
   --SpecificTargetTagIds: list
   --TenantId: string
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> record<ChangeRequestSettings: table<Type: string>, Comments: string, Created: string, DebugMode: string, DeployedBy: string, DeployedById: string, DeployedToMachineIds: list<string>, EnvironmentId: string, ExcludedMachineIds: list<string>, ExcludedTargetTagIds: list<string>, ExecutionPlanLogContext: record<Steps: list<record>>, FailTargetDiscovery: bool, FailureEncountered: bool, ForcePackageDownload: bool, FormValues: record, FrozenRunbookProcessId: string, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, ManifestVariableSetId: string, Name: string, Priority: string, ProjectId: string, QueueTime: string, QueueTimeExpiry: string, RunbookId: string, RunbookName: string, RunbookSnapshotId: string, SkipActions: list<string>, SpaceId: string, SpecificMachineIds: list<string>, SpecificTargetTagIds: list<string>, TaskId: string, TenantId: string, TentacleRetentionPeriod: record<QuantityToKeep: int, ShouldKeepForever: bool, Strategy: string, Unit: string>, UseGuidedFailure: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -34372,7 +34371,7 @@ export def "spaces-runbook-runs-create createRunbookRunV1" [
   EnvironmentNames: list
   --ExcludedMachineNames: list
   --ExcludedTargetTagNames: list
-  --ForcePackageDownload: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
   --NoRunAfter: string # format: date-time
   --Priority: string
   ProjectName: string
@@ -34386,7 +34385,7 @@ export def "spaces-runbook-runs-create createRunbookRunV1" [
   --SpecificTargetTagNames: list
   --Tenants: list
   --TenantTags: list
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
   --Variables: record
 ]: any -> record<RunbookRunServerTasks: table<RunbookRunId: string, ServerTaskId: string>> {
   let input = $in
@@ -34451,8 +34450,8 @@ export def "spaces-runbook-runs LegacyInferProject-by-spaceIdentifier-1" [
   EnvironmentId: string
   --ExcludedMachineIds: list
   --ExcludedTargetTagIds: list
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   --FormValues: record
   --Priority: string
   --ProjectId: string
@@ -34465,7 +34464,7 @@ export def "spaces-runbook-runs LegacyInferProject-by-spaceIdentifier-1" [
   --SpecificMachineIds: list
   --SpecificTargetTagIds: list
   --TenantId: string
-  --UseGuidedFailure: string@bool-completer
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> record<ChangeRequestSettings: table<Type: string>, Comments: string, Created: string, DebugMode: string, DeployedBy: string, DeployedById: string, DeployedToMachineIds: list<string>, EnvironmentId: string, ExcludedMachineIds: list<string>, ExcludedTargetTagIds: list<string>, ExecutionPlanLogContext: record<Steps: list<record>>, FailTargetDiscovery: bool, FailureEncountered: bool, ForcePackageDownload: bool, FormValues: record, FrozenRunbookProcessId: string, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, ManifestVariableSetId: string, Name: string, Priority: string, ProjectId: string, QueueTime: string, QueueTimeExpiry: string, RunbookId: string, RunbookName: string, RunbookSnapshotId: string, SkipActions: list<string>, SpaceId: string, SpecificMachineIds: list<string>, SpecificTargetTagIds: list<string>, TaskId: string, TenantId: string, TentacleRetentionPeriod: record<QuantityToKeep: int, ShouldKeepForever: bool, Strategy: string, Unit: string>, UseGuidedFailure: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -34575,7 +34574,7 @@ export def "projects-runbooks LegacyDefaultSpace-by-projectId-1" [
   --Description: string
   --Environments: list
   --EnvironmentScope: string@EnvironmentScope-completer
-  --ForcePackageDownload: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
   --MultiTenancyMode: string@MultiTenancyMode-completer
   Name: string
   ProjectId: string
@@ -34660,15 +34659,15 @@ export def "projects-runbooks LegacyDefaultSpace-by-projectId-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CancelQueuedTasks: string@bool-completer
-  --CancelRunningTasks: string@bool-completer
+  --CancelQueuedTasks: oneof<nothing, bool>
+  --CancelRunningTasks: oneof<nothing, bool>
   --ConnectivityPolicy: record # shape: {AllowDeploymentsToNoTargets?: bool, ExcludeUnhealthyTargets?: bool, SkipMachineBehavior?: "None"|"SkipUnavailableMachines", TargetRoles?: list}
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
   --Description: string
   --Environments: list
   --EnvironmentScope: string@EnvironmentScope-completer
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   Id: string
   --MultiTenancyMode: string@MultiTenancyMode-completer
   Name: string
@@ -34752,7 +34751,7 @@ export def "projects-runbooks-runbook-runs-preview LegacyDefaultSpace-by-project
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
   --tenant: string # ID of the Tenant
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -34780,7 +34779,7 @@ export def "projects-runbooks-runbook-runs-preview LegacyDefaultSpace-by-project
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -34835,8 +34834,8 @@ export def "projects-runbooks-run LegacyDefaultSpace-by-projectId-runbookId" [
   --EnvironmentIds: list
   --ExcludedMachineIds: list
   --ExcludedTargetTagIds: list
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   --FormValues: record
   --Priority: string
   --ProjectId: string
@@ -34851,8 +34850,8 @@ export def "projects-runbooks-run LegacyDefaultSpace-by-projectId-runbookId" [
   --TenantId: string
   --TenantIds: list
   --TenantTagNames: list
-  --UseDefaultSnapshot: string@bool-completer
-  --UseGuidedFailure: string@bool-completer
+  --UseDefaultSnapshot: oneof<nothing, bool>
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -34881,7 +34880,7 @@ export def "projects-runbooks-runbook-runs-previews LegacyDefaultSpace-by-projec
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   DeploymentPreviews: list # item shape: {EnvironmentId?: string, TenantId?: string}
-  --IncludeDisabledSteps: string@bool-completer
+  --IncludeDisabledSteps: oneof<nothing, bool>
   ProjectId: string
   RunbookId: string
   SpaceId: string
@@ -34990,16 +34989,16 @@ export def "projects-runbooks LegacyDefaultSpace-by-projectId-gitRef-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CancelQueuedTasks: string@bool-completer
-  --CancelRunningTasks: string@bool-completer
+  --CancelQueuedTasks: oneof<nothing, bool>
+  --CancelRunningTasks: oneof<nothing, bool>
   --ChangeDescription: string
   --ConnectivityPolicy: record # shape: {AllowDeploymentsToNoTargets?: bool, ExcludeUnhealthyTargets?: bool, SkipMachineBehavior?: "None"|"SkipUnavailableMachines", TargetRoles?: list}
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
   --Description: string
   --Environments: list
   --EnvironmentScope: string@EnvironmentScope-completer
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   GitRef: string
   Id: string
   --MultiTenancyMode: string@MultiTenancyMode-completer
@@ -35095,7 +35094,7 @@ export def "projects-runbooks-runbook-runs-preview LegacyDefaultSpace-by-project
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
   --tenant: string # ID of the Tenant
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -35124,7 +35123,7 @@ export def "projects-runbooks-runbook-runs-preview LegacyDefaultSpace-by-project
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -35177,7 +35176,7 @@ export def "projects-runbooks-runbook-runs-previews LegacyDefaultSpace-by-projec
   --allow-errors(-e) # Return full response without error handling
   DeploymentPreviews: list # item shape: {EnvironmentId?: string, TenantId?: string}
   GitRef: string
-  --IncludeDisabledSteps: string@bool-completer
+  --IncludeDisabledSteps: oneof<nothing, bool>
   ProjectId: string
   RunbookId: string
   SpaceId: string
@@ -35263,7 +35262,7 @@ export def "runbooks LegacyDefaultSpace-1" [
   --Description: string
   --Environments: list
   --EnvironmentScope: string@EnvironmentScope-completer
-  --ForcePackageDownload: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
   --MultiTenancyMode: string@MultiTenancyMode-completer
   Name: string
   ProjectId: string
@@ -35348,15 +35347,15 @@ export def "runbooks LegacyDefaultSpace-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CancelQueuedTasks: string@bool-completer
-  --CancelRunningTasks: string@bool-completer
+  --CancelQueuedTasks: oneof<nothing, bool>
+  --CancelRunningTasks: oneof<nothing, bool>
   --ConnectivityPolicy: record # shape: {AllowDeploymentsToNoTargets?: bool, ExcludeUnhealthyTargets?: bool, SkipMachineBehavior?: "None"|"SkipUnavailableMachines", TargetRoles?: list}
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
   --Description: string
   --Environments: list
   --EnvironmentScope: string@EnvironmentScope-completer
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   Id: string
   --MultiTenancyMode: string@MultiTenancyMode-completer
   Name: string
@@ -35439,7 +35438,7 @@ export def "runbooks-runbook-runs-preview list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
   --projectId: string # ID of the Project
   --tenant: string # ID of the Tenant
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
@@ -35467,7 +35466,7 @@ export def "runbooks-runbook-runs-preview LegacyDefaultSpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
   --projectId: string # ID of the Project
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -35523,8 +35522,8 @@ export def "runbooks-run LegacyDefaultSpace" [
   --EnvironmentIds: list
   --ExcludedMachineIds: list
   --ExcludedTargetTagIds: list
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   --FormValues: record
   --Priority: string
   --ProjectId: string
@@ -35539,8 +35538,8 @@ export def "runbooks-run LegacyDefaultSpace" [
   --TenantId: string
   --TenantIds: list
   --TenantTagNames: list
-  --UseDefaultSnapshot: string@bool-completer
-  --UseGuidedFailure: string@bool-completer
+  --UseDefaultSnapshot: oneof<nothing, bool>
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -35628,7 +35627,7 @@ export def "projects-runbooks createOrCloneRunbookInDatabaseBySpace" [
   --Description: string
   --Environments: list
   --EnvironmentScope: string@EnvironmentScope-completer
-  --ForcePackageDownload: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
   --MultiTenancyMode: string@MultiTenancyMode-completer
   Name: string
   ProjectId: string
@@ -35696,7 +35695,7 @@ export def "projects-runbooks createRunbookInDatabaseV2BySpace" [
   --Description: string
   --Environments: list
   --EnvironmentScope: string@EnvironmentScope-completer
-  --ForcePackageDownload: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
   --MultiTenancyMode: string@MultiTenancyMode-completer
   Name: string
   ProjectId: string
@@ -35757,15 +35756,15 @@ export def "projects-runbooks modifyRunbookInDatabaseBySpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CancelQueuedTasks: string@bool-completer
-  --CancelRunningTasks: string@bool-completer
+  --CancelQueuedTasks: oneof<nothing, bool>
+  --CancelRunningTasks: oneof<nothing, bool>
   --ConnectivityPolicy: record # shape: {AllowDeploymentsToNoTargets?: bool, ExcludeUnhealthyTargets?: bool, SkipMachineBehavior?: "None"|"SkipUnavailableMachines", TargetRoles?: list}
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
   --Description: string
   --Environments: list
   --EnvironmentScope: string@EnvironmentScope-completer
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   Id: string
   --MultiTenancyMode: string@MultiTenancyMode-completer
   Name: string
@@ -35876,7 +35875,7 @@ export def "projects-runbooks-runbook-runs-preview get-by-spaceId-projectId-id-e
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
   --tenant: string # ID of the Tenant
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -35905,7 +35904,7 @@ export def "projects-runbooks-runbook-runs-preview get-by-spaceId-projectId-id-e
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -35962,8 +35961,8 @@ export def "projects-runbooks-run runRunbookBySpace" [
   --EnvironmentIds: list
   --ExcludedMachineIds: list
   --ExcludedTargetTagIds: list
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   --FormValues: record
   --Priority: string
   --ProjectId: string
@@ -35978,8 +35977,8 @@ export def "projects-runbooks-run runRunbookBySpace" [
   --TenantId: string
   --TenantIds: list
   --TenantTagNames: list
-  --UseDefaultSnapshot: string@bool-completer
-  --UseGuidedFailure: string@bool-completer
+  --UseDefaultSnapshot: oneof<nothing, bool>
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -36009,7 +36008,7 @@ export def "projects-runbooks-runbook-runs-previews post-by-spaceId-projectId-ru
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   DeploymentPreviews: list # item shape: {EnvironmentId?: string, TenantId?: string}
-  --IncludeDisabledSteps: string@bool-completer
+  --IncludeDisabledSteps: oneof<nothing, bool>
   ProjectId: string
   RunbookId: string
   SpaceId: string
@@ -36102,7 +36101,7 @@ export def "projects-runbooks createRunbookInGitV2BySpace" [
   --Description: string
   --Environments: list
   --EnvironmentScope: string@EnvironmentScope-completer
-  --ForcePackageDownload: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
   GitRef: string
   --MultiTenancyMode: string@MultiTenancyMode-completer
   Name: string
@@ -36166,16 +36165,16 @@ export def "projects-runbooks modifyRunbookInGitBySpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CancelQueuedTasks: string@bool-completer
-  --CancelRunningTasks: string@bool-completer
+  --CancelQueuedTasks: oneof<nothing, bool>
+  --CancelRunningTasks: oneof<nothing, bool>
   --ChangeDescription: string
   --ConnectivityPolicy: record # shape: {AllowDeploymentsToNoTargets?: bool, ExcludeUnhealthyTargets?: bool, SkipMachineBehavior?: "None"|"SkipUnavailableMachines", TargetRoles?: list}
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
   --Description: string
   --Environments: list
   --EnvironmentScope: string@EnvironmentScope-completer
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   GitRef: string
   Id: string
   --MultiTenancyMode: string@MultiTenancyMode-completer
@@ -36299,7 +36298,7 @@ export def "projects-runbooks-runbook-runs-preview get-by-spaceId-projectId-gitR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
   --tenant: string # ID of the Tenant
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -36329,7 +36328,7 @@ export def "projects-runbooks-runbook-runs-preview get-by-spaceId-projectId-gitR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -36384,7 +36383,7 @@ export def "projects-runbooks-runbook-runs-previews post-by-spaceId-projectId-gi
   --allow-errors(-e) # Return full response without error handling
   DeploymentPreviews: list # item shape: {EnvironmentId?: string, TenantId?: string}
   GitRef: string
-  --IncludeDisabledSteps: string@bool-completer
+  --IncludeDisabledSteps: oneof<nothing, bool>
   ProjectId: string
   RunbookId: string
   SpaceId: string
@@ -36473,7 +36472,7 @@ export def "runbooks LegacyInferProjectBySpace-by-spaceId" [
   --Description: string
   --Environments: list
   --EnvironmentScope: string@EnvironmentScope-completer
-  --ForcePackageDownload: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
   --MultiTenancyMode: string@MultiTenancyMode-completer
   Name: string
   ProjectId: string
@@ -36561,15 +36560,15 @@ export def "runbooks LegacyInferProjectBySpace-by-spaceId-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CancelQueuedTasks: string@bool-completer
-  --CancelRunningTasks: string@bool-completer
+  --CancelQueuedTasks: oneof<nothing, bool>
+  --CancelRunningTasks: oneof<nothing, bool>
   --ConnectivityPolicy: record # shape: {AllowDeploymentsToNoTargets?: bool, ExcludeUnhealthyTargets?: bool, SkipMachineBehavior?: "None"|"SkipUnavailableMachines", TargetRoles?: list}
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
   --Description: string
   --Environments: list
   --EnvironmentScope: string@EnvironmentScope-completer
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   Id: string
   --MultiTenancyMode: string@MultiTenancyMode-completer
   Name: string
@@ -36655,7 +36654,7 @@ export def "runbooks-runbook-runs-preview list-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
   --projectId: string # ID of the Project
   --tenant: string # ID of the Tenant
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
@@ -36684,7 +36683,7 @@ export def "runbooks-runbook-runs-preview LegacyInferProjectBySpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
   --projectId: string # ID of the Project
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -36742,8 +36741,8 @@ export def "runbooks-run LegacyInferProjectBySpace" [
   --EnvironmentIds: list
   --ExcludedMachineIds: list
   --ExcludedTargetTagIds: list
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   --FormValues: record
   --Priority: string
   --ProjectId: string
@@ -36758,8 +36757,8 @@ export def "runbooks-run LegacyInferProjectBySpace" [
   --TenantId: string
   --TenantIds: list
   --TenantTagNames: list
-  --UseDefaultSnapshot: string@bool-completer
-  --UseGuidedFailure: string@bool-completer
+  --UseDefaultSnapshot: oneof<nothing, bool>
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -36848,7 +36847,7 @@ export def "spaces-projects-runbooks createOrCloneRunbookInDatabase" [
   --Description: string
   --Environments: list
   --EnvironmentScope: string@EnvironmentScope-completer
-  --ForcePackageDownload: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
   --MultiTenancyMode: string@MultiTenancyMode-completer
   Name: string
   ProjectId: string
@@ -36916,7 +36915,7 @@ export def "spaces-projects-runbooks createRunbookInDatabaseV2" [
   --Description: string
   --Environments: list
   --EnvironmentScope: string@EnvironmentScope-completer
-  --ForcePackageDownload: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
   --MultiTenancyMode: string@MultiTenancyMode-completer
   Name: string
   ProjectId: string
@@ -36977,15 +36976,15 @@ export def "spaces-projects-runbooks modifyRunbookInDatabase" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CancelQueuedTasks: string@bool-completer
-  --CancelRunningTasks: string@bool-completer
+  --CancelQueuedTasks: oneof<nothing, bool>
+  --CancelRunningTasks: oneof<nothing, bool>
   --ConnectivityPolicy: record # shape: {AllowDeploymentsToNoTargets?: bool, ExcludeUnhealthyTargets?: bool, SkipMachineBehavior?: "None"|"SkipUnavailableMachines", TargetRoles?: list}
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
   --Description: string
   --Environments: list
   --EnvironmentScope: string@EnvironmentScope-completer
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   Id: string
   --MultiTenancyMode: string@MultiTenancyMode-completer
   Name: string
@@ -37096,7 +37095,7 @@ export def "spaces-projects-runbooks-runbook-runs-preview get-by-spaceIdentifier
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
   --tenant: string # ID of the Tenant
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -37125,7 +37124,7 @@ export def "spaces-projects-runbooks-runbook-runs-preview get-by-spaceIdentifier
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -37182,8 +37181,8 @@ export def "spaces-projects-runbooks-run runRunbook" [
   --EnvironmentIds: list
   --ExcludedMachineIds: list
   --ExcludedTargetTagIds: list
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   --FormValues: record
   --Priority: string
   --ProjectId: string
@@ -37198,8 +37197,8 @@ export def "spaces-projects-runbooks-run runRunbook" [
   --TenantId: string
   --TenantIds: list
   --TenantTagNames: list
-  --UseDefaultSnapshot: string@bool-completer
-  --UseGuidedFailure: string@bool-completer
+  --UseDefaultSnapshot: oneof<nothing, bool>
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -37229,7 +37228,7 @@ export def "spaces-projects-runbooks-runbook-runs-previews post-by-spaceIdentifi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   DeploymentPreviews: list # item shape: {EnvironmentId?: string, TenantId?: string}
-  --IncludeDisabledSteps: string@bool-completer
+  --IncludeDisabledSteps: oneof<nothing, bool>
   ProjectId: string
   RunbookId: string
   SpaceId: string
@@ -37322,7 +37321,7 @@ export def "spaces-projects-runbooks createRunbookInGitV2" [
   --Description: string
   --Environments: list
   --EnvironmentScope: string@EnvironmentScope-completer
-  --ForcePackageDownload: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
   GitRef: string
   --MultiTenancyMode: string@MultiTenancyMode-completer
   Name: string
@@ -37386,16 +37385,16 @@ export def "spaces-projects-runbooks modifyRunbookInGit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CancelQueuedTasks: string@bool-completer
-  --CancelRunningTasks: string@bool-completer
+  --CancelQueuedTasks: oneof<nothing, bool>
+  --CancelRunningTasks: oneof<nothing, bool>
   --ChangeDescription: string
   --ConnectivityPolicy: record # shape: {AllowDeploymentsToNoTargets?: bool, ExcludeUnhealthyTargets?: bool, SkipMachineBehavior?: "None"|"SkipUnavailableMachines", TargetRoles?: list}
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
   --Description: string
   --Environments: list
   --EnvironmentScope: string@EnvironmentScope-completer
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   GitRef: string
   Id: string
   --MultiTenancyMode: string@MultiTenancyMode-completer
@@ -37519,7 +37518,7 @@ export def "spaces-projects-runbooks-runbook-runs-preview get-by-spaceIdentifier
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
   --tenant: string # ID of the Tenant
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -37549,7 +37548,7 @@ export def "spaces-projects-runbooks-runbook-runs-preview get-by-spaceIdentifier
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -37604,7 +37603,7 @@ export def "spaces-projects-runbooks-runbook-runs-previews post-by-spaceIdentifi
   --allow-errors(-e) # Return full response without error handling
   DeploymentPreviews: list # item shape: {EnvironmentId?: string, TenantId?: string}
   GitRef: string
-  --IncludeDisabledSteps: string@bool-completer
+  --IncludeDisabledSteps: oneof<nothing, bool>
   ProjectId: string
   RunbookId: string
   SpaceId: string
@@ -37693,7 +37692,7 @@ export def "spaces-runbooks LegacyInferProject-by-spaceIdentifier" [
   --Description: string
   --Environments: list
   --EnvironmentScope: string@EnvironmentScope-completer
-  --ForcePackageDownload: string@bool-completer
+  --ForcePackageDownload: oneof<nothing, bool>
   --MultiTenancyMode: string@MultiTenancyMode-completer
   Name: string
   ProjectId: string
@@ -37781,15 +37780,15 @@ export def "spaces-runbooks LegacyInferProject-by-spaceIdentifier-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CancelQueuedTasks: string@bool-completer
-  --CancelRunningTasks: string@bool-completer
+  --CancelQueuedTasks: oneof<nothing, bool>
+  --CancelRunningTasks: oneof<nothing, bool>
   --ConnectivityPolicy: record # shape: {AllowDeploymentsToNoTargets?: bool, ExcludeUnhealthyTargets?: bool, SkipMachineBehavior?: "None"|"SkipUnavailableMachines", TargetRoles?: list}
   --DefaultGuidedFailureMode: string@DefaultGuidedFailureMode-completer
   --Description: string
   --Environments: list
   --EnvironmentScope: string@EnvironmentScope-completer
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   Id: string
   --MultiTenancyMode: string@MultiTenancyMode-completer
   Name: string
@@ -37875,7 +37874,7 @@ export def "spaces-runbooks-runbook-runs-preview list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
   --projectId: string # ID of the Project
   --tenant: string # ID of the Tenant
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
@@ -37904,7 +37903,7 @@ export def "spaces-runbooks-runbook-runs-preview LegacyInferProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
   --projectId: string # ID of the Project
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -37962,8 +37961,8 @@ export def "spaces-runbooks-run LegacyInferProject" [
   --EnvironmentIds: list
   --ExcludedMachineIds: list
   --ExcludedTargetTagIds: list
-  --FailTargetDiscovery: string@bool-completer
-  --ForcePackageDownload: string@bool-completer
+  --FailTargetDiscovery: oneof<nothing, bool>
+  --ForcePackageDownload: oneof<nothing, bool>
   --FormValues: record
   --Priority: string
   --ProjectId: string
@@ -37978,8 +37977,8 @@ export def "spaces-runbooks-run LegacyInferProject" [
   --TenantId: string
   --TenantIds: list
   --TenantTagNames: list
-  --UseDefaultSnapshot: string@bool-completer
-  --UseGuidedFailure: string@bool-completer
+  --UseDefaultSnapshot: oneof<nothing, bool>
+  --UseGuidedFailure: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -38227,7 +38226,7 @@ export def "projects-runbook-snapshots-runbook-runs-preview list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
   --tenant: string # ID of the Tenant
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -38255,7 +38254,7 @@ export def "projects-runbook-snapshots-runbook-runs-preview LegacyDefaultSpace" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -38374,7 +38373,7 @@ export def "projects-runbook-snapshots-runbook-runs-previews LegacyDefaultSpace"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   DeploymentPreviews: list # item shape: {EnvironmentId?: string, TenantId?: string}
-  --IncludeDisabledSteps: string@bool-completer
+  --IncludeDisabledSteps: oneof<nothing, bool>
   ProjectId: string
   RunbookSnapshotId: string
   SpaceId: string
@@ -38592,7 +38591,7 @@ export def "runbook-snapshots-runbook-runs-preview list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
   --projectId: string # ID of the Project
   --tenant: string # ID of the Tenant
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
@@ -38620,7 +38619,7 @@ export def "runbook-snapshots-runbook-runs-preview LegacyDefaultSpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
   --projectId: string # ID of the Project
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -38920,7 +38919,7 @@ export def "projects-runbook-snapshots-runbook-runs-preview Legacy0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
   --tenant: string # ID of the Tenant
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -38949,7 +38948,7 @@ export def "projects-runbook-snapshots-runbook-runs-preview get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -39073,7 +39072,7 @@ export def "projects-runbook-snapshots-runbook-runs-previews post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   DeploymentPreviews: list # item shape: {EnvironmentId?: string, TenantId?: string}
-  --IncludeDisabledSteps: string@bool-completer
+  --IncludeDisabledSteps: oneof<nothing, bool>
   ProjectId: string
   RunbookSnapshotId: string
   SpaceId: string
@@ -39299,7 +39298,7 @@ export def "runbook-snapshots-runbook-runs-preview Legacy0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
   --projectId: string # ID of the Project
   --tenant: string # ID of the Tenant
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
@@ -39328,7 +39327,7 @@ export def "runbook-snapshots-runbook-runs-preview LegacyInferProjectBySpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
   --projectId: string # ID of the Project
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -39630,7 +39629,7 @@ export def "spaces-projects-runbook-snapshots-runbook-runs-preview Legacy0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
   --tenant: string # ID of the Tenant
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -39659,7 +39658,7 @@ export def "spaces-projects-runbook-snapshots-runbook-runs-preview get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -39783,7 +39782,7 @@ export def "spaces-projects-runbook-snapshots-runbook-runs-previews post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   DeploymentPreviews: list # item shape: {EnvironmentId?: string, TenantId?: string}
-  --IncludeDisabledSteps: string@bool-completer
+  --IncludeDisabledSteps: oneof<nothing, bool>
   ProjectId: string
   RunbookSnapshotId: string
   SpaceId: string
@@ -40009,7 +40008,7 @@ export def "spaces-runbook-snapshots-runbook-runs-preview Legacy0" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
   --projectId: string # ID of the Project
   --tenant: string # ID of the Tenant
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
@@ -40038,7 +40037,7 @@ export def "spaces-runbook-snapshots-runbook-runs-preview LegacyInferProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDisabledSteps: string@bool-completer # Boolean to include/exclude disabled steps from response
+  --includeDisabledSteps: oneof<nothing, bool> # Boolean to include/exclude disabled steps from response
   --projectId: string # ID of the Project
 ]: nothing -> record<Form: record<Elements: list<record>, Values: record>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, StepsToExecute: table<ActionId: string, ActionName: string, ActionNumber: string, AvailableTagSets: list, CanBeSkipped: bool, ExcludedMachines: list, HasNoApplicableMachines: bool, IsDisabled: bool, MachineNames: list, Machines: list, Roles: list, UnavailableMachines: list>, UseGuidedFailureModeByDefault: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -40205,7 +40204,7 @@ export def "scheduler-logs get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --tail: int # format: int32
-  --verbose: string@bool-completer
+  --verbose: oneof<nothing, bool>
 ]: nothing -> record<ActivityLog: record<Children: list<any>, Ended: string, Id: string, LogElements: list<record>, Name: string, ProgressMessage: string, ProgressPercentage: int, ShowAtSummaryLevel: bool, Started: string, Status: string>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -40832,7 +40831,7 @@ export def "serverstatus-logs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDetail: string@bool-completer
+  --includeDetail: oneof<nothing, bool>
   --skip: int # Number of items to skip. Defaults to zero (format: int32)
   --take: int # Number of items to take. Defaults to 30 (format: int32)
 ]: nothing -> table<Category: string, Detail: string, GapLastNumber: int, MessageText: string, Number: int, OccurredAt: string> {
@@ -40879,7 +40878,7 @@ export def "serverstatus-system-report generateSystemReport" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-2 # Response content type
-  --nodeSpecificOnly: string@bool-completer # When true, only node-specific sections are included (recent logs, system info, filesystem logs). Defaults to false (full report) when not set.
+  --nodeSpecificOnly: oneof<nothing, bool> # When true, only node-specific sections are included (recent logs, system info, filesystem logs). Defaults to false (full report) when not set.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -41147,7 +41146,7 @@ export def "signingkeys-verify verifySigningKeysV1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --IncludeExpiredKeys: string@bool-completer
+  --IncludeExpiredKeys: oneof<nothing, bool>
   --Issuer: string
 ]: any -> record {
   let input = $in
@@ -41196,7 +41195,7 @@ export def "smtpconfiguration modifySmtpConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Details: record # shape: {CredentialType?: string}
-  --EnableSsl: string@bool-completer
+  --EnableSsl: oneof<nothing, bool>
   --SendEmailFrom: string
   --SmtpHost: string
   --SmtpPort: int # format: int32
@@ -41316,12 +41315,12 @@ export def "spaces createSpace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Description: string
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   Name: string
   --Slug: string
   SpaceManagersTeamMembers: list
   SpaceManagersTeams: list
-  --TaskQueueStopped: string@bool-completer
+  --TaskQueueStopped: oneof<nothing, bool>
 ]: any -> record<Description: string, ExtensionSettings: table<ExtensionId: string, Values: any>, Icon: record<Color: string, Id: string>, Id: string, IsDefault: bool, IsPrivate: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, Slug: string, SpaceManagersTeamMembers: list<string>, SpaceManagersTeams: list<string>, TaskQueueStopped: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -41370,12 +41369,12 @@ export def "spaces createSpaceV1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Description: string
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   Name: string
   --Slug: string
   SpaceManagersTeamMembers: list
   SpaceManagersTeams: list
-  --TaskQueueStopped: string@bool-completer
+  --TaskQueueStopped: oneof<nothing, bool>
 ]: any -> record<Space: record<Description: string, ExtensionSettings: list<record>, Icon: record<Color: string, Id: string>, Id: string, IsDefault: bool, IsPrivate: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, Slug: string, SpaceManagersTeamMembers: list<string>, SpaceManagersTeams: list<string>, TaskQueueStopped: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -41425,12 +41424,12 @@ export def "spaces modifySpace" [
   --allow-errors(-e) # Return full response without error handling
   --Description: string
   Id: string
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   Name: string
   --Slug: string
   SpaceManagersTeamMembers: list
   SpaceManagersTeams: list
-  --TaskQueueStopped: string@bool-completer
+  --TaskQueueStopped: oneof<nothing, bool>
 ]: any -> record<Description: string, ExtensionSettings: table<ExtensionId: string, Values: any>, Icon: record<Color: string, Id: string>, Id: string, IsDefault: bool, IsPrivate: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, Slug: string, SpaceManagersTeamMembers: list<string>, SpaceManagersTeams: list<string>, TaskQueueStopped: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
@@ -42690,7 +42689,7 @@ export def "subscriptions LegacyDefaultSpace-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   EventNotificationSubscription: record # shape: {EmailDigestLastProcessed?: string, EmailDigestLastProcessedEventAutoId?: int, EmailFrequencyPeriod?: string, EmailPriority?: "Normal"|"Low"|"High", EmailShowDatesInTimeZoneId?: string, EmailTeams?: list, Filter?: record, WebhookHeaderKey?: string, WebhookHeaderValue?: record, WebhookLastProcessed?: string, WebhookLastProcessedEventAutoId?: int, WebhookTeams?: list, WebhookTimeout?: string, WebhookURI?: string}
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   Name: string
   SpaceId: string
 ]: any -> record<EventNotificationSubscription: record<EmailDigestLastProcessed: string, EmailDigestLastProcessedEventAutoId: int, EmailFrequencyPeriod: string, EmailPriority: string, EmailShowDatesInTimeZoneId: string, EmailTeams: list<string>, Filter: record<DocumentTypes: list, Environments: list, EventAgents: list, EventCategories: list, EventGroups: list, ProjectGroups: list, Projects: list, Tags: list, Tenants: list, Users: list>, WebhookHeaderKey: string, WebhookHeaderValue: record<IsSensitive: bool, SensitiveValue: record, Value: string>, WebhookLastProcessed: string, WebhookLastProcessedEventAutoId: int, WebhookTeams: list<string>, WebhookTimeout: string, WebhookURI: string>, Id: string, IsDisabled: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, SpaceId: string, Type: string> {
@@ -42764,7 +42763,7 @@ export def "subscriptions LegacyDefaultSpace-by-id-1" [
   --allow-errors(-e) # Return full response without error handling
   EventNotificationSubscription: record # shape: {EmailDigestLastProcessed?: string, EmailDigestLastProcessedEventAutoId?: int, EmailFrequencyPeriod?: string, EmailPriority?: "Normal"|"Low"|"High", EmailShowDatesInTimeZoneId?: string, EmailTeams?: list, Filter?: record, WebhookHeaderKey?: string, WebhookHeaderValue?: record, WebhookLastProcessed?: string, WebhookLastProcessedEventAutoId?: int, WebhookTeams?: list, WebhookTimeout?: string, WebhookURI?: string}
   Id: string
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   Name: string
   SpaceId: string
   --Type: string@Type-completer
@@ -42844,7 +42843,7 @@ export def "subscriptions createSubscriptionBySpace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   EventNotificationSubscription: record # shape: {EmailDigestLastProcessed?: string, EmailDigestLastProcessedEventAutoId?: int, EmailFrequencyPeriod?: string, EmailPriority?: "Normal"|"Low"|"High", EmailShowDatesInTimeZoneId?: string, EmailTeams?: list, Filter?: record, WebhookHeaderKey?: string, WebhookHeaderValue?: record, WebhookLastProcessed?: string, WebhookLastProcessedEventAutoId?: int, WebhookTeams?: list, WebhookTimeout?: string, WebhookURI?: string}
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   Name: string
   SpaceId: string
 ]: any -> record<EventNotificationSubscription: record<EmailDigestLastProcessed: string, EmailDigestLastProcessedEventAutoId: int, EmailFrequencyPeriod: string, EmailPriority: string, EmailShowDatesInTimeZoneId: string, EmailTeams: list<string>, Filter: record<DocumentTypes: list, Environments: list, EventAgents: list, EventCategories: list, EventGroups: list, ProjectGroups: list, Projects: list, Tags: list, Tenants: list, Users: list>, WebhookHeaderKey: string, WebhookHeaderValue: record<IsSensitive: bool, SensitiveValue: record, Value: string>, WebhookLastProcessed: string, WebhookLastProcessedEventAutoId: int, WebhookTeams: list<string>, WebhookTimeout: string, WebhookURI: string>, Id: string, IsDisabled: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, SpaceId: string, Type: string> {
@@ -42921,7 +42920,7 @@ export def "subscriptions modifySubscriptionBySpace" [
   --allow-errors(-e) # Return full response without error handling
   EventNotificationSubscription: record # shape: {EmailDigestLastProcessed?: string, EmailDigestLastProcessedEventAutoId?: int, EmailFrequencyPeriod?: string, EmailPriority?: "Normal"|"Low"|"High", EmailShowDatesInTimeZoneId?: string, EmailTeams?: list, Filter?: record, WebhookHeaderKey?: string, WebhookHeaderValue?: record, WebhookLastProcessed?: string, WebhookLastProcessedEventAutoId?: int, WebhookTeams?: list, WebhookTimeout?: string, WebhookURI?: string}
   Id: string
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   Name: string
   SpaceId: string
   --Type: string@Type-completer
@@ -43002,7 +43001,7 @@ export def "spaces-subscriptions createSubscription" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   EventNotificationSubscription: record # shape: {EmailDigestLastProcessed?: string, EmailDigestLastProcessedEventAutoId?: int, EmailFrequencyPeriod?: string, EmailPriority?: "Normal"|"Low"|"High", EmailShowDatesInTimeZoneId?: string, EmailTeams?: list, Filter?: record, WebhookHeaderKey?: string, WebhookHeaderValue?: record, WebhookLastProcessed?: string, WebhookLastProcessedEventAutoId?: int, WebhookTeams?: list, WebhookTimeout?: string, WebhookURI?: string}
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   Name: string
   SpaceId: string
 ]: any -> record<EventNotificationSubscription: record<EmailDigestLastProcessed: string, EmailDigestLastProcessedEventAutoId: int, EmailFrequencyPeriod: string, EmailPriority: string, EmailShowDatesInTimeZoneId: string, EmailTeams: list<string>, Filter: record<DocumentTypes: list, Environments: list, EventAgents: list, EventCategories: list, EventGroups: list, ProjectGroups: list, Projects: list, Tags: list, Tenants: list, Users: list>, WebhookHeaderKey: string, WebhookHeaderValue: record<IsSensitive: bool, SensitiveValue: record, Value: string>, WebhookLastProcessed: string, WebhookLastProcessedEventAutoId: int, WebhookTeams: list<string>, WebhookTimeout: string, WebhookURI: string>, Id: string, IsDisabled: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, Name: string, SpaceId: string, Type: string> {
@@ -43079,7 +43078,7 @@ export def "spaces-subscriptions modifySubscription" [
   --allow-errors(-e) # Return full response without error handling
   EventNotificationSubscription: record # shape: {EmailDigestLastProcessed?: string, EmailDigestLastProcessedEventAutoId?: int, EmailFrequencyPeriod?: string, EmailPriority?: "Normal"|"Low"|"High", EmailShowDatesInTimeZoneId?: string, EmailTeams?: list, Filter?: record, WebhookHeaderKey?: string, WebhookHeaderValue?: record, WebhookLastProcessed?: string, WebhookLastProcessedEventAutoId?: int, WebhookTeams?: list, WebhookTimeout?: string, WebhookURI?: string}
   Id: string
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   Name: string
   SpaceId: string
   --Type: string@Type-completer
@@ -43702,23 +43701,23 @@ export def "tasks LegacyDefaultSpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --batch: string
   --description: string
   --environment: string
   --fromCompletedDate: string # format: date-time
   --fromQueueDate: string # format: date-time
   --fromStartDate: string # format: date-time
-  --hasPendingInterruptions: string@bool-completer
-  --hasPendingPreconditions: string@bool-completer
-  --hasWarningsOrErrors: string@bool-completer
+  --hasPendingInterruptions: oneof<nothing, bool>
+  --hasPendingPreconditions: oneof<nothing, bool>
+  --hasWarningsOrErrors: oneof<nothing, bool>
   --ids: list
   --name: list
   --node: string
   --partialName: string
   --project: string
   --runbook: string
-  --running: string@bool-completer
+  --running: oneof<nothing, bool>
   --skip: int # Number of items to skip. Defaults to zero (format: int32)
   --states: list
   --take: int # Number of items to take. Defaults to 30 (format: int32)
@@ -43869,7 +43868,7 @@ export def "tasks-details LegacyDefaultSpace" [
   --allow-errors(-e) # Return full response without error handling
   --ranges: string
   --tail: int # If set, determines how many log entries will be returned (format: int32)
-  --verbose: string@bool-completer # If true, includes verbose output
+  --verbose: oneof<nothing, bool> # If true, includes verbose output
 ]: nothing -> record<ActivityLogs: table<Children: list, Ended: string, Id: string, LogElements: list, Name: string, ProgressMessage: string, ProgressPercentage: int, ShowAtSummaryLevel: bool, Started: string, Status: string>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, PhysicalLogSize: int, Progress: record<EstimatedTimeRemaining: string, ProgressPercentage: int>, Task: record<Arguments: record, CanRerun: bool, Completed: string, CompletedTime: string, Description: string, Duration: string, ErrorMessage: string, EstimatedRemainingQueueDurationSeconds: int, FinishedSuccessfully: bool, HasBeenPickedUpByProcessor: bool, HasPendingInterruptions: bool, HasPendingPreconditions: bool, HasWarningsOrErrors: bool, Id: string, IsCompleted: bool, LastModifiedBy: string, LastModifiedOn: string, LastUpdatedTime: string, Links: record, Name: string, PendingInterruptionTypes: list<string>, PendingPreconditionTypes: list<string>, ProjectId: string, QueueTime: string, QueueTimeExpiry: string, ServerNode: string, SpaceId: string, StartTime: string, State: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -44014,23 +44013,23 @@ export def "tasks listServerTasksBySpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --batch: string
   --description: string
   --environment: string
   --fromCompletedDate: string # format: date-time
   --fromQueueDate: string # format: date-time
   --fromStartDate: string # format: date-time
-  --hasPendingInterruptions: string@bool-completer
-  --hasPendingPreconditions: string@bool-completer
-  --hasWarningsOrErrors: string@bool-completer
+  --hasPendingInterruptions: oneof<nothing, bool>
+  --hasPendingPreconditions: oneof<nothing, bool>
+  --hasWarningsOrErrors: oneof<nothing, bool>
   --ids: list
   --name: list
   --node: string
   --partialName: string
   --project: string
   --runbook: string
-  --running: string@bool-completer
+  --running: oneof<nothing, bool>
   --skip: int # Number of items to skip. Defaults to zero (format: int32)
   --states: list
   --take: int # Number of items to take. Defaults to 30 (format: int32)
@@ -44187,7 +44186,7 @@ export def "tasks-details get" [
   --allow-errors(-e) # Return full response without error handling
   --ranges: string
   --tail: int # If set, determines how many log entries will be returned (format: int32)
-  --verbose: string@bool-completer # If true, includes verbose output
+  --verbose: oneof<nothing, bool> # If true, includes verbose output
 ]: nothing -> record<ActivityLogs: table<Children: list, Ended: string, Id: string, LogElements: list, Name: string, ProgressMessage: string, ProgressPercentage: int, ShowAtSummaryLevel: bool, Started: string, Status: string>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, PhysicalLogSize: int, Progress: record<EstimatedTimeRemaining: string, ProgressPercentage: int>, Task: record<Arguments: record, CanRerun: bool, Completed: string, CompletedTime: string, Description: string, Duration: string, ErrorMessage: string, EstimatedRemainingQueueDurationSeconds: int, FinishedSuccessfully: bool, HasBeenPickedUpByProcessor: bool, HasPendingInterruptions: bool, HasPendingPreconditions: bool, HasWarningsOrErrors: bool, Id: string, IsCompleted: bool, LastModifiedBy: string, LastModifiedOn: string, LastUpdatedTime: string, Links: record, Name: string, PendingInterruptionTypes: list<string>, PendingPreconditionTypes: list<string>, ProjectId: string, QueueTime: string, QueueTimeExpiry: string, ServerNode: string, SpaceId: string, StartTime: string, State: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -44337,23 +44336,23 @@ export def "spaces-tasks listServerTasks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --batch: string
   --description: string
   --environment: string
   --fromCompletedDate: string # format: date-time
   --fromQueueDate: string # format: date-time
   --fromStartDate: string # format: date-time
-  --hasPendingInterruptions: string@bool-completer
-  --hasPendingPreconditions: string@bool-completer
-  --hasWarningsOrErrors: string@bool-completer
+  --hasPendingInterruptions: oneof<nothing, bool>
+  --hasPendingPreconditions: oneof<nothing, bool>
+  --hasWarningsOrErrors: oneof<nothing, bool>
   --ids: list
   --name: list
   --node: string
   --partialName: string
   --project: string
   --runbook: string
-  --running: string@bool-completer
+  --running: oneof<nothing, bool>
   --skip: int # Number of items to skip. Defaults to zero (format: int32)
   --states: list
   --take: int # Number of items to take. Defaults to 30 (format: int32)
@@ -44510,7 +44509,7 @@ export def "spaces-tasks-details get" [
   --allow-errors(-e) # Return full response without error handling
   --ranges: string
   --tail: int # If set, determines how many log entries will be returned (format: int32)
-  --verbose: string@bool-completer # If true, includes verbose output
+  --verbose: oneof<nothing, bool> # If true, includes verbose output
 ]: nothing -> record<ActivityLogs: table<Children: list, Ended: string, Id: string, LogElements: list, Name: string, ProgressMessage: string, ProgressPercentage: int, ShowAtSummaryLevel: bool, Started: string, Status: string>, Id: string, LastModifiedBy: string, LastModifiedOn: string, Links: record, PhysicalLogSize: int, Progress: record<EstimatedTimeRemaining: string, ProgressPercentage: int>, Task: record<Arguments: record, CanRerun: bool, Completed: string, CompletedTime: string, Description: string, Duration: string, ErrorMessage: string, EstimatedRemainingQueueDurationSeconds: int, FinishedSuccessfully: bool, HasBeenPickedUpByProcessor: bool, HasPendingInterruptions: bool, HasPendingPreconditions: bool, HasWarningsOrErrors: bool, Id: string, IsCompleted: bool, LastModifiedBy: string, LastModifiedOn: string, LastUpdatedTime: string, Links: record, Name: string, PendingInterruptionTypes: list<string>, PendingPreconditionTypes: list<string>, ProjectId: string, QueueTime: string, QueueTimeExpiry: string, ServerNode: string, SpaceId: string, StartTime: string, State: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -45517,9 +45516,9 @@ export def "telemetryconfiguration modifyTelemetryConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Enabled: string@bool-completer
+  --Enabled: oneof<nothing, bool>
   --Id: string
-  --IsTelemetryEnforced: string@bool-completer
+  --IsTelemetryEnforced: oneof<nothing, bool>
   --LastModifiedBy: string
   --LastModifiedOn: string # format: date-time
   --Links: record
@@ -45550,7 +45549,7 @@ export def "tenants LegacyDefaultSpace" [
   --allow-errors(-e) # Return full response without error handling
   --clonedFromTenantId: string # A Tenant ID, to limit the included Tenants to those cloned from that Tenant. Example: Tenants-1
   --ids: list # A list of Tenant IDs, to limit the matching of Tenants to those with a particular ID. Example: ["Tenants-1", "Tenants-2"]
-  --isDisabled: string@bool-completer # Disabled Status, to limit the set of retrieved Tenants to those with the specified disabled status.
+  --isDisabled: oneof<nothing, bool> # Disabled Status, to limit the set of retrieved Tenants to those with the specified disabled status.
   --name: string # (Obsolete) A partial or complete name to limit the set of retrieved Tenants to. This will perform a "contains" style match against the supplied name or name-fragment. Left for backwards compatibility.
   --partialName: string # A partial name, to limit the set of Tenants to those with a name that includes the partial name
   --projectId: string # A Project ID, to limit the set of Tenants to those connected to a particular Project. Example: Projects-1
@@ -45581,7 +45580,7 @@ export def "tenants LegacyDefaultSpace-1" [
   --allow-errors(-e) # Return full response without error handling
   --Clone: string
   --Description: string
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   Name: string
   --ProjectEnvironments: record
   --Slug: string
@@ -45612,7 +45611,7 @@ export def "tenants-all LegacyDefaultSpace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ids: list # A set of Tenant IDs to retrieve Tenants for.
-  --isDisabled: string@bool-completer # Disabled Status, to limit the set of retrieved Tenants to those with the specified disabled status.
+  --isDisabled: oneof<nothing, bool> # Disabled Status, to limit the set of retrieved Tenants to those with the specified disabled status.
   --name: string # (Obsolete) A partial or complete name to limit the set of retrieved Tenants to. This will perform a "contains" style match against the supplied name or name-fragment. Left for backwards compatibility.
   --partialName: string # A partial or complete name to limit the set of retrieved Tenants to. This will perform a "contains" style match against the supplied name or name-fragment
   --projectId: string # A Project ID, to limit the set of retrieved Tenants to those connected to a particular Project.
@@ -45685,7 +45684,7 @@ export def "tenants-variables-missing LegacyDefaultSpace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --environmentId: string # An Environment ID, to limit the set of inspected Tenants to those connected to a particular Environment. Example: Environments-202.
-  --includeDetails: string@bool-completer # A switch to indicate whether missing variable details should be returned along with names.
+  --includeDetails: oneof<nothing, bool> # A switch to indicate whether missing variable details should be returned along with names.
   --projectId: string # A Project ID, to limit the set of inspected Tenants to those connected to a particular Project. Example: Projects-202.
   --tenantId: string # An ID for a Tenant. If supplied, will limit the result to variables missing for the Tenant identified by the ID. Example: Tenants-101.
 ]: nothing -> table<Links: record, MissingVariables: list<record>, TenantId: string> {
@@ -45735,7 +45734,7 @@ export def "tenants LegacyDefaultSpace-by-id-1" [
   --allow-errors(-e) # Return full response without error handling
   --Description: string
   Id: string
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   Name: string
   --ProjectEnvironments: record
   --Slug: string
@@ -45939,7 +45938,7 @@ export def "tenants-commonvariables LegacyDefaultSpace-by-tenantId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeMissingVariables: string@bool-completer
+  --includeMissingVariables: oneof<nothing, bool>
 ]: nothing -> record<MissingVariables: table<LibraryVariableSetId: string, LibraryVariableSetName: string, Scope: record, Template: record, TemplateId: string, Value: record>, TenantId: string, Variables: table<Id: string, LibraryVariableSetId: string, LibraryVariableSetName: string, Scope: record, Template: record, TemplateId: string, Value: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -46023,7 +46022,7 @@ export def "tenants-projectvariables LegacyDefaultSpace-by-tenantId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeMissingVariables: string@bool-completer
+  --includeMissingVariables: oneof<nothing, bool>
 ]: nothing -> record<MissingVariables: table<ProjectId: string, ProjectName: string, Scope: record, Template: record, TemplateId: string, Value: record>, TenantId: string, Variables: table<Id: string, ProjectId: string, ProjectName: string, Scope: record, Template: record, TemplateId: string, Value: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -46132,7 +46131,7 @@ export def "tenants list" [
   --allow-errors(-e) # Return full response without error handling
   --clonedFromTenantId: string # A Tenant ID, to limit the included Tenants to those cloned from that Tenant. Example: Tenants-1
   --ids: list # A list of Tenant IDs, to limit the matching of Tenants to those with a particular ID. Example: ["Tenants-1", "Tenants-2"]
-  --isDisabled: string@bool-completer # Disabled Status, to limit the set of retrieved Tenants to those with the specified disabled status.
+  --isDisabled: oneof<nothing, bool> # Disabled Status, to limit the set of retrieved Tenants to those with the specified disabled status.
   --name: string # (Obsolete) A partial or complete name to limit the set of retrieved Tenants to. This will perform a "contains" style match against the supplied name or name-fragment. Left for backwards compatibility.
   --partialName: string # A partial name, to limit the set of Tenants to those with a name that includes the partial name
   --projectId: string # A Project ID, to limit the set of Tenants to those connected to a particular Project. Example: Projects-1
@@ -46164,7 +46163,7 @@ export def "tenants createTenantBySpace" [
   --allow-errors(-e) # Return full response without error handling
   --Clone: string
   --Description: string
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   Name: string
   --ProjectEnvironments: record
   --Slug: string
@@ -46196,7 +46195,7 @@ export def "tenants-all get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ids: list # A set of Tenant IDs to retrieve Tenants for.
-  --isDisabled: string@bool-completer # Disabled Status, to limit the set of retrieved Tenants to those with the specified disabled status.
+  --isDisabled: oneof<nothing, bool> # Disabled Status, to limit the set of retrieved Tenants to those with the specified disabled status.
   --name: string # (Obsolete) A partial or complete name to limit the set of retrieved Tenants to. This will perform a "contains" style match against the supplied name or name-fragment. Left for backwards compatibility.
   --partialName: string # A partial or complete name to limit the set of retrieved Tenants to. This will perform a "contains" style match against the supplied name or name-fragment
   --projectId: string # A Project ID, to limit the set of retrieved Tenants to those connected to a particular Project.
@@ -46272,7 +46271,7 @@ export def "tenants-variables-missing get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --environmentId: string # An Environment ID, to limit the set of inspected Tenants to those connected to a particular Environment. Example: Environments-202.
-  --includeDetails: string@bool-completer # A switch to indicate whether missing variable details should be returned along with names.
+  --includeDetails: oneof<nothing, bool> # A switch to indicate whether missing variable details should be returned along with names.
   --projectId: string # A Project ID, to limit the set of inspected Tenants to those connected to a particular Project. Example: Projects-202.
   --tenantId: string # An ID for a Tenant. If supplied, will limit the result to variables missing for the Tenant identified by the ID. Example: Tenants-101.
 ]: nothing -> table<Links: record, MissingVariables: list<record>, TenantId: string> {
@@ -46324,7 +46323,7 @@ export def "tenants modifyTenantBySpace" [
   --allow-errors(-e) # Return full response without error handling
   --Description: string
   Id: string
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   Name: string
   --ProjectEnvironments: record
   --Slug: string
@@ -46536,7 +46535,7 @@ export def "tenants-commonvariables get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeMissingVariables: string@bool-completer
+  --includeMissingVariables: oneof<nothing, bool>
 ]: nothing -> record<MissingVariables: table<LibraryVariableSetId: string, LibraryVariableSetName: string, Scope: record, Template: record, TemplateId: string, Value: record>, TenantId: string, Variables: table<Id: string, LibraryVariableSetId: string, LibraryVariableSetName: string, Scope: record, Template: record, TemplateId: string, Value: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -46623,7 +46622,7 @@ export def "tenants-projectvariables get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeMissingVariables: string@bool-completer
+  --includeMissingVariables: oneof<nothing, bool>
 ]: nothing -> record<MissingVariables: table<ProjectId: string, ProjectName: string, Scope: record, Template: record, TemplateId: string, Value: record>, TenantId: string, Variables: table<Id: string, ProjectId: string, ProjectName: string, Scope: record, Template: record, TemplateId: string, Value: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -46735,7 +46734,7 @@ export def "spaces-tenants list" [
   --allow-errors(-e) # Return full response without error handling
   --clonedFromTenantId: string # A Tenant ID, to limit the included Tenants to those cloned from that Tenant. Example: Tenants-1
   --ids: list # A list of Tenant IDs, to limit the matching of Tenants to those with a particular ID. Example: ["Tenants-1", "Tenants-2"]
-  --isDisabled: string@bool-completer # Disabled Status, to limit the set of retrieved Tenants to those with the specified disabled status.
+  --isDisabled: oneof<nothing, bool> # Disabled Status, to limit the set of retrieved Tenants to those with the specified disabled status.
   --name: string # (Obsolete) A partial or complete name to limit the set of retrieved Tenants to. This will perform a "contains" style match against the supplied name or name-fragment. Left for backwards compatibility.
   --partialName: string # A partial name, to limit the set of Tenants to those with a name that includes the partial name
   --projectId: string # A Project ID, to limit the set of Tenants to those connected to a particular Project. Example: Projects-1
@@ -46767,7 +46766,7 @@ export def "spaces-tenants createTenant" [
   --allow-errors(-e) # Return full response without error handling
   --Clone: string
   --Description: string
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   Name: string
   --ProjectEnvironments: record
   --Slug: string
@@ -46799,7 +46798,7 @@ export def "spaces-tenants-all get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ids: list # A set of Tenant IDs to retrieve Tenants for.
-  --isDisabled: string@bool-completer # Disabled Status, to limit the set of retrieved Tenants to those with the specified disabled status.
+  --isDisabled: oneof<nothing, bool> # Disabled Status, to limit the set of retrieved Tenants to those with the specified disabled status.
   --name: string # (Obsolete) A partial or complete name to limit the set of retrieved Tenants to. This will perform a "contains" style match against the supplied name or name-fragment. Left for backwards compatibility.
   --partialName: string # A partial or complete name to limit the set of retrieved Tenants to. This will perform a "contains" style match against the supplied name or name-fragment
   --projectId: string # A Project ID, to limit the set of retrieved Tenants to those connected to a particular Project.
@@ -46875,7 +46874,7 @@ export def "spaces-tenants-variables-missing get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --environmentId: string # An Environment ID, to limit the set of inspected Tenants to those connected to a particular Environment. Example: Environments-202.
-  --includeDetails: string@bool-completer # A switch to indicate whether missing variable details should be returned along with names.
+  --includeDetails: oneof<nothing, bool> # A switch to indicate whether missing variable details should be returned along with names.
   --projectId: string # A Project ID, to limit the set of inspected Tenants to those connected to a particular Project. Example: Projects-202.
   --tenantId: string # An ID for a Tenant. If supplied, will limit the result to variables missing for the Tenant identified by the ID. Example: Tenants-101.
 ]: nothing -> table<Links: record, MissingVariables: list<record>, TenantId: string> {
@@ -46927,7 +46926,7 @@ export def "spaces-tenants modifyTenant" [
   --allow-errors(-e) # Return full response without error handling
   --Description: string
   Id: string
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   Name: string
   --ProjectEnvironments: record
   --Slug: string
@@ -47139,7 +47138,7 @@ export def "spaces-tenants-commonvariables get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeMissingVariables: string@bool-completer
+  --includeMissingVariables: oneof<nothing, bool>
 ]: nothing -> record<MissingVariables: table<LibraryVariableSetId: string, LibraryVariableSetName: string, Scope: record, Template: record, TemplateId: string, Value: record>, TenantId: string, Variables: table<Id: string, LibraryVariableSetId: string, LibraryVariableSetName: string, Scope: record, Template: record, TemplateId: string, Value: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -47226,7 +47225,7 @@ export def "spaces-tenants-projectvariables get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeMissingVariables: string@bool-completer
+  --includeMissingVariables: oneof<nothing, bool>
 ]: nothing -> record<MissingVariables: table<ProjectId: string, ProjectName: string, Scope: record, Template: record, TemplateId: string, Value: record>, TenantId: string, Variables: table<Id: string, ProjectId: string, ProjectName: string, Scope: record, Template: record, TemplateId: string, Value: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -47384,8 +47383,8 @@ export def "upgradeconfiguration setUpgradeConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AllowChecking: string@bool-completer
-  --IncludeStatistics: string@bool-completer
+  --AllowChecking: oneof<nothing, bool>
+  --IncludeStatistics: oneof<nothing, bool>
   NotificationMode: string@NotificationMode-completer
 ]: any -> record<AllowChecking: bool, Id: string, IncludeStatistics: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, NotificationMode: string> {
   let input = $in
@@ -47412,7 +47411,7 @@ export def "users-permissions LegacyDefaultSpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeSystem: string@bool-completer # Whether to include permission information from the system context
+  --includeSystem: oneof<nothing, bool> # Whether to include permission information from the system context
 ]: nothing -> record<Id: string, IsPermissionsComplete: bool, IsTeamsComplete: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, SpacePermissions: record<AdministerSystem: list<record>, ProjectEdit: list<record>, ProjectView: list<record>, ProjectCreate: list<record>, ProjectDelete: list<record>, ProcessView: list<record>, ProcessEdit: list<record>, VariableEdit: list<record>, VariableEditUnscoped: list<record>, VariableView: list<record>, VariableViewUnscoped: list<record>, ReleaseCreate: list<record>, ReleaseView: list<record>, ReleaseEdit: list<record>, ReleaseDelete: list<record>, DefectReport: list<record>, DefectResolve: list<record>, DeploymentCreate: list<record>, DeploymentDelete: list<record>, DeploymentView: list<record>, EnvironmentView: list<record>, EnvironmentCreate: list<record>, EnvironmentEdit: list<record>, EnvironmentDelete: list<record>, MachineCreate: list<record>, MachineEdit: list<record>, MachineView: list<record>, MachineDelete: list<record>, ArtifactView: list<record>, ArtifactCreate: list<record>, ArtifactEdit: list<record>, ArtifactDelete: list<record>, FeedView: list<record>, EventView: list<record>, LibraryVariableSetView: list<record>, LibraryVariableSetCreate: list<record>, LibraryVariableSetEdit: list<record>, LibraryVariableSetDelete: list<record>, ProjectGroupView: list<record>, ProjectGroupCreate: list<record>, ProjectGroupEdit: list<record>, ProjectGroupDelete: list<record>, TeamCreate: list<record>, TeamView: list<record>, TeamEdit: list<record>, TeamDelete: list<record>, UserView: list<record>, UserInvite: list<record>, UserRoleView: list<record>, UserRoleEdit: list<record>, TaskView: list<record>, TaskCreate: list<record>, TaskCancel: list<record>, TaskEdit: list<record>, TaskPrioritize: list<record>, InterruptionView: list<record>, InterruptionSubmit: list<record>, InterruptionViewSubmitResponsible: list<record>, BuiltInFeedPush: list<record>, BuiltInFeedAdminister: list<record>, BuiltInFeedDownload: list<record>, ActionTemplateView: list<record>, ActionTemplateCreate: list<record>, ActionTemplateEdit: list<record>, ActionTemplateDelete: list<record>, LifecycleCreate: list<record>, LifecycleView: list<record>, LifecycleEdit: list<record>, LifecycleDelete: list<record>, AccountView: list<record>, AccountEdit: list<record>, AccountCreate: list<record>, AccountDelete: list<record>, TenantCreate: list<record>, TenantEdit: list<record>, TenantView: list<record>, TenantDelete: list<record>, TagSetCreate: list<record>, TagSetEdit: list<record>, TagSetDelete: list<record>, TelemetryView: list<record>, MachinePolicyCreate: list<record>, MachinePolicyView: list<record>, MachinePolicyEdit: list<record>, MachinePolicyDelete: list<record>, ProxyCreate: list<record>, ProxyView: list<record>, ProxyEdit: list<record>, ProxyDelete: list<record>, SubscriptionCreate: list<record>, SubscriptionView: list<record>, SubscriptionEdit: list<record>, SubscriptionDelete: list<record>, TriggerCreate: list<record>, TriggerView: list<record>, TriggerEdit: list<record>, TriggerDelete: list<record>, CertificateView: list<record>, CertificateCreate: list<record>, CertificateEdit: list<record>, CertificateDelete: list<record>, CertificateExportPrivateKey: list<record>, UserEdit: list<record>, ConfigureServer: list<record>, FeedEdit: list<record>, WorkerView: list<record>, WorkerEdit: list<record>, SpaceEdit: list<record>, SpaceView: list<record>, SpaceDelete: list<record>, SpaceCreate: list<record>, BuildInformationPush: list<record>, BuildInformationAdminister: list<record>, RunbookView: list<record>, RunbookEdit: list<record>, RunbookRunView: list<record>, RunbookRunDelete: list<record>, RunbookRunCreate: list<record>, GitCredentialView: list<record>, GitCredentialEdit: list<record>, EventRetentionDelete: list<record>, EventRetentionView: list<record>, InsightsReportView: list<record>, InsightsReportCreate: list<record>, InsightsReportEdit: list<record>, InsightsReportDelete: list<record>, DeploymentFreezeAdminister: list<record>, TargetTagView: list<record>, TargetTagAdminister: list<record>, PlatformHubView: list<record>, PlatformHubEdit: list<record>, RetentionAdminister: list<record>, FeatureToggleEdit: list<record>, ApprovalPolicyAdminister: list<record>, SshKnownHostsAdminister: list<record>, SshKnownHostsView: list<record>>, SystemPermissions: list<string>, Teams: table<ExternalSecurityGroups: list, Id: string, IsDirectlyAssigned: bool, Name: string, SpaceId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -47436,7 +47435,7 @@ export def "users-permissions-configuration LegacyDefaultSpace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeSystem: string@bool-completer # Whether to include permission information from the system context
+  --includeSystem: oneof<nothing, bool> # Whether to include permission information from the system context
 ]: nothing -> record<Id: string, IsPermissionsComplete: bool, IsTeamsComplete: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, SpacePermissions: record<AdministerSystem: list<record>, ProjectEdit: list<record>, ProjectView: list<record>, ProjectCreate: list<record>, ProjectDelete: list<record>, ProcessView: list<record>, ProcessEdit: list<record>, VariableEdit: list<record>, VariableEditUnscoped: list<record>, VariableView: list<record>, VariableViewUnscoped: list<record>, ReleaseCreate: list<record>, ReleaseView: list<record>, ReleaseEdit: list<record>, ReleaseDelete: list<record>, DefectReport: list<record>, DefectResolve: list<record>, DeploymentCreate: list<record>, DeploymentDelete: list<record>, DeploymentView: list<record>, EnvironmentView: list<record>, EnvironmentCreate: list<record>, EnvironmentEdit: list<record>, EnvironmentDelete: list<record>, MachineCreate: list<record>, MachineEdit: list<record>, MachineView: list<record>, MachineDelete: list<record>, ArtifactView: list<record>, ArtifactCreate: list<record>, ArtifactEdit: list<record>, ArtifactDelete: list<record>, FeedView: list<record>, EventView: list<record>, LibraryVariableSetView: list<record>, LibraryVariableSetCreate: list<record>, LibraryVariableSetEdit: list<record>, LibraryVariableSetDelete: list<record>, ProjectGroupView: list<record>, ProjectGroupCreate: list<record>, ProjectGroupEdit: list<record>, ProjectGroupDelete: list<record>, TeamCreate: list<record>, TeamView: list<record>, TeamEdit: list<record>, TeamDelete: list<record>, UserView: list<record>, UserInvite: list<record>, UserRoleView: list<record>, UserRoleEdit: list<record>, TaskView: list<record>, TaskCreate: list<record>, TaskCancel: list<record>, TaskEdit: list<record>, TaskPrioritize: list<record>, InterruptionView: list<record>, InterruptionSubmit: list<record>, InterruptionViewSubmitResponsible: list<record>, BuiltInFeedPush: list<record>, BuiltInFeedAdminister: list<record>, BuiltInFeedDownload: list<record>, ActionTemplateView: list<record>, ActionTemplateCreate: list<record>, ActionTemplateEdit: list<record>, ActionTemplateDelete: list<record>, LifecycleCreate: list<record>, LifecycleView: list<record>, LifecycleEdit: list<record>, LifecycleDelete: list<record>, AccountView: list<record>, AccountEdit: list<record>, AccountCreate: list<record>, AccountDelete: list<record>, TenantCreate: list<record>, TenantEdit: list<record>, TenantView: list<record>, TenantDelete: list<record>, TagSetCreate: list<record>, TagSetEdit: list<record>, TagSetDelete: list<record>, TelemetryView: list<record>, MachinePolicyCreate: list<record>, MachinePolicyView: list<record>, MachinePolicyEdit: list<record>, MachinePolicyDelete: list<record>, ProxyCreate: list<record>, ProxyView: list<record>, ProxyEdit: list<record>, ProxyDelete: list<record>, SubscriptionCreate: list<record>, SubscriptionView: list<record>, SubscriptionEdit: list<record>, SubscriptionDelete: list<record>, TriggerCreate: list<record>, TriggerView: list<record>, TriggerEdit: list<record>, TriggerDelete: list<record>, CertificateView: list<record>, CertificateCreate: list<record>, CertificateEdit: list<record>, CertificateDelete: list<record>, CertificateExportPrivateKey: list<record>, UserEdit: list<record>, ConfigureServer: list<record>, FeedEdit: list<record>, WorkerView: list<record>, WorkerEdit: list<record>, SpaceEdit: list<record>, SpaceView: list<record>, SpaceDelete: list<record>, SpaceCreate: list<record>, BuildInformationPush: list<record>, BuildInformationAdminister: list<record>, RunbookView: list<record>, RunbookEdit: list<record>, RunbookRunView: list<record>, RunbookRunDelete: list<record>, RunbookRunCreate: list<record>, GitCredentialView: list<record>, GitCredentialEdit: list<record>, EventRetentionDelete: list<record>, EventRetentionView: list<record>, InsightsReportView: list<record>, InsightsReportCreate: list<record>, InsightsReportEdit: list<record>, InsightsReportDelete: list<record>, DeploymentFreezeAdminister: list<record>, TargetTagView: list<record>, TargetTagAdminister: list<record>, PlatformHubView: list<record>, PlatformHubEdit: list<record>, RetentionAdminister: list<record>, FeatureToggleEdit: list<record>, ApprovalPolicyAdminister: list<record>, SshKnownHostsAdminister: list<record>, SshKnownHostsView: list<record>>, SystemPermissions: list<string>, Teams: table<ExternalSecurityGroups: list, Id: string, IsDirectlyAssigned: bool, Name: string, SpaceId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -47484,7 +47483,7 @@ export def "users-permissions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeSystem: string@bool-completer # Whether to include permission information from the system context
+  --includeSystem: oneof<nothing, bool> # Whether to include permission information from the system context
 ]: nothing -> record<Id: string, IsPermissionsComplete: bool, IsTeamsComplete: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, SpacePermissions: record<AdministerSystem: list<record>, ProjectEdit: list<record>, ProjectView: list<record>, ProjectCreate: list<record>, ProjectDelete: list<record>, ProcessView: list<record>, ProcessEdit: list<record>, VariableEdit: list<record>, VariableEditUnscoped: list<record>, VariableView: list<record>, VariableViewUnscoped: list<record>, ReleaseCreate: list<record>, ReleaseView: list<record>, ReleaseEdit: list<record>, ReleaseDelete: list<record>, DefectReport: list<record>, DefectResolve: list<record>, DeploymentCreate: list<record>, DeploymentDelete: list<record>, DeploymentView: list<record>, EnvironmentView: list<record>, EnvironmentCreate: list<record>, EnvironmentEdit: list<record>, EnvironmentDelete: list<record>, MachineCreate: list<record>, MachineEdit: list<record>, MachineView: list<record>, MachineDelete: list<record>, ArtifactView: list<record>, ArtifactCreate: list<record>, ArtifactEdit: list<record>, ArtifactDelete: list<record>, FeedView: list<record>, EventView: list<record>, LibraryVariableSetView: list<record>, LibraryVariableSetCreate: list<record>, LibraryVariableSetEdit: list<record>, LibraryVariableSetDelete: list<record>, ProjectGroupView: list<record>, ProjectGroupCreate: list<record>, ProjectGroupEdit: list<record>, ProjectGroupDelete: list<record>, TeamCreate: list<record>, TeamView: list<record>, TeamEdit: list<record>, TeamDelete: list<record>, UserView: list<record>, UserInvite: list<record>, UserRoleView: list<record>, UserRoleEdit: list<record>, TaskView: list<record>, TaskCreate: list<record>, TaskCancel: list<record>, TaskEdit: list<record>, TaskPrioritize: list<record>, InterruptionView: list<record>, InterruptionSubmit: list<record>, InterruptionViewSubmitResponsible: list<record>, BuiltInFeedPush: list<record>, BuiltInFeedAdminister: list<record>, BuiltInFeedDownload: list<record>, ActionTemplateView: list<record>, ActionTemplateCreate: list<record>, ActionTemplateEdit: list<record>, ActionTemplateDelete: list<record>, LifecycleCreate: list<record>, LifecycleView: list<record>, LifecycleEdit: list<record>, LifecycleDelete: list<record>, AccountView: list<record>, AccountEdit: list<record>, AccountCreate: list<record>, AccountDelete: list<record>, TenantCreate: list<record>, TenantEdit: list<record>, TenantView: list<record>, TenantDelete: list<record>, TagSetCreate: list<record>, TagSetEdit: list<record>, TagSetDelete: list<record>, TelemetryView: list<record>, MachinePolicyCreate: list<record>, MachinePolicyView: list<record>, MachinePolicyEdit: list<record>, MachinePolicyDelete: list<record>, ProxyCreate: list<record>, ProxyView: list<record>, ProxyEdit: list<record>, ProxyDelete: list<record>, SubscriptionCreate: list<record>, SubscriptionView: list<record>, SubscriptionEdit: list<record>, SubscriptionDelete: list<record>, TriggerCreate: list<record>, TriggerView: list<record>, TriggerEdit: list<record>, TriggerDelete: list<record>, CertificateView: list<record>, CertificateCreate: list<record>, CertificateEdit: list<record>, CertificateDelete: list<record>, CertificateExportPrivateKey: list<record>, UserEdit: list<record>, ConfigureServer: list<record>, FeedEdit: list<record>, WorkerView: list<record>, WorkerEdit: list<record>, SpaceEdit: list<record>, SpaceView: list<record>, SpaceDelete: list<record>, SpaceCreate: list<record>, BuildInformationPush: list<record>, BuildInformationAdminister: list<record>, RunbookView: list<record>, RunbookEdit: list<record>, RunbookRunView: list<record>, RunbookRunDelete: list<record>, RunbookRunCreate: list<record>, GitCredentialView: list<record>, GitCredentialEdit: list<record>, EventRetentionDelete: list<record>, EventRetentionView: list<record>, InsightsReportView: list<record>, InsightsReportCreate: list<record>, InsightsReportEdit: list<record>, InsightsReportDelete: list<record>, DeploymentFreezeAdminister: list<record>, TargetTagView: list<record>, TargetTagAdminister: list<record>, PlatformHubView: list<record>, PlatformHubEdit: list<record>, RetentionAdminister: list<record>, FeatureToggleEdit: list<record>, ApprovalPolicyAdminister: list<record>, SshKnownHostsAdminister: list<record>, SshKnownHostsView: list<record>>, SystemPermissions: list<string>, Teams: table<ExternalSecurityGroups: list, Id: string, IsDirectlyAssigned: bool, Name: string, SpaceId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -47509,7 +47508,7 @@ export def "users-permissions-configuration get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeSystem: string@bool-completer # Whether to include permission information from the system context
+  --includeSystem: oneof<nothing, bool> # Whether to include permission information from the system context
 ]: nothing -> record<Id: string, IsPermissionsComplete: bool, IsTeamsComplete: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, SpacePermissions: record<AdministerSystem: list<record>, ProjectEdit: list<record>, ProjectView: list<record>, ProjectCreate: list<record>, ProjectDelete: list<record>, ProcessView: list<record>, ProcessEdit: list<record>, VariableEdit: list<record>, VariableEditUnscoped: list<record>, VariableView: list<record>, VariableViewUnscoped: list<record>, ReleaseCreate: list<record>, ReleaseView: list<record>, ReleaseEdit: list<record>, ReleaseDelete: list<record>, DefectReport: list<record>, DefectResolve: list<record>, DeploymentCreate: list<record>, DeploymentDelete: list<record>, DeploymentView: list<record>, EnvironmentView: list<record>, EnvironmentCreate: list<record>, EnvironmentEdit: list<record>, EnvironmentDelete: list<record>, MachineCreate: list<record>, MachineEdit: list<record>, MachineView: list<record>, MachineDelete: list<record>, ArtifactView: list<record>, ArtifactCreate: list<record>, ArtifactEdit: list<record>, ArtifactDelete: list<record>, FeedView: list<record>, EventView: list<record>, LibraryVariableSetView: list<record>, LibraryVariableSetCreate: list<record>, LibraryVariableSetEdit: list<record>, LibraryVariableSetDelete: list<record>, ProjectGroupView: list<record>, ProjectGroupCreate: list<record>, ProjectGroupEdit: list<record>, ProjectGroupDelete: list<record>, TeamCreate: list<record>, TeamView: list<record>, TeamEdit: list<record>, TeamDelete: list<record>, UserView: list<record>, UserInvite: list<record>, UserRoleView: list<record>, UserRoleEdit: list<record>, TaskView: list<record>, TaskCreate: list<record>, TaskCancel: list<record>, TaskEdit: list<record>, TaskPrioritize: list<record>, InterruptionView: list<record>, InterruptionSubmit: list<record>, InterruptionViewSubmitResponsible: list<record>, BuiltInFeedPush: list<record>, BuiltInFeedAdminister: list<record>, BuiltInFeedDownload: list<record>, ActionTemplateView: list<record>, ActionTemplateCreate: list<record>, ActionTemplateEdit: list<record>, ActionTemplateDelete: list<record>, LifecycleCreate: list<record>, LifecycleView: list<record>, LifecycleEdit: list<record>, LifecycleDelete: list<record>, AccountView: list<record>, AccountEdit: list<record>, AccountCreate: list<record>, AccountDelete: list<record>, TenantCreate: list<record>, TenantEdit: list<record>, TenantView: list<record>, TenantDelete: list<record>, TagSetCreate: list<record>, TagSetEdit: list<record>, TagSetDelete: list<record>, TelemetryView: list<record>, MachinePolicyCreate: list<record>, MachinePolicyView: list<record>, MachinePolicyEdit: list<record>, MachinePolicyDelete: list<record>, ProxyCreate: list<record>, ProxyView: list<record>, ProxyEdit: list<record>, ProxyDelete: list<record>, SubscriptionCreate: list<record>, SubscriptionView: list<record>, SubscriptionEdit: list<record>, SubscriptionDelete: list<record>, TriggerCreate: list<record>, TriggerView: list<record>, TriggerEdit: list<record>, TriggerDelete: list<record>, CertificateView: list<record>, CertificateCreate: list<record>, CertificateEdit: list<record>, CertificateDelete: list<record>, CertificateExportPrivateKey: list<record>, UserEdit: list<record>, ConfigureServer: list<record>, FeedEdit: list<record>, WorkerView: list<record>, WorkerEdit: list<record>, SpaceEdit: list<record>, SpaceView: list<record>, SpaceDelete: list<record>, SpaceCreate: list<record>, BuildInformationPush: list<record>, BuildInformationAdminister: list<record>, RunbookView: list<record>, RunbookEdit: list<record>, RunbookRunView: list<record>, RunbookRunDelete: list<record>, RunbookRunCreate: list<record>, GitCredentialView: list<record>, GitCredentialEdit: list<record>, EventRetentionDelete: list<record>, EventRetentionView: list<record>, InsightsReportView: list<record>, InsightsReportCreate: list<record>, InsightsReportEdit: list<record>, InsightsReportDelete: list<record>, DeploymentFreezeAdminister: list<record>, TargetTagView: list<record>, TargetTagAdminister: list<record>, PlatformHubView: list<record>, PlatformHubEdit: list<record>, RetentionAdminister: list<record>, FeatureToggleEdit: list<record>, ApprovalPolicyAdminister: list<record>, SshKnownHostsAdminister: list<record>, SshKnownHostsView: list<record>>, SystemPermissions: list<string>, Teams: table<ExternalSecurityGroups: list, Id: string, IsDirectlyAssigned: bool, Name: string, SpaceId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -47558,7 +47557,7 @@ export def "spaces-users-permissions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeSystem: string@bool-completer # Whether to include permission information from the system context
+  --includeSystem: oneof<nothing, bool> # Whether to include permission information from the system context
 ]: nothing -> record<Id: string, IsPermissionsComplete: bool, IsTeamsComplete: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, SpacePermissions: record<AdministerSystem: list<record>, ProjectEdit: list<record>, ProjectView: list<record>, ProjectCreate: list<record>, ProjectDelete: list<record>, ProcessView: list<record>, ProcessEdit: list<record>, VariableEdit: list<record>, VariableEditUnscoped: list<record>, VariableView: list<record>, VariableViewUnscoped: list<record>, ReleaseCreate: list<record>, ReleaseView: list<record>, ReleaseEdit: list<record>, ReleaseDelete: list<record>, DefectReport: list<record>, DefectResolve: list<record>, DeploymentCreate: list<record>, DeploymentDelete: list<record>, DeploymentView: list<record>, EnvironmentView: list<record>, EnvironmentCreate: list<record>, EnvironmentEdit: list<record>, EnvironmentDelete: list<record>, MachineCreate: list<record>, MachineEdit: list<record>, MachineView: list<record>, MachineDelete: list<record>, ArtifactView: list<record>, ArtifactCreate: list<record>, ArtifactEdit: list<record>, ArtifactDelete: list<record>, FeedView: list<record>, EventView: list<record>, LibraryVariableSetView: list<record>, LibraryVariableSetCreate: list<record>, LibraryVariableSetEdit: list<record>, LibraryVariableSetDelete: list<record>, ProjectGroupView: list<record>, ProjectGroupCreate: list<record>, ProjectGroupEdit: list<record>, ProjectGroupDelete: list<record>, TeamCreate: list<record>, TeamView: list<record>, TeamEdit: list<record>, TeamDelete: list<record>, UserView: list<record>, UserInvite: list<record>, UserRoleView: list<record>, UserRoleEdit: list<record>, TaskView: list<record>, TaskCreate: list<record>, TaskCancel: list<record>, TaskEdit: list<record>, TaskPrioritize: list<record>, InterruptionView: list<record>, InterruptionSubmit: list<record>, InterruptionViewSubmitResponsible: list<record>, BuiltInFeedPush: list<record>, BuiltInFeedAdminister: list<record>, BuiltInFeedDownload: list<record>, ActionTemplateView: list<record>, ActionTemplateCreate: list<record>, ActionTemplateEdit: list<record>, ActionTemplateDelete: list<record>, LifecycleCreate: list<record>, LifecycleView: list<record>, LifecycleEdit: list<record>, LifecycleDelete: list<record>, AccountView: list<record>, AccountEdit: list<record>, AccountCreate: list<record>, AccountDelete: list<record>, TenantCreate: list<record>, TenantEdit: list<record>, TenantView: list<record>, TenantDelete: list<record>, TagSetCreate: list<record>, TagSetEdit: list<record>, TagSetDelete: list<record>, TelemetryView: list<record>, MachinePolicyCreate: list<record>, MachinePolicyView: list<record>, MachinePolicyEdit: list<record>, MachinePolicyDelete: list<record>, ProxyCreate: list<record>, ProxyView: list<record>, ProxyEdit: list<record>, ProxyDelete: list<record>, SubscriptionCreate: list<record>, SubscriptionView: list<record>, SubscriptionEdit: list<record>, SubscriptionDelete: list<record>, TriggerCreate: list<record>, TriggerView: list<record>, TriggerEdit: list<record>, TriggerDelete: list<record>, CertificateView: list<record>, CertificateCreate: list<record>, CertificateEdit: list<record>, CertificateDelete: list<record>, CertificateExportPrivateKey: list<record>, UserEdit: list<record>, ConfigureServer: list<record>, FeedEdit: list<record>, WorkerView: list<record>, WorkerEdit: list<record>, SpaceEdit: list<record>, SpaceView: list<record>, SpaceDelete: list<record>, SpaceCreate: list<record>, BuildInformationPush: list<record>, BuildInformationAdminister: list<record>, RunbookView: list<record>, RunbookEdit: list<record>, RunbookRunView: list<record>, RunbookRunDelete: list<record>, RunbookRunCreate: list<record>, GitCredentialView: list<record>, GitCredentialEdit: list<record>, EventRetentionDelete: list<record>, EventRetentionView: list<record>, InsightsReportView: list<record>, InsightsReportCreate: list<record>, InsightsReportEdit: list<record>, InsightsReportDelete: list<record>, DeploymentFreezeAdminister: list<record>, TargetTagView: list<record>, TargetTagAdminister: list<record>, PlatformHubView: list<record>, PlatformHubEdit: list<record>, RetentionAdminister: list<record>, FeatureToggleEdit: list<record>, ApprovalPolicyAdminister: list<record>, SshKnownHostsAdminister: list<record>, SshKnownHostsView: list<record>>, SystemPermissions: list<string>, Teams: table<ExternalSecurityGroups: list, Id: string, IsDirectlyAssigned: bool, Name: string, SpaceId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -47583,7 +47582,7 @@ export def "spaces-users-permissions-configuration get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeSystem: string@bool-completer # Whether to include permission information from the system context
+  --includeSystem: oneof<nothing, bool> # Whether to include permission information from the system context
 ]: nothing -> record<Id: string, IsPermissionsComplete: bool, IsTeamsComplete: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, SpacePermissions: record<AdministerSystem: list<record>, ProjectEdit: list<record>, ProjectView: list<record>, ProjectCreate: list<record>, ProjectDelete: list<record>, ProcessView: list<record>, ProcessEdit: list<record>, VariableEdit: list<record>, VariableEditUnscoped: list<record>, VariableView: list<record>, VariableViewUnscoped: list<record>, ReleaseCreate: list<record>, ReleaseView: list<record>, ReleaseEdit: list<record>, ReleaseDelete: list<record>, DefectReport: list<record>, DefectResolve: list<record>, DeploymentCreate: list<record>, DeploymentDelete: list<record>, DeploymentView: list<record>, EnvironmentView: list<record>, EnvironmentCreate: list<record>, EnvironmentEdit: list<record>, EnvironmentDelete: list<record>, MachineCreate: list<record>, MachineEdit: list<record>, MachineView: list<record>, MachineDelete: list<record>, ArtifactView: list<record>, ArtifactCreate: list<record>, ArtifactEdit: list<record>, ArtifactDelete: list<record>, FeedView: list<record>, EventView: list<record>, LibraryVariableSetView: list<record>, LibraryVariableSetCreate: list<record>, LibraryVariableSetEdit: list<record>, LibraryVariableSetDelete: list<record>, ProjectGroupView: list<record>, ProjectGroupCreate: list<record>, ProjectGroupEdit: list<record>, ProjectGroupDelete: list<record>, TeamCreate: list<record>, TeamView: list<record>, TeamEdit: list<record>, TeamDelete: list<record>, UserView: list<record>, UserInvite: list<record>, UserRoleView: list<record>, UserRoleEdit: list<record>, TaskView: list<record>, TaskCreate: list<record>, TaskCancel: list<record>, TaskEdit: list<record>, TaskPrioritize: list<record>, InterruptionView: list<record>, InterruptionSubmit: list<record>, InterruptionViewSubmitResponsible: list<record>, BuiltInFeedPush: list<record>, BuiltInFeedAdminister: list<record>, BuiltInFeedDownload: list<record>, ActionTemplateView: list<record>, ActionTemplateCreate: list<record>, ActionTemplateEdit: list<record>, ActionTemplateDelete: list<record>, LifecycleCreate: list<record>, LifecycleView: list<record>, LifecycleEdit: list<record>, LifecycleDelete: list<record>, AccountView: list<record>, AccountEdit: list<record>, AccountCreate: list<record>, AccountDelete: list<record>, TenantCreate: list<record>, TenantEdit: list<record>, TenantView: list<record>, TenantDelete: list<record>, TagSetCreate: list<record>, TagSetEdit: list<record>, TagSetDelete: list<record>, TelemetryView: list<record>, MachinePolicyCreate: list<record>, MachinePolicyView: list<record>, MachinePolicyEdit: list<record>, MachinePolicyDelete: list<record>, ProxyCreate: list<record>, ProxyView: list<record>, ProxyEdit: list<record>, ProxyDelete: list<record>, SubscriptionCreate: list<record>, SubscriptionView: list<record>, SubscriptionEdit: list<record>, SubscriptionDelete: list<record>, TriggerCreate: list<record>, TriggerView: list<record>, TriggerEdit: list<record>, TriggerDelete: list<record>, CertificateView: list<record>, CertificateCreate: list<record>, CertificateEdit: list<record>, CertificateDelete: list<record>, CertificateExportPrivateKey: list<record>, UserEdit: list<record>, ConfigureServer: list<record>, FeedEdit: list<record>, WorkerView: list<record>, WorkerEdit: list<record>, SpaceEdit: list<record>, SpaceView: list<record>, SpaceDelete: list<record>, SpaceCreate: list<record>, BuildInformationPush: list<record>, BuildInformationAdminister: list<record>, RunbookView: list<record>, RunbookEdit: list<record>, RunbookRunView: list<record>, RunbookRunDelete: list<record>, RunbookRunCreate: list<record>, GitCredentialView: list<record>, GitCredentialEdit: list<record>, EventRetentionDelete: list<record>, EventRetentionView: list<record>, InsightsReportView: list<record>, InsightsReportCreate: list<record>, InsightsReportEdit: list<record>, InsightsReportDelete: list<record>, DeploymentFreezeAdminister: list<record>, TargetTagView: list<record>, TargetTagAdminister: list<record>, PlatformHubView: list<record>, PlatformHubEdit: list<record>, RetentionAdminister: list<record>, FeatureToggleEdit: list<record>, ApprovalPolicyAdminister: list<record>, SshKnownHostsAdminister: list<record>, SshKnownHostsView: list<record>>, SystemPermissions: list<string>, Teams: table<ExternalSecurityGroups: list, Id: string, IsDirectlyAssigned: bool, Name: string, SpaceId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-octopus-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -47780,7 +47779,7 @@ export def "users list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string # Filters the Users by Username/DisplayName/EmailAddress/IdentificationToken using the specified `filter` fragment
-  --isServiceAccount: string@bool-completer # A filter to return only service account users
+  --isServiceAccount: oneof<nothing, bool> # A filter to return only service account users
   --serviceAccountType: string@serviceAccountType-completer # A filter to return only service accounts of the specified type
   --skip: int # Number of items to skip. Defaults to zero (format: int32)
   --take: int # Number of items to take. Defaults to 30 (format: int32)
@@ -47810,8 +47809,8 @@ export def "users createUser" [
   DisplayName: string
   --EmailAddress: string
   --Identities: list # item shape: {IdentityProviderName?: string}
-  --IsActive: string@bool-completer
-  --IsService: string@bool-completer
+  --IsActive: oneof<nothing, bool>
+  --IsService: oneof<nothing, bool>
   --Password: string
   --ServiceAccountType: string@ServiceAccountType-completer
   Username: string
@@ -47951,7 +47950,7 @@ export def "users-login loginUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   Password: string
-  --RememberMe: string@bool-completer
+  --RememberMe: oneof<nothing, bool>
   --RemoteIpAddress: string
   --State: record # shape: {RedirectAfterLoginTo?: string, UsingSecureConnection?: bool}
   Username: string
@@ -48080,7 +48079,7 @@ export def "users modifyUser" [
   --EmailAddress: string
   Id: string
   --Identities: list # item shape: {IdentityProviderName?: string}
-  --IsActive: string@bool-completer
+  --IsActive: oneof<nothing, bool>
   --Password: string
   Username: string
 ]: any -> record<CanPasswordBeEdited: bool, Created: string, DisplayName: string, EmailAddress: string, Id: string, Identities: table<Claims: record, IdentityProviderName: string>, IsActive: bool, IsRequestor: bool, IsService: bool, LastModifiedBy: string, LastModifiedOn: string, Links: record, Password: string, ServiceAccountType: string, Username: string> {
@@ -48316,7 +48315,7 @@ export def "projects-git-migrate-variables convertProjectVariablesToGitBySpace" 
   --allow-errors(-e) # Return full response without error handling
   Branch: string
   CommitMessage: string
-  --CreateBranch: string@bool-completer
+  --CreateBranch: oneof<nothing, bool>
   ProjectId: string
   SpaceId: string
 ]: any -> record {
@@ -48630,7 +48629,7 @@ export def "spaces-projects-git-migrate-variables convertProjectVariablesToGit" 
   --allow-errors(-e) # Return full response without error handling
   Branch: string
   CommitMessage: string
-  --CreateBranch: string@bool-completer
+  --CreateBranch: oneof<nothing, bool>
   ProjectId: string
   SpaceId: string
 ]: any -> record {
@@ -49041,7 +49040,7 @@ export def "workerpools LegacyDefaultSpace-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Description: string
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   Name: string
   --Slug: string
   --SortOrder: int # format: int32
@@ -49142,9 +49141,9 @@ export def "workerpools-summary LegacyDefaultSpace" [
   --allow-errors(-e) # Return full response without error handling
   --commStyles: list
   --healthStatuses: list
-  --hideEmptyWorkerPools: string@bool-completer
+  --hideEmptyWorkerPools: oneof<nothing, bool>
   --ids: list
-  --isDisabled: string@bool-completer
+  --isDisabled: oneof<nothing, bool>
   --machinePartialName: string
   --partialName: string
   --shellNames: list
@@ -49216,7 +49215,7 @@ export def "workerpools LegacyDefaultSpace-by-id-1" [
   --allow-errors(-e) # Return full response without error handling
   --Description: string
   Id: string
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   Name: string
   --Slug: string
   SpaceId: string
@@ -49271,7 +49270,7 @@ export def "workerpools-workers LegacyDefaultSpace" [
   --commStyles: list
   --deploymentTargetTypes: list
   --healthStatuses: list
-  --isDisabled: string@bool-completer
+  --isDisabled: oneof<nothing, bool>
   --operatingSystemNames: list
   --partialName: string
   --shellNames: list
@@ -49329,7 +49328,7 @@ export def "workerpools createWorkerPoolBySpace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Description: string
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   Name: string
   --Slug: string
   --SortOrder: int # format: int32
@@ -49434,9 +49433,9 @@ export def "workerpools-summary get" [
   --allow-errors(-e) # Return full response without error handling
   --commStyles: list
   --healthStatuses: list
-  --hideEmptyWorkerPools: string@bool-completer
+  --hideEmptyWorkerPools: oneof<nothing, bool>
   --ids: list
-  --isDisabled: string@bool-completer
+  --isDisabled: oneof<nothing, bool>
   --machinePartialName: string
   --partialName: string
   --shellNames: list
@@ -49511,7 +49510,7 @@ export def "workerpools modifyWorkerPoolBySpace" [
   --allow-errors(-e) # Return full response without error handling
   --Description: string
   Id: string
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   Name: string
   --Slug: string
   SpaceId: string
@@ -49568,7 +49567,7 @@ export def "workerpools-workers get" [
   --commStyles: list
   --deploymentTargetTypes: list
   --healthStatuses: list
-  --isDisabled: string@bool-completer
+  --isDisabled: oneof<nothing, bool>
   --operatingSystemNames: list
   --partialName: string
   --shellNames: list
@@ -49626,7 +49625,7 @@ export def "spaces-workerpools createWorkerPool" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Description: string
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   Name: string
   --Slug: string
   --SortOrder: int # format: int32
@@ -49731,9 +49730,9 @@ export def "spaces-workerpools-summary get" [
   --allow-errors(-e) # Return full response without error handling
   --commStyles: list
   --healthStatuses: list
-  --hideEmptyWorkerPools: string@bool-completer
+  --hideEmptyWorkerPools: oneof<nothing, bool>
   --ids: list
-  --isDisabled: string@bool-completer
+  --isDisabled: oneof<nothing, bool>
   --machinePartialName: string
   --partialName: string
   --shellNames: list
@@ -49808,7 +49807,7 @@ export def "spaces-workerpools modifyWorkerPool" [
   --allow-errors(-e) # Return full response without error handling
   --Description: string
   Id: string
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   Name: string
   --Slug: string
   SpaceId: string
@@ -49865,7 +49864,7 @@ export def "spaces-workerpools-workers get" [
   --commStyles: list
   --deploymentTargetTypes: list
   --healthStatuses: list
-  --isDisabled: string@bool-completer
+  --isDisabled: oneof<nothing, bool>
   --operatingSystemNames: list
   --partialName: string
   --shellNames: list
@@ -49896,7 +49895,7 @@ export def "workers LegacyDefaultSpace" [
   --commStyles: list # List of communication styles which if specified, filters the result to only include Workers with matching communication styles.
   --healthStatuses: list # List of health statuses which if specified, filters the result to only include Deployment Targets with matching health statuses.
   --ids: list # List of Worker IDs which if specified, filters the result to only include Workers with matching IDs.
-  --isDisabled: string@bool-completer # A filter to return only disabled/enabled Workers
+  --isDisabled: oneof<nothing, bool> # A filter to return only disabled/enabled Workers
   --name: string # The exact name of a Worker to be matched
   --operatingSystemNames: list # List of operating system names which if specified, filters the result to only include Workers with matching operating systems.
   --partialName: string # A partial or complete name to search on. This will perform a "contains" style match against the supplied name or name-fragment
@@ -49928,10 +49927,10 @@ export def "workers LegacyDefaultSpace-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   Endpoint: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   --MachinePolicyId: string
   Name: string
-  --SkipInitialHealthCheck: string@bool-completer
+  --SkipInitialHealthCheck: oneof<nothing, bool>
   --Slug: string
   SpaceId: string
   WorkerPoolIds: list
@@ -50054,7 +50053,7 @@ export def "workers LegacyDefaultSpace-2" [
   --commStyles: list # List of communication styles which if specified, filters the result to only include Workers with matching communication styles.
   --healthStatuses: list # List of health statuses which if specified, filters the result to only include Workers with matching health statuses.
   --ids: list # List of Worker IDs which if specified, filters the result to only include Workers with matching IDs.
-  --isDisabled: string@bool-completer # A filter to return only disabled/enabled Workers
+  --isDisabled: oneof<nothing, bool> # A filter to return only disabled/enabled Workers
   --name: string # The exact name of a Worker to be matched
   --operatingSystemNames: list # List of operating system names which if specified, filters the result to only include Workers with matching operating systems.
   --partialName: string # A partial or complete name to search on. This will perform a "contains" style match against the supplied name or name-fragment
@@ -50110,7 +50109,7 @@ export def "workers LegacyDefaultSpace-by-id-1" [
   --allow-errors(-e) # Return full response without error handling
   Endpoint: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
   Id: string
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   --MachinePolicyId: string
   Name: string
   --Slug: string
@@ -50188,7 +50187,7 @@ export def "workers get-by-spaceId" [
   --commStyles: list # List of communication styles which if specified, filters the result to only include Workers with matching communication styles.
   --healthStatuses: list # List of health statuses which if specified, filters the result to only include Deployment Targets with matching health statuses.
   --ids: list # List of Worker IDs which if specified, filters the result to only include Workers with matching IDs.
-  --isDisabled: string@bool-completer # A filter to return only disabled/enabled Workers
+  --isDisabled: oneof<nothing, bool> # A filter to return only disabled/enabled Workers
   --name: string # The exact name of a Worker to be matched
   --operatingSystemNames: list # List of operating system names which if specified, filters the result to only include Workers with matching operating systems.
   --partialName: string # A partial or complete name to search on. This will perform a "contains" style match against the supplied name or name-fragment
@@ -50221,10 +50220,10 @@ export def "workers createWorkerBySpace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   Endpoint: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   --MachinePolicyId: string
   Name: string
-  --SkipInitialHealthCheck: string@bool-completer
+  --SkipInitialHealthCheck: oneof<nothing, bool>
   --Slug: string
   SpaceId: string
   WorkerPoolIds: list
@@ -50352,7 +50351,7 @@ export def "workers get-by-spaceId-1" [
   --commStyles: list # List of communication styles which if specified, filters the result to only include Workers with matching communication styles.
   --healthStatuses: list # List of health statuses which if specified, filters the result to only include Workers with matching health statuses.
   --ids: list # List of Worker IDs which if specified, filters the result to only include Workers with matching IDs.
-  --isDisabled: string@bool-completer # A filter to return only disabled/enabled Workers
+  --isDisabled: oneof<nothing, bool> # A filter to return only disabled/enabled Workers
   --name: string # The exact name of a Worker to be matched
   --operatingSystemNames: list # List of operating system names which if specified, filters the result to only include Workers with matching operating systems.
   --partialName: string # A partial or complete name to search on. This will perform a "contains" style match against the supplied name or name-fragment
@@ -50410,7 +50409,7 @@ export def "workers modifyWorkerBySpace" [
   --allow-errors(-e) # Return full response without error handling
   Endpoint: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
   Id: string
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   --MachinePolicyId: string
   Name: string
   --Slug: string
@@ -50490,7 +50489,7 @@ export def "spaces-workers get-by-spaceIdentifier" [
   --commStyles: list # List of communication styles which if specified, filters the result to only include Workers with matching communication styles.
   --healthStatuses: list # List of health statuses which if specified, filters the result to only include Deployment Targets with matching health statuses.
   --ids: list # List of Worker IDs which if specified, filters the result to only include Workers with matching IDs.
-  --isDisabled: string@bool-completer # A filter to return only disabled/enabled Workers
+  --isDisabled: oneof<nothing, bool> # A filter to return only disabled/enabled Workers
   --name: string # The exact name of a Worker to be matched
   --operatingSystemNames: list # List of operating system names which if specified, filters the result to only include Workers with matching operating systems.
   --partialName: string # A partial or complete name to search on. This will perform a "contains" style match against the supplied name or name-fragment
@@ -50523,10 +50522,10 @@ export def "spaces-workers createWorker" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   Endpoint: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   --MachinePolicyId: string
   Name: string
-  --SkipInitialHealthCheck: string@bool-completer
+  --SkipInitialHealthCheck: oneof<nothing, bool>
   --Slug: string
   SpaceId: string
   WorkerPoolIds: list
@@ -50654,7 +50653,7 @@ export def "spaces-workers get-by-spaceIdentifier-1" [
   --commStyles: list # List of communication styles which if specified, filters the result to only include Workers with matching communication styles.
   --healthStatuses: list # List of health statuses which if specified, filters the result to only include Workers with matching health statuses.
   --ids: list # List of Worker IDs which if specified, filters the result to only include Workers with matching IDs.
-  --isDisabled: string@bool-completer # A filter to return only disabled/enabled Workers
+  --isDisabled: oneof<nothing, bool> # A filter to return only disabled/enabled Workers
   --name: string # The exact name of a Worker to be matched
   --operatingSystemNames: list # List of operating system names which if specified, filters the result to only include Workers with matching operating systems.
   --partialName: string # A partial or complete name to search on. This will perform a "contains" style match against the supplied name or name-fragment
@@ -50712,7 +50711,7 @@ export def "spaces-workers modifyWorker" [
   --allow-errors(-e) # Return full response without error handling
   Endpoint: record # shape: {Id?: string, LastModifiedBy?: string, LastModifiedOn?: string, Links?: record}
   Id: string
-  --IsDisabled: string@bool-completer
+  --IsDisabled: oneof<nothing, bool>
   --MachinePolicyId: string
   Name: string
   --Slug: string

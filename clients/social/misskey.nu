@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://misskey.io/api"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -161,7 +160,7 @@ export def "admin-abuse-report-resolver-create create" [
   --reporterPattern: string # nullable
   --reportContentPattern: string # nullable
   expiresAt: string@expiresAt-completer
-  --forward: string@bool-completer
+  --forward: oneof<nothing, bool>
 ]: any -> record<name: string, targetUserPattern: string, reporterPattern: string, reportContentPattern: string, expiresAt: string, forward: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -247,7 +246,7 @@ export def "admin-abuse-report-resolver-update update" [
   --reporterPattern: string # nullable
   --reportContentPattern: string # nullable
   --expiresAt: string@expiresAt-completer
-  --forward: string@bool-completer
+  --forward: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -273,7 +272,7 @@ export def "admin-abuse-report-notification-recipient-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isActive: string@bool-completer
+  --isActive: oneof<nothing, bool>
   name: string
   method: string@method-completer
   --userId: string # format: misskey:id
@@ -382,7 +381,7 @@ export def "admin-abuse-report-notification-recipient-update update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   id: string # format: misskey:id
-  --isActive: string@bool-completer
+  --isActive: oneof<nothing, bool>
   name: string
   method: string@method-completer
   --userId: string # format: misskey:id
@@ -418,7 +417,7 @@ export def "admin-abuse-user-reports abuse-user-reports" [
   --state: string # nullable
   --reporterOrigin: string@reporterOrigin-completer # default: combined
   --targetUserOrigin: string@targetUserOrigin-completer # default: combined
-  --forwarded: string@bool-completer # default: false
+  --forwarded: oneof<nothing, bool> # default: false
   --category: string # nullable
 ]: any -> table<id: string, createdAt: string, comment: string, resolved: bool, forwarded: bool, resolvedAs: string, reporterId: string, targetUserId: string, assigneeId: string, reporter: any, targetUser: any, assignee: record, category: string, moderationNote: string> {
   let input = $in
@@ -474,7 +473,7 @@ export def "admin-accounts-delete delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   userId: string # format: misskey:id
-  --soft: string@bool-completer # Since deletion by an administrator is a moderation action, the default is to soft delete. (default: true)
+  --soft: oneof<nothing, bool> # Since deletion by an administrator is a moderation action, the default is to soft delete. (default: true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -593,7 +592,7 @@ export def "admin-ad-create create" [
   startsAt: int
   imageUrl: string
   dayOfWeek: int
-  --isSensitive: string@bool-completer # default: false
+  --isSensitive: oneof<nothing, bool> # default: false
 ]: any -> record<id: string, expiresAt: string, startsAt: string, place: string, priority: string, ratio: float, url: string, imageUrl: string, imageBlurhash: string, memo: string, dayOfWeek: int, isSensitive: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -648,7 +647,7 @@ export def "admin-ad-list list" [
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
-  --publishing: string@bool-completer # nullable
+  --publishing: oneof<nothing, bool> # nullable
 ]: any -> table<id: string, expiresAt: string, startsAt: string, place: string, priority: string, ratio: float, url: string, imageUrl: string, imageBlurhash: string, memo: string, dayOfWeek: int, isSensitive: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -684,7 +683,7 @@ export def "admin-ad-update update" [
   --expiresAt: int
   --startsAt: int
   --dayOfWeek: int
-  --isSensitive: string@bool-completer
+  --isSensitive: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -715,12 +714,12 @@ export def "admin-announcements-create create" [
   --imageUrl: string # nullable
   --icon: string@icon-completer # default: info
   --display: string@display-completer # default: normal
-  --forExistingUsers: string@bool-completer # default: false
-  --needConfirmationToRead: string@bool-completer # default: false
-  --needEnrollmentTutorialToRead: string@bool-completer # default: false
+  --forExistingUsers: oneof<nothing, bool> # default: false
+  --needConfirmationToRead: oneof<nothing, bool> # default: false
+  --needEnrollmentTutorialToRead: oneof<nothing, bool> # default: false
   --closeDuration: float # default: 0
   --displayOrder: float # default: 0
-  --silence: string@bool-completer # default: false
+  --silence: oneof<nothing, bool> # default: false
   --userId: string # nullable, format: misskey:id
 ]: any -> record<id: string, createdAt: string, updatedAt: string, title: string, text: string, imageUrl: string, icon: string, display: string, forYou: bool, needConfirmationToRead: bool, needEnrollmentTutorialToRead: bool, closeDuration: float, displayOrder: float, silence: bool, isRead: bool> {
   let input = $in
@@ -808,13 +807,13 @@ export def "admin-announcements-update update" [
   --imageUrl: string # nullable
   --icon: string@icon-completer
   --display: string@display-completer
-  --forExistingUsers: string@bool-completer
-  --needConfirmationToRead: string@bool-completer
-  --needEnrollmentTutorialToRead: string@bool-completer
+  --forExistingUsers: oneof<nothing, bool>
+  --needConfirmationToRead: oneof<nothing, bool>
+  --needEnrollmentTutorialToRead: oneof<nothing, bool>
   --closeDuration: float # default: 0
   --displayOrder: float # default: 0
-  --silence: string@bool-completer
-  --isActive: string@bool-completer
+  --silence: oneof<nothing, bool>
+  --isActive: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1140,8 +1139,8 @@ export def "admin-emoji-add add" [
   --category: string # Use `null` to reset the category. (nullable)
   --aliases: list
   --license: string # nullable
-  --isSensitive: string@bool-completer
-  --localOnly: string@bool-completer
+  --isSensitive: oneof<nothing, bool>
+  --localOnly: oneof<nothing, bool>
   --requestedBy: string # nullable
   --memo: string # nullable
   --roleIdsThatCanBeUsedThisEmojiAsReaction: list
@@ -1475,8 +1474,8 @@ export def "admin-emoji-update update" [
   --category: string # Use `null` to reset the category. (nullable)
   --aliases: list
   --license: string # nullable
-  --isSensitive: string@bool-completer
-  --localOnly: string@bool-completer
+  --isSensitive: oneof<nothing, bool>
+  --localOnly: oneof<nothing, bool>
   --requestedBy: string # nullable
   --memo: string # nullable
   --roleIdsThatCanBeUsedThisEmojiAsReaction: list
@@ -1585,7 +1584,7 @@ export def "admin-federation-update-instance update-instance" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   host: string
-  --isSuspended: string@bool-completer
+  --isSuspended: oneof<nothing, bool>
   --moderationNote: string
 ]: any -> any {
   let input = $in
@@ -2169,7 +2168,7 @@ export def "admin-resolve-abuse-user-report resolve-abuse-user-report" [
   --allow-errors(-e) # Return full response without error handling
   reportId: string # format: misskey:id
   --resolvedAs: string@resolvedAs-completer # nullable
-  --forward: string@bool-completer # default: false
+  --forward: oneof<nothing, bool> # default: false
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2230,14 +2229,14 @@ export def "admin-roles-create create" [
   --iconUrl: string # nullable
   target: string@target-completer
   condFormula: record
-  --isPublic: string@bool-completer
-  --isModerator: string@bool-completer
-  --isAdministrator: string@bool-completer
-  --isExplorable: string@bool-completer # default: false
-  --asBadge: string@bool-completer
+  --isPublic: oneof<nothing, bool>
+  --isModerator: oneof<nothing, bool>
+  --isAdministrator: oneof<nothing, bool>
+  --isExplorable: oneof<nothing, bool> # default: false
+  --asBadge: oneof<nothing, bool>
   --badgeBehavior: string # nullable
-  --preserveAssignmentOnMoveAccount: string@bool-completer
-  --canEditMembersByModerator: string@bool-completer
+  --preserveAssignmentOnMoveAccount: oneof<nothing, bool>
+  --canEditMembersByModerator: oneof<nothing, bool>
   displayOrder: float
   policies: record
 ]: any -> record {
@@ -2373,14 +2372,14 @@ export def "admin-roles-update update" [
   --iconUrl: string # nullable
   --target: string@target-completer
   --condFormula: record
-  --isPublic: string@bool-completer
-  --isModerator: string@bool-completer
-  --isAdministrator: string@bool-completer
-  --isExplorable: string@bool-completer
-  --asBadge: string@bool-completer
+  --isPublic: oneof<nothing, bool>
+  --isModerator: oneof<nothing, bool>
+  --isAdministrator: oneof<nothing, bool>
+  --isExplorable: oneof<nothing, bool>
+  --asBadge: oneof<nothing, bool>
   --badgeBehavior: string # nullable
-  --preserveAssignmentOnMoveAccount: string@bool-completer
-  --canEditMembersByModerator: string@bool-completer
+  --preserveAssignmentOnMoveAccount: oneof<nothing, bool>
+  --canEditMembersByModerator: oneof<nothing, bool>
   --displayOrder: float
   --policies: record
 ]: any -> any {
@@ -2647,10 +2646,10 @@ export def "admin-sso-create create" [
   acsUrl: string
   signatureAlgorithm: string
   --cipherAlgorithm: string # nullable
-  --wantAuthnRequestsSigned: string@bool-completer # default: false
-  --wantAssertionsSigned: string@bool-completer # default: true
-  --wantEmailAddressNormalized: string@bool-completer # default: true
-  --useCertificate: string@bool-completer # default: true
+  --wantAuthnRequestsSigned: oneof<nothing, bool> # default: false
+  --wantAssertionsSigned: oneof<nothing, bool> # default: true
+  --wantEmailAddressNormalized: oneof<nothing, bool> # default: true
+  --useCertificate: oneof<nothing, bool> # default: true
   --secret: string # nullable
 ]: any -> record<id: string, createdAt: string, name: string, type: string, issuer: string, audience: list<string>, binding: string, acsUrl: string, publicKey: string, signatureAlgorithm: string, cipherAlgorithm: string, wantAuthnRequestsSigned: bool, wantAssertionsSigned: bool, wantEmailAddressNormalized: bool> {
   let input = $in
@@ -2738,10 +2737,10 @@ export def "admin-sso-update update" [
   --acsUrl: string
   --signatureAlgorithm: string
   --cipherAlgorithm: string # nullable
-  --wantAuthnRequestsSigned: string@bool-completer
-  --wantAssertionsSigned: string@bool-completer
-  --wantEmailAddressNormalized: string@bool-completer
-  --regenerateCertificate: string@bool-completer # nullable
+  --wantAuthnRequestsSigned: oneof<nothing, bool>
+  --wantAssertionsSigned: oneof<nothing, bool>
+  --wantEmailAddressNormalized: oneof<nothing, bool>
+  --regenerateCertificate: oneof<nothing, bool> # nullable
   --secret: string # nullable
 ]: any -> any {
   let input = $in
@@ -2794,7 +2793,7 @@ export def "admin-system-webhook-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isActive: string@bool-completer
+  --isActive: oneof<nothing, bool>
   name: string
   on: list
   --body-url: string
@@ -2850,7 +2849,7 @@ export def "admin-system-webhook-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isActive: string@bool-completer
+  --isActive: oneof<nothing, bool>
   --on: list
 ]: any -> table<id: string, isActive: bool, updatedAt: string, latestSentAt: string, latestStatus: float, name: string, on: list<string>, url: string, secret: string> {
   let input = $in
@@ -2933,7 +2932,7 @@ export def "admin-system-webhook-update update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   id: string # format: misskey:id
-  --isActive: string@bool-completer
+  --isActive: oneof<nothing, bool>
   name: string
   on: list
   --body-url: string
@@ -3095,7 +3094,7 @@ export def "admin-update-meta update-meta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --disableRegistration: string@bool-completer # nullable
+  --disableRegistration: oneof<nothing, bool> # nullable
   --pinnedUsers: list # nullable
   --hiddenTags: list # nullable
   --blockedHosts: list # nullable
@@ -3118,41 +3117,41 @@ export def "admin-update-meta update-meta" [
   --description: string # nullable
   --defaultLightTheme: string # nullable
   --defaultDarkTheme: string # nullable
-  --cacheRemoteFiles: string@bool-completer
-  --cacheRemoteSensitiveFiles: string@bool-completer
-  --emailRequiredForSignup: string@bool-completer
-  --enableHcaptcha: string@bool-completer
+  --cacheRemoteFiles: oneof<nothing, bool>
+  --cacheRemoteSensitiveFiles: oneof<nothing, bool>
+  --emailRequiredForSignup: oneof<nothing, bool>
+  --enableHcaptcha: oneof<nothing, bool>
   --hcaptchaSiteKey: string # nullable
   --hcaptchaSecretKey: string # nullable
-  --enableMcaptcha: string@bool-completer
+  --enableMcaptcha: oneof<nothing, bool>
   --mcaptchaSiteKey: string # nullable
   --mcaptchaInstanceUrl: string # nullable
   --mcaptchaSecretKey: string # nullable
-  --enableRecaptcha: string@bool-completer
+  --enableRecaptcha: oneof<nothing, bool>
   --recaptchaSiteKey: string # nullable
   --recaptchaSecretKey: string # nullable
-  --enableTurnstile: string@bool-completer
+  --enableTurnstile: oneof<nothing, bool>
   --turnstileSiteKey: string # nullable
   --turnstileSecretKey: string # nullable
   --googleAnalyticsId: string # nullable
   --sensitiveMediaDetection: string@sensitiveMediaDetection-completer
   --sensitiveMediaDetectionSensitivity: string@sensitiveMediaDetectionSensitivity-completer
-  --setSensitiveFlagAutomatically: string@bool-completer
-  --enableSensitiveMediaDetectionForVideos: string@bool-completer
+  --setSensitiveFlagAutomatically: oneof<nothing, bool>
+  --enableSensitiveMediaDetectionForVideos: oneof<nothing, bool>
   --maintainerName: string # nullable
   --maintainerEmail: string # nullable
   --langs: list
   --dimensions: int
   --deeplAuthKey: string # nullable
-  --deeplIsPro: string@bool-completer
-  --enableEmail: string@bool-completer
+  --deeplIsPro: oneof<nothing, bool>
+  --enableEmail: oneof<nothing, bool>
   --email: string # nullable
-  --smtpSecure: string@bool-completer
+  --smtpSecure: oneof<nothing, bool>
   --smtpHost: string # nullable
   --smtpPort: int # nullable
   --smtpUser: string # nullable
   --smtpPass: string # nullable
-  --enableServiceWorker: string@bool-completer
+  --enableServiceWorker: oneof<nothing, bool>
   --swPublicKey: string # nullable
   --swPrivateKey: string # nullable
   --tosUrl: string # nullable
@@ -3160,7 +3159,7 @@ export def "admin-update-meta update-meta" [
   --feedbackUrl: string # nullable
   --impressumUrl: string # nullable
   --privacyPolicyUrl: string # nullable
-  --useObjectStorage: string@bool-completer
+  --useObjectStorage: oneof<nothing, bool>
   --objectStorageBaseUrl: string # nullable
   --objectStorageBucket: string # nullable
   --objectStoragePrefix: string # nullable
@@ -3169,27 +3168,27 @@ export def "admin-update-meta update-meta" [
   --objectStoragePort: int # nullable
   --objectStorageAccessKey: string # nullable
   --objectStorageSecretKey: string # nullable
-  --objectStorageUseSSL: string@bool-completer
-  --objectStorageUseProxy: string@bool-completer
-  --objectStorageSetPublicRead: string@bool-completer
-  --objectStorageS3ForcePathStyle: string@bool-completer
-  --enableIpLogging: string@bool-completer
-  --enableActiveEmailValidation: string@bool-completer
-  --enableVerifymailApi: string@bool-completer
+  --objectStorageUseSSL: oneof<nothing, bool>
+  --objectStorageUseProxy: oneof<nothing, bool>
+  --objectStorageSetPublicRead: oneof<nothing, bool>
+  --objectStorageS3ForcePathStyle: oneof<nothing, bool>
+  --enableIpLogging: oneof<nothing, bool>
+  --enableActiveEmailValidation: oneof<nothing, bool>
+  --enableVerifymailApi: oneof<nothing, bool>
   --verifymailAuthKey: string # nullable
-  --enableTruemailApi: string@bool-completer
+  --enableTruemailApi: oneof<nothing, bool>
   --truemailInstance: string # nullable
   --truemailAuthKey: string # nullable
-  --enableChartsForRemoteUser: string@bool-completer
-  --enableChartsForFederatedInstances: string@bool-completer
-  --enableServerMachineStats: string@bool-completer
-  --enableIdenticonGeneration: string@bool-completer
+  --enableChartsForRemoteUser: oneof<nothing, bool>
+  --enableChartsForFederatedInstances: oneof<nothing, bool>
+  --enableServerMachineStats: oneof<nothing, bool>
+  --enableIdenticonGeneration: oneof<nothing, bool>
   --serverRules: list
   --bannedEmailDomains: list
   --preservedUsernames: list
   --manifestJsonOverride: string
-  --enableFanoutTimeline: string@bool-completer
-  --enableFanoutTimelineDbFallback: string@bool-completer
+  --enableFanoutTimeline: oneof<nothing, bool>
+  --enableFanoutTimelineDbFallback: oneof<nothing, bool>
   --perLocalUserUserTimelineCacheMax: int
   --perRemoteUserUserTimelineCacheMax: int
   --perUserHomeTimelineCacheMax: int
@@ -3201,10 +3200,10 @@ export def "admin-update-meta update-meta" [
   --urlPreviewDenyList: list # nullable
   --featuredGameChannels: list # nullable
   --summalyProxy: string # [Deprecated] Use "urlPreviewSummaryProxyUrl" instead. (nullable)
-  --urlPreviewEnabled: string@bool-completer
+  --urlPreviewEnabled: oneof<nothing, bool>
   --urlPreviewTimeout: int
   --urlPreviewMaximumContentLength: int
-  --urlPreviewRequireContentLength: string@bool-completer
+  --urlPreviewRequireContentLength: oneof<nothing, bool>
   --urlPreviewUserAgent: string # nullable
   --urlPreviewSummaryProxyUrl: string # nullable
   --prohibitedWordsForNameOfUser: list # nullable
@@ -3345,7 +3344,7 @@ export def "announcements announcements" [
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
   --offset: int # default: 0
-  --isActive: string@bool-completer # default: true
+  --isActive: oneof<nothing, bool> # default: true
 ]: any -> table<id: string, createdAt: string, updatedAt: string, text: string, title: string, imageUrl: string, icon: string, display: string, needConfirmationToRead: bool, needEnrollmentTutorialToRead: bool, forYou: bool, closeDuration: float, displayOrder: float, silence: bool, isRead: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3403,12 +3402,12 @@ export def "antennas-create create" [
   keywords: list
   excludeKeywords: list
   users: list
-  --caseSensitive: string@bool-completer
-  --localOnly: string@bool-completer
-  --excludeBots: string@bool-completer
-  --withReplies: string@bool-completer
-  --withFile: string@bool-completer
-  --excludeNotesInSensitiveChannel: string@bool-completer
+  --caseSensitive: oneof<nothing, bool>
+  --localOnly: oneof<nothing, bool>
+  --excludeBots: oneof<nothing, bool>
+  --withReplies: oneof<nothing, bool>
+  --withFile: oneof<nothing, bool>
+  --excludeNotesInSensitiveChannel: oneof<nothing, bool>
 ]: any -> record<id: string, createdAt: string, name: string, keywords: list<list<string>>, excludeKeywords: list<list<string>>, src: string, userListId: string, users: list<string>, caseSensitive: bool, localOnly: bool, excludeBots: bool, withReplies: bool, withFile: bool, isActive: bool, hasUnreadNote: bool, notify: bool, excludeNotesInSensitiveChannel: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3546,12 +3545,12 @@ export def "antennas-update update" [
   --keywords: list
   --excludeKeywords: list
   --users: list
-  --caseSensitive: string@bool-completer
-  --localOnly: string@bool-completer
-  --excludeBots: string@bool-completer
-  --withReplies: string@bool-completer
-  --withFile: string@bool-completer
-  --excludeNotesInSensitiveChannel: string@bool-completer
+  --caseSensitive: oneof<nothing, bool>
+  --localOnly: oneof<nothing, bool>
+  --excludeBots: oneof<nothing, bool>
+  --withReplies: oneof<nothing, bool>
+  --withFile: oneof<nothing, bool>
+  --excludeNotesInSensitiveChannel: oneof<nothing, bool>
 ]: any -> record<id: string, createdAt: string, name: string, keywords: list<list<string>>, excludeKeywords: list<list<string>>, src: string, userListId: string, users: list<string>, caseSensitive: bool, localOnly: bool, excludeBots: bool, withReplies: bool, withFile: bool, isActive: bool, hasUnreadNote: bool, notify: bool, excludeNotesInSensitiveChannel: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3955,8 +3954,8 @@ export def "channels-create create" [
   --description: string # nullable
   --bannerId: string # nullable, format: misskey:id
   --color: string
-  --isSensitive: string@bool-completer # nullable
-  --allowRenoteToExternal: string@bool-completer # nullable
+  --isSensitive: oneof<nothing, bool> # nullable
+  --allowRenoteToExternal: oneof<nothing, bool> # nullable
 ]: any -> record<id: string, createdAt: string, lastNotedAt: string, name: string, description: string, userId: string, bannerUrl: string, pinnedNoteIds: list<string>, color: string, isArchived: bool, usersCount: float, notesCount: float, isSensitive: bool, allowRenoteToExternal: bool, isFollowing: bool, isFavorited: bool, pinnedNotes: table<id: string, createdAt: string, deletedAt: string, text: string, cw: string, userId: string, user: record, replyId: string, renoteId: string, reply: record, renote: record, isHidden: bool, visibility: string, mentions: list, visibleUserIds: list, fileIds: list, files: list, tags: list, poll: record, emojis: record, channelId: string, channel: record, localOnly: bool, dimension: int, reactionAcceptance: string, reactionEmojis: record, reactions: record, reactionCount: float, renoteCount: float, repliesCount: float, uri: string, url: string, reactionAndUserPairCache: list, clippedCount: float, myReaction: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4218,7 +4217,7 @@ export def "channels-timeline timeline" [
   --untilId: string # format: misskey:id
   --sinceDate: int
   --untilDate: int
-  --allowPartial: string@bool-completer # default: false
+  --allowPartial: oneof<nothing, bool> # default: false
   --dimension: int # nullable
 ]: any -> table<id: string, createdAt: string, deletedAt: string, text: string, cw: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record, emojis: record, onlineStatus: string, badgeRoles: list>, replyId: string, renoteId: string, reply: record, renote: record, isHidden: bool, visibility: string, mentions: list<string>, visibleUserIds: list<string>, fileIds: list<string>, files: list<record>, tags: list<string>, poll: record<expiresAt: string, multiple: bool, choices: list>, emojis: record, channelId: string, channel: record<id: string, name: string, color: string, isSensitive: bool, allowRenoteToExternal: bool, userId: string>, localOnly: bool, dimension: int, reactionAcceptance: string, reactionEmojis: record, reactions: record, reactionCount: float, renoteCount: float, repliesCount: float, uri: string, url: string, reactionAndUserPairCache: list<string>, clippedCount: float, myReaction: string> {
   let input = $in
@@ -4301,11 +4300,11 @@ export def "channels-update update" [
   --name: string
   --description: string # nullable
   --bannerId: string # nullable, format: misskey:id
-  --isArchived: string@bool-completer # nullable
+  --isArchived: oneof<nothing, bool> # nullable
   --pinnedNoteIds: list
   --color: string
-  --isSensitive: string@bool-completer # nullable
-  --allowRenoteToExternal: string@bool-completer # nullable
+  --isSensitive: oneof<nothing, bool> # nullable
+  --allowRenoteToExternal: oneof<nothing, bool> # nullable
 ]: any -> record<id: string, createdAt: string, lastNotedAt: string, name: string, description: string, userId: string, bannerUrl: string, pinnedNoteIds: list<string>, color: string, isArchived: bool, usersCount: float, notesCount: float, isSensitive: bool, allowRenoteToExternal: bool, isFollowing: bool, isFavorited: bool, pinnedNotes: table<id: string, createdAt: string, deletedAt: string, text: string, cw: string, userId: string, user: record, replyId: string, renoteId: string, reply: record, renote: record, isHidden: bool, visibility: string, mentions: list, visibleUserIds: list, fileIds: list, files: list, tags: list, poll: record, emojis: record, channelId: string, channel: record, localOnly: bool, dimension: int, reactionAcceptance: string, reactionEmojis: record, reactions: record, reactionCount: float, renoteCount: float, repliesCount: float, uri: string, url: string, reactionAndUserPairCache: list, clippedCount: float, myReaction: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5043,7 +5042,7 @@ export def "clips-create create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --isPublic: string@bool-completer # default: false
+  --isPublic: oneof<nothing, bool> # default: false
   --description: string # nullable
 ]: any -> record<id: string, createdAt: string, lastClippedAt: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list<record>, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record<name: string, softwareName: string, softwareVersion: string, iconUrl: string, faviconUrl: string, themeColor: string>, emojis: record, onlineStatus: string, badgeRoles: list<record>>, name: string, description: string, isPublic: bool, favoritedCount: float, isFavorited: bool, notesCount: int> {
   let input = $in
@@ -5276,7 +5275,7 @@ export def "clips-update update" [
   --allow-errors(-e) # Return full response without error handling
   clipId: string # format: misskey:id
   --name: string
-  --isPublic: string@bool-completer
+  --isPublic: oneof<nothing, bool>
   --description: string # nullable
 ]: any -> record<id: string, createdAt: string, lastClippedAt: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list<record>, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record<name: string, softwareName: string, softwareVersion: string, iconUrl: string, faviconUrl: string, themeColor: string>, emojis: record, onlineStatus: string, badgeRoles: list<record>>, name: string, description: string, isPublic: bool, favoritedCount: float, isFavorited: bool, notesCount: int> {
   let input = $in
@@ -5414,8 +5413,8 @@ export def "drive-files-create create" [
   --folderId: string # nullable, format: misskey:id
   --name: string # nullable
   --comment: string # nullable
-  --isSensitive: string@bool-completer # default: false
-  --force: string@bool-completer # default: false
+  --isSensitive: oneof<nothing, bool> # default: false
+  --force: oneof<nothing, bool> # default: false
   file: string # The file contents. (format: binary)
 ]: any -> record<id: string, createdAt: string, name: string, type: string, md5: string, size: float, isSensitive: bool, isSensitiveByModerator: bool, blurhash: string, properties: record<width: float, height: float, orientation: float, avgColor: string>, url: string, thumbnailUrl: string, comment: string, folderId: string, folder: record, userId: string, user: record> {
   let input = $in
@@ -5551,7 +5550,7 @@ export def "drive-files-update update" [
   fileId: string # format: misskey:id
   --folderId: string # nullable, format: misskey:id
   --name: string
-  --isSensitive: string@bool-completer
+  --isSensitive: oneof<nothing, bool>
   --comment: string # nullable
 ]: any -> record<id: string, createdAt: string, name: string, type: string, md5: string, size: float, isSensitive: bool, isSensitiveByModerator: bool, blurhash: string, properties: record<width: float, height: float, orientation: float, avgColor: string>, url: string, thumbnailUrl: string, comment: string, folderId: string, folder: record, userId: string, user: record> {
   let input = $in
@@ -5580,10 +5579,10 @@ export def "drive-files-upload-from-url upload-from-url" [
   --allow-errors(-e) # Return full response without error handling
   --body-url: string
   --folderId: string # nullable, format: misskey:id
-  --isSensitive: string@bool-completer # default: false
+  --isSensitive: oneof<nothing, bool> # default: false
   --comment: string # nullable
   --marker: string # nullable
-  --force: string@bool-completer # default: false
+  --force: oneof<nothing, bool> # default: false
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6052,13 +6051,13 @@ export def "federation-instances instances" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --host: string # Omit or use `null` to not filter by host. (nullable)
-  --blocked: string@bool-completer # nullable
-  --notResponding: string@bool-completer # nullable
-  --suspended: string@bool-completer # nullable
-  --silenced: string@bool-completer # nullable
-  --federating: string@bool-completer # nullable
-  --subscribing: string@bool-completer # nullable
-  --publishing: string@bool-completer # nullable
+  --blocked: oneof<nothing, bool> # nullable
+  --notResponding: oneof<nothing, bool> # nullable
+  --suspended: oneof<nothing, bool> # nullable
+  --silenced: oneof<nothing, bool> # nullable
+  --federating: oneof<nothing, bool> # nullable
+  --subscribing: oneof<nothing, bool> # nullable
+  --publishing: oneof<nothing, bool> # nullable
   --limit: int # default: 30
   --offset: int # default: 0
   --body-sort: string@sort-completer-4 # nullable
@@ -6088,13 +6087,13 @@ export def "federation-instances instances-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --host: string # Omit or use `null` to not filter by host. (nullable)
-  --blocked: string@bool-completer # nullable
-  --notResponding: string@bool-completer # nullable
-  --suspended: string@bool-completer # nullable
-  --silenced: string@bool-completer # nullable
-  --federating: string@bool-completer # nullable
-  --subscribing: string@bool-completer # nullable
-  --publishing: string@bool-completer # nullable
+  --blocked: oneof<nothing, bool> # nullable
+  --notResponding: oneof<nothing, bool> # nullable
+  --suspended: oneof<nothing, bool> # nullable
+  --silenced: oneof<nothing, bool> # nullable
+  --federating: oneof<nothing, bool> # nullable
+  --subscribing: oneof<nothing, bool> # nullable
+  --publishing: oneof<nothing, bool> # nullable
   --limit: int # default: 30
   --offset: int # default: 0
   --body-sort: string@sort-completer-4 # nullable
@@ -6584,7 +6583,7 @@ export def "following-create create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   userId: string # format: misskey:id
-  --withReplies: string@bool-completer
+  --withReplies: oneof<nothing, bool>
 ]: any -> record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: table<id: string, angle: float, flipH: bool, url: string, offsetX: float, offsetY: float>, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record<name: string, softwareName: string, softwareVersion: string, iconUrl: string, faviconUrl: string, themeColor: string>, emojis: record, onlineStatus: string, badgeRoles: table<name: string, iconUrl: string, displayOrder: float, behavior: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6798,7 +6797,7 @@ export def "following-update update" [
   --allow-errors(-e) # Return full response without error handling
   userId: string # format: misskey:id
   --notify: string@notify-completer
-  --withReplies: string@bool-completer
+  --withReplies: oneof<nothing, bool>
 ]: any -> record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: table<id: string, angle: float, flipH: bool, url: string, offsetX: float, offsetY: float>, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record<name: string, softwareName: string, softwareVersion: string, iconUrl: string, faviconUrl: string, themeColor: string>, emojis: record, onlineStatus: string, badgeRoles: table<name: string, iconUrl: string, displayOrder: float, behavior: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6825,7 +6824,7 @@ export def "following-update-all update-all" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --notify: string@notify-completer
-  --withReplies: string@bool-completer
+  --withReplies: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6931,7 +6930,7 @@ export def "gallery-posts-create create" [
   title: string
   --description: string # nullable
   fileIds: list
-  --isSensitive: string@bool-completer # default: false
+  --isSensitive: oneof<nothing, bool> # default: false
 ]: any -> record<id: string, createdAt: string, updatedAt: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list<record>, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record<name: string, softwareName: string, softwareVersion: string, iconUrl: string, faviconUrl: string, themeColor: string>, emojis: record, onlineStatus: string, badgeRoles: list<record>>, title: string, description: string, fileIds: list<string>, files: table<id: string, createdAt: string, name: string, type: string, md5: string, size: float, isSensitive: bool, isSensitiveByModerator: bool, blurhash: string, properties: record, url: string, thumbnailUrl: string, comment: string, folderId: string, folder: record, userId: string, user: record>, tags: list<string>, isSensitive: bool, likedCount: float, isLiked: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7065,7 +7064,7 @@ export def "gallery-posts-update update" [
   --title: string
   --description: string # nullable
   --fileIds: list
-  --isSensitive: string@bool-completer # default: false
+  --isSensitive: oneof<nothing, bool> # default: false
 ]: any -> record<id: string, createdAt: string, updatedAt: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list<record>, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record<name: string, softwareName: string, softwareVersion: string, iconUrl: string, faviconUrl: string, themeColor: string>, emojis: record, onlineStatus: string, badgeRoles: list<record>>, title: string, description: string, fileIds: list<string>, files: table<id: string, createdAt: string, name: string, type: string, md5: string, size: float, isSensitive: bool, isSensitiveByModerator: bool, blurhash: string, properties: record, url: string, thumbnailUrl: string, comment: string, folderId: string, folder: record, userId: string, user: record>, tags: list<string>, isSensitive: bool, likedCount: float, isLiked: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7158,9 +7157,9 @@ export def "hashtags-list list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --limit: int # default: 10
-  --attachedToUserOnly: string@bool-completer # default: false
-  --attachedToLocalUserOnly: string@bool-completer # default: false
-  --attachedToRemoteUserOnly: string@bool-completer # default: false
+  --attachedToUserOnly: oneof<nothing, bool> # default: false
+  --attachedToLocalUserOnly: oneof<nothing, bool> # default: false
+  --attachedToRemoteUserOnly: oneof<nothing, bool> # default: false
   --body-sort: string@sort-completer-5
 ]: any -> table<tag: string, mentionedUsersCount: float, mentionedLocalUsersCount: float, mentionedRemoteUsersCount: float, attachedUsersCount: float, attachedLocalUsersCount: float, attachedRemoteUsersCount: float> {
   let input = $in
@@ -7394,7 +7393,7 @@ export def "i-2fa-password-less password-less" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --value: string@bool-completer
+  --value: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7779,8 +7778,8 @@ export def "i-export-following export-following" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --excludeMuting: string@bool-completer # default: false
-  --excludeInactive: string@bool-completer # default: false
+  --excludeMuting: oneof<nothing, bool> # default: false
+  --excludeInactive: oneof<nothing, bool> # default: false
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8009,7 +8008,7 @@ export def "i-import-following import-following" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   fileId: string # format: misskey:id
-  --withReplies: string@bool-completer
+  --withReplies: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8116,7 +8115,7 @@ export def "i-notifications notifications" [
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
-  --markAsRead: string@bool-completer # default: true
+  --markAsRead: oneof<nothing, bool> # default: true
   --includeTypes: list
   --excludeTypes: list
 ]: any -> list<record> {
@@ -8147,7 +8146,7 @@ export def "i-notifications-grouped notifications-grouped" [
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
-  --markAsRead: string@bool-completer # default: true
+  --markAsRead: oneof<nothing, bool> # default: true
   --includeTypes: list
   --excludeTypes: list
 ]: any -> list<record> {
@@ -8646,29 +8645,29 @@ export def "i-update update" [
   --lang: string@lang-completer # nullable
   --postingLang: string@postingLang-completer # nullable
   --viewingLangs: list
-  --showMediaInAllLanguages: string@bool-completer
-  --showHashtagsInAllLanguages: string@bool-completer
+  --showMediaInAllLanguages: oneof<nothing, bool>
+  --showHashtagsInAllLanguages: oneof<nothing, bool>
   --avatarId: string # nullable, format: misskey:id
   --avatarDecorations: list # item shape: {id: string, angle?: float, flipH?: bool, offsetX?: float, offsetY?: float}
   --bannerId: string # nullable, format: misskey:id
   --body-fields: list # item shape: {name: string, value: string}
-  --isLocked: string@bool-completer
-  --isExplorable: string@bool-completer
-  --hideOnlineStatus: string@bool-completer
-  --publicReactions: string@bool-completer
-  --carefulBot: string@bool-completer
-  --autoAcceptFollowed: string@bool-completer
-  --noCrawle: string@bool-completer
-  --preventAiLearning: string@bool-completer
-  --requireSigninToViewContents: string@bool-completer
+  --isLocked: oneof<nothing, bool>
+  --isExplorable: oneof<nothing, bool>
+  --hideOnlineStatus: oneof<nothing, bool>
+  --publicReactions: oneof<nothing, bool>
+  --carefulBot: oneof<nothing, bool>
+  --autoAcceptFollowed: oneof<nothing, bool>
+  --noCrawle: oneof<nothing, bool>
+  --preventAiLearning: oneof<nothing, bool>
+  --requireSigninToViewContents: oneof<nothing, bool>
   --makeNotesFollowersOnlyBefore: int # nullable
   --makeNotesHiddenBefore: int # nullable
-  --isBot: string@bool-completer
-  --isCat: string@bool-completer
-  --injectFeaturedNote: string@bool-completer
-  --receiveAnnouncementEmail: string@bool-completer
-  --alwaysMarkNsfw: string@bool-completer
-  --autoSensitive: string@bool-completer
+  --isBot: oneof<nothing, bool>
+  --isCat: oneof<nothing, bool>
+  --injectFeaturedNote: oneof<nothing, bool>
+  --receiveAnnouncementEmail: oneof<nothing, bool>
+  --alwaysMarkNsfw: oneof<nothing, bool>
+  --autoSensitive: oneof<nothing, bool>
   --followingVisibility: string@followingVisibility-completer
   --followersVisibility: string@followersVisibility-completer
   --chatScope: string@chatScope-completer
@@ -8869,7 +8868,7 @@ export def "i-webhooks-update update" [
   --body-url: string
   --secret: string # nullable
   --on: list
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8993,7 +8992,7 @@ export def "meta meta" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --detail: string@bool-completer # default: true
+  --detail: oneof<nothing, bool> # default: true
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9019,7 +9018,7 @@ export def "meta meta-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --detail: string@bool-completer # default: true
+  --detail: oneof<nothing, bool> # default: true
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9183,11 +9182,11 @@ export def "notes notes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --local: string@bool-completer # default: false
-  --reply: string@bool-completer
-  --renote: string@bool-completer
-  --withFiles: string@bool-completer
-  --poll: string@bool-completer
+  --local: oneof<nothing, bool> # default: false
+  --reply: oneof<nothing, bool>
+  --renote: oneof<nothing, bool>
+  --withFiles: oneof<nothing, bool>
+  --poll: oneof<nothing, bool>
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -9303,12 +9302,12 @@ export def "notes-create create" [
   --visibility: string@visibility-completer-1 # default: public
   --visibleUserIds: list
   --cw: string # nullable
-  --localOnly: string@bool-completer # default: false
+  --localOnly: oneof<nothing, bool> # default: false
   --dimension: int # nullable
   --reactionAcceptance: string@reactionAcceptance-completer # nullable
-  --noExtractMentions: string@bool-completer # default: false
-  --noExtractHashtags: string@bool-completer # default: false
-  --noExtractEmojis: string@bool-completer # default: false
+  --noExtractMentions: oneof<nothing, bool> # default: false
+  --noExtractHashtags: oneof<nothing, bool> # default: false
+  --noExtractEmojis: oneof<nothing, bool> # default: false
   --replyId: string # nullable, format: misskey:id
   --renoteId: string # nullable, format: misskey:id
   --channelId: string # nullable, format: misskey:id
@@ -9318,7 +9317,7 @@ export def "notes-create create" [
   --mediaIds: list
   --poll: record # nullable — shape: {choices: list, multiple?: bool, expiresAt?: int, expiredAfter?: int}
   --scheduledAt: int # nullable
-  --noCreatedNote: string@bool-completer # default: false
+  --noCreatedNote: oneof<nothing, bool> # default: false
 ]: any -> record<createdNote: record<id: string, createdAt: string, deletedAt: string, text: string, cw: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record, emojis: record, onlineStatus: string, badgeRoles: list>, replyId: string, renoteId: string, reply: record, renote: record, isHidden: bool, visibility: string, mentions: list<string>, visibleUserIds: list<string>, fileIds: list<string>, files: list<record>, tags: list<string>, poll: record<expiresAt: string, multiple: bool, choices: list>, emojis: record, channelId: string, channel: record<id: string, name: string, color: string, isSensitive: bool, allowRenoteToExternal: bool, userId: string>, localOnly: bool, dimension: int, reactionAcceptance: string, reactionEmojis: record, reactions: record, reactionCount: float, renoteCount: float, repliesCount: float, uri: string, url: string, reactionAndUserPairCache: list<string>, clippedCount: float, myReaction: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9478,8 +9477,8 @@ export def "notes-global-timeline global-timeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --withFiles: string@bool-completer # default: false
-  --withRenotes: string@bool-completer # default: true
+  --withFiles: oneof<nothing, bool> # default: false
+  --withRenotes: oneof<nothing, bool> # default: true
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -9516,13 +9515,13 @@ export def "notes-hybrid-timeline hybrid-timeline" [
   --untilId: string # format: misskey:id
   --sinceDate: int
   --untilDate: int
-  --allowPartial: string@bool-completer # default: false
-  --includeMyRenotes: string@bool-completer # default: true
-  --includeRenotedMyNotes: string@bool-completer # default: true
-  --includeLocalRenotes: string@bool-completer # default: true
-  --withFiles: string@bool-completer # default: false
-  --withRenotes: string@bool-completer # default: true
-  --withReplies: string@bool-completer # default: false
+  --allowPartial: oneof<nothing, bool> # default: false
+  --includeMyRenotes: oneof<nothing, bool> # default: true
+  --includeRenotedMyNotes: oneof<nothing, bool> # default: true
+  --includeLocalRenotes: oneof<nothing, bool> # default: true
+  --withFiles: oneof<nothing, bool> # default: false
+  --withRenotes: oneof<nothing, bool> # default: true
+  --withReplies: oneof<nothing, bool> # default: false
   --dimension: int # nullable
 ]: any -> table<id: string, createdAt: string, deletedAt: string, text: string, cw: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record, emojis: record, onlineStatus: string, badgeRoles: list>, replyId: string, renoteId: string, reply: record, renote: record, isHidden: bool, visibility: string, mentions: list<string>, visibleUserIds: list<string>, fileIds: list<string>, files: list<record>, tags: list<string>, poll: record<expiresAt: string, multiple: bool, choices: list>, emojis: record, channelId: string, channel: record<id: string, name: string, color: string, isSensitive: bool, allowRenoteToExternal: bool, userId: string>, localOnly: bool, dimension: int, reactionAcceptance: string, reactionEmojis: record, reactions: record, reactionCount: float, renoteCount: float, repliesCount: float, uri: string, url: string, reactionAndUserPairCache: list<string>, clippedCount: float, myReaction: string> {
   let input = $in
@@ -9549,13 +9548,13 @@ export def "notes-local-timeline local-timeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --withFiles: string@bool-completer # default: false
-  --withRenotes: string@bool-completer # default: true
-  --withReplies: string@bool-completer # default: false
+  --withFiles: oneof<nothing, bool> # default: false
+  --withRenotes: oneof<nothing, bool> # default: true
+  --withReplies: oneof<nothing, bool> # default: false
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
-  --allowPartial: string@bool-completer # default: false
+  --allowPartial: oneof<nothing, bool> # default: false
   --sinceDate: int
   --untilDate: int
   --dimension: int # nullable
@@ -9584,7 +9583,7 @@ export def "notes-mentions mentions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --following: string@bool-completer # default: false
+  --following: oneof<nothing, bool> # default: false
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -9616,7 +9615,7 @@ export def "notes-polls-recommendation recommendation" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # default: 10
   --offset: int # default: 0
-  --excludeChannels: string@bool-completer # default: false
+  --excludeChannels: oneof<nothing, bool> # default: false
 ]: any -> table<id: string, createdAt: string, deletedAt: string, text: string, cw: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record, emojis: record, onlineStatus: string, badgeRoles: list>, replyId: string, renoteId: string, reply: record, renote: record, isHidden: bool, visibility: string, mentions: list<string>, visibleUserIds: list<string>, fileIds: list<string>, files: list<record>, tags: list<string>, poll: record<expiresAt: string, multiple: bool, choices: list>, emojis: record, channelId: string, channel: record<id: string, name: string, color: string, isSensitive: bool, allowRenoteToExternal: bool, userId: string>, localOnly: bool, dimension: int, reactionAcceptance: string, reactionEmojis: record, reactions: record, reactionCount: float, renoteCount: float, repliesCount: float, uri: string, url: string, reactionAndUserPairCache: list<string>, clippedCount: float, myReaction: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9926,11 +9925,11 @@ export def "notes-search-by-tag search-by-tag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --local: string@bool-completer # nullable
-  --reply: string@bool-completer # nullable
-  --renote: string@bool-completer # nullable
-  --withFiles: string@bool-completer # Only show notes that have attached files. (default: false)
-  --poll: string@bool-completer # nullable
+  --local: oneof<nothing, bool> # nullable
+  --reply: oneof<nothing, bool> # nullable
+  --renote: oneof<nothing, bool> # nullable
+  --withFiles: oneof<nothing, bool> # Only show notes that have attached files. (default: false)
+  --poll: oneof<nothing, bool> # nullable
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
   --limit: int # default: 10
@@ -10070,12 +10069,12 @@ export def "notes-timeline timeline" [
   --untilId: string # format: misskey:id
   --sinceDate: int
   --untilDate: int
-  --allowPartial: string@bool-completer # default: false
-  --includeMyRenotes: string@bool-completer # default: true
-  --includeRenotedMyNotes: string@bool-completer # default: true
-  --includeLocalRenotes: string@bool-completer # default: true
-  --withFiles: string@bool-completer # default: false
-  --withRenotes: string@bool-completer # default: true
+  --allowPartial: oneof<nothing, bool> # default: false
+  --includeMyRenotes: oneof<nothing, bool> # default: true
+  --includeRenotedMyNotes: oneof<nothing, bool> # default: true
+  --includeLocalRenotes: oneof<nothing, bool> # default: true
+  --withFiles: oneof<nothing, bool> # default: false
+  --withRenotes: oneof<nothing, bool> # default: true
   --dimension: int # nullable
 ]: any -> table<id: string, createdAt: string, deletedAt: string, text: string, cw: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record, emojis: record, onlineStatus: string, badgeRoles: list>, replyId: string, renoteId: string, reply: record, renote: record, isHidden: bool, visibility: string, mentions: list<string>, visibleUserIds: list<string>, fileIds: list<string>, files: list<record>, tags: list<string>, poll: record<expiresAt: string, multiple: bool, choices: list>, emojis: record, channelId: string, channel: record<id: string, name: string, color: string, isSensitive: bool, allowRenoteToExternal: bool, userId: string>, localOnly: bool, dimension: int, reactionAcceptance: string, reactionEmojis: record, reactions: record, reactionCount: float, renoteCount: float, repliesCount: float, uri: string, url: string, reactionAndUserPairCache: list<string>, clippedCount: float, myReaction: string> {
   let input = $in
@@ -10161,12 +10160,12 @@ export def "notes-user-list-timeline user-list-timeline" [
   --untilId: string # format: misskey:id
   --sinceDate: int
   --untilDate: int
-  --allowPartial: string@bool-completer # default: false
-  --includeMyRenotes: string@bool-completer # default: true
-  --includeRenotedMyNotes: string@bool-completer # default: true
-  --includeLocalRenotes: string@bool-completer # default: true
-  --withRenotes: string@bool-completer # default: true
-  --withFiles: string@bool-completer # Only show notes that have attached files. (default: false)
+  --allowPartial: oneof<nothing, bool> # default: false
+  --includeMyRenotes: oneof<nothing, bool> # default: true
+  --includeRenotedMyNotes: oneof<nothing, bool> # default: true
+  --includeLocalRenotes: oneof<nothing, bool> # default: true
+  --withRenotes: oneof<nothing, bool> # default: true
+  --withFiles: oneof<nothing, bool> # Only show notes that have attached files. (default: false)
 ]: any -> table<id: string, createdAt: string, deletedAt: string, text: string, cw: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record, emojis: record, onlineStatus: string, badgeRoles: list>, replyId: string, renoteId: string, reply: record, renote: record, isHidden: bool, visibility: string, mentions: list<string>, visibleUserIds: list<string>, fileIds: list<string>, files: list<record>, tags: list<string>, poll: record<expiresAt: string, multiple: bool, choices: list>, emojis: record, channelId: string, channel: record<id: string, name: string, color: string, isSensitive: bool, allowRenoteToExternal: bool, userId: string>, localOnly: bool, dimension: int, reactionAcceptance: string, reactionEmojis: record, reactions: record, reactionCount: float, renoteCount: float, repliesCount: float, uri: string, url: string, reactionAndUserPairCache: list<string>, clippedCount: float, myReaction: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10322,8 +10321,8 @@ export def "pages-create create" [
   script: string
   --eyeCatchingImageId: string # nullable, format: misskey:id
   --font: string@font-completer # default: sans-serif
-  --alignCenter: string@bool-completer # default: false
-  --hideTitleWhenPinned: string@bool-completer # default: false
+  --alignCenter: oneof<nothing, bool> # default: false
+  --hideTitleWhenPinned: oneof<nothing, bool> # default: false
   --visibility: string@visibility-completer
 ]: any -> record<id: string, createdAt: string, updatedAt: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list<record>, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record<name: string, softwareName: string, softwareVersion: string, iconUrl: string, faviconUrl: string, themeColor: string>, emojis: record, onlineStatus: string, badgeRoles: list<record>>, content: list<record>, variables: list<record>, title: string, name: string, summary: string, hideTitleWhenPinned: bool, alignCenter: bool, font: string, script: string, eyeCatchingImageId: string, eyeCatchingImage: record, attachedFiles: table<id: string, createdAt: string, name: string, type: string, md5: string, size: float, isSensitive: bool, isSensitiveByModerator: bool, blurhash: string, properties: record, url: string, thumbnailUrl: string, comment: string, folderId: string, folder: record, userId: string, user: record>, likedCount: float, isLiked: bool, visibility: string> {
   let input = $in
@@ -10487,8 +10486,8 @@ export def "pages-update update" [
   --script: string
   --eyeCatchingImageId: string # nullable, format: misskey:id
   --font: string@font-completer
-  --alignCenter: string@bool-completer
-  --hideTitleWhenPinned: string@bool-completer
+  --alignCenter: oneof<nothing, bool>
+  --hideTitleWhenPinned: oneof<nothing, bool>
   --visibility: string@visibility-completer
 ]: any -> any {
   let input = $in
@@ -10814,7 +10813,7 @@ export def "reversi-games games" [
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
-  --my: string@bool-completer # default: false
+  --my: oneof<nothing, bool> # default: false
 ]: any -> table<id: string, createdAt: string, startedAt: string, endedAt: string, isStarted: bool, isEnded: bool, user1Id: string, user2Id: string, user1: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record, emojis: record, onlineStatus: string, badgeRoles: list>, user2: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record, emojis: record, onlineStatus: string, badgeRoles: list>, winnerId: string, winner: record, surrenderedUserId: string, timeoutUserId: string, black: float, bw: string, noIrregularRules: bool, isLlotheo: bool, canPutEverywhere: bool, loopedBoard: bool, timeLimitForEachTurn: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10863,8 +10862,8 @@ export def "reversi-match match" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --userId: string # nullable, format: misskey:id
-  --noIrregularRules: string@bool-completer # default: false
-  --multiple: string@bool-completer # default: false
+  --noIrregularRules: oneof<nothing, bool> # default: false
+  --multiple: oneof<nothing, bool> # default: false
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11125,7 +11124,7 @@ export def "sw-register register" [
   endpoint: string
   --body-auth: string
   publickey: string
-  --sendReadMessage: string@bool-completer # default: false
+  --sendReadMessage: oneof<nothing, bool> # default: false
 ]: any -> record<state: string, key: string, userId: string, endpoint: string, sendReadMessage: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11204,7 +11203,7 @@ export def "sw-update-registration update-registration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   endpoint: string
-  --sendReadMessage: string@bool-completer
+  --sendReadMessage: oneof<nothing, bool>
 ]: any -> record<userId: string, endpoint: string, sendReadMessage: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11230,7 +11229,7 @@ export def "test test" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --required: string@bool-completer
+  --required: oneof<nothing, bool>
   --string: string
   --default: string # default: hello
   --nullableDefault: string # nullable, default: hello
@@ -11790,7 +11789,7 @@ export def "users-lists-get-memberships get-memberships" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   listId: string # format: misskey:id
-  --forPublic: string@bool-completer # default: false
+  --forPublic: oneof<nothing, bool> # default: false
   --limit: int # default: 30
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
@@ -11900,7 +11899,7 @@ export def "users-lists-show show" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   listId: string # format: misskey:id
-  --forPublic: string@bool-completer # default: false
+  --forPublic: oneof<nothing, bool> # default: false
 ]: any -> record<id: string, createdAt: string, name: string, userIds: list<string>, isPublic: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11954,7 +11953,7 @@ export def "users-lists-update update" [
   --allow-errors(-e) # Return full response without error handling
   listId: string # format: misskey:id
   --name: string
-  --isPublic: string@bool-completer
+  --isPublic: oneof<nothing, bool>
 ]: any -> record<id: string, createdAt: string, name: string, userIds: list<string>, isPublic: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11982,7 +11981,7 @@ export def "users-lists-update-membership update-membership" [
   --allow-errors(-e) # Return full response without error handling
   listId: string # format: misskey:id
   userId: string # format: misskey:id
-  --withReplies: string@bool-completer
+  --withReplies: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12009,16 +12008,16 @@ export def "users-notes notes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   userId: string # format: misskey:id
-  --withReplies: string@bool-completer # default: false
-  --withRenotes: string@bool-completer # default: true
-  --withChannelNotes: string@bool-completer # default: false
+  --withReplies: oneof<nothing, bool> # default: false
+  --withRenotes: oneof<nothing, bool> # default: true
+  --withChannelNotes: oneof<nothing, bool> # default: false
   --limit: int # default: 10
   --sinceId: string # format: misskey:id
   --untilId: string # format: misskey:id
   --sinceDate: int
   --untilDate: int
-  --allowPartial: string@bool-completer # default: false
-  --withFiles: string@bool-completer # default: false
+  --allowPartial: oneof<nothing, bool> # default: false
+  --withFiles: oneof<nothing, bool> # default: false
 ]: any -> table<id: string, createdAt: string, deletedAt: string, text: string, cw: string, userId: string, user: record<id: string, name: string, username: string, host: string, avatarUrl: string, avatarBlurhash: string, avatarDecorations: list, isBot: bool, isCat: bool, requireSigninToViewContents: bool, makeNotesFollowersOnlyBefore: float, makeNotesHiddenBefore: float, instance: record, emojis: record, onlineStatus: string, badgeRoles: list>, replyId: string, renoteId: string, reply: record, renote: record, isHidden: bool, visibility: string, mentions: list<string>, visibleUserIds: list<string>, fileIds: list<string>, files: list<record>, tags: list<string>, poll: record<expiresAt: string, multiple: bool, choices: list>, emojis: record, channelId: string, channel: record<id: string, name: string, color: string, isSensitive: bool, allowRenoteToExternal: bool, userId: string>, localOnly: bool, dimension: int, reactionAcceptance: string, reactionEmojis: record, reactions: record, reactionCount: float, renoteCount: float, repliesCount: float, uri: string, url: string, reactionAndUserPairCache: list<string>, clippedCount: float, myReaction: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12189,7 +12188,7 @@ export def "users-search search" [
   --offset: int # default: 0
   --limit: int # default: 10
   --origin: string@origin-completer # default: combined
-  --detail: string@bool-completer # default: true
+  --detail: oneof<nothing, bool> # default: true
 ]: any -> list<any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12216,7 +12215,7 @@ export def "users-search-by-username-and-host search-by-username-and-host" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --limit: int # default: 10
-  --detail: string@bool-completer # default: true
+  --detail: oneof<nothing, bool> # default: true
   --username: string # nullable
   --host: string # nullable
 ]: any -> list<any> {
@@ -12248,7 +12247,7 @@ export def "users-show show" [
   --userIds: list
   --username: string
   --host: string # The local host is represented with `null`. (nullable)
-  --detailed: string@bool-completer # default: true
+  --detailed: oneof<nothing, bool> # default: true
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

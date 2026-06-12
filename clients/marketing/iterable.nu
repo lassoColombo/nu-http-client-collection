@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.iterable.com"] }
 def auth-scheme-completer [] { ["api-key"] }
 
@@ -271,7 +270,7 @@ export def "campaigns-create create-campaign" [
   --labelIds: list # An optional array of label IDs to associate with the new campaign. Labels must exist in the project. Maximum 50 labels allowed.
   listIds: list # To create a blast campaign, set <code>listIds</code> to a non-empty array of list IDs to which the campaign should be sent. To create a triggered campaign, omit <code>listIds</code> from the request body.
   name: string # The name to use in Iterable for the new campaign.
-  --scheduleSend: string@bool-completer # Whether to immediately schedule the blast campaign for sending. Defaults to <code>true</code>. Set to <code>false</code> to create the campaign without scheduling it (the campaign can be scheduled later using <code>POST /api/campaigns/{campaignId}/schedule</code>). Only applies to blast campaigns. (e.g. false)
+  --scheduleSend: oneof<nothing, bool> # Whether to immediately schedule the blast campaign for sending. Defaults to <code>true</code>. Set to <code>false</code> to create the campaign without scheduling it (the campaign can be scheduled later using <code>POST /api/campaigns/{campaignId}/schedule</code>). Only applies to blast campaigns. (e.g. false)
   --sendAt: string # A scheduled send time for a new blast campaign, up to 21 days in the future. Format: <code>YYYY-MM-DD HH:MM:SS</code> (UTC). For more details, see our <a href="https://support.iterable.com/hc/articles/204780579#post-api-campaigns-create">API Overview</a>.
   --sendMode: string@sendMode-completer # When creating a blast campaign, set <code>sendMode</code> to <code>RecipientTimeZone</code> to have Iterable send the campaign to each recipient at a given local time in their own time zone — the same local time associated with <code>sendAt</code> (UTC) in <code>startTimeZone</code>. Or set <code>sendMode</code> to <code>ProjectTimeZone</code> (default value) to have Iterable send the campaign to all recipients at the UTC time specified by <code>sendAt</code>, regardless of local time zone. For more details, see our <a href="https://support.iterable.com/hc/articles/204780579#post-api-campaigns-create">API Overview</a>.
   --startTimeZone: string # For a scheduled blast campaign, when <code>sendMode</code> is <code>RecipientTimeZone</code>, Iterable sends the campaign at the same local time in all recipient time zones — starting with <code>startTimeZone</code>. Recipients in time zones to the east of <code>startTimeZone</code> receive the campaign simultaneously with recipients in <code>startTimeZone</code>, and recipients in time zones to the west of <code>startTimeZone</code> receive the campaign when the same local time arrives in their own time zone. IANA format (for example, <code>America/New_York</code>). For more details, see our <a href="https://support.iterable.com/hc/articles/204780579#post-api-campaigns-create">API Overview</a>.
@@ -378,7 +377,7 @@ export def "campaigns-trigger trigger-campaign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowRepeatMarketingSends: string@bool-completer # Allow repeat marketing sends? Defaults to true.
+  --allowRepeatMarketingSends: oneof<nothing, bool> # Allow repeat marketing sends? Defaults to true.
   campaignId: int # format: int64
   --dataFields: record # Fields to merge into handlebars context
   listIds: list # A non-empty array of list IDs to send to
@@ -626,7 +625,7 @@ export def "catalogs-items listCatalogItems" [
   --page: int # Page number to list (starting at 1). (format: int32, e.g. 1)
   --pageSize: int # Number of results to display per page (defaults to 10). (format: int32, e.g. 10)
   --orderBy: string # Field by which results should be ordered. To also use the sortAscending parameter, this field must have a defined type. (e.g. myField)
-  --sortAscending: string@bool-completer # Sort results by ascending (Defaults to false). (e.g. false)
+  --sortAscending: oneof<nothing, bool> # Sort results by ascending (Defaults to false). (e.g. false)
 ]: nothing -> record<catalogItemsWithProperties: table<catalogName: string, itemId: string, lastModified: string, size: int, value: record>, nextPageUrl: string, previousPageUrl: string, totalItemsCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -651,7 +650,7 @@ export def "catalogs-items bulkUpdateCatalogItems" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   documents: record # Json map of id to values. Max number of pairs in list is 1000. Max size of each json value is is 30kb.
-  --replaceUploadedFieldsOnly: string@bool-completer # Whether to replace only the upload fields within each document, not each entire document
+  --replaceUploadedFieldsOnly: oneof<nothing, bool> # Whether to replace only the upload fields within each document, not each entire document
 ]: any -> record<code: string, msg: string, params: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -887,7 +886,7 @@ export def "email-target target" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowRepeatMarketingSends: string@bool-completer # Allow repeat marketing sends? Defaults to true.
+  --allowRepeatMarketingSends: oneof<nothing, bool> # Allow repeat marketing sends? Defaults to true.
   campaignId: int # Campaign ID (format: int64)
   --dataFields: record # Fields to merge into email template
   --metadata: record # Metadata to pass back via webhooks. Not used for rendering
@@ -1125,7 +1124,7 @@ export def "events-track track" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --campaignId: int # Campaign tied to conversion (format: int64)
-  --createNewFields: string@bool-completer # Whether new fields should be ingested and added to the schema. Defaults to project's setting to allow or drop unrecognized fields. (e.g. false)
+  --createNewFields: oneof<nothing, bool> # Whether new fields should be ingested and added to the schema. Defaults to project's setting to allow or drop unrecognized fields. (e.g. false)
   --createdAt: int # Time event happened. Set to the time event was received if unspecified. Expects a unix timestamp. (format: int64)
   --dataFields: record # Additional data associated with event (i.e. item amount, item quantity). For events of the same name, identically named data fields must be of the same type.
   --email: string # An email address that identifies a user profile in Iterable. Provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
@@ -1614,7 +1613,7 @@ export def "export-user-events exportUserEvents" [
   --allow-errors(-e) # Return full response without error handling
   --email: string # Export by user's email
   --userId: string # Export by user's ID
-  --includeCustomEvents: string@bool-completer # Include Custom Events (default: false)
+  --includeCustomEvents: oneof<nothing, bool> # Include Custom Events (default: false)
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1766,7 +1765,7 @@ export def "in-app-target target" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowRepeatMarketingSends: string@bool-completer # Allow repeat marketing sends? Defaults to true.
+  --allowRepeatMarketingSends: oneof<nothing, bool> # Allow repeat marketing sends? Defaults to true.
   campaignId: int # Campaign ID (format: int64)
   --dataFields: record # Fields to merge into email template
   --recipientEmail: string # An email address that identifies a user profile in Iterable. Provide a <code>recipientEmail</code> or a <code>recipientUserId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
@@ -1897,7 +1896,7 @@ export def "lists-get-users get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --listId: int # list id (format: int64)
-  --preferUserId: string@bool-completer # If true, will return the userId instead of email if both exists in a user profile for a hybrid project. (default: false)
+  --preferUserId: oneof<nothing, bool> # If true, will return the userId instead of email if both exists in a user profile for a hybrid project. (default: false)
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1921,7 +1920,7 @@ export def "lists-preview-users get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --listId: int # list id (format: int64)
-  --preferUserId: string@bool-completer # If true, will return the userId instead of email if both exists in a user profile for a hybrid project. (default: false)
+  --preferUserId: oneof<nothing, bool> # If true, will return the userId instead of email if both exists in a user profile for a hybrid project. (default: false)
   --size: int # Number of users the response will return, up to 5000. Defaults to 1000. (format: int32)
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -1948,7 +1947,7 @@ export def "lists-subscribe subscribe" [
   --allow-errors(-e) # Return full response without error handling
   listId: int # format: int64
   subscribers: list # item shape: {dataFields?: record, email?: string, mergeNestedObjects?: bool, preferUserId?: bool, userId?: string}
-  --updateExistingUsersOnly: string@bool-completer # Whether to skip operation when the request includes a <code>userId</code> or <code>email</code> that doesn't yet exist in the Iterable project. When <code>true</code>, Iterable ignores requests with unknown userIds and email addresses. When <code>false</code>, Iterable creates new users. Defaults to <code>false</code>. Only respected in API calls for <a href="https://support.iterable.com/hc/articles/29156459027348">userID-based and hybrid projects</a>. (e.g. false)
+  --updateExistingUsersOnly: oneof<nothing, bool> # Whether to skip operation when the request includes a <code>userId</code> or <code>email</code> that doesn't yet exist in the Iterable project. When <code>true</code>, Iterable ignores requests with unknown userIds and email addresses. When <code>false</code>, Iterable creates new users. Defaults to <code>false</code>. Only respected in API calls for <a href="https://support.iterable.com/hc/articles/29156459027348">userID-based and hybrid projects</a>. (e.g. false)
 ]: any -> record<createdFields: list<string>, failCount: int, failedUpdates: record<conflictEmails: list<string>, conflictUserIds: list<string>, forgottenEmails: list<string>, forgottenUserIds: list<string>, invalidDataEmails: list<string>, invalidDataUserIds: list<string>, invalidEmails: list<string>, invalidUserIds: list<string>, notFoundEmails: list<string>, notFoundUserIds: list<string>>, filteredOutFields: list<string>, invalidEmails: list<string>, invalidUserIds: list<string>, successCount: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -1975,7 +1974,7 @@ export def "lists-unsubscribe unsubscribe" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --campaignId: int # attribute unsubscribe to a campaign (format: int64)
-  --channelUnsubscribe: string@bool-completer # Unsubscribe email from list's associated channel - essentially a global unsubscribe. (default: false)
+  --channelUnsubscribe: oneof<nothing, bool> # Unsubscribe email from list's associated channel - essentially a global unsubscribe. (default: false)
   listId: int # format: int64
   subscribers: list # item shape: {email?: string, userId?: string}
 ]: any -> record<createdFields: list<string>, failCount: int, failedUpdates: record<conflictEmails: list<string>, conflictUserIds: list<string>, forgottenEmails: list<string>, forgottenUserIds: list<string>, invalidDataEmails: list<string>, invalidDataUserIds: list<string>, invalidEmails: list<string>, invalidUserIds: list<string>, notFoundEmails: list<string>, notFoundUserIds: list<string>>, filteredOutFields: list<string>, invalidEmails: list<string>, invalidUserIds: list<string>, successCount: int> {
@@ -2235,7 +2234,7 @@ export def "push-target target" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowRepeatMarketingSends: string@bool-completer # Allow repeat marketing sends? Defaults to true.
+  --allowRepeatMarketingSends: oneof<nothing, bool> # Allow repeat marketing sends? Defaults to true.
   campaignId: int # Campaign ID (format: int64)
   --dataFields: record # JSON object containing fields to merge into template
   --metadata: record # Metadata to pass back via system webhooks. Not used for rendering
@@ -2294,7 +2293,7 @@ export def "sms-target target" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowRepeatMarketingSends: string@bool-completer # Allow repeat marketing sends? Defaults to true.
+  --allowRepeatMarketingSends: oneof<nothing, bool> # Allow repeat marketing sends? Defaults to true.
   campaignId: int # Campaign ID (format: int64)
   --dataFields: record # Fields to merge into template
   --recipientEmail: string # An email address that identifies a user profile in Iterable. Provide a <code>recipientEmail</code> or a <code>recipientUserId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
@@ -2684,7 +2683,7 @@ export def "templates-email-preview previewEmailTemplate" [
   --locale: string # Locale of content to get (default: None)
   --dataFeed: record # Data feed content for template rendering. Provide key-value pairs for any data feed fields that your template references. Note: Data feed fields are accessible as <code>[[fieldName]]</code> when template's <code>mergeDataFeedContext=false</code>, or as <code>{{fieldName}}</code> when <code>mergeDataFeedContext=true</code>. The <code>mergeDataFeedContext</code> setting is configured when creating/updating templates. If <code>fetchDataFeeds</code> is true, this will be merged with (or overridden by) the fetched data feed data.
   --dataFields: record # Data fields for template rendering. Provide key-value pairs for any user profile, event, or custom fields that your template references. Note: Fields are accessible as <code>{{fieldName}}</code> in templates.
-  --fetchDataFeeds: string@bool-completer # Whether to fetch and use actual data feeds configured in the template. If true, the data feeds associated with the template will be fetched and used for rendering. Data from <code>dataFields</code> will be used to render dynamic URLs in the data feed configuration. If <code>dataFeed</code> is also provided, it will be merged with (or override) the fetched data feed data. Defaults to false.
+  --fetchDataFeeds: oneof<nothing, bool> # Whether to fetch and use actual data feeds configured in the template. If true, the data feeds associated with the template will be fetched and used for rendering. Data from <code>dataFields</code> will be used to render dynamic URLs in the data feed configuration. If <code>dataFeed</code> is also provided, it will be merged with (or override) the fetched data feed data. Defaults to false.
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -2753,7 +2752,7 @@ export def "templates-email-update updateEmailTemplate" [
   --fromName: string # From name
   --googleAnalyticsCampaignName: string # Google analytics utm_campaign value
   --html: string # HTML contents
-  --isDefaultLocale: string@bool-completer # Ask your Iterable CSM to enroll you in the beta for this feature.  Identifies if the locale associated with the response is the template’s default. If empty or flexible default locales are not enabled for the project, the project’s default locale is assigned.
+  --isDefaultLocale: oneof<nothing, bool> # Ask your Iterable CSM to enroll you in the beta for this feature.  Identifies if the locale associated with the response is the template’s default. If empty or flexible default locales are not enabled for the project, the project’s default locale is assigned.
   --linkParams: list # Parameters to append to each URL in html contents — item shape: {key: string, value: string}
   --locale: string # The locale for the content in this request. Leave empty for default locale. Iterable will automatically send the content with locale that matches a 'locale' field in the user profile.
   --mergeDataFeedContext: record # Merge data feed contents into user context, so fields be referenced by {{field}} instead of [[field]]
@@ -2802,10 +2801,10 @@ export def "templates-email-upsert upsertEmailTemplate" [
   --fromName: string # From name
   --googleAnalyticsCampaignName: string # Google analytics utm_campaign value
   --html: string # HTML contents
-  --isDefaultLocale: string@bool-completer # Ask your Iterable CSM to enroll you in the beta for this feature.  Sets the locale associated with the request content as the template’s default. If empty or flexible default locales are not enabled for the project, the project’s default locale is assigned.
+  --isDefaultLocale: oneof<nothing, bool> # Ask your Iterable CSM to enroll you in the beta for this feature.  Sets the locale associated with the request content as the template’s default. If empty or flexible default locales are not enabled for the project, the project’s default locale is assigned.
   --linkParams: list # Parameters to append to each URL in html contents — item shape: {key: string, value: string}
   --locale: string # The locale for the content in this request. Iterable will automatically pick the content with locale that matches a 'locale' field in the user profile.
-  --mergeDataFeedContext: string@bool-completer # Merge data feed contents into user context, so fields be referenced by {{field}} instead of [[field]]
+  --mergeDataFeedContext: oneof<nothing, bool> # Merge data feed contents into user context, so fields be referenced by {{field}} instead of [[field]]
   --messageTypeId: int # Message Type Id (format: int32)
   --name: string # Name of the template
   --plainText: string # Plain text contents
@@ -2866,7 +2865,7 @@ export def "templates-embedded-update updateEmbeddedTemplate" [
   --campaignId: int # Campaign ID (format: int32)
   --clientTemplateId: string # Client template ID. Used as a secondary key to reference the template
   --elements: record # shape: {buttons?: list, defaultAction?: record, mediaUrl?: string, mediaUrlCaption?: string, text?: list}
-  --isDefaultLocale: string@bool-completer # Ask your Iterable CSM to enroll you in the beta for this feature.  Identifies if the locale associated with the response is the template's default. If empty or flexible default locales are not enabled for the project, the project's default locale is assigned.
+  --isDefaultLocale: oneof<nothing, bool> # Ask your Iterable CSM to enroll you in the beta for this feature.  Identifies if the locale associated with the response is the template's default. If empty or flexible default locales are not enabled for the project, the project's default locale is assigned.
   --locale: string # The locale for the content in this request. Leave empty for default locale. Iterable automatically sends the content with a locale that matches a user profile's <code>locale</code> field.
   --messageTypeId: int # Message type ID (format: int32)
   --name: string # Name of the template
@@ -2905,7 +2904,7 @@ export def "templates-embedded-upsert upsertEmbeddedTemplate" [
   clientTemplateId: string # ID used by the client to identify a template. If multiple templates exist with the ID, all will be updated
   --creatorUserId: string # Specify a specific creator user ID (email). The email must be an existing member of the project. Defaults to the organization creator.
   --elements: record # shape: {buttons?: list, defaultAction?: record, mediaUrl?: string, mediaUrlCaption?: string, text?: list}
-  --isDefaultLocale: string@bool-completer # Ask your Iterable CSM to enroll you in the beta for this feature.  Sets the locale associated with the request content as the template's default. If empty or flexible default locales are not enabled for the project, the project's default locale is assigned.
+  --isDefaultLocale: oneof<nothing, bool> # Ask your Iterable CSM to enroll you in the beta for this feature.  Sets the locale associated with the request content as the template's default. If empty or flexible default locales are not enabled for the project, the project's default locale is assigned.
   --locale: string # The locale for the content in this request. Leave empty for default locale. Iterable will automatically send the content with locale that matches a 'locale' field in the user profile.
   --messageTypeId: int # Message type ID (format: int32)
   --name: string # Name of the template
@@ -2987,7 +2986,7 @@ export def "templates-inapp-preview previewInAppTemplate" [
   --locale: string # Locale of content to get (default: None)
   --dataFeed: record # Data feed content for template rendering. Provide key-value pairs for any data feed fields that your template references. Note: Data feed fields are accessible as <code>[[fieldName]]</code> when template's <code>mergeDataFeedContext=false</code>, or as <code>{{fieldName}}</code> when <code>mergeDataFeedContext=true</code>. The <code>mergeDataFeedContext</code> setting is configured when creating/updating templates. If <code>fetchDataFeeds</code> is true, this will be merged with (or overridden by) the fetched data feed data.
   --dataFields: record # Data fields for template rendering. Provide key-value pairs for any user profile, event, or custom fields that your template references. Note: Fields are accessible as <code>{{fieldName}}</code> in templates.
-  --fetchDataFeeds: string@bool-completer # Whether to fetch and use actual data feeds configured in the template. If true, the data feeds associated with the template will be fetched and used for rendering. Data from <code>dataFields</code> will be used to render dynamic URLs in the data feed configuration. If <code>dataFeed</code> is also provided, it will be merged with (or override) the fetched data feed data. Defaults to false.
+  --fetchDataFeeds: oneof<nothing, bool> # Whether to fetch and use actual data feeds configured in the template. If true, the data feeds associated with the template will be fetched and used for rendering. Data from <code>dataFields</code> will be used to render dynamic URLs in the data feed configuration. If <code>dataFeed</code> is also provided, it will be merged with (or override) the fetched data feed data. Defaults to false.
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -3053,7 +3052,7 @@ export def "templates-inapp-update updateInAppTemplate" [
   --html: string # Html of the in-app notification
   --inAppDisplaySettings: record # shape: {bgColor?: record, bottom?: record, left?: record, right?: record, shouldAnimate?: bool, top?: record}
   --inboxMetadata: record # shape: {icon?: string, subtitle?: string, title?: string}
-  --isDefaultLocale: string@bool-completer # Ask your Iterable CSM to enroll you in the beta for this feature.  Identifies if the locale associated with the response is the template's default. If empty or flexible default locales are not enabled for the project, the project's default locale is assigned.
+  --isDefaultLocale: oneof<nothing, bool> # Ask your Iterable CSM to enroll you in the beta for this feature.  Identifies if the locale associated with the response is the template's default. If empty or flexible default locales are not enabled for the project, the project's default locale is assigned.
   --locale: string # The locale for the content in this request. Leave empty for default locale. Iterable automatically sends the content with a locale that matches a user profile's <code>locale</code> field.
   --messageTypeId: int # Message Type Id (format: int32)
   --name: string # Name of the template
@@ -3096,7 +3095,7 @@ export def "templates-inapp-upsert upsertInAppTemplate" [
   --html: string # Html of the in-app notification
   --inAppDisplaySettings: record # shape: {bgColor?: record, bottom?: record, left?: record, right?: record, shouldAnimate?: bool, top?: record}
   --inboxMetadata: record # shape: {icon?: string, subtitle?: string, title?: string}
-  --isDefaultLocale: string@bool-completer # Ask your Iterable CSM to enroll you in the beta for this feature.  Sets the locale associated with the request content as the template’s default. If empty or flexible default locales are not enabled for the project, the project’s default locale is assigned.
+  --isDefaultLocale: oneof<nothing, bool> # Ask your Iterable CSM to enroll you in the beta for this feature.  Sets the locale associated with the request content as the template’s default. If empty or flexible default locales are not enabled for the project, the project’s default locale is assigned.
   --locale: string # The locale for the content in this request. Leave empty for default locale. Iterable will automatically send the content with locale that matches a 'locale' field in the user profile.
   --messageTypeId: int # Message Type Id (format: int32)
   --name: string # Name of the template
@@ -3184,7 +3183,7 @@ export def "templates-push-update updatePushTemplate" [
   --allow-errors(-e) # Return full response without error handling
   --badge: string # Badge to set for push notification
   --buttons: list # Array of buttons that appear to respond to the push. Max of 3. — item shape: {action?: record, actionIcon?: record, buttonType?: "default"|"destructive"|"textInput", identifier: string, inputPlaceholder?: string, inputTitle?: string, openApp: bool, requiresUnlock?: bool, title: string}
-  --cacheDataFeed: string@bool-completer # Cache data feed lookups for 1 hour
+  --cacheDataFeed: oneof<nothing, bool> # Cache data feed lookups for 1 hour
   --campaignDataFields: record # Campaign-level data fields available as {{field}} merge parameters during message rendering. These fields are overridden by user and event data fields of the same name.
   --campaignId: record # Campaign ID
   --clientTemplateId: string # Client template ID. Used as a secondary key to reference the template
@@ -3192,10 +3191,10 @@ export def "templates-push-update updatePushTemplate" [
   --dataFeedIds: list # Ids for data feeds used in template rendering
   --deeplink: record # shape: {android?: string, ios?: string}
   --interruptionLevel: string@interruptionLevel-completer # An interruption level helps iOS determine when to alert a user about the arrival of a push notification
-  --isDefaultLocale: string@bool-completer # Ask your Iterable CSM to enroll you in the beta for this feature.  Identifies if the locale associated with the response is the template's default. If empty or flexible default locales are not enabled for the project, the project's default locale is assigned.
-  --isSilentPush: string@bool-completer # Whether or not this is a silent push notification template
+  --isDefaultLocale: oneof<nothing, bool> # Ask your Iterable CSM to enroll you in the beta for this feature.  Identifies if the locale associated with the response is the template's default. If empty or flexible default locales are not enabled for the project, the project's default locale is assigned.
+  --isSilentPush: oneof<nothing, bool> # Whether or not this is a silent push notification template
   --locale: string # The locale for the content in this request. Leave empty for default locale. Iterable will automatically send the content with locale that matches a 'locale' field in the user profile.
-  --mergeDataFeedContext: string@bool-completer # Merge data feed contents into user context, so fields can be referenced by {{field}} instead of [[field]]
+  --mergeDataFeedContext: oneof<nothing, bool> # Merge data feed contents into user context, so fields can be referenced by {{field}} instead of [[field]]
   --message: string # Push message
   --messageTypeId: int # Message Type Id (format: int32)
   --name: string # Name of the template
@@ -3206,7 +3205,7 @@ export def "templates-push-update updatePushTemplate" [
   templateId: int # Push template ID (format: int64)
   --title: string # Push message title
   --updatedAt: string # Date last updated [Read only] (format: date-time)
-  --wake: string@bool-completer # Set the content-available flag on iOS notifications, which will wake the app in the background
+  --wake: oneof<nothing, bool> # Set the content-available flag on iOS notifications, which will wake the app in the background
 ]: any -> record<code: string, msg: string, params: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -3237,17 +3236,17 @@ export def "templates-push-upsert upsertPushTemplate" [
   --allow-errors(-e) # Return full response without error handling
   --badge: string # Badge to set for push notification
   --buttons: list # Array of buttons that appear to respond to the push. Max of 3. — item shape: {action?: record, actionIcon?: record, buttonType?: "default"|"destructive"|"textInput", identifier: string, inputPlaceholder?: string, inputTitle?: string, openApp: bool, requiresUnlock?: bool, title: string}
-  --cacheDataFeed: string@bool-completer # Cache data feed lookups for 1 hour
+  --cacheDataFeed: oneof<nothing, bool> # Cache data feed lookups for 1 hour
   --campaignDataFields: record # Campaign-level data fields available as {{field}} merge parameters during message rendering. These fields are overridden by user and event data fields of the same name.
   clientTemplateId: string # ID used by the client to identify a template. If multiple templates exist with the ID, all will be updated
   --creatorUserId: string # Specify a specific creator user id (email). The email must be an existing member of the project. Defaults to the organization creator.
   --dataFeedIds: list # Ids for data feeds used in template rendering
   --deeplink: record # shape: {android?: string, ios?: string}
   --interruptionLevel: string@interruptionLevel-completer # An interruption level helps iOS determine when to alert a user about the arrival of a push notification
-  --isDefaultLocale: string@bool-completer # Ask your Iterable CSM to enroll you in the beta for this feature.  Sets the locale associated with the request content as the template’s default. If empty or flexible default locales are not enabled for the project, the project’s default locale is assigned.
-  --isSilentPush: string@bool-completer # Whether or not this is a silent push notification template
+  --isDefaultLocale: oneof<nothing, bool> # Ask your Iterable CSM to enroll you in the beta for this feature.  Sets the locale associated with the request content as the template’s default. If empty or flexible default locales are not enabled for the project, the project’s default locale is assigned.
+  --isSilentPush: oneof<nothing, bool> # Whether or not this is a silent push notification template
   --locale: string # The locale for the content in this request. Leave empty for default locale.Iterable will automatically send the content with locale that matches a 'locale' field in the user profile.
-  --mergeDataFeedContext: string@bool-completer # Merge data feed contents into user context, so fields can be referenced by {{field}} instead of [[field]]
+  --mergeDataFeedContext: oneof<nothing, bool> # Merge data feed contents into user context, so fields can be referenced by {{field}} instead of [[field]]
   --message: string # Push message
   --messageTypeId: int # Message Type Id (format: int32)
   --name: string # Name of the template
@@ -3256,7 +3255,7 @@ export def "templates-push-upsert upsertPushTemplate" [
   --richMedia: record # shape: {android?: string, ios?: string}
   --sound: string # Sound
   --title: string # Push message title
-  --wake: string@bool-completer # Set the content-available flag on iOS notifications, which will wake the app in the background
+  --wake: oneof<nothing, bool> # Set the content-available flag on iOS notifications, which will wake the app in the background
 ]: any -> record<code: string, msg: string, params: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -3341,7 +3340,7 @@ export def "templates-sms-update updateSMSTemplate" [
   --createdAt: string # Date created [Read only] (format: date-time)
   --googleAnalyticsCampaignName: string # Google analytics utm_campaign value
   --imageUrl: string # Image Url
-  --isDefaultLocale: string@bool-completer # Ask your Iterable CSM to enroll you in the beta for this feature.  Identifies if the locale associated with the response is the template's default. If empty or flexible default locales are not enabled for the project, the project's default locale is assigned.
+  --isDefaultLocale: oneof<nothing, bool> # Ask your Iterable CSM to enroll you in the beta for this feature.  Identifies if the locale associated with the response is the template's default. If empty or flexible default locales are not enabled for the project, the project's default locale is assigned.
   --linkParams: list # Parameters to append to each URL in contents — item shape: {key: string, value: string}
   --locale: string # The locale for the content in this request. Leave empty for default locale. Iterable will automatically send the content with locale that matches a 'locale' field in the user profile.
   --message: string # SMS message
@@ -3380,7 +3379,7 @@ export def "templates-sms-upsert upsertSMSTemplate" [
   --creatorUserId: string # Specify a specific creator user id (email). The email must be an existing member of the project. Defaults to the organization creator.
   --googleAnalyticsCampaignName: string # Google analytics utm_campaign value
   --imageUrl: string # Image Url
-  --isDefaultLocale: string@bool-completer # Ask your Iterable CSM to enroll you in the beta for this feature.  Sets the locale associated with the request content as the template’s default. If empty or flexible default locales are not enabled for the project, the project’s default locale is assigned.
+  --isDefaultLocale: oneof<nothing, bool> # Ask your Iterable CSM to enroll you in the beta for this feature.  Sets the locale associated with the request content as the template’s default. If empty or flexible default locales are not enabled for the project, the project’s default locale is assigned.
   --linkParams: list # Parameters to append to each URL in html contents — item shape: {key: string, value: string}
   --locale: string # The locale for the content in this request. Leave empty for default locale. Iterable will automatically send the content with locale that matches a 'locale' field in the user profile.
   --message: string # SMS message
@@ -3411,7 +3410,7 @@ export def "users-bulk-update bulkUpdateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --createNewFields: string@bool-completer # Whether new fields should be ingested and added to the schema. Defaults to project's setting to allow or drop unrecognized fields. Added fields will be included in the response's <code>createdFields</code>. Dropped fields will be included in <code>filteredOutFields</code> and not added to user profiles. (e.g. false)
+  --createNewFields: oneof<nothing, bool> # Whether new fields should be ingested and added to the schema. Defaults to project's setting to allow or drop unrecognized fields. Added fields will be included in the response's <code>createdFields</code>. Dropped fields will be included in <code>filteredOutFields</code> and not added to user profiles. (e.g. false)
   users: list # item shape: {dataFields?: record, email?: string, mergeNestedObjects?: bool, preferUserId?: bool, userId?: string}
 ]: any -> record<createdFields: list<string>, failCount: int, failedUpdates: record<conflictEmails: list<string>, conflictUserIds: list<string>, forgottenEmails: list<string>, forgottenUserIds: list<string>, invalidDataEmails: list<string>, invalidDataUserIds: list<string>, invalidEmails: list<string>, invalidUserIds: list<string>, notFoundEmails: list<string>, notFoundUserIds: list<string>>, filteredOutFields: list<string>, invalidEmails: list<string>, invalidUserIds: list<string>, successCount: int> {
   let input = $in
@@ -3675,7 +3674,7 @@ export def "users-get-sent-messages get" [
   --campaignIds: list # only include messages from these campaigns
   --startDateTime: string # start date time (yyyy-MM-dd HH:mm:ss ZZ) (format: date-time)
   --endDateTime: string # end date time (yyyy-MM-dd HH:mm:ss ZZ) (format: date-time)
-  --excludeBlastCampaigns: string@bool-completer # exclude results coming from blast campaigns (ignored if campaignId is set) (default: false)
+  --excludeBlastCampaigns: oneof<nothing, bool> # exclude results coming from blast campaigns (ignored if campaignId is set) (default: false)
   --messageMedium: string@messageMedium-completer # only include messages of this type
 ]: nothing -> record<messages: table<campaignId: int, createdAt: string, messageId: string, templateId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -3759,7 +3758,7 @@ export def "users-register-device-token registerDeviceToken" [
   --allow-errors(-e) # Return full response without error handling
   device: record # shape: {applicationName: string, dataFields?: record, platform: "APNS"|"APNS_SANDBOX"|"GCM", token: string}
   --email: string # An email address that identifies a user profile in Iterable. Provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
-  --preferUserId: string@bool-completer # Whether or not a new user should be created if the request includes a <code>userId</code> that doesn't yet exist in the Iterable project. Defaults to <code>false</code>. Only respected in API calls for <a href="https://support.iterable.com/hc/articles/29156459027348">email-based projects</a>. (e.g. false)
+  --preferUserId: oneof<nothing, bool> # Whether or not a new user should be created if the request includes a <code>userId</code> that doesn't yet exist in the Iterable project. Defaults to <code>false</code>. Only respected in API calls for <a href="https://support.iterable.com/hc/articles/29156459027348">email-based projects</a>. (e.g. false)
   --userId: string # A user ID that identifies a user profile in Iterable. Provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
 ]: any -> record<code: string, msg: string, params: record> {
   let input = $in
@@ -3811,11 +3810,11 @@ export def "users-update updateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --createNewFields: string@bool-completer # Whether new fields should be ingested and added to the schema. Defaults to project's setting to allow or drop unrecognized fields. (e.g. false)
+  --createNewFields: oneof<nothing, bool> # Whether new fields should be ingested and added to the schema. Defaults to project's setting to allow or drop unrecognized fields. (e.g. false)
   --dataFields: record # Data to store on the user profile identified by <code>userId</code> or <code>email</code>.
   --email: string # An email address that identifies a user profile in Iterable. Provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
-  --mergeNestedObjects: string@bool-completer # Merge top-level objects instead of overwriting them. Defaults to <code>false</code>. For example, if a user profile has data <code>{"mySettings":{"mobile":true}}</code> and the request has data <code>{"mySettings":{"email":true}}</code>, merging results in <code>{"mySettings":{"mobile":true,"email":true}}</code>. (e.g. false)
-  --preferUserId: string@bool-completer # Whether or not a new user should be created if the request includes a <code>userId</code> that doesn't yet exist in the Iterable project. Defaults to <code>false</code>. Only respected in API calls for <a href="https://support.iterable.com/hc/articles/29156459027348">email-based projects</a>. (e.g. false)
+  --mergeNestedObjects: oneof<nothing, bool> # Merge top-level objects instead of overwriting them. Defaults to <code>false</code>. For example, if a user profile has data <code>{"mySettings":{"mobile":true}}</code> and the request has data <code>{"mySettings":{"email":true}}</code>, merging results in <code>{"mySettings":{"mobile":true,"email":true}}</code>. (e.g. false)
+  --preferUserId: oneof<nothing, bool> # Whether or not a new user should be created if the request includes a <code>userId</code> that doesn't yet exist in the Iterable project. Defaults to <code>false</code>. Only respected in API calls for <a href="https://support.iterable.com/hc/articles/29156459027348">email-based projects</a>. (e.g. false)
   --userId: string # A user ID that identifies a user profile in Iterable. Provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
 ]: any -> record<code: string, msg: string, params: record> {
   let input = $in
@@ -3876,7 +3875,7 @@ export def "users-update-subscriptions updateSubscriptions" [
   --unsubscribedChannelIds: list # Email channel ids to unsubscribe from
   --unsubscribedMessageTypeIds: list # Individual message type IDs to unsubscribe (does not impact channel subscriptions).
   --userId: string # A user ID that identifies a user profile in Iterable. For each user in your request, provide an <code>email</code> or a <code>userId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
-  --validateChannelAlignment: string@bool-completer # Defaults to <code>true</code> (validation enabled). When <code>false</code>, allows subscribing users to message types that belong to unsubscribed channels. By default, Iterable validates that subscribed message types belong to subscribed channels. Setting this to <code>false</code> bypasses this validation, allowing you to save message type preferences even when the parent channel is unsubscribed. Users won't receive messages from these types while the channel remains unsubscribed, but their preferences are preserved for when the channel becomes subscribed.
+  --validateChannelAlignment: oneof<nothing, bool> # Defaults to <code>true</code> (validation enabled). When <code>false</code>, allows subscribing users to message types that belong to unsubscribed channels. By default, Iterable validates that subscribed message types belong to subscribed channels. Setting this to <code>false</code> bypasses this validation, allowing you to save message type preferences even when the parent channel is unsubscribed. Users won't receive messages from these types while the channel remains unsubscribed, but their preferences are preserved for when the channel becomes subscribed.
 ]: any -> record<code: string, msg: string, params: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -4026,7 +4025,7 @@ export def "web-push-target target" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowRepeatMarketingSends: string@bool-completer # Allow repeat marketing sends? Defaults to true.
+  --allowRepeatMarketingSends: oneof<nothing, bool> # Allow repeat marketing sends? Defaults to true.
   campaignId: int # format: int64
   --dataFields: record # Fields to merge into template
   --recipientEmail: string # An email address that identifies a user profile in Iterable. Provide a <code>recipientEmail</code> or a <code>recipientUserId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.
@@ -4080,12 +4079,12 @@ export def "webhooks updateWebhook" [
   --allow-errors(-e) # Return full response without error handling
   --authToken: string # Auth token
   --authType: string@authType-completer # The type of authentication Iterable uses when calling this webhook
-  --blastSendEnabled: string@bool-completer # Whether or not Iterable calls this webhook for blast campaigns
-  --enabled: string@bool-completer # Whether or not Iterable will call the webhook when sending campaigns
+  --blastSendEnabled: oneof<nothing, bool> # Whether or not Iterable calls this webhook for blast campaigns
+  --enabled: oneof<nothing, bool> # Whether or not Iterable will call the webhook when sending campaigns
   --endpoint: string # The URL associated with the webhook
   --headers: list # Headers — item shape: {key: string, value: string}
   id: int # The ID of the webhook in Iterable (format: int64)
-  --triggeredSendEnabled: string@bool-completer # Whether or not Iterable calls this webhook for triggered campaigns
+  --triggeredSendEnabled: oneof<nothing, bool> # Whether or not Iterable calls this webhook for triggered campaigns
 ]: any -> record<authType: string, blastSendEnabled: bool, channelIds: list<record>, enabled: bool, endpoint: string, id: int, messageTypeIds: list<record>, triggeredSendEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -4138,7 +4137,7 @@ export def "whats-app-target target" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowRepeatMarketingSends: string@bool-completer # Allow repeat marketing sends? Defaults to true.
+  --allowRepeatMarketingSends: oneof<nothing, bool> # Allow repeat marketing sends? Defaults to true.
   campaignId: int # Campaign ID (format: int64)
   --dataFields: record # Data fields that can be referenced in the template or campaign content
   --recipientEmail: string # An email address that identifies a user profile in Iterable. Provide a <code>recipientEmail</code> or a <code>recipientUserId</code> (but not both), depending on <a href="https://support.iterable.com/hc/articles/29156459027348">how your project identifies users</a>.

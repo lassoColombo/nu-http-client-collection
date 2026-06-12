@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://unify.apideck.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -116,7 +115,7 @@ export def "accounting-balance-sheet balanceSheetOne" [
   --allow-errors(-e) # Return full response without error handling
   --pass-through: record # Optional unmapped key/values that will be passed through to downstream as query parameters
   --filter: record # Apply filters (e.g. {end_date: 2021-12-31, start_date: 2021-01-01})
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -144,7 +143,7 @@ export def "accounting-bills billsAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --qp-sort: record # Apply sorting (e.g. {by: updated_at, direction: desc})
@@ -180,7 +179,7 @@ export def "accounting-bills billsAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -202,7 +201,7 @@ export def "accounting-bills billsAdd" [
   --sub-total: float # Sub-total amount, normally before tax. (nullable, e.g. 27500)
   --supplier: record # The supplier this entity is linked to. (nullable) — shape: {address?: record, display_name?: string, id: string}
   --tax-code: string # Applicable tax id/code override if tax is not supplied on a line item basis. (nullable, e.g. 1234)
-  --tax-inclusive: string@bool-completer # Amounts are including tax (nullable, e.g. true)
+  --tax-inclusive: oneof<nothing, bool> # Amounts are including tax (nullable, e.g. true)
   --terms: string # Terms of payment. (nullable, e.g. Net 30 days)
   --total: float # Total amount of bill, including tax. (nullable, e.g. 27500)
   --total-tax: float # Total tax amount applied to this bill. (nullable, e.g. 2500)
@@ -234,7 +233,7 @@ export def "accounting-bills billsDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -263,7 +262,7 @@ export def "accounting-bills billsOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --qp-fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
@@ -296,7 +295,7 @@ export def "accounting-bills billsUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -318,7 +317,7 @@ export def "accounting-bills billsUpdate" [
   --sub-total: float # Sub-total amount, normally before tax. (nullable, e.g. 27500)
   --supplier: record # The supplier this entity is linked to. (nullable) — shape: {address?: record, display_name?: string, id: string}
   --tax-code: string # Applicable tax id/code override if tax is not supplied on a line item basis. (nullable, e.g. 1234)
-  --tax-inclusive: string@bool-completer # Amounts are including tax (nullable, e.g. true)
+  --tax-inclusive: oneof<nothing, bool> # Amounts are including tax (nullable, e.g. true)
   --terms: string # Terms of payment. (nullable, e.g. Net 30 days)
   --total: float # Total amount of bill, including tax. (nullable, e.g. 27500)
   --total-tax: float # Total tax amount applied to this bill. (nullable, e.g. 2500)
@@ -349,7 +348,7 @@ export def "accounting-company-info companyInfoOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --qp-fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
@@ -378,7 +377,7 @@ export def "accounting-credit-notes creditNotesAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --pass-through: record # Optional unmapped key/values that will be passed through to downstream as query parameters
@@ -414,7 +413,7 @@ export def "accounting-credit-notes creditNotesAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -435,7 +434,7 @@ export def "accounting-credit-notes creditNotesAdd" [
   --status: string@status-completer-1 # Status of credit notes (e.g. authorised)
   --sub-total: float # Sub-total amount, normally before tax. (nullable, e.g. 27500)
   --tax-code: string # Applicable tax id/code override if tax is not supplied on a line item basis. (nullable, e.g. 1234)
-  --tax-inclusive: string@bool-completer # Amounts are including tax (nullable, e.g. true)
+  --tax-inclusive: oneof<nothing, bool> # Amounts are including tax (nullable, e.g. true)
   --terms: string # Optional terms to be associated with the credit note. (nullable, e.g. Some terms about this credit note)
   total_amount: float # Amount of transaction (e.g. 49.99)
   --total-tax: float # Total tax amount applied to this invoice. (nullable, e.g. 2500)
@@ -468,7 +467,7 @@ export def "accounting-credit-notes creditNotesDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -497,7 +496,7 @@ export def "accounting-credit-notes creditNotesOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --qp-fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
@@ -531,7 +530,7 @@ export def "accounting-credit-notes creditNotesUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -552,7 +551,7 @@ export def "accounting-credit-notes creditNotesUpdate" [
   --status: string@status-completer-1 # Status of credit notes (e.g. authorised)
   --sub-total: float # Sub-total amount, normally before tax. (nullable, e.g. 27500)
   --tax-code: string # Applicable tax id/code override if tax is not supplied on a line item basis. (nullable, e.g. 1234)
-  --tax-inclusive: string@bool-completer # Amounts are including tax (nullable, e.g. true)
+  --tax-inclusive: oneof<nothing, bool> # Amounts are including tax (nullable, e.g. true)
   --terms: string # Optional terms to be associated with the credit note. (nullable, e.g. Some terms about this credit note)
   total_amount: float # Amount of transaction (e.g. 49.99)
   --total-tax: float # Total tax amount applied to this invoice. (nullable, e.g. 2500)
@@ -584,7 +583,7 @@ export def "accounting-customers customersAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --filter: record # Apply filters (e.g. {company_name: SpaceX, display_name: Elon Musk, email: elon@musk.com, first_name: Elon, last_name: Musk})
@@ -625,7 +624,7 @@ export def "accounting-customers customersAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -638,13 +637,13 @@ export def "accounting-customers customersAdd" [
   --display-name: string # Display name (nullable, e.g. Windsurf Shop)
   --emails: list # item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
   --first-name: string # The first name of the person. (nullable, e.g. Elon)
-  --individual: string@bool-completer # Is this an individual or business customer (nullable, e.g. true)
+  --individual: oneof<nothing, bool> # Is this an individual or business customer (nullable, e.g. true)
   --last-name: string # The last name of the person. (nullable, e.g. Musk)
   --middle-name: string # Middle name of the person. (nullable, e.g. D.)
   --notes: string # Some notes about this customer (nullable, e.g. Some notes about this customer)
   --parent: record # The parent customer this entity is linked to. (nullable) — shape: {id: string, name?: string}
   --phone-numbers: list # item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
-  --project: string@bool-completer # If true, indicates this is a Project. (nullable, e.g. false)
+  --project: oneof<nothing, bool> # If true, indicates this is a Project. (nullable, e.g. false)
   --row-version: string # A binary value used to detect updates to a object and prevent data conflicts. It is incremented each time an update is made to the object. (nullable, e.g. 1-12345)
   --status: string@status-completer-2 # Customer status (nullable, e.g. active)
   --suffix: string # nullable, e.g. Jr.
@@ -680,7 +679,7 @@ export def "accounting-customers customersDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -709,7 +708,7 @@ export def "accounting-customers customersOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --qp-fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
@@ -747,7 +746,7 @@ export def "accounting-customers customersUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -760,13 +759,13 @@ export def "accounting-customers customersUpdate" [
   --display-name: string # Display name (nullable, e.g. Windsurf Shop)
   --emails: list # item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
   --first-name: string # The first name of the person. (nullable, e.g. Elon)
-  --individual: string@bool-completer # Is this an individual or business customer (nullable, e.g. true)
+  --individual: oneof<nothing, bool> # Is this an individual or business customer (nullable, e.g. true)
   --last-name: string # The last name of the person. (nullable, e.g. Musk)
   --middle-name: string # Middle name of the person. (nullable, e.g. D.)
   --notes: string # Some notes about this customer (nullable, e.g. Some notes about this customer)
   --parent: record # The parent customer this entity is linked to. (nullable) — shape: {id: string, name?: string}
   --phone-numbers: list # item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
-  --project: string@bool-completer # If true, indicates this is a Project. (nullable, e.g. false)
+  --project: oneof<nothing, bool> # If true, indicates this is a Project. (nullable, e.g. false)
   --row-version: string # A binary value used to detect updates to a object and prevent data conflicts. It is incremented each time an update is made to the object. (nullable, e.g. 1-12345)
   --status: string@status-completer-2 # Customer status (nullable, e.g. active)
   --suffix: string # nullable, e.g. Jr.
@@ -801,7 +800,7 @@ export def "accounting-invoice-items invoiceItemsAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --filter: record # Apply filters (e.g. {name: Widgets Large})
@@ -839,11 +838,11 @@ export def "accounting-invoice-items invoiceItemsAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-  --active: string@bool-completer # nullable, e.g. true
+  --active: oneof<nothing, bool> # nullable, e.g. true
   --asset-account: record # nullable — shape: {code?: string, id?: string, nominal_code?: string}
   --code: string # User defined item code (nullable, e.g. 120-C)
   --description: string # A short description of the item (nullable, e.g. Model Y is a fully electric, mid-size SUV, with seating for up to seven, dual motor AWD and unparalleled protection.)
@@ -852,13 +851,13 @@ export def "accounting-invoice-items invoiceItemsAdd" [
   --inventory-date: string # The date of opening balance if inventory item is tracked - YYYY-MM-DD. (nullable, format: date, e.g. 2020-10-30)
   --name: string # Item name (nullable, e.g. Model Y)
   --purchase-details: record # shape: {tax_inclusive?: bool, tax_rate?: record, unit_of_measure?: string, unit_price?: float}
-  --purchased: string@bool-completer # Item is available for purchase transactions (nullable, e.g. true)
+  --purchased: oneof<nothing, bool> # Item is available for purchase transactions (nullable, e.g. true)
   --quantity: float # nullable, e.g. 1
   --row-version: string # A binary value used to detect updates to a object and prevent data conflicts. It is incremented each time an update is made to the object. (nullable, e.g. 1-12345)
   --sales-details: record # shape: {tax_inclusive?: bool, tax_rate?: record, unit_of_measure?: string, unit_price?: float}
-  --sold: string@bool-completer # Item will be available on sales transactions (nullable, e.g. true)
-  --taxable: string@bool-completer # If true, transactions for this item are taxable (nullable, e.g. true)
-  --tracked: string@bool-completer # Item is inventoried (nullable, e.g. true)
+  --sold: oneof<nothing, bool> # Item will be available on sales transactions (nullable, e.g. true)
+  --taxable: oneof<nothing, bool> # If true, transactions for this item are taxable (nullable, e.g. true)
+  --tracked: oneof<nothing, bool> # Item is inventoried (nullable, e.g. true)
   --type: string@type-completer-1 # Item type (nullable, e.g. inventory)
   --unit-price: float # nullable, e.g. 27500.5
 ]: any -> any {
@@ -889,7 +888,7 @@ export def "accounting-invoice-items invoiceItemsDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -918,7 +917,7 @@ export def "accounting-invoice-items invoiceItemsOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --qp-fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
@@ -953,11 +952,11 @@ export def "accounting-invoice-items invoiceItemsUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-  --active: string@bool-completer # nullable, e.g. true
+  --active: oneof<nothing, bool> # nullable, e.g. true
   --asset-account: record # nullable — shape: {code?: string, id?: string, nominal_code?: string}
   --code: string # User defined item code (nullable, e.g. 120-C)
   --description: string # A short description of the item (nullable, e.g. Model Y is a fully electric, mid-size SUV, with seating for up to seven, dual motor AWD and unparalleled protection.)
@@ -966,13 +965,13 @@ export def "accounting-invoice-items invoiceItemsUpdate" [
   --inventory-date: string # The date of opening balance if inventory item is tracked - YYYY-MM-DD. (nullable, format: date, e.g. 2020-10-30)
   --name: string # Item name (nullable, e.g. Model Y)
   --purchase-details: record # shape: {tax_inclusive?: bool, tax_rate?: record, unit_of_measure?: string, unit_price?: float}
-  --purchased: string@bool-completer # Item is available for purchase transactions (nullable, e.g. true)
+  --purchased: oneof<nothing, bool> # Item is available for purchase transactions (nullable, e.g. true)
   --quantity: float # nullable, e.g. 1
   --row-version: string # A binary value used to detect updates to a object and prevent data conflicts. It is incremented each time an update is made to the object. (nullable, e.g. 1-12345)
   --sales-details: record # shape: {tax_inclusive?: bool, tax_rate?: record, unit_of_measure?: string, unit_price?: float}
-  --sold: string@bool-completer # Item will be available on sales transactions (nullable, e.g. true)
-  --taxable: string@bool-completer # If true, transactions for this item are taxable (nullable, e.g. true)
-  --tracked: string@bool-completer # Item is inventoried (nullable, e.g. true)
+  --sold: oneof<nothing, bool> # Item will be available on sales transactions (nullable, e.g. true)
+  --taxable: oneof<nothing, bool> # If true, transactions for this item are taxable (nullable, e.g. true)
+  --tracked: oneof<nothing, bool> # Item is inventoried (nullable, e.g. true)
   --type: string@type-completer-1 # Item type (nullable, e.g. inventory)
   --unit-price: float # nullable, e.g. 27500.5
 ]: any -> any {
@@ -1002,7 +1001,7 @@ export def "accounting-invoices invoicesAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --qp-sort: record # Apply sorting (e.g. {by: updated_at, direction: desc})
@@ -1039,7 +1038,7 @@ export def "accounting-invoices invoicesAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1054,7 +1053,7 @@ export def "accounting-invoices invoicesAdd" [
   --discount-percentage: float # Discount percentage applied to this invoice. (nullable, e.g. 5.5)
   --due-date: string # The invoice due date is the date on which a payment or invoice is scheduled to be received by the seller - YYYY-MM-DD. (nullable, format: date, e.g. 2020-09-30)
   --invoice-date: string # Date invoice was issued - YYYY-MM-DD. (nullable, format: date, e.g. 2020-09-30)
-  --invoice-sent: string@bool-completer # Invoice sent to contact/customer. (e.g. true)
+  --invoice-sent: oneof<nothing, bool> # Invoice sent to contact/customer. (e.g. true)
   --line-items: list # item shape: {code?: string, department_id?: string, description?: string, discount_amount?: float, discount_percentage?: float, item?: record, ledger_account?: record, line_number?: int, location_id?: string, quantity?: float, row_id?: string, row_version?: string, tax_amount?: float, tax_rate?: record, total_amount?: float, type?: "sales_item"|"discount"|"info"|"sub_total", unit_of_measure?: string, unit_price?: float}
   --number: string # Invoice number. (nullable, e.g. OIT00546)
   --po-number: string # A PO Number uniquely identifies a purchase order and is generally defined by the buyer. The buyer will match the PO number in the invoice to the Purchase Order. (nullable, e.g. 90000117)
@@ -1065,7 +1064,7 @@ export def "accounting-invoices invoicesAdd" [
   --status: string@status-completer # Invoice status (nullable, e.g. draft)
   --sub-total: float # Sub-total amount, normally before tax. (nullable, e.g. 27500)
   --tax-code: string # Applicable tax id/code override if tax is not supplied on a line item basis. (nullable, e.g. 1234)
-  --tax-inclusive: string@bool-completer # Amounts are including tax (nullable, e.g. true)
+  --tax-inclusive: oneof<nothing, bool> # Amounts are including tax (nullable, e.g. true)
   --template-id: string # Optional invoice template (nullable, e.g. 123456)
   --terms: string # Terms of payment. (nullable, e.g. Net 30 days)
   --total: float # Total amount of invoice, including tax. (nullable, e.g. 27500)
@@ -1099,7 +1098,7 @@ export def "accounting-invoices invoicesDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1128,7 +1127,7 @@ export def "accounting-invoices invoicesOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --qp-fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
@@ -1162,7 +1161,7 @@ export def "accounting-invoices invoicesUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1177,7 +1176,7 @@ export def "accounting-invoices invoicesUpdate" [
   --discount-percentage: float # Discount percentage applied to this invoice. (nullable, e.g. 5.5)
   --due-date: string # The invoice due date is the date on which a payment or invoice is scheduled to be received by the seller - YYYY-MM-DD. (nullable, format: date, e.g. 2020-09-30)
   --invoice-date: string # Date invoice was issued - YYYY-MM-DD. (nullable, format: date, e.g. 2020-09-30)
-  --invoice-sent: string@bool-completer # Invoice sent to contact/customer. (e.g. true)
+  --invoice-sent: oneof<nothing, bool> # Invoice sent to contact/customer. (e.g. true)
   --line-items: list # item shape: {code?: string, department_id?: string, description?: string, discount_amount?: float, discount_percentage?: float, item?: record, ledger_account?: record, line_number?: int, location_id?: string, quantity?: float, row_id?: string, row_version?: string, tax_amount?: float, tax_rate?: record, total_amount?: float, type?: "sales_item"|"discount"|"info"|"sub_total", unit_of_measure?: string, unit_price?: float}
   --number: string # Invoice number. (nullable, e.g. OIT00546)
   --po-number: string # A PO Number uniquely identifies a purchase order and is generally defined by the buyer. The buyer will match the PO number in the invoice to the Purchase Order. (nullable, e.g. 90000117)
@@ -1188,7 +1187,7 @@ export def "accounting-invoices invoicesUpdate" [
   --status: string@status-completer # Invoice status (nullable, e.g. draft)
   --sub-total: float # Sub-total amount, normally before tax. (nullable, e.g. 27500)
   --tax-code: string # Applicable tax id/code override if tax is not supplied on a line item basis. (nullable, e.g. 1234)
-  --tax-inclusive: string@bool-completer # Amounts are including tax (nullable, e.g. true)
+  --tax-inclusive: oneof<nothing, bool> # Amounts are including tax (nullable, e.g. true)
   --template-id: string # Optional invoice template (nullable, e.g. 123456)
   --terms: string # Terms of payment. (nullable, e.g. Net 30 days)
   --total: float # Total amount of invoice, including tax. (nullable, e.g. 27500)
@@ -1221,7 +1220,7 @@ export def "accounting-journal-entries journalEntriesAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --pass-through: record # Optional unmapped key/values that will be passed through to downstream as query parameters
@@ -1254,7 +1253,7 @@ export def "accounting-journal-entries journalEntriesAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1294,7 +1293,7 @@ export def "accounting-journal-entries journalEntriesDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1323,7 +1322,7 @@ export def "accounting-journal-entries journalEntriesOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --qp-fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
@@ -1354,7 +1353,7 @@ export def "accounting-journal-entries journalEntriesUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1393,7 +1392,7 @@ export def "accounting-ledger-accounts ledgerAccountsAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --pass-through: record # Optional unmapped key/values that will be passed through to downstream as query parameters
@@ -1429,11 +1428,11 @@ export def "accounting-ledger-accounts ledgerAccountsAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-  --active: string@bool-completer # Whether the account is active or not. (nullable, e.g. true)
+  --active: oneof<nothing, bool> # Whether the account is active or not. (nullable, e.g. true)
   --bank-account: record # shape: {account_name?: string, account_number?: string, account_type?: "bank_account"|"credit_card"|"other", bank_code?: string, bic?: string, branch_identifier?: string, bsb_number?: string, currency?: "UNKNOWN_CURRENCY"|"AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BHD"|"BIF"|"BMD"|"BND"|"BOB"|"BOV"|"BRL"|"BSD"|"BTN"|"BWP"|"BYR"|"BZD"|"CAD"|"CDF"|"CHE"|"CHF"|"CHW"|"CLF"|"CLP"|"CNY"|"COP"|"COU"|"CRC"|"CUC"|"CUP"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ERN"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"IQD"|"IRR"|"ISK"|"JMD"|"JOD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KPW"|"KRW"|"KWD"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"LTL"|"LVL"|"LYD"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MXV"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"OMR"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SDG"|"SEK"|"SGD"|"SHP"|"SLL"|"SOS"|"SRD"|"SSP"|"STD"|"SVC"|"SYP"|"SZL"|"THB"|"TJS"|"TMT"|"TND"|"TOP"|"TRC"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"USN"|"USS"|"UYI"|"UYU"|"UZS"|"VEF"|"VND"|"VUV"|"WST"|"XAF"|"XAG"|"XAU"|"XBA"|"XBB"|"XBC"|"XBD"|"XCD"|"XDR"|"XOF"|"XPD"|"XPF"|"XPT"|"XTS"|"XXX"|"YER"|"ZAR"|"ZMK"|"ZMW"|"BTC"|"ETH", iban?: string}
   --classification: string@classification-completer # The classification of account. (nullable, e.g. asset)
   --code: string # The code assigned to the account. (nullable, e.g. 453)
@@ -1442,7 +1441,7 @@ export def "accounting-ledger-accounts ledgerAccountsAdd" [
   --description: string # The description of the account. (nullable, e.g. Main checking account)
   --display-id: string # The human readable display ID used when displaying the account (e.g. 1-12345)
   --fully-qualified-name: string # The fully qualified name of the account. (nullable, e.g. Asset.Bank.Checking_Account)
-  --header: string@bool-completer # Whether the account is a header or not. (nullable, e.g. true)
+  --header: oneof<nothing, bool> # Whether the account is a header or not. (nullable, e.g. true)
   --last-reconciliation-date: string # Reconciliation Date means the last calendar day of each Reconciliation Period. (nullable, format: date, e.g. 2020-09-30)
   --level: float # nullable, e.g. 1
   --name: string # The name of the account. (nullable, e.g. Bank account)
@@ -1451,7 +1450,7 @@ export def "accounting-ledger-accounts ledgerAccountsAdd" [
   --parent-account: record # shape: {display_id?: string, id?: string, name?: string}
   --row-version: string # A binary value used to detect updates to a object and prevent data conflicts. It is incremented each time an update is made to the object. (nullable, e.g. 1-12345)
   --status: string@status-completer-3 # The status of the account. (nullable, e.g. active)
-  --sub-account: string@bool-completer # Whether the account is a sub account or not. (nullable, e.g. false)
+  --sub-account: oneof<nothing, bool> # Whether the account is a sub account or not. (nullable, e.g. false)
   --sub-type: string # The sub type of account. (nullable, e.g. CHECKING_ACCOUNT)
   --tax-rate: record # shape: {id?: string}
   --tax-type: string # The tax type of the account. (nullable, e.g. NONE)
@@ -1484,7 +1483,7 @@ export def "accounting-ledger-accounts ledgerAccountsDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1513,7 +1512,7 @@ export def "accounting-ledger-accounts ledgerAccountsOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --qp-fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
@@ -1547,11 +1546,11 @@ export def "accounting-ledger-accounts ledgerAccountsUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-  --active: string@bool-completer # Whether the account is active or not. (nullable, e.g. true)
+  --active: oneof<nothing, bool> # Whether the account is active or not. (nullable, e.g. true)
   --bank-account: record # shape: {account_name?: string, account_number?: string, account_type?: "bank_account"|"credit_card"|"other", bank_code?: string, bic?: string, branch_identifier?: string, bsb_number?: string, currency?: "UNKNOWN_CURRENCY"|"AED"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BHD"|"BIF"|"BMD"|"BND"|"BOB"|"BOV"|"BRL"|"BSD"|"BTN"|"BWP"|"BYR"|"BZD"|"CAD"|"CDF"|"CHE"|"CHF"|"CHW"|"CLF"|"CLP"|"CNY"|"COP"|"COU"|"CRC"|"CUC"|"CUP"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ERN"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"IQD"|"IRR"|"ISK"|"JMD"|"JOD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KPW"|"KRW"|"KWD"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"LTL"|"LVL"|"LYD"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MXV"|"MYR"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"OMR"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SDG"|"SEK"|"SGD"|"SHP"|"SLL"|"SOS"|"SRD"|"SSP"|"STD"|"SVC"|"SYP"|"SZL"|"THB"|"TJS"|"TMT"|"TND"|"TOP"|"TRC"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"USN"|"USS"|"UYI"|"UYU"|"UZS"|"VEF"|"VND"|"VUV"|"WST"|"XAF"|"XAG"|"XAU"|"XBA"|"XBB"|"XBC"|"XBD"|"XCD"|"XDR"|"XOF"|"XPD"|"XPF"|"XPT"|"XTS"|"XXX"|"YER"|"ZAR"|"ZMK"|"ZMW"|"BTC"|"ETH", iban?: string}
   --classification: string@classification-completer # The classification of account. (nullable, e.g. asset)
   --code: string # The code assigned to the account. (nullable, e.g. 453)
@@ -1560,7 +1559,7 @@ export def "accounting-ledger-accounts ledgerAccountsUpdate" [
   --description: string # The description of the account. (nullable, e.g. Main checking account)
   --display-id: string # The human readable display ID used when displaying the account (e.g. 1-12345)
   --fully-qualified-name: string # The fully qualified name of the account. (nullable, e.g. Asset.Bank.Checking_Account)
-  --header: string@bool-completer # Whether the account is a header or not. (nullable, e.g. true)
+  --header: oneof<nothing, bool> # Whether the account is a header or not. (nullable, e.g. true)
   --last-reconciliation-date: string # Reconciliation Date means the last calendar day of each Reconciliation Period. (nullable, format: date, e.g. 2020-09-30)
   --level: float # nullable, e.g. 1
   --name: string # The name of the account. (nullable, e.g. Bank account)
@@ -1569,7 +1568,7 @@ export def "accounting-ledger-accounts ledgerAccountsUpdate" [
   --parent-account: record # shape: {display_id?: string, id?: string, name?: string}
   --row-version: string # A binary value used to detect updates to a object and prevent data conflicts. It is incremented each time an update is made to the object. (nullable, e.g. 1-12345)
   --status: string@status-completer-3 # The status of the account. (nullable, e.g. active)
-  --sub-account: string@bool-completer # Whether the account is a sub account or not. (nullable, e.g. false)
+  --sub-account: oneof<nothing, bool> # Whether the account is a sub account or not. (nullable, e.g. false)
   --sub-type: string # The sub type of account. (nullable, e.g. CHECKING_ACCOUNT)
   --tax-rate: record # shape: {id?: string}
   --tax-type: string # The tax type of the account. (nullable, e.g. NONE)
@@ -1601,7 +1600,7 @@ export def "accounting-payments paymentsAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --pass-through: record # Optional unmapped key/values that will be passed through to downstream as query parameters
@@ -1639,7 +1638,7 @@ export def "accounting-payments paymentsAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1655,7 +1654,7 @@ export def "accounting-payments paymentsAdd" [
   --payment-method: string # Payment method name (nullable, e.g. Credit Card)
   --payment-method-id: string # Unique identifier for the payment method. (nullable, e.g. 123456)
   --payment-method-reference: string # Optional reference message returned by payment method on processing (nullable, e.g. 123456)
-  --reconciled: string@bool-completer # Payment has been reconciled (e.g. true)
+  --reconciled: oneof<nothing, bool> # Payment has been reconciled (e.g. true)
   --reference: string # Optional payment reference message ie: Debit remittance detail. (nullable, e.g. 123456)
   --row-version: string # A binary value used to detect updates to a object and prevent data conflicts. It is incremented each time an update is made to the object. (nullable, e.g. 1-12345)
   --status: string@status-completer-4 # Status of payment (e.g. authorised)
@@ -1691,7 +1690,7 @@ export def "accounting-payments paymentsDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1720,7 +1719,7 @@ export def "accounting-payments paymentsOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --qp-fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
@@ -1756,7 +1755,7 @@ export def "accounting-payments paymentsUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1772,7 +1771,7 @@ export def "accounting-payments paymentsUpdate" [
   --payment-method: string # Payment method name (nullable, e.g. Credit Card)
   --payment-method-id: string # Unique identifier for the payment method. (nullable, e.g. 123456)
   --payment-method-reference: string # Optional reference message returned by payment method on processing (nullable, e.g. 123456)
-  --reconciled: string@bool-completer # Payment has been reconciled (e.g. true)
+  --reconciled: oneof<nothing, bool> # Payment has been reconciled (e.g. true)
   --reference: string # Optional payment reference message ie: Debit remittance detail. (nullable, e.g. 123456)
   --row-version: string # A binary value used to detect updates to a object and prevent data conflicts. It is incremented each time an update is made to the object. (nullable, e.g. 1-12345)
   --status: string@status-completer-4 # Status of payment (e.g. authorised)
@@ -1807,7 +1806,7 @@ export def "accounting-profit-and-loss profitAndLossOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --filter: record # Apply filters (e.g. {customer_id: 123abc, end_date: 2021-12-31, start_date: 2021-01-01})
   --pass-through: record # Optional unmapped key/values that will be passed through to downstream as query parameters
   --qp-fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
@@ -1838,7 +1837,7 @@ export def "accounting-suppliers suppliersAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --filter: record # Apply filters (e.g. {company_name: SpaceX, email: elon@musk.com})
@@ -1878,7 +1877,7 @@ export def "accounting-suppliers suppliersAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1891,7 +1890,7 @@ export def "accounting-suppliers suppliersAdd" [
   --display-name: string # Display name (nullable, e.g. Windsurf Shop)
   --emails: list # item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
   --first-name: string # The first name of the person. (nullable, e.g. Elon)
-  --individual: string@bool-completer # Is this an individual or business supplier (nullable, e.g. true)
+  --individual: oneof<nothing, bool> # Is this an individual or business supplier (nullable, e.g. true)
   --last-name: string # The last name of the person. (nullable, e.g. Musk)
   --middle-name: string # Middle name of the person. (nullable, e.g. D.)
   --notes: string # Some notes about this supplier (nullable, e.g. Some notes about this supplier)
@@ -1931,7 +1930,7 @@ export def "accounting-suppliers suppliersDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -1960,7 +1959,7 @@ export def "accounting-suppliers suppliersOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --qp-fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
@@ -1997,7 +1996,7 @@ export def "accounting-suppliers suppliersUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -2010,7 +2009,7 @@ export def "accounting-suppliers suppliersUpdate" [
   --display-name: string # Display name (nullable, e.g. Windsurf Shop)
   --emails: list # item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
   --first-name: string # The first name of the person. (nullable, e.g. Elon)
-  --individual: string@bool-completer # Is this an individual or business supplier (nullable, e.g. true)
+  --individual: oneof<nothing, bool> # Is this an individual or business supplier (nullable, e.g. true)
   --last-name: string # The last name of the person. (nullable, e.g. Musk)
   --middle-name: string # Middle name of the person. (nullable, e.g. D.)
   --notes: string # Some notes about this supplier (nullable, e.g. Some notes about this supplier)
@@ -2049,7 +2048,7 @@ export def "accounting-tax-rates taxRatesAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
   --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
   --filter: record # Apply filters (e.g. {assets: true, equity: true, expenses: true, liabilities: true, revenue: true})
@@ -2083,7 +2082,7 @@ export def "accounting-tax-rates taxRatesAdd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -2129,7 +2128,7 @@ export def "accounting-tax-rates taxRatesDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
@@ -2158,7 +2157,7 @@ export def "accounting-tax-rates taxRatesOne" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --qp-fields: string # The 'fields' parameter allows API users to specify the fields they want to include in the API response. If this parameter is not present, the API will return all available fields. If this parameter is present, only the fields specified in the comma-separated string will be included in the response. Nested properties can also be requested by using a dot notation. <br /><br />Example: `fields=name,email,addresses.city`<br /><br />In the example above, the response will only include the fields "name", "email" and "addresses.city". If any other fields are available, they will be excluded. (nullable, e.g. id,updated_at)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
@@ -2189,7 +2188,7 @@ export def "accounting-tax-rates taxRatesUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Include raw response. Mostly used for debugging purposes (default: false)
+  --qp-raw: oneof<nothing, bool> # Include raw response. Mostly used for debugging purposes (default: false)
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
   --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://example.com:7990/rest"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -551,7 +550,7 @@ export def "branch-utils-latest-projects-repos-branches delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dryRun: string@bool-completer # Don't actually delete the ref name, just do a dry run
+  --dryRun: oneof<nothing, bool> # Don't actually delete the ref name, just do a dry run
   --endPoint: string # Commit ID that the provided ref name is expected to point to
   --name: string # Name of the ref to be deleted
 ]: any -> any {
@@ -658,7 +657,7 @@ export def "build-status-latest-commits-stats get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeUnique: string@bool-completer # include a unique build result if there is either only one failed build, only one in-progress build or only one successful build
+  --includeUnique: oneof<nothing, bool> # include a unique build result if there is either only one failed build, only one in-progress build or only one successful build
 ]: nothing -> record<cancelled: int, failed: int, inProgress: int, successful: int, unknown: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1457,7 +1456,7 @@ export def "git-latest-projects-repos-tags createTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer
+  --force: oneof<nothing, bool>
   --message: string # e.g. A new release tag
   --name: string # e.g. release-tag
   --startPoint: string # e.g. refs/heads/master
@@ -2730,7 +2729,7 @@ export def "sync-latest-projects-repos setEnabled" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3094,7 +3093,7 @@ export def "mirroring-latest-repos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDefaultBranch: string@bool-completer # default: false
+  --includeDefaultBranch: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3118,7 +3117,7 @@ export def "mirroring-latest-repos-mirrors get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --preAuthorized: string@bool-completer
+  --preAuthorized: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3610,18 +3609,18 @@ export def "authconfig-latest-idps addIdp" [
   --client-id: string
   --client-secret: string
   --crowd-url: string
-  --discovery-enabled: string@bool-completer
-  --enable-remember-me: string@bool-completer
-  --enabled: string@bool-completer
+  --discovery-enabled: oneof<nothing, bool>
+  --enable-remember-me: oneof<nothing, bool>
+  --enabled: oneof<nothing, bool>
   --id: int # format: int64
   --idp-type: string@idp-type-completer
-  --include-customer-logins: string@bool-completer
+  --include-customer-logins: oneof<nothing, bool>
   --issuer-url: string
   --jit-configuration: any # shape: {additional-openid-scopes?: list, mapping-display-name?: string, mapping-email?: string, mapping-groups?: string, user-provisioning-enabled?: bool}
   --last-updated: string # format: date-time
   --name: string
   --name-id-policy: string@name-id-policy-completer
-  --sign-authnrequest: string@bool-completer
+  --sign-authnrequest: oneof<nothing, bool>
   --signature-algorithm: string@signature-algorithm-completer
   --sso-issuer: string
   --sso-type: string@sso-type-completer
@@ -3707,18 +3706,18 @@ export def "authconfig-latest-idps updateIdp" [
   --client-id: string
   --client-secret: string
   --crowd-url: string
-  --discovery-enabled: string@bool-completer
-  --enable-remember-me: string@bool-completer
-  --enabled: string@bool-completer
+  --discovery-enabled: oneof<nothing, bool>
+  --enable-remember-me: oneof<nothing, bool>
+  --enabled: oneof<nothing, bool>
   --body-id: int # format: int64
   --idp-type: string@idp-type-completer
-  --include-customer-logins: string@bool-completer
+  --include-customer-logins: oneof<nothing, bool>
   --issuer-url: string
   --jit-configuration: any # shape: {additional-openid-scopes?: list, mapping-display-name?: string, mapping-email?: string, mapping-groups?: string, user-provisioning-enabled?: bool}
   --last-updated: string # format: date-time
   --name: string
   --name-id-policy: string@name-id-policy-completer
-  --sign-authnrequest: string@bool-completer
+  --sign-authnrequest: oneof<nothing, bool>
   --signature-algorithm: string@signature-algorithm-completer
   --sso-issuer: string
   --sso-type: string@sso-type-completer
@@ -3860,10 +3859,10 @@ export def "authconfig-latest-sso updateConfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --discovery-refresh-cron: string
-  --enable-authentication-fallback: string@bool-completer
+  --enable-authentication-fallback: oneof<nothing, bool>
   --last-updated: string # format: date-time
-  --show-login-form: string@bool-completer
-  --show-login-form-for-jsm: string@bool-completer
+  --show-login-form: oneof<nothing, bool>
+  --show-login-form-for-jsm: oneof<nothing, bool>
 ]: any -> record<discovery_refresh_cron: string, enable_authentication_fallback: bool, last_updated: string, show_login_form: bool, show_login_form_for_jsm: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3911,8 +3910,8 @@ export def "basicauth-latest-config put" [
   --allow-errors(-e) # Return full response without error handling
   --allowed-paths: list
   --allowed-users: list
-  --block-requests: string@bool-completer
-  --show-warning-message: string@bool-completer
+  --block-requests: oneof<nothing, bool>
+  --show-warning-message: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3940,7 +3939,7 @@ export def "tsv-latest-authenticate authenticate" [
   --captchaChallenge: string
   --captchaId: string
   --password: string
-  --rememberMe: string@bool-completer
+  --rememberMe: oneof<nothing, bool>
   --targetUrl: string
   --username: string
 ]: any -> record<next: string> {
@@ -4492,8 +4491,8 @@ export def "indexing-latest-restart restartIndexingThreadWorker" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --gracefulShutdown: string@bool-completer # Should the indexing thread terminate immediately (default: false, e.g. true)
-  --waitForRestart: string@bool-completer # Should the response wait until the worker has been restarted (default: false, e.g. true)
+  --gracefulShutdown: oneof<nothing, bool> # Should the indexing thread terminate immediately (default: false, e.g. true)
+  --waitForRestart: oneof<nothing, bool> # Should the response wait until the worker has been restarted (default: false, e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5186,7 +5185,7 @@ export def "latest-admin-banner setBanner" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   audience: string@audience-completer
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --message: string
 ]: any -> any {
   let input = $in
@@ -5367,7 +5366,7 @@ export def "latest-admin-git-mesh-nodes registerNewMeshNode" [
   --id: string # e.g. 1
   --lastSeenDate: float # e.g. 1630041546433
   --name: string # e.g. My node
-  --offline: string@bool-completer # e.g. false
+  --offline: oneof<nothing, bool> # e.g. false
   --rpcId: string # e.g. 1
   --rpcUrl: string # e.g. http://127.0.0.1:7999
   --state: string@state-completer-2 # e.g. AVAILABLE
@@ -5396,7 +5395,7 @@ export def "latest-admin-git-mesh-nodes delete-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # default: false
+  --force: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5446,7 +5445,7 @@ export def "latest-admin-git-mesh-nodes updateMeshNode" [
   --body-id: string # e.g. 1
   --lastSeenDate: float # e.g. 1630041546433
   --name: string # e.g. My node
-  --offline: string@bool-completer # e.g. false
+  --offline: oneof<nothing, bool> # e.g. false
   --rpcId: string # e.g. 1
   --rpcUrl: string # e.g. http://127.0.0.1:7999
   --state: string@state-completer-2 # e.g. AVAILABLE
@@ -5817,10 +5816,10 @@ export def "latest-admin-mail-server setMailConfig" [
   --password: string # e.g. password
   --port: int # format: int32, e.g. 465
   --protocol: string@protocol-completer
-  --requireStartTls: string@bool-completer
+  --requireStartTls: oneof<nothing, bool>
   --senderAddress: string # e.g. stash-no-reply@company.com
   --tokenId: string
-  --useStartTls: string@bool-completer
+  --useStartTls: oneof<nothing, bool>
   --username: string # e.g. user
 ]: any -> any {
   let input = $in
@@ -6203,7 +6202,7 @@ export def "latest-admin-rate-limit-settings setSettings-by-" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --defaultSettings: record # shape: {capacity?: int, fillRate?: int}
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6256,7 +6255,7 @@ export def "latest-admin-rate-limit-settings-users set-by-" [
   --allow-errors(-e) # Return full response without error handling
   --settings: record # shape: {capacity?: int, fillRate?: int}
   usernames: list
-  --whitelisted: string@bool-completer
+  --whitelisted: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6328,7 +6327,7 @@ export def "latest-admin-rate-limit-settings-users set-by-userSlug" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --settings: record # shape: {capacity?: int, fillRate?: int}
-  --whitelisted: string@bool-completer
+  --whitelisted: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6426,10 +6425,10 @@ export def "latest-admin-users createUser" [
   --allow-errors(-e) # Return full response without error handling
   --emailAddress: string # The e-mail address for the new user.
   --password: string # The password for the new user. Required if the <code>notify</code> parameter is not present or is set to <code>false</false>
-  --addToDefaultGroup: string@bool-completer # Set <code>true</code> to add the user to the default group, which can be used to grant them a set of initial permissions; otherwise, <code>false</code> to not add them to a group. (default: true)
+  --addToDefaultGroup: oneof<nothing, bool> # Set <code>true</code> to add the user to the default group, which can be used to grant them a set of initial permissions; otherwise, <code>false</code> to not add them to a group. (default: true)
   --displayName: string # The display name for the new user.
   --name: string # The username for the new user.
-  --notify: string@bool-completer # If present and not <code>false</code> instead of requiring a password, the create user will be notified via email their account has been created and requires a password to be reset. This option can only be used if a mail server has been configured.
+  --notify: oneof<nothing, bool> # If present and not <code>false</code> instead of requiring a password, the create user will be notified via email their account has been created and requires a password to be reset. This option can only be used if a mail server has been configured.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7247,8 +7246,8 @@ export def "latest-logs-settings setSettings-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --debugLoggingEnabled: string@bool-completer # e.g. false
-  --profilingEnabled: string@bool-completer # e.g. false
+  --debugLoggingEnabled: oneof<nothing, bool> # e.g. false
+  --profilingEnabled: oneof<nothing, bool> # e.g. false
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7523,7 +7522,7 @@ export def "latest-migration-mesh startMeshMigration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer
+  --all: oneof<nothing, bool>
   projectIds: list
   repositoryIds: list
 ]: any -> any {
@@ -7550,7 +7549,7 @@ export def "latest-migration-mesh-preview previewMeshMigration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer
+  --all: oneof<nothing, bool>
   projectIds: list
   repositoryIds: list
 ]: any -> any {
@@ -8654,10 +8653,10 @@ export def "latest-projects-repos-branches get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --boostMatches: string@bool-completer # Controls whether exact and prefix matches will be boosted to the top
+  --boostMatches: oneof<nothing, bool> # Controls whether exact and prefix matches will be boosted to the top
   --context: string
   --orderBy: string@orderBy-completer # Ordering of refs either ALPHABETICAL (by name) or MODIFICATION (last updated)
-  --details: string@bool-completer # Whether to retrieve plugin-provided metadata about each branch
+  --details: oneof<nothing, bool> # Whether to retrieve plugin-provided metadata about each branch
   --filterText: string # The text to match on
   --qp-base: string # Base branch or tag to compare each branch to (for the metadata providers that uses that information
   --start: float # Start number for the page (inclusive). If not passed, first page is assumed. (e.g. 0)
@@ -9102,7 +9101,7 @@ export def "latest-projects-repos-commits-comments createComment" [
   --severity: string # e.g. NORMAL
   --state: string # e.g. OPEN
   --text: string # e.g. An insightful comment.
-  --threadResolved: string@bool-completer # Indicates if this comment thread has been marked as resolved or not
+  --threadResolved: oneof<nothing, bool> # Indicates if this comment thread has been marked as resolved or not
   --version: int # format: int32, e.g. 1
 ]: any -> any {
   let input = $in
@@ -9198,7 +9197,7 @@ export def "latest-projects-repos-commits-comments updateComment" [
   --severity: string # e.g. NORMAL
   --state: string # e.g. OPEN
   --text: string # e.g. An insightful comment.
-  --threadResolved: string@bool-completer # Indicates if this comment thread has been marked as resolved or not
+  --threadResolved: oneof<nothing, bool> # Indicates if this comment thread has been marked as resolved or not
   --version: int # format: int32, e.g. 1
 ]: any -> any {
   let input = $in
@@ -10404,18 +10403,18 @@ export def "latest-projects-repos-pull-requests create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --closed: string@bool-completer
+  --closed: oneof<nothing, bool>
   --closedDate: int # format: int64, e.g. 19990759200
   --createdDate: int # format: int64, e.g. 13590759200
   --description: string # e.g. It is a kludge, but put the tuple from the database in the cache.
   --descriptionAsHtml: string
-  --draft: string@bool-completer
+  --draft: oneof<nothing, bool>
   --fromRef: record # shape: {displayId: string, id: string, latestCommit: string, repository?: record, type?: "BRANCH"|"TAG"}
   --htmlDescription: string
   --id: int # format: int64, e.g. 1
   --links: record
-  --locked: string@bool-completer
-  --body-open: string@bool-completer
+  --locked: oneof<nothing, bool>
+  --body-open: oneof<nothing, bool>
   --participants: list # item shape: {approved?: bool, lastReviewedCommit?: string, role?: "AUTHOR"|"REVIEWER"|"PARTICIPANT", status?: "UNAPPROVED"|"NEEDS_WORK"|"APPROVED", user?: record}
   --reviewers: list # item shape: {approved?: bool, lastReviewedCommit?: string, role?: "AUTHOR"|"REVIEWER"|"PARTICIPANT", status?: "UNAPPROVED"|"NEEDS_WORK"|"APPROVED", user?: record}
   --state: string@state-completer-3
@@ -10509,18 +10508,18 @@ export def "latest-projects-repos-pull-requests update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --closed: string@bool-completer
+  --closed: oneof<nothing, bool>
   --closedDate: int # format: int64, e.g. 19990759200
   --createdDate: int # format: int64, e.g. 13590759200
   --description: string # e.g. It is a kludge, but put the tuple from the database in the cache.
   --descriptionAsHtml: string
-  --draft: string@bool-completer
+  --draft: oneof<nothing, bool>
   --fromRef: record # shape: {displayId: string, id: string, latestCommit: string, repository?: record, type?: "BRANCH"|"TAG"}
   --htmlDescription: string
   --id: int # format: int64, e.g. 1
   --links: record
-  --locked: string@bool-completer
-  --body-open: string@bool-completer
+  --locked: oneof<nothing, bool>
+  --body-open: oneof<nothing, bool>
   --participants: list # item shape: {approved?: bool, lastReviewedCommit?: string, role?: "AUTHOR"|"REVIEWER"|"PARTICIPANT", status?: "UNAPPROVED"|"NEEDS_WORK"|"APPROVED", user?: record}
   --reviewers: list # item shape: {approved?: bool, lastReviewedCommit?: string, role?: "AUTHOR"|"REVIEWER"|"PARTICIPANT", status?: "UNAPPROVED"|"NEEDS_WORK"|"APPROVED", user?: record}
   --state: string@state-completer-3
@@ -10802,7 +10801,7 @@ export def "latest-projects-repos-pull-requests-blocker-comments createComment-b
   --severity: string # e.g. NORMAL
   --state: string # e.g. OPEN
   --text: string # e.g. An insightful comment.
-  --threadResolved: string@bool-completer # Indicates if this comment thread has been marked as resolved or not
+  --threadResolved: oneof<nothing, bool> # Indicates if this comment thread has been marked as resolved or not
   --version: int # format: int32, e.g. 1
 ]: any -> any {
   let input = $in
@@ -10897,7 +10896,7 @@ export def "latest-projects-repos-pull-requests-blocker-comments updateComment-b
   --severity: string # e.g. NORMAL
   --state: string # e.g. OPEN
   --text: string # e.g. An insightful comment.
-  --threadResolved: string@bool-completer # Indicates if this comment thread has been marked as resolved or not
+  --threadResolved: oneof<nothing, bool> # Indicates if this comment thread has been marked as resolved or not
   --version: int # format: int32, e.g. 1
 ]: any -> any {
   let input = $in
@@ -11005,7 +11004,7 @@ export def "latest-projects-repos-pull-requests-comments createComment-by-projec
   --severity: string # e.g. NORMAL
   --state: string # e.g. OPEN
   --text: string # e.g. An insightful comment.
-  --threadResolved: string@bool-completer # Indicates if this comment thread has been marked as resolved or not
+  --threadResolved: oneof<nothing, bool> # Indicates if this comment thread has been marked as resolved or not
   --version: int # format: int32, e.g. 1
 ]: any -> any {
   let input = $in
@@ -11100,7 +11099,7 @@ export def "latest-projects-repos-pull-requests-comments updateComment-by-projec
   --severity: string # e.g. NORMAL
   --state: string # e.g. OPEN
   --text: string # e.g. An insightful comment.
-  --threadResolved: string@bool-completer # Indicates if this comment thread has been marked as resolved or not
+  --threadResolved: oneof<nothing, bool> # Indicates if this comment thread has been marked as resolved or not
   --version: int # format: int32, e.g. 1
 ]: any -> any {
   let input = $in
@@ -11336,9 +11335,9 @@ export def "latest-projects-repos-pull-requests-merge merge" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --version: string # The current version of the pull request. If the server's version isn't the same as the specified version the operation will fail. To determine the current version of the pull request it should be fetched from the server prior to this operation. Look for the 'version' attribute in the returned JSON structure.
-  --autoMerge: string@bool-completer # e.g. false
+  --autoMerge: oneof<nothing, bool> # e.g. false
   --autoSubject: string # e.g. (Optional, 5.7+) true to prepend an auto-generated subject to the message (default), or false to use the message as-is
-  --bypassMergeQueue: string@bool-completer # e.g. false
+  --bypassMergeQueue: oneof<nothing, bool> # e.g. false
   --message: string # e.g. (Optional) A descriptive message for the merge commit
   --strategyId: string # e.g. (Optional) squash
   --version: int # format: int32
@@ -12235,7 +12234,7 @@ export def "latest-projects-repos-settings-auto-decline setAutoDeclineSettings-b
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # e.g. true
+  --enabled: oneof<nothing, bool> # e.g. true
   --inactivityWeeks: int # format: int32, e.g. 4
 ]: any -> any {
   let input = $in
@@ -12309,7 +12308,7 @@ export def "latest-projects-repos-settings-auto-merge set-by-projectKey-reposito
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # e.g. false
+  --enabled: oneof<nothing, bool> # e.g. false
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -12487,7 +12486,7 @@ export def "latest-projects-repos-settings-hooks-settings setSettings-by-project
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --booleanValue: string@bool-completer # e.g. true
+  --booleanValue: oneof<nothing, bool> # e.g. true
   --doubleValue: float # format: double, e.g. 1.1
   --integerValue: int # format: int32, e.g. 1
   --longValue: int # format: int64, e.g. -2147483648
@@ -12545,8 +12544,8 @@ export def "latest-projects-repos-settings-pull-requests updatePullRequestSettin
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --mergeConfig: record # shape: {commitMessageTemplate?: record, commitSummaries?: int, defaultStrategy?: record, strategies: list}
-  --requiredAllApprovers: string@bool-completer
-  --requiredAllTasksComplete: string@bool-completer
+  --requiredAllApprovers: oneof<nothing, bool>
+  --requiredAllTasksComplete: oneof<nothing, bool>
   --requiredApprovers: record # shape: {count?: string, enabled?: bool}
   --requiredApproversDeprecated: int # format: int32
   --requiredSuccessfulBuilds: record # shape: {count?: string, enabled?: bool}
@@ -12883,7 +12882,7 @@ export def "latest-projects-repos-webhooks findWebhooks-by-projectKey-repository
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --event: string # List of <code>com.atlassian.webhooks.WebhookEvent</code> IDs to filter for
-  --statistics: string@bool-completer # <code>true</code> if statistics should be provided for all found webhooks
+  --statistics: oneof<nothing, bool> # <code>true</code> if statistics should be provided for all found webhooks
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -12909,13 +12908,13 @@ export def "latest-projects-repos-webhooks createWebhook-by-projectKey-repositor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --configuration: record
   --credentials: any # shape: {password?: string, username?: string}
   --events: list
   --name: string
   --scopeType: string
-  --sslVerificationRequired: string@bool-completer
+  --sslVerificationRequired: oneof<nothing, bool>
   --statistics: record
   --body-url: string
 ]: any -> any {
@@ -12946,7 +12945,7 @@ export def "latest-projects-repos-webhooks-search searchWebhooks" [
   --allow-errors(-e) # Return full response without error handling
   --scopeType: string # Scopes to filter by. This parameter can be specified once e.g. "scopeType=repository", or twice e.g. "scopeType=repository&scopeType=project", to filter by more than one scope level. 
   --event: string # List of <code>com.atlassian.webhooks.WebhookEvent</code> ids to filter for
-  --statistics: string@bool-completer # <code>true</code> if statistics should be provided for all found webhooks
+  --statistics: oneof<nothing, bool> # <code>true</code> if statistics should be provided for all found webhooks
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -13055,13 +13054,13 @@ export def "latest-projects-repos-webhooks updateWebhook-by-projectKey-webhookId
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --configuration: record
   --credentials: any # shape: {password?: string, username?: string}
   --events: list
   --name: string
   --scopeType: string
-  --sslVerificationRequired: string@bool-completer
+  --sslVerificationRequired: oneof<nothing, bool>
   --statistics: record
   --body-url: string
 ]: any -> any {
@@ -13616,7 +13615,7 @@ export def "latest-projects-settings-auto-decline setAutoDeclineSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # e.g. true
+  --enabled: oneof<nothing, bool> # e.g. true
   --inactivityWeeks: int # format: int32, e.g. 4
 ]: any -> any {
   let input = $in
@@ -13687,7 +13686,7 @@ export def "latest-projects-settings-auto-merge set" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # e.g. false
+  --enabled: oneof<nothing, bool> # e.g. false
   --restrictionAction: string@restrictionAction-completer # e.g. CREATE
 ]: any -> any {
   let input = $in
@@ -13836,7 +13835,7 @@ export def "latest-projects-settings-hooks-settings setSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --booleanValue: string@bool-completer # e.g. true
+  --booleanValue: oneof<nothing, bool> # e.g. true
   --doubleValue: float # format: double, e.g. 1.1
   --integerValue: int # format: int32, e.g. 1
   --longValue: int # format: int64, e.g. -2147483648
@@ -14056,7 +14055,7 @@ export def "latest-projects-webhooks findWebhooks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --event: string # List of <code>com.atlassian.webhooks.WebhookEvent</code> IDs to filter for
-  --statistics: string@bool-completer # <code>true</code> if statistics should be provided for all found webhooks
+  --statistics: oneof<nothing, bool> # <code>true</code> if statistics should be provided for all found webhooks
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -14081,13 +14080,13 @@ export def "latest-projects-webhooks createWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --configuration: record
   --credentials: any # shape: {password?: string, username?: string}
   --events: list
   --name: string
   --scopeType: string
-  --sslVerificationRequired: string@bool-completer
+  --sslVerificationRequired: oneof<nothing, bool>
   --statistics: record
   --body-url: string
 ]: any -> any {
@@ -14116,7 +14115,7 @@ export def "latest-projects-webhooks-test testWebhook" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --webhookId: int # format: int32
-  --sslVerificationRequired: string@bool-completer # default: true
+  --sslVerificationRequired: oneof<nothing, bool> # default: true
   --qp-url: string # The url in which to connect to
   --password: string
   --username: string
@@ -14196,13 +14195,13 @@ export def "latest-projects-webhooks updateWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --configuration: record
   --credentials: any # shape: {password?: string, username?: string}
   --events: list
   --name: string
   --scopeType: string
-  --sslVerificationRequired: string@bool-completer
+  --sslVerificationRequired: oneof<nothing, bool>
   --statistics: record
   --body-url: string
 ]: any -> any {
@@ -14613,7 +14612,7 @@ export def "latest-system-signing-configuration updateSystemSigningConfiguration
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # e.g. false
+  --enabled: oneof<nothing, bool> # e.g. false
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -14815,7 +14814,7 @@ export def "latest-users-settings updateSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --boolean key: string@bool-completer # e.g. true
+  --boolean key: oneof<nothing, bool> # e.g. true
   --long key: float # e.g. 10
   --string key: string # e.g. string value
 ]: any -> any {

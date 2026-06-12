@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://try.microcks.io/rest/Train+Travel+API/1.0.0" "https://api.example.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -138,8 +137,8 @@ export def "trips get-trips" [
   --origin: string # The ID of the origin station (format: uuid, e.g. efdbb9d1-02c2-4bc3-afb7-6788d8782b1e)
   --destination: string # The ID of the destination station (format: uuid, e.g. b2e783e1-c824-4d63-b37a-d8d698862f1d)
   --date: string # The date and time of the trip in ISO 8601 format in origin station's timezone. (format: date-time, e.g. 2024-02-01T09:00:00Z)
-  --bicycles: string@bool-completer # Only return trips where bicycles are known to be allowed (default: false)
-  --dogs: string@bool-completer # Only return trips where dogs are known to be allowed (default: false)
+  --bicycles: oneof<nothing, bool> # Only return trips where bicycles are known to be allowed (default: false)
+  --dogs: oneof<nothing, bool> # Only return trips where dogs are known to be allowed (default: false)
 ]: nothing -> record<data: table<id: string, origin: string, destination: string, departure_time: string, arrival_time: string, operator: string, price: float, bicycles_allowed: bool, dogs_allowed: bool, self: string>, links: record<self: string, next: string, prev: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -190,8 +189,8 @@ export def "bookings create-booking" [
   --accept: string@accept-completer # Response content type
   --trip-id: string # Identifier of the booked trip (format: uuid)
   --passenger-name: string # Name of the passenger
-  --has-bicycle: string@bool-completer # Indicates whether the passenger has a bicycle.
-  --has-dog: string@bool-completer # Indicates whether the passenger has a dog.
+  --has-bicycle: oneof<nothing, bool> # Indicates whether the passenger has a bicycle.
+  --has-dog: oneof<nothing, bool> # Indicates whether the passenger has a dog.
 ]: any -> record<id: string, trip_id: string, passenger_name: string, has_bicycle: bool, has_dog: bool, links: record<self: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

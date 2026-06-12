@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -118,7 +117,7 @@ export def "api-keys-refresh refresh" [
   --allow-errors(-e) # Return full response without error handling
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_
   --apiKeyDaysValid: float # For how many days is managed organization api key valid. Defaults to 30 days. (default: 30, e.g. 60)
-  --apiKeyNeverExpires: string@bool-completer # If true, organization api key never expires. (e.g. true)
+  --apiKeyNeverExpires: oneof<nothing, bool> # If true, organization api key never expires. (e.g. true)
 ]: any -> record<status: string, data: record<apiKey: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -388,7 +387,7 @@ export def "bookings-cancel cancelBooking" [
   --x-cal-secret-key: string # For platform customers - OAuth client secret key
   --x-cal-client-id: string # For platform customers - OAuth client ID
   --cancellationReason: string # e.g. User requested cancellation
-  --cancelSubsequentBookings: string@bool-completer # For recurring non-seated booking only - if true, cancel booking with the bookingUid of the individual recurrence and all recurrences that come after it.
+  --cancelSubsequentBookings: oneof<nothing, bool> # For recurring non-seated booking only - if true, cancel booking with the bookingUid of the individual recurrence and all recurrences that come after it.
   --seatUid: string # Uid of the specific seat within booking. (e.g. 3be561a9-31f1-4b8e-aefc-9d9a085f0dd1)
 ]: any -> record<status: string, data: any> {
   let input = $in
@@ -420,7 +419,7 @@ export def "bookings-mark-absent markNoShow" [
   --allow-errors(-e) # Return full response without error handling
   --cal-api-version: string # Must be set to 2024-08-13. If not set to this value, the endpoint will default to an older version.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
-  --host: string@bool-completer # Whether the host was absent (e.g. false)
+  --host: oneof<nothing, bool> # Whether the host was absent (e.g. false)
   --attendees: list # item shape: {email: string, absent: bool}
 ]: any -> record<status: string, data: any> {
   let input = $in
@@ -1280,7 +1279,7 @@ export def "calendars-ics-feed-save createIcsFeed" [
   --allow-errors(-e) # Return full response without error handling
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   urls: list # An array of ICS URLs (e.g. [https://cal.com/ics/feed.ics, http://cal.com/ics/feed.ics])
-  --readOnly: string@bool-completer # Whether to allowing writing to the calendar or not (default: true, e.g. false)
+  --readOnly: oneof<nothing, bool> # Whether to allowing writing to the calendar or not (default: true, e.g. false)
 ]: any -> record<status: string, data: record<id: float, type: string, userId: int, teamId: int, appId: string, invalid: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1388,7 +1387,7 @@ export def "calendars-connect redirect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isDryRun: string@bool-completer
+  --isDryRun: oneof<nothing, bool>
   --redir: string # Redirect URL after successful calendar authorization.
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
 ]: nothing -> record {
@@ -1915,7 +1914,7 @@ export def "oauth-clients-webhooks createOAuthClientWebhook" [
   --allow-errors(-e) # Return full response without error handling
   --x-cal-secret-key: string # OAuth client secret key
   --payloadTemplate: string # The template of the payload that will be sent to the subscriberUrl, check cal.com/docs/core-features/webhooks for more information (e.g. {"content":"A new event has been scheduled","type":"{{type}}","name":"{{title}}","organizer":"{{organizer.name}}","booker":"{{attendees.0.name}}"})
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   subscriberUrl: string
   triggers: list # e.g. [BOOKING_CREATED, BOOKING_RESCHEDULED, BOOKING_CANCELLED, BOOKING_CONFIRMED, BOOKING_REJECTED, BOOKING_COMPLETED, BOOKING_NO_SHOW, BOOKING_REOPENED]
   --secret: string
@@ -2003,7 +2002,7 @@ export def "oauth-clients-webhooks updateOAuthClientWebhook" [
   --allow-errors(-e) # Return full response without error handling
   --x-cal-secret-key: string # OAuth client secret key
   --payloadTemplate: string # The template of the payload that will be sent to the subscriberUrl, check cal.com/docs/core-features/webhooks for more information (e.g. {"content":"A new event has been scheduled","type":"{{type}}","name":"{{title}}","organizer":"{{organizer.name}}","booker":"{{attendees.0.name}}"})
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --subscriberUrl: string
   --triggers: list # e.g. [BOOKING_CREATED, BOOKING_RESCHEDULED, BOOKING_CANCELLED, BOOKING_CONFIRMED, BOOKING_REJECTED, BOOKING_COMPLETED, BOOKING_NO_SHOW, BOOKING_REOPENED]
   --secret: string
@@ -2094,9 +2093,9 @@ export def "oauth-clients createOAuthClient" [
   --bookingRedirectUri: string
   --bookingCancelRedirectUri: string
   --bookingRescheduleRedirectUri: string
-  --areEmailsEnabled: string@bool-completer
-  --areDefaultEventTypesEnabled: string@bool-completer # If true, when creating a managed user the managed user will have 4 default event types: 30 and 60 minutes without Cal video, 30 and 60 minutes with Cal video. Set this as false if you want to create a managed user and then manually create event types for the user. (default: false)
-  --areCalendarEventsEnabled: string@bool-completer # If true and if managed user has calendar connected, calendar events will be created. Disable it if you manually create calendar events. Default to true. (default: true)
+  --areEmailsEnabled: oneof<nothing, bool>
+  --areDefaultEventTypesEnabled: oneof<nothing, bool> # If true, when creating a managed user the managed user will have 4 default event types: 30 and 60 minutes without Cal video, 30 and 60 minutes with Cal video. Set this as false if you want to create a managed user and then manually create event types for the user. (default: false)
+  --areCalendarEventsEnabled: oneof<nothing, bool> # If true and if managed user has calendar connected, calendar events will be created. Disable it if you manually create calendar events. Default to true. (default: true)
 ]: any -> record<status: string, data: record<clientId: string, clientSecret: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2180,9 +2179,9 @@ export def "oauth-clients updateOAuthClient" [
   --bookingRedirectUri: string
   --bookingCancelRedirectUri: string
   --bookingRescheduleRedirectUri: string
-  --areEmailsEnabled: string@bool-completer
-  --areDefaultEventTypesEnabled: string@bool-completer # If true, when creating a managed user the managed user will have 4 default event types: 30 and 60 minutes without Cal video, 30 and 60 minutes with Cal video. Set this as false if you want to create a managed user and then manually create event types for the user.
-  --areCalendarEventsEnabled: string@bool-completer # If true and if managed user has calendar connected, calendar events will be created. Disable it if you manually create calendar events. Default to true.
+  --areEmailsEnabled: oneof<nothing, bool>
+  --areDefaultEventTypesEnabled: oneof<nothing, bool> # If true, when creating a managed user the managed user will have 4 default event types: 30 and 60 minutes without Cal video, 30 and 60 minutes with Cal video. Set this as false if you want to create a managed user and then manually create event types for the user.
+  --areCalendarEventsEnabled: oneof<nothing, bool> # If true and if managed user has calendar connected, calendar events will be created. Disable it if you manually create calendar events. Default to true.
 ]: any -> record<status: string, data: record<id: string, name: string, secret: string, permissions: list<string>, logo: record, redirectUris: list<string>, organizationId: float, createdAt: string, areEmailsEnabled: bool, areDefaultEventTypesEnabled: bool, areCalendarEventsEnabled: bool, bookingRedirectUri: string, bookingCancelRedirectUri: string, bookingRescheduleRedirectUri: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2274,7 +2273,7 @@ export def "event-types createEventType" [
   slug: string # e.g. learn-the-secrets-of-masterchief
   --description: string # e.g. Discover the culinary wonders of the Argentina by making the best flan ever!
   --bookingFields: list # Custom fields that can be added to the booking form when the event is booked by someone. By default booking form has name and email field.
-  --disableGuests: string@bool-completer # If true, person booking this event can't add guests via their emails.
+  --disableGuests: oneof<nothing, bool> # If true, person booking this event can't add guests via their emails.
   --slotInterval: float # Number representing length of each slot when event is booked. By default it equal length of the event type.       If event length is 60 minutes then we would have slots 9AM, 10AM, 11AM etc. but if it was changed to 30 minutes then       we would have slots 9AM, 9:30AM, 10AM, 10:30AM etc. as the available times to book the 60 minute event.
   --minimumBookingNotice: float # Minimum number of minutes before the event that a booking can be made.
   --beforeEventBuffer: float # Extra time automatically blocked on your calendar before a meeting starts. This gives you time to prepare, review notes, or transition from your previous activity.
@@ -2282,33 +2281,33 @@ export def "event-types createEventType" [
   --scheduleId: float # If you want that this event has different schedule than user's default one you can specify it here.
   --bookingLimitsCount: any # Limit how many times this event can be booked
   --bookerActiveBookingsLimit: any # Limit the number of active bookings a booker can make for this event type.
-  --onlyShowFirstAvailableSlot: string@bool-completer # This will limit your availability for this event type to one slot per day, scheduled at the earliest available time.
+  --onlyShowFirstAvailableSlot: oneof<nothing, bool> # This will limit your availability for this event type to one slot per day, scheduled at the earliest available time.
   --bookingLimitsDuration: any # Limit total amount of time that this event can be booked
   --bookingWindow: any # Limit how far in the future this event can be booked
   --offsetStart: float # Offset timeslots shown to bookers by a specified number of minutes
   --bookerLayouts: any # Should booker have week, month or column view. Specify default layout and enabled layouts user can pick.
   --confirmationPolicy: any # Specify how the booking needs to be manually confirmed before it is pushed to the integrations and a confirmation mail is sent.
   --recurrence: any # Create a recurring event type.
-  --requiresBookerEmailVerification: string@bool-completer
-  --hideCalendarNotes: string@bool-completer
-  --lockTimeZoneToggleOnBookingPage: string@bool-completer
+  --requiresBookerEmailVerification: oneof<nothing, bool>
+  --hideCalendarNotes: oneof<nothing, bool>
+  --lockTimeZoneToggleOnBookingPage: oneof<nothing, bool>
   --color: record # shape: {lightThemeHex: string, darkThemeHex: string}
   --seats: any # Create an event type with multiple seats.
   --customName: string # Customizable event name with valid variables:       {Event type title}, {Organiser}, {Scheduler}, {Location}, {Organiser first name},       {Scheduler first name}, {Scheduler last name}, {Event duration}, {LOCATION},       {HOST/ATTENDEE}, {HOST}, {ATTENDEE}, {USER} (e.g. {Event type title} between {Organiser} and {Scheduler})
   --destinationCalendar: record # shape: {integration: string, externalId: string}
-  --useDestinationCalendarEmail: string@bool-completer
-  --hideCalendarEventDetails: string@bool-completer
+  --useDestinationCalendarEmail: oneof<nothing, bool>
+  --hideCalendarEventDetails: oneof<nothing, bool>
   --successRedirectUrl: string # A valid URL where the booker will redirect to, once the booking is completed successfully (e.g. https://masterchief.com/argentina/flan/video/9129412)
-  --hideOrganizerEmail: string@bool-completer # Boolean to Hide organizer's email address from the booking screen, email notifications, and calendar events
+  --hideOrganizerEmail: oneof<nothing, bool> # Boolean to Hide organizer's email address from the booking screen, email notifications, and calendar events
   --calVideoSettings: any # Cal video settings for the event type. Platform customers can't manage this property because currently we have no way of determining if managed user is a host or an attendee.
-  --hidden: string@bool-completer
-  --bookingRequiresAuthentication: string@bool-completer # Boolean to require authentication for booking this event type via api. If true, only authenticated users who are the event-type owner or org/team admin/owner can book this event type. (default: false)
+  --hidden: oneof<nothing, bool>
+  --bookingRequiresAuthentication: oneof<nothing, bool> # Boolean to require authentication for booking this event type via api. If true, only authenticated users who are the event-type owner or org/team admin/owner can book this event type. (default: false)
   --disableCancelling: any # Settings for disabling cancelling of this event type. (e.g. {disabled: true})
   --disableRescheduling: any # Settings for disabling rescheduling of this event type. Can be always disabled or disabled when less than X minutes before the meeting. (e.g. {disabled: false, minutesBefore: 60})
   --interfaceLanguage: string@interfaceLanguage-completer # Set preferred language for the booking interface. Use empty string for visitor's browser language (default).
-  --allowReschedulingPastBookings: string@bool-completer # Enabling this option allows for past events to be rescheduled. (default: false)
-  --allowReschedulingCancelledBookings: string@bool-completer # When enabled, users will be able to create a new booking when trying to reschedule a cancelled booking. (default: false)
-  --showOptimizedSlots: string@bool-completer # Arrange time slots to optimize availability. (default: false)
+  --allowReschedulingPastBookings: oneof<nothing, bool> # Enabling this option allows for past events to be rescheduled. (default: false)
+  --allowReschedulingCancelledBookings: oneof<nothing, bool> # When enabled, users will be able to create a new booking when trying to reschedule a cancelled booking. (default: false)
+  --showOptimizedSlots: oneof<nothing, bool> # Arrange time slots to optimize availability. (default: false)
   --locations: list # Locations where the event will take place. If not provided, cal video link will be used as the location. Note: Setting a location to a conferencing app does not install the app - the app must already be installed. Via API, only Google Meet (google-meet), Microsoft Teams (office365-video), and Zoom (zoom) can be installed. Cal Video (cal-video) is installed by default. All other conferencing apps must be connected via the Cal.diy web app and are not available for Platform plan customers. You can only set an event type location to an app that has already been installed or connected.
 ]: any -> record<status: string, data: record<id: float, lengthInMinutes: float, lengthInMinutesOptions: list<float>, title: string, slug: string, description: string, locations: list<any>, bookingFields: list<any>, disableGuests: bool, slotInterval: record, minimumBookingNotice: float, beforeEventBuffer: float, afterEventBuffer: float, recurrence: record<interval: float, occurrences: float, frequency: string>, metadata: record, price: float, currency: string, lockTimeZoneToggleOnBookingPage: bool, seatsPerTimeSlot: record, forwardParamsSuccessRedirect: record, successRedirectUrl: record, isInstantEvent: bool, seatsShowAvailabilityCount: bool, scheduleId: float, bookingLimitsCount: record, bookerActiveBookingsLimit: record<maximumActiveBookings: float, offerReschedule: bool>, onlyShowFirstAvailableSlot: bool, bookingLimitsDuration: record, bookingWindow: list<any>, bookerLayouts: record<defaultLayout: string, enabledLayouts: list>, confirmationPolicy: record, requiresBookerEmailVerification: bool, hideCalendarNotes: bool, color: record<lightThemeHex: string, darkThemeHex: string>, seats: record<seatsPerTimeSlot: float, showAttendeeInfo: bool, showAvailabilityCount: bool>, offsetStart: float, customName: string, destinationCalendar: record<integration: string, externalId: string>, useDestinationCalendarEmail: bool, hideCalendarEventDetails: bool, hideOrganizerEmail: bool, calVideoSettings: record<disableRecordingForOrganizer: bool, disableRecordingForGuests: bool, redirectUrlOnExit: record, enableAutomaticRecordingForOrganizer: bool, enableAutomaticTranscription: bool, disableTranscriptionForGuests: bool, disableTranscriptionForOrganizer: bool, sendTranscriptionEmails: bool>, hidden: bool, bookingRequiresAuthentication: bool, disableCancelling: record<disabled: bool>, disableRescheduling: record<disabled: bool, minutesBefore: float>, interfaceLanguage: string, allowReschedulingPastBookings: bool, allowReschedulingCancelledBookings: bool, showOptimizedSlots: bool, ownerId: float, users: list<string>, bookingUrl: string>> {
   let input = $in
@@ -2407,7 +2406,7 @@ export def "event-types updateEventType" [
   --slug: string # e.g. learn-the-secrets-of-masterchief
   --description: string # e.g. Discover the culinary wonders of the Argentina by making the best flan ever!
   --bookingFields: list # Complete set of booking form fields. This array replaces all existing booking fields. To modify existing fields, first fetch the current event type, then include all desired fields in this array. Sending only one field will remove all other custom fields, keeping only default fields plus the provided one.
-  --disableGuests: string@bool-completer # If true, person booking this event can't add guests via their emails.
+  --disableGuests: oneof<nothing, bool> # If true, person booking this event can't add guests via their emails.
   --slotInterval: float # Number representing length of each slot when event is booked. By default it equal length of the event type.       If event length is 60 minutes then we would have slots 9AM, 10AM, 11AM etc. but if it was changed to 30 minutes then       we would have slots 9AM, 9:30AM, 10AM, 10:30AM etc. as the available times to book the 60 minute event.
   --minimumBookingNotice: float # Minimum number of minutes before the event that a booking can be made.
   --beforeEventBuffer: float # Extra time automatically blocked on your calendar before a meeting starts. This gives you time to prepare, review notes, or transition from your previous activity.
@@ -2415,33 +2414,33 @@ export def "event-types updateEventType" [
   --scheduleId: float # If you want that this event has different schedule than user's default one you can specify it here.
   --bookingLimitsCount: any # Limit how many times this event can be booked
   --bookerActiveBookingsLimit: any # Limit the number of active bookings a booker can make for this event type.
-  --onlyShowFirstAvailableSlot: string@bool-completer # This will limit your availability for this event type to one slot per day, scheduled at the earliest available time.
+  --onlyShowFirstAvailableSlot: oneof<nothing, bool> # This will limit your availability for this event type to one slot per day, scheduled at the earliest available time.
   --bookingLimitsDuration: any # Limit total amount of time that this event can be booked
   --bookingWindow: any # Limit how far in the future this event can be booked
   --offsetStart: float # Offset timeslots shown to bookers by a specified number of minutes
   --bookerLayouts: any # Should booker have week, month or column view. Specify default layout and enabled layouts user can pick.
   --confirmationPolicy: any # Specify how the booking needs to be manually confirmed before it is pushed to the integrations and a confirmation mail is sent.
   --recurrence: any # Create a recurring event type.
-  --requiresBookerEmailVerification: string@bool-completer
-  --hideCalendarNotes: string@bool-completer
-  --lockTimeZoneToggleOnBookingPage: string@bool-completer
+  --requiresBookerEmailVerification: oneof<nothing, bool>
+  --hideCalendarNotes: oneof<nothing, bool>
+  --lockTimeZoneToggleOnBookingPage: oneof<nothing, bool>
   --color: record # shape: {lightThemeHex: string, darkThemeHex: string}
   --seats: any # Create an event type with multiple seats.
   --customName: string # Customizable event name with valid variables:       {Event type title}, {Organiser}, {Scheduler}, {Location}, {Organiser first name},       {Scheduler first name}, {Scheduler last name}, {Event duration}, {LOCATION},       {HOST/ATTENDEE}, {HOST}, {ATTENDEE}, {USER} (e.g. {Event type title} between {Organiser} and {Scheduler})
   --destinationCalendar: record # shape: {integration: string, externalId: string}
-  --useDestinationCalendarEmail: string@bool-completer
-  --hideCalendarEventDetails: string@bool-completer
+  --useDestinationCalendarEmail: oneof<nothing, bool>
+  --hideCalendarEventDetails: oneof<nothing, bool>
   --successRedirectUrl: string # A valid URL where the booker will redirect to, once the booking is completed successfully (e.g. https://masterchief.com/argentina/flan/video/9129412)
-  --hideOrganizerEmail: string@bool-completer # Boolean to Hide organizer's email address from the booking screen, email notifications, and calendar events
+  --hideOrganizerEmail: oneof<nothing, bool> # Boolean to Hide organizer's email address from the booking screen, email notifications, and calendar events
   --calVideoSettings: any # Cal video settings for the event type
-  --hidden: string@bool-completer
-  --bookingRequiresAuthentication: string@bool-completer # Boolean to require authentication for booking this event type via api. If true, only authenticated users who are the event-type owner or org/team admin/owner can book this event type. (default: false)
+  --hidden: oneof<nothing, bool>
+  --bookingRequiresAuthentication: oneof<nothing, bool> # Boolean to require authentication for booking this event type via api. If true, only authenticated users who are the event-type owner or org/team admin/owner can book this event type. (default: false)
   --disableCancelling: any # Settings for disabling cancelling of this event type. (e.g. {disabled: true})
   --disableRescheduling: any # Settings for disabling rescheduling of this event type. Can be always disabled or disabled when less than X minutes before the meeting. (e.g. {disabled: false, minutesBefore: 60})
   --interfaceLanguage: string@interfaceLanguage-completer # Set preferred language for the booking interface. Use empty string for visitor's browser language (default).
-  --allowReschedulingPastBookings: string@bool-completer # Enabling this option allows for past events to be rescheduled. (default: false)
-  --allowReschedulingCancelledBookings: string@bool-completer # When enabled, users will be able to create a new booking when trying to reschedule a cancelled booking. (default: false)
-  --showOptimizedSlots: string@bool-completer # Arrange time slots to optimize availability. (default: false)
+  --allowReschedulingPastBookings: oneof<nothing, bool> # Enabling this option allows for past events to be rescheduled. (default: false)
+  --allowReschedulingCancelledBookings: oneof<nothing, bool> # When enabled, users will be able to create a new booking when trying to reschedule a cancelled booking. (default: false)
+  --showOptimizedSlots: oneof<nothing, bool> # Arrange time slots to optimize availability. (default: false)
   --locations: list # Locations where the event will take place. If not provided, cal video link will be used as the location. Note: Setting a location to a conferencing app does not install the app - the app must already be installed. Via API, only Google Meet (google-meet), Microsoft Teams (office365-video), and Zoom (zoom) can be installed. Cal Video (cal-video) is installed by default. All other conferencing apps must be connected via the Cal.diy web app and are not available for Platform plan customers. You can only set an event type location to an app that has already been installed or connected.
 ]: any -> record<status: string, data: record<id: float, lengthInMinutes: float, lengthInMinutesOptions: list<float>, title: string, slug: string, description: string, locations: list<any>, bookingFields: list<any>, disableGuests: bool, slotInterval: record, minimumBookingNotice: float, beforeEventBuffer: float, afterEventBuffer: float, recurrence: record<interval: float, occurrences: float, frequency: string>, metadata: record, price: float, currency: string, lockTimeZoneToggleOnBookingPage: bool, seatsPerTimeSlot: record, forwardParamsSuccessRedirect: record, successRedirectUrl: record, isInstantEvent: bool, seatsShowAvailabilityCount: bool, scheduleId: float, bookingLimitsCount: record, bookerActiveBookingsLimit: record<maximumActiveBookings: float, offerReschedule: bool>, onlyShowFirstAvailableSlot: bool, bookingLimitsDuration: record, bookingWindow: list<any>, bookerLayouts: record<defaultLayout: string, enabledLayouts: list>, confirmationPolicy: record, requiresBookerEmailVerification: bool, hideCalendarNotes: bool, color: record<lightThemeHex: string, darkThemeHex: string>, seats: record<seatsPerTimeSlot: float, showAttendeeInfo: bool, showAvailabilityCount: bool>, offsetStart: float, customName: string, destinationCalendar: record<integration: string, externalId: string>, useDestinationCalendarEmail: bool, hideCalendarEventDetails: bool, hideOrganizerEmail: bool, calVideoSettings: record<disableRecordingForOrganizer: bool, disableRecordingForGuests: bool, redirectUrlOnExit: record, enableAutomaticRecordingForOrganizer: bool, enableAutomaticTranscription: bool, disableTranscriptionForGuests: bool, disableTranscriptionForOrganizer: bool, sendTranscriptionEmails: bool>, hidden: bool, bookingRequiresAuthentication: bool, disableCancelling: record<disabled: bool>, disableRescheduling: record<disabled: bool, minutesBefore: float>, interfaceLanguage: string, allowReschedulingPastBookings: bool, allowReschedulingCancelledBookings: bool, showOptimizedSlots: bool, ownerId: float, users: list<string>, bookingUrl: string>> {
   let input = $in
@@ -2498,7 +2497,7 @@ export def "event-types-webhooks createEventTypeWebhook" [
   --allow-errors(-e) # Return full response without error handling
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --payloadTemplate: string # The template of the payload that will be sent to the subscriberUrl, check cal.com/docs/core-features/webhooks for more information (e.g. {"content":"A new event has been scheduled","type":"{{type}}","name":"{{title}}","organizer":"{{organizer.name}}","booker":"{{attendees.0.name}}"})
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   subscriberUrl: string
   triggers: list # e.g. [BOOKING_CREATED, BOOKING_RESCHEDULED, BOOKING_CANCELLED, BOOKING_CONFIRMED, BOOKING_REJECTED, BOOKING_COMPLETED, BOOKING_NO_SHOW, BOOKING_REOPENED]
   --secret: string
@@ -2586,7 +2585,7 @@ export def "event-types-webhooks updateEventTypeWebhook" [
   --allow-errors(-e) # Return full response without error handling
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_ or managed user access token
   --payloadTemplate: string # The template of the payload that will be sent to the subscriberUrl, check cal.com/docs/core-features/webhooks for more information (e.g. {"content":"A new event has been scheduled","type":"{{type}}","name":"{{title}}","organizer":"{{organizer.name}}","booker":"{{attendees.0.name}}"})
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --subscriberUrl: string
   --triggers: list # e.g. [BOOKING_CREATED, BOOKING_RESCHEDULED, BOOKING_CANCELLED, BOOKING_CONFIRMED, BOOKING_REJECTED, BOOKING_COMPLETED, BOOKING_NO_SHOW, BOOKING_REOPENED]
   --secret: string
@@ -2902,7 +2901,7 @@ export def "schedules createSchedule" [
   name: string # e.g. Catch up hours
   timeZone: string # Timezone is used to calculate available times when an event using the schedule is booked. (e.g. Europe/Rome)
   --availability: list # Each object contains days and times when the user is available. If not passed, the default availability is Monday to Friday from 09:00 to 17:00. (e.g. [{days: [Monday, Tuesday], startTime: 17:00, endTime: 19:00}, {days: [Wednesday, Thursday], startTime: 16:00, endTime: 20:00}]) — item shape: {days: list, startTime: string, endTime: string}
-  --isDefault: string@bool-completer # Each user should have 1 default schedule. If you specified `timeZone` when creating managed user, then the default schedule will be created with that timezone.     Default schedule means that if an event type is not tied to a specific schedule then the default schedule is used. (e.g. true)
+  --isDefault: oneof<nothing, bool> # Each user should have 1 default schedule. If you specified `timeZone` when creating managed user, then the default schedule will be created with that timezone.     Default schedule means that if an event type is not tied to a specific schedule then the default schedule is used. (e.g. true)
   --overrides: list # Need to change availability for a specific date? Add an override. (e.g. [{date: 2024-05-20, startTime: 18:00, endTime: 21:00}]) — item shape: {date: string, startTime: string, endTime: string}
 ]: any -> record<status: string, data: record<id: float, ownerId: float, name: string, timeZone: string, availability: list<record>, isDefault: bool, overrides: list<record>>> {
   let input = $in
@@ -3014,7 +3013,7 @@ export def "schedules updateSchedule" [
   --name: string # e.g. One-on-one coaching
   --timeZone: string # e.g. Europe/Rome
   --availability: list # e.g. [{days: [Monday, Tuesday], startTime: 09:00, endTime: 10:00}] — item shape: {days: list, startTime: string, endTime: string}
-  --isDefault: string@bool-completer # e.g. true
+  --isDefault: oneof<nothing, bool> # e.g. true
   --overrides: list # e.g. [{date: 2024-05-20, startTime: 12:00, endTime: 14:00}] — item shape: {date: string, startTime: string, endTime: string}
 ]: any -> record<status: string, data: record<id: float, ownerId: float, name: string, timeZone: string, availability: list<record>, isDefault: bool, overrides: list<record>>, error: record> {
   let input = $in
@@ -3572,7 +3571,7 @@ export def "webhooks createWebhook" [
   --allow-errors(-e) # Return full response without error handling
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_
   --payloadTemplate: string # The template of the payload that will be sent to the subscriberUrl, check cal.com/docs/core-features/webhooks for more information (e.g. {"content":"A new event has been scheduled","type":"{{type}}","name":"{{title}}","organizer":"{{organizer.name}}","booker":"{{attendees.0.name}}"})
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   subscriberUrl: string
   triggers: list # e.g. [BOOKING_CREATED, BOOKING_RESCHEDULED, BOOKING_CANCELLED, BOOKING_CONFIRMED, BOOKING_REJECTED, BOOKING_COMPLETED, BOOKING_NO_SHOW, BOOKING_REOPENED]
   --secret: string
@@ -3633,7 +3632,7 @@ export def "webhooks updateWebhook" [
   --allow-errors(-e) # Return full response without error handling
   --Authorization: string # value must be `Bearer <token>` where `<token>` is api key prefixed with cal_
   --payloadTemplate: string # The template of the payload that will be sent to the subscriberUrl, check cal.com/docs/core-features/webhooks for more information (e.g. {"content":"A new event has been scheduled","type":"{{type}}","name":"{{title}}","organizer":"{{organizer.name}}","booker":"{{attendees.0.name}}"})
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --subscriberUrl: string
   --triggers: list # e.g. [BOOKING_CREATED, BOOKING_RESCHEDULED, BOOKING_CANCELLED, BOOKING_CONFIRMED, BOOKING_REJECTED, BOOKING_COMPLETED, BOOKING_NO_SHOW, BOOKING_REOPENED]
   --secret: string

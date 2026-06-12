@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api-ch-gva-2.exoscale.com/v2" "https://api-ch-dk-2.exoscale.com/v2" "https://api-de-fra-1.exoscale.com/v2" "https://api-de-muc-1.exoscale.com/v2" "https://api-at-vie-1.exoscale.com/v2" "https://api-at-vie-2.exoscale.com/v2" "https://api-bg-sof-1.exoscale.com/v2" "https://api-hr-zag-1.exoscale.com/v2"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -308,8 +307,8 @@ export def "dbaas-opensearch-acl-config update-dbaas-opensearch-acl-config" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --acls: list # List of OpenSearch ACLs — item shape: {rules?: list, username?: string}
-  --acl-enabled: string@bool-completer # Enable OpenSearch ACLs. When disabled authenticated service users have unrestricted access.
-  --extended-acl-enabled: string@bool-completer # Enable to enforce index rules in a limited fashion for requests that use the _mget, _msearch, and _bulk APIs
+  --acl-enabled: oneof<nothing, bool> # Enable OpenSearch ACLs. When disabled authenticated service users have unrestricted access.
+  --extended-acl-enabled: oneof<nothing, bool> # Enable to enforce index rules in a limited fashion for requests that use the _mget, _msearch, and _bulk APIs
 ]: any -> record<id: string, reason: string, reference: record<id: string, link: string, command: string>, message: string, state: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -846,7 +845,7 @@ export def "dbaas-mysql update-dbaas-service-mysql" [
   --allow-errors(-e) # Return full response without error handling
   --maintenance: record # Automatic maintenance settings — shape: {dow: "saturday"|"tuesday"|"never"|"wednesday"|"sunday"|"friday"|"monday"|"thursday", time: string}
   --plan: string # Subscription plan
-  --termination-protection: string@bool-completer # Service is protected against termination and powering off
+  --termination-protection: oneof<nothing, bool> # Service is protected against termination and powering off
   --ip-filter: list # Allow incoming connections from CIDR address block, e.g. '10.20.0.0/16'
   --mysql-settings: record # shape: {net_write_timeout?: int, internal_tmp_mem_storage_engine?: "TempTable"|"MEMORY", sql_mode?: string, information_schema_stats_expiry?: int, sort_buffer_size?: int, innodb_thread_concurrency?: int, innodb_write_io_threads?: int, innodb_ft_min_token_size?: int, innodb_change_buffer_max_size?: int, innodb_flush_neighbors?: int, tmp_table_size?: int, slow_query_log?: bool, connect_timeout?: int, log_output?: "INSIGHTS"|"INSIGHTS,TABLE"|"NONE"|"TABLE", net_read_timeout?: int, innodb_lock_wait_timeout?: int, wait_timeout?: int, innodb_rollback_on_timeout?: bool, group_concat_max_len?: int, net_buffer_length?: int, innodb_print_all_deadlocks?: bool, innodb_online_alter_log_max_size?: int, interactive_timeout?: int, innodb_log_buffer_size?: int, max_allowed_packet?: int, max_heap_table_size?: int, innodb_ft_server_stopword_table?: string, innodb_read_io_threads?: int, sql_require_primary_key?: bool, default_time_zone?: string, long_query_time?: float}
   --migration: record # Migrate data from existing server — shape: {host: string, port: int, password?: string, ssl?: bool, username?: string, dbname?: string, ignore-dbs?: string, method?: "dump"|"replication"}
@@ -907,7 +906,7 @@ export def "dbaas-mysql create-dbaas-service-mysql" [
   --backup-schedule: record # shape: {backup-hour?: int, backup-minute?: int}
   --integrations: list # Service integrations to be enabled when creating the service. — item shape: {type: "read_replica", source-service?: string, dest-service?: string, settings?: record}
   --ip-filter: list # Allow incoming connections from CIDR address block, e.g. '10.20.0.0/16'
-  --termination-protection: string@bool-completer # Service is protected against termination and powering off
+  --termination-protection: oneof<nothing, bool> # Service is protected against termination and powering off
   --fork-from-service: string
   --recovery-backup-time: string # ISO time of a backup to recover from for services that support arbitrary times
   --mysql-settings: record # shape: {net_write_timeout?: int, internal_tmp_mem_storage_engine?: "TempTable"|"MEMORY", sql_mode?: string, information_schema_stats_expiry?: int, sort_buffer_size?: int, innodb_thread_concurrency?: int, innodb_write_io_threads?: int, innodb_ft_min_token_size?: int, innodb_change_buffer_max_size?: int, innodb_flush_neighbors?: int, tmp_table_size?: int, slow_query_log?: bool, connect_timeout?: int, log_output?: "INSIGHTS"|"INSIGHTS,TABLE"|"NONE"|"TABLE", net_read_timeout?: int, innodb_lock_wait_timeout?: int, wait_timeout?: int, innodb_rollback_on_timeout?: bool, group_concat_max_len?: int, net_buffer_length?: int, innodb_print_all_deadlocks?: bool, innodb_online_alter_log_max_size?: int, interactive_timeout?: int, innodb_log_buffer_size?: int, max_allowed_packet?: int, max_heap_table_size?: int, innodb_ft_server_stopword_table?: string, innodb_read_io_threads?: int, sql_require_primary_key?: bool, default_time_zone?: string, long_query_time?: float}
@@ -1471,7 +1470,7 @@ export def "instance-pool create-instance-pool" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --application-consistent-snapshot-enabled: string@bool-completer # Enable application consistent snapshots
+  --application-consistent-snapshot-enabled: oneof<nothing, bool> # Enable application consistent snapshots
   --anti-affinity-groups: list # Instance Pool Anti-affinity Groups — item shape: {id?: string}
   --description: string # Instance Pool description
   --public-ip-assignment: string@public-ip-assignment-completer # Determines public IP assignment of the Instances. Type `none` is final and can't be changed later on.
@@ -1488,7 +1487,7 @@ export def "instance-pool create-instance-pool" [
   --instance-prefix: string # Prefix to apply to Instances names (default: pool)
   --user-data: string # Instances Cloud-init user-data
   --deploy-target: record # Deploy target reference — shape: {id?: string}
-  --ipv6-enabled: string@bool-completer # Enable IPv6. DEPRECATED: use `public-ip-assignments`.
+  --ipv6-enabled: oneof<nothing, bool> # Enable IPv6. DEPRECATED: use `public-ip-assignments`.
   disk_size: int # Instances disk size in GiB (format: int64)
   --ssh-keys: list # Instances SSH Keys — item shape: {name?: string}
 ]: any -> record<id: string, reason: string, reference: record<id: string, link: string, command: string>, message: string, state: string> {
@@ -1906,16 +1905,16 @@ export def "dbaas-kafka create-dbaas-service-kafka" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --authentication-methods: record # Kafka authentication methods — shape: {certificate?: bool, sasl?: bool}
-  --kafka-rest-enabled: string@bool-completer # Enable Kafka-REST service
-  --kafka-connect-enabled: string@bool-completer # Allow clients to connect to kafka_connect from the public internet for service nodes that are in a project VPC or another type of private network
+  --kafka-rest-enabled: oneof<nothing, bool> # Enable Kafka-REST service
+  --kafka-connect-enabled: oneof<nothing, bool> # Allow clients to connect to kafka_connect from the public internet for service nodes that are in a project VPC or another type of private network
   --ip-filter: list # Allow incoming connections from CIDR address block, e.g. '10.20.0.0/16'
   --schema-registry-settings: record # shape: {leader_eligibility?: bool, topic_name?: string}
   --kafka-rest-settings: record # shape: {producer_compression_type?: "gzip"|"snappy"|"lz4"|"zstd"|"none", name_strategy_validation?: bool, name_strategy?: "topic_name"|"record_name"|"topic_record_name", consumer_enable_auto_commit?: bool, producer_acks?: "all"|"-1"|"0"|"1", consumer_request_max_bytes?: int, producer_max_request_size?: int, simpleconsumer_pool_size_max?: int, producer_linger_ms?: int, consumer_request_timeout_ms?: "1000"|"15000"|"30000"}
-  --termination-protection: string@bool-completer # Service is protected against termination and powering off
+  --termination-protection: oneof<nothing, bool> # Service is protected against termination and powering off
   --kafka-connect-settings: record # shape: {producer_buffer_memory?: int, consumer_max_poll_interval_ms?: int, producer_compression_type?: "gzip"|"snappy"|"lz4"|"zstd"|"none", connector_client_config_override_policy?: "None"|"All", offset_flush_interval_ms?: int, scheduled_rebalance_max_delay_ms?: int, consumer_fetch_max_bytes?: int, consumer_max_partition_fetch_bytes?: int, offset_flush_timeout_ms?: int, consumer_auto_offset_reset?: "earliest"|"latest", producer_max_request_size?: int, producer_batch_size?: int, session_timeout_ms?: int, producer_linger_ms?: int, consumer_isolation_level?: "read_uncommitted"|"read_committed", consumer_max_poll_records?: int}
   --maintenance: record # Automatic maintenance settings — shape: {dow: "saturday"|"tuesday"|"never"|"wednesday"|"sunday"|"friday"|"monday"|"thursday", time: string}
   --kafka-settings: record # shape: {sasl_oauthbearer_expected_audience?: string, group_max_session_timeout_ms?: int, log_flush_interval_messages?: int, sasl_oauthbearer_jwks_endpoint_url?: string, max_connections_per_ip?: int, sasl_oauthbearer_expected_issuer?: string, log_index_size_max_bytes?: int, auto_create_topics_enable?: bool, log_index_interval_bytes?: int, replica_fetch_max_bytes?: int, num_partitions?: int, transaction_state_log_segment_bytes?: int, replica_fetch_response_max_bytes?: int, log_message_timestamp_type?: "CreateTime"|"LogAppendTime", connections_max_idle_ms?: int, log_flush_interval_ms?: int, log_preallocate?: bool, log_segment_delete_delay_ms?: int, message_max_bytes?: int, group_initial_rebalance_delay_ms?: int, log_local_retention_bytes?: int, log_roll_jitter_ms?: int, transaction_remove_expired_transaction_cleanup_interval_ms?: int, transaction_partition_verification_enable?: bool, default_replication_factor?: int, log_roll_ms?: int, producer_purgatory_purge_interval_requests?: int, log_retention_bytes?: int, min_insync_replicas?: int, compression_type?: "gzip"|"snappy"|"lz4"|"zstd"|"uncompressed"|"producer", log_message_timestamp_difference_max_ms?: int, log_local_retention_ms?: int, log_message_downconversion_enable?: bool, sasl_oauthbearer_sub_claim_name?: string, max_incremental_fetch_session_cache_slots?: int, log_retention_hours?: int, group_min_session_timeout_ms?: int, socket_request_max_bytes?: int, log_segment_bytes?: int, log-cleanup-and-compaction?: record, offsets_retention_minutes?: int, log_retention_ms?: int}
-  --schema-registry-enabled: string@bool-completer # Enable Schema-Registry service
+  --schema-registry-enabled: oneof<nothing, bool> # Enable Schema-Registry service
   --version: string # Kafka major version
   plan: string # Subscription plan
 ]: any -> record<id: string, reason: string, reference: record<id: string, link: string, command: string>, message: string, state: string> {
@@ -1950,16 +1949,16 @@ export def "dbaas-kafka update-dbaas-service-kafka" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --authentication-methods: record # Kafka authentication methods — shape: {certificate?: bool, sasl?: bool}
-  --kafka-rest-enabled: string@bool-completer # Enable Kafka-REST service
-  --kafka-connect-enabled: string@bool-completer # Allow clients to connect to kafka_connect from the public internet for service nodes that are in a project VPC or another type of private network
+  --kafka-rest-enabled: oneof<nothing, bool> # Enable Kafka-REST service
+  --kafka-connect-enabled: oneof<nothing, bool> # Allow clients to connect to kafka_connect from the public internet for service nodes that are in a project VPC or another type of private network
   --ip-filter: list # Allow incoming connections from CIDR address block, e.g. '10.20.0.0/16'
   --schema-registry-settings: record # shape: {leader_eligibility?: bool, topic_name?: string}
   --kafka-rest-settings: record # shape: {producer_compression_type?: "gzip"|"snappy"|"lz4"|"zstd"|"none", name_strategy_validation?: bool, name_strategy?: "topic_name"|"record_name"|"topic_record_name", consumer_enable_auto_commit?: bool, producer_acks?: "all"|"-1"|"0"|"1", consumer_request_max_bytes?: int, producer_max_request_size?: int, simpleconsumer_pool_size_max?: int, producer_linger_ms?: int, consumer_request_timeout_ms?: "1000"|"15000"|"30000"}
-  --termination-protection: string@bool-completer # Service is protected against termination and powering off
+  --termination-protection: oneof<nothing, bool> # Service is protected against termination and powering off
   --kafka-connect-settings: record # shape: {producer_buffer_memory?: int, consumer_max_poll_interval_ms?: int, producer_compression_type?: "gzip"|"snappy"|"lz4"|"zstd"|"none", connector_client_config_override_policy?: "None"|"All", offset_flush_interval_ms?: int, scheduled_rebalance_max_delay_ms?: int, consumer_fetch_max_bytes?: int, consumer_max_partition_fetch_bytes?: int, offset_flush_timeout_ms?: int, consumer_auto_offset_reset?: "earliest"|"latest", producer_max_request_size?: int, producer_batch_size?: int, session_timeout_ms?: int, producer_linger_ms?: int, consumer_isolation_level?: "read_uncommitted"|"read_committed", consumer_max_poll_records?: int}
   --maintenance: record # Automatic maintenance settings — shape: {dow: "saturday"|"tuesday"|"never"|"wednesday"|"sunday"|"friday"|"monday"|"thursday", time: string}
   --kafka-settings: record # shape: {sasl_oauthbearer_expected_audience?: string, group_max_session_timeout_ms?: int, log_flush_interval_messages?: int, sasl_oauthbearer_jwks_endpoint_url?: string, max_connections_per_ip?: int, sasl_oauthbearer_expected_issuer?: string, log_index_size_max_bytes?: int, auto_create_topics_enable?: bool, log_index_interval_bytes?: int, replica_fetch_max_bytes?: int, num_partitions?: int, transaction_state_log_segment_bytes?: int, replica_fetch_response_max_bytes?: int, log_message_timestamp_type?: "CreateTime"|"LogAppendTime", connections_max_idle_ms?: int, log_flush_interval_ms?: int, log_preallocate?: bool, log_segment_delete_delay_ms?: int, message_max_bytes?: int, group_initial_rebalance_delay_ms?: int, log_local_retention_bytes?: int, log_roll_jitter_ms?: int, transaction_remove_expired_transaction_cleanup_interval_ms?: int, transaction_partition_verification_enable?: bool, default_replication_factor?: int, log_roll_ms?: int, producer_purgatory_purge_interval_requests?: int, log_retention_bytes?: int, min_insync_replicas?: int, compression_type?: "gzip"|"snappy"|"lz4"|"zstd"|"uncompressed"|"producer", log_message_timestamp_difference_max_ms?: int, log_local_retention_ms?: int, log_message_downconversion_enable?: bool, sasl_oauthbearer_sub_claim_name?: string, max_incremental_fetch_session_cache_slots?: int, log_retention_hours?: int, group_min_session_timeout_ms?: int, socket_request_max_bytes?: int, log_segment_bytes?: int, log-cleanup-and-compaction?: record, offsets_retention_minutes?: int, log_retention_ms?: int}
-  --schema-registry-enabled: string@bool-completer # Enable Schema-Registry service
+  --schema-registry-enabled: oneof<nothing, bool> # Enable Schema-Registry service
   --version: string # Kafka major version
   --plan: string # Subscription plan
 ]: any -> record<id: string, reason: string, reference: record<id: string, link: string, command: string>, message: string, state: string> {
@@ -2273,7 +2272,7 @@ export def "dbaas-postgres-user create-dbaas-postgres-user" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   username: string
-  --allow-replication: string@bool-completer
+  --allow-replication: oneof<nothing, bool>
 ]: any -> record<id: string, reason: string, reference: record<id: string, link: string, command: string>, message: string, state: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2396,7 +2395,7 @@ export def "instance-pool update-instance-pool" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --application-consistent-snapshot-enabled: string@bool-completer # Enable application consistent snapshots
+  --application-consistent-snapshot-enabled: oneof<nothing, bool> # Enable application consistent snapshots
   --anti-affinity-groups: list # Instance Pool Anti-affinity Groups (nullable) — item shape: {id?: string}
   --description: string # Instance Pool description
   --public-ip-assignment: string@public-ip-assignment-completer-1 # Determines public IP assignment of the Instances.
@@ -2412,7 +2411,7 @@ export def "instance-pool update-instance-pool" [
   --instance-prefix: string # Prefix to apply to Instances names (default: pool) (nullable)
   --user-data: string # Instances Cloud-init user-data (nullable)
   --deploy-target: record # Deploy target reference — shape: {id?: string}
-  --ipv6-enabled: string@bool-completer # Enable IPv6. DEPRECATED: use `public-ip-assignments`.
+  --ipv6-enabled: oneof<nothing, bool> # Enable IPv6. DEPRECATED: use `public-ip-assignments`.
   --disk-size: int # Instances disk size in GiB (format: int64)
   --ssh-keys: list # Instances SSH keys (nullable) — item shape: {name?: string}
 ]: any -> record<id: string, reason: string, reference: record<id: string, link: string, command: string>, message: string, state: string> {
@@ -2461,7 +2460,7 @@ export def "ai-api-key delete-ai-api-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> any {
+]: nothing -> record<id: string, reason: string, reference: record<id: string, link: string, command: string>, message: string, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/ai/api-key/($id)")
@@ -4132,7 +4131,7 @@ export def "dbaas-postgres-user-allow-replication update-dbaas-postgres-allow-re
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-replication: string@bool-completer
+  --allow-replication: oneof<nothing, bool>
 ]: any -> record<users: table<username: string, allow_replication: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5768,8 +5767,8 @@ export def "snapshot promote-snapshot-to-template" [
   name: string # Template name
   --description: string # Template description
   --default-user: string # Template default user
-  --ssh-key-enabled: string@bool-completer # Enable SSH key-based login in the template
-  --password-enabled: string@bool-completer # Enable password-based login in the template
+  --ssh-key-enabled: oneof<nothing, bool> # Enable SSH key-based login in the template
+  --password-enabled: oneof<nothing, bool> # Enable password-based login in the template
 ]: any -> record<id: string, reason: string, reference: record<id: string, link: string, command: string>, message: string, state: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5800,12 +5799,12 @@ export def "sks-cluster create-sks-cluster" [
   --description: string # Cluster description (nullable)
   --labels: record
   --cni: string@cni-completer # Cluster CNI
-  --auto-upgrade: string@bool-completer # Enable auto upgrade of the control plane to the latest patch version available
+  --auto-upgrade: oneof<nothing, bool> # Enable auto upgrade of the control plane to the latest patch version available
   --networking: record # Cluster networking configuration. — shape: {cluster-cidr?: string, service-cluster-ip-range?: string, node-cidr-mask-size-ipv4?: int, node-cidr-mask-size-ipv6?: int}
   --oidc: record # SKS Cluster OpenID config map — shape: {client-id: string, issuer-url: string, username-claim?: string, username-prefix?: string, groups-claim?: string, groups-prefix?: string, required-claim?: record}
   name: string # Cluster name
-  --create-default-security-group: string@bool-completer # Creates an ad-hoc security group based on the choice of the selected CNI (nullable)
-  --enable-kube-proxy: string@bool-completer # Indicates whether to deploy the Kubernetes network proxy. When unspecified, defaults to `true` unless Cilium CNI is selected
+  --create-default-security-group: oneof<nothing, bool> # Creates an ad-hoc security group based on the choice of the selected CNI (nullable)
+  --enable-kube-proxy: oneof<nothing, bool> # Indicates whether to deploy the Kubernetes network proxy. When unspecified, defaults to `true` unless Cilium CNI is selected
   level: string@level-completer # Cluster service level
   --feature-gates: list # A list of Kubernetes-only Alpha features to enable for API server component
   --addons: list # Cluster addons
@@ -6073,10 +6072,10 @@ export def "sks-cluster update-sks-cluster" [
   --allow-errors(-e) # Return full response without error handling
   --description: string # Cluster description (nullable)
   --labels: record
-  --auto-upgrade: string@bool-completer # Enable auto upgrade of the control plane to the latest patch version available
+  --auto-upgrade: oneof<nothing, bool> # Enable auto upgrade of the control plane to the latest patch version available
   --oidc: record # SKS Cluster OpenID config map — shape: {client-id: string, issuer-url: string, username-claim?: string, username-prefix?: string, groups-claim?: string, groups-prefix?: string, required-claim?: record}
   --name: string # Cluster name
-  --enable-operators-ca: string@bool-completer # Add or remove the operators certificate authority (CA) from the list of trusted CAs of the api server. The default value is true
+  --enable-operators-ca: oneof<nothing, bool> # Add or remove the operators certificate authority (CA) from the list of trusted CAs of the api server. The default value is true
   --feature-gates: list # A list of Kubernetes-only Alpha features to enable for API server component (nullable)
   --addons: list # Cluster addons
   --audit: record # Kubernetes Audit parameters — shape: {endpoint?: string, bearer-token?: string, initial-backoff?: string, enabled?: bool}
@@ -6338,7 +6337,7 @@ export def "dbaas-valkey create-dbaas-service-valkey" [
   --allow-errors(-e) # Return full response without error handling
   --valkey-settings: record # shape: {ssl?: bool, lfu_log_factor?: int, frequent_snapshots?: bool, maxmemory_policy?: "noeviction"|"allkeys-lru"|"volatile-lru"|"allkeys-random"|"volatile-random"|"volatile-ttl"|"volatile-lfu"|"allkeys-lfu", io_threads?: int, lfu_decay_time?: int, pubsub_client_output_buffer_limit?: int, active_expire_effort?: int, notify_keyspace_events?: string, persistence?: "off"|"rdb", timeout?: int, acl_channels_default?: "allchannels"|"resetchannels", number_of_databases?: int}
   --ip-filter: list # Allow incoming connections from CIDR address block, e.g. '10.20.0.0/16'
-  --termination-protection: string@bool-completer # Service is protected against termination and powering off
+  --termination-protection: oneof<nothing, bool> # Service is protected against termination and powering off
   --fork-from-service: string
   --maintenance: record # Automatic maintenance settings — shape: {dow: "saturday"|"tuesday"|"never"|"wednesday"|"sunday"|"friday"|"monday"|"thursday", time: string}
   --version: string # Valkey major version
@@ -6375,7 +6374,7 @@ export def "dbaas-valkey update-dbaas-service-valkey" [
   --allow-errors(-e) # Return full response without error handling
   --maintenance: record # Automatic maintenance settings — shape: {dow: "saturday"|"tuesday"|"never"|"wednesday"|"sunday"|"friday"|"monday"|"thursday", time: string}
   --plan: string # Subscription plan
-  --termination-protection: string@bool-completer # Service is protected against termination and powering off
+  --termination-protection: oneof<nothing, bool> # Service is protected against termination and powering off
   --ip-filter: list # Allow incoming connections from CIDR address block, e.g. '10.20.0.0/16'
   --migration: record # Migrate data from existing server — shape: {host: string, port: int, password?: string, ssl?: bool, username?: string, dbname?: string, ignore-dbs?: string, method?: "dump"|"replication"}
   --valkey-settings: record # shape: {ssl?: bool, lfu_log_factor?: int, frequent_snapshots?: bool, maxmemory_policy?: "noeviction"|"allkeys-lru"|"volatile-lru"|"allkeys-random"|"volatile-random"|"volatile-ttl"|"volatile-lfu"|"allkeys-lfu", io_threads?: int, lfu_decay_time?: int, pubsub_client_output_buffer_limit?: int, active_expire_effort?: int, notify_keyspace_events?: string, persistence?: "off"|"rdb", timeout?: int, acl_channels_default?: "allchannels"|"resetchannels", number_of_databases?: int}
@@ -6430,7 +6429,7 @@ export def "instance update-instance" [
   --user-data: string # Instance Cloud-init user-data (base64 encoded)
   --public-ip-assignment: string@public-ip-assignment-completer
   --labels: record
-  --application-consistent-snapshot-enabled: string@bool-completer # Enable/Disable Application Consistent Snapshot for Instance
+  --application-consistent-snapshot-enabled: oneof<nothing, bool> # Enable/Disable Application Consistent Snapshot for Instance
 ]: any -> record<id: string, reason: string, reference: record<id: string, link: string, command: string>, message: string, state: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6620,7 +6619,7 @@ export def "kms-key create-kms-key" [
   name: string
   --description: string
   --usage: string@usage-completer # default: encrypt-decrypt
-  --multi-zone: string@bool-completer # default: false
+  --multi-zone: oneof<nothing, bool> # default: false
 ]: any -> record<description: string, revision: record<at: string, seq: int>, name: string, multi_zone: bool, source: string, usage: string, status: string, status_since: string, id: string, origin_zone: string, created_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6693,7 +6692,7 @@ export def "dbaas-thanos create-dbaas-service-thanos" [
   --allow-errors(-e) # Return full response without error handling
   --maintenance: record # Automatic maintenance settings — shape: {dow: "saturday"|"tuesday"|"never"|"wednesday"|"sunday"|"friday"|"monday"|"thursday", time: string}
   plan: string # Subscription plan
-  --termination-protection: string@bool-completer # Service is protected against termination and powering off
+  --termination-protection: oneof<nothing, bool> # Service is protected against termination and powering off
   --ip-filter: list # Allowed CIDR address blocks for incoming connections
   --thanos-settings: record # shape: {compactor?: record, query?: record, query-frontend?: record}
 ]: any -> record<id: string, reason: string, reference: record<id: string, link: string, command: string>, message: string, state: string> {
@@ -6725,7 +6724,7 @@ export def "dbaas-thanos update-dbaas-service-thanos" [
   --allow-errors(-e) # Return full response without error handling
   --maintenance: record # Automatic maintenance settings — shape: {dow: "saturday"|"tuesday"|"never"|"wednesday"|"sunday"|"friday"|"monday"|"thursday", time: string}
   --plan: string # Subscription plan
-  --termination-protection: string@bool-completer # Service is protected against termination and powering off
+  --termination-protection: oneof<nothing, bool> # Service is protected against termination and powering off
   --ip-filter: list # Allowed CIDR address blocks for incoming connections
   --thanos-settings: record # shape: {compactor?: record, query?: record, query-frontend?: record}
 ]: any -> record<id: string, reason: string, reference: record<id: string, link: string, command: string>, message: string, state: string> {
@@ -7012,14 +7011,14 @@ export def "template register-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --application-consistent-snapshot-enabled: string@bool-completer # Template with support for Application Consistent Snapshots
+  --application-consistent-snapshot-enabled: oneof<nothing, bool> # Template with support for Application Consistent Snapshots
   --maintainer: string # Template maintainer
   --description: string # Template description
-  --ssh-key-enabled: string@bool-completer # Enable SSH key-based login
+  --ssh-key-enabled: oneof<nothing, bool> # Enable SSH key-based login
   name: string # Template name
   --default-user: string # Template default user
   --size: int # Template size (format: int64)
-  --password-enabled: string@bool-completer # Enable password-based login
+  --password-enabled: oneof<nothing, bool> # Enable password-based login
   --build: string # Template build
   checksum: string # Template MD5 checksum
   --boot-mode: string@boot-mode-completer # Boot mode (default: legacy)
@@ -7259,7 +7258,7 @@ export def "dbaas-grafana update-dbaas-service-grafana" [
   --allow-errors(-e) # Return full response without error handling
   --maintenance: record # Automatic maintenance settings — shape: {dow: "saturday"|"tuesday"|"never"|"wednesday"|"sunday"|"friday"|"monday"|"thursday", time: string}
   --plan: string # Subscription plan
-  --termination-protection: string@bool-completer # Service is protected against termination and powering off
+  --termination-protection: oneof<nothing, bool> # Service is protected against termination and powering off
   --grafana-settings: record # shape: {allow_embedding?: bool, cookie_samesite?: "lax"|"strict"|"none", dashboard_previews_enabled?: bool, metrics_enabled?: bool, auth_azuread?: record, alerting_enabled?: bool, wal?: bool, unified_alerting_enabled?: bool, auth_github?: record, user_auto_assign_org?: bool, dataproxy_send_user_header?: bool, google_analytics_ua_id?: string, dashboards_versions_to_keep?: int, editors_can_admin?: bool, smtp_server?: record, auth_gitlab?: record, alerting_nodata_or_nullvalues?: "alerting"|"no_data"|"keep_state"|"ok", auth_basic_enabled?: bool, date_formats?: record, service_log?: bool, disable_gravatar?: bool, user_auto_assign_org_role?: "Viewer"|"Admin"|"Editor", dataproxy_timeout?: int, viewers_can_edit?: bool, dashboards_min_refresh_interval?: string, auth_google?: record, oauth_allow_insecure_email_lookup?: bool, alerting_max_annotations_to_keep?: int, auth_generic_oauth?: record, custom_domain?: string, alerting_error_or_timeout?: "alerting"|"keep_state"}
   --ip-filter: list # Allowed CIDR address blocks for incoming connections
 ]: any -> record<id: string, reason: string, reference: record<id: string, link: string, command: string>, message: string, state: string> {
@@ -7291,7 +7290,7 @@ export def "dbaas-grafana create-dbaas-service-grafana" [
   --allow-errors(-e) # Return full response without error handling
   --maintenance: record # Automatic maintenance settings — shape: {dow: "saturday"|"tuesday"|"never"|"wednesday"|"sunday"|"friday"|"monday"|"thursday", time: string}
   plan: string # Subscription plan
-  --termination-protection: string@bool-completer # Service is protected against termination and powering off
+  --termination-protection: oneof<nothing, bool> # Service is protected against termination and powering off
   --fork-from-service: string
   --grafana-settings: record # shape: {allow_embedding?: bool, cookie_samesite?: "lax"|"strict"|"none", dashboard_previews_enabled?: bool, metrics_enabled?: bool, auth_azuread?: record, alerting_enabled?: bool, wal?: bool, unified_alerting_enabled?: bool, auth_github?: record, user_auto_assign_org?: bool, dataproxy_send_user_header?: bool, google_analytics_ua_id?: string, dashboards_versions_to_keep?: int, editors_can_admin?: bool, smtp_server?: record, auth_gitlab?: record, alerting_nodata_or_nullvalues?: "alerting"|"no_data"|"keep_state"|"ok", auth_basic_enabled?: bool, date_formats?: record, service_log?: bool, disable_gravatar?: bool, user_auto_assign_org_role?: "Viewer"|"Admin"|"Editor", dataproxy_timeout?: int, viewers_can_edit?: bool, dashboards_min_refresh_interval?: string, auth_google?: record, oauth_allow_insecure_email_lookup?: bool, alerting_max_annotations_to_keep?: int, auth_generic_oauth?: record, custom_domain?: string, alerting_error_or_timeout?: "alerting"|"keep_state"}
   --ip-filter: list # Allowed CIDR address blocks for incoming connections
@@ -7706,9 +7705,9 @@ export def "dbaas-opensearch create-dbaas-service-opensearch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --max-index-count: int # Maximum number of indexes to keep before deleting the oldest one (nullable, format: int64)
-  --keep-index-refresh-interval: string@bool-completer # Aiven automation resets index.refresh_interval to default value for every index to be sure that indices are always visible to search. If it doesn't fit your case, you can disable this by setting up this flag to true.
+  --keep-index-refresh-interval: oneof<nothing, bool> # Aiven automation resets index.refresh_interval to default value for every index to be sure that indices are always visible to search. If it doesn't fit your case, you can disable this by setting up this flag to true.
   --ip-filter: list # Allow incoming connections from CIDR address block, e.g. '10.20.0.0/16'
-  --termination-protection: string@bool-completer # Service is protected against termination and powering off
+  --termination-protection: oneof<nothing, bool> # Service is protected against termination and powering off
   --fork-from-service: string
   --index-patterns: list # Allows you to create glob style patterns and set a max number of indexes matching this pattern you want to keep. Creating indexes exceeding this value will cause the oldest one to get deleted. You could for example create a pattern looking like 'logs.?' and then create index logs.1, logs.2 etc, it will delete logs.1 once you create logs.6. Do note 'logs.?' does not apply to logs.10. Note: Setting max_index_count to 0 will do nothing and the pattern gets ignored. — item shape: {max-index-count?: int, sorting-algorithm?: "alphabetical"|"creation_date", pattern?: string}
   --maintenance: record # Automatic maintenance settings — shape: {dow: "saturday"|"tuesday"|"never"|"wednesday"|"sunday"|"friday"|"monday"|"thursday", time: string}
@@ -7793,9 +7792,9 @@ export def "dbaas-opensearch update-dbaas-service-opensearch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --max-index-count: int # Maximum number of indexes to keep before deleting the oldest one (nullable, format: int64)
-  --keep-index-refresh-interval: string@bool-completer # Aiven automation resets index.refresh_interval to default value for every index to be sure that indices are always visible to search. If it doesn't fit your case, you can disable this by setting up this flag to true.
+  --keep-index-refresh-interval: oneof<nothing, bool> # Aiven automation resets index.refresh_interval to default value for every index to be sure that indices are always visible to search. If it doesn't fit your case, you can disable this by setting up this flag to true.
   --ip-filter: list # Allow incoming connections from CIDR address block, e.g. '10.20.0.0/16'
-  --termination-protection: string@bool-completer # Service is protected against termination and powering off
+  --termination-protection: oneof<nothing, bool> # Service is protected against termination and powering off
   --index-patterns: list # Allows you to create glob style patterns and set a max number of indexes matching this pattern you want to keep. Creating indexes exceeding this value will cause the oldest one to get deleted. You could for example create a pattern looking like 'logs.?' and then create index logs.1, logs.2 etc, it will delete logs.1 once you create logs.6. Do note 'logs.?' does not apply to logs.10. Note: Setting max_index_count to 0 will do nothing and the pattern gets ignored. — item shape: {max-index-count?: int, sorting-algorithm?: "alphabetical"|"creation_date", pattern?: string}
   --maintenance: record # Automatic maintenance settings — shape: {dow: "saturday"|"tuesday"|"never"|"wednesday"|"sunday"|"friday"|"monday"|"thursday", time: string}
   --index-template: record # Template settings for all new indexes — shape: {mapping-nested-objects-limit?: int, number-of-replicas?: int, number-of-shards?: int}
@@ -7911,7 +7910,7 @@ export def "dbaas-postgres update-dbaas-service-pg" [
   --variant: string@variant-completer
   --timescaledb-settings: record # System-wide settings for the timescaledb extension — shape: {max_background_workers?: int}
   --ip-filter: list # Allow incoming connections from CIDR address block, e.g. '10.20.0.0/16'
-  --termination-protection: string@bool-completer # Service is protected against termination and powering off
+  --termination-protection: oneof<nothing, bool> # Service is protected against termination and powering off
   --pgaudit-settings: record # System-wide settings for the pgaudit extension. — shape: {role?: string, log_parameter?: bool, log_rows?: bool, log_level?: "debug1"|"debug2"|"debug3"|"debug4"|"debug5"|"info"|"notice"|"warning"|"log", log_relation?: bool, log_statement_once?: bool, log_max_string_length?: int, log_catalog?: bool, log_nested_statements?: bool, log_statement?: bool, log_client?: bool, feature_enabled?: bool, log?: list, log_parameter_max_size?: int}
   --synchronous-replication: string@synchronous-replication-completer
   --pglookout-settings: record # System-wide settings for pglookout. — shape: {max_failover_replication_time_lag?: int}
@@ -7984,7 +7983,7 @@ export def "dbaas-postgres create-dbaas-service-pg" [
   --integrations: list # Service integrations to be enabled when creating the service. — item shape: {type: "read_replica", source-service?: string, dest-service?: string, settings?: record}
   --timescaledb-settings: record # System-wide settings for the timescaledb extension — shape: {max_background_workers?: int}
   --ip-filter: list # Allow incoming connections from CIDR address block, e.g. '10.20.0.0/16'
-  --termination-protection: string@bool-completer # Service is protected against termination and powering off
+  --termination-protection: oneof<nothing, bool> # Service is protected against termination and powering off
   --pgaudit-settings: record # System-wide settings for the pgaudit extension. — shape: {role?: string, log_parameter?: bool, log_rows?: bool, log_level?: "debug1"|"debug2"|"debug3"|"debug4"|"debug5"|"info"|"notice"|"warning"|"log", log_relation?: bool, log_statement_once?: bool, log_max_string_length?: int, log_catalog?: bool, log_nested_statements?: bool, log_statement?: bool, log_client?: bool, feature_enabled?: bool, log?: list, log_parameter_max_size?: int}
   --fork-from-service: string
   --synchronous-replication: string@synchronous-replication-completer
@@ -8336,21 +8335,21 @@ export def "instance create-instance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --application-consistent-snapshot-enabled: string@bool-completer # Enable application-consistent snapshot for the instance
+  --application-consistent-snapshot-enabled: oneof<nothing, bool> # Enable application-consistent snapshot for the instance
   --anti-affinity-groups: list # Instance Anti-affinity Groups — item shape: {id?: string}
   --public-ip-assignment: string@public-ip-assignment-completer
   --labels: record
-  --auto-start: string@bool-completer # Start Instance on creation (default: true)
+  --auto-start: oneof<nothing, bool> # Start Instance on creation (default: true)
   --security-groups: list # Instance Security Groups — item shape: {id?: string}
   --name: string # Instance name
   instance_type: record # Instance type reference — shape: {id?: string}
   template: record # Template reference — shape: {id?: string}
-  --secureboot-enabled: string@bool-completer # Enable secure boot
+  --secureboot-enabled: oneof<nothing, bool> # Enable secure boot
   --ssh-key: record # SSH key reference — shape: {name?: string}
   --user-data: string # Instance Cloud-init user-data (base64 encoded)
-  --tpm-enabled: string@bool-completer # Enable Trusted Platform Module (TPM)
+  --tpm-enabled: oneof<nothing, bool> # Enable Trusted Platform Module (TPM)
   --deploy-target: record # Deploy target reference — shape: {id?: string}
-  --ipv6-enabled: string@bool-completer # Enable IPv6. DEPRECATED: use `public-ip-assignments`.
+  --ipv6-enabled: oneof<nothing, bool> # Enable IPv6. DEPRECATED: use `public-ip-assignments`.
   disk_size: int # Instance disk size in GiB (format: int64)
   --ssh-keys: list # Instance SSH Keys — item shape: {name?: string}
 ]: any -> record<id: string, reason: string, reference: record<id: string, link: string, command: string>, message: string, state: string> {
@@ -8429,7 +8428,7 @@ export def "iam-role create-iam-role" [
   name: string # IAM Role name
   --description: string # IAM Role description
   --permissions: list # IAM Role permissions
-  --editable: string@bool-completer # Sets if the IAM Role Policy is editable or not (default: true). This setting cannot be changed after creation
+  --editable: oneof<nothing, bool> # Sets if the IAM Role Policy is editable or not (default: true). This setting cannot be changed after creation
   --labels: record
   --policy: record # Policy — shape: {default-service-strategy: "allow"|"deny", services: record}
   --assume-role-policy: record # Assume Role Policy — shape: {rules?: list}
@@ -8530,7 +8529,7 @@ export def "ai-deployment-logs get-deployment-logs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --stream: string@bool-completer
+  --stream: oneof<nothing, bool>
   --tail: int # format: int64
 ]: nothing -> record<logs: table<time: string, node: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

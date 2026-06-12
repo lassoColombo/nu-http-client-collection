@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.docspring.com/api/v1"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -153,7 +152,7 @@ export def "combined-submissions combineSubmissions" [
   --metadata: record
   --password: string
   submission_ids: list
-  --test: string@bool-completer
+  --test: oneof<nothing, bool>
 ]: any -> record<combined_submission: record<actions: list<record>, download_url: string, error_message: string, expired: bool, expires_at: string, expires_in: int, id: string, metadata: record, password: string, pdf_hash: string, source_pdfs: list<any>, state: string, submission_ids: list<string>>, errors: list<string>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -222,12 +221,12 @@ export def "combined-submissions-v2 combinePdfs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete-custom-files: string@bool-completer
+  --delete-custom-files: oneof<nothing, bool>
   --expires-in: int
   --metadata: record
   --password: string
   source_pdfs: list
-  --test: string@bool-completer
+  --test: oneof<nothing, bool>
 ]: any -> record<combined_submission: record<actions: list<record>, download_url: string, error_message: string, expired: bool, expires_at: string, expires_in: int, id: string, metadata: record, password: string, pdf_hash: string, source_pdfs: list<any>, state: string, submission_ids: list<string>>, errors: list<string>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -487,7 +486,7 @@ export def "submissions listSubmissions" [
   --created-after: string # e.g. 2019-01-01T09:00:00-05:00
   --created-before: string # e.g. 2020-01-01T09:00:00-05:00
   --type: string # e.g. test
-  --include-data: string@bool-completer # e.g. true
+  --include-data: oneof<nothing, bool> # e.g. true
 ]: nothing -> record<limit: float, next_cursor: string, submissions: table<actions: list, batch_id: string, data: record, data_requests: list, download_url: string, editable: bool, expired: bool, expires_at: string, id: string, metadata: record, pdf_hash: string, permanent_download_url: string, processed_at: string, referrer: string, source: string, state: string, template_id: string, test: bool, truncated_text: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -514,7 +513,7 @@ export def "submissions-batches batchGeneratePdfs" [
   --metadata: record
   submissions: list # item shape: {css?: string, data: record, html?: string, metadata?: record, template_id: string, test?: bool}
   --template-id: string # nullable
-  --test: string@bool-completer
+  --test: oneof<nothing, bool>
 ]: any -> record<error: string, errors: list<string>, status: string, submission_batch: record<completion_percentage: int, error_count: int, id: string, metadata: record, pending_count: int, processed_at: string, state: string, submissions: list<record>, total_count: int>, submissions: table<errors: list, status: string, submission: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -540,7 +539,7 @@ export def "submissions-batches get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-submissions: string@bool-completer # e.g. true
+  --include-submissions: oneof<nothing, bool> # e.g. true
 ]: nothing -> record<completion_percentage: int, error_count: int, id: string, metadata: record, pending_count: int, processed_at: string, state: string, submissions: table<actions: list, batch_id: string, data: record, data_requests: list, download_url: string, editable: bool, expired: bool, expires_at: string, id: string, metadata: record, pdf_hash: string, permanent_download_url: string, processed_at: string, referrer: string, source: string, state: string, template_id: string, test: bool, truncated_text: record>, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -586,7 +585,7 @@ export def "submissions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-data: string@bool-completer # e.g. true
+  --include-data: oneof<nothing, bool> # e.g. true
 ]: nothing -> record<actions: table<action_category: string, action_type: string, id: string, integration_id: string, result_data: record, state: string>, batch_id: string, data: record, data_requests: table<auth_phone_number_hash: string, auth_provider: string, auth_second_factor_type: string, auth_session_id_hash: string, auth_session_started_at: string, auth_type: string, auth_user_id_hash: string, auth_username_hash: string, completed_at: string, email: string, fields: list, id: string, ip_address: string, metadata: record, name: string, order: int, sort_order: int, state: string, submission_id: string, user_agent: string, viewed_at: string>, download_url: string, editable: bool, expired: bool, expires_at: string, id: string, metadata: record, pdf_hash: string, permanent_download_url: string, processed_at: string, referrer: string, source: string, state: string, template_id: string, test: bool, truncated_text: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -818,7 +817,7 @@ export def "templates-submissions get" [
   --created-after: string
   --created-before: string
   --type: string
-  --include-data: string@bool-completer # e.g. true
+  --include-data: oneof<nothing, bool> # e.g. true
 ]: nothing -> record<limit: float, next_cursor: string, submissions: table<actions: list, batch_id: string, data: record, data_requests: list, download_url: string, editable: bool, expired: bool, expires_at: string, id: string, metadata: record, pdf_hash: string, permanent_download_url: string, processed_at: string, referrer: string, source: string, state: string, template_id: string, test: bool, truncated_text: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -851,7 +850,7 @@ export def "templates-submissions generatePDF" [
   --html: string
   --metadata: record
   --password: string
-  --test: string@bool-completer
+  --test: oneof<nothing, bool>
 ]: any -> record<errors: list<string>, status: string, submission: record<actions: list<record>, batch_id: string, data: record, data_requests: list<record>, download_url: string, editable: bool, expired: bool, expires_at: string, id: string, metadata: record, pdf_hash: string, permanent_download_url: string, processed_at: string, referrer: string, source: string, state: string, template_id: string, test: bool, truncated_text: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -883,7 +882,7 @@ export def "templates-submissions-batch batchGeneratePdfV1" [
   --data-requests: list # item shape: {auth_phone_number_hash?: string, auth_provider?: string, auth_second_factor_type?: "none"|"phone_number"|"totp"|"mobile_push"|"security_key"|"fingerprint", auth_session_id_hash?: string, auth_session_started_at?: string, auth_type: "none"|"password"|"oauth"|"email_link"|"phone_number"|"ldap"|"saml", auth_user_id_hash?: string, auth_username_hash?: string, email: string, fields?: list, metadata?: record, name?: string, order?: int}
   --html: string
   --metadata: record
-  --test: string@bool-completer
+  --test: oneof<nothing, bool>
 ]: any -> table<errors: list<string>, status: string, submission: record<actions: list, batch_id: string, data: record, data_requests: list, download_url: string, editable: bool, expired: bool, expires_at: string, id: string, metadata: record, pdf_hash: string, permanent_download_url: string, processed_at: string, referrer: string, source: string, state: string, template_id: string, test: bool, truncated_text: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))

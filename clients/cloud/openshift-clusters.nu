@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.openshift.com" "https://api.stage.openshift.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -160,13 +159,13 @@ export def "clusters-mgmt-addons post" [
   --credentials-requests: list # List of credentials requests to authenticate operators to access cloud resources. — item shape: {name?: string, namespace?: string, policy_permissions?: list, service_account?: string}
   --description: string # Description of the add-on.
   --docs-link: string # Link to documentation about the add-on.
-  --enabled: string@bool-completer # Indicates if this add-on can be added to clusters.
-  --has-external-resources: string@bool-completer # Indicates if this add-on has external resources associated with it
-  --hidden: string@bool-completer # Indicates if this add-on is hidden.
+  --enabled: oneof<nothing, bool> # Indicates if this add-on can be added to clusters.
+  --has-external-resources: oneof<nothing, bool> # Indicates if this add-on has external resources associated with it
+  --hidden: oneof<nothing, bool> # Indicates if this add-on is hidden.
   --icon: string # Base64-encoded icon representing an add-on. The icon should be in PNG format.
   --install-mode: string@install-mode-completer # Representation of an add-on InstallMode field.
   --label: string # Label used to attach to a cluster deployment when add-on is installed.
-  --managed-service: string@bool-completer # Indicates if add-on is part of a managed service
+  --managed-service: oneof<nothing, bool> # Indicates if add-on is part of a managed service
   --name: string # Name of the add-on.
   --namespaces: list # Namespaces which are required by this addon. — item shape: {kind?: string, id?: string, href?: string, annotations?: record, labels?: record, name?: string}
   --operator-name: string # The name of the operator installed by this add-on.
@@ -284,13 +283,13 @@ export def "clusters-mgmt-addons patch" [
   --credentials-requests: list # List of credentials requests to authenticate operators to access cloud resources. — item shape: {name?: string, namespace?: string, policy_permissions?: list, service_account?: string}
   --description: string # Description of the add-on.
   --docs-link: string # Link to documentation about the add-on.
-  --enabled: string@bool-completer # Indicates if this add-on can be added to clusters.
-  --has-external-resources: string@bool-completer # Indicates if this add-on has external resources associated with it
-  --hidden: string@bool-completer # Indicates if this add-on is hidden.
+  --enabled: oneof<nothing, bool> # Indicates if this add-on can be added to clusters.
+  --has-external-resources: oneof<nothing, bool> # Indicates if this add-on has external resources associated with it
+  --hidden: oneof<nothing, bool> # Indicates if this add-on is hidden.
   --icon: string # Base64-encoded icon representing an add-on. The icon should be in PNG format.
   --install-mode: string@install-mode-completer # Representation of an add-on InstallMode field.
   --label: string # Label used to attach to a cluster deployment when add-on is installed.
-  --managed-service: string@bool-completer # Indicates if add-on is part of a managed service
+  --managed-service: oneof<nothing, bool> # Indicates if add-on is part of a managed service
   --name: string # Name of the add-on.
   --namespaces: list # Namespaces which are required by this addon. — item shape: {kind?: string, id?: string, href?: string, annotations?: record, labels?: record, name?: string}
   --operator-name: string # The name of the operator installed by this add-on.
@@ -337,7 +336,7 @@ export def "clusters-mgmt-addons-versions post" [
   --available-upgrades: list # AvailableUpgrades is the list of versions this version can be upgraded to.
   --channel: string # The specific addon catalog source channel of packages
   --config: any # Representation of an add-on config. The attributes under it are to be used by the addon once its installed in the cluster. — shape: {kind?: string, id?: string, href?: string, add_on_environment_variables?: list, secret_propagations?: list}
-  --enabled: string@bool-completer # Indicates if this add-on version can be added to clusters.
+  --enabled: oneof<nothing, bool> # Indicates if this add-on version can be added to clusters.
   --package-image: string # The package image for this addon version
   --parameters: list # List of parameters for this add-on version. — item shape: {kind?: string, id?: string, href?: string, addon?: any, conditions?: list, default_value?: string, description?: string, editable?: bool, editable_direction?: string, enabled?: bool, name?: string, options?: list, required?: bool, validation?: string, validation_err_msg?: string, value_type?: string}
   --pull-secret-name: string # The pull secret name used for this addon version.
@@ -451,7 +450,7 @@ export def "clusters-mgmt-addons-versions patch" [
   --available-upgrades: list # AvailableUpgrades is the list of versions this version can be upgraded to.
   --channel: string # The specific addon catalog source channel of packages
   --config: any # Representation of an add-on config. The attributes under it are to be used by the addon once its installed in the cluster. — shape: {kind?: string, id?: string, href?: string, add_on_environment_variables?: list, secret_propagations?: list}
-  --enabled: string@bool-completer # Indicates if this add-on version can be added to clusters.
+  --enabled: oneof<nothing, bool> # Indicates if this add-on version can be added to clusters.
   --package-image: string # The package image for this addon version
   --parameters: list # List of parameters for this add-on version. — item shape: {kind?: string, id?: string, href?: string, addon?: any, conditions?: list, default_value?: string, description?: string, editable?: bool, editable_direction?: string, enabled?: bool, name?: string, options?: list, required?: bool, validation?: string, validation_err_msg?: string, value_type?: string}
   --pull-secret-name: string # The pull secret name used for this addon version.
@@ -651,7 +650,7 @@ export def "clusters-mgmt-aws-inquiries-sts-account-roles post" [
   --hcp-internal-communication-hosted-zone-id: string # ID of local private hosted zone for hypershift internal communication.
   --private-hosted-zone-id: string # ID of private hosted zone.
   --private-hosted-zone-role-arn: string # Role ARN for private hosted zone.
-  --private-link: string@bool-completer # Sets cluster to be inaccessible externally.
+  --private-link: oneof<nothing, bool> # Sets cluster to be inaccessible externally.
   --private-link-configuration: any # Manages the configuration for the Private Links. — shape: {principals?: list}
   --secret-access-key: string # AWS secret access key.
   --subnet-ids: list # The subnet ids to be used when installing the cluster.
@@ -805,7 +804,7 @@ export def "clusters-mgmt-cloud-providers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --fetchRegions: string@bool-completer # If true, includes the regions on each provider in the output. Could slow request response time.
+  --fetchRegions: oneof<nothing, bool> # If true, includes the regions on each provider in the output. Could slow request response time.
   --order: string # Order criteria.  The syntax of this parameter is similar to the syntax of the _order by_ clause of a SQL statement, but using the names of the attributes of the cloud provider instead of the names of the columns of a table. For example, in order to sort the clusters descending by name identifier the value should be:  ```sql name desc ```  If the parameter isn't provided, or if the value is empty, then the order of the results is undefined.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --search: string # Search criteria.  The syntax of this parameter is similar to the syntax of the _where_ clause of a SQL statement, but using the names of the attributes of the cloud provider instead of the names of the columns of a table. For example, in order to retrieve all the cloud providers with a name starting with `A` the value should be:  ```sql name like 'A%' ```  If the parameter isn't provided, or if the value is empty, then all the clusters that the user has permission to see will be returned.
@@ -877,7 +876,7 @@ export def "clusters-mgmt-cloud-providers-available-regions post" [
   --hcp-internal-communication-hosted-zone-id: string # ID of local private hosted zone for hypershift internal communication.
   --private-hosted-zone-id: string # ID of private hosted zone.
   --private-hosted-zone-role-arn: string # Role ARN for private hosted zone.
-  --private-link: string@bool-completer # Sets cluster to be inaccessible externally.
+  --private-link: oneof<nothing, bool> # Sets cluster to be inaccessible externally.
   --private-link-configuration: any # Manages the configuration for the Private Links. — shape: {principals?: list}
   --secret-access-key: string # AWS secret access key.
   --subnet-ids: list # The subnet ids to be used when installing the cluster.
@@ -913,16 +912,16 @@ export def "clusters-mgmt-cloud-providers-regions post" [
   --kind: string # Indicates the type of this object. Will be 'CloudRegion' if this is a complete object or 'CloudRegionLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
-  --ccs-only: string@bool-completer # 'true' if the region is supported only for CCS clusters, 'false' otherwise.
+  --ccs-only: oneof<nothing, bool> # 'true' if the region is supported only for CCS clusters, 'false' otherwise.
   --kms-location-id: string # (GCP only) Comma-separated list of KMS location IDs that can be used with this region. E.g. "global,nam4,us". Order is not guaranteed.
   --kms-location-name: string # (GCP only) Comma-separated list of display names corresponding to KMSLocationID. E.g. "Global,nam4 (Iowa, South Carolina, and Oklahoma),US". Order is not guaranteed but will match KMSLocationID. Unfortunately, this API doesn't allow robust splitting - Contact ocm-feedback@redhat.com if you want to rely on this.
   --cloud-provider: any # Cloud provider. — shape: {kind?: string, id?: string, href?: string, display_name?: string, name?: string, regions?: list}
   --display-name: string # Name of the region for display purposes, for example `N. Virginia`.
-  --enabled: string@bool-completer # Whether the region is enabled for deploying a managed cluster.
-  --govcloud: string@bool-completer # Whether the region is an AWS GovCloud region.
+  --enabled: oneof<nothing, bool> # Whether the region is enabled for deploying a managed cluster.
+  --govcloud: oneof<nothing, bool> # Whether the region is an AWS GovCloud region.
   --name: string # Human friendly identifier of the region, for example `us-east-1`.  NOTE: Currently for all cloud providers and all regions `id` and `name` have exactly the same values.
-  --supports-hypershift: string@bool-completer # 'true' if the region is supported for Hypershift deployments, 'false' otherwise.
-  --supports-multi-az: string@bool-completer # Whether the region supports multiple availability zones.
+  --supports-hypershift: oneof<nothing, bool> # 'true' if the region is supported for Hypershift deployments, 'false' otherwise.
+  --supports-multi-az: oneof<nothing, bool> # Whether the region supports multiple availability zones.
 ]: any -> record<kind: string, id: string, href: string, ccs_only: bool, kms_location_id: string, kms_location_name: string, cloud_provider: record<kind: string, id: string, href: string, display_name: string, name: string, regions: list<any>>, display_name: string, enabled: bool, govcloud: bool, name: string, supports_hypershift: bool, supports_multi_az: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1020,16 +1019,16 @@ export def "clusters-mgmt-cloud-providers-regions patch" [
   --kind: string # Indicates the type of this object. Will be 'CloudRegion' if this is a complete object or 'CloudRegionLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
-  --ccs-only: string@bool-completer # 'true' if the region is supported only for CCS clusters, 'false' otherwise.
+  --ccs-only: oneof<nothing, bool> # 'true' if the region is supported only for CCS clusters, 'false' otherwise.
   --kms-location-id: string # (GCP only) Comma-separated list of KMS location IDs that can be used with this region. E.g. "global,nam4,us". Order is not guaranteed.
   --kms-location-name: string # (GCP only) Comma-separated list of display names corresponding to KMSLocationID. E.g. "Global,nam4 (Iowa, South Carolina, and Oklahoma),US". Order is not guaranteed but will match KMSLocationID. Unfortunately, this API doesn't allow robust splitting - Contact ocm-feedback@redhat.com if you want to rely on this.
   --cloud-provider: any # Cloud provider. — shape: {kind?: string, id?: string, href?: string, display_name?: string, name?: string, regions?: list}
   --display-name: string # Name of the region for display purposes, for example `N. Virginia`.
-  --enabled: string@bool-completer # Whether the region is enabled for deploying a managed cluster.
-  --govcloud: string@bool-completer # Whether the region is an AWS GovCloud region.
+  --enabled: oneof<nothing, bool> # Whether the region is enabled for deploying a managed cluster.
+  --govcloud: oneof<nothing, bool> # Whether the region is an AWS GovCloud region.
   --name: string # Human friendly identifier of the region, for example `us-east-1`.  NOTE: Currently for all cloud providers and all regions `id` and `name` have exactly the same values.
-  --supports-hypershift: string@bool-completer # 'true' if the region is supported for Hypershift deployments, 'false' otherwise.
-  --supports-multi-az: string@bool-completer # Whether the region supports multiple availability zones.
+  --supports-hypershift: oneof<nothing, bool> # 'true' if the region is supported for Hypershift deployments, 'false' otherwise.
+  --supports-multi-az: oneof<nothing, bool> # Whether the region supports multiple availability zones.
 ]: any -> record<kind: string, id: string, href: string, ccs_only: bool, kms_location_id: string, kms_location_name: string, cloud_provider: record<kind: string, id: string, href: string, display_name: string, name: string, regions: list<any>>, display_name: string, enabled: bool, govcloud: bool, name: string, supports_hypershift: bool, supports_multi_az: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1104,7 +1103,7 @@ export def "clusters-mgmt-clusters post" [
   --aws-infrastructure-access-role-grants: list # List of AWS infrastructure access role grants on this cluster. — item shape: {kind?: string, id?: string, href?: string, console_url?: string, role?: any, state?: "deleting"|"failed"|"pending"|"ready"|"removed", state_description?: string, user_arn?: string}
   --ccs: any # shape: {kind?: string, id?: string, href?: string, disable_scp_checks?: bool, enabled?: bool}
   --dns: any # DNS settings of the cluster. — shape: {base_domain?: string}
-  --fips: string@bool-completer # Create cluster that uses FIPS Validated / Modules in Process cryptographic libraries.
+  --fips: oneof<nothing, bool> # Create cluster that uses FIPS Validated / Modules in Process cryptographic libraries.
   --gcp: any # Google cloud platform settings of a cluster. — shape: {auth_uri?: string, auth_provider_x509_cert_url?: string, authentication?: any, client_id?: string, client_x509_cert_url?: string, client_email?: string, private_key?: string, private_key_id?: string, private_service_connect?: any, project_id?: string, security?: any, token_uri?: string, type?: string}
   --gcp-encryption-key: any # GCP Encryption Key for CCS clusters. — shape: {kms_key_service_account?: string, key_location?: string, key_name?: string, key_ring?: string}
   --gcp-network: any # GCP Network configuration of a cluster. — shape: {vpc_name?: string, vpc_project_id?: string, compute_subnet?: string, control_plane_subnet?: string}
@@ -1121,9 +1120,9 @@ export def "clusters-mgmt-clusters post" [
   --control-plane: any # Representation of a Control Plane — shape: {backup?: any, log_forwarders?: list}
   --creation-timestamp: string # Date and time when the cluster was initially created, using the format defined in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt). (format: date-time)
   --delete-protection: any # DeleteProtection configuration. — shape: {enabled?: bool}
-  --disable-user-workload-monitoring: string@bool-completer # Indicates whether the User workload monitoring is enabled or not It is enabled by default This field is deprecated for ROSA Hosted Control Plane clusters and will be removed
+  --disable-user-workload-monitoring: oneof<nothing, bool> # Indicates whether the User workload monitoring is enabled or not It is enabled by default This field is deprecated for ROSA Hosted Control Plane clusters and will be removed
   --domain-prefix: string # DomainPrefix of the cluster. This prefix is optionally assigned by the user when the cluster is created. It will appear in the Cluster's domain when the cluster is provisioned.
-  --etcd-encryption: string@bool-completer # Indicates whether that etcd is encrypted or not. This is set only during cluster creation. For ROSA-HCP Clusters, etcd is always encrypted, if not set/false, or kms user's key not set,  defaults true indicates 'encrypted by internal key'. For ARO-HCP Clusters, this is a readonly attribute, always set to true.
+  --etcd-encryption: oneof<nothing, bool> # Indicates whether that etcd is encrypted or not. This is set only during cluster creation. For ROSA-HCP Clusters, etcd is always encrypted, if not set/false, or kms user's key not set,  defaults true indicates 'encrypted by internal key'. For ARO-HCP Clusters, this is a readonly attribute, always set to true.
   --expiration-timestamp: string # Date and time when the cluster will be automatically deleted, using the format defined in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt). If no timestamp is provided, the cluster will never expire.  This option is unsupported. (format: date-time)
   --external-id: string # External identifier of the cluster, generated by the installer.
   --external-auth-config: any # Represents an external authentication configuration — shape: {kind?: string, id?: string, href?: string, enabled?: bool, external_auths?: list, state?: "disabled"|"enabled"}
@@ -1141,10 +1140,10 @@ export def "clusters-mgmt-clusters post" [
   --kubelet-config: any # OCM representation of KubeletConfig, exposing the fields of Kubernetes KubeletConfig that can be managed by users — shape: {kind?: string, id?: string, href?: string, name?: string, pod_pids_limit?: int}
   --load-balancer-quota: int # Load Balancer quota to be assigned to the cluster. (format: int32)
   --machine-pools: list # List of machine pools on this cluster. — item shape: {kind?: string, id?: string, href?: string, aws?: any, gcp?: any, autoscaling?: any, availability_zones?: list, instance_type?: string, labels?: record, replicas?: int, root_volume?: any, security_group_filters?: list, subnets?: list, taints?: list}
-  --managed: string@bool-completer # Flag indicating if the cluster is managed (by Red Hat) or self-managed by the user.
+  --managed: oneof<nothing, bool> # Flag indicating if the cluster is managed (by Red Hat) or self-managed by the user.
   --managed-service: any # Contains the necessary attributes to support role-based authentication on AWS. — shape: {enabled?: bool}
-  --multi-az: string@bool-completer # Flag indicating if the cluster should be created with nodes in different availability zones or all the nodes in a single one randomly selected. For ARO-HCP Clusters, this attribute is unused, and the control plane is deployed in multiple availability zones when the Azure region where it is deployed supports multiple availability zones.
-  --multi-arch-enabled: string@bool-completer # Indicate whether the cluster is enabled for multi arch workers
+  --multi-az: oneof<nothing, bool> # Flag indicating if the cluster should be created with nodes in different availability zones or all the nodes in a single one randomly selected. For ARO-HCP Clusters, this attribute is unused, and the control plane is deployed in multiple availability zones when the Azure region where it is deployed supports multiple availability zones.
+  --multi-arch-enabled: oneof<nothing, bool> # Indicate whether the cluster is enabled for multi arch workers
   --name: string # Name of the cluster. This name is assigned by the user when the cluster is created. This is used to uniquely identify the cluster
   --network: any # Network configuration of a cluster. — shape: {host_prefix?: int, machine_cidr?: string, pod_cidr?: string, service_cidr?: string, type?: string}
   --node-drain-grace-period: any # Numeric value and the unit used to measure it.  Units are not mandatory, and they're not specified for some resources. For resources that use bytes, the accepted units are:  - 1 B = 1 byte - 1 KB = 10^3 bytes - 1 MB = 10^6 bytes - 1 GB = 10^9 bytes - 1 TB = 10^12 bytes - 1 PB = 10^15 bytes  - 1 B = 1 byte - 1 KiB = 2^10 bytes - 1 MiB = 2^20 bytes - 1 GiB = 2^30 bytes - 1 TiB = 2^40 bytes - 1 PiB = 2^50 bytes — shape: {unit?: string, value?: float}
@@ -1211,9 +1210,9 @@ export def "clusters-mgmt-clusters delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --best-effort: string@bool-completer # BestEffort flag is used to check if the cluster deletion should be best-effort mode or not.
-  --deprovision: string@bool-completer # If false it will only delete from OCM but not the actual cluster resources. false is only allowed for OCP clusters. true by default.
-  --dry-run: string@bool-completer # Dry run flag is used to check if the operation can be completed, but won't delete.
+  --best-effort: oneof<nothing, bool> # BestEffort flag is used to check if the cluster deletion should be best-effort mode or not.
+  --deprovision: oneof<nothing, bool> # If false it will only delete from OCM but not the actual cluster resources. false is only allowed for OCP clusters. true by default.
+  --dry-run: oneof<nothing, bool> # Dry run flag is used to check if the operation can be completed, but won't delete.
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1308,7 +1307,7 @@ export def "clusters-mgmt-clusters patch" [
   --aws-infrastructure-access-role-grants: list # List of AWS infrastructure access role grants on this cluster. — item shape: {kind?: string, id?: string, href?: string, console_url?: string, role?: any, state?: "deleting"|"failed"|"pending"|"ready"|"removed", state_description?: string, user_arn?: string}
   --ccs: any # shape: {kind?: string, id?: string, href?: string, disable_scp_checks?: bool, enabled?: bool}
   --dns: any # DNS settings of the cluster. — shape: {base_domain?: string}
-  --fips: string@bool-completer # Create cluster that uses FIPS Validated / Modules in Process cryptographic libraries.
+  --fips: oneof<nothing, bool> # Create cluster that uses FIPS Validated / Modules in Process cryptographic libraries.
   --gcp: any # Google cloud platform settings of a cluster. — shape: {auth_uri?: string, auth_provider_x509_cert_url?: string, authentication?: any, client_id?: string, client_x509_cert_url?: string, client_email?: string, private_key?: string, private_key_id?: string, private_service_connect?: any, project_id?: string, security?: any, token_uri?: string, type?: string}
   --gcp-encryption-key: any # GCP Encryption Key for CCS clusters. — shape: {kms_key_service_account?: string, key_location?: string, key_name?: string, key_ring?: string}
   --gcp-network: any # GCP Network configuration of a cluster. — shape: {vpc_name?: string, vpc_project_id?: string, compute_subnet?: string, control_plane_subnet?: string}
@@ -1325,9 +1324,9 @@ export def "clusters-mgmt-clusters patch" [
   --control-plane: any # Representation of a Control Plane — shape: {backup?: any, log_forwarders?: list}
   --creation-timestamp: string # Date and time when the cluster was initially created, using the format defined in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt). (format: date-time)
   --delete-protection: any # DeleteProtection configuration. — shape: {enabled?: bool}
-  --disable-user-workload-monitoring: string@bool-completer # Indicates whether the User workload monitoring is enabled or not It is enabled by default This field is deprecated for ROSA Hosted Control Plane clusters and will be removed
+  --disable-user-workload-monitoring: oneof<nothing, bool> # Indicates whether the User workload monitoring is enabled or not It is enabled by default This field is deprecated for ROSA Hosted Control Plane clusters and will be removed
   --domain-prefix: string # DomainPrefix of the cluster. This prefix is optionally assigned by the user when the cluster is created. It will appear in the Cluster's domain when the cluster is provisioned.
-  --etcd-encryption: string@bool-completer # Indicates whether that etcd is encrypted or not. This is set only during cluster creation. For ROSA-HCP Clusters, etcd is always encrypted, if not set/false, or kms user's key not set,  defaults true indicates 'encrypted by internal key'. For ARO-HCP Clusters, this is a readonly attribute, always set to true.
+  --etcd-encryption: oneof<nothing, bool> # Indicates whether that etcd is encrypted or not. This is set only during cluster creation. For ROSA-HCP Clusters, etcd is always encrypted, if not set/false, or kms user's key not set,  defaults true indicates 'encrypted by internal key'. For ARO-HCP Clusters, this is a readonly attribute, always set to true.
   --expiration-timestamp: string # Date and time when the cluster will be automatically deleted, using the format defined in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt). If no timestamp is provided, the cluster will never expire.  This option is unsupported. (format: date-time)
   --external-id: string # External identifier of the cluster, generated by the installer.
   --external-auth-config: any # Represents an external authentication configuration — shape: {kind?: string, id?: string, href?: string, enabled?: bool, external_auths?: list, state?: "disabled"|"enabled"}
@@ -1345,10 +1344,10 @@ export def "clusters-mgmt-clusters patch" [
   --kubelet-config: any # OCM representation of KubeletConfig, exposing the fields of Kubernetes KubeletConfig that can be managed by users — shape: {kind?: string, id?: string, href?: string, name?: string, pod_pids_limit?: int}
   --load-balancer-quota: int # Load Balancer quota to be assigned to the cluster. (format: int32)
   --machine-pools: list # List of machine pools on this cluster. — item shape: {kind?: string, id?: string, href?: string, aws?: any, gcp?: any, autoscaling?: any, availability_zones?: list, instance_type?: string, labels?: record, replicas?: int, root_volume?: any, security_group_filters?: list, subnets?: list, taints?: list}
-  --managed: string@bool-completer # Flag indicating if the cluster is managed (by Red Hat) or self-managed by the user.
+  --managed: oneof<nothing, bool> # Flag indicating if the cluster is managed (by Red Hat) or self-managed by the user.
   --managed-service: any # Contains the necessary attributes to support role-based authentication on AWS. — shape: {enabled?: bool}
-  --multi-az: string@bool-completer # Flag indicating if the cluster should be created with nodes in different availability zones or all the nodes in a single one randomly selected. For ARO-HCP Clusters, this attribute is unused, and the control plane is deployed in multiple availability zones when the Azure region where it is deployed supports multiple availability zones.
-  --multi-arch-enabled: string@bool-completer # Indicate whether the cluster is enabled for multi arch workers
+  --multi-az: oneof<nothing, bool> # Flag indicating if the cluster should be created with nodes in different availability zones or all the nodes in a single one randomly selected. For ARO-HCP Clusters, this attribute is unused, and the control plane is deployed in multiple availability zones when the Azure region where it is deployed supports multiple availability zones.
+  --multi-arch-enabled: oneof<nothing, bool> # Indicate whether the cluster is enabled for multi arch workers
   --name: string # Name of the cluster. This name is assigned by the user when the cluster is created. This is used to uniquely identify the cluster
   --network: any # Network configuration of a cluster. — shape: {host_prefix?: int, machine_cidr?: string, pod_cidr?: string, service_cidr?: string, type?: string}
   --node-drain-grace-period: any # Numeric value and the unit used to measure it.  Units are not mandatory, and they're not specified for some resources. For resources that use bytes, the accepted units are:  - 1 B = 1 byte - 1 KB = 10^3 bytes - 1 MB = 10^6 bytes - 1 GB = 10^9 bytes - 1 TB = 10^12 bytes - 1 PB = 10^15 bytes  - 1 B = 1 byte - 1 KiB = 2^10 bytes - 1 MiB = 2^20 bytes - 1 GiB = 2^30 bytes - 1 TiB = 2^40 bytes - 1 PiB = 2^50 bytes — shape: {unit?: string, value?: float}
@@ -1863,16 +1862,16 @@ export def "clusters-mgmt-clusters-autoscaler post" [
   --kind: string # Indicates the type of this object. Will be 'ClusterAutoscaler' if this is a complete object or 'ClusterAutoscalerLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
-  --balance-similar-node-groups: string@bool-completer # BalanceSimilarNodeGroups enables/disables the `--balance-similar-node-groups` cluster-autoscaler feature. This feature will automatically identify node groups with the same instance type and the same set of labels and try to keep the respective sizes of those node groups balanced.
+  --balance-similar-node-groups: oneof<nothing, bool> # BalanceSimilarNodeGroups enables/disables the `--balance-similar-node-groups` cluster-autoscaler feature. This feature will automatically identify node groups with the same instance type and the same set of labels and try to keep the respective sizes of those node groups balanced.
   --balancing-ignored-labels: list # This option specifies labels that cluster autoscaler should ignore when considering node group similarity. For example, if you have nodes with "topology.ebs.csi.aws.com/zone" label, you can add name of this label here to prevent cluster autoscaler from splitting nodes into different node groups based on its value.
-  --ignore-daemonsets-utilization: string@bool-completer # Should CA ignore DaemonSet pods when calculating resource utilization for scaling down. false by default.
+  --ignore-daemonsets-utilization: oneof<nothing, bool> # Should CA ignore DaemonSet pods when calculating resource utilization for scaling down. false by default.
   --log-verbosity: int # Sets the autoscaler log level. Default value is 1, level 4 is recommended for DEBUGGING and level 6 will enable almost everything. (format: int32)
   --max-node-provision-time: string # Maximum time CA waits for node to be provisioned.
   --max-pod-grace-period: int # Gives pods graceful termination time before scaling down. (format: int32)
   --pod-priority-threshold: int # To allow users to schedule "best-effort" pods, which shouldn't trigger Cluster Autoscaler actions, but only run when there are spare resources available, More info: https://github.com/kubernetes/autoscaler/blob/master/cluster-autoscaler/FAQ.md#how-does-cluster-autoscaler-work-with-pod-priority-and-preemption. (format: int32)
   --resource-limits: any # shape: {gpus?: list, cores?: any, max_nodes_total?: int, memory?: any}
   --scale-down: any # shape: {delay_after_add?: string, delay_after_delete?: string, delay_after_failure?: string, enabled?: bool, unneeded_time?: string, utilization_threshold?: string}
-  --skip-nodes-with-local-storage: string@bool-completer # Enables/Disables `--skip-nodes-with-local-storage` CA feature flag. If true cluster autoscaler will never delete nodes with pods with local storage, e.g. EmptyDir or HostPath. true by default at autoscaler.
+  --skip-nodes-with-local-storage: oneof<nothing, bool> # Enables/Disables `--skip-nodes-with-local-storage` CA feature flag. If true cluster autoscaler will never delete nodes with pods with local storage, e.g. EmptyDir or HostPath. true by default at autoscaler.
 ]: any -> record<kind: string, id: string, href: string, balance_similar_node_groups: bool, balancing_ignored_labels: list<string>, ignore_daemonsets_utilization: bool, log_verbosity: int, max_node_provision_time: string, max_pod_grace_period: int, pod_priority_threshold: int, resource_limits: record<gpus: list<record>, cores: record<max: int, min: int>, max_nodes_total: int, memory: record<max: int, min: int>>, scale_down: record<delay_after_add: string, delay_after_delete: string, delay_after_failure: string, enabled: bool, unneeded_time: string, utilization_threshold: string>, skip_nodes_with_local_storage: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1902,16 +1901,16 @@ export def "clusters-mgmt-clusters-autoscaler patch" [
   --kind: string # Indicates the type of this object. Will be 'ClusterAutoscaler' if this is a complete object or 'ClusterAutoscalerLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
-  --balance-similar-node-groups: string@bool-completer # BalanceSimilarNodeGroups enables/disables the `--balance-similar-node-groups` cluster-autoscaler feature. This feature will automatically identify node groups with the same instance type and the same set of labels and try to keep the respective sizes of those node groups balanced.
+  --balance-similar-node-groups: oneof<nothing, bool> # BalanceSimilarNodeGroups enables/disables the `--balance-similar-node-groups` cluster-autoscaler feature. This feature will automatically identify node groups with the same instance type and the same set of labels and try to keep the respective sizes of those node groups balanced.
   --balancing-ignored-labels: list # This option specifies labels that cluster autoscaler should ignore when considering node group similarity. For example, if you have nodes with "topology.ebs.csi.aws.com/zone" label, you can add name of this label here to prevent cluster autoscaler from splitting nodes into different node groups based on its value.
-  --ignore-daemonsets-utilization: string@bool-completer # Should CA ignore DaemonSet pods when calculating resource utilization for scaling down. false by default.
+  --ignore-daemonsets-utilization: oneof<nothing, bool> # Should CA ignore DaemonSet pods when calculating resource utilization for scaling down. false by default.
   --log-verbosity: int # Sets the autoscaler log level. Default value is 1, level 4 is recommended for DEBUGGING and level 6 will enable almost everything. (format: int32)
   --max-node-provision-time: string # Maximum time CA waits for node to be provisioned.
   --max-pod-grace-period: int # Gives pods graceful termination time before scaling down. (format: int32)
   --pod-priority-threshold: int # To allow users to schedule "best-effort" pods, which shouldn't trigger Cluster Autoscaler actions, but only run when there are spare resources available, More info: https://github.com/kubernetes/autoscaler/blob/master/cluster-autoscaler/FAQ.md#how-does-cluster-autoscaler-work-with-pod-priority-and-preemption. (format: int32)
   --resource-limits: any # shape: {gpus?: list, cores?: any, max_nodes_total?: int, memory?: any}
   --scale-down: any # shape: {delay_after_add?: string, delay_after_delete?: string, delay_after_failure?: string, enabled?: bool, unneeded_time?: string, utilization_threshold?: string}
-  --skip-nodes-with-local-storage: string@bool-completer # Enables/Disables `--skip-nodes-with-local-storage` CA feature flag. If true cluster autoscaler will never delete nodes with pods with local storage, e.g. EmptyDir or HostPath. true by default at autoscaler.
+  --skip-nodes-with-local-storage: oneof<nothing, bool> # Enables/Disables `--skip-nodes-with-local-storage` CA feature flag. If true cluster autoscaler will never delete nodes with pods with local storage, e.g. EmptyDir or HostPath. true by default at autoscaler.
 ]: any -> record<kind: string, id: string, href: string, balance_similar_node_groups: bool, balancing_ignored_labels: list<string>, ignore_daemonsets_utilization: bool, log_verbosity: int, max_node_provision_time: string, max_pod_grace_period: int, pod_priority_threshold: int, resource_limits: record<gpus: list<record>, cores: record<max: int, min: int>, max_nodes_total: int, memory: record<max: int, min: int>>, scale_down: record<delay_after_add: string, delay_after_delete: string, delay_after_failure: string, enabled: bool, unneeded_time: string, utilization_threshold: string>, skip_nodes_with_local_storage: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2052,7 +2051,7 @@ export def "clusters-mgmt-clusters-aws-role-policy-bindings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --fetchCurrent: string@bool-completer # If true, retrieves role policy binding states from AWS.
+  --fetchCurrent: oneof<nothing, bool> # If true, retrieves role policy binding states from AWS.
   --page: int # Index of the requested page, where one corresponds to the first page. (format: int32)
   --size: int # Number of items contained in the returned page. (format: int32)
 ]: nothing -> record<items: table<arn: string, creation_timestamp: string, last_update_timestamp: string, name: string, policies: list, status: record, type: string>, page: int, size: int, total: int> {
@@ -2500,7 +2499,7 @@ export def "clusters-mgmt-clusters-control-plane-upgrade-policies post" [
   --href: string # Self link.
   --body-cluster-id: string # Cluster ID this upgrade policy for control plane is defined for.
   --creation-timestamp: string # Timestamp for creation of resource. (format: date-time)
-  --enable-minor-version-upgrades: string@bool-completer # Indicates if minor version upgrades are allowed for automatic upgrades (for manual it's always allowed).
+  --enable-minor-version-upgrades: oneof<nothing, bool> # Indicates if minor version upgrades are allowed for automatic upgrades (for manual it's always allowed).
   --last-update-timestamp: string # Timestamp for last update that happened to resource. (format: date-time)
   --next-run: string # Next time the upgrade should run. (format: date-time)
   --schedule: string # Schedule cron expression that defines automatic upgrade scheduling.
@@ -2607,7 +2606,7 @@ export def "clusters-mgmt-clusters-control-plane-upgrade-policies patch" [
   --href: string # Self link.
   --body-cluster-id: string # Cluster ID this upgrade policy for control plane is defined for.
   --creation-timestamp: string # Timestamp for creation of resource. (format: date-time)
-  --enable-minor-version-upgrades: string@bool-completer # Indicates if minor version upgrades are allowed for automatic upgrades (for manual it's always allowed).
+  --enable-minor-version-upgrades: oneof<nothing, bool> # Indicates if minor version upgrades are allowed for automatic upgrades (for manual it's always allowed).
   --last-update-timestamp: string # Timestamp for last update that happened to resource. (format: date-time)
   --next-run: string # Next time the upgrade should run. (format: date-time)
   --schedule: string # Schedule cron expression that defines automatic upgrade scheduling.
@@ -2677,7 +2676,7 @@ export def "clusters-mgmt-clusters-delete-protection patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Boolean flag indicating if the cluster should be be using _DeleteProtection_.  By default this is `false`.  To enable it a SREP needs to patch the value through OCM API
+  --enabled: oneof<nothing, bool> # Boolean flag indicating if the cluster should be be using _DeleteProtection_.  By default this is `false`.  To enable it a SREP needs to patch the value through OCM API
 ]: any -> record<enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3529,7 +3528,7 @@ export def "clusters-mgmt-clusters-hypershift patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --hcp-namespace: string # Contains the name of the hcp namespace for this Hypershift cluster. Empty for non Hypershift clusters.
-  --enabled: string@bool-completer # Boolean flag indicating if the cluster should be creating using _Hypershift_.  By default this is `false`.  To enable it the cluster needs to be ROSA cluster and the organization of the user needs to have the `hypershift` capability enabled.
+  --enabled: oneof<nothing, bool> # Boolean flag indicating if the cluster should be creating using _Hypershift_.  By default this is `false`.  To enable it the cluster needs to be ROSA cluster and the organization of the user needs to have the `hypershift` capability enabled.
   --management-cluster: string # Contains the name of the current management cluster for this Hypershift cluster. Empty for non Hypershift clusters.
 ]: any -> record<hcp_namespace: string, enabled: bool, management_cluster: string> {
   let input = $in
@@ -3565,12 +3564,12 @@ export def "clusters-mgmt-clusters-identity-providers post" [
   --id: string # Unique identifier of the object.
   --href: string # Self link.
   --ldap: any # Details for `ldap` identity providers. — shape: {ca?: string, url?: string, attributes?: any, bind_dn?: string, bind_password?: string, insecure?: bool}
-  --challenge: string@bool-completer # When `true` unauthenticated token requests from non-web clients (like the CLI) are sent a `WWW-Authenticate` challenge header for this provider.
+  --challenge: oneof<nothing, bool> # When `true` unauthenticated token requests from non-web clients (like the CLI) are sent a `WWW-Authenticate` challenge header for this provider.
   --github: any # Details for `github` identity providers. — shape: {ca?: string, client_id?: string, client_secret?: string, hostname?: string, organizations?: list, teams?: list}
   --gitlab: any # Details for `gitlab` identity providers. — shape: {ca?: string, url?: string, client_id?: string, client_secret?: string}
   --google: any # Details for `google` identity providers. — shape: {client_id?: string, client_secret?: string, hosted_domain?: string}
   --htpasswd: any # Details for `htpasswd` identity providers. — shape: {password?: string, username?: string, users?: list}
-  --login: string@bool-completer # When `true` unauthenticated token requests from web clients (like the web console) are redirected to the authorize URL to log in.
+  --login: oneof<nothing, bool> # When `true` unauthenticated token requests from web clients (like the web console) are redirected to the authorize URL to log in.
   --mapping-method: string@mapping-method-completer # Controls how mappings are established between provider identities and user objects.
   --name: string # The name of the identity provider.
   --open-id: any # Details for `openid` identity providers. — shape: {ca?: string, claims?: any, client_id?: string, client_secret?: string, extra_authorize_parameters?: record, extra_scopes?: list, issuer?: string}
@@ -3678,12 +3677,12 @@ export def "clusters-mgmt-clusters-identity-providers patch" [
   --id: string # Unique identifier of the object.
   --href: string # Self link.
   --ldap: any # Details for `ldap` identity providers. — shape: {ca?: string, url?: string, attributes?: any, bind_dn?: string, bind_password?: string, insecure?: bool}
-  --challenge: string@bool-completer # When `true` unauthenticated token requests from non-web clients (like the CLI) are sent a `WWW-Authenticate` challenge header for this provider.
+  --challenge: oneof<nothing, bool> # When `true` unauthenticated token requests from non-web clients (like the CLI) are sent a `WWW-Authenticate` challenge header for this provider.
   --github: any # Details for `github` identity providers. — shape: {ca?: string, client_id?: string, client_secret?: string, hostname?: string, organizations?: list, teams?: list}
   --gitlab: any # Details for `gitlab` identity providers. — shape: {ca?: string, url?: string, client_id?: string, client_secret?: string}
   --google: any # Details for `google` identity providers. — shape: {client_id?: string, client_secret?: string, hosted_domain?: string}
   --htpasswd: any # Details for `htpasswd` identity providers. — shape: {password?: string, username?: string, users?: list}
-  --login: string@bool-completer # When `true` unauthenticated token requests from web clients (like the web console) are redirected to the authorize URL to log in.
+  --login: oneof<nothing, bool> # When `true` unauthenticated token requests from web clients (like the web console) are redirected to the authorize URL to log in.
   --mapping-method: string@mapping-method-completer # Controls how mappings are established between provider identities and user objects.
   --name: string # The name of the identity provider.
   --open-id: any # Details for `openid` identity providers. — shape: {ca?: string, claims?: any, client_id?: string, client_secret?: string, extra_authorize_parameters?: record, extra_scopes?: list, issuer?: string}
@@ -4060,7 +4059,7 @@ export def "clusters-mgmt-clusters-ingresses post" [
   --cluster-routes-hostname: string # Cluster routes hostname.
   --cluster-routes-tls-secret-ref: string # Cluster routes TLS Secret reference.
   --component-routes: record # Component Routes settings.
-  --default: string@bool-completer # Indicates if this is the default ingress.
+  --default: oneof<nothing, bool> # Indicates if this is the default ingress.
   --excluded-namespace-selectors: list # A set of excluded exclude namespaces via labels for ingress. — item shape: {key?: string, values?: list}
   --excluded-namespaces: list # A set of excluded namespaces for the ingress.
   --listening: string@listening-completer # Cluster components listening method.
@@ -4193,7 +4192,7 @@ export def "clusters-mgmt-clusters-ingresses patch-by-cluster_id-ingress_id" [
   --cluster-routes-hostname: string # Cluster routes hostname.
   --cluster-routes-tls-secret-ref: string # Cluster routes TLS Secret reference.
   --component-routes: record # Component Routes settings.
-  --default: string@bool-completer # Indicates if this is the default ingress.
+  --default: oneof<nothing, bool> # Indicates if this is the default ingress.
   --excluded-namespace-selectors: list # A set of excluded exclude namespaces via labels for ingress. — item shape: {key?: string, values?: list}
   --excluded-namespaces: list # A set of excluded namespaces for the ingress.
   --listening: string@listening-completer # Cluster components listening method.
@@ -4974,7 +4973,7 @@ export def "clusters-mgmt-clusters-node-pools post" [
   --id: string # Unique identifier of the object.
   --href: string # Self link.
   --aws-node-pool: any # Representation of aws node pool specific parameters. — shape: {kind?: string, id?: string, href?: string, additional_security_group_ids?: list, availability_zone_types?: record, capacity_reservation?: any, ec2_metadata_http_tokens?: "optional"|"required", instance_profile?: string, instance_type?: string, root_volume?: any, subnet_outposts?: record, tags?: record}
-  --auto-repair: string@bool-completer # Specifies whether health checks should be enabled for machines in the NodePool.
+  --auto-repair: oneof<nothing, bool> # Specifies whether health checks should be enabled for machines in the NodePool.
   --autoscaling: any # Representation of a autoscaling in a node pool. — shape: {kind?: string, id?: string, href?: string, max_replica?: int, min_replica?: int}
   --availability-zone: string # The availability zone upon which the node is created.
   --azure-node-pool: any # Representation of azure node pool specific parameters. — shape: {vm_size?: string, encryption_at_host?: any, os_disk?: any, resource_name?: string}
@@ -5096,7 +5095,7 @@ export def "clusters-mgmt-clusters-node-pools patch" [
   --id: string # Unique identifier of the object.
   --href: string # Self link.
   --aws-node-pool: any # Representation of aws node pool specific parameters. — shape: {kind?: string, id?: string, href?: string, additional_security_group_ids?: list, availability_zone_types?: record, capacity_reservation?: any, ec2_metadata_http_tokens?: "optional"|"required", instance_profile?: string, instance_type?: string, root_volume?: any, subnet_outposts?: record, tags?: record}
-  --auto-repair: string@bool-completer # Specifies whether health checks should be enabled for machines in the NodePool.
+  --auto-repair: oneof<nothing, bool> # Specifies whether health checks should be enabled for machines in the NodePool.
   --autoscaling: any # Representation of a autoscaling in a node pool. — shape: {kind?: string, id?: string, href?: string, max_replica?: int, min_replica?: int}
   --availability-zone: string # The availability zone upon which the node is created.
   --azure-node-pool: any # Representation of azure node pool specific parameters. — shape: {vm_size?: string, encryption_at_host?: any, os_disk?: any, resource_name?: string}
@@ -5142,7 +5141,7 @@ export def "clusters-mgmt-clusters-node-pools-upgrade-policies post" [
   --href: string # Self link.
   --body-cluster-id: string # Cluster ID this upgrade policy for node pool is defined for.
   --creation-timestamp: string # Timestamp for creation of resource. (format: date-time)
-  --enable-minor-version-upgrades: string@bool-completer # Indicates if minor version upgrades are allowed for automatic upgrades (for manual it's always allowed).
+  --enable-minor-version-upgrades: oneof<nothing, bool> # Indicates if minor version upgrades are allowed for automatic upgrades (for manual it's always allowed).
   --last-update-timestamp: string # Timestamp for last update that happened to resource. (format: date-time)
   --next-run: string # Next time the upgrade should run. (format: date-time)
   --body-node-pool-id: string # Node Pool ID this upgrade policy is defined for.
@@ -5254,7 +5253,7 @@ export def "clusters-mgmt-clusters-node-pools-upgrade-policies patch" [
   --href: string # Self link.
   --body-cluster-id: string # Cluster ID this upgrade policy for node pool is defined for.
   --creation-timestamp: string # Timestamp for creation of resource. (format: date-time)
-  --enable-minor-version-upgrades: string@bool-completer # Indicates if minor version upgrades are allowed for automatic upgrades (for manual it's always allowed).
+  --enable-minor-version-upgrades: oneof<nothing, bool> # Indicates if minor version upgrades are allowed for automatic upgrades (for manual it's always allowed).
   --last-update-timestamp: string # Timestamp for last update that happened to resource. (format: date-time)
   --next-run: string # Next time the upgrade should run. (format: date-time)
   --body-node-pool-id: string # Node Pool ID this upgrade policy is defined for.
@@ -5660,7 +5659,7 @@ export def "clusters-mgmt-clusters-upgrade-policies post" [
   --id: string # Unique identifier of the object.
   --href: string # Self link.
   --body-cluster-id: string # Cluster ID this upgrade policy is defined for.
-  --enable-minor-version-upgrades: string@bool-completer # Indicates if minor version upgrades are allowed for automatic upgrades (for manual it's always allowed).
+  --enable-minor-version-upgrades: oneof<nothing, bool> # Indicates if minor version upgrades are allowed for automatic upgrades (for manual it's always allowed).
   --next-run: string # Next time the upgrade should run. (format: date-time)
   --schedule: string # Schedule cron expression that defines automatic upgrade scheduling.
   --schedule-type: string@schedule-type-completer # ScheduleType defines which type of scheduling should be used for the upgrade policy.
@@ -5763,7 +5762,7 @@ export def "clusters-mgmt-clusters-upgrade-policies patch" [
   --id: string # Unique identifier of the object.
   --href: string # Self link.
   --body-cluster-id: string # Cluster ID this upgrade policy is defined for.
-  --enable-minor-version-upgrades: string@bool-completer # Indicates if minor version upgrades are allowed for automatic upgrades (for manual it's always allowed).
+  --enable-minor-version-upgrades: oneof<nothing, bool> # Indicates if minor version upgrades are allowed for automatic upgrades (for manual it's always allowed).
   --next-run: string # Next time the upgrade should run. (format: date-time)
   --schedule: string # Schedule cron expression that defines automatic upgrade scheduling.
   --schedule-type: string@schedule-type-completer # ScheduleType defines which type of scheduling should be used for the upgrade policy.
@@ -5921,7 +5920,7 @@ export def "clusters-mgmt-dns-domains post" [
   --gcp: any # GcpDnsDomain represents configuration for Google Cloud Platform DNS domain settings used in cluster DNS configuration for GCP-hosted clusters. — shape: {domain_prefix?: string, network_id?: string, project_id?: string}
   --organization: any # Definition of an organization link. — shape: {href?: string, id?: string}
   --reserved-at-timestamp: string # Date and time when the DNS domain was reserved. (format: date-time)
-  --user-defined: string@bool-completer # Indicates if this dns domain is user defined.
+  --user-defined: oneof<nothing, bool> # Indicates if this dns domain is user defined.
 ]: any -> record<kind: string, id: string, href: string, cloud_provider: string, cluster: record<href: string, id: string>, cluster_arch: string, gcp: record<domain_prefix: string, network_id: string, project_id: string>, organization: record<href: string, id: string>, reserved_at_timestamp: string, user_defined: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6222,7 +6221,7 @@ export def "clusters-mgmt-gcp-wif-configs delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dry-run: string@bool-completer # Dry run flag is used to check if the operation can be completed, but won't delete.
+  --dry-run: oneof<nothing, bool> # Dry run flag is used to check if the operation can be completed, but won't delete.
 ]: nothing -> record<kind: string, id: int, href: string, code: string, reason: string, details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6733,9 +6732,9 @@ export def "clusters-mgmt-oidc-configs post" [
   --issuer-url: string # Issuer URL, filled in response when Managed and supplied in Unmanaged.
   --last-update-timestamp: string # Last update timestamp, filled when patching a valid attribute of this oidc config. (format: date-time)
   --last-used-timestamp: string # Last used timestamp, filled by the latest cluster that used this oidc config. (format: date-time)
-  --managed: string@bool-completer # Indicates whether it is Managed or Unmanaged (Customer hosted).
+  --managed: oneof<nothing, bool> # Indicates whether it is Managed or Unmanaged (Customer hosted).
   --organization-id: string # Organization ID, filled in response respecting token provided.
-  --reusable: string@bool-completer # Indicates whether the Oidc Config can be reused.
+  --reusable: oneof<nothing, bool> # Indicates whether the Oidc Config can be reused.
   --secret-arn: string # Secrets Manager ARN for the OIDC private key, supplied in request. It is only to be used in Unmanaged Oidc Config.
 ]: any -> record<href: string, id: string, creation_timestamp: string, installer_role_arn: string, issuer_url: string, last_update_timestamp: string, last_used_timestamp: string, managed: bool, organization_id: string, reusable: bool, secret_arn: string> {
   let input = $in
@@ -6833,9 +6832,9 @@ export def "clusters-mgmt-oidc-configs patch" [
   --issuer-url: string # Issuer URL, filled in response when Managed and supplied in Unmanaged.
   --last-update-timestamp: string # Last update timestamp, filled when patching a valid attribute of this oidc config. (format: date-time)
   --last-used-timestamp: string # Last used timestamp, filled by the latest cluster that used this oidc config. (format: date-time)
-  --managed: string@bool-completer # Indicates whether it is Managed or Unmanaged (Customer hosted).
+  --managed: oneof<nothing, bool> # Indicates whether it is Managed or Unmanaged (Customer hosted).
   --organization-id: string # Organization ID, filled in response respecting token provided.
-  --reusable: string@bool-completer # Indicates whether the Oidc Config can be reused.
+  --reusable: oneof<nothing, bool> # Indicates whether the Oidc Config can be reused.
   --secret-arn: string # Secrets Manager ARN for the OIDC private key, supplied in request. It is only to be used in Unmanaged Oidc Config.
 ]: any -> record<href: string, id: string, creation_timestamp: string, installer_role_arn: string, issuer_url: string, last_update_timestamp: string, last_used_timestamp: string, managed: bool, organization_id: string, reusable: bool, secret_arn: string> {
   let input = $in
@@ -6911,7 +6910,7 @@ export def "clusters-mgmt-pending-delete-clusters patch" [
   --kind: string # Indicates the type of this object. Will be 'PendingDeleteCluster' if this is a complete object or 'PendingDeleteClusterLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
-  --best-effort: string@bool-completer # Flag indicating if the cluster deletion should be best-effort mode or not.
+  --best-effort: oneof<nothing, bool> # Flag indicating if the cluster deletion should be best-effort mode or not.
   --cluster: any # Definition of an _OpenShift_ cluster.  The `cloud_provider` attribute is a reference to the cloud provider. When a cluster is retrieved it will be a link to the cloud provider, containing only the kind, id and href attributes:  ```json {   "cloud_provider": {     "kind": "CloudProviderLink",     "id": "123",     "href": "/api/clusters_mgmt/v1/cloud_providers/123"   } } ```  When a cluster is created this is optional, and if used it should contain the identifier of the cloud provider to use:  ```json {   "cloud_provider": {     "id": "123",   } } ```  If not included, then the cluster will be created using the default cloud provider, which is currently Amazon Web Services.  The region attribute is mandatory when a cluster is created.  The `aws.access_key_id`, `aws.secret_access_key` and `dns.base_domain` attributes are mandatory when creation a cluster with your own Amazon Web Services account. — shape: {kind?: string, id?: string, href?: string, api?: any, aws?: any, aws_infrastructure_access_role_grants?: list, ccs?: any, dns?: any, fips?: bool, gcp?: any, gcp_encryption_key?: any, gcp_network?: any, additional_trust_bundle?: string, addons?: list, auto_node?: any, autoscaler?: any, azure?: any, billing_model?: "marketplace"|"marketplace-aws"|"marketplace-gcp"|"marketplace-rhm"|"marketplace-azure"|"standard", byo_oidc?: any, channel?: string, cloud_provider?: any, console?: any, control_plane?: any, creation_timestamp?: string, delete_protection?: any, disable_user_workload_monitoring?: bool, domain_prefix?: string, etcd_encryption?: bool, expiration_timestamp?: string, external_id?: string, external_auth_config?: any, external_configuration?: any, flavour?: any, groups?: list, health_state?: "healthy"|"unhealthy"|"unknown", htpasswd?: any, hypershift?: any, identity_providers?: list, image_registry?: any, inflight_checks?: list, infra_id?: string, ingresses?: list, kubelet_config?: any, load_balancer_quota?: int, machine_pools?: list, managed?: bool, managed_service?: any, multi_az?: bool, multi_arch_enabled?: bool, name?: string, network?: any, node_drain_grace_period?: any, node_pools?: list, nodes?: any, openshift_version?: string, product?: any, properties?: record, provision_shard?: any, proxy?: any, region?: any, registry_config?: any, state?: "error"|"hibernating"|"installing"|"pending"|"powering_down"|"ready"|"resuming"|"uninstalling"|"unknown"|"updating"|"validating"|"waiting", status?: any, storage_quota?: any, subscription?: any, version?: any}
   --creation-timestamp: string # Date and time when the cluster was initially created, using the format defined in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt). (format: date-time)
 ]: any -> record<kind: string, id: string, href: string, best_effort: bool, cluster: record<kind: string, id: string, href: string, api: record<cidr_block_access: record, url: string, listening: string>, aws: record<kms_key_arn: string, sts: record, access_key_id: string, account_id: string, additional_allowed_principals: list, additional_compute_security_group_ids: list, additional_control_plane_security_group_ids: list, additional_infra_security_group_ids: list, audit_log: record, auto_node: record, billing_account_id: string, ec2_metadata_http_tokens: string, etcd_encryption: record, hcp_internal_communication_hosted_zone_id: string, private_hosted_zone_id: string, private_hosted_zone_role_arn: string, private_link: bool, private_link_configuration: record, secret_access_key: string, subnet_ids: list, tags: record, vpc_endpoint_role_arn: string, zero_egress: record>, aws_infrastructure_access_role_grants: list<record>, ccs: record<kind: string, id: string, href: string, disable_scp_checks: bool, enabled: bool>, dns: record<base_domain: string>, fips: bool, gcp: record<auth_uri: string, auth_provider_x509_cert_url: string, authentication: record, client_id: string, client_x509_cert_url: string, client_email: string, private_key: string, private_key_id: string, private_service_connect: record, project_id: string, security: record, token_uri: string, type: string>, gcp_encryption_key: record<kms_key_service_account: string, key_location: string, key_name: string, key_ring: string>, gcp_network: record<vpc_name: string, vpc_project_id: string, compute_subnet: string, control_plane_subnet: string>, additional_trust_bundle: string, addons: list<record>, auto_node: record<mode: string, status: record>, autoscaler: record<kind: string, id: string, href: string, balance_similar_node_groups: bool, balancing_ignored_labels: list, ignore_daemonsets_utilization: bool, log_verbosity: int, max_node_provision_time: string, max_pod_grace_period: int, pod_priority_threshold: int, resource_limits: record, scale_down: record, skip_nodes_with_local_storage: bool>, azure: record<etcd_encryption: record, managed_resource_group_name: string, network_security_group_resource_id: string, nodes_outbound_connectivity: record, operators_authentication: record, resource_group_name: string, resource_name: string, subnet_resource_id: string, subscription_id: string, tenant_id: string>, billing_model: string, byo_oidc: record<enabled: bool>, channel: string, cloud_provider: record<kind: string, id: string, href: string, display_name: string, name: string, regions: list>, console: record<url: string>, control_plane: record<backup: record, log_forwarders: list>, creation_timestamp: string, delete_protection: record<enabled: bool>, disable_user_workload_monitoring: bool, domain_prefix: string, etcd_encryption: bool, expiration_timestamp: string, external_id: string, external_auth_config: record<kind: string, id: string, href: string, enabled: bool, external_auths: list, state: string>, external_configuration: record<labels: list, manifests: list, syncsets: list>, flavour: record<kind: string, id: string, href: string, aws: record, gcp: record, name: string, network: record, nodes: record>, groups: list<record>, health_state: string, htpasswd: record<password: string, username: string, users: list>, hypershift: record<enabled: bool>, identity_providers: list<record>, image_registry: record<state: string>, inflight_checks: list<record>, infra_id: string, ingresses: list<record>, kubelet_config: record<kind: string, id: string, href: string, name: string, pod_pids_limit: int>, load_balancer_quota: int, machine_pools: list<record>, managed: bool, managed_service: record<enabled: bool>, multi_az: bool, multi_arch_enabled: bool, name: string, network: record<host_prefix: int, machine_cidr: string, pod_cidr: string, service_cidr: string, type: string>, node_drain_grace_period: record<unit: string, value: float>, node_pools: list<record>, nodes: record<autoscale_compute: record, availability_zones: list, compute: int, compute_labels: record, compute_machine_type: record, compute_root_volume: record, infra: int, infra_machine_type: record, master: int, master_machine_type: record, security_group_filters: list, total: int>, openshift_version: string, product: record<kind: string, id: string, href: string, name: string>, properties: record, provision_shard: record<kind: string, id: string, href: string, aws_account_operator_config: record, aws_base_domain: string, gcp_base_domain: string, gcp_project_operator: record, cloud_provider: record, creation_timestamp: string, hive_config: record, hypershift_config: record, last_update_timestamp: string, management_cluster: string, region: record, status: string>, proxy: record<http_proxy: string, https_proxy: string, no_proxy: string>, region: record<kind: string, id: string, href: string, ccs_only: bool, kms_location_id: string, kms_location_name: string, cloud_provider: record, display_name: string, enabled: bool, govcloud: bool, name: string, supports_hypershift: bool, supports_multi_az: bool>, registry_config: record<additional_trusted_ca: record, allowed_registries_for_import: list, platform_allowlist: record, registry_sources: record>, state: string, status: record<kind: string, id: string, href: string, dns_ready: bool, oidc_ready: bool, configuration_mode: string, current_compute: int, description: string, limited_support_reason_count: int, provision_error_code: string, provision_error_message: string, state: string>, storage_quota: record<unit: string, value: float>, subscription: record<kind: string, id: string, href: string>, version: record<kind: string, id: string, href: string, gcp_marketplace_enabled: bool, rosa_enabled: bool, available_channels: list, available_upgrades: list, channel_group: string, default: bool, enabled: bool, end_of_life_timestamp: string, hosted_control_plane_default: bool, hosted_control_plane_enabled: bool, image_overrides: record, raw_id: string, release_image: string, release_images: record, wif_enabled: bool>>, creation_timestamp: string> {
@@ -7405,7 +7404,7 @@ export def "clusters-mgmt-version-gates post" [
   --kind: string # Indicates the type of this object. Will be 'VersionGate' if this is a complete object or 'VersionGateLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
-  --sts-only: string@bool-completer # STSOnly indicates if this version gate is for STS clusters only, deprecated: to be replaced with ClusterCondition
+  --sts-only: oneof<nothing, bool> # STSOnly indicates if this version gate is for STS clusters only, deprecated: to be replaced with ClusterCondition
   --cluster-condition: string # ClusterCondition aims at selecting the clusters targeted by this version gate, ignored if STSOnly is true
   --creation-timestamp: string # CreationTimestamp is the date and time when the version gate was created, format defined in https://www.ietf.org/rfc/rfc3339.txt[RC3339]. (format: date-time)
   --description: string # Description of the version gate.
@@ -7508,7 +7507,7 @@ export def "clusters-mgmt-version-gates patch" [
   --kind: string # Indicates the type of this object. Will be 'VersionGate' if this is a complete object or 'VersionGateLink' if it is just a link.
   --id: string # Unique identifier of the object.
   --href: string # Self link.
-  --sts-only: string@bool-completer # STSOnly indicates if this version gate is for STS clusters only, deprecated: to be replaced with ClusterCondition
+  --sts-only: oneof<nothing, bool> # STSOnly indicates if this version gate is for STS clusters only, deprecated: to be replaced with ClusterCondition
   --cluster-condition: string # ClusterCondition aims at selecting the clusters targeted by this version gate, ignored if STSOnly is true
   --creation-timestamp: string # CreationTimestamp is the date and time when the version gate was created, format defined in https://www.ietf.org/rfc/rfc3339.txt[RC3339]. (format: date-time)
   --description: string # Description of the version gate.

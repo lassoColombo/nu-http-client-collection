@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://discord.com/api/v10"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -276,7 +275,7 @@ export def "applications-commands commands-by-application_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-localizations: string@bool-completer
+  --with-localizations: oneof<nothing, bool>
 ]: nothing -> table<id: string, application_id: string, version: string, default_member_permissions: string, type: int, name: string, name_localized: string, name_localizations: record, description: string, description_localized: string, description_localizations: record, guild_id: string, dm_permission: bool, contexts: list<int>, integration_types: list<int>, options: list<any>, nsfw: bool, handler: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -329,7 +328,7 @@ export def "applications-commands command-by-application_id" [
   --description-localizations: record # nullable
   --options: list # nullable
   --default-member-permissions: int # nullable
-  --dm-permission: string@bool-completer # nullable
+  --dm-permission: oneof<nothing, bool> # nullable
   --contexts: list # nullable
   --integration-types: list # nullable
   --handler: any # Determines whether the interaction is handled by the app's interactions handler or by Discord
@@ -409,7 +408,7 @@ export def "applications-commands command-by-application_id-command_id-2" [
   --description-localizations: record # nullable
   --options: list # nullable
   --default-member-permissions: int # nullable
-  --dm-permission: string@bool-completer # nullable
+  --dm-permission: oneof<nothing, bool> # nullable
   --contexts: list # nullable
   --integration-types: list # nullable
   --handler: any # Determines whether the interaction is handled by the app's interactions handler or by Discord
@@ -560,9 +559,9 @@ export def "applications-entitlements entitlements" [
   --before: string # format: snowflake
   --after: string # format: snowflake
   --limit: int
-  --exclude-ended: string@bool-completer
-  --exclude-deleted: string@bool-completer
-  --only-active: string@bool-completer
+  --exclude-ended: oneof<nothing, bool>
+  --exclude-deleted: oneof<nothing, bool>
+  --only-active: oneof<nothing, bool>
 ]: nothing -> table<id: string, sku_id: string, application_id: string, user_id: string, guild_id: any, deleted: bool, starts_at: string, ends_at: string, type: int, fulfilled_at: string, fulfillment_status: any, consumed: bool, gifter_user_id: any, parent_id: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -679,7 +678,7 @@ export def "applications-guilds-commands commands-by-application_id-guild_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-localizations: string@bool-completer
+  --with-localizations: oneof<nothing, bool>
 ]: nothing -> table<id: string, application_id: string, version: string, default_member_permissions: string, type: int, name: string, name_localized: string, name_localizations: record, description: string, description_localized: string, description_localizations: record, guild_id: string, dm_permission: bool, contexts: list<int>, integration_types: list<int>, options: list<any>, nsfw: bool, handler: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -734,7 +733,7 @@ export def "applications-guilds-commands command-by-application_id-guild_id" [
   --description-localizations: record # nullable
   --options: list # nullable
   --default-member-permissions: int # nullable
-  --dm-permission: string@bool-completer # nullable
+  --dm-permission: oneof<nothing, bool> # nullable
   --contexts: list # nullable
   --integration-types: list # nullable
   --handler: any # Determines whether the interaction is handled by the app's interactions handler or by Discord
@@ -839,7 +838,7 @@ export def "applications-guilds-commands command-by-application_id-guild_id-comm
   --description-localizations: record # nullable
   --options: list # nullable
   --default-member-permissions: int # nullable
-  --dm-permission: string@bool-completer # nullable
+  --dm-permission: oneof<nothing, bool> # nullable
   --contexts: list # nullable
   --integration-types: list # nullable
   --handler: any # Determines whether the interaction is handled by the app's interactions handler or by Discord
@@ -1014,7 +1013,7 @@ export def "channels channel-by-channel_id-2" [
   --topic: string # nullable
   --bitrate: int # nullable, format: int32
   --user-limit: int # nullable, format: int32
-  --nsfw: string@bool-completer # nullable
+  --nsfw: oneof<nothing, bool> # nullable
   --rate-limit-per-user: int # nullable
   --parent-id: any
   --permission-overwrites: list # nullable — item shape: {id: string, type?: any, allow?: int, deny?: int}
@@ -1028,9 +1027,9 @@ export def "channels channel-by-channel_id-2" [
   --default-tag-setting: any
   --flags: int # nullable
   --available-tags: list # nullable — item shape: {name: string, emoji_id?: any, emoji_name?: string, moderated?: bool, id?: any}
-  --archived: string@bool-completer # nullable
-  --locked: string@bool-completer # nullable
-  --invitable: string@bool-completer # nullable
+  --archived: oneof<nothing, bool> # nullable
+  --locked: oneof<nothing, bool> # nullable
+  --invitable: oneof<nothing, bool> # nullable
   --auto-archive-duration: any
   --applied-tags: list # nullable
 ]: any -> any {
@@ -1104,9 +1103,9 @@ export def "channels-invites invite" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --max-age: int # nullable
-  --temporary: string@bool-completer # nullable
+  --temporary: oneof<nothing, bool> # nullable
   --max-uses: int # nullable
-  --unique: string@bool-completer # nullable
+  --unique: oneof<nothing, bool> # nullable
   --target-user-id: any
   --target-application-id: any
   --target-type: any
@@ -1173,8 +1172,8 @@ export def "channels-messages message-by-channel_id" [
   --shared-client-theme: any
   --message-reference: any
   --nonce: any
-  --enforce-nonce: string@bool-completer # nullable
-  --tts: string@bool-completer # nullable
+  --enforce-nonce: oneof<nothing, bool> # nullable
+  --tts: oneof<nothing, bool> # nullable
 ]: any -> record<type: int, content: string, mentions: table<id: string, username: string, avatar: string, discriminator: string, public_flags: int, flags: int, bot: bool, system: bool, banner: string, accent_color: int, global_name: string, avatar_decoration_data: any, collectibles: any, primary_guild: any>, mention_roles: list<string>, attachments: table<id: string, filename: string, size: int, url: string, proxy_url: string, width: int, height: int, duration_secs: float, waveform: string, description: string, content_type: string, ephemeral: bool, flags: int, placeholder: string, placeholder_version: int, title: string, application: record, clip_created_at: string, clip_participants: list>, embeds: table<type: string, url: string, title: string, description: string, color: int, timestamp: string, fields: list, author: record, provider: record, image: record, thumbnail: record, video: record, footer: record, flags: int, components: list>, timestamp: string, edited_timestamp: string, flags: int, components: list<any>, stickers: list<any>, sticker_items: table<id: string, name: string, format_type: int>, id: string, channel_id: string, author: record<id: string, username: string, avatar: string, discriminator: string, public_flags: int, flags: int, bot: bool, system: bool, banner: string, accent_color: int, global_name: string, avatar_decoration_data: any, collectibles: any, primary_guild: any>, pinned: bool, mention_everyone: bool, tts: bool, call: record<ended_timestamp: string, participants: list<string>>, activity: record<type: int, party_id: string>, application: record<id: string, name: string, icon: string, description: string, type: any, cover_image: string, primary_sku_id: string, bot: record<id: string, username: string, avatar: string, discriminator: string, public_flags: int, flags: int, bot: bool, system: bool, banner: string, accent_color: int, global_name: string, avatar_decoration_data: any, collectibles: any, primary_guild: any>>, application_id: string, interaction: record<id: string, type: int, name: string, user: record<id: string, username: string, avatar: string, discriminator: string, public_flags: int, flags: int, bot: bool, system: bool, banner: string, accent_color: int, global_name: string, avatar_decoration_data: any, collectibles: any, primary_guild: any>, name_localized: string>, nonce: any, webhook_id: string, message_reference: record<type: int, channel_id: string, message_id: string, guild_id: string>, thread: record<id: string, type: int, last_message_id: any, flags: int, last_pin_timestamp: string, guild_id: string, name: string, parent_id: any, rate_limit_per_user: int, bitrate: int, user_limit: int, rtc_region: string, video_quality_mode: int, permissions: string, owner_id: string, thread_metadata: record<archived: bool, archive_timestamp: string, auto_archive_duration: int, locked: bool, create_timestamp: string, invitable: bool>, message_count: int, member_count: int, total_message_sent: int, applied_tags: list<string>, member: record<id: string, user_id: string, join_timestamp: string, flags: int, member: record>>, mention_channels: table<id: string, name: string, type: int, guild_id: string>, role_subscription_data: record<role_subscription_listing_id: string, tier_name: string, total_months_subscribed: int, is_renewal: bool>, purchase_notification: record<type: int, guild_product_purchase: record<listing_id: string, product_name: string>>, position: int, resolved: record<users: record, members: record, channels: record, roles: record>, poll: record<question: record<text: string, emoji: record>, answers: list<record>, expiry: string, allow_multiselect: bool, layout_type: int, results: record<answer_counts: list, is_finalized: bool>>, shared_client_theme: record<colors: list<string>, gradient_angle: int, base_mix: int, base_theme: int>, interaction_metadata: any, message_snapshots: table<message: record>, reactions: table<emoji: record, count: int, count_details: record, burst_colors: list, me_burst: bool, me: bool>, referenced_message: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1800,7 +1799,7 @@ export def "channels-thread-members members" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-member: string@bool-completer
+  --with-member: oneof<nothing, bool>
   --limit: int
   --after: string # format: snowflake
 ]: nothing -> table<id: string, user_id: string, join_timestamp: string, flags: int, member: record<avatar: string, avatar_decoration_data: any, banner: string, communication_disabled_until: string, flags: int, joined_at: string, nick: string, pending: bool, premium_since: string, roles: list, collectibles: any, user: record, mute: bool, deaf: bool>> {
@@ -1868,7 +1867,7 @@ export def "channels-thread-members member-by-channel_id-user_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-member: string@bool-completer
+  --with-member: oneof<nothing, bool>
 ]: nothing -> record<id: string, user_id: string, join_timestamp: string, flags: int, member: record<avatar: string, avatar_decoration_data: any, banner: string, communication_disabled_until: string, flags: int, joined_at: string, nick: string, pending: bool, premium_since: string, roles: list<string>, collectibles: any, user: record<id: string, username: string, avatar: string, discriminator: string, public_flags: int, flags: int, bot: bool, system: bool, banner: string, accent_color: int, global_name: string, avatar_decoration_data: any, collectibles: any, primary_guild: any>, mute: bool, deaf: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1942,7 +1941,7 @@ export def "channels-threads thread" [
   --applied-tags: list # nullable
   --message: record # shape: {content?: string, embeds?: list, allowed_mentions?: any, sticker_ids?: list, components?: list, flags?: int, attachments?: list, poll?: any, shared_client_theme?: any}
   --type: any
-  --invitable: string@bool-completer # nullable
+  --invitable: oneof<nothing, bool> # nullable
 ]: any -> record<id: string, type: int, last_message_id: any, flags: int, last_pin_timestamp: string, guild_id: string, name: string, parent_id: any, rate_limit_per_user: int, bitrate: int, user_limit: int, rtc_region: string, video_quality_mode: int, permissions: string, owner_id: string, thread_metadata: record<archived: bool, archive_timestamp: string, auto_archive_duration: int, locked: bool, create_timestamp: string, invitable: bool>, message_count: int, member_count: int, total_message_sent: int, applied_tags: list<string>, member: record<id: string, user_id: string, join_timestamp: string, flags: int, member: record<avatar: string, avatar_decoration_data: any, banner: string, communication_disabled_until: string, flags: int, joined_at: string, nick: string, pending: bool, premium_since: string, roles: list, collectibles: any, user: record, mute: bool, deaf: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2021,7 +2020,7 @@ export def "channels-threads-search search" [
   --max-id: string # format: snowflake
   --tag: string
   --tag-setting: string
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
   --sort-by: string
   --sort-order: string
   --limit: int
@@ -2227,7 +2226,7 @@ export def "guilds guild-by-guild_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-counts: string@bool-completer
+  --with-counts: oneof<nothing, bool>
 ]: nothing -> record<id: string, name: string, icon: string, description: string, home_header: string, splash: string, discovery_splash: string, features: list<string>, banner: string, owner_id: string, application_id: any, region: string, afk_channel_id: any, afk_timeout: int, system_channel_id: any, system_channel_flags: int, widget_enabled: bool, widget_channel_id: any, verification_level: int, roles: table<id: string, name: string, permissions: string, position: int, color: int, colors: record, hoist: bool, managed: bool, mentionable: bool, icon: string, unicode_emoji: string, tags: record, flags: int>, default_message_notifications: int, mfa_level: int, explicit_content_filter: int, max_presences: int, max_members: int, max_stage_video_channel_users: int, max_video_channel_users: int, vanity_url_code: string, premium_tier: int, premium_subscription_count: int, preferred_locale: string, rules_channel_id: any, safety_alerts_channel_id: any, public_updates_channel_id: any, premium_progress_bar_enabled: bool, premium_progress_bar_enabled_user_updated_at: string, nsfw: bool, nsfw_level: int, emojis: table<id: string, name: string, user: record, roles: list, require_colons: bool, managed: bool, animated: bool, available: bool>, stickers: table<id: string, name: string, tags: string, type: int, format_type: any, description: string, available: bool, guild_id: string, user: record>, incidents_data: any, approximate_member_count: int, approximate_presence_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2270,7 +2269,7 @@ export def "guilds guild-by-guild_id-1" [
   --rules-channel-id: any
   --safety-alerts-channel-id: any
   --public-updates-channel-id: any
-  --premium-progress-bar-enabled: string@bool-completer # nullable
+  --premium-progress-bar-enabled: oneof<nothing, bool> # nullable
 ]: any -> record<id: string, name: string, icon: string, description: string, home_header: string, splash: string, discovery_splash: string, features: list<string>, banner: string, owner_id: string, application_id: any, region: string, afk_channel_id: any, afk_timeout: int, system_channel_id: any, system_channel_flags: int, widget_enabled: bool, widget_channel_id: any, verification_level: int, roles: table<id: string, name: string, permissions: string, position: int, color: int, colors: record, hoist: bool, managed: bool, mentionable: bool, icon: string, unicode_emoji: string, tags: record, flags: int>, default_message_notifications: int, mfa_level: int, explicit_content_filter: int, max_presences: int, max_members: int, max_stage_video_channel_users: int, max_video_channel_users: int, vanity_url_code: string, premium_tier: int, premium_subscription_count: int, preferred_locale: string, rules_channel_id: any, safety_alerts_channel_id: any, public_updates_channel_id: any, premium_progress_bar_enabled: bool, premium_progress_bar_enabled_user_updated_at: string, nsfw: bool, nsfw_level: int, emojis: table<id: string, name: string, user: record, roles: list, require_colons: bool, managed: bool, animated: bool, available: bool>, stickers: table<id: string, name: string, tags: string, type: int, format_type: any, description: string, available: bool, guild_id: string, user: record>, incidents_data: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2348,7 +2347,7 @@ export def "guilds-auto-moderation-rules rule-by-guild_id" [
   --name: string
   --event-type: int # format: int32
   --actions: list # nullable
-  --enabled: string@bool-completer # nullable
+  --enabled: oneof<nothing, bool> # nullable
   --exempt-roles: list # nullable
   --exempt-channels: list # nullable
   --trigger-type: int@trigger-type-completer # format: int32
@@ -2426,7 +2425,7 @@ export def "guilds-auto-moderation-rules rule-by-guild_id-rule_id-2" [
   --name: string
   --event-type: int # format: int32
   --actions: list # nullable
-  --enabled: string@bool-completer # nullable
+  --enabled: oneof<nothing, bool> # nullable
   --exempt-roles: list # nullable
   --exempt-channels: list # nullable
   --trigger-type: int@trigger-type-completer # format: int32
@@ -2608,7 +2607,7 @@ export def "guilds-channels channel" [
   --topic: string # nullable
   --bitrate: int # nullable, format: int32
   --user-limit: int # nullable, format: int32
-  --nsfw: string@bool-completer # nullable
+  --nsfw: oneof<nothing, bool> # nullable
   --rate-limit-per-user: int # nullable
   --parent-id: any
   --permission-overwrites: list # nullable — item shape: {id: string, type?: any, allow?: int, deny?: int}
@@ -2980,8 +2979,8 @@ export def "guilds-members member-by-guild_id-user_id-1" [
   --allow-errors(-e) # Return full response without error handling
   --nick: string # nullable
   --roles: list # nullable
-  --mute: string@bool-completer # nullable
-  --deaf: string@bool-completer # nullable
+  --mute: oneof<nothing, bool> # nullable
+  --deaf: oneof<nothing, bool> # nullable
   access_token: string
   --flags: int # nullable
 ]: any -> record<avatar: string, avatar_decoration_data: any, banner: string, communication_disabled_until: string, flags: int, joined_at: string, nick: string, pending: bool, premium_since: string, roles: list<string>, collectibles: any, user: record<id: string, username: string, avatar: string, discriminator: string, public_flags: int, flags: int, bot: bool, system: bool, banner: string, accent_color: int, global_name: string, avatar_decoration_data: any, collectibles: any, primary_guild: any>, mute: bool, deaf: bool> {
@@ -3033,8 +3032,8 @@ export def "guilds-members member-by-guild_id-user_id-3" [
   --allow-errors(-e) # Return full response without error handling
   --nick: string # nullable
   --roles: list # nullable
-  --mute: string@bool-completer # nullable
-  --deaf: string@bool-completer # nullable
+  --mute: oneof<nothing, bool> # nullable
+  --deaf: oneof<nothing, bool> # nullable
   --channel-id: any
   --communication-disabled-until: string # nullable, format: date-time
   --flags: int # nullable
@@ -3118,7 +3117,7 @@ export def "guilds-messages-search search" [
   --mentions-role-id: list
   --replied-to-user-id: list
   --replied-to-message-id: list
-  --mention-everyone: string@bool-completer
+  --mention-everyone: oneof<nothing, bool>
   --min-id: string # format: snowflake
   --max-id: string # format: snowflake
   --limit: int
@@ -3129,8 +3128,8 @@ export def "guilds-messages-search search" [
   --embed-type: list
   --attachment-extension: list
   --attachment-filename: list
-  --pinned: string@bool-completer
-  --include-nsfw: string@bool-completer
+  --pinned: oneof<nothing, bool>
+  --include-nsfw: oneof<nothing, bool>
   --channel-id: list
 ]: nothing -> record<messages: list<list<record>>, doing_deep_historical_index: bool, total_results: int, threads: table<id: string, type: int, last_message_id: any, flags: int, last_pin_timestamp: string, guild_id: string, name: string, parent_id: any, rate_limit_per_user: int, bitrate: int, user_limit: int, rtc_region: string, video_quality_mode: int, permissions: string, owner_id: string, thread_metadata: record, message_count: int, member_count: int, total_message_sent: int, applied_tags: list, member: record>, members: table<id: string, user_id: string, join_timestamp: string, flags: int, member: record>, documents_indexed: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3198,7 +3197,7 @@ export def "guilds-onboarding onboarding-by-guild_id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --prompts: list # nullable — item shape: {title: string, options: list, single_select?: bool, required?: bool, in_onboarding?: bool, type?: any, id: string}
-  --enabled: string@bool-completer # nullable
+  --enabled: oneof<nothing, bool> # nullable
   --default-channel-ids: list # nullable
   --mode: any
 ]: any -> record<guild_id: string, prompts: table<id: string, title: string, options: list, single_select: bool, required: bool, in_onboarding: bool, type: int>, default_channel_ids: list<string>, enabled: bool, mode: int> {
@@ -3271,7 +3270,7 @@ export def "guilds-prune guild-by-guild_id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --days: int # nullable
-  --compute-prune-count: string@bool-completer # nullable
+  --compute-prune-count: oneof<nothing, bool> # nullable
   --include-roles: any
 ]: any -> record<pruned: int> {
   let input = $in
@@ -3398,8 +3397,8 @@ export def "guilds-roles role-by-guild_id" [
   --permissions: int # nullable
   --color: int # nullable
   --colors: any
-  --hoist: string@bool-completer # nullable
-  --mentionable: string@bool-completer # nullable
+  --hoist: oneof<nothing, bool> # nullable
+  --mentionable: oneof<nothing, bool> # nullable
   --icon: string # nullable
   --unicode-emoji: string # nullable
 ]: any -> record<id: string, name: string, permissions: string, position: int, color: int, colors: record<primary_color: int, secondary_color: int, tertiary_color: int>, hoist: bool, managed: bool, mentionable: bool, icon: string, unicode_emoji: string, tags: record<premium_subscriber: any, bot_id: string, integration_id: string, subscription_listing_id: string, available_for_purchase: any, guild_connections: any>, flags: int> {
@@ -3520,8 +3519,8 @@ export def "guilds-roles role-by-guild_id-role_id-2" [
   --permissions: int # nullable
   --color: int # nullable
   --colors: any
-  --hoist: string@bool-completer # nullable
-  --mentionable: string@bool-completer # nullable
+  --hoist: oneof<nothing, bool> # nullable
+  --mentionable: oneof<nothing, bool> # nullable
   --icon: string # nullable
   --unicode-emoji: string # nullable
 ]: any -> record<id: string, name: string, permissions: string, position: int, color: int, colors: record<primary_color: int, secondary_color: int, tertiary_color: int>, hoist: bool, managed: bool, mentionable: bool, icon: string, unicode_emoji: string, tags: record<premium_subscriber: any, bot_id: string, integration_id: string, subscription_listing_id: string, available_for_purchase: any, guild_connections: any>, flags: int> {
@@ -3548,7 +3547,7 @@ export def "guilds-scheduled-events events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-user-count: string@bool-completer
+  --with-user-count: oneof<nothing, bool>
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3607,7 +3606,7 @@ export def "guilds-scheduled-events event-by-guild_id-guild_scheduled_event_id" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-user-count: string@bool-completer
+  --with-user-count: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3694,7 +3693,7 @@ export def "guilds-scheduled-events-exceptions exception-by-guild_id-guild_sched
   --scheduled-start-time: string # Overridden start time of this occurrence (nullable, format: date-time)
   --scheduled-end-time: string # Overridden end time of this occurrence (nullable, format: date-time)
   original_scheduled_start_time: string # The original start time of the occurrence to create an exception for (format: date-time)
-  --is-canceled: string@bool-completer # Whether this occurrence is canceled (nullable)
+  --is-canceled: oneof<nothing, bool> # Whether this occurrence is canceled (nullable)
 ]: any -> record<event_id: string, event_exception_id: string, scheduled_start_time: string, scheduled_end_time: string, is_canceled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3748,7 +3747,7 @@ export def "guilds-scheduled-events-exceptions exception-by-guild_id-guild_sched
   --allow-errors(-e) # Return full response without error handling
   --scheduled-start-time: string # Overridden start time of this occurrence (nullable, format: date-time)
   --scheduled-end-time: string # Overridden end time of this occurrence (nullable, format: date-time)
-  --is-canceled: string@bool-completer # Whether this occurrence is canceled (nullable)
+  --is-canceled: oneof<nothing, bool> # Whether this occurrence is canceled (nullable)
 ]: any -> record<event_id: string, event_exception_id: string, scheduled_start_time: string, scheduled_end_time: string, is_canceled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3774,7 +3773,7 @@ export def "guilds-scheduled-events-users list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-member: string@bool-completer
+  --with-member: oneof<nothing, bool>
   --limit: int
   --before: string # format: snowflake
   --after: string # format: snowflake
@@ -3828,7 +3827,7 @@ export def "guilds-scheduled-events-users users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-member: string@bool-completer
+  --with-member: oneof<nothing, bool>
   --limit: int
   --before: string # format: snowflake
   --after: string # format: snowflake
@@ -4280,7 +4279,7 @@ export def "guilds-voice-states-me state-by-guild_id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --request-to-speak-timestamp: string # nullable, format: date-time
-  --suppress: string@bool-completer # nullable
+  --suppress: oneof<nothing, bool> # nullable
   --channel-id: any
 ]: any -> any {
   let input = $in
@@ -4329,7 +4328,7 @@ export def "guilds-voice-states state-by-guild_id-user_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --suppress: string@bool-completer # nullable
+  --suppress: oneof<nothing, bool> # nullable
   --channel-id: any
 ]: any -> any {
   let input = $in
@@ -4400,7 +4399,7 @@ export def "guilds-welcome-screen screen-by-guild_id-1" [
   --allow-errors(-e) # Return full response without error handling
   --description: string # nullable
   --welcome-channels: list # nullable — item shape: {channel_id: string, description: string, emoji_id?: any, emoji_name?: string}
-  --enabled: string@bool-completer # nullable
+  --enabled: oneof<nothing, bool> # nullable
 ]: any -> record<description: string, welcome_channels: table<channel_id: string, description: string, emoji_id: any, emoji_name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4447,7 +4446,7 @@ export def "guilds-widget settings-by-guild_id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --channel-id: any
-  --enabled: string@bool-completer # nullable
+  --enabled: oneof<nothing, bool> # nullable
 ]: any -> record<enabled: bool, channel_id: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4517,7 +4516,7 @@ export def "interactions-callback response" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-response: string@bool-completer
+  --with-response: oneof<nothing, bool>
   --type: int@type-completer # format: int32
   --data: any
 ]: any -> record<interaction: record<id: string, type: int, activity_instance_id: string, response_message_id: string, response_message_loading: bool, response_message_ephemeral: bool, channel_id: string, guild_id: string>, resource: any> {
@@ -4545,7 +4544,7 @@ export def "invites resolve" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-counts: string@bool-completer
+  --with-counts: oneof<nothing, bool>
   --guild-scheduled-event-id: string # format: snowflake
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4988,8 +4987,8 @@ export def "lobbies-messages message" [
   --shared-client-theme: any
   --message-reference: any
   --nonce: any
-  --enforce-nonce: string@bool-completer # nullable
-  --tts: string@bool-completer # nullable
+  --enforce-nonce: oneof<nothing, bool> # nullable
+  --tts: oneof<nothing, bool> # nullable
 ]: any -> record<id: string, type: int, content: string, lobby_id: string, channel_id: string, author: record<id: string, username: string, avatar: string, discriminator: string, public_flags: int, flags: int, bot: bool, system: bool, banner: string, accent_color: int, global_name: string, avatar_decoration_data: any, collectibles: any, primary_guild: any>, metadata: record, moderation_metadata: record, flags: int, application_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5326,7 +5325,7 @@ export def "stage-instances instance" [
   channel_id: string # format: snowflake
   --privacy-level: any
   --guild-scheduled-event-id: any
-  --send-start-notification: string@bool-completer # nullable
+  --send-start-notification: oneof<nothing, bool> # nullable
 ]: any -> record<guild_id: string, channel_id: string, topic: string, privacy_level: int, id: string, discoverable_disabled: bool, guild_scheduled_event_id: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5528,7 +5527,7 @@ export def "users-me-applications-entitlements entitlements" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --sku-ids: string
-  --exclude-consumed: string@bool-completer
+  --exclude-consumed: oneof<nothing, bool>
 ]: nothing -> table<id: string, sku_id: string, application_id: string, user_id: string, guild_id: any, deleted: bool, starts_at: string, ends_at: string, type: int, fulfilled_at: string, fulfillment_status: any, consumed: bool, gifter_user_id: any, parent_id: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5668,7 +5667,7 @@ export def "users-me-guilds guilds" [
   --before: string # format: snowflake
   --after: string # format: snowflake
   --limit: int
-  --with-counts: string@bool-completer
+  --with-counts: oneof<nothing, bool>
 ]: nothing -> table<id: string, name: string, icon: string, banner: string, owner: bool, permissions: string, features: list<string>, approximate_member_count: int, approximate_presence_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5868,16 +5867,16 @@ export def "webhooks webhook-by-webhook_id-webhook_token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer
+  --wait: oneof<nothing, bool>
   --thread-id: string # format: snowflake
-  --with-components: string@bool-completer
+  --with-components: oneof<nothing, bool>
   --content: string # nullable
   --embeds: list # nullable — item shape: {type?: string, url?: string, title?: string, color?: int, timestamp?: string, description?: string, author?: any, image?: any, thumbnail?: any, footer?: any, fields?: list, provider?: any, video?: any}
   --allowed-mentions: any
   --components: list # nullable
   --attachments: list # nullable — item shape: {id: string, filename?: string, description?: string, duration_secs?: float, waveform?: string, title?: string, is_remix?: bool}
   --poll: any
-  --tts: string@bool-completer # nullable
+  --tts: oneof<nothing, bool> # nullable
   --flags: int # nullable
   --username: string # nullable
   --avatar-url: string # nullable, format: uri
@@ -5960,7 +5959,7 @@ export def "webhooks-github webhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer
+  --wait: oneof<nothing, bool>
   --thread-id: string # format: snowflake
   --action: string # nullable
   --ref: string # nullable
@@ -5975,7 +5974,7 @@ export def "webhooks-github webhook" [
   --release: any
   --head-commit: any
   --commits: list # nullable — item shape: {id: string, url: string, message: string, author: record}
-  --forced: string@bool-completer # nullable
+  --forced: oneof<nothing, bool> # nullable
   --compare: string # nullable, format: uri
   --review: any
   --check-run: any
@@ -6059,7 +6058,7 @@ export def "webhooks-messages-original message-by-webhook_id-webhook_token-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --thread-id: string # format: snowflake
-  --with-components: string@bool-completer
+  --with-components: oneof<nothing, bool>
   --content: string # nullable
   --embeds: list # nullable — item shape: {type?: string, url?: string, title?: string, color?: int, timestamp?: string, description?: string, author?: any, image?: any, thumbnail?: any, footer?: any, fields?: list, provider?: any, video?: any}
   --allowed-mentions: any
@@ -6147,7 +6146,7 @@ export def "webhooks-messages message-by-webhook_id-webhook_token-message_id-2" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --thread-id: string # format: snowflake
-  --with-components: string@bool-completer
+  --with-components: oneof<nothing, bool>
   --content: string # nullable
   --embeds: list # nullable — item shape: {type?: string, url?: string, title?: string, color?: int, timestamp?: string, description?: string, author?: any, image?: any, thumbnail?: any, footer?: any, fields?: list, provider?: any, video?: any}
   --allowed-mentions: any
@@ -6182,7 +6181,7 @@ export def "webhooks-slack webhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer
+  --wait: oneof<nothing, bool>
   --thread-id: string # format: snowflake
   --text: string # nullable
   --username: string # nullable

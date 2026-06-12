@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -167,10 +166,10 @@ export def "branches v1-update-a-branch-config" [
   --allow-errors(-e) # Return full response without error handling
   --branch-name: string
   --git-branch: string
-  --reset-on-push: string@bool-completer # This field is deprecated and will be ignored. Use v1-reset-a-branch endpoint directly instead. (DEPRECATED)
-  --persistent: string@bool-completer
+  --reset-on-push: oneof<nothing, bool> # This field is deprecated and will be ignored. Use v1-reset-a-branch endpoint directly instead. (DEPRECATED)
+  --persistent: oneof<nothing, bool>
   --status: string@status-completer
-  --request-review: string@bool-completer
+  --request-review: oneof<nothing, bool>
   --notify-url: string # HTTP endpoint to receive branch status updates. (format: uri)
 ]: any -> record<id: string, name: string, project_ref: string, parent_project_ref: string, is_default: bool, git_branch: string, pr_number: int, latest_check_run_id: float, persistent: bool, status: string, created_at: string, updated_at: string, review_requested_at: string, with_data: bool, notify_url: string, deletion_scheduled_at: string, preview_project_status: string> {
   let input = $in
@@ -197,7 +196,7 @@ export def "branches v1-delete-a-branch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # If set to false, schedule deletion with 1-hour grace period (only when soft deletion is enabled). (default: true, e.g. false)
+  --force: oneof<nothing, bool> # If set to false, schedule deletion with 1-hour grace period (only when soft deletion is enabled). (default: true, e.g. false)
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -322,7 +321,7 @@ export def "branches-diff v1-diff-a-branch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --included-schemas: string # e.g. public,auth
-  --pgdelta: string@bool-completer # Use pg-delta instead of Migra for diffing when true (e.g. false)
+  --pgdelta: oneof<nothing, bool> # Use pg-delta instead of Migra for diffing when true (e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -377,7 +376,7 @@ export def "projects v1-create-a-project" [
   --plan: string@plan-completer # Subscription Plan is now set on organization level and is ignored in this request (DEPRECATED)
   --region: string@region-completer # Region you want your server to reside in. Use region_selection instead. (DEPRECATED)
   --region-selection: any # Region selection. Only one of region or region_selection can be specified.
-  --kps-enabled: string@bool-completer # This field is deprecated and is ignored in this request (DEPRECATED)
+  --kps-enabled: oneof<nothing, bool> # This field is deprecated and is ignored in this request (DEPRECATED)
   --desired-instance-size: string@desired-instance-size-completer # Desired instance size. Omit this field to always default to the smallest possible size.
   --template-url: string # Template URL used to create the project from the CLI. (format: uri)
 ]: any -> record<id: string, ref: string, organization_id: string, organization_slug: string, name: string, region: string, created_at: string, status: string> {
@@ -795,7 +794,7 @@ export def "projects-api-keys v1-get-project-api-keys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --reveal: string@bool-completer # Boolean string, true or false (e.g. true)
+  --reveal: oneof<nothing, bool> # Boolean string, true or false (e.g. true)
 ]: nothing -> table<api_key: string, id: string, type: string, prefix: string, name: string, description: string, hash: string, secret_jwt_template: record, inserted_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -819,7 +818,7 @@ export def "projects-api-keys v1-create-project-api-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --reveal: string@bool-completer # Boolean string, true or false (e.g. true)
+  --reveal: oneof<nothing, bool> # Boolean string, true or false (e.g. true)
   type: string@type-completer
   name: string
   --description: string # nullable
@@ -872,7 +871,7 @@ export def "projects-api-keys-legacy v1-update-project-legacy-api-keys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Boolean string, true or false (e.g. true)
+  --enabled: oneof<nothing, bool> # Boolean string, true or false (e.g. true)
 ]: nothing -> record<enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -897,7 +896,7 @@ export def "projects-api-keys v1-update-project-api-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --reveal: string@bool-completer # Boolean string, true or false (e.g. true)
+  --reveal: oneof<nothing, bool> # Boolean string, true or false (e.g. true)
   --name: string
   --description: string # nullable
   --secret-jwt-template: record # nullable
@@ -928,7 +927,7 @@ export def "projects-api-keys v1-get-project-api-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --reveal: string@bool-completer # Boolean string, true or false (e.g. true)
+  --reveal: oneof<nothing, bool> # Boolean string, true or false (e.g. true)
 ]: nothing -> record<api_key: string, id: string, type: string, prefix: string, name: string, description: string, hash: string, secret_jwt_template: record, inserted_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -953,8 +952,8 @@ export def "projects-api-keys v1-delete-project-api-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --reveal: string@bool-completer # Boolean string, true or false (e.g. true)
-  --was-compromised: string@bool-completer # Boolean string, true or false (e.g. false)
+  --reveal: oneof<nothing, bool> # Boolean string, true or false (e.g. true)
+  --was-compromised: oneof<nothing, bool> # Boolean string, true or false (e.g. false)
   --reason: string # e.g. rotating_key
 ]: nothing -> record<api_key: string, id: string, type: string, prefix: string, name: string, description: string, hash: string, secret_jwt_template: record, inserted_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1003,14 +1002,14 @@ export def "projects-branches v1-create-a-branch" [
   --allow-errors(-e) # Return full response without error handling
   branch_name: string
   --git-branch: string
-  --is-default: string@bool-completer
-  --persistent: string@bool-completer
+  --is-default: oneof<nothing, bool>
+  --persistent: oneof<nothing, bool>
   --region: string
   --desired-instance-size: string@desired-instance-size-completer-1
   --release-channel: string@release-channel-completer # Release channel. If not provided, GA will be used.
   --postgres-engine: string@postgres-engine-completer # Postgres engine version. If not provided, the latest version will be used.
   --secrets: record
-  --with-data: string@bool-completer
+  --with-data: oneof<nothing, bool>
   --notify-url: string # HTTP endpoint to receive branch status updates. (format: uri)
 ]: any -> record<id: string, name: string, project_ref: string, parent_project_ref: string, is_default: bool, git_branch: string, pr_number: int, latest_check_run_id: float, persistent: bool, status: string, created_at: string, updated_at: string, review_requested_at: string, with_data: bool, notify_url: string, deletion_scheduled_at: string, preview_project_status: string> {
   let input = $in
@@ -1104,7 +1103,7 @@ export def "projects-custom-hostname v1-Delete-hostname-config" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --remove-addon: string@bool-completer # If true, also removes the custom domain add-on from the project subscription. (default: false)
+  --remove-addon: oneof<nothing, bool> # If true, also removes the custom domain add-on from the project subscription. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1293,7 +1292,7 @@ export def "projects-network-bans v1-delete-network-bans" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   ipv4_addresses: list # List of IP addresses to unban.
-  --requester-ip: string@bool-completer # Include requester's public IP in the list of addresses to unban. (default: false)
+  --requester-ip: oneof<nothing, bool> # Include requester's public IP in the list of addresses to unban. (default: false)
   --identifier: string
 ]: any -> any {
   let input = $in
@@ -2192,7 +2191,7 @@ export def "projects-config-auth v1-update-auth-service-config" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --site-url: string # nullable
-  --disable-signup: string@bool-completer # nullable
+  --disable-signup: oneof<nothing, bool> # nullable
   --jwt-exp: int # nullable
   --smtp-admin-email: string # nullable, format: email
   --smtp-host: string # nullable
@@ -2201,8 +2200,8 @@ export def "projects-config-auth v1-update-auth-service-config" [
   --smtp-pass: string # nullable
   --smtp-max-frequency: int # nullable
   --smtp-sender-name: string # nullable
-  --mailer-allow-unverified-email-sign-ins: string@bool-completer # nullable
-  --mailer-autoconfirm: string@bool-completer # nullable
+  --mailer-allow-unverified-email-sign-ins: oneof<nothing, bool> # nullable
+  --mailer-autoconfirm: oneof<nothing, bool> # nullable
   --mailer-subjects-invite: string # nullable
   --mailer-subjects-confirmation: string # nullable
   --mailer-subjects-recovery: string # nullable
@@ -2229,27 +2228,27 @@ export def "projects-config-auth v1-update-auth-service-config" [
   --mailer-templates-mfa-factor-unenrolled-notification-content: string # nullable
   --mailer-templates-identity-linked-notification-content: string # nullable
   --mailer-templates-identity-unlinked-notification-content: string # nullable
-  --mailer-notifications-password-changed-enabled: string@bool-completer # nullable
-  --mailer-notifications-email-changed-enabled: string@bool-completer # nullable
-  --mailer-notifications-phone-changed-enabled: string@bool-completer # nullable
-  --mailer-notifications-mfa-factor-enrolled-enabled: string@bool-completer # nullable
-  --mailer-notifications-mfa-factor-unenrolled-enabled: string@bool-completer # nullable
-  --mailer-notifications-identity-linked-enabled: string@bool-completer # nullable
-  --mailer-notifications-identity-unlinked-enabled: string@bool-completer # nullable
+  --mailer-notifications-password-changed-enabled: oneof<nothing, bool> # nullable
+  --mailer-notifications-email-changed-enabled: oneof<nothing, bool> # nullable
+  --mailer-notifications-phone-changed-enabled: oneof<nothing, bool> # nullable
+  --mailer-notifications-mfa-factor-enrolled-enabled: oneof<nothing, bool> # nullable
+  --mailer-notifications-mfa-factor-unenrolled-enabled: oneof<nothing, bool> # nullable
+  --mailer-notifications-identity-linked-enabled: oneof<nothing, bool> # nullable
+  --mailer-notifications-identity-unlinked-enabled: oneof<nothing, bool> # nullable
   --mfa-max-enrolled-factors: int # nullable
   --uri-allow-list: string # nullable
-  --external-anonymous-users-enabled: string@bool-completer # nullable
-  --external-email-enabled: string@bool-completer # nullable
-  --external-phone-enabled: string@bool-completer # nullable
-  --saml-enabled: string@bool-completer # nullable
+  --external-anonymous-users-enabled: oneof<nothing, bool> # nullable
+  --external-email-enabled: oneof<nothing, bool> # nullable
+  --external-phone-enabled: oneof<nothing, bool> # nullable
+  --saml-enabled: oneof<nothing, bool> # nullable
   --saml-external-url: string # nullable
-  --security-sb-forwarded-for-enabled: string@bool-completer # nullable
-  --security-captcha-enabled: string@bool-completer # nullable
+  --security-sb-forwarded-for-enabled: oneof<nothing, bool> # nullable
+  --security-captcha-enabled: oneof<nothing, bool> # nullable
   --security-captcha-provider: string@security-captcha-provider-completer # nullable
   --security-captcha-secret: string # nullable
   --sessions-timebox: float # nullable
   --sessions-inactivity-timeout: float # nullable
-  --sessions-single-per-user: string@bool-completer # nullable
+  --sessions-single-per-user: oneof<nothing, bool> # nullable
   --sessions-tags: string # nullable
   --rate-limit-anonymous-users: int # nullable
   --rate-limit-email-sent: int # nullable
@@ -2258,17 +2257,17 @@ export def "projects-config-auth v1-update-auth-service-config" [
   --rate-limit-token-refresh: int # nullable
   --rate-limit-otp: int # nullable
   --rate-limit-web3: int # nullable
-  --mailer-secure-email-change-enabled: string@bool-completer # nullable
-  --refresh-token-rotation-enabled: string@bool-completer # nullable
-  --password-hibp-enabled: string@bool-completer # nullable
+  --mailer-secure-email-change-enabled: oneof<nothing, bool> # nullable
+  --refresh-token-rotation-enabled: oneof<nothing, bool> # nullable
+  --password-hibp-enabled: oneof<nothing, bool> # nullable
   --password-min-length: int # nullable
   --password-required-characters: string@password-required-characters-completer # nullable
-  --security-manual-linking-enabled: string@bool-completer # nullable
-  --security-update-password-require-reauthentication: string@bool-completer # nullable
+  --security-manual-linking-enabled: oneof<nothing, bool> # nullable
+  --security-update-password-require-reauthentication: oneof<nothing, bool> # nullable
   --security-refresh-token-reuse-interval: int # nullable
   --mailer-otp-exp: int
   --mailer-otp-length: int # nullable
-  --sms-autoconfirm: string@bool-completer # nullable
+  --sms-autoconfirm: oneof<nothing, bool> # nullable
   --sms-max-frequency: int # nullable
   --sms-otp-exp: int # nullable
   --sms-otp-length: int
@@ -2290,141 +2289,141 @@ export def "projects-config-auth v1-update-auth-service-config" [
   --sms-vonage-api-secret: string # nullable
   --sms-vonage-from: string # nullable
   --sms-template: string # nullable
-  --hook-mfa-verification-attempt-enabled: string@bool-completer # nullable
+  --hook-mfa-verification-attempt-enabled: oneof<nothing, bool> # nullable
   --hook-mfa-verification-attempt-uri: string # nullable
   --hook-mfa-verification-attempt-secrets: string # nullable
-  --hook-password-verification-attempt-enabled: string@bool-completer # nullable
+  --hook-password-verification-attempt-enabled: oneof<nothing, bool> # nullable
   --hook-password-verification-attempt-uri: string # nullable
   --hook-password-verification-attempt-secrets: string # nullable
-  --hook-custom-access-token-enabled: string@bool-completer # nullable
+  --hook-custom-access-token-enabled: oneof<nothing, bool> # nullable
   --hook-custom-access-token-uri: string # nullable
   --hook-custom-access-token-secrets: string # nullable
-  --hook-send-sms-enabled: string@bool-completer # nullable
+  --hook-send-sms-enabled: oneof<nothing, bool> # nullable
   --hook-send-sms-uri: string # nullable
   --hook-send-sms-secrets: string # nullable
-  --hook-send-email-enabled: string@bool-completer # nullable
+  --hook-send-email-enabled: oneof<nothing, bool> # nullable
   --hook-send-email-uri: string # nullable
   --hook-send-email-secrets: string # nullable
-  --hook-before-user-created-enabled: string@bool-completer # nullable
+  --hook-before-user-created-enabled: oneof<nothing, bool> # nullable
   --hook-before-user-created-uri: string # nullable
   --hook-before-user-created-secrets: string # nullable
-  --hook-after-user-created-enabled: string@bool-completer # nullable
+  --hook-after-user-created-enabled: oneof<nothing, bool> # nullable
   --hook-after-user-created-uri: string # nullable
   --hook-after-user-created-secrets: string # nullable
-  --external-apple-enabled: string@bool-completer # nullable
+  --external-apple-enabled: oneof<nothing, bool> # nullable
   --external-apple-client-id: string # nullable
-  --external-apple-email-optional: string@bool-completer # nullable
+  --external-apple-email-optional: oneof<nothing, bool> # nullable
   --external-apple-secret: string # nullable
   --external-apple-additional-client-ids: string # nullable
-  --external-azure-enabled: string@bool-completer # nullable
+  --external-azure-enabled: oneof<nothing, bool> # nullable
   --external-azure-client-id: string # nullable
-  --external-azure-email-optional: string@bool-completer # nullable
+  --external-azure-email-optional: oneof<nothing, bool> # nullable
   --external-azure-secret: string # nullable
   --external-azure-url: string # nullable
-  --external-bitbucket-enabled: string@bool-completer # nullable
+  --external-bitbucket-enabled: oneof<nothing, bool> # nullable
   --external-bitbucket-client-id: string # nullable
-  --external-bitbucket-email-optional: string@bool-completer # nullable
+  --external-bitbucket-email-optional: oneof<nothing, bool> # nullable
   --external-bitbucket-secret: string # nullable
-  --external-discord-enabled: string@bool-completer # nullable
+  --external-discord-enabled: oneof<nothing, bool> # nullable
   --external-discord-client-id: string # nullable
-  --external-discord-email-optional: string@bool-completer # nullable
+  --external-discord-email-optional: oneof<nothing, bool> # nullable
   --external-discord-secret: string # nullable
-  --external-facebook-enabled: string@bool-completer # nullable
+  --external-facebook-enabled: oneof<nothing, bool> # nullable
   --external-facebook-client-id: string # nullable
-  --external-facebook-email-optional: string@bool-completer # nullable
+  --external-facebook-email-optional: oneof<nothing, bool> # nullable
   --external-facebook-secret: string # nullable
-  --external-figma-enabled: string@bool-completer # nullable
+  --external-figma-enabled: oneof<nothing, bool> # nullable
   --external-figma-client-id: string # nullable
-  --external-figma-email-optional: string@bool-completer # nullable
+  --external-figma-email-optional: oneof<nothing, bool> # nullable
   --external-figma-secret: string # nullable
-  --external-github-enabled: string@bool-completer # nullable
+  --external-github-enabled: oneof<nothing, bool> # nullable
   --external-github-client-id: string # nullable
-  --external-github-email-optional: string@bool-completer # nullable
+  --external-github-email-optional: oneof<nothing, bool> # nullable
   --external-github-secret: string # nullable
-  --external-gitlab-enabled: string@bool-completer # nullable
+  --external-gitlab-enabled: oneof<nothing, bool> # nullable
   --external-gitlab-client-id: string # nullable
-  --external-gitlab-email-optional: string@bool-completer # nullable
+  --external-gitlab-email-optional: oneof<nothing, bool> # nullable
   --external-gitlab-secret: string # nullable
   --external-gitlab-url: string # nullable
-  --external-google-enabled: string@bool-completer # nullable
+  --external-google-enabled: oneof<nothing, bool> # nullable
   --external-google-client-id: string # nullable
-  --external-google-email-optional: string@bool-completer # nullable
+  --external-google-email-optional: oneof<nothing, bool> # nullable
   --external-google-secret: string # nullable
   --external-google-additional-client-ids: string # nullable
-  --external-google-skip-nonce-check: string@bool-completer # nullable
-  --external-kakao-enabled: string@bool-completer # nullable
+  --external-google-skip-nonce-check: oneof<nothing, bool> # nullable
+  --external-kakao-enabled: oneof<nothing, bool> # nullable
   --external-kakao-client-id: string # nullable
-  --external-kakao-email-optional: string@bool-completer # nullable
+  --external-kakao-email-optional: oneof<nothing, bool> # nullable
   --external-kakao-secret: string # nullable
-  --external-keycloak-enabled: string@bool-completer # nullable
+  --external-keycloak-enabled: oneof<nothing, bool> # nullable
   --external-keycloak-client-id: string # nullable
-  --external-keycloak-email-optional: string@bool-completer # nullable
+  --external-keycloak-email-optional: oneof<nothing, bool> # nullable
   --external-keycloak-secret: string # nullable
   --external-keycloak-url: string # nullable
-  --external-linkedin-oidc-enabled: string@bool-completer # nullable
+  --external-linkedin-oidc-enabled: oneof<nothing, bool> # nullable
   --external-linkedin-oidc-client-id: string # nullable
-  --external-linkedin-oidc-email-optional: string@bool-completer # nullable
+  --external-linkedin-oidc-email-optional: oneof<nothing, bool> # nullable
   --external-linkedin-oidc-secret: string # nullable
-  --external-slack-oidc-enabled: string@bool-completer # nullable
+  --external-slack-oidc-enabled: oneof<nothing, bool> # nullable
   --external-slack-oidc-client-id: string # nullable
-  --external-slack-oidc-email-optional: string@bool-completer # nullable
+  --external-slack-oidc-email-optional: oneof<nothing, bool> # nullable
   --external-slack-oidc-secret: string # nullable
-  --external-notion-enabled: string@bool-completer # nullable
+  --external-notion-enabled: oneof<nothing, bool> # nullable
   --external-notion-client-id: string # nullable
-  --external-notion-email-optional: string@bool-completer # nullable
+  --external-notion-email-optional: oneof<nothing, bool> # nullable
   --external-notion-secret: string # nullable
-  --external-slack-enabled: string@bool-completer # nullable
+  --external-slack-enabled: oneof<nothing, bool> # nullable
   --external-slack-client-id: string # nullable
-  --external-slack-email-optional: string@bool-completer # nullable
+  --external-slack-email-optional: oneof<nothing, bool> # nullable
   --external-slack-secret: string # nullable
-  --external-spotify-enabled: string@bool-completer # nullable
+  --external-spotify-enabled: oneof<nothing, bool> # nullable
   --external-spotify-client-id: string # nullable
-  --external-spotify-email-optional: string@bool-completer # nullable
+  --external-spotify-email-optional: oneof<nothing, bool> # nullable
   --external-spotify-secret: string # nullable
-  --external-twitch-enabled: string@bool-completer # nullable
+  --external-twitch-enabled: oneof<nothing, bool> # nullable
   --external-twitch-client-id: string # nullable
-  --external-twitch-email-optional: string@bool-completer # nullable
+  --external-twitch-email-optional: oneof<nothing, bool> # nullable
   --external-twitch-secret: string # nullable
-  --external-twitter-enabled: string@bool-completer # nullable
+  --external-twitter-enabled: oneof<nothing, bool> # nullable
   --external-twitter-client-id: string # nullable
-  --external-twitter-email-optional: string@bool-completer # nullable
+  --external-twitter-email-optional: oneof<nothing, bool> # nullable
   --external-twitter-secret: string # nullable
-  --external-x-enabled: string@bool-completer # nullable
+  --external-x-enabled: oneof<nothing, bool> # nullable
   --external-x-client-id: string # nullable
-  --external-x-email-optional: string@bool-completer # nullable
+  --external-x-email-optional: oneof<nothing, bool> # nullable
   --external-x-secret: string # nullable
-  --external-workos-enabled: string@bool-completer # nullable
+  --external-workos-enabled: oneof<nothing, bool> # nullable
   --external-workos-client-id: string # nullable
   --external-workos-secret: string # nullable
   --external-workos-url: string # nullable
-  --external-web3-solana-enabled: string@bool-completer # nullable
-  --external-web3-ethereum-enabled: string@bool-completer # nullable
-  --external-zoom-enabled: string@bool-completer # nullable
+  --external-web3-solana-enabled: oneof<nothing, bool> # nullable
+  --external-web3-ethereum-enabled: oneof<nothing, bool> # nullable
+  --external-zoom-enabled: oneof<nothing, bool> # nullable
   --external-zoom-client-id: string # nullable
-  --external-zoom-email-optional: string@bool-completer # nullable
+  --external-zoom-email-optional: oneof<nothing, bool> # nullable
   --external-zoom-secret: string # nullable
   --db-max-pool-size: int # nullable
   --db-max-pool-size-unit: string@db-max-pool-size-unit-completer # nullable
   --api-max-request-duration: int # nullable
-  --mfa-totp-enroll-enabled: string@bool-completer # nullable
-  --mfa-totp-verify-enabled: string@bool-completer # nullable
-  --mfa-web-authn-enroll-enabled: string@bool-completer # nullable
-  --mfa-web-authn-verify-enabled: string@bool-completer # nullable
-  --passkey-enabled: string@bool-completer
+  --mfa-totp-enroll-enabled: oneof<nothing, bool> # nullable
+  --mfa-totp-verify-enabled: oneof<nothing, bool> # nullable
+  --mfa-web-authn-enroll-enabled: oneof<nothing, bool> # nullable
+  --mfa-web-authn-verify-enabled: oneof<nothing, bool> # nullable
+  --passkey-enabled: oneof<nothing, bool>
   --webauthn-rp-display-name: string # nullable
   --webauthn-rp-id: string # nullable
   --webauthn-rp-origins: string # nullable
-  --mfa-phone-enroll-enabled: string@bool-completer # nullable
-  --mfa-phone-verify-enabled: string@bool-completer # nullable
+  --mfa-phone-enroll-enabled: oneof<nothing, bool> # nullable
+  --mfa-phone-verify-enabled: oneof<nothing, bool> # nullable
   --mfa-phone-max-frequency: int # nullable
   --mfa-phone-otp-length: int # nullable
   --mfa-phone-template: string # nullable
   --nimbus-oauth-client-id: string # nullable
   --nimbus-oauth-client-secret: string # nullable
-  --oauth-server-enabled: string@bool-completer # nullable
-  --oauth-server-allow-dynamic-registration: string@bool-completer # nullable
+  --oauth-server-enabled: oneof<nothing, bool> # nullable
+  --oauth-server-allow-dynamic-registration: oneof<nothing, bool> # nullable
   --oauth-server-authorization-path: string # nullable
-  --custom-oauth-enabled: string@bool-completer
+  --custom-oauth-enabled: oneof<nothing, bool>
 ]: any -> record<api_max_request_duration: int, db_max_pool_size: int, db_max_pool_size_unit: string, disable_signup: bool, external_anonymous_users_enabled: bool, external_apple_additional_client_ids: string, external_apple_client_id: string, external_apple_email_optional: bool, external_apple_enabled: bool, external_apple_secret: string, external_azure_client_id: string, external_azure_email_optional: bool, external_azure_enabled: bool, external_azure_secret: string, external_azure_url: string, external_bitbucket_client_id: string, external_bitbucket_email_optional: bool, external_bitbucket_enabled: bool, external_bitbucket_secret: string, external_discord_client_id: string, external_discord_email_optional: bool, external_discord_enabled: bool, external_discord_secret: string, external_email_enabled: bool, external_facebook_client_id: string, external_facebook_email_optional: bool, external_facebook_enabled: bool, external_facebook_secret: string, external_figma_client_id: string, external_figma_email_optional: bool, external_figma_enabled: bool, external_figma_secret: string, external_github_client_id: string, external_github_email_optional: bool, external_github_enabled: bool, external_github_secret: string, external_gitlab_client_id: string, external_gitlab_email_optional: bool, external_gitlab_enabled: bool, external_gitlab_secret: string, external_gitlab_url: string, external_google_additional_client_ids: string, external_google_client_id: string, external_google_email_optional: bool, external_google_enabled: bool, external_google_secret: string, external_google_skip_nonce_check: bool, external_kakao_client_id: string, external_kakao_email_optional: bool, external_kakao_enabled: bool, external_kakao_secret: string, external_keycloak_client_id: string, external_keycloak_email_optional: bool, external_keycloak_enabled: bool, external_keycloak_secret: string, external_keycloak_url: string, external_linkedin_oidc_client_id: string, external_linkedin_oidc_email_optional: bool, external_linkedin_oidc_enabled: bool, external_linkedin_oidc_secret: string, external_slack_oidc_client_id: string, external_slack_oidc_email_optional: bool, external_slack_oidc_enabled: bool, external_slack_oidc_secret: string, external_notion_client_id: string, external_notion_email_optional: bool, external_notion_enabled: bool, external_notion_secret: string, external_phone_enabled: bool, external_slack_client_id: string, external_slack_email_optional: bool, external_slack_enabled: bool, external_slack_secret: string, external_spotify_client_id: string, external_spotify_email_optional: bool, external_spotify_enabled: bool, external_spotify_secret: string, external_twitch_client_id: string, external_twitch_email_optional: bool, external_twitch_enabled: bool, external_twitch_secret: string, external_twitter_client_id: string, external_twitter_email_optional: bool, external_twitter_enabled: bool, external_twitter_secret: string, external_x_client_id: string, external_x_email_optional: bool, external_x_enabled: bool, external_x_secret: string, external_workos_client_id: string, external_workos_enabled: bool, external_workos_secret: string, external_workos_url: string, external_web3_solana_enabled: bool, external_web3_ethereum_enabled: bool, external_zoom_client_id: string, external_zoom_email_optional: bool, external_zoom_enabled: bool, external_zoom_secret: string, hook_custom_access_token_enabled: bool, hook_custom_access_token_uri: string, hook_custom_access_token_secrets: string, hook_mfa_verification_attempt_enabled: bool, hook_mfa_verification_attempt_uri: string, hook_mfa_verification_attempt_secrets: string, hook_password_verification_attempt_enabled: bool, hook_password_verification_attempt_uri: string, hook_password_verification_attempt_secrets: string, hook_send_sms_enabled: bool, hook_send_sms_uri: string, hook_send_sms_secrets: string, hook_send_email_enabled: bool, hook_send_email_uri: string, hook_send_email_secrets: string, hook_before_user_created_enabled: bool, hook_before_user_created_uri: string, hook_before_user_created_secrets: string, hook_after_user_created_enabled: bool, hook_after_user_created_uri: string, hook_after_user_created_secrets: string, jwt_exp: int, mailer_allow_unverified_email_sign_ins: bool, mailer_autoconfirm: bool, mailer_otp_exp: int, mailer_otp_length: int, mailer_secure_email_change_enabled: bool, mailer_subjects_confirmation: string, mailer_subjects_email_change: string, mailer_subjects_invite: string, mailer_subjects_magic_link: string, mailer_subjects_reauthentication: string, mailer_subjects_recovery: string, mailer_subjects_password_changed_notification: string, mailer_subjects_email_changed_notification: string, mailer_subjects_phone_changed_notification: string, mailer_subjects_mfa_factor_enrolled_notification: string, mailer_subjects_mfa_factor_unenrolled_notification: string, mailer_subjects_identity_linked_notification: string, mailer_subjects_identity_unlinked_notification: string, mailer_templates_confirmation_content: string, mailer_templates_email_change_content: string, mailer_templates_invite_content: string, mailer_templates_magic_link_content: string, mailer_templates_reauthentication_content: string, mailer_templates_recovery_content: string, mailer_templates_password_changed_notification_content: string, mailer_templates_email_changed_notification_content: string, mailer_templates_phone_changed_notification_content: string, mailer_templates_mfa_factor_enrolled_notification_content: string, mailer_templates_mfa_factor_unenrolled_notification_content: string, mailer_templates_identity_linked_notification_content: string, mailer_templates_identity_unlinked_notification_content: string, mailer_notifications_password_changed_enabled: bool, mailer_notifications_email_changed_enabled: bool, mailer_notifications_phone_changed_enabled: bool, mailer_notifications_mfa_factor_enrolled_enabled: bool, mailer_notifications_mfa_factor_unenrolled_enabled: bool, mailer_notifications_identity_linked_enabled: bool, mailer_notifications_identity_unlinked_enabled: bool, mfa_max_enrolled_factors: int, mfa_totp_enroll_enabled: bool, mfa_totp_verify_enabled: bool, mfa_phone_enroll_enabled: bool, mfa_phone_verify_enabled: bool, mfa_web_authn_enroll_enabled: bool, mfa_web_authn_verify_enabled: bool, passkey_enabled: bool, webauthn_rp_display_name: string, webauthn_rp_id: string, webauthn_rp_origins: string, mfa_phone_otp_length: int, mfa_phone_template: string, mfa_phone_max_frequency: int, nimbus_oauth_client_id: string, nimbus_oauth_email_optional: bool, nimbus_oauth_client_secret: string, password_hibp_enabled: bool, password_min_length: int, password_required_characters: string, rate_limit_anonymous_users: int, rate_limit_email_sent: int, rate_limit_sms_sent: int, rate_limit_token_refresh: int, rate_limit_verify: int, rate_limit_otp: int, rate_limit_web3: int, refresh_token_rotation_enabled: bool, saml_enabled: bool, saml_external_url: string, saml_allow_encrypted_assertions: bool, security_sb_forwarded_for_enabled: bool, security_captcha_enabled: bool, security_captcha_provider: string, security_captcha_secret: string, security_manual_linking_enabled: bool, security_refresh_token_reuse_interval: int, security_update_password_require_reauthentication: bool, sessions_inactivity_timeout: float, sessions_single_per_user: bool, sessions_tags: string, sessions_timebox: float, site_url: string, sms_autoconfirm: bool, sms_max_frequency: int, sms_messagebird_access_key: string, sms_messagebird_originator: string, sms_otp_exp: int, sms_otp_length: int, sms_provider: string, sms_template: string, sms_test_otp: string, sms_test_otp_valid_until: string, sms_textlocal_api_key: string, sms_textlocal_sender: string, sms_twilio_account_sid: string, sms_twilio_auth_token: string, sms_twilio_content_sid: string, sms_twilio_message_service_sid: string, sms_twilio_verify_account_sid: string, sms_twilio_verify_auth_token: string, sms_twilio_verify_message_service_sid: string, sms_vonage_api_key: string, sms_vonage_api_secret: string, sms_vonage_from: string, smtp_admin_email: string, smtp_host: string, smtp_max_frequency: int, smtp_pass: string, smtp_port: string, smtp_sender_name: string, smtp_user: string, uri_allow_list: string, oauth_server_enabled: bool, oauth_server_allow_dynamic_registration: bool, oauth_server_authorization_path: string, custom_oauth_enabled: bool, custom_oauth_max_providers: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2550,6 +2549,28 @@ export def "projects-pause v1-pause-a-project" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/projects/($ref)/pause")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Restarts the given project
+#
+# POST /v1/projects/{ref}/restart
+# operationId: v1-restart-a-project
+export def "projects-restart v1-restart-a-project" [
+  ref: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v1/projects/($ref)/restart")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
@@ -2919,7 +2940,7 @@ export def "projects-cli-login-role v1-create-login-role" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --read-only: string@bool-completer
+  --read-only: oneof<nothing, bool>
 ]: any -> record<role: string, password: string, ttl_seconds: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3128,7 +3149,7 @@ export def "projects-database-query v1-run-a-query" [
   --allow-errors(-e) # Return full response without error handling
   --body-query: string
   --parameters: list
-  --read-only: string@bool-completer
+  --read-only: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3425,15 +3446,15 @@ export def "projects-functions v1-create-a-function" [
   --allow-errors(-e) # Return full response without error handling
   --slug: string # e.g. hello-world
   --name: string # e.g. Hello World
-  --verify-jwt: string@bool-completer # Boolean string, true or false (e.g. true)
-  --import-map: string@bool-completer # Boolean string, true or false (e.g. false)
+  --verify-jwt: oneof<nothing, bool> # Boolean string, true or false (e.g. true)
+  --import-map: oneof<nothing, bool> # Boolean string, true or false (e.g. false)
   --entrypoint-path: string # e.g. index.ts
   --import-map-path: string # e.g. import_map.json
   --ezbr-sha256: string # e.g. 44c691990518d25498f0fd80cf6631ecf2b58eb9c5eb2a087dd1688f2904dac7
   slug: string
   name: string
   --body-body: string
-  --verify-jwt: string@bool-completer
+  --verify-jwt: oneof<nothing, bool>
 ]: any -> record<id: string, slug: string, name: string, status: string, version: int, created_at: int, updated_at: int, verify_jwt: bool, import_map: bool, entrypoint_path: string, import_map_path: string, ezbr_sha256: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3487,7 +3508,7 @@ export def "projects-functions-deploy v1-deploy-a-function" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --slug: string # e.g. hello-world
-  --bundleOnly: string@bool-completer # Boolean string, true or false (e.g. false)
+  --bundleOnly: oneof<nothing, bool> # Boolean string, true or false (e.g. false)
   --file: list
   metadata: record # shape: {entrypoint_path: string, import_map_path?: string, static_patterns?: list, verify_jwt?: bool, name?: string}
 ]: any -> record<id: string, slug: string, name: string, status: string, version: int, created_at: int, updated_at: int, verify_jwt: bool, import_map: bool, entrypoint_path: string, import_map_path: string, ezbr_sha256: string> {
@@ -3542,14 +3563,14 @@ export def "projects-functions v1-update-a-function" [
   --allow-errors(-e) # Return full response without error handling
   --slug: string # e.g. hello-world
   --name: string # e.g. Hello World
-  --verify-jwt: string@bool-completer # Boolean string, true or false (e.g. true)
-  --import-map: string@bool-completer # Boolean string, true or false (e.g. false)
+  --verify-jwt: oneof<nothing, bool> # Boolean string, true or false (e.g. true)
+  --import-map: oneof<nothing, bool> # Boolean string, true or false (e.g. false)
   --entrypoint-path: string # e.g. index.ts
   --import-map-path: string # e.g. import_map.json
   --ezbr-sha256: string # e.g. 44c691990518d25498f0fd80cf6631ecf2b58eb9c5eb2a087dd1688f2904dac7
   --name: string
   --body-body: string
-  --verify-jwt: string@bool-completer
+  --verify-jwt: oneof<nothing, bool>
 ]: any -> record<id: string, slug: string, name: string, status: string, version: int, created_at: int, updated_at: int, verify_jwt: bool, import_map: bool, entrypoint_path: string, import_map_path: string, ezbr_sha256: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3883,15 +3904,15 @@ export def "projects-config-database-postgres v1-update-postgres-config" [
   --allow-errors(-e) # Return full response without error handling
   --effective-cache-size: string
   --logical-decoding-work-mem: string
-  --cronlog-statement: string@bool-completer
+  --cronlog-statement: oneof<nothing, bool>
   --log-autovacuum-min-duration: string # Default unit: ms
-  --log-checkpoints: string@bool-completer
-  --log-connections: string@bool-completer
-  --log-disconnections: string@bool-completer
-  --log-duration: string@bool-completer
-  --log-lock-waits: string@bool-completer
-  --log-recovery-conflict-waits: string@bool-completer
-  --log-replication-commands: string@bool-completer
+  --log-checkpoints: oneof<nothing, bool>
+  --log-connections: oneof<nothing, bool>
+  --log-disconnections: oneof<nothing, bool>
+  --log-duration: oneof<nothing, bool>
+  --log-lock-waits: oneof<nothing, bool>
+  --log-recovery-conflict-waits: oneof<nothing, bool>
+  --log-replication-commands: oneof<nothing, bool>
   --log-startup-progress-interval: string # Default unit: ms
   --log-temp-files: string
   --maintenance-work-mem: string
@@ -3911,13 +3932,13 @@ export def "projects-config-database-postgres v1-update-postgres-config" [
   --session-replication-role: string@session-replication-role-completer
   --shared-buffers: string
   --statement-timeout: string # Default unit: ms
-  --track-commit-timestamp: string@bool-completer
+  --track-commit-timestamp: oneof<nothing, bool>
   --wal-keep-size: string
   --wal-sender-timeout: string # Default unit: ms
   --work-mem: string
   --checkpoint-timeout: string # Default unit: s
-  --hot-standby-feedback: string@bool-completer
-  --restart-database: string@bool-completer
+  --hot-standby-feedback: oneof<nothing, bool>
+  --restart-database: oneof<nothing, bool>
 ]: any -> record<effective_cache_size: string, logical_decoding_work_mem: string, cron_log_statement: bool, log_autovacuum_min_duration: string, log_checkpoints: bool, log_connections: bool, log_disconnections: bool, log_duration: bool, log_lock_waits: bool, log_recovery_conflict_waits: bool, log_replication_commands: bool, log_startup_progress_interval: string, log_temp_files: string, maintenance_work_mem: string, track_activity_query_size: string, max_connections: int, max_locks_per_transaction: int, max_parallel_maintenance_workers: int, max_parallel_workers: int, max_parallel_workers_per_gather: int, max_replication_slots: int, max_slot_wal_keep_size: string, max_standby_archive_delay: string, max_standby_streaming_delay: string, max_wal_size: string, max_wal_senders: int, max_worker_processes: int, session_replication_role: string, shared_buffers: string, statement_timeout: string, track_commit_timestamp: bool, wal_keep_size: string, wal_sender_timeout: string, work_mem: string, checkpoint_timeout: string, hot_standby_feedback: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3965,7 +3986,7 @@ export def "projects-config-realtime v1-update-realtime-config" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --private-only: string@bool-completer # Whether to only allow private channels
+  --private-only: oneof<nothing, bool> # Whether to only allow private channels
   --connection-pool: int # Sets connection pool size for Realtime Authorization
   --max-concurrent-users: int # Sets maximum number of concurrent users rate limit
   --max-events-per-second: int # Sets maximum number of events per second rate per channel limit
@@ -3974,8 +3995,8 @@ export def "projects-config-realtime v1-update-realtime-config" [
   --max-joins-per-second: int # Sets maximum number of joins per second rate limit
   --max-presence-events-per-second: int # Sets maximum number of presence events per second rate limit
   --max-payload-size-in-kb: int # Sets maximum number of payload size in KB rate limit
-  --suspend: string@bool-completer # Disables the Realtime service for this project when true. Set to false to re-enable it.
-  --presence-enabled: string@bool-completer # Whether to enable presence
+  --suspend: oneof<nothing, bool> # Disables the Realtime service for this project when true. Set to false to re-enable it.
+  --presence-enabled: oneof<nothing, bool> # Whether to enable presence
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

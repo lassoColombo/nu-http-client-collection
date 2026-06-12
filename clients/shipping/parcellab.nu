@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.parcellab.com" "https://api.eu.parcellab.com" "https://api.us.parcellab.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -152,10 +151,10 @@ export def "track-orders-info get" [
   --client-key: string
   --lang: string # default: en
   --s: string # HMAC security signature.
-  --live-refresh: string@bool-completer
-  --show-returns: string@bool-completer
+  --live-refresh: oneof<nothing, bool>
+  --show-returns: oneof<nothing, bool>
   --tracking-id: string
-  --single-tracking: string@bool-completer
+  --single-tracking: oneof<nothing, bool>
 ]: nothing -> record<order_number: string, client_key: string, order_date: string, recipient_name: string, recipient_email: string, destination_country_iso3: string, trackings: table<tracking_number: string, courier: string, status: string, lifecycle: string, delivery_estimate: string, checkpoints: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -256,9 +255,9 @@ export def "promise-prediction-predict predictDelivery" [
   --warehouse: string
   --language-iso2: string
   --calibration: string@calibration-completer
-  --dispatch-now: string@bool-completer
+  --dispatch-now: oneof<nothing, bool>
   --now-override: string # format: date-time
-  --draft: string@bool-completer
+  --draft: oneof<nothing, bool>
 ]: nothing -> record<request_id: string, success: bool, prediction: table<courier: string, service_level: string, date_min: string, date_max: string, date_likely: string, days_min: int, days_max: int, days_likely: int, cutoff: string, localized: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -452,7 +451,7 @@ export def "campaign-evaluate evaluateCampaign" [
   --medium: string
   --message: string
   --orderNumber: string
-  --preview: string@bool-completer
+  --preview: oneof<nothing, bool>
   --status: string
   --trackingId: string
 ]: nothing -> record {
@@ -556,7 +555,7 @@ export def "survey-survey-answer submitSurveyAnswer" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --data: record
-  --is-complete: string@bool-completer
+  --is-complete: oneof<nothing, bool>
   --reference-id: string
   --reference-type: string@reference-type-completer
 ]: any -> record<isComplete: bool, detail: string> {
@@ -583,7 +582,7 @@ export def "survey-survey-themes listSurveyThemes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --default: string@bool-completer
+  --default: oneof<nothing, bool>
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

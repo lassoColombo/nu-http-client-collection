@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://management-test.adyen.com/v3"] }
 def auth-scheme-completer [] { ["x-api-key" "basic"] }
 
@@ -395,7 +394,7 @@ export def "companies-api-credentials patch-companies-companyId-apiCredentials-a
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Indicates if the API credential is enabled.
+  --active: oneof<nothing, bool> # Indicates if the API credential is enabled.
   --allowedOrigins: list # The new list of [allowed origins](https://docs.adyen.com/development-resources/client-side-authentication#allowed-origins) for the API credential.
   --associatedMerchantAccounts: list # List of merchant accounts that the API credential has access to.
   --description: string # Description of the API credential.
@@ -1153,7 +1152,7 @@ export def "companies-users patch-companies-companyId-users-userId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accountGroups: list # The list of [account groups](https://docs.adyen.com/account/account-structure#account-groups) associated with this user.
-  --active: string@bool-completer # Indicates whether this user is active.
+  --active: oneof<nothing, bool> # Indicates whether this user is active.
   --associatedMerchantAccounts: list # The list of [merchant accounts](https://docs.adyen.com/account/account-structure#merchant-accounts) to associate the user with.
   --email: string # The email address of the user.
   --loginMethod: string # The requested login method for the user. To use SSO, you must already have SSO configured with Adyen before creating the user.  Possible values: **Email** or **SSO** 
@@ -1211,10 +1210,10 @@ export def "companies-webhooks post-companies-companyId-webhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acceptsExpiredCertificate: string@bool-completer # Indicates if expired SSL certificates are accepted. Default value: **false**.
-  --acceptsSelfSignedCertificate: string@bool-completer # Indicates if self-signed SSL certificates are accepted. Default value: **false**.
-  --acceptsUntrustedRootCertificate: string@bool-completer # Indicates if untrusted SSL certificates are accepted. Default value: **false**.
-  --active: string@bool-completer # Indicates if the webhook configuration is active. The field must be **true** for us to send webhooks about events related an account.
+  --acceptsExpiredCertificate: oneof<nothing, bool> # Indicates if expired SSL certificates are accepted. Default value: **false**.
+  --acceptsSelfSignedCertificate: oneof<nothing, bool> # Indicates if self-signed SSL certificates are accepted. Default value: **false**.
+  --acceptsUntrustedRootCertificate: oneof<nothing, bool> # Indicates if untrusted SSL certificates are accepted. Default value: **false**.
+  --active: oneof<nothing, bool> # Indicates if the webhook configuration is active. The field must be **true** for us to send webhooks about events related an account.
   --additionalSettings: record # shape: {includeEventCodes?: list, properties?: record}
   communicationFormat: string@communicationFormat-completer # Format or protocol for receiving webhooks. Possible values: * **soap** * **http** * **json**  (e.g. soap)
   --description: string # Your description for this webhook configuration.
@@ -1223,7 +1222,7 @@ export def "companies-webhooks post-companies-companyId-webhooks" [
   filterMerchantAccounts: list # A list of merchant account names that are included or excluded from receiving the webhook. Inclusion or exclusion is based on the value defined for `filterMerchantAccountType`.  Required if `filterMerchantAccountType` is either: * **includeAccounts** * **excludeAccounts**  Not needed for `filterMerchantAccountType`: **allAccounts**.
   --networkType: string@networkType-completer # Network type for Terminal API notification webhooks. Possible values: * **public** * **local**  Default Value: **public**.
   --password: string # Password to access the webhook URL.
-  --populateSoapActionHeader: string@bool-completer # Indicates if the SOAP action header needs to be populated. Default value: **false**.  Only applies if `communicationFormat`: **soap**.
+  --populateSoapActionHeader: oneof<nothing, bool> # Indicates if the SOAP action header needs to be populated. Default value: **false**.  Only applies if `communicationFormat`: **soap**.
   type: string # The type of webhook that is being created. Possible values are:  - **standard** - **account-settings-notification** - **banktransfer-notification** - **boletobancario-notification** - **directdebit-notification** - **ach-notification-of-change-notification** - **direct-debit-notice-of-change-notification** - **pending-notification** - **ideal-notification** - **ideal-pending-notification** - **report-notification** - **rreq-notification** - **terminal-settings** - **terminal-boarding**  Find out more about [standard webhooks](https://docs.adyen.com/development-resources/webhooks/webhook-types/#event-codes) and [other types of webhooks](https://docs.adyen.com/development-resources/webhooks/webhook-types/#other-webhooks).
   --body-url: string # Public URL where webhooks will be sent, for example **https://www.domain.com/webhook-endpoint**. (e.g. http://www.adyen.com)
   --username: string # Username to access the webhook URL.
@@ -1300,10 +1299,10 @@ export def "companies-webhooks patch-companies-companyId-webhooks-webhookId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acceptsExpiredCertificate: string@bool-completer # Indicates if expired SSL certificates are accepted. Default value: **false**.
-  --acceptsSelfSignedCertificate: string@bool-completer # Indicates if self-signed SSL certificates are accepted. Default value: **false**.
-  --acceptsUntrustedRootCertificate: string@bool-completer # Indicates if untrusted SSL certificates are accepted. Default value: **false**.
-  --active: string@bool-completer # Indicates if the webhook configuration is active. The field must be **true** for us to send webhooks about events related an account.
+  --acceptsExpiredCertificate: oneof<nothing, bool> # Indicates if expired SSL certificates are accepted. Default value: **false**.
+  --acceptsSelfSignedCertificate: oneof<nothing, bool> # Indicates if self-signed SSL certificates are accepted. Default value: **false**.
+  --acceptsUntrustedRootCertificate: oneof<nothing, bool> # Indicates if untrusted SSL certificates are accepted. Default value: **false**.
+  --active: oneof<nothing, bool> # Indicates if the webhook configuration is active. The field must be **true** for us to send webhooks about events related an account.
   --additionalSettings: record # shape: {includeEventCodes?: list, properties?: record}
   --communicationFormat: string@communicationFormat-completer # Format or protocol for receiving webhooks. Possible values: * **soap** * **http** * **json**  (e.g. soap)
   --description: string # Your description for this webhook configuration.
@@ -1312,7 +1311,7 @@ export def "companies-webhooks patch-companies-companyId-webhooks-webhookId" [
   --filterMerchantAccounts: list # A list of merchant account names that are included or excluded from receiving the webhook. Inclusion or exclusion is based on the value defined for `filterMerchantAccountType`.  Required if `filterMerchantAccountType` is either: * **includeAccounts** * **excludeAccounts**  Not needed for `filterMerchantAccountType`: **allAccounts**.
   --networkType: string@networkType-completer # Network type for Terminal API notification webhooks. Possible values: * **public** * **local**  Default Value: **public**.
   --password: string # Password to access the webhook URL.
-  --populateSoapActionHeader: string@bool-completer # Indicates if the SOAP action header needs to be populated. Default value: **false**.  Only applies if `communicationFormat`: **soap**.
+  --populateSoapActionHeader: oneof<nothing, bool> # Indicates if the SOAP action header needs to be populated. Default value: **false**.  Only applies if `communicationFormat`: **soap**.
   --body-url: string # Public URL where webhooks will be sent, for example **https://www.domain.com/webhook-endpoint**. (e.g. http://www.adyen.com)
   --username: string # Username to access the webhook URL.
 ]: any -> record<_links: record<company: record<href: string>, generateHmac: record<href: string>, merchant: record<href: string>, self: record<href: string>, testWebhook: record<href: string>>, acceptsExpiredCertificate: bool, acceptsSelfSignedCertificate: bool, acceptsUntrustedRootCertificate: bool, accountReference: string, active: bool, additionalSettings: record<excludeEventCodes: list<string>, includeEventCodes: list<string>, properties: record>, certificateAlias: string, communicationFormat: string, description: string, encryptionProtocol: string, filterMerchantAccountType: string, filterMerchantAccounts: list<string>, hasError: bool, hasPassword: bool, hmacKeyCheckValue: string, id: string, networkType: string, populateSoapActionHeader: bool, type: string, url: string, username: string> {
@@ -1704,7 +1703,7 @@ export def "merchants-api-credentials patch-merchants-merchantId-apiCredentials-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Indicates if the API credential is enabled.
+  --active: oneof<nothing, bool> # Indicates if the API credential is enabled.
   --allowedOrigins: list # The new list of [allowed origins](https://docs.adyen.com/development-resources/client-side-authentication#allowed-origins) for the API credential.
   --description: string # Description of the API credential.
   --roles: list # List of [roles](https://docs.adyen.com/development-resources/api-credentials#roles-1) for the API credential. Only roles assigned to 'ws@Company.<CompanyName>' can be assigned to other API credentials.
@@ -2116,7 +2115,7 @@ export def "merchants-payment-method-settings patch-merchants-merchantId-payment
   --discover: record # shape: {transactionDescription?: record}
   --eft-directdebit-CA: record # shape: {transactionDescription?: record}
   --eftpos-australia: record # shape: {transactionDescription?: record}
-  --enabled: string@bool-completer # Indicates whether the payment method is enabled (**true**) or disabled (**false**).
+  --enabled: oneof<nothing, bool> # Indicates whether the payment method is enabled (**true**) or disabled (**false**).
   --girocard: record # shape: {transactionDescription?: record}
   --ideal: record # shape: {transactionDescription?: record}
   --interac-card: record # shape: {transactionDescription?: record}
@@ -2229,7 +2228,7 @@ export def "merchants-payout-settings post-merchants-merchantId-payoutSettings" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Indicates if payouts to this bank account are enabled. Default: **true**.  To receive payouts into this bank account, both `enabled` and `allowed` must be **true**.
+  --enabled: oneof<nothing, bool> # Indicates if payouts to this bank account are enabled. Default: **true**.  To receive payouts into this bank account, both `enabled` and `allowed` must be **true**.
   --enabledFromDate: string # The date when Adyen starts paying out to this bank account.  Format: [ISO 8601](https://www.w3.org/TR/NOTE-datetime), for example, **2019-11-23T12:25:28Z** or **2020-05-27T20:25:28+08:00**.  If not specified, the `enabled` field indicates if payouts are enabled for this bank account.  If a date is specified and:  * `enabled`: **true**, payouts are enabled starting the specified date. * `enabled`: **false**, payouts are disabled until the specified date. On the specified date, `enabled` changes to **true** and this field is reset to **null**.
   transferInstrumentId: string # The unique identifier of the [transfer instrument](https://docs.adyen.com/api-explorer/#/legalentity/latest/post/transferInstruments) that contains the details of the bank account.
 ]: any -> record<allowed: bool, enabled: bool, enabledFromDate: string, id: string, priority: string, transferInstrumentId: string, verificationStatus: string> {
@@ -2304,7 +2303,7 @@ export def "merchants-payout-settings patch-merchants-merchantId-payoutSettings-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Indicates if payouts to this bank account are enabled. Default: **true**.  To receive payouts into this bank account, both `enabled` and `allowed` must be **true**.
+  --enabled: oneof<nothing, bool> # Indicates if payouts to this bank account are enabled. Default: **true**.  To receive payouts into this bank account, both `enabled` and `allowed` must be **true**.
 ]: any -> record<allowed: bool, enabled: bool, enabledFromDate: string, id: string, priority: string, transferInstrumentId: string, verificationStatus: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3347,7 +3346,7 @@ export def "merchants-users patch-merchants-merchantId-users-userId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accountGroups: list # The list of [account groups](https://docs.adyen.com/account/account-structure#account-groups) associated with this user.
-  --active: string@bool-completer # Sets the status of the user to active (**true**) or inactive (**false**).
+  --active: oneof<nothing, bool> # Sets the status of the user to active (**true**) or inactive (**false**).
   --email: string # The email address of the user.
   --loginMethod: string # The requested login method for the user. To use SSO, you must already have SSO configured with Adyen before creating the user.  Possible values: **Email** or **SSO** 
   --name: record # shape: {firstName?: string, lastName?: string}
@@ -3404,17 +3403,17 @@ export def "merchants-webhooks post-merchants-merchantId-webhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acceptsExpiredCertificate: string@bool-completer # Indicates if expired SSL certificates are accepted. Default value: **false**.
-  --acceptsSelfSignedCertificate: string@bool-completer # Indicates if self-signed SSL certificates are accepted. Default value: **false**.
-  --acceptsUntrustedRootCertificate: string@bool-completer # Indicates if untrusted SSL certificates are accepted. Default value: **false**.
-  --active: string@bool-completer # Indicates if the webhook configuration is active. The field must be **true** for us to send webhooks about events related an account.
+  --acceptsExpiredCertificate: oneof<nothing, bool> # Indicates if expired SSL certificates are accepted. Default value: **false**.
+  --acceptsSelfSignedCertificate: oneof<nothing, bool> # Indicates if self-signed SSL certificates are accepted. Default value: **false**.
+  --acceptsUntrustedRootCertificate: oneof<nothing, bool> # Indicates if untrusted SSL certificates are accepted. Default value: **false**.
+  --active: oneof<nothing, bool> # Indicates if the webhook configuration is active. The field must be **true** for us to send webhooks about events related an account.
   --additionalSettings: record # shape: {includeEventCodes?: list, properties?: record}
   communicationFormat: string@communicationFormat-completer # Format or protocol for receiving webhooks. Possible values: * **soap** * **http** * **json**  (e.g. soap)
   --description: string # Your description for this webhook configuration.
   --encryptionProtocol: string@encryptionProtocol-completer # SSL version to access the public webhook URL specified in the `url` field. Possible values: * **TLSv1.3** * **TLSv1.2** * **HTTP** - Only allowed on Test environment.  If not specified, the webhook will use `sslVersion`: **TLSv1.2**. (e.g. TLSv1.2)
   --networkType: string@networkType-completer # Network type for Terminal API notification webhooks. Possible values: * **public** * **local**  Default Value: **public**.
   --password: string # Password to access the webhook URL.
-  --populateSoapActionHeader: string@bool-completer # Indicates if the SOAP action header needs to be populated. Default value: **false**.  Only applies if `communicationFormat`: **soap**.
+  --populateSoapActionHeader: oneof<nothing, bool> # Indicates if the SOAP action header needs to be populated. Default value: **false**.  Only applies if `communicationFormat`: **soap**.
   type: string # The type of webhook that is being created. Possible values are:  - **standard** - **account-settings-notification** - **banktransfer-notification** - **boletobancario-notification** - **directdebit-notification** - **ach-notification-of-change-notification** - **direct-debit-notice-of-change-notification** - **pending-notification** - **ideal-notification** - **ideal-pending-notification** - **report-notification** - **rreq-notification** - **terminal-settings** - **terminal-boarding**  Find out more about [standard webhooks](https://docs.adyen.com/development-resources/webhooks/webhook-types/#event-codes) and [other types of webhooks](https://docs.adyen.com/development-resources/webhooks/webhook-types/#other-webhooks).
   --body-url: string # Public URL where webhooks will be sent, for example **https://www.domain.com/webhook-endpoint**. (e.g. http://www.adyen.com)
   --username: string # Username to access the webhook URL.
@@ -3491,17 +3490,17 @@ export def "merchants-webhooks patch-merchants-merchantId-webhooks-webhookId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acceptsExpiredCertificate: string@bool-completer # Indicates if expired SSL certificates are accepted. Default value: **false**.
-  --acceptsSelfSignedCertificate: string@bool-completer # Indicates if self-signed SSL certificates are accepted. Default value: **false**.
-  --acceptsUntrustedRootCertificate: string@bool-completer # Indicates if untrusted SSL certificates are accepted. Default value: **false**.
-  --active: string@bool-completer # Indicates if the webhook configuration is active. The field must be **true** for us to send webhooks about events related an account.
+  --acceptsExpiredCertificate: oneof<nothing, bool> # Indicates if expired SSL certificates are accepted. Default value: **false**.
+  --acceptsSelfSignedCertificate: oneof<nothing, bool> # Indicates if self-signed SSL certificates are accepted. Default value: **false**.
+  --acceptsUntrustedRootCertificate: oneof<nothing, bool> # Indicates if untrusted SSL certificates are accepted. Default value: **false**.
+  --active: oneof<nothing, bool> # Indicates if the webhook configuration is active. The field must be **true** for us to send webhooks about events related an account.
   --additionalSettings: record # shape: {includeEventCodes?: list, properties?: record}
   --communicationFormat: string@communicationFormat-completer # Format or protocol for receiving webhooks. Possible values: * **soap** * **http** * **json**  (e.g. soap)
   --description: string # Your description for this webhook configuration.
   --encryptionProtocol: string@encryptionProtocol-completer # SSL version to access the public webhook URL specified in the `url` field. Possible values: * **TLSv1.3** * **TLSv1.2** * **HTTP** - Only allowed on Test environment.  If not specified, the webhook will use `sslVersion`: **TLSv1.2**. (e.g. TLSv1.2)
   --networkType: string@networkType-completer # Network type for Terminal API notification webhooks. Possible values: * **public** * **local**  Default Value: **public**.
   --password: string # Password to access the webhook URL.
-  --populateSoapActionHeader: string@bool-completer # Indicates if the SOAP action header needs to be populated. Default value: **false**.  Only applies if `communicationFormat`: **soap**.
+  --populateSoapActionHeader: oneof<nothing, bool> # Indicates if the SOAP action header needs to be populated. Default value: **false**.  Only applies if `communicationFormat`: **soap**.
   --body-url: string # Public URL where webhooks will be sent, for example **https://www.domain.com/webhook-endpoint**. (e.g. http://www.adyen.com)
   --username: string # Username to access the webhook URL.
 ]: any -> record<_links: record<company: record<href: string>, generateHmac: record<href: string>, merchant: record<href: string>, self: record<href: string>, testWebhook: record<href: string>>, acceptsExpiredCertificate: bool, acceptsSelfSignedCertificate: bool, acceptsUntrustedRootCertificate: bool, accountReference: string, active: bool, additionalSettings: record<excludeEventCodes: list<string>, includeEventCodes: list<string>, properties: record>, certificateAlias: string, communicationFormat: string, description: string, encryptionProtocol: string, filterMerchantAccountType: string, filterMerchantAccounts: list<string>, hasError: bool, hasPassword: bool, hmacKeyCheckValue: string, id: string, networkType: string, populateSoapActionHeader: bool, type: string, url: string, username: string> {
@@ -3914,7 +3913,7 @@ export def "terminals-reassign post-terminals-terminalId-reassign" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --companyId: string # The unique identifier of the company account to which the terminal is reassigned.
-  --inventory: string@bool-completer # Must be specified when reassigning terminals to a merchant account:  - If set to **true**, reassigns terminals to the inventory of the merchant account and the terminals cannot process transactions.  - If set to **false**, reassigns terminals directly to the merchant account and the terminals can process transactions.
+  --inventory: oneof<nothing, bool> # Must be specified when reassigning terminals to a merchant account:  - If set to **true**, reassigns terminals to the inventory of the merchant account and the terminals cannot process transactions.  - If set to **false**, reassigns terminals directly to the merchant account and the terminals can process transactions.
   --merchantId: string # The unique identifier of the merchant account to which the terminal is reassigned. When reassigning terminals to a merchant account, you must specify the `inventory` field.
   --storeId: string # The unique identifier of the store to which the terminal is reassigned.
 ]: any -> any {

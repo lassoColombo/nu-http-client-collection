@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://your-dokploy-instance.com/api"] }
 def auth-scheme-completer [] { ["x-api-key"] }
 
@@ -340,7 +339,7 @@ export def "applicationsave-environment application-saveEnvironment" [
   env: any
   buildArgs: any
   buildSecrets: any
-  --createEnvFile: string@bool-completer
+  --createEnvFile: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -403,7 +402,7 @@ export def "applicationsave-github-provider application-saveGithubProvider" [
   githubId: any
   branch: string
   triggerType: string@triggerType-completer # default: push
-  --enableSubmodules: string@bool-completer
+  --enableSubmodules: oneof<nothing, bool>
   --watchPaths: any
 ]: any -> record {
   let input = $in
@@ -436,7 +435,7 @@ export def "applicationsave-gitlab-provider application-saveGitlabProvider" [
   gitlabProjectId: any
   gitlabPathNamespace: any
   gitlabBranch: string
-  --enableSubmodules: string@bool-completer
+  --enableSubmodules: oneof<nothing, bool>
   --watchPaths: any
 ]: any -> record {
   let input = $in
@@ -468,7 +467,7 @@ export def "applicationsave-bitbucket-provider application-saveBitbucketProvider
   bitbucketId: any
   applicationId: string
   bitbucketBranch: string
-  --enableSubmodules: string@bool-completer
+  --enableSubmodules: oneof<nothing, bool>
   --watchPaths: any
 ]: any -> record {
   let input = $in
@@ -499,7 +498,7 @@ export def "applicationsave-gitea-provider application-saveGiteaProvider" [
   giteaRepository: any
   giteaId: any
   giteaBranch: string
-  --enableSubmodules: string@bool-completer
+  --enableSubmodules: oneof<nothing, bool>
   --watchPaths: any
 ]: any -> record {
   let input = $in
@@ -556,7 +555,7 @@ export def "applicationsave-git-provider application-saveGitProvider" [
   customGitBuildPath: any
   customGitUrl: any
   watchPaths: any
-  --enableSubmodules: string@bool-completer
+  --enableSubmodules: oneof<nothing, bool>
   customGitBranch: string
   --customGitSSHKeyId: any
 ]: any -> record {
@@ -642,7 +641,7 @@ export def "applicationupdate application-update" [
   --previewLabels: any
   --previewWildcard: any
   --previewPort: any
-  --previewHttps: string@bool-completer
+  --previewHttps: oneof<nothing, bool>
   --previewPath: any
   --previewCertificateType: string@previewCertificateType-completer
   --previewCustomCertResolver: any
@@ -694,7 +693,7 @@ export def "applicationupdate application-update" [
   --customGitBranch: any
   --customGitBuildPath: any
   --customGitSSHKeyId: any
-  --enableSubmodules: string@bool-completer
+  --enableSubmodules: oneof<nothing, bool>
   --dockerfile: any
   --dockerContextPath: any
   --dockerBuildStage: any
@@ -717,7 +716,7 @@ export def "applicationupdate application-update" [
   --herokuVersion: any
   --publishDirectory: any
   --isStaticSpa: any
-  --createEnvFile: string@bool-completer
+  --createEnvFile: oneof<nothing, bool>
   --createdAt: string
   --registryId: any
   --rollbackRegistryId: any
@@ -1862,12 +1861,12 @@ export def "composeupdate compose-update" [
   --customGitBranch: any
   --customGitSSHKeyId: any
   --command: string
-  --enableSubmodules: string@bool-completer
+  --enableSubmodules: oneof<nothing, bool>
   --composePath: string
   --suffix: string
-  --randomize: string@bool-completer
-  --isolatedDeployment: string@bool-completer
-  --isolatedDeploymentsVolume: string@bool-completer
+  --randomize: oneof<nothing, bool>
+  --isolatedDeployment: oneof<nothing, bool>
+  --isolatedDeploymentsVolume: oneof<nothing, bool>
   --triggerType: any
   --composeStatus: string@composeStatus-completer
   --environmentId: string
@@ -1926,7 +1925,7 @@ export def "composedelete compose-delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   composeId: string
-  --deleteVolumes: string@bool-completer
+  --deleteVolumes: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3243,7 +3242,7 @@ export def "domaincreate domain-create" [
   --path: any
   --port: any
   --customEntrypoint: any
-  --https: string@bool-completer
+  --https: oneof<nothing, bool>
   --applicationId: any
   --certificateType: string@certificateType-completer
   --customCertResolver: any
@@ -3252,7 +3251,7 @@ export def "domaincreate domain-create" [
   --domainType: any
   --previewDeploymentId: any
   --internalPath: any
-  --stripPath: string@bool-completer
+  --stripPath: oneof<nothing, bool>
   --middlewares: any
 ]: any -> record {
   let input = $in
@@ -3372,13 +3371,13 @@ export def "domainupdate domain-update" [
   --path: any
   --port: any
   --customEntrypoint: any
-  --https: string@bool-completer
+  --https: oneof<nothing, bool>
   --certificateType: string@certificateType-completer
   --customCertResolver: any
   --serviceName: any
   --domainType: any
   --internalPath: any
-  --stripPath: string@bool-completer
+  --stripPath: oneof<nothing, bool>
   --middlewares: any
   domainId: string
 ]: any -> record {
@@ -3707,7 +3706,7 @@ export def "git-providertoggle-share gitProvider-toggleShare" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   gitProviderId: string
-  --sharedWithOrganization: string@bool-completer
+  --sharedWithOrganization: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -4101,7 +4100,7 @@ export def "libsqlcreate libsql-create" [
   databasePassword: string
   sqldNode: string@sqldNode-completer
   sqldPrimaryUrl: any
-  --enableNamespaces: string@bool-completer # default: false
+  --enableNamespaces: oneof<nothing, bool> # default: false
   serverId: any
 ]: any -> record {
   let input = $in
@@ -4354,7 +4353,7 @@ export def "libsqlupdate libsql-update" [
   --databasePassword: string
   --sqldNode: string@sqldNode-completer
   --sqldPrimaryUrl: any
-  --enableNamespaces: string@bool-completer # default: false
+  --enableNamespaces: oneof<nothing, bool> # default: false
   --dockerImage: string # default: ghcr.io/tursodatabase/libsql-server:v0.24.32
   --command: any
   --env: any
@@ -5939,15 +5938,15 @@ export def "notificationcreate-slack notification-createSlack" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
-  --serverThreshold: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
+  --serverThreshold: oneof<nothing, bool>
   webhookUrl: string
   channel: string
 ]: any -> record {
@@ -5973,15 +5972,15 @@ export def "notificationupdate-slack notification-updateSlack" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   --name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
-  --serverThreshold: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
+  --serverThreshold: oneof<nothing, bool>
   --webhookUrl: string
   --channel: string
   notificationId: string
@@ -6035,15 +6034,15 @@ export def "notificationcreate-telegram notification-createTelegram" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
-  --serverThreshold: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
+  --serverThreshold: oneof<nothing, bool>
   botToken: string
   chatId: string
   messageThreadId: string
@@ -6070,15 +6069,15 @@ export def "notificationupdate-telegram notification-updateTelegram" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   --name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
-  --serverThreshold: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
+  --serverThreshold: oneof<nothing, bool>
   --botToken: string
   --chatId: string
   --messageThreadId: string
@@ -6134,17 +6133,17 @@ export def "notificationcreate-discord notification-createDiscord" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
-  --serverThreshold: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
+  --serverThreshold: oneof<nothing, bool>
   webhookUrl: string
-  --decoration: string@bool-completer
+  --decoration: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -6168,17 +6167,17 @@ export def "notificationupdate-discord notification-updateDiscord" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   --name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
-  --serverThreshold: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
+  --serverThreshold: oneof<nothing, bool>
   --webhookUrl: string
-  --decoration: string@bool-completer
+  --decoration: oneof<nothing, bool>
   notificationId: string
   discordId: string
   --organizationId: string
@@ -6206,7 +6205,7 @@ export def "notificationtest-discord-connection notification-testDiscordConnecti
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   webhookUrl: string
-  --decoration: string@bool-completer
+  --decoration: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -6230,15 +6229,15 @@ export def "notificationcreate-email notification-createEmail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
-  --serverThreshold: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
+  --serverThreshold: oneof<nothing, bool>
   smtpServer: string
   smtpPort: float
   username: string
@@ -6268,15 +6267,15 @@ export def "notificationupdate-email notification-updateEmail" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   --name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
-  --serverThreshold: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
+  --serverThreshold: oneof<nothing, bool>
   --smtpServer: string
   --smtpPort: float
   --username: string
@@ -6338,15 +6337,15 @@ export def "notificationcreate-resend notification-createResend" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
-  --serverThreshold: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
+  --serverThreshold: oneof<nothing, bool>
   apiKey: string
   fromAddress: string
   toAddresses: list
@@ -6373,15 +6372,15 @@ export def "notificationupdate-resend notification-updateResend" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   --name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
-  --serverThreshold: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
+  --serverThreshold: oneof<nothing, bool>
   --apiKey: string
   --fromAddress: string
   --toAddresses: list
@@ -6533,18 +6532,18 @@ export def "notificationcreate-gotify notification-createGotify" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
   serverUrl: string
   appToken: string
   priority: float
-  --decoration: string@bool-completer
+  --decoration: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -6568,18 +6567,18 @@ export def "notificationupdate-gotify notification-updateGotify" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   --name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
   --serverUrl: string
   --appToken: string
   --priority: float
-  --decoration: string@bool-completer
+  --decoration: oneof<nothing, bool>
   notificationId: string
   gotifyId: string
   --organizationId: string
@@ -6609,7 +6608,7 @@ export def "notificationtest-gotify-connection notification-testGotifyConnection
   serverUrl: string
   appToken: string
   priority: float
-  --decoration: string@bool-completer
+  --decoration: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -6633,14 +6632,14 @@ export def "notificationcreate-ntfy notification-createNtfy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
   serverUrl: string
   topic: string
   accessToken: string
@@ -6668,14 +6667,14 @@ export def "notificationupdate-ntfy notification-updateNtfy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   --name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
   --serverUrl: string
   --topic: string
   --accessToken: string
@@ -6733,15 +6732,15 @@ export def "notificationcreate-mattermost notification-createMattermost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
-  --serverThreshold: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
+  --serverThreshold: oneof<nothing, bool>
   webhookUrl: string # format: uri
   --channel: string
   --username: string
@@ -6768,15 +6767,15 @@ export def "notificationupdate-mattermost notification-updateMattermost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   --name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
-  --serverThreshold: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
+  --serverThreshold: oneof<nothing, bool>
   --webhookUrl: string # format: uri
   --channel: string
   --username: string
@@ -6832,15 +6831,15 @@ export def "notificationcreate-custom notification-createCustom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
-  --serverThreshold: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
+  --serverThreshold: oneof<nothing, bool>
   endpoint: string
   --headers: record
 ]: any -> record {
@@ -6866,15 +6865,15 @@ export def "notificationupdate-custom notification-updateCustom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   --name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
-  --serverThreshold: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
+  --serverThreshold: oneof<nothing, bool>
   --endpoint: string
   --headers: record
   notificationId: string
@@ -6928,15 +6927,15 @@ export def "notificationcreate-lark notification-createLark" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
-  --serverThreshold: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
+  --serverThreshold: oneof<nothing, bool>
   webhookUrl: string
 ]: any -> record {
   let input = $in
@@ -6961,15 +6960,15 @@ export def "notificationupdate-lark notification-updateLark" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   --name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
-  --serverThreshold: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
+  --serverThreshold: oneof<nothing, bool>
   --webhookUrl: string
   notificationId: string
   larkId: string
@@ -7021,15 +7020,15 @@ export def "notificationcreate-teams notification-createTeams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
-  --serverThreshold: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
+  --serverThreshold: oneof<nothing, bool>
   webhookUrl: string
 ]: any -> record {
   let input = $in
@@ -7054,15 +7053,15 @@ export def "notificationupdate-teams notification-updateTeams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   --name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
-  --serverThreshold: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
+  --serverThreshold: oneof<nothing, bool>
   --webhookUrl: string
   notificationId: string
   teamsId: string
@@ -7114,15 +7113,15 @@ export def "notificationcreate-pushover notification-createPushover" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
-  --serverThreshold: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
+  --serverThreshold: oneof<nothing, bool>
   userKey: string
   apiToken: string
   --priority: float # default: 0
@@ -7159,15 +7158,15 @@ export def "notificationupdate-pushover notification-updatePushover" [
   --priority: float
   --retry: any
   --expire: any
-  --appBuildError: string@bool-completer
-  --databaseBackup: string@bool-completer
-  --dokployBackup: string@bool-completer
-  --volumeBackup: string@bool-completer
-  --dokployRestart: string@bool-completer
+  --appBuildError: oneof<nothing, bool>
+  --databaseBackup: oneof<nothing, bool>
+  --dokployBackup: oneof<nothing, bool>
+  --volumeBackup: oneof<nothing, bool>
+  --dokployRestart: oneof<nothing, bool>
   --name: string
-  --appDeploy: string@bool-completer
-  --dockerCleanup: string@bool-completer
-  --serverThreshold: string@bool-completer
+  --appDeploy: oneof<nothing, bool>
+  --dockerCleanup: oneof<nothing, bool>
+  --serverThreshold: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -8058,9 +8057,9 @@ export def "projectduplicate project-duplicate" [
   sourceEnvironmentId: string
   name: string
   --description: string
-  --includeServices: string@bool-completer # default: true
+  --includeServices: oneof<nothing, bool> # default: true
   --selectedServices: list # item shape: {id: string, type: "application"|"compose"|"libsql"|"mariadb"|"mongo"|"mysql"|"postgres"|"redis"}
-  --duplicateInSameProject: string@bool-completer # default: false
+  --duplicateInSameProject: oneof<nothing, bool> # default: false
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -8086,7 +8085,7 @@ export def "redirectscreate redirects-create" [
   --allow-errors(-e) # Return full response without error handling
   regex: string
   replacement: string
-  --permanent: string@bool-completer
+  --permanent: oneof<nothing, bool>
   applicationId: string
 ]: any -> record {
   let input = $in
@@ -8160,7 +8159,7 @@ export def "redirectsupdate redirects-update" [
   redirectId: string
   regex: string
   replacement: string
-  --permanent: string@bool-completer
+  --permanent: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -9406,7 +9405,7 @@ export def "settingstoggle-dashboard settings-toggleDashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enableDashboard: string@bool-completer
+  --enableDashboard: oneof<nothing, bool>
   --serverId: string
 ]: any -> record {
   let input = $in
@@ -9642,7 +9641,7 @@ export def "settingsassign-domain-server settings-assignDomainServer" [
   host: string
   certificateType: string@certificateType-completer
   --letsEncryptEmail: any
-  --https: string@bool-completer
+  --https: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -9686,7 +9685,7 @@ export def "settingsupdate-docker-cleanup settings-updateDockerCleanup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enableDockerCleanup: string@bool-completer
+  --enableDockerCleanup: oneof<nothing, bool>
   --serverId: string
 ]: any -> record {
   let input = $in
@@ -9711,7 +9710,7 @@ export def "settingsupdate-remote-servers-only settings-updateRemoteServersOnly"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --remoteServersOnly: string@bool-completer
+  --remoteServersOnly: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -9735,7 +9734,7 @@ export def "settingsupdate-enforce-sso settings-updateEnforceSSO" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enforceSSO: string@bool-completer
+  --enforceSSO: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -10195,7 +10194,7 @@ export def "settingstoggle-requests settings-toggleRequests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -10665,7 +10664,7 @@ export def "stripecreate-checkout-session stripe-createCheckoutSession" [
   tier: string@tier-completer
   productId: string
   serverQuantity: float
-  --isAnnual: string@bool-completer
+  --isAnnual: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -10711,7 +10710,7 @@ export def "stripeupgrade-subscription stripe-upgradeSubscription" [
   --allow-errors(-e) # Return full response without error handling
   tier: string@tier-completer-1
   serverQuantity: float
-  --isAnnual: string@bool-completer
+  --isAnnual: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -10755,7 +10754,7 @@ export def "stripeupdate-invoice-notifications stripe-updateInvoiceNotifications
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -11053,26 +11052,26 @@ export def "userupdate user-update" [
   --id: string
   --firstName: string
   --lastName: string
-  --isRegistered: string@bool-completer
+  --isRegistered: oneof<nothing, bool>
   --expirationDate: string
   --createdAt2: string
   --createdAt: any
   --twoFactorEnabled: any
   --email: string # format: email
-  --emailVerified: string@bool-completer
+  --emailVerified: oneof<nothing, bool>
   --image: any
   --banned: any
   --banReason: any
   --banExpires: any
   --updatedAt: string
-  --enablePaidFeatures: string@bool-completer
-  --allowImpersonation: string@bool-completer
-  --enableEnterpriseFeatures: string@bool-completer
+  --enablePaidFeatures: oneof<nothing, bool>
+  --allowImpersonation: oneof<nothing, bool>
+  --enableEnterpriseFeatures: oneof<nothing, bool>
   --licenseKey: any
   --stripeCustomerId: any
   --stripeSubscriptionId: any
   --serversQuantity: float
-  --sendInvoiceNotifications: string@bool-completer
+  --sendInvoiceNotifications: oneof<nothing, bool>
   --password: string
   --currentPassword: string
 ]: any -> record {
@@ -11170,17 +11169,17 @@ export def "userassign-permissions user-assignPermissions" [
   accessedServices: list
   accessedGitProviders: list
   accessedServers: list
-  --canCreateProjects: string@bool-completer
-  --canCreateServices: string@bool-completer
-  --canDeleteProjects: string@bool-completer
-  --canDeleteServices: string@bool-completer
-  --canAccessToDocker: string@bool-completer
-  --canAccessToTraefikFiles: string@bool-completer
-  --canAccessToAPI: string@bool-completer
-  --canAccessToSSHKeys: string@bool-completer
-  --canAccessToGitProviders: string@bool-completer
-  --canDeleteEnvironments: string@bool-completer
-  --canCreateEnvironments: string@bool-completer
+  --canCreateProjects: oneof<nothing, bool>
+  --canCreateServices: oneof<nothing, bool>
+  --canDeleteProjects: oneof<nothing, bool>
+  --canDeleteServices: oneof<nothing, bool>
+  --canAccessToDocker: oneof<nothing, bool>
+  --canAccessToTraefikFiles: oneof<nothing, bool>
+  --canAccessToAPI: oneof<nothing, bool>
+  --canAccessToSSHKeys: oneof<nothing, bool>
+  --canAccessToGitProviders: oneof<nothing, bool>
+  --canDeleteEnvironments: oneof<nothing, bool>
+  --canCreateEnvironments: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -11298,7 +11297,7 @@ export def "usercreate-api-key user-createApiKey" [
   --prefix: string
   --expiresIn: float
   metadata: record # shape: {organizationId: string}
-  --rateLimitEnabled: string@bool-completer
+  --rateLimitEnabled: oneof<nothing, bool>
   --rateLimitTimeWindow: float
   --rateLimitMax: float
   --remaining: float
@@ -11493,7 +11492,7 @@ export def "aicreate ai-create" [
   apiUrl: string # format: uri
   apiKey: string
   model: string
-  --isEnabled: string@bool-completer
+  --isEnabled: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -11522,7 +11521,7 @@ export def "aiupdate ai-update" [
   --apiUrl: string # format: uri
   --apiKey: string
   --model: string
-  --isEnabled: string@bool-completer
+  --isEnabled: oneof<nothing, bool>
   --createdAt: string
 ]: any -> record {
   let input = $in
@@ -12104,7 +12103,7 @@ export def "license-keyupdate-enterprise-settings licenseKey-updateEnterpriseSet
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enableEnterpriseFeatures: string@bool-completer
+  --enableEnterpriseFeatures: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -12238,7 +12237,7 @@ export def "ssoupdate sso-update" [
   --oidcConfig: record # shape: {clientId: string, clientSecret: string, authorizationEndpoint?: string, tokenEndpoint?: string, userInfoEndpoint?: string, tokenEndpointAuthentication?: "client_secret_post"|"client_secret_basic", jwksEndpoint?: string, discoveryEndpoint?: string, skipDiscovery?: bool, scopes?: list, pkce?: bool, mapping?: record}
   --samlConfig: record # shape: {entryPoint: string, cert: string, callbackUrl: string, audience?: string, idpMetadata?: record, spMetadata: record, wantAssertionsSigned?: bool, authnRequestsSigned?: bool, signatureAlgorithm?: string, digestAlgorithm?: string, identifierFormat?: string, privateKey?: string, decryptionPvk?: string, additionalParams?: record, mapping?: record}
   --organizationId: string
-  --overrideUserInfo: string@bool-completer # default: false
+  --overrideUserInfo: oneof<nothing, bool> # default: false
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -12294,7 +12293,7 @@ export def "ssoregister sso-register" [
   --oidcConfig: record # shape: {clientId: string, clientSecret: string, authorizationEndpoint?: string, tokenEndpoint?: string, userInfoEndpoint?: string, tokenEndpointAuthentication?: "client_secret_post"|"client_secret_basic", jwksEndpoint?: string, discoveryEndpoint?: string, skipDiscovery?: bool, scopes?: list, pkce?: bool, mapping?: record}
   --samlConfig: record # shape: {entryPoint: string, cert: string, callbackUrl: string, audience?: string, idpMetadata?: record, spMetadata: record, wantAssertionsSigned?: bool, authnRequestsSigned?: bool, signatureAlgorithm?: string, digestAlgorithm?: string, identifierFormat?: string, privateKey?: string, decryptionPvk?: string, additionalParams?: record, mapping?: record}
   --organizationId: string
-  --overrideUserInfo: string@bool-completer # default: false
+  --overrideUserInfo: oneof<nothing, bool> # default: false
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -12657,7 +12656,7 @@ export def "schedulecreate schedule-create" [
   --composeId: any
   --serverId: any
   --organizationId: any
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --timezone: any
   --createdAt: string
 ]: any -> record {
@@ -12697,7 +12696,7 @@ export def "scheduleupdate schedule-update" [
   --composeId: any
   --serverId: any
   --organizationId: any
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --timezone: any
   --createdAt: string
 ]: any -> record {
@@ -12893,7 +12892,7 @@ export def "volume-backupscreate volumeBackups-create" [
   --serviceType: string@serviceType-completer
   --appName: string
   --serviceName: any
-  --turnOff: string@bool-completer
+  --turnOff: oneof<nothing, bool>
   cronExpression: string
   --keepLatestCount: any
   --enabled: any
@@ -12982,7 +12981,7 @@ export def "volume-backupsupdate volumeBackups-update" [
   --serviceType: string@serviceType-completer
   --appName: string
   --serviceName: any
-  --turnOff: string@bool-completer
+  --turnOff: oneof<nothing, bool>
   cronExpression: string
   --keepLatestCount: any
   --enabled: any
@@ -13416,7 +13415,7 @@ export def "patchcreate patch-create" [
   filePath: string
   content: string
   --type: string@type-completer-6
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --applicationId: any
   --composeId: any
 ]: any -> record {
@@ -13490,7 +13489,7 @@ export def "patchupdate patch-update" [
   patchId: string
   --type: string@type-completer-6
   --filePath: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --content: string
   --createdAt: string
   --updatedAt: any
@@ -13542,7 +13541,7 @@ export def "patchtoggle-enabled patch-toggleEnabled" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   patchId: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))

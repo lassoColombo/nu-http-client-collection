@@ -63,7 +63,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://chat.stream-io-api.com" "http://localhost:3030"] }
 def auth-scheme-completer [] { ["jwt" "query-api_key" "stream-auth-type"] }
 
@@ -152,14 +151,14 @@ export def "app UpdateApp" [
   --agora-options: record # shape: {app_certificate: string, app_id: string, default_role?: "attendee"|"publisher"|"subscriber"|"admin", role_map?: record}
   --apn-config: record # shape: {Disabled?: bool, auth_key?: string, auth_type?: "certificate"|"token", bundle_id?: string, development?: bool, host?: string, key_id?: string, notification_template?: string, p12_cert?: string, team_id?: string}
   --async-moderation-config: record # shape: {callback?: record, timeout_ms?: float}
-  --async-url-enrich-enabled: string@bool-completer
-  --auto-translation-enabled: string@bool-completer
+  --async-url-enrich-enabled: oneof<nothing, bool>
+  --auto-translation-enabled: oneof<nothing, bool>
   --before-message-send-hook-url: string
   --cdn-expiration-seconds: float
-  --channel-hide-members-only: string@bool-completer
+  --channel-hide-members-only: oneof<nothing, bool>
   --custom-action-handler-url: string
-  --disable-auth-checks: string@bool-completer
-  --disable-permissions-checks: string@bool-completer
+  --disable-auth-checks: oneof<nothing, bool>
+  --disable-permissions-checks: oneof<nothing, bool>
   --enforce-unique-usernames: string@enforce-unique-usernames-completer
   --file-upload-config: record # shape: {allowed_file_extensions?: list, allowed_mime_types?: list, blocked_file_extensions?: list, blocked_mime_types?: list}
   --firebase-config: record # shape: {Disabled?: bool, apn_template?: string, credentials_json?: string, data_template?: string, notification_template?: string, server_key?: string}
@@ -167,11 +166,11 @@ export def "app UpdateApp" [
   --hms-options: record # shape: {app_certificate: string, app_id: string, default_role?: "attendee"|"publisher"|"subscriber"|"admin", role_map?: record}
   --huawei-config: record # shape: {Disabled?: bool, id?: string, secret?: string}
   --image-moderation-block-labels: list
-  --image-moderation-enabled: string@bool-completer
+  --image-moderation-enabled: oneof<nothing, bool>
   --image-moderation-labels: list
   --image-upload-config: record # shape: {allowed_file_extensions?: list, allowed_mime_types?: list, blocked_file_extensions?: list, blocked_mime_types?: list}
-  --migrate-permissions-to-v2: string@bool-completer
-  --multi-tenant-enabled: string@bool-completer
+  --migrate-permissions-to-v2: oneof<nothing, bool>
+  --multi-tenant-enabled: oneof<nothing, bool>
   --permission-version: string@permission-version-completer
   --push-config: record # shape: {offline_only?: bool, version?: "v1"|"v2"}
   --reminders-interval: float
@@ -588,12 +587,12 @@ export def "channels QueryChannels" [
   --member-limit: float # Number of members to limit
   --message-limit: float # Number of messages to limit
   --offset: float # Channel pagination offset
-  --presence: string@bool-completer
+  --presence: oneof<nothing, bool>
   --body-sort: list # List of sort parameters — item shape: {direction?: float, field?: string}
-  --state: string@bool-completer # Whether to update channel state or not
+  --state: oneof<nothing, bool> # Whether to update channel state or not
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list}
   --user-id: string
-  --watch: string@bool-completer # Whether to start watching found channels or not
+  --watch: oneof<nothing, bool> # Whether to start watching found channels or not
 ]: any -> record<channels: table<channel: record, hidden: bool, hide_messages_before: string, members: list, membership: record, messages: list, pending_messages: list, pinned_messages: list, read: list, watcher_count: float, watchers: list>, duration: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -620,7 +619,7 @@ export def "channels-delete DeleteChannels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --cids: list # All channels that should be deleted
-  --hard-delete: string@bool-completer # Specify if channels and all ressources should be hard deleted
+  --hard-delete: oneof<nothing, bool> # Specify if channels and all ressources should be hard deleted
 ]: any -> record<duration: string, result: record, task_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -684,9 +683,9 @@ export def "channels-query type-by-type" [
   --data: record # shape: {auto_translation_enabled?: bool, auto_translation_language?: string, config_overrides?: record, created_by?: record, disabled?: bool, frozen?: bool, members?: list, own_capabilities?: list, team?: string, truncated_at?: list, truncated_by?: list, truncated_by_id?: string}
   --members: record # shape: {id_gt?: float, id_gte?: float, id_lt?: float, id_lte?: float, limit?: float, offset?: float}
   --messages: record # shape: {created_at_after?: string, created_at_after_or_equal?: string, created_at_around?: string, created_at_before?: string, created_at_before_or_equal?: string, id_around?: string, id_gt?: string, id_gte?: string, id_lt?: string, id_lte?: string, limit?: float, offset?: float}
-  --presence: string@bool-completer # Fetch user presence info
-  --state: string@bool-completer # Refresh channel state
-  --watch: string@bool-completer # Start watching the channel
+  --presence: oneof<nothing, bool> # Fetch user presence info
+  --state: oneof<nothing, bool> # Refresh channel state
+  --watch: oneof<nothing, bool> # Start watching the channel
   --watchers: record # shape: {id_gt?: float, id_gte?: float, id_lt?: float, id_lte?: float, limit?: float, offset?: float}
 ]: any -> record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record<automod: string, automod_behavior: string, automod_thresholds: record, blocklist: string, blocklist_behavior: string, commands: list, connect_events: bool, created_at: string, custom_events: bool, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, cooldown: float, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list<record>, mute_expires_at: string, muted: bool, own_capabilities: list<string>, team: string, truncated_at: string, truncated_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, type: string, updated_at: string>, duration: string, hidden: bool, hide_messages_before: string, members: table<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>, membership: record<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string>, messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, pending_messages: table<channel: record, message: record, metadata: record, user: record>, pinned_messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, read: table<last_read: string, unread_messages: float, user: record>, watcher_count: float, watchers: table<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>> {
   let input = $in
@@ -777,19 +776,19 @@ export def "channels UpdateChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --accept-invite: string@bool-completer # Set to `true` to accept the invite
+  --accept-invite: oneof<nothing, bool> # Set to `true` to accept the invite
   --add-members: list # List of user IDs to add to the channel — item shape: {ban_expires?: string, banned?: bool, channel_role?: string, created_at?: string, deleted_at?: string, invite_accepted_at?: string, invite_rejected_at?: string, invited?: bool, is_moderator?: bool, role?: "member"|"moderator"|"admin"|"owner", shadow_banned?: bool, updated_at?: string, user?: record, user_id?: string}
   add_moderators: list # List of user IDs to make channel moderators
   --assign-roles: list # List of channel member role assignments. If any specified user is not part of the channel, the request will fail — item shape: {ban_expires?: string, banned?: bool, channel_role?: string, created_at?: string, deleted_at?: string, invite_accepted_at?: string, invite_rejected_at?: string, invited?: bool, is_moderator?: bool, role?: "member"|"moderator"|"admin"|"owner", shadow_banned?: bool, updated_at?: string, user?: record, user_id?: string}
   --cooldown: float # Sets cool down period for the channel in seconds
   --data: record # shape: {auto_translation_enabled?: bool, auto_translation_language?: string, config_overrides?: record, created_by?: record, disabled?: bool, frozen?: bool, members?: list, own_capabilities?: list, team?: string, truncated_at?: list, truncated_by?: list, truncated_by_id?: string}
   demote_moderators: list # List of user IDs to take away moderators status from
-  --hide-history: string@bool-completer # Set to `true` to hide channel's history when adding new members
+  --hide-history: oneof<nothing, bool> # Set to `true` to hide channel's history when adding new members
   --invites: list # List of user IDs to invite to the channel — item shape: {ban_expires?: string, banned?: bool, channel_role?: string, created_at?: string, deleted_at?: string, invite_accepted_at?: string, invite_rejected_at?: string, invited?: bool, is_moderator?: bool, role?: "member"|"moderator"|"admin"|"owner", shadow_banned?: bool, updated_at?: string, user?: record, user_id?: string}
   --message: record # Represents any chat message — shape: {attachments: list, cid?: list, html?: string, id?: string, mentioned_users?: list, mml?: string, parent?: list, parent_id?: string, pin_expires?: string, pinned?: bool, pinned_at?: string, pinned_by?: list, quoted_message_id?: string, reaction_scores?: list, show_in_channel?: bool, silent?: bool, text?: string, user?: record, user_id?: string}
-  --reject-invite: string@bool-completer # Set to `true` to reject the invite
+  --reject-invite: oneof<nothing, bool> # Set to `true` to reject the invite
   remove_members: list # List of user IDs to remove from the channel
-  --skip-push: string@bool-completer # When `message` is set disables all push notifications for it
+  --skip-push: oneof<nothing, bool> # When `message` is set disables all push notifications for it
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list}
   --user-id: string
 ]: any -> record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record<automod: string, automod_behavior: string, automod_thresholds: record, blocklist: string, blocklist_behavior: string, commands: list, connect_events: bool, created_at: string, custom_events: bool, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, cooldown: float, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list<record>, mute_expires_at: string, muted: bool, own_capabilities: list<string>, team: string, truncated_at: string, truncated_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, type: string, updated_at: string>, duration: string, members: table<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>> {
@@ -933,7 +932,7 @@ export def "channels-hide HideChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --clear-history: string@bool-completer # Whether to clear message history of the channel or not
+  --clear-history: oneof<nothing, bool> # Whether to clear message history of the channel or not
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list}
   --user-id: string
 ]: any -> record<duration: string> {
@@ -1019,12 +1018,12 @@ export def "channels-message SendMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force-moderation: string@bool-completer # Enable moderation on server-side requests
-  --is-pending-message: string@bool-completer # Make the message a pending message. This message will not be viewable to others until it is committed.
+  --force-moderation: oneof<nothing, bool> # Enable moderation on server-side requests
+  --is-pending-message: oneof<nothing, bool> # Make the message a pending message. This message will not be viewable to others until it is committed.
   message: record # Represents any chat message — shape: {attachments: list, cid?: list, html?: string, id?: string, mentioned_users?: list, mml?: string, parent?: list, parent_id?: string, pin_expires?: string, pinned?: bool, pinned_at?: string, pinned_by?: list, quoted_message_id?: string, reaction_scores?: list, show_in_channel?: bool, silent?: bool, text?: string, user?: record, user_id?: string}
   --pending-message-metadata: record
-  --skip-enrich-url: string@bool-completer # Do not try to enrich the links within message
-  --skip-push: string@bool-completer # Disables all push notifications for this message
+  --skip-enrich-url: oneof<nothing, bool> # Do not try to enrich the links within message
+  --skip-push: oneof<nothing, bool> # Disables all push notifications for this message
 ]: any -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>, pending_message_metadata: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -1087,9 +1086,9 @@ export def "channels-query id-by-type-id" [
   --data: record # shape: {auto_translation_enabled?: bool, auto_translation_language?: string, config_overrides?: record, created_by?: record, disabled?: bool, frozen?: bool, members?: list, own_capabilities?: list, team?: string, truncated_at?: list, truncated_by?: list, truncated_by_id?: string}
   --members: record # shape: {id_gt?: float, id_gte?: float, id_lt?: float, id_lte?: float, limit?: float, offset?: float}
   --messages: record # shape: {created_at_after?: string, created_at_after_or_equal?: string, created_at_around?: string, created_at_before?: string, created_at_before_or_equal?: string, id_around?: string, id_gt?: string, id_gte?: string, id_lt?: string, id_lte?: string, limit?: float, offset?: float}
-  --presence: string@bool-completer # Fetch user presence info
-  --state: string@bool-completer # Refresh channel state
-  --watch: string@bool-completer # Start watching the channel
+  --presence: oneof<nothing, bool> # Fetch user presence info
+  --state: oneof<nothing, bool> # Refresh channel state
+  --watch: oneof<nothing, bool> # Start watching the channel
   --watchers: record # shape: {id_gt?: float, id_gte?: float, id_lt?: float, id_lte?: float, limit?: float, offset?: float}
 ]: any -> record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record<automod: string, automod_behavior: string, automod_thresholds: record, blocklist: string, blocklist_behavior: string, commands: list, connect_events: bool, created_at: string, custom_events: bool, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, cooldown: float, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list<record>, mute_expires_at: string, muted: bool, own_capabilities: list<string>, team: string, truncated_at: string, truncated_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, type: string, updated_at: string>, duration: string, hidden: bool, hide_messages_before: string, members: table<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>, membership: record<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string>, messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, pending_messages: table<channel: record, message: record, metadata: record, user: record>, pinned_messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, read: table<last_read: string, unread_messages: float, user: record>, watcher_count: float, watchers: table<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>> {
   let input = $in
@@ -1210,9 +1209,9 @@ export def "channels-truncate TruncateChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hard-delete: string@bool-completer # Permanently delete channel data (messages, reactions, etc.)
+  --hard-delete: oneof<nothing, bool> # Permanently delete channel data (messages, reactions, etc.)
   --message: record # Represents any chat message — shape: {attachments: list, cid?: list, html?: string, id?: string, mentioned_users?: list, mml?: string, parent?: list, parent_id?: string, pin_expires?: string, pinned?: bool, pinned_at?: string, pinned_by?: list, quoted_message_id?: string, reaction_scores?: list, show_in_channel?: bool, silent?: bool, text?: string, user?: record, user_id?: string}
-  --skip-push: string@bool-completer # When `message` is set disables all push notifications for it
+  --skip-push: oneof<nothing, bool> # When `message` is set disables all push notifications for it
   --truncated-at: string # Truncate channel data up to `truncated_at`. The system message (if provided) creation time is always greater than `truncated_at` (format: date-time)
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list}
   --user-id: string
@@ -1297,22 +1296,22 @@ export def "channeltypes CreateChannelType" [
   --blocklist: string # Name of the blocklist to use
   --blocklist-behavior: string@blocklist-behavior-completer # Sets behavior of blocklist
   --commands: list # List of commands that channel supports
-  --connect-events: string@bool-completer # Connect events support
-  --custom-events: string@bool-completer # Enables custom events
+  --connect-events: oneof<nothing, bool> # Connect events support
+  --custom-events: oneof<nothing, bool> # Enables custom events
   --grants: record
   --max-message-length: float # Number of maximum message characters
   --message-retention: string # Number of days to keep messages. 'infinite' disables retention
-  --mutes: string@bool-completer # Enables mutes
+  --mutes: oneof<nothing, bool> # Enables mutes
   name: string # Channel type name
   --permissions: list # List of permissions for the channel type — item shape: {action?: "Deny"|"Allow", name: string, owner?: bool, priority: float, resources?: list, roles?: list}
-  --push-notifications: string@bool-completer # Enables push notifications
-  --reactions: string@bool-completer # Enables message reactions
-  --read-events: string@bool-completer # Read events support
-  --replies: string@bool-completer # Enables message replies (threads)
-  --search: string@bool-completer # Enables message search
-  --typing-events: string@bool-completer # Typing events support
-  --uploads: string@bool-completer # Enables file uploads
-  --url-enrichment: string@bool-completer # Enables URL enrichment
+  --push-notifications: oneof<nothing, bool> # Enables push notifications
+  --reactions: oneof<nothing, bool> # Enables message reactions
+  --read-events: oneof<nothing, bool> # Read events support
+  --replies: oneof<nothing, bool> # Enables message replies (threads)
+  --search: oneof<nothing, bool> # Enables message search
+  --typing-events: oneof<nothing, bool> # Typing events support
+  --uploads: oneof<nothing, bool> # Enables file uploads
+  --url-enrichment: oneof<nothing, bool> # Enables URL enrichment
 ]: any -> record<automod: string, automod_behavior: string, automod_thresholds: record<explicit: record<block: float, flag: float>, spam: record<block: float, flag: float>, toxic: record<block: float, flag: float>>, blocklist: string, blocklist_behavior: string, commands: list<string>, connect_events: bool, created_at: string, custom_events: bool, duration: string, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, permissions: table<action: string, name: string, owner: bool, priority: float, resources: list, roles: list>, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -1391,23 +1390,23 @@ export def "channeltypes UpdateChannelType" [
   --blocklist: string
   --blocklist-behavior: string@blocklist-behavior-completer
   --commands: list # List of commands that channel supports
-  --connect-events: string@bool-completer
-  --custom-events: string@bool-completer
+  --connect-events: oneof<nothing, bool>
+  --custom-events: oneof<nothing, bool>
   --grants: record
   --max-message-length: float
   --message-retention: string
-  --mutes: string@bool-completer
+  --mutes: oneof<nothing, bool>
   --permissions: list # item shape: {action?: "Deny"|"Allow", name: string, owner?: bool, priority: float, resources?: list, roles?: list}
-  --push-notifications: string@bool-completer
-  --quotes: string@bool-completer
-  --reactions: string@bool-completer
-  --read-events: string@bool-completer
-  --reminders: string@bool-completer
-  --replies: string@bool-completer
-  --search: string@bool-completer
-  --typing-events: string@bool-completer
-  --uploads: string@bool-completer
-  --url-enrichment: string@bool-completer
+  --push-notifications: oneof<nothing, bool>
+  --quotes: oneof<nothing, bool>
+  --reactions: oneof<nothing, bool>
+  --read-events: oneof<nothing, bool>
+  --reminders: oneof<nothing, bool>
+  --replies: oneof<nothing, bool>
+  --search: oneof<nothing, bool>
+  --typing-events: oneof<nothing, bool>
+  --uploads: oneof<nothing, bool>
+  --url-enrichment: oneof<nothing, bool>
 ]: any -> record<automod: string, automod_behavior: string, automod_thresholds: record<explicit: record<block: float, flag: float>, spam: record<block: float, flag: float>, toxic: record<block: float, flag: float>>, blocklist: string, blocklist_behavior: string, commands: list<string>, connect_events: bool, created_at: string, custom_events: bool, duration: string, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, permissions: table<action: string, name: string, owner: bool, priority: float, resources: list, roles: list>, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -1439,7 +1438,7 @@ export def "check-push CheckPush" [
   --message-id: string # Message ID to send push notification for
   --push-provider-name: string # Name of push provider
   --push-provider-type: string@push-provider-type-completer # Push provider type
-  --skip-devices: string@bool-completer # Don't require existing devices to render templates
+  --skip-devices: oneof<nothing, bool> # Don't require existing devices to render templates
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list}
   --user-id: string
 ]: any -> record<device_errors: record, duration: string, general_errors: list<string>, rendered_apn_template: string, rendered_firebase_template: string, rendered_message: record, skip_devices: bool> {
@@ -1742,9 +1741,9 @@ export def "export-channels ExportChannels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --channels: list # Export options for channels — item shape: {cid?: string, id?: string, messages_since?: string, messages_until?: string, type?: string}
-  --clear-deleted-message-text: string@bool-completer # Set if deleted message text should be cleared
-  --export-users: string@bool-completer
-  --include-truncated-messages: string@bool-completer # Set if you want to include truncated messages
+  --clear-deleted-message-text: oneof<nothing, bool> # Set if deleted message text should be cleared
+  --export-users: oneof<nothing, bool>
+  --include-truncated-messages: oneof<nothing, bool> # Set if you want to include truncated messages
   --version: string
 ]: any -> record<duration: string, task_id: string> {
   let input = $in
@@ -2009,7 +2008,7 @@ export def "messages UpdateMessage" [
   --allow-errors(-e) # Return full response without error handling
   message: record # Represents any chat message — shape: {attachments: list, cid?: list, html?: string, id?: string, mentioned_users?: list, mml?: string, parent?: list, parent_id?: string, pin_expires?: string, pinned?: bool, pinned_at?: string, pinned_by?: list, quoted_message_id?: string, reaction_scores?: list, show_in_channel?: bool, silent?: bool, text?: string, user?: record, user_id?: string}
   --pending-message-metadata: record
-  --skip-enrich-url: string@bool-completer # Do not try to enrich the links within message
+  --skip-enrich-url: oneof<nothing, bool> # Do not try to enrich the links within message
 ]: any -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -2037,7 +2036,7 @@ export def "messages UpdateMessagePartial" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   set: record # Sets new field values
-  --skip-enrich-url: string@bool-completer # Do not try to enrich the links within message
+  --skip-enrich-url: oneof<nothing, bool> # Do not try to enrich the links within message
   unset: list # Array of field names to unset
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list}
   --user-id: string
@@ -2120,9 +2119,9 @@ export def "messages-reaction SendReaction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ID: string
-  --enforce-unique: string@bool-completer # Whether to replace all existing user reactions
+  --enforce-unique: oneof<nothing, bool> # Whether to replace all existing user reactions
   --reaction: record # Represents user reaction to a message (nullable) — shape: {message_id?: string, score?: float, type: string, user?: record, user_id?: string}
-  --skip-push: string@bool-completer # Skips any mobile push notifications
+  --skip-push: oneof<nothing, bool> # Skips any mobile push notifications
 ]: any -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>, reaction: record<created_at: string, message_id: string, score: float, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -2286,9 +2285,9 @@ export def "moderation-ban Ban" [
   --banned-by: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list}
   --banned-by-id: string # User ID who issued a ban
   --id: string # Channel ID to ban user in
-  --ip-ban: string@bool-completer # Whether to perform IP ban or not
+  --ip-ban: oneof<nothing, bool> # Whether to perform IP ban or not
   --reason: string # Ban reason
-  --shadow: string@bool-completer # Whether to perform shadow ban or not
+  --shadow: oneof<nothing, bool> # Whether to perform shadow ban or not
   target_user_id: string # ID of user to ban
   --timeout: float # Timeout of ban in minutes. User will be unbanned after this period of time
   --type: string # Channel type to ban user in
@@ -2926,8 +2925,8 @@ export def "sync Sync" [
   last_sync_at: string # Date from which synchronization should happen (format: date-time)
   --user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list}
   --user-id: string
-  --watch: string@bool-completer # If set to true this will start watching requested and newly added channels that user has access to. If error occurred with this option enabled and it is not an input error - channels will still be watched.
-  --with-inaccessible-cids: string@bool-completer # If set to true this will add 'inaccessible_cids' to response type
+  --watch: oneof<nothing, bool> # If set to true this will start watching requested and newly added channels that user has access to. If error occurred with this option enabled and it is not an input error - channels will still be watched.
+  --with-inaccessible-cids: oneof<nothing, bool> # If set to true this will add 'inaccessible_cids' to response type
 ]: any -> record<duration: string, events: table<automoderation: bool, automoderation_scores: record, channel: record, channel_id: string, channel_type: string, cid: string, connection_id: string, created_at: string, created_by: record, me: record, member: record, message: record, parent_id: string, reaction: record, reason: string, team: string, type: string, user: record, user_id: string, watcher_count: float>, inaccessible_cids: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -3051,7 +3050,7 @@ export def "users-deactivate DeactivateUsers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --created-by-id: string # ID of the user who deactivated the users
-  --mark-messages-deleted: string@bool-completer # Makes messages appear to be deleted
+  --mark-messages-deleted: oneof<nothing, bool> # Makes messages appear to be deleted
   user_ids: list # User IDs to deactivate
 ]: any -> record<duration: string, task_id: string> {
   let input = $in
@@ -3107,7 +3106,7 @@ export def "users-reactivate ReactivateUsers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --created-by-id: string # ID of the user who's reactivating the users
-  --restore-messages: string@bool-completer # Restore previously deleted messages
+  --restore-messages: oneof<nothing, bool> # Restore previously deleted messages
   user_ids: list # User IDs to reactivate
 ]: any -> record<duration: string, task_id: string> {
   let input = $in
@@ -3186,7 +3185,7 @@ export def "users-deactivate DeactivateUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --created-by-id: string # ID of the user who deactivated the user
-  --mark-messages-deleted: string@bool-completer # Makes messages appear to be deleted
+  --mark-messages-deleted: oneof<nothing, bool> # Makes messages appear to be deleted
   --body-user-id: string
 ]: any -> record<duration: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, revoke_tokens_issued_before: string, role: string, teams: list<string>, updated_at: string>> {
   let input = $in
@@ -3263,7 +3262,7 @@ export def "users-reactivate ReactivateUser" [
   --allow-errors(-e) # Return full response without error handling
   --created-by-id: string # ID of the user who's reactivating the user
   --name: string # Set this field to put new name for the user
-  --restore-messages: string@bool-completer # Restore previously deleted messages
+  --restore-messages: oneof<nothing, bool> # Restore previously deleted messages
   --body-user-id: string
 ]: any -> record<duration: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, revoke_tokens_issued_before: string, role: string, teams: list<string>, updated_at: string>> {
   let input = $in

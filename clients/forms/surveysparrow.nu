@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.surveysparrow.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -297,7 +296,7 @@ export def "surveys get" [
   --maxResults: float # default: 50
   --page: float
   --surveyTypes: string
-  --archived: string@bool-completer # default: false
+  --archived: oneof<nothing, bool> # default: false
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -687,8 +686,8 @@ export def "channels post" [
   --email: record # shape: {subject: string, properties?: record, theme_id?: float}
   --link: record # shape: {title?: string, description?: string, image_link?: string}
   --offline: record # shape: {animation_direction?: "Horizontal"|"Vertical"}
-  --ignore-throttled-contacts: string@bool-completer # If set to true, survey will be shared even if throttling is met (default: true)
-  --accept-anonymous-response: string@bool-completer # Only applicable for CX survey types (default: false)
+  --ignore-throttled-contacts: oneof<nothing, bool> # If set to true, survey will be shared even if throttling is met (default: true)
+  --accept-anonymous-response: oneof<nothing, bool> # Only applicable for CX survey types (default: false)
 ]: any -> record<data: record<id: float, name: string, status: string, type: string, properties: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -847,7 +846,7 @@ export def "contacts post-1" [
   --contact-type: string@contact-type-completer # Type of contact (default: contact)
   --referenceId: string # Reference ID of the anonymous contact (e.g. 123456)
   --unique-id: string # Unique ID of the contact (e.g. abc123)
-  --unsubscribed: string@bool-completer # Unsubscribed status of the contact (e.g. false)
+  --unsubscribed: oneof<nothing, bool> # Unsubscribed status of the contact (e.g. false)
   --unsubscribe-text: string # Reason for unsubscribing (e.g. Not interested)
 ]: any -> record<data: record<full_name: string, email: string, phone: string, mobile: string, job_title: string, contact_type: string, referenceId: string, unique_id: string, unsubscribed: bool, unsubscribe_text: string>> {
   let input = $in
@@ -1138,8 +1137,8 @@ export def "responses list" [
   --state: string@state-completer
   --order-by: string@order-by-completer # default: completedTime
   --order: string@order-completer # default: DESC
-  --preserve-format: string@bool-completer # default: false
-  --response-url: string@bool-completer # default: false
+  --preserve-format: oneof<nothing, bool> # default: false
+  --response-url: oneof<nothing, bool> # default: false
 ]: nothing -> record<total_count: float, has_next_page: bool, data: table<id: float, survey_id: float, contact_id: float, completed: string, channel_id: float, language: string, completed_time: string, answers: list, channel: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1168,7 +1167,7 @@ export def "responses post" [
   --contact-id: float # ID of the contact (e.g. 2)
   --channel-id: float # ID of the channel (e.g. 3)
   --body-variables: record
-  --trigger-workflow: string@bool-completer # Should this response trigger workflow (default: true)
+  --trigger-workflow: oneof<nothing, bool> # Should this response trigger workflow (default: true)
   --meta-data: record # shape: {os?: string, browser?: string, time_zone?: string, browser_language?: string, date_time?: string, tags?: list, ip?: string, device_type?: string, language?: string}
   answers: list # item shape: {question_id: float, parent_question_id?: float, answer: string, other_txt?: string, matrix_txt?: list, matrix_int?: list, region_code?: string, time?: string, time_zone?: string}
 ]: any -> record<data: record<id: float, state: string, time_taken: float>> {
@@ -1221,7 +1220,7 @@ export def "survey-folders folders" [
   --allow-errors(-e) # Return full response without error handling
   --limit: float # default: 50
   --page: float
-  --enable-subfolders: string@bool-completer # Pass true to get the survey folder with its subfolders, surveys, and echoes (default: false)
+  --enable-subfolders: oneof<nothing, bool> # Pass true to get the survey folder with its subfolders, surveys, and echoes (default: false)
 ]: nothing -> record<data: table<id: float, name: string, description: string, auto_created: bool, visibility: string, teams: list, surveys: list, parent_survey_folder_id: float, users: list, subfolders: list, echoes: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1244,7 +1243,7 @@ export def "survey-folders folders-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-subfolders: string@bool-completer # Pass true to get the survey folder with its subfolders, surveys, and echoes (default: false)
+  --enable-subfolders: oneof<nothing, bool> # Pass true to get the survey folder with its subfolders, surveys, and echoes (default: false)
   --teams: list
   --users: list
   name: string
@@ -1276,7 +1275,7 @@ export def "surveys get-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --survey-type: string@survey-type-completer # Type of survey
-  --archived: string@bool-completer # Is the survey archived (default: false)
+  --archived: oneof<nothing, bool> # Is the survey archived (default: false)
   --survey-folder-id: float # Survey folder Id of the survey
   --created-dategte: string # Survey created date greater than or equal to (format: date)
   --created-datelte: string # Survey created date less than or equal to (format: date)
@@ -1396,7 +1395,7 @@ export def "teams post-1" [
   name: string # Team name (e.g. Avengers)
   --type: string@type-completer-1 # Team type, if not provided will be "SURVEY" by default (default: SURVEY)
   --user-id: list # Id of users who should be added to the team (e.g. [1, 2, 3])
-  --enable-round-robin: string@bool-completer # Enable round robin for the team (default: false, e.g. true)
+  --enable-round-robin: oneof<nothing, bool> # Enable round robin for the team (default: false, e.g. true)
 ]: any -> record<data: record<id: float, name: string, description: string, type: string, account_id: float, business_hour_id: float, round_robin_enabled: bool, created_at: string, updated_at: string, deleted_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1524,7 +1523,7 @@ export def "tickets post" [
   --assignee-id: float # Ticket agent's user id (e.g. 7)
   --team-id: float # Ticket team's id (e.g. 8)
   --custom-fields: record
-  --update-on-submission-change: string@bool-completer # Update the existing ticket using the submission ID. (e.g. true)
+  --update-on-submission-change: oneof<nothing, bool> # Update the existing ticket using the submission ID. (e.g. true)
 ]: any -> record<data: record<id: float, requester: record, subject: string, description: string, description_html: string, priority: record, status: record, template_id: float, custom_fields: record, source: record, agent: record, team: record, created_at: string, updated_at: string, deleted_at: string, first_response_due: string, resolution_due: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1689,7 +1688,7 @@ export def "webhooks post-1" [
   --headers: list
   --type: string # default: application
   --payload: record
-  --include-partial-submission: string@bool-completer # default: false, e.g. true
+  --include-partial-submission: oneof<nothing, bool> # default: false, e.g. true
 ]: any -> record<data: record<id: float, name: string, url: string, eventType: string, description: string, objectType: string, httpMethod: string, headers: list<record>, properties: record<payload: string, includePartialSubmission: bool>, disabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1922,13 +1921,13 @@ export def "surveys put" [
   --name: string
   --workspace-id: float
   --theme-id: float
-  --welcomeDescriptionEnabled: string@bool-completer # default: true
+  --welcomeDescriptionEnabled: oneof<nothing, bool> # default: true
   --welcomeScreenYesButtonText: string
   --welcomeText: string
   --welcomeDescription: string
-  --addThankyouPage: string@bool-completer # default: false
+  --addThankyouPage: oneof<nothing, bool> # default: false
   --thankyou-json: list # item shape: {preAdded?: bool, message?: string, description?: string, redirectBoolean?: bool, redirectMultiBoolean?: bool, redirect?: string, branding?: bool, redirectMulti?: record}
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2602,8 +2601,8 @@ export def "responses get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --survey-id: float
-  --preserve-format: string@bool-completer # default: false
-  --response-url: string@bool-completer # default: false
+  --preserve-format: oneof<nothing, bool> # default: false
+  --response-url: oneof<nothing, bool> # default: false
 ]: nothing -> record<data: record<id: float, survey_id: float, contact_id: float, completed: string, channel_id: float, language: string, completed_time: string, answers: list<record>, channel: record<name: string, type: string, status: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2658,7 +2657,7 @@ export def "responses delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --survey-id: float
-  --delete-quota: string@bool-completer # default: false
+  --delete-quota: oneof<nothing, bool> # default: false
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2756,7 +2755,7 @@ export def "survey-folders foldersId-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-subfolders: string@bool-completer # Pass true to get the survey folder with its subfolders, surveys, and echoes (default: false)
+  --enable-subfolders: oneof<nothing, bool> # Pass true to get the survey folder with its subfolders, surveys, and echoes (default: false)
 ]: nothing -> record<data: record<id: float, name: string, description: string, auto_created: bool, visibility: string, teams: list<float>, surveys: list<record>, parent_survey_folder_id: float, users: list<float>, subfolders: list<record>, echoes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2780,7 +2779,7 @@ export def "survey-folders foldersId-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-subfolders: string@bool-completer # Pass true to get the survey folder with its subfolders, surveys, and echoes (default: false)
+  --enable-subfolders: oneof<nothing, bool> # Pass true to get the survey folder with its subfolders, surveys, and echoes (default: false)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2804,7 +2803,7 @@ export def "survey-folders foldersId-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-subfolders: string@bool-completer # Pass true to get the survey folder with its subfolders, surveys, and echoes (default: false)
+  --enable-subfolders: oneof<nothing, bool> # Pass true to get the survey folder with its subfolders, surveys, and echoes (default: false)
   --visibility: string@visibility-completer-1
   --teams: list
   --users: list
@@ -2864,7 +2863,7 @@ export def "surveys patch" [
   --theme-id: float
   --welcome-text: string
   --thankyou-json: list # item shape: {preAdded?: bool, message?: string, description?: string, redirect_url?: string, branding?: bool}
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
   --settings: record # shape: {survey_randomize?: bool, submission_per_user?: record, throttling?: record, track_ip?: bool, track_location?: bool, edit_response?: bool, copy_of_response?: bool, partial_submission?: bool, auto_submission?: bool, response_limit?: float, cut_off_date?: string, dynamic_cut_off?: record, enable_offline_support?: bool, password?: string, disable_scroll_back?: bool, disable_contact_tracking?: bool}
 ]: any -> record<data: table<id: float, name: string, archived: bool, survey_type: string, created_at: string, updated_at: string, survey_folder_id: float, survey_folder_name: string>> {
   let input = $in
@@ -2994,7 +2993,7 @@ export def "translation-export get" [
   --allow-errors(-e) # Return full response without error handling
   --survey-id: float # Survey ID
   --language-code: string # Language code
-  --include-labels: string@bool-completer # Include labels in the file (default: true)
+  --include-labels: oneof<nothing, bool> # Include labels in the file (default: true)
 ]: nothing -> record<data: record<translationFile: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3686,9 +3685,9 @@ export def "surveys-settings put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --partialSubmission: string@bool-completer
-  --editResponse: string@bool-completer
-  --anonymousResponses: string@bool-completer
+  --partialSubmission: oneof<nothing, bool>
+  --editResponse: oneof<nothing, bool>
+  --anonymousResponses: oneof<nothing, bool>
   --submissionPerUser: float
   --cutOffDate: string # format: date
 ]: any -> string {
@@ -3878,7 +3877,7 @@ export def "tickets-comments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --private: string@bool-completer # Comment visibility; true for private, false for public visibility.
+  --private: oneof<nothing, bool> # Comment visibility; true for private, false for public visibility.
   --limit: float # Record limit per request; default is 50, maximum is 100. (default: 50)
   --page: float # Page of results
   --created-dategte: string # Comment created date greater than or equal to. Should be in the format YYYY-MM-DDTHH:MM:SS (format: date)
@@ -3908,7 +3907,7 @@ export def "tickets-comments post" [
   --allow-errors(-e) # Return full response without error handling
   --body-body: string # The comment body. Supports HTML formatting with <b>, <i>, <u>, <a>, and <br /> tags. Supports mentioning contacts using @email format.
   --attachments: path # Following file types are allowed: pdf, png, jpeg, mp3, csv, wav. Maximum file size allowed is 15MB.
-  --private: string@bool-completer # Comment visibility; true for private, false for public visibility. (default: false)
+  --private: oneof<nothing, bool> # Comment visibility; true for private, false for public visibility. (default: false)
 ]: any -> record<data: record<id: float, body: string, ticket_id: float, private: bool, agent_id: float, requester_id: float, created_at: string, attachments: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4468,9 +4467,9 @@ export def "ces-shares-triggers get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --page: float # default: 1
-  --opened: string@bool-completer
-  --blocked: string@bool-completer
-  --throttled: string@bool-completer
+  --opened: oneof<nothing, bool>
+  --blocked: oneof<nothing, bool>
+  --throttled: oneof<nothing, bool>
   --maxResults: float # default: 50
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4556,9 +4555,9 @@ export def "csat-shares-triggers get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --page: float # default: 1
-  --opened: string@bool-completer
-  --blocked: string@bool-completer
-  --throttled: string@bool-completer
+  --opened: oneof<nothing, bool>
+  --blocked: oneof<nothing, bool>
+  --throttled: oneof<nothing, bool>
   --maxResults: float # default: 50
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4585,9 +4584,9 @@ export def "nps-shares-triggers get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --page: float # default: 1
-  --opened: string@bool-completer
-  --blocked: string@bool-completer
-  --throttled: string@bool-completer
+  --opened: oneof<nothing, bool>
+  --blocked: oneof<nothing, bool>
+  --throttled: oneof<nothing, bool>
   --maxResults: float # default: 50
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4909,7 +4908,7 @@ export def "translation post" [
   --allow-errors(-e) # Return full response without error handling
   survey_id: float # Survey ID (e.g. 123456)
   language_codes: list # Array of language codes (e.g. [en, fr])
-  --google-translate: string@bool-completer # Translate using Google Translate (default: false, e.g. false)
+  --google-translate: oneof<nothing, bool> # Translate using Google Translate (default: false, e.g. false)
 ]: any -> record<data: record<languageCreated: list<record>, languageSkipped: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4936,7 +4935,7 @@ export def "translation put" [
   --allow-errors(-e) # Return full response without error handling
   survey_id: float # Survey ID (e.g. 123456)
   language_code: string # Language code (e.g. en)
-  --google-translate: string@bool-completer # Translate using Google Translate (default: false, e.g. false)
+  --google-translate: oneof<nothing, bool> # Translate using Google Translate (default: false, e.g. false)
   --file: path # Excel file containing translations
 ]: any -> record<data: record<message: string>> {
   let input = $in
@@ -4994,8 +4993,8 @@ export def "channels-create-unique-links links" [
   --contact-ids: list # Id's of Contact
   --contacts: list # Array of contact objects — item shape: {full_name?: string, phone?: string, mobile?: string, email?: string, job_title?: string, contact_type?: "contact"|"employee", variables?: record, expires_at?: string}
   --contact-list-ids: list # Id's of Contact Lists
-  --short-url: string@bool-completer # Create short link for the survey (default: false, e.g. false)
-  --expires-at: string # expiry time of link in UTC (format: date, e.g. 2026-08-10T20:20:54Z)
+  --short-url: oneof<nothing, bool> # Create short link for the survey (default: false, e.g. false)
+  --expires-at: string # expiry time of link in UTC (format: date, e.g. 2026-08-12T09:02:55Z)
   --body-variables: record
 ]: any -> record<data: table<contact_id: float, survey_link: string, short_url: string, variables: record, expires_at: string>> {
   let input = $in
@@ -5110,7 +5109,7 @@ export def "survey-invite post" [
   evaluators: list # item shape: {full_name: string, email: string, relation: string}
   approver: record # shape: {full_name: string, email: string}
   properties: record # shape: {require_approval: bool, self_evaluation: bool, self_nomination: bool}
-  --invite-now: string@bool-completer
+  --invite-now: oneof<nothing, bool>
   --schedule: string # format: date
 ]: any -> string {
   let input = $in
@@ -5222,7 +5221,7 @@ export def "ces-sms idSms" [
   --allow-errors(-e) # Return full response without error handling
   --contacts: list # item shape: {mobile: string, variables?: record}
   --contactLists: list
-  --sendNow: string@bool-completer # default: true
+  --sendNow: oneof<nothing, bool> # default: true
   --mode: string # default: BLAST
   --type: string # default: SMS
   --name: string # default: SMS Share
@@ -5231,7 +5230,7 @@ export def "ces-sms idSms" [
   --customProperties: record
   --body-variables: record
   properties: record # shape: {content: string, smsTargetId?: float, acceptAnonymousResponse?: bool, twilio_consent_agreed?: bool}
-  --ignoreThrottledContacts: string@bool-completer # default: true
+  --ignoreThrottledContacts: oneof<nothing, bool> # default: true
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5263,7 +5262,7 @@ export def "ces-email idEmail" [
   --allow-errors(-e) # Return full response without error handling
   --contacts: list # item shape: {email: string, variables?: record}
   --contactLists: list
-  --sendNow: string@bool-completer # default: true
+  --sendNow: oneof<nothing, bool> # default: true
   --mode: string # default: BLAST
   --type: string # default: EMAIL
   --name: string # default: Email Share
@@ -5274,10 +5273,10 @@ export def "ces-email idEmail" [
   --questions: list # item shape: {id?: float, label: string}
   --meetingTime: string
   --properties: record # shape: {body?: string, subject?: string, replyEmail?: string, fromAddress?: string}
-  --embed-first-question: string@bool-completer # default: true
-  --custom-footer: string@bool-completer # default: false
+  --embed-first-question: oneof<nothing, bool> # default: true
+  --custom-footer: oneof<nothing, bool> # default: false
   --custom-footer-value: string
-  --ignoreThrottledContacts: string@bool-completer # default: true
+  --ignoreThrottledContacts: oneof<nothing, bool> # default: true
   --reminders: list # item shape: {body?: string, subject?: string, frequency: "Days"|"Weeks"|"Months"|"Years", type: "NOT_RESPONDED"|"PARTIALLY_RESPONDED", interval: float, properties?: record}
 ]: any -> string {
   let input = $in
@@ -5335,7 +5334,7 @@ export def "csat-sms idSms" [
   --allow-errors(-e) # Return full response without error handling
   --contacts: list # item shape: {mobile: string, variables?: record}
   --contactLists: list
-  --sendNow: string@bool-completer # default: true
+  --sendNow: oneof<nothing, bool> # default: true
   --mode: string # default: BLAST
   --type: string # default: SMS
   --name: string # default: SMS Share
@@ -5344,7 +5343,7 @@ export def "csat-sms idSms" [
   --customProperties: record
   --body-variables: record
   properties: record # shape: {content: string, smsTargetId?: float, acceptAnonymousResponse?: bool, twilio_consent_agreed?: bool}
-  --ignoreThrottledContacts: string@bool-completer # default: true
+  --ignoreThrottledContacts: oneof<nothing, bool> # default: true
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5376,7 +5375,7 @@ export def "csat-email idEmail" [
   --allow-errors(-e) # Return full response without error handling
   --contacts: list # item shape: {email: string, variables?: record}
   --contactLists: list
-  --sendNow: string@bool-completer # default: true
+  --sendNow: oneof<nothing, bool> # default: true
   --mode: string # default: BLAST
   --type: string # default: EMAIL
   --name: string # default: Email Share
@@ -5387,10 +5386,10 @@ export def "csat-email idEmail" [
   --questions: list # item shape: {id?: float, label: string}
   --meetingTime: string
   --properties: record # shape: {body?: string, subject?: string, replyEmail?: string, fromAddress?: string}
-  --ignoreThrottledContacts: string@bool-completer # default: true
+  --ignoreThrottledContacts: oneof<nothing, bool> # default: true
   --reminders: list # item shape: {body?: string, subject?: string, frequency: "Days"|"Weeks"|"Months"|"Years", type: "NOT_RESPONDED"|"PARTIALLY_RESPONDED", interval: float, properties?: record}
-  --embed-first-question: string@bool-completer # default: true
-  --custom-footer: string@bool-completer # default: false
+  --embed-first-question: oneof<nothing, bool> # default: true
+  --custom-footer: oneof<nothing, bool> # default: false
   --custom-footer-value: string
 ]: any -> string {
   let input = $in
@@ -5423,7 +5422,7 @@ export def "nps-email idEmail" [
   --allow-errors(-e) # Return full response without error handling
   --contacts: list # item shape: {email: string, variables?: record}
   --contactLists: list
-  --sendNow: string@bool-completer # default: true
+  --sendNow: oneof<nothing, bool> # default: true
   --mode: string # default: BLAST
   --type: string # default: EMAIL
   --name: string # default: Email Share
@@ -5434,10 +5433,10 @@ export def "nps-email idEmail" [
   --questions: list # item shape: {id?: float, label: string}
   --meetingTime: string
   --properties: record # shape: {body?: string, subject?: string, replyEmail?: string, fromAddress?: string}
-  --ignoreThrottledContacts: string@bool-completer # default: true
+  --ignoreThrottledContacts: oneof<nothing, bool> # default: true
   --reminders: list # item shape: {body?: string, subject?: string, frequency: "Days"|"Weeks"|"Months"|"Years", type: "NOT_RESPONDED"|"PARTIALLY_RESPONDED", interval: float, properties?: record}
-  --embed-first-question: string@bool-completer # default: true
-  --custom-footer: string@bool-completer # default: false
+  --embed-first-question: oneof<nothing, bool> # default: true
+  --custom-footer: oneof<nothing, bool> # default: false
   --custom-footer-value: string
 ]: any -> string {
   let input = $in
@@ -5468,7 +5467,7 @@ export def "nps-sms idSms" [
   --allow-errors(-e) # Return full response without error handling
   --contacts: list # item shape: {mobile: string, variables?: record}
   --contactLists: list
-  --sendNow: string@bool-completer # default: true
+  --sendNow: oneof<nothing, bool> # default: true
   --mode: string # default: BLAST
   --type: string # default: SMS
   --name: string # default: SMS Share
@@ -5477,7 +5476,7 @@ export def "nps-sms idSms" [
   --customProperties: record
   --body-variables: record
   properties: record # shape: {content: string, smsTargetId?: float, acceptAnonymousResponse?: bool, twilio_consent_agreed?: bool}
-  --ignoreThrottledContacts: string@bool-completer # default: true
+  --ignoreThrottledContacts: oneof<nothing, bool> # default: true
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5564,7 +5563,7 @@ export def "survey-invite post-by-surveyId" [
   evaluators: list # item shape: {fullName: string, email: string, relation: string}
   approver: record # shape: {fullName: string, email: string}
   properties: record # shape: {requireApproval: bool, selfEvaluation: bool, selfNomination: bool}
-  --inviteNow: string@bool-completer
+  --inviteNow: oneof<nothing, bool>
   --schedule: string # format: date
 ]: any -> string {
   let input = $in
@@ -5768,7 +5767,7 @@ export def "ces-sms idSmsId" [
   --contactLists: list
   --body-variables: record
   --sendLaterInDays: float
-  --twilio-consent-agreed: string@bool-completer # For using surveysparrow message service you need to agree the consent.
+  --twilio-consent-agreed: oneof<nothing, bool> # For using surveysparrow message service you need to agree the consent.
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5832,7 +5831,7 @@ export def "csat-sms idSmsId" [
   --contactLists: list
   --body-variables: record
   --sendLaterInDays: float
-  --twilio-consent-agreed: string@bool-completer # For using surveysparrow message service you need to agree the consent.
+  --twilio-consent-agreed: oneof<nothing, bool> # For using surveysparrow message service you need to agree the consent.
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5864,7 +5863,7 @@ export def "nps-sms idSmsId" [
   --contactLists: list
   --body-variables: record
   --sendLaterInDays: float
-  --twilio-consent-agreed: string@bool-completer # For using surveysparrow message service you need to agree the consent.
+  --twilio-consent-agreed: oneof<nothing, bool> # For using surveysparrow message service you need to agree the consent.
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5981,7 +5980,7 @@ export def "survey-shares-email id" [
   --body-variables: record
   --sendLaterInDays: float
   --sendLater: string # format: date
-  --ignoreThrottledContacts: string@bool-completer # default: true
+  --ignoreThrottledContacts: oneof<nothing, bool> # default: true
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6248,7 +6247,7 @@ export def "webhooks put-by-id-1" [
   --http-method: string@http-method-completer
   --headers: list
   --payload: record
-  --include-partial-submission: string@bool-completer # e.g. true
+  --include-partial-submission: oneof<nothing, bool> # e.g. true
 ]: any -> record<data: record<id: float, name: string, url: string, eventType: string, description: string, objectType: string, httpMethod: string, headers: list<record>, properties: record<payload: string, includePartialSubmission: bool>, disabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6436,7 +6435,7 @@ export def "surveys-questions id-by-id-question_id" [
   --allow-errors(-e) # Return full response without error handling
   --text: string
   --description: string
-  --required: string@bool-completer
+  --required: oneof<nothing, bool>
   --properties: record # shape: {data?: record}
   --displayLogic: record # shape: {logics?: list}
 ]: any -> string {
@@ -6576,7 +6575,7 @@ export def "survey-shares-sms put-by-surveyId-channelId" [
   --message: string
   --smsTargetId: float
   --body-variables: record
-  --twilio-consent-agreed: string@bool-completer # For using surveysparrow message service you need to agree the consent.
+  --twilio-consent-agreed: oneof<nothing, bool> # For using surveysparrow message service you need to agree the consent.
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6634,7 +6633,7 @@ export def "survey-shares-sms put-by-surveyId-channelId-1" [
   --smsTargetId: float
   --body-variables: record
   --sendLaterInDays: float
-  --twilio-consent-agreed: string@bool-completer # For using surveysparrow message service you need to agree the consent.
+  --twilio-consent-agreed: oneof<nothing, bool> # For using surveysparrow message service you need to agree the consent.
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

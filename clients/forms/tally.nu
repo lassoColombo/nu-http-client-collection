@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.tally.so"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -698,7 +697,7 @@ export def "webhooks patch" [
   --signingSecret: string # Optional secret used to sign webhook payloads (nullable)
   --httpHeaders: list # Optional custom HTTP headers to include in webhook requests (nullable) — item shape: {name: string, value: string}
   eventTypes: list # Types of events to receive
-  --isEnabled: string@bool-completer # Whether the webhook is enabled
+  --isEnabled: oneof<nothing, bool> # Whether the webhook is enabled
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -147,7 +146,7 @@ export def "admin-mappings post" [
   --metadata: record # Arbitrary metadata to be used for e.g. tagging, documentation. Can also be used to find and remove stubs.
   --name: string # The stub mapping's name
   --newScenarioState: string # The new state for the scenario to be updated to after this stub is served.
-  --persistent: string@bool-completer # Indicates that the stub mapping should be persisted immediately on create/update/delete and survive resets to default.
+  --persistent: oneof<nothing, bool> # Indicates that the stub mapping should be persisted immediately on create/update/delete and survive resets to default.
   --postServeActions: record # A map of the names of post serve action extensions to trigger and their parameters.
   --priority: int # This stub mapping's priority relative to others. 1 is highest.
   --request: record # e.g. {bodyPatterns: [{equalToJson: { "numbers": [1, 2, 3] }}], headers: {Content-Type: {equalTo: application/json}}, method: POST, url: /some/thing} — shape: {basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
@@ -178,14 +177,14 @@ export def "admin-mappings-find-by-metadata post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --caseInsensitive: string@bool-completer
-  --equalTo: string@bool-completer
+  --caseInsensitive: oneof<nothing, bool>
+  --equalTo: oneof<nothing, bool>
   --contains: string
   --matches: string
   --doesNotMatch: string
   --equalToJson: string
-  --ignoreArrayOrder: string@bool-completer
-  --ignoreExtraElements: string@bool-completer
+  --ignoreArrayOrder: oneof<nothing, bool>
+  --ignoreExtraElements: oneof<nothing, bool>
   --matchesJsonPath: string
   --equalToXml: string
   --matchesXpath: string
@@ -234,14 +233,14 @@ export def "admin-mappings-remove-by-metadata post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --caseInsensitive: string@bool-completer
-  --equalTo: string@bool-completer
+  --caseInsensitive: oneof<nothing, bool>
+  --equalTo: oneof<nothing, bool>
   --contains: string
   --matches: string
   --doesNotMatch: string
   --equalToJson: string
-  --ignoreArrayOrder: string@bool-completer
-  --ignoreExtraElements: string@bool-completer
+  --ignoreArrayOrder: oneof<nothing, bool>
+  --ignoreExtraElements: oneof<nothing, bool>
   --matchesJsonPath: string
   --equalToXml: string
   --matchesXpath: string
@@ -358,7 +357,7 @@ export def "admin-mappings put" [
   --metadata: record # Arbitrary metadata to be used for e.g. tagging, documentation. Can also be used to find and remove stubs.
   --name: string # The stub mapping's name
   --newScenarioState: string # The new state for the scenario to be updated to after this stub is served.
-  --persistent: string@bool-completer # Indicates that the stub mapping should be persisted immediately on create/update/delete and survive resets to default.
+  --persistent: oneof<nothing, bool> # Indicates that the stub mapping should be persisted immediately on create/update/delete and survive resets to default.
   --postServeActions: record # A map of the names of post serve action extensions to trigger and their parameters.
   --priority: int # This stub mapping's priority relative to others. 1 is highest.
   --request: record # e.g. {bodyPatterns: [{equalToJson: { "numbers": [1, 2, 3] }}], headers: {Content-Type: {equalTo: application/json}}, method: POST, url: /some/thing} — shape: {basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
@@ -457,8 +456,8 @@ export def "admin-recordings-snapshot post" [
   --allow-errors(-e) # Return full response without error handling
   --captureHeaders: record # Headers from the request to include in the generated stub mappings, mapped to parameter objects. The only parameter available is "caseInsensitive", which defaults to false (e.g. {Accept: {}, Content-Type: {caseInsensitive: true}})
   --extractBodyCriteria: record # Criteria for extracting response bodies to a separate file instead of including it in the stub mapping (e.g. [{binarySizeThreshold: 1 Mb, textSizeThreshold: 2 kb}]) — shape: {binarySizeThreshold?: string, textSizeThreshold?: string}
-  --persist: string@bool-completer # Whether to save stub mappings to the file system or just return them (default: true)
-  --repeatsAsScenarios: string@bool-completer # When true, duplicate requests will be added to a Scenario. When false, duplicates are discarded (default: true)
+  --persist: oneof<nothing, bool> # Whether to save stub mappings to the file system or just return them (default: true)
+  --repeatsAsScenarios: oneof<nothing, bool> # When true, duplicate requests will be added to a Scenario. When false, duplicates are discarded (default: true)
   --requestBodyPattern: record # Control the request body matcher used in generated stub mappings — shape: {caseInsensitive?: bool, ignoreArrayOrder?: bool, ignoreExtraElements?: bool, matcher?: "auto"}
   --transformerParameters: record # List of names of stub mappings transformers to apply to generated stubs
   --transformers: list # Parameters to pass to stub mapping transformers
@@ -490,8 +489,8 @@ export def "admin-recordings-start post" [
   --allow-errors(-e) # Return full response without error handling
   --captureHeaders: record # Headers from the request to include in the generated stub mappings, mapped to parameter objects. The only parameter available is "caseInsensitive", which defaults to false (e.g. {Accept: {}, Content-Type: {caseInsensitive: true}})
   --extractBodyCriteria: record # Criteria for extracting response bodies to a separate file instead of including it in the stub mapping (e.g. [{binarySizeThreshold: 1 Mb, textSizeThreshold: 2 kb}]) — shape: {binarySizeThreshold?: string, textSizeThreshold?: string}
-  --persist: string@bool-completer # Whether to save stub mappings to the file system or just return them (default: true)
-  --repeatsAsScenarios: string@bool-completer # When true, duplicate requests will be added to a Scenario. When false, duplicates are discarded (default: true)
+  --persist: oneof<nothing, bool> # Whether to save stub mappings to the file system or just return them (default: true)
+  --repeatsAsScenarios: oneof<nothing, bool> # When true, duplicate requests will be added to a Scenario. When false, duplicates are discarded (default: true)
   --requestBodyPattern: record # Control the request body matcher used in generated stub mappings — shape: {caseInsensitive?: bool, ignoreArrayOrder?: bool, ignoreExtraElements?: bool, matcher?: "auto"}
   --transformerParameters: record # List of names of stub mappings transformers to apply to generated stubs
   --transformers: list # Parameters to pass to stub mapping transformers
@@ -705,14 +704,14 @@ export def "admin-requests-remove-by-metadata post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --caseInsensitive: string@bool-completer
-  --equalTo: string@bool-completer
+  --caseInsensitive: oneof<nothing, bool>
+  --equalTo: oneof<nothing, bool>
   --contains: string
   --matches: string
   --doesNotMatch: string
   --equalToJson: string
-  --ignoreArrayOrder: string@bool-completer
-  --ignoreExtraElements: string@bool-completer
+  --ignoreArrayOrder: oneof<nothing, bool>
+  --ignoreExtraElements: oneof<nothing, bool>
   --matchesJsonPath: string
   --equalToXml: string
   --matchesXpath: string

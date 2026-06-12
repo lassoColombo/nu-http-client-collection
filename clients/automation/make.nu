@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://eu1.make.com/api/v2" "https://eu2.make.com/api/v2" "https://us1.make.com/api/v2" "https://us2.make.com/api/v2" "https://eu1.make.celonis.com/api/v2" "https://us1.make.celonis.com/api/v2"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -387,7 +386,7 @@ export def "admin-organizations patch" [
   --timezoneId: int # The ID of the timezone associated with the organization. Get the list of the timezone IDs with the API call `GET /enums/timezones`.
   --countryId: int # The ID of the country associated with the organization. Get the list of the country IDs with the API call `GET /enums/countries`.
   --nextReset: string # The moment to which you want to schedule the reset of the organization's consumption. (format: date-time)
-  --performReset: string@bool-completer # Set to `true` if you want to reset the organization's consumption with the API call. Make sets the next reset of the organization's consumption either to the moment from the `nextReset` parameter, or according to the organization's restart period.
+  --performReset: oneof<nothing, bool> # Set to `true` if you want to reset the organization's consumption with the API call. Make sets the next reset of the organization's consumption either to the moment from the `nextReset` parameter, or according to the organization's restart period.
   --license: record # The resources and features available to the users in the organization.
 ]: any -> record<organization: record<id: int, name: string, createdAt: string, serviceName: string, nextReset: string, lastReset: string, isPaused: bool, countryId: int, timezoneId: int, deleted: bool, license: record, zone: string, teams: list<record>, productName: string, ssoType: string, scenarios: int, activeScenarios: int, tfaEnforced: bool, featureControls: list<record>>> {
   let input = $in
@@ -485,7 +484,7 @@ export def "admin-organizations-assign-universal-discount post" [
   --allow-errors(-e) # Return full response without error handling
   discountType: string # The type of discount to assign (e.g. SOME_DISCOUNT_TYPE)
   percentOff: float # The percentage off for the discount (1-100) (e.g. 23)
-  --activateImmediately: string@bool-completer # Whether to activate the discount immediately (default: false, e.g. true)
+  --activateImmediately: oneof<nothing, bool> # Whether to activate the discount immediately (default: false, e.g. true)
   --redeemUntil: string # The date until which the discount can be redeemed (format: date, e.g. 2024-12-31)
   --durationInMonths: int # The duration of the discount in months (e.g. 12)
   --bannerText: string # Custom banner text for the discount (overrides the type default) (e.g. Special offer just for you!)
@@ -583,7 +582,7 @@ export def "admin-apps-installation-history get" [
   --pgoffset: int # Number of records to skip. (default: 0)
   --pgsortBy: string@pgsortBy-completer-1 # Field to sort by. (default: createdAt)
   --pgsortDir: string@pgsortDir-completer # Sort direction. (default: desc)
-  --pgreturnTotalCount: string@bool-completer # When true, the response pagination block contains the total record count. This option is supported only for session (cookie) authentication. Token-authenticated requests that send `pg[returnTotalCount]=true` are rejected with HTTP 400.  (default: false)
+  --pgreturnTotalCount: oneof<nothing, bool> # When true, the response pagination block contains the total record count. This option is supported only for session (cookie) authentication. Token-authenticated requests that send `pg[returnTotalCount]=true` are rejected with HTTP 400.  (default: false)
 ]: nothing -> record<installationHistory: table<id: int, appName: string, appVersion: int, appVersionFull: string, previousVersion: int, previousVersionFull: string, status: string, userId: int, userName: string, userEmail: string, createdAt: string>, pg: record<limit: int, offset: int, sortBy: string, sortDir: string, returnTotalCount: bool, totalCount: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -696,7 +695,7 @@ export def "admin-users post" [
   name: string # The name of the user.
   email: string # The user's email.
   --password: string # The password to the user's account. It has to contain at least 10 characters, including one number, one upper case character and one special character.
-  --sendEmail: string@bool-completer # If set to `true`, Make sends an email to the user with their automatically generated password. The user has to change their password right after logging in.
+  --sendEmail: oneof<nothing, bool> # If set to `true`, Make sends an email to the user with their automatically generated password. The user has to change their password right after logging in.
   --countryId: int # The ID of user's country. Get the `countryId` values with the API call `GET /enums/countries`.
   --timezoneId: int # The ID of user's timezone. Get the list of the timezone IDs with the API call `GET /enums/timezones`.
   --localeId: int # The ID of user's locale. Get the list of locale IDs with the API call `GET /enums/locales`.
@@ -778,8 +777,8 @@ export def "admin-users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deleteConnections: string@bool-completer # Set to `true` to delete also user's connections when removing organizations, in which the user has the role "Owner". The default value is `false`. (e.g. true)
-  --confirmed: string@bool-completer # Set to `true` to delete organizations in which the user has the "Owner" role. Use the parameter `deleteConnections` to delete the user's connections in the deleted organizations. (e.g. true)
+  --deleteConnections: oneof<nothing, bool> # Set to `true` to delete also user's connections when removing organizations, in which the user has the role "Owner". The default value is `false`. (e.g. true)
+  --confirmed: oneof<nothing, bool> # Set to `true` to delete organizations in which the user has the "Owner" role. Use the parameter `deleteConnections` to delete the user's connections in the deleted organizations. (e.g. true)
 ]: nothing -> record<user: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -804,8 +803,8 @@ export def "admin-users-user-organization-roles post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --cols: list # Specifies columns that are returned in the response. Use the `cols[]` parameter for every column that you want to return in the response. For example `GET /endpoint?cols[]=key1&cols[]=key2` to get both `key1` and `key2` columns in the response.  [Check the "Filtering" section for a full example.](/api-documentation/pagination-sorting-filtering/filtering)
-  --deleteConnections: string@bool-completer # When removing the user from the organization, set to `true` to delete also user's connections. The default value is `false`. To confirm deleting the user's connections you have to also set the `confirmed` parameter to `true`.
-  --confirmed: string@bool-completer # Set to `true` to confirm deleting the user's connections in combination with the `deleteConnections` parameter. Otherwise, the API call fails with error requiring confirmation. (e.g. true)
+  --deleteConnections: oneof<nothing, bool> # When removing the user from the organization, set to `true` to delete also user's connections. The default value is `false`. To confirm deleting the user's connections you have to also set the `confirmed` parameter to `true`.
+  --confirmed: oneof<nothing, bool> # Set to `true` to confirm deleting the user's connections in combination with the `deleteConnections` parameter. Otherwise, the API call fails with error requiring confirmation. (e.g. true)
   --usersRoleId: int # The ID of the user role. Check the `GET /users/roles` API call for the available `usersRoleId` values.
 ]: any -> record<userOrganizationRole: record<userId: int, organizationId: int, usersRoleId: int, invitation: string>> {
   let input = $in
@@ -855,8 +854,8 @@ export def "admin-users-user-team-roles post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # Use this parameter when you are removing a user from a team. Set this parameter to `true` is you want to delete the user's connections from the team with the parameter `deleteConnections`.
-  --deleteConnections: string@bool-completer # Set this parameter to `true` if you are removing a user from a team to delete also the user's connections. If you set this parameter to `false`, the API call won't delete the user's connections.
+  --confirmed: oneof<nothing, bool> # Use this parameter when you are removing a user from a team. Set this parameter to `true` is you want to delete the user's connections from the team with the parameter `deleteConnections`.
+  --deleteConnections: oneof<nothing, bool> # Set this parameter to `true` if you are removing a user from a team to delete also the user's connections. If you set this parameter to `false`, the API call won't delete the user's connections.
   --usersRoleId: int # The ID of the user role. Check the `GET /users/roles` API call for the available `usersRoleId` values.
 ]: any -> record<userTeamRole: record<usersRoleId: int, userId: int, teamId: int, changeable: bool, ssoPending: bool>> {
   let input = $in
@@ -1539,7 +1538,7 @@ export def "affiliate-partner-register post" [
   --allow-errors(-e) # Return full response without error handling
   partnerCode: string
   paypalMeLink: string
-  --termsAndConditions: string@bool-completer
+  --termsAndConditions: oneof<nothing, bool>
 ]: any -> record<ok: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1669,7 +1668,7 @@ export def "audit-logs-organization get" [
   --pglast: int # The last retrieved key. In response, you get only entries that follow after the key. (e.g. 10)
   --pgsortBy: string@pgsortBy-completer-4 # Specify the response property values that Make will use to sort the audit log entries in the response. The default is `triggeredAt`.
   --pgsortDir: string@pgsortDir-completer # The sorting order. It accepts the ascending and descending direction specifiers.
-  --pgreturnTotalCount: string@bool-completer # Set to `true` to get also the total number of audit log entries in the response. (e.g. true)
+  --pgreturnTotalCount: oneof<nothing, bool> # Set to `true` to get also the total number of audit log entries in the response. (e.g. true)
 ]: nothing -> record<auditLogs: table<uuid: string, createdAt: string, triggeredAt: int, organizationId: int, organization: record, eventName: string, team: record, actor: record, targetId: string, version: record>, pg: record<last: string, showLast: bool, sortBy: string, sortDir: string, limit: int, offset: int, totalCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1724,7 +1723,7 @@ export def "audit-logs-team get" [
   --pglast: int # The last retrieved key. In response, you get only entries that follow after the key. (e.g. 10)
   --pgsortBy: string@pgsortBy-completer-4 # Specify the response property values that Make will use to sort the audit log entries in the response. The default is `triggeredAt`.
   --pgsortDir: string@pgsortDir-completer # The sorting order. It accepts the ascending and descending direction specifiers.
-  --pgreturnTotalCount: string@bool-completer # Set to `true` to get also the total number of audit log entries in the response. (e.g. true)
+  --pgreturnTotalCount: oneof<nothing, bool> # Set to `true` to get also the total number of audit log entries in the response. (e.g. true)
 ]: nothing -> record<auditLogs: table<uuid: string, createdAt: string, triggeredAt: int, organizationId: int, organization: record, eventName: string, team: record, actor: record, targetId: string, version: record>, pg: record<last: string, showLast: bool, sortBy: string, sortDir: string, limit: int, offset: int, totalCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1802,7 +1801,7 @@ export def "analytics get" [
   --pglast: int # The last retrieved key. In response, you get only entries that follow after the key. (e.g. 10)
   --pgsortBy: string@pgsortBy-completer-5 # Specify which property Make will use to sort the analytics entries in the response. The default is `operations`.
   --pgsortDir: string@pgsortDir-completer # The sorting order. It accepts the ascending and descending direction specifiers.
-  --pgreturnTotalCount: string@bool-completer # Set to `true` to get also the total number of analytics entries in the response. (e.g. true)
+  --pgreturnTotalCount: oneof<nothing, bool> # Set to `true` to get also the total number of analytics entries in the response. (e.g. true)
 ]: nothing -> record<total: record<executions: int, operations: int, centicredits: string, errors: int, errorRate: float, executionsChange: float, operationsChange: float, centicreditsChange: float, errorsChange: float, errorRateChange: float>, analytics: table<executions: int, operations: int, centicredits: string, errors: int, errorRate: float, executionsChange: float, operationsChange: float, centicreditsChange: float, errorsChange: float, errorRateChange: float, imtId: string, id: float, name: string, status: string, teamId: float, teamName: string>, pg: record<last: string, showLast: bool, sortBy: string, sortDir: string, limit: int, offset: int, totalCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1825,7 +1824,7 @@ export def "cashier-products get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer-1 # e.g. PLAN
-  --includeInvisible: string@bool-completer # e.g. true
+  --includeInvisible: oneof<nothing, bool> # e.g. true
   --relatedPriceId: int
   --organizationId: int
 ]: nothing -> record<products: list<record>> {
@@ -2039,7 +2038,7 @@ export def "connections delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # Confirms the deletion if the connection is included in at least one scenario. Confirmation is required because the scenario will stop working without the connection. If the parameter is missing or it is set to `false` an error code is returned and the resource is not deleted. (e.g. true)
+  --confirmed: oneof<nothing, bool> # Confirms the deletion if the connection is included in at least one scenario. Confirmation is required because the scenario will stop working without the connection. If the parameter is missing or it is set to `false` an error code is returned and the resource is not deleted. (e.g. true)
 ]: nothing -> record<connection: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2220,7 +2219,7 @@ export def "credential-requests-requests delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # When true, also deletes credentials (connections and keys) associated with the credential request. When false or omitted the API will return an error if there are any associated credentials, preventing accidental deletion of credentials.
+  --confirmed: oneof<nothing, bool> # When true, also deletes credentials (connections and keys) associated with the credential request. When false or omitted the API will return an error if there are any associated credentials, preventing accidental deletion of credentials.
 ]: nothing -> record<deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2468,7 +2467,7 @@ export def "custom-property-structures-custom-property-structure-items post" [
   --description: string # The description of the custom property structure item. You can review the item description in the **Scenario properties** tab in the Organization dashboard.
   type: string@type-completer-2 # The data type of the custom property structure item. The data types `dropdown` and `multiselect` allow you to specify available options for the item data.
   --options: any # The options available to users when filling in the item data. For the data types `dropdown` and `multiselect`, fill in an object like `{"options":[{"value": "Marketing"}, {"value": "Sales"}]}`. You can omit the `options` parameter for the rest of the data types. 
-  --required: string@bool-completer # Set to `true` in order to make a structure item required when adding custom property data. Default value is `false`.
+  --required: oneof<nothing, bool> # Set to `true` in order to make a structure item required when adding custom property data. Default value is `false`.
 ]: any -> record<customPropertyStructureItem: record<id: int, created: string, belongers: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2496,7 +2495,7 @@ export def "custom-property-structures-custom-property-structure-items patch" [
   --label: string # Make displays the item label to users in the scenario table header.
   --description: string # The description of the custom property structure item. You can review the item description in the **Scenario properties** tab in the Organization dashboard.
   --options: any # The options available to users when filling in the item data. For the data types `dropdown` and `multiselect`, fill in an object like `{"options":[{"value": "Marketing"}, {"value": "Sales"}]}`. You can omit the `options` parameter for the rest of the data types. 
-  --required: string@bool-completer # Set to `true` if you require to fill in data to the structure item when adding custom property data. Default value is `false`.
+  --required: oneof<nothing, bool> # Set to `true` if you require to fill in data to the structure item when adding custom property data. Default value is `false`.
 ]: any -> record<customPropertyStructureItem: record<id: int, created: string, belongers: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2521,7 +2520,7 @@ export def "custom-property-structures-custom-property-structure-items delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # e.g. true
+  --confirmed: oneof<nothing, bool> # e.g. true
 ]: nothing -> record<customPropertyStructureItem: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2597,11 +2596,11 @@ export def "data-stores delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # Confirms the deletion if a data store is included in at least one scenario. Confirmation is required because the scenario will stop working without the data store. If the parameter is missing or it is set to `false` an error code is returned and the resource is not deleted. (e.g. true)
+  --confirmed: oneof<nothing, bool> # Confirms the deletion if a data store is included in at least one scenario. Confirmation is required because the scenario will stop working without the data store. If the parameter is missing or it is set to `false` an error code is returned and the resource is not deleted. (e.g. true)
   --teamId: int # The unique ID of the team from which the data store will be deleted. (e.g. 1)
   --ids: list # The IDs of data stores to delete. You can either use only this parameter alone or use the `all` parameter, or the `all` parameter together with the `exceptIds` parameter.
   --exceptIds: list # The IDs of data stores to be excluded from deleting. It can be only used together with the `all` parameter set to `true`.
-  --all: string@bool-completer # If set to `true`, all data stores will be deleted. It can be used alone or together with the `exceptIds` parameter.
+  --all: oneof<nothing, bool> # If set to `true`, all data stores will be deleted. It can be used alone or together with the `exceptIds` parameter.
 ]: any -> record<dataStores: list<int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2727,9 +2726,9 @@ export def "data-stores-data delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # Set to `true` to confirm deleting of the data store records. Otherwise, you get an error and Make won't delete the data store records. (e.g. true)
+  --confirmed: oneof<nothing, bool> # Set to `true` to confirm deleting of the data store records. Otherwise, you get an error and Make won't delete the data store records. (e.g. true)
   --keys: list # The keys of data store records you want to delete. Use the `all` and `confirmed` parameters if you want to delete all records in the data store.
-  --all: string@bool-completer # Set to `true` to delete all records in the data store. Use the `confirmed` parameter to confirm the deletion. You can also use the `exceptKeys` parameter to specify keys of the records that you want to keep in the data store.
+  --all: oneof<nothing, bool> # Set to `true` to delete all records in the data store. Use the `confirmed` parameter to confirm the deletion. You can also use the `exceptKeys` parameter to specify keys of the records that you want to keep in the data store.
   --exceptKeys: list # Specify the keys of the data store records you want to keep when deleting all records from the data store.
 ]: any -> record<keys: list<string>> {
   let input = $in
@@ -2834,7 +2833,7 @@ export def "data-structures post" [
   --allow-errors(-e) # Return full response without error handling
   teamId: int # The unique ID of the team in which the data structure will be created.
   name: string # The name of the data structure. The maximum length of the name is 128 characters.
-  --strict: string@bool-completer # Set to `true` to enforce strict validation of the data put in the data structure. With the strict validation enabled, the data structure won't store data that don't fit into the structure and the storing module will return an error.  The default value of this parameter is `false`. With the default setting, the modules using the data structure will process data that don't conform to the data structure.  (e.g. true)
+  --strict: oneof<nothing, bool> # Set to `true` to enforce strict validation of the data put in the data structure. With the strict validation enabled, the data structure won't store data that don't fit into the structure and the storing module will return an error.  The default value of this parameter is `false`. With the default setting, the modules using the data structure will process data that don't conform to the data structure.  (e.g. true)
   spec: list # Sets the data structure specification.
 ]: any -> record<dataStructure: record<id: int, teamId: int, name: string, strict: bool, spec: list<any>>> {
   let input = $in
@@ -2884,7 +2883,7 @@ export def "data-structures patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name of the data structure. The maximum length of the name is 128 characters.
-  --strict: string@bool-completer # Set to `true` to enforce strict validation of the data put in the data structure. With the strict validation enabled, the data structure won't store data that don't fit into the structure and the storing module will return an error.  The default value of this parameter is `false`. With the default setting, the modules using the data structure will process data that don't conform to the data structure.  (e.g. false)
+  --strict: oneof<nothing, bool> # Set to `true` to enforce strict validation of the data put in the data structure. With the strict validation enabled, the data structure won't store data that don't fit into the structure and the storing module will return an error.  The default value of this parameter is `false`. With the default setting, the modules using the data structure will process data that don't conform to the data structure.  (e.g. false)
   --spec: list # Sets the data structure specification.   Note that when you update the data structure specification with the `spec` parameter, you have to provide all structure fields you want to use. Make replaces the old structure specification with the new one."
 ]: any -> record<dataStructure: record<id: int, teamId: int, name: string, strict: bool, spec: list<any>>> {
   let input = $in
@@ -2910,7 +2909,7 @@ export def "data-structures delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # Confirms the deletion if a data structure is included in at least one scenario. Confirmation is required because the scenario will stop working without the data structure. If the parameter is missing or it is set to `false` an error code is returned and the resource is not deleted. (e.g. true)
+  --confirmed: oneof<nothing, bool> # Confirms the deletion if a data structure is included in at least one scenario. Confirmation is required because the scenario will stop working without the data structure. If the parameter is missing or it is set to `false` an error code is returned and the resource is not deleted. (e.g. true)
 ]: nothing -> record<dataStructure: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2959,7 +2958,7 @@ export def "devices list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --teamId: int # e.g. 1
-  --assigned: string@bool-completer # true = devices with scenarioId; false = devices without scenarioId - this filter only affects the trigger scope (e.g. true)
+  --assigned: oneof<nothing, bool> # true = devices with scenarioId; false = devices without scenarioId - this filter only affects the trigger scope (e.g. true)
   --viewForScenarioId: int # Devices assigned to the scenario and not assigned devices. If this parameter is set assigned parameter is ignored. (e.g. 4)
   --scope: list # e.g. call
   --cols: list # e.g. name
@@ -3035,7 +3034,7 @@ export def "devices delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # e.g. true
+  --confirmed: oneof<nothing, bool> # e.g. true
 ]: nothing -> record<device: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3112,10 +3111,10 @@ export def "devices-incomings delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # e.g. true
+  --confirmed: oneof<nothing, bool> # e.g. true
   --ids: list
   --exceptIds: list
-  --all: string@bool-completer
+  --all: oneof<nothing, bool>
 ]: any -> record<incomings: list<string>, error: record<name: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3213,10 +3212,10 @@ export def "devices-outgoings delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # e.g. true
+  --confirmed: oneof<nothing, bool> # e.g. true
   --ids: list
   --exceptIds: list
-  --all: string@bool-completer
+  --all: oneof<nothing, bool>
 ]: any -> record<outgoings: list<string>, error: record<name: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3286,10 +3285,10 @@ export def "dlqs delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --scenarioId: int # The ID value of the scenario. Use the API call `GET /scenarios` to get the ID of the scenario. If your scenario is placed in a folder, use the API call `GET /scenarios-folders?teamId={teamId}` first. (e.g. 4)
-  --confirmed: string@bool-completer # Set to `true` to confirm deleting the incomplete executions. Otherwise the API call fails with the error IM004 (406). (e.g. true)
+  --confirmed: oneof<nothing, bool> # Set to `true` to confirm deleting the incomplete executions. Otherwise the API call fails with the error IM004 (406). (e.g. true)
   --ids: list # The ID values of the scenario incomplete executions that you want to delete. Use the API call `GET /dlqs/?scenarioId={scenarioId}` to get the ID values of the webhook processing queue items.
   --exceptIds: list # If you are deleting all of the incomplete executions with the `all:true` parameter, you can specify the ID values of the incomplete executions that you want to keep. Use the API call `GET /dlqs?scenarioId={scenarioId}` to get the ID values of the incomplete executions.
-  --all: string@bool-completer # Set to `true` to delete all incomplete executions of the specified scenario.
+  --all: oneof<nothing, bool> # Set to `true` to delete all incomplete executions of the specified scenario.
 ]: any -> record<dlqs: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3496,7 +3495,7 @@ export def "dlqs-retry post" [
   --allow-errors(-e) # Return full response without error handling
   --scenarioId: int # The ID of the scenario. You can get the `scenarioId` with the [List scenarios](/scenarios-get) API call. (e.g. 112)
   --ids: list # The list of incomplete execution IDs you want to retry. All of the IDs have to belong to the same scenario.
-  --all: string@bool-completer # Set to `true` to retry all incomplete executions of the scenario.
+  --all: oneof<nothing, bool> # Set to `true` to retry all incomplete executions of the scenario.
   --exceptIds: list # You can use this parameter together with the `all` parameter to specify incomplete execution IDs which shouldn't be retried.
 ]: any -> record<dlqs: list<string>> {
   let input = $in
@@ -3622,7 +3621,7 @@ export def "enums-languages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --localized: string@bool-completer # When set to true, the response contains localized language names, for example --  German: Deutch or Czech: Čeština. This setting limits the number of returned languages to those that have defined their localized name. The default value is `false`. (e.g. true)
+  --localized: oneof<nothing, bool> # When set to true, the response contains localized language names, for example --  German: Deutch or Czech: Čeština. This setting limits the number of returned languages to those that have defined their localized name. The default value is `false`. (e.g. true)
 ]: nothing -> record<languages: table<code: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3973,7 +3972,7 @@ export def "functions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # Confirms deleting of the custom function. If you are using the custom function in a scenario Make requires the confirmation. (e.g. true)
+  --confirmed: oneof<nothing, bool> # Confirms deleting of the custom function. If you are using the custom function in a scenario Make requires the confirmation. (e.g. true)
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4040,7 +4039,7 @@ export def "hooks list" [
   --allow-errors(-e) # Return full response without error handling
   --teamId: string # The unique ID of the team whose hooks will be retrieved. (e.g. 4)
   --typeName: string # The hook type. Two native Make hook types are `gateway-webhook` and `gateway-mailhook`. (e.g. gateway-webhook)
-  --assigned: string@bool-completer # Specifies if the hook is assigned to a scenario. If set to `true`, the request will return only the hooks which the `scenarioId` value is not set to null. (e.g. true)
+  --assigned: oneof<nothing, bool> # Specifies if the hook is assigned to a scenario. If set to `true`, the request will return only the hooks which the `scenarioId` value is not set to null. (e.g. true)
   --viewForScenarioId: int # This parameter shows only the hooks that can be used by a scenario with a specific ID, which means hooks that are not assigned to another scenario yet and the hook that is already assigned to this scenario. This can be useful because Make allows assigning any hook to only one scenario. If this parameter is set the `assigned` parameter is ignored. (e.g. 123)
 ]: nothing -> record<hooks: table<id: int, name: string, teamId: int, udid: string, type: string, packageName: string, theme: string, flags: record, editable: bool, queueCount: int, queueLimit: int, enabled: bool, gone: bool, typeName: string, data: record, scenarioId: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4066,9 +4065,9 @@ export def "hooks post" [
   name: string # The name of the hook. The name must be at most 128 characters long and does not need to be unique.
   teamId: string # The unique ID of the team in which a hook will be created.
   typeName: string # The hook type strictly related to the app for which the hook was created.
-  --method: string@bool-completer # Set the `method` parameter to `true` to add the HTTP method to the request body.
-  --headers: string@bool-completer # Set the `headers` parameter to `true` to add headers to the request body.
-  --stringify: string@bool-completer # Set the `stringify` parameter to `true` to return JSON payloads as strings.
+  --method: oneof<nothing, bool> # Set the `method` parameter to `true` to add the HTTP method to the request body.
+  --headers: oneof<nothing, bool> # Set the `headers` parameter to `true` to add headers to the request body.
+  --stringify: oneof<nothing, bool> # Set the `stringify` parameter to `true` to return JSON payloads as strings.
   --IMTCONN: int # The unique ID of the connection that will be included in the created hook.
   --formId: string # The unique ID of the form that will be included in the created hook.
 ]: any -> record<hook: record<id: int, name: string, teamId: int, udid: string, type: string, packageName: string, theme: string, flags: record<form: bool>, editable: bool, queueCount: int, queueLimit: int, enabled: bool, gone: bool, typeName: string, data: record<headers: bool, method: bool, stringify: bool, teamId: int, ip: string, udt: int>, scenarioId: int, url: string>, formula: record<success: list<any>>> {
@@ -4116,7 +4115,7 @@ export def "hooks delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # Confirms the deletion if a hook is included in the scenario. Confirmation is required because the scenario will stop working without the hook. If the parameter is missing or it is set to `false` an error code is returned and the resource is not deleted. (e.g. true)
+  --confirmed: oneof<nothing, bool> # Confirms the deletion if a hook is included in the scenario. Confirmation is required because the scenario will stop working without the hook. If the parameter is missing or it is set to `false` an error code is returned and the resource is not deleted. (e.g. true)
 ]: nothing -> record<hook: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4319,10 +4318,10 @@ export def "hooks-incomings delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # Set to `true` to confirm deleting the webhook queue items. Otherwise the API call fails with the error IM004 (406). (e.g. true)
+  --confirmed: oneof<nothing, bool> # Set to `true` to confirm deleting the webhook queue items. Otherwise the API call fails with the error IM004 (406). (e.g. true)
   --ids: list # The ID values of the webhook processing queue items that you want to delete. Use the API call `GET /hooks/{hookId}/incomings` to get the ID values of the webhook processing queue items.
   --exceptIds: list # If you are deleting all of the incomplete executions with the `all:true` parameter, you can specify the ID values of the webhook queue items that you want to keep. Use the API call `GET /hooks/{hookId}/incomings` to get the ID values of the webhook queue items.
-  --all: string@bool-completer # Set to `true` to delete all items in the webhook processing queue.
+  --all: oneof<nothing, bool> # Set to `true` to delete all items in the webhook processing queue.
 ]: any -> record<incomings: list<string>, error: record<name: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4446,7 +4445,7 @@ export def "imt-apps get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --organizationId: int # Organization context for filtering custom (SDK) apps and resolving feature controls.
-  --scoredSearch: string@bool-completer # If `true`, the response is enriched with scoring (zone + team usage) and modules are aggregated per version. Requires `teamId`. When omitted, a non-scored shape is returned.
+  --scoredSearch: oneof<nothing, bool> # If `true`, the response is enriched with scoring (zone + team usage) and modules are aggregated per version. Requires `teamId`. When omitted, a non-scored shape is returned.
   --teamId: int # Team whose usage drives team-level module scoring. **Required when `scoredSearch=true`**; ignored otherwise.
 ]: nothing -> record<apps: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4469,7 +4468,7 @@ export def "imt-apps-meta get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --skipSdkApps: string@bool-completer # If set to true, custom apps will be excluded from response. These are either apps developed by the requesters organisation or installed from a shared link
+  --skipSdkApps: oneof<nothing, bool> # If set to true, custom apps will be excluded from response. These are either apps developed by the requesters organisation or installed from a shared link
   --organizationId: int # If set, return custom apps only from given organizationid, still returning all verified apps Has no effect if skipSdkApps is set to true
 ]: nothing -> record<apps: table<name: string, label: string, foreign: bool, theme: string, version: int, isPrivate: bool, app: bool, categories: list, keywords: string, premiumTier: int, brand: any, coming_soon: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4670,7 +4669,7 @@ export def "internal-settings get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --settings: list # An array of settings IDs to include in the response. If omitted, all available settings are returned.
-  --includeNulls: string@bool-completer # Should the response include null values for settings that are not set for the specified?
+  --includeNulls: oneof<nothing, bool> # Should the response include null values for settings that are not set for the specified?
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4861,7 +4860,7 @@ export def "keys delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # Set this parameter to `true` to confirm deleting the key. Otherwise, you get an error and the key is not deleted. (e.g. true)
+  --confirmed: oneof<nothing, bool> # Set this parameter to `true` to confirm deleting the key. Otherwise, you get an error and the key is not deleted. (e.g. true)
 ]: nothing -> record<key: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4883,7 +4882,7 @@ export def "notifications list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --unreadOnly: string@bool-completer # If set to `true`, this parameter returns only the unread notifications. (e.g. false)
+  --unreadOnly: oneof<nothing, bool> # If set to `true`, this parameter returns only the unread notifications. (e.g. false)
   --imtZoneId: int # The unique ID of the Make zone. This parameter is required to retrieve notifications from the Make version. For other Make platforms, it can be ignored. The IDs of the zones can be obtained from the `/enums/imt-zones` endpoint. (e.g. 2)
   --pgsortBy: string@pgsortBy-completer-7 # The value that will be used to sort returned entities by. Notifications can be currently sorted only by ID.
   --pgoffset: int # The value of entities you want to skip before getting entities you need.
@@ -5337,7 +5336,7 @@ export def "organizations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # Set this parameter to `true` if you are using the API call `GET /organizations/{organizationId}` shortly after creating the organization. The API call will first check synchronization of the Make backend and your Make zone data. If you don't use this argument, the API call might fail with an error due to unfinished data synchronization. The default value of this argument is `false`. (e.g. true)
+  --wait: oneof<nothing, bool> # Set this parameter to `true` if you are using the API call `GET /organizations/{organizationId}` shortly after creating the organization. The API call will first check synchronization of the Make backend and your Make zone data. If you don't use this argument, the API call might fail with an error due to unfinished data synchronization. The default value of this argument is `false`. (e.g. true)
 ]: nothing -> record<organization: record<id: int, name: string, createdAt: string, serviceName: string, nextReset: string, lastReset: string, isPaused: bool, countryId: int, timezoneId: int, deleted: bool, license: record, zone: string, teams: list<record>, productName: string, ssoType: string, scenarios: int, activeScenarios: int, tfaEnforced: bool, featureControls: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5387,7 +5386,7 @@ export def "organizations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # Set to `true` to confirm the organization deletion. Otherwise, if the organization has active scenarios, Make won't delete the organization and the API call returns an error. (e.g. true)
+  --confirmed: oneof<nothing, bool> # Set to `true` to confirm the organization deletion. Otherwise, if the organization has active scenarios, Make won't delete the organization and the API call returns an error. (e.g. true)
 ]: nothing -> record<organization: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5644,7 +5643,7 @@ export def "organizations-subscription-free post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer
+  --confirmed: oneof<nothing, bool>
 ]: nothing -> record<customerId: int, subscriptionId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6001,7 +6000,7 @@ export def "organizations-variables delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # Set to `true` to confirm deleting the custom variable. Otherwise the API call fails with the error IM004 (406). (e.g. true)
+  --confirmed: oneof<nothing, bool> # Set to `true` to confirm deleting the custom variable. Otherwise the API call fails with the error IM004 (406). (e.g. true)
 ]: nothing -> record<ok: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6068,7 +6067,7 @@ export def "organizations-usage get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --organizationTimezone: string@bool-completer # When set to `true`, the endpoint will calculate and return usage data based on the organization's timezone instead of the user's local timezone. (e.g. true)
+  --organizationTimezone: oneof<nothing, bool> # When set to `true`, the endpoint will calculate and return usage data based on the organization's timezone instead of the user's local timezone. (e.g. true)
 ]: nothing -> record<data: table<date: string, operations: int, dataTransfer: int, centicredits: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6243,7 +6242,7 @@ export def "organizations-feature-controls patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: int # The ID of the feature control.
-  --enabled: string@bool-completer # Indicates whether the feature control is enabled (true) or disabled (false).
+  --enabled: oneof<nothing, bool> # Indicates whether the feature control is enabled (true) or disabled (false).
 ]: any -> record<featureControls: record<id: int, enabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6268,7 +6267,7 @@ export def "organizations-tfa-enforcement patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable: string@bool-completer # Set to `true` to enable TFA enforcement for the organization, or `false` to disable it.
+  --enable: oneof<nothing, bool> # Set to `true` to enable TFA enforcement for the organization, or `false` to disable it.
 ]: any -> record<organization: record<tfaEnforced: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6314,11 +6313,11 @@ export def "organizations-private-spaces-settings patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # Required when enabling/disabling auto-creation, toggling admin observers, or bulk-updating existing limits. (e.g. true)
-  --privateSpacesAutoCreationEnabled: string@bool-completer # When `true`, new members of the organization automatically get a private space.
+  --confirmed: oneof<nothing, bool> # Required when enabling/disabling auto-creation, toggling admin observers, or bulk-updating existing limits. (e.g. true)
+  --privateSpacesAutoCreationEnabled: oneof<nothing, bool> # When `true`, new members of the organization automatically get a private space.
   --defaultOperationsLimit: int # Default operations limit applied when a private space is auto-created. Pass `null` to set unlimited operations. (nullable)
-  --bulkUpdateExistingLimits: string@bool-completer # When `true`, applies `defaultOperationsLimit` to every existing private-space team in the organization. Requires `defaultOperationsLimit` to be provided in the same request (rejected with `IM005` otherwise).
-  --addAdminsAsObservers: string@bool-completer # When `true`, organization admins/owner are added as `Team Observer` to private spaces (and to all existing ones); when `false`, those implicit observers are removed. Enabling requires the `privateSpacesObservability` license (rejected with `SC402` otherwise).
+  --bulkUpdateExistingLimits: oneof<nothing, bool> # When `true`, applies `defaultOperationsLimit` to every existing private-space team in the organization. Requires `defaultOperationsLimit` to be provided in the same request (rejected with `IM005` otherwise).
+  --addAdminsAsObservers: oneof<nothing, bool> # When `true`, organization admins/owner are added as `Team Observer` to private spaces (and to all existing ones); when `false`, those implicit observers are removed. Enabling requires the `privateSpacesObservability` license (rejected with `SC402` otherwise).
 ]: any -> record<privateSpacesSettings: record<privateSpacesAutoCreationEnabled: bool, defaultOperationsLimit: int, addAdminsAsObservers: bool>, bulkCreatedTeamIds: list<int>, bulkUpdatedTeamIds: list<int>, bulkDeletedTeamIds: list<int>, observersAddedTeamIds: list<int>, observersRemovedTeamIds: list<int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6531,9 +6530,9 @@ export def "scenarios list" [
   --organizationId: int # The unique ID of the organization whose scenarios will be retrieved. If this parameter is set, the `teamId` parameter must be skipped. For each request either `teamId` or `organizationId` must be defined. (e.g. 11)
   --id: list # The array of IDs of scenarios to retrieve. (e.g. [1, 2, 3])
   --folderId: int # The unique ID of the folder containing scenarios you want to retrieve. (e.g. 1)
-  --isActive: string@bool-completer # Set this parameter to `true` to get only active scenarios in the response.  (e.g. true)
-  --islinked: string@bool-completer # This parameter is deprecated. Use the `isActive` parameter to filter for active scenarios instead.  (DEPRECATED, e.g. true)
-  --concept: string@bool-completer # If set to `true`, the response contains only scenario concepts. (e.g. true)
+  --isActive: oneof<nothing, bool> # Set this parameter to `true` to get only active scenarios in the response.  (e.g. true)
+  --islinked: oneof<nothing, bool> # This parameter is deprecated. Use the `isActive` parameter to filter for active scenarios instead.  (DEPRECATED, e.g. true)
+  --concept: oneof<nothing, bool> # If set to `true`, the response contains only scenario concepts. (e.g. true)
   --type: string@type-completer-3 # Limits the type of scenarios to be retrieved. (e.g. false)
   --cols: list # Specifies columns that are returned in the response. Use the `cols[]` parameter for every column that you want to return in the response. For example `GET /endpoint?cols[]=key1&cols[]=key2` to get both `key1` and `key2` columns in the response.  [Check the "Filtering" section for a full example.](/api-documentation/pagination-sorting-filtering/filtering)
   --pgoffset: int # The number of entities you want to skip before getting entities you want.
@@ -6562,7 +6561,7 @@ export def "scenarios post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --cols: list # Specifies columns that are returned in the response. Use the `cols[]` parameter for every column that you want to return in the response. For example `GET /endpoint?cols[]=key1&cols[]=key2` to get both `key1` and `key2` columns in the response.  [Check the "Filtering" section for a full example.](/api-documentation/pagination-sorting-filtering/filtering)
-  --confirmed: string@bool-completer # If set to `true` this parameter confirms the scenario creation when the scenario contains the app that is used in the organization for the first time and needs installation. If the parameter is missing or it is set to `false` an error code is returned and the scenario is not created. (e.g. true)
+  --confirmed: oneof<nothing, bool> # If set to `true` this parameter confirms the scenario creation when the scenario contains the app that is used in the organization for the first time and needs installation. If the parameter is missing or it is set to `false` an error code is returned and the scenario is not created. (e.g. true)
   blueprint: string # The scenario blueprint. To save resources, the blueprint is sent as a string, not as an object.
   teamId: int # The unique ID of the team in which the scenario will be created.
   scheduling: string # The scenario scheduling details. To save resources, the scheduling details are sent as a string, not as an object.
@@ -6617,7 +6616,7 @@ export def "scenarios patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --cols: list # Specifies columns that are returned in the response. Use the `cols[]` parameter for every column that you want to return in the response. For example `GET /endpoint?cols[]=key1&cols[]=key2` to get both `key1` and `key2` columns in the response.  [Check the "Filtering" section for a full example.](/api-documentation/pagination-sorting-filtering/filtering)
-  --confirmed: string@bool-completer # If set to `true` this parameter confirms the scenario update when the scenario contains the app that is used in the organization for the first time and needs installation. If the parameter is missing or it is set to `false` an error code is returned and the scenario is not updated. (e.g. true)
+  --confirmed: oneof<nothing, bool> # If set to `true` this parameter confirms the scenario update when the scenario contains the app that is used in the organization for the first time and needs installation. If the parameter is missing or it is set to `false` an error code is returned and the scenario is not updated. (e.g. true)
   --blueprint: string # The scenario blueprint. To save resources, the blueprint is sent as a string, not as an object.
   --scheduling: string # The scenario scheduling details. To save resources, the scheduling details are sent as a string, not as an object.
   --folderId: int # The unique ID of the folder in which you want to store created scenario.
@@ -6691,8 +6690,8 @@ export def "scenarios-clone post" [
   --allow-errors(-e) # Return full response without error handling
   --organizationId: int # The ID of the organization. (e.g. 11)
   --cols: list # Specifies columns that are returned in the response. Use the `cols[]` parameter for every column that you want to return in the response. For example `GET /endpoint?cols[]=key1&cols[]=key2` to get both `key1` and `key2` columns in the response.  [Check the "Filtering" section for a full example.](/api-documentation/pagination-sorting-filtering/filtering)
-  --confirmed: string@bool-completer # If the scenario contains a custom app or a custom function, that is not available in the team, you have to set the `confirmed` parameter to `true` to clone the scenario. Otherwise you get an error and the scenario is not cloned.
-  --notAnalyze: string@bool-completer # If you are cloning a scenario to a different team, you have to map the scenario entities (connections, data stores, webhooks, ...) from the original to the clone. If you cannot map all of the scenario entities, set the `notAnalyze` parameter to `true` to suppress the scenario blueprint analysis.
+  --confirmed: oneof<nothing, bool> # If the scenario contains a custom app or a custom function, that is not available in the team, you have to set the `confirmed` parameter to `true` to clone the scenario. Otherwise you get an error and the scenario is not cloned.
+  --notAnalyze: oneof<nothing, bool> # If you are cloning a scenario to a different team, you have to map the scenario entities (connections, data stores, webhooks, ...) from the original to the clone. If you cannot map all of the scenario entities, set the `notAnalyze` parameter to `true` to suppress the scenario blueprint analysis.
   name: string # The name for the scenario clone. The maximum length of the name is 120 characters.
   teamId: int # The ID of the team to which you want to clone the scenario.
   --account: record # Specify pairs of original and clone connection IDs to map connections to the cloned scenario.
@@ -6701,7 +6700,7 @@ export def "scenarios-clone post" [
   --device: record # Specify pairs of original and clone device IDs to map devices to the cloned scenario.
   --udt: record # Specify pairs of original and clone data structure IDs to map data structures to the cloned scenario.
   --datastore: record # Specify pairs of original and clone data store IDs to map data stores to the cloned scenario.
-  --states: string@bool-completer # Set to `true` to clone also states of the scenario modules, for example last scenario trigger execution. Setting to `false` resets the state information of the scenario modules in the scenario clone.
+  --states: oneof<nothing, bool> # Set to `true` to clone also states of the scenario modules, for example last scenario trigger execution. Setting to `false` resets the state information of the scenario modules in the scenario clone.
 ]: any -> record<scenario: record<id: int, name: string, teamId: int, hookId: int, devices: list<record>, deviceId: int, deviceScope: string, description: string, folderId: int, isinvalid: bool, islinked: bool, isActive: bool, islocked: bool, isPaused: bool, usedPackages: list<string>, lastEdit: string, scheduling: record<type: string, interval: int>, iswaiting: bool, dlqCount: int, createdByUser: record<id: int, name: string, email: string>, updatedByUser: record<id: int, name: string, email: string>, nextExec: string, created: string, scenarioVersion: int, moduleSequenceId: int, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6816,7 +6815,7 @@ export def "scenarios-run post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --data: record # If your scenario has inputs specify the input parameters and values in the `data` object.
-  --responsive: string@bool-completer # If set to `true` the Make API waits until the scenario finishes. The response contains the scenario `status` and `executionId`. If the scenario execution takes longer than 40 seconds, the API call returns the time out error, but the scenario is still executed.  If set to `false` the API call returns immediately without waiting. The response contains only the `executionId`. (default: false)
+  --responsive: oneof<nothing, bool> # If set to `true` the Make API waits until the scenario finishes. The response contains the scenario `status` and `executionId`. If the scenario execution takes longer than 40 seconds, the API call returns the time out error, but the scenario is still executed.  If set to `false` the API call returns immediately without waiting. The response contains only the `executionId`. (default: false)
   --callbackUrl: string # Url that will be called once the scenario execution finishes. If the run is responsive and finishes within 40 seconds, the url is not called since the result is present in the response.   The `callbackUrl` will be called using a `POST` request with the following body:  {  "executionId": `executionId`,  "statusUrl": "url to retrieve execution status and outputs via GET"  }  
 ]: any -> record<executionId: string, status: string> {
   let input = $in
@@ -6955,7 +6954,7 @@ export def "scenarios-usage get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --organizationTimezone: string@bool-completer # When set to `true`, the endpoint will calculate and return usage data based on the organization's timezone instead of the user's local timezone. (e.g. true)
+  --organizationTimezone: oneof<nothing, bool> # When set to `true`, the endpoint will calculate and return usage data based on the organization's timezone instead of the user's local timezone. (e.g. true)
 ]: nothing -> record<data: table<date: string, operations: int, dataTransfer: int, centicredits: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7087,10 +7086,10 @@ export def "scenarios-logs get-by-scenarioId" [
   --executionName: string # Filters logs by the execution name (partial match). (e.g. My run)
   --creditsFrom: int # Filters logs to only include executions with credits greater than or equal to this value (in centicredits). (e.g. 0)
   --creditsTo: int # Filters logs to only include executions with credits less than or equal to this value (in centicredits). (e.g. 1000)
-  --showCheckRuns: string@bool-completer # If set to `true`, this parameter specifies that check runs should be hidden in the returned results. Check runs concern scenarios starting with a trigger in cases when the trigger does not find anything new. (e.g. true)
+  --showCheckRuns: oneof<nothing, bool> # If set to `true`, this parameter specifies that check runs should be hidden in the returned results. Check runs concern scenarios starting with a trigger in cases when the trigger does not find anything new. (e.g. true)
   --pgoffset: int # The number of entities you want to skip before getting entities you want.
   --pglimit: int # The maximum number of entities you want to get in the response.
-  --pgshowLast: string@bool-completer # Include records with `last` value in the result set. Just in case of the `last` based paging. (e.g. true)
+  --pgshowLast: oneof<nothing, bool> # Include records with `last` value in the result set. Just in case of the `last` based paging. (e.g. true)
   --pglast: int # The last retrieved key. In response, you get only entries that follow after the key. (e.g. 10)
   --pgsortBy: string # The value that will be used to sort returned entities by.
   --pgsortDir: string@pgsortDir-completer # The sorting order. It accepts the ascending and descending direction specifiers.
@@ -7185,7 +7184,7 @@ export def "scenarios-executions-stop post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # If set to `true`, the execution is terminated immediately. If set to `false` or omitted, the execution stops after the current module finishes. (default: false)
+  --force: oneof<nothing, bool> # If set to `true`, the execution is terminated immediately. If set to `false` or omitted, the execution stops after the current module finishes. (default: false)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7265,7 +7264,7 @@ export def "scenarios-modules-logs get" [
   --allow-errors(-e) # Return full response without error handling
   --pgoffset: int # The number of entities you want to skip before getting entities you want.
   --pglimit: int # The maximum number of entities you want to get in the response.
-  --pgshowLast: string@bool-completer # Include records with `last` value in the result set. Just in case of the `last` based paging. (e.g. true)
+  --pgshowLast: oneof<nothing, bool> # Include records with `last` value in the result set. Just in case of the `last` based paging. (e.g. true)
   --pglast: int # The last retrieved key. In response, you get only entries that follow after the key. (e.g. 10)
   --pgsortBy: string # The value that will be used to sort returned entities by.
   --pgsortDir: string@pgsortDir-completer # The sorting order. It accepts the ascending and descending direction specifiers.
@@ -7318,7 +7317,7 @@ export def "scenarios-notes post" [
   --moduleIds: list
   --metadata: record
   --content: string
-  --isFilterNote: string@bool-completer
+  --isFilterNote: oneof<nothing, bool>
 ]: any -> record<note: record<id: int, scenarioId: int, moduleIds: list<int>, metadata: record, content: string, created: string, updated: string, scenariosTotal: int, isFilterNote: bool, createdByUser: record, updatedByUser: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7374,7 +7373,7 @@ export def "scenarios-notes patch" [
   --moduleIds: list
   --metadata: record
   --content: string
-  --isFilterNote: string@bool-completer
+  --isFilterNote: oneof<nothing, bool>
 ]: any -> record<note: record<id: int, scenarioId: int, moduleIds: list<int>, metadata: record, content: string, created: string, updated: string, scenariosTotal: int, isFilterNote: bool, createdByUser: record, updatedByUser: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7427,7 +7426,7 @@ export def "scenarios-consumption-overview get" [
   --allow-errors(-e) # Return full response without error handling
   --qp-from: int # The timestamp in milliseconds that defines the starting point of time from which the logs should be retrieved. Older logs will not be returned. (e.g. 1632395547)
   --qp-to: int # The timestamp in milliseconds that defines the ending point of time to which the logs should be retrieved. Newer logs will not be returned. (e.g. 1632395548)
-  --showCheckRuns: string@bool-completer # If set to `true`, this parameter specifies that check runs should be hidden in the returned results. Check runs concern scenarios starting with a trigger in cases when the trigger does not find anything new. (e.g. true)
+  --showCheckRuns: oneof<nothing, bool> # If set to `true`, this parameter specifies that check runs should be hidden in the returned results. Check runs concern scenarios starting with a trigger in cases when the trigger does not find anything new. (e.g. true)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7451,7 +7450,7 @@ export def "scenarios-blueprint get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --blueprintId: int # The unique ID of the blueprint version. It can be retrieved from the [Get blueprint versions](/api-reference/scenarios/blueprints/get--scenarios--scenarioid--blueprints.md) endpoint. This parameter can be useful when you want to retrieve the older version of the blueprint. (e.g. 12)
-  --draft: string@bool-completer # If this parameter is set to `true`, the draft version of the scenario blueprint will be retrieved. If set to `false`, the live version of the blueprint will be retrieved. In case that the `blueprintId` parameter is set to the query as well, this parameter is ignored. (e.g. false)
+  --draft: oneof<nothing, bool> # If this parameter is set to `true`, the draft version of the scenario blueprint will be retrieved. If set to `false`, the live version of the blueprint will be retrieved. In case that the `blueprintId` parameter is set to the query as well, this parameter is ignored. (e.g. false)
 ]: nothing -> record<code: string, response: record<blueprint: record<flow: list, name: string, metadata: record>, scheduling: record<type: string, interval: int, date: string, between: list, time: string, days: list, months: list, restrict: list, maximum_runs_per_minute: int>, idSequence: int, created: string, last_edit: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7908,7 +7907,7 @@ export def "scenarios-custom-properties delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # e.g. true
+  --confirmed: oneof<nothing, bool> # e.g. true
 ]: nothing -> record<ok: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7941,7 +7940,7 @@ export def "scenarios-shared get" [
   --pgoffset: int # Number of results to skip (for pagination). (default: 0, e.g. 0)
   --pgsortBy: string@pgsortBy-completer-9 # Column to sort results by. (default: id, e.g. title)
   --pgsortDir: string@pgsortDir-completer # Sort direction (ascending or descending). (default: desc, e.g. asc)
-  --pgreturnTotalCount: string@bool-completer # Whether to return the total count of matching records. (default: false, e.g. false)
+  --pgreturnTotalCount: oneof<nothing, bool> # Whether to return the total count of matching records. (default: false, e.g. false)
 ]: nothing -> record<scenariosShared: table<id: string, scenarioId: int, title: string, scenarioName: string, descriptionShort: string, scenarioUsedPackages: list, shareUrl: string, createdAt: string, updated: string>, pg: record<limit: int, offset: int, sortBy: string, sortDir: string, returnTotalCount: bool, totalCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7988,7 +7987,7 @@ export def "scenarios-shared post" [
   title: string
   --descriptionShort: string # nullable
   --descriptionLong: string # nullable
-  --isEnabled: string@bool-completer # default: false
+  --isEnabled: oneof<nothing, bool> # default: false
 ]: any -> record<scenarioShared: record<id: string, scenarioId: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8039,7 +8038,7 @@ export def "scenarios-shared patch" [
   --title: string
   --descriptionShort: string # nullable
   --descriptionLong: string # nullable
-  --isEnabled: string@bool-completer
+  --isEnabled: oneof<nothing, bool>
 ]: any -> record<scenarioShared: record<id: string, scenarioId: int, authorId: int, isEnabled: bool, origin: string, titleOriginal: string, title: string, descriptionShort: string, descriptionLong: string, thumbnailUrl: string, shareUrl: string, shareUrlCardinal: string, createdAt: string, updated: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8085,7 +8084,7 @@ export def "sdk-apps get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --opensource: string@bool-completer # If set to `true`, this parameter returns apps available to all users. If set to `false`, it retrieves the apps available to the authenticated user.
+  --opensource: oneof<nothing, bool> # If set to `true`, this parameter returns apps available to all users. If set to `false`, it retrieves the apps available to the authenticated user.
   --cols: list # Specifies the group of values to return. For example, you may want to retrieve only the names of the available apps. (e.g. name)
 ]: nothing -> record<apps: table<name: string, label: string, version: int, versionFull: string, beta: bool, description: string, theme: string, public: bool, approved: bool, in_review: bool, modules: list, opensource: bool, changes: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8277,7 +8276,7 @@ export def "sdk-apps-review post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # e.g. true
+  --all: oneof<nothing, bool> # e.g. true
   --Content-Type: string # e.g. application/json
 ]: nothing -> record<requested: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8401,7 +8400,7 @@ export def "sdk-apps-readme get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # e.g. true
+  --all: oneof<nothing, bool> # e.g. true
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8425,7 +8424,7 @@ export def "sdk-apps-readme put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # e.g. true
+  --all: oneof<nothing, bool> # e.g. true
   --Content-Type: string # e.g. text/markdown
   --body: record
 ]: any -> record<changed: bool> {
@@ -8463,7 +8462,7 @@ export def "sdk-apps-base post" [
   --Content-Type: string # e.g. application/jsonc
   --body-url: string # Request URL
   --baseUrl: string # Base URL for endpoints starting with /
-  --encodeUrl: string@bool-completer # This directive controls the encoding of URLs. It is on by default, so if you have any special characters in your URL, they will be automatically encoded. But there might be situations where you don't want your URL to be encoded automatically, or you want to control what parts of the URL are encoded. To do this, set this flag to false. (default: true)
+  --encodeUrl: oneof<nothing, bool> # This directive controls the encoding of URLs. It is on by default, so if you have any special characters in your URL, they will be automatically encoded. But there might be situations where you don't want your URL to be encoded automatically, or you want to control what parts of the URL are encoded. To do this, set this flag to false. (default: true)
   --method: any # This directive specifies the HTTP method that will be used to issue the request.
   --headers: record # This directive specifies headers that will be sent with the request.
   --qs: record # This directive specifies the query string to use when making the request.
@@ -8473,9 +8472,9 @@ export def "sdk-apps-base post" [
   --temp: record # The temp directive specifies an object, which can be used to create custom temporary variables. It also creates a temp variable in IML, through which you then access your variables. The temp collection is not persisted and will be lost after the module is done executing.
   --condition: any # This directive specifies whether to execute the request or not. (default: true)
   --aws: record # Helper directive, that will simplify generating AWS signatures. — shape: {key?: string, secret?: string, session?: string, bucket?: string, sign_version?: any}
-  --gzip: string@bool-completer # Add an Accept-Encoding header to request compressed content encodings from the server (if not already present) and decode supported content encodings in the response. (default: false)
-  --followRedirects: string@bool-completer # This directive specifies whether to follow GET HTTP 3xx responses as redirects or never. (default: true)
-  --followAllRedirects: string@bool-completer # This directive specifies whether to follow non-GET HTTP 3xx responses as redirects or never. (default: true)
+  --gzip: oneof<nothing, bool> # Add an Accept-Encoding header to request compressed content encodings from the server (if not already present) and decode supported content encodings in the response. (default: false)
+  --followRedirects: oneof<nothing, bool> # This directive specifies whether to follow GET HTTP 3xx responses as redirects or never. (default: true)
+  --followAllRedirects: oneof<nothing, bool> # This directive specifies whether to follow non-GET HTTP 3xx responses as redirects or never. (default: true)
   --log: record # This directive specifies logging options for both the request and the response. — shape: {sanitize?: list}
   --oauth: record # Helper directive, that will simplify generating an OAuth1 Authorization headers. — shape: {consumer_key?: string, consumer_secret?: string, private_key?: string, token?: string, token_secret?: string, verifier?: string, signature_method?: any, transport_method?: any, body_hash?: any}
   --pagination: record # Directive to specify how to process paginated responses. — shape: {mergeWithParent?: bool, url?: string, method?: any, headers?: record, qs?: record, body?: any, condition?: any}
@@ -8515,7 +8514,7 @@ export def "sdk-apps-base patch" [
   --Content-Type: string # e.g. application/jsonc
   --body-url: string # Request URL
   --baseUrl: string # Base URL for endpoints starting with /
-  --encodeUrl: string@bool-completer # This directive controls the encoding of URLs. It is on by default, so if you have any special characters in your URL, they will be automatically encoded. But there might be situations where you don't want your URL to be encoded automatically, or you want to control what parts of the URL are encoded. To do this, set this flag to false. (default: true)
+  --encodeUrl: oneof<nothing, bool> # This directive controls the encoding of URLs. It is on by default, so if you have any special characters in your URL, they will be automatically encoded. But there might be situations where you don't want your URL to be encoded automatically, or you want to control what parts of the URL are encoded. To do this, set this flag to false. (default: true)
   --method: any # This directive specifies the HTTP method that will be used to issue the request.
   --headers: record # This directive specifies headers that will be sent with the request.
   --qs: record # This directive specifies the query string to use when making the request.
@@ -8525,9 +8524,9 @@ export def "sdk-apps-base patch" [
   --temp: record # The temp directive specifies an object, which can be used to create custom temporary variables. It also creates a temp variable in IML, through which you then access your variables. The temp collection is not persisted and will be lost after the module is done executing.
   --condition: any # This directive specifies whether to execute the request or not. (default: true)
   --aws: record # Helper directive, that will simplify generating AWS signatures. — shape: {key?: string, secret?: string, session?: string, bucket?: string, sign_version?: any}
-  --gzip: string@bool-completer # Add an Accept-Encoding header to request compressed content encodings from the server (if not already present) and decode supported content encodings in the response. (default: false)
-  --followRedirects: string@bool-completer # This directive specifies whether to follow GET HTTP 3xx responses as redirects or never. (default: true)
-  --followAllRedirects: string@bool-completer # This directive specifies whether to follow non-GET HTTP 3xx responses as redirects or never. (default: true)
+  --gzip: oneof<nothing, bool> # Add an Accept-Encoding header to request compressed content encodings from the server (if not already present) and decode supported content encodings in the response. (default: false)
+  --followRedirects: oneof<nothing, bool> # This directive specifies whether to follow GET HTTP 3xx responses as redirects or never. (default: true)
+  --followAllRedirects: oneof<nothing, bool> # This directive specifies whether to follow non-GET HTTP 3xx responses as redirects or never. (default: true)
   --log: record # This directive specifies logging options for both the request and the response. — shape: {sanitize?: list}
   --oauth: record # Helper directive, that will simplify generating an OAuth1 Authorization headers. — shape: {consumer_key?: string, consumer_secret?: string, private_key?: string, token?: string, token_secret?: string, verifier?: string, signature_method?: any, transport_method?: any, body_hash?: any}
   --pagination: record # Directive to specify how to process paginated responses. — shape: {mergeWithParent?: bool, url?: string, method?: any, headers?: record, qs?: record, body?: any, condition?: any}
@@ -8713,7 +8712,7 @@ export def "sdk-apps-commit post" [
   --allow-errors(-e) # Return full response without error handling
   --Content-Type: string # e.g. application/json
   --message: string
-  --notify: string@bool-completer
+  --notify: oneof<nothing, bool>
   --changeIds: list
 ]: any -> any {
   let input = $in
@@ -9055,7 +9054,7 @@ export def "sdk-apps-modules put-by-SDK_appName-SDK_appVersion-SDK_moduleName" [
   --allow-errors(-e) # Return full response without error handling
   --body-url: string # Request URL
   --baseUrl: string # Base URL for endpoints starting with /
-  --encodeUrl: string@bool-completer # This directive controls the encoding of URLs. It is on by default, so if you have any special characters in your URL, they will be automatically encoded. But there might be situations where you don't want your URL to be encoded automatically, or you want to control what parts of the URL are encoded. To do this, set this flag to false. (default: true)
+  --encodeUrl: oneof<nothing, bool> # This directive controls the encoding of URLs. It is on by default, so if you have any special characters in your URL, they will be automatically encoded. But there might be situations where you don't want your URL to be encoded automatically, or you want to control what parts of the URL are encoded. To do this, set this flag to false. (default: true)
   --method: any # This directive specifies the HTTP method that will be used to issue the request.
   --headers: record # This directive specifies headers that will be sent with the request.
   --qs: record # This directive specifies the query string to use when making the request.
@@ -9065,9 +9064,9 @@ export def "sdk-apps-modules put-by-SDK_appName-SDK_appVersion-SDK_moduleName" [
   --temp: record # The temp directive specifies an object, which can be used to create custom temporary variables. It also creates a temp variable in IML, through which you then access your variables. The temp collection is not persisted and will be lost after the module is done executing.
   --condition: any # This directive specifies whether to execute the request or not. (default: true)
   --aws: record # Helper directive, that will simplify generating AWS signatures. — shape: {key?: string, secret?: string, session?: string, bucket?: string, sign_version?: any}
-  --gzip: string@bool-completer # Add an Accept-Encoding header to request compressed content encodings from the server (if not already present) and decode supported content encodings in the response. (default: false)
-  --followRedirects: string@bool-completer # This directive specifies whether to follow GET HTTP 3xx responses as redirects or never. (default: true)
-  --followAllRedirects: string@bool-completer # This directive specifies whether to follow non-GET HTTP 3xx responses as redirects or never. (default: true)
+  --gzip: oneof<nothing, bool> # Add an Accept-Encoding header to request compressed content encodings from the server (if not already present) and decode supported content encodings in the response. (default: false)
+  --followRedirects: oneof<nothing, bool> # This directive specifies whether to follow GET HTTP 3xx responses as redirects or never. (default: true)
+  --followAllRedirects: oneof<nothing, bool> # This directive specifies whether to follow non-GET HTTP 3xx responses as redirects or never. (default: true)
   --log: record # This directive specifies logging options for both the request and the response. — shape: {sanitize?: list}
   --oauth: record # Helper directive, that will simplify generating an OAuth1 Authorization headers. — shape: {consumer_key?: string, consumer_secret?: string, private_key?: string, token?: string, token_secret?: string, verifier?: string, signature_method?: any, transport_method?: any, body_hash?: any}
   --pagination: record # Directive to specify how to process paginated responses. — shape: {mergeWithParent?: bool, url?: string, method?: any, headers?: record, qs?: record, body?: any, condition?: any}
@@ -9110,7 +9109,7 @@ export def "sdk-apps-modules-epoch put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-url: string # Request URL
-  --encodeUrl: string@bool-completer # This directive controls the encoding of URLs. It is on by default, so if you have any special characters in your URL, they will be automatically encoded. But there might be situations where you don't want your URL to be encoded automatically, or you want to control what parts of the URL are encoded. To do this, set this flag to false. (default: true)
+  --encodeUrl: oneof<nothing, bool> # This directive controls the encoding of URLs. It is on by default, so if you have any special characters in your URL, they will be automatically encoded. But there might be situations where you don't want your URL to be encoded automatically, or you want to control what parts of the URL are encoded. To do this, set this flag to false. (default: true)
   --method: any
   --headers: record # Request headers
   --qs: record # Query string parameters
@@ -9121,9 +9120,9 @@ export def "sdk-apps-modules-epoch put" [
   --condition: any # default: true
   --aws: record # Helper directive, that will simplify generating AWS signatures. — shape: {key?: string, secret?: string, session?: string, bucket?: string, sign_version?: any}
   --oauth: record # Helper directive, that will simplify generating an OAuth1 Authorization headers. — shape: {consumer_key?: string, consumer_secret?: string, private_key?: string, token?: string, token_secret?: string, verifier?: string, signature_method?: any, transport_method?: any, body_hash?: any}
-  --gzip: string@bool-completer # Add an Accept-Encoding header to request compressed content encodings from the server (if not already present) and decode supported content encodings in the response. (default: false)
-  --followRedirects: string@bool-completer # This directive specifies whether to follow GET HTTP 3xx responses as redirects or never. (default: true)
-  --followAllRedirects: string@bool-completer # This directive specifies whether to follow non-GET HTTP 3xx responses as redirects or never. (default: true)
+  --gzip: oneof<nothing, bool> # Add an Accept-Encoding header to request compressed content encodings from the server (if not already present) and decode supported content encodings in the response. (default: false)
+  --followRedirects: oneof<nothing, bool> # This directive specifies whether to follow GET HTTP 3xx responses as redirects or never. (default: true)
+  --followAllRedirects: oneof<nothing, bool> # This directive specifies whether to follow non-GET HTTP 3xx responses as redirects or never. (default: true)
   --log: record # This directive specifies logging options for both the request and the response. — shape: {sanitize?: list}
   --pagination: record # Directive to specify how to process paginated responses. — shape: {mergeWithParent?: bool, url?: string, method?: any, headers?: record, qs?: record, body?: any, condition?: any}
   --repeat: record # Repeats a request under a certain condition with a predefined delay in milliseconds. The maximum number of repeats can be bounded by the repeat.limit. — shape: {condition?: string, delay?: float, limit?: float}
@@ -9660,7 +9659,7 @@ export def "sdk-apps-functions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # e.g. true
+  --all: oneof<nothing, bool> # e.g. true
 ]: nothing -> record<appFunctions: table<name: string, args: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10182,7 +10181,7 @@ export def "sdk-apps-webhooks put" [
   --allow-errors(-e) # Return full response without error handling
   --Content-Type: string # e.g. application/jsonc
   --output: string
-  --test: string@bool-completer
+  --test: oneof<nothing, bool>
 ]: any -> record<change: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10284,7 +10283,7 @@ export def "private-spaces delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # When `true`, confirms the deletion.
+  --confirmed: oneof<nothing, bool> # When `true`, confirms the deletion.
 ]: nothing -> record<privateSpaceId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10330,7 +10329,7 @@ export def "private-spaces patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # When `true`, confirms the operation even if the new limit is below the current consumption. This will pause the private space.
+  --confirmed: oneof<nothing, bool> # When `true`, confirms the operation even if the new limit is below the current consumption. This will pause the private space.
   --operationsLimit: int # Optional. The new operations limit for the private space. Transfer limit is auto-calculated. Set to `null` to remove limits, omit to leave unchanged. (nullable, e.g. 10000)
 ]: any -> record<privateSpace: record<id: int, name: string, organizationId: int, deleted: bool, externalId: string, globalAgentsEnabled: bool, type: string, privateSpaceOwnerName: string, privateSpaceOwnerEmail: string, privateSpaceOwnerId: int, operationsLimit: int, transferLimit: string, consumedOperations: int, consumedTransfer: string, isPaused: bool, consumedCenticredits: int>> {
   let input = $in
@@ -10557,7 +10556,7 @@ export def "teams patch" [
   --cols: list # Specifies columns that are returned in the response. Use the `cols[]` parameter for every column that you want to return in the response. For example `GET /endpoint?cols[]=key1&cols[]=key2` to get both `key1` and `key2` columns in the response.  [Check the "Filtering" section for a full example.](/api-documentation/pagination-sorting-filtering/filtering)
   --name: string # The new name of the team. Maximum length is 128 characters.
   --operationsLimit: int # The maximum number of operations allowed for the team.
-  --scenarioDrafts: string@bool-completer # This property is deprecated. It is only supported on private instances and ignored on Make's public cloud.  (DEPRECATED)
+  --scenarioDrafts: oneof<nothing, bool> # This property is deprecated. It is only supported on private instances and ignored on Make's public cloud.  (DEPRECATED)
 ]: any -> record<team: record<id: int, name: string, organizationId: int, operationsLimit: int, transferLimit: any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10583,7 +10582,7 @@ export def "teams delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # Set this parameter to `true` to confirm the team deletion. Otherwise, the API call returns an error and the team is not deleted. (e.g. true)
+  --confirmed: oneof<nothing, bool> # Set this parameter to `true` to confirm the team deletion. Otherwise, the API call returns an error and the team is not deleted. (e.g. true)
 ]: nothing -> record<team: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10737,7 +10736,7 @@ export def "teams-variables delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # Set to `true` to confirm deleting the custom variable. Otherwise the API call fails with the error IM004 (406). (e.g. true)
+  --confirmed: oneof<nothing, bool> # Set to `true` to confirm deleting the custom variable. Otherwise the API call fails with the error IM004 (406). (e.g. true)
 ]: nothing -> record<ok: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10810,7 +10809,7 @@ export def "teams-usage get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --organizationTimezone: string@bool-completer # When set to `true`, the endpoint will calculate and return usage data based on the organization's timezone instead of the user's local timezone. (e.g. true)
+  --organizationTimezone: oneof<nothing, bool> # When set to `true`, the endpoint will calculate and return usage data based on the organization's timezone instead of the user's local timezone. (e.g. true)
 ]: nothing -> record<data: table<date: string, operations: int, dataTransfer: int, centicredits: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10908,7 +10907,7 @@ export def "templates list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --teamId: int # The unique ID of the team whose templates will be retrieved. (e.g. 1)
-  --public: string@bool-completer # Indicates if the template is public which means that it was published and approved, and can be accessed by anyone. (e.g. true)
+  --public: oneof<nothing, bool> # Indicates if the template is public which means that it was published and approved, and can be accessed by anyone. (e.g. true)
   --usedApps: list # The array with the text IDs of the apps used in the templates. This parameter allows you to get only the templates containing specific apps. (e.g. [http])
   --cols: list # Specifies the group of values to return. For example, you may want to retrieve only the names and IDs of the templates.
   --pgsortBy: string # The value that will be used to sort returned entities by.
@@ -11027,7 +11026,7 @@ export def "templates delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # Confirms the deletion of the private or published template. If the parameter is missing or it is set to `false` an error code is returned and the resource is not deleted. The public (approved) templates can only be deleted by administrators. (e.g. true)
+  --confirmed: oneof<nothing, bool> # Confirms the deletion of the private or published template. If the parameter is missing or it is set to `false` an error code is returned and the resource is not deleted. The public (approved) templates can only be deleted by administrators. (e.g. true)
 ]: nothing -> record<template: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11050,7 +11049,7 @@ export def "templates-blueprint get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forUse: string@bool-completer # If this parameter is set to `true`, it means the blueprint should be used for creating a scenario from the template. (e.g. true)
+  --forUse: oneof<nothing, bool> # If this parameter is set to `true`, it means the blueprint should be used for creating a scenario from the template. (e.g. true)
   --templatePublicId: int # The unique ID of the public version of the approved template. It can be retrieved from the [List templates](/api-reference/templates/get--templates.md) endpoint as one of the following IDs: `publishedId` for all published templates that are waiting for approval or not, or `approvedId` for approved templates. (e.g. 18)
 ]: nothing -> record<blueprint: record<flow: list<record>, name: string, metadata: record<version: int, scenario: record>>, controller: record<name: string, modules: record, idSequence: int>, scheduling: record<type: string, interval: int>, language: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11123,7 +11122,7 @@ export def "templates-public list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeEn: string@bool-completer # If this parameter is set to `true`, it means English templates should be included in the response. This is relevant only if the user's language is not English. (e.g. true)
+  --includeEn: oneof<nothing, bool> # If this parameter is set to `true`, it means English templates should be included in the response. This is relevant only if the user's language is not English. (e.g. true)
   --name: string # The name of the template. This parameter allows limiting returned results to the template(s) with the given name. (e.g. my first template)
   --usedApps: list # The array with the text IDs of the apps used in the templates. This parameter allows you to get only the templates containing specific apps. (e.g. [http])
   --cols: list # Specifies the group of values to return. For example, you may want to retrieve only the names and IDs of the public templates.
@@ -11234,7 +11233,7 @@ export def "users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deleteConnections: string@bool-completer # Whether to delete all user connections (accounts, webhooks, etc). (default: false)
+  --deleteConnections: oneof<nothing, bool> # Whether to delete all user connections (accounts, webhooks, etc). (default: false)
   --currentPassword: string # User's current password (required if user has a password set).
   --tfaCode: string # Two-factor authentication code (required if 2FA is enabled).
 ]: any -> record<user: int> {
@@ -11414,7 +11413,7 @@ export def "users-me get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeInvitedOrg: string@bool-completer # Set this parameter to `true` if you want to get also the user roles in organizations with pending invitation. The default value is `false`.
+  --includeInvitedOrg: oneof<nothing, bool> # Set this parameter to `true` if you want to get also the user roles in organizations with pending invitation. The default value is `false`.
   --cols: list # Specifies columns that are returned in the response. Use the `cols[]` parameter for every column that you want to return in the response. For example `GET /endpoint?cols[]=key1&cols[]=key2` to get both `key1` and `key2` columns in the response.  [Check the "Filtering" section for a full example.](/api-documentation/pagination-sorting-filtering/filtering)
 ]: nothing -> record<authUser: record<id: int, name: string, email: string, language: string, timezoneId: int, localeId: int, countryId: int, features: record<allow_apps: bool>, avatar: string, lastLogin: string, tfaStatus: int, supportEligible: bool, userTeamIds: list<int>, privateSpace: record<id: int, name: string, globalAgentsEnabled: bool, type: string, operationsLimit: int, transferLimit: any, consumedOperations: int, consumedTransfer: any, isPaused: bool, consumedCenticredits: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11750,7 +11749,7 @@ export def "users-user-team-notifications put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Enables or disables team notification type for the user.
+  --enabled: oneof<nothing, bool> # Enables or disables team notification type for the user.
 ]: any -> record<userTeamNotification: record<userId: int, teamId: int, notificationId: int, enabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12001,8 +12000,8 @@ export def "users-user-organization-roles post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --cols: list # Specifies columns that are returned in the response. Use the `cols[]` parameter for every column that you want to return in the response. For example `GET /endpoint?cols[]=key1&cols[]=key2` to get both `key1` and `key2` columns in the response.  [Check the "Filtering" section for a full example.](/api-documentation/pagination-sorting-filtering/filtering)
-  --confirmed: string@bool-completer # Use this parameter when you are removing a user from an organization. Set this parameter to `true` is you want to delete the user's connections from the organization with the parameter `deleteConnections`.
-  --deleteConnections: string@bool-completer # Set this parameter to `true` if you are removing a user from an organization to delete also the user's connections. If you set this parameter to `false`, the API call won't delete the user's connections.
+  --confirmed: oneof<nothing, bool> # Use this parameter when you are removing a user from an organization. Set this parameter to `true` is you want to delete the user's connections from the organization with the parameter `deleteConnections`.
+  --deleteConnections: oneof<nothing, bool> # Set this parameter to `true` if you are removing a user from an organization to delete also the user's connections. If you set this parameter to `false`, the API call won't delete the user's connections.
   --usersRoleId: int # The ID of the user role. Check the `GET /users/roles` API call for the available `usersRoleId` values.
 ]: any -> record<userOrganizationRole: record<userId: int, organizationId: int, usersRoleId: int, invitation: string>> {
   let input = $in
@@ -12139,7 +12138,7 @@ export def "mailhub-users-preferences patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<preferences: record<global: record<preferences: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12190,7 +12189,7 @@ export def "mailhub-users-organizations-teams-preferences patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<team: record<preferences: record<id: string, enabled: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12218,7 +12217,7 @@ export def "mailhub-users-organizations-teams-native-preferences patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string # format: utc-millisec
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<team: record<preferences: record<id: string, enabled: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

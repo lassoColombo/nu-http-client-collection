@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://app.tolgee.io"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -1506,8 +1505,8 @@ export def "projects-import-settings store" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --overrideKeyDescriptions: string@bool-completer # If true, key descriptions will be overridden by the import
-  --createNewKeys: string@bool-completer # If false, only updates keys, skipping the creation of new keys
+  --overrideKeyDescriptions: oneof<nothing, bool> # If true, key descriptions will be overridden by the import
+  --createNewKeys: oneof<nothing, bool> # If false, only updates keys, skipping the creation of new keys
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1553,8 +1552,8 @@ export def "projects-import-settings store-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --overrideKeyDescriptions: string@bool-completer # If true, key descriptions will be overridden by the import
-  --createNewKeys: string@bool-completer # If false, only updates keys, skipping the creation of new keys
+  --overrideKeyDescriptions: oneof<nothing, bool> # If true, key descriptions will be overridden by the import
+  --createNewKeys: oneof<nothing, bool> # If false, only updates keys, skipping the creation of new keys
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1650,14 +1649,14 @@ export def "projects editProject" [
   name: string
   --slug: string
   --baseLanguageId: int # format: int64
-  --useNamespaces: string@bool-completer
-  --useBranching: string@bool-completer
+  --useNamespaces: oneof<nothing, bool>
+  --useBranching: oneof<nothing, bool>
   --defaultNamespaceId: int # format: int64
   --description: string
-  --icuPlaceholders: string@bool-completer # Whether to use ICU placeholder visualization in the editor and it's support.
+  --icuPlaceholders: oneof<nothing, bool> # Whether to use ICU placeholder visualization in the editor and it's support.
   suggestionsMode: string@suggestionsMode-completer # Suggestions can be DISABLED (hidden from UI) or ENABLED (visible in the UI)
   translationProtection: string@translationProtection-completer # Protects reviewed translations, so translators can't change them by default and others will receive warning.
-  --unassignConflictingTms: string@bool-completer # When true, the request is allowed to unassign shared translation memories whose source language differs from the new base language. Without this flag, such a conflict is rejected with `cannot_change_project_base_language_tm_conflict`. The frontend should only set this after the user explicitly confirms in the conflict dialog.
+  --unassignConflictingTms: oneof<nothing, bool> # When true, the request is allowed to unassign shared translation memories whose source language differs from the new base language. Without this flag, such a conflict is rejected with `cannot_change_project_base_language_tm_conflict`. The frontend should only set this after the user explicitly confirms in the conflict dialog.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1730,7 +1729,7 @@ export def "projects-webhook-configs update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-url: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2273,19 +2272,19 @@ export def "projects-translations list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --cursor: string # Cursor to get next data
-  --includeQaIssues: string@bool-completer # Include detailed QA issues for inline highlighting
+  --includeQaIssues: oneof<nothing, bool> # Include detailed QA issues for inline highlighting
   --filterState: list # Translation state in the format: languageTag,state. You can use this parameter multiple times.  When used with multiple states for same language it is applied with logical OR.    When used with multiple languages, it is applied with logical AND.     
   --languages: list # Languages to be contained in response.                  To add multiple languages, repeat this param (eg. ?languages=en&languages=de) (e.g. en)
   --search: string # String to search in key name or translation text
   --filterKeyName: list # Selects key with provided names. Use this param multiple times to fetch more keys.
   --filterKeyId: list # Selects key with provided ID. Use this param multiple times to fetch more keys.
-  --filterUntranslatedAny: string@bool-completer # Selects only keys for which the translation is missing in any returned language. It only filters for translations included in returned languages.
-  --filterTranslatedAny: string@bool-completer # Selects only keys, where translation is provided in any language
+  --filterUntranslatedAny: oneof<nothing, bool> # Selects only keys for which the translation is missing in any returned language. It only filters for translations included in returned languages.
+  --filterTranslatedAny: oneof<nothing, bool> # Selects only keys, where translation is provided in any language
   --filterUntranslatedInLang: string # Selects only keys where the translation is missing for the specified language. The specified language must be included in the returned languages. Otherwise, this filter doesn't apply. (e.g. en-US)
   --filterTranslatedInLang: string # Selects only keys, where translation is provided in specified language (e.g. en-US)
   --filterAutoTranslatedInLang: list # Selects only keys, where translation was auto translated for specified languages. (e.g. en-US)
-  --filterHasScreenshot: string@bool-completer # Selects only keys with screenshots
-  --filterHasNoScreenshot: string@bool-completer # Selects only keys without screenshots
+  --filterHasScreenshot: oneof<nothing, bool> # Selects only keys with screenshots
+  --filterHasNoScreenshot: oneof<nothing, bool> # Selects only keys without screenshots
   --filterNamespace: list # Selects only keys with provided namespaces.   To filter default namespace, set to empty string.   
   --filterNoNamespace: list # Selects only keys without provided namespaces.   To filter default namespace, set to empty string.   
   --filterTag: list # Selects only keys with provided tag
@@ -2295,8 +2294,8 @@ export def "projects-translations list" [
   --filterRevisionId: list # Selects only key affected by activity with specidfied revision ID (e.g. 1234567)
   --filterFailedKeysOfJob: int # Select only keys which were not successfully translated by batch job with provided id (format: int64)
   --filterTaskNumber: list # Select only keys which are in specified task
-  --filterTaskKeysNotDone: string@bool-completer # Filter task keys which are `not done`
-  --filterTaskKeysDone: string@bool-completer # Filter task keys which are `done`
+  --filterTaskKeysNotDone: oneof<nothing, bool> # Filter task keys which are `not done`
+  --filterTaskKeysDone: oneof<nothing, bool> # Filter task keys which are `done`
   --filterHasUnresolvedCommentsInLang: list # Filter keys with unresolved comments in lang
   --filterHasCommentsInLang: list # Filter keys with any comments in lang
   --filterLabel: list # Filter key translations with labels (e.g. labelId1,labelId2)
@@ -2393,19 +2392,19 @@ export def "projects-translations get-by-" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --cursor: string # Cursor to get next data
-  --includeQaIssues: string@bool-completer # Include detailed QA issues for inline highlighting
+  --includeQaIssues: oneof<nothing, bool> # Include detailed QA issues for inline highlighting
   --filterState: list # Translation state in the format: languageTag,state. You can use this parameter multiple times.  When used with multiple states for same language it is applied with logical OR.    When used with multiple languages, it is applied with logical AND.     
   --languages: list # Languages to be contained in response.                  To add multiple languages, repeat this param (eg. ?languages=en&languages=de) (e.g. en)
   --search: string # String to search in key name or translation text
   --filterKeyName: list # Selects key with provided names. Use this param multiple times to fetch more keys.
   --filterKeyId: list # Selects key with provided ID. Use this param multiple times to fetch more keys.
-  --filterUntranslatedAny: string@bool-completer # Selects only keys for which the translation is missing in any returned language. It only filters for translations included in returned languages.
-  --filterTranslatedAny: string@bool-completer # Selects only keys, where translation is provided in any language
+  --filterUntranslatedAny: oneof<nothing, bool> # Selects only keys for which the translation is missing in any returned language. It only filters for translations included in returned languages.
+  --filterTranslatedAny: oneof<nothing, bool> # Selects only keys, where translation is provided in any language
   --filterUntranslatedInLang: string # Selects only keys where the translation is missing for the specified language. The specified language must be included in the returned languages. Otherwise, this filter doesn't apply. (e.g. en-US)
   --filterTranslatedInLang: string # Selects only keys, where translation is provided in specified language (e.g. en-US)
   --filterAutoTranslatedInLang: list # Selects only keys, where translation was auto translated for specified languages. (e.g. en-US)
-  --filterHasScreenshot: string@bool-completer # Selects only keys with screenshots
-  --filterHasNoScreenshot: string@bool-completer # Selects only keys without screenshots
+  --filterHasScreenshot: oneof<nothing, bool> # Selects only keys with screenshots
+  --filterHasNoScreenshot: oneof<nothing, bool> # Selects only keys without screenshots
   --filterNamespace: list # Selects only keys with provided namespaces.   To filter default namespace, set to empty string.   
   --filterNoNamespace: list # Selects only keys without provided namespaces.   To filter default namespace, set to empty string.   
   --filterTag: list # Selects only keys with provided tag
@@ -2415,8 +2414,8 @@ export def "projects-translations get-by-" [
   --filterRevisionId: list # Selects only key affected by activity with specidfied revision ID (e.g. 1234567)
   --filterFailedKeysOfJob: int # Select only keys which were not successfully translated by batch job with provided id (format: int64)
   --filterTaskNumber: list # Select only keys which are in specified task
-  --filterTaskKeysNotDone: string@bool-completer # Filter task keys which are `not done`
-  --filterTaskKeysDone: string@bool-completer # Filter task keys which are `done`
+  --filterTaskKeysNotDone: oneof<nothing, bool> # Filter task keys which are `not done`
+  --filterTaskKeysDone: oneof<nothing, bool> # Filter task keys which are `done`
   --filterHasUnresolvedCommentsInLang: list # Filter keys with unresolved comments in lang
   --filterHasCommentsInLang: list # Filter keys with any comments in lang
   --filterLabel: list # Filter key translations with labels (e.g. labelId1,labelId2)
@@ -2512,8 +2511,8 @@ export def "projects-translation-memories updateAssignment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --readAccess: string@bool-completer # Whether this project can read from the TM
-  --writeAccess: string@bool-completer # Whether this project writes new translations to the TM
+  --readAccess: oneof<nothing, bool> # Whether this project can read from the TM
+  --writeAccess: oneof<nothing, bool> # Whether this project writes new translations to the TM
   --priority: int # Priority in suggestion results (lower = higher priority). Omit to leave the current priority unchanged. (format: int32)
   --penalty: int # Per-assignment penalty override (0–100). When null, the TM's default penalty applies. (format: int32)
 ]: any -> any {
@@ -2542,8 +2541,8 @@ export def "projects-translation-memories assign" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --readAccess: string@bool-completer # Whether this project can read from the TM
-  --writeAccess: string@bool-completer # Whether this project writes new translations to the TM
+  --readAccess: oneof<nothing, bool> # Whether this project can read from the TM
+  --writeAccess: oneof<nothing, bool> # Whether this project writes new translations to the TM
   --priority: int # Priority in suggestion results (lower = higher priority). When null, the assignment is placed after every existing one (max + 1) so it stacks at the bottom of the list. (format: int32)
   --penalty: int # Per-assignment penalty override (0–100). When null, the TM's default penalty applies. (format: int32)
 ]: any -> any {
@@ -2594,8 +2593,8 @@ export def "projects-translation-memories updateAssignment-by-translationMemoryI
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --readAccess: string@bool-completer # Whether this project can read from the TM
-  --writeAccess: string@bool-completer # Whether this project writes new translations to the TM
+  --readAccess: oneof<nothing, bool> # Whether this project can read from the TM
+  --writeAccess: oneof<nothing, bool> # Whether this project writes new translations to the TM
   --priority: int # Priority in suggestion results (lower = higher priority). Omit to leave the current priority unchanged. (format: int32)
   --penalty: int # Per-assignment penalty override (0–100). When null, the TM's default penalty applies. (format: int32)
 ]: any -> any {
@@ -2623,8 +2622,8 @@ export def "projects-translation-memories assign-by-translationMemoryId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --readAccess: string@bool-completer # Whether this project can read from the TM
-  --writeAccess: string@bool-completer # Whether this project writes new translations to the TM
+  --readAccess: oneof<nothing, bool> # Whether this project can read from the TM
+  --writeAccess: oneof<nothing, bool> # Whether this project writes new translations to the TM
   --priority: int # Priority in suggestion results (lower = higher priority). When null, the assignment is placed after every existing one (max + 1) so it stacks at the bottom of the list. (format: int32)
   --penalty: int # Per-assignment penalty override (0–100). When null, the TM's default penalty applies. (format: int32)
 ]: any -> any {
@@ -2674,7 +2673,7 @@ export def "projects-translation-memories-project-tm-settings updateProjectTmSet
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --writeOnlyReviewed: string@bool-completer # When true, only translations whose state is REVIEWED are written to this project's own TM. Translations that drop back to TRANSLATED or UNTRANSLATED also remove the entry. TMX import and direct TM-browser edits bypass this filter.
+  --writeOnlyReviewed: oneof<nothing, bool> # When true, only translations whose state is REVIEWED are written to this project's own TM. Translations that drop back to TRANSLATED or UNTRANSLATED also remove the entry. TMX import and direct TM-browser edits bypass this filter.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2699,7 +2698,7 @@ export def "projects-translation-memories-project-tm-settings updateProjectTmSet
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --writeOnlyReviewed: string@bool-completer # When true, only translations whose state is REVIEWED are written to this project's own TM. Translations that drop back to TRANSLATED or UNTRANSLATED also remove the entry. TMX import and direct TM-browser edits bypass this filter.
+  --writeOnlyReviewed: oneof<nothing, bool> # When true, only translations whose state is REVIEWED are written to this project's own TM. Translations that drop back to TRANSLATED or UNTRANSLATED also remove the entry. TMX import and direct TM-browser edits bypass this filter.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2795,7 +2794,7 @@ export def "projects-tasks-keys updateTaskKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --done: string@bool-completer
+  --done: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2822,7 +2821,7 @@ export def "projects-tasks-keys updateTaskKey-by-taskNumber-keyId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --done: string@bool-completer
+  --done: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3312,7 +3311,7 @@ export def "projects-qa-settings-enabled setQaEnabled" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3782,7 +3781,7 @@ export def "projects-languages-key-suggestion-accept acceptSuggestion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --declineOther: string@bool-completer
+  --declineOther: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3808,7 +3807,7 @@ export def "projects-languages-key-suggestion-accept acceptSuggestion-by-languag
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --declineOther: string@bool-completer
+  --declineOther: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3861,8 +3860,8 @@ export def "projects-keys-auto-translate autoTranslate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --languages: list # Tags of languages to auto-translate.  When no languages provided, it translates only untranslated languages.
-  --useMachineTranslation: string@bool-completer
-  --useTranslationMemory: string@bool-completer
+  --useMachineTranslation: oneof<nothing, bool>
+  --useTranslationMemory: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3887,8 +3886,8 @@ export def "projects-keys-auto-translate autoTranslate-by-keyId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --languages: list # Tags of languages to auto-translate.  When no languages provided, it translates only untranslated languages.
-  --useMachineTranslation: string@bool-completer
-  --useTranslationMemory: string@bool-completer
+  --useMachineTranslation: oneof<nothing, bool>
+  --useTranslationMemory: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4024,9 +4023,9 @@ export def "projects-keys-complex-update complexEdit" [
   --screenshotsToAdd: list # item shape: {text?: string, uploadedImageId: int, positions?: list}
   --relatedKeysInOrder: list # Keys in the document used as a context for machine translation. Keys in the same order as they appear in the document. The order is important! We are using it for graph distance calculation.  — item shape: {namespace?: string, keyName: string, branch?: string}
   --description: string # Description of the key. It's also used as a context for Tolgee AI translator
-  --isPlural: string@bool-completer # If key is pluralized. If it will be reflected in the editor. If null, value won't be modified.
+  --isPlural: oneof<nothing, bool> # If key is pluralized. If it will be reflected in the editor. If null, value won't be modified.
   --pluralArgName: string # The argument name for the plural. If null, value won't be modified. If isPlural is false, this value will be ignored.
-  --warnOnDataLoss: string@bool-completer # If true, it will fail with 400 (with code plural_forms_data_loss) if plural is disabled and there are plural forms, which would be lost by the action. You can get rid of this warning by setting this value to false.
+  --warnOnDataLoss: oneof<nothing, bool> # If true, it will fail with 400 (with code plural_forms_data_loss) if plural is disabled and there are plural forms, which would be lost by the action. You can get rid of this warning by setting this value to false.
   --custom: record # Custom values of the key. If not provided, custom values won't be modified
   --maxCharLimit: int # Maximum character limit. Null = don't modify. 0 = remove limit. (format: int32)
   --branch: string # Branch of the key. If not provided, default branch will be used
@@ -4068,9 +4067,9 @@ export def "projects-keys-complex-update complexEdit-by-id" [
   --screenshotsToAdd: list # item shape: {text?: string, uploadedImageId: int, positions?: list}
   --relatedKeysInOrder: list # Keys in the document used as a context for machine translation. Keys in the same order as they appear in the document. The order is important! We are using it for graph distance calculation.  — item shape: {namespace?: string, keyName: string, branch?: string}
   --description: string # Description of the key. It's also used as a context for Tolgee AI translator
-  --isPlural: string@bool-completer # If key is pluralized. If it will be reflected in the editor. If null, value won't be modified.
+  --isPlural: oneof<nothing, bool> # If key is pluralized. If it will be reflected in the editor. If null, value won't be modified.
   --pluralArgName: string # The argument name for the plural. If null, value won't be modified. If isPlural is false, this value will be ignored.
-  --warnOnDataLoss: string@bool-completer # If true, it will fail with 400 (with code plural_forms_data_loss) if plural is disabled and there are plural forms, which would be lost by the action. You can get rid of this warning by setting this value to false.
+  --warnOnDataLoss: oneof<nothing, bool> # If true, it will fail with 400 (with code plural_forms_data_loss) if plural is disabled and there are plural forms, which would be lost by the action. You can get rid of this warning by setting this value to false.
   --custom: record # Custom values of the key. If not provided, custom values won't be modified
   --maxCharLimit: int # Maximum character limit. Null = don't modify. 0 = remove limit. (format: int32)
   --branch: string # Branch of the key. If not provided, default branch will be used
@@ -4390,14 +4389,14 @@ export def "projects-content-delivery-configs update-by-id-projectId" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   --contentStorageId: int # Id of custom storage to use for content delivery. If null, default server storage is used. Tolgee Cloud provides default Content Storage. (format: int64)
-  --autoPublish: string@bool-completer # If true, data are published to the content delivery automatically after each change.
+  --autoPublish: oneof<nothing, bool> # If true, data are published to the content delivery automatically after each change.
   --slug: string # Tolgee uses a custom slug as a directory name for content storage and public content delivery URL. It is only applicable for custom storage. This field needs to be kept null for Tolgee Cloud content storage or global server storage on self-hosted instances.  Slag has to match following regular expression: `^[a-z0-9]+(?:-[a-z0-9]+)*$`.  If null is provided for update operation, slug will be assigned with generated value.
-  --pruneBeforePublish: string@bool-completer # Whether the data in the CDN should be pruned before publishing new data.  In some cases, you might want to keep the data in the storage and only replace the files created by following publish operation.
-  --zip: string@bool-completer # Whether to export all files as a single zip archive (translations.zip).
+  --pruneBeforePublish: oneof<nothing, bool> # Whether the data in the CDN should be pruned before publishing new data.  In some cases, you might want to keep the data in the storage and only replace the files created by following publish operation.
+  --zip: oneof<nothing, bool> # Whether to export all files as a single zip archive (translations.zip).
   --languages: list # Languages to be contained in export.                  If null, all languages are exported (e.g. en)
   format: string@format-completer # Format to export to
   --structureDelimiter: string # Delimiter to structure file content.   e.g. For key "home.header.title" would result in {"home": {"header": "title": {"Hello"}}} structure.  When null, resulting file won't be structured. Works only for generic structured formats (e.g. JSON, YAML),  specific formats like `YAML_RUBY` don't honor this parameter.
-  --supportArrays: string@bool-completer # If true, for structured formats (like JSON) arrays are supported.   e.g. Key hello[0] will be exported as {"hello": ["..."]}
+  --supportArrays: oneof<nothing, bool> # If true, for structured formats (like JSON) arrays are supported.   e.g. Key hello[0] will be exported as {"hello": ["..."]}
   --filterKeyId: list # Filter key IDs to be contained in export
   --filterKeyIdNot: list # Filter key IDs not to be contained in export
   --filterTag: string # Filter keys tagged by.  This filter works the same as `filterTagIn` but in this cases it accepts single tag only.
@@ -4408,7 +4407,7 @@ export def "projects-content-delivery-configs update-by-id-projectId" [
   --filterNamespace: list # Filter translations with namespace. By default, all namespaces everything are exported. To export default namespace, use empty string.
   --messageFormat: string@messageFormat-completer # Message format to be used for export.        e.g. PHP_PO: Hello %s, ICU: Hello {name}.   This property is honored only for generic formats like JSON or YAML.  For specific formats like `YAML_RUBY` it's ignored.
   --fileStructureTemplate: string # This is a template that defines the structure of the resulting .zip file content.  The template is a string that can contain the following placeholders: {namespace}, {languageTag},  {androidLanguageTag}, {snakeLanguageTag}, {extension}.   For example, when exporting to JSON with the template `{namespace}/{languageTag}.{extension}`,  the English translations of the `home` namespace will be stored in `home/en.json`.  The `{snakeLanguageTag}` placeholder is the same as `{languageTag}` but in snake case. (e.g., en_US).  The Android specific `{androidLanguageTag}` placeholder is the same as `{languageTag}`  but in Android format. (e.g., en-rUS)
-  --escapeHtml: string@bool-completer # If true, HTML tags are escaped in the exported file. (Supported in the XLIFF format only).  e.g. Key <b>hello</b> will be exported as &lt;b&gt;hello&lt;/b&gt;
+  --escapeHtml: oneof<nothing, bool> # If true, HTML tags are escaped in the exported file. (Supported in the XLIFF format only).  e.g. Key <b>hello</b> will be exported as &lt;b&gt;hello&lt;/b&gt;
   --filterBranch: string # Filter translations with branch.   By default, default branch is exported.
 ]: any -> any {
   let input = $in
@@ -4664,9 +4663,9 @@ export def "projects-auto-translation-settings setAutoTranslationSettings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --languageId: int # format: int64
-  --usingTranslationMemory: string@bool-completer # If true, new keys will be automatically translated via batch operation using translation memory when 100% match is found
-  --usingMachineTranslation: string@bool-completer # If true, new keys will be automatically translated via batch operationusing primary machine translation service.When "usingTranslationMemory" is enabled, it tries to translate it with translation memory first.
-  --enableForImport: string@bool-completer # If true, import will trigger batch operation to translate the new new keys. It includes also the data imported via CLI, Figma, or other integrations using batch key import.
+  --usingTranslationMemory: oneof<nothing, bool> # If true, new keys will be automatically translated via batch operation using translation memory when 100% match is found
+  --usingMachineTranslation: oneof<nothing, bool> # If true, new keys will be automatically translated via batch operationusing primary machine translation service.When "usingTranslationMemory" is enabled, it tries to translate it with translation memory first.
+  --enableForImport: oneof<nothing, bool> # If true, import will trigger batch operation to translate the new new keys. It includes also the data imported via CLI, Figma, or other integrations using batch key import.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4892,7 +4891,7 @@ export def "organizations-translation-memories update-by-organizationId-translat
   sourceLanguageTag: string # Source language tag according to BCP 47 definition (e.g. en)
   --assignedProjects: list # Project assignments with access settings. — item shape: {projectId: int, readAccess: bool, writeAccess: bool, penalty?: int}
   --defaultPenalty: int # Default penalty (0–100) subtracted from match scores for every assignment that does not define its own override. Defaults to 0. (format: int32)
-  --writeOnlyReviewed: string@bool-completer # When true, only translations whose state is REVIEWED are written to this TM. Translations that drop back to TRANSLATED or UNTRANSLATED also remove the entry. TMX import and direct TM-browser edits bypass this filter. Defaults to false.
+  --writeOnlyReviewed: oneof<nothing, bool> # When true, only translations whose state is REVIEWED are written to this TM. Translations that drop back to TRANSLATED or UNTRANSLATED also remove the entry. TMX import and direct TM-browser edits bypass this filter. Defaults to false.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4942,7 +4941,7 @@ export def "organizations-translation-memories-write-only-reviewed setWriteOnlyR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --writeOnlyReviewed: string@bool-completer # When true, only translations whose state is REVIEWED are written to this project's own TM. Translations that drop back to TRANSLATED or UNTRANSLATED also remove the entry. TMX import and direct TM-browser edits bypass this filter.
+  --writeOnlyReviewed: oneof<nothing, bool> # When true, only translations whose state is REVIEWED are written to this project's own TM. Translations that drop back to TRANSLATED or UNTRANSLATED also remove the entry. TMX import and direct TM-browser edits bypass this filter.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5068,8 +5067,8 @@ export def "organizations-sso setProvider" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
-  --force: string@bool-completer
+  --enabled: oneof<nothing, bool>
+  --force: oneof<nothing, bool>
   clientId: string
   clientSecret: string
   authorizationUri: string
@@ -5308,10 +5307,10 @@ export def "organizations-glossaries-terms update-by-organizationId-glossaryId-t
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string
-  --flagNonTranslatable: string@bool-completer # When true, this term will have the same translation across all target languages
-  --flagCaseSensitive: string@bool-completer # When true, the term matching considers uppercase and lowercase characters as distinct
-  --flagAbbreviation: string@bool-completer # Specifies whether the term represents a shortened form of a word or phrase
-  --flagForbiddenTerm: string@bool-completer # When true, marks this term as prohibited or not recommended for use in translations
+  --flagNonTranslatable: oneof<nothing, bool> # When true, this term will have the same translation across all target languages
+  --flagCaseSensitive: oneof<nothing, bool> # When true, the term matching considers uppercase and lowercase characters as distinct
+  --flagAbbreviation: oneof<nothing, bool> # Specifies whether the term represents a shortened form of a word or phrase
+  --flagForbiddenTerm: oneof<nothing, bool> # When true, marks this term as prohibited or not recommended for use in translations
   --text: string
 ]: any -> any {
   let input = $in
@@ -5720,7 +5719,7 @@ export def "notification-settings put" [
   --allow-errors(-e) # Return full response without error handling
   group: string@group-completer # e.g. TASKS
   channel: string@channel-completer # e.g. IN_APP
-  --enabled: string@bool-completer # True if the setting should be enabled, false for disabled (e.g. false)
+  --enabled: oneof<nothing, bool> # True if the setting should be enabled, false for disabled (e.g. false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6277,19 +6276,19 @@ export def "administration-billing-self-hosted-ee-plans updatePlan" [
   enabledFeatures: list
   prices: record # shape: {perSeat?: float, perThousandTranslations?: float, perThousandMtCredits?: float, subscriptionMonthly: float, subscriptionYearly: float, perThousandKeys?: float, _links?: record}
   includedUsage: record # shape: {seats: int, translations: int, mtCredits: int, keys: int, _links?: record}
-  --public: string@bool-completer
+  --public: oneof<nothing, bool>
   --stripeProductId: string
   --notAvailableBefore: string # format: date-time
   --availableUntil: string # format: date-time
   --usableUntil: string # format: date-time
   forOrganizationIds: list
-  --free: string@bool-completer
-  --nonCommercial: string@bool-completer
-  --isPayAsYouGo: string@bool-completer
-  --archived: string@bool-completer
-  --newStripeProduct: string@bool-completer # If true, a new Stripe product will be created with name specified in [stripeProductName] and [stripeProductId] will be automatically populated with the ID of the newly created Stripe product.
+  --free: oneof<nothing, bool>
+  --nonCommercial: oneof<nothing, bool>
+  --isPayAsYouGo: oneof<nothing, bool>
+  --archived: oneof<nothing, bool>
+  --newStripeProduct: oneof<nothing, bool> # If true, a new Stripe product will be created with name specified in [stripeProductName] and [stripeProductId] will be automatically populated with the ID of the newly created Stripe product.
   --stripeProductName: string
-  --payAsYouGo: string@bool-completer
+  --payAsYouGo: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6377,7 +6376,7 @@ export def "administration-billing-self-hosted-ee-plans-migration updatePlanMigr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   targetPlanId: int # format: int64
   monthlyOffsetDays: int # format: int32
   yearlyOffsetDays: int # format: int32
@@ -6428,7 +6427,7 @@ export def "administration-billing-self-hosted-ee-plans-migration-upcoming-subsc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --skipped: string@bool-completer
+  --skipped: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6477,21 +6476,21 @@ export def "administration-billing-cloud-plans updatePlan-by-planId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --free: string@bool-completer
-  --nonCommercial: string@bool-completer
+  --free: oneof<nothing, bool>
+  --nonCommercial: oneof<nothing, bool>
   enabledFeatures: list
   type: string@type-completer-2
   prices: record # shape: {perSeat?: float, perThousandTranslations?: float, perThousandMtCredits?: float, subscriptionMonthly: float, subscriptionYearly: float, perThousandKeys?: float, _links?: record}
   includedUsage: record # shape: {seats: int, translations: int, mtCredits: int, keys: int, _links?: record}
-  --public: string@bool-completer
+  --public: oneof<nothing, bool>
   stripeProductId: string
   --notAvailableBefore: string # format: date-time
   --availableUntil: string # format: date-time
   --usableUntil: string # format: date-time
   forOrganizationIds: list
   metricType: string@metricType-completer
-  --archived: string@bool-completer
-  --newStripeProduct: string@bool-completer # If true, a new Stripe product will be created with name specified in [stripeProductName] and [stripeProductId] will be automatically populated with the ID of the newly created Stripe product.
+  --archived: oneof<nothing, bool>
+  --newStripeProduct: oneof<nothing, bool> # If true, a new Stripe product will be created with name specified in [stripeProductName] and [stripeProductId] will be automatically populated with the ID of the newly created Stripe product.
   --stripeProductName: string
 ]: any -> any {
   let input = $in
@@ -6580,7 +6579,7 @@ export def "administration-billing-cloud-plans-migration updatePlanMigration-by-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   targetPlanId: int # format: int64
   monthlyOffsetDays: int # format: int32
   yearlyOffsetDays: int # format: int32
@@ -6631,7 +6630,7 @@ export def "administration-billing-cloud-plans-migration-upcoming-subscriptions-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --skipped: string@bool-completer
+  --skipped: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6853,7 +6852,7 @@ export def "public-translator-translate translate" [
   targetTag: string
   --metadata: record # shape: {examples: list, closeItems: list, keyDescription?: string, projectDescription?: string, languageDescription?: string}
   --formality: string@formality-completer
-  --isBatch: string@bool-completer
+  --isBatch: oneof<nothing, bool>
   --pluralForms: record
   --pluralFormExamples: record
 ]: any -> any {
@@ -6995,7 +6994,7 @@ export def "public-llm-prompt prompt" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   messages: list # item shape: {type: "TEXT"|"IMAGE", text?: string, image?: string}
-  --shouldOutputJson: string@bool-completer
+  --shouldOutputJson: oneof<nothing, bool>
   priority: string@priority-completer
 ]: any -> any {
   let input = $in
@@ -7314,7 +7313,7 @@ export def "projects createProject" [
   --slug: string # Slug of your project used in url e.g. "/v2/projects/what-a-project". If not provided, it will be generated
   organizationId: int # Organization to create the project in (format: int64)
   --baseLanguageTag: string # Tag of one of created languages, to select it as base language. If not provided, first language will be selected as base.
-  --icuPlaceholders: string@bool-completer # Whether to use ICU placeholder visualization in the editor and it's support.
+  --icuPlaceholders: oneof<nothing, bool> # Whether to use ICU placeholder visualization in the editor and it's support.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7511,10 +7510,10 @@ export def "projects-billing-order-translation createTranslationOrder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filterState: list
-  --filterOutdated: string@bool-completer
+  --filterOutdated: oneof<nothing, bool>
   agencyId: int # format: int64
   tasks: list # item shape: {name?: string, description: string, type: "TRANSLATE"|"REVIEW", dueDate?: int, languageId: int, assignees: list, keys: list, branch?: string}
-  --sendReadOnlyInvitation: string@bool-completer
+  --sendReadOnlyInvitation: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7542,10 +7541,10 @@ export def "projects-billing-order-translation createTranslationOrder-by-" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filterState: list
-  --filterOutdated: string@bool-completer
+  --filterOutdated: oneof<nothing, bool>
   agencyId: int # format: int64
   tasks: list # item shape: {name?: string, description: string, type: "TRANSLATE"|"REVIEW", dueDate?: int, languageId: int, assignees: list, keys: list, branch?: string}
-  --sendReadOnlyInvitation: string@bool-completer
+  --sendReadOnlyInvitation: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8432,7 +8431,7 @@ export def "projects-single-step-import-resolvable singleStepResolvableImport" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --overrideMode: string@overrideMode-completer # Some translations are forbidden or protected:  When set to `RECOMMENDED` it will fail for DISABLED translations and protected REVIEWED translations. When set to `ALL` it will fail for DISABLED translations, but will try to update protected REVIEWED translations (fails only if user has no permission)
-  --errorOnUnresolvedConflict: string@bool-completer # If `false`, import will apply all `non-failed` overrides and reports `unresolvedConflict` .If `true`, import will fail completely on unresolved conflict and won't apply any changes. Unresolved conflicts are reported in the `params` of the error response
+  --errorOnUnresolvedConflict: oneof<nothing, bool> # If `false`, import will apply all `non-failed` overrides and reports `unresolvedConflict` .If `true`, import will fail completely on unresolved conflict and won't apply any changes. Unresolved conflicts are reported in the `params` of the error response
   --branch: string # Branch to import keys into. If not specified, default branch is used.
   keys: list # List of keys to import — item shape: {name: string, namespace?: string, screenshots?: list, translations: record}
 ]: any -> any {
@@ -8461,7 +8460,7 @@ export def "projects-single-step-import-resolvable singleStepResolvableImport-by
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --overrideMode: string@overrideMode-completer # Some translations are forbidden or protected:  When set to `RECOMMENDED` it will fail for DISABLED translations and protected REVIEWED translations. When set to `ALL` it will fail for DISABLED translations, but will try to update protected REVIEWED translations (fails only if user has no permission)
-  --errorOnUnresolvedConflict: string@bool-completer # If `false`, import will apply all `non-failed` overrides and reports `unresolvedConflict` .If `true`, import will fail completely on unresolved conflict and won't apply any changes. Unresolved conflicts are reported in the `params` of the error response
+  --errorOnUnresolvedConflict: oneof<nothing, bool> # If `false`, import will apply all `non-failed` overrides and reports `unresolvedConflict` .If `true`, import will fail completely on unresolved conflict and won't apply any changes. Unresolved conflicts are reported in the `params` of the error response
   --branch: string # Branch to import keys into. If not specified, default branch is used.
   keys: list # List of keys to import — item shape: {name: string, namespace?: string, screenshots?: list, translations: record}
 ]: any -> any {
@@ -8767,11 +8766,11 @@ export def "projects-export exportData" [
   --filterKeyPrefix: string # Filter keys with prefix
   --filterState: list # Filter translations with state. By default, all states except untranslated is exported.
   --filterNamespace: list # Filter translations with namespace. By default, all namespaces everything are exported. To export default namespace, use empty string.
-  --zip: string@bool-completer # If false, it doesn't return zip of files, but it returns single file.        This is possible only when single language is exported. Otherwise it returns "400 - Bad Request" response.
+  --zip: oneof<nothing, bool> # If false, it doesn't return zip of files, but it returns single file.        This is possible only when single language is exported. Otherwise it returns "400 - Bad Request" response.
   --messageFormat: string@messageFormat-completer # Message format to be used for export.        e.g. PHP_PO: Hello %s, ICU: Hello {name}.   This property is honored only for generic formats like JSON or YAML.  For specific formats like `YAML_RUBY` it's ignored.
   --fileStructureTemplate: string # This is a template that defines the structure of the resulting .zip file content.  The template is a string that can contain the following placeholders: {namespace}, {languageTag},  {androidLanguageTag}, {snakeLanguageTag}, {extension}.   For example, when exporting to JSON with the template `{namespace}/{languageTag}.{extension}`,  the English translations of the `home` namespace will be stored in `home/en.json`.  The `{snakeLanguageTag}` placeholder is the same as `{languageTag}` but in snake case. (e.g., en_US).  The Android specific `{androidLanguageTag}` placeholder is the same as `{languageTag}`  but in Android format. (e.g., en-rUS)
-  --supportArrays: string@bool-completer # If true, for structured formats (like JSON) arrays are supported.   e.g. Key hello[0] will be exported as {"hello": ["..."]}
-  --escapeHtml: string@bool-completer # If true, HTML tags are escaped in the exported file. (Supported in the XLIFF format only).  e.g. Key <b>hello</b> will be exported as &lt;b&gt;hello&lt;/b&gt;
+  --supportArrays: oneof<nothing, bool> # If true, for structured formats (like JSON) arrays are supported.   e.g. Key hello[0] will be exported as {"hello": ["..."]}
+  --escapeHtml: oneof<nothing, bool> # If true, HTML tags are escaped in the exported file. (Supported in the XLIFF format only).  e.g. Key <b>hello</b> will be exported as &lt;b&gt;hello&lt;/b&gt;
   --filterBranch: string # Filter translations with branch.   By default, default branch is exported.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8807,11 +8806,11 @@ export def "projects-export exportPost" [
   --filterKeyPrefix: string # Filter keys with prefix
   --filterState: list # Filter translations with state. By default, all states except untranslated is exported.
   --filterNamespace: list # Filter translations with namespace. By default, all namespaces everything are exported. To export default namespace, use empty string.
-  --zip: string@bool-completer
+  --zip: oneof<nothing, bool>
   --messageFormat: string@messageFormat-completer # Message format to be used for export.        e.g. PHP_PO: Hello %s, ICU: Hello {name}.   This property is honored only for generic formats like JSON or YAML.  For specific formats like `YAML_RUBY` it's ignored.
   --fileStructureTemplate: string # This is a template that defines the structure of the resulting .zip file content.  The template is a string that can contain the following placeholders: {namespace}, {languageTag},  {androidLanguageTag}, {snakeLanguageTag}, {extension}.   For example, when exporting to JSON with the template `{namespace}/{languageTag}.{extension}`,  the English translations of the `home` namespace will be stored in `home/en.json`.  The `{snakeLanguageTag}` placeholder is the same as `{languageTag}` but in snake case. (e.g., en_US).  The Android specific `{androidLanguageTag}` placeholder is the same as `{languageTag}`  but in Android format. (e.g., en-rUS)
-  --supportArrays: string@bool-completer # If true, for structured formats (like JSON) arrays are supported.   e.g. Key hello[0] will be exported as {"hello": ["..."]}
-  --escapeHtml: string@bool-completer # If true, HTML tags are escaped in the exported file. (Supported in the XLIFF format only).  e.g. Key <b>hello</b> will be exported as &lt;b&gt;hello&lt;/b&gt;
+  --supportArrays: oneof<nothing, bool> # If true, for structured formats (like JSON) arrays are supported.   e.g. Key hello[0] will be exported as {"hello": ["..."]}
+  --escapeHtml: oneof<nothing, bool> # If true, HTML tags are escaped in the exported file. (Supported in the XLIFF format only).  e.g. Key <b>hello</b> will be exported as &lt;b&gt;hello&lt;/b&gt;
   --filterBranch: string # Filter translations with branch.   By default, default branch is exported.
 ]: any -> any {
   let input = $in
@@ -8848,11 +8847,11 @@ export def "projects-export exportData-by-" [
   --filterKeyPrefix: string # Filter keys with prefix
   --filterState: list # Filter translations with state. By default, all states except untranslated is exported.
   --filterNamespace: list # Filter translations with namespace. By default, all namespaces everything are exported. To export default namespace, use empty string.
-  --zip: string@bool-completer # If false, it doesn't return zip of files, but it returns single file.        This is possible only when single language is exported. Otherwise it returns "400 - Bad Request" response.
+  --zip: oneof<nothing, bool> # If false, it doesn't return zip of files, but it returns single file.        This is possible only when single language is exported. Otherwise it returns "400 - Bad Request" response.
   --messageFormat: string@messageFormat-completer # Message format to be used for export.        e.g. PHP_PO: Hello %s, ICU: Hello {name}.   This property is honored only for generic formats like JSON or YAML.  For specific formats like `YAML_RUBY` it's ignored.
   --fileStructureTemplate: string # This is a template that defines the structure of the resulting .zip file content.  The template is a string that can contain the following placeholders: {namespace}, {languageTag},  {androidLanguageTag}, {snakeLanguageTag}, {extension}.   For example, when exporting to JSON with the template `{namespace}/{languageTag}.{extension}`,  the English translations of the `home` namespace will be stored in `home/en.json`.  The `{snakeLanguageTag}` placeholder is the same as `{languageTag}` but in snake case. (e.g., en_US).  The Android specific `{androidLanguageTag}` placeholder is the same as `{languageTag}`  but in Android format. (e.g., en-rUS)
-  --supportArrays: string@bool-completer # If true, for structured formats (like JSON) arrays are supported.   e.g. Key hello[0] will be exported as {"hello": ["..."]}
-  --escapeHtml: string@bool-completer # If true, HTML tags are escaped in the exported file. (Supported in the XLIFF format only).  e.g. Key <b>hello</b> will be exported as &lt;b&gt;hello&lt;/b&gt;
+  --supportArrays: oneof<nothing, bool> # If true, for structured formats (like JSON) arrays are supported.   e.g. Key hello[0] will be exported as {"hello": ["..."]}
+  --escapeHtml: oneof<nothing, bool> # If true, HTML tags are escaped in the exported file. (Supported in the XLIFF format only).  e.g. Key <b>hello</b> will be exported as &lt;b&gt;hello&lt;/b&gt;
   --filterBranch: string # Filter translations with branch.   By default, default branch is exported.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8887,11 +8886,11 @@ export def "projects-export exportPost-by-" [
   --filterKeyPrefix: string # Filter keys with prefix
   --filterState: list # Filter translations with state. By default, all states except untranslated is exported.
   --filterNamespace: list # Filter translations with namespace. By default, all namespaces everything are exported. To export default namespace, use empty string.
-  --zip: string@bool-completer
+  --zip: oneof<nothing, bool>
   --messageFormat: string@messageFormat-completer # Message format to be used for export.        e.g. PHP_PO: Hello %s, ICU: Hello {name}.   This property is honored only for generic formats like JSON or YAML.  For specific formats like `YAML_RUBY` it's ignored.
   --fileStructureTemplate: string # This is a template that defines the structure of the resulting .zip file content.  The template is a string that can contain the following placeholders: {namespace}, {languageTag},  {androidLanguageTag}, {snakeLanguageTag}, {extension}.   For example, when exporting to JSON with the template `{namespace}/{languageTag}.{extension}`,  the English translations of the `home` namespace will be stored in `home/en.json`.  The `{snakeLanguageTag}` placeholder is the same as `{languageTag}` but in snake case. (e.g., en_US).  The Android specific `{androidLanguageTag}` placeholder is the same as `{languageTag}`  but in Android format. (e.g., en-rUS)
-  --supportArrays: string@bool-completer # If true, for structured formats (like JSON) arrays are supported.   e.g. Key hello[0] will be exported as {"hello": ["..."]}
-  --escapeHtml: string@bool-completer # If true, HTML tags are escaped in the exported file. (Supported in the XLIFF format only).  e.g. Key <b>hello</b> will be exported as &lt;b&gt;hello&lt;/b&gt;
+  --supportArrays: oneof<nothing, bool> # If true, for structured formats (like JSON) arrays are supported.   e.g. Key hello[0] will be exported as {"hello": ["..."]}
+  --escapeHtml: oneof<nothing, bool> # If true, HTML tags are escaped in the exported file. (Supported in the XLIFF format only).  e.g. Key <b>hello</b> will be exported as &lt;b&gt;hello&lt;/b&gt;
   --filterBranch: string # Filter translations with branch.   By default, default branch is exported.
 ]: any -> any {
   let input = $in
@@ -8998,7 +8997,7 @@ export def "projects-webhook-configs create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-url: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9280,7 +9279,7 @@ export def "projects-tasks-create-multiple-tasks createTasks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filterState: list
-  --filterOutdated: string@bool-completer
+  --filterOutdated: oneof<nothing, bool>
   tasks: list # item shape: {name?: string, description: string, type: "TRANSLATE"|"REVIEW", dueDate?: int, languageId: int, assignees: list, keys: list, branch?: string}
 ]: any -> any {
   let input = $in
@@ -9309,7 +9308,7 @@ export def "projects-tasks-create-multiple-tasks createTasks-by-" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filterState: list
-  --filterOutdated: string@bool-completer
+  --filterOutdated: oneof<nothing, bool>
   tasks: list # item shape: {name?: string, description: string, type: "TRANSLATE"|"REVIEW", dueDate?: int, languageId: int, assignees: list, keys: list, branch?: string}
 ]: any -> any {
   let input = $in
@@ -9338,7 +9337,7 @@ export def "projects-tasks-calculate-scope calculateScope" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filterState: list
-  --filterOutdated: string@bool-completer
+  --filterOutdated: oneof<nothing, bool>
   languageId: int # format: int64
   type: string@type-completer-4
   keys: list
@@ -9369,7 +9368,7 @@ export def "projects-tasks-calculate-scope calculateScope-by-" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filterState: list
-  --filterOutdated: string@bool-completer
+  --filterOutdated: oneof<nothing, bool>
   languageId: int # format: int64
   type: string@type-completer-4
   keys: list
@@ -9441,7 +9440,7 @@ export def "projects-tasks createTask" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filterState: list
-  --filterOutdated: string@bool-completer
+  --filterOutdated: oneof<nothing, bool>
   --name: string
   description: string
   type: string@type-completer-4
@@ -9515,7 +9514,7 @@ export def "projects-tasks createTask-by-" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filterState: list
-  --filterOutdated: string@bool-completer
+  --filterOutdated: oneof<nothing, bool>
   --name: string
   description: string
   type: string@type-completer-4
@@ -9556,9 +9555,9 @@ export def "projects-suggest-translation-memory suggestTranslationMemory" [
   --keyId: int # Key Id to get results for. Use when key is stored already. (format: int64)
   targetLanguageId: int # format: int64
   --baseText: string # Text value of base translation. Useful, when base translation is not stored yet.
-  --isPlural: string@bool-completer # Whether base text is plural. This value is ignored if baseText is null.
+  --isPlural: oneof<nothing, bool> # Whether base text is plural. This value is ignored if baseText is null.
   --services: list # List of services to use. If null, then all enabled services are used.
-  --plural: string@bool-completer
+  --plural: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9590,9 +9589,9 @@ export def "projects-suggest-translation-memory suggestTranslationMemory-by-" [
   --keyId: int # Key Id to get results for. Use when key is stored already. (format: int64)
   targetLanguageId: int # format: int64
   --baseText: string # Text value of base translation. Useful, when base translation is not stored yet.
-  --isPlural: string@bool-completer # Whether base text is plural. This value is ignored if baseText is null.
+  --isPlural: oneof<nothing, bool> # Whether base text is plural. This value is ignored if baseText is null.
   --services: list # List of services to use. If null, then all enabled services are used.
-  --plural: string@bool-completer
+  --plural: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9622,9 +9621,9 @@ export def "projects-suggest-machine-translations-streaming suggestMachineTransl
   --keyId: int # Key Id to get results for. Use when key is stored already. (format: int64)
   targetLanguageId: int # format: int64
   --baseText: string # Text value of base translation. Useful, when base translation is not stored yet.
-  --isPlural: string@bool-completer # Whether base text is plural. This value is ignored if baseText is null.
+  --isPlural: oneof<nothing, bool> # Whether base text is plural. This value is ignored if baseText is null.
   --services: list # List of services to use. If null, then all enabled services are used.
-  --plural: string@bool-completer
+  --plural: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9652,9 +9651,9 @@ export def "projects-suggest-machine-translations-streaming suggestMachineTransl
   --keyId: int # Key Id to get results for. Use when key is stored already. (format: int64)
   targetLanguageId: int # format: int64
   --baseText: string # Text value of base translation. Useful, when base translation is not stored yet.
-  --isPlural: string@bool-completer # Whether base text is plural. This value is ignored if baseText is null.
+  --isPlural: oneof<nothing, bool> # Whether base text is plural. This value is ignored if baseText is null.
   --services: list # List of services to use. If null, then all enabled services are used.
-  --plural: string@bool-completer
+  --plural: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9683,9 +9682,9 @@ export def "projects-suggest-machine-translations suggestMachineTranslations" [
   --keyId: int # Key Id to get results for. Use when key is stored already. (format: int64)
   targetLanguageId: int # format: int64
   --baseText: string # Text value of base translation. Useful, when base translation is not stored yet.
-  --isPlural: string@bool-completer # Whether base text is plural. This value is ignored if baseText is null.
+  --isPlural: oneof<nothing, bool> # Whether base text is plural. This value is ignored if baseText is null.
   --services: list # List of services to use. If null, then all enabled services are used.
-  --plural: string@bool-completer
+  --plural: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9713,9 +9712,9 @@ export def "projects-suggest-machine-translations suggestMachineTranslations-by-
   --keyId: int # Key Id to get results for. Use when key is stored already. (format: int64)
   targetLanguageId: int # format: int64
   --baseText: string # Text value of base translation. Useful, when base translation is not stored yet.
-  --isPlural: string@bool-completer # Whether base text is plural. This value is ignored if baseText is null.
+  --isPlural: oneof<nothing, bool> # Whether base text is plural. This value is ignored if baseText is null.
   --services: list # List of services to use. If null, then all enabled services are used.
-  --plural: string@bool-completer
+  --plural: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10156,7 +10155,7 @@ export def "projects-keys-create create-by-projectId" [
   --screenshots: list # item shape: {text?: string, uploadedImageId: int, positions?: list}
   --relatedKeysInOrder: list # Keys in the document used as a context for machine translation. Keys in the same order as they appear in the document. The order is important! We are using it for graph distance calculation.  — item shape: {namespace?: string, keyName: string, branch?: string}
   --description: string # Description of the key (e.g. This key is used on homepage. It's a label of sign up button.)
-  --isPlural: string@bool-completer # If key is pluralized. If it will be reflected in the editor
+  --isPlural: oneof<nothing, bool> # If key is pluralized. If it will be reflected in the editor
   --pluralArgName: string # The argument name for the plural. If null, value will be guessed from the values provided in translations.
   --maxCharLimit: int # Maximum character limit for translations of this key. Null means no limit. (format: int32)
   --branch: string
@@ -10224,7 +10223,7 @@ export def "projects-keys create-by-projectId" [
   --screenshots: list # item shape: {text?: string, uploadedImageId: int, positions?: list}
   --relatedKeysInOrder: list # Keys in the document used as a context for machine translation. Keys in the same order as they appear in the document. The order is important! We are using it for graph distance calculation.  — item shape: {namespace?: string, keyName: string, branch?: string}
   --description: string # Description of the key (e.g. This key is used on homepage. It's a label of sign up button.)
-  --isPlural: string@bool-completer # If key is pluralized. If it will be reflected in the editor
+  --isPlural: oneof<nothing, bool> # If key is pluralized. If it will be reflected in the editor
   --pluralArgName: string # The argument name for the plural. If null, value will be guessed from the values provided in translations.
   --maxCharLimit: int # Maximum character limit for translations of this key. Null means no limit. (format: int32)
   --branch: string
@@ -10290,7 +10289,7 @@ export def "projects-keys-create create-by-" [
   --screenshots: list # item shape: {text?: string, uploadedImageId: int, positions?: list}
   --relatedKeysInOrder: list # Keys in the document used as a context for machine translation. Keys in the same order as they appear in the document. The order is important! We are using it for graph distance calculation.  — item shape: {namespace?: string, keyName: string, branch?: string}
   --description: string # Description of the key (e.g. This key is used on homepage. It's a label of sign up button.)
-  --isPlural: string@bool-completer # If key is pluralized. If it will be reflected in the editor
+  --isPlural: oneof<nothing, bool> # If key is pluralized. If it will be reflected in the editor
   --pluralArgName: string # The argument name for the plural. If null, value will be guessed from the values provided in translations.
   --maxCharLimit: int # Maximum character limit for translations of this key. Null means no limit. (format: int32)
   --branch: string
@@ -10356,7 +10355,7 @@ export def "projects-keys create-by-" [
   --screenshots: list # item shape: {text?: string, uploadedImageId: int, positions?: list}
   --relatedKeysInOrder: list # Keys in the document used as a context for machine translation. Keys in the same order as they appear in the document. The order is important! We are using it for graph distance calculation.  — item shape: {namespace?: string, keyName: string, branch?: string}
   --description: string # Description of the key (e.g. This key is used on homepage. It's a label of sign up button.)
-  --isPlural: string@bool-completer # If key is pluralized. If it will be reflected in the editor
+  --isPlural: oneof<nothing, bool> # If key is pluralized. If it will be reflected in the editor
   --pluralArgName: string # The argument name for the plural. If null, value will be guessed from the values provided in translations.
   --maxCharLimit: int # Maximum character limit for translations of this key. Null means no limit. (format: int32)
   --branch: string
@@ -10585,14 +10584,14 @@ export def "projects-content-delivery-configs create-by-projectId" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   --contentStorageId: int # Id of custom storage to use for content delivery. If null, default server storage is used. Tolgee Cloud provides default Content Storage. (format: int64)
-  --autoPublish: string@bool-completer # If true, data are published to the content delivery automatically after each change.
+  --autoPublish: oneof<nothing, bool> # If true, data are published to the content delivery automatically after each change.
   --slug: string # Tolgee uses a custom slug as a directory name for content storage and public content delivery URL. It is only applicable for custom storage. This field needs to be kept null for Tolgee Cloud content storage or global server storage on self-hosted instances.  Slag has to match following regular expression: `^[a-z0-9]+(?:-[a-z0-9]+)*$`.  If null is provided for update operation, slug will be assigned with generated value.
-  --pruneBeforePublish: string@bool-completer # Whether the data in the CDN should be pruned before publishing new data.  In some cases, you might want to keep the data in the storage and only replace the files created by following publish operation.
-  --zip: string@bool-completer # Whether to export all files as a single zip archive (translations.zip).
+  --pruneBeforePublish: oneof<nothing, bool> # Whether the data in the CDN should be pruned before publishing new data.  In some cases, you might want to keep the data in the storage and only replace the files created by following publish operation.
+  --zip: oneof<nothing, bool> # Whether to export all files as a single zip archive (translations.zip).
   --languages: list # Languages to be contained in export.                  If null, all languages are exported (e.g. en)
   format: string@format-completer # Format to export to
   --structureDelimiter: string # Delimiter to structure file content.   e.g. For key "home.header.title" would result in {"home": {"header": "title": {"Hello"}}} structure.  When null, resulting file won't be structured. Works only for generic structured formats (e.g. JSON, YAML),  specific formats like `YAML_RUBY` don't honor this parameter.
-  --supportArrays: string@bool-completer # If true, for structured formats (like JSON) arrays are supported.   e.g. Key hello[0] will be exported as {"hello": ["..."]}
+  --supportArrays: oneof<nothing, bool> # If true, for structured formats (like JSON) arrays are supported.   e.g. Key hello[0] will be exported as {"hello": ["..."]}
   --filterKeyId: list # Filter key IDs to be contained in export
   --filterKeyIdNot: list # Filter key IDs not to be contained in export
   --filterTag: string # Filter keys tagged by.  This filter works the same as `filterTagIn` but in this cases it accepts single tag only.
@@ -10603,7 +10602,7 @@ export def "projects-content-delivery-configs create-by-projectId" [
   --filterNamespace: list # Filter translations with namespace. By default, all namespaces everything are exported. To export default namespace, use empty string.
   --messageFormat: string@messageFormat-completer # Message format to be used for export.        e.g. PHP_PO: Hello %s, ICU: Hello {name}.   This property is honored only for generic formats like JSON or YAML.  For specific formats like `YAML_RUBY` it's ignored.
   --fileStructureTemplate: string # This is a template that defines the structure of the resulting .zip file content.  The template is a string that can contain the following placeholders: {namespace}, {languageTag},  {androidLanguageTag}, {snakeLanguageTag}, {extension}.   For example, when exporting to JSON with the template `{namespace}/{languageTag}.{extension}`,  the English translations of the `home` namespace will be stored in `home/en.json`.  The `{snakeLanguageTag}` placeholder is the same as `{languageTag}` but in snake case. (e.g., en_US).  The Android specific `{androidLanguageTag}` placeholder is the same as `{languageTag}`  but in Android format. (e.g., en-rUS)
-  --escapeHtml: string@bool-completer # If true, HTML tags are escaped in the exported file. (Supported in the XLIFF format only).  e.g. Key <b>hello</b> will be exported as &lt;b&gt;hello&lt;/b&gt;
+  --escapeHtml: oneof<nothing, bool> # If true, HTML tags are escaped in the exported file. (Supported in the XLIFF format only).  e.g. Key <b>hello</b> will be exported as &lt;b&gt;hello&lt;/b&gt;
   --filterBranch: string # Filter translations with branch.   By default, default branch is exported.
 ]: any -> any {
   let input = $in
@@ -10631,7 +10630,7 @@ export def "projects-branches-protected setProtected" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isProtected: string@bool-completer # Whether the branch is protected (e.g. true)
+  --isProtected: oneof<nothing, bool> # Whether the branch is protected (e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10657,7 +10656,7 @@ export def "projects-branches-protected setProtected-by-branchId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isProtected: string@bool-completer # Whether the branch is protected (e.g. true)
+  --isProtected: oneof<nothing, bool> # Whether the branch is protected (e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10827,7 +10826,7 @@ export def "projects-branches-merge-apply merge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deleteBranch: string@bool-completer
+  --deleteBranch: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10853,7 +10852,7 @@ export def "projects-branches-merge-apply merge-by-mergeId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deleteBranch: string@bool-completer
+  --deleteBranch: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11193,7 +11192,7 @@ export def "organizations get-by-" [
   --page: int # Zero-based page index (0..N) (default: 0)
   --size: int # The size of the page to be returned (default: 20)
   --qp-sort: list # Sorting criteria in the format: property,(asc|desc). Default sort order is ascending. Multiple sort criteria are supported. (default: [id,ASC])
-  --filterCurrentUserOwner: string@bool-completer
+  --filterCurrentUserOwner: oneof<nothing, bool>
   --search: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11277,7 +11276,7 @@ export def "organizations-translation-memories create-by-organizationId" [
   sourceLanguageTag: string # Source language tag according to BCP 47 definition (e.g. en)
   --assignedProjects: list # Project assignments with access settings. — item shape: {projectId: int, readAccess: bool, writeAccess: bool, penalty?: int}
   --defaultPenalty: int # Default penalty (0–100) subtracted from match scores for every assignment that does not define its own override. Defaults to 0. (format: int32)
-  --writeOnlyReviewed: string@bool-completer # When true, only translations whose state is REVIEWED are written to this TM. Translations that drop back to TRANSLATED or UNTRANSLATED also remove the entry. TMX import and direct TM-browser edits bypass this filter. Defaults to false.
+  --writeOnlyReviewed: oneof<nothing, bool> # When true, only translations whose state is REVIEWED are written to this TM. Translations that drop back to TRANSLATED or UNTRANSLATED also remove the entry. TMX import and direct TM-browser edits bypass this filter. Defaults to false.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11304,7 +11303,7 @@ export def "organizations-translation-memories-import importTmx" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --overrideExisting: string@bool-completer # default: false
+  --overrideExisting: oneof<nothing, bool> # default: false
   file: string # format: binary
 ]: any -> any {
   let input = $in
@@ -11615,10 +11614,10 @@ export def "organizations-glossaries-terms create-by-organizationId-glossaryId" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   description: string # A detailed explanation or definition of the glossary term (e.g. It's trademark)
-  --flagNonTranslatable: string@bool-completer # When true, this term will have the same translation across all target languages
-  --flagCaseSensitive: string@bool-completer # When true, the term matching considers uppercase and lowercase characters as distinct
-  --flagAbbreviation: string@bool-completer # Specifies whether the term represents a shortened form of a word or phrase
-  --flagForbiddenTerm: string@bool-completer # When true, marks this term as prohibited or not recommended for use in translations
+  --flagNonTranslatable: oneof<nothing, bool> # When true, this term will have the same translation across all target languages
+  --flagCaseSensitive: oneof<nothing, bool> # When true, the term matching considers uppercase and lowercase characters as distinct
+  --flagAbbreviation: oneof<nothing, bool> # Specifies whether the term represents a shortened form of a word or phrase
+  --flagForbiddenTerm: oneof<nothing, bool> # When true, marks this term as prohibited or not recommended for use in translations
   text: string
 ]: any -> any {
   let input = $in
@@ -11702,7 +11701,7 @@ export def "organizations-glossaries-import importCsv" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --removeExistingTerms: string@bool-completer # default: false
+  --removeExistingTerms: oneof<nothing, bool> # default: false
   file: string # format: binary
 ]: any -> any {
   let input = $in
@@ -12107,8 +12106,8 @@ export def "administration-billing-self-hosted-ee-plans list" [
   --allow-errors(-e) # Return full response without error handling
   --filterAssignableToOrganization: int # Filters only plans which can be assignable to the provided organization it.  Plan can be assignable to organization because of one of these reasons:  - plan is private free, visible to organization - plan is paid (Assignable as trial) (format: int64)
   --filterPlanIds: list
-  --filterPublic: string@bool-completer
-  --filterHasMigration: string@bool-completer
+  --filterPublic: oneof<nothing, bool>
+  --filterHasMigration: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12136,19 +12135,19 @@ export def "administration-billing-self-hosted-ee-plans create-by-" [
   enabledFeatures: list
   prices: record # shape: {perSeat?: float, perThousandTranslations?: float, perThousandMtCredits?: float, subscriptionMonthly: float, subscriptionYearly: float, perThousandKeys?: float, _links?: record}
   includedUsage: record # shape: {seats: int, translations: int, mtCredits: int, keys: int, _links?: record}
-  --public: string@bool-completer
+  --public: oneof<nothing, bool>
   --stripeProductId: string
   --notAvailableBefore: string # format: date-time
   --availableUntil: string # format: date-time
   --usableUntil: string # format: date-time
   forOrganizationIds: list
-  --free: string@bool-completer
-  --nonCommercial: string@bool-completer
-  --isPayAsYouGo: string@bool-completer
-  --archived: string@bool-completer
-  --newStripeProduct: string@bool-completer # If true, a new Stripe product will be created with name specified in [stripeProductName] and [stripeProductId] will be automatically populated with the ID of the newly created Stripe product.
+  --free: oneof<nothing, bool>
+  --nonCommercial: oneof<nothing, bool>
+  --isPayAsYouGo: oneof<nothing, bool>
+  --archived: oneof<nothing, bool>
+  --newStripeProduct: oneof<nothing, bool> # If true, a new Stripe product will be created with name specified in [stripeProductName] and [stripeProductId] will be automatically populated with the ID of the newly created Stripe product.
   --stripeProductName: string
-  --payAsYouGo: string@bool-completer
+  --payAsYouGo: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12172,7 +12171,7 @@ export def "administration-billing-self-hosted-ee-plans-migration createPlanMigr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   targetPlanId: int # format: int64
   monthlyOffsetDays: int # format: int32
   yearlyOffsetDays: int # format: int32
@@ -12229,8 +12228,8 @@ export def "administration-billing-cloud-plans get-by-" [
   --allow-errors(-e) # Return full response without error handling
   --filterAssignableToOrganization: int # Filters only plans which can be assignable to the provided organization it.  Plan can be assignable to organization because of one of these reasons:  - plan is private free, visible to organization - plan is paid (Assignable as trial) (format: int64)
   --filterPlanIds: list
-  --filterPublic: string@bool-completer
-  --filterHasMigration: string@bool-completer
+  --filterPublic: oneof<nothing, bool>
+  --filterHasMigration: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12255,21 +12254,21 @@ export def "administration-billing-cloud-plans create-by-" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --free: string@bool-completer
-  --nonCommercial: string@bool-completer
+  --free: oneof<nothing, bool>
+  --nonCommercial: oneof<nothing, bool>
   enabledFeatures: list
   type: string@type-completer-2
   prices: record # shape: {perSeat?: float, perThousandTranslations?: float, perThousandMtCredits?: float, subscriptionMonthly: float, subscriptionYearly: float, perThousandKeys?: float, _links?: record}
   includedUsage: record # shape: {seats: int, translations: int, mtCredits: int, keys: int, _links?: record}
-  --public: string@bool-completer
+  --public: oneof<nothing, bool>
   stripeProductId: string
   --notAvailableBefore: string # format: date-time
   --availableUntil: string # format: date-time
   --usableUntil: string # format: date-time
   forOrganizationIds: list
   metricType: string@metricType-completer
-  --archived: string@bool-completer
-  --newStripeProduct: string@bool-completer # If true, a new Stripe product will be created with name specified in [stripeProductName] and [stripeProductId] will be automatically populated with the ID of the newly created Stripe product.
+  --archived: oneof<nothing, bool>
+  --newStripeProduct: oneof<nothing, bool> # If true, a new Stripe product will be created with name specified in [stripeProductName] and [stripeProductId] will be automatically populated with the ID of the newly created Stripe product.
   --stripeProductName: string
 ]: any -> any {
   let input = $in
@@ -12294,7 +12293,7 @@ export def "administration-billing-cloud-plans-migration createPlanMigration-by-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   targetPlanId: int # format: int64
   monthlyOffsetDays: int # format: int32
   yearlyOffsetDays: int # format: int32
@@ -13340,8 +13339,8 @@ export def "projects-import-result-languages-translations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --onlyConflicts: string@bool-completer # Whether only translations, which are in conflict with existing translations should be returned (default: false)
-  --onlyUnresolved: string@bool-completer # Whether only translations with unresolved conflictswith existing translations should be returned (default: false)
+  --onlyConflicts: oneof<nothing, bool> # Whether only translations, which are in conflict with existing translations should be returned (default: false)
+  --onlyUnresolved: oneof<nothing, bool> # Whether only translations with unresolved conflictswith existing translations should be returned (default: false)
   --search: string # String to search in translation text or key
   --page: int # Zero-based page index (0..N) (default: 0)
   --size: int # The size of the page to be returned (default: 20)
@@ -13369,8 +13368,8 @@ export def "projects-import-result-languages-translations get-by-languageId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --onlyConflicts: string@bool-completer # Whether only translations, which are in conflict with existing translations should be returned (default: false)
-  --onlyUnresolved: string@bool-completer # Whether only translations with unresolved conflictswith existing translations should be returned (default: false)
+  --onlyConflicts: oneof<nothing, bool> # Whether only translations, which are in conflict with existing translations should be returned (default: false)
+  --onlyUnresolved: oneof<nothing, bool> # Whether only translations with unresolved conflictswith existing translations should be returned (default: false)
   --search: string # String to search in translation text or key
   --page: int # Zero-based page index (0..N) (default: 0)
   --size: int # The size of the page to be returned (default: 20)
@@ -13985,13 +13984,13 @@ export def "projects-translations-select-all selectKeys" [
   --search: string # String to search in key name or translation text
   --filterKeyName: list # Selects key with provided names. Use this param multiple times to fetch more keys.
   --filterKeyId: list # Selects key with provided ID. Use this param multiple times to fetch more keys.
-  --filterUntranslatedAny: string@bool-completer # Selects only keys for which the translation is missing in any returned language. It only filters for translations included in returned languages.
-  --filterTranslatedAny: string@bool-completer # Selects only keys, where translation is provided in any language
+  --filterUntranslatedAny: oneof<nothing, bool> # Selects only keys for which the translation is missing in any returned language. It only filters for translations included in returned languages.
+  --filterTranslatedAny: oneof<nothing, bool> # Selects only keys, where translation is provided in any language
   --filterUntranslatedInLang: string # Selects only keys where the translation is missing for the specified language. The specified language must be included in the returned languages. Otherwise, this filter doesn't apply. (e.g. en-US)
   --filterTranslatedInLang: string # Selects only keys, where translation is provided in specified language (e.g. en-US)
   --filterAutoTranslatedInLang: list # Selects only keys, where translation was auto translated for specified languages. (e.g. en-US)
-  --filterHasScreenshot: string@bool-completer # Selects only keys with screenshots
-  --filterHasNoScreenshot: string@bool-completer # Selects only keys without screenshots
+  --filterHasScreenshot: oneof<nothing, bool> # Selects only keys with screenshots
+  --filterHasNoScreenshot: oneof<nothing, bool> # Selects only keys without screenshots
   --filterNamespace: list # Selects only keys with provided namespaces.   To filter default namespace, set to empty string.   
   --filterNoNamespace: list # Selects only keys without provided namespaces.   To filter default namespace, set to empty string.   
   --filterTag: list # Selects only keys with provided tag
@@ -14001,8 +14000,8 @@ export def "projects-translations-select-all selectKeys" [
   --filterRevisionId: list # Selects only key affected by activity with specidfied revision ID (e.g. 1234567)
   --filterFailedKeysOfJob: int # Select only keys which were not successfully translated by batch job with provided id (format: int64)
   --filterTaskNumber: list # Select only keys which are in specified task
-  --filterTaskKeysNotDone: string@bool-completer # Filter task keys which are `not done`
-  --filterTaskKeysDone: string@bool-completer # Filter task keys which are `done`
+  --filterTaskKeysNotDone: oneof<nothing, bool> # Filter task keys which are `not done`
+  --filterTaskKeysDone: oneof<nothing, bool> # Filter task keys which are `done`
   --filterHasUnresolvedCommentsInLang: list # Filter keys with unresolved comments in lang
   --filterHasCommentsInLang: list # Filter keys with any comments in lang
   --filterLabel: list # Filter key translations with labels (e.g. labelId1,labelId2)
@@ -14040,13 +14039,13 @@ export def "projects-translations-select-all selectKeys-by-" [
   --search: string # String to search in key name or translation text
   --filterKeyName: list # Selects key with provided names. Use this param multiple times to fetch more keys.
   --filterKeyId: list # Selects key with provided ID. Use this param multiple times to fetch more keys.
-  --filterUntranslatedAny: string@bool-completer # Selects only keys for which the translation is missing in any returned language. It only filters for translations included in returned languages.
-  --filterTranslatedAny: string@bool-completer # Selects only keys, where translation is provided in any language
+  --filterUntranslatedAny: oneof<nothing, bool> # Selects only keys for which the translation is missing in any returned language. It only filters for translations included in returned languages.
+  --filterTranslatedAny: oneof<nothing, bool> # Selects only keys, where translation is provided in any language
   --filterUntranslatedInLang: string # Selects only keys where the translation is missing for the specified language. The specified language must be included in the returned languages. Otherwise, this filter doesn't apply. (e.g. en-US)
   --filterTranslatedInLang: string # Selects only keys, where translation is provided in specified language (e.g. en-US)
   --filterAutoTranslatedInLang: list # Selects only keys, where translation was auto translated for specified languages. (e.g. en-US)
-  --filterHasScreenshot: string@bool-completer # Selects only keys with screenshots
-  --filterHasNoScreenshot: string@bool-completer # Selects only keys without screenshots
+  --filterHasScreenshot: oneof<nothing, bool> # Selects only keys with screenshots
+  --filterHasNoScreenshot: oneof<nothing, bool> # Selects only keys without screenshots
   --filterNamespace: list # Selects only keys with provided namespaces.   To filter default namespace, set to empty string.   
   --filterNoNamespace: list # Selects only keys without provided namespaces.   To filter default namespace, set to empty string.   
   --filterTag: list # Selects only keys with provided tag
@@ -14056,8 +14055,8 @@ export def "projects-translations-select-all selectKeys-by-" [
   --filterRevisionId: list # Selects only key affected by activity with specidfied revision ID (e.g. 1234567)
   --filterFailedKeysOfJob: int # Select only keys which were not successfully translated by batch job with provided id (format: int64)
   --filterTaskNumber: list # Select only keys which are in specified task
-  --filterTaskKeysNotDone: string@bool-completer # Filter task keys which are `not done`
-  --filterTaskKeysDone: string@bool-completer # Filter task keys which are `done`
+  --filterTaskKeysNotDone: oneof<nothing, bool> # Filter task keys which are `not done`
+  --filterTaskKeysDone: oneof<nothing, bool> # Filter task keys which are `done`
   --filterHasUnresolvedCommentsInLang: list # Filter keys with unresolved comments in lang
   --filterHasCommentsInLang: list # Filter keys with any comments in lang
   --filterLabel: list # Filter key translations with labels (e.g. labelId1,labelId2)
@@ -14096,13 +14095,13 @@ export def "projects-keys-select selectKeys-by-projectId" [
   --search: string # String to search in key name or translation text
   --filterKeyName: list # Selects key with provided names. Use this param multiple times to fetch more keys.
   --filterKeyId: list # Selects key with provided ID. Use this param multiple times to fetch more keys.
-  --filterUntranslatedAny: string@bool-completer # Selects only keys for which the translation is missing in any returned language. It only filters for translations included in returned languages.
-  --filterTranslatedAny: string@bool-completer # Selects only keys, where translation is provided in any language
+  --filterUntranslatedAny: oneof<nothing, bool> # Selects only keys for which the translation is missing in any returned language. It only filters for translations included in returned languages.
+  --filterTranslatedAny: oneof<nothing, bool> # Selects only keys, where translation is provided in any language
   --filterUntranslatedInLang: string # Selects only keys where the translation is missing for the specified language. The specified language must be included in the returned languages. Otherwise, this filter doesn't apply. (e.g. en-US)
   --filterTranslatedInLang: string # Selects only keys, where translation is provided in specified language (e.g. en-US)
   --filterAutoTranslatedInLang: list # Selects only keys, where translation was auto translated for specified languages. (e.g. en-US)
-  --filterHasScreenshot: string@bool-completer # Selects only keys with screenshots
-  --filterHasNoScreenshot: string@bool-completer # Selects only keys without screenshots
+  --filterHasScreenshot: oneof<nothing, bool> # Selects only keys with screenshots
+  --filterHasNoScreenshot: oneof<nothing, bool> # Selects only keys without screenshots
   --filterNamespace: list # Selects only keys with provided namespaces.   To filter default namespace, set to empty string.   
   --filterNoNamespace: list # Selects only keys without provided namespaces.   To filter default namespace, set to empty string.   
   --filterTag: list # Selects only keys with provided tag
@@ -14112,8 +14111,8 @@ export def "projects-keys-select selectKeys-by-projectId" [
   --filterRevisionId: list # Selects only key affected by activity with specidfied revision ID (e.g. 1234567)
   --filterFailedKeysOfJob: int # Select only keys which were not successfully translated by batch job with provided id (format: int64)
   --filterTaskNumber: list # Select only keys which are in specified task
-  --filterTaskKeysNotDone: string@bool-completer # Filter task keys which are `not done`
-  --filterTaskKeysDone: string@bool-completer # Filter task keys which are `done`
+  --filterTaskKeysNotDone: oneof<nothing, bool> # Filter task keys which are `not done`
+  --filterTaskKeysDone: oneof<nothing, bool> # Filter task keys which are `done`
   --filterHasUnresolvedCommentsInLang: list # Filter keys with unresolved comments in lang
   --filterHasCommentsInLang: list # Filter keys with any comments in lang
   --filterLabel: list # Filter key translations with labels (e.g. labelId1,labelId2)
@@ -14151,13 +14150,13 @@ export def "projects-keys-select selectKeys-by-" [
   --search: string # String to search in key name or translation text
   --filterKeyName: list # Selects key with provided names. Use this param multiple times to fetch more keys.
   --filterKeyId: list # Selects key with provided ID. Use this param multiple times to fetch more keys.
-  --filterUntranslatedAny: string@bool-completer # Selects only keys for which the translation is missing in any returned language. It only filters for translations included in returned languages.
-  --filterTranslatedAny: string@bool-completer # Selects only keys, where translation is provided in any language
+  --filterUntranslatedAny: oneof<nothing, bool> # Selects only keys for which the translation is missing in any returned language. It only filters for translations included in returned languages.
+  --filterTranslatedAny: oneof<nothing, bool> # Selects only keys, where translation is provided in any language
   --filterUntranslatedInLang: string # Selects only keys where the translation is missing for the specified language. The specified language must be included in the returned languages. Otherwise, this filter doesn't apply. (e.g. en-US)
   --filterTranslatedInLang: string # Selects only keys, where translation is provided in specified language (e.g. en-US)
   --filterAutoTranslatedInLang: list # Selects only keys, where translation was auto translated for specified languages. (e.g. en-US)
-  --filterHasScreenshot: string@bool-completer # Selects only keys with screenshots
-  --filterHasNoScreenshot: string@bool-completer # Selects only keys without screenshots
+  --filterHasScreenshot: oneof<nothing, bool> # Selects only keys with screenshots
+  --filterHasNoScreenshot: oneof<nothing, bool> # Selects only keys without screenshots
   --filterNamespace: list # Selects only keys with provided namespaces.   To filter default namespace, set to empty string.   
   --filterNoNamespace: list # Selects only keys without provided namespaces.   To filter default namespace, set to empty string.   
   --filterTag: list # Selects only keys with provided tag
@@ -14167,8 +14166,8 @@ export def "projects-keys-select selectKeys-by-" [
   --filterRevisionId: list # Selects only key affected by activity with specidfied revision ID (e.g. 1234567)
   --filterFailedKeysOfJob: int # Select only keys which were not successfully translated by batch job with provided id (format: int64)
   --filterTaskNumber: list # Select only keys which are in specified task
-  --filterTaskKeysNotDone: string@bool-completer # Filter task keys which are `not done`
-  --filterTaskKeysDone: string@bool-completer # Filter task keys which are `done`
+  --filterTaskKeysNotDone: oneof<nothing, bool> # Filter task keys which are `not done`
+  --filterTaskKeysDone: oneof<nothing, bool> # Filter task keys which are `done`
   --filterHasUnresolvedCommentsInLang: list # Filter keys with unresolved comments in lang
   --filterHasCommentsInLang: list # Filter keys with any comments in lang
   --filterLabel: list # Filter key translations with labels (e.g. labelId1,labelId2)
@@ -14820,13 +14819,13 @@ export def "projects-keys-trash-select-all selectAll" [
   --search: string # String to search in key name or translation text
   --filterKeyName: list # Selects key with provided names. Use this param multiple times to fetch more keys.
   --filterKeyId: list # Selects key with provided ID. Use this param multiple times to fetch more keys.
-  --filterUntranslatedAny: string@bool-completer # Selects only keys for which the translation is missing in any returned language. It only filters for translations included in returned languages.
-  --filterTranslatedAny: string@bool-completer # Selects only keys, where translation is provided in any language
+  --filterUntranslatedAny: oneof<nothing, bool> # Selects only keys for which the translation is missing in any returned language. It only filters for translations included in returned languages.
+  --filterTranslatedAny: oneof<nothing, bool> # Selects only keys, where translation is provided in any language
   --filterUntranslatedInLang: string # Selects only keys where the translation is missing for the specified language. The specified language must be included in the returned languages. Otherwise, this filter doesn't apply. (e.g. en-US)
   --filterTranslatedInLang: string # Selects only keys, where translation is provided in specified language (e.g. en-US)
   --filterAutoTranslatedInLang: list # Selects only keys, where translation was auto translated for specified languages. (e.g. en-US)
-  --filterHasScreenshot: string@bool-completer # Selects only keys with screenshots
-  --filterHasNoScreenshot: string@bool-completer # Selects only keys without screenshots
+  --filterHasScreenshot: oneof<nothing, bool> # Selects only keys with screenshots
+  --filterHasNoScreenshot: oneof<nothing, bool> # Selects only keys without screenshots
   --filterNamespace: list # Selects only keys with provided namespaces.   To filter default namespace, set to empty string.   
   --filterNoNamespace: list # Selects only keys without provided namespaces.   To filter default namespace, set to empty string.   
   --filterTag: list # Selects only keys with provided tag
@@ -14836,8 +14835,8 @@ export def "projects-keys-trash-select-all selectAll" [
   --filterRevisionId: list # Selects only key affected by activity with specidfied revision ID (e.g. 1234567)
   --filterFailedKeysOfJob: int # Select only keys which were not successfully translated by batch job with provided id (format: int64)
   --filterTaskNumber: list # Select only keys which are in specified task
-  --filterTaskKeysNotDone: string@bool-completer # Filter task keys which are `not done`
-  --filterTaskKeysDone: string@bool-completer # Filter task keys which are `done`
+  --filterTaskKeysNotDone: oneof<nothing, bool> # Filter task keys which are `not done`
+  --filterTaskKeysDone: oneof<nothing, bool> # Filter task keys which are `done`
   --filterHasUnresolvedCommentsInLang: list # Filter keys with unresolved comments in lang
   --filterHasCommentsInLang: list # Filter keys with any comments in lang
   --filterLabel: list # Filter key translations with labels (e.g. labelId1,labelId2)
@@ -14875,13 +14874,13 @@ export def "projects-keys-trash-select-all selectAll-by-" [
   --search: string # String to search in key name or translation text
   --filterKeyName: list # Selects key with provided names. Use this param multiple times to fetch more keys.
   --filterKeyId: list # Selects key with provided ID. Use this param multiple times to fetch more keys.
-  --filterUntranslatedAny: string@bool-completer # Selects only keys for which the translation is missing in any returned language. It only filters for translations included in returned languages.
-  --filterTranslatedAny: string@bool-completer # Selects only keys, where translation is provided in any language
+  --filterUntranslatedAny: oneof<nothing, bool> # Selects only keys for which the translation is missing in any returned language. It only filters for translations included in returned languages.
+  --filterTranslatedAny: oneof<nothing, bool> # Selects only keys, where translation is provided in any language
   --filterUntranslatedInLang: string # Selects only keys where the translation is missing for the specified language. The specified language must be included in the returned languages. Otherwise, this filter doesn't apply. (e.g. en-US)
   --filterTranslatedInLang: string # Selects only keys, where translation is provided in specified language (e.g. en-US)
   --filterAutoTranslatedInLang: list # Selects only keys, where translation was auto translated for specified languages. (e.g. en-US)
-  --filterHasScreenshot: string@bool-completer # Selects only keys with screenshots
-  --filterHasNoScreenshot: string@bool-completer # Selects only keys without screenshots
+  --filterHasScreenshot: oneof<nothing, bool> # Selects only keys with screenshots
+  --filterHasNoScreenshot: oneof<nothing, bool> # Selects only keys without screenshots
   --filterNamespace: list # Selects only keys with provided namespaces.   To filter default namespace, set to empty string.   
   --filterNoNamespace: list # Selects only keys without provided namespaces.   To filter default namespace, set to empty string.   
   --filterTag: list # Selects only keys with provided tag
@@ -14891,8 +14890,8 @@ export def "projects-keys-trash-select-all selectAll-by-" [
   --filterRevisionId: list # Selects only key affected by activity with specidfied revision ID (e.g. 1234567)
   --filterFailedKeysOfJob: int # Select only keys which were not successfully translated by batch job with provided id (format: int64)
   --filterTaskNumber: list # Select only keys which are in specified task
-  --filterTaskKeysNotDone: string@bool-completer # Filter task keys which are `not done`
-  --filterTaskKeysDone: string@bool-completer # Filter task keys which are `done`
+  --filterTaskKeysNotDone: oneof<nothing, bool> # Filter task keys which are `not done`
+  --filterTaskKeysDone: oneof<nothing, bool> # Filter task keys which are `done`
   --filterHasUnresolvedCommentsInLang: list # Filter keys with unresolved comments in lang
   --filterHasCommentsInLang: list # Filter keys with any comments in lang
   --filterLabel: list # Filter key translations with labels (e.g. labelId1,labelId2)
@@ -14981,13 +14980,13 @@ export def "projects-keys-trash list-by-projectId" [
   --search: string # String to search in key name or translation text
   --filterKeyName: list # Selects key with provided names. Use this param multiple times to fetch more keys.
   --filterKeyId: list # Selects key with provided ID. Use this param multiple times to fetch more keys.
-  --filterUntranslatedAny: string@bool-completer # Selects only keys for which the translation is missing in any returned language. It only filters for translations included in returned languages.
-  --filterTranslatedAny: string@bool-completer # Selects only keys, where translation is provided in any language
+  --filterUntranslatedAny: oneof<nothing, bool> # Selects only keys for which the translation is missing in any returned language. It only filters for translations included in returned languages.
+  --filterTranslatedAny: oneof<nothing, bool> # Selects only keys, where translation is provided in any language
   --filterUntranslatedInLang: string # Selects only keys where the translation is missing for the specified language. The specified language must be included in the returned languages. Otherwise, this filter doesn't apply. (e.g. en-US)
   --filterTranslatedInLang: string # Selects only keys, where translation is provided in specified language (e.g. en-US)
   --filterAutoTranslatedInLang: list # Selects only keys, where translation was auto translated for specified languages. (e.g. en-US)
-  --filterHasScreenshot: string@bool-completer # Selects only keys with screenshots
-  --filterHasNoScreenshot: string@bool-completer # Selects only keys without screenshots
+  --filterHasScreenshot: oneof<nothing, bool> # Selects only keys with screenshots
+  --filterHasNoScreenshot: oneof<nothing, bool> # Selects only keys without screenshots
   --filterNamespace: list # Selects only keys with provided namespaces.   To filter default namespace, set to empty string.   
   --filterNoNamespace: list # Selects only keys without provided namespaces.   To filter default namespace, set to empty string.   
   --filterTag: list # Selects only keys with provided tag
@@ -14997,8 +14996,8 @@ export def "projects-keys-trash list-by-projectId" [
   --filterRevisionId: list # Selects only key affected by activity with specidfied revision ID (e.g. 1234567)
   --filterFailedKeysOfJob: int # Select only keys which were not successfully translated by batch job with provided id (format: int64)
   --filterTaskNumber: list # Select only keys which are in specified task
-  --filterTaskKeysNotDone: string@bool-completer # Filter task keys which are `not done`
-  --filterTaskKeysDone: string@bool-completer # Filter task keys which are `done`
+  --filterTaskKeysNotDone: oneof<nothing, bool> # Filter task keys which are `not done`
+  --filterTaskKeysDone: oneof<nothing, bool> # Filter task keys which are `done`
   --filterHasUnresolvedCommentsInLang: list # Filter keys with unresolved comments in lang
   --filterHasCommentsInLang: list # Filter keys with any comments in lang
   --filterLabel: list # Filter key translations with labels (e.g. labelId1,labelId2)
@@ -15039,13 +15038,13 @@ export def "projects-keys-trash list-by-" [
   --search: string # String to search in key name or translation text
   --filterKeyName: list # Selects key with provided names. Use this param multiple times to fetch more keys.
   --filterKeyId: list # Selects key with provided ID. Use this param multiple times to fetch more keys.
-  --filterUntranslatedAny: string@bool-completer # Selects only keys for which the translation is missing in any returned language. It only filters for translations included in returned languages.
-  --filterTranslatedAny: string@bool-completer # Selects only keys, where translation is provided in any language
+  --filterUntranslatedAny: oneof<nothing, bool> # Selects only keys for which the translation is missing in any returned language. It only filters for translations included in returned languages.
+  --filterTranslatedAny: oneof<nothing, bool> # Selects only keys, where translation is provided in any language
   --filterUntranslatedInLang: string # Selects only keys where the translation is missing for the specified language. The specified language must be included in the returned languages. Otherwise, this filter doesn't apply. (e.g. en-US)
   --filterTranslatedInLang: string # Selects only keys, where translation is provided in specified language (e.g. en-US)
   --filterAutoTranslatedInLang: list # Selects only keys, where translation was auto translated for specified languages. (e.g. en-US)
-  --filterHasScreenshot: string@bool-completer # Selects only keys with screenshots
-  --filterHasNoScreenshot: string@bool-completer # Selects only keys without screenshots
+  --filterHasScreenshot: oneof<nothing, bool> # Selects only keys with screenshots
+  --filterHasNoScreenshot: oneof<nothing, bool> # Selects only keys without screenshots
   --filterNamespace: list # Selects only keys with provided namespaces.   To filter default namespace, set to empty string.   
   --filterNoNamespace: list # Selects only keys without provided namespaces.   To filter default namespace, set to empty string.   
   --filterTag: list # Selects only keys with provided tag
@@ -15055,8 +15054,8 @@ export def "projects-keys-trash list-by-" [
   --filterRevisionId: list # Selects only key affected by activity with specidfied revision ID (e.g. 1234567)
   --filterFailedKeysOfJob: int # Select only keys which were not successfully translated by batch job with provided id (format: int64)
   --filterTaskNumber: list # Select only keys which are in specified task
-  --filterTaskKeysNotDone: string@bool-completer # Filter task keys which are `not done`
-  --filterTaskKeysDone: string@bool-completer # Filter task keys which are `done`
+  --filterTaskKeysNotDone: oneof<nothing, bool> # Filter task keys which are `not done`
+  --filterTaskKeysDone: oneof<nothing, bool> # Filter task keys which are `done`
   --filterHasUnresolvedCommentsInLang: list # Filter keys with unresolved comments in lang
   --filterHasCommentsInLang: list # Filter keys with any comments in lang
   --filterLabel: list # Filter key translations with labels (e.g. labelId1,labelId2)
@@ -16757,7 +16756,7 @@ export def "notification get" [
   --page: int # Zero-based page index (0..N) (default: 0)
   --size: int # The size of the page to be returned (default: 20)
   --qp-sort: list # Sorting criteria in the format: property,(asc|desc). Default sort order is ascending. Multiple sort criteria are supported.
-  --filterSeen: string@bool-completer # Filter by the `seen` parameter.  no value = request everything  true = only seen  false = only unseen
+  --filterSeen: oneof<nothing, bool> # Filter by the `seen` parameter.  no value = request everything  true = only seen  false = only unseen
   --cursor: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -17287,9 +17286,9 @@ export def "administration-billing-organizations get-by-" [
   --qp-sort: list # Sorting criteria in the format: property,(asc|desc). Default sort order is ascending. Multiple sort criteria are supported.
   --search: string
   --withCloudPlanId: int # format: int64
-  --hasSelfHostedSubscription: string@bool-completer
-  --filterDeleted: string@bool-completer
-  --trialing: string@bool-completer
+  --hasSelfHostedSubscription: oneof<nothing, bool>
+  --filterDeleted: oneof<nothing, bool>
+  --trialing: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

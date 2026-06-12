@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.mailscript.com/v2"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -298,8 +297,8 @@ export def "addresses-keys addKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --read: string@bool-completer
-  --write: string@bool-completer
+  --read: oneof<nothing, bool>
+  --write: oneof<nothing, bool>
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -373,8 +372,8 @@ export def "addresses-keys updateKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --read: string@bool-completer
-  --write: string@bool-completer
+  --read: oneof<nothing, bool>
+  --write: oneof<nothing, bool>
 ]: any -> record<createdAt: string, createdBy: string, id: string, name: string, read: bool, write: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -868,7 +867,7 @@ export def "workflows addWorkflow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   action: string
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   input: string
   name: string
   --trigger: string
@@ -946,7 +945,7 @@ export def "workflows updateWorkflow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   action: string
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   input: string
   name: string
   --trigger: string

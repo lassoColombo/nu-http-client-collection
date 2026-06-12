@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.vectara.io"] }
 def auth-scheme-completer [] { ["bearer" "x-api-key"] }
 
@@ -143,9 +142,9 @@ export def "corpora createCorpus" [
   key: string # A user-provided key for a corpus. (e.g. my-corpus)
   --name: string # The name for the corpus. This value defaults to the key. (e.g. My corpus)
   --description: string # Description of the corpus. (e.g. Documents with important information for my prompt.)
-  --save-history: string@bool-completer # Indicates whether to save corpus queries to query history by default. (default: false)
-  --queries-are-answers: string@bool-completer # Queries made to this corpus are considered answers, and not questions. (default: false)
-  --documents-are-questions: string@bool-completer # Documents inside this corpus are considered questions, and not answers. (default: false)
+  --save-history: oneof<nothing, bool> # Indicates whether to save corpus queries to query history by default. (default: false)
+  --queries-are-answers: oneof<nothing, bool> # Queries made to this corpus are considered answers, and not questions. (default: false)
+  --documents-are-questions: oneof<nothing, bool> # Documents inside this corpus are considered questions, and not answers. (default: false)
   --encoder-id: string # *Deprecated*: Use `encoder_name` instead. (DEPRECATED, e.g. enc_1)
   --encoder-name: string # The encoder used by the corpus, `boomerang-2023-q3`. (e.g. boomerang-2023-q3)
   --filter-attributes: list # The new filter attributes of the corpus. If unset then the corpus will not have filter attributes. (default: []) — item shape: {name: string, level: "document"|"part", description?: string, indexed?: bool, type: "integer"|"real_number"|"text"|"boolean"|"list[integer]"|"list[real_number]"|"list[text]"}
@@ -261,10 +260,10 @@ export def "corpora updateCorpus" [
   --allow-errors(-e) # Return full response without error handling
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
-  --enabled: string@bool-completer # Set whether or not the corpus is enabled. If unset then the corpus will remain in the same state. (e.g. false)
+  --enabled: oneof<nothing, bool> # Set whether or not the corpus is enabled. If unset then the corpus will remain in the same state. (e.g. false)
   --name: string # The name for the corpus. If unset or null, then the corpus will remain in the same state. (e.g. new-corpus-name)
   --description: string # Description of the corpus. If unset or null, then the corpus will remain in the same state. (e.g. New description of the corpus.)
-  --save-history: string@bool-completer # Indicates whether to save corpus queries to query history by default.
+  --save-history: oneof<nothing, bool> # Indicates whether to save corpus queries to query history by default.
 ]: any -> record<id: string, key: string, name: string, description: string, enabled: bool, chat_history_corpus: bool, queries_are_answers: bool, documents_are_questions: bool, encoder_id: string, encoder_name: string, save_history: bool, filter_attributes: table<name: string, level: string, description: string, indexed: bool, type: string>, custom_dimensions: table<name: string, description: string, indexing_default: float, querying_default: float>, limits: record<used_docs: int, used_parts: int, used_bytes: int, used_characters: int, max_bytes: int, max_metadata_bytes: int, index_rate: int>, created_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -522,7 +521,7 @@ export def "corpora-documents bulkDeleteCorpusDocuments" [
   --allow-errors(-e) # Return full response without error handling
   --metadata-filter: string # Filter documents by metadata. Uses the same expression as a query metadata filter. Example: `doc.status = 'archived' AND doc.year < 2020`
   --document-ids: string # Comma-separated list of document IDs to delete. Maximum 10,000 IDs per request.
-  --async: string@bool-completer # Whether to perform the deletion asynchronously. - `true` (default): Returns immediately with job_id to track progress (HTTP 202) - `false`: Waits for completion and returns deletion results (HTTP 200)  When `async=false`, the operation will wait for the deletion to complete up to the timeout specified in the `Request-Timeout` or `Request-Timeout-Millis` header. If no timeout header is provided, defaults to 7 days. If the operation times out, returns HTTP 504 with job_id to track via Jobs API.  The workflow continues running in the background even if the API wait times out.  (default: true)
+  --async: oneof<nothing, bool> # Whether to perform the deletion asynchronously. - `true` (default): Returns immediately with job_id to track progress (HTTP 202) - `false`: Waits for completion and returns deletion results (HTTP 200)  When `async=false`, the operation will wait for the deletion to complete up to the timeout specified in the `Request-Timeout` or `Request-Timeout-Millis` header. If no timeout header is provided, defaults to 7 days. If the operation times out, returns HTTP 504 with job_id to track via Jobs API.  The workflow continues running in the background even if the API wait times out.  (default: true)
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {
@@ -673,7 +672,7 @@ export def "corpora-documents-summarize summarizeCorpusDocument" [
   llm_name: string # The name of the LLM. (e.g. mockingbird-2.0)
   --prompt-template: string # The prompt template to use when generating the summary. Vectara manages both system and user roles and prompts for the generative LLM out of the box by default. However, users can override the `prompt_template` via this variable. The `prompt_template` is in the form of an Apache Velocity template. For more details on how to configure the `prompt_template`, see the [long-form documentation](https://docs.vectara.com/docs/prompts/vectara-prompt-engine). (e.g. Provide a concise summary of the document.)
   --model-parameters: record # Optional parameters for the specified model used when generating the summary.
-  --stream-response: string@bool-completer # Indicates whether the response should be streamed or not. (default: false)
+  --stream-response: oneof<nothing, bool> # Indicates whether the response should be streamed or not. (default: false)
 ]: any -> record<summary: string, rendered_prompt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -767,8 +766,8 @@ export def "corpora-query searchCorpus" [
   --qp-query: string # The search query string for the corpus, which is the question the user is asking.
   --limit: int # The maximum number of top retrieval results to rerank and return. (default: 10)
   --offset: int # The position from which to start in the result set. (default: 0)
-  --save-history: string@bool-completer # Indicates whether to save the query in the query history.
-  --intelligent-query-rewriting: string@bool-completer # [Tech Preview] Indicates whether to enable intelligent query rewriting. When enabled, the platform will attempt to extract metadata filter and rewrite the query to improve search results. Read [here](https://docs.vectara.com/docs/search-and-retrieval/intelligent-query-rewriting) for more details. (default: false)
+  --save-history: oneof<nothing, bool> # Indicates whether to save the query in the query history.
+  --intelligent-query-rewriting: oneof<nothing, bool> # [Tech Preview] Indicates whether to enable intelligent query rewriting. When enabled, the platform will attempt to extract metadata filter and rewrite the query to improve search results. Read [here](https://docs.vectara.com/docs/search-and-retrieval/intelligent-query-rewriting) for more details. (default: false)
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<summary: string, response_language: string, search_results: list<record>, factual_consistency_score: float, rendered_prompt: string, warnings: list<string>, rewritten_queries: table<corpus_key: string, filter_extraction: record>> {
@@ -803,9 +802,9 @@ export def "corpora-query queryCorpus" [
   --body-query: string # The search query string, which is the question the user is asking.
   --search: any # The parameters to search one corpus.
   --generation: record # The parameters to control generation. — shape: {enabled?: bool, generation_preset_name?: string, prompt_name?: string, max_used_search_results?: int, prompt_template?: string, prompt_text?: string, max_response_characters?: int, response_language?: "auto"|"eng"|"deu"|"fra"|"zho"|"kor"|"ara"|"rus"|"tha"|"nld"|"ita"|"por"|"spa"|"jpn"|"pol"|"tur"|"vie"|"ind"|"ces"|"ukr"|"ell"|"heb"|"fas"|"hin"|"urd"|"swe"|"ben"|"msa"|"ron", model_parameters?: record, citations?: record, enable_factual_consistency_score?: bool}
-  --stream-response: string@bool-completer # Indicates whether the response should be streamed or not. (default: false)
-  --save-history: string@bool-completer # Indicates whether to save the query to query history.
-  --intelligent-query-rewriting: string@bool-completer # [Tech Preview] Indicates whether to enable intelligent query rewriting. When enabled, the platform will attempt to extract metadata filter and rewrite the query to improve search results. Read [here](https://docs.vectara.com/docs/search-and-retrieval/intelligent-query-rewriting) for more details. (default: false)
+  --stream-response: oneof<nothing, bool> # Indicates whether the response should be streamed or not. (default: false)
+  --save-history: oneof<nothing, bool> # Indicates whether to save the query to query history.
+  --intelligent-query-rewriting: oneof<nothing, bool> # [Tech Preview] Indicates whether to enable intelligent query rewriting. When enabled, the platform will attempt to extract metadata filter and rewrite the query to improve search results. Read [here](https://docs.vectara.com/docs/search-and-retrieval/intelligent-query-rewriting) for more details. (default: false)
 ]: any -> record<summary: string, response_language: string, search_results: list<record>, factual_consistency_score: float, rendered_prompt: string, warnings: list<string>, rewritten_queries: table<corpus_key: string, filter_extraction: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -839,9 +838,9 @@ export def "query query" [
   --body-query: string # The search query string, which is the question the user is asking. (e.g. Am I allowed to bring pets to work?)
   search: any # The parameters to search one or more corpora.
   --generation: record # The parameters to control generation. — shape: {enabled?: bool, generation_preset_name?: string, prompt_name?: string, max_used_search_results?: int, prompt_template?: string, prompt_text?: string, max_response_characters?: int, response_language?: "auto"|"eng"|"deu"|"fra"|"zho"|"kor"|"ara"|"rus"|"tha"|"nld"|"ita"|"por"|"spa"|"jpn"|"pol"|"tur"|"vie"|"ind"|"ces"|"ukr"|"ell"|"heb"|"fas"|"hin"|"urd"|"swe"|"ben"|"msa"|"ron", model_parameters?: record, citations?: record, enable_factual_consistency_score?: bool}
-  --stream-response: string@bool-completer # Indicates whether the response should be streamed or not. (default: false)
-  --save-history: string@bool-completer # Indicates whether to save the query to query history.
-  --intelligent-query-rewriting: string@bool-completer # [Tech Preview] Indicates whether to enable intelligent query rewriting. When enabled, the platform will attempt to extract metadata filter and rewrite the query to improve search results. Read [here](https://docs.vectara.com/docs/search-and-retrieval/intelligent-query-rewriting) for more details. (default: false)
+  --stream-response: oneof<nothing, bool> # Indicates whether the response should be streamed or not. (default: false)
+  --save-history: oneof<nothing, bool> # Indicates whether to save the query to query history.
+  --intelligent-query-rewriting: oneof<nothing, bool> # [Tech Preview] Indicates whether to enable intelligent query rewriting. When enabled, the platform will attempt to extract metadata filter and rewrite the query to improve search results. Read [here](https://docs.vectara.com/docs/search-and-retrieval/intelligent-query-rewriting) for more details. (default: false)
 ]: any -> record<summary: string, response_language: string, search_results: list<record>, factual_consistency_score: float, rendered_prompt: string, warnings: list<string>, rewritten_queries: table<corpus_key: string, filter_extraction: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -938,9 +937,9 @@ export def "chats createChat" [
   search: any # The parameters to search one or more corpora.
   --generation: record # The parameters to control generation. — shape: {enabled?: bool, generation_preset_name?: string, prompt_name?: string, max_used_search_results?: int, prompt_template?: string, prompt_text?: string, max_response_characters?: int, response_language?: "auto"|"eng"|"deu"|"fra"|"zho"|"kor"|"ara"|"rus"|"tha"|"nld"|"ita"|"por"|"spa"|"jpn"|"pol"|"tur"|"vie"|"ind"|"ces"|"ukr"|"ell"|"heb"|"fas"|"hin"|"urd"|"swe"|"ben"|"msa"|"ron", model_parameters?: record, citations?: record, enable_factual_consistency_score?: bool}
   --chat: record # Parameters to control chat behavior. — shape: {store?: bool}
-  --save-history: string@bool-completer # Indicates whether to save the chat in both the chat and query history. This overrides `chat.store`. (default: true)
-  --intelligent-query-rewriting: string@bool-completer # [Tech Preview] Indicates whether to enable intelligent query rewriting. When enabled, the platform will attempt to extract metadata filter and rewrite the query to improve search results. Read [here](https://docs.vectara.com/docs/search-and-retrieval/intelligent-query-rewriting) for more details. (default: false)
-  --stream-response: string@bool-completer # Indicates whether the response should be streamed or not. (default: false)
+  --save-history: oneof<nothing, bool> # Indicates whether to save the chat in both the chat and query history. This overrides `chat.store`. (default: true)
+  --intelligent-query-rewriting: oneof<nothing, bool> # [Tech Preview] Indicates whether to enable intelligent query rewriting. When enabled, the platform will attempt to extract metadata filter and rewrite the query to improve search results. Read [here](https://docs.vectara.com/docs/search-and-retrieval/intelligent-query-rewriting) for more details. (default: false)
+  --stream-response: oneof<nothing, bool> # Indicates whether the response should be streamed or not. (default: false)
 ]: any -> record<chat_id: string, turn_id: string, answer: string, response_language: string, search_results: list<record>, factual_consistency_score: float, rendered_prompt: string, warnings: list<string>, rephrased_query: string, rewritten_queries: table<corpus_key: string, filter_extraction: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1065,9 +1064,9 @@ export def "chats-turns createChatTurn" [
   search: any # The parameters to search one or more corpora.
   --generation: record # The parameters to control generation. — shape: {enabled?: bool, generation_preset_name?: string, prompt_name?: string, max_used_search_results?: int, prompt_template?: string, prompt_text?: string, max_response_characters?: int, response_language?: "auto"|"eng"|"deu"|"fra"|"zho"|"kor"|"ara"|"rus"|"tha"|"nld"|"ita"|"por"|"spa"|"jpn"|"pol"|"tur"|"vie"|"ind"|"ces"|"ukr"|"ell"|"heb"|"fas"|"hin"|"urd"|"swe"|"ben"|"msa"|"ron", model_parameters?: record, citations?: record, enable_factual_consistency_score?: bool}
   --chat: record # Parameters to control chat behavior. — shape: {store?: bool}
-  --save-history: string@bool-completer # Indicates whether to save the chat in both the chat and query history. This overrides `chat.store`. (default: true)
-  --intelligent-query-rewriting: string@bool-completer # [Tech Preview] Indicates whether to enable intelligent query rewriting. When enabled, the platform will attempt to extract metadata filter and rewrite the query to improve search results. Read [here](https://docs.vectara.com/docs/search-and-retrieval/intelligent-query-rewriting) for more details. (default: false)
-  --stream-response: string@bool-completer # Indicates whether the response should be streamed or not. (default: false)
+  --save-history: oneof<nothing, bool> # Indicates whether to save the chat in both the chat and query history. This overrides `chat.store`. (default: true)
+  --intelligent-query-rewriting: oneof<nothing, bool> # [Tech Preview] Indicates whether to enable intelligent query rewriting. When enabled, the platform will attempt to extract metadata filter and rewrite the query to improve search results. Read [here](https://docs.vectara.com/docs/search-and-retrieval/intelligent-query-rewriting) for more details. (default: false)
+  --stream-response: oneof<nothing, bool> # Indicates whether the response should be streamed or not. (default: false)
 ]: any -> record<chat_id: string, turn_id: string, answer: string, response_language: string, search_results: list<record>, factual_consistency_score: float, rendered_prompt: string, warnings: list<string>, rephrased_query: string, rewritten_queries: table<corpus_key: string, filter_extraction: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1186,7 +1185,7 @@ export def "chats-turns updateChatTurn" [
   --allow-errors(-e) # Return full response without error handling
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
-  --enabled: string@bool-completer # Indicates whether to disable a turn. It will disable this turn and all subsequent turns. Enabling a turn is not implemented. (e.g. false)
+  --enabled: oneof<nothing, bool> # Indicates whether to disable a turn. It will disable this turn and all subsequent turns. Enabling a turn is not implemented. (e.g. false)
 ]: any -> record<id: string, chat_id: string, query: string, answer: string, enabled: bool, created_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1348,7 +1347,7 @@ export def "llms updateLLM" [
   --body-auth: record # Authentication configuration for Vertex AI — shape: {type: "api_key"|"service_account", api_key?: string, key_json?: string}
   --headers: record # Additional HTTP headers to include with requests to the Gemini API.
   --idle-timeout-seconds: int # Maximum time in seconds the platform will wait for the model to send data before considering the connection stale and terminating it. For example, this is used as the SSE idle timeout during streaming — if no new server-sent events arrive within this window the stream is closed with an error. If unset, the platform falls back to its default read timeout for that provider (typically 60 seconds for OpenAI / Anthropic; provider SDK default for Vertex). On update, omit the field to leave the configured value unchanged or send an explicit null to clear it. (nullable, format: int32, e.g. 300)
-  --enabled: string@bool-completer # Whether the LLM is enabled.
+  --enabled: oneof<nothing, bool> # Whether the LLM is enabled.
   --test-model-parameters: record # Any additional parameters that are required for the LLM during the test call.
   --capabilities: record # Capabilities of a Large Language Model. If not provided when creating an LLM, capabilities are automatically inferred from the model name and provider type. Any explicitly provided fields override the inferred defaults. — shape: {image_support?: bool, context_limit?: int, tool_calling?: bool, structured_outputs?: bool, requires_role_alternation?: bool}
 ]: any -> record<id: string, name: string, description: string, enabled: bool, default: bool, capabilities: record<image_support: bool, context_limit: int, tool_calling: bool, structured_outputs: bool, requires_role_alternation: bool>, ownership: string, type: string, model: string, uri: string, headers: record, idle_timeout_seconds: int, auth: record, prompts: list<record<id: string, name: string, description: string, enabled: bool, default: bool>>> {
@@ -1384,7 +1383,7 @@ export def "llms-chat-completions createChatCompletion" [
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   model: string # The ID of the model to use. This field is required.
   messages: list # An ordered array of messages that represent the full context of the conversation to date. Each message includes a `role` and `content`. — item shape: {role: string, content: any, name?: string}
-  --stream: string@bool-completer # Optional. When set to `true`, the API streams partial message deltas as they become available, similar to ChatGPT's streaming mode. (default: false)
+  --stream: oneof<nothing, bool> # Optional. When set to `true`, the API streams partial message deltas as they become available, similar to ChatGPT's streaming mode. (default: false)
   --response-format: record # Specifies the format the model must output. - `text`: Plain text responses (default). - `json_object`: Ensures the response is valid JSON. - `json_schema`: Ensures the response conforms to the provided JSON schema. — shape: {type: "json_schema"|"json_object"|"text", json_schema?: record}
 ]: any -> record<object: string, choices: table<index: int, message: record>> {
   let input = $in
@@ -1455,8 +1454,8 @@ export def "generation-presets createGenerationPreset" [
   --frequency-penalty: float # Higher values penalize new tokens based on their existing frequency in the generation so far, decreasing the model's likelihood to repeat the same line verbatim. (format: float, e.g. 0.2)
   --presence-penalty: float # Higher values penalize new tokens based on whether they appear in the generation so far, increasing the model's likelihood to talk about new topics. (format: float, e.g. 0.2)
   --additional-model-params: record # Additional model parameters beyond the standard fields above.
-  --enabled: string@bool-completer # Indicates whether the prompt is enabled.
-  --default: string@bool-completer # Indicates if this prompt is the default prompt used with the LLM.
+  --enabled: oneof<nothing, bool> # Indicates whether the prompt is enabled.
+  --default: oneof<nothing, bool> # Indicates if this prompt is the default prompt used with the LLM.
   --ownership: string@ownership-completer # Indicates whether the generation preset is provided by the platform or created by the customer. Platform presets are pre-configured and cannot be modified or deleted. Customer presets are created and managed by the customer. (e.g. platform)
 ]: any -> record<id: string, name: string, description: string, llm_name: string, prompt_template: string, max_used_search_results: int, max_tokens: int, temperature: float, frequency_penalty: float, presence_penalty: float, additional_model_params: record, enabled: bool, default: bool, ownership: string> {
   let input = $in
@@ -1498,8 +1497,8 @@ export def "generation-presets replaceGenerationPreset" [
   --frequency-penalty: float # Higher values penalize new tokens based on their existing frequency in the generation so far, decreasing the model's likelihood to repeat the same line verbatim. (format: float, e.g. 0.2)
   --presence-penalty: float # Higher values penalize new tokens based on whether they appear in the generation so far, increasing the model's likelihood to talk about new topics. (format: float, e.g. 0.2)
   --additional-model-params: record # Additional model parameters beyond the standard fields above.
-  --enabled: string@bool-completer # Indicates whether the prompt is enabled.
-  --default: string@bool-completer # Indicates if this prompt is the default prompt used with the LLM.
+  --enabled: oneof<nothing, bool> # Indicates whether the prompt is enabled.
+  --default: oneof<nothing, bool> # Indicates if this prompt is the default prompt used with the LLM.
   --ownership: string@ownership-completer # Indicates whether the generation preset is provided by the platform or created by the customer. Platform presets are pre-configured and cannot be modified or deleted. Customer presets are created and managed by the customer. (e.g. platform)
 ]: any -> record<id: string, name: string, description: string, llm_name: string, prompt_template: string, max_used_search_results: int, max_tokens: int, temperature: float, frequency_penalty: float, presence_penalty: float, additional_model_params: record, enabled: bool, default: bool, ownership: string> {
   let input = $in
@@ -1596,7 +1595,7 @@ export def "encoders createEncoder" [
   --uri: string # The URI endpoint for the embedding API (can be OpenAI or any compatible embedding API endpoint) (format: uri, e.g. https://api.openai.com/v1/embeddings)
   --model: string # The model name to use for embeddings (e.g. text-embedding-ada-002)
   --body-auth: record # Authentication configuration for connecting to a remote service. — shape: {type: "bearer"|"header"|"oauth_client_credentials", token?: string, header?: string, value?: string, client_id?: string, client_secret?: string, token_endpoint?: string, scopes?: list}
-  --image-encoding: string@bool-completer # Whether the encoder produces image embeddings, either of an image alone or jointly with accompanying text. When `true`, the endpoint must accept image-embedding requests; the create call validates this and fails if the endpoint does not support them. (default: false)
+  --image-encoding: oneof<nothing, bool> # Whether the encoder produces image embeddings, either of an image alone or jointly with accompanying text. When `true`, the endpoint must accept image-embedding requests; the create call validates this and fails if the endpoint does not support them. (default: false)
 ]: any -> record<id: string, name: string, type: string, output_dimensions: int, description: string, default: bool, enabled: bool, image_encoding: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1921,7 +1920,7 @@ export def "users updateUser" [
   --allow-errors(-e) # Return full response without error handling
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
-  --enabled: string@bool-completer # Indicates whether to enable or disable the user.
+  --enabled: oneof<nothing, bool> # Indicates whether to enable or disable the user.
   --api-roles: list # The new customer-level role names of the user.
   --corpus-roles: list # New corpus-specific role assignments for the user. — item shape: {corpus_key: string, role: "owner"|"administrator"|"viewer"|"editor"}
   --agent-roles: list # New agent-specific role assignments for the user. — item shape: {agent_key: string, role: "agent_administrator"|"agent_viewer"|"agent_developer"|"agent_user"}
@@ -2100,7 +2099,7 @@ export def "api-keys updateApiKey" [
   --allow-errors(-e) # Return full response without error handling
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
-  --enabled: string@bool-completer # Indicates whether to disable or enable an API key.
+  --enabled: oneof<nothing, bool> # Indicates whether to disable or enable an API key.
 ]: any -> record<id: string, name: string, secret_key: string, enabled: bool, api_roles: list<string>, api_key_role: string, corpus_roles: table<corpus_key: string, role: string>, agent_roles: table<agent_key: string, role: string>, api_policy: record<name: string, allowed_operations: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2335,7 +2334,7 @@ export def "tool-servers listToolServers" [
   --allow-errors(-e) # Return full response without error handling
   --filter: string # A regular expression against tool server names and descriptions to filter the results. (e.g. rag.*)
   --type: string@type-completer-4 # Filter tool servers by type. (e.g. mcp)
-  --enabled: string@bool-completer # Filter tool servers by enabled status. (e.g. true)
+  --enabled: oneof<nothing, bool> # Filter tool servers by enabled status. (e.g. true)
   --limit: int # The maximum number of tool servers to return in the list. (format: int32, default: 10)
   --page-key: string # Used to retrieve the next page of tool servers after the limit has been reached.
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
@@ -2374,7 +2373,7 @@ export def "tool-servers createToolServer" [
   --headers: record # Optional HTTP headers to include when connecting to the server.
   transport: string@transport-completer # Transport protocol for MCP server connections. Both use Server-Sent Events (SSE). - `sse`: Legacy format (https://modelcontextprotocol.io/specification/2024-11-05/basic/transports) - `streamable-http`: New format (https://modelcontextprotocol.io/specification/2025-03-26/basic/transports)  (e.g. sse)
   --body-auth: record # Authentication configuration for connecting to a remote service. — shape: {type: "bearer"|"header"|"oauth_client_credentials", token?: string, header?: string, value?: string, client_id?: string, client_secret?: string, token_endpoint?: string, scopes?: list}
-  --enabled: string@bool-completer # Whether the tool server is currently enabled and available for use. (default: true)
+  --enabled: oneof<nothing, bool> # Whether the tool server is currently enabled and available for use. (default: true)
   --metadata: record # Arbitrary metadata associated with the tool server.
 ]: any -> record<id: string, name: string, type: string, description: string, uri: string, headers: record, transport: string, enabled: bool, metadata: record, created_at: string, updated_at: string> {
   let input = $in
@@ -2438,7 +2437,7 @@ export def "tool-servers updateToolServer" [
   --headers: record # Optional HTTP headers to include when connecting to the server.
   --transport: string@transport-completer # Transport protocol for MCP server connections. Both use Server-Sent Events (SSE). - `sse`: Legacy format (https://modelcontextprotocol.io/specification/2024-11-05/basic/transports) - `streamable-http`: New format (https://modelcontextprotocol.io/specification/2025-03-26/basic/transports)  (e.g. sse)
   --body-auth: record # Authentication configuration for connecting to a remote service. — shape: {type: "bearer"|"header"|"oauth_client_credentials", token?: string, header?: string, value?: string, client_id?: string, client_secret?: string, token_endpoint?: string, scopes?: list}
-  --enabled: string@bool-completer # Whether the tool server is currently enabled and available for use.
+  --enabled: oneof<nothing, bool> # Whether the tool server is currently enabled and available for use.
   --metadata: record # Arbitrary metadata associated with the tool server.
 ]: any -> record<id: string, name: string, type: string, description: string, uri: string, headers: record, transport: string, enabled: bool, metadata: record, created_at: string, updated_at: string> {
   let input = $in
@@ -2559,7 +2558,7 @@ export def "tools listTools" [
   --allow-errors(-e) # Return full response without error handling
   --filter: string # A regular expression against tool names and descriptions to filter the results. (e.g. rag.*)
   --type: string@type-completer-6 # Filter tools by type. (e.g. mcp)
-  --enabled: string@bool-completer # Filter tools by enabled status. (e.g. true)
+  --enabled: oneof<nothing, bool> # Filter tools by enabled status. (e.g. true)
   --category: list # Filter tools by category. Pass one or more category values to include only those categories. When omitted, tools in the "experimental" category are excluded by default. To include experimental tools, explicitly pass `category=experimental`. (e.g. [retrieval, utilities])
   --tool-server-id: string # Filter tools by the tool server they belong to. (e.g. tsr_rag_search)
   --limit: int # The maximum number of tools to return in the list. (format: int32, default: 50)
@@ -2657,7 +2656,7 @@ export def "tools updateTool" [
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   type: string@type-completer-6 # This should always be `mcp`. (default: mcp, e.g. mcp)
-  --enabled: string@bool-completer # Whether the tool is enabled.
+  --enabled: oneof<nothing, bool> # Whether the tool is enabled.
   --title: string # Updated user-friendly display name for the tool. (e.g. Updated Calculator Tool)
   --description: string # Updated description of what the tool does. (e.g. An updated tool that performs advanced calculations)
   --code: string # Updated code for the lambda function. Use function parameter type annotations for automatic schema discovery. Object parameters must use `TypedDict`; bare `dict` and `Dict[K, V]` parameters are rejected. See the `code` field on `CreateLambdaToolRequest` for full details and examples.  (e.g. def process(value: float) -> dict:     return {"result": value * 2} )
@@ -2779,7 +2778,7 @@ export def "instructions listInstructions" [
   --allow-errors(-e) # Return full response without error handling
   --filter: string # A regular expression against instruction names and descriptions to filter the results. (e.g. support.*)
   --type: string@type-completer-7 # Filter instructions by type. (e.g. initial)
-  --enabled: string@bool-completer # Filter instructions by enabled status. (e.g. true)
+  --enabled: oneof<nothing, bool> # Filter instructions by enabled status. (e.g. true)
   --limit: int # The maximum number of instructions to return in the list. (format: int32, default: 10)
   --page-key: string # Used to retrieve the next page of instructions after the limit has been reached.
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
@@ -2847,7 +2846,7 @@ export def "instructions updateInstruction" [
   --template: string # The instruction template content using the specified template engine.  Available Velocity variables: - `$agent.name` - Agent name - `$agent.key` - Agent key - `$agent.metadata` - Agent metadata map - `$session.key` - Session key - `$session.metadata` - Session metadata map (includes user-provided context from test/runtime) - `$currentDate` - Current date/time in ISO 8601 format (e.g., "2025-10-24T15:30:45Z") - `$tools` - List of tool maps, each with `name` and `description` fields  Example: `You are a helpful customer support agent. Agent: $agent.name. Today is $currentDate. Available tools: #foreach($tool in $tools)${tool.name}#if($foreach.hasNext), #end#end`  (e.g. You are an expert customer support agent for $agent.name. Available tools: #foreach($tool in $tools)${tool.name}#if($foreach.hasNext), #end#end)
   --template-type: string@template-type-completer # The templating engine used for instructions. (default: velocity, e.g. velocity)
   --metadata: record # Arbitrary metadata associated with the instruction. (e.g. {version: 1.1.0, author: support-team, last_reviewed: 2024-01-15})
-  --enabled: string@bool-completer # Whether the instruction is enabled. (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the instruction is enabled. (e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2976,7 +2975,7 @@ export def "agents createAgent" [
   --first-step-name: string # Name of a step in the steps map to use as the entry point. This is the preferred way to define the entry point - define all steps in the steps map and reference the entry point by name here.  (e.g. classifier)
   --steps: record # A map of named steps keyed by step name. Steps can transition to other steps defined here via next_steps.  (e.g. {sales_handler: {instructions: [{type: inline, template: Handle sales inquiries}], output_parser: {type: default}}, support_handler: {instructions: [{type: inline, template: Handle support requests}], output_parser: {type: default}}})
   --metadata: record # Arbitrary metadata associated with the agent for customization and configuration. (default: {}, e.g. {department: customer_service, version: 1.0.0, owner: support-team})
-  --enabled: string@bool-completer # Whether the agent should be enabled upon creation. (default: true, e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the agent should be enabled upon creation. (default: true, e.g. true)
   --compaction: record # Configuration for automatic context compaction. — shape: {enabled?: bool, threshold_percent?: int, keep_recent_inputs?: int, compaction_message?: string, tool_event_policy?: "exclude"|"include_outputs"|"include_all"}
   --tool-output-offloading: record # Controls how large tool outputs are kept from overwhelming the agent context window.  Tool outputs are inspected as they are produced. A small output is always passed through unchanged. A larger output is handled in one of two cases: when the output on its own is big enough to dominate the context, or when adding it to the conversation would leave too little room for the agent to continue. In either case the output is handled according to `mode` — stored as an artifact and replaced with a compact reference, or truncated in place with the head and tail preserved and the middle omitted. When stored as an artifact, the agent is expected to have artifact_read, artifact_grep, or artifact_jq configured so it can retrieve the full content on demand.  All fields are optional; omitted fields fall back to defaults. — shape: {enabled?: bool, mode?: "artifact"|"truncate", context_percentage?: float, max_threshold_bytes?: int, min_threshold_bytes?: int, headroom_percentage?: float}
 ]: any -> record<key: string, name: string, description: string, tool_configurations: record, skills: record, model: record<name: string, parameters: record, retry_configuration: record<enabled: bool, max_retries: int, initial_backoff_ms: int, max_backoff_ms: int, backoff_factor: float>>, first_step: record<name: string, type: string, instructions: list<any>, output_parser: record, reminders: list<any>, next_steps: list<record>, allowed_tools: list<string>, allowed_skills: list<string>, reentry_step: string>, first_step_name: string, steps: record, metadata: record, enabled: bool, compaction: record<enabled: bool, threshold_percent: int, keep_recent_inputs: int, compaction_message: string, tool_event_policy: string>, tool_output_offloading: record<enabled: bool, mode: string, context_percentage: float, max_threshold_bytes: int, min_threshold_bytes: int, headroom_percentage: float>, created_at: string, updated_at: string> {
@@ -3006,7 +3005,7 @@ export def "agents listAgents" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string # A regular expression against agent names and descriptions to filter the results. (e.g. support.*)
-  --enabled: string@bool-completer # Filter agents by enabled status. (e.g. true)
+  --enabled: oneof<nothing, bool> # Filter agents by enabled status. (e.g. true)
   --limit: int # The maximum number of agents to return in the list. (format: int32, default: 10)
   --page-key: string # Used to retrieve the next page of agents after the limit has been reached.
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
@@ -3076,7 +3075,7 @@ export def "agents updateAgent" [
   --first-step: record # Partial update for the first (entry point) step. Omitted fields are preserved. Includes an optional name field to rename the first step. — shape: {name?: string, type?: string, instructions?: list, output_parser?: any, reminders?: list, next_steps?: list, allowed_tools?: list, allowed_skills?: list, reentry_step?: string}
   --first-step-name: string # Reassign the entry point to an existing step by name. This is the preferred way to change the entry point. The named step must exist in the steps map.
   --metadata: record # Arbitrary metadata associated with the agent. Set to null to clear. (nullable, e.g. {department: customer_service, version: 1.1.0, owner: support-team, last_reviewed: 2024-01-15})
-  --enabled: string@bool-completer # Whether the agent is enabled. Set to null to reset to default (true). (nullable, e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the agent is enabled. Set to null to reset to default (true). (nullable, e.g. true)
   --compaction: record # Configuration for automatic context compaction. — shape: {enabled?: bool, threshold_percent?: int, keep_recent_inputs?: int, compaction_message?: string, tool_event_policy?: "exclude"|"include_outputs"|"include_all"}
   --tool-output-offloading: record # Controls how large tool outputs are kept from overwhelming the agent context window.  Tool outputs are inspected as they are produced. A small output is always passed through unchanged. A larger output is handled in one of two cases: when the output on its own is big enough to dominate the context, or when adding it to the conversation would leave too little room for the agent to continue. In either case the output is handled according to `mode` — stored as an artifact and replaced with a compact reference, or truncated in place with the head and tail preserved and the middle omitted. When stored as an artifact, the agent is expected to have artifact_read, artifact_grep, or artifact_jq configured so it can retrieve the full content on demand.  All fields are optional; omitted fields fall back to defaults. — shape: {enabled?: bool, mode?: "artifact"|"truncate", context_percentage?: float, max_threshold_bytes?: int, min_threshold_bytes?: int, headroom_percentage?: float}
   --steps: record # A map of additional named steps keyed by step name for partial update. Only provided keys are modified; missing keys are preserved. Set a key's value to null to delete that step.  (nullable, e.g. {sales_handler: {instructions: [{type: inline, template: Handle sales inquiries}]}})
@@ -3123,7 +3122,7 @@ export def "agents replaceAgent" [
   --first-step-name: string # Name of a step in the steps map to use as the entry point. This is the preferred way to define the entry point - define all steps in the steps map and reference the entry point by name here.  (e.g. classifier)
   --steps: record # A map of named steps keyed by step name. Steps can transition to other steps defined here via next_steps.  (e.g. {sales_handler: {instructions: [{type: inline, template: Handle sales inquiries}], output_parser: {type: default}}, support_handler: {instructions: [{type: inline, template: Handle support requests}], output_parser: {type: default}}})
   --metadata: record # Arbitrary metadata associated with the agent for customization and configuration. (default: {}, e.g. {department: customer_service, version: 1.0.0, owner: support-team})
-  --enabled: string@bool-completer # Whether the agent should be enabled upon creation. (default: true, e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the agent should be enabled upon creation. (default: true, e.g. true)
   --compaction: record # Configuration for automatic context compaction. — shape: {enabled?: bool, threshold_percent?: int, keep_recent_inputs?: int, compaction_message?: string, tool_event_policy?: "exclude"|"include_outputs"|"include_all"}
   --tool-output-offloading: record # Controls how large tool outputs are kept from overwhelming the agent context window.  Tool outputs are inspected as they are produced. A small output is always passed through unchanged. A larger output is handled in one of two cases: when the output on its own is big enough to dominate the context, or when adding it to the conversation would leave too little room for the agent to continue. In either case the output is handled according to `mode` — stored as an artifact and replaced with a compact reference, or truncated in place with the head and tail preserved and the middle omitted. When stored as an artifact, the agent is expected to have artifact_read, artifact_grep, or artifact_jq configured so it can retrieve the full content on demand.  All fields are optional; omitted fields fall back to defaults. — shape: {enabled?: bool, mode?: "artifact"|"truncate", context_percentage?: float, max_threshold_bytes?: int, min_threshold_bytes?: int, headroom_percentage?: float}
 ]: any -> record<key: string, name: string, description: string, tool_configurations: record, skills: record, model: record<name: string, parameters: record, retry_configuration: record<enabled: bool, max_retries: int, initial_backoff_ms: int, max_backoff_ms: int, backoff_factor: float>>, first_step: record<name: string, type: string, instructions: list<any>, output_parser: record, reminders: list<any>, next_steps: list<record>, allowed_tools: list<string>, allowed_skills: list<string>, reentry_step: string>, first_step_name: string, steps: record, metadata: record, enabled: bool, compaction: record<enabled: bool, threshold_percent: int, keep_recent_inputs: int, compaction_message: string, tool_event_policy: string>, tool_output_offloading: record<enabled: bool, mode: string, context_percentage: float, max_threshold_bytes: int, min_threshold_bytes: int, headroom_percentage: float>, created_at: string, updated_at: string> {
@@ -3186,7 +3185,7 @@ export def "agents-sessions createAgentSession" [
   --name: string # Human-readable name for the session. (e.g. Customer Support Session)
   --description: string # A short description of the session's purpose. If omitted, one is auto-generated once the session has produced events. Pass an empty string to suppress auto-generation.  (e.g. Helping customer troubleshoot issues)
   --metadata: record # Arbitrary metadata associated with the session. (default: {}, e.g. {customer_id: 12345, priority: medium, channel: web_chat})
-  --enabled: string@bool-completer # Whether the session should be enabled upon creation. (default: true, e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the session should be enabled upon creation. (default: true, e.g. true)
   --tti-minutes: int # Time-to-idle in minutes for the session. If no events occur in the session for this duration, the session will be automatically deleted. If set to 0, the session will not expire. (format: int64, default: 0, e.g. 60)
   --secrets: record # Session-scoped secrets to store on the new session. Map of secret name to plaintext value. Encrypted at rest with the owning agent's encryption key. Referenced from tool `argument_override` via `{"$ref": "session.secrets.<name>"}`. Returned masked (`****`) on reads.  (e.g. {slack_user_token: xoxp-your-token-here})
   --from-session: record # Create a new session by forking an existing one. By default, copies all visible events and artifacts from the source session without compaction. Optionally specify exactly one of include_up_to_event_id or compact_up_to_event_id to control which events are included and whether they are compacted. These two fields are mutually exclusive. — shape: {agent_key?: string, session_key: string, include_up_to_event_id?: string, compact_up_to_event_id?: string}
@@ -3281,7 +3280,7 @@ export def "agents-sessions updateAgentSession" [
   --name: string # Human-readable name for the session. (e.g. Updated Session Name)
   --description: string # A short description of the session's purpose. Pass an empty string to suppress auto-generation.  (e.g. Updated session description)
   --metadata: record # Arbitrary metadata associated with the session. (e.g. {customer_id: 12345, priority: high, status: escalated})
-  --enabled: string@bool-completer # Whether the session is enabled. (e.g. false)
+  --enabled: oneof<nothing, bool> # Whether the session is enabled. (e.g. false)
   --tti-minutes: int # Time-to-idle in minutes for the session. If no events occur in the session for this duration, the session will be automatically deleted. If set to 0, the session will not expire. (format: int64, e.g. 60)
   --secrets: record # Patch the session's secrets. Names present in the map are added or replaced; names absent from the map are left unchanged. A name mapped to `null` is removed. Values are encrypted at rest with the owning agent's encryption key and returned masked on reads.  (e.g. {slack_user_token: xoxp-rotated-token, old_token_to_remove: })
 ]: any -> record<key: string, agent_key: string, name: string, description: string, metadata: record, current_step_name: string, enabled: bool, status: string, tti_minutes: int, created_at: string, session_context_usage: record<input_tokens: record<count: int>, output_tokens: record<count: int, reasoning_tokens: int>, total_tokens: int, model_context_window: int>, effective_compaction: record<enabled: bool, threshold_percent: int, keep_recent_inputs: int, compaction_message: string, tool_event_policy: string>, alias_key: string, secrets: record> {
@@ -3374,7 +3373,7 @@ export def "agents-sessions-events listAgentEvents" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The maximum number of events to return in the list. (format: int32, default: 10)
   --page-key: string # Used to retrieve the next page of events after the limit has been reached.
-  --include-hidden: string@bool-completer # Include hidden events (compacted or manually hidden) in the response. Defaults to false. (default: false)
+  --include-hidden: oneof<nothing, bool> # Include hidden events (compacted or manually hidden) in the response. Defaults to false. (default: false)
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<events: list<record>, metadata: record<page_key: string>> {
@@ -3611,7 +3610,7 @@ export def "agents-schedules createAgentSchedule" [
   --description: string # Optional detailed description of the schedule's purpose.
   message: list # The input message to send to the agent on each scheduled execution.
   schedule: any # Configuration for when and how often the schedule should execute.
-  --enabled: string@bool-completer # Whether the schedule should be active upon creation. (default: true)
+  --enabled: oneof<nothing, bool> # Whether the schedule should be active upon creation. (default: true)
   --session-metadata: record # Arbitrary metadata to include in each session created by this schedule. (default: {})
   --max-executions-to-keep: int # Maximum number of past execution records to keep. Defaults to 10. (format: int32, default: 10)
   --stall-timeout-seconds: int # Number of seconds a scheduled run may go without producing output (streamed tokens, tool calls, or other progress events) before it is considered stalled and retried. Set this above the longest silent operation the agent is expected to perform so an in-flight run is not retried mid-operation.  (format: int32, default: 3600, e.g. 1800)
@@ -3705,7 +3704,7 @@ export def "agents-schedules updateAgentSchedule" [
   --description: string # Updated description of the schedule's purpose.
   --message: list # Updated input message to send to the agent on each scheduled execution.
   --schedule: any # Configuration for when and how often the schedule should execute.
-  --enabled: string@bool-completer # Updated enabled status for the schedule.
+  --enabled: oneof<nothing, bool> # Updated enabled status for the schedule.
   --session-metadata: record # Updated metadata to include in each session created by this schedule.
   --max-executions-to-keep: int # Updated maximum number of past execution records to keep. (format: int32)
   --stall-timeout-seconds: int # Updated number of seconds a scheduled run may go without producing output before it is considered stalled and retried. Omit to leave the current value unchanged.  (format: int32)
@@ -4029,7 +4028,7 @@ export def "agents-connectors createAgentConnector" [
   name: string # The human-readable name of the connector. (e.g. Customer Support Slack Channel)
   --description: string # A detailed description of what this connector does. (e.g. Receives customer support messages from the)
   --metadata: record # Arbitrary metadata associated with the connector. (default: {}, e.g. {priority: high, department: customer_service})
-  --enabled: string@bool-completer # Whether the connector should be enabled upon creation. (default: true, e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the connector should be enabled upon creation. (default: true, e.g. true)
   configuration: any # Write view of a connector's configuration. Used when creating a connector and reused when updating one. Carries the secrets and inputs the customer must supply. Server-derived display fields are not accepted here and instead appear in the read view: Slack returns `webhook_path`, and gchat returns `audience_url` and `client_email`.
 ]: any -> record<id: string, agent_key: string, name: string, description: string, type: string, status: string, status_message: string, metadata: record, enabled: bool, configuration: any, created_at: string, updated_at: string, last_webhook_at: string, last_webhook_status: string> {
   let input = $in
@@ -4059,7 +4058,7 @@ export def "agents-connectors listAgentConnectors" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer-9 # Filter connectors by type. (e.g. slack)
-  --enabled: string@bool-completer # Filter connectors by enabled status. (e.g. true)
+  --enabled: oneof<nothing, bool> # Filter connectors by enabled status. (e.g. true)
   --limit: int # The maximum number of connectors to return in the list. (format: int32, default: 10)
   --page-key: string # Used to retrieve the next page of connectors after the limit has been reached.
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
@@ -4122,7 +4121,7 @@ export def "agents-connectors updateAgentConnector" [
   --name: string # The human-readable name of the connector. (e.g. Updated Customer Support Slack Channel)
   --description: string # A detailed description of what this connector does. (e.g. Updated description for the Slack connector)
   --metadata: record # Arbitrary metadata associated with the connector. (e.g. {priority: medium, department: customer_service, last_reviewed: 2024-01-15})
-  --enabled: string@bool-completer # Whether the connector is enabled. (e.g. false)
+  --enabled: oneof<nothing, bool> # Whether the connector is enabled. (e.g. false)
   --configuration: any # Write view of a connector's configuration. Used when creating a connector and reused when updating one. Carries the secrets and inputs the customer must supply. Server-derived display fields are not accepted here and instead appear in the read view: Slack returns `webhook_path`, and gchat returns `audience_url` and `client_email`.
 ]: any -> record<id: string, agent_key: string, name: string, description: string, type: string, status: string, status_message: string, metadata: record, enabled: bool, configuration: any, created_at: string, updated_at: string, last_webhook_at: string, last_webhook_status: string> {
   let input = $in
@@ -4183,7 +4182,7 @@ export def "agent-aliases createAgentAlias" [
   name: string
   --description: string
   policy: any # A routing policy. The `type` discriminator determines which fields apply:  * `routed` — evaluate ordered rules; the first rule whose `match` expression evaluates to true is selected. The selected rule's `targets` are then used (one agent for `single`, hashed by `partition_by` for `weighted`). A rule with omitted `match` is a catch-all that always matches; it must be the last rule, and any rule placed after it is rejected as unreachable.  Most use cases (direct, weighted/canary, conditional, conditional+canary) collapse into `routed`.
-  --enabled: string@bool-completer # default: true
+  --enabled: oneof<nothing, bool> # default: true
   --metadata: record
 ]: any -> record<key: string, name: string, description: string, policy: any, enabled: bool, metadata: record, created_at: string, updated_at: string> {
   let input = $in
@@ -4214,7 +4213,7 @@ export def "agent-aliases listAgentAliases" [
   --limit: int # Max number of aliases to return. (format: int32, default: 10)
   --page-key: string # Pagination cursor.
   --filter: string # A regular expression matched against alias names and descriptions to filter results. (e.g. support.*)
-  --enabled: string@bool-completer # Filter aliases by enabled status. (e.g. true)
+  --enabled: oneof<nothing, bool> # Filter aliases by enabled status. (e.g. true)
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<aliases: table<key: string, name: string, description: string, policy: any, enabled: bool, metadata: record, created_at: string, updated_at: string>, metadata: record<page_key: string>> {
@@ -4272,7 +4271,7 @@ export def "agent-aliases updateAgentAlias" [
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
   --name: string
   --description: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --metadata: record
 ]: any -> record<key: string, name: string, description: string, policy: any, enabled: bool, metadata: record, created_at: string, updated_at: string> {
   let input = $in
@@ -4364,7 +4363,7 @@ export def "agent-aliases-sessions createAliasRoutedSession" [
   --name: string # Human-readable name for the session. (e.g. Customer Support Session)
   --description: string # A short description of the session's purpose. If omitted, one is auto-generated once the session has produced events. Pass an empty string to suppress auto-generation.  (e.g. Helping customer troubleshoot issues)
   --metadata: record # Arbitrary metadata associated with the session. (default: {}, e.g. {customer_id: 12345, priority: medium, channel: web_chat})
-  --enabled: string@bool-completer # Whether the session should be enabled upon creation. (default: true, e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the session should be enabled upon creation. (default: true, e.g. true)
   --tti-minutes: int # Time-to-idle in minutes for the session. If no events occur in the session for this duration, the session will be automatically deleted. If set to 0, the session will not expire. (format: int64, default: 0, e.g. 60)
   --secrets: record # Session-scoped secrets to store on the new session. Map of secret name to plaintext value. Encrypted at rest with the owning agent's encryption key. Referenced from tool `argument_override` via `{"$ref": "session.secrets.<name>"}`. Returned masked (`****`) on reads.  (e.g. {slack_user_token: xoxp-your-token-here})
   --from-session: record # Create a new session by forking an existing one. By default, copies all visible events and artifacts from the source session without compaction. Optionally specify exactly one of include_up_to_event_id or compact_up_to_event_id to control which events are included and whether they are compacted. These two fields are mutually exclusive. — shape: {agent_key?: string, session_key: string, include_up_to_event_id?: string, compact_up_to_event_id?: string}
@@ -4458,7 +4457,7 @@ export def "agent-aliases-sessions updateAliasRoutedSession" [
   --name: string # Human-readable name for the session. (e.g. Updated Session Name)
   --description: string # A short description of the session's purpose. Pass an empty string to suppress auto-generation.  (e.g. Updated session description)
   --metadata: record # Arbitrary metadata associated with the session. (e.g. {customer_id: 12345, priority: high, status: escalated})
-  --enabled: string@bool-completer # Whether the session is enabled. (e.g. false)
+  --enabled: oneof<nothing, bool> # Whether the session is enabled. (e.g. false)
   --tti-minutes: int # Time-to-idle in minutes for the session. If no events occur in the session for this duration, the session will be automatically deleted. If set to 0, the session will not expire. (format: int64, e.g. 60)
   --secrets: record # Patch the session's secrets. Names present in the map are added or replaced; names absent from the map are left unchanged. A name mapped to `null` is removed. Values are encrypted at rest with the owning agent's encryption key and returned masked on reads.  (e.g. {slack_user_token: xoxp-rotated-token, old_token_to_remove: })
 ]: any -> record<key: string, agent_key: string, name: string, description: string, metadata: record, current_step_name: string, enabled: bool, status: string, tti_minutes: int, created_at: string, session_context_usage: record<input_tokens: record<count: int>, output_tokens: record<count: int, reasoning_tokens: int>, total_tokens: int, model_context_window: int>, effective_compaction: record<enabled: bool, threshold_percent: int, keep_recent_inputs: int, compaction_message: string, tool_event_policy: string>, alias_key: string, secrets: record> {
@@ -4789,7 +4788,7 @@ export def "pipelines createPipeline" [
   trigger: any # Defines when the pipeline runs.
   transform: record # Defines how source data is processed. Currently only agent transforms are supported. — shape: {type: "agent", agent_key?: string, verification?: any}
   --sync-mode: string@sync-mode-completer # How the pipeline syncs data from the source. - `incremental`: Only process new or changed records since the last watermark. - `full_refresh`: Process all records from the source on each run.  (default: incremental)
-  --enabled: string@bool-completer # default: true
+  --enabled: oneof<nothing, bool> # default: true
   --metadata: record # default: {}
 ]: any -> record<key: string, name: string, description: string, source: any, trigger: any, transform: record<type: string>, sync_mode: string, watermark: record<value: string, updated_at: string>, status: string, status_message: string, enabled: bool, metadata: record, created_at: string, updated_at: string> {
   let input = $in
@@ -4819,7 +4818,7 @@ export def "pipelines listPipelines" [
   --allow-errors(-e) # Return full response without error handling
   --source-type: string@source-type-completer # Filter pipelines by source type.
   --status: string@status-completer # Filter pipelines by status.
-  --enabled: string@bool-completer # Filter pipelines by enabled state.
+  --enabled: oneof<nothing, bool> # Filter pipelines by enabled state.
   --filter: string # A regex filter on pipeline name and description.
   --limit: int # The maximum number of pipelines to return. (format: int32, default: 10)
   --page-key: string # Used to retrieve the next page of pipelines after the limit has been reached.
@@ -4886,7 +4885,7 @@ export def "pipelines replacePipeline" [
   trigger: any # Defines when the pipeline runs.
   transform: record # Defines how source data is processed. Currently only agent transforms are supported. — shape: {type: "agent", agent_key?: string, verification?: any}
   --sync-mode: string@sync-mode-completer # How the pipeline syncs data from the source. - `incremental`: Only process new or changed records since the last watermark. - `full_refresh`: Process all records from the source on each run.  (default: incremental)
-  --enabled: string@bool-completer # default: true
+  --enabled: oneof<nothing, bool> # default: true
   --metadata: record # default: {}
 ]: any -> record<key: string, name: string, description: string, source: any, trigger: any, transform: record<type: string>, sync_mode: string, watermark: record<value: string, updated_at: string>, status: string, status_message: string, enabled: bool, metadata: record, created_at: string, updated_at: string> {
   let input = $in
@@ -4924,7 +4923,7 @@ export def "pipelines updatePipeline" [
   --trigger: any # Defines when the pipeline runs.
   --transform: record # Defines how source data is processed. Currently only agent transforms are supported. — shape: {type: "agent", agent_key?: string, verification?: any}
   --sync-mode: string@sync-mode-completer # How the pipeline syncs data from the source. - `incremental`: Only process new or changed records since the last watermark. - `full_refresh`: Process all records from the source on each run.  (default: incremental)
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --metadata: record # nullable
 ]: any -> record<key: string, name: string, description: string, source: any, trigger: any, transform: record<type: string>, sync_mode: string, watermark: record<value: string, updated_at: string>, status: string, status_message: string, enabled: bool, metadata: record, created_at: string, updated_at: string> {
   let input = $in
@@ -5397,10 +5396,10 @@ export def "agent-analytics-traces-spans listTraceSpans" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-content: string@bool-completer # When true, include decrypted span content such as input/output messages and tool arguments. (default: false)
+  --include-content: oneof<nothing, bool> # When true, include decrypted span content such as input/output messages and tool arguments. (default: false)
   --operation: string@operation-completer # Restrict to spans with this operation.
   --parent-span-id: string # Filter spans to only direct children of this span ID.
-  --exclude-subagents: string@bool-completer # When true, exclude nested sub-agent invocations and their descendants. Restricts results to the entry-point invoke_agent span and any spans that belong to the entry agent's session. (default: false)
+  --exclude-subagents: oneof<nothing, bool> # When true, exclude nested sub-agent invocations and their descendants. Restricts results to the entry-point invoke_agent span and any spans that belong to the entry agent's session. (default: false)
   --limit: int # The maximum number of spans to return. (format: int32, default: 100)
   --page-key: string # Used to retrieve the next page of results.
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
@@ -5432,7 +5431,7 @@ export def "agent-analytics-traces-spans get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-content: string@bool-completer # When true, include decrypted span content. (default: false)
+  --include-content: oneof<nothing, bool> # When true, include decrypted span content. (default: false)
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> any {

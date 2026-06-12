@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["basic" "bearer"] }
 
@@ -229,7 +228,7 @@ export def "banners createBanner" [
   --startDate: string # nullable, format: date-time
   --endDate: string # nullable, format: date-time
   --tenantId: string # nullable
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
 ]: any -> record<id: string, message: string, type: string, startDate: string, endDate: string, tenantId: string, active: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -284,7 +283,7 @@ export def "banners updateBanner" [
   --startDate: string # nullable, format: date-time
   --endDate: string # nullable, format: date-time
   --tenantId: string # nullable
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
 ]: any -> record<id: string, message: string, type: string, startDate: string, endDate: string, tenantId: string, active: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -742,7 +741,7 @@ export def "instance-versioned-plugins-upload uploadVersionedPlugins" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   file: string # format: binary
-  --forceInstallOnExistingVersions: string@bool-completer # nullable
+  --forceInstallOnExistingVersions: oneof<nothing, bool> # nullable
 ]: any -> record<groupId: string, artifactId: string, extension: string, classifier: string, version: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1407,8 +1406,8 @@ export def "kill-switches createKillSwitch" [
   --endDate: string # format: date-time
   --description: string
   evaluationType: string@evaluationType-completer
-  --enabled: string@bool-completer
-  --deleted: string@bool-completer
+  --enabled: oneof<nothing, bool>
+  --deleted: oneof<nothing, bool>
 ]: any -> record<id: string, name: string, tenantId: string, namespace: string, flowId: string, executionIds: list<string>, startDate: string, endDate: string, description: string, evaluationType: string, enabled: bool, deleted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1465,8 +1464,8 @@ export def "kill-switches updateKillSwitch" [
   --endDate: string # format: date-time
   --description: string
   evaluationType: string@evaluationType-completer
-  --enabled: string@bool-completer
-  --deleted: string@bool-completer
+  --enabled: oneof<nothing, bool>
+  --deleted: oneof<nothing, bool>
 ]: any -> record<id: string, name: string, tenantId: string, namespace: string, flowId: string, executionIds: list<string>, startDate: string, endDate: string, description: string, evaluationType: string, enabled: bool, deleted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1648,7 +1647,7 @@ export def "me-api-tokens createApiTokenForCurrentUser" [
   name: string
   --description: string
   --maxAge: string
-  --extended: string@bool-completer
+  --extended: oneof<nothing, bool>
 ]: any -> record<id: string, name: string, fullToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1963,7 +1962,7 @@ export def "plugins-schemas get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --arrayOf: string@bool-completer # If schema should be an array of requested type (default: false)
+  --arrayOf: oneof<nothing, bool> # If schema should be an array of requested type (default: false)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2008,7 +2007,7 @@ export def "plugins get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # Include all the properties (default: false)
+  --all: oneof<nothing, bool> # Include all the properties (default: false)
 ]: nothing -> record<markdown: string, schema: record<properties: record, outputs: record, definitions: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2055,7 +2054,7 @@ export def "plugins-versions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # Include all the properties (default: false)
+  --all: oneof<nothing, bool> # Include all the properties (default: false)
 ]: nothing -> record<markdown: string, schema: record<properties: record, outputs: record, definitions: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2177,7 +2176,7 @@ export def "service-accounts createServiceAccount" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   --description: string
-  --superAdmin: string@bool-completer
+  --superAdmin: oneof<nothing, bool>
   --tenants: list
 ]: any -> record<id: string, name: string, description: string, tenants: table<id: string, name: string>, superAdmin: bool> {
   let input = $in
@@ -2300,7 +2299,7 @@ export def "service-accounts-api-tokens createApiTokensForServiceAccount" [
   name: string
   --description: string
   --maxAge: string
-  --extended: string@bool-completer
+  --extended: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2349,7 +2348,7 @@ export def "service-accounts-superadmin patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --superAdmin: string@bool-completer
+  --superAdmin: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2480,15 +2479,15 @@ export def "tenants create-by-" [
   --secretIsolation: record # shape: {deniedServices?: list, enabled?: bool}
   id: string
   name: string
-  --deleted: string@bool-completer
+  --deleted: oneof<nothing, bool>
   --defaultWorkerSelector: record # shape: {tags?: list, match?: any, fallback?: any}
   --storageType: string
   --storageConfiguration: record
   --secretType: string
-  --secretReadOnly: string@bool-completer
+  --secretReadOnly: oneof<nothing, bool>
   --secretConfiguration: record
-  --requireExistingNamespace: string@bool-completer
-  --outputsInInternalStorage: string@bool-completer
+  --requireExistingNamespace: oneof<nothing, bool>
+  --outputsInInternalStorage: oneof<nothing, bool>
   --appCatalogConfig: record # shape: {title?: string, titleColor?: string, primaryColor?: string}
   --settings: record # shape: {dashboard?: record}
   --sdkDefaultAuthentication: record # shape: {apiToken?: string, username?: string, password?: string}
@@ -2575,15 +2574,15 @@ export def "tenants update-by-id" [
   --secretIsolation: record # shape: {deniedServices?: list, enabled?: bool}
   --body-id: string
   name: string
-  --deleted: string@bool-completer
+  --deleted: oneof<nothing, bool>
   --defaultWorkerSelector: record # shape: {tags?: list, match?: any, fallback?: any}
   --storageType: string
   --storageConfiguration: record
   --secretType: string
-  --secretReadOnly: string@bool-completer
+  --secretReadOnly: oneof<nothing, bool>
   --secretConfiguration: record
-  --requireExistingNamespace: string@bool-completer
-  --outputsInInternalStorage: string@bool-completer
+  --requireExistingNamespace: oneof<nothing, bool>
+  --outputsInInternalStorage: oneof<nothing, bool>
   --appCatalogConfig: record # shape: {title?: string, titleColor?: string, primaryColor?: string}
   --settings: record # shape: {dashboard?: record}
   --sdkDefaultAuthentication: record # shape: {apiToken?: string, username?: string, password?: string}
@@ -2839,8 +2838,8 @@ export def "users createUser" [
   --lastName: string
   email: string
   --password: string
-  --superAdmin: string@bool-completer
-  --restricted: string@bool-completer
+  --superAdmin: oneof<nothing, bool>
+  --restricted: oneof<nothing, bool>
 ]: any -> record<id: string, username: string, displayName: string, firstName: string, lastName: string, email: string, tenants: table<id: string, name: string>, auths: table<id: string, name: string, type: string>, groups: table<id: string, tenantId: string>, superAdmin: bool, restricted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2894,8 +2893,8 @@ export def "users updateUser" [
   --lastName: string
   email: string
   --password: string
-  --superAdmin: string@bool-completer
-  --restricted: string@bool-completer
+  --superAdmin: oneof<nothing, bool>
+  --restricted: oneof<nothing, bool>
 ]: any -> record<id: string, username: string, displayName: string, firstName: string, lastName: string, email: string, tenants: table<id: string, name: string>, auths: table<id: string, name: string, type: string>, groups: table<id: string, tenantId: string>, superAdmin: bool, restricted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2996,7 +2995,7 @@ export def "users-api-tokens createApiTokensForUser" [
   name: string
   --description: string
   --maxAge: string
-  --extended: string@bool-completer
+  --extended: oneof<nothing, bool>
 ]: any -> record<id: string, name: string, fullToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3138,7 +3137,7 @@ export def "users-restricted patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --restricted: string@bool-completer
+  --restricted: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3164,7 +3163,7 @@ export def "users-superadmin patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --superAdmin: string@bool-completer
+  --superAdmin: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3998,7 +3997,7 @@ export def "assets-by-query delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filters: list # Filters
-  --purge: string@bool-completer # If true, will purge instead of soft-delete (default: false)
+  --purge: oneof<nothing, bool> # If true, will purge instead of soft-delete (default: false)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4152,7 +4151,7 @@ export def "assets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowDeleted: string@bool-completer # Get asset even if soft deleted (default: false)
+  --allowDeleted: oneof<nothing, bool> # Get asset even if soft deleted (default: false)
 ]: nothing -> record<namespace: string, id: string, type: string, displayName: string, description: string, metadata: record, created: string, updated: string, deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4200,8 +4199,8 @@ export def "assets-dependencies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --destinationOnly: string@bool-completer # If true, list only destination dependencies, otherwise list also source dependencies (default: false)
-  --expandAll: string@bool-completer # If true, expand all dependencies recursively (default: false)
+  --destinationOnly: oneof<nothing, bool> # If true, list only destination dependencies, otherwise list also source dependencies (default: false)
+  --expandAll: oneof<nothing, bool> # If true, expand all dependencies recursively (default: false)
 ]: nothing -> record<nodes: table<uid: string, namespace: string, id: string, type: string>, edges: table<source: string, target: string, relation: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4648,7 +4647,7 @@ export def "blueprints-custom searchInternalBlueprints" [
   --qp-sort: string # The sort of current page (nullable)
   --page: int # The current page (format: int32, default: 1)
   --size: int # The current page size (format: int32, default: 1)
-  --qp-source: string@bool-completer # Whether to include the flow source in the response (nullable, default: false)
+  --qp-source: oneof<nothing, bool> # Whether to include the flow source in the response (nullable, default: false)
   --filters: list # A list of query filters (nullable)
 ]: nothing -> record<results: table<id: string, title: string, description: string, tags: list, includedTasks: list, publishedAt: string, deleted: bool, template: record>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5533,7 +5532,7 @@ export def "dependencies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --destinationOnly: string@bool-completer # if true, list only destination dependencies, otherwise list also source dependencies (default: false)
+  --destinationOnly: oneof<nothing, bool> # if true, list only destination dependencies, otherwise list also source dependencies (default: false)
 ]: nothing -> record<nodes: table<uid: string, namespace: string, id: string>, edges: table<source: string, target: string, relation: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5584,10 +5583,10 @@ export def "executions-by-ids delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeNonTerminated: string@bool-completer # Whether to delete non-terminated executions (nullable, default: false)
-  --deleteLogs: string@bool-completer # Whether to delete execution logs (default: true)
-  --deleteMetrics: string@bool-completer # Whether to delete execution metrics (default: true)
-  --deleteStorage: string@bool-completer # Whether to delete execution files in the internal storage (default: true)
+  --includeNonTerminated: oneof<nothing, bool> # Whether to delete non-terminated executions (nullable, default: false)
+  --deleteLogs: oneof<nothing, bool> # Whether to delete execution logs (default: true)
+  --deleteMetrics: oneof<nothing, bool> # Whether to delete execution metrics (default: true)
+  --deleteStorage: oneof<nothing, bool> # Whether to delete execution files in the internal storage (default: true)
   --body: record
 ]: any -> record<count: int> {
   let input = $in
@@ -5615,10 +5614,10 @@ export def "executions-by-query delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filters: list # Filters. PHP-style nested query is used - examples: `filters[timeRange][EQUALS]=PT168H`, `filters[scope][EQUALS]=USER`, `filters[state][IN]=FAILED,CANCELLED`, `filters[labels][NOT_EQUALS][foo]=bar`, `filters[namespace][CONTAINS]=test` (nullable)
-  --includeNonTerminated: string@bool-completer # Whether to delete non-terminated executions (nullable, default: false)
-  --deleteLogs: string@bool-completer # Whether to delete execution logs (default: true)
-  --deleteMetrics: string@bool-completer # Whether to delete execution metrics (default: true)
-  --deleteStorage: string@bool-completer # Whether to delete execution files in the internal storage (default: true)
+  --includeNonTerminated: oneof<nothing, bool> # Whether to delete non-terminated executions (nullable, default: false)
+  --deleteLogs: oneof<nothing, bool> # Whether to delete execution logs (default: true)
+  --deleteMetrics: oneof<nothing, bool> # Whether to delete execution metrics (default: true)
+  --deleteStorage: oneof<nothing, bool> # Whether to delete execution files in the internal storage (default: true)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6042,7 +6041,7 @@ export def "executions-replay-by-ids replayExecutionsByIds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --latestRevision: string@bool-completer # If latest revision should be used (nullable, default: false)
+  --latestRevision: oneof<nothing, bool> # If latest revision should be used (nullable, default: false)
   --body: record
 ]: any -> record {
   let input = $in
@@ -6070,7 +6069,7 @@ export def "executions-replay-by-query replayExecutionsByQuery" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filters: list # Filters. PHP-style nested query is used - examples: `filters[timeRange][EQUALS]=PT168H`, `filters[scope][EQUALS]=USER`, `filters[state][IN]=FAILED,CANCELLED`, `filters[labels][NOT_EQUALS][foo]=bar`, `filters[namespace][CONTAINS]=test` (nullable)
-  --latestRevision: string@bool-completer # If latest revision should be used (nullable, default: false)
+  --latestRevision: oneof<nothing, bool> # If latest revision should be used (nullable, default: false)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6449,9 +6448,9 @@ export def "executions delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deleteLogs: string@bool-completer # Whether to delete execution logs (default: true)
-  --deleteMetrics: string@bool-completer # Whether to delete execution metrics (default: true)
-  --deleteStorage: string@bool-completer # Whether to delete execution files in the internal storage (default: true)
+  --deleteLogs: oneof<nothing, bool> # Whether to delete execution logs (default: true)
+  --deleteMetrics: oneof<nothing, bool> # Whether to delete execution metrics (default: true)
+  --deleteStorage: oneof<nothing, bool> # Whether to delete execution files in the internal storage (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6577,7 +6576,7 @@ export def "executions-actions-kill killExecution" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isOnKillCascade: string@bool-completer # Specifies whether killing the execution also kill all subflow executions. (default: true)
+  --isOnKillCascade: oneof<nothing, bool> # Specifies whether killing the execution also kill all subflow executions. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6986,8 +6985,8 @@ export def "executions-follow-dependencies followDependenciesExecutions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --destinationOnly: string@bool-completer # If true, list only destination dependencies, otherwise list also source dependencies (default: false)
-  --expandAll: string@bool-completer # If true, expand all dependencies recursively (default: false)
+  --destinationOnly: oneof<nothing, bool> # If true, list only destination dependencies, otherwise list also source dependencies (default: false)
+  --expandAll: oneof<nothing, bool> # If true, expand all dependencies recursively (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7039,7 +7038,7 @@ export def "executions createExecution" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --labels: list # The labels as a list of 'key:value' (nullable)
-  --wait: string@bool-completer # If the server will wait the end of the execution (default: false)
+  --wait: oneof<nothing, bool> # If the server will wait the end of the execution (default: false)
   --revision: int # The flow revision or latest if null (nullable, format: int32)
   --scheduleDate: string # Schedule the flow on a specific date (nullable, format: date-time)
   --breakpoints: string # Set a list of breakpoints at specific tasks 'id.value', separated by a coma. (nullable)
@@ -7125,9 +7124,9 @@ export def "flows-bulk bulkUpdateFlows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete: string@bool-completer # If missing flow should be deleted (default: true)
+  --delete: oneof<nothing, bool> # If missing flow should be deleted (default: true)
   --namespace: string # The namespace where to update flows (nullable)
-  --allowNamespaceChild: string@bool-completer # If namespace child should are allowed to be updated (default: false)
+  --allowNamespaceChild: oneof<nothing, bool> # If namespace child should are allowed to be updated (default: false)
   --body: record
 ]: any -> list<record> {
   let input = $in
@@ -7476,7 +7475,7 @@ export def "flows-import importFlows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --failOnError: string@bool-completer # If should fail on invalid flows (default: false)
+  --failOnError: oneof<nothing, bool> # If should fail on invalid flows (default: false)
   --fileUpload: string # The file to import, can be a ZIP archive or a multi-objects YAML file (format: binary)
 ]: any -> list<string> {
   let input = $in
@@ -7660,8 +7659,8 @@ export def "flows updateFlowsInNamespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete: string@bool-completer # If missing flows should be deleted (default: true)
-  --override: string@bool-completer # If namespace of all provided flows should be overridden (default: false)
+  --delete: oneof<nothing, bool> # If missing flows should be deleted (default: true)
+  --override: oneof<nothing, bool> # If namespace of all provided flows should be overridden (default: false)
   --body: record
 ]: any -> list<record> {
   let input = $in
@@ -7690,9 +7689,9 @@ export def "flows get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-source: string@bool-completer # Include the source code (default: false)
+  --qp-source: oneof<nothing, bool> # Include the source code (default: false)
   --revision: int # Get latest revision by default (nullable, format: int32)
-  --allowDeleted: string@bool-completer # Get flow even if deleted (default: false)
+  --allowDeleted: oneof<nothing, bool> # Get flow even if deleted (default: false)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7769,8 +7768,8 @@ export def "flows-dependencies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --destinationOnly: string@bool-completer # If true, list only destination dependencies, otherwise list also source dependencies (default: false)
-  --expandAll: string@bool-completer # If true, expand all dependencies recursively (default: false)
+  --destinationOnly: oneof<nothing, bool> # If true, list only destination dependencies, otherwise list also source dependencies (default: false)
+  --expandAll: oneof<nothing, bool> # If true, expand all dependencies recursively (default: false)
 ]: nothing -> record<nodes: table<uid: string, namespace: string, id: string>, edges: table<source: string, target: string, relation: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7823,7 +7822,7 @@ export def "flows-revisions listFlowRevisions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowDelete: string@bool-completer # default: false
+  --allowDelete: oneof<nothing, bool> # default: false
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7931,7 +7930,7 @@ export def "groups-autocomplete autocompleteGroups" [
   --filters: list # Filters
   --q: string # nullable
   --ids: list # nullable
-  --existingOnly: string@bool-completer
+  --existingOnly: oneof<nothing, bool>
 ]: any -> table<id: string, name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8699,8 +8698,8 @@ export def "invitations createInvitation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --createUserIfNotExist: string@bool-completer
-  --superAdmin: string@bool-completer
+  --createUserIfNotExist: oneof<nothing, bool>
+  --superAdmin: oneof<nothing, bool>
   --roles: list # item shape: {id: string, namespaces?: list}
   --groups: list
   email: string
@@ -9041,7 +9040,7 @@ export def "mcp-servers createMcp" [
   --authType: any # Authentication type for private servers.
   --oauthProvider: string # OAuth provider key from micronaut.security.oauth2.clients. Required when authType is OAUTH.
   --oauthScopesSupported: list # Scopes advertised in the server's RFC 9728 Protected Resource Metadata document. Only meaningful when authType is OAUTH. When null or empty the field is omitted from the PRM document.
-  --disabled: string@bool-completer # Whether the MCP server is disabled.
+  --disabled: oneof<nothing, bool> # Whether the MCP server is disabled.
 ]: any -> record<id: string, description: string, instructions: string, serverType: record, authType: record, oauthProvider: string, oauthScopesSupported: list<string>, disabled: bool, isDefault: bool, created: string, updated: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9098,7 +9097,7 @@ export def "mcp-servers updateMcp" [
   --authType: any # Authentication type for private servers.
   --oauthProvider: string # OAuth provider key from micronaut.security.oauth2.clients. Required when authType is OAUTH.
   --oauthScopesSupported: list # Scopes advertised in the server's RFC 9728 Protected Resource Metadata document. Only meaningful when authType is OAUTH. When null or empty the field is omitted from the PRM document.
-  --disabled: string@bool-completer # Whether the MCP server is disabled.
+  --disabled: oneof<nothing, bool> # Whether the MCP server is disabled.
 ]: any -> record<id: string, description: string, instructions: string, serverType: record, authType: record, oauthProvider: string, oauthScopesSupported: list<string>, disabled: bool, isDefault: bool, created: string, updated: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9366,7 +9365,7 @@ export def "namespaces createNamespace" [
   --allowedTriggers: list # DEPRECATED — item shape: {namespace: string, flowId?: string}
   --storageIsolation: record # shape: {deniedServices?: list, enabled?: bool}
   --secretIsolation: record # shape: {deniedServices?: list, enabled?: bool}
-  --deleted: string@bool-completer
+  --deleted: oneof<nothing, bool>
   --description: string
   --body-variables: record
   --pluginDefaults: list # item shape: {type: string, forced?: bool, values?: record}
@@ -9375,9 +9374,9 @@ export def "namespaces createNamespace" [
   --storageType: string
   --storageConfiguration: record
   --secretType: string
-  --secretReadOnly: string@bool-completer
+  --secretReadOnly: oneof<nothing, bool>
   --secretConfiguration: record
-  --outputsInInternalStorage: string@bool-completer
+  --outputsInInternalStorage: oneof<nothing, bool>
   --sdkDefaultAuthentication: record # shape: {apiToken?: string, username?: string, password?: string}
 ]: any -> record<id: string, allowedTriggers: table<namespace: string, flowId: string>, storageIsolation: record<deniedServices: list<string>, enabled: bool>, secretIsolation: record<deniedServices: list<string>, enabled: bool>, deleted: bool, description: string, variables: record, pluginDefaults: table<type: string, forced: bool, values: record>, allowedNamespaces: table<namespace: string>, defaultWorkerSelector: record<tags: list<string>, match: record, fallback: record>, storageType: string, storageConfiguration: record, secretType: string, secretReadOnly: bool, secretConfiguration: record, outputsInInternalStorage: bool, sdkDefaultAuthentication: record<apiToken: string, username: string, password: string>> {
   let input = $in
@@ -9406,7 +9405,7 @@ export def "namespaces-autocomplete autocompleteNamespaces" [
   --allow-errors(-e) # Return full response without error handling
   --q: string # nullable
   --ids: list # nullable
-  --existingOnly: string@bool-completer
+  --existingOnly: oneof<nothing, bool>
 ]: any -> list<string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9435,7 +9434,7 @@ export def "namespaces-search searchNamespaces" [
   --page: int # The current page (format: int32, default: 1)
   --size: int # The current page size (format: int32, default: 10)
   --qp-sort: list # The sort of current page (nullable)
-  --existing: string@bool-completer # Return only existing namespace (default: false)
+  --existing: oneof<nothing, bool> # Return only existing namespace (default: false)
   --filters: list # A list of query filters
 ]: nothing -> record<results: table<id: string, allowedTriggers: list, storageIsolation: record, secretIsolation: record, deleted: bool, description: string, variables: record, pluginDefaults: list, allowedNamespaces: list, defaultWorkerSelector: record, storageType: string, storageConfiguration: record, secretType: string, secretReadOnly: bool, secretConfiguration: record, outputsInInternalStorage: bool, sdkDefaultAuthentication: record>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9496,7 +9495,7 @@ export def "namespaces updateNamespace" [
   --allowedTriggers: list # DEPRECATED — item shape: {namespace: string, flowId?: string}
   --storageIsolation: record # shape: {deniedServices?: list, enabled?: bool}
   --secretIsolation: record # shape: {deniedServices?: list, enabled?: bool}
-  --deleted: string@bool-completer
+  --deleted: oneof<nothing, bool>
   --description: string
   --body-variables: record
   --pluginDefaults: list # item shape: {type: string, forced?: bool, values?: record}
@@ -9505,9 +9504,9 @@ export def "namespaces updateNamespace" [
   --storageType: string
   --storageConfiguration: record
   --secretType: string
-  --secretReadOnly: string@bool-completer
+  --secretReadOnly: oneof<nothing, bool>
   --secretConfiguration: record
-  --outputsInInternalStorage: string@bool-completer
+  --outputsInInternalStorage: oneof<nothing, bool>
   --sdkDefaultAuthentication: record # shape: {apiToken?: string, username?: string, password?: string}
 ]: any -> record<id: string, allowedTriggers: table<namespace: string, flowId: string>, storageIsolation: record<deniedServices: list<string>, enabled: bool>, secretIsolation: record<deniedServices: list<string>, enabled: bool>, deleted: bool, description: string, variables: record, pluginDefaults: table<type: string, forced: bool, values: record>, allowedNamespaces: table<namespace: string>, defaultWorkerSelector: record<tags: list<string>, match: record, fallback: record>, storageType: string, storageConfiguration: record, secretType: string, secretReadOnly: bool, secretConfiguration: record, outputsInInternalStorage: bool, sdkDefaultAuthentication: record<apiToken: string, username: string, password: string>> {
   let input = $in
@@ -9849,7 +9848,7 @@ export def "namespaces-dependencies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --destinationOnly: string@bool-completer # if true, list only destination dependencies, otherwise list also source dependencies (default: false)
+  --destinationOnly: oneof<nothing, bool> # if true, list only destination dependencies, otherwise list also source dependencies (default: false)
 ]: nothing -> record<nodes: table<uid: string, namespace: string, id: string>, edges: table<source: string, target: string, relation: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10413,7 +10412,7 @@ export def "roles createRole" [
   permissions: record # shape: {FLOW?: list, EXECUTION?: list, TRIGGER?: list, NAMESPACE?: list, KVSTORE?: list, DASHBOARD?: list, SECRET?: list, CREDENTIAL?: list, BLUEPRINT?: list, APP?: list, AUDITLOG?: list, SYSTEM_SETTINGS?: list, TENANT_SETTINGS?: list, TESTSUITE?: list, ASSET?: list, USER?: list, GROUP?: list, ROLE?: list, BINDING?: list, SERVICE_ACCOUNT?: list, INVITATION?: list, COPILOT?: list, MCP_SERVER?: list, APP_EXECUTION?: list, NAMESPACE_FILE?: list, TESTSUITE_RUN?: list, TENANT_ACCESS?: list, SECURITY_INTEGRATION?: list, KILL_SWITCH?: list, TENANT?: list, VERSIONED_PLUGIN?: list, WORKER_GROUP?: list, WORKER_QUEUE?: list, INSTANCE?: list, UNKNOWN?: list}
   name: string
   --description: string
-  --isDefault: string@bool-completer
+  --isDefault: oneof<nothing, bool>
 ]: any -> record<id: string, name: string, description: string, permissions: record<FLOW: list<any>, EXECUTION: list<any>, TRIGGER: list<any>, NAMESPACE: list<any>, KVSTORE: list<any>, DASHBOARD: list<any>, SECRET: list<any>, CREDENTIAL: list<any>, BLUEPRINT: list<any>, APP: list<any>, AUDITLOG: list<any>, SYSTEM_SETTINGS: list<any>, TENANT_SETTINGS: list<any>, TESTSUITE: list<any>, ASSET: list<any>, USER: list<any>, GROUP: list<any>, ROLE: list<any>, BINDING: list<any>, SERVICE_ACCOUNT: list<any>, INVITATION: list<any>, COPILOT: list<any>, MCP_SERVER: list<any>, APP_EXECUTION: list<any>, NAMESPACE_FILE: list<any>, TESTSUITE_RUN: list<any>, TENANT_ACCESS: list<any>, SECURITY_INTEGRATION: list<any>, KILL_SWITCH: list<any>, TENANT: list<any>, VERSIONED_PLUGIN: list<any>, WORKER_GROUP: list<any>, WORKER_QUEUE: list<any>, INSTANCE: list<any>, UNKNOWN: list<any>>, isDefault: bool, isManaged: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10441,7 +10440,7 @@ export def "roles-autocomplete autocompleteRoles" [
   --allow-errors(-e) # Return full response without error handling
   --q: string # nullable
   --ids: list # nullable
-  --existingOnly: string@bool-completer
+  --existingOnly: oneof<nothing, bool>
 ]: any -> table<id: string, name: string, isDefault: bool, isManaged: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10548,7 +10547,7 @@ export def "roles updateRole" [
   permissions: record # shape: {FLOW?: list, EXECUTION?: list, TRIGGER?: list, NAMESPACE?: list, KVSTORE?: list, DASHBOARD?: list, SECRET?: list, CREDENTIAL?: list, BLUEPRINT?: list, APP?: list, AUDITLOG?: list, SYSTEM_SETTINGS?: list, TENANT_SETTINGS?: list, TESTSUITE?: list, ASSET?: list, USER?: list, GROUP?: list, ROLE?: list, BINDING?: list, SERVICE_ACCOUNT?: list, INVITATION?: list, COPILOT?: list, MCP_SERVER?: list, APP_EXECUTION?: list, NAMESPACE_FILE?: list, TESTSUITE_RUN?: list, TENANT_ACCESS?: list, SECURITY_INTEGRATION?: list, KILL_SWITCH?: list, TENANT?: list, VERSIONED_PLUGIN?: list, WORKER_GROUP?: list, WORKER_QUEUE?: list, INSTANCE?: list, UNKNOWN?: list}
   name: string
   --description: string
-  --isDefault: string@bool-completer
+  --isDefault: oneof<nothing, bool>
 ]: any -> record<id: string, name: string, description: string, permissions: record<FLOW: list<any>, EXECUTION: list<any>, TRIGGER: list<any>, NAMESPACE: list<any>, KVSTORE: list<any>, DASHBOARD: list<any>, SECRET: list<any>, CREDENTIAL: list<any>, BLUEPRINT: list<any>, APP: list<any>, AUDITLOG: list<any>, SYSTEM_SETTINGS: list<any>, TENANT_SETTINGS: list<any>, TESTSUITE: list<any>, ASSET: list<any>, USER: list<any>, GROUP: list<any>, ROLE: list<any>, BINDING: list<any>, SERVICE_ACCOUNT: list<any>, INVITATION: list<any>, COPILOT: list<any>, MCP_SERVER: list<any>, APP_EXECUTION: list<any>, NAMESPACE_FILE: list<any>, TESTSUITE_RUN: list<any>, TENANT_ACCESS: list<any>, SECURITY_INTEGRATION: list<any>, KILL_SWITCH: list<any>, TENANT: list<any>, VERSIONED_PLUGIN: list<any>, WORKER_GROUP: list<any>, WORKER_QUEUE: list<any>, INSTANCE: list<any>, UNKNOWN: list<any>>, isDefault: bool, isManaged: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10826,7 +10825,7 @@ export def "service-accounts createServiceAccountForTenant" [
   --groups: list # item shape: {id?: string}
   name: string
   --description: string
-  --superAdmin: string@bool-completer
+  --superAdmin: oneof<nothing, bool>
 ]: any -> record<id: string, name: string, description: string, groups: table<id: string>, superAdmin: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10880,7 +10879,7 @@ export def "service-accounts updateServiceAccount" [
   --groups: list # item shape: {id?: string}
   name: string
   --description: string
-  --superAdmin: string@bool-completer
+  --superAdmin: oneof<nothing, bool>
 ]: any -> record<id: string, name: string, description: string, groups: table<id: string>, superAdmin: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10956,7 +10955,7 @@ export def "service-accounts-api-tokens createApiTokensForServiceAccountWithTena
   name: string
   --description: string
   --maxAge: string
-  --extended: string@bool-completer
+  --extended: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11084,7 +11083,7 @@ export def "tenant-access-autocomplete autocompleteUsers" [
   --allow-errors(-e) # Return full response without error handling
   --q: string # nullable
   --ids: list # nullable
-  --existingOnly: string@bool-completer
+  --existingOnly: oneof<nothing, bool>
   --username: string # nullable
 ]: any -> table<id: string, username: string, displayName: string, description: string, groups: list<record>, auths: list<record>> {
   let input = $in
@@ -11367,7 +11366,7 @@ export def "tests-run runTestSuitesByQuery" [
   --allow-errors(-e) # Return full response without error handling
   --namespace: string # nullable
   --flowId: string # nullable
-  --includeChildNamespaces: string@bool-completer # Should child namespaces be included or not (default: true)
+  --includeChildNamespaces: oneof<nothing, bool> # Should child namespaces be included or not (default: true)
 ]: any -> record<requestMade: record<namespace: string, flowId: string, includeChildNamespaces: bool>, tenantId: string, numberOfTestSuitesToBeRun: int, numberOfTestCasesToBeRun: int, results: table<id: string, testSuiteId: string, namespace: string, flowId: string, state: string, startDate: string, endDate: string, results: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11398,7 +11397,7 @@ export def "tests-search searchTestSuites" [
   --qp-sort: list # The sort of current page (nullable)
   --namespace: string # The namespace to filter on (nullable)
   --flowId: string # The flow id to filter on (nullable)
-  --includeChildNamespaces: string@bool-completer # Include child namespaces in filter or not (default: true)
+  --includeChildNamespaces: oneof<nothing, bool> # Include child namespaces in filter or not (default: true)
 ]: nothing -> record<results: table<id: string, description: string, namespace: string, flowId: string, source: string, testCases: list, deleted: bool, disabled: bool>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11918,7 +11917,7 @@ export def "triggers-set-disabled disableTriggerById" [
   --namespace: string
   --flowId: string
   --triggerId: string
-  --disabled: string@bool-completer
+  --disabled: oneof<nothing, bool>
 ]: any -> record<namespace: string, flowId: string, triggerId: string, updatedAt: string, evaluatedAt: string, nextEvaluationDate: string, backfill: record<start: string, end: string, currentDate: string, paused: bool, inputs: record, labels: list<record>, previousNextExecutionDate: string>, stopAfter: list<string>, disabled: bool, locked: bool, workerId: string, lastTriggeredDate: string, executionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11945,7 +11944,7 @@ export def "triggers-set-disabled-by-query disabledTriggersByQuery" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filters: list # Filters. PHP-style nested query is used - examples: `filters[flowId][EQUALS]=hello-world`, `filters[namespace][CONTAINS]=test` (nullable)
-  --disabled: string@bool-completer # The disabled state (default: true)
+  --disabled: oneof<nothing, bool> # The disabled state (default: true)
 ]: nothing -> record<operationId: string, totalItems: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11971,7 +11970,7 @@ export def "triggers-set-disabled-by-triggers disabledTriggersByIds" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   triggers: list # item shape: {namespace?: string, flowId?: string, triggerId?: string}
-  --disabled: string@bool-completer
+  --disabled: oneof<nothing, bool>
 ]: any -> record<operationId: string, totalItems: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

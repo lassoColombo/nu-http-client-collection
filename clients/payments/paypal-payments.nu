@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api-m.paypal.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -135,7 +134,7 @@ export def "payments-authorizations-capture authorizationscapture" [
   --invoice-id: string # The API caller-provided external invoice number for this order. Appears in both the payer's transaction history and the emails that the payer receives.
   --note-to-payer: string # An informational note about this settlement. Appears in both the payer's transaction history and the emails that the payer receives.
   --amount: any
-  --final-capture: string@bool-completer # Indicates whether you can make additional captures against the authorized payment. Set to `true` if you do not intend to capture additional payments against the authorization. Set to `false` if you intend to capture additional payments against the authorization. (default: false)
+  --final-capture: oneof<nothing, bool> # Indicates whether you can make additional captures against the authorized payment. Set to `true` if you do not intend to capture additional payments against the authorization. Set to `false` if you intend to capture additional payments against the authorization. (default: false)
   --payment-instruction: any
   --soft-descriptor: string # The payment descriptor on the payer's account statement.
 ]: any -> record {

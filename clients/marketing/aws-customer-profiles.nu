@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://profile.us-east-1.amazonaws.com" "http://profile.us-east-2.amazonaws.com" "http://profile.us-west-1.amazonaws.com" "http://profile.us-west-2.amazonaws.com" "http://profile.us-gov-west-1.amazonaws.com" "http://profile.us-gov-east-1.amazonaws.com" "http://profile.ca-central-1.amazonaws.com" "http://profile.eu-north-1.amazonaws.com" "http://profile.eu-west-1.amazonaws.com" "http://profile.eu-west-2.amazonaws.com" "http://profile.eu-west-3.amazonaws.com" "http://profile.eu-central-1.amazonaws.com" "http://profile.eu-south-1.amazonaws.com" "http://profile.af-south-1.amazonaws.com" "http://profile.ap-northeast-1.amazonaws.com" "http://profile.ap-northeast-2.amazonaws.com" "http://profile.ap-northeast-3.amazonaws.com" "http://profile.ap-southeast-1.amazonaws.com" "http://profile.ap-southeast-2.amazonaws.com" "http://profile.ap-east-1.amazonaws.com" "http://profile.ap-south-1.amazonaws.com" "http://profile.sa-east-1.amazonaws.com" "http://profile.me-south-1.amazonaws.com" "https://profile.us-east-1.amazonaws.com" "https://profile.us-east-2.amazonaws.com" "https://profile.us-west-1.amazonaws.com" "https://profile.us-west-2.amazonaws.com" "https://profile.us-gov-west-1.amazonaws.com" "https://profile.us-gov-east-1.amazonaws.com" "https://profile.ca-central-1.amazonaws.com" "https://profile.eu-north-1.amazonaws.com" "https://profile.eu-west-1.amazonaws.com" "https://profile.eu-west-2.amazonaws.com" "https://profile.eu-west-3.amazonaws.com" "https://profile.eu-central-1.amazonaws.com" "https://profile.eu-south-1.amazonaws.com" "https://profile.af-south-1.amazonaws.com" "https://profile.ap-northeast-1.amazonaws.com" "https://profile.ap-northeast-2.amazonaws.com" "https://profile.ap-northeast-3.amazonaws.com" "https://profile.ap-southeast-1.amazonaws.com" "https://profile.ap-southeast-2.amazonaws.com" "https://profile.ap-east-1.amazonaws.com" "https://profile.ap-south-1.amazonaws.com" "https://profile.sa-east-1.amazonaws.com" "https://profile.me-south-1.amazonaws.com" "http://profile.cn-north-1.amazonaws.com.cn" "http://profile.cn-northwest-1.amazonaws.com.cn" "https://profile.cn-north-1.amazonaws.com.cn" "https://profile.cn-northwest-1.amazonaws.com.cn"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -674,7 +673,7 @@ export def "domains-object-types PutProfileObjectType" [
   --TemplateId: string # A unique identifier for the object template. For some attributes in the request, the service will use the default value from the object template when TemplateId is present. If these attributes are present in the request, the service may return a <code>BadRequestException</code>. These attributes include: AllowProfileCreation, SourceLastUpdatedTimestampFormat, Fields, and Keys. For example, if AllowProfileCreation is set to true when TemplateId is set, the service may return a <code>BadRequestException</code>.
   --ExpirationDays: int # The number of days until the data in the object expires.
   --EncryptionKey: string # The customer-provided key to encrypt the profile object that will be created in this profile object type.
-  --AllowProfileCreation: string@bool-completer # Indicates whether a profile should be created when data is received if one doesn’t exist for an object of this type. The default is <code>FALSE</code>. If the AllowProfileCreation flag is set to <code>FALSE</code>, then the service tries to fetch a standard profile and associate this object with the profile. If it is set to <code>TRUE</code>, and if no match is found, then the service creates a new standard profile.
+  --AllowProfileCreation: oneof<nothing, bool> # Indicates whether a profile should be created when data is received if one doesn’t exist for an object of this type. The default is <code>FALSE</code>. If the AllowProfileCreation flag is set to <code>FALSE</code>, then the service tries to fetch a standard profile and associate this object with the profile. If it is set to <code>TRUE</code>, and if no match is found, then the service creates a new standard profile.
   --SourceLastUpdatedTimestampFormat: string # The format of your <code>sourceLastUpdatedTimestamp</code> that was previously set up. 
   --Fields: record # A map of the name and ObjectType field.
   --Keys: record # A list of unique keys that can be used to map data to the profile.
@@ -878,7 +877,7 @@ export def "domains-integrations ListIntegrations" [
   --allow-errors(-e) # Return full response without error handling
   --next-token: string # The pagination token from the previous ListIntegrations API call.
   --max-results: int # The maximum number of objects returned per page.
-  --include-hidden: string@bool-completer # Boolean to indicate if hidden integration should be returned. Defaults to <code>False</code>.
+  --include-hidden: oneof<nothing, bool> # Boolean to indicate if hidden integration should be returned. Defaults to <code>False</code>.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -1052,7 +1051,7 @@ export def "integrations ListAccountIntegrations" [
   --allow-errors(-e) # Return full response without error handling
   --next-token: string # The pagination token from the previous ListAccountIntegrations API call.
   --max-results: int # The maximum number of objects returned per page.
-  --include-hidden: string@bool-completer # Boolean to indicate if hidden integration should be returned. Defaults to <code>False</code>.
+  --include-hidden: oneof<nothing, bool> # Boolean to indicate if hidden integration should be returned. Defaults to <code>False</code>.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string

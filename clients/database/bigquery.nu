@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://bigquery.googleapis.com/bigquery/v2"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -112,7 +111,7 @@ export def "projects bigqueryprojectslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --maxResults: int # Maximum number of results to return
@@ -144,10 +143,10 @@ export def "projects-datasets bigquerydatasetslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --all: string@bool-completer # Whether to list all datasets, including hidden ones
+  --all: oneof<nothing, bool> # Whether to list all datasets, including hidden ones
   --filter: string # An expression for filtering the results of the request by label. The syntax is "labels.<name>[:<value>]". Multiple filters can be ANDed together by connecting with a space. Example: "labels.department:receiving labels.active". See Filtering datasets using labels for details.
   --maxResults: int # The maximum number of results to return
   --pageToken: string # Page token, returned by a previous call, to request the next page of results
@@ -182,7 +181,7 @@ export def "projects-datasets bigquerydatasetsinsert" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --access: list # [Optional] An array of objects that define dataset access for one or more entities. You can set this property when inserting or updating a dataset in order to control who is allowed to access the data. If unspecified at dataset creation time, BigQuery adds default dataset access for the following entities: access.specialGroup: projectReaders; access.role: READER; access.specialGroup: projectWriters; access.role: WRITER; access.specialGroup: projectOwners; access.role: OWNER; access.userByEmail: [dataset creator email]; access.role: OWNER; — item shape: {dataset?: record, domain?: string, groupByEmail?: string, iamMember?: string, role?: string, routine?: record, specialGroup?: string, userByEmail?: string, view?: record}
@@ -197,13 +196,13 @@ export def "projects-datasets bigquerydatasetsinsert" [
   --etag: string # [Output-only] A hash of the resource.
   --friendlyName: string # [Optional] A descriptive name for the dataset.
   --id: string # [Output-only] The fully-qualified unique name of the dataset in the format projectId:datasetId. The dataset name without the project name is given in the datasetId field. When creating a new dataset, leave this field blank, and instead specify the datasetId field.
-  --isCaseInsensitive: string@bool-completer # [Optional] Indicates if table names are case insensitive in the dataset.
+  --isCaseInsensitive: oneof<nothing, bool> # [Optional] Indicates if table names are case insensitive in the dataset.
   --kind: string # [Output-only] The resource type. (default: bigquery#dataset)
   --labels: record # The labels associated with this dataset. You can use these to organize and group your datasets. You can set this property when inserting or updating a dataset. See Creating and Updating Dataset Labels for more information.
   --lastModifiedTime: string # [Output-only] The date when this dataset or any of its tables was last modified, in milliseconds since the epoch. (format: int64)
   --location: string # The geographic location where the dataset should reside. The default value is US. See details at https://cloud.google.com/bigquery/docs/locations.
   --maxTimeTravelHours: string # [Optional] Number of hours for the max time travel for all tables in the dataset. (format: int64)
-  --satisfiesPzs: string@bool-completer # [Output-only] Reserved for future use.
+  --satisfiesPzs: oneof<nothing, bool> # [Output-only] Reserved for future use.
   --selfLink: string # [Output-only] A URL that can be used to access the resource again. You can use this URL in Get or Update requests to the resource.
   --storageBillingModel: string # [Optional] Storage billing model to be used for all tables in the dataset. Can be set to PHYSICAL. Default is LOGICAL.
   --tags: list # [Optional]The tags associated with this dataset. Tag keys are globally unique. — item shape: {tagKey?: string, tagValue?: string}
@@ -238,10 +237,10 @@ export def "projects-datasets bigquerydatasetsdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --deleteContents: string@bool-completer # If True, delete all the tables in the dataset. If False and the dataset contains tables, the request will fail. Default is False
+  --deleteContents: oneof<nothing, bool> # If True, delete all the tables in the dataset. If False and the dataset contains tables, the request will fail. Default is False
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -270,7 +269,7 @@ export def "projects-datasets bigquerydatasetsget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<access: table<dataset: record, domain: string, groupByEmail: string, iamMember: string, role: string, routine: record, specialGroup: string, userByEmail: string, view: record>, creationTime: string, datasetReference: record<datasetId: string, projectId: string>, defaultCollation: string, defaultEncryptionConfiguration: record<kmsKeyName: string>, defaultPartitionExpirationMs: string, defaultRoundingMode: string, defaultTableExpirationMs: string, description: string, etag: string, friendlyName: string, id: string, isCaseInsensitive: bool, kind: string, labels: record, lastModifiedTime: string, location: string, maxTimeTravelHours: string, satisfiesPzs: bool, selfLink: string, storageBillingModel: string, tags: table<tagKey: string, tagValue: string>> {
@@ -305,7 +304,7 @@ export def "projects-datasets bigquerydatasetspatch" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --access: list # [Optional] An array of objects that define dataset access for one or more entities. You can set this property when inserting or updating a dataset in order to control who is allowed to access the data. If unspecified at dataset creation time, BigQuery adds default dataset access for the following entities: access.specialGroup: projectReaders; access.role: READER; access.specialGroup: projectWriters; access.role: WRITER; access.specialGroup: projectOwners; access.role: OWNER; access.userByEmail: [dataset creator email]; access.role: OWNER; — item shape: {dataset?: record, domain?: string, groupByEmail?: string, iamMember?: string, role?: string, routine?: record, specialGroup?: string, userByEmail?: string, view?: record}
@@ -320,13 +319,13 @@ export def "projects-datasets bigquerydatasetspatch" [
   --etag: string # [Output-only] A hash of the resource.
   --friendlyName: string # [Optional] A descriptive name for the dataset.
   --id: string # [Output-only] The fully-qualified unique name of the dataset in the format projectId:datasetId. The dataset name without the project name is given in the datasetId field. When creating a new dataset, leave this field blank, and instead specify the datasetId field.
-  --isCaseInsensitive: string@bool-completer # [Optional] Indicates if table names are case insensitive in the dataset.
+  --isCaseInsensitive: oneof<nothing, bool> # [Optional] Indicates if table names are case insensitive in the dataset.
   --kind: string # [Output-only] The resource type. (default: bigquery#dataset)
   --labels: record # The labels associated with this dataset. You can use these to organize and group your datasets. You can set this property when inserting or updating a dataset. See Creating and Updating Dataset Labels for more information.
   --lastModifiedTime: string # [Output-only] The date when this dataset or any of its tables was last modified, in milliseconds since the epoch. (format: int64)
   --location: string # The geographic location where the dataset should reside. The default value is US. See details at https://cloud.google.com/bigquery/docs/locations.
   --maxTimeTravelHours: string # [Optional] Number of hours for the max time travel for all tables in the dataset. (format: int64)
-  --satisfiesPzs: string@bool-completer # [Output-only] Reserved for future use.
+  --satisfiesPzs: oneof<nothing, bool> # [Output-only] Reserved for future use.
   --selfLink: string # [Output-only] A URL that can be used to access the resource again. You can use this URL in Get or Update requests to the resource.
   --storageBillingModel: string # [Optional] Storage billing model to be used for all tables in the dataset. Can be set to PHYSICAL. Default is LOGICAL.
   --tags: list # [Optional]The tags associated with this dataset. Tag keys are globally unique. — item shape: {tagKey?: string, tagValue?: string}
@@ -365,7 +364,7 @@ export def "projects-datasets bigquerydatasetsupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --access: list # [Optional] An array of objects that define dataset access for one or more entities. You can set this property when inserting or updating a dataset in order to control who is allowed to access the data. If unspecified at dataset creation time, BigQuery adds default dataset access for the following entities: access.specialGroup: projectReaders; access.role: READER; access.specialGroup: projectWriters; access.role: WRITER; access.specialGroup: projectOwners; access.role: OWNER; access.userByEmail: [dataset creator email]; access.role: OWNER; — item shape: {dataset?: record, domain?: string, groupByEmail?: string, iamMember?: string, role?: string, routine?: record, specialGroup?: string, userByEmail?: string, view?: record}
@@ -380,13 +379,13 @@ export def "projects-datasets bigquerydatasetsupdate" [
   --etag: string # [Output-only] A hash of the resource.
   --friendlyName: string # [Optional] A descriptive name for the dataset.
   --id: string # [Output-only] The fully-qualified unique name of the dataset in the format projectId:datasetId. The dataset name without the project name is given in the datasetId field. When creating a new dataset, leave this field blank, and instead specify the datasetId field.
-  --isCaseInsensitive: string@bool-completer # [Optional] Indicates if table names are case insensitive in the dataset.
+  --isCaseInsensitive: oneof<nothing, bool> # [Optional] Indicates if table names are case insensitive in the dataset.
   --kind: string # [Output-only] The resource type. (default: bigquery#dataset)
   --labels: record # The labels associated with this dataset. You can use these to organize and group your datasets. You can set this property when inserting or updating a dataset. See Creating and Updating Dataset Labels for more information.
   --lastModifiedTime: string # [Output-only] The date when this dataset or any of its tables was last modified, in milliseconds since the epoch. (format: int64)
   --location: string # The geographic location where the dataset should reside. The default value is US. See details at https://cloud.google.com/bigquery/docs/locations.
   --maxTimeTravelHours: string # [Optional] Number of hours for the max time travel for all tables in the dataset. (format: int64)
-  --satisfiesPzs: string@bool-completer # [Output-only] Reserved for future use.
+  --satisfiesPzs: oneof<nothing, bool> # [Output-only] Reserved for future use.
   --selfLink: string # [Output-only] A URL that can be used to access the resource again. You can use this URL in Get or Update requests to the resource.
   --storageBillingModel: string # [Optional] Storage billing model to be used for all tables in the dataset. Can be set to PHYSICAL. Default is LOGICAL.
   --tags: list # [Optional]The tags associated with this dataset. Tag keys are globally unique. — item shape: {tagKey?: string, tagValue?: string}
@@ -421,7 +420,7 @@ export def "projects-datasets-models bigquerymodelslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --maxResults: int # The maximum number of results to return in a single response page. Leverage the page tokens to iterate through the entire collection.
@@ -455,7 +454,7 @@ export def "projects-datasets-models bigquerymodelsdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
@@ -487,7 +486,7 @@ export def "projects-datasets-models bigquerymodelsget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<bestTrialId: string, creationTime: string, defaultTrialId: string, description: string, encryptionConfiguration: record<kmsKeyName: string>, etag: string, expirationTime: string, featureColumns: table<name: string, type: record>, friendlyName: string, hparamSearchSpaces: record<activationFn: record<candidates: list>, batchSize: record<candidates: record, range: record>, boosterType: record<candidates: list>, colsampleBylevel: record<candidates: record, range: record>, colsampleBynode: record<candidates: record, range: record>, colsampleBytree: record<candidates: record, range: record>, dartNormalizeType: record<candidates: list>, dropout: record<candidates: record, range: record>, hiddenUnits: record<candidates: list>, l1Reg: record<candidates: record, range: record>, l2Reg: record<candidates: record, range: record>, learnRate: record<candidates: record, range: record>, maxTreeDepth: record<candidates: record, range: record>, minSplitLoss: record<candidates: record, range: record>, minTreeChildWeight: record<candidates: record, range: record>, numClusters: record<candidates: record, range: record>, numFactors: record<candidates: record, range: record>, numParallelTree: record<candidates: record, range: record>, optimizer: record<candidates: list>, subsample: record<candidates: record, range: record>, treeMethod: record<candidates: list>, walsAlpha: record<candidates: record, range: record>>, hparamTrials: table<endTimeMs: string, errorMessage: string, evalLoss: float, evaluationMetrics: record, hparamTuningEvaluationMetrics: record, hparams: record, startTimeMs: string, status: string, trainingLoss: float, trialId: string>, labelColumns: table<name: string, type: record>, labels: record, lastModifiedTime: string, location: string, modelReference: record<datasetId: string, modelId: string, projectId: string>, modelType: string, optimalTrialIds: list<string>, trainingRuns: table<classLevelGlobalExplanations: list, dataSplitResult: record, evaluationMetrics: record, modelLevelGlobalExplanation: record, results: list, startTime: string, trainingOptions: record, trainingStartTime: string, vertexAiModelId: string, vertexAiModelVersion: string>> {
@@ -526,7 +525,7 @@ export def "projects-datasets-models bigquerymodelspatch" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --bestTrialId: string # The best trial_id across all training runs. (format: int64)
@@ -569,7 +568,7 @@ export def "projects-datasets-routines bigqueryroutineslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --filter: string # If set, then only the Routines matching this filter are returned. The current supported form is either "routine_type:" or "routineType:", where is a RoutineType enum. Example: "routineType:SCALAR_FUNCTION".
@@ -610,7 +609,7 @@ export def "projects-datasets-routines bigqueryroutinesinsert" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --arguments: list # Optional. — item shape: {argumentKind?: "ARGUMENT_KIND_UNSPECIFIED"|"FIXED_TYPE"|"ANY_TYPE", dataType?: record, mode?: "MODE_UNSPECIFIED"|"IN"|"OUT"|"INOUT", name?: string}
@@ -625,7 +624,7 @@ export def "projects-datasets-routines bigqueryroutinesinsert" [
   --routineReference: record # shape: {datasetId?: string, projectId?: string, routineId?: string}
   --routineType: string@routineType-completer # Required. The type of routine.
   --sparkOptions: record # Options for a user-defined Spark routine. — shape: {archiveUris?: list, connection?: string, containerImage?: string, fileUris?: list, jarUris?: list, mainClass?: string, mainFileUri?: string, properties?: record, pyFileUris?: list, runtimeVersion?: string}
-  --strictMode: string@bool-completer # Optional. Can be set for procedures only. If true (default), the definition body will be validated in the creation and the updates of the procedure. For procedures with an argument of ANY TYPE, the definition body validtion is not supported at creation/update time, and thus this field must be set to false explicitly.
+  --strictMode: oneof<nothing, bool> # Optional. Can be set for procedures only. If true (default), the definition body will be validated in the creation and the updates of the procedure. For procedures with an argument of ANY TYPE, the definition body validtion is not supported at creation/update time, and thus this field must be set to false explicitly.
 ]: any -> record<arguments: table<argumentKind: string, dataType: record, mode: string, name: string>, creationTime: string, definitionBody: string, description: string, determinismLevel: string, etag: string, importedLibraries: list<string>, language: string, lastModifiedTime: string, remoteFunctionOptions: record<connection: string, endpoint: string, maxBatchingRows: string, userDefinedContext: record>, returnTableType: record<columns: list<record>>, returnType: record<arrayElementType: any, structType: record<fields: list>, typeKind: string>, routineReference: record<datasetId: string, projectId: string, routineId: string>, routineType: string, sparkOptions: record<archiveUris: list<string>, connection: string, containerImage: string, fileUris: list<string>, jarUris: list<string>, mainClass: string, mainFileUri: string, properties: record, pyFileUris: list<string>, runtimeVersion: string>, strictMode: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -658,7 +657,7 @@ export def "projects-datasets-routines bigqueryroutinesdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
@@ -690,7 +689,7 @@ export def "projects-datasets-routines bigqueryroutinesget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --readMask: string # If set, only the Routine fields in the field mask are returned in the response. If unset, all Routine fields are returned.
@@ -729,7 +728,7 @@ export def "projects-datasets-routines bigqueryroutinesupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --arguments: list # Optional. — item shape: {argumentKind?: "ARGUMENT_KIND_UNSPECIFIED"|"FIXED_TYPE"|"ANY_TYPE", dataType?: record, mode?: "MODE_UNSPECIFIED"|"IN"|"OUT"|"INOUT", name?: string}
@@ -744,7 +743,7 @@ export def "projects-datasets-routines bigqueryroutinesupdate" [
   --routineReference: record # shape: {datasetId?: string, projectId?: string, routineId?: string}
   --routineType: string@routineType-completer # Required. The type of routine.
   --sparkOptions: record # Options for a user-defined Spark routine. — shape: {archiveUris?: list, connection?: string, containerImage?: string, fileUris?: list, jarUris?: list, mainClass?: string, mainFileUri?: string, properties?: record, pyFileUris?: list, runtimeVersion?: string}
-  --strictMode: string@bool-completer # Optional. Can be set for procedures only. If true (default), the definition body will be validated in the creation and the updates of the procedure. For procedures with an argument of ANY TYPE, the definition body validtion is not supported at creation/update time, and thus this field must be set to false explicitly.
+  --strictMode: oneof<nothing, bool> # Optional. Can be set for procedures only. If true (default), the definition body will be validated in the creation and the updates of the procedure. For procedures with an argument of ANY TYPE, the definition body validtion is not supported at creation/update time, and thus this field must be set to false explicitly.
 ]: any -> record<arguments: table<argumentKind: string, dataType: record, mode: string, name: string>, creationTime: string, definitionBody: string, description: string, determinismLevel: string, etag: string, importedLibraries: list<string>, language: string, lastModifiedTime: string, remoteFunctionOptions: record<connection: string, endpoint: string, maxBatchingRows: string, userDefinedContext: record>, returnTableType: record<columns: list<record>>, returnType: record<arrayElementType: any, structType: record<fields: list>, typeKind: string>, routineReference: record<datasetId: string, projectId: string, routineId: string>, routineType: string, sparkOptions: record<archiveUris: list<string>, connection: string, containerImage: string, fileUris: list<string>, jarUris: list<string>, mainClass: string, mainFileUri: string, properties: record, pyFileUris: list<string>, runtimeVersion: string>, strictMode: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -776,7 +775,7 @@ export def "projects-datasets-tables bigquerytableslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --maxResults: int # Maximum number of results to return
@@ -822,7 +821,7 @@ export def "projects-datasets-tables bigquerytablesinsert" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --cloneDefinition: record # shape: {baseTableReference?: record, cloneTime?: string}
@@ -857,7 +856,7 @@ export def "projects-datasets-tables bigquerytablesinsert" [
   --num-total-logical-bytes: string # [Output-only] Total number of logical bytes in the table or materialized view. (format: int64)
   --num-total-physical-bytes: string # [Output-only] The physical size of this table in bytes. This also includes storage used for time travel. This data is not kept in real time, and might be delayed by a few seconds to a few minutes. (format: int64)
   --rangePartitioning: record # shape: {field?: string, range?: record}
-  --requirePartitionFilter: string@bool-completer # [Optional] If set to true, queries over this table require a partition filter that can be used for partition elimination to be specified. (default: false)
+  --requirePartitionFilter: oneof<nothing, bool> # [Optional] If set to true, queries over this table require a partition filter that can be used for partition elimination to be specified. (default: false)
   --schema: record # shape: {fields?: list}
   --selfLink: string # [Output-only] A URL that can be used to access this resource again.
   --snapshotDefinition: record # shape: {baseTableReference?: record, snapshotTime?: string}
@@ -898,7 +897,7 @@ export def "projects-datasets-tables bigquerytablesdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
@@ -930,7 +929,7 @@ export def "projects-datasets-tables bigquerytablesget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --selectedFields: string # List of fields to return (comma-separated). If unspecified, all fields are returned
@@ -977,10 +976,10 @@ export def "projects-datasets-tables bigquerytablespatch" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --autodetect-schema: string@bool-completer # When true will autodetect schema, else will keep original schema
+  --autodetect-schema: oneof<nothing, bool> # When true will autodetect schema, else will keep original schema
   --cloneDefinition: record # shape: {baseTableReference?: record, cloneTime?: string}
   --clustering: record # shape: {fields?: list}
   --creationTime: string # [Output-only] The time when this table was created, in milliseconds since the epoch. (format: int64)
@@ -1013,7 +1012,7 @@ export def "projects-datasets-tables bigquerytablespatch" [
   --num-total-logical-bytes: string # [Output-only] Total number of logical bytes in the table or materialized view. (format: int64)
   --num-total-physical-bytes: string # [Output-only] The physical size of this table in bytes. This also includes storage used for time travel. This data is not kept in real time, and might be delayed by a few seconds to a few minutes. (format: int64)
   --rangePartitioning: record # shape: {field?: string, range?: record}
-  --requirePartitionFilter: string@bool-completer # [Optional] If set to true, queries over this table require a partition filter that can be used for partition elimination to be specified. (default: false)
+  --requirePartitionFilter: oneof<nothing, bool> # [Optional] If set to true, queries over this table require a partition filter that can be used for partition elimination to be specified. (default: false)
   --schema: record # shape: {fields?: list}
   --selfLink: string # [Output-only] A URL that can be used to access this resource again.
   --snapshotDefinition: record # shape: {baseTableReference?: record, snapshotTime?: string}
@@ -1067,10 +1066,10 @@ export def "projects-datasets-tables bigquerytablesupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --autodetect-schema: string@bool-completer # When true will autodetect schema, else will keep original schema
+  --autodetect-schema: oneof<nothing, bool> # When true will autodetect schema, else will keep original schema
   --cloneDefinition: record # shape: {baseTableReference?: record, cloneTime?: string}
   --clustering: record # shape: {fields?: list}
   --creationTime: string # [Output-only] The time when this table was created, in milliseconds since the epoch. (format: int64)
@@ -1103,7 +1102,7 @@ export def "projects-datasets-tables bigquerytablesupdate" [
   --num-total-logical-bytes: string # [Output-only] Total number of logical bytes in the table or materialized view. (format: int64)
   --num-total-physical-bytes: string # [Output-only] The physical size of this table in bytes. This also includes storage used for time travel. This data is not kept in real time, and might be delayed by a few seconds to a few minutes. (format: int64)
   --rangePartitioning: record # shape: {field?: string, range?: record}
-  --requirePartitionFilter: string@bool-completer # [Optional] If set to true, queries over this table require a partition filter that can be used for partition elimination to be specified. (default: false)
+  --requirePartitionFilter: oneof<nothing, bool> # [Optional] If set to true, queries over this table require a partition filter that can be used for partition elimination to be specified. (default: false)
   --schema: record # shape: {fields?: list}
   --selfLink: string # [Output-only] A URL that can be used to access this resource again.
   --snapshotDefinition: record # shape: {baseTableReference?: record, snapshotTime?: string}
@@ -1144,7 +1143,7 @@ export def "projects-datasets-tables-data bigquerytabledatalist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --maxResults: int # Maximum number of results to return
@@ -1181,13 +1180,13 @@ export def "projects-datasets-tables-insert-all bigquerytabledatainsertAll" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --ignoreUnknownValues: string@bool-completer # [Optional] Accept rows that contain values that do not match the schema. The unknown values are ignored. Default is false, which treats unknown values as errors.
+  --ignoreUnknownValues: oneof<nothing, bool> # [Optional] Accept rows that contain values that do not match the schema. The unknown values are ignored. Default is false, which treats unknown values as errors.
   --kind: string # The resource type of the response. (default: bigquery#tableDataInsertAllRequest)
   --rows: list # The rows to insert. — item shape: {insertId?: string, json?: record}
-  --skipInvalidRows: string@bool-completer # [Optional] Insert all valid rows of a request, even if invalid rows exist. The default value is false, which causes the entire request to fail if any invalid rows exist.
+  --skipInvalidRows: oneof<nothing, bool> # [Optional] Insert all valid rows of a request, even if invalid rows exist. The default value is false, which causes the entire request to fail if any invalid rows exist.
   --templateSuffix: string # If specified, treats the destination table as a base template, and inserts the rows into an instance table named "{destination}{templateSuffix}". BigQuery will manage creation of the instance table, using the schema of the base template table. See https://cloud.google.com/bigquery/streaming-data-into-bigquery#template-tables for considerations when working with templates tables.
 ]: any -> record<insertErrors: table<errors: list, index: int>, kind: string> {
   let input = $in
@@ -1221,7 +1220,7 @@ export def "projects-datasets-tables-row-access-policies bigqueryrowAccessPolici
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --pageSize: int # The maximum number of results to return in a single response page. Leverage the page tokens to iterate through the entire collection.
@@ -1253,10 +1252,10 @@ export def "projects-jobs bigqueryjobslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --allUsers: string@bool-completer # Whether to display jobs owned by all users in the project. Default false
+  --allUsers: oneof<nothing, bool> # Whether to display jobs owned by all users in the project. Default false
   --maxCreationTime: string # Max value for job creation time, in milliseconds since the POSIX epoch. If set, only jobs created before or at this timestamp are returned
   --maxResults: int # Maximum number of results to return
   --minCreationTime: string # Min value for job creation time, in milliseconds since the POSIX epoch. If set, only jobs created after or at this timestamp are returned
@@ -1291,7 +1290,7 @@ export def "projects-jobs bigqueryjobsinsert" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body: record
@@ -1325,7 +1324,7 @@ export def "projects-jobs bigqueryjobsget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --location: string # The geographic location of the job. Required except for US and EU. See details at https://cloud.google.com/bigquery/docs/locations#specifying_your_location.
@@ -1357,7 +1356,7 @@ export def "projects-jobs-cancel bigqueryjobscancel" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --location: string # The geographic location of the job. Required except for US and EU. See details at https://cloud.google.com/bigquery/docs/locations#specifying_your_location.
@@ -1389,7 +1388,7 @@ export def "projects-jobs-delete bigqueryjobsdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --location: string # The geographic location of the job. Required. See details at: https://cloud.google.com/bigquery/docs/locations#specifying_your_location.
@@ -1423,27 +1422,27 @@ export def "projects-queries bigqueryjobsquery" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --connectionProperties: list # Connection properties. — item shape: {key?: string, value?: string}
-  --continuous: string@bool-completer # [Optional] Specifies whether the query should be executed as a continuous query. The default value is false.
-  --createSession: string@bool-completer # If true, creates a new session, where session id will be a server generated random id. If false, runs query with an existing session_id passed in ConnectionProperty, otherwise runs query in non-session mode.
+  --continuous: oneof<nothing, bool> # [Optional] Specifies whether the query should be executed as a continuous query. The default value is false.
+  --createSession: oneof<nothing, bool> # If true, creates a new session, where session id will be a server generated random id. If false, runs query with an existing session_id passed in ConnectionProperty, otherwise runs query in non-session mode.
   --defaultDataset: record # shape: {datasetId?: string, projectId?: string}
-  --dryRun: string@bool-completer # [Optional] If set to true, BigQuery doesn't run the job. Instead, if the query is valid, BigQuery returns statistics about the job such as how many bytes would be processed. If the query is invalid, an error returns. The default value is false.
+  --dryRun: oneof<nothing, bool> # [Optional] If set to true, BigQuery doesn't run the job. Instead, if the query is valid, BigQuery returns statistics about the job such as how many bytes would be processed. If the query is invalid, an error returns. The default value is false.
   --kind: string # The resource type of the request. (default: bigquery#queryRequest)
   --labels: record # The labels associated with this job. You can use these to organize and group your jobs. Label keys and values can be no longer than 63 characters, can only contain lowercase letters, numeric characters, underscores and dashes. International characters are allowed. Label values are optional. Label keys must start with a letter and each label in the list must have a different key.
   --location: string # The geographic location where the job should run. See details at https://cloud.google.com/bigquery/docs/locations#specifying_your_location.
   --maxResults: int # [Optional] The maximum number of rows of data to return per page of results. Setting this flag to a small value such as 1000 and then paging through results might improve reliability when the query result set is large. In addition to this limit, responses are also limited to 10 MB. By default, there is no maximum row count, and only the byte limit applies. (format: uint32)
   --maximumBytesBilled: string # [Optional] Limits the bytes billed for this job. Queries that will have bytes billed beyond this limit will fail (without incurring a charge). If unspecified, this will be set to your project default. (format: int64)
   --parameterMode: string # Standard SQL only. Set to POSITIONAL to use positional (?) query parameters or to NAMED to use named (@myparam) query parameters in this query.
-  --preserveNulls: string@bool-completer # [Deprecated] This property is deprecated.
+  --preserveNulls: oneof<nothing, bool> # [Deprecated] This property is deprecated.
   --body-query: string # [Required] A query string, following the BigQuery query syntax, of the query to execute. Example: "SELECT count(f1) FROM [myProjectId:myDatasetId.myTableId]".
   --queryParameters: list # Query parameters for Standard SQL queries. — item shape: {name?: string, parameterType?: record, parameterValue?: record}
   --requestId: string # A unique user provided identifier to ensure idempotent behavior for queries. Note that this is different from the job_id. It has the following properties: 1. It is case-sensitive, limited to up to 36 ASCII characters. A UUID is recommended. 2. Read only queries can ignore this token since they are nullipotent by definition. 3. For the purposes of idempotency ensured by the request_id, a request is considered duplicate of another only if they have the same request_id and are actually duplicates. When determining whether a request is a duplicate of the previous request, all parameters in the request that may affect the behavior are considered. For example, query, connection_properties, query_parameters, use_legacy_sql are parameters that affect the result and are considered when determining whether a request is a duplicate, but properties like timeout_ms don't affect the result and are thus not considered. Dry run query requests are never considered duplicate of another request. 4. When a duplicate mutating query request is detected, it returns: a. the results of the mutation if it completes successfully within the timeout. b. the running operation if it is still in progress at the end of the timeout. 5. Its lifetime is limited to 15 minutes. In other words, if two requests are sent with the same request_id, but more than 15 minutes apart, idempotency is not guaranteed.
   --timeoutMs: int # [Optional] How long to wait for the query to complete, in milliseconds, before the request times out and returns. Note that this is only a timeout for the request, not the query. If the query takes longer to run than the timeout value, the call returns without any results and with the 'jobComplete' flag set to false. You can call GetQueryResults() to wait for the query to complete and read the results. The default value is 10000 milliseconds (10 seconds). (format: uint32)
-  --useLegacySql: string@bool-completer # Specifies whether to use BigQuery's legacy SQL dialect for this query. The default value is true. If set to false, the query will use BigQuery's standard SQL: https://cloud.google.com/bigquery/sql-reference/ When useLegacySql is set to false, the value of flattenResults is ignored; query will be run as if flattenResults is false. (default: true)
-  --useQueryCache: string@bool-completer # [Optional] Whether to look for the result in the query cache. The query cache is a best-effort cache that will be flushed whenever tables in the query are modified. The default value is true. (default: true)
+  --useLegacySql: oneof<nothing, bool> # Specifies whether to use BigQuery's legacy SQL dialect for this query. The default value is true. If set to false, the query will use BigQuery's standard SQL: https://cloud.google.com/bigquery/sql-reference/ When useLegacySql is set to false, the value of flattenResults is ignored; query will be run as if flattenResults is false. (default: true)
+  --useQueryCache: oneof<nothing, bool> # [Optional] Whether to look for the result in the query cache. The query cache is a best-effort cache that will be flushed whenever tables in the query are modified. The default value is true. (default: true)
 ]: any -> record<cacheHit: bool, dmlStats: record<deletedRowCount: string, insertedRowCount: string, updatedRowCount: string>, errors: table<debugInfo: string, location: string, message: string, reason: string>, jobComplete: bool, jobReference: record<jobId: string, location: string, projectId: string>, kind: string, numDmlAffectedRows: string, pageToken: string, rows: table<f: list>, schema: record<fields: list<record>>, sessionInfo: record<sessionId: string>, totalBytesProcessed: string, totalRows: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1475,7 +1474,7 @@ export def "projects-queries bigqueryjobsgetQueryResults" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --location: string # The geographic location where the job should run. Required except for US and EU. See details at https://cloud.google.com/bigquery/docs/locations#specifying_your_location.
@@ -1510,7 +1509,7 @@ export def "projects-service-account bigqueryprojectsgetServiceAccount" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<email: string, kind: string> {
@@ -1541,7 +1540,7 @@ export def "tables bigquerytablesgetIamPolicy" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --options: record # Encapsulates settings provided to GetIamPolicy. — shape: {requestedPolicyVersion?: int}
@@ -1576,7 +1575,7 @@ export def "tables bigquerytablessetIamPolicy" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources. A `Policy` is a collection of `bindings`. A `binding` binds one or more `members`, or principals, to a single `role`. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A `role` is a named list of permissions; each `role` can be an IAM predefined role or a user-created custom role. For some types of Google Cloud resources, a `binding` can also specify a `condition`, which is a logical expression that allows access to a resource only if the expression evaluates to `true`. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies). **JSON example:** { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } **YAML example:** bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the [IAM documentation](https://cloud.google.com/iam/docs/). — shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
@@ -1611,7 +1610,7 @@ export def "tables bigquerytablestestIamPermissions" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --permissions: list # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).

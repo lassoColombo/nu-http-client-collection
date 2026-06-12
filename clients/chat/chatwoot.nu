@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://app.chatwoot.com"] }
 def auth-scheme-completer [] { ["api_access_token"] }
 
@@ -949,7 +948,7 @@ export def "accounts update-account" [
   --support-email: string # The support email of the account (e.g. support@example.com)
   --auto-resolve-after: int # Auto resolve conversations after specified minutes (nullable, e.g. 1440)
   --auto-resolve-message: string # Message to send when auto resolving (nullable, e.g. This conversation has been automatically resolved due to inactivity)
-  --auto-resolve-ignore-waiting: string@bool-completer # Whether to ignore waiting conversations for auto resolve (nullable, e.g. false)
+  --auto-resolve-ignore-waiting: oneof<nothing, bool> # Whether to ignore waiting conversations for auto resolve (nullable, e.g. false)
   --industry: string # Industry type (e.g. Technology)
   --company-size: string # Company size (e.g. 50-100)
   --timezone: string # Account timezone (e.g. UTC)
@@ -1161,7 +1160,7 @@ export def "accounts-agents add-new-agent-to-account" [
   email: string # Email of the Agent (e.g. john.doe@acme.inc)
   role: string@role-completer # Whether its administrator or agent (e.g. agent)
   --availability: string@availability-completer # The configured availability of the agent. (e.g. online)
-  --auto-offline: string@bool-completer # Whether the agent is automatically marked offline when they are away. (e.g. true)
+  --auto-offline: oneof<nothing, bool> # Whether the agent is automatically marked offline when they are away. (e.g. true)
 ]: any -> record<id: int, account_id: int, availability_status: string, auto_offline: bool, confirmed: bool, email: string, available_name: string, name: string, role: string, thumbnail: string, custom_role_id: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api_access_token"))
@@ -1190,7 +1189,7 @@ export def "accounts-agents update-agent-in-account" [
   --allow-errors(-e) # Return full response without error handling
   role: string@role-completer # Whether its administrator or agent (e.g. agent)
   --availability: string@availability-completer # The configured availability of the agent. (e.g. online)
-  --auto-offline: string@bool-completer # Whether the agent is automatically marked offline when they are away. (e.g. true)
+  --auto-offline: oneof<nothing, bool> # Whether the agent is automatically marked offline when they are away. (e.g. true)
 ]: any -> record<id: int, account_id: int, availability_status: string, auto_offline: bool, confirmed: bool, email: string, available_name: string, name: string, role: string, thumbnail: string, custom_role_id: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api_access_token"))
@@ -1504,7 +1503,7 @@ export def "accounts-contacts contactCreate" [
   inbox_id: float # ID of the inbox to which the contact belongs (e.g. 1)
   --name: string # name of the contact (e.g. Alice)
   --email: string # email of the contact (e.g. alice@acme.inc)
-  --blocked: string@bool-completer # whether the contact is blocked or not (e.g. false)
+  --blocked: oneof<nothing, bool> # whether the contact is blocked or not (e.g. false)
   --phone-number: string # phone number of the contact (e.g. +123456789)
   --avatar: string # Send the form data with the avatar image binary or use the avatar_url (format: binary)
   --avatar-url: string # The url to a jpeg, png file for the contact avatar (e.g. https://example.com/avatar.png)
@@ -1562,7 +1561,7 @@ export def "accounts-contacts contactUpdate" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # name of the contact (e.g. Alice)
   --email: string # email of the contact (e.g. alice@acme.inc)
-  --blocked: string@bool-completer # whether the contact is blocked or not (e.g. false)
+  --blocked: oneof<nothing, bool> # whether the contact is blocked or not (e.g. false)
   --phone-number: string # phone number of the contact (e.g. +123456789)
   --avatar: string # Send the form data with the avatar image binary or use the avatar_url (format: binary)
   --avatar-url: string # The url to a jpeg, png file for the contact avatar (e.g. https://example.com/avatar.png)
@@ -1850,7 +1849,7 @@ export def "accounts-automation-rules add-new-automation-rule-to-account" [
   --name: string # Rule name (e.g. Add label on message create event)
   --description: string # The description about the automation and actions (e.g. Add label support and sales on message create event if incoming message content contains text help)
   --event-name: string@event-name-completer # The event when you want to execute the automation actions (e.g. message_created)
-  --active: string@bool-completer # Enable/disable automation rule
+  --active: oneof<nothing, bool> # Enable/disable automation rule
   --actions: list # Array of actions which you want to perform when condition matches, e.g add label support if message contains content help.
   --conditions: list # Array of conditions on which conversation filter would work, e.g message content contains text help.
 ]: any -> record<payload: any> {
@@ -1905,7 +1904,7 @@ export def "accounts-automation-rules update-automation-rule-in-account" [
   --name: string # Rule name (e.g. Add label on message create event)
   --description: string # The description about the automation and actions (e.g. Add label support and sales on message create event if incoming message content contains text help)
   --event-name: string@event-name-completer # The event when you want to execute the automation actions (e.g. message_created)
-  --active: string@bool-completer # Enable/disable automation rule
+  --active: oneof<nothing, bool> # Enable/disable automation rule
   --actions: list # Array of actions which you want to perform when condition matches, e.g add label support if message contains content help.
   --conditions: list # Array of conditions on which conversation filter would work, e.g message content contains text help.
 ]: any -> record<payload: any> {
@@ -1963,7 +1962,7 @@ export def "accounts-portals add-new-portal-to-account" [
   --name: string # Name for the portal (e.g. Handbook)
   --page-title: string # Page title for the portal (e.g. Handbook)
   --slug: string # Slug for the portal to display in link (e.g. handbook)
-  --archived: string@bool-completer # Status to check if portal is live (e.g. false)
+  --archived: oneof<nothing, bool> # Status to check if portal is live (e.g. false)
   --config: record # Configuration about supporting locales (e.g. {allowed_locales: [en, es], default_locale: en})
 ]: any -> record<payload: table<id: int, archived: bool, color: string, config: record, custom_domain: string, header_text: string, homepage_link: string, name: string, slug: string, page_title: string, account_id: int, inbox: record, logo: record, meta: record>> {
   let input = $in
@@ -2020,7 +2019,7 @@ export def "accounts-portals update-portal-to-account" [
   --name: string # Name for the portal (e.g. Handbook)
   --page-title: string # Page title for the portal (e.g. Handbook)
   --slug: string # Slug for the portal to display in link (e.g. handbook)
-  --archived: string@bool-completer # Status to check if portal is live (e.g. false)
+  --archived: oneof<nothing, bool> # Status to check if portal is live (e.g. false)
   --config: record # Configuration about supporting locales (e.g. {allowed_locales: [en, es], default_locale: en})
 ]: any -> record<payload: record<id: int, archived: bool, color: string, config: record<allowed_locales: list>, custom_domain: string, header_text: string, homepage_link: string, name: string, slug: string, page_title: string, account_id: int, inbox: record<id: float, name: string, website_url: string, channel_type: string, avatar_url: string, widget_color: string, website_token: string, enable_auto_assignment: bool, web_widget_script: string, welcome_title: string, welcome_tagline: string, greeting_enabled: bool, greeting_message: string, channel_id: float, working_hours_enabled: bool, enable_email_collect: bool, csat_survey_enabled: bool, auto_assignment_config: record, out_of_office_message: string, working_hours: list, timezone: string, callback_webhook_url: string, allow_messages_after_resolved: bool, lock_to_single_conversation: bool, sender_name_type: string, business_name: string, hmac_mandatory: bool, selected_feature_flags: list, reply_time: string, messaging_service_sid: string, phone_number: string, medium: string, provider: string>, logo: record<id: int, portal_id: int, file_type: string, account_id: int, file_url: string, blob_id: int, filename: string>, meta: record<all_articles_count: int, archived_articles_count: int, published_count: int, draft_articles_count: int, categories_count: int, default_locale: string>>> {
   let input = $in
@@ -2349,7 +2348,7 @@ export def "accounts-conversations-toggle-typing-status toggle-typing-status-of-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   typing_status: string@typing-status-completer # Typing status to set. (e.g. on)
-  --is-private: string@bool-completer # Whether the typing event is for private notes. (e.g. false)
+  --is-private: oneof<nothing, bool> # Whether the typing event is for private notes. (e.g. false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api_access_token"))
@@ -2528,17 +2527,17 @@ export def "accounts-inboxes inboxCreation" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name of the inbox. (e.g. Support)
   --avatar: string # Image file for avatar. (format: binary)
-  --greeting-enabled: string@bool-completer # Enable greeting message. (e.g. true)
+  --greeting-enabled: oneof<nothing, bool> # Enable greeting message. (e.g. true)
   --greeting-message: string # Greeting message to send when greeting messages are enabled. (e.g. Hello, how can I help you?)
-  --enable-email-collect: string@bool-completer # Enable email collection.  Available for: `Website`  (e.g. true)
-  --csat-survey-enabled: string@bool-completer # Enable CSAT survey. (e.g. true)
+  --enable-email-collect: oneof<nothing, bool> # Enable email collection.  Available for: `Website`  (e.g. true)
+  --csat-survey-enabled: oneof<nothing, bool> # Enable CSAT survey. (e.g. true)
   --csat-config: record # CSAT survey configuration. — shape: {display_type?: "emoji"|"star", message?: string, button_text?: string, language?: string, survey_rules?: record}
-  --enable-auto-assignment: string@bool-completer # Enable Auto Assignment. (e.g. true)
-  --working-hours-enabled: string@bool-completer # Enable working hours. (e.g. true)
+  --enable-auto-assignment: oneof<nothing, bool> # Enable Auto Assignment. (e.g. true)
+  --working-hours-enabled: oneof<nothing, bool> # Enable working hours. (e.g. true)
   --out-of-office-message: string # Out of office message to send outside working hours. (e.g. We are currently out of office. Please leave a message and we will get back to you.)
   --timezone: string # Timezone of the inbox. (e.g. America/New_York)
-  --allow-messages-after-resolved: string@bool-completer # Allow messages after conversation is resolved.  Available for: `Website`  (e.g. true)
-  --lock-to-single-conversation: string@bool-completer # Lock contact messages to a single active conversation.  Available for: `API` `LINE` `Telegram` `WhatsApp` `SMS`  (e.g. true)
+  --allow-messages-after-resolved: oneof<nothing, bool> # Allow messages after conversation is resolved.  Available for: `Website`  (e.g. true)
+  --lock-to-single-conversation: oneof<nothing, bool> # Lock contact messages to a single active conversation.  Available for: `API` `LINE` `Telegram` `WhatsApp` `SMS`  (e.g. true)
   --portal-id: int # Id of the help center portal to attach to the inbox. (e.g. 1)
   --sender-name-type: string@sender-name-type-completer # Sender name type for outbound email replies.  Available for: `Website` `Email`  (e.g. friendly)
   --business-name: string # Business name for outbound email replies.  Available for: `Website` `Email`  (e.g. My Business)
@@ -2595,17 +2594,17 @@ export def "accounts-inboxes updateInbox" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name of the inbox. (e.g. Support)
   --avatar: string # Image file for avatar. (format: binary)
-  --greeting-enabled: string@bool-completer # Enable greeting message. (e.g. true)
+  --greeting-enabled: oneof<nothing, bool> # Enable greeting message. (e.g. true)
   --greeting-message: string # Greeting message to send when greeting messages are enabled. (e.g. Hello, how can I help you?)
-  --enable-email-collect: string@bool-completer # Enable email collection.  Available for: `Website`  (e.g. true)
-  --csat-survey-enabled: string@bool-completer # Enable CSAT survey. (e.g. true)
+  --enable-email-collect: oneof<nothing, bool> # Enable email collection.  Available for: `Website`  (e.g. true)
+  --csat-survey-enabled: oneof<nothing, bool> # Enable CSAT survey. (e.g. true)
   --csat-config: record # CSAT survey configuration. — shape: {display_type?: "emoji"|"star", message?: string, button_text?: string, language?: string, survey_rules?: record}
-  --enable-auto-assignment: string@bool-completer # Enable Auto Assignment. (e.g. true)
-  --working-hours-enabled: string@bool-completer # Enable working hours. (e.g. true)
+  --enable-auto-assignment: oneof<nothing, bool> # Enable Auto Assignment. (e.g. true)
+  --working-hours-enabled: oneof<nothing, bool> # Enable working hours. (e.g. true)
   --out-of-office-message: string # Out of office message to send outside working hours. (e.g. We are currently out of office. Please leave a message and we will get back to you.)
   --timezone: string # Timezone of the inbox. (e.g. America/New_York)
-  --allow-messages-after-resolved: string@bool-completer # Allow messages after conversation is resolved.  Available for: `Website`  (e.g. true)
-  --lock-to-single-conversation: string@bool-completer # Lock contact messages to a single active conversation.  Available for: `API` `LINE` `Telegram` `WhatsApp` `SMS`  (e.g. true)
+  --allow-messages-after-resolved: oneof<nothing, bool> # Allow messages after conversation is resolved.  Available for: `Website`  (e.g. true)
+  --lock-to-single-conversation: oneof<nothing, bool> # Lock contact messages to a single active conversation.  Available for: `API` `LINE` `Telegram` `WhatsApp` `SMS`  (e.g. true)
   --portal-id: int # Id of the help center portal to attach to the inbox. (e.g. 1)
   --sender-name-type: string@sender-name-type-completer # Sender name type for outbound email replies.  Available for: `Website` `Email`  (e.g. friendly)
   --business-name: string # Business name for outbound email replies.  Available for: `Website` `Email`  (e.g. My Business)
@@ -2814,7 +2813,7 @@ export def "accounts-labels create-a-label" [
   --title: string # The label title (e.g. support)
   --description: string # A short description for the label (e.g. Conversations that need support follow-up)
   --color: string # Hex color code for the label (e.g. #1f93ff)
-  --show-on-sidebar: string@bool-completer # Whether the label should appear in the sidebar (e.g. true)
+  --show-on-sidebar: oneof<nothing, bool> # Whether the label should appear in the sidebar (e.g. true)
 ]: any -> record<id: float, title: string, description: string, color: string, show_on_sidebar: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api_access_token"))
@@ -2867,7 +2866,7 @@ export def "accounts-labels update-a-label" [
   --title: string # The label title (e.g. support)
   --description: string # A short description for the label (e.g. Conversations that need support follow-up)
   --color: string # Hex color code for the label (e.g. #1f93ff)
-  --show-on-sidebar: string@bool-completer # Whether the label should appear in the sidebar (e.g. true)
+  --show-on-sidebar: oneof<nothing, bool> # Whether the label should appear in the sidebar (e.g. true)
 ]: any -> record<id: float, title: string, description: string, color: string, show_on_sidebar: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api_access_token"))
@@ -2946,7 +2945,7 @@ export def "accounts-conversations-messages create-a-new-message-in-a-conversati
   --allow-errors(-e) # Return full response without error handling
   content: string # The content of the message (e.g. Hello, how can I help you?)
   --message-type: string@message-type-completer # The type of the message (e.g. outgoing)
-  --private: string@bool-completer # Flag to identify if it is a private note (e.g. false)
+  --private: oneof<nothing, bool> # Flag to identify if it is a private note (e.g. false)
   --content-type: string@content-type-completer # Content type of the message (e.g. text)
   --content-attributes: record # Attributes based on the content type (e.g. {})
   --campaign-id: int # The campaign id to which the message belongs (e.g. 1)
@@ -3173,7 +3172,7 @@ export def "accounts-teams create-a-team" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name of the team (e.g. Support Team)
   --description: string # The description of the team (e.g. This is a team of support agents)
-  --allow-auto-assign: string@bool-completer # If this setting is turned on, the system would automatically assign the conversation to an agent in the team while assigning the conversation to a team (e.g. true)
+  --allow-auto-assign: oneof<nothing, bool> # If this setting is turned on, the system would automatically assign the conversation to an agent in the team while assigning the conversation to a team (e.g. true)
 ]: any -> record<id: float, name: string, description: string, allow_auto_assign: bool, account_id: float, is_member: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api_access_token"))
@@ -3225,7 +3224,7 @@ export def "accounts-teams update-a-team" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name of the team (e.g. Support Team)
   --description: string # The description of the team (e.g. This is a team of support agents)
-  --allow-auto-assign: string@bool-completer # If this setting is turned on, the system would automatically assign the conversation to an agent in the team while assigning the conversation to a team (e.g. true)
+  --allow-auto-assign: oneof<nothing, bool> # If this setting is turned on, the system would automatically assign the conversation to an agent in the team while assigning the conversation to a team (e.g. true)
 ]: any -> record<id: float, name: string, description: string, allow_auto_assign: bool, account_id: float, is_member: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api_access_token"))
@@ -3769,7 +3768,7 @@ export def "accounts-summary-reports-inbox get-inbox-summary-report" [
   --allow-errors(-e) # Return full response without error handling
   --since: string # The timestamp from where report should start (Unix timestamp).
   --until: string # The timestamp from where report should stop (Unix timestamp).
-  --business-hours: string@bool-completer # Whether to calculate metrics using business hours only.
+  --business-hours: oneof<nothing, bool> # Whether to calculate metrics using business hours only.
 ]: nothing -> table<id: float, conversations_count: float, resolved_conversations_count: float, avg_resolution_time: float, avg_first_response_time: float, avg_reply_time: float> {
   let auth = (build-auth $token ($auth_scheme | default "api_access_token"))
   let base = ($base_url | default $BASE_URL)
@@ -3795,7 +3794,7 @@ export def "accounts-summary-reports-agent get-agent-summary-report" [
   --allow-errors(-e) # Return full response without error handling
   --since: string # The timestamp from where report should start (Unix timestamp).
   --until: string # The timestamp from where report should stop (Unix timestamp).
-  --business-hours: string@bool-completer # Whether to calculate metrics using business hours only.
+  --business-hours: oneof<nothing, bool> # Whether to calculate metrics using business hours only.
 ]: nothing -> table<id: float, conversations_count: float, resolved_conversations_count: float, avg_resolution_time: float, avg_first_response_time: float, avg_reply_time: float> {
   let auth = (build-auth $token ($auth_scheme | default "api_access_token"))
   let base = ($base_url | default $BASE_URL)
@@ -3821,7 +3820,7 @@ export def "accounts-summary-reports-team get-team-summary-report" [
   --allow-errors(-e) # Return full response without error handling
   --since: string # The timestamp from where report should start (Unix timestamp).
   --until: string # The timestamp from where report should stop (Unix timestamp).
-  --business-hours: string@bool-completer # Whether to calculate metrics using business hours only.
+  --business-hours: oneof<nothing, bool> # Whether to calculate metrics using business hours only.
 ]: nothing -> table<id: float, conversations_count: float, resolved_conversations_count: float, avg_resolution_time: float, avg_first_response_time: float, avg_reply_time: float> {
   let auth = (build-auth $token ($auth_scheme | default "api_access_token"))
   let base = ($base_url | default $BASE_URL)

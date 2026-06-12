@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -279,8 +278,8 @@ export def "applications Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --upsert: string@bool-completer
-  --validate: string@bool-completer
+  --upsert: oneof<nothing, bool>
+  --validate: oneof<nothing, bool>
   --metadata: record # ObjectMeta is metadata that all persisted resources must have, which includes all objects users must create. — shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
   --operation: record # shape: {info?: list, initiatedBy?: record, retry?: record, sync?: record}
   --spec: record # ApplicationSpec represents desired application state. Contains link to repository with application definition and additional parameters link definition revision. — shape: {destination?: record, ignoreDifferences?: list, info?: list, project?: string, revisionHistoryLimit?: int, source?: record, sourceHydrator?: record, sources?: list, syncPolicy?: record}
@@ -369,7 +368,7 @@ export def "applications Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --validate: string@bool-completer
+  --validate: oneof<nothing, bool>
   --project: string
   --metadata: record # ObjectMeta is metadata that all persisted resources must have, which includes all objects users must create. — shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
   --operation: record # shape: {info?: list, initiatedBy?: record, retry?: record, sync?: record}
@@ -491,7 +490,7 @@ export def "applications Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cascade: string@bool-completer
+  --cascade: oneof<nothing, bool>
   --propagationPolicy: string
   --appNamespace: string
   --project: string
@@ -608,16 +607,16 @@ export def "applications-logs PodLogs2" [
   --sinceTimeseconds: string # Represents seconds of UTC time since Unix epoch 1970-01-01T00:00:00Z. Must be from 0001-01-01T00:00:00Z to 9999-12-31T23:59:59Z inclusive. (format: int64)
   --sinceTimenanos: int # Non-negative fractions of a second at nanosecond resolution. Negative second values with fractions must still have non-negative nanos values that count forward in time. Must be from 0 to 999,999,999 inclusive. This field may be limited in precision depending on context. (format: int32)
   --tailLines: string # format: int64
-  --follow: string@bool-completer
+  --follow: oneof<nothing, bool>
   --untilTime: string
   --filter: string
   --kind: string
   --group: string
   --resourceName: string
-  --previous: string@bool-completer
+  --previous: oneof<nothing, bool>
   --appNamespace: string
   --project: string
-  --matchCase: string@bool-completer
+  --matchCase: oneof<nothing, bool>
 ]: nothing -> record<error: record<details: list<record>, grpc_code: int, http_code: int, http_status: string, message: string>, result: record<content: string, last: bool, podName: string, timeStamp: string, timeStampStr: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -646,7 +645,7 @@ export def "applications-manifests GetManifests" [
   --project: string
   --sourcePositions: list
   --revisions: list
-  --noCache: string@bool-completer
+  --noCache: oneof<nothing, bool>
 ]: nothing -> record<commands: list<string>, manifests: list<string>, namespace: string, revision: string, server: string, sourceIntegrityResult: record<checks: list<record>>, sourceType: string, verifyResult: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -702,16 +701,16 @@ export def "applications-pods-logs PodLogs" [
   --sinceTimeseconds: string # Represents seconds of UTC time since Unix epoch 1970-01-01T00:00:00Z. Must be from 0001-01-01T00:00:00Z to 9999-12-31T23:59:59Z inclusive. (format: int64)
   --sinceTimenanos: int # Non-negative fractions of a second at nanosecond resolution. Negative second values with fractions must still have non-negative nanos values that count forward in time. Must be from 0 to 999,999,999 inclusive. This field may be limited in precision depending on context. (format: int32)
   --tailLines: string # format: int64
-  --follow: string@bool-completer
+  --follow: oneof<nothing, bool>
   --untilTime: string
   --filter: string
   --kind: string
   --group: string
   --resourceName: string
-  --previous: string@bool-completer
+  --previous: oneof<nothing, bool>
   --appNamespace: string
   --project: string
-  --matchCase: string@bool-completer
+  --matchCase: oneof<nothing, bool>
 ]: nothing -> record<error: record<details: list<record>, grpc_code: int, http_code: int, http_status: string, message: string>, result: record<content: string, last: bool, podName: string, timeStamp: string, timeStampStr: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -804,8 +803,8 @@ export def "applications-resource DeleteResource" [
   --version: string
   --group: string
   --kind: string
-  --force: string@bool-completer
-  --orphan: string@bool-completer
+  --force: oneof<nothing, bool>
+  --orphan: oneof<nothing, bool>
   --appNamespace: string
   --project: string
 ]: nothing -> record {
@@ -1045,11 +1044,11 @@ export def "applications-rollback Rollback" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --appNamespace: string
-  --dryRun: string@bool-completer
+  --dryRun: oneof<nothing, bool>
   --id: int # format: int64
   --body-name: string
   --project: string
-  --prune: string@bool-completer
+  --prune: oneof<nothing, bool>
 ]: any -> record<metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, operation: record<info: list<record>, initiatedBy: record<automated: bool, username: string>, retry: record<backoff: record, limit: int, refresh: bool>, sync: record<autoHealAttemptsCount: int, dryRun: bool, manifests: list, prune: bool, resources: list, revision: string, revisions: list, source: record, sources: list, syncOptions: list, syncStrategy: record>>, spec: record<destination: record<name: string, namespace: string, server: string>, ignoreDifferences: list<record>, info: list<record>, project: string, revisionHistoryLimit: int, source: record<chart: string, directory: record, helm: record, kustomize: record, name: string, path: string, plugin: record, ref: string, repoURL: string, tagPrefix: string, targetRevision: string>, sourceHydrator: record<drySource: record, hydrateTo: record, syncSource: record>, sources: list<record>, syncPolicy: record<automated: record, managedNamespaceMetadata: record, retry: record, syncOptions: list>>, status: record<conditions: list<record>, controllerNamespace: string, health: record<lastTransitionTime: string, message: string, status: string>, history: list<record>, observedAt: string, operationState: record<finishedAt: string, message: string, operation: record, phase: string, retryCount: int, startedAt: string, syncResult: record>, reconciledAt: string, resourceHealthSource: string, resources: list<record>, sourceHydrator: record<currentOperation: record, lastComparedDryRevision: string, lastSuccessfulOperation: record>, sourceType: string, sourceTypes: list<string>, summary: record<externalURLs: list, images: list, isAppOfApps: bool>, sync: record<comparedTo: record, revision: string, revisions: list, status: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1082,7 +1081,7 @@ export def "applications-spec UpdateSpec" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --validate: string@bool-completer
+  --validate: oneof<nothing, bool>
   --appNamespace: string
   --project: string
   --destination: record # shape: {name?: string, namespace?: string, server?: string}
@@ -1126,12 +1125,12 @@ export def "applications-sync Sync" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --appNamespace: string
-  --dryRun: string@bool-completer
+  --dryRun: oneof<nothing, bool>
   --infos: list # item shape: {name?: string, value?: string}
   --manifests: list
   --body-name: string
   --project: string
-  --prune: string@bool-completer
+  --prune: oneof<nothing, bool>
   --resources: list # item shape: {group?: string, kind?: string, name?: string, namespace?: string}
   --retryStrategy: record # shape: {backoff?: record, limit?: int, refresh?: bool}
   --revision: string
@@ -1216,8 +1215,8 @@ export def "applicationsets Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --upsert: string@bool-completer
-  --dryRun: string@bool-completer
+  --upsert: oneof<nothing, bool>
+  --dryRun: oneof<nothing, bool>
   --metadata: record # ObjectMeta is metadata that all persisted resources must have, which includes all objects users must create. — shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
   --spec: record # ApplicationSetSpec represents a class of application set state. — shape: {applyNestedSelectors?: bool, generators?: list, goTemplate?: bool, goTemplateOptions?: list, ignoreApplicationDifferences?: list, preservedFields?: record, strategy?: record, syncPolicy?: record, template?: record, templatePatch?: string}
   --status: record # shape: {applicationStatus?: list, conditions?: list, health?: record, resources?: list, resourcesCount?: int}
@@ -1395,7 +1394,7 @@ export def "certificates CreateCertificate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --upsert: string@bool-completer # Whether to upsert already existing certificates.
+  --upsert: oneof<nothing, bool> # Whether to upsert already existing certificates.
   --items: list # item shape: {certData?: string, certInfo?: string, certSubType?: string, certType?: string, serverName?: string}
   --metadata: record # ListMeta describes metadata that synthetic resources must have, including lists and various status objects. A resource may have only one of {ObjectMeta, ListMeta}. — shape: {continue?: string, remainingItemCount?: int, resourceVersion?: string, selfLink?: string, shardInfo?: record}
 ]: any -> record<items: table<certData: string, certInfo: string, certSubType: string, certType: string, serverName: string>, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>> {
@@ -1477,9 +1476,9 @@ export def "clusters Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --upsert: string@bool-completer
+  --upsert: oneof<nothing, bool>
   --annotations: record
-  --clusterResources: string@bool-completer # Indicates if cluster level resources should be managed. This setting is used only if cluster is connected in a namespaced mode.
+  --clusterResources: oneof<nothing, bool> # Indicates if cluster level resources should be managed. This setting is used only if cluster is connected in a namespaced mode.
   --config: record # ClusterConfig is the configuration attributes. This structure is subset of the go-client rest.Config with annotations added for marshalling. — shape: {awsAuthConfig?: record, bearerToken?: string, disableCompression?: bool, execProviderConfig?: record, password?: string, proxyUrl?: string, tlsClientConfig?: record, username?: string}
   --connectionState: record # shape: {attemptedAt?: string, message?: string, status?: string}
   --info: record # shape: {apiVersions?: list, applicationsCount?: int, cacheInfo?: record, connectionState?: record, serverVersion?: string}
@@ -1549,7 +1548,7 @@ export def "clusters Update" [
   --updatedFields: list
   --idtype: string # type is the type of the specified cluster identifier ( "server" - default, "name" ).
   --annotations: record
-  --clusterResources: string@bool-completer # Indicates if cluster level resources should be managed. This setting is used only if cluster is connected in a namespaced mode.
+  --clusterResources: oneof<nothing, bool> # Indicates if cluster level resources should be managed. This setting is used only if cluster is connected in a namespaced mode.
   --config: record # ClusterConfig is the configuration attributes. This structure is subset of the go-client rest.Config with annotations added for marshalling. — shape: {awsAuthConfig?: record, bearerToken?: string, disableCompression?: bool, execProviderConfig?: record, password?: string, proxyUrl?: string, tlsClientConfig?: record, username?: string}
   --connectionState: record # shape: {attemptedAt?: string, message?: string, status?: string}
   --info: record # shape: {apiVersions?: list, applicationsCount?: int, cacheInfo?: record, connectionState?: record, serverVersion?: string}
@@ -1679,7 +1678,7 @@ export def "gpgkeys Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --upsert: string@bool-completer # Whether to upsert already existing public keys.
+  --upsert: oneof<nothing, bool> # Whether to upsert already existing public keys.
   --fingerprint: string
   --keyData: string
   --keyID: string
@@ -1844,7 +1843,7 @@ export def "projects Create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --project: record # shape: {metadata?: record, spec?: record, status?: record}
-  --upsert: string@bool-completer
+  --upsert: oneof<nothing, bool>
 ]: any -> record<metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, spec: record<clusterResourceBlacklist: list<record>, clusterResourceWhitelist: list<record>, description: string, destinationServiceAccounts: list<record>, destinations: list<record>, namespaceResourceBlacklist: list<record>, namespaceResourceWhitelist: list<record>, orphanedResources: record<ignore: list, warn: bool>, permitOnlyProjectScopedClusters: bool, roles: list<record>, signatureKeys: list<record>, sourceIntegrity: record<git: record>, sourceNamespaces: list<string>, sourceRepos: list<string>, syncWindows: list<record>>, status: record<jwtTokensByRole: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2130,20 +2129,20 @@ export def "repocreds CreateRepositoryCredentials" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --upsert: string@bool-completer # Whether to create in upsert mode.
+  --upsert: oneof<nothing, bool> # Whether to create in upsert mode.
   --azureActiveDirectoryEndpoint: string
   --azureServicePrincipalClientId: string
   --azureServicePrincipalClientSecret: string
   --azureServicePrincipalTenantId: string
   --bearerToken: string
-  --enableOCI: string@bool-completer
-  --forceHttpBasicAuth: string@bool-completer
+  --enableOCI: oneof<nothing, bool>
+  --forceHttpBasicAuth: oneof<nothing, bool>
   --gcpServiceAccountKey: string
   --githubAppEnterpriseBaseUrl: string
   --githubAppID: int # format: int64
   --githubAppInstallationID: int # format: int64
   --githubAppPrivateKey: string
-  --insecureOCIForceHttp: string@bool-completer # InsecureOCIForceHttp specifies whether the connection to the repository uses TLS at _all_. If true, no TLS. This flag is applicable for OCI repos only.
+  --insecureOCIForceHttp: oneof<nothing, bool> # InsecureOCIForceHttp specifies whether the connection to the repository uses TLS at _all_. If true, no TLS. This flag is applicable for OCI repos only.
   --noProxy: string
   --password: string
   --proxy: string
@@ -2152,7 +2151,7 @@ export def "repocreds CreateRepositoryCredentials" [
   --tlsClientCertKey: string
   --type: string # Type specifies the type of the repoCreds. Can be either "git", "helm" or "oci". "git" is assumed if empty or absent.
   --body-url: string
-  --useAzureWorkloadIdentity: string@bool-completer
+  --useAzureWorkloadIdentity: oneof<nothing, bool>
   --username: string
 ]: any -> record<azureActiveDirectoryEndpoint: string, azureServicePrincipalClientId: string, azureServicePrincipalClientSecret: string, azureServicePrincipalTenantId: string, bearerToken: string, enableOCI: bool, forceHttpBasicAuth: bool, gcpServiceAccountKey: string, githubAppEnterpriseBaseUrl: string, githubAppID: int, githubAppInstallationID: int, githubAppPrivateKey: string, insecureOCIForceHttp: bool, noProxy: string, password: string, proxy: string, sshPrivateKey: string, tlsClientCertData: string, tlsClientCertKey: string, type: string, url: string, useAzureWorkloadIdentity: bool, username: string> {
   let input = $in
@@ -2185,14 +2184,14 @@ export def "repocreds UpdateRepositoryCredentials" [
   --azureServicePrincipalClientSecret: string
   --azureServicePrincipalTenantId: string
   --bearerToken: string
-  --enableOCI: string@bool-completer
-  --forceHttpBasicAuth: string@bool-completer
+  --enableOCI: oneof<nothing, bool>
+  --forceHttpBasicAuth: oneof<nothing, bool>
   --gcpServiceAccountKey: string
   --githubAppEnterpriseBaseUrl: string
   --githubAppID: int # format: int64
   --githubAppInstallationID: int # format: int64
   --githubAppPrivateKey: string
-  --insecureOCIForceHttp: string@bool-completer # InsecureOCIForceHttp specifies whether the connection to the repository uses TLS at _all_. If true, no TLS. This flag is applicable for OCI repos only.
+  --insecureOCIForceHttp: oneof<nothing, bool> # InsecureOCIForceHttp specifies whether the connection to the repository uses TLS at _all_. If true, no TLS. This flag is applicable for OCI repos only.
   --noProxy: string
   --password: string
   --proxy: string
@@ -2201,7 +2200,7 @@ export def "repocreds UpdateRepositoryCredentials" [
   --tlsClientCertKey: string
   --type: string # Type specifies the type of the repoCreds. Can be either "git", "helm" or "oci". "git" is assumed if empty or absent.
   --body-url: string
-  --useAzureWorkloadIdentity: string@bool-completer
+  --useAzureWorkloadIdentity: oneof<nothing, bool>
   --username: string
 ]: any -> record<azureActiveDirectoryEndpoint: string, azureServicePrincipalClientId: string, azureServicePrincipalClientSecret: string, azureServicePrincipalTenantId: string, bearerToken: string, enableOCI: bool, forceHttpBasicAuth: bool, gcpServiceAccountKey: string, githubAppEnterpriseBaseUrl: string, githubAppID: int, githubAppInstallationID: int, githubAppPrivateKey: string, insecureOCIForceHttp: bool, noProxy: string, password: string, proxy: string, sshPrivateKey: string, tlsClientCertData: string, tlsClientCertKey: string, type: string, url: string, useAzureWorkloadIdentity: bool, username: string> {
   let input = $in
@@ -2250,7 +2249,7 @@ export def "repositories ListRepositories" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --repo: string # Repo URL for query.
-  --forceRefresh: string@bool-completer # Whether to force a cache refresh on repo's connection state.
+  --forceRefresh: oneof<nothing, bool> # Whether to force a cache refresh on repo's connection state.
   --appProject: string # App project for query.
 ]: nothing -> record<items: table<azureActiveDirectoryEndpoint: string, azureServicePrincipalClientId: string, azureServicePrincipalClientSecret: string, azureServicePrincipalTenantId: string, bearerToken: string, connectionState: record, depth: int, enableLfs: bool, enableOCI: bool, forceHttpBasicAuth: bool, gcpServiceAccountKey: string, githubAppEnterpriseBaseUrl: string, githubAppID: int, githubAppInstallationID: int, githubAppPrivateKey: string, inheritedCreds: bool, insecure: bool, insecureIgnoreHostKey: bool, insecureOCIForceHttp: bool, name: string, noProxy: string, password: string, project: string, proxy: string, repo: string, sshPrivateKey: string, tlsClientCertData: string, tlsClientCertKey: string, type: string, useAzureWorkloadIdentity: bool, username: string, webhookManifestCacheWarmDisabled: bool>, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2275,8 +2274,8 @@ export def "repositories CreateRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --upsert: string@bool-completer # Whether to create in upsert mode.
-  --credsOnly: string@bool-completer # Whether to operate on credential set instead of repository.
+  --upsert: oneof<nothing, bool> # Whether to create in upsert mode.
+  --credsOnly: oneof<nothing, bool> # Whether to operate on credential set instead of repository.
   --azureActiveDirectoryEndpoint: string
   --azureServicePrincipalClientId: string
   --azureServicePrincipalClientSecret: string
@@ -2284,18 +2283,18 @@ export def "repositories CreateRepository" [
   --bearerToken: string
   --connectionState: record # shape: {attemptedAt?: string, message?: string, status?: string}
   --depth: int # Depth specifies the depth for shallow clones. A value of 0 or omitting the field indicates a full clone. (format: int64)
-  --enableLfs: string@bool-completer # EnableLFS specifies whether git-lfs support should be enabled for this repo. Only valid for Git repositories.
-  --enableOCI: string@bool-completer
-  --forceHttpBasicAuth: string@bool-completer
+  --enableLfs: oneof<nothing, bool> # EnableLFS specifies whether git-lfs support should be enabled for this repo. Only valid for Git repositories.
+  --enableOCI: oneof<nothing, bool>
+  --forceHttpBasicAuth: oneof<nothing, bool>
   --gcpServiceAccountKey: string
   --githubAppEnterpriseBaseUrl: string
   --githubAppID: int # format: int64
   --githubAppInstallationID: int # format: int64
   --githubAppPrivateKey: string
-  --inheritedCreds: string@bool-completer
-  --body-insecure: string@bool-completer
-  --insecureIgnoreHostKey: string@bool-completer
-  --insecureOCIForceHttp: string@bool-completer # InsecureOCIForceHttp specifies whether the connection to the repository uses TLS at _all_. If true, no TLS. This flag is applicable for OCI repos only.
+  --inheritedCreds: oneof<nothing, bool>
+  --body-insecure: oneof<nothing, bool>
+  --insecureIgnoreHostKey: oneof<nothing, bool>
+  --insecureOCIForceHttp: oneof<nothing, bool> # InsecureOCIForceHttp specifies whether the connection to the repository uses TLS at _all_. If true, no TLS. This flag is applicable for OCI repos only.
   --name: string
   --noProxy: string
   --password: string
@@ -2306,9 +2305,9 @@ export def "repositories CreateRepository" [
   --tlsClientCertData: string
   --tlsClientCertKey: string
   --type: string # Type specifies the type of the repo. Can be either "git" or "helm. "git" is assumed if empty or absent.
-  --useAzureWorkloadIdentity: string@bool-completer
+  --useAzureWorkloadIdentity: oneof<nothing, bool>
   --username: string
-  --webhookManifestCacheWarmDisabled: string@bool-completer # WebhookManifestCacheWarmDisabled disables manifest cache warming during webhook processing for this repository. When set, webhook handlers will only trigger reconciliation for affected applications and skip Redis cache operations for unaffected ones. Recommended for large monorepos with plain YAML manifests.
+  --webhookManifestCacheWarmDisabled: oneof<nothing, bool> # WebhookManifestCacheWarmDisabled disables manifest cache warming during webhook processing for this repository. When set, webhook handlers will only trigger reconciliation for affected applications and skip Redis cache operations for unaffected ones. Recommended for large monorepos with plain YAML manifests.
 ]: any -> record<azureActiveDirectoryEndpoint: string, azureServicePrincipalClientId: string, azureServicePrincipalClientSecret: string, azureServicePrincipalTenantId: string, bearerToken: string, connectionState: record<attemptedAt: string, message: string, status: string>, depth: int, enableLfs: bool, enableOCI: bool, forceHttpBasicAuth: bool, gcpServiceAccountKey: string, githubAppEnterpriseBaseUrl: string, githubAppID: int, githubAppInstallationID: int, githubAppPrivateKey: string, inheritedCreds: bool, insecure: bool, insecureIgnoreHostKey: bool, insecureOCIForceHttp: bool, name: string, noProxy: string, password: string, project: string, proxy: string, repo: string, sshPrivateKey: string, tlsClientCertData: string, tlsClientCertKey: string, type: string, useAzureWorkloadIdentity: bool, username: string, webhookManifestCacheWarmDisabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2343,18 +2342,18 @@ export def "repositories UpdateRepository" [
   --bearerToken: string
   --connectionState: record # shape: {attemptedAt?: string, message?: string, status?: string}
   --depth: int # Depth specifies the depth for shallow clones. A value of 0 or omitting the field indicates a full clone. (format: int64)
-  --enableLfs: string@bool-completer # EnableLFS specifies whether git-lfs support should be enabled for this repo. Only valid for Git repositories.
-  --enableOCI: string@bool-completer
-  --forceHttpBasicAuth: string@bool-completer
+  --enableLfs: oneof<nothing, bool> # EnableLFS specifies whether git-lfs support should be enabled for this repo. Only valid for Git repositories.
+  --enableOCI: oneof<nothing, bool>
+  --forceHttpBasicAuth: oneof<nothing, bool>
   --gcpServiceAccountKey: string
   --githubAppEnterpriseBaseUrl: string
   --githubAppID: int # format: int64
   --githubAppInstallationID: int # format: int64
   --githubAppPrivateKey: string
-  --inheritedCreds: string@bool-completer
-  --body-insecure: string@bool-completer
-  --insecureIgnoreHostKey: string@bool-completer
-  --insecureOCIForceHttp: string@bool-completer # InsecureOCIForceHttp specifies whether the connection to the repository uses TLS at _all_. If true, no TLS. This flag is applicable for OCI repos only.
+  --inheritedCreds: oneof<nothing, bool>
+  --body-insecure: oneof<nothing, bool>
+  --insecureIgnoreHostKey: oneof<nothing, bool>
+  --insecureOCIForceHttp: oneof<nothing, bool> # InsecureOCIForceHttp specifies whether the connection to the repository uses TLS at _all_. If true, no TLS. This flag is applicable for OCI repos only.
   --name: string
   --noProxy: string
   --password: string
@@ -2365,9 +2364,9 @@ export def "repositories UpdateRepository" [
   --tlsClientCertData: string
   --tlsClientCertKey: string
   --type: string # Type specifies the type of the repo. Can be either "git" or "helm. "git" is assumed if empty or absent.
-  --useAzureWorkloadIdentity: string@bool-completer
+  --useAzureWorkloadIdentity: oneof<nothing, bool>
   --username: string
-  --webhookManifestCacheWarmDisabled: string@bool-completer # WebhookManifestCacheWarmDisabled disables manifest cache warming during webhook processing for this repository. When set, webhook handlers will only trigger reconciliation for affected applications and skip Redis cache operations for unaffected ones. Recommended for large monorepos with plain YAML manifests.
+  --webhookManifestCacheWarmDisabled: oneof<nothing, bool> # WebhookManifestCacheWarmDisabled disables manifest cache warming during webhook processing for this repository. When set, webhook handlers will only trigger reconciliation for affected applications and skip Redis cache operations for unaffected ones. Recommended for large monorepos with plain YAML manifests.
 ]: any -> record<azureActiveDirectoryEndpoint: string, azureServicePrincipalClientId: string, azureServicePrincipalClientSecret: string, azureServicePrincipalTenantId: string, bearerToken: string, connectionState: record<attemptedAt: string, message: string, status: string>, depth: int, enableLfs: bool, enableOCI: bool, forceHttpBasicAuth: bool, gcpServiceAccountKey: string, githubAppEnterpriseBaseUrl: string, githubAppID: int, githubAppInstallationID: int, githubAppPrivateKey: string, inheritedCreds: bool, insecure: bool, insecureIgnoreHostKey: bool, insecureOCIForceHttp: bool, name: string, noProxy: string, password: string, project: string, proxy: string, repo: string, sshPrivateKey: string, tlsClientCertData: string, tlsClientCertKey: string, type: string, useAzureWorkloadIdentity: bool, username: string, webhookManifestCacheWarmDisabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2393,7 +2392,7 @@ export def "repositories Get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceRefresh: string@bool-completer # Whether to force a cache refresh on repo's connection state.
+  --forceRefresh: oneof<nothing, bool> # Whether to force a cache refresh on repo's connection state.
   --appProject: string # App project for query.
 ]: nothing -> record<azureActiveDirectoryEndpoint: string, azureServicePrincipalClientId: string, azureServicePrincipalClientSecret: string, azureServicePrincipalTenantId: string, bearerToken: string, connectionState: record<attemptedAt: string, message: string, status: string>, depth: int, enableLfs: bool, enableOCI: bool, forceHttpBasicAuth: bool, gcpServiceAccountKey: string, githubAppEnterpriseBaseUrl: string, githubAppID: int, githubAppInstallationID: int, githubAppPrivateKey: string, inheritedCreds: bool, insecure: bool, insecureIgnoreHostKey: bool, insecureOCIForceHttp: bool, name: string, noProxy: string, password: string, project: string, proxy: string, repo: string, sshPrivateKey: string, tlsClientCertData: string, tlsClientCertKey: string, type: string, useAzureWorkloadIdentity: bool, username: string, webhookManifestCacheWarmDisabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2418,7 +2417,7 @@ export def "repositories DeleteRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceRefresh: string@bool-completer # Whether to force a cache refresh on repo's connection state.
+  --forceRefresh: oneof<nothing, bool> # Whether to force a cache refresh on repo's connection state.
   --appProject: string # App project for query.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2469,7 +2468,7 @@ export def "repositories-helmcharts GetHelmCharts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceRefresh: string@bool-completer # Whether to force a cache refresh on repo's connection state.
+  --forceRefresh: oneof<nothing, bool> # Whether to force a cache refresh on repo's connection state.
   --appProject: string # App project for query.
 ]: nothing -> record<items: table<name: string, versions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2493,7 +2492,7 @@ export def "repositories-oci-tags ListOCITags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceRefresh: string@bool-completer # Whether to force a cache refresh on repo's connection state.
+  --forceRefresh: oneof<nothing, bool> # Whether to force a cache refresh on repo's connection state.
   --appProject: string # App project for query.
 ]: nothing -> record<branches: list<string>, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2517,7 +2516,7 @@ export def "repositories-refs ListRefs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceRefresh: string@bool-completer # Whether to force a cache refresh on repo's connection state.
+  --forceRefresh: oneof<nothing, bool> # Whether to force a cache refresh on repo's connection state.
   --appProject: string # App project for query.
 ]: nothing -> record<branches: list<string>, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2545,12 +2544,12 @@ export def "repositories-validate ValidateAccess" [
   --username: string # Username for accessing repo.
   --password: string # Password for accessing repo.
   --sshPrivateKey: string # Private key data for accessing SSH repository.
-  --qp-insecure: string@bool-completer # Whether to skip certificate or host key validation.
+  --qp-insecure: oneof<nothing, bool> # Whether to skip certificate or host key validation.
   --tlsClientCertData: string # TLS client cert data for accessing HTTPS repository.
   --tlsClientCertKey: string # TLS client cert key for accessing HTTPS repository.
   --type: string # The type of the repo.
   --name: string # The name of the repo.
-  --enableOci: string@bool-completer # Whether helm-oci support should be enabled for this repo.
+  --enableOci: oneof<nothing, bool> # Whether helm-oci support should be enabled for this repo.
   --githubAppPrivateKey: string # Github App Private Key PEM data.
   --githubAppID: string # Github App ID of the app used to access the repo. (format: int64)
   --githubAppInstallationID: string # Github App Installation ID of the installed GitHub App. (format: int64)
@@ -2558,10 +2557,10 @@ export def "repositories-validate ValidateAccess" [
   --proxy: string # HTTP/HTTPS proxy to access the repository.
   --project: string # Reference between project and repository that allow you automatically to be added as item inside SourceRepos project entity.
   --gcpServiceAccountKey: string # Google Cloud Platform service account key.
-  --forceHttpBasicAuth: string@bool-completer # Whether to force HTTP basic auth.
-  --useAzureWorkloadIdentity: string@bool-completer # Whether to use azure workload identity for authentication.
+  --forceHttpBasicAuth: oneof<nothing, bool> # Whether to force HTTP basic auth.
+  --useAzureWorkloadIdentity: oneof<nothing, bool> # Whether to use azure workload identity for authentication.
   --bearerToken: string # BearerToken contains the bearer token used for Git auth at the repo server.
-  --insecureOciForceHttp: string@bool-completer # Whether https should be disabled for an OCI repo.
+  --insecureOciForceHttp: oneof<nothing, bool> # Whether https should be disabled for an OCI repo.
   --azureServicePrincipalClientId: string # Azure Service Principal Client ID.
   --azureServicePrincipalClientSecret: string # Azure Service Principal Client Secret.
   --azureServicePrincipalTenantId: string # Azure Service Principal Tenant ID.
@@ -2842,20 +2841,20 @@ export def "write-repocreds CreateWriteRepositoryCredentials" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --upsert: string@bool-completer # Whether to create in upsert mode.
+  --upsert: oneof<nothing, bool> # Whether to create in upsert mode.
   --azureActiveDirectoryEndpoint: string
   --azureServicePrincipalClientId: string
   --azureServicePrincipalClientSecret: string
   --azureServicePrincipalTenantId: string
   --bearerToken: string
-  --enableOCI: string@bool-completer
-  --forceHttpBasicAuth: string@bool-completer
+  --enableOCI: oneof<nothing, bool>
+  --forceHttpBasicAuth: oneof<nothing, bool>
   --gcpServiceAccountKey: string
   --githubAppEnterpriseBaseUrl: string
   --githubAppID: int # format: int64
   --githubAppInstallationID: int # format: int64
   --githubAppPrivateKey: string
-  --insecureOCIForceHttp: string@bool-completer # InsecureOCIForceHttp specifies whether the connection to the repository uses TLS at _all_. If true, no TLS. This flag is applicable for OCI repos only.
+  --insecureOCIForceHttp: oneof<nothing, bool> # InsecureOCIForceHttp specifies whether the connection to the repository uses TLS at _all_. If true, no TLS. This flag is applicable for OCI repos only.
   --noProxy: string
   --password: string
   --proxy: string
@@ -2864,7 +2863,7 @@ export def "write-repocreds CreateWriteRepositoryCredentials" [
   --tlsClientCertKey: string
   --type: string # Type specifies the type of the repoCreds. Can be either "git", "helm" or "oci". "git" is assumed if empty or absent.
   --body-url: string
-  --useAzureWorkloadIdentity: string@bool-completer
+  --useAzureWorkloadIdentity: oneof<nothing, bool>
   --username: string
 ]: any -> record<azureActiveDirectoryEndpoint: string, azureServicePrincipalClientId: string, azureServicePrincipalClientSecret: string, azureServicePrincipalTenantId: string, bearerToken: string, enableOCI: bool, forceHttpBasicAuth: bool, gcpServiceAccountKey: string, githubAppEnterpriseBaseUrl: string, githubAppID: int, githubAppInstallationID: int, githubAppPrivateKey: string, insecureOCIForceHttp: bool, noProxy: string, password: string, proxy: string, sshPrivateKey: string, tlsClientCertData: string, tlsClientCertKey: string, type: string, url: string, useAzureWorkloadIdentity: bool, username: string> {
   let input = $in
@@ -2897,14 +2896,14 @@ export def "write-repocreds UpdateWriteRepositoryCredentials" [
   --azureServicePrincipalClientSecret: string
   --azureServicePrincipalTenantId: string
   --bearerToken: string
-  --enableOCI: string@bool-completer
-  --forceHttpBasicAuth: string@bool-completer
+  --enableOCI: oneof<nothing, bool>
+  --forceHttpBasicAuth: oneof<nothing, bool>
   --gcpServiceAccountKey: string
   --githubAppEnterpriseBaseUrl: string
   --githubAppID: int # format: int64
   --githubAppInstallationID: int # format: int64
   --githubAppPrivateKey: string
-  --insecureOCIForceHttp: string@bool-completer # InsecureOCIForceHttp specifies whether the connection to the repository uses TLS at _all_. If true, no TLS. This flag is applicable for OCI repos only.
+  --insecureOCIForceHttp: oneof<nothing, bool> # InsecureOCIForceHttp specifies whether the connection to the repository uses TLS at _all_. If true, no TLS. This flag is applicable for OCI repos only.
   --noProxy: string
   --password: string
   --proxy: string
@@ -2913,7 +2912,7 @@ export def "write-repocreds UpdateWriteRepositoryCredentials" [
   --tlsClientCertKey: string
   --type: string # Type specifies the type of the repoCreds. Can be either "git", "helm" or "oci". "git" is assumed if empty or absent.
   --body-url: string
-  --useAzureWorkloadIdentity: string@bool-completer
+  --useAzureWorkloadIdentity: oneof<nothing, bool>
   --username: string
 ]: any -> record<azureActiveDirectoryEndpoint: string, azureServicePrincipalClientId: string, azureServicePrincipalClientSecret: string, azureServicePrincipalTenantId: string, bearerToken: string, enableOCI: bool, forceHttpBasicAuth: bool, gcpServiceAccountKey: string, githubAppEnterpriseBaseUrl: string, githubAppID: int, githubAppInstallationID: int, githubAppPrivateKey: string, insecureOCIForceHttp: bool, noProxy: string, password: string, proxy: string, sshPrivateKey: string, tlsClientCertData: string, tlsClientCertKey: string, type: string, url: string, useAzureWorkloadIdentity: bool, username: string> {
   let input = $in
@@ -2962,7 +2961,7 @@ export def "write-repositories ListWriteRepositories" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --repo: string # Repo URL for query.
-  --forceRefresh: string@bool-completer # Whether to force a cache refresh on repo's connection state.
+  --forceRefresh: oneof<nothing, bool> # Whether to force a cache refresh on repo's connection state.
   --appProject: string # App project for query.
 ]: nothing -> record<items: table<azureActiveDirectoryEndpoint: string, azureServicePrincipalClientId: string, azureServicePrincipalClientSecret: string, azureServicePrincipalTenantId: string, bearerToken: string, connectionState: record, depth: int, enableLfs: bool, enableOCI: bool, forceHttpBasicAuth: bool, gcpServiceAccountKey: string, githubAppEnterpriseBaseUrl: string, githubAppID: int, githubAppInstallationID: int, githubAppPrivateKey: string, inheritedCreds: bool, insecure: bool, insecureIgnoreHostKey: bool, insecureOCIForceHttp: bool, name: string, noProxy: string, password: string, project: string, proxy: string, repo: string, sshPrivateKey: string, tlsClientCertData: string, tlsClientCertKey: string, type: string, useAzureWorkloadIdentity: bool, username: string, webhookManifestCacheWarmDisabled: bool>, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2987,8 +2986,8 @@ export def "write-repositories CreateWriteRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --upsert: string@bool-completer # Whether to create in upsert mode.
-  --credsOnly: string@bool-completer # Whether to operate on credential set instead of repository.
+  --upsert: oneof<nothing, bool> # Whether to create in upsert mode.
+  --credsOnly: oneof<nothing, bool> # Whether to operate on credential set instead of repository.
   --azureActiveDirectoryEndpoint: string
   --azureServicePrincipalClientId: string
   --azureServicePrincipalClientSecret: string
@@ -2996,18 +2995,18 @@ export def "write-repositories CreateWriteRepository" [
   --bearerToken: string
   --connectionState: record # shape: {attemptedAt?: string, message?: string, status?: string}
   --depth: int # Depth specifies the depth for shallow clones. A value of 0 or omitting the field indicates a full clone. (format: int64)
-  --enableLfs: string@bool-completer # EnableLFS specifies whether git-lfs support should be enabled for this repo. Only valid for Git repositories.
-  --enableOCI: string@bool-completer
-  --forceHttpBasicAuth: string@bool-completer
+  --enableLfs: oneof<nothing, bool> # EnableLFS specifies whether git-lfs support should be enabled for this repo. Only valid for Git repositories.
+  --enableOCI: oneof<nothing, bool>
+  --forceHttpBasicAuth: oneof<nothing, bool>
   --gcpServiceAccountKey: string
   --githubAppEnterpriseBaseUrl: string
   --githubAppID: int # format: int64
   --githubAppInstallationID: int # format: int64
   --githubAppPrivateKey: string
-  --inheritedCreds: string@bool-completer
-  --body-insecure: string@bool-completer
-  --insecureIgnoreHostKey: string@bool-completer
-  --insecureOCIForceHttp: string@bool-completer # InsecureOCIForceHttp specifies whether the connection to the repository uses TLS at _all_. If true, no TLS. This flag is applicable for OCI repos only.
+  --inheritedCreds: oneof<nothing, bool>
+  --body-insecure: oneof<nothing, bool>
+  --insecureIgnoreHostKey: oneof<nothing, bool>
+  --insecureOCIForceHttp: oneof<nothing, bool> # InsecureOCIForceHttp specifies whether the connection to the repository uses TLS at _all_. If true, no TLS. This flag is applicable for OCI repos only.
   --name: string
   --noProxy: string
   --password: string
@@ -3018,9 +3017,9 @@ export def "write-repositories CreateWriteRepository" [
   --tlsClientCertData: string
   --tlsClientCertKey: string
   --type: string # Type specifies the type of the repo. Can be either "git" or "helm. "git" is assumed if empty or absent.
-  --useAzureWorkloadIdentity: string@bool-completer
+  --useAzureWorkloadIdentity: oneof<nothing, bool>
   --username: string
-  --webhookManifestCacheWarmDisabled: string@bool-completer # WebhookManifestCacheWarmDisabled disables manifest cache warming during webhook processing for this repository. When set, webhook handlers will only trigger reconciliation for affected applications and skip Redis cache operations for unaffected ones. Recommended for large monorepos with plain YAML manifests.
+  --webhookManifestCacheWarmDisabled: oneof<nothing, bool> # WebhookManifestCacheWarmDisabled disables manifest cache warming during webhook processing for this repository. When set, webhook handlers will only trigger reconciliation for affected applications and skip Redis cache operations for unaffected ones. Recommended for large monorepos with plain YAML manifests.
 ]: any -> record<azureActiveDirectoryEndpoint: string, azureServicePrincipalClientId: string, azureServicePrincipalClientSecret: string, azureServicePrincipalTenantId: string, bearerToken: string, connectionState: record<attemptedAt: string, message: string, status: string>, depth: int, enableLfs: bool, enableOCI: bool, forceHttpBasicAuth: bool, gcpServiceAccountKey: string, githubAppEnterpriseBaseUrl: string, githubAppID: int, githubAppInstallationID: int, githubAppPrivateKey: string, inheritedCreds: bool, insecure: bool, insecureIgnoreHostKey: bool, insecureOCIForceHttp: bool, name: string, noProxy: string, password: string, project: string, proxy: string, repo: string, sshPrivateKey: string, tlsClientCertData: string, tlsClientCertKey: string, type: string, useAzureWorkloadIdentity: bool, username: string, webhookManifestCacheWarmDisabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3055,18 +3054,18 @@ export def "write-repositories UpdateWriteRepository" [
   --bearerToken: string
   --connectionState: record # shape: {attemptedAt?: string, message?: string, status?: string}
   --depth: int # Depth specifies the depth for shallow clones. A value of 0 or omitting the field indicates a full clone. (format: int64)
-  --enableLfs: string@bool-completer # EnableLFS specifies whether git-lfs support should be enabled for this repo. Only valid for Git repositories.
-  --enableOCI: string@bool-completer
-  --forceHttpBasicAuth: string@bool-completer
+  --enableLfs: oneof<nothing, bool> # EnableLFS specifies whether git-lfs support should be enabled for this repo. Only valid for Git repositories.
+  --enableOCI: oneof<nothing, bool>
+  --forceHttpBasicAuth: oneof<nothing, bool>
   --gcpServiceAccountKey: string
   --githubAppEnterpriseBaseUrl: string
   --githubAppID: int # format: int64
   --githubAppInstallationID: int # format: int64
   --githubAppPrivateKey: string
-  --inheritedCreds: string@bool-completer
-  --body-insecure: string@bool-completer
-  --insecureIgnoreHostKey: string@bool-completer
-  --insecureOCIForceHttp: string@bool-completer # InsecureOCIForceHttp specifies whether the connection to the repository uses TLS at _all_. If true, no TLS. This flag is applicable for OCI repos only.
+  --inheritedCreds: oneof<nothing, bool>
+  --body-insecure: oneof<nothing, bool>
+  --insecureIgnoreHostKey: oneof<nothing, bool>
+  --insecureOCIForceHttp: oneof<nothing, bool> # InsecureOCIForceHttp specifies whether the connection to the repository uses TLS at _all_. If true, no TLS. This flag is applicable for OCI repos only.
   --name: string
   --noProxy: string
   --password: string
@@ -3077,9 +3076,9 @@ export def "write-repositories UpdateWriteRepository" [
   --tlsClientCertData: string
   --tlsClientCertKey: string
   --type: string # Type specifies the type of the repo. Can be either "git" or "helm. "git" is assumed if empty or absent.
-  --useAzureWorkloadIdentity: string@bool-completer
+  --useAzureWorkloadIdentity: oneof<nothing, bool>
   --username: string
-  --webhookManifestCacheWarmDisabled: string@bool-completer # WebhookManifestCacheWarmDisabled disables manifest cache warming during webhook processing for this repository. When set, webhook handlers will only trigger reconciliation for affected applications and skip Redis cache operations for unaffected ones. Recommended for large monorepos with plain YAML manifests.
+  --webhookManifestCacheWarmDisabled: oneof<nothing, bool> # WebhookManifestCacheWarmDisabled disables manifest cache warming during webhook processing for this repository. When set, webhook handlers will only trigger reconciliation for affected applications and skip Redis cache operations for unaffected ones. Recommended for large monorepos with plain YAML manifests.
 ]: any -> record<azureActiveDirectoryEndpoint: string, azureServicePrincipalClientId: string, azureServicePrincipalClientSecret: string, azureServicePrincipalTenantId: string, bearerToken: string, connectionState: record<attemptedAt: string, message: string, status: string>, depth: int, enableLfs: bool, enableOCI: bool, forceHttpBasicAuth: bool, gcpServiceAccountKey: string, githubAppEnterpriseBaseUrl: string, githubAppID: int, githubAppInstallationID: int, githubAppPrivateKey: string, inheritedCreds: bool, insecure: bool, insecureIgnoreHostKey: bool, insecureOCIForceHttp: bool, name: string, noProxy: string, password: string, project: string, proxy: string, repo: string, sshPrivateKey: string, tlsClientCertData: string, tlsClientCertKey: string, type: string, useAzureWorkloadIdentity: bool, username: string, webhookManifestCacheWarmDisabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3105,7 +3104,7 @@ export def "write-repositories GetWrite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceRefresh: string@bool-completer # Whether to force a cache refresh on repo's connection state.
+  --forceRefresh: oneof<nothing, bool> # Whether to force a cache refresh on repo's connection state.
   --appProject: string # App project for query.
 ]: nothing -> record<azureActiveDirectoryEndpoint: string, azureServicePrincipalClientId: string, azureServicePrincipalClientSecret: string, azureServicePrincipalTenantId: string, bearerToken: string, connectionState: record<attemptedAt: string, message: string, status: string>, depth: int, enableLfs: bool, enableOCI: bool, forceHttpBasicAuth: bool, gcpServiceAccountKey: string, githubAppEnterpriseBaseUrl: string, githubAppID: int, githubAppInstallationID: int, githubAppPrivateKey: string, inheritedCreds: bool, insecure: bool, insecureIgnoreHostKey: bool, insecureOCIForceHttp: bool, name: string, noProxy: string, password: string, project: string, proxy: string, repo: string, sshPrivateKey: string, tlsClientCertData: string, tlsClientCertKey: string, type: string, useAzureWorkloadIdentity: bool, username: string, webhookManifestCacheWarmDisabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3130,7 +3129,7 @@ export def "write-repositories DeleteWriteRepository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceRefresh: string@bool-completer # Whether to force a cache refresh on repo's connection state.
+  --forceRefresh: oneof<nothing, bool> # Whether to force a cache refresh on repo's connection state.
   --appProject: string # App project for query.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3158,12 +3157,12 @@ export def "write-repositories-validate ValidateWriteAccess" [
   --username: string # Username for accessing repo.
   --password: string # Password for accessing repo.
   --sshPrivateKey: string # Private key data for accessing SSH repository.
-  --qp-insecure: string@bool-completer # Whether to skip certificate or host key validation.
+  --qp-insecure: oneof<nothing, bool> # Whether to skip certificate or host key validation.
   --tlsClientCertData: string # TLS client cert data for accessing HTTPS repository.
   --tlsClientCertKey: string # TLS client cert key for accessing HTTPS repository.
   --type: string # The type of the repo.
   --name: string # The name of the repo.
-  --enableOci: string@bool-completer # Whether helm-oci support should be enabled for this repo.
+  --enableOci: oneof<nothing, bool> # Whether helm-oci support should be enabled for this repo.
   --githubAppPrivateKey: string # Github App Private Key PEM data.
   --githubAppID: string # Github App ID of the app used to access the repo. (format: int64)
   --githubAppInstallationID: string # Github App Installation ID of the installed GitHub App. (format: int64)
@@ -3171,10 +3170,10 @@ export def "write-repositories-validate ValidateWriteAccess" [
   --proxy: string # HTTP/HTTPS proxy to access the repository.
   --project: string # Reference between project and repository that allow you automatically to be added as item inside SourceRepos project entity.
   --gcpServiceAccountKey: string # Google Cloud Platform service account key.
-  --forceHttpBasicAuth: string@bool-completer # Whether to force HTTP basic auth.
-  --useAzureWorkloadIdentity: string@bool-completer # Whether to use azure workload identity for authentication.
+  --forceHttpBasicAuth: oneof<nothing, bool> # Whether to force HTTP basic auth.
+  --useAzureWorkloadIdentity: oneof<nothing, bool> # Whether to use azure workload identity for authentication.
   --bearerToken: string # BearerToken contains the bearer token used for Git auth at the repo server.
-  --insecureOciForceHttp: string@bool-completer # Whether https should be disabled for an OCI repo.
+  --insecureOciForceHttp: oneof<nothing, bool> # Whether https should be disabled for an OCI repo.
   --azureServicePrincipalClientId: string # Azure Service Principal Client ID.
   --azureServicePrincipalClientSecret: string # Azure Service Principal Client Secret.
   --azureServicePrincipalTenantId: string # Azure Service Principal Tenant ID.

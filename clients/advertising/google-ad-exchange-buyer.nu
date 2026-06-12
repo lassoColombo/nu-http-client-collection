@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://www.googleapis.com/adexchangebuyer/v1.4"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -109,7 +108,7 @@ export def "accounts adexchangebuyeraccountslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<items: table<applyPretargetingToNonGuaranteedDeals: bool, bidderLocation: list, cookieMatchingNid: string, cookieMatchingUrl: string, id: int, kind: string, maximumActiveCreatives: int, maximumTotalQps: int, numberActiveCreatives: int>, kind: string> {
@@ -139,7 +138,7 @@ export def "accounts adexchangebuyeraccountsget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<applyPretargetingToNonGuaranteedDeals: bool, bidderLocation: table<bidProtocol: string, maximumQps: int, region: string, url: string>, cookieMatchingNid: string, cookieMatchingUrl: string, id: int, kind: string, maximumActiveCreatives: int, maximumTotalQps: int, numberActiveCreatives: int> {
@@ -170,11 +169,11 @@ export def "accounts adexchangebuyeraccountspatch" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --confirmUnsafeAccountChange: string@bool-completer # Confirmation for erasing bidder and cookie matching urls.
-  --applyPretargetingToNonGuaranteedDeals: string@bool-completer # When this is false, bid requests that include a deal ID for a private auction or preferred deal are always sent to your bidder. When true, all active pretargeting configs will be applied to private auctions and preferred deals. Programmatic Guaranteed deals (when enabled) are always sent to your bidder.
+  --confirmUnsafeAccountChange: oneof<nothing, bool> # Confirmation for erasing bidder and cookie matching urls.
+  --applyPretargetingToNonGuaranteedDeals: oneof<nothing, bool> # When this is false, bid requests that include a deal ID for a private auction or preferred deal are always sent to your bidder. When true, all active pretargeting configs will be applied to private auctions and preferred deals. Programmatic Guaranteed deals (when enabled) are always sent to your bidder.
   --bidderLocation: list # Your bidder locations that have distinct URLs. — item shape: {bidProtocol?: string, maximumQps?: int, region?: string, url?: string}
   --cookieMatchingNid: string # The nid parameter value used in cookie match requests. Please contact your technical account manager if you need to change this.
   --cookieMatchingUrl: string # The base URL used in cookie match requests.
@@ -214,11 +213,11 @@ export def "accounts adexchangebuyeraccountsupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --confirmUnsafeAccountChange: string@bool-completer # Confirmation for erasing bidder and cookie matching urls.
-  --applyPretargetingToNonGuaranteedDeals: string@bool-completer # When this is false, bid requests that include a deal ID for a private auction or preferred deal are always sent to your bidder. When true, all active pretargeting configs will be applied to private auctions and preferred deals. Programmatic Guaranteed deals (when enabled) are always sent to your bidder.
+  --confirmUnsafeAccountChange: oneof<nothing, bool> # Confirmation for erasing bidder and cookie matching urls.
+  --applyPretargetingToNonGuaranteedDeals: oneof<nothing, bool> # When this is false, bid requests that include a deal ID for a private auction or preferred deal are always sent to your bidder. When true, all active pretargeting configs will be applied to private auctions and preferred deals. Programmatic Guaranteed deals (when enabled) are always sent to your bidder.
   --bidderLocation: list # Your bidder locations that have distinct URLs. — item shape: {bidProtocol?: string, maximumQps?: int, region?: string, url?: string}
   --cookieMatchingNid: string # The nid parameter value used in cookie match requests. Please contact your technical account manager if you need to change this.
   --cookieMatchingUrl: string # The base URL used in cookie match requests.
@@ -256,7 +255,7 @@ export def "billinginfo adexchangebuyerbillingInfolist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<items: table<accountId: int, accountName: string, billingId: list, kind: string>, kind: string> {
@@ -286,7 +285,7 @@ export def "billinginfo adexchangebuyerbillingInfoget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<accountId: int, accountName: string, billingId: list<string>, kind: string> {
@@ -317,7 +316,7 @@ export def "billinginfo adexchangebuyerbudgetget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<accountId: string, billingId: string, budgetAmount: string, currencyCode: string, id: string, kind: string> {
@@ -348,7 +347,7 @@ export def "billinginfo adexchangebuyerbudgetpatch" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # The id of the account. This is required for get and update requests. (format: int64)
@@ -388,7 +387,7 @@ export def "billinginfo adexchangebuyerbudgetupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --body-accountId: string # The id of the account. This is required for get and update requests. (format: int64)
@@ -426,7 +425,7 @@ export def "creatives adexchangebuyercreativeslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --accountId: list # When specified, only creatives for the given account ids are returned.
@@ -466,7 +465,7 @@ export def "creatives adexchangebuyercreativesinsert" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --HTMLSnippet: string # The HTML snippet that displays the ad when inserted in the web page. If set, videoURL, videoVastXML, and nativeAd should not be set.
@@ -531,7 +530,7 @@ export def "creatives adexchangebuyercreativesget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<HTMLSnippet: string, accountId: int, adChoicesDestinationUrl: string, adTechnologyProviders: record<detectedProviderIds: list<string>, hasUnidentifiedProvider: bool>, advertiserId: list<string>, advertiserName: string, agencyId: string, apiUploadTimestamp: string, attribute: list<int>, buyerCreativeId: string, clickThroughUrl: list<string>, corrections: table<contexts: list, details: list, reason: string>, creativeStatusIdentityType: string, dealsStatus: string, detectedDomains: list<string>, filteringReasons: record<date: string, reasons: list<record>>, height: int, impressionTrackingUrl: list<string>, kind: string, languages: list<string>, nativeAd: record<advertiser: string, appIcon: record<height: int, url: string, width: int>, body: string, callToAction: string, clickLinkUrl: string, clickTrackingUrl: string, headline: string, image: record<height: int, url: string, width: int>, impressionTrackingUrl: list<string>, logo: record<height: int, url: string, width: int>, price: string, starRating: float, videoURL: string>, openAuctionStatus: string, productCategories: list<int>, restrictedCategories: list<int>, sensitiveCategories: list<int>, servingRestrictions: table<contexts: list, disapprovalReasons: list, reason: string>, vendorType: list<int>, version: int, videoURL: string, videoVastXML: string, width: int> {
@@ -563,7 +562,7 @@ export def "creatives-add-deal adexchangebuyercreativesaddDeal" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
@@ -594,7 +593,7 @@ export def "creatives-list-deals adexchangebuyercreativeslistDeals" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<dealStatuses: table<arcStatus: string, dealId: string, webPropertyId: int>, kind: string> {
@@ -626,7 +625,7 @@ export def "creatives-remove-deal adexchangebuyercreativesremoveDeal" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
@@ -655,7 +654,7 @@ export def "performancereport adexchangebuyerperformanceReportlist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --accountId: string # The account id to get the reports.
@@ -690,7 +689,7 @@ export def "pretargetingconfigs adexchangebuyerpretargetingConfiglist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<items: table<billingId: string, configId: string, configName: string, creativeType: list, dimensions: list, excludedContentLabels: list, excludedGeoCriteriaIds: list, excludedPlacements: list, excludedUserLists: list, excludedVerticals: list, geoCriteriaIds: list, isActive: bool, kind: string, languages: list, maximumQps: string, minimumViewabilityDecile: int, mobileCarriers: list, mobileDevices: list, mobileOperatingSystemVersions: list, placements: list, platforms: list, supportedCreativeAttributes: list, userIdentifierDataRequired: list, userLists: list, vendorTypes: list, verticals: list, videoPlayerSizes: list>, kind: string> {
@@ -724,7 +723,7 @@ export def "pretargetingconfigs adexchangebuyerpretargetingConfiginsert" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --billingId: string # The id for billing purposes, provided for reference. Leave this field blank for insert requests; the id will be generated automatically. (format: int64)
@@ -738,7 +737,7 @@ export def "pretargetingconfigs adexchangebuyerpretargetingConfiginsert" [
   --excludedUserLists: list # Requests containing any of these users list ids will not match.
   --excludedVerticals: list # Requests containing any of these vertical ids will not match. Values are from the publisher-verticals.txt file in the downloadable files section.
   --geoCriteriaIds: list # Requests containing any of these geo criteria ids will match.
-  --isActive: string@bool-completer # Whether this config is active. Required for all requests.
+  --isActive: oneof<nothing, bool> # Whether this config is active. Required for all requests.
   --kind: string # The kind of the resource, i.e. "adexchangebuyer#pretargetingConfig". (default: adexchangebuyer#pretargetingConfig)
   --languages: list # Request containing any of these language codes will match.
   --maximumQps: string # The maximum QPS allocated to this pretargeting configuration, used for pretargeting-level QPS limits. By default, this is not set, which indicates that there is no QPS limit at the configuration level (a global or account-level limit may still be imposed). (format: int64)
@@ -785,7 +784,7 @@ export def "pretargetingconfigs adexchangebuyerpretargetingConfigdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
@@ -816,7 +815,7 @@ export def "pretargetingconfigs adexchangebuyerpretargetingConfigget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<billingId: string, configId: string, configName: string, creativeType: list<string>, dimensions: table<height: string, width: string>, excludedContentLabels: list<string>, excludedGeoCriteriaIds: list<string>, excludedPlacements: table<token: string, type: string>, excludedUserLists: list<string>, excludedVerticals: list<string>, geoCriteriaIds: list<string>, isActive: bool, kind: string, languages: list<string>, maximumQps: string, minimumViewabilityDecile: int, mobileCarriers: list<string>, mobileDevices: list<string>, mobileOperatingSystemVersions: list<string>, placements: table<token: string, type: string>, platforms: list<string>, supportedCreativeAttributes: list<string>, userIdentifierDataRequired: list<string>, userLists: list<string>, vendorTypes: list<string>, verticals: list<string>, videoPlayerSizes: table<aspectRatio: string, minHeight: string, minWidth: string>> {
@@ -851,7 +850,7 @@ export def "pretargetingconfigs adexchangebuyerpretargetingConfigpatch" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --billingId: string # The id for billing purposes, provided for reference. Leave this field blank for insert requests; the id will be generated automatically. (format: int64)
@@ -865,7 +864,7 @@ export def "pretargetingconfigs adexchangebuyerpretargetingConfigpatch" [
   --excludedUserLists: list # Requests containing any of these users list ids will not match.
   --excludedVerticals: list # Requests containing any of these vertical ids will not match. Values are from the publisher-verticals.txt file in the downloadable files section.
   --geoCriteriaIds: list # Requests containing any of these geo criteria ids will match.
-  --isActive: string@bool-completer # Whether this config is active. Required for all requests.
+  --isActive: oneof<nothing, bool> # Whether this config is active. Required for all requests.
   --kind: string # The kind of the resource, i.e. "adexchangebuyer#pretargetingConfig". (default: adexchangebuyer#pretargetingConfig)
   --languages: list # Request containing any of these language codes will match.
   --maximumQps: string # The maximum QPS allocated to this pretargeting configuration, used for pretargeting-level QPS limits. By default, this is not set, which indicates that there is no QPS limit at the configuration level (a global or account-level limit may still be imposed). (format: int64)
@@ -916,7 +915,7 @@ export def "pretargetingconfigs adexchangebuyerpretargetingConfigupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --billingId: string # The id for billing purposes, provided for reference. Leave this field blank for insert requests; the id will be generated automatically. (format: int64)
@@ -930,7 +929,7 @@ export def "pretargetingconfigs adexchangebuyerpretargetingConfigupdate" [
   --excludedUserLists: list # Requests containing any of these users list ids will not match.
   --excludedVerticals: list # Requests containing any of these vertical ids will not match. Values are from the publisher-verticals.txt file in the downloadable files section.
   --geoCriteriaIds: list # Requests containing any of these geo criteria ids will match.
-  --isActive: string@bool-completer # Whether this config is active. Required for all requests.
+  --isActive: oneof<nothing, bool> # Whether this config is active. Required for all requests.
   --kind: string # The kind of the resource, i.e. "adexchangebuyer#pretargetingConfig". (default: adexchangebuyer#pretargetingConfig)
   --languages: list # Request containing any of these language codes will match.
   --maximumQps: string # The maximum QPS allocated to this pretargeting configuration, used for pretargeting-level QPS limits. By default, this is not set, which indicates that there is no QPS limit at the configuration level (a global or account-level limit may still be imposed). (format: int64)
@@ -977,7 +976,7 @@ export def "privateauction-updateproposal adexchangebuyermarketplaceprivateaucti
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --externalDealId: string # The externalDealId of the deal to be updated.
@@ -1013,7 +1012,7 @@ export def "products-search adexchangebuyerproductssearch" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --pqlQuery: string # The pql query used to query for products.
@@ -1044,7 +1043,7 @@ export def "products adexchangebuyerproductsget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<billedBuyer: record<accountId: string>, buyer: record<accountId: string>, creationTimeMs: string, creatorContacts: table<email: string, name: string>, creatorRole: string, deliveryControl: record<creativeBlockingLevel: string, deliveryRateType: string, frequencyCaps: list<record>>, flightEndTimeMs: string, flightStartTimeMs: string, hasCreatorSignedOff: bool, inventorySource: string, kind: string, labels: table<accountId: string, createTimeMs: string, deprecatedMarketplaceDealParty: record, label: string>, lastUpdateTimeMs: string, legacyOfferId: string, marketplacePublisherProfileId: string, name: string, privateAuctionId: string, productId: string, publisherProfileId: string, publisherProvidedForecast: record<dimensions: list<record>, weeklyImpressions: string, weeklyUniques: string>, revisionNumber: string, seller: record<accountId: string, subAccountId: string>, sharedTargetings: table<exclusions: list, inclusions: list, key: string>, state: string, syndicationProduct: string, terms: record<brandingType: string, crossListedExternalDealIdType: string, description: string, estimatedGrossSpend: record<amountMicros: float, currencyCode: string, expectedCpmMicros: float, pricingType: string>, estimatedImpressionsPerDay: string, guaranteedFixedPriceTerms: record<billingInfo: record, fixedPrices: list, guaranteedImpressions: string, guaranteedLooks: string, minimumDailyLooks: string>, nonGuaranteedAuctionTerms: record<autoOptimizePrivateAuction: bool, reservePricePerBuyers: list>, nonGuaranteedFixedPriceTerms: record<fixedPrices: list>, rubiconNonGuaranteedTerms: record<priorityPrice: record, standardPrice: record>, sellerTimeZone: string>, webPropertyCode: string> {
@@ -1074,7 +1073,7 @@ export def "proposals-insert adexchangebuyerproposalsinsert" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --proposals: list # The list of proposals to create. — item shape: {billedBuyer?: record, buyer?: record, buyerContacts?: list, buyerPrivateData?: record, dbmAdvertiserIds?: list, hasBuyerSignedOff?: bool, hasSellerSignedOff?: bool, inventorySource?: string, isRenegotiating?: bool, isSetupComplete?: bool, kind?: string, labels?: list, lastUpdaterOrCommentorRole?: string, name?: string, negotiationId?: string, originatorRole?: string, privateAuctionId?: string, proposalId?: string, proposalState?: string, revisionNumber?: string, revisionTimeMs?: string, seller?: record, sellerContacts?: list}
@@ -1108,7 +1107,7 @@ export def "proposals-search adexchangebuyerproposalssearch" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --pqlQuery: string # Query string to retrieve specific proposals.
@@ -1139,7 +1138,7 @@ export def "proposals adexchangebuyerproposalsget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<billedBuyer: record<accountId: string>, buyer: record<accountId: string>, buyerContacts: table<email: string, name: string>, buyerPrivateData: record<referenceId: string, referencePayload: string>, dbmAdvertiserIds: list<string>, hasBuyerSignedOff: bool, hasSellerSignedOff: bool, inventorySource: string, isRenegotiating: bool, isSetupComplete: bool, kind: string, labels: table<accountId: string, createTimeMs: string, deprecatedMarketplaceDealParty: record, label: string>, lastUpdaterOrCommentorRole: string, name: string, negotiationId: string, originatorRole: string, privateAuctionId: string, proposalId: string, proposalState: string, revisionNumber: string, revisionTimeMs: string, seller: record<accountId: string, subAccountId: string>, sellerContacts: table<email: string, name: string>> {
@@ -1169,7 +1168,7 @@ export def "proposals-deals adexchangebuyermarketplacedealslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --pqlQuery: string # Query string to retrieve specific deals.
@@ -1200,7 +1199,7 @@ export def "proposals-deals-delete adexchangebuyermarketplacedealsdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --dealIds: list # List of deals to delete for a given proposal
@@ -1237,7 +1236,7 @@ export def "proposals-deals-insert adexchangebuyermarketplacedealsinsert" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --deals: list # The list of deals to add — item shape: {buyerPrivateData?: record, creationTimeMs?: string, creativePreApprovalPolicy?: string, creativeSafeFrameCompatibility?: string, dealId?: string, dealServingMetadata?: record, deliveryControl?: record, externalDealId?: string, flightEndTimeMs?: string, flightStartTimeMs?: string, inventoryDescription?: string, isRfpTemplate?: bool, isSetupComplete?: bool, kind?: string, lastUpdateTimeMs?: string, makegoodRequestedReason?: string, name?: string, productId?: string, productRevisionNumber?: string, programmaticCreativeSource?: string, proposalId?: string, sellerContacts?: list, sharedTargetings?: list, syndicationProduct?: string, terms?: record, webPropertyCode?: string}
@@ -1275,7 +1274,7 @@ export def "proposals-deals-update adexchangebuyermarketplacedealsupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --deals: list # List of deals to edit. Service may perform 3 different operations based on comparison of deals in this list vs deals already persisted in database: 1. Add new deal to proposal If a deal in this list does not exist in the proposal, the service will create a new deal and add it to the proposal. Validation will follow AddOrderDealsRequest. 2. Update existing deal in the proposal If a deal in this list already exist in the proposal, the service will update that existing deal to this new deal in the request. Validation will follow UpdateOrderDealsRequest. 3. Delete deals from the proposal (just need the id) If a existing deal in the proposal is not present in this list, the service will delete that deal from the proposal. Validation will follow DeleteOrderDealsRequest. — item shape: {buyerPrivateData?: record, creationTimeMs?: string, creativePreApprovalPolicy?: string, creativeSafeFrameCompatibility?: string, dealId?: string, dealServingMetadata?: record, deliveryControl?: record, externalDealId?: string, flightEndTimeMs?: string, flightStartTimeMs?: string, inventoryDescription?: string, isRfpTemplate?: bool, isSetupComplete?: bool, kind?: string, lastUpdateTimeMs?: string, makegoodRequestedReason?: string, name?: string, productId?: string, productRevisionNumber?: string, programmaticCreativeSource?: string, proposalId?: string, sellerContacts?: list, sharedTargetings?: list, syndicationProduct?: string, terms?: record, webPropertyCode?: string}
@@ -1312,7 +1311,7 @@ export def "proposals-notes adexchangebuyermarketplacenoteslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --pqlQuery: string # Query string to retrieve specific notes. To search the text contents of notes, please use syntax like "WHERE note.note = "foo" or "WHERE note.note LIKE "%bar%"
@@ -1344,7 +1343,7 @@ export def "proposals-notes-insert adexchangebuyermarketplacenotesinsert" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --notes: list # The list of notes to add. — item shape: {creatorRole?: string, dealId?: string, kind?: string, note?: string, noteId?: string, proposalId?: string, proposalRevisionNumber?: string, timestampMs?: string}
@@ -1378,7 +1377,7 @@ export def "proposals-setupcomplete adexchangebuyerproposalssetupcomplete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
@@ -1417,7 +1416,7 @@ export def "proposals adexchangebuyerproposalspatch" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --billedBuyer: record # shape: {accountId?: string}
@@ -1425,11 +1424,11 @@ export def "proposals adexchangebuyerproposalspatch" [
   --buyerContacts: list # Optional contact information of the buyer. (seller-readonly) — item shape: {email?: string, name?: string}
   --buyerPrivateData: record # shape: {referenceId?: string, referencePayload?: string}
   --dbmAdvertiserIds: list # IDs of DBM advertisers permission to this proposal.
-  --hasBuyerSignedOff: string@bool-completer # When an proposal is in an accepted state, indicates whether the buyer has signed off. Once both sides have signed off on a deal, the proposal can be finalized by the seller. (seller-readonly)
-  --hasSellerSignedOff: string@bool-completer # When an proposal is in an accepted state, indicates whether the buyer has signed off Once both sides have signed off on a deal, the proposal can be finalized by the seller. (buyer-readonly)
+  --hasBuyerSignedOff: oneof<nothing, bool> # When an proposal is in an accepted state, indicates whether the buyer has signed off. Once both sides have signed off on a deal, the proposal can be finalized by the seller. (seller-readonly)
+  --hasSellerSignedOff: oneof<nothing, bool> # When an proposal is in an accepted state, indicates whether the buyer has signed off Once both sides have signed off on a deal, the proposal can be finalized by the seller. (buyer-readonly)
   --inventorySource: string # What exchange will provide this inventory (readonly, except on create).
-  --isRenegotiating: string@bool-completer # True if the proposal is being renegotiated (readonly).
-  --isSetupComplete: string@bool-completer # True, if the buyside inventory setup is complete for this proposal. (readonly, except via OrderSetupCompleted action) Deprecated in favor of deal level setup complete flag.
+  --isRenegotiating: oneof<nothing, bool> # True if the proposal is being renegotiated (readonly).
+  --isSetupComplete: oneof<nothing, bool> # True, if the buyside inventory setup is complete for this proposal. (readonly, except via OrderSetupCompleted action) Deprecated in favor of deal level setup complete flag.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "adexchangebuyer#proposal". (default: adexchangebuyer#proposal)
   --labels: list # List of labels associated with the proposal. (readonly) — item shape: {accountId?: string, createTimeMs?: string, deprecatedMarketplaceDealParty?: record, label?: string}
   --lastUpdaterOrCommentorRole: string # The role of the last user that either updated the proposal or left a comment. (readonly)
@@ -1482,7 +1481,7 @@ export def "proposals adexchangebuyerproposalsupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --billedBuyer: record # shape: {accountId?: string}
@@ -1490,11 +1489,11 @@ export def "proposals adexchangebuyerproposalsupdate" [
   --buyerContacts: list # Optional contact information of the buyer. (seller-readonly) — item shape: {email?: string, name?: string}
   --buyerPrivateData: record # shape: {referenceId?: string, referencePayload?: string}
   --dbmAdvertiserIds: list # IDs of DBM advertisers permission to this proposal.
-  --hasBuyerSignedOff: string@bool-completer # When an proposal is in an accepted state, indicates whether the buyer has signed off. Once both sides have signed off on a deal, the proposal can be finalized by the seller. (seller-readonly)
-  --hasSellerSignedOff: string@bool-completer # When an proposal is in an accepted state, indicates whether the buyer has signed off Once both sides have signed off on a deal, the proposal can be finalized by the seller. (buyer-readonly)
+  --hasBuyerSignedOff: oneof<nothing, bool> # When an proposal is in an accepted state, indicates whether the buyer has signed off. Once both sides have signed off on a deal, the proposal can be finalized by the seller. (seller-readonly)
+  --hasSellerSignedOff: oneof<nothing, bool> # When an proposal is in an accepted state, indicates whether the buyer has signed off Once both sides have signed off on a deal, the proposal can be finalized by the seller. (buyer-readonly)
   --inventorySource: string # What exchange will provide this inventory (readonly, except on create).
-  --isRenegotiating: string@bool-completer # True if the proposal is being renegotiated (readonly).
-  --isSetupComplete: string@bool-completer # True, if the buyside inventory setup is complete for this proposal. (readonly, except via OrderSetupCompleted action) Deprecated in favor of deal level setup complete flag.
+  --isRenegotiating: oneof<nothing, bool> # True if the proposal is being renegotiated (readonly).
+  --isSetupComplete: oneof<nothing, bool> # True, if the buyside inventory setup is complete for this proposal. (readonly, except via OrderSetupCompleted action) Deprecated in favor of deal level setup complete flag.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "adexchangebuyer#proposal". (default: adexchangebuyer#proposal)
   --labels: list # List of labels associated with the proposal. (readonly) — item shape: {accountId?: string, createTimeMs?: string, deprecatedMarketplaceDealParty?: record, label?: string}
   --lastUpdaterOrCommentorRole: string # The role of the last user that either updated the proposal or left a comment. (readonly)
@@ -1538,7 +1537,7 @@ export def "publisher-profiles adexchangebuyerpubprofileslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<profiles: table<audience: string, buyerPitchStatement: string, directContact: string, exchange: string, forecastInventory: string, googlePlusLink: string, isParent: bool, isPublished: bool, kind: string, logoUrl: string, mediaKitLink: string, name: string, overview: string, profileId: int, programmaticContact: string, publisherAppIds: list, publisherApps: list, publisherDomains: list, publisherProfileId: string, publisherProvidedForecast: record, rateCardInfoLink: string, samplePageLink: string, seller: record, state: string, topHeadlines: list>> {

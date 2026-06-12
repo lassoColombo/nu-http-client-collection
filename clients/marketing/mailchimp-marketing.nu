@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://server.api.mailchimp.com/3.0"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -369,7 +368,7 @@ export def "audiences-contacts createAudienceContact" [
   --sms-channel: record # shape: {sms_phone?: string, marketing_consent?: record}
   --merge-fields: record # A dictionary of merge fields where the keys are the merge tags. See the [Merge Fields documentation](https://mailchimp.com/developer/marketing/docs/merge-fields/#structure) for more about the structure.
   --tags: list # An array of tag names to add to the contact. This operation is append-only; existing tags will be preserved, and only new tags from this array will be added. (e.g. [new_tag, another_tag])
-  --update-existing: string@bool-completer # If a contact already exists, update them instead of returning a conflict error. When `true` and a matching contact is found (by email or phone), the existing contact is updated with the provided channel data. Defaults to `false`. (e.g. true)
+  --update-existing: oneof<nothing, bool> # If a contact already exists, update them instead of returning a conflict error. When `true` and a matching contact is found (by email or phone), the existing contact is updated with the provided channel data. Defaults to `false`. (e.g. true)
 ]: any -> record<id: string, audience_id: string, language: string, status: string, email_channel: record<email: string, hashed_email: string, effective_subscription_status: record<value: string>, marketing_consent: record<status: string, captured_at: string, source: record>, source: record<name: string>>, sms_channel: record<sms_phone: string, hashed_sms_phone: string, effective_subscription_status: record<value: string>, marketing_consent: record<status: string, captured_at: string, source: record>, source: record<name: string>>, merge_fields: record, tags: list<string>, source: record<name: string>, created_at: string, last_updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1151,7 +1150,7 @@ export def "batch-webhooks post" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --body-url: string # A valid URL for the Webhook. (e.g. http://yourdomain.com/webhook)
-  --enabled: string@bool-completer # Whether the webhook receives requests or not. (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the webhook receives requests or not. (e.g. true)
 ]: any -> record<id: string, url: string, enabled: bool, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1205,7 +1204,7 @@ export def "batch-webhooks patch" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --body-url: string # A valid URL for the Webhook. (e.g. http://yourdomain.com/webhook)
-  --enabled: string@bool-completer # Whether the webhook receives requests or not. (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the webhook receives requests or not. (e.g. true)
 ]: any -> record<id: string, url: string, enabled: bool, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1527,8 +1526,8 @@ export def "campaigns list" [
   --member-id: string # Retrieve campaigns sent to a particular list member. Member ID is The MD5 hash of the lowercase version of the list member’s email address.
   --sort-field: string@sort-field-completer-1 # Returns files sorted by the specified field.
   --sort-dir: string@sort-dir-completer # Determines the order direction for sorted results.
-  --include-resend-shortcut-eligibility: string@bool-completer # Return the `resend_shortcut_eligibility` field in the response, which tells you if the campaign is eligible for the various Campaign Resend Shortcuts offered.
-  --include-resend-shortcut-usage: string@bool-completer # Return the `resend_shortcut_usage` field in the response.  This includes information about campaigns related by a shortcut.
+  --include-resend-shortcut-eligibility: oneof<nothing, bool> # Return the `resend_shortcut_eligibility` field in the response, which tells you if the campaign is eligible for the various Campaign Resend Shortcuts offered.
+  --include-resend-shortcut-usage: oneof<nothing, bool> # Return the `resend_shortcut_usage` field in the response.  This includes information about campaigns related by a shortcut.
 ]: nothing -> record<campaigns: table<id: string, web_id: int, parent_campaign_id: string, type: string, create_time: string, archive_url: string, long_archive_url: string, status: string, emails_sent: int, send_time: string, content_type: string, needs_block_refresh: bool, resendable: bool, recipients: record, settings: record, variate_settings: record, tracking: record, rss_opts: record, ab_split_opts: record, social_card: record, report_summary: record, delivery_status: record, resend_shortcut_eligibility: record, resend_shortcut_usage: record, _links: list>, total_items: int, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1594,8 +1593,8 @@ export def "campaigns get" [
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
-  --include-resend-shortcut-eligibility: string@bool-completer # Return the `resend_shortcut_eligibility` field in the response, which tells you if the campaign is eligible for the various Campaign Resend Shortcuts offered.
-  --include-resend-shortcut-usage: string@bool-completer # Return the `resend_shortcut_usage` field in the response.  This includes information about campaigns related by a shortcut.
+  --include-resend-shortcut-eligibility: oneof<nothing, bool> # Return the `resend_shortcut_eligibility` field in the response, which tells you if the campaign is eligible for the various Campaign Resend Shortcuts offered.
+  --include-resend-shortcut-usage: oneof<nothing, bool> # Return the `resend_shortcut_usage` field in the response.  This includes information about campaigns related by a shortcut.
 ]: nothing -> record<id: string, web_id: int, parent_campaign_id: string, type: string, create_time: string, archive_url: string, long_archive_url: string, status: string, emails_sent: int, send_time: string, content_type: string, needs_block_refresh: bool, resendable: bool, recipients: record<list_id: string, list_is_active: bool, list_name: string, segment_text: string, recipient_count: int, segment_opts: record<saved_segment_id: int, prebuilt_segment_id: string, match: string, conditions: list>>, settings: record<subject_line: string, preview_text: string, title: string, from_name: string, reply_to: string, use_conversation: bool, to_name: string, folder_id: string, authenticate: bool, auto_footer: bool, inline_css: bool, auto_tweet: bool, auto_fb_post: list<string>, fb_comments: bool, timewarp: bool, template_id: int, drag_and_drop: bool>, variate_settings: record<winning_combination_id: string, winning_campaign_id: string, winner_criteria: string, wait_time: int, test_size: int, subject_lines: list<string>, send_times: list<string>, from_names: list<string>, reply_to_addresses: list<string>, contents: list<string>, combinations: list<record>>, tracking: record<opens: bool, html_clicks: bool, text_clicks: bool, goal_tracking: bool, ecomm360: bool, google_analytics: string, clicktale: string, salesforce: record<campaign: bool, notes: bool>, capsule: record<notes: bool>>, rss_opts: record<feed_url: string, frequency: string, schedule: record<hour: int, daily_send: record, weekly_send_day: string, monthly_send_date: float>, last_sent: string, constrain_rss_img: bool>, ab_split_opts: record<split_test: string, pick_winner: string, wait_units: string, wait_time: int, split_size: int, from_name_a: string, from_name_b: string, reply_email_a: string, reply_email_b: string, subject_a: string, subject_b: string, send_time_a: string, send_time_b: string, send_time_winner: string>, social_card: record<image_url: string, description: string, title: string>, report_summary: record<opens: int, unique_opens: int, open_rate: float, clicks: int, subscriber_clicks: int, click_rate: float, ecommerce: record<total_orders: int, total_spent: float, total_revenue: float>>, delivery_status: record<enabled: bool, can_cancel: bool, status: string, emails_sent: int, emails_canceled: int>, resend_shortcut_eligibility: record<to_non_openers: record<is_eligible: bool, reason: string>, to_new_subscribers: record<is_eligible: bool, reason: string>, to_non_clickers: record<is_eligible: bool, reason: string>, to_non_purchasers: record<is_eligible: bool, reason: string>>, resend_shortcut_usage: record<shortcut_campaigns: list<record>, original_campaign: record<id: string, web_id: int, title: string, shortcut_type: string>>, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1752,7 +1751,7 @@ export def "campaigns-actions-schedule post" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   schedule_time: string # The UTC date and time to schedule the campaign for delivery in ISO 8601 format. Campaigns may only be scheduled to send on the quarter-hour (:00, :15, :30, :45). (format: date-time)
-  --timewarp: string@bool-completer # Choose whether the campaign should use [Timewarp](https://mailchimp.com/help/use-timewarp/) when sending. Campaigns scheduled with Timewarp are localized based on the recipients' time zones. For example, a Timewarp campaign with a `schedule_time` of 13:00 will be sent to each recipient at 1:00pm in their local time. Cannot be set to `true` for campaigns using [Batch Delivery](https://mailchimp.com/help/schedule-batch-delivery/).
+  --timewarp: oneof<nothing, bool> # Choose whether the campaign should use [Timewarp](https://mailchimp.com/help/use-timewarp/) when sending. Campaigns scheduled with Timewarp are localized based on the recipients' time zones. For example, a Timewarp campaign with a `schedule_time` of 13:00 will be sent to each recipient at 1:00pm in their local time. Cannot be set to `true` for campaigns using [Batch Delivery](https://mailchimp.com/help/schedule-batch-delivery/).
   --batch-delivery: record # Choose whether the campaign should use [Batch Delivery](https://mailchimp.com/help/schedule-batch-delivery/). Cannot be set to `true` for campaigns using [Timewarp](https://mailchimp.com/help/use-timewarp/). — shape: {batch_delay: int, batch_count: int}
 ]: any -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let input = $in
@@ -1993,7 +1992,7 @@ export def "campaigns-feedback post" [
   --accept: string@accept-completer # Response content type
   --block-id: int # The block id for the editable block that the feedback addresses.
   message: string # The content of the feedback.
-  --is-complete: string@bool-completer # The status of feedback.
+  --is-complete: oneof<nothing, bool> # The status of feedback.
 ]: any -> record<feedback_id: int, parent_id: int, block_id: int, message: string, is_complete: bool, created_by: string, created_at: string, updated_at: string, source: string, campaign_id: string, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2050,7 +2049,7 @@ export def "campaigns-feedback patch" [
   --accept: string@accept-completer # Response content type
   --block-id: int # The block id for the editable block that the feedback addresses.
   --message: string # The content of the feedback.
-  --is-complete: string@bool-completer # The status of feedback.
+  --is-complete: oneof<nothing, bool> # The status of feedback.
 ]: any -> record<feedback_id: int, parent_id: int, block_id: int, message: string, is_complete: bool, created_by: string, created_at: string, updated_at: string, source: string, campaign_id: string, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2761,8 +2760,8 @@ export def "lists list" [
   --email: string # Restrict results to lists that include a specific subscriber's email address.
   --sort-field: string@sort-field-completer-3 # Returns files sorted by the specified field.
   --sort-dir: string@sort-dir-completer # Determines the order direction for sorted results.
-  --has-ecommerce-store: string@bool-completer # Restrict results to lists that contain an active, connected, undeleted ecommerce store.
-  --include-total-contacts: string@bool-completer # Return the total_contacts field in the stats response, which contains an approximate count of all contacts in any state.
+  --has-ecommerce-store: oneof<nothing, bool> # Restrict results to lists that contain an active, connected, undeleted ecommerce store.
+  --include-total-contacts: oneof<nothing, bool> # Return the total_contacts field in the stats response, which contains an approximate count of all contacts in any state.
 ]: nothing -> record<lists: table<id: string, web_id: int, name: string, contact: record, permission_reminder: string, use_archive_bar: bool, campaign_defaults: record, notify_on_subscribe: string, notify_on_unsubscribe: string, date_created: string, list_rating: int, email_type_option: bool, subscribe_url_short: string, subscribe_url_long: string, beamer_address: string, visibility: string, double_optin: bool, has_welcome: bool, marketing_permissions: bool, modules: list, stats: record, _links: list>, total_items: int, constraints: record<may_create: bool, max_instances: int, current_total_instances: int>, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2791,13 +2790,13 @@ export def "lists post" [
   name: string # The name of the list.
   contact: record # [Contact information displayed in campaign footers](https://mailchimp.com/help/about-campaign-footers/) to comply with international spam laws. — shape: {company: string, address1: string, address2?: string, city: string, state?: string, zip?: string, country: string, phone?: string}
   permission_reminder: string # The [permission reminder](https://mailchimp.com/help/edit-the-permission-reminder/) for the list.
-  --use-archive-bar: string@bool-completer # Whether campaigns for this list use the [Archive Bar](https://mailchimp.com/help/about-email-campaign-archives-and-pages/) in archives by default. (default: false)
+  --use-archive-bar: oneof<nothing, bool> # Whether campaigns for this list use the [Archive Bar](https://mailchimp.com/help/about-email-campaign-archives-and-pages/) in archives by default. (default: false)
   campaign_defaults: record # [Default values for campaigns](https://mailchimp.com/help/edit-your-emails-subject-preview-text-from-name-or-from-email-address/) created for this list. — shape: {from_name: string, from_email: string, subject: string, language: string}
   --notify-on-subscribe: string # The email address to send [subscribe notifications](https://mailchimp.com/help/change-subscribe-and-unsubscribe-notifications/) to. (default: false)
   --notify-on-unsubscribe: string # The email address to send [unsubscribe notifications](https://mailchimp.com/help/change-subscribe-and-unsubscribe-notifications/) to. (default: false)
-  --email-type-option: string@bool-completer # Whether the list supports [multiple formats for emails](https://mailchimp.com/help/change-audience-name-defaults/). When set to `true`, subscribers can choose whether they want to receive HTML or plain-text emails. When set to `false`, subscribers will receive HTML emails, with a plain-text alternative backup.
-  --double-optin: string@bool-completer # Whether or not to require the subscriber to confirm subscription via email. (default: false)
-  --marketing-permissions: string@bool-completer # Whether or not the list has marketing permissions (eg. GDPR) enabled. (default: false)
+  --email-type-option: oneof<nothing, bool> # Whether the list supports [multiple formats for emails](https://mailchimp.com/help/change-audience-name-defaults/). When set to `true`, subscribers can choose whether they want to receive HTML or plain-text emails. When set to `false`, subscribers will receive HTML emails, with a plain-text alternative backup.
+  --double-optin: oneof<nothing, bool> # Whether or not to require the subscriber to confirm subscription via email. (default: false)
+  --marketing-permissions: oneof<nothing, bool> # Whether or not the list has marketing permissions (eg. GDPR) enabled. (default: false)
 ]: any -> record<id: string, web_id: int, name: string, contact: record<company: string, address1: string, address2: string, city: string, state: string, zip: string, country: string, phone: string>, permission_reminder: string, use_archive_bar: bool, campaign_defaults: record<from_name: string, from_email: string, subject: string, language: string>, notify_on_subscribe: string, notify_on_unsubscribe: string, date_created: string, list_rating: int, email_type_option: bool, subscribe_url_short: string, subscribe_url_long: string, beamer_address: string, visibility: string, double_optin: bool, has_welcome: bool, marketing_permissions: bool, modules: list<string>, stats: record<member_count: int, total_contacts: int, unsubscribe_count: int, cleaned_count: int, member_count_since_send: int, unsubscribe_count_since_send: int, cleaned_count_since_send: int, campaign_count: int, campaign_last_sent: string, merge_field_count: int, avg_sub_rate: float, avg_unsub_rate: float, target_sub_rate: float, open_rate: float, click_rate: float, last_sub_date: string, last_unsub_date: string>, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2826,7 +2825,7 @@ export def "lists get" [
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
-  --include-total-contacts: string@bool-completer # Return the total_contacts field in the stats response, which contains an approximate count of all contacts in any state.
+  --include-total-contacts: oneof<nothing, bool> # Return the total_contacts field in the stats response, which contains an approximate count of all contacts in any state.
 ]: nothing -> record<id: string, web_id: int, name: string, contact: record<company: string, address1: string, address2: string, city: string, state: string, zip: string, country: string, phone: string>, permission_reminder: string, use_archive_bar: bool, campaign_defaults: record<from_name: string, from_email: string, subject: string, language: string>, notify_on_subscribe: string, notify_on_unsubscribe: string, date_created: string, list_rating: int, email_type_option: bool, subscribe_url_short: string, subscribe_url_long: string, beamer_address: string, visibility: string, double_optin: bool, has_welcome: bool, marketing_permissions: bool, modules: list<string>, stats: record<member_count: int, total_contacts: int, unsubscribe_count: int, cleaned_count: int, member_count_since_send: int, unsubscribe_count_since_send: int, cleaned_count_since_send: int, campaign_count: int, campaign_last_sent: string, merge_field_count: int, avg_sub_rate: float, avg_unsub_rate: float, target_sub_rate: float, open_rate: float, click_rate: float, last_sub_date: string, last_unsub_date: string>, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2856,13 +2855,13 @@ export def "lists patch" [
   name: string # The name of the list.
   contact: record # [Contact information displayed in campaign footers](https://mailchimp.com/help/about-campaign-footers/) to comply with international spam laws. — shape: {company: string, address1: string, address2?: string, city: string, state: string, zip: string, country: string, phone?: string}
   permission_reminder: string # The [permission reminder](https://mailchimp.com/help/edit-the-permission-reminder/) for the list.
-  --use-archive-bar: string@bool-completer # Whether campaigns for this list use the [Archive Bar](https://mailchimp.com/help/about-email-campaign-archives-and-pages/) in archives by default. (default: false)
+  --use-archive-bar: oneof<nothing, bool> # Whether campaigns for this list use the [Archive Bar](https://mailchimp.com/help/about-email-campaign-archives-and-pages/) in archives by default. (default: false)
   campaign_defaults: record # [Default values for campaigns](https://mailchimp.com/help/edit-your-emails-subject-preview-text-from-name-or-from-email-address/) created for this list. — shape: {from_name: string, from_email: string, subject: string, language: string}
   --notify-on-subscribe: string # The email address to send [subscribe notifications](https://mailchimp.com/help/change-subscribe-and-unsubscribe-notifications/) to. (default: false)
   --notify-on-unsubscribe: string # The email address to send [unsubscribe notifications](https://mailchimp.com/help/change-subscribe-and-unsubscribe-notifications/) to. (default: false)
-  --email-type-option: string@bool-completer # Whether the list supports [multiple formats for emails](https://mailchimp.com/help/change-audience-name-defaults/). When set to `true`, subscribers can choose whether they want to receive HTML or plain-text emails. When set to `false`, subscribers will receive HTML emails, with a plain-text alternative backup.
-  --double-optin: string@bool-completer # Whether or not to require the subscriber to confirm subscription via email. (default: false)
-  --marketing-permissions: string@bool-completer # Whether or not the list has marketing permissions (eg. GDPR) enabled. (default: false)
+  --email-type-option: oneof<nothing, bool> # Whether the list supports [multiple formats for emails](https://mailchimp.com/help/change-audience-name-defaults/). When set to `true`, subscribers can choose whether they want to receive HTML or plain-text emails. When set to `false`, subscribers will receive HTML emails, with a plain-text alternative backup.
+  --double-optin: oneof<nothing, bool> # Whether or not to require the subscriber to confirm subscription via email. (default: false)
+  --marketing-permissions: oneof<nothing, bool> # Whether or not the list has marketing permissions (eg. GDPR) enabled. (default: false)
 ]: any -> record<id: string, web_id: int, name: string, contact: record<company: string, address1: string, address2: string, city: string, state: string, zip: string, country: string, phone: string>, permission_reminder: string, use_archive_bar: bool, campaign_defaults: record<from_name: string, from_email: string, subject: string, language: string>, notify_on_subscribe: string, notify_on_unsubscribe: string, date_created: string, list_rating: int, email_type_option: bool, subscribe_url_short: string, subscribe_url_long: string, beamer_address: string, visibility: string, double_optin: bool, has_welcome: bool, marketing_permissions: bool, modules: list<string>, stats: record<member_count: int, total_contacts: int, unsubscribe_count: int, cleaned_count: int, member_count_since_send: int, unsubscribe_count_since_send: int, cleaned_count_since_send: int, campaign_count: int, campaign_last_sent: string, merge_field_count: int, avg_sub_rate: float, avg_unsub_rate: float, target_sub_rate: float, open_rate: float, click_rate: float, last_sub_date: string, last_unsub_date: string>, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2913,11 +2912,11 @@ export def "lists post-by-list_id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --skip-merge-validation: string@bool-completer # If skip_merge_validation is true, member data will be accepted without merge field values, even if the merge field is usually required. This defaults to false.
-  --skip-duplicate-check: string@bool-completer # If skip_duplicate_check is true, we will ignore duplicates sent in the request when using the batch sub/unsub on the lists endpoint. The status of the first appearance in the request will be saved. This defaults to false.
+  --skip-merge-validation: oneof<nothing, bool> # If skip_merge_validation is true, member data will be accepted without merge field values, even if the merge field is usually required. This defaults to false.
+  --skip-duplicate-check: oneof<nothing, bool> # If skip_duplicate_check is true, we will ignore duplicates sent in the request when using the batch sub/unsub on the lists endpoint. The status of the first appearance in the request will be saved. This defaults to false.
   members: list # An array of objects, each representing an email address and the subscription status for a specific list. Up to 500 members may be added or updated with each API call. — item shape: {email_address?: string, email_type?: string, status?: "subscribed"|"unsubscribed"|"cleaned"|"pending"|"transactional", merge_fields?: record, interests?: record, language?: string, vip?: bool, location?: record, ip_signup?: string, timestamp_signup?: string, ip_opt?: string, timestamp_opt?: string}
-  --sync-tags: string@bool-completer # Whether this batch operation will replace all existing tags with tags in request.
-  --update-existing: string@bool-completer # Whether this batch operation will change existing members' subscription status.
+  --sync-tags: oneof<nothing, bool> # Whether this batch operation will replace all existing tags with tags in request.
+  --update-existing: oneof<nothing, bool> # Whether this batch operation will change existing members' subscription status.
 ]: any -> record<new_members: table<id: string, contact_id: string, email_address: string, unique_email_id: string, email_type: string, status: string, merge_fields: record, interests: record, stats: record, ip_signup: string, timestamp_signup: string, ip_opt: string, timestamp_opt: string, member_rating: int, last_changed: string, language: string, vip: bool, email_client: string, location: record, last_note: record, tags_count: int, tags: list, list_id: string, _links: list>, updated_members: table<id: string, contact_id: string, email_address: string, unique_email_id: string, email_type: string, status: string, merge_fields: record, interests: record, stats: record, ip_signup: string, timestamp_signup: string, ip_opt: string, timestamp_opt: string, member_rating: int, last_changed: string, language: string, vip: bool, email_client: string, location: record, last_note: record, tags_count: int, tags: list, list_id: string, _links: list>, errors: table<email_address: string, error: string, error_code: string, field: string, field_message: string>, total_created: int, total_updated: int, error_count: int, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3402,9 +3401,9 @@ export def "lists-segments previewASegment" [
   --type: string # Limit results based on segment type.
   --since-created-at: string # Restrict results to segments created after the set time. Uses ISO 8601 time format: 2015-10-21T15:41:36+00:00.
   --before-created-at: string # Restrict results to segments created before the set time. Uses ISO 8601 time format: 2015-10-21T15:41:36+00:00.
-  --include-cleaned: string@bool-completer # Include cleaned members in response (e.g. false)
-  --include-transactional: string@bool-completer # Include transactional members in response (e.g. false)
-  --include-unsubscribed: string@bool-completer # Include unsubscribed members in response (e.g. false)
+  --include-cleaned: oneof<nothing, bool> # Include cleaned members in response (e.g. false)
+  --include-transactional: oneof<nothing, bool> # Include transactional members in response (e.g. false)
+  --include-unsubscribed: oneof<nothing, bool> # Include unsubscribed members in response (e.g. false)
   --since-updated-at: string # Restrict results to segments update after the set time. Uses ISO 8601 time format: 2015-10-21T15:41:36+00:00.
   --before-updated-at: string # Restrict results to segments update before the set time. Uses ISO 8601 time format: 2015-10-21T15:41:36+00:00.
   --exclude-type: string@exclude-type-completer # Exclude results based on segment type. For example, use `exclude_type=static` to exclude tags from the response.
@@ -3465,9 +3464,9 @@ export def "lists-segments get" [
   --accept: string@accept-completer # Response content type
   --qp-fields: list # A comma-separated list of fields to return. Reference parameters of sub-objects with dot notation.
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
-  --include-cleaned: string@bool-completer # Include cleaned members in response (e.g. false)
-  --include-transactional: string@bool-completer # Include transactional members in response (e.g. false)
-  --include-unsubscribed: string@bool-completer # Include unsubscribed members in response (e.g. false)
+  --include-cleaned: oneof<nothing, bool> # Include cleaned members in response (e.g. false)
+  --include-transactional: oneof<nothing, bool> # Include transactional members in response (e.g. false)
+  --include-unsubscribed: oneof<nothing, bool> # Include unsubscribed members in response (e.g. false)
 ]: nothing -> record<id: int, name: string, member_count: int, type: string, created_at: string, updated_at: string, options: record<match: string, conditions: list<any>>, list_id: string, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3581,9 +3580,9 @@ export def "lists-segments-members get" [
   --exclude-fields: list # A comma-separated list of fields to exclude. Reference parameters of sub-objects with dot notation.
   --count: int # The number of records to return. Default value is 10. Maximum value is 1000 (default: 10)
   --offset: int # Used for [pagination](https://mailchimp.com/developer/marketing/docs/methods-parameters/#pagination), this is the number of records from a collection to skip. Default value is 0. (default: 0)
-  --include-cleaned: string@bool-completer # Include cleaned members in response (e.g. false)
-  --include-transactional: string@bool-completer # Include transactional members in response (e.g. false)
-  --include-unsubscribed: string@bool-completer # Include unsubscribed members in response (e.g. false)
+  --include-cleaned: oneof<nothing, bool> # Include cleaned members in response (e.g. false)
+  --include-transactional: oneof<nothing, bool> # Include transactional members in response (e.g. false)
+  --include-unsubscribed: oneof<nothing, bool> # Include unsubscribed members in response (e.g. false)
 ]: nothing -> record<members: table<id: string, email_address: string, full_name: string, unique_email_id: string, email_type: string, status: string, merge_fields: record, interests: record, stats: record, ip_signup: string, timestamp_signup: string, ip_opt: string, timestamp_opt: string, member_rating: int, last_changed: string, language: string, vip: bool, email_client: string, location: record, last_note: record, list_id: string, _links: list>, total_items: int, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3697,13 +3696,13 @@ export def "lists-members list" [
   --since-last-changed: string # Restrict results to subscribers whose information changed after the set timeframe. Uses ISO 8601 time format: 2015-10-21T15:41:36+00:00.
   --before-last-changed: string # Restrict results to subscribers whose information changed before the set timeframe. Uses ISO 8601 time format: 2015-10-21T15:41:36+00:00.
   --unique-email-id: string # A unique identifier for the email address across all Mailchimp lists.
-  --vip-only: string@bool-completer # A filter to return only the list's VIP members. Passing `true` will restrict results to VIP list members, passing `false` will return all list members.
+  --vip-only: oneof<nothing, bool> # A filter to return only the list's VIP members. Passing `true` will restrict results to VIP list members, passing `false` will return all list members.
   --interest-category-id: string # The unique id for the interest category.
   --interest-ids: string # Used to filter list members by interests. Must be accompanied by interest_category_id and interest_match. The value must be a comma separated list of interest ids present for any supplied interest categories.
   --interest-match: string@interest-match-completer # Used to filter list members by interests. Must be accompanied by interest_category_id and interest_ids. "any" will match a member with any of the interest supplied, "all" will only match members with every interest supplied, and "none" will match members without any of the interest supplied.
   --sort-field: string@sort-field-completer-6 # Returns files sorted by the specified field.
   --sort-dir: string@sort-dir-completer # Determines the order direction for sorted results.
-  --since-last-campaign: string@bool-completer # Filter subscribers by those subscribed/unsubscribed/pending/cleaned since last email campaign send. Member status is required to use this filter.
+  --since-last-campaign: oneof<nothing, bool> # Filter subscribers by those subscribed/unsubscribed/pending/cleaned since last email campaign send. Member status is required to use this filter.
   --unsubscribed-since: string # Filter subscribers by those unsubscribed since a specific date. Using any status other than unsubscribed with this filter will result in an error.
 ]: nothing -> record<members: table<id: string, email_address: string, unique_email_id: string, contact_id: string, full_name: string, web_id: int, email_type: string, status: string, unsubscribe_reason: string, consents_to_one_to_one_messaging: bool, sms_phone_number: string, sms_subscription_status: string, sms_subscription_last_updated: string, merge_fields: record, interests: record, stats: record, ip_signup: string, timestamp_signup: string, ip_opt: string, timestamp_opt: string, member_rating: int, last_changed: string, language: string, vip: bool, email_client: string, location: record, marketing_permissions: list, last_note: record, source: string, tags_count: int, tags: list, list_id: string, _links: list>, list_id: string, total_items: int, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3731,14 +3730,14 @@ export def "lists-members post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --skip-merge-validation: string@bool-completer # If skip_merge_validation is true, member data will be accepted without merge field values, even if the merge field is usually required. This defaults to false.
+  --skip-merge-validation: oneof<nothing, bool> # If skip_merge_validation is true, member data will be accepted without merge field values, even if the merge field is usually required. This defaults to false.
   email_address: string # Email address for a subscriber.
   --email-type: string # Type of email this member asked to get ('html' or 'text').
   status: string@status-completer-3 # Subscriber's current status.
   --merge-fields: record # A dictionary of merge fields where the keys are the merge tags. See the [Merge Fields documentation](https://mailchimp.com/developer/marketing/docs/merge-fields/#structure) for more about the structure.
   --interests: record # The key of this object's properties is the ID of the interest in question.
   --language: string # If set/detected, the [subscriber's language](https://mailchimp.com/help/view-and-edit-contact-languages/).
-  --vip: string@bool-completer # [VIP status](https://mailchimp.com/help/designate-and-send-to-vip-contacts/) for subscriber.
+  --vip: oneof<nothing, bool> # [VIP status](https://mailchimp.com/help/designate-and-send-to-vip-contacts/) for subscriber.
   --location: record # Subscriber location information. — shape: {latitude?: float, longitude?: float}
   --marketing-permissions: list # The marketing permissions for the subscriber. — item shape: {marketing_permission_id?: string, enabled?: bool}
   --ip-signup: string # IP address the subscriber signed up from.
@@ -3803,7 +3802,7 @@ export def "lists-members put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --skip-merge-validation: string@bool-completer # If skip_merge_validation is true, member data will be accepted without merge field values, even if the merge field is usually required. This defaults to false.
+  --skip-merge-validation: oneof<nothing, bool> # If skip_merge_validation is true, member data will be accepted without merge field values, even if the merge field is usually required. This defaults to false.
   email_address: string # Email address for a subscriber. This value is required only if the email address is not already present on the list.
   status_if_new: string@status-if-new-completer # Subscriber's status. This value is required only if the email address is not already present on the list.
   --email-type: string # Type of email this member asked to get ('html' or 'text').
@@ -3811,7 +3810,7 @@ export def "lists-members put" [
   --merge-fields: record # A dictionary of merge fields where the keys are the merge tags. See the [Merge Fields documentation](https://mailchimp.com/developer/marketing/docs/merge-fields/#structure) for more about the structure.
   --interests: record # The key of this object's properties is the ID of the interest in question.
   --language: string # If set/detected, the [subscriber's language](https://mailchimp.com/help/view-and-edit-contact-languages/).
-  --vip: string@bool-completer # [VIP status](https://mailchimp.com/help/designate-and-send-to-vip-contacts/) for subscriber.
+  --vip: oneof<nothing, bool> # [VIP status](https://mailchimp.com/help/designate-and-send-to-vip-contacts/) for subscriber.
   --location: record # Subscriber location information. — shape: {latitude?: float, longitude?: float}
   --marketing-permissions: list # The marketing permissions for the subscriber. — item shape: {marketing_permission_id?: string, enabled?: bool}
   --ip-signup: string # IP address the subscriber signed up from.
@@ -3848,14 +3847,14 @@ export def "lists-members patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --skip-merge-validation: string@bool-completer # If skip_merge_validation is true, member data will be accepted without merge field values, even if the merge field is usually required. This defaults to false.
+  --skip-merge-validation: oneof<nothing, bool> # If skip_merge_validation is true, member data will be accepted without merge field values, even if the merge field is usually required. This defaults to false.
   --email-address: string # Email address for a subscriber.
   --email-type: string # Type of email this member asked to get ('html' or 'text').
   --status: string@status-completer-4 # Subscriber's current status.
   --merge-fields: record # A dictionary of merge fields where the keys are the merge tags. See the [Merge Fields documentation](https://mailchimp.com/developer/marketing/docs/merge-fields/#structure) for more about the structure.
   --interests: record # The key of this object's properties is the ID of the interest in question.
   --language: string # If set/detected, the [subscriber's language](https://mailchimp.com/help/view-and-edit-contact-languages/).
-  --vip: string@bool-completer # [VIP status](https://mailchimp.com/help/designate-and-send-to-vip-contacts/) for subscriber.
+  --vip: oneof<nothing, bool> # [VIP status](https://mailchimp.com/help/designate-and-send-to-vip-contacts/) for subscriber.
   --location: record # Subscriber location information. — shape: {latitude?: float, longitude?: float}
   --marketing-permissions: list # The marketing permissions for the subscriber. — item shape: {marketing_permission_id?: string, enabled?: bool}
   --ip-signup: string # IP address the subscriber signed up from.
@@ -4003,7 +4002,7 @@ export def "lists-members-tags post" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   tags: list # A list of tags assigned to the list member. — item shape: {name: string, status: "inactive"|"active"}
-  --is-syncing: string@bool-completer # When is_syncing is true, automations based on the tags in the request will not fire
+  --is-syncing: oneof<nothing, bool> # When is_syncing is true, automations based on the tags in the request will not fire
 ]: any -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4062,7 +4061,7 @@ export def "lists-members-events post" [
   --accept: string@accept-completer # Response content type
   name: string # The name for this type of event ('purchased', 'visited', etc). Must be 2-30 characters in length
   --properties: record # An optional list of properties
-  --is-syncing: string@bool-completer # Events created with the is_syncing value set to `true` will not trigger automations.
+  --is-syncing: oneof<nothing, bool> # Events created with the is_syncing value set to `true` will not trigger automations.
   --occurred-at: string # The date and time the event occurred in ISO 8601 format. (format: date-time)
 ]: any -> record<type: string, title: string, status: int, detail: string, instance: string> {
   let input = $in
@@ -4287,7 +4286,7 @@ export def "lists-merge-fields list" [
   --count: int # The number of records to return. Default value is 10. Maximum value is 1000 (default: 10)
   --offset: int # Used for [pagination](https://mailchimp.com/developer/marketing/docs/methods-parameters/#pagination), this is the number of records from a collection to skip. Default value is 0. (default: 0)
   --type: string # The merge field type.
-  --required: string@bool-completer # Whether it's a required merge field.
+  --required: oneof<nothing, bool> # Whether it's a required merge field.
 ]: nothing -> record<merge_fields: table<merge_id: int, tag: string, name: string, type: string, required: bool, default_value: string, public: bool, display_order: int, options: record, help_text: string, list_id: string, total_items: int, merge_field_limit: int, _links: list>, list_id: string, total_items: int, merge_field_limit: int, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4316,9 +4315,9 @@ export def "lists-merge-fields post" [
   --tag: string # The merge tag used for Mailchimp campaigns and [adding contact information](https://mailchimp.com/developer/marketing/docs/merge-fields/#add-merge-data-to-contacts).
   name: string # The name of the merge field (audience field).
   type: string@type-completer-2 # The [type](https://mailchimp.com/developer/marketing/docs/merge-fields/#structure) for the merge field.
-  --required: string@bool-completer # Whether the merge field is required to import a contact.
+  --required: oneof<nothing, bool> # Whether the merge field is required to import a contact.
   --default-value: string # The default value for the merge field if `null`.
-  --public: string@bool-completer # Whether the merge field is displayed on the signup form.
+  --public: oneof<nothing, bool> # Whether the merge field is displayed on the signup form.
   --display-order: int # The order that the merge field displays on the list signup form.
   --options: record # Extra options for some merge field types. — shape: {default_country?: int, phone_format?: string, date_format?: string, choices?: list, size?: int}
   --help-text: string # Extra text to help the subscriber fill out the form.
@@ -4379,9 +4378,9 @@ export def "lists-merge-fields patch" [
   --accept: string@accept-completer # Response content type
   --tag: string # The merge tag used for Mailchimp campaigns and [adding contact information](https://mailchimp.com/developer/marketing/docs/merge-fields/#add-merge-data-to-contacts).
   name: string # The name of the merge field (audience field).
-  --required: string@bool-completer # Whether the merge field is required to import a contact.
+  --required: oneof<nothing, bool> # Whether the merge field is required to import a contact.
   --default-value: string # The default value for the merge field if `null`.
-  --public: string@bool-completer # Whether the merge field is displayed on the signup form.
+  --public: oneof<nothing, bool> # Whether the merge field is displayed on the signup form.
   --display-order: int # The order that the merge field displays on the list signup form.
   --options: record # Extra options for some merge field types. — shape: {default_country?: int, phone_format?: string, date_format?: string, choices?: list}
   --help-text: string # Extra text to help the subscriber fill out the form.
@@ -4797,7 +4796,7 @@ export def "landing-pages post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --use-default-list: string@bool-completer # Will create the Landing Page using the account's Default List instead of requiring a list_id.
+  --use-default-list: oneof<nothing, bool> # Will create the Landing Page using the account's Default List instead of requiring a list_id.
   --name: string # The name of this landing page.
   --title: string # The title of this landing page seen in the browser's title bar.
   --description: string # The description of this landing page.
@@ -5770,7 +5769,7 @@ export def "ecommerce-orders get" [
   --campaign-id: string # Restrict results to orders with a specific `campaign_id` value.
   --outreach-id: string # Restrict results to orders with a specific `outreach_id` value.
   --customer-id: string # Restrict results to orders made by a specific customer.
-  --has-outreach: string@bool-completer # Restrict results to orders that have an outreach attached. For example, an email campaign or Facebook ad.
+  --has-outreach: oneof<nothing, bool> # Restrict results to orders that have an outreach attached. For example, an email campaign or Facebook ad.
 ]: nothing -> record<orders: table<id: string, customer: record, store_id: string, campaign_id: string, cart_id: string, landing_site: string, financial_status: string, fulfillment_status: string, currency_code: string, order_total: float, order_url: string, discount_total: float, tax_total: float, shipping_total: float, tracking_code: string, processed_at_foreign: string, cancelled_at_foreign: string, updated_at_foreign: string, shipping_address: record, billing_address: record, promos: list, lines: list, outreach: record, tracking_number: string, tracking_carrier: string, tracking_url: string, _links: list>, total_items: int, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5827,7 +5826,7 @@ export def "ecommerce-stores post" [
   name: string # The name of the store. (e.g. Freddie's Cat Hat Emporium)
   --platform: string # The e-commerce platform of the store.
   --domain: string # The store domain. This parameter is required for Connected Sites and Google Ads. (e.g. example.com)
-  --is-syncing: string@bool-completer # Whether to disable automations because the store is currently [syncing](https://mailchimp.com/developer/marketing/docs/e-commerce/#pausing-store-automations).
+  --is-syncing: oneof<nothing, bool> # Whether to disable automations because the store is currently [syncing](https://mailchimp.com/developer/marketing/docs/e-commerce/#pausing-store-automations).
   --email-address: string # The email address for the store. (e.g. freddie@mailchimp.com)
   currency_code: string # The three-letter ISO 4217 code for the currency that the store accepts. (e.g. USD)
   --money-format: string # The currency format for the store. For example: `$`, `£`, etc. (e.g. $)
@@ -5891,7 +5890,7 @@ export def "ecommerce-stores patch" [
   --name: string # The name of the store. (e.g. Freddie's Cat Hat Emporium)
   --platform: string # The e-commerce platform of the store.
   --domain: string # The store domain. (e.g. example.com)
-  --is-syncing: string@bool-completer # Whether to disable automations because the store is currently [syncing](https://mailchimp.com/developer/marketing/docs/e-commerce/#pausing-store-automations).
+  --is-syncing: oneof<nothing, bool> # Whether to disable automations because the store is currently [syncing](https://mailchimp.com/developer/marketing/docs/e-commerce/#pausing-store-automations).
   --email-address: string # The email address for the store. (e.g. freddie@mailchimp.com)
   --currency-code: string # The three-letter ISO 4217 code for the currency that the store accepts. (e.g. USD)
   --money-format: string # The currency format for the store. For example: `$`, `£`, etc. (e.g. $)
@@ -6278,7 +6277,7 @@ export def "ecommerce-stores-customers post" [
   id: string # A unique identifier for the customer. Limited to 50 characters.
   --email-address: string # The customer's email address.
   --sms-phone-number: string # A US phone number for SMS contact.
-  --opt-in-status: string@bool-completer # The customer's opt-in status. This value will never overwrite the opt-in status of a pre-existing Mailchimp list member, but will apply to list members that are added through the e-commerce API endpoints. Customers who don't opt in to your Mailchimp list [will be added as `Transactional` members](https://mailchimp.com/developer/marketing/docs/e-commerce/#customers).
+  --opt-in-status: oneof<nothing, bool> # The customer's opt-in status. This value will never overwrite the opt-in status of a pre-existing Mailchimp list member, but will apply to list members that are added through the e-commerce API endpoints. Customers who don't opt in to your Mailchimp list [will be added as `Transactional` members](https://mailchimp.com/developer/marketing/docs/e-commerce/#customers).
   --company: string # The customer's company.
   --first-name: string # The customer's first name.
   --last-name: string # The customer's last name.
@@ -6341,7 +6340,7 @@ export def "ecommerce-stores-customers put" [
   id: string # A unique identifier for the customer. Limited to 50 characters.
   --email-address: string # The customer's email address.
   --sms-phone-number: string # A US phone number for SMS contact.
-  --opt-in-status: string@bool-completer # The customer's opt-in status. This value will never overwrite the opt-in status of a pre-existing Mailchimp list member, but will apply to list members that are added through the e-commerce API endpoints. Customers who don't opt in to your Mailchimp list [will be added as `Transactional` members](https://mailchimp.com/developer/marketing/docs/e-commerce/#customers).
+  --opt-in-status: oneof<nothing, bool> # The customer's opt-in status. This value will never overwrite the opt-in status of a pre-existing Mailchimp list member, but will apply to list members that are added through the e-commerce API endpoints. Customers who don't opt in to your Mailchimp list [will be added as `Transactional` members](https://mailchimp.com/developer/marketing/docs/e-commerce/#customers).
   --company: string # The customer's company.
   --first-name: string # The customer's first name.
   --last-name: string # The customer's last name.
@@ -6374,7 +6373,7 @@ export def "ecommerce-stores-customers patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --opt-in-status: string@bool-completer # The customer's opt-in status. This value will never overwrite the opt-in status of a pre-existing Mailchimp list member, but will apply to list members that are added through the e-commerce API endpoints. Customers who don't opt in to your Mailchimp list [will be added as `Transactional` members](https://mailchimp.com/developer/marketing/docs/e-commerce/#customers).
+  --opt-in-status: oneof<nothing, bool> # The customer's opt-in status. This value will never overwrite the opt-in status of a pre-existing Mailchimp list member, but will apply to list members that are added through the e-commerce API endpoints. Customers who don't opt in to your Mailchimp list [will be added as `Transactional` members](https://mailchimp.com/developer/marketing/docs/e-commerce/#customers).
   --company: string # The customer's company.
   --first-name: string # The customer's first name.
   --last-name: string # The customer's last name.
@@ -6465,7 +6464,7 @@ export def "ecommerce-stores-promo-rules post" [
   amount: float # The amount of the promo code discount. If 'type' is 'fixed', the amount is treated as a monetary value. If 'type' is 'percentage', amount must be a decimal value between 0.0 and 1.0, inclusive. (format: float, e.g. 0.5)
   type: string@type-completer-4 # Type of discount. For free shipping set type to fixed.
   target: string@target-completer # The target that the discount applies to.
-  --enabled: string@bool-completer # Whether the promo rule is currently enabled. (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the promo rule is currently enabled. (e.g. true)
   --created-at-foreign: string # The date and time the promotion was created in ISO 8601 format. (format: date-time)
   --updated-at-foreign: string # The date and time the promotion was updated in ISO 8601 format. (format: date-time)
 ]: any -> record<id: string, title: string, description: string, starts_at: string, ends_at: string, amount: float, type: string, target: string, enabled: bool, created_at_foreign: string, updated_at_foreign: string, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
@@ -6529,7 +6528,7 @@ export def "ecommerce-stores-promo-rules patch" [
   --amount: float # The amount of the promo code discount. If 'type' is 'fixed', the amount is treated as a monetary value. If 'type' is 'percentage', amount must be a decimal value between 0.0 and 1.0, inclusive. (format: float, e.g. 0.5)
   --type: string@type-completer-4 # Type of discount. For free shipping set type to fixed.
   --target: string@target-completer # The target that the discount applies to.
-  --enabled: string@bool-completer # Whether the promo rule is currently enabled. (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the promo rule is currently enabled. (e.g. true)
   --created-at-foreign: string # The date and time the promotion was created in ISO 8601 format. (format: date-time)
   --updated-at-foreign: string # The date and time the promotion was updated in ISO 8601 format. (format: date-time)
 ]: any -> record<id: string, title: string, description: string, starts_at: string, ends_at: string, amount: float, type: string, target: string, enabled: bool, created_at_foreign: string, updated_at_foreign: string, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
@@ -6616,7 +6615,7 @@ export def "ecommerce-stores-promo-rules-promo-codes post" [
   code: string # The discount code. Restricted to UTF-8 characters with max length 50. (e.g. summersale)
   redemption_url: string # The url that should be used in the promotion campaign restricted to UTF-8 characters with max length 2000. (e.g. A url that applies promo code directly at checkout or a url that points to sale page or store url)
   --usage-count: int # Number of times promo code has been used.
-  --enabled: string@bool-completer # Whether the promo code is currently enabled. (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the promo code is currently enabled. (e.g. true)
   --created-at-foreign: string # The date and time the promotion was created in ISO 8601 format. (format: date-time)
   --updated-at-foreign: string # The date and time the promotion was updated in ISO 8601 format. (format: date-time)
 ]: any -> record<id: string, code: string, redemption_url: string, usage_count: int, enabled: bool, created_at_foreign: string, updated_at_foreign: string, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
@@ -6678,7 +6677,7 @@ export def "ecommerce-stores-promo-rules-promo-codes patch" [
   --code: string # The discount code. Restricted to UTF-8 characters with max length 50. (e.g. summersale)
   --redemption-url: string # The url that should be used in the promotion campaign restricted to UTF-8 characters with max length 2000. (e.g. A url that applies promo code directly at checkout or a url that points to sale page or store url)
   --usage-count: int # Number of times promo code has been used.
-  --enabled: string@bool-completer # Whether the promo code is currently enabled. (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the promo code is currently enabled. (e.g. true)
   --created-at-foreign: string # The date and time the promotion was created in ISO 8601 format. (format: date-time)
   --updated-at-foreign: string # The date and time the promotion was updated in ISO 8601 format. (format: date-time)
 ]: any -> record<id: string, code: string, redemption_url: string, usage_count: int, enabled: bool, created_at_foreign: string, updated_at_foreign: string, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {
@@ -6737,7 +6736,7 @@ export def "ecommerce-stores-orders list" [
   --count: int # The number of records to return. Default value is 10. Maximum value is 1000 (default: 10)
   --offset: int # Used for [pagination](https://mailchimp.com/developer/marketing/docs/methods-parameters/#pagination), this is the number of records from a collection to skip. Default value is 0. (default: 0)
   --customer-id: string # Restrict results to orders made by a specific customer.
-  --has-outreach: string@bool-completer # Restrict results to orders that have an outreach attached. For example, an email campaign or Facebook ad.
+  --has-outreach: oneof<nothing, bool> # Restrict results to orders that have an outreach attached. For example, an email campaign or Facebook ad.
   --campaign-id: string # Restrict results to orders with a specific `campaign_id` value.
   --outreach-id: string # Restrict results to orders with a specific `outreach_id` value.
 ]: nothing -> record<store_id: string, orders: table<id: string, customer: record, store_id: string, campaign_id: string, cart_id: string, landing_site: string, financial_status: string, fulfillment_status: string, currency_code: string, order_total: float, order_url: string, discount_total: float, tax_total: float, shipping_total: float, tracking_code: string, processed_at_foreign: string, cancelled_at_foreign: string, updated_at_foreign: string, shipping_address: record, billing_address: record, promos: list, lines: list, outreach: record, tracking_number: string, tracking_carrier: string, tracking_url: string, _links: list>, total_items: int, _links: table<rel: string, href: string, method: string, targetSchema: string, schema: string>> {

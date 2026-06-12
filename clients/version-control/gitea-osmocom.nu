@@ -67,7 +67,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://localhost/api/v1" "http://localhost/api/v1"] }
 def auth-scheme-completer [] { ["query-access_token" "bearer" "basic" "sudo" "query-sudo" "x-forgejo-otp" "query-token"] }
 
@@ -381,7 +380,7 @@ export def "admin-hooks adminCreateHook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # default: false
+  --active: oneof<nothing, bool> # default: false
   --authorization-header: string
   --branch-filter: string
   config: record # CreateHookOptionConfig has all config options in it required are "content_type" and "url" Required
@@ -456,7 +455,7 @@ export def "admin-hooks adminEditHook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --authorization-header: string
   --branch-filter: string
   --config: record
@@ -980,10 +979,10 @@ export def "admin-users adminCreateUser" [
   email: string # format: email
   --full-name: string
   --login-name: string
-  --must-change-password: string@bool-completer
+  --must-change-password: oneof<nothing, bool>
   --password: string
-  --restricted: string@bool-completer
-  --send-notify: string@bool-completer
+  --restricted: oneof<nothing, bool>
+  --send-notify: oneof<nothing, bool>
   --source-id: int # format: int64
   username: string
   --visibility: string
@@ -1012,7 +1011,7 @@ export def "admin-users adminDeleteUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --purge: string@bool-completer # purge the user from the system completely
+  --purge: oneof<nothing, bool> # purge the user from the system completely
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1036,22 +1035,22 @@ export def "admin-users adminEditUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
-  --admin: string@bool-completer
-  --allow-create-organization: string@bool-completer
-  --allow-git-hook: string@bool-completer
-  --allow-import-local: string@bool-completer
+  --active: oneof<nothing, bool>
+  --admin: oneof<nothing, bool>
+  --allow-create-organization: oneof<nothing, bool>
+  --allow-git-hook: oneof<nothing, bool>
+  --allow-import-local: oneof<nothing, bool>
   --description: string
   --email: string # format: email
   --full-name: string
   --location: string
   --login-name: string
   --max-repo-creation: int # format: int64
-  --must-change-password: string@bool-completer
+  --must-change-password: oneof<nothing, bool>
   --password: string
-  --prohibit-login: string@bool-completer
+  --prohibit-login: oneof<nothing, bool>
   --pronouns: string
-  --restricted: string@bool-completer
+  --restricted: oneof<nothing, bool>
   --source-id: int # format: int64
   --visibility: string
   --website: string
@@ -1081,7 +1080,7 @@ export def "admin-users-keys adminCreatePublicKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   key: string # An armored SSH key to add
-  --read-only: string@bool-completer # Describe if the key has only read access or read/write
+  --read-only: oneof<nothing, bool> # Describe if the key has only read access or read/write
   title: string # Title of the key to add
 ]: any -> any {
   let input = $in
@@ -1135,7 +1134,7 @@ export def "admin-users-orgs adminCreateOrg" [
   --email: string
   --full-name: string
   --location: string
-  --repo-admin-change-team-access: string@bool-completer
+  --repo-admin-change-team-access: oneof<nothing, bool>
   --body-username: string
   --visibility: string@visibility-completer # possible values are `public` (default), `limited` or `private`
   --website: string
@@ -1238,7 +1237,7 @@ export def "admin-users-repos adminCreateRepo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --auto-init: string@bool-completer # Whether the repository should be auto-initialized?
+  --auto-init: oneof<nothing, bool> # Whether the repository should be auto-initialized?
   --default-branch: string # DefaultBranch of the repository (used when initializes and in template)
   --description: string # Description of the repository to create
   --gitignores: string # Gitignores to use
@@ -1246,9 +1245,9 @@ export def "admin-users-repos adminCreateRepo" [
   --license: string # License to use
   name: string # Name of the repository to create
   --object-format-name: string@object-format-name-completer # ObjectFormatName of the underlying git repository
-  --private: string@bool-completer # Whether the repository is private
+  --private: oneof<nothing, bool> # Whether the repository is private
   --readme: string # Readme of the repository to create
-  --template: string@bool-completer # Whether the repository is template
+  --template: oneof<nothing, bool> # Whether the repository is template
   --trust-model: string@trust-model-completer # TrustModel of the repository
 ]: any -> any {
   let input = $in
@@ -1406,7 +1405,7 @@ export def "markdown renderMarkdown" [
   --Context: string # Context to render  in: body
   --Mode: string # Mode to render (comment, gfm, markdown)  in: body
   --Text: string # Text markdown to render  in: body
-  --Wiki: string@bool-completer # Is it a wiki page ?  in: body
+  --Wiki: oneof<nothing, bool> # Is it a wiki page ?  in: body
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1460,7 +1459,7 @@ export def "markup renderMarkup" [
   --FilePath: string # File path for detecting extension in file mode  in: body
   --Mode: string # Mode to render (comment, gfm, markdown, file)  in: body
   --Text: string # Text markup to render  in: body
-  --Wiki: string@bool-completer # Is it a wiki page ?  in: body
+  --Wiki: oneof<nothing, bool> # Is it a wiki page ?  in: body
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1506,7 +1505,7 @@ export def "notifications notifyGetList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # If true, show notifications marked as read. Default value is false
+  --all: oneof<nothing, bool> # If true, show notifications marked as read. Default value is false
   --status-types: list # Show notifications with the provided status types. Options are: unread, read and/or pinned. Defaults to unread & pinned.
   --subject-type: list # filter notifications by subject type
   --since: string # Only show notifications updated after the given time. This is a timestamp in RFC 3339 format (format: date-time)
@@ -1632,7 +1631,7 @@ export def "org-repos createOrgRepoDeprecated" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --auto-init: string@bool-completer # Whether the repository should be auto-initialized?
+  --auto-init: oneof<nothing, bool> # Whether the repository should be auto-initialized?
   --default-branch: string # DefaultBranch of the repository (used when initializes and in template)
   --description: string # Description of the repository to create
   --gitignores: string # Gitignores to use
@@ -1640,9 +1639,9 @@ export def "org-repos createOrgRepoDeprecated" [
   --license: string # License to use
   name: string # Name of the repository to create
   --object-format-name: string@object-format-name-completer # ObjectFormatName of the underlying git repository
-  --private: string@bool-completer # Whether the repository is private
+  --private: oneof<nothing, bool> # Whether the repository is private
   --readme: string # Readme of the repository to create
-  --template: string@bool-completer # Whether the repository is template
+  --template: oneof<nothing, bool> # Whether the repository is template
   --trust-model: string@trust-model-completer # TrustModel of the repository
 ]: any -> any {
   let input = $in
@@ -1696,7 +1695,7 @@ export def "orgs orgCreate" [
   --email: string
   --full-name: string
   --location: string
-  --repo-admin-change-team-access: string@bool-completer
+  --repo-admin-change-team-access: oneof<nothing, bool>
   username: string
   --visibility: string@visibility-completer # possible values are `public` (default), `limited` or `private`
   --website: string
@@ -1773,7 +1772,7 @@ export def "orgs orgEdit" [
   --email: string
   --full-name: string
   --location: string
-  --repo-admin-change-team-access: string@bool-completer
+  --repo-admin-change-team-access: oneof<nothing, bool>
   --visibility: string@visibility-completer # possible values are `public`, `limited` or `private`
   --website: string
 ]: any -> any {
@@ -2170,7 +2169,7 @@ export def "orgs-hooks orgCreateHook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # default: false
+  --active: oneof<nothing, bool> # default: false
   --authorization-header: string
   --branch-filter: string
   config: record # CreateHookOptionConfig has all config options in it required are "content_type" and "url" Required
@@ -2248,7 +2247,7 @@ export def "orgs-hooks orgEditHook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --authorization-header: string
   --branch-filter: string
   --config: record
@@ -2305,8 +2304,8 @@ export def "orgs-labels orgCreateLabel" [
   --allow-errors(-e) # Return full response without error handling
   color: string # e.g. #00aabb
   --description: string
-  --exclusive: string@bool-completer # e.g. false
-  --is-archived: string@bool-completer # e.g. false
+  --exclusive: oneof<nothing, bool> # e.g. false
+  --is-archived: oneof<nothing, bool> # e.g. false
   name: string
 ]: any -> any {
   let input = $in
@@ -2383,8 +2382,8 @@ export def "orgs-labels orgEditLabel" [
   --allow-errors(-e) # Return full response without error handling
   --color: string # e.g. #00aabb
   --description: string
-  --exclusive: string@bool-completer # e.g. false
-  --is-archived: string@bool-completer # e.g. false
+  --exclusive: oneof<nothing, bool> # e.g. false
+  --is-archived: oneof<nothing, bool> # e.g. false
   --name: string
 ]: any -> any {
   let input = $in
@@ -2773,7 +2772,7 @@ export def "orgs-repos createOrgRepo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --auto-init: string@bool-completer # Whether the repository should be auto-initialized?
+  --auto-init: oneof<nothing, bool> # Whether the repository should be auto-initialized?
   --default-branch: string # DefaultBranch of the repository (used when initializes and in template)
   --description: string # Description of the repository to create
   --gitignores: string # Gitignores to use
@@ -2781,9 +2780,9 @@ export def "orgs-repos createOrgRepo" [
   --license: string # License to use
   name: string # Name of the repository to create
   --object-format-name: string@object-format-name-completer # ObjectFormatName of the underlying git repository
-  --private: string@bool-completer # Whether the repository is private
+  --private: oneof<nothing, bool> # Whether the repository is private
   --readme: string # Readme of the repository to create
-  --template: string@bool-completer # Whether the repository is template
+  --template: oneof<nothing, bool> # Whether the repository is template
   --trust-model: string@trust-model-completer # TrustModel of the repository
 ]: any -> any {
   let input = $in
@@ -2835,9 +2834,9 @@ export def "orgs-teams orgCreateTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --can-create-org-repo: string@bool-completer
+  --can-create-org-repo: oneof<nothing, bool>
   --description: string
-  --includes-all-repositories: string@bool-completer
+  --includes-all-repositories: oneof<nothing, bool>
   name: string
   --permission: string@permission-completer
   --units: list # e.g. [repo.actions, repo.code, repo.issues, repo.ext_issues, repo.wiki, repo.ext_wiki, repo.pulls, repo.releases, repo.projects, repo.ext_wiki]
@@ -2868,7 +2867,7 @@ export def "orgs-teams-search teamSearch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --q: string # keywords to search
-  --include-desc: string@bool-completer # include search within team description (defaults to true)
+  --include-desc: oneof<nothing, bool> # include search within team description (defaults to true)
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
 ]: nothing -> record<data: table<can_create_org_repo: bool, description: string, id: int, includes_all_repositories: bool, name: string, organization: record, permission: string, units: list, units_map: record>, ok: bool> {
@@ -3078,11 +3077,11 @@ export def "repos-issues-search issueSearchIssues" [
   --type: string@type-completer-2 # Filter by issue type
   --since: string # Only show issues updated after the given time (RFC 3339 format) (format: date-time)
   --before: string # Only show issues updated before the given time (RFC 3339 format) (format: date-time)
-  --assigned: string@bool-completer # Filter issues or pulls assigned to the authenticated user (default: false)
-  --created: string@bool-completer # Filter issues or pulls created by the authenticated user (default: false)
-  --mentioned: string@bool-completer # Filter issues or pulls mentioning the authenticated user (default: false)
-  --review-requested: string@bool-completer # Filter pull requests where the authenticated user's review was requested (default: false)
-  --reviewed: string@bool-completer # Filter pull requests reviewed by the authenticated user (default: false)
+  --assigned: oneof<nothing, bool> # Filter issues or pulls assigned to the authenticated user (default: false)
+  --created: oneof<nothing, bool> # Filter issues or pulls created by the authenticated user (default: false)
+  --mentioned: oneof<nothing, bool> # Filter issues or pulls mentioning the authenticated user (default: false)
+  --review-requested: oneof<nothing, bool> # Filter pull requests where the authenticated user's review was requested (default: false)
+  --reviewed: oneof<nothing, bool> # Filter pull requests reviewed by the authenticated user (default: false)
   --owner: string # Filter by repository owner
   --team: string # Filter by team (requires organization owner parameter)
   --page: int # Page number of results to return (1-based) (default: 1)
@@ -3114,21 +3113,21 @@ export def "repos-migrate repoMigrate" [
   --auth-username: string
   clone_addr: string
   --description: string
-  --issues: string@bool-completer
-  --labels: string@bool-completer
-  --lfs: string@bool-completer
+  --issues: oneof<nothing, bool>
+  --labels: oneof<nothing, bool>
+  --lfs: oneof<nothing, bool>
   --lfs-endpoint: string
-  --milestones: string@bool-completer
-  --mirror: string@bool-completer
+  --milestones: oneof<nothing, bool>
+  --mirror: oneof<nothing, bool>
   --mirror-interval: string
-  --private: string@bool-completer
-  --pull-requests: string@bool-completer
-  --releases: string@bool-completer
+  --private: oneof<nothing, bool>
+  --pull-requests: oneof<nothing, bool>
+  --releases: oneof<nothing, bool>
   repo_name: string
   --repo-owner: string # Name of User or Organisation who will own Repo after migration
   --service: string@service-completer
   --uid: int # deprecated (only for backwards compatibility) (format: int64)
-  --wiki: string@bool-completer
+  --wiki: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3154,18 +3153,18 @@ export def "repos-search repoSearch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --q: string # keyword
-  --topic: string@bool-completer # Limit search to repositories with keyword as topic
-  --includeDesc: string@bool-completer # include search of keyword within repository description
+  --topic: oneof<nothing, bool> # Limit search to repositories with keyword as topic
+  --includeDesc: oneof<nothing, bool> # include search of keyword within repository description
   --uid: int # search only for repos that the user with the given id owns or contributes to (format: int64)
   --priority-owner-id: int # repo owner to prioritize in the results (format: int64)
   --team-id: int # search only for repos that belong to the given team id (format: int64)
   --starredBy: int # search only for repos that the user with the given id has starred (format: int64)
-  --private: string@bool-completer # include private repositories this user has access to (defaults to true)
-  --is-private: string@bool-completer # show only public, private or all repositories (defaults to all)
-  --template: string@bool-completer # include template repositories this user has access to (defaults to true)
-  --archived: string@bool-completer # show only archived, non-archived or all repositories (defaults to all)
+  --private: oneof<nothing, bool> # include private repositories this user has access to (defaults to true)
+  --is-private: oneof<nothing, bool> # show only public, private or all repositories (defaults to all)
+  --template: oneof<nothing, bool> # include template repositories this user has access to (defaults to true)
+  --archived: oneof<nothing, bool> # show only archived, non-archived or all repositories (defaults to all)
   --mode: string # type of repository to search for. Supported values are "fork", "source", "mirror" and "collaborative"
-  --exclusive: string@bool-completer # if `uid` is given, search only for repos that the user owns
+  --exclusive: oneof<nothing, bool> # if `uid` is given, search only for repos that the user owns
   --qp-sort: string # sort repos by attribute. Supported values are "alpha", "created", "updated", "size", "git_size", "lfs_size", "stars", "forks" and "id". Default is "alpha"
   --order: string # sort order, either "asc" (ascending) or "desc" (descending). Default is "asc", ignored if "sort" is not specified.
   --page: int # page number of results to return (1-based)
@@ -3243,38 +3242,38 @@ export def "repos repoEdit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-fast-forward-only-merge: string@bool-completer # either `true` to allow fast-forward-only merging pull requests, or `false` to prevent fast-forward-only merging.
-  --allow-manual-merge: string@bool-completer # either `true` to allow mark pr as merged manually, or `false` to prevent it.
-  --allow-merge-commits: string@bool-completer # either `true` to allow merging pull requests with a merge commit, or `false` to prevent merging pull requests with merge commits.
-  --allow-rebase: string@bool-completer # either `true` to allow rebase-merging pull requests, or `false` to prevent rebase-merging.
-  --allow-rebase-explicit: string@bool-completer # either `true` to allow rebase with explicit merge commits (--no-ff), or `false` to prevent rebase with explicit merge commits.
-  --allow-rebase-update: string@bool-completer # either `true` to allow updating pull request branch by rebase, or `false` to prevent it.
-  --allow-squash-merge: string@bool-completer # either `true` to allow squash-merging pull requests, or `false` to prevent squash-merging.
-  --archived: string@bool-completer # set to `true` to archive this repository.
-  --autodetect-manual-merge: string@bool-completer # either `true` to enable AutodetectManualMerge, or `false` to prevent it. Note: In some special cases, misjudgments can occur.
-  --default-allow-maintainer-edit: string@bool-completer # set to `true` to allow edits from maintainers by default
+  --allow-fast-forward-only-merge: oneof<nothing, bool> # either `true` to allow fast-forward-only merging pull requests, or `false` to prevent fast-forward-only merging.
+  --allow-manual-merge: oneof<nothing, bool> # either `true` to allow mark pr as merged manually, or `false` to prevent it.
+  --allow-merge-commits: oneof<nothing, bool> # either `true` to allow merging pull requests with a merge commit, or `false` to prevent merging pull requests with merge commits.
+  --allow-rebase: oneof<nothing, bool> # either `true` to allow rebase-merging pull requests, or `false` to prevent rebase-merging.
+  --allow-rebase-explicit: oneof<nothing, bool> # either `true` to allow rebase with explicit merge commits (--no-ff), or `false` to prevent rebase with explicit merge commits.
+  --allow-rebase-update: oneof<nothing, bool> # either `true` to allow updating pull request branch by rebase, or `false` to prevent it.
+  --allow-squash-merge: oneof<nothing, bool> # either `true` to allow squash-merging pull requests, or `false` to prevent squash-merging.
+  --archived: oneof<nothing, bool> # set to `true` to archive this repository.
+  --autodetect-manual-merge: oneof<nothing, bool> # either `true` to enable AutodetectManualMerge, or `false` to prevent it. Note: In some special cases, misjudgments can occur.
+  --default-allow-maintainer-edit: oneof<nothing, bool> # set to `true` to allow edits from maintainers by default
   --default-branch: string # sets the default branch for this repository.
-  --default-delete-branch-after-merge: string@bool-completer # set to `true` to delete pr branch after merge by default
+  --default-delete-branch-after-merge: oneof<nothing, bool> # set to `true` to delete pr branch after merge by default
   --default-merge-style: string # set to a merge style to be used by this repository: "merge", "rebase", "rebase-merge", "squash", "fast-forward-only", "manually-merged", or "rebase-update-only".
   --default-update-style: string # set to a update style to be used by this repository: "rebase" or "merge"
   --description: string # a short description of the repository.
-  --enable-prune: string@bool-completer # enable prune - remove obsolete remote-tracking references when mirroring
+  --enable-prune: oneof<nothing, bool> # enable prune - remove obsolete remote-tracking references when mirroring
   --external-tracker: record # ExternalTracker represents settings for external tracker — shape: {external_tracker_format?: string, external_tracker_regexp_pattern?: string, external_tracker_style?: string, external_tracker_url?: string}
   --external-wiki: record # ExternalWiki represents setting for external wiki — shape: {external_wiki_url?: string}
-  --globally-editable-wiki: string@bool-completer # set the globally editable state of the wiki
-  --has-actions: string@bool-completer # either `true` to enable actions unit, or `false` to disable them.
-  --has-issues: string@bool-completer # either `true` to enable issues for this repository or `false` to disable them.
-  --has-packages: string@bool-completer # either `true` to enable packages unit, or `false` to disable them.
-  --has-projects: string@bool-completer # either `true` to enable project unit, or `false` to disable them.
-  --has-pull-requests: string@bool-completer # either `true` to allow pull requests, or `false` to prevent pull request.
-  --has-releases: string@bool-completer # either `true` to enable releases unit, or `false` to disable them.
-  --has-wiki: string@bool-completer # either `true` to enable the wiki for this repository or `false` to disable it.
-  --ignore-whitespace-conflicts: string@bool-completer # either `true` to ignore whitespace for conflicts, or `false` to not ignore whitespace.
+  --globally-editable-wiki: oneof<nothing, bool> # set the globally editable state of the wiki
+  --has-actions: oneof<nothing, bool> # either `true` to enable actions unit, or `false` to disable them.
+  --has-issues: oneof<nothing, bool> # either `true` to enable issues for this repository or `false` to disable them.
+  --has-packages: oneof<nothing, bool> # either `true` to enable packages unit, or `false` to disable them.
+  --has-projects: oneof<nothing, bool> # either `true` to enable project unit, or `false` to disable them.
+  --has-pull-requests: oneof<nothing, bool> # either `true` to allow pull requests, or `false` to prevent pull request.
+  --has-releases: oneof<nothing, bool> # either `true` to enable releases unit, or `false` to disable them.
+  --has-wiki: oneof<nothing, bool> # either `true` to enable the wiki for this repository or `false` to disable it.
+  --ignore-whitespace-conflicts: oneof<nothing, bool> # either `true` to ignore whitespace for conflicts, or `false` to not ignore whitespace.
   --internal-tracker: record # InternalTracker represents settings for internal tracker — shape: {allow_only_contributors_to_track_time?: bool, enable_issue_dependencies?: bool, enable_time_tracker?: bool}
   --mirror-interval: string # set to a string like `8h30m0s` to set the mirror interval time
   --name: string # name of the repository
-  --private: string@bool-completer # either `true` to make the repository private or `false` to make it public. Note: you will get a 422 error if the organization restricts changing repository visibility to organization owners and a non-owner tries to change the value of private.
-  --template: string@bool-completer # either `true` to make this repository a template or `false` to make it a normal repository
+  --private: oneof<nothing, bool> # either `true` to make the repository private or `false` to make it public. Note: you will get a 422 error if the organization restricts changing repository visibility to organization owners and a non-owner tries to change the value of private.
+  --template: oneof<nothing, bool> # either `true` to make this repository a template or `false` to make it a normal repository
   --website: string # a URL with more information about the repository.
   --wiki-branch: string # sets the branch used for this repository's wiki.
 ]: any -> any {
@@ -3590,7 +3589,7 @@ export def "repos-actions-workflows-dispatches DispatchWorkflow" [
   --accept: string@accept-completer # Response content type
   --inputs: record # Input keys and values configured in the workflow file.
   ref: string # Git reference for the workflow
-  --return-run-info: string@bool-completer # Flag to return the run info (default: false)
+  --return-run-info: oneof<nothing, bool> # Flag to return the run info (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3765,27 +3764,27 @@ export def "repos-branch-protections repoCreateBranchProtection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --apply-to-admins: string@bool-completer
+  --apply-to-admins: oneof<nothing, bool>
   --approvals-whitelist-teams: list
   --approvals-whitelist-username: list
-  --block-on-official-review-requests: string@bool-completer
-  --block-on-outdated-branch: string@bool-completer
-  --block-on-rejected-reviews: string@bool-completer
+  --block-on-official-review-requests: oneof<nothing, bool>
+  --block-on-outdated-branch: oneof<nothing, bool>
+  --block-on-rejected-reviews: oneof<nothing, bool>
   --branch-name: string # Deprecated: true
-  --dismiss-stale-approvals: string@bool-completer
-  --enable-approvals-whitelist: string@bool-completer
-  --enable-merge-whitelist: string@bool-completer
-  --enable-push: string@bool-completer
-  --enable-push-whitelist: string@bool-completer
-  --enable-status-check: string@bool-completer
-  --ignore-stale-approvals: string@bool-completer
+  --dismiss-stale-approvals: oneof<nothing, bool>
+  --enable-approvals-whitelist: oneof<nothing, bool>
+  --enable-merge-whitelist: oneof<nothing, bool>
+  --enable-push: oneof<nothing, bool>
+  --enable-push-whitelist: oneof<nothing, bool>
+  --enable-status-check: oneof<nothing, bool>
+  --ignore-stale-approvals: oneof<nothing, bool>
   --merge-whitelist-teams: list
   --merge-whitelist-usernames: list
   --protected-file-patterns: string
-  --push-whitelist-deploy-keys: string@bool-completer
+  --push-whitelist-deploy-keys: oneof<nothing, bool>
   --push-whitelist-teams: list
   --push-whitelist-usernames: list
-  --require-signed-commits: string@bool-completer
+  --require-signed-commits: oneof<nothing, bool>
   --required-approvals: int # format: int64
   --rule-name: string
   --status-check-contexts: list
@@ -3865,26 +3864,26 @@ export def "repos-branch-protections repoEditBranchProtection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --apply-to-admins: string@bool-completer
+  --apply-to-admins: oneof<nothing, bool>
   --approvals-whitelist-teams: list
   --approvals-whitelist-username: list
-  --block-on-official-review-requests: string@bool-completer
-  --block-on-outdated-branch: string@bool-completer
-  --block-on-rejected-reviews: string@bool-completer
-  --dismiss-stale-approvals: string@bool-completer
-  --enable-approvals-whitelist: string@bool-completer
-  --enable-merge-whitelist: string@bool-completer
-  --enable-push: string@bool-completer
-  --enable-push-whitelist: string@bool-completer
-  --enable-status-check: string@bool-completer
-  --ignore-stale-approvals: string@bool-completer
+  --block-on-official-review-requests: oneof<nothing, bool>
+  --block-on-outdated-branch: oneof<nothing, bool>
+  --block-on-rejected-reviews: oneof<nothing, bool>
+  --dismiss-stale-approvals: oneof<nothing, bool>
+  --enable-approvals-whitelist: oneof<nothing, bool>
+  --enable-merge-whitelist: oneof<nothing, bool>
+  --enable-push: oneof<nothing, bool>
+  --enable-push-whitelist: oneof<nothing, bool>
+  --enable-status-check: oneof<nothing, bool>
+  --ignore-stale-approvals: oneof<nothing, bool>
   --merge-whitelist-teams: list
   --merge-whitelist-usernames: list
   --protected-file-patterns: string
-  --push-whitelist-deploy-keys: string@bool-completer
+  --push-whitelist-deploy-keys: oneof<nothing, bool>
   --push-whitelist-teams: list
   --push-whitelist-usernames: list
-  --require-signed-commits: string@bool-completer
+  --require-signed-commits: oneof<nothing, bool>
   --required-approvals: int # format: int64
   --status-check-contexts: list
   --unprotected-file-patterns: string
@@ -4173,9 +4172,9 @@ export def "repos-commits repoGetAllCommits" [
   --allow-errors(-e) # Return full response without error handling
   --sha: string # SHA or branch to start listing commits from (usually 'master')
   --path: string # filepath of a file/dir
-  --stat: string@bool-completer # include diff stats for every commit (disable for speedup, default 'true')
-  --verification: string@bool-completer # include verification for every commit (disable for speedup, default 'true')
-  --files: string@bool-completer # include a list of affected files for every commit (disable for speedup, default 'true')
+  --stat: oneof<nothing, bool> # include diff stats for every commit (disable for speedup, default 'true')
+  --verification: oneof<nothing, bool> # include verification for every commit (disable for speedup, default 'true')
+  --files: oneof<nothing, bool> # include a list of affected files for every commit (disable for speedup, default 'true')
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results (ignored if used with 'path')
   --qp-not: string # commits that match the given specifier will not be listed.
@@ -4343,7 +4342,7 @@ export def "repos-contents repoChangeFiles" [
   files: list # list of file operations — item shape: {content?: string, from_path?: string, operation: "create"|"update"|"delete", path: string, sha?: string}
   --message: string # message (optional) for the commit of this file. if not supplied, a default message will be used
   --new-branch: string # new_branch (optional) will make a new branch from `branch` before creating the file
-  --signoff: string@bool-completer # Add a Signed-off-by trailer by the committer at the end of the commit log message.
+  --signoff: oneof<nothing, bool> # Add a Signed-off-by trailer by the committer at the end of the commit log message.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4409,7 +4408,7 @@ export def "repos-contents repoUpdateFile" [
   --message: string # message (optional) for the commit of this file. if not supplied, a default message will be used
   --new-branch: string # new_branch (optional) will make a new branch from `branch` before creating the file
   sha: string # sha is the SHA for the file that already exists
-  --signoff: string@bool-completer # Add a Signed-off-by trailer by the committer at the end of the commit log message.
+  --signoff: oneof<nothing, bool> # Add a Signed-off-by trailer by the committer at the end of the commit log message.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4447,7 +4446,7 @@ export def "repos-contents repoCreateFile" [
   --dates: record # CommitDateOptions store dates for GIT_AUTHOR_DATE and GIT_COMMITTER_DATE — shape: {author?: string, committer?: string}
   --message: string # message (optional) for the commit of this file. if not supplied, a default message will be used
   --new-branch: string # new_branch (optional) will make a new branch from `branch` before creating the file
-  --signoff: string@bool-completer # Add a Signed-off-by trailer by the committer at the end of the commit log message.
+  --signoff: oneof<nothing, bool> # Add a Signed-off-by trailer by the committer at the end of the commit log message.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4485,7 +4484,7 @@ export def "repos-contents repoDeleteFile" [
   --message: string # message (optional) for the commit of this file. if not supplied, a default message will be used
   --new-branch: string # new_branch (optional) will make a new branch from `branch` before creating the file
   sha: string # sha is the SHA for the file that already exists
-  --signoff: string@bool-completer # Add a Signed-off-by trailer by the committer at the end of the commit log message.
+  --signoff: oneof<nothing, bool> # Add a Signed-off-by trailer by the committer at the end of the commit log message.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4524,7 +4523,7 @@ export def "repos-diffpatch repoApplyDiffPatch" [
   --message: string # message (optional) for the commit of this file. if not supplied, a default message will be used
   --new-branch: string # new_branch (optional) will make a new branch from `branch` before creating the file
   sha: string # sha is the SHA for the file that already exists
-  --signoff: string@bool-completer # Add a Signed-off-by trailer by the committer at the end of the commit log message.
+  --signoff: oneof<nothing, bool> # Add a Signed-off-by trailer by the committer at the end of the commit log message.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4801,9 +4800,9 @@ export def "repos-git-commits repoGetSingleCommit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --stat: string@bool-completer # include diff stats for every commit (disable for speedup, default 'true')
-  --verification: string@bool-completer # include verification for every commit (disable for speedup, default 'true')
-  --files: string@bool-completer # include a list of affected files for every commit (disable for speedup, default 'true')
+  --stat: oneof<nothing, bool> # include diff stats for every commit (disable for speedup, default 'true')
+  --verification: oneof<nothing, bool> # include verification for every commit (disable for speedup, default 'true')
+  --files: oneof<nothing, bool> # include a list of affected files for every commit (disable for speedup, default 'true')
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4854,8 +4853,8 @@ export def "repos-git-notes repoGetNote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --verification: string@bool-completer # include verification for every commit (disable for speedup, default 'true')
-  --files: string@bool-completer # include a list of affected files for every commit (disable for speedup, default 'true')
+  --verification: oneof<nothing, bool> # include verification for every commit (disable for speedup, default 'true')
+  --files: oneof<nothing, bool> # include a list of affected files for every commit (disable for speedup, default 'true')
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5004,7 +5003,7 @@ export def "repos-git-trees GetTree" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --recursive: string@bool-completer # show all directories and files
+  --recursive: oneof<nothing, bool> # show all directories and files
   --page: int # page number; the 'truncated' field in the response will be true if there are still more items after this page, false if the last page
   --per-page: int # number of items per page
 ]: nothing -> any {
@@ -5057,7 +5056,7 @@ export def "repos-hooks repoCreateHook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # default: false
+  --active: oneof<nothing, bool> # default: false
   --authorization-header: string
   --branch-filter: string
   config: record # CreateHookOptionConfig has all config options in it required are "content_type" and "url" Required
@@ -5237,7 +5236,7 @@ export def "repos-hooks repoEditHook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --authorization-header: string
   --branch-filter: string
   --config: record
@@ -5403,7 +5402,7 @@ export def "repos-issues issueCreateIssue" [
   --assignee: string # deprecated
   --assignees: list
   --body-body: string
-  --closed: string@bool-completer
+  --closed: oneof<nothing, bool>
   --due-date: string # format: date-time
   --labels: list # list of label ids
   --milestone: int # milestone id (format: int64)
@@ -5838,7 +5837,7 @@ export def "repos-issues issueEditIssue" [
   --ref: string
   --state: string
   --title: string
-  --unset-due-date: string@bool-completer
+  --unset-due-date: oneof<nothing, bool>
   --updated-at: string # format: date-time
 ]: any -> any {
   let input = $in
@@ -6958,7 +6957,7 @@ export def "repos-keys repoCreateKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   key: string # An armored SSH key to add
-  --read-only: string@bool-completer # Describe if the key has only read access or read/write
+  --read-only: oneof<nothing, bool> # Describe if the key has only read access or read/write
   title: string # Title of the key to add
 ]: any -> any {
   let input = $in
@@ -7063,8 +7062,8 @@ export def "repos-labels issueCreateLabel" [
   --allow-errors(-e) # Return full response without error handling
   color: string # e.g. #00aabb
   --description: string
-  --exclusive: string@bool-completer # e.g. false
-  --is-archived: string@bool-completer # e.g. false
+  --exclusive: oneof<nothing, bool> # e.g. false
+  --is-archived: oneof<nothing, bool> # e.g. false
   name: string
 ]: any -> any {
   let input = $in
@@ -7144,8 +7143,8 @@ export def "repos-labels issueEditLabel" [
   --allow-errors(-e) # Return full response without error handling
   --color: string # e.g. #00aabb
   --description: string
-  --exclusive: string@bool-completer # e.g. false
-  --is-archived: string@bool-completer # e.g. false
+  --exclusive: oneof<nothing, bool> # e.g. false
+  --is-archived: oneof<nothing, bool> # e.g. false
   --name: string
 ]: any -> any {
   let input = $in
@@ -7406,7 +7405,7 @@ export def "repos-notifications notifyGetRepoList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # If true, show notifications marked as read. Default value is false
+  --all: oneof<nothing, bool> # If true, show notifications marked as read. Default value is false
   --status-types: list # Show notifications with the provided status types. Options are: unread, read and/or pinned. Defaults to unread & pinned
   --subject-type: list # filter notifications by subject type
   --since: string # Only show notifications updated after the given time. This is a timestamp in RFC 3339 format (format: date-time)
@@ -7604,7 +7603,7 @@ export def "repos-pulls repoEditPullRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-maintainer-edit: string@bool-completer
+  --allow-maintainer-edit: oneof<nothing, bool>
   --assignee: string
   --assignees: list
   --body-base: string
@@ -7614,7 +7613,7 @@ export def "repos-pulls repoEditPullRequest" [
   --milestone: int # format: int64
   --state: string
   --title: string
-  --unset-due-date: string@bool-completer
+  --unset-due-date: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7643,7 +7642,7 @@ export def "repos-pulls repoDownloadPullDiffOrPatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --binary: string@bool-completer # whether to include binary file changes. if true, the diff is applicable with `git apply`
+  --binary: oneof<nothing, bool> # whether to include binary file changes. if true, the diff is applicable with `git apply`
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7671,8 +7670,8 @@ export def "repos-pulls-commits repoGetPullRequestCommits" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
-  --verification: string@bool-completer # include verification for every commit (disable for speedup, default 'true')
-  --files: string@bool-completer # include a list of affected files for every commit (disable for speedup, default 'true')
+  --verification: oneof<nothing, bool> # include verification for every commit (disable for speedup, default 'true')
+  --files: oneof<nothing, bool> # include a list of affected files for every commit (disable for speedup, default 'true')
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7755,10 +7754,10 @@ export def "repos-pulls-merge repoMergePullRequest" [
   --MergeCommitID: string
   --MergeMessageField: string
   --MergeTitleField: string
-  --delete-branch-after-merge: string@bool-completer
-  --force-merge: string@bool-completer
+  --delete-branch-after-merge: oneof<nothing, bool>
+  --force-merge: oneof<nothing, bool>
   --head-commit-id: string
-  --merge-when-checks-succeed: string@bool-completer
+  --merge-when-checks-succeed: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8118,7 +8117,7 @@ export def "repos-pulls-reviews-dismissals repoDismissPullReview" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --message: string
-  --priors: string@bool-completer
+  --priors: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8226,8 +8225,8 @@ export def "repos-push-mirrors repoAddPushMirror" [
   --remote-address: string
   --remote-password: string
   --remote-username: string
-  --sync-on-commit: string@bool-completer
-  --use-ssh: string@bool-completer
+  --sync-on-commit: oneof<nothing, bool>
+  --use-ssh: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8351,8 +8350,8 @@ export def "repos-releases repoListReleases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --draft: string@bool-completer # filter (exclude / include) drafts, if you dont have repo write access none will show
-  --pre-release: string@bool-completer # filter (exclude / include) pre-releases
+  --draft: oneof<nothing, bool> # filter (exclude / include) drafts, if you dont have repo write access none will show
+  --pre-release: oneof<nothing, bool> # filter (exclude / include) pre-releases
   --q: string # Search string
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results
@@ -8381,10 +8380,10 @@ export def "repos-releases repoCreateRelease" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-body: string
-  --draft: string@bool-completer
-  --hide-archive-links: string@bool-completer
+  --draft: oneof<nothing, bool>
+  --hide-archive-links: oneof<nothing, bool>
   --name: string
-  --prerelease: string@bool-completer
+  --prerelease: oneof<nothing, bool>
   tag_name: string
   --target-commitish: string
 ]: any -> any {
@@ -8536,10 +8535,10 @@ export def "repos-releases repoEditRelease" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-body: string
-  --draft: string@bool-completer
-  --hide-archive-links: string@bool-completer
+  --draft: oneof<nothing, bool>
+  --hide-archive-links: oneof<nothing, bool>
   --name: string
-  --prerelease: string@bool-completer
+  --prerelease: oneof<nothing, bool>
   --tag-name: string
   --target-commitish: string
 ]: any -> any {
@@ -9654,18 +9653,18 @@ export def "repos-generate generateRepo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --avatar: string@bool-completer # include avatar of the template repo
+  --avatar: oneof<nothing, bool> # include avatar of the template repo
   --default-branch: string # Default branch of the new repository
   --description: string # Description of the repository to create
-  --git-content: string@bool-completer # include git content of default branch in template repo
-  --git-hooks: string@bool-completer # include git hooks in template repo
-  --labels: string@bool-completer # include labels in template repo
+  --git-content: oneof<nothing, bool> # include git content of default branch in template repo
+  --git-hooks: oneof<nothing, bool> # include git hooks in template repo
+  --labels: oneof<nothing, bool> # include labels in template repo
   name: string # Name of the repository to create
   owner: string # The organization or person who will own the new repository
-  --private: string@bool-completer # Whether the repository is private
-  --protected-branch: string@bool-completer # include protected branches in template repo
-  --topics: string@bool-completer # include topics in template repo
-  --webhooks: string@bool-completer # include webhooks in template repo
+  --private: oneof<nothing, bool> # Whether the repository is private
+  --protected-branch: oneof<nothing, bool> # include protected branches in template repo
+  --topics: oneof<nothing, bool> # include topics in template repo
+  --webhooks: oneof<nothing, bool> # include webhooks in template repo
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -9863,9 +9862,9 @@ export def "teams orgEditTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --can-create-org-repo: string@bool-completer
+  --can-create-org-repo: oneof<nothing, bool>
   --description: string
-  --includes-all-repositories: string@bool-completer
+  --includes-all-repositories: oneof<nothing, bool>
   name: string
   --permission: string@permission-completer
   --units: list # e.g. [repo.code, repo.issues, repo.ext_issues, repo.wiki, repo.pulls, repo.releases, repo.projects, repo.ext_wiki]
@@ -10394,7 +10393,7 @@ export def "user-applications-oauth2 userCreateOAuth2Application" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confidential-client: string@bool-completer
+  --confidential-client: oneof<nothing, bool>
   --name: string
   --redirect-uris: list
 ]: any -> any {
@@ -10466,7 +10465,7 @@ export def "user-applications-oauth2 userUpdateOAuth2Application" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confidential-client: string@bool-completer
+  --confidential-client: oneof<nothing, bool>
   --name: string
   --redirect-uris: list
 ]: any -> any {
@@ -10909,7 +10908,7 @@ export def "user-hooks userCreateHook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # default: false
+  --active: oneof<nothing, bool> # default: false
   --authorization-header: string
   --branch-filter: string
   config: record # CreateHookOptionConfig has all config options in it required are "content_type" and "url" Required
@@ -10984,7 +10983,7 @@ export def "user-hooks userEditHook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --authorization-header: string
   --branch-filter: string
   --config: record
@@ -11039,7 +11038,7 @@ export def "user-keys userCurrentPostKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   key: string # An armored SSH key to add
-  --read-only: string@bool-completer # Describe if the key has only read access or read/write
+  --read-only: oneof<nothing, bool> # Describe if the key has only read access or read/write
   title: string # Title of the key to add
 ]: any -> any {
   let input = $in
@@ -11296,7 +11295,7 @@ export def "user-repos createCurrentUserRepo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --auto-init: string@bool-completer # Whether the repository should be auto-initialized?
+  --auto-init: oneof<nothing, bool> # Whether the repository should be auto-initialized?
   --default-branch: string # DefaultBranch of the repository (used when initializes and in template)
   --description: string # Description of the repository to create
   --gitignores: string # Gitignores to use
@@ -11304,9 +11303,9 @@ export def "user-repos createCurrentUserRepo" [
   --license: string # License to use
   name: string # Name of the repository to create
   --object-format-name: string@object-format-name-completer # ObjectFormatName of the underlying git repository
-  --private: string@bool-completer # Whether the repository is private
+  --private: oneof<nothing, bool> # Whether the repository is private
   --readme: string # Readme of the repository to create
-  --template: string@bool-completer # Whether the repository is template
+  --template: oneof<nothing, bool> # Whether the repository is template
   --trust-model: string@trust-model-completer # TrustModel of the repository
 ]: any -> any {
   let input = $in
@@ -11355,11 +11354,11 @@ export def "user-settings updateUserSettings" [
   --allow-errors(-e) # Return full response without error handling
   --description: string
   --diff-view-style: string
-  --enable-repo-unit-hints: string@bool-completer
+  --enable-repo-unit-hints: oneof<nothing, bool>
   --full-name: string
-  --hide-activity: string@bool-completer
-  --hide-email: string@bool-completer # Privacy
-  --hide-pronouns: string@bool-completer
+  --hide-activity: oneof<nothing, bool>
+  --hide-email: oneof<nothing, bool> # Privacy
+  --hide-pronouns: oneof<nothing, bool>
   --language: string
   --location: string
   --pronouns: string
@@ -11654,7 +11653,7 @@ export def "users-activities-feeds userListActivityFeeds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --only-performed-by: string@bool-completer # if true, only show actions performed by the requested user
+  --only-performed-by: oneof<nothing, bool> # if true, only show actions performed by the requested user
   --date: string # the date of the activities to be found (format: date)
   --page: int # page number of results to return (1-based)
   --limit: int # page size of results

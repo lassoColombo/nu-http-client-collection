@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://www.wrike.com/api/v4" "https://app-eu.wrike.com/api/v4" "https://app-us2.wrike.com/api/v4"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -498,9 +497,9 @@ export def "attachments GET:/attachments/empty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --versions: string@bool-completer # Get attachments with previous versions
+  --versions: oneof<nothing, bool> # Get attachments with previous versions
   --createdDate: string # Created date filter. Required to request attachments in account. Time range duration should be less than 31 day
-  --withUrls: string@bool-completer # Get attachment URLs. The link for attachment from Wrike is valid for 24 hours from when you make the request
+  --withUrls: oneof<nothing, bool> # Get attachment URLs. The link for attachment from Wrike is valid for 24 hours from when you make the request
 ]: nothing -> record<data: table<currentAttachmentId: string, originVersionId: string, reviewIds: list, previewUrl: string, playlistUrl: string, authorId: string, type: string, version: float, folderId: string, url: string, createdDate: string, size: float, name: string, width: float, commentId: string, id: string, contentType: string, taskId: string, height: float>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -524,9 +523,9 @@ export def "folders-attachments GET:/folders/single/attachments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --versions: string@bool-completer # Get attachments with previous versions
+  --versions: oneof<nothing, bool> # Get attachments with previous versions
   --createdDate: string # Created date filter. Required to request attachments in account. Time range duration should be less than 31 day
-  --withUrls: string@bool-completer # Get attachment URLs. The link for attachment from Wrike is valid for 24 hours from when you make the request
+  --withUrls: oneof<nothing, bool> # Get attachment URLs. The link for attachment from Wrike is valid for 24 hours from when you make the request
 ]: nothing -> record<data: table<currentAttachmentId: string, originVersionId: string, reviewIds: list, previewUrl: string, playlistUrl: string, authorId: string, type: string, version: float, folderId: string, url: string, createdDate: string, size: float, name: string, width: float, commentId: string, id: string, contentType: string, taskId: string, height: float>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -572,9 +571,9 @@ export def "tasks-attachments GET:/tasks/single/attachments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --versions: string@bool-completer # Get attachments with previous versions
+  --versions: oneof<nothing, bool> # Get attachments with previous versions
   --createdDate: string # Created date filter. Required to request attachments in account. Time range duration should be less than 31 day
-  --withUrls: string@bool-completer # Get attachment URLs. The link for attachment from Wrike is valid for 24 hours from when you make the request
+  --withUrls: oneof<nothing, bool> # Get attachment URLs. The link for attachment from Wrike is valid for 24 hours from when you make the request
 ]: nothing -> record<data: table<currentAttachmentId: string, originVersionId: string, reviewIds: list, previewUrl: string, playlistUrl: string, authorId: string, type: string, version: float, folderId: string, url: string, createdDate: string, size: float, name: string, width: float, commentId: string, id: string, contentType: string, taskId: string, height: float>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -620,7 +619,7 @@ export def "attachments GET:/attachments/multi" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --versions: string@bool-completer # Get attachments with previous versions
+  --versions: oneof<nothing, bool> # Get attachments with previous versions
 ]: nothing -> record<data: table<currentAttachmentId: string, originVersionId: string, reviewIds: list, previewUrl: string, playlistUrl: string, authorId: string, type: string, version: float, folderId: string, url: string, createdDate: string, size: float, name: string, width: float, commentId: string, id: string, contentType: string, taskId: string, height: float>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1079,7 +1078,7 @@ export def "comments GET:/comments/empty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --plainText: string@bool-completer # Get comment text as plain text, HTML otherwise (default: false)
+  --plainText: oneof<nothing, bool> # Get comment text as plain text, HTML otherwise (default: false)
   --types: string # Comment type filter * `Email` * `Regular`
   --updatedDate: string # Deprecated because this parameter filters by created date instead of updated date. Please use the createdDate parameter instead
   --createdDate: string # Use the createdDate parameter to get all comments created within a specific date range. The date range must be 7 days or shorter
@@ -1108,7 +1107,7 @@ export def "folders-comments GET:/folders/single/comments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --plainText: string@bool-completer # Get comment text as plain text, HTML otherwise (default: false)
+  --plainText: oneof<nothing, bool> # Get comment text as plain text, HTML otherwise (default: false)
   --types: string # Comment type filter * `Email` * `Regular`
   --qp-fields: string # Json string array of optional fields to be included in the response model * `type` - Comment type
 ]: nothing -> record<data: table<externalRequester: record, createdDate: string, id: string, text: string, updatedDate: string, authorId: string, type: string, emailSubject: string, taskId: string, folderId: string, direction: string>, kind: string> {
@@ -1135,7 +1134,7 @@ export def "folders-comments POST:/folders/single/comments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --text: string # Comment text, can not be empty. Supported HTML tags can be found in <a href="https://developers.wrike.com/special-syntax">Special syntax</a>
-  --plainText: string@bool-completer # Treat comment text as plain text, HTML otherwise (default: false)
+  --plainText: oneof<nothing, bool> # Treat comment text as plain text, HTML otherwise (default: false)
 ]: nothing -> record<data: table<externalRequester: record, createdDate: string, id: string, text: string, updatedDate: string, authorId: string, type: string, emailSubject: string, taskId: string, folderId: string, direction: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1159,7 +1158,7 @@ export def "tasks-comments GET:/tasks/single/comments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --plainText: string@bool-completer # Get comment text as plain text, HTML otherwise (default: false)
+  --plainText: oneof<nothing, bool> # Get comment text as plain text, HTML otherwise (default: false)
   --types: string # Comment type filter * `Email` * `Regular`
   --qp-fields: string # Json string array of optional fields to be included in the response model * `type` - Comment type
 ]: nothing -> record<data: table<externalRequester: record, createdDate: string, id: string, text: string, updatedDate: string, authorId: string, type: string, emailSubject: string, taskId: string, folderId: string, direction: string>, kind: string> {
@@ -1186,7 +1185,7 @@ export def "tasks-comments POST:/tasks/single/comments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --text: string # Comment text, can not be empty. Supported HTML tags can be found in <a href="https://developers.wrike.com/special-syntax">Special syntax</a>
-  --plainText: string@bool-completer # Treat comment text as plain text, HTML otherwise (default: false)
+  --plainText: oneof<nothing, bool> # Treat comment text as plain text, HTML otherwise (default: false)
 ]: nothing -> record<data: table<externalRequester: record, createdDate: string, id: string, text: string, updatedDate: string, authorId: string, type: string, emailSubject: string, taskId: string, folderId: string, direction: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1210,7 +1209,7 @@ export def "comments GET:/comments/multi" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --plainText: string@bool-completer # Get comment text as plain text, HTML otherwise (default: false)
+  --plainText: oneof<nothing, bool> # Get comment text as plain text, HTML otherwise (default: false)
   --types: string # Comment type filter * `Email` * `Regular`
   --qp-fields: string # Json string array of optional fields to be included in the response model * `type` - Comment type
 ]: nothing -> record<data: table<externalRequester: record, createdDate: string, id: string, text: string, updatedDate: string, authorId: string, type: string, emailSubject: string, taskId: string, folderId: string, direction: string>, kind: string> {
@@ -1237,7 +1236,7 @@ export def "comments PUT:/comments/single" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --text: string # Comment text, can not be empty. Supported HTML tags can be found in <a href="https://developers.wrike.com/special-syntax">Special syntax</a>
-  --plainText: string@bool-completer # Get comment text as plain text, HTML otherwise (default: false)
+  --plainText: oneof<nothing, bool> # Get comment text as plain text, HTML otherwise (default: false)
 ]: nothing -> record<data: table<externalRequester: record, createdDate: string, id: string, text: string, updatedDate: string, authorId: string, type: string, emailSubject: string, taskId: string, folderId: string, direction: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1282,12 +1281,12 @@ export def "contacts GET:/contacts/empty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --me: string@bool-completer # If present - only contact info of requesting user is returned
+  --me: oneof<nothing, bool> # If present - only contact info of requesting user is returned
   --metadata: string # Metadata filter, exact match for metadata key or key-value pair
-  --deleted: string@bool-completer # Deleted flag filter
+  --deleted: oneof<nothing, bool> # Deleted flag filter
   --customFields: string # Custom field filter
   --emails: string # Email contacts filter. Limit : `100`
-  --active: string@bool-completer # Active status filter
+  --active: oneof<nothing, bool> # Active status filter
   --name: string # Contact name filter
   --types: string # Contact type filter * `Group` - Group of users. Group userId can be used in folder/task sharing requests only. It has no effect in other operations * `Asset` - Asset * `Person` - Person * `Robot` - Robot user for automated operations
   --qp-fields: string # Json string array of optional fields to be included in the response model * `metadata` - Contact metadata * `currentCostRate` - Current user's cost rate * `customFields` - User's custom fields * `currentBillRate` - Current user's bill rate * `jobRoleId` - Current user's jobRoleId * `workScheduleId` - Contact work schedule id
@@ -1559,7 +1558,7 @@ export def "custom-item-types types/empty" [
   --allow-errors(-e) # Return full response without error handling
   --title: string # Filter search results by title
   --limit: float # Result entries limit (default: 10000)
-  --withDeleted: string@bool-completer # Include deleted custom item types in the result (default: false)
+  --withDeleted: oneof<nothing, bool> # Include deleted custom item types in the result (default: false)
   --type: string@type-completer-2 # Related type of returned custom item types * `Project` - Project based * `Task` - Task based
   --qp-fields: string # Json string array of optional fields to be included in the response model * `dataUsageStatistics` - Return collection of data usage statistics
 ]: nothing -> record<data: table<spaceId: string, relatedType: string, customFieldIds: list, isDeleted: bool, archivedOn: string, icon: record, description: string, id: string, title: string, dataUsageStatistics: record, archivedBy: string>, kind: string> {
@@ -1587,7 +1586,7 @@ export def "spaces-custom-item-types types" [
   --allow-errors(-e) # Return full response without error handling
   --title: string # Filter search results by title
   --limit: float # Result entries limit (default: 10000)
-  --withDeleted: string@bool-completer # Include deleted custom item types in the result (default: false)
+  --withDeleted: oneof<nothing, bool> # Include deleted custom item types in the result (default: false)
   --type: string@type-completer-2 # Related type of returned custom item types * `Project` - Project based * `Task` - Task based
   --qp-fields: string # Json string array of optional fields to be included in the response model * `dataUsageStatistics` - Return collection of data usage statistics
 ]: nothing -> record<data: table<spaceId: string, relatedType: string, customFieldIds: list, isDeleted: bool, archivedOn: string, icon: record, description: string, id: string, title: string, dataUsageStatistics: record, archivedBy: string>, kind: string> {
@@ -1613,7 +1612,7 @@ export def "custom-item-types types/multi" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --withDeleted: string@bool-completer # Include deleted custom item types in the result (default: false)
+  --withDeleted: oneof<nothing, bool> # Include deleted custom item types in the result (default: false)
   --qp-fields: string # Json string array of optional fields to be included in the response model * `dataUsageStatistics` - Return collection of data usage statistics
 ]: nothing -> record<data: table<spaceId: string, relatedType: string, customFieldIds: list, isDeleted: bool, archivedOn: string, icon: record, description: string, id: string, title: string, dataUsageStatistics: record, archivedBy: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1949,11 +1948,11 @@ export def "folder-blueprints-launch-async async" [
   --parent: string # ID of parent folder
   --title: string # Title (required)
   --titlePrefix: string # Title prefix for all copied tasks
-  --copyDescriptions: string@bool-completer # Copy descriptions or leave empty (default: true)
-  --notifyResponsibles: string@bool-completer # Notify those responsible (default: true)
-  --copyResponsibles: string@bool-completer # Copy those responsible (default: true)
-  --copyCustomFields: string@bool-completer # Copy custom fields (default: true)
-  --copyAttachments: string@bool-completer # Copy attachments (default: false)
+  --copyDescriptions: oneof<nothing, bool> # Copy descriptions or leave empty (default: true)
+  --notifyResponsibles: oneof<nothing, bool> # Notify those responsible (default: true)
+  --copyResponsibles: oneof<nothing, bool> # Copy those responsible (default: true)
+  --copyCustomFields: oneof<nothing, bool> # Copy custom fields (default: true)
+  --copyAttachments: oneof<nothing, bool> # Copy attachments (default: false)
   --rescheduleDate: string # Date to use in task rescheduling. Note: Only active tasks can be rescheduled. Format: yyyy-MM-dd Format: yyyy-MM-dd
   --rescheduleMode: string@rescheduleMode-completer # Mode to be used for rescheduling (based on first or last date). Used only if reschedule date is specified. * `Start` - Tasks in scope are rescheduled starting from reschedule date * `End` - Tasks in scope are rescheduled ending with reschedule date
   --entryLimit: float # Maximum number of tasks/folders in tree for copy. The operation will fail if limit is exceeded. This should be 1..250 (default: 250)
@@ -1980,16 +1979,16 @@ export def "folders GET:/folders/empty" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --permalink: string # Folder permalink, exact match
-  --descendants: string@bool-completer # Adds all descendant folders to search scope (default: true)
+  --descendants: oneof<nothing, bool> # Adds all descendant folders to search scope (default: true)
   --metadata: string # Folders metadata filter
   --customField: string # [Deprecated] It is recommended to use 'customFields' parameter. Custom field filter
   --customFields: string # Custom field filters, exact match. Limit : `25`
   --updatedDate: string # Updated date filter, range
-  --withInvitations: string@bool-completer # Include invitations in sharedIds list
-  --project: string@bool-completer # Filter only projects (true) / only folders (false)
-  --deleted: string@bool-completer # Get folders from Root (false) / Recycle Bin (true). This parameter does not affect method's mode.
+  --withInvitations: oneof<nothing, bool> # Include invitations in sharedIds list
+  --project: oneof<nothing, bool> # Filter only projects (true) / only folders (false)
+  --deleted: oneof<nothing, bool> # Get folders from Root (false) / Recycle Bin (true). This parameter does not affect method's mode.
   --contractTypes: string # Contract type filter * `Billable` - Billable * `NonBillable` - Non-Billable
-  --plainTextCustomFields: string@bool-completer # Strip HTML tags from custom fields
+  --plainTextCustomFields: oneof<nothing, bool> # Strip HTML tags from custom fields
   --customItemTypes: string # Custom item types filter. Standard types (project, folder) IDs are not allowed. Limit : `1000`
   --pageSize: float # The number of folders to return (max 1000 items per page). Only 'folders' kind is supported
   --nextPageToken: string # A pagination request will return a token that applies an offset to the next page. The returned value should be used as an input parameter in the next request. Parameter pageSize can be omitted in this case. If you included optional fields to the first request, you will need to include those in each new call. Only 'folders' kind is supported
@@ -2025,15 +2024,15 @@ export def "folders-folders GET:/folders/single/folders" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --permalink: string # Folder permalink, exact match
-  --descendants: string@bool-completer # Adds all descendant folders to search scope (default: true)
+  --descendants: oneof<nothing, bool> # Adds all descendant folders to search scope (default: true)
   --metadata: string # Folders metadata filter
   --customField: string # [Deprecated] It is recommended to use 'customFields' parameter. Custom field filter
   --customFields: string # Custom field filters, exact match. Limit : `25`
   --updatedDate: string # Updated date filter, range
-  --withInvitations: string@bool-completer # Include invitations in sharedIds list
-  --project: string@bool-completer # Filter only projects (true) / only folders (false)
+  --withInvitations: oneof<nothing, bool> # Include invitations in sharedIds list
+  --project: oneof<nothing, bool> # Filter only projects (true) / only folders (false)
   --contractTypes: string # Contract type filter * `Billable` - Billable * `NonBillable` - Non-Billable
-  --plainTextCustomFields: string@bool-completer # Strip HTML tags from custom fields
+  --plainTextCustomFields: oneof<nothing, bool> # Strip HTML tags from custom fields
   --customItemTypes: string # Custom item types filter. Standard types (project, folder) IDs are not allowed. Limit : `1000`
   --pageSize: float # The number of folders to return (max 1000 items per page). Only 'folders' kind is supported
   --nextPageToken: string # A pagination request will return a token that applies an offset to the next page. The returned value should be used as an input parameter in the next request. Parameter pageSize can be omitted in this case. If you included optional fields to the first request, you will need to include those in each new call. Only 'folders' kind is supported
@@ -2076,9 +2075,9 @@ export def "folders-folders POST:/folders/single/folders" [
   --customColumns: string # List of custom fields associated with folder
   --project: string # Project settings in order to create project
   --userAccessRoles: string # Access Roles assigned to users with which folder will be shared
-  --withInvitations: string@bool-completer # Include invitations in ownerIds & sharedIds list
+  --withInvitations: oneof<nothing, bool> # Include invitations in ownerIds & sharedIds list
   --customItemTypeId: string # Custom Item Type ID to create a project from
-  --plainTextCustomFields: string@bool-completer # Strip HTML tags from custom fields
+  --plainTextCustomFields: oneof<nothing, bool> # Strip HTML tags from custom fields
   --qp-fields: string # Json string array of optional fields to be included in the response model * `customItemTypeId` - Custom Item Type ID * `contractType` - Contract type
 ]: nothing -> record<data: table<color: string, customItemTypeId: string, childIds: list, scope: string, project: record, id: string, title: string, space: bool>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2104,16 +2103,16 @@ export def "spaces-folders GET:/spaces/single/folders" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --permalink: string # Folder permalink, exact match
-  --descendants: string@bool-completer # Adds all descendant folders to search scope (default: true)
+  --descendants: oneof<nothing, bool> # Adds all descendant folders to search scope (default: true)
   --metadata: string # Folders metadata filter
   --customField: string # [Deprecated] It is recommended to use 'customFields' parameter. Custom field filter
   --customFields: string # Custom field filters, exact match. Limit : `25`
   --updatedDate: string # Updated date filter, range
-  --withInvitations: string@bool-completer # Include invitations in sharedIds list
-  --project: string@bool-completer # Filter only projects (true) / only folders (false)
-  --deleted: string@bool-completer # Get folders from Root (false) / Recycle Bin (true). This parameter does not affect method's mode.
+  --withInvitations: oneof<nothing, bool> # Include invitations in sharedIds list
+  --project: oneof<nothing, bool> # Filter only projects (true) / only folders (false)
+  --deleted: oneof<nothing, bool> # Get folders from Root (false) / Recycle Bin (true). This parameter does not affect method's mode.
   --contractTypes: string # Contract type filter * `Billable` - Billable * `NonBillable` - Non-Billable
-  --plainTextCustomFields: string@bool-completer # Strip HTML tags from custom fields
+  --plainTextCustomFields: oneof<nothing, bool> # Strip HTML tags from custom fields
   --customItemTypes: string # Custom item types filter. Standard types (project, folder) IDs are not allowed. Limit : `1000`
   --pageSize: float # The number of folders to return (max 1000 items per page). Only 'folders' kind is supported
   --nextPageToken: string # A pagination request will return a token that applies an offset to the next page. The returned value should be used as an input parameter in the next request. Parameter pageSize can be omitted in this case. If you included optional fields to the first request, you will need to include those in each new call. Only 'folders' kind is supported
@@ -2173,8 +2172,8 @@ export def "folders GET:/folders/multi" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --withInvitations: string@bool-completer # Include invitations in sharedIds list
-  --plainTextCustomFields: string@bool-completer # Strip HTML tags from custom fields
+  --withInvitations: oneof<nothing, bool> # Include invitations in sharedIds list
+  --plainTextCustomFields: oneof<nothing, bool> # Strip HTML tags from custom fields
   --qp-fields: string # Json string array of optional fields to be included in the response model * `cascadingFields` - Active cascading fields settings * `accessRoles` - Folder Access Roles * `customItemTypeId` - Work Item custom item type Id * `customColumnIds` - Associated custom field IDs * `contractType` - Contract type * `attachmentCount` - Attachment count * `briefDescription` - Get brief description * `finance` - Project Finance fields
 ]: nothing -> record<data: table<color: string, customItemTypeId: string, childIds: list, scope: string, project: record, id: string, title: string, space: bool>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2229,18 +2228,18 @@ export def "copy-folder folder/single" [
   --parent: string # ID of parent folder
   --title: string # Title, cannot be empty
   --titlePrefix: string # Title prefix for all copied tasks
-  --copyDescriptions: string@bool-completer # Copy descriptions or leave empty (default: true)
-  --copyResponsibles: string@bool-completer # Copy responsibles (default: true)
+  --copyDescriptions: oneof<nothing, bool> # Copy descriptions or leave empty (default: true)
+  --copyResponsibles: oneof<nothing, bool> # Copy responsibles (default: true)
   --addResponsibles: string # Add specified users to task responsible list
   --removeResponsibles: string # Remove specified users from task responsible list
-  --copyCustomFields: string@bool-completer # Copy custom fields (default: true)
-  --copyCustomStatuses: string@bool-completer # Copy custom statuses or set according to workflow otherwise (default: true)
-  --copyStatuses: string@bool-completer # Copy task statuses or set to Active otherwise (default: true)
-  --copyParents: string@bool-completer # Preserve parent folders (default: false)
+  --copyCustomFields: oneof<nothing, bool> # Copy custom fields (default: true)
+  --copyCustomStatuses: oneof<nothing, bool> # Copy custom statuses or set according to workflow otherwise (default: true)
+  --copyStatuses: oneof<nothing, bool> # Copy task statuses or set to Active otherwise (default: true)
+  --copyParents: oneof<nothing, bool> # Preserve parent folders (default: false)
   --rescheduleDate: string # Date to use in task rescheduling. Note that only active tasks can be rescheduled. To activate and reschedule all tasks, use 'rescheduleDate' in combination with copyStatuses = false Format: yyyy-MM-dd
   --rescheduleMode: string@rescheduleMode-completer # Mode to be used for rescheduling (based on first or last date), has effect only if reschedule date is specified. * `Start` - Tasks in scope are rescheduled starting from reschedule date * `End` - Tasks in scope are rescheduled ending with reschedule date
   --entryLimit: float # Limit maximum allowed number for tasks/folders in tree for copy, operation will fail if limit is exceeded, should be 1..250 (default: 250)
-  --plainTextCustomFields: string@bool-completer # Strip HTML tags from custom fields
+  --plainTextCustomFields: oneof<nothing, bool> # Strip HTML tags from custom fields
 ]: nothing -> record<data: table<color: string, customItemTypeId: string, childIds: list, scope: string, project: record, id: string, title: string, space: bool>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2267,14 +2266,14 @@ export def "copy-folder-async async/single" [
   --parent: string # ID of parent folder
   --title: string # Title, cannot be empty
   --titlePrefix: string # Title prefix for all copied tasks
-  --copyDescriptions: string@bool-completer # Copy descriptions or leave empty (default: true)
-  --copyResponsibles: string@bool-completer # Copy responsibles (default: true)
+  --copyDescriptions: oneof<nothing, bool> # Copy descriptions or leave empty (default: true)
+  --copyResponsibles: oneof<nothing, bool> # Copy responsibles (default: true)
   --addResponsibles: string # Add specified users to task responsible list
   --removeResponsibles: string # Remove specified users from task responsible list
-  --copyCustomFields: string@bool-completer # Copy custom fields (default: true)
-  --copyCustomStatuses: string@bool-completer # Copy custom statuses or set according to workflow otherwise (default: true)
-  --copyStatuses: string@bool-completer # Copy task statuses or set to Active otherwise (default: true)
-  --copyParents: string@bool-completer # Preserve parent folders (default: false)
+  --copyCustomFields: oneof<nothing, bool> # Copy custom fields (default: true)
+  --copyCustomStatuses: oneof<nothing, bool> # Copy custom statuses or set according to workflow otherwise (default: true)
+  --copyStatuses: oneof<nothing, bool> # Copy task statuses or set to Active otherwise (default: true)
+  --copyParents: oneof<nothing, bool> # Preserve parent folders (default: false)
   --rescheduleDate: string # Date to use in task rescheduling. Note that only active tasks can be rescheduled. To activate and reschedule all tasks, use 'rescheduleDate' in combination with copyStatuses = false Format: yyyy-MM-dd
   --rescheduleMode: string@rescheduleMode-completer # Mode to be used for rescheduling (based on first or last date), has effect only if reschedule date is specified. * `Start` - Tasks in scope are rescheduled starting from reschedule date * `End` - Tasks in scope are rescheduled ending with reschedule date
   --entryLimit: float # Limit maximum allowed number for tasks/folders in tree for copy, operation will fail if limit is exceeded, should be 1..250 (default: 250)
@@ -2308,16 +2307,16 @@ export def "folders PUT:/folders/single" [
   --addShareds: string # Share folder with specified users or invitations
   --removeShareds: string # Unshare folder from specified users or invitations
   --metadata: string # Metadata to be updated. Limit : `100`
-  --restore: string@bool-completer # Restore folder from Recycled Bin
+  --restore: oneof<nothing, bool> # Restore folder from Recycled Bin
   --customFields: string # Custom fields to be updated or deleted (null value removes field). Limit : `100`
   --customColumns: string # List of custom fields associated with folder
-  --clearCustomColumns: string@bool-completer # Remove all custom fields associated with folder
+  --clearCustomColumns: oneof<nothing, bool> # Remove all custom fields associated with folder
   --project: string # Project settings (update project or convert folder to project). Use null value to convert project to folder
   --addAccessRoles: string # Specifies users with Access Roles for folder
   --removeAccessRoles: string # Specifies users whose Access Roles should be removed
-  --withInvitations: string@bool-completer # Include invitations in ownerIds & sharedIds list
+  --withInvitations: oneof<nothing, bool> # Include invitations in ownerIds & sharedIds list
   --convertToCustomItemType: string # Custom Item Type id
-  --plainTextCustomFields: string@bool-completer # Strip HTML tags from custom fields
+  --plainTextCustomFields: oneof<nothing, bool> # Strip HTML tags from custom fields
   --qp-fields: string # Json string array of optional fields to be included in the response model * `contractType` - Contract type
 ]: nothing -> record<data: table<color: string, customItemTypeId: string, childIds: list, scope: string, project: record, id: string, title: string, space: bool>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2419,7 +2418,7 @@ export def "groups DELETE:/groups/single" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --test: string@bool-completer # Check that group can be removed
+  --test: oneof<nothing, bool> # Check that group can be removed
 ]: nothing -> record<data: table<accountId: string, metadata: list, childIds: list, avatarUrl: string, parentIds: list, myTeam: bool, id: string, title: string, memberIds: list>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2564,7 +2563,7 @@ export def "folders-hourly-rates rates-by-folderId-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --rates: string # Provision hourly rates to users. Max 100 users per request. Limit : `100`
-  --enableCalculations: string@bool-completer # Trigger rates recalculation
+  --enableCalculations: oneof<nothing, bool> # Trigger rates recalculation
 ]: nothing -> record<data: table<billRate: record, costRate: record, rateSubjectId: string, rateSubjectType: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2729,7 +2728,7 @@ export def "invitations POST:/invitations/empty" [
   --firstName: string # First name of invited user
   --lastName: string # Last name of invited user
   --role: string@role-completer # [Deprecated] It is recommended to use 'userTypeId' parameter instead. Set user role in account. Mutually exclusive with userTypeId param * `User` * `Collaborator`
-  --external: string@bool-completer # [Deprecated] It is recommended to use 'userTypeId' parameter instead. Set external flag for invited user. Flag 'External' can be applied only to the role 'User'. Mutually exclusive with userTypeId param (default: false)
+  --external: oneof<nothing, bool> # [Deprecated] It is recommended to use 'userTypeId' parameter instead. Set external flag for invited user. Flag 'External' can be applied only to the role 'User'. Mutually exclusive with userTypeId param (default: false)
   --subject: string # Custom message subject. Not available for free accounts
   --message: string # Custom message body. Not available for free accounts
   --userTypeId: string # Set user type in account. Mutually exclusive with role and external params
@@ -2756,9 +2755,9 @@ export def "invitations PUT:/invitations/single" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --resend: string@bool-completer # Resend invitation
+  --resend: oneof<nothing, bool> # Resend invitation
   --role: string@role-completer # [Deprecated] It is recommended to use 'userTypeId' parameter instead. Change role of user in account for pending invitation. Mutually exclusive with userTypeId param.  * `User` * `Collaborator`
-  --external: string@bool-completer # [Deprecated] It is recommended to use 'userTypeId' parameter instead. Change external flag for pending invitation. Flag 'External' can be applied only to the role 'User'. Mutually exclusive with userTypeId param
+  --external: oneof<nothing, bool> # [Deprecated] It is recommended to use 'userTypeId' parameter instead. Change external flag for pending invitation. Flag 'External' can be applied only to the role 'User'. Mutually exclusive with userTypeId param
   --userTypeId: string # Change user type of user in account for pending invitation. Mutually exclusive with role and external params
 ]: nothing -> record<data: table<userTypeId: string, accountId: string, firstName: string, lastName: string, external: bool, inviterUserId: string, role: string, id: string, email: string, status: string, invitationDate: string, resolvedDate: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3011,7 +3010,7 @@ export def "request-forms forms/empty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --plainTextDescription: string@bool-completer # Get form description as plain text, HTML otherwise (default: false)
+  --plainTextDescription: oneof<nothing, bool> # Get form description as plain text, HTML otherwise (default: false)
   --limit: float # Limit on number of returned forms
   --pageSize: float # The number of forms to return (max 100 items per page)
   --nextPageToken: string # A pagination request will return a token that applies an offset to the next page. The returned value should be used as an input parameter in the next request. Parameter pageSize can be omitted in this case.
@@ -3039,7 +3038,7 @@ export def "spaces-request-forms forms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --plainTextDescription: string@bool-completer # Get form description as plain text, HTML otherwise (default: false)
+  --plainTextDescription: oneof<nothing, bool> # Get form description as plain text, HTML otherwise (default: false)
   --limit: float # Limit on number of returned forms
   --pageSize: float # The number of forms to return (max 100 items per page)
   --nextPageToken: string # A pagination request will return a token that applies an offset to the next page. The returned value should be used as an input parameter in the next request. Parameter pageSize can be omitted in this case.
@@ -3067,7 +3066,7 @@ export def "request-forms forms/single" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --plainTextDescription: string@bool-completer # When true, returns description as plain text (line breaks stripped). When false (default), description is plain text with <br> tags for line breaks. (default: false)
+  --plainTextDescription: oneof<nothing, bool> # When true, returns description as plain text (line breaks stripped). When false (default), description is plain text with <br> tags for line breaks. (default: false)
   --qp-fields: string # Json string array of optional fields to be included in the response model * `dataUsageStatistics` - Return collection of data usage statistics
 ]: nothing -> record<data: table<spaceId: string, pages: list, description: string, id: string, title: string, dataUsageStatistics: record>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3092,7 +3091,7 @@ export def "folders-rollups GET:/folders/single/rollups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --descendants: string@bool-completer # Adds all descendant folders to search scope (default: false)
+  --descendants: oneof<nothing, bool> # Adds all descendant folders to search scope (default: false)
   --filter: string # Filter rollup results by field configurations
   --pageSize: float # The number of rollup settings to return (max 100 items per page)
   --nextPageToken: string # A pagination request will return a token that applies an offset to the next page. The returned value should be used as an input parameter in the next request. Parameter pageSize can be omitted in this case. If you included optional fields to the first request, you will need to include those in each new call.
@@ -3190,9 +3189,9 @@ export def "spaces GET:/spaces/empty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --withArchived: string@bool-completer # Include archived spaces (default: false)
-  --userIsMember: string@bool-completer # Include only spaces where user is member
-  --withInvitations: string@bool-completer # Include invitations in space members list (default: false)
+  --withArchived: oneof<nothing, bool> # Include archived spaces (default: false)
+  --userIsMember: oneof<nothing, bool> # Include only spaces where user is member
+  --withInvitations: oneof<nothing, bool> # Include invitations in space members list (default: false)
   --title: string # Title filter, contains match and accepts non-blank values only
   --accessTypes: string # Access type filter * `Locked` * `Personal` * `Private` * `Public`
   --qp-fields: string # Json string array of optional fields to be included in the response model * `members` - Space members * `workScheduleId` - Id of work schedule assigned to space
@@ -3227,7 +3226,7 @@ export def "spaces POST:/spaces/empty" [
   --suggestedProjectWorkflows: string # Suggested project workflows for a space. A workflow can only be included in a request once. Limit : `100`
   --defaultTaskWorkflowId: string # Set default task workflow for a space
   --suggestedTaskWorkflows: string # Suggested task workflows for a space. A workflow can only be included in a request once
-  --withInvitations: string@bool-completer # Include invitations in space members list (default: false)
+  --withInvitations: oneof<nothing, bool> # Include invitations in space members list (default: false)
   --workScheduleId: string # Id of work schedule to assign to space
   --qp-fields: string # Json string array of optional fields to be included in the response model * `suggestedTaskWorkflows` - Suggested task workflows for a space * `suggestedProjectWorkflows` - Suggested project workflows for a space * `members` - Space members * `workScheduleId` - Id of work schedule assigned to space
 ]: nothing -> record<data: table<defaultTaskWorkflowId: string, guestRoleId: string, avatarUrl: string, description: string, suggestedProjectWorkflowIds: list, suggestedTaskWorkflowIds: list, title: string, defaultProjectWorkflowId: string, accessType: string, archived: bool, members: list, workScheduleId: string, id: string>, kind: string> {
@@ -3253,7 +3252,7 @@ export def "spaces GET:/spaces/single" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --withInvitations: string@bool-completer # Include invitations in space members list (default: false)
+  --withInvitations: oneof<nothing, bool> # Include invitations in space members list (default: false)
   --qp-fields: string # Json string array of optional fields to be included in the response model * `suggestedTaskWorkflows` - Suggested task workflows for a space * `suggestedProjectWorkflows` - Suggested project workflows for a space * `members` - Space members * `workScheduleId` - Id of work schedule assigned to space
 ]: nothing -> record<data: table<defaultTaskWorkflowId: string, guestRoleId: string, avatarUrl: string, description: string, suggestedProjectWorkflowIds: list, suggestedTaskWorkflowIds: list, title: string, defaultProjectWorkflowId: string, accessType: string, archived: bool, members: list, workScheduleId: string, id: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3291,7 +3290,7 @@ export def "spaces PUT:/spaces/single" [
   --defaultTaskWorkflowId: string # Set default task workflow for a space
   --suggestedTaskWorkflowsAdd: string # Add workflows to Suggested task workflows. A workflow can only be included in a request once
   --suggestedTaskWorkflowsRemove: string # Remove workflows from Suggested task workflows. A workflow can only be included in a request once
-  --withInvitations: string@bool-completer # Include invitations in space members list (default: false)
+  --withInvitations: oneof<nothing, bool> # Include invitations in space members list (default: false)
   --workScheduleId: string # Id of work schedule to assign to space
   --qp-fields: string # Json string array of optional fields to be included in the response model * `suggestedTaskWorkflows` - Space task suggested workflows * `suggestedProjectWorkflows` - Space project suggested workflows * `members` - Space members * `workScheduleId` - Id of work schedule assigned to space
 ]: nothing -> record<data: table<defaultTaskWorkflowId: string, guestRoleId: string, avatarUrl: string, description: string, suggestedProjectWorkflowIds: list, suggestedTaskWorkflowIds: list, title: string, defaultProjectWorkflowId: string, accessType: string, archived: bool, members: list, workScheduleId: string, id: string>, kind: string> {
@@ -3400,11 +3399,11 @@ export def "task-blueprints-launch-async async" [
   --parentId: string # ID of parent folder or project.  Set this to put work from the template to the specific folder or project. Either this parameter or superTaskId  is required. parentId and superTaskId cannot be set simultaneously
   --title: string # Title (required)
   --titlePrefix: string # Title prefix for all copied tasks
-  --copyDescriptions: string@bool-completer # Copy descriptions or leave empty (default: true)
-  --notifyResponsibles: string@bool-completer # Notify those responsible (default: true)
-  --copyResponsibles: string@bool-completer # Copy those responsible (default: true)
-  --copyCustomFields: string@bool-completer # Copy custom fields (default: true)
-  --copyAttachments: string@bool-completer # Copy attachments (default: false)
+  --copyDescriptions: oneof<nothing, bool> # Copy descriptions or leave empty (default: true)
+  --notifyResponsibles: oneof<nothing, bool> # Notify those responsible (default: true)
+  --copyResponsibles: oneof<nothing, bool> # Copy those responsible (default: true)
+  --copyCustomFields: oneof<nothing, bool> # Copy custom fields (default: true)
+  --copyAttachments: oneof<nothing, bool> # Copy attachments (default: false)
   --rescheduleDate: string # Date to use in task rescheduling. Note: Only active tasks can be rescheduled. Format: yyyy-MM-dd Format: yyyy-MM-dd
   --rescheduleMode: string@rescheduleMode-completer # Mode to be used for rescheduling (based on first or last date). Used only if reschedule date is specified. * `Start` - Tasks in scope are rescheduled starting from reschedule date * `End` - Tasks in scope are rescheduled ending with reschedule date
   --entryLimit: float # Maximum number of tasks/folders in tree for copy. The operation will fail if limit is exceeded. This should be 1..250 (default: 250)
@@ -3430,7 +3429,7 @@ export def "tasks GET:/tasks/empty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --descendants: string@bool-completer # Adds all descendant folders to search scope. Applicable only for GET/folders/{folderId}/tasks and GET/spaces/{spaceId}/tasks endpoints
+  --descendants: oneof<nothing, bool> # Adds all descendant folders to search scope. Applicable only for GET/folders/{folderId}/tasks and GET/spaces/{spaceId}/tasks endpoints
   --title: string # Title filter, contains match
   --status: string # Status filter, match with any of specified constants * `Active` - Active * `Deferred` - Deferred * `Completed` - Completed * `Cancelled` - Cancelled
   --importance: string@importance-completer # Importance filter, exact match * `High` * `Low` * `Normal`
@@ -3448,16 +3447,16 @@ export def "tasks GET:/tasks/empty" [
   --limit: float # Limit on number of returned tasks
   --sortField: string@sortField-completer # Sort field * `Status` - Sort by status * `Importance` - Sort by importance * `UpdatedDate` - Sort by updated date * `CreatedDate` - Sort by created date * `Title` - Lexicographic sorting by title * `StartFinishInterval` - Sort by start-finish interval * `DueDate` - Sort by due date * `LastAccessDate` - Sort by last access date * `CompletedDate` - Sort by completed date
   --sortOrder: string@sortOrder-completer # Sort order * `Asc` - Ascending sort order * `Desc` - Descending sort order
-  --subTasks: string@bool-completer # Adds subtasks to search scope
+  --subTasks: oneof<nothing, bool> # Adds subtasks to search scope
   --pageSize: float # The number of tasks to return (max 1000 items per page)
   --nextPageToken: string # A pagination request will return a token that applies an offset to the next page. The returned value should be used as an input parameter in the next request. Parameter pageSize can be omitted in this case. If you included optional fields to the first request, you will need to include those  in each new call
   --metadata: string # Task metadata filter
   --customField: string # [Deprecated] It is recommended to use 'customFields' parameter. Custom field filter
   --customFields: string # Custom field filters, exact match
   --customStatuses: string # Custom statuses filter
-  --withInvitations: string@bool-completer # Include invitations in sharedIds & responsibleIds lists
+  --withInvitations: oneof<nothing, bool> # Include invitations in sharedIds & responsibleIds lists
   --billingTypes: string # Timelog billing types filter * `Billable` - Billable * `NonBillable` - Non-Billable
-  --plainTextCustomFields: string@bool-completer # Strip HTML tags from custom fields
+  --plainTextCustomFields: oneof<nothing, bool> # Strip HTML tags from custom fields
   --customItemTypes: string # Custom item types filter. Standard type (task) ID is not allowed. Filtering by deleted custom item types is not supported. Limit : `1000`
   --qp-fields: string # Json string array of optional fields to be included in the response model * `metadata` - Task metadata entries * `responsibleIds` - List of assignee user IDs * `customItemTypeId` - Work Item custom item type Id * `customFields` - Custom fields * `followerIds` - List of user IDs, who follows task, and the additional flag "followedByMe", that indicates if a task is followed by user * `parentIds` - List of task parent folder * `sharedIds` - List of user IDs, who have task share * `description` - Description * `superTaskIds` - List of supertask IDs * `responsiblePlaceholderIds` - List of placeholder assignee IDs * `superParentIds` - List of folder IDs inherited from parent task * `dependencyIds` - Dependency IDs * `billingType` - Billing type * `attachmentCount` - Attachment count * `workScheduleId` - Id of work schedule assigned to task * `effortAllocation` - Effort Allocation * `hasAttachments` - Has attachments * `subTaskIds` - List of subtask IDs * `recurrent` - Is a task recurrent * `authorIds` - Author IDs * `briefDescription` - Brief description
 ]: nothing -> record<data: table<metadata: list, importance: string, customFields: list, followerIds: list, parentIds: list, description: string, responsiblePlaceholderIds: list, updatedDate: string, title: string, followedByMe: bool, billingType: string, scope: string, id: string, effortAllocation: record, hasAttachments: bool, subTaskIds: list, recurrent: bool, authorIds: list, responsibleIds: list, customItemTypeId: string, sharedIds: list, dates: record, superTaskIds: list, priority: string, completedDate: string, superParentIds: list, accountId: string, dependencyIds: list, createdDate: string, cascadingFieldSettings: list, customStatusId: string, attachmentCount: float, workScheduleId: string, permalink: string, briefDescription: string, finance: record, status: string>, kind: string> {
@@ -3483,7 +3482,7 @@ export def "folders-tasks GET:/folders/single/tasks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --descendants: string@bool-completer # Adds all descendant folders to search scope. Applicable only for GET/folders/{folderId}/tasks and GET/spaces/{spaceId}/tasks endpoints
+  --descendants: oneof<nothing, bool> # Adds all descendant folders to search scope. Applicable only for GET/folders/{folderId}/tasks and GET/spaces/{spaceId}/tasks endpoints
   --title: string # Title filter, contains match
   --status: string # Status filter, match with any of specified constants * `Active` - Active * `Deferred` - Deferred * `Completed` - Completed * `Cancelled` - Cancelled
   --importance: string@importance-completer # Importance filter, exact match * `High` * `Low` * `Normal`
@@ -3501,16 +3500,16 @@ export def "folders-tasks GET:/folders/single/tasks" [
   --limit: float # Limit on number of returned tasks
   --sortField: string@sortField-completer # Sort field * `Status` - Sort by status * `Importance` - Sort by importance * `UpdatedDate` - Sort by updated date * `CreatedDate` - Sort by created date * `Title` - Lexicographic sorting by title * `StartFinishInterval` - Sort by start-finish interval * `DueDate` - Sort by due date * `LastAccessDate` - Sort by last access date * `CompletedDate` - Sort by completed date
   --sortOrder: string@sortOrder-completer # Sort order * `Asc` - Ascending sort order * `Desc` - Descending sort order
-  --subTasks: string@bool-completer # Adds subtasks to search scope
+  --subTasks: oneof<nothing, bool> # Adds subtasks to search scope
   --pageSize: float # The number of tasks to return (max 1000 items per page)
   --nextPageToken: string # A pagination request will return a token that applies an offset to the next page. The returned value should be used as an input parameter in the next request. Parameter pageSize can be omitted in this case. If you included optional fields to the first request, you will need to include those  in each new call
   --metadata: string # Task metadata filter
   --customField: string # [Deprecated] It is recommended to use 'customFields' parameter. Custom field filter
   --customFields: string # Custom field filters, exact match
   --customStatuses: string # Custom statuses filter
-  --withInvitations: string@bool-completer # Include invitations in sharedIds & responsibleIds lists
+  --withInvitations: oneof<nothing, bool> # Include invitations in sharedIds & responsibleIds lists
   --billingTypes: string # Timelog billing types filter * `Billable` - Billable * `NonBillable` - Non-Billable
-  --plainTextCustomFields: string@bool-completer # Strip HTML tags from custom fields
+  --plainTextCustomFields: oneof<nothing, bool> # Strip HTML tags from custom fields
   --customItemTypes: string # Custom item types filter. Standard type (task) ID is not allowed. Filtering by deleted custom item types is not supported. Limit : `1000`
   --qp-fields: string # Json string array of optional fields to be included in the response model * `metadata` - Task metadata entries * `responsibleIds` - List of assignee user IDs * `customItemTypeId` - Work Item custom item type Id * `customFields` - Custom fields * `followerIds` - List of user IDs, who follows task, and the additional flag "followedByMe", that indicates if a task is followed by user * `parentIds` - List of task parent folder * `sharedIds` - List of user IDs, who have task share * `description` - Description * `superTaskIds` - List of supertask IDs * `responsiblePlaceholderIds` - List of placeholder assignee IDs * `superParentIds` - List of folder IDs inherited from parent task * `dependencyIds` - Dependency IDs * `billingType` - Billing type * `attachmentCount` - Attachment count * `workScheduleId` - Id of work schedule assigned to task * `effortAllocation` - Effort Allocation * `hasAttachments` - Has attachments * `subTaskIds` - List of subtask IDs * `recurrent` - Is a task recurrent * `authorIds` - Author IDs * `briefDescription` - Brief description * `finance` - Task Finance fields
 ]: nothing -> record<data: table<metadata: list, importance: string, customFields: list, followerIds: list, parentIds: list, description: string, responsiblePlaceholderIds: list, updatedDate: string, title: string, followedByMe: bool, billingType: string, scope: string, id: string, effortAllocation: record, hasAttachments: bool, subTaskIds: list, recurrent: bool, authorIds: list, responsibleIds: list, customItemTypeId: string, sharedIds: list, dates: record, superTaskIds: list, priority: string, completedDate: string, superParentIds: list, accountId: string, dependencyIds: list, createdDate: string, cascadingFieldSettings: list, customStatusId: string, attachmentCount: float, workScheduleId: string, permalink: string, briefDescription: string, finance: record, status: string>, kind: string> {
@@ -3546,7 +3545,7 @@ export def "folders-tasks POST:/folders/single/tasks" [
   --responsibles: string # Makes specified users or invitations assignee for the task
   --responsiblePlaceholders: string # Makes specified placeholders assignee for the task
   --followers: string # Add specified users to task followers
-  --follow: string@bool-completer # Follow task
+  --follow: oneof<nothing, bool> # Follow task
   --priorityBefore: string # Put newly created task before specified task in task list
   --priorityAfter: string # Put newly created task after specified task in task list
   --superTasks: string # Add the task as subtask to specified tasks
@@ -3555,9 +3554,9 @@ export def "folders-tasks POST:/folders/single/tasks" [
   --customStatus: string # Custom status ID
   --effortAllocation: string # Set Task Effort fields: mode, total Effort
   --billingType: string@billingType-completer # Task's timelogs billing type * `Billable` - Billable * `NonBillable` - Non-Billable
-  --withInvitations: string@bool-completer # Include invitations in sharedIds & responsibleIds lists
+  --withInvitations: oneof<nothing, bool> # Include invitations in sharedIds & responsibleIds lists
   --customItemTypeId: string # Custom Item Type ID to create a task from
-  --plainTextCustomFields: string@bool-completer # Strip HTML tags from custom fields
+  --plainTextCustomFields: oneof<nothing, bool> # Strip HTML tags from custom fields
   --workScheduleId: string # Id of work schedule to assign to task
   --qp-fields: string # Json string array of optional fields to be included in the response model * `customItemTypeId` - Custom Item Type ID * `billingType` - Billing type * `workScheduleId` - Id of work schedule assigned to task * `effortAllocation` - Effort Allocation * `responsiblePlaceholderIds` - List of placeholder assignee IDs
 ]: nothing -> record<data: table<metadata: list, importance: string, customFields: list, followerIds: list, parentIds: list, description: string, responsiblePlaceholderIds: list, updatedDate: string, title: string, followedByMe: bool, billingType: string, scope: string, id: string, effortAllocation: record, hasAttachments: bool, subTaskIds: list, recurrent: bool, authorIds: list, responsibleIds: list, customItemTypeId: string, sharedIds: list, dates: record, superTaskIds: list, priority: string, completedDate: string, superParentIds: list, accountId: string, dependencyIds: list, createdDate: string, cascadingFieldSettings: list, customStatusId: string, attachmentCount: float, workScheduleId: string, permalink: string, briefDescription: string, finance: record, status: string>, kind: string> {
@@ -3583,7 +3582,7 @@ export def "spaces-tasks GET:/spaces/single/tasks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --descendants: string@bool-completer # Adds all descendant folders to search scope. Applicable only for GET/folders/{folderId}/tasks and GET/spaces/{spaceId}/tasks endpoints
+  --descendants: oneof<nothing, bool> # Adds all descendant folders to search scope. Applicable only for GET/folders/{folderId}/tasks and GET/spaces/{spaceId}/tasks endpoints
   --title: string # Title filter, contains match
   --status: string # Status filter, match with any of specified constants * `Active` - Active * `Deferred` - Deferred * `Completed` - Completed * `Cancelled` - Cancelled
   --importance: string@importance-completer # Importance filter, exact match * `High` * `Low` * `Normal`
@@ -3601,16 +3600,16 @@ export def "spaces-tasks GET:/spaces/single/tasks" [
   --limit: float # Limit on number of returned tasks
   --sortField: string@sortField-completer # Sort field * `Status` - Sort by status * `Importance` - Sort by importance * `UpdatedDate` - Sort by updated date * `CreatedDate` - Sort by created date * `Title` - Lexicographic sorting by title * `StartFinishInterval` - Sort by start-finish interval * `DueDate` - Sort by due date * `LastAccessDate` - Sort by last access date * `CompletedDate` - Sort by completed date
   --sortOrder: string@sortOrder-completer # Sort order * `Asc` - Ascending sort order * `Desc` - Descending sort order
-  --subTasks: string@bool-completer # Adds subtasks to search scope
+  --subTasks: oneof<nothing, bool> # Adds subtasks to search scope
   --pageSize: float # The number of tasks to return (max 1000 items per page)
   --nextPageToken: string # A pagination request will return a token that applies an offset to the next page. The returned value should be used as an input parameter in the next request. Parameter pageSize can be omitted in this case. If you included optional fields to the first request, you will need to include those  in each new call
   --metadata: string # Task metadata filter
   --customField: string # [Deprecated] It is recommended to use 'customFields' parameter. Custom field filter
   --customFields: string # Custom field filters, exact match
   --customStatuses: string # Custom statuses filter
-  --withInvitations: string@bool-completer # Include invitations in sharedIds & responsibleIds lists
+  --withInvitations: oneof<nothing, bool> # Include invitations in sharedIds & responsibleIds lists
   --billingTypes: string # Timelog billing types filter * `Billable` - Billable * `NonBillable` - Non-Billable
-  --plainTextCustomFields: string@bool-completer # Strip HTML tags from custom fields
+  --plainTextCustomFields: oneof<nothing, bool> # Strip HTML tags from custom fields
   --customItemTypes: string # Custom item types filter. Standard type (task) ID is not allowed. Filtering by deleted custom item types is not supported. Limit : `1000`
   --qp-fields: string # Json string array of optional fields to be included in the response model * `metadata` - Task metadata entries * `responsibleIds` - List of assignee user IDs * `customItemTypeId` - Work Item custom item type Id * `customFields` - Custom fields * `followerIds` - List of user IDs, who follows task, and the additional flag "followedByMe", that indicates if a task is followed by user * `parentIds` - List of task parent folder * `sharedIds` - List of user IDs, who have task share * `description` - Description * `superTaskIds` - List of supertask IDs * `responsiblePlaceholderIds` - List of placeholder assignee IDs * `superParentIds` - List of folder IDs inherited from parent task * `dependencyIds` - Dependency IDs * `billingType` - Billing type * `attachmentCount` - Attachment count * `workScheduleId` - Id of work schedule assigned to task * `effortAllocation` - Effort Allocation * `hasAttachments` - Has attachments * `subTaskIds` - List of subtask IDs * `recurrent` - Is a task recurrent * `authorIds` - Author IDs * `briefDescription` - Brief description
 ]: nothing -> record<data: table<metadata: list, importance: string, customFields: list, followerIds: list, parentIds: list, description: string, responsiblePlaceholderIds: list, updatedDate: string, title: string, followedByMe: bool, billingType: string, scope: string, id: string, effortAllocation: record, hasAttachments: bool, subTaskIds: list, recurrent: bool, authorIds: list, responsibleIds: list, customItemTypeId: string, sharedIds: list, dates: record, superTaskIds: list, priority: string, completedDate: string, superParentIds: list, accountId: string, dependencyIds: list, createdDate: string, cascadingFieldSettings: list, customStatusId: string, attachmentCount: float, workScheduleId: string, permalink: string, briefDescription: string, finance: record, status: string>, kind: string> {
@@ -3636,8 +3635,8 @@ export def "tasks GET:/tasks/multi" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --withInvitations: string@bool-completer # Include invitations in sharedIds & responsibleIds lists
-  --plainTextCustomFields: string@bool-completer # Strip HTML tags from custom fields
+  --withInvitations: oneof<nothing, bool> # Include invitations in sharedIds & responsibleIds lists
+  --plainTextCustomFields: oneof<nothing, bool> # Strip HTML tags from custom fields
   --qp-fields: string # Json string array of optional fields to be included in the response model * `cascadingFields` - Active cascading fields settings * `customItemTypeId` - Work Item custom item type Id * `billingType` - Billing type * `attachmentCount` - Attachment count * `workScheduleId` - Id of work schedule assigned to task * `responsiblePlaceholderIds` - List of placeholder responsible IDs * `effortAllocation` - Effort Allocation * `recurrent` - Add field to indicate if task is recurrent * `finance` - Task Finance fields
 ]: nothing -> record<data: table<metadata: list, importance: string, customFields: list, followerIds: list, parentIds: list, description: string, responsiblePlaceholderIds: list, updatedDate: string, title: string, followedByMe: bool, billingType: string, scope: string, id: string, effortAllocation: record, hasAttachments: bool, subTaskIds: list, recurrent: bool, authorIds: list, responsibleIds: list, customItemTypeId: string, sharedIds: list, dates: record, superTaskIds: list, priority: string, completedDate: string, superParentIds: list, accountId: string, dependencyIds: list, createdDate: string, cascadingFieldSettings: list, customStatusId: string, attachmentCount: float, workScheduleId: string, permalink: string, briefDescription: string, finance: record, status: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3735,7 +3734,7 @@ export def "tasks PUT:/tasks/single" [
   --addResponsiblePlaceholders: string # Add specified placeholders to placeholder assignee list
   --removeResponsiblePlaceholders: string # Remove specified placeholders from placeholder assignee list
   --addFollowers: string # Add specified users to task followers
-  --follow: string@bool-completer # Follow task
+  --follow: oneof<nothing, bool> # Follow task
   --priorityBefore: string # Put task in task list before specified task
   --priorityAfter: string # Put task in task list after specified task
   --addSuperTasks: string # Add the task as subtask to specified tasks
@@ -3743,13 +3742,13 @@ export def "tasks PUT:/tasks/single" [
   --metadata: string # Metadata to be updated (null value removes entry). Limit : `100`
   --customFields: string # Custom fields to be updated or deleted (null value removes field). Limit : `100`
   --customStatus: string # Custom status ID
-  --restore: string@bool-completer # Restore task from Recycled Bin
+  --restore: oneof<nothing, bool> # Restore task from Recycled Bin
   --effortAllocation: string # Set Task Effort fields: mode, total Effort
   --setResponsibleAllocation: string # Update responsible allocations
   --billingType: string@billingType-completer # Task's timelogs billing type * `Billable` - Billable * `NonBillable` - Non-Billable
-  --withInvitations: string@bool-completer # Include invitations in sharedIds & responsibleIds lists
+  --withInvitations: oneof<nothing, bool> # Include invitations in sharedIds & responsibleIds lists
   --convertToCustomItemType: string # Custom Item Type id
-  --plainTextCustomFields: string@bool-completer # Strip HTML tags from custom fields
+  --plainTextCustomFields: oneof<nothing, bool> # Strip HTML tags from custom fields
   --workScheduleId: string # Id of work schedule to assign to task
   --qp-fields: string # Json string array of optional fields to be included in the response model * `billingType` - Billing type * `workScheduleId` - Id of work schedule assigned to task * `effortAllocation` - Effort Allocation * `responsiblePlaceholderIds` - List of placeholder assignee IDs
 ]: nothing -> record<data: table<metadata: list, importance: string, customFields: list, followerIds: list, parentIds: list, description: string, responsiblePlaceholderIds: list, updatedDate: string, title: string, followedByMe: bool, billingType: string, scope: string, id: string, effortAllocation: record, hasAttachments: bool, subTaskIds: list, recurrent: bool, authorIds: list, responsibleIds: list, customItemTypeId: string, sharedIds: list, dates: record, superTaskIds: list, priority: string, completedDate: string, superParentIds: list, accountId: string, dependencyIds: list, createdDate: string, cascadingFieldSettings: list, customStatusId: string, attachmentCount: float, workScheduleId: string, permalink: string, briefDescription: string, finance: record, status: string>, kind: string> {
@@ -3988,9 +3987,9 @@ export def "timelogs GET:/timelogs/empty" [
   --createdDate: string # Created date filter, exact match or range
   --updatedDate: string # Last updated date filter, exact match or range
   --trackedDate: string # Tracked date filter, exact match or range
-  --me: string@bool-completer # If present - only timelogs created by current user are returned
-  --descendants: string@bool-completer # Adds all descendant tasks to search scope (default: true)
-  --plainText: string@bool-completer # Get comment text as plain text, HTML otherwise (default: false)
+  --me: oneof<nothing, bool> # If present - only timelogs created by current user are returned
+  --descendants: oneof<nothing, bool> # Adds all descendant tasks to search scope (default: true)
+  --plainText: oneof<nothing, bool> # Get comment text as plain text, HTML otherwise (default: false)
   --timelogCategories: string # Get timelog records for specified categories. Limit : `1000`
   --exportStatuses: string # Get timelog records with specified export statuses * `NotExported` - Not Exported * `Exported` - Exported * `ReadyForExport` - Ready For Export
   --billingTypes: string # Billing type filter * `Billable` - Billable * `NonBillable` - Non-Billable
@@ -4025,9 +4024,9 @@ export def "contacts-timelogs GET:/contacts/single/timelogs" [
   --createdDate: string # Created date filter, exact match or range
   --updatedDate: string # Last updated date filter, exact match or range
   --trackedDate: string # Tracked date filter, exact match or range
-  --me: string@bool-completer # If present - only timelogs created by current user are returned
-  --descendants: string@bool-completer # Adds all descendant tasks to search scope (default: true)
-  --plainText: string@bool-completer # Get comment text as plain text, HTML otherwise (default: false)
+  --me: oneof<nothing, bool> # If present - only timelogs created by current user are returned
+  --descendants: oneof<nothing, bool> # Adds all descendant tasks to search scope (default: true)
+  --plainText: oneof<nothing, bool> # Get comment text as plain text, HTML otherwise (default: false)
   --timelogCategories: string # Get timelog records for specified categories. Limit : `1000`
   --exportStatuses: string # Get timelog records with specified export statuses * `NotExported` - Not Exported * `Exported` - Exported * `ReadyForExport` - Ready For Export
   --billingTypes: string # Billing type filter * `Billable` - Billable * `NonBillable` - Non-Billable
@@ -4062,9 +4061,9 @@ export def "folders-timelogs GET:/folders/single/timelogs" [
   --createdDate: string # Created date filter, exact match or range
   --updatedDate: string # Last updated date filter, exact match or range
   --trackedDate: string # Tracked date filter, exact match or range
-  --me: string@bool-completer # If present - only timelogs created by current user are returned
-  --descendants: string@bool-completer # Adds all descendant tasks to search scope (default: true)
-  --plainText: string@bool-completer # Get comment text as plain text, HTML otherwise (default: false)
+  --me: oneof<nothing, bool> # If present - only timelogs created by current user are returned
+  --descendants: oneof<nothing, bool> # Adds all descendant tasks to search scope (default: true)
+  --plainText: oneof<nothing, bool> # Get comment text as plain text, HTML otherwise (default: false)
   --timelogCategories: string # Get timelog records for specified categories. Limit : `1000`
   --exportStatuses: string # Get timelog records with specified export statuses * `NotExported` - Not Exported * `Exported` - Exported * `ReadyForExport` - Ready For Export
   --billingTypes: string # Billing type filter * `Billable` - Billable * `NonBillable` - Non-Billable
@@ -4099,9 +4098,9 @@ export def "tasks-timelogs GET:/tasks/single/timelogs" [
   --createdDate: string # Created date filter, exact match or range
   --updatedDate: string # Last updated date filter, exact match or range
   --trackedDate: string # Tracked date filter, exact match or range
-  --me: string@bool-completer # If present - only timelogs created by current user are returned
-  --descendants: string@bool-completer # Adds all descendant tasks to search scope (default: true)
-  --plainText: string@bool-completer # Get comment text as plain text, HTML otherwise (default: false)
+  --me: oneof<nothing, bool> # If present - only timelogs created by current user are returned
+  --descendants: oneof<nothing, bool> # Adds all descendant tasks to search scope (default: true)
+  --plainText: oneof<nothing, bool> # Get comment text as plain text, HTML otherwise (default: false)
   --timelogCategories: string # Get timelog records for specified categories. Limit : `1000`
   --exportStatuses: string # Get timelog records with specified export statuses * `NotExported` - Not Exported * `Exported` - Exported * `ReadyForExport` - Ready For Export
   --billingTypes: string # Billing type filter * `Billable` - Billable * `NonBillable` - Non-Billable
@@ -4136,7 +4135,7 @@ export def "tasks-timelogs POST:/tasks/single/timelogs" [
   --comment: string # Timelog record comment
   --hours: float # Time to log in hours
   --trackedDate: string # Date to register time Format: yyyy-MM-dd
-  --plainText: string@bool-completer # Get comment text as plain text, HTML otherwise (default: false)
+  --plainText: oneof<nothing, bool> # Get comment text as plain text, HTML otherwise (default: false)
   --categoryId: string # Timelog category
   --onBehalfOf: string # Create a time entry for another user
   --qp-fields: string # Json string array of optional fields to be included in the response model * `approvalStatus` - Timesheet approval status * `billingType` - Timelog billing type
@@ -4166,9 +4165,9 @@ export def "timelog-categories-timelogs categories/single/timelogs" [
   --createdDate: string # Created date filter, exact match or range
   --updatedDate: string # Last updated date filter, exact match or range
   --trackedDate: string # Tracked date filter, exact match or range
-  --me: string@bool-completer # If present - only timelogs created by current user are returned
-  --descendants: string@bool-completer # Adds all descendant tasks to search scope (default: true)
-  --plainText: string@bool-completer # Get comment text as plain text, HTML otherwise (default: false)
+  --me: oneof<nothing, bool> # If present - only timelogs created by current user are returned
+  --descendants: oneof<nothing, bool> # Adds all descendant tasks to search scope (default: true)
+  --plainText: oneof<nothing, bool> # Get comment text as plain text, HTML otherwise (default: false)
   --timelogCategories: string # Get timelog records for specified categories. Limit : `1000`
   --exportStatuses: string # Get timelog records with specified export statuses * `NotExported` - Not Exported * `Exported` - Exported * `ReadyForExport` - Ready For Export
   --billingTypes: string # Billing type filter * `Billable` - Billable * `NonBillable` - Non-Billable
@@ -4200,7 +4199,7 @@ export def "timelogs GET:/timelogs/multi" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --plainText: string@bool-completer # Get comment text as plain text, HTML otherwise (default: false)
+  --plainText: oneof<nothing, bool> # Get comment text as plain text, HTML otherwise (default: false)
   --qp-fields: string # Json string array of optional fields to be included in the response model * `approvalStatus` - Timesheet approval status * `lockStatus` - Timelog lock status * `exportStatus` - Timelog export status field * `billingType` - Timelog billing type * `finance` - Timelog Finance fields
 ]: nothing -> record<data: table<approvalStatus: string, hours: float, exportStatus: string, updatedDate: string, userId: string, createdDate: string, lockStatus: string, billingType: string, trackedDate: string, comment: string, id: string, taskId: string, categoryId: string, finance: record>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4228,7 +4227,7 @@ export def "timelogs PUT:/timelogs/single" [
   --comment: string # Timelog comment
   --hours: float # New timelog tracked hours
   --trackedDate: string # New timelog date Format: yyyy-MM-dd
-  --plainText: string@bool-completer # Get comment text as plain text, HTML otherwise (default: false)
+  --plainText: oneof<nothing, bool> # Get comment text as plain text, HTML otherwise (default: false)
   --categoryId: string # Timelog category
   --qp-fields: string # Json string array of optional fields to be included in the response model * `approvalStatus` - Timesheet approval status * `billingType` - Timelog billing type
 ]: nothing -> record<data: table<approvalStatus: string, hours: float, exportStatus: string, updatedDate: string, userId: string, createdDate: string, lockStatus: string, billingType: string, trackedDate: string, comment: string, id: string, taskId: string, categoryId: string, finance: record>, kind: string> {
@@ -4343,7 +4342,7 @@ export def "workschedules-timesheet-submission-rules rules-by-workscheduleId-1" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Switch to toggle on/off timesheet submission rule
+  --enabled: oneof<nothing, bool> # Switch to toggle on/off timesheet submission rule
   --ruleType: string@ruleType-completer # Type of timesheet submission rule * `Hard` - Hard * `Soft` - Soft
   --frequency: string@frequency-completer # Frequency for timesheet submission rule * `Month` - Week * `Week` - Week * `Day` - Day
   --trackExceptionsMode: string@trackExceptionsMode-completer # Track exceptions mode for timesheet submission rule * `TotalCapacity` - Total Capacity * `ActualCapacity` - Actual Capacity
@@ -4850,7 +4849,7 @@ export def "users PUT:/users/single" [
   --allow-errors(-e) # Return full response without error handling
   --profile: string # [Deprecated] It is recommended to use 'userTypeId' parameter instead. Profile to be updated. Mutually exclusive with other params
   --userTypeId: string # Change user type of user in account. Mutually exclusive with other params
-  --active: string@bool-completer # Activate or deactivate user. Mutually exclusive with other params
+  --active: oneof<nothing, bool> # Activate or deactivate user. Mutually exclusive with other params
 ]: nothing -> record<data: table<userTypeId: string, lastName: string, metadata: list, avatarUrl: string, timezone: string, companyName: string, profiles: list, type: string, locale: string, title: string, firstName: string, deleted: bool, phone: string, me: bool, myTeam: bool, location: string, id: string, memberIds: list, primaryEmail: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4874,7 +4873,7 @@ export def "users PUT:/users/multi" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Activate or deactivate user. Mutually exclusive with other params
+  --active: oneof<nothing, bool> # Activate or deactivate user. Mutually exclusive with other params
 ]: nothing -> record<data: table<userTypeId: string, lastName: string, metadata: list, avatarUrl: string, timezone: string, companyName: string, profiles: list, type: string, locale: string, title: string, firstName: string, deleted: bool, phone: string, me: bool, myTeam: bool, location: string, id: string, memberIds: list, primaryEmail: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5355,7 +5354,7 @@ export def "workflows PUT:/workflows/single" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # Name of workflow (128 symbols max)
   --description: string # Description of workflow (2000 symbols max)
-  --hidden: string@bool-completer # Workflow is hidden
+  --hidden: oneof<nothing, bool> # Workflow is hidden
   --customStatus: string # Custom status
 ]: nothing -> record<data: table<standard: bool, hidden: bool, customStatuses: list, name: string, description: string, id: string, dataUsageStatistics: record>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

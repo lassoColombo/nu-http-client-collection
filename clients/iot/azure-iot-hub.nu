@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -822,7 +821,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-iot-hubs-e
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --api-version: string # The version of the API.
-  --excludeKeys: string@bool-completer # The value indicating whether keys should be excluded during export.
+  --excludeKeys: oneof<nothing, bool> # The value indicating whether keys should be excluded during export.
   exportBlobContainerUri: string # The export blob container URI.
 ]: any -> record<endTimeUtc: string, failureReason: string, jobId: string, parentJobId: string, startTimeUtc: string, status: string, statusMessage: string, type: string> {
   let input = $in

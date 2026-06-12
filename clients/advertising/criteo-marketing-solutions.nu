@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.criteo.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -130,7 +129,7 @@ export def "2023-10-log-level-advertisers-report GetTransparencyReport" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   endDate: string # End date of the report. Date component of ISO 8061 format, any time or timezone component is ignored. (format: date-time)
-  --shouldDisplayProductIds: string@bool-completer # Specify if the product ids are displayed in the report. (default: false)
+  --shouldDisplayProductIds: oneof<nothing, bool> # Specify if the product ids are displayed in the report. (default: false)
   startDate: string # Start date of the report. Date component of ISO 8061 format, any time or timezone component is ignored. (format: date-time)
 ]: any -> record<data: table<attributes: record, type: string>, errors: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>, warnings: table<code: string, detail: string, instance: string, source: record, stackTrace: string, title: string, traceId: string, traceIdentifier: string, type: string>> {
   let input = $in

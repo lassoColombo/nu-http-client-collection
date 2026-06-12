@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://www.googleapis.com/adsense/v1.4"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -107,7 +106,7 @@ export def "accounts adsenseaccountslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --maxResults: int # The maximum number of accounts to include in the response, used for paging.
@@ -139,10 +138,10 @@ export def "accounts adsenseaccountsget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --tree: string@bool-completer # Whether the tree of sub accounts should be returned.
+  --tree: oneof<nothing, bool> # Whether the tree of sub accounts should be returned.
 ]: nothing -> record<creation_time: string, id: string, kind: string, name: string, premium: bool, subAccounts: list<any>, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -170,7 +169,7 @@ export def "accounts-adclients adsenseaccountsadclientslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --maxResults: int # The maximum number of ad clients to include in the response, used for paging.
@@ -203,7 +202,7 @@ export def "accounts-adclients-adcode adsenseaccountsadclientsgetAdCode" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --tagPartner: string # Tag partner to include in the ad code snippet.
@@ -235,10 +234,10 @@ export def "accounts-adclients-adunits adsenseaccountsadunitslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --includeInactive: string@bool-completer # Whether to include inactive ad units. Default: true.
+  --includeInactive: oneof<nothing, bool> # Whether to include inactive ad units. Default: true.
   --maxResults: int # The maximum number of ad units to include in the response, used for paging.
   --pageToken: string # A continuation token, used to page through ad units. To retrieve the next page, set this parameter to the value of "nextPageToken" from the previous response.
 ]: nothing -> record<etag: string, items: table<code: string, contentAdsSettings: record, customStyle: record, feedAdsSettings: record, id: string, kind: string, mobileContentAdsSettings: record, name: string, savedStyleId: string, status: string>, kind: string, nextPageToken: string> {
@@ -270,7 +269,7 @@ export def "accounts-adclients-adunits adsenseaccountsadunitsget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<code: string, contentAdsSettings: record<backupOption: record<color: string, type: string, url: string>, size: string, type: string>, customStyle: record<colors: record<background: string, border: string, text: string, title: string, url: string>, corners: string, font: record<family: string, size: string>, kind: string>, feedAdsSettings: record<adPosition: string, frequency: int, minimumWordCount: int, type: string>, id: string, kind: string, mobileContentAdsSettings: record<markupLanguage: string, scriptingLanguage: string, size: string, type: string>, name: string, savedStyleId: string, status: string> {
@@ -302,7 +301,7 @@ export def "accounts-adclients-adunits-adcode adsenseaccountsadunitsgetAdCode" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<adCode: string, ampBody: string, ampHead: string, kind: string> {
@@ -334,7 +333,7 @@ export def "accounts-adclients-adunits-customchannels adsenseaccountsadunitscust
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --maxResults: int # The maximum number of custom channels to include in the response, used for paging.
@@ -367,7 +366,7 @@ export def "accounts-adclients-customchannels adsenseaccountscustomchannelslist"
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --maxResults: int # The maximum number of custom channels to include in the response, used for paging.
@@ -401,7 +400,7 @@ export def "accounts-adclients-customchannels adsenseaccountscustomchannelsget" 
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<code: string, id: string, kind: string, name: string, targetingInfo: record<adsAppearOn: string, description: string, location: string, siteLanguage: string>> {
@@ -433,10 +432,10 @@ export def "accounts-adclients-customchannels-adunits adsenseaccountscustomchann
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --includeInactive: string@bool-completer # Whether to include inactive ad units. Default: true.
+  --includeInactive: oneof<nothing, bool> # Whether to include inactive ad units. Default: true.
   --maxResults: int # The maximum number of ad units to include in the response, used for paging.
   --pageToken: string # A continuation token, used to page through ad units. To retrieve the next page, set this parameter to the value of "nextPageToken" from the previous response.
 ]: nothing -> record<etag: string, items: table<code: string, contentAdsSettings: record, customStyle: record, feedAdsSettings: record, id: string, kind: string, mobileContentAdsSettings: record, name: string, savedStyleId: string, status: string>, kind: string, nextPageToken: string> {
@@ -467,7 +466,7 @@ export def "accounts-adclients-urlchannels adsenseaccountsurlchannelslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --maxResults: int # The maximum number of URL channels to include in the response, used for paging.
@@ -499,7 +498,7 @@ export def "accounts-alerts adsenseaccountsalertslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --locale: string # The locale to use for translating alert messages. The account locale will be used if this is not supplied. The AdSense default (English) will be used if the supplied locale is invalid or unsupported.
@@ -531,7 +530,7 @@ export def "accounts-alerts adsenseaccountsalertsdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
@@ -561,7 +560,7 @@ export def "accounts-payments adsenseaccountspaymentslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<items: table<id: string, kind: string, paymentAmount: string, paymentAmountCurrencyCode: string, paymentDate: string>, kind: string> {
@@ -591,7 +590,7 @@ export def "accounts-reports adsenseaccountsreportsgenerate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --startDate: string # Start of the date range to report on in "YYYY-MM-DD" format, inclusive.
@@ -604,7 +603,7 @@ export def "accounts-reports adsenseaccountsreportsgenerate" [
   --metric: list # Numeric columns to include in the report.
   --qp-sort: list # The name of a dimension or metric to sort the resulting report on, optionally prefixed with "+" to sort ascending or "-" to sort descending. If no prefix is specified, the column is sorted ascending.
   --startIndex: int # Index of the first row of report data to return.
-  --useTimezoneReporting: string@bool-completer # Whether the report should be generated in the AdSense account's local timezone. If false default PST/PDT timezone will be used.
+  --useTimezoneReporting: oneof<nothing, bool> # Whether the report should be generated in the AdSense account's local timezone. If false default PST/PDT timezone will be used.
 ]: nothing -> record<averages: list<string>, endDate: string, headers: table<currency: string, name: string, type: string>, kind: string, rows: list<list<string>>, startDate: string, totalMatchedRows: string, totals: list<string>, warnings: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -632,7 +631,7 @@ export def "accounts-reports-saved adsenseaccountsreportssavedlist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --maxResults: int # The maximum number of saved reports to include in the response, used for paging.
@@ -665,7 +664,7 @@ export def "accounts-reports adsenseaccountsreportssavedgenerate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --locale: string # Optional locale to use for translating report output to a local language. Defaults to "en_US" if not specified.
@@ -698,7 +697,7 @@ export def "accounts-savedadstyles adsenseaccountssavedadstyleslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --maxResults: int # The maximum number of saved ad styles to include in the response, used for paging.
@@ -731,7 +730,7 @@ export def "accounts-savedadstyles adsenseaccountssavedadstylesget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<adStyle: record<colors: record<background: string, border: string, text: string, title: string, url: string>, corners: string, font: record<family: string, size: string>, kind: string>, id: string, kind: string, name: string> {
@@ -760,7 +759,7 @@ export def "adclients adsenseadclientslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --maxResults: int # The maximum number of ad clients to include in the response, used for paging.
@@ -792,10 +791,10 @@ export def "adclients-adunits adsenseadunitslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --includeInactive: string@bool-completer # Whether to include inactive ad units. Default: true.
+  --includeInactive: oneof<nothing, bool> # Whether to include inactive ad units. Default: true.
   --maxResults: int # The maximum number of ad units to include in the response, used for paging.
   --pageToken: string # A continuation token, used to page through ad units. To retrieve the next page, set this parameter to the value of "nextPageToken" from the previous response.
 ]: nothing -> record<etag: string, items: table<code: string, contentAdsSettings: record, customStyle: record, feedAdsSettings: record, id: string, kind: string, mobileContentAdsSettings: record, name: string, savedStyleId: string, status: string>, kind: string, nextPageToken: string> {
@@ -826,7 +825,7 @@ export def "adclients-adunits adsenseadunitsget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<code: string, contentAdsSettings: record<backupOption: record<color: string, type: string, url: string>, size: string, type: string>, customStyle: record<colors: record<background: string, border: string, text: string, title: string, url: string>, corners: string, font: record<family: string, size: string>, kind: string>, feedAdsSettings: record<adPosition: string, frequency: int, minimumWordCount: int, type: string>, id: string, kind: string, mobileContentAdsSettings: record<markupLanguage: string, scriptingLanguage: string, size: string, type: string>, name: string, savedStyleId: string, status: string> {
@@ -857,7 +856,7 @@ export def "adclients-adunits-adcode adsenseadunitsgetAdCode" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<adCode: string, ampBody: string, ampHead: string, kind: string> {
@@ -888,7 +887,7 @@ export def "adclients-adunits-customchannels adsenseadunitscustomchannelslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --maxResults: int # The maximum number of custom channels to include in the response, used for paging.
@@ -920,7 +919,7 @@ export def "adclients-customchannels adsensecustomchannelslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --maxResults: int # The maximum number of custom channels to include in the response, used for paging.
@@ -953,7 +952,7 @@ export def "adclients-customchannels adsensecustomchannelsget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<code: string, id: string, kind: string, name: string, targetingInfo: record<adsAppearOn: string, description: string, location: string, siteLanguage: string>> {
@@ -984,10 +983,10 @@ export def "adclients-customchannels-adunits adsensecustomchannelsadunitslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --includeInactive: string@bool-completer # Whether to include inactive ad units. Default: true.
+  --includeInactive: oneof<nothing, bool> # Whether to include inactive ad units. Default: true.
   --maxResults: int # The maximum number of ad units to include in the response, used for paging.
   --pageToken: string # A continuation token, used to page through ad units. To retrieve the next page, set this parameter to the value of "nextPageToken" from the previous response.
 ]: nothing -> record<etag: string, items: table<code: string, contentAdsSettings: record, customStyle: record, feedAdsSettings: record, id: string, kind: string, mobileContentAdsSettings: record, name: string, savedStyleId: string, status: string>, kind: string, nextPageToken: string> {
@@ -1017,7 +1016,7 @@ export def "adclients-urlchannels adsenseurlchannelslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --maxResults: int # The maximum number of URL channels to include in the response, used for paging.
@@ -1048,7 +1047,7 @@ export def "alerts adsensealertslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --locale: string # The locale to use for translating alert messages. The account locale will be used if this is not supplied. The AdSense default (English) will be used if the supplied locale is invalid or unsupported.
@@ -1079,7 +1078,7 @@ export def "alerts adsensealertsdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
@@ -1108,7 +1107,7 @@ export def "metadata-dimensions adsensemetadatadimensionslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<items: table<compatibleDimensions: list, compatibleMetrics: list, id: string, kind: string, requiredDimensions: list, requiredMetrics: list, supportedProducts: list>, kind: string> {
@@ -1137,7 +1136,7 @@ export def "metadata-metrics adsensemetadatametricslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<items: table<compatibleDimensions: list, compatibleMetrics: list, id: string, kind: string, requiredDimensions: list, requiredMetrics: list, supportedProducts: list>, kind: string> {
@@ -1166,7 +1165,7 @@ export def "payments adsensepaymentslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<items: table<id: string, kind: string, paymentAmount: string, paymentAmountCurrencyCode: string, paymentDate: string>, kind: string> {
@@ -1195,7 +1194,7 @@ export def "reports adsensereportsgenerate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --startDate: string # Start of the date range to report on in "YYYY-MM-DD" format, inclusive.
@@ -1209,7 +1208,7 @@ export def "reports adsensereportsgenerate" [
   --metric: list # Numeric columns to include in the report.
   --qp-sort: list # The name of a dimension or metric to sort the resulting report on, optionally prefixed with "+" to sort ascending or "-" to sort descending. If no prefix is specified, the column is sorted ascending.
   --startIndex: int # Index of the first row of report data to return.
-  --useTimezoneReporting: string@bool-completer # Whether the report should be generated in the AdSense account's local timezone. If false default PST/PDT timezone will be used.
+  --useTimezoneReporting: oneof<nothing, bool> # Whether the report should be generated in the AdSense account's local timezone. If false default PST/PDT timezone will be used.
 ]: nothing -> record<averages: list<string>, endDate: string, headers: table<currency: string, name: string, type: string>, kind: string, rows: list<list<string>>, startDate: string, totalMatchedRows: string, totals: list<string>, warnings: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1236,7 +1235,7 @@ export def "reports-saved adsensereportssavedlist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --maxResults: int # The maximum number of saved reports to include in the response, used for paging.
@@ -1268,7 +1267,7 @@ export def "reports adsensereportssavedgenerate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --locale: string # Optional locale to use for translating report output to a local language. Defaults to "en_US" if not specified.
@@ -1300,7 +1299,7 @@ export def "savedadstyles adsensesavedadstyleslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --maxResults: int # The maximum number of saved ad styles to include in the response, used for paging.
@@ -1332,7 +1331,7 @@ export def "savedadstyles adsensesavedadstylesget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<adStyle: record<colors: record<background: string, border: string, text: string, title: string, url: string>, corners: string, font: record<family: string, size: string>, kind: string>, id: string, kind: string, name: string> {

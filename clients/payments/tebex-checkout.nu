@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://checkout.tebex.io/api"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -135,7 +134,7 @@ export def "baskets updateBasket" [
   --last-name: string # nullable
   --postal-code: string # nullable
   --creator-code: string # nullable
-  --complete-auto-redirect: string@bool-completer # nullable
+  --complete-auto-redirect: oneof<nothing, bool> # nullable
   --expires-at: string # An ISO8601 formatted date. After this date the basket cannot be used to checkout. (nullable, format: date-time, e.g. 2025-01-27T18:09:51Z)
 ]: any -> any {
   let input = $in
@@ -421,7 +420,7 @@ export def "baskets createBasket" [
   --first-name: string # The first name of the customer (e.g. Neil)
   --last-name: string # The last name of the customer (e.g. McNeil)
   --email: string # The email address of the customer (e.g. example@tebex.io)
-  --complete-auto-redirect: string@bool-completer # Automatically redirect to the complete_url provided (e.g. true)
+  --complete-auto-redirect: oneof<nothing, bool> # Automatically redirect to the complete_url provided (e.g. true)
   --country: string # An ISO 3166-1 alpha-2 character code representing the customer's country. (e.g. US)
   --creator-code: string # The creator code is used to share a percentage of the payment with another party. See more about creator codes at https://docs.tebex.io/creators/tebex-control-panel/engagement/creator-codes
   --ip: string # The IP address of the customer using this basket. Provide the IP if creating a basket on your server backend. (e.g. 1.2.3.4)

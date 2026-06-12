@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://rest.iad-01.braze.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -285,7 +284,7 @@ export def "canvas-trigger-schedule-create scheduleApiTriggeredCanvases" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --audience: record # shape: {AND?: list}
-  --broadcast: string@bool-completer # e.g. false
+  --broadcast: oneof<nothing, bool> # e.g. false
   --canvas-entry-properties: record
   --canvas-id: string # e.g. canvas_identifier
   --recipients: list # item shape: {canvas_entry_properties?: record, external_user_id?: string, trigger_properties?: string, user_alias?: string}

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.us.nylas.com" "https://api.eu.nylas.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -296,7 +295,7 @@ export def "grants-calendars-free-busy post-calendars-free-busy" [
   start_time: int # The start of a time block, in seconds using the Unix timestamp format. Nylas uses `start_time` and `end_time` to assess the specified account's free/busy schedule. (e.g. 1690862400)
   end_time: int # The end of a time block, in seconds using the Unix timestamp format. Nylas uses `start_time` and `end_time` to assess the specified account's free/busy schedule.  For Google and EWS accounts, Nylas can query a timespan of up to 3 months from the `start_time`.  For Microsoft Graph accounts, Nylas can query a timespan of up to 62 days from the `start_time`. (e.g. 1691208000)
   emails: list # A list of email addresses to check the free/busy schedules for.
-  --tentative-as-busy: string@bool-completer # When `true`, Nylas treats tentative events as busy. (default: true)
+  --tentative-as-busy: oneof<nothing, bool> # When `true`, Nylas treats tentative events as busy. (default: true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -324,12 +323,12 @@ export def "grants-events get-all-events" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --attendees: string # (Not supported for virtual calendars) Filter for events that include the specified attendees. This parameter accepts a comma-delimited list of email addresses.
-  --busy: string@bool-completer # (Not supported for iCloud) Filter for events with the specified `busy` status.
+  --busy: oneof<nothing, bool> # (Not supported for iCloud) Filter for events with the specified `busy` status.
   --calendar-id: string # Filter for the specified calendar ID.  (Not supported for iCloud) You can use `primary` to query the user's primary calendar.
   --description: string # Filter for events matching the specified description. The filter is case insensitive and will match partial descriptions.
   --end: int # Filter for events that end at or before the specified time, in seconds using the Unix timestamp format. For example, if you filter for events that end at 5:00p.m., and the calendar includes an event that runs from 4:30–5:30p.m., Nylas returns that event.  Defaults to one month from the time you make the request.  The `end` value cannot be earlier than `start`. For iCloud accounts, the difference between `start` and `end` can't be greater than one year.
   --event-type: string@event-type-completer # (Google only) Filter for events with the specified event type. You can pass this query parameter multiple times to select or exclude multiple event types. For example, `event_type=default&event_type=outOfOffice` returns all events that are default or `OOO`, and excludes any events that are `focusTime` or that have a `workingLocation`.  If you don't specify an event type, Nylas uses `default` to filter for regular events that don't have another specific type.
-  --expand-recurring: string@bool-completer # **This parameter is deprecated. Use the [Import Events endpoint](/docs/reference/api/events/import-events/) instead**.  When `true`, Nylas returns all recurring events within the specified time range, including individual occurrences of the recurring event. Otherwise, Nylas only returns the parent event and any event overrides (individual occurrences that have been edited) in the time range. (DEPRECATED, default: true)
+  --expand-recurring: oneof<nothing, bool> # **This parameter is deprecated. Use the [Import Events endpoint](/docs/reference/api/events/import-events/) instead**.  When `true`, Nylas returns all recurring events within the specified time range, including individual occurrences of the recurring event. Otherwise, Nylas only returns the parent event and any event overrides (individual occurrences that have been edited) in the time range. (DEPRECATED, default: true)
   --ical-uid: string # (Not supported for iCloud) Filter for events with the specified `ical_uid`. You _cannot_ apply other filters if you use this parameter.
   --limit: int # The maximum number of objects to return. See [Pagination](/docs/reference/api/#pagination) for more information. (default: 50)
   --location: string # Filter for events with the specified location. The filter is case insensitive and will match partial locations.
@@ -337,9 +336,9 @@ export def "grants-events get-all-events" [
   --metadata-pair: string # Pass a metadata key/value pair (for example, `?metadata_pair=key1:value`) to search for metadata associated with objects. See [Metadata](/docs/reference/api/#metadata) for more information.
   --page-token: string # An identifier that specifies which page of data to return. You can get this value from the `next_cursor` response field. See [Pagination](/docs/reference/api/#pagination) for more information.
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
-  --show-cancelled: string@bool-completer # (Not supported for iCloud or EWS) If `true`, Nylas includes events whose `status` is `cancelled`.  Different providers have different semantics for cancelled events:  - **Google**: An event is considered cancelled after a user deletes it from their calendar, until it's eventually hard-deleted and is no longer readable. - **Microsoft**: An event is considered cancelled if the user is invited to an event and the organizer deletes it. The cancelled version of the event stays on the participants' calendars until they delete it manually. (default: false)
+  --show-cancelled: oneof<nothing, bool> # (Not supported for iCloud or EWS) If `true`, Nylas includes events whose `status` is `cancelled`.  Different providers have different semantics for cancelled events:  - **Google**: An event is considered cancelled after a user deletes it from their calendar, until it's eventually hard-deleted and is no longer readable. - **Microsoft**: An event is considered cancelled if the user is invited to an event and the organizer deletes it. The cancelled version of the event stays on the participants' calendars until they delete it manually. (default: false)
   --start: int # Filter for events that start at or after the specified time, in seconds using the Unix timestamp format. For example, if you filter for events that start at 9:00a.m., and the calendar includes an event that runs from 8:30–9:30a.m., Nylas returns that event.  Defaults to the time that you make the request.  The `start` value cannot be later than `end`. For iCloud accounts, the difference between `start` and `end` can't be greater than one year.
-  --tentative-as-busy: string@bool-completer # (Microsoft and EWS only) When `true`, Nylas treats tentative events as busy. (default: true)
+  --tentative-as-busy: oneof<nothing, bool> # (Microsoft and EWS only) When `true`, Nylas treats tentative events as busy. (default: true)
   --title: string # Filter for events that match the specified title. The filter is case insensitive and will match partial titles.
   --updated-after: int # (Google, Microsoft, and EWS only) Filter for events that have been updated after the specified time, in seconds using the Unix timestamp format.  `updated_after` is _not_ respected by metadata filtering.
   --updated-before: int # (Google, Microsoft, and EWS only) Filter for events that have been updated before the specified time, in seconds using the Unix timestamp format.  `updated_before` is _not_ respected by metadata filtering.
@@ -374,13 +373,13 @@ export def "grants-events create-event" [
   --allow-errors(-e) # Return full response without error handling
   --calendar-id: string # Filter for the specified calendar ID.  (Not supported for iCloud) You can use `primary` to query the user's primary calendar.
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
-  --notify-participants: string@bool-completer # Filter for events matching the specified `notify_participants` setting.  Microsoft and iCloud do _not_ support `notify_participants=false`. (default: true)
-  --tentative-as-busy: string@bool-completer # (Microsoft and EWS only) When `true`, Nylas treats tentative events as busy. (default: true)
-  --busy: string@bool-completer # When `true`, shows the event's time block as "busy" on shared or public calendars. This might be called "transparency" in some systems. This field may be `null` if not explicitly set. Treat `null` the same as `true` (the default behavior). (nullable, e.g. true)
+  --notify-participants: oneof<nothing, bool> # Filter for events matching the specified `notify_participants` setting.  Microsoft and iCloud do _not_ support `notify_participants=false`. (default: true)
+  --tentative-as-busy: oneof<nothing, bool> # (Microsoft and EWS only) When `true`, Nylas treats tentative events as busy. (default: true)
+  --busy: oneof<nothing, bool> # When `true`, shows the event's time block as "busy" on shared or public calendars. This might be called "transparency" in some systems. This field may be `null` if not explicitly set. Treat `null` the same as `true` (the default behavior). (nullable, e.g. true)
   --capacity: int # The maximum number of participants that can attend the event. (e.g. 5)
   --conferencing: record # An object that lets you automatically create a conference, or enter conferencing details manually.  You can't use `autocreate` and `details` in the same request. If you do, Nylas returns an error.  Nylas stores conference information in the event description. To remove conference details, set `conferencing` to `{}` and remove the corresponding conference information from the description in the same request. — shape: {provider?: "Google Meet"|"Zoom Meeting"|"Microsoft Teams", autocreate?: record, details?: record}
   --description: string # A brief description of the event (for example, its agenda). Nylas might return the description as an HTML string, depending on how the provider formats it.  For Google accounts, this field accepts a maximum of 8,192 characters. (e.g. Come ready to talk philosophy!)
-  --hide-participants: string@bool-completer # When `true`, hides the event's list of participants. (e.g. false)
+  --hide-participants: oneof<nothing, bool> # When `true`, hides the event's list of participants. (e.g. false)
   --location: string # The location of the event (for example, a physical address or the name of a meeting room). (e.g. Room 130)
   --metadata: record # The metadata associated with the object. For more information, see [Metadata](/docs/reference/api/#metadata).
   --notetaker: record # shape: {meeting_settings?: record, name?: string}
@@ -449,7 +448,7 @@ export def "grants-events get-events-id" [
   --allow-errors(-e) # Return full response without error handling
   --calendar-id: string # The calendar ID of the event.  For Microsoft, we do not validate whether the given calendar ID matches the real calendar ID of the event. This is due to a limitation of the Microsoft Graph API.  (Not supported for iCloud) You can use `primary` to query the user's primary calendar.
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
-  --tentative-as-busy: string@bool-completer # (Microsoft and EWS only) When `true`, Nylas treats tentative events as busy. (default: true)
+  --tentative-as-busy: oneof<nothing, bool> # (Microsoft and EWS only) When `true`, Nylas treats tentative events as busy. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -482,13 +481,13 @@ export def "grants-events put-events-id" [
   --allow-errors(-e) # Return full response without error handling
   --calendar-id: string # The calendar ID of the event.  For Microsoft, we do not validate whether the given calendar ID matches the real calendar ID of the event. This is due to a limitation of the Microsoft Graph API.  (Not supported for iCloud) You can use `primary` to query the user's primary calendar.
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
-  --notify-participants: string@bool-completer # Filter for events matching the specified `notify_participants` setting.  Microsoft and iCloud do _not_ support `notify_participants=false`. (default: true)
-  --tentative-as-busy: string@bool-completer # (Microsoft and EWS only) When `true`, Nylas treats tentative events as busy. (default: true)
-  --busy: string@bool-completer # When `true`, shows the event's time block as "busy" on shared or public calendars. This might be called "transparency" in some systems. This field may be `null` if not explicitly set. Treat `null` the same as `true` (the default behavior). (nullable, e.g. true)
+  --notify-participants: oneof<nothing, bool> # Filter for events matching the specified `notify_participants` setting.  Microsoft and iCloud do _not_ support `notify_participants=false`. (default: true)
+  --tentative-as-busy: oneof<nothing, bool> # (Microsoft and EWS only) When `true`, Nylas treats tentative events as busy. (default: true)
+  --busy: oneof<nothing, bool> # When `true`, shows the event's time block as "busy" on shared or public calendars. This might be called "transparency" in some systems. This field may be `null` if not explicitly set. Treat `null` the same as `true` (the default behavior). (nullable, e.g. true)
   --capacity: int # The maximum number of participants that can attend the event. (e.g. 5)
   --conferencing: record # An object that lets you automatically create a conference, or enter conferencing details manually.  You can't use `autocreate` and `details` in the same request. If you do, Nylas returns an error.  Nylas stores conference information in the event description. To remove conference details, set `conferencing` to `{}` and remove the corresponding conference information from the description in the same request. — shape: {provider?: "Google Meet"|"Zoom Meeting"|"Microsoft Teams", autocreate?: record, details?: record}
   --description: string # A brief description of the event (for example, its agenda). Nylas might return the description as an HTML string, depending on how the provider formats it.  For Google accounts, this field accepts a maximum of 8,192 characters. (e.g. Come ready to talk philosophy!)
-  --hide-participants: string@bool-completer # When `true`, hides the event's list of participants. (e.g. false)
+  --hide-participants: oneof<nothing, bool> # When `true`, hides the event's list of participants. (e.g. false)
   --location: string # The location of the event (for example, a physical address or the name of a meeting room). (e.g. Room 130)
   --metadata: record # The metadata associated with the object. For more information, see [Metadata](/docs/reference/api/#metadata).
   --notetaker: record # shape: {meeting_settings?: record, name?: string}
@@ -527,7 +526,7 @@ export def "grants-events delete-events-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --calendar-id: string # The calendar ID of the event.  For Microsoft, we do not validate whether the given calendar ID matches the real calendar ID of the event. This is due to a limitation of the Microsoft Graph API.  (Not supported for iCloud) You can use `primary` to query the user's primary calendar.
-  --notify-participants: string@bool-completer # Filter for events matching the specified `notify_participants` setting.  Microsoft and iCloud do _not_ support `notify_participants=false`. (default: true)
+  --notify-participants: oneof<nothing, bool> # Filter for events matching the specified `notify_participants` setting.  Microsoft and iCloud do _not_ support `notify_participants=false`. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -553,7 +552,7 @@ export def "grants-events-send-rsvp send-rsvp" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --calendar-id: string # Filter for the specified calendar ID.  (Not supported for iCloud) You can use `primary` to query the user's primary calendar.
-  --skip-nylas-email: string@bool-completer # When `true`, Nylas does not send the RSVP email to the event organizer. (default: false)
+  --skip-nylas-email: oneof<nothing, bool> # When `true`, Nylas does not send the RSVP email to the event organizer. (default: false)
   --status: string@status-completer # A participant's RSVP status for the event. (e.g. maybe)
 ]: any -> any {
   let input = $in
@@ -1060,22 +1059,22 @@ export def "grants-messages get-messages" [
   --cc: string # Return messages that include the specified email address in the CC list.  For Microsoft grants, Nylas sometimes doesn't return messages that satisfy the conditions of this query parameter. This is because of a limitation on the provider. Instead, you can use the `thread_id` to retrieve a specific conversation.
   --qp-fields: string@fields-completer # Return the specified data for each message.  - `standard`: Returns the standard message payload. - `include_headers`: Returns messages and their full set of headers. - `include_basic_headers`: Returns messages with only the three RFC threading headers   (`Message-ID`, `In-Reply-To`, `References`) in the `headers` array. Use this option when you   only need to track message identity and thread relationships — payload size is significantly   smaller than `include_headers`. - `include_tracking_options`: Returns messages and their [tracking settings](/docs/v3/email/message-tracking/). - `raw_mime`: Returns the `grant_id`, `object`, `id`, and `raw_mime` fields for each message. (default: standard)
   --qp-from: string # Return messages sent from the specified email address. If you want to filter for messages sent from the current grant, use the `in` query parameter and specify the Sent folder instead.  For Microsoft grants, Nylas sometimes doesn't return messages that satisfy the conditions of this query parameter. This is because of a limitation on the provider. Instead, you can use the `thread_id` to retrieve a specific conversation.
-  --has-attachment: string@bool-completer # When `true`, Nylas returns messages that include attachments.
+  --has-attachment: oneof<nothing, bool> # When `true`, Nylas returns messages that include attachments.
   --in-param: string # Return messages in the specified folder or label, by folder ID. Required when using `shared_from` or `query_imap`.
   --limit: int # The maximum number of objects to return. See [Pagination](/docs/reference/api/#pagination) for more information. (default: 50)
   --metadata-pair: string # Pass a metadata key/value pair (for example, `?metadata_pair=key1:value`) to search for metadata associated with objects. See [Metadata](/docs/reference/api/#metadata) for more information.
   --page-token: string # An identifier that specifies which page of data to return. You can get this value from the `next_cursor` response field. See [Pagination](/docs/reference/api/#pagination) for more information.
-  --query-imap: string@bool-completer # (IMAP, Yahoo, and iCloud only) When `true`, Nylas queries the IMAP server directly instead of the Nylas database. You also need to set the `in` query parameter in your request so Nylas knows which folder to query. (default: false)
+  --query-imap: oneof<nothing, bool> # (IMAP, Yahoo, and iCloud only) When `true`, Nylas queries the IMAP server directly instead of the Nylas database. You also need to set the `in` query parameter in your request so Nylas knows which folder to query. (default: false)
   --received-after: int # Return messages received after the specified time, in seconds using the Unix timestamp format.
   --received-before: int # Return messages received before the specified time, in seconds using the Unix timestamp format.
   --search-query-native: string # Specify a URL-encoded provider-specific query string. Each provider supports a limited set of query parameters that you can use in your request alongside `search_query_native`:  - **Google**: `in`, `limit`, and `page_token` - **Microsoft**: `in`, `limit`, and `page_token` - **IMAP/Yahoo/iCloud**: Any parameter - **EWS**: Any parameter _except_ `thread_id`  Required when using `shared_from`.  For more information, see [Searching with Nylas](/docs/dev-guide/best-practices/search/#search-messages-and-threads-using-search_query_native).
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --shared-from: string # (Microsoft only) When provided, Nylas returns items that were shared from the specified email address. It also accepts grant ID. This parameter only accepts single email address or grant ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
-  --starred: string@bool-completer # When `true`, Nylas returns starred messages.  EWS only supports starred messages on Microsoft Exchange 2010 or later.
+  --starred: oneof<nothing, bool> # When `true`, Nylas returns starred messages.  EWS only supports starred messages on Microsoft Exchange 2010 or later.
   --subject: string # Return messages with a matching subject. This filter is case-sensitive and returns partial matches.
   --thread-id: string # Return messages in the specified thread.
   --qp-to: string # Return messages sent to the specified email address.  For Microsoft grants, Nylas sometimes doesn't return messages that satisfy the conditions of this query parameter. This is because of a limitation on the provider. Instead, you can use the `thread_id` to retrieve a specific conversation.
-  --unread: string@bool-completer # When `true`, Nylas returns unread messages.
+  --unread: oneof<nothing, bool> # When `true`, Nylas returns unread messages.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1102,7 +1101,7 @@ export def "grants-messages get-messages-id" [
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: string@fields-completer # Return the specified data for each message.   - `standard`: Returns the standard message payload.  - `include_headers`: Returns the message and its full set of headers.  - `include_basic_headers`: Returns the message with only the three RFC threading headers    (`Message-ID`, `In-Reply-To`, `References`) in the `headers` array. Use this option when you    only need to track message identity and thread relationships — payload size is significantly    smaller than `include_headers`.  - `include_tracking_options`: Returns the message and its [tracking settings](/docs/v3/email/message-tracking/).  - `raw_mime`: Returns the `grant_id`, `object`, `id`, and `raw_mime` fields for the message. (default: standard)
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
-  --query-imap: string@bool-completer # (IMAP, iCloud, and Yahoo only) When `true`, Nylas queries from the IMAP server directly instead of the Nylas database. (default: false)
+  --query-imap: oneof<nothing, bool> # (IMAP, iCloud, and Yahoo only) When `true`, Nylas queries from the IMAP server directly instead of the Nylas database. (default: false)
   --shared-from: string # (Microsoft only) When provided, Nylas returns items that were shared from the specified email address. It also accepts grant ID. This parameter only accepts single email address or grant ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1129,10 +1128,10 @@ export def "grants-messages put-messages-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
-  --query-imap: string@bool-completer # (IMAP, iCloud, and Yahoo only) When `true`, Nylas queries from the IMAP server directly instead of the Nylas database. (default: false)
+  --query-imap: oneof<nothing, bool> # (IMAP, iCloud, and Yahoo only) When `true`, Nylas queries from the IMAP server directly instead of the Nylas database. (default: false)
   --shared-from: string # (Microsoft only) When provided, Nylas returns items that were shared from the specified email address. It also accepts grant ID. This parameter only accepts single email address or grant ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
-  --starred: string@bool-completer # Set to `true` to mark as starred; `false` to mark as not starred. (e.g. true)
-  --unread: string@bool-completer # Set to `true` to mark as unread; `false` to mark as read. (e.g. true)
+  --starred: oneof<nothing, bool> # Set to `true` to mark as starred; `false` to mark as not starred. (e.g. true)
+  --unread: oneof<nothing, bool> # Set to `true` to mark as unread; `false` to mark as read. (e.g. true)
   --folders: list # The ID(s) of the folder(s) to apply, overwriting all folders previously associated with the message. Microsoft messages can be in a single folder only. Google allows a single message to appear in multiple folders. (e.g. [folder-1, folder-2])
   --metadata: record # The metadata associated with the object. For more information, see [Metadata](/docs/reference/api/#metadata).
 ]: any -> any {
@@ -1162,7 +1161,7 @@ export def "grants-messages delete-message" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hard-delete: string@bool-completer # When `true`, Nylas immediately deletes the specified message instead of sending it to the user's Trash folder. This operation is irreversible.  To use this query parameter, you need to turn on "Enable hard delete" in the [Nylas Dashboard](https://dashboard-v3.nylas.com/?utm_source=docs&utm_content=docs-hard-delete) under **Customizations > API**. (default: false)
+  --hard-delete: oneof<nothing, bool> # When `true`, Nylas immediately deletes the specified message instead of sending it to the user's Trash folder. This operation is irreversible.  To use this query parameter, you need to turn on "Enable hard delete" in the [Nylas Dashboard](https://dashboard-v3.nylas.com/?utm_source=docs&utm_content=docs-hard-delete) under **Customizations > API**. (default: false)
   --shared-from: string # (Microsoft only) When provided, Nylas returns items that were shared from the specified email address. It also accepts grant ID. This parameter only accepts single email address or grant ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1190,12 +1189,12 @@ export def "grants-messages-clean clean-messages" [
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --shared-from: string # (Microsoft only) When provided, Nylas returns items that were shared from the specified email address. It also accepts grant ID. This parameter only accepts single email address or grant ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
   --message-id: list # An array of IDs for the messages Nylas will clean. (e.g. [18df98cadcc8534a])
-  --ignore-links: string@bool-completer # If `true`, removes link-related tags (`<a>`) from the message while keeping the text. (default: true, e.g. true)
-  --ignore-images: string@bool-completer # If `true`, removes images from the message. (default: true, e.g. true)
-  --images-as-markdown: string@bool-completer # If `true`, converts images in the message to [Markdown](https://en.wikipedia.org/wiki/Markdown). Can't be `false` when `html_as_markdown` is `true`. (default: true, e.g. true)
-  --ignore-tables: string@bool-completer # If `true`, removes table-related tags (`<table>`, `<th>`, `<td>`, `<tr>`) from the message while keeping rows. (default: true, e.g. true)
-  --remove-conclusion-phrases: string@bool-completer # If `true`, removes phrases such as "Best" and "Regards" from the message signature. (default: true, e.g. true)
-  --html-as-markdown: string@bool-completer # **This property is in beta**. If `true`, converts the message to [Markdown](https://en.wikipedia.org/wiki/Markdown). Can't be `true` when `images_as_markdown` is `false`. (default: false, e.g. false)
+  --ignore-links: oneof<nothing, bool> # If `true`, removes link-related tags (`<a>`) from the message while keeping the text. (default: true, e.g. true)
+  --ignore-images: oneof<nothing, bool> # If `true`, removes images from the message. (default: true, e.g. true)
+  --images-as-markdown: oneof<nothing, bool> # If `true`, converts images in the message to [Markdown](https://en.wikipedia.org/wiki/Markdown). Can't be `false` when `html_as_markdown` is `true`. (default: true, e.g. true)
+  --ignore-tables: oneof<nothing, bool> # If `true`, removes table-related tags (`<table>`, `<th>`, `<td>`, `<tr>`) from the message while keeping rows. (default: true, e.g. true)
+  --remove-conclusion-phrases: oneof<nothing, bool> # If `true`, removes phrases such as "Best" and "Regards" from the message signature. (default: true, e.g. true)
+  --html-as-markdown: oneof<nothing, bool> # **This property is in beta**. If `true`, converts the message to [Markdown](https://en.wikipedia.org/wiki/Markdown). Can't be `true` when `images_as_markdown` is `false`. (default: false, e.g. false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1239,7 +1238,7 @@ export def "grants-messages-send send-message" [
   --cc: list # A list of people CC'd on the message. — item shape: {name?: string, email?: string}
   --custom-headers: list # An array of custom headers to add to the message. — item shape: {name?: string, value?: string}
   --body-from: list # The sender of the message. Accepts a single object in an array. If omitted, Nylas uses the grant's email address and display name. — item shape: {name?: string, email: string}
-  --is-plaintext: string@bool-completer # When `true`, the message body is sent as plain text and the MIME data doesn't include the HTML version of the message. When `false`, the message body is sent as HTML. (default: false)
+  --is-plaintext: oneof<nothing, bool> # When `true`, the message body is sent as plain text and the MIME data doesn't include the HTML version of the message. When `false`, the message body is sent as HTML. (default: false)
   --metadata: record # The metadata associated with the object. For more information, see [Metadata](/docs/reference/api/#metadata).
   --reply-to: list # A list of people who should receive replies to the message by default. — item shape: {name?: string, email?: string}
   --reply-to-message-id: string # The ID of the message you're replying to. For Gmail and Microsoft Graph, this is the message ID on the provider. For IMAP Send, this is the [RFC822](https://datatracker.ietf.org/doc/html/rfc822#section-4.6.1) `Message-ID` header of the message you're replying to.
@@ -1248,7 +1247,7 @@ export def "grants-messages-send send-message" [
   --template: record # The [template](/docs/reference/api/application-level-templates/) to use for the message. Can be overriden by the `body` and `subject` fields. — shape: {id?: string, strict?: bool, variables?: record}
   --body-to: list # A list of people that the message will be sent to. — item shape: {name?: string, email?: string}
   --tracking-options: record # Tracking settings for the message. See [Track messages](/docs/v3/email/message-tracking/). — shape: {opens?: bool, thread_replies?: bool, links?: bool, label?: string}
-  --use-draft: string@bool-completer # (Google and Microsoft only) When `true`, Nylas saves the message in the user's Drafts folder until its `send_at` time. This field can't be `true` if `send_at` is undefined. (default: false)
+  --use-draft: oneof<nothing, bool> # (Google and Microsoft only) When `true`, Nylas saves the message in the user's Drafts folder until its `send_at` time. This field can't be `true` if `send_at` is undefined. (default: false)
   --signature-id: string # The ID of a [signature](/docs/v3/email/signatures/) to append to the message body. Nylas inserts the signature after a line break at the end of the body, including after any quoted text in replies and forwards. Only one signature can be used per message. (e.g. sig_abc123)
 ]: any -> any {
   let input = $in
@@ -1403,7 +1402,7 @@ export def "grants-threads get-threads" [
   --bcc: string # Filter for threads that contain messages BCC'd to the specified email address. Because most SMTP gateways remove BCC information from sent messages, any messages that Nylas returns are likely sent from the parent account.  For Microsoft grants, Nylas sometimes doesn't return messages that satisfy the conditions of this query parameter. This is because of a limitation on the provider. Instead, you can use the `thread_id` to retrieve a specific conversation.
   --cc: string # Filter for threads that contain messages CC'd to the specified email address.  For Microsoft grants, Nylas sometimes doesn't return messages that satisfy the conditions of this query parameter. This is because of a limitation on the provider. Instead, you can use the `thread_id` to retrieve a specific conversation.
   --qp-from: string # Filter for threads that include messages sent from the specified email address. If you want to filter for threads that include messages sent from the current grant, use the `in` query parameter and specify the Sent folder instead.  For Microsoft grants, Nylas sometimes doesn't return messages that satisfy the conditions of this query parameter. This is because of a limitation on the provider. Instead, you can use the `thread_id` to retrieve a specific conversation.
-  --has-attachment: string@bool-completer # When `true`, filters for threads that include attachments. (default: false)
+  --has-attachment: oneof<nothing, bool> # When `true`, filters for threads that include attachments. (default: false)
   --in-param: string # Return messages in the specified folder or label, by folder ID. Required when using `shared_from`.
   --earliest-message-date: int # Returns the date when the earliest or first message in the thread was sent or received, in Unix  timestamp format.
   --latest-message-after: int # Filter for threads whose most recent message was received after the specified time, in Unix timestamp format.
@@ -1414,10 +1413,10 @@ export def "grants-threads get-threads" [
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --shared-folder-id: string # (Microsoft only) When provided, Nylas returns items from the specified shared folder ID. Required when using `shared_from`. This parameter only accepts a single folder ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
   --shared-from: string # (Microsoft only) When provided, Nylas returns items that were shared from the specified email address. It also accepts grant ID. This parameter only accepts single email address or grant ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
-  --starred: string@bool-completer # Filter for threads that contain one or more starred messages.
+  --starred: oneof<nothing, bool> # Filter for threads that contain one or more starred messages.
   --subject: string # Return threads that contain messages with a matching subject. This filter is case-sensitive and returns partial matches.
   --qp-to: string # Filter for threads that contain messages sent to the specified email address.  For Microsoft grants, Nylas sometimes doesn't return messages that satisfy the conditions of this query parameter. This is because of a limitation on the provider. Instead, you can use the `thread_id` to retrieve a specific conversation.
-  --unread: string@bool-completer # Filter for threads that contain one or more unread messages.
+  --unread: oneof<nothing, bool> # Filter for threads that contain one or more unread messages.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1472,8 +1471,8 @@ export def "grants-threads put-threads-id" [
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
   --shared-folder-id: string # (Microsoft only) When provided, Nylas returns items from the specified shared folder ID. Required when using `shared_from`. This parameter only accepts a single folder ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
   --shared-from: string # (Microsoft only) When provided, Nylas returns items that were shared from the specified email address. It also accepts grant ID. This parameter only accepts single email address or grant ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
-  --starred: string@bool-completer # When `true`, indicates that the thread is starred. (e.g. true)
-  --unread: string@bool-completer # When `false`, indicates that all messages in the thread have been read. (e.g. true)
+  --starred: oneof<nothing, bool> # When `true`, indicates that the thread is starred. (e.g. true)
+  --unread: oneof<nothing, bool> # When `false`, indicates that all messages in the thread have been read. (e.g. true)
   --folders: list # The IDs of the folders to apply to the thread. This overwrites all previously assigned folders for all messages in the thread. (e.g. [folder-1, folder-2])
 ]: any -> any {
   let input = $in
@@ -1536,10 +1535,10 @@ export def "grants-drafts get-drafts" [
   --qp-to: string # Return items containing messages sent to this email address.
   --cc: string # Return items containing messages that were CC'd to this email address.
   --bcc: string # Return items containing messages that were BCC'd to this email address, likely sent from the parent account. (Most SMTP gateways remove BCC information, so this appears only if the user sent the email message, or received it because they were on the BCC list.)
-  --starred: string@bool-completer # Return items with one or more starred messages. For EWS, this is only supported for Microsoft Exchange 2010 or later.
+  --starred: oneof<nothing, bool> # Return items with one or more starred messages. For EWS, this is only supported for Microsoft Exchange 2010 or later.
   --thread-id: string # Return items with a matching `thread_id`.
-  --has-attachment: string@bool-completer # Return items with attachments.
-  --query-imap: string@bool-completer # (IMAP, Yahoo, and iCloud only) When `true`, Nylas queries the IMAP server directly instead of the Nylas database. You also need to set the `in` query parameter in your request so Nylas knows which folder to query. (default: false)
+  --has-attachment: oneof<nothing, bool> # Return items with attachments.
+  --query-imap: oneof<nothing, bool> # (IMAP, Yahoo, and iCloud only) When `true`, Nylas queries the IMAP server directly instead of the Nylas database. You also need to set the `in` query parameter in your request so Nylas knows which folder to query. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1578,10 +1577,10 @@ export def "grants-drafts post-draft" [
   --tracking-options: record # shape: {opens?: bool, thread_replies?: bool, links?: bool, label?: string}
   --attachments: list # An array of file attachments to include in the draft. You can use either the `application/json` or `multipart/form-data` schema, depending on the size of the attachment.  The `application/json` schema is limited to 3MB, including the message body. The `content` must be Base64-encoded.  The `multipart/form-data` schema is limited by the provider to 25MB. See the [Attachments references](/docs/reference/api/attachments/) for more information. — item shape: {filename?: string, content?: string, content_type?: string, content_id?: string, content_disposition?: string}
   --body-from: list # An array that contains a single name and email address pair that Nylas sets as the `from` header. By default, Nylas uses the email address associated with the `grant_id`.  Nylas supports multiple `from` addresses for email aliases only. (e.g. [{email: leyah@example.com, name: Leyah Miller}]) — item shape: {name?: string, email: string}
-  --is-plaintext: string@bool-completer # When `true`, the message body is sent as plain text and the MIME data doesn't include the HTML version of the message. When `false`, the message body is sent as HTML. (default: false)
+  --is-plaintext: oneof<nothing, bool> # When `true`, the message body is sent as plain text and the MIME data doesn't include the HTML version of the message. When `false`, the message body is sent as HTML. (default: false)
   --reply-to: list # An array of name/email address pairs that should receive replies to the message. This is used to set an alternative `Reply-To` header in the sent message. Not all providers support setting this in a draft. (e.g. [{email: healthcare.demo@example.com, name: }]) — item shape: {name?: string, email: string}
   --reply-to-message-id: string # The unique identifier of the message to which you want to draft a reply. (e.g. 1t8tv3890q4vgmwq6pmdwm8qg)
-  --starred: string@bool-completer # If `true`, the draft is starred. (e.g. false)
+  --starred: oneof<nothing, bool> # If `true`, the draft is starred. (e.g. false)
   --subject: string # The subject line of the draft. (e.g. Invitation: Welcome! @ Thu Oct 28, 2021 7am - 8am (EDT) - Toronto)
   --body-to: list # The name/email address pairs of the recipients. (e.g. [{email: demo@example.com, name: }, {email: realestate.demo@example.com, name: }]) — item shape: {name?: string, email: string}
   --custom-headers: list # An array of custom headers to add to the message. — item shape: {name?: string, value?: string}
@@ -1615,7 +1614,7 @@ export def "grants-drafts get-draft-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
-  --query-imap: string@bool-completer # (IMAP, iCloud, and Yahoo only) When `true`, Nylas queries from the IMAP server directly instead of the Nylas database. (default: false)
+  --query-imap: oneof<nothing, bool> # (IMAP, iCloud, and Yahoo only) When `true`, Nylas queries from the IMAP server directly instead of the Nylas database. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1652,7 +1651,7 @@ export def "grants-drafts put-drafts-id" [
   --cc: list # The name/email address pairs of the recipients to be CC'd. (e.g. [{email: clivescounters@example.com, name: }]) — item shape: {name?: string, email: string}
   --attachments: list # An array of file attachments to include in the draft. You can use either the `application/json` or `multipart/form-data` schema, depending on attachment size. The `application/json` format is limited to 3MB including the message body, and the `content` must be Base64 encoded. The `multipart/form-data` format size is limited by the provider to 25MB.  See [Attachments](/#tag--Attachments) for more information. — item shape: {filename?: string, content?: string, content_type?: string, content_id?: string, content_disposition?: string}
   --reply-to: list # An array of name/email address pairs that should receive replies to the message. This is used to set an alternative `Reply-To` header in the sent message. Not all providers support setting this in a draft. (e.g. [{email: healthcare.demo@example.com, name: }]) — item shape: {name?: string, email: string}
-  --starred: string@bool-completer # If `true`, the draft is starred. (e.g. false)
+  --starred: oneof<nothing, bool> # If `true`, the draft is starred. (e.g. false)
   --subject: string # The subject line of the draft. (e.g. Invitation: Welcome! @ Thu Oct 28, 2021 7am - 8am (EDT) - Toronto)
   --body-to: list # The name/email address pairs of the recipients. (e.g. [{email: demo@example.com, name: }, {email: realestate.demo@example.com, name: }]) — item shape: {name?: string, email: string}
   --metadata: record # The metadata associated with the object. For more information, see [Metadata](/docs/reference/api/#metadata).
@@ -1736,12 +1735,12 @@ export def "grants-folders get-folder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
-  --include-hidden-folders: string@bool-completer # (Microsoft only) When `true`, Nylas includes hidden folders in its response. (default: false)
+  --include-hidden-folders: oneof<nothing, bool> # (Microsoft only) When `true`, Nylas includes hidden folders in its response. (default: false)
   --limit: int # The maximum number of objects to return. See [Pagination](/docs/reference/api/#pagination) for more information. (default: 50)
   --page-token: string # An identifier that specifies which page of data to return. You can get this value from the `next_cursor` response field. See [Pagination](/docs/reference/api/#pagination) for more information.
   --parent-id: string # (Microsoft and EWS only) Use the ID of a folder to find all child folders it contains.
   --shared-from: string # (Microsoft only) When provided, Nylas returns items that were shared from the specified email address. It also accepts grant ID. This parameter only accepts single email address or grant ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
-  --single-level: string@bool-completer # (Microsoft only) If `true`, retrieves folders from a single-level hierarchy only. If `false`, retrieves folders across a multi-level hierarchy. (default: false)
+  --single-level: oneof<nothing, bool> # (Microsoft only) If `true`, retrieves folders from a single-level hierarchy only. If `false`, retrieves folders across a multi-level hierarchy. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1799,7 +1798,7 @@ export def "grants-folders get-folders-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
-  --include-hidden-folders: string@bool-completer # (Microsoft only) When `true`, Nylas includes hidden folders in its response. (default: false)
+  --include-hidden-folders: oneof<nothing, bool> # (Microsoft only) When `true`, Nylas includes hidden folders in its response. (default: false)
   --shared-from: string # (Microsoft only) When provided, Nylas returns items that were shared from the specified email address. It also accepts grant ID. This parameter only accepts single email address or grant ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1826,7 +1825,7 @@ export def "grants-folders put-folders-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
-  --include-hidden-folders: string@bool-completer # (Microsoft only) When `true`, Nylas includes hidden folders in its response. (default: false)
+  --include-hidden-folders: oneof<nothing, bool> # (Microsoft only) When `true`, Nylas includes hidden folders in its response. (default: false)
   --shared-from: string # (Microsoft only) When provided, Nylas returns items that were shared from the specified email address. It also accepts grant ID. This parameter only accepts single email address or grant ID. Check out the [Shared folders](/docs/provider-guides/microsoft/shared-folders) guide for more information.
   --name: string # The name of the folder to be updated.
   --parent-id: string # (Microsoft and EWS only) The ID of the parent folder.
@@ -1886,7 +1885,7 @@ export def "grants-attachments get-attachments-id" [
   --allow-errors(-e) # Return full response without error handling
   --message-id: string # ID of the message the specified attachment belongs to.
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
-  --query-imap: string@bool-completer # (IMAP, iCloud, and Yahoo only) When `true`, Nylas queries from the IMAP server directly instead of the Nylas database. (default: false)
+  --query-imap: oneof<nothing, bool> # (IMAP, iCloud, and Yahoo only) When `true`, Nylas queries from the IMAP server directly instead of the Nylas database. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1912,7 +1911,7 @@ export def "grants-attachments-download get-attachments-id-download" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --message-id: string # ID of the message the specified attachment belongs to.
-  --query-imap: string@bool-completer # (IMAP, Yahoo, and iCloud only) When `true`, Nylas downloads the attachment directly from the IMAP server instead of the Nylas database. (default: false)
+  --query-imap: oneof<nothing, bool> # (IMAP, Yahoo, and iCloud only) When `true`, Nylas downloads the attachment directly from the IMAP server instead of the Nylas database. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2070,7 +2069,7 @@ export def "grants-contacts get-contact" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --select: string # Specify fields that you want Nylas to return, as a comma-separated list (for example, `select=id,updated_at`). This allows you to receive only the portion of object data that you're interested in. You can use `select` to optimize response size and reduce latency by limiting queries to only the information that you need.
-  --profile-picture: string@bool-completer # If `true` and `picture_url` is present, the response includes a Base64 binary data blob that you can use to view information as an image file (for example, a JPEG).
+  --profile-picture: oneof<nothing, bool> # If `true` and `picture_url` is present, the response includes a Base64 binary data blob that you can use to view information as an image file (for example, a JPEG).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2352,7 +2351,7 @@ export def "workflows create-workflow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --delay: int # The number of minutes between a `trigger_event` being met and the workflow sending a message. (default: 0, e.g. 5)
-  --is-enabled: string@bool-completer # When `true`, indicates that the workflow is enabled. (default: true, e.g. true)
+  --is-enabled: oneof<nothing, bool> # When `true`, indicates that the workflow is enabled. (default: true, e.g. true)
   name: string # The name of the workflow. (e.g. New booking confirmation workflow)
   template_id: string # The ID of the email template the workflow uses. (e.g. 14c00cc8-648c-4381-ad10-52641d9bac8e)
   trigger_event: string@trigger-event-completer # The event which triggers the workflow. (e.g. booking.created)
@@ -2406,7 +2405,7 @@ export def "workflows update-workflow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --delay: int # The number of minutes between a `trigger_event` being met and the workflow sending a message. (e.g. 1)
-  --is-enabled: string@bool-completer # When `true`, indicates that the workflow is enabled. (e.g. false)
+  --is-enabled: oneof<nothing, bool> # When `true`, indicates that the workflow is enabled. (e.g. false)
   --name: string # The name of the workflow. (e.g. Updated booking confirmation workflow)
   --template-id: string # The ID of the email template the workflow uses. (e.g. 14c00cc8-648c-4381-ad10-52641d9bac8e)
   --trigger-event: string@trigger-event-completer # The event which triggers the workflow. (e.g. booking.created)
@@ -2485,7 +2484,7 @@ export def "grants-workflows create-grant-workflow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --delay: int # The number of minutes between a `trigger_event` being met and the workflow sending a message. (default: 0, e.g. 5)
-  --is-enabled: string@bool-completer # When `true`, indicates that the workflow is enabled. (default: true, e.g. true)
+  --is-enabled: oneof<nothing, bool> # When `true`, indicates that the workflow is enabled. (default: true, e.g. true)
   name: string # The name of the workflow. (e.g. New booking confirmation workflow)
   template_id: string # The ID of the email template the workflow uses. (e.g. 14c00cc8-648c-4381-ad10-52641d9bac8e)
   trigger_event: string@trigger-event-completer # The event which triggers the workflow. (e.g. booking.created)
@@ -2541,7 +2540,7 @@ export def "grants-workflows update-grant-workflow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --delay: int # The number of minutes between a `trigger_event` being met and the workflow sending a message. (e.g. 1)
-  --is-enabled: string@bool-completer # When `true`, indicates that the workflow is enabled. (e.g. false)
+  --is-enabled: oneof<nothing, bool> # When `true`, indicates that the workflow is enabled. (e.g. false)
   --name: string # The name of the workflow. (e.g. Updated booking confirmation workflow)
   --template-id: string # The ID of the email template the workflow uses. (e.g. 14c00cc8-648c-4381-ad10-52641d9bac8e)
   --trigger-event: string@trigger-event-completer # The event which triggers the workflow. (e.g. booking.created)
@@ -2721,7 +2720,7 @@ export def "templates-render render-template-html" [
   --allow-errors(-e) # Return full response without error handling
   --body-body: string # The body content of the template, in HTML format. (e.g. <p>Hello {{user.name}}, this shows test was {{ foo }}.</p>)
   engine: string@engine-completer # The templating engine to use. (e.g. mustache)
-  --strict: string@bool-completer # When `true`, Nylas returns an error if the template contains variables that aren't defined in the `variables` object. (default: true, e.g. true)
+  --strict: oneof<nothing, bool> # When `true`, Nylas returns an error if the template contains variables that aren't defined in the `variables` object. (default: true, e.g. true)
   --body-variables: record # A set of key/value pairs representing variables to substitute for values in the template. (e.g. {user: {name: Leyah, surname: Miller}, foo: testing successful}) — shape: {additionalProperties?: string}
 ]: any -> any {
   let input = $in
@@ -2749,7 +2748,7 @@ export def "templates-render render-app-level-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --strict: string@bool-completer # When `true`, Nylas returns an error if the template contains variables that aren't defined in the `variables` object. (default: true, e.g. true)
+  --strict: oneof<nothing, bool> # When `true`, Nylas returns an error if the template contains variables that aren't defined in the `variables` object. (default: true, e.g. true)
   --body-variables: record # A set of key/value pairs representing variables to substitute for values in the template. (e.g. {user: {name: Leyah, surname: Miller}}) — shape: {additionalProperties?: string}
 ]: any -> any {
   let input = $in
@@ -2908,7 +2907,7 @@ export def "grants-templates-render render-grant-level-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --strict: string@bool-completer # When `true`, Nylas returns an error if the template contains variables that aren't defined in the `variables` object. (default: true, e.g. true)
+  --strict: oneof<nothing, bool> # When `true`, Nylas returns an error if the template contains variables that aren't defined in the `variables` object. (default: true, e.g. true)
   --body-variables: record # A set of key/value pairs representing variables to substitute for values in the template. (e.g. {user: {name: Leyah, surname: Miller}}) — shape: {additionalProperties?: string}
 ]: any -> any {
   let input = $in
@@ -2938,7 +2937,7 @@ export def "grants-templates-render render-grant-level-template-html" [
   --allow-errors(-e) # Return full response without error handling
   --body-body: string # The body content of the template, in HTML format. (e.g. <p>Hello {{user.name}}, this shows test was {{ foo }}.</p>)
   engine: string@engine-completer # The templating engine to use. (e.g. mustache)
-  --strict: string@bool-completer # When `true`, Nylas returns an error if the template contains variables that aren't defined in the `variables` object. (default: true, e.g. true)
+  --strict: oneof<nothing, bool> # When `true`, Nylas returns an error if the template contains variables that aren't defined in the `variables` object. (default: true, e.g. true)
   --body-variables: record # A set of key/value pairs representing variables to substitute for values in the template. (e.g. {user: {name: Leyah, surname: Miller}, foo: testing successful}) — shape: {additionalProperties?: string}
 ]: any -> any {
   let input = $in
@@ -2981,7 +2980,7 @@ export def "domains-messages-send send-transactional-email" [
   --cc: list # A list of people to be CC'd on the message. — item shape: {email?: string, name?: string}
   --custom-headers: list # An array of custom headers to add to the message. — item shape: {name?: string, value?: string}
   --body-from: record # Information about the person sending the message. — shape: {email?: string, name?: string}
-  --is-plaintext: string@bool-completer # When `true`, Nylas sends the message body as plain text and the MIME data doesn't include an HTML version of the message. When `false`, Nylas sends the message body as HTML. (default: false, e.g. true)
+  --is-plaintext: oneof<nothing, bool> # When `true`, Nylas sends the message body as plain text and the MIME data doesn't include an HTML version of the message. When `false`, Nylas sends the message body as HTML. (default: false, e.g. true)
   --metadata: record # The metadata associated with the object. For more information, see [Metadata](/docs/reference/api/#metadata).
   --reply-to: list # A list of people who should receive replies to the message by default. — item shape: {name?: string, email?: string}
   --reply-to-message-id: string # The ID of the message you are replying to. If you are using a message that was sent using Nylas' Transactional Send, you may use the ID that was returned in the Nylas response. For all other messages, this is the [RFC822](https://datatracker.ietf.org/doc/html/rfc822#section-4.6.1) `Message-ID` header of the message you're replying to.

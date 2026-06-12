@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://platform.ringcentral.com" "https://media.ringcentral.com" "https://platform.devtest.ringcentral.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -730,7 +729,7 @@ export def "webinar-registration-sessions-registrants rcwRegListRegistrants" [
   --allow-errors(-e) # Return full response without error handling
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
   --pageToken: string # The token indicating the particular page of the result set to be retrieved. If omitted the first page will be returned.
-  --includeQuestionnaire: string@bool-completer # Indicates if registrant's "questionnaire" should be returned (default: false)
+  --includeQuestionnaire: oneof<nothing, bool> # Indicates if registrant's "questionnaire" should be returned (default: false)
 ]: nothing -> record<records: list<record>, paging: record<perPage: int, pageToken: string, nextPageToken: string, previousPageToken: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -781,7 +780,7 @@ export def "webinar-registration-sessions-registrants rcwRegGetRegistrant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeQuestionnaire: string@bool-completer # Indicates if registrant's "questionnaire" should be returned (default: false)
+  --includeQuestionnaire: oneof<nothing, bool> # Indicates if registrant's "questionnaire" should be returned (default: false)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1153,7 +1152,7 @@ export def "webinar-configuration-webinars-sessions-invitees rcwConfigUpdateInvi
   --allow-errors(-e) # Return full response without error handling
   role: string@role-completer # The role of the webinar session participant/invitee. See also: [Understanding Webinar Roles](https://support.ringcentral.com/webinar/getting-started/understanding-ringcentral-webinar-roles.html)  (e.g. Panelist)
   --type: string@type-completer # The type of the webinar invitee (default: User)
-  --sendInvite: string@bool-completer # Indicates if invite/cancellation emails have to be sent to this invitee. For "Host" it cannot be set to false. If it is true it can't be changed back to false.  (default: true)
+  --sendInvite: oneof<nothing, bool> # Indicates if invite/cancellation emails have to be sent to this invitee. For "Host" it cannot be set to false. If it is true it can't be changed back to false.  (default: true)
 ]: any -> record<joinUri: string, phoneParticipantCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1998,7 +1997,7 @@ export def "restapi-accounts-phone-numbers listAccountPhoneNumbersV2" [
   --status: string@status-completer-1 # Status of the phone number(s) to be returned
   --tollType: string@tollType-completer # Toll type of phone numbers to return (e.g. Toll)
   --extensionStatus: string@extensionStatus-completer # Statuses of extensions to return phone numbers for
-  --byocNumber: string@bool-completer # The parameter reflects whether this number is BYOC or not
+  --byocNumber: oneof<nothing, bool> # The parameter reflects whether this number is BYOC or not
   --phoneNumber: string # Phone number in e.164 format to be searched for. Parameter value can include wildcards (e.g. "+165012345**") or be an exact number "+16501234500" - single number is searched in that case. Make sure you escape the "+" in the URL as "%2B"
 ]: nothing -> record<records: table<id: string, phoneNumber: string, type: string, tollType: string, usageType: string, byocNumber: bool, status: string, extension: record>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2159,7 +2158,7 @@ export def "restapi-accounts-devices removeLineJWSPublic" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --keepAssetsInInventory: string@bool-completer # The flag that controls what to do with the number and device:  - if the value of `keepAssetsInInventory` is `true`, the given device is moved to unassigned devices and the number is moved to the number inventory; - if the value of `keepAssetsInInventory` is `false`, the given device and number is removed from the account; - if the parameter `keepAssetsInInventory` is not set (empty body) or the value of the parameter is empty, default value `true` is set.  (default: true)
+  --keepAssetsInInventory: oneof<nothing, bool> # The flag that controls what to do with the number and device:  - if the value of `keepAssetsInInventory` is `true`, the given device is moved to unassigned devices and the number is moved to the number inventory; - if the value of `keepAssetsInInventory` is `false`, the given device and number is removed from the account; - if the parameter `keepAssetsInInventory` is not set (empty body) or the value of the parameter is empty, default value `true` is set.  (default: true)
 ]: any -> record<id: string, type: string, name: string, serial: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2262,7 +2261,7 @@ export def "restapi-accounts-extensions bulkDeleteUsersV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --keepAssetsInInventory: string@bool-completer # Indicates that the freed users' assets (phone numbers and devices) should be moved to account inventory rather than deleted. If set to `true`, the phone numbers and devices assigned to deleted extensions will be kept in the account's inventory. If set to `false`, these assets will be deleted from the account and returned to either the partner's phone numbers or RingCentral's phone number pool  (default: true)
+  --keepAssetsInInventory: oneof<nothing, bool> # Indicates that the freed users' assets (phone numbers and devices) should be moved to account inventory rather than deleted. If set to `true`, the phone numbers and devices assigned to deleted extensions will be kept in the account's inventory. If set to `false`, these assets will be deleted from the account and returned to either the partner's phone numbers or RingCentral's phone number pool  (default: true)
   records: list # item shape: {id: string}
 ]: any -> record<records: table<id: string, bulkItemSuccessful: bool, bulkItemErrors: list>> {
   let input = $in
@@ -2389,7 +2388,7 @@ export def "restapi-v10-account-device readDevice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --syncEmergencyAddress: string@bool-completer # Specifies if an emergency address should be synchronized or not (default: false)
+  --syncEmergencyAddress: oneof<nothing, bool> # Specifies if an emergency address should be synchronized or not (default: false)
 ]: nothing -> record<id: string, uri: string, sku: string, type: string, name: string, serial: string, status: string, computerName: string, model: record<id: string, name: string, addons: list<record>, deviceClass: string, features: list<string>, lineCount: int>, extension: record<id: int, uri: string, extensionNumber: string, partnerId: string>, emergency: record<address: record<country: string, countryId: string, countryIsoCode: string, countryName: string, state: string, stateId: string, stateIsoCode: string, stateName: string, city: string, street: string, street2: string, zip: string, customerName: string>, location: record<id: string, name: string, addressFormatId: string>, outOfCountry: bool, addressStatus: string, visibility: string, syncStatus: string, addressEditableStatus: string>, emergencyServiceAddress: record<street: string, street2: string, city: string, zip: string, customerName: string, state: string, stateId: string, stateIsoCode: string, stateName: string, countryId: string, countryIsoCode: string, country: string, countryName: string, outOfCountry: bool, syncStatus: string, additionalCustomerName: string, customerEmail: string, additionalCustomerEmail: string, customerPhone: string, additionalCustomerPhone: string, lineProvisioningStatus: string, taxId: string>, phoneLines: table<id: string, lineType: string, phoneInfo: record, emergencyAddress: record>, shipping: record<status: string, carrier: string, trackingNumber: string, method: record<id: string, name: string>, address: record<customerName: string, additionalCustomerName: string, customerEmail: string, additionalCustomerEmail: string, customerPhone: string, additionalCustomerPhone: string, street: string, street2: string, city: string, state: string, stateId: string, stateIsoCode: string, stateName: string, countryId: string, countryIsoCode: string, country: string, countryName: string, zip: string, taxId: string>>, boxBillingId: int, useAsCommonPhone: bool, hotDeskDevice: bool, inCompanyNet: bool, site: record<id: string, name: string>, lastLocationReportTime: string, linePooling: string, billingStatement: record<currency: string, charges: list<record>, fees: list<record>, totalCharged: float, totalCharges: float, totalFees: float, subtotal: float, totalFreeServiceCredit: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2418,12 +2417,12 @@ export def "restapi-v10-account-device updateDevice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --prestatement: string@bool-completer
+  --prestatement: oneof<nothing, bool>
   --emergencyServiceAddress: record # Address for emergency cases. The same emergency address is assigned to all numbers of a single device. If the emergency address is also specified in `emergency` resource, then this value is ignored — shape: {street?: string, street2?: string, city?: string, zip?: string, customerName?: string, state?: string, stateId?: string, country?: string, countryId?: string}
   --emergency: record # Device emergency settings — shape: {address?: record, location?: record, outOfCountry?: bool, addressStatus?: "Valid"|"Invalid"|"Provisioning", visibility?: "Private"|"Public", syncStatus?: "Verified"|"Updated"|"Deleted"|"NotRequired"|"Unsupported"|"Failed", addressEditableStatus?: "MainDevice"|"AnyDevice"}
   --extension: record # Information on extension that the device is assigned to — shape: {id?: string}
   --phoneLines: record # Information on phone lines added to a device — shape: {phoneLines?: list}
-  --useAsCommonPhone: string@bool-completer # Supported only for devices assigned to Limited extensions. If true, enables users to log in to this phone as a common phone
+  --useAsCommonPhone: oneof<nothing, bool> # Supported only for devices assigned to Limited extensions. If true, enables users to log in to this phone as a common phone
   --name: string # Device label, maximum number of symbols is 64
 ]: any -> record<id: string, uri: string, sku: string, type: string, name: string, serial: string, status: string, computerName: string, model: record<id: string, name: string, addons: list<record>, deviceClass: string, features: list<string>, lineCount: int>, extension: record<id: int, uri: string, extensionNumber: string, partnerId: string>, emergency: record<address: record<country: string, countryId: string, countryIsoCode: string, countryName: string, state: string, stateId: string, stateIsoCode: string, stateName: string, city: string, street: string, street2: string, zip: string, customerName: string>, location: record<id: string, name: string, addressFormatId: string>, outOfCountry: bool, addressStatus: string, visibility: string, syncStatus: string, addressEditableStatus: string>, emergencyServiceAddress: record<street: string, street2: string, city: string, zip: string, customerName: string, state: string, stateId: string, stateIsoCode: string, stateName: string, countryId: string, countryIsoCode: string, country: string, countryName: string, outOfCountry: bool, syncStatus: string, additionalCustomerName: string, customerEmail: string, additionalCustomerEmail: string, customerPhone: string, additionalCustomerPhone: string, lineProvisioningStatus: string, taxId: string>, phoneLines: table<id: string, lineType: string, phoneInfo: record, emergencyAddress: record>, shipping: record<status: string, carrier: string, trackingNumber: string, method: record<id: string, name: string>, address: record<customerName: string, additionalCustomerName: string, customerEmail: string, additionalCustomerEmail: string, customerPhone: string, additionalCustomerPhone: string, street: string, street2: string, city: string, state: string, stateId: string, stateIsoCode: string, stateName: string, countryId: string, countryIsoCode: string, country: string, countryName: string, zip: string, taxId: string>>, boxBillingId: int, useAsCommonPhone: bool, hotDeskDevice: bool, inCompanyNet: bool, site: record<id: string, name: string>, lastLocationReportTime: string, linePooling: string, billingStatement: record<currency: string, charges: list<record>, fees: list<record>, totalCharged: float, totalCharges: float, totalFees: float, subtotal: float, totalFreeServiceCredit: float>> {
   let input = $in
@@ -2483,7 +2482,7 @@ export def "restapi-v10-account-device-emergency updateDeviceEmergency" [
   --emergency: record # Device emergency settings — shape: {address?: record, location?: record, outOfCountry?: bool, addressStatus?: "Valid"|"Invalid"|"Provisioning", visibility?: "Private"|"Public", syncStatus?: "Verified"|"Updated"|"Deleted"|"NotRequired"|"Unsupported"|"Failed", addressEditableStatus?: "MainDevice"|"AnyDevice"}
   --extension: record # Information on extension that the device is assigned to — shape: {id?: string}
   --phoneLines: record # Information on phone lines added to a device — shape: {phoneLines?: list}
-  --useAsCommonPhone: string@bool-completer # Supported only for devices assigned to Limited extensions. If true, enables users to log in to this phone as a common phone
+  --useAsCommonPhone: oneof<nothing, bool> # Supported only for devices assigned to Limited extensions. If true, enables users to log in to this phone as a common phone
   --name: string # Device label, maximum number of symbols is 64
 ]: any -> record<id: string, uri: string, sku: string, type: string, name: string, serial: string, status: string, computerName: string, model: record<id: string, name: string, addons: list<record>, deviceClass: string, features: list<string>, lineCount: int>, extension: record<id: int, uri: string, extensionNumber: string, partnerId: string>, emergency: record<address: record<country: string, countryId: string, countryIsoCode: string, countryName: string, state: string, stateId: string, stateIsoCode: string, stateName: string, city: string, street: string, street2: string, zip: string, customerName: string>, location: record<id: string, name: string, addressFormatId: string>, outOfCountry: bool, addressStatus: string, visibility: string, syncStatus: string, addressEditableStatus: string>, emergencyServiceAddress: record<street: string, street2: string, city: string, zip: string, customerName: string, state: string, stateId: string, stateIsoCode: string, stateName: string, countryId: string, countryIsoCode: string, country: string, countryName: string, outOfCountry: bool, syncStatus: string, additionalCustomerName: string, customerEmail: string, additionalCustomerEmail: string, customerPhone: string, additionalCustomerPhone: string, lineProvisioningStatus: string, taxId: string>, phoneLines: table<id: string, lineType: string, phoneInfo: record, emergencyAddress: record>, shipping: record<status: string, carrier: string, trackingNumber: string, method: record<id: string, name: string>, address: record<customerName: string, additionalCustomerName: string, customerEmail: string, additionalCustomerEmail: string, customerPhone: string, additionalCustomerPhone: string, street: string, street2: string, city: string, state: string, stateId: string, stateIsoCode: string, stateName: string, countryId: string, countryIsoCode: string, country: string, countryName: string, zip: string, taxId: string>>, boxBillingId: int, useAsCommonPhone: bool, hotDeskDevice: bool, inCompanyNet: bool, site: record<id: string, name: string>, lastLocationReportTime: string, linePooling: string, billingStatement: record<currency: string, charges: list<record>, fees: list<record>, totalCharged: float, totalCharges: float, totalFees: float, subtotal: float, totalFreeServiceCredit: float>> {
   let input = $in
@@ -3158,7 +3157,7 @@ export def "restapi-v10-account-telephony-sessions-parties-supervise superviseCa
   mode: string@mode-completer # Supervising mode (e.g. Listen)
   supervisorDeviceId: string # Internal identifier of a supervisor's device (e.g. 191888004)
   agentExtensionId: string # Mailbox ID of a user that will be monitored (e.g. 400378008008)
-  --autoAnswer: string@bool-completer # Specifies if auto-answer SIP header should be sent. If auto-answer is set to `true`, the call is automatically answered by the supervising party, if set to `false` - then the supervising party has to accept or decline the monitored call (default: true)
+  --autoAnswer: oneof<nothing, bool> # Specifies if auto-answer SIP header should be sent. If auto-answer is set to `true`, the call is automatically answered by the supervising party, if set to `false` - then the supervising party has to accept or decline the monitored call (default: true)
   --mediaSDP: string@mediaSDP-completer # Specifies session description protocol (SDP) setting. The possible values are 'sendOnly' (only sending) meaning one-way audio streaming; and 'sendRecv' (sending/receiving) meaning two-way audio streaming
 ]: any -> record<from: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, to: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, direction: string, id: string, accountId: string, extensionId: string, muted: bool, owner: record<accountId: string, extensionId: string>, standAlone: bool, status: record<code: string, peerId: record<sessionId: string, telephonySessionId: string, partyId: string>, reason: string, description: string>> {
   let input = $in
@@ -3237,7 +3236,7 @@ export def "restapi-v10-account-telephony-sessions-parties-recordings pauseResum
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --brandId: string # Identifies a brand of a logged-in user or a brand of a sign-up session (default: ~)
-  --active: string@bool-completer # Recording status
+  --active: oneof<nothing, bool> # Recording status
 ]: any -> record<id: string, active: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3413,7 +3412,7 @@ export def "restapi-v10-account-telephony-sessions-supervise superviseCallSessio
   mode: string@mode-completer # Supervising mode (e.g. Listen)
   supervisorDeviceId: string # Internal identifier of a supervisor's device which will be used for call session monitoring (e.g. 191888004)
   --agentExtensionId: string # Extension identifier of the user that will be monitored (e.g. 400378008008)
-  --autoAnswer: string@bool-completer # Specifies if auto-answer SIP header should be sent. If auto-answer is set to `true`, the call is automatically answered by the supervising party, if set to `false` - then the supervising party has to accept or decline the monitored call (default: true)
+  --autoAnswer: oneof<nothing, bool> # Specifies if auto-answer SIP header should be sent. If auto-answer is set to `true`, the call is automatically answered by the supervising party, if set to `false` - then the supervising party has to accept or decline the monitored call (default: true)
   --mediaSDP: string@mediaSDP-completer # Specifies session description protocol setting
 ]: any -> record<from: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, to: record<phoneNumber: string, name: string, deviceId: string, extensionId: string>, direction: string, id: string, accountId: string, extensionId: string, muted: bool, owner: record<accountId: string, extensionId: string>, standAlone: bool, status: record<code: string, peerId: record<sessionId: string, telephonySessionId: string, partyId: string>, reason: string, description: string>> {
   let input = $in
@@ -3599,7 +3598,7 @@ export def "restapi-v10-account-call-log readCompanyCallLog" [
   --direction: list # The direction of call records to be included in the result. If omitted, both inbound and outbound calls are returned. Multiple values are supported
   --type: list # The type of call records to be included in the result. If omitted, all call types are returned. Multiple values are supported
   --view: string@view-completer # Defines the level of details for returned call records  (default: Simple)
-  --withRecording: string@bool-completer # Deprecated, replaced with `recordingType` filter, still supported for compatibility reasons. Indicates if only recorded calls should be returned.  If both `withRecording` and `recordingType` parameters are specified, then `withRecording` is ignored  (DEPRECATED, default: false)
+  --withRecording: oneof<nothing, bool> # Deprecated, replaced with `recordingType` filter, still supported for compatibility reasons. Indicates if only recorded calls should be returned.  If both `withRecording` and `recordingType` parameters are specified, then `withRecording` is ignored  (DEPRECATED, default: false)
   --recordingType: string@recordingType-completer # Indicates that call records with recordings of particular type should be returned. If omitted, then calls with and without recordings are returned
   --dateFrom: string # The beginning of the time range to return call records in ISO 8601 format including timezone, for example 2016-03-10T18:07:52.534Z. The default value is `dateTo` minus 24 hours  (format: date-time)
   --dateTo: string # The end of the time range to return call records in ISO 8601 format including timezone, for example 2016-03-10T18:07:52.534Z. The default value is current time  (format: date-time)
@@ -3662,8 +3661,8 @@ export def "restapi-v10-account-call-log-sync syncAccountCallLog" [
   --recordCount: int # For `FSync` mode this parameter is mandatory, it limits the number of records to be returned in response.  For `ISync` mode this parameter specifies the number of records to extend the sync frame with to the past (the maximum number of records is 250)  (format: int32)
   --statusGroup: list # Type of calls to be returned
   --view: string@view-completer # Defines the level of details for returned call records  (default: Simple)
-  --showDeleted: string@bool-completer # Supported for `ISync` mode. Indicates that deleted call records should be returned (default: false)
-  --withRecording: string@bool-completer # Deprecated, replaced with `recordingType` filter, still supported for compatibility reasons. Indicates if only recorded calls should be returned.  If both `withRecording` and `recordingType` parameters are specified, then `withRecording` is ignored  (DEPRECATED, default: false)
+  --showDeleted: oneof<nothing, bool> # Supported for `ISync` mode. Indicates that deleted call records should be returned (default: false)
+  --withRecording: oneof<nothing, bool> # Deprecated, replaced with `recordingType` filter, still supported for compatibility reasons. Indicates if only recorded calls should be returned.  If both `withRecording` and `recordingType` parameters are specified, then `withRecording` is ignored  (DEPRECATED, default: false)
   --recordingType: string@recordingType-completer # Indicates that call records with recordings of particular type should be returned. If omitted, then calls with and without recordings are returned
 ]: nothing -> record<uri: string, records: table<extension: record, telephonySessionId: string, sipUuidInfo: string, transferTarget: record, transferee: record, partyId: string, transport: string, from: record, to: record, type: string, direction: string, message: record, delegate: record, delegationType: string, action: string, result: string, reason: string, reasonDescription: string, startTime: string, duration: int, durationMs: int, recording: record, shortRecording: bool, billing: record, internalType: string, id: string, uri: string, sessionId: string, deleted: bool, legs: list, lastModifiedTime: string>, syncInfo: record<syncType: string, syncToken: string, syncTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4068,7 +4067,7 @@ export def "restapi-v10-account-answering-rule createCompanyAnsweringRule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # Name of an answering rule specified by user. Max number of symbols is 30. The default value is 'My Rule N' where 'N' is the first free number
-  --enabled: string@bool-completer # Specifies if the rule is active or inactive. The default value is `true` (default: true)
+  --enabled: oneof<nothing, bool> # Specifies if the rule is active or inactive. The default value is `true` (default: true)
   --type: string@type-completer-7 # Type of an answering rule, the default value is 'Custom' = ['BusinessHours', 'AfterHours', 'Custom']
   --callers: list # Answering rule will be applied when calls are received from the specified caller(s) — item shape: {callerId?: string, name?: string}
   --calledNumbers: list # Answering rule will be applied when calling the specified number(s) — item shape: {id?: string, phoneNumber?: string}
@@ -4130,7 +4129,7 @@ export def "restapi-v10-account-answering-rule updateCompanyAnsweringRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Specifies if a rule is active or inactive. The default value is `true` (default: true)
+  --enabled: oneof<nothing, bool> # Specifies if a rule is active or inactive. The default value is `true` (default: true)
   --name: string # Name of an answering rule specified by user. Max number of symbols is 30. The default value is 'My Rule N' where 'N' is the first free number
   --callers: list # Answering rule will be applied when calls are received from the specified caller(s) — item shape: {callerId?: string, name?: string}
   --calledNumbers: list # Answering rule will be applied when calling the specified number(s) — item shape: {id?: string, phoneNumber?: string}
@@ -4417,7 +4416,7 @@ export def "restapi-v10-account-call-queues updateCallQueueInfo" [
   --status: string@status-completer-3 # Call queue status
   --subType: string@subType-completer # Indicates whether it is an emergency call queue extension or not
   --serviceLevelSettings: record # Call queue service level settings — shape: {slaGoal?: int, slaThresholdSeconds?: int, includeAbandonedCalls?: bool, abandonedThresholdSeconds?: int}
-  --editableMemberStatus: string@bool-completer # Allows members to change their queue status
+  --editableMemberStatus: oneof<nothing, bool> # Allows members to change their queue status
   --alertTimer: int@alertTimer-completer # Alert timer or pickup setting. Delay time in seconds before call queue group members are notified when calls are queued  (format: int32)
 ]: any -> record<uri: string, id: string, extensionNumber: string, name: string, status: string, subType: string, serviceLevelSettings: record<slaGoal: int, slaThresholdSeconds: int, includeAbandonedCalls: bool, abandonedThresholdSeconds: int>, editableMemberStatus: bool, alertTimer: int> {
   let input = $in
@@ -4589,7 +4588,7 @@ export def "restapi-v10-account-emergency-locations createEmergencyLocation" [
   --usageStatus: string@usageStatus-completer # Status of an emergency response location usage.
   --addressFormatId: string # Address format ID
   --visibility: string@visibility-completer # Visibility of an emergency response location. If `Private` is set, then a location is visible only for restricted number of users, specified in `owners` array  (default: Public)
-  --trusted: string@bool-completer # If 'true' address validation for non-us addresses is skipped
+  --trusted: oneof<nothing, bool> # If 'true' address validation for non-us addresses is skipped
 ]: any -> record<id: string, address: any, name: string, site: record<id: string, name: string>, addressStatus: string, usageStatus: string, syncStatus: string, addressType: string, visibility: string, owners: table<id: string, extensionNumber: string, name: string>, addressFormatId: string, trusted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4616,7 +4615,7 @@ export def "restapi-v10-account-emergency-locations readEmergencyLocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --syncEmergencyAddress: string@bool-completer
+  --syncEmergencyAddress: oneof<nothing, bool>
 ]: nothing -> record<id: string, address: any, name: string, site: record<id: string, name: string>, addressStatus: string, usageStatus: string, syncStatus: string, addressType: string, visibility: string, owners: table<id: string, extensionNumber: string, name: string>, addressFormatId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4650,7 +4649,7 @@ export def "restapi-v10-account-emergency-locations updateEmergencyLocation" [
   --usageStatus: string@usageStatus-completer # Status of an emergency response location usage.
   --addressFormatId: string # Address format ID
   --visibility: string@visibility-completer # Visibility of an emergency response location. If `Private` is set, then a location is visible only for restricted number of users, specified in `owners` array  (default: Public)
-  --trusted: string@bool-completer # If 'true' address validation for non-us addresses is skipped
+  --trusted: oneof<nothing, bool> # If 'true' address validation for non-us addresses is skipped
 ]: any -> record<id: string, address: any, name: string, site: record<id: string, name: string>, addressStatus: string, usageStatus: string, syncStatus: string, addressType: string, visibility: string, owners: table<id: string, extensionNumber: string, name: string>, addressFormatId: string, trusted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4677,7 +4676,7 @@ export def "restapi-v10-account-emergency-locations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --validateOnly: string@bool-completer # Flag indicating that validation of emergency location(s) is required before deletion
+  --validateOnly: oneof<nothing, bool> # Flag indicating that validation of emergency location(s) is required before deletion
   --newLocationId: string # Internal identifier of an emergency response location that should be used instead of a deleted one.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4808,8 +4807,8 @@ export def "restapi-v10-account-presence readAccountPresence" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --detailedTelephonyState: string@bool-completer # Whether to return detailed telephony state
-  --sipData: string@bool-completer # Whether to return SIP data
+  --detailedTelephonyState: oneof<nothing, bool> # Whether to return detailed telephony state
+  --sipData: oneof<nothing, bool> # Whether to return SIP data
   --page: int # Page number for account presence information (format: int32)
   --perPage: int # Number for account presence information items per page (format: int32)
 ]: nothing -> record<uri: string, records: table<uri: string, allowSeeMyPresence: bool, callerIdVisibility: string, dndStatus: string, extension: record, message: string, pickUpCallsOnHold: bool, presenceStatus: string, ringOnMonitoredCall: bool, telephonyStatus: string, userStatus: string, meetingStatus: string, activeCalls: list>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<page: int, perPage: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
@@ -4861,7 +4860,7 @@ export def "restapi-v10-account-assigned-role listAssignedRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --showHidden: string@bool-completer # Specifies if hidden roles are shown or not
+  --showHidden: oneof<nothing, bool> # Specifies if hidden roles are shown or not
 ]: nothing -> record<uri: string, records: table<uri: string, extensionId: string, roles: list>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4937,7 +4936,7 @@ export def "restapi-v10-account-forward-all-calls updateForwardAllCompanyCalls" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Indicates whether the *Forward All Company Calls* feature is enabled or disabled for an account
+  --enabled: oneof<nothing, bool> # Indicates whether the *Forward All Company Calls* feature is enabled or disabled for an account
 ]: any -> record<enabled: bool, ranges: table<from: string, to: string>, callHandlingAction: string, extension: record<id: string, name: string, extensionNumber: string>, reason: record<code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5400,7 +5399,7 @@ export def "restapi-v10-account-directory-entries listDirectoryEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --showFederated: string@bool-completer # If `true` then contacts of all accounts in federation are returned. If `false` then only contacts of the current account are returned, and account section is eliminated in this case (default: true)
+  --showFederated: oneof<nothing, bool> # If `true` then contacts of all accounts in federation are returned. If `false` then only contacts of the current account are returned, and account section is eliminated in this case (default: true)
   --type: string@type-completer-8 # Type of an extension. Please note that legacy 'Department' extension type corresponds to 'Call Queue' extensions in modern RingCentral product terminology
   --typeGroup: string@typeGroup-completer # Type of extension group
   --page: int # Page number (format: int32, default: 1)
@@ -5463,11 +5462,11 @@ export def "restapi-v10-account-directory-entries-search searchDirectoryEntries"
   --extensionType: string@extensionType-completer # Extension types (e.g. User)
   --searchString: string # String value to filter the contacts. The value specified is searched through the following fields: `firstName`, `lastName`, `extensionNumber`, `phoneNumber`, `email`, `jobTitle`, `department`, `customFieldValue`
   --searchFields: list # The list of field to be searched for
-  --showFederated: string@bool-completer # If `true` then contacts of all accounts in federation are returned, if it is in federation, account section will be returned. If `false` then only contacts of the current account are returned, and account section is eliminated in this case
-  --showAdminOnlyContacts: string@bool-completer # Should show AdminOnly Contacts (default: false)
+  --showFederated: oneof<nothing, bool> # If `true` then contacts of all accounts in federation are returned, if it is in federation, account section will be returned. If `false` then only contacts of the current account are returned, and account section is eliminated in this case
+  --showAdminOnlyContacts: oneof<nothing, bool> # Should show AdminOnly Contacts (default: false)
   --extensionType: string@extensionType-completer-1 # Type of directory contact to filter (e.g. User)
   --siteId: string # Internal identifier of the business site to which extensions belong (e.g. 872781797006)
-  --showExternalContacts: string@bool-completer # Allows to control whether External (Hybrid) contacts should be returned in the response or not (default: false, e.g. true)
+  --showExternalContacts: oneof<nothing, bool> # Allows to control whether External (Hybrid) contacts should be returned in the response or not (default: false, e.g. true)
   --accountIds: list # The list of Internal identifiers of an accounts (e.g. [854874047006, 422456828004, 854874151006])
   --department: string # Department
   --siteIds: list # The list of Internal identifiers of the business sites to which extensions belong
@@ -5955,7 +5954,7 @@ export def "restapi-v10-account-user-role listUserRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --custom: string@bool-completer # Specifies whether to return custom roles or predefined roles only. If not specified, all roles are returned
+  --custom: oneof<nothing, bool> # Specifies whether to return custom roles or predefined roles only. If not specified, all roles are returned
   --page: int # The result set page number (1-indexed) to return (format: int32, default: 1, e.g. 1)
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
 ]: nothing -> record<uri: string, records: table<uri: string, id: string, displayName: string, description: string, siteCompatible: bool, custom: bool, scope: string, hidden: bool, lastUpdated: string, permissions: list>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>> {
@@ -5985,10 +5984,10 @@ export def "restapi-v10-account-user-role createCustomRole" [
   --id: string # Internal identifier of a role
   --displayName: string # Dispayed name of a role (e.g. Super Admin)
   --description: string # Role description (e.g. Primary company administrator role)
-  --siteCompatible: string@bool-completer # Site compatibility of a user role
-  --custom: string@bool-completer # Specifies if a user role is custom (default: false)
+  --siteCompatible: oneof<nothing, bool> # Site compatibility of a user role
+  --custom: oneof<nothing, bool> # Specifies if a user role is custom (default: false)
   --scope: string@scope-completer # Specifies resource for permission
-  --hidden: string@bool-completer # default: false
+  --hidden: oneof<nothing, bool> # default: false
   --lastUpdated: string # format: date-time
   --permissions: list # item shape: {uri?: string, id?: string, siteCompatible?: "Compatible"|"Incompatible"|"Independent", readOnly?: bool, assignable?: bool, permissionsCapabilities?: record}
 ]: any -> any {
@@ -6065,7 +6064,7 @@ export def "restapi-v10-account-user-role readUserRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --advancedPermissions: string@bool-completer # Specifies whether to return advanced permissions capabilities within `permissionsCapabilities` resource. The default value is false.
+  --advancedPermissions: oneof<nothing, bool> # Specifies whether to return advanced permissions capabilities within `permissionsCapabilities` resource. The default value is false.
 ]: nothing -> record<uri: string, id: string, displayName: string, description: string, siteCompatible: bool, custom: bool, scope: string, hidden: bool, lastUpdated: string, permissions: table<uri: string, id: string, siteCompatible: string, readOnly: bool, assignable: bool, permissionsCapabilities: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6094,10 +6093,10 @@ export def "restapi-v10-account-user-role updateUserRole" [
   --id: string # Internal identifier of a role
   --displayName: string # Dispayed name of a role (e.g. Super Admin)
   --description: string # Role description (e.g. Primary company administrator role)
-  --siteCompatible: string@bool-completer # Site compatibility of a user role
-  --custom: string@bool-completer # Specifies if a user role is custom (default: false)
+  --siteCompatible: oneof<nothing, bool> # Site compatibility of a user role
+  --custom: oneof<nothing, bool> # Specifies if a user role is custom (default: false)
   --scope: string@scope-completer # Specifies resource for permission
-  --hidden: string@bool-completer # default: false
+  --hidden: oneof<nothing, bool> # default: false
   --lastUpdated: string # format: date-time
   --permissions: list # item shape: {uri?: string, id?: string, siteCompatible?: "Compatible"|"Incompatible"|"Independent", readOnly?: bool, assignable?: bool, permissionsCapabilities?: record}
 ]: any -> record<uri: string, id: string, displayName: string, description: string, siteCompatible: bool, custom: bool, scope: string, hidden: bool, lastUpdated: string, permissions: table<uri: string, id: string, siteCompatible: string, readOnly: bool, assignable: bool, permissionsCapabilities: record>> {
@@ -6126,7 +6125,7 @@ export def "restapi-v10-account-user-role delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --validateOnly: string@bool-completer # Specifies that role should be validated prior to deletion, whether it can be deleted or not
+  --validateOnly: oneof<nothing, bool> # Specifies that role should be validated prior to deletion, whether it can be deleted or not
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6151,8 +6150,8 @@ export def "restapi-v10-account-user-role-bulk-assign assignMultipleUserRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --siteRestricted: string@bool-completer # e.g. true
-  --siteCompatible: string@bool-completer
+  --siteRestricted: oneof<nothing, bool> # e.g. true
+  --siteCompatible: oneof<nothing, bool>
   --uri: string # format: uri
   --addedExtensionIds: list
   --removedExtensionIds: list
@@ -6231,7 +6230,7 @@ export def "restapi-v10-account-extension createExtension" [
   --status: string@status-completer-4 # Extension current state
   --statusInfo: record # Status information (reason, comment). Returned for 'Disabled' status only — shape: {comment?: string, reason?: "SuspendedVoluntarily"|"SuspendedInvoluntarily"|"CancelledVoluntarily"|"CancelledInvoluntarily", till?: string}
   --type: string@type-completer-10 # Extension type. Please note that legacy 'Department' extension type corresponds to 'Call Queue' extensions in modern RingCentral product terminology
-  --hidden: string@bool-completer # Hides extension from showing in company directory. Supported for extensions of 'User' type only. For unassigned extensions the value is set to `true` by default. For assigned extensions the value is set to `false` by default
+  --hidden: oneof<nothing, bool> # Hides extension from showing in company directory. Supported for extensions of 'User' type only. For unassigned extensions the value is set to `true` by default. For assigned extensions the value is set to `false` by default
 ]: any -> record<id: int, uri: string, contact: record<firstName: string, lastName: string, name: string, company: string, jobTitle: string, email: string, businessPhone: string, mobilePhone: string, businessAddress: record<country: string, state: string, city: string, street: string, zip: string>, emailAsLoginName: bool, pronouncedName: record<type: string, text: string, prompt: record>, department: string>, costCenter: record<id: string, name: string>, customFields: table<id: string, value: string, displayName: string>, extensionNumber: string, name: string, partnerId: string, permissions: record<admin: record<enabled: bool>, internationalCalling: record<enabled: bool>>, profileImage: record<uri: string, etag: string, lastModified: string, contentType: string, scales: list<record>>, references: table<ref: string, type: string, refAccId: string>, regionalSettings: record<homeCountry: record<isoCode: string, callingCode: string>, timezone: record<id: string, uri: string, name: string, description: string, bias: string>, language: record<id: string, localeCode: string, name: string>, greetingLanguage: record<id: string, localeCode: string, name: string>, formattingLocale: record<id: string, localeCode: string, name: string>, timeFormat: string>, serviceFeatures: table<enabled: bool, featureName: string, reason: string>, setupWizardState: string, site: record<id: string, uri: string, name: string, code: string>, status: string, statusInfo: record<comment: string, reason: string, till: string>, type: string, hidden: bool, assignedCountry: record<id: string, uri: string, isoCode: string, name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6333,8 +6332,8 @@ export def "restapi-v10-account-extension delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --savePhoneLines: string@bool-completer # default: false
-  --savePhoneNumbers: string@bool-completer # default: true
+  --savePhoneLines: oneof<nothing, bool> # default: false
+  --savePhoneNumbers: oneof<nothing, bool> # default: true
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6568,7 +6567,7 @@ export def "restapi-v10-account-extension-conferencing updateConferencingSetting
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --phoneNumbers: list # Multiple dial-in phone numbers to connect to audio conference service, relevant for user's brand. Each number is given with the country and location information, in order to let the user choose the less expensive way to connect to a conference. The first number in the list is the primary conference number, that is default and domestic — item shape: {phoneNumber?: string, default?: bool}
-  --allowJoinBeforeHost: string@bool-completer # Determines if host user allows conference participants to join before the host
+  --allowJoinBeforeHost: oneof<nothing, bool> # Determines if host user allows conference participants to join before the host
 ]: any -> record<uri: string, allowJoinBeforeHost: bool, hostCode: string, mode: string, participantCode: string, phoneNumber: string, supportUri: string, tapToJoinUri: string, phoneNumbers: table<country: record, default: bool, hasGreeting: bool, location: string, phoneNumber: string, premium: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6624,7 +6623,7 @@ export def "restapi-v10-account-extension-call-queue-presence readExtensionCallQ
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --editableMemberStatus: string@bool-completer # Filtering by the flag 'Allow members to change their Queue Status'. If 'true' only queues where user can change his availability status are returned
+  --editableMemberStatus: oneof<nothing, bool> # Filtering by the flag 'Allow members to change their Queue Status'. If 'true' only queues where user can change his availability status are returned
 ]: nothing -> record<records: table<callQueue: record, acceptCalls: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6818,7 +6817,7 @@ export def "restapi-v10-account-extension-message-sync syncMessages" [
   --dateFrom: string # The start date/time for resulting messages in ISO 8601 format including timezone, for example 2016-03-10T18:07:52.534Z. The default value is dateTo minus 24 hours  (format: date-time)
   --dateTo: string # The end date/time for resulting messages in ISO 8601 format including timezone, for example 2016-03-10T18:07:52.534Z. The default value is current time  (format: date-time)
   --direction: list # Direction for the resulting messages. If not specified, both inbound and outbound messages are returned. Multiple values are accepted
-  --distinctConversations: string@bool-completer # If `true`, then the latest messages per every conversation ID are returned
+  --distinctConversations: oneof<nothing, bool> # If `true`, then the latest messages per every conversation ID are returned
   --messageType: list # Type for the resulting messages. If not specified, all types of messages are returned. Multiple values are accepted
   --recordCount: int # Limits the number of records to be returned (works in combination with dateFrom and dateTo if specified)  (format: int32)
   --syncToken: string # A `syncToken` value from the previous sync response (for `ISync` mode only, mandatory)
@@ -6952,20 +6951,20 @@ export def "restapi-v10-account-extension-call-log readUserCallLog" [
   --allow-errors(-e) # Return full response without error handling
   --extensionNumber: string # Short extension number of a user. If specified, returns call log for this particular extension only. Cannot be combined with `phoneNumber` filter  (e.g. 101)
   --phoneNumber: string # Phone number of a caller/callee in e.164 format without a '+' sign. If specified, all incoming/outgoing calls from/to this phone number are returned.  (e.g. 12053320032)
-  --showBlocked: string@bool-completer # Indicates then calls from/to blocked numbers are returned (default: true)
+  --showBlocked: oneof<nothing, bool> # Indicates then calls from/to blocked numbers are returned (default: true)
   --direction: list # The direction of call records to be included in the result. If omitted, both inbound and outbound calls are returned. Multiple values are supported
   --sessionId: string # Internal identifier of a call session
   --type: list # The type of call records to be included in the result. If omitted, all call types are returned. Multiple values are supported
   --transport: list # The type of call transport. Multiple values are supported. By default, this filter is disabled
   --view: string@view-completer # Defines the level of details for returned call records  (default: Simple)
-  --withRecording: string@bool-completer # Deprecated, replaced with `recordingType` filter, still supported for compatibility reasons. Indicates if only recorded calls should be returned.  If both `withRecording` and `recordingType` parameters are specified, then `withRecording` is ignored  (DEPRECATED, default: false)
+  --withRecording: oneof<nothing, bool> # Deprecated, replaced with `recordingType` filter, still supported for compatibility reasons. Indicates if only recorded calls should be returned.  If both `withRecording` and `recordingType` parameters are specified, then `withRecording` is ignored  (DEPRECATED, default: false)
   --recordingType: string@recordingType-completer # Indicates that call records with recordings of particular type should be returned. If omitted, then calls with and without recordings are returned
   --dateTo: string # The end of the time range to return call records in ISO 8601 format including timezone, for example 2016-03-10T18:07:52.534Z. The default value is current time  (format: date-time)
   --dateFrom: string # The beginning of the time range to return call records in ISO 8601 format including timezone, for example 2016-03-10T18:07:52.534Z. The default value is `dateTo` minus 24 hours  (format: date-time)
   --telephonySessionId: string # Internal identifier of a telephony session
   --page: int # Indicates the page number to retrieve. Only positive number values are allowed (format: int32, default: 1)
   --perPage: int # Indicates the page size (number of items). The default value is 100. The maximum value for `Simple` view is 1000, for `Detailed` view - 250  (format: int32, default: 100)
-  --showDeleted: string@bool-completer # Indicates that deleted calls records should be returned (default: false)
+  --showDeleted: oneof<nothing, bool> # Indicates that deleted calls records should be returned (default: false)
 ]: nothing -> record<uri: string, records: table<extension: record, telephonySessionId: string, sipUuidInfo: string, transferTarget: record, transferee: record, partyId: string, transport: string, from: record, to: record, type: string, direction: string, message: record, delegate: record, delegationType: string, action: string, result: string, reason: string, reasonDescription: string, startTime: string, duration: int, durationMs: int, recording: record, shortRecording: bool, billing: record, internalType: string, id: string, uri: string, sessionId: string, deleted: bool, legs: list, lastModifiedTime: string>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7048,8 +7047,8 @@ export def "restapi-v10-account-extension-call-log-sync syncUserCallLog" [
   --recordCount: int # For `FSync` mode this parameter is mandatory, it limits the number of records to be returned in response.  For `ISync` mode this parameter specifies the number of records to extend the sync frame with to the past (the maximum number of records is 250)  (format: int32)
   --statusGroup: list # Type of calls to be returned
   --view: string@view-completer # Defines the level of details for returned call records  (default: Simple)
-  --showDeleted: string@bool-completer # Supported for `ISync` mode. Indicates that deleted call records should be returned (default: false)
-  --withRecording: string@bool-completer # Deprecated, replaced with `recordingType` filter, still supported for compatibility reasons. Indicates if only recorded calls should be returned.  If both `withRecording` and `recordingType` parameters are specified, then `withRecording` is ignored  (DEPRECATED, default: false)
+  --showDeleted: oneof<nothing, bool> # Supported for `ISync` mode. Indicates that deleted call records should be returned (default: false)
+  --withRecording: oneof<nothing, bool> # Deprecated, replaced with `recordingType` filter, still supported for compatibility reasons. Indicates if only recorded calls should be returned.  If both `withRecording` and `recordingType` parameters are specified, then `withRecording` is ignored  (DEPRECATED, default: false)
   --recordingType: string@recordingType-completer # Indicates that call records with recordings of particular type should be returned. If omitted, then calls with and without recordings are returned
 ]: nothing -> record<uri: string, records: table<extension: record, telephonySessionId: string, sipUuidInfo: string, transferTarget: record, transferee: record, partyId: string, transport: string, from: record, to: record, type: string, direction: string, message: record, delegate: record, delegationType: string, action: string, result: string, reason: string, reasonDescription: string, startTime: string, duration: int, durationMs: int, recording: record, shortRecording: bool, billing: record, internalType: string, id: string, uri: string, sessionId: string, deleted: bool, legs: list, lastModifiedTime: string>, syncInfo: record<syncType: string, syncToken: string, syncTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7160,8 +7159,8 @@ export def "restapi-v10-account-extension-caller-id updateExtensionCallerId" [
   --uri: string # Canonical URL of a caller ID resource (format: uri)
   --byDevice: list # item shape: {device?: record, callerId?: record}
   --byFeature: list # item shape: {feature?: "RingOut"|"RingMe"|"CallFlip"|"FaxNumber"|"AdditionalSoftphone"|"Alternate"|"CommonPhone"|"MobileApp"|"Delegated", callerId?: record}
-  --extensionNameForOutboundCalls: string@bool-completer # If `true`, then the user first name and last name will be used as caller ID when making outbound calls from extension
-  --extensionNumberForInternalCalls: string@bool-completer # If `true`, then extension number will be used as caller ID when making internal calls
+  --extensionNameForOutboundCalls: oneof<nothing, bool> # If `true`, then the user first name and last name will be used as caller ID when making outbound calls from extension
+  --extensionNumberForInternalCalls: oneof<nothing, bool> # If `true`, then extension number will be used as caller ID when making internal calls
 ]: any -> record<uri: string, byDevice: table<device: record, callerId: record>, byFeature: table<feature: string, callerId: record>, extensionNameForOutboundCalls: bool, extensionNumberForInternalCalls: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7190,7 +7189,7 @@ export def "restapi-v10-account-extension-answering-rule listAnsweringRules" [
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer-13 # Filters custom call handling rules of the extension
   --view: string@view-completer # default: Simple
-  --enabledOnly: string@bool-completer # If true, then only active call handling rules are returned (default: false)
+  --enabledOnly: oneof<nothing, bool> # If true, then only active call handling rules are returned (default: false)
   --page: int # The result set page number (1-indexed) to return (format: int32, default: 1, e.g. 1)
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
 ]: nothing -> record<uri: string, records: table<uri: string, id: string, type: string, name: string, enabled: bool, schedule: record, calledNumbers: list, callers: list, callHandlingAction: string, forwarding: record, unconditionalForwarding: record, queue: record, transfer: record, voicemail: record, greetings: list, screening: string, sharedLines: record, missedCall: record>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>> {
@@ -7227,7 +7226,7 @@ export def "restapi-v10-account-extension-answering-rule createAnsweringRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Specifies if the rule is active or inactive. The default value is `true`
+  --enabled: oneof<nothing, bool> # Specifies if the rule is active or inactive. The default value is `true`
   type: string # Type of an answering rule. The 'Custom' value should be specified
   name: string # Name of an answering rule specified by user
   --callers: list # Answering rule will be applied when calls are received from the specified caller(s) — item shape: {callerId?: string, name?: string}
@@ -7269,7 +7268,7 @@ export def "restapi-v10-account-extension-answering-rule readAnsweringRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --showInactiveNumbers: string@bool-completer # Indicates whether inactive numbers should be returned or not (default: false)
+  --showInactiveNumbers: oneof<nothing, bool> # Indicates whether inactive numbers should be returned or not (default: false)
 ]: nothing -> record<uri: string, id: string, type: string, name: string, enabled: bool, schedule: record<weeklyRanges: record<monday: list, tuesday: list, wednesday: list, thursday: list, friday: list, saturday: list, sunday: list>, ranges: list<record>, ref: string>, calledNumbers: table<phoneNumber: string>, callers: table<callerId: string, name: string>, callHandlingAction: string, forwarding: record<notifyMySoftPhones: bool, notifyAdminSoftPhones: bool, softPhonesRingCount: int, softPhonesAlwaysRing: bool, ringingMode: string, rules: list<record>, softPhonesPositionTop: bool, mobileTimeout: bool>, unconditionalForwarding: record<phoneNumber: string, action: string>, queue: record<transferMode: string, transfer: list<record>, noAnswerAction: string, fixedOrderAgents: list<record>, holdAudioInterruptionMode: string, holdAudioInterruptionPeriod: int, holdTimeExpirationAction: string, agentTimeout: int, wrapUpTime: int, holdTime: int, maxCallers: int, maxCallersAction: string, unconditionalForwarding: list<record>>, transfer: record<extension: record<id: string, uri: string>>, voicemail: record<enabled: bool, recipient: record<uri: string, id: string>>, greetings: table<type: string, preset: record, custom: record>, screening: string, sharedLines: record<timeout: int>, missedCall: record<actionType: string, extension: record<id: string, externalNumber: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7307,7 +7306,7 @@ export def "restapi-v10-account-extension-answering-rule updateAnsweringRule" [
   --allow-errors(-e) # Return full response without error handling
   --id: string # Identifier of an answering rule
   --forwarding: record # Forwarding parameters. Returned if 'ForwardCalls' is specified in 'callHandlingAction'. These settings determine the forwarding numbers to which the call will be forwarded — shape: {notifyMySoftPhones?: bool, notifyAdminSoftPhones?: bool, softPhonesRingCount?: int, softPhonesAlwaysRing?: bool, ringingMode?: "Sequentially"|"Simultaneously", rules?: list, mobileTimeout?: bool}
-  --enabled: string@bool-completer # Specifies if the rule is active or inactive. The default value is `true`
+  --enabled: oneof<nothing, bool> # Specifies if the rule is active or inactive. The default value is `true`
   --name: string # Name of an answering rule specified by user
   --callers: list # Answering rule will be applied when calls are received from the specified caller(s) — item shape: {callerId?: string, name?: string}
   --calledNumbers: list # Answering rules are applied when calling to selected number(s) — item shape: {phoneNumber?: string}
@@ -7320,7 +7319,7 @@ export def "restapi-v10-account-extension-answering-rule updateAnsweringRule" [
   --missedCall: record # Specifies behavior for the missed call scenario. Returned only if `enabled` parameter of a voicemail is set to 'false' — shape: {actionType?: "PlayGreetingAndDisconnect"|"ConnectToExtension"|"ConnectToExternalNumber", extension?: record}
   --greetings: list # Greetings applied for an answering rule; only predefined greetings can be applied, see Dictionary Greeting List — item shape: {type?: "Introductory"|"Announcement"|"AutomaticRecording"|"BlockedCallersAll"|"BlockedCallersSpecific"|"BlockedNoCallerId"|"BlockedPayPhones"|"ConnectingMessage"|"ConnectingAudio"|"StartRecording"|"StopRecording"|"Voicemail"|"Unavailable"|"InterruptPrompt"|"HoldMusic"|"Company", preset?: record, custom?: record}
   --screening: string@screening-completer # Call screening status. 'Off' - no call screening; 'NoCallerId' - if caller ID is missing, then callers are asked to say their name before connecting; 'UnknownCallerId' - if caller ID is not in contact list, then callers are asked to say their name before connecting; 'Always' - the callers are always asked to say their name before connecting. The default value is 'Off'  (default: Off)
-  --showInactiveNumbers: string@bool-completer # Indicates whether inactive numbers should be returned or not
+  --showInactiveNumbers: oneof<nothing, bool> # Indicates whether inactive numbers should be returned or not
   --transfer: record # shape: {extension?: record}
 ]: any -> record<uri: string, id: string, type: string, name: string, enabled: bool, schedule: record<weeklyRanges: record<monday: list, tuesday: list, wednesday: list, thursday: list, friday: list, saturday: list, sunday: list>, ranges: list<record>, ref: string>, calledNumbers: table<phoneNumber: string>, callers: table<callerId: string, name: string>, callHandlingAction: string, forwarding: record<notifyMySoftPhones: bool, notifyAdminSoftPhones: bool, softPhonesRingCount: int, softPhonesAlwaysRing: bool, ringingMode: string, rules: list<record>, softPhonesPositionTop: bool, mobileTimeout: bool>, unconditionalForwarding: record<phoneNumber: string, action: string>, queue: record<transferMode: string, transfer: list<record>, noAnswerAction: string, fixedOrderAgents: list<record>, holdAudioInterruptionMode: string, holdAudioInterruptionPeriod: int, holdTimeExpirationAction: string, agentTimeout: int, wrapUpTime: int, holdTime: int, maxCallers: int, maxCallersAction: string, unconditionalForwarding: list<record>>, transfer: record<extension: record<id: string, uri: string>>, voicemail: record<enabled: bool, recipient: record<uri: string, id: string>>, greetings: table<type: string, preset: record, custom: record>, screening: string, sharedLines: record<timeout: int>, missedCall: record<actionType: string, extension: record<id: string, externalNumber: record>>> {
   let input = $in
@@ -7516,7 +7515,7 @@ export def "restapi-v10-account-extension-emergency-locations createExtensionEme
   --allow-errors(-e) # Return full response without error handling
   --name: string # Name of a new personal emergency response location
   --addressFormatId: string # Address format ID
-  --trusted: string@bool-completer # If 'true' address validation for non-us addresses is skipped
+  --trusted: oneof<nothing, bool> # If 'true' address validation for non-us addresses is skipped
   --address: any
 ]: any -> record<id: string, address: any, name: string, site: record<id: string, name: string>, addressStatus: string, usageStatus: string, syncStatus: string, addressType: string, visibility: string, owners: table<id: string, extensionNumber: string, name: string>, addressFormatId: string, trusted: bool> {
   let input = $in
@@ -7554,7 +7553,7 @@ export def "restapi-v10-account-extension-emergency-locations updateExtensionEme
   --usageStatus: string@usageStatus-completer # Status of an emergency response location usage.
   --addressFormatId: string # Address format ID
   --visibility: string@visibility-completer # Visibility of an emergency response location. If `Private` is set, then a location is visible only for restricted number of users, specified in `owners` array  (default: Public)
-  --trusted: string@bool-completer # If 'true' address validation for non-us addresses is skipped
+  --trusted: oneof<nothing, bool> # If 'true' address validation for non-us addresses is skipped
 ]: any -> record<id: string, address: any, name: string, site: record<id: string, name: string>, addressStatus: string, usageStatus: string, syncStatus: string, addressType: string, visibility: string, owners: table<id: string, extensionNumber: string, name: string>, addressFormatId: string, trusted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7582,7 +7581,7 @@ export def "restapi-v10-account-extension-emergency-locations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --validateOnly: string@bool-completer # Flag indicating that only validation of Emergency Response Locations to be deleted is required
+  --validateOnly: oneof<nothing, bool> # Flag indicating that only validation of Emergency Response Locations to be deleted is required
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7831,16 +7830,16 @@ export def "restapi-v10-account-extension-meeting createMeeting" [
   --schedule: record # Timing of a meeting — shape: {startTime?: string, durationInMinutes?: int, timeZone?: record}
   --password: string # Meeting password (format: password)
   --host: record # Meeting host information — shape: {uri?: string, id?: string}
-  --allowJoinBeforeHost: string@bool-completer # default: false
-  --startHostVideo: string@bool-completer # default: false
-  --startParticipantsVideo: string@bool-completer # Starting meetings with participant video on/off (true/false) (default: false)
-  --usePersonalMeetingId: string@bool-completer # If true, then personal user's meeting ID is applied for creation of this meeting
+  --allowJoinBeforeHost: oneof<nothing, bool> # default: false
+  --startHostVideo: oneof<nothing, bool> # default: false
+  --startParticipantsVideo: oneof<nothing, bool> # Starting meetings with participant video on/off (true/false) (default: false)
+  --usePersonalMeetingId: oneof<nothing, bool> # If true, then personal user's meeting ID is applied for creation of this meeting
   --audioOptions: list
   --recurrence: record # shape: {frequency?: "Daily"|"Weekly"|"Monthly", interval?: int, weeklyByDays?: list, monthlyByDay?: int, monthlyByWeek?: "Last"|"First"|"Second"|"Third"|"Fourth", monthlyByWeekDay?: "Sunday"|"Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"Saturday", count?: int, until?: string}
   --autoRecordType: string@autoRecordType-completer # Automatic record type (default: none)
-  --enforceLogin: string@bool-completer # If true, then only signed-in users can join this meeting
-  --muteParticipantsOnEntry: string@bool-completer # If true, then participants are muted on entry
-  --enableWaitingRoom: string@bool-completer # If true, then the waiting room for participants is enabled
+  --enforceLogin: oneof<nothing, bool> # If true, then only signed-in users can join this meeting
+  --muteParticipantsOnEntry: oneof<nothing, bool> # If true, then participants are muted on entry
+  --enableWaitingRoom: oneof<nothing, bool> # If true, then the waiting room for participants is enabled
   --globalDialInCountries: list # List of global dial-in countries (eg. US, UK, AU, etc.)
   --alternativeHosts: string
 ]: any -> record<uri: string, uuid: string, id: string, topic: string, meetingType: string, password: string, h323Password: string, status: string, links: record<startUri: string, joinUri: string>, schedule: record<startTime: string, durationInMinutes: int, timeZone: record<uri: string, id: string, name: string, description: string>>, host: record<uri: string, id: string>, allowJoinBeforeHost: bool, startHostVideo: bool, startParticipantsVideo: bool, audioOptions: list<string>, recurrence: record<frequency: string, interval: int, weeklyByDays: list<string>, monthlyByDay: int, monthlyByWeek: string, monthlyByWeekDay: string, count: int, until: string>, autoRecordType: string, enforceLogin: bool, muteParticipantsOnEntry: bool, occurrences: table<id: string, startTime: string, durationInMinutes: int, status: string>, enableWaitingRoom: bool, globalDialInCountries: list<string>, alternativeHosts: string> {
@@ -7931,16 +7930,16 @@ export def "restapi-v10-account-extension-meeting updateMeeting" [
   --schedule: record # Timing of a meeting — shape: {startTime?: string, durationInMinutes?: int, timeZone?: record}
   --password: string # Meeting password (format: password)
   --host: record # Meeting host information — shape: {uri?: string, id?: string}
-  --allowJoinBeforeHost: string@bool-completer # default: false
-  --startHostVideo: string@bool-completer # default: false
-  --startParticipantsVideo: string@bool-completer # Starting meetings with participant video on/off (true/false) (default: false)
-  --usePersonalMeetingId: string@bool-completer # If true, then personal user's meeting ID is applied for creation of this meeting
+  --allowJoinBeforeHost: oneof<nothing, bool> # default: false
+  --startHostVideo: oneof<nothing, bool> # default: false
+  --startParticipantsVideo: oneof<nothing, bool> # Starting meetings with participant video on/off (true/false) (default: false)
+  --usePersonalMeetingId: oneof<nothing, bool> # If true, then personal user's meeting ID is applied for creation of this meeting
   --audioOptions: list
   --recurrence: record # shape: {frequency?: "Daily"|"Weekly"|"Monthly", interval?: int, weeklyByDays?: list, monthlyByDay?: int, monthlyByWeek?: "Last"|"First"|"Second"|"Third"|"Fourth", monthlyByWeekDay?: "Sunday"|"Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"Saturday", count?: int, until?: string}
   --autoRecordType: string@autoRecordType-completer # Automatic record type (default: none)
-  --enforceLogin: string@bool-completer # If true, then only signed-in users can join this meeting
-  --muteParticipantsOnEntry: string@bool-completer # If true, then participants are muted on entry
-  --enableWaitingRoom: string@bool-completer # If true, then the waiting room for participants is enabled
+  --enforceLogin: oneof<nothing, bool> # If true, then only signed-in users can join this meeting
+  --muteParticipantsOnEntry: oneof<nothing, bool> # If true, then participants are muted on entry
+  --enableWaitingRoom: oneof<nothing, bool> # If true, then the waiting room for participants is enabled
   --globalDialInCountries: list # List of global dial-in countries (eg. US, UK, AU, etc.)
   --alternativeHosts: string
 ]: any -> record<uri: string, uuid: string, id: string, topic: string, meetingType: string, password: string, h323Password: string, status: string, links: record<startUri: string, joinUri: string>, schedule: record<startTime: string, durationInMinutes: int, timeZone: record<uri: string, id: string, name: string, description: string>>, host: record<uri: string, id: string>, allowJoinBeforeHost: bool, startHostVideo: bool, startParticipantsVideo: bool, audioOptions: list<string>, recurrence: record<frequency: string, interval: int, weeklyByDays: list<string>, monthlyByDay: int, monthlyByWeek: string, monthlyByWeekDay: string, count: int, until: string>, autoRecordType: string, enforceLogin: bool, muteParticipantsOnEntry: bool, occurrences: table<id: string, startTime: string, durationInMinutes: int, status: string>, enableWaitingRoom: bool, globalDialInCountries: list<string>, alternativeHosts: string> {
@@ -8008,16 +8007,16 @@ export def "restapi-v10-account-extension-meeting patch" [
   --schedule: record # Timing of a meeting — shape: {startTime?: string, durationInMinutes?: int, timeZone?: record}
   --password: string # Meeting password (format: password)
   --host: record # Meeting host information — shape: {uri?: string, id?: string}
-  --allowJoinBeforeHost: string@bool-completer # default: false
-  --startHostVideo: string@bool-completer # default: false
-  --startParticipantsVideo: string@bool-completer # Starting meetings with participant video on/off (true/false) (default: false)
-  --usePersonalMeetingId: string@bool-completer # If true, then personal user's meeting ID is applied for creation of this meeting
+  --allowJoinBeforeHost: oneof<nothing, bool> # default: false
+  --startHostVideo: oneof<nothing, bool> # default: false
+  --startParticipantsVideo: oneof<nothing, bool> # Starting meetings with participant video on/off (true/false) (default: false)
+  --usePersonalMeetingId: oneof<nothing, bool> # If true, then personal user's meeting ID is applied for creation of this meeting
   --audioOptions: list
   --recurrence: record # shape: {frequency?: "Daily"|"Weekly"|"Monthly", interval?: int, weeklyByDays?: list, monthlyByDay?: int, monthlyByWeek?: "Last"|"First"|"Second"|"Third"|"Fourth", monthlyByWeekDay?: "Sunday"|"Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"Saturday", count?: int, until?: string}
   --autoRecordType: string@autoRecordType-completer # Automatic record type (default: none)
-  --enforceLogin: string@bool-completer # If true, then only signed-in users can join this meeting
-  --muteParticipantsOnEntry: string@bool-completer # If true, then participants are muted on entry
-  --enableWaitingRoom: string@bool-completer # If true, then the waiting room for participants is enabled
+  --enforceLogin: oneof<nothing, bool> # If true, then only signed-in users can join this meeting
+  --muteParticipantsOnEntry: oneof<nothing, bool> # If true, then participants are muted on entry
+  --enableWaitingRoom: oneof<nothing, bool> # If true, then the waiting room for participants is enabled
   --globalDialInCountries: list # List of global dial-in countries (eg. US, UK, AU, etc.)
   --alternativeHosts: string
 ]: any -> record<uri: string, uuid: string, id: string, topic: string, meetingType: string, password: string, h323Password: string, status: string, links: record<startUri: string, joinUri: string>, schedule: record<startTime: string, durationInMinutes: int, timeZone: record<uri: string, id: string, name: string, description: string>>, host: record<uri: string, id: string>, allowJoinBeforeHost: bool, startHostVideo: bool, startParticipantsVideo: bool, audioOptions: list<string>, recurrence: record<frequency: string, interval: int, weeklyByDays: list<string>, monthlyByDay: int, monthlyByWeek: string, monthlyByWeekDay: string, count: int, until: string>, autoRecordType: string, enforceLogin: bool, muteParticipantsOnEntry: bool, occurrences: table<id: string, startTime: string, durationInMinutes: int, status: string>, enableWaitingRoom: bool, globalDialInCountries: list<string>, alternativeHosts: string> {
@@ -8153,8 +8152,8 @@ export def "restapi-v10-account-extension-presence readUserPresenceStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --detailedTelephonyState: string@bool-completer # Specifies whether to return a detailed telephony state or not
-  --sipData: string@bool-completer # Specifies whether to return SIP data or not
+  --detailedTelephonyState: oneof<nothing, bool> # Specifies whether to return a detailed telephony state or not
+  --sipData: oneof<nothing, bool> # Specifies whether to return SIP data or not
 ]: nothing -> record<uri: string, allowSeeMyPresence: bool, callerIdVisibility: string, dndStatus: string, extension: record<id: int, uri: string, extensionNumber: string>, message: string, pickUpCallsOnHold: bool, presenceStatus: string, ringOnMonitoredCall: bool, telephonyStatus: string, userStatus: string, meetingStatus: string, activeCalls: table<id: string, direction: string, queueCall: bool, from: string, fromName: string, to: string, toName: string, startTime: string, telephonyStatus: string, sipData: record, sessionId: string, telephonySessionId: string, onBehalfOf: string, partyId: string, terminationType: string, callInfo: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8182,9 +8181,9 @@ export def "restapi-v10-account-extension-presence updateUserPresenceStatus" [
   --userStatus: string@userStatus-completer
   --dndStatus: string@dndStatus-completer
   --message: string
-  --allowSeeMyPresence: string@bool-completer # default: false
-  --ringOnMonitoredCall: string@bool-completer # default: false
-  --pickUpCallsOnHold: string@bool-completer # default: false
+  --allowSeeMyPresence: oneof<nothing, bool> # default: false
+  --ringOnMonitoredCall: oneof<nothing, bool> # default: false
+  --pickUpCallsOnHold: oneof<nothing, bool> # default: false
   --callerIdVisibility: string@callerIdVisibility-completer # Configures the user presence visibility. When the `allowSeeMyPresence` parameter is set to `true`,  the following visibility options are supported via this parameter - All, None, PermittedUsers
 ]: any -> record<uri: string, userStatus: string, dndStatus: string, message: string, allowSeeMyPresence: bool, callerIdVisibility: string, ringOnMonitoredCall: bool, pickUpCallsOnHold: bool, activeCalls: table<id: string, direction: string, queueCall: bool, from: string, fromName: string, to: string, toName: string, startTime: string, telephonyStatus: string, sipData: record, sessionId: string, telephonySessionId: string, onBehalfOf: string, partyId: string, terminationType: string, callInfo: record>, extension: record<id: int, uri: string, extensionNumber: string>, meetingStatus: string, telephonyStatus: string, presenceStatus: string> {
   let input = $in
@@ -8253,7 +8252,7 @@ export def "restapi-v10-account-extension-ring-out createRingOutCall" [
   --body-from: record # Phone number of a caller. This number corresponds to the 1st leg of a RingOut call. This number can be one of the user's configured forwarding numbers or an arbitrary number — shape: {phoneNumber?: string, forwardingNumberId?: string}
   --body-to: record # Phone number of a called party. This number corresponds to the 2nd leg of a RingOut call — shape: {phoneNumber?: string}
   --callerId: record # Phone number which will be displayed to the called party — shape: {phoneNumber?: string}
-  --playPrompt: string@bool-completer # Audio prompt that a calling party hears when a call is connected
+  --playPrompt: oneof<nothing, bool> # Audio prompt that a calling party hears when a call is connected
   --country: record # Optional. Dialing plan country data. If not specified, then an extension home country is applied by default — shape: {id?: string}
 ]: any -> record<id: string, uri: string, status: record<callStatus: string, callerStatus: string, calleeStatus: string>> {
   let input = $in
@@ -8719,7 +8718,7 @@ export def "restapi-v10-account-extension-assigned-role listUserAssignedRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --showHidden: string@bool-completer # Specifies if hidden roles are shown or not
+  --showHidden: oneof<nothing, bool> # Specifies if hidden roles are shown or not
 ]: nothing -> record<uri: string, records: table<uri: string, id: string, autoAssigned: bool, displayName: string, siteCompatible: bool, siteRestricted: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8857,13 +8856,13 @@ export def "restapi-v10-account-extension-notification-settings updateNotificati
   --allow-errors(-e) # Return full response without error handling
   --emailAddresses: list # List of notification recipient email addresses. Should not be empty if 'includeManagers' parameter is set to false
   --smsEmailAddresses: list # List of notification recipient email addresses
-  --advancedMode: string@bool-completer # Specifies notifications settings mode. If `true` then advanced mode is on, it allows using different emails and/or phone numbers for each notification type. If `false` then basic mode is on. Advanced mode settings are returned in both modes, if specified once, but if basic mode is switched on, they are not applied
+  --advancedMode: oneof<nothing, bool> # Specifies notifications settings mode. If `true` then advanced mode is on, it allows using different emails and/or phone numbers for each notification type. If `false` then basic mode is on. Advanced mode settings are returned in both modes, if specified once, but if basic mode is switched on, they are not applied
   --voicemails: record # shape: {notifyByEmail?: bool, notifyBySms?: bool, advancedEmailAddresses?: list, advancedSmsEmailAddresses?: list, includeAttachment?: bool, includeTranscription?: bool, markAsRead?: bool}
   --inboundFaxes: record # shape: {notifyByEmail?: bool, notifyBySms?: bool, advancedEmailAddresses?: list, advancedSmsEmailAddresses?: list, includeAttachment?: bool, markAsRead?: bool}
   --outboundFaxes: record # shape: {notifyByEmail?: bool, notifyBySms?: bool, advancedEmailAddresses?: list, advancedSmsEmailAddresses?: list}
   --inboundTexts: record # shape: {notifyByEmail?: bool, notifyBySms?: bool, advancedEmailAddresses?: list, advancedSmsEmailAddresses?: list}
   --missedCalls: record # shape: {notifyByEmail?: bool, notifyBySms?: bool, advancedEmailAddresses?: list, advancedSmsEmailAddresses?: list}
-  --includeManagers: string@bool-completer # Specifies if managers' emails are included in the list of emails to which notifications are sent. If not specified, then the value is `true`  (default: true)
+  --includeManagers: oneof<nothing, bool> # Specifies if managers' emails are included in the list of emails to which notifications are sent. If not specified, then the value is `true`  (default: true)
 ]: any -> record<uri: string, emailRecipients: table<extensionId: string, fullName: string, extensionNumber: string, status: string, emailAddresses: list, permission: string>, emailAddresses: list<string>, includeManagers: bool, smsEmailAddresses: list<string>, advancedMode: bool, voicemails: record<notifyByEmail: bool, notifyBySms: bool, advancedEmailAddresses: list<string>, advancedSmsEmailAddresses: list<string>, includeAttachment: bool, includeTranscription: bool, markAsRead: bool>, inboundFaxes: record<notifyByEmail: bool, notifyBySms: bool, advancedEmailAddresses: list<string>, advancedSmsEmailAddresses: list<string>, includeAttachment: bool, markAsRead: bool>, outboundFaxes: record<notifyByEmail: bool, notifyBySms: bool, advancedEmailAddresses: list<string>, advancedSmsEmailAddresses: list<string>>, inboundTexts: record<notifyByEmail: bool, notifyBySms: bool, advancedEmailAddresses: list<string>, advancedSmsEmailAddresses: list<string>>, missedCalls: record<notifyByEmail: bool, notifyBySms: bool, advancedEmailAddresses: list<string>, advancedSmsEmailAddresses: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8924,7 +8923,7 @@ export def "restapi-v10-account-extension-features readExtensionFeatures" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --availableOnly: string@bool-completer # Allows to filter features by availability for an extension  (default: false)
+  --availableOnly: oneof<nothing, bool> # Allows to filter features by availability for an extension  (default: false)
   --featureId: list # Internal identifier(s) of the feature(s)
 ]: nothing -> record<records: table<id: string, available: bool, params: list, reason: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8955,7 +8954,7 @@ export def "restapi-v10-account-extension-message-store listMessages" [
   --dateFrom: string # Start date/time for resulting messages in ISO 8601 format including timezone, for example 2016-03-10T18:07:52.534Z. The default value is dateTo minus 24 hours  (format: date-time)
   --dateTo: string # End date/time for resulting messages in ISO 8601 format including timezone, for example 2016-03-10T18:07:52.534Z. The default value is current time  (format: date-time)
   --direction: list # Direction for resulting messages. If not specified, both inbound and outbound messages are returned. Multiple values are accepted
-  --distinctConversations: string@bool-completer # If `true`, then the latest messages per every conversation ID are returned
+  --distinctConversations: oneof<nothing, bool> # If `true`, then the latest messages per every conversation ID are returned
   --messageType: list # Type of resulting messages. If not specified, all messages without message type filtering are returned. Multiple values are accepted
   --readStatus: list # Read status for resulting messages. Multiple values are accepted
   --page: int # Indicates a page number to retrieve. Only positive number values are accepted  (format: int32, default: 1)
@@ -9097,7 +9096,7 @@ export def "restapi-v10-account-extension-message-store delete-by-accountId-exte
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --purge: string@bool-completer # If the value is `true`, then the message is purged immediately with all the attachments  (default: false)
+  --purge: oneof<nothing, bool> # If the value is `true`, then the message is purged immediately with all the attachments  (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -9125,7 +9124,7 @@ export def "restapi-v10-account-extension-greeting createCustomUserGreeting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --apply: string@bool-completer # Specifies whether to apply an answering rule or not. If set to true then `answeringRule` parameter is mandatory. If set to false, then the answering rule is not applied even if specified  (default: true)
+  --apply: oneof<nothing, bool> # Specifies whether to apply an answering rule or not. If set to true then `answeringRule` parameter is mandatory. If set to false, then the answering rule is not applied even if specified  (default: true)
   type: string@type-completer-17 # Type of greeting, specifying the case when the greeting is played.
   answeringRuleId: string # Internal identifier of an answering rule
   binary: string # Media file to upload (format: binary)
@@ -9501,7 +9500,7 @@ export def "restapi-v10-account-extension-overflow-settings updateCallQueueOverf
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Call queue overflow status
+  --enabled: oneof<nothing, bool> # Call queue overflow status
   --items: list # item shape: {id?: string}
 ]: any -> record<enabled: bool, items: table<uri: string, id: string, extensionNumber: string, name: string, status: string, subType: string>> {
   let input = $in
@@ -9555,7 +9554,7 @@ export def "restapi-v10-account-emergency-address-auto-update-users listAutomati
   --searchString: string # Filters entries containing the specified substring in user name, extension or department. The characters range is 0-64; not case-sensitive. If empty then the filter is ignored
   --department: list # Department name to filter the users. The value range is 0-64; not case-sensitive. If not specified then the parameter is ignored. Multiple values are supported
   --siteId: list # Internal identifier of a site for filtering. To indicate company main site `main-site` value should be specified. Supported only if multi-site feature is enabled for the account. Multiple values are supported.
-  --featureEnabled: string@bool-completer # Filters entries by their status of Automatic Location Updates feature
+  --featureEnabled: oneof<nothing, bool> # Filters entries by their status of Automatic Location Updates feature
   --orderBy: string # Comma-separated list of fields to order results prefixed by plus sign '+' (ascending order) or minus sign '-' (descending order). Supported values: 'name', 'modelName', 'siteName', 'featureEnabled'. The default sorting is by `name`
   --perPage: int # Indicates a page size (number of items). The values supported: `Max` or numeric value. If not specified, 100 records are returned per one page  (format: int32)
   --page: int # Indicates a page number to retrieve. Only positive number values are supported  (format: int32, default: 1)
@@ -10109,9 +10108,9 @@ export def "restapi-v10-account-emergency-address-auto-update-devices listDevice
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --siteId: list # Internal identifier of a site for filtering. To indicate company main site `main-site` value should be specified. Supported only if multi-site feature is enabled for the account. Multiple values are supported.
-  --featureEnabled: string@bool-completer # Filters entries by their status of Automatic Location Updates feature
+  --featureEnabled: oneof<nothing, bool> # Filters entries by their status of Automatic Location Updates feature
   --modelId: string # Internal identifier of a device model for filtering. Multiple values are supported
-  --compatibleOnly: string@bool-completer # Filters devices which support HELD protocol
+  --compatibleOnly: oneof<nothing, bool> # Filters devices which support HELD protocol
   --searchString: string # Filters entries which have device name or model name containing the mentioned substring. The value should be split by spaces; the range is 0 - 64 characters, not case-sensitive. If empty the filter is ignored
   --orderBy: string # Comma-separated list of fields to order results prefixed by plus sign '+' (ascending order) or minus sign '-' (descending order). Supported values: 'name', 'modelName', 'siteName', 'featureEnabled'. The default sorting is by `name`
   --perPage: int # Indicates a page size (number of items). The values supported: `Max` or numeric value. If not specified, 100 records are returned per one page  (format: int32)
@@ -10439,7 +10438,7 @@ export def "restapi-v10-number-parser-parse parsePhoneNumber" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --homeCountry: string # ISO 3166 alpha2 code of the home country to be used if it is impossible to determine country from the number itself. By default, this parameter is preset to the current user's home country or brand country if the user is undefined  (e.g. US)
-  --nationalAsPriority: string@bool-completer # The default value is `false`. If `true`, the numbers that are closer to the home country are given higher priority  (default: false)
+  --nationalAsPriority: oneof<nothing, bool> # The default value is `false`. If `true`, the numbers that are closer to the home country are given higher priority  (default: false)
   --originalStrings: list # The list of phone numbers passed as an array of strings (not more than 64 items). The maximum size of each string is 64 characters
 ]: any -> record<uri: string, homeCountry: record<id: string, uri: string, callingCode: string, isoCode: string, name: string>, phoneNumbers: table<originalString: string, country: record, areaCode: string, dialable: string, e164: string, formattedInternational: string, formattedNational: string, special: bool, normalized: string, tollFree: bool, subAddress: string, subscriberNumber: string, dtmfPostfix: string>> {
   let input = $in
@@ -10514,11 +10513,11 @@ export def "restapi-v10-dictionary-state listStates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allCountries: string@bool-completer # If set to `true` then states of all countries are returned and `countryId` is ignored, even if specified. If the value is empty then the parameter is ignored
+  --allCountries: oneof<nothing, bool> # If set to `true` then states of all countries are returned and `countryId` is ignored, even if specified. If the value is empty then the parameter is ignored
   --countryId: int # Internal identifier of a country (format: int64)
   --page: int # Indicates a page number to retrieve. Only positive number values are accepted  (format: int32, default: 1)
   --perPage: int # Indicates a page size (number of items) (format: int32, default: 100)
-  --withPhoneNumbers: string@bool-completer # If `true` the list of states with phone numbers available for buying is returned  (default: false)
+  --withPhoneNumbers: oneof<nothing, bool> # If `true` the list of states with phone numbers available for buying is returned  (default: false)
 ]: nothing -> record<uri: string, records: table<id: string, uri: string, country: record, isoCode: string, name: string>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10567,7 +10566,7 @@ export def "restapi-v10-dictionary-location listLocations" [
   --page: int # Indicates a page number to retrieve. Only positive number values are accepted  (format: int32, default: 1)
   --perPage: int # Indicates a page size (number of items) (format: int32, default: 100)
   --stateId: string # Internal identifier of a state
-  --withNxx: string@bool-completer # Specifies if `nxx` codes are returned
+  --withNxx: oneof<nothing, bool> # Specifies if `nxx` codes are returned
 ]: nothing -> record<uri: string, records: table<uri: string, areaCode: string, city: string, npa: string, nxx: string, state: record>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10592,7 +10591,7 @@ export def "restapi-v10-dictionary-permission listPermissions" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # The result set page number (1-indexed) to return (format: int32, default: 1, e.g. 1)
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
-  --assignable: string@bool-completer # Specifies whether to return only assignable permissions
+  --assignable: oneof<nothing, bool> # Specifies whether to return only assignable permissions
   --servicePlanId: string # Internal identifier of a service plan
 ]: nothing -> record<uri: string, records: table<uri: string, id: string, displayName: string, description: string, assignable: bool, readOnly: bool, siteCompatible: string, category: record, includedPermissions: list>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10849,7 +10848,7 @@ export def "restapi-v10-dictionary-user-role listStandardUserRole" [
   --servicePlanId: string # Internal identifier of a service plan.
   --page: int # The result set page number (1-indexed) to return (format: int32, default: 1, e.g. 1)
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
-  --advancedPermissions: string@bool-completer # Specifies whether to return advanced permissions capabilities within `permissionsCapabilities` resource. The default value is false.
+  --advancedPermissions: oneof<nothing, bool> # Specifies whether to return advanced permissions capabilities within `permissionsCapabilities` resource. The default value is false.
 ]: nothing -> record<uri: string, records: table<uri: string, id: string, displayName: string, description: string, siteCompatible: bool, custom: bool, scope: string, hidden: bool, lastUpdated: string, permissions: list>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10894,12 +10893,12 @@ export def "restapi-v10-dictionary-country listCountries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --loginAllowed: string@bool-completer # Specifies whether the logging-in with the phone numbers of this country is enabled or not
-  --signupAllowed: string@bool-completer # Indicates whether a signup/billing is allowed for a country. If not specified all countries are returned (according to other specified filters if any)
-  --numberSelling: string@bool-completer # Specifies if RingCentral sells phone numbers of this country
+  --loginAllowed: oneof<nothing, bool> # Specifies whether the logging-in with the phone numbers of this country is enabled or not
+  --signupAllowed: oneof<nothing, bool> # Indicates whether a signup/billing is allowed for a country. If not specified all countries are returned (according to other specified filters if any)
+  --numberSelling: oneof<nothing, bool> # Specifies if RingCentral sells phone numbers of this country
   --page: int # Indicates a page number to retrieve. Only positive number values are accepted  (format: int32, default: 1)
   --perPage: int # Indicates a page size (number of items)  (format: int32, default: 100)
-  --freeSoftphoneLine: string@bool-completer # Specifies if free phone line for softphone is available for a country or not
+  --freeSoftphoneLine: oneof<nothing, bool> # Specifies if free phone line for softphone is available for a country or not
 ]: nothing -> record<uri: string, records: table<emergencyCalling: bool, isoCode: string, name: string, numberSelling: bool, loginAllowed: bool, signupAllowed: bool, freeSoftphoneLine: bool, localDialing: bool>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11073,7 +11072,7 @@ export def "ai-audio-enrollments caiEnrollmentsList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --partial: string@bool-completer # Indicates if partially enrolled speakers should be returned
+  --partial: oneof<nothing, bool> # Indicates if partially enrolled speakers should be returned
   --perPage: int # Number of enrollments to be returned per page (format: int32)
   --page: int # Page number to be returned (format: int32)
 ]: nothing -> record<paging: record<page: int, totalPages: int, perPage: int>, records: table<enrollmentQuality: string, enrollmentComplete: bool, speakerId: string, totalEnrollDuration: float, totalSpeechDuration: float>> {
@@ -11200,9 +11199,9 @@ export def "ai-audio-async-speech-to-text caiSpeechToText" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --webhook: string # The webhook URI to which the job response will be returned (format: uri)
-  --enablePunctuation: string@bool-completer # Enables Smart Punctuation API.
-  --enableSpeakerDiarization: string@bool-completer # Tags each word corresponding to the speaker. (default: false)
-  --separateSpeakerPerChannel: string@bool-completer # Indicates that the input audio is multi-channel and each channel has a separate speaker. (default: false)
+  --enablePunctuation: oneof<nothing, bool> # Enables Smart Punctuation API.
+  --enableSpeakerDiarization: oneof<nothing, bool> # Tags each word corresponding to the speaker. (default: false)
+  --separateSpeakerPerChannel: oneof<nothing, bool> # Indicates that the input audio is multi-channel and each channel has a separate speaker. (default: false)
   --speechContexts: list # Indicates the words/phrases that will be used for boosting the transcript. This can help to boost accuracy for cases like Person Names, Company names etc. — item shape: {phrases: list}
 ]: any -> record<jobId: string> {
   let input = $in
@@ -11230,10 +11229,10 @@ export def "ai-audio-async-speaker-diarize caiSpeakerDiarize" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --webhook: string # The webhook URI to which the job response will be returned (format: uri)
-  --separateSpeakerPerChannel: string@bool-completer # Set to True if the input audio is multi-channel and each channel has a separate speaker. (e.g. false)
+  --separateSpeakerPerChannel: oneof<nothing, bool> # Set to True if the input audio is multi-channel and each channel has a separate speaker. (e.g. false)
   --speakerCount: int # Number of speakers in the file, omit parameter if unknown (format: int32, e.g. 2)
   --speakerIds: list # Optional set of speakers to be identified from the call. (e.g. [speakerId1, speakerId2])
-  --enableVoiceActivityDetection: string@bool-completer # Apply voice activity detection.
+  --enableVoiceActivityDetection: oneof<nothing, bool> # Apply voice activity detection.
 ]: any -> record<jobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11261,7 +11260,7 @@ export def "ai-audio-async-speaker-identify caiSpeakerIdentify" [
   --allow-errors(-e) # Return full response without error handling
   --webhook: string # The webhook URI to which the job response will be returned (format: uri)
   speakerIds: list # Set of enrolled speakers to be identified from the media. (e.g. [speakerId1, speakerId2])
-  --enableVoiceActivityDetection: string@bool-completer # Apply voice activity detection.
+  --enableVoiceActivityDetection: oneof<nothing, bool> # Apply voice activity detection.
 ]: any -> record<jobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11352,7 +11351,7 @@ export def "cx-social-messaging-contents socMsgCreateContent" [
   --authorIdentityId: string # Identity identifier of the author of content.  Not mandatory on creation, by default it uses the token's user first identity on channel.  (e.g. 541014e17aa58d8ccf000023)
   --body-body: string # The content's body.  On creation this field is mandatory except for WhatsApp content using templates.  The following are the max length restrictions for the different channels supported. Channel and max length   * Apple Messages For Business (max length 10000)   * Email (max length 262144)   * RingCX Digital Messaging (max length 1024)   * Facebook (max length 8000)   * GoogleBusinessMessages (max length 3000)   * Google My Business (max length 4000)   * Instagram (max length 950)   * Instagram Messaging (max length 1000)   * LinkedIn (max length 3000)   * Messenger (max length 2000)   * Twitter (max length 280)   * Viber (max length 7000)   * WhatsApp (max length 3800)   * Youtube (max length 8000)  (e.g. Body of the content)
   --inReplyToContentId: string # The content identifier to which this content is a reply to.  On creation, if omitted, a new discussion will be created. If the channel does not support to initiate discussion this parameter is mandatory.  (e.g. 123414e17asdd8ccf000023)
-  --public: string@bool-completer # True if the content is publicly visible on the remote channel (default).  Private content is NOT supported on every channel.  (default: true)
+  --public: oneof<nothing, bool> # True if the content is publicly visible on the remote channel (default).  Private content is NOT supported on every channel.  (default: true)
   --sourceId: string # Identifier of the channel.  On creation if `inReplyToContentId` is specified, the channel will be determined from it. Otherwise, this parameter is mandatory.  (e.g. fff415437asdd8ccf000023)
   --attachmentIds: list # An array containing the attachment identifiers that need to be attached to the content.  (e.g. [541014e17aa58d8ccf000023, 541014e17aa58d8ccf000023])
   --title: string # Applicable to Email channels only.  The subject of the email.  This field is mandatory when initiating a discussion.  (e.g. An email title)
@@ -11363,7 +11362,7 @@ export def "cx-social-messaging-contents socMsgCreateContent" [
   --templateLanguage: string # Applicable to WhatsApp channels only.  Language of the Whatsapp template to use for the content. All available template languages are visible on the Whatsapp Business Manager interface.  Language specified must conform to the ISO 639-1 alpha-2 codes for representing the names of languages.  (e.g. fr)
   --components: list # Applicable to WhatsApp channels only.  Component configuration of the Whatsapp template to use for the content.  All available components are visible on the Whatsapp Business Manager interface.  (e.g. [{Message1: [{param11: {type: Name, text: John}}, {param12: {type: Message, text: Product rocks!}}]}, {Message2: [{param21: {type: Agent Name, text: Alice}}, {param22: {type: Message, text: Thank you}}]}]) — item shape: {type?: string, parameters?: list}
   --contextData: record # Additional data of the content.  The contextData hash keys are the custom fields keys.  (e.g. {test1: value1, test2: value2})
-  --autoSubmitted: string@bool-completer # Auto submitted content:   - won't reopen tasks or interventions   - can be used to send automatic messages like asking an user to follow on twitter, sending a survey, etc,   - doesn't get included in statistics
+  --autoSubmitted: oneof<nothing, bool> # Auto submitted content:   - won't reopen tasks or interventions   - can be used to send automatic messages like asking an user to follow on twitter, sending a survey, etc,   - doesn't get included in statistics
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11539,7 +11538,7 @@ export def "scim-users scimCreateUser2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-5 # Response content type
-  --active: string@bool-completer # User status (default: false)
+  --active: oneof<nothing, bool> # User status (default: false)
   --addresses: list # item shape: {country?: string, locality?: string, postalCode?: string, region?: string, streetAddress?: string, type: "work"}
   emails: list # item shape: {type: "work", value: string}
   --externalId: string # External unique resource ID defined by provisioning client
@@ -11635,7 +11634,7 @@ export def "scim-users scimUpdateUser2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-5 # Response content type
-  --active: string@bool-completer # User status (default: false)
+  --active: oneof<nothing, bool> # User status (default: false)
   --addresses: list # item shape: {country?: string, locality?: string, postalCode?: string, region?: string, streetAddress?: string, type: "work"}
   emails: list # item shape: {type: "work", value: string}
   --externalId: string # External unique resource ID defined by provisioning client
@@ -12002,7 +12001,7 @@ export def "team-messaging-events createEventNew" [
   title: string # Event title
   startTime: string # Datetime of starting an event (format: date-time)
   endTime: string # Datetime of ending an event (format: date-time)
-  --allDay: string@bool-completer # Indicates whether event has some specific time slot or lasts for whole day(s) (default: false)
+  --allDay: oneof<nothing, bool> # Indicates whether event has some specific time slot or lasts for whole day(s) (default: false)
   --recurrence: record # shape: {schedule?: "None"|"Day"|"Weekday"|"Week"|"Month"|"Year", endingCondition?: "None"|"Count"|"Date", endingAfter?: int, endingOn?: string}
   --color: string@color-completer # Color of Event title (including its presentation in Calendar) (default: Black)
   --location: string # Event location
@@ -12061,7 +12060,7 @@ export def "team-messaging-events updateEventNew" [
   title: string # Event title
   startTime: string # Datetime of starting an event (format: date-time)
   endTime: string # Datetime of ending an event (format: date-time)
-  --allDay: string@bool-completer # Indicates whether event has some specific time slot or lasts for whole day(s) (default: false)
+  --allDay: oneof<nothing, bool> # Indicates whether event has some specific time slot or lasts for whole day(s) (default: false)
   --recurrence: record # shape: {schedule?: "None"|"Day"|"Weekday"|"Week"|"Month"|"Year", endingCondition?: "None"|"Count"|"Date", endingAfter?: int, endingOn?: string}
   --color: string@color-completer # Color of Event title (including its presentation in Calendar) (default: Black)
   --location: string # Event location
@@ -12886,7 +12885,7 @@ export def "team-messaging-groups-events createEventByGroupIdNew" [
   title: string # Event title
   startTime: string # Datetime of starting an event (format: date-time)
   endTime: string # Datetime of ending an event (format: date-time)
-  --allDay: string@bool-completer # Indicates whether event has some specific time slot or lasts for whole day(s) (default: false)
+  --allDay: oneof<nothing, bool> # Indicates whether event has some specific time slot or lasts for whole day(s) (default: false)
   --recurrence: record # shape: {schedule?: "None"|"Day"|"Weekday"|"Week"|"Month"|"Year", endingCondition?: "None"|"Count"|"Date", endingAfter?: int, endingOn?: string}
   --color: string@color-completer # Color of Event title (including its presentation in Calendar) (default: Black)
   --location: string # Event location
@@ -13107,7 +13106,7 @@ export def "team-messaging-teams createGlipTeamNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --public: string@bool-completer # Team access level.
+  --public: oneof<nothing, bool> # Team access level.
   name: string # Team name.
   --description: string # Team description.
   --members: list # Identifier(s) of team members. — item shape: {id?: string, email?: string}
@@ -13180,7 +13179,7 @@ export def "team-messaging-teams patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --public: string@bool-completer # Team access level
+  --public: oneof<nothing, bool> # Team access level
   --name: string # Team name. Maximum number of characters supported is 250
   --description: string # Team description. Maximum number of characters supported is 1000
 ]: any -> record<id: string, type: string, public: bool, name: string, description: string, status: string, creationTime: string, lastModifiedTime: string> {
@@ -13394,7 +13393,7 @@ export def "team-messaging-notes patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --releaseLock: string@bool-completer # If true then note lock (if any) will be released upon request (default: false)
+  --releaseLock: oneof<nothing, bool> # If true then note lock (if any) will be released upon request (default: false)
   title: string # Title of a note. Max allowed length is 250 characters
   --body-body: string # Contents of a note; HTML markup text. Max allowed length is 1048576 characters (1 Mb).
 ]: any -> record<id: string, title: string, chatIds: list<string>, preview: string, creator: record<id: string>, lastModifiedBy: record<id: string>, lockedBy: record<id: string>, status: string, creationTime: string, lastModifiedTime: string, type: string> {

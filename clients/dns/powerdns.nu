@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://localhost/api/v1"] }
 def auth-scheme-completer [] { ["x-api-key"] }
 
@@ -244,7 +243,7 @@ export def "servers-statistics get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --statistic: string # When set to the name of a specific statistic, only this value is returned. If no statistic with that name exists, the response has a 422 status and an error message.
-  --includerings: string@bool-completer # “true” (default) or “false”, whether to include the Ring items, which can contain thousands of log messages or queried domains. Setting this to ”false” may make the response a lot smaller. (default: true)
+  --includerings: oneof<nothing, bool> # “true” (default) or “false”, whether to include the Ring items, which can contain thousands of log messages or queried domains. Setting this to ”false” may make the response a lot smaller. (default: true)
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -394,7 +393,7 @@ export def "servers-zones listZones" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --zone: string # When set to the name of a zone, only this zone is returned. If no zone with that name exists, the response is an empty array. This can e.g. be used to check if a zone exists in the database without having to guess/encode the zone's id or to check if a zone exists.
-  --dnssec: string@bool-completer # “true” (default) or “false”, whether to include the “dnssec” and ”edited_serial” fields in the Zone objects. Setting this to ”false” will make the query a lot faster. (default: true)
+  --dnssec: oneof<nothing, bool> # “true” (default) or “false”, whether to include the “dnssec” and ”edited_serial” fields in the Zone objects. Setting this to ”false” will make the query a lot faster. (default: true)
 ]: nothing -> table<account: string, api_rectify: bool, dnssec: bool, edited_serial: int, id: string, kind: string, master_tsig_key_ids: list<string>, masters: list<string>, name: string, nameservers: list<string>, notified_serial: int, nsec3narrow: bool, nsec3param: string, presigned: bool, rrsets: list<record>, serial: int, slave_tsig_key_ids: list<string>, soa_edit: string, soa_edit_api: string, type: string, url: string, zone: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -419,10 +418,10 @@ export def "servers-zones createZone" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --rrsets: string@bool-completer # “true” (default) or “false”, whether to include the “rrsets” in the response Zone object. (default: true) — item shape: {changetype: string, comments?: list, name: string, records: list, ttl: int, type: string}
+  --rrsets: oneof<nothing, bool> # “true” (default) or “false”, whether to include the “rrsets” in the response Zone object. (default: true) — item shape: {changetype: string, comments?: list, name: string, records: list, ttl: int, type: string}
   --account: string # MAY be set. Its value is defined by local policy
-  --api-rectify: string@bool-completer #  Whether or not the zone will be rectified on data changes via the API
-  --dnssec: string@bool-completer # Whether or not this zone is DNSSEC signed (inferred from presigned being true XOR presence of at least one cryptokey with active being true)
+  --api-rectify: oneof<nothing, bool> #  Whether or not the zone will be rectified on data changes via the API
+  --dnssec: oneof<nothing, bool> # Whether or not this zone is DNSSEC signed (inferred from presigned being true XOR presence of at least one cryptokey with active being true)
   --edited-serial: int # The SOA serial as seen in query responses. Calculated using the SOA-EDIT metadata, default-soa-edit and default-soa-edit-signed settings
   --id: string # Opaque zone id (string), assigned by the server, should not be interpreted by the application. Guaranteed to be safe for embedding in URLs.
   --kind: string@kind-completer # Zone kind, one of “Native”, “Master”, “Slave”
@@ -431,9 +430,9 @@ export def "servers-zones createZone" [
   --name: string # Name of the zone (e.g. “example.com.”) MUST have a trailing dot
   --nameservers: list # MAY be sent in client bodies during creation, and MUST NOT be sent by the server. Simple list of strings of nameserver names, including the trailing dot. Not required for slave zones.
   --notified-serial: int # The SOA serial notifications have been sent out for
-  --nsec3narrow: string@bool-completer # Whether or not the zone uses NSEC3 narrow
+  --nsec3narrow: oneof<nothing, bool> # Whether or not the zone uses NSEC3 narrow
   --nsec3param: string # The NSEC3PARAM record
-  --presigned: string@bool-completer # Whether or not the zone is pre-signed
+  --presigned: oneof<nothing, bool> # Whether or not the zone is pre-signed
   --rrsets: list # RRSets in this zone (for zones/{zone_id} endpoint only; omitted during GET on the .../zones list endpoint) — item shape: {changetype: string, comments?: list, name: string, records: list, ttl: int, type: string}
   --serial: int # The SOA serial number
   --slave-tsig-key-ids: list # The id of the TSIG keys used for slave operation in this zone
@@ -492,7 +491,7 @@ export def "servers-zones listZone" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --rrsets: string@bool-completer # “true” (default) or “false”, whether to include the “rrsets” in the response Zone object. (default: true)
+  --rrsets: oneof<nothing, bool> # “true” (default) or “false”, whether to include the “rrsets” in the response Zone object. (default: true)
 ]: nothing -> record<account: string, api_rectify: bool, dnssec: bool, edited_serial: int, id: string, kind: string, master_tsig_key_ids: list<string>, masters: list<string>, name: string, nameservers: list<string>, notified_serial: int, nsec3narrow: bool, nsec3param: string, presigned: bool, rrsets: table<changetype: string, comments: list, name: string, records: list, ttl: int, type: string>, serial: int, slave_tsig_key_ids: list<string>, soa_edit: string, soa_edit_api: string, type: string, url: string, zone: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -519,8 +518,8 @@ export def "servers-zones patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --account: string # MAY be set. Its value is defined by local policy
-  --api-rectify: string@bool-completer #  Whether or not the zone will be rectified on data changes via the API
-  --dnssec: string@bool-completer # Whether or not this zone is DNSSEC signed (inferred from presigned being true XOR presence of at least one cryptokey with active being true)
+  --api-rectify: oneof<nothing, bool> #  Whether or not the zone will be rectified on data changes via the API
+  --dnssec: oneof<nothing, bool> # Whether or not this zone is DNSSEC signed (inferred from presigned being true XOR presence of at least one cryptokey with active being true)
   --edited-serial: int # The SOA serial as seen in query responses. Calculated using the SOA-EDIT metadata, default-soa-edit and default-soa-edit-signed settings
   --id: string # Opaque zone id (string), assigned by the server, should not be interpreted by the application. Guaranteed to be safe for embedding in URLs.
   --kind: string@kind-completer # Zone kind, one of “Native”, “Master”, “Slave”
@@ -529,9 +528,9 @@ export def "servers-zones patch" [
   --name: string # Name of the zone (e.g. “example.com.”) MUST have a trailing dot
   --nameservers: list # MAY be sent in client bodies during creation, and MUST NOT be sent by the server. Simple list of strings of nameserver names, including the trailing dot. Not required for slave zones.
   --notified-serial: int # The SOA serial notifications have been sent out for
-  --nsec3narrow: string@bool-completer # Whether or not the zone uses NSEC3 narrow
+  --nsec3narrow: oneof<nothing, bool> # Whether or not the zone uses NSEC3 narrow
   --nsec3param: string # The NSEC3PARAM record
-  --presigned: string@bool-completer # Whether or not the zone is pre-signed
+  --presigned: oneof<nothing, bool> # Whether or not the zone is pre-signed
   --rrsets: list # RRSets in this zone (for zones/{zone_id} endpoint only; omitted during GET on the .../zones list endpoint) — item shape: {changetype: string, comments?: list, name: string, records: list, ttl: int, type: string}
   --serial: int # The SOA serial number
   --slave-tsig-key-ids: list # The id of the TSIG keys used for slave operation in this zone
@@ -568,8 +567,8 @@ export def "servers-zones put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --account: string # MAY be set. Its value is defined by local policy
-  --api-rectify: string@bool-completer #  Whether or not the zone will be rectified on data changes via the API
-  --dnssec: string@bool-completer # Whether or not this zone is DNSSEC signed (inferred from presigned being true XOR presence of at least one cryptokey with active being true)
+  --api-rectify: oneof<nothing, bool> #  Whether or not the zone will be rectified on data changes via the API
+  --dnssec: oneof<nothing, bool> # Whether or not this zone is DNSSEC signed (inferred from presigned being true XOR presence of at least one cryptokey with active being true)
   --edited-serial: int # The SOA serial as seen in query responses. Calculated using the SOA-EDIT metadata, default-soa-edit and default-soa-edit-signed settings
   --id: string # Opaque zone id (string), assigned by the server, should not be interpreted by the application. Guaranteed to be safe for embedding in URLs.
   --kind: string@kind-completer # Zone kind, one of “Native”, “Master”, “Slave”
@@ -578,9 +577,9 @@ export def "servers-zones put" [
   --name: string # Name of the zone (e.g. “example.com.”) MUST have a trailing dot
   --nameservers: list # MAY be sent in client bodies during creation, and MUST NOT be sent by the server. Simple list of strings of nameserver names, including the trailing dot. Not required for slave zones.
   --notified-serial: int # The SOA serial notifications have been sent out for
-  --nsec3narrow: string@bool-completer # Whether or not the zone uses NSEC3 narrow
+  --nsec3narrow: oneof<nothing, bool> # Whether or not the zone uses NSEC3 narrow
   --nsec3param: string # The NSEC3PARAM record
-  --presigned: string@bool-completer # Whether or not the zone is pre-signed
+  --presigned: oneof<nothing, bool> # Whether or not the zone is pre-signed
   --rrsets: list # RRSets in this zone (for zones/{zone_id} endpoint only; omitted during GET on the .../zones list endpoint) — item shape: {changetype: string, comments?: list, name: string, records: list, ttl: int, type: string}
   --serial: int # The SOA serial number
   --slave-tsig-key-ids: list # The id of the TSIG keys used for slave operation in this zone
@@ -661,7 +660,7 @@ export def "servers-zones-cryptokeys createCryptokey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Whether or not the key is in active use
+  --active: oneof<nothing, bool> # Whether or not the key is in active use
   --algorithm: string # The name of the algorithm of the key, should be a mnemonic
   --bits: int # The size of the key
   --dnskey: string # The DNSKEY record for this key
@@ -669,7 +668,7 @@ export def "servers-zones-cryptokeys createCryptokey" [
   --id: int # The internal identifier, read only
   --keytype: string@keytype-completer
   --privatekey: string # The private key in ISC format
-  --published: string@bool-completer # Whether or not the DNSKEY record is published in the zone
+  --published: oneof<nothing, bool> # Whether or not the DNSKEY record is published in the zone
   --type: string # set to "Cryptokey"
 ]: any -> record<active: bool, algorithm: string, bits: int, dnskey: string, ds: list<string>, id: int, keytype: string, privatekey: string, published: bool, type: string> {
   let input = $in
@@ -746,7 +745,7 @@ export def "servers-zones-cryptokeys modifyCryptokey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Whether or not the key is in active use
+  --active: oneof<nothing, bool> # Whether or not the key is in active use
   --algorithm: string # The name of the algorithm of the key, should be a mnemonic
   --bits: int # The size of the key
   --dnskey: string # The DNSKEY record for this key
@@ -754,7 +753,7 @@ export def "servers-zones-cryptokeys modifyCryptokey" [
   --id: int # The internal identifier, read only
   --keytype: string@keytype-completer
   --privatekey: string # The private key in ISC format
-  --published: string@bool-completer # Whether or not the DNSKEY record is published in the zone
+  --published: oneof<nothing, bool> # Whether or not the DNSKEY record is published in the zone
   --type: string # set to "Cryptokey"
 ]: any -> any {
   let input = $in

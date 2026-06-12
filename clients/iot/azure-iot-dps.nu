@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -353,11 +352,11 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --allow-errors(-e) # Return full response without error handling
   --certificatename: string # This is optional, and it is the Common Name of the certificate.
   --certificaterawBytes: string # Raw data within the certificate. (format: byte)
-  --certificateisVerified: string@bool-completer # Indicates if certificate has been verified by owner of the private key.
+  --certificateisVerified: oneof<nothing, bool> # Indicates if certificate has been verified by owner of the private key.
   --certificatepurpose: string@certificatepurpose-completer # A description that mentions the purpose of the certificate.
   --certificatecreated: string # Time the certificate is created. (format: date-time)
   --certificatelastUpdated: string # Time the certificate is last updated. (format: date-time)
-  --certificatehasPrivateKey: string@bool-completer # Indicates if the certificate contains a private key.
+  --certificatehasPrivateKey: oneof<nothing, bool> # Indicates if the certificate contains a private key.
   --certificatenonce: string # Random number generated to indicate Proof of Possession.
   --api-version: string # The version of the API.
   --If-Match: string # ETag of the certificate
@@ -455,11 +454,11 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --allow-errors(-e) # Return full response without error handling
   --certificatename: string # Common Name for the certificate.
   --certificaterawBytes: string # Raw data of certificate. (format: byte)
-  --certificateisVerified: string@bool-completer # Indicates if the certificate has been verified by owner of the private key.
+  --certificateisVerified: oneof<nothing, bool> # Indicates if the certificate has been verified by owner of the private key.
   --certificatepurpose: string@certificatepurpose-completer # Description mentioning the purpose of the certificate.
   --certificatecreated: string # Certificate creation time. (format: date-time)
   --certificatelastUpdated: string # Certificate last updated time. (format: date-time)
-  --certificatehasPrivateKey: string@bool-completer # Indicates if the certificate contains private key.
+  --certificatehasPrivateKey: oneof<nothing, bool> # Indicates if the certificate contains private key.
   --certificatenonce: string # Random number generated to indicate Proof of Possession.
   --api-version: string # The version of the API.
   --If-Match: string # ETag of the certificate. This is required to update an existing certificate, and ignored while creating a brand new certificate.
@@ -493,11 +492,11 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
   --allow-errors(-e) # Return full response without error handling
   --certificatename: string # Common Name for the certificate.
   --certificaterawBytes: string # Raw data of certificate. (format: byte)
-  --certificateisVerified: string@bool-completer # Indicates if the certificate has been verified by owner of the private key.
+  --certificateisVerified: oneof<nothing, bool> # Indicates if the certificate has been verified by owner of the private key.
   --certificatepurpose: string@certificatepurpose-completer # Describe the purpose of the certificate.
   --certificatecreated: string # Certificate creation time. (format: date-time)
   --certificatelastUpdated: string # Certificate last updated time. (format: date-time)
-  --certificatehasPrivateKey: string@bool-completer # Indicates if the certificate contains private key.
+  --certificatehasPrivateKey: oneof<nothing, bool> # Indicates if the certificate contains private key.
   --certificatenonce: string # Random number generated to indicate Proof of Possession.
   --api-version: string # The version of the API.
   --If-Match: string # ETag of the certificate.

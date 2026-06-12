@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.usefathom.com/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -564,7 +563,7 @@ export def "current-visitors get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --site-id: string # The ID of the site.
-  --detailed: string@bool-completer # Set this parameter if you want a detailed breakdown. Otherwise you'll only get a count. (default: false)
+  --detailed: oneof<nothing, bool> # Set this parameter if you want a detailed breakdown. Otherwise you'll only get a count. (default: false)
 ]: nothing -> record<total: int, content: table<pathname: string, hostname: string, total: int>, referrers: table<referrer_hostname: string, referrer_pathname: string, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

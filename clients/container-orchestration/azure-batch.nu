@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://azure.local"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -115,7 +114,7 @@ export def "applications List" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<odata_nextLink: string, value: table<displayName: string, id: string, versions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -145,7 +144,7 @@ export def "applications Get" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<displayName: string, id: string, versions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -177,7 +176,7 @@ export def "certificates List" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<odata_nextLink: string, value: table<deleteCertificateError: record, previousState: string, previousStateTransitionTime: string, publicData: string, state: string, stateTransitionTime: string, thumbprint: string, thumbprintAlgorithm: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -206,7 +205,7 @@ export def "certificates Add" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --certificateFormat: string@certificateFormat-completer
   data: string
@@ -245,7 +244,7 @@ export def "certificatesthumbprint-algorithm-thumbprint-algorithm-thumbprint-thu
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -277,7 +276,7 @@ export def "certificatesthumbprint-algorithm-thumbprint-algorithm-thumbprint-thu
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<deleteCertificateError: record<code: string, message: string, values: list<record>>, previousState: string, previousStateTransitionTime: string, publicData: string, state: string, stateTransitionTime: string, thumbprint: string, thumbprintAlgorithm: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -308,7 +307,7 @@ export def "certificatesthumbprint-algorithm-thumbprint-algorithm-thumbprint-thu
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -341,7 +340,7 @@ export def "jobs List" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<odata_nextLink: string, value: table<commonEnvironmentSettings: list, constraints: record, creationTime: string, displayName: string, eTag: string, executionInfo: record, id: string, jobManagerTask: record, jobPreparationTask: record, jobReleaseTask: record, lastModified: string, metadata: list, networkConfiguration: record, onAllTasksComplete: string, onTaskFailure: string, poolInfo: record, previousState: string, previousStateTransitionTime: string, priority: int, state: string, stateTransitionTime: string, stats: record, url: string, usesTaskDependencies: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -378,7 +377,7 @@ export def "jobs Add" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --commonEnvironmentSettings: list # Individual Tasks can override an environment setting specified here by specifying the same setting name with a different value. — item shape: {name: string, value?: string}
   --constraints: any # shape: {maxTaskRetryCount?: int, maxWallClockTime?: string}
@@ -393,7 +392,7 @@ export def "jobs Add" [
   --onTaskFailure: string@onTaskFailure-completer # A Task is considered to have failed if has a failureInfo. A failureInfo is set if the Task completes with a non-zero exit code after exhausting its retry count, or if there was an error starting the Task, for example due to a resource file download error. The default is noaction.
   poolInfo: any # shape: {autoPoolSpecification?: any, poolId?: string}
   --priority: int # Priority values can range from -1000 to 1000, with -1000 being the lowest priority and 1000 being the highest priority. The default value is 0. (format: int32)
-  --usesTaskDependencies: string@bool-completer
+  --usesTaskDependencies: oneof<nothing, bool>
 ]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -425,7 +424,7 @@ export def "jobs Delete" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -461,7 +460,7 @@ export def "jobs Get" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -498,7 +497,7 @@ export def "jobs Patch" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -543,7 +542,7 @@ export def "jobs Update" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -586,7 +585,7 @@ export def "jobs-addtaskcollection AddCollection" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   value: list # The total serialized size of this collection must be less than 1MB. If it is greater than 1MB (for example if each Task has 100's of resource files or environment variables), the request will fail with code 'RequestBodyTooLarge' and should be retried again with fewer Tasks. — item shape: {affinityInfo?: any, applicationPackageReferences?: list, authenticationTokenSettings?: any, commandLine: string, constraints?: any, containerSettings?: any, dependsOn?: any, displayName?: string, environmentSettings?: list, exitConditions?: any, id: string, multiInstanceSettings?: any, outputFiles?: list, resourceFiles?: list, userIdentity?: any}
 ]: any -> record<value: table<eTag: string, error: record, lastModified: string, location: string, status: string, taskId: string>> {
@@ -620,7 +619,7 @@ export def "jobs-disable Disable" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -658,7 +657,7 @@ export def "jobs-enable Enable" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -695,7 +694,7 @@ export def "jobs-jobpreparationandreleasetaskstatus ListPreparationAndReleaseTas
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<odata_nextLink: string, value: table<jobPreparationTaskExecutionInfo: record, jobReleaseTaskExecutionInfo: record, nodeId: string, nodeUrl: string, poolId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -725,7 +724,7 @@ export def "jobs-taskcounts GetTaskCounts" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<active: int, completed: int, failed: int, running: int, succeeded: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -759,7 +758,7 @@ export def "jobs-tasks List" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<odata_nextLink: string, value: table<affinityInfo: record, applicationPackageReferences: list, authenticationTokenSettings: record, commandLine: string, constraints: record, containerSettings: record, creationTime: string, dependsOn: record, displayName: string, eTag: string, environmentSettings: list, executionInfo: record, exitConditions: record, id: string, lastModified: string, multiInstanceSettings: record, nodeInfo: record, outputFiles: list, previousState: string, previousStateTransitionTime: string, resourceFiles: list, state: string, stateTransitionTime: string, stats: record, url: string, userIdentity: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -801,7 +800,7 @@ export def "jobs-tasks Add" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --affinityInfo: any # shape: {affinityId: string}
   --applicationPackageReferences: list # Application packages are downloaded and deployed to a shared directory, not the Task working directory. Therefore, if a referenced package is already on the Node, and is up to date, then it is not re-downloaded; the existing copy on the Compute Node is used. If a referenced Package cannot be installed, for example because the package has been deleted or because download failed, the Task fails. — item shape: {applicationId: string, version?: string}
@@ -850,7 +849,7 @@ export def "jobs-tasks Delete" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -887,7 +886,7 @@ export def "jobs-tasks Get" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -923,7 +922,7 @@ export def "jobs-tasks Update" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -960,12 +959,12 @@ export def "jobs-tasks-files ListFromTask" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string # An OData $filter clause. For more information on constructing this filter, see https://docs.microsoft.com/en-us/rest/api/batchservice/odata-filters-in-batch#list-task-files.
-  --recursive: string@bool-completer # Whether to list children of the Task directory. This parameter can be used in combination with the filter parameter to list specific type of files.
+  --recursive: oneof<nothing, bool> # Whether to list children of the Task directory. This parameter can be used in combination with the filter parameter to list specific type of files.
   --maxresults: int # The maximum number of items to return in the response. A maximum of 1000 files can be returned. (format: int32, default: 1000)
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<odata_nextLink: string, value: table<isDirectory: bool, name: string, properties: record, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -994,11 +993,11 @@ export def "jobs-tasks-files DeleteFromTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --recursive: string@bool-completer # Whether to delete children of a directory. If the filePath parameter represents a directory instead of a file, you can set recursive to true to delete the directory and all of the files and subdirectories in it. If recursive is false then the directory must be empty or deletion will fail.
+  --recursive: oneof<nothing, bool> # Whether to delete children of a directory. If the filePath parameter represents a directory instead of a file, you can set recursive to true to delete the directory and all of the files and subdirectories in it. If recursive is false then the directory must be empty or deletion will fail.
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1031,7 +1030,7 @@ export def "jobs-tasks-files GetFromTask" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --ocp-range: string # The byte range to be retrieved. The default is to retrieve the entire file. The format is bytes=startRange-endRange.
   --If-Modified-Since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
@@ -1066,7 +1065,7 @@ export def "jobs-tasks-files GetPropertiesFromTask" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Modified-Since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
   --If-Unmodified-Since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
@@ -1099,7 +1098,7 @@ export def "jobs-tasks-reactivate Reactivate" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -1135,7 +1134,7 @@ export def "jobs-tasks-subtasksinfo ListSubtasks" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<value: table<containerInfo: record, endTime: string, exitCode: int, failureInfo: record, id: int, nodeInfo: record, previousState: string, previousStateTransitionTime: string, result: string, startTime: string, state: string, stateTransitionTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1166,7 +1165,7 @@ export def "jobs-tasks-terminate Terminate" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -1200,7 +1199,7 @@ export def "jobs-terminate Terminate" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -1241,7 +1240,7 @@ export def "jobschedules List" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<odata_nextLink: string, value: table<creationTime: string, displayName: string, eTag: string, executionInfo: record, id: string, jobSpecification: record, lastModified: string, metadata: list, previousState: string, previousStateTransitionTime: string, schedule: record, state: string, stateTransitionTime: string, stats: record, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1273,7 +1272,7 @@ export def "jobschedules Add" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --displayName: string # The display name need not be unique and can contain any Unicode characters up to a maximum length of 1024.
   id: string # The ID can contain any combination of alphanumeric characters including hyphens and underscores, and cannot contain more than 64 characters. The ID is case-preserving and case-insensitive (that is, you may not have two IDs within an Account that differ only by case).
@@ -1311,7 +1310,7 @@ export def "jobschedules Delete" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -1347,7 +1346,7 @@ export def "jobschedules Get" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -1381,7 +1380,7 @@ export def "jobschedules Exists" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -1418,7 +1417,7 @@ export def "jobschedules Patch" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -1461,7 +1460,7 @@ export def "jobschedules Update" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -1501,7 +1500,7 @@ export def "jobschedules-disable Disable" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -1535,7 +1534,7 @@ export def "jobschedules-enable Enable" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -1573,7 +1572,7 @@ export def "jobschedules-jobs ListFromJobSchedule" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<odata_nextLink: string, value: table<commonEnvironmentSettings: list, constraints: record, creationTime: string, displayName: string, eTag: string, executionInfo: record, id: string, jobManagerTask: record, jobPreparationTask: record, jobReleaseTask: record, lastModified: string, metadata: list, networkConfiguration: record, onAllTasksComplete: string, onTaskFailure: string, poolInfo: record, previousState: string, previousStateTransitionTime: string, priority: int, state: string, stateTransitionTime: string, stats: record, url: string, usesTaskDependencies: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1603,7 +1602,7 @@ export def "jobschedules-terminate Terminate" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -1636,7 +1635,7 @@ export def "lifetimejobstats GetAllLifetimeStatistics" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<kernelCPUTime: string, lastUpdateTime: string, numFailedTasks: int, numSucceededTasks: int, numTaskRetries: int, readIOGiB: float, readIOps: int, startTime: string, url: string, userCPUTime: string, waitTime: string, wallClockTime: string, writeIOGiB: float, writeIOps: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1665,7 +1664,7 @@ export def "lifetimepoolstats GetAllLifetimeStatistics" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<lastUpdateTime: string, resourceStats: record<avgCPUPercentage: float, avgDiskGiB: float, avgMemoryGiB: float, diskReadGiB: float, diskReadIOps: int, diskWriteGiB: float, diskWriteIOps: int, lastUpdateTime: string, networkReadGiB: float, networkWriteGiB: float, peakDiskGiB: float, peakMemoryGiB: float, startTime: string>, startTime: string, url: string, usageStats: record<dedicatedCoreTime: string, lastUpdateTime: string, startTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1696,7 +1695,7 @@ export def "nodecounts ListPoolNodeCounts" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<odata_nextLink: string, value: table<dedicated: record, lowPriority: record, poolId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1729,7 +1728,7 @@ export def "pools List" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<odata_nextLink: string, value: table<allocationState: string, allocationStateTransitionTime: string, applicationLicenses: list, applicationPackageReferences: list, autoScaleEvaluationInterval: string, autoScaleFormula: string, autoScaleRun: record, certificateReferences: list, cloudServiceConfiguration: record, creationTime: string, currentDedicatedNodes: int, currentLowPriorityNodes: int, displayName: string, eTag: string, enableAutoScale: bool, enableInterNodeCommunication: bool, id: string, lastModified: string, maxTasksPerNode: int, metadata: list, mountConfiguration: list, networkConfiguration: record, resizeErrors: list, resizeTimeout: string, startTask: record, state: string, stateTransitionTime: string, stats: record, targetDedicatedNodes: int, targetLowPriorityNodes: int, taskSchedulingPolicy: record, url: string, userAccounts: list, virtualMachineConfiguration: record, vmSize: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1768,7 +1767,7 @@ export def "pools Add" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --applicationLicenses: list # The list of application licenses must be a subset of available Batch service application licenses. If a license is requested which is not supported, Pool creation will fail.
   --applicationPackageReferences: list # Changes to Package references affect all new Nodes joining the Pool, but do not affect Compute Nodes that are already in the Pool until they are rebooted or reimaged. There is a maximum of 10 Package references on any given Pool. — item shape: {applicationId: string, version?: string}
@@ -1777,8 +1776,8 @@ export def "pools Add" [
   --certificateReferences: list # For Windows Nodes, the Batch service installs the Certificates to the specified Certificate store and location. For Linux Compute Nodes, the Certificates are stored in a directory inside the Task working directory and an environment variable AZ_BATCH_CERTIFICATES_DIR is supplied to the Task to query for this location. For Certificates with visibility of 'remoteUser', a 'certs' directory is created in the user's home directory (e.g., /home/{user-name}/certs) and Certificates are placed in that directory. — item shape: {storeLocation?: "currentuser"|"localmachine", storeName?: string, thumbprint: string, thumbprintAlgorithm: string, visibility?: list}
   --cloudServiceConfiguration: any # shape: {osFamily: string, osVersion?: string}
   --displayName: string # The display name need not be unique and can contain any Unicode characters up to a maximum length of 1024.
-  --enableAutoScale: string@bool-completer # If false, at least one of targetDedicateNodes and targetLowPriorityNodes must be specified. If true, the autoScaleFormula property is required and the Pool automatically resizes according to the formula. The default value is false.
-  --enableInterNodeCommunication: string@bool-completer # Enabling inter-node communication limits the maximum size of the Pool due to deployment restrictions on the Compute Nodes of the Pool. This may result in the Pool not reaching its desired size. The default value is false.
+  --enableAutoScale: oneof<nothing, bool> # If false, at least one of targetDedicateNodes and targetLowPriorityNodes must be specified. If true, the autoScaleFormula property is required and the Pool automatically resizes according to the formula. The default value is false.
+  --enableInterNodeCommunication: oneof<nothing, bool> # Enabling inter-node communication limits the maximum size of the Pool due to deployment restrictions on the Compute Nodes of the Pool. This may result in the Pool not reaching its desired size. The default value is false.
   id: string # The ID can contain any combination of alphanumeric characters including hyphens and underscores, and cannot contain more than 64 characters. The ID is case-preserving and case-insensitive (that is, you may not have two Pool IDs within an Account that differ only by case).
   --maxTasksPerNode: int # The default value is 1. The maximum value is the smaller of 4 times the number of cores of the vmSize of the Pool or 256. (format: int32)
   --metadata: list # The Batch service does not assign any meaning to metadata; it is solely for the use of user code. — item shape: {name: string, value: string}
@@ -1823,7 +1822,7 @@ export def "pools Delete" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -1859,7 +1858,7 @@ export def "pools Get" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -1893,7 +1892,7 @@ export def "pools Exists" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -1931,7 +1930,7 @@ export def "pools Patch" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -1972,7 +1971,7 @@ export def "pools-disableautoscale DisableAutoScale" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2002,7 +2001,7 @@ export def "pools-enableautoscale EnableAutoScale" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -2041,7 +2040,7 @@ export def "pools-evaluateautoscale EvaluateAutoScale" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   autoScaleFormula: string # The formula is validated and its results calculated, but it is not applied to the Pool. To apply the formula to the Pool, 'Enable automatic scaling on a Pool'. For more information about specifying this formula, see Automatically scale Compute Nodes in an Azure Batch Pool (https://azure.microsoft.com/en-us/documentation/articles/batch-automatic-scaling).
 ]: any -> record<error: record<code: string, message: string, values: list<record>>, results: string, timestamp: string> {
@@ -2078,7 +2077,7 @@ export def "pools-nodes List" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<odata_nextLink: string, value: table<affinityId: string, allocationTime: string, certificateReferences: list, endpointConfiguration: record, errors: list, id: string, ipAddress: string, isDedicated: bool, lastBootTime: string, nodeAgentInfo: record, recentTasks: list, runningTasksCount: int, schedulingState: string, startTask: record, startTaskInfo: record, state: string, stateTransitionTime: string, totalTasksRun: int, totalTasksSucceeded: int, url: string, vmSize: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2110,7 +2109,7 @@ export def "pools-nodes Get" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<affinityId: string, allocationTime: string, certificateReferences: table<storeLocation: string, storeName: string, thumbprint: string, thumbprintAlgorithm: string, visibility: list>, endpointConfiguration: record<inboundEndpoints: list<record>>, errors: table<code: string, errorDetails: list, message: string>, id: string, ipAddress: string, isDedicated: bool, lastBootTime: string, nodeAgentInfo: record<lastUpdateTime: string, version: string>, recentTasks: table<executionInfo: record, jobId: string, subtaskId: int, taskId: string, taskState: string, taskUrl: string>, runningTasksCount: int, schedulingState: string, startTask: record<commandLine: string, containerSettings: record<containerRunOptions: string, imageName: string, registry: record, workingDirectory: string>, environmentSettings: list<record>, maxTaskRetryCount: int, resourceFiles: list<record>, userIdentity: record<autoUser: record, username: string>, waitForSuccess: bool>, startTaskInfo: record<containerInfo: record<containerId: string, error: string, state: string>, endTime: string, exitCode: int, failureInfo: record<category: string, code: string, details: list, message: string>, lastRetryTime: string, result: string, retryCount: int, startTime: string, state: string>, state: string, stateTransitionTime: string, totalTasksRun: int, totalTasksSucceeded: int, url: string, vmSize: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2141,7 +2140,7 @@ export def "pools-nodes-disablescheduling DisableScheduling" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --nodeDisableSchedulingOption: string@nodeDisableSchedulingOption-completer # The default value is requeue.
 ]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
@@ -2176,7 +2175,7 @@ export def "pools-nodes-enablescheduling EnableScheduling" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2205,12 +2204,12 @@ export def "pools-nodes-files ListFromComputeNode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string # An OData $filter clause. For more information on constructing this filter, see https://docs.microsoft.com/en-us/rest/api/batchservice/odata-filters-in-batch#list-compute-node-files.
-  --recursive: string@bool-completer # Whether to list children of a directory.
+  --recursive: oneof<nothing, bool> # Whether to list children of a directory.
   --maxresults: int # The maximum number of items to return in the response. A maximum of 1000 files can be returned. (format: int32, default: 1000)
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<odata_nextLink: string, value: table<isDirectory: bool, name: string, properties: record, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2239,11 +2238,11 @@ export def "pools-nodes-files DeleteFromComputeNode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --recursive: string@bool-completer # Whether to delete children of a directory. If the filePath parameter represents a directory instead of a file, you can set recursive to true to delete the directory and all of the files and subdirectories in it. If recursive is false then the directory must be empty or deletion will fail.
+  --recursive: oneof<nothing, bool> # Whether to delete children of a directory. If the filePath parameter represents a directory instead of a file, you can set recursive to true to delete the directory and all of the files and subdirectories in it. If recursive is false then the directory must be empty or deletion will fail.
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2276,7 +2275,7 @@ export def "pools-nodes-files GetFromComputeNode" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --ocp-range: string # The byte range to be retrieved. The default is to retrieve the entire file. The format is bytes=startRange-endRange.
   --If-Modified-Since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
@@ -2311,7 +2310,7 @@ export def "pools-nodes-files GetPropertiesFromComputeNode" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Modified-Since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has been modified since the specified time.
   --If-Unmodified-Since: string # A timestamp indicating the last modified time of the resource known to the client. The operation will be performed only if the resource on the service has not been modified since the specified time.
@@ -2345,7 +2344,7 @@ export def "pools-nodes-rdp GetRemoteDesktop" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2376,7 +2375,7 @@ export def "pools-nodes-reboot Reboot" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --nodeRebootOption: string@nodeRebootOption-completer # The default value is requeue.
 ]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
@@ -2411,7 +2410,7 @@ export def "pools-nodes-reimage Reimage" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --nodeReimageOption: string@nodeReimageOption-completer # The default value is requeue.
 ]: any -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
@@ -2446,7 +2445,7 @@ export def "pools-nodes-remoteloginsettings GetRemoteLoginSettings" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<remoteLoginIPAddress: string, remoteLoginPort: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2477,7 +2476,7 @@ export def "pools-nodes-uploadbatchservicelogs UploadBatchServiceLogs" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   containerUrl: string # The URL must include a Shared Access Signature (SAS) granting write permissions to the container. The SAS duration must allow enough time for the upload to finish. The start time for SAS is optional and recommended to not be specified.
   --endTime: string # Any log file containing a log message in the time range will be uploaded. This means that the operation might retrieve more logs than have been requested since the entire log file is always uploaded, but the operation should not retrieve fewer logs than have been requested. If omitted, the default is to upload all logs available after the startTime. (format: date-time)
@@ -2514,10 +2513,10 @@ export def "pools-nodes-users AddUser" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --expiryTime: string # If omitted, the default is 1 day from the current time. For Linux Compute Nodes, the expiryTime has a precision up to a day. (format: date-time)
-  --isAdmin: string@bool-completer # The default value is false.
+  --isAdmin: oneof<nothing, bool> # The default value is false.
   name: string
   --password: string # The password is required for Windows Compute Nodes (those created with 'cloudServiceConfiguration', or created with 'virtualMachineConfiguration' using a Windows Image reference). For Linux Compute Nodes, the password can optionally be specified along with the sshPublicKey property.
   --sshPublicKey: string # The public key should be compatible with OpenSSH encoding and should be base 64 encoded. This property can be specified only for Linux Compute Nodes. If this is specified for a Windows Compute Node, then the Batch service rejects the request; if you are calling the REST API directly, the HTTP status code is 400 (Bad Request).
@@ -2554,7 +2553,7 @@ export def "pools-nodes-users DeleteUser" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<code: string, message: record<lang: string, value: string>, values: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2586,7 +2585,7 @@ export def "pools-nodes-users UpdateUser" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --expiryTime: string # If omitted, the default is 1 day from the current time. For Linux Compute Nodes, the expiryTime has a precision up to a day. (format: date-time)
   --password: string # The password is required for Windows Compute Nodes (those created with 'cloudServiceConfiguration', or created with 'virtualMachineConfiguration' using a Windows Image reference). For Linux Compute Nodes, the password can optionally be specified along with the sshPublicKey property. If omitted, any existing password is removed.
@@ -2622,7 +2621,7 @@ export def "pools-removenodes RemoveNodes" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -2662,7 +2661,7 @@ export def "pools-resize Resize" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -2703,7 +2702,7 @@ export def "pools-stopresize StopResize" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   --If-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service exactly matches the value specified by the client.
   --If-None-Match: string # An ETag value associated with the version of the resource known to the client. The operation will be performed only if the resource's current ETag on the service does not match the value specified by the client.
@@ -2741,7 +2740,7 @@ export def "pools-updateproperties UpdateProperties" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
   applicationPackageReferences: list # The list replaces any existing Application Package references on the Pool. Changes to Application Package references affect all new Compute Nodes joining the Pool, but do not affect Compute Nodes that are already in the Pool until they are rebooted or reimaged. There is a maximum of 10 Application Package references on any given Pool. If omitted, or if you specify an empty collection, any existing Application Packages references are removed from the Pool. A maximum of 10 references may be specified on a given Pool. — item shape: {applicationId: string, version?: string}
   certificateReferences: list # This list replaces any existing Certificate references configured on the Pool. If you specify an empty collection, any existing Certificate references are removed from the Pool. For Windows Nodes, the Batch service installs the Certificates to the specified Certificate store and location. For Linux Compute Nodes, the Certificates are stored in a directory inside the Task working directory and an environment variable AZ_BATCH_CERTIFICATES_DIR is supplied to the Task to query for this location. For Certificates with visibility of 'remoteUser', a 'certs' directory is created in the user's home directory (e.g., /home/{user-name}/certs) and Certificates are placed in that directory. — item shape: {storeLocation?: "currentuser"|"localmachine", storeName?: string, thumbprint: string, thumbprintAlgorithm: string, visibility?: list}
@@ -2781,7 +2780,7 @@ export def "poolusagemetrics ListUsageMetrics" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<odata_nextLink: string, value: table<endTime: string, poolId: string, startTime: string, totalCoreHours: float, vmSize: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2812,7 +2811,7 @@ export def "supportedimages ListSupportedImages" [
   --timeout: int # The maximum time that the server can spend processing the request, in seconds. The default is 30 seconds. (format: int32, default: 30)
   --api-version: string # Client API Version.
   --client-request-id: string # The caller-generated request identity, in the form of a GUID with no decoration such as curly braces, e.g. 9C4D50EE-2D56-4CD3-8152-34347DC9F2B0.
-  --return-client-request-id: string@bool-completer # Whether the server should return the client-request-id in the response.
+  --return-client-request-id: oneof<nothing, bool> # Whether the server should return the client-request-id in the response.
   --ocp-date: string # The time the request was issued. Client libraries typically set this to the current system clock time; set it explicitly if you are calling the REST API directly.
 ]: nothing -> record<odata_nextLink: string, value: table<batchSupportEndOfLife: string, capabilities: list, imageReference: record, nodeAgentSKUId: string, osType: string, verificationType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

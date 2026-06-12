@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.gbif.org/v1" "https://api.gbif-uat.org/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -168,10 +167,10 @@ export def "occurrence-search searchOccurrence" [
   --georeferencedBy: list # Name of a person, group, or organization who determined the georeference (spatial representation) for the location.  *Parameter may be repeated.* (e.g. Brad Millen)
   --geometry: list # Searches for occurrences inside a polygon described in Well Known Text (WKT) format. Only `POLYGON` and `MULTIPOLYGON` are accepted WKT types.  For example, a shape written as `POLYGON ((30.1 10.1, 40 40, 20 40, 10 20, 30.1 10.1))` would be queried as is.  _Polygons must have *anticlockwise* ordering of points._ (A clockwise polygon represents the opposite area: the Earth's surface with a 'hole' in it. Such queries are not supported.)  *Parameter may be repeated.* (e.g. POLYGON ((30.1 10.1, 40 40, 20 40, 10 20, 30.1 10.1)))
   --group: list # The full name of the lithostratigraphic group from which the material entity was collected.  *Parameter may be repeated.* (e.g. Bathurst)
-  --hasCoordinate: string@bool-completer # Limits searches to occurrence records which contain a value in both latitude and longitude (i.e. `hasCoordinate=true` limits to occurrence records with coordinate values and `hasCoordinate=false` limits to occurrence records without coordinate values). (e.g. true)
+  --hasCoordinate: oneof<nothing, bool> # Limits searches to occurrence records which contain a value in both latitude and longitude (i.e. `hasCoordinate=true` limits to occurrence records with coordinate values and `hasCoordinate=false` limits to occurrence records without coordinate values). (e.g. true)
   --higherGeography: list # Geographic name less specific than the information captured in the locality term.  *Parameter may be repeated.* (e.g. Argentina)
   --highestBiostratigraphicZone: list # The full name of the highest possible geological biostratigraphic zone of the stratigraphic horizon from which the material entity was collected.  *Parameter may be repeated.* (e.g. Blancan)
-  --hasGeospatialIssue: string@bool-completer # Includes/excludes occurrence records which contain spatial issues (as determined in our record interpretation), i.e. hasGeospatialIssue=true returns only those records with spatial issues while hasGeospatialIssue=false includes only records without spatial issues.  The absence of this parameter returns any record with or without spatial issues. (e.g. true)
+  --hasGeospatialIssue: oneof<nothing, bool> # Includes/excludes occurrence records which contain spatial issues (as determined in our record interpretation), i.e. hasGeospatialIssue=true returns only those records with spatial issues while hasGeospatialIssue=false includes only records without spatial issues.  The absence of this parameter returns any record with or without spatial issues. (e.g. true)
   --hostingOrganizationKey: list # The key (UUID) of the publishing organization whose installation (server) hosts the original dataset.  (This is of little interest to most data users.)  *Parameter may be repeated.* (e.g. fbca90e3-8aed-48b1-84e3-369afbd000ce)
   --identifiedBy: list # The person who provided the taxonomic identification of the occurrence.  *Parameter may be repeated.* (e.g. Allison)
   --identifiedByID: list # Identifier (e.g. ORCID) for the person who provided the taxonomic identification of the occurrence.  *Parameter may be repeated.* (e.g. https://orcid.org/0000-0001-6492-4016)
@@ -179,10 +178,10 @@ export def "occurrence-search searchOccurrence" [
   --institutionCode: list # An identifier of any form assigned by the source to identify the institution the record belongs to. Not guaranteed to be unique.  *Parameter may be repeated.* (e.g. K)
   --institutionKey: list # A key (UUID) for an institution registered in the [Global Registry of Scientific Collections](https://www.gbif.org/grscicoll).  *Parameter may be repeated.* (e.g. fa252605-26f6-426c-9892-94d071c2c77f)
   --issue: list # A specific interpretation issue as defined in our OccurrenceIssue enumeration.  *Parameter may be repeated.* (e.g. COUNTRY_COORDINATE_MISMATCH)
-  --isInCluster: string@bool-completer # *Experimental.* Searches for records which are part of a cluster.  See the documentation on [clustering](/en/data-processing/clustering-occurrences). (e.g. true)
+  --isInCluster: oneof<nothing, bool> # *Experimental.* Searches for records which are part of a cluster.  See the documentation on [clustering](/en/data-processing/clustering-occurrences). (e.g. true)
   --island: list # The name of the island on or near which the location occurs.  *Parameter may be repeated.* (e.g. Zanzibar)
   --islandGroup: list # The name of the island group in which the location occurs.  *Parameter may be repeated.* (e.g. Seychelles)
-  --isSequenced: string@bool-completer # Flag occurrence when associated sequences exists (e.g. true)
+  --isSequenced: oneof<nothing, bool> # Flag occurrence when associated sequences exists (e.g. true)
   --iucnRedListCategory: list # A threat status category from the IUCN Red List.  The two-letter code for the status should be used.  *Parameter may be repeated.* (e.g. EX)
   --kingdomKey: list # Kingdom classification key.  *Parameter may be repeated.* (e.g. 5)
   --lastInterpreted: list # This date the record was last modified in GBIF, in ISO 8601 format: yyyy, yyyy-MM, yyyy-MM-dd, or MM-dd.  Note that this is the date the record was last changed in GBIF, not necessarily the date the record was first/last changed by the publisher. Data is re-interpreted when we change the taxonomic backbone, geographic data sources, or interpretation processes.  *Parameter may be repeated or a range.* (e.g. 2023-02)
@@ -211,10 +210,10 @@ export def "occurrence-search searchOccurrence" [
   --nucleotideSequencenonACGTNFraction: list # Fraction of ambiguous IUPAC codes, not A/C/G/T/N (0-1).*Parameter may be repeated.*
   --nucleotideSequencenFraction: list # Fraction of N characters (0-1).*Parameter may be repeated.*
   --nucleotideSequencenRunsCapped: list # Number of N-runs that were capped.*Parameter may be repeated.*
-  --nucleotideSequencenaturalLanguageDetected: string@bool-completer # Whether UNMERGED marker was found.*Parameter may be repeated.*
-  --nucleotideSequenceendsTrimmed: string@bool-completer # Whether ends were trimmed.*Parameter may be repeated.*
-  --nucleotideSequencegapsOrWhitespaceRemoved: string@bool-completer # Whether gaps and/or whitespace were removed.*Parameter may be repeated.*
-  --nucleotideSequenceinvalid: string@bool-completer # nonIupacFraction > 0 and/or naturalLanguageDetected is true.*Parameter may be repeated.*
+  --nucleotideSequencenaturalLanguageDetected: oneof<nothing, bool> # Whether UNMERGED marker was found.*Parameter may be repeated.*
+  --nucleotideSequenceendsTrimmed: oneof<nothing, bool> # Whether ends were trimmed.*Parameter may be repeated.*
+  --nucleotideSequencegapsOrWhitespaceRemoved: oneof<nothing, bool> # Whether gaps and/or whitespace were removed.*Parameter may be repeated.*
+  --nucleotideSequenceinvalid: oneof<nothing, bool> # nonIupacFraction > 0 and/or naturalLanguageDetected is true.*Parameter may be repeated.*
   --occurrenceId: list # A globally unique identifier for the occurrence record as provided by the publisher.  *Parameter may be repeated.* (e.g. URN:catalog:UWBM:Bird:126493)
   --occurrenceStatus: string@occurrenceStatus-completer # Either `ABSENT` or `PRESENT`; the presence or absence of the occurrence. (e.g. PRESENT)
   --orderKey: list # Order classification key.  *Parameter may be repeated.* (e.g. 1448)
@@ -237,7 +236,7 @@ export def "occurrence-search searchOccurrence" [
   --recordedByID: list # Identifier (e.g. ORCID) for the person who recorded the occurrence.  *Parameter may be repeated.* (e.g. https://orcid.org/0000-0003-0623-6682)
   --recordNumber: list # An identifier given to the record at the time it was recorded in the field.  *Parameter may be repeated.* (e.g. 1)
   --relativeOrganismQuantity: list # The relative measurement of the quantity of the organism (i.e. without absolute units).  *Parameter may be repeated.*
-  --repatriated: string@bool-completer # Searches for records whose publishing country is different to the country in which the record was recorded. (e.g. true)
+  --repatriated: oneof<nothing, bool> # Searches for records whose publishing country is different to the country in which the record was recorded. (e.g. true)
   --sampleSizeUnit: list # The unit of measurement of the size (time duration, length, area, or volume) of a sample in a sampling event.  *Parameter may be repeated.* (e.g. hectares)
   --sampleSizeValue: list # A numeric value for a measurement of the size (time duration, length, area, or volume) of a sample in a sampling event.  *Parameter may be repeated.* (e.g. 50.5)
   --samplingProtocol: list # The name of, reference to, or description of the method or protocol used during a sampling event.  *Parameter may be repeated.* (e.g. malaise trap)
@@ -258,15 +257,15 @@ export def "occurrence-search searchOccurrence" [
   --geologicalTime: string # The geological time of an occurrence that is present in the chronostratigraphy terms. *Parameter may be repeated or a range.* (e.g. Mesozoic)
   --lithostratigraphy: string # The lithostratigraphy of an occurrence that is present in the group, formation, member and bed terms (e.g. Wayne Fm)
   --biostratigraphy: string # The biostratigraphy of an occurrence that is present in the lowest and highest biostratigraphy terms (e.g. Rhynchonella cuvieri Zone)
-  --matchCase: string@bool-completer # *Experimental.* Indicates if the search has to be case sensitive (e.g. true)
+  --matchCase: oneof<nothing, bool> # *Experimental.* Indicates if the search has to be case sensitive (e.g. true)
   --shuffle: string # *Experimental.* Seed to sort the results randomly. (e.g. abcdefgh)
-  --hl: string@bool-completer # Set `hl=true` to highlight terms matching the query when in full-text search fields. The highlight will be an emphasis tag of class `gbifH1` e.g. [`/search?q=plant&hl=true`](https://api.gbif.org/v1/literature/search?q=plant&hl=true).  Full-text search fields include: title, keyword, country, publishing country, publishing organization title, hosting organization title, and description. One additional full text field is searched which includes information from metadata documents, but the text of this field is not returned in the response. (e.g. true)
+  --hl: oneof<nothing, bool> # Set `hl=true` to highlight terms matching the query when in full-text search fields. The highlight will be an emphasis tag of class `gbifH1` e.g. [`/search?q=plant&hl=true`](https://api.gbif.org/v1/literature/search?q=plant&hl=true).  Full-text search fields include: title, keyword, country, publishing country, publishing organization title, hosting organization title, and description. One additional full text field is searched which includes information from metadata documents, but the text of this field is not returned in the response. (e.g. true)
   --q: string # Simple full-text search parameter. The value for this parameter can be a simple word or a phrase. Wildcards are not supported
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the maximum threshold, which is 300 for this service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. This service has a maximum offset of 100,000. (format: int32)
   --facet: string # A facet name used to retrieve the most frequent values for a field. Facets are allowed for all search parameters except geometry and geoDistance. This parameter may by repeated to request multiple facets, as in [this example](https://api.gbif.org/v1/occurrence/search?facet=datasetKey&facet=basisOfRecord&limit=0).  Note terms not available for searching are not available for faceting.
   --facetMincount: int # Used in combination with the facet parameter. Set facetMincount={#} to exclude facets with a count less than {#}, e.g. [/search?facet=basisOfRecord&limit=0&facetMincount=10000](https://api.gbif.org/v1/occurrence/search?facet=basisOfRecord&limit=0&facetMincount=1000000]. (format: int32)
-  --facetMultiselect: string@bool-completer # Used in combination with the facet parameter. Set facetMultiselect=true to still return counts for values that are not currently filtered, e.g. [/search?facet=basisOfRecord&limit=0&basisOfRecord=HUMAN_OBSERVATION&facetMultiselect=true](https://api.gbif.org/v1/occurrence/search?facet=basisOfRecord&limit=0&basisOfRecord=HUMAN_OBSERVATION&facetMultiselect=true) still shows Basis of Record values 'PRESERVED_SPECIMEN' and so on, even though Basis of Record is being filtered.
+  --facetMultiselect: oneof<nothing, bool> # Used in combination with the facet parameter. Set facetMultiselect=true to still return counts for values that are not currently filtered, e.g. [/search?facet=basisOfRecord&limit=0&basisOfRecord=HUMAN_OBSERVATION&facetMultiselect=true](https://api.gbif.org/v1/occurrence/search?facet=basisOfRecord&limit=0&basisOfRecord=HUMAN_OBSERVATION&facetMultiselect=true) still shows Basis of Record values 'PRESERVED_SPECIMEN' and so on, even though Basis of Record is being filtered.
   --facetLimit: int # Facet parameters allow paging requests using the parameters facetOffset and facetLimit (format: int32)
   --facetOffset: int # Facet parameters allow paging requests using the parameters facetOffset and facetLimit (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: int, datasetKey: string, publishingOrgKey: string, networkKeys: list, installationKey: string, hostingOrganizationKey: string, publishingCountry: string, protocol: string, lastCrawled: string, lastParsed: string, crawlId: int, projectId: string, programmeAcronym: string, extensions: record, basisOfRecord: string, individualCount: int, occurrenceStatus: string, sex: string, lifeStage: string, establishmentMeans: string, degreeOfEstablishment: string, pathway: string, classifications: record, taxonKey: int, kingdomKey: int, phylumKey: int, classKey: int, orderKey: int, familyKey: int, genusKey: int, subgenusKey: int, speciesKey: int, acceptedTaxonKey: int, scientificName: string, scientificNameAuthorship: string, acceptedScientificName: string, kingdom: string, phylum: string, order: string, family: string, genus: string, subgenus: string, species: string, genericName: string, specificEpithet: string, infraspecificEpithet: string, taxonRank: string, taxonomicStatus: string, iucnRedListCategory: string, dateIdentified: string, decimalLatitude: float, decimalLongitude: float, coordinatePrecision: float, coordinateUncertaintyInMeters: float, coordinateAccuracy: float, elevation: float, elevationAccuracy: float, depth: float, depthAccuracy: float, continent: string, stateProvince: string, gadm: record, waterBody: string, distanceFromCentroidInMeters: float, higherGeography: string, georeferencedBy: string, year: int, month: int, day: int, eventDate: record, startDayOfYear: int, endDayOfYear: int, typeStatus: string, typifiedName: string, issues: list, modified: string, lastInterpreted: string, references: string, license: string, organismQuantity: float, organismQuantityType: string, sampleSizeUnit: string, sampleSizeValue: float, relativeOrganismQuantity: float, isSequenced: bool, associatedSequences: string, identifiers: list, media: list, facts: list, relations: list, institutionKey: string, collectionKey: string, isInCluster: bool, datasetID: string, datasetName: string, otherCatalogNumbers: string, earliestEonOrLowestEonothem: string, latestEonOrHighestEonothem: string, earliestEraOrLowestErathem: string, latestEraOrHighestErathem: string, earliestPeriodOrLowestSystem: string, latestPeriodOrHighestSystem: string, earliestEpochOrLowestSeries: string, latestEpochOrHighestSeries: string, earliestAgeOrLowestStage: string, latestAgeOrHighestStage: string, lowestBiostratigraphicZone: string, highestBiostratigraphicZone: string, group: string, formation: string, member: string, bed: string, recordedBy: string, identifiedBy: string, preparations: string, samplingProtocol: string, dnaSequenceID: list, nucleotideSequence: list, verbatimScientificName: string, geodeticDatum: string, class: string, countryCode: string, recordedByIDs: list, identifiedByIDs: list, gbifRegion: string, country: string, publishedByGbifRegion: string>, facets: table<field: string, counts: list>> {
@@ -295,7 +294,7 @@ export def "occurrence-download-request requestDownload" [
   --predicate: any # A predicate defining the filters to apply to the download.
   --creator: string # The GBIF username of the initiator of the download request.
   --notificationAddresses: list
-  --sendNotification: string@bool-completer # Whether to send a notification email when the download finishes.
+  --sendNotification: oneof<nothing, bool> # Whether to send a notification email when the download finishes.
   --format: string@format-completer # The data format of the download.
   --description: string # A user-specified description of the download, such as the intended purpose or a tag for later reference.
   --machineDescription: any
@@ -374,7 +373,7 @@ export def "occurrence-download-request-validate validateDownloadRequest" [
   --sql: string # An SQL query defining the filter and output for the download.
   --creator: string # The GBIF username of the initiator of the download request.
   --notificationAddresses: list
-  --sendNotification: string@bool-completer # Whether to send a notification email when the download finishes.
+  --sendNotification: oneof<nothing, bool> # Whether to send a notification email when the download finishes.
   --format: string@format-completer # The data format of the download.
   --description: string # A user-specified description of the download, such as the intended purpose or a tag for later reference.
   --machineDescription: any
@@ -463,7 +462,7 @@ export def "occurrence-download-request-sql searchToSql-by-" [
   --predicate: any # A predicate defining the filters to apply to the download.
   --creator: string # The GBIF username of the initiator of the download request.
   --notificationAddresses: list
-  --sendNotification: string@bool-completer # Whether to send a notification email when the download finishes.
+  --sendNotification: oneof<nothing, bool> # Whether to send a notification email when the download finishes.
   --format: string@format-completer # The data format of the download.
   --description: string # A user-specified description of the download, such as the intended purpose or a tag for later reference.
   --machineDescription: any
@@ -1332,7 +1331,7 @@ export def "occurrence-download list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --statistics: string@bool-completer # If true it also shows number of organizations and countries.
+  --statistics: oneof<nothing, bool> # If true it also shows number of organizations and countries.
 ]: nothing -> record<key: string, doi: string, license: string, request: record<creator: string, notificationAddresses: list<string>, sendNotification: bool, format: string, description: string, machineDescription: any, checklistKey: string>, created: string, modified: string, eraseAfter: string, erasureNotification: string, status: string, downloadLink: string, size: int, totalRecords: int, numberDatasets: int, numberOrganizations: int, numberPublishingCountries: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1382,7 +1381,7 @@ export def "occurrence-download-user listOccurrenceDownloadsByUser" [
   --page: record
   --status: list
   --qp-from: string # format: date-time
-  --statistics: string@bool-completer # default: true
+  --statistics: oneof<nothing, bool> # default: true
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: string, doi: string, license: string, request: record, created: string, modified: string, eraseAfter: string, erasureNotification: string, status: string, downloadLink: string, size: int, totalRecords: int, numberDatasets: int, numberOrganizations: int, numberPublishingCountries: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1767,7 +1766,7 @@ export def "occurrence-download-dataset get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --showDownloadDetails: string@bool-completer # Flag to indicate if we want the download details in the response. It defaults to true to keep backwards compatibility. (default: true)
+  --showDownloadDetails: oneof<nothing, bool> # Flag to indicate if we want the download details in the response. It defaults to true to keep backwards compatibility. (default: true)
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<downloadKey: string, datasetKey: string, datasetTitle: string, datasetDOI: string, datasetCitation: string, numberRecords: int, download: record, publishingCountryCode: string>> {
@@ -1966,7 +1965,7 @@ export def "occurrence-count get" [
   --basisOfRecord: string@basisOfRecord-completer # Count records with a particular basisOfRecord.
   --country: string@country-completer # Count records in the given country.
   --datasetKey: string # Count records in a dataset. (format: uuid)
-  --isGeoreferenced: string@bool-completer # Count only georeferenced (or not) records.
+  --isGeoreferenced: oneof<nothing, bool> # Count only georeferenced (or not) records.
   --issue: string@issue-completer # Count only records with this issue.
   --protocol: string@protocol-completer # Count records retrieved using the chosen protocol.
   --publishingCountry: string@publishingCountry-completer # Count records published by the given country.

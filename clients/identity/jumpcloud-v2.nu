@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://console.jumpcloud.com/api/v2" "https://console.eu.jumpcloud.com/api/v2" "https://console.in.jumpcloud.com/api/v2"] }
 def auth-scheme-completer [] { ["x-api-key"] }
 
@@ -179,7 +178,7 @@ export def "activedirectories post" [
   --x-org-id: string # Organization identifier that can be obtained from console settings.
   --domain: string # Domain name for this Active Directory instance.
   --useCase: string@useCase-completer
-  --groupsEnabled: string@bool-completer
+  --groupsEnabled: oneof<nothing, bool>
   --delegationState: string@delegationState-completer # Delegation state of the Active Directory instance
 ]: any -> record<domain: string, id: string, useCase: string, groupsEnabled: bool, delegationState: string, primaryAgent: string, primaryImportAgent: string, permission: string> {
   let input = $in
@@ -411,7 +410,7 @@ export def "activedirectories-users activeDirectoryTraverseUser" [
   --filter: list # A filter to apply to the query.  **Filter structure**: `<field>:<operator>:<value>`.  **field** = Populate with a valid field from an endpoint response.  **operator** =  Supported operators are: eq, ne, gt, ge, lt, le, between, search, in. _Note: v1 operators differ from v2 operators._  **value** = Populate with the value you want to search for. Is case sensitive. Supports wild cards.  **EX:** `GET /api/v2/groups?filter=name:eq:Test+Group`
   --limit: int # The number of records to return at once. Limited to 100. (default: 10)
   --skip: int # The offset into the records to return. (default: 0)
-  --syncStatus: string@bool-completer # Include sync status for users
+  --syncStatus: oneof<nothing, bool> # Include sync status for users
   --x-org-id: string # Organization identifier that can be obtained from console settings.
 ]: nothing -> table<compiledAttributes: record, id: string, paths: list<list>, type: string, externalId: string, syncStatus: record<syncedAt: string, code: int, message: string, details: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -491,7 +490,7 @@ export def "activedirectories patch" [
   --x-org-id: string # Organization identifier that can be obtained from console settings.
   --domain: string # Domain name for this Active Directory instance.
   --useCase: string@useCase-completer
-  --groupsEnabled: string@bool-completer
+  --groupsEnabled: oneof<nothing, bool>
   --delegationState: string@delegationState-completer # Delegation state of the Active Directory instance
 ]: any -> record<domain: string, id: string, useCase: string, groupsEnabled: bool, delegationState: string, primaryAgent: string, primaryImportAgent: string, permission: string> {
   let input = $in
@@ -844,7 +843,7 @@ export def "applemdms put" [
   --name: string # A new name for the Apple MDM configuration.
   --defaultSystemGroupID: string # ObjectId uniquely identifying the MDM default System Group.
   --defaultIosUserEnrollmentDeviceGroupID: string # ObjectId uniquely identifying the MDM default iOS user enrollment device group.
-  --allowMobileUserEnrollment: string@bool-completer # A toggle to allow mobile device enrollment for an organization.
+  --allowMobileUserEnrollment: oneof<nothing, bool> # A toggle to allow mobile device enrollment for an organization.
   --dep: record # shape: {welcomeScreen?: record, setupAssistantOptions?: list, enableZeroTouchEnrollment?: bool}
   --ades: record # shape: {macos?: record, ios?: record}
   --appleCertCreatorAppleID: string # The Apple ID of the admin who created the Apple signed certificate.
@@ -1308,7 +1307,7 @@ export def "applications-import-jobs create" [
   --allow-errors(-e) # Return full response without error handling
   --x-org-id: string # Organization identifier that can be obtained from console settings.
   --queryString: string # Query string to filter and sort the user list returned from the application.  The supported filtering and sorting varies by application.  If no value is sent, all users are returned. **Example:** "location=Chicago&department=IT"Query string used to retrieve users from service (default: )
-  --allowUserReactivation: string@bool-completer # A boolean value to allow the reactivation of suspended users (default: true)
+  --allowUserReactivation: oneof<nothing, bool> # A boolean value to allow the reactivation of suspended users (default: true)
   --operations: list # Operations to be performed on the user list returned from the application
 ]: any -> record<jobId: string> {
   let input = $in
@@ -1454,8 +1453,8 @@ export def "applications-import-users users" [
   --qp-sort: string@sort-completer # Sort users by supported fields
   --sortOrder: string@sortOrder-completer # default: asc
   --sessionId: string # Import sessionId for manual select and view user
-  --isCount: string@bool-completer # IsCount indicates if the request is only for getting the total count of users. (default: false)
-  --isCursor: string@bool-completer # Enable cursor-based pagination (default: false)
+  --isCount: oneof<nothing, bool> # IsCount indicates if the request is only for getting the total count of users. (default: false)
+  --isCursor: oneof<nothing, bool> # Enable cursor-based pagination (default: false)
   --cursor: string # Cursor token for pagination
   --limit: int # The number of records to return at once. Limited to 100. (default: 10)
   --skip: int # The offset into the records to return. (default: 0)
@@ -1484,7 +1483,7 @@ export def "bulk-users usersCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --suppressEmail: string@bool-completer # An option indicating whether to suppress the job results email that will otherwise be sent to the Administrator who created the job. If true, the email won't be sent. If omitted or false, the email will be sent.
+  --suppressEmail: oneof<nothing, bool> # An option indicating whether to suppress the job results email that will otherwise be sent to the Administrator who created the job. If true, the email won't be sent. If omitted or false, the email will be sent.
   --x-org-id: string # Organization identifier that can be obtained from console settings.
   --creation-source: string@creation-source-completer # Defines the creation-source header for gapps, o365 and workdays requests. If the header isn't sent, the default value is `jumpcloud:bulk`, if you send the header with a malformed value you receive a 400 error.
   --body: record
@@ -1514,7 +1513,7 @@ export def "bulk-users usersUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --suppressEmail: string@bool-completer # An option indicating whether to suppress the job results email that will otherwise be sent to the Administrator who created the job. If true, the email won't be sent. If omitted or false, the email will be sent.
+  --suppressEmail: oneof<nothing, bool> # An option indicating whether to suppress the job results email that will otherwise be sent to the Administrator who created the job. If true, the email won't be sent. If omitted or false, the email will be sent.
   --x-org-id: string # Organization identifier that can be obtained from console settings.
   --body: record
 ]: any -> record<jobId: string> {
@@ -1658,7 +1657,7 @@ export def "bulk-userstates userStatesCreate" [
   user_ids: list # Array of system user ids to schedule for a state change
   state: string@state-completer # The state to move the user(s) to
   start_date: string # Date and time that scheduled action should occur (format: date-time)
-  --send-activation-emails: string@bool-completer # Set to true to send activation or welcome email(s) to each user_id upon activation. Set to false to suppress emails. Can only be used with scheduled activation(s).
+  --send-activation-emails: oneof<nothing, bool> # Set to true to send activation or welcome email(s) to each user_id upon activation. Set to false to suppress emails. Can only be used with scheduled activation(s).
   --activation-email-override: string # Send the activation or welcome email to the specified email address upon activation. Can only be used with a single user_id and scheduled activation. This field will be ignored if `send_activation_emails` is explicitly set to false.
 ]: any -> table<scheduledJobId: string, scheduledDate: string, state: string, systemUserId: string> {
   let input = $in
@@ -2405,7 +2404,7 @@ export def "gsuites-users gSuiteTraverseUser" [
   --limit: int # The number of records to return at once. Limited to 100. (default: 10)
   --skip: int # The offset into the records to return. (default: 0)
   --filter: list # A filter to apply to the query.  **Filter structure**: `<field>:<operator>:<value>`.  **field** = Populate with a valid field from an endpoint response.  **operator** =  Supported operators are: eq, ne, gt, ge, lt, le, between, search, in. _Note: v1 operators differ from v2 operators._  **value** = Populate with the value you want to search for. Is case sensitive. Supports wild cards.  **EX:** `GET /api/v2/groups?filter=name:eq:Test+Group`
-  --syncStatus: string@bool-completer # Include sync status for users
+  --syncStatus: oneof<nothing, bool> # Include sync status for users
   --x-org-id: string # Organization identifier that can be obtained from console settings.
 ]: nothing -> table<compiledAttributes: record, id: string, paths: list<list>, type: string, externalId: string, syncStatus: record<syncedAt: string, code: int, message: string, details: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2462,7 +2461,7 @@ export def "gsuites patch" [
   --userLockoutAction: string@userLockoutAction-completer
   --userPasswordExpirationAction: string@userPasswordExpirationAction-completer
   --name: string
-  --groupsEnabled: string@bool-completer
+  --groupsEnabled: oneof<nothing, bool>
   --importFilter: string
   --defaultDomain: record # shape: {id?: string}
   --organizationObjectId: string # OrganizationObjectId is the object id of the organization that the account belongs to. (format: byte)
@@ -3046,7 +3045,7 @@ export def "office365s patch" [
   --allow-errors(-e) # Return full response without error handling
   --x-org-id: string # Organization identifier that can be obtained from console settings.
   --name: string
-  --groupsEnabled: string@bool-completer
+  --groupsEnabled: oneof<nothing, bool>
   --defaultDomain: record # shape: {id?: string}
 ]: any -> record<id: string, userLockoutAction: string, userPasswordExpirationAction: string, name: string, groupsEnabled: bool, defaultDomain: record<id: string, domain: string>> {
   let input = $in
@@ -3269,7 +3268,7 @@ export def "office365s-users office365TraverseUser" [
   --limit: int # The number of records to return at once. Limited to 100. (default: 10)
   --skip: int # The offset into the records to return. (default: 0)
   --filter: list # A filter to apply to the query.  **Filter structure**: `<field>:<operator>:<value>`.  **field** = Populate with a valid field from an endpoint response.  **operator** =  Supported operators are: eq, ne, gt, ge, lt, le, between, search, in. _Note: v1 operators differ from v2 operators._  **value** = Populate with the value you want to search for. Is case sensitive. Supports wild cards.  **EX:** `GET /api/v2/groups?filter=name:eq:Test+Group`
-  --syncStatus: string@bool-completer # Include sync status for users
+  --syncStatus: oneof<nothing, bool> # Include sync status for users
   --x-org-id: string # Organization identifier that can be obtained from console settings.
 ]: nothing -> table<compiledAttributes: record, id: string, paths: list<list>, type: string, externalId: string, syncStatus: record<syncedAt: string, code: int, message: string, details: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -4761,11 +4760,11 @@ export def "providers-administrators post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --apiKeyAllowed: string@bool-completer
+  --apiKeyAllowed: oneof<nothing, bool>
   --apiKeyHash: record
-  --bindNoOrgs: string@bool-completer # default: false
+  --bindNoOrgs: oneof<nothing, bool> # default: false
   email: string
-  --enableMultiFactor: string@bool-completer
+  --enableMultiFactor: oneof<nothing, bool>
   --firstname: string
   --lastname: string
   --role: string
@@ -5359,7 +5358,7 @@ export def "integrations-connectwise-settings patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --companyTypeIds: list # The array of ConnectWise companyType IDs applicable to the Provider.
-  --automaticTicketing: string@bool-completer # Determine whether ConnectWise uses automatic ticketing
+  --automaticTicketing: oneof<nothing, bool> # Determine whether ConnectWise uses automatic ticketing
 ]: any -> record<companyTypeIds: list<int>, automaticTicketing: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -5388,7 +5387,7 @@ export def "providers-integrations-connectwise-alerts-configuration updateAlertC
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --shouldCreateTickets: string@bool-completer
+  --shouldCreateTickets: oneof<nothing, bool>
   --priority: record # shape: {id?: int, name?: string}
   --body-source: record # shape: {id?: int, name?: string}
 ]: any -> record<id: int, category: string, description: string, displayName: string, shouldCreateTickets: bool, priority: record<id: int, name: string>, source: record<id: int, name: string>> {
@@ -5603,7 +5602,7 @@ export def "integrations-autotask-settings patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --companyTypeIds: list # The array of Autotask companyType IDs applicable to the Provider.
-  --automaticTicketing: string@bool-completer # Determine whether Autotask uses automatic ticketing
+  --automaticTicketing: oneof<nothing, bool> # Determine whether Autotask uses automatic ticketing
 ]: any -> record<companyTypeIds: list<int>, automaticTicketing: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -5818,7 +5817,7 @@ export def "providers-integrations-autotask-alerts-configuration updateAlertConf
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --shouldCreateTickets: string@bool-completer
+  --shouldCreateTickets: oneof<nothing, bool>
   priority: record # shape: {id?: int, name?: string}
   status: record # shape: {id?: int, name?: string}
   --body-source: record # shape: {id?: int, name?: string}
@@ -6015,7 +6014,7 @@ export def "integrations-syncro-settings patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --automaticTicketing: string@bool-completer # Determine whether Syncro uses automatic ticketing
+  --automaticTicketing: oneof<nothing, bool> # Determine whether Syncro uses automatic ticketing
 ]: any -> record<automaticTicketing: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -6042,7 +6041,7 @@ export def "providers-integrations-syncro-alerts-configuration updateAlertConfig
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --shouldCreateTickets: string@bool-completer
+  --shouldCreateTickets: oneof<nothing, bool>
   problemType: string
   --dueDays: int
 ]: any -> record<id: int, category: string, description: string, displayName: string, shouldCreateTickets: bool, priority: string, problemType: string, status: string, dueDays: int, userId: int, username: string> {
@@ -6365,7 +6364,7 @@ export def "providers-directoryinsights-events directoryInsightsEventsPost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --x-org-id: string # Organization identifier that can be obtained from console settings.
-  --exclude-provider-activity: string@bool-completer # When true, excludes provider-level (master MSP) activity and limits results to child-organization activity.
+  --exclude-provider-activity: oneof<nothing, bool> # When true, excludes provider-level (master MSP) activity and limits results to child-organization activity.
 ]: any -> list<record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -6394,7 +6393,7 @@ export def "providers-directoryinsights-events-distinct directoryInsightsEventsD
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --x-org-id: string # Organization identifier that can be obtained from console settings.
-  --exclude-provider-activity: string@bool-completer # When true, excludes provider-level (master MSP) activity and limits results to child-organization activity.
+  --exclude-provider-activity: oneof<nothing, bool> # When true, excludes provider-level (master MSP) activity and limits results to child-organization activity.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -6423,7 +6422,7 @@ export def "providers-directoryinsights-events-count directoryInsightsEventsCoun
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --x-org-id: string # Organization identifier that can be obtained from console settings.
-  --exclude-provider-activity: string@bool-completer # When true, excludes provider-level (master MSP) activity and limits results to child-organization activity.
+  --exclude-provider-activity: oneof<nothing, bool> # When true, excludes provider-level (master MSP) activity and limits results to child-organization activity.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -6452,7 +6451,7 @@ export def "providers-directoryinsights-events-interval directoryInsightsEventsI
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --x-org-id: string # Organization identifier that can be obtained from console settings.
-  --exclude-provider-activity: string@bool-completer # When true, excludes provider-level (master MSP) activity and limits results to child-organization activity.
+  --exclude-provider-activity: oneof<nothing, bool> # When true, excludes provider-level (master MSP) activity and limits results to child-organization activity.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -7067,7 +7066,7 @@ export def "systemgroups post" [
   name: string # Display name of a System Group.
   --memberQuery: any # Query using a sequence of field filters.
   --membershipMethod: string@membershipMethod-completer # The type of membership method for this group. Valid values include NOTSET, STATIC, DYNAMIC_REVIEW_REQUIRED, and DYNAMIC_AUTOMATED.  Note DYNAMIC_AUTOMATED and DYNAMIC_REVIEW_REQUIRED group rules will supersede any group enrollment for [group-associated MDM-enrolled devices](https://jumpcloud.com/support/change-a-default-device-group-for-apple-devices).  Use caution when creating dynamic device groups with MDM-enrolled devices to avoid creating conflicting rule sets.
-  --memberSuggestionsNotify: string@bool-completer # True if notification emails are to be sent for membership suggestions.
+  --memberSuggestionsNotify: oneof<nothing, bool> # True if notification emails are to be sent for membership suggestions.
   --memberQueryExemptions: list # Array of GraphObjects exempted from the query — item shape: {attributes?: record, id: string, type: string}
 ]: any -> record<attributes: record, description: string, email: string, id: string, memberQuery: record<queryType: string, filters: list<record>>, memberQueryErrorFlags: list<string>, memberQueryExemptions: table<attributes: record, id: string, type: string>, membershipMethod: string, memberSuggestionsNotify: bool, name: string, type: string> {
   let input = $in
@@ -7428,7 +7427,7 @@ export def "systemgroups put" [
   name: string # Display name of a System Group.
   --memberQuery: any # Query using a sequence of field filters.
   --membershipMethod: string@membershipMethod-completer # The type of membership method for this group. Valid values include NOTSET, STATIC, DYNAMIC_REVIEW_REQUIRED, and DYNAMIC_AUTOMATED.  Note DYNAMIC_AUTOMATED and DYNAMIC_REVIEW_REQUIRED group rules will supersede any group enrollment for [group-associated MDM-enrolled devices](https://jumpcloud.com/support/change-a-default-device-group-for-apple-devices).  Use caution when creating dynamic device groups with MDM-enrolled devices to avoid creating conflicting rule sets.
-  --memberSuggestionsNotify: string@bool-completer # True if notification emails are to be sent for membership suggestions.
+  --memberSuggestionsNotify: oneof<nothing, bool> # True if notification emails are to be sent for membership suggestions.
   --memberQueryExemptions: list # Array of GraphObjects exempted from the query — item shape: {attributes?: record, id: string, type: string}
 ]: any -> record<attributes: record, description: string, email: string, id: string, memberQuery: record<queryType: string, filters: list<record>>, memberQueryErrorFlags: list<string>, memberQueryExemptions: table<attributes: record, id: string, type: string>, membershipMethod: string, memberSuggestionsNotify: bool, name: string, type: string> {
   let input = $in
@@ -9594,7 +9593,7 @@ export def "usergroups post" [
   --description: string # Description of a User Group
   --memberQuery: any # Query using a sequence of field filters.
   --memberQueryExemptions: list # Array of GraphObjects exempted from the query — item shape: {attributes?: record, id: string, type: string}
-  --memberSuggestionsNotify: string@bool-completer # True if notification emails are to be sent for membership suggestions.
+  --memberSuggestionsNotify: oneof<nothing, bool> # True if notification emails are to be sent for membership suggestions.
   --membershipMethod: string@membershipMethod-completer # The type of membership method for this group. Valid values include NOTSET, STATIC, DYNAMIC_REVIEW_REQUIRED, and DYNAMIC_AUTOMATED.  Note DYNAMIC_AUTOMATED and DYNAMIC_REVIEW_REQUIRED group rules will supersede any group enrollment for [group-associated MDM-enrolled devices](https://jumpcloud.com/support/change-a-default-device-group-for-apple-devices).  Use caution when creating dynamic device groups with MDM-enrolled devices to avoid creating conflicting rule sets.
   name: string # Display name of a User Group.
 ]: any -> record<attributes: record<sudo: record<enabled: bool, withoutPassword: bool>, ldapGroups: list<record>, posixGroups: list<record>, radius: record<reply: list>, sambaEnabled: bool>, email: string, description: string, id: string, memberQuery: record<queryType: string, filters: list<record>>, memberQueryExemptions: table<attributes: record, id: string, type: string>, memberSuggestionsNotify: bool, memberQueryErrorFlags: list<string>, membershipMethod: string, name: string, suggestionCounts: record<add: int, remove: int, total: int>, type: string> {
@@ -10240,7 +10239,7 @@ export def "usergroups put" [
   --description: string # Description of a User Group
   --memberQuery: any # Query using a sequence of field filters.
   --memberQueryExemptions: list # Array of GraphObjects exempted from the query — item shape: {attributes?: record, id: string, type: string}
-  --memberSuggestionsNotify: string@bool-completer # True if notification emails are to be sent for membership suggestions.
+  --memberSuggestionsNotify: oneof<nothing, bool> # True if notification emails are to be sent for membership suggestions.
   --membershipMethod: string@membershipMethod-completer # The type of membership method for this group. Valid values include NOTSET, STATIC, DYNAMIC_REVIEW_REQUIRED, and DYNAMIC_AUTOMATED.  Note DYNAMIC_AUTOMATED and DYNAMIC_REVIEW_REQUIRED group rules will supersede any group enrollment for [group-associated MDM-enrolled devices](https://jumpcloud.com/support/change-a-default-device-group-for-apple-devices).  Use caution when creating dynamic device groups with MDM-enrolled devices to avoid creating conflicting rule sets.
   name: string # Display name of a User Group.
 ]: any -> record<attributes: record<sudo: record<enabled: bool, withoutPassword: bool>, ldapGroups: list<record>, posixGroups: list<record>, radius: record<reply: list>, sambaEnabled: bool>, email: string, description: string, id: string, memberQuery: record<queryType: string, filters: list<record>>, memberQueryExemptions: table<attributes: record, id: string, type: string>, memberSuggestionsNotify: bool, memberQueryErrorFlags: list<string>, membershipMethod: string, name: string, suggestionCounts: record<add: int, remove: int, total: int>, type: string> {
@@ -11219,8 +11218,8 @@ export def "authn-policies post" [
   --x-org-id: string # Organization identifier that can be obtained from console settings.
   --name: string
   --description: string
-  --disabled: string@bool-completer
-  --monitorOnly: string@bool-completer
+  --disabled: oneof<nothing, bool>
+  --monitorOnly: oneof<nothing, bool>
   --effect: record # shape: {action: "allow"|"deny"|"unknown", obligations?: record, custom_error_message?: record}
   --targets: record # shape: {excludedApplications?: list, resources?: list, userAttributes?: record, userGroups?: record, users?: record}
   --type: string@type-completer-7 # default: user_portal
@@ -11307,8 +11306,8 @@ export def "authn-policies patch" [
   --x-org-id: string # Organization identifier that can be obtained from console settings.
   --name: string
   --description: string
-  --disabled: string@bool-completer
-  --monitorOnly: string@bool-completer
+  --disabled: oneof<nothing, bool>
+  --monitorOnly: oneof<nothing, bool>
   --effect: record # shape: {action: "allow"|"deny"|"unknown", obligations?: record, custom_error_message?: record}
   --targets: record # shape: {excludedApplications?: list, resources?: list, userAttributes?: record, userGroups?: record, users?: record}
   --type: string@type-completer-7 # default: user_portal
@@ -11481,7 +11480,7 @@ export def "gsuites-import-jumpcloudusers listImportJumpcloudUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowEmptyFields: string@bool-completer # [EXPERIMENTAL] Allow empty fields of the user object to be sent in the response (default: false)
+  --allowEmptyFields: oneof<nothing, bool> # [EXPERIMENTAL] Allow empty fields of the user object to be sent in the response (default: false)
   --maxResults: int # Google Directory API maximum number of results per page. See https://developers.google.com/admin-sdk/directory/reference/rest/v1/users/list.
   --orderBy: string # Google Directory API sort field parameter. See https://developers.google.com/admin-sdk/directory/reference/rest/v1/users/list.
   --pageToken: string # Google Directory API token used to access the next page of results. See https://developers.google.com/admin-sdk/directory/reference/rest/v1/users/list.
@@ -11515,7 +11514,7 @@ export def "office365s-import-users listImportUsers" [
   --filter: string # Office 365 API filter parameter. See https://docs.microsoft.com/en-us/graph/api/user-list?view=graph-rest-1.0&tabs=http#optional-query-parameters.
   --search: string # Office 365 API search parameter. See https://docs.microsoft.com/en-us/graph/api/user-list?view=graph-rest-1.0&tabs=http#optional-query-parameters.
   --orderby: string # Office 365 API orderby parameter. See https://docs.microsoft.com/en-us/graph/api/user-list?view=graph-rest-1.0&tabs=http#optional-query-parameters.
-  --count: string@bool-completer # Office 365 API count parameter. See https://docs.microsoft.com/en-us/graph/api/user-list?view=graph-rest-1.0&tabs=http#optional-query-parameters.
+  --count: oneof<nothing, bool> # Office 365 API count parameter. See https://docs.microsoft.com/en-us/graph/api/user-list?view=graph-rest-1.0&tabs=http#optional-query-parameters.
   --ConsistencyLevel: string # Defines the consistency header for O365 requests. See https://docs.microsoft.com/en-us/graph/api/user-list?view=graph-rest-1.0&tabs=http#request-headers
 ]: nothing -> record<top: int, skipToken: string, users: table<id: string, userPrincipalName: string, givenName: string, surname: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -12471,7 +12470,7 @@ export def "google-emm-enterprises PatchEnterprise" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowDeviceEnrollment: string@bool-completer
+  --allowDeviceEnrollment: oneof<nothing, bool>
   --deviceGroupId: string # format: byte
 ]: any -> record<allowDeviceEnrollment: bool, contactEmail: string, createdAt: string, deviceGroupId: string, displayName: string, enterpriseType: string, googleAuthenticationRequired: string, name: string, objectId: string, organizationObjectId: string> {
   let input = $in
@@ -12666,7 +12665,7 @@ export def "passwordmanager-backup-keys CreateBackupKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --companyId: string
   --createdAt: string
   --createdBy: string
@@ -12721,7 +12720,7 @@ export def "passwordmanager-backup-keys UpdateBackupKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
 ]: nothing -> record<active: bool, companyId: string, createdAt: string, createdBy: string, id: string, name: string, publicKey: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -13318,10 +13317,10 @@ export def "google-emm-enterprises-enrollment-tokens CreateEnterprisesEnrollment
   --displayName: string
   --duration: string
   --enrollmentType: string@enrollmentType-completer # default: WORK_PROFILE
-  --oneTimeOnly: string@bool-completer
+  --oneTimeOnly: oneof<nothing, bool>
   --provisioningExtras: record # shape: {allowOfflineProvisioning?: bool, enableSystemApps?: bool, keepScreenOn?: bool, language?: string, skipEducationScreens?: bool, timeZone?: string, useMobileNetworkForProvisioning?: bool, wifiHiddenNetwork?: bool, wifiPassword?: string, wifiSecurityType?: "NONE"|"WPA"|"WEP", wifiSsid?: string}
   --userObjectId: string # format: byte
-  --zeroTouch: string@bool-completer
+  --zeroTouch: oneof<nothing, bool>
 ]: any -> record<createdBy: string, createdWhere: string, displayName: string, enrollmentLink: string, enrollmentType: string, expirationTime: string, id: string, metadata: string, name: string, oneTimeOnly: bool, qrCodeImage: string, value: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -13463,7 +13462,7 @@ export def "devices-settings-defaultpasswordsync SetDefaultPasswordSyncSettings"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --organizationObjectId: string # format: byte
 ]: any -> record {
   let input = $in
@@ -13786,7 +13785,7 @@ export def "gsuites-import-schedules Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --sendEmail: string@bool-completer # SendEmail is a flag to opt-in for an email with results of a scheduled import job
+  --sendEmail: oneof<nothing, bool> # SendEmail is a flag to opt-in for an email with results of a scheduled import job
 ]: nothing -> record<scheduledJobId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -13834,7 +13833,7 @@ export def "gsuites-import-schedules Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --sendEmail: string@bool-completer # SendEmail is a flag to opt-in for an email with results of a scheduled import job
+  --sendEmail: oneof<nothing, bool> # SendEmail is a flag to opt-in for an email with results of a scheduled import job
 ]: nothing -> record<scheduledJob: record<scheduledJobId: string, sendEmail: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -14250,7 +14249,7 @@ export def "passwordmanager-company-policies UpdatePolicies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --disableExport: string@bool-completer
+  --disableExport: oneof<nothing, bool>
 ]: nothing -> record<disableExport: bool, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -14527,10 +14526,10 @@ export def "systems-views Create" [
   --allow-errors(-e) # Return full response without error handling
   --columns: list
   --filters: list # item shape: {field?: string, values?: list}
-  --isDefault: string@bool-completer
+  --isDefault: oneof<nothing, bool>
   --name: string
   --objectId: string # format: byte
-  --shared: string@bool-completer
+  --shared: oneof<nothing, bool>
   --sortConfig: string
   --userObjectId: string # format: byte
 ]: any -> record<columns: list<string>, filters: table<field: string, values: list>, isDefault: bool, name: string, objectId: string, shared: bool, sortConfig: string, userObjectId: string> {
@@ -14753,7 +14752,7 @@ export def "reports-export ExportReport" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --exportType: string@exportType-completer # default: csv
-  --notifyByEmail: string@bool-completer
+  --notifyByEmail: oneof<nothing, bool>
   --reportName: string
   --searchRequest: record # shape: {aggregations?: list, cacheToken?: string, fields?: record, filters?: list, limit?: int, metadata?: any, pagination?: any, requestCache?: bool, sort?: list}
 ]: any -> record<downloadUrl: string, status: string> {
@@ -15015,9 +15014,9 @@ export def "saved-views Create" [
   --columns: list
   --configuration: record # shape: {filters?: list, sort?: string}
   --id: string # format: byte
-  --isDefault: string@bool-completer
+  --isDefault: oneof<nothing, bool>
   --name: string
-  --shared: string@bool-completer
+  --shared: oneof<nothing, bool>
   --body-source: string
 ]: any -> record<adminId: string, columns: list<string>, configuration: record<filters: list<record>, sort: string>, id: string, isDefault: bool, name: string, shared: bool, source: string> {
   let input = $in
@@ -16106,15 +16105,15 @@ export def "approvalflows CreateAccessWorkflow" [
   --iconUrl: string
   --multiSelectDuration: list
   --name: string
-  --nonAdminApproval: string@bool-completer
+  --nonAdminApproval: oneof<nothing, bool>
   --organizationObjectId: string # format: byte
   --resourceId: string
   --resourceType: string
   --slackConfig: list # item shape: {slackResourceId?: string}
-  --slackDmEnabled: string@bool-completer
-  --slackEnabled: string@bool-completer
+  --slackDmEnabled: oneof<nothing, bool>
+  --slackEnabled: oneof<nothing, bool>
   --status: string
-  --timeBasedAccess: string@bool-completer
+  --timeBasedAccess: oneof<nothing, bool>
   --ttlConfig: string@ttlConfig-completer # default: TTL_CONFIG_UNSPECIFIED
   --visibleTo: list
 ]: any -> record<id: string> {
@@ -16178,14 +16177,14 @@ export def "approvalflows UpdateAccessWorkflow" [
   --iconUrl: string
   --multiSelectDuration: list
   --name: string
-  --nonAdminApproval: string@bool-completer
+  --nonAdminApproval: oneof<nothing, bool>
   --organizationObjectId: string # format: byte
   --resourceId: string
   --slackConfig: list # item shape: {slackResourceId?: string}
-  --slackDmEnabled: string@bool-completer
-  --slackEnabled: string@bool-completer
+  --slackDmEnabled: oneof<nothing, bool>
+  --slackEnabled: oneof<nothing, bool>
   --status: string
-  --timeBasedAccess: string@bool-completer
+  --timeBasedAccess: oneof<nothing, bool>
   --ttlConfig: string@ttlConfig-completer # default: TTL_CONFIG_UNSPECIFIED
   --visibleTo: list
 ]: any -> record {
@@ -16260,13 +16259,13 @@ export def "approvalflowsettings UpdateAccessWorkflowSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --adminApprovalEmail: string@bool-completer
+  --adminApprovalEmail: oneof<nothing, bool>
   --channelEvents: list # item shape: {channelObjectId?: string, eventTypes?: list}
-  --exposeApprovalProgress: string@bool-completer
+  --exposeApprovalProgress: oneof<nothing, bool>
   --organizationObjectId: string # format: byte
-  --resourceRequest: string@bool-completer
-  --userApprovalEmail: string@bool-completer
-  --userRequestEmail: string@bool-completer
+  --resourceRequest: oneof<nothing, bool>
+  --userApprovalEmail: oneof<nothing, bool>
+  --userRequestEmail: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -16292,13 +16291,13 @@ export def "approvalflowsettings CreateAccessWorkflowSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --adminApprovalEmail: string@bool-completer
+  --adminApprovalEmail: oneof<nothing, bool>
   --channelEvents: list # item shape: {channelObjectId?: string, eventTypes?: list}
-  --exposeApprovalProgress: string@bool-completer
+  --exposeApprovalProgress: oneof<nothing, bool>
   --organizationObjectId: string # format: byte
-  --resourceRequest: string@bool-completer
-  --userApprovalEmail: string@bool-completer
-  --userRequestEmail: string@bool-completer
+  --resourceRequest: oneof<nothing, bool>
+  --userApprovalEmail: oneof<nothing, bool>
+  --userRequestEmail: oneof<nothing, bool>
 ]: any -> record<id: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))

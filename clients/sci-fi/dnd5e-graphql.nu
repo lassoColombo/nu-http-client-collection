@@ -71,7 +71,6 @@ def unwrap-graphql [resp: any, field: string] {
   $resp.data? | get -o $field | default $resp.data?
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://www.dnd5eapi.co/graphql/2014"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -1713,8 +1712,8 @@ export def "query spells" [
   --school: string # Filter by magic school index (e.g., ["evocation"])
   --class: string # Filter by class index that can cast the spell (e.g., ["wizard"])
   --subclass: string # Filter by subclass index that can cast the spell (e.g., ["lore"])
-  --concentration: string@bool-completer # Filter by concentration requirement
-  --ritual: string@bool-completer # Filter by ritual requirement
+  --concentration: oneof<nothing, bool> # Filter by concentration requirement
+  --ritual: oneof<nothing, bool> # Filter by ritual requirement
   --attack-type: string # Filter by attack type (e.g., ["ranged", "melee"])
   --casting-time: string # Filter by casting time (e.g., ["1 action"])
   --damage-type: string # Filter by damage type index (e.g., ["fire"])

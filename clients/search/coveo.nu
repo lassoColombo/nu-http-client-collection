@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://platform.cloud.coveo.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -102,24 +101,24 @@ export def "rest-search get" [
   --allow-errors(-e) # Return full response without error handling
   --aq: string
   --cq: string
-  --debug: string@bool-completer
+  --debug: oneof<nothing, bool>
   --dictionaryFieldContext: record
   --dq: string
-  --enableDidYouMean: string@bool-completer
-  --enableDuplicateFiltering: string@bool-completer
-  --enableMLDidYouMean: string@bool-completer
-  --enableQuerySyntax: string@bool-completer
+  --enableDidYouMean: oneof<nothing, bool>
+  --enableDuplicateFiltering: oneof<nothing, bool>
+  --enableMLDidYouMean: oneof<nothing, bool>
+  --enableQuerySyntax: oneof<nothing, bool>
   --excerptLength: string
   --summaryLength: string
   --locale: string
   --lq: string
   --lqPartialMatchKeywords: int
   --lqPartialMatchMaxKeywords: string
-  --partialMatch: string@bool-completer
-  --retrieveFirstSentences: string@bool-completer
+  --partialMatch: oneof<nothing, bool>
+  --retrieveFirstSentences: oneof<nothing, bool>
   --sortCriteria: string
   --q: string # e.g. help
-  --wildcards: string@bool-completer
+  --wildcards: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

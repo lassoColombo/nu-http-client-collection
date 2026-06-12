@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://acmedns.googleapis.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -111,7 +110,7 @@ export def "acme-challenge-sets acmednsacmeChallengeSetsget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
@@ -147,12 +146,12 @@ export def "acme-challenge-sets acmednsacmeChallengeSetsrotateChallenges" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --accessToken: string # Required. ACME DNS access token. This is a base64 token secret that is procured from the Google Domains website. It authorizes ACME TXT record updates for a domain. (format: byte)
-  --keepExpiredRecords: string@bool-completer # Keep records older than 30 days that were used for previous requests.
+  --keepExpiredRecords: oneof<nothing, bool> # Keep records older than 30 days that were used for previous requests.
   --recordsToAdd: list # ACME TXT record challenges to add. Supports multiple challenges on the same FQDN. — item shape: {digest?: string, fqdn?: string}
   --recordsToRemove: list # ACME TXT record challenges to remove. — item shape: {digest?: string, fqdn?: string}
 ]: any -> record<record: table<digest: string, fqdn: string, updateTime: string>> {

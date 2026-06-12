@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost/api/v2.0" "https://localhost/api/v2.0"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -187,7 +186,7 @@ export def "ldap-ping pingLdap" [
   --ldap-uid: string # The serach uid from ldap service attributes.
   --ldap-scope: int # The serach scope of ldap service. (format: int64)
   --ldap-connection-timeout: int # The connect timeout of ldap service(second). (format: int64)
-  --ldap-verify-cert: string@bool-completer # Verify Ldap server certificate.
+  --ldap-verify-cert: oneof<nothing, bool> # Verify Ldap server certificate.
 ]: any -> record<success: bool, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -345,7 +344,7 @@ export def "configurations updateConfigurations" [
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
   --auth-mode: string # The auth mode of current system, such as "db_auth", "ldap_auth", "oidc_auth"
-  --primary-auth-mode: string@bool-completer # The flag to indicate whether the current auth mode should consider as a primary one.
+  --primary-auth-mode: oneof<nothing, bool> # The flag to indicate whether the current auth mode should consider as a primary one.
   --ldap-base-dn: string # The Base DN for LDAP binding.
   --ldap-filter: string # The filter for LDAP search
   --ldap-group-base-dn: string # The base DN to search LDAP group.
@@ -353,29 +352,29 @@ export def "configurations updateConfigurations" [
   --ldap-group-attribute-name: string # The attribute which is used as identity of the LDAP group, default is cn.'
   --ldap-group-search-filter: string # The filter to search the ldap group
   --ldap-group-search-scope: int # The scope to search ldap group. ''0-LDAP_SCOPE_BASE, 1-LDAP_SCOPE_ONELEVEL, 2-LDAP_SCOPE_SUBTREE''
-  --ldap-group-attach-parallel: string@bool-completer # Attach LDAP user group information in parallel, the parallel worker count is 5
+  --ldap-group-attach-parallel: oneof<nothing, bool> # Attach LDAP user group information in parallel, the parallel worker count is 5
   --ldap-scope: int # The scope to search ldap users,'0-LDAP_SCOPE_BASE, 1-LDAP_SCOPE_ONELEVEL, 2-LDAP_SCOPE_SUBTREE'
   --ldap-search-dn: string # The DN of the user to do the search.
   --ldap-search-password: string # The password of the ldap search dn
   --ldap-timeout: int # Timeout in seconds for connection to LDAP server
   --ldap-uid: string # The attribute which is used as identity for the LDAP binding, such as "CN" or "SAMAccountname"
   --ldap-url: string # The URL of LDAP server
-  --ldap-verify-cert: string@bool-completer # Whether verify your OIDC server certificate, disable it if your OIDC server is hosted via self-hosted certificate.
+  --ldap-verify-cert: oneof<nothing, bool> # Whether verify your OIDC server certificate, disable it if your OIDC server is hosted via self-hosted certificate.
   --ldap-group-membership-attribute: string # The user attribute to identify the group membership
   --project-creation-restriction: string # Indicate who can create projects, it could be ''adminonly'' or ''everyone''.
-  --read-only: string@bool-completer # The flag to indicate whether Harbor is in readonly mode.
-  --self-registration: string@bool-completer # Whether the Harbor instance supports self-registration.  If it''s set to false, admin need to add user to the instance.
+  --read-only: oneof<nothing, bool> # The flag to indicate whether Harbor is in readonly mode.
+  --self-registration: oneof<nothing, bool> # Whether the Harbor instance supports self-registration.  If it''s set to false, admin need to add user to the instance.
   --token-expiration: int # The expiration time of the token for internal Registry, in minutes.
   --uaa-client-id: string # The client id of UAA
   --uaa-client-secret: string # The client secret of the UAA
   --uaa-endpoint: string # The endpoint of the UAA
-  --uaa-verify-cert: string@bool-completer # Verify the certificate in UAA server
+  --uaa-verify-cert: oneof<nothing, bool> # Verify the certificate in UAA server
   --http-authproxy-endpoint: string # The endpoint of the HTTP auth
   --http-authproxy-tokenreview-endpoint: string # The token review endpoint
   --http-authproxy-admin-groups: string # The group which has the harbor admin privileges
   --http-authproxy-admin-usernames: string # The username which has the harbor admin privileges
-  --http-authproxy-verify-cert: string@bool-completer # Verify the HTTP auth provider's certificate
-  --http-authproxy-skip-search: string@bool-completer # Search user before onboard
+  --http-authproxy-verify-cert: oneof<nothing, bool> # Verify the HTTP auth provider's certificate
+  --http-authproxy-skip-search: oneof<nothing, bool> # Search user before onboard
   --http-authproxy-server-certificate: string # The certificate of the HTTP auth provider
   --oidc-name: string # The OIDC provider name
   --oidc-endpoint: string # The endpoint of the OIDC provider
@@ -386,19 +385,19 @@ export def "configurations updateConfigurations" [
   --oidc-group-filter: string # The OIDC group filter which filters out the group name doesn't match the regular expression
   --oidc-scope: string # The scope of the OIDC provider
   --oidc-user-claim: string # The attribute claims the username
-  --oidc-verify-cert: string@bool-completer # Verify the OIDC provider's certificate'
-  --oidc-auto-onboard: string@bool-completer # Auto onboard the OIDC user
+  --oidc-verify-cert: oneof<nothing, bool> # Verify the OIDC provider's certificate'
+  --oidc-auto-onboard: oneof<nothing, bool> # Auto onboard the OIDC user
   --oidc-extra-redirect-parms: string # Extra parameters to add when redirect request to OIDC provider
-  --oidc-logout: string@bool-completer # Logout OIDC user session
+  --oidc-logout: oneof<nothing, bool> # Logout OIDC user session
   --robot-token-duration: int # The robot account token duration in days
   --robot-name-prefix: string # The rebot account name prefix
-  --notification-enable: string@bool-completer # Enable notification
-  --quota-per-project-enable: string@bool-completer # Enable quota per project
+  --notification-enable: oneof<nothing, bool> # Enable notification
+  --quota-per-project-enable: oneof<nothing, bool> # Enable quota per project
   --storage-per-project: int # The storage quota per project
   --audit-log-forward-endpoint: string # The audit log forward endpoint
-  --skip-audit-log-database: string@bool-completer # Skip audit log database
+  --skip-audit-log-database: oneof<nothing, bool> # Skip audit log database
   --session-timeout: int # The session timeout for harbor, in minutes.
-  --scanner-skip-update-pulltime: string@bool-completer # Whether or not to skip update pull time for scanner
+  --scanner-skip-update-pulltime: oneof<nothing, bool> # Whether or not to skip update pull time for scanner
   --banner-message: string # The banner message for the UI.It is the stringified result of the banner message object
   --disabled-audit-log-event-types: string # the list to disable log audit event types.
 ]: any -> any {
@@ -432,9 +431,9 @@ export def "projects listProjects" [
   --page-size: int # The size of per page (format: int64, default: 10)
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --name: string # The name of project.
-  --public: string@bool-completer # The project is public or private.
+  --public: oneof<nothing, bool> # The project is public or private.
   --owner: string # The name of project owner.
-  --with-detail: string@bool-completer # Bool value indicating whether return detailed information of the project (default: true)
+  --with-detail: oneof<nothing, bool> # Bool value indicating whether return detailed information of the project (default: true)
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> table<project_id: int, owner_id: int, name: string, registry_id: int, creation_time: string, update_time: string, deleted: bool, owner_name: string, togglable: bool, current_user_role_id: int, current_user_role_ids: list<int>, repo_count: int, metadata: record<public: string, enable_content_trust: string, enable_content_trust_cosign: string, prevent_vul: string, severity: string, auto_scan: string, auto_sbom_generation: string, reuse_sys_cve_allowlist: string, retention_id: string, proxy_speed_kb: string, max_upstream_conn: string, proxy_cache_local_on_not_found: string, proxy_referrer_api: string>, cve_allowlist: record<id: int, project_id: int, expires_at: int, items: list, creation_time: string, update_time: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -489,9 +488,9 @@ export def "projects createProject" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Resource-Name-In-Location: string@bool-completer # The flag to indicate whether to return the name of the resource in Location. When X-Resource-Name-In-Location is true, the Location will return the name of the resource.
+  --X-Resource-Name-In-Location: oneof<nothing, bool> # The flag to indicate whether to return the name of the resource in Location. When X-Resource-Name-In-Location is true, the Location will return the name of the resource.
   --project-name: string # The name of the project.
-  --public: string@bool-completer # deprecated, reserved for project creation in replication
+  --public: oneof<nothing, bool> # deprecated, reserved for project creation in replication
   --metadata: record # shape: {public?: string, enable_content_trust?: string, enable_content_trust_cosign?: string, prevent_vul?: string, severity?: string, auto_scan?: string, auto_sbom_generation?: string, reuse_sys_cve_allowlist?: string, retention_id?: string, proxy_speed_kb?: string, max_upstream_conn?: string, proxy_cache_local_on_not_found?: string, proxy_referrer_api?: string}
   --cve-allowlist: record # The CVE Allowlist for system or project — shape: {id?: int, project_id?: int, expires_at?: int, items?: list, creation_time?: string, update_time?: string}
   --storage-limit: int # The storage quota of the project. (format: int64)
@@ -524,7 +523,7 @@ export def "projects get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> record<project_id: int, owner_id: int, name: string, registry_id: int, creation_time: string, update_time: string, deleted: bool, owner_name: string, togglable: bool, current_user_role_id: int, current_user_role_ids: list<int>, repo_count: int, metadata: record<public: string, enable_content_trust: string, enable_content_trust_cosign: string, prevent_vul: string, severity: string, auto_scan: string, auto_sbom_generation: string, reuse_sys_cve_allowlist: string, retention_id: string, proxy_speed_kb: string, max_upstream_conn: string, proxy_cache_local_on_not_found: string, proxy_referrer_api: string>, cve_allowlist: record<id: int, project_id: int, expires_at: int, items: list<record>, creation_time: string, update_time: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -552,9 +551,9 @@ export def "projects updateProject" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
   --project-name: string # The name of the project.
-  --public: string@bool-completer # deprecated, reserved for project creation in replication
+  --public: oneof<nothing, bool> # deprecated, reserved for project creation in replication
   --metadata: record # shape: {public?: string, enable_content_trust?: string, enable_content_trust_cosign?: string, prevent_vul?: string, severity?: string, auto_scan?: string, auto_sbom_generation?: string, reuse_sys_cve_allowlist?: string, retention_id?: string, proxy_speed_kb?: string, max_upstream_conn?: string, proxy_cache_local_on_not_found?: string, proxy_referrer_api?: string}
   --cve-allowlist: record # The CVE Allowlist for system or project — shape: {id?: int, project_id?: int, expires_at?: int, items?: list, creation_time?: string, update_time?: string}
   --storage-limit: int # The storage quota of the project. (format: int64)
@@ -587,7 +586,7 @@ export def "projects delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -613,7 +612,7 @@ export def "projects-deletable get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> record<deletable: bool, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -639,7 +638,7 @@ export def "projects-summary get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> record<repo_count: int, project_admin_count: int, maintainer_count: int, developer_count: int, guest_count: int, limited_guest_count: int, quota: record<hard: record, used: record>, registry: record<id: int, url: string, name: string, credential: record<type: string, access_key: string, access_secret: string>, type: string, insecure: bool, ca_certificate: string, description: string, status: string, creation_time: string, update_time: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -668,7 +667,7 @@ export def "projects-members listProjectMembers" [
   --page-size: int # The size of per page (format: int64, default: 10)
   --entityname: string # The entity name to search.
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> table<id: int, project_id: int, entity_name: string, role_name: string, role_id: int, entity_id: int, entity_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -697,7 +696,7 @@ export def "projects-members createProjectMember" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
   --role-id: int # The role id 1 for projectAdmin, 2 for developer, 3 for guest, 4 for maintainer
   --member-user: record # shape: {user_id?: int, username?: string}
   --member-group: record # shape: {id?: int, group_name?: string, group_type?: int, ldap_group_dn?: string}
@@ -730,7 +729,7 @@ export def "projects-members get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> record<id: int, project_id: int, entity_name: string, role_name: string, role_id: int, entity_id: int, entity_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -757,7 +756,7 @@ export def "projects-members updateProjectMember" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
   --role-id: int # The role id 1 for projectAdmin, 2 for developer, 3 for guest, 4 for maintainer
 ]: any -> any {
   let input = $in
@@ -788,7 +787,7 @@ export def "projects-members delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -814,7 +813,7 @@ export def "projects-metadatas listProjectMetadatas" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -840,7 +839,7 @@ export def "projects-metadatas addProjectMetadatas" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
   --body: record
 ]: any -> any {
   let input = $in
@@ -870,7 +869,7 @@ export def "projects-metadatas get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -897,7 +896,7 @@ export def "projects-metadatas updateProjectMetadata" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
   --body: record
 ]: any -> any {
   let input = $in
@@ -927,7 +926,7 @@ export def "projects-metadatas delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1105,12 +1104,12 @@ export def "projects-repositories-artifacts listArtifacts" [
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
-  --with-tag: string@bool-completer # Specify whether the tags are included inside the returning artifacts (default: true)
-  --with-label: string@bool-completer # Specify whether the labels are included inside the returning artifacts (default: false)
-  --with-scan-overview: string@bool-completer # Specify whether the scan overview is included inside the returning artifacts (default: false)
-  --with-sbom-overview: string@bool-completer # Specify whether the SBOM overview is included in returning artifacts, when this option is true, the SBOM overview will be included in the response (default: false)
-  --with-immutable-status: string@bool-completer # Specify whether the immutable status is included inside the tags of the returning artifacts. Only works when setting "with_immutable_status=true" (default: false)
-  --with-accessory: string@bool-completer # Specify whether the accessories are included of the returning artifacts. Only works when setting "with_accessory=true" (default: false)
+  --with-tag: oneof<nothing, bool> # Specify whether the tags are included inside the returning artifacts (default: true)
+  --with-label: oneof<nothing, bool> # Specify whether the labels are included inside the returning artifacts (default: false)
+  --with-scan-overview: oneof<nothing, bool> # Specify whether the scan overview is included inside the returning artifacts (default: false)
+  --with-sbom-overview: oneof<nothing, bool> # Specify whether the SBOM overview is included in returning artifacts, when this option is true, the SBOM overview will be included in the response (default: false)
+  --with-immutable-status: oneof<nothing, bool> # Specify whether the immutable status is included inside the tags of the returning artifacts. Only works when setting "with_immutable_status=true" (default: false)
+  --with-accessory: oneof<nothing, bool> # Specify whether the accessories are included of the returning artifacts. Only works when setting "with_accessory=true" (default: false)
   --X-Request-Id: string # An unique ID for the request
   --X-Accept-Vulnerabilities: string # A comma-separated lists of MIME types for the scan report or scan summary. The first mime type will be used when the report found for it. Currently the mime type supports 'application/vnd.scanner.adapter.vuln.report.harbor+json; version=1.0' and 'application/vnd.security.vulnerability.report; version=1.1'
 ]: nothing -> table<id: int, type: string, media_type: string, manifest_media_type: string, artifact_type: string, project_id: int, repository_id: int, repository_name: string, digest: string, size: int, icon: string, push_time: string, pull_time: string, extra_attrs: record, annotations: record, references: list<record>, tags: list<record>, addition_links: record, labels: list<record>, scan_overview: record, sbom_overview: record<start_time: string, end_time: string, scan_status: string, sbom_digest: string, report_id: string, duration: int, scanner: record>, accessories: list<record>> {
@@ -1170,13 +1169,13 @@ export def "projects-repositories-artifacts get" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
-  --with-tag: string@bool-completer # Specify whether the tags are inclued inside the returning artifacts (default: true)
-  --with-label: string@bool-completer # Specify whether the labels are inclued inside the returning artifacts (default: false)
-  --with-scan-overview: string@bool-completer # Specify whether the scan overview is inclued inside the returning artifacts (default: false)
-  --with-sbom-overview: string@bool-completer # Specify whether the SBOM overview is included in returning artifact, when this option is true, the SBOM overview will be included in the response (default: false)
-  --with-accessory: string@bool-completer # Specify whether the accessories are included of the returning artifacts. (default: false)
-  --with-signature: string@bool-completer # Specify whether the signature is inclued inside the returning artifacts (default: false)
-  --with-immutable-status: string@bool-completer # Specify whether the immutable status is inclued inside the tags of the returning artifacts. (default: false)
+  --with-tag: oneof<nothing, bool> # Specify whether the tags are inclued inside the returning artifacts (default: true)
+  --with-label: oneof<nothing, bool> # Specify whether the labels are inclued inside the returning artifacts (default: false)
+  --with-scan-overview: oneof<nothing, bool> # Specify whether the scan overview is inclued inside the returning artifacts (default: false)
+  --with-sbom-overview: oneof<nothing, bool> # Specify whether the SBOM overview is included in returning artifact, when this option is true, the SBOM overview will be included in the response (default: false)
+  --with-accessory: oneof<nothing, bool> # Specify whether the accessories are included of the returning artifacts. (default: false)
+  --with-signature: oneof<nothing, bool> # Specify whether the signature is inclued inside the returning artifacts (default: false)
+  --with-immutable-status: oneof<nothing, bool> # Specify whether the immutable status is inclued inside the tags of the returning artifacts. (default: false)
   --X-Request-Id: string # An unique ID for the request
   --X-Accept-Vulnerabilities: string # A comma-separated lists of MIME types for the scan report or scan summary. The first mime type will be used when the report found for it. Currently the mime type supports 'application/vnd.scanner.adapter.vuln.report.harbor+json; version=1.0' and 'application/vnd.security.vulnerability.report; version=1.1'
 ]: nothing -> record<id: int, type: string, media_type: string, manifest_media_type: string, artifact_type: string, project_id: int, repository_id: int, repository_name: string, digest: string, size: int, icon: string, push_time: string, pull_time: string, extra_attrs: record, annotations: record, references: table<parent_id: int, child_id: int, child_digest: string, platform: record, annotations: record, urls: list>, tags: table<id: int, repository_id: int, artifact_id: int, name: string, push_time: string, pull_time: string, immutable: bool>, addition_links: record, labels: table<id: int, name: string, description: string, color: string, scope: string, project_id: int, creation_time: string, update_time: string>, scan_overview: record, sbom_overview: record<start_time: string, end_time: string, scan_status: string, sbom_digest: string, report_id: string, duration: int, scanner: record<name: string, vendor: string, version: string>>, accessories: table<id: int, artifact_id: int, subject_artifact_id: int, subject_artifact_digest: string, subject_artifact_repo: string, size: int, digest: string, type: string, icon: string, creation_time: string>> {
@@ -1358,7 +1357,7 @@ export def "projects-repositories-artifacts-tags listTags" [
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
-  --with-immutable-status: string@bool-completer # Specify whether the immutable status is included inside the returning tags (default: false)
+  --with-immutable-status: oneof<nothing, bool> # Specify whether the immutable status is included inside the returning tags (default: false)
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> table<id: int, repository_id: int, artifact_id: int, name: string, push_time: string, pull_time: string, immutable: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1571,15 +1570,15 @@ export def "projects-artifacts listArtifactsOfProject" [
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
-  --with-tag: string@bool-completer # Specify whether the tags are included inside the returning artifacts (default: true)
-  --with-label: string@bool-completer # Specify whether the labels are included inside the returning artifacts (default: false)
-  --with-scan-overview: string@bool-completer # Specify whether the scan overview is included inside the returning artifacts (default: false)
-  --with-sbom-overview: string@bool-completer # Specify whether the SBOM overview is included in returning artifacts, when this option is true, the SBOM overview will be included in the response (default: false)
-  --with-immutable-status: string@bool-completer # Specify whether the immutable status is included inside the tags of the returning artifacts. Only works when setting "with_immutable_status=true" (default: false)
-  --with-accessory: string@bool-completer # Specify whether the accessories are included of the returning artifacts. Only works when setting "with_accessory=true" (default: false)
-  --latest-in-repository: string@bool-completer # Specify whether only the latest pushed artifact of each repository is included inside the returning artifacts. Only works when either artifact_type or media_type is included in the query. (default: false)
+  --with-tag: oneof<nothing, bool> # Specify whether the tags are included inside the returning artifacts (default: true)
+  --with-label: oneof<nothing, bool> # Specify whether the labels are included inside the returning artifacts (default: false)
+  --with-scan-overview: oneof<nothing, bool> # Specify whether the scan overview is included inside the returning artifacts (default: false)
+  --with-sbom-overview: oneof<nothing, bool> # Specify whether the SBOM overview is included in returning artifacts, when this option is true, the SBOM overview will be included in the response (default: false)
+  --with-immutable-status: oneof<nothing, bool> # Specify whether the immutable status is included inside the tags of the returning artifacts. Only works when setting "with_immutable_status=true" (default: false)
+  --with-accessory: oneof<nothing, bool> # Specify whether the accessories are included of the returning artifacts. Only works when setting "with_accessory=true" (default: false)
+  --latest-in-repository: oneof<nothing, bool> # Specify whether only the latest pushed artifact of each repository is included inside the returning artifacts. Only works when either artifact_type or media_type is included in the query. (default: false)
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
   --X-Accept-Vulnerabilities: string # A comma-separated lists of MIME types for the scan report or scan summary. The first mime type will be used when the report found for it. Currently the mime type supports 'application/vnd.scanner.adapter.vuln.report.harbor+json; version=1.0' and 'application/vnd.security.vulnerability.report; version=1.1'
 ]: nothing -> table<id: int, type: string, media_type: string, manifest_media_type: string, artifact_type: string, project_id: int, repository_id: int, repository_name: string, digest: string, size: int, icon: string, push_time: string, pull_time: string, extra_attrs: record, annotations: record, references: list<record>, tags: list<record>, addition_links: record, labels: list<record>, scan_overview: record, sbom_overview: record<start_time: string, end_time: string, scan_status: string, sbom_digest: string, report_id: string, duration: int, scanner: record>, accessories: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1607,7 +1606,7 @@ export def "projects-scanner get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> record<uuid: string, name: string, description: string, url: string, disabled: bool, is_default: bool, auth: string, access_credential: string, skip_certVerify: bool, use_internal_addr: bool, create_time: string, update_time: string, adapter: string, vendor: string, version: string, health: string, capabilities: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1633,7 +1632,7 @@ export def "projects-scanner setScannerOfProject" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
   uuid: string # The identifier of the scanner registration
 ]: any -> any {
   let input = $in
@@ -1667,7 +1666,7 @@ export def "projects-scanner-candidates listScannerCandidatesOfProject" [
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> table<uuid: string, name: string, description: string, url: string, disabled: bool, is_default: bool, auth: string, access_credential: string, skip_certVerify: bool, use_internal_addr: bool, create_time: string, update_time: string, adapter: string, vendor: string, version: string, health: string, capabilities: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1867,9 +1866,9 @@ export def "p2p-preheat-instances-ping PingInstances" [
   --auth-mode: string # The authentication way supported
   --auth-info: record # The auth credential data if it exists.  When updating an instance (PUT `/p2p/preheat/instances/{preheat_instance_name}`), if this object is omitted or empty and `auth_mode` is not `NONE`, the previously stored credentials are kept.
   --status: string # The health status
-  --enabled: string@bool-completer # Whether the instance is activated or not
-  --default: string@bool-completer # Whether the instance is default or not
-  --body-insecure: string@bool-completer # Whether the instance endpoint is insecure or not
+  --enabled: oneof<nothing, bool> # Whether the instance is activated or not
+  --default: oneof<nothing, bool> # Whether the instance is default or not
+  --body-insecure: oneof<nothing, bool> # Whether the instance endpoint is insecure or not
   --setup-timestamp: int # The timestamp of instance setting up (format: int64)
 ]: any -> any {
   let input = $in
@@ -1935,9 +1934,9 @@ export def "p2p-preheat-instances CreateInstance" [
   --auth-mode: string # The authentication way supported
   --auth-info: record # The auth credential data if it exists.  When updating an instance (PUT `/p2p/preheat/instances/{preheat_instance_name}`), if this object is omitted or empty and `auth_mode` is not `NONE`, the previously stored credentials are kept.
   --status: string # The health status
-  --enabled: string@bool-completer # Whether the instance is activated or not
-  --default: string@bool-completer # Whether the instance is default or not
-  --body-insecure: string@bool-completer # Whether the instance endpoint is insecure or not
+  --enabled: oneof<nothing, bool> # Whether the instance is activated or not
+  --default: oneof<nothing, bool> # Whether the instance is default or not
+  --body-insecure: oneof<nothing, bool> # Whether the instance endpoint is insecure or not
   --setup-timestamp: int # The timestamp of instance setting up (format: int64)
 ]: any -> any {
   let input = $in
@@ -2025,9 +2024,9 @@ export def "p2p-preheat-instances UpdateInstance" [
   --auth-mode: string # The authentication way supported
   --auth-info: record # The auth credential data if it exists.  When updating an instance (PUT `/p2p/preheat/instances/{preheat_instance_name}`), if this object is omitted or empty and `auth_mode` is not `NONE`, the previously stored credentials are kept.
   --status: string # The health status
-  --enabled: string@bool-completer # Whether the instance is activated or not
-  --default: string@bool-completer # Whether the instance is default or not
-  --body-insecure: string@bool-completer # Whether the instance endpoint is insecure or not
+  --enabled: oneof<nothing, bool> # Whether the instance is activated or not
+  --default: oneof<nothing, bool> # Whether the instance is default or not
+  --body-insecure: oneof<nothing, bool> # Whether the instance endpoint is insecure or not
   --setup-timestamp: int # The timestamp of instance setting up (format: int64)
 ]: any -> any {
   let input = $in
@@ -2065,7 +2064,7 @@ export def "projects-preheat-policies CreatePolicy" [
   --provider-name: string # The Name of preheat policy provider
   --filters: string # The Filters of preheat policy
   --trigger: string # The Trigger of preheat policy
-  --enabled: string@bool-completer # Whether the preheat policy enabled
+  --enabled: oneof<nothing, bool> # Whether the preheat policy enabled
   --extra-attrs: string # The extra attributes of preheat policy
   --creation-time: string # The Create Time of preheat policy (format: date-time)
   --update-time: string # The Update Time of preheat policy (format: date-time)
@@ -2162,7 +2161,7 @@ export def "projects-preheat-policies UpdatePolicy" [
   --provider-name: string # The Name of preheat policy provider
   --filters: string # The Filters of preheat policy
   --trigger: string # The Trigger of preheat policy
-  --enabled: string@bool-completer # Whether the preheat policy enabled
+  --enabled: oneof<nothing, bool> # Whether the preheat policy enabled
   --extra-attrs: string # The extra attributes of preheat policy
   --creation-time: string # The Create Time of preheat policy (format: date-time)
   --update-time: string # The Update Time of preheat policy (format: date-time)
@@ -2203,7 +2202,7 @@ export def "projects-preheat-policies ManualPreheat" [
   --provider-name: string # The Name of preheat policy provider
   --filters: string # The Filters of preheat policy
   --trigger: string # The Trigger of preheat policy
-  --enabled: string@bool-completer # Whether the preheat policy enabled
+  --enabled: oneof<nothing, bool> # Whether the preheat policy enabled
   --extra-attrs: string # The extra attributes of preheat policy
   --creation-time: string # The Create Time of preheat policy (format: date-time)
   --update-time: string # The Update Time of preheat policy (format: date-time)
@@ -2449,7 +2448,7 @@ export def "projects-immutabletagrules ListImmuRules" [
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> table<id: int, priority: int, disabled: bool, action: string, template: string, params: record, tag_selectors: list<record>, scope_selectors: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2477,10 +2476,10 @@ export def "projects-immutabletagrules CreateImmuRule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
   --id: int
   --priority: int
-  --disabled: string@bool-completer
+  --disabled: oneof<nothing, bool>
   --action: string
   --template: string
   --params: record
@@ -2516,10 +2515,10 @@ export def "projects-immutabletagrules UpdateImmuRule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
   --id: int
   --priority: int
-  --disabled: string@bool-completer
+  --disabled: oneof<nothing, bool>
   --action: string
   --template: string
   --params: record
@@ -2554,7 +2553,7 @@ export def "projects-immutabletagrules DeleteImmuRule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2584,7 +2583,7 @@ export def "projects-webhook-policies ListWebhookPoliciesOfProject" [
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> table<id: int, name: string, description: string, project_id: int, targets: list<record>, event_types: list<string>, creator: string, creation_time: string, update_time: string, enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2612,7 +2611,7 @@ export def "projects-webhook-policies CreateWebhookPolicyOfProject" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
   --id: int # The webhook policy ID. (format: int64)
   --name: string # The name of webhook policy.
   --description: string # The description of webhook policy.
@@ -2622,7 +2621,7 @@ export def "projects-webhook-policies CreateWebhookPolicyOfProject" [
   --creator: string # The creator of the webhook policy.
   --creation-time: string # The create time of the webhook policy. (format: date-time)
   --update-time: string # The update time of the webhook policy. (format: date-time)
-  --enabled: string@bool-completer # Whether the webhook policy is enabled or not.
+  --enabled: oneof<nothing, bool> # Whether the webhook policy is enabled or not.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2652,7 +2651,7 @@ export def "projects-webhook-policies GetWebhookPolicyOfProject" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> record<id: int, name: string, description: string, project_id: int, targets: table<type: string, address: string, auth_header: string, skip_cert_verify: bool, payload_format: string>, event_types: list<string>, creator: string, creation_time: string, update_time: string, enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2680,7 +2679,7 @@ export def "projects-webhook-policies UpdateWebhookPolicyOfProject" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
   --id: int # The webhook policy ID. (format: int64)
   --name: string # The name of webhook policy.
   --description: string # The description of webhook policy.
@@ -2690,7 +2689,7 @@ export def "projects-webhook-policies UpdateWebhookPolicyOfProject" [
   --creator: string # The creator of the webhook policy.
   --creation-time: string # The create time of the webhook policy. (format: date-time)
   --update-time: string # The update time of the webhook policy. (format: date-time)
-  --enabled: string@bool-completer # Whether the webhook policy is enabled or not.
+  --enabled: oneof<nothing, bool> # Whether the webhook policy is enabled or not.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2720,7 +2719,7 @@ export def "projects-webhook-policies DeleteWebhookPolicyOfProject" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2751,7 +2750,7 @@ export def "projects-webhook-policies-executions ListExecutionsOfWebhookPolicy" 
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> table<id: int, vendor_type: string, vendor_id: int, status: string, status_message: string, metrics: record<task_count: int, success_task_count: int, error_task_count: int, pending_task_count: int, running_task_count: int, scheduled_task_count: int, stopped_task_count: int>, trigger: string, extra_attrs: record, start_time: string, end_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2784,7 +2783,7 @@ export def "projects-webhook-policies-executions-tasks ListTasksOfWebhookExecuti
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --qp-sort: string # Sort the resource list in ascending or descending order. e.g. sort by field1 in ascending order and field2 in descending order with "sort=field1,-field2"
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> table<id: int, execution_id: int, status: string, status_message: string, run_count: int, extra_attrs: record, creation_time: string, update_time: string, start_time: string, end_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2814,7 +2813,7 @@ export def "projects-webhook-policies-executions-tasks-log GetLogsOfWebhookTask"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2842,7 +2841,7 @@ export def "projects-webhook-lasttrigger LastTrigger" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> table<policy_name: string, event_type: string, enabled: bool, creation_time: string, last_trigger_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2876,7 +2875,7 @@ export def "projects-webhook-jobs ListWebhookJobs" [
   --policy-id: int # The policy ID. (format: int64)
   --status: list # The status of webhook job.
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> table<id: int, policy_id: int, event_type: string, notify_type: string, status: string, job_detail: string, creation_time: string, update_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2903,7 +2902,7 @@ export def "projects-webhook-events GetSupportedEventTypes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --X-Is-Resource-Name: string@bool-completer # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
+  --X-Is-Resource-Name: oneof<nothing, bool> # The flag to indicate whether the parameter which supports both name and id in the path is the name of the resource. When the X-Is-Resource-Name is false and the parameter can be converted to an integer, the parameter will be as an id, otherwise, it will be as a name.
 ]: nothing -> record<event_type: list<string>, notify_type: list<string>, payload_formats: table<notify_type: string, formats: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3157,7 +3156,7 @@ export def "robots CreateRobot" [
   --description: string # The description of the robot
   --secret: string # The secret of the robot
   --level: string # The level of the robot, project or system
-  --disable: string@bool-completer # The disable status of the robot
+  --disable: oneof<nothing, bool> # The disable status of the robot
   --duration: int # The duration of the robot in days, duration must be either -1(Never) or a positive integer (format: int64)
   --permissions: list # item shape: {kind?: string, namespace?: string, access?: list}
 ]: any -> record<id: int, name: string, secret: string, creation_time: string, expires_at: int> {
@@ -3304,8 +3303,8 @@ export def "robots UpdateRobot" [
   --secret: string # The secret of the robot
   --level: string # The level of the robot, project or system
   --duration: int # The duration of the robot in days, duration must be either -1(Never) or a positive integer (format: int64)
-  --editable: string@bool-completer # The editable status of the robot
-  --disable: string@bool-completer # The disable status of the robot
+  --editable: oneof<nothing, bool> # The editable status of the robot
+  --disable: oneof<nothing, bool> # The disable status of the robot
   --expires-at: int # The expiration date of the robot (format: int64)
   --permissions: list # item shape: {kind?: string, namespace?: string, access?: list}
   --creator-type: string # The type of the robot creator, like local(harbor_user) or robot.
@@ -3436,15 +3435,15 @@ export def "replication-policies createReplicationPolicy" [
   --dest-namespace-replace-count: int # Specify how many path components will be replaced by the provided destination namespace. The default value is -1 in which case the legacy mode will be applied. (format: int8)
   --trigger: record # shape: {type?: string, trigger_settings?: record}
   --filters: list # The replication policy filter array. — item shape: {type?: string, value?: any, decoration?: string}
-  --replicate-deletion: string@bool-completer # Whether to replicate the deletion operation.
-  --deletion: string@bool-completer # Deprecated, use "replicate_deletion" instead. Whether to replicate the deletion operation.
-  --override: string@bool-completer # Whether to override the resources on the destination registry.
-  --enabled: string@bool-completer # Whether the policy is enabled or not.
+  --replicate-deletion: oneof<nothing, bool> # Whether to replicate the deletion operation.
+  --deletion: oneof<nothing, bool> # Deprecated, use "replicate_deletion" instead. Whether to replicate the deletion operation.
+  --override: oneof<nothing, bool> # Whether to override the resources on the destination registry.
+  --enabled: oneof<nothing, bool> # Whether the policy is enabled or not.
   --creation-time: string # The create time of the policy. (format: date-time)
   --update-time: string # The update time of the policy. (format: date-time)
   --speed: int # speed limit for each task (format: int32)
-  --copy-by-chunk: string@bool-completer # Whether to enable copy by chunk.
-  --single-active-replication: string@bool-completer # Whether to skip execution until the previous active execution finishes, avoiding the execution of the same replication rules multiple times in parallel.
+  --copy-by-chunk: oneof<nothing, bool> # Whether to enable copy by chunk.
+  --single-active-replication: oneof<nothing, bool> # Whether to skip execution until the previous active execution finishes, avoiding the execution of the same replication rules multiple times in parallel.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3536,15 +3535,15 @@ export def "replication-policies updateReplicationPolicy" [
   --dest-namespace-replace-count: int # Specify how many path components will be replaced by the provided destination namespace. The default value is -1 in which case the legacy mode will be applied. (format: int8)
   --trigger: record # shape: {type?: string, trigger_settings?: record}
   --filters: list # The replication policy filter array. — item shape: {type?: string, value?: any, decoration?: string}
-  --replicate-deletion: string@bool-completer # Whether to replicate the deletion operation.
-  --deletion: string@bool-completer # Deprecated, use "replicate_deletion" instead. Whether to replicate the deletion operation.
-  --override: string@bool-completer # Whether to override the resources on the destination registry.
-  --enabled: string@bool-completer # Whether the policy is enabled or not.
+  --replicate-deletion: oneof<nothing, bool> # Whether to replicate the deletion operation.
+  --deletion: oneof<nothing, bool> # Deprecated, use "replicate_deletion" instead. Whether to replicate the deletion operation.
+  --override: oneof<nothing, bool> # Whether to override the resources on the destination registry.
+  --enabled: oneof<nothing, bool> # Whether the policy is enabled or not.
   --creation-time: string # The create time of the policy. (format: date-time)
   --update-time: string # The update time of the policy. (format: date-time)
   --speed: int # speed limit for each task (format: int32)
-  --copy-by-chunk: string@bool-completer # Whether to enable copy by chunk.
-  --single-active-replication: string@bool-completer # Whether to skip execution until the previous active execution finishes, avoiding the execution of the same replication rules multiple times in parallel.
+  --copy-by-chunk: oneof<nothing, bool> # Whether to enable copy by chunk.
+  --single-active-replication: oneof<nothing, bool> # Whether to skip execution until the previous active execution finishes, avoiding the execution of the same replication rules multiple times in parallel.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3792,7 +3791,7 @@ export def "registries createRegistry" [
   --name: string # The registry name.
   --credential: record # shape: {type?: string, access_key?: string, access_secret?: string}
   --type: string # Type of the registry, e.g. 'harbor'.
-  --body-insecure: string@bool-completer # Whether or not the certificate will be verified when Harbor tries to access the server.
+  --body-insecure: oneof<nothing, bool> # Whether or not the certificate will be verified when Harbor tries to access the server.
   --ca-certificate: string # The PEM-encoded CA certificate for this registry endpoint. If provided, this CA will be used to verify the registry's certificate instead of the system CA pool.
   --description: string # Description of the registry.
   --status: string # Health status of the registry.
@@ -3861,7 +3860,7 @@ export def "registries-ping pingRegistry" [
   --credential-type: string # Credential type of the registry, e.g. 'basic'.
   --access-key: string # The registry access key.
   --access-secret: string # The registry access secret.
-  --body-insecure: string@bool-completer # Whether or not the certificate will be verified when Harbor tries to access the server.
+  --body-insecure: oneof<nothing, bool> # Whether or not the certificate will be verified when Harbor tries to access the server.
   --ca-certificate: string # The PEM-encoded CA certificate for this registry endpoint.
 ]: any -> any {
   let input = $in
@@ -3947,7 +3946,7 @@ export def "registries updateRegistry" [
   --credential-type: string # Credential type of the registry, e.g. 'basic'.
   --access-key: string # The registry access key.
   --access-secret: string # The registry access secret.
-  --body-insecure: string@bool-completer # Whether or not the certificate will be verified when Harbor tries to access the server.
+  --body-insecure: oneof<nothing, bool> # Whether or not the certificate will be verified when Harbor tries to access the server.
   --ca-certificate: string # The PEM-encoded CA certificate for this registry endpoint.
 ]: any -> any {
   let input = $in
@@ -4124,7 +4123,7 @@ export def "system-oidc-ping pingOIDC" [
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
   --body-url: string # The URL of OIDC endpoint to be tested.
-  --verify-cert: string@bool-completer # Whether the certificate should be verified
+  --verify-cert: oneof<nothing, bool> # Whether the certificate should be verified
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5068,7 +5067,7 @@ export def "retentions-executions triggerRetentionExecution" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --dry-run: string@bool-completer
+  --dry-run: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5244,9 +5243,9 @@ export def "scanners createScanner" [
   --body-url: string # A base URL of the scanner adapter. (format: uri, e.g. http://harbor-scanner-trivy:8080)
   --body-auth: string # Specify what authentication approach is adopted for the HTTP communications. Supported types Basic", "Bearer" and api key header "X-ScannerAdapter-API-Key"  (e.g. Bearer)
   --access-credential: string # An optional value of the HTTP Authorization header sent with each request to the Scanner Adapter API.  When updating a registration (PUT `/scanners/{registration_id}`), if this field is omitted or empty and `auth` is still one of Basic, Bearer, or APIKey, the previously stored credential is kept unchanged. Provide a non-empty value to set or rotate the credential. Clearing `auth` removes the need for a credential; in that case an empty `access_credential` does not restore the old secret.  (e.g. Bearer: JWTTOKENGOESHERE)
-  --skip-certVerify: string@bool-completer # Indicate if skip the certificate verification when sending HTTP requests (default: false)
-  --use-internal-addr: string@bool-completer # Indicate whether use internal registry addr for the scanner to pull content or not (default: false)
-  --disabled: string@bool-completer # Indicate whether the registration is enabled or not (default: false)
+  --skip-certVerify: oneof<nothing, bool> # Indicate if skip the certificate verification when sending HTTP requests (default: false)
+  --use-internal-addr: oneof<nothing, bool> # Indicate whether use internal registry addr for the scanner to pull content or not (default: false)
+  --disabled: oneof<nothing, bool> # Indicate whether the registration is enabled or not (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5336,9 +5335,9 @@ export def "scanners updateScanner" [
   --body-url: string # A base URL of the scanner adapter. (format: uri, e.g. http://harbor-scanner-trivy:8080)
   --body-auth: string # Specify what authentication approach is adopted for the HTTP communications. Supported types Basic", "Bearer" and api key header "X-ScannerAdapter-API-Key"  (e.g. Bearer)
   --access-credential: string # An optional value of the HTTP Authorization header sent with each request to the Scanner Adapter API.  When updating a registration (PUT `/scanners/{registration_id}`), if this field is omitted or empty and `auth` is still one of Basic, Bearer, or APIKey, the previously stored credential is kept unchanged. Provide a non-empty value to set or rotate the credential. Clearing `auth` removes the need for a credential; in that case an empty `access_credential` does not restore the old secret.  (e.g. Bearer: JWTTOKENGOESHERE)
-  --skip-certVerify: string@bool-completer # Indicate if skip the certificate verification when sending HTTP requests (default: false)
-  --use-internal-addr: string@bool-completer # Indicate whether use internal registry addr for the scanner to pull content or not (default: false)
-  --disabled: string@bool-completer # Indicate whether the registration is enabled or not (default: false)
+  --skip-certVerify: oneof<nothing, bool> # Indicate if skip the certificate verification when sending HTTP requests (default: false)
+  --use-internal-addr: oneof<nothing, bool> # Indicate whether use internal registry addr for the scanner to pull content or not (default: false)
+  --disabled: oneof<nothing, bool> # Indicate whether the registration is enabled or not (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5392,7 +5391,7 @@ export def "scanners setScannerAsDefault" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --is-default: string@bool-completer # A flag indicating whether a scanner registration is default.
+  --is-default: oneof<nothing, bool> # A flag indicating whether a scanner registration is default.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5640,7 +5639,7 @@ export def "users-sysadmin setUserSysAdmin" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Request-Id: string # An unique ID for the request
-  --sysadmin-flag: string@bool-completer # true-admin, false-not admin.
+  --sysadmin-flag: oneof<nothing, bool> # true-admin, false-not admin.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5698,7 +5697,7 @@ export def "users-current-permissions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --scope: string # The scope for the permission
-  --relative: string@bool-completer # If true, the resources in the response are relative to the scope, eg for resource '/project/1/repository' if relative is 'true' then the resource in response will be 'repository'.
+  --relative: oneof<nothing, bool> # If true, the resources in the response are relative to the scope, eg for resource '/project/1/repository' if relative is 'true' then the resource in response will be 'repository'.
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> table<resource: string, action: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6016,8 +6015,8 @@ export def "security-summary get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-dangerous-cve: string@bool-completer # Specify whether the dangerous CVEs are included inside summary information (default: false)
-  --with-dangerous-artifact: string@bool-completer # Specify whether the dangerous Artifact are included inside summary information (default: false)
+  --with-dangerous-cve: oneof<nothing, bool> # Specify whether the dangerous CVEs are included inside summary information (default: false)
+  --with-dangerous-artifact: oneof<nothing, bool> # Specify whether the dangerous Artifact are included inside summary information (default: false)
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> record<critical_cnt: int, high_cnt: int, medium_cnt: int, low_cnt: int, none_cnt: int, unknown_cnt: int, total_vuls: int, scanned_cnt: int, total_artifact: int, fixable_cnt: int, dangerous_cves: table<cve_id: string, severity: string, cvss_score_v3: float, desc: string, package: string, version: string>, dangerous_artifacts: table<project_id: int, repository_name: string, digest: string, critical_cnt: int, high_cnt: int, medium_cnt: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6046,8 +6045,8 @@ export def "security-vul ListVulnerabilities" [
   --q: string # Query string to query resources. Supported query patterns are "exact match(k=v)", "fuzzy match(k=~v)", "range(k=[min~max])", "list with union releationship(k={v1 v2 v3})" and "list with intersetion relationship(k=(v1 v2 v3))". The value of range and list can be string(enclosed by " or '), integer or time(in format "2020-04-09 02:36:00"). All of these query patterns should be put in the query string "q=xxx" and splitted by ",". e.g. q=k1=v1,k2=~v2,k3=[min~max]
   --page: int # The page number (format: int64, default: 1)
   --page-size: int # The size of per page (format: int64, default: 10)
-  --tune-count: string@bool-completer # Enable to ignore X-Total-Count when the total count > 1000, if the total count is less than 1000, the real total count is returned, else -1. (default: false)
-  --with-tag: string@bool-completer # Specify whether the tag information is included inside vulnerability information (default: false)
+  --tune-count: oneof<nothing, bool> # Enable to ignore X-Total-Count when the total count > 1000, if the total count is less than 1000, the real total count is returned, else -1. (default: false)
+  --with-tag: oneof<nothing, bool> # Specify whether the tag information is included inside vulnerability information (default: false)
   --X-Request-Id: string # An unique ID for the request
 ]: nothing -> table<project_id: int, repository_name: string, digest: string, tags: list<string>, cve_id: string, severity: string, status: string, cvss_v3_score: float, package: string, version: string, fixed_version: string, desc: string, links: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))

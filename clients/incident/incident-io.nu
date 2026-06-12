@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.incident.io"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -189,10 +188,10 @@ export def "alert-attributes Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --array: string@bool-completer # Whether this attribute is an array (e.g. false)
+  --array: oneof<nothing, bool> # Whether this attribute is an array (e.g. false)
   --emoji: string # The emoji to display alongside this attribute in chat messages, stored without colons (e.g. fire)
   name: string # Unique name of this attribute (e.g. service)
-  --required: string@bool-completer # Whether this attribute is required. If this field is not set, the existing setting will be preserved. (e.g. false)
+  --required: oneof<nothing, bool> # Whether this attribute is required. If this field is not set, the existing setting will be preserved. (e.g. false)
   type: string # Engine resource name for this attribute (e.g. CatalogEntry["01GW2G3V0S59R238FAHPDS1R67"])
 ]: any -> record<alert_attribute: record<array: bool, emoji: string, id: string, name: string, required: bool, type: string>> {
   let input = $in
@@ -263,10 +262,10 @@ export def "alert-attributes Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --array: string@bool-completer # Whether this attribute is an array (e.g. false)
+  --array: oneof<nothing, bool> # Whether this attribute is an array (e.g. false)
   --emoji: string # The emoji to display alongside this attribute in chat messages, stored without colons (e.g. fire)
   name: string # Unique name of this attribute (e.g. service)
-  --required: string@bool-completer # Whether this attribute is required. If this field is not set, the existing setting will be preserved. (e.g. false)
+  --required: oneof<nothing, bool> # Whether this attribute is required. If this field is not set, the existing setting will be preserved. (e.g. false)
   type: string # Engine resource name for this attribute (e.g. CatalogEntry["01GW2G3V0S59R238FAHPDS1R67"])
 ]: any -> record<alert_attribute: record<array: bool, emoji: string, id: string, name: string, required: bool, type: string>> {
   let input = $in
@@ -364,12 +363,12 @@ export def "alert-routes Create" [
   channel_config: list # The channel configuration for this alert route (e.g. [{condition_groups: [{conditions: [{operation: one_of, param_bindings: [{array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}], subject: incident.severity}]}], ms_teams_targets: {binding: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}, channel_visibility: abc123}, slack_targets: {binding: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}, channel_visibility: abc123}}]) — item shape: {condition_groups: list, ms_teams_targets?: record, slack_targets?: record}
   condition_groups: list # What condition groups must be true for this alert route to fire? (e.g. [{conditions: [{operation: one_of, param_bindings: [{array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}], subject: incident.severity}]}]) — item shape: {conditions: list}
   --created-at: string # The time of creation of this alert route (format: date-time, e.g. 2021-08-17T13:28:57.801578Z)
-  --enabled: string@bool-completer # Whether this alert route is enabled or not (e.g. false)
+  --enabled: oneof<nothing, bool> # Whether this alert route is enabled or not (e.g. false)
   escalation_config: record # e.g. {auto_cancel_escalations: false, escalation_targets: [{escalation_paths: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}, users: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}}]} — shape: {auto_cancel_escalations: bool, escalation_targets: list}
   expressions: list # The expressions used in this template (e.g. [{else_branch: {result: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}}, label: Team Slack channel, operations: [{branches: {branches: [{condition_groups: [{conditions: [{operation: one_of, param_bindings: [{array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}], subject: incident.severity}]}], result: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}}], returns: {array: true, type: IncidentStatus}}, concatenate: {reference: catalog_attribute["01FCNDV6P870EA6S7TK1DSYD5H"]}, filter: {condition_groups: [{conditions: [{operation: one_of, param_bindings: [{array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}], subject: incident.severity}]}]}, navigate: {reference: catalog_attribute["01FCNDV6P870EA6S7TK1DSYD5H"]}, operation_type: navigate, parse: {returns: {array: true, type: IncidentStatus}, source: metadata.annotations["github.com/repo"]}}], reference: abc123, root_reference: incident.status}]) — item shape: {else_branch?: record, label: string, operations: list, reference: string, root_reference: string}
   incident_config: record # e.g. {auto_decline_enabled: false, auto_relate_grouped_alerts: false, condition_groups: [{conditions: [{operation: one_of, param_bindings: [{array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}], subject: incident.severity}]}], defer_time_seconds: 1, enabled: false, grouping_keys: [{reference: alert.title}], grouping_window_seconds: 1} — shape: {auto_decline_enabled: bool, auto_relate_grouped_alerts?: bool, condition_groups: list, defer_time_seconds: int, enabled: bool, grouping_keys: list, grouping_window_seconds: int}
   incident_template: record # e.g. {custom_fields: [{binding: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}, custom_field_id: 01FCNDV6P870EA6S7TK1DSYDG0, merge_strategy: first-wins}], incident_mode: {binding: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}}, incident_type: {binding: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}}, name: {autogenerated: false, binding: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}}, severity: {binding: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}, merge_strategy: first-wins}, start_in_triage: {binding: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}}, summary: {autogenerated: false, binding: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}}, workspace: {binding: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}}} — shape: {custom_fields?: list, incident_mode?: record, incident_type?: record, name: record, severity?: record, start_in_triage?: record, summary?: record, workspace?: record}
-  --is-private: string@bool-completer # Whether this alert route is private. Private alert routes will only create private incidents from alerts. (e.g. false)
+  --is-private: oneof<nothing, bool> # Whether this alert route is private. Private alert routes will only create private incidents from alerts. (e.g. false)
   --message-template: record # e.g. {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}} — shape: {array_value?: list, value?: record}
   name: string # The name of this alert route config, for the user's reference (e.g. Production incidents)
   --owning-team-ids: list # IDs of teams that own this alert route (e.g. [01G0J1EXE7AXZ2C93K61WBPYEH])
@@ -456,12 +455,12 @@ export def "alert-routes Update" [
   channel_config: list # The channel configuration for this alert route (e.g. [{condition_groups: [{conditions: [{operation: one_of, param_bindings: [{array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}], subject: incident.severity}]}], ms_teams_targets: {binding: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}, channel_visibility: abc123}, slack_targets: {binding: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}, channel_visibility: abc123}}]) — item shape: {condition_groups: list, ms_teams_targets?: record, slack_targets?: record}
   condition_groups: list # What condition groups must be true for this alert route to fire? (e.g. [{conditions: [{operation: one_of, param_bindings: [{array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}], subject: incident.severity}]}]) — item shape: {conditions: list}
   --created-at: string # The time of creation of this alert route (format: date-time, e.g. 2021-08-17T13:28:57.801578Z)
-  --enabled: string@bool-completer # Whether this alert route is enabled or not (e.g. false)
+  --enabled: oneof<nothing, bool> # Whether this alert route is enabled or not (e.g. false)
   escalation_config: record # e.g. {auto_cancel_escalations: false, escalation_targets: [{escalation_paths: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}, users: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}}]} — shape: {auto_cancel_escalations: bool, escalation_targets: list}
   expressions: list # The expressions used in this template (e.g. [{else_branch: {result: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}}, label: Team Slack channel, operations: [{branches: {branches: [{condition_groups: [{conditions: [{operation: one_of, param_bindings: [{array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}], subject: incident.severity}]}], result: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}}], returns: {array: true, type: IncidentStatus}}, concatenate: {reference: catalog_attribute["01FCNDV6P870EA6S7TK1DSYD5H"]}, filter: {condition_groups: [{conditions: [{operation: one_of, param_bindings: [{array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}], subject: incident.severity}]}]}, navigate: {reference: catalog_attribute["01FCNDV6P870EA6S7TK1DSYD5H"]}, operation_type: navigate, parse: {returns: {array: true, type: IncidentStatus}, source: metadata.annotations["github.com/repo"]}}], reference: abc123, root_reference: incident.status}]) — item shape: {else_branch?: record, label: string, operations: list, reference: string, root_reference: string}
   incident_config: record # e.g. {auto_decline_enabled: false, auto_relate_grouped_alerts: false, condition_groups: [{conditions: [{operation: one_of, param_bindings: [{array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}], subject: incident.severity}]}], defer_time_seconds: 1, enabled: false, grouping_keys: [{reference: alert.title}], grouping_window_seconds: 1} — shape: {auto_decline_enabled: bool, auto_relate_grouped_alerts?: bool, condition_groups: list, defer_time_seconds: int, enabled: bool, grouping_keys: list, grouping_window_seconds: int}
   incident_template: record # e.g. {custom_fields: [{binding: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}, custom_field_id: 01FCNDV6P870EA6S7TK1DSYDG0, merge_strategy: first-wins}], incident_mode: {binding: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}}, incident_type: {binding: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}}, name: {autogenerated: false, binding: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}}, severity: {binding: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}, merge_strategy: first-wins}, start_in_triage: {binding: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}}, summary: {autogenerated: false, binding: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}}, workspace: {binding: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}}} — shape: {custom_fields?: list, incident_mode?: record, incident_type?: record, name: record, severity?: record, start_in_triage?: record, summary?: record, workspace?: record}
-  --is-private: string@bool-completer # Whether this alert route is private. Private alert routes will only create private incidents from alerts. (e.g. false)
+  --is-private: oneof<nothing, bool> # Whether this alert route is private. Private alert routes will only create private incidents from alerts. (e.g. false)
   --message-template: record # e.g. {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}} — shape: {array_value?: list, value?: record}
   name: string # The name of this alert route config, for the user's reference (e.g. Production incidents)
   --owning-team-ids: list # IDs of teams that own this alert route (e.g. [01G0J1EXE7AXZ2C93K61WBPYEH])
@@ -517,7 +516,7 @@ export def "alert-sources Create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --auto-resolve-incident-alerts: string@bool-completer # Whether to auto-resolve incident alerts when the alert auto-resolves. Defaults to true. Only use in conjunction with auto_resolve_timeout_minutes. (e.g. false)
+  --auto-resolve-incident-alerts: oneof<nothing, bool> # Whether to auto-resolve incident alerts when the alert auto-resolves. Defaults to true. Only use in conjunction with auto_resolve_timeout_minutes. (e.g. false)
   --auto-resolve-timeout-minutes: int # When set, alerts from this source will automatically resolve after this many minutes. (format: int64, e.g. 1)
   --email-options: record # e.g. {redactions: [credit_card_numbers], transform_expression: return {   title: $.subject,   description: $.text,   status: $.subject.startsWith('[RESOLVED]') ? 'resolved' : 'firing',   deduplication_key: $.header_message_id, }} — shape: {redactions: list, transform_expression?: string}
   --heartbeat-options: record # e.g. {failure_threshold: 1, grace_period_seconds: 0, interval_seconds: 60} — shape: {failure_threshold?: int, grace_period_seconds?: int, interval_seconds: int}
@@ -601,9 +600,9 @@ export def "alert-sources Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --auto-resolve-incident-alerts: string@bool-completer # Whether to auto-resolve incident alerts when the alert auto-resolves. Defaults to true. Only use in conjunction with auto_resolve_timeout_minutes. (e.g. false)
+  --auto-resolve-incident-alerts: oneof<nothing, bool> # Whether to auto-resolve incident alerts when the alert auto-resolves. Defaults to true. Only use in conjunction with auto_resolve_timeout_minutes. (e.g. false)
   --auto-resolve-timeout-minutes: int # When set, alerts from this source will automatically resolve after this many minutes. (format: int64, e.g. 1)
-  --disabled: string@bool-completer # For heartbeat sources, set to true to disable monitoring (e.g. false)
+  --disabled: oneof<nothing, bool> # For heartbeat sources, set to true to disable monitoring (e.g. false)
   --email-options: record # e.g. {redactions: [credit_card_numbers], transform_expression: return {   title: $.subject,   description: $.text,   status: $.subject.startsWith('[RESOLVED]') ? 'resolved' : 'firing',   deduplication_key: $.header_message_id, }} — shape: {redactions: list, transform_expression?: string}
   --heartbeat-options: record # e.g. {failure_threshold: 1, grace_period_seconds: 0, interval_seconds: 60} — shape: {failure_threshold?: int, grace_period_seconds?: int, interval_seconds: int}
   --http-custom-options: record # e.g. {deduplication_key_path: $.alert_id, transform_expression: return {   title: $.title || $.name || 'Unknown Alert',   status: $.status === 'resolved' ? 'resolved' : 'firing',   description: $.description || $.message || '',   sourceURL: $.url || $.link || '',   metadata: { team: $.team, severity: $.severity } }} — shape: {deduplication_key_path: string, transform_expression: string}
@@ -964,7 +963,7 @@ export def "catalog-entries ShowEntry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --expand: string@bool-completer # Whether to include details of all attribute links (forwards and backwards) within the response. Default behaviour (no query param) is to include only forward links. When expand is false, we only show attributes of the catalog entry itself.When expand is true, we show forward and backward links (e.g. true, allows empty value)
+  --expand: oneof<nothing, bool> # Whether to include details of all attribute links (forwards and backwards) within the response. Default behaviour (no query param) is to include only forward links. When expand is false, we only show attributes of the catalog entry itself.When expand is true, we show forward and backward links (e.g. true, allows empty value)
 ]: nothing -> record<catalog_entry: record<aliases: list<string>, archived_at: string, attribute_values: record, catalog_type_id: string, created_at: string, external_id: string, id: string, name: string, rank: int, updated_at: string>, catalog_type: record<annotations: record, categories: list<string>, color: string, created_at: string, description: string, dynamic_resource_parameter: string, estimated_count: int, icon: string, id: string, is_editable: bool, is_team_type: bool, last_synced_at: string, name: string, ranked: bool, registry_type: string, required_integrations: list<string>, schema: record<attributes: list, version: int>, source_repo_url: string, type_name: string, updated_at: string, use_name_as_identifier: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1094,10 +1093,10 @@ export def "catalog-types CreateType" [
   description: string # Human readble description of this type (e.g. Represents Kubernetes clusters that we run inside of GKE.)
   --icon: string@icon-completer # Sets the display icon of this type in the dashboard (e.g. alert)
   name: string # Name is the human readable name of this type (e.g. Kubernetes Cluster)
-  --ranked: string@bool-completer # If this type should be ranked (e.g. true)
+  --ranked: oneof<nothing, bool> # If this type should be ranked (e.g. true)
   --source-repo-url: string # The url of the external repository where this type is managed (e.g. https://github.com/my-company/incident-io-catalog)
   --type-name: string # The type name of this catalog type, to be used when defining attributes. This is immutable once a CatalogType has been created. For non-externally sync types, it must follow the pattern Custom["SomeName"] (e.g. Custom["BackstageGroup"])
-  --use-name-as-identifier: string@bool-completer # If enabled, you can refer to entries of this type by their name, as well as their external ID and any aliases. (e.g. true)
+  --use-name-as-identifier: oneof<nothing, bool> # If enabled, you can refer to entries of this type by their name, as well as their external ID and any aliases. (e.g. true)
 ]: any -> record<catalog_type: record<annotations: record, categories: list<string>, color: string, created_at: string, description: string, dynamic_resource_parameter: string, estimated_count: int, icon: string, id: string, is_editable: bool, is_team_type: bool, last_synced_at: string, name: string, ranked: bool, registry_type: string, required_integrations: list<string>, schema: record<attributes: list, version: int>, source_repo_url: string, type_name: string, updated_at: string, use_name_as_identifier: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1173,9 +1172,9 @@ export def "catalog-types UpdateType" [
   description: string # Human readble description of this type (e.g. Represents Kubernetes clusters that we run inside of GKE.)
   --icon: string@icon-completer # Sets the display icon of this type in the dashboard (e.g. alert)
   name: string # Name is the human readable name of this type (e.g. Kubernetes Cluster)
-  --ranked: string@bool-completer # If this type should be ranked (e.g. true)
+  --ranked: oneof<nothing, bool> # If this type should be ranked (e.g. true)
   --source-repo-url: string # The url of the external repository where this type is managed (e.g. https://github.com/my-company/incident-io-catalog)
-  --use-name-as-identifier: string@bool-completer # If enabled, you can refer to entries of this type by their name, as well as their external ID and any aliases. (e.g. true)
+  --use-name-as-identifier: oneof<nothing, bool> # If enabled, you can refer to entries of this type by their name, as well as their external ID and any aliases. (e.g. true)
 ]: any -> record<catalog_type: record<annotations: record, categories: list<string>, color: string, created_at: string, description: string, dynamic_resource_parameter: string, estimated_count: int, icon: string, id: string, is_editable: bool, is_team_type: bool, last_synced_at: string, name: string, ranked: bool, registry_type: string, required_integrations: list<string>, schema: record<attributes: list, version: int>, source_repo_url: string, type_name: string, updated_at: string, use_name_as_identifier: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2404,7 +2403,7 @@ export def "incidents-actions-edit Edit" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   incident: record # e.g. {call_url: https://zoom.us/foo, custom_field_entries: [{custom_field_id: 01FCNDV6P870EA6S7TK1DSYDG0, values: [{id: 01FCNDV6P870EA6S7TK1DSYDG0, value_catalog_entry_id: 01FCNDV6P870EA6S7TK1DSYDG0, value_link: https://google.com/, value_numeric: 123.456, value_option_id: 01FCNDV6P870EA6S7TK1DSYDG0, value_text: This is my text field, I hope you like it, value_timestamp: }]}], incident_role_assignments: [{assignee: {email: bob@example.com, id: 01G0J1EXE7AXZ2C93K61WBPYEH, slack_user_id: USER123}, incident_role_id: 01FH5TZRWMNAFB0DZ23FD1TV96}], incident_status_id: abc123, incident_timestamp_values: [{incident_timestamp_id: 01FCNDV6P870EA6S7TK1DSYD5H, value: 2021-08-17T13:28:57.801578Z}], name: Our database is sad, severity_id: 01G0J1EXE7AXZ2C93K61WBPYEH, slack_channel_name_override: inc-123-database-down, summary: Our database is really really sad, and we don't know why yet.} — shape: {call_url?: string, custom_field_entries?: list, incident_role_assignments?: list, incident_status_id?: string, incident_timestamp_values?: list, name?: string, severity_id?: string, slack_channel_name_override?: string, summary?: string}
-  --notify-incident-channel: string@bool-completer # Should we send Slack channel notifications to inform responders of this update? Note that this won't work if the Slack channel has already been archived. (e.g. true)
+  --notify-incident-channel: oneof<nothing, bool> # Should we send Slack channel notifications to inform responders of this update? Note that this won't work if the Slack channel has already been archived. (e.g. true)
 ]: any -> record<incident: record<call_url: string, created_at: string, creator: record<alert: record, api_key: record, user: record, workflow: record>, custom_field_entries: list<record>, duration_metrics: list<record>, external_issue_reference: record<issue_name: string, issue_permalink: string, provider: string>, has_debrief: bool, id: string, incident_role_assignments: list<record>, incident_status: record<category: string, created_at: string, description: string, id: string, name: string, rank: int, updated_at: string>, incident_timestamp_values: list<record>, incident_type: record<create_in_triage: string, created_at: string, description: string, id: string, is_default: bool, name: string, private_incidents_only: bool, updated_at: string>, mode: string, name: string, permalink: string, postmortem_document_ids: list<string>, postmortem_document_url: string, reference: string, severity: record<created_at: string, description: string, id: string, name: string, rank: int, updated_at: string>, slack_channel_id: string, slack_channel_name: string, slack_team_id: string, summary: string, updated_at: string, visibility: string, workload_minutes_late: float, workload_minutes_sleeping: float, workload_minutes_total: float, workload_minutes_working: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2479,7 +2478,7 @@ export def "ip-allowlists UpdateIPAllowlist" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   allowlist: list # A list of IP addresses or CIDR prefixes to allow (e.g. [{label: London HQ, value: 192.0.2.0}]) — item shape: {label?: string, value: string}
-  --enabled: string@bool-completer # Whether this IP allowlist is enabled or not (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether this IP allowlist is enabled or not (e.g. true)
   version: int # The version of this IP allowlist (format: int64, e.g. 1)
 ]: any -> record<ip_allowlist: record<allowlist: list<record>, enabled: bool, updated_at: string, version: int>> {
   let input = $in
@@ -2544,9 +2543,9 @@ export def "maintenance-windows Create" [
   --notify-channels: list # Channels to notify about the maintenance window starting and ending (e.g. [{channel_id: C0ACTHQMHS8, channel_name: general, channel_type: public}]) — item shape: {channel_id: string, channel_name?: string, channel_type: string}
   --notify-end-minutes-before: int # Minutes before the end to send a notification to the configured channels (format: int64, e.g. 5)
   --notify-start-minutes-before: int # Minutes before the start to send a notification to the configured channels (format: int64, e.g. 15)
-  --reroute-on-end: string@bool-completer # Whether to retrigger firing alerts through alert routing when the window ends (e.g. false)
-  --resolve-on-end: string@bool-completer # Whether to automatically resolve all firing alerts that matched this window when it ends (e.g. false)
-  --show-in-sidebar: string@bool-completer # Whether to show this maintenance window in the dashboard sidebar when active (e.g. true)
+  --reroute-on-end: oneof<nothing, bool> # Whether to retrigger firing alerts through alert routing when the window ends (e.g. false)
+  --resolve-on-end: oneof<nothing, bool> # Whether to automatically resolve all firing alerts that matched this window when it ends (e.g. false)
+  --show-in-sidebar: oneof<nothing, bool> # Whether to show this maintenance window in the dashboard sidebar when active (e.g. true)
   start_at: string # When the maintenance window should start (format: date-time, e.g. 2021-08-17T13:28:57.801578Z)
 ]: any -> record<maintenance_window: record<alert_condition_groups: list<record>, archived_at: string, created_at: string, end_at: string, escalation_targets: list<record>, id: string, incident_id: string, lead: record<alert: record, api_key: record, user: record, workflow: record>, name: string, notification_message: string, notify_channels: list<record>, notify_end_minutes_before: int, notify_start_minutes_before: int, reroute_on_end: bool, resolve_on_end: bool, show_in_sidebar: bool, start_at: string, updated_at: string>> {
   let input = $in
@@ -2631,9 +2630,9 @@ export def "maintenance-windows Update" [
   --notify-channels: list # Channels to notify about the maintenance window starting and ending (e.g. [{channel_id: C0ACTHQMHS8, channel_name: general, channel_type: public}]) — item shape: {channel_id: string, channel_name?: string, channel_type: string}
   --notify-end-minutes-before: int # Minutes before the end to send a notification to the configured channels (format: int64, e.g. 5)
   --notify-start-minutes-before: int # Minutes before the start to send a notification to the configured channels (format: int64, e.g. 15)
-  --reroute-on-end: string@bool-completer # Whether to retrigger firing alerts through alert routing when the window ends (e.g. false)
-  --resolve-on-end: string@bool-completer # Whether to automatically resolve all firing alerts that matched this window when it ends (e.g. false)
-  --show-in-sidebar: string@bool-completer # Whether to show this maintenance window in the dashboard sidebar when active (e.g. true)
+  --reroute-on-end: oneof<nothing, bool> # Whether to retrigger firing alerts through alert routing when the window ends (e.g. false)
+  --resolve-on-end: oneof<nothing, bool> # Whether to automatically resolve all firing alerts that matched this window when it ends (e.g. false)
+  --show-in-sidebar: oneof<nothing, bool> # Whether to show this maintenance window in the dashboard sidebar when active (e.g. true)
   start_at: string # When the maintenance window should start (format: date-time, e.g. 2021-08-17T13:28:57.801578Z)
 ]: any -> record<maintenance_window: record<alert_condition_groups: list<record>, archived_at: string, created_at: string, end_at: string, escalation_targets: list<record>, id: string, incident_id: string, lead: record<alert: record, api_key: record, user: record, workflow: record>, name: string, notification_message: string, notify_channels: list<record>, notify_end_minutes_before: int, notify_start_minutes_before: int, reroute_on_end: bool, resolve_on_end: bool, show_in_sidebar: bool, start_at: string, updated_at: string>> {
   let input = $in
@@ -2850,7 +2849,7 @@ export def "schedule-sync-targets Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --add-bot-to-group: string@bool-completer # Whether the incident.io bot should be added to the group (e.g. true)
+  --add-bot-to-group: oneof<nothing, bool> # Whether the incident.io bot should be added to the group (e.g. true)
   --annotations: record # Annotations that track metadata about this resource (e.g. {incident.io/terraform/version: 3.0.0})
 ]: any -> record<schedule_sync_target: record<add_bot_to_group: bool, created_at: string, id: string, linked_schedules: list<record>, slack_team_id: string, slack_user_group_id: string, updated_at: string>> {
   let input = $in
@@ -3421,7 +3420,7 @@ export def "status-page-incident-updates CreateStatusPageIncidentUpdate" [
   --component-statuses: list # An array of mappings from component ID to component status. This must not be set if the status page incident status is being set to "resolved", as all components statuses will update to "operational". (e.g. [{component_id: 01FCNDV6P870EA6S7TK1DSYDG2, component_status: operational}]) — item shape: {component_id: string, component_status: "operational"|"degraded_performance"|"partial_outage"|"full_outage"}
   --incident-status: string@incident-status-completer # Optional new status for this status page incident. If not provided, the status will remain unchanged. Setting to "resolved" will end the incident and all component statuses will update to "operational". (e.g. investigating)
   message: string # Markdown update on what's changed about this status page incident (e.g. The fix has been deployed and we are monitoring the situation. Some users may still experience intermittent issues.)
-  --notify-subscribers: string@bool-completer # Whether to notify subscribers about this incident update. This will not work if your status page has more than 1000 subscribers. (e.g. true)
+  --notify-subscribers: oneof<nothing, bool> # Whether to notify subscribers about this incident update. This will not work if your status page has more than 1000 subscribers. (e.g. true)
   status_page_incident_id: string # ID of the status page incident (e.g. 01FCNDV6P870EA6S7TK1DSYDG1)
 ]: any -> record<status_page_incident_update: record<component_statuses: list<record>, id: string, incident_status: string, message: string, published_at: string, status_page_incident_id: string>> {
   let input = $in
@@ -3483,7 +3482,7 @@ export def "status-page-incidents CreateStatusPageIncident" [
   incident_status: string@incident-status-completer # Current status for this status page incident (e.g. investigating)
   message: string # Markdown initial update on this status page incident (e.g. We are currently investigating reports of elevated error rates affecting our API.)
   name: string # A title for the incident (e.g. Elevated API latency)
-  --notify-subscribers: string@bool-completer # Whether to notify subscribers about this status page incident. This will not work if your status page has more than 1000 subscribers. (e.g. true)
+  --notify-subscribers: oneof<nothing, bool> # Whether to notify subscribers about this status page incident. This will not work if your status page has more than 1000 subscribers. (e.g. true)
   status_page_id: string # ID of the status page. You can find this by calling the ListStatusPages endpoint. (e.g. 01FCNDV6P870EA6S7TK1DSYDG0)
 ]: any -> record<status_page_incident: record<component_impacts: list<record>, id: string, incident_status: string, name: string, published_at: string, status_page_id: string, updates: list<record>>> {
   let input = $in
@@ -3561,7 +3560,7 @@ export def "status-page-maintenance-updates CreateStatusPageMaintenanceUpdate" [
   --component-statuses: list # An array of mappings from component ID to component status. This must not be set if the status page maintenance window status is being set to "maintenance_complete", as all components statuses will update to "operational". (e.g. [{component_id: 01FCNDV6P870EA6S7TK1DSYDG2, component_status: operational}]) — item shape: {component_id: string, component_status: "operational"|"under_maintenance"}
   --maintenance-status: string@maintenance-status-completer # Optional new status for this status page maintenance window. If not provided, the status will remain unchanged. Setting to "maintenance_complete" will end the maintenance window and all component statuses will update to "operational". (e.g. maintenance_scheduled)
   message: string # Markdown update on what's changed about this status page maintenance window (e.g. Scheduled maintenance is underway for our database infrastructure. Some services may experience brief interruptions during this window.)
-  --notify-subscribers: string@bool-completer # Whether to notify subscribers about this status page maintenance update. This will not work if your status page has more than 1000 subscribers. (e.g. true)
+  --notify-subscribers: oneof<nothing, bool> # Whether to notify subscribers about this status page maintenance update. This will not work if your status page has more than 1000 subscribers. (e.g. true)
   status_page_maintenance_id: string # ID of the status page maintenance window (e.g. 01FCNDV6P870EA6S7TK1DSYDG1)
 ]: any -> record<status_page_maintenance_update: record<component_statuses: list<record>, id: string, maintenance_status: string, message: string, published_at: string, status_page_maintenance_id: string>> {
   let input = $in
@@ -3623,7 +3622,7 @@ export def "status-page-maintenances CreateStatusPageMaintenance" [
   maintenance_status: string@maintenance-status-completer # Current status for this status page maintenance window (e.g. maintenance_scheduled)
   message: string # Markdown initial update on this status page maintenance window (e.g. Planned maintenance has been scheduled to upgrade our infrastructure. We expect minimal disruption, but some features may be briefly unavailable.)
   name: string # A title for the maintenance window (e.g. Routine infrastructure upgrade)
-  --notify-subscribers: string@bool-completer # Whether to notify subscribers about this status page maintenance. This will not work if your status page has more than 1000 subscribers. (e.g. true)
+  --notify-subscribers: oneof<nothing, bool> # Whether to notify subscribers about this status page maintenance. This will not work if your status page has more than 1000 subscribers. (e.g. true)
   start_at: string # The time the maintenance window starts (format: date-time, e.g. 2025-01-28T10:00:00Z)
   status_page_id: string # ID of the status page. You can find this by calling the ListStatusPages endpoint. (e.g. 01FCNDV6P870EA6S7TK1DSYDG0)
 ]: any -> record<status_page_maintenance: record<component_maintenance_periods: list<record>, id: string, maintenance_status: string, name: string, published_at: string, status_page_id: string, updates: list<record>>> {
@@ -4026,12 +4025,12 @@ export def "workflows CreateWorkflow" [
   --allow-errors(-e) # Return full response without error handling
   --annotations: record # Annotations that track metadata about this resource (e.g. {incident.io/terraform/version: 3.0.0})
   condition_groups: list # Conditions that apply to the workflow trigger (e.g. [{conditions: [{operation: one_of, param_bindings: [{array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}], subject: incident.severity}]}]) — item shape: {conditions: list}
-  --continue-on-step-error: string@bool-completer # Whether to continue executing the workflow if a step fails (e.g. true)
+  --continue-on-step-error: oneof<nothing, bool> # Whether to continue executing the workflow if a step fails (e.g. true)
   --delay: record # e.g. {conditions_apply_over_delay: false, for_seconds: 60} — shape: {conditions_apply_over_delay: bool, for_seconds: int}
   expressions: list # The expressions to use in the workflow (e.g. [{else_branch: {result: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}}, label: Team Slack channel, operations: [{branches: {branches: [{condition_groups: [{conditions: [{operation: one_of, param_bindings: [{array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}], subject: incident.severity}]}], result: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}}], returns: {array: true, type: IncidentStatus}}, concatenate: {reference: catalog_attribute["01FCNDV6P870EA6S7TK1DSYD5H"]}, filter: {condition_groups: [{conditions: [{operation: one_of, param_bindings: [{array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}], subject: incident.severity}]}]}, navigate: {reference: catalog_attribute["01FCNDV6P870EA6S7TK1DSYD5H"]}, operation_type: navigate, parse: {returns: {array: true, type: IncidentStatus}, source: metadata.annotations["github.com/repo"]}}], reference: abc123, root_reference: incident.status}]) — item shape: {else_branch?: record, label: string, operations: list, reference: string, root_reference: string}
   --folder: string # Folder to display the workflow in (e.g. My folder 01)
-  --include-private-escalations: string@bool-completer # Whether to include private escalations (e.g. true)
-  --include-private-incidents: string@bool-completer # Whether to include private incidents (e.g. true)
+  --include-private-escalations: oneof<nothing, bool> # Whether to include private escalations (e.g. true)
+  --include-private-incidents: oneof<nothing, bool> # Whether to include private incidents (e.g. true)
   name: string # Name provided by the user when creating the workflow (e.g. My little workflow)
   once_for: list # This workflow will run 'once for' a list of references (e.g. [incident.url])
   runs_on_incident_modes: list # Which incident modes should this workflow run on? By default, workflows only run on standard incidents, but can also be configured to run on test and retrospective incidents. (e.g. [standard, test, retrospective])
@@ -4087,7 +4086,7 @@ export def "workflows ShowWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --skip-step-upgrades: string@bool-completer # Skips workflow step upgrades, when the parameters for an existing workflow step change (e.g. false, allows empty value)
+  --skip-step-upgrades: oneof<nothing, bool> # Skips workflow step upgrades, when the parameters for an existing workflow step change (e.g. false, allows empty value)
 ]: nothing -> record<management_meta: record<annotations: record, managed_by: string, source_url: string>, workflow: record<condition_groups: list<record>, continue_on_step_error: bool, delay: record<conditions_apply_over_delay: bool, for_seconds: int>, expressions: list<record>, folder: string, id: string, include_private_escalations: bool, include_private_incidents: bool, name: string, once_for: list<record>, runs_from: string, runs_on_incident_modes: list<string>, runs_on_incidents: string, shortform: string, state: string, steps: list<record>, trigger: record<label: string, name: string>, version: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4117,18 +4116,18 @@ export def "workflows UpdateWorkflow" [
   --allow-errors(-e) # Return full response without error handling
   --annotations: record # Annotations that track metadata about this resource (e.g. {incident.io/terraform/version: 3.0.0})
   condition_groups: list # Conditions that apply to the workflow trigger (e.g. [{conditions: [{operation: one_of, param_bindings: [{array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}], subject: incident.severity}]}]) — item shape: {conditions: list}
-  --continue-on-step-error: string@bool-completer # Whether to continue executing the workflow if a step fails (e.g. true)
+  --continue-on-step-error: oneof<nothing, bool> # Whether to continue executing the workflow if a step fails (e.g. true)
   --delay: record # e.g. {conditions_apply_over_delay: false, for_seconds: 60} — shape: {conditions_apply_over_delay: bool, for_seconds: int}
   expressions: list # The expressions to use in the workflow (e.g. [{else_branch: {result: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}}, label: Team Slack channel, operations: [{branches: {branches: [{condition_groups: [{conditions: [{operation: one_of, param_bindings: [{array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}], subject: incident.severity}]}], result: {array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}}], returns: {array: true, type: IncidentStatus}}, concatenate: {reference: catalog_attribute["01FCNDV6P870EA6S7TK1DSYD5H"]}, filter: {condition_groups: [{conditions: [{operation: one_of, param_bindings: [{array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}], subject: incident.severity}]}]}, navigate: {reference: catalog_attribute["01FCNDV6P870EA6S7TK1DSYD5H"]}, operation_type: navigate, parse: {returns: {array: true, type: IncidentStatus}, source: metadata.annotations["github.com/repo"]}}], reference: abc123, root_reference: incident.status}]) — item shape: {else_branch?: record, label: string, operations: list, reference: string, root_reference: string}
   --folder: string # Folder to display the workflow in (e.g. My folder 01)
-  --include-private-escalations: string@bool-completer # Whether to include private escalations (e.g. true)
-  --include-private-incidents: string@bool-completer # Whether to include private incidents (e.g. true)
+  --include-private-escalations: oneof<nothing, bool> # Whether to include private escalations (e.g. true)
+  --include-private-incidents: oneof<nothing, bool> # Whether to include private incidents (e.g. true)
   name: string # Name provided by the user when creating the workflow (e.g. My little workflow)
   once_for: list # This workflow will run 'once for' a list of references (e.g. [incident.url])
   runs_on_incident_modes: list # Which incident modes should this workflow run on? By default, workflows only run on standard incidents, but can also be configured to run on test and retrospective incidents. (e.g. [standard, test, retrospective])
   runs_on_incidents: string@runs-on-incidents-completer # Which incidents should the workflow be applied to? (e.g. newly_created)
   --shortform: string # The shortform used to trigger this workflow (only applicable for manual triggers) (e.g. page-the-ceo)
-  --skip-step-upgrades: string@bool-completer # Skips workflow step upgrades, when the parameters for an existing workflow step change (e.g. false)
+  --skip-step-upgrades: oneof<nothing, bool> # Skips workflow step upgrades, when the parameters for an existing workflow step change (e.g. false)
   --state: string@state-completer # What state this workflow is in (e.g. active)
   steps: list # Steps that are executed as part of the workflow (e.g. [{for_each: abc123, id: abc123, name: pagerduty.escalate, param_bindings: [{array_value: [{literal: SEV123, reference: incident.severity}], value: {literal: SEV123, reference: incident.severity}}]}]) — item shape: {for_each?: string, id: string, name: string, param_bindings: list}
 ]: any -> record<management_meta: record<annotations: record, managed_by: string, source_url: string>, workflow: record<condition_groups: list<record>, continue_on_step_error: bool, delay: record<conditions_apply_over_delay: bool, for_seconds: int>, expressions: list<record>, folder: string, id: string, include_private_escalations: bool, include_private_incidents: bool, name: string, once_for: list<record>, runs_from: string, runs_on_incident_modes: list<string>, runs_on_incidents: string, shortform: string, state: string, steps: list<record>, trigger: record<label: string, name: string>, version: int>> {

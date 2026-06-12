@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost/api" "https://localhost/api"] }
 def auth-scheme-completer [] { ["bearer" "basic"] }
 
@@ -118,8 +117,8 @@ export def "access-control-roles listRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delegatable: string@bool-completer
-  --includeHidden: string@bool-completer
+  --delegatable: oneof<nothing, bool>
+  --includeHidden: oneof<nothing, bool>
   --targetOrgId: int # format: int64
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -146,9 +145,9 @@ export def "access-control-roles createRole" [
   --allow-errors(-e) # Return full response without error handling
   --description: string
   --displayName: string
-  --global: string@bool-completer
+  --global: oneof<nothing, bool>
   --group: string
-  --hidden: string@bool-completer
+  --hidden: oneof<nothing, bool>
   --name: string
   --permissions: list # item shape: {action?: string, created?: string, scope?: string, updated?: string}
   --uid: string
@@ -202,9 +201,9 @@ export def "access-control-roles updateRole" [
   --allow-errors(-e) # Return full response without error handling
   description: string
   displayName: string
-  --global: string@bool-completer
+  --global: oneof<nothing, bool>
   group: string
-  --hidden: string@bool-completer
+  --hidden: oneof<nothing, bool>
   --name: string
   --permissions: list # item shape: {action?: string, created?: string, scope?: string, updated?: string}
 ]: any -> any {
@@ -232,8 +231,8 @@ export def "access-control-roles delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer
-  --global: string@bool-completer
+  --force: oneof<nothing, bool>
+  --global: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -327,7 +326,7 @@ export def "access-control-teams-roles-search listTeamsRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeHidden: string@bool-completer
+  --includeHidden: oneof<nothing, bool>
   --orgId: int # format: int64
   --teamIds: list
   --userIds: list
@@ -381,7 +380,7 @@ export def "access-control-teams-roles setTeamRoles" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --targetOrgId: int # format: int64
-  --includeHidden: string@bool-completer
+  --includeHidden: oneof<nothing, bool>
   --roleUids: list
 ]: any -> any {
   let input = $in
@@ -457,7 +456,7 @@ export def "access-control-users-roles-search listUsersRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeHidden: string@bool-completer
+  --includeHidden: oneof<nothing, bool>
   --orgId: int # format: int64
   --teamIds: list
   --userIds: list
@@ -486,7 +485,7 @@ export def "access-control-users-roles listUserRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeHidden: string@bool-completer
+  --includeHidden: oneof<nothing, bool>
   --targetOrgId: int # format: int64
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -512,8 +511,8 @@ export def "access-control-users-roles setUserRoles" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --targetOrgId: int # format: int64
-  --global: string@bool-completer
-  --includeHidden: string@bool-completer
+  --global: oneof<nothing, bool>
+  --includeHidden: oneof<nothing, bool>
   --roleUids: list
 ]: any -> any {
   let input = $in
@@ -541,7 +540,7 @@ export def "access-control-users-roles addUserRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --global: string@bool-completer
+  --global: oneof<nothing, bool>
   --roleUid: string
 ]: any -> any {
   let input = $in
@@ -569,7 +568,7 @@ export def "access-control-users-roles removeUserRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --global: string@bool-completer # A flag indicating if the assignment is global or not. If set to false, the default org ID of the authenticated user will be used from the request to remove assignment.
+  --global: oneof<nothing, bool> # A flag indicating if the assignment is global or not. If set to false, the default org ID of the authenticated user will be used from the request to remove assignment.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1148,7 +1147,7 @@ export def "admin-users-permissions adminUpdateUserPermissions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isGrafanaAdmin: string@bool-completer
+  --isGrafanaAdmin: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1260,7 +1259,7 @@ export def "annotations list" [
   --limit: int # Max limit for results returned. (format: int64)
   --tags: list # Use this to filter organization annotations. Organization annotations are annotations from an annotation data source that are not connected specifically to a dashboard or panel. You can filter by multiple tags.
   --type: string@type-completer # Return alerts or user created annotations
-  --matchAny: string@bool-completer # Match any or all tags
+  --matchAny: oneof<nothing, bool> # Match any or all tags
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1665,7 +1664,7 @@ export def "cloudmigration-migration-snapshot get" [
   --resultLimit: int # Max limit for snapshot results returned. (format: int64, default: 100)
   --resultSortColumn: string # ResultSortColumn can be used to override the default system sort. Valid values are "name", "resource_type", and "status". (default: default)
   --resultSortOrder: string # ResultSortOrder is used with ResultSortColumn. Valid values are ASC and DESC. (default: ASC)
-  --errorsOnly: string@bool-completer # ErrorsOnly is used to only return resources with error statuses (default: false)
+  --errorsOnly: oneof<nothing, bool> # ErrorsOnly is used to only return resources with error statuses (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1912,8 +1911,8 @@ export def "convert-prom-rules RouteConvertPrometheusCortexPostRuleGroup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --x-grafana-alerting-datasource-uid: string
-  --x-grafana-alerting-recording-rules-paused: string@bool-completer
-  --x-grafana-alerting-alert-rules-paused: string@bool-completer
+  --x-grafana-alerting-recording-rules-paused: oneof<nothing, bool>
+  --x-grafana-alerting-alert-rules-paused: oneof<nothing, bool>
   --x-grafana-alerting-target-datasource-uid: string
   --x-grafana-alerting-folder-uid: string
   --x-grafana-alerting-notification-settings: string
@@ -2084,8 +2083,8 @@ export def "convert-prometheus-config-rules RouteConvertPrometheusPostRuleGroup"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --x-grafana-alerting-datasource-uid: string
-  --x-grafana-alerting-recording-rules-paused: string@bool-completer
-  --x-grafana-alerting-alert-rules-paused: string@bool-completer
+  --x-grafana-alerting-recording-rules-paused: oneof<nothing, bool>
+  --x-grafana-alerting-alert-rules-paused: oneof<nothing, bool>
   --x-grafana-alerting-target-datasource-uid: string
   --x-grafana-alerting-folder-uid: string
   --x-grafana-alerting-notification-settings: string
@@ -2219,9 +2218,9 @@ export def "dashboards-db post" [
   --dashboard: record
   --folderId: int # Deprecated: use FolderUID instead (format: int64)
   --folderUid: string
-  --isFolder: string@bool-completer
+  --isFolder: oneof<nothing, bool>
   --message: string
-  --overwrite: string@bool-completer
+  --overwrite: oneof<nothing, bool>
   --userId: int # format: int64
 ]: any -> any {
   let input = $in
@@ -2275,7 +2274,7 @@ export def "dashboards-import importDashboard" [
   --folderId: int # Deprecated: use FolderUID instead (format: int64)
   --folderUid: string
   --inputs: list # item shape: {name?: string, pluginId?: string, type?: string, value?: string}
-  --overwrite: string@bool-completer
+  --overwrite: oneof<nothing, bool>
   --path: string
   --pluginId: string
 ]: any -> any {
@@ -2391,10 +2390,10 @@ export def "dashboards-uid-public-dashboards createPublicDashboard" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accessToken: string
-  --annotationsEnabled: string@bool-completer
-  --isEnabled: string@bool-completer
+  --annotationsEnabled: oneof<nothing, bool>
+  --isEnabled: oneof<nothing, bool>
   --share: string
-  --timeSelectionEnabled: string@bool-completer
+  --timeSelectionEnabled: oneof<nothing, bool>
   --uid: string
 ]: any -> any {
   let input = $in
@@ -2446,10 +2445,10 @@ export def "dashboards-uid-public-dashboards updatePublicDashboard" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accessToken: string
-  --annotationsEnabled: string@bool-completer
-  --isEnabled: string@bool-completer
+  --annotationsEnabled: oneof<nothing, bool>
+  --isEnabled: oneof<nothing, bool>
   --share: string
-  --timeSelectionEnabled: string@bool-completer
+  --timeSelectionEnabled: oneof<nothing, bool>
   --body-uid: string
 ]: any -> any {
   let input = $in
@@ -2678,10 +2677,10 @@ export def "datasources addDataSource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --access: string
-  --basicAuth: string@bool-completer
+  --basicAuth: oneof<nothing, bool>
   --basicAuthUser: string
   --database: string
-  --isDefault: string@bool-completer
+  --isDefault: oneof<nothing, bool>
   --jsonData: record
   --name: string
   --secureJsonData: record
@@ -2689,7 +2688,7 @@ export def "datasources addDataSource" [
   --uid: string
   --body-url: string
   --user: string
-  --withCredentials: string@bool-completer
+  --withCredentials: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2910,7 +2909,7 @@ export def "datasources-uid-correlations createCorrelation" [
   --config: record # shape: {field: string, target: record, transformations?: list, type?: string}
   --description: string # Optional description of the correlation (e.g. Logs to Traces)
   --label: string # Optional label identifying the correlation (e.g. My label)
-  --provisioned: string@bool-completer # True if correlation was created with provisioning. This makes it read-only.
+  --provisioned: oneof<nothing, bool> # True if correlation was created with provisioning. This makes it read-only.
   --targetUID: string # Target data source UID to which the correlation is created. required if type = query (e.g. PE1C5CBDA0504A6A3)
   --type: string # the type of correlation, either query for containing query information, or external for containing an external URL +enum
 ]: any -> any {
@@ -3015,10 +3014,10 @@ export def "datasources-uid updateDataSourceByUID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --access: string
-  --basicAuth: string@bool-completer
+  --basicAuth: oneof<nothing, bool>
   --basicAuthUser: string
   --database: string
-  --isDefault: string@bool-completer
+  --isDefault: oneof<nothing, bool>
   --jsonData: record
   --name: string
   --secureJsonData: record
@@ -3027,7 +3026,7 @@ export def "datasources-uid updateDataSourceByUID" [
   --body-url: string
   --user: string
   --version: int # The previous version -- used for optimistic locking (format: int64)
-  --withCredentials: string@bool-completer
+  --withCredentials: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3219,10 +3218,10 @@ export def "datasources-cache setDataSourceCacheConfig" [
   --dataSourceType: string
   --dataSourceID: int # format: int64
   --body-dataSourceUID: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --ttlQueriesMs: int # TTL MS, or "time to live", is how long a cached item will stay in the cache before it is removed (in milliseconds) (format: int64)
   --ttlResourcesMs: int # format: int64
-  --useDefaultTTL: string@bool-completer # If UseDefaultTTL is enabled, then the TTLQueriesMS and TTLResourcesMS in this object is always sent as the default TTL located in grafana.ini
+  --useDefaultTTL: oneof<nothing, bool> # If UseDefaultTTL is enabled, then the TTLQueriesMS and TTLResourcesMS in this object is always sent as the default TTL located in grafana.ini
 ]: any -> record<created: string, dataSourceID: int, dataSourceUID: string, defaultTTLMs: int, enabled: bool, message: string, ttlQueriesMs: int, ttlResourcesMs: int, updated: string, useDefaultTTL: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3318,7 +3317,7 @@ export def "ds-query queryMetricsWithExpressions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --debug: string@bool-completer
+  --debug: oneof<nothing, bool>
   --body-from: string # From Start time in epoch timestamps in milliseconds or relative using Grafana time units. (e.g. now-1h)
   queries: list # queries.refId – Specifies an identifier of the query. Is optional and default to “A”. queries.datasourceId – Specifies the data source to be queried. Each query in the request must have an unique datasourceId. queries.maxDataPoints - Species maximum amount of data points that dashboard panel can render. Is optional and default to 100. queries.intervalMs - Specifies the time interval in milliseconds of time series. Is optional and defaults to 1000. (e.g. [{datasource: {uid: PD8C576611E62080A}, format: table, intervalMs: 86400000, maxDataPoints: 1092, rawSql: SELECT 1 as valueOne, 2 as valueTwo, refId: A}])
   --body-to: string # To End time in epoch timestamps in milliseconds or relative using Grafana time units. (e.g. now)
@@ -3432,7 +3431,7 @@ export def "folders updateFolder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # NewDescription it's an optional parameter used for overriding the existing folder description
-  --overwrite: string@bool-completer # Overwrite only used by the legacy folder implementation
+  --overwrite: oneof<nothing, bool> # Overwrite only used by the legacy folder implementation
   --title: string # NewTitle it's an optional parameter used for overriding the existing folder title
   --version: int # Version only used by the legacy folder implementation (format: int64)
 ]: any -> any {
@@ -3462,7 +3461,7 @@ export def "folders delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceDeleteRules: string@bool-completer # If `true` any Grafana 8 Alerts under this folder will be deleted. Set to `false` so that the request will fail if the folder contains any Grafana 8 Alerts. (default: false)
+  --forceDeleteRules: oneof<nothing, bool> # If `true` any Grafana 8 Alerts under this folder will be deleted. Set to `false` so that the request will fail if the folder contains any Grafana 8 Alerts. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4094,7 +4093,7 @@ export def "org-invites addOrgInvite" [
   --loginOrEmail: string
   --name: string
   --role: string@role-completer
-  --sendEmail: string@bool-completer
+  --sendEmail: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4947,7 +4946,7 @@ export def "query-history searchQueries" [
   --allow-errors(-e) # Return full response without error handling
   --datasourceUid: list # List of data source UIDs to search for
   --searchString: string # Text inside query or comments that is searched for
-  --onlyStarred: string@bool-completer # Flag indicating if only starred queries should be returned
+  --onlyStarred: oneof<nothing, bool> # Flag indicating if only starred queries should be returned
   --qp-sort: string@sort-completer # Sort method (default: time-desc)
   --page: int # Use this parameter to access hits beyond limit. Numbering starts at 1. limit param acts as page size. (format: int64)
   --limit: int # Limit the number of returned results (format: int64)
@@ -5114,8 +5113,8 @@ export def "recording-rules updateRecordingRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
-  --count: string@bool-completer
+  --active: oneof<nothing, bool>
+  --count: oneof<nothing, bool>
   --description: string
   --dest-data-source-uid: string
   --id: string
@@ -5149,8 +5148,8 @@ export def "recording-rules createRecordingRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
-  --count: string@bool-completer
+  --active: oneof<nothing, bool>
+  --count: oneof<nothing, bool>
   --description: string
   --dest-data-source-uid: string
   --id: string
@@ -5184,8 +5183,8 @@ export def "recording-rules-test testCreateRecordingRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
-  --count: string@bool-completer
+  --active: oneof<nothing, bool>
+  --count: oneof<nothing, bool>
   --description: string
   --dest-data-source-uid: string
   --id: string
@@ -5336,8 +5335,8 @@ export def "reports createReport" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dashboards: list # item shape: {dashboard?: record, reportVariables?: record, timeRange?: record}
-  --enableCsv: string@bool-completer
-  --enableDashboardUrl: string@bool-completer
+  --enableCsv: oneof<nothing, bool>
+  --enableDashboardUrl: oneof<nothing, bool>
   --formats: list
   --message: string
   --name: string
@@ -5397,7 +5396,7 @@ export def "reports-email sendReport" [
   --allow-errors(-e) # Return full response without error handling
   --emails: string # Comma-separated list of emails to which to send the report to.
   --id: string # Send the report to the emails specified in the report. Required if emails is not present. (format: int64)
-  --useEmailsFromReport: string@bool-completer # Send the report to the emails specified in the report. Required if emails is not present.
+  --useEmailsFromReport: oneof<nothing, bool> # Send the report to the emails specified in the report. Required if emails is not present.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5524,10 +5523,10 @@ export def "reports-settings saveReportSettings" [
   --footerItems: list # item shape: {color?: string, fontSize?: string, fontStyle?: string, fontWeight?: string, type?: string, value?: string}
   --id: int # format: int64
   --orgId: int # format: int64
-  --pdfDashboardTitleEnabled: string@bool-completer
-  --pdfHeaderEnabled: string@bool-completer
+  --pdfDashboardTitleEnabled: oneof<nothing, bool>
+  --pdfHeaderEnabled: oneof<nothing, bool>
   --pdfTheme: string
-  --pdfTimeRangeEnabled: string@bool-completer
+  --pdfTimeRangeEnabled: oneof<nothing, bool>
   --userId: int # format: int64
 ]: any -> any {
   let input = $in
@@ -5558,8 +5557,8 @@ export def "reports-test-email sendTestEmail" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dashboards: list # item shape: {dashboard?: record, reportVariables?: record, timeRange?: record}
-  --enableCsv: string@bool-completer
-  --enableDashboardUrl: string@bool-completer
+  --enableCsv: oneof<nothing, bool>
+  --enableDashboardUrl: oneof<nothing, bool>
   --formats: list
   --message: string
   --name: string
@@ -5627,8 +5626,8 @@ export def "reports updateReport" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dashboards: list # item shape: {dashboard?: record, reportVariables?: record, timeRange?: record}
-  --enableCsv: string@bool-completer
-  --enableDashboardUrl: string@bool-completer
+  --enableCsv: oneof<nothing, bool>
+  --enableDashboardUrl: oneof<nothing, bool>
   --formats: list
   --message: string
   --name: string
@@ -5783,12 +5782,12 @@ export def "search search" [
   --dashboardUIDs: list # List of dashboard uid’s to search for
   --folderIds: list # List of folder id’s to search in for dashboards If it's `0` then it will query for the top level folders This is deprecated: users should use the `folderUIDs` query parameter instead
   --folderUIDs: list # List of folder UID’s to search in for dashboards If it's an empty string then it will query for the top level folders
-  --starred: string@bool-completer # Flag indicating if only starred Dashboards should be returned
+  --starred: oneof<nothing, bool> # Flag indicating if only starred Dashboards should be returned
   --limit: int # Limit the number of returned results (max 5000) (format: int64)
   --page: int # Use this parameter to access hits beyond limit. Numbering starts at 1. limit param acts as page size. Only available in Grafana v6.2+. (format: int64)
   --permission: string@permission-completer # Set to `Edit` to return dashboards/folders that the user can edit (default: View)
   --qp-sort: string@sort-completer-1 # Sort method; for listing all the possible sort methods use the search sorting endpoint. (default: alpha-asc)
-  --deleted: string@bool-completer # Flag indicating if only soft deleted Dashboards should be returned
+  --deleted: oneof<nothing, bool> # Flag indicating if only soft deleted Dashboards should be returned
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5832,7 +5831,7 @@ export def "serviceaccounts createServiceAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isDisabled: string@bool-completer # e.g. false
+  --isDisabled: oneof<nothing, bool> # e.g. false
   --name: string # e.g. grafana
   --role: string@role-completer # e.g. Admin
 ]: any -> any {
@@ -5859,8 +5858,8 @@ export def "serviceaccounts-search searchOrgServiceAccountsWithPaging" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Disabled: string@bool-completer
-  --expiredTokens: string@bool-completer
+  --Disabled: oneof<nothing, bool>
+  --expiredTokens: oneof<nothing, bool>
   --qp-query: string # It will return results where the query value is contained in one of the name. Query values with spaces need to be URL encoded.
   --perpage: int # The default value is 1000. (format: int64)
   --page: int # The default value is 1. (format: int64)
@@ -5931,7 +5930,7 @@ export def "serviceaccounts updateServiceAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isDisabled: string@bool-completer
+  --isDisabled: oneof<nothing, bool>
   --name: string
   --role: string@role-completer
   --body-serviceAccountId: int # format: int64
@@ -6078,7 +6077,7 @@ export def "snapshots createDashboardSnapshot" [
   dashboard: record # Unstructured allows objects that do not have Golang structs registered to be manipulated generically. — shape: {Object?: record}
   --deleteKey: string # Unique key used to delete the snapshot. It is different from the `key` so that only the creator can delete the snapshot. Required if `external` is `true`.
   --expires: int # When the snapshot should expire in seconds in seconds. Default is never to expire. (format: int64, default: 0)
-  --external: string@bool-completer # these are passed when storing an external snapshot ref Save the snapshot on an external server rather than locally. (default: false)
+  --external: oneof<nothing, bool> # these are passed when storing an external snapshot ref Save the snapshot on an external server rather than locally. (default: false)
   --key: string # Define the unique key. Required if `external` is `true`.
   --kind: string # Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds +optional
   --name: string # Snapshot name
@@ -6202,7 +6201,7 @@ export def "teams-search searchTeams" [
   --perpage: int # Number of items per page The totalCount field in the response can be used for pagination list E.g. if totalCount is equal to 100 teams and the perpage parameter is set to 10 then there are 10 pages of teams. (format: int64, default: 1000)
   --name: string
   --qp-query: string # If set it will return results where the query value is contained in the name field. Query values with spaces need to be URL encoded.
-  --accesscontrol: string@bool-completer # default: false
+  --accesscontrol: oneof<nothing, bool> # default: false
   --qp-sort: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6326,7 +6325,7 @@ export def "teams get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --accesscontrol: string@bool-completer # default: false
+  --accesscontrol: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7139,7 +7138,7 @@ export def "provisioning-alert-rules RoutePostAlertRule" [
   folderUID: string # e.g. project_x
   --body-for: string # format: duration
   --id: int # format: int64
-  --isPaused: string@bool-completer # e.g. false
+  --isPaused: oneof<nothing, bool> # e.g. false
   --keep-firing-for: string # format: duration
   --labels: record # e.g. {team: sre-team-1}
   --missingSeriesEvalsToResolve: int # format: int64, e.g. 2
@@ -7178,7 +7177,7 @@ export def "provisioning-alert-rules-export RouteGetAlertRulesExport" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --download: string@bool-completer # Whether to initiate a download of the file or not. (default: false)
+  --download: oneof<nothing, bool> # Whether to initiate a download of the file or not. (default: false)
   --format: string@format-completer # Format of the downloaded file. Supported yaml, json or hcl. Accept header can also be used, but the query parameter will take precedence. (default: yaml)
   --folderUid: list # UIDs of folders from which to export rules
   --group: string # Name of group of rules to export. Must be specified only together with a single folder UID
@@ -7243,7 +7242,7 @@ export def "provisioning-alert-rules RoutePutAlertRule" [
   folderUID: string # e.g. project_x
   --body-for: string # format: duration
   --id: int # format: int64
-  --isPaused: string@bool-completer # e.g. false
+  --isPaused: oneof<nothing, bool> # e.g. false
   --keep-firing-for: string # format: duration
   --labels: record # e.g. {team: sre-team-1}
   --missingSeriesEvalsToResolve: int # format: int64, e.g. 2
@@ -7310,7 +7309,7 @@ export def "provisioning-alert-rules-export RouteGetAlertRuleExport" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --download: string@bool-completer # Whether to initiate a download of the file or not. (default: false)
+  --download: oneof<nothing, bool> # Whether to initiate a download of the file or not. (default: false)
   --format: string@format-completer # Format of the downloaded file. Supported yaml, json or hcl. Accept header can also be used, but the query parameter will take precedence. (default: yaml)
 ]: nothing -> record<apiVersion: int, contactPoints: table<name: string, orgId: int, receivers: list>, groups: table<folder: string, interval: int, name: string, orgId: int, rules: list>, muteTimes: table<name: string, orgId: int, time_intervals: list>, policies: table<active_time_intervals: list, continue: bool, group_by: list, group_interval: string, group_wait: string, match: record, match_re: record, matchers: list, mute_time_intervals: list, object_matchers: list, orgId: int, receiver: string, repeat_interval: string, routes: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7362,7 +7361,7 @@ export def "provisioning-contact-points RoutePostContactpoints" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Disable-Provenance: string
-  --disableResolveMessage: string@bool-completer # e.g. false
+  --disableResolveMessage: oneof<nothing, bool> # e.g. false
   --name: string # Name is used as grouping key in the UI. Contact points with the same name will be grouped in the UI. (e.g. webhook_1)
   settings: record
   type: string@type-completer-2 # e.g. webhook
@@ -7394,9 +7393,9 @@ export def "provisioning-contact-points-export RouteGetContactpointsExport" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --download: string@bool-completer # Whether to initiate a download of the file or not. (default: false)
+  --download: oneof<nothing, bool> # Whether to initiate a download of the file or not. (default: false)
   --format: string@format-completer # Format of the downloaded file. Supported yaml, json or hcl. Accept header can also be used, but the query parameter will take precedence. (default: yaml)
-  --decrypt: string@bool-completer # Whether any contained secure settings should be decrypted or left redacted. Redacted settings will contain RedactedValue instead. Currently, only org admin can view decrypted secure settings. (default: false)
+  --decrypt: oneof<nothing, bool> # Whether any contained secure settings should be decrypted or left redacted. Redacted settings will contain RedactedValue instead. Currently, only org admin can view decrypted secure settings. (default: false)
   --name: string # Filter by name
 ]: nothing -> record<apiVersion: int, contactPoints: table<name: string, orgId: int, receivers: list>, groups: table<folder: string, interval: int, name: string, orgId: int, rules: list>, muteTimes: table<name: string, orgId: int, time_intervals: list>, policies: table<active_time_intervals: list, continue: bool, group_by: list, group_interval: string, group_wait: string, match: record, match_re: record, matchers: list, mute_time_intervals: list, object_matchers: list, orgId: int, receiver: string, repeat_interval: string, routes: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7424,7 +7423,7 @@ export def "provisioning-contact-points RoutePutContactpoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Disable-Provenance: string
-  --disableResolveMessage: string@bool-completer # e.g. false
+  --disableResolveMessage: oneof<nothing, bool> # e.g. false
   --name: string # Name is used as grouping key in the UI. Contact points with the same name will be grouped in the UI. (e.g. webhook_1)
   settings: record
   type: string@type-completer-2 # e.g. webhook
@@ -7568,7 +7567,7 @@ export def "provisioning-folder-rule-groups-export RouteGetAlertRuleGroupExport"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --download: string@bool-completer # Whether to initiate a download of the file or not. (default: false)
+  --download: oneof<nothing, bool> # Whether to initiate a download of the file or not. (default: false)
   --format: string@format-completer # Format of the downloaded file. Supported yaml, json or hcl. Accept header can also be used, but the query parameter will take precedence. (default: yaml)
 ]: nothing -> record<apiVersion: int, contactPoints: table<name: string, orgId: int, receivers: list>, groups: table<folder: string, interval: int, name: string, orgId: int, rules: list>, muteTimes: table<name: string, orgId: int, time_intervals: list>, policies: table<active_time_intervals: list, continue: bool, group_by: list, group_interval: string, group_wait: string, match: record, match_re: record, matchers: list, mute_time_intervals: list, object_matchers: list, orgId: int, receiver: string, repeat_interval: string, routes: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7648,7 +7647,7 @@ export def "provisioning-mute-timings-export RouteExportMuteTimings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --download: string@bool-completer # Whether to initiate a download of the file or not. (default: false)
+  --download: oneof<nothing, bool> # Whether to initiate a download of the file or not. (default: false)
   --format: string@format-completer # Format of the downloaded file. Supported yaml, json or hcl. Accept header can also be used, but the query parameter will take precedence. (default: yaml)
 ]: nothing -> record<apiVersion: int, contactPoints: table<name: string, orgId: int, receivers: list>, groups: table<folder: string, interval: int, name: string, orgId: int, rules: list>, muteTimes: table<name: string, orgId: int, time_intervals: list>, policies: table<active_time_intervals: list, continue: bool, group_by: list, group_interval: string, group_wait: string, match: record, match_re: record, matchers: list, mute_time_intervals: list, object_matchers: list, orgId: int, receiver: string, repeat_interval: string, routes: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7760,7 +7759,7 @@ export def "provisioning-mute-timings-export RouteExportMuteTiming" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --download: string@bool-completer # Whether to initiate a download of the file or not. (default: false)
+  --download: oneof<nothing, bool> # Whether to initiate a download of the file or not. (default: false)
   --format: string@format-completer # Format of the downloaded file. Supported yaml, json or hcl. Accept header can also be used, but the query parameter will take precedence. (default: yaml)
 ]: nothing -> record<apiVersion: int, contactPoints: table<name: string, orgId: int, receivers: list>, groups: table<folder: string, interval: int, name: string, orgId: int, rules: list>, muteTimes: table<name: string, orgId: int, time_intervals: list>, policies: table<active_time_intervals: list, continue: bool, group_by: list, group_interval: string, group_wait: string, match: record, match_re: record, matchers: list, mute_time_intervals: list, object_matchers: list, orgId: int, receiver: string, repeat_interval: string, routes: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7813,7 +7812,7 @@ export def "provisioning-policies RoutePutPolicyTree" [
   --allow-errors(-e) # Return full response without error handling
   --X-Disable-Provenance: string
   --active-time-intervals: list
-  --body-continue: string@bool-completer
+  --body-continue: oneof<nothing, bool>
   --group-by: list
   --group-interval: string
   --group-wait: string

@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.worldnewsapi.com"] }
 def auth-scheme-completer [] { ["query-api-key" "x-api-key"] }
 
@@ -146,7 +145,7 @@ export def "top-news topNews" [
   --source-country: string # The ISO 3166 country code of the country for which top news should be retrieved. (e.g. us)
   --language: string # The ISO 6391 language code of the top news. The language must be one spoken in the source-country. (e.g. en)
   --date: string # The date for which the top news should be retrieved. If no date is given, the current day is assumed. (e.g. 2024-05-30)
-  --headlines-only: string@bool-completer # Whether to only return basic information such as id, title, and url of the news. (e.g. false)
+  --headlines-only: oneof<nothing, bool> # Whether to only return basic information such as id, title, and url of the news. (e.g. false)
 ]: nothing -> record<top_news: table<news: list>, language: string, country: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -221,7 +220,7 @@ export def "extract-news extractNews" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-url: string # The url of the news. (e.g. https://www.bbc.com/news/world-us-canada-59340789)
-  --analyze: string@bool-completer # Whether to analyze the extracted news (extract entities, detect sentiment etc.) (e.g. true)
+  --analyze: oneof<nothing, bool> # Whether to analyze the extracted news (extract entities, detect sentiment etc.) (e.g. true)
 ]: nothing -> record<title: string, text: string, url: string, image: string, images: table<width: int, title: string, url: string, height: int>, video: string, videos: table<summary: string, duration: int, thumbnail: string, title: string, url: string>, publish_date: string, author: string, authors: list<string>, language: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -246,7 +245,7 @@ export def "extract-news-links extractNewsLinks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-url: string # The url of the news. (e.g. https://www.bbc.com/news/world-us-canada-59340789)
-  --analyze: string@bool-completer # Whether to analyze the extracted news (extract entities, detect sentiment etc.) (e.g. true)
+  --analyze: oneof<nothing, bool> # Whether to analyze the extracted news (extract entities, detect sentiment etc.) (e.g. true)
 ]: nothing -> record<news_links: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -295,7 +294,7 @@ export def "feedrss newsWebsiteToRSSFeed" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-url: string # The url of the site for which an RSS feed should be created. (e.g. https://www.bbc.com/)
-  --extract-news: string@bool-completer # Whether to extract the news for each link instead of just returning the link. (e.g. true)
+  --extract-news: oneof<nothing, bool> # Whether to extract the news for each link instead of just returning the link. (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://www.googleapis.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -106,7 +105,7 @@ export def "oauth2-tokeninfo oauth2tokeninfo" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --access-token: string
@@ -136,7 +135,7 @@ export def "oauth2-userinfo oauth2userinfoget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<email: string, family_name: string, gender: string, given_name: string, hd: string, id: string, link: string, locale: string, name: string, picture: string, verified_email: bool> {
@@ -164,7 +163,7 @@ export def "userinfo-me oauth2userinfov2meget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<email: string, family_name: string, gender: string, given_name: string, hd: string, id: string, link: string, locale: string, name: string, picture: string, verified_email: bool> {

@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost" "https://messaging.bandwidth.com/api/v2" "https://voice.bandwidth.com/api/v2" "https://mfa.bandwidth.com/api/v1" "https://api.bandwidth.com/v2" "https://api.bandwidth.com/api/v2"] }
 def auth-scheme-completer [] { ["basic" "bearer"] }
 
@@ -235,10 +234,10 @@ export def "users-messages listMessages" [
   --toDateTime: string # The end of the date range to search in ISO 8601 format. Uses the message receive time. The date range to search in is currently 14 days. (e.g. 2022-09-14T18:20:16.000Z)
   --campaignId: string # The campaign ID of the message. (e.g. CJEUMDK)
   --fromBwLatency: int # The minimum Bandwidth latency of the message in seconds. Only available for accounts with the Advanced Quality Metrics feature enabled. (e.g. 5)
-  --bwQueued: string@bool-completer # A boolean value indicating whether the message is queued in the Bandwidth network. (e.g. true)
+  --bwQueued: oneof<nothing, bool> # A boolean value indicating whether the message is queued in the Bandwidth network. (e.g. true)
   --product: string@product-completer # Messaging product associated with the message. (e.g. P2P)
   --location: string # Location Id associated with the message. (e.g. 123ABC)
-  --carrierQueued: string@bool-completer # A boolean value indicating whether the message is queued in the carrier network. Only available for OUTBOUND messages from accounts with the Advanced Quality Metrics feature enabled. (e.g. true)
+  --carrierQueued: oneof<nothing, bool> # A boolean value indicating whether the message is queued in the carrier network. Only available for OUTBOUND messages from accounts with the Advanced Quality Metrics feature enabled. (e.g. true)
   --fromCarrierLatency: int # The minimum carrier latency of the message in seconds. Only available for OUTBOUND messages from accounts with the Advanced Quality Metrics feature enabled. (e.g. 50)
   --callingNumberCountryA3: string # Calling number country in A3 format. (e.g. USA)
   --calledNumberCountryA3: string # Called number country in A3 format. (e.g. USA)
@@ -249,7 +248,7 @@ export def "users-messages listMessages" [
   --qp-sort: string # The field and direction to sort by combined with a colon. Direction is either asc or desc. (e.g. sourceTn:desc)
   --pageToken: string # A base64 encoded value used for pagination of results. (e.g. gdEewhcJLQRB5)
   --limit: int # The maximum records requested in search result. Default 100. The sum of limit and after cannot be more than 10000. (e.g. 50)
-  --limitTotalCount: string@bool-completer # When set to true, the response's totalCount field will have a maximum value of 10,000. When set to false, or excluded, this will give an accurate totalCount of all messages that match the provided filters. If you are experiencing latency, try using this parameter to limit your results. (e.g. true)
+  --limitTotalCount: oneof<nothing, bool> # When set to true, the response's totalCount field will have a maximum value of 10,000. When set to false, or excluded, this will give an accurate totalCount of all messages that match the provided filters. If you are experiencing latency, try using this parameter to limit your results. (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://messaging.bandwidth.com/api/v2")
@@ -339,7 +338,7 @@ export def "accounts-calls createCall" [
   --allow-errors(-e) # Return full response without error handling
   --body-to: string # The destination to call (must be an E.164 formatted number (e.g. `+15555551212`) or a SIP URI (e.g. `sip:user@server.example`)). (e.g. +19195551234)
   --body-from: string # A Bandwidth phone number on your account the call should come from (must be in E.164 format, like `+15555551212`) even if `privacy` is set to true. (e.g. +15555551212)
-  --privacy: string@bool-completer # Hide the calling number. The `displayName` field can be used to customize the displayed name. (nullable, e.g. false)
+  --privacy: oneof<nothing, bool> # Hide the calling number. The `displayName` field can be used to customize the displayed name. (nullable, e.g. false)
   --displayName: string # The caller display name to use when the call is created. May not exceed 256 characters nor contain control characters such as new lines. If `privacy` is true, only the following values are valid: `Restricted`, `Anonymous`, `Private`, or `Unavailable`. (nullable, e.g. John Doe)
   --uui: string # A comma-separated list of 'User-To-User' headers to be sent in the INVITE when calling a SIP URI. Each value must end with an 'encoding' parameter as described in <a href='https://tools.ietf.org/html/rfc7433'>RFC 7433</a>. Only 'jwt', 'base64' and 'hex' encodings are allowed. The entire value cannot exceed 350 characters, including parameters and separators. (nullable, e.g. eyJhbGciOiJIUzI1NiJ9.WyJoaSJd.-znkjYyCkgz4djmHUPSXl9YrJ6Nix_XvmlwKGFh5ERM;encoding=jwt,aGVsbG8gd29ybGQ;encoding=base64)
   applicationId: string # The id of the application associated with the `from` number. (e.g. 1234-qwer-5679-tyui)
@@ -636,8 +635,8 @@ export def "accounts-conferences-members updateConferenceMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --mute: string@bool-completer # Whether or not this member is currently muted. Members who are muted are still able to hear other participants.  Updates this member's mute status. Has no effect if omitted. (e.g. false)
-  --hold: string@bool-completer # Whether or not this member is currently on hold. Members who are on hold are not able to hear or speak in the conference.  Updates this member's hold status. Has no effect if omitted. (e.g. false)
+  --mute: oneof<nothing, bool> # Whether or not this member is currently muted. Members who are muted are still able to hear other participants.  Updates this member's mute status. Has no effect if omitted. (e.g. false)
+  --hold: oneof<nothing, bool> # Whether or not this member is currently on hold. Members who are on hold are not able to hear or speak in the conference.  Updates this member's hold status. Has no effect if omitted. (e.g. false)
   --callIdsToCoach: list # If this member had a value set for `callIdsToCoach` in its [Conference](/docs/voice/bxml/conference) verb or this list was added with a previous PUT request to modify the member, this is that list of calls.  Modifies the calls that this member is coaching. Has no effect if omitted. See the documentation for the [Conference](/docs/voice/bxml/conference) verb for more details about coaching.  Note that this will not add the matching calls to the conference; each call must individually execute a Conference verb to join. (nullable, e.g. [c-25ac29a2-1331029c-2cb0-4a07-b215-b22865662d85])
 ]: any -> any {
   let input = $in
@@ -940,7 +939,7 @@ export def "accounts-calls-recordings-transcription transcribeCallRecording" [
   --password: string # Basic auth password. (nullable, e.g. mySecretPassword1!)
   --tag: string # (optional) The tag specified on call creation. If no tag was specified or it was previously cleared, this field will not be present. (nullable, e.g. exampleTag)
   --callbackTimeout: float # This is the timeout (in seconds) to use when delivering the webhook to `callbackUrl`. Can be any numeric value (including decimals) between 1 and 25. (nullable, format: double, default: 15, e.g. 5.5)
-  --detectLanguage: string@bool-completer # A boolean value to indicate that the recording may not be in English, and the transcription service will need to detect the dominant language the recording is in and transcribe accordingly. Current supported languages are English, French, and Spanish. (nullable, default: false, e.g. true)
+  --detectLanguage: oneof<nothing, bool> # A boolean value to indicate that the recording may not be in English, and the transcription service will need to detect the dominant language the recording is in and transcribe accordingly. Current supported languages are English, French, and Spanish. (nullable, default: false, e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1271,7 +1270,7 @@ export def "accounts-toll-free-verification requestTollFreeVerification" [
   --businessRegistrationIssuingCountry: string # The country issuing the business registration in ISO-3166-1 alpha-3 format. Alpha-2 format is accepted by the API, but alpha-3 is highly encouraged.  **Note: As of October 19th, 2026 this field will be required when `businessRegistrationNumber` is provided.**  | Registration Type     | Supported Countries                | |----------------------|------------------------------------| | EIN                  | USA                                | | CBN                  | CAN                                | | NEQ                  | CAN                                | | PROVINCIAL_NUMBER    | CAN                                | | CRN                  | GBR, HKG                           | | VAT                  | GBR, IRL, BRA, NLD                 | | ACN                  | AUS                                | | ABN                  | AUS                                | | BRN                  | HKG                                | | SIREN                | FRA                                | | SIRET                | FRA                                | | NZBN                 | NZL                                | | UST_IDNR             | DEU                                | | CIF                  | ESP                                | | NIF                  | ESP                                | | CNPJ                 | BRA                                | | UID                  | CHE                                | | OTHER                | Must Provide Country Code          | (nullable, e.g. USA)
   businessEntityType: string@businessEntityType-completer # The type of registered business.  **Note: As of October 19th, 2026 submissions using a value other than `SOLE_PROPRIETOR` must provide a value for `businessRegistrationNumber`, `businessRegistrationType`, and `businessRegistrationIssuingCountry`.  Submissions using `SOLE_PROPRIETOR` must _omit_ `businessRegistrationNumber`, `businessRegistrationType`, and `businessRegistrationIssuingCountry`. Failure to adhere to these constraints will result in a 400 Bad Request rejection.**  (e.g. PRIVATE_PROFIT)
   --helpMessageResponse: string # A message that gets sent to users requesting help. (nullable, e.g. Please contact support for assistance.)
-  --ageGatedContent: string@bool-completer # Indicates whether the content is age-gated. (e.g. false)
+  --ageGatedContent: oneof<nothing, bool> # Indicates whether the content is age-gated. (e.g. false)
   --cvToken: string # The token provided by Campaign Verify to validate your political use case. Only required for 527 political organizations. If you are not a 527 political organization, this field should be omitted. Supplying an empty string will likely result in rejection. (nullable, e.g. cv.user123|sess456|mno|tfree|read_write|X7yZ9aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789aBcDeFgHiJkLmNoPqRsTuVw)
 ]: any -> any {
   let input = $in

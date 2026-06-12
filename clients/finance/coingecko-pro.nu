@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://pro-api.coingecko.com/api/v3"] }
 def auth-scheme-completer [] { ["x-cg-pro-api-key" "query-x_cg_pro_api_key"] }
 
@@ -192,10 +191,10 @@ export def "simple-price simple-price" [
   --names: string # Coins' names, comma-separated if querying more than 1 coin. (default: Bitcoin)
   --symbols: string # Coins' symbols, comma-separated if querying more than 1 coin. (default: btc)
   --include-tokens: string@include-tokens-completer # For `symbols` lookups, specify `all` to include all matching tokens.  Default `top` returns top-ranked tokens by market cap or volume.
-  --include-market-cap: string@bool-completer # Include market capitalization.  Default: false
-  --include-24hr-vol: string@bool-completer # Include 24-hour trading volume.  Default: false
-  --include-24hr-change: string@bool-completer # Include 24-hour change percentage.  Default: false
-  --include-last-updated-at: string@bool-completer # Include last updated price time as a UNIX timestamp.  Default: false
+  --include-market-cap: oneof<nothing, bool> # Include market capitalization.  Default: false
+  --include-24hr-vol: oneof<nothing, bool> # Include 24-hour trading volume.  Default: false
+  --include-24hr-change: oneof<nothing, bool> # Include 24-hour change percentage.  Default: false
+  --include-last-updated-at: oneof<nothing, bool> # Include last updated price time as a UNIX timestamp.  Default: false
   --precision: string@precision-completer # Decimal places for currency price value
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
@@ -266,10 +265,10 @@ export def "simple-token-price simple-token-price" [
   --allow-errors(-e) # Return full response without error handling
   --contract-addresses: string # Token contract addresses, comma-separated if querying more than 1 token (default: 0x2260fac5e5542a773aa44fbcfedf7c193bc2c599)
   --vs-currencies: string # Target currency of coins, comma-separated if querying more than 1 currency.  *refers to [`/simple/supported_vs_currencies`](/reference/simple-supported-currencies) (default: usd)
-  --include-market-cap: string@bool-completer # Include market capitalization.  Default: false
-  --include-24hr-vol: string@bool-completer # Include 24-hour trading volume.  Default: false
-  --include-24hr-change: string@bool-completer # Include 24-hour change percentage.  Default: false
-  --include-last-updated-at: string@bool-completer # Include last updated price time as a UNIX timestamp.  Default: false
+  --include-market-cap: oneof<nothing, bool> # Include market capitalization.  Default: false
+  --include-24hr-vol: oneof<nothing, bool> # Include 24-hour trading volume.  Default: false
+  --include-24hr-change: oneof<nothing, bool> # Include 24-hour change percentage.  Default: false
+  --include-last-updated-at: oneof<nothing, bool> # Include last updated price time as a UNIX timestamp.  Default: false
   --precision: string@precision-completer # Decimal places for currency price value
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
@@ -320,13 +319,13 @@ export def "coins coins-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --localization: string@bool-completer # Include all localized languages in the response.  Default: true
-  --tickers: string@bool-completer # Include tickers data.  Default: true
-  --market-data: string@bool-completer # Include market data.  Default: true
-  --community-data: string@bool-completer # Include community data.  Default: true
-  --developer-data: string@bool-completer # Include developer data.  Default: true
-  --sparkline: string@bool-completer # Include sparkline 7-day data.  Default: false
-  --include-categories-details: string@bool-completer # Include categories details.  Default: false
+  --localization: oneof<nothing, bool> # Include all localized languages in the response.  Default: true
+  --tickers: oneof<nothing, bool> # Include tickers data.  Default: true
+  --market-data: oneof<nothing, bool> # Include market data.  Default: true
+  --community-data: oneof<nothing, bool> # Include community data.  Default: true
+  --developer-data: oneof<nothing, bool> # Include developer data.  Default: true
+  --sparkline: oneof<nothing, bool> # Include sparkline 7-day data.  Default: false
+  --include-categories-details: oneof<nothing, bool> # Include categories details.  Default: false
   --dex-pair-format: string@dex-pair-format-completer # Set to `symbol` to display DEX pair base and target as symbols.  Default: `contract_address`
 ]: nothing -> record<id: string, symbol: string, name: string, web_slug: string, asset_platform_id: string, platforms: record, detail_platforms: record, block_time_in_minutes: float, hashing_algorithm: string, categories: list<string>, categories_details: table<id: string, name: string>, preview_listing: bool, public_notice: string, additional_notices: list<string>, localization: record, description: record, links: record<homepage: list<string>, whitepaper: string, blockchain_site: list<string>, official_forum_url: list<string>, chat_url: list<string>, announcement_url: list<string>, snapshot_url: string, twitter_screen_name: string, facebook_username: string, bitcointalk_thread_identifier: int, telegram_channel_identifier: string, subreddit_url: string, repos_url: record<github: list, bitbucket: list>>, image: record<thumb: string, small: string, large: string>, country_origin: string, genesis_date: string, sentiment_votes_up_percentage: float, sentiment_votes_down_percentage: float, ico_data: record<ico_start_date: string, ico_end_date: string, short_desc: string, description: string, links: record, softcap_currency: string, hardcap_currency: string, total_raised_currency: string, softcap_amount: float, hardcap_amount: float, total_raised: float, quote_pre_sale_currency: string, base_pre_sale_amount: float, quote_pre_sale_amount: float, quote_public_sale_currency: string, base_public_sale_amount: float, quote_public_sale_amount: float, accepting_currencies: string, country_origin: string, pre_sale_start_date: string, pre_sale_end_date: string, whitelist_url: string, whitelist_start_date: string, whitelist_end_date: string, bounty_detail_url: string, amount_for_sale: float, kyc_required: bool, whitelist_available: bool, pre_sale_available: bool, pre_sale_ended: bool>, watchlist_portfolio_users: float, market_cap_rank: int, market_cap_rank_with_rehypothecated: int, market_data: record<current_price: record, total_value_locked: float, mcap_to_tvl_ratio: float, fdv_to_tvl_ratio: float, roi: record<times: float, currency: string, percentage: float>, ath: record, ath_change_percentage: record, ath_date: record, atl: record, atl_change_percentage: record, atl_date: record, market_cap: record, fully_diluted_valuation: record, market_cap_fdv_ratio: float, market_cap_rank: int, outstanding_token_value_usd: float, market_cap_rank_with_rehypothecated: int, total_volume: record, high_24h: record, low_24h: record, price_change_24h: float, price_change_percentage_24h: float, price_change_percentage_7d: float, price_change_percentage_14d: float, price_change_percentage_30d: float, price_change_percentage_60d: float, price_change_percentage_200d: float, price_change_percentage_1y: float, market_cap_change_24h: float, market_cap_change_percentage_24h: float, price_change_24h_in_currency: record, price_change_percentage_1h_in_currency: record, price_change_percentage_24h_in_currency: record, price_change_percentage_7d_in_currency: record, price_change_percentage_14d_in_currency: record, price_change_percentage_30d_in_currency: record, price_change_percentage_60d_in_currency: record, price_change_percentage_200d_in_currency: record, price_change_percentage_1y_in_currency: record, market_cap_change_24h_in_currency: record, market_cap_change_percentage_24h_in_currency: record, total_supply: float, max_supply: float, max_supply_infinite: bool, circulating_supply: float, outstanding_supply: float, last_updated: string, sparkline_7d: list<float>>, community_data: record<facebook_likes: float, reddit_average_posts_48h: float, reddit_average_comments_48h: float, reddit_subscribers: float, reddit_accounts_active_48h: float, telegram_channel_user_count: float>, developer_data: record<forks: float, stars: float, subscribers: float, total_issues: float, closed_issues: float, pull_requests_merged: float, pull_request_contributors: float, code_additions_deletions_4_weeks: record<additions: float, deletions: float>, commit_count_4_weeks: float, last_4_weeks_commit_activity_series: list<float>>, status_updates: table<description: string, category: string, created_at: string, user: string, user_title: string>, last_updated: string, tickers: table<base: string, target: string, market: record, last: float, volume: float, converted_last: record, converted_volume: record, trust_score: string, bid_ask_spread_percentage: float, timestamp: string, last_traded_at: string, last_fetch_at: string, is_anomaly: bool, is_stale: bool, trade_url: string, token_info_url: string, coin_id: string, target_coin_id: string, coin_mcap_usd: float>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
@@ -359,11 +358,11 @@ export def "coins-markets coins-markets" [
   --order: string@order-completer # Sort result by field.  Default: market_cap_desc
   --per-page: int # Total results per page.  Default: 100  Valid values: 1...250
   --page: int # Page through results.  Default: 1
-  --sparkline: string@bool-completer # Include sparkline 7-day data.  Default: false
+  --sparkline: oneof<nothing, bool> # Include sparkline 7-day data.  Default: false
   --price-change-percentage: string # Include price change percentage timeframe, comma-separated if querying more than 1 timeframe.  Valid values: `1h`, `24h`, `7d`, `14d`, `30d`, `200d`, `1y`
   --locale: string@locale-completer # Language background.  Default: en
   --precision: string@precision-completer # Decimal places for currency price value
-  --include-rehypothecated: string@bool-completer # Include rehypothecated tokens in results. When true, returns `market_cap_rank_with_rehypothecated` field.  Default: false
+  --include-rehypothecated: oneof<nothing, bool> # Include rehypothecated tokens in results. When true, returns `market_cap_rank_with_rehypothecated` field.  Default: false
 ]: nothing -> table<id: string, symbol: string, name: string, image: string, current_price: float, market_cap: float, market_cap_rank: int, fully_diluted_valuation: float, total_volume: float, high_24h: float, low_24h: float, price_change_24h: float, price_change_percentage_24h: float, market_cap_change_24h: float, market_cap_change_percentage_24h: float, circulating_supply: float, total_supply: float, max_supply: float, ath: float, ath_change_percentage: float, ath_date: string, atl: float, atl_change_percentage: float, atl_date: string, roi: record<times: float, currency: string, percentage: float>, last_updated: string, market_cap_rank_with_rehypothecated: int, sparkline_in_7d: record<price: list>, price_change_percentage_1h_in_currency: float, price_change_percentage_24h_in_currency: float, price_change_percentage_7d_in_currency: float, price_change_percentage_14d_in_currency: float, price_change_percentage_30d_in_currency: float, price_change_percentage_200d_in_currency: float, price_change_percentage_1y_in_currency: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -388,10 +387,10 @@ export def "coins-tickers coins-id-tickers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --exchange-ids: string # Exchange ID.  *refers to [`/exchanges/list`](/reference/exchanges-list)
-  --include-exchange-logo: string@bool-completer # Include exchange logo.  Default: false
+  --include-exchange-logo: oneof<nothing, bool> # Include exchange logo.  Default: false
   --page: int # Page through results
   --order: string@order-completer-1 # Sort the order of responses.  Default: trust_score_desc
-  --depth: string@bool-completer # Include 2% orderbook depth, i.e. `cost_to_move_up_usd` and `cost_to_move_down_usd`.  Default: false
+  --depth: oneof<nothing, bool> # Include 2% orderbook depth, i.e. `cost_to_move_up_usd` and `cost_to_move_down_usd`.  Default: false
   --dex-pair-format: string@dex-pair-format-completer # Set to `symbol` to display DEX pair base and target as symbols.  Default: `contract_address`
 ]: nothing -> record<name: string, tickers: table<base: string, target: string, market: record, last: float, volume: float, cost_to_move_up_usd: float, cost_to_move_down_usd: float, converted_last: record, converted_volume: record, trust_score: string, bid_ask_spread_percentage: float, timestamp: string, last_traded_at: string, last_fetch_at: string, is_anomaly: bool, is_stale: bool, trade_url: string, token_info_url: string, coin_id: string, target_coin_id: string, coin_mcap_usd: float>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
@@ -417,7 +416,7 @@ export def "coins-history coins-id-history" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --date: string # The date of data snapshot.  Format: `YYYY-MM-DD` (default: 2025-12-30)
-  --localization: string@bool-completer # Include all the localized languages in response.  Default: true
+  --localization: oneof<nothing, bool> # Include all the localized languages in response.  Default: true
 ]: nothing -> record<id: string, symbol: string, name: string, localization: record, image: record<thumb: string, small: string>, market_data: record<current_price: record, market_cap: record, total_volume: record>, community_data: record<facebook_likes: float, reddit_average_posts_48h: float, reddit_average_comments_48h: float, reddit_subscribers: float, reddit_accounts_active_48h: float>, developer_data: record<forks: float, stars: float, subscribers: float, total_issues: float, closed_issues: float, pull_requests_merged: float, pull_request_contributors: float, code_additions_deletions_4_weeks: record<additions: float, deletions: float>, commit_count_4_weeks: float>, public_interest_stats: record<alexa_rank: float, bing_matches: float>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -750,7 +749,7 @@ export def "coins-list coins-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-platform: string@bool-completer # Include platform and token's contract addresses.  Default: false
+  --include-platform: oneof<nothing, bool> # Include platform and token's contract addresses.  Default: false
   --status: string@status-completer # Filter by status of coins.  Default: active
 ]: nothing -> table<id: string, symbol: string, name: string, platforms: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
@@ -936,9 +935,9 @@ export def "exchanges-tickers exchanges-id-tickers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --coin-ids: string # Filter tickers by coin IDs, comma-separated if querying more than 1 coin.  *refers to [`/coins/list`](/reference/coins-list).
-  --include-exchange-logo: string@bool-completer # Include exchange logo.  Default: false
+  --include-exchange-logo: oneof<nothing, bool> # Include exchange logo.  Default: false
   --page: float # Page through results.
-  --depth: string@bool-completer # Include 2% orderbook depth (cost_to_move_up_usd and cost_to_move_down_usd).  Default: false
+  --depth: oneof<nothing, bool> # Include 2% orderbook depth (cost_to_move_up_usd and cost_to_move_down_usd).  Default: false
   --order: string@order-completer-3 # Sort the order of responses.  Default: `trust_score_desc`
   --dex-pair-format: string@dex-pair-format-completer # Set to `symbol` to display DEX pair base and target as symbols.  Default: `contract_address`
 ]: nothing -> record<name: string, tickers: table<base: string, target: string, market: record, last: float, volume: float, cost_to_move_up_usd: float, cost_to_move_down_usd: float, converted_last: record, converted_volume: record, trust_score: string, bid_ask_spread_percentage: float, timestamp: string, last_traded_at: string, last_fetch_at: string, is_anomaly: bool, is_stale: bool, trade_url: string, token_info_url: string, coin_id: string, target_coin_id: string, coin_mcap_usd: float>> {
@@ -1183,7 +1182,7 @@ export def "public-treasury-holding-chart public-treasury-entity-chart" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --days: string # Data up to number of days ago.  Valid values: `7`, `14`, `30`, `90`, `180`, `365`, `730`, `max` (default: 365)
-  --include-empty-intervals: string@bool-completer # Include empty intervals with no transaction data.  Default: `false`
+  --include-empty-intervals: oneof<nothing, bool> # Include empty intervals with no transaction data.  Default: `false`
 ]: nothing -> record<holdings: list<list<float>>, holding_value_in_usd: list<list<float>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1540,8 +1539,8 @@ export def "onchain-networks-pools pool-address" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --include: string # Attributes to include, comma-separated if more than one.  Available values: `base_token`, `quote_token`, `dex`
-  --include-volume-breakdown: string@bool-completer # Include volume breakdown.  Default: `false`
-  --include-composition: string@bool-completer # Include pool composition.  Default: `false`
+  --include-volume-breakdown: oneof<nothing, bool> # Include volume breakdown.  Default: `false`
+  --include-composition: oneof<nothing, bool> # Include pool composition.  Default: `false`
 ]: nothing -> record<data: record<id: string, type: string, attributes: record<base_token_price_usd: string, base_token_price_native_currency: string, base_token_balance: string, base_token_liquidity_usd: string, quote_token_price_usd: string, quote_token_price_native_currency: string, quote_token_balance: string, quote_token_liquidity_usd: string, base_token_price_quote_token: string, quote_token_price_base_token: string, address: string, name: string, pool_name: string, pool_fee_percentage: string, pool_created_at: string, fdv_usd: string, market_cap_usd: string, price_change_percentage: record, transactions: record, volume_usd: record, net_buy_volume_usd: record, buy_volume_usd: record, sell_volume_usd: record, reserve_in_usd: string, locked_liquidity_percentage: string>, relationships: record<base_token: record, quote_token: record, dex: record>>, included: table<id: string, type: string, attributes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1567,7 +1566,7 @@ export def "onchain-networks-trending-pools trending-pools-list" [
   --include: string # Attributes to include, comma-separated if more than one.  Available values: `base_token`, `quote_token`, `dex`, `network`
   --page: int # Page through results.  Default value: 1
   --duration: string@duration-completer-1 # Duration to sort trending list by.  Default: `24h`
-  --include-gt-community-data: string@bool-completer # Include GeckoTerminal community data (sentiment votes, suspicious reports).  Default: `false`
+  --include-gt-community-data: oneof<nothing, bool> # Include GeckoTerminal community data (sentiment votes, suspicious reports).  Default: `false`
 ]: nothing -> record<data: table<id: string, type: string, attributes: record, relationships: record>, included: table<id: string, type: string, attributes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1594,7 +1593,7 @@ export def "onchain-networks-trending-pools trending-pools-network" [
   --include: string # Attributes to include, comma-separated if more than one.  Available values: `base_token`, `quote_token`, `dex`
   --page: int # Page through results.  Default value: 1
   --duration: string@duration-completer-1 # Duration to sort trending list by.  Default: `24h`
-  --include-gt-community-data: string@bool-completer # Include GeckoTerminal community data (sentiment votes, suspicious reports).  Default: `false`
+  --include-gt-community-data: oneof<nothing, bool> # Include GeckoTerminal community data (sentiment votes, suspicious reports).  Default: `false`
 ]: nothing -> record<data: table<id: string, type: string, attributes: record, relationships: record>, included: table<id: string, type: string, attributes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1621,7 +1620,7 @@ export def "onchain-networks-pools top-pools-network" [
   --include: string # Attributes to include, comma-separated if more than one.  Available values: `base_token`, `quote_token`, `dex`
   --page: int # Page through results.  Default value: 1
   --qp-sort: string@sort-completer # Sort the pools by field.  Default: `h24_tx_count_desc`
-  --include-gt-community-data: string@bool-completer # Include GeckoTerminal community data (sentiment votes, suspicious reports).  Default: `false`
+  --include-gt-community-data: oneof<nothing, bool> # Include GeckoTerminal community data (sentiment votes, suspicious reports).  Default: `false`
 ]: nothing -> record<data: table<id: string, type: string, attributes: record, relationships: record>, included: table<id: string, type: string, attributes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1649,7 +1648,7 @@ export def "onchain-networks-dexes-pools top-pools-dex" [
   --include: string # Attributes to include, comma-separated if more than one.  Available values: `base_token`, `quote_token`, `dex`
   --page: int # Page through results.  Default value: 1
   --qp-sort: string@sort-completer # Sort the pools by field.  Default: `h24_tx_count_desc`
-  --include-gt-community-data: string@bool-completer # Include GeckoTerminal community data (sentiment votes, suspicious reports).  Default: `false`
+  --include-gt-community-data: oneof<nothing, bool> # Include GeckoTerminal community data (sentiment votes, suspicious reports).  Default: `false`
 ]: nothing -> record<data: table<id: string, type: string, attributes: record, relationships: record>, included: table<id: string, type: string, attributes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1702,7 +1701,7 @@ export def "onchain-pools-megafilter pools-megafilter" [
   --sell-tax-percentage-min: float # Minimum sell tax percentage.
   --sell-tax-percentage-max: float # Maximum sell tax percentage.
   --checks: string # Filter options for various checks, comma-separated if more than one.  Available values: `no_honeypot`, `good_gt_score`, `on_coingecko`, `has_social`
-  --include-unknown-honeypot-tokens: string@bool-completer # When `checks` includes `no_honeypot`, set to `true` to also include unknown honeypot tokens.  Default: `false`
+  --include-unknown-honeypot-tokens: oneof<nothing, bool> # When `checks` includes `no_honeypot`, set to `true` to also include unknown honeypot tokens.  Default: `false`
 ]: nothing -> record<data: table<id: string, type: string, attributes: record, relationships: record>, included: table<id: string, type: string, attributes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1752,10 +1751,10 @@ export def "onchain-networks-tokens-pools top-pools-contract-address" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --include: string # Attributes to include, comma-separated if more than one.  Available values: `base_token`, `quote_token`, `dex`
-  --include-inactive-source: string@bool-completer # Include tokens from inactive pools using the most recent swap.  Default: `false`
+  --include-inactive-source: oneof<nothing, bool> # Include tokens from inactive pools using the most recent swap.  Default: `false`
   --page: int # Page through results.  Default value: 1
   --qp-sort: string@sort-completer-2 # Sort the pools by field.  Default: `h24_volume_usd_liquidity_desc`
-  --include-gt-community-data: string@bool-completer # Include GeckoTerminal community data (sentiment votes, suspicious reports).  Default: `false`
+  --include-gt-community-data: oneof<nothing, bool> # Include GeckoTerminal community data (sentiment votes, suspicious reports).  Default: `false`
 ]: nothing -> record<data: table<id: string, type: string, attributes: record, relationships: record>, included: table<id: string, type: string, attributes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1781,8 +1780,8 @@ export def "onchain-networks-tokens token-data-contract-address" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --include: string@include-completer # Attributes to include.
-  --include-composition: string@bool-completer # Include pool composition.  Default: `false`
-  --include-inactive-source: string@bool-completer # Include token data from inactive pools using the most recent swap.  Default: `false`
+  --include-composition: oneof<nothing, bool> # Include pool composition.  Default: `false`
+  --include-inactive-source: oneof<nothing, bool> # Include token data from inactive pools using the most recent swap.  Default: `false`
 ]: nothing -> record<data: record<id: string, type: string, attributes: record<address: string, name: string, symbol: string, decimals: int, image_url: string, coingecko_coin_id: string, total_supply: string, normalized_total_supply: string, price_usd: string, fdv_usd: string, total_reserve_in_usd: string, volume_usd: record, market_cap_usd: string, last_trade_timestamp: string, launchpad_details: record>, relationships: record<top_pools: record>>, included: table<id: string, type: string, attributes: record, relationships: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1808,8 +1807,8 @@ export def "onchain-networks-tokens-multi tokens-data-contract-addresses" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --include: string@include-completer # Attributes to include.
-  --include-composition: string@bool-completer # Include pool composition.  Default: `false`
-  --include-inactive-source: string@bool-completer # Include tokens from inactive pools using the most recent swap.  Default: `false`
+  --include-composition: oneof<nothing, bool> # Include pool composition.  Default: `false`
+  --include-inactive-source: oneof<nothing, bool> # Include tokens from inactive pools using the most recent swap.  Default: `false`
 ]: nothing -> record<data: table<id: string, type: string, attributes: record, relationships: record>, included: table<id: string, type: string, attributes: record, relationships: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1908,7 +1907,7 @@ export def "onchain-networks-tokens-top-traders top-token-traders-token-address"
   --allow-errors(-e) # Return full response without error handling
   --traders: string # Number of top token traders to return, any integer or `max`.  Default value: 10
   --qp-sort: string@sort-completer-3 # Sort the traders by field.  Default: `realized_pnl_usd_desc`
-  --include-address-label: string@bool-completer # Include address label data.  Default: `false`
+  --include-address-label: oneof<nothing, bool> # Include address label data.  Default: `false`
 ]: nothing -> record<data: record<id: string, type: string, attributes: record<traders: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1934,7 +1933,7 @@ export def "onchain-networks-tokens-top-holders top-token-holders-token-address"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --holders: string # Number of top token holders to return, any integer or `max`.  Default value: 10
-  --include-pnl-details: string@bool-completer # Include PnL details for token holders.  Default: `false`
+  --include-pnl-details: oneof<nothing, bool> # Include PnL details for token holders.  Default: `false`
 ]: nothing -> record<data: record<id: string, type: string, attributes: record<last_updated_at: string, holders: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1990,7 +1989,7 @@ export def "onchain-networks-pools-ohlcv pool-ohlcv-contract-address" [
   --limit: int # Number of OHLCV results to return, maximum 1000.  Default value: 100
   --currency: string@currency-completer # Return OHLCV in USD or quote token.  Default: `usd`
   --qp-token: string # Return OHLCV for token, use this to invert the chart.  Available values: `base`, `quote`, or token address.  Default: `base`
-  --include-empty-intervals: string@bool-completer # Include empty intervals with no trade data.  Default: `false`
+  --include-empty-intervals: oneof<nothing, bool> # Include empty intervals with no trade data.  Default: `false`
 ]: nothing -> record<data: record<id: string, type: string, attributes: record<ohlcv_list: list>>, meta: record<base: record<name: string, symbol: string, coingecko_coin_id: string, address: string>, quote: record<name: string, symbol: string, coingecko_coin_id: string, address: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2020,8 +2019,8 @@ export def "onchain-networks-tokens-ohlcv token-ohlcv-token-address" [
   --before-timestamp: int # Return OHLCV data before this timestamp (integer seconds since epoch).
   --limit: int # Number of OHLCV results to return, maximum 1000.  Default value: 100
   --currency: string@currency-completer # Return OHLCV in USD or quote token.  Default: `usd`
-  --include-empty-intervals: string@bool-completer # Include empty intervals with no trade data.  Default: `false`
-  --include-inactive-source: string@bool-completer # Include token data from inactive pools using the most recent swap.  Default: `false`
+  --include-empty-intervals: oneof<nothing, bool> # Include empty intervals with no trade data.  Default: `false`
+  --include-inactive-source: oneof<nothing, bool> # Include token data from inactive pools using the most recent swap.  Default: `false`
 ]: nothing -> record<data: record<id: string, type: string, attributes: record<ohlcv_list: list>>, meta: record<base: record<name: string, symbol: string, coingecko_coin_id: string, address: string>, quote: record<name: string, symbol: string, coingecko_coin_id: string, address: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2147,7 +2146,7 @@ export def "onchain-networks-new-pools latest-pools-list" [
   --allow-errors(-e) # Return full response without error handling
   --include: string # Attributes to include, comma-separated if more than one.  Available values: `base_token`, `quote_token`, `dex`, `network`
   --page: int # Page through results.  Default value: 1
-  --include-gt-community-data: string@bool-completer # Include GeckoTerminal community data (sentiment votes, suspicious reports).  Default: `false`
+  --include-gt-community-data: oneof<nothing, bool> # Include GeckoTerminal community data (sentiment votes, suspicious reports).  Default: `false`
 ]: nothing -> record<data: table<id: string, type: string, attributes: record, relationships: record>, included: table<id: string, type: string, attributes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2173,7 +2172,7 @@ export def "onchain-networks-new-pools latest-pools-network" [
   --allow-errors(-e) # Return full response without error handling
   --include: string # Attributes to include, comma-separated if more than one.  Available values: `base_token`, `quote_token`, `dex`
   --page: int # Page through results.  Default value: 1
-  --include-gt-community-data: string@bool-completer # Include GeckoTerminal community data (sentiment votes, suspicious reports).  Default: `false`
+  --include-gt-community-data: oneof<nothing, bool> # Include GeckoTerminal community data (sentiment votes, suspicious reports).  Default: `false`
 ]: nothing -> record<data: table<id: string, type: string, attributes: record, relationships: record>, included: table<id: string, type: string, attributes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2199,8 +2198,8 @@ export def "onchain-networks-pools-multi pools-addresses" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --include: string # Attributes to include, comma-separated if more than one.  Available values: `base_token`, `quote_token`, `dex`
-  --include-volume-breakdown: string@bool-completer # Include volume breakdown.  Default: `false`
-  --include-composition: string@bool-completer # Include pool composition.  Default: `false`
+  --include-volume-breakdown: oneof<nothing, bool> # Include volume breakdown.  Default: `false`
+  --include-composition: oneof<nothing, bool> # Include pool composition.  Default: `false`
 ]: nothing -> record<data: table<id: string, type: string, attributes: record, relationships: record>, included: table<id: string, type: string, attributes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2251,12 +2250,12 @@ export def "onchain-simple-networks-token-price onchain-simple-price" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-market-cap: string@bool-completer # Include market capitalization.  Default: `false`
-  --mcap-fdv-fallback: string@bool-completer # Return FDV if market cap is not available.  Default: `false`
-  --include-24hr-vol: string@bool-completer # Include 24hr volume.  Default: `false`
-  --include-24hr-price-change: string@bool-completer # Include 24hr price change.  Default: `false`
-  --include-total-reserve-in-usd: string@bool-completer # Include total reserve in USD.  Default: `false`
-  --include-inactive-source: string@bool-completer # Include token price data from inactive pools using the most recent swap.  Default: `false`
+  --include-market-cap: oneof<nothing, bool> # Include market capitalization.  Default: `false`
+  --mcap-fdv-fallback: oneof<nothing, bool> # Return FDV if market cap is not available.  Default: `false`
+  --include-24hr-vol: oneof<nothing, bool> # Include 24hr volume.  Default: `false`
+  --include-24hr-price-change: oneof<nothing, bool> # Include 24hr price change.  Default: `false`
+  --include-total-reserve-in-usd: oneof<nothing, bool> # Include total reserve in USD.  Default: `false`
+  --include-inactive-source: oneof<nothing, bool> # Include token price data from inactive pools using the most recent swap.  Default: `false`
 ]: nothing -> record<data: record<id: string, type: string, attributes: record<token_prices: record, market_cap_usd: record, h24_volume_usd: record, h24_price_change_percentage: record, total_reserve_in_usd: record, last_trade_timestamp: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-cg-pro-api-key"))
   let base = ($base_url | default $BASE_URL)

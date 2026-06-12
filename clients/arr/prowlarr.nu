@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost:9696" "https://localhost:9696"] }
 def auth-scheme-completer [] { ["x-api-key" "query-apikey"] }
 
@@ -156,7 +155,7 @@ export def "applications put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -232,7 +231,7 @@ export def "applications post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -339,7 +338,7 @@ export def "applications-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -432,9 +431,9 @@ export def "appprofile post" [
   --allow-errors(-e) # Return full response without error handling
   --id: int # format: int32
   --name: string # nullable
-  --enableRss: string@bool-completer
-  --enableAutomaticSearch: string@bool-completer
-  --enableInteractiveSearch: string@bool-completer
+  --enableRss: oneof<nothing, bool>
+  --enableAutomaticSearch: oneof<nothing, bool>
+  --enableInteractiveSearch: oneof<nothing, bool>
   --minimumSeeders: int # format: int32
 ]: any -> record<id: int, name: string, enableRss: bool, enableAutomaticSearch: bool, enableInteractiveSearch: bool, minimumSeeders: int> {
   let input = $in
@@ -497,9 +496,9 @@ export def "appprofile put" [
   --allow-errors(-e) # Return full response without error handling
   --body-id: int # format: int32
   --name: string # nullable
-  --enableRss: string@bool-completer
-  --enableAutomaticSearch: string@bool-completer
-  --enableInteractiveSearch: string@bool-completer
+  --enableRss: oneof<nothing, bool>
+  --enableAutomaticSearch: oneof<nothing, bool>
+  --enableInteractiveSearch: oneof<nothing, bool>
   --minimumSeeders: int # format: int32
 ]: any -> record<id: int, name: string, enableRss: bool, enableAutomaticSearch: bool, enableInteractiveSearch: bool, minimumSeeders: int> {
   let input = $in
@@ -750,8 +749,8 @@ export def "command post" [
   --trigger: string@trigger-completer
   --clientUserAgent: string # nullable
   --stateChangeTime: string # nullable, format: date-time
-  --sendUpdatesToClient: string@bool-completer
-  --updateScheduledTask: string@bool-completer
+  --sendUpdatesToClient: oneof<nothing, bool>
+  --updateScheduledTask: oneof<nothing, bool>
   --lastExecutionTime: string # nullable, format: date-time
 ]: any -> record<id: int, name: string, commandName: string, message: string, body: record<sendUpdatesToClient: bool, updateScheduledTask: bool, completionMessage: string, requiresDiskAccess: bool, isExclusive: bool, isTypeExclusive: bool, name: string, lastExecutionTime: string, lastStartTime: string, trigger: string, suppressMessages: bool, clientUserAgent: string>, priority: string, status: string, queued: string, started: string, ended: string, duration: string, exception: string, trigger: string, clientUserAgent: string, stateChangeTime: string, sendUpdatesToClient: bool, updateScheduledTask: bool, lastExecutionTime: string> {
   let input = $in
@@ -902,10 +901,10 @@ export def "config-development put" [
   --allow-errors(-e) # Return full response without error handling
   --body-id: int # format: int32
   --consoleLogLevel: string # nullable
-  --logSql: string@bool-completer
-  --logIndexerResponse: string@bool-completer
+  --logSql: oneof<nothing, bool>
+  --logIndexerResponse: oneof<nothing, bool>
   --logRotate: int # format: int32
-  --filterSentryEvents: string@bool-completer
+  --filterSentryEvents: oneof<nothing, bool>
 ]: any -> record<id: int, consoleLogLevel: string, logSql: bool, logIndexerResponse: bool, logRotate: int, filterSentryEvents: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -989,7 +988,7 @@ export def "downloadclient put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -1000,11 +999,11 @@ export def "downloadclient put" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, categories?: list, supportsCategories?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
   --categories: list # nullable — item shape: {clientCategory?: string, categories?: list}
-  --supportsCategories: string@bool-completer
+  --supportsCategories: oneof<nothing, bool>
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool, protocol: string, priority: int, categories: table<clientCategory: string, categories: list>, supportsCategories: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1069,7 +1068,7 @@ export def "downloadclient post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -1080,11 +1079,11 @@ export def "downloadclient post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, categories?: list, supportsCategories?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
   --categories: list # nullable — item shape: {clientCategory?: string, categories?: list}
-  --supportsCategories: string@bool-completer
+  --supportsCategories: oneof<nothing, bool>
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool, protocol: string, priority: int, categories: table<clientCategory: string, categories: list>, supportsCategories: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1110,7 +1109,7 @@ export def "downloadclient-bulk put" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enable: string@bool-completer # nullable
+  --enable: oneof<nothing, bool> # nullable
   --priority: int # nullable, format: int32
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool, protocol: string, priority: int, categories: table<clientCategory: string, categories: list>, supportsCategories: bool> {
   let input = $in
@@ -1136,7 +1135,7 @@ export def "downloadclient-bulk delete" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enable: string@bool-completer # nullable
+  --enable: oneof<nothing, bool> # nullable
   --priority: int # nullable, format: int32
 ]: any -> any {
   let input = $in
@@ -1182,7 +1181,7 @@ export def "downloadclient-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -1193,11 +1192,11 @@ export def "downloadclient-test post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, categories?: list, supportsCategories?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
   --categories: list # nullable — item shape: {clientCategory?: string, categories?: list}
-  --supportsCategories: string@bool-completer
+  --supportsCategories: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1254,11 +1253,11 @@ export def "downloadclient-action post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, categories?: list, supportsCategories?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
   --categories: list # nullable — item shape: {clientCategory?: string, categories?: list}
-  --supportsCategories: string@bool-completer
+  --supportsCategories: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1341,8 +1340,8 @@ export def "filesystem get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --path: string
-  --includeFiles: string@bool-completer # default: false
-  --allowFoldersWithoutTrailingSlashes: string@bool-completer # default: false
+  --includeFiles: oneof<nothing, bool> # default: false
+  --allowFoldersWithoutTrailingSlashes: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1405,7 +1404,7 @@ export def "history get" [
   --sortKey: string
   --sortDirection: string@sortDirection-completer
   --eventType: list
-  --successful: string@bool-completer
+  --successful: oneof<nothing, bool>
   --downloadId: string
   --indexerIds: list
 ]: nothing -> record<page: int, pageSize: int, sortKey: string, sortDirection: string, totalRecords: int, records: table<id: int, indexerId: int, date: string, downloadId: string, successful: bool, eventType: string, data: record>> {
@@ -1494,11 +1493,11 @@ export def "config-host put" [
   --bindAddress: string # nullable
   --port: int # format: int32
   --sslPort: int # format: int32
-  --enableSsl: string@bool-completer
-  --launchBrowser: string@bool-completer
+  --enableSsl: oneof<nothing, bool>
+  --launchBrowser: oneof<nothing, bool>
   --authenticationMethod: string@authenticationMethod-completer
   --authenticationRequired: string@authenticationRequired-completer
-  --analyticsEnabled: string@bool-completer
+  --analyticsEnabled: oneof<nothing, bool>
   --username: string # nullable
   --password: string # nullable
   --passwordConfirmation: string # nullable
@@ -1512,23 +1511,23 @@ export def "config-host put" [
   --urlBase: string # nullable
   --instanceName: string # nullable
   --applicationUrl: string # nullable
-  --updateAutomatically: string@bool-completer
+  --updateAutomatically: oneof<nothing, bool>
   --updateMechanism: string@updateMechanism-completer
   --updateScriptPath: string # nullable
-  --proxyEnabled: string@bool-completer
+  --proxyEnabled: oneof<nothing, bool>
   --proxyType: string@proxyType-completer
   --proxyHostname: string # nullable
   --proxyPort: int # format: int32
   --proxyUsername: string # nullable
   --proxyPassword: string # nullable
   --proxyBypassFilter: string # nullable
-  --proxyBypassLocalAddresses: string@bool-completer
+  --proxyBypassLocalAddresses: oneof<nothing, bool>
   --certificateValidation: string@certificateValidation-completer
   --backupFolder: string # nullable
   --backupInterval: int # format: int32
   --backupRetention: int # format: int32
   --historyCleanupDays: int # format: int32
-  --trustCgnatIpAddresses: string@bool-completer
+  --trustCgnatIpAddresses: oneof<nothing, bool>
 ]: any -> record<id: int, bindAddress: string, port: int, sslPort: int, enableSsl: bool, launchBrowser: bool, authenticationMethod: string, authenticationRequired: string, analyticsEnabled: bool, username: string, password: string, passwordConfirmation: string, logLevel: string, logSizeLimit: int, consoleLogLevel: string, branch: string, apiKey: string, sslCertPath: string, sslCertPassword: string, urlBase: string, instanceName: string, applicationUrl: string, updateAutomatically: bool, updateMechanism: string, updateScriptPath: string, proxyEnabled: bool, proxyType: string, proxyHostname: string, proxyPort: int, proxyUsername: string, proxyPassword: string, proxyBypassFilter: string, proxyBypassLocalAddresses: bool, certificateValidation: string, backupFolder: string, backupInterval: int, backupRetention: int, historyCleanupDays: int, trustCgnatIpAddresses: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1594,7 +1593,7 @@ export def "indexer put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -1611,12 +1610,12 @@ export def "indexer put" [
   --description: string # nullable
   --language: string # nullable
   --encoding: string # nullable
-  --enable: string@bool-completer
-  --redirect: string@bool-completer
-  --supportsRss: string@bool-completer
-  --supportsSearch: string@bool-completer
-  --supportsRedirect: string@bool-completer
-  --supportsPagination: string@bool-completer
+  --enable: oneof<nothing, bool>
+  --redirect: oneof<nothing, bool>
+  --supportsRss: oneof<nothing, bool>
+  --supportsSearch: oneof<nothing, bool>
+  --supportsRedirect: oneof<nothing, bool>
+  --supportsPagination: oneof<nothing, bool>
   --appProfileId: int # format: int32
   --protocol: string@protocol-completer
   --privacy: string@privacy-completer
@@ -1691,7 +1690,7 @@ export def "indexer post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -1708,12 +1707,12 @@ export def "indexer post" [
   --description: string # nullable
   --language: string # nullable
   --encoding: string # nullable
-  --enable: string@bool-completer
-  --redirect: string@bool-completer
-  --supportsRss: string@bool-completer
-  --supportsSearch: string@bool-completer
-  --supportsRedirect: string@bool-completer
-  --supportsPagination: string@bool-completer
+  --enable: oneof<nothing, bool>
+  --redirect: oneof<nothing, bool>
+  --supportsRss: oneof<nothing, bool>
+  --supportsSearch: oneof<nothing, bool>
+  --supportsRedirect: oneof<nothing, bool>
+  --supportsPagination: oneof<nothing, bool>
   --appProfileId: int # format: int32
   --protocol: string@protocol-completer
   --privacy: string@privacy-completer
@@ -1748,14 +1747,14 @@ export def "indexer-bulk put" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enable: string@bool-completer # nullable
+  --enable: oneof<nothing, bool> # nullable
   --appProfileId: int # nullable, format: int32
   --priority: int # nullable, format: int32
   --minimumSeeders: int # nullable, format: int32
   --seedRatio: float # nullable, format: double
   --seedTime: int # nullable, format: int32
   --packSeedTime: int # nullable, format: int32
-  --preferMagnetUrl: string@bool-completer # nullable
+  --preferMagnetUrl: oneof<nothing, bool> # nullable
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, indexerUrls: list<string>, legacyUrls: list<string>, definitionName: string, description: string, language: string, encoding: string, enable: bool, redirect: bool, supportsRss: bool, supportsSearch: bool, supportsRedirect: bool, supportsPagination: bool, appProfileId: int, protocol: string, privacy: string, capabilities: record<id: int, limitsMax: int, limitsDefault: int, categories: list<record>, supportsRawSearch: bool, searchParams: list<string>, tvSearchParams: list<string>, movieSearchParams: list<string>, musicSearchParams: list<string>, bookSearchParams: list<string>>, priority: int, downloadClientId: int, added: string, status: record<id: int, indexerId: int, disabledTill: string, mostRecentFailure: string, initialFailure: string>, sortName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1780,14 +1779,14 @@ export def "indexer-bulk delete" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enable: string@bool-completer # nullable
+  --enable: oneof<nothing, bool> # nullable
   --appProfileId: int # nullable, format: int32
   --priority: int # nullable, format: int32
   --minimumSeeders: int # nullable, format: int32
   --seedRatio: float # nullable, format: double
   --seedTime: int # nullable, format: int32
   --packSeedTime: int # nullable, format: int32
-  --preferMagnetUrl: string@bool-completer # nullable
+  --preferMagnetUrl: oneof<nothing, bool> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1833,7 +1832,7 @@ export def "indexer-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -1850,12 +1849,12 @@ export def "indexer-test post" [
   --description: string # nullable
   --language: string # nullable
   --encoding: string # nullable
-  --enable: string@bool-completer
-  --redirect: string@bool-completer
-  --supportsRss: string@bool-completer
-  --supportsSearch: string@bool-completer
-  --supportsRedirect: string@bool-completer
-  --supportsPagination: string@bool-completer
+  --enable: oneof<nothing, bool>
+  --redirect: oneof<nothing, bool>
+  --supportsRss: oneof<nothing, bool>
+  --supportsSearch: oneof<nothing, bool>
+  --supportsRedirect: oneof<nothing, bool>
+  --supportsPagination: oneof<nothing, bool>
   --appProfileId: int # format: int32
   --protocol: string@protocol-completer
   --privacy: string@privacy-completer
@@ -1928,12 +1927,12 @@ export def "indexer-action post" [
   --description: string # nullable
   --language: string # nullable
   --encoding: string # nullable
-  --enable: string@bool-completer
-  --redirect: string@bool-completer
-  --supportsRss: string@bool-completer
-  --supportsSearch: string@bool-completer
-  --supportsRedirect: string@bool-completer
-  --supportsPagination: string@bool-completer
+  --enable: oneof<nothing, bool>
+  --redirect: oneof<nothing, bool>
+  --supportsRss: oneof<nothing, bool>
+  --supportsSearch: oneof<nothing, bool>
+  --supportsRedirect: oneof<nothing, bool>
+  --supportsPagination: oneof<nothing, bool>
   --appProfileId: int # format: int32
   --protocol: string@protocol-completer
   --privacy: string@privacy-completer
@@ -2006,7 +2005,7 @@ export def "indexerproxy put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2018,9 +2017,9 @@ export def "indexerproxy put" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onHealthIssue?: bool, supportsOnHealthIssue?: bool, includeHealthWarnings?: bool, testCommand?: string}
   --link: string # nullable
-  --onHealthIssue: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
+  --onHealthIssue: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, link: string, onHealthIssue: bool, supportsOnHealthIssue: bool, includeHealthWarnings: bool, testCommand: string> {
   let input = $in
@@ -2085,7 +2084,7 @@ export def "indexerproxy post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2097,9 +2096,9 @@ export def "indexerproxy post" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onHealthIssue?: bool, supportsOnHealthIssue?: bool, includeHealthWarnings?: bool, testCommand?: string}
   --link: string # nullable
-  --onHealthIssue: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
+  --onHealthIssue: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, link: string, onHealthIssue: bool, supportsOnHealthIssue: bool, includeHealthWarnings: bool, testCommand: string> {
   let input = $in
@@ -2145,7 +2144,7 @@ export def "indexerproxy-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2157,9 +2156,9 @@ export def "indexerproxy-test post" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onHealthIssue?: bool, supportsOnHealthIssue?: bool, includeHealthWarnings?: bool, testCommand?: string}
   --link: string # nullable
-  --onHealthIssue: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
+  --onHealthIssue: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> any {
   let input = $in
@@ -2217,9 +2216,9 @@ export def "indexerproxy-action post" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onHealthIssue?: bool, supportsOnHealthIssue?: bool, includeHealthWarnings?: bool, testCommand?: string}
   --link: string # nullable
-  --onHealthIssue: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
+  --onHealthIssue: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> any {
   let input = $in
@@ -2553,7 +2552,7 @@ export def "notification put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2565,16 +2564,16 @@ export def "notification put" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onGrab?: bool, onHealthIssue?: bool, onHealthRestored?: bool, onApplicationUpdate?: bool, supportsOnGrab?: bool, includeManualGrabs?: bool, supportsOnHealthIssue?: bool, supportsOnHealthRestored?: bool, includeHealthWarnings?: bool, supportsOnApplicationUpdate?: bool, testCommand?: string}
   --link: string # nullable
-  --onGrab: string@bool-completer
-  --onHealthIssue: string@bool-completer
-  --onHealthRestored: string@bool-completer
-  --onApplicationUpdate: string@bool-completer
-  --supportsOnGrab: string@bool-completer
-  --includeManualGrabs: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --supportsOnHealthRestored: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
-  --supportsOnApplicationUpdate: string@bool-completer
+  --onGrab: oneof<nothing, bool>
+  --onHealthIssue: oneof<nothing, bool>
+  --onHealthRestored: oneof<nothing, bool>
+  --onApplicationUpdate: oneof<nothing, bool>
+  --supportsOnGrab: oneof<nothing, bool>
+  --includeManualGrabs: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --supportsOnHealthRestored: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
+  --supportsOnApplicationUpdate: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, link: string, onGrab: bool, onHealthIssue: bool, onHealthRestored: bool, onApplicationUpdate: bool, supportsOnGrab: bool, includeManualGrabs: bool, supportsOnHealthIssue: bool, supportsOnHealthRestored: bool, includeHealthWarnings: bool, supportsOnApplicationUpdate: bool, testCommand: string> {
   let input = $in
@@ -2639,7 +2638,7 @@ export def "notification post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2651,16 +2650,16 @@ export def "notification post" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onGrab?: bool, onHealthIssue?: bool, onHealthRestored?: bool, onApplicationUpdate?: bool, supportsOnGrab?: bool, includeManualGrabs?: bool, supportsOnHealthIssue?: bool, supportsOnHealthRestored?: bool, includeHealthWarnings?: bool, supportsOnApplicationUpdate?: bool, testCommand?: string}
   --link: string # nullable
-  --onGrab: string@bool-completer
-  --onHealthIssue: string@bool-completer
-  --onHealthRestored: string@bool-completer
-  --onApplicationUpdate: string@bool-completer
-  --supportsOnGrab: string@bool-completer
-  --includeManualGrabs: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --supportsOnHealthRestored: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
-  --supportsOnApplicationUpdate: string@bool-completer
+  --onGrab: oneof<nothing, bool>
+  --onHealthIssue: oneof<nothing, bool>
+  --onHealthRestored: oneof<nothing, bool>
+  --onApplicationUpdate: oneof<nothing, bool>
+  --supportsOnGrab: oneof<nothing, bool>
+  --includeManualGrabs: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --supportsOnHealthRestored: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
+  --supportsOnApplicationUpdate: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, link: string, onGrab: bool, onHealthIssue: bool, onHealthRestored: bool, onApplicationUpdate: bool, supportsOnGrab: bool, includeManualGrabs: bool, supportsOnHealthIssue: bool, supportsOnHealthRestored: bool, includeHealthWarnings: bool, supportsOnApplicationUpdate: bool, testCommand: string> {
   let input = $in
@@ -2706,7 +2705,7 @@ export def "notification-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2718,16 +2717,16 @@ export def "notification-test post" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onGrab?: bool, onHealthIssue?: bool, onHealthRestored?: bool, onApplicationUpdate?: bool, supportsOnGrab?: bool, includeManualGrabs?: bool, supportsOnHealthIssue?: bool, supportsOnHealthRestored?: bool, includeHealthWarnings?: bool, supportsOnApplicationUpdate?: bool, testCommand?: string}
   --link: string # nullable
-  --onGrab: string@bool-completer
-  --onHealthIssue: string@bool-completer
-  --onHealthRestored: string@bool-completer
-  --onApplicationUpdate: string@bool-completer
-  --supportsOnGrab: string@bool-completer
-  --includeManualGrabs: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --supportsOnHealthRestored: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
-  --supportsOnApplicationUpdate: string@bool-completer
+  --onGrab: oneof<nothing, bool>
+  --onHealthIssue: oneof<nothing, bool>
+  --onHealthRestored: oneof<nothing, bool>
+  --onApplicationUpdate: oneof<nothing, bool>
+  --supportsOnGrab: oneof<nothing, bool>
+  --includeManualGrabs: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --supportsOnHealthRestored: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
+  --supportsOnApplicationUpdate: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> any {
   let input = $in
@@ -2785,16 +2784,16 @@ export def "notification-action post" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onGrab?: bool, onHealthIssue?: bool, onHealthRestored?: bool, onApplicationUpdate?: bool, supportsOnGrab?: bool, includeManualGrabs?: bool, supportsOnHealthIssue?: bool, supportsOnHealthRestored?: bool, includeHealthWarnings?: bool, supportsOnApplicationUpdate?: bool, testCommand?: string}
   --link: string # nullable
-  --onGrab: string@bool-completer
-  --onHealthIssue: string@bool-completer
-  --onHealthRestored: string@bool-completer
-  --onApplicationUpdate: string@bool-completer
-  --supportsOnGrab: string@bool-completer
-  --includeManualGrabs: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --supportsOnHealthRestored: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
-  --supportsOnApplicationUpdate: string@bool-completer
+  --onGrab: oneof<nothing, bool>
+  --onHealthIssue: oneof<nothing, bool>
+  --onHealthRestored: oneof<nothing, bool>
+  --onApplicationUpdate: oneof<nothing, bool>
+  --supportsOnGrab: oneof<nothing, bool>
+  --includeManualGrabs: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --supportsOnHealthRestored: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
+  --supportsOnApplicationUpdate: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> any {
   let input = $in
@@ -3284,8 +3283,8 @@ export def "config-ui put" [
   --shortDateFormat: string # nullable
   --longDateFormat: string # nullable
   --timeFormat: string # nullable
-  --showRelativeDates: string@bool-completer
-  --enableColorImpairedMode: string@bool-completer
+  --showRelativeDates: oneof<nothing, bool>
+  --enableColorImpairedMode: oneof<nothing, bool>
   --uiLanguage: string # nullable
   --theme: string # nullable
 ]: any -> record<id: int, firstDayOfWeek: int, calendarWeekColumnHeader: string, shortDateFormat: string, longDateFormat: string, timeFormat: string, showRelativeDates: bool, enableColorImpairedMode: bool, uiLanguage: string, theme: string> {

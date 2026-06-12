@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.sumologic.com" "https://api.au.sumologic.com/api" "https://api.ca.sumologic.com/api" "https://api.ch.sumologic.com/api" "https://api.de.sumologic.com/api" "https://api.eu.sumologic.com/api" "https://api.fed.sumologic.com/api" "https://api.jp.sumologic.com/api" "https://api.kr.sumologic.com/api" "https://api.in.sumologic.com/api" "https://api.sumologic.com/api" "https://api.us2.sumologic.com/api"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -728,7 +727,7 @@ export def "scheduled-views updateScheduledView" [
   --allow-errors(-e) # Return full response without error handling
   --dataForwardingId: string # An optional ID of a data forwarding configuration to be used by the scheduled view.
   --retentionPeriod: int # The number of days to retain data in the scheduled view, or -1 to use the default value for your account.  Only relevant if your account has multi-retention. enabled. (format: int32, default: -1, e.g. 365)
-  --reduceRetentionPeriodImmediately: string@bool-completer # This is required if the newly specified `retentionPeriod` is less than the existing retention period.  In such a situation, a value of `true` says that data between the existing retention period and the new retention period should be deleted immediately; if `false`, such data will be deleted after seven days. This property is optional and ignored if the specified `retentionPeriod` is greater than or equal to the current retention period. (default: false)
+  --reduceRetentionPeriodImmediately: oneof<nothing, bool> # This is required if the newly specified `retentionPeriod` is less than the existing retention period.  In such a situation, a value of `true` says that data between the existing retention period and the new retention period should be deleted immediately; if `false`, such data will be deleted after seven days. This property is optional and ignored if the specified `retentionPeriod` is greater than or equal to the current retention period. (default: false)
   --timeZone: string # Updates the time zone for ingesting data in scheduled view to the specified timezone ( does nothing if not specified ). Follow the format in the [IANA Time Zone Database](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List). (e.g. America/Los_Angeles)
   --description: string # Description of the scheduled view.
 ]: any -> record {
@@ -947,7 +946,7 @@ export def "lookup-tables-upload uploadFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --merge: string@bool-completer # This indicates whether the file contents will be merged with existing data in the lookup table or not. If this is true then data with the same primary keys will be updated while the rest of the rows will be appended. By default, merge is false. The response includes a request identifier that you need to use in the [Request Status API](#operation/requestStatus) to track the status of the upload request. (default: false, e.g. true)
+  --merge: oneof<nothing, bool> # This indicates whether the file contents will be merged with existing data in the lookup table or not. If this is true then data with the same primary keys will be updated while the rest of the rows will be appended. By default, merge is false. The response includes a request identifier that you need to use in the [Request Status API](#operation/requestStatus) to track the status of the upload request. (default: false, e.g. true)
   --fileEncoding: string # File encoding of file being uploaded. (default: UTF-8, e.g. UTF-16)
   file: string # The CSV file to upload.   - The size limit for the CSV file is 100MB.   - Use Unix format, with newlines ("\n") separating rows.   - The first row should contain headers that match the lookup table schema. Matching is     case-insensitive. (format: binary)
 ]: any -> record<id: string> {
@@ -1102,8 +1101,8 @@ export def "partitions createPartition" [
   routingExpression: string # The query that defines the data to be included in the partition. (e.g. _sourcecategory=*/Apache)
   --analyticsTier: string # The Data Tier where the data in the partition will reside. Possible values are:               1. `continuous`               2. `frequent`               3. `infrequent` Note: The "infrequent" and "frequent" tiers are only available to Cloud Flex Credits Enterprise Suite accounts. (e.g. continuous)
   --retentionPeriod: int # The number of days to retain data in the partition, or -1 to use the default value for your account.  Only relevant if your account has variable retention enabled. (default: -1, e.g. 365)
-  --isCompliant: string@bool-completer # Whether the partition is compliant or not. Mark a partition as compliant if it contains data used for compliance or audit purpose. Retention for a compliant partition can only be increased and cannot be reduced after the partition is marked compliant. A partition once marked compliant, cannot be marked non-compliant later. (default: false, e.g. false)
-  --isIncludedInDefaultSearch: string@bool-completer # Indicates whether the partition is included in the default search scope. When executing a  query such as "error | count," certain partitions are automatically part of the search scope.  However, for specific partitions, the user must explicitly mention the partition using the _index  term, as in "_index=webApp error | count". This property governs the default inclusion of the  partition in the search scope. Configuring this property is exclusively permitted for flex partitions. (e.g. true)
+  --isCompliant: oneof<nothing, bool> # Whether the partition is compliant or not. Mark a partition as compliant if it contains data used for compliance or audit purpose. Retention for a compliant partition can only be increased and cannot be reduced after the partition is marked compliant. A partition once marked compliant, cannot be marked non-compliant later. (default: false, e.g. false)
+  --isIncludedInDefaultSearch: oneof<nothing, bool> # Indicates whether the partition is included in the default search scope. When executing a  query such as "error | count," certain partitions are automatically part of the search scope.  However, for specific partitions, the user must explicitly mention the partition using the _index  term, as in "_index=webApp error | count". This property governs the default inclusion of the  partition in the search scope. Configuring this property is exclusively permitted for flex partitions. (e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1152,9 +1151,9 @@ export def "partitions updatePartition" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --retentionPeriod: int # The number of days to retain data in the partition, or -1 to use the default value for your account. Only relevant if your account has variable retention enabled. (e.g. 365)
-  --reduceRetentionPeriodImmediately: string@bool-completer # This is required if the newly specified `retentionPeriod` is less than the existing retention period.  In such a situation, a value of `true` says that data between the existing retention period and the new  retention period should be deleted immediately; if `false`, such data will be deleted after seven days.  This property is optional and ignored if the specified `retentionPeriod` is greater than or equal to the  current retention period. (default: false)
-  --isCompliant: string@bool-completer # Whether to mark a partition as compliant. Mark a partition as compliant if it contains data used for compliance or audit purpose. Retention for a compliant partition can only be increased and cannot be reduced after the partition marked as compliant. A partition once marked compliant, cannot be marked non-compliant later. (default: false, e.g. false)
-  --isIncludedInDefaultSearch: string@bool-completer # Indicates whether the partition is included in the default search scope. When executing a  query such as "error | count," certain partitions are automatically part of the search scope.  However, for specific partitions, the user must explicitly mention the partition using the _index  term, as in "_index=webApp error | count". This property governs the default inclusion of the  partition in the search scope. Configuring this property is exclusively permitted for flex partitions.
+  --reduceRetentionPeriodImmediately: oneof<nothing, bool> # This is required if the newly specified `retentionPeriod` is less than the existing retention period.  In such a situation, a value of `true` says that data between the existing retention period and the new  retention period should be deleted immediately; if `false`, such data will be deleted after seven days.  This property is optional and ignored if the specified `retentionPeriod` is greater than or equal to the  current retention period. (default: false)
+  --isCompliant: oneof<nothing, bool> # Whether to mark a partition as compliant. Mark a partition as compliant if it contains data used for compliance or audit purpose. Retention for a compliant partition can only be increased and cannot be reduced after the partition marked as compliant. A partition once marked compliant, cannot be marked non-compliant later. (default: false, e.g. false)
+  --isIncludedInDefaultSearch: oneof<nothing, bool> # Indicates whether the partition is included in the default search scope. When executing a  query such as "error | count," certain partitions are automatically part of the search scope.  However, for specific partitions, the user must explicitly mention the partition using the _index  term, as in "_index=webApp error | count". This property governs the default inclusion of the  partition in the search scope. Configuring this property is exclusively permitted for flex partitions.
   --routingExpression: string # The query that defines the data to be included in the partition. (e.g. _sourcecategory=*/Apache)
 ]: any -> record {
   let input = $in
@@ -1276,8 +1275,8 @@ export def "logs-data-forwarding-destinations createDataForwardingBucket" [
   --secretAccessKey: string # The AWS Secret Key to access the S3 bucket. (e.g. secretAccessKey)
   --roleArn: string # The AWS Role ARN to access the S3 bucket. (e.g. roleArn)
   --region: string # The region where the S3 bucket is located. (e.g. us-east-1)
-  --encrypted: string@bool-completer # Enable S3 server-side encryption.
-  --enabled: string@bool-completer # True if the destination is Active. (e.g. true)
+  --encrypted: oneof<nothing, bool> # Enable S3 server-side encryption.
+  --enabled: oneof<nothing, bool> # True if the destination is Active. (e.g. true)
   bucketName: string # The name of the Amazon S3 bucket. (e.g. df-bucket)
 ]: any -> record {
   let input = $in
@@ -1333,8 +1332,8 @@ export def "logs-data-forwarding-destinations UpdateDataForwardingBucket" [
   --secretAccessKey: string # The AWS Secret Key to access the S3 bucket. (e.g. secretAccessKey)
   --roleArn: string # The AWS Role ARN to access the S3 bucket. (e.g. roleArn)
   --region: string # The region where the S3 bucket is located. (e.g. us-east-1)
-  --encrypted: string@bool-completer # Enable S3 server-side encryption.
-  --enabled: string@bool-completer # True if the destination is Active. (e.g. true)
+  --encrypted: oneof<nothing, bool> # Enable S3 server-side encryption.
+  --enabled: oneof<nothing, bool> # True if the destination is Active. (e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1407,7 +1406,7 @@ export def "logs-data-forwarding-rules createDataForwardingRule" [
   --allow-errors(-e) # Return full response without error handling
   indexId: string # The `id` of the Partition or Scheduled View the rule applies to. (e.g. 1)
   destinationId: string # The data forwarding destination id. (e.g. 1)
-  --enabled: string@bool-completer # True when the data forwarding rule is enabled. (e.g. true)
+  --enabled: oneof<nothing, bool> # True when the data forwarding rule is enabled. (e.g. true)
   --fileFormat: string # Specify the path prefix to a directory in the S3 bucket and how to format the file name. (e.g. {index}_{day}_{hour}_{minute}_{second})
   --payloadSchema: string # Schema for the payload. Default value of the payload schema is "allFields" for scheduled view, and "builtInFields" for partition. "raw" payloadSchema should be used in conjunction with "text" format and vice-versa. (e.g. builtInFields)
   --format: string # Format of the payload. Default format will be "csv". "text" format should be used in conjunction with "raw" payloadSchema and vice-versa. (e.g. csv)
@@ -1459,7 +1458,7 @@ export def "logs-data-forwarding-rules updateDataForwardingRule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --destinationId: string # Data forwarding destination id. (e.g. 1)
-  --enabled: string@bool-completer # True when the data forwarding rule is enabled. (e.g. true)
+  --enabled: oneof<nothing, bool> # True when the data forwarding rule is enabled. (e.g. true)
   --fileFormat: string # Specify the path prefix to a directory in the S3 bucket and how to format the file name. (e.g. {index}_{day}_{hour}_{minute}_{second})
   --payloadSchema: string # Schema for the payload. Default value of the payload schema is "allFields" for scheduled view, and "builtInFields" for partition. "raw" payloadSchema should be used in conjunction with "text" format and vice-versa. (e.g. builtInFields)
   --format: string # Format of the payload. Default format will be "csv". "text" format should be used in conjunction with "raw" payloadSchema and vice-versa. (e.g. csv)
@@ -1661,7 +1660,7 @@ export def "data-deletion-rules createDataDeletionRule" [
   --body-query: string # query to filter out the logs that need to be deleted.
   startMillis: int # Start time of the search as a number of milliseconds. (format: int64, e.g. 1704976268773)
   endMillis: int # End time of the search as a number of milliseconds. (format: int64, e.g. 1704977168773)
-  --byReceiptTime: string@bool-completer # Flag to order the search results in the order collector received it. This has the value `true` if the search is to be run by receipt time and `false` if it is to be run by message time. (default: false)
+  --byReceiptTime: oneof<nothing, bool> # Flag to order the search results in the order collector received it. This has the value `true` if the search is to be run by receipt time and `false` if it is to be run by message time. (default: false)
   --timezone: string # Timezone for the resolving timerange from startMillis,endMillis (default: UTC)
   --parsingMode: string # Define the parsing mode to scan the JSON format log messages. Possible values are:   1. `AutoParse`   2. `Manual` In AutoParse mode, the system automatically figures out fields to parse based on the search query. While in the Manual mode, no fields are parsed out automatically. For more information see [Dynamic Parsing](https://help.sumologic.com/?cid=0011). (default: Manual, e.g. AutoParse)
 ]: any -> record<ruleName: string, ruleReason: string, query: string, startMillis: int, endMillis: int, byReceiptTime: bool, timezone: string, parsingMode: string, id: string, createdAt: string, modifiedAt: string, error: string, status: string, createdBy: string, modifiedBy: string, deletedRanges: table<startTime: string, endTime: string>> {
@@ -1781,7 +1780,7 @@ export def "data-masking-rules createDataMaskingRule" [
   --description: string # Optional description of the data masking rule. Provide context about what PII this rule masks and why it's needed. (e.g. Masks email addresses in application logs)
   regexPattern: string # Regular expression pattern to match PII data that should be masked. The pattern must be valid according to Java regex syntax. All matches in search results will be replaced with the mask string. Required when creating a rule. When updating, if omitted the existing pattern is retained. (e.g. \b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,6}\b)
   --maskString: string # The string to replace matched PII with. Defaults to '##redactedPII##' if not specified. Use descriptive mask strings like 'EMAIL_REDACTED' or 'PHONE_REDACTED' for clarity. (default: ##redactedPII##, e.g. EMAIL_REDACTED)
-  --enabled: string@bool-completer # Whether the data masking rule is active. Only enabled rules are applied to search results. Set to false to temporarily disable a rule without deleting it. (default: true)
+  --enabled: oneof<nothing, bool> # Whether the data masking rule is active. Only enabled rules are applied to search results. Set to false to temporarily disable a rule without deleting it. (default: true)
   name: string # Name of the data masking rule. Use a name that makes it easy to identify the rule. Must be unique within the organization. This field is immutable and cannot be changed after creation. (e.g. Email Masking)
 ]: any -> record {
   let input = $in
@@ -1833,7 +1832,7 @@ export def "data-masking-rules updateDataMaskingRule" [
   --description: string # Optional description of the data masking rule. Provide context about what PII this rule masks and why it's needed. (e.g. Masks email addresses in application logs)
   --regexPattern: string # Regular expression pattern to match PII data that should be masked. The pattern must be valid according to Java regex syntax. All matches in search results will be replaced with the mask string. Required when creating a rule. When updating, if omitted the existing pattern is retained. (e.g. \b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,6}\b)
   --maskString: string # The string to replace matched PII with. Defaults to '##redactedPII##' if not specified. Use descriptive mask strings like 'EMAIL_REDACTED' or 'PHONE_REDACTED' for clarity. (default: ##redactedPII##, e.g. EMAIL_REDACTED)
-  --enabled: string@bool-completer # Whether the data masking rule is active. Only enabled rules are applied to search results. Set to false to temporarily disable a rule without deleting it. (default: true)
+  --enabled: oneof<nothing, bool> # Whether the data masking rule is active. Only enabled rules are applied to search results. Set to false to temporarily disable a rule without deleting it. (default: true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1934,7 +1933,7 @@ export def "extraction-rules createExtractionRule" [
   name: string # Name of the field extraction rule. Use a name that makes it easy to identify the rule. (e.g. ExtractionRule123)
   scope: string # Scope of the field extraction rule. This could be a sourceCategory, sourceHost, or any other metadata that describes the data you want to extract from. Think of the Scope as the first portion of an ad hoc search, before the first pipe ( | ). You'll use the Scope to run a search against the rule. (e.g. _sourceHost=127.0.0.1)
   parseExpression: string # Describes the fields to be parsed. (e.g. csv _raw extract 1 as f1)
-  --enabled: string@bool-completer # Is the field extraction rule enabled. (default: true)
+  --enabled: oneof<nothing, bool> # Is the field extraction rule enabled. (default: true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1985,7 +1984,7 @@ export def "extraction-rules updateExtractionRule" [
   name: string # Name of the field extraction rule. Use a name that makes it easy to identify the rule. (e.g. ExtractionRule123)
   scope: string # Scope of the field extraction rule. This could be a sourceCategory, sourceHost, or any other metadata that describes the data you want to extract from. Think of the Scope as the first portion of an ad hoc search, before the first pipe ( | ). You'll use the Scope to run a search against the rule. (e.g. _sourceHost=127.0.0.1)
   parseExpression: string # Describes the fields to be parsed. (e.g. csv _raw extract 1 as f1)
-  --enabled: string@bool-completer # Is the field extraction rule enabled.
+  --enabled: oneof<nothing, bool> # Is the field extraction rule enabled.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2058,7 +2057,7 @@ export def "dynamic-parsing-rules createDynamicParsingRule" [
   --allow-errors(-e) # Return full response without error handling
   name: string # Name of the dynamic parsing rule. Use a name that makes it easy to identify the rule. (e.g. DynamicParsingRule123)
   scope: string # Scope of the dynamic parsing rule. This could be a sourceCategory, sourceHost, or any other metadata that describes the data you want to extract from. Think of the Scope as the first portion of an ad hoc search, before the first pipe ( | ). You'll use the Scope to run a search against the rule. (e.g. _sourceHost=127.0.0.1)
-  --enabled: string@bool-completer # Is the dynamic parsing rule enabled. (default: true, e.g. false)
+  --enabled: oneof<nothing, bool> # Is the dynamic parsing rule enabled. (default: true, e.g. false)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2108,7 +2107,7 @@ export def "dynamic-parsing-rules updateDynamicParsingRule" [
   --allow-errors(-e) # Return full response without error handling
   name: string # Name of the dynamic parsing rule. Use a name that makes it easy to identify the rule. (e.g. DynamicParsingRule123)
   scope: string # Scope of the dynamic parsing rule. This could be a sourceCategory, sourceHost, or any other metadata that describes the data you want to extract from. Think of the Scope as the first portion of an ad hoc search, before the first pipe ( | ). You'll use the Scope to run a search against the rule. (e.g. _sourceHost=127.0.0.1)
-  --enabled: string@bool-completer # Is the dynamic parsing rule enabled. (default: true, e.g. false)
+  --enabled: oneof<nothing, bool> # Is the dynamic parsing rule enabled. (default: true, e.g. false)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2533,7 +2532,7 @@ export def "users listUsers" [
   --qp-token: string # Continuation token to get the next page of results. A page object with the next continuation token is returned in the response body. Subsequent GET requests should specify the continuation token to get the next page of results. `token` is set to null when no more pages are left.
   --sortBy: string # Sort the list of users by the `firstName`, `lastName`, or `email` field.
   --email: string # Find user with the given email address.
-  --includeServiceAccounts: string@bool-completer # Include service accounts while listing users within the organization.
+  --includeServiceAccounts: oneof<nothing, bool> # Include service accounts while listing users within the organization.
 ]: nothing -> record<data: list<record>, next: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2609,7 +2608,7 @@ export def "users updateUser" [
   --allow-errors(-e) # Return full response without error handling
   firstName: string # First name of the user. If the caller has `manageUsersAndRoles` capability, this field can be updated for any user. If the caller does NOT have `manageUsersAndRoles` capability, then only the calling user's firstName can be updated. (e.g. John)
   lastName: string # Last name of the user. If the caller has `manageUsersAndRoles` capability, this field can be updated for any user. If the caller does NOT have `manageUsersAndRoles` capability, then only the calling user's lastName can be updated. (e.g. Doe)
-  --isActive: string@bool-completer # This has the value `true` if the user is active and `false` if they have been deactivated. To modify this field you must have the `manageUserAndRoles` capability. (e.g. true)
+  --isActive: oneof<nothing, bool> # This has the value `true` if the user is active and `false` if they have been deactivated. To modify this field you must have the `manageUserAndRoles` capability. (e.g. true)
   --roleIds: list # List of role identifiers associated with the user. To modify this field you must have the `manageUserAndRoles` capability. (e.g. [00000000000001DF, 00000000000002D2])
 ]: any -> record {
   let input = $in
@@ -2637,7 +2636,7 @@ export def "users delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --transferTo: string # Identifier of the user to receive the transfer of content from the deleted user. <br> **Note:** If `deleteContent` is not set to `true`, and no user identifier is specified in `transferTo`, content from the deleted user is transferred to the executing user.
-  --deleteContent: string@bool-completer # Whether to delete content from the deleted user or not. <br> **Warning:** If `deleteContent` is set to `true`, all of the content for the user being deleted is permanently deleted and cannot be recovered.
+  --deleteContent: oneof<nothing, bool> # Whether to delete content from the deleted user or not. <br> **Warning:** If `deleteContent` is set to `true`, all of the content for the user being deleted is permanently deleted and cannot be recovered.
 ]: nothing -> record<id: string, errors: table<code: string, message: string, detail: string, meta: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2810,7 +2809,7 @@ export def "roles createRole" [
   --filterPredicate: string # A search filter to restrict access to specific logs. The filter is silently added to the beginning of each query a user runs. For example, using '!_sourceCategory=billing' as a filter predicate will prevent users assigned to the role from viewing logs from the source category named 'billing'. (e.g. !_sourceCategory=billing)
   --users: list # List of user identifiers to assign the role to. (e.g. [0000000006743FE0, 0000000005FCE0EE])
   --capabilities: list # List of [capabilities](https://help.sumologic.com/docs/manage/users-roles/roles/role-capabilities/) associated with this role. Valid values are ### Data Management   - viewCollectors   - manageCollectors   - manageBudgets   - manageDataVolumeFeed   - viewFieldExtraction   - manageFieldExtractionRules   - manageS3DataForwarding   - manageContent   - manageApps   - dataVolumeIndex   - manageConnections   - viewScheduledViews   - manageScheduledViews   - viewPartitions   - managePartitions   - viewFields   - manageFields   - viewAccountOverview   - manageTokens   - downloadSearchResults   - manageIndexes   - manageDataStreams   - viewParsers   - viewDataStreams  ### Entity management   - manageEntityTypeConfig  ### Metrics   - metricsTransformation   - metricsExtraction   - metricsRules  ### Security   - managePasswordPolicy   - ipAllowlisting   - ipWhitelisting   - createAccessKeys   - manageAccessKeys   - manageSupportAccountAccess   - manageAuditDataFeed   - manageSaml   - shareDashboardOutsideOrg   - manageOrgSettings   - changeDataAccessLevel  ### Dashboards   - shareDashboardWorld   - shareDashboardAllowlist   - shareDashboardWhitelist  ### UserManagement   - manageUsersAndRoles  ### Observability   - searchAuditIndex   - auditEventIndex  ### Cloud SIEM Enterprise   - viewCse   - cseViewAutomations   - cseManageContextActions   - cseViewNetworkBlocks   - cseManageInsightTags   - cseViewRules   - cseViewThreatIntelligence   - cseCommentOnInsights   - cseViewEntityGroups   - cseManageEntityConfiguration   - cseManageNetworkBlocks   - cseManageMatchLists   - cseViewCustomInsights   - cseManageActions   - cseManageAutomations   - cseManageMappings   - cseManageThreatIntelligence   - cseViewActions   - cseCreateInsights   - cseManageTagSchemas   - cseInvokeInsights   - cseManageCustomEntityType   - cseViewTagSchemas   - cseDeleteInsights   - cseManageCustomInsights   - cseViewFileAnalysis   - cseManageFileAnalysis   - cseManageEntityCriticality   - cseViewEntityCriticality   - cseViewEntity   - cseManageCustomInsightStatuses   - cseViewContextActions   - cseViewMappings   - cseViewCustomEntityType   - cseManageEntityGroups   - cseViewCustomInsightStatuses   - cseViewEnrichments   - cseManageInsightSignals   - cseManageRules   - cseManageArtifacts   - cseViewMatchLists   - cseManageInsightPolicy   - cseManageEnrichments   - cseViewEntityConfiguration   - cseManageEntity   - cseExecuteAutomations   - cseManageSuppressedEntities   - cseManageInsightStatus     - cseManageInsightAssignee   - cseManageFavoriteFields   - cseViewSuppressedEntities  ### Alerting   - viewMonitorsV2   - manageMonitorsV2   - viewAlerts   - viewMutingSchedules   - manageMutingSchedules   - adminMonitorsV2  ### SLO   - viewSlos   - manageSlos  ### CloudSoar   - cloudSoarPlaybooksAccess   - cloudSoarNotificationConfigure   - cloudSoarReportAll   - cloudSoarIncidentTriageAccess   - cloudSoarIncidentTaskView   - cloudSoarIncidentChangeOwnership   - cloudSoarIncidentNotesEdit   - cloudSoarAPIEmailEdit   - cloudSoarIncidentTemplatesAccess   - cloudSoarIncidentPlaybooksManage   - cloudSoarGeneralConfigure   - cloudSoarEntitiesAccess   - cloudSoarEntitiesBulkPhysicalDelete   - cloudSoarIncidentAttachmentsAccess   - cloudSoarAppCentralAccess   - cloudSoarBridgeMonitoringAccess   - viewCloudSoar   - cloudSoarIncidentView   - cloudSoarObservabilityAccess   - cloudSoarAPIEmailRead   - cloudSoarAppCentralExport   - cloudSoarWidgetsAll   - cloudSoarIncidentTaskReassign   - cloudSoarIntegrationsAccess   - cloudSoarCustomizationIncidentLabels   - cloudSoarAutomationRulesConfigure   - cloudSoarIncidentTaskAccessAll   - cloudSoarAuditAndInformationConfigureAuditTrail   - cloudSoarIncidentTriageEdit   - cloudSoarIncidentEdit   - cloudSoarNotificationTriage   - cloudSoarIncidentTriageBulkPhysicalDelete   - cloudSoarIncidentNotesAccess   - cloudSoarAPIUse   - cloudSoarIncidentPlaybooksEdit   - cloudSoarDashboardAll   - cloudSoarEntitiesManage   - cloudSoarIncidentTemplatesConfigure   - cloudSoarIncidentTriageAccessAll   - cloudSoarPlaybooksConfigure   - cloudSoarIncidentAccessAll   - cloudSoarCustomizationLogo   - cloudSoarIncidentTaskAccess   - cloudSoarIncidentTriageView   - cloudSoarIntegrationsConfigure   - cloudSoarIncidentManageInvestigators   - cloudSoarIncidentAccess   - cloudSoarAuditAndInformationLicenseInformation   - cloudSoarIncidentBulkOperations   - cloudSoarCustomizationFields   - cloudSoarIncidentTaskEdit   - cloudSoarDashboardAccess   - cloudSoarIncidentAttachmentsEdit   - cloudSoarIncidentFoldersEdit   - cloudSoarUserManagementGroups   - cloudSoarIncidentPlaybooksAccess   - cloudSoarIncidentWarRoomUse   - cloudSoarReportAccess   - cloudSoarAuditAndInformationAuditTrail   - cloudSoarAutomationRulesAccess   - cloudSoarIncidentTriageChangeOwnership   - cloudSoarObservabilityManagement (e.g. [manageContent, manageDataVolumeFeed, manageFieldExtractionRules, manageS3DataForwarding])
-  --autofillDependencies: string@bool-completer # Set this to true if you want to automatically append all missing capability requirements. If set to false an error will be thrown if any capabilities are missing their dependencies. (default: true)
+  --autofillDependencies: oneof<nothing, bool> # Set this to true if you want to automatically append all missing capability requirements. If set to false an error will be thrown if any capabilities are missing their dependencies. (default: true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2863,7 +2862,7 @@ export def "roles updateRole" [
   filterPredicate: string # A search filter to restrict access to specific logs. The filter is silently added to the beginning of each query a user runs. For example, using '!_sourceCategory=billing' as a filter predicate will prevent users assigned to the role from viewing logs from the source category named 'billing'. (e.g. !_sourceCategory=billing)
   users: list # List of user identifiers to assign the role to. (e.g. [0000000006743FE0, 0000000005FCE0EE])
   capabilities: list # List of [capabilities](https://help.sumologic.com/Manage/Users-and-Roles/Manage-Roles/Role-Capabilities) associated with this role. Valid values are ### Data Management   - viewCollectors   - manageCollectors   - manageBudgets   - manageDataVolumeFeed   - viewFieldExtraction   - manageFieldExtractionRules   - manageS3DataForwarding   - manageContent   - manageApps   - dataVolumeIndex   - manageConnections   - viewScheduledViews   - manageScheduledViews   - viewPartitions   - managePartitions   - viewFields   - manageFields   - viewAccountOverview   - manageTokens   - downloadSearchResults  ### Entity management   - manageEntityTypeConfig  ### Metrics   - metricsTransformation   - metricsExtraction   - metricsRules  ### Security   - managePasswordPolicy   - ipAllowlisting   - createAccessKeys   - manageAccessKeys   - manageSupportAccountAccess   - manageAuditDataFeed   - manageSaml   - shareDashboardOutsideOrg   - manageOrgSettings   - changeDataAccessLevel  ### Dashboards   - shareDashboardWorld   - shareDashboardAllowlist  ### UserManagement   - manageUsersAndRoles  ### Observability   - searchAuditIndex   - auditEventIndex  ### Cloud SIEM Enterprise   - viewCse  ### Alerting   - viewMonitorsV2   - manageMonitorsV2   - viewAlerts (e.g. [manageContent, manageDataVolumeFeed, manageFieldExtractionRules, manageS3DataForwarding])
-  --autofillDependencies: string@bool-completer # Set this to true if you want to automatically append all missing capability requirements. If set to false an error will be thrown if any capabilities are missing their dependencies. (default: true)
+  --autofillDependencies: oneof<nothing, bool> # Set this to true if you want to automatically append all missing capability requirements. If set to false an error will be thrown if any capabilities are missing their dependencies. (default: true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2992,7 +2991,7 @@ export def "roles createRoleV2" [
   --selectedViews: list # List of views which with specific view level filters in accordance to the selectionType chosen. — item shape: {viewName: string}
   --users: list # List of user identifiers to assign the role to. (e.g. [0000000006743FE0, 0000000005FCE0EE])
   --capabilities: list # List of [capabilities](https://help.sumologic.com/docs/manage/users-roles/roles/role-capabilities/) associated with this role. Valid values are ### Data Management   - viewCollectors   - manageCollectors   - manageBudgets   - manageDataVolumeFeed   - viewFieldExtraction   - manageFieldExtractionRules   - manageS3DataForwarding   - manageContent   - manageApps   - dataVolumeIndex   - manageConnections   - viewScheduledViews   - manageScheduledViews   - viewPartitions   - managePartitions   - viewFields   - manageFields   - viewAccountOverview   - manageTokens   - downloadSearchResults   - manageIndexes   - manageDataStreams   - viewParsers   - viewDataStreams  ### Entity management   - manageEntityTypeConfig  ### Metrics   - metricsTransformation   - metricsExtraction   - metricsRules  ### Security   - managePasswordPolicy   - ipAllowlisting   - ipWhitelisting   - createAccessKeys   - manageAccessKeys   - manageSupportAccountAccess   - manageAuditDataFeed   - manageSaml   - shareDashboardOutsideOrg   - manageOrgSettings   - changeDataAccessLevel  ### Dashboards   - shareDashboardWorld   - shareDashboardAllowlist   - shareDashboardWhitelist  ### UserManagement   - manageUsersAndRoles  ### Observability   - searchAuditIndex   - auditEventIndex  ### Cloud SIEM Enterprise   - viewCse   - cseViewAutomations   - cseManageContextActions   - cseViewNetworkBlocks   - cseManageInsightTags   - cseViewRules   - cseViewThreatIntelligence   - cseCommentOnInsights   - cseViewEntityGroups   - cseManageEntityConfiguration   - cseManageNetworkBlocks   - cseManageMatchLists   - cseViewCustomInsights   - cseManageActions   - cseManageAutomations   - cseManageMappings   - cseManageThreatIntelligence   - cseViewActions   - cseCreateInsights   - cseManageTagSchemas   - cseInvokeInsights   - cseManageCustomEntityType   - cseViewTagSchemas   - cseDeleteInsights   - cseManageCustomInsights   - cseViewFileAnalysis   - cseManageFileAnalysis   - cseManageEntityCriticality   - cseViewEntityCriticality   - cseViewEntity   - cseManageCustomInsightStatuses   - cseViewContextActions   - cseViewMappings   - cseViewCustomEntityType   - cseManageEntityGroups   - cseViewCustomInsightStatuses   - cseViewEnrichments   - cseManageInsightSignals   - cseManageRules   - cseManageArtifacts   - cseViewMatchLists   - cseManageInsightPolicy   - cseManageEnrichments   - cseViewEntityConfiguration   - cseManageEntity   - cseExecuteAutomations   - cseManageSuppressedEntities   - cseManageInsightStatus     - cseManageInsightAssignee   - cseManageFavoriteFields   - cseViewSuppressedEntities  ### Alerting   - viewMonitorsV2   - manageMonitorsV2   - viewAlerts   - viewMutingSchedules   - manageMutingSchedules   - adminMonitorsV2  ### SLO   - viewSlos   - manageSlos  ### CloudSoar   - cloudSoarPlaybooksAccess   - cloudSoarNotificationConfigure   - cloudSoarReportAll   - cloudSoarIncidentTriageAccess   - cloudSoarIncidentTaskView   - cloudSoarIncidentChangeOwnership   - cloudSoarIncidentNotesEdit   - cloudSoarAPIEmailEdit   - cloudSoarIncidentTemplatesAccess   - cloudSoarIncidentPlaybooksManage   - cloudSoarGeneralConfigure   - cloudSoarEntitiesAccess   - cloudSoarEntitiesBulkPhysicalDelete   - cloudSoarIncidentAttachmentsAccess   - cloudSoarAppCentralAccess   - cloudSoarBridgeMonitoringAccess   - viewCloudSoar   - cloudSoarIncidentView   - cloudSoarObservabilityAccess   - cloudSoarAPIEmailRead   - cloudSoarAppCentralExport   - cloudSoarWidgetsAll   - cloudSoarIncidentTaskReassign   - cloudSoarIntegrationsAccess   - cloudSoarCustomizationIncidentLabels   - cloudSoarAutomationRulesConfigure   - cloudSoarIncidentTaskAccessAll   - cloudSoarAuditAndInformationConfigureAuditTrail   - cloudSoarIncidentTriageEdit   - cloudSoarIncidentEdit   - cloudSoarNotificationTriage   - cloudSoarIncidentTriageBulkPhysicalDelete   - cloudSoarIncidentNotesAccess   - cloudSoarAPIUse   - cloudSoarIncidentPlaybooksEdit   - cloudSoarDashboardAll   - cloudSoarEntitiesManage   - cloudSoarIncidentTemplatesConfigure   - cloudSoarIncidentTriageAccessAll   - cloudSoarPlaybooksConfigure   - cloudSoarIncidentAccessAll   - cloudSoarCustomizationLogo   - cloudSoarIncidentTaskAccess   - cloudSoarIncidentTriageView   - cloudSoarIntegrationsConfigure   - cloudSoarIncidentManageInvestigators   - cloudSoarIncidentAccess   - cloudSoarAuditAndInformationLicenseInformation   - cloudSoarIncidentBulkOperations   - cloudSoarCustomizationFields   - cloudSoarIncidentTaskEdit   - cloudSoarDashboardAccess   - cloudSoarIncidentAttachmentsEdit   - cloudSoarIncidentFoldersEdit   - cloudSoarUserManagementGroups   - cloudSoarIncidentPlaybooksAccess   - cloudSoarIncidentWarRoomUse   - cloudSoarReportAccess   - cloudSoarAuditAndInformationAuditTrail   - cloudSoarAutomationRulesAccess   - cloudSoarIncidentTriageChangeOwnership   - cloudSoarObservabilityManagement (e.g. [manageContent, manageDataVolumeFeed, manageFieldExtractionRules, manageS3DataForwarding])
-  --autofillDependencies: string@bool-completer # Set this to true if you want to automatically append all missing capability requirements. If set to false an error will be thrown if any capabilities are missing their dependencies. (default: true)
+  --autofillDependencies: oneof<nothing, bool> # Set this to true if you want to automatically append all missing capability requirements. If set to false an error will be thrown if any capabilities are missing their dependencies. (default: true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3050,7 +3049,7 @@ export def "roles updateRoleV2" [
   selectedViews: list # List of views which with specific view level filters in accordance to the selectionType chosen. — item shape: {viewName: string}
   users: list # List of user identifiers to assign the role to. (e.g. [0000000006743FE0, 0000000005FCE0EE])
   capabilities: list # List of [capabilities](https://help.sumologic.com/Manage/Users-and-Roles/Manage-Roles/Role-Capabilities) associated with this role. Valid values are ### Data Management   - viewCollectors   - manageCollectors   - manageBudgets   - manageDataVolumeFeed   - viewFieldExtraction   - manageFieldExtractionRules   - manageS3DataForwarding   - manageContent   - manageApps   - dataVolumeIndex   - manageConnections   - viewScheduledViews   - manageScheduledViews   - viewPartitions   - managePartitions   - viewFields   - manageFields   - viewAccountOverview   - manageTokens   - downloadSearchResults  ### Entity management   - manageEntityTypeConfig  ### Metrics   - metricsTransformation   - metricsExtraction   - metricsRules  ### Security   - managePasswordPolicy   - ipAllowlisting   - createAccessKeys   - manageAccessKeys   - manageSupportAccountAccess   - manageAuditDataFeed   - manageSaml   - shareDashboardOutsideOrg   - manageOrgSettings   - changeDataAccessLevel  ### Dashboards   - shareDashboardWorld   - shareDashboardAllowlist  ### UserManagement   - manageUsersAndRoles  ### Observability   - searchAuditIndex   - auditEventIndex  ### Cloud SIEM Enterprise   - viewCse  ### Alerting   - viewMonitorsV2   - manageMonitorsV2   - viewAlerts (e.g. [manageContent, manageDataVolumeFeed, manageFieldExtractionRules, manageS3DataForwarding])
-  --autofillDependencies: string@bool-completer # Set this to true if you want to automatically append all missing capability requirements. If set to false an error will be thrown if any capabilities are missing their dependencies. (default: true)
+  --autofillDependencies: oneof<nothing, bool> # Set this to true if you want to automatically append all missing capability requirements. If set to false an error will be thrown if any capabilities are missing their dependencies. (default: true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3454,7 +3453,7 @@ export def "content-permissions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --explicitOnly: string@bool-completer # There are two permission types: explicit and implicit. Permissions specifically assigned to the content item are explicit. Permissions derived from a parent content item, like a folder are implicit. To return only explicit permissions set this to true. (default: false)
+  --explicitOnly: oneof<nothing, bool> # There are two permission types: explicit and implicit. Permissions specifically assigned to the content item are explicit. Permissions derived from a parent content item, like a folder are implicit. To return only explicit permissions set this to true. (default: false)
   --isAdminMode: string # Set this to "true" if you want to perform the request as a Content Administrator.
 ]: nothing -> record<explicitPermissions: table<permissionName: string, sourceType: string, sourceId: string, contentId: string>, implicitPermissions: table<permissionName: string, sourceType: string, sourceId: string, contentId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3484,7 +3483,7 @@ export def "content-permissions-add addContentPermissions" [
   --allow-errors(-e) # Return full response without error handling
   --isAdminMode: string # Set this to "true" if you want to perform the request as a Content Administrator.
   contentPermissionAssignments: list # Content permissions to be updated. — item shape: {permissionName: string, sourceType: string, sourceId: string, contentId: string}
-  --notifyRecipients: string@bool-completer # Set this to "true" to notify the users who had a permission update.
+  --notifyRecipients: oneof<nothing, bool> # Set this to "true" to notify the users who had a permission update.
   notificationMessage: string # The notification message sent to the users who had a permission update.
 ]: any -> record<explicitPermissions: table<permissionName: string, sourceType: string, sourceId: string, contentId: string>, implicitPermissions: table<permissionName: string, sourceType: string, sourceId: string, contentId: string>> {
   let input = $in
@@ -3516,7 +3515,7 @@ export def "content-permissions-remove removeContentPermissions" [
   --allow-errors(-e) # Return full response without error handling
   --isAdminMode: string # Set this to "true" if you want to perform the request as a Content Administrator.
   contentPermissionAssignments: list # Content permissions to be updated. — item shape: {permissionName: string, sourceType: string, sourceId: string, contentId: string}
-  --notifyRecipients: string@bool-completer # Set this to "true" to notify the users who had a permission update.
+  --notifyRecipients: oneof<nothing, bool> # Set this to "true" to notify the users who had a permission update.
   notificationMessage: string # The notification message sent to the users who had a permission update.
 ]: any -> record<explicitPermissions: table<permissionName: string, sourceType: string, sourceId: string, contentId: string>, implicitPermissions: table<permissionName: string, sourceType: string, sourceId: string, contentId: string>> {
   let input = $in
@@ -3669,7 +3668,7 @@ export def "content-folders-import beginAsyncImport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --overwrite: string@bool-completer # Set this to "true" to overwrite a content item if the name already exists. (default: false)
+  --overwrite: oneof<nothing, bool> # Set this to "true" to overwrite a content item if the name already exists. (default: false)
   --isAdminMode: string # Set this to "true" if you want to perform the request as a Content Administrator.
   type: string # The content item type. **Note:**  - `MewboardSyncDefinition` _is depreciated, and will soon be removed. Please use_ `DashboardV2SyncDefinition`    _instead_.  - Dashboard links are not supported for dashboards.
   name: string # The name of the item.
@@ -3909,7 +3908,7 @@ export def "transformation-rules createRule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   ruleDefinition: record # The properties that define a transformation rule. — shape: {name: string, selector: string, dimensionTransformations?: list, transformedMetricsRetention?: int, retention: int}
-  --enabled: string@bool-completer # True if the rule is enabled. (e.g. true)
+  --enabled: oneof<nothing, bool> # True if the rule is enabled. (e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3959,7 +3958,7 @@ export def "transformation-rules updateTransformationRule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   ruleDefinition: record # The properties that define a transformation rule. — shape: {name: string, selector: string, dimensionTransformations?: list, transformedMetricsRetention?: int, retention: int}
-  --enabled: string@bool-completer # True if the rule is enabled. (e.g. true)
+  --enabled: oneof<nothing, bool> # True if the rule is enabled. (e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4167,7 +4166,7 @@ export def "account-usage-report exportUsageReport" [
   --endDate: string # End date, without the time, of usage data to fetch. If no value is provided endDate is used as the end of the subscription. The end date cannot be after the end of the subscription. (e.g. 2019-08-20)
   --groupBy: string # Perform a groupBy operation on the usage details. If no value is provided data is grouped by `Day` - `day`: Aggregate the data by day - `week`: Aggregate the data by week. Week starts at Monday and ends at sunday night. - `month`: Aggregate the data by calendar month. (default: day, e.g. day)
   --reportType: string # Specifies the type of report to be exported. Available types are `standard` and `detailed`. An additional `childDetailed` type is available for Sumo Orgs parents. Detailed report will have raw consumption along with the credits breakdown. If no value is provided Standard reports will be exported. (default: standard, e.g. standard)
-  --includeDeploymentCharge: string@bool-completer # Deployment charges will be applied to the returned usages csv if this is set to true and the organization  is a part of Sumo Organizations as a child organization. (default: false, e.g. false)
+  --includeDeploymentCharge: oneof<nothing, bool> # Deployment charges will be applied to the returned usages csv if this is set to true and the organization  is a part of Sumo Organizations as a child organization. (default: false, e.g. false)
 ]: any -> record<jobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4637,7 +4636,7 @@ export def "access-keys updateAccessKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --disabled: string@bool-completer # Indicates whether the access key is disabled or not. (e.g. true)
+  --disabled: oneof<nothing, bool> # Indicates whether the access key is disabled or not. (e.g. true)
   --corsHeaders: list # An array of domains for which the access key is valid. Whether Sumo Logic accepts or rejects an API request depends on whether it contains an ORIGIN header and the entries in the allowlist. Sumo Logic will reject:   1. Requests with an ORIGIN header but the allowlist is empty.   2. Requests with an ORIGIN header that don't match any entry in the allowlist. (e.g. [https://my-app.com, https://mail.my-app.com])
   --scopes: list # Scopes assigned to the key. <br><br> Note: Updates to scopes will take up to 5m to reflect due to caching in the system. ### Alerting   - adminMonitorsV2   - viewMonitorsV2   - manageMonitorsV2  ### Data Management   - manageApps   - viewCollectors   - manageCollectors   - viewConnections   - manageConnections   - contentAdmin   - viewFieldExtractionRules   - manageFieldExtractionRules               - viewFields   - manageFields   - manageBudgets   - viewLibrary   - manageLibrary   - viewPartitions   - managePartitions   - manageS3DataForwarding   - viewScheduledViews   - manageScheduledViews   - manageTokens  ### Logs   - runLogSearch  ### Metrics   - runMetricsQuery   ### Reliability Management   - viewSlos   - manageSlos  ### Security   - manageAccessKeys   - viewPersonalAccessKeys   - managePersonalAccessKeys  ### UserManagement   - viewUsersAndRoles   - manageUsersAndRoles (e.g. [manageUsersAndRoles, viewCollectors])
 ]: any -> record<id: string, label: string, corsHeaders: list<string>, disabled: bool, createdAt: string, createdBy: string, modifiedAt: string, modifiedBy: string, serviceAccountId: string, lastUsed: string, scopes: list<string>, effectiveScopes: list<string>> {
@@ -4734,20 +4733,20 @@ export def "saml-identity-providers createIdentityProvider" [
   --spInitiatedLoginPath: string # This property has been deprecated and is no longer used. (DEPRECATED, default: , e.g. http://www.okta.com/abxcseyuiwelflkdjh)
   configurationName: string # Name of the SSO policy or another name used to describe the policy internally. (e.g. SumoLogic)
   issuer: string # The unique URL assigned to the organization by the SAML Identity Provider. (e.g. http://www.okta.com/abxcseyuiwelflkdjh)
-  --spInitiatedLoginEnabled: string@bool-completer # True if Sumo Logic redirects users to your identity provider with a SAML AuthnRequest when signing in. (default: false)
+  --spInitiatedLoginEnabled: oneof<nothing, bool> # True if Sumo Logic redirects users to your identity provider with a SAML AuthnRequest when signing in. (default: false)
   --authnRequestUrl: string # The URL that the identity provider has assigned for Sumo Logic to submit SAML authentication requests to the identity provider. (default: , e.g. https://www.okta.com/app/sumologic/abxcseyuiwelflkdjh/sso/saml)
   x509cert1: string # The certificate is used to verify the signature in SAML assertions.
   --x509cert2: string # The backup certificate used to verify the signature in SAML assertions when x509cert1 expires. (default: )
   --x509cert3: string # The backup certificate used to verify the signature in SAML assertions when x509cert1 expires and x509cert2 is empty. (default: )
   --onDemandProvisioningEnabled: record # shape: {firstNameAttribute?: string, lastNameAttribute?: string, onDemandProvisioningRoles: list}
   --rolesAttribute: string # The role that Sumo Logic will assign to users when they sign in. (default: , e.g. Sumo_Role)
-  --logoutEnabled: string@bool-completer # True if users are redirected to a URL after signing out of Sumo Logic. (default: false)
+  --logoutEnabled: oneof<nothing, bool> # True if users are redirected to a URL after signing out of Sumo Logic. (default: false)
   --logoutUrl: string # The URL that users will be redirected to after signing out of Sumo Logic. (default: , e.g. https://www.sumologic.com)
   --emailAttribute: string # The email address of the new user account. (default: , e.g. attribute/subject)
-  --debugMode: string@bool-completer # True if additional details are included when a user fails to sign in. (default: false)
-  --signAuthnRequest: string@bool-completer # True if Sumo Logic will send signed Authn requests to the identity provider. (default: false)
-  --disableRequestedAuthnContext: string@bool-completer # True if Sumo Logic will include the RequestedAuthnContext element of the SAML AuthnRequests it sends to the identity provider. (default: false)
-  --isRedirectBinding: string@bool-completer # True if the SAML binding is of HTTP Redirect type. (default: false)
+  --debugMode: oneof<nothing, bool> # True if additional details are included when a user fails to sign in. (default: false)
+  --signAuthnRequest: oneof<nothing, bool> # True if Sumo Logic will send signed Authn requests to the identity provider. (default: false)
+  --disableRequestedAuthnContext: oneof<nothing, bool> # True if Sumo Logic will include the RequestedAuthnContext element of the SAML AuthnRequests it sends to the identity provider. (default: false)
+  --isRedirectBinding: oneof<nothing, bool> # True if the SAML binding is of HTTP Redirect type. (default: false)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4778,20 +4777,20 @@ export def "saml-identity-providers updateIdentityProvider" [
   --spInitiatedLoginPath: string # This property has been deprecated and is no longer used. (DEPRECATED, default: , e.g. http://www.okta.com/abxcseyuiwelflkdjh)
   configurationName: string # Name of the SSO policy or another name used to describe the policy internally. (e.g. SumoLogic)
   issuer: string # The unique URL assigned to the organization by the SAML Identity Provider. (e.g. http://www.okta.com/abxcseyuiwelflkdjh)
-  --spInitiatedLoginEnabled: string@bool-completer # True if Sumo Logic redirects users to your identity provider with a SAML AuthnRequest when signing in. (default: false)
+  --spInitiatedLoginEnabled: oneof<nothing, bool> # True if Sumo Logic redirects users to your identity provider with a SAML AuthnRequest when signing in. (default: false)
   --authnRequestUrl: string # The URL that the identity provider has assigned for Sumo Logic to submit SAML authentication requests to the identity provider. (default: , e.g. https://www.okta.com/app/sumologic/abxcseyuiwelflkdjh/sso/saml)
   x509cert1: string # The certificate is used to verify the signature in SAML assertions.
   --x509cert2: string # The backup certificate used to verify the signature in SAML assertions when x509cert1 expires. (default: )
   --x509cert3: string # The backup certificate used to verify the signature in SAML assertions when x509cert1 expires and x509cert2 is empty. (default: )
   --onDemandProvisioningEnabled: record # shape: {firstNameAttribute?: string, lastNameAttribute?: string, onDemandProvisioningRoles: list}
   --rolesAttribute: string # The role that Sumo Logic will assign to users when they sign in. (default: , e.g. Sumo_Role)
-  --logoutEnabled: string@bool-completer # True if users are redirected to a URL after signing out of Sumo Logic. (default: false)
+  --logoutEnabled: oneof<nothing, bool> # True if users are redirected to a URL after signing out of Sumo Logic. (default: false)
   --logoutUrl: string # The URL that users will be redirected to after signing out of Sumo Logic. (default: , e.g. https://www.sumologic.com)
   --emailAttribute: string # The email address of the new user account. (default: , e.g. attribute/subject)
-  --debugMode: string@bool-completer # True if additional details are included when a user fails to sign in. (default: false)
-  --signAuthnRequest: string@bool-completer # True if Sumo Logic will send signed Authn requests to the identity provider. (default: false)
-  --disableRequestedAuthnContext: string@bool-completer # True if Sumo Logic will include the RequestedAuthnContext element of the SAML AuthnRequests it sends to the identity provider. (default: false)
-  --isRedirectBinding: string@bool-completer # True if the SAML binding is of HTTP Redirect type. (default: false)
+  --debugMode: oneof<nothing, bool> # True if additional details are included when a user fails to sign in. (default: false)
+  --signAuthnRequest: oneof<nothing, bool> # True if Sumo Logic will send signed Authn requests to the identity provider. (default: false)
+  --disableRequestedAuthnContext: oneof<nothing, bool> # True if Sumo Logic will include the RequestedAuthnContext element of the SAML AuthnRequests it sends to the identity provider. (default: false)
+  --isRedirectBinding: oneof<nothing, bool> # True if the SAML binding is of HTTP Redirect type. (default: false)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5129,7 +5128,7 @@ export def "policies-audit setAuditPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether the Audit policy is enabled. (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the Audit policy is enabled. (e.g. true)
 ]: any -> record<enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5175,7 +5174,7 @@ export def "policies-search-audit setSearchAuditPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether the Search Audit policy is enabled. (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the Search Audit policy is enabled. (e.g. true)
 ]: any -> record<enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5221,7 +5220,7 @@ export def "policies-share-dashboards-outside-organization setShareDashboardsOut
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether the Share Dashboards Outside Organization policy is enabled. (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the Share Dashboards Outside Organization policy is enabled. (e.g. true)
 ]: any -> record<enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5267,7 +5266,7 @@ export def "policies-data-access-level setDataAccessLevelPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether the Data Access Level policy is enabled. (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the Data Access Level policy is enabled. (e.g. true)
 ]: any -> record<enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5313,7 +5312,7 @@ export def "policies-user-concurrent-sessions-limit setUserConcurrentSessionsLim
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether the User Concurrent Sessions Limit policy is enabled. (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the User Concurrent Sessions Limit policy is enabled. (e.g. true)
   --maxConcurrentSessions: int # Maximum number of concurrent sessions a user may have. (format: int32, default: 100, e.g. 50)
 ]: any -> record<enabled: bool, maxConcurrentSessions: int> {
   let input = $in
@@ -5452,7 +5451,7 @@ export def "policies-data-deletion setDataDeletionPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether the Data Deletion policy is enabled. (e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the Data Deletion policy is enabled. (e.g. true)
 ]: any -> record<enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5656,7 +5655,7 @@ export def "log-searches-estimated-usage-by-tier post" [
   --allow-errors(-e) # Return full response without error handling
   queryString: string # Query to perform. (e.g. error {{sourceCategory}}| count by _sourceCategory)
   timeRange: record # e.g. {type: BeginBoundedTimeRange, from: {type: RelativeTimeRangeBoundary, relativeTime: -15m}} — shape: {type: string}
-  --runByReceiptTime: string@bool-completer # This has the value `true` if the search is to be run by receipt time and `false` if it is to be run by message time. (default: false, e.g. false)
+  --runByReceiptTime: oneof<nothing, bool> # This has the value `true` if the search is to be run by receipt time and `false` if it is to be run by message time. (default: false, e.g. false)
   --queryParameters: list # Values for search template used in the search query. Learn more about the search templates here : https://help.sumologic.com/docs/search/get-started-with-search/build-search/search-templates/ — item shape: {autoComplete?: record, name: string, description?: string, dataType: string, value: string}
   --intervalTimeType: string # This parameter defines whether you want to run the search by messageTime, receiptTime, or searchableTime.  By default, the search will run by messageTime. If both runByReceiptTime and intervalTimeType parameters are present then  the preference will be given to the intervalTimeType. (default: messageTime, e.g. messageTime)
   timezone: string # Time zone to get the estimated usage details. Follow the format in the [IANA Time Zone Database](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List).  (e.g. America/Los_Angeles)
@@ -5781,8 +5780,8 @@ export def "dashboards createDashboard" [
   --layout: record # shape: {layoutType: string, layoutStructures: list}
   --body-variables: list # Variables to apply to the panels. — item shape: {id?: string, name: string, displayName?: string, defaultValue?: string, sourceDefinition: record, allowMultiSelect?: bool, includeAllOption?: bool, hideFromUI?: bool, valueType?: string}
   --theme: string # Theme for the dashboard. Either `Light` or `Dark`. (default: Light, e.g. light)
-  --isPublic: string@bool-completer # Is the dashboard public (default: false)
-  --highlightViolations: string@bool-completer # Whether to highlight threshold violations. (default: false)
+  --isPublic: oneof<nothing, bool> # Is the dashboard public (default: false)
+  --highlightViolations: oneof<nothing, bool> # Whether to highlight threshold violations. (default: false)
   --organizations: record # The organization details to run the dashboard by — shape: {defaultOrgIds?: list}
 ]: any -> record<title: string, description: string, folderId: string, topologyLabelMap: record<data: record>, domain: string, hierarchies: list<string>, refreshInterval: int, timeRange: record<type: string>, panels: table<id: string, key: string, title: string, visualSettings: string, keepVisualSettingsConsistentWithParent: bool, panelType: string>, layout: record<layoutType: string, layoutStructures: list<record>>, variables: table<id: string, name: string, displayName: string, defaultValue: string, sourceDefinition: record, allowMultiSelect: bool, includeAllOption: bool, hideFromUI: bool, valueType: string>, theme: string, isPublic: bool, highlightViolations: bool, organizations: record<defaultOrgIds: list<string>>, id: string, contentId: string, scheduleId: string, scheduleCount: int> {
   let input = $in
@@ -5849,8 +5848,8 @@ export def "dashboards updateDashboard" [
   --layout: record # shape: {layoutType: string, layoutStructures: list}
   --body-variables: list # Variables to apply to the panels. — item shape: {id?: string, name: string, displayName?: string, defaultValue?: string, sourceDefinition: record, allowMultiSelect?: bool, includeAllOption?: bool, hideFromUI?: bool, valueType?: string}
   --theme: string # Theme for the dashboard. Either `Light` or `Dark`. (default: Light, e.g. light)
-  --isPublic: string@bool-completer # Is the dashboard public (default: false)
-  --highlightViolations: string@bool-completer # Whether to highlight threshold violations. (default: false)
+  --isPublic: oneof<nothing, bool> # Is the dashboard public (default: false)
+  --highlightViolations: oneof<nothing, bool> # Whether to highlight threshold violations. (default: false)
   --organizations: record # The organization details to run the dashboard by — shape: {defaultOrgIds?: list}
 ]: any -> record<title: string, description: string, folderId: string, topologyLabelMap: record<data: record>, domain: string, hierarchies: list<string>, refreshInterval: int, timeRange: record<type: string>, panels: table<id: string, key: string, title: string, visualSettings: string, keepVisualSettingsConsistentWithParent: bool, panelType: string>, layout: record<layoutType: string, layoutStructures: list<record>>, variables: table<id: string, name: string, displayName: string, defaultValue: string, sourceDefinition: record, allowMultiSelect: bool, includeAllOption: bool, hideFromUI: bool, valueType: string>, theme: string, isPublic: bool, highlightViolations: bool, organizations: record<defaultOrgIds: list<string>>, id: string, contentId: string, scheduleId: string, scheduleCount: int> {
   let input = $in
@@ -6104,7 +6103,7 @@ export def "dashboards-report-schedules createScheduleReport" [
   --cronExpression: string # Cron-like expression specifying the report's schedule. Field scheduleType must be set to "Custom", otherwise, scheduleType takes precedence over cronExpression. (e.g. 0 0/15 * * * ? *)
   timeZone: string # Time zone identifier for time specification. Either an abbreviation such as "PST", a full name such as "America/Los_Angeles", or a custom ID such as "GMT-8:00". Note that the support of abbreviations is for JDK 1.1.x compatibility only and full names should be used. (e.g. America/Los_Angeles)
   emailNotification: any
-  --isActive: string@bool-completer # Is the dashboard report schedule active (default: true)
+  --isActive: oneof<nothing, bool> # Is the dashboard report schedule active (default: true)
   --theme: string # Theme for the report rendering. Must be `Light` or `Dark`. If absent, the dashboard's own theme is used. (e.g. Light)
   --exportWidth: int # Pixel width of the exported PDF or PNG. If absent, the default width is used. (e.g. 1500)
 ]: any -> record<dashboardId: string, timeRange: record<type: string>, variableValues: record<data: record, richData: record>, reportFormat: string, scheduleType: string, cronExpression: string, timeZone: string, emailNotification: record<connectionType: string, recipients: list<string>, subject: string, messageBody: string, timeZone: string>, isActive: bool, theme: string, exportWidth: int, scheduleId: string> {
@@ -6164,7 +6163,7 @@ export def "dashboards-report-schedules updateReportSchedule" [
   --cronExpression: string # Cron-like expression specifying the report's schedule. Field scheduleType must be set to "Custom", otherwise, scheduleType takes precedence over cronExpression. (e.g. 0 0/15 * * * ? *)
   timeZone: string # Time zone identifier for time specification. Either an abbreviation such as "PST", a full name such as "America/Los_Angeles", or a custom ID such as "GMT-8:00". Note that the support of abbreviations is for JDK 1.1.x compatibility only and full names should be used. (e.g. America/Los_Angeles)
   emailNotification: any
-  --isActive: string@bool-completer # Is the dashboard report schedule active (default: true)
+  --isActive: oneof<nothing, bool> # Is the dashboard report schedule active (default: true)
   --theme: string # Theme for the report rendering. Must be `Light` or `Dark`. If absent, the dashboard's own theme is used. (e.g. Light)
   --exportWidth: int # Pixel width of the exported PDF or PNG. If absent, the default width is used. (e.g. 1500)
 ]: any -> record<dashboardId: string, timeRange: record<type: string>, variableValues: record<data: record, richData: record>, reportFormat: string, scheduleType: string, cronExpression: string, timeZone: string, emailNotification: record<connectionType: string, recipients: list<string>, subject: string, messageBody: string, timeZone: string>, isActive: bool, theme: string, exportWidth: int, scheduleId: string> {
@@ -6504,18 +6503,18 @@ export def "password-policy setPasswordPolicy" [
   --allow-errors(-e) # Return full response without error handling
   --minLength: int # The minimum length of the password. (format: int32, default: 8, e.g. 8)
   --maxLength: int # The maximum length of the password. (Setting this to any value other than 128 is no longer supported; this field may be deprecated in the future.) (format: int32, default: 128, e.g. 128)
-  --mustContainLowercase: string@bool-completer # If the password must contain lower case characters. (default: true, e.g. true)
-  --mustContainUppercase: string@bool-completer # If the password must contain upper case characters. (default: true, e.g. true)
-  --mustContainDigits: string@bool-completer # If the password must contain digits. (default: true, e.g. true)
-  --mustContainSpecialChars: string@bool-completer # If the password must contain special characters. (default: true, e.g. true)
+  --mustContainLowercase: oneof<nothing, bool> # If the password must contain lower case characters. (default: true, e.g. true)
+  --mustContainUppercase: oneof<nothing, bool> # If the password must contain upper case characters. (default: true, e.g. true)
+  --mustContainDigits: oneof<nothing, bool> # If the password must contain digits. (default: true, e.g. true)
+  --mustContainSpecialChars: oneof<nothing, bool> # If the password must contain special characters. (default: true, e.g. true)
   --maxPasswordAgeInDays: int # Maximum number of days that a password can be used before user is required to change it. Put -1 if the user should not have to change their password. (format: int32, default: 365, e.g. 365)
   --minUniquePasswords: int # The minimum number of unique new passwords that a user must use before an old password can be reused. (format: int32, default: 10, e.g. 10)
   --accountLockoutThreshold: int # Number of failed login attempts allowed before account is locked-out. (format: int32, default: 6, e.g. 6)
   --failedLoginResetDurationInMins: int # The duration of time in minutes that must elapse from the first failed login attempt after which failed login count is reset to 0. (format: int32, default: 10, e.g. 10)
   --accountLockoutDurationInMins: int # The duration of time in minutes that a locked-out account remained locked before getting unlocked automatically. (format: int32, default: 30, e.g. 30)
-  --requireMfa: string@bool-completer # If MFA should be required to log in. By default, this field is set to `false`. (default: false, e.g. false)
-  --rememberMfa: string@bool-completer # If MFA should be remembered on the browser. (default: true, e.g. true)
-  --disallowWeakPasswords: string@bool-completer # If weak passwords should be disallowed. By default, this field is set to `false`. (default: false, e.g. false)
+  --requireMfa: oneof<nothing, bool> # If MFA should be required to log in. By default, this field is set to `false`. (default: false, e.g. false)
+  --rememberMfa: oneof<nothing, bool> # If MFA should be remembered on the browser. (default: true, e.g. true)
+  --disallowWeakPasswords: oneof<nothing, bool> # If weak passwords should be disallowed. By default, this field is set to `false`. (default: false, e.g. false)
 ]: any -> record<minLength: int, maxLength: int, mustContainLowercase: bool, mustContainUppercase: bool, mustContainDigits: bool, mustContainSpecialChars: bool, maxPasswordAgeInDays: int, minUniquePasswords: int, accountLockoutThreshold: int, failedLoginResetDurationInMins: int, accountLockoutDurationInMins: int, requireMfa: bool, rememberMfa: bool, disallowWeakPasswords: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6589,7 +6588,7 @@ export def "parsers parsersCreate" [
   name: string # Name of the folder or parser.
   description: string # Description of the folder or parser.
   type: string # Type of the object model.
-  --isLocked: string@bool-completer # Locking/Unlocking requires the `LockParsers` capability. Locked objects can only be `Localized`. Updating or moving requires unlocking the object. Locking/Unlocking recursively locks all of the objects children. All children of a locked object must be locked. (default: false)
+  --isLocked: oneof<nothing, bool> # Locking/Unlocking requires the `LockParsers` capability. Locked objects can only be `Localized`. Updating or moving requires unlocking the object. Locking/Unlocking recursively locks all of the objects children. All children of a locked object must be locked. (default: false)
 ]: any -> record<id: string, name: string, description: string, version: int, createdAt: string, createdBy: string, modifiedAt: string, modifiedBy: string, parentId: string, contentType: string, type: string, isLocked: bool, isSystem: bool, isMutable: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6837,7 +6836,7 @@ export def "parsers-export parsersExportItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --preserveLock: string@bool-completer # Set this to true if you want to export an object and preserve the locked status.  (default: false)
+  --preserveLock: oneof<nothing, bool> # Set this to true if you want to export an object and preserve the locked status.  (default: false)
 ]: nothing -> record<name: string, description: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7056,7 +7055,7 @@ export def "service-accounts updateServiceAccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # Name of the service account. (e.g. Service Account)
-  --isActive: string@bool-completer # This has the value `true` if the service account is active and `false` if it has been deactivated. (e.g. true)
+  --isActive: oneof<nothing, bool> # This has the value `true` if the service account is active and `false` if it has been deactivated. (e.g. true)
   --roleIds: list # List of role identifiers associated with the service account. (e.g. [00000000000001DF, 00000000000002D2])
   --email: string # New email address of the service account. (format: email, e.g. johndoe@acme.com)
 ]: any -> record {
@@ -7085,7 +7084,7 @@ export def "service-accounts delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --transferTo: string # Identifier of a user/service account to receive the transfer of content from the deleted service account. <br> **Note:** If `deleteContent` is not set to `true`, and no user identifier is specified in `transferTo`, content from the deleted service account is transferred to the executing user.
-  --deleteContent: string@bool-completer # Whether to delete content from the deleted service account or not. <br> **Warning:** If `deleteContent` is set to `true`, all of the content for the service account being  deleted is permanently deleted and cannot be recovered.
+  --deleteContent: oneof<nothing, bool> # Whether to delete content from the deleted service account or not. <br> **Warning:** If `deleteContent` is set to `true`, all of the content for the service account being  deleted is permanently deleted and cannot be recovered.
 ]: nothing -> record<id: string, errors: table<code: string, message: string, detail: string, meta: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7183,7 +7182,7 @@ export def "service-accounts-access-keys updateAccessKeyOfAServiceAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --disabled: string@bool-completer # Indicates whether the access key is disabled or not. (e.g. true)
+  --disabled: oneof<nothing, bool> # Indicates whether the access key is disabled or not. (e.g. true)
   --corsHeaders: list # An array of domains for which the access key is valid. Whether Sumo Logic accepts or rejects an API request depends on whether it contains an ORIGIN header and the entries in the allowlist. Sumo Logic will reject:   1. Requests with an ORIGIN header but the allowlist is empty.   2. Requests with an ORIGIN header that don't match any entry in the allowlist. (e.g. [https://my-app.com, https://mail.my-app.com])
   --scopes: list # Scopes assigned to the key. <br><br> Note: Updates to scopes will take up to 5m to reflect due to caching in the system. ### Alerting   - adminMonitorsV2   - viewMonitorsV2   - manageMonitorsV2  ### Data Management   - manageApps   - viewCollectors   - manageCollectors   - viewConnections   - manageConnections   - contentAdmin   - viewFieldExtractionRules   - manageFieldExtractionRules               - viewFields   - manageFields   - manageBudgets   - viewLibrary   - manageLibrary   - viewPartitions   - managePartitions   - manageS3DataForwarding   - viewScheduledViews   - manageScheduledViews   - manageTokens  ### Logs   - runLogSearch  ### Metrics   - runMetricsQuery   ### Reliability Management   - viewSlos   - manageSlos  ### Security   - manageAccessKeys   - viewPersonalAccessKeys   - managePersonalAccessKeys  ### UserManagement   - viewUsersAndRoles   - manageUsersAndRoles (e.g. [manageUsersAndRoles, viewCollectors])
 ]: any -> record<id: string, label: string, corsHeaders: list<string>, disabled: bool, createdAt: string, createdBy: string, modifiedAt: string, modifiedBy: string, serviceAccountId: string, lastUsed: string, scopes: list<string>, effectiveScopes: list<string>> {
@@ -7337,7 +7336,7 @@ export def "oauth-clients updateOAuthClient" [
   type: string@type-completer-1 # Type of the object model.
   name: string # Name of the OAuth client. (e.g. My OAuth Client)
   description: string # Description of the OAuth client. (e.g. OAuth client for data ingestion)
-  --disabled: string@bool-completer # Whether the OAuth client is disabled. Disabled OAuth clients cannot be used to authenticate users.
+  --disabled: oneof<nothing, bool> # Whether the OAuth client is disabled. Disabled OAuth clients cannot be used to authenticate users.
   scopes: list # Scopes assigned to the client. ### Alerting   - adminMonitorsV2   - viewMonitorsV2   - manageMonitorsV2  ### Data Management   - manageApps   - viewCollectors   - manageCollectors   - viewConnections   - manageConnections   - contentAdmin   - viewFieldExtractionRules   - manageFieldExtractionRules               - viewFields   - manageFields   - manageBudgets   - viewLibrary   - manageLibrary   - viewPartitions   - managePartitions    - manageS3DataForwarding   - viewScheduledViews   - manageScheduledViews   - manageTokens  ### Logs   - runLogSearch  ### Metrics   - runMetricsQuery   ### Reliability Management   - viewSlos   - manageSlos  ### Security   - manageAccessKeys   - viewPersonalAccessKeys   - managePersonalAccessKeys  ### UserManagement   - viewUsersAndRoles   - manageUsersAndRoles (e.g. [manageUsersAndRoles, viewCollectors])
 ]: any -> record<type: string, clientId: string, createdAt: string, createdBy: string, modifiedAt: string, modifiedBy: string, name: string, description: string, disabled: bool, scopes: list<string>> {
   let input = $in
@@ -8428,7 +8427,7 @@ export def "threat-intel-datastore-data-source dataSourcePropertiesUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # True if enabled. (e.g. true)
+  --enabled: oneof<nothing, bool> # True if enabled. (e.g. true)
   --description: string # The data source description. (e.g. This is a stix1.2 data source.)
 ]: any -> record<id: string, errors: table<code: string, message: string, detail: string, meta: record>> {
   let input = $in
@@ -8460,7 +8459,7 @@ export def "ot-collectors post" [
   --sortBy: string # parameter which is used for sorting. (e.g. name)
   --next: string # parameter which is used for fetching next set of results. (e.g. token)
   --limit: int # parameter which is used for limiting number of otCollectors on a page. (format: int32, e.g. 30)
-  --includeCount: string@bool-completer # count of filtered otCollectors. (nullable, e.g. false)
+  --includeCount: oneof<nothing, bool> # count of filtered otCollectors. (nullable, e.g. false)
 ]: any -> record<data: table<id: string, name: string, version: record, category: string, description: string, tags: record, healthIncidentsTracker: record, ephemeral: bool, alive: bool, isRemotelyManaged: bool, effectiveConfig: record, systemInfo: record, timeZone: string, createdAt: string, createdBy: string, modifiedAt: string, modifiedBy: string, sourceTemplateLinkedCount: int>, next: string, count: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8594,7 +8593,7 @@ export def "source-templates list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --showDisabled: string@bool-completer # A boolean parameter to get all, including disabled source templates. (default: false)
+  --showDisabled: oneof<nothing, bool> # A boolean parameter to get all, including disabled source templates. (default: false)
   --name: string # Only return source template matching the given name (exact match). (nullable)
 ]: nothing -> record<data: table<schemaRef: record, id: string, inputJson: record, config: string, selector: record, totalCollectorLinked: int, createdAt: string, modifiedAt: string, createdBy: string, modifiedBy: string, status: string, isEnabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8624,7 +8623,7 @@ export def "source-templates createSourceTemplateV2" [
   schemaRef: record # schema reference for source template. — shape: {type: string}
   inputJson: record # inputJson of source template — shape: {name: string, receivers: record, description?: string, processors?: record}
   --selector: record # Agent selector conditions — shape: {tags?: list, names?: list}
-  --isEnabled: string@bool-completer # Indicates whether the source template is enabled - **Create operation:** Defaults to `true` (the template is enabled when created). - **Update operation:** If omitted, the existing status is preserved. (e.g. true)
+  --isEnabled: oneof<nothing, bool> # Indicates whether the source template is enabled - **Create operation:** Defaults to `true` (the template is enabled when created). - **Update operation:** If omitted, the existing status is preserved. (e.g. true)
 ]: any -> record<schemaRef: record<type: string>, id: string, inputJson: record, config: string, selector: record<tags: list<list>, names: list<string>>, totalCollectorLinked: int, createdAt: string, modifiedAt: string, createdBy: string, modifiedBy: string, status: string, isEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8678,7 +8677,7 @@ export def "source-templates updateSourceTemplateV2" [
   schemaRef: record # schema reference for source template. — shape: {type: string}
   inputJson: record # InputJson of source template — shape: {name: string, receivers: record, description?: string, processors?: record}
   --selector: record # Agent selector conditions — shape: {tags?: list, names?: list}
-  --isEnabled: string@bool-completer # Indicates whether the source template is enabled. If omitted, the existing status is preserved. (e.g. true)
+  --isEnabled: oneof<nothing, bool> # Indicates whether the source template is enabled. If omitted, the existing status is preserved. (e.g. true)
 ]: any -> record<schemaRef: record<type: string>, id: string, inputJson: record, config: string, selector: record<tags: list<list>, names: list<string>>, totalCollectorLinked: int, createdAt: string, modifiedAt: string, createdBy: string, modifiedBy: string, status: string, isEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8809,7 +8808,7 @@ export def "source-template list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --showDisabled: string@bool-completer # A boolean parameter to get all, including disabled source templates. (default: false)
+  --showDisabled: oneof<nothing, bool> # A boolean parameter to get all, including disabled source templates. (default: false)
   --name: string # Only return source template matching the given name (exact match). (nullable)
 ]: nothing -> record<data: table<schemaRef: record, id: string, inputJson: record, config: string, selector: record, totalCollectorLinked: int, createdAt: string, modifiedAt: string, createdBy: string, modifiedBy: string, status: string, isEnabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8841,7 +8840,7 @@ export def "source-template createSourceTemplate" [
   schemaRef: record # schema reference for source template. — shape: {type: string}
   inputJson: record # inputJson of source template — shape: {name: string, receivers: record, description?: string, processors?: record}
   --selector: record # Agent selector conditions — shape: {tags?: list, names?: list}
-  --isEnabled: string@bool-completer # Indicates whether the source template is enabled - **Create operation:** Defaults to `true` (the template is enabled when created). - **Update operation:** If omitted, the existing status is preserved. (e.g. true)
+  --isEnabled: oneof<nothing, bool> # Indicates whether the source template is enabled - **Create operation:** Defaults to `true` (the template is enabled when created). - **Update operation:** If omitted, the existing status is preserved. (e.g. true)
 ]: any -> record<schemaRef: record<type: string>, id: string, inputJson: record, config: string, selector: record<tags: list<list>, names: list<string>>, totalCollectorLinked: int, createdAt: string, modifiedAt: string, createdBy: string, modifiedBy: string, status: string, isEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8899,7 +8898,7 @@ export def "source-template updateSourceTemplate" [
   schemaRef: record # schema reference for source template. — shape: {type: string}
   inputJson: record # inputJson of source template — shape: {name: string, receivers: record, description?: string, processors?: record}
   --selector: record # Agent selector conditions — shape: {tags?: list, names?: list}
-  --isEnabled: string@bool-completer # Indicates whether the source template is enabled - **Create operation:** Defaults to `true` (the template is enabled when created). - **Update operation:** If omitted, the existing status is preserved. (e.g. true)
+  --isEnabled: oneof<nothing, bool> # Indicates whether the source template is enabled - **Create operation:** Defaults to `true` (the template is enabled when created). - **Update operation:** If omitted, the existing status is preserved. (e.g. true)
 ]: any -> record<schemaRef: record<type: string>, id: string, inputJson: record, config: string, selector: record<tags: list<list>, names: list<string>>, totalCollectorLinked: int, createdAt: string, modifiedAt: string, createdBy: string, modifiedBy: string, status: string, isEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -9415,7 +9414,7 @@ export def "macros createMacro" [
   --allow-errors(-e) # Return full response without error handling
   --description: string # Description of the macro. (e.g. Macro for geo lookup.)
   definition: string # The definition of the macro. Use a valid Sumo Log Search expression. (e.g. lookup latitude, longitude from geo://location on ip = {{ip_field}} | count by latitude, longitude | sort _count" )
-  --enabled: string@bool-completer # If the macro is enabled or not (default True) (default: true)
+  --enabled: oneof<nothing, bool> # If the macro is enabled or not (default True) (default: true)
   --arguments: list # Arguments used in the macro. — item shape: {name: string, type?: string}
   --argumentValidations: list # Validation expressions for the arguments. — item shape: {evalExpression: string, errorMessage: string}
   name: string # Name of the macro. (e.g. MacroGeoLookup)
@@ -9471,7 +9470,7 @@ export def "macros editMacro" [
   --allow-errors(-e) # Return full response without error handling
   --description: string # Description of the macro. (e.g. Macro for geo lookup.)
   definition: string # The definition of the macro. Use a valid Sumo Log Search expression. (e.g. lookup latitude, longitude from geo://location on ip = {{ip_field}} | count by latitude, longitude | sort _count" )
-  --enabled: string@bool-completer # If the macro is enabled or not (default True) (default: true)
+  --enabled: oneof<nothing, bool> # If the macro is enabled or not (default True) (default: true)
   --arguments: list # Arguments used in the macro. — item shape: {name: string, type?: string}
   --argumentValidations: list # Validation expressions for the arguments. — item shape: {evalExpression: string, errorMessage: string}
 ]: any -> record<id: string, createdAt: string, createdBy: string> {
@@ -9521,7 +9520,7 @@ export def "muting-schedules mutingSchedulesReadByIds" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ids: list # A comma-separated list of identifiers. (e.g. 0000000000000001,0000000000000002,0000000000000003)
-  --skipChildren: string@bool-completer # a boolean parameter to control skipping fetching children of requested folder(s)
+  --skipChildren: oneof<nothing, bool> # a boolean parameter to control skipping fetching children of requested folder(s)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -9621,7 +9620,7 @@ export def "muting-schedules-search mutingSchedulesSearch" [
   --qp-query: string # The search query to find mutingschedule or folder. Below is the list of different filters with examples:   - **createdBy** : Filter by the user's identifier who created the content. Example: `createdBy:000000000000968B`.   - **createdBefore** : Filter by the content objects created before the given timestamp(in milliseconds). Example: `createdBefore:1457997222`.   - **createdAfter** : Filter by the content objects created after the given timestamp(in milliseconds). Example: `createdAfter:1457997111`.   - **modifiedBefore** : Filter by the content objects modified before the given timestamp(in milliseconds). Example: `modifiedBefore:1457997222`.   - **modifiedAfter** : Filter by the content objects modified after the given timestamp(in milliseconds). Example: `modifiedAfter:1457997111`.   - **type** : Filter by the type of the content object. Example: `type:folder`.  You can also use multiple filters in one query. For example to search for all content objects created by user with identifier 000000000000968B with creation timestamp after 1457997222 containing the text Test, the query would look like:    `createdBy:000000000000968B createdAfter:1457997222 Test` (e.g. createdBy:000000000000968B Test)
   --limit: int # Maximum number of items you want in the response. (format: int32, default: 1000, e.g. 10)
   --offset: int # The position or row from where to start the search operation. (format: int32, default: 0, e.g. 5)
-  --skipChildren: string@bool-completer # a boolean parameter to control skipping fetching children of requested folder(s)
+  --skipChildren: oneof<nothing, bool> # a boolean parameter to control skipping fetching children of requested folder(s)
 ]: nothing -> table<item: record<id: string, name: string, description: string, version: int, createdAt: string, createdBy: string, modifiedAt: string, modifiedBy: string, parentId: string, contentType: string, type: string, isSystem: bool, isMutable: bool, permissions: list>, path: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -9823,7 +9822,7 @@ export def "slos slosReadByIds" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ids: list # A comma-separated list of identifiers. (e.g. 0000000000000001,0000000000000002,0000000000000003)
-  --skipChildren: string@bool-completer # a boolean parameter to control skipping fetching children of requested folder(s)
+  --skipChildren: oneof<nothing, bool> # a boolean parameter to control skipping fetching children of requested folder(s)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -9947,7 +9946,7 @@ export def "slos-search slosSearch" [
   --qp-query: string # The search query to find slo or folder. Below is the list of different filters with examples:   - **createdBy** : Filter by the user's identifier who created the content. Example: `createdBy:000000000000968B`.   - **createdBefore** : Filter by the content objects created before the given timestamp(in milliseconds). Example: `createdBefore:1457997222`.   - **createdAfter** : Filter by the content objects created after the given timestamp(in milliseconds). Example: `createdAfter:1457997111`.   - **modifiedBefore** : Filter by the content objects modified before the given timestamp(in milliseconds). Example: `modifiedBefore:1457997222`.   - **modifiedAfter** : Filter by the content objects modified after the given timestamp(in milliseconds). Example: `modifiedAfter:1457997111`.   - **type** : Filter by the type of the content object. Example: `type:folder`.  You can also use multiple filters in one query. For example to search for all content objects created by user with identifier 000000000000968B with creation timestamp after 1457997222 containing the text Test, the query would look like:    `createdBy:000000000000968B createdAfter:1457997222 Test` (e.g. createdBy:000000000000968B Test)
   --limit: int # Maximum number of items you want in the response. (format: int32, default: 1000, e.g. 10)
   --offset: int # The position or row from where to start the search operation. (format: int32, default: 0, e.g. 5)
-  --skipChildren: string@bool-completer # a boolean parameter to control skipping fetching children of requested folder(s)
+  --skipChildren: oneof<nothing, bool> # a boolean parameter to control skipping fetching children of requested folder(s)
 ]: nothing -> table<item: record<id: string, name: string, description: string, version: int, createdAt: string, createdBy: string, modifiedAt: string, modifiedBy: string, parentId: string, contentType: string, type: string, isSystem: bool, isMutable: bool, permissions: list>, path: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -10174,7 +10173,7 @@ export def "monitors monitorsReadByIds" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ids: list # A comma-separated list of identifiers. (e.g. 0000000000000001,0000000000000002,0000000000000003)
-  --skipChildren: string@bool-completer # a boolean parameter to control skipping fetching children of requested folder(s)
+  --skipChildren: oneof<nothing, bool> # a boolean parameter to control skipping fetching children of requested folder(s)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -10298,7 +10297,7 @@ export def "monitors-search monitorsSearch" [
   --qp-query: string # The search query to find monitor or folder. Below is the list of different filters with examples:   - **createdBy** : Filter by the user's identifier who created the content. Example: `createdBy:000000000000968B`.   - **createdBefore** : Filter by the content objects created before the given timestamp(in milliseconds). Example: `createdBefore:1457997222`.   - **createdAfter** : Filter by the content objects created after the given timestamp(in milliseconds). Example: `createdAfter:1457997111`.   - **modifiedBefore** : Filter by the content objects modified before the given timestamp(in milliseconds). Example: `modifiedBefore:1457997222`.   - **modifiedAfter** : Filter by the content objects modified after the given timestamp(in milliseconds). Example: `modifiedAfter:1457997111`.   - **type** : Filter by the type of the content object. Example: `type:folder`.   - **monitorStatus** : Filter by the status of the monitor: Normal, Critical, Warning, MissingData, Disabled, AllTriggered. Example: `monitorStatus:Normal`.  You can also use multiple filters in one query. For example to search for all content objects created by user with identifier 000000000000968B with creation timestamp after 1457997222 containing the text Test, the query would look like:    `createdBy:000000000000968B createdAfter:1457997222 Test` (e.g. createdBy:000000000000968B Test)
   --limit: int # Maximum number of items you want in the response. (format: int32, default: 1000, e.g. 10)
   --offset: int # The position or row from where to start the search operation. (format: int32, default: 0, e.g. 5)
-  --skipChildren: string@bool-completer # a boolean parameter to control skipping fetching children of requested folder(s)
+  --skipChildren: oneof<nothing, bool> # a boolean parameter to control skipping fetching children of requested folder(s)
 ]: nothing -> table<item: record<id: string, name: string, description: string, version: int, createdAt: string, createdBy: string, modifiedAt: string, modifiedBy: string, parentId: string, contentType: string, type: string, isSystem: bool, isMutable: bool, permissions: list>, path: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)

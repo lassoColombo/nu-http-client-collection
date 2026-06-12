@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.docusign.net/Management"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -812,9 +811,9 @@ export def "organizations-users-profiles UpdateV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --apply-license-override: string@bool-completer
+  --apply-license-override: oneof<nothing, bool>
   --users: list # A list of users whose information you want to change. — item shape: {id: string, site_id: int, user_name?: string, first_name?: string, last_name?: string, email?: string, default_account_id?: string, language_culture?: string, selected_languages?: string, federated_status?: string, force_password_change?: bool, memberships?: list, device_verification_enabled?: bool}
-  --auto-activate-memberships-on-reactivation: string@bool-completer
+  --auto-activate-memberships-on-reactivation: oneof<nothing, bool>
 ]: any -> record<success: bool, users: table<id: string, site_id: int, email: string, error_details: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -906,8 +905,8 @@ export def "organizations-users GetV2" [
   --account-id: string # Select users that are members of the specified account. At least one of `email`, `account_id` or `organization_reserved_domain_id` must be specified. (format: uuid)
   --organization-reserved-domain-id: string # Select users that are in the specified domain. At least one of `email`, `account_id` or `organization_reserved_domain_id` must be specified. (format: uuid)
   --last-modified-since: string # Select users whose data have been modified since the date specified. `account_id` or `organization_reserved_domain_id` must be specified.
-  --include-ds-groups: string@bool-completer # Select users with groups the users belong to; The organization must have entitlement `AllowMultiApplication` enabled.
-  --include-license: string@bool-completer
+  --include-ds-groups: oneof<nothing, bool> # Select users with groups the users belong to; The organization must have entitlement `AllowMultiApplication` enabled.
+  --include-license: oneof<nothing, bool>
 ]: nothing -> record<users: table<id: string, user_name: string, first_name: string, last_name: string, user_status: string, membership_status: string, email: string, created_on: string, closed_on: string, membership_created_on: string, membership_closed_on: string, ds_groups: list, membership_id: string, is_membership_managed_by_scim: bool, is_managed_by_scim: bool, license_type: string, subscription_id: string, plan_name: string>, paging: record<result_set_size: int, result_set_start_position: int, result_set_end_position: int, total_set_size: int, next: string, previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -942,7 +941,7 @@ export def "organizations-users AddV2" [
   --selected-languages: string
   --access-code: string # The access code that the user needs to activate an account.
   --federated-status: string # The user's federated status. One of:  - `RemoveStatus` - `FedAuthRequired` - `FedAuthBypass` - `Evicted`
-  --auto-activate-memberships: string@bool-completer # When **true,** the user's account is activated automatically.
+  --auto-activate-memberships: oneof<nothing, bool> # When **true,** the user's account is activated automatically.
 ]: any -> record<id: string, site_id: int, user_name: string, first_name: string, last_name: string, email: string, language_culture: string, federated_status: string, accounts: table<id: string, site_id: int, permission_profile: record, groups: list, company_name: string, job_title: string, license_type: string, subscription_id: string, plan_name: string, license_status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -997,7 +996,7 @@ export def "organizations-users-profile GetProfileV2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --email: string # The email address associated with the users you want to retrieve.  **Note:** This property is required.
-  --include-license: string@bool-completer
+  --include-license: oneof<nothing, bool>
 ]: nothing -> record<users: table<id: string, site_id: int, site_name: string, user_name: string, first_name: string, last_name: string, user_status: string, default_account_id: string, default_account_name: string, language_culture: string, selected_languages: string, federated_status: string, is_organization_admin: bool, created_on: string, last_login: string, memberships: list, identities: list, device_verification_enabled: bool, require_two_step_verification: bool, allow_two_step_verification_snooze: bool, allow_extend_org_admin_rights_to_self: bool, is_managed_by_scim: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1063,7 +1062,7 @@ export def "organizations-accounts-users PostAccountUsersV2" [
   --selected-languages: string
   --access-code: string # The access code that the user needs to activate an account.
   --federated-status: string # The user's federated status. One of:  - `RemoveStatus` - `FedAuthRequired` - `FedAuthBypass` - `Evicted`
-  --auto-activate-memberships: string@bool-completer # When **true,** the user's account is activated automatically.
+  --auto-activate-memberships: oneof<nothing, bool> # When **true,** the user's account is activated automatically.
   --license-type: string
 ]: any -> record<id: string, site_id: int, user_name: string, first_name: string, last_name: string, email: string, language_culture: string, federated_status: string, accounts: table<id: string, site_id: int, permission_profile: record, groups: list, company_name: string, job_title: string, license_type: string, subscription_id: string, plan_name: string, license_status: string>> {
   let input = $in
@@ -1365,7 +1364,7 @@ export def "v21-organizations-accounts-users PostAccountUsersV2-by-organizationI
   --language-culture: string # The language and culture of the user.    * Chinese Simplified: `zh_CN`   * Chinese Traditional: `zh_TW`   * Dutch: `nl`   * English: `en`   * French: `fr`   * German: `de`   * Italian: `it`   * Japanese: `ja`   * Korean: `ko`   * Portuguese: `pt`   * Portuguese Brazil: `pt_BR`   * Russian: `ru`   * Spanish: `es`
   --access-code: string # The access code that the user needs to activate an account.
   --federated-status: string # The user's federated status. One of:  - `RemoveStatus` - `FedAuthRequired` - `FedAuthBypass` - `Evicted`
-  --auto-activate-memberships: string@bool-completer # When **true,** the user's account is activated automatically.
+  --auto-activate-memberships: oneof<nothing, bool> # When **true,** the user's account is activated automatically.
   --license-type: string
 ]: any -> record<id: string, site_id: int, user_name: string, first_name: string, last_name: string, email: string, language_culture: string, federated_status: string, accounts: table<id: string, site_id: int, product_permission_profiles: list, ds_groups: list, company_name: string, job_title: string, license_type: string, subscription_id: string, plan_name: string, license_status: string>> {
   let input = $in
@@ -1393,8 +1392,8 @@ export def "v21-organizations-users-dsprofile GetDSProfiles" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --email: string # The email address of the user.  **Note:** This property is required.
-  --qp-sort: string@bool-completer # When **true,** sorts the results in ascending order by account name.
-  --include-license: string@bool-completer
+  --qp-sort: oneof<nothing, bool> # When **true,** sorts the results in ascending order by account name.
+  --include-license: oneof<nothing, bool>
 ]: nothing -> record<users: table<id: string, site_id: int, site_name: string, user_name: string, first_name: string, last_name: string, user_status: string, default_account_id: string, default_account_name: string, language_culture: string, selected_languages: string, federated_status: string, is_organization_admin: bool, created_on: string, last_login: string, memberships: list, identities: list, device_verification_enabled: bool, require_two_step_verification: bool, allow_two_step_verification_snooze: bool, allow_extend_org_admin_rights_to_self: bool, is_managed_by_scim: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1419,8 +1418,8 @@ export def "v21-organizations-users-dsprofile GetDSProfileByUserId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-sort: string@bool-completer # When **true,** sorts the results in ascending order by account name.
-  --include-license: string@bool-completer
+  --qp-sort: oneof<nothing, bool> # When **true,** sorts the results in ascending order by account name.
+  --include-license: oneof<nothing, bool>
 ]: nothing -> record<users: table<id: string, site_id: int, site_name: string, user_name: string, first_name: string, last_name: string, user_status: string, default_account_id: string, default_account_name: string, language_culture: string, selected_languages: string, federated_status: string, is_organization_admin: bool, created_on: string, last_login: string, memberships: list, identities: list, device_verification_enabled: bool, require_two_step_verification: bool, allow_two_step_verification_snooze: bool, allow_extend_org_admin_rights_to_self: bool, is_managed_by_scim: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1527,7 +1526,7 @@ export def "organizations-asset-groups-accounts GetAssetGroupAccountsByOrg" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --compliant: string@bool-completer # When **true,** only compliant accounts are returned and account responses do not include the `compliant` field. The default value is **false.**
+  --compliant: oneof<nothing, bool> # When **true,** only compliant accounts are returned and account responses do not include the `compliant` field. The default value is **false.**
 ]: nothing -> record<assetGroupAccounts: table<assetGroupId: string, assetGroupName: string, accountId: string, accountName: string, externalAccountId: int, compliant: bool, siteId: int, siteName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1582,7 +1581,7 @@ export def "organizations-asset-groups-account-clones GetAssetGroupAccountClones
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --since-updated-date: string # Use this parameter to retrieve only account clones that were created on or after a specified date. (format: date-time)
-  --include-details: string@bool-completer # When **true,** include additional details for the asset group account clones. The default value is **false.**
+  --include-details: oneof<nothing, bool> # When **true,** include additional details for the asset group account clones. The default value is **false.**
 ]: nothing -> record<assetGroupWorks: table<sourceAccount: record, targetAccount: record, assetGroupWorkId: string, assetGroupId: string, assetGroupWorkType: string, status: string, cloneRequestId: string, orderId: string, attempts: int, createdDate: string, createdByName: string, createdByEmail: string, message: string, cloneProcessingFailureDetails: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1608,7 +1607,7 @@ export def "organizations-asset-groups-account-clones GetAssetGroupAccountClone"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-details: string@bool-completer # When **true,** include additional details about the cloned account. The default value is **false.**
+  --include-details: oneof<nothing, bool> # When **true,** include additional details about the cloned account. The default value is **false.**
 ]: nothing -> record<sourceAccount: record<id: string, externalAccountId: int, site: string, name: string>, targetAccount: record<id: string, name: string, region: string, countryCode: string, site: string, admin: record<email: string, firstName: string, lastName: string, locale: string>>, assetGroupWorkId: string, assetGroupId: string, assetGroupWorkType: string, status: string, cloneRequestId: string, orderId: string, attempts: int, createdDate: string, createdByName: string, createdByEmail: string, message: string, cloneProcessingFailureDetails: record<error: string, errorDescription: string, isSystemError: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1684,7 +1683,7 @@ export def "organizations-sub-accounts-created GetSubAccountCreateProcessesByOrg
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --since-updated-date: string # Specifies that the request will only return information for accounts that were created after the date passed in the format YYYY-MM-DD. (format: date-time)
-  --include-details: string@bool-completer # When `true`, include additional details about the account creation process. The default value is `false`.
+  --include-details: oneof<nothing, bool> # When `true`, include additional details about the account creation process. The default value is `false`.
 ]: nothing -> record<assetGroupWorks: table<targetAccount: record, subscriptionDetails: record, assetGroupWorkId: string, assetGroupId: string, assetGroupWorkType: string, status: string, orderId: string, attempts: int, createdDate: string, createdByName: string, createdByEmail: string, message: string, createAccountProcessingFailureDetails: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1710,7 +1709,7 @@ export def "organizations-asset-group-sub-account-created GetSubAccountCreatePro
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-details: string@bool-completer # When true, include details for the asset group account clone.
+  --include-details: oneof<nothing, bool> # When true, include details for the asset group account clone.
 ]: nothing -> record<targetAccount: record<id: string, name: string, region: string, countryCode: string, site: string, admin: record<email: string, firstName: string, lastName: string, locale: string>>, subscriptionDetails: record<id: string, planId: string, planName: string, modules: list<record>>, assetGroupWorkId: string, assetGroupId: string, assetGroupWorkType: string, status: string, orderId: string, attempts: int, createdDate: string, createdByName: string, createdByEmail: string, message: string, createAccountProcessingFailureDetails: record<error: string, errorDescription: string, isSystemError: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1736,7 +1735,7 @@ export def "organizations-connect GetOrganizationConnectConfigs" [
   --sortBy: string
   --siteId: int # The site ID of the account.  (format: int32)
   --accountId: string # The account ID GUID. (format: uuid)
-  --allowEnvelopePublish: string@bool-completer
+  --allowEnvelopePublish: oneof<nothing, bool>
   --q: string
 ]: nothing -> record<configurations: table<connectId: string, configurationType: string, disabledBy: string, allowSalesforcePublish: string, name: string, accountId: string, accountName: string, allowEnvelopePublish: string, siteId: int, pausePublish: string, requiresAcknowledgement: string>, totalSetSize: int, errorDetail: record<errorMessage: string, referenceId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

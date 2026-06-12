@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://app.codacy.com/api/v3"] }
 def auth-scheme-completer [] { ["api-token"] }
 
@@ -279,8 +278,8 @@ export def "analysis-organizations-repositories-tools configureTool" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether to enable or disable the tool.
-  --useConfigurationFile: string@bool-completer # Marks the tool as using a configuration file or not.
+  --enabled: oneof<nothing, bool> # Whether to enable or disable the tool.
+  --useConfigurationFile: oneof<nothing, bool> # Marks the tool as using a configuration file or not.
   --patterns: list # The patterns to enable or disable. — item shape: {id: string, enabled: bool, parameters?: list}
 ]: any -> any {
   let input = $in
@@ -315,8 +314,8 @@ export def "analysis-organizations-repositories-tools-patterns listRepositoryToo
   --severityLevels: string # Filter by a comma-separated list of code pattern severity levels. Valid values are `Error`, `High`, `Warning`, and `Info`. (e.g. Error,Warning)
   --tags: string # Filter by a comma-separated list of pattern tags (e.g. React,Angular)
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
-  --enabled: string@bool-completer # Filter by pattern status. Set to `true` to return only enabled patterns, or `false` to return only disabled patterns
-  --recommended: string@bool-completer # Filter by recommended status. Set to `true` to return only recommended patterns, or `false` to return only non-recommended patterns
+  --enabled: oneof<nothing, bool> # Filter by pattern status. Set to `true` to return only enabled patterns, or `false` to return only disabled patterns
+  --recommended: oneof<nothing, bool> # Filter by recommended status. Set to `true` to return only recommended patterns, or `false` to return only non-recommended patterns
   --qp-sort: string # Field used to sort the tool's code patterns. Valid values are `category`, `recommended`, and `severity`. (e.g. category)
   --direction: string # Sort direction. Possible values are 'asc' (ascending) or 'desc' (descending). (e.g. desc)
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
@@ -352,8 +351,8 @@ export def "analysis-organizations-repositories-tools-patterns updateRepositoryT
   --severityLevels: string # Filter by a comma-separated list of code pattern severity levels. Valid values are `Error`, `High`, `Warning`, and `Info`. (e.g. Error,Warning)
   --tags: string # Filter by a comma-separated list of pattern tags (e.g. React,Angular)
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
-  --recommended: string@bool-completer # Filter by recommended status. Set to `true` to return only recommended patterns, or `false` to return only non-recommended patterns
-  --enabled: string@bool-completer # True enables the code patterns, and False disables them.
+  --recommended: oneof<nothing, bool> # Filter by recommended status. Set to `true` to return only recommended patterns, or `false` to return only non-recommended patterns
+  --enabled: oneof<nothing, bool> # True enables the code patterns, and False disables them.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
@@ -414,8 +413,8 @@ export def "analysis-organizations-repositories-tools-patterns-overview toolPatt
   --severityLevels: string # Filter by a comma-separated list of code pattern severity levels. Valid values are `Error`, `High`, `Warning`, and `Info`. (e.g. Error,Warning)
   --tags: string # Filter by a comma-separated list of pattern tags (e.g. React,Angular)
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
-  --enabled: string@bool-completer # Filter by pattern status. Set to `true` to return only enabled patterns, or `false` to return only disabled patterns
-  --recommended: string@bool-completer # Filter by recommended status. Set to `true` to return only recommended patterns, or `false` to return only non-recommended patterns
+  --enabled: oneof<nothing, bool> # Filter by pattern status. Set to `true` to return only enabled patterns, or `false` to return only disabled patterns
+  --recommended: oneof<nothing, bool> # Filter by recommended status. Set to `true` to return only recommended patterns, or `false` to return only non-recommended patterns
 ]: nothing -> record<data: record<counts: record<languages: list, categories: list, severities: list, tags: list, totalRecommended: int, totalEnabled: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -518,7 +517,7 @@ export def "analysis-organizations-repositories-autoconfig addAutoconfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<data: record<status: string>> {
+]: nothing -> record<data: record<analysisId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/autoconfig")
@@ -542,7 +541,7 @@ export def "analysis-organizations-repositories-autoconfig-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<data: record<status: string, requestedAt: string, updatedAt: string, error: string>> {
+]: nothing -> record<data: record<status: string, transitionedAt: string, transitionReason: string, analysisId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/analysis/organizations/($provider)/($remoteOrganizationName)/repositories/($repositoryName)/autoconfig/status")
@@ -569,7 +568,7 @@ export def "analysis-organizations-repositories-pull-requests listRepositoryPull
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
-  --includeNotAnalyzed: string@bool-completer # If true, also return pull requests that weren't analyzed (default: false)
+  --includeNotAnalyzed: oneof<nothing, bool> # If true, also return pull requests that weren't analyzed (default: false)
 ]: nothing -> record<data: table<isUpToStandards: bool, isAnalysing: bool, pullRequest: record, newIssues: int, fixedIssues: int, deltaComplexity: int, deltaClonesCount: int, deltaCoverageWithDecimals: float, deltaCoverage: int, diffCoverage: float, coverage: record, quality: record, meta: record>, pagination: record<cursor: string, limit: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -800,7 +799,7 @@ export def "analysis-organizations-repositories-pull-requests-issues listPullReq
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --status: string@status-completer # Filter issues by status. Valid values are `all`, `new`, or `fixed`. (e.g. all)
-  --onlyPotential: string@bool-completer # Set to `true` to return only potential issues (e.g. true)
+  --onlyPotential: oneof<nothing, bool> # Set to `true` to return only potential issues (e.g. true)
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<analyzed: bool, data: table<commitIssue: record, deltaType: string>, pagination: record<cursor: string, limit: int, total: int>> {
@@ -830,7 +829,7 @@ export def "analysis-organizations-repositories-pull-requests-clones listPullReq
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --status: string@status-completer # Filter issues by status. Valid values are `all`, `new`, or `fixed`. (e.g. all)
-  --onlyPotential: string@bool-completer # Set to `true` to return only potential issues (e.g. true)
+  --onlyPotential: oneof<nothing, bool> # Set to `true` to return only potential issues (e.g. true)
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<data: table<id: int, status: string, clones: list>, pagination: record<cursor: string, limit: int, total: int>> {
@@ -860,7 +859,7 @@ export def "analysis-organizations-repositories-commits-clones listCommitClones"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --status: string@status-completer # Filter issues by status. Valid values are `all`, `new`, or `fixed`. (e.g. all)
-  --onlyPotential: string@bool-completer # Set to `true` to return only potential issues (e.g. true)
+  --onlyPotential: oneof<nothing, bool> # Set to `true` to return only potential issues (e.g. true)
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<data: table<id: int, status: string, clones: list>, pagination: record<cursor: string, limit: int, total: int>> {
@@ -1252,7 +1251,7 @@ export def "organizations-repositories-settings-analysis updateBuildServerAnalys
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --buildServerAnalysisSetting: string@bool-completer # If true, Codacy waits for your build server to upload the results of the local analysis before resuming the analysis of your commits. If false, Codacy analyzes your commits directly on its cloud infrastructure.
+  --buildServerAnalysisSetting: oneof<nothing, bool> # If true, Codacy waits for your build server to upload the results of the local analysis before resuming the analysis of your commits. If false, Codacy analyzes your commits directly on its cloud infrastructure.
 ]: any -> record<buildServerAnalysisSetting: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
@@ -1673,7 +1672,7 @@ export def "analysis-organizations-repositories-issues-search searchRepositoryIs
   --levels: list # Set of issue severity levels (e.g. [Error, Warning])
   --tags: list # Set of issue pattern tags (e.g. [react, angular])
   --authorEmails: list # Set of commit author email addresses (e.g. [example@mail.com, another@mail.com])
-  --potentialFalsePositives: string@bool-completer # If true, only issues that are potential false positives will be included in the search,  if false, only issues that are not potential false positives will be included in the search.  (e.g. true)
+  --potentialFalsePositives: oneof<nothing, bool> # If true, only issues that are potential false positives will be included in the search,  if false, only issues that are not potential false positives will be included in the search.  (e.g. true)
 ]: any -> record<data: table<issueId: string, resultDataId: int, filePath: string, fileId: int, patternInfo: record, toolInfo: record, lineNumber: int, message: string, suggestion: string, language: string, lineText: string, commitInfo: record, falsePositiveProbability: int, falsePositiveReason: string, falsePositiveThreshold: int>, pagination: record<cursor: string, limit: int, total: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
@@ -1740,7 +1739,7 @@ export def "analysis-organizations-repositories-issues-overview issuesOverview" 
   --levels: list # Set of issue severity levels (e.g. [Error, Warning])
   --tags: list # Set of issue pattern tags (e.g. [react, angular])
   --authorEmails: list # Set of commit author email addresses (e.g. [example@mail.com, another@mail.com])
-  --potentialFalsePositives: string@bool-completer # If true, only issues that are potential false positives will be included in the search,  if false, only issues that are not potential false positives will be included in the search.  (e.g. true)
+  --potentialFalsePositives: oneof<nothing, bool> # If true, only issues that are potential false positives will be included in the search,  if false, only issues that are not potential false positives will be included in the search.  (e.g. true)
 ]: any -> record<data: record<counts: record<categories: list, languages: list, levels: list, tags: list, patterns: list, authors: list, potentialFalsePositives: list>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
@@ -1794,7 +1793,7 @@ export def "analysis-organizations-repositories-issues updateIssueState" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ignored: string@bool-completer # True if the issue is ignored
+  --ignored: oneof<nothing, bool> # True if the issue is ignored
   --reason: string@reason-completer # Predefined reason for ignoring the issue (e.g. FalsePositive)
   --comment: string # Optional comment justifying the ignore action
 ]: any -> any {
@@ -1859,7 +1858,7 @@ export def "analysis-organizations-repositories-ignored-issues-search searchRepo
   --levels: list # Set of issue severity levels (e.g. [Error, Warning])
   --tags: list # Set of issue pattern tags (e.g. [react, angular])
   --authorEmails: list # Set of commit author email addresses (e.g. [example@mail.com, another@mail.com])
-  --potentialFalsePositives: string@bool-completer # If true, only issues that are potential false positives will be included in the search,  if false, only issues that are not potential false positives will be included in the search.  (e.g. true)
+  --potentialFalsePositives: oneof<nothing, bool> # If true, only issues that are potential false positives will be included in the search,  if false, only issues that are not potential false positives will be included in the search.  (e.g. true)
   --ignoreReasons: list
 ]: any -> record<data: table<issueId: string, reason: string, comment: string, ignoredByName: string, ignoredTimestamp: string, filePath: string, fileId: int, patternInfo: record, toolInfo: record, lineNumber: int, message: string, language: string, lineText: string, commitInfo: record, falsePositiveProbability: int, falsePositiveReason: string, falsePositiveThreshold: int>, pagination: record<cursor: string, limit: int, total: int>> {
   let input = $in
@@ -1970,7 +1969,7 @@ export def "analysis-organizations-repositories-commits-delta-issues listCommitD
   --allow-errors(-e) # Return full response without error handling
   --targetCommitUuid: string # UUID or SHA string that identifies the target commit (e.g. 2957025d42e8daadf937d4044516f991d21deea4)
   --status: string@status-completer # Filter issues by status. Valid values are `all`, `new`, or `fixed`. (e.g. all)
-  --onlyPotential: string@bool-completer # Set to `true` to return only potential issues (e.g. true)
+  --onlyPotential: oneof<nothing, bool> # Set to `true` to return only potential issues (e.g. true)
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
 ]: nothing -> record<analyzed: bool, data: table<commitIssue: record, deltaType: string>, pagination: record<cursor: string, limit: int, total: int>> {
@@ -2038,7 +2037,7 @@ export def "user patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # e.g. Foo
-  --shouldDoClientQualification: string@bool-completer # e.g. false
+  --shouldDoClientQualification: oneof<nothing, bool> # e.g. false
 ]: any -> record<data: record<id: int, name: string, mainEmail: string, otherEmails: list<string>, isAdmin: bool, isActive: bool, created: string, intercomHash: string, zendeskHash: string, pylonHash: string, shouldDoClientQualification: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
@@ -2201,9 +2200,9 @@ export def "user-emails-settings updateEmailSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --perCommit: string@bool-completer # Whether to receive notifications for each commit (e.g. false)
-  --perPullRequest: string@bool-completer # Whether to receive notifications for pull requests (e.g. true)
-  --onlyMyActivity: string@bool-completer # Whether to only receive notifications for your own activity (e.g. true)
+  --perCommit: oneof<nothing, bool> # Whether to receive notifications for each commit (e.g. false)
+  --perPullRequest: oneof<nothing, bool> # Whether to receive notifications for pull requests (e.g. true)
+  --onlyMyActivity: oneof<nothing, bool> # Whether to only receive notifications for your own activity (e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
@@ -2606,15 +2605,15 @@ export def "organizations-integrations-provider-settings updateProviderSettings"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --commitStatus: string@bool-completer # Toggle the feature "Status checks"
-  --pullRequestComment: string@bool-completer # Toggle the feature "Issue annotations"
-  --pullRequestSummary: string@bool-completer # Toggle the feature "Issue summaries"
-  --coverageSummary: string@bool-completer # Toggle the feature "Coverage summary" (GitHub only)
-  --suggestions: string@bool-completer # Toggle the feature "Suggested fixes" (GitHub only)
-  --aiEnhancedComments: string@bool-completer # Toggle the feature "AI-enhanced comments". If "Suggested fixes" (GitHub only) is also enabled, then the AI-enhanced comments also provide suggested fixes.
-  --aiPullRequestReviewer: string@bool-completer # Toggle the feature "AI Pull Request Reviewer" (GitHub only). When enabled, Codacy will use AI to review pull requests and provide comments on code quality and potential issues.
-  --aiPullRequestReviewerAutomatic: string@bool-completer # Toggle the feature "AI Pull Request Reviewer Automatic" (GitHub only). When enabled, Codacy will use AI to review pull requests and provide comments on code quality and potential issues automatically once, subsequent reviews will have to be explicitly requested.
-  --pullRequestUnifiedSummary: string@bool-completer # Toggle the feature "Pull Request Unified Summary" (GitHub only). When enabled, Codacy provides a unified summary (coverage and analysis).
+  --commitStatus: oneof<nothing, bool> # Toggle the feature "Status checks"
+  --pullRequestComment: oneof<nothing, bool> # Toggle the feature "Issue annotations"
+  --pullRequestSummary: oneof<nothing, bool> # Toggle the feature "Issue summaries"
+  --coverageSummary: oneof<nothing, bool> # Toggle the feature "Coverage summary" (GitHub only)
+  --suggestions: oneof<nothing, bool> # Toggle the feature "Suggested fixes" (GitHub only)
+  --aiEnhancedComments: oneof<nothing, bool> # Toggle the feature "AI-enhanced comments". If "Suggested fixes" (GitHub only) is also enabled, then the AI-enhanced comments also provide suggested fixes.
+  --aiPullRequestReviewer: oneof<nothing, bool> # Toggle the feature "AI Pull Request Reviewer" (GitHub only). When enabled, Codacy will use AI to review pull requests and provide comments on code quality and potential issues.
+  --aiPullRequestReviewerAutomatic: oneof<nothing, bool> # Toggle the feature "AI Pull Request Reviewer Automatic" (GitHub only). When enabled, Codacy will use AI to review pull requests and provide comments on code quality and potential issues automatically once, subsequent reviews will have to be explicitly requested.
+  --pullRequestUnifiedSummary: oneof<nothing, bool> # Toggle the feature "Pull Request Unified Summary" (GitHub only). When enabled, Codacy provides a unified summary (coverage and analysis).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
@@ -2666,15 +2665,15 @@ export def "organizations-repositories-integrations-provider-settings updateRepo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --commitStatus: string@bool-completer # Toggle the feature "Status checks"
-  --pullRequestComment: string@bool-completer # Toggle the feature "Issue annotations"
-  --pullRequestSummary: string@bool-completer # Toggle the feature "Issue summaries"
-  --coverageSummary: string@bool-completer # Toggle the feature "Coverage summary" (GitHub only)
-  --suggestions: string@bool-completer # Toggle the feature "Suggested fixes" (GitHub only)
-  --aiEnhancedComments: string@bool-completer # Toggle the feature "AI-enhanced comments". If "Suggested fixes" (GitHub only) is also enabled, then the AI-enhanced comments also provide suggested fixes.
-  --aiPullRequestReviewer: string@bool-completer # Toggle the feature "AI Pull Request Reviewer" (GitHub only). When enabled, Codacy will use AI to review pull requests and provide comments on code quality and potential issues.
-  --aiPullRequestReviewerAutomatic: string@bool-completer # Toggle the feature "AI Pull Request Reviewer Automatic" (GitHub only). When enabled, Codacy will use AI to review pull requests and provide comments on code quality and potential issues automatically once, subsequent reviews will have to be explicitly requested.
-  --pullRequestUnifiedSummary: string@bool-completer # Toggle the feature "Pull Request Unified Summary" (GitHub only). When enabled, Codacy provides a unified summary (coverage and analysis).
+  --commitStatus: oneof<nothing, bool> # Toggle the feature "Status checks"
+  --pullRequestComment: oneof<nothing, bool> # Toggle the feature "Issue annotations"
+  --pullRequestSummary: oneof<nothing, bool> # Toggle the feature "Issue summaries"
+  --coverageSummary: oneof<nothing, bool> # Toggle the feature "Coverage summary" (GitHub only)
+  --suggestions: oneof<nothing, bool> # Toggle the feature "Suggested fixes" (GitHub only)
+  --aiEnhancedComments: oneof<nothing, bool> # Toggle the feature "AI-enhanced comments". If "Suggested fixes" (GitHub only) is also enabled, then the AI-enhanced comments also provide suggested fixes.
+  --aiPullRequestReviewer: oneof<nothing, bool> # Toggle the feature "AI Pull Request Reviewer" (GitHub only). When enabled, Codacy will use AI to review pull requests and provide comments on code quality and potential issues.
+  --aiPullRequestReviewerAutomatic: oneof<nothing, bool> # Toggle the feature "AI Pull Request Reviewer Automatic" (GitHub only). When enabled, Codacy will use AI to review pull requests and provide comments on code quality and potential issues automatically once, subsequent reviews will have to be explicitly requested.
+  --pullRequestUnifiedSummary: oneof<nothing, bool> # Toggle the feature "Pull Request Unified Summary" (GitHub only). When enabled, Codacy provides a unified summary (coverage and analysis).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
@@ -2805,7 +2804,7 @@ export def "organizations-people listPeopleFromOrganization" [
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
-  --onlyMembers: string@bool-completer # If true, returns only Codacy users. If false, returns also commit authors that are not Codacy users. (default: false, e.g. true)
+  --onlyMembers: oneof<nothing, bool> # If true, returns only Codacy users. If false, returns also commit authors that are not Codacy users. (default: false, e.g. true)
 ]: nothing -> record<data: table<name: string, email: string, emails: list, userId: int, committerId: int, lastLogin: string, lastAnalysis: string, isActive: bool, canBeRemoved: bool, lastCommitId: int, providerId: string, providerLogin: string, isProviderRegistered: bool>, pagination: record<cursor: string, limit: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -2985,7 +2984,7 @@ export def "organizations-repositories-reanalyze-commit reanalyzeCommitById" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   commitUuid: string # UUID or SHA string that identifies the commit
-  --cleanCache: string@bool-completer # If true, the cache will be cleaned before the analysis (e.g. false)
+  --cleanCache: oneof<nothing, bool> # If true, the cache will be cleaned before the analysis (e.g. false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
@@ -3089,7 +3088,7 @@ export def "organizations-repositories-branches listRepositoryBranches" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Filter by branch status. Set to `true` to return only enabled branches, or `false` to return only disabled branches
+  --enabled: oneof<nothing, bool> # Filter by branch status. Set to `true` to return only enabled branches, or `false` to return only disabled branches
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
@@ -3121,7 +3120,7 @@ export def "organizations-repositories-branches updateRepositoryBranchConfigurat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isEnabled: string@bool-completer # True if Codacy should analyze the branch (e.g. true)
+  --isEnabled: oneof<nothing, bool> # True if Codacy should analyze the branch (e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
@@ -3809,8 +3808,8 @@ export def "admin-license generateLicense" [
   email: string # e.g. name@domain.com
   expirationDate: string # format: date-time, e.g. 2019-05-07T14:29:13.43Z
   --inactivityThreshold: int # format: int32, e.g. 4
-  --autoAddAuthors: string@bool-completer
-  --allowSeatsOverflow: string@bool-completer
+  --autoAddAuthors: oneof<nothing, bool>
+  --allowSeatsOverflow: oneof<nothing, bool>
 ]: any -> record<data: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
@@ -3934,7 +3933,7 @@ export def "tools-patterns listPatterns" [
   --allow-errors(-e) # Return full response without error handling
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
   --limit: int # Maximum number of items to return (format: int32, default: 100, e.g. 20)
-  --enabled: string@bool-completer # Filter by enabled status. Set to `true` to return only enabled patterns, or `false` to return only disabled patterns.
+  --enabled: oneof<nothing, bool> # Filter by enabled status. Set to `true` to return only enabled patterns, or `false` to return only disabled patterns.
 ]: nothing -> record<data: table<id: string, title: string, category: string, subCategory: string, level: string, severityLevel: string, description: string, explanation: string, enabled: bool, languages: list, timeToFix: int, parameters: list, rationale: string, solution: string, goodExamples: list, badExamples: list, tags: list>, pagination: record<cursor: string, limit: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -3961,7 +3960,7 @@ export def "tools-patterns-organizations-feedback addPatternFeedback" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --reactionFeedback: string@bool-completer # True if the enriched pattern in mention is considered good/relevant by the user
+  --reactionFeedback: oneof<nothing, bool> # True if the enriched pattern in mention is considered good/relevant by the user
   --feedback: string # Feedback from the user to describe why enriched pattern is not considered good/relevant
 ]: any -> any {
   let input = $in
@@ -4693,7 +4692,7 @@ export def "organizations-presets-standards createCodingStandardPreset" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # Name of the new coding standard (e.g. Security best practices)
-  --isDefault: string@bool-completer # If true, the new coding standard becomes the default coding standard for the organization
+  --isDefault: oneof<nothing, bool> # If true, the new coding standard becomes the default coding standard for the organization
   presets: record # Settings to create a new coding standard from a series of presets — shape: {bugRisk: int, security: int, bestPractices: int, codeStyle: int, documentation: int}
 ]: any -> record<data: record<id: int, name: string, isDraft: bool, isDefault: bool, languages: list<string>, meta: record<enabledToolsCount: int, enabledPatternsCount: int, linkedRepositoriesCount: int>, complianceType: string>> {
   let input = $in
@@ -4818,7 +4817,7 @@ export def "organizations-coding-standards-set-default setDefaultCodingStandard"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isDefault: string@bool-completer # If true, sets the coding standard as the default coding standard for the organization
+  --isDefault: oneof<nothing, bool> # If true, sets the coding standard as the default coding standard for the organization
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
@@ -4852,8 +4851,8 @@ export def "organizations-coding-standards-tools-patterns listCodingStandardPatt
   --severityLevels: string # Filter by a comma-separated list of code pattern severity levels. Valid values are `Error`, `High`, `Warning`, and `Info`. (e.g. Error,Warning)
   --tags: string # Filter by a comma-separated list of pattern tags (e.g. React,Angular)
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
-  --enabled: string@bool-completer # Filter by pattern status. Set to `true` to return only enabled patterns, or `false` to return only disabled patterns
-  --recommended: string@bool-completer # Filter by recommended status. Set to `true` to return only recommended patterns, or `false` to return only non-recommended patterns
+  --enabled: oneof<nothing, bool> # Filter by pattern status. Set to `true` to return only enabled patterns, or `false` to return only disabled patterns
+  --recommended: oneof<nothing, bool> # Filter by recommended status. Set to `true` to return only recommended patterns, or `false` to return only non-recommended patterns
   --qp-sort: string # Field used to sort the tool's code patterns. Valid values are `category`, `recommended`, and `severity`. (e.g. category)
   --direction: string # Sort direction. Possible values are 'asc' (ascending) or 'desc' (descending). (e.g. desc)
   --cursor: string # Cursor to [specify a batch of results to request](https://docs.codacy.com/codacy-api/using-the-codacy-api/#using-pagination) (e.g. Yms345gh==)
@@ -4889,8 +4888,8 @@ export def "organizations-coding-standards-tools-patterns-overview codingStandar
   --severityLevels: string # Filter by a comma-separated list of code pattern severity levels. Valid values are `Error`, `High`, `Warning`, and `Info`. (e.g. Error,Warning)
   --tags: string # Filter by a comma-separated list of pattern tags (e.g. React,Angular)
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
-  --enabled: string@bool-completer # Filter by pattern status. Set to `true` to return only enabled patterns, or `false` to return only disabled patterns
-  --recommended: string@bool-completer # Filter by recommended status. Set to `true` to return only recommended patterns, or `false` to return only non-recommended patterns
+  --enabled: oneof<nothing, bool> # Filter by pattern status. Set to `true` to return only enabled patterns, or `false` to return only disabled patterns
+  --recommended: oneof<nothing, bool> # Filter by recommended status. Set to `true` to return only recommended patterns, or `false` to return only non-recommended patterns
 ]: nothing -> record<data: record<counts: record<languages: list, categories: list, severities: list, tags: list, totalRecommended: int, totalEnabled: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -4922,8 +4921,8 @@ export def "organizations-coding-standards-tools-patterns-update updateCodingSta
   --severityLevels: string # Filter by a comma-separated list of code pattern severity levels. Valid values are `Error`, `High`, `Warning`, and `Info`. (e.g. Error,Warning)
   --tags: string # Filter by a comma-separated list of pattern tags (e.g. React,Angular)
   --search: string # Filter results by searching for this string (e.g. my-repository-name)
-  --recommended: string@bool-completer # Filter by recommended status. Set to `true` to return only recommended patterns, or `false` to return only non-recommended patterns
-  --enabled: string@bool-completer # True enables the code patterns, and False disables them.
+  --recommended: oneof<nothing, bool> # Filter by recommended status. Set to `true` to return only recommended patterns, or `false` to return only non-recommended patterns
+  --enabled: oneof<nothing, bool> # True enables the code patterns, and False disables them.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-token"))
@@ -4954,7 +4953,7 @@ export def "organizations-coding-standards-tools updateCodingStandardToolConfigu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # True if the tool is enabled in the repository or coding standard (e.g. true)
+  --enabled: oneof<nothing, bool> # True if the tool is enabled in the repository or coding standard (e.g. true)
   patterns: list # List of code pattern configurations — item shape: {id: string, enabled?: bool, parameters?: list}
 ]: any -> any {
   let input = $in
@@ -5136,7 +5135,7 @@ export def "organizations-gate-policies updateGatePolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --gatePolicyName: string # Name of the gate policy
-  --isDefault: string@bool-completer # True if the gate policy is the default for the organization
+  --isDefault: oneof<nothing, bool> # True if the gate policy is the default for the organization
   --settings: record # shape: {issueThreshold?: record, securityIssueThreshold?: int, securityIssueMinimumSeverity?: "Info"|"Warning"|"High"|"Error", duplicationThreshold?: int, coverageThreshold?: int, coverageThresholdWithDecimals?: float, diffCoverageThreshold?: int, complexityThreshold?: int}
 ]: any -> record<data: record<id: int, name: string, isDefault: bool, readOnly: bool, settings: record<issueThreshold: record, securityIssueThreshold: int, securityIssueMinimumSeverity: string, duplicationThreshold: int, coverageThreshold: int, coverageThresholdWithDecimals: float, diffCoverageThreshold: int, complexityThreshold: int>, meta: record<nrOfQualityGates: int, linkedRepositoriesCount: int>>> {
   let input = $in
@@ -5192,7 +5191,7 @@ export def "organizations-gate-policies createGatePolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   gatePolicyName: string # Name of the gate policy (e.g. gate-policy-name)
-  --isDefault: string@bool-completer # e.g. true
+  --isDefault: oneof<nothing, bool> # e.g. true
   --settings: record # shape: {issueThreshold?: record, securityIssueThreshold?: int, securityIssueMinimumSeverity?: "Info"|"Warning"|"High"|"Error", duplicationThreshold?: int, coverageThreshold?: int, coverageThresholdWithDecimals?: float, diffCoverageThreshold?: int, complexityThreshold?: int}
 ]: any -> record<data: record<id: int, name: string, isDefault: bool, readOnly: bool, settings: record<issueThreshold: record, securityIssueThreshold: int, securityIssueMinimumSeverity: string, duplicationThreshold: int, coverageThreshold: int, coverageThresholdWithDecimals: float, diffCoverageThreshold: int, complexityThreshold: int>, meta: record<nrOfQualityGates: int, linkedRepositoriesCount: int>>> {
   let input = $in
@@ -5554,7 +5553,7 @@ export def "organizations-repositories-file updateFileState" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ignored: string@bool-completer # True if the file is ignored (e.g. true)
+  --ignored: oneof<nothing, bool> # True if the file is ignored (e.g. true)
   filepath: string # Relative path of the file in the repository (e.g. src/main/scala/main/Main.scala)
 ]: any -> any {
   let input = $in
@@ -6905,7 +6904,7 @@ export def "session-heartbeat heartbeat" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wasActive: string@bool-completer # True if the user was active in the last heartbeat interval. (e.g. true)
+  --wasActive: oneof<nothing, bool> # True if the user was active in the last heartbeat interval. (e.g. true)
 ]: any -> record<lastActivity: string, idleExpiresIn: int, absoluteExpiresIn: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-token"))

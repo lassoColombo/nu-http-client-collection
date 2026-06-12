@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://data.alpaca.markets" "https://data.sandbox.alpaca.markets"] }
 def auth-scheme-completer [] { ["apca-api-key-id" "apca-api-secret-key"] }
 
@@ -912,8 +911,8 @@ export def "v1beta1-news get" [
   --symbols: string # The comma-separated list of crypto symbols to query for. Note, currently all crypto symbols must be appended with "USD", ie "BTCUSD,ETHUSD" would get both BTC and ETH (e.g. BTCUSD,ETHUSD)
   --limit: int # Number of data points to return. Must be in range 1-10000, defaults to 1000.
   --qp-sort: string@sort-completer # Sort articles by updated date. Options: DESC, ASC (e.g. DESC)
-  --include-content: string@bool-completer # Boolean indicator to include content for news articles (if available)
-  --exclude-contentless: string@bool-completer # Boolean indicator to exclude news articles that do not contain content 
+  --include-content: oneof<nothing, bool> # Boolean indicator to include content for news articles (if available)
+  --exclude-contentless: oneof<nothing, bool> # Boolean indicator to exclude news articles that do not contain content 
   --page-token: string # Pagination token to continue from. The value to pass here is returned in specific requests when more data is available than the request limit allows.
 ]: nothing -> record<news: table<id: int, headline: string, author: string, created_at: string, updated_at: string, summary: string, content: string, url: string, images: list, symbols: list, source: string>, next_page_token: string> {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
@@ -962,7 +961,7 @@ export def "v1beta1-logos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --placeholder: string@bool-completer # If true then the api will generate a placeholder image if no logo was found. Defaults to true (default: true)
+  --placeholder: oneof<nothing, bool> # If true then the api will generate a placeholder image if no logo was found. Defaults to true (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apca-api-key-id"))
   let base = ($base_url | default $BASE_URL)

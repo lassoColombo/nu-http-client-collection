@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://iot.us-east-1.amazonaws.com" "http://iot.us-east-2.amazonaws.com" "http://iot.us-west-1.amazonaws.com" "http://iot.us-west-2.amazonaws.com" "http://iot.us-gov-west-1.amazonaws.com" "http://iot.us-gov-east-1.amazonaws.com" "http://iot.ca-central-1.amazonaws.com" "http://iot.eu-north-1.amazonaws.com" "http://iot.eu-west-1.amazonaws.com" "http://iot.eu-west-2.amazonaws.com" "http://iot.eu-west-3.amazonaws.com" "http://iot.eu-central-1.amazonaws.com" "http://iot.eu-south-1.amazonaws.com" "http://iot.af-south-1.amazonaws.com" "http://iot.ap-northeast-1.amazonaws.com" "http://iot.ap-northeast-2.amazonaws.com" "http://iot.ap-northeast-3.amazonaws.com" "http://iot.ap-southeast-1.amazonaws.com" "http://iot.ap-southeast-2.amazonaws.com" "http://iot.ap-east-1.amazonaws.com" "http://iot.ap-south-1.amazonaws.com" "http://iot.sa-east-1.amazonaws.com" "http://iot.me-south-1.amazonaws.com" "https://iot.us-east-1.amazonaws.com" "https://iot.us-east-2.amazonaws.com" "https://iot.us-west-1.amazonaws.com" "https://iot.us-west-2.amazonaws.com" "https://iot.us-gov-west-1.amazonaws.com" "https://iot.us-gov-east-1.amazonaws.com" "https://iot.ca-central-1.amazonaws.com" "https://iot.eu-north-1.amazonaws.com" "https://iot.eu-west-1.amazonaws.com" "https://iot.eu-west-2.amazonaws.com" "https://iot.eu-west-3.amazonaws.com" "https://iot.eu-central-1.amazonaws.com" "https://iot.eu-south-1.amazonaws.com" "https://iot.af-south-1.amazonaws.com" "https://iot.ap-northeast-1.amazonaws.com" "https://iot.ap-northeast-2.amazonaws.com" "https://iot.ap-northeast-3.amazonaws.com" "https://iot.ap-southeast-1.amazonaws.com" "https://iot.ap-southeast-2.amazonaws.com" "https://iot.ap-east-1.amazonaws.com" "https://iot.ap-south-1.amazonaws.com" "https://iot.sa-east-1.amazonaws.com" "https://iot.me-south-1.amazonaws.com" "http://iot.cn-north-1.amazonaws.com.cn" "http://iot.cn-northwest-1.amazonaws.com.cn" "https://iot.cn-north-1.amazonaws.com.cn" "https://iot.cn-northwest-1.amazonaws.com.cn"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -134,7 +133,7 @@ export def "accept-certificate-transfer AcceptCertificateTransfer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --setAsActive: string@bool-completer # Specifies whether the certificate is active.
+  --setAsActive: oneof<nothing, bool> # Specifies whether the certificate is active.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -214,7 +213,7 @@ export def "thing-groups-add-thing-to-thing-group AddThingToThingGroup" [
   --thingGroupArn: string # The ARN of the group to which you are adding a thing.
   --thingName: string # The name of the thing to add to a group.
   --thingArn: string # The ARN of the thing to add to a group.
-  --overrideDynamicGroups: string@bool-completer # Override dynamic thing groups with static thing groups when 10-group limit is reached. If a thing belongs to 10 thing groups, and one or more of those groups are dynamic thing groups, adding a thing to a static group removes the thing from the last dynamic group.
+  --overrideDynamicGroups: oneof<nothing, bool> # Override dynamic thing groups with static thing groups when 10-group limit is reached. If a thing belongs to 10 thing groups, and one or more of those groups are dynamic thing groups, adding a thing to a static group removes the thing from the last dynamic group.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -672,7 +671,7 @@ export def "jobs-cancel CancelJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # <p>(Optional) If <code>true</code> job executions with status "IN_PROGRESS" and "QUEUED" are canceled, otherwise only job executions with status "QUEUED" are canceled. The default is <code>false</code>.</p> <p>Canceling a job which is "IN_PROGRESS", will cause a device which is executing the job to be unable to update the job execution status. Use caution and ensure that each device executing a job which is canceled is able to recover to a valid state.</p>
+  --force: oneof<nothing, bool> # <p>(Optional) If <code>true</code> job executions with status "IN_PROGRESS" and "QUEUED" are canceled, otherwise only job executions with status "QUEUED" are canceled. The default is <code>false</code>.</p> <p>Canceling a job which is "IN_PROGRESS", will cause a device which is executing the job to be unable to update the job execution status. Use caution and ensure that each device executing a job which is canceled is able to recover to a valid state.</p>
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -711,7 +710,7 @@ export def "things-jobs-cancel CancelJobExecution" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # <p>(Optional) If <code>true</code> the job execution will be canceled if it has status IN_PROGRESS or QUEUED, otherwise the job execution will be canceled only if it has status QUEUED. If you attempt to cancel a job execution that is IN_PROGRESS, and you do not set <code>force</code> to <code>true</code>, then an <code>InvalidStateTransitionException</code> will be thrown. The default is <code>false</code>.</p> <p>Canceling a job execution which is "IN_PROGRESS", will cause the device to be unable to update the job execution status. Use caution and ensure that the device is able to recover to a valid state.</p>
+  --force: oneof<nothing, bool> # <p>(Optional) If <code>true</code> the job execution will be canceled if it has status IN_PROGRESS or QUEUED, otherwise the job execution will be canceled only if it has status QUEUED. If you attempt to cancel a job execution that is IN_PROGRESS, and you do not set <code>force</code> to <code>true</code>, then an <code>InvalidStateTransitionException</code> will be thrown. The default is <code>false</code>.</p> <p>Canceling a job execution which is "IN_PROGRESS", will cause the device to be unable to update the job execution status. Use caution and ensure that the device is able to recover to a valid state.</p>
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -884,7 +883,7 @@ export def "audit-suppressions-create CreateAuditSuppression" [
   checkName: string # An audit check name. Checks must be enabled for your account. (Use <code>DescribeAccountAuditConfiguration</code> to see the list of all checks, including those that are enabled or use <code>UpdateAccountAuditConfiguration</code> to select which checks are enabled.)
   resourceIdentifier: record # Information that identifies the noncompliant resource. — shape: {deviceCertificateId?: any, caCertificateId?: any, cognitoIdentityPoolId?: any, clientId?: any, policyVersionIdentifier?: any, account?: any, iamRoleArn?: any, roleAliasArn?: any, issuerCertificateIdentifier?: any, deviceCertificateArn?: any}
   --expirationDate: string #  The epoch timestamp in seconds at which this suppression expires.  (format: date-time)
-  --suppressIndefinitely: string@bool-completer #  Indicates whether a suppression should exist indefinitely or not. 
+  --suppressIndefinitely: oneof<nothing, bool> #  Indicates whether a suppression should exist indefinitely or not. 
   --description: string #  The description of the audit suppression. 
   clientRequestToken: string #  Each audit supression must have a unique client request token. If you try to create a new audit suppression with the same token as one that already exists, an exception occurs. If you omit this value, Amazon Web Services SDKs will automatically generate a unique client request.
 ]: any -> record {
@@ -927,8 +926,8 @@ export def "authorizer CreateAuthorizer" [
   --tokenSigningPublicKeys: record # The public keys used to verify the digital signature returned by your custom authentication service.
   --status: string@status-completer # The status of the create authorizer request.
   --tags: list # <p>Metadata which can be used to manage the custom authorizer.</p> <note> <p>For URI Request parameters use format: ...key1=value1&amp;key2=value2...</p> <p>For the CLI command-line parameter use format: &amp;&amp;tags "key1=value1&amp;key2=value2..."</p> <p>For the cli-input-json file use format: "tags": "key1=value1&amp;key2=value2..."</p> </note> — item shape: {Key: any, Value?: any}
-  --signingDisabled: string@bool-completer # Specifies whether IoT validates the token signature in an authorization request.
-  --enableCachingForHttp: string@bool-completer # <p>When <code>true</code>, the result from the authorizer’s Lambda function is cached for clients that use persistent HTTP connections. The results are cached for the time specified by the Lambda function in <code>refreshAfterInSeconds</code>. This value does not affect authorization of clients that use MQTT connections.</p> <p>The default value is <code>false</code>.</p>
+  --signingDisabled: oneof<nothing, bool> # Specifies whether IoT validates the token signature in an authorization request.
+  --enableCachingForHttp: oneof<nothing, bool> # <p>When <code>true</code>, the result from the authorizer’s Lambda function is cached for clients that use persistent HTTP connections. The results are cached for the time specified by the Lambda function in <code>refreshAfterInSeconds</code>. This value does not affect authorization of clients that use MQTT connections.</p> <p>The default value is <code>false</code>.</p>
 ]: any -> record<authorizerName: record, authorizerArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1029,7 +1028,7 @@ export def "authorizer UpdateAuthorizer" [
   --tokenKeyName: string # The key used to extract the token from the HTTP headers. 
   --tokenSigningPublicKeys: record # The public keys used to verify the token signature.
   --status: string@status-completer # The status of the update authorizer request.
-  --enableCachingForHttp: string@bool-completer # When <code>true</code>, the result from the authorizer’s Lambda function is cached for the time specified in <code>refreshAfterInSeconds</code>. The cached result is used while the device reuses the same HTTP connection.
+  --enableCachingForHttp: oneof<nothing, bool> # When <code>true</code>, the result from the authorizer’s Lambda function is cached for the time specified in <code>refreshAfterInSeconds</code>. The cached result is used while the device reuses the same HTTP connection.
 ]: any -> record<authorizerName: record, authorizerArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1195,7 +1194,7 @@ export def "certificates CreateCertificateFromCsr" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --setAsActive: string@bool-completer # Specifies whether the certificate is active.
+  --setAsActive: oneof<nothing, bool> # Specifies whether the certificate is active.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -1233,7 +1232,7 @@ export def "certificates ListCertificates" [
   --allow-errors(-e) # Return full response without error handling
   --pageSize: int # The result page size.
   --marker: string # The marker for the next set of results.
-  --isAscendingOrder: string@bool-completer # Specifies the order for results. If True, the results are returned in ascending order, based on the creation date.
+  --isAscendingOrder: oneof<nothing, bool> # Specifies the order for results. If True, the results are returned in ascending order, based on the creation date.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -1652,7 +1651,7 @@ export def "domain-configurations UpdateDomainConfiguration" [
   --X-Amz-SignedHeaders: string
   --authorizerConfig: record # An object that specifies the authorization service for a domain. — shape: {defaultAuthorizerName?: any, allowAuthorizerOverride?: any}
   --domainConfigurationStatus: string@domainConfigurationStatus-completer # The status to which the domain configuration should be updated.
-  --removeAuthorizerConfig: string@bool-completer # Removes the authorization configuration from a domain.
+  --removeAuthorizerConfig: oneof<nothing, bool> # Removes the authorization configuration from a domain.
 ]: any -> record<domainConfigurationName: record, domainConfigurationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2003,7 +2002,7 @@ export def "jobs DeleteJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # <p>(Optional) When true, you can delete a job which is "IN_PROGRESS". Otherwise, you can only delete a job which is in a terminal state ("COMPLETED" or "CANCELED") or an exception will occur. The default is false.</p> <note> <p>Deleting a job which is "IN_PROGRESS", will cause a device which is executing the job to be unable to access job information or update the job execution status. Use caution and ensure that each device executing a job which is deleted is able to recover to a valid state.</p> </note>
+  --force: oneof<nothing, bool> # <p>(Optional) When true, you can delete a job which is "IN_PROGRESS". Otherwise, you can only delete a job which is in a terminal state ("COMPLETED" or "CANCELED") or an exception will occur. The default is false.</p> <note> <p>Deleting a job which is "IN_PROGRESS", will cause a device which is executing the job to be unable to access job information or update the job execution status. Use caution and ensure that each device executing a job which is deleted is able to recover to a valid state.</p> </note>
   --namespaceId: string # <p>The namespace used to indicate that a job is a customer-managed job.</p> <p>When you specify a value for this parameter, Amazon Web Services IoT Core sends jobs notifications to MQTT topics that contain the value in the following format.</p> <p> <code>$aws/things/<i>THING_NAME</i>/jobs/<i>JOB_ID</i>/notify-namespace-<i>NAMESPACE_ID</i>/</code> </p> <note> <p>The <code>namespaceId</code> feature is in public preview.</p> </note>
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
@@ -2228,7 +2227,7 @@ export def "keys-and-certificate CreateKeysAndCertificate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --setAsActive: string@bool-completer # Specifies whether the certificate is active.
+  --setAsActive: oneof<nothing, bool> # Specifies whether the certificate is active.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -2451,8 +2450,8 @@ export def "ota-updates DeleteOTAUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deleteStream: string@bool-completer # When true, the stream created by the OTAUpdate process is deleted when the OTA update is deleted. Ignored if the stream specified in the OTAUpdate is supplied by the user.
-  --forceDeleteAWSJob: string@bool-completer # When true, deletes the IoT job created by the OTAUpdate process even if it is "IN_PROGRESS". Otherwise, if the job is not in a terminal state ("COMPLETED" or "CANCELED") an exception will occur. The default is false.
+  --deleteStream: oneof<nothing, bool> # When true, the stream created by the OTAUpdate process is deleted when the OTA update is deleted. Ignored if the stream specified in the OTAUpdate is supplied by the user.
+  --forceDeleteAWSJob: oneof<nothing, bool> # When true, deletes the IoT job created by the OTAUpdate process even if it is "IN_PROGRESS". Otherwise, if the job is not in a terminal state ("COMPLETED" or "CANCELED") an exception will occur. The default is false.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -2615,7 +2614,7 @@ export def "policies-version CreatePolicyVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --setAsDefault: string@bool-completer # Specifies whether the policy version is set as the default. When this parameter is true, the new policy version becomes the operative version (that is, the version that is in effect for the certificates to which the policy is attached).
+  --setAsDefault: oneof<nothing, bool> # Specifies whether the policy version is set as the default. When this parameter is true, the new policy version becomes the operative version (that is, the version that is in effect for the certificates to which the policy is attached).
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -2725,7 +2724,7 @@ export def "provisioning-templates CreateProvisioningTemplate" [
   templateName: string # The name of the provisioning template.
   --description: string # The description of the provisioning template.
   templateBody: string # The JSON formatted contents of the provisioning template.
-  --enabled: string@bool-completer # True to enable the provisioning template, otherwise false.
+  --enabled: oneof<nothing, bool> # True to enable the provisioning template, otherwise false.
   provisioningRoleArn: string # The role ARN for the role associated with the provisioning template. This IoT role grants permission to provision a device.
   --preProvisioningHook: record # Structure that contains <code>payloadVersion</code> and <code>targetArn</code>. — shape: {payloadVersion?: any, targetArn?: any}
   --tags: list # <p>Metadata which can be used to manage the provisioning template.</p> <note> <p>For URI Request parameters use format: ...key1=value1&amp;key2=value2...</p> <p>For the CLI command-line parameter use format: &amp;&amp;tags "key1=value1&amp;key2=value2..."</p> <p>For the cli-input-json file use format: "tags": "key1=value1&amp;key2=value2..."</p> </note> — item shape: {Key: any, Value?: any}
@@ -2790,7 +2789,7 @@ export def "provisioning-templates-versions CreateProvisioningTemplateVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --setAsDefault: string@bool-completer # Sets a fleet provision template version as the default version.
+  --setAsDefault: oneof<nothing, bool> # Sets a fleet provision template version as the default version.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -3259,9 +3258,9 @@ export def "security-profiles UpdateSecurityProfile" [
   --alertTargets: record # Where the alerts are sent. (Alerts are always sent to the console.)
   --additionalMetricsToRetain: list # <p> <i>Please use <a>UpdateSecurityProfileRequest$additionalMetricsToRetainV2</a> instead.</i> </p> <p>A list of metrics whose data is retained (stored). By default, data is retained for any metric used in the profile's <code>behaviors</code>, but it is also retained for any metric specified here. Can be used with custom metrics; cannot be used with dimensions.</p>
   --additionalMetricsToRetainV2: list # A list of metrics whose data is retained (stored). By default, data is retained for any metric used in the profile's behaviors, but it is also retained for any metric specified here. Can be used with custom metrics; cannot be used with dimensions. — item shape: {metric: any, metricDimension?: any}
-  --deleteBehaviors: string@bool-completer # If true, delete all <code>behaviors</code> defined for this security profile. If any <code>behaviors</code> are defined in the current invocation, an exception occurs.
-  --deleteAlertTargets: string@bool-completer # If true, delete all <code>alertTargets</code> defined for this security profile. If any <code>alertTargets</code> are defined in the current invocation, an exception occurs.
-  --deleteAdditionalMetricsToRetain: string@bool-completer # If true, delete all <code>additionalMetricsToRetain</code> defined for this security profile. If any <code>additionalMetricsToRetain</code> are defined in the current invocation, an exception occurs.
+  --deleteBehaviors: oneof<nothing, bool> # If true, delete all <code>behaviors</code> defined for this security profile. If any <code>behaviors</code> are defined in the current invocation, an exception occurs.
+  --deleteAlertTargets: oneof<nothing, bool> # If true, delete all <code>alertTargets</code> defined for this security profile. If any <code>alertTargets</code> are defined in the current invocation, an exception occurs.
+  --deleteAdditionalMetricsToRetain: oneof<nothing, bool> # If true, delete all <code>additionalMetricsToRetain</code> defined for this security profile. If any <code>additionalMetricsToRetain</code> are defined in the current invocation, an exception occurs.
 ]: any -> record<securityProfileName: record, securityProfileArn: record, securityProfileDescription: record, behaviors: record, alertTargets: record, additionalMetricsToRetain: record, additionalMetricsToRetainV2: record, version: record, creationDate: record, lastModifiedDate: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3543,7 +3542,7 @@ export def "things UpdateThing" [
   --thingTypeName: string # The name of the thing type.
   --attributePayload: record # The attribute payload. — shape: {attributes?: any, merge?: any}
   --expectedVersion: int # The expected version of the thing record in the registry. If the version of the record in the registry does not match the expected version specified in the request, the <code>UpdateThing</code> request is rejected with a <code>VersionConflictException</code>.
-  --removeThingType: string@bool-completer # Remove a thing type association. If <b>true</b>, the association is removed.
+  --removeThingType: oneof<nothing, bool> # Remove a thing type association. If <b>true</b>, the association is removed.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4048,7 +4047,7 @@ export def "audit-configuration DeleteAccountAuditConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deleteScheduledAudits: string@bool-completer # If true, all scheduled audits are deleted.
+  --deleteScheduledAudits: oneof<nothing, bool> # If true, all scheduled audits are deleted.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -4256,7 +4255,7 @@ export def "cacertificate UpdateCACertificate" [
   --X-Amz-Signature: string
   --X-Amz-SignedHeaders: string
   --registrationConfig: record # The registration configuration. — shape: {templateBody?: any, roleArn?: any, templateName?: any}
-  --removeAutoRegistration: string@bool-completer # If true, removes auto registration.
+  --removeAutoRegistration: oneof<nothing, bool> # If true, removes auto registration.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4285,7 +4284,7 @@ export def "certificates DeleteCertificate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceDelete: string@bool-completer # Forces the deletion of a certificate if it is inactive and is not attached to an IoT thing.
+  --forceDelete: oneof<nothing, bool> # Forces the deletion of a certificate if it is inactive and is not attached to an IoT thing.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -4351,7 +4350,7 @@ export def "things-jobs-execution-number DeleteJobExecution" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # <p>(Optional) When true, you can delete a job execution which is "IN_PROGRESS". Otherwise, you can only delete a job execution which is in a terminal state ("SUCCEEDED", "FAILED", "REJECTED", "REMOVED" or "CANCELED") or an exception will occur. The default is false.</p> <note> <p>Deleting a job execution which is "IN_PROGRESS", will cause the device to be unable to access job information or update the job execution status. Use caution and ensure that the device is able to recover to a valid state.</p> </note>
+  --force: oneof<nothing, bool> # <p>(Optional) When true, you can delete a job execution which is "IN_PROGRESS". Otherwise, you can only delete a job execution which is in a terminal state ("SUCCEEDED", "FAILED", "REJECTED", "REMOVED" or "CANCELED") or an exception will occur. The default is false.</p> <note> <p>Deleting a job execution which is "IN_PROGRESS", will cause the device to be unable to access job information or update the job execution status. Use caution and ensure that the device is able to recover to a valid state.</p> </note>
   --namespaceId: string # <p>The namespace used to indicate that a job is a customer-managed job.</p> <p>When you specify a value for this parameter, Amazon Web Services IoT Core sends jobs notifications to MQTT topics that contain the value in the following format.</p> <p> <code>$aws/things/<i>THING_NAME</i>/jobs/<i>JOB_ID</i>/notify-namespace-<i>NAMESPACE_ID</i>/</code> </p> <note> <p>The <code>namespaceId</code> feature is in public preview.</p> </note>
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
@@ -4552,11 +4551,11 @@ export def "provisioning-templates UpdateProvisioningTemplate" [
   --X-Amz-Signature: string
   --X-Amz-SignedHeaders: string
   --description: string # The description of the provisioning template.
-  --enabled: string@bool-completer # True to enable the provisioning template, otherwise false.
+  --enabled: oneof<nothing, bool> # True to enable the provisioning template, otherwise false.
   --defaultVersionId: int # The ID of the default provisioning template version.
   --provisioningRoleArn: string # The ARN of the role associated with the provisioning template. This IoT role grants permission to provision a device.
   --preProvisioningHook: record # Structure that contains <code>payloadVersion</code> and <code>targetArn</code>. — shape: {payloadVersion?: any, targetArn?: any}
-  --removePreProvisioningHook: string@bool-completer # Removes pre-provisioning hook template.
+  --removePreProvisioningHook: oneof<nothing, bool> # Removes pre-provisioning hook template.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4810,7 +4809,7 @@ export def "thing-types-deprecate DeprecateThingType" [
   --X-Amz-Security-Token: string
   --X-Amz-Signature: string
   --X-Amz-SignedHeaders: string
-  --undoDeprecate: string@bool-completer # Whether to undeprecate a deprecated thing type. If <b>true</b>, the thing type will not be deprecated anymore and you can associate it with things.
+  --undoDeprecate: oneof<nothing, bool> # Whether to undeprecate a deprecated thing type. If <b>true</b>, the thing type will not be deprecated anymore and you can associate it with things.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5048,8 +5047,8 @@ export def "detect-mitigationactions-tasks StartDetectMitigationActionsTask" [
   target: record #  The target of a mitigation action task.  — shape: {violationIds?: any, securityProfileName?: any, behaviorName?: any}
   actions: list #  The actions to be performed when a device has unexpected behavior. 
   --violationEventOccurrenceRange: record #  Specifies the time period of which violation events occurred between.  — shape: {startTime?: any, endTime?: any}
-  --includeOnlyActiveViolations: string@bool-completer #  Specifies to list only active violations. 
-  --includeSuppressedAlerts: string@bool-completer #  Specifies to include suppressed alerts. 
+  --includeOnlyActiveViolations: oneof<nothing, bool> #  Specifies to list only active violations. 
+  --includeSuppressedAlerts: oneof<nothing, bool> #  Specifies to include suppressed alerts. 
   clientRequestToken: string #  Each mitigation action task must have a unique client request token. If you try to create a new task with the same token as a task that already exists, an exception occurs. If you omit this value, Amazon Web Services SDKs will automatically generate a unique client request. 
 ]: any -> record<taskId: record> {
   let input = $in
@@ -5788,7 +5787,7 @@ export def "v2-logging-options SetV2LoggingOptions" [
   --X-Amz-SignedHeaders: string
   --roleArn: string # The ARN of the role that allows IoT to write to Cloudwatch logs.
   --defaultLogLevel: string@defaultLogLevel-completer # The default logging level.
-  --disableAllLogs: string@bool-completer # If true all logs are disabled. The default is false.
+  --disableAllLogs: oneof<nothing, bool> # If true all logs are disabled. The default is false.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5818,7 +5817,7 @@ export def "active-violations ListActiveViolations" [
   --thingName: string # The name of the thing whose active violations are listed.
   --securityProfileName: string # The name of the Device Defender security profile for which violations are listed.
   --behaviorCriteriaType: string@behaviorCriteriaType-completer #  The criteria for a behavior. 
-  --listSuppressedAlerts: string@bool-completer #  A list of all suppressed alerts. 
+  --listSuppressedAlerts: oneof<nothing, bool> #  A list of all suppressed alerts. 
   --verificationState: string@verificationState-completer # The verification state of the violation (detect alarm).
   --nextToken: string # The token for the next set of results.
   --maxResults: int # The maximum number of results to return at one time.
@@ -5854,7 +5853,7 @@ export def "attached-policies ListAttachedPolicies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --recursive: string@bool-completer # When true, recursively list attached policies.
+  --recursive: oneof<nothing, bool> # When true, recursively list attached policies.
   --marker: string # The token to retrieve the next set of results.
   --pageSize: int # The maximum number of results to be returned per request.
   --X-Amz-Content-Sha256: string
@@ -5905,7 +5904,7 @@ export def "audit-findings ListAuditFindings" [
   --nextToken: string # The token for the next set of results.
   --startTime: string # A filter to limit results to those found after the specified time. You must specify either the startTime and endTime or the taskId, but not both. (format: date-time)
   --endTime: string # A filter to limit results to those found before the specified time. You must specify either the startTime and endTime or the taskId, but not both. (format: date-time)
-  --listSuppressedFindings: string@bool-completer #  Boolean flag indicating whether only the suppressed findings or the unsuppressed findings should be listed. If this parameter isn't provided, the response will list both suppressed and unsuppressed findings. 
+  --listSuppressedFindings: oneof<nothing, bool> #  Boolean flag indicating whether only the suppressed findings or the unsuppressed findings should be listed. If this parameter isn't provided, the response will list both suppressed and unsuppressed findings. 
 ]: any -> record<findings: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6019,7 +6018,7 @@ export def "audit-suppressions-list ListAuditSuppressions" [
   --X-Amz-SignedHeaders: string
   --checkName: string # An audit check name. Checks must be enabled for your account. (Use <code>DescribeAccountAuditConfiguration</code> to see the list of all checks, including those that are enabled or use <code>UpdateAccountAuditConfiguration</code> to select which checks are enabled.)
   --resourceIdentifier: record # Information that identifies the noncompliant resource. — shape: {deviceCertificateId?: any, caCertificateId?: any, cognitoIdentityPoolId?: any, clientId?: any, policyVersionIdentifier?: any, account?: any, iamRoleArn?: any, roleAliasArn?: any, issuerCertificateIdentifier?: any, deviceCertificateArn?: any}
-  --ascendingOrder: string@bool-completer #  Determines whether suppressions are listed in ascending order by expiration date or not. If parameter isn't provided, <code>ascendingOrder=true</code>. 
+  --ascendingOrder: oneof<nothing, bool> #  Determines whether suppressions are listed in ascending order by expiration date or not. If parameter isn't provided, <code>ascendingOrder=true</code>. 
   --nextToken: string #  The token for the next set of results. 
   --maxResults: int #  The maximum number of results to return at one time. The default is 25. 
 ]: any -> record<suppressions: record, nextToken: record> {
@@ -6088,7 +6087,7 @@ export def "authorizers ListAuthorizers" [
   --allow-errors(-e) # Return full response without error handling
   --pageSize: int # The maximum number of results to return at one time.
   --marker: string # A marker used to get the next set of results.
-  --isAscendingOrder: string@bool-completer # Return the list of authorizers in ascending alphabetical order.
+  --isAscendingOrder: oneof<nothing, bool> # Return the list of authorizers in ascending alphabetical order.
   --status: string@status-completer # The status of the list authorizers request.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
@@ -6157,7 +6156,7 @@ export def "cacertificates ListCACertificates" [
   --allow-errors(-e) # Return full response without error handling
   --pageSize: int # The result page size.
   --marker: string # The marker for the next set of results.
-  --isAscendingOrder: string@bool-completer # Determines the order of the results.
+  --isAscendingOrder: oneof<nothing, bool> # Determines the order of the results.
   --templateName: string # The name of the provisioning template.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
@@ -6193,7 +6192,7 @@ export def "certificates-by-ca ListCertificatesByCA" [
   --allow-errors(-e) # Return full response without error handling
   --pageSize: int # The result page size.
   --marker: string # The marker for the next set of results.
-  --isAscendingOrder: string@bool-completer # Specifies the order for results. If True, the results are returned in ascending order, based on the creation date.
+  --isAscendingOrder: oneof<nothing, bool> # Specifies the order for results. If True, the results are returned in ascending order, based on the creation date.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -6750,7 +6749,7 @@ export def "certificates-out-going ListOutgoingCertificates" [
   --allow-errors(-e) # Return full response without error handling
   --pageSize: int # The result page size.
   --marker: string # The marker for the next set of results.
-  --isAscendingOrder: string@bool-completer # Specifies the order for results. If True, the results are returned in ascending order, based on the creation date.
+  --isAscendingOrder: oneof<nothing, bool> # Specifies the order for results. If True, the results are returned in ascending order, based on the creation date.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -6784,7 +6783,7 @@ export def "policies ListPolicies" [
   --allow-errors(-e) # Return full response without error handling
   --marker: string # The marker for the next set of results.
   --pageSize: int # The result page size.
-  --isAscendingOrder: string@bool-completer # Specifies the order for results. If true, the results are returned in ascending creation order.
+  --isAscendingOrder: oneof<nothing, bool> # Specifies the order for results. If true, the results are returned in ascending creation order.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -6820,7 +6819,7 @@ export def "policy-principalsx-amzn-iot-policy ListPolicyPrincipals" [
   --allow-errors(-e) # Return full response without error handling
   --marker: string # The marker for the next set of results.
   --pageSize: int # The result page size.
-  --isAscendingOrder: string@bool-completer # Specifies the order for results. If true, the results are returned in ascending creation order.
+  --isAscendingOrder: oneof<nothing, bool> # Specifies the order for results. If true, the results are returned in ascending creation order.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -6857,7 +6856,7 @@ export def "principal-policiesx-amzn-iot-principal ListPrincipalPolicies" [
   --allow-errors(-e) # Return full response without error handling
   --marker: string # The marker for the next set of results.
   --pageSize: int # The result page size.
-  --isAscendingOrder: string@bool-completer # Specifies the order for results. If true, results are returned in ascending creation order.
+  --isAscendingOrder: oneof<nothing, bool> # Specifies the order for results. If true, results are returned in ascending creation order.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -6960,7 +6959,7 @@ export def "role-aliases ListRoleAliases" [
   --allow-errors(-e) # Return full response without error handling
   --pageSize: int # The maximum number of results to return at one time.
   --marker: string # A marker used to get the next set of results.
-  --isAscendingOrder: string@bool-completer # Return the list of role aliases in ascending alphabetical order.
+  --isAscendingOrder: oneof<nothing, bool> # Return the list of role aliases in ascending alphabetical order.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -7062,7 +7061,7 @@ export def "security-profiles-for-targetsecurity-profile-target-arn ListSecurity
   --allow-errors(-e) # Return full response without error handling
   --nextToken: string # The token for the next set of results.
   --maxResults: int # The maximum number of results to return at one time.
-  --recursive: string@bool-completer # If true, return child groups too.
+  --recursive: oneof<nothing, bool> # If true, return child groups too.
   --securityProfileTargetArn: string # The ARN of the target (thing group) whose attached security profiles you want to get.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
@@ -7097,7 +7096,7 @@ export def "streams ListStreams" [
   --allow-errors(-e) # Return full response without error handling
   --maxResults: int # The maximum number of results to return at a time.
   --nextToken: string # A token used to get the next set of results.
-  --isAscendingOrder: string@bool-completer # Set to true to return the list of streams in ascending order.
+  --isAscendingOrder: oneof<nothing, bool> # Set to true to return the list of streams in ascending order.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -7234,7 +7233,7 @@ export def "thing-groups ListThingGroups" [
   --maxResults: int # The maximum number of results to return at one time.
   --parentGroup: string # A filter that limits the results to those with the specified parent group.
   --namePrefixFilter: string # A filter that limits the results to those with the specified name prefix.
-  --recursive: string@bool-completer # If true, return child groups as well.
+  --recursive: oneof<nothing, bool> # If true, return child groups as well.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -7479,7 +7478,7 @@ export def "things ListThings" [
   --attributeName: string # The attribute name used to search for things.
   --attributeValue: string # The attribute value used to search for things.
   --thingTypeName: string # The name of the thing type used to search for things.
-  --usePrefixAttributeValue: string@bool-completer # <p>When <code>true</code>, the action returns the thing resources with attribute values that start with the <code>attributeValue</code> provided.</p> <p>When <code>false</code>, or not present, the action returns only the thing resources with attribute values that match the entire <code>attributeValue</code> provided. </p>
+  --usePrefixAttributeValue: oneof<nothing, bool> # <p>When <code>true</code>, the action returns the thing resources with attribute values that start with the <code>attributeValue</code> provided.</p> <p>When <code>false</code>, or not present, the action returns only the thing resources with attribute values that match the entire <code>attributeValue</code> provided. </p>
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -7581,7 +7580,7 @@ export def "thing-groups-things ListThingsInThingGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --recursive: string@bool-completer # When true, list things in this thing group and in all child groups as well.
+  --recursive: oneof<nothing, bool> # When true, list things in this thing group and in all child groups as well.
   --nextToken: string # To retrieve the next set of results, the <code>nextToken</code> value from a previous response; otherwise <b>null</b> to receive the first set of results.
   --maxResults: int # The maximum number of results to return at one time.
   --X-Amz-Content-Sha256: string
@@ -7618,7 +7617,7 @@ export def "rules ListTopicRules" [
   --topic: string # The topic.
   --maxResults: int # The maximum number of results to return.
   --nextToken: string # To retrieve the next set of results, the <code>nextToken</code> value from a previous response; otherwise <b>null</b> to receive the first set of results.
-  --ruleDisabled: string@bool-completer # Specifies whether the rule is disabled.
+  --ruleDisabled: oneof<nothing, bool> # Specifies whether the rule is disabled.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -7725,7 +7724,7 @@ export def "violation-eventsstart-timeend-time ListViolationEvents" [
   --thingName: string # A filter to limit results to those alerts caused by the specified thing.
   --securityProfileName: string # A filter to limit results to those alerts generated by the specified security profile.
   --behaviorCriteriaType: string@behaviorCriteriaType-completer #  The criteria for a behavior. 
-  --listSuppressedAlerts: string@bool-completer #  A list of all suppressed alerts. 
+  --listSuppressedAlerts: oneof<nothing, bool> #  A list of all suppressed alerts. 
   --verificationState: string@verificationState-completer # The verification state of the violation (detect alarm).
   --nextToken: string # The token for the next set of results.
   --maxResults: int # The maximum number of results to return at one time.
@@ -7798,8 +7797,8 @@ export def "cacertificate RegisterCACertificate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --setAsActive: string@bool-completer # <p>A boolean value that specifies if the CA certificate is set to active.</p> <p>Valid values: <code>ACTIVE | INACTIVE</code> </p>
-  --allowAutoRegistration: string@bool-completer # Allows this CA certificate to be used for auto registration of device certificates.
+  --setAsActive: oneof<nothing, bool> # <p>A boolean value that specifies if the CA certificate is set to active.</p> <p>Valid values: <code>ACTIVE | INACTIVE</code> </p>
+  --allowAutoRegistration: oneof<nothing, bool> # Allows this CA certificate to be used for auto registration of device certificates.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -7839,7 +7838,7 @@ export def "certificate-register RegisterCertificate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --setAsActive: string@bool-completer # <p>A boolean value that specifies if the certificate is set to active.</p> <p>Valid values: <code>ACTIVE | INACTIVE</code> </p>
+  --setAsActive: oneof<nothing, bool> # <p>A boolean value that specifies if the certificate is set to active.</p> <p>Valid values: <code>ACTIVE | INACTIVE</code> </p>
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -8326,7 +8325,7 @@ export def "audit-suppressions-update UpdateAuditSuppression" [
   checkName: string # An audit check name. Checks must be enabled for your account. (Use <code>DescribeAccountAuditConfiguration</code> to see the list of all checks, including those that are enabled or use <code>UpdateAccountAuditConfiguration</code> to select which checks are enabled.)
   resourceIdentifier: record # Information that identifies the noncompliant resource. — shape: {deviceCertificateId?: any, caCertificateId?: any, cognitoIdentityPoolId?: any, clientId?: any, policyVersionIdentifier?: any, account?: any, iamRoleArn?: any, roleAliasArn?: any, issuerCertificateIdentifier?: any, deviceCertificateArn?: any}
   --expirationDate: string #  The expiration date (epoch timestamp in seconds) that you want the suppression to adhere to.  (format: date-time)
-  --suppressIndefinitely: string@bool-completer #  Indicates whether a suppression should exist indefinitely or not. 
+  --suppressIndefinitely: oneof<nothing, bool> #  Indicates whether a suppression should exist indefinitely or not. 
   --description: string #  The description of the audit suppression. 
 ]: any -> record {
   let input = $in
@@ -8397,7 +8396,7 @@ export def "thing-groups-update-thing-groups-for-thing UpdateThingGroupsForThing
   --thingName: string # The thing whose group memberships will be updated.
   --thingGroupsToAdd: list # The groups to which the thing will be added.
   --thingGroupsToRemove: list # The groups from which the thing will be removed.
-  --overrideDynamicGroups: string@bool-completer # Override dynamic thing groups with static thing groups when 10-group limit is reached. If a thing belongs to 10 thing groups, and one or more of those groups are dynamic thing groups, adding a thing to a static group removes the thing from the last dynamic group.
+  --overrideDynamicGroups: oneof<nothing, bool> # Override dynamic thing groups with static thing groups when 10-group limit is reached. If a thing belongs to 10 thing groups, and one or more of those groups are dynamic thing groups, adding a thing to a static group removes the thing from the last dynamic group.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

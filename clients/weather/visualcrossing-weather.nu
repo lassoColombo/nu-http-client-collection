@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://weather.visualcrossing.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -183,9 +182,9 @@ export def "visual-crossing-web-services-rest-services-weatherdata-forecast get"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --sendAsDatasource: string@bool-completer # e.g. false
-  --allowAsynch: string@bool-completer # e.g. false
-  --shortColumnNames: string@bool-completer # e.g. false
+  --sendAsDatasource: oneof<nothing, bool> # e.g. false
+  --allowAsynch: oneof<nothing, bool> # e.g. false
+  --shortColumnNames: oneof<nothing, bool> # e.g. false
   --locations: string # e.g. Sterling%2C%20VA%2C%20US
   --aggregateHours: string # e.g. 24
   --contentType: string # e.g. json
@@ -213,15 +212,15 @@ export def "visual-crossing-web-services-rest-services-weatherdata-history get" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --maxDistance: string # e.g. -1
-  --shortColumnNames: string@bool-completer # e.g. false
+  --shortColumnNames: oneof<nothing, bool> # e.g. false
   --endDateTime: string # e.g. 2020-02-04T00%3A00%3A00
   --aggregateHours: string # e.g. 24
-  --collectStationContributions: string@bool-completer # e.g. false
+  --collectStationContributions: oneof<nothing, bool> # e.g. false
   --startDateTime: string # e.g. 2020-01-28T00%3A00%3A00
   --maxStations: string # e.g. -1
-  --allowAsynch: string@bool-completer # e.g. false
+  --allowAsynch: oneof<nothing, bool> # e.g. false
   --locations: string # e.g. Sterling%2C%20VA%2C%20US
-  --includeNormals: string@bool-completer # e.g. false
+  --includeNormals: oneof<nothing, bool> # e.g. false
   --contentType: string # e.g. json
   --unitGroup: string # e.g. us
   --key: string # e.g. INSERT_YOUR_KEY

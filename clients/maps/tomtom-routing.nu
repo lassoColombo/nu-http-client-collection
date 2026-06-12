@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.tomtom.com"] }
 def auth-scheme-completer [] { ["query-key"] }
 
@@ -122,7 +121,7 @@ export def "routing-calculate-reachable-range get" [
   --departAt: string # The date and time of departure from the origin point. Departure times apart from <i>now</i> must be specified as a dateTime. (default: now)
   --arriveAt: string # The date and time of arrival at the destination point. It must be specified as a dateTime. (format: dateTime)
   --routeType: string@routeType-completer # The type of route requested. (default: fastest)
-  --traffic: string@bool-completer # Determines whether current traffic is used in route calculations. Note that information on historic road speeds is always used. (default: true)
+  --traffic: oneof<nothing, bool> # Determines whether current traffic is used in route calculations. Note that information on historic road speeds is always used. (default: true)
   --avoid: string # Specifies whether the routing engine should try to avoid specific types of road segment when calculating the route. Can be specified multiple times. Possible values:   - tollRoads   - motorways   - ferries   - unpavedRoads   - carpools (e.g. unpavedRoads)
   --travelMode: string@travelMode-completer # The mode of travel for the requested route. (default: car)
   --hilliness: string@hilliness-completer # Degree of hilliness for calculating a thrilling route. (default: normal)
@@ -133,7 +132,7 @@ export def "routing-calculate-reachable-range get" [
   --vehicleLength: float # Length of the vehicle in meters. (format: float, default: 0)
   --vehicleWidth: float # Width of the vehicle in meters. (format: float, default: 0)
   --vehicleHeight: float # Height of the vehicle in meters. (format: float, default: 0)
-  --vehicleCommercial: string@bool-completer # Indicates that the vehicle is used for commercial purposes. This means it may not be allowed on certain roads. (default: false)
+  --vehicleCommercial: oneof<nothing, bool> # Indicates that the vehicle is used for commercial purposes. This means it may not be allowed on certain roads. (default: false)
   --vehicleLoadType: string # Indicates what kinds of hazardous materials the vehicle is carrying (if any). This means it may not be allowed on certain roads. Use these for routing in the US:    - <i>USHazmatClass1</i> Explosives   - <i>USHazmatClass2</i> Compressed gas   - <i>USHazmatClass3</i> Flammable liquids   - <i>USHazmatClass4</i> Flammable solids   - <i>USHazmatClass5</i> Oxidizers   - <i>USHazmatClass6</i> Poisons   - <i>USHazmatClass7</i> Radioactive   - <i>USHazmatClass8</i> Corrosives   - <i>USHazmatClass9</i> Miscellaneous  Use these for routing in all other countries:    - <i>otherHazmatExplosive</i> Explosives   - <i>otherHazmatGeneral</i> Miscellaneous   - <i>otherHazmatHarmfulToWater</i> Harmful to water  vehicleLoadType can be specified multiple times. This parameter is currently only considered for <b>travelMode</b>=<i>truck</i>.
   --constantSpeedConsumptionInLitersPerHundredkm: string # Specifies the speed-dependent component of consumption. Provided as an unordered list of speed/consumption-rate pairs.
   --currentFuelInLiters: float # Specifies the current supply of fuel in liters. (format: float)
@@ -178,7 +177,7 @@ export def "routing-calculate-reachable-range post" [
   --departAt: string # The date and time of departure from the origin point. Departure times apart from <i>now</i> must be specified as a dateTime. (default: now)
   --arriveAt: string # The date and time of arrival at the destination point. It must be specified as a dateTime. (format: dateTime)
   --routeType: string@routeType-completer # The type of route requested. (default: fastest)
-  --traffic: string@bool-completer # Determines whether current traffic is used in route calculations. Note that information on historic road speeds is always used. (default: true)
+  --traffic: oneof<nothing, bool> # Determines whether current traffic is used in route calculations. Note that information on historic road speeds is always used. (default: true)
   --avoid: string # Specifies whether the routing engine should try to avoid specific types of road segment when calculating the route. Can be specified multiple times. Possible values:   - tollRoads   - motorways   - ferries   - unpavedRoads   - carpools (e.g. unpavedRoads)
   --travelMode: string@travelMode-completer # The mode of travel for the requested route. (default: car)
   --hilliness: string@hilliness-completer # Degree of hilliness for calculating a thrilling route. (default: normal)
@@ -189,7 +188,7 @@ export def "routing-calculate-reachable-range post" [
   --vehicleLength: float # Length of the vehicle in meters. (format: float, default: 0)
   --vehicleWidth: float # Width of the vehicle in meters. (format: float, default: 0)
   --vehicleHeight: float # Height of the vehicle in meters. (format: float, default: 0)
-  --vehicleCommercial: string@bool-completer # Indicates that the vehicle is used for commercial purposes. This means it may not be allowed on certain roads. (default: false)
+  --vehicleCommercial: oneof<nothing, bool> # Indicates that the vehicle is used for commercial purposes. This means it may not be allowed on certain roads. (default: false)
   --vehicleLoadType: string # Indicates what kinds of hazardous materials the vehicle is carrying (if any). This means it may not be allowed on certain roads. Use these for routing in the US:    - <i>USHazmatClass1</i> Explosives   - <i>USHazmatClass2</i> Compressed gas   - <i>USHazmatClass3</i> Flammable liquids   - <i>USHazmatClass4</i> Flammable solids   - <i>USHazmatClass5</i> Oxidizers   - <i>USHazmatClass6</i> Poisons   - <i>USHazmatClass7</i> Radioactive   - <i>USHazmatClass8</i> Corrosives   - <i>USHazmatClass9</i> Miscellaneous  Use these for routing in all other countries:    - <i>otherHazmatExplosive</i> Explosives   - <i>otherHazmatGeneral</i> Miscellaneous   - <i>otherHazmatHarmfulToWater</i> Harmful to water  vehicleLoadType can be specified multiple times. This parameter is currently only considered for <b>travelMode</b>=<i>truck</i>.
   --constantSpeedConsumptionInLitersPerHundredkm: string # Specifies the speed-dependent component of consumption. Provided as an unordered list of speed/consumption-rate pairs.
   --currentFuelInLiters: float # Specifies the current supply of fuel in liters. (format: float)
@@ -237,7 +236,7 @@ export def "routing-calculate-route get" [
   --minDeviationTime: int # All alternative routes will follow the reference route for the specified minimum number of seconds starting from the origin point. (default: 0)
   --instructionsType: string@instructionsType-completer # If specified, guidance instructions will be returned (if available).
   --language: string # The language parameter determines the language of the guidance messages. (default: en-GB)
-  --computeBestOrder: string@bool-completer # Re-order the route waypoints to reduce the route length. (default: false)
+  --computeBestOrder: oneof<nothing, bool> # Re-order the route waypoints to reduce the route length. (default: false)
   --routeRepresentation: string@routeRepresentation-completer # Specifies the representation of the set of routes provided as a response. (default: polyline)
   --computeTravelTimeFor: string@computeTravelTimeFor-completer # Specifies whether to return additional travel times using different types of traffic information (none, historic, live) as well as the default best-estimate travel time. (default: none)
   --vehicleHeading: int # The directional heading of the vehicle in degrees. Entered in degrees, measured clockwise from north (so north is 0, east is 90, etc.).
@@ -247,7 +246,7 @@ export def "routing-calculate-route get" [
   --departAt: string # The date and time of departure from the origin point. Departure times apart from <i>now</i> must be specified as a dateTime. (default: now)
   --arriveAt: string # The date and time of arrival at the destination point. It must be specified as a dateTime. (format: dateTime)
   --routeType: string@routeType-completer # The type of route requested. (default: fastest)
-  --traffic: string@bool-completer # Determines whether current traffic is used in route calculations. Note that information on historic road speeds is always used. (default: true)
+  --traffic: oneof<nothing, bool> # Determines whether current traffic is used in route calculations. Note that information on historic road speeds is always used. (default: true)
   --avoid: string # Specifies whether the routing engine should try to avoid specific types of road segment when calculating the route. Can be specified multiple times. Possible values:   - tollRoads   - motorways   - ferries   - unpavedRoads   - carpools   - alreadyUsedRoads (e.g. unpavedRoads)
   --travelMode: string@travelMode-completer # The mode of travel for the requested route. (default: car)
   --hilliness: string@hilliness-completer # Degree of hilliness for calculating a thrilling route. (default: normal)
@@ -258,7 +257,7 @@ export def "routing-calculate-route get" [
   --vehicleLength: float # Length of the vehicle in meters. (format: float, default: 0)
   --vehicleWidth: float # Width of the vehicle in meters. (format: float, default: 0)
   --vehicleHeight: float # Height of the vehicle in meters. (format: float, default: 0)
-  --vehicleCommercial: string@bool-completer # Indicates that the vehicle is used for commercial purposes. This means it may not be allowed on certain roads. (default: false)
+  --vehicleCommercial: oneof<nothing, bool> # Indicates that the vehicle is used for commercial purposes. This means it may not be allowed on certain roads. (default: false)
   --vehicleLoadType: string # Indicates what kinds of hazardous materials the vehicle is carrying (if any). This means it may not be allowed on certain roads. Use these for routing in the US:    - <i>USHazmatClass1</i> Explosives   - <i>USHazmatClass2</i> Compressed gas   - <i>USHazmatClass3</i> Flammable liquids   - <i>USHazmatClass4</i> Flammable solids   - <i>USHazmatClass5</i> Oxidizers   - <i>USHazmatClass6</i> Poisons   - <i>USHazmatClass7</i> Radioactive   - <i>USHazmatClass8</i> Corrosives   - <i>USHazmatClass9</i> Miscellaneous  Use these for routing in all other countries:    - <i>otherHazmatExplosive</i> Explosives   - <i>otherHazmatGeneral</i> Miscellaneous   - <i>otherHazmatHarmfulToWater</i> Harmful to water  vehicleLoadType can be specified multiple times. This parameter is currently only considered for <b>travelMode</b>=<i>truck</i>.
   --vehicleEngineType: string@vehicleEngineType-completer # Engine type of the vehicle. (default: combustion)
   --constantSpeedConsumptionInLitersPerHundredkm: string # Specifies the speed-dependent component of consumption. Provided as an unordered list of speed/consumption-rate pairs.
@@ -302,7 +301,7 @@ export def "routing-calculate-route post" [
   --minDeviationTime: int # All alternative routes will follow the reference route for the specified minimum number of seconds starting from the origin point. (default: 0)
   --instructionsType: string@instructionsType-completer # If specified, guidance instructions will be returned (if available).
   --language: string # The language parameter determines the language of the guidance messages. (default: en-GB)
-  --computeBestOrder: string@bool-completer # Re-order the route waypoints to reduce the route length. (default: false)
+  --computeBestOrder: oneof<nothing, bool> # Re-order the route waypoints to reduce the route length. (default: false)
   --routeRepresentation: string@routeRepresentation-completer # Specifies the representation of the set of routes provided as a response. (default: polyline)
   --computeTravelTimeFor: string@computeTravelTimeFor-completer # Specifies whether to return additional travel times using different types of traffic information (none, historic, live) as well as the default best-estimate travel time. (default: none)
   --vehicleHeading: int # The directional heading of the vehicle in degrees. Entered in degrees, measured clockwise from north (so north is 0, east is 90, etc.).
@@ -312,7 +311,7 @@ export def "routing-calculate-route post" [
   --departAt: string # The date and time of departure from the origin point. Departure times apart from <i>now</i> must be specified as a dateTime. (default: now)
   --arriveAt: string # The date and time of arrival at the destination point. It must be specified as a dateTime. (format: dateTime)
   --routeType: string@routeType-completer # The type of route requested. (default: fastest)
-  --traffic: string@bool-completer # Determines whether current traffic is used in route calculations. Note that information on historic road speeds is always used. (default: true)
+  --traffic: oneof<nothing, bool> # Determines whether current traffic is used in route calculations. Note that information on historic road speeds is always used. (default: true)
   --avoid: string # Specifies whether the routing engine should try to avoid specific types of road segment when calculating the route. Can be specified multiple times. Possible values:   - tollRoads   - motorways   - ferries   - unpavedRoads   - carpools   - alreadyUsedRoads (e.g. unpavedRoads)
   --travelMode: string@travelMode-completer # The mode of travel for the requested route. (default: car)
   --hilliness: string@hilliness-completer # Degree of hilliness for calculating a thrilling route. (default: normal)
@@ -323,7 +322,7 @@ export def "routing-calculate-route post" [
   --vehicleLength: float # Length of the vehicle in meters. (format: float, default: 0)
   --vehicleWidth: float # Width of the vehicle in meters. (format: float, default: 0)
   --vehicleHeight: float # Height of the vehicle in meters. (format: float, default: 0)
-  --vehicleCommercial: string@bool-completer # Indicates that the vehicle is used for commercial purposes. This means it may not be allowed on certain roads. (default: false)
+  --vehicleCommercial: oneof<nothing, bool> # Indicates that the vehicle is used for commercial purposes. This means it may not be allowed on certain roads. (default: false)
   --vehicleLoadType: string # Indicates what kinds of hazardous materials the vehicle is carrying (if any). This means it may not be allowed on certain roads. Use these for routing in the US:    - <i>USHazmatClass1</i> Explosives   - <i>USHazmatClass2</i> Compressed gas   - <i>USHazmatClass3</i> Flammable liquids   - <i>USHazmatClass4</i> Flammable solids   - <i>USHazmatClass5</i> Oxidizers   - <i>USHazmatClass6</i> Poisons   - <i>USHazmatClass7</i> Radioactive   - <i>USHazmatClass8</i> Corrosives   - <i>USHazmatClass9</i> Miscellaneous  Use these for routing in all other countries:    - <i>otherHazmatExplosive</i> Explosives   - <i>otherHazmatGeneral</i> Miscellaneous   - <i>otherHazmatHarmfulToWater</i> Harmful to water  vehicleLoadType can be specified multiple times. This parameter is currently only considered for <b>travelMode</b>=<i>truck</i>.
   --vehicleEngineType: string@vehicleEngineType-completer # Engine type of the vehicle. (default: combustion)
   --constantSpeedConsumptionInLitersPerHundredkm: string # Specifies the speed-dependent component of consumption. Provided as an unordered list of speed/consumption-rate pairs.

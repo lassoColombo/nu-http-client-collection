@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://quotes.rest" "http://quotes.rest" "http://api01.quotes.rest"] }
 def auth-scheme-completer [] { ["x-theysaidso-api-secret"] }
 
@@ -127,7 +126,7 @@ export def "qod-categories get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --language: string # Language of the QOD category. The language must be supported in our QOD system. (format: string, default: en)
-  --detailed: string@bool-completer # Return detailed information of the categories. Note the data format changes between the two values of this switch. (format: boolean, default: false)
+  --detailed: oneof<nothing, bool> # Return detailed information of the categories. Note the data format changes between the two values of this switch. (format: boolean, default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
@@ -264,7 +263,7 @@ export def "qshow-list get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --start: int # Response is paged. This parameter controls where response starts the listing at (format: int32, default: 0)
-  --public: string@bool-completer # Should include public qshows or not in the list (format: boolean, default: false)
+  --public: oneof<nothing, bool> # Should include public qshows or not in the list (format: boolean, default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
@@ -476,7 +475,7 @@ export def "quote-authors-popular get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --language: string # Language. A same author may have quotes in two or more different languages. So for example 'Mahatma Gandhi' may be returned for language "en"(English), and "மஹாத்மா காந்தி" may be returned when the language is "ta" (Tamil). (format: string, default: en)
-  --detailed: string@bool-completer # Should return detailed author information such as `birthday`, `death date`, `occupation`, `description` etc. Only available at certain subscription levels. (format: boolean, default: false)
+  --detailed: oneof<nothing, bool> # Should return detailed author information such as `birthday`, `death date`, `occupation`, `description` etc. Only available at certain subscription levels. (format: boolean, default: false)
   --start: int # Response is paged. This parameter controls where response starts the listing at (format: int32, default: 0)
   --limit: int # Response is paged. This parameter controls how many is returned in the result. The maximum depends on the subscription level. (format: int32, default: 5)
 ]: nothing -> any {
@@ -502,7 +501,7 @@ export def "quote-authors-search get" [
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string # Text string to search for in author names (format: string)
   --language: string # Language. A same author may have quotes in two or more different languages. So for example 'Mahatma Gandhi' may be returned for language "en"(English), and "மஹாத்மா காந்தி" may be returned when the language is "ta" (Tamil). (format: string, default: en)
-  --detailed: string@bool-completer # Should return detailed author information such as `birthday`, `death date`, `occupation`, `description` etc. Only available at certain subscription levels. (format: boolean, default: false)
+  --detailed: oneof<nothing, bool> # Should return detailed author information such as `birthday`, `death date`, `occupation`, `description` etc. Only available at certain subscription levels. (format: boolean, default: false)
   --start: int # Response is paged. This parameter controls where response starts the listing at (format: int32, default: 0)
   --limit: int # Response is paged. This parameter controls how many is returned in the result. The maximum depends on the subscription level. (format: int32, default: 1)
 ]: nothing -> any {
@@ -662,7 +661,7 @@ export def "quote-image get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string # Quote Image id (format: string)
-  --binary: string@bool-completer # Should the response be a direct file download of the image or a base64 encoded image file wrapped in json? (format: boolean, default: true)
+  --binary: oneof<nothing, bool> # Should the response be a direct file download of the image or a base64 encoded image file wrapped in json? (format: boolean, default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
@@ -694,8 +693,8 @@ export def "quote-image put" [
   --valign: string # Vertical text Alignment Value (format: string, default: center)
   --width: int # Image Width(By default this takes the width of the background image) (format: integer)
   --height: int # Image Height(By default this takes the height of the background image) (format: integer)
-  --branding: string@bool-completer # Disable They Said So branding (Only available in certain subscription levels. Ignored in other levels) (format: boolean, default: false)
-  --include-transparent-layer: string@bool-completer # Should include a transparent layer between the text and the background image? This helps when the background image is bright and obscures the text. (format: boolean, default: true)
+  --branding: oneof<nothing, bool> # Disable They Said So branding (Only available in certain subscription levels. Ignored in other levels) (format: boolean, default: false)
+  --include-transparent-layer: oneof<nothing, bool> # Should include a transparent layer between the text and the background image? This helps when the background image is bright and obscures the text. (format: boolean, default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
@@ -993,7 +992,7 @@ export def "quote-image-search get" [
   --allow-errors(-e) # Return full response without error handling
   --category: string # Quote Category (format: string)
   --author: string # Quote Author (format: string)
-  --private: string@bool-completer # Should search private collection. Default searches public image collection. (format: boolean, default: false)
+  --private: oneof<nothing, bool> # Should search private collection. Default searches public image collection. (format: boolean, default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)
@@ -1134,10 +1133,10 @@ export def "quote-search get" [
   --minlength: int # Quote minimum Length (format: int32, default: 100)
   --maxlength: int # Quote maximum Length (format: int32, default: 300)
   --qp-query: string # keyword to search for in the quote (format: string)
-  --private: string@bool-completer # Should search private collection? Default searches public collection. (format: boolean, default: false)
+  --private: oneof<nothing, bool> # Should search private collection? Default searches public collection. (format: boolean, default: false)
   --language: string # Language of the Quote. The language must be supported in our system. (format: string, default: en)
   --limit: int # No of quotes to return. The max limit depends on the subscription level. (format: integer, default: 1)
-  --sfw: string@bool-completer # Should search only SFW (Safe For Work) quotes? (format: boolean, default: false)
+  --sfw: oneof<nothing, bool> # Should search only SFW (Safe For Work) quotes? (format: boolean, default: false)
 ]: nothing -> record<contents: record<quotes: list<record>>, success: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-theysaidso-api-secret"))
   let base = ($base_url | default $BASE_URL)

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://s3.us-east-1.amazonaws.com" "http://s3.us-west-1.amazonaws.com" "http://s3.us-west-2.amazonaws.com" "http://s3.us-gov-west-1.amazonaws.com" "http://s3.eu-west-1.amazonaws.com" "http://s3.ap-northeast-1.amazonaws.com" "http://s3.ap-southeast-1.amazonaws.com" "http://s3.ap-southeast-2.amazonaws.com" "http://s3.sa-east-1.amazonaws.com" "http://s3-us-east-1.amazonaws.com" "https://s3.us-east-1.amazonaws.com" "https://s3.us-west-1.amazonaws.com" "https://s3.us-west-2.amazonaws.com" "https://s3.us-gov-west-1.amazonaws.com" "https://s3.eu-west-1.amazonaws.com" "https://s3.ap-northeast-1.amazonaws.com" "https://s3.ap-southeast-1.amazonaws.com" "https://s3.ap-southeast-2.amazonaws.com" "https://s3.sa-east-1.amazonaws.com" "https://s3-us-east-1.amazonaws.com" "http://s3.amazonaws.com" "https://s3.amazonaws.com" "http://s3.us-east-2.amazonaws.com" "http://s3.us-gov-east-1.amazonaws.com" "http://s3.ca-central-1.amazonaws.com" "http://s3.eu-north-1.amazonaws.com" "http://s3.eu-west-2.amazonaws.com" "http://s3.eu-west-3.amazonaws.com" "http://s3.eu-central-1.amazonaws.com" "http://s3.eu-south-1.amazonaws.com" "http://s3.af-south-1.amazonaws.com" "http://s3.ap-northeast-2.amazonaws.com" "http://s3.ap-northeast-3.amazonaws.com" "http://s3.ap-east-1.amazonaws.com" "http://s3.ap-south-1.amazonaws.com" "http://s3.me-south-1.amazonaws.com" "https://s3.us-east-2.amazonaws.com" "https://s3.us-gov-east-1.amazonaws.com" "https://s3.ca-central-1.amazonaws.com" "https://s3.eu-north-1.amazonaws.com" "https://s3.eu-west-2.amazonaws.com" "https://s3.eu-west-3.amazonaws.com" "https://s3.eu-central-1.amazonaws.com" "https://s3.eu-south-1.amazonaws.com" "https://s3.af-south-1.amazonaws.com" "https://s3.ap-northeast-2.amazonaws.com" "https://s3.ap-northeast-3.amazonaws.com" "https://s3.ap-east-1.amazonaws.com" "https://s3.ap-south-1.amazonaws.com" "https://s3.me-south-1.amazonaws.com" "http://s3.cn-north-1.amazonaws.com.cn" "http://s3.cn-northwest-1.amazonaws.com.cn" "https://s3.cn-north-1.amazonaws.com.cn" "https://s3.cn-northwest-1.amazonaws.com.cn"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -296,7 +295,7 @@ export def "api CopyObject" [
   --x-amz-server-side-encryption-customer-key-MD5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
   --x-amz-server-side-encryption-aws-kms-key-id: string # Specifies the Amazon Web Services KMS key ID to use for object encryption. All GET and PUT requests for an object protected by Amazon Web Services KMS will fail if not made via SSL or using SigV4. For information about configuring using any of the officially supported Amazon Web Services SDKs and Amazon Web Services CLI, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingAWSSDK.html#specify-signature-version">Specifying the Signature Version in Request Authentication</a> in the <i>Amazon S3 User Guide</i>.
   --x-amz-server-side-encryption-context: string # Specifies the Amazon Web Services KMS Encryption Context to use for object encryption. The value of this header is a base64-encoded UTF-8 string holding JSON with the encryption context key-value pairs.
-  --x-amz-server-side-encryption-bucket-key-enabled: string@bool-completer # <p>Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with server-side encryption using AWS KMS (SSE-KMS). Setting this header to <code>true</code> causes Amazon S3 to use an S3 Bucket Key for object encryption with SSE-KMS. </p> <p>Specifying this header with a COPY action doesn’t affect bucket-level settings for S3 Bucket Key.</p>
+  --x-amz-server-side-encryption-bucket-key-enabled: oneof<nothing, bool> # <p>Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with server-side encryption using AWS KMS (SSE-KMS). Setting this header to <code>true</code> causes Amazon S3 to use an S3 Bucket Key for object encryption with SSE-KMS. </p> <p>Specifying this header with a COPY action doesn’t affect bucket-level settings for S3 Bucket Key.</p>
   --x-amz-copy-source-server-side-encryption-customer-algorithm: string # Specifies the algorithm to use when decrypting the source object (for example, AES256).
   --x-amz-copy-source-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use to decrypt the source object. The encryption key provided in this header must be one that was used when the source object was created.
   --x-amz-copy-source-server-side-encryption-customer-key-MD5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
@@ -342,7 +341,7 @@ export def "api CreateBucket" [
   --x-amz-grant-read-acp: string # Allows grantee to read the bucket ACL.
   --x-amz-grant-write: string # <p>Allows grantee to create new objects in the bucket.</p> <p>For the bucket and object owners of existing objects, also allows deletions and overwrites of those objects.</p>
   --x-amz-grant-write-acp: string # Allows grantee to write the ACL for the applicable bucket.
-  --x-amz-bucket-object-lock-enabled: string@bool-completer # Specifies whether you want S3 Object Lock to be enabled for the new bucket.
+  --x-amz-bucket-object-lock-enabled: oneof<nothing, bool> # Specifies whether you want S3 Object Lock to be enabled for the new bucket.
   --x-amz-object-ownership: string@x-amz-object-ownership-completer
   --body: record
 ]: any -> any {
@@ -463,7 +462,7 @@ export def "api CreateMultipartUpload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --uploads: string@bool-completer # allows empty value
+  --uploads: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-acl: string@x-amz-acl-completer # <p>The canned ACL to apply to the object.</p> <p>This action is not supported by Amazon S3 on Outposts.</p>
   --Cache-Control: string # Specifies caching behavior along the request/reply chain.
@@ -484,7 +483,7 @@ export def "api CreateMultipartUpload" [
   --x-amz-server-side-encryption-customer-key-MD5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
   --x-amz-server-side-encryption-aws-kms-key-id: string # Specifies the ID of the symmetric customer managed key to use for object encryption. All GET and PUT requests for an object protected by Amazon Web Services KMS will fail if not made via SSL or using SigV4. For information about configuring using any of the officially supported Amazon Web Services SDKs and Amazon Web Services CLI, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingAWSSDK.html#specify-signature-version">Specifying the Signature Version in Request Authentication</a> in the <i>Amazon S3 User Guide</i>.
   --x-amz-server-side-encryption-context: string # Specifies the Amazon Web Services KMS Encryption Context to use for object encryption. The value of this header is a base64-encoded UTF-8 string holding JSON with the encryption context key-value pairs.
-  --x-amz-server-side-encryption-bucket-key-enabled: string@bool-completer # <p>Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with server-side encryption using AWS KMS (SSE-KMS). Setting this header to <code>true</code> causes Amazon S3 to use an S3 Bucket Key for object encryption with SSE-KMS.</p> <p>Specifying this header with an object action doesn’t affect bucket-level settings for S3 Bucket Key.</p>
+  --x-amz-server-side-encryption-bucket-key-enabled: oneof<nothing, bool> # <p>Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with server-side encryption using AWS KMS (SSE-KMS). Setting this header to <code>true</code> causes Amazon S3 to use an S3 Bucket Key for object encryption with SSE-KMS.</p> <p>Specifying this header with an object action doesn’t affect bucket-level settings for S3 Bucket Key.</p>
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-tagging: string # The tag-set for the object. The tag-set must be encoded as URL Query parameters.
   --x-amz-object-lock-mode: string@x-amz-object-lock-mode-completer # Specifies the Object Lock mode that you want to apply to the uploaded object.
@@ -521,7 +520,7 @@ export def "api DeleteBucketAnalyticsConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string # The ID that identifies the analytics configuration.
-  --analytics: string@bool-completer # allows empty value
+  --analytics: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -550,7 +549,7 @@ export def "api GetBucketAnalyticsConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string # The ID that identifies the analytics configuration.
-  --analytics: string@bool-completer # allows empty value
+  --analytics: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -579,7 +578,7 @@ export def "api PutBucketAnalyticsConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string # The ID that identifies the analytics configuration.
-  --analytics: string@bool-completer # allows empty value
+  --analytics: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --body: record
@@ -611,7 +610,7 @@ export def "api DeleteBucketCors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cors: string@bool-completer # allows empty value
+  --cors: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -640,7 +639,7 @@ export def "api GetBucketCors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cors: string@bool-completer # allows empty value
+  --cors: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -669,7 +668,7 @@ export def "api PutBucketCors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cors: string@bool-completer # allows empty value
+  --cors: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --Content-MD5: string # <p>The base64-encoded 128-bit MD5 digest of the data. This header must be used as a message integrity check to verify that the request body was not corrupted in transit. For more information, go to <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864.</a> </p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
@@ -702,7 +701,7 @@ export def "api DeleteBucketEncryption" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --encryption: string@bool-completer # allows empty value
+  --encryption: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -730,7 +729,7 @@ export def "api GetBucketEncryption" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --encryption: string@bool-completer # allows empty value
+  --encryption: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -758,7 +757,7 @@ export def "api PutBucketEncryption" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --encryption: string@bool-completer # allows empty value
+  --encryption: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --Content-MD5: string # <p>The base64-encoded 128-bit MD5 digest of the server-side encryption configuration.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
@@ -792,7 +791,7 @@ export def "api DeleteBucketIntelligentTieringConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string # The ID used to identify the S3 Intelligent-Tiering configuration.
-  --intelligent-tiering: string@bool-completer # allows empty value
+  --intelligent-tiering: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -820,7 +819,7 @@ export def "api GetBucketIntelligentTieringConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string # The ID used to identify the S3 Intelligent-Tiering configuration.
-  --intelligent-tiering: string@bool-completer # allows empty value
+  --intelligent-tiering: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -848,7 +847,7 @@ export def "api PutBucketIntelligentTieringConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string # The ID used to identify the S3 Intelligent-Tiering configuration.
-  --intelligent-tiering: string@bool-completer # allows empty value
+  --intelligent-tiering: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --body: record
 ]: any -> any {
@@ -879,7 +878,7 @@ export def "api DeleteBucketInventoryConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string # The ID used to identify the inventory configuration.
-  --inventory: string@bool-completer # allows empty value
+  --inventory: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -908,7 +907,7 @@ export def "api GetBucketInventoryConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string # The ID used to identify the inventory configuration.
-  --inventory: string@bool-completer # allows empty value
+  --inventory: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -937,7 +936,7 @@ export def "api PutBucketInventoryConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string # The ID used to identify the inventory configuration.
-  --inventory: string@bool-completer # allows empty value
+  --inventory: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --body: record
@@ -969,7 +968,7 @@ export def "api DeleteBucketLifecycle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --lifecycle: string@bool-completer # allows empty value
+  --lifecycle: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -997,7 +996,7 @@ export def "api GetBucketLifecycleConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --lifecycle: string@bool-completer # allows empty value
+  --lifecycle: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -1025,7 +1024,7 @@ export def "api PutBucketLifecycleConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --lifecycle: string@bool-completer # allows empty value
+  --lifecycle: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
@@ -1058,7 +1057,7 @@ export def "api DeleteBucketMetricsConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string # The ID used to identify the metrics configuration.
-  --metrics: string@bool-completer # allows empty value
+  --metrics: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -1087,7 +1086,7 @@ export def "api GetBucketMetricsConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string # The ID used to identify the metrics configuration.
-  --metrics: string@bool-completer # allows empty value
+  --metrics: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -1116,7 +1115,7 @@ export def "api PutBucketMetricsConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string # The ID used to identify the metrics configuration.
-  --metrics: string@bool-completer # allows empty value
+  --metrics: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --body: record
@@ -1147,7 +1146,7 @@ export def "api DeleteBucketOwnershipControls" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ownershipControls: string@bool-completer # allows empty value
+  --ownershipControls: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -1175,7 +1174,7 @@ export def "api GetBucketOwnershipControls" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ownershipControls: string@bool-completer # allows empty value
+  --ownershipControls: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -1203,7 +1202,7 @@ export def "api PutBucketOwnershipControls" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ownershipControls: string@bool-completer # allows empty value
+  --ownershipControls: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --Content-MD5: string # <p>The MD5 hash of the <code>OwnershipControls</code> request body. </p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
@@ -1236,7 +1235,7 @@ export def "api DeleteBucketPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --policy: string@bool-completer # allows empty value
+  --policy: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -1265,7 +1264,7 @@ export def "api GetBucketPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --policy: string@bool-completer # allows empty value
+  --policy: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -1294,11 +1293,11 @@ export def "api PutBucketPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --policy: string@bool-completer # allows empty value
+  --policy: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --Content-MD5: string # <p>The MD5 hash of the request body.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
-  --x-amz-confirm-remove-self-bucket-access: string@bool-completer # Set this parameter to true to confirm that you want to remove your permissions to change this bucket policy in the future.
+  --x-amz-confirm-remove-self-bucket-access: oneof<nothing, bool> # Set this parameter to true to confirm that you want to remove your permissions to change this bucket policy in the future.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --body: record
 ]: any -> any {
@@ -1328,7 +1327,7 @@ export def "api DeleteBucketReplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --replication: string@bool-completer # allows empty value
+  --replication: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -1356,7 +1355,7 @@ export def "api GetBucketReplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --replication: string@bool-completer # allows empty value
+  --replication: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -1384,7 +1383,7 @@ export def "api PutBucketReplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --replication: string@bool-completer # allows empty value
+  --replication: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --Content-MD5: string # <p>The base64-encoded 128-bit MD5 digest of the data. You must use this header as a message integrity check to verify that the request body was not corrupted in transit. For more information, see <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
@@ -1419,7 +1418,7 @@ export def "api DeleteBucketTagging" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --tagging: string@bool-completer # allows empty value
+  --tagging: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -1448,7 +1447,7 @@ export def "api GetBucketTagging" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --tagging: string@bool-completer # allows empty value
+  --tagging: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -1477,7 +1476,7 @@ export def "api PutBucketTagging" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --tagging: string@bool-completer # allows empty value
+  --tagging: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --Content-MD5: string # <p>The base64-encoded 128-bit MD5 digest of the data. You must use this header as a message integrity check to verify that the request body was not corrupted in transit. For more information, see <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
@@ -1511,7 +1510,7 @@ export def "api DeleteBucketWebsite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --website: string@bool-completer # allows empty value
+  --website: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -1540,7 +1539,7 @@ export def "api GetBucketWebsite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --website: string@bool-completer # allows empty value
+  --website: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -1569,7 +1568,7 @@ export def "api PutBucketWebsite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --website: string@bool-completer # allows empty value
+  --website: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --Content-MD5: string # <p>The base64-encoded 128-bit MD5 digest of the data. You must use this header as a message integrity check to verify that the request body was not corrupted in transit. For more information, see <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
@@ -1608,7 +1607,7 @@ export def "api DeleteObject" [
   --x-amz-security-token: string
   --x-amz-mfa: string # The concatenation of the authentication device's serial number, a space, and the value that is displayed on your authentication device. Required to permanently delete a versioned object if versioning is configured with MFA delete enabled.
   --x-amz-request-payer: string@x-amz-request-payer-completer
-  --x-amz-bypass-governance-retention: string@bool-completer # Indicates whether S3 Object Lock should bypass Governance-mode restrictions to process this operation. To use this header, you must have the <code>s3:BypassGovernanceRetention</code> permission.
+  --x-amz-bypass-governance-retention: oneof<nothing, bool> # Indicates whether S3 Object Lock should bypass Governance-mode restrictions to process this operation. To use this header, you must have the <code>s3:BypassGovernanceRetention</code> permission.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1752,7 +1751,7 @@ export def "api PutObject" [
   --x-amz-server-side-encryption-customer-key-MD5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
   --x-amz-server-side-encryption-aws-kms-key-id: string # If <code>x-amz-server-side-encryption</code> is present and has the value of <code>aws:kms</code>, this header specifies the ID of the Amazon Web Services Key Management Service (Amazon Web Services KMS) symmetrical customer managed key that was used for the object. If you specify <code>x-amz-server-side-encryption:aws:kms</code>, but do not provide<code> x-amz-server-side-encryption-aws-kms-key-id</code>, Amazon S3 uses the Amazon Web Services managed key to protect the data. If the KMS key does not exist in the same account issuing the command, you must use the full ARN and not just the ID. 
   --x-amz-server-side-encryption-context: string # Specifies the Amazon Web Services KMS Encryption Context to use for object encryption. The value of this header is a base64-encoded UTF-8 string holding JSON with the encryption context key-value pairs.
-  --x-amz-server-side-encryption-bucket-key-enabled: string@bool-completer # <p>Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with server-side encryption using AWS KMS (SSE-KMS). Setting this header to <code>true</code> causes Amazon S3 to use an S3 Bucket Key for object encryption with SSE-KMS.</p> <p>Specifying this header with a PUT action doesn’t affect bucket-level settings for S3 Bucket Key.</p>
+  --x-amz-server-side-encryption-bucket-key-enabled: oneof<nothing, bool> # <p>Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with server-side encryption using AWS KMS (SSE-KMS). Setting this header to <code>true</code> causes Amazon S3 to use an S3 Bucket Key for object encryption with SSE-KMS.</p> <p>Specifying this header with a PUT action doesn’t affect bucket-level settings for S3 Bucket Key.</p>
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-tagging: string # The tag-set for the object. The tag-set must be encoded as URL Query parameters. (For example, "Key1=Value1")
   --x-amz-object-lock-mode: string@x-amz-object-lock-mode-completer # The Object Lock mode that you want to apply to this object.
@@ -1788,7 +1787,7 @@ export def "api DeleteObjectTagging" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --versionId: string # The versionId of the object that the tag-set will be removed from.
-  --tagging: string@bool-completer # allows empty value
+  --tagging: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -1818,7 +1817,7 @@ export def "api GetObjectTagging" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --versionId: string # The versionId of the object for which to get the tagging information.
-  --tagging: string@bool-completer # allows empty value
+  --tagging: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --x-amz-request-payer: string@x-amz-request-payer-completer
@@ -1849,7 +1848,7 @@ export def "api PutObjectTagging" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --versionId: string # The versionId of the object that the tag-set will be added to.
-  --tagging: string@bool-completer # allows empty value
+  --tagging: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --Content-MD5: string # <p>The MD5 hash for the request body.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
@@ -1884,11 +1883,11 @@ export def "api DeleteObjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete: string@bool-completer # allows empty value
+  --delete: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-mfa: string # The concatenation of the authentication device's serial number, a space, and the value that is displayed on your authentication device. Required to permanently delete a versioned object if versioning is configured with MFA delete enabled.
   --x-amz-request-payer: string@x-amz-request-payer-completer
-  --x-amz-bypass-governance-retention: string@bool-completer # Specifies whether you want to delete this object even if it has a Governance-type Object Lock in place. To use this header, you must have the <code>s3:BypassGovernanceRetention</code> permission.
+  --x-amz-bypass-governance-retention: oneof<nothing, bool> # Specifies whether you want to delete this object even if it has a Governance-type Object Lock in place. To use this header, you must have the <code>s3:BypassGovernanceRetention</code> permission.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p> <p>This checksum algorithm must be the same for all parts and it match the checksum value supplied in the <code>CreateMultipartUpload</code> request.</p>
   --body: record
@@ -1919,7 +1918,7 @@ export def "api DeletePublicAccessBlock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --publicAccessBlock: string@bool-completer # allows empty value
+  --publicAccessBlock: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -1947,7 +1946,7 @@ export def "api GetPublicAccessBlock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --publicAccessBlock: string@bool-completer # allows empty value
+  --publicAccessBlock: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -1975,7 +1974,7 @@ export def "api PutPublicAccessBlock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --publicAccessBlock: string@bool-completer # allows empty value
+  --publicAccessBlock: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --Content-MD5: string # <p>The MD5 hash of the <code>PutPublicAccessBlock</code> request body. </p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
@@ -2008,7 +2007,7 @@ export def "api GetBucketAccelerateConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --accelerate: string@bool-completer # allows empty value
+  --accelerate: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -2036,7 +2035,7 @@ export def "api PutBucketAccelerateConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --accelerate: string@bool-completer # allows empty value
+  --accelerate: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
@@ -2069,7 +2068,7 @@ export def "api GetBucketAcl" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acl: string@bool-completer # allows empty value
+  --acl: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -2098,7 +2097,7 @@ export def "api PutBucketAcl" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acl: string@bool-completer # allows empty value
+  --acl: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-acl: string@x-amz-acl-completer-1 # The canned ACL to apply to the bucket.
   --Content-MD5: string # <p>The base64-encoded 128-bit MD5 digest of the data. This header must be used as a message integrity check to verify that the request body was not corrupted in transit. For more information, go to <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864.</a> </p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
@@ -2140,7 +2139,7 @@ export def "api GetBucketLifecycle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --lifecycle: string@bool-completer # allows empty value
+  --lifecycle: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -2171,7 +2170,7 @@ export def "api PutBucketLifecycle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --lifecycle: string@bool-completer # allows empty value
+  --lifecycle: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --Content-MD5: string # <p/> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
@@ -2205,7 +2204,7 @@ export def "api GetBucketLocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --location: string@bool-completer # allows empty value
+  --location: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -2234,7 +2233,7 @@ export def "api GetBucketLogging" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --logging: string@bool-completer # allows empty value
+  --logging: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -2263,7 +2262,7 @@ export def "api PutBucketLogging" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --logging: string@bool-completer # allows empty value
+  --logging: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --Content-MD5: string # <p>The MD5 hash of the <code>PutBucketLogging</code> request body.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
@@ -2296,7 +2295,7 @@ export def "api GetBucketNotificationConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notification: string@bool-completer # allows empty value
+  --notification: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -2324,10 +2323,10 @@ export def "api PutBucketNotificationConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notification: string@bool-completer # allows empty value
+  --notification: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
-  --x-amz-skip-destination-validation: string@bool-completer # Skips validation of Amazon SQS, Amazon SNS, and Lambda destinations. True or false value.
+  --x-amz-skip-destination-validation: oneof<nothing, bool> # Skips validation of Amazon SQS, Amazon SNS, and Lambda destinations. True or false value.
   --body: record
 ]: any -> any {
   let input = $in
@@ -2359,7 +2358,7 @@ export def "api GetBucketNotification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notification: string@bool-completer # allows empty value
+  --notification: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -2390,7 +2389,7 @@ export def "api PutBucketNotification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notification: string@bool-completer # allows empty value
+  --notification: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --Content-MD5: string # <p>The MD5 hash of the <code>PutPublicAccessBlock</code> request body.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
@@ -2423,7 +2422,7 @@ export def "api GetBucketPolicyStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --policyStatus: string@bool-completer # allows empty value
+  --policyStatus: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -2452,7 +2451,7 @@ export def "api GetBucketRequestPayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --requestPayment: string@bool-completer # allows empty value
+  --requestPayment: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -2481,7 +2480,7 @@ export def "api PutBucketRequestPayment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --requestPayment: string@bool-completer # allows empty value
+  --requestPayment: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --Content-MD5: string # <p>The base64-encoded 128-bit MD5 digest of the data. You must use this header as a message integrity check to verify that the request body was not corrupted in transit. For more information, see <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
@@ -2515,7 +2514,7 @@ export def "api GetBucketVersioning" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --versioning: string@bool-completer # allows empty value
+  --versioning: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -2544,7 +2543,7 @@ export def "api PutBucketVersioning" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --versioning: string@bool-completer # allows empty value
+  --versioning: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --Content-MD5: string # <p>&gt;The base64-encoded 128-bit MD5 digest of the data. You must use this header as a message integrity check to verify that the request body was not corrupted in transit. For more information, see <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
@@ -2581,7 +2580,7 @@ export def "api GetObjectAcl" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --versionId: string # VersionId used to reference a specific version of the object.
-  --acl: string@bool-completer # allows empty value
+  --acl: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
@@ -2613,7 +2612,7 @@ export def "api PutObjectAcl" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --versionId: string # VersionId used to reference a specific version of the object.
-  --acl: string@bool-completer # allows empty value
+  --acl: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-acl: string@x-amz-acl-completer # The canned ACL to apply to the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#CannedACL">Canned ACL</a>.
   --Content-MD5: string # <p>The base64-encoded 128-bit MD5 digest of the data. This header must be used as a message integrity check to verify that the request body was not corrupted in transit. For more information, go to <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864.&gt;</a> </p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
@@ -2655,7 +2654,7 @@ export def "api GetObjectAttributes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --versionId: string # The version ID used to reference a specific version of the object.
-  --attributes: string@bool-completer # allows empty value
+  --attributes: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-max-parts: int # Sets the maximum number of parts to return.
   --x-amz-part-number-marker: int # Specifies the part after which listing should begin. Only parts with higher part numbers will be listed.
@@ -2692,7 +2691,7 @@ export def "api GetObjectLegalHold" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --versionId: string # The version ID of the object whose legal hold status you want to retrieve.
-  --legal-hold: string@bool-completer # allows empty value
+  --legal-hold: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
@@ -2723,7 +2722,7 @@ export def "api PutObjectLegalHold" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --versionId: string # The version ID of the object that you want to place a legal hold on.
-  --legal-hold: string@bool-completer # allows empty value
+  --legal-hold: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --Content-MD5: string # <p>The MD5 hash for the request body.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
@@ -2757,7 +2756,7 @@ export def "api GetObjectLockConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --object-lock: string@bool-completer # allows empty value
+  --object-lock: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -2785,7 +2784,7 @@ export def "api PutObjectLockConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --object-lock: string@bool-completer # allows empty value
+  --object-lock: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-bucket-object-lock-token: string # A token to allow Object Lock to be enabled for an existing bucket.
@@ -2822,7 +2821,7 @@ export def "api GetObjectRetention" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --versionId: string # The version ID for the object whose retention settings you want to retrieve.
-  --retention: string@bool-completer # allows empty value
+  --retention: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
@@ -2853,10 +2852,10 @@ export def "api PutObjectRetention" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --versionId: string # The version ID for the object that you want to apply this Object Retention configuration to.
-  --retention: string@bool-completer # allows empty value
+  --retention: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
-  --x-amz-bypass-governance-retention: string@bool-completer # Indicates whether this action should bypass Governance-mode restrictions.
+  --x-amz-bypass-governance-retention: oneof<nothing, bool> # Indicates whether this action should bypass Governance-mode restrictions.
   --Content-MD5: string # <p>The MD5 hash for the request body.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
@@ -2890,7 +2889,7 @@ export def "api GetObjectTorrent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --torrent: string@bool-completer # allows empty value
+  --torrent: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
@@ -2920,7 +2919,7 @@ export def "api ListBucketAnalyticsConfigurations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --continuation-token: string # The ContinuationToken that represents a placeholder from where this request should begin.
-  --analytics: string@bool-completer # allows empty value
+  --analytics: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -2949,7 +2948,7 @@ export def "api ListBucketIntelligentTieringConfigurations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --continuation-token: string # The <code>ContinuationToken</code> that represents a placeholder from where this request should begin.
-  --intelligent-tiering: string@bool-completer # allows empty value
+  --intelligent-tiering: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2977,7 +2976,7 @@ export def "api ListBucketInventoryConfigurations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --continuation-token: string # The marker used to continue an inventory configuration listing that has been truncated. Use the NextContinuationToken from a previously truncated list response to continue the listing. The continuation token is an opaque value that Amazon S3 understands.
-  --inventory: string@bool-completer # allows empty value
+  --inventory: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -3006,7 +3005,7 @@ export def "api ListBucketMetricsConfigurations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --continuation-token: string # The marker that is used to continue a metrics configuration listing that has been truncated. Use the NextContinuationToken from a previously truncated list response to continue the listing. The continuation token is an opaque value that Amazon S3 understands.
-  --metrics: string@bool-completer # allows empty value
+  --metrics: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -3069,7 +3068,7 @@ export def "api ListMultipartUploads" [
   --MaxUploads: string # Pagination limit
   --KeyMarker: string # Pagination token
   --UploadIdMarker: string # Pagination token
-  --uploads: string@bool-completer # allows empty value
+  --uploads: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -3107,7 +3106,7 @@ export def "api ListObjectVersions" [
   --MaxKeys: string # Pagination limit
   --KeyMarker: string # Pagination token
   --VersionIdMarker: string # Pagination token
-  --versions: string@bool-completer # allows empty value
+  --versions: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
@@ -3140,7 +3139,7 @@ export def "api ListObjectsV2" [
   --max-keys: int # Sets the maximum number of keys returned in the response. By default the action returns up to 1,000 key names. The response might contain fewer keys but will never contain more.
   --prefix: string # Limits the response to keys that begin with the specified prefix.
   --continuation-token: string # ContinuationToken indicates Amazon S3 that the list is being continued on this bucket with a token. ContinuationToken is obfuscated and is not a real key.
-  --fetch-owner: string@bool-completer # The owner field is not present in listV2 by default, if you want to return owner field with each key in the result then set the fetch owner field to true.
+  --fetch-owner: oneof<nothing, bool> # The owner field is not present in listV2 by default, if you want to return owner field with each key in the result then set the fetch owner field to true.
   --start-after: string # StartAfter is where you want Amazon S3 to start listing from. Amazon S3 starts listing after this specified key. StartAfter can be any key in the bucket.
   --MaxKeys: string # Pagination limit
   --ContinuationToken: string # Pagination token
@@ -3176,7 +3175,7 @@ export def "api RestoreObject" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --versionId: string # VersionId used to reference a specific version of the object.
-  --restore: string@bool-completer # allows empty value
+  --restore: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
@@ -3210,7 +3209,7 @@ export def "api SelectObjectContent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --select: string@bool-completer # allows empty value
+  --select: oneof<nothing, bool> # allows empty value
   --select-type: string@select-type-completer
   --x-amz-security-token: string
   --x-amz-server-side-encryption-customer-algorithm: string # The server-side encryption (SSE) algorithm used to encrypt the object. This parameter is needed only when the object was created using a checksum algorithm. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Protecting data using SSE-C keys</a> in the <i>Amazon S3 User Guide</i>.
@@ -3352,7 +3351,7 @@ export def "write-get-object-responsex-amz-request-routex-amz-request-token Writ
   --x-amz-fwd-header-x-amz-checksum-crc32c: string # <p>This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This specifies the base64-encoded, 32-bit CRC32C checksum of the object returned by the Object Lambda function. This may not match the checksum for the object stored in Amazon S3. Amazon S3 will perform validation of the checksum values only when the original <code>GetObject</code> request required checksum validation. For more information about checksums, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>Only one checksum header can be specified at a time. If you supply multiple checksum headers, this request will fail.</p>
   --x-amz-fwd-header-x-amz-checksum-sha1: string # <p>This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This specifies the base64-encoded, 160-bit SHA-1 digest of the object returned by the Object Lambda function. This may not match the checksum for the object stored in Amazon S3. Amazon S3 will perform validation of the checksum values only when the original <code>GetObject</code> request required checksum validation. For more information about checksums, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>Only one checksum header can be specified at a time. If you supply multiple checksum headers, this request will fail.</p>
   --x-amz-fwd-header-x-amz-checksum-sha256: string # <p>This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This specifies the base64-encoded, 256-bit SHA-256 digest of the object returned by the Object Lambda function. This may not match the checksum for the object stored in Amazon S3. Amazon S3 will perform validation of the checksum values only when the original <code>GetObject</code> request required checksum validation. For more information about checksums, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>Only one checksum header can be specified at a time. If you supply multiple checksum headers, this request will fail.</p>
-  --x-amz-fwd-header-x-amz-delete-marker: string@bool-completer # Specifies whether an object stored in Amazon S3 is (<code>true</code>) or is not (<code>false</code>) a delete marker. 
+  --x-amz-fwd-header-x-amz-delete-marker: oneof<nothing, bool> # Specifies whether an object stored in Amazon S3 is (<code>true</code>) or is not (<code>false</code>) a delete marker. 
   --x-amz-fwd-header-ETag: string # An opaque identifier assigned by a web server to a specific version of a resource found at a URL. 
   --x-amz-fwd-header-Expires: string # The date and time at which the object is no longer cacheable.
   --x-amz-fwd-header-x-amz-expiration: string # If the object expiration is configured (see PUT Bucket lifecycle), the response includes this header. It includes the <code>expiry-date</code> and <code>rule-id</code> key-value pairs that provide the object expiration information. The value of the <code>rule-id</code> is URL-encoded. 
@@ -3372,7 +3371,7 @@ export def "write-get-object-responsex-amz-request-routex-amz-request-token Writ
   --x-amz-fwd-header-x-amz-storage-class: string@x-amz-fwd-header-x-amz-storage-class-completer # <p>Provides storage class information of the object. Amazon S3 returns this header for all objects except for S3 Standard storage class objects.</p> <p>For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html">Storage Classes</a>.</p>
   --x-amz-fwd-header-x-amz-tagging-count: int # The number of tags, if any, on the object.
   --x-amz-fwd-header-x-amz-version-id: string # An ID used to reference a specific version of the object.
-  --x-amz-fwd-header-x-amz-server-side-encryption-bucket-key-enabled: string@bool-completer #  Indicates whether the object stored in Amazon S3 uses an S3 bucket key for server-side encryption with Amazon Web Services KMS (SSE-KMS).
+  --x-amz-fwd-header-x-amz-server-side-encryption-bucket-key-enabled: oneof<nothing, bool> #  Indicates whether the object stored in Amazon S3 uses an S3 bucket key for server-side encryption with Amazon Web Services KMS (SSE-KMS).
   --body: record
 ]: any -> any {
   let input = $in

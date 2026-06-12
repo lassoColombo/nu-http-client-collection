@@ -63,7 +63,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://console.neon.tech/api/v2"] }
 def auth-scheme-completer [] { ["bearer" "cookie-zenith" "cookie-keycloak_token"] }
 
@@ -239,7 +238,7 @@ export def "projects listProjects" [
   --search: string # Search by project `name` or `id`. You can specify partial `name` or `id` values to filter results.
   --org-id: string # Search for projects by `org_id`.
   --timeout: int # Specify an explicit timeout in milliseconds to limit response delay. After timing out, the incomplete list of project data fetched so far will be returned. Projects still being fetched when the timeout occurred are listed in the "unavailable" attribute of the response. If not specified, an implicit implementation defined timeout is chosen with the same behaviour as above
-  --recoverable: string@bool-completer # Show only deleted projects within the recovery window.  (default: false)
+  --recoverable: oneof<nothing, bool> # Show only deleted projects within the recovery window.  (default: false)
 ]: nothing -> record<projects: table<id: string, platform_id: string, region_id: string, name: string, provisioner: string, default_endpoint_settings: record, settings: record, pg_version: int, proxy_host: string, branch_logical_size_limit: int, branch_logical_size_limit_bytes: int, store_passwords: bool, active_time: int, cpu_used_sec: int, maintenance_starts_at: string, creation_source: string, created_at: string, updated_at: string, synthetic_storage_size: int, quota_reset_at: string, owner_id: string, compute_last_active_at: string, org_id: string, org_name: string, history_retention_seconds: int, hipaa_enabled_at: string, deleted_at: string, recoverable_until: string, effective_project_permission: string>, unavailable_project_ids: list<string>, pagination: record<cursor: string>, applications: record, integrations: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -607,7 +606,7 @@ export def "projects-jwks addProjectJWKS" [
   --branch-id: string # Branch ID
   --jwt-audience: string # The name of the required JWT Audience to be used
   --role-names: list # DEPRECATED. This field should only be used when using Neon RLS. The roles the JWKS should be mapped to. By default, the JWKS is mapped to the `authenticator`, `authenticated` and `anonymous` roles. (DEPRECATED)
-  --skip-role-creation: string@bool-completer # DEPRECATED. This field should only be used when using Neon RLS. If true, the role creation will be skipped. (default: false)
+  --skip-role-creation: oneof<nothing, bool> # DEPRECATED. This field should only be used when using Neon RLS. If true, the role creation will be skipped. (default: false)
 ]: any -> record<jwks: record<id: string, project_id: string, branch_id: string, jwks_url: string, provider_name: string, created_at: string, updated_at: string, jwt_audience: string, role_names: list<string>>, operations: table<id: string, project_id: string, branch_id: string, endpoint_id: string, action: string, status: string, error: string, failures_count: int, retry_at: string, created_at: string, updated_at: string, total_duration_ms: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -663,8 +662,8 @@ export def "projects-branches-data-api createProjectBranchDataAPI" [
   --jwks-url: string # The URL that lists the JWKS (format: uri)
   --provider-name: string # The name of the authentication provider (e.g., Clerk, Stytch, Auth0)
   --jwt-audience: string # WARNING - using this setting will only reject tokens with a different audience claim. Tokens without audience claim will still be accepted.
-  --add-default-grants: string@bool-completer # Grant all permissions to the tables in the public schema to authenticated users (default: false)
-  --skip-auth-schema: string@bool-completer # Skip creating the auth schema and RLS functions (default: false)
+  --add-default-grants: oneof<nothing, bool> # Grant all permissions to the tables in the public schema to authenticated users (default: false)
+  --skip-auth-schema: oneof<nothing, bool> # Skip creating the auth schema and RLS functions (default: false)
   --settings: record # Configuration settings for the Neon Data API — shape: {db_aggregates_enabled?: bool, db_anon_role?: string, db_extra_search_path?: string, db_max_rows?: int, db_schemas?: list, jwt_role_claim_key?: string, jwt_cache_max_lifetime?: int, openapi_mode?: string, server_cors_allowed_origins?: string, server_timing_enabled?: bool}
 ]: any -> record<url: string> {
   let input = $in
@@ -852,7 +851,7 @@ export def "projects-branches-auth disableNeonAuth" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete-data: string@bool-completer # If true, deletes the `neon_auth` schema from the database (default: false)
+  --delete-data: oneof<nothing, bool> # If true, deletes the `neon_auth` schema from the database (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1586,13 +1585,13 @@ export def "projects-branches-auth-email-and-password updateNeonAuthEmailAndPass
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether email and password authentication is enabled
+  --enabled: oneof<nothing, bool> # Whether email and password authentication is enabled
   --email-verification-method: string@email-verification-method-completer # The email verification method to use. - `link`: Sends a verification link via email - `otp`: Sends a one-time password (OTP) via email
-  --require-email-verification: string@bool-completer # Whether email verification is required before users can sign in
-  --auto-sign-in-after-verification: string@bool-completer # Whether users are automatically signed in after verifying their email
-  --send-verification-email-on-sign-up: string@bool-completer # Whether to send a verification email when users sign up
-  --send-verification-email-on-sign-in: string@bool-completer # Whether to send a verification email when users sign in
-  --disable-sign-up: string@bool-completer # Whether to disable new user sign ups
+  --require-email-verification: oneof<nothing, bool> # Whether email verification is required before users can sign in
+  --auto-sign-in-after-verification: oneof<nothing, bool> # Whether users are automatically signed in after verifying their email
+  --send-verification-email-on-sign-up: oneof<nothing, bool> # Whether to send a verification email when users sign up
+  --send-verification-email-on-sign-in: oneof<nothing, bool> # Whether to send a verification email when users sign in
+  --disable-sign-up: oneof<nothing, bool> # Whether to disable new user sign ups
 ]: any -> record<enabled: bool, email_verification_method: string, require_email_verification: bool, auto_sign_in_after_verification: bool, send_verification_email_on_sign_up: bool, send_verification_email_on_sign_in: bool, disable_sign_up: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1678,7 +1677,7 @@ export def "projects-auth-integration delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete-data: string@bool-completer # If true, deletes the `neon_auth` schema from the database (default: false)
+  --delete-data: oneof<nothing, bool> # If true, deletes the `neon_auth` schema from the database (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1708,7 +1707,7 @@ export def "projects-connection-uri get" [
   --endpoint-id: string # The endpoint ID. Defaults to the read-write `endpoint_id` associated with the `branch_id` if not specified.
   --database-name: string # The database name
   --role-name: string # The role name
-  --pooled: string@bool-completer # Adds the `-pooler` option to the connection URI when set to `true`, creating a pooled connection URI.
+  --pooled: oneof<nothing, bool> # Adds the `-pooler` option to the connection URI when set to `true`, creating a pooled connection URI.
 ]: nothing -> record<uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1756,7 +1755,7 @@ export def "projects-branches-auth-allow-localhost updateNeonAuthAllowLocalhost"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-localhost: string@bool-completer # Whether to allow localhost connections
+  --allow-localhost: oneof<nothing, bool> # Whether to allow localhost connections
 ]: any -> record<allow_localhost: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1806,11 +1805,11 @@ export def "projects-branches-auth-plugins-organization updateNeonAuthOrganizati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether the organization plugin is enabled
+  --enabled: oneof<nothing, bool> # Whether the organization plugin is enabled
   --organization-limit: int # Maximum number of organizations a user can create (format: int32)
   --membership-limit: int # Maximum number of members per organization (format: int32)
   --creator-role: string@creator-role-completer # The role assigned to the user who creates an organization
-  --send-invitation-email: string@bool-completer # Whether to send invitation emails when inviting members to an organization
+  --send-invitation-email: oneof<nothing, bool> # Whether to send invitation emails when inviting members to an organization
 ]: any -> record<enabled: bool, organization_limit: int, membership_limit: int, creator_role: string, send_invitation_email: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1864,9 +1863,9 @@ export def "projects-branches-auth-plugins-magic-link updateNeonAuthMagicLinkPlu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether the magic link plugin is enabled
+  --enabled: oneof<nothing, bool> # Whether the magic link plugin is enabled
   --expires-in: int # Time in minutes before the magic link expires (format: int32)
-  --disable-sign-up: string@bool-completer # Whether to disable sign-up via magic link
+  --disable-sign-up: oneof<nothing, bool> # Whether to disable sign-up via magic link
 ]: any -> record<enabled: bool, expires_in: int, disable_sign_up: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1916,7 +1915,7 @@ export def "projects-branches-auth-plugins-phone-number updateNeonAuthPhoneNumbe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether the phone number plugin is enabled
+  --enabled: oneof<nothing, bool> # Whether the phone number plugin is enabled
   --otp-expires-in: int # Time in seconds before the OTP expires
 ]: any -> record<enabled: bool, otp_expires_in: int> {
   let input = $in
@@ -1967,7 +1966,7 @@ export def "projects-branches-auth-webhooks updateNeonAuthWebhookConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --webhook-url: string
   --enabled-events: list
   --timeout-seconds: int # default: 5
@@ -2031,7 +2030,7 @@ export def "projects-branches listProjectBranches" [
   --cursor: string # A cursor to use in pagination. A cursor defines your place in the data list. Include `response.pagination.next` in subsequent API calls to fetch next page of the list.
   --sort-order: string@sort-order-completer # Defines the sorting order of entities. (default: desc)
   --limit: int # The maximum number of records to be returned in the response
-  --include-deleted: string@bool-completer # If true, return recoverable deleted branches too (soft-deleted within the recovery window). If false or not provided, return only active (non-deleted) branches.  This parameter is part of the Branch Recovery feature, which is in preview and not available to all users.  (default: false)
+  --include-deleted: oneof<nothing, bool> # If true, return recoverable deleted branches too (soft-deleted within the recovery window). If false or not provided, return only active (non-deleted) branches.  This parameter is part of the Branch Recovery feature, which is in preview and not available to all users.  (default: false)
 ]: nothing -> record<branches: table<id: string, project_id: string, parent_id: string, parent_lsn: string, parent_timestamp: string, name: string, current_state: string, pending_state: string, state_changed_at: string, logical_size: int, creation_source: string, primary: bool, default: bool, protected: bool, cpu_used_sec: int, compute_time_seconds: int, active_time_seconds: int, written_data_bytes: int, data_transfer_bytes: int, created_at: string, updated_at: string, ttl_interval_seconds: int, expires_at: string, last_reset_at: string, created_by: record, init_source: string, restore_status: string, restored_from: string, restored_as: string, restricted_actions: list, recovery: record>, annotations: record, pagination: record<next: string, sort_by: string, sort_order: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2060,7 +2059,7 @@ export def "projects-branch-anonymized createProjectBranchAnonymized" [
   --annotation-value: record # Annotation properties. (e.g. {github-commit-ref: github-branch-name})
   --branch-create: record # shape: {endpoints?: list, branch?: record}
   --masking-rules: list # List of masking rules to apply to the branch. — item shape: {database_name: string, schema_name: string, table_name: string, column_name: string, masking_function?: string, masking_value?: string}
-  --start-anonymization: string@bool-completer # If true, automatically start anonymization after the branch is created. Defaults to false.
+  --start-anonymization: oneof<nothing, bool> # If true, automatically start anonymization after the branch is created. Defaults to false.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2134,7 +2133,7 @@ export def "projects-branches delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hard-delete: string@bool-completer # If true, the branch is permanently deleted immediately without a recovery window. If false (default), the branch can be recovered within 7 days via the recover endpoint.  This parameter is part of the Branch Recovery feature, which is in preview and not available to all users.  (default: false)
+  --hard-delete: oneof<nothing, bool> # If true, the branch is permanently deleted immediately without a recovery window. If false (default), the branch can be recovered within 7 days via the recover endpoint.  This parameter is part of the Branch Recovery feature, which is in preview and not available to all users.  (default: false)
 ]: nothing -> record<branch: record<id: string, project_id: string, parent_id: string, parent_lsn: string, parent_timestamp: string, name: string, current_state: string, pending_state: string, state_changed_at: string, logical_size: int, creation_source: string, primary: bool, default: bool, protected: bool, cpu_used_sec: int, compute_time_seconds: int, active_time_seconds: int, written_data_bytes: int, data_transfer_bytes: int, created_at: string, updated_at: string, ttl_interval_seconds: int, expires_at: string, last_reset_at: string, created_by: record<name: string, image: string>, init_source: string, restore_status: string, restored_from: string, restored_as: string, restricted_actions: list<record>, recovery: record<deleted_at: string, recoverable_until: string, deletion_method: string>>, operations: table<id: string, project_id: string, branch_id: string, endpoint_id: string, action: string, status: string, error: string, failures_count: int, retry_at: string, created_at: string, updated_at: string, total_duration_ms: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3012,7 +3011,7 @@ export def "consumption-history-account get" [
   --qp-to: string # Specify the end `date-time` for the consumption period. The `date-time` value is rounded according to the specified granularity. For example, `2024-03-15T15:30:00Z` for `daily` granularity will be rounded to `2024-03-15T00:00:00Z`. The specified `date-time` value must respect the specified granularity: - For `hourly`, consumption metrics are limited to the last 168 hours. - For `daily`, consumption metrics are limited to the last 60 days. - For `monthly`, consumption metrics are limited to the past year.  (format: date-time)
   --granularity: string@granularity-completer # Specify the granularity of consumption metrics. Hourly, daily, and monthly metrics are available for the last 168 hours, 60 days, and 1 year, respectively.
   --org-id: string # Specify the organization for which the consumption metrics should be returned. If this parameter is not provided, the endpoint will return the metrics for the authenticated user's account.
-  --include-v1-metrics: string@bool-completer # The field is deprecated. Please use `metrics` instead. If `metrics` is specified, this field is ignored. Include metrics utilized in previous pricing models. - **data_storage_bytes_hour**: The sum of the maximum observed storage values for each hour   for each project, which never decreases.  (DEPRECATED)
+  --include-v1-metrics: oneof<nothing, bool> # The field is deprecated. Please use `metrics` instead. If `metrics` is specified, this field is ignored. Include metrics utilized in previous pricing models. - **data_storage_bytes_hour**: The sum of the maximum observed storage values for each hour   for each project, which never decreases.  (DEPRECATED)
   --metrics: list # Specify a list of metrics to include in the response. If omitted, active_time, compute_time, written_data, synthetic_storage_size are returned. Possible values: - `active_time_seconds` - `compute_time_seconds` - `written_data_bytes` - `synthetic_storage_size_bytes` - `data_storage_bytes_hour`  A list of metrics can be specified as an array of parameter values or as a comma-separated list in a single parameter value. - As an array of parameter values: `metrics=cpu_seconds&metrics=ram_bytes` - As a comma-separated list in a single parameter value: `metrics=cpu_seconds,ram_bytes`
 ]: nothing -> record<periods: table<period_id: string, period_plan: string, period_start: string, period_end: string, consumption: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3044,7 +3043,7 @@ export def "consumption-history-projects get" [
   --qp-to: string # Specify the end `date-time` for the consumption period. The `date-time` value is rounded according to the specified granularity. For example, `2024-03-15T15:30:00Z` for `daily` granularity will be rounded to `2024-03-15T00:00:00Z`. The specified `date-time` value must respect the specified `granularity`: - For `hourly`, consumption metrics are limited to the last 168 hours. - For `daily`, consumption metrics are limited to the last 60 days. - For `monthly`, consumption metrics are limited to the last year.  (format: date-time)
   --granularity: string@granularity-completer # Specify the granularity of consumption metrics. Hourly, daily, and monthly metrics are available for the last 168 hours, 60 days, and 1 year, respectively.
   --org-id: string # Specify the organization for which the project consumption metrics should be returned. If this parameter is not provided, the endpoint will return the metrics for the authenticated user's projects.
-  --include-v1-metrics: string@bool-completer # The field is deprecated. Please use `metrics` instead. If `metrics` is specified, this field is ignored. Include metrics utilized in previous pricing models. - **data_storage_bytes_hour**: The sum of the maximum observed storage values for each hour,   which never decreases.  (DEPRECATED)
+  --include-v1-metrics: oneof<nothing, bool> # The field is deprecated. Please use `metrics` instead. If `metrics` is specified, this field is ignored. Include metrics utilized in previous pricing models. - **data_storage_bytes_hour**: The sum of the maximum observed storage values for each hour,   which never decreases.  (DEPRECATED)
   --metrics: list # Specify a list of metrics to include in the response. If omitted, active_time, compute_time, written_data, synthetic_storage_size are returned. Possible values: - `active_time_seconds` - `compute_time_seconds` - `written_data_bytes` - `synthetic_storage_size_bytes` - `data_storage_bytes_hour` - `logical_size_bytes` - `logical_size_bytes_hour`  A list of metrics can be specified as an array of parameter values or as a comma-separated list in a single parameter value. - As an array of parameter values: `metrics=cpu_seconds&metrics=ram_bytes` - As a comma-separated list in a single parameter value: `metrics=cpu_seconds,ram_bytes`
 ]: nothing -> record<projects: table<project_id: string, periods: list>, pagination: record<cursor: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3811,7 +3810,7 @@ export def "projects-snapshots-restore restoreSnapshot" [
   --name: string # DEPRECATED. Use the `name` field in the request body instead. A name for the newly restored branch. If omitted, a default name will be generated.  (DEPRECATED)
   --name: string # A name for the newly restored branch. If omitted, a default name will be generated.
   --target-branch-id: string # The ID of the branch to restore the snapshot into. If not specified, the branch from which the snapshot was originally created (`snapshot.source_branch_id`) will be used.
-  --finalize-restore: string@bool-completer # Set to `true` to finalize the restore operation immediately. This will complete the restore and move any associated computes to the new branch, similar to the `finalizeRestoreBranch` operation. Defaults to `false` to allow previewing the restored snapshot data first.  (default: false)
+  --finalize-restore: oneof<nothing, bool> # Set to `true` to finalize the restore operation immediately. This will complete the restore and move any associated computes to the new branch, similar to the `finalizeRestoreBranch` operation. Defaults to `false` to allow previewing the restored snapshot data first.  (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://localhost/AUDIUS_API_HOST/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -860,7 +859,7 @@ export def "tips Get-Tips" [
   --limit: int # The number of items to fetch
   --user-id: string # The user ID of the user making the request
   --receiver-min-followers: int # Only include tips to recipients that have this many followers (default: 0)
-  --receiver-is-verified: string@bool-completer # Only include tips to recipients that are verified (default: false)
+  --receiver-is-verified: oneof<nothing, bool> # Only include tips to recipients that are verified (default: false)
   --current-user-follows: string@current-user-follows-completer # Only include tips involving the user's followers in the given capacity. Requires user_id to be set.
   --unique-by: string@unique-by-completer # Only include the most recent tip for a user was involved in the given capacity.  Eg. 'sender' will ensure that each tip returned has a unique sender, using the most recent tip sent by a user if that user has sent multiple tips.     
   --app-name: string # Your app name (e.g. EXAMPLEAPP)

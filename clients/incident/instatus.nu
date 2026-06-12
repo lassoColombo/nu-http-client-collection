@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.instatus.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -145,7 +144,7 @@ export def "pages post" [
   --faviconUrl: string
   --websiteUrl: string
   --language: string # The language of the status page in language code (e.g. `en` for English, `fr` for French, `de` for German, etc.). (default: en)
-  --useLargeHeader: string@bool-completer
+  --useLargeHeader: oneof<nothing, bool>
   --brandColor: string # The brand color of the status page, This only accepts hex colors or rgb(r,g,b).
   --okColor: string # The color for operational, This only accepts hex colors or rgb(r,g,b).
   --disruptedColor: string # The color for partial outage, This only accepts hex colors or rgb(r,g,b).
@@ -154,7 +153,7 @@ export def "pages post" [
   --noticeColor: string # The color for maintenances, This only accepts hex colors or rgb(r,g,b).
   --unknownColor: string
   --googleAnalytics: string
-  --subscribeBySms: string@bool-completer
+  --subscribeBySms: oneof<nothing, bool>
   --smsService: string@smsService-completer
   --twilioSid: string
   --twilioToken: string
@@ -210,7 +209,7 @@ export def "status-pages put" [
   --websiteUrl: string
   --language: string # The language of the status page in language code (e.g. `en` for English, `fr` for French, `de` for German, etc.).
   --publicEmail: string
-  --useLargeHeader: string@bool-completer
+  --useLargeHeader: oneof<nothing, bool>
   --brandColor: string # The brand color of the status page, This only accepts hex colors or rgb(r,g,b).
   --okColor: string # The color for operational, This only accepts hex colors or rgb(r,g,b).
   --disruptedColor: string # The color for partial outage, This only accepts hex colors or rgb(r,g,b).
@@ -219,7 +218,7 @@ export def "status-pages put" [
   --noticeColor: string # The color for maintenances, This only accepts hex colors or rgb(r,g,b).
   --unknownColor: string
   --googleAnalytics: string
-  --subscribeBySms: string@bool-completer
+  --subscribeBySms: oneof<nothing, bool>
   --smsService: string@smsService-completer
   --twilioSid: string
   --twilioToken: string
@@ -241,8 +240,8 @@ export def "status-pages put" [
   --dateFormat: string
   --dateFormatShort: string
   --timeFormat: string
-  --private: string@bool-completer
-  --useAllowList: string@bool-completer
+  --private: oneof<nothing, bool>
+  --useAllowList: oneof<nothing, bool>
   --translations: record # Object containing translations where each key is a property name and the value is an object with language codes as keys and translations as values. The language code as the key (e.g., 'en', 'fr') and the translation as the value. (e.g. {name: {en: This will be displayed for English users, fr: Ceci sera affiché pour les utilisateurs francophones}, description: {en: Example description in English, fr: Exemple de description en français}})
 ]: any -> record<id: string, createdAt: string, subdomain: string, name: string, status: string, logoUrl: string, faviconUrl: string, websiteUrl: string, color: string, language: string, googleAnalytics: string, publicEmail: string, customDomain: string, useLargeHeader: bool, disableDarkMode: bool, twitter: string, subscribeBySms: bool, brandColor: string, okColor: string, disruptedColor: string, downColor: string, degradedColor: string, noticeColor: string, htmlInMeta: string, htmlAboveHeader: string, htmlBelowHeader: string, htmlAboveFooter: string, htmlBelowFooter: string, htmlBelowSummary: string, cssGlobal: string, onboarded: bool, launchDate: string, dateFormat: string, dateFormatShort: string, timeFormat: string, private: bool, useAllowList: bool, allowList: list<string>, components: table<id: string, name: string, uniqueEmail: string, description: string, status: string, order: int, group: any, nameTranslationId: string, descriptionTranslationId: string, showUptime: bool, createdAt: string, updatedAt: string, archivedAt: string, siteId: string, groupId: string, nameHtml: string, nameHtmlTranslationId: string, descriptionHtml: string, descriptionHtmlTranslationId: string, isThirdParty: bool, thirdPartyStatus: string, thirdPartyComponentId: string, thirdPartyComponentServiceId: string, importedFromStatuspage: bool, startDate: string, translations: record>, translations: record> {
   let input = $in
@@ -317,10 +316,10 @@ export def "components post" [
   --description: string
   --status: string@status-completer-1
   --order: int # The order of the component on the status page.
-  --showUptime: string@bool-completer # Whether to show the percentage and uptime bar for the component.
-  --grouped: string@bool-completer # Whether the component is a parent component or not, If set to true, make sure to set the group parent id in the `group` field.
+  --showUptime: oneof<nothing, bool> # Whether to show the percentage and uptime bar for the component.
+  --grouped: oneof<nothing, bool> # Whether the component is a parent component or not, If set to true, make sure to set the group parent id in the `group` field.
   --group: string # The id of the component to group under. (nullable)
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
   --translations: record # Object containing translations where each key is a property name and the value is an object with language codes as keys and translations as values. The language code as the key (e.g., 'en', 'fr') and the translation as the value. (e.g. {name: {en: This will be displayed for English users, fr: Ceci sera affiché pour les utilisateurs francophones}, description: {en: Example description in English, fr: Exemple de description en français}})
 ]: any -> record<id: string, name: string, uniqueEmail: string, description: string, status: string, order: int, group: any, nameTranslationId: string, descriptionTranslationId: string, showUptime: bool, createdAt: string, updatedAt: string, archivedAt: string, siteId: string, groupId: string, nameHtml: string, nameHtmlTranslationId: string, descriptionHtml: string, descriptionHtmlTranslationId: string, isThirdParty: bool, thirdPartyStatus: string, thirdPartyComponentId: string, thirdPartyComponentServiceId: string, importedFromStatuspage: bool, startDate: string, translations: record> {
   let input = $in
@@ -373,9 +372,9 @@ export def "components put" [
   --description: string
   --status: string@status-completer-1
   --order: int # The order of the component on the status page.
-  --showUptime: string@bool-completer # Whether to show the percentage and uptime bar for the component.
-  --grouped: string@bool-completer
-  --archived: string@bool-completer
+  --showUptime: oneof<nothing, bool> # Whether to show the percentage and uptime bar for the component.
+  --grouped: oneof<nothing, bool>
+  --archived: oneof<nothing, bool>
   --translations: record # Object containing translations where each key is a property name and the value is an object with language codes as keys and translations as values. The language code as the key (e.g., 'en', 'fr') and the translation as the value. (e.g. {name: {en: This will be displayed for English users, fr: Ceci sera affiché pour les utilisateurs francophones}, description: {en: Example description in English, fr: Exemple de description en français}})
 ]: any -> record<id: string, name: string, uniqueEmail: string, description: string, status: string, order: int, group: any, nameTranslationId: string, descriptionTranslationId: string, showUptime: bool, createdAt: string, updatedAt: string, archivedAt: string, siteId: string, groupId: string, nameHtml: string, nameHtmlTranslationId: string, descriptionHtml: string, descriptionHtmlTranslationId: string, isThirdParty: bool, thirdPartyStatus: string, thirdPartyComponentId: string, thirdPartyComponentServiceId: string, importedFromStatuspage: bool, startDate: string, translations: record> {
   let input = $in
@@ -455,8 +454,8 @@ export def "incidents post-by-page_id" [
   --components: list # The ids of the components that are affected by the incident.
   --started: string # The date and time the incident started, If left empty the time will be set to the current time. (format: date-time)
   status: string@status-completer-2
-  --notify: string@bool-completer # Whether to notify the subscribers of the page and the affected components.
-  --shouldPublish: string@bool-completer # Whether to publish the incident to the page. (default: true)
+  --notify: oneof<nothing, bool> # Whether to notify the subscribers of the page and the affected components.
+  --shouldPublish: oneof<nothing, bool> # Whether to publish the incident to the page. (default: true)
   --statuses: list # The statuses of the components that are affected by the incident update. **Make sure the components are also included in the `components` field.** — item shape: {id?: string, status?: "OPERATIONAL"|"UNDERMAINTENANCE"|"DEGRADEDPERFORMANCE"|"PARTIALOUTAGE"|"MAJOROUTAGE"}
   --translations: record # Object containing translations where each key is a property name and the value is an object with language codes as keys and translations as values. The language code as the key (e.g., 'en', 'fr') and the translation as the value. (e.g. {name: {en: This will be displayed for English users, fr: Ceci sera affiché pour les utilisateurs francophones}, description: {en: Example description in English, fr: Exemple de description en français}})
 ]: any -> record<id: string, name: string, status: string, started: string, duration: int, resolved: string, updates: table<id: string, message: string, messageHtml: string, status: string, notify: bool, started: string, ended: string, duration: int, createdAt: string>, components: table<id: string, name: string, status: string, showUptime: bool, site: record>, translations: record> {
@@ -511,7 +510,7 @@ export def "incidents put" [
   --components: list # The ids of the components that are affected by the incident.
   --started: string # The date and time the incident started. (format: date-time)
   --status: string@status-completer-2
-  --notify: string@bool-completer # Whether to notify the subscribers of the page and the affected components.
+  --notify: oneof<nothing, bool> # Whether to notify the subscribers of the page and the affected components.
   --statuses: list # The statuses of the components that are affected by the incident update. **Make sure the components are also included in the `components` field.** — item shape: {id?: string, status?: "OPERATIONAL"|"UNDERMAINTENANCE"|"DEGRADEDPERFORMANCE"|"PARTIALOUTAGE"|"MAJOROUTAGE"}
   --translations: record # Object containing translations where each key is a property name and the value is an object with language codes as keys and translations as values. The language code as the key (e.g., 'en', 'fr') and the translation as the value. (e.g. {name: {en: This will be displayed for English users, fr: Ceci sera affiché pour les utilisateurs francophones}, description: {en: Example description in English, fr: Exemple de description en français}})
 ]: any -> record<id: string, name: string, status: string, started: string, duration: int, resolved: string, updates: table<id: string, message: string, messageHtml: string, status: string, notify: bool, started: string, ended: string, duration: int, createdAt: string>, components: table<id: string, name: string, status: string, showUptime: bool, site: record>, translations: record> {
@@ -612,7 +611,7 @@ export def "incidents-incident-updates put" [
   --components: list # The ids of the components that are affected by the incident.
   --started: string # The date and time the incident update happened. (format: date-time)
   --status: string@status-completer-2
-  --notify: string@bool-completer # Whether to notify the subscribers of the page and the affected components.
+  --notify: oneof<nothing, bool> # Whether to notify the subscribers of the page and the affected components.
   --statuses: list # The statuses of the components that are affected by the incident update. **Make sure the components are also included in the `components` field.** — item shape: {id?: string, status?: "OPERATIONAL"|"UNDERMAINTENANCE"|"DEGRADEDPERFORMANCE"|"PARTIALOUTAGE"|"MAJOROUTAGE"}
   --translations: record # Object containing translations where each key is a property name and the value is an object with language codes as keys and translations as values. The language code as the key (e.g., 'en', 'fr') and the translation as the value. (e.g. {name: {en: This will be displayed for English users, fr: Ceci sera affiché pour les utilisateurs francophones}, description: {en: Example description in English, fr: Exemple de description en français}})
 ]: any -> record<id: string, message: string, messageHtml: string, status: string, notify: bool, started: string, incident: record<id: string, name: string, started: string, status: string, components: list<record>>, translations: record> {
@@ -668,7 +667,7 @@ export def "incidents-incident-updates post-by-page_id-incident_id" [
   components: list # The ids of the components that are affected by the incident.
   --started: string # The date and time the incident update happened, If left empty the time will be set to the current time. (format: date-time)
   status: string@status-completer-2
-  --notify: string@bool-completer # Whether to notify the subscribers of the page and the affected components.
+  --notify: oneof<nothing, bool> # Whether to notify the subscribers of the page and the affected components.
   statuses: list # The statuses of the components that are affected by the incident update. **Make sure the components are also included in the `components` field.** — item shape: {id?: string, status?: "OPERATIONAL"|"UNDERMAINTENANCE"|"DEGRADEDPERFORMANCE"|"PARTIALOUTAGE"|"MAJOROUTAGE"}
   --translations: record # Object containing translations where each key is a property name and the value is an object with language codes as keys and translations as values. The language code as the key (e.g., 'en', 'fr') and the translation as the value. (e.g. {name: {en: This will be displayed for English users, fr: Ceci sera affiché pour les utilisateurs francophones}, description: {en: Example description in English, fr: Exemple de description en français}})
 ]: any -> record<id: string, message: string, messageHtml: string, status: string, notify: bool, started: string, incident: record<id: string, name: string, started: string, status: string, components: list<record>>, translations: record> {
@@ -749,15 +748,15 @@ export def "maintenances post" [
   start: string # The date and time the maintenance will start in ISO-8601 format (UTC Timezone). (format: date-time)
   end: string # The date and time the maintenance will end in ISO-8601 format (UTC Timezone). (format: date-time)
   status: string@status-completer-3
-  --notify: string@bool-completer # Whether to notify the subscribers of the page and the affected components.
+  --notify: oneof<nothing, bool> # Whether to notify the subscribers of the page and the affected components.
   --duration: int # How many minutes the maintenance will last since the `start` date and time if `autoEnd` is set to `true`.
-  --notifyStart: string@bool-completer # Whether to notify the subscribers of the page and the affected components when the maintenance **starts**.
-  --notifyEnd: string@bool-completer # Whether to notify the subscribers of the page and the affected components when the maintenance **ends**.
-  --notifyEarly: string@bool-completer # Whether to notify the subscribers of the page and the affected components before the maintenance starts.
+  --notifyStart: oneof<nothing, bool> # Whether to notify the subscribers of the page and the affected components when the maintenance **starts**.
+  --notifyEnd: oneof<nothing, bool> # Whether to notify the subscribers of the page and the affected components when the maintenance **ends**.
+  --notifyEarly: oneof<nothing, bool> # Whether to notify the subscribers of the page and the affected components before the maintenance starts.
   --notifyMinutes: int # The number of minutes before the maintenance starts that the subscribers will be notified.
-  --autoStart: string@bool-completer # Whether to automatically start the maintenance automatically when the date and time reaches the `start` date and time.
-  --autoEnd: string@bool-completer # Whether to automatically end the maintenance automatically when the date and time« reaches the `end` date and time.
-  --isCollapsed: string@bool-completer # Whether the maintenance is collapsed or not on the page.
+  --autoStart: oneof<nothing, bool> # Whether to automatically start the maintenance automatically when the date and time reaches the `start` date and time.
+  --autoEnd: oneof<nothing, bool> # Whether to automatically end the maintenance automatically when the date and time« reaches the `end` date and time.
+  --isCollapsed: oneof<nothing, bool> # Whether the maintenance is collapsed or not on the page.
   --expandAt: string # The date and time the maintenance will expand at in ISO-8601 format (UTC Timezone). (format: date-time)
   --statuses: list # The statuses of the components that are affected by the maintenance update. **Make sure the components are also included in the `components` field.** — item shape: {id?: string, status?: "OPERATIONAL"|"UNDERMAINTENANCE"|"DEGRADEDPERFORMANCE"|"PARTIALOUTAGE"|"MAJOROUTAGE"}
   --translations: record # Object containing translations where each key is a property name and the value is an object with language codes as keys and translations as values. The language code as the key (e.g., 'en', 'fr') and the translation as the value. (e.g. {name: {en: This will be displayed for English users, fr: Ceci sera affiché pour les utilisateurs francophones}, description: {en: Example description in English, fr: Exemple de description en français}})
@@ -815,9 +814,9 @@ export def "maintenances put" [
   start: string # The date and time the maintenance will start. (format: date-time)
   end: string # The date and time the maintenance will end. (format: date-time)
   status: string@status-completer-3
-  --notify: string@bool-completer # Whether to notify the subscribers of the page and the affected components.
-  --autoStart: string@bool-completer # Whether to automatically start the maintenance automatically when the date and time reaches the `start` date and time.
-  --autoEnd: string@bool-completer # Whether to automatically end the maintenance automatically when the date and time« reaches the `end` date and time.
+  --notify: oneof<nothing, bool> # Whether to notify the subscribers of the page and the affected components.
+  --autoStart: oneof<nothing, bool> # Whether to automatically start the maintenance automatically when the date and time reaches the `start` date and time.
+  --autoEnd: oneof<nothing, bool> # Whether to automatically end the maintenance automatically when the date and time« reaches the `end` date and time.
   duration: int # How many minutes the maintenance will last since the `start` date and time if `autoEnd` is set to `true`.
   statuses: list # The statuses of the components that are affected by the maintenance update. **Make sure the components are also included in the `components` field.** — item shape: {id?: string, status?: "OPERATIONAL"|"UNDERMAINTENANCE"|"DEGRADEDPERFORMANCE"|"PARTIALOUTAGE"|"MAJOROUTAGE"}
   --translations: record # Object containing translations where each key is a property name and the value is an object with language codes as keys and translations as values. The language code as the key (e.g., 'en', 'fr') and the translation as the value. (e.g. {name: {en: This will be displayed for English users, fr: Ceci sera affiché pour les utilisateurs francophones}, description: {en: Example description in English, fr: Exemple de description en français}})
@@ -898,7 +897,7 @@ export def "maintenances-maintenance-updates put" [
   --started: string # format: date-time
   --end: string # format: date-time
   --status: string@status-completer-3
-  --notify: string@bool-completer
+  --notify: oneof<nothing, bool>
   --statuses: list # The statuses of the components that are affected by the maintenance update. **Make sure the components are also included in the `components` field.** — item shape: {id?: string, status?: "OPERATIONAL"|"UNDERMAINTENANCE"|"DEGRADEDPERFORMANCE"|"PARTIALOUTAGE"|"MAJOROUTAGE"}
   --translations: record # Object containing translations where each key is a property name and the value is an object with language codes as keys and translations as values. The language code as the key (e.g., 'en', 'fr') and the translation as the value. (e.g. {name: {en: This will be displayed for English users, fr: Ceci sera affiché pour les utilisateurs francophones}, description: {en: Example description in English, fr: Exemple de description en français}})
 ]: any -> record<id: string, message: string, messageHtml: string, notify: bool, started: string, status: string, maintenance: record<id: string, name: string, start: string, status: string, components: list<record>>, translations: record> {
@@ -955,7 +954,7 @@ export def "maintenances-maintenance-updates post" [
   --started: string # format: date-time
   --end: string # format: date-time
   --status: string@status-completer-3
-  --notify: string@bool-completer # Whether to notify the subscribers of the page and the affected components about the maintenance update.
+  --notify: oneof<nothing, bool> # Whether to notify the subscribers of the page and the affected components about the maintenance update.
   --statuses: list # The statuses of the components that are affected by the maintenance update. **Make sure the components are also included in the `components` field.** — item shape: {id?: string, status?: "OPERATIONAL"|"UNDERMAINTENANCE"|"DEGRADEDPERFORMANCE"|"PARTIALOUTAGE"|"MAJOROUTAGE"}
   --translations: record # Object containing translations where each key is a property name and the value is an object with language codes as keys and translations as values. The language code as the key (e.g., 'en', 'fr') and the translation as the value. (e.g. {name: {en: This will be displayed for English users, fr: Ceci sera affiché pour les utilisateurs francophones}, description: {en: Example description in English, fr: Exemple de description en français}})
 ]: any -> record<id: string, message: string, messageHtml: string, notify: bool, started: string, status: string, maintenance: record<id: string, name: string, start: string, status: string, components: list<record>>, translations: record> {
@@ -1012,7 +1011,7 @@ export def "templates post" [
   name: string # The name of the notice it creates.
   message: string # The message for the first update of the notice it creates.
   status: string@status-completer-4 # The status of the notice when it's created using the template. **Incident Options:**  - `INVESTIGATING` - `IDENTIFIED` - `MONITORING` - `RESOLVED`  **Maintenance options:**  - `NOTSTARTEDYET` - `INPROGRESS` - `COMPLETED`
-  --notify: string@bool-completer # Whether to notify the subscribers of the page and the affected components when a notice is created using this template.
+  --notify: oneof<nothing, bool> # Whether to notify the subscribers of the page and the affected components when a notice is created using this template.
   components: list # The list of components that are affected by the incident or maintenance. — item shape: {id?: string, status?: "OPERATIONAL"|"UNDERMAINTENANCE"|"DEGRADEDPERFORMANCE"|"PARTIALOUTAGE"|"MAJOROUTAGE"}
   --translations: record # Object containing translations where each key is a property name and the value is an object with language codes as keys and translations as values. The language code as the key (e.g., 'en', 'fr') and the translation as the value. (e.g. {name: {en: This will be displayed for English users, fr: Ceci sera affiché pour les utilisateurs francophones}, description: {en: Example description in English, fr: Exemple de description en français}})
 ]: any -> record<id: string, type: string, name: string, nameTranslationId: string, message: string, messageTranslationId: string, messageHtml: string, messageHtmlTranslationId: string, status: string, notify: bool, createdAt: string, siteId: string, importedFromStatuspage: bool, deletedAt: string, origin: string, components: table<id: string, status: string, componentId: string, templateId: string, importedFromStatuspage: bool>, translations: record> {
@@ -1067,7 +1066,7 @@ export def "templates put" [
   --name: string # The name of the notice it creates.
   --message: string # The message for the first update of the notice it creates.
   --status: string@status-completer-4 # The status of the notice when it's created using the template. **Incident Options:**  - `INVESTIGATING` - `IDENTIFIED` - `MONITORING` - `RESOLVED`  **Maintenance options:**  - `NOTSTARTEDYET` - `INPROGRESS` - `COMPLETED`
-  --notify: string@bool-completer # Whether to notify the subscribers of the page and the affected components.
+  --notify: oneof<nothing, bool> # Whether to notify the subscribers of the page and the affected components.
   --components: list # The list of components that are affected by the incident or maintenance. — item shape: {id?: string, status?: "OPERATIONAL"|"UNDERMAINTENANCE"|"DEGRADEDPERFORMANCE"|"PARTIALOUTAGE"|"MAJOROUTAGE"}
   --translations: record # Object containing translations where each key is a property name and the value is an object with language codes as keys and translations as values. The language code as the key (e.g., 'en', 'fr') and the translation as the value. (e.g. {name: {en: This will be displayed for English users, fr: Ceci sera affiché pour les utilisateurs francophones}, description: {en: Example description in English, fr: Exemple de description en français}})
 ]: any -> record<id: string, type: string, name: string, nameTranslationId: string, message: string, messageTranslationId: string, messageHtml: string, messageHtmlTranslationId: string, status: string, notify: bool, createdAt: string, siteId: string, importedFromStatuspage: bool, deletedAt: string, origin: string, components: table<id: string, status: string, componentId: string, templateId: string, importedFromStatuspage: bool>, translations: record> {
@@ -1219,8 +1218,8 @@ export def "subscribers post" [
   --phone: string # The phone number of the subscriber.
   --webhook: string # The webhook URL of the subscriber.
   --webhookEmail: string # The webhook email of the webhook subscriber. This is used to send email to the subscriber when a webhook request does not receive a positive response.
-  --all: string@bool-completer # Whether the subscriber is subscribed to all components on the page or not.
-  --autoConfirm: string@bool-completer # Whether the subscriber is automatically confirmed or will receive an email to confirm their subscription.
+  --all: oneof<nothing, bool> # Whether the subscriber is subscribed to all components on the page or not.
+  --autoConfirm: oneof<nothing, bool> # Whether the subscriber is automatically confirmed or will receive an email to confirm their subscription.
   --components: list # The ids of the components that the subscriber will be subscribed to, Leave as null if `all` is set to true. (nullable)
   --language: string # The language of the subscriber in language code (e.g. `en` for English, `fr` for French, `de` for German, etc.).
 ]: any -> record<id: string, name: string, email: string, phone: string, confirmed: bool, all: bool, createdAt: string, updatedAt: string, siteId: string, unsubscribeToken: string, webhook: string, webhookEmail: string, discord: string, discordTeam: string, slack: string, slackTeam: string, language: string, company: string, microsoftTeamsWebhook: string, googleChatWebhook: string, googleChatSpace: string, failedAttempts: int, approved: bool, importedFromStatuspage: bool, hideUnsubLink: bool, webhookIncidentBody: string, webhookMaintenanceBody: string, webhookComponentBody: string, webhookHttpMethod: string, webhookHeaders: record, webhookQueryParams: record, site: record<id: string>> {
@@ -1249,7 +1248,7 @@ export def "subscribers-bulk post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   subscribers: list # Array of subscriber objects to create. — item shape: {email?: string, phone?: string, webhook?: string, webhookEmail?: string, all?: bool, autoConfirm?: bool, components?: list, language?: string}
-  --autoConfirm: string@bool-completer # Whether subscribers are automatically confirmed or will receive an email to confirm their subscription. Applies to all subscribers in the batch. This is a paid feature.
+  --autoConfirm: oneof<nothing, bool> # Whether subscribers are automatically confirmed or will receive an email to confirm their subscription. Applies to all subscribers in the batch. This is a paid feature.
 ]: any -> record<success: bool, created: int, failed: int, results: record<created: list<record>, failed: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1761,8 +1760,8 @@ export def "monitors post" [
   --name: string
   --locations: list
   --checksInterval: int # The interval in seconds between each monitor check.
-  --createComponent: string@bool-completer # Whether to create a component that will follow the status of the monitor on the status page.
-  --createMetric: string@bool-completer # Whether to create a metric that will show the response time of the monitor on the status page.
+  --createComponent: oneof<nothing, bool> # Whether to create a component that will follow the status of the monitor on the status page.
+  --createMetric: oneof<nothing, bool> # Whether to create a metric that will show the response time of the monitor on the status page.
   --onFail: record # shape: {createIncident?: bool, createOutageDuration?: bool, publishIncident?: bool, notifySubscribers?: bool}
   --onRecover: record # shape: {resolveIncident?: bool, resolveOutageDuration?: bool, publishIncident?: bool, notifySubscribers?: bool}
 ]: any -> record<monitor: record<pageId: string, url: string, httpMethod: string, body: string, headers: record, queryParams: record, basicAuth: record<username: string, password: string>, type: string, assertions: list<record>, alerts: list<string>, name: string, locations: list<string>, checksInterval: int, onFail: record<createIncident: bool, createOutageDuration: bool, publishIncident: bool, notifySubscribers: bool>, onRecover: record<resolveIncident: bool, resolveOutageDuration: bool, publishIncident: bool, notifySubscribers: bool>, createdAt: string, updatedAt: string>, message: string> {
@@ -1864,10 +1863,10 @@ export def "monitor-alerts post" [
   pageId: string # The id of the status page of the monitor to create the monitor alert on.
   recipient: string # The recipient of this alert, This depends on the type of alert. **For example:** * `EMAIL` - Email address * `SMS` and `PHONE_CALL` - Phone number * `SLACK`, `DISCORD`, and `WEBHOOK` - Webhook URL  * `MICROSOFT_TEAMS` - Email address or webhook URL
   --recipientWorkspace: string
-  --whenFails: string@bool-completer # Whether to send an alert when the monitor fails.
-  --whenRecovers: string@bool-completer # Whether to send an alert when the monitor recovers from a failure or degraded state.
-  --whenDegrades: string@bool-completer # Whether to send an alert when the monitor degrades.
-  --whenSslExpires: string@bool-completer # Whether to send an alert when the SSL certificate expires.
+  --whenFails: oneof<nothing, bool> # Whether to send an alert when the monitor fails.
+  --whenRecovers: oneof<nothing, bool> # Whether to send an alert when the monitor recovers from a failure or degraded state.
+  --whenDegrades: oneof<nothing, bool> # Whether to send an alert when the monitor degrades.
+  --whenSslExpires: oneof<nothing, bool> # Whether to send an alert when the SSL certificate expires.
   --sslExpiresInDays: int # The number of days left until the SSL certificate expires so the alert will trigger, for example if this value is 30 then the alert will trigger 30 days before the certificate expires.
   --monitors: list # The ids of the monitors this alert will trigger based on.
   --metadata: string
@@ -2064,7 +2063,7 @@ export def "monitors-groups-run get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --location: list
-  --retry: string@bool-completer # default: false
+  --retry: oneof<nothing, bool> # default: false
   --monitorLogId: string
 ]: nothing -> record<result: string, monitorLogId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2206,11 +2205,11 @@ export def "escalation-policies post" [
   name: string # The name of the escalation policy.
   --description: string # The description of the escalation policy.
   rules: list # item shape: {delayInMins?: int, condition?: "NOT_ACKNOWLEDGED", actions?: list}
-  --repeat: string@bool-completer # Whether the escalation policy should repeat or not after the last rule is triggered.
+  --repeat: oneof<nothing, bool> # Whether the escalation policy should repeat or not after the last rule is triggered.
   repeatCount: int # The number of times the escalation policy should repeat.
   repeatDelay: int # The delay in minutes between each repeat.
-  --revertAcknowledgement: string@bool-completer # Whether the escalation policy should revert the acknowledgement status of the incident after each repeat.
-  --autoResolveIncidentsAfterRepeat: string@bool-completer # Whether the escalation policy should auto resolve the incident after all the repeats are completed.
+  --revertAcknowledgement: oneof<nothing, bool> # Whether the escalation policy should revert the acknowledgement status of the incident after each repeat.
+  --autoResolveIncidentsAfterRepeat: oneof<nothing, bool> # Whether the escalation policy should auto resolve the incident after all the repeats are completed.
 ]: any -> record<escalationPolicy: record<id: string, siteId: string, name: string, description: string, rules: list<record>, repeat: bool, repeatCount: int, repeatDelay: int, revertAcknowledgement: bool, autoResolveIncidentsAfterRepeat: bool, createdAt: string, updatedAt: string>, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2240,11 +2239,11 @@ export def "escalation-policies put" [
   name: string # The name of the escalation policy.
   --description: string # The description of the escalation policy.
   rules: list # item shape: {delayInMins?: int, condition?: "NOT_ACKNOWLEDGED", actions?: list}
-  --repeat: string@bool-completer # Whether the escalation policy should repeat or not after the last rule is triggered.
+  --repeat: oneof<nothing, bool> # Whether the escalation policy should repeat or not after the last rule is triggered.
   repeatCount: int # The number of times the escalation policy should repeat.
   repeatDelay: int # The delay in minutes between each repeat.
-  --revertAcknowledgement: string@bool-completer # Whether the escalation policy should revert the acknowledgement status of the incident after each repeat.
-  --autoResolveIncidentsAfterRepeat: string@bool-completer # Whether the escalation policy should auto resolve the incident after all the repeats are completed.
+  --revertAcknowledgement: oneof<nothing, bool> # Whether the escalation policy should revert the acknowledgement status of the incident after each repeat.
+  --autoResolveIncidentsAfterRepeat: oneof<nothing, bool> # Whether the escalation policy should auto resolve the incident after all the repeats are completed.
 ]: any -> record<escalationPolicy: record<id: string, siteId: string, name: string, description: string, rules: list<record>, repeat: bool, repeatCount: int, repeatDelay: int, revertAcknowledgement: bool, autoResolveIncidentsAfterRepeat: bool, createdAt: string, updatedAt: string>, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2413,11 +2412,11 @@ export def "workspaces post" [
   --allow-errors(-e) # Return full response without error handling
   --name: string
   --slug: string
-  --sendNewWorkspaceMembersStatusPageUpdates: string@bool-completer
-  --sendNewWorkspaceMembersAutomationIntegrationNotifications: string@bool-completer
-  --sendNewWorkspaceMembersInvalidCustomDomainNotifications: string@bool-completer
-  --sendNewWorkspaceMembersPhoneCallNotifications: string@bool-completer
-  --sendNewWorkspaceMembersWeeklyReportsNotifications: string@bool-completer
+  --sendNewWorkspaceMembersStatusPageUpdates: oneof<nothing, bool>
+  --sendNewWorkspaceMembersAutomationIntegrationNotifications: oneof<nothing, bool>
+  --sendNewWorkspaceMembersInvalidCustomDomainNotifications: oneof<nothing, bool>
+  --sendNewWorkspaceMembersPhoneCallNotifications: oneof<nothing, bool>
+  --sendNewWorkspaceMembersWeeklyReportsNotifications: oneof<nothing, bool>
   --longRunningIncidentNotificationSettings: list
 ]: any -> record<id: string, createdAt: string, updatedAt: string, name: string, slug: string, avatar: string, sites: list<string>, sso: bool, organizationDomains: string, allowDomainEmails: bool, allowedDomainsDefaultPermission: string, ssoActive: bool, directorySyncActive: bool, enableMultipleOrgs: bool, allowedDomains: string, allowedEmailDomains: list<string>, referralId: string, referralCoupon: string, referralCode: string, sendNewWorkspaceMembersStatusPageUpdates: bool, sendNewWorkspaceMembersAutomationIntegrationNotifications: bool, sendNewWorkspaceMembersInvalidCustomDomainNotifications: bool, sendNewWorkspaceMembersPhoneCallNotifications: bool, sendNewWorkspaceMembersWeeklyReportsNotifications: bool, longRunningIncidentNotificationSettings: list<float>, useSSOLogin: bool, useGoogleLogin: bool, useMagiclinkLogin: bool, usePasswordLogin: bool, useGithubLogin: bool> {
   let input = $in

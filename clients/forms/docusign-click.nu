@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://www.demo.docusign.net/clickapi"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -158,10 +157,10 @@ export def "accounts-clickwraps PostClickwrap" [
   --displaySettings: record # Information about how an agreement is displayed. — shape: {actionButtonAlignment?: string, allowClientOnly?: bool, allowedHosts?: list, brandId?: string, consentButtonText?: string, consentText?: string, declineButtonText?: string, displayName?: string, documentDisplay?: string, downloadable?: bool, format?: string, hasDeclineButton?: bool, hostOrigin?: string, mustRead?: bool, mustView?: bool, recordDeclineResponses?: bool, requireAccept?: bool, sendToEmail?: bool}
   --documents: list # An array of documents. — item shape: {documentBase64?: string, documentHtml?: string, documentName?: string, fileExtension?: string, order?: int}
   --fieldsToNull: string # Specifies whether `scheduledReacceptance` and `scheduledDate` should be cleared. May be one of:  - `"scheduledReacceptance"` - `"scheduledDate"` - `"scheduledReacceptance,scheduledDate"`
-  --isMajorVersion: string@bool-completer # When **true**, the next version created is a major version. When **false** the next version created is minor.
-  --isShared: string@bool-completer
+  --isMajorVersion: oneof<nothing, bool> # When **true**, the next version created is a major version. When **false** the next version created is minor.
+  --isShared: oneof<nothing, bool>
   --name: string # Name of the clickwrap.
-  --requireReacceptance: string@bool-completer # When **true**, requires signers who have previously agreed to this clickwrap to sign again. The version number is incremented.
+  --requireReacceptance: oneof<nothing, bool> # When **true**, requires signers who have previously agreed to this clickwrap to sign again. The version number is incremented.
   --scheduledDate: record # The time and date when this clickwrap is activated.
   --scheduledReacceptance: record # shape: {recurrenceInterval?: int, recurrenceIntervalType?: string, startDateTime?: record}
   --status: record # Clickwrap status. Possible values:  - `active` - `inactive` - `deleted`
@@ -406,10 +405,10 @@ export def "accounts-clickwraps-versions PostClickwrapVersion" [
   --displaySettings: record # Information about how an agreement is displayed. — shape: {actionButtonAlignment?: string, allowClientOnly?: bool, allowedHosts?: list, brandId?: string, consentButtonText?: string, consentText?: string, declineButtonText?: string, displayName?: string, documentDisplay?: string, downloadable?: bool, format?: string, hasDeclineButton?: bool, hostOrigin?: string, mustRead?: bool, mustView?: bool, recordDeclineResponses?: bool, requireAccept?: bool, sendToEmail?: bool}
   --documents: list # An array of documents. — item shape: {documentBase64?: string, documentHtml?: string, documentName?: string, fileExtension?: string, order?: int}
   --fieldsToNull: string # Specifies whether `scheduledReacceptance` and `scheduledDate` should be cleared. May be one of:  - `"scheduledReacceptance"` - `"scheduledDate"` - `"scheduledReacceptance,scheduledDate"`
-  --isMajorVersion: string@bool-completer # When **true**, the next version created is a major version. When **false** the next version created is minor.
-  --isShared: string@bool-completer
+  --isMajorVersion: oneof<nothing, bool> # When **true**, the next version created is a major version. When **false** the next version created is minor.
+  --isShared: oneof<nothing, bool>
   --name: string # Name of the clickwrap.
-  --requireReacceptance: string@bool-completer # When **true**, requires signers who have previously agreed to this clickwrap to sign again. The version number is incremented.
+  --requireReacceptance: oneof<nothing, bool> # When **true**, requires signers who have previously agreed to this clickwrap to sign again. The version number is incremented.
   --scheduledDate: record # The time and date when this clickwrap is activated.
   --scheduledReacceptance: record # shape: {recurrenceInterval?: int, recurrenceIntervalType?: string, startDateTime?: record}
   --status: record # Clickwrap status. Possible values:  - `active` - `inactive` - `deleted`
@@ -498,10 +497,10 @@ export def "accounts-clickwraps-versions PutClickwrapVersion" [
   --displaySettings: record # Information about how an agreement is displayed. — shape: {actionButtonAlignment?: string, allowClientOnly?: bool, allowedHosts?: list, brandId?: string, consentButtonText?: string, consentText?: string, declineButtonText?: string, displayName?: string, documentDisplay?: string, downloadable?: bool, format?: string, hasDeclineButton?: bool, hostOrigin?: string, mustRead?: bool, mustView?: bool, recordDeclineResponses?: bool, requireAccept?: bool, sendToEmail?: bool}
   --documents: list # An array of documents. — item shape: {documentBase64?: string, documentHtml?: string, documentName?: string, fileExtension?: string, order?: int}
   --fieldsToNull: string # Specifies whether `scheduledReacceptance` and `scheduledDate` should be cleared. May be one of:  - `"scheduledReacceptance"` - `"scheduledDate"` - `"scheduledReacceptance,scheduledDate"`
-  --isMajorVersion: string@bool-completer # When **true**, the next version created is a major version. When **false** the next version created is minor.
-  --isShared: string@bool-completer
+  --isMajorVersion: oneof<nothing, bool> # When **true**, the next version created is a major version. When **false** the next version created is minor.
+  --isShared: oneof<nothing, bool>
   --name: string # Name of the clickwrap.
-  --requireReacceptance: string@bool-completer # When **true**, requires signers who have previously agreed to this clickwrap to sign again. The version number is incremented.
+  --requireReacceptance: oneof<nothing, bool> # When **true**, requires signers who have previously agreed to this clickwrap to sign again. The version number is incremented.
   --scheduledDate: record # The time and date when this clickwrap is activated.
   --scheduledReacceptance: record # shape: {recurrenceInterval?: int, recurrenceIntervalType?: string, startDateTime?: record}
   --status: record # Clickwrap status. Possible values:  - `active` - `inactive` - `deleted`
@@ -619,10 +618,10 @@ export def "accounts-clickwraps-versions PutClickwrapVersionByNumber" [
   --displaySettings: record # Information about how an agreement is displayed. — shape: {actionButtonAlignment?: string, allowClientOnly?: bool, allowedHosts?: list, brandId?: string, consentButtonText?: string, consentText?: string, declineButtonText?: string, displayName?: string, documentDisplay?: string, downloadable?: bool, format?: string, hasDeclineButton?: bool, hostOrigin?: string, mustRead?: bool, mustView?: bool, recordDeclineResponses?: bool, requireAccept?: bool, sendToEmail?: bool}
   --documents: list # An array of documents. — item shape: {documentBase64?: string, documentHtml?: string, documentName?: string, fileExtension?: string, order?: int}
   --fieldsToNull: string # Specifies whether `scheduledReacceptance` and `scheduledDate` should be cleared. May be one of:  - `"scheduledReacceptance"` - `"scheduledDate"` - `"scheduledReacceptance,scheduledDate"`
-  --isMajorVersion: string@bool-completer # When **true**, the next version created is a major version. When **false** the next version created is minor.
-  --isShared: string@bool-completer
+  --isMajorVersion: oneof<nothing, bool> # When **true**, the next version created is a major version. When **false** the next version created is minor.
+  --isShared: oneof<nothing, bool>
   --name: string # Name of the clickwrap.
-  --requireReacceptance: string@bool-completer # When **true**, requires signers who have previously agreed to this clickwrap to sign again. The version number is incremented.
+  --requireReacceptance: oneof<nothing, bool> # When **true**, requires signers who have previously agreed to this clickwrap to sign again. The version number is incremented.
   --scheduledDate: record # The time and date when this clickwrap is activated.
   --scheduledReacceptance: record # shape: {recurrenceInterval?: int, recurrenceIntervalType?: string, startDateTime?: record}
   --status: record # Clickwrap status. Possible values:  - `active` - `inactive` - `deleted`

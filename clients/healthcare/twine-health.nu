@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.twinehealth.com/pub"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -257,7 +256,7 @@ export def "calendar-event fetchCalendarEvents" [
   --filterorganization: string # Fitbit Plus organization id. Note that one of the following filters must be specified: `filter[patient]`, `filter[group]`, `filter[organization]`, or `filter[attendees]`.
   --filterattendees: string # Comma-separated list of coach or patient ids. Note that one of the following filters must be specified: `filter[patient]`, `filter[group]`, `filter[organization]`, or `filter[attendees]`.
   --filtertype: string@filtertype-completer # Calendar event type
-  --filtercompleted: string@bool-completer # If not specified, return all calendar events. If set to `true` return only events marked as completed, if set to `false`, return only events not marked as completed yet.
+  --filtercompleted: oneof<nothing, bool> # If not specified, return all calendar events. If set to `true` return only events marked as completed, if set to `false`, return only events not marked as completed yet.
   --filterstart-at: string # The start (inclusive) and end (exclusive) dates are ISO date and time strings separated by `..`. Example for events starting in November 2017 (America/New_York): `filter[start_at]=2017-11-01T00:00:00-04:00..2017-12-01T00:00:00-05:00`
   --filterend-at: string # The start (inclusive) and end (exclusive) dates are ISO date and time strings separated by `..`. Example for events ending in November 2017 (America/New_York): `filter[end_at]=2017-11-01T00:00:00-04:00..2017-12-01T00:00:00-05:00`
   --filtercompleted-at: string # The start (inclusive) and end (exclusive) dates are ISO date and time strings separated by `..`. Example for events completed in November 2017 (America/New_York): `filter[completed_at]=2017-11-01T00:00:00-04:00..2017-12-01T00:00:00-05:00`
@@ -870,7 +869,7 @@ export def "patient fetchPatients" [
   --filterorganization: string # Fitbit Plus organization id. Note that either `filter[group]` or `filter[organization]` must be specified.
   --filteridentifiersystem: string # Identifier system (example: "MyEHR") - requires a "filter[identifier][value]" parameter
   --filteridentifiervalue: string # Identifier value (example: "12345") - requires a "filter[identifier][system]" parameter
-  --filterarchived: string@bool-completer # If not specified, return all patients. If set to 'true' return only archived patients, if set to 'false', return only patients who are not archived.
+  --filterarchived: oneof<nothing, bool> # If not specified, return all patients. If set to 'true' return only archived patients, if set to 'false', return only patients who are not archived.
   --filtercreated-at: string # The start (inclusive) and end (exclusive) dates are ISO date and time strings separated by `..`. Example for patients created in November 2017 (America/New_York): `filter[created_at]=2017-11-01T00:00:00-04:00..2017-12-01T00:00:00-05:00`
   --filterupdated-at: string # The start (inclusive) and end (exclusive) dates are ISO date and time strings separated by `..`. Example for patients updated in November 2017 (America/New_York): `filter[updated_at]=2017-11-01T00:00:00-04:00..2017-12-01T00:00:00-05:00`
   --pagenumber: int # Page number (default: 1)
@@ -1318,7 +1317,7 @@ export def "reward-earning fetchRewardEarnings" [
   --allow-errors(-e) # Return full response without error handling
   --filtergroups: string # Group identifiers
   --filterpatient: string # Patient identifier
-  --filterready-for-fulfillment: string@bool-completer # If true, only returns those reward earnings for which ready_for_fulfillment is true and fulfilled_at is null. If false, only returns those reward earnings for which ready_for_fulfillment is false and fulfilled_at is null.
+  --filterready-for-fulfillment: oneof<nothing, bool> # If true, only returns those reward earnings for which ready_for_fulfillment is true and fulfilled_at is null. If false, only returns those reward earnings for which ready_for_fulfillment is false and fulfilled_at is null.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://financialmodelingprep.com/stable"] }
 def auth-scheme-completer [] { ["query-apikey"] }
 
@@ -786,8 +785,8 @@ export def "company-screener companyScreener" [
   --betaLowerThan: float # Maximum beta
   --dividendMoreThan: float # Minimum dividend yield
   --dividendLowerThan: float # Maximum dividend yield
-  --isEtf: string@bool-completer # Filter for ETFs
-  --isActivelyTrading: string@bool-completer # Filter actively trading
+  --isEtf: oneof<nothing, bool> # Filter for ETFs
+  --isActivelyTrading: oneof<nothing, bool> # Filter actively trading
   --limit: int # Max results
 ]: nothing -> table<symbol: string, companyName: string, marketCap: int, sector: string, industry: string, beta: float, price: float, lastAnnualDividend: float, volume: int, exchange: string, exchangeShortName: string, country: string, isEtf: bool, isFund: bool, isActivelyTrading: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))

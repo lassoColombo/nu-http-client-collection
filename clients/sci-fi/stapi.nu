@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://stapi.co/api" "http://stapi.co/api"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -151,11 +150,11 @@ export def "rest-animal-search v1SearchAnimals" [
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Animal name
-  --earthAnimal: string@bool-completer # Whether it should be an earth animal
-  --earthInsect: string@bool-completer # Whether it should be an earth insect
-  --avian: string@bool-completer # Whether it should be an avian
-  --canine: string@bool-completer # Whether it should be a canine
-  --feline: string@bool-completer # Whether it should be a feline
+  --earthAnimal: oneof<nothing, bool> # Whether it should be an earth animal
+  --earthInsect: oneof<nothing, bool> # Whether it should be an earth insect
+  --avian: oneof<nothing, bool> # Whether it should be an avian
+  --canine: oneof<nothing, bool> # Whether it should be a canine
+  --feline: oneof<nothing, bool> # Whether it should be a feline
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, animals: table<uid: string, name: string, earthAnimal: bool, earthInsect: bool, avian: bool, canine: bool, feline: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -408,15 +407,15 @@ export def "rest-book-search v1SearchBooks" [
   --stardateTo: float # Ending stardate of book story (format: float)
   --yearFrom: int # Starting year of book story (format: int32)
   --yearTo: int # Ending year of book story (format: int32)
-  --novel: string@bool-completer # Whether it should be a novel
-  --referenceBook: string@bool-completer # Whether it should be a reference book
-  --biographyBook: string@bool-completer # Whether it should be a biography book
-  --rolePlayingBook: string@bool-completer # Whether it should be a role playing book
-  --eBook: string@bool-completer # Whether it should be an e-book
-  --anthology: string@bool-completer # Whether it should be an anthology
-  --novelization: string@bool-completer # Whether it should be novelization
-  --audiobook: string@bool-completer # Whether it should be an audiobook
-  --audiobookAbridged: string@bool-completer # Whether it should be an audiobook, abridged
+  --novel: oneof<nothing, bool> # Whether it should be a novel
+  --referenceBook: oneof<nothing, bool> # Whether it should be a reference book
+  --biographyBook: oneof<nothing, bool> # Whether it should be a biography book
+  --rolePlayingBook: oneof<nothing, bool> # Whether it should be a role playing book
+  --eBook: oneof<nothing, bool> # Whether it should be an e-book
+  --anthology: oneof<nothing, bool> # Whether it should be an anthology
+  --novelization: oneof<nothing, bool> # Whether it should be novelization
+  --audiobook: oneof<nothing, bool> # Whether it should be an audiobook
+  --audiobookAbridged: oneof<nothing, bool> # Whether it should be an audiobook, abridged
   --audiobookPublishedYearFrom: int # Starting year the audiobook was published (format: int32)
   --audiobookPublishedYearTo: int # Ending year the audiobook was published (format: int32)
   --audiobookRunTimeFrom: int # Minimal audiobook run time, in minutes (format: int32)
@@ -505,16 +504,16 @@ export def "rest-book-search v2SearchBooks" [
   --stardateTo: float # Ending stardate of book story (format: float)
   --yearFrom: int # Starting year of book story (format: int32)
   --yearTo: int # Ending year of book story (format: int32)
-  --novel: string@bool-completer # Whether it should be a novel
-  --referenceBook: string@bool-completer # Whether it should be a reference book
-  --biographyBook: string@bool-completer # Whether it should be a biography book
-  --rolePlayingBook: string@bool-completer # Whether it should be a role playing book
-  --eBook: string@bool-completer # Whether it should be an e-book
-  --anthology: string@bool-completer # Whether it should be an anthology
-  --novelization: string@bool-completer # Whether it should be novelization
-  --unauthorizedPublication: string@bool-completer # Whether it should be an unauthorized publication
-  --audiobook: string@bool-completer # Whether it should be an audiobook
-  --audiobookAbridged: string@bool-completer # Whether it should be an audiobook, abridged
+  --novel: oneof<nothing, bool> # Whether it should be a novel
+  --referenceBook: oneof<nothing, bool> # Whether it should be a reference book
+  --biographyBook: oneof<nothing, bool> # Whether it should be a biography book
+  --rolePlayingBook: oneof<nothing, bool> # Whether it should be a role playing book
+  --eBook: oneof<nothing, bool> # Whether it should be an e-book
+  --anthology: oneof<nothing, bool> # Whether it should be an anthology
+  --novelization: oneof<nothing, bool> # Whether it should be novelization
+  --unauthorizedPublication: oneof<nothing, bool> # Whether it should be an unauthorized publication
+  --audiobook: oneof<nothing, bool> # Whether it should be an audiobook
+  --audiobookAbridged: oneof<nothing, bool> # Whether it should be an audiobook, abridged
   --audiobookPublishedYearFrom: int # Starting year the audiobook was published (format: int32)
   --audiobookPublishedYearTo: int # Ending year the audiobook was published (format: int32)
   --audiobookRunTimeFrom: int # Minimal audiobook run time, in minutes (format: int32)
@@ -685,8 +684,8 @@ export def "rest-book-series-search v1SearchBookSeries" [
   --numberOfBooksTo: int # Maximal number of books (format: int32)
   --yearFrom: int # Starting year of book series stories (format: int32)
   --yearTo: int # Ending year of book series stories (format: int32)
-  --miniseries: string@bool-completer # Whether it should be a miniseries
-  --eBookSeries: string@bool-completer # Whether it should be an e-book series
+  --miniseries: oneof<nothing, bool> # Whether it should be a miniseries
+  --eBookSeries: oneof<nothing, bool> # Whether it should be an e-book series
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, bookSeries: table<uid: string, title: string, publishedYearFrom: int, publishedMonthFrom: int, publishedYearTo: int, publishedMonthTo: int, numberOfBooks: int, yearFrom: int, yearTo: int, miniseries: bool, ebookSeries: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -764,11 +763,11 @@ export def "rest-character-search v1SearchCharacters" [
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Character name
   --gender: string # Character gender
-  --deceased: string@bool-completer # Whether it should be a deceased character
-  --hologram: string@bool-completer # Whether it should be a hologram
-  --fictionalCharacter: string@bool-completer # Whether it should be a fictional character (from universe point of view)
-  --mirror: string@bool-completer # Whether it should be a mirror universe character
-  --alternateReality: string@bool-completer # Whether it should be a alternate reality character
+  --deceased: oneof<nothing, bool> # Whether it should be a deceased character
+  --hologram: oneof<nothing, bool> # Whether it should be a hologram
+  --fictionalCharacter: oneof<nothing, bool> # Whether it should be a fictional character (from universe point of view)
+  --mirror: oneof<nothing, bool> # Whether it should be a mirror universe character
+  --alternateReality: oneof<nothing, bool> # Whether it should be a alternate reality character
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, characters: table<uid: string, name: string, gender: string, yearOfBirth: int, monthOfBirth: int, dayOfBirth: int, placeOfBirth: string, yearOfDeath: int, monthOfDeath: int, dayOfDeath: int, placeOfDeath: string, height: int, weight: int, deceased: bool, bloodType: string, maritalStatus: string, serialNumber: string, hologramActivationDate: string, hologramStatus: string, hologramDateStatus: string, hologram: bool, fictionalCharacter: bool, mirror: bool, alternateReality: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -853,8 +852,8 @@ export def "rest-comics-search v1SearchComics" [
   --stardateTo: float # Ending stardate of comics story (format: float)
   --yearFrom: int # Starting year of comics story (format: int32)
   --yearTo: int # Ending year of comics story (format: int32)
-  --photonovel: string@bool-completer # Whether it should be a photonovel
-  --adaptation: string@bool-completer # Whether it should be an adaptation of an episode or a movie
+  --photonovel: oneof<nothing, bool> # Whether it should be a photonovel
+  --adaptation: oneof<nothing, bool> # Whether it should be an adaptation of an episode or a movie
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, comics: table<uid: string, title: string, publishedYear: int, publishedMonth: int, publishedDay: int, coverYear: int, coverMonth: int, coverDay: int, numberOfPages: int, stardateFrom: float, stardateTo: float, yearFrom: int, yearTo: int, photonovel: bool, adaptation: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -941,7 +940,7 @@ export def "rest-comic-collection-search v1SearchComicCollections" [
   --stardateTo: float # Ending stardate of comic collections stories (format: float)
   --yearFrom: int # Starting year of comic collection stories (format: int32)
   --yearTo: int # Ending year of comic collections stories (format: int32)
-  --photonovel: string@bool-completer # Whether it should be an photonovel collection
+  --photonovel: oneof<nothing, bool> # Whether it should be an photonovel collection
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, comicCollections: table<uid: string, title: string, publishedYear: int, publishedMonth: int, publishedDay: int, coverYear: int, coverMonth: int, coverDay: int, numberOfPages: int, stardateFrom: float, stardateTo: float, yearFrom: int, yearTo: int, photonovel: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1049,8 +1048,8 @@ export def "rest-comic-series-search v1SearchComicSeries" [
   --stardateTo: float # Starting stardate of comic series stories (format: float)
   --yearFrom: int # Starting year of comic series stories (format: int32)
   --yearTo: int # Ending year of comic series stories (format: int32)
-  --miniseries: string@bool-completer # Whether it should be a miniseries
-  --photonovelSeries: string@bool-completer # Whether it should be photonovel series
+  --miniseries: oneof<nothing, bool> # Whether it should be a miniseries
+  --photonovelSeries: oneof<nothing, bool> # Whether it should be photonovel series
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, comicSeries: table<uid: string, title: string, publishedYearFrom: int, publishedMonthFrom: int, publishedDayFrom: int, publishedYearTo: int, publishedMonthTo: int, publishedDayTo: int, numberOfIssues: int, stardateFrom: float, stardateTo: float, yearFrom: int, yearTo: int, miniseries: bool, photonovelSeries: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1215,23 +1214,23 @@ export def "rest-company-search v1SearchCompanies" [
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Company name
-  --broadcaster: string@bool-completer # Whether it should be a broadcaster
-  --collectibleCompany: string@bool-completer # Whether it should be a collectible company
-  --conglomerate: string@bool-completer # Whether it should be a conglomerate
-  --digitalVisualEffectsCompany: string@bool-completer # Whether it should be a digital visual effects company
-  --distributor: string@bool-completer # Whether it should be a distributor
-  --gameCompany: string@bool-completer # Whether it should be a game company
-  --filmEquipmentCompany: string@bool-completer # Whether it should be a film equipment company
-  --makeUpEffectsStudio: string@bool-completer # Whether it should be a make-up effects studio
-  --mattePaintingCompany: string@bool-completer # Whether it should be a matte painting company
-  --modelAndMiniatureEffectsCompany: string@bool-completer # Whether it should be a model and miniature effects company
-  --postProductionCompany: string@bool-completer # Whether it should be a post-production company
-  --productionCompany: string@bool-completer # Whether it should be a production company
-  --propCompany: string@bool-completer # Whether it should be a prop company
-  --recordLabel: string@bool-completer # Whether it should be a record label
-  --specialEffectsCompany: string@bool-completer # Whether it should be a special effects company
-  --tvAndFilmProductionCompany: string@bool-completer # Whether it should be a TV and film production company
-  --videoGameCompany: string@bool-completer # Whether it should be a video game company
+  --broadcaster: oneof<nothing, bool> # Whether it should be a broadcaster
+  --collectibleCompany: oneof<nothing, bool> # Whether it should be a collectible company
+  --conglomerate: oneof<nothing, bool> # Whether it should be a conglomerate
+  --digitalVisualEffectsCompany: oneof<nothing, bool> # Whether it should be a digital visual effects company
+  --distributor: oneof<nothing, bool> # Whether it should be a distributor
+  --gameCompany: oneof<nothing, bool> # Whether it should be a game company
+  --filmEquipmentCompany: oneof<nothing, bool> # Whether it should be a film equipment company
+  --makeUpEffectsStudio: oneof<nothing, bool> # Whether it should be a make-up effects studio
+  --mattePaintingCompany: oneof<nothing, bool> # Whether it should be a matte painting company
+  --modelAndMiniatureEffectsCompany: oneof<nothing, bool> # Whether it should be a model and miniature effects company
+  --postProductionCompany: oneof<nothing, bool> # Whether it should be a post-production company
+  --productionCompany: oneof<nothing, bool> # Whether it should be a production company
+  --propCompany: oneof<nothing, bool> # Whether it should be a prop company
+  --recordLabel: oneof<nothing, bool> # Whether it should be a record label
+  --specialEffectsCompany: oneof<nothing, bool> # Whether it should be a special effects company
+  --tvAndFilmProductionCompany: oneof<nothing, bool> # Whether it should be a TV and film production company
+  --videoGameCompany: oneof<nothing, bool> # Whether it should be a video game company
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, companies: table<uid: string, name: string, broadcaster: bool, collectibleCompany: bool, conglomerate: bool, digitalVisualEffectsCompany: bool, distributor: bool, gameCompany: bool, filmEquipmentCompany: bool, makeUpEffectsStudio: bool, mattePaintingCompany: bool, modelAndMiniatureEffectsCompany: bool, postProductionCompany: bool, productionCompany: bool, propCompany: bool, recordLabel: bool, specialEffectsCompany: bool, tvAndFilmProductionCompany: bool, videoGameCompany: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1308,27 +1307,27 @@ export def "rest-company-search v2SearchCompanies" [
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Company name
-  --broadcaster: string@bool-completer # Whether it should be a broadcaster
-  --streamingService: string@bool-completer # Whether it should be a streaming service
-  --collectibleCompany: string@bool-completer # Whether it should be a collectible company
-  --conglomerate: string@bool-completer # Whether it should be a conglomerate
-  --visualEffectsCompany: string@bool-completer # Whether it should be a visual effects company
-  --digitalVisualEffectsCompany: string@bool-completer # Whether it should be a digital visual effects company
-  --distributor: string@bool-completer # Whether it should be a distributor
-  --gameCompany: string@bool-completer # Whether it should be a game company
-  --filmEquipmentCompany: string@bool-completer # Whether it should be a film equipment company
-  --makeUpEffectsStudio: string@bool-completer # Whether it should be a make-up effects studio
-  --mattePaintingCompany: string@bool-completer # Whether it should be a matte painting company
-  --modelAndMiniatureEffectsCompany: string@bool-completer # Whether it should be a model and miniature effects company
-  --postProductionCompany: string@bool-completer # Whether it should be a post-production company
-  --productionCompany: string@bool-completer # Whether it should be a production company
-  --propCompany: string@bool-completer # Whether it should be a prop company
-  --recordLabel: string@bool-completer # Whether it should be a record label
-  --specialEffectsCompany: string@bool-completer # Whether it should be a special effects company
-  --tvAndFilmProductionCompany: string@bool-completer # Whether it should be a TV and film production company
-  --videoGameCompany: string@bool-completer # Whether it should be a video game company
-  --publisher: string@bool-completer # Whether it should be a publisher
-  --publicationArtStudio: string@bool-completer # Whether it should be a publication art studio
+  --broadcaster: oneof<nothing, bool> # Whether it should be a broadcaster
+  --streamingService: oneof<nothing, bool> # Whether it should be a streaming service
+  --collectibleCompany: oneof<nothing, bool> # Whether it should be a collectible company
+  --conglomerate: oneof<nothing, bool> # Whether it should be a conglomerate
+  --visualEffectsCompany: oneof<nothing, bool> # Whether it should be a visual effects company
+  --digitalVisualEffectsCompany: oneof<nothing, bool> # Whether it should be a digital visual effects company
+  --distributor: oneof<nothing, bool> # Whether it should be a distributor
+  --gameCompany: oneof<nothing, bool> # Whether it should be a game company
+  --filmEquipmentCompany: oneof<nothing, bool> # Whether it should be a film equipment company
+  --makeUpEffectsStudio: oneof<nothing, bool> # Whether it should be a make-up effects studio
+  --mattePaintingCompany: oneof<nothing, bool> # Whether it should be a matte painting company
+  --modelAndMiniatureEffectsCompany: oneof<nothing, bool> # Whether it should be a model and miniature effects company
+  --postProductionCompany: oneof<nothing, bool> # Whether it should be a post-production company
+  --productionCompany: oneof<nothing, bool> # Whether it should be a production company
+  --propCompany: oneof<nothing, bool> # Whether it should be a prop company
+  --recordLabel: oneof<nothing, bool> # Whether it should be a record label
+  --specialEffectsCompany: oneof<nothing, bool> # Whether it should be a special effects company
+  --tvAndFilmProductionCompany: oneof<nothing, bool> # Whether it should be a TV and film production company
+  --videoGameCompany: oneof<nothing, bool> # Whether it should be a video game company
+  --publisher: oneof<nothing, bool> # Whether it should be a publisher
+  --publicationArtStudio: oneof<nothing, bool> # Whether it should be a publication art studio
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, companies: table<uid: string, name: string, broadcaster: bool, streamingService: bool, collectibleCompany: bool, conglomerate: bool, visualEffectsCompany: bool, digitalVisualEffectsCompany: bool, distributor: bool, gameCompany: bool, filmEquipmentCompany: bool, makeUpEffectsStudio: bool, mattePaintingCompany: bool, modelAndMiniatureEffectsCompany: bool, postProductionCompany: bool, productionCompany: bool, propCompany: bool, recordLabel: bool, specialEffectsCompany: bool, tvAndFilmProductionCompany: bool, videoGameCompany: bool, publisher: bool, publicationArtStudio: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1409,11 +1408,11 @@ export def "rest-conflict-search v1SearchConflicts" [
   --name: string # Conflict name
   --yearFrom: int # Starting year of the conflict (format: int32)
   --yearTo: int # Ending year of the conflict (format: int32)
-  --earthConflict: string@bool-completer # Whether it should be an Earth conflict
-  --federationWar: string@bool-completer # Whether this conflict should be a part of war involving Federation
-  --klingonWar: string@bool-completer # Whether this conflict should be a part of war involving the Klingons
-  --dominionWarBattle: string@bool-completer # Whether this conflict should be a Dominion war battle
-  --alternateReality: string@bool-completer # Whether this conflict should be from alternate reality
+  --earthConflict: oneof<nothing, bool> # Whether it should be an Earth conflict
+  --federationWar: oneof<nothing, bool> # Whether this conflict should be a part of war involving Federation
+  --klingonWar: oneof<nothing, bool> # Whether this conflict should be a part of war involving the Klingons
+  --dominionWarBattle: oneof<nothing, bool> # Whether this conflict should be a Dominion war battle
+  --alternateReality: oneof<nothing, bool> # Whether this conflict should be from alternate reality
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, conflicts: table<uid: string, name: string, yearFrom: int, yearTo: int, earthConflict: bool, federationWar: bool, klingonWar: bool, dominionWarBattle: bool, alternateReality: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1541,13 +1540,13 @@ export def "rest-element-search v1SearchElements" [
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Element name
   --symbol: string # Element symbol
-  --transuranium: string@bool-completer # Whether it should be a transuranium
-  --gammaSeries: string@bool-completer # Whether it should belong to Gamma series
-  --hypersonicSeries: string@bool-completer # Whether it should belong to Hypersonic series
-  --megaSeries: string@bool-completer # Whether it should belong to Mega series
-  --omegaSeries: string@bool-completer # Whether it should belong to Omega series
-  --transonicSeries: string@bool-completer # Whether it should belong to Transonic series
-  --worldSeries: string@bool-completer # Whether it should belong to World series
+  --transuranium: oneof<nothing, bool> # Whether it should be a transuranium
+  --gammaSeries: oneof<nothing, bool> # Whether it should belong to Gamma series
+  --hypersonicSeries: oneof<nothing, bool> # Whether it should belong to Hypersonic series
+  --megaSeries: oneof<nothing, bool> # Whether it should belong to Mega series
+  --omegaSeries: oneof<nothing, bool> # Whether it should belong to Omega series
+  --transonicSeries: oneof<nothing, bool> # Whether it should belong to Transonic series
+  --worldSeries: oneof<nothing, bool> # Whether it should belong to World series
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, elements: table<uid: string, name: string, symbol: string, atomicNumber: int, atomicWeight: int, transuranium: bool, gammaSeries: bool, hypersonicSeries: bool, megaSeries: bool, omegaSeries: bool, transonicSeries: bool, worldSeries: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1625,13 +1624,13 @@ export def "rest-element-search v2SearchElements" [
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Element name
   --symbol: string # Element symbol
-  --transuranic: string@bool-completer # Whether it should be a transuranic
-  --gammaSeries: string@bool-completer # Whether it should belong to Gamma series
-  --hypersonicSeries: string@bool-completer # Whether it should belong to Hypersonic series
-  --megaSeries: string@bool-completer # Whether it should belong to Mega series
-  --omegaSeries: string@bool-completer # Whether it should belong to Omega series
-  --transonicSeries: string@bool-completer # Whether it should belong to Transonic series
-  --worldSeries: string@bool-completer # Whether it should belong to World series
+  --transuranic: oneof<nothing, bool> # Whether it should be a transuranic
+  --gammaSeries: oneof<nothing, bool> # Whether it should belong to Gamma series
+  --hypersonicSeries: oneof<nothing, bool> # Whether it should belong to Hypersonic series
+  --megaSeries: oneof<nothing, bool> # Whether it should belong to Mega series
+  --omegaSeries: oneof<nothing, bool> # Whether it should belong to Omega series
+  --transonicSeries: oneof<nothing, bool> # Whether it should belong to Transonic series
+  --worldSeries: oneof<nothing, bool> # Whether it should belong to World series
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, elements: table<uid: string, name: string, symbol: string, atomicNumber: int, atomicWeight: int, transuranic: bool, gammaSeries: bool, hypersonicSeries: bool, megaSeries: bool, omegaSeries: bool, transonicSeries: bool, worldSeries: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1713,7 +1712,7 @@ export def "rest-episode-search v1SearchEpisodes" [
   --episodeNumberFrom: int # Minimal episode number in season (format: int32)
   --episodeNumberTo: int # Maximal episode number in season (format: int32)
   --productionSerialNumber: string # Production serial number
-  --featureLength: string@bool-completer # Whether it should be a feature length episode
+  --featureLength: oneof<nothing, bool> # Whether it should be a feature length episode
   --stardateFrom: float # Starting stardate of episode story (format: float)
   --stardateTo: float # Ending stardate of episode story (format: float)
   --yearFrom: int # Starting year of episode story (format: int32)
@@ -1798,16 +1797,16 @@ export def "rest-food-search v1SearchFoods" [
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Food name
-  --earthlyOrigin: string@bool-completer # Whether it should be of earthly origin
-  --dessert: string@bool-completer # Whether it should be a dessert
-  --fruit: string@bool-completer # Whether it should be a fruit
-  --herbOrSpice: string@bool-completer # Whether it should be an herb or a spice
-  --sauce: string@bool-completer # Whether it should be a sauce
-  --soup: string@bool-completer # Whether it should be a soup
-  --beverage: string@bool-completer # Whether it should be a beverage
-  --alcoholicBeverage: string@bool-completer # Whether it should be an alcoholic beverage
-  --juice: string@bool-completer # Whether it should be a juice
-  --tea: string@bool-completer # Whether it should be a tea
+  --earthlyOrigin: oneof<nothing, bool> # Whether it should be of earthly origin
+  --dessert: oneof<nothing, bool> # Whether it should be a dessert
+  --fruit: oneof<nothing, bool> # Whether it should be a fruit
+  --herbOrSpice: oneof<nothing, bool> # Whether it should be an herb or a spice
+  --sauce: oneof<nothing, bool> # Whether it should be a sauce
+  --soup: oneof<nothing, bool> # Whether it should be a soup
+  --beverage: oneof<nothing, bool> # Whether it should be a beverage
+  --alcoholicBeverage: oneof<nothing, bool> # Whether it should be an alcoholic beverage
+  --juice: oneof<nothing, bool> # Whether it should be a juice
+  --tea: oneof<nothing, bool> # Whether it should be a tea
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, foods: table<uid: string, name: string, earthlyOrigin: bool, dessert: bool, fruit: bool, herbOrSpice: bool, sauce: bool, soup: bool, beverage: bool, alcoholicBeverage: bool, juice: bool, tea: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1884,12 +1883,12 @@ export def "rest-literature-search v1SearchLiterature" [
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --title: string # Literature title
-  --earthlyOrigin: string@bool-completer # Whether it should be of earthly origin
-  --shakespeareanWork: string@bool-completer # Whether it should be a Shakespearean work
-  --report: string@bool-completer # Whether it should be a report
-  --scientificLiterature: string@bool-completer # Whether it should be a scientific literature
-  --technicalManual: string@bool-completer # Whether it should be a technical manual
-  --religiousLiterature: string@bool-completer # Whether it should be a religious literature
+  --earthlyOrigin: oneof<nothing, bool> # Whether it should be of earthly origin
+  --shakespeareanWork: oneof<nothing, bool> # Whether it should be a Shakespearean work
+  --report: oneof<nothing, bool> # Whether it should be a report
+  --scientificLiterature: oneof<nothing, bool> # Whether it should be a scientific literature
+  --technicalManual: oneof<nothing, bool> # Whether it should be a technical manual
+  --religiousLiterature: oneof<nothing, bool> # Whether it should be a religious literature
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, literature: table<uid: string, title: string, earthlyOrigin: bool, shakespeareanWork: bool, report: bool, scientificLiterature: bool, technicalManual: bool, religiousLiterature: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1972,29 +1971,29 @@ export def "rest-location-search v1SearchLocations" [
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Location name
-  --earthlyLocation: string@bool-completer # Whether it should be an earthly location
-  --fictionalLocation: string@bool-completer # Whether it should be a fictional location
-  --religiousLocation: string@bool-completer # Whether it should be a religious location
-  --geographicalLocation: string@bool-completer # Whether it should be a geographical location
-  --bodyOfWater: string@bool-completer # Whether it should be a body of water
-  --country: string@bool-completer # Whether it should be a country
-  --subnationalEntity: string@bool-completer # Whether it should be a subnational entity
-  --settlement: string@bool-completer # Whether it should be a settlement
-  --usSettlement: string@bool-completer # Whether it should be a US settlement
-  --bajoranSettlement: string@bool-completer # Whether it should be a Bajoran settlement
-  --colony: string@bool-completer # Whether it should be a colony
-  --landform: string@bool-completer # Whether it should be a landform
-  --landmark: string@bool-completer # Whether it should be a landmark
-  --road: string@bool-completer # Whether it should be a road
-  --structure: string@bool-completer # Whether it should be a structure
-  --shipyard: string@bool-completer # Whether it should be a shipyard
-  --buildingInterior: string@bool-completer # Whether it should be a building interior
-  --establishment: string@bool-completer # Whether it should be a establishment
-  --medicalEstablishment: string@bool-completer # Whether it should be a medical establishment
-  --ds9Establishment: string@bool-completer # Whether it should be a DS9 establishment
-  --school: string@bool-completer # Whether it should be a school
-  --mirror: string@bool-completer # Whether this location should be from mirror universe
-  --alternateReality: string@bool-completer # Whether this location should be from alternate reality
+  --earthlyLocation: oneof<nothing, bool> # Whether it should be an earthly location
+  --fictionalLocation: oneof<nothing, bool> # Whether it should be a fictional location
+  --religiousLocation: oneof<nothing, bool> # Whether it should be a religious location
+  --geographicalLocation: oneof<nothing, bool> # Whether it should be a geographical location
+  --bodyOfWater: oneof<nothing, bool> # Whether it should be a body of water
+  --country: oneof<nothing, bool> # Whether it should be a country
+  --subnationalEntity: oneof<nothing, bool> # Whether it should be a subnational entity
+  --settlement: oneof<nothing, bool> # Whether it should be a settlement
+  --usSettlement: oneof<nothing, bool> # Whether it should be a US settlement
+  --bajoranSettlement: oneof<nothing, bool> # Whether it should be a Bajoran settlement
+  --colony: oneof<nothing, bool> # Whether it should be a colony
+  --landform: oneof<nothing, bool> # Whether it should be a landform
+  --landmark: oneof<nothing, bool> # Whether it should be a landmark
+  --road: oneof<nothing, bool> # Whether it should be a road
+  --structure: oneof<nothing, bool> # Whether it should be a structure
+  --shipyard: oneof<nothing, bool> # Whether it should be a shipyard
+  --buildingInterior: oneof<nothing, bool> # Whether it should be a building interior
+  --establishment: oneof<nothing, bool> # Whether it should be a establishment
+  --medicalEstablishment: oneof<nothing, bool> # Whether it should be a medical establishment
+  --ds9Establishment: oneof<nothing, bool> # Whether it should be a DS9 establishment
+  --school: oneof<nothing, bool> # Whether it should be a school
+  --mirror: oneof<nothing, bool> # Whether this location should be from mirror universe
+  --alternateReality: oneof<nothing, bool> # Whether this location should be from alternate reality
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, locations: table<uid: string, name: string, earthlyLocation: bool, fictionalLocation: bool, religiousLocation: bool, geographicalLocation: bool, bodyOfWater: bool, country: bool, subnationalEntity: bool, settlement: bool, usSettlement: bool, bajoranSettlement: bool, colony: bool, landform: bool, landmark: bool, road: bool, structure: bool, shipyard: bool, buildingInterior: bool, establishment: bool, medicalEstablishment: bool, ds9Establishment: bool, school: bool, mirror: bool, alternateReality: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2071,32 +2070,32 @@ export def "rest-location-search v2SearchLocations" [
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Location name
-  --earthlyLocation: string@bool-completer # Whether it should be an earthly location
-  --qonosLocation: string@bool-completer # Whether it should be a Qo'nos location
-  --fictionalLocation: string@bool-completer # Whether it should be a fictional location
-  --mythologicalLocation: string@bool-completer # Whether it should be a mythological location
-  --religiousLocation: string@bool-completer # Whether it should be a religious location
-  --geographicalLocation: string@bool-completer # Whether it should be a geographical location
-  --bodyOfWater: string@bool-completer # Whether it should be a body of water
-  --country: string@bool-completer # Whether it should be a country
-  --subnationalEntity: string@bool-completer # Whether it should be a subnational entity
-  --settlement: string@bool-completer # Whether it should be a settlement
-  --usSettlement: string@bool-completer # Whether it should be a US settlement
-  --bajoranSettlement: string@bool-completer # Whether it should be a Bajoran settlement
-  --colony: string@bool-completer # Whether it should be a colony
-  --landform: string@bool-completer # Whether it should be a landform
-  --road: string@bool-completer # Whether it should be a road
-  --structure: string@bool-completer # Whether it should be a structure
-  --shipyard: string@bool-completer # Whether it should be a shipyard
-  --buildingInterior: string@bool-completer # Whether it should be a building interior
-  --establishment: string@bool-completer # Whether it should be a establishment
-  --medicalEstablishment: string@bool-completer # Whether it should be a medical establishment
-  --ds9Establishment: string@bool-completer # Whether it should be a DS9 establishment
-  --school: string@bool-completer # Whether it should be a school
-  --restaurant: string@bool-completer # Whether it should be a restaurant
-  --residence: string@bool-completer # Whether it should be a residence
-  --mirror: string@bool-completer # Whether this location should be from mirror universe
-  --alternateReality: string@bool-completer # Whether this location should be from alternate reality
+  --earthlyLocation: oneof<nothing, bool> # Whether it should be an earthly location
+  --qonosLocation: oneof<nothing, bool> # Whether it should be a Qo'nos location
+  --fictionalLocation: oneof<nothing, bool> # Whether it should be a fictional location
+  --mythologicalLocation: oneof<nothing, bool> # Whether it should be a mythological location
+  --religiousLocation: oneof<nothing, bool> # Whether it should be a religious location
+  --geographicalLocation: oneof<nothing, bool> # Whether it should be a geographical location
+  --bodyOfWater: oneof<nothing, bool> # Whether it should be a body of water
+  --country: oneof<nothing, bool> # Whether it should be a country
+  --subnationalEntity: oneof<nothing, bool> # Whether it should be a subnational entity
+  --settlement: oneof<nothing, bool> # Whether it should be a settlement
+  --usSettlement: oneof<nothing, bool> # Whether it should be a US settlement
+  --bajoranSettlement: oneof<nothing, bool> # Whether it should be a Bajoran settlement
+  --colony: oneof<nothing, bool> # Whether it should be a colony
+  --landform: oneof<nothing, bool> # Whether it should be a landform
+  --road: oneof<nothing, bool> # Whether it should be a road
+  --structure: oneof<nothing, bool> # Whether it should be a structure
+  --shipyard: oneof<nothing, bool> # Whether it should be a shipyard
+  --buildingInterior: oneof<nothing, bool> # Whether it should be a building interior
+  --establishment: oneof<nothing, bool> # Whether it should be a establishment
+  --medicalEstablishment: oneof<nothing, bool> # Whether it should be a medical establishment
+  --ds9Establishment: oneof<nothing, bool> # Whether it should be a DS9 establishment
+  --school: oneof<nothing, bool> # Whether it should be a school
+  --restaurant: oneof<nothing, bool> # Whether it should be a restaurant
+  --residence: oneof<nothing, bool> # Whether it should be a residence
+  --mirror: oneof<nothing, bool> # Whether this location should be from mirror universe
+  --alternateReality: oneof<nothing, bool> # Whether this location should be from alternate reality
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, locations: table<uid: string, name: string, earthlyLocation: bool, qonosLocation: bool, fictionalLocation: bool, mythologicalLocation: bool, religiousLocation: bool, geographicalLocation: bool, bodyOfWater: bool, country: bool, subnationalEntity: bool, settlement: bool, usSettlement: bool, bajoranSettlement: bool, colony: bool, landform: bool, road: bool, structure: bool, shipyard: bool, buildingInterior: bool, establishment: bool, medicalEstablishment: bool, ds9Establishment: bool, school: bool, restaurant: bool, residence: bool, mirror: bool, alternateReality: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2333,16 +2332,16 @@ export def "rest-material-search v1SearchMaterials" [
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Material name
-  --chemicalCompound: string@bool-completer # Whether it should be a chemical compound
-  --biochemicalCompound: string@bool-completer # Whether it should be a biochemical compound
-  --drug: string@bool-completer # Whether it should be a drug
-  --poisonousSubstance: string@bool-completer # Whether it should be a poisonous substance
-  --explosive: string@bool-completer # Whether it should be an explosive
-  --gemstone: string@bool-completer # Whether it should be a gemstone
-  --alloyOrComposite: string@bool-completer # Whether it should be an alloy or a composite
-  --fuel: string@bool-completer # Whether it should be a fuel
-  --mineral: string@bool-completer # Whether it should be a mineral
-  --preciousMaterial: string@bool-completer # Whether it should be a precious material
+  --chemicalCompound: oneof<nothing, bool> # Whether it should be a chemical compound
+  --biochemicalCompound: oneof<nothing, bool> # Whether it should be a biochemical compound
+  --drug: oneof<nothing, bool> # Whether it should be a drug
+  --poisonousSubstance: oneof<nothing, bool> # Whether it should be a poisonous substance
+  --explosive: oneof<nothing, bool> # Whether it should be an explosive
+  --gemstone: oneof<nothing, bool> # Whether it should be a gemstone
+  --alloyOrComposite: oneof<nothing, bool> # Whether it should be an alloy or a composite
+  --fuel: oneof<nothing, bool> # Whether it should be a fuel
+  --mineral: oneof<nothing, bool> # Whether it should be a mineral
+  --preciousMaterial: oneof<nothing, bool> # Whether it should be a precious material
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, materials: table<uid: string, name: string, chemicalCompound: bool, biochemicalCompound: bool, drug: bool, poisonousSubstance: bool, explosive: bool, gemstone: bool, alloyOrComposite: bool, fuel: bool, mineral: bool, preciousMaterial: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2419,7 +2418,7 @@ export def "rest-medical-condition-search v1SearchMedicalConditions" [
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Medical condition name
-  --psychologicalCondition: string@bool-completer # Whether it should be a psychological condition
+  --psychologicalCondition: oneof<nothing, bool> # Whether it should be a psychological condition
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, medicalConditions: table<uid: string, name: string, psychologicalCondition: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2584,9 +2583,9 @@ export def "rest-occupation-search v1SearchOccupations" [
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Occupation name
-  --legalOccupation: string@bool-completer # Whether it should be a legal occupation
-  --medicalOccupation: string@bool-completer # Whether it should be a medical occupation
-  --scientificOccupation: string@bool-completer # Whether it should be a scientific occupation
+  --legalOccupation: oneof<nothing, bool> # Whether it should be a legal occupation
+  --medicalOccupation: oneof<nothing, bool> # Whether it should be a medical occupation
+  --scientificOccupation: oneof<nothing, bool> # Whether it should be a scientific occupation
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, occupations: table<uid: string, name: string, legalOccupation: bool, medicalOccupation: bool, scientificOccupation: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2663,17 +2662,17 @@ export def "rest-occupation-search v2SearchOccupations" [
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Occupation name
-  --artsOccupation: string@bool-completer # Whether it should be an arts occupation
-  --communicationOccupation: string@bool-completer # Whether it should be a communication occupation
-  --economicOccupation: string@bool-completer # Whether it should be an economic occupation
-  --educationOccupation: string@bool-completer # Whether it should be an education occupation
-  --entertainmentOccupation: string@bool-completer # Whether it should be an entertainment occupation
-  --illegalOccupation: string@bool-completer # Whether it should be an illegal occupation
-  --legalOccupation: string@bool-completer # Whether it should be a legal occupation
-  --medicalOccupation: string@bool-completer # Whether it should be a medical occupation
-  --scientificOccupation: string@bool-completer # Whether it should be a scientific occupation
-  --sportsOccupation: string@bool-completer # Whether it should be a sports occupation
-  --victualOccupation: string@bool-completer # Whether it should be a victual occupation
+  --artsOccupation: oneof<nothing, bool> # Whether it should be an arts occupation
+  --communicationOccupation: oneof<nothing, bool> # Whether it should be a communication occupation
+  --economicOccupation: oneof<nothing, bool> # Whether it should be an economic occupation
+  --educationOccupation: oneof<nothing, bool> # Whether it should be an education occupation
+  --entertainmentOccupation: oneof<nothing, bool> # Whether it should be an entertainment occupation
+  --illegalOccupation: oneof<nothing, bool> # Whether it should be an illegal occupation
+  --legalOccupation: oneof<nothing, bool> # Whether it should be a legal occupation
+  --medicalOccupation: oneof<nothing, bool> # Whether it should be a medical occupation
+  --scientificOccupation: oneof<nothing, bool> # Whether it should be a scientific occupation
+  --sportsOccupation: oneof<nothing, bool> # Whether it should be a sports occupation
+  --victualOccupation: oneof<nothing, bool> # Whether it should be a victual occupation
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, occupations: table<uid: string, name: string, artsOccupation: bool, communicationOccupation: bool, economicOccupation: bool, educationOccupation: bool, entertainmentOccupation: bool, illegalOccupation: bool, legalOccupation: bool, medicalOccupation: bool, scientificOccupation: bool, sportsOccupation: bool, victualOccupation: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2750,18 +2749,18 @@ export def "rest-organization-search v1SearchOrganizations" [
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Organization name
-  --government: string@bool-completer # Whether it should be a government
-  --intergovernmentalOrganization: string@bool-completer # Whether it should be an intergovernmental organization
-  --researchOrganization: string@bool-completer # Whether it should be a research organization
-  --sportOrganization: string@bool-completer # Whether it should be a sport organization
-  --medicalOrganization: string@bool-completer # Whether it should be a medical organization
-  --militaryOrganization: string@bool-completer # Whether it should be a military organization
-  --militaryUnit: string@bool-completer # Whether it should be a military unit
-  --governmentAgency: string@bool-completer # Whether it should be a government agency
-  --lawEnforcementAgency: string@bool-completer # Whether it should be a law enforcement agency
-  --prisonOrPenalColony: string@bool-completer # Whether it should be a prison or penal colony
-  --mirror: string@bool-completer # Whether this organization should be from mirror universe
-  --alternateReality: string@bool-completer # Whether this organization should be from alternate reality
+  --government: oneof<nothing, bool> # Whether it should be a government
+  --intergovernmentalOrganization: oneof<nothing, bool> # Whether it should be an intergovernmental organization
+  --researchOrganization: oneof<nothing, bool> # Whether it should be a research organization
+  --sportOrganization: oneof<nothing, bool> # Whether it should be a sport organization
+  --medicalOrganization: oneof<nothing, bool> # Whether it should be a medical organization
+  --militaryOrganization: oneof<nothing, bool> # Whether it should be a military organization
+  --militaryUnit: oneof<nothing, bool> # Whether it should be a military unit
+  --governmentAgency: oneof<nothing, bool> # Whether it should be a government agency
+  --lawEnforcementAgency: oneof<nothing, bool> # Whether it should be a law enforcement agency
+  --prisonOrPenalColony: oneof<nothing, bool> # Whether it should be a prison or penal colony
+  --mirror: oneof<nothing, bool> # Whether this organization should be from mirror universe
+  --alternateReality: oneof<nothing, bool> # Whether this organization should be from alternate reality
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, organizations: table<uid: string, name: string, government: bool, intergovernmentalOrganization: bool, researchOrganization: bool, sportOrganization: bool, medicalOrganization: bool, militaryOrganization: bool, militaryUnit: bool, governmentAgency: bool, lawEnforcementAgency: bool, prisonOrPenalColony: bool, mirror: bool, alternateReality: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2852,19 +2851,19 @@ export def "rest-performer-search v1SearchPerformers" [
   --dateOfDeathFrom: string # Minimal date the performer died (format: date)
   --dateOfDeathTo: string # Maximal date the performer died (format: date)
   --placeOfDeath: string # Place the performer died
-  --animalPerformer: string@bool-completer # Whether it should be an animal performer
-  --disPerformer: string@bool-completer # Whether it should be a performer that appeared in Star Trek: Discovery
-  --ds9Performer: string@bool-completer # Whether it should be a performer that appeared in Star Trek: Deep Space Nine
-  --entPerformer: string@bool-completer # Whether it should be a performer that appeared in Star Trek: Enterprise
-  --filmPerformer: string@bool-completer # Whether it should be a performer that appeared in a Star Trek movie
-  --standInPerformer: string@bool-completer # Whether it should be a stand-in performer
-  --stuntPerformer: string@bool-completer # Whether it should be a stunt performer
-  --tasPerformer: string@bool-completer # Whether it should be a performer that appeared in Star Trek: The Animated Series
-  --tngPerformer: string@bool-completer # Whether it should be a performer that appeared in Star Trek: The Next Generation
-  --tosPerformer: string@bool-completer # Whether it should be a performer that appeared in Star Trek: The Original Series
-  --videoGamePerformer: string@bool-completer # Whether it should be a video game performer
-  --voicePerformer: string@bool-completer # Whether it should be a voice performer
-  --voyPerformer: string@bool-completer # Whether it should be a performer that appeared in Star Trek: Voyager
+  --animalPerformer: oneof<nothing, bool> # Whether it should be an animal performer
+  --disPerformer: oneof<nothing, bool> # Whether it should be a performer that appeared in Star Trek: Discovery
+  --ds9Performer: oneof<nothing, bool> # Whether it should be a performer that appeared in Star Trek: Deep Space Nine
+  --entPerformer: oneof<nothing, bool> # Whether it should be a performer that appeared in Star Trek: Enterprise
+  --filmPerformer: oneof<nothing, bool> # Whether it should be a performer that appeared in a Star Trek movie
+  --standInPerformer: oneof<nothing, bool> # Whether it should be a stand-in performer
+  --stuntPerformer: oneof<nothing, bool> # Whether it should be a stunt performer
+  --tasPerformer: oneof<nothing, bool> # Whether it should be a performer that appeared in Star Trek: The Animated Series
+  --tngPerformer: oneof<nothing, bool> # Whether it should be a performer that appeared in Star Trek: The Next Generation
+  --tosPerformer: oneof<nothing, bool> # Whether it should be a performer that appeared in Star Trek: The Original Series
+  --videoGamePerformer: oneof<nothing, bool> # Whether it should be a video game performer
+  --voicePerformer: oneof<nothing, bool> # Whether it should be a voice performer
+  --voyPerformer: oneof<nothing, bool> # Whether it should be a performer that appeared in Star Trek: Voyager
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, performers: table<uid: string, name: string, birthName: string, gender: string, dateOfBirth: string, placeOfBirth: string, dateOfDeath: string, placeOfDeath: string, animalPerformer: bool, disPerformer: bool, ds9Performer: bool, entPerformer: bool, filmPerformer: bool, standInPerformer: bool, stuntPerformer: bool, tasPerformer: bool, tngPerformer: bool, tosPerformer: bool, videoGamePerformer: bool, voicePerformer: bool, voyPerformer: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2949,27 +2948,27 @@ export def "rest-performer-search v2SearchPerformers" [
   --dateOfDeathFrom: string # Minimal date the performer died (format: date)
   --dateOfDeathTo: string # Maximal date the performer died (format: date)
   --placeOfDeath: string # Place the performer died
-  --animalPerformer: string@bool-completer # Whether it should be an animal performer
-  --audiobookPerformer: string@bool-completer # Whether it should be an audiobook performer
-  --cutPerformer: string@bool-completer # Whether it should be a cut performer
-  --disPerformer: string@bool-completer # Whether it should be a performer that appeared in Star Trek: Discovery
-  --ds9Performer: string@bool-completer # Whether it should be a performer that appeared in Star Trek: Deep Space Nine
-  --entPerformer: string@bool-completer # Whether it should be a performer that appeared in Star Trek: Enterprise
-  --filmPerformer: string@bool-completer # Whether it should be a performer that appeared in a Star Trek movie
-  --ldPerformer: string@bool-completer # Whether it should be a performer that appeared in Star Trek: Lower Decks
-  --picPerformer: string@bool-completer # Whether it should be a performer that appeared in Star Trek: Picard
-  --proPerformer: string@bool-completer # Whether it should be a performer that appeared in Star Trek: Prodigy
-  --puppeteer: string@bool-completer # Whether it should be a puppeteer
-  --snwPerformer: string@bool-completer # Whether it should be a performer that appeared in Star Trek: Strange New Worlds
-  --standInPerformer: string@bool-completer # Whether it should be a stand-in performer
-  --stPerformer: string@bool-completer # Whether it should be a performer that appeared in Star Trek: Short Treks
-  --stuntPerformer: string@bool-completer # Whether it should be a stunt performer
-  --tasPerformer: string@bool-completer # Whether it should be a performer that appeared in Star Trek: The Animated Series
-  --tngPerformer: string@bool-completer # Whether it should be a performer that appeared in Star Trek: The Next Generation
-  --tosPerformer: string@bool-completer # Whether it should be a performer that appeared in Star Trek: The Original Series
-  --videoGamePerformer: string@bool-completer # Whether it should be a video game performer
-  --voicePerformer: string@bool-completer # Whether it should be a voice performer
-  --voyPerformer: string@bool-completer # Whether it should be a performer that appeared in Star Trek: Voyager
+  --animalPerformer: oneof<nothing, bool> # Whether it should be an animal performer
+  --audiobookPerformer: oneof<nothing, bool> # Whether it should be an audiobook performer
+  --cutPerformer: oneof<nothing, bool> # Whether it should be a cut performer
+  --disPerformer: oneof<nothing, bool> # Whether it should be a performer that appeared in Star Trek: Discovery
+  --ds9Performer: oneof<nothing, bool> # Whether it should be a performer that appeared in Star Trek: Deep Space Nine
+  --entPerformer: oneof<nothing, bool> # Whether it should be a performer that appeared in Star Trek: Enterprise
+  --filmPerformer: oneof<nothing, bool> # Whether it should be a performer that appeared in a Star Trek movie
+  --ldPerformer: oneof<nothing, bool> # Whether it should be a performer that appeared in Star Trek: Lower Decks
+  --picPerformer: oneof<nothing, bool> # Whether it should be a performer that appeared in Star Trek: Picard
+  --proPerformer: oneof<nothing, bool> # Whether it should be a performer that appeared in Star Trek: Prodigy
+  --puppeteer: oneof<nothing, bool> # Whether it should be a puppeteer
+  --snwPerformer: oneof<nothing, bool> # Whether it should be a performer that appeared in Star Trek: Strange New Worlds
+  --standInPerformer: oneof<nothing, bool> # Whether it should be a stand-in performer
+  --stPerformer: oneof<nothing, bool> # Whether it should be a performer that appeared in Star Trek: Short Treks
+  --stuntPerformer: oneof<nothing, bool> # Whether it should be a stunt performer
+  --tasPerformer: oneof<nothing, bool> # Whether it should be a performer that appeared in Star Trek: The Animated Series
+  --tngPerformer: oneof<nothing, bool> # Whether it should be a performer that appeared in Star Trek: The Next Generation
+  --tosPerformer: oneof<nothing, bool> # Whether it should be a performer that appeared in Star Trek: The Original Series
+  --videoGamePerformer: oneof<nothing, bool> # Whether it should be a video game performer
+  --voicePerformer: oneof<nothing, bool> # Whether it should be a voice performer
+  --voyPerformer: oneof<nothing, bool> # Whether it should be a performer that appeared in Star Trek: Voyager
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, performers: table<uid: string, name: string, birthName: string, gender: string, dateOfBirth: string, placeOfBirth: string, dateOfDeath: string, placeOfDeath: string, animalPerformer: bool, audiobookPerformer: bool, cutPerformer: bool, disPerformer: bool, ds9Performer: bool, entPerformer: bool, filmPerformer: bool, ldPerformer: bool, picPerformer: bool, proPerformer: bool, puppeteer: bool, snwPerformer: bool, standInPerformer: bool, stPerformer: bool, stuntPerformer: bool, tasPerformer: bool, tngPerformer: bool, tosPerformer: bool, videoGamePerformer: bool, voicePerformer: bool, voyPerformer: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3457,8 +3456,8 @@ export def "rest-spacecraft-class-search v1SearchSpacecraftClasses" [
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Spacecraft class name
-  --warpCapableSpecies: string@bool-completer # Whether it should be a warp-capable spacecraft class
-  --alternateReality: string@bool-completer # Whether this spacecraft class should be from alternate reality
+  --warpCapableSpecies: oneof<nothing, bool> # Whether it should be a warp-capable spacecraft class
+  --alternateReality: oneof<nothing, bool> # Whether this spacecraft class should be from alternate reality
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, spacecraftClasses: table<uid: string, name: string, numberOfDecks: int, warpCapable: bool, alternateReality: bool, activeFrom: string, activeTo: string, species: record, owner: record, operator: record, affiliation: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3537,9 +3536,9 @@ export def "rest-spacecraft-class-search v2SearchSpacecraftClasses" [
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Spacecraft class name
-  --warpCapableSpecies: string@bool-completer # Whether it should be a warp-capable spacecraft class
-  --mirror: string@bool-completer # Whether this spacecraft class should be from mirror universe
-  --alternateReality: string@bool-completer # Whether this spacecraft class should be from alternate reality
+  --warpCapableSpecies: oneof<nothing, bool> # Whether it should be a warp-capable spacecraft class
+  --mirror: oneof<nothing, bool> # Whether this spacecraft class should be from mirror universe
+  --alternateReality: oneof<nothing, bool> # Whether this spacecraft class should be from alternate reality
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, spacecraftClasses: table<uid: string, name: string, numberOfDecks: int, crew: string, warpCapable: bool, mirror: bool, alternateReality: bool, activeFrom: string, activeTo: string, species: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3645,18 +3644,18 @@ export def "rest-species-search v1SearchSpecies" [
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Species name
-  --extinctSpecies: string@bool-completer # Whether it should be an extinct species
-  --warpCapableSpecies: string@bool-completer # Whether it should be a warp-capable species
-  --extraGalacticSpecies: string@bool-completer # Whether it should be an extra-galactic species
-  --humanoidSpecies: string@bool-completer # Whether it should be a humanoid species
-  --reptilianSpecies: string@bool-completer # Whether it should be a reptilian species
-  --nonCorporealSpecies: string@bool-completer # Whether it should be a non-corporeal species
-  --shapeshiftingSpecies: string@bool-completer # Whether it should be a shapeshifting species
-  --spaceborneSpecies: string@bool-completer # Whether it should be a spaceborne species
-  --telepathicSpecies: string@bool-completer # Whether it should be a telepathic species
-  --transDimensionalSpecies: string@bool-completer # Whether it should be a trans-dimensional species
-  --unnamedSpecies: string@bool-completer # Whether it should be a unnamed species
-  --alternateReality: string@bool-completer # Whether this species should be from alternate reality
+  --extinctSpecies: oneof<nothing, bool> # Whether it should be an extinct species
+  --warpCapableSpecies: oneof<nothing, bool> # Whether it should be a warp-capable species
+  --extraGalacticSpecies: oneof<nothing, bool> # Whether it should be an extra-galactic species
+  --humanoidSpecies: oneof<nothing, bool> # Whether it should be a humanoid species
+  --reptilianSpecies: oneof<nothing, bool> # Whether it should be a reptilian species
+  --nonCorporealSpecies: oneof<nothing, bool> # Whether it should be a non-corporeal species
+  --shapeshiftingSpecies: oneof<nothing, bool> # Whether it should be a shapeshifting species
+  --spaceborneSpecies: oneof<nothing, bool> # Whether it should be a spaceborne species
+  --telepathicSpecies: oneof<nothing, bool> # Whether it should be a telepathic species
+  --transDimensionalSpecies: oneof<nothing, bool> # Whether it should be a trans-dimensional species
+  --unnamedSpecies: oneof<nothing, bool> # Whether it should be a unnamed species
+  --alternateReality: oneof<nothing, bool> # Whether this species should be from alternate reality
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, species: table<uid: string, name: string, homeworld: record, quadrant: record, extinctSpecies: bool, warpCapableSpecies: bool, extraGalacticSpecies: bool, humanoidSpecies: bool, reptilianSpecies: bool, nonCorporealSpecies: bool, shapeshiftingSpecies: bool, spaceborneSpecies: bool, telepathicSpecies: bool, transDimensionalSpecies: bool, unnamedSpecies: bool, alternateReality: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3733,19 +3732,19 @@ export def "rest-species-search v2SearchSpecies" [
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Species name
-  --extinctSpecies: string@bool-completer # Whether it should be an extinct species
-  --warpCapableSpecies: string@bool-completer # Whether it should be a warp-capable species
-  --extraGalacticSpecies: string@bool-completer # Whether it should be an extra-galactic species
-  --humanoidSpecies: string@bool-completer # Whether it should be a humanoid species
-  --reptilianSpecies: string@bool-completer # Whether it should be a reptilian species
-  --avianSpecies: string@bool-completer # Whether it should be an avian species
-  --nonCorporealSpecies: string@bool-completer # Whether it should be a non-corporeal species
-  --shapeshiftingSpecies: string@bool-completer # Whether it should be a shapeshifting species
-  --spaceborneSpecies: string@bool-completer # Whether it should be a spaceborne species
-  --telepathicSpecies: string@bool-completer # Whether it should be a telepathic species
-  --transDimensionalSpecies: string@bool-completer # Whether it should be a trans-dimensional species
-  --unnamedSpecies: string@bool-completer # Whether it should be a unnamed species
-  --alternateReality: string@bool-completer # Whether this species should be from alternate reality
+  --extinctSpecies: oneof<nothing, bool> # Whether it should be an extinct species
+  --warpCapableSpecies: oneof<nothing, bool> # Whether it should be a warp-capable species
+  --extraGalacticSpecies: oneof<nothing, bool> # Whether it should be an extra-galactic species
+  --humanoidSpecies: oneof<nothing, bool> # Whether it should be a humanoid species
+  --reptilianSpecies: oneof<nothing, bool> # Whether it should be a reptilian species
+  --avianSpecies: oneof<nothing, bool> # Whether it should be an avian species
+  --nonCorporealSpecies: oneof<nothing, bool> # Whether it should be a non-corporeal species
+  --shapeshiftingSpecies: oneof<nothing, bool> # Whether it should be a shapeshifting species
+  --spaceborneSpecies: oneof<nothing, bool> # Whether it should be a spaceborne species
+  --telepathicSpecies: oneof<nothing, bool> # Whether it should be a telepathic species
+  --transDimensionalSpecies: oneof<nothing, bool> # Whether it should be a trans-dimensional species
+  --unnamedSpecies: oneof<nothing, bool> # Whether it should be a unnamed species
+  --alternateReality: oneof<nothing, bool> # Whether this species should be from alternate reality
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, species: table<uid: string, name: string, homeworld: record, quadrant: record, extinctSpecies: bool, warpCapableSpecies: bool, extraGalacticSpecies: bool, humanoidSpecies: bool, reptilianSpecies: bool, avianSpecies: bool, nonCorporealSpecies: bool, shapeshiftingSpecies: bool, spaceborneSpecies: bool, telepathicSpecies: bool, transDimensionalSpecies: bool, unnamedSpecies: bool, alternateReality: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3836,61 +3835,61 @@ export def "rest-staff-search v1SearchStaff" [
   --dateOfDeathFrom: string # Minimal date the staff died (format: date)
   --dateOfDeathTo: string # Maximal date the staff died (format: date)
   --placeOfDeath: string # Place the staff died
-  --artDepartment: string@bool-completer # Whether this person should be from art department
-  --artDirector: string@bool-completer # Whether this person should be an art director
-  --productionDesigner: string@bool-completer # Whether this person should be a production designer
-  --cameraAndElectricalDepartment: string@bool-completer # Whether this person should be from camera and electrical department
-  --cinematographer: string@bool-completer # Whether this person should be a cinematographer
-  --castingDepartment: string@bool-completer # Whether this person should be from casting department
-  --costumeDepartment: string@bool-completer # Whether this person should be from costume department
-  --costumeDesigner: string@bool-completer # Whether this person should be a custume designer
-  --director: string@bool-completer # Whether this person should be a director
-  --assistantOrSecondUnitDirector: string@bool-completer # Whether this person should be an assistant or second unit director director
-  --exhibitAndAttractionStaff: string@bool-completer # Whether this person should be an exhibit and attraction staff
-  --filmEditor: string@bool-completer # Whether this person should be a film editor
-  --linguist: string@bool-completer # Whether this person should be a linguist
-  --locationStaff: string@bool-completer # Whether this person should be a location staff
-  --makeupStaff: string@bool-completer # Whether this person should be a make-up staff
-  --musicDepartment: string@bool-completer # Whether this person should be from music department
-  --composer: string@bool-completer # Whether this person should be a composer
-  --personalAssistant: string@bool-completer # Whether this person should be a personal assistant
-  --producer: string@bool-completer # Whether this person should be a producer
-  --productionAssociate: string@bool-completer # Whether this person should be a production associate
-  --productionStaff: string@bool-completer # Whether this person should be a production staff
-  --publicationStaff: string@bool-completer # Whether this person should be a publication staff
-  --scienceConsultant: string@bool-completer # Whether this person should be a science consultant
-  --soundDepartment: string@bool-completer # Whether this person should be from sound department
-  --specialAndVisualEffectsStaff: string@bool-completer # Whether this person should be a special and visual effects staff
-  --author: string@bool-completer # Whether this person should be an author
-  --audioAuthor: string@bool-completer # Whether this person should be an audio author
-  --calendarArtist: string@bool-completer # Whether this person should be a calendar artist
-  --comicArtist: string@bool-completer # Whether this person should be a comic artist
-  --comicAuthor: string@bool-completer # Whether this person should be a comic author
-  --comicColorArtist: string@bool-completer # Whether this person should be a comic color artist
-  --comicInteriorArtist: string@bool-completer # Whether this person should be a comic interior artist
-  --comicInkArtist: string@bool-completer # Whether this person should be a comic ink artist
-  --comicPencilArtist: string@bool-completer # Whether this person should be a comic pencil artist
-  --comicLetterArtist: string@bool-completer # Whether this person should be a comic letter artist
-  --comicStripArtist: string@bool-completer # Whether this person should be a comic strip artist
-  --gameArtist: string@bool-completer # Whether this person should be a game artist
-  --gameAuthor: string@bool-completer # Whether this person should be a game author
-  --novelArtist: string@bool-completer # Whether this person should be a novel artist
-  --novelAuthor: string@bool-completer # Whether this person should be a novel author
-  --referenceArtist: string@bool-completer # Whether this person should be a reference artist
-  --referenceAuthor: string@bool-completer # Whether this person should be a reference author
-  --publicationArtist: string@bool-completer # Whether this person should be a publication artist
-  --publicationDesigner: string@bool-completer # Whether this person should be a publication designer
-  --publicationEditor: string@bool-completer # Whether this person should be a publication editor
-  --publicityArtist: string@bool-completer # Whether this person should be a publicity artist
-  --cbsDigitalStaff: string@bool-completer # Whether this person should be a part of CBS digital staff
-  --ilmProductionStaff: string@bool-completer # Whether this person should be a part of ILM production staff
-  --specialFeaturesStaff: string@bool-completer # Whether this person should be a special features artist
-  --storyEditor: string@bool-completer # Whether this person should be a story editor
-  --studioExecutive: string@bool-completer # Whether this person should be a studio executive
-  --stuntDepartment: string@bool-completer # Whether this person should be from stunt department
-  --transportationDepartment: string@bool-completer # Whether this person should be from transportation department
-  --videoGameProductionStaff: string@bool-completer # Whether this person is video game production staff
-  --writer: string@bool-completer # Whether this person should be a writer
+  --artDepartment: oneof<nothing, bool> # Whether this person should be from art department
+  --artDirector: oneof<nothing, bool> # Whether this person should be an art director
+  --productionDesigner: oneof<nothing, bool> # Whether this person should be a production designer
+  --cameraAndElectricalDepartment: oneof<nothing, bool> # Whether this person should be from camera and electrical department
+  --cinematographer: oneof<nothing, bool> # Whether this person should be a cinematographer
+  --castingDepartment: oneof<nothing, bool> # Whether this person should be from casting department
+  --costumeDepartment: oneof<nothing, bool> # Whether this person should be from costume department
+  --costumeDesigner: oneof<nothing, bool> # Whether this person should be a custume designer
+  --director: oneof<nothing, bool> # Whether this person should be a director
+  --assistantOrSecondUnitDirector: oneof<nothing, bool> # Whether this person should be an assistant or second unit director director
+  --exhibitAndAttractionStaff: oneof<nothing, bool> # Whether this person should be an exhibit and attraction staff
+  --filmEditor: oneof<nothing, bool> # Whether this person should be a film editor
+  --linguist: oneof<nothing, bool> # Whether this person should be a linguist
+  --locationStaff: oneof<nothing, bool> # Whether this person should be a location staff
+  --makeupStaff: oneof<nothing, bool> # Whether this person should be a make-up staff
+  --musicDepartment: oneof<nothing, bool> # Whether this person should be from music department
+  --composer: oneof<nothing, bool> # Whether this person should be a composer
+  --personalAssistant: oneof<nothing, bool> # Whether this person should be a personal assistant
+  --producer: oneof<nothing, bool> # Whether this person should be a producer
+  --productionAssociate: oneof<nothing, bool> # Whether this person should be a production associate
+  --productionStaff: oneof<nothing, bool> # Whether this person should be a production staff
+  --publicationStaff: oneof<nothing, bool> # Whether this person should be a publication staff
+  --scienceConsultant: oneof<nothing, bool> # Whether this person should be a science consultant
+  --soundDepartment: oneof<nothing, bool> # Whether this person should be from sound department
+  --specialAndVisualEffectsStaff: oneof<nothing, bool> # Whether this person should be a special and visual effects staff
+  --author: oneof<nothing, bool> # Whether this person should be an author
+  --audioAuthor: oneof<nothing, bool> # Whether this person should be an audio author
+  --calendarArtist: oneof<nothing, bool> # Whether this person should be a calendar artist
+  --comicArtist: oneof<nothing, bool> # Whether this person should be a comic artist
+  --comicAuthor: oneof<nothing, bool> # Whether this person should be a comic author
+  --comicColorArtist: oneof<nothing, bool> # Whether this person should be a comic color artist
+  --comicInteriorArtist: oneof<nothing, bool> # Whether this person should be a comic interior artist
+  --comicInkArtist: oneof<nothing, bool> # Whether this person should be a comic ink artist
+  --comicPencilArtist: oneof<nothing, bool> # Whether this person should be a comic pencil artist
+  --comicLetterArtist: oneof<nothing, bool> # Whether this person should be a comic letter artist
+  --comicStripArtist: oneof<nothing, bool> # Whether this person should be a comic strip artist
+  --gameArtist: oneof<nothing, bool> # Whether this person should be a game artist
+  --gameAuthor: oneof<nothing, bool> # Whether this person should be a game author
+  --novelArtist: oneof<nothing, bool> # Whether this person should be a novel artist
+  --novelAuthor: oneof<nothing, bool> # Whether this person should be a novel author
+  --referenceArtist: oneof<nothing, bool> # Whether this person should be a reference artist
+  --referenceAuthor: oneof<nothing, bool> # Whether this person should be a reference author
+  --publicationArtist: oneof<nothing, bool> # Whether this person should be a publication artist
+  --publicationDesigner: oneof<nothing, bool> # Whether this person should be a publication designer
+  --publicationEditor: oneof<nothing, bool> # Whether this person should be a publication editor
+  --publicityArtist: oneof<nothing, bool> # Whether this person should be a publicity artist
+  --cbsDigitalStaff: oneof<nothing, bool> # Whether this person should be a part of CBS digital staff
+  --ilmProductionStaff: oneof<nothing, bool> # Whether this person should be a part of ILM production staff
+  --specialFeaturesStaff: oneof<nothing, bool> # Whether this person should be a special features artist
+  --storyEditor: oneof<nothing, bool> # Whether this person should be a story editor
+  --studioExecutive: oneof<nothing, bool> # Whether this person should be a studio executive
+  --stuntDepartment: oneof<nothing, bool> # Whether this person should be from stunt department
+  --transportationDepartment: oneof<nothing, bool> # Whether this person should be from transportation department
+  --videoGameProductionStaff: oneof<nothing, bool> # Whether this person is video game production staff
+  --writer: oneof<nothing, bool> # Whether this person should be a writer
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, staff: table<uid: string, name: string, birthName: string, gender: string, dateOfBirth: string, placeOfBirth: string, dateOfDeath: string, placeOfDeath: string, artDepartment: bool, artDirector: bool, productionDesigner: bool, cameraAndElectricalDepartment: bool, cinematographer: bool, castingDepartment: bool, costumeDepartment: bool, costumeDesigner: bool, director: bool, assistantOrSecondUnitDirector: bool, exhibitAndAttractionStaff: bool, filmEditor: bool, linguist: bool, locationStaff: bool, makeupStaff: bool, musicDepartment: bool, composer: bool, personalAssistant: bool, producer: bool, productionAssociate: bool, productionStaff: bool, publicationStaff: bool, scienceConsultant: bool, soundDepartment: bool, specialAndVisualEffectsStaff: bool, author: bool, audioAuthor: bool, calendarArtist: bool, comicArtist: bool, comicAuthor: bool, comicColorArtist: bool, comicInteriorArtist: bool, comicInkArtist: bool, comicPencilArtist: bool, comicLetterArtist: bool, comicStripArtist: bool, gameArtist: bool, gameAuthor: bool, novelArtist: bool, novelAuthor: bool, referenceArtist: bool, referenceAuthor: bool, publicationArtist: bool, publicationDesigner: bool, publicationEditor: bool, publicityArtist: bool, cbsDigitalStaff: bool, ilmProductionStaff: bool, specialFeaturesStaff: bool, storyEditor: bool, studioExecutive: bool, stuntDepartment: bool, transportationDepartment: bool, videoGameProductionStaff: bool, writer: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3975,64 +3974,64 @@ export def "rest-staff-search v2SearchStaff" [
   --dateOfDeathFrom: string # Minimal date the staff died (format: date)
   --dateOfDeathTo: string # Maximal date the staff died (format: date)
   --placeOfDeath: string # Place the staff died
-  --artDepartment: string@bool-completer # Whether this person should be from art department
-  --artDirector: string@bool-completer # Whether this person should be an art director
-  --productionDesigner: string@bool-completer # Whether this person should be a production designer
-  --cameraAndElectricalDepartment: string@bool-completer # Whether this person should be from camera and electrical department
-  --cinematographer: string@bool-completer # Whether this person should be a cinematographer
-  --castingDepartment: string@bool-completer # Whether this person should be from casting department
-  --costumeDepartment: string@bool-completer # Whether this person should be from costume department
-  --costumeDesigner: string@bool-completer # Whether this person should be a custume designer
-  --director: string@bool-completer # Whether this person should be a director
-  --assistantOrSecondUnitDirector: string@bool-completer # Whether this person should be an assistant or second unit director director
-  --exhibitAndAttractionStaff: string@bool-completer # Whether this person should be an exhibit and attraction staff
-  --filmEditor: string@bool-completer # Whether this person should be a film editor
-  --filmationProductionStaff: string@bool-completer # Whether this person should be a part of Filmation production staff
-  --linguist: string@bool-completer # Whether this person should be a linguist
-  --locationStaff: string@bool-completer # Whether this person should be a location staff
-  --makeupStaff: string@bool-completer # Whether this person should be a make-up staff
-  --merchandiseStaff: string@bool-completer # Whether this person should be a merchandise staff
-  --musicDepartment: string@bool-completer # Whether this person should be from music department
-  --composer: string@bool-completer # Whether this person should be a composer
-  --personalAssistant: string@bool-completer # Whether this person should be a personal assistant
-  --producer: string@bool-completer # Whether this person should be a producer
-  --productionAssociate: string@bool-completer # Whether this person should be a production associate
-  --productionStaff: string@bool-completer # Whether this person should be a production staff
-  --publicationStaff: string@bool-completer # Whether this person should be a publication staff
-  --scienceConsultant: string@bool-completer # Whether this person should be a science consultant
-  --soundDepartment: string@bool-completer # Whether this person should be from sound department
-  --specialAndVisualEffectsStaff: string@bool-completer # Whether this person should be a special and visual effects staff
-  --author: string@bool-completer # Whether this person should be an author
-  --audioAuthor: string@bool-completer # Whether this person should be an audio author
-  --calendarArtist: string@bool-completer # Whether this person should be a calendar artist
-  --comicArtist: string@bool-completer # Whether this person should be a comic artist
-  --comicAuthor: string@bool-completer # Whether this person should be a comic author
-  --comicColorArtist: string@bool-completer # Whether this person should be a comic color artist
-  --comicCoverArtist: string@bool-completer # Whether this person should be a comic cover artist
-  --comicInteriorArtist: string@bool-completer # Whether this person should be a comic interior artist
-  --comicInkArtist: string@bool-completer # Whether this person should be a comic ink artist
-  --comicPencilArtist: string@bool-completer # Whether this person should be a comic pencil artist
-  --comicLetterArtist: string@bool-completer # Whether this person should be a comic letter artist
-  --comicStripArtist: string@bool-completer # Whether this person should be a comic strip artist
-  --gameArtist: string@bool-completer # Whether this person should be a game artist
-  --gameAuthor: string@bool-completer # Whether this person should be a game author
-  --novelArtist: string@bool-completer # Whether this person should be a novel artist
-  --novelAuthor: string@bool-completer # Whether this person should be a novel author
-  --referenceArtist: string@bool-completer # Whether this person should be a reference artist
-  --referenceAuthor: string@bool-completer # Whether this person should be a reference author
-  --publicationArtist: string@bool-completer # Whether this person should be a publication artist
-  --publicationDesigner: string@bool-completer # Whether this person should be a publication designer
-  --publicationEditor: string@bool-completer # Whether this person should be a publication editor
-  --publicityArtist: string@bool-completer # Whether this person should be a publicity artist
-  --cbsDigitalStaff: string@bool-completer # Whether this person should be a part of CBS digital staff
-  --ilmProductionStaff: string@bool-completer # Whether this person should be a part of ILM production staff
-  --specialFeaturesStaff: string@bool-completer # Whether this person should be a special features artist
-  --storyEditor: string@bool-completer # Whether this person should be a story editor
-  --studioExecutive: string@bool-completer # Whether this person should be a studio executive
-  --stuntDepartment: string@bool-completer # Whether this person should be from stunt department
-  --transportationDepartment: string@bool-completer # Whether this person should be from transportation department
-  --videoGameProductionStaff: string@bool-completer # Whether this person is video game production staff
-  --writer: string@bool-completer # Whether this person should be a writer
+  --artDepartment: oneof<nothing, bool> # Whether this person should be from art department
+  --artDirector: oneof<nothing, bool> # Whether this person should be an art director
+  --productionDesigner: oneof<nothing, bool> # Whether this person should be a production designer
+  --cameraAndElectricalDepartment: oneof<nothing, bool> # Whether this person should be from camera and electrical department
+  --cinematographer: oneof<nothing, bool> # Whether this person should be a cinematographer
+  --castingDepartment: oneof<nothing, bool> # Whether this person should be from casting department
+  --costumeDepartment: oneof<nothing, bool> # Whether this person should be from costume department
+  --costumeDesigner: oneof<nothing, bool> # Whether this person should be a custume designer
+  --director: oneof<nothing, bool> # Whether this person should be a director
+  --assistantOrSecondUnitDirector: oneof<nothing, bool> # Whether this person should be an assistant or second unit director director
+  --exhibitAndAttractionStaff: oneof<nothing, bool> # Whether this person should be an exhibit and attraction staff
+  --filmEditor: oneof<nothing, bool> # Whether this person should be a film editor
+  --filmationProductionStaff: oneof<nothing, bool> # Whether this person should be a part of Filmation production staff
+  --linguist: oneof<nothing, bool> # Whether this person should be a linguist
+  --locationStaff: oneof<nothing, bool> # Whether this person should be a location staff
+  --makeupStaff: oneof<nothing, bool> # Whether this person should be a make-up staff
+  --merchandiseStaff: oneof<nothing, bool> # Whether this person should be a merchandise staff
+  --musicDepartment: oneof<nothing, bool> # Whether this person should be from music department
+  --composer: oneof<nothing, bool> # Whether this person should be a composer
+  --personalAssistant: oneof<nothing, bool> # Whether this person should be a personal assistant
+  --producer: oneof<nothing, bool> # Whether this person should be a producer
+  --productionAssociate: oneof<nothing, bool> # Whether this person should be a production associate
+  --productionStaff: oneof<nothing, bool> # Whether this person should be a production staff
+  --publicationStaff: oneof<nothing, bool> # Whether this person should be a publication staff
+  --scienceConsultant: oneof<nothing, bool> # Whether this person should be a science consultant
+  --soundDepartment: oneof<nothing, bool> # Whether this person should be from sound department
+  --specialAndVisualEffectsStaff: oneof<nothing, bool> # Whether this person should be a special and visual effects staff
+  --author: oneof<nothing, bool> # Whether this person should be an author
+  --audioAuthor: oneof<nothing, bool> # Whether this person should be an audio author
+  --calendarArtist: oneof<nothing, bool> # Whether this person should be a calendar artist
+  --comicArtist: oneof<nothing, bool> # Whether this person should be a comic artist
+  --comicAuthor: oneof<nothing, bool> # Whether this person should be a comic author
+  --comicColorArtist: oneof<nothing, bool> # Whether this person should be a comic color artist
+  --comicCoverArtist: oneof<nothing, bool> # Whether this person should be a comic cover artist
+  --comicInteriorArtist: oneof<nothing, bool> # Whether this person should be a comic interior artist
+  --comicInkArtist: oneof<nothing, bool> # Whether this person should be a comic ink artist
+  --comicPencilArtist: oneof<nothing, bool> # Whether this person should be a comic pencil artist
+  --comicLetterArtist: oneof<nothing, bool> # Whether this person should be a comic letter artist
+  --comicStripArtist: oneof<nothing, bool> # Whether this person should be a comic strip artist
+  --gameArtist: oneof<nothing, bool> # Whether this person should be a game artist
+  --gameAuthor: oneof<nothing, bool> # Whether this person should be a game author
+  --novelArtist: oneof<nothing, bool> # Whether this person should be a novel artist
+  --novelAuthor: oneof<nothing, bool> # Whether this person should be a novel author
+  --referenceArtist: oneof<nothing, bool> # Whether this person should be a reference artist
+  --referenceAuthor: oneof<nothing, bool> # Whether this person should be a reference author
+  --publicationArtist: oneof<nothing, bool> # Whether this person should be a publication artist
+  --publicationDesigner: oneof<nothing, bool> # Whether this person should be a publication designer
+  --publicationEditor: oneof<nothing, bool> # Whether this person should be a publication editor
+  --publicityArtist: oneof<nothing, bool> # Whether this person should be a publicity artist
+  --cbsDigitalStaff: oneof<nothing, bool> # Whether this person should be a part of CBS digital staff
+  --ilmProductionStaff: oneof<nothing, bool> # Whether this person should be a part of ILM production staff
+  --specialFeaturesStaff: oneof<nothing, bool> # Whether this person should be a special features artist
+  --storyEditor: oneof<nothing, bool> # Whether this person should be a story editor
+  --studioExecutive: oneof<nothing, bool> # Whether this person should be a studio executive
+  --stuntDepartment: oneof<nothing, bool> # Whether this person should be from stunt department
+  --transportationDepartment: oneof<nothing, bool> # Whether this person should be from transportation department
+  --videoGameProductionStaff: oneof<nothing, bool> # Whether this person is video game production staff
+  --writer: oneof<nothing, bool> # Whether this person should be a writer
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, staff: table<uid: string, name: string, birthName: string, gender: string, dateOfBirth: string, placeOfBirth: string, dateOfDeath: string, placeOfDeath: string, artDepartment: bool, artDirector: bool, productionDesigner: bool, cameraAndElectricalDepartment: bool, cinematographer: bool, castingDepartment: bool, costumeDepartment: bool, costumeDesigner: bool, director: bool, assistantOrSecondUnitDirector: bool, exhibitAndAttractionStaff: bool, filmEditor: bool, filmationProductionStaff: bool, linguist: bool, locationStaff: bool, makeupStaff: bool, merchandiseStaff: bool, musicDepartment: bool, composer: bool, personalAssistant: bool, producer: bool, productionAssociate: bool, productionStaff: bool, publicationStaff: bool, scienceConsultant: bool, soundDepartment: bool, specialAndVisualEffectsStaff: bool, author: bool, audioAuthor: bool, calendarArtist: bool, comicArtist: bool, comicAuthor: bool, comicColorArtist: bool, comicCoverArtist: bool, comicInteriorArtist: bool, comicInkArtist: bool, comicPencilArtist: bool, comicLetterArtist: bool, comicStripArtist: bool, gameArtist: bool, gameAuthor: bool, novelArtist: bool, novelAuthor: bool, referenceArtist: bool, referenceAuthor: bool, publicationArtist: bool, publicationDesigner: bool, publicationEditor: bool, publicityArtist: bool, cbsDigitalStaff: bool, ilmProductionStaff: bool, specialFeaturesStaff: bool, storyEditor: bool, studioExecutive: bool, stuntDepartment: bool, transportationDepartment: bool, videoGameProductionStaff: bool, writer: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4115,26 +4114,26 @@ export def "rest-technology-search v1SearchTechnology" [
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Technology name
-  --borgTechnology: string@bool-completer # Whether it should be a Borg technology
-  --borgComponent: string@bool-completer # Whether it should be a Borg component
-  --communicationsTechnology: string@bool-completer # Whether it should be a communications technology
-  --computerTechnology: string@bool-completer # Whether it should be a computer technology
-  --computerProgramming: string@bool-completer # Whether it should be a technology related to computer programming
-  --subroutine: string@bool-completer # Whether it should be a subroutine
-  --database: string@bool-completer # Whether it should be a database
-  --energyTechnology: string@bool-completer # Whether it should be a energy technology
-  --fictionalTechnology: string@bool-completer # Whether it should be a fictional technology
-  --holographicTechnology: string@bool-completer # Whether it should be a holographic technology
-  --identificationTechnology: string@bool-completer # Whether it should be a identification technology
-  --lifeSupportTechnology: string@bool-completer # Whether it should be a life support technology
-  --sensorTechnology: string@bool-completer # Whether it should be a sensor technology
-  --shieldTechnology: string@bool-completer # Whether it should be a shield technology
-  --tool: string@bool-completer # Whether it should be a tool
-  --culinaryTool: string@bool-completer # Whether it should be a culinary tool
-  --engineeringTool: string@bool-completer # Whether it should be a engineering tool
-  --householdTool: string@bool-completer # Whether it should be a household tool
-  --medicalEquipment: string@bool-completer # Whether it should be a medical equipment
-  --transporterTechnology: string@bool-completer # Whether it's a transporter technology
+  --borgTechnology: oneof<nothing, bool> # Whether it should be a Borg technology
+  --borgComponent: oneof<nothing, bool> # Whether it should be a Borg component
+  --communicationsTechnology: oneof<nothing, bool> # Whether it should be a communications technology
+  --computerTechnology: oneof<nothing, bool> # Whether it should be a computer technology
+  --computerProgramming: oneof<nothing, bool> # Whether it should be a technology related to computer programming
+  --subroutine: oneof<nothing, bool> # Whether it should be a subroutine
+  --database: oneof<nothing, bool> # Whether it should be a database
+  --energyTechnology: oneof<nothing, bool> # Whether it should be a energy technology
+  --fictionalTechnology: oneof<nothing, bool> # Whether it should be a fictional technology
+  --holographicTechnology: oneof<nothing, bool> # Whether it should be a holographic technology
+  --identificationTechnology: oneof<nothing, bool> # Whether it should be a identification technology
+  --lifeSupportTechnology: oneof<nothing, bool> # Whether it should be a life support technology
+  --sensorTechnology: oneof<nothing, bool> # Whether it should be a sensor technology
+  --shieldTechnology: oneof<nothing, bool> # Whether it should be a shield technology
+  --tool: oneof<nothing, bool> # Whether it should be a tool
+  --culinaryTool: oneof<nothing, bool> # Whether it should be a culinary tool
+  --engineeringTool: oneof<nothing, bool> # Whether it should be a engineering tool
+  --householdTool: oneof<nothing, bool> # Whether it should be a household tool
+  --medicalEquipment: oneof<nothing, bool> # Whether it should be a medical equipment
+  --transporterTechnology: oneof<nothing, bool> # Whether it's a transporter technology
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, technology: table<uid: string, name: string, borgTechnology: bool, borgComponent: bool, communicationsTechnology: bool, computerTechnology: bool, computerProgramming: bool, subroutine: bool, database: bool, energyTechnology: bool, fictionalTechnology: bool, holographicTechnology: bool, identificationTechnology: bool, lifeSupportTechnology: bool, sensorTechnology: bool, shieldTechnology: bool, tool: bool, culinaryTool: bool, engineeringTool: bool, householdTool: bool, medicalEquipment: bool, transporterTechnology: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4211,37 +4210,37 @@ export def "rest-technology-search v2SearchTechnology" [
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Technology name
-  --borgTechnology: string@bool-completer # Whether it should be a Borg technology
-  --borgComponent: string@bool-completer # Whether it should be a Borg component
-  --communicationsTechnology: string@bool-completer # Whether it should be a communications technology
-  --computerTechnology: string@bool-completer # Whether it should be a computer technology
-  --computerProgramming: string@bool-completer # Whether it should be a technology related to computer programming
-  --subroutine: string@bool-completer # Whether it should be a subroutine
-  --database: string@bool-completer # Whether it should be a database
-  --energyTechnology: string@bool-completer # Whether it should be a energy technology
-  --fictionalTechnology: string@bool-completer # Whether it should be a fictional technology
-  --holographicTechnology: string@bool-completer # Whether it should be a holographic technology
-  --identificationTechnology: string@bool-completer # Whether it should be a identification technology
-  --lifeSupportTechnology: string@bool-completer # Whether it should be a life support technology
-  --sensorTechnology: string@bool-completer # Whether it should be a sensor technology
-  --shieldTechnology: string@bool-completer # Whether it should be a shield technology
-  --securityTechnology: string@bool-completer # Whether it should be a security technology
-  --propulsionTechnology: string@bool-completer # Whether it should be a propulsion technology
-  --spacecraftComponent: string@bool-completer # Whether it should be a spacecraft component
-  --warpTechnology: string@bool-completer # Whether it should be a warp technology
-  --transwarpTechnology: string@bool-completer # Whether it should be a transwarp technology
-  --timeTravelTechnology: string@bool-completer # Whether it should be a time travel technology
-  --militaryTechnology: string@bool-completer # Whether it should be a military technology
-  --victualTechnology: string@bool-completer # Whether it should be a victual technology
-  --tool: string@bool-completer # Whether it should be a tool
-  --culinaryTool: string@bool-completer # Whether it should be a culinary tool
-  --engineeringTool: string@bool-completer # Whether it should be a engineering tool
-  --householdTool: string@bool-completer # Whether it should be a household tool
-  --medicalEquipment: string@bool-completer # Whether it should be a medical equipment
-  --transporterTechnology: string@bool-completer # Whether it's a transporter technology
-  --transportationTechnology: string@bool-completer # Whether it's a transportation technology
-  --weaponComponent: string@bool-completer # Whether it's a weapon component
-  --artificialLifeformComponent: string@bool-completer # Whether it's an artificial lifeform component
+  --borgTechnology: oneof<nothing, bool> # Whether it should be a Borg technology
+  --borgComponent: oneof<nothing, bool> # Whether it should be a Borg component
+  --communicationsTechnology: oneof<nothing, bool> # Whether it should be a communications technology
+  --computerTechnology: oneof<nothing, bool> # Whether it should be a computer technology
+  --computerProgramming: oneof<nothing, bool> # Whether it should be a technology related to computer programming
+  --subroutine: oneof<nothing, bool> # Whether it should be a subroutine
+  --database: oneof<nothing, bool> # Whether it should be a database
+  --energyTechnology: oneof<nothing, bool> # Whether it should be a energy technology
+  --fictionalTechnology: oneof<nothing, bool> # Whether it should be a fictional technology
+  --holographicTechnology: oneof<nothing, bool> # Whether it should be a holographic technology
+  --identificationTechnology: oneof<nothing, bool> # Whether it should be a identification technology
+  --lifeSupportTechnology: oneof<nothing, bool> # Whether it should be a life support technology
+  --sensorTechnology: oneof<nothing, bool> # Whether it should be a sensor technology
+  --shieldTechnology: oneof<nothing, bool> # Whether it should be a shield technology
+  --securityTechnology: oneof<nothing, bool> # Whether it should be a security technology
+  --propulsionTechnology: oneof<nothing, bool> # Whether it should be a propulsion technology
+  --spacecraftComponent: oneof<nothing, bool> # Whether it should be a spacecraft component
+  --warpTechnology: oneof<nothing, bool> # Whether it should be a warp technology
+  --transwarpTechnology: oneof<nothing, bool> # Whether it should be a transwarp technology
+  --timeTravelTechnology: oneof<nothing, bool> # Whether it should be a time travel technology
+  --militaryTechnology: oneof<nothing, bool> # Whether it should be a military technology
+  --victualTechnology: oneof<nothing, bool> # Whether it should be a victual technology
+  --tool: oneof<nothing, bool> # Whether it should be a tool
+  --culinaryTool: oneof<nothing, bool> # Whether it should be a culinary tool
+  --engineeringTool: oneof<nothing, bool> # Whether it should be a engineering tool
+  --householdTool: oneof<nothing, bool> # Whether it should be a household tool
+  --medicalEquipment: oneof<nothing, bool> # Whether it should be a medical equipment
+  --transporterTechnology: oneof<nothing, bool> # Whether it's a transporter technology
+  --transportationTechnology: oneof<nothing, bool> # Whether it's a transportation technology
+  --weaponComponent: oneof<nothing, bool> # Whether it's a weapon component
+  --artificialLifeformComponent: oneof<nothing, bool> # Whether it's an artificial lifeform component
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, technology: table<uid: string, name: string, borgTechnology: bool, borgComponent: bool, communicationsTechnology: bool, computerTechnology: bool, computerProgramming: bool, subroutine: bool, database: bool, energyTechnology: bool, fictionalTechnology: bool, holographicTechnology: bool, identificationTechnology: bool, lifeSupportTechnology: bool, sensorTechnology: bool, shieldTechnology: bool, securityTechnology: bool, propulsionTechnology: bool, spacecraftComponent: bool, warpTechnology: bool, transwarpTechnology: bool, timeTravelTechnology: bool, militaryTechnology: bool, victualTechnology: bool, tool: bool, culinaryTool: bool, engineeringTool: bool, householdTool: bool, medicalEquipment: bool, transporterTechnology: bool, transportationTechnology: bool, weaponComponent: bool, artificialLifeformComponent: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4324,11 +4323,11 @@ export def "rest-title-search v1SearchTitles" [
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Title name
-  --militaryRank: string@bool-completer # Whether it should be a military rank
-  --fleetRank: string@bool-completer # Whether it should be a fleet rank
-  --religiousTitle: string@bool-completer # Whether it should be a religious title
-  --position: string@bool-completer # Whether it should be a position
-  --mirror: string@bool-completer # Whether this title should be from mirror universe
+  --militaryRank: oneof<nothing, bool> # Whether it should be a military rank
+  --fleetRank: oneof<nothing, bool> # Whether it should be a fleet rank
+  --religiousTitle: oneof<nothing, bool> # Whether it should be a religious title
+  --position: oneof<nothing, bool> # Whether it should be a position
+  --mirror: oneof<nothing, bool> # Whether this title should be from mirror universe
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, titles: table<uid: string, name: string, militaryRank: bool, fleetRank: bool, religiousTitle: bool, position: bool, mirror: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4405,11 +4404,11 @@ export def "rest-title-search v2SearchTitles" [
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Title name
-  --militaryRank: string@bool-completer # Whether it should be a military rank
-  --fleetRank: string@bool-completer # Whether it should be a fleet rank
-  --religiousTitle: string@bool-completer # Whether it should be a religious title
-  --educationTitle: string@bool-completer # Whether it should be a education title
-  --mirror: string@bool-completer # Whether this title should be from mirror universe
+  --militaryRank: oneof<nothing, bool> # Whether it should be a military rank
+  --fleetRank: oneof<nothing, bool> # Whether it should be a fleet rank
+  --religiousTitle: oneof<nothing, bool> # Whether it should be a religious title
+  --educationTitle: oneof<nothing, bool> # Whether it should be a education title
+  --mirror: oneof<nothing, bool> # Whether this title should be from mirror universe
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, titles: table<uid: string, name: string, militaryRank: bool, fleetRank: bool, religiousTitle: bool, educationTitle: bool, mirror: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4900,8 +4899,8 @@ export def "rest-video-release-search v2SearchVideoReleases" [
   --yearTo: int # Ending year of video release story (format: int32)
   --runTimeFrom: int # Minimal run time, in minutes (format: int32)
   --runTimeTo: int # Minimal run time, in minutes (format: int32)
-  --documentary: string@bool-completer # Whether it should be a documentary
-  --specialFeatures: string@bool-completer # Whether it should contain special features
+  --documentary: oneof<nothing, bool> # Whether it should be a documentary
+  --specialFeatures: oneof<nothing, bool> # Whether it should contain special features
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, videoReleases: table<uid: string, title: string, format: string, numberOfEpisodes: int, numberOfFeatureLengthEpisodes: int, numberOfDataCarriers: int, runTime: int, yearFrom: int, yearTo: int, regionFreeReleaseDate: string, region1AReleaseDate: string, region1SlimlineReleaseDate: string, region2BReleaseDate: string, region2SlimlineReleaseDate: string, region4AReleaseDate: string, region4SlimlineReleaseDate: string, amazonDigitalRelease: bool, dailymotionDigitalRelease: bool, googlePlayDigitalRelease: bool, itunesDigitalRelease: bool, ultraVioletDigitalRelease: bool, vimeoDigitalRelease: bool, vuduDigitalRelease: bool, xboxSmartGlassDigitalRelease: bool, youTubeDigitalRelease: bool, netflixDigitalRelease: bool, documentary: bool, specialFeatures: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4984,13 +4983,13 @@ export def "rest-weapon-search v1SearchWeapons" [
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Weapon name
-  --handHeldWeapon: string@bool-completer # Whether it should be a hand-help weapon
-  --laserTechnology: string@bool-completer # Whether it should be a laser technology
-  --plasmaTechnology: string@bool-completer # Whether it should be a plasma technology
-  --photonicTechnology: string@bool-completer # Whether it should be a photonic technology
-  --phaserTechnology: string@bool-completer # Whether it should be a phaser technology
-  --mirror: string@bool-completer # Whether this weapon should be from mirror universe
-  --alternateReality: string@bool-completer # Whether this weapon should be from alternate reality
+  --handHeldWeapon: oneof<nothing, bool> # Whether it should be a hand-help weapon
+  --laserTechnology: oneof<nothing, bool> # Whether it should be a laser technology
+  --plasmaTechnology: oneof<nothing, bool> # Whether it should be a plasma technology
+  --photonicTechnology: oneof<nothing, bool> # Whether it should be a photonic technology
+  --phaserTechnology: oneof<nothing, bool> # Whether it should be a phaser technology
+  --mirror: oneof<nothing, bool> # Whether this weapon should be from mirror universe
+  --alternateReality: oneof<nothing, bool> # Whether this weapon should be from alternate reality
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, weapons: table<uid: string, name: string, handHeldWeapon: bool, laserTechnology: bool, plasmaTechnology: bool, photonicTechnology: bool, phaserTechnology: bool, mirror: bool, alternateReality: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5067,17 +5066,17 @@ export def "rest-weapon-search v2SearchWeapons" [
   --pageSize: int # Page size (format: int32)
   --qp-sort: string # Sorting, serialized like this: fieldName,ASC;anotherFieldName,DESC
   --name: string # Weapon name
-  --handHeldWeapon: string@bool-completer # Whether it should be a hand-help weapon
-  --laserTechnology: string@bool-completer # Whether it should be a laser technology
-  --plasmaTechnology: string@bool-completer # Whether it should be a plasma technology
-  --photonicTechnology: string@bool-completer # Whether it should be a photonic technology
-  --phaserTechnology: string@bool-completer # Whether it should be a phaser technology
-  --directedEnergyWeapon: string@bool-completer # Whether it should be a directed energy weapon
-  --explosiveWeapon: string@bool-completer # Whether it should be an explosive weapon
-  --projectileWeapon: string@bool-completer # Whether it should be a projectile weapon
-  --fictionalWeapon: string@bool-completer # Whether it should be a fictional weapon
-  --mirror: string@bool-completer # Whether this weapon should be from mirror universe
-  --alternateReality: string@bool-completer # Whether this weapon should be from alternate reality
+  --handHeldWeapon: oneof<nothing, bool> # Whether it should be a hand-help weapon
+  --laserTechnology: oneof<nothing, bool> # Whether it should be a laser technology
+  --plasmaTechnology: oneof<nothing, bool> # Whether it should be a plasma technology
+  --photonicTechnology: oneof<nothing, bool> # Whether it should be a photonic technology
+  --phaserTechnology: oneof<nothing, bool> # Whether it should be a phaser technology
+  --directedEnergyWeapon: oneof<nothing, bool> # Whether it should be a directed energy weapon
+  --explosiveWeapon: oneof<nothing, bool> # Whether it should be an explosive weapon
+  --projectileWeapon: oneof<nothing, bool> # Whether it should be a projectile weapon
+  --fictionalWeapon: oneof<nothing, bool> # Whether it should be a fictional weapon
+  --mirror: oneof<nothing, bool> # Whether this weapon should be from mirror universe
+  --alternateReality: oneof<nothing, bool> # Whether this weapon should be from alternate reality
 ]: any -> record<page: record<pageNumber: int, pageSize: int, numberOfElements: int, totalElements: int, totalPages: int, firstPage: bool, lastPage: bool>, sort: record<clauses: list<record>>, weapons: table<uid: string, name: string, handHeldWeapon: bool, laserTechnology: bool, plasmaTechnology: bool, photonicTechnology: bool, phaserTechnology: bool, directedEnergyWeapon: bool, explosiveWeapon: bool, projectileWeapon: bool, fictionalWeapon: bool, mirror: bool, alternateReality: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

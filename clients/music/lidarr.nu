@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost:8686" "https://localhost:8686"] }
 def auth-scheme-completer [] { ["x-api-key" "query-apikey"] }
 
@@ -130,7 +129,7 @@ export def "album list" [
   --artistId: int # format: int32
   --albumIds: list
   --foreignAlbumId: string
-  --includeAllArtistAlbums: string@bool-completer # default: false
+  --includeAllArtistAlbums: oneof<nothing, bool> # default: false
 ]: nothing -> table<id: int, title: string, disambiguation: string, overview: string, artistId: int, foreignAlbumId: string, monitored: bool, anyReleaseOk: bool, profileId: int, duration: int, albumType: string, secondaryTypes: list<string>, mediumCount: int, ratings: record<votes: int, value: float>, releaseDate: string, releases: list<record>, genres: list<string>, media: list<record>, artist: record<id: int, status: string, ended: bool, artistName: string, foreignArtistId: string, mbId: string, tadbId: int, discogsId: int, allMusicId: string, overview: string, artistType: string, disambiguation: string, links: list, nextAlbum: any, lastAlbum: any, images: list, members: list, remotePoster: string, path: string, qualityProfileId: int, metadataProfileId: int, monitored: bool, monitorNewItems: string, rootFolderPath: string, folder: string, genres: list, cleanName: string, sortName: string, tags: list, added: string, addOptions: record, ratings: record, statistics: record>, images: list<record>, links: list<record>, lastSearchTime: string, statistics: record<trackFileCount: int, trackCount: int, totalTrackCount: int, sizeOnDisk: int, percentOfTracks: float>, addOptions: record<addType: string, searchForNewAlbum: bool>, remoteCover: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -166,8 +165,8 @@ export def "album post" [
   --overview: string # nullable
   --artistId: int # format: int32
   --foreignAlbumId: string # nullable
-  --monitored: string@bool-completer
-  --anyReleaseOk: string@bool-completer
+  --monitored: oneof<nothing, bool>
+  --anyReleaseOk: oneof<nothing, bool>
   --profileId: int # format: int32
   --duration: int # format: int32
   --albumType: string # nullable
@@ -222,8 +221,8 @@ export def "album put" [
   --overview: string # nullable
   --artistId: int # format: int32
   --foreignAlbumId: string # nullable
-  --monitored: string@bool-completer
-  --anyReleaseOk: string@bool-completer
+  --monitored: oneof<nothing, bool>
+  --anyReleaseOk: oneof<nothing, bool>
   --profileId: int # format: int32
   --duration: int # format: int32
   --albumType: string # nullable
@@ -262,8 +261,8 @@ export def "album delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deleteFiles: string@bool-completer # default: false
-  --addImportListExclusion: string@bool-completer # default: false
+  --deleteFiles: oneof<nothing, bool> # default: false
+  --addImportListExclusion: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -304,7 +303,7 @@ export def "album-monitor put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --albumIds: list # nullable
-  --monitored: string@bool-completer
+  --monitored: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -421,7 +420,7 @@ export def "artist put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --moveFiles: string@bool-completer # default: false
+  --moveFiles: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --status: string@status-completer
   --artistName: string # nullable
@@ -442,7 +441,7 @@ export def "artist put" [
   --path: string # nullable
   --qualityProfileId: int # format: int32
   --metadataProfileId: int # format: int32
-  --monitored: string@bool-completer
+  --monitored: oneof<nothing, bool>
   --monitorNewItems: string@monitorNewItems-completer
   --rootFolderPath: string # nullable
   --folder: string # nullable
@@ -477,8 +476,8 @@ export def "artist delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deleteFiles: string@bool-completer # default: false
-  --addImportListExclusion: string@bool-completer # default: false
+  --deleteFiles: oneof<nothing, bool> # default: false
+  --addImportListExclusion: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -547,7 +546,7 @@ export def "artist post" [
   --path: string # nullable
   --qualityProfileId: int # format: int32
   --metadataProfileId: int # format: int32
-  --monitored: string@bool-completer
+  --monitored: oneof<nothing, bool>
   --monitorNewItems: string@monitorNewItems-completer
   --rootFolderPath: string # nullable
   --folder: string # nullable
@@ -581,16 +580,16 @@ export def "artist-editor put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --artistIds: list # nullable
-  --monitored: string@bool-completer # nullable
+  --monitored: oneof<nothing, bool> # nullable
   --monitorNewItems: string@monitorNewItems-completer
   --qualityProfileId: int # nullable, format: int32
   --metadataProfileId: int # nullable, format: int32
   --rootFolderPath: string # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --moveFiles: string@bool-completer
-  --deleteFiles: string@bool-completer
-  --addImportListExclusion: string@bool-completer
+  --moveFiles: oneof<nothing, bool>
+  --deleteFiles: oneof<nothing, bool>
+  --addImportListExclusion: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -613,16 +612,16 @@ export def "artist-editor delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --artistIds: list # nullable
-  --monitored: string@bool-completer # nullable
+  --monitored: oneof<nothing, bool> # nullable
   --monitorNewItems: string@monitorNewItems-completer
   --qualityProfileId: int # nullable, format: int32
   --metadataProfileId: int # nullable, format: int32
   --rootFolderPath: string # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --moveFiles: string@bool-completer
-  --deleteFiles: string@bool-completer
-  --addImportListExclusion: string@bool-completer
+  --moveFiles: oneof<nothing, bool>
+  --deleteFiles: oneof<nothing, bool>
+  --addImportListExclusion: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -752,7 +751,7 @@ export def "autotagging put" [
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
   --name: string # nullable
-  --removeTagsAutomatically: string@bool-completer
+  --removeTagsAutomatically: oneof<nothing, bool>
   --tags: list # nullable
   --specifications: list # nullable — item shape: {id?: int, name?: string, implementation?: string, implementationName?: string, negate?: bool, required?: bool, fields?: list}
 ]: any -> record<id: int, name: string, removeTagsAutomatically: bool, tags: list<int>, specifications: table<id: int, name: string, implementation: string, implementationName: string, negate: bool, required: bool, fields: list>> {
@@ -800,7 +799,7 @@ export def "autotagging post" [
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
   --name: string # nullable
-  --removeTagsAutomatically: string@bool-completer
+  --removeTagsAutomatically: oneof<nothing, bool>
   --tags: list # nullable
   --specifications: list # nullable — item shape: {id?: int, name?: string, implementation?: string, implementationName?: string, negate?: bool, required?: bool, fields?: list}
 ]: any -> record<id: int, name: string, removeTagsAutomatically: bool, tags: list<int>, specifications: table<id: int, name: string, implementation: string, implementationName: string, negate: bool, required: bool, fields: list>> {
@@ -1001,8 +1000,8 @@ export def "calendar list" [
   --allow-errors(-e) # Return full response without error handling
   --start: string # format: date-time
   --end: string # format: date-time
-  --unmonitored: string@bool-completer # default: false
-  --includeArtist: string@bool-completer # default: false
+  --unmonitored: oneof<nothing, bool> # default: false
+  --includeArtist: oneof<nothing, bool> # default: false
   --tags: string # default: 
 ]: nothing -> table<id: int, title: string, disambiguation: string, overview: string, artistId: int, foreignAlbumId: string, monitored: bool, anyReleaseOk: bool, profileId: int, duration: int, albumType: string, secondaryTypes: list<string>, mediumCount: int, ratings: record<votes: int, value: float>, releaseDate: string, releases: list<record>, genres: list<string>, media: list<record>, artist: record<id: int, status: string, ended: bool, artistName: string, foreignArtistId: string, mbId: string, tadbId: int, discogsId: int, allMusicId: string, overview: string, artistType: string, disambiguation: string, links: list, nextAlbum: any, lastAlbum: any, images: list, members: list, remotePoster: string, path: string, qualityProfileId: int, metadataProfileId: int, monitored: bool, monitorNewItems: string, rootFolderPath: string, folder: string, genres: list, cleanName: string, sortName: string, tags: list, added: string, addOptions: record, ratings: record, statistics: record>, images: list<record>, links: list<record>, lastSearchTime: string, statistics: record<trackFileCount: int, trackCount: int, totalTrackCount: int, sizeOnDisk: int, percentOfTracks: float>, addOptions: record<addType: string, searchForNewAlbum: bool>, remoteCover: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1046,7 +1045,7 @@ export def "feed-calendar-lidarrics get" [
   --pastDays: int # format: int32, default: 7
   --futureDays: int # format: int32, default: 28
   --tags: string # default: 
-  --unmonitored: string@bool-completer # default: false
+  --unmonitored: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1123,8 +1122,8 @@ export def "command post" [
   --trigger: string@trigger-completer
   --clientUserAgent: string # nullable
   --stateChangeTime: string # nullable, format: date-time
-  --sendUpdatesToClient: string@bool-completer
-  --updateScheduledTask: string@bool-completer
+  --sendUpdatesToClient: oneof<nothing, bool>
+  --updateScheduledTask: oneof<nothing, bool>
   --lastExecutionTime: string # nullable, format: date-time
 ]: any -> record<id: int, name: string, commandName: string, message: string, body: record<sendUpdatesToClient: bool, updateScheduledTask: bool, completionMessage: string, requiresDiskAccess: bool, isExclusive: bool, isTypeExclusive: bool, isLongRunning: bool, name: string, lastExecutionTime: string, lastStartTime: string, trigger: string, suppressMessages: bool, clientUserAgent: string>, priority: string, status: string, result: string, queued: string, started: string, ended: string, duration: string, exception: string, trigger: string, clientUserAgent: string, stateChangeTime: string, sendUpdatesToClient: bool, updateScheduledTask: bool, lastExecutionTime: string> {
   let input = $in
@@ -1301,7 +1300,7 @@ export def "customformat put" [
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
   --name: string # nullable
-  --includeCustomFormatWhenRenaming: string@bool-completer # nullable
+  --includeCustomFormatWhenRenaming: oneof<nothing, bool> # nullable
   --specifications: list # nullable — item shape: {id?: int, name?: string, implementation?: string, implementationName?: string, infoLink?: string, negate?: bool, required?: bool, fields?: list, presets?: list}
 ]: any -> record<id: int, name: string, includeCustomFormatWhenRenaming: bool, specifications: table<id: int, name: string, implementation: string, implementationName: string, infoLink: string, negate: bool, required: bool, fields: list, presets: list>> {
   let input = $in
@@ -1366,7 +1365,7 @@ export def "customformat post" [
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
   --name: string # nullable
-  --includeCustomFormatWhenRenaming: string@bool-completer # nullable
+  --includeCustomFormatWhenRenaming: oneof<nothing, bool> # nullable
   --specifications: list # nullable — item shape: {id?: int, name?: string, implementation?: string, implementationName?: string, infoLink?: string, negate?: bool, required?: bool, fields?: list, presets?: list}
 ]: any -> record<id: int, name: string, includeCustomFormatWhenRenaming: bool, specifications: table<id: int, name: string, implementation: string, implementationName: string, infoLink: string, negate: bool, required: bool, fields: list, presets: list>> {
   let input = $in
@@ -1390,7 +1389,7 @@ export def "customformat-bulk put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ids: list # nullable
-  --includeCustomFormatWhenRenaming: string@bool-completer # nullable
+  --includeCustomFormatWhenRenaming: oneof<nothing, bool> # nullable
 ]: any -> record<id: int, name: string, includeCustomFormatWhenRenaming: bool, specifications: table<id: int, name: string, implementation: string, implementationName: string, infoLink: string, negate: bool, required: bool, fields: list, presets: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1413,7 +1412,7 @@ export def "customformat-bulk delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ids: list # nullable
-  --includeCustomFormatWhenRenaming: string@bool-completer # nullable
+  --includeCustomFormatWhenRenaming: oneof<nothing, bool> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1457,8 +1456,8 @@ export def "wanted-cutoff list" [
   --pageSize: int # format: int32, default: 10
   --sortKey: string
   --sortDirection: string@sortDirection-completer
-  --includeArtist: string@bool-completer # default: false
-  --monitored: string@bool-completer # default: true
+  --includeArtist: oneof<nothing, bool> # default: false
+  --monitored: oneof<nothing, bool> # default: true
 ]: nothing -> record<page: int, pageSize: int, sortKey: string, sortDirection: string, totalRecords: int, records: table<id: int, title: string, disambiguation: string, overview: string, artistId: int, foreignAlbumId: string, monitored: bool, anyReleaseOk: bool, profileId: int, duration: int, albumType: string, secondaryTypes: list, mediumCount: int, ratings: record, releaseDate: string, releases: list, genres: list, media: list, artist: record, images: list, links: list, lastSearchTime: string, statistics: record, addOptions: record, remoteCover: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1500,13 +1499,13 @@ export def "delayprofile post" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
-  --enableUsenet: string@bool-completer
-  --enableTorrent: string@bool-completer
+  --enableUsenet: oneof<nothing, bool>
+  --enableTorrent: oneof<nothing, bool>
   --preferredProtocol: string@preferredProtocol-completer
   --usenetDelay: int # format: int32
   --torrentDelay: int # format: int32
-  --bypassIfHighestQuality: string@bool-completer
-  --bypassIfAboveCustomFormatScore: string@bool-completer
+  --bypassIfHighestQuality: oneof<nothing, bool>
+  --bypassIfAboveCustomFormatScore: oneof<nothing, bool>
   --minimumCustomFormatScore: int # format: int32
   --order: int # format: int32
   --tags: list # nullable
@@ -1572,13 +1571,13 @@ export def "delayprofile put" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
-  --enableUsenet: string@bool-completer
-  --enableTorrent: string@bool-completer
+  --enableUsenet: oneof<nothing, bool>
+  --enableTorrent: oneof<nothing, bool>
   --preferredProtocol: string@preferredProtocol-completer
   --usenetDelay: int # format: int32
   --torrentDelay: int # format: int32
-  --bypassIfHighestQuality: string@bool-completer
-  --bypassIfAboveCustomFormatScore: string@bool-completer
+  --bypassIfHighestQuality: oneof<nothing, bool>
+  --bypassIfAboveCustomFormatScore: oneof<nothing, bool>
   --minimumCustomFormatScore: int # format: int32
   --order: int # format: int32
   --tags: list # nullable
@@ -1687,7 +1686,7 @@ export def "downloadclient put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -1698,11 +1697,11 @@ export def "downloadclient put" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, removeCompletedDownloads?: bool, removeFailedDownloads?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
-  --removeCompletedDownloads: string@bool-completer
-  --removeFailedDownloads: string@bool-completer
+  --removeCompletedDownloads: oneof<nothing, bool>
+  --removeFailedDownloads: oneof<nothing, bool>
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool, protocol: string, priority: int, removeCompletedDownloads: bool, removeFailedDownloads: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1766,7 +1765,7 @@ export def "downloadclient post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -1777,11 +1776,11 @@ export def "downloadclient post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, removeCompletedDownloads?: bool, removeFailedDownloads?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
-  --removeCompletedDownloads: string@bool-completer
-  --removeFailedDownloads: string@bool-completer
+  --removeCompletedDownloads: oneof<nothing, bool>
+  --removeFailedDownloads: oneof<nothing, bool>
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool, protocol: string, priority: int, removeCompletedDownloads: bool, removeFailedDownloads: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1807,10 +1806,10 @@ export def "downloadclient-bulk put" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enable: string@bool-completer # nullable
+  --enable: oneof<nothing, bool> # nullable
   --priority: int # nullable, format: int32
-  --removeCompletedDownloads: string@bool-completer # nullable
-  --removeFailedDownloads: string@bool-completer # nullable
+  --removeCompletedDownloads: oneof<nothing, bool> # nullable
+  --removeFailedDownloads: oneof<nothing, bool> # nullable
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool, protocol: string, priority: int, removeCompletedDownloads: bool, removeFailedDownloads: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1835,10 +1834,10 @@ export def "downloadclient-bulk delete" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enable: string@bool-completer # nullable
+  --enable: oneof<nothing, bool> # nullable
   --priority: int # nullable, format: int32
-  --removeCompletedDownloads: string@bool-completer # nullable
-  --removeFailedDownloads: string@bool-completer # nullable
+  --removeCompletedDownloads: oneof<nothing, bool> # nullable
+  --removeFailedDownloads: oneof<nothing, bool> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1882,7 +1881,7 @@ export def "downloadclient-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -1893,11 +1892,11 @@ export def "downloadclient-test post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, removeCompletedDownloads?: bool, removeFailedDownloads?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
-  --removeCompletedDownloads: string@bool-completer
-  --removeFailedDownloads: string@bool-completer
+  --removeCompletedDownloads: oneof<nothing, bool>
+  --removeFailedDownloads: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1953,11 +1952,11 @@ export def "downloadclient-action post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, removeCompletedDownloads?: bool, removeFailedDownloads?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
-  --removeCompletedDownloads: string@bool-completer
-  --removeFailedDownloads: string@bool-completer
+  --removeCompletedDownloads: oneof<nothing, bool>
+  --removeFailedDownloads: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2003,9 +2002,9 @@ export def "config-downloadclient put" [
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
   --downloadClientWorkingFolders: string # nullable
-  --enableCompletedDownloadHandling: string@bool-completer
-  --autoRedownloadFailed: string@bool-completer
-  --autoRedownloadFailedFromInteractiveSearch: string@bool-completer
+  --enableCompletedDownloadHandling: oneof<nothing, bool>
+  --autoRedownloadFailed: oneof<nothing, bool>
+  --autoRedownloadFailedFromInteractiveSearch: oneof<nothing, bool>
 ]: any -> record<id: int, downloadClientWorkingFolders: string, enableCompletedDownloadHandling: bool, autoRedownloadFailed: bool, autoRedownloadFailedFromInteractiveSearch: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2046,8 +2045,8 @@ export def "filesystem get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --path: string
-  --includeFiles: string@bool-completer # default: false
-  --allowFoldersWithoutTrailingSlashes: string@bool-completer # default: false
+  --includeFiles: oneof<nothing, bool> # default: false
+  --allowFoldersWithoutTrailingSlashes: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2129,9 +2128,9 @@ export def "history get" [
   --pageSize: int # format: int32, default: 10
   --sortKey: string
   --sortDirection: string@sortDirection-completer
-  --includeArtist: string@bool-completer
-  --includeAlbum: string@bool-completer
-  --includeTrack: string@bool-completer
+  --includeArtist: oneof<nothing, bool>
+  --includeAlbum: oneof<nothing, bool>
+  --includeTrack: oneof<nothing, bool>
   --eventType: list
   --albumId: int # format: int32
   --downloadId: string
@@ -2158,9 +2157,9 @@ export def "history-since get" [
   --allow-errors(-e) # Return full response without error handling
   --date: string # format: date-time
   --eventType: string@eventType-completer
-  --includeArtist: string@bool-completer # default: false
-  --includeAlbum: string@bool-completer # default: false
-  --includeTrack: string@bool-completer # default: false
+  --includeArtist: oneof<nothing, bool> # default: false
+  --includeAlbum: oneof<nothing, bool> # default: false
+  --includeTrack: oneof<nothing, bool> # default: false
 ]: nothing -> table<id: int, albumId: int, artistId: int, trackId: int, sourceTitle: string, quality: record<quality: record, revision: record>, customFormats: list<record>, customFormatScore: int, qualityCutoffNotMet: bool, date: string, downloadId: string, eventType: string, data: record, album: record<id: int, title: string, disambiguation: string, overview: string, artistId: int, foreignAlbumId: string, monitored: bool, anyReleaseOk: bool, profileId: int, duration: int, albumType: string, secondaryTypes: list, mediumCount: int, ratings: record, releaseDate: string, releases: list, genres: list, media: list, artist: record, images: list, links: list, lastSearchTime: string, statistics: record, addOptions: record, remoteCover: string>, artist: record<id: int, status: string, ended: bool, artistName: string, foreignArtistId: string, mbId: string, tadbId: int, discogsId: int, allMusicId: string, overview: string, artistType: string, disambiguation: string, links: list, nextAlbum: record, lastAlbum: record, images: list, members: list, remotePoster: string, path: string, qualityProfileId: int, metadataProfileId: int, monitored: bool, monitorNewItems: string, rootFolderPath: string, folder: string, genres: list, cleanName: string, sortName: string, tags: list, added: string, addOptions: record, ratings: record, statistics: record>, track: record<id: int, artistId: int, foreignTrackId: string, foreignRecordingId: string, trackFileId: int, albumId: int, explicit: bool, absoluteTrackNumber: int, trackNumber: string, title: string, duration: int, trackFile: record, mediumNumber: int, hasFile: bool, artist: record, ratings: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2183,9 +2182,9 @@ export def "history-artist get" [
   --artistId: int # format: int32
   --albumId: int # format: int32
   --eventType: string@eventType-completer
-  --includeArtist: string@bool-completer # default: false
-  --includeAlbum: string@bool-completer # default: false
-  --includeTrack: string@bool-completer # default: false
+  --includeArtist: oneof<nothing, bool> # default: false
+  --includeAlbum: oneof<nothing, bool> # default: false
+  --includeTrack: oneof<nothing, bool> # default: false
 ]: nothing -> table<id: int, albumId: int, artistId: int, trackId: int, sourceTitle: string, quality: record<quality: record, revision: record>, customFormats: list<record>, customFormatScore: int, qualityCutoffNotMet: bool, date: string, downloadId: string, eventType: string, data: record, album: record<id: int, title: string, disambiguation: string, overview: string, artistId: int, foreignAlbumId: string, monitored: bool, anyReleaseOk: bool, profileId: int, duration: int, albumType: string, secondaryTypes: list, mediumCount: int, ratings: record, releaseDate: string, releases: list, genres: list, media: list, artist: record, images: list, links: list, lastSearchTime: string, statistics: record, addOptions: record, remoteCover: string>, artist: record<id: int, status: string, ended: bool, artistName: string, foreignArtistId: string, mbId: string, tadbId: int, discogsId: int, allMusicId: string, overview: string, artistType: string, disambiguation: string, links: list, nextAlbum: record, lastAlbum: record, images: list, members: list, remotePoster: string, path: string, qualityProfileId: int, metadataProfileId: int, monitored: bool, monitorNewItems: string, rootFolderPath: string, folder: string, genres: list, cleanName: string, sortName: string, tags: list, added: string, addOptions: record, ratings: record, statistics: record>, track: record<id: int, artistId: int, foreignTrackId: string, foreignRecordingId: string, trackFileId: int, albumId: int, explicit: bool, absoluteTrackNumber: int, trackNumber: string, title: string, duration: int, trackFile: record, mediumNumber: int, hasFile: bool, artist: record, ratings: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2250,11 +2249,11 @@ export def "config-host put" [
   --bindAddress: string # nullable
   --port: int # format: int32
   --sslPort: int # format: int32
-  --enableSsl: string@bool-completer
-  --launchBrowser: string@bool-completer
+  --enableSsl: oneof<nothing, bool>
+  --launchBrowser: oneof<nothing, bool>
   --authenticationMethod: string@authenticationMethod-completer
   --authenticationRequired: string@authenticationRequired-completer
-  --analyticsEnabled: string@bool-completer
+  --analyticsEnabled: oneof<nothing, bool>
   --username: string # nullable
   --password: string # nullable
   --passwordConfirmation: string # nullable
@@ -2268,22 +2267,22 @@ export def "config-host put" [
   --urlBase: string # nullable
   --instanceName: string # nullable
   --applicationUrl: string # nullable
-  --updateAutomatically: string@bool-completer
+  --updateAutomatically: oneof<nothing, bool>
   --updateMechanism: string@updateMechanism-completer
   --updateScriptPath: string # nullable
-  --proxyEnabled: string@bool-completer
+  --proxyEnabled: oneof<nothing, bool>
   --proxyType: string@proxyType-completer
   --proxyHostname: string # nullable
   --proxyPort: int # format: int32
   --proxyUsername: string # nullable
   --proxyPassword: string # nullable
   --proxyBypassFilter: string # nullable
-  --proxyBypassLocalAddresses: string@bool-completer
+  --proxyBypassLocalAddresses: oneof<nothing, bool>
   --certificateValidation: string@certificateValidation-completer
   --backupFolder: string # nullable
   --backupInterval: int # format: int32
   --backupRetention: int # format: int32
-  --trustCgnatIpAddresses: string@bool-completer
+  --trustCgnatIpAddresses: oneof<nothing, bool>
 ]: any -> record<id: int, bindAddress: string, port: int, sslPort: int, enableSsl: bool, launchBrowser: bool, authenticationMethod: string, authenticationRequired: string, analyticsEnabled: bool, username: string, password: string, passwordConfirmation: string, logLevel: string, logSizeLimit: int, consoleLogLevel: string, branch: string, apiKey: string, sslCertPath: string, sslCertPassword: string, urlBase: string, instanceName: string, applicationUrl: string, updateAutomatically: bool, updateMechanism: string, updateScriptPath: string, proxyEnabled: bool, proxyType: string, proxyHostname: string, proxyPort: int, proxyUsername: string, proxyPassword: string, proxyBypassFilter: string, proxyBypassLocalAddresses: bool, certificateValidation: string, backupFolder: string, backupInterval: int, backupRetention: int, trustCgnatIpAddresses: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2349,7 +2348,7 @@ export def "importlist put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2360,10 +2359,10 @@ export def "importlist put" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableAutomaticAdd?: bool, shouldMonitor?: "none"|"specificAlbum"|"entireArtist", shouldMonitorExisting?: bool, shouldSearch?: bool, rootFolderPath?: string, monitorNewItems?: "all"|"none"|"new", qualityProfileId?: int, metadataProfileId?: int, listType?: "program"|"spotify"|"lastFm"|"other"|"advanced", listOrder?: int, minRefreshInterval?: string}
-  --enableAutomaticAdd: string@bool-completer
+  --enableAutomaticAdd: oneof<nothing, bool>
   --shouldMonitor: string@shouldMonitor-completer
-  --shouldMonitorExisting: string@bool-completer
-  --shouldSearch: string@bool-completer
+  --shouldMonitorExisting: oneof<nothing, bool>
+  --shouldSearch: oneof<nothing, bool>
   --rootFolderPath: string # nullable
   --monitorNewItems: string@monitorNewItems-completer
   --qualityProfileId: int # format: int32
@@ -2434,7 +2433,7 @@ export def "importlist post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2445,10 +2444,10 @@ export def "importlist post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableAutomaticAdd?: bool, shouldMonitor?: "none"|"specificAlbum"|"entireArtist", shouldMonitorExisting?: bool, shouldSearch?: bool, rootFolderPath?: string, monitorNewItems?: "all"|"none"|"new", qualityProfileId?: int, metadataProfileId?: int, listType?: "program"|"spotify"|"lastFm"|"other"|"advanced", listOrder?: int, minRefreshInterval?: string}
-  --enableAutomaticAdd: string@bool-completer
+  --enableAutomaticAdd: oneof<nothing, bool>
   --shouldMonitor: string@shouldMonitor-completer
-  --shouldMonitorExisting: string@bool-completer
-  --shouldSearch: string@bool-completer
+  --shouldMonitorExisting: oneof<nothing, bool>
+  --shouldSearch: oneof<nothing, bool>
   --rootFolderPath: string # nullable
   --monitorNewItems: string@monitorNewItems-completer
   --qualityProfileId: int # format: int32
@@ -2481,7 +2480,7 @@ export def "importlist-bulk put" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enableAutomaticAdd: string@bool-completer # nullable
+  --enableAutomaticAdd: oneof<nothing, bool> # nullable
   --rootFolderPath: string # nullable
   --qualityProfileId: int # nullable, format: int32
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enableAutomaticAdd: bool, shouldMonitor: string, shouldMonitorExisting: bool, shouldSearch: bool, rootFolderPath: string, monitorNewItems: string, qualityProfileId: int, metadataProfileId: int, listType: string, listOrder: int, minRefreshInterval: string> {
@@ -2508,7 +2507,7 @@ export def "importlist-bulk delete" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enableAutomaticAdd: string@bool-completer # nullable
+  --enableAutomaticAdd: oneof<nothing, bool> # nullable
   --rootFolderPath: string # nullable
   --qualityProfileId: int # nullable, format: int32
 ]: any -> any {
@@ -2554,7 +2553,7 @@ export def "importlist-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2565,10 +2564,10 @@ export def "importlist-test post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableAutomaticAdd?: bool, shouldMonitor?: "none"|"specificAlbum"|"entireArtist", shouldMonitorExisting?: bool, shouldSearch?: bool, rootFolderPath?: string, monitorNewItems?: "all"|"none"|"new", qualityProfileId?: int, metadataProfileId?: int, listType?: "program"|"spotify"|"lastFm"|"other"|"advanced", listOrder?: int, minRefreshInterval?: string}
-  --enableAutomaticAdd: string@bool-completer
+  --enableAutomaticAdd: oneof<nothing, bool>
   --shouldMonitor: string@shouldMonitor-completer
-  --shouldMonitorExisting: string@bool-completer
-  --shouldSearch: string@bool-completer
+  --shouldMonitorExisting: oneof<nothing, bool>
+  --shouldSearch: oneof<nothing, bool>
   --rootFolderPath: string # nullable
   --monitorNewItems: string@monitorNewItems-completer
   --qualityProfileId: int # format: int32
@@ -2631,10 +2630,10 @@ export def "importlist-action post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableAutomaticAdd?: bool, shouldMonitor?: "none"|"specificAlbum"|"entireArtist", shouldMonitorExisting?: bool, shouldSearch?: bool, rootFolderPath?: string, monitorNewItems?: "all"|"none"|"new", qualityProfileId?: int, metadataProfileId?: int, listType?: "program"|"spotify"|"lastFm"|"other"|"advanced", listOrder?: int, minRefreshInterval?: string}
-  --enableAutomaticAdd: string@bool-completer
+  --enableAutomaticAdd: oneof<nothing, bool>
   --shouldMonitor: string@shouldMonitor-completer
-  --shouldMonitorExisting: string@bool-completer
-  --shouldSearch: string@bool-completer
+  --shouldMonitorExisting: oneof<nothing, bool>
+  --shouldSearch: oneof<nothing, bool>
   --rootFolderPath: string # nullable
   --monitorNewItems: string@monitorNewItems-completer
   --qualityProfileId: int # format: int32
@@ -2797,7 +2796,7 @@ export def "indexer put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2808,11 +2807,11 @@ export def "indexer put" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableRss?: bool, enableAutomaticSearch?: bool, enableInteractiveSearch?: bool, supportsRss?: bool, supportsSearch?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, downloadClientId?: int}
-  --enableRss: string@bool-completer
-  --enableAutomaticSearch: string@bool-completer
-  --enableInteractiveSearch: string@bool-completer
-  --supportsRss: string@bool-completer
-  --supportsSearch: string@bool-completer
+  --enableRss: oneof<nothing, bool>
+  --enableAutomaticSearch: oneof<nothing, bool>
+  --enableInteractiveSearch: oneof<nothing, bool>
+  --supportsRss: oneof<nothing, bool>
+  --supportsSearch: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
   --downloadClientId: int # format: int32
@@ -2879,7 +2878,7 @@ export def "indexer post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2890,11 +2889,11 @@ export def "indexer post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableRss?: bool, enableAutomaticSearch?: bool, enableInteractiveSearch?: bool, supportsRss?: bool, supportsSearch?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, downloadClientId?: int}
-  --enableRss: string@bool-completer
-  --enableAutomaticSearch: string@bool-completer
-  --enableInteractiveSearch: string@bool-completer
-  --supportsRss: string@bool-completer
-  --supportsSearch: string@bool-completer
+  --enableRss: oneof<nothing, bool>
+  --enableAutomaticSearch: oneof<nothing, bool>
+  --enableInteractiveSearch: oneof<nothing, bool>
+  --supportsRss: oneof<nothing, bool>
+  --supportsSearch: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
   --downloadClientId: int # format: int32
@@ -2923,9 +2922,9 @@ export def "indexer-bulk put" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enableRss: string@bool-completer # nullable
-  --enableAutomaticSearch: string@bool-completer # nullable
-  --enableInteractiveSearch: string@bool-completer # nullable
+  --enableRss: oneof<nothing, bool> # nullable
+  --enableAutomaticSearch: oneof<nothing, bool> # nullable
+  --enableInteractiveSearch: oneof<nothing, bool> # nullable
   --priority: int # nullable, format: int32
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enableRss: bool, enableAutomaticSearch: bool, enableInteractiveSearch: bool, supportsRss: bool, supportsSearch: bool, protocol: string, priority: int, downloadClientId: int> {
   let input = $in
@@ -2951,9 +2950,9 @@ export def "indexer-bulk delete" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enableRss: string@bool-completer # nullable
-  --enableAutomaticSearch: string@bool-completer # nullable
-  --enableInteractiveSearch: string@bool-completer # nullable
+  --enableRss: oneof<nothing, bool> # nullable
+  --enableAutomaticSearch: oneof<nothing, bool> # nullable
+  --enableInteractiveSearch: oneof<nothing, bool> # nullable
   --priority: int # nullable, format: int32
 ]: any -> any {
   let input = $in
@@ -2998,7 +2997,7 @@ export def "indexer-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -3009,11 +3008,11 @@ export def "indexer-test post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableRss?: bool, enableAutomaticSearch?: bool, enableInteractiveSearch?: bool, supportsRss?: bool, supportsSearch?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, downloadClientId?: int}
-  --enableRss: string@bool-completer
-  --enableAutomaticSearch: string@bool-completer
-  --enableInteractiveSearch: string@bool-completer
-  --supportsRss: string@bool-completer
-  --supportsSearch: string@bool-completer
+  --enableRss: oneof<nothing, bool>
+  --enableAutomaticSearch: oneof<nothing, bool>
+  --enableInteractiveSearch: oneof<nothing, bool>
+  --supportsRss: oneof<nothing, bool>
+  --supportsSearch: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
   --downloadClientId: int # format: int32
@@ -3072,11 +3071,11 @@ export def "indexer-action post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableRss?: bool, enableAutomaticSearch?: bool, enableInteractiveSearch?: bool, supportsRss?: bool, supportsSearch?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, downloadClientId?: int}
-  --enableRss: string@bool-completer
-  --enableAutomaticSearch: string@bool-completer
-  --enableInteractiveSearch: string@bool-completer
-  --supportsRss: string@bool-completer
-  --supportsSearch: string@bool-completer
+  --enableRss: oneof<nothing, bool>
+  --enableAutomaticSearch: oneof<nothing, bool>
+  --enableInteractiveSearch: oneof<nothing, bool>
+  --supportsRss: oneof<nothing, bool>
+  --supportsSearch: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
   --downloadClientId: int # format: int32
@@ -3329,8 +3328,8 @@ export def "manualimport get" [
   --folder: string
   --downloadId: string
   --artistId: int # format: int32
-  --filterExistingFiles: string@bool-completer # default: true
-  --replaceExistingFiles: string@bool-completer # default: true
+  --filterExistingFiles: oneof<nothing, bool> # default: true
+  --replaceExistingFiles: oneof<nothing, bool> # default: true
 ]: nothing -> table<id: int, path: string, name: string, size: int, artist: record<id: int, status: string, ended: bool, artistName: string, foreignArtistId: string, mbId: string, tadbId: int, discogsId: int, allMusicId: string, overview: string, artistType: string, disambiguation: string, links: list, nextAlbum: record, lastAlbum: record, images: list, members: list, remotePoster: string, path: string, qualityProfileId: int, metadataProfileId: int, monitored: bool, monitorNewItems: string, rootFolderPath: string, folder: string, genres: list, cleanName: string, sortName: string, tags: list, added: string, addOptions: record, ratings: record, statistics: record>, album: record<id: int, title: string, disambiguation: string, overview: string, artistId: int, foreignAlbumId: string, monitored: bool, anyReleaseOk: bool, profileId: int, duration: int, albumType: string, secondaryTypes: list, mediumCount: int, ratings: record, releaseDate: string, releases: list, genres: list, media: list, artist: record, images: list, links: list, lastSearchTime: string, statistics: record, addOptions: record, remoteCover: string>, albumReleaseId: int, tracks: list<record>, quality: record<quality: record, revision: record>, releaseGroup: string, qualityWeight: int, downloadId: string, indexerFlags: int, rejections: list<record>, audioTags: record<title: string, cleanTitle: string, artistTitle: string, albumTitle: string, artistTitleInfo: record, artistMBId: string, albumMBId: string, releaseMBId: string, recordingMBId: string, trackMBId: string, discNumber: int, discCount: int, country: record, year: int, label: string, catalogNumber: string, disambiguation: string, duration: string, quality: record, mediaInfo: record, trackNumbers: list, releaseGroup: string, releaseHash: string>, additionalFile: bool, replaceExistingFiles: bool, disableReleaseSwitching: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3413,26 +3412,26 @@ export def "config-mediamanagement put" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
-  --autoUnmonitorPreviouslyDownloadedTracks: string@bool-completer
+  --autoUnmonitorPreviouslyDownloadedTracks: oneof<nothing, bool>
   --recycleBin: string # nullable
   --recycleBinCleanupDays: int # format: int32
   --downloadPropersAndRepacks: string@downloadPropersAndRepacks-completer
-  --createEmptyArtistFolders: string@bool-completer
-  --deleteEmptyFolders: string@bool-completer
+  --createEmptyArtistFolders: oneof<nothing, bool>
+  --deleteEmptyFolders: oneof<nothing, bool>
   --fileDate: string@fileDate-completer
-  --watchLibraryForChanges: string@bool-completer
+  --watchLibraryForChanges: oneof<nothing, bool>
   --rescanAfterRefresh: string@rescanAfterRefresh-completer
   --allowFingerprinting: string@allowFingerprinting-completer
-  --setPermissionsLinux: string@bool-completer
+  --setPermissionsLinux: oneof<nothing, bool>
   --chmodFolder: string # nullable
   --chownGroup: string # nullable
-  --skipFreeSpaceCheckWhenImporting: string@bool-completer
+  --skipFreeSpaceCheckWhenImporting: oneof<nothing, bool>
   --minimumFreeSpaceWhenImporting: int # format: int32
-  --copyUsingHardlinks: string@bool-completer
-  --enableMediaInfo: string@bool-completer
-  --useScriptImport: string@bool-completer
+  --copyUsingHardlinks: oneof<nothing, bool>
+  --enableMediaInfo: oneof<nothing, bool>
+  --useScriptImport: oneof<nothing, bool>
   --scriptImportPath: string # nullable
-  --importExtraFiles: string@bool-completer
+  --importExtraFiles: oneof<nothing, bool>
   --extraFileExtensions: string # nullable
 ]: any -> record<id: int, autoUnmonitorPreviouslyDownloadedTracks: bool, recycleBin: string, recycleBinCleanupDays: int, downloadPropersAndRepacks: string, createEmptyArtistFolders: bool, deleteEmptyFolders: bool, fileDate: string, watchLibraryForChanges: bool, rescanAfterRefresh: string, allowFingerprinting: string, setPermissionsLinux: bool, chmodFolder: string, chownGroup: string, skipFreeSpaceCheckWhenImporting: bool, minimumFreeSpaceWhenImporting: int, copyUsingHardlinks: bool, enableMediaInfo: bool, useScriptImport: bool, scriptImportPath: string, importExtraFiles: bool, extraFileExtensions: string> {
   let input = $in
@@ -3498,7 +3497,7 @@ export def "metadata put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -3509,7 +3508,7 @@ export def "metadata put" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3573,7 +3572,7 @@ export def "metadata post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -3584,7 +3583,7 @@ export def "metadata post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3629,7 +3628,7 @@ export def "metadata-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -3640,7 +3639,7 @@ export def "metadata-test post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3696,7 +3695,7 @@ export def "metadata-action post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3883,8 +3882,8 @@ export def "config-metadataprovider put" [
   --body-id: int # format: int32
   --metadataSource: string # nullable
   --writeAudioTags: string@writeAudioTags-completer
-  --scrubAudioTags: string@bool-completer
-  --embedCoverArt: string@bool-completer
+  --scrubAudioTags: oneof<nothing, bool>
+  --embedCoverArt: oneof<nothing, bool>
 ]: any -> record<id: int, metadataSource: string, writeAudioTags: string, scrubAudioTags: bool, embedCoverArt: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3928,8 +3927,8 @@ export def "wanted-missing list" [
   --pageSize: int # format: int32, default: 10
   --sortKey: string
   --sortDirection: string@sortDirection-completer
-  --includeArtist: string@bool-completer # default: false
-  --monitored: string@bool-completer # default: true
+  --includeArtist: oneof<nothing, bool> # default: false
+  --monitored: oneof<nothing, bool> # default: true
 ]: nothing -> record<page: int, pageSize: int, sortKey: string, sortDirection: string, totalRecords: int, records: table<id: int, title: string, disambiguation: string, overview: string, artistId: int, foreignAlbumId: string, monitored: bool, anyReleaseOk: bool, profileId: int, duration: int, albumType: string, secondaryTypes: list, mediumCount: int, ratings: record, releaseDate: string, releases: list, genres: list, media: list, artist: record, images: list, links: list, lastSearchTime: string, statistics: record, addOptions: record, remoteCover: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3992,16 +3991,16 @@ export def "config-naming put" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
-  --renameTracks: string@bool-completer
-  --replaceIllegalCharacters: string@bool-completer
+  --renameTracks: oneof<nothing, bool>
+  --replaceIllegalCharacters: oneof<nothing, bool>
   --colonReplacementFormat: int # format: int32
   --standardTrackFormat: string # nullable
   --multiDiscTrackFormat: string # nullable
   --artistFolderFormat: string # nullable
-  --includeArtistName: string@bool-completer
-  --includeAlbumTitle: string@bool-completer
-  --includeQuality: string@bool-completer
-  --replaceSpaces: string@bool-completer
+  --includeArtistName: oneof<nothing, bool>
+  --includeAlbumTitle: oneof<nothing, bool>
+  --includeQuality: oneof<nothing, bool>
+  --replaceSpaces: oneof<nothing, bool>
   --separator: string # nullable
   --numberStyle: string # nullable
 ]: any -> record<id: int, renameTracks: bool, replaceIllegalCharacters: bool, colonReplacementFormat: int, standardTrackFormat: string, multiDiscTrackFormat: string, artistFolderFormat: string, includeArtistName: bool, includeAlbumTitle: bool, includeQuality: bool, replaceSpaces: bool, separator: string, numberStyle: string> {
@@ -4044,16 +4043,16 @@ export def "config-naming-examples get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --renameTracks: string@bool-completer
-  --replaceIllegalCharacters: string@bool-completer
+  --renameTracks: oneof<nothing, bool>
+  --replaceIllegalCharacters: oneof<nothing, bool>
   --colonReplacementFormat: int # format: int32
   --standardTrackFormat: string
   --multiDiscTrackFormat: string
   --artistFolderFormat: string
-  --includeArtistName: string@bool-completer
-  --includeAlbumTitle: string@bool-completer
-  --includeQuality: string@bool-completer
-  --replaceSpaces: string@bool-completer
+  --includeArtistName: oneof<nothing, bool>
+  --includeAlbumTitle: oneof<nothing, bool>
+  --includeQuality: oneof<nothing, bool>
+  --replaceSpaces: oneof<nothing, bool>
   --separator: string
   --numberStyle: string
   --id: int # format: int32
@@ -4102,7 +4101,7 @@ export def "notification put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -4114,33 +4113,33 @@ export def "notification put" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onGrab?: bool, onReleaseImport?: bool, onUpgrade?: bool, onRename?: bool, onArtistAdd?: bool, onArtistDelete?: bool, onAlbumDelete?: bool, onHealthIssue?: bool, onHealthRestored?: bool, onDownloadFailure?: bool, onImportFailure?: bool, onTrackRetag?: bool, onApplicationUpdate?: bool, supportsOnGrab?: bool, supportsOnReleaseImport?: bool, supportsOnUpgrade?: bool, supportsOnRename?: bool, supportsOnArtistAdd?: bool, supportsOnArtistDelete?: bool, supportsOnAlbumDelete?: bool, supportsOnHealthIssue?: bool, supportsOnHealthRestored?: bool, includeHealthWarnings?: bool, supportsOnDownloadFailure?: bool, supportsOnImportFailure?: bool, supportsOnTrackRetag?: bool, supportsOnApplicationUpdate?: bool, testCommand?: string}
   --link: string # nullable
-  --onGrab: string@bool-completer
-  --onReleaseImport: string@bool-completer
-  --onUpgrade: string@bool-completer
-  --onRename: string@bool-completer
-  --onArtistAdd: string@bool-completer
-  --onArtistDelete: string@bool-completer
-  --onAlbumDelete: string@bool-completer
-  --onHealthIssue: string@bool-completer
-  --onHealthRestored: string@bool-completer
-  --onDownloadFailure: string@bool-completer
-  --onImportFailure: string@bool-completer
-  --onTrackRetag: string@bool-completer
-  --onApplicationUpdate: string@bool-completer
-  --supportsOnGrab: string@bool-completer
-  --supportsOnReleaseImport: string@bool-completer
-  --supportsOnUpgrade: string@bool-completer
-  --supportsOnRename: string@bool-completer
-  --supportsOnArtistAdd: string@bool-completer
-  --supportsOnArtistDelete: string@bool-completer
-  --supportsOnAlbumDelete: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --supportsOnHealthRestored: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
-  --supportsOnDownloadFailure: string@bool-completer
-  --supportsOnImportFailure: string@bool-completer
-  --supportsOnTrackRetag: string@bool-completer
-  --supportsOnApplicationUpdate: string@bool-completer
+  --onGrab: oneof<nothing, bool>
+  --onReleaseImport: oneof<nothing, bool>
+  --onUpgrade: oneof<nothing, bool>
+  --onRename: oneof<nothing, bool>
+  --onArtistAdd: oneof<nothing, bool>
+  --onArtistDelete: oneof<nothing, bool>
+  --onAlbumDelete: oneof<nothing, bool>
+  --onHealthIssue: oneof<nothing, bool>
+  --onHealthRestored: oneof<nothing, bool>
+  --onDownloadFailure: oneof<nothing, bool>
+  --onImportFailure: oneof<nothing, bool>
+  --onTrackRetag: oneof<nothing, bool>
+  --onApplicationUpdate: oneof<nothing, bool>
+  --supportsOnGrab: oneof<nothing, bool>
+  --supportsOnReleaseImport: oneof<nothing, bool>
+  --supportsOnUpgrade: oneof<nothing, bool>
+  --supportsOnRename: oneof<nothing, bool>
+  --supportsOnArtistAdd: oneof<nothing, bool>
+  --supportsOnArtistDelete: oneof<nothing, bool>
+  --supportsOnAlbumDelete: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --supportsOnHealthRestored: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
+  --supportsOnDownloadFailure: oneof<nothing, bool>
+  --supportsOnImportFailure: oneof<nothing, bool>
+  --supportsOnTrackRetag: oneof<nothing, bool>
+  --supportsOnApplicationUpdate: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, link: string, onGrab: bool, onReleaseImport: bool, onUpgrade: bool, onRename: bool, onArtistAdd: bool, onArtistDelete: bool, onAlbumDelete: bool, onHealthIssue: bool, onHealthRestored: bool, onDownloadFailure: bool, onImportFailure: bool, onTrackRetag: bool, onApplicationUpdate: bool, supportsOnGrab: bool, supportsOnReleaseImport: bool, supportsOnUpgrade: bool, supportsOnRename: bool, supportsOnArtistAdd: bool, supportsOnArtistDelete: bool, supportsOnAlbumDelete: bool, supportsOnHealthIssue: bool, supportsOnHealthRestored: bool, includeHealthWarnings: bool, supportsOnDownloadFailure: bool, supportsOnImportFailure: bool, supportsOnTrackRetag: bool, supportsOnApplicationUpdate: bool, testCommand: string> {
   let input = $in
@@ -4205,7 +4204,7 @@ export def "notification post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -4217,33 +4216,33 @@ export def "notification post" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onGrab?: bool, onReleaseImport?: bool, onUpgrade?: bool, onRename?: bool, onArtistAdd?: bool, onArtistDelete?: bool, onAlbumDelete?: bool, onHealthIssue?: bool, onHealthRestored?: bool, onDownloadFailure?: bool, onImportFailure?: bool, onTrackRetag?: bool, onApplicationUpdate?: bool, supportsOnGrab?: bool, supportsOnReleaseImport?: bool, supportsOnUpgrade?: bool, supportsOnRename?: bool, supportsOnArtistAdd?: bool, supportsOnArtistDelete?: bool, supportsOnAlbumDelete?: bool, supportsOnHealthIssue?: bool, supportsOnHealthRestored?: bool, includeHealthWarnings?: bool, supportsOnDownloadFailure?: bool, supportsOnImportFailure?: bool, supportsOnTrackRetag?: bool, supportsOnApplicationUpdate?: bool, testCommand?: string}
   --link: string # nullable
-  --onGrab: string@bool-completer
-  --onReleaseImport: string@bool-completer
-  --onUpgrade: string@bool-completer
-  --onRename: string@bool-completer
-  --onArtistAdd: string@bool-completer
-  --onArtistDelete: string@bool-completer
-  --onAlbumDelete: string@bool-completer
-  --onHealthIssue: string@bool-completer
-  --onHealthRestored: string@bool-completer
-  --onDownloadFailure: string@bool-completer
-  --onImportFailure: string@bool-completer
-  --onTrackRetag: string@bool-completer
-  --onApplicationUpdate: string@bool-completer
-  --supportsOnGrab: string@bool-completer
-  --supportsOnReleaseImport: string@bool-completer
-  --supportsOnUpgrade: string@bool-completer
-  --supportsOnRename: string@bool-completer
-  --supportsOnArtistAdd: string@bool-completer
-  --supportsOnArtistDelete: string@bool-completer
-  --supportsOnAlbumDelete: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --supportsOnHealthRestored: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
-  --supportsOnDownloadFailure: string@bool-completer
-  --supportsOnImportFailure: string@bool-completer
-  --supportsOnTrackRetag: string@bool-completer
-  --supportsOnApplicationUpdate: string@bool-completer
+  --onGrab: oneof<nothing, bool>
+  --onReleaseImport: oneof<nothing, bool>
+  --onUpgrade: oneof<nothing, bool>
+  --onRename: oneof<nothing, bool>
+  --onArtistAdd: oneof<nothing, bool>
+  --onArtistDelete: oneof<nothing, bool>
+  --onAlbumDelete: oneof<nothing, bool>
+  --onHealthIssue: oneof<nothing, bool>
+  --onHealthRestored: oneof<nothing, bool>
+  --onDownloadFailure: oneof<nothing, bool>
+  --onImportFailure: oneof<nothing, bool>
+  --onTrackRetag: oneof<nothing, bool>
+  --onApplicationUpdate: oneof<nothing, bool>
+  --supportsOnGrab: oneof<nothing, bool>
+  --supportsOnReleaseImport: oneof<nothing, bool>
+  --supportsOnUpgrade: oneof<nothing, bool>
+  --supportsOnRename: oneof<nothing, bool>
+  --supportsOnArtistAdd: oneof<nothing, bool>
+  --supportsOnArtistDelete: oneof<nothing, bool>
+  --supportsOnAlbumDelete: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --supportsOnHealthRestored: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
+  --supportsOnDownloadFailure: oneof<nothing, bool>
+  --supportsOnImportFailure: oneof<nothing, bool>
+  --supportsOnTrackRetag: oneof<nothing, bool>
+  --supportsOnApplicationUpdate: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, link: string, onGrab: bool, onReleaseImport: bool, onUpgrade: bool, onRename: bool, onArtistAdd: bool, onArtistDelete: bool, onAlbumDelete: bool, onHealthIssue: bool, onHealthRestored: bool, onDownloadFailure: bool, onImportFailure: bool, onTrackRetag: bool, onApplicationUpdate: bool, supportsOnGrab: bool, supportsOnReleaseImport: bool, supportsOnUpgrade: bool, supportsOnRename: bool, supportsOnArtistAdd: bool, supportsOnArtistDelete: bool, supportsOnAlbumDelete: bool, supportsOnHealthIssue: bool, supportsOnHealthRestored: bool, includeHealthWarnings: bool, supportsOnDownloadFailure: bool, supportsOnImportFailure: bool, supportsOnTrackRetag: bool, supportsOnApplicationUpdate: bool, testCommand: string> {
   let input = $in
@@ -4289,7 +4288,7 @@ export def "notification-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -4301,33 +4300,33 @@ export def "notification-test post" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onGrab?: bool, onReleaseImport?: bool, onUpgrade?: bool, onRename?: bool, onArtistAdd?: bool, onArtistDelete?: bool, onAlbumDelete?: bool, onHealthIssue?: bool, onHealthRestored?: bool, onDownloadFailure?: bool, onImportFailure?: bool, onTrackRetag?: bool, onApplicationUpdate?: bool, supportsOnGrab?: bool, supportsOnReleaseImport?: bool, supportsOnUpgrade?: bool, supportsOnRename?: bool, supportsOnArtistAdd?: bool, supportsOnArtistDelete?: bool, supportsOnAlbumDelete?: bool, supportsOnHealthIssue?: bool, supportsOnHealthRestored?: bool, includeHealthWarnings?: bool, supportsOnDownloadFailure?: bool, supportsOnImportFailure?: bool, supportsOnTrackRetag?: bool, supportsOnApplicationUpdate?: bool, testCommand?: string}
   --link: string # nullable
-  --onGrab: string@bool-completer
-  --onReleaseImport: string@bool-completer
-  --onUpgrade: string@bool-completer
-  --onRename: string@bool-completer
-  --onArtistAdd: string@bool-completer
-  --onArtistDelete: string@bool-completer
-  --onAlbumDelete: string@bool-completer
-  --onHealthIssue: string@bool-completer
-  --onHealthRestored: string@bool-completer
-  --onDownloadFailure: string@bool-completer
-  --onImportFailure: string@bool-completer
-  --onTrackRetag: string@bool-completer
-  --onApplicationUpdate: string@bool-completer
-  --supportsOnGrab: string@bool-completer
-  --supportsOnReleaseImport: string@bool-completer
-  --supportsOnUpgrade: string@bool-completer
-  --supportsOnRename: string@bool-completer
-  --supportsOnArtistAdd: string@bool-completer
-  --supportsOnArtistDelete: string@bool-completer
-  --supportsOnAlbumDelete: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --supportsOnHealthRestored: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
-  --supportsOnDownloadFailure: string@bool-completer
-  --supportsOnImportFailure: string@bool-completer
-  --supportsOnTrackRetag: string@bool-completer
-  --supportsOnApplicationUpdate: string@bool-completer
+  --onGrab: oneof<nothing, bool>
+  --onReleaseImport: oneof<nothing, bool>
+  --onUpgrade: oneof<nothing, bool>
+  --onRename: oneof<nothing, bool>
+  --onArtistAdd: oneof<nothing, bool>
+  --onArtistDelete: oneof<nothing, bool>
+  --onAlbumDelete: oneof<nothing, bool>
+  --onHealthIssue: oneof<nothing, bool>
+  --onHealthRestored: oneof<nothing, bool>
+  --onDownloadFailure: oneof<nothing, bool>
+  --onImportFailure: oneof<nothing, bool>
+  --onTrackRetag: oneof<nothing, bool>
+  --onApplicationUpdate: oneof<nothing, bool>
+  --supportsOnGrab: oneof<nothing, bool>
+  --supportsOnReleaseImport: oneof<nothing, bool>
+  --supportsOnUpgrade: oneof<nothing, bool>
+  --supportsOnRename: oneof<nothing, bool>
+  --supportsOnArtistAdd: oneof<nothing, bool>
+  --supportsOnArtistDelete: oneof<nothing, bool>
+  --supportsOnAlbumDelete: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --supportsOnHealthRestored: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
+  --supportsOnDownloadFailure: oneof<nothing, bool>
+  --supportsOnImportFailure: oneof<nothing, bool>
+  --supportsOnTrackRetag: oneof<nothing, bool>
+  --supportsOnApplicationUpdate: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> any {
   let input = $in
@@ -4385,33 +4384,33 @@ export def "notification-action post" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onGrab?: bool, onReleaseImport?: bool, onUpgrade?: bool, onRename?: bool, onArtistAdd?: bool, onArtistDelete?: bool, onAlbumDelete?: bool, onHealthIssue?: bool, onHealthRestored?: bool, onDownloadFailure?: bool, onImportFailure?: bool, onTrackRetag?: bool, onApplicationUpdate?: bool, supportsOnGrab?: bool, supportsOnReleaseImport?: bool, supportsOnUpgrade?: bool, supportsOnRename?: bool, supportsOnArtistAdd?: bool, supportsOnArtistDelete?: bool, supportsOnAlbumDelete?: bool, supportsOnHealthIssue?: bool, supportsOnHealthRestored?: bool, includeHealthWarnings?: bool, supportsOnDownloadFailure?: bool, supportsOnImportFailure?: bool, supportsOnTrackRetag?: bool, supportsOnApplicationUpdate?: bool, testCommand?: string}
   --link: string # nullable
-  --onGrab: string@bool-completer
-  --onReleaseImport: string@bool-completer
-  --onUpgrade: string@bool-completer
-  --onRename: string@bool-completer
-  --onArtistAdd: string@bool-completer
-  --onArtistDelete: string@bool-completer
-  --onAlbumDelete: string@bool-completer
-  --onHealthIssue: string@bool-completer
-  --onHealthRestored: string@bool-completer
-  --onDownloadFailure: string@bool-completer
-  --onImportFailure: string@bool-completer
-  --onTrackRetag: string@bool-completer
-  --onApplicationUpdate: string@bool-completer
-  --supportsOnGrab: string@bool-completer
-  --supportsOnReleaseImport: string@bool-completer
-  --supportsOnUpgrade: string@bool-completer
-  --supportsOnRename: string@bool-completer
-  --supportsOnArtistAdd: string@bool-completer
-  --supportsOnArtistDelete: string@bool-completer
-  --supportsOnAlbumDelete: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --supportsOnHealthRestored: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
-  --supportsOnDownloadFailure: string@bool-completer
-  --supportsOnImportFailure: string@bool-completer
-  --supportsOnTrackRetag: string@bool-completer
-  --supportsOnApplicationUpdate: string@bool-completer
+  --onGrab: oneof<nothing, bool>
+  --onReleaseImport: oneof<nothing, bool>
+  --onUpgrade: oneof<nothing, bool>
+  --onRename: oneof<nothing, bool>
+  --onArtistAdd: oneof<nothing, bool>
+  --onArtistDelete: oneof<nothing, bool>
+  --onAlbumDelete: oneof<nothing, bool>
+  --onHealthIssue: oneof<nothing, bool>
+  --onHealthRestored: oneof<nothing, bool>
+  --onDownloadFailure: oneof<nothing, bool>
+  --onImportFailure: oneof<nothing, bool>
+  --onTrackRetag: oneof<nothing, bool>
+  --onApplicationUpdate: oneof<nothing, bool>
+  --supportsOnGrab: oneof<nothing, bool>
+  --supportsOnReleaseImport: oneof<nothing, bool>
+  --supportsOnUpgrade: oneof<nothing, bool>
+  --supportsOnRename: oneof<nothing, bool>
+  --supportsOnArtistAdd: oneof<nothing, bool>
+  --supportsOnArtistDelete: oneof<nothing, bool>
+  --supportsOnAlbumDelete: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --supportsOnHealthRestored: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
+  --supportsOnDownloadFailure: oneof<nothing, bool>
+  --supportsOnImportFailure: oneof<nothing, bool>
+  --supportsOnTrackRetag: oneof<nothing, bool>
+  --supportsOnApplicationUpdate: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> any {
   let input = $in
@@ -4588,7 +4587,7 @@ export def "qualityprofile post" [
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
   --name: string # nullable
-  --upgradeAllowed: string@bool-completer
+  --upgradeAllowed: oneof<nothing, bool>
   --cutoff: int # format: int32
   --items: list # nullable — item shape: {id?: int, name?: string, quality?: record, items?: list, allowed?: bool}
   --minFormatScore: int # format: int32
@@ -4660,7 +4659,7 @@ export def "qualityprofile put" [
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
   --name: string # nullable
-  --upgradeAllowed: string@bool-completer
+  --upgradeAllowed: oneof<nothing, bool>
   --cutoff: int # format: int32
   --items: list # nullable — item shape: {id?: int, name?: string, quality?: record, items?: list, allowed?: bool}
   --minFormatScore: int # format: int32
@@ -4727,10 +4726,10 @@ export def "queue delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --removeFromClient: string@bool-completer # default: true
-  --blocklist: string@bool-completer # default: false
-  --skipRedownload: string@bool-completer # default: false
-  --changeCategory: string@bool-completer # default: false
+  --removeFromClient: oneof<nothing, bool> # default: true
+  --blocklist: oneof<nothing, bool> # default: false
+  --skipRedownload: oneof<nothing, bool> # default: false
+  --changeCategory: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4750,10 +4749,10 @@ export def "queue-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --removeFromClient: string@bool-completer # default: true
-  --blocklist: string@bool-completer # default: false
-  --skipRedownload: string@bool-completer # default: false
-  --changeCategory: string@bool-completer # default: false
+  --removeFromClient: oneof<nothing, bool> # default: true
+  --blocklist: oneof<nothing, bool> # default: false
+  --skipRedownload: oneof<nothing, bool> # default: false
+  --changeCategory: oneof<nothing, bool> # default: false
   --ids: list # nullable
 ]: any -> any {
   let input = $in
@@ -4781,9 +4780,9 @@ export def "queue get" [
   --pageSize: int # format: int32, default: 10
   --sortKey: string
   --sortDirection: string@sortDirection-completer
-  --includeUnknownArtistItems: string@bool-completer # default: false
-  --includeArtist: string@bool-completer # default: false
-  --includeAlbum: string@bool-completer # default: false
+  --includeUnknownArtistItems: oneof<nothing, bool> # default: false
+  --includeArtist: oneof<nothing, bool> # default: false
+  --includeAlbum: oneof<nothing, bool> # default: false
   --artistIds: list
   --protocol: string@protocol-completer
   --quality: list
@@ -4849,8 +4848,8 @@ export def "queue-details get" [
   --allow-errors(-e) # Return full response without error handling
   --artistId: int # format: int32
   --albumIds: list
-  --includeArtist: string@bool-completer # default: false
-  --includeAlbum: string@bool-completer # default: true
+  --includeArtist: oneof<nothing, bool> # default: false
+  --includeAlbum: oneof<nothing, bool> # default: true
 ]: nothing -> table<id: int, artistId: int, albumId: int, artist: record<id: int, status: string, ended: bool, artistName: string, foreignArtistId: string, mbId: string, tadbId: int, discogsId: int, allMusicId: string, overview: string, artistType: string, disambiguation: string, links: list, nextAlbum: record, lastAlbum: record, images: list, members: list, remotePoster: string, path: string, qualityProfileId: int, metadataProfileId: int, monitored: bool, monitorNewItems: string, rootFolderPath: string, folder: string, genres: list, cleanName: string, sortName: string, tags: list, added: string, addOptions: record, ratings: record, statistics: record>, album: record<id: int, title: string, disambiguation: string, overview: string, artistId: int, foreignAlbumId: string, monitored: bool, anyReleaseOk: bool, profileId: int, duration: int, albumType: string, secondaryTypes: list, mediumCount: int, ratings: record, releaseDate: string, releases: list, genres: list, media: list, artist: record, images: list, links: list, lastSearchTime: string, statistics: record, addOptions: record, remoteCover: string>, quality: record<quality: record, revision: record>, customFormats: list<record>, customFormatScore: int, size: float, title: string, sizeleft: float, timeleft: string, estimatedCompletionTime: string, added: string, status: string, trackedDownloadStatus: string, trackedDownloadState: string, statusMessages: list<record>, errorMessage: string, downloadId: string, protocol: string, downloadClient: string, downloadClientHasPostImportCategory: bool, indexer: string, outputPath: string, trackFileCount: int, trackHasFileCount: int, downloadForced: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4906,20 +4905,20 @@ export def "release post" [
   --subGroup: string # nullable
   --releaseHash: string # nullable
   --title: string # nullable
-  --discography: string@bool-completer
-  --sceneSource: string@bool-completer
+  --discography: oneof<nothing, bool>
+  --sceneSource: oneof<nothing, bool>
   --airDate: string # nullable
   --artistName: string # nullable
   --albumTitle: string # nullable
-  --approved: string@bool-completer
-  --temporarilyRejected: string@bool-completer
-  --rejected: string@bool-completer
+  --approved: oneof<nothing, bool>
+  --temporarilyRejected: oneof<nothing, bool>
+  --rejected: oneof<nothing, bool>
   --rejections: list # nullable
   --publishDate: string # format: date-time
   --commentUrl: string # nullable
   --downloadUrl: string # nullable
   --infoUrl: string # nullable
-  --downloadAllowed: string@bool-completer
+  --downloadAllowed: oneof<nothing, bool>
   --releaseWeight: int # format: int32
   --customFormats: list # nullable — item shape: {id?: int, name?: string, includeCustomFormatWhenRenaming?: bool, specifications?: list}
   --customFormatScore: int # format: int32
@@ -4999,7 +4998,7 @@ export def "releaseprofile put" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --required: list # nullable
   --ignored: list # nullable
   --indexerId: int # format: int32
@@ -5065,7 +5064,7 @@ export def "releaseprofile post" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --required: list # nullable
   --ignored: list # nullable
   --indexerId: int # format: int32
@@ -5109,20 +5108,20 @@ export def "release-push post" [
   --subGroup: string # nullable
   --releaseHash: string # nullable
   --title: string # nullable
-  --discography: string@bool-completer
-  --sceneSource: string@bool-completer
+  --discography: oneof<nothing, bool>
+  --sceneSource: oneof<nothing, bool>
   --airDate: string # nullable
   --artistName: string # nullable
   --albumTitle: string # nullable
-  --approved: string@bool-completer
-  --temporarilyRejected: string@bool-completer
-  --rejected: string@bool-completer
+  --approved: oneof<nothing, bool>
+  --temporarilyRejected: oneof<nothing, bool>
+  --rejected: oneof<nothing, bool>
   --rejections: list # nullable
   --publishDate: string # format: date-time
   --commentUrl: string # nullable
   --downloadUrl: string # nullable
   --infoUrl: string # nullable
-  --downloadAllowed: string@bool-completer
+  --downloadAllowed: oneof<nothing, bool>
   --releaseWeight: int # format: int32
   --customFormats: list # nullable — item shape: {id?: int, name?: string, includeCustomFormatWhenRenaming?: bool, specifications?: list}
   --customFormatScore: int # format: int32
@@ -5341,7 +5340,7 @@ export def "rootfolder put" [
   --defaultMonitorOption: string@defaultMonitorOption-completer
   --defaultNewItemMonitorOption: string@defaultNewItemMonitorOption-completer
   --defaultTags: list # nullable
-  --accessible: string@bool-completer
+  --accessible: oneof<nothing, bool>
   --freeSpace: int # nullable, format: int64
   --totalSpace: int # nullable, format: int64
 ]: any -> record<id: int, name: string, path: string, defaultMetadataProfileId: int, defaultQualityProfileId: int, defaultMonitorOption: string, defaultNewItemMonitorOption: string, defaultTags: list<int>, accessible: bool, freeSpace: int, totalSpace: int> {
@@ -5393,7 +5392,7 @@ export def "rootfolder post" [
   --defaultMonitorOption: string@defaultMonitorOption-completer
   --defaultNewItemMonitorOption: string@defaultNewItemMonitorOption-completer
   --defaultTags: list # nullable
-  --accessible: string@bool-completer
+  --accessible: oneof<nothing, bool>
   --freeSpace: int # nullable, format: int64
   --totalSpace: int # nullable, format: int64
 ]: any -> record<id: int, name: string, path: string, defaultMetadataProfileId: int, defaultQualityProfileId: int, defaultMonitorOption: string, defaultNewItemMonitorOption: string, defaultTags: list<int>, accessible: bool, freeSpace: int, totalSpace: int> {
@@ -5870,7 +5869,7 @@ export def "trackfile put" [
   --customFormatScore: int # format: int32
   --indexerFlags: int # nullable, format: int32
   --mediaInfo: record # shape: {id?: int, audioChannels?: float, audioBitRate?: string, audioCodec?: string, audioBits?: string, audioSampleRate?: string}
-  --qualityCutoffNotMet: string@bool-completer
+  --qualityCutoffNotMet: oneof<nothing, bool>
   --audioTags: record # shape: {title?: string, cleanTitle?: string, artistTitle?: string, albumTitle?: string, artistTitleInfo?: record, artistMBId?: string, albumMBId?: string, releaseMBId?: string, recordingMBId?: string, trackMBId?: string, discNumber?: int, discCount?: int, country?: record, year?: int, label?: string, catalogNumber?: string, disambiguation?: string, duration?: string, quality?: record, mediaInfo?: record, trackNumbers?: list, releaseGroup?: string, releaseHash?: string}
 ]: any -> record<id: int, artistId: int, albumId: int, path: string, size: int, dateAdded: string, sceneName: string, releaseGroup: string, quality: record<quality: record<id: int, name: string>, revision: record<version: int, real: int, isRepack: bool>>, qualityWeight: int, customFormats: table<id: int, name: string, includeCustomFormatWhenRenaming: bool, specifications: list>, customFormatScore: int, indexerFlags: int, mediaInfo: record<id: int, audioChannels: float, audioBitRate: string, audioCodec: string, audioBits: string, audioSampleRate: string>, qualityCutoffNotMet: bool, audioTags: record<title: string, cleanTitle: string, artistTitle: string, albumTitle: string, artistTitleInfo: record<title: string, titleWithoutYear: string, year: int>, artistMBId: string, albumMBId: string, releaseMBId: string, recordingMBId: string, trackMBId: string, discNumber: int, discCount: int, country: record<twoLetterCode: string, name: string>, year: int, label: string, catalogNumber: string, disambiguation: string, duration: string, quality: record<quality: record, revision: record>, mediaInfo: record<audioFormat: string, audioBitrate: int, audioChannels: int, audioBits: int, audioSampleRate: int>, trackNumbers: list<int>, releaseGroup: string, releaseHash: string>> {
   let input = $in
@@ -5916,7 +5915,7 @@ export def "trackfile list" [
   --artistId: int # format: int32
   --trackFileIds: list
   --albumId: list
-  --unmapped: string@bool-completer
+  --unmapped: oneof<nothing, bool>
 ]: nothing -> table<id: int, artistId: int, albumId: int, path: string, size: int, dateAdded: string, sceneName: string, releaseGroup: string, quality: record<quality: record, revision: record>, qualityWeight: int, customFormats: list<record>, customFormatScore: int, indexerFlags: int, mediaInfo: record<id: int, audioChannels: float, audioBitRate: string, audioCodec: string, audioBits: string, audioSampleRate: string>, qualityCutoffNotMet: bool, audioTags: record<title: string, cleanTitle: string, artistTitle: string, albumTitle: string, artistTitleInfo: record, artistMBId: string, albumMBId: string, releaseMBId: string, recordingMBId: string, trackMBId: string, discNumber: int, discCount: int, country: record, year: int, label: string, catalogNumber: string, disambiguation: string, duration: string, quality: record, mediaInfo: record, trackNumbers: list, releaseGroup: string, releaseHash: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5998,14 +5997,14 @@ export def "config-ui put" [
   --shortDateFormat: string # nullable
   --longDateFormat: string # nullable
   --timeFormat: string # nullable
-  --showRelativeDates: string@bool-completer
-  --enableColorImpairedMode: string@bool-completer
+  --showRelativeDates: oneof<nothing, bool>
+  --enableColorImpairedMode: oneof<nothing, bool>
   --uiLanguage: int # format: int32
-  --expandAlbumByDefault: string@bool-completer
-  --expandSingleByDefault: string@bool-completer
-  --expandEPByDefault: string@bool-completer
-  --expandBroadcastByDefault: string@bool-completer
-  --expandOtherByDefault: string@bool-completer
+  --expandAlbumByDefault: oneof<nothing, bool>
+  --expandSingleByDefault: oneof<nothing, bool>
+  --expandEPByDefault: oneof<nothing, bool>
+  --expandBroadcastByDefault: oneof<nothing, bool>
+  --expandOtherByDefault: oneof<nothing, bool>
   --theme: string # nullable
 ]: any -> record<id: int, firstDayOfWeek: int, calendarWeekColumnHeader: string, shortDateFormat: string, longDateFormat: string, timeFormat: string, showRelativeDates: bool, enableColorImpairedMode: bool, uiLanguage: int, expandAlbumByDefault: bool, expandSingleByDefault: bool, expandEPByDefault: bool, expandBroadcastByDefault: bool, expandOtherByDefault: bool, theme: string> {
   let input = $in

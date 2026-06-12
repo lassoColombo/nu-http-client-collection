@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://ll.thespacedevs.com" "https://lldev.thespacedevs.com"] }
 def auth-scheme-completer [] { ["bearer" "cookie-sessionid"] }
 
@@ -136,7 +135,7 @@ export def "230-agencies list" [
   --failed-launches-gte: int
   --failed-launches-lt: int
   --failed-launches-lte: int
-  --featured: string@bool-completer
+  --featured: oneof<nothing, bool>
   --founding-year: int
   --founding-year-gt: int
   --founding-year-gte: int
@@ -156,7 +155,7 @@ export def "230-agencies list" [
   --pending-launches-lt: int
   --pending-launches-lte: int
   --search: string # A search term.
-  --spacecraft: string@bool-completer
+  --spacecraft: oneof<nothing, bool>
   --successful-landings: int
   --successful-landings-gt: int
   --successful-landings-gte: int
@@ -264,9 +263,9 @@ export def "230-astronauts list" [
   --flights-count-gte: int
   --flights-count-lt: int
   --flights-count-lte: int
-  --has-flown: string@bool-completer
-  --in-space: string@bool-completer
-  --is-human: string@bool-completer
+  --has-flown: oneof<nothing, bool>
+  --in-space: oneof<nothing, bool>
+  --is-human: oneof<nothing, bool>
   --landings-count: int
   --landings-count-gt: int
   --landings-count-gte: int
@@ -1791,7 +1790,7 @@ export def "230-docking-events list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --docked: string@bool-completer
+  --docked: oneof<nothing, bool>
   --docking-gt: string # Docking is greater than (format: date-time)
   --docking-gte: string # Docking is greater than or equal to (format: date-time)
   --docking-lt: string # Docking is less than (format: date-time)
@@ -1993,7 +1992,7 @@ export def "230-events-upcoming list" [
   --date-lte: string # Date is less than or equal to (format: date-time)
   --day: list # Multiple values may be separated by commas.
   --expedition-ids: list # Comma-separated expedition IDs.
-  --hide-recent-previous: string@bool-completer # Hide events from the past 24 hours, which are included by default for convenience.
+  --hide-recent-previous: oneof<nothing, bool> # Hide events from the past 24 hours, which are included by default for convenience.
   --id: list # Multiple values may be separated by commas.
   --last-updated-gte: string # Last Update is greater than or equal to (format: date-time)
   --last-updated-lte: string # Last Update is less than or equal to (format: date-time)
@@ -2062,7 +2061,7 @@ export def "230-expeditions list" [
   --end-gte: string # End is greater than or equal to (format: date-time)
   --end-lt: string # End is less than (format: date-time)
   --end-lte: string # End is greater than or equal to (format: date-time)
-  --is-active: string@bool-completer
+  --is-active: oneof<nothing, bool>
   --limit: int # Number of results to return per page.
   --mode: string@mode-completer-1 # Specifies the level of detail for the response. Options are dynamically generated based on available serializers.
   --name: string
@@ -2118,7 +2117,7 @@ export def "230-landings list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --attempt: string@bool-completer
+  --attempt: oneof<nothing, bool>
   --firststage-launch-ids: list # Multiple values may be separated by commas.
   --landing-location-ids: list # Multiple values may be separated by commas.
   --landing-type-ids: list # Multiple values may be separated by commas.
@@ -2133,7 +2132,7 @@ export def "230-landings list" [
   --spacecraft-ids: list # Multiple values may be separated by commas.
   --spacecraft-config-ids: list # Multiple values may be separated by commas.
   --spacecraft-launch-ids: list # Multiple values may be separated by commas.
-  --success: string@bool-completer
+  --success: oneof<nothing, bool>
 ]: nothing -> record<count: int, next: string, previous: string, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-sessionid"))
   let base = ($base_url | default $BASE_URL)
@@ -2286,7 +2285,7 @@ export def "230-launcher-configurations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --attempted-landings: int
   --attempted-landings-gt: int
   --attempted-landings-gte: int
@@ -2316,7 +2315,7 @@ export def "230-launcher-configurations list" [
   --families-contains: list
   --full-name: string
   --full-name-contains: string
-  --is-placeholder: string@bool-completer
+  --is-placeholder: oneof<nothing, bool>
   --limit: int # Number of results to return per page.
   --maiden-flight: string # format: date
   --maiden-flight-gt: string # format: date
@@ -2403,7 +2402,7 @@ export def "230-launchers list" [
   --attempted-landings-lt: int
   --attempted-landings-lte: int
   --first-launch-date: string # format: date-time
-  --flight-proven: string@bool-completer
+  --flight-proven: oneof<nothing, bool>
   --flights: int
   --flights-gt: int
   --flights-gte: int
@@ -2411,7 +2410,7 @@ export def "230-launchers list" [
   --flights-lte: int
   --id: int
   --id-contains: int
-  --is-placeholder: string@bool-completer
+  --is-placeholder: oneof<nothing, bool>
   --last-launch-date: string # format: date-time
   --launcher-config-ids: list # Comma-separated launcher config IDs.
   --launcher-config-manufacturer--name: string
@@ -2485,8 +2484,8 @@ export def "230-launches list" [
   --agency-launch-attempt-count-year-lte: int
   --day: list # Multiple values may be separated by commas.
   --id: list # Multiple values may be separated by commas.
-  --include-suborbital: string@bool-completer
-  --is-crewed: string@bool-completer
+  --include-suborbital: oneof<nothing, bool>
+  --is-crewed: oneof<nothing, bool>
   --last-updated-gte: string # Last Update is greater than or equal to (format: date-time)
   --last-updated-lte: string # Last Update is less than or equal to (format: date-time)
   --launch-designator: list # Comma-separated (COSPAR) international launch designators.
@@ -2625,8 +2624,8 @@ export def "230-launches-previous list" [
   --agency-launch-attempt-count-year-lte: int
   --day: list # Multiple values may be separated by commas.
   --id: list # Multiple values may be separated by commas.
-  --include-suborbital: string@bool-completer
-  --is-crewed: string@bool-completer
+  --include-suborbital: oneof<nothing, bool>
+  --is-crewed: oneof<nothing, bool>
   --last-updated-gte: string # Last Update is greater than or equal to (format: date-time)
   --last-updated-lte: string # Last Update is less than or equal to (format: date-time)
   --launch-designator: list # Comma-separated (COSPAR) international launch designators.
@@ -2764,10 +2763,10 @@ export def "230-launches-upcoming list" [
   --agency-launch-attempt-count-year-lt: int
   --agency-launch-attempt-count-year-lte: int
   --day: list # Multiple values may be separated by commas.
-  --hide-recent-previous: string@bool-completer # Hide launches from the past 24 hours, which are included by default for convenience.
+  --hide-recent-previous: oneof<nothing, bool> # Hide launches from the past 24 hours, which are included by default for convenience.
   --id: list # Multiple values may be separated by commas.
-  --include-suborbital: string@bool-completer
-  --is-crewed: string@bool-completer
+  --include-suborbital: oneof<nothing, bool>
+  --is-crewed: oneof<nothing, bool>
   --last-updated-gte: string # Last Update is greater than or equal to (format: date-time)
   --last-updated-lte: string # Last Update is less than or equal to (format: date-time)
   --launch-designator: list # Comma-separated (COSPAR) international launch designators.
@@ -2894,7 +2893,7 @@ export def "230-locations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --country-code: string # Country Code
   --id: int
   --limit: int # Number of results to return per page.
@@ -3014,7 +3013,7 @@ export def "230-pads list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --agencies-ids: list # Multiple values may be separated by commas.
   --id: int
   --id-contains: int
@@ -3312,8 +3311,8 @@ export def "230-spacecraft list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --in-space: string@bool-completer
-  --is-placeholder: string@bool-completer
+  --in-space: oneof<nothing, bool>
+  --is-placeholder: oneof<nothing, bool>
   --limit: int # Number of results to return per page.
   --mode: string@mode-completer-1 # Specifies the level of detail for the response. Options are dynamically generated based on available serializers.
   --name: string
@@ -3418,8 +3417,8 @@ export def "230-spacecraft-configurations list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --agency: int
-  --human-rated: string@bool-completer
-  --in-use: string@bool-completer
+  --human-rated: oneof<nothing, bool>
+  --in-use: oneof<nothing, bool>
   --limit: int # Number of results to return per page.
   --mode: string@mode-completer-1 # Specifies the level of detail for the response. Options are dynamically generated based on available serializers.
   --name: string

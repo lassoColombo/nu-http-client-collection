@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.lambdatest.com/screenshots/v1"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -105,10 +104,10 @@ export def "start-screenshot-test Start-Screenshot-Test" [
   --callback-url: string # e.g. https://www.example.com
   --configs: record # shape: {macos mojave?: record, windows 10?: record}
   --defer-time: float # e.g. 5
-  --email: string@bool-completer # e.g. true
+  --email: oneof<nothing, bool> # e.g. true
   --mac-res: string # e.g. 1024x768
   --password: string # e.g. password
-  --tunnel: string@bool-completer # e.g. true
+  --tunnel: oneof<nothing, bool> # e.g. true
   --tunnel-identifier: string # e.g. tunnel
   --body-url: string # e.g. https://www.lambdatest.com
   --username: string # e.g. admin

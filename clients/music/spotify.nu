@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.spotify.com/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -783,8 +782,8 @@ export def "playlists change-playlist-details" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # The new name for the playlist, for example `"My New Playlist Title"`
-  --public: string@bool-completer # The playlist's public/private status (if it should be added to the user's profile or not): `true` the playlist will be public, `false` the playlist will be private, `null` the playlist status is not relevant. For more about public/private status, see [Working with Playlists](/documentation/web-api/concepts/playlists)
-  --collaborative: string@bool-completer # If `true`, the playlist will become collaborative and other users will be able to modify the playlist in their Spotify client. <br/> _**Note**: You can only set `collaborative` to `true` on non-public playlists._
+  --public: oneof<nothing, bool> # The playlist's public/private status (if it should be added to the user's profile or not): `true` the playlist will be public, `false` the playlist will be private, `null` the playlist status is not relevant. For more about public/private status, see [Working with Playlists](/documentation/web-api/concepts/playlists)
+  --collaborative: oneof<nothing, bool> # If `true`, the playlist will become collaborative and other users will be able to modify the playlist in their Spotify client. <br/> _**Note**: You can only set `collaborative` to `true` on non-public playlists._
   --description: string # Value for playlist description as displayed in Spotify Clients and in the Web API.
 ]: any -> any {
   let input = $in
@@ -1079,8 +1078,8 @@ export def "me-playlists create-playlist" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string # The name for the new playlist, for example `"Your Coolest Playlist"`. This name does not need to be unique; a user may have several playlists with the same name.
-  --public: string@bool-completer # Defaults to `true`. The playlist's public/private status (if it should be added to the user's profile or not): `true` the playlist will be public, `false` the playlist will be private. To be able to create private playlists, the user must have granted the `playlist-modify-private` [scope](/documentation/web-api/concepts/scopes/#list-of-scopes). For more about public/private status, see [Working with Playlists](/documentation/web-api/concepts/playlists)
-  --collaborative: string@bool-completer # Defaults to `false`. If `true` the playlist will be collaborative. _**Note**: to create a collaborative playlist you must also set `public` to `false`. To create collaborative playlists you must have granted `playlist-modify-private` and `playlist-modify-public` [scopes](/documentation/web-api/concepts/scopes/#list-of-scopes)._
+  --public: oneof<nothing, bool> # Defaults to `true`. The playlist's public/private status (if it should be added to the user's profile or not): `true` the playlist will be public, `false` the playlist will be private. To be able to create private playlists, the user must have granted the `playlist-modify-private` [scope](/documentation/web-api/concepts/scopes/#list-of-scopes). For more about public/private status, see [Working with Playlists](/documentation/web-api/concepts/playlists)
+  --collaborative: oneof<nothing, bool> # Defaults to `false`. If `true` the playlist will be collaborative. _**Note**: to create a collaborative playlist you must also set `public` to `false`. To create collaborative playlists you must have granted `playlist-modify-private` and `playlist-modify-public` [scopes](/documentation/web-api/concepts/scopes/#list-of-scopes)._
   --description: string # value for playlist description as displayed in Spotify Clients and in the Web API.
 ]: any -> any {
   let input = $in
@@ -1662,8 +1661,8 @@ export def "users-playlists create-playlist-for-user" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string # The name for the new playlist, for example `"Your Coolest Playlist"`. This name does not need to be unique; a user may have several playlists with the same name.
-  --public: string@bool-completer # Defaults to `true`. The playlist's public/private status (if it should be added to the user's profile or not): `true` the playlist will be public, `false` the playlist will be private. To be able to create private playlists, the user must have granted the `playlist-modify-private` [scope](/documentation/web-api/concepts/scopes/#list-of-scopes). For more about public/private status, see [Working with Playlists](/documentation/web-api/concepts/playlists)
-  --collaborative: string@bool-completer # Defaults to `false`. If `true` the playlist will be collaborative. _**Note**: to create a collaborative playlist you must also set `public` to `false`. To create collaborative playlists you must have granted `playlist-modify-private` and `playlist-modify-public` [scopes](/documentation/web-api/concepts/scopes/#list-of-scopes)._
+  --public: oneof<nothing, bool> # Defaults to `true`. The playlist's public/private status (if it should be added to the user's profile or not): `true` the playlist will be public, `false` the playlist will be private. To be able to create private playlists, the user must have granted the `playlist-modify-private` [scope](/documentation/web-api/concepts/scopes/#list-of-scopes). For more about public/private status, see [Working with Playlists](/documentation/web-api/concepts/playlists)
+  --collaborative: oneof<nothing, bool> # Defaults to `false`. If `true` the playlist will be collaborative. _**Note**: to create a collaborative playlist you must also set `public` to `false`. To create collaborative playlists you must have granted `playlist-modify-private` and `playlist-modify-public` [scopes](/documentation/web-api/concepts/scopes/#list-of-scopes)._
   --description: string # value for playlist description as displayed in Spotify Clients and in the Web API.
 ]: any -> any {
   let input = $in
@@ -1692,7 +1691,7 @@ export def "playlists-followers follow-playlist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --public: string@bool-completer # Defaults to `true`. If `true` the playlist will be included in user's public playlists (added to profile), if `false` it will remain private. For more about public/private status, see [Working with Playlists](/documentation/web-api/concepts/playlists)
+  --public: oneof<nothing, bool> # Defaults to `true`. If `true` the playlist will be included in user's public playlists (added to profile), if `false` it will remain private. For more about public/private status, see [Working with Playlists](/documentation/web-api/concepts/playlists)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2250,7 +2249,7 @@ export def "me-player transfer-a-users-playback" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   device_ids: list # A JSON array containing the ID of the device on which playback should be started/transferred.<br/>For example:`{device_ids:["74ASZWbe4lXaubB36ztrGX"]}`<br/>_**Note**: Although an array is accepted, only a single device_id is currently supported. Supplying more than one will return `400 Bad Request`_
-  --play: string@bool-completer # **true**: ensure playback happens on new device.<br/>**false** or not provided: keep the current playback state.
+  --play: oneof<nothing, bool> # **true**: ensure playback happens on new device.<br/>**false** or not provided: keep the current playback state.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2491,7 +2490,7 @@ export def "me-player-shuffle toggle-shuffle-for-users-playback" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --state: string@bool-completer # e.g. true
+  --state: oneof<nothing, bool> # e.g. true
   --device-id: string # e.g. 0d1841b0976bae2a3a310dd74c0f3df354899bc8
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

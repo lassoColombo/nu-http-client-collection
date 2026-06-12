@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://localhost/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -126,8 +125,8 @@ export def "healthz get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --brief: string@bool-completer # Brief will return a brief representation of the Cilium status.
-  --require-k8s-connectivity: string@bool-completer # If set to true, failure of the agent to connect to the Kubernetes control plane will cause the agent's health status to also fail.
+  --brief: oneof<nothing, bool> # Brief will return a brief representation of the Cilium status.
+  --require-k8s-connectivity: oneof<nothing, bool> # If set to true, failure of the agent to connect to the Kubernetes control plane will cause the agent's health status to also fail.
 ]: nothing -> record<cilium: record<state: string, msg: string>, kvstore: record<state: string, msg: string>, cni_file: record<state: string, msg: string>, container_runtime: record<state: string, msg: string>, host_firewall: record<mode: string, devices: list<string>>, hubble: record<state: string, msg: string, observer: record<max_flows: int, current_flows: int, seen_flows: int, uptime: string>>, hubble_metrics: record<state: string, msg: string>, kubernetes: record<state: string, k8s_api_versions: list<string>, msg: string>, datapath_mode: string, configured_datapath_mode: string, attach_mode: string, kube_proxy_replacement: record<mode: string, devices: list<string>, deviceList: list<record>, directRoutingDevice: string, features: record<nodePort: record, hostPort: record, externalIPs: record, hostReachableServices: record, socketLB: record, sessionAffinity: record, gracefulTermination: record, nat46X64: record, socketLBTracing: record, bpfSocketLBHostnsOnly: bool, annotations: list>>, ipam: record<allocations: record, ipv4: list<string>, ipv6: list<string>, status: string>, nodeMonitor: record<cpus: int, npages: int, pagesize: int, lost: int, unknown: int>, cluster: record<ciliumHealth: record<state: string, msg: string>, self: string, nodes: list<record>>, controllers: table<name: string, uuid: string, configuration: record, status: record>, proxy: record<port_range: string, ip: string, total_redirects: int, total_ports: int, redirects: list<record>, envoy_deployment_mode: string>, identity_range: record<min_identity: int, max_identity: int>, ipv6_big_tcp: record<enabled: bool, maxGRO: int, maxGSO: int>, ipv4_big_tcp: record<enabled: bool, maxGRO: int, maxGSO: int>, bandwidth_manager: record<enabled: bool, devices: list<string>, congestionControl: string>, masquerading: record<enabled: bool, enabledProtocols: record<ipv4: bool, ipv6: bool>, mode: string, ip_masq_agent: bool, snat_exclusion_cidr: string, snat_exclusion_cidr_v4: string, snat_exclusion_cidr_v6: string>, routing: record<inter_host_routing_mode: string, intra_host_routing_mode: string, tunnel_protocol: string>, clock_source: record<mode: string, hertz: int>, srv6: record<enabled: bool, srv6EncapMode: string>, stale: record, client_id: int, cluster_mesh: record<clusters: list<record>>, bpf_maps: record<dynamic_size_ratio: float, maps: list<record>>, encryption: record<mode: string, msg: string, ipsec: record<decrypt_interfaces: list, max_seq_number: string, keys_in_use: int, error_count: int, xfrm_errors: record>, wireguard: record<node_encryption: string, node_encrypt_opt_out_labels: string, interfaces: list>>, cni_chaining: record<mode: string>, auth_certificate_provider: record<state: string, msg: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -521,7 +520,7 @@ export def "ipam post" [
   --family: string@family-completer
   --owner: string
   --pool: string
-  --expiration: string@bool-completer
+  --expiration: oneof<nothing, bool>
 ]: nothing -> record<address: record<ipv4: string, ipv4_expiration_uuid: string, ipv4_pool_name: string, ipv6: string, ipv6_expiration_uuid: string, ipv6_pool_name: string>, ipv4: record<ip: string, gateway: string, cidrs: list<string>, master_mac: string, expiration_uuid: string, interface_number: string, skip_masquerade: bool>, ipv6: record<ip: string, gateway: string, cidrs: list<string>, master_mac: string, expiration_uuid: string, interface_number: string, skip_masquerade: bool>, host_addressing: record<ipv6: record<enabled: bool, ip: string, alloc_range: string, address_type: string>, ipv4: record<enabled: bool, ip: string, alloc_range: string, address_type: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -836,7 +835,7 @@ export def "map-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --follow: string@bool-completer # Whether to follow streamed requests
+  --follow: oneof<nothing, bool> # Whether to follow streamed requests
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

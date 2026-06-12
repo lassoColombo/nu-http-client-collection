@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -375,7 +374,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --skipSucceeded: string@bool-completer # If true, will skip all succeeded steps so far in the rollout. If false, will execute the entire rollout again regardless of the current state of individual resources. Defaults to false if not specified.
+  --skipSucceeded: oneof<nothing, bool> # If true, will skip all succeeded steps so far in the rollout. If false, will execute the entire rollout again regardless of the current state of individual resources. Defaults to false if not specified.
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<identity: record<identityIds: list<string>, type: string>, properties: record<artifactSourceId: string, buildVersion: string, stepGroups: list<record>, targetServiceTopologyId: string, operationInfo: record<endTime: string, error: record, retryAttempt: int, skipSucceededOnRetry: bool, startTime: string>, services: list<record>, status: string, totalRetryAttempts: int>, location: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

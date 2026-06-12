@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://dev.to/api"] }
 def auth-scheme-completer [] { ["api-key"] }
 
@@ -473,14 +472,14 @@ export def "display-ads post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --approved: string@bool-completer # Ad must be both published and approved to be in rotation
+  --approved: oneof<nothing, bool> # Ad must be both published and approved to be in rotation
   body_markdown: string # The text (in markdown) of the ad (required)
   --creator-id: int # Identifies the user who created the ad.
   --display-to: string@display-to-completer # Potentially limits visitors to whom the ad is visible (default: all)
   name: string # For internal use, helps distinguish ads from one another
   --organization-id: int # Identifies the organization to which the ad belongs
   placement_area: string@placement-area-completer # Identifies which area of site layout the ad can appear in
-  --published: string@bool-completer # Ad must be both published and approved to be in rotation
+  --published: oneof<nothing, bool> # Ad must be both published and approved to be in rotation
   --tag-list: string # Tags on which this ad can be displayed (blank is all/any tags)
   --type-of: string@type-of-completer # Types of the billboards: in_house (created by admins), community (created by an entity, appears on entity's content), external ( created by an entity, or a non-entity, can appear everywhere)  (default: in_house)
 ]: any -> any {
@@ -528,14 +527,14 @@ export def "display-ads put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --approved: string@bool-completer # Ad must be both published and approved to be in rotation
+  --approved: oneof<nothing, bool> # Ad must be both published and approved to be in rotation
   body_markdown: string # The text (in markdown) of the ad (required)
   --creator-id: int # Identifies the user who created the ad.
   --display-to: string@display-to-completer # Potentially limits visitors to whom the ad is visible (default: all)
   name: string # For internal use, helps distinguish ads from one another
   --organization-id: int # Identifies the organization to which the ad belongs, required for 'community' type ads
   placement_area: string@placement-area-completer # Identifies which area of site layout the ad can appear in
-  --published: string@bool-completer # Ad must be both published and approved to be in rotation
+  --published: oneof<nothing, bool> # Ad must be both published and approved to be in rotation
   --tag-list: string # Tags on which this ad can be displayed (blank is all/any tags)
 ]: any -> any {
   let input = $in
@@ -722,7 +721,7 @@ export def "pages post" [
   --body-json: string # For JSON pages, the JSON body
   --body-markdown: string # The text (in markdown) of the ad (required)
   --description: string # For internal use, helps similar pages from one another
-  --is-top-level-path: string@bool-completer # If true, the page is available at '/{slug}' instead of '/page/{slug}', use with caution
+  --is-top-level-path: oneof<nothing, bool> # If true, the page is available at '/{slug}' instead of '/page/{slug}', use with caution
   --slug: string # Used to link to this page in URLs, must be unique and URL-safe
   --template: string@template-completer # Controls what kind of layout the page is rendered in (default: contained)
   --title: string # Title of the page
@@ -795,7 +794,7 @@ export def "pages put" [
   --body-json: string # For JSON pages, the JSON body (nullable)
   --body-markdown: string # The text (in markdown) of the ad (required) (nullable)
   description: string # For internal use, helps similar pages from one another
-  --is-top-level-path: string@bool-completer # If true, the page is available at '/{slug}' instead of '/page/{slug}', use with caution
+  --is-top-level-path: oneof<nothing, bool> # If true, the page is available at '/{slug}' instead of '/page/{slug}', use with caution
   slug: string # Used to link to this page in URLs, must be unique and URL-safe
   --social-image: record # nullable
   template: string@template-completer # Controls what kind of layout the page is rendered in (default: contained)

@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost:7878" "https://localhost:7878"] }
 def auth-scheme-completer [] { ["x-api-key" "query-apikey"] }
 
@@ -252,7 +251,7 @@ export def "autotagging post" [
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
   --name: string # nullable
-  --removeTagsAutomatically: string@bool-completer
+  --removeTagsAutomatically: oneof<nothing, bool>
   --tags: list # nullable
   --specifications: list # nullable — item shape: {id?: int, name?: string, implementation?: string, implementationName?: string, negate?: bool, required?: bool, fields?: list}
 ]: any -> record<id: int, name: string, removeTagsAutomatically: bool, tags: list<int>, specifications: table<id: int, name: string, implementation: string, implementationName: string, negate: bool, required: bool, fields: list>> {
@@ -300,7 +299,7 @@ export def "autotagging put" [
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
   --name: string # nullable
-  --removeTagsAutomatically: string@bool-completer
+  --removeTagsAutomatically: oneof<nothing, bool>
   --tags: list # nullable
   --specifications: list # nullable — item shape: {id?: int, name?: string, implementation?: string, implementationName?: string, negate?: bool, required?: bool, fields?: list}
 ]: any -> record<id: int, name: string, removeTagsAutomatically: bool, tags: list<int>, specifications: table<id: int, name: string, implementation: string, implementationName: string, negate: bool, required: bool, fields: list>> {
@@ -545,7 +544,7 @@ export def "calendar get" [
   --allow-errors(-e) # Return full response without error handling
   --start: string # format: date-time
   --end: string # format: date-time
-  --unmonitored: string@bool-completer # default: false
+  --unmonitored: oneof<nothing, bool> # default: false
   --tags: string # default: 
 ]: nothing -> table<id: int, title: string, originalTitle: string, originalLanguage: record<id: int, name: string>, alternateTitles: list<record>, secondaryYear: int, secondaryYearSourceId: int, sortTitle: string, sizeOnDisk: int, status: string, overview: string, inCinemas: string, physicalRelease: string, digitalRelease: string, releaseDate: string, physicalReleaseNote: string, images: list<record>, website: string, remotePoster: string, year: int, youTubeTrailerId: string, studio: string, path: string, qualityProfileId: int, hasFile: bool, movieFileId: int, monitored: bool, minimumAvailability: string, isAvailable: bool, folderName: string, runtime: int, cleanTitle: string, imdbId: string, tmdbId: int, titleSlug: string, rootFolderPath: string, folder: string, certification: string, genres: list<string>, keywords: list<string>, tags: list<int>, added: string, addOptions: record<ignoreEpisodesWithFiles: bool, ignoreEpisodesWithoutFiles: bool, monitor: string, searchForMovie: bool, addMethod: string>, ratings: record<imdb: record, tmdb: record, metacritic: record, rottenTomatoes: record, trakt: record>, movieFile: record<id: int, movieId: int, relativePath: string, path: string, size: int, dateAdded: string, sceneName: string, releaseGroup: string, edition: string, languages: list, quality: record, customFormats: list, customFormatScore: int, indexerFlags: int, mediaInfo: record, originalFilePath: string, qualityCutoffNotMet: bool>, collection: record<title: string, tmdbId: int>, popularity: float, lastSearchTime: string, statistics: record<movieFileCount: int, sizeOnDisk: int, releaseGroups: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -569,7 +568,7 @@ export def "feed-calendar-radarrics get" [
   --pastDays: int # format: int32, default: 7
   --futureDays: int # format: int32, default: 28
   --tags: string # default: 
-  --unmonitored: string@bool-completer # default: false
+  --unmonitored: oneof<nothing, bool> # default: false
   --releaseTypes: list
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -611,9 +610,9 @@ export def "collection put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --collectionIds: list # nullable
-  --monitored: string@bool-completer # nullable
-  --monitorMovies: string@bool-completer # nullable
-  --searchOnAdd: string@bool-completer # nullable
+  --monitored: oneof<nothing, bool> # nullable
+  --monitorMovies: oneof<nothing, bool> # nullable
+  --searchOnAdd: oneof<nothing, bool> # nullable
   --qualityProfileId: int # nullable, format: int32
   --rootFolderPath: string # nullable
   --minimumAvailability: string@minimumAvailability-completer
@@ -649,10 +648,10 @@ export def "collection put-by-id" [
   --tmdbId: int # format: int32
   --images: list # nullable — item shape: {coverType?: "unknown"|"poster"|"banner"|"fanart"|"screenshot"|"headshot"|"clearlogo", url?: string, remoteUrl?: string}
   --overview: string # nullable
-  --monitored: string@bool-completer
+  --monitored: oneof<nothing, bool>
   --rootFolderPath: string # nullable
   --qualityProfileId: int # format: int32
-  --searchOnAdd: string@bool-completer
+  --searchOnAdd: oneof<nothing, bool>
   --minimumAvailability: string@minimumAvailability-completer
   --movies: list # nullable — item shape: {tmdbId?: int, imdbId?: string, title?: string, cleanTitle?: string, sortTitle?: string, status?: "tba"|"announced"|"inCinemas"|"released"|"deleted", overview?: string, runtime?: int, images?: list, year?: int, ratings?: record, genres?: list, folder?: string, isExisting?: bool, isExcluded?: bool}
   --missingMovies: int # format: int32
@@ -716,8 +715,8 @@ export def "command post" [
   --trigger: string@trigger-completer
   --clientUserAgent: string # nullable
   --stateChangeTime: string # nullable, format: date-time
-  --sendUpdatesToClient: string@bool-completer
-  --updateScheduledTask: string@bool-completer
+  --sendUpdatesToClient: oneof<nothing, bool>
+  --updateScheduledTask: oneof<nothing, bool>
   --lastExecutionTime: string # nullable, format: date-time
 ]: any -> record<id: int, name: string, commandName: string, message: string, body: record<sendUpdatesToClient: bool, updateScheduledTask: bool, completionMessage: string, requiresDiskAccess: bool, isExclusive: bool, isTypeExclusive: bool, isLongRunning: bool, name: string, lastExecutionTime: string, lastStartTime: string, trigger: string, suppressMessages: bool, clientUserAgent: string>, priority: string, status: string, result: string, queued: string, started: string, ended: string, duration: string, exception: string, trigger: string, clientUserAgent: string, stateChangeTime: string, sendUpdatesToClient: bool, updateScheduledTask: bool, lastExecutionTime: string> {
   let input = $in
@@ -973,7 +972,7 @@ export def "customformat post" [
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
   --name: string # nullable
-  --includeCustomFormatWhenRenaming: string@bool-completer # nullable
+  --includeCustomFormatWhenRenaming: oneof<nothing, bool> # nullable
   --specifications: list # nullable — item shape: {id?: int, name?: string, implementation?: string, implementationName?: string, infoLink?: string, negate?: bool, required?: bool, fields?: list, presets?: list}
 ]: any -> record<id: int, name: string, includeCustomFormatWhenRenaming: bool, specifications: table<id: int, name: string, implementation: string, implementationName: string, infoLink: string, negate: bool, required: bool, fields: list, presets: list>> {
   let input = $in
@@ -1002,7 +1001,7 @@ export def "customformat put" [
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
   --name: string # nullable
-  --includeCustomFormatWhenRenaming: string@bool-completer # nullable
+  --includeCustomFormatWhenRenaming: oneof<nothing, bool> # nullable
   --specifications: list # nullable — item shape: {id?: int, name?: string, implementation?: string, implementationName?: string, infoLink?: string, negate?: bool, required?: bool, fields?: list, presets?: list}
 ]: any -> record<id: int, name: string, includeCustomFormatWhenRenaming: bool, specifications: table<id: int, name: string, implementation: string, implementationName: string, infoLink: string, negate: bool, required: bool, fields: list, presets: list>> {
   let input = $in
@@ -1065,7 +1064,7 @@ export def "customformat-bulk put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ids: list # nullable
-  --includeCustomFormatWhenRenaming: string@bool-completer # nullable
+  --includeCustomFormatWhenRenaming: oneof<nothing, bool> # nullable
 ]: any -> record<id: int, name: string, includeCustomFormatWhenRenaming: bool, specifications: table<id: int, name: string, implementation: string, implementationName: string, infoLink: string, negate: bool, required: bool, fields: list, presets: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1088,7 +1087,7 @@ export def "customformat-bulk delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ids: list # nullable
-  --includeCustomFormatWhenRenaming: string@bool-completer # nullable
+  --includeCustomFormatWhenRenaming: oneof<nothing, bool> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1132,7 +1131,7 @@ export def "wanted-cutoff get" [
   --pageSize: int # format: int32, default: 10
   --sortKey: string
   --sortDirection: string@sortDirection-completer
-  --monitored: string@bool-completer # default: true
+  --monitored: oneof<nothing, bool> # default: true
 ]: nothing -> record<page: int, pageSize: int, sortKey: string, sortDirection: string, totalRecords: int, records: table<id: int, title: string, originalTitle: string, originalLanguage: record, alternateTitles: list, secondaryYear: int, secondaryYearSourceId: int, sortTitle: string, sizeOnDisk: int, status: string, overview: string, inCinemas: string, physicalRelease: string, digitalRelease: string, releaseDate: string, physicalReleaseNote: string, images: list, website: string, remotePoster: string, year: int, youTubeTrailerId: string, studio: string, path: string, qualityProfileId: int, hasFile: bool, movieFileId: int, monitored: bool, minimumAvailability: string, isAvailable: bool, folderName: string, runtime: int, cleanTitle: string, imdbId: string, tmdbId: int, titleSlug: string, rootFolderPath: string, folder: string, certification: string, genres: list, keywords: list, tags: list, added: string, addOptions: record, ratings: record, movieFile: record, collection: record, popularity: float, lastSearchTime: string, statistics: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1154,13 +1153,13 @@ export def "delayprofile post" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
-  --enableUsenet: string@bool-completer
-  --enableTorrent: string@bool-completer
+  --enableUsenet: oneof<nothing, bool>
+  --enableTorrent: oneof<nothing, bool>
   --preferredProtocol: string@preferredProtocol-completer
   --usenetDelay: int # format: int32
   --torrentDelay: int # format: int32
-  --bypassIfHighestQuality: string@bool-completer
-  --bypassIfAboveCustomFormatScore: string@bool-completer
+  --bypassIfHighestQuality: oneof<nothing, bool>
+  --bypassIfAboveCustomFormatScore: oneof<nothing, bool>
   --minimumCustomFormatScore: int # format: int32
   --order: int # format: int32
   --tags: list # nullable
@@ -1226,13 +1225,13 @@ export def "delayprofile put" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
-  --enableUsenet: string@bool-completer
-  --enableTorrent: string@bool-completer
+  --enableUsenet: oneof<nothing, bool>
+  --enableTorrent: oneof<nothing, bool>
   --preferredProtocol: string@preferredProtocol-completer
   --usenetDelay: int # format: int32
   --torrentDelay: int # format: int32
-  --bypassIfHighestQuality: string@bool-completer
-  --bypassIfAboveCustomFormatScore: string@bool-completer
+  --bypassIfHighestQuality: oneof<nothing, bool>
+  --bypassIfAboveCustomFormatScore: oneof<nothing, bool>
   --minimumCustomFormatScore: int # format: int32
   --order: int # format: int32
   --tags: list # nullable
@@ -1340,7 +1339,7 @@ export def "downloadclient post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -1351,11 +1350,11 @@ export def "downloadclient post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, removeCompletedDownloads?: bool, removeFailedDownloads?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
-  --removeCompletedDownloads: string@bool-completer
-  --removeFailedDownloads: string@bool-completer
+  --removeCompletedDownloads: oneof<nothing, bool>
+  --removeFailedDownloads: oneof<nothing, bool>
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool, protocol: string, priority: int, removeCompletedDownloads: bool, removeFailedDownloads: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1383,7 +1382,7 @@ export def "downloadclient put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -1394,11 +1393,11 @@ export def "downloadclient put" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, removeCompletedDownloads?: bool, removeFailedDownloads?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
-  --removeCompletedDownloads: string@bool-completer
-  --removeFailedDownloads: string@bool-completer
+  --removeCompletedDownloads: oneof<nothing, bool>
+  --removeFailedDownloads: oneof<nothing, bool>
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool, protocol: string, priority: int, removeCompletedDownloads: bool, removeFailedDownloads: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1463,10 +1462,10 @@ export def "downloadclient-bulk put" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enable: string@bool-completer # nullable
+  --enable: oneof<nothing, bool> # nullable
   --priority: int # nullable, format: int32
-  --removeCompletedDownloads: string@bool-completer # nullable
-  --removeFailedDownloads: string@bool-completer # nullable
+  --removeCompletedDownloads: oneof<nothing, bool> # nullable
+  --removeFailedDownloads: oneof<nothing, bool> # nullable
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool, protocol: string, priority: int, removeCompletedDownloads: bool, removeFailedDownloads: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1491,10 +1490,10 @@ export def "downloadclient-bulk delete" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enable: string@bool-completer # nullable
+  --enable: oneof<nothing, bool> # nullable
   --priority: int # nullable, format: int32
-  --removeCompletedDownloads: string@bool-completer # nullable
-  --removeFailedDownloads: string@bool-completer # nullable
+  --removeCompletedDownloads: oneof<nothing, bool> # nullable
+  --removeFailedDownloads: oneof<nothing, bool> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1538,7 +1537,7 @@ export def "downloadclient-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -1549,11 +1548,11 @@ export def "downloadclient-test post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, removeCompletedDownloads?: bool, removeFailedDownloads?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
-  --removeCompletedDownloads: string@bool-completer
-  --removeFailedDownloads: string@bool-completer
+  --removeCompletedDownloads: oneof<nothing, bool>
+  --removeFailedDownloads: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1609,11 +1608,11 @@ export def "downloadclient-action post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, removeCompletedDownloads?: bool, removeFailedDownloads?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
-  --removeCompletedDownloads: string@bool-completer
-  --removeFailedDownloads: string@bool-completer
+  --removeCompletedDownloads: oneof<nothing, bool>
+  --removeFailedDownloads: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1657,10 +1656,10 @@ export def "config-downloadclient put" [
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
   --downloadClientWorkingFolders: string # nullable
-  --enableCompletedDownloadHandling: string@bool-completer
+  --enableCompletedDownloadHandling: oneof<nothing, bool>
   --checkForFinishedDownloadInterval: int # format: int32
-  --autoRedownloadFailed: string@bool-completer
-  --autoRedownloadFailedFromInteractiveSearch: string@bool-completer
+  --autoRedownloadFailed: oneof<nothing, bool>
+  --autoRedownloadFailedFromInteractiveSearch: oneof<nothing, bool>
 ]: any -> record<id: int, downloadClientWorkingFolders: string, enableCompletedDownloadHandling: bool, checkForFinishedDownloadInterval: int, autoRedownloadFailed: bool, autoRedownloadFailedFromInteractiveSearch: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1724,8 +1723,8 @@ export def "filesystem get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --path: string
-  --includeFiles: string@bool-completer # default: false
-  --allowFoldersWithoutTrailingSlashes: string@bool-completer # default: false
+  --includeFiles: oneof<nothing, bool> # default: false
+  --allowFoldersWithoutTrailingSlashes: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1808,7 +1807,7 @@ export def "history get" [
   --pageSize: int # format: int32, default: 10
   --sortKey: string
   --sortDirection: string@sortDirection-completer
-  --includeMovie: string@bool-completer
+  --includeMovie: oneof<nothing, bool>
   --eventType: list
   --downloadId: string
   --movieIds: list
@@ -1835,7 +1834,7 @@ export def "history-since get" [
   --allow-errors(-e) # Return full response without error handling
   --date: string # format: date-time
   --eventType: string@eventType-completer
-  --includeMovie: string@bool-completer # default: false
+  --includeMovie: oneof<nothing, bool> # default: false
 ]: nothing -> table<id: int, movieId: int, sourceTitle: string, languages: list<record>, quality: record<quality: record, revision: record>, customFormats: list<record>, customFormatScore: int, qualityCutoffNotMet: bool, date: string, downloadId: string, eventType: string, data: record, movie: record<id: int, title: string, originalTitle: string, originalLanguage: record, alternateTitles: list, secondaryYear: int, secondaryYearSourceId: int, sortTitle: string, sizeOnDisk: int, status: string, overview: string, inCinemas: string, physicalRelease: string, digitalRelease: string, releaseDate: string, physicalReleaseNote: string, images: list, website: string, remotePoster: string, year: int, youTubeTrailerId: string, studio: string, path: string, qualityProfileId: int, hasFile: bool, movieFileId: int, monitored: bool, minimumAvailability: string, isAvailable: bool, folderName: string, runtime: int, cleanTitle: string, imdbId: string, tmdbId: int, titleSlug: string, rootFolderPath: string, folder: string, certification: string, genres: list, keywords: list, tags: list, added: string, addOptions: record, ratings: record, movieFile: record, collection: record, popularity: float, lastSearchTime: string, statistics: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1857,7 +1856,7 @@ export def "history-movie get" [
   --allow-errors(-e) # Return full response without error handling
   --movieId: int # format: int32
   --eventType: string@eventType-completer
-  --includeMovie: string@bool-completer # default: false
+  --includeMovie: oneof<nothing, bool> # default: false
 ]: nothing -> table<id: int, movieId: int, sourceTitle: string, languages: list<record>, quality: record<quality: record, revision: record>, customFormats: list<record>, customFormatScore: int, qualityCutoffNotMet: bool, date: string, downloadId: string, eventType: string, data: record, movie: record<id: int, title: string, originalTitle: string, originalLanguage: record, alternateTitles: list, secondaryYear: int, secondaryYearSourceId: int, sortTitle: string, sizeOnDisk: int, status: string, overview: string, inCinemas: string, physicalRelease: string, digitalRelease: string, releaseDate: string, physicalReleaseNote: string, images: list, website: string, remotePoster: string, year: int, youTubeTrailerId: string, studio: string, path: string, qualityProfileId: int, hasFile: bool, movieFileId: int, monitored: bool, minimumAvailability: string, isAvailable: bool, folderName: string, runtime: int, cleanTitle: string, imdbId: string, tmdbId: int, titleSlug: string, rootFolderPath: string, folder: string, certification: string, genres: list, keywords: list, tags: list, added: string, addOptions: record, ratings: record, movieFile: record, collection: record, popularity: float, lastSearchTime: string, statistics: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1921,11 +1920,11 @@ export def "config-host put" [
   --bindAddress: string # nullable
   --port: int # format: int32
   --sslPort: int # format: int32
-  --enableSsl: string@bool-completer
-  --launchBrowser: string@bool-completer
+  --enableSsl: oneof<nothing, bool>
+  --launchBrowser: oneof<nothing, bool>
   --authenticationMethod: string@authenticationMethod-completer
   --authenticationRequired: string@authenticationRequired-completer
-  --analyticsEnabled: string@bool-completer
+  --analyticsEnabled: oneof<nothing, bool>
   --username: string # nullable
   --password: string # nullable
   --passwordConfirmation: string # nullable
@@ -1939,22 +1938,22 @@ export def "config-host put" [
   --urlBase: string # nullable
   --instanceName: string # nullable
   --applicationUrl: string # nullable
-  --updateAutomatically: string@bool-completer
+  --updateAutomatically: oneof<nothing, bool>
   --updateMechanism: string@updateMechanism-completer
   --updateScriptPath: string # nullable
-  --proxyEnabled: string@bool-completer
+  --proxyEnabled: oneof<nothing, bool>
   --proxyType: string@proxyType-completer
   --proxyHostname: string # nullable
   --proxyPort: int # format: int32
   --proxyUsername: string # nullable
   --proxyPassword: string # nullable
   --proxyBypassFilter: string # nullable
-  --proxyBypassLocalAddresses: string@bool-completer
+  --proxyBypassLocalAddresses: oneof<nothing, bool>
   --certificateValidation: string@certificateValidation-completer
   --backupFolder: string # nullable
   --backupInterval: int # format: int32
   --backupRetention: int # format: int32
-  --trustCgnatIpAddresses: string@bool-completer
+  --trustCgnatIpAddresses: oneof<nothing, bool>
 ]: any -> record<id: int, bindAddress: string, port: int, sslPort: int, enableSsl: bool, launchBrowser: bool, authenticationMethod: string, authenticationRequired: string, analyticsEnabled: bool, username: string, password: string, passwordConfirmation: string, logLevel: string, logSizeLimit: int, consoleLogLevel: string, branch: string, apiKey: string, sslCertPath: string, sslCertPassword: string, urlBase: string, instanceName: string, applicationUrl: string, updateAutomatically: bool, updateMechanism: string, updateScriptPath: string, proxyEnabled: bool, proxyType: string, proxyHostname: string, proxyPort: int, proxyUsername: string, proxyPassword: string, proxyBypassFilter: string, proxyBypassLocalAddresses: bool, certificateValidation: string, backupFolder: string, backupInterval: int, backupRetention: int, trustCgnatIpAddresses: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2018,7 +2017,7 @@ export def "importlist post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2029,12 +2028,12 @@ export def "importlist post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enabled?: bool, enableAuto?: bool, monitor?: "movieOnly"|"movieAndCollection"|"none", rootFolderPath?: string, qualityProfileId?: int, searchOnAdd?: bool, minimumAvailability?: "tba"|"announced"|"inCinemas"|"released"|"deleted", listType?: "program"|"tmdb"|"trakt"|"plex"|"simkl"|"other"|"advanced", listOrder?: int, minRefreshInterval?: string}
-  --enabled: string@bool-completer
-  --enableAuto: string@bool-completer
+  --enabled: oneof<nothing, bool>
+  --enableAuto: oneof<nothing, bool>
   --monitor: string@monitor-completer
   --rootFolderPath: string # nullable
   --qualityProfileId: int # format: int32
-  --searchOnAdd: string@bool-completer
+  --searchOnAdd: oneof<nothing, bool>
   --minimumAvailability: string@minimumAvailability-completer
   --listType: string@listType-completer
   --listOrder: int # format: int32
@@ -2066,7 +2065,7 @@ export def "importlist put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2077,12 +2076,12 @@ export def "importlist put" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enabled?: bool, enableAuto?: bool, monitor?: "movieOnly"|"movieAndCollection"|"none", rootFolderPath?: string, qualityProfileId?: int, searchOnAdd?: bool, minimumAvailability?: "tba"|"announced"|"inCinemas"|"released"|"deleted", listType?: "program"|"tmdb"|"trakt"|"plex"|"simkl"|"other"|"advanced", listOrder?: int, minRefreshInterval?: string}
-  --enabled: string@bool-completer
-  --enableAuto: string@bool-completer
+  --enabled: oneof<nothing, bool>
+  --enableAuto: oneof<nothing, bool>
   --monitor: string@monitor-completer
   --rootFolderPath: string # nullable
   --qualityProfileId: int # format: int32
-  --searchOnAdd: string@bool-completer
+  --searchOnAdd: oneof<nothing, bool>
   --minimumAvailability: string@minimumAvailability-completer
   --listType: string@listType-completer
   --listOrder: int # format: int32
@@ -2151,8 +2150,8 @@ export def "importlist-bulk put" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enabled: string@bool-completer # nullable
-  --enableAuto: string@bool-completer # nullable
+  --enabled: oneof<nothing, bool> # nullable
+  --enableAuto: oneof<nothing, bool> # nullable
   --rootFolderPath: string # nullable
   --qualityProfileId: int # nullable, format: int32
   --minimumAvailability: string@minimumAvailability-completer
@@ -2180,8 +2179,8 @@ export def "importlist-bulk delete" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enabled: string@bool-completer # nullable
-  --enableAuto: string@bool-completer # nullable
+  --enabled: oneof<nothing, bool> # nullable
+  --enableAuto: oneof<nothing, bool> # nullable
   --rootFolderPath: string # nullable
   --qualityProfileId: int # nullable, format: int32
   --minimumAvailability: string@minimumAvailability-completer
@@ -2228,7 +2227,7 @@ export def "importlist-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2239,12 +2238,12 @@ export def "importlist-test post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enabled?: bool, enableAuto?: bool, monitor?: "movieOnly"|"movieAndCollection"|"none", rootFolderPath?: string, qualityProfileId?: int, searchOnAdd?: bool, minimumAvailability?: "tba"|"announced"|"inCinemas"|"released"|"deleted", listType?: "program"|"tmdb"|"trakt"|"plex"|"simkl"|"other"|"advanced", listOrder?: int, minRefreshInterval?: string}
-  --enabled: string@bool-completer
-  --enableAuto: string@bool-completer
+  --enabled: oneof<nothing, bool>
+  --enableAuto: oneof<nothing, bool>
   --monitor: string@monitor-completer
   --rootFolderPath: string # nullable
   --qualityProfileId: int # format: int32
-  --searchOnAdd: string@bool-completer
+  --searchOnAdd: oneof<nothing, bool>
   --minimumAvailability: string@minimumAvailability-completer
   --listType: string@listType-completer
   --listOrder: int # format: int32
@@ -2304,12 +2303,12 @@ export def "importlist-action post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enabled?: bool, enableAuto?: bool, monitor?: "movieOnly"|"movieAndCollection"|"none", rootFolderPath?: string, qualityProfileId?: int, searchOnAdd?: bool, minimumAvailability?: "tba"|"announced"|"inCinemas"|"released"|"deleted", listType?: "program"|"tmdb"|"trakt"|"plex"|"simkl"|"other"|"advanced", listOrder?: int, minRefreshInterval?: string}
-  --enabled: string@bool-completer
-  --enableAuto: string@bool-completer
+  --enabled: oneof<nothing, bool>
+  --enableAuto: oneof<nothing, bool>
   --monitor: string@monitor-completer
   --rootFolderPath: string # nullable
   --qualityProfileId: int # format: int32
-  --searchOnAdd: string@bool-completer
+  --searchOnAdd: oneof<nothing, bool>
   --minimumAvailability: string@minimumAvailability-completer
   --listType: string@listType-completer
   --listOrder: int # format: int32
@@ -2603,9 +2602,9 @@ export def "importlist-movie get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeRecommendations: string@bool-completer # default: false
-  --includeTrending: string@bool-completer # default: false
-  --includePopular: string@bool-completer # default: false
+  --includeRecommendations: oneof<nothing, bool> # default: false
+  --includeTrending: oneof<nothing, bool> # default: false
+  --includePopular: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2668,7 +2667,7 @@ export def "indexer post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2679,11 +2678,11 @@ export def "indexer post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableRss?: bool, enableAutomaticSearch?: bool, enableInteractiveSearch?: bool, supportsRss?: bool, supportsSearch?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, downloadClientId?: int}
-  --enableRss: string@bool-completer
-  --enableAutomaticSearch: string@bool-completer
-  --enableInteractiveSearch: string@bool-completer
-  --supportsRss: string@bool-completer
-  --supportsSearch: string@bool-completer
+  --enableRss: oneof<nothing, bool>
+  --enableAutomaticSearch: oneof<nothing, bool>
+  --enableInteractiveSearch: oneof<nothing, bool>
+  --supportsRss: oneof<nothing, bool>
+  --supportsSearch: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
   --downloadClientId: int # format: int32
@@ -2714,7 +2713,7 @@ export def "indexer put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2725,11 +2724,11 @@ export def "indexer put" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableRss?: bool, enableAutomaticSearch?: bool, enableInteractiveSearch?: bool, supportsRss?: bool, supportsSearch?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, downloadClientId?: int}
-  --enableRss: string@bool-completer
-  --enableAutomaticSearch: string@bool-completer
-  --enableInteractiveSearch: string@bool-completer
-  --supportsRss: string@bool-completer
-  --supportsSearch: string@bool-completer
+  --enableRss: oneof<nothing, bool>
+  --enableAutomaticSearch: oneof<nothing, bool>
+  --enableInteractiveSearch: oneof<nothing, bool>
+  --supportsRss: oneof<nothing, bool>
+  --supportsSearch: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
   --downloadClientId: int # format: int32
@@ -2797,9 +2796,9 @@ export def "indexer-bulk put" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enableRss: string@bool-completer # nullable
-  --enableAutomaticSearch: string@bool-completer # nullable
-  --enableInteractiveSearch: string@bool-completer # nullable
+  --enableRss: oneof<nothing, bool> # nullable
+  --enableAutomaticSearch: oneof<nothing, bool> # nullable
+  --enableInteractiveSearch: oneof<nothing, bool> # nullable
   --priority: int # nullable, format: int32
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enableRss: bool, enableAutomaticSearch: bool, enableInteractiveSearch: bool, supportsRss: bool, supportsSearch: bool, protocol: string, priority: int, downloadClientId: int> {
   let input = $in
@@ -2825,9 +2824,9 @@ export def "indexer-bulk delete" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enableRss: string@bool-completer # nullable
-  --enableAutomaticSearch: string@bool-completer # nullable
-  --enableInteractiveSearch: string@bool-completer # nullable
+  --enableRss: oneof<nothing, bool> # nullable
+  --enableAutomaticSearch: oneof<nothing, bool> # nullable
+  --enableInteractiveSearch: oneof<nothing, bool> # nullable
   --priority: int # nullable, format: int32
 ]: any -> any {
   let input = $in
@@ -2872,7 +2871,7 @@ export def "indexer-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2883,11 +2882,11 @@ export def "indexer-test post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableRss?: bool, enableAutomaticSearch?: bool, enableInteractiveSearch?: bool, supportsRss?: bool, supportsSearch?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, downloadClientId?: int}
-  --enableRss: string@bool-completer
-  --enableAutomaticSearch: string@bool-completer
-  --enableInteractiveSearch: string@bool-completer
-  --supportsRss: string@bool-completer
-  --supportsSearch: string@bool-completer
+  --enableRss: oneof<nothing, bool>
+  --enableAutomaticSearch: oneof<nothing, bool>
+  --enableInteractiveSearch: oneof<nothing, bool>
+  --supportsRss: oneof<nothing, bool>
+  --supportsSearch: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
   --downloadClientId: int # format: int32
@@ -2946,11 +2945,11 @@ export def "indexer-action post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableRss?: bool, enableAutomaticSearch?: bool, enableInteractiveSearch?: bool, supportsRss?: bool, supportsSearch?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, downloadClientId?: int}
-  --enableRss: string@bool-completer
-  --enableAutomaticSearch: string@bool-completer
-  --enableInteractiveSearch: string@bool-completer
-  --supportsRss: string@bool-completer
-  --supportsSearch: string@bool-completer
+  --enableRss: oneof<nothing, bool>
+  --enableAutomaticSearch: oneof<nothing, bool>
+  --enableInteractiveSearch: oneof<nothing, bool>
+  --supportsRss: oneof<nothing, bool>
+  --supportsSearch: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
   --downloadClientId: int # format: int32
@@ -3000,9 +2999,9 @@ export def "config-indexer put" [
   --maximumSize: int # format: int32
   --retention: int # format: int32
   --rssSyncInterval: int # format: int32
-  --preferIndexerFlags: string@bool-completer
+  --preferIndexerFlags: oneof<nothing, bool>
   --availabilityDelay: int # format: int32
-  --allowHardcodedSubs: string@bool-completer
+  --allowHardcodedSubs: oneof<nothing, bool>
   --whitelistedHardcodedSubs: string # nullable
 ]: any -> record<id: int, minimumAge: int, maximumSize: int, retention: int, rssSyncInterval: int, preferIndexerFlags: bool, availabilityDelay: int, allowHardcodedSubs: bool, whitelistedHardcodedSubs: string> {
   let input = $in
@@ -3205,7 +3204,7 @@ export def "manualimport get" [
   --folder: string
   --downloadId: string
   --movieId: int # format: int32
-  --filterExistingFiles: string@bool-completer # default: true
+  --filterExistingFiles: oneof<nothing, bool> # default: true
 ]: nothing -> table<id: int, path: string, relativePath: string, folderName: string, name: string, size: int, movie: record<id: int, title: string, originalTitle: string, originalLanguage: record, alternateTitles: list, secondaryYear: int, secondaryYearSourceId: int, sortTitle: string, sizeOnDisk: int, status: string, overview: string, inCinemas: string, physicalRelease: string, digitalRelease: string, releaseDate: string, physicalReleaseNote: string, images: list, website: string, remotePoster: string, year: int, youTubeTrailerId: string, studio: string, path: string, qualityProfileId: int, hasFile: bool, movieFileId: int, monitored: bool, minimumAvailability: string, isAvailable: bool, folderName: string, runtime: int, cleanTitle: string, imdbId: string, tmdbId: int, titleSlug: string, rootFolderPath: string, folder: string, certification: string, genres: list, keywords: list, tags: list, added: string, addOptions: record, ratings: record, movieFile: record, collection: record, popularity: float, lastSearchTime: string, statistics: record>, movieFileId: int, releaseGroup: string, quality: record<quality: record, revision: record>, languages: list<record>, qualityWeight: int, downloadId: string, customFormats: list<record>, customFormatScore: int, indexerFlags: int, rejections: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3287,27 +3286,27 @@ export def "config-mediamanagement put" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
-  --autoUnmonitorPreviouslyDownloadedMovies: string@bool-completer
+  --autoUnmonitorPreviouslyDownloadedMovies: oneof<nothing, bool>
   --recycleBin: string # nullable
   --recycleBinCleanupDays: int # format: int32
   --downloadPropersAndRepacks: string@downloadPropersAndRepacks-completer
-  --createEmptyMovieFolders: string@bool-completer
-  --deleteEmptyFolders: string@bool-completer
+  --createEmptyMovieFolders: oneof<nothing, bool>
+  --deleteEmptyFolders: oneof<nothing, bool>
   --fileDate: string@fileDate-completer
   --rescanAfterRefresh: string@rescanAfterRefresh-completer
-  --autoRenameFolders: string@bool-completer
-  --pathsDefaultStatic: string@bool-completer
-  --setPermissionsLinux: string@bool-completer
+  --autoRenameFolders: oneof<nothing, bool>
+  --pathsDefaultStatic: oneof<nothing, bool>
+  --setPermissionsLinux: oneof<nothing, bool>
   --chmodFolder: string # nullable
   --chownGroup: string # nullable
-  --skipFreeSpaceCheckWhenImporting: string@bool-completer
+  --skipFreeSpaceCheckWhenImporting: oneof<nothing, bool>
   --minimumFreeSpaceWhenImporting: int # format: int32
-  --copyUsingHardlinks: string@bool-completer
-  --useScriptImport: string@bool-completer
+  --copyUsingHardlinks: oneof<nothing, bool>
+  --useScriptImport: oneof<nothing, bool>
   --scriptImportPath: string # nullable
-  --importExtraFiles: string@bool-completer
+  --importExtraFiles: oneof<nothing, bool>
   --extraFileExtensions: string # nullable
-  --enableMediaInfo: string@bool-completer
+  --enableMediaInfo: oneof<nothing, bool>
 ]: any -> record<id: int, autoUnmonitorPreviouslyDownloadedMovies: bool, recycleBin: string, recycleBinCleanupDays: int, downloadPropersAndRepacks: string, createEmptyMovieFolders: bool, deleteEmptyFolders: bool, fileDate: string, rescanAfterRefresh: string, autoRenameFolders: bool, pathsDefaultStatic: bool, setPermissionsLinux: bool, chmodFolder: string, chownGroup: string, skipFreeSpaceCheckWhenImporting: bool, minimumFreeSpaceWhenImporting: int, copyUsingHardlinks: bool, useScriptImport: bool, scriptImportPath: string, importExtraFiles: bool, extraFileExtensions: string, enableMediaInfo: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3371,7 +3370,7 @@ export def "metadata post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -3382,7 +3381,7 @@ export def "metadata post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3410,7 +3409,7 @@ export def "metadata put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -3421,7 +3420,7 @@ export def "metadata put" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3505,7 +3504,7 @@ export def "metadata-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -3516,7 +3515,7 @@ export def "metadata-test post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3572,7 +3571,7 @@ export def "metadata-action post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3661,7 +3660,7 @@ export def "wanted-missing get" [
   --pageSize: int # format: int32, default: 10
   --sortKey: string
   --sortDirection: string@sortDirection-completer
-  --monitored: string@bool-completer # default: true
+  --monitored: oneof<nothing, bool> # default: true
 ]: nothing -> record<page: int, pageSize: int, sortKey: string, sortDirection: string, totalRecords: int, records: table<id: int, title: string, originalTitle: string, originalLanguage: record, alternateTitles: list, secondaryYear: int, secondaryYearSourceId: int, sortTitle: string, sizeOnDisk: int, status: string, overview: string, inCinemas: string, physicalRelease: string, digitalRelease: string, releaseDate: string, physicalReleaseNote: string, images: list, website: string, remotePoster: string, year: int, youTubeTrailerId: string, studio: string, path: string, qualityProfileId: int, hasFile: bool, movieFileId: int, monitored: bool, minimumAvailability: string, isAvailable: bool, folderName: string, runtime: int, cleanTitle: string, imdbId: string, tmdbId: int, titleSlug: string, rootFolderPath: string, folder: string, certification: string, genres: list, keywords: list, tags: list, added: string, addOptions: record, ratings: record, movieFile: record, collection: record, popularity: float, lastSearchTime: string, statistics: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3683,7 +3682,7 @@ export def "movie list" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --tmdbId: int # format: int32
-  --excludeLocalCovers: string@bool-completer # default: false
+  --excludeLocalCovers: oneof<nothing, bool> # default: false
   --languageId: int # format: int32
 ]: nothing -> table<id: int, title: string, originalTitle: string, originalLanguage: record<id: int, name: string>, alternateTitles: list<record>, secondaryYear: int, secondaryYearSourceId: int, sortTitle: string, sizeOnDisk: int, status: string, overview: string, inCinemas: string, physicalRelease: string, digitalRelease: string, releaseDate: string, physicalReleaseNote: string, images: list<record>, website: string, remotePoster: string, year: int, youTubeTrailerId: string, studio: string, path: string, qualityProfileId: int, hasFile: bool, movieFileId: int, monitored: bool, minimumAvailability: string, isAvailable: bool, folderName: string, runtime: int, cleanTitle: string, imdbId: string, tmdbId: int, titleSlug: string, rootFolderPath: string, folder: string, certification: string, genres: list<string>, keywords: list<string>, tags: list<int>, added: string, addOptions: record<ignoreEpisodesWithFiles: bool, ignoreEpisodesWithoutFiles: bool, monitor: string, searchForMovie: bool, addMethod: string>, ratings: record<imdb: record, tmdb: record, metacritic: record, rottenTomatoes: record, trakt: record>, movieFile: record<id: int, movieId: int, relativePath: string, path: string, size: int, dateAdded: string, sceneName: string, releaseGroup: string, edition: string, languages: list, quality: record, customFormats: list, customFormatScore: int, indexerFlags: int, mediaInfo: record, originalFilePath: string, qualityCutoffNotMet: bool>, collection: record<title: string, tmdbId: int>, popularity: float, lastSearchTime: string, statistics: record<movieFileCount: int, sizeOnDisk: int, releaseGroups: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3737,11 +3736,11 @@ export def "movie post" [
   --studio: string # nullable
   --path: string # nullable
   --qualityProfileId: int # format: int32
-  --hasFile: string@bool-completer # nullable
+  --hasFile: oneof<nothing, bool> # nullable
   --movieFileId: int # format: int32
-  --monitored: string@bool-completer
+  --monitored: oneof<nothing, bool>
   --minimumAvailability: string@minimumAvailability-completer
-  --isAvailable: string@bool-completer
+  --isAvailable: oneof<nothing, bool>
   --folderName: string # nullable
   --runtime: int # format: int32
   --cleanTitle: string # nullable
@@ -3793,7 +3792,7 @@ export def "movie put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --moveFiles: string@bool-completer # default: false
+  --moveFiles: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --title: string # nullable
   --originalTitle: string # nullable
@@ -3818,11 +3817,11 @@ export def "movie put" [
   --studio: string # nullable
   --path: string # nullable
   --qualityProfileId: int # format: int32
-  --hasFile: string@bool-completer # nullable
+  --hasFile: oneof<nothing, bool> # nullable
   --movieFileId: int # format: int32
-  --monitored: string@bool-completer
+  --monitored: oneof<nothing, bool>
   --minimumAvailability: string@minimumAvailability-completer
-  --isAvailable: string@bool-completer
+  --isAvailable: oneof<nothing, bool>
   --folderName: string # nullable
   --runtime: int # format: int32
   --cleanTitle: string # nullable
@@ -3866,8 +3865,8 @@ export def "movie delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deleteFiles: string@bool-completer # default: false
-  --addImportExclusion: string@bool-completer # default: false
+  --deleteFiles: oneof<nothing, bool> # default: false
+  --addImportExclusion: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3908,15 +3907,15 @@ export def "movie-editor put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --movieIds: list # nullable
-  --monitored: string@bool-completer # nullable
+  --monitored: oneof<nothing, bool> # nullable
   --qualityProfileId: int # nullable, format: int32
   --minimumAvailability: string@minimumAvailability-completer
   --rootFolderPath: string # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --moveFiles: string@bool-completer
-  --deleteFiles: string@bool-completer
-  --addImportExclusion: string@bool-completer
+  --moveFiles: oneof<nothing, bool>
+  --deleteFiles: oneof<nothing, bool>
+  --addImportExclusion: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3939,15 +3938,15 @@ export def "movie-editor delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --movieIds: list # nullable
-  --monitored: string@bool-completer # nullable
+  --monitored: oneof<nothing, bool> # nullable
   --qualityProfileId: int # nullable, format: int32
   --minimumAvailability: string@minimumAvailability-completer
   --rootFolderPath: string # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --moveFiles: string@bool-completer
-  --deleteFiles: string@bool-completer
-  --addImportExclusion: string@bool-completer
+  --moveFiles: oneof<nothing, bool>
+  --deleteFiles: oneof<nothing, bool>
+  --addImportExclusion: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -4013,7 +4012,7 @@ export def "moviefile put" [
   --indexerFlags: int # nullable, format: int32
   --mediaInfo: record # shape: {id?: int, audioBitrate?: int, audioChannels?: float, audioCodec?: string, audioLanguages?: string, audioStreamCount?: int, videoBitDepth?: int, videoBitrate?: int, videoCodec?: string, videoFps?: float, videoDynamicRange?: string, videoDynamicRangeType?: string, resolution?: string, runTime?: string, scanType?: string, subtitles?: string}
   --originalFilePath: string # nullable
-  --qualityCutoffNotMet: string@bool-completer
+  --qualityCutoffNotMet: oneof<nothing, bool>
 ]: any -> record<id: int, movieId: int, relativePath: string, path: string, size: int, dateAdded: string, sceneName: string, releaseGroup: string, edition: string, languages: table<id: int, name: string>, quality: record<quality: record<id: int, name: string, source: string, resolution: int, modifier: string>, revision: record<version: int, real: int, isRepack: bool>>, customFormats: table<id: int, name: string, includeCustomFormatWhenRenaming: bool, specifications: list>, customFormatScore: int, indexerFlags: int, mediaInfo: record<id: int, audioBitrate: int, audioChannels: float, audioCodec: string, audioLanguages: string, audioStreamCount: int, videoBitDepth: int, videoBitrate: int, videoCodec: string, videoFps: float, videoDynamicRange: string, videoDynamicRangeType: string, resolution: string, runTime: string, scanType: string, subtitles: string>, originalFilePath: string, qualityCutoffNotMet: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -4281,8 +4280,8 @@ export def "config-naming put" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
-  --renameMovies: string@bool-completer
-  --replaceIllegalCharacters: string@bool-completer
+  --renameMovies: oneof<nothing, bool>
+  --replaceIllegalCharacters: oneof<nothing, bool>
   --colonReplacementFormat: string@colonReplacementFormat-completer
   --standardMovieFormat: string # nullable
   --movieFolderFormat: string # nullable
@@ -4327,8 +4326,8 @@ export def "config-naming-examples get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --renameMovies: string@bool-completer
-  --replaceIllegalCharacters: string@bool-completer
+  --renameMovies: oneof<nothing, bool>
+  --replaceIllegalCharacters: oneof<nothing, bool>
   --colonReplacementFormat: string@colonReplacementFormat-completer
   --standardMovieFormat: string
   --movieFolderFormat: string
@@ -4375,7 +4374,7 @@ export def "notification post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -4387,31 +4386,31 @@ export def "notification post" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onGrab?: bool, onDownload?: bool, onUpgrade?: bool, onRename?: bool, onMovieAdded?: bool, onMovieDelete?: bool, onMovieFileDelete?: bool, onMovieFileDeleteForUpgrade?: bool, onHealthIssue?: bool, includeHealthWarnings?: bool, onHealthRestored?: bool, onApplicationUpdate?: bool, onManualInteractionRequired?: bool, supportsOnGrab?: bool, supportsOnDownload?: bool, supportsOnUpgrade?: bool, supportsOnRename?: bool, supportsOnMovieAdded?: bool, supportsOnMovieDelete?: bool, supportsOnMovieFileDelete?: bool, supportsOnMovieFileDeleteForUpgrade?: bool, supportsOnHealthIssue?: bool, supportsOnHealthRestored?: bool, supportsOnApplicationUpdate?: bool, supportsOnManualInteractionRequired?: bool, testCommand?: string}
   --link: string # nullable
-  --onGrab: string@bool-completer
-  --onDownload: string@bool-completer
-  --onUpgrade: string@bool-completer
-  --onRename: string@bool-completer
-  --onMovieAdded: string@bool-completer
-  --onMovieDelete: string@bool-completer
-  --onMovieFileDelete: string@bool-completer
-  --onMovieFileDeleteForUpgrade: string@bool-completer
-  --onHealthIssue: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
-  --onHealthRestored: string@bool-completer
-  --onApplicationUpdate: string@bool-completer
-  --onManualInteractionRequired: string@bool-completer
-  --supportsOnGrab: string@bool-completer
-  --supportsOnDownload: string@bool-completer
-  --supportsOnUpgrade: string@bool-completer
-  --supportsOnRename: string@bool-completer
-  --supportsOnMovieAdded: string@bool-completer
-  --supportsOnMovieDelete: string@bool-completer
-  --supportsOnMovieFileDelete: string@bool-completer
-  --supportsOnMovieFileDeleteForUpgrade: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --supportsOnHealthRestored: string@bool-completer
-  --supportsOnApplicationUpdate: string@bool-completer
-  --supportsOnManualInteractionRequired: string@bool-completer
+  --onGrab: oneof<nothing, bool>
+  --onDownload: oneof<nothing, bool>
+  --onUpgrade: oneof<nothing, bool>
+  --onRename: oneof<nothing, bool>
+  --onMovieAdded: oneof<nothing, bool>
+  --onMovieDelete: oneof<nothing, bool>
+  --onMovieFileDelete: oneof<nothing, bool>
+  --onMovieFileDeleteForUpgrade: oneof<nothing, bool>
+  --onHealthIssue: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
+  --onHealthRestored: oneof<nothing, bool>
+  --onApplicationUpdate: oneof<nothing, bool>
+  --onManualInteractionRequired: oneof<nothing, bool>
+  --supportsOnGrab: oneof<nothing, bool>
+  --supportsOnDownload: oneof<nothing, bool>
+  --supportsOnUpgrade: oneof<nothing, bool>
+  --supportsOnRename: oneof<nothing, bool>
+  --supportsOnMovieAdded: oneof<nothing, bool>
+  --supportsOnMovieDelete: oneof<nothing, bool>
+  --supportsOnMovieFileDelete: oneof<nothing, bool>
+  --supportsOnMovieFileDeleteForUpgrade: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --supportsOnHealthRestored: oneof<nothing, bool>
+  --supportsOnApplicationUpdate: oneof<nothing, bool>
+  --supportsOnManualInteractionRequired: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, link: string, onGrab: bool, onDownload: bool, onUpgrade: bool, onRename: bool, onMovieAdded: bool, onMovieDelete: bool, onMovieFileDelete: bool, onMovieFileDeleteForUpgrade: bool, onHealthIssue: bool, includeHealthWarnings: bool, onHealthRestored: bool, onApplicationUpdate: bool, onManualInteractionRequired: bool, supportsOnGrab: bool, supportsOnDownload: bool, supportsOnUpgrade: bool, supportsOnRename: bool, supportsOnMovieAdded: bool, supportsOnMovieDelete: bool, supportsOnMovieFileDelete: bool, supportsOnMovieFileDeleteForUpgrade: bool, supportsOnHealthIssue: bool, supportsOnHealthRestored: bool, supportsOnApplicationUpdate: bool, supportsOnManualInteractionRequired: bool, testCommand: string> {
   let input = $in
@@ -4440,7 +4439,7 @@ export def "notification put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -4452,31 +4451,31 @@ export def "notification put" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onGrab?: bool, onDownload?: bool, onUpgrade?: bool, onRename?: bool, onMovieAdded?: bool, onMovieDelete?: bool, onMovieFileDelete?: bool, onMovieFileDeleteForUpgrade?: bool, onHealthIssue?: bool, includeHealthWarnings?: bool, onHealthRestored?: bool, onApplicationUpdate?: bool, onManualInteractionRequired?: bool, supportsOnGrab?: bool, supportsOnDownload?: bool, supportsOnUpgrade?: bool, supportsOnRename?: bool, supportsOnMovieAdded?: bool, supportsOnMovieDelete?: bool, supportsOnMovieFileDelete?: bool, supportsOnMovieFileDeleteForUpgrade?: bool, supportsOnHealthIssue?: bool, supportsOnHealthRestored?: bool, supportsOnApplicationUpdate?: bool, supportsOnManualInteractionRequired?: bool, testCommand?: string}
   --link: string # nullable
-  --onGrab: string@bool-completer
-  --onDownload: string@bool-completer
-  --onUpgrade: string@bool-completer
-  --onRename: string@bool-completer
-  --onMovieAdded: string@bool-completer
-  --onMovieDelete: string@bool-completer
-  --onMovieFileDelete: string@bool-completer
-  --onMovieFileDeleteForUpgrade: string@bool-completer
-  --onHealthIssue: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
-  --onHealthRestored: string@bool-completer
-  --onApplicationUpdate: string@bool-completer
-  --onManualInteractionRequired: string@bool-completer
-  --supportsOnGrab: string@bool-completer
-  --supportsOnDownload: string@bool-completer
-  --supportsOnUpgrade: string@bool-completer
-  --supportsOnRename: string@bool-completer
-  --supportsOnMovieAdded: string@bool-completer
-  --supportsOnMovieDelete: string@bool-completer
-  --supportsOnMovieFileDelete: string@bool-completer
-  --supportsOnMovieFileDeleteForUpgrade: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --supportsOnHealthRestored: string@bool-completer
-  --supportsOnApplicationUpdate: string@bool-completer
-  --supportsOnManualInteractionRequired: string@bool-completer
+  --onGrab: oneof<nothing, bool>
+  --onDownload: oneof<nothing, bool>
+  --onUpgrade: oneof<nothing, bool>
+  --onRename: oneof<nothing, bool>
+  --onMovieAdded: oneof<nothing, bool>
+  --onMovieDelete: oneof<nothing, bool>
+  --onMovieFileDelete: oneof<nothing, bool>
+  --onMovieFileDeleteForUpgrade: oneof<nothing, bool>
+  --onHealthIssue: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
+  --onHealthRestored: oneof<nothing, bool>
+  --onApplicationUpdate: oneof<nothing, bool>
+  --onManualInteractionRequired: oneof<nothing, bool>
+  --supportsOnGrab: oneof<nothing, bool>
+  --supportsOnDownload: oneof<nothing, bool>
+  --supportsOnUpgrade: oneof<nothing, bool>
+  --supportsOnRename: oneof<nothing, bool>
+  --supportsOnMovieAdded: oneof<nothing, bool>
+  --supportsOnMovieDelete: oneof<nothing, bool>
+  --supportsOnMovieFileDelete: oneof<nothing, bool>
+  --supportsOnMovieFileDeleteForUpgrade: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --supportsOnHealthRestored: oneof<nothing, bool>
+  --supportsOnApplicationUpdate: oneof<nothing, bool>
+  --supportsOnManualInteractionRequired: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, link: string, onGrab: bool, onDownload: bool, onUpgrade: bool, onRename: bool, onMovieAdded: bool, onMovieDelete: bool, onMovieFileDelete: bool, onMovieFileDeleteForUpgrade: bool, onHealthIssue: bool, includeHealthWarnings: bool, onHealthRestored: bool, onApplicationUpdate: bool, onManualInteractionRequired: bool, supportsOnGrab: bool, supportsOnDownload: bool, supportsOnUpgrade: bool, supportsOnRename: bool, supportsOnMovieAdded: bool, supportsOnMovieDelete: bool, supportsOnMovieFileDelete: bool, supportsOnMovieFileDeleteForUpgrade: bool, supportsOnHealthIssue: bool, supportsOnHealthRestored: bool, supportsOnApplicationUpdate: bool, supportsOnManualInteractionRequired: bool, testCommand: string> {
   let input = $in
@@ -4561,7 +4560,7 @@ export def "notification-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -4573,31 +4572,31 @@ export def "notification-test post" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onGrab?: bool, onDownload?: bool, onUpgrade?: bool, onRename?: bool, onMovieAdded?: bool, onMovieDelete?: bool, onMovieFileDelete?: bool, onMovieFileDeleteForUpgrade?: bool, onHealthIssue?: bool, includeHealthWarnings?: bool, onHealthRestored?: bool, onApplicationUpdate?: bool, onManualInteractionRequired?: bool, supportsOnGrab?: bool, supportsOnDownload?: bool, supportsOnUpgrade?: bool, supportsOnRename?: bool, supportsOnMovieAdded?: bool, supportsOnMovieDelete?: bool, supportsOnMovieFileDelete?: bool, supportsOnMovieFileDeleteForUpgrade?: bool, supportsOnHealthIssue?: bool, supportsOnHealthRestored?: bool, supportsOnApplicationUpdate?: bool, supportsOnManualInteractionRequired?: bool, testCommand?: string}
   --link: string # nullable
-  --onGrab: string@bool-completer
-  --onDownload: string@bool-completer
-  --onUpgrade: string@bool-completer
-  --onRename: string@bool-completer
-  --onMovieAdded: string@bool-completer
-  --onMovieDelete: string@bool-completer
-  --onMovieFileDelete: string@bool-completer
-  --onMovieFileDeleteForUpgrade: string@bool-completer
-  --onHealthIssue: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
-  --onHealthRestored: string@bool-completer
-  --onApplicationUpdate: string@bool-completer
-  --onManualInteractionRequired: string@bool-completer
-  --supportsOnGrab: string@bool-completer
-  --supportsOnDownload: string@bool-completer
-  --supportsOnUpgrade: string@bool-completer
-  --supportsOnRename: string@bool-completer
-  --supportsOnMovieAdded: string@bool-completer
-  --supportsOnMovieDelete: string@bool-completer
-  --supportsOnMovieFileDelete: string@bool-completer
-  --supportsOnMovieFileDeleteForUpgrade: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --supportsOnHealthRestored: string@bool-completer
-  --supportsOnApplicationUpdate: string@bool-completer
-  --supportsOnManualInteractionRequired: string@bool-completer
+  --onGrab: oneof<nothing, bool>
+  --onDownload: oneof<nothing, bool>
+  --onUpgrade: oneof<nothing, bool>
+  --onRename: oneof<nothing, bool>
+  --onMovieAdded: oneof<nothing, bool>
+  --onMovieDelete: oneof<nothing, bool>
+  --onMovieFileDelete: oneof<nothing, bool>
+  --onMovieFileDeleteForUpgrade: oneof<nothing, bool>
+  --onHealthIssue: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
+  --onHealthRestored: oneof<nothing, bool>
+  --onApplicationUpdate: oneof<nothing, bool>
+  --onManualInteractionRequired: oneof<nothing, bool>
+  --supportsOnGrab: oneof<nothing, bool>
+  --supportsOnDownload: oneof<nothing, bool>
+  --supportsOnUpgrade: oneof<nothing, bool>
+  --supportsOnRename: oneof<nothing, bool>
+  --supportsOnMovieAdded: oneof<nothing, bool>
+  --supportsOnMovieDelete: oneof<nothing, bool>
+  --supportsOnMovieFileDelete: oneof<nothing, bool>
+  --supportsOnMovieFileDeleteForUpgrade: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --supportsOnHealthRestored: oneof<nothing, bool>
+  --supportsOnApplicationUpdate: oneof<nothing, bool>
+  --supportsOnManualInteractionRequired: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> any {
   let input = $in
@@ -4655,31 +4654,31 @@ export def "notification-action post" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onGrab?: bool, onDownload?: bool, onUpgrade?: bool, onRename?: bool, onMovieAdded?: bool, onMovieDelete?: bool, onMovieFileDelete?: bool, onMovieFileDeleteForUpgrade?: bool, onHealthIssue?: bool, includeHealthWarnings?: bool, onHealthRestored?: bool, onApplicationUpdate?: bool, onManualInteractionRequired?: bool, supportsOnGrab?: bool, supportsOnDownload?: bool, supportsOnUpgrade?: bool, supportsOnRename?: bool, supportsOnMovieAdded?: bool, supportsOnMovieDelete?: bool, supportsOnMovieFileDelete?: bool, supportsOnMovieFileDeleteForUpgrade?: bool, supportsOnHealthIssue?: bool, supportsOnHealthRestored?: bool, supportsOnApplicationUpdate?: bool, supportsOnManualInteractionRequired?: bool, testCommand?: string}
   --link: string # nullable
-  --onGrab: string@bool-completer
-  --onDownload: string@bool-completer
-  --onUpgrade: string@bool-completer
-  --onRename: string@bool-completer
-  --onMovieAdded: string@bool-completer
-  --onMovieDelete: string@bool-completer
-  --onMovieFileDelete: string@bool-completer
-  --onMovieFileDeleteForUpgrade: string@bool-completer
-  --onHealthIssue: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
-  --onHealthRestored: string@bool-completer
-  --onApplicationUpdate: string@bool-completer
-  --onManualInteractionRequired: string@bool-completer
-  --supportsOnGrab: string@bool-completer
-  --supportsOnDownload: string@bool-completer
-  --supportsOnUpgrade: string@bool-completer
-  --supportsOnRename: string@bool-completer
-  --supportsOnMovieAdded: string@bool-completer
-  --supportsOnMovieDelete: string@bool-completer
-  --supportsOnMovieFileDelete: string@bool-completer
-  --supportsOnMovieFileDeleteForUpgrade: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --supportsOnHealthRestored: string@bool-completer
-  --supportsOnApplicationUpdate: string@bool-completer
-  --supportsOnManualInteractionRequired: string@bool-completer
+  --onGrab: oneof<nothing, bool>
+  --onDownload: oneof<nothing, bool>
+  --onUpgrade: oneof<nothing, bool>
+  --onRename: oneof<nothing, bool>
+  --onMovieAdded: oneof<nothing, bool>
+  --onMovieDelete: oneof<nothing, bool>
+  --onMovieFileDelete: oneof<nothing, bool>
+  --onMovieFileDeleteForUpgrade: oneof<nothing, bool>
+  --onHealthIssue: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
+  --onHealthRestored: oneof<nothing, bool>
+  --onApplicationUpdate: oneof<nothing, bool>
+  --onManualInteractionRequired: oneof<nothing, bool>
+  --supportsOnGrab: oneof<nothing, bool>
+  --supportsOnDownload: oneof<nothing, bool>
+  --supportsOnUpgrade: oneof<nothing, bool>
+  --supportsOnRename: oneof<nothing, bool>
+  --supportsOnMovieAdded: oneof<nothing, bool>
+  --supportsOnMovieDelete: oneof<nothing, bool>
+  --supportsOnMovieFileDelete: oneof<nothing, bool>
+  --supportsOnMovieFileDeleteForUpgrade: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --supportsOnHealthRestored: oneof<nothing, bool>
+  --supportsOnApplicationUpdate: oneof<nothing, bool>
+  --supportsOnManualInteractionRequired: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> any {
   let input = $in
@@ -4877,7 +4876,7 @@ export def "qualityprofile post" [
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
   --name: string # nullable
-  --upgradeAllowed: string@bool-completer
+  --upgradeAllowed: oneof<nothing, bool>
   --cutoff: int # format: int32
   --items: list # nullable — item shape: {id?: int, name?: string, quality?: record, items?: list, allowed?: bool}
   --minFormatScore: int # format: int32
@@ -4952,7 +4951,7 @@ export def "qualityprofile put" [
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
   --name: string # nullable
-  --upgradeAllowed: string@bool-completer
+  --upgradeAllowed: oneof<nothing, bool>
   --cutoff: int # format: int32
   --items: list # nullable — item shape: {id?: int, name?: string, quality?: record, items?: list, allowed?: bool}
   --minFormatScore: int # format: int32
@@ -5021,10 +5020,10 @@ export def "queue delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --removeFromClient: string@bool-completer # default: true
-  --blocklist: string@bool-completer # default: false
-  --skipRedownload: string@bool-completer # default: false
-  --changeCategory: string@bool-completer # default: false
+  --removeFromClient: oneof<nothing, bool> # default: true
+  --blocklist: oneof<nothing, bool> # default: false
+  --skipRedownload: oneof<nothing, bool> # default: false
+  --changeCategory: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5044,10 +5043,10 @@ export def "queue-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --removeFromClient: string@bool-completer # default: true
-  --blocklist: string@bool-completer # default: false
-  --skipRedownload: string@bool-completer # default: false
-  --changeCategory: string@bool-completer # default: false
+  --removeFromClient: oneof<nothing, bool> # default: true
+  --blocklist: oneof<nothing, bool> # default: false
+  --skipRedownload: oneof<nothing, bool> # default: false
+  --changeCategory: oneof<nothing, bool> # default: false
   --ids: list # nullable
 ]: any -> any {
   let input = $in
@@ -5075,8 +5074,8 @@ export def "queue get" [
   --pageSize: int # format: int32, default: 10
   --sortKey: string
   --sortDirection: string@sortDirection-completer
-  --includeUnknownMovieItems: string@bool-completer # default: false
-  --includeMovie: string@bool-completer # default: false
+  --includeUnknownMovieItems: oneof<nothing, bool> # default: false
+  --includeMovie: oneof<nothing, bool> # default: false
   --movieIds: list
   --protocol: string@protocol-completer
   --languages: list
@@ -5144,7 +5143,7 @@ export def "queue-details get" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --movieId: int # format: int32
-  --includeMovie: string@bool-completer # default: false
+  --includeMovie: oneof<nothing, bool> # default: false
 ]: nothing -> table<id: int, movieId: int, movie: record<id: int, title: string, originalTitle: string, originalLanguage: record, alternateTitles: list, secondaryYear: int, secondaryYearSourceId: int, sortTitle: string, sizeOnDisk: int, status: string, overview: string, inCinemas: string, physicalRelease: string, digitalRelease: string, releaseDate: string, physicalReleaseNote: string, images: list, website: string, remotePoster: string, year: int, youTubeTrailerId: string, studio: string, path: string, qualityProfileId: int, hasFile: bool, movieFileId: int, monitored: bool, minimumAvailability: string, isAvailable: bool, folderName: string, runtime: int, cleanTitle: string, imdbId: string, tmdbId: int, titleSlug: string, rootFolderPath: string, folder: string, certification: string, genres: list, keywords: list, tags: list, added: string, addOptions: record, ratings: record, movieFile: record, collection: record, popularity: float, lastSearchTime: string, statistics: record>, languages: list<record>, quality: record<quality: record, revision: record>, customFormats: list<record>, customFormatScore: int, size: float, title: string, estimatedCompletionTime: string, added: string, status: string, trackedDownloadStatus: string, trackedDownloadState: string, statusMessages: list<record>, errorMessage: string, downloadId: string, protocol: string, downloadClient: string, downloadClientHasPostImportCategory: bool, indexer: string, outputPath: string, sizeleft: float, timeleft: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5203,13 +5202,13 @@ export def "release post" [
   --subGroup: string # nullable
   --releaseHash: string # nullable
   --title: string # nullable
-  --sceneSource: string@bool-completer
+  --sceneSource: oneof<nothing, bool>
   --movieTitles: list # nullable
   --languages: list # nullable — item shape: {id?: int, name?: string}
   --mappedMovieId: int # nullable, format: int32
-  --approved: string@bool-completer
-  --temporarilyRejected: string@bool-completer
-  --rejected: string@bool-completer
+  --approved: oneof<nothing, bool>
+  --temporarilyRejected: oneof<nothing, bool>
+  --rejected: oneof<nothing, bool>
   --tmdbId: int # format: int32
   --imdbId: int # format: int32
   --rejections: list # nullable
@@ -5217,8 +5216,8 @@ export def "release post" [
   --commentUrl: string # nullable
   --downloadUrl: string # nullable
   --infoUrl: string # nullable
-  --movieRequested: string@bool-completer
-  --downloadAllowed: string@bool-completer
+  --movieRequested: oneof<nothing, bool>
+  --downloadAllowed: oneof<nothing, bool>
   --releaseWeight: int # format: int32
   --edition: string # nullable
   --magnetUrl: string # nullable
@@ -5230,7 +5229,7 @@ export def "release post" [
   --movieId: int # nullable, format: int32
   --downloadClientId: int # nullable, format: int32
   --downloadClient: string # nullable
-  --shouldOverride: string@bool-completer # nullable
+  --shouldOverride: oneof<nothing, bool> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -5275,7 +5274,7 @@ export def "releaseprofile post" [
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
   --name: string # nullable
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --required: any # nullable
   --ignored: any # nullable
   --indexerId: int # format: int32
@@ -5343,7 +5342,7 @@ export def "releaseprofile put" [
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
   --name: string # nullable
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --required: any # nullable
   --ignored: any # nullable
   --indexerId: int # format: int32
@@ -5410,13 +5409,13 @@ export def "release-push post" [
   --subGroup: string # nullable
   --releaseHash: string # nullable
   --title: string # nullable
-  --sceneSource: string@bool-completer
+  --sceneSource: oneof<nothing, bool>
   --movieTitles: list # nullable
   --languages: list # nullable — item shape: {id?: int, name?: string}
   --mappedMovieId: int # nullable, format: int32
-  --approved: string@bool-completer
-  --temporarilyRejected: string@bool-completer
-  --rejected: string@bool-completer
+  --approved: oneof<nothing, bool>
+  --temporarilyRejected: oneof<nothing, bool>
+  --rejected: oneof<nothing, bool>
   --tmdbId: int # format: int32
   --imdbId: int # format: int32
   --rejections: list # nullable
@@ -5424,8 +5423,8 @@ export def "release-push post" [
   --commentUrl: string # nullable
   --downloadUrl: string # nullable
   --infoUrl: string # nullable
-  --movieRequested: string@bool-completer
-  --downloadAllowed: string@bool-completer
+  --movieRequested: oneof<nothing, bool>
+  --downloadAllowed: oneof<nothing, bool>
   --releaseWeight: int # format: int32
   --edition: string # nullable
   --magnetUrl: string # nullable
@@ -5437,7 +5436,7 @@ export def "release-push post" [
   --movieId: int # nullable, format: int32
   --downloadClientId: int # nullable, format: int32
   --downloadClient: string # nullable
-  --shouldOverride: string@bool-completer # nullable
+  --shouldOverride: oneof<nothing, bool> # nullable
 ]: any -> table<id: int, guid: string, quality: record<quality: record, revision: record>, customFormats: list<record>, customFormatScore: int, qualityWeight: int, age: int, ageHours: float, ageMinutes: float, size: int, indexerId: int, indexer: string, releaseGroup: string, subGroup: string, releaseHash: string, title: string, sceneSource: bool, movieTitles: list<string>, languages: list<record>, mappedMovieId: int, approved: bool, temporarilyRejected: bool, rejected: bool, tmdbId: int, imdbId: int, rejections: list<string>, publishDate: string, commentUrl: string, downloadUrl: string, infoUrl: string, movieRequested: bool, downloadAllowed: bool, releaseWeight: int, edition: string, magnetUrl: string, infoHash: string, seeders: int, leechers: int, protocol: string, indexerFlags: any, movieId: int, downloadClientId: int, downloadClient: string, shouldOverride: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -5596,7 +5595,7 @@ export def "rootfolder post" [
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
   --path: string # nullable
-  --accessible: string@bool-completer
+  --accessible: oneof<nothing, bool>
   --freeSpace: int # nullable, format: int64
   --unmappedFolders: list # nullable — item shape: {name?: string, path?: string, relativePath?: string}
 ]: any -> record<id: int, path: string, accessible: bool, freeSpace: int, unmappedFolders: table<name: string, path: string, relativePath: string>> {
@@ -6020,8 +6019,8 @@ export def "config-ui put" [
   --shortDateFormat: string # nullable
   --longDateFormat: string # nullable
   --timeFormat: string # nullable
-  --showRelativeDates: string@bool-completer
-  --enableColorImpairedMode: string@bool-completer
+  --showRelativeDates: oneof<nothing, bool>
+  --enableColorImpairedMode: oneof<nothing, bool>
   --movieInfoLanguage: int # format: int32
   --uiLanguage: int # format: int32
   --theme: string # nullable

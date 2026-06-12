@@ -1,4 +1,4 @@
-# Auto-generated client for Windmill API v1.722.0
+# Auto-generated client for Windmill API v1.723.0
 # Source: https://raw.githubusercontent.com/windmill-labs/windmill/main/backend/windmill-api/openapi.yaml
 # Auth: --token flag or $env.WINDMILL_API_TOKEN
 
@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost/api"] }
 def auth-scheme-completer [] { ["bearer" "cookie-token"] }
 
@@ -151,7 +150,7 @@ export def "health-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # Force a fresh check, bypassing the cache (default: false)
+  --force: oneof<nothing, bool> # Force a fresh check, bypassing the cache (default: false)
 ]: nothing -> record<status: string, checked_at: string, database_healthy: bool, workers_alive: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -317,7 +316,7 @@ export def "w-audit-list listAuditLogs" [
   --exclude-operations: string # comma separated list of operations to exclude
   --resource: string # filter on exact or prefix name of resource
   --action-kind: string@action-kind-completer # filter on type of operation
-  --all-workspaces: string@bool-completer # get audit logs for all workspaces
+  --all-workspaces: oneof<nothing, bool> # get audit logs for all workspaces
 ]: nothing -> table<workspace_id: string, id: int, timestamp: string, username: string, operation: string, action_kind: string, resource: string, parameters: record, span: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -505,9 +504,9 @@ export def "w-users-update updateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-admin: string@bool-completer
-  --operator: string@bool-completer
-  --disabled: string@bool-completer
+  --is-admin: oneof<nothing, bool>
+  --operator: oneof<nothing, bool>
+  --disabled: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -634,10 +633,10 @@ export def "users-create createUserGlobally" [
   --allow-errors(-e) # Return full response without error handling
   email: string
   password: string
-  --super-admin: string@bool-completer
+  --super-admin: oneof<nothing, bool>
   --name: string
   --company: string
-  --skip-email: string@bool-completer # Skip sending email notifications to the user
+  --skip-email: oneof<nothing, bool> # Skip sending email notifications to the user
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -663,10 +662,10 @@ export def "users-update globalUserUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-super-admin: string@bool-completer
-  --is-devops: string@bool-completer
+  --is-super-admin: oneof<nothing, bool>
+  --is-devops: oneof<nothing, bool>
   --name: string
-  --disabled: string@bool-completer
+  --disabled: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -808,7 +807,7 @@ export def "users-ext-jwt-tokens listExtJwtTokens" [
   --allow-errors(-e) # Return full response without error handling
   --page: int
   --per-page: int
-  --active-only: string@bool-completer # only tokens used in the last 30 days
+  --active-only: oneof<nothing, bool> # only tokens used in the last 30 days
 ]: nothing -> table<jwt_hash: int, email: string, username: string, is_admin: bool, is_operator: bool, workspace_id: string, label: string, scopes: list<string>, last_used_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -907,7 +906,7 @@ export def "w-users-offboard offboardWorkspaceUser" [
   --allow-errors(-e) # Return full response without error handling
   reassign_to: string # Target for reassignment: 'u/{username}' or 'f/{folder}'
   --new-on-behalf-of-user: string # Required when reassign_to is a folder. The username whose identity will be used as permissioned_as for schedules and triggers.
-  --delete-user: string@bool-completer # Whether to also remove the user from the workspace (default: true)
+  --delete-user: oneof<nothing, bool> # Whether to also remove the user from the workspace (default: true)
 ]: any -> record<conflicts: list<string>, summary: record<scripts_reassigned: int, flows_reassigned: int, apps_reassigned: int, resources_reassigned: int, variables_reassigned: int, schedules_reassigned: int, triggers_reassigned: int, drafts_deleted: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -956,7 +955,7 @@ export def "users-offboard offboardGlobalUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --reassignments: record # Map of workspace_id to reassignment config
-  --delete-user: string@bool-completer # Whether to also remove the user from the instance (default: true)
+  --delete-user: oneof<nothing, bool> # Whether to also remove the user from the instance (default: true)
 ]: any -> record<conflicts: list<string>, summary: record<scripts_reassigned: int, flows_reassigned: int, apps_reassigned: int, resources_reassigned: int, variables_reassigned: int, schedules_reassigned: int, triggers_reassigned: int, drafts_deleted: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1508,7 +1507,7 @@ export def "settings-critical-alerts get" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # default: 1
   --page-size: int # default: 10
-  --acknowledged: string@bool-completer # nullable
+  --acknowledged: oneof<nothing, bool> # nullable
 ]: nothing -> record<alerts: table<id: int, alert_type: string, message: string, created_at: string, acknowledged: bool, workspace_id: string>, total_rows: int, total_pages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2042,7 +2041,7 @@ export def "settings-test-secret-backend testSecretBackend" [
   --jwt-mount-path: string # Mount path for the JWT auth method in Vault (optional, defaults to "jwt"). Set this when the JWT auth method is mounted at a non-default path, e.g. via `vault auth enable -path=<mount> jwt`.
   --namespace: string # Vault Enterprise namespace (optional)
   --body-token: string # Static Vault token for testing/development (optional, if provided this is used instead of JWT authentication)
-  --skip-ssl-verify: string@bool-completer # Skip TLS certificate verification when connecting to Vault. Only use for self-signed certificates in development environments.
+  --skip-ssl-verify: oneof<nothing, bool> # Skip TLS certificate verification when connecting to Vault. Only use for self-signed certificates in development environments.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2074,7 +2073,7 @@ export def "settings-migrate-secrets-to-vault migrateSecretsToVault" [
   --jwt-mount-path: string # Mount path for the JWT auth method in Vault (optional, defaults to "jwt"). Set this when the JWT auth method is mounted at a non-default path, e.g. via `vault auth enable -path=<mount> jwt`.
   --namespace: string # Vault Enterprise namespace (optional)
   --body-token: string # Static Vault token for testing/development (optional, if provided this is used instead of JWT authentication)
-  --skip-ssl-verify: string@bool-completer # Skip TLS certificate verification when connecting to Vault. Only use for self-signed certificates in development environments.
+  --skip-ssl-verify: oneof<nothing, bool> # Skip TLS certificate verification when connecting to Vault. Only use for self-signed certificates in development environments.
 ]: any -> record<total_secrets: int, migrated_count: int, failed_count: int, failures: table<workspace_id: string, path: string, error: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2106,7 +2105,7 @@ export def "settings-migrate-secrets-to-database migrateSecretsToDatabase" [
   --jwt-mount-path: string # Mount path for the JWT auth method in Vault (optional, defaults to "jwt"). Set this when the JWT auth method is mounted at a non-default path, e.g. via `vault auth enable -path=<mount> jwt`.
   --namespace: string # Vault Enterprise namespace (optional)
   --body-token: string # Static Vault token for testing/development (optional, if provided this is used instead of JWT authentication)
-  --skip-ssl-verify: string@bool-completer # Skip TLS certificate verification when connecting to Vault. Only use for self-signed certificates in development environments.
+  --skip-ssl-verify: oneof<nothing, bool> # Skip TLS certificate verification when connecting to Vault. Only use for self-signed certificates in development environments.
 ]: any -> record<total_secrets: int, migrated_count: int, failed_count: int, failures: table<workspace_id: string, path: string, error: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2371,7 +2370,7 @@ export def "users-tutorial-progress updateTutorialProgress" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --progress: int
-  --skipped-all: string@bool-completer
+  --skipped-all: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2818,8 +2817,8 @@ export def "w-workspaces-invite-user inviteUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   email: string
-  --is-admin: string@bool-completer
-  --operator: string@bool-completer
+  --is-admin: oneof<nothing, bool>
+  --operator: oneof<nothing, bool>
   --parent-workspace-id: string # nullable
 ]: any -> any {
   let input = $in
@@ -2847,9 +2846,9 @@ export def "w-workspaces-add-user addUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   email: string
-  --is-admin: string@bool-completer
+  --is-admin: oneof<nothing, bool>
   --username: string
-  --operator: string@bool-completer
+  --operator: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2876,9 +2875,9 @@ export def "w-workspaces-create-service-account createServiceAccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   username: string
-  --is-admin: string@bool-completer # Grant the service account workspace admin. Defaults to false. Cannot be combined with operator=true.
-  --operator: string@bool-completer # Make the service account an operator. Defaults to true for backward compatibility. Set to false to count as a developer (1 seat) instead of 0.5 seat.
-  --add-to-deployers: string@bool-completer # Add the service account to the workspace `wm_deployers` group on creation. Recommended when the account will be used as a CLI sync / CI deploy identity so it can deploy on behalf of other users.
+  --is-admin: oneof<nothing, bool> # Grant the service account workspace admin. Defaults to false. Cannot be combined with operator=true.
+  --operator: oneof<nothing, bool> # Make the service account an operator. Defaults to true for backward compatibility. Set to false to count as a developer (1 seat) instead of 0.5 seat.
+  --add-to-deployers: oneof<nothing, bool> # Add the service account to the workspace `wm_deployers` group on creation. Recommended when the account will be used as a CLI sync / CI deploy identity so it can deploy on behalf of other users.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2957,8 +2956,8 @@ export def "w-workspaces-delete-invite delete-invite" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   email: string
-  --is-admin: string@bool-completer
-  --operator: string@bool-completer
+  --is-admin: oneof<nothing, bool>
+  --operator: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3028,7 +3027,7 @@ export def "workspaces-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --only-delete-forks: string@bool-completer
+  --only-delete-forks: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3198,16 +3197,16 @@ export def "w-workspaces-operator-settings updateOperatorSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --runs: string@bool-completer # Whether operators can view runs
-  --schedules: string@bool-completer # Whether operators can view schedules
-  --resources: string@bool-completer # Whether operators can view resources
-  --body-variables: string@bool-completer # Whether operators can view variables
-  --assets: string@bool-completer # Whether operators can view assets
-  --audit-logs: string@bool-completer # Whether operators can view audit logs
-  --triggers: string@bool-completer # Whether operators can view triggers
-  --groups: string@bool-completer # Whether operators can view groups page
-  --folders: string@bool-completer # Whether operators can view folders page
-  --workers: string@bool-completer # Whether operators can view workers page
+  --runs: oneof<nothing, bool> # Whether operators can view runs
+  --schedules: oneof<nothing, bool> # Whether operators can view schedules
+  --resources: oneof<nothing, bool> # Whether operators can view resources
+  --body-variables: oneof<nothing, bool> # Whether operators can view variables
+  --assets: oneof<nothing, bool> # Whether operators can view assets
+  --audit-logs: oneof<nothing, bool> # Whether operators can view audit logs
+  --triggers: oneof<nothing, bool> # Whether operators can view triggers
+  --groups: oneof<nothing, bool> # Whether operators can view groups page
+  --folders: oneof<nothing, bool> # Whether operators can view folders page
+  --workers: oneof<nothing, bool> # Whether operators can view workers page
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3302,7 +3301,7 @@ export def "users-list-as-super-admin listUsersAsSuperAdmin" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
-  --active-only: string@bool-completer # filter only active users
+  --active-only: oneof<nothing, bool> # filter only active users
 ]: nothing -> table<email: string, login_type: string, super_admin: bool, devops: bool, verified: bool, name: string, company: string, username: string, operator_only: bool, is_workspace_admin: bool, first_time_user: bool, role_source: string, disabled: bool, workspace_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3436,7 +3435,7 @@ export def "w-workspaces-premium-info get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --skip-subscription-fetch: string@bool-completer # skip fetching subscription status from stripe
+  --skip-subscription-fetch: oneof<nothing, bool> # skip fetching subscription status from stripe
 ]: nothing -> record<premium: bool, usage: float, owner: string, status: string, is_past_due: bool, max_tolerated_executions: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3932,9 +3931,9 @@ export def "w-workspaces-edit-auto-invite editAutoInvite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --operator: string@bool-completer
-  --invite-all: string@bool-completer
-  --auto-add: string@bool-completer
+  --operator: oneof<nothing, bool>
+  --invite-all: oneof<nothing, bool>
+  --auto-add: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4093,11 +4092,11 @@ export def "w-workspaces-edit-error-handler editErrorHandler" [
   --allow-errors(-e) # Return full response without error handling
   --path: string # Path to the error handler script or flow
   --extra-args: record # The arguments to pass to the script or flow
-  --muted-on-cancel: string@bool-completer # default: false
-  --muted-on-user-path: string@bool-completer # default: false
+  --muted-on-cancel: oneof<nothing, bool> # default: false
+  --muted-on-user-path: oneof<nothing, bool> # default: false
   --error-handler: string # Path to the error handler script or flow
   --error-handler-extra-args: record # The arguments to pass to the script or flow
-  --error-handler-muted-on-cancel: string@bool-completer # default: false
+  --error-handler-muted-on-cancel: oneof<nothing, bool> # default: false
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4737,7 +4736,7 @@ export def "w-workspaces-encryption-key setWorkspaceEncryptionKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   new_key: string
-  --skip-reencrypt: string@bool-completer
+  --skip-reencrypt: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4942,7 +4941,7 @@ export def "users-tokens-create createToken" [
   --expiration: string # format: date-time
   --scopes: list
   --workspace-id: string
-  --read-only: string@bool-completer # If true, the token is restricted to read-only HTTP methods (GET/HEAD/OPTIONS). Mutating endpoints and job-run actions are rejected with 403, regardless of the scopes attached.
+  --read-only: oneof<nothing, bool> # If true, the token is restricted to read-only HTTP methods (GET/HEAD/OPTIONS). Mutating endpoints and job-run actions are rejected with 403, regardless of the scopes attached.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5069,7 +5068,7 @@ export def "users-tokens-list listTokens" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --exclude-ephemeral: string@bool-completer
+  --exclude-ephemeral: oneof<nothing, bool>
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
 ]: nothing -> table<label: string, expiration: string, token_prefix: string, created_at: string, last_used_at: string, scopes: list<string>, email: string, workspace_id: string, read_only: bool> {
@@ -5120,16 +5119,16 @@ export def "w-variables-create createVariable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --already-encrypted: string@bool-completer # whether the variable is already encrypted (default false)
+  --already-encrypted: oneof<nothing, bool> # whether the variable is already encrypted (default false)
   path: string # The path to the variable
   value: string # The value of the variable
-  --is-secret: string@bool-completer # Whether the variable is a secret
+  --is-secret: oneof<nothing, bool> # Whether the variable is a secret
   description: string # The description of the variable
   --account: int # The account identifier
-  --is-oauth: string@bool-completer # Whether the variable is an OAuth variable
+  --is-oauth: oneof<nothing, bool> # Whether the variable is an OAuth variable
   --expires-at: string # The expiration date of the variable (format: date-time)
   --labels: list
-  --ws-specific: string@bool-completer
+  --ws-specific: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5231,13 +5230,13 @@ export def "w-variables-update updateVariable" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --already-encrypted: string@bool-completer # whether the variable is already encrypted (default false)
+  --already-encrypted: oneof<nothing, bool> # whether the variable is already encrypted (default false)
   --body-path: string # The path to the variable
   --value: string # The new value of the variable
-  --is-secret: string@bool-completer # Whether the variable is a secret
+  --is-secret: oneof<nothing, bool> # Whether the variable is a secret
   --description: string # The new description of the variable
   --labels: list
-  --ws-specific: string@bool-completer
+  --ws-specific: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5265,8 +5264,8 @@ export def "w-variables-get get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --decrypt-secret: string@bool-completer # ask to decrypt secret if this variable is secret (if not secret no effect, default: true)
-  --include-encrypted: string@bool-completer # ask to include the encrypted value if secret and decrypt secret is not true (default: false)
+  --decrypt-secret: oneof<nothing, bool> # ask to decrypt secret if this variable is secret (if not secret no effect, default: true)
+  --include-encrypted: oneof<nothing, bool> # ask to include the encrypted value if secret and decrypt secret is not true (default: false)
 ]: nothing -> record<workspace_id: string, path: string, value: string, is_secret: bool, description: string, account: int, is_oauth: bool, extra_perms: record, is_expired: bool, refresh_error: string, is_linked: bool, is_refreshed: bool, expires_at: string, labels: list<string>, inherited_labels: list<string>, ws_specific: bool, edited_at: string, edited_by: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5291,7 +5290,7 @@ export def "w-variables-get-value get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-cache: string@bool-completer # allow getting a cached value for improved performance
+  --allow-cache: oneof<nothing, bool> # allow getting a cached value for improved performance
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5391,7 +5390,7 @@ export def "w-workspaces-get-secondary-storage-names get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-default: string@bool-completer # If true, include "_default_" in the list if primary workspace storage is set (default: false)
+  --include-default: oneof<nothing, bool> # If true, include "_default_" in the list if primary workspace storage is set (default: false)
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5417,7 +5416,7 @@ export def "w-workspaces-critical-alerts workspaceGetCriticalAlerts" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # default: 1
   --page-size: int # default: 10
-  --acknowledged: string@bool-completer # nullable
+  --acknowledged: oneof<nothing, bool> # nullable
 ]: nothing -> record<alerts: table<id: int, alert_type: string, message: string, created_at: string, acknowledged: bool, workspace_id: string>, total_rows: int, total_pages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5486,7 +5485,7 @@ export def "w-workspaces-critical-alerts-mute workspaceMuteCriticalAlertsUI" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --mute-critical-alerts: string@bool-completer # Whether critical alerts should be muted. (e.g. true)
+  --mute-critical-alerts: oneof<nothing, bool> # Whether critical alerts should be muted. (e.g. true)
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6266,7 +6265,7 @@ export def "teams-activities sendMessageToConversation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   conversation_id: string # The ID of the Teams conversation/activity
-  --success: string@bool-completer # Used for styling the card conditionally (default: true)
+  --success: oneof<nothing, bool> # Used for styling the card conditionally (default: true)
   text: string # The message text to be sent in the Teams card
   --card-block: record # The card block to be sent in the Teams card
 ]: any -> any {
@@ -6294,13 +6293,13 @@ export def "w-resources-create createResource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --update-if-exists: string@bool-completer # update the resource if it already exists (default false)
+  --update-if-exists: oneof<nothing, bool> # update the resource if it already exists (default false)
   path: string # The path to the resource
   value: any
   --description: string # The description of the resource
   resource_type: string # The resource_type associated with the resource
   --labels: list
-  --ws-specific: string@bool-completer
+  --ws-specific: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6382,7 +6381,7 @@ export def "w-resources-update updateResource" [
   --value: any
   --resource-type: string # The new resource_type to be associated with the resource
   --labels: list
-  --ws-specific: string@bool-completer
+  --ws-specific: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6460,7 +6459,7 @@ export def "w-resources-get-value-interpolated get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --job-id: string # job id (format: uuid)
-  --allow-cache: string@bool-completer # allow getting a cached value for improved performance
+  --allow-cache: oneof<nothing, bool> # allow getting a cached value for improved performance
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6663,7 +6662,7 @@ export def "w-resources-type-create createResourceType" [
   --created-by: string
   --edited-at: string # format: date-time
   --format-extension: string
-  --is-fileset: string@bool-completer
+  --is-fileset: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6737,7 +6736,7 @@ export def "w-resources-type-update updateResourceType" [
   --allow-errors(-e) # Return full response without error handling
   --schema: any
   --description: string
-  --is-fileset: string@bool-completer
+  --is-fileset: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7269,23 +7268,23 @@ export def "w-scripts-list listScripts" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
-  --order-desc: string@bool-completer # order by desc order (default true)
+  --order-desc: oneof<nothing, bool> # order by desc order (default true)
   --created-by: string # filter by exact matching user creator. Supports comma-separated list (e.g. 'alice,bob') and negation by prefixing all values with '!' (e.g. '!alice,!bob')
   --path-start: string # mask to filter matching starting path
   --path-exact: string # mask to filter exact matching path
   --first-parent-hash: string # mask to filter scripts whom first direct parent has exact hash
   --last-parent-hash: string # mask to filter scripts whom last parent in the chain has exact hash. Beware that each script stores only a limited number of parents. Hence the last parent hash for a script is not necessarily its top-most parent. To find the top-most parent you will have to jump from last to last hash  until finding the parent
   --parent-hash: string # is the hash present in the array of stored parent hashes for this script. The same warning applies than for last_parent_hash. A script only store a limited number of direct parent
-  --show-archived: string@bool-completer # (default false) show only the archived files. when multiple archived hash share the same path, only the ones with the latest create_at are ed.
-  --include-without-main: string@bool-completer # (default false) include scripts without an exported main function
-  --include-draft-only: string@bool-completer # (default false) include scripts that have no deployed version
-  --is-template: string@bool-completer # (default regardless) if true show only the templates if false show only the non templates if not defined, show all regardless of if the script is a template
+  --show-archived: oneof<nothing, bool> # (default false) show only the archived files. when multiple archived hash share the same path, only the ones with the latest create_at are ed.
+  --include-without-main: oneof<nothing, bool> # (default false) include scripts without an exported main function
+  --include-draft-only: oneof<nothing, bool> # (default false) include scripts that have no deployed version
+  --is-template: oneof<nothing, bool> # (default regardless) if true show only the templates if false show only the non templates if not defined, show all regardless of if the script is a template
   --kinds: string # (default regardless) script kinds to filter, split by comma
-  --starred-only: string@bool-completer # (default false) show only the starred items
-  --with-deployment-msg: string@bool-completer # (default false) include deployment message
+  --starred-only: oneof<nothing, bool> # (default false) show only the starred items
+  --with-deployment-msg: oneof<nothing, bool> # (default false) include deployment message
   --languages: string # Filter to only include scripts written in the given languages. Accepts multiple values as a comma-separated list.
-  --without-description: string@bool-completer # (default false) If true, the description field will be omitted from the response.
-  --dedicated-worker: string@bool-completer # (default regardless) If true, show only scripts with dedicated_worker enabled. If false, show only scripts with dedicated_worker disabled.
+  --without-description: oneof<nothing, bool> # (default false) If true, the description field will be omitted from the response.
+  --dedicated-worker: oneof<nothing, bool> # (default regardless) If true, show only scripts with dedicated_worker enabled. If false, show only scripts with dedicated_worker disabled.
   --label: string # Filter by label
 ]: nothing -> table<workspace_id: string, hash: string, path: string, parent_hashes: list<string>, summary: string, description: string, content: string, created_by: string, created_at: string, archived: bool, schema: record, deleted: bool, is_template: bool, extra_perms: record, lock: string, lock_error_logs: string, language: string, kind: string, starred: bool, tag: string, has_draft: bool, draft_only: bool, envs: list<string>, concurrent_limit: int, concurrency_time_window_s: int, concurrency_key: string, debounce_key: string, debounce_delay_s: int, debounce_args_to_accumulate: list<string>, max_total_debouncing_time: int, max_total_debounces_amount: int, cache_ttl: float, dedicated_worker: bool, ws_error_handler_muted: bool, priority: int, restart_unless_cancelled: bool, timeout: int, delete_after_secs: int, visible_to_runner_only: bool, auto_kind: string, codebase: string, has_preprocessor: bool, on_behalf_of_email: string, modules: record, labels: list<string>, inherited_labels: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7391,21 +7390,21 @@ export def "w-scripts-create createScript" [
   --description: string
   content: string
   --schema: record
-  --is-template: string@bool-completer
+  --is-template: oneof<nothing, bool>
   --lock: string
   language: string@language-completer
   --kind: string@kind-completer-1
   --tag: string
-  --draft-only: string@bool-completer
+  --draft-only: oneof<nothing, bool>
   --envs: list
   --concurrent-limit: int
   --concurrency-time-window-s: int
   --cache-ttl: float
-  --cache-ignore-s3-path: string@bool-completer
-  --dedicated-worker: string@bool-completer
-  --ws-error-handler-muted: string@bool-completer
+  --cache-ignore-s3-path: oneof<nothing, bool>
+  --dedicated-worker: oneof<nothing, bool>
+  --ws-error-handler-muted: oneof<nothing, bool>
   --priority: int
-  --restart-unless-cancelled: string@bool-completer
+  --restart-unless-cancelled: oneof<nothing, bool>
   --timeout: int
   --delete-after-secs: int # If set, delete the job's args, result and logs after this many seconds following job completion
   --deployment-message: string
@@ -7415,16 +7414,16 @@ export def "w-scripts-create createScript" [
   --debounce-args-to-accumulate: list
   --max-total-debouncing-time: int
   --max-total-debounces-amount: int
-  --visible-to-runner-only: string@bool-completer
+  --visible-to-runner-only: oneof<nothing, bool>
   --auto-kind: string
   --codebase: string
-  --has-preprocessor: string@bool-completer
+  --has-preprocessor: oneof<nothing, bool>
   --on-behalf-of-email: string
-  --preserve-on-behalf-of: string@bool-completer # When true and the caller is a member of the 'wm_deployers' group, preserves the original on_behalf_of_email value instead of overwriting it.
+  --preserve-on-behalf-of: oneof<nothing, bool> # When true and the caller is a member of the 'wm_deployers' group, preserves the original on_behalf_of_email value instead of overwriting it.
   --assets: list # item shape: {path: string, kind: "s3object"|"resource"|"ducklake"|"datatable"|"volume", access_type?: "r"|"w"|"rw", alt_access_type?: "r"|"w"|"rw"}
   --modules: record # Additional script modules keyed by relative file path (nullable)
   --labels: list
-  --skip-draft-deletion: string@bool-completer # When true (set by the CLI / git sync), deploying this script does not delete an existing user draft at the same path.
+  --skip-draft-deletion: oneof<nothing, bool> # When true (set by the CLI / git sync), deploying this script does not delete an existing user draft at the same path.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7451,7 +7450,7 @@ export def "w-scripts-toggle-workspace-error-handler-p toggleWorkspaceErrorHandl
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --muted: string@bool-completer
+  --muted: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7476,7 +7475,7 @@ export def "workers-custom-tags get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-workspace-restriction: string@bool-completer
+  --show-workspace-restriction: oneof<nothing, bool>
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7761,7 +7760,7 @@ export def "w-scripts-delete-p post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --keep-captures: string@bool-completer # keep captures
+  --keep-captures: oneof<nothing, bool> # keep captures
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7812,7 +7811,7 @@ export def "w-scripts-get-p get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-starred-info: string@bool-completer
+  --with-starred-info: oneof<nothing, bool>
 ]: nothing -> record<workspace_id: string, hash: string, path: string, parent_hashes: list<string>, summary: string, description: string, content: string, created_by: string, created_at: string, archived: bool, schema: record, deleted: bool, is_template: bool, extra_perms: record, lock: string, lock_error_logs: string, language: string, kind: string, starred: bool, tag: string, has_draft: bool, draft_only: bool, envs: list<string>, concurrent_limit: int, concurrency_time_window_s: int, concurrency_key: string, debounce_key: string, debounce_delay_s: int, debounce_args_to_accumulate: list<string>, max_total_debouncing_time: int, max_total_debounces_amount: int, cache_ttl: float, dedicated_worker: bool, ws_error_handler_muted: bool, priority: int, restart_unless_cancelled: bool, timeout: int, delete_after_secs: int, visible_to_runner_only: bool, auto_kind: string, codebase: string, has_preprocessor: bool, on_behalf_of_email: string, modules: record, labels: list<string>, inherited_labels: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8095,8 +8094,8 @@ export def "w-scripts-get-h get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-starred-info: string@bool-completer
-  --authed: string@bool-completer
+  --with-starred-info: oneof<nothing, bool>
+  --authed: oneof<nothing, bool>
 ]: nothing -> record<workspace_id: string, hash: string, path: string, parent_hashes: list<string>, summary: string, description: string, content: string, created_by: string, created_at: string, archived: bool, schema: record, deleted: bool, is_template: bool, extra_perms: record, lock: string, lock_error_logs: string, language: string, kind: string, starred: bool, tag: string, has_draft: bool, draft_only: bool, envs: list<string>, concurrent_limit: int, concurrency_time_window_s: int, concurrency_key: string, debounce_key: string, debounce_delay_s: int, debounce_args_to_accumulate: list<string>, max_total_debouncing_time: int, max_total_debounces_amount: int, cache_ttl: float, dedicated_worker: bool, ws_error_handler_muted: bool, priority: int, restart_unless_cancelled: bool, timeout: int, delete_after_secs: int, visible_to_runner_only: bool, auto_kind: string, codebase: string, has_preprocessor: bool, on_behalf_of_email: string, modules: record, labels: list<string>, inherited_labels: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8298,12 +8297,12 @@ export def "w-jobs-run-p runScriptByPath" [
   --allow-errors(-e) # Return full response without error handling
   --scheduled-for: string # when to schedule this job (leave empty for immediate run) (format: date-time)
   --scheduled-in-secs: int # schedule the script to execute in the number of seconds starting now
-  --skip-preprocessor: string@bool-completer # skip the preprocessor
+  --skip-preprocessor: oneof<nothing, bool> # skip the preprocessor
   --parent-job: string # The parent job that is at the origin and responsible for the execution of this script if any (format: uuid)
   --tag: string # Override the tag to use
   --cache-ttl: string # Override the cache time to live (in seconds). Can not be used to disable caching, only override with a new cache ttl
   --job-id: string # The job id to assign to the created job. if missing, job is chosen randomly using the ULID scheme. If a job id already exists in the queue or as a completed job, the request to create one will fail (Bad Request) (format: uuid)
-  --invisible-to-owner: string@bool-completer # make the run invisible to the the script owner (default false)
+  --invisible-to-owner: oneof<nothing, bool> # make the run invisible to the the script owner (default false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -8337,7 +8336,7 @@ export def "w-jobs-run-wait-result-p runWaitResultScriptByPath" [
   --job-id: string # The job id to assign to the created job. if missing, job is chosen randomly using the ULID scheme. If a job id already exists in the queue or as a completed job, the request to create one will fail (Bad Request) (format: uuid)
   --include-header: string # List of headers's keys (separated with ',') whove value are added to the args Header's key lowercased and '-'' replaced to '_' such that 'Content-Type' becomes the 'content_type' arg key
   --queue-limit: string # The maximum size of the queue for which the request would get rejected if that job would push it above that limit
-  --skip-preprocessor: string@bool-completer # skip the preprocessor
+  --skip-preprocessor: oneof<nothing, bool> # skip the preprocessor
   --body: record
 ]: any -> any {
   let input = $in
@@ -8372,7 +8371,7 @@ export def "w-jobs-run-wait-result-p runWaitResultScriptByPathGet" [
   --include-header: string # List of headers's keys (separated with ',') whove value are added to the args Header's key lowercased and '-'' replaced to '_' such that 'Content-Type' becomes the 'content_type' arg key
   --queue-limit: string # The maximum size of the queue for which the request would get rejected if that job would push it above that limit
   --payload: string # The base64 encoded payload that has been encoded as a JSON. e.g how to encode such payload encodeURIComponent `encodeURIComponent(btoa(JSON.stringify({a: 2})))`
-  --skip-preprocessor: string@bool-completer # skip the preprocessor
+  --skip-preprocessor: oneof<nothing, bool> # skip the preprocessor
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8400,7 +8399,7 @@ export def "w-jobs-run-wait-result-f runWaitResultFlowByPath" [
   --include-header: string # List of headers's keys (separated with ',') whove value are added to the args Header's key lowercased and '-'' replaced to '_' such that 'Content-Type' becomes the 'content_type' arg key
   --queue-limit: string # The maximum size of the queue for which the request would get rejected if that job would push it above that limit
   --job-id: string # The job id to assign to the created job. if missing, job is chosen randomly using the ULID scheme. If a job id already exists in the queue or as a completed job, the request to create one will fail (Bad Request) (format: uuid)
-  --skip-preprocessor: string@bool-completer # skip the preprocessor
+  --skip-preprocessor: oneof<nothing, bool> # skip the preprocessor
   --memory-id: string # memory ID for chat-enabled flows (format: uuid)
   --body: record
 ]: any -> any {
@@ -8432,7 +8431,7 @@ export def "w-jobs-run-wait-result-fv runWaitResultFlowByVersion" [
   --include-header: string # List of headers's keys (separated with ',') whove value are added to the args Header's key lowercased and '-'' replaced to '_' such that 'Content-Type' becomes the 'content_type' arg key
   --queue-limit: string # The maximum size of the queue for which the request would get rejected if that job would push it above that limit
   --job-id: string # The job id to assign to the created job. if missing, job is chosen randomly using the ULID scheme. If a job id already exists in the queue or as a completed job, the request to create one will fail (Bad Request) (format: uuid)
-  --skip-preprocessor: string@bool-completer # skip the preprocessor
+  --skip-preprocessor: oneof<nothing, bool> # skip the preprocessor
   --memory-id: string # memory ID for chat-enabled flows (format: uuid)
   --body: record
 ]: any -> any {
@@ -8465,7 +8464,7 @@ export def "w-jobs-run-wait-result-fv runWaitResultFlowByVersionGet" [
   --queue-limit: string # The maximum size of the queue for which the request would get rejected if that job would push it above that limit
   --payload: string # The base64 encoded payload that has been encoded as a JSON. e.g how to encode such payload encodeURIComponent `encodeURIComponent(btoa(JSON.stringify({a: 2})))`
   --job-id: string # The job id to assign to the created job. if missing, job is chosen randomly using the ULID scheme. If a job id already exists in the queue or as a completed job, the request to create one will fail (Bad Request) (format: uuid)
-  --skip-preprocessor: string@bool-completer # skip the preprocessor
+  --skip-preprocessor: oneof<nothing, bool> # skip the preprocessor
   --memory-id: string # memory ID for chat-enabled flows (format: uuid)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8494,7 +8493,7 @@ export def "w-jobs-run-and-stream-f runAndStreamFlowByPath" [
   --include-header: string # List of headers's keys (separated with ',') whove value are added to the args Header's key lowercased and '-'' replaced to '_' such that 'Content-Type' becomes the 'content_type' arg key
   --queue-limit: string # The maximum size of the queue for which the request would get rejected if that job would push it above that limit
   --job-id: string # The job id to assign to the created job. if missing, job is chosen randomly using the ULID scheme. If a job id already exists in the queue or as a completed job, the request to create one will fail (Bad Request) (format: uuid)
-  --skip-preprocessor: string@bool-completer # skip the preprocessor
+  --skip-preprocessor: oneof<nothing, bool> # skip the preprocessor
   --memory-id: string # memory ID for chat-enabled flows (format: uuid)
   --poll-delay-ms: int # delay between polling for job updates in milliseconds (format: int64)
   --body: record
@@ -8528,7 +8527,7 @@ export def "w-jobs-run-and-stream-f runAndStreamFlowByPathGet" [
   --queue-limit: string # The maximum size of the queue for which the request would get rejected if that job would push it above that limit
   --payload: string # The base64 encoded payload that has been encoded as a JSON. e.g how to encode such payload encodeURIComponent `encodeURIComponent(btoa(JSON.stringify({a: 2})))`
   --job-id: string # The job id to assign to the created job. if missing, job is chosen randomly using the ULID scheme. If a job id already exists in the queue or as a completed job, the request to create one will fail (Bad Request) (format: uuid)
-  --skip-preprocessor: string@bool-completer # skip the preprocessor
+  --skip-preprocessor: oneof<nothing, bool> # skip the preprocessor
   --memory-id: string # memory ID for chat-enabled flows (format: uuid)
   --poll-delay-ms: int # delay between polling for job updates in milliseconds (format: int64)
 ]: nothing -> any {
@@ -8558,7 +8557,7 @@ export def "w-jobs-run-and-stream-fv runAndStreamFlowByVersion" [
   --include-header: string # List of headers's keys (separated with ',') whove value are added to the args Header's key lowercased and '-'' replaced to '_' such that 'Content-Type' becomes the 'content_type' arg key
   --queue-limit: string # The maximum size of the queue for which the request would get rejected if that job would push it above that limit
   --job-id: string # The job id to assign to the created job. if missing, job is chosen randomly using the ULID scheme. If a job id already exists in the queue or as a completed job, the request to create one will fail (Bad Request) (format: uuid)
-  --skip-preprocessor: string@bool-completer # skip the preprocessor
+  --skip-preprocessor: oneof<nothing, bool> # skip the preprocessor
   --memory-id: string # memory ID for chat-enabled flows (format: uuid)
   --poll-delay-ms: int # delay between polling for job updates in milliseconds (format: int64)
   --body: record
@@ -8592,7 +8591,7 @@ export def "w-jobs-run-and-stream-fv runAndStreamFlowByVersionGet" [
   --queue-limit: string # The maximum size of the queue for which the request would get rejected if that job would push it above that limit
   --payload: string # The base64 encoded payload that has been encoded as a JSON. e.g how to encode such payload encodeURIComponent `encodeURIComponent(btoa(JSON.stringify({a: 2})))`
   --job-id: string # The job id to assign to the created job. if missing, job is chosen randomly using the ULID scheme. If a job id already exists in the queue or as a completed job, the request to create one will fail (Bad Request) (format: uuid)
-  --skip-preprocessor: string@bool-completer # skip the preprocessor
+  --skip-preprocessor: oneof<nothing, bool> # skip the preprocessor
   --memory-id: string # memory ID for chat-enabled flows (format: uuid)
   --poll-delay-ms: int # delay between polling for job updates in milliseconds (format: int64)
 ]: nothing -> any {
@@ -8625,7 +8624,7 @@ export def "w-jobs-run-and-stream-p runAndStreamScriptByPath" [
   --job-id: string # The job id to assign to the created job. if missing, job is chosen randomly using the ULID scheme. If a job id already exists in the queue or as a completed job, the request to create one will fail (Bad Request) (format: uuid)
   --include-header: string # List of headers's keys (separated with ',') whove value are added to the args Header's key lowercased and '-'' replaced to '_' such that 'Content-Type' becomes the 'content_type' arg key
   --queue-limit: string # The maximum size of the queue for which the request would get rejected if that job would push it above that limit
-  --skip-preprocessor: string@bool-completer # skip the preprocessor
+  --skip-preprocessor: oneof<nothing, bool> # skip the preprocessor
   --poll-delay-ms: int # delay between polling for job updates in milliseconds (format: int64)
   --body: record
 ]: any -> any {
@@ -8661,7 +8660,7 @@ export def "w-jobs-run-and-stream-p runAndStreamScriptByPathGet" [
   --include-header: string # List of headers's keys (separated with ',') whove value are added to the args Header's key lowercased and '-'' replaced to '_' such that 'Content-Type' becomes the 'content_type' arg key
   --queue-limit: string # The maximum size of the queue for which the request would get rejected if that job would push it above that limit
   --payload: string # The base64 encoded payload that has been encoded as a JSON. e.g how to encode such payload encodeURIComponent `encodeURIComponent(btoa(JSON.stringify({a: 2})))`
-  --skip-preprocessor: string@bool-completer # skip the preprocessor
+  --skip-preprocessor: oneof<nothing, bool> # skip the preprocessor
   --poll-delay-ms: int # delay between polling for job updates in milliseconds (format: int64)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8693,7 +8692,7 @@ export def "w-jobs-run-and-stream-h runAndStreamScriptByHash" [
   --job-id: string # The job id to assign to the created job. if missing, job is chosen randomly using the ULID scheme. If a job id already exists in the queue or as a completed job, the request to create one will fail (Bad Request) (format: uuid)
   --include-header: string # List of headers's keys (separated with ',') whove value are added to the args Header's key lowercased and '-'' replaced to '_' such that 'Content-Type' becomes the 'content_type' arg key
   --queue-limit: string # The maximum size of the queue for which the request would get rejected if that job would push it above that limit
-  --skip-preprocessor: string@bool-completer # skip the preprocessor
+  --skip-preprocessor: oneof<nothing, bool> # skip the preprocessor
   --poll-delay-ms: int # delay between polling for job updates in milliseconds (format: int64)
   --body: record
 ]: any -> any {
@@ -8729,7 +8728,7 @@ export def "w-jobs-run-and-stream-h runAndStreamScriptByHashGet" [
   --include-header: string # List of headers's keys (separated with ',') whove value are added to the args Header's key lowercased and '-'' replaced to '_' such that 'Content-Type' becomes the 'content_type' arg key
   --queue-limit: string # The maximum size of the queue for which the request would get rejected if that job would push it above that limit
   --payload: string # The base64 encoded payload that has been encoded as a JSON. e.g how to encode such payload encodeURIComponent `encodeURIComponent(btoa(JSON.stringify({a: 2})))`
-  --skip-preprocessor: string@bool-completer # skip the preprocessor
+  --skip-preprocessor: oneof<nothing, bool> # skip the preprocessor
   --poll-delay-ms: int # delay between polling for job updates in milliseconds (format: int64)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8847,16 +8846,16 @@ export def "w-flows-list listFlows" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
-  --order-desc: string@bool-completer # order by desc order (default true)
+  --order-desc: oneof<nothing, bool> # order by desc order (default true)
   --created-by: string # filter by exact matching user creator. Supports comma-separated list (e.g. 'alice,bob') and negation by prefixing all values with '!' (e.g. '!alice,!bob')
   --path-start: string # mask to filter matching starting path
   --path-exact: string # mask to filter exact matching path
-  --show-archived: string@bool-completer # (default false) show only the archived files. when multiple archived hash share the same path, only the ones with the latest create_at are displayed.
-  --starred-only: string@bool-completer # (default false) show only the starred items
-  --include-draft-only: string@bool-completer # (default false) include items that have no deployed version
-  --with-deployment-msg: string@bool-completer # (default false) include deployment message
-  --without-description: string@bool-completer # (default false) If true, the description field will be omitted from the response.
-  --dedicated-worker: string@bool-completer # (default regardless) If true, show only flows with dedicated_worker enabled. If false, show only flows with dedicated_worker disabled.
+  --show-archived: oneof<nothing, bool> # (default false) show only the archived files. when multiple archived hash share the same path, only the ones with the latest create_at are displayed.
+  --starred-only: oneof<nothing, bool> # (default false) show only the starred items
+  --include-draft-only: oneof<nothing, bool> # (default false) include items that have no deployed version
+  --with-deployment-msg: oneof<nothing, bool> # (default false) include deployment message
+  --without-description: oneof<nothing, bool> # (default false) If true, the description field will be omitted from the response.
+  --dedicated-worker: oneof<nothing, bool> # (default regardless) If true, show only flows with dedicated_worker enabled. If false, show only flows with dedicated_worker disabled.
   --label: string # Filter by label
 ]: nothing -> table<has_draft: bool, draft_only: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8929,7 +8928,7 @@ export def "w-flows-list-paths-from-workspace-runnable listFlowPathsFromWorkspac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --match-path-start: string@bool-completer
+  --match-path-start: oneof<nothing, bool>
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9004,7 +9003,7 @@ export def "w-flows-get get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-starred-info: string@bool-completer
+  --with-starred-info: oneof<nothing, bool>
 ]: nothing -> record<workspace_id: string, path: string, edited_by: string, edited_at: string, archived: bool, extra_perms: record, starred: bool, draft_only: bool, tag: string, ws_error_handler_muted: bool, priority: int, dedicated_worker: bool, timeout: float, visible_to_runner_only: bool, on_behalf_of_email: string, labels: list<string>, inherited_labels: list<string>, lock_error_logs: string, version_id: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9098,7 +9097,7 @@ export def "w-flows-toggle-workspace-error-handler toggleWorkspaceErrorHandlerFo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --muted: string@bool-completer
+  --muted: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9170,9 +9169,9 @@ export def "w-flows-create createFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --draft-only: string@bool-completer
+  --draft-only: oneof<nothing, bool>
   --deployment-message: string
-  --skip-draft-deletion: string@bool-completer # When true (set by the CLI / git sync), deploying this flow does not delete an existing user draft at the same path.
+  --skip-draft-deletion: oneof<nothing, bool> # When true (set by the CLI / git sync), deploying this flow does not delete an existing user draft at the same path.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9200,7 +9199,7 @@ export def "w-flows-update updateFlow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --deployment-message: string
-  --skip-draft-deletion: string@bool-completer # When true (set by the CLI / git sync), deploying this flow does not delete an existing user draft at the same path.
+  --skip-draft-deletion: oneof<nothing, bool> # When true (set by the CLI / git sync), deploying this flow does not delete an existing user draft at the same path.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9227,7 +9226,7 @@ export def "w-flows-archive archiveFlowByPath" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9254,7 +9253,7 @@ export def "w-flows-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --keep-captures: string@bool-completer # keep captures
+  --keep-captures: oneof<nothing, bool> # keep captures
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9354,7 +9353,7 @@ export def "w-path-autocomplete-list-paths listPathAutocompletePaths" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # bypass the server-side cache and re-query the DB, refreshing the cache. Used right after a deploy so the new path appears immediately.
+  --force: oneof<nothing, bool> # bypass the server-side cache and re-query the DB, refreshing the cache. Used right after a deploy so the new path appears immediately.
 ]: nothing -> record<paths: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9380,11 +9379,11 @@ export def "w-raw-apps-list listRawApps" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
-  --order-desc: string@bool-completer # order by desc order (default true)
+  --order-desc: oneof<nothing, bool> # order by desc order (default true)
   --created-by: string # filter by exact matching user creator. Supports comma-separated list (e.g. 'alice,bob') and negation by prefixing all values with '!' (e.g. '!alice,!bob')
   --path-start: string # mask to filter matching starting path
   --path-exact: string # mask to filter exact matching path
-  --starred-only: string@bool-completer # (default false) show only the starred items
+  --starred-only: oneof<nothing, bool> # (default false) show only the starred items
   --label: string # Filter by label
 ]: nothing -> table<workspace_id: string, path: string, summary: string, extra_perms: record, starred: bool, version: float, edited_at: string, labels: list<string>, inherited_labels: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9548,13 +9547,13 @@ export def "w-apps-list listApps" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
-  --order-desc: string@bool-completer # order by desc order (default true)
+  --order-desc: oneof<nothing, bool> # order by desc order (default true)
   --created-by: string # filter by exact matching user creator. Supports comma-separated list (e.g. 'alice,bob') and negation by prefixing all values with '!' (e.g. '!alice,!bob')
   --path-start: string # mask to filter matching starting path
   --path-exact: string # mask to filter exact matching path
-  --starred-only: string@bool-completer # (default false) show only the starred items
-  --include-draft-only: string@bool-completer # (default false) include items that have no deployed version
-  --with-deployment-msg: string@bool-completer # (default false) include deployment message
+  --starred-only: oneof<nothing, bool> # (default false) show only the starred items
+  --include-draft-only: oneof<nothing, bool> # (default false) include items that have no deployed version
+  --with-deployment-msg: oneof<nothing, bool> # (default false) include deployment message
   --label: string # Filter by label
 ]: nothing -> table<id: int, workspace_id: string, path: string, summary: string, version: int, extra_perms: record, starred: bool, edited_at: string, execution_mode: string, raw_app: bool, labels: list<string>, inherited_labels: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9584,12 +9583,12 @@ export def "w-apps-create createApp" [
   value: any
   summary: string
   policy: record # shape: {triggerables?: record, triggerables_v2?: record, s3_inputs?: list, allowed_s3_keys?: list, execution_mode?: "viewer"|"publisher"|"anonymous", on_behalf_of?: string, on_behalf_of_email?: string}
-  --draft-only: string@bool-completer
+  --draft-only: oneof<nothing, bool>
   --deployment-message: string
   --custom-path: string
-  --preserve-on-behalf-of: string@bool-completer # When true and the caller is a member of the 'wm_deployers' group, preserves the original on_behalf_of value in the policy instead of overwriting it.
+  --preserve-on-behalf-of: oneof<nothing, bool> # When true and the caller is a member of the 'wm_deployers' group, preserves the original on_behalf_of value in the policy instead of overwriting it.
   --labels: list
-  --skip-draft-deletion: string@bool-completer # When true (set by the CLI / git sync), deploying this app does not delete an existing user draft at the same path.
+  --skip-draft-deletion: oneof<nothing, bool> # When true (set by the CLI / git sync), deploying this app does not delete an existing user draft at the same path.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9668,7 +9667,7 @@ export def "w-apps-get-p get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-starred-info: string@bool-completer
+  --with-starred-info: oneof<nothing, bool>
 ]: nothing -> record<id: int, workspace_id: string, path: string, summary: string, versions: list<int>, created_by: string, created_at: string, value: any, policy: record<triggerables: record, triggerables_v2: record, s3_inputs: list<record>, allowed_s3_keys: list<record>, execution_mode: string, on_behalf_of: string, on_behalf_of_email: string>, execution_mode: string, extra_perms: record, custom_path: string, raw_app: bool, bundle_secret: string, labels: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9982,9 +9981,9 @@ export def "w-apps-update updateApp" [
   --policy: record # shape: {triggerables?: record, triggerables_v2?: record, s3_inputs?: list, allowed_s3_keys?: list, execution_mode?: "viewer"|"publisher"|"anonymous", on_behalf_of?: string, on_behalf_of_email?: string}
   --deployment-message: string
   --custom-path: string
-  --preserve-on-behalf-of: string@bool-completer # When true and the caller is a member of the 'wm_deployers' group, preserves the original on_behalf_of value in the policy instead of overwriting it.
+  --preserve-on-behalf-of: oneof<nothing, bool> # When true and the caller is a member of the 'wm_deployers' group, preserves the original on_behalf_of value in the policy instead of overwriting it.
   --labels: list
-  --skip-draft-deletion: string@bool-completer # When true (set by the CLI / git sync), deploying this app does not delete an existing user draft at the same path.
+  --skip-draft-deletion: oneof<nothing, bool> # When true (set by the CLI / git sync), deploying this app does not delete an existing user draft at the same path.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10191,12 +10190,12 @@ export def "w-jobs-run-f runFlowByPath" [
   --allow-errors(-e) # Return full response without error handling
   --scheduled-for: string # when to schedule this job (leave empty for immediate run) (format: date-time)
   --scheduled-in-secs: int # schedule the script to execute in the number of seconds starting now
-  --skip-preprocessor: string@bool-completer # skip the preprocessor
+  --skip-preprocessor: oneof<nothing, bool> # skip the preprocessor
   --parent-job: string # The parent job that is at the origin and responsible for the execution of this script if any (format: uuid)
   --tag: string # Override the tag to use
   --job-id: string # The job id to assign to the created job. if missing, job is chosen randomly using the ULID scheme. If a job id already exists in the queue or as a completed job, the request to create one will fail (Bad Request) (format: uuid)
   --include-header: string # List of headers's keys (separated with ',') whove value are added to the args Header's key lowercased and '-'' replaced to '_' such that 'Content-Type' becomes the 'content_type' arg key
-  --invisible-to-owner: string@bool-completer # make the run invisible to the the flow owner (default false)
+  --invisible-to-owner: oneof<nothing, bool> # make the run invisible to the the flow owner (default false)
   --memory-id: string # memory ID for chat-enabled flows (format: uuid)
   --body: record
 ]: any -> any {
@@ -10227,12 +10226,12 @@ export def "w-jobs-run-fv runFlowByVersion" [
   --allow-errors(-e) # Return full response without error handling
   --scheduled-for: string # when to schedule this job (leave empty for immediate run) (format: date-time)
   --scheduled-in-secs: int # schedule the script to execute in the number of seconds starting now
-  --skip-preprocessor: string@bool-completer # skip the preprocessor
+  --skip-preprocessor: oneof<nothing, bool> # skip the preprocessor
   --parent-job: string # The parent job that is at the origin and responsible for the execution of this script if any (format: uuid)
   --tag: string # Override the tag to use
   --job-id: string # The job id to assign to the created job. if missing, job is chosen randomly using the ULID scheme. If a job id already exists in the queue or as a completed job, the request to create one will fail (Bad Request) (format: uuid)
   --include-header: string # List of headers's keys (separated with ',') whove value are added to the args Header's key lowercased and '-'' replaced to '_' such that 'Content-Type' becomes the 'content_type' arg key
-  --invisible-to-owner: string@bool-completer # make the run invisible to the the flow owner (default false)
+  --invisible-to-owner: oneof<nothing, bool> # make the run invisible to the the flow owner (default false)
   --memory-id: string # memory ID for chat-enabled flows (format: uuid)
   --body: record
 ]: any -> any {
@@ -10296,7 +10295,7 @@ export def "w-jobs-restart-f restartFlowAtStep" [
   --tag: string # Override the tag to use
   --job-id: string # The job id to assign to the created job. if missing, job is chosen randomly using the ULID scheme. If a job id already exists in the queue or as a completed job, the request to create one will fail (Bad Request) (format: uuid)
   --include-header: string # List of headers's keys (separated with ',') whove value are added to the args Header's key lowercased and '-'' replaced to '_' such that 'Content-Type' becomes the 'content_type' arg key
-  --invisible-to-owner: string@bool-completer # make the run invisible to the the flow owner (default false)
+  --invisible-to-owner: oneof<nothing, bool> # make the run invisible to the the flow owner (default false)
   step_id: string # top-level step id to restart the flow from (or the outermost container when restarting at a nested step)
   --branch-or-iteration-n: int # for branchall or loop at the top level, the iteration at which the flow should restart (optional)
   --flow-version: int # specific flow version to use for restart (optional, uses current version if not specified)
@@ -10330,13 +10329,13 @@ export def "w-jobs-run-h runScriptByHash" [
   --allow-errors(-e) # Return full response without error handling
   --scheduled-for: string # when to schedule this job (leave empty for immediate run) (format: date-time)
   --scheduled-in-secs: int # schedule the script to execute in the number of seconds starting now
-  --skip-preprocessor: string@bool-completer # skip the preprocessor
+  --skip-preprocessor: oneof<nothing, bool> # skip the preprocessor
   --parent-job: string # The parent job that is at the origin and responsible for the execution of this script if any (format: uuid)
   --tag: string # Override the tag to use
   --cache-ttl: string # Override the cache time to live (in seconds). Can not be used to disable caching, only override with a new cache ttl
   --job-id: string # The job id to assign to the created job. if missing, job is chosen randomly using the ULID scheme. If a job id already exists in the queue or as a completed job, the request to create one will fail (Bad Request) (format: uuid)
   --include-header: string # List of headers's keys (separated with ',') whove value are added to the args Header's key lowercased and '-'' replaced to '_' such that 'Content-Type' becomes the 'content_type' arg key
-  --invisible-to-owner: string@bool-completer # make the run invisible to the the script owner (default false)
+  --invisible-to-owner: oneof<nothing, bool> # make the run invisible to the the script owner (default false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -10364,7 +10363,7 @@ export def "w-jobs-run-preview runScriptPreview" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --include-header: string # List of headers's keys (separated with ',') whove value are added to the args Header's key lowercased and '-'' replaced to '_' such that 'Content-Type' becomes the 'content_type' arg key
-  --invisible-to-owner: string@bool-completer # make the run invisible to the the script owner (default false)
+  --invisible-to-owner: oneof<nothing, bool> # make the run invisible to the the script owner (default false)
   --job-id: string # The job id to assign to the created job. if missing, job is chosen randomly using the ULID scheme. If a job id already exists in the queue or as a completed job, the request to create one will fail (Bad Request) (format: uuid)
   --content: string # The code to run
   --path: string # The path to the script
@@ -10373,7 +10372,7 @@ export def "w-jobs-run-preview runScriptPreview" [
   --language: string@language-completer
   --tag: string
   --kind: string@kind-completer-2
-  --dedicated-worker: string@bool-completer
+  --dedicated-worker: oneof<nothing, bool>
   --lock: string
   --flow-path: string
   --modules: record # Additional script modules keyed by relative file path (nullable)
@@ -10493,7 +10492,7 @@ export def "w-jobs-run-wait-result-preview runScriptPreviewAndWaitResult" [
   --language: string@language-completer
   --tag: string
   --kind: string@kind-completer-2
-  --dedicated-worker: string@bool-completer
+  --dedicated-worker: oneof<nothing, bool>
   --lock: string
   --flow-path: string
   --modules: record # Additional script modules keyed by relative file path (nullable)
@@ -10636,7 +10635,7 @@ export def "w-jobs-run-preview-flow runFlowPreview" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --include-header: string # List of headers's keys (separated with ',') whove value are added to the args Header's key lowercased and '-'' replaced to '_' such that 'Content-Type' becomes the 'content_type' arg key
-  --invisible-to-owner: string@bool-completer # make the run invisible to the the script owner (default false)
+  --invisible-to-owner: oneof<nothing, bool> # make the run invisible to the the script owner (default false)
   --job-id: string # The job id to assign to the created job. if missing, job is chosen randomly using the ULID scheme. If a job id already exists in the queue or as a completed job, the request to create one will fail (Bad Request) (format: uuid)
   --memory-id: string # memory ID for chat-enabled flows (format: uuid)
   value: any
@@ -10734,7 +10733,7 @@ export def "w-jobs-queue-list listQueue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --order-desc: string@bool-completer # order by desc order (default true)
+  --order-desc: oneof<nothing, bool> # order by desc order (default true)
   --created-by: string # filter by exact matching user creator. Supports comma-separated list (e.g. 'alice,bob') and negation by prefixing all values with '!' (e.g. '!alice,!bob')
   --parent-job: string # The parent job that is at the origin and responsible for the execution of this script if any (format: uuid)
   --worker: string # filter by worker this job ran on. Supports comma-separated list (e.g. 'worker-1,worker-2') and negation by prefixing all values with '!' (e.g. '!worker-1,!worker-2')
@@ -10746,19 +10745,19 @@ export def "w-jobs-queue-list listQueue" [
   --script-hash: string # mask to filter exact matching path
   --started-before: string # filter on started before (inclusive) timestamp (format: date-time)
   --started-after: string # filter on started after (exclusive) timestamp (format: date-time)
-  --success: string@bool-completer # filter on successful jobs
-  --scheduled-for-before-now: string@bool-completer # filter on jobs scheduled_for before now (hence waitinf for a worker)
+  --success: oneof<nothing, bool> # filter on successful jobs
+  --scheduled-for-before-now: oneof<nothing, bool> # filter on jobs scheduled_for before now (hence waitinf for a worker)
   --job-kinds: string # filter by job kind. Supports comma-separated list of values ('preview', 'script', 'dependencies', 'flow') and negation by prefixing all values with '!' (e.g. '!preview,!dependencies')
-  --suspended: string@bool-completer # filter on suspended jobs
-  --running: string@bool-completer # filter on running jobs
+  --suspended: oneof<nothing, bool> # filter on suspended jobs
+  --running: oneof<nothing, bool> # filter on running jobs
   --args: string # filter on jobs containing those args as a json subset (@> in postgres)
   --qp-result: string # filter on jobs containing those result as a json subset (@> in postgres)
-  --allow-wildcards: string@bool-completer # allow wildcards (*) in the filter of label, tag, worker
+  --allow-wildcards: oneof<nothing, bool> # allow wildcards (*) in the filter of label, tag, worker
   --tag: string # filter by tag/worker group. Supports comma-separated list (e.g. 'gpu,highmem') and negation by prefixing all values with '!' (e.g. '!gpu,!highmem')
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
-  --all-workspaces: string@bool-completer # get jobs from all workspaces (only valid if request come from the `admins` workspace)
-  --is-not-schedule: string@bool-completer # is not a scheduled job
+  --all-workspaces: oneof<nothing, bool> # get jobs from all workspaces (only valid if request come from the `admins` workspace)
+  --is-not-schedule: oneof<nothing, bool> # is not a scheduled job
 ]: nothing -> table<workspace_id: string, id: string, parent_job: string, created_by: string, created_at: string, started_at: string, scheduled_for: string, running: bool, script_path: string, script_hash: string, args: record, logs: string, raw_code: string, canceled: bool, canceled_by: string, canceled_reason: string, last_ping: string, job_kind: string, schedule_path: string, permissioned_as: string, flow_status: any, workflow_as_code_status: record<scheduled_for: string, started_at: string, duration_ms: float, name: string>, raw_flow: any, is_flow_step: bool, language: string, email: string, visible_to_owner: bool, mem_peak: int, tag: string, priority: int, self_wait_time_ms: float, aggregate_wait_time_ms: float, suspend: float, preprocessed: bool, worker: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10782,7 +10781,7 @@ export def "w-jobs-queue-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all-workspaces: string@bool-completer # get jobs from all workspaces (only valid if request come from the `admins` workspace)
+  --all-workspaces: oneof<nothing, bool> # get jobs from all workspaces (only valid if request come from the `admins` workspace)
 ]: nothing -> record<database_length: int, suspended: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10829,9 +10828,9 @@ export def "w-jobs-completed-count-jobs countCompletedJobs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --completed-after-s-ago: int
-  --success: string@bool-completer
+  --success: oneof<nothing, bool>
   --tags: string
-  --all-workspaces: string@bool-completer
+  --all-workspaces: oneof<nothing, bool>
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10871,22 +10870,22 @@ export def "w-jobs-list-filtered-uuids listFilteredJobsUuids" [
   --completed-after: string # filter on started after (exclusive) timestamp (format: date-time)
   --created-before-queue: string # filter on jobs created before X for jobs in the queue only (format: date-time)
   --created-after-queue: string # filter on jobs created after X for jobs in the queue only (format: date-time)
-  --running: string@bool-completer # filter on running jobs
-  --scheduled-for-before-now: string@bool-completer # filter on jobs scheduled_for before now (hence waitinf for a worker)
+  --running: oneof<nothing, bool> # filter on running jobs
+  --scheduled-for-before-now: oneof<nothing, bool> # filter on jobs scheduled_for before now (hence waitinf for a worker)
   --job-kinds: string # filter by job kind. Supports comma-separated list of values ('preview', 'script', 'dependencies', 'flow') and negation by prefixing all values with '!' (e.g. '!preview,!dependencies')
-  --suspended: string@bool-completer # filter on suspended jobs
+  --suspended: oneof<nothing, bool> # filter on suspended jobs
   --args: string # filter on jobs containing those args as a json subset (@> in postgres)
   --tag: string # filter by tag/worker group. Supports comma-separated list (e.g. 'gpu,highmem') and negation by prefixing all values with '!' (e.g. '!gpu,!highmem')
   --qp-result: string # filter on jobs containing those result as a json subset (@> in postgres)
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
-  --is-skipped: string@bool-completer # is the job skipped
-  --is-flow-step: string@bool-completer # is the job a flow step
-  --has-null-parent: string@bool-completer # has null parent
-  --success: string@bool-completer # filter on successful jobs
+  --is-skipped: oneof<nothing, bool> # is the job skipped
+  --is-flow-step: oneof<nothing, bool> # is the job a flow step
+  --has-null-parent: oneof<nothing, bool> # has null parent
+  --success: oneof<nothing, bool> # filter on successful jobs
   --status: string@status-completer # filter on the exact completed job status. Unlike `success=true` (which also matches `skipped`), `status=success` matches only `success`.
-  --all-workspaces: string@bool-completer # get jobs from all workspaces (only valid if request come from the `admins` workspace)
-  --is-not-schedule: string@bool-completer # is not a scheduled job
+  --all-workspaces: oneof<nothing, bool> # get jobs from all workspaces (only valid if request come from the `admins` workspace)
+  --is-not-schedule: oneof<nothing, bool> # is not a scheduled job
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10910,7 +10909,7 @@ export def "w-jobs-queue-list-filtered-uuids listFilteredQueueUuids" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --order-desc: string@bool-completer # order by desc order (default true)
+  --order-desc: oneof<nothing, bool> # order by desc order (default true)
   --created-by: string # filter by exact matching user creator. Supports comma-separated list (e.g. 'alice,bob') and negation by prefixing all values with '!' (e.g. '!alice,!bob')
   --parent-job: string # The parent job that is at the origin and responsible for the execution of this script if any (format: uuid)
   --script-path-exact: string # filter by exact matching script path. Supports comma-separated list (e.g. 'f/script1,f/script2') and negation by prefixing all values with '!' (e.g. '!f/script1,!f/script2')
@@ -10919,20 +10918,20 @@ export def "w-jobs-queue-list-filtered-uuids listFilteredQueueUuids" [
   --script-hash: string # mask to filter exact matching path
   --started-before: string # filter on started before (inclusive) timestamp (format: date-time)
   --started-after: string # filter on started after (exclusive) timestamp (format: date-time)
-  --success: string@bool-completer # filter on successful jobs
-  --scheduled-for-before-now: string@bool-completer # filter on jobs scheduled_for before now (hence waitinf for a worker)
+  --success: oneof<nothing, bool> # filter on successful jobs
+  --scheduled-for-before-now: oneof<nothing, bool> # filter on jobs scheduled_for before now (hence waitinf for a worker)
   --job-kinds: string # filter by job kind. Supports comma-separated list of values ('preview', 'script', 'dependencies', 'flow') and negation by prefixing all values with '!' (e.g. '!preview,!dependencies')
-  --suspended: string@bool-completer # filter on suspended jobs
-  --running: string@bool-completer # filter on running jobs
+  --suspended: oneof<nothing, bool> # filter on suspended jobs
+  --running: oneof<nothing, bool> # filter on running jobs
   --args: string # filter on jobs containing those args as a json subset (@> in postgres)
   --qp-result: string # filter on jobs containing those result as a json subset (@> in postgres)
-  --allow-wildcards: string@bool-completer # allow wildcards (*) in the filter of label, tag, worker
+  --allow-wildcards: oneof<nothing, bool> # allow wildcards (*) in the filter of label, tag, worker
   --tag: string # filter by tag/worker group. Supports comma-separated list (e.g. 'gpu,highmem') and negation by prefixing all values with '!' (e.g. '!gpu,!highmem')
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
   --concurrency-key: string
-  --all-workspaces: string@bool-completer # get jobs from all workspaces (only valid if request come from the `admins` workspace)
-  --is-not-schedule: string@bool-completer # is not a scheduled job
+  --all-workspaces: oneof<nothing, bool> # get jobs from all workspaces (only valid if request come from the `admins` workspace)
+  --is-not-schedule: oneof<nothing, bool> # is not a scheduled job
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10956,8 +10955,8 @@ export def "w-jobs-queue-cancel-selection cancelSelection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force-cancel: string@bool-completer
-  --all-workspaces: string@bool-completer
+  --force-cancel: oneof<nothing, bool>
+  --all-workspaces: oneof<nothing, bool>
   --body: record
 ]: any -> list<string> {
   let input = $in
@@ -11063,7 +11062,7 @@ export def "w-jobs-completed-list listCompletedJobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --order-desc: string@bool-completer # order by desc order (default true)
+  --order-desc: oneof<nothing, bool> # order by desc order (default true)
   --created-by: string # filter by exact matching user creator. Supports comma-separated list (e.g. 'alice,bob') and negation by prefixing all values with '!' (e.g. '!alice,!bob')
   --label: string # filter by exact matching job label. Supports comma-separated list (e.g. 'deploy,release') and negation by prefixing all values with '!' (e.g. '!deploy,!release')
   --worker: string # filter by worker this job ran on. Supports comma-separated list (e.g. 'worker-1,worker-2') and negation by prefixing all values with '!' (e.g. '!worker-1,!worker-2')
@@ -11074,19 +11073,19 @@ export def "w-jobs-completed-list listCompletedJobs" [
   --script-hash: string # mask to filter exact matching path
   --started-before: string # filter on started before (inclusive) timestamp (format: date-time)
   --started-after: string # filter on started after (exclusive) timestamp (format: date-time)
-  --success: string@bool-completer # filter on successful jobs
+  --success: oneof<nothing, bool> # filter on successful jobs
   --status: string@status-completer # filter on the exact completed job status. Unlike `success=true` (which also matches `skipped`), `status=success` matches only `success`.
   --job-kinds: string # filter by job kind. Supports comma-separated list of values ('preview', 'script', 'dependencies', 'flow') and negation by prefixing all values with '!' (e.g. '!preview,!dependencies')
   --args: string # filter on jobs containing those args as a json subset (@> in postgres)
   --qp-result: string # filter on jobs containing those result as a json subset (@> in postgres)
-  --allow-wildcards: string@bool-completer # allow wildcards (*) in the filter of label, tag, worker
+  --allow-wildcards: oneof<nothing, bool> # allow wildcards (*) in the filter of label, tag, worker
   --tag: string # filter by tag/worker group. Supports comma-separated list (e.g. 'gpu,highmem') and negation by prefixing all values with '!' (e.g. '!gpu,!highmem')
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
-  --is-skipped: string@bool-completer # is the job skipped
-  --is-flow-step: string@bool-completer # is the job a flow step
-  --has-null-parent: string@bool-completer # has null parent
-  --is-not-schedule: string@bool-completer # is not a scheduled job
+  --is-skipped: oneof<nothing, bool> # is the job skipped
+  --is-flow-step: oneof<nothing, bool> # is the job a flow step
+  --has-null-parent: oneof<nothing, bool> # has null parent
+  --is-not-schedule: oneof<nothing, bool> # is not a scheduled job
 ]: nothing -> table<workspace_id: string, id: string, parent_job: string, created_by: string, created_at: string, started_at: string, completed_at: string, duration_ms: int, success: bool, script_path: string, script_hash: string, args: record, result: any, logs: string, deleted: bool, raw_code: string, canceled: bool, canceled_by: string, canceled_reason: string, job_kind: string, schedule_path: string, permissioned_as: string, flow_status: any, workflow_as_code_status: record<scheduled_for: string, started_at: string, duration_ms: float, name: string>, raw_flow: any, is_flow_step: bool, language: string, is_skipped: bool, email: string, visible_to_owner: bool, mem_peak: int, tag: string, priority: int, labels: list<string>, self_wait_time_ms: float, aggregate_wait_time_ms: float, preprocessed: bool, worker: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11251,24 +11250,24 @@ export def "w-jobs-list listJobs" [
   --completed-after: string # filter on started after (exclusive) timestamp (format: date-time)
   --created-before-queue: string # filter on jobs created before X for jobs in the queue only (format: date-time)
   --created-after-queue: string # filter on jobs created after X for jobs in the queue only (format: date-time)
-  --running: string@bool-completer # filter on running jobs
-  --scheduled-for-before-now: string@bool-completer # filter on jobs scheduled_for before now (hence waitinf for a worker)
+  --running: oneof<nothing, bool> # filter on running jobs
+  --scheduled-for-before-now: oneof<nothing, bool> # filter on jobs scheduled_for before now (hence waitinf for a worker)
   --job-kinds: string # filter by job kind. Supports comma-separated list of values ('preview', 'script', 'dependencies', 'flow') and negation by prefixing all values with '!' (e.g. '!preview,!dependencies')
-  --suspended: string@bool-completer # filter on suspended jobs
+  --suspended: oneof<nothing, bool> # filter on suspended jobs
   --args: string # filter on jobs containing those args as a json subset (@> in postgres)
   --tag: string # filter by tag/worker group. Supports comma-separated list (e.g. 'gpu,highmem') and negation by prefixing all values with '!' (e.g. '!gpu,!highmem')
   --qp-result: string # filter on jobs containing those result as a json subset (@> in postgres)
-  --allow-wildcards: string@bool-completer # allow wildcards (*) in the filter of label, tag, worker
+  --allow-wildcards: oneof<nothing, bool> # allow wildcards (*) in the filter of label, tag, worker
   --per-page: int # number of items to return for a given page (default 30, max 100)
   --trigger-kind: string # filter by trigger kind. Supports comma-separated list (e.g. 'schedule,webhook') and negation by prefixing all values with '!' (e.g. '!schedule,!webhook')
-  --is-skipped: string@bool-completer # is the job skipped
-  --is-flow-step: string@bool-completer # is the job a flow step
-  --has-null-parent: string@bool-completer # has null parent
-  --success: string@bool-completer # filter on successful jobs
+  --is-skipped: oneof<nothing, bool> # is the job skipped
+  --is-flow-step: oneof<nothing, bool> # is the job a flow step
+  --has-null-parent: oneof<nothing, bool> # has null parent
+  --success: oneof<nothing, bool> # filter on successful jobs
   --status: string@status-completer # filter on the exact completed job status. Unlike `success=true` (which also matches `skipped`), `status=success` matches only `success`.
-  --all-workspaces: string@bool-completer # get jobs from all workspaces (only valid if request come from the `admins` workspace)
-  --is-not-schedule: string@bool-completer # is not a scheduled job
-  --excludes-entrypoint-override: string@bool-completer # exclude jobs that were started with a `_ENTRYPOINT_OVERRIDE` arg (e.g. dynamic-select helper runs and preprocessor previews)
+  --all-workspaces: oneof<nothing, bool> # get jobs from all workspaces (only valid if request come from the `admins` workspace)
+  --is-not-schedule: oneof<nothing, bool> # is not a scheduled job
+  --excludes-entrypoint-override: oneof<nothing, bool> # exclude jobs that were started with a `_ENTRYPOINT_OVERRIDE` arg (e.g. dynamic-select helper runs and preprocessor previews)
   --broad-filter: string # broad search across multiple fields (case-insensitive substring match on path, tag, schedule path, trigger kind, label)
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11340,8 +11339,8 @@ export def "w-jobs-u-get get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --no-logs: string@bool-completer
-  --no-code: string@bool-completer
+  --no-logs: oneof<nothing, bool>
+  --no-code: oneof<nothing, bool>
   --approval-token: string # Approval token granting read access to the job when not logged in. The token must be the one issued for this job's flow (i.e. the flow id used when generating the approval URL).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11390,7 +11389,7 @@ export def "w-jobs-u-get-logs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --remove-ansi-warnings: string@bool-completer
+  --remove-ansi-warnings: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11509,11 +11508,11 @@ export def "w-jobs-u-getupdate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --running: string@bool-completer
+  --running: oneof<nothing, bool>
   --log-offset: int
   --stream-offset: int
-  --get-progress: string@bool-completer
-  --no-logs: string@bool-completer
+  --get-progress: oneof<nothing, bool>
+  --no-logs: oneof<nothing, bool>
 ]: nothing -> record<running: bool, completed: bool, new_logs: string, log_offset: int, mem_peak: int, progress: int, stream_offset: int, new_result_stream: string, flow_status: any, workflow_as_code_status: record<scheduled_for: string, started_at: string, duration_ms: float, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11538,13 +11537,13 @@ export def "w-jobs-u-getupdate-sse get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --running: string@bool-completer
+  --running: oneof<nothing, bool>
   --log-offset: int
   --stream-offset: int
-  --get-progress: string@bool-completer
-  --only-result: string@bool-completer
-  --no-logs: string@bool-completer
-  --fast: string@bool-completer
+  --get-progress: oneof<nothing, bool>
+  --only-result: oneof<nothing, bool>
+  --no-logs: oneof<nothing, bool>
+  --fast: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11666,7 +11665,7 @@ export def "w-jobs-u-completed-get-result-maybe get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --get-started: string@bool-completer
+  --get-started: oneof<nothing, bool>
 ]: nothing -> record<completed: bool, result: any, success: bool, started: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11892,7 +11891,7 @@ export def "w-jobs-resume-urls get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --approver: string
-  --flow-level: string@bool-completer # If true, generate resume URLs for the parent flow instead of the specific step. This allows pre-approvals that can be consumed by any later suspend step in the same flow.
+  --flow-level: oneof<nothing, bool> # If true, generate resume URLs for the parent flow instead of the specific step. This allows pre-approvals that can be consumed by any later suspend step in the same flow.
 ]: nothing -> record<approvalPage: string, resume: string, cancel: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11985,7 +11984,7 @@ export def "w-jobs-u-flow-resume-suspended resumeSuspended" [
   --allow-errors(-e) # Return full response without error handling
   --payload: any # payload to send to the resumed job
   --approval-token: string # approval token for unauthenticated access
-  --approved: string@bool-completer # whether to approve (true) or cancel (false) the job (default: true)
+  --approved: oneof<nothing, bool> # whether to approve (true) or cancel (false) the job (default: true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12286,21 +12285,21 @@ export def "w-schedules-create createSchedule" [
   schedule: string # Cron expression with 6 fields (seconds, minutes, hours, day of month, month, day of week). Example '0 0 12 * * *' for daily at noon
   timezone: string # IANA timezone for the schedule (e.g., 'UTC', 'Europe/Paris', 'America/New_York')
   script_path: string # Path to the script or flow to execute when triggered
-  --is-flow: string@bool-completer # True if script_path points to a flow, false if it points to a script
+  --is-flow: oneof<nothing, bool> # True if script_path points to a flow, false if it points to a script
   args: record # The arguments to pass to the script or flow
-  --enabled: string@bool-completer # Whether the schedule is currently active and will trigger jobs
+  --enabled: oneof<nothing, bool> # Whether the schedule is currently active and will trigger jobs
   --on-failure: string # Path to a script or flow to run when the scheduled job fails (nullable)
   --on-failure-times: float # Number of consecutive failures before the on_failure handler is triggered (default 1) (nullable)
-  --on-failure-exact: string@bool-completer # If true, trigger on_failure handler only on exactly N failures, not on every failure after N (nullable)
+  --on-failure-exact: oneof<nothing, bool> # If true, trigger on_failure handler only on exactly N failures, not on every failure after N (nullable)
   --on-failure-extra-args: record # The arguments to pass to the script or flow
   --on-recovery: string # Path to a script or flow to run when the schedule recovers after failures (nullable)
   --on-recovery-times: float # Number of consecutive successes before the on_recovery handler is triggered (default 1) (nullable)
   --on-recovery-extra-args: record # The arguments to pass to the script or flow
   --on-success: string # Path to a script or flow to run after each successful execution (nullable)
   --on-success-extra-args: record # The arguments to pass to the script or flow
-  --ws-error-handler-muted: string@bool-completer # If true, the workspace-level error handler will not be triggered for this schedule's failures
+  --ws-error-handler-muted: oneof<nothing, bool> # If true, the workspace-level error handler will not be triggered for this schedule's failures
   --retry: any
-  --no-flow-overlap: string@bool-completer # If true, skip this schedule's execution if the previous run is still in progress (prevents concurrent runs)
+  --no-flow-overlap: oneof<nothing, bool> # If true, skip this schedule's execution if the previous run is still in progress (prevents concurrent runs)
   --summary: string # Short summary describing the purpose of this schedule (nullable)
   --description: string # Detailed description of what this schedule does (nullable)
   --tag: string # Worker tag to route jobs to specific worker groups (nullable)
@@ -12308,7 +12307,7 @@ export def "w-schedules-create createSchedule" [
   --cron-version: string # Cron parser version. Use 'v2' for extended syntax with additional features (nullable)
   --dynamic-skip: string # Path to a script that validates scheduled datetimes. Receives scheduled_for datetime and returns boolean to skip (true) or run (false) (nullable)
   --permissioned-as: string # The user or group this schedule runs as. Used during deployment to preserve the original schedule owner.
-  --preserve-permissioned-as: string@bool-completer # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
+  --preserve-permissioned-as: oneof<nothing, bool> # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
   --labels: list
 ]: any -> any {
   let input = $in
@@ -12341,16 +12340,16 @@ export def "w-schedules-update updateSchedule" [
   args: record # The arguments to pass to the script or flow
   --on-failure: string # Path to a script or flow to run when the scheduled job fails (nullable)
   --on-failure-times: float # Number of consecutive failures before the on_failure handler is triggered (default 1) (nullable)
-  --on-failure-exact: string@bool-completer # If true, trigger on_failure handler only on exactly N failures, not on every failure after N (nullable)
+  --on-failure-exact: oneof<nothing, bool> # If true, trigger on_failure handler only on exactly N failures, not on every failure after N (nullable)
   --on-failure-extra-args: record # The arguments to pass to the script or flow
   --on-recovery: string # Path to a script or flow to run when the schedule recovers after failures (nullable)
   --on-recovery-times: float # Number of consecutive successes before the on_recovery handler is triggered (default 1) (nullable)
   --on-recovery-extra-args: record # The arguments to pass to the script or flow
   --on-success: string # Path to a script or flow to run after each successful execution (nullable)
   --on-success-extra-args: record # The arguments to pass to the script or flow
-  --ws-error-handler-muted: string@bool-completer # If true, the workspace-level error handler will not be triggered for this schedule's failures
+  --ws-error-handler-muted: oneof<nothing, bool> # If true, the workspace-level error handler will not be triggered for this schedule's failures
   --retry: any
-  --no-flow-overlap: string@bool-completer # If true, skip this schedule's execution if the previous run is still in progress (prevents concurrent runs)
+  --no-flow-overlap: oneof<nothing, bool> # If true, skip this schedule's execution if the previous run is still in progress (prevents concurrent runs)
   --summary: string # Short summary describing the purpose of this schedule (nullable)
   --description: string # Detailed description of what this schedule does (nullable)
   --tag: string # Worker tag to route jobs to specific worker groups (nullable)
@@ -12358,7 +12357,7 @@ export def "w-schedules-update updateSchedule" [
   --cron-version: string # Cron parser version. Use 'v2' for extended syntax with additional features (nullable)
   --dynamic-skip: string # Path to a script that validates scheduled datetimes. Receives scheduled_for datetime and returns boolean to skip (true) or run (false) (nullable)
   --permissioned-as: string # The user or group this schedule runs as (e.g., 'u/admin' or 'g/mygroup'). Only admins and wm_deployers can set this via preserve_permissioned_as. (nullable)
-  --preserve-permissioned-as: string@bool-completer # If true and user is admin/wm_deployers, preserve the provided permissioned_as instead of using the deploying user's identity (nullable)
+  --preserve-permissioned-as: oneof<nothing, bool> # If true and user is admin/wm_deployers, preserve the provided permissioned_as instead of using the deploying user's identity (nullable)
   --labels: list
 ]: any -> any {
   let input = $in
@@ -12386,8 +12385,8 @@ export def "w-schedules-setenabled setScheduleEnabled" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
-  --force: string@bool-completer # Bypass the parent-state conflict warning when enabling a schedule in a fork whose parent has the same path enabled.
+  --enabled: oneof<nothing, bool>
+  --force: oneof<nothing, bool> # Bypass the parent-state conflict warning when enabling a schedule in a fork whose parent has the same path enabled.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12486,7 +12485,7 @@ export def "w-schedules-list listSchedules" [
   --per-page: int # number of items to return for a given page (default 30, max 100)
   --args: string # filter on jobs containing those args as a json subset (@> in postgres)
   --path: string # filter by path (script path)
-  --is-flow: string@bool-completer # filter schedules by whether they target a flow
+  --is-flow: oneof<nothing, bool> # filter schedules by whether they target a flow
   --path-start: string # filter schedules by path prefix
   --schedule-path: string # exact match on the schedule's path
   --description: string # pattern match filter for description field (case-insensitive)
@@ -12542,12 +12541,12 @@ export def "w-schedules-setdefaulthandler setDefaultErrorOrRecoveryHandler" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   handler_type: string@handler-type-completer
-  --override-existing: string@bool-completer
+  --override-existing: oneof<nothing, bool>
   --path: string
   --extra-args: record
   --number-of-occurence: int
-  --number-of-occurence-exact: string@bool-completer
-  --workspace-handler-muted: string@bool-completer
+  --number-of-occurence-exact: oneof<nothing, bool>
+  --workspace-handler-muted: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12668,25 +12667,25 @@ export def "w-http-triggers-create createHttpTrigger" [
   path: string # The unique Windmill path for this trigger. Must be of the form `u/<user>/<path>` or `f/<folder>/<path>`. This is the trigger object path, not the HTTP route path.
   script_path: string # Path to the script or flow to execute when triggered
   route_path: string # The URL route path that will trigger this endpoint (e.g., 'api/myendpoint'). Must NOT start with a /.
-  --workspaced-route: string@bool-completer # If true, the route includes the workspace ID in the path
+  --workspaced-route: oneof<nothing, bool> # If true, the route includes the workspace ID in the path
   --summary: string # Short summary describing the purpose of this trigger (nullable)
   --description: string # Detailed description of what this trigger does (nullable)
   --static-asset-config: record # Configuration for serving static assets (s3 bucket, storage path, filename) (nullable) — shape: {s3: string, storage?: string, filename?: string}
-  --is-flow: string@bool-completer # True if script_path points to a flow, false if it points to a script
+  --is-flow: oneof<nothing, bool> # True if script_path points to a flow, false if it points to a script
   http_method: string@http-method-completer
   --authentication-resource-path: string # Path to the resource containing authentication configuration (for api_key, basic_http, custom_script, signature methods) (nullable)
-  --is-async: string@bool-completer # Deprecated, use request_type instead
+  --is-async: oneof<nothing, bool> # Deprecated, use request_type instead
   --request-type: string@request-type-completer
   authentication_method: string@authentication-method-completer
-  --is-static-website: string@bool-completer # If true, serves static files from S3/storage instead of running a script
-  --wrap-body: string@bool-completer # If true, wraps the request body in a 'body' parameter
+  --is-static-website: oneof<nothing, bool> # If true, serves static files from S3/storage instead of running a script
+  --wrap-body: oneof<nothing, bool> # If true, wraps the request body in a 'body' parameter
   --mode: string@mode-completer # job trigger mode
-  --raw-string: string@bool-completer # If true, passes the request body as a raw string instead of parsing as JSON
+  --raw-string: oneof<nothing, bool> # If true, passes the request body as a raw string instead of parsing as JSON
   --error-handler-path: string # Path to a script or flow to run when the triggered job fails
   --error-handler-args: record # The arguments to pass to the script or flow
   --retry: any
   --permissioned-as: string # The user or group this trigger runs as. Used during deployment to preserve the original trigger owner.
-  --preserve-permissioned-as: string@bool-completer # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
+  --preserve-permissioned-as: oneof<nothing, bool> # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
   --labels: list
 ]: any -> any {
   let input = $in
@@ -12720,22 +12719,22 @@ export def "w-http-triggers-update updateHttpTrigger" [
   --route-path: string # The URL route path that will trigger this endpoint (e.g., 'api/myendpoint'). Must NOT start with a /.
   --summary: string # Short summary describing the purpose of this trigger (nullable)
   --description: string # Detailed description of what this trigger does (nullable)
-  --workspaced-route: string@bool-completer # If true, the route includes the workspace ID in the path
+  --workspaced-route: oneof<nothing, bool> # If true, the route includes the workspace ID in the path
   --static-asset-config: record # Configuration for serving static assets (s3 bucket, storage path, filename) (nullable) — shape: {s3: string, storage?: string, filename?: string}
   --authentication-resource-path: string # Path to the resource containing authentication configuration (for api_key, basic_http, custom_script, signature methods) (nullable)
-  --is-flow: string@bool-completer # True if script_path points to a flow, false if it points to a script
+  --is-flow: oneof<nothing, bool> # True if script_path points to a flow, false if it points to a script
   http_method: string@http-method-completer
-  --is-async: string@bool-completer # Deprecated, use request_type instead
+  --is-async: oneof<nothing, bool> # Deprecated, use request_type instead
   --request-type: string@request-type-completer
   authentication_method: string@authentication-method-completer
-  --is-static-website: string@bool-completer # If true, serves static files from S3/storage instead of running a script
-  --wrap-body: string@bool-completer # If true, wraps the request body in a 'body' parameter
-  --raw-string: string@bool-completer # If true, passes the request body as a raw string instead of parsing as JSON
+  --is-static-website: oneof<nothing, bool> # If true, serves static files from S3/storage instead of running a script
+  --wrap-body: oneof<nothing, bool> # If true, wraps the request body in a 'body' parameter
+  --raw-string: oneof<nothing, bool> # If true, passes the request body as a raw string instead of parsing as JSON
   --error-handler-path: string # Path to a script or flow to run when the triggered job fails
   --error-handler-args: record # The arguments to pass to the script or flow
   --retry: any
   --permissioned-as: string # The user or group this trigger runs as. Used during deployment to preserve the original trigger owner.
-  --preserve-permissioned-as: string@bool-completer # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
+  --preserve-permissioned-as: oneof<nothing, bool> # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
   --labels: list
 ]: any -> any {
   let input = $in
@@ -12811,7 +12810,7 @@ export def "w-http-triggers-list listHttpTriggers" [
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
   --path: string # filter by path
-  --is-flow: string@bool-completer
+  --is-flow: oneof<nothing, bool>
   --path-start: string
   --label: string # Filter by label
 ]: nothing -> table<route_path: string, static_asset_config: record<s3: string, storage: string, filename: string>, http_method: string, authentication_resource_path: string, summary: string, description: string, request_type: string, authentication_method: string, is_static_website: bool, workspaced_route: bool, wrap_body: bool, raw_string: bool, error_handler_path: string, error_handler_args: record, retry: any> {
@@ -12863,7 +12862,7 @@ export def "w-http-triggers-route-exists existsRoute" [
   route_path: string
   http_method: string@http-method-completer
   --trigger-path: string
-  --workspaced-route: string@bool-completer
+  --workspaced-route: oneof<nothing, bool>
 ]: any -> bool {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12891,7 +12890,7 @@ export def "w-http-triggers-setmode setHttpTriggerMode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   mode: string@mode-completer # job trigger mode
-  --force: string@bool-completer # Bypass the parent-state conflict warning when enabling a trigger in a fork whose parent has the same path enabled.
+  --force: oneof<nothing, bool> # Bypass the parent-state conflict warning when enabling a trigger in a fork whose parent has the same path enabled.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12921,21 +12920,21 @@ export def "w-websocket-triggers-create createWebsocketTrigger" [
   --allow-errors(-e) # Return full response without error handling
   path: string # The unique Windmill path for this trigger. Must be of the form `u/<user>/<path>` or `f/<folder>/<path>`. This is the trigger object path, not the HTTP route path.
   script_path: string # Path to the script or flow to execute when a message is received
-  --is-flow: string@bool-completer # True if script_path points to a flow, false if it points to a script
+  --is-flow: oneof<nothing, bool> # True if script_path points to a flow, false if it points to a script
   --body-url: string # The WebSocket URL to connect to (can be a static URL or computed by a runnable)
   --mode: string@mode-completer # job trigger mode
   filters: list # Array of key-value filters to match incoming messages (only matching messages trigger the script) — item shape: {key: string, value: any}
   --filter-logic: string@filter-logic-completer # Logic to apply when evaluating filters. 'and' requires all filters to match, 'or' requires any filter to match. (default: and)
   --initial-messages: list # Messages to send immediately after connecting (can be raw strings or computed by runnables) (nullable)
   --url-runnable-args: record # The arguments to pass to the script or flow
-  --can-return-message: string@bool-completer # If true, the script can return a message to send back through the WebSocket
-  --can-return-error-result: string@bool-completer # If true, error results are sent back through the WebSocket
+  --can-return-message: oneof<nothing, bool> # If true, the script can return a message to send back through the WebSocket
+  --can-return-error-result: oneof<nothing, bool> # If true, error results are sent back through the WebSocket
   --heartbeat: record # shape: {interval_secs: int, message: string, state_field?: string}
   --error-handler-path: string # Path to a script or flow to run when the triggered job fails
   --error-handler-args: record # The arguments to pass to the script or flow
   --retry: any
   --permissioned-as: string # The user or group this trigger runs as. Used during deployment to preserve the original trigger owner.
-  --preserve-permissioned-as: string@bool-completer # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
+  --preserve-permissioned-as: oneof<nothing, bool> # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
   --labels: list
 ]: any -> any {
   let input = $in
@@ -12968,19 +12967,19 @@ export def "w-websocket-triggers-update updateWebsocketTrigger" [
   --body-url: string # The WebSocket URL to connect to (can be a static URL or computed by a runnable)
   --body-path: string # The unique Windmill path for this trigger. Must be of the form `u/<user>/<path>` or `f/<folder>/<path>`. This is the trigger object path, not the HTTP route path.
   script_path: string # Path to the script or flow to execute when a message is received
-  --is-flow: string@bool-completer # True if script_path points to a flow, false if it points to a script
+  --is-flow: oneof<nothing, bool> # True if script_path points to a flow, false if it points to a script
   filters: list # Array of key-value filters to match incoming messages (only matching messages trigger the script) — item shape: {key: string, value: any}
   --filter-logic: string@filter-logic-completer # Logic to apply when evaluating filters. 'and' requires all filters to match, 'or' requires any filter to match. (default: and)
   --initial-messages: list # Messages to send immediately after connecting (can be raw strings or computed by runnables) (nullable)
   --url-runnable-args: record # The arguments to pass to the script or flow
-  --can-return-message: string@bool-completer # If true, the script can return a message to send back through the WebSocket
-  --can-return-error-result: string@bool-completer # If true, error results are sent back through the WebSocket
+  --can-return-message: oneof<nothing, bool> # If true, the script can return a message to send back through the WebSocket
+  --can-return-error-result: oneof<nothing, bool> # If true, error results are sent back through the WebSocket
   --heartbeat: record # shape: {interval_secs: int, message: string, state_field?: string}
   --error-handler-path: string # Path to a script or flow to run when the triggered job fails
   --error-handler-args: record # The arguments to pass to the script or flow
   --retry: any
   --permissioned-as: string # The user or group this trigger runs as. Used during deployment to preserve the original trigger owner.
-  --preserve-permissioned-as: string@bool-completer # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
+  --preserve-permissioned-as: oneof<nothing, bool> # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
   --labels: list
 ]: any -> any {
   let input = $in
@@ -13056,7 +13055,7 @@ export def "w-websocket-triggers-list listWebsocketTriggers" [
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
   --path: string # filter by path
-  --is-flow: string@bool-completer
+  --is-flow: oneof<nothing, bool>
   --path-start: string
   --label: string # Filter by label
 ]: nothing -> table<url: string, server_id: string, last_server_ping: string, error: string, filters: list<record>, filter_logic: string, initial_messages: list<any>, url_runnable_args: record, can_return_message: bool, can_return_error_result: bool, heartbeat: record<interval_secs: int, message: string, state_field: string>, error_handler_path: string, error_handler_args: record, retry: any> {
@@ -13107,7 +13106,7 @@ export def "w-websocket-triggers-setmode setWebsocketTriggerMode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   mode: string@mode-completer # job trigger mode
-  --force: string@bool-completer # Bypass the parent-state conflict warning when enabling a trigger in a fork whose parent has the same path enabled.
+  --force: oneof<nothing, bool> # Bypass the parent-state conflict warning when enabling a trigger in a fork whose parent has the same path enabled.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -13135,7 +13134,7 @@ export def "w-websocket-triggers-test testWebsocketConnection" [
   --allow-errors(-e) # Return full response without error handling
   --body-url: string
   --url-runnable-args: record # The arguments to pass to the script or flow
-  --can-return-message: string@bool-completer
+  --can-return-message: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -13164,20 +13163,20 @@ export def "w-kafka-triggers-create createKafkaTrigger" [
   --allow-errors(-e) # Return full response without error handling
   path: string # The unique Windmill path for this trigger. Must be of the form `u/<user>/<path>` or `f/<folder>/<path>`. This is the trigger object path, not the HTTP route path.
   script_path: string # Path to the script or flow to execute when a message is received
-  --is-flow: string@bool-completer # True if script_path points to a flow, false if it points to a script
+  --is-flow: oneof<nothing, bool> # True if script_path points to a flow, false if it points to a script
   kafka_resource_path: string # Path to the Kafka resource containing connection configuration
   group_id: string # Kafka consumer group ID for this trigger
   topics: list # Array of Kafka topic names to subscribe to
   filters: list # item shape: {key: string, value: any}
   --filter-logic: string@filter-logic-completer # Logic to apply when evaluating filters. 'and' requires all filters to match, 'or' requires any filter to match. (default: and)
   --auto-offset-reset: string@auto-offset-reset-completer # Initial offset behavior when consumer group has no committed offset. (default: latest)
-  --auto-commit: string@bool-completer # When true (default), offsets are committed automatically after receiving each message. When false, you must manually commit offsets using the commit_offsets endpoint. (default: true)
+  --auto-commit: oneof<nothing, bool> # When true (default), offsets are committed automatically after receiving each message. When false, you must manually commit offsets using the commit_offsets endpoint. (default: true)
   --mode: string@mode-completer # job trigger mode
   --error-handler-path: string # Path to a script or flow to run when the triggered job fails
   --error-handler-args: record # The arguments to pass to the script or flow
   --retry: any
   --permissioned-as: string # The user or group this trigger runs as. Used during deployment to preserve the original trigger owner.
-  --preserve-permissioned-as: string@bool-completer # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
+  --preserve-permissioned-as: oneof<nothing, bool> # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
   --labels: list
 ]: any -> any {
   let input = $in
@@ -13212,15 +13211,15 @@ export def "w-kafka-triggers-update updateKafkaTrigger" [
   filters: list # item shape: {key: string, value: any}
   --filter-logic: string@filter-logic-completer # Logic to apply when evaluating filters. 'and' requires all filters to match, 'or' requires any filter to match. (default: and)
   --auto-offset-reset: string@auto-offset-reset-completer # Initial offset behavior when consumer group has no committed offset. (default: latest)
-  --auto-commit: string@bool-completer # When true (default), offsets are committed automatically after receiving each message. When false, you must manually commit offsets using the commit_offsets endpoint. (default: true)
+  --auto-commit: oneof<nothing, bool> # When true (default), offsets are committed automatically after receiving each message. When false, you must manually commit offsets using the commit_offsets endpoint. (default: true)
   --body-path: string # The unique Windmill path for this trigger. Must be of the form `u/<user>/<path>` or `f/<folder>/<path>`. This is the trigger object path, not the HTTP route path.
   script_path: string # Path to the script or flow to execute when a message is received
-  --is-flow: string@bool-completer # True if script_path points to a flow, false if it points to a script
+  --is-flow: oneof<nothing, bool> # True if script_path points to a flow, false if it points to a script
   --error-handler-path: string # Path to a script or flow to run when the triggered job fails
   --error-handler-args: record # The arguments to pass to the script or flow
   --retry: any
   --permissioned-as: string # The user or group this trigger runs as. Used during deployment to preserve the original trigger owner.
-  --preserve-permissioned-as: string@bool-completer # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
+  --preserve-permissioned-as: oneof<nothing, bool> # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
   --labels: list
 ]: any -> any {
   let input = $in
@@ -13296,7 +13295,7 @@ export def "w-kafka-triggers-list listKafkaTriggers" [
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
   --path: string # filter by path
-  --is-flow: string@bool-completer
+  --is-flow: oneof<nothing, bool>
   --path-start: string
   --label: string # Filter by label
 ]: nothing -> table<kafka_resource_path: string, group_id: string, topics: list<string>, filters: list<record>, filter_logic: string, auto_offset_reset: string, auto_commit: bool, server_id: string, last_server_ping: string, error: string, error_handler_path: string, error_handler_args: record, retry: any> {
@@ -13347,7 +13346,7 @@ export def "w-kafka-triggers-setmode setKafkaTriggerMode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   mode: string@mode-completer # job trigger mode
-  --force: string@bool-completer # Bypass the parent-state conflict warning when enabling a trigger in a fork whose parent has the same path enabled.
+  --force: oneof<nothing, bool> # Bypass the parent-state conflict warning when enabling a trigger in a fork whose parent has the same path enabled.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -13453,9 +13452,9 @@ export def "w-nats-triggers-create createNatsTrigger" [
   --allow-errors(-e) # Return full response without error handling
   path: string # The unique Windmill path for this trigger. Must be of the form `u/<user>/<path>` or `f/<folder>/<path>`. This is the trigger object path, not the HTTP route path.
   script_path: string # Path to the script or flow to execute when a message is received
-  --is-flow: string@bool-completer # True if script_path points to a flow, false if it points to a script
+  --is-flow: oneof<nothing, bool> # True if script_path points to a flow, false if it points to a script
   nats_resource_path: string # Path to the NATS resource containing connection configuration
-  --use-jetstream: string@bool-completer # If true, uses NATS JetStream for durable message delivery
+  --use-jetstream: oneof<nothing, bool> # If true, uses NATS JetStream for durable message delivery
   --stream-name: string # JetStream stream name (required when use_jetstream is true) (nullable)
   --consumer-name: string # JetStream consumer name (required when use_jetstream is true) (nullable)
   subjects: list # Array of NATS subjects to subscribe to
@@ -13464,7 +13463,7 @@ export def "w-nats-triggers-create createNatsTrigger" [
   --error-handler-args: record # The arguments to pass to the script or flow
   --retry: any
   --permissioned-as: string # The user or group this trigger runs as. Used during deployment to preserve the original trigger owner.
-  --preserve-permissioned-as: string@bool-completer # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
+  --preserve-permissioned-as: oneof<nothing, bool> # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
   --labels: list
 ]: any -> any {
   let input = $in
@@ -13493,18 +13492,18 @@ export def "w-nats-triggers-update updateNatsTrigger" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   nats_resource_path: string # Path to the NATS resource containing connection configuration
-  --use-jetstream: string@bool-completer # If true, uses NATS JetStream for durable message delivery
+  --use-jetstream: oneof<nothing, bool> # If true, uses NATS JetStream for durable message delivery
   --stream-name: string # JetStream stream name (required when use_jetstream is true) (nullable)
   --consumer-name: string # JetStream consumer name (required when use_jetstream is true) (nullable)
   subjects: list # Array of NATS subjects to subscribe to
   --body-path: string # The unique Windmill path for this trigger. Must be of the form `u/<user>/<path>` or `f/<folder>/<path>`. This is the trigger object path, not the HTTP route path.
   script_path: string # Path to the script or flow to execute when a message is received
-  --is-flow: string@bool-completer # True if script_path points to a flow, false if it points to a script
+  --is-flow: oneof<nothing, bool> # True if script_path points to a flow, false if it points to a script
   --error-handler-path: string # Path to a script or flow to run when the triggered job fails
   --error-handler-args: record # The arguments to pass to the script or flow
   --retry: any
   --permissioned-as: string # The user or group this trigger runs as. Used during deployment to preserve the original trigger owner.
-  --preserve-permissioned-as: string@bool-completer # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
+  --preserve-permissioned-as: oneof<nothing, bool> # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
   --labels: list
 ]: any -> any {
   let input = $in
@@ -13580,7 +13579,7 @@ export def "w-nats-triggers-list listNatsTriggers" [
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
   --path: string # filter by path
-  --is-flow: string@bool-completer
+  --is-flow: oneof<nothing, bool>
   --path-start: string
   --label: string # Filter by label
 ]: nothing -> table<nats_resource_path: string, use_jetstream: bool, stream_name: string, consumer_name: string, subjects: list<string>, server_id: string, last_server_ping: string, error: string, error_handler_path: string, error_handler_args: record, retry: any> {
@@ -13631,7 +13630,7 @@ export def "w-nats-triggers-setmode setNatsTriggerMode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   mode: string@mode-completer # job trigger mode
-  --force: string@bool-completer # Bypass the parent-state conflict warning when enabling a trigger in a fork whose parent has the same path enabled.
+  --force: oneof<nothing, bool> # Bypass the parent-state conflict warning when enabling a trigger in a fork whose parent has the same path enabled.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -13689,13 +13688,13 @@ export def "w-sqs-triggers-create createSqsTrigger" [
   --message-attributes: list # Array of SQS message attribute names to include with each message (nullable)
   path: string # The unique Windmill path for this trigger. Must be of the form `u/<user>/<path>` or `f/<folder>/<path>`. This is the trigger object path, not the HTTP route path.
   script_path: string # Path to the script or flow to execute when a message is received
-  --is-flow: string@bool-completer # True if script_path points to a flow, false if it points to a script
+  --is-flow: oneof<nothing, bool> # True if script_path points to a flow, false if it points to a script
   --mode: string@mode-completer # job trigger mode
   --error-handler-path: string # Path to a script or flow to run when the triggered job fails
   --error-handler-args: record # The arguments to pass to the script or flow
   --retry: any
   --permissioned-as: string # The user or group this trigger runs as. Used during deployment to preserve the original trigger owner.
-  --preserve-permissioned-as: string@bool-completer # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
+  --preserve-permissioned-as: oneof<nothing, bool> # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
   --labels: list
 ]: any -> any {
   let input = $in
@@ -13729,13 +13728,13 @@ export def "w-sqs-triggers-update updateSqsTrigger" [
   --message-attributes: list # Array of SQS message attribute names to include with each message (nullable)
   --body-path: string # The unique Windmill path for this trigger. Must be of the form `u/<user>/<path>` or `f/<folder>/<path>`. This is the trigger object path, not the HTTP route path.
   script_path: string # Path to the script or flow to execute when a message is received
-  --is-flow: string@bool-completer # True if script_path points to a flow, false if it points to a script
+  --is-flow: oneof<nothing, bool> # True if script_path points to a flow, false if it points to a script
   --mode: string@mode-completer # job trigger mode
   --error-handler-path: string # Path to a script or flow to run when the triggered job fails
   --error-handler-args: record # The arguments to pass to the script or flow
   --retry: any
   --permissioned-as: string # The user or group this trigger runs as. Used during deployment to preserve the original trigger owner.
-  --preserve-permissioned-as: string@bool-completer # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
+  --preserve-permissioned-as: oneof<nothing, bool> # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
   --labels: list
 ]: any -> any {
   let input = $in
@@ -13811,7 +13810,7 @@ export def "w-sqs-triggers-list listSqsTriggers" [
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
   --path: string # filter by path
-  --is-flow: string@bool-completer
+  --is-flow: oneof<nothing, bool>
   --path-start: string
   --label: string # Filter by label
 ]: nothing -> table<queue_url: string, aws_auth_resource_type: string, aws_resource_path: string, message_attributes: list<string>, server_id: string, last_server_ping: string, error: string, error_handler_path: string, error_handler_args: record, retry: any> {
@@ -13862,7 +13861,7 @@ export def "w-sqs-triggers-setmode setSqsTriggerMode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   mode: string@mode-completer # job trigger mode
-  --force: string@bool-completer # Bypass the parent-state conflict warning when enabling a trigger in a fork whose parent has the same path enabled.
+  --force: oneof<nothing, bool> # Bypass the parent-state conflict warning when enabling a trigger in a fork whose parent has the same path enabled.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -14121,7 +14120,7 @@ export def "w-native-triggers-create createNativeTrigger" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   script_path: string # The path to the script or flow that will be triggered
-  --is-flow: string@bool-completer # Whether the trigger targets a flow (true) or a script (false)
+  --is-flow: oneof<nothing, bool> # Whether the trigger targets a flow (true) or a script (false)
   service_config: record # Service-specific configuration (e.g., event types, filters)
   --summary: string # Short summary to be displayed when listed (nullable)
 ]: any -> record<external_id: string> {
@@ -14152,7 +14151,7 @@ export def "w-native-triggers-update updateNativeTrigger" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   script_path: string # The path to the script or flow that will be triggered
-  --is-flow: string@bool-completer # Whether the trigger targets a flow (true) or a script (false)
+  --is-flow: oneof<nothing, bool> # Whether the trigger targets a flow (true) or a script (false)
   service_config: record # Service-specific configuration (e.g., event types, filters)
   --summary: string # Short summary to be displayed when listed (nullable)
 ]: any -> any {
@@ -14232,7 +14231,7 @@ export def "w-native-triggers-list listNativeTriggers" [
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
   --path: string # filter by script path
-  --is-flow: string@bool-completer # filter by is_flow
+  --is-flow: oneof<nothing, bool> # filter by is_flow
   --label: string # Filter by label
 ]: nothing -> table<external_id: string, workspace_id: string, service_name: string, script_path: string, is_flow: bool, service_config: record, error: string, summary: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -14351,7 +14350,7 @@ export def "w-native-triggers-google-drive-files listGoogleDriveFiles" [
   --q: string # search query to filter files by name
   --parent-id: string # folder ID to list children of
   --page-token: string # token for next page of results
-  --shared-with-me: string@bool-completer # if true, list files shared with the user (default: false)
+  --shared-with-me: oneof<nothing, bool> # if true, list files shared with the user (default: false)
 ]: nothing -> record<files: table<id: string, name: string, mime_type: string, is_folder: bool>, next_page_token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14457,13 +14456,13 @@ export def "w-mqtt-triggers-create createMqttTrigger" [
   --client-version: string@client-version-completer
   path: string # The unique Windmill path for this trigger. Must be of the form `u/<user>/<path>` or `f/<folder>/<path>`. This is the trigger object path, not the HTTP route path.
   script_path: string # Path to the script or flow to execute when a message is received
-  --is-flow: string@bool-completer # True if script_path points to a flow, false if it points to a script
+  --is-flow: oneof<nothing, bool> # True if script_path points to a flow, false if it points to a script
   --mode: string@mode-completer # job trigger mode
   --error-handler-path: string # Path to a script or flow to run when the triggered job fails
   --error-handler-args: record # The arguments to pass to the script or flow
   --retry: any
   --permissioned-as: string # The user or group this trigger runs as. Used during deployment to preserve the original trigger owner.
-  --preserve-permissioned-as: string@bool-completer # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
+  --preserve-permissioned-as: oneof<nothing, bool> # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
   --labels: list
 ]: any -> any {
   let input = $in
@@ -14502,13 +14501,13 @@ export def "w-mqtt-triggers-update updateMqttTrigger" [
   --client-version: string@client-version-completer
   --body-path: string # The unique Windmill path for this trigger. Must be of the form `u/<user>/<path>` or `f/<folder>/<path>`. This is the trigger object path, not the HTTP route path.
   script_path: string # Path to the script or flow to execute when a message is received
-  --is-flow: string@bool-completer # True if script_path points to a flow, false if it points to a script
+  --is-flow: oneof<nothing, bool> # True if script_path points to a flow, false if it points to a script
   --mode: string@mode-completer # job trigger mode
   --error-handler-path: string # Path to a script or flow to run when the triggered job fails
   --error-handler-args: record # The arguments to pass to the script or flow
   --retry: any
   --permissioned-as: string # The user or group this trigger runs as. Used during deployment to preserve the original trigger owner.
-  --preserve-permissioned-as: string@bool-completer # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
+  --preserve-permissioned-as: oneof<nothing, bool> # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
   --labels: list
 ]: any -> any {
   let input = $in
@@ -14584,7 +14583,7 @@ export def "w-mqtt-triggers-list listMqttTriggers" [
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
   --path: string # filter by path
-  --is-flow: string@bool-completer
+  --is-flow: oneof<nothing, bool>
   --path-start: string
   --label: string # Filter by label
 ]: nothing -> table<mqtt_resource_path: string, subscribe_topics: list<record>, v3_config: record<clean_session: bool>, v5_config: record<clean_start: bool, topic_alias_maximum: float, session_expiry_interval: float>, client_id: string, client_version: string, server_id: string, last_server_ping: string, error: string, error_handler_path: string, error_handler_args: record, retry: any> {
@@ -14635,7 +14634,7 @@ export def "w-mqtt-triggers-setmode setMqttTriggerMode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   mode: string@mode-completer # job trigger mode
-  --force: string@bool-completer # Bypass the parent-state conflict warning when enabling a trigger in a fork whose parent has the same path enabled.
+  --force: oneof<nothing, bool> # Bypass the parent-state conflict warning when enabling a trigger in a fork whose parent has the same path enabled.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -14697,15 +14696,15 @@ export def "w-gcp-triggers-create createGcpTrigger" [
   --delivery-config: record # Configuration for push delivery mode. — shape: {audience?: string, authenticate: bool}
   path: string # The unique Windmill path for this trigger. Must be of the form `u/<user>/<path>` or `f/<folder>/<path>`. This is the trigger object path, not the HTTP route path.
   script_path: string # Path to the script or flow to execute when a message is received.
-  --is-flow: string@bool-completer # True if script_path points to a flow, false if it points to a script.
+  --is-flow: oneof<nothing, bool> # True if script_path points to a flow, false if it points to a script.
   --mode: string@mode-completer # job trigger mode
-  --auto-acknowledge-msg: string@bool-completer # If true, automatically acknowledge messages after processing.
+  --auto-acknowledge-msg: oneof<nothing, bool> # If true, automatically acknowledge messages after processing.
   --ack-deadline: int # Time in seconds within which the message must be acknowledged. If not provided, defaults to the subscription's acknowledgment deadline (600 seconds). (format: int32)
   --error-handler-path: string # Path to a script or flow to run when the triggered job fails.
   --error-handler-args: record # The arguments to pass to the script or flow
   --retry: any
   --permissioned-as: string # The user or group this trigger runs as. Used during deployment to preserve the original trigger owner.
-  --preserve-permissioned-as: string@bool-completer # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
+  --preserve-permissioned-as: oneof<nothing, bool> # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
   --labels: list
 ]: any -> any {
   let input = $in
@@ -14743,15 +14742,15 @@ export def "w-gcp-triggers-update updateGcpTrigger" [
   --delivery-config: record # Configuration for push delivery mode. — shape: {audience?: string, authenticate: bool}
   --body-path: string # The unique Windmill path for this trigger. Must be of the form `u/<user>/<path>` or `f/<folder>/<path>`. This is the trigger object path, not the HTTP route path.
   script_path: string # Path to the script or flow to execute when a message is received.
-  --is-flow: string@bool-completer # True if script_path points to a flow, false if it points to a script.
+  --is-flow: oneof<nothing, bool> # True if script_path points to a flow, false if it points to a script.
   --mode: string@mode-completer # job trigger mode
-  --auto-acknowledge-msg: string@bool-completer # If true, automatically acknowledge messages after processing.
+  --auto-acknowledge-msg: oneof<nothing, bool> # If true, automatically acknowledge messages after processing.
   --ack-deadline: int # Time in seconds within which the message must be acknowledged. If not provided, defaults to the subscription's acknowledgment deadline (600 seconds). (format: int32)
   --error-handler-path: string # Path to a script or flow to run when the triggered job fails.
   --error-handler-args: record # The arguments to pass to the script or flow
   --retry: any
   --permissioned-as: string # The user or group this trigger runs as. Used during deployment to preserve the original trigger owner.
-  --preserve-permissioned-as: string@bool-completer # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
+  --preserve-permissioned-as: oneof<nothing, bool> # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
   --labels: list
 ]: any -> any {
   let input = $in
@@ -14827,7 +14826,7 @@ export def "w-gcp-triggers-list listGcpTriggers" [
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
   --path: string # filter by path
-  --is-flow: string@bool-completer
+  --is-flow: oneof<nothing, bool>
   --path-start: string
   --label: string # Filter by label
 ]: nothing -> table<gcp_resource_path: string, topic_id: string, subscription_id: string, server_id: string, delivery_type: string, delivery_config: record<audience: string, authenticate: bool>, subscription_mode: string, last_server_ping: string, error: string, error_handler_path: string, error_handler_args: record, retry: any> {
@@ -14878,7 +14877,7 @@ export def "w-gcp-triggers-setmode setGcpTriggerMode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   mode: string@mode-completer # job trigger mode
-  --force: string@bool-completer # Bypass the parent-state conflict warning when enabling a trigger in a fork whose parent has the same path enabled.
+  --force: oneof<nothing, bool> # Bypass the parent-state conflict warning when enabling a trigger in a fork whose parent has the same path enabled.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15016,13 +15015,13 @@ export def "w-azure-triggers-create createAzureTrigger" [
   --event-type-filters: list
   path: string # The unique Windmill path for this trigger. Must be of the form `u/<user>/<path>` or `f/<folder>/<path>`. This is the trigger object path, not the HTTP route path.
   script_path: string
-  --is-flow: string@bool-completer
+  --is-flow: oneof<nothing, bool>
   --mode: string@mode-completer # job trigger mode
   --error-handler-path: string
   --error-handler-args: record # The arguments to pass to the script or flow
   --retry: any
   --permissioned-as: string
-  --preserve-permissioned-as: string@bool-completer
+  --preserve-permissioned-as: oneof<nothing, bool>
   --labels: list
 ]: any -> any {
   let input = $in
@@ -15059,13 +15058,13 @@ export def "w-azure-triggers-update updateAzureTrigger" [
   --event-type-filters: list
   --body-path: string # The unique Windmill path for this trigger. Must be of the form `u/<user>/<path>` or `f/<folder>/<path>`. This is the trigger object path, not the HTTP route path.
   script_path: string
-  --is-flow: string@bool-completer
+  --is-flow: oneof<nothing, bool>
   --mode: string@mode-completer # job trigger mode
   --error-handler-path: string
   --error-handler-args: record # The arguments to pass to the script or flow
   --retry: any
   --permissioned-as: string
-  --preserve-permissioned-as: string@bool-completer
+  --preserve-permissioned-as: oneof<nothing, bool>
   --labels: list
 ]: any -> any {
   let input = $in
@@ -15141,7 +15140,7 @@ export def "w-azure-triggers-list listAzureTriggers" [
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
   --path: string # filter by exact path
-  --is-flow: string@bool-completer
+  --is-flow: oneof<nothing, bool>
   --path-start: string
 ]: nothing -> table<azure_resource_path: string, azure_mode: string, scope_resource_id: string, topic_name: string, subscription_name: string, event_type_filters: list<string>, server_id: string, last_server_ping: string, error: string, error_handler_path: string, error_handler_args: record, retry: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15191,7 +15190,7 @@ export def "w-azure-triggers-setmode setAzureTriggerMode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   mode: string@mode-completer # job trigger mode
-  --force: string@bool-completer # Bypass the parent-state conflict warning when enabling a trigger in a fork whose parent has the same path enabled.
+  --force: oneof<nothing, bool> # Bypass the parent-state conflict warning when enabling a trigger in a fork whose parent has the same path enabled.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15685,7 +15684,7 @@ export def "w-postgres-triggers-create createPostgresTrigger" [
   --publication-name: string # Name of the PostgreSQL publication to subscribe to for change data capture
   path: string # The unique Windmill path for this trigger. Must be of the form `u/<user>/<path>` or `f/<folder>/<path>`. This is the trigger object path, not the HTTP route path.
   script_path: string # Path to the script or flow to execute when database changes are detected
-  --is-flow: string@bool-completer # True if script_path points to a flow, false if it points to a script
+  --is-flow: oneof<nothing, bool> # True if script_path points to a flow, false if it points to a script
   --mode: string@mode-completer # job trigger mode
   postgres_resource_path: string # Path to the PostgreSQL resource containing connection configuration
   --publication: record # shape: {table_to_track?: list, transaction_to_track: list}
@@ -15693,7 +15692,7 @@ export def "w-postgres-triggers-create createPostgresTrigger" [
   --error-handler-args: record # The arguments to pass to the script or flow
   --retry: any
   --permissioned-as: string # The user or group this trigger runs as. Used during deployment to preserve the original trigger owner.
-  --preserve-permissioned-as: string@bool-completer # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
+  --preserve-permissioned-as: oneof<nothing, bool> # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
   --labels: list
 ]: any -> any {
   let input = $in
@@ -15726,7 +15725,7 @@ export def "w-postgres-triggers-update updatePostgresTrigger" [
   publication_name: string # Name of the PostgreSQL publication to subscribe to for change data capture
   --body-path: string # The unique Windmill path for this trigger. Must be of the form `u/<user>/<path>` or `f/<folder>/<path>`. This is the trigger object path, not the HTTP route path.
   script_path: string # Path to the script or flow to execute when database changes are detected
-  --is-flow: string@bool-completer # True if script_path points to a flow, false if it points to a script
+  --is-flow: oneof<nothing, bool> # True if script_path points to a flow, false if it points to a script
   --mode: string@mode-completer # job trigger mode
   postgres_resource_path: string # Path to the PostgreSQL resource containing connection configuration
   --publication: record # shape: {table_to_track?: list, transaction_to_track: list}
@@ -15734,7 +15733,7 @@ export def "w-postgres-triggers-update updatePostgresTrigger" [
   --error-handler-args: record # The arguments to pass to the script or flow
   --retry: any
   --permissioned-as: string # The user or group this trigger runs as. Used during deployment to preserve the original trigger owner.
-  --preserve-permissioned-as: string@bool-completer # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
+  --preserve-permissioned-as: oneof<nothing, bool> # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
   --labels: list
 ]: any -> any {
   let input = $in
@@ -15810,7 +15809,7 @@ export def "w-postgres-triggers-list listPostgresTriggers" [
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
   --path: string # filter by path
-  --is-flow: string@bool-completer
+  --is-flow: oneof<nothing, bool>
   --path-start: string
   --label: string # Filter by label
 ]: nothing -> table<postgres_resource_path: string, publication_name: string, server_id: string, replication_slot_name: string, error: string, last_server_ping: string, error_handler_path: string, error_handler_args: record, retry: any> {
@@ -15861,7 +15860,7 @@ export def "w-postgres-triggers-setmode setPostgresTriggerMode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   mode: string@mode-completer # job trigger mode
-  --force: string@bool-completer # Bypass the parent-state conflict warning when enabling a trigger in a fork whose parent has the same path enabled.
+  --force: oneof<nothing, bool> # Bypass the parent-state conflict warning when enabling a trigger in a fork whose parent has the same path enabled.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15916,14 +15915,14 @@ export def "w-email-triggers-create createEmailTrigger" [
   path: string
   script_path: string
   local_part: string
-  --workspaced-local-part: string@bool-completer
-  --is-flow: string@bool-completer
+  --workspaced-local-part: oneof<nothing, bool>
+  --is-flow: oneof<nothing, bool>
   --error-handler-path: string
   --error-handler-args: record # The arguments to pass to the script or flow
   --retry: any
   --mode: string@mode-completer # job trigger mode
   --permissioned-as: string # The user or group this trigger runs as. Used during deployment to preserve the original trigger owner.
-  --preserve-permissioned-as: string@bool-completer # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
+  --preserve-permissioned-as: oneof<nothing, bool> # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
   --labels: list
 ]: any -> any {
   let input = $in
@@ -15954,13 +15953,13 @@ export def "w-email-triggers-update updateEmailTrigger" [
   --body-path: string
   script_path: string
   --local-part: string
-  --workspaced-local-part: string@bool-completer
-  --is-flow: string@bool-completer
+  --workspaced-local-part: oneof<nothing, bool>
+  --is-flow: oneof<nothing, bool>
   --error-handler-path: string
   --error-handler-args: record # The arguments to pass to the script or flow
   --retry: any
   --permissioned-as: string # The user or group this trigger runs as. Used during deployment to preserve the original trigger owner.
-  --preserve-permissioned-as: string@bool-completer # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
+  --preserve-permissioned-as: oneof<nothing, bool> # When true and the caller is a member of the 'wm_deployers' group, preserves the original permissioned_as value instead of overwriting it.
   --labels: list
 ]: any -> any {
   let input = $in
@@ -16036,7 +16035,7 @@ export def "w-email-triggers-list listEmailTriggers" [
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
   --path: string # filter by path
-  --is-flow: string@bool-completer
+  --is-flow: oneof<nothing, bool>
   --path-start: string
   --label: string # Filter by label
 ]: nothing -> table<local_part: string, workspaced_local_part: bool, error_handler_path: string, error_handler_args: record, retry: any> {
@@ -16086,7 +16085,7 @@ export def "w-email-triggers-local-part-exists existsEmailLocalPart" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   local_part: string
-  --workspaced-local-part: string@bool-completer
+  --workspaced-local-part: oneof<nothing, bool>
   --trigger-path: string
 ]: any -> bool {
   let input = $in
@@ -16115,7 +16114,7 @@ export def "w-email-triggers-setmode setEmailTriggerMode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   mode: string@mode-completer # job trigger mode
-  --force: string@bool-completer # Bypass the parent-state conflict warning when enabling a trigger in a fork whose parent has the same path enabled.
+  --force: oneof<nothing, bool> # Bypass the parent-state conflict warning when enabling a trigger in a fork whose parent has the same path enabled.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -16402,7 +16401,7 @@ export def "w-groups-listnames listGroupNames" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --only-member-of: string@bool-completer # only list the groups the user is member of (default false)
+  --only-member-of: oneof<nothing, bool> # only list the groups the user is member of (default false)
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16631,7 +16630,7 @@ export def "w-folders-listnames listFolderNames" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --only-member-of: string@bool-completer # only list the folders the user is member of (default false)
+  --only-member-of: oneof<nothing, bool> # only list the folders the user is member of (default false)
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16840,7 +16839,7 @@ export def "w-folders-removeowner removeOwnerToFolder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   owner: string
-  --write: string@bool-completer
+  --write: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -17322,7 +17321,7 @@ export def "agent-workers-list-blacklisted-tokens listBlacklistedAgentTokens" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-expired: string@bool-completer # Whether to include expired blacklisted tokens (default: false)
+  --include-expired: oneof<nothing, bool> # Whether to include expired blacklisted tokens (default: false)
 ]: nothing -> table<token: string, expires_at: string, blacklisted_at: string, blacklisted_by: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17394,7 +17393,7 @@ export def "w-acls-add addGranularAcls" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   owner: string
-  --write: string@bool-completer
+  --write: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -17450,7 +17449,7 @@ export def "w-capture-set-config setCaptureConfig" [
   --allow-errors(-e) # Return full response without error handling
   trigger_kind: string@trigger-kind-completer
   path: string
-  --is-flow: string@bool-completer
+  --is-flow: oneof<nothing, bool>
   --trigger-config: record
 ]: any -> record {
   let input = $in
@@ -17687,7 +17686,7 @@ export def "w-inputs-history get" [
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
   --args: string # filter on jobs containing those args as a json subset (@> in postgres)
-  --include-preview: string@bool-completer
+  --include-preview: oneof<nothing, bool>
 ]: nothing -> table<id: string, name: string, created_by: string, created_at: string, is_public: bool, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17712,8 +17711,8 @@ export def "w-inputs-args get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --input: string@bool-completer
-  --allow-large: string@bool-completer
+  --input: oneof<nothing, bool>
+  --allow-large: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17796,7 +17795,7 @@ export def "w-inputs-update updateInput" [
   --allow-errors(-e) # Return full response without error handling
   id: string
   name: string
-  --is-public: string@bool-completer
+  --is-public: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -18057,7 +18056,7 @@ export def "w-job-helpers-load-file-preview loadFilePreview" [
   --file-size-in-bytes: int
   --file-mime-type: string
   --csv-separator: string
-  --csv-has-header: string@bool-completer
+  --csv-has-header: oneof<nothing, bool>
   --read-bytes-from: int
   --read-bytes-length: int
   --storage: string
@@ -18115,7 +18114,7 @@ export def "w-job-helpers-load-git-repo-file-preview loadGitRepoFilePreview" [
   --file-size-in-bytes: int
   --file-mime-type: string
   --csv-separator: string
-  --csv-has-header: string@bool-completer
+  --csv-has-header: oneof<nothing, bool>
   --read-bytes-from: int
   --read-bytes-length: int
   --storage: string
@@ -18196,7 +18195,7 @@ export def "w-job-helpers-load-parquet-preview loadParquetPreview" [
   --offset: float
   --limit: float
   --sort-col: string
-  --sort-desc: string@bool-completer
+  --sort-desc: oneof<nothing, bool>
   --search-col: string
   --search-term: string
   --storage: string
@@ -18254,7 +18253,7 @@ export def "w-job-helpers-load-csv-preview loadCsvPreview" [
   --offset: float
   --limit: float
   --sort-col: string
-  --sort-desc: string@bool-completer
+  --sort-desc: oneof<nothing, bool>
   --search-col: string
   --search-term: string
   --storage: string
@@ -18533,7 +18532,7 @@ export def "service-logs-list-files listLogFiles" [
   --allow-errors(-e) # Return full response without error handling
   --before: string # filter on started before (inclusive) timestamp (format: date-time)
   --after: string # filter on created after (exclusive) timestamp (format: date-time)
-  --with-error: string@bool-completer
+  --with-error: oneof<nothing, bool>
 ]: nothing -> table<hostname: string, mode: string, worker_group: string, log_ts: string, file_path: string, ok_lines: int, err_lines: int, json_fmt: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -18655,8 +18654,8 @@ export def "w-concurrency-groups-list-jobs listExtendedJobs" [
   --script-hash: string # mask to filter exact matching path
   --started-before: string # filter on started before (inclusive) timestamp (format: date-time)
   --started-after: string # filter on started after (exclusive) timestamp (format: date-time)
-  --running: string@bool-completer # filter on running jobs
-  --scheduled-for-before-now: string@bool-completer # filter on jobs scheduled_for before now (hence waitinf for a worker)
+  --running: oneof<nothing, bool> # filter on running jobs
+  --scheduled-for-before-now: oneof<nothing, bool> # filter on jobs scheduled_for before now (hence waitinf for a worker)
   --completed-before: string # filter on started before (inclusive) timestamp (format: date-time)
   --completed-after: string # filter on started after (exclusive) timestamp (format: date-time)
   --created-before-queue: string # filter on jobs created before X for jobs in the queue only (format: date-time)
@@ -18665,17 +18664,17 @@ export def "w-concurrency-groups-list-jobs listExtendedJobs" [
   --args: string # filter on jobs containing those args as a json subset (@> in postgres)
   --tag: string # filter by tag/worker group. Supports comma-separated list (e.g. 'gpu,highmem') and negation by prefixing all values with '!' (e.g. '!gpu,!highmem')
   --qp-result: string # filter on jobs containing those result as a json subset (@> in postgres)
-  --allow-wildcards: string@bool-completer # allow wildcards (*) in the filter of label, tag, worker
+  --allow-wildcards: oneof<nothing, bool> # allow wildcards (*) in the filter of label, tag, worker
   --page: int # which page to return (start at 1, default 1)
   --per-page: int # number of items to return for a given page (default 30, max 100)
   --trigger-kind: string # filter by trigger kind. Supports comma-separated list (e.g. 'schedule,webhook') and negation by prefixing all values with '!' (e.g. '!schedule,!webhook')
-  --is-skipped: string@bool-completer # is the job skipped
-  --is-flow-step: string@bool-completer # is the job a flow step
-  --has-null-parent: string@bool-completer # has null parent
-  --success: string@bool-completer # filter on successful jobs
+  --is-skipped: oneof<nothing, bool> # is the job skipped
+  --is-flow-step: oneof<nothing, bool> # is the job a flow step
+  --has-null-parent: oneof<nothing, bool> # has null parent
+  --success: oneof<nothing, bool> # filter on successful jobs
   --status: string@status-completer # filter on the exact completed job status. Unlike `success=true` (which also matches `skipped`), `status=success` matches only `success`.
-  --all-workspaces: string@bool-completer # get jobs from all workspaces (only valid if request come from the `admins` workspace)
-  --is-not-schedule: string@bool-completer # is not a scheduled job
+  --all-workspaces: oneof<nothing, bool> # get jobs from all workspaces (only valid if request come from the `admins` workspace)
+  --is-not-schedule: oneof<nothing, bool> # is not a scheduled job
 ]: nothing -> record<jobs: list<any>, obscured_jobs: table<typ: string, started_at: string, duration_ms: float>, omitted_obscured_jobs: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://catalogue.data.gov.bc.ca/api/3" "https://cat.data.gov.bc.ca/api/3" "https://cad.data.gov.bc.ca/api/3"] }
 def auth-scheme-completer [] { ["bearer" "ckan_api_key"] }
 
@@ -280,7 +279,7 @@ export def "action-organization-show get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string # The id or name of the organization (default: ministry-of-agriculture)
-  --include-datasets: string@bool-completer # include a list of the organization's datasets (default: true)
+  --include-datasets: oneof<nothing, bool> # include a list of the organization's datasets (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -539,7 +538,7 @@ export def "action-resource-show get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string # The id of the resource (default: e6c8bb1d-3726-418b-9b7e-1d97a9bbb817)
-  --include-tracking: string@bool-completer # Add tracking information to dataset (default: false)
+  --include-tracking: oneof<nothing, bool> # Add tracking information to dataset (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

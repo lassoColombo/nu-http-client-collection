@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://example.zendesk.com"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -621,7 +620,7 @@ export def "automations ListAutomations" [
   --page: string # Pagination parameter. Supports both traditional offset and cursor-based pagination:  - Traditional: `?page=2` (integer page number) - Cursor: `?page[size]=50&page[after]=cursor` (deepObject with size, after, before)  These are mutually exclusive - use one format or the other, not both.
   --per-page: int # Number of records to return per page.  Note: Default and maximum values vary by endpoint. Check endpoint-specific documentation for limits.  (e.g. 50)
   --qp-sort: string # Field to sort results by. Prefix with `-` for descending order.  When used with cursor pagination, this determines the cursor ordering.  Example: `?sort=name` or `?sort=-created_at`  (e.g. name)
-  --active: string@bool-completer # Filter by active automations if true or inactive automations if false (e.g. true)
+  --active: oneof<nothing, bool> # Filter by active automations if true or inactive automations if false (e.g. true)
   --include: string # A sideload to include in the response. See [Sideloads](#sideloads-2) (e.g. usage_24h)
 ]: nothing -> record<automations: table<actions: list, active: bool, conditions: record, created_at: string, default: bool, id: int, position: int, raw_title: string, title: string, updated_at: string>, count: int, next_page: string, previous_page: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -777,7 +776,7 @@ export def "automations-search SearchAutomations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string # Query string used to find all automations with matching title (e.g. close)
-  --active: string@bool-completer # Filter by active automations if true or inactive automations if false (e.g. true)
+  --active: oneof<nothing, bool> # Filter by active automations if true or inactive automations if false (e.g. true)
   --sort-by: string # Possible values are "alphabetical", "created_at", "updated_at", and "position". If unspecified, the automations are sorted by relevance (e.g. position)
   --sort-order: string # One of "asc" or "desc". Defaults to "asc" for alphabetical and position sort, "desc" for all others (e.g. desc)
   --include: string # A sideload to include in the response. See [Sideloads](#sideloads-2) (e.g. usage_24h)
@@ -966,7 +965,7 @@ export def "brands ListBrands" [
   --per-page: int # Number of records to return per page.  Note: Default and maximum values vary by endpoint. Check endpoint-specific documentation for limits.  (Marked internal-only because only used with traditional offset pagination, which is only supported for internal/bime requests)  (e.g. 50)
   --qp-sort: string # Field to sort results by. Prefix with `-` for descending order.  When used with cursor pagination, this determines the cursor ordering.  Example: `?sort=name` or `?sort=-created_at`  (e.g. name)
   --assignable-from: int # Filters brands to only those assignable from the specified brand ID. A brand-separated brand is only assignable to itself, while account-separated brands are assignable to all other account-separated brands. (format: int64)
-  --include-deleted: string@bool-completer # When true, includes soft-deleted brands in the response.
+  --include-deleted: oneof<nothing, bool> # When true, includes soft-deleted brands in the response.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1429,7 +1428,7 @@ export def "custom-objects ListCustomObjects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-ui-path: string@bool-completer # Include UI path in the response
+  --include-ui-path: oneof<nothing, bool> # Include UI path in the response
 ]: nothing -> record<custom_objects: table<allows_attachments: bool, allows_photos: bool, created_at: string, created_by_user_id: string, description: string, include_in_list_view: bool, key: string, raw_description: string, raw_title: string, raw_title_pluralized: string, title: string, title_pluralized: string, updated_at: string, updated_by_user_id: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1479,8 +1478,8 @@ export def "custom-objects ShowCustomObject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-permissions-metadata: string@bool-completer # Include permission metadata in the response
-  --include-ui-path: string@bool-completer # Include UI path in the response
+  --include-permissions-metadata: oneof<nothing, bool> # Include permission metadata in the response
+  --include-ui-path: oneof<nothing, bool> # Include UI path in the response
 ]: nothing -> record<custom_object: record<allows_attachments: bool, allows_photos: bool, created_at: string, created_by_user_id: string, description: string, include_in_list_view: bool, key: string, raw_description: string, raw_title: string, raw_title_pluralized: string, title: string, title_pluralized: string, updated_at: string, updated_by_user_id: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1693,7 +1692,7 @@ export def "custom-objects-fields ListCustomObjectFields" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-standard-fields: string@bool-completer # Include standard fields if true. Exclude them if false (e.g. true)
+  --include-standard-fields: oneof<nothing, bool> # Include standard fields if true. Exclude them if false (e.g. true)
 ]: nothing -> record<custom_object_fields: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1745,7 +1744,7 @@ export def "custom-objects-fields ShowCustomObjectField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-standard-fields: string@bool-completer # If true, returns standard fields in addition to custom fields.
+  --include-standard-fields: oneof<nothing, bool> # If true, returns standard fields in addition to custom fields.
 ]: nothing -> record<custom_object_field: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2244,7 +2243,7 @@ export def "custom-objects-records-attachments-download DownloadCustomObjectReco
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --inline: string@bool-completer # If true, the attachment content is displayed inline in the browser. If false or omitted, the attachment is downloaded as a file.  (default: false)
+  --inline: oneof<nothing, bool> # If true, the attachment content is displayed inline in the browser. If false or omitted, the attachment is downloaded as a file.  (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2384,7 +2383,7 @@ export def "custom-objects-triggers ListObjectTriggers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Filter by active triggers if true or inactive triggers if false (e.g. true)
+  --active: oneof<nothing, bool> # Filter by active triggers if true or inactive triggers if false (e.g. true)
   --sort-by: string # Offset pagination only. Possible values are "alphabetical", "created_at", "updated_at", "usage_1h", "usage_24h", or "usage_7d". Defaults to "position" (e.g. position)
   --sort-order: string # One of "asc" or "desc". Defaults to "asc" for alphabetical and position sort, "desc" for all others (e.g. desc)
 ]: nothing -> record<count: int, next_page: string, previous_page: string, triggers: table<actions: list, active: bool, conditions: record, created_at: string, default: bool, description: string, id: int, position: int, raw_title: string, title: string, updated_at: string, url: string>> {
@@ -2582,7 +2581,7 @@ export def "custom-objects-triggers-search SearchObjectTriggers" [
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string # Query string used to find all triggers with matching title (e.g. important_trigger)
   --filter: string # JSON-encoded trigger attribute filters for the search. See [Filter](#filter).  Example: `{"json":{"description":"Close a ticket"}}`  (e.g. {"json":{"description":"Close a ticket"}})
-  --active: string@bool-completer # Filter by active triggers if true or inactive triggers if false (e.g. true)
+  --active: oneof<nothing, bool> # Filter by active triggers if true or inactive triggers if false (e.g. true)
   --qp-sort: string # Cursor-based pagination only. Possible values are "alphabetical", "created_at", "updated_at", or "position". (e.g. position)
   --sort-by: string # Offset pagination only. Possible values are "alphabetical", "created_at", "updated_at", "usage_1h", "usage_24h", or "usage_7d". Defaults to "position" (e.g. position)
   --sort-order: string # One of "asc" or "desc". Defaults to "asc" for alphabetical and position sort, "desc" for all others (e.g. desc)
@@ -2812,8 +2811,8 @@ export def "custom-statuses ListCustomStatuses" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --status-categories: string # Filter the list of custom ticket statuses by a comma-separated list of status categories
-  --active: string@bool-completer # If true, show only active custom ticket statuses. If false, show only inactive custom ticket statuses. If the filter is not used, show all custom ticket statuses
-  --default: string@bool-completer # If true, show only default custom ticket statuses. If false, show only non-default custom ticket statuses. If the filter is not used, show all custom ticket statuses
+  --active: oneof<nothing, bool> # If true, show only active custom ticket statuses. If false, show only inactive custom ticket statuses. If the filter is not used, show all custom ticket statuses
+  --default: oneof<nothing, bool> # If true, show only default custom ticket statuses. If false, show only non-default custom ticket statuses. If the filter is not used, show all custom ticket statuses
 ]: nothing -> record<custom_statuses: table<active: bool, agent_label: string, created_at: string, default: bool, description: string, end_user_description: string, end_user_label: string, id: int, raw_agent_label: string, raw_description: string, raw_end_user_description: string, raw_end_user_label: string, status_category: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4102,13 +4101,13 @@ export def "groups ListGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --exclude-deleted: string@bool-completer # Whether to exclude deleted entities (e.g. false)
+  --exclude-deleted: oneof<nothing, bool> # Whether to exclude deleted entities (e.g. false)
   --include: string # Sideloads to include in the response. Accepts a comma-separated list of values.  (e.g. users,group_settings)
   --page: string # Pagination parameter. Supports both traditional offset and cursor-based pagination:  - Traditional: `?page=2` (integer page number) - Cursor: `?page[size]=50&page[after]=cursor` (deepObject with size, after, before)  These are mutually exclusive - use one format or the other, not both.
   --per-page: int # Number of records to return per page.  Note: Default and maximum values vary by endpoint. Check endpoint-specific documentation for limits.  (e.g. 50)
   --qp-sort: string # Field to sort results by. Prefix with `-` for descending order.  When used with cursor pagination, this determines the cursor ordering.  Example: `?sort=name` or `?sort=-created_at`  (e.g. name)
-  --include-boundary-indicators: string@bool-completer # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
-  --include-item-cursors: string@bool-completer # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-boundary-indicators: oneof<nothing, bool> # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-item-cursors: oneof<nothing, bool> # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
 ]: nothing -> record<groups: table<created_at: string, default: bool, deleted: bool, description: string, id: int, is_public: bool, name: string, updated_at: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4360,7 +4359,7 @@ export def "imports-tickets TicketImport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archive-immediately: string@bool-completer # If `true`, any ticket created with a `closed` status bypasses the normal ticket lifecycle and will be created directly in your ticket archive
+  --archive-immediately: oneof<nothing, bool> # If `true`, any ticket created with a `closed` status bypasses the normal ticket lifecycle and will be created directly in your ticket archive
   --ticket: record # shape: {assignee_id?: int, brand_id?: int, collaborators?: list, comment?: any, comments?: list, created_at?: string, custom_fields?: list, custom_status_id?: int, description?: string, email_ccs?: list, external_id?: string, followers?: list, group_id?: int, priority?: "urgent"|"high"|"normal"|"low", recipient?: string, requester_id?: int, solved_at?: string, status?: "new"|"open"|"pending"|"hold"|"solved"|"closed", subject?: string, tags?: list, updated_at?: string, via?: record}
 ]: any -> record<ticket: record<additional_collaborators: list<record>, allow_attachments: bool, allow_channelback: bool, assignee_email: string, assignee_id: int, attribute_value_ids: list<int>, brand_id: int, collaborator_ids: list<int>, collaborators: list<record>, comment: record<add_short_url: bool, attachments: list, audit_id: int, author_id: int, body: string, channel_back: string, channel_source_id: string, created_at: string, html_body: string, id: int, metadata: record, plain_body: string, public: bool, translate_to: string, type: string, uploads: list, via: record>, created_at: string, custom_fields: list<record>, custom_status_id: int, description: string, due_at: string, email_cc_ids: list<int>, email_ccs: list<record>, encoded_id: string, external_id: string, fields: list<record>, follower_ids: list<int>, followers: list<record>, followup_ids: list<int>, forum_topic_id: int, from_messaging_channel: bool, generated_timestamp: int, group_id: int, has_incidents: bool, id: int, is_public: bool, macro_id: int, macro_ids: list<int>, metadata: record, organization_id: int, origin_zrn: string, priority: string, problem_id: int, raw_subject: string, recipient: string, requester: any, requester_id: int, safe_update: bool, satisfaction_probability: float, satisfaction_rating: record, sharing_agreement_ids: list<int>, sharing_agreements: any, status: string, subject: string, submitter_id: int, support_type: string, suspended_ticket_id: int, suspension_type_id: int, system_metadata: record<client: string, ip_address: string>, tags: any, tde_workspace: record<previous_workspace: record, type: string, workspace: record>, ticket_form_id: int, tpe_voice_comment: record<agent_id: int, answering_machine_detection_status: string, app_id: int, app_name: string, author_id: int, call_connected_at: string, call_disposition: string, call_ended_at: string, call_id: int, call_recording_consent: string, call_recording_consent_action: string, call_recording_consent_keypress: string, call_started_at: string, call_type: string, callback_number: string, callback_requested_at: string, completion_status: string, connection_attempts: int, consultation_time: int, direction: string, disconnection_reason: string, dnis: string, duration: int, end_user_id: int, end_user_location: string, exceeded_queue_time: bool, extension: string, external_id: string, from_line: string, from_line_nickname: string, hold_time: int, intent: string, ivr_destination_group_name: string, ivr_time_spent: int, language: string, line_type: string, longest_hold_time: int, number_of_holds: int, outside_business_hours: bool, overflowed_to: string, phone_name: string, public: bool, quality_score: int, queue_name: string, queue_time: int, recorded: bool, recording_time: int, recording_type: string, recording_url: string, sentiment_agent: string, sentiment_call: string, sentiment_customer: string, sentiment_trend: string, short_summary: string, summary: string, talk_time: int, time_to_answer: int, title: string, to_line: string, to_line_nickname: string, transcript: string, via_id: int, video_recording_url: string, voicemail: bool, voicemail_requested_at: string, wait_time: int>, type: string, updated_at: string, updated_stamp: string, url: string, via: record<channel: any, source: record>, via_followup_source_id: int, via_id: int, voice_comment: record<answered_by_id: int, call_duration: int, from: string, location: string, recording_url: string, to: string, transcription_text: string>>> {
   let input = $in
@@ -4388,7 +4387,7 @@ export def "imports-tickets-create-many TicketBulkImport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archive-immediately: string@bool-completer # If `true`, any ticket created with a `closed` status bypasses the normal ticket lifecycle and will be created directly in your ticket archive
+  --archive-immediately: oneof<nothing, bool> # If `true`, any ticket created with a `closed` status bypasses the normal ticket lifecycle and will be created directly in your ticket archive
   --tickets: list # item shape: {assignee_id?: int, brand_id?: int, collaborators?: list, comment?: any, comments?: list, created_at?: string, custom_fields?: list, custom_status_id?: int, description?: string, email_ccs?: list, external_id?: string, followers?: list, group_id?: int, priority?: "urgent"|"high"|"normal"|"low", recipient?: string, requester_id?: int, solved_at?: string, status?: "new"|"open"|"pending"|"hold"|"solved"|"closed", subject?: string, tags?: list, updated_at?: string, via?: record}
 ]: any -> record<job_status: record<id: string, job_type: string, message: string, progress: int, results: any, status: string, total: int, url: string>> {
   let input = $in
@@ -4443,7 +4442,7 @@ export def "incremental-custom-objects-cursor IncrementalCustomObjectRecordExpor
   --start-time: int # The time to start the incremental export from. Must be at least one minute in the past. Data isn't provided for the most recent minute. Required on the initial export request; not required on subsequent cursor-based pagination requests (e.g. 1332034771)
   --cursor: string # The cursor pointer to work with for all subsequent exports after the initial request
   --per-page: int # Number of records to return per page (default 1000, maximum 1000) (default: 1000)
-  --filterexclude-deleted: string@bool-completer # If true, exclude deleted records from the export (default: false)
+  --filterexclude-deleted: oneof<nothing, bool> # If true, exclude deleted records from the export (default: false)
 ]: nothing -> record<after_cursor: string, after_url: string, before_cursor: string, before_url: string, custom_object_records: table<created_at: string, created_by_user_id: string, custom_object_fields: record, custom_object_key: string, external_id: string, id: string, name: string, updated_at: string, updated_by_user_id: string, url: string>, filter: record<exclude_deleted: bool>, meta: record<has_more: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4577,8 +4576,8 @@ export def "incremental-ticket-metric-events ListTicketMetricEvents" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --start-time: int # The Unix UTC epoch time of the oldest event you're interested in. Example: 1332034771. (e.g. 1332034771)
-  --include-changes: string@bool-completer # This optional parameter enhances incremental data retrieval, delivering a consistent and accurate representation of data changes.
-  --exclude-deleted: string@bool-completer # When true, excludes ticket metric events for deleted tickets. Use this to avoid receiving events for tickets that are deleted.
+  --include-changes: oneof<nothing, bool> # This optional parameter enhances incremental data retrieval, delivering a consistent and accurate representation of data changes.
+  --exclude-deleted: oneof<nothing, bool> # When true, excludes ticket metric events for deleted tickets. Use this to avoid receiving events for tickets that are deleted.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5483,10 +5482,10 @@ export def "macros ListMacros" [
   --allow-errors(-e) # Return full response without error handling
   --include: string # A sideload to include in the response. See [Sideloads](#sideloads-2) (e.g. usage_7d)
   --access: string # Filter macros by access. Possible values are "personal", "agents", "shared", or "account". The "agents" value returns all personal macros for the account's agents and is only available to admins. (e.g. personal)
-  --active: string@bool-completer # Filter by active macros if true or inactive macros if false (e.g. true)
+  --active: oneof<nothing, bool> # Filter by active macros if true or inactive macros if false (e.g. true)
   --category: int # Filter macros by category (e.g. 25)
   --group-id: int # Filter macros by group (format: int64, e.g. 25)
-  --only-viewable: string@bool-completer # If true, returns only macros that can be applied to tickets. If false, returns all macros the current user can manage. Default is false (e.g. false)
+  --only-viewable: oneof<nothing, bool> # If true, returns only macros that can be applied to tickets. If false, returns all macros the current user can manage. Default is false (e.g. false)
   --sort-by: string # Possible values are "alphabetical", "created_at", "updated_at", "usage_1h", "usage_24h", "usage_7d", or "usage_30d". Defaults to alphabetical (e.g. alphabetical)
   --sort-order: string # One of "asc" or "desc". Defaults to "asc" for alphabetical and position sort, "desc" for all others (e.g. asc)
   --page: string # Pagination parameter. Supports both traditional offset and cursor-based pagination:  - Traditional: `?page=2` (integer page number) - Cursor: `?page[size]=50&page[after]=cursor` (deepObject with size, after, before)  These are mutually exclusive - use one format or the other, not both.
@@ -5611,7 +5610,7 @@ export def "macros-apply ShowChangesToTicket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --normalize-comment: string@bool-completer # If true, normalizes the newline formatting of the macro's comment to more closely match the formatting produced by the ticket comment editor
+  --normalize-comment: oneof<nothing, bool> # If true, normalizes the newline formatting of the macro's comment to more closely match the formatting produced by the ticket comment editor
 ]: nothing -> record<result: record<ticket: record<assignee_id: int, comment: record, fields: record, group_id: int, id: int, url: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5861,10 +5860,10 @@ export def "macros-search SearchMacro" [
   --allow-errors(-e) # Return full response without error handling
   --include: string # A sideload to include in the response. See [Sideloads](#sideloads-2) (e.g. usage_7d)
   --access: string # Filter macros by access. Possible values are "personal", "agents", "shared", or "account". The "agents" value returns all personal macros for the account's agents and is only available to admins. (e.g. personal)
-  --active: string@bool-completer # Filter by active macros if true or inactive macros if false (e.g. true)
+  --active: oneof<nothing, bool> # Filter by active macros if true or inactive macros if false (e.g. true)
   --category: int # Filter macros by category (e.g. 25)
   --group-id: int # Filter macros by group (format: int64, e.g. 25)
-  --only-viewable: string@bool-completer # If true, returns only macros that can be applied to tickets. If false, returns all macros the current user can manage. Default is false (e.g. false)
+  --only-viewable: oneof<nothing, bool> # If true, returns only macros that can be applied to tickets. If false, returns all macros the current user can manage. Default is false (e.g. false)
   --sort-by: string # Possible values are "alphabetical", "created_at", "updated_at", or "position". Defaults to alphabetical (e.g. alphabetical)
   --sort-order: string # One of "asc" or "desc". Defaults to "asc" for alphabetical and position sort, "desc" for all others (e.g. asc)
   --qp-query: string # Query string used to find macros with matching titles (e.g. close)
@@ -6096,7 +6095,7 @@ export def "oauth-global-clients-token-summary GlobalOAuthClientsTokenSummary" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --global-client-id: int # The id of the global OAuth client (format: int64, e.g. 334556)
-  --include-expired: string@bool-completer # If true, includes expired tokens in summary (e.g. true)
+  --include-expired: oneof<nothing, bool> # If true, includes expired tokens in summary (e.g. true)
 ]: nothing -> record<global_clients: table<id: int, last_used_at: string, tokens_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6145,7 +6144,7 @@ export def "oauth-tokens CreateOAuthToken" [
   --allow-errors(-e) # Return full response without error handling
   --client-id: int # The id of the OAuth client (format: int64, e.g. 223443)
   --global-client-id: int # The id of the global OAuth client (format: int64, e.g. 334556)
-  --all: string@bool-completer # A boolean that returns all OAuth tokens in the account. Requires admin role (e.g. true)
+  --all: oneof<nothing, bool> # A boolean that returns all OAuth tokens in the account. Requires admin role (e.g. true)
 ]: nothing -> record<token: record<client_id: int, created_at: string, expires_at: string, id: int, refresh_token: string, refresh_token_expires_at: string, scopes: list<string>, token: string, url: string, used_at: string, user_id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6255,7 +6254,7 @@ export def "organization-fields ListOrganizationFields" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --page: record # Cursor-based pagination parameters (JSON:API style).  Supports nested parameters: - `page[size]` - Number of records per page (default varies by endpoint, typically 100) - `page[after]` - Cursor token to fetch records after this position - `page[before]` - Cursor token to fetch records before this position  Example: `?page[size]=50&page[after]=eyJvIjoiaWQiLCJ2IjoiYVFFPSJ9`
-  --resolve-dc: string@bool-completer # If true, resolves dynamic content placeholders.
+  --resolve-dc: oneof<nothing, bool> # If true, resolves dynamic content placeholders.
 ]: nothing -> record<count: int, next_page: string, organization_fields: list<record>, previous_page: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6637,8 +6636,8 @@ export def "organizations ListOrganizations" [
   --page: string # Pagination parameter. Supports both traditional offset and cursor-based pagination:  - Traditional: `?page=2` (integer page number) - Cursor: `?page[size]=50&page[after]=cursor` (deepObject with size, after, before)  These are mutually exclusive - use one format or the other, not both.
   --per-page: int # Number of records to return per page.  Note: Default and maximum values vary by endpoint. Check endpoint-specific documentation for limits.  (e.g. 50)
   --qp-sort: string # Field to sort results by. Prefix with `-` for descending order.  When used with cursor pagination, this determines the cursor ordering.  Example: `?sort=name` or `?sort=-created_at`  (e.g. name)
-  --include-boundary-indicators: string@bool-completer # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
-  --include-item-cursors: string@bool-completer # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-boundary-indicators: oneof<nothing, bool> # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-item-cursors: oneof<nothing, bool> # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
 ]: nothing -> record<count: int, next_page: string, organizations: table<created_at: string, details: string, domain_names: list, external_id: string, group_id: int, id: int, name: string, notes: string, organization_fields: record, shared_comments: bool, shared_tickets: bool, tags: list, updated_at: string, url: string>, previous_page: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6689,8 +6688,8 @@ export def "organizations ShowOrganization" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --include: string # Include additional related data. Supported values: `lookup_relationship_fields`.
-  --include-boundary-indicators: string@bool-completer # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
-  --include-item-cursors: string@bool-completer # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-boundary-indicators: oneof<nothing, bool> # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-item-cursors: oneof<nothing, bool> # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
 ]: nothing -> record<organization: record<created_at: string, details: string, domain_names: list<string>, external_id: string, group_id: int, id: int, name: string, notes: string, organization_fields: record, shared_comments: bool, shared_tickets: bool, tags: list<string>, updated_at: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7089,8 +7088,8 @@ export def "organizations-autocomplete AutocompleteOrganizations" [
   --name: string # A substring of an organization to search for (e.g. imp)
   --field-id: string # The id of a lookup relationship field.  The type of field is determined by the `source` param
   --qp-source: string # If a `field_id` is provided, this specifies the type of the field. For example, if the field is on a "zen:user", it references a field on a user
-  --include-boundary-indicators: string@bool-completer # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
-  --include-item-cursors: string@bool-completer # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-boundary-indicators: oneof<nothing, bool> # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-item-cursors: oneof<nothing, bool> # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
 ]: nothing -> record<count: int, next_page: string, organizations: table<created_at: string, details: string, domain_names: list, external_id: string, group_id: int, id: int, name: string, notes: string, organization_fields: record, shared_comments: bool, shared_tickets: bool, tags: list, updated_at: string, url: string>, previous_page: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7113,8 +7112,8 @@ export def "organizations-count CountOrganizations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-boundary-indicators: string@bool-completer # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
-  --include-item-cursors: string@bool-completer # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-boundary-indicators: oneof<nothing, bool> # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-item-cursors: oneof<nothing, bool> # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
 ]: nothing -> record<count: record<refreshed_at: string, value: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7278,8 +7277,8 @@ export def "problems ListTicketProblems" [
   --page: string # Pagination parameter. Supports both traditional offset and cursor-based pagination:  - Traditional: `?page=2` (integer page number) - Cursor: `?page[size]=50&page[after]=cursor` (deepObject with size, after, before)  These are mutually exclusive - use one format or the other, not both.
   --per-page: int # Number of records to return per page.  Note: Default and maximum values vary by endpoint. Check endpoint-specific documentation for limits.  (e.g. 50)
   --qp-sort: string # Field to sort results by. Prefix with `-` for descending order.  When used with cursor pagination, this determines the cursor ordering.  Example: `?sort=name` or `?sort=-created_at`  (e.g. name)
-  --include-boundary-indicators: string@bool-completer # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
-  --include-item-cursors: string@bool-completer # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-boundary-indicators: oneof<nothing, bool> # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-item-cursors: oneof<nothing, bool> # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -9589,11 +9588,11 @@ export def "ticket-fields ListTicketFields" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --locale: string # Forces the `title_in_portal` property to return a dynamic content variant for the specified locale.  Only accepts [active locale ids](/api-reference/ticketing/account-configuration/locales/#list-locales). Example: `locale="de"`.
-  --creator: string@bool-completer # Displays the `creator_user_id` and `creator_app_name` properties. If the ticket field is created  by an app, `creator_app_name` is the name of the app and `creator_user_id` is `-1`. If the ticket field  is not created by an app, `creator_app_name` is null
+  --creator: oneof<nothing, bool> # Displays the `creator_user_id` and `creator_app_name` properties. If the ticket field is created  by an app, `creator_app_name` is the name of the app and `creator_user_id` is `-1`. If the ticket field  is not created by an app, `creator_app_name` is null
   --page: record # Cursor-based pagination parameters (JSON:API style).  Supports nested parameters: - `page[size]` - Number of records per page (default varies by endpoint, typically 100) - `page[after]` - Cursor token to fetch records after this position - `page[before]` - Cursor token to fetch records before this position  Example: `?page[size]=50&page[after]=eyJvIjoiaWQiLCJ2IjoiYVFFPSJ9`
   --qp-sort: string # Field to sort results by. Prefix with `-` for descending order.  When used with cursor pagination, this determines the cursor ordering.  Example: `?sort=name` or `?sort=-created_at`  (e.g. name)
-  --include-boundary-indicators: string@bool-completer # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
-  --include-item-cursors: string@bool-completer # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-boundary-indicators: oneof<nothing, bool> # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-item-cursors: oneof<nothing, bool> # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
 ]: nothing -> record<ticket_fields: table<active: bool, agent_can_edit: bool, agent_description: string, collapsed_for_agents: bool, created_at: string, creator_app_name: string, creator_user_id: int, custom_field_options: list, custom_statuses: list, description: string, editable_in_portal: bool, id: int, position: int, raw_description: string, raw_title: string, raw_title_in_portal: string, regexp_for_validation: string, relationship_filter: record, relationship_target_type: string, removable: bool, required: bool, required_in_portal: bool, sub_type_id: int, system_field_options: list, tag: string, title: string, title_in_portal: string, type: string, updated_at: string, url: string, visible_in_portal: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -9638,7 +9637,7 @@ export def "ticket-fields ShowTicketfield" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --creator: string@bool-completer # If true, displays the `creator_user_id` and `creator_app_name` properties. If the ticket field is created  by an app, `creator_app_name` is the name of the app and `creator_user_id` is `-1`. If the ticket field  is not created by an app, then `creator_app_name` is null
+  --creator: oneof<nothing, bool> # If true, displays the `creator_user_id` and `creator_app_name` properties. If the ticket field is created  by an app, `creator_app_name` is the name of the app and `creator_user_id` is `-1`. If the ticket field  is not created by an app, then `creator_app_name` is null
 ]: nothing -> record<ticket_field: record<active: bool, agent_can_edit: bool, agent_description: string, collapsed_for_agents: bool, created_at: string, creator_app_name: string, creator_user_id: int, custom_field_options: list<record>, custom_statuses: list<record>, description: string, editable_in_portal: bool, id: int, position: int, raw_description: string, raw_title: string, raw_title_in_portal: string, regexp_for_validation: string, relationship_filter: record, relationship_target_type: string, removable: bool, required: bool, required_in_portal: bool, sub_type_id: int, system_field_options: list<record>, tag: string, title: string, title_in_portal: string, type: string, updated_at: string, url: string, visible_in_portal: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -9662,7 +9661,7 @@ export def "ticket-fields UpdateTicketField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --creator: string@bool-completer # If true, displays the `creator_user_id` and `creator_app_name` properties. If the ticket field is created  by an app, `creator_app_name` is the name of the app and `creator_user_id` is `-1`. If the ticket field  is not created by an app, then `creator_app_name` is null
+  --creator: oneof<nothing, bool> # If true, displays the `creator_user_id` and `creator_app_name` properties. If the ticket field is created  by an app, `creator_app_name` is the name of the app and `creator_user_id` is `-1`. If the ticket field  is not created by an app, then `creator_app_name` is null
 ]: nothing -> record<ticket_field: record<active: bool, agent_can_edit: bool, agent_description: string, collapsed_for_agents: bool, created_at: string, creator_app_name: string, creator_user_id: int, custom_field_options: list<record>, custom_statuses: list<record>, description: string, editable_in_portal: bool, id: int, position: int, raw_description: string, raw_title: string, raw_title_in_portal: string, regexp_for_validation: string, relationship_filter: record, relationship_target_type: string, removable: bool, required: bool, required_in_portal: bool, sub_type_id: int, system_field_options: list<record>, tag: string, title: string, title_in_portal: string, type: string, updated_at: string, url: string, visible_in_portal: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -9686,7 +9685,7 @@ export def "ticket-fields DeleteTicketField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --creator: string@bool-completer # If true, displays the `creator_user_id` and `creator_app_name` properties. If the ticket field is created  by an app, `creator_app_name` is the name of the app and `creator_user_id` is `-1`. If the ticket field  is not created by an app, then `creator_app_name` is null
+  --creator: oneof<nothing, bool> # If true, displays the `creator_user_id` and `creator_app_name` properties. If the ticket field is created  by an app, `creator_app_name` is the name of the app and `creator_user_id` is `-1`. If the ticket field  is not created by an app, then `creator_app_name` is null
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -9843,8 +9842,8 @@ export def "ticket-fields-show-many ShowManyTicketFields" [
   --allow-errors(-e) # Return full response without error handling
   --ids: string # Comma-separated list of ticket field IDs to retrieve. Up to 100 values accepted.  Either `ids` or `keys` can be used, but not both.  (e.g. 123,456,789)
   --keys: string # Comma-separated list of ticket field keys to retrieve. Up to 100 values accepted.  Use field keys like 'priority', 'status', 'subject' instead of numeric IDs.  Either `ids` or `keys` can be used, but not both.  (e.g. priority,status,subject)
-  --creator: string@bool-completer # If true, includes creator information in the response.
-  --exclude-sub-selection-options: string@bool-completer # If true, excludes sub-selection options from dropdown fields in the response.
+  --creator: oneof<nothing, bool> # If true, includes creator information in the response.
+  --exclude-sub-selection-options: oneof<nothing, bool> # If true, excludes sub-selection options from dropdown fields in the response.
 ]: nothing -> record<count: int, next_page: string, previous_page: string, ticket_fields: table<active: bool, agent_can_edit: bool, agent_description: string, collapsed_for_agents: bool, created_at: string, creator_app_name: string, creator_user_id: int, custom_field_options: list, custom_statuses: list, description: string, editable_in_portal: bool, id: int, position: int, raw_description: string, raw_title: string, raw_title_in_portal: string, regexp_for_validation: string, relationship_filter: record, relationship_target_type: string, removable: bool, required: bool, required_in_portal: bool, sub_type_id: int, system_field_options: list, tag: string, title: string, title_in_portal: string, type: string, updated_at: string, url: string, visible_in_portal: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -9914,16 +9913,16 @@ export def "ticket-forms ListTicketForms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # true returns active ticket forms; false returns inactive ticket forms. If not present, returns both
-  --end-user-visible: string@bool-completer # true returns ticket forms where `end_user_visible`; false returns ticket forms that are not end-user visible. If not present, returns both
-  --fallback-to-default: string@bool-completer # true returns the default ticket form when the criteria defined by the parameters results in a set without active and end-user visible ticket forms
+  --active: oneof<nothing, bool> # true returns active ticket forms; false returns inactive ticket forms. If not present, returns both
+  --end-user-visible: oneof<nothing, bool> # true returns ticket forms where `end_user_visible`; false returns ticket forms that are not end-user visible. If not present, returns both
+  --fallback-to-default: oneof<nothing, bool> # true returns the default ticket form when the criteria defined by the parameters results in a set without active and end-user visible ticket forms
   --form-type: string@form-type-completer # Filter ticket forms by type. Use 'standard' for regular ticket forms, 'service_catalog' for service catalog forms, or 'all' to return all form types (e.g. standard)
-  --associated-to-brand: string@bool-completer # true returns the ticket forms of the brand specified by the url's subdomain
+  --associated-to-brand: oneof<nothing, bool> # true returns the ticket forms of the brand specified by the url's subdomain
   --page: string # Pagination parameter. Supports both traditional offset and cursor-based pagination:  - Traditional: `?page=2` (integer page number) - Cursor: `?page[size]=50&page[after]=cursor` (deepObject with size, after, before)  These are mutually exclusive - use one format or the other, not both.
   --per-page: int # Number of records to return per page.  Note: Default and maximum values vary by endpoint. Check endpoint-specific documentation for limits.  (e.g. 50)
   --qp-sort: string # Field to sort results by. Prefix with `-` for descending order.  When used with cursor pagination, this determines the cursor ordering.  Example: `?sort=name` or `?sort=-created_at`  (e.g. name)
-  --include-boundary-indicators: string@bool-completer # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
-  --include-item-cursors: string@bool-completer # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-boundary-indicators: oneof<nothing, bool> # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-item-cursors: oneof<nothing, bool> # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
   --locale: string # Locale to use for the ticket form names. If not specified, the default locale is used.
 ]: nothing -> record<ticket_forms: table<active: bool, agent_conditions: list, created_at: string, default: bool, deleted_at: string, display_name: string, end_user_conditions: list, end_user_visible: bool, id: int, in_all_brands: bool, name: string, position: int, raw_display_name: string, raw_name: string, restricted_brand_ids: list, ticket_field_ids: list, updated_at: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -10231,12 +10230,12 @@ export def "ticket-forms-show-many ShowManyTicketForms" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ids: string # IDs of the ticket forms to be shown (e.g. 1,2,3)
-  --include-boundary-indicators: string@bool-completer # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
-  --include-item-cursors: string@bool-completer # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
-  --active: string@bool-completer # true returns active ticket forms; false returns inactive ticket forms. If not present, returns both
-  --end-user-visible: string@bool-completer # true returns ticket forms where `end_user_visible`; false returns ticket forms that are not end-user visible. If not present, returns both
-  --fallback-to-default: string@bool-completer # true returns the default ticket form when the criteria defined by the parameters results in a set without active and end-user visible ticket forms
-  --associated-to-brand: string@bool-completer # true returns the ticket forms of the brand specified by the url's subdomain
+  --include-boundary-indicators: oneof<nothing, bool> # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-item-cursors: oneof<nothing, bool> # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --active: oneof<nothing, bool> # true returns active ticket forms; false returns inactive ticket forms. If not present, returns both
+  --end-user-visible: oneof<nothing, bool> # true returns ticket forms where `end_user_visible`; false returns ticket forms that are not end-user visible. If not present, returns both
+  --fallback-to-default: oneof<nothing, bool> # true returns the default ticket form when the criteria defined by the parameters results in a set without active and end-user visible ticket forms
+  --associated-to-brand: oneof<nothing, bool> # true returns the ticket forms of the brand specified by the url's subdomain
 ]: nothing -> record<ticket_forms: table<active: bool, agent_conditions: list, created_at: string, default: bool, deleted_at: string, display_name: string, end_user_conditions: list, end_user_visible: bool, id: int, in_all_brands: bool, name: string, position: int, raw_display_name: string, raw_name: string, restricted_brand_ids: list, ticket_field_ids: list, updated_at: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -10367,8 +10366,8 @@ export def "tickets ShowTicket" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --include: string # Sideloads to include in the response. Accepts a comma-separated list of values. See [Sideloading](/api-reference/ticketing/tickets/tickets/#sideloading).  (e.g. users,groups,organizations)
-  --reduced-payload-size: string@bool-completer # When true, returns a reduced ticket payload (omits null custom fields).
-  --remove-duplicate-fields: string@bool-completer # When true, removes duplicate custom field entries from the response.
+  --reduced-payload-size: oneof<nothing, bool> # When true, returns a reduced ticket payload (omits null custom fields).
+  --remove-duplicate-fields: oneof<nothing, bool> # When true, removes duplicate custom field entries from the response.
 ]: nothing -> record<ticket: record<additional_collaborators: list<record>, allow_attachments: bool, allow_channelback: bool, assignee_email: string, assignee_id: int, attribute_value_ids: list<int>, brand_id: int, collaborator_ids: list<int>, collaborators: list<record>, comment: record<add_short_url: bool, attachments: list, audit_id: int, author_id: int, body: string, channel_back: string, channel_source_id: string, created_at: string, html_body: string, id: int, metadata: record, plain_body: string, public: bool, translate_to: string, type: string, uploads: list, via: record>, created_at: string, custom_fields: list<record>, custom_status_id: int, description: string, due_at: string, email_cc_ids: list<int>, email_ccs: list<record>, encoded_id: string, external_id: string, fields: list<record>, follower_ids: list<int>, followers: list<record>, followup_ids: list<int>, forum_topic_id: int, from_messaging_channel: bool, generated_timestamp: int, group_id: int, has_incidents: bool, id: int, is_public: bool, macro_id: int, macro_ids: list<int>, metadata: record, organization_id: int, origin_zrn: string, priority: string, problem_id: int, raw_subject: string, recipient: string, requester: any, requester_id: int, safe_update: bool, satisfaction_probability: float, satisfaction_rating: record, sharing_agreement_ids: list<int>, sharing_agreements: any, status: string, subject: string, submitter_id: int, support_type: string, suspended_ticket_id: int, suspension_type_id: int, system_metadata: record<client: string, ip_address: string>, tags: any, tde_workspace: record<previous_workspace: record, type: string, workspace: record>, ticket_form_id: int, tpe_voice_comment: record<agent_id: int, answering_machine_detection_status: string, app_id: int, app_name: string, author_id: int, call_connected_at: string, call_disposition: string, call_ended_at: string, call_id: int, call_recording_consent: string, call_recording_consent_action: string, call_recording_consent_keypress: string, call_started_at: string, call_type: string, callback_number: string, callback_requested_at: string, completion_status: string, connection_attempts: int, consultation_time: int, direction: string, disconnection_reason: string, dnis: string, duration: int, end_user_id: int, end_user_location: string, exceeded_queue_time: bool, extension: string, external_id: string, from_line: string, from_line_nickname: string, hold_time: int, intent: string, ivr_destination_group_name: string, ivr_time_spent: int, language: string, line_type: string, longest_hold_time: int, number_of_holds: int, outside_business_hours: bool, overflowed_to: string, phone_name: string, public: bool, quality_score: int, queue_name: string, queue_time: int, recorded: bool, recording_time: int, recording_type: string, recording_url: string, sentiment_agent: string, sentiment_call: string, sentiment_customer: string, sentiment_trend: string, short_summary: string, summary: string, talk_time: int, time_to_answer: int, title: string, to_line: string, to_line_nickname: string, transcript: string, via_id: int, video_recording_url: string, voicemail: bool, voicemail_requested_at: string, wait_time: int>, type: string, updated_at: string, updated_stamp: string, url: string, via: record<channel: any, source: record>, via_followup_source_id: int, via_id: int, voice_comment: record<answered_by_id: int, call_duration: int, from: string, location: string, recording_url: string, to: string, transcription_text: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -10445,8 +10444,8 @@ export def "tickets-audits ListAuditsForTicket" [
   --page: string # Pagination parameter. Supports both traditional offset and cursor-based pagination:  - Traditional: `?page=2` (integer page number) - Cursor: `?page[size]=50&page[after]=cursor` (deepObject with size, after, before)  These are mutually exclusive - use one format or the other, not both.
   --qp-sort: string # Field to sort results by. Prefix with `-` for descending order.  When used with cursor pagination, this determines the cursor ordering.  Example: `?sort=name` or `?sort=-created_at`  (e.g. name)
   --include: string # A comma-separated list of sideloads to include in the response.
-  --include-boundary-indicators: string@bool-completer # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
-  --include-item-cursors: string@bool-completer # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-boundary-indicators: oneof<nothing, bool> # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-item-cursors: oneof<nothing, bool> # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
   --filter-events: list # Filter audit events by type. Use the format `filter_events[]=Type1&filter_events[]=Type2`.
   --sort-order: string@sort-order-completer # Sort order. Defaults to "asc"
 ]: nothing -> record<audits: table<author_id: int, created_at: string, events: list, id: int, metadata: record, ticket_id: int, via: record>, count: int, next_page: string, previous_page: string> {
@@ -10562,7 +10561,7 @@ export def "tickets-comments ListTicketComments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-inline-images: string@bool-completer # Default is false. When true, inline images are also listed as attachments in the response
+  --include-inline-images: oneof<nothing, bool> # Default is false. When true, inline images are also listed as attachments in the response
   --include: string # Accepts "users". Use this parameter to list email CCs by side-loading users. Example: `?include=users`. **Note**: If the comment source is email, a deleted user will be represented as the CCd email address. If the comment source is anything else, a deleted user will be represented as the user name.
   --per-page: int # Number of records to return per page.  Note: Default and maximum values vary by endpoint. Check endpoint-specific documentation for limits.  (e.g. 50)
   --sort-order: string@sort-order-completer # Sort order. Defaults to "asc"
@@ -10774,7 +10773,7 @@ export def "tickets-macros-apply ShowTicketAfterChanges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --normalize-comment: string@bool-completer # If true, normalizes the newline formatting of the macro's comment to more closely match the formatting produced by the ticket comment editor
+  --normalize-comment: oneof<nothing, bool> # If true, normalizes the newline formatting of the macro's comment to more closely match the formatting produced by the ticket comment editor
 ]: nothing -> record<result: record<ticket: record<assignee_id: int, comment: record, fields: record, group_id: int, id: int, url: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -10822,9 +10821,9 @@ export def "tickets-merge MergeTicketsIntoTargetTicket" [
   --allow-errors(-e) # Return full response without error handling
   ids: list # Ids of tickets to merge into the target ticket
   --source-comment: string # Private comment to add to the source ticket
-  --source-comment-is-public: string@bool-completer # Whether comment in source tickets are public or private
+  --source-comment-is-public: oneof<nothing, bool> # Whether comment in source tickets are public or private
   --target-comment: string # Private comment to add to the target ticket
-  --target-comment-is-public: string@bool-completer # Whether comment in target ticket is public or private
+  --target-comment-is-public: oneof<nothing, bool> # Whether comment in target ticket is public or private
 ]: any -> record<job_status: record<id: string, job_type: string, message: string, progress: int, results: any, status: string, total: int, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -11416,7 +11415,7 @@ export def "triggers ListTriggers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Filter by active triggers if true or inactive triggers if false (e.g. true)
+  --active: oneof<nothing, bool> # Filter by active triggers if true or inactive triggers if false (e.g. true)
   --qp-sort: string # Cursor-based pagination only. Possible values are "alphabetical", "created_at", "updated_at", or "position". (e.g. position)
   --sort-by: string # Offset pagination only. Possible values are "alphabetical", "created_at", "updated_at", "usage_1h", "usage_24h", or "usage_7d". Defaults to "position" (e.g. position)
   --sort-order: string # One of "asc" or "desc". Defaults to "asc" for alphabetical and position sort, "desc" for all others (e.g. desc)
@@ -11681,7 +11680,7 @@ export def "triggers-search SearchTriggers" [
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string # Query string used to find all triggers with matching title (e.g. important_trigger)
   --filter: string # JSON-encoded trigger attribute filters for the search. See [Filter](#filter).  Example: `{"json":{"description":"Close a ticket"}}`  (e.g. {"json":{"description":"Close a ticket"}})
-  --active: string@bool-completer # Filter by active triggers if true or inactive triggers if false (e.g. true)
+  --active: oneof<nothing, bool> # Filter by active triggers if true or inactive triggers if false (e.g. true)
   --qp-sort: string # Cursor-based pagination only. Possible values are "alphabetical", "created_at", "updated_at", or "position". (e.g. position)
   --sort-by: string # Offset pagination only. Possible values are "alphabetical", "created_at", "updated_at", "usage_1h", "usage_24h", or "usage_7d". Defaults to "position" (e.g. position)
   --sort-order: string # One of "asc" or "desc". Defaults to "asc" for alphabetical and position sort, "desc" for all others (e.g. desc)
@@ -11780,7 +11779,7 @@ export def "user-fields ListUserFields" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --page: record # Cursor-based pagination parameters (JSON:API style).  Supports nested parameters: - `page[size]` - Number of records per page (default varies by endpoint, typically 100) - `page[after]` - Cursor token to fetch records after this position - `page[before]` - Cursor token to fetch records before this position  Example: `?page[size]=50&page[after]=eyJvIjoiaWQiLCJ2IjoiYVFFPSJ9`
-  --resolve-dc: string@bool-completer # If true, resolves dynamic content placeholders.
+  --resolve-dc: oneof<nothing, bool> # If true, resolves dynamic content placeholders.
 ]: nothing -> record<count: int, next_page: string, previous_page: string, user_fields: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -12032,8 +12031,8 @@ export def "users ListUsers" [
   --page: string # Pagination parameter. Supports both traditional offset and cursor-based pagination:  - Traditional: `?page=2` (integer page number) - Cursor: `?page[size]=50&page[after]=cursor` (deepObject with size, after, before)  These are mutually exclusive - use one format or the other, not both.
   --per-page: int # Number of records to return per page.  Note: Default and maximum values vary by endpoint. Check endpoint-specific documentation for limits.  (e.g. 50)
   --qp-sort: string # Field to sort results by. Prefix with `-` for descending order.  When used with cursor pagination, this determines the cursor ordering.  Example: `?sort=name` or `?sort=-created_at`  (e.g. name)
-  --include-boundary-indicators: string@bool-completer # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
-  --include-item-cursors: string@bool-completer # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-boundary-indicators: oneof<nothing, bool> # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-item-cursors: oneof<nothing, bool> # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
   --brand-id: int # When brand separation is enabled, scopes the listing to users belonging to the specified brand. Only applicable when the account has brand separation enabled.  (format: int64, e.g. 123)
 ]: nothing -> record<users: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -12367,8 +12366,8 @@ export def "users-groups ListUserGroups" [
   --page: string # Pagination parameter. Supports both traditional offset and cursor-based pagination:  - Traditional: `?page=2` (integer page number) - Cursor: `?page[size]=50&page[after]=cursor` (deepObject with size, after, before)  These are mutually exclusive - use one format or the other, not both.
   --per-page: int # Number of records to return per page.  Note: Default and maximum values vary by endpoint. Check endpoint-specific documentation for limits.  (e.g. 50)
   --qp-sort: string # Field to sort results by. Prefix with `-` for descending order.  When used with cursor pagination, this determines the cursor ordering.  Example: `?sort=name` or `?sort=-created_at`  (e.g. name)
-  --include-boundary-indicators: string@bool-completer # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
-  --include-item-cursors: string@bool-completer # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-boundary-indicators: oneof<nothing, bool> # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-item-cursors: oneof<nothing, bool> # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
 ]: nothing -> record<groups: table<created_at: string, default: bool, deleted: bool, description: string, id: int, is_public: bool, name: string, updated_at: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -12417,8 +12416,8 @@ export def "users-identities ListUserIdentities" [
   --type: list # Filters results by one or more identity types using the format `?type[]={type}&type[]={type}`
   --page: record # Cursor-based pagination parameters (JSON:API style).  Supports nested parameters: - `page[size]` - Number of records per page (default varies by endpoint, typically 100) - `page[after]` - Cursor token to fetch records after this position - `page[before]` - Cursor token to fetch records before this position  Example: `?page[size]=50&page[after]=eyJvIjoiaWQiLCJ2IjoiYVFFPSJ9`
   --qp-sort: string # Field to sort results by. Prefix with `-` for descending order.  When used with cursor pagination, this determines the cursor ordering.  Example: `?sort=name` or `?sort=-created_at`  (e.g. name)
-  --include-boundary-indicators: string@bool-completer # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
-  --include-item-cursors: string@bool-completer # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-boundary-indicators: oneof<nothing, bool> # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-item-cursors: oneof<nothing, bool> # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
 ]: nothing -> record<identities: table<brand_id: int, created_at: string, deliverable_state: string, id: int, primary: bool, type: string, undeliverable_count: int, updated_at: string, url: string, user_id: int, value: string, verification_method: string, verified: bool, verified_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -12772,8 +12771,8 @@ export def "users-organizations ListUserOrganizations" [
   --page: string # Pagination parameter. Supports both traditional offset and cursor-based pagination:  - Traditional: `?page=2` (integer page number) - Cursor: `?page[size]=50&page[after]=cursor` (deepObject with size, after, before)  These are mutually exclusive - use one format or the other, not both.
   --per-page: int # Number of records to return per page.  Note: Default and maximum values vary by endpoint. Check endpoint-specific documentation for limits.  (e.g. 50)
   --qp-sort: string # Field to sort results by. Prefix with `-` for descending order.  When used with cursor pagination, this determines the cursor ordering.  Example: `?sort=name` or `?sort=-created_at`  (e.g. name)
-  --include-boundary-indicators: string@bool-completer # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
-  --include-item-cursors: string@bool-completer # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-boundary-indicators: oneof<nothing, bool> # When true, includes `has_more` indicator in the cursor pagination response meta.  Only valid with cursor pagination (page[size], page[after], page[before]).
+  --include-item-cursors: oneof<nothing, bool> # When true, includes cursor values for each item in the cursor pagination response.  Only valid with cursor pagination (page[size], page[after], page[before]).
 ]: nothing -> record<count: int, next_page: string, organizations: table<created_at: string, details: string, domain_names: list, external_id: string, group_id: int, id: int, name: string, notes: string, organization_fields: record, shared_comments: bool, shared_tickets: bool, tags: list, updated_at: string, url: string>, previous_page: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -13274,7 +13273,7 @@ export def "users-tickets-followed ListUserFollowedTickets" [
   --sort-order: string@sort-order-completer # Sort order. Defaults to "asc"
   --page: string # Pagination parameter. Supports both traditional offset and cursor-based pagination:  - Traditional: `?page=2` (integer page number) - Cursor: `?page[size]=50&page[after]=cursor` (deepObject with size, after, before)  These are mutually exclusive - use one format or the other, not both.
   --per-page: int # Number of records to return per page.  Note: Default and maximum values vary by endpoint. Check endpoint-specific documentation for limits.  (e.g. 50)
-  --exclude-archived: string@bool-completer # If true, excludes archived tickets from the results.
+  --exclude-archived: oneof<nothing, bool> # If true, excludes archived tickets from the results.
 ]: nothing -> record<tickets: table<additional_collaborators: list, allow_attachments: bool, allow_channelback: bool, assignee_email: string, assignee_id: int, attribute_value_ids: list, brand_id: int, collaborator_ids: list, collaborators: list, comment: record, created_at: string, custom_fields: list, custom_status_id: int, description: string, due_at: string, email_cc_ids: list, email_ccs: list, encoded_id: string, external_id: string, fields: list, follower_ids: list, followers: list, followup_ids: list, forum_topic_id: int, from_messaging_channel: bool, generated_timestamp: int, group_id: int, has_incidents: bool, id: int, is_public: bool, macro_id: int, macro_ids: list, metadata: record, organization_id: int, origin_zrn: string, priority: string, problem_id: int, raw_subject: string, recipient: string, requester: any, requester_id: int, safe_update: bool, satisfaction_probability: float, satisfaction_rating: record, sharing_agreement_ids: list, sharing_agreements: any, status: string, subject: string, submitter_id: int, support_type: string, suspended_ticket_id: int, suspension_type_id: int, system_metadata: record, tags: any, tde_workspace: record, ticket_form_id: int, tpe_voice_comment: record, type: string, updated_at: string, updated_stamp: string, url: string, via: record, via_followup_source_id: int, via_id: int, voice_comment: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -13303,8 +13302,8 @@ export def "users-tickets-requested ListUserRequestedTickets" [
   --page: string # Pagination parameter. Supports both traditional offset and cursor-based pagination:  - Traditional: `?page=2` (integer page number) - Cursor: `?page[size]=50&page[after]=cursor` (deepObject with size, after, before)  These are mutually exclusive - use one format or the other, not both.
   --per-page: int # Number of records to return per page.  Note: Default and maximum values vary by endpoint. Check endpoint-specific documentation for limits.  (e.g. 50)
   --include: string # Sideloads to include in the response. Accepts a comma-separated list of values. See [Sideloading](/api-reference/ticketing/tickets/tickets/#sideloading).  (e.g. users,groups,organizations)
-  --exclude-archived: string@bool-completer # If true, excludes archived tickets from the results.
-  --exclude-count: string@bool-completer # If true, excludes the total count from the results.
+  --exclude-archived: oneof<nothing, bool> # If true, excludes archived tickets from the results.
+  --exclude-count: oneof<nothing, bool> # If true, excludes the total count from the results.
 ]: nothing -> record<tickets: table<additional_collaborators: list, allow_attachments: bool, allow_channelback: bool, assignee_email: string, assignee_id: int, attribute_value_ids: list, brand_id: int, collaborator_ids: list, collaborators: list, comment: record, created_at: string, custom_fields: list, custom_status_id: int, description: string, due_at: string, email_cc_ids: list, email_ccs: list, encoded_id: string, external_id: string, fields: list, follower_ids: list, followers: list, followup_ids: list, forum_topic_id: int, from_messaging_channel: bool, generated_timestamp: int, group_id: int, has_incidents: bool, id: int, is_public: bool, macro_id: int, macro_ids: list, metadata: record, organization_id: int, origin_zrn: string, priority: string, problem_id: int, raw_subject: string, recipient: string, requester: any, requester_id: int, safe_update: bool, satisfaction_probability: float, satisfaction_rating: record, sharing_agreement_ids: list, sharing_agreements: any, status: string, subject: string, submitter_id: int, support_type: string, suspended_ticket_id: int, suspension_type_id: int, system_metadata: record, tags: any, tde_workspace: record, ticket_form_id: int, tpe_voice_comment: record, type: string, updated_at: string, updated_stamp: string, url: string, via: record, via_followup_source_id: int, via_id: int, voice_comment: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -13748,7 +13747,7 @@ export def "users-show-many ShowManyUsers" [
   --allow-errors(-e) # Return full response without error handling
   --ids: string # Accepts a comma-separated list of up to 100 user ids.  (e.g. 1,2)
   --external-ids: string # Accepts a comma-separated list of up to 100 external ids.  (e.g. abc,def)
-  --include-deleted: string@bool-completer # If true, returns inactive or deleted users.
+  --include-deleted: oneof<nothing, bool> # If true, returns inactive or deleted users.
   --brand-id: int # When brand separation is enabled and `external_ids` is provided, scopes the lookup to users belonging to the specified brand. Only applicable when the account has brand separation enabled.  (format: int64, e.g. 123)
   --include: string # Sideloads to include in the response. Accepts a comma-separated list of values. See [Sideloading](/api-reference/ticketing/users/users/#sideloading).  (e.g. roles,organizations)
 ]: nothing -> record<users: list<any>> {
@@ -13805,7 +13804,7 @@ export def "views ListViews" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --access: string # Only views with given access. May be "personal", "shared", or "account"
-  --active: string@bool-completer # Only active views if true, inactive views if false
+  --active: oneof<nothing, bool> # Only active views if true, inactive views if false
   --group-id: int # Only views belonging to given group (format: int64)
   --qp-sort: string # The sort parameter used with cursor pagination. Defaults to "created_at". Prefix with '-' for descending order
   --sort-by: string # The sort_by parameter used with offset pagination. Possible values are "alphabetical", "created_at", or "updated_at". Defaults to "position"
@@ -14205,7 +14204,7 @@ export def "views-search SearchViews" [
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string # Query string used to find all views with matching title (e.g. sales&group_id=25789188)
   --access: string # Filter views by access. May be "personal", "shared", or "account"
-  --active: string@bool-completer # Filter by active views if true or inactive views if false
+  --active: oneof<nothing, bool> # Filter by active views if true or inactive views if false
   --group-id: int # Filter views by group (format: int64)
   --sort-by: string # Possible values are "alphabetical", "created_at", "updated_at", and "position". If unspecified, the views are sorted by relevance
   --sort-order: string # One of "asc" or "desc". Defaults to "asc" for alphabetical and position sort, "desc" for all others
@@ -14233,7 +14232,7 @@ export def "views-show-many ListViewsById" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ids: string # List of view's ids separated by commas. (e.g. 1,2,3)
-  --active: string@bool-completer # Only active views if true, inactive views if false
+  --active: oneof<nothing, bool> # Only active views if true, inactive views if false
 ]: nothing -> record<count: int, next_page: string, previous_page: string, views: table<active: bool, conditions: record, created_at: string, default: bool, description: string, execution: record, id: int, position: int, restriction: record, title: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://iotsitewise.us-east-1.amazonaws.com" "http://iotsitewise.us-east-2.amazonaws.com" "http://iotsitewise.us-west-1.amazonaws.com" "http://iotsitewise.us-west-2.amazonaws.com" "http://iotsitewise.us-gov-west-1.amazonaws.com" "http://iotsitewise.us-gov-east-1.amazonaws.com" "http://iotsitewise.ca-central-1.amazonaws.com" "http://iotsitewise.eu-north-1.amazonaws.com" "http://iotsitewise.eu-west-1.amazonaws.com" "http://iotsitewise.eu-west-2.amazonaws.com" "http://iotsitewise.eu-west-3.amazonaws.com" "http://iotsitewise.eu-central-1.amazonaws.com" "http://iotsitewise.eu-south-1.amazonaws.com" "http://iotsitewise.af-south-1.amazonaws.com" "http://iotsitewise.ap-northeast-1.amazonaws.com" "http://iotsitewise.ap-northeast-2.amazonaws.com" "http://iotsitewise.ap-northeast-3.amazonaws.com" "http://iotsitewise.ap-southeast-1.amazonaws.com" "http://iotsitewise.ap-southeast-2.amazonaws.com" "http://iotsitewise.ap-east-1.amazonaws.com" "http://iotsitewise.ap-south-1.amazonaws.com" "http://iotsitewise.sa-east-1.amazonaws.com" "http://iotsitewise.me-south-1.amazonaws.com" "https://iotsitewise.us-east-1.amazonaws.com" "https://iotsitewise.us-east-2.amazonaws.com" "https://iotsitewise.us-west-1.amazonaws.com" "https://iotsitewise.us-west-2.amazonaws.com" "https://iotsitewise.us-gov-west-1.amazonaws.com" "https://iotsitewise.us-gov-east-1.amazonaws.com" "https://iotsitewise.ca-central-1.amazonaws.com" "https://iotsitewise.eu-north-1.amazonaws.com" "https://iotsitewise.eu-west-1.amazonaws.com" "https://iotsitewise.eu-west-2.amazonaws.com" "https://iotsitewise.eu-west-3.amazonaws.com" "https://iotsitewise.eu-central-1.amazonaws.com" "https://iotsitewise.eu-south-1.amazonaws.com" "https://iotsitewise.af-south-1.amazonaws.com" "https://iotsitewise.ap-northeast-1.amazonaws.com" "https://iotsitewise.ap-northeast-2.amazonaws.com" "https://iotsitewise.ap-northeast-3.amazonaws.com" "https://iotsitewise.ap-southeast-1.amazonaws.com" "https://iotsitewise.ap-southeast-2.amazonaws.com" "https://iotsitewise.ap-east-1.amazonaws.com" "https://iotsitewise.ap-south-1.amazonaws.com" "https://iotsitewise.sa-east-1.amazonaws.com" "https://iotsitewise.me-south-1.amazonaws.com" "http://iotsitewise.cn-north-1.amazonaws.com.cn" "http://iotsitewise.cn-northwest-1.amazonaws.com.cn" "https://iotsitewise.cn-north-1.amazonaws.com.cn" "https://iotsitewise.cn-northwest-1.amazonaws.com.cn"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -1083,7 +1082,7 @@ export def "assets DescribeAsset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --excludeProperties: string@bool-completer #  Whether or not to exclude asset properties from the response. 
+  --excludeProperties: oneof<nothing, bool> #  Whether or not to exclude asset properties from the response. 
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -1186,7 +1185,7 @@ export def "asset-models DescribeAssetModel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --excludeProperties: string@bool-completer #  Whether or not to exclude asset model properties from the response. 
+  --excludeProperties: oneof<nothing, bool> #  Whether or not to exclude asset model properties from the response. 
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string

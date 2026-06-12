@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://vtex.local" "https://{accountName}.{environment}.com.br"] }
 def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 
@@ -1414,7 +1413,7 @@ export def "logistics-pvt-shipping-policies post" [
   cubicWeightSettings: record # Measure that accounts package's volume, and not only weight. (e.g. {minimunAcceptableVolumetricWeight: 5, volumetricFactor: 3}) — shape: {minimunAcceptableVolumetricWeight: float, volumetricFactor: float}
   deliveryScheduleSettings: record # Settings for the Scheduled Delivery feature. (e.g. {dayOfWeekForDelivery: [{dayOfWeek: 2, deliveryRanges: [{endTime: 12:00:00, listPrice: 5, startTime: 08:00:00}, {endTime: 18:00:00, listPrice: 10, startTime: 12:01:00}]}], maxRangeDelivery: 5, useDeliverySchedule: true}) — shape: {dayOfWeekForDelivery: list, maxRangeDelivery: float, useDeliverySchedule: bool}
   id: string # ID of the shipping policy. (e.g. 123)
-  --isActive: string@bool-completer # Indicates whether shipping policy is active or not. (e.g. false)
+  --isActive: oneof<nothing, bool> # Indicates whether shipping policy is active or not. (e.g. false)
   maxDimension: record # Object containing attributes of maximum dimension permitted by the shipping policy (carrier). (e.g. {largestMeasure: 15, maxMeasureSum: 25}) — shape: {largestMeasure: float, maxMeasureSum: float}
   maximumValueAceptable: float # Maximum value accepted by the carrier, to realize the shipping. (e.g. 0)
   minimumValueAceptable: float # Minimum value accepted by the carrier, to realize the shipping. (e.g. 0)
@@ -1504,9 +1503,9 @@ export def "logistics-pvt-shipping-policies put" [
   --allow-errors(-e) # Return full response without error handling
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --Content-Type: string # Type of the content being sent
-  --deliveryOnWeekends: string@bool-completer # If the shipping policy (carrier) delivers on weekends (e.g. false)
+  --deliveryOnWeekends: oneof<nothing, bool> # If the shipping policy (carrier) delivers on weekends (e.g. false)
   --deliveryScheduleSettings: record # Settings for the Scheduled Delivery feature. — shape: {dayOfWeekForDelivery: list, maxRangeDelivery: float, useDeliverySchedule: bool}
-  --isActive: string@bool-completer # If the shipping policy is active or not. (e.g. true)
+  --isActive: oneof<nothing, bool> # If the shipping policy is active or not. (e.g. true)
   maxDimension: record # Object containing attributes of maximum dimension permitted by the shipping policy (carrier). (e.g. {largestMeasure: 10, maxMeasureSum: 30}) — shape: {largestMeasure: float, maxMeasureSum: float}
   name: string # Name of the shipping policy (e.g. Correios PAC)
   shippingMethod: string # Type of shipping available for this shipping policy (carrier). Options shown on freight simulation. (e.g. Normal)

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://proxy.twilio.com"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -369,7 +368,7 @@ export def "services-phone-numbers CreatePhoneNumber" [
   --allow-errors(-e) # Return full response without error handling
   --Sid: string # The SID of a Twilio [IncomingPhoneNumber](https://www.twilio.com/docs/phone-numbers/api/incomingphonenumber-resource) resource that represents the Twilio Number you would like to assign to your Proxy Service.
   --PhoneNumber: string # The phone number in [E.164](https://www.twilio.com/docs/glossary/what-e164) format.  E.164 phone numbers consist of a + followed by the country code and subscriber number without punctuation characters. For example, +14155551234. (format: phone-number)
-  --IsReserved: string@bool-completer # Whether the new phone number should be reserved and not be assigned to a participant using proxy pool logic. See [Reserved Phone Numbers](https://www.twilio.com/docs/proxy/reserved-phone-numbers) for more information.
+  --IsReserved: oneof<nothing, bool> # Whether the new phone number should be reserved and not be assigned to a participant using proxy pool logic. See [Reserved Phone Numbers](https://www.twilio.com/docs/proxy/reserved-phone-numbers) for more information.
 ]: any -> record<sid: string, account_sid: string, service_sid: string, date_created: string, date_updated: string, phone_number: string, friendly_name: string, iso_country: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, url: string, is_reserved: bool, in_use: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -468,7 +467,7 @@ export def "services-phone-numbers UpdatePhoneNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --IsReserved: string@bool-completer # Whether the phone number should be reserved and not be assigned to a participant using proxy pool logic. See [Reserved Phone Numbers](https://www.twilio.com/docs/proxy/reserved-phone-numbers) for more information.
+  --IsReserved: oneof<nothing, bool> # Whether the phone number should be reserved and not be assigned to a participant using proxy pool logic. See [Reserved Phone Numbers](https://www.twilio.com/docs/proxy/reserved-phone-numbers) for more information.
 ]: any -> record<sid: string, account_sid: string, service_sid: string, date_created: string, date_updated: string, phone_number: string, friendly_name: string, iso_country: string, capabilities: record<fax: bool, mms: bool, sms: bool, voice: bool>, url: string, is_reserved: bool, in_use: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))

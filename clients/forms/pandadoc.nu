@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.pandadoc.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -160,7 +159,7 @@ export def "public-documents listDocuments" [
   --order-by: string@order-by-completer # Defines the sorting of the result. Use `date_created` for ASC and `-date_created` for DESC sorting. (default: date_status_changed)
   --created-from: string # Limits results to the documents with the `date_created` greater than or equal to this value. (format: datetime, e.g. 2024-10-27T15:22:23.132757Z)
   --created-to: string # Limits results to the documents with the `date_created` less than this value. (format: datetime, e.g. 2024-10-27T15:22:23.132757Z)
-  --deleted: string@bool-completer # Returns only the deleted documents. (e.g. false)
+  --deleted: oneof<nothing, bool> # Returns only the deleted documents. (e.g. false)
   --id: string # e.g. BhVzRcxH9Z2LgfPPGXFUBa
   --completed-from: string # Limits results to the documents with the `date_completed` greater than or equal to this value. (format: datetime, e.g. 2024-10-27T15:22:23.132757Z)
   --completed-to: string # Limits results to the documents with the `date_completed` less than this value. (format: datetime, e.g. 2024-10-27T15:22:23.132757Z)
@@ -210,7 +209,7 @@ export def "public-documents createDocument" [
   --pricing-tables: list # Information to construct or populate a pricing table can be passed when creating a document. All product information must be passed when creating a new document. Products stored in PandaDoc cannot be used to populate table rows at this time. Keep in mind that this is an array, so multiple table objects can be passed to a document. Make sure that "Automatically add products to this table" is enabled in the PandaDoc template pricing tables you wish to populate via API. — item shape: {name: string, data_merge?: bool, options?: record, sections?: list}
   --tables: list # Information to construct or populate a table can be passed when creating a document. Keep in mind that this is an array, so multiple table objects can be passed to a document. — item shape: {name: string, data: record}
   --texts: list # You can pass a list of rich text values to pre-fill text blocks in a template. This is useful for inserting dynamic content like introductions or terms and conditions. Markdown is supported. — item shape: {name: string, data: string}
-  --detect-title-variables: string@bool-completer # Set this parameter as true if you want to detect title variables in the document. (e.g. true)
+  --detect-title-variables: oneof<nothing, bool> # Set this parameter as true if you want to detect title variables in the document. (e.g. true)
   --content-placeholders: list # You may replace Content Library Item Placeholders with a few content library items each and pre-fill fields/variables values, pricing table items, and assign recipients to roles from there. — item shape: {content_library_items?: list, block_id: string}
   --name: string # Name the document you are creating. (e.g. API Sample Document from PandaDoc Template)
   --folder-uuid: string # ID of the folder where the created document should be stored. (e.g. QMDSzwabfFzTgjW4kUijqQ)
@@ -411,10 +410,10 @@ export def "public-documents-auto-reminders updateDocumentAutoReminderSettings" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Toggles auto-reminders for the document.  If `true`, reminders are scheduled based on the configuration.
+  --enabled: oneof<nothing, bool> # Toggles auto-reminders for the document.  If `true`, reminders are scheduled based on the configuration.
   --delivery-method: string@delivery-method-completer # The method used to deliver reminders (e.g., email, SMS).
   --initial-delay-days: int # Number of days to wait after sending the document before the first reminder is sent.
-  --is-recurring: string@bool-completer # If `true`, reminders will be sent repeatedly at specified intervals after the initial reminder.
+  --is-recurring: oneof<nothing, bool> # If `true`, reminders will be sent repeatedly at specified intervals after the initial reminder.
   --recurrence-frequency-days: int # Number of days between recurring reminders, applicable if `is_recurring` is `true`.
 ]: any -> record<enabled: bool, delivery_method: string, initial_delay_days: int, is_recurring: bool, recurrence_frequency_days: int> {
   let input = $in
@@ -509,7 +508,7 @@ export def "public-documents-status changeDocumentStatus" [
   --allow-errors(-e) # Return full response without error handling
   status: int@status-completer-1 # Number code for the target document status. See notes for the codes corresponding to each status. (e.g. 12)
   --note: string # Provide “private notes” regarding the manual status change. (e.g. A private note)
-  --notify-recipients: string@bool-completer # Send a notification email about the status change to all recipients.
+  --notify-recipients: oneof<nothing, bool> # Send a notification email about the status change to all recipients.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -611,7 +610,7 @@ export def "public-documents-send sendDocument" [
   --allow-errors(-e) # Return full response without error handling
   --message: string # A message that will be sent by email with a link to a document to sign. (e.g. Hello! This document was sent from the PandaDoc API)
   --subject: string # Value that will be used as the email subject. (e.g. Please check this test API document from PandaDoc)
-  --silent: string@bool-completer # If set to `true`, disables email notifications for document recipients and the document sender. Also disables scheduled reminders (manual reminders still possible). Doesn't affect "Approve document" email notification sent to the Approver.
+  --silent: oneof<nothing, bool> # If set to `true`, disables email notifications for document recipients and the document sender. Also disables scheduled reminders (manual reminders still possible). Doesn't affect "Approve document" email notification sent to the Approver.
   --sender: record # You can set a sender of a document as an `email` or `membership_id` — shape: {membership_id?: string, email?: string}
   --forwarding-settings: record # Set settings for Document and Signature forwarding. — shape: {forwarding_allowed?: bool, forwarding_with_reassigning_allowed?: bool}
   --reply-to: string # Email address that will be used as a reply-to address for the document. To use this parameter, please contact the support team to have it enabled for your account.  (format: email, e.g. john.doe@example.com)
@@ -699,7 +698,7 @@ export def "public-documents-download downloadDocument" [
   --watermark-font-size: int # Font size of the watermark. (e.g. 12)
   --watermark-opacity: float # In range 0.0-1.0 (format: float, e.g. 0.5)
   --watermark-text: string # Specify watermark text. (e.g. John Doe inc.)
-  --separate-files: string@bool-completer # Download document bundle as a zip-archive of separate PDFs (1 file per section). (default: false, e.g. false)
+  --separate-files: oneof<nothing, bool> # Download document bundle as a zip-archive of separate PDFs (1 file per section). (default: false, e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -723,7 +722,7 @@ export def "public-documents-download-protected downloadProtectedDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --separate-files: string@bool-completer # Download document bundle as a zip-archive of separate PDFs (1 file per section). (default: false, e.g. false)
+  --separate-files: oneof<nothing, bool> # Download document bundle as a zip-archive of separate PDFs (1 file per section). (default: false, e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1116,7 +1115,7 @@ export def "public-documents-settings documentSettingsUpdate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --language: string@language-completer # Document language code (e.g., 'en-US', 'fr-FR').
-  --qualified-electronic-signature: string@bool-completer # Indicates whether the document requires a Qualified Electronic Signature (QES) during the signing process. If `true`, signers must complete the document using a third-party qualified electronic signature provider according to supported verification rules.
+  --qualified-electronic-signature: oneof<nothing, bool> # Indicates whether the document requires a Qualified Electronic Signature (QES) during the signing process. If `true`, signers must complete the document using a third-party qualified electronic signature provider according to supported verification rules.
   --expires-in: int # Document expiration in days. Minimum is 1 day.  (format: int32)
 ]: any -> record<language: string, qualified_electronic_signature: bool, expires_in: int> {
   let input = $in
@@ -1567,7 +1566,7 @@ export def "public-content-library-items listContentLibraryItems" [
   --allow-errors(-e) # Return full response without error handling
   --q: string # Search query. Filter by content library item name. (e.g. Sample Pricing Table)
   --id: string # Specify content library item ID. (e.g. UXdP7Lnbvvr4WEb2wzM2hc)
-  --deleted: string@bool-completer # Returns only the deleted content library items. (e.g. false)
+  --deleted: oneof<nothing, bool> # Returns only the deleted content library items. (e.g. false)
   --folder-uuid: string # The UUID of the folder where the content library items are stored. (e.g. S6xX7saJfA44mtJxGWd95L)
   --count: int # Specify how many content library items to return. Default is 50 content library items, maximum is 100 content library items. (format: int32, e.g. 10)
   --page: int # Specify which page of the dataset to return. (format: int32, e.g. 1)
@@ -1691,8 +1690,8 @@ export def "public-templates listTemplates" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --q: string # Search query. Filter by template name. (e.g. Sample onboarding template)
-  --shared: string@bool-completer # Returns only the shared templates. (e.g. false)
-  --deleted: string@bool-completer # Returns only the deleted templates. (e.g. false)
+  --shared: oneof<nothing, bool> # Returns only the shared templates. (e.g. false)
+  --deleted: oneof<nothing, bool> # Returns only the deleted templates. (e.g. false)
   --count: int # Specify how many templates to return. (format: int32, default: 50, e.g. 10)
   --page: int # Specify which page of the dataset to return. (format: int32, e.g. 1)
   --id: string # Specify template ID. (e.g. e9LxBesSL73AeZMzeYdfvV)
@@ -1957,7 +1956,7 @@ export def "public-forms listForm" [
   --page: int # Specify which page of the dataset to return. (format: int32, e.g. 1)
   --status: list # Specify which status of the forms dataset to return. (e.g. [draft, active])
   --order-by: string@order-by-completer-1 # Specify the form dataset order to return. (e.g. name)
-  --asc: string@bool-completer # Specify sorting the result-set in ascending or descending order. (e.g. true)
+  --asc: oneof<nothing, bool> # Specify sorting the result-set in ascending or descending order. (e.g. true)
   --name: string # Specify the form name. (e.g. New Form)
 ]: nothing -> record<results: table<id: string, name: string, date_created: string, date_modified: string, status: string>, has_next_page: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2492,7 +2491,7 @@ export def "public-webhook-subscriptions createWebhookSubscription" [
   --allow-errors(-e) # Return full response without error handling
   name: string # Set a name for the Webhooks subscription. (e.g. My Subscription)
   --body-url: string # Set the Webhooks subscription URL. (format: url, e.g. https://example.com)
-  --active: string@bool-completer # Set the status of the Webhooks subscription. (default: true)
+  --active: oneof<nothing, bool> # Set the status of the Webhooks subscription. (default: true)
   --payload: list # Set a payload structure. (nullable)
   --triggers: list # Set trigger events for the Webhooks subscription. (nullable)
 ]: any -> record<uuid: string, name: string, url: string, active: bool, payload: list<string>, triggers: list<string>, workspace_id: string, shared_key: string, status: string> {
@@ -2544,7 +2543,7 @@ export def "public-webhook-subscriptions updateWebhookSubscription" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # Set a new name for the Webhooks subscription. (e.g. My Subscription)
   --body-url: string # Set the new Webhooks subscription URL. (format: url, e.g. https://example.com)
-  --active: string@bool-completer # Set the status of the Webhooks subscription. (default: true, e.g. true)
+  --active: oneof<nothing, bool> # Set the status of the Webhooks subscription. (default: true, e.g. true)
   --payload: list # Set a new payload structure. (nullable)
   --triggers: list # Set trigger events for the Webhooks subscription. (nullable)
 ]: any -> record<uuid: string, name: string, url: string, active: bool, payload: list<string>, triggers: list<string>, workspace_id: string, shared_key: string, status: string> {
@@ -2724,7 +2723,7 @@ export def "public-notary-notarization-requests createNotarizationRequest" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   document_id: string # ID of the Document for notarization. (e.g. 8DstGmLJDBXBKrh3wnqzpe)
-  --disable-invitees-notifications: string@bool-completer # Disable all notifications for invitees including email with invitation for notarization. This is useful when you are using alternative delivery methods. (nullable, default: false, e.g. true)
+  --disable-invitees-notifications: oneof<nothing, bool> # Disable all notifications for invitees including email with invitation for notarization. This is useful when you are using alternative delivery methods. (nullable, default: false, e.g. true)
   invitation: record # shape: {message?: string, invitees?: list}
   --notary: record # Optional notary assignment for in-house notary requests. Used for Bring you own notary use case. Only ACTIVE notaries can be used — shape: {id: string, scheduled_at: string, message?: string}
 ]: any -> record<id: string, name: string, status: string, date_created: string, date_accepted: string, created_by: record<user_id: string, email: string, first_name: string, last_name: string>, invitees: table<id: string, email: string, first_name: string, last_name: string, notarization_link: string>> {
@@ -2803,7 +2802,7 @@ export def "public-product-catalog-items-search searchCatalogItems" [
   --billing-types: list # Filter by billing types. (e.g. [one_time])
   --exclude-uuids: list # A list of item uuids to be excluded from search. (e.g. [1725f759-3a1c-64e3-2daa-f67eafa589d7, 06cb0ce9-094b-1f38-2fe6-0a9d226cd22c])
   --category-id: string # Category id. (e.g. 06cb0ce9-094b-1f38-2fe6-0a9d226cd22c)
-  --no-category: string@bool-completer # e.g. true
+  --no-category: oneof<nothing, bool> # e.g. true
 ]: nothing -> record<items: table<billing_cycle: int, billing_type: string, bundle_items_count: int, workspace_id: string, category_id: string, category_name: string, created_by: string, cost: float, currency: string, custom_fields: list, date_created: string, date_modified: string, description: string, image_src: string, images: list, max_tier_value: float, min_tier_value: float, modified_by: string, price: float, pricing_method: int, sku: string, title: string, tiers: list, type: string, uuid: string, highlights: record>, has_more_items: bool, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3048,7 +3047,7 @@ export def "public-users listUsers" [
   --allow-errors(-e) # Return full response without error handling
   --count: int # Number of elements in page. (format: int32, default: 50, e.g. 10)
   --page: int # Page number. (format: int32, default: 1, e.g. 1)
-  --show-removed: string@bool-completer # Filter option - show users with removed memberships. (default: true, e.g. false)
+  --show-removed: oneof<nothing, bool> # Filter option - show users with removed memberships. (default: true, e.g. false)
 ]: nothing -> record<total: int, results: table<user_id: string, email: string, first_name: string, last_name: string, phone_number: string, license: string, is_organization_owner: bool, workspaces: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3073,8 +3072,8 @@ export def "public-users createUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notify-user: string@bool-completer # Send a confirmation email to the user that was added to workspace(s). (e.g. true)
-  --notify-ws-admins: string@bool-completer # Send a confirmation email to all workspace admins indicating that the user has been added to the workspace. (e.g. false)
+  --notify-user: oneof<nothing, bool> # Send a confirmation email to the user that was added to workspace(s). (e.g. true)
+  --notify-ws-admins: oneof<nothing, bool> # Send a confirmation email to all workspace admins indicating that the user has been added to the workspace. (e.g. false)
   user: record # User info — shape: {email?: string, first_name?: string, last_name?: string, phone_number?: string}
   workspaces: list # Info for adding a user to a workspace(s) — item shape: {workspace_id?: string, role?: "Admin"|"Manager"|"Member"|"Collaborator"}
   license: string@license-completer
@@ -3126,8 +3125,8 @@ export def "public-workspaces-members addMember" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notify-user: string@bool-completer # Send a confirmation email to the user that was added to workspace(s). (e.g. true)
-  --notify-ws-admins: string@bool-completer # Send a confirmation email to all workspace admins indicating that the user has been added to the workspace. (e.g. false)
+  --notify-user: oneof<nothing, bool> # Send a confirmation email to the user that was added to workspace(s). (e.g. true)
+  --notify-ws-admins: oneof<nothing, bool> # Send a confirmation email to all workspace admins indicating that the user has been added to the workspace. (e.g. false)
   user_id: string # User id. (e.g. 2eWSKSvVqmuVCnuUK3iWwD)
   role: string@role-completer # Role for a member. (e.g. Member)
 ]: any -> record<member_id: string, workspace_id: string, role: string, email: string, first_name: string, last_name: string> {

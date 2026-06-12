@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.attio.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -199,7 +198,7 @@ export def "objects-views get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-archived: string@bool-completer # default: false, e.g. false
+  --show-archived: oneof<nothing, bool> # default: false, e.g. false
   --limit: int # default: 500, e.g. 500
   --cursor: string # e.g. eyJkZXNjcmlwdGlvbiI6ICJ0aGlzIGlzIGEgY3Vyc29yIn0=.eM56CGbqZ6G1NHiJchTIkH4vKDr
 ]: nothing -> record<data: table<id: record, title: string, created_at: string>, pagination: record<next_cursor: string>> {
@@ -227,7 +226,7 @@ export def "attributes list" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # e.g. 10
   --offset: int # e.g. 5
-  --show-archived: string@bool-completer # e.g. true
+  --show-archived: oneof<nothing, bool> # e.g. true
 ]: nothing -> record<data: table<id: record, title: string, description: string, api_slug: string, type: string, is_system_attribute: bool, is_writable: bool, is_required: bool, is_unique: bool, is_multiselect: bool, is_default_value_enabled: bool, is_archived: bool, default_value: any, relationship: record, created_at: string, config: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -330,7 +329,7 @@ export def "attributes-options get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-archived: string@bool-completer # e.g. true
+  --show-archived: oneof<nothing, bool> # e.g. true
 ]: nothing -> record<data: table<id: record, title: string, is_archived: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -412,7 +411,7 @@ export def "attributes-statuses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-archived: string@bool-completer # default: false, e.g. true
+  --show-archived: oneof<nothing, bool> # default: false, e.g. true
 ]: nothing -> record<data: table<id: record, title: string, is_archived: bool, celebration_enabled: bool, target_time_in_status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -675,7 +674,7 @@ export def "objects-records-attributes-values get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-historic: string@bool-completer # default: false, e.g. true
+  --show-historic: oneof<nothing, bool> # default: false, e.g. true
   --limit: int # e.g. 10
   --offset: int # e.g. 5
 ]: nothing -> record<data: list<any>> {
@@ -844,7 +843,7 @@ export def "lists-views get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-archived: string@bool-completer # default: false, e.g. false
+  --show-archived: oneof<nothing, bool> # default: false, e.g. false
   --limit: int # default: 500, e.g. 500
   --cursor: string # e.g. eyJkZXNjcmlwdGlvbiI6ICJ0aGlzIGlzIGEgY3Vyc29yIn0=.eM56CGbqZ6G1NHiJchTIkH4vKDr
 ]: nothing -> record<data: table<id: record, title: string, created_at: string>, pagination: record<next_cursor: string>> {
@@ -1050,7 +1049,7 @@ export def "lists-entries-attributes-values get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-historic: string@bool-completer # default: false, e.g. true
+  --show-historic: oneof<nothing, bool> # default: false, e.g. true
   --limit: int # e.g. 10
   --offset: int # e.g. 5
 ]: nothing -> record<data: list<any>> {
@@ -1213,7 +1212,7 @@ export def "tasks list" [
   --linked-object: string # e.g. people
   --linked-record-id: string # format: uuid, e.g. 891dcbfc-9141-415d-9b2a-2238a6cc012d
   --assignee: string
-  --is-completed: string@bool-completer # e.g. true
+  --is-completed: oneof<nothing, bool> # e.g. true
 ]: nothing -> record<data: table<id: record, content_plaintext: string, deadline_at: string, is_completed: bool, completed_at: string, linked_records: list, assignees: list, created_by_actor: record, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

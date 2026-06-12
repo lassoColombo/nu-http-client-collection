@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.cloudsmith.io"] }
 def auth-scheme-completer [] { ["x-api-key" "basic"] }
 
@@ -206,9 +205,9 @@ export def "badges-version list" [
   --labelColor: string # Override the shields.io badge labelColor value. (default: 021F2F)
   --logoColor: string # Override the shields.io badge logoColor value. (default: 45B6EE)
   --logoWidth: string # Override the shields.io badge logoWidth value. (default: 10)
-  --render: string@bool-completer # If true, badge will be rendered (default: false)
-  --shields: string@bool-completer # If true, a shields response will be generated (default: false)
-  --show-latest: string@bool-completer # If true, for latest version badges a '(latest)' suffix is added (default: false)
+  --render: oneof<nothing, bool> # If true, badge will be rendered (default: false)
+  --shields: oneof<nothing, bool> # If true, a shields response will be generated (default: false)
+  --show-latest: oneof<nothing, bool> # If true, for latest version badges a '(latest)' suffix is added (default: false)
   --style: string # Override the shields.io badge style value. (default: flat-square)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -335,10 +334,10 @@ export def "entitlements list" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
-  --show-tokens: string@bool-completer # Show entitlement token strings in results (default: false)
+  --show-tokens: oneof<nothing, bool> # Show entitlement token strings in results (default: false)
   --qp-query: string # A search term for querying names of entitlements.
-  --active: string@bool-completer # If true, only include active tokens (default: false)
-  --exclude-other-user-tokens: string@bool-completer # If true, exclude user tokens that belong to other users (default: false)
+  --active: oneof<nothing, bool> # If true, only include active tokens (default: false)
+  --exclude-other-user-tokens: oneof<nothing, bool> # If true, exclude user tokens that belong to other users (default: false)
   --qp-sort: string # A field for sorting objects in ascending or descending order. Use `-` prefix for descending order (e.g., `-name`). Available options: name. (default: name)
 ]: nothing -> table<access_private_broadcasts: bool, clients: int, created_at: string, created_by: string, created_by_url: string, default: bool, disable_url: string, downloads: int, enable_url: string, eula_accepted: record<identifier: string, number: int>, eula_accepted_at: string, eula_accepted_from: string, eula_required: bool, has_limits: bool, identifier: int, is_active: bool, is_limited: bool, limit_bandwidth: int, limit_bandwidth_unit: string, limit_date_range_from: string, limit_date_range_to: string, limit_num_clients: int, limit_num_downloads: int, limit_package_query: string, limit_path_query: string, metadata: record, name: string, refresh_url: string, reset_url: string, scheduled_reset_at: string, scheduled_reset_period: string, self_url: string, slug_perm: string, token: string, updated_at: string, updated_by: string, updated_by_url: string, usage: string, user: string, user_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -364,9 +363,9 @@ export def "entitlements create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-tokens: string@bool-completer # Show entitlement token strings in results (default: false)
-  --eula-required: string@bool-completer # If checked, a EULA acceptance is required for this token.
-  --is-active: string@bool-completer # If enabled, the token will allow downloads based on configured restrictions (if any).
+  --show-tokens: oneof<nothing, bool> # Show entitlement token strings in results (default: false)
+  --eula-required: oneof<nothing, bool> # If checked, a EULA acceptance is required for this token.
+  --is-active: oneof<nothing, bool> # If enabled, the token will allow downloads based on configured restrictions (if any).
   --limit-bandwidth: int # The maximum download bandwidth allowed for the token. Values are expressed as the selected unit of bandwidth. Please note that since downloads are calculated asynchronously (after the download happens), the limit may not be imposed immediately but at a later point. 
   --limit-bandwidth-unit: string@limit-bandwidth-unit-completer # default: Byte
   --limit-date-range-from: string # The starting date/time the token is allowed to be used from. (format: date-time)
@@ -407,7 +406,7 @@ export def "entitlements-sync sync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-tokens: string@bool-completer # Show entitlement token strings in results (default: false)
+  --show-tokens: oneof<nothing, bool> # Show entitlement token strings in results (default: false)
   --body-source: string # The source repository slug (in the same owner namespace).
 ]: any -> record<tokens: table<access_private_broadcasts: bool, clients: int, created_at: string, created_by: string, created_by_url: string, default: bool, disable_url: string, downloads: int, enable_url: string, eula_accepted: record, eula_accepted_at: string, eula_accepted_from: string, eula_required: bool, has_limits: bool, identifier: int, is_active: bool, is_limited: bool, limit_bandwidth: int, limit_bandwidth_unit: string, limit_date_range_from: string, limit_date_range_to: string, limit_num_clients: int, limit_num_downloads: int, limit_package_query: string, limit_path_query: string, metadata: record, name: string, refresh_url: string, reset_url: string, scheduled_reset_at: string, scheduled_reset_period: string, self_url: string, slug_perm: string, token: string, updated_at: string, updated_by: string, updated_by_url: string, usage: string, user: string, user_url: string>> {
   let input = $in
@@ -437,8 +436,8 @@ export def "entitlements read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --fuzzy: string@bool-completer # If true, entitlement identifiers including name will be fuzzy matched. (default: false)
-  --show-tokens: string@bool-completer # Show entitlement token strings in results (default: false)
+  --fuzzy: oneof<nothing, bool> # If true, entitlement identifiers including name will be fuzzy matched. (default: false)
+  --show-tokens: oneof<nothing, bool> # Show entitlement token strings in results (default: false)
 ]: nothing -> record<access_private_broadcasts: bool, clients: int, created_at: string, created_by: string, created_by_url: string, default: bool, disable_url: string, downloads: int, enable_url: string, eula_accepted: record<identifier: string, number: int>, eula_accepted_at: string, eula_accepted_from: string, eula_required: bool, has_limits: bool, identifier: int, is_active: bool, is_limited: bool, limit_bandwidth: int, limit_bandwidth_unit: string, limit_date_range_from: string, limit_date_range_to: string, limit_num_clients: int, limit_num_downloads: int, limit_package_query: string, limit_path_query: string, metadata: record, name: string, refresh_url: string, reset_url: string, scheduled_reset_at: string, scheduled_reset_period: string, self_url: string, slug_perm: string, token: string, updated_at: string, updated_by: string, updated_by_url: string, usage: string, user: string, user_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -464,9 +463,9 @@ export def "entitlements patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-tokens: string@bool-completer # Show entitlement token strings in results (default: false)
-  --eula-required: string@bool-completer # If checked, a EULA acceptance is required for this token.
-  --is-active: string@bool-completer # If enabled, the token will allow downloads based on configured restrictions (if any).
+  --show-tokens: oneof<nothing, bool> # Show entitlement token strings in results (default: false)
+  --eula-required: oneof<nothing, bool> # If checked, a EULA acceptance is required for this token.
+  --is-active: oneof<nothing, bool> # If enabled, the token will allow downloads based on configured restrictions (if any).
   --limit-bandwidth: int # The maximum download bandwidth allowed for the token. Values are expressed as the selected unit of bandwidth. Please note that since downloads are calculated asynchronously (after the download happens), the limit may not be imposed immediately but at a later point. 
   --limit-bandwidth-unit: string@limit-bandwidth-unit-completer # default: Byte
   --limit-date-range-from: string # The starting date/time the token is allowed to be used from. (format: date-time)
@@ -580,9 +579,9 @@ export def "entitlements-refresh refresh" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-tokens: string@bool-completer # Show entitlement token strings in results (default: false)
-  --eula-required: string@bool-completer # If checked, a EULA acceptance is required for this token.
-  --is-active: string@bool-completer # If enabled, the token will allow downloads based on configured restrictions (if any).
+  --show-tokens: oneof<nothing, bool> # Show entitlement token strings in results (default: false)
+  --eula-required: oneof<nothing, bool> # If checked, a EULA acceptance is required for this token.
+  --is-active: oneof<nothing, bool> # If enabled, the token will allow downloads based on configured restrictions (if any).
   --limit-bandwidth: int # The maximum download bandwidth allowed for the token. Values are expressed as the selected unit of bandwidth. Please note that since downloads are calculated asynchronously (after the download happens), the limit may not be imposed immediately but at a later point. 
   --limit-bandwidth-unit: string@limit-bandwidth-unit-completer # default: Byte
   --limit-date-range-from: string # The starting date/time the token is allowed to be used from. (format: date-time)
@@ -623,7 +622,7 @@ export def "entitlements-reset reset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-tokens: string@bool-completer # Show entitlement token strings in results (default: false)
+  --show-tokens: oneof<nothing, bool> # Show entitlement token strings in results (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -649,7 +648,7 @@ export def "entitlements-toggle-private-broadcasts broadcasts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --access-private-broadcasts: string@bool-completer # Whether the token should have access to private broadcasts.
+  --access-private-broadcasts: oneof<nothing, bool> # Whether the token should have access to private broadcasts.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1118,7 +1117,7 @@ export def "orgs-deny-policy create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string
-  --enabled: string@bool-completer # Whether this rule is enabled or disabled.
+  --enabled: oneof<nothing, bool> # Whether this rule is enabled or disabled.
   --name: string
   package_query_string: string # Packages that match this query will trigger this deny rule.
 ]: any -> record<action: string, created_at: string, description: string, enabled: bool, name: string, package_query_string: string, slug_perm: string, status: string, updated_at: string> {
@@ -1171,7 +1170,7 @@ export def "orgs-deny-policy update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string
-  --enabled: string@bool-completer # Whether this rule is enabled or disabled.
+  --enabled: oneof<nothing, bool> # Whether this rule is enabled or disabled.
   --name: string
   package_query_string: string # Packages that match this query will trigger this deny rule.
 ]: any -> record<action: string, created_at: string, description: string, enabled: bool, name: string, package_query_string: string, slug_perm: string, status: string, updated_at: string> {
@@ -1201,7 +1200,7 @@ export def "orgs-deny-policy patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string
-  --enabled: string@bool-completer # Whether this rule is enabled or disabled.
+  --enabled: oneof<nothing, bool> # Whether this rule is enabled or disabled.
   --name: string
   --package-query-string: string # Packages that match this query will trigger this deny rule.
 ]: any -> record<action: string, created_at: string, description: string, enabled: bool, name: string, package_query_string: string, slug_perm: string, status: string, updated_at: string> {
@@ -1453,10 +1452,10 @@ export def "orgs-license-policy create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-unknown-licenses: string@bool-completer
+  --allow-unknown-licenses: oneof<nothing, bool>
   --description: string
   name: string
-  --on-violation-quarantine: string@bool-completer
+  --on-violation-quarantine: oneof<nothing, bool>
   --package-query-string: string
   spdx_identifiers: list
 ]: any -> record<allow_unknown_licenses: bool, created_at: string, description: string, name: string, on_violation_quarantine: bool, package_query_string: string, slug_perm: string, spdx_identifiers: list<string>, updated_at: string> {
@@ -1584,10 +1583,10 @@ export def "orgs-license-policy update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-unknown-licenses: string@bool-completer
+  --allow-unknown-licenses: oneof<nothing, bool>
   --description: string
   name: string
-  --on-violation-quarantine: string@bool-completer
+  --on-violation-quarantine: oneof<nothing, bool>
   --package-query-string: string
   spdx_identifiers: list
 ]: any -> record<allow_unknown_licenses: bool, created_at: string, description: string, name: string, on_violation_quarantine: bool, package_query_string: string, slug_perm: string, spdx_identifiers: list<string>, updated_at: string> {
@@ -1616,10 +1615,10 @@ export def "orgs-license-policy patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-unknown-licenses: string@bool-completer
+  --allow-unknown-licenses: oneof<nothing, bool>
   --description: string
   --name: string
-  --on-violation-quarantine: string@bool-completer
+  --on-violation-quarantine: oneof<nothing, bool>
   --package-query-string: string
   --spdx-identifiers: list
 ]: any -> record<allow_unknown_licenses: bool, created_at: string, description: string, name: string, on_violation_quarantine: bool, package_query_string: string, slug_perm: string, spdx_identifiers: list<string>, updated_at: string> {
@@ -1672,7 +1671,7 @@ export def "orgs-members list" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
-  --is-active: string@bool-completer # Filter for active/inactive users. (default: false)
+  --is-active: oneof<nothing, bool> # Filter for active/inactive users. (default: false)
   --qp-query: string # A search term for querying of members within an Organization.Available options are: email, org, user, userslug, inactive, user_name, role (default: )
   --qp-sort: string # A field for sorting objects in ascending or descending order. Use `-` prefix for descending order (e.g., `-user_name`). Available options: user_name, role. (default: user_name)
 ]: nothing -> table<email: string, has_two_factor: bool, is_active: bool, joined_at: string, last_login_at: string, last_login_method: string, role: string, teams: list<record>, user: string, user_id: string, user_name: string, user_url: string, visibility: string> {
@@ -1900,7 +1899,7 @@ export def "orgs-openid-connect create" [
   --allow-errors(-e) # Return full response without error handling
   claims: record # The set of claims that any received tokens from the provider must contain to authenticate as the configured service account.
   --dynamic-mappings: list # The dynamic mappings of `mapping_claim` values to service accounts. Cannot be provided if `service_accounts` is also set.  Note: This field and the dynamic mappings feature are still in early access. Breaking changes are possible as we receive feedback on this feature. — item shape: {claim_value: string, service_account: string}
-  --enabled: string@bool-completer # Whether the provider settings should be used for incoming OIDC requests.
+  --enabled: oneof<nothing, bool> # Whether the provider settings should be used for incoming OIDC requests.
   --mapping-claim: string # The OIDC claim to use for mapping to service accounts in dynamic_mappings. Cannot be provided if `service_accounts` is also set.  Note: This field and the dynamic mappings feature are still in early access. Breaking changes are possible as we receive feedback on this feature.
   name: string # The name of the provider settings are being configured for
   provider_url: string # The URL from the provider that serves as the base for the OpenID configuration. For example, if the OpenID configuration is available at https://token.actions.githubusercontent.com/.well-known/openid-configuration, the provider URL would be https://token.actions.githubusercontent.com/ (format: uri)
@@ -2007,7 +2006,7 @@ export def "orgs-openid-connect update" [
   --allow-errors(-e) # Return full response without error handling
   claims: record # The set of claims that any received tokens from the provider must contain to authenticate as the configured service account.
   --dynamic-mappings: list # The dynamic mappings of `mapping_claim` values to service accounts. Cannot be provided if `service_accounts` is also set.  Note: This field and the dynamic mappings feature are still in early access. Breaking changes are possible as we receive feedback on this feature. — item shape: {claim_value: string, service_account: string}
-  --enabled: string@bool-completer # Whether the provider settings should be used for incoming OIDC requests.
+  --enabled: oneof<nothing, bool> # Whether the provider settings should be used for incoming OIDC requests.
   --mapping-claim: string # The OIDC claim to use for mapping to service accounts in dynamic_mappings. Cannot be provided if `service_accounts` is also set.  Note: This field and the dynamic mappings feature are still in early access. Breaking changes are possible as we receive feedback on this feature.
   name: string # The name of the provider settings are being configured for
   provider_url: string # The URL from the provider that serves as the base for the OpenID configuration. For example, if the OpenID configuration is available at https://token.actions.githubusercontent.com/.well-known/openid-configuration, the provider URL would be https://token.actions.githubusercontent.com/ (format: uri)
@@ -2041,7 +2040,7 @@ export def "orgs-openid-connect patch" [
   --allow-errors(-e) # Return full response without error handling
   --claims: record # The set of claims that any received tokens from the provider must contain to authenticate as the configured service account.
   --dynamic-mappings: list # The dynamic mappings of `mapping_claim` values to service accounts. Cannot be provided if `service_accounts` is also set.  Note: This field and the dynamic mappings feature are still in early access. Breaking changes are possible as we receive feedback on this feature. — item shape: {claim_value: string, service_account: string}
-  --enabled: string@bool-completer # Whether the provider settings should be used for incoming OIDC requests.
+  --enabled: oneof<nothing, bool> # Whether the provider settings should be used for incoming OIDC requests.
   --mapping-claim: string # The OIDC claim to use for mapping to service accounts in dynamic_mappings. Cannot be provided if `service_accounts` is also set.  Note: This field and the dynamic mappings feature are still in early access. Breaking changes are possible as we receive feedback on this feature.
   --name: string # The name of the provider settings are being configured for
   --provider-url: string # The URL from the provider that serves as the base for the OpenID configuration. For example, if the OpenID configuration is available at https://token.actions.githubusercontent.com/.well-known/openid-configuration, the provider URL would be https://token.actions.githubusercontent.com/ (format: uri)
@@ -2116,8 +2115,8 @@ export def "orgs-saml-authentication patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --saml-auth-enabled: string@bool-completer
-  --saml-auth-enforced: string@bool-completer
+  --saml-auth-enabled: oneof<nothing, bool>
+  --saml-auth-enforced: oneof<nothing, bool>
   --saml-metadata-inline: string # If configured, SAML metadata will be used as entered instead of retrieved from a remote URL.
   --saml-metadata-url: string # If configured, SAML metadata be retrieved from a remote URL. (format: uri)
 ]: any -> record<saml_auth_enabled: bool, saml_auth_enforced: bool, saml_metadata_inline: string, saml_metadata_url: string> {
@@ -2448,7 +2447,7 @@ export def "orgs-teams list" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
-  --for-user: string@bool-completer # Filter for teams that you are a member of. (default: false)
+  --for-user: oneof<nothing, bool> # Filter for teams that you are a member of. (default: false)
   --qp-query: string # A search term for querying of teams within an Organization.Available options are: name, slug, user, userslug (default: )
   --qp-sort: string # A field for sorting objects in ascending or descending order. Use `-` prefix for descending order (e.g., `-name`). Available options: name, members. (default: name)
 ]: nothing -> table<description: string, name: string, slug: string, slug_perm: string, visibility: string> {
@@ -2710,11 +2709,11 @@ export def "orgs-vulnerability-policy create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-unknown-severity: string@bool-completer # Denotes whether vulnerabilities detected by a security scan with an unknown severity are permitted by this policy.
+  --allow-unknown-severity: oneof<nothing, bool> # Denotes whether vulnerabilities detected by a security scan with an unknown severity are permitted by this policy.
   --description: string
   --min-severity: string@min-severity-completer # default: Critical
   name: string
-  --on-violation-quarantine: string@bool-completer
+  --on-violation-quarantine: oneof<nothing, bool>
   --package-query-string: string
 ]: any -> record<allow_unknown_severity: bool, created_at: string, description: string, min_severity: string, name: string, on_violation_quarantine: bool, package_query_string: string, slug_perm: string, updated_at: string> {
   let input = $in
@@ -2841,11 +2840,11 @@ export def "orgs-vulnerability-policy update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-unknown-severity: string@bool-completer # Denotes whether vulnerabilities detected by a security scan with an unknown severity are permitted by this policy.
+  --allow-unknown-severity: oneof<nothing, bool> # Denotes whether vulnerabilities detected by a security scan with an unknown severity are permitted by this policy.
   --description: string
   --min-severity: string@min-severity-completer # default: Critical
   name: string
-  --on-violation-quarantine: string@bool-completer
+  --on-violation-quarantine: oneof<nothing, bool>
   --package-query-string: string
 ]: any -> record<allow_unknown_severity: bool, created_at: string, description: string, min_severity: string, name: string, on_violation_quarantine: bool, package_query_string: string, slug_perm: string, updated_at: string> {
   let input = $in
@@ -2873,11 +2872,11 @@ export def "orgs-vulnerability-policy patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-unknown-severity: string@bool-completer # Denotes whether vulnerabilities detected by a security scan with an unknown severity are permitted by this policy.
+  --allow-unknown-severity: oneof<nothing, bool> # Denotes whether vulnerabilities detected by a security scan with an unknown severity are permitted by this policy.
   --description: string
   --min-severity: string@min-severity-completer # default: Critical
   --name: string
-  --on-violation-quarantine: string@bool-completer
+  --on-violation-quarantine: oneof<nothing, bool>
   --package-query-string: string
 ]: any -> record<allow_unknown_severity: bool, created_at: string, description: string, min_severity: string, name: string, on_violation_quarantine: bool, package_query_string: string, slug_perm: string, updated_at: string> {
   let input = $in
@@ -2930,7 +2929,7 @@ export def "packages list" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
-  --include-connected-repositories: string@bool-completer # If true, include packages from active connected target repositories in addition to packages from this repository. Has no effect if the repository has no active connections. Defaults to false. Note: download-related URLs on returned packages (e.g. cdn_url, signature_url) are rewritten to point at the requesting repository, not the connected target repository the package physically lives in. (default: false)
+  --include-connected-repositories: oneof<nothing, bool> # If true, include packages from active connected target repositories in addition to packages from this repository. Has no effect if the repository has no active connections. Defaults to false. Note: download-related URLs on returned packages (e.g. cdn_url, signature_url) are rewritten to point at the requesting repository, not the connected target repository the package physically lives in. (default: false)
   --qp-query: string # A search term for querying names, filenames, versions, distributions, architectures, formats or statuses of packages. (default: )
   --qp-sort: string # A field for sorting objects in ascending or descending order. (default: -date)
 ]: nothing -> table<architectures: list<record>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, filepath: string, files: list<record>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags: record, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
@@ -2960,8 +2959,8 @@ export def "packages-groups list" [
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --group-by: string # A field to group packages by. Available options: name, backend_kind. (default: name)
-  --hide-subcomponents: string@bool-completer # Whether to hide packages which are subcomponents of another package in the results (default: false)
-  --include-connected-repositories: string@bool-completer # If true, include packages from active connected target repositories in addition to packages from this repository. Has no effect if the repository has no active connections. Defaults to false. (default: false)
+  --hide-subcomponents: oneof<nothing, bool> # Whether to hide packages which are subcomponents of another package in the results (default: false)
+  --include-connected-repositories: oneof<nothing, bool> # If true, include packages from active connected target repositories in addition to packages from this repository. Has no effect if the repository has no active connections. Defaults to false. (default: false)
   --qp-query: string # A search term for querying names, filenames, versions, distributions, architectures, formats, or statuses of packages. (default: )
   --qp-sort: string # A field for sorting objects in ascending or descending order. Use `-` prefix for descending order (e.g., `-name`). Available options: name, count, num_downloads, size, last_push, backend_kind. (default: name)
 ]: nothing -> record<results: table<backend_kind: int, count: int, last_push: string, name: string, num_downloads: int, size: int>> {
@@ -2990,7 +2989,7 @@ export def "packages-upload-alpine alpine" [
   --allow-errors(-e) # Return full response without error handling
   distribution: string # The distribution to store the package for.
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
@@ -3019,7 +3018,7 @@ export def "packages-upload-cargo cargo" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
@@ -3048,7 +3047,7 @@ export def "packages-upload-cocoapods cocoapods" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
@@ -3077,7 +3076,7 @@ export def "packages-upload-composer composer" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
   --version: string # The raw version for this package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
@@ -3113,7 +3112,7 @@ export def "packages-upload-conan conan" [
   metadata_file: string # The conan file is an python file containing the package metadata.
   --name: string # The name of this package.
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
   --version: string # The raw version for this package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, conan_channel: string, conan_prefix: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
@@ -3143,7 +3142,7 @@ export def "packages-upload-conda conda" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
@@ -3174,7 +3173,7 @@ export def "packages-upload-cran cran" [
   --architecture: string # Binary package uploads for macOS should specify the architecture they were built for.
   package_file: string # The primary file for the package.
   --r-version: string # Binary package uploads should specify the version of R they were built for.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, r_version: string, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
@@ -3203,7 +3202,7 @@ export def "packages-upload-dart dart" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
@@ -3235,7 +3234,7 @@ export def "packages-upload-deb deb" [
   --component: string # The component (channel) for the package (e.g. 'main', 'unstable', etc.) (default: main)
   distribution: string # The distribution to store the package for.
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --sources-file: string # The sources archive containing the source code for the binary
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
@@ -3265,7 +3264,7 @@ export def "packages-upload-docker docker" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
@@ -3296,7 +3295,7 @@ export def "packages-upload-generic generic" [
   filepath: string # The full filepath of the package including filename.
   --name: string # The name of this package.
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
   --version: string # The raw version for this package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
@@ -3326,7 +3325,7 @@ export def "packages-upload-go go" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
@@ -3356,7 +3355,7 @@ export def "packages-upload-helm helm" [
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
   --provenance-file: string # The provenance file containing the signature for the chart. If one is not provided, it will be generated automatically.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
@@ -3385,7 +3384,7 @@ export def "packages-upload-hex hex" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
@@ -3414,7 +3413,7 @@ export def "packages-upload-huggingface huggingface" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
@@ -3443,7 +3442,7 @@ export def "packages-upload-luarocks luarocks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
@@ -3479,7 +3478,7 @@ export def "packages-upload-maven maven" [
   package_file: string # The primary file for the package.
   --packaging: string # Artifact's Maven packaging type.
   --pom-file: string # The POM file is an XML file containing the Maven coordinates.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --sbt-version: string
   --scala-version: string
   --sources-file: string # Adds bundled Java source code to the Maven package.
@@ -3513,7 +3512,7 @@ export def "packages-upload-mcp mcp" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
   --version: string # The raw version for this package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
@@ -3544,7 +3543,7 @@ export def "packages-upload-npm npm" [
   --allow-errors(-e) # Return full response without error handling
   --npm-dist-tag: string # The default npm dist-tag for this package/version - This will replace any other package/version if they are using the same tag. (default: latest)
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
@@ -3573,7 +3572,7 @@ export def "packages-upload-nuget nuget" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --symbols-file: string # Uploads a symbols file as a separate package
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
@@ -3603,7 +3602,7 @@ export def "packages-upload-p2 p2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
@@ -3632,7 +3631,7 @@ export def "packages-upload-python python" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
@@ -3664,7 +3663,7 @@ export def "packages-upload-raw raw" [
   --description: string # A textual description of this package.
   --name: string # The name of this package.
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --summary: string # A one-liner synopsis of this package.
   --tags: string # A comma-separated values list of tags to add to the package.
   --version: string # The raw version for this package.
@@ -3696,7 +3695,7 @@ export def "packages-upload-rpm rpm" [
   --allow-errors(-e) # Return full response without error handling
   distribution: string # The distribution to store the package for.
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
@@ -3725,7 +3724,7 @@ export def "packages-upload-ruby ruby" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
@@ -3760,7 +3759,7 @@ export def "packages-upload-swift swift" [
   package_file: string # The primary file for the package.
   --readme-url: string # The URL of the readme for the package. (format: uri)
   --repository-url: string # The URL of the SCM repository for the package. (format: uri)
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   scope: string # A scope provides a namespace for related packages within the package registry.
   --tags: string # A comma-separated values list of tags to add to the package.
   version: string # The raw version for this package.
@@ -3791,7 +3790,7 @@ export def "packages-upload-terraform terraform" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
@@ -3822,7 +3821,7 @@ export def "packages-upload-vagrant vagrant" [
   name: string # The name of this package.
   package_file: string # The primary file for the package.
   provider: string # The virtual machine provider for the box.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
   version: string # The raw version for this package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, provider: string, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
@@ -3852,7 +3851,7 @@ export def "packages-upload-vsx vsx" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
@@ -3882,7 +3881,7 @@ export def "packages-validate-upload-alpine alpine" [
   --allow-errors(-e) # Return full response without error handling
   distribution: string # The distribution to store the package for.
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> any {
   let input = $in
@@ -3911,7 +3910,7 @@ export def "packages-validate-upload-cargo cargo" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> any {
   let input = $in
@@ -3940,7 +3939,7 @@ export def "packages-validate-upload-cocoapods cocoapods" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> any {
   let input = $in
@@ -3969,7 +3968,7 @@ export def "packages-validate-upload-composer composer" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
   --version: string # The raw version for this package.
 ]: any -> any {
@@ -4005,7 +4004,7 @@ export def "packages-validate-upload-conan conan" [
   metadata_file: string # The conan file is an python file containing the package metadata.
   --name: string # The name of this package.
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
   --version: string # The raw version for this package.
 ]: any -> any {
@@ -4035,7 +4034,7 @@ export def "packages-validate-upload-conda conda" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> any {
   let input = $in
@@ -4066,7 +4065,7 @@ export def "packages-validate-upload-cran cran" [
   --architecture: string # Binary package uploads for macOS should specify the architecture they were built for.
   package_file: string # The primary file for the package.
   --r-version: string # Binary package uploads should specify the version of R they were built for.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> any {
   let input = $in
@@ -4095,7 +4094,7 @@ export def "packages-validate-upload-dart dart" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> any {
   let input = $in
@@ -4127,7 +4126,7 @@ export def "packages-validate-upload-deb deb" [
   --component: string # The component (channel) for the package (e.g. 'main', 'unstable', etc.) (default: main)
   distribution: string # The distribution to store the package for.
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --sources-file: string # The sources archive containing the source code for the binary
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> any {
@@ -4157,7 +4156,7 @@ export def "packages-validate-upload-docker docker" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> any {
   let input = $in
@@ -4188,7 +4187,7 @@ export def "packages-validate-upload-generic generic" [
   filepath: string # The full filepath of the package including filename.
   --name: string # The name of this package.
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
   --version: string # The raw version for this package.
 ]: any -> any {
@@ -4218,7 +4217,7 @@ export def "packages-validate-upload-go go" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> any {
   let input = $in
@@ -4248,7 +4247,7 @@ export def "packages-validate-upload-helm helm" [
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
   --provenance-file: string # The provenance file containing the signature for the chart. If one is not provided, it will be generated automatically.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> any {
   let input = $in
@@ -4277,7 +4276,7 @@ export def "packages-validate-upload-hex hex" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> any {
   let input = $in
@@ -4306,7 +4305,7 @@ export def "packages-validate-upload-huggingface huggingface" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> any {
   let input = $in
@@ -4335,7 +4334,7 @@ export def "packages-validate-upload-luarocks luarocks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> any {
   let input = $in
@@ -4371,7 +4370,7 @@ export def "packages-validate-upload-maven maven" [
   package_file: string # The primary file for the package.
   --packaging: string # Artifact's Maven packaging type.
   --pom-file: string # The POM file is an XML file containing the Maven coordinates.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --sbt-version: string
   --scala-version: string
   --sources-file: string # Adds bundled Java source code to the Maven package.
@@ -4405,7 +4404,7 @@ export def "packages-validate-upload-mcp mcp" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
   --version: string # The raw version for this package.
 ]: any -> any {
@@ -4436,7 +4435,7 @@ export def "packages-validate-upload-npm npm" [
   --allow-errors(-e) # Return full response without error handling
   --npm-dist-tag: string # The default npm dist-tag for this package/version - This will replace any other package/version if they are using the same tag. (default: latest)
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> any {
   let input = $in
@@ -4465,7 +4464,7 @@ export def "packages-validate-upload-nuget nuget" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --symbols-file: string # Uploads a symbols file as a separate package
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> any {
@@ -4495,7 +4494,7 @@ export def "packages-validate-upload-p2 p2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> any {
   let input = $in
@@ -4524,7 +4523,7 @@ export def "packages-validate-upload-python python" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> any {
   let input = $in
@@ -4556,7 +4555,7 @@ export def "packages-validate-upload-raw raw" [
   --description: string # A textual description of this package.
   --name: string # The name of this package.
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --summary: string # A one-liner synopsis of this package.
   --tags: string # A comma-separated values list of tags to add to the package.
   --version: string # The raw version for this package.
@@ -4588,7 +4587,7 @@ export def "packages-validate-upload-rpm rpm" [
   --allow-errors(-e) # Return full response without error handling
   distribution: string # The distribution to store the package for.
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> any {
   let input = $in
@@ -4617,7 +4616,7 @@ export def "packages-validate-upload-ruby ruby" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> any {
   let input = $in
@@ -4652,7 +4651,7 @@ export def "packages-validate-upload-swift swift" [
   package_file: string # The primary file for the package.
   --readme-url: string # The URL of the readme for the package. (format: uri)
   --repository-url: string # The URL of the SCM repository for the package. (format: uri)
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   scope: string # A scope provides a namespace for related packages within the package registry.
   --tags: string # A comma-separated values list of tags to add to the package.
   version: string # The raw version for this package.
@@ -4683,7 +4682,7 @@ export def "packages-validate-upload-terraform terraform" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> any {
   let input = $in
@@ -4714,7 +4713,7 @@ export def "packages-validate-upload-vagrant vagrant" [
   name: string # The name of this package.
   package_file: string # The primary file for the package.
   provider: string # The virtual machine provider for the box.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
   version: string # The raw version for this package.
 ]: any -> any {
@@ -4744,7 +4743,7 @@ export def "packages-validate-upload-vsx vsx" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   package_file: string # The primary file for the package.
-  --republish: string@bool-completer # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the uploaded package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
   --tags: string # A comma-separated values list of tags to add to the package.
 ]: any -> any {
   let input = $in
@@ -4773,7 +4772,7 @@ export def "packages read" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-connected-repositories: string@bool-completer # If true, include packages from active connected target repositories in addition to packages from this repository. Has no effect if the repository has no active connections. Defaults to false. Note: download-related URLs on returned packages (e.g. cdn_url, signature_url) are rewritten to point at the requesting repository, not the connected target repository the package physically lives in. (default: false)
+  --include-connected-repositories: oneof<nothing, bool> # If true, include packages from active connected target repositories in addition to packages from this repository. Has no effect if the repository has no active connections. Defaults to false. Note: download-related URLs on returned packages (e.g. cdn_url, signature_url) are rewritten to point at the requesting repository, not the connected target repository the package physically lives in. (default: false)
 ]: nothing -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, filepath: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags: record, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4824,7 +4823,7 @@ export def "packages-copy copy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   destination: string # The name of the destination repository without the namespace.
-  --republish: string@bool-completer # If true, the package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
+  --republish: oneof<nothing, bool> # If true, the package will overwrite any others with the same attributes (e.g. same version); otherwise, it will be flagged as a duplicate.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, filepath: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags: record, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -4852,7 +4851,7 @@ export def "packages-dependencies dependencies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-connected-repositories: string@bool-completer # If true, include packages from active connected target repositories in addition to packages from this repository. Has no effect if the repository has no active connections. Defaults to false. Note: download-related URLs on returned packages (e.g. cdn_url, signature_url) are rewritten to point at the requesting repository, not the connected target repository the package physically lives in. (default: false)
+  --include-connected-repositories: oneof<nothing, bool> # If true, include packages from active connected target repositories in addition to packages from this repository. Has no effect if the repository has no active connections. Defaults to false. Note: download-related URLs on returned packages (e.g. cdn_url, signature_url) are rewritten to point at the requesting repository, not the connected target repository the package physically lives in. (default: false)
 ]: nothing -> record<dependencies: table<dep_type: string, name: string, operator: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4906,8 +4905,8 @@ export def "packages-quarantine quarantine" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --release: string@bool-completer # If true, the package is released from quarantine.
-  --restore: string@bool-completer # If true, the package is released from quarantine. Note: This field is deprecated, please use 'release' instead.
+  --release: oneof<nothing, bool> # If true, the package is released from quarantine.
+  --restore: oneof<nothing, bool> # If true, the package is released from quarantine. Note: This field is deprecated, please use 'release' instead.
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, filepath: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags: record, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -4983,7 +4982,7 @@ export def "packages-status status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-connected-repositories: string@bool-completer # If true, include packages from active connected target repositories in addition to packages from this repository. Has no effect if the repository has no active connections. Defaults to false. Note: download-related URLs on returned packages (e.g. cdn_url, signature_url) are rewritten to point at the requesting repository, not the connected target repository the package physically lives in. (default: false)
+  --include-connected-repositories: oneof<nothing, bool> # If true, include packages from active connected target repositories in addition to packages from this repository. Has no effect if the repository has no active connections. Defaults to false. Note: download-related URLs on returned packages (e.g. cdn_url, signature_url) are rewritten to point at the requesting repository, not the connected target repository the package physically lives in. (default: false)
 ]: nothing -> record<is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, self_url: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, sync_finished_at: string, sync_progress: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5010,7 +5009,7 @@ export def "packages-tag tag" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --action: string@action-completer-1 # default: Add
-  --is-immutable: string@bool-completer # If true, created tags will be immutable. An immutable flag is a tag that cannot be removed from a package. (default: false)
+  --is-immutable: oneof<nothing, bool> # If true, created tags will be immutable. An immutable flag is a tag that cannot be removed from a package. (default: false)
   --tags: list # A list of tags to apply the action to. Not required for clears. (default: [])
 ]: any -> record<architectures: table<description: string, name: string>, cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, dependencies_checksum_md5: string, dependencies_url: string, description: string, display_name: string, distro: record<name: string, self_url: string, slug: string, variants: string>, distro_version: record<name: string, slug: string>, downloads: int, epoch: int, extension: string, filename: string, filepath: string, files: table<cdn_url: string, checksum_md5: string, checksum_sha1: string, checksum_sha256: string, checksum_sha512: string, downloads: int, filename: string, is_downloadable: bool, is_primary: bool, is_synchronised: bool, signature_url: string, size: int, slug_perm: string, tag: string>, format: string, format_url: string, freeable_storage: int, fully_qualified_name: string, identifier_perm: string, identifiers: record, indexed: bool, is_cancellable: bool, is_copyable: bool, is_deleteable: bool, is_downloadable: bool, is_hidden: bool, is_moveable: bool, is_quarantinable: bool, is_quarantined: bool, is_resyncable: bool, is_security_scannable: bool, is_sync_awaiting: bool, is_sync_completed: bool, is_sync_failed: bool, is_sync_in_flight: bool, is_sync_in_progress: bool, license: string, name: string, namespace: string, namespace_url: string, num_files: int, origin_repository: string, origin_repository_url: string, osi_approved: bool, package_type: int, policy_violated: bool, raw_license: string, release: string, repository: string, repository_url: string, security_scan_completed_at: string, security_scan_started_at: string, security_scan_status: string, security_scan_status_updated_at: string, self_html_url: string, self_url: string, self_webapp_url: string, signature_url: string, size: int, slug: string, slug_perm: string, spdx_license: string, stage: int, stage_str: string, stage_updated_at: string, status: int, status_reason: string, status_str: string, status_updated_at: string, status_url: string, subtype: string, summary: string, sync_finished_at: string, sync_progress: int, tags: record, tags_automatic: record, tags_immutable: record, type_display: string, uploaded_at: string, uploader: string, uploader_url: string, version: string, version_orig: string, vulnerability_scan_results_url: string> {
   let input = $in
@@ -5285,51 +5284,51 @@ export def "repos create" [
   --allow-errors(-e) # Return full response without error handling
   --broadcast-state: string@broadcast-state-completer # Broadcasting status of a repository. (default: Off)
   --content-kind: string@content-kind-completer # The repository content kind determines whether this repository contains packages, or provides a distribution of packages from other repositories. You can only select the content kind at repository creation time. (default: Standard)
-  --contextual-auth-realm: string@bool-completer # If checked, missing credentials for this repository where basic authentication is required shall present an enriched value in the 'WWW-Authenticate' header containing the namespace and repository. This can be useful for tooling such as SBT where the authentication realm is used to distinguish and disambiguate credentials.
-  --copy-own: string@bool-completer # If checked, users can copy any of their own packages that they have uploaded, assuming that they still have write privilege for the repository. This takes precedence over privileges configured in the 'Access Controls' section of the repository, and any inherited from the org.
+  --contextual-auth-realm: oneof<nothing, bool> # If checked, missing credentials for this repository where basic authentication is required shall present an enriched value in the 'WWW-Authenticate' header containing the namespace and repository. This can be useful for tooling such as SBT where the authentication realm is used to distinguish and disambiguate credentials.
+  --copy-own: oneof<nothing, bool> # If checked, users can copy any of their own packages that they have uploaded, assuming that they still have write privilege for the repository. This takes precedence over privileges configured in the 'Access Controls' section of the repository, and any inherited from the org.
   --copy-packages: string@copy-packages-completer # This defines the minimum level of privilege required for a user to copy packages. Unless the package was uploaded by that user, in which the permission may be overridden by the user-specific copy setting. (default: Read)
-  --cosign-signing-enabled: string@bool-completer # When enabled, all pushed (or pulled from upstream) OCI packages and artifacts will be signed using cosign with the repository's ECDSA key. This generates a distinct cosign signature artifact per artifact.
+  --cosign-signing-enabled: oneof<nothing, bool> # When enabled, all pushed (or pulled from upstream) OCI packages and artifacts will be signed using cosign with the repository's ECDSA key. This generates a distinct cosign signature artifact per artifact.
   --default-privilege: string@default-privilege-completer # This defines the default level of privilege that all of your organization members have for this repository. This does not include collaborators, but applies to any member of the org regardless of their own membership role (i.e. it applies to owners, managers and members). Be careful if setting this to admin, because any member will be able to change settings. (default: None)
-  --delete-own: string@bool-completer # If checked, users can delete any of their own packages that they have uploaded, assuming that they still have write privilege for the repository. This takes precedence over privileges configured in the 'Access Controls' section of the repository, and any inherited from the org.
+  --delete-own: oneof<nothing, bool> # If checked, users can delete any of their own packages that they have uploaded, assuming that they still have write privilege for the repository. This takes precedence over privileges configured in the 'Access Controls' section of the repository, and any inherited from the org.
   --delete-packages: string@delete-packages-completer # This defines the minimum level of privilege required for a user to delete packages. Unless the package was uploaded by that user, in which the permission may be overridden by the user-specific delete setting. (default: Admin)
   --description: string # A description of the repository's purpose/contents.
   --distributes: list # The repositories distributed through this repo. Adding repos here is only valid if the content_kind is DISTRIBUTION.
-  --docker-refresh-tokens-enabled: string@bool-completer # If checked, refresh tokens will be issued in addition to access tokens for Docker authentication. This allows unlimited extension of the lifetime of access tokens.
-  --enforce-eula: string@bool-completer # If checked, downloads will explicitly require acceptance of an EULA.
-  --generic-package-index-enabled: string@bool-completer # If checked, HTML indexes will be generated that list all available generic packages in the repository.
-  --index-files: string@bool-completer # If checked, files contained in packages will be indexed, which increase the synchronisation time required for packages. Note that it is recommended you keep this enabled unless the synchronisation time is significantly impacted.
-  --is-public-hidden: string@bool-completer # If checked, this repository will be hidden from the list of public broadcasts for the workspace.
+  --docker-refresh-tokens-enabled: oneof<nothing, bool> # If checked, refresh tokens will be issued in addition to access tokens for Docker authentication. This allows unlimited extension of the lifetime of access tokens.
+  --enforce-eula: oneof<nothing, bool> # If checked, downloads will explicitly require acceptance of an EULA.
+  --generic-package-index-enabled: oneof<nothing, bool> # If checked, HTML indexes will be generated that list all available generic packages in the repository.
+  --index-files: oneof<nothing, bool> # If checked, files contained in packages will be indexed, which increase the synchronisation time required for packages. Note that it is recommended you keep this enabled unless the synchronisation time is significantly impacted.
+  --is-public-hidden: oneof<nothing, bool> # If checked, this repository will be hidden from the list of public broadcasts for the workspace.
   --manage-entitlements-privilege: string@manage-entitlements-privilege-completer # This defines the minimum level of privilege required for a user to manage entitlement tokens with private repositories. Management is the ability to create, alter, enable, disable or delete all tokens without a repository. (default: Admin)
-  --move-own: string@bool-completer # If checked, users can move any of their own packages that they have uploaded, assuming that they still have write privilege for the repository. This takes precedence over privileges configured in the 'Access Controls' section of the repository, and any inherited from the org.
+  --move-own: oneof<nothing, bool> # If checked, users can move any of their own packages that they have uploaded, assuming that they still have write privilege for the repository. This takes precedence over privileges configured in the 'Access Controls' section of the repository, and any inherited from the org.
   --move-packages: string@move-packages-completer # This defines the minimum level of privilege required for a user to move packages. Unless the package was uploaded by that user, in which the permission may be overridden by the user-specific move setting. (default: Admin)
   name: string # A descriptive name for the repository.
-  --npm-upstream-tags-take-precedence: string@bool-completer # If checked, npm distribution tags from configured upstreams will take precedence over matching local tags. When both upstream and local repositories have the same tag name (e.g., 'latest'), the upstream tag will be used instead of the local one, even if the local repository has a semantically higher version.
-  --nuget-native-signing-enabled: string@bool-completer # When enabled, all pushed (or pulled from upstream) nuget packages and artifacts will be signed using the repository's X.509 RSA certificate. Additionally, the nuget RepositorySignature index will list all of the repository's signing certificates including the ones from configured upstreams.
+  --npm-upstream-tags-take-precedence: oneof<nothing, bool> # If checked, npm distribution tags from configured upstreams will take precedence over matching local tags. When both upstream and local repositories have the same tag name (e.g., 'latest'), the upstream tag will be used instead of the local one, even if the local repository has a semantically higher version.
+  --nuget-native-signing-enabled: oneof<nothing, bool> # When enabled, all pushed (or pulled from upstream) nuget packages and artifacts will be signed using the repository's X.509 RSA certificate. Additionally, the nuget RepositorySignature index will list all of the repository's signing certificates including the ones from configured upstreams.
   --open-source-license: string # The SPDX identifier of the open source license.
   --open-source-project-url: string # The URL to the Open-Source project, used for validating that the project meets the requirements for Open-Source. (format: uri)
-  --proxy-npmjs: string@bool-completer # If checked, Npm packages that are not in the repository when requested by clients will automatically be proxied from the public npmjs.org registry. If there is at least one version for a package, others will not be proxied.
-  --proxy-pypi: string@bool-completer # If checked, Python packages that are not in the repository when requested by clients will automatically be proxied from the public pypi.python.org registry. If there is at least one version for a package, others will not be proxied.
-  --raw-package-index-enabled: string@bool-completer # If checked, HTML and JSON indexes will be generated that list all available raw packages in the repository.
-  --raw-package-index-signatures-enabled: string@bool-completer # If checked, the HTML and JSON indexes will display raw package GPG signatures alongside the index packages.
+  --proxy-npmjs: oneof<nothing, bool> # If checked, Npm packages that are not in the repository when requested by clients will automatically be proxied from the public npmjs.org registry. If there is at least one version for a package, others will not be proxied.
+  --proxy-pypi: oneof<nothing, bool> # If checked, Python packages that are not in the repository when requested by clients will automatically be proxied from the public pypi.python.org registry. If there is at least one version for a package, others will not be proxied.
+  --raw-package-index-enabled: oneof<nothing, bool> # If checked, HTML and JSON indexes will be generated that list all available raw packages in the repository.
+  --raw-package-index-signatures-enabled: oneof<nothing, bool> # If checked, the HTML and JSON indexes will display raw package GPG signatures alongside the index packages.
   --replace-packages: string@replace-packages-completer # This defines the minimum level of privilege required for a user to republish packages. Unless the package was uploaded by that user, in which the permission may be overridden by the user-specific republish setting. Please note that the user still requires the privilege to delete packages that will be replaced by the new package; otherwise the republish will fail. (default: Write)
-  --replace-packages-by-default: string@bool-completer # If checked, uploaded packages will overwrite/replace any others with the same attributes (e.g. same version) by default. This only applies if the user has the required privilege for the republishing AND has the required privilege to delete existing packages that they don't own.
+  --replace-packages-by-default: oneof<nothing, bool> # If checked, uploaded packages will overwrite/replace any others with the same attributes (e.g. same version) by default. This only applies if the user has the required privilege for the republishing AND has the required privilege to delete existing packages that they don't own.
   --repository-type-str: string@repository-type-str-completer # The repository type changes how it is accessed and billed. Private repositories are visible only to you or authorized delegates. Public repositories are visible to all Cloudsmith users. (default: Public)
-  --resync-own: string@bool-completer # If checked, users can resync any of their own packages that they have uploaded, assuming that they still have write privilege for the repository. This takes precedence over privileges configured in the 'Access Controls' section of the repository, and any inherited from the org.
+  --resync-own: oneof<nothing, bool> # If checked, users can resync any of their own packages that they have uploaded, assuming that they still have write privilege for the repository. This takes precedence over privileges configured in the 'Access Controls' section of the repository, and any inherited from the org.
   --resync-packages: string@resync-packages-completer # This defines the minimum level of privilege required for a user to resync packages. Unless the package was uploaded by that user, in which the permission may be overridden by the user-specific resync setting. (default: Admin)
-  --scan-own: string@bool-completer # If checked, users can scan any of their own packages that they have uploaded, assuming that they still have write privilege for the repository. This takes precedence over privileges configured in the 'Access Controls' section of the repository, and any inherited from the org.
+  --scan-own: oneof<nothing, bool> # If checked, users can scan any of their own packages that they have uploaded, assuming that they still have write privilege for the repository. This takes precedence over privileges configured in the 'Access Controls' section of the repository, and any inherited from the org.
   --scan-packages: string@scan-packages-completer # This defines the minimum level of privilege required for a user to scan packages. Unless the package was uploaded by that user, in which the permission may be overridden by the user-specific scan setting. (default: Read)
-  --show-setup-all: string@bool-completer # If checked, the Set Me Up help for all formats will always be shown, even if you don't have packages of that type uploaded. Otherwise, help will only be shown for packages that are in the repository. For example, if you have uploaded only NuGet packages, then the Set Me Up help for NuGet packages will be shown only.
+  --show-setup-all: oneof<nothing, bool> # If checked, the Set Me Up help for all formats will always be shown, even if you don't have packages of that type uploaded. Otherwise, help will only be shown for packages that are in the repository. For example, if you have uploaded only NuGet packages, then the Set Me Up help for NuGet packages will be shown only.
   --slug: string # The slug identifies the repository in URIs.
   --storage-region: string # The Cloudsmith region in which package files are stored. (default: default)
-  --strict-npm-validation: string@bool-completer # If checked, npm packages will be validated strictly to ensure the package matches specifcation. You can turn this on if you want to guarantee that the packages will work with npm-cli and other tools correctly.
-  --tag-pre-releases-as-latest: string@bool-completer # If checked, packages pushed with a pre-release component on that version will be marked with the 'latest' tag. Note that if unchecked, a repository containing ONLY pre-release versions, will have no version marked latest which may cause incompatibility with native tools 
-  --use-debian-labels: string@bool-completer # If checked, a 'Label' field will be present in Debian-based repositories. It will contain a string that identifies the entitlement token used to authenticate the repository, in the form of 'source=t-<identifier>'; or 'source=none' if no token was used. You can use this to help with pinning.
-  --use-default-cargo-upstream: string@bool-completer # If checked, dependencies of uploaded Cargo crates which do not set an explicit value for "registry" will be assumed to be available from crates.io. If unchecked, dependencies with unspecified "registry" values will be assumed to be available in the registry being uploaded to. Uncheck this if you want to ensure that dependencies are only ever installed from Cloudsmith unless explicitly specified as belong to another registry.
+  --strict-npm-validation: oneof<nothing, bool> # If checked, npm packages will be validated strictly to ensure the package matches specifcation. You can turn this on if you want to guarantee that the packages will work with npm-cli and other tools correctly.
+  --tag-pre-releases-as-latest: oneof<nothing, bool> # If checked, packages pushed with a pre-release component on that version will be marked with the 'latest' tag. Note that if unchecked, a repository containing ONLY pre-release versions, will have no version marked latest which may cause incompatibility with native tools 
+  --use-debian-labels: oneof<nothing, bool> # If checked, a 'Label' field will be present in Debian-based repositories. It will contain a string that identifies the entitlement token used to authenticate the repository, in the form of 'source=t-<identifier>'; or 'source=none' if no token was used. You can use this to help with pinning.
+  --use-default-cargo-upstream: oneof<nothing, bool> # If checked, dependencies of uploaded Cargo crates which do not set an explicit value for "registry" will be assumed to be available from crates.io. If unchecked, dependencies with unspecified "registry" values will be assumed to be available in the registry being uploaded to. Uncheck this if you want to ensure that dependencies are only ever installed from Cloudsmith unless explicitly specified as belong to another registry.
   --use-entitlements-privilege: string@use-entitlements-privilege-completer # This defines the minimum level of privilege required for a user to see/use entitlement tokens with private repositories. If a user does not have the permission, they will only be able to download packages using other credentials, such as email/password via basic authentication. Use this if you want to force users to only use their user-based token, which is tied to their access (if removed, they can't use it). (default: Read)
-  --use-noarch-packages: string@bool-completer # If checked, noarch packages (if supported) are enabled in installations/configurations. A noarch package is one that is not tied to specific system architecture (like i686).
-  --use-source-packages: string@bool-completer # If checked, source packages (if supported) are enabled in installations/configurations. A source package is one that contains source code rather than built binaries.
-  --use-vulnerability-scanning: string@bool-completer # If checked, vulnerability scanning will be enabled for all supported packages within this repository.
-  --user-entitlements-enabled: string@bool-completer # If checked, users can use and manage their own user-specific entitlement token for the repository (if private). Otherwise, user-specific entitlements are disabled for all users.
+  --use-noarch-packages: oneof<nothing, bool> # If checked, noarch packages (if supported) are enabled in installations/configurations. A noarch package is one that is not tied to specific system architecture (like i686).
+  --use-source-packages: oneof<nothing, bool> # If checked, source packages (if supported) are enabled in installations/configurations. A source package is one that contains source code rather than built binaries.
+  --use-vulnerability-scanning: oneof<nothing, bool> # If checked, vulnerability scanning will be enabled for all supported packages within this repository.
+  --user-entitlements-enabled: oneof<nothing, bool> # If checked, users can use and manage their own user-specific entitlement token for the repository (if private). Otherwise, user-specific entitlements are disabled for all users.
   --view-statistics: string@view-statistics-completer # This defines the minimum level of privilege required for a user to view repository statistics, to include entitlement-based usage, if applicable. If a user does not have the permission, they won't be able to view any statistics, either via the UI, API or CLI. (default: Read)
 ]: any -> record<active_connection_count: int, broadcast_state: string, cdn_url: string, content_kind: string, contextual_auth_realm: bool, copy_own: bool, copy_packages: string, cosign_signing_enabled: bool, created_at: string, default_privilege: string, delete_own: bool, delete_packages: string, deleted_at: string, description: string, distributes: list<string>, docker_refresh_tokens_enabled: bool, ecdsa_keys: table<active: bool, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string, ssh_fingerprint: string>, enforce_eula: bool, generic_package_index_enabled: bool, gpg_keys: table<active: bool, comment: string, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string>, index_files: bool, is_open_source: bool, is_private: bool, is_public: bool, is_public_hidden: bool, manage_entitlements_privilege: string, move_own: bool, move_packages: string, name: string, namespace: string, namespace_url: string, npm_upstream_tags_take_precedence: bool, nuget_native_signing_enabled: bool, num_downloads: int, num_policy_violated_packages: int, num_quarantined_packages: int, open_source_license: string, open_source_project_url: string, package_count: int, package_count_excl_subcomponents: int, package_group_count: int, proxy_npmjs: bool, proxy_pypi: bool, raw_package_index_enabled: bool, raw_package_index_signatures_enabled: bool, replace_packages: string, replace_packages_by_default: bool, repository_type: int, repository_type_str: string, resync_own: bool, resync_packages: string, scan_own: bool, scan_packages: string, self_html_url: string, self_url: string, self_webapp_url: string, show_setup_all: bool, size: int, size_str: string, slug: string, slug_perm: string, storage_region: string, strict_npm_validation: bool, tag_pre_releases_as_latest: bool, use_debian_labels: bool, use_default_cargo_upstream: bool, use_entitlements_privilege: string, use_noarch_packages: bool, use_source_packages: bool, use_vulnerability_scanning: bool, user_entitlements_enabled: bool, view_statistics: string> {
   let input = $in
@@ -5382,50 +5381,50 @@ export def "repos patch" [
   --allow-errors(-e) # Return full response without error handling
   --broadcast-state: string@broadcast-state-completer # Broadcasting status of a repository. (default: Off)
   --content-kind: string@content-kind-completer # The repository content kind determines whether this repository contains packages, or provides a distribution of packages from other repositories. You can only select the content kind at repository creation time. (default: Standard)
-  --contextual-auth-realm: string@bool-completer # If checked, missing credentials for this repository where basic authentication is required shall present an enriched value in the 'WWW-Authenticate' header containing the namespace and repository. This can be useful for tooling such as SBT where the authentication realm is used to distinguish and disambiguate credentials.
-  --copy-own: string@bool-completer # If checked, users can copy any of their own packages that they have uploaded, assuming that they still have write privilege for the repository. This takes precedence over privileges configured in the 'Access Controls' section of the repository, and any inherited from the org.
+  --contextual-auth-realm: oneof<nothing, bool> # If checked, missing credentials for this repository where basic authentication is required shall present an enriched value in the 'WWW-Authenticate' header containing the namespace and repository. This can be useful for tooling such as SBT where the authentication realm is used to distinguish and disambiguate credentials.
+  --copy-own: oneof<nothing, bool> # If checked, users can copy any of their own packages that they have uploaded, assuming that they still have write privilege for the repository. This takes precedence over privileges configured in the 'Access Controls' section of the repository, and any inherited from the org.
   --copy-packages: string@copy-packages-completer # This defines the minimum level of privilege required for a user to copy packages. Unless the package was uploaded by that user, in which the permission may be overridden by the user-specific copy setting. (default: Read)
-  --cosign-signing-enabled: string@bool-completer # When enabled, all pushed (or pulled from upstream) OCI packages and artifacts will be signed using cosign with the repository's ECDSA key. This generates a distinct cosign signature artifact per artifact.
+  --cosign-signing-enabled: oneof<nothing, bool> # When enabled, all pushed (or pulled from upstream) OCI packages and artifacts will be signed using cosign with the repository's ECDSA key. This generates a distinct cosign signature artifact per artifact.
   --default-privilege: string@default-privilege-completer # This defines the default level of privilege that all of your organization members have for this repository. This does not include collaborators, but applies to any member of the org regardless of their own membership role (i.e. it applies to owners, managers and members). Be careful if setting this to admin, because any member will be able to change settings. (default: None)
-  --delete-own: string@bool-completer # If checked, users can delete any of their own packages that they have uploaded, assuming that they still have write privilege for the repository. This takes precedence over privileges configured in the 'Access Controls' section of the repository, and any inherited from the org.
+  --delete-own: oneof<nothing, bool> # If checked, users can delete any of their own packages that they have uploaded, assuming that they still have write privilege for the repository. This takes precedence over privileges configured in the 'Access Controls' section of the repository, and any inherited from the org.
   --delete-packages: string@delete-packages-completer # This defines the minimum level of privilege required for a user to delete packages. Unless the package was uploaded by that user, in which the permission may be overridden by the user-specific delete setting. (default: Admin)
   --description: string # A description of the repository's purpose/contents.
   --distributes: list # The repositories distributed through this repo. Adding repos here is only valid if the content_kind is DISTRIBUTION.
-  --docker-refresh-tokens-enabled: string@bool-completer # If checked, refresh tokens will be issued in addition to access tokens for Docker authentication. This allows unlimited extension of the lifetime of access tokens.
-  --enforce-eula: string@bool-completer # If checked, downloads will explicitly require acceptance of an EULA.
-  --generic-package-index-enabled: string@bool-completer # If checked, HTML indexes will be generated that list all available generic packages in the repository.
-  --index-files: string@bool-completer # If checked, files contained in packages will be indexed, which increase the synchronisation time required for packages. Note that it is recommended you keep this enabled unless the synchronisation time is significantly impacted.
-  --is-public-hidden: string@bool-completer # If checked, this repository will be hidden from the list of public broadcasts for the workspace.
+  --docker-refresh-tokens-enabled: oneof<nothing, bool> # If checked, refresh tokens will be issued in addition to access tokens for Docker authentication. This allows unlimited extension of the lifetime of access tokens.
+  --enforce-eula: oneof<nothing, bool> # If checked, downloads will explicitly require acceptance of an EULA.
+  --generic-package-index-enabled: oneof<nothing, bool> # If checked, HTML indexes will be generated that list all available generic packages in the repository.
+  --index-files: oneof<nothing, bool> # If checked, files contained in packages will be indexed, which increase the synchronisation time required for packages. Note that it is recommended you keep this enabled unless the synchronisation time is significantly impacted.
+  --is-public-hidden: oneof<nothing, bool> # If checked, this repository will be hidden from the list of public broadcasts for the workspace.
   --manage-entitlements-privilege: string@manage-entitlements-privilege-completer # This defines the minimum level of privilege required for a user to manage entitlement tokens with private repositories. Management is the ability to create, alter, enable, disable or delete all tokens without a repository. (default: Admin)
-  --move-own: string@bool-completer # If checked, users can move any of their own packages that they have uploaded, assuming that they still have write privilege for the repository. This takes precedence over privileges configured in the 'Access Controls' section of the repository, and any inherited from the org.
+  --move-own: oneof<nothing, bool> # If checked, users can move any of their own packages that they have uploaded, assuming that they still have write privilege for the repository. This takes precedence over privileges configured in the 'Access Controls' section of the repository, and any inherited from the org.
   --move-packages: string@move-packages-completer # This defines the minimum level of privilege required for a user to move packages. Unless the package was uploaded by that user, in which the permission may be overridden by the user-specific move setting. (default: Admin)
   --name: string # A descriptive name for the repository.
-  --npm-upstream-tags-take-precedence: string@bool-completer # If checked, npm distribution tags from configured upstreams will take precedence over matching local tags. When both upstream and local repositories have the same tag name (e.g., 'latest'), the upstream tag will be used instead of the local one, even if the local repository has a semantically higher version.
-  --nuget-native-signing-enabled: string@bool-completer # When enabled, all pushed (or pulled from upstream) nuget packages and artifacts will be signed using the repository's X.509 RSA certificate. Additionally, the nuget RepositorySignature index will list all of the repository's signing certificates including the ones from configured upstreams.
+  --npm-upstream-tags-take-precedence: oneof<nothing, bool> # If checked, npm distribution tags from configured upstreams will take precedence over matching local tags. When both upstream and local repositories have the same tag name (e.g., 'latest'), the upstream tag will be used instead of the local one, even if the local repository has a semantically higher version.
+  --nuget-native-signing-enabled: oneof<nothing, bool> # When enabled, all pushed (or pulled from upstream) nuget packages and artifacts will be signed using the repository's X.509 RSA certificate. Additionally, the nuget RepositorySignature index will list all of the repository's signing certificates including the ones from configured upstreams.
   --open-source-license: string # The SPDX identifier of the open source license.
   --open-source-project-url: string # The URL to the Open-Source project, used for validating that the project meets the requirements for Open-Source. (format: uri)
-  --proxy-npmjs: string@bool-completer # If checked, Npm packages that are not in the repository when requested by clients will automatically be proxied from the public npmjs.org registry. If there is at least one version for a package, others will not be proxied.
-  --proxy-pypi: string@bool-completer # If checked, Python packages that are not in the repository when requested by clients will automatically be proxied from the public pypi.python.org registry. If there is at least one version for a package, others will not be proxied.
-  --raw-package-index-enabled: string@bool-completer # If checked, HTML and JSON indexes will be generated that list all available raw packages in the repository.
-  --raw-package-index-signatures-enabled: string@bool-completer # If checked, the HTML and JSON indexes will display raw package GPG signatures alongside the index packages.
+  --proxy-npmjs: oneof<nothing, bool> # If checked, Npm packages that are not in the repository when requested by clients will automatically be proxied from the public npmjs.org registry. If there is at least one version for a package, others will not be proxied.
+  --proxy-pypi: oneof<nothing, bool> # If checked, Python packages that are not in the repository when requested by clients will automatically be proxied from the public pypi.python.org registry. If there is at least one version for a package, others will not be proxied.
+  --raw-package-index-enabled: oneof<nothing, bool> # If checked, HTML and JSON indexes will be generated that list all available raw packages in the repository.
+  --raw-package-index-signatures-enabled: oneof<nothing, bool> # If checked, the HTML and JSON indexes will display raw package GPG signatures alongside the index packages.
   --replace-packages: string@replace-packages-completer # This defines the minimum level of privilege required for a user to republish packages. Unless the package was uploaded by that user, in which the permission may be overridden by the user-specific republish setting. Please note that the user still requires the privilege to delete packages that will be replaced by the new package; otherwise the republish will fail. (default: Write)
-  --replace-packages-by-default: string@bool-completer # If checked, uploaded packages will overwrite/replace any others with the same attributes (e.g. same version) by default. This only applies if the user has the required privilege for the republishing AND has the required privilege to delete existing packages that they don't own.
+  --replace-packages-by-default: oneof<nothing, bool> # If checked, uploaded packages will overwrite/replace any others with the same attributes (e.g. same version) by default. This only applies if the user has the required privilege for the republishing AND has the required privilege to delete existing packages that they don't own.
   --repository-type-str: string@repository-type-str-completer # The repository type changes how it is accessed and billed. Private repositories are visible only to you or authorized delegates. Public repositories are visible to all Cloudsmith users. (default: Public)
-  --resync-own: string@bool-completer # If checked, users can resync any of their own packages that they have uploaded, assuming that they still have write privilege for the repository. This takes precedence over privileges configured in the 'Access Controls' section of the repository, and any inherited from the org.
+  --resync-own: oneof<nothing, bool> # If checked, users can resync any of their own packages that they have uploaded, assuming that they still have write privilege for the repository. This takes precedence over privileges configured in the 'Access Controls' section of the repository, and any inherited from the org.
   --resync-packages: string@resync-packages-completer # This defines the minimum level of privilege required for a user to resync packages. Unless the package was uploaded by that user, in which the permission may be overridden by the user-specific resync setting. (default: Admin)
-  --scan-own: string@bool-completer # If checked, users can scan any of their own packages that they have uploaded, assuming that they still have write privilege for the repository. This takes precedence over privileges configured in the 'Access Controls' section of the repository, and any inherited from the org.
+  --scan-own: oneof<nothing, bool> # If checked, users can scan any of their own packages that they have uploaded, assuming that they still have write privilege for the repository. This takes precedence over privileges configured in the 'Access Controls' section of the repository, and any inherited from the org.
   --scan-packages: string@scan-packages-completer # This defines the minimum level of privilege required for a user to scan packages. Unless the package was uploaded by that user, in which the permission may be overridden by the user-specific scan setting. (default: Read)
-  --show-setup-all: string@bool-completer # If checked, the Set Me Up help for all formats will always be shown, even if you don't have packages of that type uploaded. Otherwise, help will only be shown for packages that are in the repository. For example, if you have uploaded only NuGet packages, then the Set Me Up help for NuGet packages will be shown only.
+  --show-setup-all: oneof<nothing, bool> # If checked, the Set Me Up help for all formats will always be shown, even if you don't have packages of that type uploaded. Otherwise, help will only be shown for packages that are in the repository. For example, if you have uploaded only NuGet packages, then the Set Me Up help for NuGet packages will be shown only.
   --slug: string # The slug identifies the repository in URIs.
-  --strict-npm-validation: string@bool-completer # If checked, npm packages will be validated strictly to ensure the package matches specifcation. You can turn this on if you want to guarantee that the packages will work with npm-cli and other tools correctly.
-  --tag-pre-releases-as-latest: string@bool-completer # If checked, packages pushed with a pre-release component on that version will be marked with the 'latest' tag. Note that if unchecked, a repository containing ONLY pre-release versions, will have no version marked latest which may cause incompatibility with native tools 
-  --use-debian-labels: string@bool-completer # If checked, a 'Label' field will be present in Debian-based repositories. It will contain a string that identifies the entitlement token used to authenticate the repository, in the form of 'source=t-<identifier>'; or 'source=none' if no token was used. You can use this to help with pinning.
-  --use-default-cargo-upstream: string@bool-completer # If checked, dependencies of uploaded Cargo crates which do not set an explicit value for "registry" will be assumed to be available from crates.io. If unchecked, dependencies with unspecified "registry" values will be assumed to be available in the registry being uploaded to. Uncheck this if you want to ensure that dependencies are only ever installed from Cloudsmith unless explicitly specified as belong to another registry.
+  --strict-npm-validation: oneof<nothing, bool> # If checked, npm packages will be validated strictly to ensure the package matches specifcation. You can turn this on if you want to guarantee that the packages will work with npm-cli and other tools correctly.
+  --tag-pre-releases-as-latest: oneof<nothing, bool> # If checked, packages pushed with a pre-release component on that version will be marked with the 'latest' tag. Note that if unchecked, a repository containing ONLY pre-release versions, will have no version marked latest which may cause incompatibility with native tools 
+  --use-debian-labels: oneof<nothing, bool> # If checked, a 'Label' field will be present in Debian-based repositories. It will contain a string that identifies the entitlement token used to authenticate the repository, in the form of 'source=t-<identifier>'; or 'source=none' if no token was used. You can use this to help with pinning.
+  --use-default-cargo-upstream: oneof<nothing, bool> # If checked, dependencies of uploaded Cargo crates which do not set an explicit value for "registry" will be assumed to be available from crates.io. If unchecked, dependencies with unspecified "registry" values will be assumed to be available in the registry being uploaded to. Uncheck this if you want to ensure that dependencies are only ever installed from Cloudsmith unless explicitly specified as belong to another registry.
   --use-entitlements-privilege: string@use-entitlements-privilege-completer # This defines the minimum level of privilege required for a user to see/use entitlement tokens with private repositories. If a user does not have the permission, they will only be able to download packages using other credentials, such as email/password via basic authentication. Use this if you want to force users to only use their user-based token, which is tied to their access (if removed, they can't use it). (default: Read)
-  --use-noarch-packages: string@bool-completer # If checked, noarch packages (if supported) are enabled in installations/configurations. A noarch package is one that is not tied to specific system architecture (like i686).
-  --use-source-packages: string@bool-completer # If checked, source packages (if supported) are enabled in installations/configurations. A source package is one that contains source code rather than built binaries.
-  --use-vulnerability-scanning: string@bool-completer # If checked, vulnerability scanning will be enabled for all supported packages within this repository.
-  --user-entitlements-enabled: string@bool-completer # If checked, users can use and manage their own user-specific entitlement token for the repository (if private). Otherwise, user-specific entitlements are disabled for all users.
+  --use-noarch-packages: oneof<nothing, bool> # If checked, noarch packages (if supported) are enabled in installations/configurations. A noarch package is one that is not tied to specific system architecture (like i686).
+  --use-source-packages: oneof<nothing, bool> # If checked, source packages (if supported) are enabled in installations/configurations. A source package is one that contains source code rather than built binaries.
+  --use-vulnerability-scanning: oneof<nothing, bool> # If checked, vulnerability scanning will be enabled for all supported packages within this repository.
+  --user-entitlements-enabled: oneof<nothing, bool> # If checked, users can use and manage their own user-specific entitlement token for the repository (if private). Otherwise, user-specific entitlements are disabled for all users.
   --view-statistics: string@view-statistics-completer # This defines the minimum level of privilege required for a user to view repository statistics, to include entitlement-based usage, if applicable. If a user does not have the permission, they won't be able to view any statistics, either via the UI, API or CLI. (default: Read)
 ]: any -> record<active_connection_count: int, broadcast_state: string, cdn_url: string, content_kind: string, contextual_auth_realm: bool, copy_own: bool, copy_packages: string, cosign_signing_enabled: bool, created_at: string, default_privilege: string, delete_own: bool, delete_packages: string, deleted_at: string, description: string, distributes: list<string>, docker_refresh_tokens_enabled: bool, ecdsa_keys: table<active: bool, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string, ssh_fingerprint: string>, enforce_eula: bool, generic_package_index_enabled: bool, gpg_keys: table<active: bool, comment: string, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string>, index_files: bool, is_open_source: bool, is_private: bool, is_public: bool, is_public_hidden: bool, manage_entitlements_privilege: string, move_own: bool, move_packages: string, name: string, namespace: string, namespace_url: string, npm_upstream_tags_take_precedence: bool, nuget_native_signing_enabled: bool, num_downloads: int, num_policy_violated_packages: int, num_quarantined_packages: int, open_source_license: string, open_source_project_url: string, package_count: int, package_count_excl_subcomponents: int, package_group_count: int, proxy_npmjs: bool, proxy_pypi: bool, raw_package_index_enabled: bool, raw_package_index_signatures_enabled: bool, replace_packages: string, replace_packages_by_default: bool, repository_type: int, repository_type_str: string, resync_own: bool, resync_packages: string, scan_own: bool, scan_packages: string, self_html_url: string, self_url: string, self_webapp_url: string, show_setup_all: bool, size: int, size_str: string, slug: string, slug_perm: string, storage_region: string, strict_npm_validation: bool, tag_pre_releases_as_latest: bool, use_debian_labels: bool, use_default_cargo_upstream: bool, use_entitlements_privilege: string, use_noarch_packages: bool, use_source_packages: bool, use_vulnerability_scanning: bool, user_entitlements_enabled: bool, view_statistics: string> {
   let input = $in
@@ -5502,7 +5501,7 @@ export def "repos-connected create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-active: string@bool-completer # default: true
+  --is-active: oneof<nothing, bool> # default: true
   --priority: int # Repositories are checked in ascending order (starting at 1). If multiple repositories have the same priority, the oldest one is used first.
   target_repository: string # The slug of the target repository to connect to. (format: slug)
 ]: any -> record<created_at: string, is_active: bool, priority: int, slug_perm: string, target_repository: string> {
@@ -5556,7 +5555,7 @@ export def "repos-connected update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-active: string@bool-completer # default: true
+  --is-active: oneof<nothing, bool> # default: true
   --priority: int # Repositories are checked in ascending order (starting at 1). If multiple repositories have the same priority, the oldest one is used first.
   target_repository: string # The slug of the target repository to connect to. (format: slug)
 ]: any -> record<created_at: string, is_active: bool, priority: int, slug_perm: string, target_repository: string> {
@@ -5586,7 +5585,7 @@ export def "repos-connected patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-active: string@bool-completer # default: true
+  --is-active: oneof<nothing, bool> # default: true
   --priority: int # Repositories are checked in ascending order (starting at 1). If multiple repositories have the same priority, the oldest one is used first.
   --target-repository: string # The slug of the target repository to connect to. (format: slug)
 ]: any -> record<created_at: string, is_active: bool, priority: int, slug_perm: string, target_repository: string> {
@@ -6235,14 +6234,14 @@ export def "repos-upstream-alpine create" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --rsa-key-url: string # When provided, Cloudsmith will fetch and validate the RSA public key at this URL and use it to verify package signatures from this upstream. (format: uri)
   --rsa-verification: string@rsa-verification-completer # The RSA signature verification mode for this upstream. (default: Allow All)
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, rsa_key_inline: string, rsa_key_url: string, rsa_verification: string, rsa_verification_status: string, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -6301,14 +6300,14 @@ export def "repos-upstream-alpine update" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --rsa-key-url: string # When provided, Cloudsmith will fetch and validate the RSA public key at this URL and use it to verify package signatures from this upstream. (format: uri)
   --rsa-verification: string@rsa-verification-completer # The RSA signature verification mode for this upstream. (default: Allow All)
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, rsa_key_inline: string, rsa_key_url: string, rsa_verification: string, rsa_verification_status: string, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -6343,14 +6342,14 @@ export def "repos-upstream-alpine patch" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   --name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --rsa-key-url: string # When provided, Cloudsmith will fetch and validate the RSA public key at this URL and use it to verify package signatures from this upstream. (format: uri)
   --rsa-verification: string@rsa-verification-completer # The RSA signature verification mode for this upstream. (default: Allow All)
   --upstream-url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, rsa_key_inline: string, rsa_key_url: string, rsa_verification: string, rsa_verification_status: string, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -6434,12 +6433,12 @@ export def "repos-upstream-cargo create" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -6498,12 +6497,12 @@ export def "repos-upstream-cargo update" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -6538,12 +6537,12 @@ export def "repos-upstream-cargo patch" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   --name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --upstream-url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -6627,12 +6626,12 @@ export def "repos-upstream-composer create" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -6691,12 +6690,12 @@ export def "repos-upstream-composer update" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -6731,12 +6730,12 @@ export def "repos-upstream-composer patch" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   --name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --upstream-url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -6820,12 +6819,12 @@ export def "repos-upstream-conda create" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -6884,12 +6883,12 @@ export def "repos-upstream-conda update" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -6924,12 +6923,12 @@ export def "repos-upstream-conda patch" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   --name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --upstream-url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -7013,12 +7012,12 @@ export def "repos-upstream-cran create" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -7077,12 +7076,12 @@ export def "repos-upstream-cran update" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -7117,12 +7116,12 @@ export def "repos-upstream-cran patch" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   --name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --upstream-url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -7206,12 +7205,12 @@ export def "repos-upstream-dart create" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -7270,12 +7269,12 @@ export def "repos-upstream-dart update" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -7310,12 +7309,12 @@ export def "repos-upstream-dart patch" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   --name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --upstream-url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -7404,14 +7403,14 @@ export def "repos-upstream-deb create" [
   --gpg-key-inline: string # A public GPG key to associate with packages found on this upstream. When using the Cloudsmith setup script, this GPG key will be automatically imported on your deployment machines to allow upstream packages to validate and install.
   --gpg-key-url: string # When provided, Cloudsmith will fetch, validate, and associate a public GPG key found at the provided URL. When using the Cloudsmith setup script, this GPG key will be automatically imported on your deployment machines to allow upstream packages to validate and install. (format: uri)
   --gpg-verification: string@gpg-verification-completer # The GPG signature verification mode for this upstream. (default: Allow All)
-  --include-sources: string@bool-completer # When true, source packages will be available from this upstream.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --include-sources: oneof<nothing, bool> # When true, source packages will be available from this upstream.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --upstream-distribution: string # The distribution to fetch from the upstream
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, component: string, created_at: string, disable_reason: string, disable_reason_text: string, distro_versions: list<string>, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, gpg_key_fingerprint_short: string, gpg_key_inline: string, gpg_key_url: string, gpg_verification: string, has_failed_signature_verification: bool, include_sources: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_distribution: string, upstream_url: string, verification_status: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -7475,14 +7474,14 @@ export def "repos-upstream-deb update" [
   --gpg-key-inline: string # A public GPG key to associate with packages found on this upstream. When using the Cloudsmith setup script, this GPG key will be automatically imported on your deployment machines to allow upstream packages to validate and install.
   --gpg-key-url: string # When provided, Cloudsmith will fetch, validate, and associate a public GPG key found at the provided URL. When using the Cloudsmith setup script, this GPG key will be automatically imported on your deployment machines to allow upstream packages to validate and install. (format: uri)
   --gpg-verification: string@gpg-verification-completer # The GPG signature verification mode for this upstream. (default: Allow All)
-  --include-sources: string@bool-completer # When true, source packages will be available from this upstream.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --include-sources: oneof<nothing, bool> # When true, source packages will be available from this upstream.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --upstream-distribution: string # The distribution to fetch from the upstream
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, component: string, created_at: string, disable_reason: string, disable_reason_text: string, distro_versions: list<string>, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, gpg_key_fingerprint_short: string, gpg_key_inline: string, gpg_key_url: string, gpg_verification: string, has_failed_signature_verification: bool, include_sources: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_distribution: string, upstream_url: string, verification_status: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -7522,14 +7521,14 @@ export def "repos-upstream-deb patch" [
   --gpg-key-inline: string # A public GPG key to associate with packages found on this upstream. When using the Cloudsmith setup script, this GPG key will be automatically imported on your deployment machines to allow upstream packages to validate and install.
   --gpg-key-url: string # When provided, Cloudsmith will fetch, validate, and associate a public GPG key found at the provided URL. When using the Cloudsmith setup script, this GPG key will be automatically imported on your deployment machines to allow upstream packages to validate and install. (format: uri)
   --gpg-verification: string@gpg-verification-completer # The GPG signature verification mode for this upstream. (default: Allow All)
-  --include-sources: string@bool-completer # When true, source packages will be available from this upstream.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --include-sources: oneof<nothing, bool> # When true, source packages will be available from this upstream.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   --name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --upstream-distribution: string # The distribution to fetch from the upstream
   --upstream-url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, component: string, created_at: string, disable_reason: string, disable_reason_text: string, distro_versions: list<string>, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, gpg_key_fingerprint_short: string, gpg_key_inline: string, gpg_key_url: string, gpg_verification: string, has_failed_signature_verification: bool, include_sources: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_distribution: string, upstream_url: string, verification_status: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -7615,12 +7614,12 @@ export def "repos-upstream-docker create" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, is_active: bool, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -7681,12 +7680,12 @@ export def "repos-upstream-docker update" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, is_active: bool, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -7723,12 +7722,12 @@ export def "repos-upstream-docker patch" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   --name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --upstream-url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, is_active: bool, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -7812,13 +7811,13 @@ export def "repos-upstream-generic create" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --upstream-prefix: string # A unique prefix used to distinguish this upstream source within the repository. Generic upstreams can represent entirely different file servers, and we do not attempt to blend them. The prefix ensures each source remains separate, and requests including this prefix are routed to the correct upstream.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_prefix: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -7877,13 +7876,13 @@ export def "repos-upstream-generic update" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --upstream-prefix: string # A unique prefix used to distinguish this upstream source within the repository. Generic upstreams can represent entirely different file servers, and we do not attempt to blend them. The prefix ensures each source remains separate, and requests including this prefix are routed to the correct upstream.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_prefix: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -7918,13 +7917,13 @@ export def "repos-upstream-generic patch" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   --name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --upstream-prefix: string # A unique prefix used to distinguish this upstream source within the repository. Generic upstreams can represent entirely different file servers, and we do not attempt to blend them. The prefix ensures each source remains separate, and requests including this prefix are routed to the correct upstream.
   --upstream-url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_prefix: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -8008,12 +8007,12 @@ export def "repos-upstream-go create" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -8072,12 +8071,12 @@ export def "repos-upstream-go update" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -8112,12 +8111,12 @@ export def "repos-upstream-go patch" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   --name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --upstream-url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -8201,12 +8200,12 @@ export def "repos-upstream-helm create" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -8265,12 +8264,12 @@ export def "repos-upstream-helm update" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -8305,12 +8304,12 @@ export def "repos-upstream-helm patch" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   --name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --upstream-url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -8394,12 +8393,12 @@ export def "repos-upstream-hex create" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -8458,12 +8457,12 @@ export def "repos-upstream-hex update" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -8498,12 +8497,12 @@ export def "repos-upstream-hex patch" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   --name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --upstream-url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -8587,12 +8586,12 @@ export def "repos-upstream-huggingface create" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -8651,12 +8650,12 @@ export def "repos-upstream-huggingface update" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -8691,12 +8690,12 @@ export def "repos-upstream-huggingface patch" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   --name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --upstream-url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -8783,13 +8782,13 @@ export def "repos-upstream-maven create" [
   --gpg-key-inline: string # A public GPG key to associate with packages found on this upstream. When using the Cloudsmith setup script, this GPG key will be automatically imported on your deployment machines to allow upstream packages to validate and install.
   --gpg-key-url: string # When provided, Cloudsmith will fetch, validate, and associate a public GPG key found at the provided URL. When using the Cloudsmith setup script, this GPG key will be automatically imported on your deployment machines to allow upstream packages to validate and install. (format: uri)
   --gpg-verification: string@gpg-verification-completer # The GPG signature verification mode for this upstream. (default: Allow All)
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer-1 # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --trust-level: string@trust-level-completer # Trust level allows for control of the visibility of upstream artifacts to native package managers. Where supported by formats, the default level (untrusted) is recommended for all upstreams, and helps to safeguard against common dependency confusion attack vectors. (default: Trusted)
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, gpg_key_fingerprint_short: string, gpg_key_inline: string, gpg_key_url: string, gpg_verification: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, trust_level: string, updated_at: string, upstream_url: string, verification_status: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -8851,13 +8850,13 @@ export def "repos-upstream-maven update" [
   --gpg-key-inline: string # A public GPG key to associate with packages found on this upstream. When using the Cloudsmith setup script, this GPG key will be automatically imported on your deployment machines to allow upstream packages to validate and install.
   --gpg-key-url: string # When provided, Cloudsmith will fetch, validate, and associate a public GPG key found at the provided URL. When using the Cloudsmith setup script, this GPG key will be automatically imported on your deployment machines to allow upstream packages to validate and install. (format: uri)
   --gpg-verification: string@gpg-verification-completer # The GPG signature verification mode for this upstream. (default: Allow All)
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer-1 # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --trust-level: string@trust-level-completer # Trust level allows for control of the visibility of upstream artifacts to native package managers. Where supported by formats, the default level (untrusted) is recommended for all upstreams, and helps to safeguard against common dependency confusion attack vectors. (default: Trusted)
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, gpg_key_fingerprint_short: string, gpg_key_inline: string, gpg_key_url: string, gpg_verification: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, trust_level: string, updated_at: string, upstream_url: string, verification_status: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -8895,13 +8894,13 @@ export def "repos-upstream-maven patch" [
   --gpg-key-inline: string # A public GPG key to associate with packages found on this upstream. When using the Cloudsmith setup script, this GPG key will be automatically imported on your deployment machines to allow upstream packages to validate and install.
   --gpg-key-url: string # When provided, Cloudsmith will fetch, validate, and associate a public GPG key found at the provided URL. When using the Cloudsmith setup script, this GPG key will be automatically imported on your deployment machines to allow upstream packages to validate and install. (format: uri)
   --gpg-verification: string@gpg-verification-completer # The GPG signature verification mode for this upstream. (default: Allow All)
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer-1 # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   --name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --trust-level: string@trust-level-completer # Trust level allows for control of the visibility of upstream artifacts to native package managers. Where supported by formats, the default level (untrusted) is recommended for all upstreams, and helps to safeguard against common dependency confusion attack vectors. (default: Trusted)
   --upstream-url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, gpg_key_fingerprint_short: string, gpg_key_inline: string, gpg_key_url: string, gpg_verification: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, trust_level: string, updated_at: string, upstream_url: string, verification_status: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -8985,13 +8984,13 @@ export def "repos-upstream-npm create" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --trust-level: string@trust-level-completer # Trust level allows for control of the visibility of upstream artifacts to native package managers. Where supported by formats, the default level (untrusted) is recommended for all upstreams, and helps to safeguard against common dependency confusion attack vectors. (default: Trusted)
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, trust_level: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -9050,13 +9049,13 @@ export def "repos-upstream-npm update" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --trust-level: string@trust-level-completer # Trust level allows for control of the visibility of upstream artifacts to native package managers. Where supported by formats, the default level (untrusted) is recommended for all upstreams, and helps to safeguard against common dependency confusion attack vectors. (default: Trusted)
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, trust_level: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -9091,13 +9090,13 @@ export def "repos-upstream-npm patch" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   --name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --trust-level: string@trust-level-completer # Trust level allows for control of the visibility of upstream artifacts to native package managers. Where supported by formats, the default level (untrusted) is recommended for all upstreams, and helps to safeguard against common dependency confusion attack vectors. (default: Trusted)
   --upstream-url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, trust_level: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -9181,12 +9180,12 @@ export def "repos-upstream-nuget create" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -9245,12 +9244,12 @@ export def "repos-upstream-nuget update" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -9285,12 +9284,12 @@ export def "repos-upstream-nuget patch" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   --name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --upstream-url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -9374,13 +9373,13 @@ export def "repos-upstream-python create" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --trust-level: string@trust-level-completer # Trust level allows for control of the visibility of upstream artifacts to native package managers. Where supported by formats, the default level (untrusted) is recommended for all upstreams, and helps to safeguard against common dependency confusion attack vectors. (default: Trusted)
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, trust_level: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -9439,13 +9438,13 @@ export def "repos-upstream-python update" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --trust-level: string@trust-level-completer # Trust level allows for control of the visibility of upstream artifacts to native package managers. Where supported by formats, the default level (untrusted) is recommended for all upstreams, and helps to safeguard against common dependency confusion attack vectors. (default: Trusted)
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, trust_level: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -9480,13 +9479,13 @@ export def "repos-upstream-python patch" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   --name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --trust-level: string@trust-level-completer # Trust level allows for control of the visibility of upstream artifacts to native package managers. Where supported by formats, the default level (untrusted) is recommended for all upstreams, and helps to safeguard against common dependency confusion attack vectors. (default: Trusted)
   --upstream-url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, trust_level: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -9574,13 +9573,13 @@ export def "repos-upstream-rpm create" [
   --gpg-key-inline: string # A public GPG key to associate with packages found on this upstream. When using the Cloudsmith setup script, this GPG key will be automatically imported on your deployment machines to allow upstream packages to validate and install.
   --gpg-key-url: string # When provided, Cloudsmith will fetch, validate, and associate a public GPG key found at the provided URL. When using the Cloudsmith setup script, this GPG key will be automatically imported on your deployment machines to allow upstream packages to validate and install. (format: uri)
   --gpg-verification: string@gpg-verification-completer # The GPG signature verification mode for this upstream. (default: Allow All)
-  --include-sources: string@bool-completer # When checked, source packages will be available from this upstream.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --include-sources: oneof<nothing, bool> # When checked, source packages will be available from this upstream.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, distro_version: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, gpg_key_fingerprint_short: string, gpg_key_inline: string, gpg_key_url: string, gpg_verification: string, has_failed_signature_verification: bool, include_sources: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verification_status: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -9643,13 +9642,13 @@ export def "repos-upstream-rpm update" [
   --gpg-key-inline: string # A public GPG key to associate with packages found on this upstream. When using the Cloudsmith setup script, this GPG key will be automatically imported on your deployment machines to allow upstream packages to validate and install.
   --gpg-key-url: string # When provided, Cloudsmith will fetch, validate, and associate a public GPG key found at the provided URL. When using the Cloudsmith setup script, this GPG key will be automatically imported on your deployment machines to allow upstream packages to validate and install. (format: uri)
   --gpg-verification: string@gpg-verification-completer # The GPG signature verification mode for this upstream. (default: Allow All)
-  --include-sources: string@bool-completer # When checked, source packages will be available from this upstream.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --include-sources: oneof<nothing, bool> # When checked, source packages will be available from this upstream.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, distro_version: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, gpg_key_fingerprint_short: string, gpg_key_inline: string, gpg_key_url: string, gpg_verification: string, has_failed_signature_verification: bool, include_sources: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verification_status: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -9688,13 +9687,13 @@ export def "repos-upstream-rpm patch" [
   --gpg-key-inline: string # A public GPG key to associate with packages found on this upstream. When using the Cloudsmith setup script, this GPG key will be automatically imported on your deployment machines to allow upstream packages to validate and install.
   --gpg-key-url: string # When provided, Cloudsmith will fetch, validate, and associate a public GPG key found at the provided URL. When using the Cloudsmith setup script, this GPG key will be automatically imported on your deployment machines to allow upstream packages to validate and install. (format: uri)
   --gpg-verification: string@gpg-verification-completer # The GPG signature verification mode for this upstream. (default: Allow All)
-  --include-sources: string@bool-completer # When checked, source packages will be available from this upstream.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --include-sources: oneof<nothing, bool> # When checked, source packages will be available from this upstream.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   --name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --upstream-url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, distro_version: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, gpg_key_fingerprint_short: string, gpg_key_inline: string, gpg_key_url: string, gpg_verification: string, has_failed_signature_verification: bool, include_sources: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verification_status: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -9778,12 +9777,12 @@ export def "repos-upstream-ruby create" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -9842,12 +9841,12 @@ export def "repos-upstream-ruby update" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -9882,12 +9881,12 @@ export def "repos-upstream-ruby patch" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   --name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --upstream-url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -9971,12 +9970,12 @@ export def "repos-upstream-swift create" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -10035,12 +10034,12 @@ export def "repos-upstream-swift update" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   upstream_url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -10075,12 +10074,12 @@ export def "repos-upstream-swift patch" [
   --extra-header-2: string # The key for extra header #2 to send to upstream.
   --extra-value-1: string # The value for extra header #1 to send to upstream. This is stored as plaintext, and is NOT encrypted.
   --extra-value-2: string # The value for extra header #2 to send to upstream. This is stored as plaintext, and is NOT encrypted.
-  --is-active: string@bool-completer # Whether or not this upstream is active and ready for requests.
+  --is-active: oneof<nothing, bool> # Whether or not this upstream is active and ready for requests.
   --mode: string@mode-completer # The mode that this upstream should operate in. Upstream sources can be used to proxy resolved packages, as well as operate in a proxy/cache or cache only mode. (default: Proxy Only)
   --name: string # A descriptive name for this upstream source. A shortened version of this name will be used for tagging cached packages retrieved from this upstream.
   --priority: int # Upstream sources are selected for resolving requests by sequential order (1..n), followed by creation date.
   --upstream-url: string # The URL for this upstream source. This must be a fully qualified URL including any path elements required to reach the root of the repository.  (format: uri)
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates are verified when requests are made to this upstream. It's recommended to leave this enabled for all public sources to help mitigate Man-In-The-Middle (MITM) attacks. Please note this only applies to HTTPS upstreams.
 ]: any -> record<auth_mode: string, auth_secret: string, auth_username: string, available: bool, can_reindex: bool, created_at: string, disable_reason: string, disable_reason_text: string, extra_header_1: string, extra_header_2: string, extra_value_1: string, extra_value_2: string, has_failed_signature_verification: bool, index_package_count: int, index_status: string, is_active: bool, last_indexed: string, mode: string, name: string, pending_validation: bool, priority: int, slug_perm: string, updated_at: string, upstream_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -10202,10 +10201,10 @@ export def "repos-retention patch" [
   --allow-errors(-e) # Return full response without error handling
   --retention-count-limit: int # The maximum X number of packages to retain.
   --retention-days-limit: int # The X number of days of packages to retain.
-  --retention-enabled: string@bool-completer # If checked, the retention lifecycle rules will be activated for the repository. Any packages that don't match will be deleted automatically, and the rest are retained.
-  --retention-group-by-format: string@bool-completer # If checked, retention will apply to packages by package formats rather than across all package formats.For example, when retaining by a limit of 1 and you upload PythonPkg 1.0 and RubyPkg 1.0, no packages are deleted because they are different formats.
-  --retention-group-by-name: string@bool-completer # If checked, retention will apply to groups of packages by name rather than all packages.<br>For example, when retaining by a limit of 1 and you upload PkgA 1.0, PkgB 1.0 and PkgB 1.1; only PkgB 1.0 is deleted because there are two (2) PkgBs and one (1) PkgA.
-  --retention-group-by-package-type: string@bool-completer # If checked, retention will apply to packages by package type (e.g. by binary, by source, etc.), rather than across all package types for one or more formats. <br>For example, when retaining by a limit of 1 and you upload DebPackage 1.0 and DebSourcePackage 1.0, no packages are deleted because they are different package types, binary and source respectively.
+  --retention-enabled: oneof<nothing, bool> # If checked, the retention lifecycle rules will be activated for the repository. Any packages that don't match will be deleted automatically, and the rest are retained.
+  --retention-group-by-format: oneof<nothing, bool> # If checked, retention will apply to packages by package formats rather than across all package formats.For example, when retaining by a limit of 1 and you upload PythonPkg 1.0 and RubyPkg 1.0, no packages are deleted because they are different formats.
+  --retention-group-by-name: oneof<nothing, bool> # If checked, retention will apply to groups of packages by name rather than all packages.<br>For example, when retaining by a limit of 1 and you upload PkgA 1.0, PkgB 1.0 and PkgB 1.1; only PkgB 1.0 is deleted because there are two (2) PkgBs and one (1) PkgA.
+  --retention-group-by-package-type: oneof<nothing, bool> # If checked, retention will apply to packages by package type (e.g. by binary, by source, etc.), rather than across all package types for one or more formats. <br>For example, when retaining by a limit of 1 and you upload DebPackage 1.0 and DebSourcePackage 1.0, no packages are deleted because they are different package types, binary and source respectively.
   --retention-package-query-string: string # A package search expression which, if provided, filters the packages to be deleted.<br>For example, a search expression of `name:foo` will result in only packages called 'foo' being deleted, or a search expression of `tag:~latest` will prevent any packages tagged 'latest' from being deleted.<br>Refer to the Cloudsmith documentation for package query syntax.
   --retention-size-limit: int # The maximum X total size (in bytes) of packages to retain.
 ]: any -> record<retention_count_limit: int, retention_days_limit: int, retention_enabled: bool, retention_group_by_format: bool, retention_group_by_name: bool, retention_group_by_package_type: bool, retention_package_query_string: string, retention_size_limit: int> {
@@ -10593,7 +10592,7 @@ export def "webhooks create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   events: list
-  --is-active: string@bool-completer # If enabled, the webhook will trigger on subscribed events and send payloads to the configured target URL.
+  --is-active: oneof<nothing, bool> # If enabled, the webhook will trigger on subscribed events and send payloads to the configured target URL.
   --package-query: string # The package-based search query for webhooks to fire. This uses the same syntax as the standard search used for repositories, and also supports boolean logic operators such as OR/AND/NOT and parentheses for grouping. If a package does not match, the webhook will not fire.
   --request-body-format: int@request-body-format-completer # The format of the payloads for webhook requests. Valid options are: (0) JSON, (1) JSON array, (2) form encoded JSON and (3) Handlebars template.
   --request-body-template-format: int@request-body-template-format-completer # The format of the payloads for webhook requests. Valid options are: (0) Generic/user defined, (1) JSON and (2) XML.
@@ -10603,7 +10602,7 @@ export def "webhooks create" [
   --signature-key: string # The value for the signature key - This is used to generate an HMAC-based hex digest of the request body, which we send as the X-Cloudsmith-Signature header so that you can ensure that the request wasn't modified by a malicious party (note: this is treated as a passphrase and is encrypted when we store it).
   target_url: string # The destination URL that webhook payloads will be POST'ed to. (format: uri)
   templates: list # item shape: {event: string, template?: string}
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates is verified when webhooks are sent. It's recommended to leave this enabled as not verifying the integrity of SSL certificates leaves you susceptible to Man-in-the-Middle (MITM) attacks.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates is verified when webhooks are sent. It's recommended to leave this enabled as not verifying the integrity of SSL certificates leaves you susceptible to Man-in-the-Middle (MITM) attacks.
 ]: any -> record<created_at: string, created_by: string, created_by_url: string, disable_reason: int, disable_reason_str: string, events: list<string>, identifier: int, is_active: bool, is_last_response_bad: bool, last_response_status: int, last_response_status_str: string, num_sent: int, package_query: string, request_body_format: int, request_body_format_str: string, request_body_template_format: int, request_body_template_format_str: string, request_content_type: string, secret_header: string, self_url: string, slug_perm: string, target_url: string, templates: table<event: string, template: string>, updated_at: string, updated_by: string, updated_by_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -10657,7 +10656,7 @@ export def "webhooks patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --events: list
-  --is-active: string@bool-completer # If enabled, the webhook will trigger on subscribed events and send payloads to the configured target URL.
+  --is-active: oneof<nothing, bool> # If enabled, the webhook will trigger on subscribed events and send payloads to the configured target URL.
   --package-query: string # The package-based search query for webhooks to fire. This uses the same syntax as the standard search used for repositories, and also supports boolean logic operators such as OR/AND/NOT and parentheses for grouping. If a package does not match, the webhook will not fire.
   --request-body-format: int@request-body-format-completer # The format of the payloads for webhook requests. Valid options are: (0) JSON, (1) JSON array, (2) form encoded JSON and (3) Handlebars template.
   --request-body-template-format: int@request-body-template-format-completer # The format of the payloads for webhook requests. Valid options are: (0) Generic/user defined, (1) JSON and (2) XML.
@@ -10667,7 +10666,7 @@ export def "webhooks patch" [
   --signature-key: string # The value for the signature key - This is used to generate an HMAC-based hex digest of the request body, which we send as the X-Cloudsmith-Signature header so that you can ensure that the request wasn't modified by a malicious party (note: this is treated as a passphrase and is encrypted when we store it).
   --target-url: string # The destination URL that webhook payloads will be POST'ed to. (format: uri)
   --templates: list # item shape: {event: string, template?: string}
-  --verify-ssl: string@bool-completer # If enabled, SSL certificates is verified when webhooks are sent. It's recommended to leave this enabled as not verifying the integrity of SSL certificates leaves you susceptible to Man-in-the-Middle (MITM) attacks.
+  --verify-ssl: oneof<nothing, bool> # If enabled, SSL certificates is verified when webhooks are sent. It's recommended to leave this enabled as not verifying the integrity of SSL certificates leaves you susceptible to Man-in-the-Middle (MITM) attacks.
 ]: any -> record<created_at: string, created_by: string, created_by_url: string, disable_reason: int, disable_reason_str: string, events: list<string>, identifier: int, is_active: bool, is_last_response_bad: bool, last_response_status: int, last_response_status_str: string, num_sent: int, package_query: string, request_body_format: int, request_body_format_str: string, request_body_template_format: int, request_body_template_format_str: string, request_content_type: string, secret_header: string, self_url: string, slug_perm: string, target_url: string, templates: table<event: string, template: string>, updated_at: string, updated_by: string, updated_by_url: string, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))

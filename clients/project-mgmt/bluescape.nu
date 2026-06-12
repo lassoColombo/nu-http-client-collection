@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost/api/v3"] }
 def auth-scheme-completer [] { ["bearer" "cookie-idToken"] }
 
@@ -109,8 +108,8 @@ export def "users list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --pageSize: float # Maximum number of results to return in a single page. (e.g. 25)
-  --includeCount: string@bool-completer # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
-  --omitPrevCursor: string@bool-completer # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
+  --includeCount: oneof<nothing, bool> # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
+  --omitPrevCursor: oneof<nothing, bool> # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
   --filterBy: string # Supported fields: firstName,lastName,email,avatarUrl,lastLoggedInAt,invitationStatus,searchText (e.g. lastName eq 'admin')
   --orderBy: string # Supported fields: firstName,lastName,email,lastLoggedInAt. Supported orders: asc,desc. (e.g. firstName asc)
   --cursor: string # e.g. jSlTIsVnUjRhbVQotSou.lBHvkfp-Rqiwdub8UM
@@ -207,7 +206,7 @@ export def "users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --permanent: string@bool-completer
+  --permanent: oneof<nothing, bool>
   --newWorkspaceOwnerId: string # All workspaces owned by 'userId' will be re-assigned to this user.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -397,8 +396,8 @@ export def "users-me-favorites-workspaces get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --pageSize: float # Maximum number of results to return in a single page. (e.g. 25)
-  --includeCount: string@bool-completer # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
-  --omitPrevCursor: string@bool-completer # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
+  --includeCount: oneof<nothing, bool> # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
+  --omitPrevCursor: oneof<nothing, bool> # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
   --filterBy: string # Supported fields: id,createdAt,isPublic,name,updatedAt,organizationId (e.g. name eq 'My favorite workspace')
   --orderBy: string # Supported fields: workspace.name,workspace.description,workspace.createdAt,workspace.updatedAt. Supported orders: asc,desc. (e.g. workspace.name asc)
   --cursor: string # e.g. jSlTIsVnUjRhbVQotSou.lBHvkfp-Rqiwdub8UM
@@ -469,8 +468,8 @@ export def "users-me-organizations get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --pageSize: float # Maximum number of results to return in a single page. (e.g. 25)
-  --includeCount: string@bool-completer # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
-  --omitPrevCursor: string@bool-completer # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
+  --includeCount: oneof<nothing, bool> # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
+  --omitPrevCursor: oneof<nothing, bool> # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
   --filterBy: string # Supported fields: name,secondaryName,mode,canHaveGuests,isGuestInviteApprovalRequired,isCustomRolesEnabled (e.g. name eq 'Billy Jean')
   --orderBy: string # Supported fields: name,mode,updatedAt,createdAt. Supported orders: asc,desc. (e.g. name asc)
   --cursor: string # e.g. jSlTIsVnUjRhbVQotSou.lBHvkfp-Rqiwdub8UM
@@ -498,8 +497,8 @@ export def "users-organizations get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --pageSize: float # Maximum number of results to return in a single page. (e.g. 25)
-  --includeCount: string@bool-completer # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
-  --omitPrevCursor: string@bool-completer # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
+  --includeCount: oneof<nothing, bool> # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
+  --omitPrevCursor: oneof<nothing, bool> # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
   --filterBy: string # Supported fields: name,secondaryName,mode,canHaveGuests,isGuestInviteApprovalRequired,isCustomRolesEnabled (e.g. name eq 'Billy Jean')
   --orderBy: string # Supported fields: name,mode,updatedAt,createdAt. Supported orders: asc,desc. (e.g. name asc)
   --cursor: string # e.g. jSlTIsVnUjRhbVQotSou.lBHvkfp-Rqiwdub8UM
@@ -526,8 +525,8 @@ export def "users-me-workspaces get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --pageSize: float # Maximum number of results to return in a single page. (e.g. 25)
-  --includeCount: string@bool-completer # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
-  --omitPrevCursor: string@bool-completer # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
+  --includeCount: oneof<nothing, bool> # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
+  --omitPrevCursor: oneof<nothing, bool> # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
   --filterBy: string # Supported fields: organizationId,ownedBy,isPublic,createdAt,updatedAt,name,associatedWorkspaces,isFavorite,ownerId,isPendingReassignment,isPendingReassignmentFrom,includeArchived (e.g. name contains "test")
   --orderBy: string # Supported fields: name,contentUpdatedAt,updatedAt,createdAt,isFavorite. Supported orders: asc,desc. (e.g. name asc)
   --cursor: string # e.g. jSlTIsVnUjRhbVQotSou.lBHvkfp-Rqiwdub8UM
@@ -555,8 +554,8 @@ export def "users-workspaces get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --pageSize: float # Maximum number of results to return in a single page. (e.g. 25)
-  --includeCount: string@bool-completer # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
-  --omitPrevCursor: string@bool-completer # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
+  --includeCount: oneof<nothing, bool> # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
+  --omitPrevCursor: oneof<nothing, bool> # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
   --filterBy: string # Supported fields: organizationId,ownedBy,isPublic,createdAt,updatedAt,name,associatedWorkspaces,isFavorite,ownerId,includeArchived (e.g. name contains "test")
   --orderBy: string # Supported fields: name,contentUpdatedAt,updatedAt,createdAt,isFavorite. Supported orders: asc,desc. (e.g. name asc)
   --cursor: string # e.g. jSlTIsVnUjRhbVQotSou.lBHvkfp-Rqiwdub8UM
@@ -583,8 +582,8 @@ export def "users-me-groups get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --pageSize: float # Maximum number of results to return in a single page. (e.g. 25)
-  --includeCount: string@bool-completer # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
-  --omitPrevCursor: string@bool-completer # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
+  --includeCount: oneof<nothing, bool> # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
+  --omitPrevCursor: oneof<nothing, bool> # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
   --filterBy: string # Supported fields: organizationId,name,type,description (e.g. name eq 'Billy Jean')
   --orderBy: string # Supported fields: name,createdAt,updatedAt. Supported orders: asc,desc. (e.g. name asc)
   --cursor: string # e.g. jSlTIsVnUjRhbVQotSou.lBHvkfp-Rqiwdub8UM
@@ -611,8 +610,8 @@ export def "organizations list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --pageSize: float # Maximum number of results to return in a single page. (e.g. 25)
-  --includeCount: string@bool-completer # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
-  --omitPrevCursor: string@bool-completer # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
+  --includeCount: oneof<nothing, bool> # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
+  --omitPrevCursor: oneof<nothing, bool> # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
   --filterBy: string # Supported fields: canHaveGuests,isCustomRolesEnabled,isGuestInviteApprovalRequired,name,secondaryName,mode (e.g. canHaveGuests eq true)
   --orderBy: string # Supported fields: name,secondaryName,mode,createdAt,updatedAt. Supported orders: asc,desc. (e.g. name asc)
   --cursor: string # e.g. jSlTIsVnUjRhbVQotSou.lBHvkfp-Rqiwdub8UM
@@ -665,8 +664,8 @@ export def "organizations-members get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --pageSize: float # Maximum number of results to return in a single page. (e.g. 25)
-  --includeCount: string@bool-completer # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
-  --omitPrevCursor: string@bool-completer # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
+  --includeCount: oneof<nothing, bool> # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
+  --omitPrevCursor: oneof<nothing, bool> # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
   --filterBy: string # Supported fields: user.id,user.email,user.firstName,user.lastName,user.avatarUrl,group.id,group.name,group.description,group.type,group.bluescapeGroupJoinType,role.id,role.name,role.description,role.type,role.resourceType,role.isCustom,user.invitationStatus,user.searchText (e.g. name eq 'Billy Jean')
   --orderBy: string # Supported fields: user.email,user.firstName,group.name,group.description,role.name,licenseLevel. Supported orders: asc,desc. (e.g. user.email asc)
   --cursor: string # e.g. jSlTIsVnUjRhbVQotSou.lBHvkfp-Rqiwdub8UM
@@ -742,7 +741,7 @@ export def "organizations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isPermanentDelete: string@bool-completer # When <i>isPermanentDelete</i> is true,<br />     * A request to Collab to Delete Workspaces of the Organization is initiated.<br />     * The Organization and its relationships are Hard Deleted.<br />     When <i>isPermanentDelete</i> is false,<br />     * Users who belong to only this organization are archived.<br />     * User Organization relationship is Soft deleted.<br />     * Organization is Soft Deleted.<br />     * When <i>isPermanentDelete</i> parameter is not provided, it will be treated as false
+  --isPermanentDelete: oneof<nothing, bool> # When <i>isPermanentDelete</i> is true,<br />     * A request to Collab to Delete Workspaces of the Organization is initiated.<br />     * The Organization and its relationships are Hard Deleted.<br />     When <i>isPermanentDelete</i> is false,<br />     * Users who belong to only this organization are archived.<br />     * User Organization relationship is Soft deleted.<br />     * Organization is Soft Deleted.<br />     * When <i>isPermanentDelete</i> parameter is not provided, it will be treated as false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -768,14 +767,14 @@ export def "organizations patch" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name of the organization or company. It must be unique (e.g. My organization)
   --secondaryName: string # The name of the team or organizational unit (nullable, e.g. Team A)
-  --isGuestInviteApprovalRequired: string@bool-completer # True if the organization admin is required to approve the invitation of a guest (e.g. false)
-  --canHaveGuests: string@bool-completer # True if guests are allowed to be added as workspace collaborators (e.g. false)
+  --isGuestInviteApprovalRequired: oneof<nothing, bool> # True if the organization admin is required to approve the invitation of a guest (e.g. false)
+  --canHaveGuests: oneof<nothing, bool> # True if guests are allowed to be added as workspace collaborators (e.g. false)
   --defaultPublicWorkspaceRoleId: string # The Id of the role to apply when a user accesses a public workspace, but has no role specified for that workspace
   --defaultOrganizationUserRoleId: string # The Id of the role to apply when a user is added to an organization, but has no role has been assigned
-  --isCustomRolesEnabled: string@bool-completer # True if custom roles are enabled (e.g. false)
-  --autoAssociateIdentityProviderUser: string@bool-completer # True if sso users are auto-associated to the organization (e.g. true)
+  --isCustomRolesEnabled: oneof<nothing, bool> # True if custom roles are enabled (e.g. false)
+  --autoAssociateIdentityProviderUser: oneof<nothing, bool> # True if sso users are auto-associated to the organization (e.g. true)
   --ownerId: string # The id of the member who will own this organization
-  --mfaEnabled: string@bool-completer # Enable/disable Multi-factor authentication for the organization
+  --mfaEnabled: oneof<nothing, bool> # Enable/disable Multi-factor authentication for the organization
 ]: any -> record<id: string, name: string, secondaryName: string, isGuestInviteApprovalRequired: bool, canHaveGuests: bool, defaultPublicWorkspaceRoleId: string, defaultOrganizationUserRoleId: string, isCustomRolesEnabled: bool, hasCamConfig: bool, isCamEnabled: bool, denyOnNoCamData: bool, autoAssociateIdentityProviderUser: bool, accountId: string, ownerId: string, mfaEnabled: bool, updatedAt: string, createdAt: string, storageUsed: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -947,8 +946,8 @@ export def "identity-providers list" [
   --redirectUrl: string
   --name: string
   --pageSize: float # Maximum number of results to return in a single page. (e.g. 25)
-  --includeCount: string@bool-completer # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
-  --omitPrevCursor: string@bool-completer # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
+  --includeCount: oneof<nothing, bool> # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
+  --omitPrevCursor: oneof<nothing, bool> # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
   --filterBy: string # Supported fields: adminEmail,createdAt,metadataUrl,name,type,updatedAt (e.g. adminEmail eq "admin@test.com" )
   --orderBy: string # Supported fields: name,type,createdAt,updatedAt. Supported orders: asc,desc. (e.g. name asc)
   --cursor: string # e.g. jSlTIsVnUjRhbVQotSou.lBHvkfp-Rqiwdub8UM
@@ -979,7 +978,7 @@ export def "identity-providers createIDP" [
   --adminEmail: string # Email address of the identity provider administrator. (default: default@test.com, e.g. admin@example.com)
   --metadataUrl: string # URL of the SAML metadata document. Required when the identity provider type uses SAML. (e.g. https://dev-175540.myidp.com/app/exknw03rmmGKP3slF0h7/sso/saml/metadata)
   --userGuidAttributeName: string # Name of the SAML assertion attribute that contains the user GUID.
-  --isSamlSpSloEnabled: string@bool-completer # Whether SP-initiated SAML single logout is enabled. Defaults to `false`.
+  --isSamlSpSloEnabled: oneof<nothing, bool> # Whether SP-initiated SAML single logout is enabled. Defaults to `false`.
 ]: any -> record<id: string, name: string, type: string, adminEmail: string, metadataUrl: string, primaryOrgId: string, userGuidAttributeName: string, isSamlSpSloEnabled: bool, createdAt: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1054,7 +1053,7 @@ export def "identity-providers updateIDP" [
   --adminEmail: string # Email address of the identity provider administrator. (e.g. admin@example.com)
   --metadataUrl: string # URL of the SAML metadata document. (e.g. https://dev-175540.myidp.com/app/exknw03rmmGKP3slF0h7/sso/saml/metadata)
   --userGuidAttributeName: string # Name of the SAML assertion attribute that contains the user GUID. Use `null` to clear the value.
-  --isSamlSpSloEnabled: string@bool-completer # Whether SP-initiated SAML single logout is enabled.
+  --isSamlSpSloEnabled: oneof<nothing, bool> # Whether SP-initiated SAML single logout is enabled.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1081,8 +1080,8 @@ export def "identity-providers-organizations get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --pageSize: float # Maximum number of results to return in a single page. (e.g. 25)
-  --includeCount: string@bool-completer # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
-  --omitPrevCursor: string@bool-completer # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
+  --includeCount: oneof<nothing, bool> # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
+  --omitPrevCursor: oneof<nothing, bool> # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
   --filterBy: string # Supported fields: autoAssociateIdentityProviderUser,canHaveGuests,isCustomRolesEnabled,isGuestInviteApprovalRequired,name,mode (e.g. name eq 'Billy Jean')
   --orderBy: string # Supported fields: mode. Supported orders: asc,desc. (e.g. mode asc)
   --cursor: string # e.g. jSlTIsVnUjRhbVQotSou.lBHvkfp-Rqiwdub8UM
@@ -1113,7 +1112,7 @@ export def "workspaces createWorkspace" [
   --copyCollaborators: string@copyCollaborators-completer # If the value is <b>owner<b> only the owner will be copied, if the value is <b>all</b> all the collborators in the workspace will be copied.
   --name: string # e.g. Workspace 1
   --description: string # e.g. Description of the workspace
-  --isPublic: string@bool-completer # true: this workspace can be accessed by any member of the organization, false: this workspace can only be accessed by the workspace's collaborators (e.g. true)
+  --isPublic: oneof<nothing, bool> # true: this workspace can be accessed by any member of the organization, false: this workspace can only be accessed by the workspace's collaborators (e.g. true)
   --defaultRoleId: string # The default workspace role for a public workspace (e.g. 6NbsqVRv7WiYEgfudedw)
   organizationId: string # The id of the organization this workspace will belong to (e.g. i6QcPYZwG6IH252MUfAn)
   --ownerId: string # The id of the member who will own this workspace (e.g. 6NbsqVRv7WiYEgfudedw)
@@ -1143,7 +1142,7 @@ export def "workspaces get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeArchived: string@bool-completer # Whether to return archived workspace (Default is false).
+  --includeArchived: oneof<nothing, bool> # Whether to return archived workspace (Default is false).
 ]: nothing -> record<id: string, name: string, description: string, isPublic: bool, defaultRoleId: string, organizationId: string, contentUpdatedAt: string, ownerId: string, classification: string, version: string, createdAt: string, updatedAt: string, archivedAt: string, storageUsed: float, pendingReassignmentFrom: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1169,7 +1168,7 @@ export def "workspaces patch" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # e.g. Workspace 1
   --description: string # e.g. Description of the workspace
-  --isPublic: string@bool-completer # true: this workspace can be accessed by any member of the organization, false: this workspace can only be accessed by the workspace's collaborators (e.g. true)
+  --isPublic: oneof<nothing, bool> # true: this workspace can be accessed by any member of the organization, false: this workspace can only be accessed by the workspace's collaborators (e.g. true)
   --defaultRoleId: string # The default workspace role for a public workspace (e.g. 6NbsqVRv7WiYEgfudedw)
 ]: any -> record<id: string, name: string, description: string, isPublic: bool, defaultRoleId: string, organizationId: string, contentUpdatedAt: string, ownerId: string, classification: string, version: string, createdAt: string, updatedAt: string, archivedAt: string, storageUsed: float, pendingReassignmentFrom: string> {
   let input = $in
@@ -1196,7 +1195,7 @@ export def "workspaces delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isPermanentDelete: string@bool-completer # e.g. true
+  --isPermanentDelete: oneof<nothing, bool> # e.g. true
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1250,8 +1249,8 @@ export def "workspaces-collaborators get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --pageSize: float # Maximum number of results to return in a single page. (e.g. 25)
-  --includeCount: string@bool-completer # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
-  --omitPrevCursor: string@bool-completer # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
+  --includeCount: oneof<nothing, bool> # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
+  --omitPrevCursor: oneof<nothing, bool> # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
   --filterBy: string # Supported fields: user.id,user.email,user.firstName,user.lastName,user.avatarUrl,user.searchText,group.id,group.name,group.description,group.type,group.bluescapeGroupJoinType,role.id,role.name,role.description,role.type,role.resourceType,role.isCustom (e.g. role.id eq 'gQ2DA6mMC4Op-_EHuR6S')
   --orderBy: string # Supported fields: user.email,group.name,group.description,role.name. Supported orders: asc,desc. (e.g. user.email asc)
   --cursor: string # e.g. jSlTIsVnUjRhbVQotSou.lBHvkfp-Rqiwdub8UM
@@ -1396,8 +1395,8 @@ export def "roles list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --pageSize: float # Maximum number of results to return in a single page. (e.g. 25)
-  --includeCount: string@bool-completer # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
-  --omitPrevCursor: string@bool-completer # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
+  --includeCount: oneof<nothing, bool> # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
+  --omitPrevCursor: oneof<nothing, bool> # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
   --filterBy: string # Supported fields: name,resourceType,type,isCustom,category,level,organizationId (e.g. name contains "Viewer")
   --orderBy: string # Supported fields: name,type,isCustom. Supported orders: asc,desc. (e.g. name asc)
   --cursor: string # e.g. jSlTIsVnUjRhbVQotSou.lBHvkfp-Rqiwdub8UM
@@ -1552,8 +1551,8 @@ export def "scratch-workspaces list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --pageSize: float # Maximum number of results to return in a single page. (e.g. 25)
-  --includeCount: string@bool-completer # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
-  --omitPrevCursor: string@bool-completer # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
+  --includeCount: oneof<nothing, bool> # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
+  --omitPrevCursor: oneof<nothing, bool> # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
   --orderBy: string # Supported fields: name,updatedAt. Supported orders: asc,desc. (e.g. name asc)
   --cursor: string # e.g. jSlTIsVnUjRhbVQotSou.lBHvkfp-Rqiwdub8UM
 ]: nothing -> record<prev: string, next: string, totalItems: float, scratchWorkspaces: list<any>> {
@@ -1606,7 +1605,7 @@ export def "scratch-workspaces delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isPermanentDelete: string@bool-completer
+  --isPermanentDelete: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1883,8 +1882,8 @@ export def "webhooks-workspace get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --pageSize: float # Maximum number of results to return in a single page. (e.g. 25)
-  --includeCount: string@bool-completer # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
-  --omitPrevCursor: string@bool-completer # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
+  --includeCount: oneof<nothing, bool> # When `true`, the response includes the total number of matching items in `totalItems`. This may add query overhead. (e.g. false)
+  --omitPrevCursor: oneof<nothing, bool> # When `true`, the response omits the previous-page cursor by returning `prev` as `null`. Use this when paging forward only to reduce query overhead. (default: false, e.g. false)
   --filterBy: string # Supported fields: callbackUrl,status,createdAt,updatedAt (e.g. status eq 'ACTIVE')
   --orderBy: string # Supported fields: callbackUrl,updatedAt,createdAt. Supported orders: asc,desc. (e.g. callbackUrl asc)
   --cursor: string # e.g. jSlTIsVnUjRhbVQotSou.lBHvkfp-Rqiwdub8UM

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://localhost:8080/api/v9"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -110,7 +109,7 @@ export def "audit-logs get-audit-logs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-export: string@bool-completer # If set to true, returns all audit logs without pagination
+  --qp-export: oneof<nothing, bool> # If set to true, returns all audit logs without pagination
   --workspace-id: int # Workspace ID
   --entity-type: string # Entity Type
   --entity-id: int # Entity ID
@@ -371,7 +370,7 @@ export def "feedback post-unified-feedback" [
   --device-model: string # Device Model.
   --build-number: string # Build Number.
   --operating-system: string # Operating system.
-  --latest: string@bool-completer # Latest feedback.
+  --latest: oneof<nothing, bool> # Latest feedback.
   --files: path # One or more files.
 ]: any -> any {
   let input = $in
@@ -442,7 +441,7 @@ export def "integrations-calendar-calendars list" [
   --limit: string # Max results per page
   --page-token: string # Token for next page. Used in pagination when the number of results exceed 'limit'
   --integration-id: int # Filter calendars by the integration ID
-  --selected: string@bool-completer # filter calendars by selected value
+  --selected: oneof<nothing, bool> # filter calendars by selected value
 ]: nothing -> record<calendars: table<auto_track: bool, background_color: string, calendar_id: int, calendar_integration_id: int, created_at: string, default_planned_task_id: int, default_project_id: int, default_workspace_id: int, deleted_at: string, external_id: string, foreground_color: string, name: string, remind_tracking: bool, selected: bool, updated_at: string>, next_page_token: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -645,7 +644,7 @@ export def "integrations-calendar-calendars get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Max results per page
-  --selected: string@bool-completer # if we should get the selected or not calendars, or all calendars, in case of omission
+  --selected: oneof<nothing, bool> # if we should get the selected or not calendars, or all calendars, in case of omission
   --page-token: string # Token for next page. Used in pagination when the number of results exceed 'limit'
 ]: nothing -> record<calendars: table<auto_track: bool, background_color: string, calendar_id: int, calendar_integration_id: int, created_at: string, default_planned_task_id: int, default_project_id: int, default_workspace_id: int, deleted_at: string, external_id: string, foreground_color: string, name: string, remind_tracking: bool, selected: bool, updated_at: string>, next_page_token: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -694,8 +693,8 @@ export def "integrations-calendar-calendars patch" [
   --default-planned-task-id: int
   --default-project-id: int
   --default-workspace-id: int
-  --remind-tracking: string@bool-completer # The following fields are deprecated but we need to keep them for backward compatibility with previous versions of mobile apps
-  --selected: string@bool-completer
+  --remind-tracking: oneof<nothing, bool> # The following fields are deprecated but we need to keep them for backward compatibility with previous versions of mobile apps
+  --selected: oneof<nothing, bool>
 ]: any -> table<auto_track: bool, background_color: string, calendar_id: int, calendar_integration_id: int, created_at: string, default_planned_task_id: int, default_project_id: int, default_workspace_id: int, deleted_at: string, external_id: string, foreground_color: string, name: string, remind_tracking: bool, selected: bool, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -813,7 +812,7 @@ export def "me get-me" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-related-data: string@bool-completer # Retrieve user related data (clients, projects, tasks, tags, workspaces, time entries, etc.)
+  --with-related-data: oneof<nothing, bool> # Retrieve user related data (clients, projects, tasks, tags, workspaces, time entries, etc.)
 ]: nothing -> record<2fa_enabled: bool, api_token: string, at: string, authorization_updated_at: string, beginning_of_week: int, clients: table<archived: bool, at: string, creator_id: int, external_reference: string, id: int, integration_ext_id: string, integration_ext_type: string, integration_provider: record, name: string, notes: string, permissions: list, total_count: int, wid: int>, country_id: int, created_at: string, default_workspace_id: int, email: string, fullname: string, has_password: bool, id: int, image_url: string, intercom_hash: string, oauth_providers: list<string>, openid_email: string, openid_enabled: bool, options: record, projects: table<active: bool, actual_hours: int, actual_seconds: int, at: string, auto_estimates: bool, billable: bool, can_track_time: bool, cid: int, client_id: int, client_name: string, color: string, created_at: string, currency: string, current_period: record, end_date: string, estimated_hours: int, estimated_seconds: int, external_reference: string, fixed_fee: float, id: int, integration_ext_id: string, integration_ext_type: string, integration_provider: record, is_private: bool, name: string, permissions: list, pinned: bool, rate: float, rate_last_updated: string, recurring: bool, recurring_parameters: list, start_date: string, status: record, template: bool, template_id: int, total_count: int, wid: int, workspace_id: int>, tags: table<at: string, creator_id: int, deleted_at: string, id: int, integration_ext_id: string, integration_ext_type: string, integration_provider: record, name: string, permissions: list, workspace_id: int>, tasks: table<active: bool, at: string, avatar_url: string, client_id: int, client_name: string, estimated_seconds: int, external_reference: string, id: int, integration_ext_id: string, integration_ext_type: string, integration_provider: record, name: string, permissions: list, project_billable: bool, project_color: string, project_id: int, project_is_private: bool, project_name: string, rate: float, rate_last_updated: string, recurring: bool, toggl_accounts_id: string, tracked_seconds: int, user_id: int, user_name: string, workspace_id: int>, time_entries: table<at: string, billable: bool, client_id: int, client_name: string, description: string, duration: int, duronly: bool, expense_ids: list, id: int, integration_ext_id: string, integration_ext_type: string, integration_provider: record, permissions: list, pid: int, project_active: bool, project_billable: bool, project_color: string, project_id: int, project_name: string, shared_with: list, start: string, stop: string, tag_ids: list, tags: list, task_id: int, task_name: string, tid: int, uid: int, user_avatar_url: string, user_id: int, user_name: string, wid: int, workspace_id: int>, timezone: string, updated_at: string, workspaces: table<admin: bool, api_token: string, at: string, business_ws: bool, csv_upload: record, default_currency: string, default_hourly_rate: float, disable_approvals: bool, disable_expenses: bool, disable_timesheet_view: bool, hide_start_end_times: bool, ical_enabled: bool, ical_url: string, id: int, last_modified: string, limit_public_project_data: bool, logo_url: string, max_data_retention_days: record, name: string, only_admins_may_create_projects: bool, only_admins_may_create_tags: bool, only_admins_see_team_dashboard: bool, organization_id: int, permissions: list, premium: bool, projects_billable_by_default: bool, projects_enforce_billable: bool, projects_private_by_default: bool, rate_last_updated: string, reports_collapse: bool, role: string, rounding: int, rounding_minutes: int, subscription: record, suspended_at: string, te_constraints: record, working_hours_in_minutes: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1026,8 +1025,8 @@ export def "me-export post-me-export" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --profile: string@bool-completer
-  --timeline: string@bool-completer
+  --profile: oneof<nothing, bool>
+  --timeline: oneof<nothing, bool>
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1099,8 +1098,8 @@ export def "me-favorites update-favorite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --meta: string@bool-completer # Should the response contain data for meta entities
-  --billable: string@bool-completer # e.g. true
+  --meta: oneof<nothing, bool> # Should the response contain data for meta entities
+  --billable: oneof<nothing, bool> # e.g. true
   --description: string # e.g. Very often used TE
   --project-id: int # e.g. 222222
   --tag-ids: list # e.g. [100]
@@ -1131,8 +1130,8 @@ export def "me-favorites create-favorite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --meta: string@bool-completer # Should the response contain data for meta entities
-  --billable: string@bool-completer # e.g. true
+  --meta: oneof<nothing, bool> # Should the response contain data for meta entities
+  --billable: oneof<nothing, bool> # e.g. true
   --description: string # e.g. Very often used TE
   --project-id: int # e.g. 222222
   --tag-ids: list # e.g. [100]
@@ -1389,28 +1388,28 @@ export def "me-preferences post-preferences" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --activity-timeline-display-activity: string@bool-completer
+  --activity-timeline-display-activity: oneof<nothing, bool>
   --activity-timeline-grouping-interval: string
   --activity-timeline-grouping-method: string
   --activity-timeline-recording-level: string
-  --activity-timeline-sync-events: string@bool-completer
+  --activity-timeline-sync-events: oneof<nothing, bool>
   --alpha-features: list # will be omitted if empty — item shape: {alpha_feature_id?: int, code?: string, deleted_at?: string, description?: string, enabled?: bool, product_id?: int}
-  --analyticsAdvancedFilters: string@bool-completer # will be omitted if empty
-  --auto-tracker-delay-enabled: string@bool-completer
+  --analyticsAdvancedFilters: oneof<nothing, bool> # will be omitted if empty
+  --auto-tracker-delay-enabled: oneof<nothing, bool>
   --auto-tracker-delay-in-seconds: int
-  --auto-tracker-stop-on-no-rule-match-enabled: string@bool-completer
-  --automatic-tagging: string@bool-completer
-  --autotracking-enabled: string@bool-completer
+  --auto-tracker-stop-on-no-rule-match-enabled: oneof<nothing, bool>
+  --automatic-tagging: oneof<nothing, bool>
+  --autotracking-enabled: oneof<nothing, bool>
   --beginningOfWeek: int # will be omitted if empty
   --calendar-snap-duration: string
   --calendar-snap-initial-location: string
   --calendar-visible-hours-end: int
   --calendar-visible-hours-start: int
   --calendar-zoom-level: string
-  --cell-swipe-actions-enabled: string@bool-completer
+  --cell-swipe-actions-enabled: oneof<nothing, bool>
   --charts-view-type: string
-  --collapseDetailedReportEntries: string@bool-completer # will be omitted if empty
-  --collapseTimeEntries: string@bool-completer # will be omitted if empty
+  --collapseDetailedReportEntries: oneof<nothing, bool> # will be omitted if empty
+  --collapseTimeEntries: oneof<nothing, bool> # will be omitted if empty
   --dashboards-view-type: string
   --date-format: string
   --decimal-separator: any # will be omitted if empty
@@ -1420,135 +1419,135 @@ export def "me-preferences post-preferences" [
   --displayDensity: string # will be omitted if empty
   --distinctRates: string # will be omitted if empty
   --duration-format: string
-  --duration-format-on-timer-duration-field: string@bool-completer
-  --edit-popup-integration-timer: string@bool-completer
-  --extension-send-error-reports: string@bool-completer
-  --extension-send-usage-statistics: string@bool-completer
+  --duration-format-on-timer-duration-field: oneof<nothing, bool>
+  --edit-popup-integration-timer: oneof<nothing, bool>
+  --extension-send-error-reports: oneof<nothing, bool>
+  --extension-send-usage-statistics: oneof<nothing, bool>
   --firstSeenBusinessPromo: int # will be omitted if empty
-  --focus-app-on-time-entry-started: string@bool-completer
-  --focus-app-on-time-entry-stopped: string@bool-completer
-  --haptic-feedback-enabled: string@bool-completer
-  --hide-keyboard-shortcut: string@bool-completer # will be omitted if empty
-  --hide-sidebar-right: string@bool-completer
-  --idle-detection-enabled: string@bool-completer
+  --focus-app-on-time-entry-started: oneof<nothing, bool>
+  --focus-app-on-time-entry-stopped: oneof<nothing, bool>
+  --haptic-feedback-enabled: oneof<nothing, bool>
+  --hide-keyboard-shortcut: oneof<nothing, bool> # will be omitted if empty
+  --hide-sidebar-right: oneof<nothing, bool>
+  --idle-detection-enabled: oneof<nothing, bool>
   --idle-detection-interval-in-minutes: int
   --inactivity-behavior: string
-  --ios-is-goals-view-shown: string@bool-completer
-  --is-goals-view-expanded: string@bool-completer
-  --is-goals-view-shown: string@bool-completer
-  --is-summary-total-view-visible: string@bool-completer
-  --keep-mini-timer-on-top: string@bool-completer
-  --keep-window-on-top: string@bool-completer
+  --ios-is-goals-view-shown: oneof<nothing, bool>
+  --is-goals-view-expanded: oneof<nothing, bool>
+  --is-goals-view-shown: oneof<nothing, bool>
+  --is-summary-total-view-visible: oneof<nothing, bool>
+  --keep-mini-timer-on-top: oneof<nothing, bool>
+  --keep-window-on-top: oneof<nothing, bool>
   --keyboard-increment-timer-page: int
-  --keyboard-shortcuts-enabled: string@bool-completer # will be omitted if empty
-  --keyboard-shortcuts-share-time-entries: string@bool-completer
-  --mac-is-goals-view-shown: string@bool-completer
+  --keyboard-shortcuts-enabled: oneof<nothing, bool> # will be omitted if empty
+  --keyboard-shortcuts-share-time-entries: oneof<nothing, bool>
+  --mac-is-goals-view-shown: oneof<nothing, bool>
   --macos-auto-tracking-rules: list # item shape: {id?: string, keyword?: string, project_id?: int, task_id?: int, workspace_id?: int}
   --macos-show-hide-toggl-keyboard-shortcut: record # shape: {key?: int, modifiers?: int}
   --macos-stop-continue-keyboard-shortcut: record # shape: {key?: int, modifiers?: int}
   --manualEntryMode: string # will be omitted if empty
-  --manualMode: string@bool-completer # will be omitted if empty
-  --manualModeOverlaySeen: string@bool-completer # will be omitted if empty
+  --manualMode: oneof<nothing, bool> # will be omitted if empty
+  --manualModeOverlaySeen: oneof<nothing, bool> # will be omitted if empty
   --modify-on-start-time-change: string
   --offlineMode: string # will be omitted if empty
   --pg-time-zone-name: string
-  --pomodoro-auto-start-break: string@bool-completer
-  --pomodoro-auto-start-focus: string@bool-completer
+  --pomodoro-auto-start-break: oneof<nothing, bool>
+  --pomodoro-auto-start-focus: oneof<nothing, bool>
   --pomodoro-break-interval-in-minutes: int
   --pomodoro-break-project: record # shape: {id?: int, workspace_id?: int}
   --pomodoro-break-project-id: int
-  --pomodoro-break-start-sound-enabled: string@bool-completer
+  --pomodoro-break-start-sound-enabled: oneof<nothing, bool>
   --pomodoro-break-tag: record # shape: {id?: int, workspace_id?: int}
   --pomodoro-break-tag-id: int
-  --pomodoro-countdown-timer: string@bool-completer
-  --pomodoro-enabled: string@bool-completer
+  --pomodoro-countdown-timer: oneof<nothing, bool>
+  --pomodoro-enabled: oneof<nothing, bool>
   --pomodoro-focus-interval-in-minutes: int
   --pomodoro-focus-sound: string
-  --pomodoro-global-sound-enabled: string@bool-completer
-  --pomodoro-interval-end-sound: string@bool-completer
+  --pomodoro-global-sound-enabled: oneof<nothing, bool>
+  --pomodoro-interval-end-sound: oneof<nothing, bool>
   --pomodoro-interval-end-volume: int
   --pomodoro-longer-break-duration-in-minutes: int
-  --pomodoro-prevent-screen-lock: string@bool-completer
+  --pomodoro-prevent-screen-lock: oneof<nothing, bool>
   --pomodoro-rounds-before-longer-break: int
-  --pomodoro-session-start-sound-enabled: string@bool-completer
-  --pomodoro-show-notifications: string@bool-completer
-  --pomodoro-stop-timer-at-interval-end: string@bool-completer
-  --pomodoro-track-breaks-as-time-entries: string@bool-completer
+  --pomodoro-session-start-sound-enabled: oneof<nothing, bool>
+  --pomodoro-show-notifications: oneof<nothing, bool>
+  --pomodoro-stop-timer-at-interval-end: oneof<nothing, bool>
+  --pomodoro-track-breaks-as-time-entries: oneof<nothing, bool>
   --projectDashboardActivityMode: string # will be omitted if empty
-  --project-shortcut-enabled: string@bool-completer
-  --record-timeline: string@bool-completer
+  --project-shortcut-enabled: oneof<nothing, bool>
+  --record-timeline: oneof<nothing, bool>
   --remember-last-project: string
   --reminder-days: string
-  --reminder-enabled: string@bool-completer
+  --reminder-enabled: oneof<nothing, bool>
   --reminder-interval-in-minutes: int
   --reminder-period: string
   --reminder-snoozing-in-minutes: int
-  --reportRounding: string@bool-completer # will be omitted if empty
+  --reportRounding: oneof<nothing, bool> # will be omitted if empty
   --reportRoundingDirection: string # will be omitted if empty
   --reportRoundingStepInMinutes: int # will be omitted if empty
-  --reportsHideWeekends: string@bool-completer # will be omitted if empty
-  --run-app-on-startup: string@bool-completer
+  --reportsHideWeekends: oneof<nothing, bool> # will be omitted if empty
+  --run-app-on-startup: oneof<nothing, bool>
   --running-entry-warning: string
-  --running-timer-notification-enabled: string@bool-completer
-  --seenFollowModal: string@bool-completer # will be omitted if empty
-  --seenFooterPopup: string@bool-completer # will be omitted if empty
-  --seenProjectDashboardOverlay: string@bool-completer # will be omitted if empty
-  --seenTogglButtonModal: string@bool-completer # will be omitted if empty
-  --send-added-to-project-notification: string@bool-completer
-  --send-daily-project-invites: string@bool-completer
-  --send-product-emails: string@bool-completer
-  --send-product-release-notification: string@bool-completer
-  --send-system-message-notification: string@bool-completer
-  --send-timer-notifications: string@bool-completer
-  --send-weekly-report: string@bool-completer
-  --sharing-shortcut-enabled: string@bool-completer
-  --showTimeInTitle: string@bool-completer # will be omitted if empty
-  --show-all-entries: string@bool-completer
-  --show-changelog: string@bool-completer
-  --show-description-in-menu-bar: string@bool-completer
-  --show-dock-icon: string@bool-completer
-  --show-events-in-calendar: string@bool-completer
-  --show-project-in-menu-bar: string@bool-completer
-  --show-qr-scanner: string@bool-completer
-  --show-seconds-in-menu-bar: string@bool-completer
-  --show-timeline-in-day-view: string@bool-completer # will be omitted if empty
-  --show-timer-in-menu-bar: string@bool-completer
-  --show-today-total-in-menu-bar: string@bool-completer
-  --show-total-billable-hours: string@bool-completer # will be omitted if empty
-  --show-weekend-on-timer-page: string@bool-completer # will be omitted if empty
-  --show-workouts-in-calendar: string@bool-completer
+  --running-timer-notification-enabled: oneof<nothing, bool>
+  --seenFollowModal: oneof<nothing, bool> # will be omitted if empty
+  --seenFooterPopup: oneof<nothing, bool> # will be omitted if empty
+  --seenProjectDashboardOverlay: oneof<nothing, bool> # will be omitted if empty
+  --seenTogglButtonModal: oneof<nothing, bool> # will be omitted if empty
+  --send-added-to-project-notification: oneof<nothing, bool>
+  --send-daily-project-invites: oneof<nothing, bool>
+  --send-product-emails: oneof<nothing, bool>
+  --send-product-release-notification: oneof<nothing, bool>
+  --send-system-message-notification: oneof<nothing, bool>
+  --send-timer-notifications: oneof<nothing, bool>
+  --send-weekly-report: oneof<nothing, bool>
+  --sharing-shortcut-enabled: oneof<nothing, bool>
+  --showTimeInTitle: oneof<nothing, bool> # will be omitted if empty
+  --show-all-entries: oneof<nothing, bool>
+  --show-changelog: oneof<nothing, bool>
+  --show-description-in-menu-bar: oneof<nothing, bool>
+  --show-dock-icon: oneof<nothing, bool>
+  --show-events-in-calendar: oneof<nothing, bool>
+  --show-project-in-menu-bar: oneof<nothing, bool>
+  --show-qr-scanner: oneof<nothing, bool>
+  --show-seconds-in-menu-bar: oneof<nothing, bool>
+  --show-timeline-in-day-view: oneof<nothing, bool> # will be omitted if empty
+  --show-timer-in-menu-bar: oneof<nothing, bool>
+  --show-today-total-in-menu-bar: oneof<nothing, bool>
+  --show-total-billable-hours: oneof<nothing, bool> # will be omitted if empty
+  --show-weekend-on-timer-page: oneof<nothing, bool> # will be omitted if empty
+  --show-workouts-in-calendar: oneof<nothing, bool>
   --sleep-behaviour: string
   --smart-alerts-option: string
   --snowballReportRounding: string # will be omitted if empty
   --stack-times-on-manual-mode-after: string
-  --start-automatically: string@bool-completer
+  --start-automatically: oneof<nothing, bool>
   --start-shortcut-mode: string
-  --stop-at-specific-time: string@bool-completer
-  --stop-automatically: string@bool-completer
-  --stop-entry-on-shutdown: string@bool-completer
+  --stop-at-specific-time: oneof<nothing, bool>
+  --stop-automatically: oneof<nothing, bool>
+  --stop-entry-on-shutdown: oneof<nothing, bool>
   --stop-specified-time: string
-  --stopped-timer-notification-enabled: string@bool-completer
-  --suggestions-enabled: string@bool-completer
+  --stopped-timer-notification-enabled: oneof<nothing, bool>
+  --suggestions-enabled: oneof<nothing, bool>
   --summaryReportAmounts: string # will be omitted if empty
-  --summaryReportDistinctRates: string@bool-completer # will be omitted if empty
+  --summaryReportDistinctRates: oneof<nothing, bool> # will be omitted if empty
   --summaryReportGrouping: string # will be omitted if empty
-  --summaryReportSortAsc: string@bool-completer # will be omitted if empty
+  --summaryReportSortAsc: oneof<nothing, bool> # will be omitted if empty
   --summaryReportSortField: string # will be omitted if empty
   --summaryReportSubGrouping: string # will be omitted if empty
   --summary-total-mode: string
-  --tags-shortcut-enabled: string@bool-completer
+  --tags-shortcut-enabled: oneof<nothing, bool>
   --time-entry-display-mode: string
-  --time-entry-ghost-suggestions-enabled: string@bool-completer
-  --time-entry-invitations-notification-enabled: string@bool-completer
+  --time-entry-ghost-suggestions-enabled: oneof<nothing, bool>
+  --time-entry-invitations-notification-enabled: oneof<nothing, bool>
   --time-entry-start-stop-input-mode: string
   --timeofday-format: string
   --timerView: string # will be omitted if empty
   --timerViewMobile: string # will be omitted if empty
-  --toSAcceptNeeded: string@bool-completer # ToSAcceptNeeded represents the trigger for new ToS accept dialog
-  --use-mini-timer: string@bool-completer
+  --toSAcceptNeeded: oneof<nothing, bool> # ToSAcceptNeeded represents the trigger for new ToS accept dialog
+  --use-mini-timer: oneof<nothing, bool>
   --visibleFooter: string # will be omitted if empty
-  --webTimeEntryStarted: string@bool-completer # will be omitted if empty
-  --webTimeEntryStopped: string@bool-completer # will be omitted if empty
+  --webTimeEntryStarted: oneof<nothing, bool> # will be omitted if empty
+  --webTimeEntryStopped: oneof<nothing, bool> # will be omitted if empty
   --weeklyReportGrouping: string # will be omitted if empty
   --weeklyReportValueToShow: string # will be omitted if empty
   --windows-auto-tracking-rules: list # item shape: {billable?: bool, description?: string, enabled?: bool, id?: string, parameters?: record, project_id?: int, skip_when_timer_is_running?: bool, start_without_confirmation?: bool, tag_ids?: list, task_id?: int, type?: int, workspace_id?: int}
@@ -1624,28 +1623,28 @@ export def "me-preferences post-preferences-client" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --activity-timeline-display-activity: string@bool-completer
+  --activity-timeline-display-activity: oneof<nothing, bool>
   --activity-timeline-grouping-interval: string
   --activity-timeline-grouping-method: string
   --activity-timeline-recording-level: string
-  --activity-timeline-sync-events: string@bool-completer
+  --activity-timeline-sync-events: oneof<nothing, bool>
   --alpha-features: list # will be omitted if empty — item shape: {alpha_feature_id?: int, code?: string, deleted_at?: string, description?: string, enabled?: bool, product_id?: int}
-  --analyticsAdvancedFilters: string@bool-completer # will be omitted if empty
-  --auto-tracker-delay-enabled: string@bool-completer
+  --analyticsAdvancedFilters: oneof<nothing, bool> # will be omitted if empty
+  --auto-tracker-delay-enabled: oneof<nothing, bool>
   --auto-tracker-delay-in-seconds: int
-  --auto-tracker-stop-on-no-rule-match-enabled: string@bool-completer
-  --automatic-tagging: string@bool-completer
-  --autotracking-enabled: string@bool-completer
+  --auto-tracker-stop-on-no-rule-match-enabled: oneof<nothing, bool>
+  --automatic-tagging: oneof<nothing, bool>
+  --autotracking-enabled: oneof<nothing, bool>
   --beginningOfWeek: int # will be omitted if empty
   --calendar-snap-duration: string
   --calendar-snap-initial-location: string
   --calendar-visible-hours-end: int
   --calendar-visible-hours-start: int
   --calendar-zoom-level: string
-  --cell-swipe-actions-enabled: string@bool-completer
+  --cell-swipe-actions-enabled: oneof<nothing, bool>
   --charts-view-type: string
-  --collapseDetailedReportEntries: string@bool-completer # will be omitted if empty
-  --collapseTimeEntries: string@bool-completer # will be omitted if empty
+  --collapseDetailedReportEntries: oneof<nothing, bool> # will be omitted if empty
+  --collapseTimeEntries: oneof<nothing, bool> # will be omitted if empty
   --dashboards-view-type: string
   --date-format: string
   --decimal-separator: any # will be omitted if empty
@@ -1655,135 +1654,135 @@ export def "me-preferences post-preferences-client" [
   --displayDensity: string # will be omitted if empty
   --distinctRates: string # will be omitted if empty
   --duration-format: string
-  --duration-format-on-timer-duration-field: string@bool-completer
-  --edit-popup-integration-timer: string@bool-completer
-  --extension-send-error-reports: string@bool-completer
-  --extension-send-usage-statistics: string@bool-completer
+  --duration-format-on-timer-duration-field: oneof<nothing, bool>
+  --edit-popup-integration-timer: oneof<nothing, bool>
+  --extension-send-error-reports: oneof<nothing, bool>
+  --extension-send-usage-statistics: oneof<nothing, bool>
   --firstSeenBusinessPromo: int # will be omitted if empty
-  --focus-app-on-time-entry-started: string@bool-completer
-  --focus-app-on-time-entry-stopped: string@bool-completer
-  --haptic-feedback-enabled: string@bool-completer
-  --hide-keyboard-shortcut: string@bool-completer # will be omitted if empty
-  --hide-sidebar-right: string@bool-completer
-  --idle-detection-enabled: string@bool-completer
+  --focus-app-on-time-entry-started: oneof<nothing, bool>
+  --focus-app-on-time-entry-stopped: oneof<nothing, bool>
+  --haptic-feedback-enabled: oneof<nothing, bool>
+  --hide-keyboard-shortcut: oneof<nothing, bool> # will be omitted if empty
+  --hide-sidebar-right: oneof<nothing, bool>
+  --idle-detection-enabled: oneof<nothing, bool>
   --idle-detection-interval-in-minutes: int
   --inactivity-behavior: string
-  --ios-is-goals-view-shown: string@bool-completer
-  --is-goals-view-expanded: string@bool-completer
-  --is-goals-view-shown: string@bool-completer
-  --is-summary-total-view-visible: string@bool-completer
-  --keep-mini-timer-on-top: string@bool-completer
-  --keep-window-on-top: string@bool-completer
+  --ios-is-goals-view-shown: oneof<nothing, bool>
+  --is-goals-view-expanded: oneof<nothing, bool>
+  --is-goals-view-shown: oneof<nothing, bool>
+  --is-summary-total-view-visible: oneof<nothing, bool>
+  --keep-mini-timer-on-top: oneof<nothing, bool>
+  --keep-window-on-top: oneof<nothing, bool>
   --keyboard-increment-timer-page: int
-  --keyboard-shortcuts-enabled: string@bool-completer # will be omitted if empty
-  --keyboard-shortcuts-share-time-entries: string@bool-completer
-  --mac-is-goals-view-shown: string@bool-completer
+  --keyboard-shortcuts-enabled: oneof<nothing, bool> # will be omitted if empty
+  --keyboard-shortcuts-share-time-entries: oneof<nothing, bool>
+  --mac-is-goals-view-shown: oneof<nothing, bool>
   --macos-auto-tracking-rules: list # item shape: {id?: string, keyword?: string, project_id?: int, task_id?: int, workspace_id?: int}
   --macos-show-hide-toggl-keyboard-shortcut: record # shape: {key?: int, modifiers?: int}
   --macos-stop-continue-keyboard-shortcut: record # shape: {key?: int, modifiers?: int}
   --manualEntryMode: string # will be omitted if empty
-  --manualMode: string@bool-completer # will be omitted if empty
-  --manualModeOverlaySeen: string@bool-completer # will be omitted if empty
+  --manualMode: oneof<nothing, bool> # will be omitted if empty
+  --manualModeOverlaySeen: oneof<nothing, bool> # will be omitted if empty
   --modify-on-start-time-change: string
   --offlineMode: string # will be omitted if empty
   --pg-time-zone-name: string
-  --pomodoro-auto-start-break: string@bool-completer
-  --pomodoro-auto-start-focus: string@bool-completer
+  --pomodoro-auto-start-break: oneof<nothing, bool>
+  --pomodoro-auto-start-focus: oneof<nothing, bool>
   --pomodoro-break-interval-in-minutes: int
   --pomodoro-break-project: record # shape: {id?: int, workspace_id?: int}
   --pomodoro-break-project-id: int
-  --pomodoro-break-start-sound-enabled: string@bool-completer
+  --pomodoro-break-start-sound-enabled: oneof<nothing, bool>
   --pomodoro-break-tag: record # shape: {id?: int, workspace_id?: int}
   --pomodoro-break-tag-id: int
-  --pomodoro-countdown-timer: string@bool-completer
-  --pomodoro-enabled: string@bool-completer
+  --pomodoro-countdown-timer: oneof<nothing, bool>
+  --pomodoro-enabled: oneof<nothing, bool>
   --pomodoro-focus-interval-in-minutes: int
   --pomodoro-focus-sound: string
-  --pomodoro-global-sound-enabled: string@bool-completer
-  --pomodoro-interval-end-sound: string@bool-completer
+  --pomodoro-global-sound-enabled: oneof<nothing, bool>
+  --pomodoro-interval-end-sound: oneof<nothing, bool>
   --pomodoro-interval-end-volume: int
   --pomodoro-longer-break-duration-in-minutes: int
-  --pomodoro-prevent-screen-lock: string@bool-completer
+  --pomodoro-prevent-screen-lock: oneof<nothing, bool>
   --pomodoro-rounds-before-longer-break: int
-  --pomodoro-session-start-sound-enabled: string@bool-completer
-  --pomodoro-show-notifications: string@bool-completer
-  --pomodoro-stop-timer-at-interval-end: string@bool-completer
-  --pomodoro-track-breaks-as-time-entries: string@bool-completer
+  --pomodoro-session-start-sound-enabled: oneof<nothing, bool>
+  --pomodoro-show-notifications: oneof<nothing, bool>
+  --pomodoro-stop-timer-at-interval-end: oneof<nothing, bool>
+  --pomodoro-track-breaks-as-time-entries: oneof<nothing, bool>
   --projectDashboardActivityMode: string # will be omitted if empty
-  --project-shortcut-enabled: string@bool-completer
-  --record-timeline: string@bool-completer
+  --project-shortcut-enabled: oneof<nothing, bool>
+  --record-timeline: oneof<nothing, bool>
   --remember-last-project: string
   --reminder-days: string
-  --reminder-enabled: string@bool-completer
+  --reminder-enabled: oneof<nothing, bool>
   --reminder-interval-in-minutes: int
   --reminder-period: string
   --reminder-snoozing-in-minutes: int
-  --reportRounding: string@bool-completer # will be omitted if empty
+  --reportRounding: oneof<nothing, bool> # will be omitted if empty
   --reportRoundingDirection: string # will be omitted if empty
   --reportRoundingStepInMinutes: int # will be omitted if empty
-  --reportsHideWeekends: string@bool-completer # will be omitted if empty
-  --run-app-on-startup: string@bool-completer
+  --reportsHideWeekends: oneof<nothing, bool> # will be omitted if empty
+  --run-app-on-startup: oneof<nothing, bool>
   --running-entry-warning: string
-  --running-timer-notification-enabled: string@bool-completer
-  --seenFollowModal: string@bool-completer # will be omitted if empty
-  --seenFooterPopup: string@bool-completer # will be omitted if empty
-  --seenProjectDashboardOverlay: string@bool-completer # will be omitted if empty
-  --seenTogglButtonModal: string@bool-completer # will be omitted if empty
-  --send-added-to-project-notification: string@bool-completer
-  --send-daily-project-invites: string@bool-completer
-  --send-product-emails: string@bool-completer
-  --send-product-release-notification: string@bool-completer
-  --send-system-message-notification: string@bool-completer
-  --send-timer-notifications: string@bool-completer
-  --send-weekly-report: string@bool-completer
-  --sharing-shortcut-enabled: string@bool-completer
-  --showTimeInTitle: string@bool-completer # will be omitted if empty
-  --show-all-entries: string@bool-completer
-  --show-changelog: string@bool-completer
-  --show-description-in-menu-bar: string@bool-completer
-  --show-dock-icon: string@bool-completer
-  --show-events-in-calendar: string@bool-completer
-  --show-project-in-menu-bar: string@bool-completer
-  --show-qr-scanner: string@bool-completer
-  --show-seconds-in-menu-bar: string@bool-completer
-  --show-timeline-in-day-view: string@bool-completer # will be omitted if empty
-  --show-timer-in-menu-bar: string@bool-completer
-  --show-today-total-in-menu-bar: string@bool-completer
-  --show-total-billable-hours: string@bool-completer # will be omitted if empty
-  --show-weekend-on-timer-page: string@bool-completer # will be omitted if empty
-  --show-workouts-in-calendar: string@bool-completer
+  --running-timer-notification-enabled: oneof<nothing, bool>
+  --seenFollowModal: oneof<nothing, bool> # will be omitted if empty
+  --seenFooterPopup: oneof<nothing, bool> # will be omitted if empty
+  --seenProjectDashboardOverlay: oneof<nothing, bool> # will be omitted if empty
+  --seenTogglButtonModal: oneof<nothing, bool> # will be omitted if empty
+  --send-added-to-project-notification: oneof<nothing, bool>
+  --send-daily-project-invites: oneof<nothing, bool>
+  --send-product-emails: oneof<nothing, bool>
+  --send-product-release-notification: oneof<nothing, bool>
+  --send-system-message-notification: oneof<nothing, bool>
+  --send-timer-notifications: oneof<nothing, bool>
+  --send-weekly-report: oneof<nothing, bool>
+  --sharing-shortcut-enabled: oneof<nothing, bool>
+  --showTimeInTitle: oneof<nothing, bool> # will be omitted if empty
+  --show-all-entries: oneof<nothing, bool>
+  --show-changelog: oneof<nothing, bool>
+  --show-description-in-menu-bar: oneof<nothing, bool>
+  --show-dock-icon: oneof<nothing, bool>
+  --show-events-in-calendar: oneof<nothing, bool>
+  --show-project-in-menu-bar: oneof<nothing, bool>
+  --show-qr-scanner: oneof<nothing, bool>
+  --show-seconds-in-menu-bar: oneof<nothing, bool>
+  --show-timeline-in-day-view: oneof<nothing, bool> # will be omitted if empty
+  --show-timer-in-menu-bar: oneof<nothing, bool>
+  --show-today-total-in-menu-bar: oneof<nothing, bool>
+  --show-total-billable-hours: oneof<nothing, bool> # will be omitted if empty
+  --show-weekend-on-timer-page: oneof<nothing, bool> # will be omitted if empty
+  --show-workouts-in-calendar: oneof<nothing, bool>
   --sleep-behaviour: string
   --smart-alerts-option: string
   --snowballReportRounding: string # will be omitted if empty
   --stack-times-on-manual-mode-after: string
-  --start-automatically: string@bool-completer
+  --start-automatically: oneof<nothing, bool>
   --start-shortcut-mode: string
-  --stop-at-specific-time: string@bool-completer
-  --stop-automatically: string@bool-completer
-  --stop-entry-on-shutdown: string@bool-completer
+  --stop-at-specific-time: oneof<nothing, bool>
+  --stop-automatically: oneof<nothing, bool>
+  --stop-entry-on-shutdown: oneof<nothing, bool>
   --stop-specified-time: string
-  --stopped-timer-notification-enabled: string@bool-completer
-  --suggestions-enabled: string@bool-completer
+  --stopped-timer-notification-enabled: oneof<nothing, bool>
+  --suggestions-enabled: oneof<nothing, bool>
   --summaryReportAmounts: string # will be omitted if empty
-  --summaryReportDistinctRates: string@bool-completer # will be omitted if empty
+  --summaryReportDistinctRates: oneof<nothing, bool> # will be omitted if empty
   --summaryReportGrouping: string # will be omitted if empty
-  --summaryReportSortAsc: string@bool-completer # will be omitted if empty
+  --summaryReportSortAsc: oneof<nothing, bool> # will be omitted if empty
   --summaryReportSortField: string # will be omitted if empty
   --summaryReportSubGrouping: string # will be omitted if empty
   --summary-total-mode: string
-  --tags-shortcut-enabled: string@bool-completer
+  --tags-shortcut-enabled: oneof<nothing, bool>
   --time-entry-display-mode: string
-  --time-entry-ghost-suggestions-enabled: string@bool-completer
-  --time-entry-invitations-notification-enabled: string@bool-completer
+  --time-entry-ghost-suggestions-enabled: oneof<nothing, bool>
+  --time-entry-invitations-notification-enabled: oneof<nothing, bool>
   --time-entry-start-stop-input-mode: string
   --timeofday-format: string
   --timerView: string # will be omitted if empty
   --timerViewMobile: string # will be omitted if empty
-  --toSAcceptNeeded: string@bool-completer # ToSAcceptNeeded represents the trigger for new ToS accept dialog
-  --use-mini-timer: string@bool-completer
+  --toSAcceptNeeded: oneof<nothing, bool> # ToSAcceptNeeded represents the trigger for new ToS accept dialog
+  --use-mini-timer: oneof<nothing, bool>
   --visibleFooter: string # will be omitted if empty
-  --webTimeEntryStarted: string@bool-completer # will be omitted if empty
-  --webTimeEntryStopped: string@bool-completer # will be omitted if empty
+  --webTimeEntryStarted: oneof<nothing, bool> # will be omitted if empty
+  --webTimeEntryStopped: oneof<nothing, bool> # will be omitted if empty
   --weeklyReportGrouping: string # will be omitted if empty
   --weeklyReportValueToShow: string # will be omitted if empty
   --windows-auto-tracking-rules: list # item shape: {billable?: bool, description?: string, enabled?: bool, id?: string, parameters?: record, project_id?: int, skip_when_timer_is_running?: bool, start_without_confirmation?: bool, tag_ids?: list, task_id?: int, type?: int, workspace_id?: int}
@@ -2008,7 +2007,7 @@ export def "me-tasks get-tasks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --meta: string@bool-completer # Should the response contain data for meta entities
+  --meta: oneof<nothing, bool> # Should the response contain data for meta entities
   --since: int # Retrieve tasks created/modified/deleted since this date using UNIX timestamp.
   --include-not-active: string # Include tasks marked as done.
   --offset: int # Offset to resume the next pagination from.
@@ -2042,8 +2041,8 @@ export def "me-time-entries get-time-entries" [
   --before: string # Get entries with start time, before given date (YYYY-MM-DD) or with time in RFC3339 format.
   --start-date: string # Get entries with start time, from start_date YYYY-MM-DD or with time in RFC3339 format. To be used with end_date.
   --end-date: string # Get entries with start time, until end_date YYYY-MM-DD or with time in RFC3339 format. To be used with start_date.
-  --meta: string@bool-completer # Should the response contain data for meta entities
-  --include-sharing: string@bool-completer # Include sharing details in the response
+  --meta: oneof<nothing, bool> # Should the response contain data for meta entities
+  --include-sharing: oneof<nothing, bool> # Include sharing details in the response
 ]: nothing -> table<at: string, billable: bool, client_id: int, client_name: string, description: string, duration: int, duronly: bool, expense_ids: list<int>, id: int, integration_ext_id: string, integration_ext_type: string, integration_provider: record, permissions: list<string>, pid: int, project_active: bool, project_billable: bool, project_color: string, project_id: int, project_name: string, shared_with: list<record>, start: string, stop: string, tag_ids: list<int>, tags: list<string>, task_id: int, task_name: string, tid: int, uid: int, user_avatar_url: string, user_id: int, user_name: string, wid: int, workspace_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2109,8 +2108,8 @@ export def "me-time-entries get-time-entry-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --meta: string@bool-completer # Should the response contain data for meta entities
-  --include-sharing: string@bool-completer # Include sharing details in the response
+  --meta: oneof<nothing, bool> # Should the response contain data for meta entities
+  --include-sharing: oneof<nothing, bool> # Include sharing details in the response
 ]: nothing -> record<at: string, billable: bool, client_id: int, client_name: string, description: string, duration: int, duronly: bool, expense_ids: list<int>, id: int, integration_ext_id: string, integration_ext_type: string, integration_provider: record, permissions: list<string>, pid: int, project_active: bool, project_billable: bool, project_color: string, project_id: int, project_name: string, shared_with: table<accepted: bool, user_id: int, user_name: string>, start: string, stop: string, tag_ids: list<int>, tags: list<string>, task_id: int, task_name: string, tid: int, uid: int, user_avatar_url: string, user_id: int, user_name: string, wid: int, workspace_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2522,7 +2521,7 @@ export def "organizations-invitations post-organization-invitation" [
   --emails: list
   --groups: list
   --project-invite: record # shape: {manager?: bool, project_id?: int, workspace_id?: int}
-  --skip-email: string@bool-completer
+  --skip-email: oneof<nothing, bool>
   --workspaces: list # item shape: {admin?: bool, integration_data?: record, role?: string, role_id?: int, workspace_id?: int}
 ]: any -> record<data: table<email: string, invitation_id: int, invite_url: string, organization_id: int, recipient_id: int, sender_id: int, workspaces: list>, invitations: table<code: string, email: string, organization_id: int, organization_name: string, sender_email: string, sender_name: string>, messages: list<string>> {
   let input = $in
@@ -2710,7 +2709,7 @@ export def "organizations-payment-records get-organizations-payments-records" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-unified: string@bool-completer # If 'true', returns unified invoices
+  --is-unified: oneof<nothing, bool> # If 'true', returns unified invoices
   --cursor: string # Next cursor for unified subsriptions. Cannot be used without `last_inv`
   --last-inv: string # Last invoice ID from the previous call.
 ]: nothing -> table<items: list<record>, next: string> {
@@ -2803,7 +2802,7 @@ export def "organizations-roles get-organization-roles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-permissions: string@bool-completer # Whether roles should include permissions
+  --include-permissions: oneof<nothing, bool> # Whether roles should include permissions
 ]: nothing -> table<code: string, description: string, entity: string, name: string, organization_id: int, permissions: list<record>, privilege_level: int, role_id: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3540,9 +3539,9 @@ export def "organizations-users put-organization-users" [
   --allow-errors(-e) # Return full response without error handling
   --email: string
   --groups: list
-  --inactive: string@bool-completer
+  --inactive: oneof<nothing, bool>
   --name: string
-  --organization-admin: string@bool-completer
+  --organization-admin: oneof<nothing, bool>
   --role-id: int
   --workspaces: list # item shape: {active?: bool, admin?: bool, cost?: float, default_currency?: string, groups?: list, inactive?: bool, rate?: float, role?: string, role_id?: int, view_edit_billable_rates?: bool, view_edit_labor_costs?: bool, working_hours?: float, workspace_id?: int, workspace_name?: string, workspace_user_id?: int}
 ]: any -> string {
@@ -3574,16 +3573,16 @@ export def "organizations-workspaces post-organization-workspaces" [
   --default-currency: string # Default currency, premium feature, optional, only for existing WS, will be 'USD' initially
   --default-hourly-rate: float # The default hourly rate, premium feature, optional, only for existing WS, will be 0.0 initially
   --initial-pricing-plan: int # The subscription plan for the workspace, deprecated
-  --limit-public-project-data: string@bool-completer # Whether the workspace limits public projects data in reports to admins.
+  --limit-public-project-data: oneof<nothing, bool> # Whether the workspace limits public projects data in reports to admins.
   --name: string # Workspace name
-  --only-admins-may-create-projects: string@bool-completer # Only admins will be able to create projects, optional, only for existing WS, will be false initially
-  --only-admins-may-create-tags: string@bool-completer # Only admins will be able to create tags, optional, only for existing WS, will be false initially
-  --only-admins-see-team-dashboard: string@bool-completer # Only admins will be able to see the team dashboard, optional, only for existing WS, will be false initially
-  --projects-billable-by-default: string@bool-completer # Whether projects will be set as billable by default, premium feature, optional, only for existing WS. Will be true initially
-  --projects-enforce-billable: string@bool-completer # Whether tracking time to projects will enforce billable setting to be respected.
-  --projects-private-by-default: string@bool-completer # Whether projects will be set to private by default, optional. Will be true initially.
+  --only-admins-may-create-projects: oneof<nothing, bool> # Only admins will be able to create projects, optional, only for existing WS, will be false initially
+  --only-admins-may-create-tags: oneof<nothing, bool> # Only admins will be able to create tags, optional, only for existing WS, will be false initially
+  --only-admins-see-team-dashboard: oneof<nothing, bool> # Only admins will be able to see the team dashboard, optional, only for existing WS, will be false initially
+  --projects-billable-by-default: oneof<nothing, bool> # Whether projects will be set as billable by default, premium feature, optional, only for existing WS. Will be true initially
+  --projects-enforce-billable: oneof<nothing, bool> # Whether tracking time to projects will enforce billable setting to be respected.
+  --projects-private-by-default: oneof<nothing, bool> # Whether projects will be set to private by default, optional. Will be true initially.
   --rate-change-mode: string # The rate change mode, premium feature, optional, only for existing WS. Can be "start-today", "override-current", "override-all"
-  --reports-collapse: string@bool-completer # Whether reports should be collapsed by default, optional, only for existing WS, will be true initially
+  --reports-collapse: oneof<nothing, bool> # Whether reports should be collapsed by default, optional, only for existing WS, will be true initially
   --rounding: int # Default rounding, premium feature, optional, only for existing WS
   --rounding-minutes: int # Default rounding in minutes, premium feature, optional, only for existing WS
 ]: any -> record<admin: bool, api_token: string, at: string, business_ws: bool, csv_upload: record<at: string, log_id: int>, default_currency: string, default_hourly_rate: float, disable_approvals: bool, disable_expenses: bool, disable_timesheet_view: bool, hide_start_end_times: bool, ical_enabled: bool, ical_url: string, id: int, last_modified: string, limit_public_project_data: bool, logo_url: string, max_data_retention_days: record, name: string, only_admins_may_create_projects: bool, only_admins_may_create_tags: bool, only_admins_see_team_dashboard: bool, organization_id: int, permissions: list<string>, premium: bool, projects_billable_by_default: bool, projects_enforce_billable: bool, projects_private_by_default: bool, rate_last_updated: string, reports_collapse: bool, role: string, rounding: int, rounding_minutes: int, subscription: record<auto_renew: bool, card_details: record<added_at: string, card_number: string, card_type: string, creator_id: int, creator_name: string, expiry_date: string, holder_name: string>, company_id: int, contact_detail: record<company_address: string, company_city: string, company_name: string, contact_detail_id: int, contact_email: string, contact_person: string, country_id: int, country_subdivision_id: int, created_at: string, customer_id: int, is_eu_resident: bool, updated_at: string, user_id: int, vat_number: string, vat_number_valid: bool, vat_number_validated_at: string, zip_code: string>, created_at: string, currency: string, customer_id: int, deleted_at: string, last_pricing_plan_id: int, organization_id: int, payment_details: record<created_at: string, currency: string, customer_id: int, payment_type: string, reference: string, user_id: int>, pricing_plan_id: int, renewal_at: string, subscription_id: int, subscription_period: record<created_at: string, finished_on: string, started_on: string, subscription_id: int, subscription_period_id: int, trial: bool, user_count: int>, workspace_id: int>, suspended_at: string, te_constraints: record<description_present: bool, max_tags: int, project_present: bool, tag_present: bool, task_present: bool, time_entry_constraints_enabled: bool>, working_hours_in_minutes: int> {
@@ -3659,8 +3658,8 @@ export def "organizations-workspaces-workspace-users get-organization-workspaces
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page number
   --per-page: int # Number of items per page
-  --custom-rates: string@bool-completer # Returns only users with or without a custom hourly rate respectively
-  --active: string@bool-completer # Returns only active users
+  --custom-rates: oneof<nothing, bool> # Returns only users with or without a custom hourly rate respectively
+  --active: oneof<nothing, bool> # Returns only active users
   name: string # Workspace user name to filter by
   search: string # Workspace filter by name or email
 ]: any -> table<2fa_enabled: bool, active: bool, admin: bool, at: string, avatar_file_name: string, email: string, group_ids: list<int>, id: int, inactive: bool, invitation_code: string, invite_url: string, is_direct: bool, labor_cost: float, labor_cost_last_updated: string, name: string, organization_admin: bool, rate: float, rate_last_updated: string, role: string, role_id: int, timezone: string, uid: int, user_id: int, view_edit_billable_rates: bool, view_edit_labor_costs: bool, wid: int, working_hours_in_minutes: int, workspace_admin: bool, workspace_id: int> {
@@ -3840,7 +3839,7 @@ export def "sync-server-me-goals get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # archived goals
+  --active: oneof<nothing, bool> # archived goals
 ]: nothing -> table<active: bool, billable: bool, comparison: string, creator_user_id: int, creator_user_name: string, current_recurrence_end_date: string, current_recurrence_start_date: string, current_recurrence_tracked_seconds: int, end_date: string, goal_id: int, icon: string, last_completed_recurrence_end_date: string, last_notified_at: string, name: string, permissions: list<string>, project_ids: list<int>, recurrence: string, start_date: string, status: string, streak: int, tag_ids: list<int>, tags: list<string>, target_seconds: int, task_ids: list<int>, team_goal: bool, user_id: int, user_name: string, workspace_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4019,16 +4018,16 @@ export def "workspaces put-workspaces" [
   --default-currency: string # Default currency, premium feature, optional, only for existing WS, will be 'USD' initially
   --default-hourly-rate: float # The default hourly rate, premium feature, optional, only for existing WS, will be 0.0 initially
   --initial-pricing-plan: int # The subscription plan for the workspace, deprecated
-  --limit-public-project-data: string@bool-completer # Whether the workspace limits public projects data in reports to admins.
+  --limit-public-project-data: oneof<nothing, bool> # Whether the workspace limits public projects data in reports to admins.
   --name: string # Workspace name
-  --only-admins-may-create-projects: string@bool-completer # Only admins will be able to create projects, optional, only for existing WS, will be false initially
-  --only-admins-may-create-tags: string@bool-completer # Only admins will be able to create tags, optional, only for existing WS, will be false initially
-  --only-admins-see-team-dashboard: string@bool-completer # Only admins will be able to see the team dashboard, optional, only for existing WS, will be false initially
-  --projects-billable-by-default: string@bool-completer # Whether projects will be set as billable by default, premium feature, optional, only for existing WS. Will be true initially
-  --projects-enforce-billable: string@bool-completer # Whether tracking time to projects will enforce billable setting to be respected.
-  --projects-private-by-default: string@bool-completer # Whether projects will be set to private by default, optional. Will be true initially.
+  --only-admins-may-create-projects: oneof<nothing, bool> # Only admins will be able to create projects, optional, only for existing WS, will be false initially
+  --only-admins-may-create-tags: oneof<nothing, bool> # Only admins will be able to create tags, optional, only for existing WS, will be false initially
+  --only-admins-see-team-dashboard: oneof<nothing, bool> # Only admins will be able to see the team dashboard, optional, only for existing WS, will be false initially
+  --projects-billable-by-default: oneof<nothing, bool> # Whether projects will be set as billable by default, premium feature, optional, only for existing WS. Will be true initially
+  --projects-enforce-billable: oneof<nothing, bool> # Whether tracking time to projects will enforce billable setting to be respected.
+  --projects-private-by-default: oneof<nothing, bool> # Whether projects will be set to private by default, optional. Will be true initially.
   --rate-change-mode: string # The rate change mode, premium feature, optional, only for existing WS. Can be "start-today", "override-current", "override-all"
-  --reports-collapse: string@bool-completer # Whether reports should be collapsed by default, optional, only for existing WS, will be true initially
+  --reports-collapse: oneof<nothing, bool> # Whether reports should be collapsed by default, optional, only for existing WS, will be true initially
   --rounding: int # Default rounding, premium feature, optional, only for existing WS
   --rounding-minutes: int # Default rounding in minutes, premium feature, optional, only for existing WS
 ]: any -> record<admin: bool, api_token: string, at: string, business_ws: bool, csv_upload: record<at: string, log_id: int>, default_currency: string, default_hourly_rate: float, disable_approvals: bool, disable_expenses: bool, disable_timesheet_view: bool, hide_start_end_times: bool, ical_enabled: bool, ical_url: string, id: int, last_modified: string, limit_public_project_data: bool, logo_url: string, max_data_retention_days: record, name: string, only_admins_may_create_projects: bool, only_admins_may_create_tags: bool, only_admins_see_team_dashboard: bool, organization_id: int, permissions: list<string>, premium: bool, projects_billable_by_default: bool, projects_enforce_billable: bool, projects_private_by_default: bool, rate_last_updated: string, reports_collapse: bool, role: string, rounding: int, rounding_minutes: int, subscription: record<auto_renew: bool, card_details: record<added_at: string, card_number: string, card_type: string, creator_id: int, creator_name: string, expiry_date: string, holder_name: string>, company_id: int, contact_detail: record<company_address: string, company_city: string, company_name: string, contact_detail_id: int, contact_email: string, contact_person: string, country_id: int, country_subdivision_id: int, created_at: string, customer_id: int, is_eu_resident: bool, updated_at: string, user_id: int, vat_number: string, vat_number_valid: bool, vat_number_validated_at: string, zip_code: string>, created_at: string, currency: string, customer_id: int, deleted_at: string, last_pricing_plan_id: int, organization_id: int, payment_details: record<created_at: string, currency: string, customer_id: int, payment_type: string, reference: string, user_id: int>, pricing_plan_id: int, renewal_at: string, subscription_id: int, subscription_period: record<created_at: string, finished_on: string, started_on: string, subscription_id: int, subscription_period_id: int, trial: bool, user_count: int>, workspace_id: int>, suspended_at: string, te_constraints: record<description_present: bool, max_tags: int, project_present: bool, tag_present: bool, task_present: bool, time_entry_constraints_enabled: bool>, working_hours_in_minutes: int> {
@@ -4392,7 +4391,7 @@ export def "workspaces-clients-restore restore-client" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --projects: list
-  --restore-all-projects: string@bool-completer
+  --restore-all-projects: oneof<nothing, bool>
 ]: any -> record<archived: bool, at: string, creator_id: int, external_reference: string, id: int, integration_ext_id: string, integration_ext_type: string, integration_provider: record, name: string, notes: string, permissions: list<string>, total_count: int, wid: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4663,13 +4662,13 @@ export def "workspaces-favorites update-workspace-favorite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --meta: string@bool-completer # Should the response contain data for meta entities
-  --billable: string@bool-completer
+  --meta: oneof<nothing, bool> # Should the response contain data for meta entities
+  --billable: oneof<nothing, bool>
   --description: string
   --favorite-id: int
   --postedFields: list
   --project-id: int
-  --public: string@bool-completer
+  --public: oneof<nothing, bool>
   --rank: int
   --tag-ids: list
   --task-id: int
@@ -4699,11 +4698,11 @@ export def "workspaces-favorites create-workspace-favorite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --meta: string@bool-completer # Should the response contain data for meta entities
-  --billable: string@bool-completer
+  --meta: oneof<nothing, bool> # Should the response contain data for meta entities
+  --billable: oneof<nothing, bool>
   --description: string
   --project-id: int
-  --public: string@bool-completer
+  --public: oneof<nothing, bool>
   --rank: int
   --tag-ids: list
   --task-id: int
@@ -4777,8 +4776,8 @@ export def "workspaces-goals list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --team-goals: string@bool-completer # team goals
-  --active: string@bool-completer # archived goals
+  --team-goals: oneof<nothing, bool> # team goals
+  --active: oneof<nothing, bool> # archived goals
   --page: int # Page number, default 1.
   --per-page: int # Number of items per page, default 20. Also defaults to 100 if provided a value greater than 100.
 ]: nothing -> table<active: bool, billable: bool, comparison: string, creator_user_id: int, creator_user_name: string, current_recurrence_end_date: string, current_recurrence_start_date: string, current_recurrence_tracked_seconds: int, end_date: string, goal_id: int, icon: string, last_completed_recurrence_end_date: string, last_notified_at: string, name: string, permissions: list<string>, project_ids: list<int>, recurrence: string, start_date: string, status: string, streak: int, tag_ids: list<int>, tags: list<string>, target_seconds: int, task_ids: list<int>, team_goal: bool, user_id: int, user_name: string, workspace_id: int> {
@@ -4803,7 +4802,7 @@ export def "workspaces-goals post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --billable: string@bool-completer
+  --billable: oneof<nothing, bool>
   --comparison: string
   --end-date: string
   --icon: string
@@ -4862,7 +4861,7 @@ export def "workspaces-goals put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --comparison: string
   --end-date: string
   --icon: string
@@ -5363,15 +5362,15 @@ export def "workspaces-preferences post-workspace-preferences" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --calendar-suggestion-start-date: string # Start date from which to fetch time entries for calendar suggestions (ISO 8601 timestamp)
-  --disable-approvals: string@bool-completer # Completely hides the approvals feature in this workspace
-  --disable-expenses: string@bool-completer # Completely hides the expenses feature in this workspace
-  --disable-timesheet-view: string@bool-completer # Whether timesheet view is disabled for this workspace
-  --hide-start-end-times: string@bool-completer # This workspace works with duration only time entries
+  --disable-approvals: oneof<nothing, bool> # Completely hides the approvals feature in this workspace
+  --disable-expenses: oneof<nothing, bool> # Completely hides the expenses feature in this workspace
+  --disable-timesheet-view: oneof<nothing, bool> # Whether timesheet view is disabled for this workspace
+  --hide-start-end-times: oneof<nothing, bool> # This workspace works with duration only time entries
   --inc-tos-accepted-at: string # Time of acceptance of the terms of service
   --inc-tos-accepted-by: int # User ID who accepted the terms of service
   --initial-pricing-plan: int # Pricing plan ID
   --report-locked-at: string # Date on which "Lock Time Entries" feature was enabled
-  --single-sign-on: string@bool-completer # Whether SSO is enabled for this workspace
+  --single-sign-on: oneof<nothing, bool> # Whether SSO is enabled for this workspace
   --sso-requested-at: string # Date on which SSO was requested
 ]: any -> record<logo: string> {
   let input = $in
@@ -5476,7 +5475,7 @@ export def "workspaces-project-users get-workspace-project-users" [
   --allow-errors(-e) # Return full response without error handling
   --project-ids: string # Numeric IDs of projects, comma-separated
   --user-id: string # Numeric ID of user, if passed returns only project users for this user's projects
-  --with-group-members: string@bool-completer # Include group members
+  --with-group-members: oneof<nothing, bool> # Include group members
 ]: nothing -> table<at: string, gid: int, group_id: int, id: int, labor_cost: float, labor_cost_last_updated: string, manager: bool, project_id: int, rate: float, rate_last_updated: string, user_id: int, workspace_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5502,7 +5501,7 @@ export def "workspaces-project-users post-workspace-project-users" [
   --allow-errors(-e) # Return full response without error handling
   --labor-cost: float # Labor cost for this project user
   --labor-cost-change-mode: string # Labor cost change mode for this project user. Can be "start-today", "override-current", "override-all"
-  --manager: string@bool-completer # Whether the user will be manager of the project
+  --manager: oneof<nothing, bool> # Whether the user will be manager of the project
   --project-id: int # Project ID
   --rate: float # Rate for this project user
   --rate-change-mode: string # Rate change mode for this project user. Can be "start-today", "override-current", "override-all"
@@ -5532,7 +5531,7 @@ export def "workspaces-project-users-paginated post-workspace-project-users-pagi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-inactive: string@bool-completer # Include inactive users in the response
+  --show-inactive: oneof<nothing, bool> # Include inactive users in the response
   --users-per-project: string # Number of users per project
   --page: int # Page number
   --body: record
@@ -5587,7 +5586,7 @@ export def "workspaces-project-users put-workspace-project-users" [
   --allow-errors(-e) # Return full response without error handling
   --labor-cost: float # Labor cost for this project user
   --labor-cost-change-mode: string # Labor cost change mode for this project user. Can be "start-today", "override-current", "override-all"
-  --manager: string@bool-completer # Whether the user will be manager of the project
+  --manager: oneof<nothing, bool> # Whether the user will be manager of the project
   --rate: float # Rate for this project user
   --rate-change-mode: string # Rate change mode for this project user. Can be "start-today", "override-current", "override-all"
 ]: any -> record<at: string, gid: int, group_id: int, id: int, labor_cost: float, labor_cost_last_updated: string, manager: bool, project_id: int, rate: float, rate_last_updated: string, user_id: int, workspace_id: int> {
@@ -5638,9 +5637,9 @@ export def "workspaces-projects get-projects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Return active or inactive project. You can pass 'both' to get both active and inactive projects.
+  --active: oneof<nothing, bool> # Return active or inactive project. You can pass 'both' to get both active and inactive projects.
   --since: int # Retrieve projects created/modified/deleted since this date using UNIX timestamp.
-  --billable: string@bool-completer # billable
+  --billable: oneof<nothing, bool> # billable
   --user-ids: list # user_ids
   --client-ids: list # client_ids
   --group-ids: list # group_ids
@@ -5650,11 +5649,11 @@ export def "workspaces-projects get-projects" [
   --page: int # page
   --sort-field: string # sort_field
   --sort-order: string # sort_order
-  --only-templates: string@bool-completer # only_templates
-  --only-me: string@bool-completer # get only projects assigned to the current user
-  --only-editable: string@bool-completer # get only projects the current user can edit
+  --only-templates: oneof<nothing, bool> # only_templates
+  --only-me: oneof<nothing, bool> # get only projects assigned to the current user
+  --only-editable: oneof<nothing, bool> # get only projects the current user can edit
   --per-page: int # Number of items per page, default 151. Cannot exceed 200.
-  --sort-pinned: string@bool-completer # Place pinned projects at top of response
+  --sort-pinned: oneof<nothing, bool> # Place pinned projects at top of response
   --search: string # search
 ]: nothing -> table<active: bool, actual_hours: int, actual_seconds: int, at: string, auto_estimates: bool, billable: bool, can_track_time: bool, cid: int, client_id: int, client_name: string, color: string, created_at: string, currency: string, current_period: record<end_date: string, start_date: string>, end_date: string, estimated_hours: int, estimated_seconds: int, external_reference: string, fixed_fee: float, id: int, integration_ext_id: string, integration_ext_type: string, integration_provider: record, is_private: bool, name: string, permissions: list<string>, pinned: bool, rate: float, rate_last_updated: string, recurring: bool, recurring_parameters: list<record>, start_date: string, status: record, template: bool, template_id: int, total_count: int, wid: int, workspace_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5679,9 +5678,9 @@ export def "workspaces-projects post-workspace-project-create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Whether the project is active or archived
-  --auto-estimates: string@bool-completer # Whether estimates are based on task hours, optional, premium feature
-  --billable: string@bool-completer # Whether the project is set as billable, optional, premium feature
+  --active: oneof<nothing, bool> # Whether the project is active or archived
+  --auto-estimates: oneof<nothing, bool> # Whether estimates are based on task hours, optional, premium feature
+  --billable: oneof<nothing, bool> # Whether the project is set as billable, optional, premium feature
   --cid: int # Client ID, legacy
   --client-id: int # Client ID, optional
   --client-name: string # Client name, optional
@@ -5691,15 +5690,15 @@ export def "workspaces-projects post-workspace-project-create" [
   --estimated-hours: int # Estimated hours, optional, premium feature
   --external-reference: string
   --fixed-fee: float # Project fixed fee, optional, premium feature
-  --is-private: string@bool-completer # Whether the project is private or not
-  --is-shared: string@bool-completer # Shared
+  --is-private: oneof<nothing, bool> # Whether the project is private or not
+  --is-shared: oneof<nothing, bool> # Shared
   --name: string # Project name
   --rate: float # Hourly rate, optional, premium feature
   --rate-change-mode: string # Rate change mode, optional, premium feature. Can be "start-today", "override-current", "override-all"
-  --recurring: string@bool-completer # Project is recurring, optional, premium feature
+  --recurring: oneof<nothing, bool> # Project is recurring, optional, premium feature
   --recurring-parameters: any # Project recurring parameters, optional, premium feature
   --start-date: string # Start date of a project timeframe
-  --template: string@bool-completer # Project is template, optional, premium feature
+  --template: oneof<nothing, bool> # Project is template, optional, premium feature
   --template-id: int # Template ID, optional
 ]: any -> record<active: bool, actual_hours: int, actual_seconds: int, at: string, auto_estimates: bool, billable: bool, can_track_time: bool, cid: int, client_id: int, client_name: string, color: string, created_at: string, currency: string, current_period: record<end_date: string, start_date: string>, end_date: string, estimated_hours: int, estimated_seconds: int, external_reference: string, fixed_fee: float, id: int, integration_ext_id: string, integration_ext_type: string, integration_provider: record, is_private: bool, name: string, permissions: list<string>, pinned: bool, rate: float, rate_last_updated: string, recurring: bool, recurring_parameters: table<custom_period: int, estimated_seconds: int, parameter_end_date: string, parameter_start_date: string, period: string, project_start_date: string>, start_date: string, status: record, template: bool, template_id: int, total_count: int, wid: int, workspace_id: int> {
   let input = $in
@@ -5874,9 +5873,9 @@ export def "workspaces-projects put-workspace-project" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Whether the project is active or archived
-  --auto-estimates: string@bool-completer # Whether estimates are based on task hours, optional, premium feature
-  --billable: string@bool-completer # Whether the project is set as billable, optional, premium feature
+  --active: oneof<nothing, bool> # Whether the project is active or archived
+  --auto-estimates: oneof<nothing, bool> # Whether estimates are based on task hours, optional, premium feature
+  --billable: oneof<nothing, bool> # Whether the project is set as billable, optional, premium feature
   --cid: int # Client ID, legacy
   --client-id: int # Client ID, optional
   --client-name: string # Client name, optional
@@ -5886,15 +5885,15 @@ export def "workspaces-projects put-workspace-project" [
   --estimated-hours: int # Estimated hours, optional, premium feature
   --external-reference: string
   --fixed-fee: float # Project fixed fee, optional, premium feature
-  --is-private: string@bool-completer # Whether the project is private or not
-  --is-shared: string@bool-completer # Shared
+  --is-private: oneof<nothing, bool> # Whether the project is private or not
+  --is-shared: oneof<nothing, bool> # Shared
   --name: string # Project name
   --rate: float # Hourly rate, optional, premium feature
   --rate-change-mode: string # Rate change mode, optional, premium feature. Can be "start-today", "override-current", "override-all"
-  --recurring: string@bool-completer # Project is recurring, optional, premium feature
+  --recurring: oneof<nothing, bool> # Project is recurring, optional, premium feature
   --recurring-parameters: any # Project recurring parameters, optional, premium feature
   --start-date: string # Start date of a project timeframe
-  --template: string@bool-completer # Project is template, optional, premium feature
+  --template: oneof<nothing, bool> # Project is template, optional, premium feature
   --template-id: int # Template ID, optional
 ]: any -> record<active: bool, actual_hours: int, actual_seconds: int, at: string, auto_estimates: bool, billable: bool, can_track_time: bool, cid: int, client_id: int, client_name: string, color: string, created_at: string, currency: string, current_period: record<end_date: string, start_date: string>, end_date: string, estimated_hours: int, estimated_seconds: int, external_reference: string, fixed_fee: float, id: int, integration_ext_id: string, integration_ext_type: string, integration_provider: record, is_private: bool, name: string, permissions: list<string>, pinned: bool, rate: float, rate_last_updated: string, recurring: bool, recurring_parameters: table<custom_period: int, estimated_seconds: int, parameter_end_date: string, parameter_start_date: string, period: string, project_start_date: string>, start_date: string, status: record, template: bool, template_id: int, total_count: int, wid: int, workspace_id: int> {
   let input = $in
@@ -5973,7 +5972,7 @@ export def "workspaces-projects-pin post-pinned-project" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --pin: string@bool-completer
+  --pin: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6022,7 +6021,7 @@ export def "workspaces-projects-tasks get-workspace-project-tasks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Return only active tasks. If true, returns only active tasks. If false or omitted, returns all tasks.
+  --active: oneof<nothing, bool> # Return only active tasks. If true, returns only active tasks. If false or omitted, returns all tasks.
 ]: nothing -> table<active: bool, at: string, avatar_url: string, client_id: int, client_name: string, estimated_seconds: int, external_reference: string, id: int, integration_ext_id: string, integration_ext_type: string, integration_provider: record, name: string, permissions: list<string>, project_billable: bool, project_color: string, project_id: int, project_is_private: bool, project_name: string, rate: float, rate_last_updated: string, recurring: bool, toggl_accounts_id: string, tracked_seconds: int, user_id: int, user_name: string, workspace_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6047,7 +6046,7 @@ export def "workspaces-projects-tasks post-workspace-project-tasks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Use false to mark the task as done
+  --active: oneof<nothing, bool> # Use false to mark the task as done
   --estimated-seconds: int # Task estimation in seconds
   --external-reference: string # Task external reference
   --name: string # Name
@@ -6130,7 +6129,7 @@ export def "workspaces-projects-tasks put-workspace-project-task" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Use false to mark the task as done
+  --active: oneof<nothing, bool> # Use false to mark the task as done
   --estimated-seconds: int # Task estimation in seconds
   --external-reference: string # Task external reference
   --name: string # Name
@@ -6241,13 +6240,13 @@ export def "workspaces-reports-shared get-shared-report" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --fixed-dates: string@bool-completer
+  --fixed-dates: oneof<nothing, bool>
   --name: string
   --page: int
   --per-page: int
-  --public: string@bool-completer
+  --public: oneof<nothing, bool>
   --requestingUserID: int
-  --scheduled: string@bool-completer
+  --scheduled: oneof<nothing, bool>
   --sort-direction: string
   --sort-field: string
 ]: nothing -> table<deleted_at: string, fixed_daterange: bool, id: int, isNAResource: bool, is_commenting_enabled: bool, name: string, params: string, public: bool, scheduled_email_gids: list<int>, scheduled_email_uids: list<int>, token: string, uid: int, updated_at: string, updated_by: int> {
@@ -6298,12 +6297,12 @@ export def "workspaces-reports-shared post-shared-report" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --fixed-daterange: string@bool-completer
+  --fixed-daterange: oneof<nothing, bool>
   --id: int
   --name: string
   --params: record
-  --public: string@bool-completer
-  --regenerate-token: string@bool-completer
+  --public: oneof<nothing, bool>
+  --regenerate-token: oneof<nothing, bool>
 ]: any -> record<deleted_at: string, fixed_daterange: bool, id: int, isNAResource: bool, is_commenting_enabled: bool, name: string, params: string, public: bool, scheduled_email_gids: list<int>, scheduled_email_uids: list<int>, token: string, uid: int, updated_at: string, updated_by: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6379,12 +6378,12 @@ export def "workspaces-reports-shared put-saved-report-resource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --fixed-daterange: string@bool-completer
+  --fixed-daterange: oneof<nothing, bool>
   --id: int
   --name: string
   --params: record
-  --public: string@bool-completer
-  --regenerate-token: string@bool-completer
+  --public: oneof<nothing, bool>
+  --regenerate-token: oneof<nothing, bool>
 ]: any -> record<deleted_at: string, fixed_daterange: bool, id: int, isNAResource: bool, is_commenting_enabled: bool, name: string, params: string, public: bool, scheduled_email_gids: list<int>, scheduled_email_uids: list<int>, token: string, uid: int, updated_at: string, updated_by: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6703,7 +6702,7 @@ export def "workspaces-tasks get-workspace-tasks" [
   --per-page: int # Number of items per page, default 50
   --sort-order: string # Sort order, default ASC
   --sort-field: string # Field used for sorting. Default is name. Valid values are 'name' and 'created_at'
-  --active: string@bool-completer # Filter by active state. You can also pass 'both' to get both active and inactive tasks.
+  --active: oneof<nothing, bool> # Filter by active state. You can also pass 'both' to get both active and inactive tasks.
   --pid: int # Filter by project id
   --start-date: string # Smallest boundary date in the format YYYY-MM-DD (format: date)
   --end-date: string # Biggest boundary date in the format YYYY-MM-DD (format: date)
@@ -6735,12 +6734,12 @@ export def "workspaces-tasks-basic get-workspace-tasks-basic" [
   --per-page: int # Number of items per page, default 50
   --sort-order: string # Sort order, default ASC
   --sort-field: string # Field used for sorting. Default is name. Valid values are 'name' and 'created_at'
-  --active: string@bool-completer # Filter by active state. You can also pass 'both' to get both active and inactive tasks. Default is true.
+  --active: oneof<nothing, bool> # Filter by active state. You can also pass 'both' to get both active and inactive tasks. Default is true.
   --search: string # Search for tasks by name.
   --project-id: int # Filter by project ID
   --project-ids: list # Filter by project IDs (comma-separated)
   --task-ids: list # Filter by task IDs (comma-separated)
-  --only-me: string@bool-completer # Filter tasks from projects assigned to the current user. Default is true.
+  --only-me: oneof<nothing, bool> # Filter tasks from projects assigned to the current user. Default is true.
   --client-ids: list # Filter by client IDs (comma-separated)
   --project-status: string # Filter by parent project status: 'active' (default), 'archived', or 'both'.
 ]: nothing -> record<data: table<active: bool, at: string, avatar_url: string, client_id: int, client_name: string, estimated_seconds: int, external_reference: string, id: int, integration_ext_id: string, integration_ext_type: string, integration_provider: record, name: string, permissions: list, project_billable: bool, project_color: string, project_id: int, project_is_private: bool, project_name: string, rate: float, rate_last_updated: string, recurring: bool, toggl_accounts_id: string, tracked_seconds: int, user_id: int, user_name: string, workspace_id: int>, page: int, per_page: int, sort_field: string, sort_order: string, total_count: int> {
@@ -6798,12 +6797,12 @@ export def "workspaces-time-entries post-workspace-time-entries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --meta: string@bool-completer # Should the response contain data for meta entities
-  --billable: string@bool-completer # Whether the time entry is marked as billable, optional, default false
+  --meta: oneof<nothing, bool> # Should the response contain data for meta entities
+  --billable: oneof<nothing, bool> # Whether the time entry is marked as billable, optional, default false
   --created-with: string # Must be provided when creating a time entry and should identify the service/application used to create it
   --description: string # Time entry description, optional
   --duration: int # Time entry duration. For running entries should be negative, preferable -1
-  --duronly: string@bool-completer # Deprecated: Used to create a time entry with a duration but without a stop time. This parameter can be ignored.
+  --duronly: oneof<nothing, bool> # Deprecated: Used to create a time entry with a duration but without a stop time. This parameter can be ignored.
   --event-metadata: record # shape: {origin_feature?: string, visible_goals_count?: int}
   --expense-ids: list # Work Expenses associated with the Time Entry
   --pid: int # Project ID, legacy field
@@ -6848,7 +6847,7 @@ export def "workspaces-time-entries patch-time-entries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --meta: string@bool-completer # Should the response contain data for meta entities
+  --meta: oneof<nothing, bool> # Should the response contain data for meta entities
   --body: record
 ]: any -> record<failure: table<id: int, message: string>, success: list<int>> {
   let input = $in
@@ -6877,13 +6876,13 @@ export def "workspaces-time-entries put-workspace-time-entry-handler" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --meta: string@bool-completer # Should the response contain data for meta entities
-  --include-sharing: string@bool-completer # Should the response contain time entry sharing details
-  --billable: string@bool-completer # Whether the time entry is marked as billable, optional, default false
+  --meta: oneof<nothing, bool> # Should the response contain data for meta entities
+  --include-sharing: oneof<nothing, bool> # Should the response contain time entry sharing details
+  --billable: oneof<nothing, bool> # Whether the time entry is marked as billable, optional, default false
   --created-with: string # Must be provided when creating a time entry and should identify the service/application used to create it
   --description: string # Time entry description, optional
   --duration: int # Time entry duration. For running entries should be negative, preferable -1
-  --duronly: string@bool-completer # Deprecated: Used to create a time entry with a duration but without a stop time. This parameter can be ignored.
+  --duronly: oneof<nothing, bool> # Deprecated: Used to create a time entry with a duration but without a stop time. This parameter can be ignored.
   --event-metadata: record # shape: {origin_feature?: string, visible_goals_count?: int}
   --expense-ids: list # Work Expenses associated with the Time Entry
   --pid: int # Project ID, legacy field
@@ -6995,12 +6994,12 @@ export def "workspaces-time-entry-constraints post-workspace-time-entry-constrai
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --description-present: string@bool-completer
+  --description-present: oneof<nothing, bool>
   --max-tags: int
-  --project-present: string@bool-completer
-  --tag-present: string@bool-completer
-  --task-present: string@bool-completer
-  --time-entry-constraints-enabled: string@bool-completer
+  --project-present: oneof<nothing, bool>
+  --tag-present: oneof<nothing, bool>
+  --task-present: oneof<nothing, bool>
+  --time-entry-constraints-enabled: oneof<nothing, bool>
 ]: any -> record<wid: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7102,12 +7101,12 @@ export def "workspaces-timesheet-setups post-timesheet-setups" [
   --approver-id: int
   --approver-ids: list
   --approvers-layers: record
-  --email-reminder-enabled: string@bool-completer
+  --email-reminder-enabled: oneof<nothing, bool>
   --member-ids: list
   --periodicity: string
   --reminder-day: int@reminder-day-completer
   --reminder-time: string
-  --slack-reminder-enabled: string@bool-completer
+  --slack-reminder-enabled: oneof<nothing, bool>
   --start-date: string
 ]: any -> table<approver_avatar_url: string, approver_id: int, approver_name: string, approvers: list<record>, approvers_layers: record, email_reminder_enabled: bool, end_date: string, errors: list<record>, id: int, member_avatar_url: string, member_id: int, member_name: string, periodicity: string, permissions: list<string>, reminder_day: int, reminder_time: string, slack_reminder_enabled: bool, start_date: string, workspace_id: int> {
   let input = $in
@@ -7138,11 +7137,11 @@ export def "workspaces-timesheet-setups put-timesheet-setups" [
   --approver-id: int
   --approver-ids: list
   --approvers-layers: record
-  --email-reminder-enabled: string@bool-completer
+  --email-reminder-enabled: oneof<nothing, bool>
   --end-date: string
   --reminder-day: int@reminder-day-completer
   --reminder-time: string
-  --slack-reminder-enabled: string@bool-completer
+  --slack-reminder-enabled: oneof<nothing, bool>
 ]: any -> record<approver_avatar_url: string, approver_id: int, approver_name: string, approvers: table<active: bool, avatar_url: string, deleted: bool, name: string, user_id: int>, approvers_layers: record, email_reminder_enabled: bool, end_date: string, errors: table<code: string, message: string>, id: int, member_avatar_url: string, member_id: int, member_name: string, periodicity: string, permissions: list<string>, reminder_day: int, reminder_time: string, slack_reminder_enabled: bool, start_date: string, workspace_id: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7224,7 +7223,7 @@ export def "workspaces-timesheets put-workspace-timesheets-batch-handler" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force-approved: string@bool-completer
+  --force-approved: oneof<nothing, bool>
   --rejection-comment: string
   --start-date: string
   --status: string
@@ -7283,7 +7282,7 @@ export def "workspaces-timesheets put-workspace-timesheets-handler" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force-approved: string@bool-completer
+  --force-approved: oneof<nothing, bool>
   --rejection-comment: string
   --status: string
 ]: any -> record<approved_or_rejected_at: string, approved_or_rejected_id: int, approved_or_rejected_name: string, approver_avatar_url: string, approver_id: int, approver_name: string, approvers: table<active: bool, avatar_url: string, deleted: bool, name: string, user_id: int>, approvers_layers: record, end_date: string, errors: table<code: string, message: string>, member_avatar_url: string, member_id: int, member_name: string, period_editable: bool, period_end: string, period_locked: bool, period_start: string, periodicity: string, permissions: list<string>, rejection_comment: string, reminder_day: int, reminder_sent_at: string, reminder_time: string, review_layer: int, reviews: table<approved: bool, avatar_url: string, force_approved: bool, name: string, rejection_comment: string, review_layer: int, updated_at: string, user_id: int>, start_date: string, status: string, submitted_at: string, timesheet_setup_id: int, timezone: string, working_hours_in_minutes: int, workspace_id: int> {
@@ -7381,10 +7380,10 @@ export def "workspaces-track-reminders post-workspace-track-reminders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --email-reminder-enabled: string@bool-completer # EmailReminderEnabled indicates if email notifications are enabled
+  --email-reminder-enabled: oneof<nothing, bool> # EmailReminderEnabled indicates if email notifications are enabled
   --frequency: int # Frequency of the reminder in days, should be either 1 or 7
   --group-ids: list # Group IDs to send the reminder to, can be omitted if user_ids is provided
-  --slack-reminder-enabled: string@bool-completer # SlackReminderEnabled indicates if slack notifications are enabled
+  --slack-reminder-enabled: oneof<nothing, bool> # SlackReminderEnabled indicates if slack notifications are enabled
   --threshold: float # Threshold is the number of hours after which the reminder will be sent
   --user-ids: list # User IDs to send the reminder to, can be omitted if group_ids is provided
 ]: any -> record<created_at: string, email_reminder_enabled: bool, frequency: int, group_ids: list<int>, reminder_id: int, slack_reminder_enabled: bool, threshold: int, user_ids: list<int>, workspace_id: int> {
@@ -7413,10 +7412,10 @@ export def "workspaces-track-reminders put-workspace-track-reminder" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --email-reminder-enabled: string@bool-completer # EmailReminderEnabled indicates if email notifications are enabled
+  --email-reminder-enabled: oneof<nothing, bool> # EmailReminderEnabled indicates if email notifications are enabled
   --frequency: int # Frequency of the reminder in days, should be either 1 or 7
   --group-ids: list # Group IDs to send the reminder to, can be omitted if user_ids is provided
-  --slack-reminder-enabled: string@bool-completer # SlackReminderEnabled indicates if slack notifications are enabled
+  --slack-reminder-enabled: oneof<nothing, bool> # SlackReminderEnabled indicates if slack notifications are enabled
   --threshold: float # Threshold is the number of hours after which the reminder will be sent
   --user-ids: list # User IDs to send the reminder to, can be omitted if group_ids is provided
 ]: any -> record<created_at: string, email_reminder_enabled: bool, frequency: int, group_ids: list<int>, reminder_id: int, slack_reminder_enabled: bool, threshold: int, user_ids: list<int>, workspace_id: int> {
@@ -7467,7 +7466,7 @@ export def "workspaces-users get-workspace-users" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --exclude-deleted: string@bool-completer # Exclude deleted records in the response
+  --exclude-deleted: oneof<nothing, bool> # Exclude deleted records in the response
 ]: nothing -> table<email: string, fullname: string, id: int, inactive: bool, is_active: bool, is_admin: bool, role: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7564,8 +7563,8 @@ export def "workspaces-workspace-users users-by-workspace_id-workspace_user_id" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --admin: string@bool-completer # deprecated
-  --inactive: string@bool-completer
+  --admin: oneof<nothing, bool> # deprecated
+  --inactive: oneof<nothing, bool>
   --labor-cost: float # Custom labor cost for project user
   --labor-cost-change-mode: string
   --postedFields: list # for explicit NULL-s, add field name here
@@ -7573,8 +7572,8 @@ export def "workspaces-workspace-users users-by-workspace_id-workspace_user_id" 
   --rate-change-mode: string # Paid feature
   --role: string # Allowed inputs: "admin", "user", "projectlead" and "teamlead"
   --role-id: int
-  --view-edit-billable-rates: string@bool-completer
-  --view-edit-labor-costs: string@bool-completer
+  --view-edit-billable-rates: oneof<nothing, bool>
+  --view-edit-labor-costs: oneof<nothing, bool>
   --working-hours-in-minutes: int # Paid feature
 ]: any -> string {
   let input = $in

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://taskrouter.twilio.com"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -210,7 +209,7 @@ export def "workspaces-activities CreateActivity" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   FriendlyName: string # A descriptive string that you create to describe the Activity resource. It can be up to 64 characters long. These names are used to calculate and expose statistics about Workers, and provide visibility into the state of each Worker. Examples of friendly names include: `on-call`, `break`, and `email`.
-  --Available: string@bool-completer # Whether the Worker should be eligible to receive a Task when it occupies the Activity. A value of `true`, `1`, or `yes` specifies the Activity is available. All other values specify that it is not. The value cannot be changed after the Activity is created.
+  --Available: oneof<nothing, bool> # Whether the Worker should be eligible to receive a Task when it occupies the Activity. A value of `true`, `1`, or `yes` specifies the Activity is available. All other values specify that it is not. The value cannot be changed after the Activity is created.
 ]: any -> record<account_sid: string, available: bool, date_created: string, date_updated: string, friendly_name: string, sid: string, workspace_sid: string, url: string, links: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -383,7 +382,7 @@ export def "workspaces-tasks ListTask" [
   --EvaluateTaskAttributes: string # The attributes of the Tasks to read. Returns the Tasks that match the attributes specified in this parameter.
   --RoutingTarget: string # A SID of a Worker, Queue, or Workflow to route a Task to
   --Ordering: string # How to order the returned Task resources. By default, Tasks are sorted by ascending DateCreated. This value is specified as: `Attribute:Order`, where `Attribute` can be either `DateCreated`, `Priority`, or `VirtualStartTime` and `Order` can be either `asc` or `desc`. For example, `Priority:desc` returns Tasks ordered in descending order of their Priority. Pairings of sort orders can be specified in a comma-separated list such as `Priority:desc,DateCreated:asc`, which returns the Tasks in descending Priority order and ascending DateCreated Order. The only ordering pairing not allowed is DateCreated and VirtualStartTime.
-  --HasAddons: string@bool-completer # Whether to read Tasks with Add-ons. If `true`, returns only Tasks with Add-ons. If `false`, returns only Tasks without Add-ons.
+  --HasAddons: oneof<nothing, bool> # Whether to read Tasks with Add-ons. If `true`, returns only Tasks with Add-ons. If `false`, returns only Tasks without Add-ons.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -466,7 +465,7 @@ export def "workspaces-task-channels UpdateTaskChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --FriendlyName: string # A descriptive string that you create to describe the Task Channel. It can be up to 64 characters long.
-  --ChannelOptimizedRouting: string@bool-completer # Whether the TaskChannel should prioritize Workers that have been idle. If `true`, Workers that have been idle the longest are prioritized.
+  --ChannelOptimizedRouting: oneof<nothing, bool> # Whether the TaskChannel should prioritize Workers that have been idle. If `true`, Workers that have been idle the longest are prioritized.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, unique_name: string, workspace_sid: string, channel_optimized_routing: bool, url: string, links: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -540,7 +539,7 @@ export def "workspaces-task-channels CreateTaskChannel" [
   --allow-errors(-e) # Return full response without error handling
   FriendlyName: string # A descriptive string that you create to describe the Task Channel. It can be up to 64 characters long.
   UniqueName: string # An application-defined string that uniquely identifies the Task Channel, such as `voice` or `sms`.
-  --ChannelOptimizedRouting: string@bool-completer # Whether the Task Channel should prioritize Workers that have been idle. If `true`, Workers that have been idle the longest are prioritized.
+  --ChannelOptimizedRouting: oneof<nothing, bool> # Whether the Task Channel should prioritize Workers that have been idle. If `true`, Workers that have been idle the longest are prioritized.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sid: string, unique_name: string, workspace_sid: string, channel_optimized_routing: bool, url: string, links: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -904,9 +903,9 @@ export def "workspaces-tasks-reservations UpdateTaskReservation" [
   --CallTo: string # The Contact URI of the worker when executing a Call instruction.  Can be the URI of the Twilio Client, the SIP URI for Programmable SIP, or the [E.164](https://www.twilio.com/docs/glossary/what-e164) formatted phone number, depending on the destination.
   --CallUrl: string # TwiML URI executed on answering the worker's leg as a result of the Call instruction. (format: uri)
   --CallStatusCallbackUrl: string # The URL to call  for the completed call event when executing a Call instruction. (format: uri)
-  --CallAccept: string@bool-completer # Whether to accept a reservation when executing a Call instruction.
+  --CallAccept: oneof<nothing, bool> # Whether to accept a reservation when executing a Call instruction.
   --RedirectCallSid: string # The Call SID of the call parked in the queue when executing a Redirect instruction.
-  --RedirectAccept: string@bool-completer # Whether the reservation should be accepted when executing a Redirect instruction.
+  --RedirectAccept: oneof<nothing, bool> # Whether the reservation should be accepted when executing a Redirect instruction.
   --RedirectUrl: string # TwiML URI to redirect the call to when executing the Redirect instruction. (format: uri)
   --To: string # The Contact URI of the worker when executing a Conference instruction. Can be the URI of the Twilio Client, the SIP URI for Programmable SIP, or the [E.164](https://www.twilio.com/docs/glossary/what-e164) formatted phone number, depending on the destination.
   --From: string # The Caller ID of the call to the worker when executing a Conference instruction.
@@ -914,14 +913,14 @@ export def "workspaces-tasks-reservations UpdateTaskReservation" [
   --StatusCallbackMethod: string@StatusCallbackMethod-completer # The HTTP method we should use to call `status_callback`. Can be: `POST` or `GET` and the default is `POST`. (format: http-method)
   --StatusCallbackEvent: list # The call progress events that we will send to `status_callback`. Can be: `initiated`, `ringing`, `answered`, or `completed`.
   --Timeout: int # Timeout for call when executing a Conference instruction.
-  --Record: string@bool-completer # Whether to record the participant and their conferences, including the time between conferences. The default is `false`.
-  --Muted: string@bool-completer # Whether the agent is muted in the conference. The default is `false`.
+  --Record: oneof<nothing, bool> # Whether to record the participant and their conferences, including the time between conferences. The default is `false`.
+  --Muted: oneof<nothing, bool> # Whether the agent is muted in the conference. The default is `false`.
   --Beep: string # Whether to play a notification beep when the participant joins or when to play a beep. Can be: `true`, `false`, `onEnter`, or `onExit`. The default value is `true`.
-  --StartConferenceOnEnter: string@bool-completer # Whether to start the conference when the participant joins, if it has not already started. The default is `true`. If `false` and the conference has not started, the participant is muted and hears background music until another participant starts the conference.
-  --EndConferenceOnExit: string@bool-completer # Whether to end the conference when the agent leaves.
+  --StartConferenceOnEnter: oneof<nothing, bool> # Whether to start the conference when the participant joins, if it has not already started. The default is `true`. If `false` and the conference has not started, the participant is muted and hears background music until another participant starts the conference.
+  --EndConferenceOnExit: oneof<nothing, bool> # Whether to end the conference when the agent leaves.
   --WaitUrl: string # The URL we should call using the `wait_method` for the music to play while participants are waiting for the conference to start. The default value is the URL of our standard hold music. [Learn more about hold music](https://www.twilio.com/labs/twimlets/holdmusic). (format: uri)
   --WaitMethod: string@WaitMethod-completer # The HTTP method we should use to call `wait_url`. Can be `GET` or `POST` and the default is `POST`. When using a static audio file, this should be `GET` so that we can cache the file. (format: http-method)
-  --EarlyMedia: string@bool-completer # Whether to allow an agent to hear the state of the outbound call, including ringing or disconnect messages. The default is `true`.
+  --EarlyMedia: oneof<nothing, bool> # Whether to allow an agent to hear the state of the outbound call, including ringing or disconnect messages. The default is `true`.
   --MaxParticipants: int # The maximum number of participants in the conference. Can be a positive integer from `2` to `250`. The default value is `250`.
   --ConferenceStatusCallback: string # The URL we should call using the `conference_status_callback_method` when the conference events in `conference_status_callback_event` occur. Only the value set by the first participant to join the conference is used. Subsequent `conference_status_callback` values are ignored. (format: uri)
   --ConferenceStatusCallbackMethod: string@ConferenceStatusCallbackMethod-completer # The HTTP method we should use to call `conference_status_callback`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
@@ -940,8 +939,8 @@ export def "workspaces-tasks-reservations UpdateTaskReservation" [
   --PostWorkActivitySid: string # The new worker activity SID after executing a Conference instruction.
   --SupervisorMode: string@SupervisorMode-completer
   --Supervisor: string # The Supervisor SID/URI when executing the Supervise instruction.
-  --EndConferenceOnCustomerExit: string@bool-completer # Whether to end the conference when the customer leaves.
-  --BeepOnCustomerEntrance: string@bool-completer # Whether to play a notification beep when the customer joins.
+  --EndConferenceOnCustomerExit: oneof<nothing, bool> # Whether to end the conference when the customer leaves.
+  --BeepOnCustomerEntrance: oneof<nothing, bool> # Whether to play a notification beep when the customer joins.
   --JitterBufferSize: string # The jitter buffer size for conference. Can be: `small`, `medium`, `large`, `off`.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, reservation_status: string, sid: string, task_sid: string, worker_name: string, worker_sid: string, workspace_sid: string, url: string, links: record> {
   let input = $in
@@ -1056,7 +1055,7 @@ export def "workspaces-workers UpdateWorker" [
   --ActivitySid: string # The SID of a valid Activity that will describe the Worker's initial state. See [Activities](https://www.twilio.com/docs/taskrouter/api/activity) for more information.
   --Attributes: string # The JSON string that describes the Worker. For example: `{ "email": "Bob@example.com", "phone": "+5095551234" }`. This data is passed to the `assignment_callback_url` when TaskRouter assigns a Task to the Worker. Defaults to {}.
   --FriendlyName: string # A descriptive string that you create to describe the Worker. It can be up to 64 characters long.
-  --RejectPendingReservations: string@bool-completer # Whether to reject the Worker's pending reservations. This option is only valid if the Worker's new [Activity](https://www.twilio.com/docs/taskrouter/api/activity) resource has its `availability` property set to `False`.
+  --RejectPendingReservations: oneof<nothing, bool> # Whether to reject the Worker's pending reservations. This option is only valid if the Worker's new [Activity](https://www.twilio.com/docs/taskrouter/api/activity) resource has its `availability` property set to `False`.
 ]: any -> record<account_sid: string, activity_name: string, activity_sid: string, attributes: string, available: bool, date_created: string, date_status_changed: string, date_updated: string, friendly_name: string, sid: string, workspace_sid: string, url: string, links: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1160,7 +1159,7 @@ export def "workspaces-workers-channels UpdateWorkerChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Capacity: int # The total number of Tasks that the Worker should handle for the TaskChannel type. TaskRouter creates reservations for Tasks of this TaskChannel type up to the specified capacity. If the capacity is 0, no new reservations will be created.
-  --Available: string@bool-completer # Whether the WorkerChannel is available. Set to `false` to prevent the Worker from receiving any new Tasks of this TaskChannel type.
+  --Available: oneof<nothing, bool> # Whether the WorkerChannel is available. Set to `false` to prevent the Worker from receiving any new Tasks of this TaskChannel type.
 ]: any -> record<account_sid: string, assigned_tasks: int, available: bool, available_capacity_percentage: int, configured_capacity: int, date_created: string, date_updated: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, worker_sid: string, workspace_sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1280,9 +1279,9 @@ export def "workspaces-workers-reservations UpdateWorkerReservation" [
   --CallTo: string # The contact URI of the worker when executing a Call instruction. Can be the URI of the Twilio Client, the SIP URI for Programmable SIP, or the [E.164](https://www.twilio.com/docs/glossary/what-e164) formatted phone number, depending on the destination.
   --CallUrl: string # TwiML URI executed on answering the worker's leg as a result of the Call instruction. (format: uri)
   --CallStatusCallbackUrl: string # The URL to call for the completed call event when executing a Call instruction. (format: uri)
-  --CallAccept: string@bool-completer # Whether to accept a reservation when executing a Call instruction.
+  --CallAccept: oneof<nothing, bool> # Whether to accept a reservation when executing a Call instruction.
   --RedirectCallSid: string # The Call SID of the call parked in the queue when executing a Redirect instruction.
-  --RedirectAccept: string@bool-completer # Whether the reservation should be accepted when executing a Redirect instruction.
+  --RedirectAccept: oneof<nothing, bool> # Whether the reservation should be accepted when executing a Redirect instruction.
   --RedirectUrl: string # TwiML URI to redirect the call to when executing the Redirect instruction. (format: uri)
   --To: string # The Contact URI of the worker when executing a Conference instruction. Can be the URI of the Twilio Client, the SIP URI for Programmable SIP, or the [E.164](https://www.twilio.com/docs/glossary/what-e164) formatted phone number, depending on the destination.
   --From: string # The caller ID of the call to the worker when executing a Conference instruction.
@@ -1290,14 +1289,14 @@ export def "workspaces-workers-reservations UpdateWorkerReservation" [
   --StatusCallbackMethod: string@StatusCallbackMethod-completer # The HTTP method we should use to call `status_callback`. Can be: `POST` or `GET` and the default is `POST`. (format: http-method)
   --StatusCallbackEvent: list # The call progress events that we will send to `status_callback`. Can be: `initiated`, `ringing`, `answered`, or `completed`.
   --Timeout: int # The timeout for a call when executing a Conference instruction.
-  --Record: string@bool-completer # Whether to record the participant and their conferences, including the time between conferences. Can be `true` or `false` and the default is `false`.
-  --Muted: string@bool-completer # Whether the agent is muted in the conference. Defaults to `false`.
+  --Record: oneof<nothing, bool> # Whether to record the participant and their conferences, including the time between conferences. Can be `true` or `false` and the default is `false`.
+  --Muted: oneof<nothing, bool> # Whether the agent is muted in the conference. Defaults to `false`.
   --Beep: string # Whether to play a notification beep when the participant joins or when to play a beep. Can be: `true`, `false`, `onEnter`, or `onExit`. The default value is `true`.
-  --StartConferenceOnEnter: string@bool-completer # Whether to start the conference when the participant joins, if it has not already started. Can be: `true` or `false` and the default is `true`. If `false` and the conference has not started, the participant is muted and hears background music until another participant starts the conference.
-  --EndConferenceOnExit: string@bool-completer # Whether to end the conference when the agent leaves.
+  --StartConferenceOnEnter: oneof<nothing, bool> # Whether to start the conference when the participant joins, if it has not already started. Can be: `true` or `false` and the default is `true`. If `false` and the conference has not started, the participant is muted and hears background music until another participant starts the conference.
+  --EndConferenceOnExit: oneof<nothing, bool> # Whether to end the conference when the agent leaves.
   --WaitUrl: string # The URL we should call using the `wait_method` for the music to play while participants are waiting for the conference to start. The default value is the URL of our standard hold music. [Learn more about hold music](https://www.twilio.com/labs/twimlets/holdmusic). (format: uri)
   --WaitMethod: string@WaitMethod-completer # The HTTP method we should use to call `wait_url`. Can be `GET` or `POST` and the default is `POST`. When using a static audio file, this should be `GET` so that we can cache the file. (format: http-method)
-  --EarlyMedia: string@bool-completer # Whether to allow an agent to hear the state of the outbound call, including ringing or disconnect messages. The default is `true`.
+  --EarlyMedia: oneof<nothing, bool> # Whether to allow an agent to hear the state of the outbound call, including ringing or disconnect messages. The default is `true`.
   --MaxParticipants: int # The maximum number of participants allowed in the conference. Can be a positive integer from `2` to `250`. The default value is `250`.
   --ConferenceStatusCallback: string # The URL we should call using the `conference_status_callback_method` when the conference events in `conference_status_callback_event` occur. Only the value set by the first participant to join the conference is used. Subsequent `conference_status_callback` values are ignored. (format: uri)
   --ConferenceStatusCallbackMethod: string@ConferenceStatusCallbackMethod-completer # The HTTP method we should use to call `conference_status_callback`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
@@ -1314,8 +1313,8 @@ export def "workspaces-workers-reservations UpdateWorkerReservation" [
   --SipAuthPassword: string # The SIP password for authentication.
   --DequeueStatusCallbackEvent: list # The call progress events sent via webhooks as a result of a Dequeue instruction.
   --PostWorkActivitySid: string # The new worker activity SID after executing a Conference instruction.
-  --EndConferenceOnCustomerExit: string@bool-completer # Whether to end the conference when the customer leaves.
-  --BeepOnCustomerEntrance: string@bool-completer # Whether to play a notification beep when the customer joins.
+  --EndConferenceOnCustomerExit: oneof<nothing, bool> # Whether to end the conference when the customer leaves.
+  --BeepOnCustomerEntrance: oneof<nothing, bool> # Whether to play a notification beep when the customer joins.
   --JitterBufferSize: string # The jitter buffer size for conference. Can be: `small`, `medium`, `large`, `off`.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, reservation_status: string, sid: string, task_sid: string, worker_name: string, worker_sid: string, workspace_sid: string, url: string, links: record> {
   let input = $in
@@ -1656,7 +1655,7 @@ export def "workspaces UpdateWorkspace" [
   --EventCallbackUrl: string # The URL we should call when an event occurs. See [Workspace Events](https://www.twilio.com/docs/taskrouter/api/event) for more information. This parameter supports Twilio's [Webhooks (HTTP callbacks) Connection Overrides](https://www.twilio.com/docs/usage/webhooks/webhooks-connection-overrides). (format: uri)
   --EventsFilter: string # The list of Workspace events for which to call event_callback_url. For example if `EventsFilter=task.created,task.canceled,worker.activity.update`, then TaskRouter will call event_callback_url only when a task is created, canceled, or a Worker activity is updated.
   --FriendlyName: string # A descriptive string that you create to describe the Workspace resource. For example: `Sales Call Center` or `Customer Support Team`.
-  --MultiTaskEnabled: string@bool-completer # Whether to enable multi-tasking. Can be: `true` to enable multi-tasking, or `false` to disable it. However, all workspaces should be maintained as multi-tasking. There is no default when omitting this parameter. A multi-tasking Workspace can't be updated to single-tasking unless it is not a Flex Project and another (legacy) single-tasking Workspace exists. Multi-tasking allows Workers to handle multiple Tasks simultaneously. In multi-tasking mode, each Worker can receive parallel reservations up to the per-channel maximums defined in the Workers section. In single-tasking mode (legacy mode), each Worker will only receive a new reservation when the previous task is completed. Learn more at [Multitasking](https://www.twilio.com/docs/taskrouter/multitasking).
+  --MultiTaskEnabled: oneof<nothing, bool> # Whether to enable multi-tasking. Can be: `true` to enable multi-tasking, or `false` to disable it. However, all workspaces should be maintained as multi-tasking. There is no default when omitting this parameter. A multi-tasking Workspace can't be updated to single-tasking unless it is not a Flex Project and another (legacy) single-tasking Workspace exists. Multi-tasking allows Workers to handle multiple Tasks simultaneously. In multi-tasking mode, each Worker can receive parallel reservations up to the per-channel maximums defined in the Workers section. In single-tasking mode (legacy mode), each Worker will only receive a new reservation when the previous task is completed. Learn more at [Multitasking](https://www.twilio.com/docs/taskrouter/multitasking).
   --TimeoutActivitySid: string # The SID of the Activity that will be assigned to a Worker when a Task reservation times out without a response.
   --PrioritizeQueueOrder: string@PrioritizeQueueOrder-completer # The type of TaskQueue to prioritize when Workers are receiving Tasks from both types of TaskQueues. Can be: `LIFO` or `FIFO` and the default is `FIFO`. For more information, see [Queue Ordering](https://www.twilio.com/docs/taskrouter/queue-ordering-last-first-out-lifo).
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, default_activity_name: string, default_activity_sid: string, event_callback_url: string, events_filter: string, friendly_name: string, multi_task_enabled: bool, sid: string, timeout_activity_name: string, timeout_activity_sid: string, prioritize_queue_order: string, url: string, links: record> {
@@ -1731,7 +1730,7 @@ export def "workspaces CreateWorkspace" [
   FriendlyName: string # A descriptive string that you create to describe the Workspace resource. It can be up to 64 characters long. For example: `Customer Support` or `2014 Election Campaign`.
   --EventCallbackUrl: string # The URL we should call when an event occurs. If provided, the Workspace will publish events to this URL, for example, to collect data for reporting. See [Workspace Events](https://www.twilio.com/docs/taskrouter/api/event) for more information. This parameter supports Twilio's [Webhooks (HTTP callbacks) Connection Overrides](https://www.twilio.com/docs/usage/webhooks/webhooks-connection-overrides). (format: uri)
   --EventsFilter: string # The list of Workspace events for which to call event_callback_url. For example, if `EventsFilter=task.created, task.canceled, worker.activity.update`, then TaskRouter will call event_callback_url only when a task is created, canceled, or a Worker activity is updated.
-  --MultiTaskEnabled: string@bool-completer # Whether to enable multi-tasking. Can be: `true` to enable multi-tasking, or `false` to disable it. However, all workspaces should be created as multi-tasking. The default is `true`. Multi-tasking allows Workers to handle multiple Tasks simultaneously. When enabled (`true`), each Worker can receive parallel reservations up to the per-channel maximums defined in the Workers section. In single-tasking mode (legacy mode), each Worker will only receive a new reservation when the previous task is completed. Learn more at [Multitasking](https://www.twilio.com/docs/taskrouter/multitasking).
+  --MultiTaskEnabled: oneof<nothing, bool> # Whether to enable multi-tasking. Can be: `true` to enable multi-tasking, or `false` to disable it. However, all workspaces should be created as multi-tasking. The default is `true`. Multi-tasking allows Workers to handle multiple Tasks simultaneously. When enabled (`true`), each Worker can receive parallel reservations up to the per-channel maximums defined in the Workers section. In single-tasking mode (legacy mode), each Worker will only receive a new reservation when the previous task is completed. Learn more at [Multitasking](https://www.twilio.com/docs/taskrouter/multitasking).
   --Template: string # An available template name. Can be: `NONE` or `FIFO` and the default is `NONE`. Pre-configures the Workspace with the Workflow and Activities specified in the template. `NONE` will create a Workspace with only a set of default activities. `FIFO` will configure TaskRouter with a set of default activities and a single TaskQueue for first-in, first-out distribution, which can be useful when you are getting started with TaskRouter.
   --PrioritizeQueueOrder: string@PrioritizeQueueOrder-completer # The type of TaskQueue to prioritize when Workers are receiving Tasks from both types of TaskQueues. Can be: `LIFO` or `FIFO` and the default is `FIFO`. For more information, see [Queue Ordering](https://www.twilio.com/docs/taskrouter/queue-ordering-last-first-out-lifo).
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, default_activity_name: string, default_activity_sid: string, event_callback_url: string, events_filter: string, friendly_name: string, multi_task_enabled: bool, sid: string, timeout_activity_name: string, timeout_activity_sid: string, prioritize_queue_order: string, url: string, links: record> {

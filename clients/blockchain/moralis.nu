@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://deep-index.moralis.io/api/v2.2"] }
 def auth-scheme-completer [] { ["x-api-key"] }
 
@@ -121,12 +120,12 @@ export def "nft get-by-address" [
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --format: string@format-completer # The format of the token ID (default: decimal, e.g. decimal)
   --limit: int # The desired page size of the result.
-  --exclude-spam: string@bool-completer # Should spam NFTs be excluded from the result? (default: false)
+  --exclude-spam: oneof<nothing, bool> # Should spam NFTs be excluded from the result? (default: false)
   --token-addresses: list # The addresses to get balances for (optional)
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
-  --normalizeMetadata: string@bool-completer # Should normalized metadata be returned? (default: true)
-  --media-items: string@bool-completer # Should preview media data be returned? (default: false)
-  --include-prices: string@bool-completer # Should NFT last sale prices be included in the result? (default: false)
+  --normalizeMetadata: oneof<nothing, bool> # Should normalized metadata be returned? (default: true)
+  --media-items: oneof<nothing, bool> # Should preview media data be returned? (default: false)
+  --include-prices: oneof<nothing, bool> # Should NFT last sale prices be included in the result? (default: false)
 ]: nothing -> record<status: string, page: int, page_size: int, cursor: string, result: table<token_address: string, token_id: string, contract_type: string, owner_of: string, block_number: string, block_number_minted: string, token_uri: string, metadata: string, normalized_metadata: record, media: record, amount: string, name: string, symbol: string, token_hash: string, rarity_rank: float, rarity_percentage: float, rarity_label: string, last_token_uri_sync: string, last_metadata_sync: string, possible_spam: bool, verified_collection: bool, floor_price: string, floor_price_usd: string, floor_price_currency: string, last_sale: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -152,8 +151,8 @@ export def "nft-get-multiple-nf-ts post" [
   --allow-errors(-e) # Return full response without error handling
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   tokens: list # The tokens to be fetched (max 25 tokens) (e.g. [{token_address: 0xa4991609c508b6d4fb7156426db0bd49fe298bd8, token_id: 12}, {token_address: 0x3c64dc415ebb4690d1df2b6216148c8de6dd29f7, token_id: 1}, {token_address: 0x3c64dc415ebb4690d1df2b6216148c8de6dd29f7, token_id: 200}]) — item shape: {token_address?: string, token_id?: string}
-  --normalizeMetadata: string@bool-completer # Should normalized metadata be returned? (e.g. false)
-  --media-items: string@bool-completer # Should preview media data be returned? (e.g. false)
+  --normalizeMetadata: oneof<nothing, bool> # Should normalized metadata be returned? (e.g. false)
+  --media-items: oneof<nothing, bool> # Should preview media data be returned? (e.g. false)
 ]: any -> table<token_address: string, token_id: string, contract_type: string, owner_of: string, block_number: string, block_number_minted: string, token_uri: string, metadata: string, normalized_metadata: record<name: string, description: string, image: string, external_link: string, external_url: string, animation_url: string, attributes: list>, media: record<mimetype: string, category: any, status: any, original_media_url: string, updatedAt: string, parent_hash: string, media_collection: record>, amount: string, name: string, symbol: string, token_hash: string, rarity_rank: float, rarity_percentage: float, rarity_label: string, last_token_uri_sync: string, last_metadata_sync: string, possible_spam: bool, verified_collection: bool, floor_price: string, floor_price_usd: string, floor_price_currency: string, last_sale: record<transaction_hash: string, block_timestamp: string, buyer_address: string, seller_address: string, price: string, price_formatted: string, usd_price_at_sale: string, current_usd_value: string, token_address: string, token_id: string, payment_token: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -187,7 +186,7 @@ export def "nft-transfers get-by-address" [
   --to-block: string # To get the reserves at this block number
   --from-date: string # The date from where to get the transfers (format in seconds or datestring accepted by momentjs) * Provide the param 'from_block' or 'from_date' * If 'from_date' and 'from_block' are provided, 'from_block' will be used.
   --to-date: string # Get transfers up until this date (format in seconds or datestring accepted by momentjs) * Provide the param 'to_block' or 'to_date' * If 'to_date' and 'to_block' are provided, 'to_block' will be used.
-  --include-prices: string@bool-completer # Should NFT last sale prices be included in the result? (default: false)
+  --include-prices: oneof<nothing, bool> # Should NFT last sale prices be included in the result? (default: false)
   --limit: int # The desired page size of the result.
   --order: string@order-completer # The order of the result, in ascending (ASC) or descending (DESC) (default: DESC, e.g. DESC)
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
@@ -215,11 +214,11 @@ export def "nft-collections get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
-  --include-prices: string@bool-completer # Should NFT last sale prices be included in the result? (default: false)
+  --include-prices: oneof<nothing, bool> # Should NFT last sale prices be included in the result? (default: false)
   --limit: int # The desired page size of the result.
-  --exclude-spam: string@bool-completer # Should spam NFTs be excluded from the result? (default: false)
+  --exclude-spam: oneof<nothing, bool> # Should spam NFTs be excluded from the result? (default: false)
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
-  --token-counts: string@bool-completer # Should token counts per collection be included in the response? (default: false)
+  --token-counts: oneof<nothing, bool> # Should token counts per collection be included in the response? (default: false)
 ]: nothing -> record<status: string, page: int, page_size: int, cursor: string, result: table<token_address: string, contract_type: string, name: string, symbol: string, possible_spam: bool, verified_collection: bool, count: int, collection_logo: string, collection_banner_image: string, floor_price: string, floor_price_usd: string, floor_price_currency: string, last_sale: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -249,9 +248,9 @@ export def "nft get-by-address-1" [
   --totalRanges: int # The number of subranges to split the results into
   --range: int # The desired subrange to query
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
-  --normalizeMetadata: string@bool-completer # Should normalized metadata be returned? (default: true)
-  --media-items: string@bool-completer # Should preview media data be returned? (default: false)
-  --include-prices: string@bool-completer # Should NFT last sale prices be included in the result? (default: false)
+  --normalizeMetadata: oneof<nothing, bool> # Should normalized metadata be returned? (default: true)
+  --media-items: oneof<nothing, bool> # Should preview media data be returned? (default: false)
+  --include-prices: oneof<nothing, bool> # Should NFT last sale prices be included in the result? (default: false)
 ]: nothing -> record<page: int, page_size: int, cursor: string, result: table<token_address: string, token_id: string, owner_of: string, token_hash: string, block_number: string, block_number_minted: string, contract_type: string, token_uri: string, metadata: string, normalized_metadata: record, media: record, minter_address: string, last_token_uri_sync: string, last_metadata_sync: string, amount: string, name: string, symbol: string, possible_spam: bool, verified_collection: bool, rarity_rank: float, rarity_percentage: float, rarity_label: string, last_sale: record, list_price: record, floor_price: string, floor_price_usd: string, floor_price_currency: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -305,8 +304,8 @@ export def "nft-owners list" [
   --format: string@format-completer # The format of the token ID (default: decimal, e.g. decimal)
   --limit: int # The desired page size of the result.
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
-  --normalizeMetadata: string@bool-completer # Should normalized metadata be returned? (default: false)
-  --media-items: string@bool-completer # Should preview media data be returned? (default: false)
+  --normalizeMetadata: oneof<nothing, bool> # Should normalized metadata be returned? (default: false)
+  --media-items: oneof<nothing, bool> # Should preview media data be returned? (default: false)
 ]: nothing -> record<status: string, page: int, page_size: int, cursor: string, result: table<token_address: string, token_id: string, contract_type: string, owner_of: string, block_number: string, block_number_minted: string, token_uri: string, metadata: string, normalized_metadata: record, media: record, amount: string, name: string, symbol: string, token_hash: string, rarity_rank: float, rarity_percentage: float, rarity_label: string, last_token_uri_sync: string, last_metadata_sync: string, possible_spam: bool, verified_collection: bool, floor_price: string, floor_price_usd: string, floor_price_currency: string, last_sale: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -336,7 +335,7 @@ export def "nft-transfers get-by-address-1" [
   --from-date: string # The date from where to get the transfers (format in seconds or datestring accepted by momentjs) * Provide the param 'from_block' or 'from_date' * If 'from_date' and 'from_block' are provided, 'from_block' will be used.
   --to-date: string # Get transfers up until this date (format in seconds or datestring accepted by momentjs) * Provide the param 'to_block' or 'to_date' * If 'to_date' and 'to_block' are provided, 'to_block' will be used.
   --format: string@format-completer # The format of the token ID (default: decimal, e.g. decimal)
-  --include-prices: string@bool-completer # Should NFT last sale prices be included in the result? (default: false)
+  --include-prices: oneof<nothing, bool> # Should NFT last sale prices be included in the result? (default: false)
   --limit: int # The desired page size of the result.
   --order: string@order-completer # The order of the result, in ascending (ASC) or descending (DESC) (default: DESC, e.g. DESC)
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
@@ -367,8 +366,8 @@ export def "nft-nfts-by-traits post" [
   --limit: int # The desired page size of the result. (default: 100)
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
   --format: string@format-completer # The format of the token ID (default: decimal, e.g. decimal)
-  --normalizeMetadata: string@bool-completer # Should normalized metadata be returned? (default: false)
-  --media-items: string@bool-completer # Should preview media data be returned? (default: false)
+  --normalizeMetadata: oneof<nothing, bool> # Should normalized metadata be returned? (default: false)
+  --media-items: oneof<nothing, bool> # Should preview media data be returned? (default: false)
   traits: record
 ]: any -> record<page: int, page_size: int, cursor: string, result: table<token_address: string, token_id: string, owner_of: string, token_hash: string, block_number: string, block_number_minted: string, contract_type: string, token_uri: string, metadata: string, normalized_metadata: record, media: record, minter_address: string, last_token_uri_sync: string, last_metadata_sync: string, amount: string, name: string, symbol: string, possible_spam: bool, verified_collection: bool, rarity_rank: float, rarity_percentage: float, rarity_label: string, last_sale: record, list_price: record, floor_price: string, floor_price_usd: string, floor_price_currency: string>> {
   let input = $in
@@ -479,7 +478,7 @@ export def "nft-trades list" [
   --marketplace: string@marketplace-completer # Marketplace from which to get the trades. See [supported Marketplaces](https://docs.moralis.io/web3-data-api/evm/nft-marketplaces). (default: opensea, e.g. opensea)
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
   --limit: int # The desired page size of the result.
-  --nft-metadata: string@bool-completer # Include the NFT Metadata of the NFT Token (default: true)
+  --nft-metadata: oneof<nothing, bool> # Include the NFT Metadata of the NFT Token (default: true)
 ]: nothing -> record<page: int, page_size: int, cursor: string, result: table<transaction_hash: string, transaction_index: string, token_ids: list, seller_address: string, buyer_address: string, token_address: string, marketplace_address: string, price_token_address: string, price: string, block_timestamp: string, block_number: string, block_hash: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -511,7 +510,7 @@ export def "nft-trades get" [
   --to-date: string # The end date from which to get the transfers (format in seconds or datestring accepted by momentjs) * Provide the param 'to_block' or 'to_date' * If 'to_date' and 'to_block' are provided, 'to_block' will be used.
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
   --limit: int # The desired page size of the result.
-  --nft-metadata: string@bool-completer # Include the NFT Metadata of the NFT Token (default: true)
+  --nft-metadata: oneof<nothing, bool> # Include the NFT Metadata of the NFT Token (default: true)
 ]: nothing -> record<page: int, page_size: int, cursor: string, result: table<transaction_hash: string, transaction_index: string, token_ids: list, seller_address: string, buyer_address: string, token_address: string, marketplace_address: string, price_token_address: string, price: string, block_timestamp: string, block_number: string, block_hash: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -542,7 +541,7 @@ export def "wallets-nfts-trades get" [
   --to-date: string # The end date from which to get the transfers (format in seconds or datestring accepted by momentjs) * Provide the param 'to_block' or 'to_date' * If 'to_date' and 'to_block' are provided, 'to_block' will be used.
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
   --limit: int # The desired page size of the result.
-  --nft-metadata: string@bool-completer # Include the NFT Metadata of the NFT Token (default: true)
+  --nft-metadata: oneof<nothing, bool> # Include the NFT Metadata of the NFT Token (default: true)
 ]: nothing -> record<page: int, page_size: int, cursor: string, result: table<transaction_hash: string, transaction_index: string, token_ids: list, seller_address: string, buyer_address: string, token_address: string, marketplace_address: string, price_token_address: string, price: string, block_timestamp: string, block_number: string, block_hash: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -567,7 +566,7 @@ export def "nft-metadata get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
-  --include-prices: string@bool-completer # Should NFT last sale prices be included in the result? (default: false)
+  --include-prices: oneof<nothing, bool> # Should NFT last sale prices be included in the result? (default: false)
 ]: nothing -> record<token_address: string, name: string, synced_at: string, symbol: string, contract_type: string, possible_spam: bool, verified_collection: bool, collection_logo: string, collection_banner_image: string, collection_category: string, project_url: string, wiki_url: string, discord_url: string, telegram_url: string, twitter_username: string, instagram_username: string, floor_price: string, floor_price_usd: string, floor_price_currency: string, last_sale: record<transaction_hash: string, block_timestamp: string, buyer_address: string, seller_address: string, price: string, price_formatted: string, usd_price_at_sale: string, current_usd_value: string, token_address: string, token_id: string, payment_token: record<token_name: string, token_symbol: string, token_logo: string, token_decimals: string, token_address: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -591,7 +590,7 @@ export def "nft-metadata post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
-  --include-prices: string@bool-completer # Should NFT last sale prices be included in the result? (default: false)
+  --include-prices: oneof<nothing, bool> # Should NFT last sale prices be included in the result? (default: false)
   addresses: list
 ]: any -> table<token_address: string, name: string, synced_at: string, symbol: string, contract_type: string, possible_spam: bool, verified_collection: bool, collection_logo: string, collection_banner_image: string, collection_category: string, project_url: string, wiki_url: string, discord_url: string, telegram_url: string, twitter_username: string, instagram_username: string, floor_price: string, floor_price_usd: string, floor_price_currency: string, last_sale: record<transaction_hash: string, block_timestamp: string, buyer_address: string, seller_address: string, price: string, price_formatted: string, usd_price_at_sale: string, current_usd_value: string, token_address: string, token_id: string, payment_token: record>> {
   let input = $in
@@ -622,9 +621,9 @@ export def "nft get-by-address-token_id" [
   --allow-errors(-e) # Return full response without error handling
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --format: string@format-completer # The format of the token ID (default: decimal, e.g. decimal)
-  --normalizeMetadata: string@bool-completer # Should normalized metadata be returned? (default: true)
-  --media-items: string@bool-completer # Should preview media data be returned? (default: false)
-  --include-prices: string@bool-completer # Should NFT last sale prices be included in the result? (default: false)
+  --normalizeMetadata: oneof<nothing, bool> # Should normalized metadata be returned? (default: true)
+  --media-items: oneof<nothing, bool> # Should preview media data be returned? (default: false)
+  --include-prices: oneof<nothing, bool> # Should NFT last sale prices be included in the result? (default: false)
 ]: nothing -> record<token_address: string, token_id: string, owner_of: string, token_hash: string, block_number: string, block_number_minted: string, contract_type: string, token_uri: string, metadata: string, normalized_metadata: record<name: string, description: string, image: string, external_link: string, external_url: string, animation_url: string, attributes: list<record>>, media: record<mimetype: string, category: any, status: any, original_media_url: string, updatedAt: string, parent_hash: string, media_collection: record<low: record, medium: record, high: record>>, minter_address: string, last_token_uri_sync: string, last_metadata_sync: string, amount: string, name: string, symbol: string, possible_spam: bool, verified_collection: bool, rarity_rank: float, rarity_percentage: float, rarity_label: string, last_sale: record<transaction_hash: string, block_timestamp: string, buyer_address: string, seller_address: string, price: string, price_formatted: string, usd_price_at_sale: string, current_usd_value: string, token_address: string, token_id: string, payment_token: record<token_name: string, token_symbol: string, token_logo: string, token_decimals: string, token_address: string>>, list_price: record<listed: bool, price: string, price_currency: string, price_usd: string, marketplace: string>, floor_price: string, floor_price_usd: string, floor_price_currency: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -651,7 +650,7 @@ export def "nft-transfers get-by-address-token_id" [
   --allow-errors(-e) # Return full response without error handling
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --format: string@format-completer # The format of the token ID (default: decimal, e.g. decimal)
-  --include-prices: string@bool-completer # Should NFT last sale prices be included in the result? (default: false)
+  --include-prices: oneof<nothing, bool> # Should NFT last sale prices be included in the result? (default: false)
   --limit: int # The desired page size of the result.
   --order: string@order-completer # The order of the result, in ascending (ASC) or descending (DESC) (default: DESC, e.g. DESC)
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
@@ -683,8 +682,8 @@ export def "nft-owners get" [
   --format: string@format-completer # The format of the token ID (default: decimal, e.g. decimal)
   --limit: int # The desired page size of the result.
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
-  --normalizeMetadata: string@bool-completer # Should normalized metadata be returned? (default: false)
-  --media-items: string@bool-completer # Should preview media data be returned? (default: false)
+  --normalizeMetadata: oneof<nothing, bool> # Should normalized metadata be returned? (default: false)
+  --media-items: oneof<nothing, bool> # Should preview media data be returned? (default: false)
 ]: nothing -> record<status: string, page: int, page_size: int, cursor: string, result: table<token_address: string, token_id: string, contract_type: string, owner_of: string, block_number: string, block_number_minted: string, token_uri: string, metadata: string, normalized_metadata: record, media: record, amount: string, name: string, symbol: string, token_hash: string, rarity_rank: float, rarity_percentage: float, rarity_label: string, last_token_uri_sync: string, last_metadata_sync: string, possible_spam: bool, verified_collection: bool, floor_price: string, floor_price_usd: string, floor_price_currency: string, last_sale: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -983,7 +982,7 @@ export def "erc20 get" [
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --to-block: float # The block number up to which the balances will be checked.
   --token-addresses: list # The addresses to get balances for (optional)
-  --exclude-spam: string@bool-completer # Exclude spam tokens from the result (default: true)
+  --exclude-spam: oneof<nothing, bool> # Exclude spam tokens from the result (default: true)
 ]: nothing -> table<token_address: string, name: string, symbol: string, logo: string, thumbnail: string, decimals: int, balance: string, possible_spam: bool, verified_contract: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1196,8 +1195,8 @@ export def "wallets-history get" [
   --to-block: int # The maximum block number from which to get the transactions. * Provide the param 'to_block' or 'to_date' * If 'to_date' and 'to_block' are provided, 'to_block' will be used.
   --from-date: string # The start date from which to get the transactions (format in seconds or datestring accepted by momentjs) * Provide the param 'from_block' or 'from_date' * If 'from_date' and 'from_block' are provided, 'from_block' will be used.
   --to-date: string # Get the transactions up to this date (format in seconds or datestring accepted by momentjs) * Provide the param 'to_block' or 'to_date' * If 'to_date' and 'to_block' are provided, 'to_block' will be used.
-  --include-internal-transactions: string@bool-completer # If the result should contain the internal transactions.
-  --nft-metadata: string@bool-completer # If the result should contain the nft metadata.
+  --include-internal-transactions: oneof<nothing, bool> # If the result should contain the internal transactions.
+  --nft-metadata: oneof<nothing, bool> # If the result should contain the nft metadata.
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
   --order: string@order-completer # The order of the result, in ascending (ASC) or descending (DESC) (default: DESC, e.g. DESC)
   --limit: int # The desired page size of the result.
@@ -1227,11 +1226,11 @@ export def "wallets-tokens get" [
   --chain: string@chain-completer # The chain to query (default: eth, e.g. eth)
   --to-block: float # The block number up to which the balances will be checked.
   --token-addresses: list # The addresses to get balances for (optional)
-  --exclude-spam: string@bool-completer # Exclude spam tokens from the result (default: false)
-  --exclude-unverified-contracts: string@bool-completer # Exclude unverified contracts from the result (default: false)
+  --exclude-spam: oneof<nothing, bool> # Exclude spam tokens from the result (default: false)
+  --exclude-unverified-contracts: oneof<nothing, bool> # Exclude unverified contracts from the result (default: false)
   --cursor: string # The cursor returned in the previous response (used for getting the next page).
   --limit: int # The desired page size of the result.
-  --exclude-native: string@bool-completer # Exclude native balance from the result (default: false)
+  --exclude-native: oneof<nothing, bool> # Exclude native balance from the result (default: false)
   --max-token-inactivity: float # Exclude tokens inactive for more than the given amount of days
   --min-pair-side-liquidity-usd: float # Exclude tokens with liquidity less than the specified amount in USD. This parameter refers to the liquidity on a single side of the pair.
 ]: nothing -> record<page: int, page_size: int, block_number: string, cursor: string, result: table<token_address: string, name: string, symbol: string, logo: string, thumbnail: string, decimals: int, balance: string, possible_spam: bool, verified_contract: bool, usd_price: string, usd_price_24hr_percent_change: string, usd_price_24hr_usd_change: string, usd_value_24hr_usd_change: string, usd_value: float, portfolio_percentage: float, balance_formatted: string, native_token: bool, total_supply: string, total_supply_formatted: string, percentage_relative_to_total_supply: float>> {
@@ -1258,8 +1257,8 @@ export def "wallets-net-worth get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --chains: list # The chains to query
-  --exclude-spam: string@bool-completer # Exclude spam tokens from the result (default: false, e.g. true)
-  --exclude-unverified-contracts: string@bool-completer # Exclude unverified contracts from the result (default: false, e.g. true)
+  --exclude-spam: oneof<nothing, bool> # Exclude spam tokens from the result (default: false, e.g. true)
+  --exclude-unverified-contracts: oneof<nothing, bool> # Exclude unverified contracts from the result (default: false, e.g. true)
   --max-token-inactivity: float # Exclude tokens inactive for more than the given amount of days (e.g. 1)
   --min-pair-side-liquidity-usd: float # Exclude tokens with liquidity less than the specified amount in USD. This parameter refers to the liquidity on a single side of the pair. (e.g. 1000)
 ]: nothing -> record<total_networth_usd: string, chains: table<chain: string, native_balance: string, native_balance_formatted: string, native_balance_usd: string, token_balance_usd: string, networth_usd: string>, unsupported_chain_ids: list<string>, unavailable_chains: table<chain_id: string>> {
@@ -1960,9 +1959,9 @@ export def "tokens-search searchTokens" [
   --chains: string # The chains to query
   --qp-query: string # The query to search (e.g. pepe)
   --limit: float # The desired page size of the result.
-  --isVerifiedContract: string@bool-completer # True to include only verified contracts (default: false)
+  --isVerifiedContract: oneof<nothing, bool> # True to include only verified contracts (default: false)
   --sortBy: string@sortBy-completer # Sort by volume1hDesc, volume24hDesc, liquidityDesc, marketCapDesc (default: volume1hDesc, e.g. volume1hDesc)
-  --boostVerifiedContracts: string@bool-completer # True to boost verified contracts (default: true)
+  --boostVerifiedContracts: oneof<nothing, bool> # True to boost verified contracts (default: true)
 ]: nothing -> record<total: int, result: table<tokenAddress: string, chainId: string, name: string, symbol: string, blockNumber: int, blockTimestamp: int, usdPrice: float, marketCap: float, experiencedNetBuyers: record, netVolumeUsd: record, liquidityChangeUSD: record, usdPricePercentChange: record, volumeUsd: record, securityScore: int, logo: string, isVerifiedContract: bool, fullyDilutedValuation: float, totalHolders: float, totalLiquidityUsd: float, implementations: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2193,7 +2192,7 @@ export def "wallets-insight get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --chains: list # The chains to query. If not provided, aggregates across all supported chains. (e.g. [0x1, 0x89])
-  --includeChainBreakdown: string@bool-completer # When true, includes a per-chain breakdown array in the response with both native and USD values. (default: false)
+  --includeChainBreakdown: oneof<nothing, bool> # When true, includes a per-chain breakdown array in the response with both native and USD values. (default: false)
 ]: nothing -> record<address: string, addressType: string, walletAgeDays: int, firstActivityAt: record<chain: string, blockNumber: string, blockTimestamp: string, transactionHash: string, type: string, direction: string>, lastActivityAt: record<chain: string, blockNumber: string, blockTimestamp: string, transactionHash: string, type: string, direction: string>, firstInitiatedAt: record<chain: string, blockNumber: string, blockTimestamp: string, transactionHash: string, type: string, direction: string>, lastInitiatedAt: record<chain: string, blockNumber: string, blockTimestamp: string, transactionHash: string, type: string, direction: string>, activeDays: int, activeChains: int, mostActiveChain: string, transactionsInitiated: int, transactionsInvolved: int, nativeTransfers: record<sent: int, received: int, total: int>, erc20Transfers: record<sent: int, received: int, total: int>, nftTransfers: record<sent: int, received: int, total: int>, uniqueCounterparties: record<sentTo: int, receivedFrom: int>, swapVolumeUsd: float, totalGasSpentUsd: string, avgGasPerTransactionUsd: string, nativeVolumeSentUsd: string, nativeVolumeReceivedUsd: string, nativeNetFlowUsd: string, uniqueTokensInteracted: int, contractsCreated: int, largestNativeTransferInUsd: string, largestNativeTransferOutUsd: string, chainBreakdown: table<chain: string, walletAgeDays: int, firstActivityAt: record, lastActivityAt: record, firstInitiatedAt: record, lastInitiatedAt: record, activeDays: int, transactionsInitiated: int, transactionsInvolved: int, nativeTransfers: record, erc20Transfers: record, nftTransfers: record, uniqueCounterparties: record, swapVolumeUsd: float, totalGasSpentNative: string, totalGasSpentUsd: string, avgGasPerTransactionNative: string, avgGasPerTransactionUsd: string, nativeVolumeSent: string, nativeVolumeSentUsd: string, nativeVolumeReceived: string, nativeVolumeReceivedUsd: string, nativeNetFlow: string, nativeNetFlowUsd: string, uniqueTokensInteracted: int, contractsCreated: int, largestNativeTransferIn: string, largestNativeTransferInUsd: string, largestNativeTransferOut: string, largestNativeTransferOutUsd: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://voice.twilio.com"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -134,7 +133,7 @@ export def "byoc-trunks CreateByocTrunk" [
   --VoiceFallbackMethod: string@VoiceFallbackMethod-completer # The HTTP method we should use to call `voice_fallback_url`. Can be: `GET` or `POST`. (format: http-method)
   --StatusCallbackUrl: string # The URL that we should call to pass status parameters (such as call ended) to your application. (format: uri)
   --StatusCallbackMethod: string@StatusCallbackMethod-completer # The HTTP method we should use to call `status_callback_url`. Can be: `GET` or `POST`. (format: http-method)
-  --CnamLookupEnabled: string@bool-completer # Whether Caller ID Name (CNAM) lookup is enabled for the trunk. If enabled, all inbound calls to the BYOC Trunk from the United States and Canada automatically perform a CNAM Lookup and display Caller ID data on your phone. See [CNAM Lookups](https://www.twilio.com/docs/sip-trunking#CNAM) for more information.
+  --CnamLookupEnabled: oneof<nothing, bool> # Whether Caller ID Name (CNAM) lookup is enabled for the trunk. If enabled, all inbound calls to the BYOC Trunk from the United States and Canada automatically perform a CNAM Lookup and display Caller ID data on your phone. See [CNAM Lookups](https://www.twilio.com/docs/sip-trunking#CNAM) for more information.
   --ConnectionPolicySid: string # The SID of the Connection Policy that Twilio will use when routing traffic to your communications infrastructure.
   --FromDomainSid: string # The SID of the SIP Domain that should be used in the `From` header of originating calls sent to your SIP infrastructure. If your SIP infrastructure allows users to "call back" an incoming call, configure this with a [SIP Domain](https://www.twilio.com/docs/voice/api/sending-sip) to ensure proper routing. If not configured, the from domain will default to "sip.twilio.com".
 ]: any -> record<account_sid: string, sid: string, friendly_name: string, voice_url: string, voice_method: string, voice_fallback_url: string, voice_fallback_method: string, status_callback_url: string, status_callback_method: string, cnam_lookup_enabled: bool, connection_policy_sid: string, from_domain_sid: string, date_created: string, date_updated: string, url: string> {
@@ -213,7 +212,7 @@ export def "byoc-trunks UpdateByocTrunk" [
   --VoiceFallbackMethod: string@VoiceFallbackMethod-completer # The HTTP method we should use to call `voice_fallback_url`. Can be: `GET` or `POST`. (format: http-method)
   --StatusCallbackUrl: string # The URL that we should call to pass status parameters (such as call ended) to your application. (format: uri)
   --StatusCallbackMethod: string@StatusCallbackMethod-completer # The HTTP method we should use to call `status_callback_url`. Can be: `GET` or `POST`. (format: http-method)
-  --CnamLookupEnabled: string@bool-completer # Whether Caller ID Name (CNAM) lookup is enabled for the trunk. If enabled, all inbound calls to the BYOC Trunk from the United States and Canada automatically perform a CNAM Lookup and display Caller ID data on your phone. See [CNAM Lookups](https://www.twilio.com/docs/sip-trunking#CNAM) for more information.
+  --CnamLookupEnabled: oneof<nothing, bool> # Whether Caller ID Name (CNAM) lookup is enabled for the trunk. If enabled, all inbound calls to the BYOC Trunk from the United States and Canada automatically perform a CNAM Lookup and display Caller ID data on your phone. See [CNAM Lookups](https://www.twilio.com/docs/sip-trunking#CNAM) for more information.
   --ConnectionPolicySid: string # The SID of the Connection Policy that Twilio will use when routing traffic to your communications infrastructure.
   --FromDomainSid: string # The SID of the SIP Domain that should be used in the `From` header of originating calls sent to your SIP infrastructure. If your SIP infrastructure allows users to "call back" an incoming call, configure this with a [SIP Domain](https://www.twilio.com/docs/voice/api/sending-sip) to ensure proper routing. If not configured, the from domain will default to "sip.twilio.com".
 ]: any -> record<account_sid: string, sid: string, friendly_name: string, voice_url: string, voice_method: string, voice_fallback_url: string, voice_fallback_method: string, status_callback_url: string, status_callback_method: string, cnam_lookup_enabled: bool, connection_policy_sid: string, from_domain_sid: string, date_created: string, date_updated: string, url: string> {
@@ -380,7 +379,7 @@ export def "connection-policies-targets CreateConnectionPolicyTarget" [
   --FriendlyName: string # A descriptive string that you create to describe the resource. It is not unique and can be up to 255 characters long.
   --Priority: int # The relative importance of the target. Can be an integer from 0 to 65535, inclusive, and the default is 10. The lowest number represents the most important target.
   --Weight: int # The value that determines the relative share of the load the Target should receive compared to other Targets with the same priority. Can be an integer from 1 to 65535, inclusive, and the default is 10. Targets with higher values receive more load than those with lower ones with the same priority.
-  --Enabled: string@bool-completer # Whether the Target is enabled. The default is `true`.
+  --Enabled: oneof<nothing, bool> # Whether the Target is enabled. The default is `true`.
 ]: any -> record<account_sid: string, connection_policy_sid: string, sid: string, friendly_name: string, target: string, priority: int, weight: int, enabled: bool, date_created: string, date_updated: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -457,7 +456,7 @@ export def "connection-policies-targets UpdateConnectionPolicyTarget" [
   --Target: string # The SIP address you want Twilio to route your calls to. This must be a `sip:` schema. `sips` is NOT supported. (format: uri)
   --Priority: int # The relative importance of the target. Can be an integer from 0 to 65535, inclusive. The lowest number represents the most important target.
   --Weight: int # The value that determines the relative share of the load the Target should receive compared to other Targets with the same priority. Can be an integer from 1 to 65535, inclusive. Targets with higher values receive more load than those with lower ones with the same priority.
-  --Enabled: string@bool-completer # Whether the Target is enabled.
+  --Enabled: oneof<nothing, bool> # Whether the Target is enabled.
 ]: any -> record<account_sid: string, connection_policy_sid: string, sid: string, friendly_name: string, target: string, priority: int, weight: int, enabled: bool, date_created: string, date_updated: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -529,9 +528,9 @@ export def "dialing-permissions-countries ListDialingPermissionsCountry" [
   --IsoCode: string # Filter to retrieve the country permissions by specifying the [ISO country code](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) (format: iso-country-code)
   --Continent: string # Filter to retrieve the country permissions by specifying the continent
   --CountryCode: string # Filter the results by specified [country codes](https://www.itu.int/itudoc/itu-t/ob-lists/icc/e164_763.html)
-  --LowRiskNumbersEnabled: string@bool-completer # Filter to retrieve the country permissions with dialing to low-risk numbers enabled. Can be: `true` or `false`.
-  --HighRiskSpecialNumbersEnabled: string@bool-completer # Filter to retrieve the country permissions with dialing to high-risk special service numbers enabled. Can be: `true` or `false`
-  --HighRiskTollfraudNumbersEnabled: string@bool-completer # Filter to retrieve the country permissions with dialing to high-risk [toll fraud](https://www.twilio.com/blog/how-to-protect-your-account-from-toll-fraud-with-voice-dialing-geo-permissions-html) numbers enabled. Can be: `true` or `false`.
+  --LowRiskNumbersEnabled: oneof<nothing, bool> # Filter to retrieve the country permissions with dialing to low-risk numbers enabled. Can be: `true` or `false`.
+  --HighRiskSpecialNumbersEnabled: oneof<nothing, bool> # Filter to retrieve the country permissions with dialing to high-risk special service numbers enabled. Can be: `true` or `false`
+  --HighRiskTollfraudNumbersEnabled: oneof<nothing, bool> # Filter to retrieve the country permissions with dialing to high-risk [toll fraud](https://www.twilio.com/blog/how-to-protect-your-account-from-toll-fraud-with-voice-dialing-geo-permissions-html) numbers enabled. Can be: `true` or `false`.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -629,7 +628,7 @@ export def "settings UpdateDialingPermissionsSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --DialingPermissionsInheritance: string@bool-completer # `true` for the sub-account to inherit voice dialing permissions from the Master Project; otherwise `false`.
+  --DialingPermissionsInheritance: oneof<nothing, bool> # `true` for the sub-account to inherit voice dialing permissions from the Master Project; otherwise `false`.
 ]: any -> record<dialing_permissions_inheritance: bool, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))

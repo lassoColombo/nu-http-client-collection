@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost:8080"] }
 def auth-scheme-completer [] { ["bearer" "jwt"] }
 
@@ -209,7 +208,7 @@ export def "namespaces delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer
+  --force: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -261,7 +260,7 @@ export def "namespaces-flags createFlag" [
   key: string
   name: string
   --description: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --body-namespaceKey: string
   type: string@type-completer # format: enum
   --metadata: record
@@ -829,7 +828,7 @@ export def "namespaces-flags updateFlag" [
   --body-key: string
   name: string
   --description: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --body-namespaceKey: string
   --defaultVariantId: string
   --metadata: record

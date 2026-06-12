@@ -64,7 +64,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.hubapi.com"] }
 def auth-scheme-completer [] { ["query-hapikey" "bearer" "private-app" "private-app-legacy"] }
 
@@ -106,7 +105,7 @@ export def "marketing-forms /marketing/v3/forms" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --after: string
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
   --formTypes: list
   --limit: int # format: int32
 ]: nothing -> record<paging: record<next: record<after: string, link: string>>, results: list<any>> {
@@ -133,7 +132,7 @@ export def "marketing-forms /marketing/v3/forms-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
   --archivedAt: string # format: date-time
   --configuration: record # shape: {allowLinkToResetKnownValues: bool, archivable: bool, cloneable: bool, createNewContactForNewEmail: bool, editable: bool, embedType?: "V3"|"V4", language: "af"|"ar-eg"|"bg"|"bn"|"ca-es"|"cs"|"da"|"de"|"el"|"en"|"en-gb"|"es"|"es-mx"|"fi"|"fr"|"fr-ca"|"he-il"|"hr"|"hu"|"id"|"it"|"ja"|"ko"|"lt"|"ms"|"nl"|"no-no"|"pl"|"pt"|"pt-br"|"ro"|"ru"|"sk"|"sl"|"sv"|"th"|"tl"|"tr"|"uk"|"vi"|"zh-cn"|"zh-hk"|"zh-tw", lifecycleStages: list, notifyContactOwner: bool, notifyRecipients: list, postSubmitAction: record, prePopulateKnownValues: bool, recaptchaEnabled: bool}
   --createdAt: string # format: date-time
@@ -168,7 +167,7 @@ export def "marketing-forms get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Whether to return only results that have been archived.
+  --archived: oneof<nothing, bool> # Whether to return only results that have been archived.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -195,7 +194,7 @@ export def "marketing-forms replace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
   --archivedAt: string # format: date-time
   configuration: record # shape: {allowLinkToResetKnownValues: bool, archivable: bool, cloneable: bool, createNewContactForNewEmail: bool, editable: bool, embedType?: "V3"|"V4", language: "af"|"ar-eg"|"bg"|"bn"|"ca-es"|"cs"|"da"|"de"|"el"|"en"|"en-gb"|"es"|"es-mx"|"fi"|"fr"|"fr-ca"|"he-il"|"hr"|"hu"|"id"|"it"|"ja"|"ko"|"lt"|"ms"|"nl"|"no-no"|"pl"|"pt"|"pt-br"|"ro"|"ru"|"sk"|"sl"|"sv"|"th"|"tl"|"tr"|"uk"|"vi"|"zh-cn"|"zh-hk"|"zh-tw", lifecycleStages: list, notifyContactOwner: bool, notifyRecipients: list, postSubmitAction: record, prePopulateKnownValues: bool, recaptchaEnabled: bool}
   createdAt: string # format: date-time
@@ -256,7 +255,7 @@ export def "marketing-forms update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Whether this form is archived.
+  --archived: oneof<nothing, bool> # Whether this form is archived.
   --configuration: record # shape: {allowLinkToResetKnownValues: bool, archivable: bool, cloneable: bool, createNewContactForNewEmail: bool, editable: bool, embedType?: "V3"|"V4", language: "af"|"ar-eg"|"bg"|"bn"|"ca-es"|"cs"|"da"|"de"|"el"|"en"|"en-gb"|"es"|"es-mx"|"fi"|"fr"|"fr-ca"|"he-il"|"hr"|"hu"|"id"|"it"|"ja"|"ko"|"lt"|"ms"|"nl"|"no-no"|"pl"|"pt"|"pt-br"|"ro"|"ru"|"sk"|"sl"|"sv"|"th"|"tl"|"tr"|"uk"|"vi"|"zh-cn"|"zh-hk"|"zh-tw", lifecycleStages: list, notifyContactOwner: bool, notifyRecipients: list, postSubmitAction: record, prePopulateKnownValues: bool, recaptchaEnabled: bool}
   --displayOptions: record # shape: {cssClass?: string, renderRawHtml: bool, style: record, submitButtonText: string, theme: "canvas"|"default_style"|"legacy"|"linear"|"round"|"sharp"}
   --fieldGroups: list # The fields in the form, grouped in rows. — item shape: {fields: list, groupType: "default_group"|"progressive"|"queued", richText?: string, richTextType: "image"|"text"}

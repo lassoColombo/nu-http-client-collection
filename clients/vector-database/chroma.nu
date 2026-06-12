@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.trychroma.com"] }
 def auth-scheme-completer [] { ["x-chroma-token"] }
 
@@ -429,7 +428,7 @@ export def "tenants-databases-collections collection-by-tenant-database" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --configuration: any
-  --get-or-create: string@bool-completer
+  --get-or-create: oneof<nothing, bool>
   --metadata: any
   name: string
   --schema: any
@@ -571,7 +570,7 @@ export def "tenants-databases-collections-attached-functions-detach function" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete-output: string@bool-completer # Whether to delete the output collection as well when detaching the function.
+  --delete-output: oneof<nothing, bool> # Whether to delete the output collection as well when detaching the function.
 ]: any -> record<success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-chroma-token"))

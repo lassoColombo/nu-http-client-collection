@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.zoom.us/v2"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -468,12 +467,12 @@ export def "accounts-options accountOptionsUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --billing-auto-renew: string@bool-completer # Toggle whether automatic billing renewal is on or off.
+  --billing-auto-renew: oneof<nothing, bool> # Toggle whether automatic billing renewal is on or off.
   --meeting-connector-list: list # Specify the IP addresses of the Meeting Connectors that you would like to share with the sub account. Multiple values can be separated by comma. If no value is provided in this field, all the Meeting Connectors of a master account will be shared with the sub account.   **Note:** This option can only be used if the value of `share_mc` is set to `true`.
   --pay-mode: string@pay-mode-completer # Payee:<br>`master` - master account holder pays.<br>`sub` - Sub account holder pays. (default: master)
   --room-connector-list: list # Specify the IP addresses of the Room Connectors that you would like to share with the sub account. Multiple values can be separated by comma. If no value is provided in this field, all the Room Connectors of a master account will be shared with the sub account.   **Note:** This option can only be used if the value of `share_rc` is set to `true`.
-  --share-mc: string@bool-completer # Enable/disable the option for a sub account to use shared [Meeting Connector(s)](https://support.zoom.us/hc/en-us/articles/201363093-Getting-Started-with-the-Meeting-Connector) that are set up by the master account. Meeting Connectors can only be used by On-prem users. (default: false)
-  --share-rc: string@bool-completer # Enable/disable the option for a sub account to use shared [Virtual Room Connector(s)](https://support.zoom.us/hc/en-us/articles/202134758-Getting-Started-With-Virtual-Room-Connector) that are set up by the master account. Virtual Room Connectors can only be used by On-prem users. (default: false)
+  --share-mc: oneof<nothing, bool> # Enable/disable the option for a sub account to use shared [Meeting Connector(s)](https://support.zoom.us/hc/en-us/articles/201363093-Getting-Started-with-the-Meeting-Connector) that are set up by the master account. Meeting Connectors can only be used by On-prem users. (default: false)
+  --share-rc: oneof<nothing, bool> # Enable/disable the option for a sub account to use shared [Virtual Room Connector(s)](https://support.zoom.us/hc/en-us/articles/202134758-Getting-Started-With-Virtual-Room-Connector) that are set up by the master account. Virtual Room Connectors can only be used by On-prem users. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1230,8 +1229,8 @@ export def "accounts-sip-trunk-settings assignSIPConfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --enable: string@bool-completer # Enable or delete the configuration.<br> The values can be one of the following:<br> `true`: Enable configuration.<br> `false`: Delete configuration
-  --show-callout-internal-number: string@bool-completer # If the value of this option is set to `true`, the call-out numbers provided by the Zoom carrier partners will be displayed in the account's list of available call-out numbers in the Zoom Web Portal and Zoom Client.
+  --enable: oneof<nothing, bool> # Enable or delete the configuration.<br> The values can be one of the following:<br> `true`: Enable configuration.<br> `false`: Delete configuration
+  --show-callout-internal-number: oneof<nothing, bool> # If the value of this option is set to `true`, the call-out numbers provided by the Zoom carrier partners will be displayed in the account's list of available call-out numbers in the Zoom Web Portal and Zoom Client.
   --show-zoom-provided-callout-countries: int # If the value of this option is set to `0`, the call-out countries list provided by Zoom will be [displayed](https://support.zoom.us/hc/en-us/articles/200942859-Using-telephone-call-out) in the account's list of available call-out countries.   If the value of this option is set to `1`, the Zoom provided call-out countries will be hidden from the user's account.<br>   If the value of this option is set to `2`, all Zoom provided countries will be deleted and only internal countries (provided by carrier partners) will be used.
   --show-zoom-provided-numbers: int@show-zoom-provided-numbers-completer # If the value of this option is set to `0`, the numbers provided by Zoom will be displayed in the account's list of available call-out and call-in numbers in the Zoom Web Portal and Zoom Client.   If the value of this option is set to `1`, the Zoom provided numbers will be shown in the Zoom Web Portal but will not be used unless specified by the user.<br>   If the value of this option is set to `2`, all Zoom provided numbers will be deleted and only internal numbers (provided by carrier partners) will be used.
 ]: any -> any {
@@ -1606,7 +1605,7 @@ export def "chat-users-me-contacts get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --query-presence-status: string@bool-completer # The presence status of the contact.  Include this query parameter with a value of `true` to get the presence status of the contact in the response.
+  --query-presence-status: oneof<nothing, bool> # The presence status of the contact.  Include this query parameter with a value of `true` to get the presence status of the contact in the response.
 ]: nothing -> record<direct_numbers: list<string>, email: string, extension_number: string, first_name: string, id: string, last_name: string, phone_number: string, presence_status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2508,7 +2507,7 @@ export def "im-chat-messages sendchatbot" [
   --allow-errors(-e) # Return full response without error handling
   account_id: string # Account ID of the authorized account.
   content: record # JSON template describing how the message should be displayed for the user. For more information please see our ["Send Message" templates](https://marketplace.zoom.us/docs/guides/chatbots/sending-messages#example-request).
-  --is-markdown-support: string@bool-completer # **Optional**<br> Applies the markdown parser to your chatbot message if the value of this field is set to `true`.<br> To learn more, refer to the Chatbot message [markdown reference](https://marketplace.zoom.us/docs/guides/chatbots/customizing-messages/message-with-markdown).
+  --is-markdown-support: oneof<nothing, bool> # **Optional**<br> Applies the markdown parser to your chatbot message if the value of this field is set to `true`.<br> To learn more, refer to the Chatbot message [markdown reference](https://marketplace.zoom.us/docs/guides/chatbots/customizing-messages/message-with-markdown).
   robot_jid: string # Robot JID created when enabling chatbot features on your marketplace app.
   to_jid: string # Unique JID of reciever. Can be a group or user.
   --user-jid: string # **Optional**<br> The UserJID of the user on whose behalf the message is being sent. Use this field to prevent members of a channel from getting notifications that were set up by a user who has left the channel.
@@ -2570,7 +2569,7 @@ export def "im-chat-messages editChatbotMessage" [
   --accept: string@accept-completer # Response content type
   account_id: string # The AccountID of the Zoom account to which the message was sent. Retrieve this from the Chatbot request sent to your server as shown in the example [here]( https://marketplace.zoom.us/docs/guides/chatbots/sending-messages).
   content: record # JSON template describing how the edited message should be displayed for the user. For more information please see our ["Send Message" templates](https://marketplace.zoom.us/docs/guides/chatbots/sending-messages#example-request).
-  --is-markdown-support: string@bool-completer # **Optional**<br> Enable or disable markdown parser to your chatbot message. Applies the markdown parser to your chatbot message if the value of this field is set to `true`.<br> To learn more, refer to the Chatbot message [markdown reference](https://marketplace.zoom.us/docs/guides/chatbots/customizing-messages/message-with-markdown).
+  --is-markdown-support: oneof<nothing, bool> # **Optional**<br> Enable or disable markdown parser to your chatbot message. Applies the markdown parser to your chatbot message if the value of this field is set to `true`.<br> To learn more, refer to the Chatbot message [markdown reference](https://marketplace.zoom.us/docs/guides/chatbots/customizing-messages/message-with-markdown).
   robot_jid: string # Robot JID created when enabling chatbot features on your marketplace app.
   --user-jid: string # **Optional**<br> The UserJID of the user on whose behalf the message is being sent. Use this field to prevent members of a channel from getting notifications that were set up by a user who has left the channel.
 ]: any -> record<message_id: string, robot_jid: string, sent_time: string, to_jid: string, user_jid: string> {
@@ -2680,9 +2679,9 @@ export def "im-groups imGroupCreate" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
   --name: string # Group name: must be unique to one account.
-  --search-by-account: string@bool-completer # Members can search for others under same account.
-  --search-by-domain: string@bool-completer # Members can search for others in the same email domain.
-  --search-by-ma-account: string@bool-completer # Members can search for others under same master account, including all sub accounts.
+  --search-by-account: oneof<nothing, bool> # Members can search for others under same account.
+  --search-by-domain: oneof<nothing, bool> # Members can search for others in the same email domain.
+  --search-by-ma-account: oneof<nothing, bool> # Members can search for others under same master account, including all sub accounts.
   --type: string@type-completer-1 # IM Group types:<br>`normal` - Only members can see automatically see the other members of this group. Other people can search for members within this group. <br>`shared` - Everyone under an account can see the group members automatically.<br>`restricted` - Nobody can see the group or search for members except the members in the group. (default: normal)
 ]: any -> record<id: string, name: string, search_by_account: bool, search_by_domain: bool, search_by_ma_account: bool, total_members: int> {
   let input = $in
@@ -2755,9 +2754,9 @@ export def "im-groups imGroupUpdate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # Group name: must be unique to one account.
-  --search-by-account: string@bool-completer # Members can search for others under same account.
-  --search-by-domain: string@bool-completer # Members can search for others in the same email domain.
-  --search-by-ma-account: string@bool-completer # Members can search for others under same master account, including all sub accounts.
+  --search-by-account: oneof<nothing, bool> # Members can search for others under same account.
+  --search-by-domain: oneof<nothing, bool> # Members can search for others in the same email domain.
+  --search-by-ma-account: oneof<nothing, bool> # Members can search for others under same master account, including all sub accounts.
   --type: string@type-completer-1 # IM Group types:<br>`normal` - Only group members can automatically see others in their group. Other people can search for members in the group.<br>`shared` - Everyone under the account can see the group and members automatically.<br>`restricted` - Nobody can see the group or search for members except for the members in the group.
 ]: any -> any {
   let input = $in
@@ -2951,7 +2950,7 @@ export def "meetings meetingDelete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --occurrence-id: string # The meeting occurrence ID.
-  --schedule-for-reminder: string@bool-completer # `true`: Notify host and alternative host about the meeting cancellation via email. `false`: Do not send any email notification.
+  --schedule-for-reminder: oneof<nothing, bool> # `true`: Notify host and alternative host about the meeting cancellation via email. `false`: Do not send any email notification.
   --cancel-meeting-reminder: string # `true`: Notify registrants about the meeting cancellation via email.   `false`: Do not send any email notification to meeting registrants.   The default value of this field is `false`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2978,7 +2977,7 @@ export def "meetings meeting" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --occurrence-id: string # Meeting Occurrence ID. Provide this field to view meeting details of a particular occurrence of the [recurring meeting](https://support.zoom.us/hc/en-us/articles/214973206-Scheduling-Recurring-Meetings).
-  --show-previous-occurrences: string@bool-completer # Set the value of this field to `true` if you would like to view meeting details of all previous occurrences of a [recurring meeting](https://support.zoom.us/hc/en-us/articles/214973206-Scheduling-Recurring-Meetings). 
+  --show-previous-occurrences: oneof<nothing, bool> # Set the value of this field to `true` if you would like to view meeting details of all previous occurrences of a [recurring meeting](https://support.zoom.us/hc/en-us/articles/214973206-Scheduling-Recurring-Meetings). 
 ]: nothing -> record<assistant_id: string, host_email: string, host_id: string, id: int, uuid: string, agenda: string, created_at: string, duration: int, encrypted_password: string, h323_password: string, join_url: string, occurrences: table<duration: int, occurrence_id: string, start_time: string, status: string>, password: string, pmi: int, recurrence: record<end_date_time: string, end_times: int, monthly_day: int, monthly_week: int, monthly_week_day: int, repeat_interval: int, type: int, weekly_days: string>, settings: record<allow_multiple_devices: bool, alternative_hosts: string, alternative_hosts_email_notification: bool, approval_type: int, approved_or_denied_countries_or_regions: record<approved_list: list, denied_list: list, enable: bool, method: string>, audio: string, authentication_domains: string, authentication_exception: list<record>, authentication_name: string, authentication_option: string, auto_recording: string, breakout_room: record<enable: bool, rooms: list>, close_registration: bool, cn_meeting: bool, contact_email: string, contact_name: string, custom_keys: list<record>, encryption_type: string, enforce_login: bool, enforce_login_domains: string, global_dial_in_countries: list<string>, global_dial_in_numbers: list<record>, host_video: bool, in_meeting: bool, jbh_time: int, join_before_host: bool, language_interpretation: record<enable: bool, interpreters: list>, meeting_authentication: bool, mute_upon_entry: bool, participant_video: bool, registrants_confirmation_email: bool, registrants_email_notification: bool, registration_type: int, show_share_button: bool, use_pmi: bool, waiting_room: bool, watermark: bool>, start_time: string, start_url: string, status: string, timezone: string, topic: string, tracking_fields: table<field: string, value: string, visible: bool>, type: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3517,14 +3516,14 @@ export def "meetings-recordings-settings recordingSettingsUpdate" [
   --approval-type: int@approval-type-completer # Approval type for the registration.<br> `0`- Automatically approve the registration when a user registers.<br> `1` - Manually approve or deny the registration of a user.<br> `2` - No registration required to view the recording.
   --authentication-domains: string # Authentication domains.
   --authentication-option: string # Authentication Options.
-  --on-demand: string@bool-completer # Determine whether registration  isrequired to view the recording.
+  --on-demand: oneof<nothing, bool> # Determine whether registration  isrequired to view the recording.
   --password: string # Enable password protection for the recording by setting a password. The password must have a minimum of **eight** characters with a mix of numbers, letters and special characters.<br><br> **Note:** If the account owner or the admin has set minimum password strength requirements for recordings via Account Settings, the password value provided here must meet those requirements. <br><br>If the requirements are enabled, you can view those requirements by calling either the [Get User Settings API](https://marketplace.zoom.us/docs/api-reference/zoom-api/users/usersettings) or the [Get Account Settings](https://marketplace.zoom.us/docs/api-reference/zoom-api/accounts/accountsettings) API. 
-  --recording-authentication: string@bool-completer # Only authenticated users can view.
-  --send-email-to-host: string@bool-completer # Send an email to host when someone registers to view the recording. This applies for On-demand recordings only.
+  --recording-authentication: oneof<nothing, bool> # Only authenticated users can view.
+  --send-email-to-host: oneof<nothing, bool> # Send an email to host when someone registers to view the recording. This applies for On-demand recordings only.
   --share-recording: string@share-recording-completer # Determine how the meeting recording is shared.
-  --show-social-share-buttons: string@bool-completer # Show social share buttons on registration page. This applies for On-demand recordings only.
+  --show-social-share-buttons: oneof<nothing, bool> # Show social share buttons on registration page. This applies for On-demand recordings only.
   --topic: string # Name of the recording.
-  --viewer-download: string@bool-completer # Determine whether a viewer can download the recording file or not.
+  --viewer-download: oneof<nothing, bool> # Determine whether a viewer can download the recording file or not.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3678,7 +3677,7 @@ export def "meetings-registrants meetingRegistrantCreate" [
   --state: string # Registrant's State/Province.
   --zip: string # Registrant's Zip/Postal Code.
   --language: string # Registrant's language preference for confirmation  emails. The value can be one of the following: `en-US`,`de-DE`,`es-ES`,`fr-FR`,`jp-JP`,`pt-PT`,`ru-RU`,`zh-CN`, `zh-TW`, `ko-KO`, `it-IT`, `vi-VN`.
-  --auto-approve: string@bool-completer
+  --auto-approve: oneof<nothing, bool>
 ]: any -> record<id: int, join_url: string, registrant_id: string, start_time: string, topic: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5793,7 +5792,7 @@ export def "phone-numbers listAccountPhoneNumbers" [
   --extension-type: string@extension-type-completer # The type of assignee to whom the number is assigned. The value can be one of the following:<br> `user`<br> `callQueue`<br> `autoReceptionist`<br> `commonAreaPhone`
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --number-type: string@number-type-completer # The type of phone number. The value can be either `toll` or `tollfree`.
-  --pending-numbers: string@bool-completer # Include or exclude pending numbers in the response. The value can be either `true` or `false`.
+  --pending-numbers: oneof<nothing, bool> # Include or exclude pending numbers in the response. The value can be either `true` or `false`.
   --site-id: string # Unique identifier of the site. Use this query parameter if you have enabled multiple sites and would like to filter the response of this API call by a specific phone site. See [Managing multiple sites](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-multiple-sites) or [Adding a site](https://support.zoom.us/hc/en-us/articles/360020809672-Managing-multiple-sites#h_05c88e35-1593-491f-b1a8-b7139a75dc15) for details.
 ]: nothing -> record<next_page_token: string, page_size: int, phone_numbers: table<assignee: record, capability: list, carrier: record, display_name: string, id: string, location: string, number: string, number_type: string, sip_group: record, site: record, source: string, status: string>, total_records: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7449,7 +7448,7 @@ export def "rooms listZoomRooms" [
   --accept: string@accept-completer # Response content type
   --status: string@status-completer-3 # The status of the Zoom Room.
   --type: string@type-completer-11 # Type of the Zoom Rooms.
-  --unassigned-rooms: string@bool-completer # Use this query parameter with a value of `true` if you would like to see Zoom Rooms in your account that have not been assigned to anyone yet. (default: false)
+  --unassigned-rooms: oneof<nothing, bool> # Use this query parameter with a value of `true` if you would like to see Zoom Rooms in your account that have not been assigned to anyone yet. (default: false)
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --location-id: string # Parent location ID of the Zoom Room.
@@ -8331,8 +8330,8 @@ export def "tracking-fields trackingfieldCreate" [
   --accept: string@accept-completer # Response content type
   --field: string # Label/ Name for the tracking field.
   --recommended-values: list # Array of recommended values
-  --required: string@bool-completer # Tracking Field Required
-  --visible: string@bool-completer # Tracking Field Visible
+  --required: oneof<nothing, bool> # Tracking Field Required
+  --visible: oneof<nothing, bool> # Tracking Field Visible
 ]: any -> record<id: string, field: string, recommended_values: list<string>, required: bool, visible: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8405,8 +8404,8 @@ export def "tracking-fields trackingfieldUpdate" [
   --allow-errors(-e) # Return full response without error handling
   --field: string # Label/ Name for the tracking field.
   --recommended-values: list # Array of recommended values
-  --required: string@bool-completer # Tracking Field Required
-  --visible: string@bool-completer # Tracking Field Visible
+  --required: oneof<nothing, bool> # Tracking Field Required
+  --visible: oneof<nothing, bool> # Tracking Field Visible
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8453,12 +8452,12 @@ export def "tsp tspUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dial-in-number-unrestricted: string@bool-completer # Control restriction on account users adding a TSP number outside of account's dial in numbers.
-  --enable: string@bool-completer # Enable 3rd party audio conferencing for account users
-  --master-account-setting-extended: string@bool-completer # For master account, extend its TSP setting to all sub accounts. For sub account, extend TSP setting from master account.
-  --modify-credential-forbidden: string@bool-completer # Control restriction on account users being able to modify their TSP credentials.
+  --dial-in-number-unrestricted: oneof<nothing, bool> # Control restriction on account users adding a TSP number outside of account's dial in numbers.
+  --enable: oneof<nothing, bool> # Enable 3rd party audio conferencing for account users
+  --master-account-setting-extended: oneof<nothing, bool> # For master account, extend its TSP setting to all sub accounts. For sub account, extend TSP setting from master account.
+  --modify-credential-forbidden: oneof<nothing, bool> # Control restriction on account users being able to modify their TSP credentials.
   --tsp-bridge: string@tsp-bridge-completer # Telephony bridge
-  --tsp-enabled: string@bool-completer # Enable TSP feature for account. This has to be enabled to use any other tsp settings/features.
+  --tsp-enabled: oneof<nothing, bool> # Enable TSP feature for account. This has to be enabled to use any other tsp settings/features.
   --tsp-provider: string # 3rd party audio conferencing provider
 ]: any -> any {
   let input = $in
@@ -8614,9 +8613,9 @@ export def "users userDelete" [
   --allow-errors(-e) # Return full response without error handling
   --action: string@action-completer-10 # Delete action options:<br>`disassociate` - Disassociate a user.<br>`delete`-  Permanently delete a user.<br>Note: To delete pending user in the account, use `disassociate` (default: disassociate)
   --transfer-email: string # Transfer email.
-  --transfer-meeting: string@bool-completer # Transfer meeting.
-  --transfer-webinar: string@bool-completer # Transfer webinar.
-  --transfer-recording: string@bool-completer # Transfer recording.
+  --transfer-meeting: oneof<nothing, bool> # Transfer meeting.
+  --transfer-webinar: oneof<nothing, bool> # Transfer webinar.
+  --transfer-recording: oneof<nothing, bool> # Transfer recording.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8686,7 +8685,7 @@ export def "users userUpdate" [
   --pmi: int # Personal meeting ID: length must be 10.
   --timezone: string # The time zone ID for a user profile. For this parameter value please refer to the ID value in the [timezone](https://marketplace.zoom.us/docs/api-reference/other-references/abbreviation-lists#timezones) list.
   --type: int@type-completer-12 # User types:<br>`1` - Basic.<br>`2` - Licensed.<br>`3` - On-prem.<br>`99` - None (this can only be set with `ssoCreate`).
-  --use-pmi: string@bool-completer # Use Personal Meeting ID for instant meetings. (default: false)
+  --use-pmi: oneof<nothing, bool> # Use Personal Meeting ID for instant meetings. (default: false)
   --vanity-name: string # Personal meeting room name.
 ]: any -> any {
   let input = $in
@@ -9058,7 +9057,7 @@ export def "users-recordings recordingsList" [
   --page-size: int # The number of records returned within a single API call. (default: 30)
   --next-page-token: string # The next page token is used to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.
   --mc: string # Query Metadata of Recording if an On-Premise Meeting Connector was used for the meeting. (default: false)
-  --trash: string@bool-completer # Query trash. `true`: List recordings from trash.<br> `false`: Do not list recordings from the trash.<br> The default value is `false`. If you set it to `true`, you can use the `trash_type` property to indicate the type of Cloud recording that you need to retrieve.  (default: false)
+  --trash: oneof<nothing, bool> # Query trash. `true`: List recordings from trash.<br> `false`: Do not list recordings from the trash.<br> The default value is `false`. If you set it to `true`, you can use the `trash_type` property to indicate the type of Cloud recording that you need to retrieve.  (default: false)
   --qp-from: string # The start date in 'yyyy-mm-dd' UTC format for the date range for which you would like to retrieve recordings. The maximum range can be a month. If no value is provided for this field, the default will be current date. For example, if you make the API request on June 30, 2020, without providing the “from” and “to” parameters, by default the value of 'from' field will be “2020-06-30” and the value of the 'to' field will be “2020-07-01”.   **Note**: The "trash" files cannot be filtered by date range and thus, the "from" and "to" fields should not be used for trash files. (format: date)
   --qp-to: string # End date in 'yyyy-mm-dd' 'yyyy-mm-dd' UTC format.  (format: date)
   --trash-type: string # The type of Cloud recording that you would like to retrieve from the trash. The value can be one of the following:<br>     `meeting_recordings`: List all meeting recordings from the trash.<br>     `recording_file`: List all individual recording files from the trash.  (default: meeting_recordings)
@@ -9623,7 +9622,7 @@ export def "webinars webinar" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --occurrence-id: string # Unique Identifier that identifies an occurrence of a recurring webinar. [Recurring webinars](https://support.zoom.us/hc/en-us/articles/216354763-How-to-Schedule-A-Recurring-Webinar) can have a maximum of 50 occurrences. When you create a recurring Webinar using [Create a Webinar API](https://marketplace.zoom.us/docs/api-reference/zoom-api/webinars/webinarcreate), you can retrieve the Occurrence ID from the response of the API call.
-  --show-previous-occurrences: string@bool-completer # Set the value of this field to `true` if you would like to view Webinar details of all previous occurrences of a recurring Webinar.
+  --show-previous-occurrences: oneof<nothing, bool> # Set the value of this field to `true` if you would like to view Webinar details of all previous occurrences of a recurring Webinar.
 ]: nothing -> record<host_email: string, host_id: string, id: int, uuid: string, agenda: string, created_at: string, duration: int, join_url: string, occurrences: table<duration: int, occurrence_id: string, start_time: string, status: string>, password: string, recurrence: record<end_date_time: string, end_times: int, monthly_day: int, monthly_week: int, monthly_week_day: int, repeat_interval: int, type: int, weekly_days: string>, settings: record<allow_multiple_devices: bool, alternative_hosts: string, approval_type: int, attendees_and_panelists_reminder_email_notification: record<enable: bool, type: int>, audio: string, authentication_domains: string, authentication_name: string, authentication_option: string, auto_recording: string, close_registration: bool, contact_email: string, contact_name: string, email_language: string, enforce_login: bool, enforce_login_domains: string, follow_up_absentees_email_notification: record<enable: bool, type: int>, follow_up_attendees_email_notification: record<enable: bool, type: int>, global_dial_in_countries: list<string>, hd_video: bool, host_video: bool, meeting_authentication: bool, notify_registrants: bool, on_demand: bool, panelists_invitation_email_notification: bool, panelists_video: bool, post_webinar_survey: bool, practice_session: bool, question_and_answer: record<allow_anonymous_questions: bool, answer_questions: string, attendees_can_comment: bool, attendees_can_upvote: bool, enable: bool>, registrants_confirmation_email: bool, registrants_email_notification: bool, registrants_restrict_number: int, registration_type: int, show_share_button: bool, survey_url: string>, start_time: string, start_url: string, timezone: string, topic: string, tracking_fields: table<field: string, value: string>, type: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9688,7 +9687,7 @@ export def "webinars-batch-registrants addBatchWebinarRegistrants" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --auto-approve: string@bool-completer # If a meeting was scheduled with approval_type `1` (manual approval), but you would like to automatically approve the registrants that are added via this API, you can set the value of this field to `true`.   You **cannot** use this field to change approval setting for a meeting  that was originally scheduled with approval_type `0` (automatic approval).
+  --auto-approve: oneof<nothing, bool> # If a meeting was scheduled with approval_type `1` (manual approval), but you would like to automatically approve the registrants that are added via this API, you can set the value of this field to `true`.   You **cannot** use this field to change approval setting for a meeting  that was originally scheduled with approval_type `0` (automatic approval).
   --registrants: list # item shape: {email: string, first_name: string, last_name?: string}
 ]: any -> record<registrants: table<email: string, join_url: string, registrant_id: string>> {
   let input = $in

@@ -63,7 +63,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://americas.api.riotgames.com" "https://asia.api.riotgames.com" "https://europe.api.riotgames.com" "https://br1.api.riotgames.com" "https://eun1.api.riotgames.com" "https://euw1.api.riotgames.com" "https://jp1.api.riotgames.com" "https://kr.api.riotgames.com" "https://la1.api.riotgames.com" "https://la2.api.riotgames.com" "https://me1.api.riotgames.com" "https://na1.api.riotgames.com" "https://oc1.api.riotgames.com" "https://ru.api.riotgames.com" "https://sg2.api.riotgames.com" "https://tr1.api.riotgames.com" "https://tw2.api.riotgames.com" "https://vn2.api.riotgames.com" "https://pbe1.api.riotgames.com" "https://sea.api.riotgames.com" "https://apac.api.riotgames.com" "https://esports.api.riotgames.com" "https://esportseu.api.riotgames.com" "https://ap.api.riotgames.com" "https://br.api.riotgames.com" "https://eu.api.riotgames.com" "https://latam.api.riotgames.com" "https://na.api.riotgames.com"] }
 def auth-scheme-completer [] { ["query-api_key" "x-riot-token" "bearer"] }
 
@@ -1489,7 +1488,7 @@ export def "lol-tournament-stub-codes tournament-stub-v5createTournamentCode" [
   pickType: string@pickType-completer # The pick type of the game.              (Legal values:  BLIND_PICK,  DRAFT_MODE,  ALL_RANDOM,  TOURNAMENT_DRAFT)
   mapType: string@mapType-completer # The map type of the game.              (Legal values:  SUMMONERS_RIFT,  HOWLING_ABYSS)
   spectatorType: string@spectatorType-completer # The spectator type of the game.              (Legal values:  NONE,  LOBBYONLY,  ALL)
-  --enoughPlayers: string@bool-completer # Checks if allowed participants are enough to make full teams.
+  --enoughPlayers: oneof<nothing, bool> # Checks if allowed participants are enough to make full teams.
 ]: any -> list<string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
@@ -1624,7 +1623,7 @@ export def "lol-tournament-codes tournament-v5createTournamentCode" [
   pickType: string@pickType-completer # The pick type of the game.              (Legal values:  BLIND_PICK,  DRAFT_MODE,  ALL_RANDOM,  TOURNAMENT_DRAFT)
   mapType: string@mapType-completer # The map type of the game.              (Legal values:  SUMMONERS_RIFT,  HOWLING_ABYSS)
   spectatorType: string@spectatorType-completer # The spectator type of the game.              (Legal values:  NONE,  LOBBYONLY,  ALL)
-  --enoughPlayers: string@bool-completer # Checks if allowed participants are enough to make full teams.
+  --enoughPlayers: oneof<nothing, bool> # Checks if allowed participants are enough to make full teams.
 ]: any -> list<string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))

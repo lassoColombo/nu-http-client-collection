@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://localhost/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -248,7 +247,7 @@ export def "replication-replicate-force-delete forceDeleteReplications" [
   --collection: string # The name of the collection to which the shard being replicated belongs.
   --shard: string # The identifier of the shard involved in the replication operations.
   --node: string # The name of the target node where the replication operations are registered.
-  --dryRun: string@bool-completer # If true, the operation will not actually delete anything but will return the expected outcome of the deletion. (default: false)
+  --dryRun: oneof<nothing, bool> # If true, the operation will not actually delete anything but will return the expected outcome of the deletion. (default: false)
 ]: any -> record<deleted: list<string>, dryRun: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -274,7 +273,7 @@ export def "replication-replicate replicationDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeHistory: string@bool-completer # Whether to include the history of the replication operation.
+  --includeHistory: oneof<nothing, bool> # Whether to include the history of the replication operation.
 ]: nothing -> record<id: string, shard: string, collection: string, sourceNode: string, targetNode: string, type: string, uncancelable: bool, scheduledForCancel: bool, scheduledForDelete: bool, status: record<state: string, whenStartedUnixMs: int, errors: list<record>>, statusHistory: table<state: string, whenStartedUnixMs: int, errors: list>, whenStartedUnixMs: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -322,7 +321,7 @@ export def "replication-replicate-list listReplication" [
   --targetNode: string # The name of the target node to get details for.
   --collection: string # The name of the collection to get details for.
   --shard: string # The shard to get details for.
-  --includeHistory: string@bool-completer # Whether to include the history of the replication operation.
+  --includeHistory: oneof<nothing, bool> # Whether to include the history of the replication operation.
 ]: nothing -> table<id: string, shard: string, collection: string, sourceNode: string, targetNode: string, type: string, uncancelable: bool, scheduledForCancel: bool, scheduledForDelete: bool, status: record<state: string, whenStartedUnixMs: int, errors: list>, statusHistory: list<record>, whenStartedUnixMs: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -463,7 +462,7 @@ export def "users-db listAllUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeLastUsedTime: string@bool-completer # Whether to include the last time the users were utilized. (default: false)
+  --includeLastUsedTime: oneof<nothing, bool> # Whether to include the last time the users were utilized. (default: false)
 ]: nothing -> table<roles: list<string>, userId: string, dbUserType: string, active: bool, createdAt: string, apiKeyFirstLetters: string, lastUsedAt: string, namespace: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -487,7 +486,7 @@ export def "users-db get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeLastUsedTime: string@bool-completer # Whether to include the last used time of the given user (default: false)
+  --includeLastUsedTime: oneof<nothing, bool> # Whether to include the last used time of the given user (default: false)
 ]: nothing -> record<roles: list<string>, userId: string, dbUserType: string, active: bool, createdAt: string, apiKeyFirstLetters: string, lastUsedAt: string, namespace: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -511,7 +510,7 @@ export def "users-db createUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --import: string@bool-completer # EXPERIMENTAL, DONT USE. THIS WILL BE REMOVED AGAIN. - import api key from static user (default: false)
+  --import: oneof<nothing, bool> # EXPERIMENTAL, DONT USE. THIS WILL BE REMOVED AGAIN. - import api key from static user (default: false)
   --createTime: string # EXPERIMENTAL, DONT USE. THIS WILL BE REMOVED AGAIN. - set the given time as creation time (format: date-time)
 ]: any -> record<apikey: string> {
   let input = $in
@@ -604,7 +603,7 @@ export def "users-db-deactivate deactivateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --revoke-key: string@bool-completer # Whether the API key should be revoked when deactivating the user. (default: false)
+  --revoke-key: oneof<nothing, bool> # Whether the API key should be revoked when deactivating the user. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -917,7 +916,7 @@ export def "authz-users-roles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeFullRoles: string@bool-completer # Whether to include detailed role information like its assigned permissions. (default: false)
+  --includeFullRoles: oneof<nothing, bool> # Whether to include detailed role information like its assigned permissions. (default: false)
 ]: nothing -> table<name: string, permissions: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1050,7 +1049,7 @@ export def "authz-groups-roles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeFullRoles: string@bool-completer # If true, the response will include the full role definitions with all associated permissions. If false, only role names are returned. (default: false)
+  --includeFullRoles: oneof<nothing, bool> # If true, the response will include the full role definitions with all associated permissions. If false, only role names are returned. (default: false)
 ]: nothing -> table<name: string, permissions: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1745,7 +1744,7 @@ export def "batch-objects batchobjectsdelete" [
   --body-match: record # Outlines how to find the objects to be deleted. — shape: {class?: string, where?: record}
   --output: string # Controls the verbosity of the output, possible values are: `minimal`, `verbose`. Defaults to `minimal`. (default: minimal)
   --deletionTimeUnixMilli: int # Timestamp of deletion in milliseconds since epoch UTC. (format: int64)
-  --dryRun: string@bool-completer # If true, the call will show which objects would be matched using the specified filter without deleting any objects. <br/><br/>Depending on the configured verbosity, you will either receive a count of affected objects, or a list of IDs. (default: false)
+  --dryRun: oneof<nothing, bool> # If true, the call will show which objects would be matched using the specified filter without deleting any objects. <br/><br/>Depending on the configured verbosity, you will either receive a count of affected objects, or a list of IDs. (default: false)
 ]: any -> record<match: record<class: string, where: record<operands: list, operator: string, path: list, valueInt: int, valueNumber: float, valueBoolean: bool, valueString: string, valueText: string, valueDate: string, valueIntArray: list, valueNumberArray: list, valueBooleanArray: list, valueStringArray: list, valueTextArray: list, valueDateArray: list, valueGeoRange: record>>, output: string, deletionTimeUnixMilli: int, dryRun: bool, results: record<matches: float, limit: float, successful: float, failed: float, objects: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1900,7 +1899,7 @@ export def "schema schemadump" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --consistency: string@bool-completer # If true, the request is proxied to the cluster leader to ensure strong schema consistency. Default is true.
+  --consistency: oneof<nothing, bool> # If true, the request is proxied to the cluster leader to ensure strong schema consistency. Default is true.
 ]: nothing -> record<classes: table<class: string, vectorConfig: record, vectorIndexType: string, vectorIndexConfig: record, shardingConfig: record, replicationConfig: record, invertedIndexConfig: record, multiTenancyConfig: record, objectTtlConfig: record, vectorizer: string, moduleConfig: record, description: string, properties: list>, maintainer: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1967,7 +1966,7 @@ export def "schema schemaobjectsget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --consistency: string@bool-completer # If true, the request is proxied to the cluster leader to ensure strong schema consistency. Default is true.
+  --consistency: oneof<nothing, bool> # If true, the request is proxied to the cluster leader to ensure strong schema consistency. Default is true.
 ]: nothing -> record<class: string, vectorConfig: record, vectorIndexType: string, vectorIndexConfig: record, shardingConfig: record, replicationConfig: record<factor: int, asyncConfig: record<hashtreeHeight: int, frequency: int, frequencyWhilePropagating: int, loggingFrequency: int, diffBatchSize: int, diffPerNodeTimeout: int, prePropagationTimeout: int, propagationTimeout: int, propagationLimit: int, propagationDelay: int, propagationConcurrency: int, propagationBatchSize: int>, deletionStrategy: string>, invertedIndexConfig: record<cleanupIntervalSeconds: float, bm25: record<k1: float, b: float>, stopwords: record<preset: string, additions: list, removals: list>, indexTimestamps: bool, indexNullState: bool, indexPropertyLength: bool, usingBlockMaxWAND: bool, tokenizerUserDict: list<record>, stopwordPresets: record>, multiTenancyConfig: record<enabled: bool, autoTenantCreation: bool, autoTenantActivation: bool>, objectTtlConfig: record<enabled: bool, defaultTtl: int, deleteOn: string, filterExpiredObjects: bool>, vectorizer: string, moduleConfig: record, description: string, properties: table<dataType: list, description: string, moduleConfig: record, name: string, indexInverted: bool, bucketGeneration: int, indexFilterable: bool, indexSearchable: bool, indexRangeFilters: bool, tokenization: string, nestedProperties: list, disableDuplicatedReferences: bool, textAnalyzer: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2063,14 +2062,14 @@ export def "schema-properties schemaobjectspropertiesadd" [
   --description: string # Description of the property.
   --moduleConfig: record # Configuration specific to modules in a collection context.
   --name: string # The name of the property (required). Multiple words should be concatenated in camelCase, e.g. `nameOfAuthor`.
-  --indexInverted: string@bool-completer # (Deprecated). Whether to include this property in the inverted index. If `false`, this property cannot be used in `where` filters, `bm25` or `hybrid` search. <br/><br/>Unrelated to vectorization behavior (deprecated as of v1.19; use indexFilterable or/and indexSearchable instead)
+  --indexInverted: oneof<nothing, bool> # (Deprecated). Whether to include this property in the inverted index. If `false`, this property cannot be used in `where` filters, `bm25` or `hybrid` search. <br/><br/>Unrelated to vectorization behavior (deprecated as of v1.19; use indexFilterable or/and indexSearchable instead)
   --bucketGeneration: int # Internal RAFT-replicated counter bumped by semantic runtime-reindex migrations (e.g. change-tokenization, enable-filterable, enable-searchable). Used by the data path to resolve the property's inverted-index bucket name; a single RAFT commit flipping the schema flag AND bumping this counter atomically cuts the cluster from the old bucket to the new one. Defaults to 0. Internal use; clients should not set this. (format: int64)
-  --indexFilterable: string@bool-completer # Whether to include this property in the filterable, Roaring Bitmap index. If `false`, this property cannot be used in `where` filters. <br/><br/>Note: Unrelated to vectorization behavior.
-  --indexSearchable: string@bool-completer # Optional. Should this property be indexed in the inverted index. Defaults to true. Applicable only to properties of data type text and text[]. If you choose false, you will not be able to use this property in bm25 or hybrid search. This property has no affect on vectorization decisions done by modules
-  --indexRangeFilters: string@bool-completer # Whether to include this property in the filterable, range-based Roaring Bitmap index. Provides better performance for range queries compared to filterable index in large datasets. Applicable only to properties of data type int, number, date.
+  --indexFilterable: oneof<nothing, bool> # Whether to include this property in the filterable, Roaring Bitmap index. If `false`, this property cannot be used in `where` filters. <br/><br/>Note: Unrelated to vectorization behavior.
+  --indexSearchable: oneof<nothing, bool> # Optional. Should this property be indexed in the inverted index. Defaults to true. Applicable only to properties of data type text and text[]. If you choose false, you will not be able to use this property in bm25 or hybrid search. This property has no affect on vectorization decisions done by modules
+  --indexRangeFilters: oneof<nothing, bool> # Whether to include this property in the filterable, range-based Roaring Bitmap index. Provides better performance for range queries compared to filterable index in large datasets. Applicable only to properties of data type int, number, date.
   --tokenization: string@tokenization-completer # Determines how a property is indexed. This setting applies to `text` and `text[]` data types. The following tokenization methods are available:<br/><br/>- `word` (default): Splits the text on any non-alphanumeric characters and lowercases the tokens.<br/>- `lowercase`: Splits the text on whitespace and lowercases the tokens.<br/>- `whitespace`: Splits the text on whitespace. This tokenization is case-sensitive.<br/>- `field`: Indexes the entire property value as a single token after trimming whitespace.<br/>- `trigram`: Splits the property into rolling trigrams (three-character sequences).<br/>- `gse`: Uses the `gse` tokenizer, suitable for Chinese language text. [See `gse` docs](https://pkg.go.dev/github.com/go-ego/gse#section-readme).<br/>- `kagome_ja`: Uses the `Kagome` tokenizer with a Japanese (IPA) dictionary. [See `kagome` docs](https://github.com/ikawaha/kagome).<br/>- `kagome_kr`: Uses the `Kagome` tokenizer with a Korean dictionary. [See `kagome` docs](https://github.com/ikawaha/kagome).<br/><br/>See [Reference: Tokenization](https://docs.weaviate.io/weaviate/config-refs/collections#tokenization) for details.
   --nestedProperties: list # The properties of the nested object(s). Applies to object and object[] data types. — item shape: {dataType?: list, description?: string, name?: string, indexFilterable?: bool, indexSearchable?: bool, indexRangeFilters?: bool, tokenization?: "word"|"lowercase"|"whitespace"|"field"|"trigram"|"gse"|"kagome_kr"|"kagome_ja"|"gse_ch", nestedProperties?: list, textAnalyzer?: record}
-  --disableDuplicatedReferences: string@bool-completer # If set to false, allows multiple references to the same target object within this property. Setting it to true will enforce uniqueness of references within this property. By default, this is set to true. (default: true)
+  --disableDuplicatedReferences: oneof<nothing, bool> # If set to false, allows multiple references to the same target object within this property. Setting it to true will enforce uniqueness of references within this property. By default, this is set to true. (default: true)
   --textAnalyzer: record # Text analysis options for a property. These settings are immutable after the property is created. Applies only to text and text[] data types that use an inverted index (searchable or filterable). — shape: {asciiFold?: bool, asciiFoldIgnore?: list, stopwordPreset?: string}
 ]: any -> record<dataType: list<string>, description: string, moduleConfig: record, name: string, indexInverted: bool, bucketGeneration: int, indexFilterable: bool, indexSearchable: bool, indexRangeFilters: bool, tokenization: string, nestedProperties: table<dataType: list, description: string, name: string, indexFilterable: bool, indexSearchable: bool, indexRangeFilters: bool, tokenization: string, nestedProperties: list, textAnalyzer: record>, disableDuplicatedReferences: bool, textAnalyzer: record<asciiFold: bool, asciiFoldIgnore: list<string>, stopwordPreset: string>> {
   let input = $in
@@ -2353,7 +2352,7 @@ export def "schema-tenants tenantsget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --consistency: string@bool-completer # If true, the request is proxied to the cluster leader to ensure strong schema consistency. Default is true.
+  --consistency: oneof<nothing, bool> # If true, the request is proxied to the cluster leader to ensure strong schema consistency. Default is true.
 ]: nothing -> table<name: string, activityStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2379,7 +2378,7 @@ export def "schema-tenants tenantexists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --consistency: string@bool-completer # If true, the request is proxied to the cluster leader to ensure strong schema consistency. Default is true.
+  --consistency: oneof<nothing, bool> # If true, the request is proxied to the cluster leader to ensure strong schema consistency. Default is true.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2405,7 +2404,7 @@ export def "schema-tenants tenantsgetone" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --consistency: string@bool-completer # If true, the request is proxied to the cluster leader to ensure strong schema consistency. Default is true.
+  --consistency: oneof<nothing, bool> # If true, the request is proxied to the cluster leader to ensure strong schema consistency. Default is true.
 ]: nothing -> record<name: string, activityStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2779,7 +2778,7 @@ export def "backups-restore backupsrestore" [
   --include: list # List of collections (classes) to include in the backup restoration process.
   --exclude: list # List of collections (classes) to exclude from the backup restoration process.
   --node-mapping: record # Allows overriding the node names stored in the backup with different ones. Useful when restoring backups to a different environment.
-  --overwriteAlias: string@bool-completer # Allows ovewriting the collection alias if there is a conflict
+  --overwriteAlias: oneof<nothing, bool> # Allows ovewriting the collection alias if there is a conflict
 ]: any -> record<id: string, classes: list<string>, backend: string, path: string, error: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://hub.docker.com" "https://docker.com/1.33"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -194,7 +193,7 @@ export def "access-tokens patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-active: string@bool-completer # e.g. false
+  --is-active: oneof<nothing, bool> # e.g. false
   --token-label: string # e.g. My read only token
 ]: any -> record<client_id: string, created_at: string, creator_ip: string, creator_ua: string, generated_by: string, is_active: bool, last_used: string, scopes: list<string>, token: string, token_label: string, uuid: string> {
   let input = $in
@@ -276,7 +275,7 @@ export def "namespaces-delete-images PostNamespacesDeleteImages" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --active-from: string # Sets the time from which an image must have been pushed or pulled to be counted as active.  Defaults to 1 month before the current time.  (e.g. 2020-12-01T12:00:00Z)
-  --dry-run: string@bool-completer # If `true` then will check and return errors and unignored warnings for the deletion request but will not delete any images. (e.g. false)
+  --dry-run: oneof<nothing, bool> # If `true` then will check and return errors and unignored warnings for the deletion request but will not delete any images. (e.g. false)
   --ignore-warnings: list # Warnings to ignore. If a warning is not ignored then no deletions will happen and the  warning is returned in the response.  These warnings include:  - is_active: warning when attempting to delete an image that is marked as active. - current_tag: warning when attempting to delete an image that has one or more current  tags in the repository.  Warnings can be copied from the response to the request. — item shape: {digest: string, repository: string, tags?: list, warning: "is_active"|"current_tag"}
   --manifests: list # Image manifests to delete. — item shape: {digest: string, repository: string}
 ]: any -> record<dry_run: bool, metrics: record<manifest_deletes: int, manifest_errors: int, tag_deletes: int, tag_errors: int>> {
@@ -306,7 +305,7 @@ export def "namespaces-repositories-images GetNamespacesRepositoriesImages" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --status: string@status-completer # Filters to only show images of this status.
-  --currently-tagged: string@bool-completer # Filters to only show images with: - `true`: at least 1 current tag. - `false`: no current tags.
+  --currently-tagged: oneof<nothing, bool> # Filters to only show images with: - `true`: at least 1 current tag. - `false`: no current tags.
   --ordering: string@ordering-completer # Orders the results by this property.  Prefixing with `-` sorts by descending order.
   --active-from: string # Sets the time from which an image must have been pushed or pulled to be counted as active.  Defaults to 1 month before the current time.
   --page: int # Page number to get. Defaults to 1.

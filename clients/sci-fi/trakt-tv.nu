@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.trakt.tv"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -465,7 +464,7 @@ export def "comments Post-a-comment" [
   --comment: string
   --movie: record # shape: {ids?: record, title?: string, year?: float}
   --sharing: record # shape: {medium?: bool, tumblr?: bool, twitter?: bool}
-  --spoiler: string@bool-completer
+  --spoiler: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -635,7 +634,7 @@ export def "comments Update-a-comment-or-reply" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
   --comment: string
-  --spoiler: string@bool-completer
+  --spoiler: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -796,7 +795,7 @@ export def "comments-replies Post-a-reply-for-a-comment" [
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
   --comment: string
-  --spoiler: string@bool-completer
+  --spoiler: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4610,9 +4609,9 @@ export def "users-lists Create-personal-list" [
   --allow-errors(-e) # Return full response without error handling
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
-  --allow-comments: string@bool-completer
+  --allow-comments: oneof<nothing, bool>
   --description: string
-  --display-numbers: string@bool-completer
+  --display-numbers: oneof<nothing, bool>
   --name: string
   --privacy: string
   --sort-by: string
@@ -4757,7 +4756,7 @@ export def "users-lists Update-personal-list" [
   --allow-errors(-e) # Return full response without error handling
   --trakt-api-version: string # e.g. 2 (e.g. 2)
   --trakt-api-key: string # e.g. [client_id] (e.g. [client_id])
-  --display-numbers: string@bool-completer
+  --display-numbers: oneof<nothing, bool>
   --name: string
   --privacy: string
   --sort-by: string

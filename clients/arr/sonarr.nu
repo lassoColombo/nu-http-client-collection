@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost:8989" "https://localhost:8989"] }
 def auth-scheme-completer [] { ["x-api-key" "query-apikey"] }
 
@@ -211,7 +210,7 @@ export def "autotagging post" [
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
   --name: string # nullable
-  --removeTagsAutomatically: string@bool-completer
+  --removeTagsAutomatically: oneof<nothing, bool>
   --tags: list # nullable
   --specifications: list # nullable — item shape: {id?: int, name?: string, implementation?: string, implementationName?: string, negate?: bool, required?: bool, fields?: list}
 ]: any -> record<id: int, name: string, removeTagsAutomatically: bool, tags: list<int>, specifications: table<id: int, name: string, implementation: string, implementationName: string, negate: bool, required: bool, fields: list>> {
@@ -259,7 +258,7 @@ export def "autotagging put" [
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
   --name: string # nullable
-  --removeTagsAutomatically: string@bool-completer
+  --removeTagsAutomatically: oneof<nothing, bool>
   --tags: list # nullable
   --specifications: list # nullable — item shape: {id?: int, name?: string, implementation?: string, implementationName?: string, negate?: bool, required?: bool, fields?: list}
 ]: any -> record<id: int, name: string, removeTagsAutomatically: bool, tags: list<int>, specifications: table<id: int, name: string, implementation: string, implementationName: string, negate: bool, required: bool, fields: list>> {
@@ -482,10 +481,10 @@ export def "calendar list" [
   --allow-errors(-e) # Return full response without error handling
   --start: string # format: date-time
   --end: string # format: date-time
-  --unmonitored: string@bool-completer # default: false
-  --includeSeries: string@bool-completer # default: false
-  --includeEpisodeFile: string@bool-completer # default: false
-  --includeEpisodeImages: string@bool-completer # default: false
+  --unmonitored: oneof<nothing, bool> # default: false
+  --includeSeries: oneof<nothing, bool> # default: false
+  --includeEpisodeFile: oneof<nothing, bool> # default: false
+  --includeEpisodeImages: oneof<nothing, bool> # default: false
   --tags: string # default: 
 ]: nothing -> table<id: int, seriesId: int, tvdbId: int, episodeFileId: int, seasonNumber: int, episodeNumber: int, title: string, airDate: string, airDateUtc: string, lastSearchTime: string, runtime: int, finaleType: string, overview: string, episodeFile: record<id: int, seriesId: int, seasonNumber: int, relativePath: string, path: string, size: int, dateAdded: string, sceneName: string, releaseGroup: string, languages: list, quality: record, customFormats: list, customFormatScore: int, indexerFlags: int, releaseType: string, mediaInfo: record, qualityCutoffNotMet: bool>, hasFile: bool, monitored: bool, absoluteEpisodeNumber: int, sceneAbsoluteEpisodeNumber: int, sceneEpisodeNumber: int, sceneSeasonNumber: int, unverifiedSceneNumbering: bool, endTime: string, grabDate: string, series: record<id: int, title: string, alternateTitles: list, sortTitle: string, status: string, ended: bool, profileName: string, overview: string, nextAiring: string, previousAiring: string, network: string, airTime: string, images: list, originalLanguage: record, remotePoster: string, seasons: list, year: int, path: string, qualityProfileId: int, seasonFolder: bool, monitored: bool, monitorNewItems: string, useSceneNumbering: bool, runtime: int, tvdbId: int, tvRageId: int, tvMazeId: int, tmdbId: int, firstAired: string, lastAired: string, seriesType: string, cleanTitle: string, imdbId: string, titleSlug: string, rootFolderPath: string, folder: string, certification: string, genres: list, tags: list, added: string, addOptions: record, ratings: record, statistics: record, episodesChanged: bool, languageProfileId: int>, images: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -528,9 +527,9 @@ export def "feed-calendar-sonarrics get" [
   --pastDays: int # format: int32, default: 7
   --futureDays: int # format: int32, default: 28
   --tags: string # default: 
-  --unmonitored: string@bool-completer # default: false
-  --premieresOnly: string@bool-completer # default: false
-  --asAllDay: string@bool-completer # default: false
+  --unmonitored: oneof<nothing, bool> # default: false
+  --premieresOnly: oneof<nothing, bool> # default: false
+  --asAllDay: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -568,8 +567,8 @@ export def "command post" [
   --trigger: string@trigger-completer
   --clientUserAgent: string # nullable
   --stateChangeTime: string # nullable, format: date-time
-  --sendUpdatesToClient: string@bool-completer
-  --updateScheduledTask: string@bool-completer
+  --sendUpdatesToClient: oneof<nothing, bool>
+  --updateScheduledTask: oneof<nothing, bool>
   --lastExecutionTime: string # nullable, format: date-time
 ]: any -> record<id: int, name: string, commandName: string, message: string, body: record<sendUpdatesToClient: bool, updateScheduledTask: bool, completionMessage: string, requiresDiskAccess: bool, isExclusive: bool, isLongRunning: bool, name: string, lastExecutionTime: string, lastStartTime: string, trigger: string, suppressMessages: bool, clientUserAgent: string>, priority: string, status: string, result: string, queued: string, started: string, ended: string, duration: string, exception: string, trigger: string, clientUserAgent: string, stateChangeTime: string, sendUpdatesToClient: bool, updateScheduledTask: bool, lastExecutionTime: string> {
   let input = $in
@@ -780,7 +779,7 @@ export def "customformat post" [
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
   --name: string # nullable
-  --includeCustomFormatWhenRenaming: string@bool-completer # nullable
+  --includeCustomFormatWhenRenaming: oneof<nothing, bool> # nullable
   --specifications: list # nullable — item shape: {id?: int, name?: string, implementation?: string, implementationName?: string, infoLink?: string, negate?: bool, required?: bool, fields?: list, presets?: list}
 ]: any -> record<id: int, name: string, includeCustomFormatWhenRenaming: bool, specifications: table<id: int, name: string, implementation: string, implementationName: string, infoLink: string, negate: bool, required: bool, fields: list, presets: list>> {
   let input = $in
@@ -809,7 +808,7 @@ export def "customformat put" [
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
   --name: string # nullable
-  --includeCustomFormatWhenRenaming: string@bool-completer # nullable
+  --includeCustomFormatWhenRenaming: oneof<nothing, bool> # nullable
   --specifications: list # nullable — item shape: {id?: int, name?: string, implementation?: string, implementationName?: string, infoLink?: string, negate?: bool, required?: bool, fields?: list, presets?: list}
 ]: any -> record<id: int, name: string, includeCustomFormatWhenRenaming: bool, specifications: table<id: int, name: string, implementation: string, implementationName: string, infoLink: string, negate: bool, required: bool, fields: list, presets: list>> {
   let input = $in
@@ -871,7 +870,7 @@ export def "customformat-bulk put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ids: list # nullable
-  --includeCustomFormatWhenRenaming: string@bool-completer # nullable
+  --includeCustomFormatWhenRenaming: oneof<nothing, bool> # nullable
 ]: any -> record<id: int, name: string, includeCustomFormatWhenRenaming: bool, specifications: table<id: int, name: string, implementation: string, implementationName: string, infoLink: string, negate: bool, required: bool, fields: list, presets: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -894,7 +893,7 @@ export def "customformat-bulk delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ids: list # nullable
-  --includeCustomFormatWhenRenaming: string@bool-completer # nullable
+  --includeCustomFormatWhenRenaming: oneof<nothing, bool> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -938,10 +937,10 @@ export def "wanted-cutoff list" [
   --pageSize: int # format: int32, default: 10
   --sortKey: string
   --sortDirection: string@sortDirection-completer
-  --includeSeries: string@bool-completer # default: false
-  --includeEpisodeFile: string@bool-completer # default: false
-  --includeImages: string@bool-completer # default: false
-  --monitored: string@bool-completer # default: true
+  --includeSeries: oneof<nothing, bool> # default: false
+  --includeEpisodeFile: oneof<nothing, bool> # default: false
+  --includeImages: oneof<nothing, bool> # default: false
+  --monitored: oneof<nothing, bool> # default: true
 ]: nothing -> record<page: int, pageSize: int, sortKey: string, sortDirection: string, totalRecords: int, records: table<id: int, seriesId: int, tvdbId: int, episodeFileId: int, seasonNumber: int, episodeNumber: int, title: string, airDate: string, airDateUtc: string, lastSearchTime: string, runtime: int, finaleType: string, overview: string, episodeFile: record, hasFile: bool, monitored: bool, absoluteEpisodeNumber: int, sceneAbsoluteEpisodeNumber: int, sceneEpisodeNumber: int, sceneSeasonNumber: int, unverifiedSceneNumbering: bool, endTime: string, grabDate: string, series: record, images: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -982,13 +981,13 @@ export def "delayprofile post" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
-  --enableUsenet: string@bool-completer
-  --enableTorrent: string@bool-completer
+  --enableUsenet: oneof<nothing, bool>
+  --enableTorrent: oneof<nothing, bool>
   --preferredProtocol: string@preferredProtocol-completer
   --usenetDelay: int # format: int32
   --torrentDelay: int # format: int32
-  --bypassIfHighestQuality: string@bool-completer
-  --bypassIfAboveCustomFormatScore: string@bool-completer
+  --bypassIfHighestQuality: oneof<nothing, bool>
+  --bypassIfAboveCustomFormatScore: oneof<nothing, bool>
   --minimumCustomFormatScore: int # format: int32
   --order: int # format: int32
   --tags: list # nullable
@@ -1053,13 +1052,13 @@ export def "delayprofile put" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
-  --enableUsenet: string@bool-completer
-  --enableTorrent: string@bool-completer
+  --enableUsenet: oneof<nothing, bool>
+  --enableTorrent: oneof<nothing, bool>
   --preferredProtocol: string@preferredProtocol-completer
   --usenetDelay: int # format: int32
   --torrentDelay: int # format: int32
-  --bypassIfHighestQuality: string@bool-completer
-  --bypassIfAboveCustomFormatScore: string@bool-completer
+  --bypassIfHighestQuality: oneof<nothing, bool>
+  --bypassIfAboveCustomFormatScore: oneof<nothing, bool>
   --minimumCustomFormatScore: int # format: int32
   --order: int # format: int32
   --tags: list # nullable
@@ -1165,7 +1164,7 @@ export def "downloadclient post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -1176,11 +1175,11 @@ export def "downloadclient post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, removeCompletedDownloads?: bool, removeFailedDownloads?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
-  --removeCompletedDownloads: string@bool-completer
-  --removeFailedDownloads: string@bool-completer
+  --removeCompletedDownloads: oneof<nothing, bool>
+  --removeFailedDownloads: oneof<nothing, bool>
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool, protocol: string, priority: int, removeCompletedDownloads: bool, removeFailedDownloads: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1208,7 +1207,7 @@ export def "downloadclient put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -1219,11 +1218,11 @@ export def "downloadclient put" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, removeCompletedDownloads?: bool, removeFailedDownloads?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
-  --removeCompletedDownloads: string@bool-completer
-  --removeFailedDownloads: string@bool-completer
+  --removeCompletedDownloads: oneof<nothing, bool>
+  --removeFailedDownloads: oneof<nothing, bool>
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool, protocol: string, priority: int, removeCompletedDownloads: bool, removeFailedDownloads: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1287,10 +1286,10 @@ export def "downloadclient-bulk put" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enable: string@bool-completer # nullable
+  --enable: oneof<nothing, bool> # nullable
   --priority: int # nullable, format: int32
-  --removeCompletedDownloads: string@bool-completer # nullable
-  --removeFailedDownloads: string@bool-completer # nullable
+  --removeCompletedDownloads: oneof<nothing, bool> # nullable
+  --removeFailedDownloads: oneof<nothing, bool> # nullable
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool, protocol: string, priority: int, removeCompletedDownloads: bool, removeFailedDownloads: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1315,10 +1314,10 @@ export def "downloadclient-bulk delete" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enable: string@bool-completer # nullable
+  --enable: oneof<nothing, bool> # nullable
   --priority: int # nullable, format: int32
-  --removeCompletedDownloads: string@bool-completer # nullable
-  --removeFailedDownloads: string@bool-completer # nullable
+  --removeCompletedDownloads: oneof<nothing, bool> # nullable
+  --removeFailedDownloads: oneof<nothing, bool> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1362,7 +1361,7 @@ export def "downloadclient-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -1373,11 +1372,11 @@ export def "downloadclient-test post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, removeCompletedDownloads?: bool, removeFailedDownloads?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
-  --removeCompletedDownloads: string@bool-completer
-  --removeFailedDownloads: string@bool-completer
+  --removeCompletedDownloads: oneof<nothing, bool>
+  --removeFailedDownloads: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1433,11 +1432,11 @@ export def "downloadclient-action post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, removeCompletedDownloads?: bool, removeFailedDownloads?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
-  --removeCompletedDownloads: string@bool-completer
-  --removeFailedDownloads: string@bool-completer
+  --removeCompletedDownloads: oneof<nothing, bool>
+  --removeFailedDownloads: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1481,9 +1480,9 @@ export def "config-downloadclient put" [
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
   --downloadClientWorkingFolders: string # nullable
-  --enableCompletedDownloadHandling: string@bool-completer
-  --autoRedownloadFailed: string@bool-completer
-  --autoRedownloadFailedFromInteractiveSearch: string@bool-completer
+  --enableCompletedDownloadHandling: oneof<nothing, bool>
+  --autoRedownloadFailed: oneof<nothing, bool>
+  --autoRedownloadFailedFromInteractiveSearch: oneof<nothing, bool>
 ]: any -> record<id: int, downloadClientWorkingFolders: string, enableCompletedDownloadHandling: bool, autoRedownloadFailed: bool, autoRedownloadFailedFromInteractiveSearch: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1528,9 +1527,9 @@ export def "episode list" [
   --seasonNumber: int # format: int32
   --episodeIds: list
   --episodeFileId: int # format: int32
-  --includeSeries: string@bool-completer # default: false
-  --includeEpisodeFile: string@bool-completer # default: false
-  --includeImages: string@bool-completer # default: false
+  --includeSeries: oneof<nothing, bool> # default: false
+  --includeEpisodeFile: oneof<nothing, bool> # default: false
+  --includeImages: oneof<nothing, bool> # default: false
 ]: nothing -> table<id: int, seriesId: int, tvdbId: int, episodeFileId: int, seasonNumber: int, episodeNumber: int, title: string, airDate: string, airDateUtc: string, lastSearchTime: string, runtime: int, finaleType: string, overview: string, episodeFile: record<id: int, seriesId: int, seasonNumber: int, relativePath: string, path: string, size: int, dateAdded: string, sceneName: string, releaseGroup: string, languages: list, quality: record, customFormats: list, customFormatScore: int, indexerFlags: int, releaseType: string, mediaInfo: record, qualityCutoffNotMet: bool>, hasFile: bool, monitored: bool, absoluteEpisodeNumber: int, sceneAbsoluteEpisodeNumber: int, sceneEpisodeNumber: int, sceneSeasonNumber: int, unverifiedSceneNumbering: bool, endTime: string, grabDate: string, series: record<id: int, title: string, alternateTitles: list, sortTitle: string, status: string, ended: bool, profileName: string, overview: string, nextAiring: string, previousAiring: string, network: string, airTime: string, images: list, originalLanguage: record, remotePoster: string, seasons: list, year: int, path: string, qualityProfileId: int, seasonFolder: bool, monitored: bool, monitorNewItems: string, useSceneNumbering: bool, runtime: int, tvdbId: int, tvRageId: int, tvMazeId: int, tmdbId: int, firstAired: string, lastAired: string, seriesType: string, cleanTitle: string, imdbId: string, titleSlug: string, rootFolderPath: string, folder: string, certification: string, genres: list, tags: list, added: string, addOptions: record, ratings: record, statistics: record, episodesChanged: bool, languageProfileId: int>, images: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1570,13 +1569,13 @@ export def "episode put" [
   --finaleType: string # nullable
   --overview: string # nullable
   --episodeFile: record # shape: {id?: int, seriesId?: int, seasonNumber?: int, relativePath?: string, path?: string, size?: int, dateAdded?: string, sceneName?: string, releaseGroup?: string, languages?: list, quality?: record, customFormats?: list, customFormatScore?: int, indexerFlags?: int, releaseType?: "unknown"|"singleEpisode"|"multiEpisode"|"seasonPack", mediaInfo?: record, qualityCutoffNotMet?: bool}
-  --hasFile: string@bool-completer
-  --monitored: string@bool-completer
+  --hasFile: oneof<nothing, bool>
+  --monitored: oneof<nothing, bool>
   --absoluteEpisodeNumber: int # nullable, format: int32
   --sceneAbsoluteEpisodeNumber: int # nullable, format: int32
   --sceneEpisodeNumber: int # nullable, format: int32
   --sceneSeasonNumber: int # nullable, format: int32
-  --unverifiedSceneNumbering: string@bool-completer
+  --unverifiedSceneNumbering: oneof<nothing, bool>
   --endTime: string # nullable, format: date-time
   --grabDate: string # nullable, format: date-time
   --series: record # shape: {id?: int, title?: string, alternateTitles?: list, sortTitle?: string, status?: "continuing"|"ended"|"upcoming"|"deleted", profileName?: string, overview?: string, nextAiring?: string, previousAiring?: string, network?: string, airTime?: string, images?: list, originalLanguage?: record, remotePoster?: string, seasons?: list, year?: int, path?: string, qualityProfileId?: int, seasonFolder?: bool, monitored?: bool, monitorNewItems?: "all"|"none", useSceneNumbering?: bool, runtime?: int, tvdbId?: int, tvRageId?: int, tvMazeId?: int, tmdbId?: int, firstAired?: string, lastAired?: string, seriesType?: "standard"|"daily"|"anime", cleanTitle?: string, imdbId?: string, titleSlug?: string, rootFolderPath?: string, folder?: string, certification?: string, genres?: list, tags?: list, added?: string, addOptions?: record, ratings?: record, statistics?: record, episodesChanged?: bool}
@@ -1621,9 +1620,9 @@ export def "episode-monitor put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeImages: string@bool-completer # default: false
+  --includeImages: oneof<nothing, bool> # default: false
   --episodeIds: list # nullable
-  --monitored: string@bool-completer
+  --monitored: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1690,7 +1689,7 @@ export def "episodefile put" [
   --indexerFlags: int # nullable, format: int32
   --releaseType: string@releaseType-completer
   --mediaInfo: record # shape: {id?: int, audioBitrate?: int, audioChannels?: float, audioCodec?: string, audioLanguages?: string, audioStreamCount?: int, videoBitDepth?: int, videoBitrate?: int, videoCodec?: string, videoFps?: float, videoDynamicRange?: string, videoDynamicRangeType?: string, resolution?: string, runTime?: string, scanType?: string, subtitles?: string}
-  --qualityCutoffNotMet: string@bool-completer
+  --qualityCutoffNotMet: oneof<nothing, bool>
 ]: any -> record<id: int, seriesId: int, seasonNumber: int, relativePath: string, path: string, size: int, dateAdded: string, sceneName: string, releaseGroup: string, languages: table<id: int, name: string>, quality: record<quality: record<id: int, name: string, source: string, resolution: int>, revision: record<version: int, real: int, isRepack: bool>>, customFormats: table<id: int, name: string, includeCustomFormatWhenRenaming: bool, specifications: list>, customFormatScore: int, indexerFlags: int, releaseType: string, mediaInfo: record<id: int, audioBitrate: int, audioChannels: float, audioCodec: string, audioLanguages: string, audioStreamCount: int, videoBitDepth: int, videoBitrate: int, videoCodec: string, videoFps: float, videoDynamicRange: string, videoDynamicRangeType: string, resolution: string, runTime: string, scanType: string, subtitles: string>, qualityCutoffNotMet: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1830,8 +1829,8 @@ export def "filesystem get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --path: string
-  --includeFiles: string@bool-completer # default: false
-  --allowFoldersWithoutTrailingSlashes: string@bool-completer # default: false
+  --includeFiles: oneof<nothing, bool> # default: false
+  --allowFoldersWithoutTrailingSlashes: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1913,8 +1912,8 @@ export def "history get" [
   --pageSize: int # format: int32, default: 10
   --sortKey: string
   --sortDirection: string@sortDirection-completer
-  --includeSeries: string@bool-completer
-  --includeEpisode: string@bool-completer
+  --includeSeries: oneof<nothing, bool>
+  --includeEpisode: oneof<nothing, bool>
   --eventType: list
   --episodeId: int # format: int32
   --downloadId: string
@@ -1942,8 +1941,8 @@ export def "history-since get" [
   --allow-errors(-e) # Return full response without error handling
   --date: string # format: date-time
   --eventType: string@eventType-completer
-  --includeSeries: string@bool-completer # default: false
-  --includeEpisode: string@bool-completer # default: false
+  --includeSeries: oneof<nothing, bool> # default: false
+  --includeEpisode: oneof<nothing, bool> # default: false
 ]: nothing -> table<id: int, episodeId: int, seriesId: int, sourceTitle: string, languages: list<record>, quality: record<quality: record, revision: record>, customFormats: list<record>, customFormatScore: int, qualityCutoffNotMet: bool, date: string, downloadId: string, eventType: string, data: record, episode: record<id: int, seriesId: int, tvdbId: int, episodeFileId: int, seasonNumber: int, episodeNumber: int, title: string, airDate: string, airDateUtc: string, lastSearchTime: string, runtime: int, finaleType: string, overview: string, episodeFile: record, hasFile: bool, monitored: bool, absoluteEpisodeNumber: int, sceneAbsoluteEpisodeNumber: int, sceneEpisodeNumber: int, sceneSeasonNumber: int, unverifiedSceneNumbering: bool, endTime: string, grabDate: string, series: record, images: list>, series: record<id: int, title: string, alternateTitles: list, sortTitle: string, status: string, ended: bool, profileName: string, overview: string, nextAiring: string, previousAiring: string, network: string, airTime: string, images: list, originalLanguage: record, remotePoster: string, seasons: list, year: int, path: string, qualityProfileId: int, seasonFolder: bool, monitored: bool, monitorNewItems: string, useSceneNumbering: bool, runtime: int, tvdbId: int, tvRageId: int, tvMazeId: int, tmdbId: int, firstAired: string, lastAired: string, seriesType: string, cleanTitle: string, imdbId: string, titleSlug: string, rootFolderPath: string, folder: string, certification: string, genres: list, tags: list, added: string, addOptions: record, ratings: record, statistics: record, episodesChanged: bool, languageProfileId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1966,8 +1965,8 @@ export def "history-series get" [
   --seriesId: int # format: int32
   --seasonNumber: int # format: int32
   --eventType: string@eventType-completer
-  --includeSeries: string@bool-completer # default: false
-  --includeEpisode: string@bool-completer # default: false
+  --includeSeries: oneof<nothing, bool> # default: false
+  --includeEpisode: oneof<nothing, bool> # default: false
 ]: nothing -> table<id: int, episodeId: int, seriesId: int, sourceTitle: string, languages: list<record>, quality: record<quality: record, revision: record>, customFormats: list<record>, customFormatScore: int, qualityCutoffNotMet: bool, date: string, downloadId: string, eventType: string, data: record, episode: record<id: int, seriesId: int, tvdbId: int, episodeFileId: int, seasonNumber: int, episodeNumber: int, title: string, airDate: string, airDateUtc: string, lastSearchTime: string, runtime: int, finaleType: string, overview: string, episodeFile: record, hasFile: bool, monitored: bool, absoluteEpisodeNumber: int, sceneAbsoluteEpisodeNumber: int, sceneEpisodeNumber: int, sceneSeasonNumber: int, unverifiedSceneNumbering: bool, endTime: string, grabDate: string, series: record, images: list>, series: record<id: int, title: string, alternateTitles: list, sortTitle: string, status: string, ended: bool, profileName: string, overview: string, nextAiring: string, previousAiring: string, network: string, airTime: string, images: list, originalLanguage: record, remotePoster: string, seasons: list, year: int, path: string, qualityProfileId: int, seasonFolder: bool, monitored: bool, monitorNewItems: string, useSceneNumbering: bool, runtime: int, tvdbId: int, tvRageId: int, tvMazeId: int, tmdbId: int, firstAired: string, lastAired: string, seriesType: string, cleanTitle: string, imdbId: string, titleSlug: string, rootFolderPath: string, folder: string, certification: string, genres: list, tags: list, added: string, addOptions: record, ratings: record, statistics: record, episodesChanged: bool, languageProfileId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2031,11 +2030,11 @@ export def "config-host put" [
   --bindAddress: string # nullable
   --port: int # format: int32
   --sslPort: int # format: int32
-  --enableSsl: string@bool-completer
-  --launchBrowser: string@bool-completer
+  --enableSsl: oneof<nothing, bool>
+  --launchBrowser: oneof<nothing, bool>
   --authenticationMethod: string@authenticationMethod-completer
   --authenticationRequired: string@authenticationRequired-completer
-  --analyticsEnabled: string@bool-completer
+  --analyticsEnabled: oneof<nothing, bool>
   --username: string # nullable
   --password: string # nullable
   --passwordConfirmation: string # nullable
@@ -2049,22 +2048,22 @@ export def "config-host put" [
   --urlBase: string # nullable
   --instanceName: string # nullable
   --applicationUrl: string # nullable
-  --updateAutomatically: string@bool-completer
+  --updateAutomatically: oneof<nothing, bool>
   --updateMechanism: string@updateMechanism-completer
   --updateScriptPath: string # nullable
-  --proxyEnabled: string@bool-completer
+  --proxyEnabled: oneof<nothing, bool>
   --proxyType: string@proxyType-completer
   --proxyHostname: string # nullable
   --proxyPort: int # format: int32
   --proxyUsername: string # nullable
   --proxyPassword: string # nullable
   --proxyBypassFilter: string # nullable
-  --proxyBypassLocalAddresses: string@bool-completer
+  --proxyBypassLocalAddresses: oneof<nothing, bool>
   --certificateValidation: string@certificateValidation-completer
   --backupFolder: string # nullable
   --backupInterval: int # format: int32
   --backupRetention: int # format: int32
-  --trustCgnatIpAddresses: string@bool-completer
+  --trustCgnatIpAddresses: oneof<nothing, bool>
 ]: any -> record<id: int, bindAddress: string, port: int, sslPort: int, enableSsl: bool, launchBrowser: bool, authenticationMethod: string, authenticationRequired: string, analyticsEnabled: bool, username: string, password: string, passwordConfirmation: string, logLevel: string, logSizeLimit: int, consoleLogLevel: string, branch: string, apiKey: string, sslCertPath: string, sslCertPassword: string, urlBase: string, instanceName: string, applicationUrl: string, updateAutomatically: bool, updateMechanism: string, updateScriptPath: string, proxyEnabled: bool, proxyType: string, proxyHostname: string, proxyPort: int, proxyUsername: string, proxyPassword: string, proxyBypassFilter: string, proxyBypassLocalAddresses: bool, certificateValidation: string, backupFolder: string, backupInterval: int, backupRetention: int, trustCgnatIpAddresses: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2127,7 +2126,7 @@ export def "importlist post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2138,14 +2137,14 @@ export def "importlist post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableAutomaticAdd?: bool, searchForMissingEpisodes?: bool, shouldMonitor?: "unknown"|"all"|"future"|"missing"|"existing"|"firstSeason"|"lastSeason"|"latestSeason"|"pilot"|"recent"|"monitorSpecials"|"unmonitorSpecials"|"none"|"skip", monitorNewItems?: "all"|"none", rootFolderPath?: string, qualityProfileId?: int, seriesType?: "standard"|"daily"|"anime", seasonFolder?: bool, listType?: "program"|"plex"|"trakt"|"simkl"|"other"|"advanced", listOrder?: int, minRefreshInterval?: string}
-  --enableAutomaticAdd: string@bool-completer
-  --searchForMissingEpisodes: string@bool-completer
+  --enableAutomaticAdd: oneof<nothing, bool>
+  --searchForMissingEpisodes: oneof<nothing, bool>
   --shouldMonitor: string@shouldMonitor-completer
   --monitorNewItems: string@monitorNewItems-completer
   --rootFolderPath: string # nullable
   --qualityProfileId: int # format: int32
   --seriesType: string@seriesType-completer
-  --seasonFolder: string@bool-completer
+  --seasonFolder: oneof<nothing, bool>
   --listType: string@listType-completer
   --listOrder: int # format: int32
   --minRefreshInterval: string # format: date-span
@@ -2176,7 +2175,7 @@ export def "importlist put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2187,14 +2186,14 @@ export def "importlist put" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableAutomaticAdd?: bool, searchForMissingEpisodes?: bool, shouldMonitor?: "unknown"|"all"|"future"|"missing"|"existing"|"firstSeason"|"lastSeason"|"latestSeason"|"pilot"|"recent"|"monitorSpecials"|"unmonitorSpecials"|"none"|"skip", monitorNewItems?: "all"|"none", rootFolderPath?: string, qualityProfileId?: int, seriesType?: "standard"|"daily"|"anime", seasonFolder?: bool, listType?: "program"|"plex"|"trakt"|"simkl"|"other"|"advanced", listOrder?: int, minRefreshInterval?: string}
-  --enableAutomaticAdd: string@bool-completer
-  --searchForMissingEpisodes: string@bool-completer
+  --enableAutomaticAdd: oneof<nothing, bool>
+  --searchForMissingEpisodes: oneof<nothing, bool>
   --shouldMonitor: string@shouldMonitor-completer
   --monitorNewItems: string@monitorNewItems-completer
   --rootFolderPath: string # nullable
   --qualityProfileId: int # format: int32
   --seriesType: string@seriesType-completer
-  --seasonFolder: string@bool-completer
+  --seasonFolder: oneof<nothing, bool>
   --listType: string@listType-completer
   --listOrder: int # format: int32
   --minRefreshInterval: string # format: date-span
@@ -2261,7 +2260,7 @@ export def "importlist-bulk put" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enableAutomaticAdd: string@bool-completer # nullable
+  --enableAutomaticAdd: oneof<nothing, bool> # nullable
   --rootFolderPath: string # nullable
   --qualityProfileId: int # nullable, format: int32
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enableAutomaticAdd: bool, searchForMissingEpisodes: bool, shouldMonitor: string, monitorNewItems: string, rootFolderPath: string, qualityProfileId: int, seriesType: string, seasonFolder: bool, listType: string, listOrder: int, minRefreshInterval: string> {
@@ -2288,7 +2287,7 @@ export def "importlist-bulk delete" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enableAutomaticAdd: string@bool-completer # nullable
+  --enableAutomaticAdd: oneof<nothing, bool> # nullable
   --rootFolderPath: string # nullable
   --qualityProfileId: int # nullable, format: int32
 ]: any -> any {
@@ -2334,7 +2333,7 @@ export def "importlist-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2345,14 +2344,14 @@ export def "importlist-test post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableAutomaticAdd?: bool, searchForMissingEpisodes?: bool, shouldMonitor?: "unknown"|"all"|"future"|"missing"|"existing"|"firstSeason"|"lastSeason"|"latestSeason"|"pilot"|"recent"|"monitorSpecials"|"unmonitorSpecials"|"none"|"skip", monitorNewItems?: "all"|"none", rootFolderPath?: string, qualityProfileId?: int, seriesType?: "standard"|"daily"|"anime", seasonFolder?: bool, listType?: "program"|"plex"|"trakt"|"simkl"|"other"|"advanced", listOrder?: int, minRefreshInterval?: string}
-  --enableAutomaticAdd: string@bool-completer
-  --searchForMissingEpisodes: string@bool-completer
+  --enableAutomaticAdd: oneof<nothing, bool>
+  --searchForMissingEpisodes: oneof<nothing, bool>
   --shouldMonitor: string@shouldMonitor-completer
   --monitorNewItems: string@monitorNewItems-completer
   --rootFolderPath: string # nullable
   --qualityProfileId: int # format: int32
   --seriesType: string@seriesType-completer
-  --seasonFolder: string@bool-completer
+  --seasonFolder: oneof<nothing, bool>
   --listType: string@listType-completer
   --listOrder: int # format: int32
   --minRefreshInterval: string # format: date-span
@@ -2411,14 +2410,14 @@ export def "importlist-action post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableAutomaticAdd?: bool, searchForMissingEpisodes?: bool, shouldMonitor?: "unknown"|"all"|"future"|"missing"|"existing"|"firstSeason"|"lastSeason"|"latestSeason"|"pilot"|"recent"|"monitorSpecials"|"unmonitorSpecials"|"none"|"skip", monitorNewItems?: "all"|"none", rootFolderPath?: string, qualityProfileId?: int, seriesType?: "standard"|"daily"|"anime", seasonFolder?: bool, listType?: "program"|"plex"|"trakt"|"simkl"|"other"|"advanced", listOrder?: int, minRefreshInterval?: string}
-  --enableAutomaticAdd: string@bool-completer
-  --searchForMissingEpisodes: string@bool-completer
+  --enableAutomaticAdd: oneof<nothing, bool>
+  --searchForMissingEpisodes: oneof<nothing, bool>
   --shouldMonitor: string@shouldMonitor-completer
   --monitorNewItems: string@monitorNewItems-completer
   --rootFolderPath: string # nullable
   --qualityProfileId: int # format: int32
   --seriesType: string@seriesType-completer
-  --seasonFolder: string@bool-completer
+  --seasonFolder: oneof<nothing, bool>
   --listType: string@listType-completer
   --listOrder: int # format: int32
   --minRefreshInterval: string # format: date-span
@@ -2683,7 +2682,7 @@ export def "indexer post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2694,11 +2693,11 @@ export def "indexer post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableRss?: bool, enableAutomaticSearch?: bool, enableInteractiveSearch?: bool, supportsRss?: bool, supportsSearch?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, seasonSearchMaximumSingleEpisodeAge?: int, downloadClientId?: int}
-  --enableRss: string@bool-completer
-  --enableAutomaticSearch: string@bool-completer
-  --enableInteractiveSearch: string@bool-completer
-  --supportsRss: string@bool-completer
-  --supportsSearch: string@bool-completer
+  --enableRss: oneof<nothing, bool>
+  --enableAutomaticSearch: oneof<nothing, bool>
+  --enableInteractiveSearch: oneof<nothing, bool>
+  --supportsRss: oneof<nothing, bool>
+  --supportsSearch: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
   --seasonSearchMaximumSingleEpisodeAge: int # format: int32
@@ -2730,7 +2729,7 @@ export def "indexer put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2741,11 +2740,11 @@ export def "indexer put" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableRss?: bool, enableAutomaticSearch?: bool, enableInteractiveSearch?: bool, supportsRss?: bool, supportsSearch?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, seasonSearchMaximumSingleEpisodeAge?: int, downloadClientId?: int}
-  --enableRss: string@bool-completer
-  --enableAutomaticSearch: string@bool-completer
-  --enableInteractiveSearch: string@bool-completer
-  --supportsRss: string@bool-completer
-  --supportsSearch: string@bool-completer
+  --enableRss: oneof<nothing, bool>
+  --enableAutomaticSearch: oneof<nothing, bool>
+  --enableInteractiveSearch: oneof<nothing, bool>
+  --supportsRss: oneof<nothing, bool>
+  --supportsSearch: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
   --seasonSearchMaximumSingleEpisodeAge: int # format: int32
@@ -2813,9 +2812,9 @@ export def "indexer-bulk put" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enableRss: string@bool-completer # nullable
-  --enableAutomaticSearch: string@bool-completer # nullable
-  --enableInteractiveSearch: string@bool-completer # nullable
+  --enableRss: oneof<nothing, bool> # nullable
+  --enableAutomaticSearch: oneof<nothing, bool> # nullable
+  --enableInteractiveSearch: oneof<nothing, bool> # nullable
   --priority: int # nullable, format: int32
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enableRss: bool, enableAutomaticSearch: bool, enableInteractiveSearch: bool, supportsRss: bool, supportsSearch: bool, protocol: string, priority: int, seasonSearchMaximumSingleEpisodeAge: int, downloadClientId: int> {
   let input = $in
@@ -2841,9 +2840,9 @@ export def "indexer-bulk delete" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enableRss: string@bool-completer # nullable
-  --enableAutomaticSearch: string@bool-completer # nullable
-  --enableInteractiveSearch: string@bool-completer # nullable
+  --enableRss: oneof<nothing, bool> # nullable
+  --enableAutomaticSearch: oneof<nothing, bool> # nullable
+  --enableInteractiveSearch: oneof<nothing, bool> # nullable
   --priority: int # nullable, format: int32
 ]: any -> any {
   let input = $in
@@ -2888,7 +2887,7 @@ export def "indexer-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -2899,11 +2898,11 @@ export def "indexer-test post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableRss?: bool, enableAutomaticSearch?: bool, enableInteractiveSearch?: bool, supportsRss?: bool, supportsSearch?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, seasonSearchMaximumSingleEpisodeAge?: int, downloadClientId?: int}
-  --enableRss: string@bool-completer
-  --enableAutomaticSearch: string@bool-completer
-  --enableInteractiveSearch: string@bool-completer
-  --supportsRss: string@bool-completer
-  --supportsSearch: string@bool-completer
+  --enableRss: oneof<nothing, bool>
+  --enableAutomaticSearch: oneof<nothing, bool>
+  --enableInteractiveSearch: oneof<nothing, bool>
+  --supportsRss: oneof<nothing, bool>
+  --supportsSearch: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
   --seasonSearchMaximumSingleEpisodeAge: int # format: int32
@@ -2963,11 +2962,11 @@ export def "indexer-action post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableRss?: bool, enableAutomaticSearch?: bool, enableInteractiveSearch?: bool, supportsRss?: bool, supportsSearch?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, seasonSearchMaximumSingleEpisodeAge?: int, downloadClientId?: int}
-  --enableRss: string@bool-completer
-  --enableAutomaticSearch: string@bool-completer
-  --enableInteractiveSearch: string@bool-completer
-  --supportsRss: string@bool-completer
-  --supportsSearch: string@bool-completer
+  --enableRss: oneof<nothing, bool>
+  --enableAutomaticSearch: oneof<nothing, bool>
+  --enableInteractiveSearch: oneof<nothing, bool>
+  --supportsRss: oneof<nothing, bool>
+  --supportsSearch: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
   --seasonSearchMaximumSingleEpisodeAge: int # format: int32
@@ -3122,7 +3121,7 @@ export def "languageprofile post" [
   --allow-errors(-e) # Return full response without error handling
   --id: int # format: int32
   --name: string # nullable
-  --upgradeAllowed: string@bool-completer
+  --upgradeAllowed: oneof<nothing, bool>
   --cutoff: record # shape: {id?: int, name?: string}
   --languages: list # nullable — item shape: {id?: int, language?: record, allowed?: bool}
 ]: any -> record<id: int, name: string, upgradeAllowed: bool, cutoff: record<id: int, name: string>, languages: table<id: int, language: record, allowed: bool>> {
@@ -3197,7 +3196,7 @@ export def "languageprofile put" [
   --allow-errors(-e) # Return full response without error handling
   --body-id: int # format: int32
   --name: string # nullable
-  --upgradeAllowed: string@bool-completer
+  --upgradeAllowed: oneof<nothing, bool>
   --cutoff: record # shape: {id?: int, name?: string}
   --languages: list # nullable — item shape: {id?: int, language?: record, allowed?: bool}
 ]: any -> record<id: int, name: string, upgradeAllowed: bool, cutoff: record<id: int, name: string>, languages: table<id: int, language: record, allowed: bool>> {
@@ -3381,7 +3380,7 @@ export def "manualimport get" [
   --downloadId: string
   --seriesId: int # format: int32
   --seasonNumber: int # format: int32
-  --filterExistingFiles: string@bool-completer # default: true
+  --filterExistingFiles: oneof<nothing, bool> # default: true
 ]: nothing -> table<id: int, path: string, relativePath: string, folderName: string, name: string, size: int, series: record<id: int, title: string, alternateTitles: list, sortTitle: string, status: string, ended: bool, profileName: string, overview: string, nextAiring: string, previousAiring: string, network: string, airTime: string, images: list, originalLanguage: record, remotePoster: string, seasons: list, year: int, path: string, qualityProfileId: int, seasonFolder: bool, monitored: bool, monitorNewItems: string, useSceneNumbering: bool, runtime: int, tvdbId: int, tvRageId: int, tvMazeId: int, tmdbId: int, firstAired: string, lastAired: string, seriesType: string, cleanTitle: string, imdbId: string, titleSlug: string, rootFolderPath: string, folder: string, certification: string, genres: list, tags: list, added: string, addOptions: record, ratings: record, statistics: record, episodesChanged: bool, languageProfileId: int>, seasonNumber: int, episodes: list<record>, episodeFileId: int, releaseGroup: string, quality: record<quality: record, revision: record>, languages: list<record>, qualityWeight: int, downloadId: string, customFormats: list<record>, customFormatScore: int, indexerFlags: int, releaseType: string, rejections: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3463,26 +3462,26 @@ export def "config-mediamanagement put" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
-  --autoUnmonitorPreviouslyDownloadedEpisodes: string@bool-completer
+  --autoUnmonitorPreviouslyDownloadedEpisodes: oneof<nothing, bool>
   --recycleBin: string # nullable
   --recycleBinCleanupDays: int # format: int32
   --downloadPropersAndRepacks: string@downloadPropersAndRepacks-completer
-  --createEmptySeriesFolders: string@bool-completer
-  --deleteEmptyFolders: string@bool-completer
+  --createEmptySeriesFolders: oneof<nothing, bool>
+  --deleteEmptyFolders: oneof<nothing, bool>
   --fileDate: string@fileDate-completer
   --rescanAfterRefresh: string@rescanAfterRefresh-completer
-  --setPermissionsLinux: string@bool-completer
+  --setPermissionsLinux: oneof<nothing, bool>
   --chmodFolder: string # nullable
   --chownGroup: string # nullable
   --episodeTitleRequired: string@episodeTitleRequired-completer
-  --skipFreeSpaceCheckWhenImporting: string@bool-completer
+  --skipFreeSpaceCheckWhenImporting: oneof<nothing, bool>
   --minimumFreeSpaceWhenImporting: int # format: int32
-  --copyUsingHardlinks: string@bool-completer
-  --useScriptImport: string@bool-completer
+  --copyUsingHardlinks: oneof<nothing, bool>
+  --useScriptImport: oneof<nothing, bool>
   --scriptImportPath: string # nullable
-  --importExtraFiles: string@bool-completer
+  --importExtraFiles: oneof<nothing, bool>
   --extraFileExtensions: string # nullable
-  --enableMediaInfo: string@bool-completer
+  --enableMediaInfo: oneof<nothing, bool>
 ]: any -> record<id: int, autoUnmonitorPreviouslyDownloadedEpisodes: bool, recycleBin: string, recycleBinCleanupDays: int, downloadPropersAndRepacks: string, createEmptySeriesFolders: bool, deleteEmptyFolders: bool, fileDate: string, rescanAfterRefresh: string, setPermissionsLinux: bool, chmodFolder: string, chownGroup: string, episodeTitleRequired: string, skipFreeSpaceCheckWhenImporting: bool, minimumFreeSpaceWhenImporting: int, copyUsingHardlinks: bool, useScriptImport: bool, scriptImportPath: string, importExtraFiles: bool, extraFileExtensions: string, enableMediaInfo: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3545,7 +3544,7 @@ export def "metadata post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -3556,7 +3555,7 @@ export def "metadata post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3584,7 +3583,7 @@ export def "metadata put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -3595,7 +3594,7 @@ export def "metadata put" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3678,7 +3677,7 @@ export def "metadata-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -3689,7 +3688,7 @@ export def "metadata-test post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3745,7 +3744,7 @@ export def "metadata-action post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3771,9 +3770,9 @@ export def "wanted-missing list" [
   --pageSize: int # format: int32, default: 10
   --sortKey: string
   --sortDirection: string@sortDirection-completer
-  --includeSeries: string@bool-completer # default: false
-  --includeImages: string@bool-completer # default: false
-  --monitored: string@bool-completer # default: true
+  --includeSeries: oneof<nothing, bool> # default: false
+  --includeImages: oneof<nothing, bool> # default: false
+  --monitored: oneof<nothing, bool> # default: true
 ]: nothing -> record<page: int, pageSize: int, sortKey: string, sortDirection: string, totalRecords: int, records: table<id: int, seriesId: int, tvdbId: int, episodeFileId: int, seasonNumber: int, episodeNumber: int, title: string, airDate: string, airDateUtc: string, lastSearchTime: string, runtime: int, finaleType: string, overview: string, episodeFile: record, hasFile: bool, monitored: bool, absoluteEpisodeNumber: int, sceneAbsoluteEpisodeNumber: int, sceneEpisodeNumber: int, sceneSeasonNumber: int, unverifiedSceneNumbering: bool, endTime: string, grabDate: string, series: record, images: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3834,8 +3833,8 @@ export def "config-naming put" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
-  --renameEpisodes: string@bool-completer
-  --replaceIllegalCharacters: string@bool-completer
+  --renameEpisodes: oneof<nothing, bool>
+  --replaceIllegalCharacters: oneof<nothing, bool>
   --colonReplacementFormat: int # format: int32
   --customColonReplacementFormat: string # nullable
   --multiEpisodeStyle: int # format: int32
@@ -3885,8 +3884,8 @@ export def "config-naming-examples get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --renameEpisodes: string@bool-completer
-  --replaceIllegalCharacters: string@bool-completer
+  --renameEpisodes: oneof<nothing, bool>
+  --replaceIllegalCharacters: oneof<nothing, bool>
   --colonReplacementFormat: int # format: int32
   --customColonReplacementFormat: string
   --multiEpisodeStyle: int # format: int32
@@ -3939,7 +3938,7 @@ export def "notification post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -3951,33 +3950,33 @@ export def "notification post" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onGrab?: bool, onDownload?: bool, onUpgrade?: bool, onImportComplete?: bool, onRename?: bool, onSeriesAdd?: bool, onSeriesDelete?: bool, onEpisodeFileDelete?: bool, onEpisodeFileDeleteForUpgrade?: bool, onHealthIssue?: bool, includeHealthWarnings?: bool, onHealthRestored?: bool, onApplicationUpdate?: bool, onManualInteractionRequired?: bool, supportsOnGrab?: bool, supportsOnDownload?: bool, supportsOnUpgrade?: bool, supportsOnImportComplete?: bool, supportsOnRename?: bool, supportsOnSeriesAdd?: bool, supportsOnSeriesDelete?: bool, supportsOnEpisodeFileDelete?: bool, supportsOnEpisodeFileDeleteForUpgrade?: bool, supportsOnHealthIssue?: bool, supportsOnHealthRestored?: bool, supportsOnApplicationUpdate?: bool, supportsOnManualInteractionRequired?: bool, testCommand?: string}
   --link: string # nullable
-  --onGrab: string@bool-completer
-  --onDownload: string@bool-completer
-  --onUpgrade: string@bool-completer
-  --onImportComplete: string@bool-completer
-  --onRename: string@bool-completer
-  --onSeriesAdd: string@bool-completer
-  --onSeriesDelete: string@bool-completer
-  --onEpisodeFileDelete: string@bool-completer
-  --onEpisodeFileDeleteForUpgrade: string@bool-completer
-  --onHealthIssue: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
-  --onHealthRestored: string@bool-completer
-  --onApplicationUpdate: string@bool-completer
-  --onManualInteractionRequired: string@bool-completer
-  --supportsOnGrab: string@bool-completer
-  --supportsOnDownload: string@bool-completer
-  --supportsOnUpgrade: string@bool-completer
-  --supportsOnImportComplete: string@bool-completer
-  --supportsOnRename: string@bool-completer
-  --supportsOnSeriesAdd: string@bool-completer
-  --supportsOnSeriesDelete: string@bool-completer
-  --supportsOnEpisodeFileDelete: string@bool-completer
-  --supportsOnEpisodeFileDeleteForUpgrade: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --supportsOnHealthRestored: string@bool-completer
-  --supportsOnApplicationUpdate: string@bool-completer
-  --supportsOnManualInteractionRequired: string@bool-completer
+  --onGrab: oneof<nothing, bool>
+  --onDownload: oneof<nothing, bool>
+  --onUpgrade: oneof<nothing, bool>
+  --onImportComplete: oneof<nothing, bool>
+  --onRename: oneof<nothing, bool>
+  --onSeriesAdd: oneof<nothing, bool>
+  --onSeriesDelete: oneof<nothing, bool>
+  --onEpisodeFileDelete: oneof<nothing, bool>
+  --onEpisodeFileDeleteForUpgrade: oneof<nothing, bool>
+  --onHealthIssue: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
+  --onHealthRestored: oneof<nothing, bool>
+  --onApplicationUpdate: oneof<nothing, bool>
+  --onManualInteractionRequired: oneof<nothing, bool>
+  --supportsOnGrab: oneof<nothing, bool>
+  --supportsOnDownload: oneof<nothing, bool>
+  --supportsOnUpgrade: oneof<nothing, bool>
+  --supportsOnImportComplete: oneof<nothing, bool>
+  --supportsOnRename: oneof<nothing, bool>
+  --supportsOnSeriesAdd: oneof<nothing, bool>
+  --supportsOnSeriesDelete: oneof<nothing, bool>
+  --supportsOnEpisodeFileDelete: oneof<nothing, bool>
+  --supportsOnEpisodeFileDeleteForUpgrade: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --supportsOnHealthRestored: oneof<nothing, bool>
+  --supportsOnApplicationUpdate: oneof<nothing, bool>
+  --supportsOnManualInteractionRequired: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, link: string, onGrab: bool, onDownload: bool, onUpgrade: bool, onImportComplete: bool, onRename: bool, onSeriesAdd: bool, onSeriesDelete: bool, onEpisodeFileDelete: bool, onEpisodeFileDeleteForUpgrade: bool, onHealthIssue: bool, includeHealthWarnings: bool, onHealthRestored: bool, onApplicationUpdate: bool, onManualInteractionRequired: bool, supportsOnGrab: bool, supportsOnDownload: bool, supportsOnUpgrade: bool, supportsOnImportComplete: bool, supportsOnRename: bool, supportsOnSeriesAdd: bool, supportsOnSeriesDelete: bool, supportsOnEpisodeFileDelete: bool, supportsOnEpisodeFileDeleteForUpgrade: bool, supportsOnHealthIssue: bool, supportsOnHealthRestored: bool, supportsOnApplicationUpdate: bool, supportsOnManualInteractionRequired: bool, testCommand: string> {
   let input = $in
@@ -4006,7 +4005,7 @@ export def "notification put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -4018,33 +4017,33 @@ export def "notification put" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onGrab?: bool, onDownload?: bool, onUpgrade?: bool, onImportComplete?: bool, onRename?: bool, onSeriesAdd?: bool, onSeriesDelete?: bool, onEpisodeFileDelete?: bool, onEpisodeFileDeleteForUpgrade?: bool, onHealthIssue?: bool, includeHealthWarnings?: bool, onHealthRestored?: bool, onApplicationUpdate?: bool, onManualInteractionRequired?: bool, supportsOnGrab?: bool, supportsOnDownload?: bool, supportsOnUpgrade?: bool, supportsOnImportComplete?: bool, supportsOnRename?: bool, supportsOnSeriesAdd?: bool, supportsOnSeriesDelete?: bool, supportsOnEpisodeFileDelete?: bool, supportsOnEpisodeFileDeleteForUpgrade?: bool, supportsOnHealthIssue?: bool, supportsOnHealthRestored?: bool, supportsOnApplicationUpdate?: bool, supportsOnManualInteractionRequired?: bool, testCommand?: string}
   --link: string # nullable
-  --onGrab: string@bool-completer
-  --onDownload: string@bool-completer
-  --onUpgrade: string@bool-completer
-  --onImportComplete: string@bool-completer
-  --onRename: string@bool-completer
-  --onSeriesAdd: string@bool-completer
-  --onSeriesDelete: string@bool-completer
-  --onEpisodeFileDelete: string@bool-completer
-  --onEpisodeFileDeleteForUpgrade: string@bool-completer
-  --onHealthIssue: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
-  --onHealthRestored: string@bool-completer
-  --onApplicationUpdate: string@bool-completer
-  --onManualInteractionRequired: string@bool-completer
-  --supportsOnGrab: string@bool-completer
-  --supportsOnDownload: string@bool-completer
-  --supportsOnUpgrade: string@bool-completer
-  --supportsOnImportComplete: string@bool-completer
-  --supportsOnRename: string@bool-completer
-  --supportsOnSeriesAdd: string@bool-completer
-  --supportsOnSeriesDelete: string@bool-completer
-  --supportsOnEpisodeFileDelete: string@bool-completer
-  --supportsOnEpisodeFileDeleteForUpgrade: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --supportsOnHealthRestored: string@bool-completer
-  --supportsOnApplicationUpdate: string@bool-completer
-  --supportsOnManualInteractionRequired: string@bool-completer
+  --onGrab: oneof<nothing, bool>
+  --onDownload: oneof<nothing, bool>
+  --onUpgrade: oneof<nothing, bool>
+  --onImportComplete: oneof<nothing, bool>
+  --onRename: oneof<nothing, bool>
+  --onSeriesAdd: oneof<nothing, bool>
+  --onSeriesDelete: oneof<nothing, bool>
+  --onEpisodeFileDelete: oneof<nothing, bool>
+  --onEpisodeFileDeleteForUpgrade: oneof<nothing, bool>
+  --onHealthIssue: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
+  --onHealthRestored: oneof<nothing, bool>
+  --onApplicationUpdate: oneof<nothing, bool>
+  --onManualInteractionRequired: oneof<nothing, bool>
+  --supportsOnGrab: oneof<nothing, bool>
+  --supportsOnDownload: oneof<nothing, bool>
+  --supportsOnUpgrade: oneof<nothing, bool>
+  --supportsOnImportComplete: oneof<nothing, bool>
+  --supportsOnRename: oneof<nothing, bool>
+  --supportsOnSeriesAdd: oneof<nothing, bool>
+  --supportsOnSeriesDelete: oneof<nothing, bool>
+  --supportsOnEpisodeFileDelete: oneof<nothing, bool>
+  --supportsOnEpisodeFileDeleteForUpgrade: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --supportsOnHealthRestored: oneof<nothing, bool>
+  --supportsOnApplicationUpdate: oneof<nothing, bool>
+  --supportsOnManualInteractionRequired: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, privacy: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, link: string, onGrab: bool, onDownload: bool, onUpgrade: bool, onImportComplete: bool, onRename: bool, onSeriesAdd: bool, onSeriesDelete: bool, onEpisodeFileDelete: bool, onEpisodeFileDeleteForUpgrade: bool, onHealthIssue: bool, includeHealthWarnings: bool, onHealthRestored: bool, onApplicationUpdate: bool, onManualInteractionRequired: bool, supportsOnGrab: bool, supportsOnDownload: bool, supportsOnUpgrade: bool, supportsOnImportComplete: bool, supportsOnRename: bool, supportsOnSeriesAdd: bool, supportsOnSeriesDelete: bool, supportsOnEpisodeFileDelete: bool, supportsOnEpisodeFileDeleteForUpgrade: bool, supportsOnHealthIssue: bool, supportsOnHealthRestored: bool, supportsOnApplicationUpdate: bool, supportsOnManualInteractionRequired: bool, testCommand: string> {
   let input = $in
@@ -4128,7 +4127,7 @@ export def "notification-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, privacy?: "normal"|"password"|"apiKey"|"userName", placeholder?: string, isFloat?: bool}
@@ -4140,33 +4139,33 @@ export def "notification-test post" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onGrab?: bool, onDownload?: bool, onUpgrade?: bool, onImportComplete?: bool, onRename?: bool, onSeriesAdd?: bool, onSeriesDelete?: bool, onEpisodeFileDelete?: bool, onEpisodeFileDeleteForUpgrade?: bool, onHealthIssue?: bool, includeHealthWarnings?: bool, onHealthRestored?: bool, onApplicationUpdate?: bool, onManualInteractionRequired?: bool, supportsOnGrab?: bool, supportsOnDownload?: bool, supportsOnUpgrade?: bool, supportsOnImportComplete?: bool, supportsOnRename?: bool, supportsOnSeriesAdd?: bool, supportsOnSeriesDelete?: bool, supportsOnEpisodeFileDelete?: bool, supportsOnEpisodeFileDeleteForUpgrade?: bool, supportsOnHealthIssue?: bool, supportsOnHealthRestored?: bool, supportsOnApplicationUpdate?: bool, supportsOnManualInteractionRequired?: bool, testCommand?: string}
   --link: string # nullable
-  --onGrab: string@bool-completer
-  --onDownload: string@bool-completer
-  --onUpgrade: string@bool-completer
-  --onImportComplete: string@bool-completer
-  --onRename: string@bool-completer
-  --onSeriesAdd: string@bool-completer
-  --onSeriesDelete: string@bool-completer
-  --onEpisodeFileDelete: string@bool-completer
-  --onEpisodeFileDeleteForUpgrade: string@bool-completer
-  --onHealthIssue: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
-  --onHealthRestored: string@bool-completer
-  --onApplicationUpdate: string@bool-completer
-  --onManualInteractionRequired: string@bool-completer
-  --supportsOnGrab: string@bool-completer
-  --supportsOnDownload: string@bool-completer
-  --supportsOnUpgrade: string@bool-completer
-  --supportsOnImportComplete: string@bool-completer
-  --supportsOnRename: string@bool-completer
-  --supportsOnSeriesAdd: string@bool-completer
-  --supportsOnSeriesDelete: string@bool-completer
-  --supportsOnEpisodeFileDelete: string@bool-completer
-  --supportsOnEpisodeFileDeleteForUpgrade: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --supportsOnHealthRestored: string@bool-completer
-  --supportsOnApplicationUpdate: string@bool-completer
-  --supportsOnManualInteractionRequired: string@bool-completer
+  --onGrab: oneof<nothing, bool>
+  --onDownload: oneof<nothing, bool>
+  --onUpgrade: oneof<nothing, bool>
+  --onImportComplete: oneof<nothing, bool>
+  --onRename: oneof<nothing, bool>
+  --onSeriesAdd: oneof<nothing, bool>
+  --onSeriesDelete: oneof<nothing, bool>
+  --onEpisodeFileDelete: oneof<nothing, bool>
+  --onEpisodeFileDeleteForUpgrade: oneof<nothing, bool>
+  --onHealthIssue: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
+  --onHealthRestored: oneof<nothing, bool>
+  --onApplicationUpdate: oneof<nothing, bool>
+  --onManualInteractionRequired: oneof<nothing, bool>
+  --supportsOnGrab: oneof<nothing, bool>
+  --supportsOnDownload: oneof<nothing, bool>
+  --supportsOnUpgrade: oneof<nothing, bool>
+  --supportsOnImportComplete: oneof<nothing, bool>
+  --supportsOnRename: oneof<nothing, bool>
+  --supportsOnSeriesAdd: oneof<nothing, bool>
+  --supportsOnSeriesDelete: oneof<nothing, bool>
+  --supportsOnEpisodeFileDelete: oneof<nothing, bool>
+  --supportsOnEpisodeFileDeleteForUpgrade: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --supportsOnHealthRestored: oneof<nothing, bool>
+  --supportsOnApplicationUpdate: oneof<nothing, bool>
+  --supportsOnManualInteractionRequired: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> any {
   let input = $in
@@ -4224,33 +4223,33 @@ export def "notification-action post" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onGrab?: bool, onDownload?: bool, onUpgrade?: bool, onImportComplete?: bool, onRename?: bool, onSeriesAdd?: bool, onSeriesDelete?: bool, onEpisodeFileDelete?: bool, onEpisodeFileDeleteForUpgrade?: bool, onHealthIssue?: bool, includeHealthWarnings?: bool, onHealthRestored?: bool, onApplicationUpdate?: bool, onManualInteractionRequired?: bool, supportsOnGrab?: bool, supportsOnDownload?: bool, supportsOnUpgrade?: bool, supportsOnImportComplete?: bool, supportsOnRename?: bool, supportsOnSeriesAdd?: bool, supportsOnSeriesDelete?: bool, supportsOnEpisodeFileDelete?: bool, supportsOnEpisodeFileDeleteForUpgrade?: bool, supportsOnHealthIssue?: bool, supportsOnHealthRestored?: bool, supportsOnApplicationUpdate?: bool, supportsOnManualInteractionRequired?: bool, testCommand?: string}
   --link: string # nullable
-  --onGrab: string@bool-completer
-  --onDownload: string@bool-completer
-  --onUpgrade: string@bool-completer
-  --onImportComplete: string@bool-completer
-  --onRename: string@bool-completer
-  --onSeriesAdd: string@bool-completer
-  --onSeriesDelete: string@bool-completer
-  --onEpisodeFileDelete: string@bool-completer
-  --onEpisodeFileDeleteForUpgrade: string@bool-completer
-  --onHealthIssue: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
-  --onHealthRestored: string@bool-completer
-  --onApplicationUpdate: string@bool-completer
-  --onManualInteractionRequired: string@bool-completer
-  --supportsOnGrab: string@bool-completer
-  --supportsOnDownload: string@bool-completer
-  --supportsOnUpgrade: string@bool-completer
-  --supportsOnImportComplete: string@bool-completer
-  --supportsOnRename: string@bool-completer
-  --supportsOnSeriesAdd: string@bool-completer
-  --supportsOnSeriesDelete: string@bool-completer
-  --supportsOnEpisodeFileDelete: string@bool-completer
-  --supportsOnEpisodeFileDeleteForUpgrade: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --supportsOnHealthRestored: string@bool-completer
-  --supportsOnApplicationUpdate: string@bool-completer
-  --supportsOnManualInteractionRequired: string@bool-completer
+  --onGrab: oneof<nothing, bool>
+  --onDownload: oneof<nothing, bool>
+  --onUpgrade: oneof<nothing, bool>
+  --onImportComplete: oneof<nothing, bool>
+  --onRename: oneof<nothing, bool>
+  --onSeriesAdd: oneof<nothing, bool>
+  --onSeriesDelete: oneof<nothing, bool>
+  --onEpisodeFileDelete: oneof<nothing, bool>
+  --onEpisodeFileDeleteForUpgrade: oneof<nothing, bool>
+  --onHealthIssue: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
+  --onHealthRestored: oneof<nothing, bool>
+  --onApplicationUpdate: oneof<nothing, bool>
+  --onManualInteractionRequired: oneof<nothing, bool>
+  --supportsOnGrab: oneof<nothing, bool>
+  --supportsOnDownload: oneof<nothing, bool>
+  --supportsOnUpgrade: oneof<nothing, bool>
+  --supportsOnImportComplete: oneof<nothing, bool>
+  --supportsOnRename: oneof<nothing, bool>
+  --supportsOnSeriesAdd: oneof<nothing, bool>
+  --supportsOnSeriesDelete: oneof<nothing, bool>
+  --supportsOnEpisodeFileDelete: oneof<nothing, bool>
+  --supportsOnEpisodeFileDeleteForUpgrade: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --supportsOnHealthRestored: oneof<nothing, bool>
+  --supportsOnApplicationUpdate: oneof<nothing, bool>
+  --supportsOnManualInteractionRequired: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> any {
   let input = $in
@@ -4446,7 +4445,7 @@ export def "qualityprofile post" [
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
   --name: string # nullable
-  --upgradeAllowed: string@bool-completer
+  --upgradeAllowed: oneof<nothing, bool>
   --cutoff: int # format: int32
   --items: list # nullable — item shape: {id?: int, name?: string, quality?: record, items?: list, allowed?: bool}
   --minFormatScore: int # format: int32
@@ -4518,7 +4517,7 @@ export def "qualityprofile put" [
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
   --name: string # nullable
-  --upgradeAllowed: string@bool-completer
+  --upgradeAllowed: oneof<nothing, bool>
   --cutoff: int # format: int32
   --items: list # nullable — item shape: {id?: int, name?: string, quality?: record, items?: list, allowed?: bool}
   --minFormatScore: int # format: int32
@@ -4585,10 +4584,10 @@ export def "queue delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --removeFromClient: string@bool-completer # default: true
-  --blocklist: string@bool-completer # default: false
-  --skipRedownload: string@bool-completer # default: false
-  --changeCategory: string@bool-completer # default: false
+  --removeFromClient: oneof<nothing, bool> # default: true
+  --blocklist: oneof<nothing, bool> # default: false
+  --skipRedownload: oneof<nothing, bool> # default: false
+  --changeCategory: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4608,10 +4607,10 @@ export def "queue-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --removeFromClient: string@bool-completer # default: true
-  --blocklist: string@bool-completer # default: false
-  --skipRedownload: string@bool-completer # default: false
-  --changeCategory: string@bool-completer # default: false
+  --removeFromClient: oneof<nothing, bool> # default: true
+  --blocklist: oneof<nothing, bool> # default: false
+  --skipRedownload: oneof<nothing, bool> # default: false
+  --changeCategory: oneof<nothing, bool> # default: false
   --ids: list # nullable
 ]: any -> any {
   let input = $in
@@ -4639,9 +4638,9 @@ export def "queue get" [
   --pageSize: int # format: int32, default: 10
   --sortKey: string
   --sortDirection: string@sortDirection-completer
-  --includeUnknownSeriesItems: string@bool-completer # default: false
-  --includeSeries: string@bool-completer # default: false
-  --includeEpisode: string@bool-completer # default: false
+  --includeUnknownSeriesItems: oneof<nothing, bool> # default: false
+  --includeSeries: oneof<nothing, bool> # default: false
+  --includeEpisode: oneof<nothing, bool> # default: false
   --seriesIds: list
   --protocol: string@protocol-completer
   --languages: list
@@ -4709,8 +4708,8 @@ export def "queue-details get" [
   --allow-errors(-e) # Return full response without error handling
   --seriesId: int # format: int32
   --episodeIds: list
-  --includeSeries: string@bool-completer # default: false
-  --includeEpisode: string@bool-completer # default: false
+  --includeSeries: oneof<nothing, bool> # default: false
+  --includeEpisode: oneof<nothing, bool> # default: false
 ]: nothing -> table<id: int, seriesId: int, episodeId: int, seasonNumber: int, series: record<id: int, title: string, alternateTitles: list, sortTitle: string, status: string, ended: bool, profileName: string, overview: string, nextAiring: string, previousAiring: string, network: string, airTime: string, images: list, originalLanguage: record, remotePoster: string, seasons: list, year: int, path: string, qualityProfileId: int, seasonFolder: bool, monitored: bool, monitorNewItems: string, useSceneNumbering: bool, runtime: int, tvdbId: int, tvRageId: int, tvMazeId: int, tmdbId: int, firstAired: string, lastAired: string, seriesType: string, cleanTitle: string, imdbId: string, titleSlug: string, rootFolderPath: string, folder: string, certification: string, genres: list, tags: list, added: string, addOptions: record, ratings: record, statistics: record, episodesChanged: bool, languageProfileId: int>, episode: record<id: int, seriesId: int, tvdbId: int, episodeFileId: int, seasonNumber: int, episodeNumber: int, title: string, airDate: string, airDateUtc: string, lastSearchTime: string, runtime: int, finaleType: string, overview: string, episodeFile: record, hasFile: bool, monitored: bool, absoluteEpisodeNumber: int, sceneAbsoluteEpisodeNumber: int, sceneEpisodeNumber: int, sceneSeasonNumber: int, unverifiedSceneNumbering: bool, endTime: string, grabDate: string, series: record, images: list>, languages: list<record>, quality: record<quality: record, revision: record>, customFormats: list<record>, customFormatScore: int, size: float, title: string, estimatedCompletionTime: string, added: string, status: string, trackedDownloadStatus: string, trackedDownloadState: string, statusMessages: list<record>, errorMessage: string, downloadId: string, protocol: string, downloadClient: string, downloadClientHasPostImportCategory: bool, indexer: string, outputPath: string, episodeHasFile: bool, sizeleft: float, timeleft: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4768,8 +4767,8 @@ export def "release post" [
   --subGroup: string # nullable
   --releaseHash: string # nullable
   --title: string # nullable
-  --fullSeason: string@bool-completer
-  --sceneSource: string@bool-completer
+  --fullSeason: oneof<nothing, bool>
+  --sceneSource: oneof<nothing, bool>
   --seasonNumber: int # format: int32
   --languages: list # nullable — item shape: {id?: int, name?: string}
   --languageWeight: int # format: int32
@@ -4782,9 +4781,9 @@ export def "release post" [
   --mappedAbsoluteEpisodeNumbers: list # nullable
   --mappedSeriesId: int # nullable, format: int32
   --mappedEpisodeInfo: list # nullable — item shape: {id?: int, seasonNumber?: int, episodeNumber?: int, absoluteEpisodeNumber?: int, title?: string}
-  --approved: string@bool-completer
-  --temporarilyRejected: string@bool-completer
-  --rejected: string@bool-completer
+  --approved: oneof<nothing, bool>
+  --temporarilyRejected: oneof<nothing, bool>
+  --rejected: oneof<nothing, bool>
   --tvdbId: int # format: int32
   --tvRageId: int # format: int32
   --imdbId: string # nullable
@@ -4793,8 +4792,8 @@ export def "release post" [
   --commentUrl: string # nullable
   --downloadUrl: string # nullable
   --infoUrl: string # nullable
-  --episodeRequested: string@bool-completer
-  --downloadAllowed: string@bool-completer
+  --episodeRequested: oneof<nothing, bool>
+  --downloadAllowed: oneof<nothing, bool>
   --releaseWeight: int # format: int32
   --customFormats: list # nullable — item shape: {id?: int, name?: string, includeCustomFormatWhenRenaming?: bool, specifications?: list}
   --customFormatScore: int # format: int32
@@ -4805,16 +4804,16 @@ export def "release post" [
   --leechers: int # nullable, format: int32
   --protocol: string@protocol-completer
   --indexerFlags: int # format: int32
-  --isDaily: string@bool-completer
-  --isAbsoluteNumbering: string@bool-completer
-  --isPossibleSpecialEpisode: string@bool-completer
-  --special: string@bool-completer
+  --isDaily: oneof<nothing, bool>
+  --isAbsoluteNumbering: oneof<nothing, bool>
+  --isPossibleSpecialEpisode: oneof<nothing, bool>
+  --special: oneof<nothing, bool>
   --seriesId: int # nullable, format: int32
   --episodeId: int # nullable, format: int32
   --episodeIds: list # nullable
   --downloadClientId: int # nullable, format: int32
   --downloadClient: string # nullable
-  --shouldOverride: string@bool-completer # nullable
+  --shouldOverride: oneof<nothing, bool> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -4861,7 +4860,7 @@ export def "releaseprofile post" [
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
   --name: string # nullable
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --required: any # nullable
   --ignored: any # nullable
   --indexerId: int # format: int32
@@ -4929,7 +4928,7 @@ export def "releaseprofile put" [
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
   --name: string # nullable
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --required: any # nullable
   --ignored: any # nullable
   --indexerId: int # format: int32
@@ -4995,8 +4994,8 @@ export def "release-push post" [
   --subGroup: string # nullable
   --releaseHash: string # nullable
   --title: string # nullable
-  --fullSeason: string@bool-completer
-  --sceneSource: string@bool-completer
+  --fullSeason: oneof<nothing, bool>
+  --sceneSource: oneof<nothing, bool>
   --seasonNumber: int # format: int32
   --languages: list # nullable — item shape: {id?: int, name?: string}
   --languageWeight: int # format: int32
@@ -5009,9 +5008,9 @@ export def "release-push post" [
   --mappedAbsoluteEpisodeNumbers: list # nullable
   --mappedSeriesId: int # nullable, format: int32
   --mappedEpisodeInfo: list # nullable — item shape: {id?: int, seasonNumber?: int, episodeNumber?: int, absoluteEpisodeNumber?: int, title?: string}
-  --approved: string@bool-completer
-  --temporarilyRejected: string@bool-completer
-  --rejected: string@bool-completer
+  --approved: oneof<nothing, bool>
+  --temporarilyRejected: oneof<nothing, bool>
+  --rejected: oneof<nothing, bool>
   --tvdbId: int # format: int32
   --tvRageId: int # format: int32
   --imdbId: string # nullable
@@ -5020,8 +5019,8 @@ export def "release-push post" [
   --commentUrl: string # nullable
   --downloadUrl: string # nullable
   --infoUrl: string # nullable
-  --episodeRequested: string@bool-completer
-  --downloadAllowed: string@bool-completer
+  --episodeRequested: oneof<nothing, bool>
+  --downloadAllowed: oneof<nothing, bool>
   --releaseWeight: int # format: int32
   --customFormats: list # nullable — item shape: {id?: int, name?: string, includeCustomFormatWhenRenaming?: bool, specifications?: list}
   --customFormatScore: int # format: int32
@@ -5032,16 +5031,16 @@ export def "release-push post" [
   --leechers: int # nullable, format: int32
   --protocol: string@protocol-completer
   --indexerFlags: int # format: int32
-  --isDaily: string@bool-completer
-  --isAbsoluteNumbering: string@bool-completer
-  --isPossibleSpecialEpisode: string@bool-completer
-  --special: string@bool-completer
+  --isDaily: oneof<nothing, bool>
+  --isAbsoluteNumbering: oneof<nothing, bool>
+  --isPossibleSpecialEpisode: oneof<nothing, bool>
+  --special: oneof<nothing, bool>
   --seriesId: int # nullable, format: int32
   --episodeId: int # nullable, format: int32
   --episodeIds: list # nullable
   --downloadClientId: int # nullable, format: int32
   --downloadClient: string # nullable
-  --shouldOverride: string@bool-completer # nullable
+  --shouldOverride: oneof<nothing, bool> # nullable
 ]: any -> table<id: int, guid: string, quality: record<quality: record, revision: record>, qualityWeight: int, age: int, ageHours: float, ageMinutes: float, size: int, indexerId: int, indexer: string, releaseGroup: string, subGroup: string, releaseHash: string, title: string, fullSeason: bool, sceneSource: bool, seasonNumber: int, languages: list<record>, languageWeight: int, airDate: string, seriesTitle: string, episodeNumbers: list<int>, absoluteEpisodeNumbers: list<int>, mappedSeasonNumber: int, mappedEpisodeNumbers: list<int>, mappedAbsoluteEpisodeNumbers: list<int>, mappedSeriesId: int, mappedEpisodeInfo: list<record>, approved: bool, temporarilyRejected: bool, rejected: bool, tvdbId: int, tvRageId: int, imdbId: string, rejections: list<string>, publishDate: string, commentUrl: string, downloadUrl: string, infoUrl: string, episodeRequested: bool, downloadAllowed: bool, releaseWeight: int, customFormats: list<record>, customFormatScore: int, sceneMapping: record<title: string, seasonNumber: int, sceneSeasonNumber: int, sceneOrigin: string, comment: string>, magnetUrl: string, infoHash: string, seeders: int, leechers: int, protocol: string, indexerFlags: int, isDaily: bool, isAbsoluteNumbering: bool, isPossibleSpecialEpisode: bool, special: bool, seriesId: int, episodeId: int, episodeIds: list<int>, downloadClientId: int, downloadClient: string, shouldOverride: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -5198,7 +5197,7 @@ export def "rootfolder post" [
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
   --path: string # nullable
-  --accessible: string@bool-completer
+  --accessible: oneof<nothing, bool>
   --freeSpace: int # nullable, format: int64
   --unmappedFolders: list # nullable — item shape: {name?: string, path?: string, relativePath?: string}
 ]: any -> record<id: int, path: string, accessible: bool, freeSpace: int, unmappedFolders: table<name: string, path: string, relativePath: string>> {
@@ -5305,7 +5304,7 @@ export def "series list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --tvdbId: int # format: int32
-  --includeSeasonImages: string@bool-completer # default: false
+  --includeSeasonImages: oneof<nothing, bool> # default: false
 ]: nothing -> table<id: int, title: string, alternateTitles: list<record>, sortTitle: string, status: string, ended: bool, profileName: string, overview: string, nextAiring: string, previousAiring: string, network: string, airTime: string, images: list<record>, originalLanguage: record<id: int, name: string>, remotePoster: string, seasons: list<record>, year: int, path: string, qualityProfileId: int, seasonFolder: bool, monitored: bool, monitorNewItems: string, useSceneNumbering: bool, runtime: int, tvdbId: int, tvRageId: int, tvMazeId: int, tmdbId: int, firstAired: string, lastAired: string, seriesType: string, cleanTitle: string, imdbId: string, titleSlug: string, rootFolderPath: string, folder: string, certification: string, genres: list<string>, tags: list<int>, added: string, addOptions: record<ignoreEpisodesWithFiles: bool, ignoreEpisodesWithoutFiles: bool, monitor: string, searchForMissingEpisodes: bool, searchForCutoffUnmetEpisodes: bool>, ratings: record<votes: int, value: float>, statistics: record<seasonCount: int, episodeFileCount: int, episodeCount: int, totalEpisodeCount: int, sizeOnDisk: int, releaseGroups: list, percentOfEpisodes: float>, episodesChanged: bool, languageProfileId: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5351,10 +5350,10 @@ export def "series post" [
   --year: int # format: int32
   --path: string # nullable
   --qualityProfileId: int # format: int32
-  --seasonFolder: string@bool-completer
-  --monitored: string@bool-completer
+  --seasonFolder: oneof<nothing, bool>
+  --monitored: oneof<nothing, bool>
   --monitorNewItems: string@monitorNewItems-completer
-  --useSceneNumbering: string@bool-completer
+  --useSceneNumbering: oneof<nothing, bool>
   --runtime: int # format: int32
   --tvdbId: int # format: int32
   --tvRageId: int # format: int32
@@ -5375,7 +5374,7 @@ export def "series post" [
   --addOptions: record # shape: {ignoreEpisodesWithFiles?: bool, ignoreEpisodesWithoutFiles?: bool, monitor?: "unknown"|"all"|"future"|"missing"|"existing"|"firstSeason"|"lastSeason"|"latestSeason"|"pilot"|"recent"|"monitorSpecials"|"unmonitorSpecials"|"none"|"skip", searchForMissingEpisodes?: bool, searchForCutoffUnmetEpisodes?: bool}
   --ratings: record # shape: {votes?: int, value?: float}
   --statistics: record # shape: {seasonCount?: int, episodeFileCount?: int, episodeCount?: int, totalEpisodeCount?: int, sizeOnDisk?: int, releaseGroups?: list}
-  --episodesChanged: string@bool-completer # nullable
+  --episodesChanged: oneof<nothing, bool> # nullable
 ]: any -> record<id: int, title: string, alternateTitles: table<title: string, seasonNumber: int, sceneSeasonNumber: int, sceneOrigin: string, comment: string>, sortTitle: string, status: string, ended: bool, profileName: string, overview: string, nextAiring: string, previousAiring: string, network: string, airTime: string, images: table<coverType: string, url: string, remoteUrl: string>, originalLanguage: record<id: int, name: string>, remotePoster: string, seasons: table<seasonNumber: int, monitored: bool, statistics: record, images: list>, year: int, path: string, qualityProfileId: int, seasonFolder: bool, monitored: bool, monitorNewItems: string, useSceneNumbering: bool, runtime: int, tvdbId: int, tvRageId: int, tvMazeId: int, tmdbId: int, firstAired: string, lastAired: string, seriesType: string, cleanTitle: string, imdbId: string, titleSlug: string, rootFolderPath: string, folder: string, certification: string, genres: list<string>, tags: list<int>, added: string, addOptions: record<ignoreEpisodesWithFiles: bool, ignoreEpisodesWithoutFiles: bool, monitor: string, searchForMissingEpisodes: bool, searchForCutoffUnmetEpisodes: bool>, ratings: record<votes: int, value: float>, statistics: record<seasonCount: int, episodeFileCount: int, episodeCount: int, totalEpisodeCount: int, sizeOnDisk: int, releaseGroups: list<string>, percentOfEpisodes: float>, episodesChanged: bool, languageProfileId: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -5398,7 +5397,7 @@ export def "series get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeSeasonImages: string@bool-completer # default: false
+  --includeSeasonImages: oneof<nothing, bool> # default: false
 ]: nothing -> record<id: int, title: string, alternateTitles: table<title: string, seasonNumber: int, sceneSeasonNumber: int, sceneOrigin: string, comment: string>, sortTitle: string, status: string, ended: bool, profileName: string, overview: string, nextAiring: string, previousAiring: string, network: string, airTime: string, images: table<coverType: string, url: string, remoteUrl: string>, originalLanguage: record<id: int, name: string>, remotePoster: string, seasons: table<seasonNumber: int, monitored: bool, statistics: record, images: list>, year: int, path: string, qualityProfileId: int, seasonFolder: bool, monitored: bool, monitorNewItems: string, useSceneNumbering: bool, runtime: int, tvdbId: int, tvRageId: int, tvMazeId: int, tmdbId: int, firstAired: string, lastAired: string, seriesType: string, cleanTitle: string, imdbId: string, titleSlug: string, rootFolderPath: string, folder: string, certification: string, genres: list<string>, tags: list<int>, added: string, addOptions: record<ignoreEpisodesWithFiles: bool, ignoreEpisodesWithoutFiles: bool, monitor: string, searchForMissingEpisodes: bool, searchForCutoffUnmetEpisodes: bool>, ratings: record<votes: int, value: float>, statistics: record<seasonCount: int, episodeFileCount: int, episodeCount: int, totalEpisodeCount: int, sizeOnDisk: int, releaseGroups: list<string>, percentOfEpisodes: float>, episodesChanged: bool, languageProfileId: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5427,7 +5426,7 @@ export def "series put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --moveFiles: string@bool-completer # default: false
+  --moveFiles: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --title: string # nullable
   --alternateTitles: list # nullable — item shape: {title?: string, seasonNumber?: int, sceneSeasonNumber?: int, sceneOrigin?: string, comment?: string}
@@ -5446,10 +5445,10 @@ export def "series put" [
   --year: int # format: int32
   --path: string # nullable
   --qualityProfileId: int # format: int32
-  --seasonFolder: string@bool-completer
-  --monitored: string@bool-completer
+  --seasonFolder: oneof<nothing, bool>
+  --monitored: oneof<nothing, bool>
   --monitorNewItems: string@monitorNewItems-completer
-  --useSceneNumbering: string@bool-completer
+  --useSceneNumbering: oneof<nothing, bool>
   --runtime: int # format: int32
   --tvdbId: int # format: int32
   --tvRageId: int # format: int32
@@ -5470,7 +5469,7 @@ export def "series put" [
   --addOptions: record # shape: {ignoreEpisodesWithFiles?: bool, ignoreEpisodesWithoutFiles?: bool, monitor?: "unknown"|"all"|"future"|"missing"|"existing"|"firstSeason"|"lastSeason"|"latestSeason"|"pilot"|"recent"|"monitorSpecials"|"unmonitorSpecials"|"none"|"skip", searchForMissingEpisodes?: bool, searchForCutoffUnmetEpisodes?: bool}
   --ratings: record # shape: {votes?: int, value?: float}
   --statistics: record # shape: {seasonCount?: int, episodeFileCount?: int, episodeCount?: int, totalEpisodeCount?: int, sizeOnDisk?: int, releaseGroups?: list}
-  --episodesChanged: string@bool-completer # nullable
+  --episodesChanged: oneof<nothing, bool> # nullable
 ]: any -> record<id: int, title: string, alternateTitles: table<title: string, seasonNumber: int, sceneSeasonNumber: int, sceneOrigin: string, comment: string>, sortTitle: string, status: string, ended: bool, profileName: string, overview: string, nextAiring: string, previousAiring: string, network: string, airTime: string, images: table<coverType: string, url: string, remoteUrl: string>, originalLanguage: record<id: int, name: string>, remotePoster: string, seasons: table<seasonNumber: int, monitored: bool, statistics: record, images: list>, year: int, path: string, qualityProfileId: int, seasonFolder: bool, monitored: bool, monitorNewItems: string, useSceneNumbering: bool, runtime: int, tvdbId: int, tvRageId: int, tvMazeId: int, tmdbId: int, firstAired: string, lastAired: string, seriesType: string, cleanTitle: string, imdbId: string, titleSlug: string, rootFolderPath: string, folder: string, certification: string, genres: list<string>, tags: list<int>, added: string, addOptions: record<ignoreEpisodesWithFiles: bool, ignoreEpisodesWithoutFiles: bool, monitor: string, searchForMissingEpisodes: bool, searchForCutoffUnmetEpisodes: bool>, ratings: record<votes: int, value: float>, statistics: record<seasonCount: int, episodeFileCount: int, episodeCount: int, totalEpisodeCount: int, sizeOnDisk: int, releaseGroups: list<string>, percentOfEpisodes: float>, episodesChanged: bool, languageProfileId: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -5494,8 +5493,8 @@ export def "series delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deleteFiles: string@bool-completer # default: false
-  --addImportListExclusion: string@bool-completer # default: false
+  --deleteFiles: oneof<nothing, bool> # default: false
+  --addImportListExclusion: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5516,17 +5515,17 @@ export def "series-editor put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --seriesIds: list # nullable
-  --monitored: string@bool-completer # nullable
+  --monitored: oneof<nothing, bool> # nullable
   --monitorNewItems: string@monitorNewItems-completer
   --qualityProfileId: int # nullable, format: int32
   --seriesType: string@seriesType-completer
-  --seasonFolder: string@bool-completer # nullable
+  --seasonFolder: oneof<nothing, bool> # nullable
   --rootFolderPath: string # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --moveFiles: string@bool-completer
-  --deleteFiles: string@bool-completer
-  --addImportListExclusion: string@bool-completer
+  --moveFiles: oneof<nothing, bool>
+  --deleteFiles: oneof<nothing, bool>
+  --addImportListExclusion: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -5549,17 +5548,17 @@ export def "series-editor delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --seriesIds: list # nullable
-  --monitored: string@bool-completer # nullable
+  --monitored: oneof<nothing, bool> # nullable
   --monitorNewItems: string@monitorNewItems-completer
   --qualityProfileId: int # nullable, format: int32
   --seriesType: string@seriesType-completer
-  --seasonFolder: string@bool-completer # nullable
+  --seasonFolder: oneof<nothing, bool> # nullable
   --rootFolderPath: string # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --moveFiles: string@bool-completer
-  --deleteFiles: string@bool-completer
-  --addImportListExclusion: string@bool-completer
+  --moveFiles: oneof<nothing, bool>
+  --deleteFiles: oneof<nothing, bool>
+  --addImportListExclusion: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -5977,8 +5976,8 @@ export def "config-ui put" [
   --shortDateFormat: string # nullable
   --longDateFormat: string # nullable
   --timeFormat: string # nullable
-  --showRelativeDates: string@bool-completer
-  --enableColorImpairedMode: string@bool-completer
+  --showRelativeDates: oneof<nothing, bool>
+  --enableColorImpairedMode: oneof<nothing, bool>
   --theme: string # nullable
   --uiLanguage: int # format: int32
 ]: any -> record<id: int, firstDayOfWeek: int, calendarWeekColumnHeader: string, shortDateFormat: string, longDateFormat: string, timeFormat: string, showRelativeDates: bool, enableColorImpairedMode: bool, theme: string, uiLanguage: int> {

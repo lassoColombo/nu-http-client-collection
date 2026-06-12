@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.rootly.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -2419,7 +2418,7 @@ export def "custom-fields listCustomFields" [
   --filterslug: string
   --filterlabel: string
   --filterkind: string
-  --filterenabled: string@bool-completer
+  --filterenabled: oneof<nothing, bool>
   --filtercreated-atgt: string
   --filtercreated-atgte: string
   --filtercreated-atlt: string
@@ -4021,7 +4020,7 @@ export def "form-fields listFormFields" [
   --filterslug: string
   --filtername: string
   --filterkind: string
-  --filterenabled: string@bool-completer
+  --filterenabled: oneof<nothing, bool>
   --filtercreated-atgt: string
   --filtercreated-atgte: string
   --filtercreated-atlt: string
@@ -4268,7 +4267,7 @@ export def "form-sets listFormSets" [
   --pagenumber: int
   --pagesize: int
   --filterslug: string
-  --filteris-default: string@bool-completer
+  --filteris-default: oneof<nothing, bool>
   --filtercreated-atgt: string
   --filtercreated-atgte: string
   --filtercreated-atlt: string
@@ -4946,7 +4945,7 @@ export def "workflow-groups listWorkflowGroups" [
   --filtername: string
   --filterslug: string
   --filterkind: string
-  --filterexpanded: string@bool-completer
+  --filterexpanded: oneof<nothing, bool>
   --filterposition: int
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6912,7 +6911,7 @@ export def "incident-roles listIncidentRoles" [
   --filtersearch: string
   --filterslug: string
   --filtername: string
-  --filterenabled: string@bool-completer
+  --filterenabled: oneof<nothing, bool>
   --filtercreated-atgt: string
   --filtercreated-atgte: string
   --filtercreated-atlt: string

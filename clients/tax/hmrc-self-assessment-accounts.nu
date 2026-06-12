@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://test-api.service.hmrc.gov.uk" "https://api.service.hmrc.gov.uk"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -187,12 +186,12 @@ export def "accounts-self-assessment-balance-and-transactions get" [
   --docNumber: string # The docNumber is a unique number per tax grouping in the Account display. (When onlyOpenItems has been set to false, either the date range (fromDate and toDate) or doc number should be supplied.)  (e.g. 3060013199)
   --fromDate: string # The inclusive start date of the period to filter payments. The maximum date range between fromDate and toDate should not exceed 732 days. (e.g. 2019-01-02)
   --toDate: string # The inclusive end date of the period to filter payments. The maximum date range between fromDate and toDate should not exceed 732 days. (e.g. 2019-01-02)
-  --onlyOpenItems: string@bool-completer # Limits the extraction to unpaid or not reversed charges.  (When onlyOpenItems has been set to false, either the date range (fromDate and toDate) or docNumber should be supplied.)  Defaults to false  (e.g. false)
-  --includeLocks: string@bool-completer # Include additional information related to claim and debt management.  Defaults to false  (e.g. true)
-  --calculateAccruedInterest: string@bool-completer # Calculate accrued interest. Accruing interest is the amount of interest calculated  a) To today’s date (or in the case of a created statement, to the statement date)  b) On any overdue interest-bearing liability  No interest charge is created for an amount of accruing interest. An interest charge is only created when the related liability is paid in full.  (e.g. false)
-  --removePOA: string@bool-completer # Remove Payment on Account details. When true, details of any payments that the customer has made will not be returned.  Defaults to false.  (e.g. false)
-  --customerPaymentInformation: string@bool-completer # Include customer payment information in the response. When true, the following information is returned: Payment Reference, Payment Amount, Payment Method, Payment Lot, Payment Lot Item, Clearing SAP Document.  Note that if removePOA is true, no information is returned even if customerPaymentInformation is true.  Defaults to false.  (e.g. false)
-  --includeEstimatedCharges: string@bool-completer # Include statistical (estimated) values for monthly payments.  Defaults to false.  (e.g. true)
+  --onlyOpenItems: oneof<nothing, bool> # Limits the extraction to unpaid or not reversed charges.  (When onlyOpenItems has been set to false, either the date range (fromDate and toDate) or docNumber should be supplied.)  Defaults to false  (e.g. false)
+  --includeLocks: oneof<nothing, bool> # Include additional information related to claim and debt management.  Defaults to false  (e.g. true)
+  --calculateAccruedInterest: oneof<nothing, bool> # Calculate accrued interest. Accruing interest is the amount of interest calculated  a) To today’s date (or in the case of a created statement, to the statement date)  b) On any overdue interest-bearing liability  No interest charge is created for an amount of accruing interest. An interest charge is only created when the related liability is paid in full.  (e.g. false)
+  --removePOA: oneof<nothing, bool> # Remove Payment on Account details. When true, details of any payments that the customer has made will not be returned.  Defaults to false.  (e.g. false)
+  --customerPaymentInformation: oneof<nothing, bool> # Include customer payment information in the response. When true, the following information is returned: Payment Reference, Payment Amount, Payment Method, Payment Lot, Payment Lot Item, Clearing SAP Document.  Note that if removePOA is true, no information is returned even if customerPaymentInformation is true.  Defaults to false.  (e.g. false)
+  --includeEstimatedCharges: oneof<nothing, bool> # Include statistical (estimated) values for monthly payments.  Defaults to false.  (e.g. true)
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used.
   --Authorization: string # An OAuth 2.0 Bearer Token with the *read:self-assessment* scope.  (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
   --Gov-Test-Scenario: string # Only in sandbox environment. See Test Data table for all header values.  (e.g. -)

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://ivs.us-east-1.amazonaws.com" "http://ivs.us-east-2.amazonaws.com" "http://ivs.us-west-1.amazonaws.com" "http://ivs.us-west-2.amazonaws.com" "http://ivs.us-gov-west-1.amazonaws.com" "http://ivs.us-gov-east-1.amazonaws.com" "http://ivs.ca-central-1.amazonaws.com" "http://ivs.eu-north-1.amazonaws.com" "http://ivs.eu-west-1.amazonaws.com" "http://ivs.eu-west-2.amazonaws.com" "http://ivs.eu-west-3.amazonaws.com" "http://ivs.eu-central-1.amazonaws.com" "http://ivs.eu-south-1.amazonaws.com" "http://ivs.af-south-1.amazonaws.com" "http://ivs.ap-northeast-1.amazonaws.com" "http://ivs.ap-northeast-2.amazonaws.com" "http://ivs.ap-northeast-3.amazonaws.com" "http://ivs.ap-southeast-1.amazonaws.com" "http://ivs.ap-southeast-2.amazonaws.com" "http://ivs.ap-east-1.amazonaws.com" "http://ivs.ap-south-1.amazonaws.com" "http://ivs.sa-east-1.amazonaws.com" "http://ivs.me-south-1.amazonaws.com" "https://ivs.us-east-1.amazonaws.com" "https://ivs.us-east-2.amazonaws.com" "https://ivs.us-west-1.amazonaws.com" "https://ivs.us-west-2.amazonaws.com" "https://ivs.us-gov-west-1.amazonaws.com" "https://ivs.us-gov-east-1.amazonaws.com" "https://ivs.ca-central-1.amazonaws.com" "https://ivs.eu-north-1.amazonaws.com" "https://ivs.eu-west-1.amazonaws.com" "https://ivs.eu-west-2.amazonaws.com" "https://ivs.eu-west-3.amazonaws.com" "https://ivs.eu-central-1.amazonaws.com" "https://ivs.eu-south-1.amazonaws.com" "https://ivs.af-south-1.amazonaws.com" "https://ivs.ap-northeast-1.amazonaws.com" "https://ivs.ap-northeast-2.amazonaws.com" "https://ivs.ap-northeast-3.amazonaws.com" "https://ivs.ap-southeast-1.amazonaws.com" "https://ivs.ap-southeast-2.amazonaws.com" "https://ivs.ap-east-1.amazonaws.com" "https://ivs.ap-south-1.amazonaws.com" "https://ivs.sa-east-1.amazonaws.com" "https://ivs.me-south-1.amazonaws.com" "http://ivs.cn-north-1.amazonaws.com.cn" "http://ivs.cn-northwest-1.amazonaws.com.cn" "https://ivs.cn-north-1.amazonaws.com.cn" "https://ivs.cn-northwest-1.amazonaws.com.cn"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -179,8 +178,8 @@ export def "create-channel CreateChannel" [
   --X-Amz-Security-Token: string
   --X-Amz-Signature: string
   --X-Amz-SignedHeaders: string
-  --authorized: string@bool-completer # Whether the channel is private (enabled for playback authorization). Default: <code>false</code>.
-  --insecureIngest: string@bool-completer # Whether the channel allows insecure RTMP ingest. Default: <code>false</code>.
+  --authorized: oneof<nothing, bool> # Whether the channel is private (enabled for playback authorization). Default: <code>false</code>.
+  --insecureIngest: oneof<nothing, bool> # Whether the channel allows insecure RTMP ingest. Default: <code>false</code>.
   --latencyMode: string@latencyMode-completer # Channel latency mode. Use <code>NORMAL</code> to broadcast and deliver live video up to Full HD. Use <code>LOW</code> for near-real-time interaction with viewers. (Note: In the Amazon IVS console, <code>LOW</code> and <code>NORMAL</code> correspond to Ultra-low and Standard, respectively.) Default: <code>LOW</code>.
   --name: string # Channel name.
   --recordingConfigurationArn: string # Recording-configuration ARN. Default: "" (empty string, recording is disabled).
@@ -1074,8 +1073,8 @@ export def "update-channel UpdateChannel" [
   --X-Amz-Signature: string
   --X-Amz-SignedHeaders: string
   arn: string # ARN of the channel to be updated.
-  --authorized: string@bool-completer # Whether the channel is private (enabled for playback authorization).
-  --insecureIngest: string@bool-completer # Whether the channel allows insecure RTMP ingest. Default: <code>false</code>.
+  --authorized: oneof<nothing, bool> # Whether the channel is private (enabled for playback authorization).
+  --insecureIngest: oneof<nothing, bool> # Whether the channel allows insecure RTMP ingest. Default: <code>false</code>.
   --latencyMode: string@latencyMode-completer # Channel latency mode. Use <code>NORMAL</code> to broadcast and deliver live video up to Full HD. Use <code>LOW</code> for near-real-time interaction with viewers. (Note: In the Amazon IVS console, <code>LOW</code> and <code>NORMAL</code> correspond to Ultra-low and Standard, respectively.)
   --name: string # Channel name.
   --recordingConfigurationArn: string # Recording-configuration ARN. If this is set to an empty string, recording is disabled. A value other than an empty string indicates that recording is enabled

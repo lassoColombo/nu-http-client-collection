@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://localhost:8080"] }
 def auth-scheme-completer [] { ["signoz-api-key" "bearer"] }
 
@@ -870,7 +869,7 @@ export def "dashboards-public CreatePublicDashboard" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --defaultTimeRange: string
-  --timeRangeEnabled: string@bool-completer
+  --timeRangeEnabled: oneof<nothing, bool>
 ]: any -> record<data: record<id: string>, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "signoz-api-key"))
@@ -897,7 +896,7 @@ export def "dashboards-public UpdatePublicDashboard" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --defaultTimeRange: string
-  --timeRangeEnabled: string@bool-completer
+  --timeRangeEnabled: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "signoz-api-key"))
@@ -1041,8 +1040,8 @@ export def "downtime-schedules ListDowntimeSchedules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # nullable
-  --recurring: string@bool-completer # nullable
+  --active: oneof<nothing, bool> # nullable
+  --recurring: oneof<nothing, bool> # nullable
 ]: nothing -> record<data: table<alertIds: list, createdAt: string, createdBy: string, description: string, id: string, kind: string, name: string, schedule: record, scope: string, status: string, updatedAt: string, updatedBy: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "signoz-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1176,7 +1175,7 @@ export def "export-raw-data HandleExportRawDataPOST" [
   --compositeQuery: record # Composite query containing one or more query envelopes. Each query envelope specifies its type and corresponding spec. — shape: {queries?: list}
   --end: int
   --formatOptions: record # shape: {fillGaps?: bool, formatTableResultForUI?: bool}
-  --noCache: string@bool-completer
+  --noCache: oneof<nothing, bool>
   --requestType: string@requestType-completer
   --schemaVersion: string
   --start: int
@@ -2279,7 +2278,7 @@ export def "span-mapper-groups ListSpanMapperGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # nullable
+  --enabled: oneof<nothing, bool> # nullable
 ]: nothing -> record<data: record<items: list<record>>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "signoz-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2304,7 +2303,7 @@ export def "span-mapper-groups CreateSpanMapperGroup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --condition: record # nullable — shape: {attributes: list, resource: list}
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   name: string
 ]: any -> record<data: record<condition: record<attributes: list, resource: list>, createdAt: string, createdBy: string, enabled: bool, id: string, name: string, orgId: string, updatedAt: string, updatedBy: string>, status: string> {
   let input = $in
@@ -2355,7 +2354,7 @@ export def "span-mapper-groups UpdateSpanMapperGroup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --condition: record # nullable — shape: {attributes: list, resource: list}
-  --enabled: string@bool-completer # nullable
+  --enabled: oneof<nothing, bool> # nullable
   --name: string # nullable
 ]: any -> any {
   let input = $in
@@ -2406,7 +2405,7 @@ export def "span-mapper-groups-span-mappers CreateSpanMapper" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   config: record # shape: {sources: list}
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   fieldContext: string@fieldContext-completer-1
   name: string
 ]: any -> record<data: record<config: record<sources: list>, createdAt: string, createdBy: string, enabled: bool, fieldContext: string, group_id: string, id: string, name: string, updatedAt: string, updatedBy: string>, status: string> {
@@ -2460,7 +2459,7 @@ export def "span-mapper-groups-span-mappers UpdateSpanMapper" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --config: record # shape: {sources: list}
-  --enabled: string@bool-completer # nullable
+  --enabled: oneof<nothing, bool> # nullable
   --fieldContext: string@fieldContext-completer-1
 ]: any -> any {
   let input = $in
@@ -2648,7 +2647,7 @@ export def "user UpdateUserDeprecated" [
   --displayName: string
   --email: string
   --body-id: string
-  --isRoot: string@bool-completer
+  --isRoot: oneof<nothing, bool>
   --orgId: string
   --role: string
   --status: string
@@ -2796,7 +2795,7 @@ export def "dashboards CreateDashboardV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --generateName: string@bool-completer
+  --generateName: oneof<nothing, bool>
   --image: string
   --name: string
   schemaVersion: string
@@ -3748,7 +3747,7 @@ export def "metrics-metadata UpdateMetricMetadata" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   description: string
-  --isMonotonic: string@bool-completer
+  --isMonotonic: oneof<nothing, bool>
   metricName: string
   temporality: string@temporality-completer
   type: string@type-completer
@@ -4038,7 +4037,7 @@ export def "rules CreateRule" [
   --annotations: record
   condition: record # shape: {absentFor?: int, alertOnAbsent?: bool, algorithm?: string, compositeQuery: record, matchType?: "at_least_once"|"all_the_times"|"on_average"|"in_total"|"last", op?: "above"|"below"|"equal"|"not_equal"|"outside_bounds", requireMinPoints?: bool, requiredNumPoints?: int, seasonality?: "hourly"|"daily"|"weekly", selectedQueryName?: string, target?: float, targetUnit?: string, thresholds?: record}
   --description: string
-  --disabled: string@bool-completer
+  --disabled: oneof<nothing, bool>
   --evalWindow: string
   --evaluation: record # shape: {kind: "rolling"|"cumulative", spec?: record}
   --frequency: string
@@ -4126,7 +4125,7 @@ export def "rules PatchRuleByID" [
   --annotations: record
   condition: record # shape: {absentFor?: int, alertOnAbsent?: bool, algorithm?: string, compositeQuery: record, matchType?: "at_least_once"|"all_the_times"|"on_average"|"in_total"|"last", op?: "above"|"below"|"equal"|"not_equal"|"outside_bounds", requireMinPoints?: bool, requiredNumPoints?: int, seasonality?: "hourly"|"daily"|"weekly", selectedQueryName?: string, target?: float, targetUnit?: string, thresholds?: record}
   --description: string
-  --disabled: string@bool-completer
+  --disabled: oneof<nothing, bool>
   --evalWindow: string
   --evaluation: record # shape: {kind: "rolling"|"cumulative", spec?: record}
   --frequency: string
@@ -4170,7 +4169,7 @@ export def "rules UpdateRuleByID" [
   --annotations: record
   condition: record # shape: {absentFor?: int, alertOnAbsent?: bool, algorithm?: string, compositeQuery: record, matchType?: "at_least_once"|"all_the_times"|"on_average"|"in_total"|"last", op?: "above"|"below"|"equal"|"not_equal"|"outside_bounds", requireMinPoints?: bool, requiredNumPoints?: int, seasonality?: "hourly"|"daily"|"weekly", selectedQueryName?: string, target?: float, targetUnit?: string, thresholds?: record}
   --description: string
-  --disabled: string@bool-completer
+  --disabled: oneof<nothing, bool>
   --evalWindow: string
   --evaluation: record # shape: {kind: "rolling"|"cumulative", spec?: record}
   --frequency: string
@@ -4386,7 +4385,7 @@ export def "rules-test TestRule" [
   --annotations: record
   condition: record # shape: {absentFor?: int, alertOnAbsent?: bool, algorithm?: string, compositeQuery: record, matchType?: "at_least_once"|"all_the_times"|"on_average"|"in_total"|"last", op?: "above"|"below"|"equal"|"not_equal"|"outside_bounds", requireMinPoints?: bool, requiredNumPoints?: int, seasonality?: "hourly"|"daily"|"weekly", selectedQueryName?: string, target?: float, targetUnit?: string, thresholds?: record}
   --description: string
-  --disabled: string@bool-completer
+  --disabled: oneof<nothing, bool>
   --evalWindow: string
   --evaluation: record # shape: {kind: "rolling"|"cumulative", spec?: record}
   --frequency: string
@@ -4889,13 +4888,13 @@ export def "zeus-profiles PutProfile" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   existing_observability_tool: string
-  --has-existing-observability-tool: string@bool-completer
+  --has-existing-observability-tool: oneof<nothing, bool>
   logs_scale_per_day_in_gb: int # format: int64
   number_of_hosts: int # format: int64
   number_of_services: int # format: int64
   --reasons-for-interest-in-signoz: list # nullable
   timeline_for_migrating_to_signoz: string
-  --uses-otel: string@bool-completer
+  --uses-otel: oneof<nothing, bool>
   where_did_you_discover_signoz: string
 ]: any -> any {
   let input = $in
@@ -4981,7 +4980,7 @@ export def "query-range QueryRangeV5" [
   --compositeQuery: record # Composite query containing one or more query envelopes. Each query envelope specifies its type and corresponding spec. — shape: {queries?: list}
   --end: int
   --formatOptions: record # shape: {fillGaps?: bool, formatTableResultForUI?: bool}
-  --noCache: string@bool-completer
+  --noCache: oneof<nothing, bool>
   --requestType: string@requestType-completer
   --schemaVersion: string
   --start: int
@@ -5015,7 +5014,7 @@ export def "substitute-vars ReplaceVariables" [
   --compositeQuery: record # Composite query containing one or more query envelopes. Each query envelope specifies its type and corresponding spec. — shape: {queries?: list}
   --end: int
   --formatOptions: record # shape: {fillGaps?: bool, formatTableResultForUI?: bool}
-  --noCache: string@bool-completer
+  --noCache: oneof<nothing, bool>
   --requestType: string@requestType-completer
   --schemaVersion: string
   --start: int

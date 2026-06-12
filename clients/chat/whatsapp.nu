@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://whatsapp.local" "http://example.com/v1"] }
 def auth-scheme-completer [] { ["bearer" "basic"] }
 
@@ -744,7 +743,7 @@ export def "messages SendMessage" [
   --hsm: record # The containing element for the message content — Indicates that the message is highly structured. Parameters contained within provide the structure. (e.g. {element_name: hello_world, language: {code: en, policy: deterministic}, localizable_params: [{default: 1234}], namespace: business_a_namespace}) — shape: {element_name: string, language: record, localizable_params: list, namespace: string}
   --image: record # The media object containing an image — shape: {caption?: string, id?: string, link?: string, provider?: record}
   --location: record # e.g. {address: <Location's Address>, latitude: <Latitude>, longitude: <Longitude>, name: <Location Name>} — shape: {address: string, latitude: string, longitude: string, name: string}
-  --preview-url: string@bool-completer # Specifying preview_url in the request is optional when not including a URL in your message. To include a URL preview, set preview_url to true in the message body and make sure the URL begins with http:// or https://. For more information, see the Sending URLs in Text Messages section.
+  --preview-url: oneof<nothing, bool> # Specifying preview_url in the request is optional when not including a URL in your message. To include a URL preview, set preview_url to true in the message body and make sure the URL begins with http:// or https://. For more information, see the Sending URLs in Text Messages section.
   --recipient-type: string@recipient-type-completer # Determines whether the recipient is an individual or a group Specifying recipient_type in the request is optional when the value is individual. However, recipient_type is required when using group. If sending a text message to a group, see the Sending Group Messages documentation. (default: individual)
   --text: record # e.g. {body: <Message Text>} — shape: {body: string}
   --body-to: string # When recipient_type is individual, this field is the WhatsApp ID (phone number) returned from contacts endpoint. When recipient_type is group, this field is the WhatsApp group ID.
@@ -916,13 +915,13 @@ export def "settings-application UpdateApplicationSettings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --callback-backoff-delay-ms: string # Backoff delay for a failed callback in milliseconds This setting is used to configure the amount of time the backoff delays before retrying a failed callback. The backoff delay increases linearly by this value each time a callback fails to get a HTTPS 200 OK response. The backoff delay is capped by the max_callback_backoff_delay_ms setting. (default: 3000)
-  --callback-persist: string@bool-completer # Stores callbacks on disk until they are successfully acknowledged by the Webhook or not. Restart required. (default: true)
+  --callback-persist: oneof<nothing, bool> # Stores callbacks on disk until they are successfully acknowledged by the Webhook or not. Restart required. (default: true)
   --heartbeat-interval: int # Multiconnect: Interval of the Master node monitoring of Coreapp nodes in seconds (default: 5)
   --max-callback-backoff-delay-ms: string # Maximum delay for a failed callback in milliseconds (default: 900000)
   --media: record # e.g. {auto_download: [image, document, audio]} — shape: {auto_download: list}
   --on-call-pager: string # Set to valid WhatsApp Group with users who wish to see alerts for critical errors and messages.
-  --pass-through: string@bool-completer # When true, removes messages from the local database after they are delivered to or read by the recipient. When false, saves all messages on local storage until they are explicitly deleted. When messages are sent, they are stored in a local database. This database is used as the application's history. Since the business keeps its own history, you can specify whether you want message pass_through or not. Restart required. (default: true)
-  --sent-status: string@bool-completer # Receive a notification that a message is sent to server. When true, you will receive a message indicating that a message has been sent. If false (default), you will not receive notification. (default: false)
+  --pass-through: oneof<nothing, bool> # When true, removes messages from the local database after they are delivered to or read by the recipient. When false, saves all messages on local storage until they are explicitly deleted. When messages are sent, they are stored in a local database. This database is used as the application's history. Since the business keeps its own history, you can specify whether you want message pass_through or not. Restart required. (default: true)
+  --sent-status: oneof<nothing, bool> # Receive a notification that a message is sent to server. When true, you will receive a message indicating that a message has been sent. If false (default), you will not receive notification. (default: false)
   --unhealthy-interval: int # Multiconnect: Maximum amount of seconds a Master node waits for a Coreapp node to respond to a heartbeat before considering it unhealthy and starting the failover process. (default: 30)
   --webhooks: record # e.g. {max_concurrent_requests: 12, url: <Webhook URL, https>} — shape: {max_concurrent_requests?: "6"|"12"|"18"|"24", url?: string}
 ]: any -> record<errors: table<code: int, details: string, href: string, title: string>, meta: record<api_status: string, version: string>> {

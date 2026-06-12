@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -132,9 +131,9 @@ export def "async-search async-search-get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --keep-alive: string # The length of time that the async search should be available in the cluster. When not specified, the `keep_alive` set with the corresponding submit async request will be used. Otherwise, it is possible to override the value and extend the validity of the request. When this period expires, the search, if still running, is cancelled. If the search is completed, its saved results are deleted.
-  --typed-keys: string@bool-completer # Specify whether aggregation and suggester names should be prefixed by their respective types in the response
+  --typed-keys: oneof<nothing, bool> # Specify whether aggregation and suggester names should be prefixed by their respective types in the response
   --wait-for-completion-timeout: string # Specifies to wait for the search to be completed up until the provided timeout. Final results will be returned if available before the timeout expires, otherwise the currently available results will be returned once the timeout expires. By default no timeout is set meaning that the currently available results will be returned without any additional wait.
-  --return-intermediate-results: string@bool-completer # Specifies whether the response should contain intermediate results if the query is still running when the wait_for_completion_timeout expires or if no wait_for_completion_timeout is specified. If true and the search is still running, the search response will include any hits and partial aggregations that are available. If false and the search is still running, the search response will not include any hits (but possibly include total hits) nor will include any partial aggregations. When not specified, the intermediate results are returned for running queries.
+  --return-intermediate-results: oneof<nothing, bool> # Specifies whether the response should contain intermediate results if the query is still running when the wait_for_completion_timeout expires or if no wait_for_completion_timeout is specified. If true and the search is still running, the search response will include any hits and partial aggregations that are available. If false and the search is still running, the search response will not include any hits (but possibly include total hits) nor will include any partial aggregations. When not specified, the intermediate results are returned for running queries.
 ]: nothing -> record<id: record, is_partial: bool, is_running: bool, expiration_time: record, expiration_time_in_millis: record, start_time: record, start_time_in_millis: record, completion_time: record, completion_time_in_millis: record, error: record<type: string, reason: any, stack_trace: string, caused_by: record<type: string, reason: any, stack_trace: string, caused_by: record, root_cause: list, suppressed: list>, root_cause: list<record>, suppressed: list<record>>, response: record<aggregations: record, _clusters: record<skipped: float, successful: float, total: float, running: float, partial: float, failed: float, details: record>, fields: record, hits: record<total: any, hits: list, max_score: any>, max_score: float, num_reduce_phases: float, profile: record<shards: list, request: record>, pit_id: record, _scroll_id: record, _shards: record<failed: record, successful: record, total: record, failures: list, skipped: record>, suggest: record, terminated_early: bool, timed_out: bool, took: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -207,24 +206,24 @@ export def "async-search async-search-submit" [
   --allow-errors(-e) # Return full response without error handling
   --wait-for-completion-timeout: string # Blocks and waits until the search is completed up to a certain timeout. When the async search completes within the timeout, the response won’t include the ID as the results are not stored in the cluster.
   --keep-alive: string # Specifies how long the async search needs to be available. Ongoing async searches and any saved search results are deleted after this period.
-  --keep-on-completion: string@bool-completer # If `true`, results are stored for later retrieval when the search completes within the `wait_for_completion_timeout`.
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --allow-partial-search-results: string@bool-completer # Indicate if an error should be returned if there is a partial search failure or timeout
+  --keep-on-completion: oneof<nothing, bool> # If `true`, results are stored for later retrieval when the search completes within the `wait_for_completion_timeout`.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-partial-search-results: oneof<nothing, bool> # Indicate if an error should be returned if there is a partial search failure or timeout
   --analyzer: string # The analyzer to use for the query string
-  --analyze-wildcard: string@bool-completer # Specify whether wildcard and prefix queries should be analyzed
+  --analyze-wildcard: oneof<nothing, bool> # Specify whether wildcard and prefix queries should be analyzed
   --batched-reduce-size: float # Affects how often partial results become available, which happens whenever shard results are reduced. A partial reduction is performed every time the coordinating node has received a certain number of new shard responses (5 by default).
-  --ccs-minimize-roundtrips: string@bool-completer # The default value is the only supported value.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # The default value is the only supported value.
   --default-operator: string@default-operator-completer # The default operator for query string query (AND or OR)
   --df: string # The field to use as default where no field prefix is given in the query string
   --docvalue-fields: string # A comma-separated list of fields to return as the docvalue representation of a field for each hit
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indices that are open, closed or both
-  --explain: string@bool-completer # Specify whether to return detailed information about score computation as part of a hit
-  --ignore-throttled: string@bool-completer # Whether specified concrete, expanded or aliased indices should be ignored when throttled
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --lenient: string@bool-completer # Specify whether format-based query failures (such as providing text to a numeric field) should be ignored
+  --explain: oneof<nothing, bool> # Specify whether to return detailed information about score computation as part of a hit
+  --ignore-throttled: oneof<nothing, bool> # Whether specified concrete, expanded or aliased indices should be ignored when throttled
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --lenient: oneof<nothing, bool> # Specify whether format-based query failures (such as providing text to a numeric field) should be ignored
   --max-concurrent-shard-requests: float # The number of concurrent shard requests per node this search executes concurrently. This value should be used to limit the impact of the search on the cluster in order to limit the number of concurrent shard requests
   --preference: string # Specify the node or shard the operation should be performed on
-  --request-cache: string@bool-completer # Specify if request cache should be used for this request or not, defaults to true
+  --request-cache: oneof<nothing, bool> # Specify if request cache should be used for this request or not, defaults to true
   --routing: string # A comma-separated list of specific routing values
   --search-type: string@search-type-completer # Search operation type
   --stats: list # Specific 'tag' of the request for logging and statistical purposes
@@ -236,21 +235,21 @@ export def "async-search async-search-submit" [
   --terminate-after: float # The maximum number of documents to collect for each shard, upon reaching which the query execution will terminate early
   --timeout: string # Explicit operation timeout
   --track-total-hits: string # Indicate if the number of documents that match the query should be tracked. A number can also be specified, to accurately track the total hit count up to the number.
-  --track-scores: string@bool-completer # Whether to calculate and return scores even if they are not used for sorting
-  --typed-keys: string@bool-completer # Specify whether aggregation and suggester names should be prefixed by their respective types in the response
-  --rest-total-hits-as-int: string@bool-completer # Indicates whether hits.total should be rendered as an integer or an object in the rest search response
-  --version: string@bool-completer # Specify whether to return document version as part of a hit
+  --track-scores: oneof<nothing, bool> # Whether to calculate and return scores even if they are not used for sorting
+  --typed-keys: oneof<nothing, bool> # Specify whether aggregation and suggester names should be prefixed by their respective types in the response
+  --rest-total-hits-as-int: oneof<nothing, bool> # Indicates whether hits.total should be rendered as an integer or an object in the rest search response
+  --version: oneof<nothing, bool> # Specify whether to return document version as part of a hit
   --qp-source: string # True or false to return the _source field or not, or a list of fields to return
   --source-excludes: string # A list of fields to exclude from the returned _source field
   --source-includes: string # A list of fields to extract and return from the _source field
-  --seq-no-primary-term: string@bool-completer # Specify whether to return sequence number and primary term of the last modification of each hit
+  --seq-no-primary-term: oneof<nothing, bool> # Specify whether to return sequence number and primary term of the last modification of each hit
   --q: string # Query in the Lucene query string syntax
   --size: float # Number of hits to return
   --qp-from: float # Starting offset
   --qp-sort: string # A comma-separated list of <field>:<direction> pairs
   --aggregations: record
   --collapse: any
-  --explain: string@bool-completer # If true, returns detailed information about score computation as part of a hit. (default: false)
+  --explain: oneof<nothing, bool> # If true, returns detailed information about score computation as part of a hit. (default: false)
   --ext: record # Configuration of search extensions defined by Elasticsearch plugins.
   --body-from: float # Starting document offset. By default, you cannot page through more than 10,000 hits using the from and size parameters. To page through more hits, use the search_after parameter. (default: 0.0)
   --highlight: any
@@ -260,7 +259,7 @@ export def "async-search async-search-submit" [
   --knn: any # Defines the approximate kNN search to run.
   --min-score: float # Minimum _score for matching documents. Documents with a lower _score are not included in search results and results collected by aggregations.
   --post-filter: any
-  --profile: string@bool-completer
+  --profile: oneof<nothing, bool>
   --body-query: any # Defines the search definition using the Query DSL.
   --rescore: any
   --script-fields: record # Retrieve a script evaluation (based on different fields) for each hit.
@@ -273,9 +272,9 @@ export def "async-search async-search-submit" [
   --suggest: any
   --terminate-after: float # Maximum number of documents to collect for each shard. If a query reaches this limit, Elasticsearch terminates the query early. Elasticsearch collects documents before sorting. Defaults to 0, which does not terminate query execution early. (default: 0.0)
   --timeout: string # Specifies the period of time to wait for a response from each shard. If no response is received before the timeout expires, the request fails and returns an error. Defaults to no timeout.
-  --track-scores: string@bool-completer # If true, calculate and return document scores, even if the scores are not used for sorting. (default: false)
-  --version: string@bool-completer # If true, returns document version as part of a hit. (default: false)
-  --seq-no-primary-term: string@bool-completer # If true, returns sequence number and primary term of the last modification of each hit. See Optimistic concurrency control.
+  --track-scores: oneof<nothing, bool> # If true, calculate and return document scores, even if the scores are not used for sorting. (default: false)
+  --version: oneof<nothing, bool> # If true, returns document version as part of a hit. (default: false)
+  --seq-no-primary-term: oneof<nothing, bool> # If true, returns sequence number and primary term of the last modification of each hit. See Optimistic concurrency control.
   --stored-fields: any # List of stored fields to return as part of a hit. If no fields are specified, no stored fields are included in the response. If this field is specified, the _source parameter defaults to false. You can pass _source: true to return both source fields and stored fields in the search response.
   --pit: any # Limits the search to a point in time (PIT). If you provide a PIT, you cannot specify an <index> in the request path.
   --runtime-mappings: any # Defines one or more runtime fields in the search request. These fields take precedence over mapped fields with the same name.
@@ -310,24 +309,24 @@ export def "async-search async-search-submit-1" [
   --allow-errors(-e) # Return full response without error handling
   --wait-for-completion-timeout: string # Blocks and waits until the search is completed up to a certain timeout. When the async search completes within the timeout, the response won’t include the ID as the results are not stored in the cluster.
   --keep-alive: string # Specifies how long the async search needs to be available. Ongoing async searches and any saved search results are deleted after this period.
-  --keep-on-completion: string@bool-completer # If `true`, results are stored for later retrieval when the search completes within the `wait_for_completion_timeout`.
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --allow-partial-search-results: string@bool-completer # Indicate if an error should be returned if there is a partial search failure or timeout
+  --keep-on-completion: oneof<nothing, bool> # If `true`, results are stored for later retrieval when the search completes within the `wait_for_completion_timeout`.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-partial-search-results: oneof<nothing, bool> # Indicate if an error should be returned if there is a partial search failure or timeout
   --analyzer: string # The analyzer to use for the query string
-  --analyze-wildcard: string@bool-completer # Specify whether wildcard and prefix queries should be analyzed
+  --analyze-wildcard: oneof<nothing, bool> # Specify whether wildcard and prefix queries should be analyzed
   --batched-reduce-size: float # Affects how often partial results become available, which happens whenever shard results are reduced. A partial reduction is performed every time the coordinating node has received a certain number of new shard responses (5 by default).
-  --ccs-minimize-roundtrips: string@bool-completer # The default value is the only supported value.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # The default value is the only supported value.
   --default-operator: string@default-operator-completer # The default operator for query string query (AND or OR)
   --df: string # The field to use as default where no field prefix is given in the query string
   --docvalue-fields: string # A comma-separated list of fields to return as the docvalue representation of a field for each hit
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indices that are open, closed or both
-  --explain: string@bool-completer # Specify whether to return detailed information about score computation as part of a hit
-  --ignore-throttled: string@bool-completer # Whether specified concrete, expanded or aliased indices should be ignored when throttled
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --lenient: string@bool-completer # Specify whether format-based query failures (such as providing text to a numeric field) should be ignored
+  --explain: oneof<nothing, bool> # Specify whether to return detailed information about score computation as part of a hit
+  --ignore-throttled: oneof<nothing, bool> # Whether specified concrete, expanded or aliased indices should be ignored when throttled
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --lenient: oneof<nothing, bool> # Specify whether format-based query failures (such as providing text to a numeric field) should be ignored
   --max-concurrent-shard-requests: float # The number of concurrent shard requests per node this search executes concurrently. This value should be used to limit the impact of the search on the cluster in order to limit the number of concurrent shard requests
   --preference: string # Specify the node or shard the operation should be performed on
-  --request-cache: string@bool-completer # Specify if request cache should be used for this request or not, defaults to true
+  --request-cache: oneof<nothing, bool> # Specify if request cache should be used for this request or not, defaults to true
   --routing: string # A comma-separated list of specific routing values
   --search-type: string@search-type-completer # Search operation type
   --stats: list # Specific 'tag' of the request for logging and statistical purposes
@@ -339,21 +338,21 @@ export def "async-search async-search-submit-1" [
   --terminate-after: float # The maximum number of documents to collect for each shard, upon reaching which the query execution will terminate early
   --timeout: string # Explicit operation timeout
   --track-total-hits: string # Indicate if the number of documents that match the query should be tracked. A number can also be specified, to accurately track the total hit count up to the number.
-  --track-scores: string@bool-completer # Whether to calculate and return scores even if they are not used for sorting
-  --typed-keys: string@bool-completer # Specify whether aggregation and suggester names should be prefixed by their respective types in the response
-  --rest-total-hits-as-int: string@bool-completer # Indicates whether hits.total should be rendered as an integer or an object in the rest search response
-  --version: string@bool-completer # Specify whether to return document version as part of a hit
+  --track-scores: oneof<nothing, bool> # Whether to calculate and return scores even if they are not used for sorting
+  --typed-keys: oneof<nothing, bool> # Specify whether aggregation and suggester names should be prefixed by their respective types in the response
+  --rest-total-hits-as-int: oneof<nothing, bool> # Indicates whether hits.total should be rendered as an integer or an object in the rest search response
+  --version: oneof<nothing, bool> # Specify whether to return document version as part of a hit
   --qp-source: string # True or false to return the _source field or not, or a list of fields to return
   --source-excludes: string # A list of fields to exclude from the returned _source field
   --source-includes: string # A list of fields to extract and return from the _source field
-  --seq-no-primary-term: string@bool-completer # Specify whether to return sequence number and primary term of the last modification of each hit
+  --seq-no-primary-term: oneof<nothing, bool> # Specify whether to return sequence number and primary term of the last modification of each hit
   --q: string # Query in the Lucene query string syntax
   --size: float # Number of hits to return
   --qp-from: float # Starting offset
   --qp-sort: string # A comma-separated list of <field>:<direction> pairs
   --aggregations: record
   --collapse: any
-  --explain: string@bool-completer # If true, returns detailed information about score computation as part of a hit. (default: false)
+  --explain: oneof<nothing, bool> # If true, returns detailed information about score computation as part of a hit. (default: false)
   --ext: record # Configuration of search extensions defined by Elasticsearch plugins.
   --body-from: float # Starting document offset. By default, you cannot page through more than 10,000 hits using the from and size parameters. To page through more hits, use the search_after parameter. (default: 0.0)
   --highlight: any
@@ -363,7 +362,7 @@ export def "async-search async-search-submit-1" [
   --knn: any # Defines the approximate kNN search to run.
   --min-score: float # Minimum _score for matching documents. Documents with a lower _score are not included in search results and results collected by aggregations.
   --post-filter: any
-  --profile: string@bool-completer
+  --profile: oneof<nothing, bool>
   --body-query: any # Defines the search definition using the Query DSL.
   --rescore: any
   --script-fields: record # Retrieve a script evaluation (based on different fields) for each hit.
@@ -376,9 +375,9 @@ export def "async-search async-search-submit-1" [
   --suggest: any
   --terminate-after: float # Maximum number of documents to collect for each shard. If a query reaches this limit, Elasticsearch terminates the query early. Elasticsearch collects documents before sorting. Defaults to 0, which does not terminate query execution early. (default: 0.0)
   --timeout: string # Specifies the period of time to wait for a response from each shard. If no response is received before the timeout expires, the request fails and returns an error. Defaults to no timeout.
-  --track-scores: string@bool-completer # If true, calculate and return document scores, even if the scores are not used for sorting. (default: false)
-  --version: string@bool-completer # If true, returns document version as part of a hit. (default: false)
-  --seq-no-primary-term: string@bool-completer # If true, returns sequence number and primary term of the last modification of each hit. See Optimistic concurrency control.
+  --track-scores: oneof<nothing, bool> # If true, calculate and return document scores, even if the scores are not used for sorting. (default: false)
+  --version: oneof<nothing, bool> # If true, returns document version as part of a hit. (default: false)
+  --seq-no-primary-term: oneof<nothing, bool> # If true, returns sequence number and primary term of the last modification of each hit. See Optimistic concurrency control.
   --stored-fields: any # List of stored fields to return as part of a hit. If no fields are specified, no stored fields are included in the response. If this field is specified, the _source parameter defaults to false. You can pass _source: true to return both source fields and stored fields in the search response.
   --pit: any # Limits the search to a point in time (PIT). If you provide a PIT, you cannot specify an <index> in the request path.
   --runtime-mappings: any # Defines one or more runtime fields in the search request. These fields take precedence over mapped fields with the same name.
@@ -409,8 +408,8 @@ export def "bulk bulk-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-source-on-error: string@bool-completer # True or false if to include the document source in the error message in case of parsing errors.
-  --list-executed-pipelines: string@bool-completer # If `true`, the response will include the ingest pipelines that were run for each index or create.
+  --include-source-on-error: oneof<nothing, bool> # True or false if to include the document source in the error message in case of parsing errors.
+  --list-executed-pipelines: oneof<nothing, bool> # If `true`, the response will include the ingest pipelines that were run for each index or create.
   --pipeline: string # The pipeline identifier to use to preprocess incoming documents. If the index has a default ingest pipeline specified, setting the value to `_none` turns off the default ingest pipeline for this request. If a final pipeline is configured, it will always run regardless of the value of this parameter.
   --refresh: string@refresh-completer # If `true`, Elasticsearch refreshes the affected shards to make this operation visible to search. If `wait_for`, wait for a refresh to make this operation visible to search. If `false`, do nothing with refreshes. Valid values: `true`, `false`, `wait_for`.
   --routing: string # A custom value that is used to route operations to a specific shard.
@@ -419,8 +418,8 @@ export def "bulk bulk-1" [
   --source-includes: string # A comma-separated list of source fields to include in the response. If this parameter is specified, only these source fields are returned. You can exclude fields from this subset using the `_source_excludes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
   --timeout: string # The period each action waits for the following operations: automatic index creation, dynamic mapping updates, and waiting for active shards. The default is `1m` (one minute), which guarantees Elasticsearch waits for at least the timeout before failing. The actual wait time could be longer, particularly when multiple waits occur.
   --wait-for-active-shards: string # The number of shard copies that must be active before proceeding with the operation. Set to `all` or any positive integer up to the total number of shards in the index (`number_of_replicas+1`). The default is `1`, which waits for each primary shard to be active.
-  --require-alias: string@bool-completer # If `true`, the request's actions must target an index alias.
-  --require-data-stream: string@bool-completer # If `true`, the request's actions must target a data stream (existing or to be created).
+  --require-alias: oneof<nothing, bool> # If `true`, the request's actions must target an index alias.
+  --require-data-stream: oneof<nothing, bool> # If `true`, the request's actions must target a data stream (existing or to be created).
   --body: record
 ]: any -> any {
   let input = $in
@@ -447,8 +446,8 @@ export def "bulk bulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-source-on-error: string@bool-completer # True or false if to include the document source in the error message in case of parsing errors.
-  --list-executed-pipelines: string@bool-completer # If `true`, the response will include the ingest pipelines that were run for each index or create.
+  --include-source-on-error: oneof<nothing, bool> # True or false if to include the document source in the error message in case of parsing errors.
+  --list-executed-pipelines: oneof<nothing, bool> # If `true`, the response will include the ingest pipelines that were run for each index or create.
   --pipeline: string # The pipeline identifier to use to preprocess incoming documents. If the index has a default ingest pipeline specified, setting the value to `_none` turns off the default ingest pipeline for this request. If a final pipeline is configured, it will always run regardless of the value of this parameter.
   --refresh: string@refresh-completer # If `true`, Elasticsearch refreshes the affected shards to make this operation visible to search. If `wait_for`, wait for a refresh to make this operation visible to search. If `false`, do nothing with refreshes. Valid values: `true`, `false`, `wait_for`.
   --routing: string # A custom value that is used to route operations to a specific shard.
@@ -457,8 +456,8 @@ export def "bulk bulk" [
   --source-includes: string # A comma-separated list of source fields to include in the response. If this parameter is specified, only these source fields are returned. You can exclude fields from this subset using the `_source_excludes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
   --timeout: string # The period each action waits for the following operations: automatic index creation, dynamic mapping updates, and waiting for active shards. The default is `1m` (one minute), which guarantees Elasticsearch waits for at least the timeout before failing. The actual wait time could be longer, particularly when multiple waits occur.
   --wait-for-active-shards: string # The number of shard copies that must be active before proceeding with the operation. Set to `all` or any positive integer up to the total number of shards in the index (`number_of_replicas+1`). The default is `1`, which waits for each primary shard to be active.
-  --require-alias: string@bool-completer # If `true`, the request's actions must target an index alias.
-  --require-data-stream: string@bool-completer # If `true`, the request's actions must target a data stream (existing or to be created).
+  --require-alias: oneof<nothing, bool> # If `true`, the request's actions must target an index alias.
+  --require-data-stream: oneof<nothing, bool> # If `true`, the request's actions must target a data stream (existing or to be created).
   --body: record
 ]: any -> any {
   let input = $in
@@ -486,8 +485,8 @@ export def "bulk bulk-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-source-on-error: string@bool-completer # True or false if to include the document source in the error message in case of parsing errors.
-  --list-executed-pipelines: string@bool-completer # If `true`, the response will include the ingest pipelines that were run for each index or create.
+  --include-source-on-error: oneof<nothing, bool> # True or false if to include the document source in the error message in case of parsing errors.
+  --list-executed-pipelines: oneof<nothing, bool> # If `true`, the response will include the ingest pipelines that were run for each index or create.
   --pipeline: string # The pipeline identifier to use to preprocess incoming documents. If the index has a default ingest pipeline specified, setting the value to `_none` turns off the default ingest pipeline for this request. If a final pipeline is configured, it will always run regardless of the value of this parameter.
   --refresh: string@refresh-completer # If `true`, Elasticsearch refreshes the affected shards to make this operation visible to search. If `wait_for`, wait for a refresh to make this operation visible to search. If `false`, do nothing with refreshes. Valid values: `true`, `false`, `wait_for`.
   --routing: string # A custom value that is used to route operations to a specific shard.
@@ -496,8 +495,8 @@ export def "bulk bulk-3" [
   --source-includes: string # A comma-separated list of source fields to include in the response. If this parameter is specified, only these source fields are returned. You can exclude fields from this subset using the `_source_excludes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
   --timeout: string # The period each action waits for the following operations: automatic index creation, dynamic mapping updates, and waiting for active shards. The default is `1m` (one minute), which guarantees Elasticsearch waits for at least the timeout before failing. The actual wait time could be longer, particularly when multiple waits occur.
   --wait-for-active-shards: string # The number of shard copies that must be active before proceeding with the operation. Set to `all` or any positive integer up to the total number of shards in the index (`number_of_replicas+1`). The default is `1`, which waits for each primary shard to be active.
-  --require-alias: string@bool-completer # If `true`, the request's actions must target an index alias.
-  --require-data-stream: string@bool-completer # If `true`, the request's actions must target a data stream (existing or to be created).
+  --require-alias: oneof<nothing, bool> # If `true`, the request's actions must target an index alias.
+  --require-data-stream: oneof<nothing, bool> # If `true`, the request's actions must target a data stream (existing or to be created).
   --body: record
 ]: any -> any {
   let input = $in
@@ -525,8 +524,8 @@ export def "bulk bulk-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-source-on-error: string@bool-completer # True or false if to include the document source in the error message in case of parsing errors.
-  --list-executed-pipelines: string@bool-completer # If `true`, the response will include the ingest pipelines that were run for each index or create.
+  --include-source-on-error: oneof<nothing, bool> # True or false if to include the document source in the error message in case of parsing errors.
+  --list-executed-pipelines: oneof<nothing, bool> # If `true`, the response will include the ingest pipelines that were run for each index or create.
   --pipeline: string # The pipeline identifier to use to preprocess incoming documents. If the index has a default ingest pipeline specified, setting the value to `_none` turns off the default ingest pipeline for this request. If a final pipeline is configured, it will always run regardless of the value of this parameter.
   --refresh: string@refresh-completer # If `true`, Elasticsearch refreshes the affected shards to make this operation visible to search. If `wait_for`, wait for a refresh to make this operation visible to search. If `false`, do nothing with refreshes. Valid values: `true`, `false`, `wait_for`.
   --routing: string # A custom value that is used to route operations to a specific shard.
@@ -535,8 +534,8 @@ export def "bulk bulk-2" [
   --source-includes: string # A comma-separated list of source fields to include in the response. If this parameter is specified, only these source fields are returned. You can exclude fields from this subset using the `_source_excludes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
   --timeout: string # The period each action waits for the following operations: automatic index creation, dynamic mapping updates, and waiting for active shards. The default is `1m` (one minute), which guarantees Elasticsearch waits for at least the timeout before failing. The actual wait time could be longer, particularly when multiple waits occur.
   --wait-for-active-shards: string # The number of shard copies that must be active before proceeding with the operation. Set to `all` or any positive integer up to the total number of shards in the index (`number_of_replicas+1`). The default is `1`, which waits for each primary shard to be active.
-  --require-alias: string@bool-completer # If `true`, the request's actions must target an index alias.
-  --require-data-stream: string@bool-completer # If `true`, the request's actions must target a data stream (existing or to be created).
+  --require-alias: oneof<nothing, bool> # If `true`, the request's actions must target an index alias.
+  --require-data-stream: oneof<nothing, bool> # If `true`, the request's actions must target a data stream (existing or to be created).
   --body: record
 ]: any -> any {
   let input = $in
@@ -563,7 +562,7 @@ export def "reindex-cancel cancel-reindex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait-for-completion: string@bool-completer # If `true` (the default), the request blocks until the cancellation is complete and returns the final task state. If `false`, the request returns immediately with `acknowledged: true`.
+  --wait-for-completion: oneof<nothing, bool> # If `true` (the default), the request blocks until the cancellation is complete and returns the final task state. If `false`, the request returns immediately with `acknowledged: true`.
 ]: nothing -> record<acknowledged: bool, completed: bool, id: record, description: string, start_time_in_millis: record, start_time: string, running_time: record, running_time_in_nanos: record, cancelled: bool, status: record<slice_id: float, batches: float, created: float, deleted: float, noops: float, requests_per_second: float, retries: record<bulk: float, search: float>, throttled: record, throttled_millis: record, throttled_until: record, throttled_until_millis: record, total: float, updated: float, version_conflicts: float, cancelled: string>, error: record<type: string, reason: any, stack_trace: string, caused_by: record<type: string, reason: any, stack_trace: string, caused_by: record, root_cause: list, suppressed: list>, root_cause: list<record>, suppressed: list<record>>, response: record<batches: float, created: float, deleted: float, failures: list<record>, noops: float, requests_per_second: float, retries: record<bulk: float, search: float>, throttled_millis: record, throttled_until_millis: record, timed_out: bool, took: record, total: float, updated: float, version_conflicts: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -641,7 +640,7 @@ export def "cat-allocation cat-allocation" [
   --allow-errors(-e) # Return full response without error handling
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # List of columns that determine how the table should be sorted. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
-  --local: string@bool-completer # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
+  --local: oneof<nothing, bool> # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
   --master-timeout: string # Period to wait for a connection to the master node.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -668,7 +667,7 @@ export def "cat-allocation cat-allocation-1" [
   --allow-errors(-e) # Return full response without error handling
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # List of columns that determine how the table should be sorted. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
-  --local: string@bool-completer # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
+  --local: oneof<nothing, bool> # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
   --master-timeout: string # Period to wait for a connection to the master node.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -694,7 +693,7 @@ export def "cat-circuit-breaker cat-circuit-breaker" [
   --allow-errors(-e) # Return full response without error handling
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # List of columns that determine how the table should be sorted. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
-  --local: string@bool-completer # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
+  --local: oneof<nothing, bool> # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
   --master-timeout: string # Period to wait for a connection to the master node.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -721,7 +720,7 @@ export def "cat-circuit-breaker cat-circuit-breaker-1" [
   --allow-errors(-e) # Return full response without error handling
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # List of columns that determine how the table should be sorted. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
-  --local: string@bool-completer # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
+  --local: oneof<nothing, bool> # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
   --master-timeout: string # Period to wait for a connection to the master node.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -747,7 +746,7 @@ export def "cat-component-templates cat-component-templates" [
   --allow-errors(-e) # Return full response without error handling
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # List of columns that determine how the table should be sorted. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
-  --local: string@bool-completer # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
+  --local: oneof<nothing, bool> # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
   --master-timeout: string # The period to wait for a connection to the master node.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -774,7 +773,7 @@ export def "cat-component-templates cat-component-templates-1" [
   --allow-errors(-e) # Return full response without error handling
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # List of columns that determine how the table should be sorted. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
-  --local: string@bool-completer # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
+  --local: oneof<nothing, bool> # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
   --master-timeout: string # The period to wait for a connection to the master node.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -959,7 +958,7 @@ export def "cat-health cat-health" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ts: string@bool-completer # If true, returns `HH:MM:SS` and Unix epoch timestamps.
+  --ts: oneof<nothing, bool> # If true, returns `HH:MM:SS` and Unix epoch timestamps.
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # List of columns that determine how the table should be sorted. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
 ]: nothing -> table<epoch: record, timestamp: record, cluster: string, status: string, node_total: string, node_data: string, shards: string, pri: string, relo: string, init: string, unassign_pri: string, unassign: string, pending_tasks: string, max_task_wait_time: string, active_shards_percent: string> {
@@ -1007,8 +1006,8 @@ export def "cat-indices cat-indices" [
   --allow-errors(-e) # Return full response without error handling
   --expand-wildcards: string # The type of index that wildcard patterns can match.
   --health: string@health-completer # The health status used to limit returned indices. By default, the response includes indices of any health status.
-  --include-unloaded-segments: string@bool-completer # If true, the response includes information from segments that are not loaded into memory.
-  --pri: string@bool-completer # If true, the response only includes information from primary shards.
+  --include-unloaded-segments: oneof<nothing, bool> # If true, the response includes information from segments that are not loaded into memory.
+  --pri: oneof<nothing, bool> # If true, the response only includes information from primary shards.
   --master-timeout: string # Period to wait for a connection to the master node.
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # List of columns that determine how the table should be sorted. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
@@ -1037,8 +1036,8 @@ export def "cat-indices cat-indices-1" [
   --allow-errors(-e) # Return full response without error handling
   --expand-wildcards: string # The type of index that wildcard patterns can match.
   --health: string@health-completer # The health status used to limit returned indices. By default, the response includes indices of any health status.
-  --include-unloaded-segments: string@bool-completer # If true, the response includes information from segments that are not loaded into memory.
-  --pri: string@bool-completer # If true, the response only includes information from primary shards.
+  --include-unloaded-segments: oneof<nothing, bool> # If true, the response includes information from segments that are not loaded into memory.
+  --pri: oneof<nothing, bool> # If true, the response only includes information from primary shards.
   --master-timeout: string # Period to wait for a connection to the master node.
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # List of columns that determine how the table should be sorted. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
@@ -1066,7 +1065,7 @@ export def "cat-master cat-master" [
   --allow-errors(-e) # Return full response without error handling
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # List of columns that determine how the table should be sorted. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
-  --local: string@bool-completer # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
+  --local: oneof<nothing, bool> # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
   --master-timeout: string # Period to wait for a connection to the master node.
 ]: nothing -> table<id: string, host: string, ip: string, node: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1090,7 +1089,7 @@ export def "cat-ml-data-frame-analytics cat-ml-data-frame-analytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Whether to ignore if a wildcard expression matches no configs. (This includes `_all` string or when no configs have been specified.)
+  --allow-no-match: oneof<nothing, bool> # Whether to ignore if a wildcard expression matches no configs. (This includes `_all` string or when no configs have been specified.)
   --h: string # Comma-separated list of column names to display.
   --s: string # Comma-separated list of column names or column aliases used to sort the response.
 ]: nothing -> any {
@@ -1116,7 +1115,7 @@ export def "cat-ml-data-frame-analytics cat-ml-data-frame-analytics-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Whether to ignore if a wildcard expression matches no configs. (This includes `_all` string or when no configs have been specified.)
+  --allow-no-match: oneof<nothing, bool> # Whether to ignore if a wildcard expression matches no configs. (This includes `_all` string or when no configs have been specified.)
   --h: string # Comma-separated list of column names to display.
   --s: string # Comma-separated list of column names or column aliases used to sort the response.
 ]: nothing -> any {
@@ -1141,7 +1140,7 @@ export def "cat-ml-datafeeds cat-ml-datafeeds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  * Contains wildcard expressions and there are no datafeeds that match. * Contains the `_all` string or no identifiers and there are no matches. * Contains wildcard expressions and there are only partial matches.  If `true`, the API returns an empty datafeeds array when there are no matches and the subset of results when there are partial matches. If `false`, the API returns a 404 status code when there are no matches or only partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  * Contains wildcard expressions and there are no datafeeds that match. * Contains the `_all` string or no identifiers and there are no matches. * Contains wildcard expressions and there are only partial matches.  If `true`, the API returns an empty datafeeds array when there are no matches and the subset of results when there are partial matches. If `false`, the API returns a 404 status code when there are no matches or only partial matches.
   --h: string # Comma-separated list of column names to display.
   --s: string # Comma-separated list of column names or column aliases used to sort the response.
 ]: nothing -> any {
@@ -1167,7 +1166,7 @@ export def "cat-ml-datafeeds cat-ml-datafeeds-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  * Contains wildcard expressions and there are no datafeeds that match. * Contains the `_all` string or no identifiers and there are no matches. * Contains wildcard expressions and there are only partial matches.  If `true`, the API returns an empty datafeeds array when there are no matches and the subset of results when there are partial matches. If `false`, the API returns a 404 status code when there are no matches or only partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  * Contains wildcard expressions and there are no datafeeds that match. * Contains the `_all` string or no identifiers and there are no matches. * Contains wildcard expressions and there are only partial matches.  If `true`, the API returns an empty datafeeds array when there are no matches and the subset of results when there are partial matches. If `false`, the API returns a 404 status code when there are no matches or only partial matches.
   --h: string # Comma-separated list of column names to display.
   --s: string # Comma-separated list of column names or column aliases used to sort the response.
 ]: nothing -> any {
@@ -1192,7 +1191,7 @@ export def "cat-ml-anomaly-detectors cat-ml-jobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  * Contains wildcard expressions and there are no jobs that match. * Contains the `_all` string or no identifiers and there are no matches. * Contains wildcard expressions and there are only partial matches.  If `true`, the API returns an empty jobs array when there are no matches and the subset of results when there are partial matches. If `false`, the API returns a 404 status code when there are no matches or only partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  * Contains wildcard expressions and there are no jobs that match. * Contains the `_all` string or no identifiers and there are no matches. * Contains wildcard expressions and there are only partial matches.  If `true`, the API returns an empty jobs array when there are no matches and the subset of results when there are partial matches. If `false`, the API returns a 404 status code when there are no matches or only partial matches.
   --h: string # Comma-separated list of column names to display.
   --s: string # Comma-separated list of column names or column aliases used to sort the response.
 ]: nothing -> any {
@@ -1218,7 +1217,7 @@ export def "cat-ml-anomaly-detectors cat-ml-jobs-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  * Contains wildcard expressions and there are no jobs that match. * Contains the `_all` string or no identifiers and there are no matches. * Contains wildcard expressions and there are only partial matches.  If `true`, the API returns an empty jobs array when there are no matches and the subset of results when there are partial matches. If `false`, the API returns a 404 status code when there are no matches or only partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  * Contains wildcard expressions and there are no jobs that match. * Contains the `_all` string or no identifiers and there are no matches. * Contains wildcard expressions and there are only partial matches.  If `true`, the API returns an empty jobs array when there are no matches and the subset of results when there are partial matches. If `false`, the API returns a 404 status code when there are no matches or only partial matches.
   --h: string # Comma-separated list of column names to display.
   --s: string # Comma-separated list of column names or column aliases used to sort the response.
 ]: nothing -> any {
@@ -1243,7 +1242,7 @@ export def "cat-ml-trained-models cat-ml-trained-models" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request: contains wildcard expressions and there are no models that match; contains the `_all` string or no identifiers and there are no matches; contains wildcard expressions and there are only partial matches. If `true`, the API returns an empty array when there are no matches and the subset of results when there are partial matches. If `false`, the API returns a 404 status code when there are no matches or only partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request: contains wildcard expressions and there are no models that match; contains the `_all` string or no identifiers and there are no matches; contains wildcard expressions and there are only partial matches. If `true`, the API returns an empty array when there are no matches and the subset of results when there are partial matches. If `false`, the API returns a 404 status code when there are no matches or only partial matches.
   --h: string # A comma-separated list of column names to display.
   --s: string # A comma-separated list of column names or aliases used to sort the response.
   --qp-from: float # Skips the specified number of transforms.
@@ -1271,7 +1270,7 @@ export def "cat-ml-trained-models cat-ml-trained-models-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request: contains wildcard expressions and there are no models that match; contains the `_all` string or no identifiers and there are no matches; contains wildcard expressions and there are only partial matches. If `true`, the API returns an empty array when there are no matches and the subset of results when there are partial matches. If `false`, the API returns a 404 status code when there are no matches or only partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request: contains wildcard expressions and there are no models that match; contains the `_all` string or no identifiers and there are no matches; contains wildcard expressions and there are only partial matches. If `true`, the API returns an empty array when there are no matches and the subset of results when there are partial matches. If `false`, the API returns a 404 status code when there are no matches or only partial matches.
   --h: string # A comma-separated list of column names to display.
   --s: string # A comma-separated list of column names or aliases used to sort the response.
   --qp-from: float # Skips the specified number of transforms.
@@ -1300,7 +1299,7 @@ export def "cat-nodeattrs cat-nodeattrs" [
   --allow-errors(-e) # Return full response without error handling
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # List of columns that determine how the table should be sorted. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
-  --local: string@bool-completer # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
+  --local: oneof<nothing, bool> # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
   --master-timeout: string # Period to wait for a connection to the master node.
 ]: nothing -> table<node: string, id: string, pid: string, host: string, ip: string, port: string, attr: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1324,8 +1323,8 @@ export def "cat-nodes cat-nodes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --full-id: string@bool-completer # If `true`, return the full node ID. If `false`, return the shortened node ID.
-  --include-unloaded-segments: string@bool-completer # If true, the response includes information from segments that are not loaded into memory.
+  --full-id: oneof<nothing, bool> # If `true`, return the full node ID. If `false`, return the shortened node ID.
+  --include-unloaded-segments: oneof<nothing, bool> # If true, the response includes information from segments that are not loaded into memory.
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # A comma-separated list of column names or aliases that determines the sort order. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
   --master-timeout: string # The period to wait for a connection to the master node.
@@ -1353,7 +1352,7 @@ export def "cat-pending-tasks cat-pending-tasks" [
   --allow-errors(-e) # Return full response without error handling
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # List of columns that determine how the table should be sorted. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
-  --local: string@bool-completer # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
+  --local: oneof<nothing, bool> # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
   --master-timeout: string # Period to wait for a connection to the master node.
 ]: nothing -> table<insertOrder: string, timeInQueue: string, priority: string, source: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1379,8 +1378,8 @@ export def "cat-plugins cat-plugins" [
   --allow-errors(-e) # Return full response without error handling
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # List of columns that determine how the table should be sorted. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
-  --include-bootstrap: string@bool-completer # Include bootstrap plugins in the response
-  --local: string@bool-completer # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
+  --include-bootstrap: oneof<nothing, bool> # Include bootstrap plugins in the response
+  --local: oneof<nothing, bool> # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
   --master-timeout: string # Period to wait for a connection to the master node.
 ]: nothing -> table<id: record, name: record, component: string, version: record, description: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1404,8 +1403,8 @@ export def "cat-recovery cat-recovery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active-only: string@bool-completer # If `true`, the response only includes ongoing shard recoveries.
-  --detailed: string@bool-completer # If `true`, the response includes detailed information about shard recoveries.
+  --active-only: oneof<nothing, bool> # If `true`, the response only includes ongoing shard recoveries.
+  --detailed: oneof<nothing, bool> # If `true`, the response includes detailed information about shard recoveries.
   --index: string # Comma-separated list or wildcard expression of index names to limit the returned information
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # A comma-separated list of column names or aliases that determines the sort order. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
@@ -1432,8 +1431,8 @@ export def "cat-recovery cat-recovery-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active-only: string@bool-completer # If `true`, the response only includes ongoing shard recoveries.
-  --detailed: string@bool-completer # If `true`, the response includes detailed information about shard recoveries.
+  --active-only: oneof<nothing, bool> # If `true`, the response only includes ongoing shard recoveries.
+  --detailed: oneof<nothing, bool> # If `true`, the response includes detailed information about shard recoveries.
   --index: string # Comma-separated list or wildcard expression of index names to limit the returned information
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # A comma-separated list of column names or aliases that determines the sort order. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
@@ -1461,7 +1460,7 @@ export def "cat-repositories cat-repositories" [
   --allow-errors(-e) # Return full response without error handling
   --h: string # List of columns to appear in the response. Supports simple wildcards.
   --s: string # List of columns that determine how the table should be sorted. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
-  --local: string@bool-completer # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
+  --local: oneof<nothing, bool> # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
   --master-timeout: string # Period to wait for a connection to the master node.
 ]: nothing -> table<id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1487,13 +1486,13 @@ export def "cat-segments cat-segments" [
   --allow-errors(-e) # Return full response without error handling
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # A comma-separated list of column names or aliases that determines the sort order. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
-  --local: string@bool-completer # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
+  --local: oneof<nothing, bool> # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
   --master-timeout: string # Period to wait for a connection to the master node.
   --expand-wildcards: string # Type of index that wildcard expressions can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as open,hidden.
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --ignore-throttled: string@bool-completer # If true, concrete, expanded or aliased indices are ignored when frozen.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --allow-closed: string@bool-completer # If true, allow closed indices to be returned in the response otherwise if false, keep the legacy behaviour of throwing an exception if index pattern matches closed indices
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --ignore-throttled: oneof<nothing, bool> # If true, concrete, expanded or aliased indices are ignored when frozen.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --allow-closed: oneof<nothing, bool> # If true, allow closed indices to be returned in the response otherwise if false, keep the legacy behaviour of throwing an exception if index pattern matches closed indices
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1519,13 +1518,13 @@ export def "cat-segments cat-segments-1" [
   --allow-errors(-e) # Return full response without error handling
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # A comma-separated list of column names or aliases that determines the sort order. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
-  --local: string@bool-completer # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
+  --local: oneof<nothing, bool> # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
   --master-timeout: string # Period to wait for a connection to the master node.
   --expand-wildcards: string # Type of index that wildcard expressions can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as open,hidden.
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --ignore-throttled: string@bool-completer # If true, concrete, expanded or aliased indices are ignored when frozen.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --allow-closed: string@bool-completer # If true, allow closed indices to be returned in the response otherwise if false, keep the legacy behaviour of throwing an exception if index pattern matches closed indices
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --ignore-throttled: oneof<nothing, bool> # If true, concrete, expanded or aliased indices are ignored when frozen.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --allow-closed: oneof<nothing, bool> # If true, allow closed indices to be returned in the response otherwise if false, keep the legacy behaviour of throwing an exception if index pattern matches closed indices
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1599,7 +1598,7 @@ export def "cat-snapshots cat-snapshots" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ignore-unavailable: string@bool-completer # If `true`, the response does not include information from unavailable snapshots.
+  --ignore-unavailable: oneof<nothing, bool> # If `true`, the response does not include information from unavailable snapshots.
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # List of columns that determine how the table should be sorted. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
   --master-timeout: string # Period to wait for a connection to the master node.
@@ -1626,7 +1625,7 @@ export def "cat-snapshots cat-snapshots-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ignore-unavailable: string@bool-completer # If `true`, the response does not include information from unavailable snapshots.
+  --ignore-unavailable: oneof<nothing, bool> # If `true`, the response does not include information from unavailable snapshots.
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # List of columns that determine how the table should be sorted. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
   --master-timeout: string # Period to wait for a connection to the master node.
@@ -1653,13 +1652,13 @@ export def "cat-tasks cat-tasks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --actions: list # The task action names, which are used to limit the response.
-  --detailed: string@bool-completer # If `true`, the response includes detailed information about shard recoveries.
+  --detailed: oneof<nothing, bool> # If `true`, the response includes detailed information about shard recoveries.
   --nodes: list # Unique node identifiers, which are used to limit the response.
   --parent-task-id: string # The parent task identifier, which is used to limit the response.
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # List of columns that determine how the table should be sorted. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
-  --wait-for-completion: string@bool-completer # If `true`, the request blocks until the task has completed.
+  --wait-for-completion: oneof<nothing, bool> # If `true`, the request blocks until the task has completed.
 ]: nothing -> table<id: record, action: string, task_id: record, parent_task_id: string, type: string, start_time: string, timestamp: string, running_time_ns: string, running_time: string, node_id: record, ip: string, port: string, node: string, version: record, x_opaque_id: string, description: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1684,7 +1683,7 @@ export def "cat-templates cat-templates" [
   --allow-errors(-e) # Return full response without error handling
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # List of columns that determine how the table should be sorted. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
-  --local: string@bool-completer # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
+  --local: oneof<nothing, bool> # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
   --master-timeout: string # Period to wait for a connection to the master node.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1711,7 +1710,7 @@ export def "cat-templates cat-templates-1" [
   --allow-errors(-e) # Return full response without error handling
   --h: string # A comma-separated list of columns names to display. It supports simple wildcards.
   --s: string # List of columns that determine how the table should be sorted. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
-  --local: string@bool-completer # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
+  --local: oneof<nothing, bool> # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
   --master-timeout: string # Period to wait for a connection to the master node.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1737,7 +1736,7 @@ export def "cat-thread-pool cat-thread-pool" [
   --allow-errors(-e) # Return full response without error handling
   --h: string # List of columns to appear in the response. Supports simple wildcards.
   --s: string # A comma-separated list of column names or aliases that determines the sort order. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
-  --local: string@bool-completer # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
+  --local: oneof<nothing, bool> # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
   --master-timeout: string # The period to wait for a connection to the master node.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1764,7 +1763,7 @@ export def "cat-thread-pool cat-thread-pool-1" [
   --allow-errors(-e) # Return full response without error handling
   --h: string # List of columns to appear in the response. Supports simple wildcards.
   --s: string # A comma-separated list of column names or aliases that determines the sort order. Sorting defaults to ascending and can be changed by setting `:asc` or `:desc` as a suffix to the column name.
-  --local: string@bool-completer # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
+  --local: oneof<nothing, bool> # If `true`, the request computes the list of selected nodes from the local cluster state. If `false` the list of selected nodes are computed from the cluster state of the master node. In both cases the coordinating node will send requests for further information to each selected node.
   --master-timeout: string # The period to wait for a connection to the master node.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1788,7 +1787,7 @@ export def "cat-transforms cat-transforms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request: contains wildcard expressions and there are no transforms that match; contains the `_all` string or no identifiers and there are no matches; contains wildcard expressions and there are only partial matches. If `true`, it returns an empty transforms array when there are no matches and the subset of results when there are partial matches. If `false`, the request returns a 404 status code when there are no matches or only partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request: contains wildcard expressions and there are no transforms that match; contains the `_all` string or no identifiers and there are no matches; contains wildcard expressions and there are only partial matches. If `true`, it returns an empty transforms array when there are no matches and the subset of results when there are partial matches. If `false`, the request returns a 404 status code when there are no matches or only partial matches.
   --qp-from: float # Skips the specified number of transforms.
   --h: string # Comma-separated list of column names to display.
   --s: string # Comma-separated list of column names or column aliases used to sort the response.
@@ -1816,7 +1815,7 @@ export def "cat-transforms cat-transforms-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request: contains wildcard expressions and there are no transforms that match; contains the `_all` string or no identifiers and there are no matches; contains wildcard expressions and there are only partial matches. If `true`, it returns an empty transforms array when there are no matches and the subset of results when there are partial matches. If `false`, the request returns a 404 status code when there are no matches or only partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request: contains wildcard expressions and there are no transforms that match; contains the `_all` string or no identifiers and there are no matches; contains wildcard expressions and there are only partial matches. If `true`, it returns an empty transforms array when there are no matches and the subset of results when there are partial matches. If `false`, the request returns a 404 status code when there are no matches or only partial matches.
   --qp-from: float # Skips the specified number of transforms.
   --h: string # Comma-separated list of column names to display.
   --s: string # Comma-separated list of column names or column aliases used to sort the response.
@@ -2249,7 +2248,7 @@ export def "search-scroll scroll" [
   --allow-errors(-e) # Return full response without error handling
   --scroll: string # The period to retain the search context for scrolling.
   --scroll-id: string # The scroll ID (DEPRECATED)
-  --rest-total-hits-as-int: string@bool-completer # If true, the API response’s hit.total property is returned as an integer. If false, the API response’s hit.total property is returned as an object.
+  --rest-total-hits-as-int: oneof<nothing, bool> # If true, the API response’s hit.total property is returned as an integer. If false, the API response’s hit.total property is returned as an object.
   --scroll: any # The period to retain the search context for scrolling. (default: 1d)
   scroll_id: any # The scroll ID of the search.
 ]: any -> any {
@@ -2281,7 +2280,7 @@ export def "search-scroll scroll-1" [
   --allow-errors(-e) # Return full response without error handling
   --scroll: string # The period to retain the search context for scrolling.
   --scroll-id: string # The scroll ID (DEPRECATED)
-  --rest-total-hits-as-int: string@bool-completer # If true, the API response’s hit.total property is returned as an integer. If false, the API response’s hit.total property is returned as an object.
+  --rest-total-hits-as-int: oneof<nothing, bool> # If true, the API response’s hit.total property is returned as an integer. If false, the API response’s hit.total property is returned as an object.
   --scroll: any # The period to retain the search context for scrolling. (default: 1d)
   scroll_id: any # The scroll ID of the search.
 ]: any -> any {
@@ -2340,7 +2339,7 @@ export def "search-scroll scroll-2" [
   --allow-errors(-e) # Return full response without error handling
   --scroll: string # The period to retain the search context for scrolling.
   --scroll-id: string # The scroll ID (DEPRECATED)
-  --rest-total-hits-as-int: string@bool-completer # If true, the API response’s hit.total property is returned as an integer. If false, the API response’s hit.total property is returned as an object.
+  --rest-total-hits-as-int: oneof<nothing, bool> # If true, the API response’s hit.total property is returned as an integer. If false, the API response’s hit.total property is returned as an object.
   --scroll: any # The period to retain the search context for scrolling. (default: 1d)
   --body-scroll-id: any # The scroll ID of the search.
 ]: any -> any {
@@ -2373,7 +2372,7 @@ export def "search-scroll scroll-3" [
   --allow-errors(-e) # Return full response without error handling
   --scroll: string # The period to retain the search context for scrolling.
   --scroll-id: string # The scroll ID (DEPRECATED)
-  --rest-total-hits-as-int: string@bool-completer # If true, the API response’s hit.total property is returned as an integer. If false, the API response’s hit.total property is returned as an object.
+  --rest-total-hits-as-int: oneof<nothing, bool> # If true, the API response’s hit.total property is returned as an integer. If false, the API response’s hit.total property is returned as an object.
   --scroll: any # The period to retain the search context for scrolling. (default: 1d)
   --body-scroll-id: any # The scroll ID of the search.
 ]: any -> any {
@@ -2456,14 +2455,14 @@ export def "cluster-allocation-explain cluster-allocation-explain" [
   --allow-errors(-e) # Return full response without error handling
   --index: string # The name of the index that you would like an explanation for.
   --shard: float # An identifier for the shard that you would like an explanation for.
-  --primary: string@bool-completer # If true, returns an explanation for the primary shard for the specified shard ID.
+  --primary: oneof<nothing, bool> # If true, returns an explanation for the primary shard for the specified shard ID.
   --current-node: string # Explain a shard only if it is currently located on the specified node name or node ID.
-  --include-disk-info: string@bool-completer # If true, returns information about disk usage and shard sizes.
-  --include-yes-decisions: string@bool-completer # If true, returns YES decisions in explanation.
+  --include-disk-info: oneof<nothing, bool> # If true, returns information about disk usage and shard sizes.
+  --include-yes-decisions: oneof<nothing, bool> # If true, returns YES decisions in explanation.
   --master-timeout: string # Period to wait for a connection to the master node.
   --index: any # The name of the index that you would like an explanation for.
   --shard: float # An identifier for the shard that you would like an explanation for.
-  --primary: string@bool-completer # If true, returns an explanation for the primary shard for the specified shard ID.
+  --primary: oneof<nothing, bool> # If true, returns an explanation for the primary shard for the specified shard ID.
   --current-node: any # Explain a shard only if it is currently located on the specified node name or node ID.
 ]: any -> any {
   let input = $in
@@ -2493,14 +2492,14 @@ export def "cluster-allocation-explain cluster-allocation-explain-1" [
   --allow-errors(-e) # Return full response without error handling
   --index: string # The name of the index that you would like an explanation for.
   --shard: float # An identifier for the shard that you would like an explanation for.
-  --primary: string@bool-completer # If true, returns an explanation for the primary shard for the specified shard ID.
+  --primary: oneof<nothing, bool> # If true, returns an explanation for the primary shard for the specified shard ID.
   --current-node: string # Explain a shard only if it is currently located on the specified node name or node ID.
-  --include-disk-info: string@bool-completer # If true, returns information about disk usage and shard sizes.
-  --include-yes-decisions: string@bool-completer # If true, returns YES decisions in explanation.
+  --include-disk-info: oneof<nothing, bool> # If true, returns information about disk usage and shard sizes.
+  --include-yes-decisions: oneof<nothing, bool> # If true, returns YES decisions in explanation.
   --master-timeout: string # Period to wait for a connection to the master node.
   --index: any # The name of the index that you would like an explanation for.
   --shard: float # An identifier for the shard that you would like an explanation for.
-  --primary: string@bool-completer # If true, returns an explanation for the primary shard for the specified shard ID.
+  --primary: oneof<nothing, bool> # If true, returns an explanation for the primary shard for the specified shard ID.
   --current-node: any # Explain a shard only if it is currently located on the specified node name or node ID.
 ]: any -> any {
   let input = $in
@@ -2529,10 +2528,10 @@ export def "component-template cluster-get-component-template-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --flat-settings: string@bool-completer # If `true`, returns settings in flat format.
+  --flat-settings: oneof<nothing, bool> # If `true`, returns settings in flat format.
   --settings-filter: string # Filter out results, for example to filter out sensitive information. Supports wildcards or full settings keys
-  --include-defaults: string@bool-completer # Return all default configurations for the component template
-  --local: string@bool-completer # If `true`, the request retrieves information from the local node only. If `false`, information is retrieved from the master node. (DEPRECATED)
+  --include-defaults: oneof<nothing, bool> # Return all default configurations for the component template
+  --local: oneof<nothing, bool> # If `true`, the request retrieves information from the local node only. If `false`, information is retrieved from the master node. (DEPRECATED)
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2557,13 +2556,13 @@ export def "component-template cluster-put-component-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --create: string@bool-completer # If `true`, this request cannot replace or update existing component templates.
+  --create: oneof<nothing, bool> # If `true`, this request cannot replace or update existing component templates.
   --cause: string # User defined reason for create the component template.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
   template: any # The template to be applied which includes mappings, settings, or aliases configuration.
   --version: any # Version number used to manage component templates externally. This number isn't automatically generated or incremented by Elasticsearch. To unset a version, replace the template without specifying a version.
   --meta: any # Optional user metadata about the component template. It may have any contents. This map is not automatically generated by Elasticsearch. This information is stored in the cluster state, so keeping it short is preferable. To unset `_meta`, replace the template without specifying this information.
-  --deprecated: string@bool-completer # Marks this index template as deprecated. When creating or updating a non-deprecated index template that uses deprecated components, Elasticsearch will emit a deprecation warning.
+  --deprecated: oneof<nothing, bool> # Marks this index template as deprecated. When creating or updating a non-deprecated index template that uses deprecated components, Elasticsearch will emit a deprecation warning.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2590,13 +2589,13 @@ export def "component-template cluster-put-component-template-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --create: string@bool-completer # If `true`, this request cannot replace or update existing component templates.
+  --create: oneof<nothing, bool> # If `true`, this request cannot replace or update existing component templates.
   --cause: string # User defined reason for create the component template.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
   template: any # The template to be applied which includes mappings, settings, or aliases configuration.
   --version: any # Version number used to manage component templates externally. This number isn't automatically generated or incremented by Elasticsearch. To unset a version, replace the template without specifying a version.
   --meta: any # Optional user metadata about the component template. It may have any contents. This map is not automatically generated by Elasticsearch. This information is stored in the cluster state, so keeping it short is preferable. To unset `_meta`, replace the template without specifying this information.
-  --deprecated: string@bool-completer # Marks this index template as deprecated. When creating or updating a non-deprecated index template that uses deprecated components, Elasticsearch will emit a deprecation warning.
+  --deprecated: oneof<nothing, bool> # Marks this index template as deprecated. When creating or updating a non-deprecated index template that uses deprecated components, Elasticsearch will emit a deprecation warning.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2650,7 +2649,7 @@ export def "component-template cluster-exists-component-template" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
-  --local: string@bool-completer # If true, the request retrieves information from the local node only. Defaults to false, which means information is retrieved from the master node. (DEPRECATED)
+  --local: oneof<nothing, bool> # If true, the request retrieves information from the local node only. Defaults to false, which means information is retrieved from the master node. (DEPRECATED)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2702,7 +2701,7 @@ export def "cluster-voting-config-exclusions cluster-delete-voting-config-exclus
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --master-timeout: string # Period to wait for a connection to the master node.
-  --wait-for-removal: string@bool-completer # Specifies whether to wait for all excluded nodes to be removed from the cluster before clearing the voting configuration exclusions list. Defaults to true, meaning that all excluded nodes must be removed from the cluster before this API takes any action. If set to false then the voting configuration exclusions list is cleared even if some excluded nodes are still in the cluster.
+  --wait-for-removal: oneof<nothing, bool> # Specifies whether to wait for all excluded nodes to be removed from the cluster before clearing the voting configuration exclusions list. Defaults to true, meaning that all excluded nodes must be removed from the cluster before this API takes any action. If set to false then the voting configuration exclusions list is cleared even if some excluded nodes are still in the cluster.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2726,10 +2725,10 @@ export def "component-template cluster-get-component-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --flat-settings: string@bool-completer # If `true`, returns settings in flat format.
+  --flat-settings: oneof<nothing, bool> # If `true`, returns settings in flat format.
   --settings-filter: string # Filter out results, for example to filter out sensitive information. Supports wildcards or full settings keys
-  --include-defaults: string@bool-completer # Return all default configurations for the component template
-  --local: string@bool-completer # If `true`, the request retrieves information from the local node only. If `false`, information is retrieved from the master node. (DEPRECATED)
+  --include-defaults: oneof<nothing, bool> # Return all default configurations for the component template
+  --local: oneof<nothing, bool> # If `true`, the request retrieves information from the local node only. If `false`, information is retrieved from the master node. (DEPRECATED)
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2754,8 +2753,8 @@ export def "cluster-settings cluster-get-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --flat-settings: string@bool-completer # If `true`, returns settings in flat format.
-  --include-defaults: string@bool-completer # If `true`, also returns the values of all other cluster settings set in the `elasticsearch.yml` file on one of the nodes in your cluster, together with the default values of all other cluster settings on that node. The default value of each setting may depend on the values of other settings on that node. If the nodes in your cluster do not all have the same configuration then the values returned by this API may vary from invocation to invocation and may not reflect the values that Elasticsearch uses in all situations. Use the `GET _nodes/settings` API to fetch the settings for each individual node in your cluster.
+  --flat-settings: oneof<nothing, bool> # If `true`, returns settings in flat format.
+  --include-defaults: oneof<nothing, bool> # If `true`, also returns the values of all other cluster settings set in the `elasticsearch.yml` file on one of the nodes in your cluster, together with the default values of all other cluster settings on that node. The default value of each setting may depend on the values of other settings on that node. If the nodes in your cluster do not all have the same configuration then the values returned by this API may vary from invocation to invocation and may not reflect the values that Elasticsearch uses in all situations. Use the `GET _nodes/settings` API to fetch the settings for each individual node in your cluster.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> record<persistent: record, transient: record, defaults: record> {
@@ -2781,7 +2780,7 @@ export def "cluster-settings cluster-put-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --flat-settings: string@bool-completer # Return settings in flat format
+  --flat-settings: oneof<nothing, bool> # Return settings in flat format
   --master-timeout: string # The period to wait for a connection to the master node.
   --timeout: string # The period to wait for a response.
   --persistent: record # The settings that persist after the cluster restarts.
@@ -2813,14 +2812,14 @@ export def "cluster-health cluster-health" [
   --allow-errors(-e) # Return full response without error handling
   --expand-wildcards: string # Expand wildcard expression to concrete indices that are open, closed or both.
   --level: string@level-completer # Return health information at a specific level of detail.
-  --local: string@bool-completer # If true, retrieve information from the local node only. If false, retrieve information from the master node.
+  --local: oneof<nothing, bool> # If true, retrieve information from the local node only. If false, retrieve information from the master node.
   --master-timeout: string # The period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
   --timeout: string # The period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --wait-for-active-shards: string # Wait for the specified number of active shards. Use `all` to wait for all shards in the cluster to be active. Use `0` to not wait.
   --wait-for-events: string@wait-for-events-completer # Wait until all currently queued events with the given priority are processed.
   --wait-for-nodes: string # Wait until the specified number (N) of nodes is available. It also accepts `>=N`, `<=N`, `>N` and `<N`. Alternatively, use the notations `ge(N)`, `le(N)`, `gt(N)`, and `lt(N)`.
-  --wait-for-no-initializing-shards: string@bool-completer # Wait (until the timeout expires) for the cluster to have no shard initializations. If false, the request does not wait for initializing shards.
-  --wait-for-no-relocating-shards: string@bool-completer # Wait (until the timeout expires) for the cluster to have no shard relocations. If false, the request not wait for relocating shards.
+  --wait-for-no-initializing-shards: oneof<nothing, bool> # Wait (until the timeout expires) for the cluster to have no shard initializations. If false, the request does not wait for initializing shards.
+  --wait-for-no-relocating-shards: oneof<nothing, bool> # Wait (until the timeout expires) for the cluster to have no shard relocations. If false, the request not wait for relocating shards.
   --wait-for-status: string@wait-for-status-completer # Wait (until the timeout expires) for the cluster to reach a specific health status (or a better status). A green status is better than yellow and yellow is better than red. By default, the request does not wait for a particular status.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2847,14 +2846,14 @@ export def "cluster-health cluster-health-1" [
   --allow-errors(-e) # Return full response without error handling
   --expand-wildcards: string # Expand wildcard expression to concrete indices that are open, closed or both.
   --level: string@level-completer # Return health information at a specific level of detail.
-  --local: string@bool-completer # If true, retrieve information from the local node only. If false, retrieve information from the master node.
+  --local: oneof<nothing, bool> # If true, retrieve information from the local node only. If false, retrieve information from the master node.
   --master-timeout: string # The period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
   --timeout: string # The period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --wait-for-active-shards: string # Wait for the specified number of active shards. Use `all` to wait for all shards in the cluster to be active. Use `0` to not wait.
   --wait-for-events: string@wait-for-events-completer # Wait until all currently queued events with the given priority are processed.
   --wait-for-nodes: string # Wait until the specified number (N) of nodes is available. It also accepts `>=N`, `<=N`, `>N` and `<N`. Alternatively, use the notations `ge(N)`, `le(N)`, `gt(N)`, and `lt(N)`.
-  --wait-for-no-initializing-shards: string@bool-completer # Wait (until the timeout expires) for the cluster to have no shard initializations. If false, the request does not wait for initializing shards.
-  --wait-for-no-relocating-shards: string@bool-completer # Wait (until the timeout expires) for the cluster to have no shard relocations. If false, the request not wait for relocating shards.
+  --wait-for-no-initializing-shards: oneof<nothing, bool> # Wait (until the timeout expires) for the cluster to have no shard initializations. If false, the request does not wait for initializing shards.
+  --wait-for-no-relocating-shards: oneof<nothing, bool> # Wait (until the timeout expires) for the cluster to have no shard relocations. If false, the request not wait for relocating shards.
   --wait-for-status: string@wait-for-status-completer # Wait (until the timeout expires) for the cluster to reach a specific health status (or a better status). A green status is better than yellow and yellow is better than red. By default, the request does not wait for a particular status.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2900,7 +2899,7 @@ export def "cluster-pending-tasks cluster-pending-tasks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --local: string@bool-completer # If `true`, the request retrieves information from the local node only. If `false`, information is retrieved from the master node.
+  --local: oneof<nothing, bool> # If `true`, the request retrieves information from the local node only. If `false`, information is retrieved from the master node.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> record<tasks: table<executing: bool, insert_order: float, priority: string, source: string, time_in_queue: record, time_in_queue_millis: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2948,10 +2947,10 @@ export def "cluster-reroute cluster-reroute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dry-run: string@bool-completer # If true, then the request simulates the operation. It will calculate the result of applying the commands to the current cluster state and return the resulting cluster state after the commands (and rebalancing) have been applied; it will not actually perform the requested changes.
-  --explain: string@bool-completer # If true, then the response contains an explanation of why the commands can or cannot run.
+  --dry-run: oneof<nothing, bool> # If true, then the request simulates the operation. It will calculate the result of applying the commands to the current cluster state and return the resulting cluster state after the commands (and rebalancing) have been applied; it will not actually perform the requested changes.
+  --explain: oneof<nothing, bool> # If true, then the response contains an explanation of why the commands can or cannot run.
   --metric: string # Limits the information returned to the specified metrics. (DEPRECATED)
-  --retry-failed: string@bool-completer # If true, then retries allocation of shards that are blocked due to too many subsequent allocation failures.
+  --retry-failed: oneof<nothing, bool> # If true, then retries allocation of shards that are blocked due to too many subsequent allocation failures.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --commands: list # Defines the commands to perform. — item shape: {cancel?: any, move?: any, allocate_replica?: any, allocate_stale_primary?: any, allocate_empty_primary?: any}
@@ -2981,11 +2980,11 @@ export def "cluster-state cluster-state" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indices that are open, closed or both
-  --flat-settings: string@bool-completer # Return settings in flat format
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --local: string@bool-completer # Return local information, do not retrieve the state from master node (DEPRECATED)
+  --flat-settings: oneof<nothing, bool> # Return settings in flat format
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --local: oneof<nothing, bool> # Return local information, do not retrieve the state from master node (DEPRECATED)
   --master-timeout: string # Timeout for waiting for new cluster state in case it is blocked
   --wait-for-metadata-version: float # Wait for the metadata version to be equal or greater than the specified metadata version
   --wait-for-timeout: string # The maximum time to wait for wait_for_metadata_version before timing out
@@ -3013,11 +3012,11 @@ export def "cluster-state cluster-state-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indices that are open, closed or both
-  --flat-settings: string@bool-completer # Return settings in flat format
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --local: string@bool-completer # Return local information, do not retrieve the state from master node (DEPRECATED)
+  --flat-settings: oneof<nothing, bool> # Return settings in flat format
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --local: oneof<nothing, bool> # Return local information, do not retrieve the state from master node (DEPRECATED)
   --master-timeout: string # Timeout for waiting for new cluster state in case it is blocked
   --wait-for-metadata-version: float # Wait for the metadata version to be equal or greater than the specified metadata version
   --wait-for-timeout: string # The maximum time to wait for wait_for_metadata_version before timing out
@@ -3046,11 +3045,11 @@ export def "cluster-state cluster-state-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indices that are open, closed or both
-  --flat-settings: string@bool-completer # Return settings in flat format
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --local: string@bool-completer # Return local information, do not retrieve the state from master node (DEPRECATED)
+  --flat-settings: oneof<nothing, bool> # Return settings in flat format
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --local: oneof<nothing, bool> # Return local information, do not retrieve the state from master node (DEPRECATED)
   --master-timeout: string # Timeout for waiting for new cluster state in case it is blocked
   --wait-for-metadata-version: float # Wait for the metadata version to be equal or greater than the specified metadata version
   --wait-for-timeout: string # The maximum time to wait for wait_for_metadata_version before timing out
@@ -3076,7 +3075,7 @@ export def "cluster-stats cluster-stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-remotes: string@bool-completer # Include remote cluster data into the response
+  --include-remotes: oneof<nothing, bool> # Include remote cluster data into the response
   --timeout: string # Period to wait for each node to respond. If a node does not respond before its timeout expires, the response does not include its stats. However, timed out nodes are included in the response’s `_nodes.failed` property. Defaults to no timeout.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3101,7 +3100,7 @@ export def "cluster-stats-nodes cluster-stats-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-remotes: string@bool-completer # Include remote cluster data into the response
+  --include-remotes: oneof<nothing, bool> # Include remote cluster data into the response
   --timeout: string # Period to wait for each node to respond. If a node does not respond before its timeout expires, the response does not include its stats. However, timed out nodes are included in the response’s `_nodes.failed` property. Defaults to no timeout.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3148,7 +3147,7 @@ export def "connector connector-get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-deleted: string@bool-completer # A flag to indicate if the desired connector should be fetched, even if it was soft-deleted.
+  --include-deleted: oneof<nothing, bool> # A flag to indicate if the desired connector should be fetched, even if it was soft-deleted.
 ]: nothing -> record<api_key_id: string, api_key_secret_id: string, configuration: record, custom_scheduling: record, deleted: bool, description: string, error: any, features: record<document_level_security: record<enabled: bool>, incremental_sync: record<enabled: bool>, native_connector_api_keys: record<enabled: bool>, sync_rules: record<advanced: record, basic: record>>, filtering: table<active: record, domain: string, draft: record>, id: record, index_name: any, is_native: bool, language: string, last_access_control_sync_error: string, last_access_control_sync_scheduled_at: record, last_access_control_sync_status: record, last_deleted_document_count: float, last_incremental_sync_scheduled_at: record, last_indexed_document_count: float, last_seen: record, last_sync_error: string, last_sync_scheduled_at: record, last_sync_status: record, last_synced: record, name: string, pipeline: record<extract_binary_content: bool, name: string, reduce_whitespace: bool, run_ml_inference: bool>, scheduling: record<access_control: record<enabled: bool, interval: string>, full: record<enabled: bool, interval: string>, incremental: record<enabled: bool, interval: string>>, service_type: string, status: record, sync_cursor: record, sync_now: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3174,7 +3173,7 @@ export def "connector connector-put" [
   --allow-errors(-e) # Return full response without error handling
   --description: string
   --index-name: any
-  --is-native: string@bool-completer
+  --is-native: oneof<nothing, bool>
   --language: string
   --name: string
   --service-type: string
@@ -3203,8 +3202,8 @@ export def "connector connector-delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete-sync-jobs: string@bool-completer # A flag indicating if associated sync jobs should be also removed.
-  --hard: string@bool-completer # A flag indicating if the connector should be hard deleted.
+  --delete-sync-jobs: oneof<nothing, bool> # A flag indicating if associated sync jobs should be also removed.
+  --hard: oneof<nothing, bool> # A flag indicating if the connector should be hard deleted.
 ]: nothing -> record<acknowledged: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3232,7 +3231,7 @@ export def "connector connector-list" [
   --index-name: string # A comma-separated list of connector index names to fetch connector documents for
   --connector-name: string # A comma-separated list of connector names to fetch connector documents for
   --service-type: string # A comma-separated list of connector service types to fetch connector documents for
-  --include-deleted: string@bool-completer # A flag to indicate if the desired connector should be fetched, even if it was soft-deleted.
+  --include-deleted: oneof<nothing, bool> # A flag to indicate if the desired connector should be fetched, even if it was soft-deleted.
   --qp-query: string # A wildcard query string that filters connectors with matching name, description or index name
 ]: nothing -> record<count: float, results: table<api_key_id: string, api_key_secret_id: string, configuration: record, custom_scheduling: record, deleted: bool, description: string, error: any, features: record, filtering: list, id: record, index_name: any, is_native: bool, language: string, last_access_control_sync_error: string, last_access_control_sync_scheduled_at: record, last_access_control_sync_status: record, last_deleted_document_count: float, last_incremental_sync_scheduled_at: record, last_indexed_document_count: float, last_seen: record, last_sync_error: string, last_sync_scheduled_at: record, last_sync_status: record, last_synced: record, name: string, pipeline: record, scheduling: record, service_type: string, status: record, sync_cursor: record, sync_now: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3258,7 +3257,7 @@ export def "connector connector-put-1" [
   --allow-errors(-e) # Return full response without error handling
   --description: string
   --index-name: any
-  --is-native: string@bool-completer
+  --is-native: oneof<nothing, bool>
   --language: string
   --name: string
   --service-type: string
@@ -3288,7 +3287,7 @@ export def "connector connector-post" [
   --allow-errors(-e) # Return full response without error handling
   --description: string
   --index-name: any
-  --is-native: string@bool-completer
+  --is-native: oneof<nothing, bool>
   --language: string
   --name: string
   --service-type: string
@@ -3780,7 +3779,7 @@ export def "connector-native connector-update-native" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-native: string@bool-completer
+  --is-native: oneof<nothing, bool>
 ]: any -> record<result: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3910,15 +3909,15 @@ export def "count count-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --analyzer: string # The analyzer to use for the query string. This parameter can be used only when the `q` query string parameter is specified.
-  --analyze-wildcard: string@bool-completer # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
+  --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
   --default-operator: string@default-operator-completer # The default operator for query string query: `and` or `or`. This parameter can be used only when the `q` query string parameter is specified.
   --df: string # The field to use as a default when no field prefix is given in the query string. This parameter can be used only when the `q` query string parameter is specified.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. It supports comma-separated values, such as `open,hidden`.
-  --ignore-throttled: string@bool-completer # If `true`, concrete, expanded, or aliased indices are ignored when frozen. (DEPRECATED)
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --lenient: string@bool-completer # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
+  --ignore-throttled: oneof<nothing, bool> # If `true`, concrete, expanded, or aliased indices are ignored when frozen. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --lenient: oneof<nothing, bool> # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
   --min-score: float # The minimum `_score` value that documents must have to be included in the result.
   --preference: string # The node or shard the operation should be performed on. By default, it is random.
   --routing: string # A custom value used to route operations to a specific shard.
@@ -3951,15 +3950,15 @@ export def "count count" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --analyzer: string # The analyzer to use for the query string. This parameter can be used only when the `q` query string parameter is specified.
-  --analyze-wildcard: string@bool-completer # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
+  --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
   --default-operator: string@default-operator-completer # The default operator for query string query: `and` or `or`. This parameter can be used only when the `q` query string parameter is specified.
   --df: string # The field to use as a default when no field prefix is given in the query string. This parameter can be used only when the `q` query string parameter is specified.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. It supports comma-separated values, such as `open,hidden`.
-  --ignore-throttled: string@bool-completer # If `true`, concrete, expanded, or aliased indices are ignored when frozen. (DEPRECATED)
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --lenient: string@bool-completer # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
+  --ignore-throttled: oneof<nothing, bool> # If `true`, concrete, expanded, or aliased indices are ignored when frozen. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --lenient: oneof<nothing, bool> # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
   --min-score: float # The minimum `_score` value that documents must have to be included in the result.
   --preference: string # The node or shard the operation should be performed on. By default, it is random.
   --routing: string # A custom value used to route operations to a specific shard.
@@ -3993,15 +3992,15 @@ export def "count count-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --analyzer: string # The analyzer to use for the query string. This parameter can be used only when the `q` query string parameter is specified.
-  --analyze-wildcard: string@bool-completer # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
+  --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
   --default-operator: string@default-operator-completer # The default operator for query string query: `and` or `or`. This parameter can be used only when the `q` query string parameter is specified.
   --df: string # The field to use as a default when no field prefix is given in the query string. This parameter can be used only when the `q` query string parameter is specified.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. It supports comma-separated values, such as `open,hidden`.
-  --ignore-throttled: string@bool-completer # If `true`, concrete, expanded, or aliased indices are ignored when frozen. (DEPRECATED)
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --lenient: string@bool-completer # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
+  --ignore-throttled: oneof<nothing, bool> # If `true`, concrete, expanded, or aliased indices are ignored when frozen. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --lenient: oneof<nothing, bool> # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
   --min-score: float # The minimum `_score` value that documents must have to be included in the result.
   --preference: string # The node or shard the operation should be performed on. By default, it is random.
   --routing: string # A custom value used to route operations to a specific shard.
@@ -4035,15 +4034,15 @@ export def "count count-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --analyzer: string # The analyzer to use for the query string. This parameter can be used only when the `q` query string parameter is specified.
-  --analyze-wildcard: string@bool-completer # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
+  --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
   --default-operator: string@default-operator-completer # The default operator for query string query: `and` or `or`. This parameter can be used only when the `q` query string parameter is specified.
   --df: string # The field to use as a default when no field prefix is given in the query string. This parameter can be used only when the `q` query string parameter is specified.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. It supports comma-separated values, such as `open,hidden`.
-  --ignore-throttled: string@bool-completer # If `true`, concrete, expanded, or aliased indices are ignored when frozen. (DEPRECATED)
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --lenient: string@bool-completer # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
+  --ignore-throttled: oneof<nothing, bool> # If `true`, concrete, expanded, or aliased indices are ignored when frozen. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --lenient: oneof<nothing, bool> # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
   --min-score: float # The minimum `_score` value that documents must have to be included in the result.
   --preference: string # The node or shard the operation should be performed on. By default, it is random.
   --routing: string # A custom value used to route operations to a specific shard.
@@ -4078,11 +4077,11 @@ export def "create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-source-on-error: string@bool-completer # True or false if to include the document source in the error message in case of parsing errors.
+  --include-source-on-error: oneof<nothing, bool> # True or false if to include the document source in the error message in case of parsing errors.
   --pipeline: string # The ID of the pipeline to use to preprocess incoming documents. If the index has a default ingest pipeline specified, setting the value to `_none` turns off the default ingest pipeline for this request. If a final pipeline is configured, it will always run regardless of the value of this parameter.
   --refresh: string@refresh-completer # If `true`, Elasticsearch refreshes the affected shards to make this operation visible to search. If `wait_for`, it waits for a refresh to make this operation visible to search. If `false`, it does nothing with refreshes.
-  --require-alias: string@bool-completer # If `true`, the destination must be an index alias.
-  --require-data-stream: string@bool-completer # If `true`, the request's actions must target a data stream (existing or to be created).
+  --require-alias: oneof<nothing, bool> # If `true`, the destination must be an index alias.
+  --require-data-stream: oneof<nothing, bool> # If `true`, the request's actions must target a data stream (existing or to be created).
   --routing: string # A custom value that is used to route operations to a specific shard.
   --timeout: string # The period the request waits for the following operations: automatic index creation, dynamic mapping updates, waiting for active shards. Elasticsearch waits for at least the specified timeout period before failing. The actual wait time could be longer, particularly when multiple waits occur.  This parameter is useful for situations where the primary shard assigned to perform the operation might not be available when the operation runs. Some reasons for this might be that the primary shard is currently recovering from a gateway or undergoing relocation. By default, the operation will wait on the primary shard to become available for at least 1 minute before failing and responding with an error. The actual wait time could be longer, particularly when multiple waits occur.
   --version: float # The explicit version number for concurrency control. It must be a non-negative long number.
@@ -4116,11 +4115,11 @@ export def "create create-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-source-on-error: string@bool-completer # True or false if to include the document source in the error message in case of parsing errors.
+  --include-source-on-error: oneof<nothing, bool> # True or false if to include the document source in the error message in case of parsing errors.
   --pipeline: string # The ID of the pipeline to use to preprocess incoming documents. If the index has a default ingest pipeline specified, setting the value to `_none` turns off the default ingest pipeline for this request. If a final pipeline is configured, it will always run regardless of the value of this parameter.
   --refresh: string@refresh-completer # If `true`, Elasticsearch refreshes the affected shards to make this operation visible to search. If `wait_for`, it waits for a refresh to make this operation visible to search. If `false`, it does nothing with refreshes.
-  --require-alias: string@bool-completer # If `true`, the destination must be an index alias.
-  --require-data-stream: string@bool-completer # If `true`, the request's actions must target a data stream (existing or to be created).
+  --require-alias: oneof<nothing, bool> # If `true`, the destination must be an index alias.
+  --require-data-stream: oneof<nothing, bool> # If `true`, the request's actions must target a data stream (existing or to be created).
   --routing: string # A custom value that is used to route operations to a specific shard.
   --timeout: string # The period the request waits for the following operations: automatic index creation, dynamic mapping updates, waiting for active shards. Elasticsearch waits for at least the specified timeout period before failing. The actual wait time could be longer, particularly when multiple waits occur.  This parameter is useful for situations where the primary shard assigned to perform the operation might not be available when the operation runs. Some reasons for this might be that the primary shard is currently recovering from a gateway or undergoing relocation. By default, the operation will wait on the primary shard to become available for at least 1 minute before failing and responding with an error. The actual wait time could be longer, particularly when multiple waits occur.
   --version: float # The explicit version number for concurrency control. It must be a non-negative long number.
@@ -4152,7 +4151,7 @@ export def "dangling dangling-indices-import-dangling-index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --accept-data-loss: string@bool-completer # This parameter must be set to true to import a dangling index. Because Elasticsearch cannot know where the dangling index data came from or determine which shard copies are fresh and which are stale, it cannot guarantee that the imported data represents the latest state of the index when it was last in the cluster.
+  --accept-data-loss: oneof<nothing, bool> # This parameter must be set to true to import a dangling index. Because Elasticsearch cannot know where the dangling index data came from or determine which shard copies are fresh and which are stale, it cannot guarantee that the imported data represents the latest state of the index when it was last in the cluster.
   --master-timeout: string # The period to wait for a connection to the master node.
   --timeout: string # The period to wait for a response.
 ]: nothing -> record<acknowledged: bool> {
@@ -4178,7 +4177,7 @@ export def "dangling dangling-indices-delete-dangling-index" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --accept-data-loss: string@bool-completer # This parameter must be set to true to acknowledge that it will no longer be possible to recove data from the dangling index.
+  --accept-data-loss: oneof<nothing, bool> # This parameter must be set to true to acknowledge that it will no longer be possible to recove data from the dangling index.
   --master-timeout: string # The period to wait for a connection to the master node.
   --timeout: string # The period to wait for a response.
 ]: nothing -> record<acknowledged: bool> {
@@ -4227,12 +4226,12 @@ export def "doc get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --preference: string # The node or shard the operation should be performed on. By default, the operation is randomized between the shard replicas.  If it is set to `_local`, the operation will prefer to be run on a local allocated shard when possible. If it is set to a custom value, the value is used to guarantee that the same shards will be used for the same custom value. This can help with "jumping values" when hitting different shards in different refresh states. A sample value can be something like the web session ID or the user name.
-  --realtime: string@bool-completer # If `true`, the request is real-time as opposed to near-real-time.
-  --refresh: string@bool-completer # If `true`, the request refreshes the relevant shards before retrieving the document. Setting it to `true` should be done after careful thought and verification that this does not cause a heavy load on the system (and slow down indexing).
+  --realtime: oneof<nothing, bool> # If `true`, the request is real-time as opposed to near-real-time.
+  --refresh: oneof<nothing, bool> # If `true`, the request refreshes the relevant shards before retrieving the document. Setting it to `true` should be done after careful thought and verification that this does not cause a heavy load on the system (and slow down indexing).
   --routing: string # A custom value used to route operations to a specific shard.
   --qp-source: string # Indicates whether to return the `_source` field (`true` or `false`) or lists the fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response. You can also use this parameter to exclude fields from the subset specified in `_source_includes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
-  --source-exclude-vectors: string@bool-completer # Whether vectors should be excluded from _source
+  --source-exclude-vectors: oneof<nothing, bool> # Whether vectors should be excluded from _source
   --source-includes: string # A comma-separated list of source fields to include in the response. If this parameter is specified, only these source fields are returned. You can exclude fields from this subset using the `_source_excludes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
   --stored-fields: string # A comma-separated list of stored fields to return as part of a hit. If no fields are specified, no stored fields are included in the response. If this field is specified, the `_source` parameter defaults to `false`. Only leaf fields can be retrieved with the `stored_fields` option. Object fields can't be returned; if specified, the request fails.
   --version: float # The version number for concurrency control. It must match the current version of the document for the request to succeed.
@@ -4264,7 +4263,7 @@ export def "doc index" [
   --allow-errors(-e) # Return full response without error handling
   --if-primary-term: float # Only perform the operation if the document has this primary term.
   --if-seq-no: float # Only perform the operation if the document has this sequence number.
-  --include-source-on-error: string@bool-completer # True or false if to include the document source in the error message in case of parsing errors.
+  --include-source-on-error: oneof<nothing, bool> # True or false if to include the document source in the error message in case of parsing errors.
   --op-type: string@op-type-completer # Set to `create` to only index the document if it does not already exist (put if absent). If a document with the specified `_id` already exists, the indexing operation will fail. The behavior is the same as using the `<index>/_create` endpoint. If a document ID is specified, this paramater defaults to `index`. Otherwise, it defaults to `create`. If the request targets a data stream, an `op_type` of `create` is required.
   --pipeline: string # The ID of the pipeline to use to preprocess incoming documents. If the index has a default ingest pipeline specified, then setting the value to `_none` disables the default ingest pipeline for this request. If a final pipeline is configured it will always run, regardless of the value of this parameter.
   --refresh: string@refresh-completer # If `true`, Elasticsearch refreshes the affected shards to make this operation visible to search. If `wait_for`, it waits for a refresh to make this operation visible to search. If `false`, it does nothing with refreshes.
@@ -4273,8 +4272,8 @@ export def "doc index" [
   --version: float # An explicit version number for concurrency control. It must be a non-negative long number.
   --version-type: string@version-type-completer # The version type.
   --wait-for-active-shards: string # The number of shard copies that must be active before proceeding with the operation. You can set it to `all` or any positive integer up to the total number of shards in the index (`number_of_replicas+1`). The default value of `1` means it waits for each primary shard to be active.
-  --require-alias: string@bool-completer # If `true`, the destination must be an index alias.
-  --require-data-stream: string@bool-completer # If `true`, the request's actions must target a data stream (existing or to be created).
+  --require-alias: oneof<nothing, bool> # If `true`, the destination must be an index alias.
+  --require-data-stream: oneof<nothing, bool> # If `true`, the request's actions must target a data stream (existing or to be created).
   --body: record
 ]: any -> any {
   let input = $in
@@ -4305,7 +4304,7 @@ export def "doc index-1" [
   --allow-errors(-e) # Return full response without error handling
   --if-primary-term: float # Only perform the operation if the document has this primary term.
   --if-seq-no: float # Only perform the operation if the document has this sequence number.
-  --include-source-on-error: string@bool-completer # True or false if to include the document source in the error message in case of parsing errors.
+  --include-source-on-error: oneof<nothing, bool> # True or false if to include the document source in the error message in case of parsing errors.
   --op-type: string@op-type-completer # Set to `create` to only index the document if it does not already exist (put if absent). If a document with the specified `_id` already exists, the indexing operation will fail. The behavior is the same as using the `<index>/_create` endpoint. If a document ID is specified, this paramater defaults to `index`. Otherwise, it defaults to `create`. If the request targets a data stream, an `op_type` of `create` is required.
   --pipeline: string # The ID of the pipeline to use to preprocess incoming documents. If the index has a default ingest pipeline specified, then setting the value to `_none` disables the default ingest pipeline for this request. If a final pipeline is configured it will always run, regardless of the value of this parameter.
   --refresh: string@refresh-completer # If `true`, Elasticsearch refreshes the affected shards to make this operation visible to search. If `wait_for`, it waits for a refresh to make this operation visible to search. If `false`, it does nothing with refreshes.
@@ -4314,8 +4313,8 @@ export def "doc index-1" [
   --version: float # An explicit version number for concurrency control. It must be a non-negative long number.
   --version-type: string@version-type-completer # The version type.
   --wait-for-active-shards: string # The number of shard copies that must be active before proceeding with the operation. You can set it to `all` or any positive integer up to the total number of shards in the index (`number_of_replicas+1`). The default value of `1` means it waits for each primary shard to be active.
-  --require-alias: string@bool-completer # If `true`, the destination must be an index alias.
-  --require-data-stream: string@bool-completer # If `true`, the request's actions must target a data stream (existing or to be created).
+  --require-alias: oneof<nothing, bool> # If `true`, the destination must be an index alias.
+  --require-data-stream: oneof<nothing, bool> # If `true`, the request's actions must target a data stream (existing or to be created).
   --body: record
 ]: any -> any {
   let input = $in
@@ -4376,8 +4375,8 @@ export def "doc exists" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --preference: string # The node or shard the operation should be performed on. By default, the operation is randomized between the shard replicas.  If it is set to `_local`, the operation will prefer to be run on a local allocated shard when possible. If it is set to a custom value, the value is used to guarantee that the same shards will be used for the same custom value. This can help with "jumping values" when hitting different shards in different refresh states. A sample value can be something like the web session ID or the user name.
-  --realtime: string@bool-completer # If `true`, the request is real-time as opposed to near-real-time.
-  --refresh: string@bool-completer # If `true`, the request refreshes the relevant shards before retrieving the document. Setting it to `true` should be done after careful thought and verification that this does not cause a heavy load on the system (and slow down indexing).
+  --realtime: oneof<nothing, bool> # If `true`, the request is real-time as opposed to near-real-time.
+  --refresh: oneof<nothing, bool> # If `true`, the request refreshes the relevant shards before retrieving the document. Setting it to `true` should be done after careful thought and verification that this does not cause a heavy load on the system (and slow down indexing).
   --routing: string # A custom value used to route operations to a specific shard.
   --qp-source: string # Indicates whether to return the `_source` field (`true` or `false`) or lists the fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response. You can also use this parameter to exclude fields from the subset specified in `_source_includes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
@@ -4409,20 +4408,20 @@ export def "delete-by-query delete-by-query" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --analyzer: string # Analyzer to use for the query string. This parameter can be used only when the `q` query string parameter is specified.
-  --analyze-wildcard: string@bool-completer # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
+  --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
   --conflicts: string@conflicts-completer # What to do if delete by query hits version conflicts: `abort` or `proceed`.
   --default-operator: string@default-operator-completer # The default operator for query string query: `and` or `or`. This parameter can be used only when the `q` query string parameter is specified.
   --df: string # The field to use as default where no field prefix is given in the query string. This parameter can be used only when the `q` query string parameter is specified.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. It supports comma-separated values, such as `open,hidden`.
   --qp-from: float # Skips the specified number of documents.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --lenient: string@bool-completer # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --lenient: oneof<nothing, bool> # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
   --max-docs: float # The maximum number of documents to process. Defaults to all documents. When set to a value less then or equal to `scroll_size`, a scroll will not be used to retrieve the results for the operation.
   --preference: string # The node or shard the operation should be performed on. It is random by default.
-  --refresh: string@bool-completer # If `true`, Elasticsearch refreshes all shards involved in the delete by query after the request completes. This is different than the delete API's `refresh` parameter, which causes just the shard that received the delete request to be refreshed. Unlike the delete API, it does not support `wait_for`.
-  --request-cache: string@bool-completer # If `true`, the request cache is used for this request. Defaults to the index-level setting.
+  --refresh: oneof<nothing, bool> # If `true`, Elasticsearch refreshes all shards involved in the delete by query after the request completes. This is different than the delete API's `refresh` parameter, which causes just the shard that received the delete request to be refreshed. Unlike the delete API, it does not support `wait_for`.
+  --request-cache: oneof<nothing, bool> # If `true`, the request cache is used for this request. Defaults to the index-level setting.
   --requests-per-second: float # The maximum number of documents to delete per second, across the entire delete-by-query operation (including slices). It can be either `-1` to turn off throttling or any decimal number like `1.7` or `12` to throttle to that level.
   --routing: string # A custom value used to route operations to a specific shard.
   --q: string # A query in the Lucene query string syntax.
@@ -4435,9 +4434,9 @@ export def "delete-by-query delete-by-query" [
   --stats: list # The specific `tag` of the request for logging and statistical purposes.
   --terminate-after: float # The maximum number of documents to collect for each shard. If a query reaches this limit, Elasticsearch terminates the query early. Elasticsearch collects documents before sorting.  Use with caution. Elasticsearch applies this parameter to each shard handling the request. When possible, let Elasticsearch perform early termination automatically. Avoid specifying this parameter for requests that target data streams with backing indices across multiple data tiers.
   --timeout: string # The period each deletion request waits for active shards.
-  --version: string@bool-completer # If `true`, returns the document version as part of a hit.
+  --version: oneof<nothing, bool> # If `true`, returns the document version as part of a hit.
   --wait-for-active-shards: string # The number of shard copies that must be active before proceeding with the operation. Set to `all` or any positive integer up to the total number of shards in the index (`number_of_replicas+1`). The `timeout` value controls how long each write request waits for unavailable shards to become available.
-  --wait-for-completion: string@bool-completer # If `true`, the request blocks until the operation is complete. If `false`, Elasticsearch performs some preflight checks, launches the request, and returns a task you can use to cancel or get the status of the task. Elasticsearch creates a record of this task as a document at `.tasks/task/${taskId}`. When you are done with a task, you should delete the task document so Elasticsearch can reclaim the space.
+  --wait-for-completion: oneof<nothing, bool> # If `true`, the request blocks until the operation is complete. If `false`, Elasticsearch performs some preflight checks, launches the request, and returns a task you can use to cancel or get the status of the task. Elasticsearch creates a record of this task as a document at `.tasks/task/${taskId}`. When you are done with a task, you should delete the task document so Elasticsearch can reclaim the space.
   --max-docs: float # The maximum number of documents to delete.
   --body-query: any # The documents to delete specified with Query DSL.
   --slice: any # Slice the request manually using the provided slice ID and total number of slices.
@@ -4682,7 +4681,7 @@ export def "enrich-policy-execute enrich-execute-policy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --master-timeout: string # Period to wait for a connection to the master node.
-  --wait-for-completion: string@bool-completer # If `true`, the request blocks other enrich policy execution requests until complete.
+  --wait-for-completion: oneof<nothing, bool> # If `true`, the request blocks other enrich policy execution requests until complete.
 ]: nothing -> record<status: record<phase: record, step: string>, task: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4822,27 +4821,27 @@ export def "eql-search eql-search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --allow-partial-search-results: string@bool-completer # If true, returns partial results if there are shard failures. If false, returns an error with no partial results.
-  --allow-partial-sequence-results: string@bool-completer # If true, sequence queries will return partial results in case of shard failures. If false, they will return no results at all. This flag has effect only if allow_partial_search_results is true.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-partial-search-results: oneof<nothing, bool> # If true, returns partial results if there are shard failures. If false, returns an error with no partial results.
+  --allow-partial-sequence-results: oneof<nothing, bool> # If true, sequence queries will return partial results in case of shard failures. If false, they will return no results at all. This flag has effect only if allow_partial_search_results is true.
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indices that are open, closed or both.
-  --ccs-minimize-roundtrips: string@bool-completer # Indicates whether network round-trips should be minimized as part of cross-cluster search requests execution
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # Indicates whether network round-trips should be minimized as part of cross-cluster search requests execution
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --keep-alive: string # Period for which the search and its results are stored on the cluster.
-  --keep-on-completion: string@bool-completer # If true, the search and its results are stored on the cluster.
+  --keep-on-completion: oneof<nothing, bool> # If true, the search and its results are stored on the cluster.
   --wait-for-completion-timeout: string # Timeout duration to wait for the request to finish. Defaults to no timeout, meaning the request waits for complete search results.
   --body-query: string # EQL query you wish to run.
-  --case-sensitive: string@bool-completer
+  --case-sensitive: oneof<nothing, bool>
   --event-category-field: any # Field containing the event classification, such as process, file, or network. (default: event.category)
   --tiebreaker-field: any # Field used to sort hits with the same timestamp in ascending order
   --timestamp-field: any # Field containing event timestamp. (default: @timestamp)
   --fetch-size: any # Maximum number of events to search at a time for sequence queries. (default: 1000.0)
   --filter: any # Query, written in Query DSL, used to filter the events on which the EQL query runs.
   --keep-alive: any
-  --keep-on-completion: string@bool-completer
+  --keep-on-completion: oneof<nothing, bool>
   --wait-for-completion-timeout: any
-  --allow-partial-search-results: string@bool-completer # Allow query execution also in case of shard failures. If true, the query will keep running and will return results based on the available shards. For sequences, the behavior can be further refined using allow_partial_sequence_results (default: true)
-  --allow-partial-sequence-results: string@bool-completer # This flag applies only to sequences and has effect only if allow_partial_search_results=true. If true, the sequence query will return results based on the available shards, ignoring the others. If false, the sequence query will return successfully, but will always have empty results. (default: false)
+  --allow-partial-search-results: oneof<nothing, bool> # Allow query execution also in case of shard failures. If true, the query will keep running and will return results based on the available shards. For sequences, the behavior can be further refined using allow_partial_sequence_results (default: true)
+  --allow-partial-sequence-results: oneof<nothing, bool> # This flag applies only to sequences and has effect only if allow_partial_search_results=true. If true, the sequence query will return results based on the available shards, ignoring the others. If false, the sequence query will return successfully, but will always have empty results. (default: false)
   --size: any # For basic queries, the maximum number of matching events to return. Defaults to 10
   --body-fields: any # Array of wildcard (*) patterns. The response returns values for field names matching these patterns in the fields property of each hit.
   --result-position: any # default: tail
@@ -4875,27 +4874,27 @@ export def "eql-search eql-search-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --allow-partial-search-results: string@bool-completer # If true, returns partial results if there are shard failures. If false, returns an error with no partial results.
-  --allow-partial-sequence-results: string@bool-completer # If true, sequence queries will return partial results in case of shard failures. If false, they will return no results at all. This flag has effect only if allow_partial_search_results is true.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-partial-search-results: oneof<nothing, bool> # If true, returns partial results if there are shard failures. If false, returns an error with no partial results.
+  --allow-partial-sequence-results: oneof<nothing, bool> # If true, sequence queries will return partial results in case of shard failures. If false, they will return no results at all. This flag has effect only if allow_partial_search_results is true.
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indices that are open, closed or both.
-  --ccs-minimize-roundtrips: string@bool-completer # Indicates whether network round-trips should be minimized as part of cross-cluster search requests execution
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # Indicates whether network round-trips should be minimized as part of cross-cluster search requests execution
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --keep-alive: string # Period for which the search and its results are stored on the cluster.
-  --keep-on-completion: string@bool-completer # If true, the search and its results are stored on the cluster.
+  --keep-on-completion: oneof<nothing, bool> # If true, the search and its results are stored on the cluster.
   --wait-for-completion-timeout: string # Timeout duration to wait for the request to finish. Defaults to no timeout, meaning the request waits for complete search results.
   --body-query: string # EQL query you wish to run.
-  --case-sensitive: string@bool-completer
+  --case-sensitive: oneof<nothing, bool>
   --event-category-field: any # Field containing the event classification, such as process, file, or network. (default: event.category)
   --tiebreaker-field: any # Field used to sort hits with the same timestamp in ascending order
   --timestamp-field: any # Field containing event timestamp. (default: @timestamp)
   --fetch-size: any # Maximum number of events to search at a time for sequence queries. (default: 1000.0)
   --filter: any # Query, written in Query DSL, used to filter the events on which the EQL query runs.
   --keep-alive: any
-  --keep-on-completion: string@bool-completer
+  --keep-on-completion: oneof<nothing, bool>
   --wait-for-completion-timeout: any
-  --allow-partial-search-results: string@bool-completer # Allow query execution also in case of shard failures. If true, the query will keep running and will return results based on the available shards. For sequences, the behavior can be further refined using allow_partial_sequence_results (default: true)
-  --allow-partial-sequence-results: string@bool-completer # This flag applies only to sequences and has effect only if allow_partial_search_results=true. If true, the sequence query will return results based on the available shards, ignoring the others. If false, the sequence query will return successfully, but will always have empty results. (default: false)
+  --allow-partial-search-results: oneof<nothing, bool> # Allow query execution also in case of shard failures. If true, the query will keep running and will return results based on the available shards. For sequences, the behavior can be further refined using allow_partial_sequence_results (default: true)
+  --allow-partial-sequence-results: oneof<nothing, bool> # This flag applies only to sequences and has effect only if allow_partial_search_results=true. If true, the sequence query will return results based on the available shards, ignoring the others. If false, the sequence query will return successfully, but will always have empty results. (default: false)
   --size: any # For basic queries, the maximum number of matching events to return. Defaults to 10
   --body-fields: any # Array of wildcard (*) patterns. The response returns values for field names matching these patterns in the fields property of each hit.
   --result-position: any # default: tail
@@ -4927,23 +4926,23 @@ export def "query-async esql-async-query" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-partial-results: string@bool-completer # If `true`, partial results will be returned if there are shard failures, but the query can continue to execute on other clusters and shards. If `false`, the query will fail if there are any failures.  To override the default behavior, you can set the `esql.query.allow_partial_results` cluster setting to `false`.
+  --allow-partial-results: oneof<nothing, bool> # If `true`, partial results will be returned if there are shard failures, but the query can continue to execute on other clusters and shards. If `false`, the query will fail if there are any failures.  To override the default behavior, you can set the `esql.query.allow_partial_results` cluster setting to `false`.
   --delimiter: string # The character to use between values within a CSV row. It is valid only for the CSV format.
-  --drop-null-columns: string@bool-completer # Indicates whether columns that are entirely `null` will be removed from the `columns` and `values` portion of the results. If `true`, the response will include an extra section under the name `all_columns` which has the name of all the columns.
+  --drop-null-columns: oneof<nothing, bool> # Indicates whether columns that are entirely `null` will be removed from the `columns` and `values` portion of the results. If `true`, the response will include an extra section under the name `all_columns` which has the name of all the columns.
   --format: string@format-completer # A short version of the Accept header, e.g. json, yaml.  `csv`, `tsv`, and `txt` formats will return results in a tabular format, excluding other metadata fields from the response.  For async requests, nothing will be returned if the async query doesn't finish within the timeout. The query ID and running status are available in the `X-Elasticsearch-Async-Id` and `X-Elasticsearch-Async-Is-Running` HTTP headers of the response, respectively.
-  --columnar: string@bool-completer # By default, ES|QL returns results as rows. For example, FROM returns each individual document as one row. For the JSON, YAML, CBOR and smile formats, ES|QL can return the results in a columnar fashion where one row represents all the values of a certain column in the results.
+  --columnar: oneof<nothing, bool> # By default, ES|QL returns results as rows. For example, FROM returns each individual document as one row. For the JSON, YAML, CBOR and smile formats, ES|QL can return the results in a columnar fashion where one row represents all the values of a certain column in the results.
   --filter: any # Specify a Query DSL query in the filter parameter to filter the set of documents that an ES|QL query runs on.
   --time-zone: string # Sets the default timezone of the query.
   --locale: string # Returns results (especially dates) formatted per the conventions of the locale.
   --params: any # To avoid any attempts of hacking or code injection, extract the values in a separate list of parameters. Use question mark placeholders (?) in the query string for each of the parameters.
-  --profile: string@bool-completer # If provided and `true` the response will include an extra `profile` object with information on how the query was executed. This information is for human debugging and its format can change at any time but it can give some insight into the performance of each part of the query.
+  --profile: oneof<nothing, bool> # If provided and `true` the response will include an extra `profile` object with information on how the query was executed. This information is for human debugging and its format can change at any time but it can give some insight into the performance of each part of the query.
   --body-query: string # The ES|QL query API accepts an ES|QL query string in the query parameter, runs it, and returns the results.
   --tables: record # Tables to use with the LOOKUP operation. The top level key is the table name and the next level key is the column name.
-  --include-ccs-metadata: string@bool-completer # When set to `true` and performing a cross-cluster/cross-project query, the response will include an extra `_clusters` object with information about the clusters that participated in the search along with info such as shards count. (default: false)
-  --include-execution-metadata: string@bool-completer # When set to `true`, the response will include an extra `_clusters` object with information about the clusters that participated in the search along with info such as shards count. This is similar to `include_ccs_metadata`, but it also returns metadata when the query is not CCS/CPS (default: false)
+  --include-ccs-metadata: oneof<nothing, bool> # When set to `true` and performing a cross-cluster/cross-project query, the response will include an extra `_clusters` object with information about the clusters that participated in the search along with info such as shards count. (default: false)
+  --include-execution-metadata: oneof<nothing, bool> # When set to `true`, the response will include an extra `_clusters` object with information about the clusters that participated in the search along with info such as shards count. This is similar to `include_ccs_metadata`, but it also returns metadata when the query is not CCS/CPS (default: false)
   --wait-for-completion-timeout: any # The period to wait for the request to finish. By default, the request waits for 1 second for the query results. If the query completes during this period, results are returned Otherwise, a query ID is returned that can later be used to retrieve the results. (default: 1s)
   --keep-alive: any # The period for which the query and its results are stored in the cluster. The default period is five days. When this period expires, the query and its results are deleted, even if the query is still ongoing. If the `keep_on_completion` parameter is false, Elasticsearch only stores async queries that do not complete within the period set by the `wait_for_completion_timeout` parameter, regardless of this value. (default: 5d)
-  --keep-on-completion: string@bool-completer # Indicates whether the query and its results are stored in the cluster. If false, the query and its results are stored in the cluster only if the request does not complete during the period set by the `wait_for_completion_timeout` parameter. (default: false)
+  --keep-on-completion: oneof<nothing, bool> # Indicates whether the query and its results are stored in the cluster. If false, the query and its results are stored in the cluster only if the request does not complete during the period set by the `wait_for_completion_timeout` parameter. (default: false)
 ]: any -> record<took: record, is_partial: bool, all_columns: table<name: string, type: string>, columns: table<name: string, type: string>, values: list<list<any>>, _clusters: record<total: float, successful: float, running: float, skipped: float, partial: float, failed: float, details: record>, profile: record, id: string, is_running: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4971,7 +4970,7 @@ export def "query-async esql-async-query-get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --drop-null-columns: string@bool-completer # Indicates whether columns that are entirely `null` will be removed from the `columns` and `values` portion of the results. If `true`, the response will include an extra section under the name `all_columns` which has the name of all the columns.
+  --drop-null-columns: oneof<nothing, bool> # Indicates whether columns that are entirely `null` will be removed from the `columns` and `values` portion of the results. If `true`, the response will include an extra section under the name `all_columns` which has the name of all the columns.
   --format: string@format-completer # A short version of the Accept header, for example `json` or `yaml`.
   --keep-alive: string # The period for which the query and its results are stored in the cluster. When this period expires, the query and its results are deleted, even if the query is still ongoing.
   --wait-for-completion-timeout: string # The period to wait for the request to finish. By default, the request waits for complete query results. If the request completes during the period specified in this parameter, complete query results are returned. Otherwise, the response returns an `is_running` value of `true` and no results.
@@ -5022,7 +5021,7 @@ export def "query-async-stop esql-async-query-stop" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --drop-null-columns: string@bool-completer # Indicates whether columns that are entirely `null` will be removed from the `columns` and `values` portion of the results. If `true`, the response will include an extra section under the name `all_columns` which has the name of all the columns.
+  --drop-null-columns: oneof<nothing, bool> # Indicates whether columns that are entirely `null` will be removed from the `columns` and `values` portion of the results. If `true`, the response will include an extra section under the name `all_columns` which has the name of all the columns.
 ]: nothing -> record<took: record, is_partial: bool, all_columns: table<name: string, type: string>, columns: table<name: string, type: string>, values: list<list<any>>, _clusters: record<total: float, successful: float, running: float, skipped: float, partial: float, failed: float, details: record>, profile: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5182,18 +5181,18 @@ export def "query esql-query" [
   --allow-errors(-e) # Return full response without error handling
   --format: string@format-completer # A short version of the Accept header, e.g. json, yaml.  `csv`, `tsv`, and `txt` formats will return results in a tabular format, excluding other metadata fields from the response.
   --delimiter: string # The character to use between values within a CSV row. Only valid for the CSV format.
-  --drop-null-columns: string@bool-completer # Should columns that are entirely `null` be removed from the `columns` and `values` portion of the results? Defaults to `false`. If `true` then the response will include an extra section under the name `all_columns` which has the name of all columns.
-  --allow-partial-results: string@bool-completer # If `true`, partial results will be returned if there are shard failures, but the query can continue to execute on other clusters and shards. If `false`, the query will fail if there are any failures.  To override the default behavior, you can set the `esql.query.allow_partial_results` cluster setting to `false`.
-  --columnar: string@bool-completer # By default, ES|QL returns results as rows. For example, FROM returns each individual document as one row. For the JSON, YAML, CBOR and smile formats, ES|QL can return the results in a columnar fashion where one row represents all the values of a certain column in the results.
+  --drop-null-columns: oneof<nothing, bool> # Should columns that are entirely `null` be removed from the `columns` and `values` portion of the results? Defaults to `false`. If `true` then the response will include an extra section under the name `all_columns` which has the name of all columns.
+  --allow-partial-results: oneof<nothing, bool> # If `true`, partial results will be returned if there are shard failures, but the query can continue to execute on other clusters and shards. If `false`, the query will fail if there are any failures.  To override the default behavior, you can set the `esql.query.allow_partial_results` cluster setting to `false`.
+  --columnar: oneof<nothing, bool> # By default, ES|QL returns results as rows. For example, FROM returns each individual document as one row. For the JSON, YAML, CBOR and smile formats, ES|QL can return the results in a columnar fashion where one row represents all the values of a certain column in the results.
   --filter: any # Specify a Query DSL query in the filter parameter to filter the set of documents that an ES|QL query runs on.
   --time-zone: string # Sets the default timezone of the query.
   --locale: string # Returns results (especially dates) formatted per the conventions of the locale.
   --params: any # To avoid any attempts of hacking or code injection, extract the values in a separate list of parameters. Use question mark placeholders (?) in the query string for each of the parameters.
-  --profile: string@bool-completer # If provided and `true` the response will include an extra `profile` object with information on how the query was executed. This information is for human debugging and its format can change at any time but it can give some insight into the performance of each part of the query.
+  --profile: oneof<nothing, bool> # If provided and `true` the response will include an extra `profile` object with information on how the query was executed. This information is for human debugging and its format can change at any time but it can give some insight into the performance of each part of the query.
   --body-query: string # The ES|QL query API accepts an ES|QL query string in the query parameter, runs it, and returns the results.
   --tables: record # Tables to use with the LOOKUP operation. The top level key is the table name and the next level key is the column name.
-  --include-ccs-metadata: string@bool-completer # When set to `true` and performing a cross-cluster/cross-project query, the response will include an extra `_clusters` object with information about the clusters that participated in the search along with info such as shards count. (default: false)
-  --include-execution-metadata: string@bool-completer # When set to `true`, the response will include an extra `_clusters` object with information about the clusters that participated in the search along with info such as shards count. This is similar to `include_ccs_metadata`, but it also returns metadata when the query is not CCS/CPS (default: false)
+  --include-ccs-metadata: oneof<nothing, bool> # When set to `true` and performing a cross-cluster/cross-project query, the response will include an extra `_clusters` object with information about the clusters that participated in the search along with info such as shards count. (default: false)
+  --include-execution-metadata: oneof<nothing, bool> # When set to `true`, the response will include an extra `_clusters` object with information about the clusters that participated in the search along with info such as shards count. This is similar to `include_ccs_metadata`, but it also returns metadata when the query is not CCS/CPS (default: false)
 ]: any -> record<took: record, is_partial: bool, all_columns: table<name: string, type: string>, columns: table<name: string, type: string>, values: list<list<any>>, _clusters: record<total: float, successful: float, running: float, skipped: float, partial: float, failed: float, details: record>, profile: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5223,8 +5222,8 @@ export def "source get-source" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --preference: string # The node or shard the operation should be performed on. By default, the operation is randomized between the shard replicas.
-  --realtime: string@bool-completer # If `true`, the request is real-time as opposed to near-real-time.
-  --refresh: string@bool-completer # If `true`, the request refreshes the relevant shards before retrieving the document. Setting it to `true` should be done after careful thought and verification that this does not cause a heavy load on the system (and slow down indexing).
+  --realtime: oneof<nothing, bool> # If `true`, the request is real-time as opposed to near-real-time.
+  --refresh: oneof<nothing, bool> # If `true`, the request refreshes the relevant shards before retrieving the document. Setting it to `true` should be done after careful thought and verification that this does not cause a heavy load on the system (and slow down indexing).
   --routing: string # A custom value used to route operations to a specific shard.
   --qp-source: string # Indicates whether to return the `_source` field (`true` or `false`) or lists the fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude in the response.
@@ -5257,8 +5256,8 @@ export def "source exists-source" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --preference: string # The node or shard the operation should be performed on. By default, the operation is randomized between the shard replicas.
-  --realtime: string@bool-completer # If `true`, the request is real-time as opposed to near-real-time.
-  --refresh: string@bool-completer # If `true`, the request refreshes the relevant shards before retrieving the document. Setting it to `true` should be done after careful thought and verification that this does not cause a heavy load on the system (and slow down indexing).
+  --realtime: oneof<nothing, bool> # If `true`, the request is real-time as opposed to near-real-time.
+  --refresh: oneof<nothing, bool> # If `true`, the request refreshes the relevant shards before retrieving the document. Setting it to `true` should be done after careful thought and verification that this does not cause a heavy load on the system (and slow down indexing).
   --routing: string # A custom value used to route operations to a specific shard.
   --qp-source: string # Indicates whether to return the `_source` field (`true` or `false`) or lists the fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude in the response.
@@ -5290,10 +5289,10 @@ export def "explain explain" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --analyzer: string # The analyzer to use for the query string. This parameter can be used only when the `q` query string parameter is specified.
-  --analyze-wildcard: string@bool-completer # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
+  --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
   --default-operator: string@default-operator-completer # The default operator for query string query: `and` or `or`. This parameter can be used only when the `q` query string parameter is specified.
   --df: string # The field to use as default where no field prefix is given in the query string. This parameter can be used only when the `q` query string parameter is specified.
-  --lenient: string@bool-completer # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
+  --lenient: oneof<nothing, bool> # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
   --preference: string # The node or shard the operation should be performed on. It is random by default.
   --routing: string # A custom value used to route operations to a specific shard.
   --qp-source: string # `True` or `false` to return the `_source` field or not or a list of fields to return.
@@ -5330,10 +5329,10 @@ export def "explain explain-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --analyzer: string # The analyzer to use for the query string. This parameter can be used only when the `q` query string parameter is specified.
-  --analyze-wildcard: string@bool-completer # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
+  --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
   --default-operator: string@default-operator-completer # The default operator for query string query: `and` or `or`. This parameter can be used only when the `q` query string parameter is specified.
   --df: string # The field to use as default where no field prefix is given in the query string. This parameter can be used only when the `q` query string parameter is specified.
-  --lenient: string@bool-completer # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
+  --lenient: oneof<nothing, bool> # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
   --preference: string # The node or shard the operation should be performed on. It is random by default.
   --routing: string # A custom value used to route operations to a specific shard.
   --qp-source: string # `True` or `false` to return the `_source` field or not or a list of fields to return.
@@ -5414,14 +5413,14 @@ export def "field-caps field-caps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
   --qp-fields: string # A comma-separated list of fields to retrieve capabilities for. Wildcard (`*`) expressions are supported.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --include-unmapped: string@bool-completer # If true, unmapped fields are included in the response.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --include-unmapped: oneof<nothing, bool> # If true, unmapped fields are included in the response.
   --filters: string # A comma-separated list of filters to apply to the response.
   --types: list # A comma-separated list of field types to include. Any fields that do not match one of these types will be excluded from the results. It defaults to empty, meaning that all field types are returned.
-  --include-empty-fields: string@bool-completer # If false, empty fields are not included in the response.
+  --include-empty-fields: oneof<nothing, bool> # If false, empty fields are not included in the response.
   --body-fields: any # A list of fields to retrieve capabilities for. Wildcard (`*`) expressions are supported.
   --index-filter: any # Filter indices if the provided query rewrites to `match_none` on every shard.  IMPORTANT: The filtering is done on a best-effort basis, it uses index statistics and mappings to rewrite queries to `match_none` instead of fully running the request. For instance a range query over a date field can rewrite to `match_none` if all documents within a shard (including deleted documents) are outside of the provided range. However, not all queries can rewrite to `match_none` so this API may return an index even if the provided filter matches no document.
   --runtime-mappings: any # Define ad-hoc runtime fields in the request similar to the way it is done in search requests. These fields exist only as part of the query and take precedence over fields defined with the same name in the index mappings.
@@ -5450,14 +5449,14 @@ export def "field-caps field-caps-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
   --qp-fields: string # A comma-separated list of fields to retrieve capabilities for. Wildcard (`*`) expressions are supported.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --include-unmapped: string@bool-completer # If true, unmapped fields are included in the response.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --include-unmapped: oneof<nothing, bool> # If true, unmapped fields are included in the response.
   --filters: string # A comma-separated list of filters to apply to the response.
   --types: list # A comma-separated list of field types to include. Any fields that do not match one of these types will be excluded from the results. It defaults to empty, meaning that all field types are returned.
-  --include-empty-fields: string@bool-completer # If false, empty fields are not included in the response.
+  --include-empty-fields: oneof<nothing, bool> # If false, empty fields are not included in the response.
   --body-fields: any # A list of fields to retrieve capabilities for. Wildcard (`*`) expressions are supported.
   --index-filter: any # Filter indices if the provided query rewrites to `match_none` on every shard.  IMPORTANT: The filtering is done on a best-effort basis, it uses index statistics and mappings to rewrite queries to `match_none` instead of fully running the request. For instance a range query over a date field can rewrite to `match_none` if all documents within a shard (including deleted documents) are outside of the provided range. However, not all queries can rewrite to `match_none` so this API may return an index even if the provided filter matches no document.
   --runtime-mappings: any # Define ad-hoc runtime fields in the request similar to the way it is done in search requests. These fields exist only as part of the query and take precedence over fields defined with the same name in the index mappings.
@@ -5487,14 +5486,14 @@ export def "field-caps field-caps-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
   --qp-fields: string # A comma-separated list of fields to retrieve capabilities for. Wildcard (`*`) expressions are supported.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --include-unmapped: string@bool-completer # If true, unmapped fields are included in the response.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --include-unmapped: oneof<nothing, bool> # If true, unmapped fields are included in the response.
   --filters: string # A comma-separated list of filters to apply to the response.
   --types: list # A comma-separated list of field types to include. Any fields that do not match one of these types will be excluded from the results. It defaults to empty, meaning that all field types are returned.
-  --include-empty-fields: string@bool-completer # If false, empty fields are not included in the response.
+  --include-empty-fields: oneof<nothing, bool> # If false, empty fields are not included in the response.
   --body-fields: any # A list of fields to retrieve capabilities for. Wildcard (`*`) expressions are supported.
   --index-filter: any # Filter indices if the provided query rewrites to `match_none` on every shard.  IMPORTANT: The filtering is done on a best-effort basis, it uses index statistics and mappings to rewrite queries to `match_none` instead of fully running the request. For instance a range query over a date field can rewrite to `match_none` if all documents within a shard (including deleted documents) are outside of the provided range. However, not all queries can rewrite to `match_none` so this API may return an index even if the provided filter matches no document.
   --runtime-mappings: any # Define ad-hoc runtime fields in the request similar to the way it is done in search requests. These fields exist only as part of the query and take precedence over fields defined with the same name in the index mappings.
@@ -5524,14 +5523,14 @@ export def "field-caps field-caps-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
   --qp-fields: string # A comma-separated list of fields to retrieve capabilities for. Wildcard (`*`) expressions are supported.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --include-unmapped: string@bool-completer # If true, unmapped fields are included in the response.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --include-unmapped: oneof<nothing, bool> # If true, unmapped fields are included in the response.
   --filters: string # A comma-separated list of filters to apply to the response.
   --types: list # A comma-separated list of field types to include. Any fields that do not match one of these types will be excluded from the results. It defaults to empty, meaning that all field types are returned.
-  --include-empty-fields: string@bool-completer # If false, empty fields are not included in the response.
+  --include-empty-fields: oneof<nothing, bool> # If false, empty fields are not included in the response.
   --body-fields: any # A list of fields to retrieve capabilities for. Wildcard (`*`) expressions are supported.
   --index-filter: any # Filter indices if the provided query rewrites to `match_none` on every shard.  IMPORTANT: The filtering is done on a best-effort basis, it uses index statistics and mappings to rewrite queries to `match_none` instead of fully running the request. For instance a range query over a date field can rewrite to `match_none` if all documents within a shard (including deleted documents) are outside of the provided range. However, not all queries can rewrite to `match_none` so this API may return an index even if the provided filter matches no document.
   --runtime-mappings: any # Define ad-hoc runtime fields in the request similar to the way it is done in search requests. These fields exist only as part of the query and take precedence over fields defined with the same name in the index mappings.
@@ -5561,8 +5560,8 @@ export def "fleet-global-checkpoints fleet-global-checkpoints" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait-for-advance: string@bool-completer # A boolean value which controls whether to wait (until the timeout) for the global checkpoints to advance past the provided `checkpoints`.
-  --wait-for-index: string@bool-completer # A boolean value which controls whether to wait (until the timeout) for the target index to exist and all primary shards be active. Can only be true when `wait_for_advance` is true.
+  --wait-for-advance: oneof<nothing, bool> # A boolean value which controls whether to wait (until the timeout) for the global checkpoints to advance past the provided `checkpoints`.
+  --wait-for-index: oneof<nothing, bool> # A boolean value which controls whether to wait (until the timeout) for the target index to exist and all primary shards be active. Can only be true when `wait_for_advance` is true.
   --checkpoints: list # A comma separated list of previous global checkpoints. When used in combination with `wait_for_advance`, the API will only return once the global checkpoints advances past the checkpoints. Providing an empty list will cause Elasticsearch to immediately return the current global checkpoints.
   --timeout: string # Period to wait for a global checkpoints to advance past `checkpoints`.
 ]: nothing -> record<global_checkpoints: list<float>, timed_out: bool> {
@@ -5587,19 +5586,19 @@ export def "fleet-fleet-msearch fleet-msearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --ccs-minimize-roundtrips: string@bool-completer # If true, network roundtrips between the coordinating node and remote clusters are minimized for cross-cluster search requests.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # If true, network roundtrips between the coordinating node and remote clusters are minimized for cross-cluster search requests.
   --expand-wildcards: string # Type of index that wildcard expressions can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams.
-  --ignore-throttled: string@bool-completer # If true, concrete, expanded or aliased indices are ignored when frozen.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-throttled: oneof<nothing, bool> # If true, concrete, expanded or aliased indices are ignored when frozen.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --max-concurrent-searches: float # Maximum number of concurrent searches the multi search API can execute.
   --max-concurrent-shard-requests: float # Maximum number of concurrent shard requests that each sub-search request executes per node.
   --pre-filter-shard-size: float # Defines a threshold that enforces a pre-filter roundtrip to prefilter search shards based on query rewriting if the number of shards the search request expands to exceeds the threshold. This filter roundtrip can limit the number of shards significantly if for instance a shard can not match any documents based on its rewrite method i.e., if date filters are mandatory to match but the shard bounds and the query are disjoint.
   --search-type: string@search-type-completer # Indicates whether global term and document frequencies should be used when scoring returned documents.
-  --rest-total-hits-as-int: string@bool-completer # If true, hits.total are returned as an integer in the response. Defaults to false, which returns an object.
-  --typed-keys: string@bool-completer # Specifies whether aggregation and suggester names should be prefixed by their respective types in the response.
+  --rest-total-hits-as-int: oneof<nothing, bool> # If true, hits.total are returned as an integer in the response. Defaults to false, which returns an object.
+  --typed-keys: oneof<nothing, bool> # Specifies whether aggregation and suggester names should be prefixed by their respective types in the response.
   --wait-for-checkpoints: list # A comma separated list of checkpoints. When configured, the search API will only be executed on a shard after the relevant checkpoint has become visible for search. Defaults to an empty list which will cause Elasticsearch to immediately execute the search.
-  --allow-partial-search-results: string@bool-completer # If true, returns partial results if there are shard request timeouts or shard failures. If false, returns an error with no partial results. Defaults to the configured cluster setting `search.default_allow_partial_results`, which is true by default.
+  --allow-partial-search-results: oneof<nothing, bool> # If true, returns partial results if there are shard request timeouts or shard failures. If false, returns an error with no partial results. Defaults to the configured cluster setting `search.default_allow_partial_results`, which is true by default.
   --body: record
 ]: any -> any {
   let input = $in
@@ -5625,19 +5624,19 @@ export def "fleet-fleet-msearch fleet-msearch-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --ccs-minimize-roundtrips: string@bool-completer # If true, network roundtrips between the coordinating node and remote clusters are minimized for cross-cluster search requests.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # If true, network roundtrips between the coordinating node and remote clusters are minimized for cross-cluster search requests.
   --expand-wildcards: string # Type of index that wildcard expressions can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams.
-  --ignore-throttled: string@bool-completer # If true, concrete, expanded or aliased indices are ignored when frozen.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-throttled: oneof<nothing, bool> # If true, concrete, expanded or aliased indices are ignored when frozen.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --max-concurrent-searches: float # Maximum number of concurrent searches the multi search API can execute.
   --max-concurrent-shard-requests: float # Maximum number of concurrent shard requests that each sub-search request executes per node.
   --pre-filter-shard-size: float # Defines a threshold that enforces a pre-filter roundtrip to prefilter search shards based on query rewriting if the number of shards the search request expands to exceeds the threshold. This filter roundtrip can limit the number of shards significantly if for instance a shard can not match any documents based on its rewrite method i.e., if date filters are mandatory to match but the shard bounds and the query are disjoint.
   --search-type: string@search-type-completer # Indicates whether global term and document frequencies should be used when scoring returned documents.
-  --rest-total-hits-as-int: string@bool-completer # If true, hits.total are returned as an integer in the response. Defaults to false, which returns an object.
-  --typed-keys: string@bool-completer # Specifies whether aggregation and suggester names should be prefixed by their respective types in the response.
+  --rest-total-hits-as-int: oneof<nothing, bool> # If true, hits.total are returned as an integer in the response. Defaults to false, which returns an object.
+  --typed-keys: oneof<nothing, bool> # Specifies whether aggregation and suggester names should be prefixed by their respective types in the response.
   --wait-for-checkpoints: list # A comma separated list of checkpoints. When configured, the search API will only be executed on a shard after the relevant checkpoint has become visible for search. Defaults to an empty list which will cause Elasticsearch to immediately execute the search.
-  --allow-partial-search-results: string@bool-completer # If true, returns partial results if there are shard request timeouts or shard failures. If false, returns an error with no partial results. Defaults to the configured cluster setting `search.default_allow_partial_results`, which is true by default.
+  --allow-partial-search-results: oneof<nothing, bool> # If true, returns partial results if there are shard request timeouts or shard failures. If false, returns an error with no partial results. Defaults to the configured cluster setting `search.default_allow_partial_results`, which is true by default.
   --body: record
 ]: any -> any {
   let input = $in
@@ -5664,19 +5663,19 @@ export def "fleet-fleet-msearch fleet-msearch-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --ccs-minimize-roundtrips: string@bool-completer # If true, network roundtrips between the coordinating node and remote clusters are minimized for cross-cluster search requests.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # If true, network roundtrips between the coordinating node and remote clusters are minimized for cross-cluster search requests.
   --expand-wildcards: string # Type of index that wildcard expressions can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams.
-  --ignore-throttled: string@bool-completer # If true, concrete, expanded or aliased indices are ignored when frozen.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-throttled: oneof<nothing, bool> # If true, concrete, expanded or aliased indices are ignored when frozen.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --max-concurrent-searches: float # Maximum number of concurrent searches the multi search API can execute.
   --max-concurrent-shard-requests: float # Maximum number of concurrent shard requests that each sub-search request executes per node.
   --pre-filter-shard-size: float # Defines a threshold that enforces a pre-filter roundtrip to prefilter search shards based on query rewriting if the number of shards the search request expands to exceeds the threshold. This filter roundtrip can limit the number of shards significantly if for instance a shard can not match any documents based on its rewrite method i.e., if date filters are mandatory to match but the shard bounds and the query are disjoint.
   --search-type: string@search-type-completer # Indicates whether global term and document frequencies should be used when scoring returned documents.
-  --rest-total-hits-as-int: string@bool-completer # If true, hits.total are returned as an integer in the response. Defaults to false, which returns an object.
-  --typed-keys: string@bool-completer # Specifies whether aggregation and suggester names should be prefixed by their respective types in the response.
+  --rest-total-hits-as-int: oneof<nothing, bool> # If true, hits.total are returned as an integer in the response. Defaults to false, which returns an object.
+  --typed-keys: oneof<nothing, bool> # Specifies whether aggregation and suggester names should be prefixed by their respective types in the response.
   --wait-for-checkpoints: list # A comma separated list of checkpoints. When configured, the search API will only be executed on a shard after the relevant checkpoint has become visible for search. Defaults to an empty list which will cause Elasticsearch to immediately execute the search.
-  --allow-partial-search-results: string@bool-completer # If true, returns partial results if there are shard request timeouts or shard failures. If false, returns an error with no partial results. Defaults to the configured cluster setting `search.default_allow_partial_results`, which is true by default.
+  --allow-partial-search-results: oneof<nothing, bool> # If true, returns partial results if there are shard request timeouts or shard failures. If false, returns an error with no partial results. Defaults to the configured cluster setting `search.default_allow_partial_results`, which is true by default.
   --body: record
 ]: any -> any {
   let input = $in
@@ -5703,19 +5702,19 @@ export def "fleet-fleet-msearch fleet-msearch-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --ccs-minimize-roundtrips: string@bool-completer # If true, network roundtrips between the coordinating node and remote clusters are minimized for cross-cluster search requests.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # If true, network roundtrips between the coordinating node and remote clusters are minimized for cross-cluster search requests.
   --expand-wildcards: string # Type of index that wildcard expressions can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams.
-  --ignore-throttled: string@bool-completer # If true, concrete, expanded or aliased indices are ignored when frozen.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-throttled: oneof<nothing, bool> # If true, concrete, expanded or aliased indices are ignored when frozen.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --max-concurrent-searches: float # Maximum number of concurrent searches the multi search API can execute.
   --max-concurrent-shard-requests: float # Maximum number of concurrent shard requests that each sub-search request executes per node.
   --pre-filter-shard-size: float # Defines a threshold that enforces a pre-filter roundtrip to prefilter search shards based on query rewriting if the number of shards the search request expands to exceeds the threshold. This filter roundtrip can limit the number of shards significantly if for instance a shard can not match any documents based on its rewrite method i.e., if date filters are mandatory to match but the shard bounds and the query are disjoint.
   --search-type: string@search-type-completer # Indicates whether global term and document frequencies should be used when scoring returned documents.
-  --rest-total-hits-as-int: string@bool-completer # If true, hits.total are returned as an integer in the response. Defaults to false, which returns an object.
-  --typed-keys: string@bool-completer # Specifies whether aggregation and suggester names should be prefixed by their respective types in the response.
+  --rest-total-hits-as-int: oneof<nothing, bool> # If true, hits.total are returned as an integer in the response. Defaults to false, which returns an object.
+  --typed-keys: oneof<nothing, bool> # Specifies whether aggregation and suggester names should be prefixed by their respective types in the response.
   --wait-for-checkpoints: list # A comma separated list of checkpoints. When configured, the search API will only be executed on a shard after the relevant checkpoint has become visible for search. Defaults to an empty list which will cause Elasticsearch to immediately execute the search.
-  --allow-partial-search-results: string@bool-completer # If true, returns partial results if there are shard request timeouts or shard failures. If false, returns an error with no partial results. Defaults to the configured cluster setting `search.default_allow_partial_results`, which is true by default.
+  --allow-partial-search-results: oneof<nothing, bool> # If true, returns partial results if there are shard request timeouts or shard failures. If false, returns an error with no partial results. Defaults to the configured cluster setting `search.default_allow_partial_results`, which is true by default.
   --body: record
 ]: any -> any {
   let input = $in
@@ -5744,23 +5743,23 @@ export def "fleet-fleet-search fleet-search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --analyzer: string
-  --analyze-wildcard: string@bool-completer
+  --analyze-wildcard: oneof<nothing, bool>
   --batched-reduce-size: float
-  --ccs-minimize-roundtrips: string@bool-completer
+  --ccs-minimize-roundtrips: oneof<nothing, bool>
   --default-operator: string@default-operator-completer
   --df: string
   --docvalue-fields: string
   --expand-wildcards: string
-  --explain: string@bool-completer
-  --ignore-throttled: string@bool-completer
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --lenient: string@bool-completer
+  --explain: oneof<nothing, bool>
+  --ignore-throttled: oneof<nothing, bool>
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --lenient: oneof<nothing, bool>
   --max-concurrent-shard-requests: float
   --preference: string
   --pre-filter-shard-size: float
-  --request-cache: string@bool-completer
+  --request-cache: oneof<nothing, bool>
   --routing: string
   --scroll: string
   --search-type: string@search-type-completer
@@ -5773,23 +5772,23 @@ export def "fleet-fleet-search fleet-search" [
   --terminate-after: float
   --timeout: string
   --track-total-hits: string
-  --track-scores: string@bool-completer
-  --typed-keys: string@bool-completer
-  --rest-total-hits-as-int: string@bool-completer
-  --version: string@bool-completer
+  --track-scores: oneof<nothing, bool>
+  --typed-keys: oneof<nothing, bool>
+  --rest-total-hits-as-int: oneof<nothing, bool>
+  --version: oneof<nothing, bool>
   --qp-source: string
   --source-excludes: string
   --source-includes: string
-  --seq-no-primary-term: string@bool-completer
+  --seq-no-primary-term: oneof<nothing, bool>
   --q: string
   --size: float
   --qp-from: float
   --qp-sort: string
   --wait-for-checkpoints: list # A comma separated list of checkpoints. When configured, the search API will only be executed on a shard after the relevant checkpoint has become visible for search. Defaults to an empty list which will cause Elasticsearch to immediately execute the search.
-  --allow-partial-search-results: string@bool-completer # If true, returns partial results if there are shard request timeouts or shard failures. If false, returns an error with no partial results. Defaults to the configured cluster setting `search.default_allow_partial_results`, which is true by default.
+  --allow-partial-search-results: oneof<nothing, bool> # If true, returns partial results if there are shard request timeouts or shard failures. If false, returns an error with no partial results. Defaults to the configured cluster setting `search.default_allow_partial_results`, which is true by default.
   --aggregations: record
   --collapse: any
-  --explain: string@bool-completer # If true, returns detailed information about score computation as part of a hit. (default: false)
+  --explain: oneof<nothing, bool> # If true, returns detailed information about score computation as part of a hit. (default: false)
   --ext: record # Configuration of search extensions defined by Elasticsearch plugins.
   --body-from: float # Starting document offset. By default, you cannot page through more than 10,000 hits using the from and size parameters. To page through more hits, use the search_after parameter. (default: 0.0)
   --highlight: any
@@ -5798,7 +5797,7 @@ export def "fleet-fleet-search fleet-search" [
   --docvalue-fields: list # Array of wildcard (*) patterns. The request returns doc values for field names matching these patterns in the hits.fields property of the response. — item shape: {field: any, format?: string, include_unmapped?: bool}
   --min-score: float # Minimum _score for matching documents. Documents with a lower _score are not included in search results and results collected by aggregations.
   --post-filter: any
-  --profile: string@bool-completer
+  --profile: oneof<nothing, bool>
   --body-query: any # Defines the search definition using the Query DSL.
   --rescore: any
   --script-fields: record # Retrieve a script evaluation (based on different fields) for each hit.
@@ -5811,9 +5810,9 @@ export def "fleet-fleet-search fleet-search" [
   --suggest: any
   --terminate-after: float # Maximum number of documents to collect for each shard. If a query reaches this limit, Elasticsearch terminates the query early. Elasticsearch collects documents before sorting. Defaults to 0, which does not terminate query execution early. (default: 0.0)
   --timeout: string # Specifies the period of time to wait for a response from each shard. If no response is received before the timeout expires, the request fails and returns an error. Defaults to no timeout.
-  --track-scores: string@bool-completer # If true, calculate and return document scores, even if the scores are not used for sorting. (default: false)
-  --version: string@bool-completer # If true, returns document version as part of a hit. (default: false)
-  --seq-no-primary-term: string@bool-completer # If true, returns sequence number and primary term of the last modification of each hit. See Optimistic concurrency control.
+  --track-scores: oneof<nothing, bool> # If true, calculate and return document scores, even if the scores are not used for sorting. (default: false)
+  --version: oneof<nothing, bool> # If true, returns document version as part of a hit. (default: false)
+  --seq-no-primary-term: oneof<nothing, bool> # If true, returns sequence number and primary term of the last modification of each hit. See Optimistic concurrency control.
   --stored-fields: any # List of stored fields to return as part of a hit. If no fields are specified, no stored fields are included in the response. If this field is specified, the _source parameter defaults to false. You can pass _source: true to return both source fields and stored fields in the search response.
   --pit: any # Limits the search to a point in time (PIT). If you provide a PIT, you cannot specify an <index> in the request path.
   --runtime-mappings: any # Defines one or more runtime fields in the search request. These fields take precedence over mapped fields with the same name.
@@ -5846,23 +5845,23 @@ export def "fleet-fleet-search fleet-search-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --analyzer: string
-  --analyze-wildcard: string@bool-completer
+  --analyze-wildcard: oneof<nothing, bool>
   --batched-reduce-size: float
-  --ccs-minimize-roundtrips: string@bool-completer
+  --ccs-minimize-roundtrips: oneof<nothing, bool>
   --default-operator: string@default-operator-completer
   --df: string
   --docvalue-fields: string
   --expand-wildcards: string
-  --explain: string@bool-completer
-  --ignore-throttled: string@bool-completer
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --lenient: string@bool-completer
+  --explain: oneof<nothing, bool>
+  --ignore-throttled: oneof<nothing, bool>
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --lenient: oneof<nothing, bool>
   --max-concurrent-shard-requests: float
   --preference: string
   --pre-filter-shard-size: float
-  --request-cache: string@bool-completer
+  --request-cache: oneof<nothing, bool>
   --routing: string
   --scroll: string
   --search-type: string@search-type-completer
@@ -5875,23 +5874,23 @@ export def "fleet-fleet-search fleet-search-1" [
   --terminate-after: float
   --timeout: string
   --track-total-hits: string
-  --track-scores: string@bool-completer
-  --typed-keys: string@bool-completer
-  --rest-total-hits-as-int: string@bool-completer
-  --version: string@bool-completer
+  --track-scores: oneof<nothing, bool>
+  --typed-keys: oneof<nothing, bool>
+  --rest-total-hits-as-int: oneof<nothing, bool>
+  --version: oneof<nothing, bool>
   --qp-source: string
   --source-excludes: string
   --source-includes: string
-  --seq-no-primary-term: string@bool-completer
+  --seq-no-primary-term: oneof<nothing, bool>
   --q: string
   --size: float
   --qp-from: float
   --qp-sort: string
   --wait-for-checkpoints: list # A comma separated list of checkpoints. When configured, the search API will only be executed on a shard after the relevant checkpoint has become visible for search. Defaults to an empty list which will cause Elasticsearch to immediately execute the search.
-  --allow-partial-search-results: string@bool-completer # If true, returns partial results if there are shard request timeouts or shard failures. If false, returns an error with no partial results. Defaults to the configured cluster setting `search.default_allow_partial_results`, which is true by default.
+  --allow-partial-search-results: oneof<nothing, bool> # If true, returns partial results if there are shard request timeouts or shard failures. If false, returns an error with no partial results. Defaults to the configured cluster setting `search.default_allow_partial_results`, which is true by default.
   --aggregations: record
   --collapse: any
-  --explain: string@bool-completer # If true, returns detailed information about score computation as part of a hit. (default: false)
+  --explain: oneof<nothing, bool> # If true, returns detailed information about score computation as part of a hit. (default: false)
   --ext: record # Configuration of search extensions defined by Elasticsearch plugins.
   --body-from: float # Starting document offset. By default, you cannot page through more than 10,000 hits using the from and size parameters. To page through more hits, use the search_after parameter. (default: 0.0)
   --highlight: any
@@ -5900,7 +5899,7 @@ export def "fleet-fleet-search fleet-search-1" [
   --docvalue-fields: list # Array of wildcard (*) patterns. The request returns doc values for field names matching these patterns in the hits.fields property of the response. — item shape: {field: any, format?: string, include_unmapped?: bool}
   --min-score: float # Minimum _score for matching documents. Documents with a lower _score are not included in search results and results collected by aggregations.
   --post-filter: any
-  --profile: string@bool-completer
+  --profile: oneof<nothing, bool>
   --body-query: any # Defines the search definition using the Query DSL.
   --rescore: any
   --script-fields: record # Retrieve a script evaluation (based on different fields) for each hit.
@@ -5913,9 +5912,9 @@ export def "fleet-fleet-search fleet-search-1" [
   --suggest: any
   --terminate-after: float # Maximum number of documents to collect for each shard. If a query reaches this limit, Elasticsearch terminates the query early. Elasticsearch collects documents before sorting. Defaults to 0, which does not terminate query execution early. (default: 0.0)
   --timeout: string # Specifies the period of time to wait for a response from each shard. If no response is received before the timeout expires, the request fails and returns an error. Defaults to no timeout.
-  --track-scores: string@bool-completer # If true, calculate and return document scores, even if the scores are not used for sorting. (default: false)
-  --version: string@bool-completer # If true, returns document version as part of a hit. (default: false)
-  --seq-no-primary-term: string@bool-completer # If true, returns sequence number and primary term of the last modification of each hit. See Optimistic concurrency control.
+  --track-scores: oneof<nothing, bool> # If true, calculate and return document scores, even if the scores are not used for sorting. (default: false)
+  --version: oneof<nothing, bool> # If true, returns document version as part of a hit. (default: false)
+  --seq-no-primary-term: oneof<nothing, bool> # If true, returns sequence number and primary term of the last modification of each hit. See Optimistic concurrency control.
   --stored-fields: any # List of stored fields to return as part of a hit. If no fields are specified, no stored fields are included in the response. If this field is specified, the _source parameter defaults to false. You can pass _source: true to return both source fields and stored fields in the search response.
   --pit: any # Limits the search to a point in time (PIT). If you provide a PIT, you cannot specify an <index> in the request path.
   --runtime-mappings: any # Defines one or more runtime fields in the search request. These fields take precedence over mapped fields with the same name.
@@ -5946,7 +5945,7 @@ export def "reindex get-reindex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait-for-completion: string@bool-completer # If `true`, the request blocks until the reindex task completes, then returns the result.
+  --wait-for-completion: oneof<nothing, bool> # If `true`, the request blocks until the reindex task completes, then returns the result.
   --timeout: string # The period to wait for the reindex task to complete when `wait_for_completion` is `true`.
 ]: nothing -> record<completed: bool, id: record, description: string, start_time_in_millis: record, start_time: string, running_time: record, running_time_in_nanos: record, cancelled: bool, status: record<slice_id: float, batches: float, created: float, deleted: float, noops: float, requests_per_second: float, retries: record<bulk: float, search: float>, throttled: record, throttled_millis: record, throttled_until: record, throttled_until_millis: record, total: float, updated: float, version_conflicts: float, cancelled: string>, error: record<type: string, reason: any, stack_trace: string, caused_by: record<type: string, reason: any, stack_trace: string, caused_by: record, root_cause: list, suppressed: list>, root_cause: list<record>, suppressed: list<record>>, response: record<batches: float, created: float, deleted: float, failures: list<record>, noops: float, requests_per_second: float, retries: record<bulk: float, search: float>, throttled_millis: record, throttled_until_millis: record, timed_out: bool, took: record, total: float, updated: float, version_conflicts: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6081,7 +6080,7 @@ export def "health-report health-report" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --timeout: string # Explicit operation timeout.
-  --verbose: string@bool-completer # Opt-in for more information about the health of the system.
+  --verbose: oneof<nothing, bool> # Opt-in for more information about the health of the system.
   --size: float # Limit the number of affected resources the health report API returns.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6107,7 +6106,7 @@ export def "health-report health-report-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --timeout: string # Explicit operation timeout.
-  --verbose: string@bool-completer # Opt-in for more information about the health of the system.
+  --verbose: oneof<nothing, bool> # Opt-in for more information about the health of the system.
   --size: float # Limit the number of affected resources the health report API returns.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6213,8 +6212,8 @@ export def "ilm-explain ilm-explain-lifecycle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --only-errors: string@bool-completer # Filters the returned indices to only indices that are managed by ILM and are in an error state, either due to an encountering an error while executing the policy, or attempting to use a policy that does not exist.
-  --only-managed: string@bool-completer # Filters the returned indices to only indices that are managed by ILM.
+  --only-errors: oneof<nothing, bool> # Filters the returned indices to only indices that are managed by ILM and are in an error state, either due to an encountering an error while executing the policy, or attempting to use a policy that does not exist.
+  --only-managed: oneof<nothing, bool> # Filters the returned indices to only indices that are managed by ILM.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> record<indices: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6284,7 +6283,7 @@ export def "ilm-migrate-to-data-tiers ilm-migrate-to-data-tiers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dry-run: string@bool-completer # If true, simulates the migration from node attributes based allocation filters to data tiers, but does not perform the migration. This provides a way to retrieve the indices and ILM policies that need to be migrated.
+  --dry-run: oneof<nothing, bool> # If true, simulates the migration from node attributes based allocation filters to data tiers, but does not perform the migration. This provides a way to retrieve the indices and ILM policies that need to be migrated.
   --master-timeout: string # The period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error. It can also be set to `-1` to indicate that the request should never timeout.
   --legacy-template-to-delete: string
   --node-attribute: string
@@ -6436,7 +6435,7 @@ export def "doc index-2" [
   --allow-errors(-e) # Return full response without error handling
   --if-primary-term: float # Only perform the operation if the document has this primary term.
   --if-seq-no: float # Only perform the operation if the document has this sequence number.
-  --include-source-on-error: string@bool-completer # True or false if to include the document source in the error message in case of parsing errors.
+  --include-source-on-error: oneof<nothing, bool> # True or false if to include the document source in the error message in case of parsing errors.
   --op-type: string@op-type-completer # Set to `create` to only index the document if it does not already exist (put if absent). If a document with the specified `_id` already exists, the indexing operation will fail. The behavior is the same as using the `<index>/_create` endpoint. If a document ID is specified, this paramater defaults to `index`. Otherwise, it defaults to `create`. If the request targets a data stream, an `op_type` of `create` is required.
   --pipeline: string # The ID of the pipeline to use to preprocess incoming documents. If the index has a default ingest pipeline specified, then setting the value to `_none` disables the default ingest pipeline for this request. If a final pipeline is configured it will always run, regardless of the value of this parameter.
   --refresh: string@refresh-completer # If `true`, Elasticsearch refreshes the affected shards to make this operation visible to search. If `wait_for`, it waits for a refresh to make this operation visible to search. If `false`, it does nothing with refreshes.
@@ -6445,8 +6444,8 @@ export def "doc index-2" [
   --version: float # An explicit version number for concurrency control. It must be a non-negative long number.
   --version-type: string@version-type-completer # The version type.
   --wait-for-active-shards: string # The number of shard copies that must be active before proceeding with the operation. You can set it to `all` or any positive integer up to the total number of shards in the index (`number_of_replicas+1`). The default value of `1` means it waits for each primary shard to be active.
-  --require-alias: string@bool-completer # If `true`, the destination must be an index alias.
-  --require-data-stream: string@bool-completer # If `true`, the request's actions must target a data stream (existing or to be created).
+  --require-alias: oneof<nothing, bool> # If `true`, the destination must be an index alias.
+  --require-data-stream: oneof<nothing, bool> # If `true`, the request's actions must target a data stream (existing or to be created).
   --body: record
 ]: any -> any {
   let input = $in
@@ -6474,9 +6473,9 @@ export def "block indices-add-block" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. It supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --master-timeout: string # The period to wait for the master node. If the master node is not available before the timeout expires, the request fails and returns an error. It can also be set to `-1` to indicate that the request should never timeout.
   --timeout: string # The period to wait for a response from all relevant nodes in the cluster after updating the cluster metadata. If no response is received before the timeout expires, the cluster metadata update still applies but the response will indicate that it was not completely acknowledged. It can also be set to `-1` to indicate that the request should never timeout.
 ]: nothing -> record<acknowledged: bool, shards_acknowledged: bool, indices: table<name: record, blocked: bool>> {
@@ -6503,9 +6502,9 @@ export def "block indices-remove-block" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. It supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --master-timeout: string # The period to wait for the master node. If the master node is not available before the timeout expires, the request fails and returns an error. It can also be set to `-1` to indicate that the request should never timeout.
   --timeout: string # The period to wait for a response from all relevant nodes in the cluster after updating the cluster metadata. If no response is received before the timeout expires, the cluster metadata update still applies but the response will indicate that it was not completely acknowledged. It can also be set to `-1` to indicate that the request should never timeout.
 ]: nothing -> record<acknowledged: bool, indices: table<name: record, unblocked: bool, exception: record>> {
@@ -6535,7 +6534,7 @@ export def "analyze indices-analyze" [
   --analyzer: string # The name of the analyzer that should be applied to the provided `text`. This could be a built-in analyzer, or an analyzer that’s been configured in the index.
   --attributes: list # Array of token attributes used to filter the output of the `explain` parameter.
   --char-filter: list # Array of character filters used to preprocess characters before the tokenizer.
-  --explain: string@bool-completer # If `true`, the response includes token attributes and additional details. (default: false)
+  --explain: oneof<nothing, bool> # If `true`, the response includes token attributes and additional details. (default: false)
   --field: any # Field used to derive the analyzer. To use this parameter, you must specify an index. If specified, the `analyzer` parameter overrides this value.
   --filter: list # Array of token filters used to apply after the tokenizer.
   --normalizer: string # Normalizer to use to convert text into a single token.
@@ -6571,7 +6570,7 @@ export def "analyze indices-analyze-1" [
   --analyzer: string # The name of the analyzer that should be applied to the provided `text`. This could be a built-in analyzer, or an analyzer that’s been configured in the index.
   --attributes: list # Array of token attributes used to filter the output of the `explain` parameter.
   --char-filter: list # Array of character filters used to preprocess characters before the tokenizer.
-  --explain: string@bool-completer # If `true`, the response includes token attributes and additional details. (default: false)
+  --explain: oneof<nothing, bool> # If `true`, the response includes token attributes and additional details. (default: false)
   --field: any # Field used to derive the analyzer. To use this parameter, you must specify an index. If specified, the `analyzer` parameter overrides this value.
   --filter: list # Array of token filters used to apply after the tokenizer.
   --normalizer: string # Normalizer to use to convert text into a single token.
@@ -6608,7 +6607,7 @@ export def "analyze indices-analyze-2" [
   --analyzer: string # The name of the analyzer that should be applied to the provided `text`. This could be a built-in analyzer, or an analyzer that’s been configured in the index.
   --attributes: list # Array of token attributes used to filter the output of the `explain` parameter.
   --char-filter: list # Array of character filters used to preprocess characters before the tokenizer.
-  --explain: string@bool-completer # If `true`, the response includes token attributes and additional details. (default: false)
+  --explain: oneof<nothing, bool> # If `true`, the response includes token attributes and additional details. (default: false)
   --field: any # Field used to derive the analyzer. To use this parameter, you must specify an index. If specified, the `analyzer` parameter overrides this value.
   --filter: list # Array of token filters used to apply after the tokenizer.
   --normalizer: string # Normalizer to use to convert text into a single token.
@@ -6645,7 +6644,7 @@ export def "analyze indices-analyze-3" [
   --analyzer: string # The name of the analyzer that should be applied to the provided `text`. This could be a built-in analyzer, or an analyzer that’s been configured in the index.
   --attributes: list # Array of token attributes used to filter the output of the `explain` parameter.
   --char-filter: list # Array of character filters used to preprocess characters before the tokenizer.
-  --explain: string@bool-completer # If `true`, the response includes token attributes and additional details. (default: false)
+  --explain: oneof<nothing, bool> # If `true`, the response includes token attributes and additional details. (default: false)
   --field: any # Field used to derive the analyzer. To use this parameter, you must specify an index. If specified, the `analyzer` parameter overrides this value.
   --filter: list # Array of token filters used to apply after the tokenizer.
   --normalizer: string # Normalizer to use to convert text into a single token.
@@ -6699,13 +6698,13 @@ export def "cache-clear indices-clear-cache" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --index: string # Comma-separated list of data streams, indices, and aliases used to limit the request. Supports wildcards (`*`). To target all data streams and indices, omit this parameter or use `*` or `_all`.
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --fielddata: string@bool-completer # If `true`, clears the fields cache. Use the `fields` parameter to clear the cache of specific fields only.
+  --fielddata: oneof<nothing, bool> # If `true`, clears the fields cache. Use the `fields` parameter to clear the cache of specific fields only.
   --qp-fields: string # Comma-separated list of field names used to limit the `fielddata` parameter.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --qp-query: string@bool-completer # If `true`, clears the query cache.
-  --request: string@bool-completer # If `true`, clears the request cache.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --qp-query: oneof<nothing, bool> # If `true`, clears the query cache.
+  --request: oneof<nothing, bool> # If `true`, clears the request cache.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6730,13 +6729,13 @@ export def "cache-clear indices-clear-cache-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --index: string # Comma-separated list of data streams, indices, and aliases used to limit the request. Supports wildcards (`*`). To target all data streams and indices, omit this parameter or use `*` or `_all`.
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --fielddata: string@bool-completer # If `true`, clears the fields cache. Use the `fields` parameter to clear the cache of specific fields only.
+  --fielddata: oneof<nothing, bool> # If `true`, clears the fields cache. Use the `fields` parameter to clear the cache of specific fields only.
   --qp-fields: string # Comma-separated list of field names used to limit the `fielddata` parameter.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --qp-query: string@bool-completer # If `true`, clears the query cache.
-  --request: string@bool-completer # If `true`, clears the request cache.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --qp-query: oneof<nothing, bool> # If `true`, clears the query cache.
+  --request: oneof<nothing, bool> # If `true`, clears the request cache.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6824,9 +6823,9 @@ export def "close indices-close" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --wait-for-active-shards: string # The number of shard copies that must be active before proceeding with the operation. Set to `all` or any positive integer up to the total number of shards in the index (`number_of_replicas+1`).
@@ -6853,12 +6852,12 @@ export def "indices indices-get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard expressions can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as open,hidden.
-  --flat-settings: string@bool-completer # If true, returns settings in flat format.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --include-defaults: string@bool-completer # If true, return all default settings in the response.
-  --local: string@bool-completer # If true, the request retrieves information from the local node only. Defaults to false, which means information is retrieved from the master node.
+  --flat-settings: oneof<nothing, bool> # If true, returns settings in flat format.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --include-defaults: oneof<nothing, bool> # If true, return all default settings in the response.
+  --local: oneof<nothing, bool> # If true, the request retrieves information from the local node only. Defaults to false, which means information is retrieved from the master node.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
   --features: string # Return only information on specified index features
 ]: nothing -> record {
@@ -6916,9 +6915,9 @@ export def "indices indices-delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> record<acknowledged: bool, _shards: record<failed: record, successful: record, total: record, failures: list<record>, skipped: record>> {
@@ -6944,12 +6943,12 @@ export def "indices indices-exists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --flat-settings: string@bool-completer # If `true`, returns settings in flat format.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --include-defaults: string@bool-completer # If `true`, return all default settings in the response.
-  --local: string@bool-completer # If `true`, the request retrieves information from the local node only.
+  --flat-settings: oneof<nothing, bool> # If `true`, returns settings in flat format.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --include-defaults: oneof<nothing, bool> # If `true`, return all default settings in the response.
+  --local: oneof<nothing, bool> # If `true`, the request retrieves information from the local node only.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6974,9 +6973,9 @@ export def "data-stream indices-get-data-stream-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --expand-wildcards: string # Type of data stream that wildcard patterns can match. Supports comma-separated values, such as `open,hidden`.
-  --include-defaults: string@bool-completer # If true, returns all relevant default configurations for the index template.
+  --include-defaults: oneof<nothing, bool> # If true, returns all relevant default configurations for the index template.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
-  --verbose: string@bool-completer # Whether the maximum timestamp for each data stream should be calculated and returned.
+  --verbose: oneof<nothing, bool> # Whether the maximum timestamp for each data stream should be calculated and returned.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7054,7 +7053,7 @@ export def "create-from indices-create-from" [
   --allow-errors(-e) # Return full response without error handling
   --mappings-override: any # Mappings overrides to be applied to the destination index (optional)
   --settings-override: any # Settings overrides to be applied to the destination index (optional)
-  --remove-index-blocks: string@bool-completer # If index blocks should be removed when creating destination index (optional) (default: true)
+  --remove-index-blocks: oneof<nothing, bool> # If index blocks should be removed when creating destination index (optional) (default: true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7084,7 +7083,7 @@ export def "create-from indices-create-from-1" [
   --allow-errors(-e) # Return full response without error handling
   --mappings-override: any # Mappings overrides to be applied to the destination index (optional)
   --settings-override: any # Settings overrides to be applied to the destination index (optional)
-  --remove-index-blocks: string@bool-completer # If index blocks should be removed when creating destination index (optional) (default: true)
+  --remove-index-blocks: oneof<nothing, bool> # If index blocks should be removed when creating destination index (optional) (default: true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7158,9 +7157,9 @@ export def "alias indices-get-alias-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7191,7 +7190,7 @@ export def "alias indices-put-alias" [
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --filter: any # Query used to limit documents the alias can access.
   --index-routing: string # Value used to route indexing operations to a specific shard. If specified, this overwrites the `routing` value for indexing operations. Data stream aliases don’t support this parameter.
-  --is-write-index: string@bool-completer # If `true`, sets the write index or data stream for the alias. If an alias points to multiple indices or data streams and `is_write_index` isn’t set, the alias rejects write requests. If an index alias points to one index and `is_write_index` isn’t set, the index automatically acts as the write index. Data stream aliases don’t automatically set a write data stream, even if the alias points to one data stream.
+  --is-write-index: oneof<nothing, bool> # If `true`, sets the write index or data stream for the alias. If an alias points to multiple indices or data streams and `is_write_index` isn’t set, the alias rejects write requests. If an index alias points to one index and `is_write_index` isn’t set, the index automatically acts as the write index. Data stream aliases don’t automatically set a write data stream, even if the alias points to one data stream.
   --routing: string # Value used to route indexing and search operations to a specific shard. Data stream aliases don’t support this parameter.
   --search-routing: string # Value used to route search operations to a specific shard. If specified, this overwrites the `routing` value for search operations. Data stream aliases don’t support this parameter.
 ]: any -> any {
@@ -7226,7 +7225,7 @@ export def "alias indices-put-alias-1" [
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --filter: any # Query used to limit documents the alias can access.
   --index-routing: string # Value used to route indexing operations to a specific shard. If specified, this overwrites the `routing` value for indexing operations. Data stream aliases don’t support this parameter.
-  --is-write-index: string@bool-completer # If `true`, sets the write index or data stream for the alias. If an alias points to multiple indices or data streams and `is_write_index` isn’t set, the alias rejects write requests. If an index alias points to one index and `is_write_index` isn’t set, the index automatically acts as the write index. Data stream aliases don’t automatically set a write data stream, even if the alias points to one data stream.
+  --is-write-index: oneof<nothing, bool> # If `true`, sets the write index or data stream for the alias. If an alias points to multiple indices or data streams and `is_write_index` isn’t set, the alias rejects write requests. If an index alias points to one index and `is_write_index` isn’t set, the index automatically acts as the write index. Data stream aliases don’t automatically set a write data stream, even if the alias points to one data stream.
   --routing: string # Value used to route indexing and search operations to a specific shard. Data stream aliases don’t support this parameter.
   --search-routing: string # Value used to route search operations to a specific shard. If specified, this overwrites the `routing` value for search operations. Data stream aliases don’t support this parameter.
 ]: any -> any {
@@ -7282,9 +7281,9 @@ export def "alias indices-exists-alias-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7315,7 +7314,7 @@ export def "aliases indices-put-alias-2" [
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --filter: any # Query used to limit documents the alias can access.
   --index-routing: string # Value used to route indexing operations to a specific shard. If specified, this overwrites the `routing` value for indexing operations. Data stream aliases don’t support this parameter.
-  --is-write-index: string@bool-completer # If `true`, sets the write index or data stream for the alias. If an alias points to multiple indices or data streams and `is_write_index` isn’t set, the alias rejects write requests. If an index alias points to one index and `is_write_index` isn’t set, the index automatically acts as the write index. Data stream aliases don’t automatically set a write data stream, even if the alias points to one data stream.
+  --is-write-index: oneof<nothing, bool> # If `true`, sets the write index or data stream for the alias. If an alias points to multiple indices or data streams and `is_write_index` isn’t set, the alias rejects write requests. If an index alias points to one index and `is_write_index` isn’t set, the index automatically acts as the write index. Data stream aliases don’t automatically set a write data stream, even if the alias points to one data stream.
   --routing: string # Value used to route indexing and search operations to a specific shard. Data stream aliases don’t support this parameter.
   --search-routing: string # Value used to route search operations to a specific shard. If specified, this overwrites the `routing` value for search operations. Data stream aliases don’t support this parameter.
 ]: any -> any {
@@ -7350,7 +7349,7 @@ export def "aliases indices-put-alias-3" [
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --filter: any # Query used to limit documents the alias can access.
   --index-routing: string # Value used to route indexing operations to a specific shard. If specified, this overwrites the `routing` value for indexing operations. Data stream aliases don’t support this parameter.
-  --is-write-index: string@bool-completer # If `true`, sets the write index or data stream for the alias. If an alias points to multiple indices or data streams and `is_write_index` isn’t set, the alias rejects write requests. If an index alias points to one index and `is_write_index` isn’t set, the index automatically acts as the write index. Data stream aliases don’t automatically set a write data stream, even if the alias points to one data stream.
+  --is-write-index: oneof<nothing, bool> # If `true`, sets the write index or data stream for the alias. If an alias points to multiple indices or data streams and `is_write_index` isn’t set, the alias rejects write requests. If an index alias points to one index and `is_write_index` isn’t set, the index automatically acts as the write index. Data stream aliases don’t automatically set a write data stream, even if the alias points to one data stream.
   --routing: string # Value used to route indexing and search operations to a specific shard. Data stream aliases don’t support this parameter.
   --search-routing: string # Value used to route search operations to a specific shard. If specified, this overwrites the `routing` value for search operations. Data stream aliases don’t support this parameter.
 ]: any -> any {
@@ -7407,7 +7406,7 @@ export def "data-stream-lifecycle indices-get-data-lifecycle" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --expand-wildcards: string # Type of data stream that wildcard patterns can match. Supports comma-separated values, such as `open,hidden`.
-  --include-defaults: string@bool-completer # If `true`, return all default settings in the response.
+  --include-defaults: oneof<nothing, bool> # If `true`, return all default settings in the response.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> record<data_streams: table<name: record, lifecycle: record>, global_retention: record<max_retention: record, default_retention: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7440,7 +7439,7 @@ export def "data-stream-lifecycle indices-put-data-lifecycle" [
   --data-retention: any # If defined, every document added to this data stream will be stored at least for this time frame. Any time after this duration the document could be deleted. When empty, every document in this data stream will be stored indefinitely.
   --downsampling: list # The downsampling configuration to execute for the managed backing index after rollover. — item shape: {after: any, fixed_interval: any}
   --downsampling-method: any # The method used to downsample the data. There are two options `aggregate` and `last_value`. It requires `downsampling` to be defined. Defaults to `aggregate`.
-  --enabled: string@bool-completer # If defined, it turns data stream lifecycle on/off (`true`/`false`) for this data stream. A data stream lifecycle that's disabled (enabled: `false`) will have no effect on the data stream. (default: true)
+  --enabled: oneof<nothing, bool> # If defined, it turns data stream lifecycle on/off (`true`/`false`) for this data stream. A data stream lifecycle that's disabled (enabled: `false`) will have no effect on the data stream. (default: true)
 ]: any -> record<acknowledged: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7576,10 +7575,10 @@ export def "index-template indices-get-index-template-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --local: string@bool-completer # If true, the request retrieves information from the local node only. Defaults to false, which means information is retrieved from the master node. (DEPRECATED)
-  --flat-settings: string@bool-completer # If true, returns settings in flat format.
+  --local: oneof<nothing, bool> # If true, the request retrieves information from the local node only. Defaults to false, which means information is retrieved from the master node. (DEPRECATED)
+  --flat-settings: oneof<nothing, bool> # If true, returns settings in flat format.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
-  --include-defaults: string@bool-completer # If true, returns all relevant default configurations for the index template.
+  --include-defaults: oneof<nothing, bool> # If true, returns all relevant default configurations for the index template.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7603,7 +7602,7 @@ export def "index-template indices-put-index-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --create: string@bool-completer # If `true`, this request cannot replace or update existing index templates.
+  --create: oneof<nothing, bool> # If `true`, this request cannot replace or update existing index templates.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
   --cause: string # User defined reason for creating or updating the index template
   --index-patterns: any # Array of wildcard (`*`) expressions used to match the names of data streams and indices during creation.
@@ -7613,9 +7612,9 @@ export def "index-template indices-put-index-template" [
   --priority: float # Priority to determine index template precedence when a new data stream or index is created. The index template with the highest priority is chosen. If no priority is specified the template is treated as though it is of priority 0 (lowest priority). This number is not automatically generated by Elasticsearch.
   --version: any # Version number used to manage index templates externally. This number is not automatically generated by Elasticsearch. External systems can use these version numbers to simplify template management. To unset a version, replace the template without specifying one.
   --meta: any # Optional user metadata about the index template. It may have any contents. It is not automatically generated or used by Elasticsearch. This user-defined object is stored in the cluster state, so keeping it short is preferable To unset the metadata, replace the template without specifying it.
-  --allow-auto-create: string@bool-completer # This setting overrides the value of the `action.auto_create_index` cluster setting. If set to `true` in a template, then indices can be automatically created using that template even if auto-creation of indices is disabled via `actions.auto_create_index`. If set to `false`, then indices or data streams matching the template must always be explicitly created, and may never be automatically created.
+  --allow-auto-create: oneof<nothing, bool> # This setting overrides the value of the `action.auto_create_index` cluster setting. If set to `true` in a template, then indices can be automatically created using that template even if auto-creation of indices is disabled via `actions.auto_create_index`. If set to `false`, then indices or data streams matching the template must always be explicitly created, and may never be automatically created.
   --ignore-missing-component-templates: list # The configuration option ignore_missing_component_templates can be used when an index template references a component template that might not exist
-  --deprecated: string@bool-completer # Marks this index template as deprecated. When creating or updating a non-deprecated index template that uses deprecated components, Elasticsearch will emit a deprecation warning.
+  --deprecated: oneof<nothing, bool> # Marks this index template as deprecated. When creating or updating a non-deprecated index template that uses deprecated components, Elasticsearch will emit a deprecation warning.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7642,7 +7641,7 @@ export def "index-template indices-put-index-template-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --create: string@bool-completer # If `true`, this request cannot replace or update existing index templates.
+  --create: oneof<nothing, bool> # If `true`, this request cannot replace or update existing index templates.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
   --cause: string # User defined reason for creating or updating the index template
   --index-patterns: any # Array of wildcard (`*`) expressions used to match the names of data streams and indices during creation.
@@ -7652,9 +7651,9 @@ export def "index-template indices-put-index-template-1" [
   --priority: float # Priority to determine index template precedence when a new data stream or index is created. The index template with the highest priority is chosen. If no priority is specified the template is treated as though it is of priority 0 (lowest priority). This number is not automatically generated by Elasticsearch.
   --version: any # Version number used to manage index templates externally. This number is not automatically generated by Elasticsearch. External systems can use these version numbers to simplify template management. To unset a version, replace the template without specifying one.
   --meta: any # Optional user metadata about the index template. It may have any contents. It is not automatically generated or used by Elasticsearch. This user-defined object is stored in the cluster state, so keeping it short is preferable To unset the metadata, replace the template without specifying it.
-  --allow-auto-create: string@bool-completer # This setting overrides the value of the `action.auto_create_index` cluster setting. If set to `true` in a template, then indices can be automatically created using that template even if auto-creation of indices is disabled via `actions.auto_create_index`. If set to `false`, then indices or data streams matching the template must always be explicitly created, and may never be automatically created.
+  --allow-auto-create: oneof<nothing, bool> # This setting overrides the value of the `action.auto_create_index` cluster setting. If set to `true` in a template, then indices can be automatically created using that template even if auto-creation of indices is disabled via `actions.auto_create_index`. If set to `false`, then indices or data streams matching the template must always be explicitly created, and may never be automatically created.
   --ignore-missing-component-templates: list # The configuration option ignore_missing_component_templates can be used when an index template references a component template that might not exist
-  --deprecated: string@bool-completer # Marks this index template as deprecated. When creating or updating a non-deprecated index template that uses deprecated components, Elasticsearch will emit a deprecation warning.
+  --deprecated: oneof<nothing, bool> # Marks this index template as deprecated. When creating or updating a non-deprecated index template that uses deprecated components, Elasticsearch will emit a deprecation warning.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7706,8 +7705,8 @@ export def "index-template indices-exists-index-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --local: string@bool-completer # If true, the request retrieves information from the local node only. Defaults to false, which means information is retrieved from the master node.
-  --flat-settings: string@bool-completer # If true, returns settings in flat format.
+  --local: oneof<nothing, bool> # If true, the request retrieves information from the local node only. Defaults to false, which means information is retrieved from the master node.
+  --flat-settings: oneof<nothing, bool> # If true, returns settings in flat format.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7736,8 +7735,8 @@ export def "template indices-get-template-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --flat-settings: string@bool-completer # If `true`, returns settings in flat format.
-  --local: string@bool-completer # If `true`, the request retrieves information from the local node only. (DEPRECATED)
+  --flat-settings: oneof<nothing, bool> # If `true`, returns settings in flat format.
+  --local: oneof<nothing, bool> # If `true`, the request retrieves information from the local node only. (DEPRECATED)
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7765,7 +7764,7 @@ export def "template indices-put-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --create: string@bool-completer # If true, this request cannot replace or update existing index templates.
+  --create: oneof<nothing, bool> # If true, this request cannot replace or update existing index templates.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
   --order: float # Order in which Elasticsearch applies this template if index matches multiple templates.  Templates with lower 'order' values are merged first. Templates with higher 'order' values are merged later, overriding templates with lower values.
   --cause: string # User defined reason for creating or updating the index template
@@ -7804,7 +7803,7 @@ export def "template indices-put-template-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --create: string@bool-completer # If true, this request cannot replace or update existing index templates.
+  --create: oneof<nothing, bool> # If true, this request cannot replace or update existing index templates.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
   --order: float # Order in which Elasticsearch applies this template if index matches multiple templates.  Templates with lower 'order' values are merged first. Templates with higher 'order' values are merged later, overriding templates with lower values.
   --cause: string # User defined reason for creating or updating the index template
@@ -7869,8 +7868,8 @@ export def "template indices-exists-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --flat-settings: string@bool-completer # Indicates whether to use a flat format for the response.
-  --local: string@bool-completer # Indicates whether to get information from the local node only. (DEPRECATED)
+  --flat-settings: oneof<nothing, bool> # Indicates whether to use a flat format for the response.
+  --local: oneof<nothing, bool> # Indicates whether to get information from the local node only. (DEPRECATED)
   --master-timeout: string # The period to wait for the master node. If the master node is not available before the timeout expires, the request fails and returns an error. To indicate that the request should never timeout, set it to `-1`.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7896,11 +7895,11 @@ export def "disk-usage indices-disk-usage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --flush: string@bool-completer # If `true`, the API performs a flush before analysis. If `false`, the response may not include uncommitted data.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --run-expensive-tasks: string@bool-completer # Analyzing field disk usage is resource-intensive. To use the API, this parameter must be set to `true`.
+  --flush: oneof<nothing, bool> # If `true`, the API performs a flush before analysis. If `false`, the response may not include uncommitted data.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --run-expensive-tasks: oneof<nothing, bool> # Analyzing field disk usage is resource-intensive. To use the API, this parameter must be set to `true`.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7952,9 +7951,9 @@ export def "alias indices-get-alias-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7979,9 +7978,9 @@ export def "alias indices-exists-alias" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8007,7 +8006,7 @@ export def "lifecycle-explain indices-explain-data-lifecycle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-defaults: string@bool-completer # Indicates if the API should return the default values the system uses for the index's lifecycle
+  --include-defaults: oneof<nothing, bool> # Indicates if the API should return the default values the system uses for the index's lifecycle
   --master-timeout: string # The period to wait for a connection to the master node.
 ]: nothing -> record<indices: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8032,9 +8031,9 @@ export def "field-usage-stats indices-field-usage-stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --qp-fields: string # Comma-separated list or wildcard expressions of fields to include in the statistics.
 ]: nothing -> record<_shards: record<failed: record, successful: record, total: record, failures: list<record>, skipped: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8058,11 +8057,11 @@ export def "flush indices-flush-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --force: string@bool-completer # If `true`, the request forces a flush even if there are no changes to commit to the index.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --wait-if-ongoing: string@bool-completer # If `true`, the flush operation blocks until execution when another flush operation is running. If `false`, Elasticsearch returns an error if you request a flush when another flush operation is running.
+  --force: oneof<nothing, bool> # If `true`, the request forces a flush even if there are no changes to commit to the index.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --wait-if-ongoing: oneof<nothing, bool> # If `true`, the flush operation blocks until execution when another flush operation is running. If `false`, Elasticsearch returns an error if you request a flush when another flush operation is running.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8085,11 +8084,11 @@ export def "flush indices-flush" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --force: string@bool-completer # If `true`, the request forces a flush even if there are no changes to commit to the index.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --wait-if-ongoing: string@bool-completer # If `true`, the flush operation blocks until execution when another flush operation is running. If `false`, Elasticsearch returns an error if you request a flush when another flush operation is running.
+  --force: oneof<nothing, bool> # If `true`, the request forces a flush even if there are no changes to commit to the index.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --wait-if-ongoing: oneof<nothing, bool> # If `true`, the flush operation blocks until execution when another flush operation is running. If `false`, Elasticsearch returns an error if you request a flush when another flush operation is running.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8113,11 +8112,11 @@ export def "flush indices-flush-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --force: string@bool-completer # If `true`, the request forces a flush even if there are no changes to commit to the index.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --wait-if-ongoing: string@bool-completer # If `true`, the flush operation blocks until execution when another flush operation is running. If `false`, Elasticsearch returns an error if you request a flush when another flush operation is running.
+  --force: oneof<nothing, bool> # If `true`, the request forces a flush even if there are no changes to commit to the index.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --wait-if-ongoing: oneof<nothing, bool> # If `true`, the flush operation blocks until execution when another flush operation is running. If `false`, Elasticsearch returns an error if you request a flush when another flush operation is running.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8141,11 +8140,11 @@ export def "flush indices-flush-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --force: string@bool-completer # If `true`, the request forces a flush even if there are no changes to commit to the index.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --wait-if-ongoing: string@bool-completer # If `true`, the flush operation blocks until execution when another flush operation is running. If `false`, Elasticsearch returns an error if you request a flush when another flush operation is running.
+  --force: oneof<nothing, bool> # If `true`, the request forces a flush even if there are no changes to commit to the index.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --wait-if-ongoing: oneof<nothing, bool> # If `true`, the flush operation blocks until execution when another flush operation is running. If `false`, Elasticsearch returns an error if you request a flush when another flush operation is running.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8169,13 +8168,13 @@ export def "forcemerge indices-forcemerge" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indices that are open, closed or both.
-  --flush: string@bool-completer # Specify whether the index should be flushed after performing the operation
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --flush: oneof<nothing, bool> # Specify whether the index should be flushed after performing the operation
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --max-num-segments: float # The number of segments the index should be merged into (default: dynamic)
-  --only-expunge-deletes: string@bool-completer # Specify whether the operation should only expunge deleted documents
-  --wait-for-completion: string@bool-completer # Should the request wait until the force merge is completed
+  --only-expunge-deletes: oneof<nothing, bool> # Specify whether the operation should only expunge deleted documents
+  --wait-for-completion: oneof<nothing, bool> # Should the request wait until the force merge is completed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8200,13 +8199,13 @@ export def "forcemerge indices-forcemerge-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indices that are open, closed or both.
-  --flush: string@bool-completer # Specify whether the index should be flushed after performing the operation
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --flush: oneof<nothing, bool> # Specify whether the index should be flushed after performing the operation
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --max-num-segments: float # The number of segments the index should be merged into (default: dynamic)
-  --only-expunge-deletes: string@bool-completer # Specify whether the operation should only expunge deleted documents
-  --wait-for-completion: string@bool-completer # Should the request wait until the force merge is completed
+  --only-expunge-deletes: oneof<nothing, bool> # Specify whether the operation should only expunge deleted documents
+  --wait-for-completion: oneof<nothing, bool> # Should the request wait until the force merge is completed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8229,9 +8228,9 @@ export def "alias indices-get-alias" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8256,9 +8255,9 @@ export def "alias indices-get-alias-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8305,9 +8304,9 @@ export def "data-stream indices-get-data-stream" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --expand-wildcards: string # Type of data stream that wildcard patterns can match. Supports comma-separated values, such as `open,hidden`.
-  --include-defaults: string@bool-completer # If true, returns all relevant default configurations for the index template.
+  --include-defaults: oneof<nothing, bool> # If true, returns all relevant default configurations for the index template.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
-  --verbose: string@bool-completer # Whether the maximum timestamp for each data stream should be calculated and returned.
+  --verbose: oneof<nothing, bool> # Whether the maximum timestamp for each data stream should be calculated and returned.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8355,24 +8354,24 @@ export def "data-stream-mappings indices-put-data-stream-mappings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dry-run: string@bool-completer # If `true`, the request does not actually change the mappings on any data streams. Instead, it simulates changing the settings and reports back to the user what would have happened had these settings actually been applied.
+  --dry-run: oneof<nothing, bool> # If `true`, the request does not actually change the mappings on any data streams. Instead, it simulates changing the settings and reports back to the user what would have happened had these settings actually been applied.
   --master-timeout: string # The period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
   --timeout: string # The period to wait for a response. If no response is received before the  timeout expires, the request fails and returns an error.
   --all-field: any
-  --date-detection: string@bool-completer
+  --date-detection: oneof<nothing, bool>
   --dynamic: any
   --dynamic-date-formats: list
   --dynamic-templates: list
   --field-names: any
   --index-field: any
   --meta: any
-  --numeric-detection: string@bool-completer
+  --numeric-detection: oneof<nothing, bool>
   --properties: record
   --routing: any
   --size: any
   --body-source: any
   --runtime: record
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --subobjects: any
   --data-stream-timestamp: any
 ]: any -> record<data_streams: table<name: record, applied_to_data_stream: bool, error: string, mappings: record, effective_mappings: record>> {
@@ -8425,7 +8424,7 @@ export def "data-stream-settings indices-put-data-stream-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dry-run: string@bool-completer # If `true`, the request does not actually change the settings on any data streams or indices. Instead, it simulates changing the settings and reports back to the user what would have happened had these settings actually been applied.
+  --dry-run: oneof<nothing, bool> # If `true`, the request does not actually change the settings on any data streams or indices. Instead, it simulates changing the settings and reports back to the user what would have happened had these settings actually been applied.
   --master-timeout: string # The period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
   --timeout: string # The period to wait for a response. If no response is received before the  timeout expires, the request fails and returns an error.
   --index: any
@@ -8439,7 +8438,7 @@ export def "data-stream-settings indices-put-data-stream-settings" [
   --check-on-startup: any # default: false
   --codec: string # default: LZ4
   --routing-partition-size: any # default: 1
-  --load-fixed-bitset-filters-eagerly: string@bool-completer # default: true
+  --load-fixed-bitset-filters-eagerly: oneof<nothing, bool> # default: true
   --hidden: any # default: false
   --auto-expand-replicas: any # default: false
   --merge: any
@@ -8510,10 +8509,10 @@ export def "mapping-field indices-get-field-mapping" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --include-defaults: string@bool-completer # If `true`, return all default settings in the response.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --include-defaults: oneof<nothing, bool> # If `true`, return all default settings in the response.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8538,10 +8537,10 @@ export def "mapping-field indices-get-field-mapping-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --include-defaults: string@bool-completer # If `true`, return all default settings in the response.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --include-defaults: oneof<nothing, bool> # If `true`, return all default settings in the response.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8565,10 +8564,10 @@ export def "index-template indices-get-index-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --local: string@bool-completer # If true, the request retrieves information from the local node only. Defaults to false, which means information is retrieved from the master node. (DEPRECATED)
-  --flat-settings: string@bool-completer # If true, returns settings in flat format.
+  --local: oneof<nothing, bool> # If true, the request retrieves information from the local node only. Defaults to false, which means information is retrieved from the master node. (DEPRECATED)
+  --flat-settings: oneof<nothing, bool> # If true, returns settings in flat format.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
-  --include-defaults: string@bool-completer # If true, returns all relevant default configurations for the index template.
+  --include-defaults: oneof<nothing, bool> # If true, returns all relevant default configurations for the index template.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8592,10 +8591,10 @@ export def "mapping indices-get-mapping" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --local: string@bool-completer # If `true`, the request retrieves information from the local node only. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --local: oneof<nothing, bool> # If `true`, the request retrieves information from the local node only. (DEPRECATED)
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8621,10 +8620,10 @@ export def "mapping indices-get-mapping-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --local: string@bool-completer # If `true`, the request retrieves information from the local node only. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --local: oneof<nothing, bool> # If `true`, the request retrieves information from the local node only. (DEPRECATED)
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8650,19 +8649,19 @@ export def "mapping indices-put-mapping" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
-  --write-index-only: string@bool-completer # If `true`, the mappings are applied only to the current write index for the target.
-  --date-detection: string@bool-completer # Controls whether dynamic date detection is enabled.
+  --write-index-only: oneof<nothing, bool> # If `true`, the mappings are applied only to the current write index for the target.
+  --date-detection: oneof<nothing, bool> # Controls whether dynamic date detection is enabled.
   --dynamic: any # Controls whether new fields are added dynamically.
   --dynamic-date-formats: list # If date detection is enabled then new string fields are checked against 'dynamic_date_formats' and if the value matches then a new date field is added instead of string.
   --dynamic-templates: list # Specify dynamic templates for the mapping.
   --field-names: any # Control whether field names are enabled for the index.
   --meta: any # A mapping type can have custom meta data associated with it. These are not used at all by Elasticsearch, but can be used to store application-specific metadata.
-  --numeric-detection: string@bool-completer # Automatically map strings into numeric data types for all fields. (default: false)
+  --numeric-detection: oneof<nothing, bool> # Automatically map strings into numeric data types for all fields. (default: false)
   --properties: record # Mapping for a field. For new fields, this mapping can include:  - Field name - Field data type - Mapping parameters
   --routing: any # Enable making a routing value required on indexed documents.
   --body-source: any # Control whether the _source field is enabled on the index.
@@ -8694,19 +8693,19 @@ export def "mapping indices-put-mapping-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
-  --write-index-only: string@bool-completer # If `true`, the mappings are applied only to the current write index for the target.
-  --date-detection: string@bool-completer # Controls whether dynamic date detection is enabled.
+  --write-index-only: oneof<nothing, bool> # If `true`, the mappings are applied only to the current write index for the target.
+  --date-detection: oneof<nothing, bool> # Controls whether dynamic date detection is enabled.
   --dynamic: any # Controls whether new fields are added dynamically.
   --dynamic-date-formats: list # If date detection is enabled then new string fields are checked against 'dynamic_date_formats' and if the value matches then a new date field is added instead of string.
   --dynamic-templates: list # Specify dynamic templates for the mapping.
   --field-names: any # Control whether field names are enabled for the index.
   --meta: any # A mapping type can have custom meta data associated with it. These are not used at all by Elasticsearch, but can be used to store application-specific metadata.
-  --numeric-detection: string@bool-completer # Automatically map strings into numeric data types for all fields. (default: false)
+  --numeric-detection: oneof<nothing, bool> # Automatically map strings into numeric data types for all fields. (default: false)
   --properties: record # Mapping for a field. For new fields, this mapping can include:  - Field name - Field data type - Mapping parameters
   --routing: any # Enable making a routing value required on indexed documents.
   --body-source: any # Control whether the _source field is enabled on the index.
@@ -8759,12 +8758,12 @@ export def "settings indices-get-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --flat-settings: string@bool-completer # If `true`, returns settings in flat format.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --include-defaults: string@bool-completer # If `true`, return all default settings in the response.
-  --local: string@bool-completer # If `true`, the request retrieves information from the local node only. If `false`, information is retrieved from the master node. (DEPRECATED)
+  --flat-settings: oneof<nothing, bool> # If `true`, returns settings in flat format.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --include-defaults: oneof<nothing, bool> # If `true`, return all default settings in the response.
+  --local: oneof<nothing, bool> # If `true`, the request retrieves information from the local node only. If `false`, information is retrieved from the master node. (DEPRECATED)
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8789,13 +8788,13 @@ export def "settings indices-put-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --flat-settings: string@bool-completer # If `true`, returns settings in flat format.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --flat-settings: oneof<nothing, bool> # If `true`, returns settings in flat format.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
-  --preserve-existing: string@bool-completer # If `true`, existing index settings remain unchanged.
-  --reopen: string@bool-completer # Whether to close and reopen the index to apply non-dynamic settings. If set to `true` the indices to which the settings are being applied will be closed temporarily and then reopened in order to apply the changes.
+  --preserve-existing: oneof<nothing, bool> # If `true`, existing index settings remain unchanged.
+  --reopen: oneof<nothing, bool> # Whether to close and reopen the index to apply non-dynamic settings. If set to `true` the indices to which the settings are being applied will be closed temporarily and then reopened in order to apply the changes.
   --timeout: string # Period to wait for a response. If no response is received before the  timeout expires, the request fails and returns an error.
   --index: any
   --mode: string
@@ -8808,7 +8807,7 @@ export def "settings indices-put-settings" [
   --check-on-startup: any # default: false
   --codec: string # default: LZ4
   --routing-partition-size: any # default: 1
-  --load-fixed-bitset-filters-eagerly: string@bool-completer # default: true
+  --load-fixed-bitset-filters-eagerly: oneof<nothing, bool> # default: true
   --hidden: any # default: false
   --auto-expand-replicas: any # default: false
   --merge: any
@@ -8880,12 +8879,12 @@ export def "settings indices-get-settings-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --flat-settings: string@bool-completer # If `true`, returns settings in flat format.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --include-defaults: string@bool-completer # If `true`, return all default settings in the response.
-  --local: string@bool-completer # If `true`, the request retrieves information from the local node only. If `false`, information is retrieved from the master node. (DEPRECATED)
+  --flat-settings: oneof<nothing, bool> # If `true`, returns settings in flat format.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --include-defaults: oneof<nothing, bool> # If `true`, return all default settings in the response.
+  --local: oneof<nothing, bool> # If `true`, the request retrieves information from the local node only. If `false`, information is retrieved from the master node. (DEPRECATED)
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8911,13 +8910,13 @@ export def "settings indices-put-settings-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --flat-settings: string@bool-completer # If `true`, returns settings in flat format.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --flat-settings: oneof<nothing, bool> # If `true`, returns settings in flat format.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
-  --preserve-existing: string@bool-completer # If `true`, existing index settings remain unchanged.
-  --reopen: string@bool-completer # Whether to close and reopen the index to apply non-dynamic settings. If set to `true` the indices to which the settings are being applied will be closed temporarily and then reopened in order to apply the changes.
+  --preserve-existing: oneof<nothing, bool> # If `true`, existing index settings remain unchanged.
+  --reopen: oneof<nothing, bool> # Whether to close and reopen the index to apply non-dynamic settings. If set to `true` the indices to which the settings are being applied will be closed temporarily and then reopened in order to apply the changes.
   --timeout: string # Period to wait for a response. If no response is received before the  timeout expires, the request fails and returns an error.
   --body-index: any
   --mode: string
@@ -8930,7 +8929,7 @@ export def "settings indices-put-settings-1" [
   --check-on-startup: any # default: false
   --codec: string # default: LZ4
   --routing-partition-size: any # default: 1
-  --load-fixed-bitset-filters-eagerly: string@bool-completer # default: true
+  --load-fixed-bitset-filters-eagerly: oneof<nothing, bool> # default: true
   --hidden: any # default: false
   --auto-expand-replicas: any # default: false
   --merge: any
@@ -9003,12 +9002,12 @@ export def "settings indices-get-settings-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --flat-settings: string@bool-completer # If `true`, returns settings in flat format.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --include-defaults: string@bool-completer # If `true`, return all default settings in the response.
-  --local: string@bool-completer # If `true`, the request retrieves information from the local node only. If `false`, information is retrieved from the master node. (DEPRECATED)
+  --flat-settings: oneof<nothing, bool> # If `true`, returns settings in flat format.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --include-defaults: oneof<nothing, bool> # If `true`, return all default settings in the response.
+  --local: oneof<nothing, bool> # If `true`, the request retrieves information from the local node only. If `false`, information is retrieved from the master node. (DEPRECATED)
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9034,12 +9033,12 @@ export def "settings indices-get-settings-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --flat-settings: string@bool-completer # If `true`, returns settings in flat format.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --include-defaults: string@bool-completer # If `true`, return all default settings in the response.
-  --local: string@bool-completer # If `true`, the request retrieves information from the local node only. If `false`, information is retrieved from the master node. (DEPRECATED)
+  --flat-settings: oneof<nothing, bool> # If `true`, returns settings in flat format.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --include-defaults: oneof<nothing, bool> # If `true`, return all default settings in the response.
+  --local: oneof<nothing, bool> # If `true`, the request retrieves information from the local node only. If `false`, information is retrieved from the master node. (DEPRECATED)
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9067,8 +9066,8 @@ export def "template indices-get-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --flat-settings: string@bool-completer # If `true`, returns settings in flat format.
-  --local: string@bool-completer # If `true`, the request retrieves information from the local node only. (DEPRECATED)
+  --flat-settings: oneof<nothing, bool> # If `true`, returns settings in flat format.
+  --local: oneof<nothing, bool> # If `true`, the request retrieves information from the local node only. (DEPRECATED)
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9171,9 +9170,9 @@ export def "open indices-open" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --wait-for-active-shards: string # The number of shard copies that must be active before proceeding with the operation. Set to `all` or any positive integer up to the total number of shards in the index (`number_of_replicas+1`).
@@ -9223,11 +9222,11 @@ export def "recovery indices-recovery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active-only: string@bool-completer # If `true`, the response only includes ongoing shard recoveries.
-  --detailed: string@bool-completer # If `true`, the response includes detailed information about shard recoveries.
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --active-only: oneof<nothing, bool> # If `true`, the response only includes ongoing shard recoveries.
+  --detailed: oneof<nothing, bool> # If `true`, the response includes detailed information about shard recoveries.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9251,11 +9250,11 @@ export def "recovery indices-recovery-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active-only: string@bool-completer # If `true`, the response only includes ongoing shard recoveries.
-  --detailed: string@bool-completer # If `true`, the response includes detailed information about shard recoveries.
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --active-only: oneof<nothing, bool> # If `true`, the response only includes ongoing shard recoveries.
+  --detailed: oneof<nothing, bool> # If `true`, the response includes detailed information about shard recoveries.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9279,9 +9278,9 @@ export def "refresh indices-refresh-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9305,9 +9304,9 @@ export def "refresh indices-refresh" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9332,9 +9331,9 @@ export def "refresh indices-refresh-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9359,9 +9358,9 @@ export def "refresh indices-refresh-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9386,9 +9385,9 @@ export def "reload-search-analyzers indices-reload-search-analyzers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indices that are open, closed or both.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --resource: string # Changed resource to reload analyzers from if applicable
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9414,9 +9413,9 @@ export def "reload-search-analyzers indices-reload-search-analyzers-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indices that are open, closed or both.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --resource: string # Changed resource to reload analyzers from if applicable
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9441,10 +9440,10 @@ export def "resolve-cluster indices-resolve-cluster" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result. NOTE: This option is only supported when specifying an index expression. You will get an error if you specify index options to the `_resolve/cluster` API endpoint that takes no index expression.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result. NOTE: This option is only supported when specifying an index expression. You will get an error if you specify index options to the `_resolve/cluster` API endpoint that takes no index expression.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. NOTE: This option is only supported when specifying an index expression. You will get an error if you specify index options to the `_resolve/cluster` API endpoint that takes no index expression.
-  --ignore-throttled: string@bool-completer # If true, concrete, expanded, or aliased indices are ignored when frozen. NOTE: This option is only supported when specifying an index expression. You will get an error if you specify index options to the `_resolve/cluster` API endpoint that takes no index expression. (DEPRECATED)
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored. NOTE: This option is only supported when specifying an index expression. You will get an error if you specify index options to the `_resolve/cluster` API endpoint that takes no index expression.
+  --ignore-throttled: oneof<nothing, bool> # If true, concrete, expanded, or aliased indices are ignored when frozen. NOTE: This option is only supported when specifying an index expression. You will get an error if you specify index options to the `_resolve/cluster` API endpoint that takes no index expression. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored. NOTE: This option is only supported when specifying an index expression. You will get an error if you specify index options to the `_resolve/cluster` API endpoint that takes no index expression.
   --timeout: string # The maximum time to wait for remote clusters to respond. If a remote cluster does not respond within this timeout period, the API response will show the cluster as not connected and include an error message that the request timed out.  The default timeout is unset and the query can take as long as the networking layer is configured to wait for remote clusters that are not responding (typically 30 seconds).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9470,10 +9469,10 @@ export def "resolve-cluster indices-resolve-cluster-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result. NOTE: This option is only supported when specifying an index expression. You will get an error if you specify index options to the `_resolve/cluster` API endpoint that takes no index expression.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result. NOTE: This option is only supported when specifying an index expression. You will get an error if you specify index options to the `_resolve/cluster` API endpoint that takes no index expression.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`. NOTE: This option is only supported when specifying an index expression. You will get an error if you specify index options to the `_resolve/cluster` API endpoint that takes no index expression.
-  --ignore-throttled: string@bool-completer # If true, concrete, expanded, or aliased indices are ignored when frozen. NOTE: This option is only supported when specifying an index expression. You will get an error if you specify index options to the `_resolve/cluster` API endpoint that takes no index expression. (DEPRECATED)
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored. NOTE: This option is only supported when specifying an index expression. You will get an error if you specify index options to the `_resolve/cluster` API endpoint that takes no index expression.
+  --ignore-throttled: oneof<nothing, bool> # If true, concrete, expanded, or aliased indices are ignored when frozen. NOTE: This option is only supported when specifying an index expression. You will get an error if you specify index options to the `_resolve/cluster` API endpoint that takes no index expression. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored. NOTE: This option is only supported when specifying an index expression. You will get an error if you specify index options to the `_resolve/cluster` API endpoint that takes no index expression.
   --timeout: string # The maximum time to wait for remote clusters to respond. If a remote cluster does not respond within this timeout period, the API response will show the cluster as not connected and include an error message that the request timed out.  The default timeout is unset and the query can take as long as the networking layer is configured to wait for remote clusters that are not responding (typically 30 seconds).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9499,8 +9498,8 @@ export def "resolve-index indices-resolve-index" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --mode: string # Filter indices by index mode - standard, lookup, time_series, etc. Comma-separated list of IndexMode. Empty means no filter.
   --body: record
 ]: any -> any {
@@ -9529,8 +9528,8 @@ export def "resolve-index indices-resolve-index-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --mode: string # Filter indices by index mode - standard, lookup, time_series, etc. Comma-separated list of IndexMode. Empty means no filter.
   --body: record
 ]: any -> any {
@@ -9558,11 +9557,11 @@ export def "rollover indices-rollover" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dry-run: string@bool-completer # If `true`, checks whether the current index satisfies the specified conditions but does not perform a rollover.
+  --dry-run: oneof<nothing, bool> # If `true`, checks whether the current index satisfies the specified conditions but does not perform a rollover.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --wait-for-active-shards: string # The number of shard copies that must be active before proceeding with the operation. Set to all or any positive integer up to the total number of shards in the index (`number_of_replicas+1`).
-  --lazy: string@bool-completer # If set to true, the rollover action will only mark a data stream to signal that it needs to be rolled over at the next write. Only allowed on data streams.
+  --lazy: oneof<nothing, bool> # If set to true, the rollover action will only mark a data stream to signal that it needs to be rolled over at the next write. Only allowed on data streams.
   --aliases: record # Aliases for the target index. Data streams do not support this parameter.
   --conditions: any # Conditions for the rollover. If specified, Elasticsearch only performs the rollover if the current index satisfies these conditions. If this parameter is not specified, Elasticsearch performs the rollover unconditionally. If conditions are specified, at least one of them must be a `max_*` condition. The index will rollover if any `max_*` condition is satisfied and all `min_*` conditions are satisfied.
   --mappings: any # Mapping for fields in the index. If specified, this mapping can include field names, field data types, and mapping paramaters.
@@ -9594,11 +9593,11 @@ export def "rollover indices-rollover-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dry-run: string@bool-completer # If `true`, checks whether the current index satisfies the specified conditions but does not perform a rollover.
+  --dry-run: oneof<nothing, bool> # If `true`, checks whether the current index satisfies the specified conditions but does not perform a rollover.
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --wait-for-active-shards: string # The number of shard copies that must be active before proceeding with the operation. Set to all or any positive integer up to the total number of shards in the index (`number_of_replicas+1`).
-  --lazy: string@bool-completer # If set to true, the rollover action will only mark a data stream to signal that it needs to be rolled over at the next write. Only allowed on data streams.
+  --lazy: oneof<nothing, bool> # If set to true, the rollover action will only mark a data stream to signal that it needs to be rolled over at the next write. Only allowed on data streams.
   --aliases: record # Aliases for the target index. Data streams do not support this parameter.
   --conditions: any # Conditions for the rollover. If specified, Elasticsearch only performs the rollover if the current index satisfies these conditions. If this parameter is not specified, Elasticsearch performs the rollover unconditionally. If conditions are specified, at least one of them must be a `max_*` condition. The index will rollover if any `max_*` condition is satisfied and all `min_*` conditions are satisfied.
   --mappings: any # Mapping for fields in the index. If specified, this mapping can include field names, field data types, and mapping paramaters.
@@ -9628,9 +9627,9 @@ export def "segments indices-segments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9654,9 +9653,9 @@ export def "segments indices-segments-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9679,9 +9678,9 @@ export def "shard-stores indices-shard-stores" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --status: string # List of shard health statuses used to limit the request.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9706,9 +9705,9 @@ export def "shard-stores indices-shard-stores-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --status: string # List of shard health statuses used to limit the request.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9797,19 +9796,19 @@ export def "index-template-simulate-index indices-simulate-index-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --create: string@bool-completer # Whether the index template we optionally defined in the body should only be dry-run added if new or can also replace an existing one
+  --create: oneof<nothing, bool> # Whether the index template we optionally defined in the body should only be dry-run added if new or can also replace an existing one
   --cause: string # User defined reason for dry-run creating the new template for simulation purposes
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
-  --include-defaults: string@bool-completer # If true, returns all relevant default configurations for the index template.
+  --include-defaults: oneof<nothing, bool> # If true, returns all relevant default configurations for the index template.
   index_patterns: any # Array of wildcard (`*`) expressions used to match the names of data streams and indices during creation.
   composed_of: list # An ordered list of component template names. Component templates are merged in the order specified, meaning that the last component template specified has the highest precedence.
   --template: any # Template to be applied. It may optionally include an `aliases`, `mappings`, or `settings` configuration.
   --version: any # Version number used to manage index templates externally. This number is not automatically generated by Elasticsearch.
   --priority: float # Priority to determine index template precedence when a new data stream or index is created. The index template with the highest priority is chosen. If no priority is specified the template is treated as though it is of priority 0 (lowest priority). This number is not automatically generated by Elasticsearch.
   --meta: any # Optional user metadata about the index template. May have any contents. This map is not automatically generated by Elasticsearch.
-  --allow-auto-create: string@bool-completer
+  --allow-auto-create: oneof<nothing, bool>
   --data-stream: any # If this object is included, the template is used to create data streams and their backing indices. Supports an empty object. Data streams require a matching index template with a `data_stream` object.
-  --deprecated: string@bool-completer # Marks this index template as deprecated. When creating or updating a non-deprecated index template that uses deprecated components, Elasticsearch will emit a deprecation warning.
+  --deprecated: oneof<nothing, bool> # Marks this index template as deprecated. When creating or updating a non-deprecated index template that uses deprecated components, Elasticsearch will emit a deprecation warning.
   --ignore-missing-component-templates: any # A list of component template names that are allowed to be absent.
   --created-date: any # Date and time when the index template was created. Only returned if the `human` query parameter is `true`.
   --created-date-millis: any # Date and time when the index template was created, in milliseconds since the epoch.
@@ -9840,11 +9839,11 @@ export def "index-template-simulate indices-simulate-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --create: string@bool-completer # If true, the template passed in the body is only used if no existing templates match the same index patterns. If false, the simulation uses the template with the highest priority. Note that the template is not permanently added or updated in either case; it is only used for the simulation.
+  --create: oneof<nothing, bool> # If true, the template passed in the body is only used if no existing templates match the same index patterns. If false, the simulation uses the template with the highest priority. Note that the template is not permanently added or updated in either case; it is only used for the simulation.
   --cause: string # User defined reason for dry-run creating the new template for simulation purposes
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
-  --include-defaults: string@bool-completer # If true, returns all relevant default configurations for the index template.
-  --allow-auto-create: string@bool-completer # This setting overrides the value of the `action.auto_create_index` cluster setting. If set to `true` in a template, then indices can be automatically created using that template even if auto-creation of indices is disabled via `actions.auto_create_index`. If set to `false`, then indices or data streams matching the template must always be explicitly created, and may never be automatically created.
+  --include-defaults: oneof<nothing, bool> # If true, returns all relevant default configurations for the index template.
+  --allow-auto-create: oneof<nothing, bool> # This setting overrides the value of the `action.auto_create_index` cluster setting. If set to `true` in a template, then indices can be automatically created using that template even if auto-creation of indices is disabled via `actions.auto_create_index`. If set to `false`, then indices or data streams matching the template must always be explicitly created, and may never be automatically created.
   --index-patterns: any # Array of wildcard (`*`) expressions used to match the names of data streams and indices during creation.
   --composed-of: list # An ordered list of component template names. Component templates are merged in the order specified, meaning that the last component template specified has the highest precedence.
   --template: any # Template to be applied. It may optionally include an `aliases`, `mappings`, or `settings` configuration.
@@ -9853,7 +9852,7 @@ export def "index-template-simulate indices-simulate-template" [
   --version: any # Version number used to manage index templates externally. This number is not automatically generated by Elasticsearch.
   --meta: any # Optional user metadata about the index template. May have any contents. This map is not automatically generated by Elasticsearch.
   --ignore-missing-component-templates: list # The configuration option ignore_missing_component_templates can be used when an index template references a component template that might not exist
-  --deprecated: string@bool-completer # Marks this index template as deprecated. When creating or updating a non-deprecated index template that uses deprecated components, Elasticsearch will emit a deprecation warning.
+  --deprecated: oneof<nothing, bool> # Marks this index template as deprecated. When creating or updating a non-deprecated index template that uses deprecated components, Elasticsearch will emit a deprecation warning.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9880,11 +9879,11 @@ export def "index-template-simulate indices-simulate-template-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --create: string@bool-completer # If true, the template passed in the body is only used if no existing templates match the same index patterns. If false, the simulation uses the template with the highest priority. Note that the template is not permanently added or updated in either case; it is only used for the simulation.
+  --create: oneof<nothing, bool> # If true, the template passed in the body is only used if no existing templates match the same index patterns. If false, the simulation uses the template with the highest priority. Note that the template is not permanently added or updated in either case; it is only used for the simulation.
   --cause: string # User defined reason for dry-run creating the new template for simulation purposes
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
-  --include-defaults: string@bool-completer # If true, returns all relevant default configurations for the index template.
-  --allow-auto-create: string@bool-completer # This setting overrides the value of the `action.auto_create_index` cluster setting. If set to `true` in a template, then indices can be automatically created using that template even if auto-creation of indices is disabled via `actions.auto_create_index`. If set to `false`, then indices or data streams matching the template must always be explicitly created, and may never be automatically created.
+  --include-defaults: oneof<nothing, bool> # If true, returns all relevant default configurations for the index template.
+  --allow-auto-create: oneof<nothing, bool> # This setting overrides the value of the `action.auto_create_index` cluster setting. If set to `true` in a template, then indices can be automatically created using that template even if auto-creation of indices is disabled via `actions.auto_create_index`. If set to `false`, then indices or data streams matching the template must always be explicitly created, and may never be automatically created.
   --index-patterns: any # Array of wildcard (`*`) expressions used to match the names of data streams and indices during creation.
   --composed-of: list # An ordered list of component template names. Component templates are merged in the order specified, meaning that the last component template specified has the highest precedence.
   --template: any # Template to be applied. It may optionally include an `aliases`, `mappings`, or `settings` configuration.
@@ -9893,7 +9892,7 @@ export def "index-template-simulate indices-simulate-template-1" [
   --version: any # Version number used to manage index templates externally. This number is not automatically generated by Elasticsearch.
   --meta: any # Optional user metadata about the index template. May have any contents. This map is not automatically generated by Elasticsearch.
   --ignore-missing-component-templates: list # The configuration option ignore_missing_component_templates can be used when an index template references a component template that might not exist
-  --deprecated: string@bool-completer # Marks this index template as deprecated. When creating or updating a non-deprecated index template that uses deprecated components, Elasticsearch will emit a deprecation warning.
+  --deprecated: oneof<nothing, bool> # Marks this index template as deprecated. When creating or updating a non-deprecated index template that uses deprecated components, Elasticsearch will emit a deprecation warning.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9987,10 +9986,10 @@ export def "stats indices-stats" [
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
   --fielddata-fields: string # Comma-separated list or wildcard expressions of fields to include in fielddata statistics.
   --qp-fields: string # Comma-separated list or wildcard expressions of fields to include in the statistics.
-  --forbid-closed-indices: string@bool-completer # If true, statistics are not collected from closed indices.
+  --forbid-closed-indices: oneof<nothing, bool> # If true, statistics are not collected from closed indices.
   --groups: string # Comma-separated list of search groups to include in the search statistics.
-  --include-segment-file-sizes: string@bool-completer # If true, the call reports the aggregated disk usage of each one of the Lucene index files (only applies if segment stats are requested).
-  --include-unloaded-segments: string@bool-completer # If true, the response includes information from segments that are not loaded into memory.
+  --include-segment-file-sizes: oneof<nothing, bool> # If true, the call reports the aggregated disk usage of each one of the Lucene index files (only applies if segment stats are requested).
+  --include-unloaded-segments: oneof<nothing, bool> # If true, the response includes information from segments that are not loaded into memory.
   --level: string@level-completer # Indicates whether statistics are aggregated at the cluster, indices, or shards level.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10019,10 +10018,10 @@ export def "stats indices-stats-1" [
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
   --fielddata-fields: string # Comma-separated list or wildcard expressions of fields to include in fielddata statistics.
   --qp-fields: string # Comma-separated list or wildcard expressions of fields to include in the statistics.
-  --forbid-closed-indices: string@bool-completer # If true, statistics are not collected from closed indices.
+  --forbid-closed-indices: oneof<nothing, bool> # If true, statistics are not collected from closed indices.
   --groups: string # Comma-separated list of search groups to include in the search statistics.
-  --include-segment-file-sizes: string@bool-completer # If true, the call reports the aggregated disk usage of each one of the Lucene index files (only applies if segment stats are requested).
-  --include-unloaded-segments: string@bool-completer # If true, the response includes information from segments that are not loaded into memory.
+  --include-segment-file-sizes: oneof<nothing, bool> # If true, the call reports the aggregated disk usage of each one of the Lucene index files (only applies if segment stats are requested).
+  --include-unloaded-segments: oneof<nothing, bool> # If true, the response includes information from segments that are not loaded into memory.
   --level: string@level-completer # Indicates whether statistics are aggregated at the cluster, indices, or shards level.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10051,10 +10050,10 @@ export def "stats indices-stats-2" [
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
   --fielddata-fields: string # Comma-separated list or wildcard expressions of fields to include in fielddata statistics.
   --qp-fields: string # Comma-separated list or wildcard expressions of fields to include in the statistics.
-  --forbid-closed-indices: string@bool-completer # If true, statistics are not collected from closed indices.
+  --forbid-closed-indices: oneof<nothing, bool> # If true, statistics are not collected from closed indices.
   --groups: string # Comma-separated list of search groups to include in the search statistics.
-  --include-segment-file-sizes: string@bool-completer # If true, the call reports the aggregated disk usage of each one of the Lucene index files (only applies if segment stats are requested).
-  --include-unloaded-segments: string@bool-completer # If true, the response includes information from segments that are not loaded into memory.
+  --include-segment-file-sizes: oneof<nothing, bool> # If true, the call reports the aggregated disk usage of each one of the Lucene index files (only applies if segment stats are requested).
+  --include-unloaded-segments: oneof<nothing, bool> # If true, the response includes information from segments that are not loaded into memory.
   --level: string@level-completer # Indicates whether statistics are aggregated at the cluster, indices, or shards level.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10084,10 +10083,10 @@ export def "stats indices-stats-3" [
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
   --fielddata-fields: string # Comma-separated list or wildcard expressions of fields to include in fielddata statistics.
   --qp-fields: string # Comma-separated list or wildcard expressions of fields to include in the statistics.
-  --forbid-closed-indices: string@bool-completer # If true, statistics are not collected from closed indices.
+  --forbid-closed-indices: oneof<nothing, bool> # If true, statistics are not collected from closed indices.
   --groups: string # Comma-separated list of search groups to include in the search statistics.
-  --include-segment-file-sizes: string@bool-completer # If true, the call reports the aggregated disk usage of each one of the Lucene index files (only applies if segment stats are requested).
-  --include-unloaded-segments: string@bool-completer # If true, the response includes information from segments that are not loaded into memory.
+  --include-segment-file-sizes: oneof<nothing, bool> # If true, the call reports the aggregated disk usage of each one of the Lucene index files (only applies if segment stats are requested).
+  --include-unloaded-segments: oneof<nothing, bool> # If true, the response includes information from segments that are not loaded into memory.
   --level: string@level-completer # Indicates whether statistics are aggregated at the cluster, indices, or shards level.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10140,17 +10139,17 @@ export def "validate-query indices-validate-query" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --all-shards: string@bool-completer # If `true`, the validation is executed on all shards instead of one random shard per index.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --all-shards: oneof<nothing, bool> # If `true`, the validation is executed on all shards instead of one random shard per index.
   --analyzer: string # Analyzer to use for the query string. This parameter can only be used when the `q` query string parameter is specified.
-  --analyze-wildcard: string@bool-completer # If `true`, wildcard and prefix queries are analyzed.
+  --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed.
   --default-operator: string@default-operator-completer # The default operator for query string query: `and` or `or`.
   --df: string # Field to use as default where no field prefix is given in the query string. This parameter can only be used when the `q` query string parameter is specified.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --explain: string@bool-completer # If `true`, the response returns detailed information if an error has occurred.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --lenient: string@bool-completer # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored.
-  --rewrite: string@bool-completer # If `true`, returns a more detailed explanation showing the actual Lucene query that will be executed.
+  --explain: oneof<nothing, bool> # If `true`, the response returns detailed information if an error has occurred.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --lenient: oneof<nothing, bool> # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored.
+  --rewrite: oneof<nothing, bool> # If `true`, returns a more detailed explanation showing the actual Lucene query that will be executed.
   --q: string # Query in the Lucene query string syntax.
   --body-query: any # Query in the Lucene query string syntax.
 ]: any -> any {
@@ -10178,17 +10177,17 @@ export def "validate-query indices-validate-query-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --all-shards: string@bool-completer # If `true`, the validation is executed on all shards instead of one random shard per index.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --all-shards: oneof<nothing, bool> # If `true`, the validation is executed on all shards instead of one random shard per index.
   --analyzer: string # Analyzer to use for the query string. This parameter can only be used when the `q` query string parameter is specified.
-  --analyze-wildcard: string@bool-completer # If `true`, wildcard and prefix queries are analyzed.
+  --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed.
   --default-operator: string@default-operator-completer # The default operator for query string query: `and` or `or`.
   --df: string # Field to use as default where no field prefix is given in the query string. This parameter can only be used when the `q` query string parameter is specified.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --explain: string@bool-completer # If `true`, the response returns detailed information if an error has occurred.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --lenient: string@bool-completer # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored.
-  --rewrite: string@bool-completer # If `true`, returns a more detailed explanation showing the actual Lucene query that will be executed.
+  --explain: oneof<nothing, bool> # If `true`, the response returns detailed information if an error has occurred.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --lenient: oneof<nothing, bool> # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored.
+  --rewrite: oneof<nothing, bool> # If `true`, returns a more detailed explanation showing the actual Lucene query that will be executed.
   --q: string # Query in the Lucene query string syntax.
   --body-query: any # Query in the Lucene query string syntax.
 ]: any -> any {
@@ -10217,17 +10216,17 @@ export def "validate-query indices-validate-query-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --all-shards: string@bool-completer # If `true`, the validation is executed on all shards instead of one random shard per index.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --all-shards: oneof<nothing, bool> # If `true`, the validation is executed on all shards instead of one random shard per index.
   --analyzer: string # Analyzer to use for the query string. This parameter can only be used when the `q` query string parameter is specified.
-  --analyze-wildcard: string@bool-completer # If `true`, wildcard and prefix queries are analyzed.
+  --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed.
   --default-operator: string@default-operator-completer # The default operator for query string query: `and` or `or`.
   --df: string # Field to use as default where no field prefix is given in the query string. This parameter can only be used when the `q` query string parameter is specified.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --explain: string@bool-completer # If `true`, the response returns detailed information if an error has occurred.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --lenient: string@bool-completer # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored.
-  --rewrite: string@bool-completer # If `true`, returns a more detailed explanation showing the actual Lucene query that will be executed.
+  --explain: oneof<nothing, bool> # If `true`, the response returns detailed information if an error has occurred.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --lenient: oneof<nothing, bool> # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored.
+  --rewrite: oneof<nothing, bool> # If `true`, returns a more detailed explanation showing the actual Lucene query that will be executed.
   --q: string # Query in the Lucene query string syntax.
   --body-query: any # Query in the Lucene query string syntax.
 ]: any -> any {
@@ -10256,17 +10255,17 @@ export def "validate-query indices-validate-query-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --all-shards: string@bool-completer # If `true`, the validation is executed on all shards instead of one random shard per index.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --all-shards: oneof<nothing, bool> # If `true`, the validation is executed on all shards instead of one random shard per index.
   --analyzer: string # Analyzer to use for the query string. This parameter can only be used when the `q` query string parameter is specified.
-  --analyze-wildcard: string@bool-completer # If `true`, wildcard and prefix queries are analyzed.
+  --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed.
   --default-operator: string@default-operator-completer # The default operator for query string query: `and` or `or`.
   --df: string # Field to use as default where no field prefix is given in the query string. This parameter can only be used when the `q` query string parameter is specified.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --explain: string@bool-completer # If `true`, the response returns detailed information if an error has occurred.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --lenient: string@bool-completer # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored.
-  --rewrite: string@bool-completer # If `true`, returns a more detailed explanation showing the actual Lucene query that will be executed.
+  --explain: oneof<nothing, bool> # If `true`, the response returns detailed information if an error has occurred.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --lenient: oneof<nothing, bool> # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored.
+  --rewrite: oneof<nothing, bool> # If `true`, returns a more detailed explanation showing the actual Lucene query that will be executed.
   --q: string # Query in the Lucene query string syntax.
   --body-query: any # Query in the Lucene query string syntax.
 ]: any -> any {
@@ -10446,8 +10445,8 @@ export def "inference inference-delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dry-run: string@bool-completer # When true, checks the semantic_text fields and inference processors that reference the endpoint and returns them in a list, but does not delete the endpoint.
-  --force: string@bool-completer # When true, the inference endpoint is forcefully deleted even if it is still being used by ingest processors or semantic text fields.
+  --dry-run: oneof<nothing, bool> # When true, checks the semantic_text fields and inference processors that reference the endpoint and returns them in a list, but does not delete the endpoint.
+  --force: oneof<nothing, bool> # When true, the inference endpoint is forcefully deleted even if it is still being used by ingest processors or semantic text fields.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10559,8 +10558,8 @@ export def "inference inference-delete-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dry-run: string@bool-completer # When true, checks the semantic_text fields and inference processors that reference the endpoint and returns them in a list, but does not delete the endpoint.
-  --force: string@bool-completer # When true, the inference endpoint is forcefully deleted even if it is still being used by ingest processors or semantic text fields.
+  --dry-run: oneof<nothing, bool> # When true, checks the semantic_text fields and inference processors that reference the endpoint and returns them in a list, but does not delete the endpoint.
+  --force: oneof<nothing, bool> # When true, the inference endpoint is forcefully deleted even if it is still being used by ingest processors or semantic text fields.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11479,7 +11478,7 @@ export def "inference-rerank inference-rerank" [
   --timeout: string # The amount of time to wait for the inference request to complete.
   --body-query: string # Query input.
   input: list # The documents to rank.
-  --return-documents: string@bool-completer # Include the document text in the response.
+  --return-documents: oneof<nothing, bool> # Include the document text in the response.
   --top-n: float # Limit the response to the top N documents.
   --task-settings: any # Task settings for the individual inference request. These settings are specific to the task type you specified and override the task settings specified when initializing the service.
 ]: any -> record<rerank: table<index: float, relevance_score: float, text: string>> {
@@ -11855,7 +11854,7 @@ export def "ingest-pipeline ingest-get-pipeline-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
-  --summary: string@bool-completer # Return pipelines without their definitions
+  --summary: oneof<nothing, bool> # Return pipelines without their definitions
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11890,7 +11889,7 @@ export def "ingest-pipeline ingest-put-pipeline" [
   --on-failure: list # Processors to run immediately after a processor failure. Each processor supports a processor-level `on_failure` value. If a processor without an `on_failure` value fails, Elasticsearch uses this pipeline-level parameter as a fallback. The processors in this parameter run sequentially in the order specified. Elasticsearch will not attempt to run the pipeline's remaining processors. — item shape: {append?: any, attachment?: any, bytes?: any, cef?: any, circle?: any, community_id?: any, convert?: any, csv?: any, date?: any, date_index_name?: any, dissect?: any, dot_expander?: any, drop?: any, enrich?: any, fail?: any, fingerprint?: any, foreach?: any, ip_location?: any, geo_grid?: any, geoip?: any, grok?: any, gsub?: any, html_strip?: any, inference?: any, join?: any, json?: any, kv?: any, lowercase?: any, network_direction?: any, pipeline?: any, redact?: any, registered_domain?: any, remove?: any, rename?: any, reroute?: any, script?: any, set?: any, set_security_user?: any, sort?: any, split?: any, terminate?: any, trim?: any, uppercase?: any, urldecode?: any, uri_parts?: any, user_agent?: any}
   --processors: list # Processors used to perform transformations on documents before indexing. Processors run sequentially in the order specified. — item shape: {append?: any, attachment?: any, bytes?: any, cef?: any, circle?: any, community_id?: any, convert?: any, csv?: any, date?: any, date_index_name?: any, dissect?: any, dot_expander?: any, drop?: any, enrich?: any, fail?: any, fingerprint?: any, foreach?: any, ip_location?: any, geo_grid?: any, geoip?: any, grok?: any, gsub?: any, html_strip?: any, inference?: any, join?: any, json?: any, kv?: any, lowercase?: any, network_direction?: any, pipeline?: any, redact?: any, registered_domain?: any, remove?: any, rename?: any, reroute?: any, script?: any, set?: any, set_security_user?: any, sort?: any, split?: any, terminate?: any, trim?: any, uppercase?: any, urldecode?: any, uri_parts?: any, user_agent?: any}
   --version: any # Version number used by external systems to track ingest pipelines. This parameter is intended for external systems only. Elasticsearch does not use or validate pipeline version numbers.
-  --deprecated: string@bool-completer # Marks this ingest pipeline as deprecated. When a deprecated ingest pipeline is referenced as the default or final pipeline when creating or updating a non-deprecated index template, Elasticsearch will emit a deprecation warning. (default: false)
+  --deprecated: oneof<nothing, bool> # Marks this ingest pipeline as deprecated. When a deprecated ingest pipeline is referenced as the default or final pipeline when creating or updating a non-deprecated index template, Elasticsearch will emit a deprecation warning. (default: false)
   --field-access-pattern: any # Controls how processors in this pipeline should read and write data on a document's source. (default: classic)
 ]: any -> record<acknowledged: bool> {
   let input = $in
@@ -12009,7 +12008,7 @@ export def "ingest-pipeline ingest-get-pipeline" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --master-timeout: string # Period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
-  --summary: string@bool-completer # Return pipelines without their definitions
+  --summary: oneof<nothing, bool> # Return pipelines without their definitions
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12055,7 +12054,7 @@ export def "ingest-pipeline-simulate ingest-simulate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --verbose: string@bool-completer # If `true`, the response includes output data for each processor in the executed pipeline.
+  --verbose: oneof<nothing, bool> # If `true`, the response includes output data for each processor in the executed pipeline.
   docs: list # Sample documents to test in the pipeline. — item shape: {_id?: any, _index?: any, _source: record}
   --pipeline: any # The pipeline to test. If you don't specify the `pipeline` request path parameter, this parameter is required. If you specify both this and the request path parameter, the API only uses the request path parameter.
 ]: any -> any {
@@ -12084,7 +12083,7 @@ export def "ingest-pipeline-simulate ingest-simulate-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --verbose: string@bool-completer # If `true`, the response includes output data for each processor in the executed pipeline.
+  --verbose: oneof<nothing, bool> # If `true`, the response includes output data for each processor in the executed pipeline.
   docs: list # Sample documents to test in the pipeline. — item shape: {_id?: any, _index?: any, _source: record}
   --pipeline: any # The pipeline to test. If you don't specify the `pipeline` request path parameter, this parameter is required. If you specify both this and the request path parameter, the API only uses the request path parameter.
 ]: any -> any {
@@ -12114,7 +12113,7 @@ export def "ingest-pipeline-simulate ingest-simulate-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --verbose: string@bool-completer # If `true`, the response includes output data for each processor in the executed pipeline.
+  --verbose: oneof<nothing, bool> # If `true`, the response includes output data for each processor in the executed pipeline.
   docs: list # Sample documents to test in the pipeline. — item shape: {_id?: any, _index?: any, _source: record}
   --pipeline: any # The pipeline to test. If you don't specify the `pipeline` request path parameter, this parameter is required. If you specify both this and the request path parameter, the API only uses the request path parameter.
 ]: any -> any {
@@ -12144,7 +12143,7 @@ export def "ingest-pipeline-simulate ingest-simulate-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --verbose: string@bool-completer # If `true`, the response includes output data for each processor in the executed pipeline.
+  --verbose: oneof<nothing, bool> # If `true`, the response includes output data for each processor in the executed pipeline.
   docs: list # Sample documents to test in the pipeline. — item shape: {_id?: any, _index?: any, _source: record}
   --pipeline: any # The pipeline to test. If you don't specify the `pipeline` request path parameter, this parameter is required. If you specify both this and the request path parameter, the API only uses the request path parameter.
 ]: any -> any {
@@ -12173,8 +12172,8 @@ export def "license license-get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --accept-enterprise: string@bool-completer # If `true`, this parameter returns enterprise for Enterprise license types. If `false`, this parameter returns platinum for both platinum and enterprise license types. This behavior is maintained for backwards compatibility. This parameter is deprecated and will always be set to true in 8.x. (DEPRECATED)
-  --local: string@bool-completer # Specifies whether to retrieve local information. From 9.2 onwards the default value is `true`, which means the information is retrieved from the responding node. In earlier versions the default is `false`, which means the information is retrieved from the elected master node.
+  --accept-enterprise: oneof<nothing, bool> # If `true`, this parameter returns enterprise for Enterprise license types. If `false`, this parameter returns platinum for both platinum and enterprise license types. This behavior is maintained for backwards compatibility. This parameter is deprecated and will always be set to true in 8.x. (DEPRECATED)
+  --local: oneof<nothing, bool> # Specifies whether to retrieve local information. From 9.2 onwards the default value is `true`, which means the information is retrieved from the responding node. In earlier versions the default is `false`, which means the information is retrieved from the elected master node.
 ]: nothing -> record<license: record<expiry_date: record, expiry_date_in_millis: record, issue_date: record, issue_date_in_millis: record, issued_to: string, issuer: string, max_nodes: any, max_resource_units: any, status: record, type: record, uid: record, start_date_in_millis: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12198,7 +12197,7 @@ export def "license license-post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acknowledge: string@bool-completer # To update a license, you must accept the acknowledge messages and set this parameter to `true`. In particular, if you are upgrading or downgrading a license, you must acknowlege the feature changes.
+  --acknowledge: oneof<nothing, bool> # To update a license, you must accept the acknowledge messages and set this parameter to `true`. In particular, if you are upgrading or downgrading a license, you must acknowlege the feature changes.
   --master-timeout: string # The period to wait for a connection to the master node.
   --timeout: string # The period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --license: any
@@ -12229,7 +12228,7 @@ export def "license license-post-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acknowledge: string@bool-completer # To update a license, you must accept the acknowledge messages and set this parameter to `true`. In particular, if you are upgrading or downgrading a license, you must acknowlege the feature changes.
+  --acknowledge: oneof<nothing, bool> # To update a license, you must accept the acknowledge messages and set this parameter to `true`. In particular, if you are upgrading or downgrading a license, you must acknowlege the feature changes.
   --master-timeout: string # The period to wait for a connection to the master node.
   --timeout: string # The period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --license: any
@@ -12326,7 +12325,7 @@ export def "license-start-basic license-post-start-basic" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acknowledge: string@bool-completer # To start a basic license, you must accept the acknowledge messages and set this parameter to `true`.
+  --acknowledge: oneof<nothing, bool> # To start a basic license, you must accept the acknowledge messages and set this parameter to `true`.
   --master-timeout: string # Period to wait for a connection to the master node.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> record<acknowledged: bool, basic_was_started: bool, error_message: string, type: record, acknowledge: record> {
@@ -12351,7 +12350,7 @@ export def "license-start-trial license-post-start-trial" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acknowledge: string@bool-completer # To start a trial, you must accept the acknowledge messages and set this parameter to `true`.
+  --acknowledge: oneof<nothing, bool> # To start a trial, you must accept the acknowledge messages and set this parameter to `true`.
   --type: string # The type of trial license to generate
   --master-timeout: string # Period to wait for a connection to the master node.
 ]: nothing -> record<acknowledged: bool, error_message: string, trial_was_started: bool, type: record> {
@@ -12376,7 +12375,7 @@ export def "reindex list-reindex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --detailed: string@bool-completer # If `true`, include detailed task status information in the response.
+  --detailed: oneof<nothing, bool> # If `true`, include detailed task status information in the response.
 ]: nothing -> record<reindex: table<id: record, description: string, start_time_in_millis: record, start_time: string, running_time: record, running_time_in_nanos: record, cancelled: bool, status: record>, task_failures: table<task_id: float, node_id: record, status: string, reason: record>, node_failures: table<type: string, reason: any, stack_trace: string, caused_by: record, root_cause: list, suppressed: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12400,15 +12399,15 @@ export def "reindex reindex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --refresh: string@bool-completer # If `true`, the request refreshes affected shards to make this operation visible to search.
+  --refresh: oneof<nothing, bool> # If `true`, the request refreshes affected shards to make this operation visible to search.
   --requests-per-second: float # The maximum number of documents to index per second, across the entire reindex operation (including slices). It can be either `-1` to turn off throttling or any decimal number like `1.7` or `12` to throttle to that level.
   --scroll: string # The period of time that a consistent view of the index should be maintained for scrolled search. In serverless, and stack versions >= v9.5.0, we use PIT rather than scroll for pagination. We only use scroll for reindexing from remote clusters that are older than v7.10.0. Therefore, this parameter is ignored unless you are reindexing from a remote cluster that is older than v7.10.0.
   --slices: string # The number of slices this task should be divided into. It defaults to one slice, which means the task isn't sliced into subtasks.  Reindex supports sliced scroll to parallelize the reindexing process. This parallelization can improve efficiency and provide a convenient way to break the request down into smaller parts.  NOTE: Reindexing from remote clusters does not support manual or automatic slicing.  If set to `auto`, Elasticsearch chooses the number of slices to use. This setting will use one slice per shard, up to a certain limit. If there are multiple sources, it will choose the number of slices based on the index or backing index with the smallest number of shards.
   --max-docs: float # The maximum number of documents to reindex. By default, all documents are reindexed. If it is a value less then or equal to `scroll_size`, a scroll will not be used to retrieve the results for the operation.  If `conflicts` is set to `proceed`, the reindex operation could attempt to reindex more documents from the source than `max_docs` until it has successfully indexed `max_docs` documents into the target or it has gone through every document in the source query.  If `slices` is set, the `max_docs` limit is split evenly across the slices. If the number of documents in the source is equal to or slightly more than `max_docs`, this could result in slightly fewer than `max_docs` documents being reindexed, due to skew in the slicing.
   --timeout: string # The period each indexing waits for automatic index creation, dynamic mapping updates, and waiting for active shards. By default, Elasticsearch waits for at least one minute before failing. The actual wait time could be longer, particularly when multiple waits occur.
   --wait-for-active-shards: string # The number of shard copies that must be active before proceeding with the operation. Set it to `all` or any positive integer up to the total number of shards in the index (`number_of_replicas+1`). The default value is one, which means it waits for each primary shard to be active.
-  --wait-for-completion: string@bool-completer # If `true`, the request blocks until the operation is complete.
-  --require-alias: string@bool-completer # If `true`, the destination must be an index alias.
+  --wait-for-completion: oneof<nothing, bool> # If `true`, the request blocks until the operation is complete.
+  --require-alias: oneof<nothing, bool> # If `true`, the destination must be an index alias.
   --conflicts: any # Indicates whether to continue reindexing even when there are conflicts. (default: abort)
   dest: any # The destination you are copying to.
   --max-docs: float # The maximum number of documents to reindex. By default, all documents are reindexed. If it is a value less then or equal to `scroll_size`, a scroll will not be used to retrieve the results for the operation.  If `conflicts` is set to `proceed`, the reindex operation could attempt to reindex more documents from the source than `max_docs` until it has successfully indexed `max_docs` documents into the target or it has gone through every document in the source query.
@@ -12541,8 +12540,8 @@ export def "mget mget" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --preference: string # Specifies the node or shard the operation should be performed on. Random by default.
-  --realtime: string@bool-completer # If `true`, the request is real-time as opposed to near-real-time.
-  --refresh: string@bool-completer # If `true`, the request refreshes relevant shards before retrieving documents.
+  --realtime: oneof<nothing, bool> # If `true`, the request is real-time as opposed to near-real-time.
+  --refresh: oneof<nothing, bool> # If `true`, the request refreshes relevant shards before retrieving documents.
   --routing: string # Custom value used to route operations to a specific shard.
   --qp-source: string # True or false to return the `_source` field or not, or a list of fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response. You can also use this parameter to exclude fields from the subset specified in `_source_includes` query parameter.
@@ -12577,8 +12576,8 @@ export def "mget mget-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --preference: string # Specifies the node or shard the operation should be performed on. Random by default.
-  --realtime: string@bool-completer # If `true`, the request is real-time as opposed to near-real-time.
-  --refresh: string@bool-completer # If `true`, the request refreshes relevant shards before retrieving documents.
+  --realtime: oneof<nothing, bool> # If `true`, the request is real-time as opposed to near-real-time.
+  --refresh: oneof<nothing, bool> # If `true`, the request refreshes relevant shards before retrieving documents.
   --routing: string # Custom value used to route operations to a specific shard.
   --qp-source: string # True or false to return the `_source` field or not, or a list of fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response. You can also use this parameter to exclude fields from the subset specified in `_source_includes` query parameter.
@@ -12614,8 +12613,8 @@ export def "mget mget-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --preference: string # Specifies the node or shard the operation should be performed on. Random by default.
-  --realtime: string@bool-completer # If `true`, the request is real-time as opposed to near-real-time.
-  --refresh: string@bool-completer # If `true`, the request refreshes relevant shards before retrieving documents.
+  --realtime: oneof<nothing, bool> # If `true`, the request is real-time as opposed to near-real-time.
+  --refresh: oneof<nothing, bool> # If `true`, the request refreshes relevant shards before retrieving documents.
   --routing: string # Custom value used to route operations to a specific shard.
   --qp-source: string # True or false to return the `_source` field or not, or a list of fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response. You can also use this parameter to exclude fields from the subset specified in `_source_includes` query parameter.
@@ -12651,8 +12650,8 @@ export def "mget mget-3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --preference: string # Specifies the node or shard the operation should be performed on. Random by default.
-  --realtime: string@bool-completer # If `true`, the request is real-time as opposed to near-real-time.
-  --refresh: string@bool-completer # If `true`, the request refreshes relevant shards before retrieving documents.
+  --realtime: oneof<nothing, bool> # If `true`, the request is real-time as opposed to near-real-time.
+  --refresh: oneof<nothing, bool> # If `true`, the request refreshes relevant shards before retrieving documents.
   --routing: string # Custom value used to route operations to a specific shard.
   --qp-source: string # True or false to return the `_source` field or not, or a list of fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response. You can also use this parameter to exclude fields from the subset specified in `_source_includes` query parameter.
@@ -12793,11 +12792,11 @@ export def "ml-anomaly-detectors-close ml-close-job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request: contains wildcard expressions and there are no jobs that match; contains the  `_all` string or no identifiers and there are no matches; or contains wildcard expressions and there are only partial matches. By default, it returns an empty jobs array when there are no matches and the subset of results when there are partial matches. If `false`, the request returns a 404 status code when there are no matches or only partial matches.
-  --force: string@bool-completer # Use to close a failed job, or to forcefully close a job which has not responded to its initial close request; the request returns without performing the associated actions such as flushing buffers and persisting the model snapshots. If you want the job to be in a consistent state after the close job API returns, do not set to `true`. This parameter should be used only in situations where the job has already failed or where you are not interested in results the job might have recently produced or might produce in the future.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request: contains wildcard expressions and there are no jobs that match; contains the  `_all` string or no identifiers and there are no matches; or contains wildcard expressions and there are only partial matches. By default, it returns an empty jobs array when there are no matches and the subset of results when there are partial matches. If `false`, the request returns a 404 status code when there are no matches or only partial matches.
+  --force: oneof<nothing, bool> # Use to close a failed job, or to forcefully close a job which has not responded to its initial close request; the request returns without performing the associated actions such as flushing buffers and persisting the model snapshots. If you want the job to be in a consistent state after the close job API returns, do not set to `true`. This parameter should be used only in situations where the job has already failed or where you are not interested in results the job might have recently produced or might produce in the future.
   --timeout: string # Controls the time to wait until a job has closed.
-  --allow-no-match: string@bool-completer # Refer to the description for the `allow_no_match` query parameter. (default: true)
-  --force: string@bool-completer # Refer to the descriptiion for the `force` query parameter. (default: false)
+  --allow-no-match: oneof<nothing, bool> # Refer to the description for the `allow_no_match` query parameter. (default: true)
+  --force: oneof<nothing, bool> # Refer to the descriptiion for the `force` query parameter. (default: false)
   --timeout: any # Refer to the description for the `timeout` query parameter. (default: 30m)
 ]: any -> record<closed: bool> {
   let input = $in
@@ -13001,10 +13000,10 @@ export def "ml-data-frame-analytics ml-get-data-frame-analytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  1. Contains wildcard expressions and there are no data frame analytics jobs that match. 2. Contains the `_all` string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value returns an empty data_frame_analytics array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a 404 status code when there are no matches or only partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  1. Contains wildcard expressions and there are no data frame analytics jobs that match. 2. Contains the `_all` string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value returns an empty data_frame_analytics array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a 404 status code when there are no matches or only partial matches.
   --qp-from: float # Skips the specified number of data frame analytics jobs.
   --size: float # Specifies the maximum number of data frame analytics jobs to obtain.
-  --exclude-generated: string@bool-completer # Indicates if certain fields should be removed from the configuration on retrieval. This allows the configuration to be in an acceptable format to be retrieved and then added to another cluster.
+  --exclude-generated: oneof<nothing, bool> # Indicates if certain fields should be removed from the configuration on retrieval. This allows the configuration to be in an acceptable format to be retrieved and then added to another cluster.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13028,7 +13027,7 @@ export def "ml-data-frame-analytics ml-put-data-frame-analytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-lazy-start: string@bool-completer # Specifies whether this job can start when there is insufficient machine learning node capacity for it to be immediately assigned to a node. If set to `false` and a machine learning node with capacity to run the job cannot be immediately found, the API returns an error. If set to `true`, the API does not return an error; the job waits in the `starting` state until sufficient machine learning node capacity is available. This behavior is also affected by the cluster-wide `xpack.ml.max_lazy_ml_nodes` setting. (default: false)
+  --allow-lazy-start: oneof<nothing, bool> # Specifies whether this job can start when there is insufficient machine learning node capacity for it to be immediately assigned to a node. If set to `false` and a machine learning node with capacity to run the job cannot be immediately found, the API returns an error. If set to `true`, the API does not return an error; the job waits in the `starting` state until sufficient machine learning node capacity is available. This behavior is also affected by the cluster-wide `xpack.ml.max_lazy_ml_nodes` setting. (default: false)
   analysis: any # The analysis configuration, which contains the information necessary to perform one of the following types of analysis: classification, outlier detection, or regression.
   --analyzed-fields: any # Specifies `includes` and/or `excludes` patterns to select which fields will be included in the analysis. The patterns specified in `excludes` are applied last, therefore `excludes` takes precedence. In other words, if the same field is specified in both `includes` and `excludes`, then the field will not be included in the analysis. If `analyzed_fields` is not set, only the relevant fields will be included. For example, all the numeric fields for outlier detection. The supported fields vary for each type of analysis. Outlier detection requires numeric or `boolean` data to analyze. The algorithms don’t support missing values therefore fields that have data types other than numeric or boolean are ignored. Documents where included fields contain missing values, null values, or an array are also ignored. Therefore the `dest` index may contain documents that don’t have an outlier score. Regression supports fields that are numeric, `boolean`, `text`, `keyword`, and `ip` data types. It is also tolerant of missing values. Fields that are supported are included in the analysis, other fields are ignored. Documents where included fields contain an array with two or more values are also ignored. Documents in the `dest` index that don’t contain a results field are not included in the regression analysis. Classification supports fields that are numeric, `boolean`, `text`, `keyword`, and `ip` data types. It is also tolerant of missing values. Fields that are supported are included in the analysis, other fields are ignored. Documents where included fields contain an array with two or more values are also ignored. Documents in the `dest` index that don’t contain a results field are not included in the classification analysis. Classification analysis can be improved by mapping ordinal variable values to a single number. For example, in case of age ranges, you can model the values as `0-14 = 0`, `15-24 = 1`, `25-34 = 2`, and so on.
   --description: string # A description of the job.
@@ -13064,7 +13063,7 @@ export def "ml-data-frame-analytics ml-delete-data-frame-analytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # If `true`, it deletes a job that is not stopped; this method is quicker than stopping and deleting the job.
+  --force: oneof<nothing, bool> # If `true`, it deletes a job that is not stopped; this method is quicker than stopping and deleting the job.
   --timeout: string # The time to wait for the job to be deleted.
 ]: nothing -> record<acknowledged: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -13089,8 +13088,8 @@ export def "ml-datafeeds ml-get-datafeeds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  1. Contains wildcard expressions and there are no datafeeds that match. 2. Contains the `_all` string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value is `true`, which returns an empty `datafeeds` array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a `404` status code when there are no matches or only partial matches.
-  --exclude-generated: string@bool-completer # Indicates if certain fields should be removed from the configuration on retrieval. This allows the configuration to be in an acceptable format to be retrieved and then added to another cluster.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  1. Contains wildcard expressions and there are no datafeeds that match. 2. Contains the `_all` string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value is `true`, which returns an empty `datafeeds` array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a `404` status code when there are no matches or only partial matches.
+  --exclude-generated: oneof<nothing, bool> # Indicates if certain fields should be removed from the configuration on retrieval. This allows the configuration to be in an acceptable format to be retrieved and then added to another cluster.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13115,10 +13114,10 @@ export def "ml-datafeeds ml-put-datafeed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values.
-  --ignore-throttled: string@bool-completer # If true, concrete, expanded, or aliased indices are ignored when frozen. (DEPRECATED)
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-throttled: oneof<nothing, bool> # If true, concrete, expanded, or aliased indices are ignored when frozen. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --aggregations: record # If set, the datafeed performs aggregation searches. Support for aggregations is limited and should be used only with low cardinality data.
   --chunking-config: any # Datafeeds might be required to search over long time periods, for several months or years. This search is split into time chunks in order to ensure the load on Elasticsearch is managed. Chunking configuration controls how the size of these time chunks are calculated; it is an advanced configuration option.
   --delayed-data-check-config: any # Specifies whether the datafeed checks for missing data and the size of the window. The datafeed can optionally search over indices that have already been read in an effort to determine whether any data has subsequently been added to the index. If missing data is found, it is a good indication that the `query_delay` is set too low and the data is being indexed after the datafeed has passed that moment in time. This check runs only on real-time datafeeds.
@@ -13159,7 +13158,7 @@ export def "ml-datafeeds ml-delete-datafeed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # Use to forcefully delete a started datafeed; this method is quicker than stopping and deleting the datafeed.
+  --force: oneof<nothing, bool> # Use to forcefully delete a started datafeed; this method is quicker than stopping and deleting the datafeed.
 ]: nothing -> record<acknowledged: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13348,7 +13347,7 @@ export def "ml-anomaly-detectors-forecast ml-delete-forecast" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-forecasts: string@bool-completer # Specifies whether an error occurs when there are no forecasts. In particular, if this parameter is set to `false` and there are no forecasts associated with the job, attempts to delete all forecasts return an error.
+  --allow-no-forecasts: oneof<nothing, bool> # Specifies whether an error occurs when there are no forecasts. In particular, if this parameter is set to `false` and there are no forecasts associated with the job, attempts to delete all forecasts return an error.
   --timeout: string # Specifies the period of time to wait for the completion of the delete operation. When this period of time elapses, the API fails and returns an error.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -13374,7 +13373,7 @@ export def "ml-anomaly-detectors-forecast ml-delete-forecast-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-forecasts: string@bool-completer # Specifies whether an error occurs when there are no forecasts. In particular, if this parameter is set to `false` and there are no forecasts associated with the job, attempts to delete all forecasts return an error.
+  --allow-no-forecasts: oneof<nothing, bool> # Specifies whether an error occurs when there are no forecasts. In particular, if this parameter is set to `false` and there are no forecasts associated with the job, attempts to delete all forecasts return an error.
   --timeout: string # Specifies the period of time to wait for the completion of the delete operation. When this period of time elapses, the API fails and returns an error.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -13399,8 +13398,8 @@ export def "ml-anomaly-detectors ml-get-jobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  1. Contains wildcard expressions and there are no jobs that match. 2. Contains the _all string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value is `true`, which returns an empty `jobs` array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a `404` status code when there are no matches or only partial matches.
-  --exclude-generated: string@bool-completer # Indicates if certain fields should be removed from the configuration on retrieval. This allows the configuration to be in an acceptable format to be retrieved and then added to another cluster.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  1. Contains wildcard expressions and there are no jobs that match. 2. Contains the _all string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value is `true`, which returns an empty `jobs` array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a `404` status code when there are no matches or only partial matches.
+  --exclude-generated: oneof<nothing, bool> # Indicates if certain fields should be removed from the configuration on retrieval. This allows the configuration to be in an acceptable format to be retrieved and then added to another cluster.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13425,11 +13424,11 @@ export def "ml-anomaly-detectors ml-put-job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values.
-  --ignore-throttled: string@bool-completer # If `true`, concrete, expanded or aliased indices are ignored when frozen. (DEPRECATED)
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --allow-lazy-open: string@bool-completer # Advanced configuration option. Specifies whether this job can open when there is insufficient machine learning node capacity for it to be immediately assigned to a node. By default, if a machine learning node with capacity to run the job cannot immediately be found, the open anomaly detection jobs API returns an error. However, this is also subject to the cluster-wide `xpack.ml.max_lazy_ml_nodes` setting. If this option is set to true, the open anomaly detection jobs API does not return an error and the job waits in the opening state until sufficient machine learning node capacity is available. (default: false)
+  --ignore-throttled: oneof<nothing, bool> # If `true`, concrete, expanded or aliased indices are ignored when frozen. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --allow-lazy-open: oneof<nothing, bool> # Advanced configuration option. Specifies whether this job can open when there is insufficient machine learning node capacity for it to be immediately assigned to a node. By default, if a machine learning node with capacity to run the job cannot immediately be found, the open anomaly detection jobs API returns an error. However, this is also subject to the cluster-wide `xpack.ml.max_lazy_ml_nodes` setting. If this option is set to true, the open anomaly detection jobs API does not return an error and the job waits in the opening state until sufficient machine learning node capacity is available. (default: false)
   analysis_config: any # Specifies how to analyze the data. After you create a job, you cannot change the analysis configuration; all the properties are informational.
   --analysis-limits: any # Limits can be applied for the resources required to hold the mathematical models in memory. These limits are approximate and can be set per job. They do not control the memory used by other processes, for example the Elasticsearch Java processes.
   --background-persist-interval: any # Advanced configuration option. The time between each periodic persistence of the model. The default value is a randomized value between 3 to 4 hours, which avoids all jobs persisting at exactly the same time. The smallest allowed value is 1 hour. For very large models (several GB), persistence could take 10-20 minutes, so do not set the `background_persist_interval` value too low.
@@ -13471,9 +13470,9 @@ export def "ml-anomaly-detectors ml-delete-job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # Use to forcefully delete an opened job; this method is quicker than closing and deleting the job.
-  --delete-user-annotations: string@bool-completer # Specifies whether annotations that have been added by the user should be deleted along with any auto-generated annotations when the job is reset.
-  --wait-for-completion: string@bool-completer # Specifies whether the request should return immediately or wait until the job deletion completes.
+  --force: oneof<nothing, bool> # Use to forcefully delete an opened job; this method is quicker than closing and deleting the job.
+  --delete-user-annotations: oneof<nothing, bool> # Specifies whether annotations that have been added by the user should be deleted along with any auto-generated annotations when the job is reset.
+  --wait-for-completion: oneof<nothing, bool> # Specifies whether the request should return immediately or wait until the job deletion completes.
 ]: nothing -> record<acknowledged: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13498,13 +13497,13 @@ export def "ml-anomaly-detectors-model-snapshots ml-get-model-snapshots" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --desc: string@bool-completer # If true, the results are sorted in descending order.
+  --desc: oneof<nothing, bool> # If true, the results are sorted in descending order.
   --end: string # Returns snapshots with timestamps earlier than this time.
   --qp-from: float # Skips the specified number of snapshots.
   --size: float # Specifies the maximum number of snapshots to obtain.
   --qp-sort: string # Specifies the sort field for the requested snapshots. By default, the snapshots are sorted by their timestamp.
   --start: string # Returns snapshots with timestamps after this time.
-  --desc: string@bool-completer # Refer to the description for the `desc` query parameter. (default: false)
+  --desc: oneof<nothing, bool> # Refer to the description for the `desc` query parameter. (default: false)
   --end: any # Refer to the description for the `end` query parameter.
   --page: any
   --body-sort: any # Refer to the description for the `sort` query parameter.
@@ -13536,13 +13535,13 @@ export def "ml-anomaly-detectors-model-snapshots ml-get-model-snapshots-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --desc: string@bool-completer # If true, the results are sorted in descending order.
+  --desc: oneof<nothing, bool> # If true, the results are sorted in descending order.
   --end: string # Returns snapshots with timestamps earlier than this time.
   --qp-from: float # Skips the specified number of snapshots.
   --size: float # Specifies the maximum number of snapshots to obtain.
   --qp-sort: string # Specifies the sort field for the requested snapshots. By default, the snapshots are sorted by their timestamp.
   --start: string # Returns snapshots with timestamps after this time.
-  --desc: string@bool-completer # Refer to the description for the `desc` query parameter. (default: false)
+  --desc: oneof<nothing, bool> # Refer to the description for the `desc` query parameter. (default: false)
   --end: any # Refer to the description for the `end` query parameter.
   --page: any
   --body-sort: any # Refer to the description for the `sort` query parameter.
@@ -13596,9 +13595,9 @@ export def "ml-trained-models ml-get-trained-models" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  - Contains wildcard expressions and there are no models that match. - Contains the _all string or no identifiers and there are no matches. - Contains wildcard expressions and there are only partial matches.  If true, it returns an empty array when there are no matches and the subset of results when there are partial matches.
-  --decompress-definition: string@bool-completer # Specifies whether the included model definition should be returned as a JSON map (true) or in a custom compressed format (false).
-  --exclude-generated: string@bool-completer # Indicates if certain fields should be removed from the configuration on retrieval. This allows the configuration to be in an acceptable format to be retrieved and then added to another cluster.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  - Contains wildcard expressions and there are no models that match. - Contains the _all string or no identifiers and there are no matches. - Contains wildcard expressions and there are only partial matches.  If true, it returns an empty array when there are no matches and the subset of results when there are partial matches.
+  --decompress-definition: oneof<nothing, bool> # Specifies whether the included model definition should be returned as a JSON map (true) or in a custom compressed format (false).
+  --exclude-generated: oneof<nothing, bool> # Indicates if certain fields should be removed from the configuration on retrieval. This allows the configuration to be in an acceptable format to be retrieved and then added to another cluster.
   --qp-from: float # Skips the specified number of models.
   --include: string@include-completer # A comma delimited string of optional fields to include in the response body.
   --size: float # Specifies the maximum number of models to obtain.
@@ -13626,8 +13625,8 @@ export def "ml-trained-models ml-put-trained-model" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --defer-definition-decompression: string@bool-completer # If set to `true` and a `compressed_definition` is provided, the request defers definition decompression and skips relevant validations.
-  --wait-for-completion: string@bool-completer # Whether to wait for all child operations (e.g. model download) to complete.
+  --defer-definition-decompression: oneof<nothing, bool> # If set to `true` and a `compressed_definition` is provided, the request defers definition decompression and skips relevant validations.
+  --wait-for-completion: oneof<nothing, bool> # Whether to wait for all child operations (e.g. model download) to complete.
   --compressed-definition: string # The compressed (GZipped and Base64 encoded) inference definition of the model. If compressed_definition is specified, then definition cannot be specified.
   --definition: any # The inference definition for the model. If definition is specified, then compressed_definition cannot be specified.
   --description: string # A human-readable description of the inference trained model.
@@ -13665,7 +13664,7 @@ export def "ml-trained-models ml-delete-trained-model" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # Forcefully deletes a trained model that is referenced by ingest pipelines or has a started deployment.
+  --force: oneof<nothing, bool> # Forcefully deletes a trained model that is referenced by ingest pipelines or has a started deployment.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> record<acknowledged: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -13691,7 +13690,7 @@ export def "ml-trained-models-model-aliases ml-put-trained-model-alias" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --reassign: string@bool-completer # Specifies whether the alias gets reassigned to the specified trained model if it is already assigned to a different model. If the alias is already assigned and this parameter is false, the API returns an error.
+  --reassign: oneof<nothing, bool> # Specifies whether the alias gets reassigned to the specified trained model if it is already assigned to a different model. If the alias is already assigned and this parameter is false, the API returns an error.
 ]: nothing -> record<acknowledged: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13798,7 +13797,7 @@ export def "ml-data-frame-analytics-explain ml-explain-data-frame-analytics" [
   --model-memory-limit: string # The approximate maximum amount of memory resources that are permitted for analytical processing. If your `elasticsearch.yml` file contains an `xpack.ml.max_model_memory_limit` setting, an error occurs when you try to create data frame analytics jobs that have `model_memory_limit` values greater than that setting. (default: 1gb)
   --max-num-threads: float # The maximum number of threads to be used by the analysis. Using more threads may decrease the time necessary to complete the analysis at the cost of using more CPU. Note that the process may use additional threads for operational functionality other than the analysis itself. (default: 1.0)
   --analyzed-fields: any # Specify includes and/or excludes patterns to select which fields will be included in the analysis. The patterns specified in excludes are applied last, therefore excludes takes precedence. In other words, if the same field is specified in both includes and excludes, then the field will not be included in the analysis.
-  --allow-lazy-start: string@bool-completer # Specifies whether this job can start when there is insufficient machine learning node capacity for it to be immediately assigned to a node. (default: false)
+  --allow-lazy-start: oneof<nothing, bool> # Specifies whether this job can start when there is insufficient machine learning node capacity for it to be immediately assigned to a node. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -13830,7 +13829,7 @@ export def "ml-data-frame-analytics-explain ml-explain-data-frame-analytics-1" [
   --model-memory-limit: string # The approximate maximum amount of memory resources that are permitted for analytical processing. If your `elasticsearch.yml` file contains an `xpack.ml.max_model_memory_limit` setting, an error occurs when you try to create data frame analytics jobs that have `model_memory_limit` values greater than that setting. (default: 1gb)
   --max-num-threads: float # The maximum number of threads to be used by the analysis. Using more threads may decrease the time necessary to complete the analysis at the cost of using more CPU. Note that the process may use additional threads for operational functionality other than the analysis itself. (default: 1.0)
   --analyzed-fields: any # Specify includes and/or excludes patterns to select which fields will be included in the analysis. The patterns specified in excludes are applied last, therefore excludes takes precedence. In other words, if the same field is specified in both includes and excludes, then the field will not be included in the analysis.
-  --allow-lazy-start: string@bool-completer # Specifies whether this job can start when there is insufficient machine learning node capacity for it to be immediately assigned to a node. (default: false)
+  --allow-lazy-start: oneof<nothing, bool> # Specifies whether this job can start when there is insufficient machine learning node capacity for it to be immediately assigned to a node. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -13863,7 +13862,7 @@ export def "ml-data-frame-analytics-explain ml-explain-data-frame-analytics-2" [
   --model-memory-limit: string # The approximate maximum amount of memory resources that are permitted for analytical processing. If your `elasticsearch.yml` file contains an `xpack.ml.max_model_memory_limit` setting, an error occurs when you try to create data frame analytics jobs that have `model_memory_limit` values greater than that setting. (default: 1gb)
   --max-num-threads: float # The maximum number of threads to be used by the analysis. Using more threads may decrease the time necessary to complete the analysis at the cost of using more CPU. Note that the process may use additional threads for operational functionality other than the analysis itself. (default: 1.0)
   --analyzed-fields: any # Specify includes and/or excludes patterns to select which fields will be included in the analysis. The patterns specified in excludes are applied last, therefore excludes takes precedence. In other words, if the same field is specified in both includes and excludes, then the field will not be included in the analysis.
-  --allow-lazy-start: string@bool-completer # Specifies whether this job can start when there is insufficient machine learning node capacity for it to be immediately assigned to a node. (default: false)
+  --allow-lazy-start: oneof<nothing, bool> # Specifies whether this job can start when there is insufficient machine learning node capacity for it to be immediately assigned to a node. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -13896,7 +13895,7 @@ export def "ml-data-frame-analytics-explain ml-explain-data-frame-analytics-3" [
   --model-memory-limit: string # The approximate maximum amount of memory resources that are permitted for analytical processing. If your `elasticsearch.yml` file contains an `xpack.ml.max_model_memory_limit` setting, an error occurs when you try to create data frame analytics jobs that have `model_memory_limit` values greater than that setting. (default: 1gb)
   --max-num-threads: float # The maximum number of threads to be used by the analysis. Using more threads may decrease the time necessary to complete the analysis at the cost of using more CPU. Note that the process may use additional threads for operational functionality other than the analysis itself. (default: 1.0)
   --analyzed-fields: any # Specify includes and/or excludes patterns to select which fields will be included in the analysis. The patterns specified in excludes are applied last, therefore excludes takes precedence. In other words, if the same field is specified in both includes and excludes, then the field will not be included in the analysis.
-  --allow-lazy-start: string@bool-completer # Specifies whether this job can start when there is insufficient machine learning node capacity for it to be immediately assigned to a node. (default: false)
+  --allow-lazy-start: oneof<nothing, bool> # Specifies whether this job can start when there is insufficient machine learning node capacity for it to be immediately assigned to a node. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -13925,12 +13924,12 @@ export def "ml-anomaly-detectors-flush ml-flush-job" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --advance-time: string # Specifies to advance to a particular time value. Results are generated and the model is updated for data from the specified time interval.
-  --calc-interim: string@bool-completer # If true, calculates the interim results for the most recent bucket or all buckets within the latency period.
+  --calc-interim: oneof<nothing, bool> # If true, calculates the interim results for the most recent bucket or all buckets within the latency period.
   --end: string # When used in conjunction with `calc_interim` and `start`, specifies the range of buckets on which to calculate interim results.
   --skip-time: string # Specifies to skip to a particular time value. Results are not generated and the model is not updated for data from the specified time interval.
   --start: string # When used in conjunction with `calc_interim`, specifies the range of buckets on which to calculate interim results.
   --advance-time: any # Refer to the description for the `advance_time` query parameter.
-  --calc-interim: string@bool-completer # Refer to the description for the `calc_interim` query parameter.
+  --calc-interim: oneof<nothing, bool> # Refer to the description for the `calc_interim` query parameter.
   --end: any # Refer to the description for the `end` query parameter.
   --skip-time: any # Refer to the description for the `skip_time` query parameter.
   --start: any # Refer to the description for the `start` query parameter.
@@ -13962,19 +13961,19 @@ export def "ml-anomaly-detectors-results-buckets ml-get-buckets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --anomaly-score: float # Returns buckets with anomaly scores greater or equal than this value.
-  --desc: string@bool-completer # If `true`, the buckets are sorted in descending order.
+  --desc: oneof<nothing, bool> # If `true`, the buckets are sorted in descending order.
   --end: string # Returns buckets with timestamps earlier than this time. `-1` means it is unset and results are not limited to specific timestamps.
-  --exclude-interim: string@bool-completer # If `true`, the output excludes interim results.
-  --expand: string@bool-completer # If true, the output includes anomaly records.
+  --exclude-interim: oneof<nothing, bool> # If `true`, the output excludes interim results.
+  --expand: oneof<nothing, bool> # If true, the output includes anomaly records.
   --qp-from: float # Skips the specified number of buckets.
   --size: float # Specifies the maximum number of buckets to obtain.
   --qp-sort: string # Specifies the sort field for the requested buckets.
   --start: string # Returns buckets with timestamps after this time. `-1` means it is unset and results are not limited to specific timestamps.
   --anomaly-score: float # Refer to the description for the `anomaly_score` query parameter. (default: 0.0)
-  --desc: string@bool-completer # Refer to the description for the `desc` query parameter. (default: false)
+  --desc: oneof<nothing, bool> # Refer to the description for the `desc` query parameter. (default: false)
   --end: any # Refer to the description for the `end` query parameter. (default: -1)
-  --exclude-interim: string@bool-completer # Refer to the description for the `exclude_interim` query parameter. (default: false)
-  --expand: string@bool-completer # Refer to the description for the `expand` query parameter. (default: false)
+  --exclude-interim: oneof<nothing, bool> # Refer to the description for the `exclude_interim` query parameter. (default: false)
+  --expand: oneof<nothing, bool> # Refer to the description for the `expand` query parameter. (default: false)
   --page: any
   --body-sort: any # Refer to the desription for the `sort` query parameter. (default: timestamp)
   --start: any # Refer to the description for the `start` query parameter. (default: -1)
@@ -14006,19 +14005,19 @@ export def "ml-anomaly-detectors-results-buckets ml-get-buckets-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --anomaly-score: float # Returns buckets with anomaly scores greater or equal than this value.
-  --desc: string@bool-completer # If `true`, the buckets are sorted in descending order.
+  --desc: oneof<nothing, bool> # If `true`, the buckets are sorted in descending order.
   --end: string # Returns buckets with timestamps earlier than this time. `-1` means it is unset and results are not limited to specific timestamps.
-  --exclude-interim: string@bool-completer # If `true`, the output excludes interim results.
-  --expand: string@bool-completer # If true, the output includes anomaly records.
+  --exclude-interim: oneof<nothing, bool> # If `true`, the output excludes interim results.
+  --expand: oneof<nothing, bool> # If true, the output includes anomaly records.
   --qp-from: float # Skips the specified number of buckets.
   --size: float # Specifies the maximum number of buckets to obtain.
   --qp-sort: string # Specifies the sort field for the requested buckets.
   --start: string # Returns buckets with timestamps after this time. `-1` means it is unset and results are not limited to specific timestamps.
   --anomaly-score: float # Refer to the description for the `anomaly_score` query parameter. (default: 0.0)
-  --desc: string@bool-completer # Refer to the description for the `desc` query parameter. (default: false)
+  --desc: oneof<nothing, bool> # Refer to the description for the `desc` query parameter. (default: false)
   --end: any # Refer to the description for the `end` query parameter. (default: -1)
-  --exclude-interim: string@bool-completer # Refer to the description for the `exclude_interim` query parameter. (default: false)
-  --expand: string@bool-completer # Refer to the description for the `expand` query parameter. (default: false)
+  --exclude-interim: oneof<nothing, bool> # Refer to the description for the `exclude_interim` query parameter. (default: false)
+  --expand: oneof<nothing, bool> # Refer to the description for the `expand` query parameter. (default: false)
   --page: any
   --body-sort: any # Refer to the desription for the `sort` query parameter. (default: timestamp)
   --start: any # Refer to the description for the `start` query parameter. (default: -1)
@@ -14049,19 +14048,19 @@ export def "ml-anomaly-detectors-results-buckets ml-get-buckets-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --anomaly-score: float # Returns buckets with anomaly scores greater or equal than this value.
-  --desc: string@bool-completer # If `true`, the buckets are sorted in descending order.
+  --desc: oneof<nothing, bool> # If `true`, the buckets are sorted in descending order.
   --end: string # Returns buckets with timestamps earlier than this time. `-1` means it is unset and results are not limited to specific timestamps.
-  --exclude-interim: string@bool-completer # If `true`, the output excludes interim results.
-  --expand: string@bool-completer # If true, the output includes anomaly records.
+  --exclude-interim: oneof<nothing, bool> # If `true`, the output excludes interim results.
+  --expand: oneof<nothing, bool> # If true, the output includes anomaly records.
   --qp-from: float # Skips the specified number of buckets.
   --size: float # Specifies the maximum number of buckets to obtain.
   --qp-sort: string # Specifies the sort field for the requested buckets.
   --start: string # Returns buckets with timestamps after this time. `-1` means it is unset and results are not limited to specific timestamps.
   --anomaly-score: float # Refer to the description for the `anomaly_score` query parameter. (default: 0.0)
-  --desc: string@bool-completer # Refer to the description for the `desc` query parameter. (default: false)
+  --desc: oneof<nothing, bool> # Refer to the description for the `desc` query parameter. (default: false)
   --end: any # Refer to the description for the `end` query parameter. (default: -1)
-  --exclude-interim: string@bool-completer # Refer to the description for the `exclude_interim` query parameter. (default: false)
-  --expand: string@bool-completer # Refer to the description for the `expand` query parameter. (default: false)
+  --exclude-interim: oneof<nothing, bool> # Refer to the description for the `exclude_interim` query parameter. (default: false)
+  --expand: oneof<nothing, bool> # Refer to the description for the `expand` query parameter. (default: false)
   --page: any
   --body-sort: any # Refer to the desription for the `sort` query parameter. (default: timestamp)
   --start: any # Refer to the description for the `start` query parameter. (default: -1)
@@ -14092,19 +14091,19 @@ export def "ml-anomaly-detectors-results-buckets ml-get-buckets-3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --anomaly-score: float # Returns buckets with anomaly scores greater or equal than this value.
-  --desc: string@bool-completer # If `true`, the buckets are sorted in descending order.
+  --desc: oneof<nothing, bool> # If `true`, the buckets are sorted in descending order.
   --end: string # Returns buckets with timestamps earlier than this time. `-1` means it is unset and results are not limited to specific timestamps.
-  --exclude-interim: string@bool-completer # If `true`, the output excludes interim results.
-  --expand: string@bool-completer # If true, the output includes anomaly records.
+  --exclude-interim: oneof<nothing, bool> # If `true`, the output excludes interim results.
+  --expand: oneof<nothing, bool> # If true, the output includes anomaly records.
   --qp-from: float # Skips the specified number of buckets.
   --size: float # Specifies the maximum number of buckets to obtain.
   --qp-sort: string # Specifies the sort field for the requested buckets.
   --start: string # Returns buckets with timestamps after this time. `-1` means it is unset and results are not limited to specific timestamps.
   --anomaly-score: float # Refer to the description for the `anomaly_score` query parameter. (default: 0.0)
-  --desc: string@bool-completer # Refer to the description for the `desc` query parameter. (default: false)
+  --desc: oneof<nothing, bool> # Refer to the description for the `desc` query parameter. (default: false)
   --end: any # Refer to the description for the `end` query parameter. (default: -1)
-  --exclude-interim: string@bool-completer # Refer to the description for the `exclude_interim` query parameter. (default: false)
-  --expand: string@bool-completer # Refer to the description for the `expand` query parameter. (default: false)
+  --exclude-interim: oneof<nothing, bool> # Refer to the description for the `exclude_interim` query parameter. (default: false)
+  --expand: oneof<nothing, bool> # Refer to the description for the `expand` query parameter. (default: false)
   --page: any
   --body-sort: any # Refer to the desription for the `sort` query parameter. (default: timestamp)
   --start: any # Refer to the description for the `start` query parameter. (default: -1)
@@ -14366,10 +14365,10 @@ export def "ml-data-frame-analytics ml-get-data-frame-analytics-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  1. Contains wildcard expressions and there are no data frame analytics jobs that match. 2. Contains the `_all` string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value returns an empty data_frame_analytics array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a 404 status code when there are no matches or only partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  1. Contains wildcard expressions and there are no data frame analytics jobs that match. 2. Contains the `_all` string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value returns an empty data_frame_analytics array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a 404 status code when there are no matches or only partial matches.
   --qp-from: float # Skips the specified number of data frame analytics jobs.
   --size: float # Specifies the maximum number of data frame analytics jobs to obtain.
-  --exclude-generated: string@bool-completer # Indicates if certain fields should be removed from the configuration on retrieval. This allows the configuration to be in an acceptable format to be retrieved and then added to another cluster.
+  --exclude-generated: oneof<nothing, bool> # Indicates if certain fields should be removed from the configuration on retrieval. This allows the configuration to be in an acceptable format to be retrieved and then added to another cluster.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14392,10 +14391,10 @@ export def "ml-data-frame-analytics-stats ml-get-data-frame-analytics-stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  1. Contains wildcard expressions and there are no data frame analytics jobs that match. 2. Contains the `_all` string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value returns an empty data_frame_analytics array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a 404 status code when there are no matches or only partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  1. Contains wildcard expressions and there are no data frame analytics jobs that match. 2. Contains the `_all` string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value returns an empty data_frame_analytics array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a 404 status code when there are no matches or only partial matches.
   --qp-from: float # Skips the specified number of data frame analytics jobs.
   --size: float # Specifies the maximum number of data frame analytics jobs to obtain.
-  --verbose: string@bool-completer # Defines whether the stats response should be verbose.
+  --verbose: oneof<nothing, bool> # Defines whether the stats response should be verbose.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14419,10 +14418,10 @@ export def "ml-data-frame-analytics-stats ml-get-data-frame-analytics-stats-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  1. Contains wildcard expressions and there are no data frame analytics jobs that match. 2. Contains the `_all` string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value returns an empty data_frame_analytics array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a 404 status code when there are no matches or only partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  1. Contains wildcard expressions and there are no data frame analytics jobs that match. 2. Contains the `_all` string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value returns an empty data_frame_analytics array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a 404 status code when there are no matches or only partial matches.
   --qp-from: float # Skips the specified number of data frame analytics jobs.
   --size: float # Specifies the maximum number of data frame analytics jobs to obtain.
-  --verbose: string@bool-completer # Defines whether the stats response should be verbose.
+  --verbose: oneof<nothing, bool> # Defines whether the stats response should be verbose.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14446,7 +14445,7 @@ export def "ml-datafeeds-stats ml-get-datafeed-stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  1. Contains wildcard expressions and there are no datafeeds that match. 2. Contains the `_all` string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value is `true`, which returns an empty `datafeeds` array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a `404` status code when there are no matches or only partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  1. Contains wildcard expressions and there are no datafeeds that match. 2. Contains the `_all` string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value is `true`, which returns an empty `datafeeds` array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a `404` status code when there are no matches or only partial matches.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14469,7 +14468,7 @@ export def "ml-datafeeds-stats ml-get-datafeed-stats-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  1. Contains wildcard expressions and there are no datafeeds that match. 2. Contains the `_all` string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value is `true`, which returns an empty `datafeeds` array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a `404` status code when there are no matches or only partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  1. Contains wildcard expressions and there are no datafeeds that match. 2. Contains the `_all` string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value is `true`, which returns an empty `datafeeds` array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a `404` status code when there are no matches or only partial matches.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14492,8 +14491,8 @@ export def "ml-datafeeds ml-get-datafeeds-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  1. Contains wildcard expressions and there are no datafeeds that match. 2. Contains the `_all` string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value is `true`, which returns an empty `datafeeds` array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a `404` status code when there are no matches or only partial matches.
-  --exclude-generated: string@bool-completer # Indicates if certain fields should be removed from the configuration on retrieval. This allows the configuration to be in an acceptable format to be retrieved and then added to another cluster.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  1. Contains wildcard expressions and there are no datafeeds that match. 2. Contains the `_all` string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value is `true`, which returns an empty `datafeeds` array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a `404` status code when there are no matches or only partial matches.
+  --exclude-generated: oneof<nothing, bool> # Indicates if certain fields should be removed from the configuration on retrieval. This allows the configuration to be in an acceptable format to be retrieved and then added to another cluster.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14541,9 +14540,9 @@ export def "ml-anomaly-detectors-results-influencers ml-get-influencers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --desc: string@bool-completer # If true, the results are sorted in descending order.
+  --desc: oneof<nothing, bool> # If true, the results are sorted in descending order.
   --end: string # Returns influencers with timestamps earlier than this time. The default value means it is unset and results are not limited to specific timestamps.
-  --exclude-interim: string@bool-completer # If true, the output excludes interim results. By default, interim results are included.
+  --exclude-interim: oneof<nothing, bool> # If true, the output excludes interim results. By default, interim results are included.
   --influencer-score: float # Returns influencers with anomaly scores greater than or equal to this value.
   --qp-from: float # Skips the specified number of influencers.
   --size: float # Specifies the maximum number of influencers to obtain.
@@ -14576,9 +14575,9 @@ export def "ml-anomaly-detectors-results-influencers ml-get-influencers-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --desc: string@bool-completer # If true, the results are sorted in descending order.
+  --desc: oneof<nothing, bool> # If true, the results are sorted in descending order.
   --end: string # Returns influencers with timestamps earlier than this time. The default value means it is unset and results are not limited to specific timestamps.
-  --exclude-interim: string@bool-completer # If true, the output excludes interim results. By default, interim results are included.
+  --exclude-interim: oneof<nothing, bool> # If true, the output excludes interim results. By default, interim results are included.
   --influencer-score: float # Returns influencers with anomaly scores greater than or equal to this value.
   --qp-from: float # Skips the specified number of influencers.
   --size: float # Specifies the maximum number of influencers to obtain.
@@ -14610,7 +14609,7 @@ export def "ml-anomaly-detectors-stats ml-get-job-stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  1. Contains wildcard expressions and there are no jobs that match. 2. Contains the _all string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  If `true`, the API returns an empty `jobs` array when there are no matches and the subset of results when there are partial matches. If `false`, the API returns a `404` status code when there are no matches or only partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  1. Contains wildcard expressions and there are no jobs that match. 2. Contains the _all string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  If `true`, the API returns an empty `jobs` array when there are no matches and the subset of results when there are partial matches. If `false`, the API returns a `404` status code when there are no matches or only partial matches.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14634,7 +14633,7 @@ export def "ml-anomaly-detectors-stats ml-get-job-stats-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  1. Contains wildcard expressions and there are no jobs that match. 2. Contains the _all string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  If `true`, the API returns an empty `jobs` array when there are no matches and the subset of results when there are partial matches. If `false`, the API returns a `404` status code when there are no matches or only partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  1. Contains wildcard expressions and there are no jobs that match. 2. Contains the _all string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  If `true`, the API returns an empty `jobs` array when there are no matches and the subset of results when there are partial matches. If `false`, the API returns a `404` status code when there are no matches or only partial matches.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14657,8 +14656,8 @@ export def "ml-anomaly-detectors ml-get-jobs-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  1. Contains wildcard expressions and there are no jobs that match. 2. Contains the _all string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value is `true`, which returns an empty `jobs` array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a `404` status code when there are no matches or only partial matches.
-  --exclude-generated: string@bool-completer # Indicates if certain fields should be removed from the configuration on retrieval. This allows the configuration to be in an acceptable format to be retrieved and then added to another cluster.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  1. Contains wildcard expressions and there are no jobs that match. 2. Contains the _all string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value is `true`, which returns an empty `jobs` array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a `404` status code when there are no matches or only partial matches.
+  --exclude-generated: oneof<nothing, bool> # Indicates if certain fields should be removed from the configuration on retrieval. This allows the configuration to be in an acceptable format to be retrieved and then added to another cluster.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14732,7 +14731,7 @@ export def "ml-anomaly-detectors-model-snapshots-upgrade-stats ml-get-model-snap
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:   -  Contains wildcard expressions and there are no jobs that match.  -  Contains the _all string or no identifiers and there are no matches.  -  Contains wildcard expressions and there are only partial matches.  The default value is true, which returns an empty jobs array when there are no matches and the subset of results when there are partial matches. If this parameter is false, the request returns a 404 status code when there are no matches or only partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:   -  Contains wildcard expressions and there are no jobs that match.  -  Contains the _all string or no identifiers and there are no matches.  -  Contains wildcard expressions and there are only partial matches.  The default value is true, which returns an empty jobs array when there are no matches and the subset of results when there are partial matches. If this parameter is false, the request returns a 404 status code when there are no matches or only partial matches.
 ]: nothing -> record<count: float, model_snapshot_upgrades: table<job_id: record, snapshot_id: record, state: record, node: record, assignment_explanation: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14756,13 +14755,13 @@ export def "ml-anomaly-detectors-model-snapshots ml-get-model-snapshots-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --desc: string@bool-completer # If true, the results are sorted in descending order.
+  --desc: oneof<nothing, bool> # If true, the results are sorted in descending order.
   --end: string # Returns snapshots with timestamps earlier than this time.
   --qp-from: float # Skips the specified number of snapshots.
   --size: float # Specifies the maximum number of snapshots to obtain.
   --qp-sort: string # Specifies the sort field for the requested snapshots. By default, the snapshots are sorted by their timestamp.
   --start: string # Returns snapshots with timestamps after this time.
-  --desc: string@bool-completer # Refer to the description for the `desc` query parameter. (default: false)
+  --desc: oneof<nothing, bool> # Refer to the description for the `desc` query parameter. (default: false)
   --end: any # Refer to the description for the `end` query parameter.
   --page: any
   --body-sort: any # Refer to the description for the `sort` query parameter.
@@ -14793,13 +14792,13 @@ export def "ml-anomaly-detectors-model-snapshots ml-get-model-snapshots-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --desc: string@bool-completer # If true, the results are sorted in descending order.
+  --desc: oneof<nothing, bool> # If true, the results are sorted in descending order.
   --end: string # Returns snapshots with timestamps earlier than this time.
   --qp-from: float # Skips the specified number of snapshots.
   --size: float # Specifies the maximum number of snapshots to obtain.
   --qp-sort: string # Specifies the sort field for the requested snapshots. By default, the snapshots are sorted by their timestamp.
   --start: string # Returns snapshots with timestamps after this time.
-  --desc: string@bool-completer # Refer to the description for the `desc` query parameter. (default: false)
+  --desc: oneof<nothing, bool> # Refer to the description for the `desc` query parameter. (default: false)
   --end: any # Refer to the description for the `end` query parameter.
   --page: any
   --body-sort: any # Refer to the description for the `sort` query parameter.
@@ -14830,17 +14829,17 @@ export def "ml-anomaly-detectors-results-overall-buckets ml-get-overall-buckets"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  1. Contains wildcard expressions and there are no jobs that match. 2. Contains the `_all` string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  If `true`, the request returns an empty `jobs` array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a `404` status code when there are no matches or only partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  1. Contains wildcard expressions and there are no jobs that match. 2. Contains the `_all` string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  If `true`, the request returns an empty `jobs` array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a `404` status code when there are no matches or only partial matches.
   --bucket-span: string # The span of the overall buckets. Must be greater or equal to the largest bucket span of the specified anomaly detection jobs, which is the default value.  By default, an overall bucket has a span equal to the largest bucket span of the specified anomaly detection jobs. To override that behavior, use the optional `bucket_span` parameter.
   --end: string # Returns overall buckets with timestamps earlier than this time.
-  --exclude-interim: string@bool-completer # If `true`, the output excludes interim results.
+  --exclude-interim: oneof<nothing, bool> # If `true`, the output excludes interim results.
   --overall-score: float # Returns overall buckets with overall scores greater than or equal to this value.
   --start: string # Returns overall buckets with timestamps after this time.
   --top-n: float # The number of top anomaly detection job bucket scores to be used in the `overall_score` calculation.
-  --allow-no-match: string@bool-completer # Refer to the description for the `allow_no_match` query parameter. (default: true)
+  --allow-no-match: oneof<nothing, bool> # Refer to the description for the `allow_no_match` query parameter. (default: true)
   --bucket-span: any # Refer to the description for the `bucket_span` query parameter.
   --end: any # Refer to the description for the `end` query parameter.
-  --exclude-interim: string@bool-completer # Refer to the description for the `exclude_interim` query parameter. (default: false)
+  --exclude-interim: oneof<nothing, bool> # Refer to the description for the `exclude_interim` query parameter. (default: false)
   --overall-score: float # Refer to the description for the `overall_score` query parameter.
   --start: any # Refer to the description for the `start` query parameter.
   --top-n: float # Refer to the description for the `top_n` query parameter. (default: 1.0)
@@ -14870,17 +14869,17 @@ export def "ml-anomaly-detectors-results-overall-buckets ml-get-overall-buckets-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  1. Contains wildcard expressions and there are no jobs that match. 2. Contains the `_all` string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  If `true`, the request returns an empty `jobs` array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a `404` status code when there are no matches or only partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  1. Contains wildcard expressions and there are no jobs that match. 2. Contains the `_all` string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  If `true`, the request returns an empty `jobs` array when there are no matches and the subset of results when there are partial matches. If this parameter is `false`, the request returns a `404` status code when there are no matches or only partial matches.
   --bucket-span: string # The span of the overall buckets. Must be greater or equal to the largest bucket span of the specified anomaly detection jobs, which is the default value.  By default, an overall bucket has a span equal to the largest bucket span of the specified anomaly detection jobs. To override that behavior, use the optional `bucket_span` parameter.
   --end: string # Returns overall buckets with timestamps earlier than this time.
-  --exclude-interim: string@bool-completer # If `true`, the output excludes interim results.
+  --exclude-interim: oneof<nothing, bool> # If `true`, the output excludes interim results.
   --overall-score: float # Returns overall buckets with overall scores greater than or equal to this value.
   --start: string # Returns overall buckets with timestamps after this time.
   --top-n: float # The number of top anomaly detection job bucket scores to be used in the `overall_score` calculation.
-  --allow-no-match: string@bool-completer # Refer to the description for the `allow_no_match` query parameter. (default: true)
+  --allow-no-match: oneof<nothing, bool> # Refer to the description for the `allow_no_match` query parameter. (default: true)
   --bucket-span: any # Refer to the description for the `bucket_span` query parameter.
   --end: any # Refer to the description for the `end` query parameter.
-  --exclude-interim: string@bool-completer # Refer to the description for the `exclude_interim` query parameter. (default: false)
+  --exclude-interim: oneof<nothing, bool> # Refer to the description for the `exclude_interim` query parameter. (default: false)
   --overall-score: float # Refer to the description for the `overall_score` query parameter.
   --start: any # Refer to the description for the `start` query parameter.
   --top-n: float # Refer to the description for the `top_n` query parameter. (default: 1.0)
@@ -14910,17 +14909,17 @@ export def "ml-anomaly-detectors-results-records ml-get-records" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --desc: string@bool-completer # If true, the results are sorted in descending order.
+  --desc: oneof<nothing, bool> # If true, the results are sorted in descending order.
   --end: string # Returns records with timestamps earlier than this time. The default value means results are not limited to specific timestamps.
-  --exclude-interim: string@bool-completer # If `true`, the output excludes interim results.
+  --exclude-interim: oneof<nothing, bool> # If `true`, the output excludes interim results.
   --qp-from: float # Skips the specified number of records.
   --record-score: float # Returns records with anomaly scores greater or equal than this value.
   --size: float # Specifies the maximum number of records to obtain.
   --qp-sort: string # Specifies the sort field for the requested records.
   --start: string # Returns records with timestamps after this time. The default value means results are not limited to specific timestamps.
-  --desc: string@bool-completer # Refer to the description for the `desc` query parameter. (default: false)
+  --desc: oneof<nothing, bool> # Refer to the description for the `desc` query parameter. (default: false)
   --end: any # Refer to the description for the `end` query parameter. (default: -1)
-  --exclude-interim: string@bool-completer # Refer to the description for the `exclude_interim` query parameter. (default: false)
+  --exclude-interim: oneof<nothing, bool> # Refer to the description for the `exclude_interim` query parameter. (default: false)
   --page: any
   --record-score: float # Refer to the description for the `record_score` query parameter. (default: 0.0)
   --body-sort: any # Refer to the description for the `sort` query parameter. (default: record_score)
@@ -14951,17 +14950,17 @@ export def "ml-anomaly-detectors-results-records ml-get-records-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --desc: string@bool-completer # If true, the results are sorted in descending order.
+  --desc: oneof<nothing, bool> # If true, the results are sorted in descending order.
   --end: string # Returns records with timestamps earlier than this time. The default value means results are not limited to specific timestamps.
-  --exclude-interim: string@bool-completer # If `true`, the output excludes interim results.
+  --exclude-interim: oneof<nothing, bool> # If `true`, the output excludes interim results.
   --qp-from: float # Skips the specified number of records.
   --record-score: float # Returns records with anomaly scores greater or equal than this value.
   --size: float # Specifies the maximum number of records to obtain.
   --qp-sort: string # Specifies the sort field for the requested records.
   --start: string # Returns records with timestamps after this time. The default value means results are not limited to specific timestamps.
-  --desc: string@bool-completer # Refer to the description for the `desc` query parameter. (default: false)
+  --desc: oneof<nothing, bool> # Refer to the description for the `desc` query parameter. (default: false)
   --end: any # Refer to the description for the `end` query parameter. (default: -1)
-  --exclude-interim: string@bool-completer # Refer to the description for the `exclude_interim` query parameter. (default: false)
+  --exclude-interim: oneof<nothing, bool> # Refer to the description for the `exclude_interim` query parameter. (default: false)
   --page: any
   --record-score: float # Refer to the description for the `record_score` query parameter. (default: 0.0)
   --body-sort: any # Refer to the description for the `sort` query parameter. (default: record_score)
@@ -14991,9 +14990,9 @@ export def "ml-trained-models ml-get-trained-models-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  - Contains wildcard expressions and there are no models that match. - Contains the _all string or no identifiers and there are no matches. - Contains wildcard expressions and there are only partial matches.  If true, it returns an empty array when there are no matches and the subset of results when there are partial matches.
-  --decompress-definition: string@bool-completer # Specifies whether the included model definition should be returned as a JSON map (true) or in a custom compressed format (false).
-  --exclude-generated: string@bool-completer # Indicates if certain fields should be removed from the configuration on retrieval. This allows the configuration to be in an acceptable format to be retrieved and then added to another cluster.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  - Contains wildcard expressions and there are no models that match. - Contains the _all string or no identifiers and there are no matches. - Contains wildcard expressions and there are only partial matches.  If true, it returns an empty array when there are no matches and the subset of results when there are partial matches.
+  --decompress-definition: oneof<nothing, bool> # Specifies whether the included model definition should be returned as a JSON map (true) or in a custom compressed format (false).
+  --exclude-generated: oneof<nothing, bool> # Indicates if certain fields should be removed from the configuration on retrieval. This allows the configuration to be in an acceptable format to be retrieved and then added to another cluster.
   --qp-from: float # Skips the specified number of models.
   --include: string@include-completer # A comma delimited string of optional fields to include in the response body.
   --size: float # Specifies the maximum number of models to obtain.
@@ -15021,7 +15020,7 @@ export def "ml-trained-models-stats ml-get-trained-models-stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  - Contains wildcard expressions and there are no models that match. - Contains the _all string or no identifiers and there are no matches. - Contains wildcard expressions and there are only partial matches.  If true, it returns an empty array when there are no matches and the subset of results when there are partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  - Contains wildcard expressions and there are no models that match. - Contains the _all string or no identifiers and there are no matches. - Contains wildcard expressions and there are only partial matches.  If true, it returns an empty array when there are no matches and the subset of results when there are partial matches.
   --qp-from: float # Skips the specified number of models.
   --size: float # Specifies the maximum number of models to obtain.
 ]: nothing -> any {
@@ -15046,7 +15045,7 @@ export def "ml-trained-models-stats ml-get-trained-models-stats-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  - Contains wildcard expressions and there are no models that match. - Contains the _all string or no identifiers and there are no matches. - Contains wildcard expressions and there are only partial matches.  If true, it returns an empty array when there are no matches and the subset of results when there are partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  - Contains wildcard expressions and there are no models that match. - Contains the _all string or no identifiers and there are no matches. - Contains wildcard expressions and there are only partial matches.  If true, it returns an empty array when there are no matches and the subset of results when there are partial matches.
   --qp-from: float # Skips the specified number of models.
   --size: float # Specifies the maximum number of models to obtain.
 ]: nothing -> any {
@@ -15457,8 +15456,8 @@ export def "ml-anomaly-detectors-reset ml-reset-job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait-for-completion: string@bool-completer # Should this request wait until the operation has completed before returning.
-  --delete-user-annotations: string@bool-completer # Specifies whether annotations that have been added by the user should be deleted along with any auto-generated annotations when the job is reset.
+  --wait-for-completion: oneof<nothing, bool> # Should this request wait until the operation has completed before returning.
+  --delete-user-annotations: oneof<nothing, bool> # Specifies whether annotations that have been added by the user should be deleted along with any auto-generated annotations when the job is reset.
 ]: nothing -> record<acknowledged: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15483,8 +15482,8 @@ export def "ml-anomaly-detectors-model-snapshots-revert ml-revert-model-snapshot
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete-intervening-results: string@bool-completer # If true, deletes the results in the time period between the latest results and the time of the reverted snapshot. It also resets the model to accept records for this time period. If you choose not to delete intervening results when reverting a snapshot, the job will not accept input data that is older than the current time. If you want to resend data, then delete the intervening results.
-  --delete-intervening-results: string@bool-completer # Refer to the description for the `delete_intervening_results` query parameter. (default: false)
+  --delete-intervening-results: oneof<nothing, bool> # If true, deletes the results in the time period between the latest results and the time of the reverted snapshot. It also resets the model to accept records for this time period. If you choose not to delete intervening results when reverting a snapshot, the job will not accept input data that is older than the current time. If you want to resend data, then delete the intervening results.
+  --delete-intervening-results: oneof<nothing, bool> # Refer to the description for the `delete_intervening_results` query parameter. (default: false)
 ]: any -> record<model: record<description: string, job_id: record, latest_record_time_stamp: float, latest_result_time_stamp: float, min_version: record, model_size_stats: record<bucket_allocation_failures_count: float, job_id: record, log_time: record, memory_status: record, model_bytes: record, model_bytes_exceeded: record, model_bytes_memory_limit: record, output_memory_allocator_bytes: record, peak_model_bytes: record, assignment_memory_basis: string, result_type: string, total_by_field_count: float, total_over_field_count: float, total_partition_field_count: float, categorization_status: record, categorized_doc_count: float, dead_category_count: float, failed_category_count: float, frequent_category_count: float, rare_category_count: float, total_category_count: float, timestamp: float>, retain: bool, snapshot_doc_count: float, snapshot_id: record, timestamp: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15510,7 +15509,7 @@ export def "ml-set-upgrade-mode ml-set-upgrade-mode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # When `true`, it enables `upgrade_mode` which temporarily halts all job and datafeed tasks and prohibits new job and datafeed tasks from starting.
+  --enabled: oneof<nothing, bool> # When `true`, it enables `upgrade_mode` which temporarily halts all job and datafeed tasks and prohibits new job and datafeed tasks from starting.
   --timeout: string # The time to wait for the request to be completed.
 ]: nothing -> record<acknowledged: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15631,12 +15630,12 @@ export def "ml-data-frame-analytics-stop ml-stop-data-frame-analytics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  1. Contains wildcard expressions and there are no data frame analytics jobs that match. 2. Contains the _all string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value is true, which returns an empty data_frame_analytics array when there are no matches and the subset of results when there are partial matches. If this parameter is false, the request returns a 404 status code when there are no matches or only partial matches.
-  --force: string@bool-completer # If true, the data frame analytics job is stopped forcefully.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  1. Contains wildcard expressions and there are no data frame analytics jobs that match. 2. Contains the _all string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value is true, which returns an empty data_frame_analytics array when there are no matches and the subset of results when there are partial matches. If this parameter is false, the request returns a 404 status code when there are no matches or only partial matches.
+  --force: oneof<nothing, bool> # If true, the data frame analytics job is stopped forcefully.
   --timeout: string # Controls the amount of time to wait until the data frame analytics job stops. Defaults to 20 seconds.
   --body-id: any # If provided, must be the same identifier as in the path.
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  1. Contains wildcard expressions and there are no data frame analytics jobs that match. 2. Contains the _all string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value is true, which returns an empty data_frame_analytics array when there are no matches and the subset of results when there are partial matches. If this parameter is false, the request returns a 404 status code when there are no matches or only partial matches. (default: true)
-  --force: string@bool-completer # If true, the data frame analytics job is stopped forcefully. (default: false)
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  1. Contains wildcard expressions and there are no data frame analytics jobs that match. 2. Contains the _all string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  The default value is true, which returns an empty data_frame_analytics array when there are no matches and the subset of results when there are partial matches. If this parameter is false, the request returns a 404 status code when there are no matches or only partial matches. (default: true)
+  --force: oneof<nothing, bool> # If true, the data frame analytics job is stopped forcefully. (default: false)
   --timeout: any # Controls the amount of time to wait until the data frame analytics job stops. Defaults to 20 seconds. (default: 20s)
 ]: any -> record<stopped: bool> {
   let input = $in
@@ -15664,14 +15663,14 @@ export def "ml-datafeeds-stop ml-stop-datafeed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  * Contains wildcard expressions and there are no datafeeds that match. * Contains the `_all` string or no identifiers and there are no matches. * Contains wildcard expressions and there are only partial matches.  If `true`, the API returns an empty datafeeds array when there are no matches and the subset of results when there are partial matches. If `false`, the API returns a 404 status code when there are no matches or only partial matches.
-  --force: string@bool-completer # If `true`, the datafeed is stopped forcefully.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  * Contains wildcard expressions and there are no datafeeds that match. * Contains the `_all` string or no identifiers and there are no matches. * Contains wildcard expressions and there are only partial matches.  If `true`, the API returns an empty datafeeds array when there are no matches and the subset of results when there are partial matches. If `false`, the API returns a 404 status code when there are no matches or only partial matches.
+  --force: oneof<nothing, bool> # If `true`, the datafeed is stopped forcefully.
   --timeout: string # Specifies the amount of time to wait until a datafeed stops.
-  --close-job: string@bool-completer # If `true` the job associated with the datafeed is closed.
-  --allow-no-match: string@bool-completer # Refer to the description for the `allow_no_match` query parameter. (default: true)
-  --force: string@bool-completer # Refer to the description for the `force` query parameter. (default: false)
+  --close-job: oneof<nothing, bool> # If `true` the job associated with the datafeed is closed.
+  --allow-no-match: oneof<nothing, bool> # Refer to the description for the `allow_no_match` query parameter. (default: true)
+  --force: oneof<nothing, bool> # Refer to the description for the `force` query parameter. (default: false)
   --timeout: any # Refer to the description for the `timeout` query parameter. (default: 20s)
-  --close-job: string@bool-completer # Refer to the description for the `close_job` query parameter. (default: false)
+  --close-job: oneof<nothing, bool> # Refer to the description for the `close_job` query parameter. (default: false)
 ]: any -> record<stopped: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15698,11 +15697,11 @@ export def "ml-trained-models-deployment-stop ml-stop-trained-model-deployment" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request: contains wildcard expressions and there are no deployments that match; contains the  `_all` string or no identifiers and there are no matches; or contains wildcard expressions and there are only partial matches. By default, it returns an empty array when there are no matches and the subset of results when there are partial matches. If `false`, the request returns a 404 status code when there are no matches or only partial matches.
-  --force: string@bool-completer # Forcefully stops the deployment, even if it is used by ingest pipelines. You can't use these pipelines until you restart the model deployment.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request: contains wildcard expressions and there are no deployments that match; contains the  `_all` string or no identifiers and there are no matches; or contains wildcard expressions and there are only partial matches. By default, it returns an empty array when there are no matches and the subset of results when there are partial matches. If `false`, the request returns a 404 status code when there are no matches or only partial matches.
+  --force: oneof<nothing, bool> # Forcefully stops the deployment, even if it is used by ingest pipelines. You can't use these pipelines until you restart the model deployment.
   --id: any # If provided, must be the same identifier as in the path.
-  --allow-no-match: string@bool-completer # Specifies what to do when the request: contains wildcard expressions and there are no deployments that match; contains the  `_all` string or no identifiers and there are no matches; or contains wildcard expressions and there are only partial matches. By default, it returns an empty array when there are no matches and the subset of results when there are partial matches. If `false`, the request returns a 404 status code when there are no matches or only partial matches. (default: true)
-  --force: string@bool-completer # Forcefully stops the deployment, even if it is used by ingest pipelines. You can't use these pipelines until you restart the model deployment. (default: false)
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request: contains wildcard expressions and there are no deployments that match; contains the  `_all` string or no identifiers and there are no matches; or contains wildcard expressions and there are only partial matches. By default, it returns an empty array when there are no matches and the subset of results when there are partial matches. If `false`, the request returns a 404 status code when there are no matches or only partial matches. (default: true)
+  --force: oneof<nothing, bool> # Forcefully stops the deployment, even if it is used by ingest pipelines. You can't use these pipelines until you restart the model deployment. (default: false)
 ]: any -> record<stopped: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15732,7 +15731,7 @@ export def "ml-data-frame-analytics-update ml-update-data-frame-analytics" [
   --description: string # A description of the job.
   --model-memory-limit: string # The approximate maximum amount of memory resources that are permitted for analytical processing. If your `elasticsearch.yml` file contains an `xpack.ml.max_model_memory_limit` setting, an error occurs when you try to create data frame analytics jobs that have `model_memory_limit` values greater than that setting. (default: 1gb)
   --max-num-threads: float # The maximum number of threads to be used by the analysis. Using more threads may decrease the time necessary to complete the analysis at the cost of using more CPU. Note that the process may use additional threads for operational functionality other than the analysis itself. (default: 1.0)
-  --allow-lazy-start: string@bool-completer # Specifies whether this job can start when there is insufficient machine learning node capacity for it to be immediately assigned to a node. (default: false)
+  --allow-lazy-start: oneof<nothing, bool> # Specifies whether this job can start when there is insufficient machine learning node capacity for it to be immediately assigned to a node. (default: false)
 ]: any -> record<authorization: record<api_key: record<id: string, name: string>, roles: list<string>, service_account: string>, allow_lazy_start: bool, analysis: record<classification: record, outlier_detection: record<compute_feature_influence: bool, feature_influence_threshold: float, method: string, n_neighbors: float, outlier_fraction: float, standardization_enabled: bool>, regression: record>, analyzed_fields: record<includes: list<string>, excludes: list<string>>, create_time: float, description: string, dest: record<index: record, results_field: record>, id: record, max_num_threads: float, model_memory_limit: string, source: record<index: record, query: record<bool: record, boosting: record, common: record, combined_fields: record, constant_score: record, dis_max: record, distance_feature: record, exists: record, function_score: record, fuzzy: record, geo_bounding_box: record, geo_distance: record, geo_grid: record, geo_polygon: record, geo_shape: record, has_child: record, has_parent: record, ids: record, intervals: record, knn: record, match: record, match_all: record, match_bool_prefix: record, match_none: record, match_phrase: record, match_phrase_prefix: record, more_like_this: record, multi_match: record, nested: record, parent_id: record, percolate: record, pinned: record, prefix: record, query_string: record, range: record, rank_feature: record, regexp: record, rule: record, script: record, script_score: record, semantic: record, shape: record, simple_query_string: record, span_containing: record, span_field_masking: record, span_first: record, span_multi: record, span_near: record, span_not: record, span_or: record, span_term: record, span_within: record, sparse_vector: record, term: record, terms: record, terms_set: record, text_expansion: record, weighted_tokens: record, wildcard: record, wrapper: record, type: record>, runtime_mappings: record, _source: record<includes: list, excludes: list>>, version: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15759,10 +15758,10 @@ export def "ml-datafeeds-update ml-update-datafeed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values.
-  --ignore-throttled: string@bool-completer # If `true`, concrete, expanded or aliased indices are ignored when frozen. (DEPRECATED)
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-throttled: oneof<nothing, bool> # If `true`, concrete, expanded or aliased indices are ignored when frozen. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --aggregations: record # If set, the datafeed performs aggregation searches. Support for aggregations is limited and should be used only with low cardinality data.
   --chunking-config: any # Datafeeds might search over long time periods, for several months or years. This search is split into time chunks in order to ensure the load on Elasticsearch is managed. Chunking configuration controls how the size of these time chunks are calculated; it is an advanced configuration option.
   --delayed-data-check-config: any # Specifies whether the datafeed checks for missing data and the size of the window. The datafeed can optionally search over indices that have already been read in an effort to determine whether any data has subsequently been added to the index. If missing data is found, it is a good indication that the `query_delay` is set too low and the data is being indexed after the datafeed has passed that moment in time. This check runs only on real-time datafeeds.
@@ -15831,7 +15830,7 @@ export def "ml-anomaly-detectors-update ml-update-job" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-lazy-open: string@bool-completer # Advanced configuration option. Specifies whether this job can open when there is insufficient machine learning node capacity for it to be immediately assigned to a node. If `false` and a machine learning node with capacity to run the job cannot immediately be found, the open anomaly detection jobs API returns an error. However, this is also subject to the cluster-wide `xpack.ml.max_lazy_ml_nodes` setting. If this option is set to `true`, the open anomaly detection jobs API does not return an error and the job waits in the opening state until sufficient machine learning node capacity is available. (default: false)
+  --allow-lazy-open: oneof<nothing, bool> # Advanced configuration option. Specifies whether this job can open when there is insufficient machine learning node capacity for it to be immediately assigned to a node. If `false` and a machine learning node with capacity to run the job cannot immediately be found, the open anomaly detection jobs API returns an error. However, this is also subject to the cluster-wide `xpack.ml.max_lazy_ml_nodes` setting. If this option is set to `true`, the open anomaly detection jobs API does not return an error and the job waits in the opening state until sufficient machine learning node capacity is available. (default: false)
   --analysis-limits: any
   --background-persist-interval: any # Advanced configuration option. The time between each periodic persistence of the model. The default value is a randomized value between 3 to 4 hours, which avoids all jobs persisting at exactly the same time. The smallest allowed value is 1 hour. For very large models (several GB), persistence could take 10-20 minutes, so do not set the value too low. If the job is open when you make the update, you must stop the datafeed, close the job, then reopen the job and restart the datafeed for the changes to take effect.
   --custom-settings: record # Advanced configuration option. Contains custom meta data about the job. For example, it can contain custom URL information as shown in Adding custom URLs to machine learning results.
@@ -15873,7 +15872,7 @@ export def "ml-anomaly-detectors-model-snapshots-update ml-update-model-snapshot
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # A description of the model snapshot.
-  --retain: string@bool-completer # If `true`, this snapshot will not be deleted during automatic cleanup of snapshots older than `model_snapshot_retention_days`. However, this snapshot will be deleted when the job is deleted. (default: false)
+  --retain: oneof<nothing, bool> # If `true`, this snapshot will not be deleted during automatic cleanup of snapshots older than `model_snapshot_retention_days`. However, this snapshot will be deleted when the job is deleted. (default: false)
 ]: any -> record<acknowledged: bool, model: record<description: string, job_id: record, latest_record_time_stamp: float, latest_result_time_stamp: float, min_version: record, model_size_stats: record<bucket_allocation_failures_count: float, job_id: record, log_time: record, memory_status: record, model_bytes: record, model_bytes_exceeded: record, model_bytes_memory_limit: record, output_memory_allocator_bytes: record, peak_model_bytes: record, assignment_memory_basis: string, result_type: string, total_by_field_count: float, total_over_field_count: float, total_partition_field_count: float, categorization_status: record, categorized_doc_count: float, dead_category_count: float, failed_category_count: float, frequent_category_count: float, rare_category_count: float, total_category_count: float, timestamp: float>, retain: bool, snapshot_doc_count: float, snapshot_id: record, timestamp: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15929,7 +15928,7 @@ export def "ml-anomaly-detectors-model-snapshots-upgrade ml-upgrade-job-snapshot
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait-for-completion: string@bool-completer # When true, the API won’t respond until the upgrade is complete. Otherwise, it responds as soon as the upgrade task is assigned to a node.
+  --wait-for-completion: oneof<nothing, bool> # When true, the API won’t respond until the upgrade is complete. Otherwise, it responds as soon as the upgrade task is assigned to a node.
   --timeout: string # Controls the time to wait for the request to complete.
 ]: nothing -> record<node: record, completed: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15954,20 +15953,20 @@ export def "msearch msearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --ccs-minimize-roundtrips: string@bool-completer # If true, network roundtrips between the coordinating node and remote clusters are minimized for cross-cluster search requests.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # If true, network roundtrips between the coordinating node and remote clusters are minimized for cross-cluster search requests.
   --expand-wildcards: string # Type of index that wildcard expressions can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams.
-  --ignore-throttled: string@bool-completer # If true, concrete, expanded or aliased indices are ignored when frozen. (DEPRECATED)
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --include-named-queries-score: string@bool-completer # Indicates whether hit.matched_queries should be rendered as a map that includes the name of the matched query associated with its score (true) or as an array containing the name of the matched queries (false) This functionality reruns each named query on every hit in a search response. Typically, this adds a small overhead to a request. However, using computationally expensive named queries on a large number of hits may add significant overhead.
+  --ignore-throttled: oneof<nothing, bool> # If true, concrete, expanded or aliased indices are ignored when frozen. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --include-named-queries-score: oneof<nothing, bool> # Indicates whether hit.matched_queries should be rendered as a map that includes the name of the matched query associated with its score (true) or as an array containing the name of the matched queries (false) This functionality reruns each named query on every hit in a search response. Typically, this adds a small overhead to a request. However, using computationally expensive named queries on a large number of hits may add significant overhead.
   --index: string # Comma-separated list of data streams, indices, and index aliases to use as default
   --max-concurrent-searches: float # Maximum number of concurrent searches the multi search API can execute. Defaults to `max(1, (# of data nodes * min(search thread pool size, 10)))`.
   --max-concurrent-shard-requests: float # Maximum number of concurrent shard requests that each sub-search request executes per node.
   --pre-filter-shard-size: float # Defines a threshold that enforces a pre-filter roundtrip to prefilter search shards based on query rewriting if the number of shards the search request expands to exceeds the threshold. This filter roundtrip can limit the number of shards significantly if for instance a shard can not match any documents based on its rewrite method i.e., if date filters are mandatory to match but the shard bounds and the query are disjoint.
-  --rest-total-hits-as-int: string@bool-completer # If true, hits.total are returned as an integer in the response. Defaults to false, which returns an object.
+  --rest-total-hits-as-int: oneof<nothing, bool> # If true, hits.total are returned as an integer in the response. Defaults to false, which returns an object.
   --routing: string # Custom routing value used to route search operations to a specific shard. Not allowed when `index.slice.enabled` is `true` for the target index; use `_slice` instead.
   --search-type: string@search-type-completer # Indicates whether global term and document frequencies should be used when scoring returned documents.
-  --typed-keys: string@bool-completer # Specifies whether aggregation and suggester names should be prefixed by their respective types in the response.
+  --typed-keys: oneof<nothing, bool> # Specifies whether aggregation and suggester names should be prefixed by their respective types in the response.
   --body: record
 ]: any -> any {
   let input = $in
@@ -15994,20 +15993,20 @@ export def "msearch msearch-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --ccs-minimize-roundtrips: string@bool-completer # If true, network roundtrips between the coordinating node and remote clusters are minimized for cross-cluster search requests.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # If true, network roundtrips between the coordinating node and remote clusters are minimized for cross-cluster search requests.
   --expand-wildcards: string # Type of index that wildcard expressions can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams.
-  --ignore-throttled: string@bool-completer # If true, concrete, expanded or aliased indices are ignored when frozen. (DEPRECATED)
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --include-named-queries-score: string@bool-completer # Indicates whether hit.matched_queries should be rendered as a map that includes the name of the matched query associated with its score (true) or as an array containing the name of the matched queries (false) This functionality reruns each named query on every hit in a search response. Typically, this adds a small overhead to a request. However, using computationally expensive named queries on a large number of hits may add significant overhead.
+  --ignore-throttled: oneof<nothing, bool> # If true, concrete, expanded or aliased indices are ignored when frozen. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --include-named-queries-score: oneof<nothing, bool> # Indicates whether hit.matched_queries should be rendered as a map that includes the name of the matched query associated with its score (true) or as an array containing the name of the matched queries (false) This functionality reruns each named query on every hit in a search response. Typically, this adds a small overhead to a request. However, using computationally expensive named queries on a large number of hits may add significant overhead.
   --index: string # Comma-separated list of data streams, indices, and index aliases to use as default
   --max-concurrent-searches: float # Maximum number of concurrent searches the multi search API can execute. Defaults to `max(1, (# of data nodes * min(search thread pool size, 10)))`.
   --max-concurrent-shard-requests: float # Maximum number of concurrent shard requests that each sub-search request executes per node.
   --pre-filter-shard-size: float # Defines a threshold that enforces a pre-filter roundtrip to prefilter search shards based on query rewriting if the number of shards the search request expands to exceeds the threshold. This filter roundtrip can limit the number of shards significantly if for instance a shard can not match any documents based on its rewrite method i.e., if date filters are mandatory to match but the shard bounds and the query are disjoint.
-  --rest-total-hits-as-int: string@bool-completer # If true, hits.total are returned as an integer in the response. Defaults to false, which returns an object.
+  --rest-total-hits-as-int: oneof<nothing, bool> # If true, hits.total are returned as an integer in the response. Defaults to false, which returns an object.
   --routing: string # Custom routing value used to route search operations to a specific shard. Not allowed when `index.slice.enabled` is `true` for the target index; use `_slice` instead.
   --search-type: string@search-type-completer # Indicates whether global term and document frequencies should be used when scoring returned documents.
-  --typed-keys: string@bool-completer # Specifies whether aggregation and suggester names should be prefixed by their respective types in the response.
+  --typed-keys: oneof<nothing, bool> # Specifies whether aggregation and suggester names should be prefixed by their respective types in the response.
   --body: record
 ]: any -> any {
   let input = $in
@@ -16035,20 +16034,20 @@ export def "msearch msearch-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --ccs-minimize-roundtrips: string@bool-completer # If true, network roundtrips between the coordinating node and remote clusters are minimized for cross-cluster search requests.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # If true, network roundtrips between the coordinating node and remote clusters are minimized for cross-cluster search requests.
   --expand-wildcards: string # Type of index that wildcard expressions can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams.
-  --ignore-throttled: string@bool-completer # If true, concrete, expanded or aliased indices are ignored when frozen. (DEPRECATED)
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --include-named-queries-score: string@bool-completer # Indicates whether hit.matched_queries should be rendered as a map that includes the name of the matched query associated with its score (true) or as an array containing the name of the matched queries (false) This functionality reruns each named query on every hit in a search response. Typically, this adds a small overhead to a request. However, using computationally expensive named queries on a large number of hits may add significant overhead.
+  --ignore-throttled: oneof<nothing, bool> # If true, concrete, expanded or aliased indices are ignored when frozen. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --include-named-queries-score: oneof<nothing, bool> # Indicates whether hit.matched_queries should be rendered as a map that includes the name of the matched query associated with its score (true) or as an array containing the name of the matched queries (false) This functionality reruns each named query on every hit in a search response. Typically, this adds a small overhead to a request. However, using computationally expensive named queries on a large number of hits may add significant overhead.
   --index: string # Comma-separated list of data streams, indices, and index aliases to use as default
   --max-concurrent-searches: float # Maximum number of concurrent searches the multi search API can execute. Defaults to `max(1, (# of data nodes * min(search thread pool size, 10)))`.
   --max-concurrent-shard-requests: float # Maximum number of concurrent shard requests that each sub-search request executes per node.
   --pre-filter-shard-size: float # Defines a threshold that enforces a pre-filter roundtrip to prefilter search shards based on query rewriting if the number of shards the search request expands to exceeds the threshold. This filter roundtrip can limit the number of shards significantly if for instance a shard can not match any documents based on its rewrite method i.e., if date filters are mandatory to match but the shard bounds and the query are disjoint.
-  --rest-total-hits-as-int: string@bool-completer # If true, hits.total are returned as an integer in the response. Defaults to false, which returns an object.
+  --rest-total-hits-as-int: oneof<nothing, bool> # If true, hits.total are returned as an integer in the response. Defaults to false, which returns an object.
   --routing: string # Custom routing value used to route search operations to a specific shard. Not allowed when `index.slice.enabled` is `true` for the target index; use `_slice` instead.
   --search-type: string@search-type-completer # Indicates whether global term and document frequencies should be used when scoring returned documents.
-  --typed-keys: string@bool-completer # Specifies whether aggregation and suggester names should be prefixed by their respective types in the response.
+  --typed-keys: oneof<nothing, bool> # Specifies whether aggregation and suggester names should be prefixed by their respective types in the response.
   --body: record
 ]: any -> any {
   let input = $in
@@ -16076,20 +16075,20 @@ export def "msearch msearch-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --ccs-minimize-roundtrips: string@bool-completer # If true, network roundtrips between the coordinating node and remote clusters are minimized for cross-cluster search requests.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # If true, network roundtrips between the coordinating node and remote clusters are minimized for cross-cluster search requests.
   --expand-wildcards: string # Type of index that wildcard expressions can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams.
-  --ignore-throttled: string@bool-completer # If true, concrete, expanded or aliased indices are ignored when frozen. (DEPRECATED)
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --include-named-queries-score: string@bool-completer # Indicates whether hit.matched_queries should be rendered as a map that includes the name of the matched query associated with its score (true) or as an array containing the name of the matched queries (false) This functionality reruns each named query on every hit in a search response. Typically, this adds a small overhead to a request. However, using computationally expensive named queries on a large number of hits may add significant overhead.
+  --ignore-throttled: oneof<nothing, bool> # If true, concrete, expanded or aliased indices are ignored when frozen. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --include-named-queries-score: oneof<nothing, bool> # Indicates whether hit.matched_queries should be rendered as a map that includes the name of the matched query associated with its score (true) or as an array containing the name of the matched queries (false) This functionality reruns each named query on every hit in a search response. Typically, this adds a small overhead to a request. However, using computationally expensive named queries on a large number of hits may add significant overhead.
   --index: string # Comma-separated list of data streams, indices, and index aliases to use as default
   --max-concurrent-searches: float # Maximum number of concurrent searches the multi search API can execute. Defaults to `max(1, (# of data nodes * min(search thread pool size, 10)))`.
   --max-concurrent-shard-requests: float # Maximum number of concurrent shard requests that each sub-search request executes per node.
   --pre-filter-shard-size: float # Defines a threshold that enforces a pre-filter roundtrip to prefilter search shards based on query rewriting if the number of shards the search request expands to exceeds the threshold. This filter roundtrip can limit the number of shards significantly if for instance a shard can not match any documents based on its rewrite method i.e., if date filters are mandatory to match but the shard bounds and the query are disjoint.
-  --rest-total-hits-as-int: string@bool-completer # If true, hits.total are returned as an integer in the response. Defaults to false, which returns an object.
+  --rest-total-hits-as-int: oneof<nothing, bool> # If true, hits.total are returned as an integer in the response. Defaults to false, which returns an object.
   --routing: string # Custom routing value used to route search operations to a specific shard. Not allowed when `index.slice.enabled` is `true` for the target index; use `_slice` instead.
   --search-type: string@search-type-completer # Indicates whether global term and document frequencies should be used when scoring returned documents.
-  --typed-keys: string@bool-completer # Specifies whether aggregation and suggester names should be prefixed by their respective types in the response.
+  --typed-keys: oneof<nothing, bool> # Specifies whether aggregation and suggester names should be prefixed by their respective types in the response.
   --body: record
 ]: any -> any {
   let input = $in
@@ -16116,11 +16115,11 @@ export def "msearch-template msearch-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ccs-minimize-roundtrips: string@bool-completer # If `true`, network round-trips are minimized for cross-cluster search requests.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # If `true`, network round-trips are minimized for cross-cluster search requests.
   --max-concurrent-searches: float # The maximum number of concurrent searches the API can run.
   --search-type: string@search-type-completer # The type of the search operation.
-  --rest-total-hits-as-int: string@bool-completer # If `true`, the response returns `hits.total` as an integer. If `false`, it returns `hits.total` as an object.
-  --typed-keys: string@bool-completer # If `true`, the response prefixes aggregation and suggester names with their respective types.
+  --rest-total-hits-as-int: oneof<nothing, bool> # If `true`, the response returns `hits.total` as an integer. If `false`, it returns `hits.total` as an object.
+  --typed-keys: oneof<nothing, bool> # If `true`, the response prefixes aggregation and suggester names with their respective types.
   --body: record
 ]: any -> any {
   let input = $in
@@ -16147,11 +16146,11 @@ export def "msearch-template msearch-template-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ccs-minimize-roundtrips: string@bool-completer # If `true`, network round-trips are minimized for cross-cluster search requests.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # If `true`, network round-trips are minimized for cross-cluster search requests.
   --max-concurrent-searches: float # The maximum number of concurrent searches the API can run.
   --search-type: string@search-type-completer # The type of the search operation.
-  --rest-total-hits-as-int: string@bool-completer # If `true`, the response returns `hits.total` as an integer. If `false`, it returns `hits.total` as an object.
-  --typed-keys: string@bool-completer # If `true`, the response prefixes aggregation and suggester names with their respective types.
+  --rest-total-hits-as-int: oneof<nothing, bool> # If `true`, the response returns `hits.total` as an integer. If `false`, it returns `hits.total` as an object.
+  --typed-keys: oneof<nothing, bool> # If `true`, the response prefixes aggregation and suggester names with their respective types.
   --body: record
 ]: any -> any {
   let input = $in
@@ -16179,11 +16178,11 @@ export def "msearch-template msearch-template-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ccs-minimize-roundtrips: string@bool-completer # If `true`, network round-trips are minimized for cross-cluster search requests.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # If `true`, network round-trips are minimized for cross-cluster search requests.
   --max-concurrent-searches: float # The maximum number of concurrent searches the API can run.
   --search-type: string@search-type-completer # The type of the search operation.
-  --rest-total-hits-as-int: string@bool-completer # If `true`, the response returns `hits.total` as an integer. If `false`, it returns `hits.total` as an object.
-  --typed-keys: string@bool-completer # If `true`, the response prefixes aggregation and suggester names with their respective types.
+  --rest-total-hits-as-int: oneof<nothing, bool> # If `true`, the response returns `hits.total` as an integer. If `false`, it returns `hits.total` as an object.
+  --typed-keys: oneof<nothing, bool> # If `true`, the response prefixes aggregation and suggester names with their respective types.
   --body: record
 ]: any -> any {
   let input = $in
@@ -16211,11 +16210,11 @@ export def "msearch-template msearch-template-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ccs-minimize-roundtrips: string@bool-completer # If `true`, network round-trips are minimized for cross-cluster search requests.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # If `true`, network round-trips are minimized for cross-cluster search requests.
   --max-concurrent-searches: float # The maximum number of concurrent searches the API can run.
   --search-type: string@search-type-completer # The type of the search operation.
-  --rest-total-hits-as-int: string@bool-completer # If `true`, the response returns `hits.total` as an integer. If `false`, it returns `hits.total` as an object.
-  --typed-keys: string@bool-completer # If `true`, the response prefixes aggregation and suggester names with their respective types.
+  --rest-total-hits-as-int: oneof<nothing, bool> # If `true`, the response returns `hits.total` as an integer. If `false`, it returns `hits.total` as an object.
+  --typed-keys: oneof<nothing, bool> # If `true`, the response prefixes aggregation and suggester names with their respective types.
   --body: record
 ]: any -> any {
   let input = $in
@@ -16244,14 +16243,14 @@ export def "mtermvectors mtermvectors" [
   --allow-errors(-e) # Return full response without error handling
   --ids: list # A comma-separated list of documents ids. You must define ids as parameter or set "ids" or "docs" in the request body
   --qp-fields: string # A comma-separated list or wildcard expressions of fields to include in the statistics. It is used as the default list unless a specific field list is provided in the `completion_fields` or `fielddata_fields` parameters.
-  --field-statistics: string@bool-completer # If `true`, the response includes the document count, sum of document frequencies, and sum of total term frequencies.
-  --offsets: string@bool-completer # If `true`, the response includes term offsets.
-  --payloads: string@bool-completer # If `true`, the response includes term payloads.
-  --positions: string@bool-completer # If `true`, the response includes term positions.
+  --field-statistics: oneof<nothing, bool> # If `true`, the response includes the document count, sum of document frequencies, and sum of total term frequencies.
+  --offsets: oneof<nothing, bool> # If `true`, the response includes term offsets.
+  --payloads: oneof<nothing, bool> # If `true`, the response includes term payloads.
+  --positions: oneof<nothing, bool> # If `true`, the response includes term positions.
   --preference: string # The node or shard the operation should be performed on. It is random by default.
-  --realtime: string@bool-completer # If true, the request is real-time as opposed to near-real-time.
+  --realtime: oneof<nothing, bool> # If true, the request is real-time as opposed to near-real-time.
   --routing: string # A custom value used to route operations to a specific shard.
-  --term-statistics: string@bool-completer # If true, the response includes term frequency and document frequency.
+  --term-statistics: oneof<nothing, bool> # If true, the response includes term frequency and document frequency.
   --version: float # If `true`, returns the document version as part of a hit.
   --version-type: string@version-type-completer # The version type.
   --docs: list # An array of existing or artificial documents. — item shape: {_id?: any, _index?: any, doc?: record, fields?: any, field_statistics?: bool, filter?: any, offsets?: bool, payloads?: bool, positions?: bool, routing?: any, term_statistics?: bool, version?: any, version_type?: any}
@@ -16284,14 +16283,14 @@ export def "mtermvectors mtermvectors-1" [
   --allow-errors(-e) # Return full response without error handling
   --ids: list # A comma-separated list of documents ids. You must define ids as parameter or set "ids" or "docs" in the request body
   --qp-fields: string # A comma-separated list or wildcard expressions of fields to include in the statistics. It is used as the default list unless a specific field list is provided in the `completion_fields` or `fielddata_fields` parameters.
-  --field-statistics: string@bool-completer # If `true`, the response includes the document count, sum of document frequencies, and sum of total term frequencies.
-  --offsets: string@bool-completer # If `true`, the response includes term offsets.
-  --payloads: string@bool-completer # If `true`, the response includes term payloads.
-  --positions: string@bool-completer # If `true`, the response includes term positions.
+  --field-statistics: oneof<nothing, bool> # If `true`, the response includes the document count, sum of document frequencies, and sum of total term frequencies.
+  --offsets: oneof<nothing, bool> # If `true`, the response includes term offsets.
+  --payloads: oneof<nothing, bool> # If `true`, the response includes term payloads.
+  --positions: oneof<nothing, bool> # If `true`, the response includes term positions.
   --preference: string # The node or shard the operation should be performed on. It is random by default.
-  --realtime: string@bool-completer # If true, the request is real-time as opposed to near-real-time.
+  --realtime: oneof<nothing, bool> # If true, the request is real-time as opposed to near-real-time.
   --routing: string # A custom value used to route operations to a specific shard.
-  --term-statistics: string@bool-completer # If true, the response includes term frequency and document frequency.
+  --term-statistics: oneof<nothing, bool> # If true, the response includes term frequency and document frequency.
   --version: float # If `true`, returns the document version as part of a hit.
   --version-type: string@version-type-completer # The version type.
   --docs: list # An array of existing or artificial documents. — item shape: {_id?: any, _index?: any, doc?: record, fields?: any, field_statistics?: bool, filter?: any, offsets?: bool, payloads?: bool, positions?: bool, routing?: any, term_statistics?: bool, version?: any, version_type?: any}
@@ -16325,14 +16324,14 @@ export def "mtermvectors mtermvectors-2" [
   --allow-errors(-e) # Return full response without error handling
   --ids: list # A comma-separated list of documents ids. You must define ids as parameter or set "ids" or "docs" in the request body
   --qp-fields: string # A comma-separated list or wildcard expressions of fields to include in the statistics. It is used as the default list unless a specific field list is provided in the `completion_fields` or `fielddata_fields` parameters.
-  --field-statistics: string@bool-completer # If `true`, the response includes the document count, sum of document frequencies, and sum of total term frequencies.
-  --offsets: string@bool-completer # If `true`, the response includes term offsets.
-  --payloads: string@bool-completer # If `true`, the response includes term payloads.
-  --positions: string@bool-completer # If `true`, the response includes term positions.
+  --field-statistics: oneof<nothing, bool> # If `true`, the response includes the document count, sum of document frequencies, and sum of total term frequencies.
+  --offsets: oneof<nothing, bool> # If `true`, the response includes term offsets.
+  --payloads: oneof<nothing, bool> # If `true`, the response includes term payloads.
+  --positions: oneof<nothing, bool> # If `true`, the response includes term positions.
   --preference: string # The node or shard the operation should be performed on. It is random by default.
-  --realtime: string@bool-completer # If true, the request is real-time as opposed to near-real-time.
+  --realtime: oneof<nothing, bool> # If true, the request is real-time as opposed to near-real-time.
   --routing: string # A custom value used to route operations to a specific shard.
-  --term-statistics: string@bool-completer # If true, the response includes term frequency and document frequency.
+  --term-statistics: oneof<nothing, bool> # If true, the response includes term frequency and document frequency.
   --version: float # If `true`, returns the document version as part of a hit.
   --version-type: string@version-type-completer # The version type.
   --docs: list # An array of existing or artificial documents. — item shape: {_id?: any, _index?: any, doc?: record, fields?: any, field_statistics?: bool, filter?: any, offsets?: bool, payloads?: bool, positions?: bool, routing?: any, term_statistics?: bool, version?: any, version_type?: any}
@@ -16366,14 +16365,14 @@ export def "mtermvectors mtermvectors-3" [
   --allow-errors(-e) # Return full response without error handling
   --ids: list # A comma-separated list of documents ids. You must define ids as parameter or set "ids" or "docs" in the request body
   --qp-fields: string # A comma-separated list or wildcard expressions of fields to include in the statistics. It is used as the default list unless a specific field list is provided in the `completion_fields` or `fielddata_fields` parameters.
-  --field-statistics: string@bool-completer # If `true`, the response includes the document count, sum of document frequencies, and sum of total term frequencies.
-  --offsets: string@bool-completer # If `true`, the response includes term offsets.
-  --payloads: string@bool-completer # If `true`, the response includes term payloads.
-  --positions: string@bool-completer # If `true`, the response includes term positions.
+  --field-statistics: oneof<nothing, bool> # If `true`, the response includes the document count, sum of document frequencies, and sum of total term frequencies.
+  --offsets: oneof<nothing, bool> # If `true`, the response includes term offsets.
+  --payloads: oneof<nothing, bool> # If `true`, the response includes term payloads.
+  --positions: oneof<nothing, bool> # If `true`, the response includes term positions.
   --preference: string # The node or shard the operation should be performed on. It is random by default.
-  --realtime: string@bool-completer # If true, the request is real-time as opposed to near-real-time.
+  --realtime: oneof<nothing, bool> # If true, the request is real-time as opposed to near-real-time.
   --routing: string # A custom value used to route operations to a specific shard.
-  --term-statistics: string@bool-completer # If true, the response includes term frequency and document frequency.
+  --term-statistics: oneof<nothing, bool> # If true, the response includes term frequency and document frequency.
   --version: float # If `true`, returns the document version as part of a hit.
   --version-type: string@version-type-completer # The version type.
   --docs: list # An array of existing or artificial documents. — item shape: {_id?: any, _index?: any, doc?: record, fields?: any, field_statistics?: bool, filter?: any, offsets?: bool, payloads?: bool, positions?: bool, routing?: any, term_statistics?: bool, version?: any, version_type?: any}
@@ -16448,7 +16447,7 @@ export def "nodes-hot-threads nodes-hot-threads" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ignore-idle-threads: string@bool-completer # If true, known idle threads (e.g. waiting in a socket select, or to get a task from an empty queue) are filtered out.
+  --ignore-idle-threads: oneof<nothing, bool> # If true, known idle threads (e.g. waiting in a socket select, or to get a task from an empty queue) are filtered out.
   --interval: string # The interval to do the second sampling of threads.
   --snapshots: float # Number of samples of thread stacktrace.
   --threads: float # Specifies the number of hot threads to provide information for.
@@ -16478,7 +16477,7 @@ export def "nodes-hot-threads nodes-hot-threads-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ignore-idle-threads: string@bool-completer # If true, known idle threads (e.g. waiting in a socket select, or to get a task from an empty queue) are filtered out.
+  --ignore-idle-threads: oneof<nothing, bool> # If true, known idle threads (e.g. waiting in a socket select, or to get a task from an empty queue) are filtered out.
   --interval: string # The interval to do the second sampling of threads.
   --snapshots: float # Number of samples of thread stacktrace.
   --threads: float # Specifies the number of hot threads to provide information for.
@@ -16507,7 +16506,7 @@ export def "nodes nodes-info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --flat-settings: string@bool-completer # If true, returns settings in flat format.
+  --flat-settings: oneof<nothing, bool> # If true, returns settings in flat format.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -16532,7 +16531,7 @@ export def "nodes nodes-info-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --flat-settings: string@bool-completer # If true, returns settings in flat format.
+  --flat-settings: oneof<nothing, bool> # If true, returns settings in flat format.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -16557,7 +16556,7 @@ export def "nodes nodes-info-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --flat-settings: string@bool-completer # If true, returns settings in flat format.
+  --flat-settings: oneof<nothing, bool> # If true, returns settings in flat format.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -16583,7 +16582,7 @@ export def "nodes nodes-info-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --flat-settings: string@bool-completer # If true, returns settings in flat format.
+  --flat-settings: oneof<nothing, bool> # If true, returns settings in flat format.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -16665,12 +16664,12 @@ export def "nodes-stats nodes-stats" [
   --completion-fields: string # Comma-separated list or wildcard expressions of fields to include in fielddata and suggest statistics.
   --fielddata-fields: string # Comma-separated list or wildcard expressions of fields to include in fielddata statistics.
   --qp-fields: string # Comma-separated list or wildcard expressions of fields to include in the statistics.
-  --groups: string@bool-completer # Comma-separated list of search groups to include in the search statistics.
-  --include-segment-file-sizes: string@bool-completer # If true, the call reports the aggregated disk usage of each one of the Lucene index files (only applies if segment stats are requested).
+  --groups: oneof<nothing, bool> # Comma-separated list of search groups to include in the search statistics.
+  --include-segment-file-sizes: oneof<nothing, bool> # If true, the call reports the aggregated disk usage of each one of the Lucene index files (only applies if segment stats are requested).
   --level: string@level-completer-1 # Indicates whether statistics are aggregated at the node, indices, or shards level.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --types: list # A comma-separated list of document types for the indexing index metric.
-  --include-unloaded-segments: string@bool-completer # If `true`, the response includes information from segments that are not loaded into memory.
+  --include-unloaded-segments: oneof<nothing, bool> # If `true`, the response includes information from segments that are not loaded into memory.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16697,12 +16696,12 @@ export def "nodes-stats nodes-stats-1" [
   --completion-fields: string # Comma-separated list or wildcard expressions of fields to include in fielddata and suggest statistics.
   --fielddata-fields: string # Comma-separated list or wildcard expressions of fields to include in fielddata statistics.
   --qp-fields: string # Comma-separated list or wildcard expressions of fields to include in the statistics.
-  --groups: string@bool-completer # Comma-separated list of search groups to include in the search statistics.
-  --include-segment-file-sizes: string@bool-completer # If true, the call reports the aggregated disk usage of each one of the Lucene index files (only applies if segment stats are requested).
+  --groups: oneof<nothing, bool> # Comma-separated list of search groups to include in the search statistics.
+  --include-segment-file-sizes: oneof<nothing, bool> # If true, the call reports the aggregated disk usage of each one of the Lucene index files (only applies if segment stats are requested).
   --level: string@level-completer-1 # Indicates whether statistics are aggregated at the node, indices, or shards level.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --types: list # A comma-separated list of document types for the indexing index metric.
-  --include-unloaded-segments: string@bool-completer # If `true`, the response includes information from segments that are not loaded into memory.
+  --include-unloaded-segments: oneof<nothing, bool> # If `true`, the response includes information from segments that are not loaded into memory.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16729,12 +16728,12 @@ export def "nodes-stats nodes-stats-2" [
   --completion-fields: string # Comma-separated list or wildcard expressions of fields to include in fielddata and suggest statistics.
   --fielddata-fields: string # Comma-separated list or wildcard expressions of fields to include in fielddata statistics.
   --qp-fields: string # Comma-separated list or wildcard expressions of fields to include in the statistics.
-  --groups: string@bool-completer # Comma-separated list of search groups to include in the search statistics.
-  --include-segment-file-sizes: string@bool-completer # If true, the call reports the aggregated disk usage of each one of the Lucene index files (only applies if segment stats are requested).
+  --groups: oneof<nothing, bool> # Comma-separated list of search groups to include in the search statistics.
+  --include-segment-file-sizes: oneof<nothing, bool> # If true, the call reports the aggregated disk usage of each one of the Lucene index files (only applies if segment stats are requested).
   --level: string@level-completer-1 # Indicates whether statistics are aggregated at the node, indices, or shards level.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --types: list # A comma-separated list of document types for the indexing index metric.
-  --include-unloaded-segments: string@bool-completer # If `true`, the response includes information from segments that are not loaded into memory.
+  --include-unloaded-segments: oneof<nothing, bool> # If `true`, the response includes information from segments that are not loaded into memory.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16762,12 +16761,12 @@ export def "nodes-stats nodes-stats-3" [
   --completion-fields: string # Comma-separated list or wildcard expressions of fields to include in fielddata and suggest statistics.
   --fielddata-fields: string # Comma-separated list or wildcard expressions of fields to include in fielddata statistics.
   --qp-fields: string # Comma-separated list or wildcard expressions of fields to include in the statistics.
-  --groups: string@bool-completer # Comma-separated list of search groups to include in the search statistics.
-  --include-segment-file-sizes: string@bool-completer # If true, the call reports the aggregated disk usage of each one of the Lucene index files (only applies if segment stats are requested).
+  --groups: oneof<nothing, bool> # Comma-separated list of search groups to include in the search statistics.
+  --include-segment-file-sizes: oneof<nothing, bool> # If true, the call reports the aggregated disk usage of each one of the Lucene index files (only applies if segment stats are requested).
   --level: string@level-completer-1 # Indicates whether statistics are aggregated at the node, indices, or shards level.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --types: list # A comma-separated list of document types for the indexing index metric.
-  --include-unloaded-segments: string@bool-completer # If `true`, the response includes information from segments that are not loaded into memory.
+  --include-unloaded-segments: oneof<nothing, bool> # If `true`, the response includes information from segments that are not loaded into memory.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16795,12 +16794,12 @@ export def "nodes-stats nodes-stats-4" [
   --completion-fields: string # Comma-separated list or wildcard expressions of fields to include in fielddata and suggest statistics.
   --fielddata-fields: string # Comma-separated list or wildcard expressions of fields to include in fielddata statistics.
   --qp-fields: string # Comma-separated list or wildcard expressions of fields to include in the statistics.
-  --groups: string@bool-completer # Comma-separated list of search groups to include in the search statistics.
-  --include-segment-file-sizes: string@bool-completer # If true, the call reports the aggregated disk usage of each one of the Lucene index files (only applies if segment stats are requested).
+  --groups: oneof<nothing, bool> # Comma-separated list of search groups to include in the search statistics.
+  --include-segment-file-sizes: oneof<nothing, bool> # If true, the call reports the aggregated disk usage of each one of the Lucene index files (only applies if segment stats are requested).
   --level: string@level-completer-1 # Indicates whether statistics are aggregated at the node, indices, or shards level.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --types: list # A comma-separated list of document types for the indexing index metric.
-  --include-unloaded-segments: string@bool-completer # If `true`, the response includes information from segments that are not loaded into memory.
+  --include-unloaded-segments: oneof<nothing, bool> # If `true`, the response includes information from segments that are not loaded into memory.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16829,12 +16828,12 @@ export def "nodes-stats nodes-stats-5" [
   --completion-fields: string # Comma-separated list or wildcard expressions of fields to include in fielddata and suggest statistics.
   --fielddata-fields: string # Comma-separated list or wildcard expressions of fields to include in fielddata statistics.
   --qp-fields: string # Comma-separated list or wildcard expressions of fields to include in the statistics.
-  --groups: string@bool-completer # Comma-separated list of search groups to include in the search statistics.
-  --include-segment-file-sizes: string@bool-completer # If true, the call reports the aggregated disk usage of each one of the Lucene index files (only applies if segment stats are requested).
+  --groups: oneof<nothing, bool> # Comma-separated list of search groups to include in the search statistics.
+  --include-segment-file-sizes: oneof<nothing, bool> # If true, the call reports the aggregated disk usage of each one of the Lucene index files (only applies if segment stats are requested).
   --level: string@level-completer-1 # Indicates whether statistics are aggregated at the node, indices, or shards level.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --types: list # A comma-separated list of document types for the indexing index metric.
-  --include-unloaded-segments: string@bool-completer # If `true`, the response includes information from segments that are not loaded into memory.
+  --include-unloaded-segments: oneof<nothing, bool> # If `true`, the response includes information from segments that are not loaded into memory.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16955,11 +16954,11 @@ export def "pit open-point-in-time" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --keep-alive: string # Extend the length of time that the point in time persists.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --preference: string # The node or shard the operation should be performed on. By default, it is random.
   --routing: string # A custom value that is used to route operations to a specific shard.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. It supports comma-separated values, such as `open,hidden`.
-  --allow-partial-search-results: string@bool-completer # Indicates whether the point in time tolerates unavailable shards or shard failures when initially creating the PIT. If `false`, creating a point in time request when a shard is missing or unavailable will throw an exception. If `true`, the point in time will contain all the shards that are available at the time of the request.
+  --allow-partial-search-results: oneof<nothing, bool> # Indicates whether the point in time tolerates unavailable shards or shard failures when initially creating the PIT. If `false`, creating a point in time request when a shard is missing or unavailable will throw an exception. If `true`, the point in time will contain all the shards that are available at the time of the request.
   --max-concurrent-shard-requests: float # Maximum number of concurrent shard requests that each sub-search request executes per node.
   --index-filter: any # Filter indices if the provided query rewrites to `match_none` on every shard.
 ]: any -> record<_shards: record<failed: record, successful: record, total: record, failures: list<record>, skipped: record>, id: record, _clusters: record<skipped: float, successful: float, total: float, running: float, partial: float, failed: float, details: record>> {
@@ -17256,9 +17255,9 @@ export def "rank-eval rank-eval" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indices that are open, closed or both.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --search-type: string@search-type-completer # Search operation type
   requests: list # A set of typical search requests, together with their provided ratings. — item shape: {id: any, request?: any, ratings: list, template_id?: any, params?: record}
   --metric: any # Definition of the evaluation metric to calculate.
@@ -17289,9 +17288,9 @@ export def "rank-eval rank-eval-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indices that are open, closed or both.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --search-type: string@search-type-completer # Search operation type
   requests: list # A set of typical search requests, together with their provided ratings. — item shape: {id: any, request?: any, ratings: list, template_id?: any, params?: record}
   --metric: any # Definition of the evaluation metric to calculate.
@@ -17323,9 +17322,9 @@ export def "rank-eval rank-eval-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indices that are open, closed or both.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --search-type: string@search-type-completer # Search operation type
   requests: list # A set of typical search requests, together with their provided ratings. — item shape: {id: any, request?: any, ratings: list, template_id?: any, params?: record}
   --metric: any # Definition of the evaluation metric to calculate.
@@ -17357,9 +17356,9 @@ export def "rank-eval rank-eval-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indices that are open, closed or both.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --search-type: string@search-type-completer # Search operation type
   requests: list # A set of typical search requests, together with their provided ratings. — item shape: {id: any, request?: any, ratings: list, template_id?: any, params?: record}
   --metric: any # Definition of the evaluation metric to calculate.
@@ -17709,8 +17708,8 @@ export def "rollup-search rollup-rollup-search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --rest-total-hits-as-int: string@bool-completer # Indicates whether hits.total should be rendered as an integer or an object in the rest search response
-  --typed-keys: string@bool-completer # Specify whether aggregation and suggester names should be prefixed by their respective types in the response
+  --rest-total-hits-as-int: oneof<nothing, bool> # Indicates whether hits.total should be rendered as an integer or an object in the rest search response
+  --typed-keys: oneof<nothing, bool> # Specify whether aggregation and suggester names should be prefixed by their respective types in the response
   --aggregations: record # Specifies aggregations.
   --body-query: any # Specifies a DSL query that is subject to some limitations.
   --size: float # Must be zero if set, as rollups work on pre-aggregated data.
@@ -17743,8 +17742,8 @@ export def "rollup-search rollup-rollup-search-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --rest-total-hits-as-int: string@bool-completer # Indicates whether hits.total should be rendered as an integer or an object in the rest search response
-  --typed-keys: string@bool-completer # Specify whether aggregation and suggester names should be prefixed by their respective types in the response
+  --rest-total-hits-as-int: oneof<nothing, bool> # Indicates whether hits.total should be rendered as an integer or an object in the rest search response
+  --typed-keys: oneof<nothing, bool> # Specify whether aggregation and suggester names should be prefixed by their respective types in the response
   --aggregations: record # Specifies aggregations.
   --body-query: any # Specifies a DSL query that is subject to some limitations.
   --size: float # Must be zero if set, as rollups work on pre-aggregated data.
@@ -17801,7 +17800,7 @@ export def "rollup-job-stop rollup-stop-job" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --timeout: string # If `wait_for_completion` is `true`, the API blocks for (at maximum) the specified duration while waiting for the job to stop. If more than `timeout` time has passed, the API throws a timeout exception. NOTE: Even if a timeout occurs, the stop request is still processing and eventually moves the job to STOPPED. The timeout simply means the API call itself timed out while waiting for the status change.
-  --wait-for-completion: string@bool-completer # If set to `true`, causes the API to block until the indexer state completely stops. If set to `false`, the API returns immediately and the indexer is stopped asynchronously in the background.
+  --wait-for-completion: oneof<nothing, bool> # If set to `true`, causes the API to block until the indexer state completely stops. If set to `false`, the API returns immediately and the indexer is stopped asynchronously in the background.
 ]: nothing -> record<stopped: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17882,25 +17881,25 @@ export def "search search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --allow-partial-search-results: string@bool-completer # If `true` and there are shard request timeouts or shard failures, the request returns partial results. If `false`, it returns an error with no partial results.  To override the default behavior, you can set the `search.default_allow_partial_results` cluster setting to `false`.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-partial-search-results: oneof<nothing, bool> # If `true` and there are shard request timeouts or shard failures, the request returns partial results. If `false`, it returns an error with no partial results.  To override the default behavior, you can set the `search.default_allow_partial_results` cluster setting to `false`.
   --analyzer: string # The analyzer to use for the query string. This parameter can be used only when the `q` query string parameter is specified.
-  --analyze-wildcard: string@bool-completer # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
+  --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
   --batched-reduce-size: float # The number of shard results that should be reduced at once on the coordinating node. If the potential number of shards in the request can be large, this value should be used as a protection mechanism to reduce the memory overhead per search request.
-  --ccs-minimize-roundtrips: string@bool-completer # If `true`, network round-trips between the coordinating node and the remote clusters are minimized when running cross-cluster search (CCS) requests.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # If `true`, network round-trips between the coordinating node and the remote clusters are minimized when running cross-cluster search (CCS) requests.
   --default-operator: string@default-operator-completer # The default operator for the query string query: `and` or `or`. This parameter can be used only when the `q` query string parameter is specified.
   --df: string # The field to use as a default when no field prefix is given in the query string. This parameter can be used only when the `q` query string parameter is specified.
   --docvalue-fields: string # A comma-separated list of fields to return as the docvalue representation of a field for each hit.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. It supports comma-separated values such as `open,hidden`.
-  --explain: string@bool-completer # If `true`, the request returns detailed information about score computation as part of a hit.
-  --ignore-throttled: string@bool-completer # If `true`, concrete, expanded or aliased indices will be ignored when frozen. (DEPRECATED)
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --include-named-queries-score: string@bool-completer # If `true`, the response includes the score contribution from any named queries.  This functionality reruns each named query on every hit in a search response. Typically, this adds a small overhead to a request. However, using computationally expensive named queries on a large number of hits may add significant overhead.
-  --lenient: string@bool-completer # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
+  --explain: oneof<nothing, bool> # If `true`, the request returns detailed information about score computation as part of a hit.
+  --ignore-throttled: oneof<nothing, bool> # If `true`, concrete, expanded or aliased indices will be ignored when frozen. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --include-named-queries-score: oneof<nothing, bool> # If `true`, the response includes the score contribution from any named queries.  This functionality reruns each named query on every hit in a search response. Typically, this adds a small overhead to a request. However, using computationally expensive named queries on a large number of hits may add significant overhead.
+  --lenient: oneof<nothing, bool> # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
   --max-concurrent-shard-requests: float # The number of concurrent shard requests per node that the search runs concurrently. This value should be used to limit the impact of the search on the cluster in order to limit the number of concurrent shard requests.
   --preference: string # The nodes and shards used for the search. By default, Elasticsearch selects from eligible nodes and shards using adaptive replica selection, accounting for allocation awareness. Valid values are:  * `_only_local` to run the search only on shards on the local node. * `_local` to, if possible, run the search on shards on the local node, or if not, select shards using the default method. * `_only_nodes:<node-id>,<node-id>` to run the search on only the specified nodes IDs. If suitable shards exist on more than one selected node, use shards on those nodes using the default method. If none of the specified nodes are available, select shards from any available node using the default method. * `_prefer_nodes:<node-id>,<node-id>` to if possible, run the search on the specified nodes IDs. If not, select shards using the default method. * `_shards:<shard>,<shard>` to run the search only on the specified shards. You can combine this value with other `preference` values. However, the `_shards` value must come first. For example: `_shards:2,3|_local`. * `<custom-string>` (any string that does not start with `_`) to route searches with the same `<custom-string>` to the same shards in the same order.
   --pre-filter-shard-size: float # A threshold that enforces a pre-filter roundtrip to prefilter search shards based on query rewriting if the number of shards the search request expands to exceeds the threshold. This filter roundtrip can limit the number of shards significantly if for instance a shard can not match any documents based on its rewrite method (if date filters are mandatory to match but the shard bounds and the query are disjoint). When unspecified, the pre-filter phase is executed if any of these conditions is met:  * The request targets more than 128 shards. * The request targets one or more read-only index. * The primary sort of the query targets an indexed field.
-  --request-cache: string@bool-completer # If `true`, the caching of search results is enabled for requests where `size` is `0`. It defaults to index level settings.
+  --request-cache: oneof<nothing, bool> # If `true`, the caching of search results is enabled for requests where `size` is `0`. It defaults to index level settings.
   --routing: string # A custom value that is used to route operations to a specific shard.
   --scroll: string # The period to retain the search context for scrolling. By default, this value cannot exceed `1d` (24 hours). You can change this limit by using the `search.max_keep_alive` cluster-level setting.
   --search-type: string@search-type-completer # Indicates how distributed term frequencies are calculated for relevance scoring.
@@ -17913,22 +17912,22 @@ export def "search search" [
   --terminate-after: float # The maximum number of documents to collect for each shard. If a query reaches this limit, Elasticsearch terminates the query early. Elasticsearch collects documents before sorting.  IMPORTANT: Use with caution. Elasticsearch applies this parameter to each shard handling the request. When possible, let Elasticsearch perform early termination automatically. Avoid specifying this parameter for requests that target data streams with backing indices across multiple data tiers. If set to `0` (default), the query does not terminate early.
   --timeout: string # The period of time to wait for a response from each shard. If no response is received before the timeout expires, the request fails and returns an error. It defaults to no timeout.
   --track-total-hits: string # The number of hits matching the query to count accurately. If `true`, the exact number of hits is returned at the cost of some performance. If `false`, the response does not include the total number of hits matching the query.
-  --track-scores: string@bool-completer # If `true`, the request calculates and returns document scores, even if the scores are not used for sorting.
-  --typed-keys: string@bool-completer # If `true`, aggregation and suggester names are be prefixed by their respective types in the response.
-  --rest-total-hits-as-int: string@bool-completer # Indicates whether `hits.total` should be rendered as an integer or an object in the rest search response.
-  --version: string@bool-completer # If `true`, the request returns the document version as part of a hit.
+  --track-scores: oneof<nothing, bool> # If `true`, the request calculates and returns document scores, even if the scores are not used for sorting.
+  --typed-keys: oneof<nothing, bool> # If `true`, aggregation and suggester names are be prefixed by their respective types in the response.
+  --rest-total-hits-as-int: oneof<nothing, bool> # Indicates whether `hits.total` should be rendered as an integer or an object in the rest search response.
+  --version: oneof<nothing, bool> # If `true`, the request returns the document version as part of a hit.
   --qp-source: string # The source fields that are returned for matching documents. These fields are returned in the `hits._source` property of the search response. Valid values are:  * `true` to return the entire document source. * `false` to not return the document source. * `<string>` to return the source fields that are specified as a comma-separated list that supports wildcard (`*`) patterns.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response. You can also use this parameter to exclude fields from the subset specified in `_source_includes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
-  --source-exclude-vectors: string@bool-completer # Whether vectors should be excluded from _source
+  --source-exclude-vectors: oneof<nothing, bool> # Whether vectors should be excluded from _source
   --source-includes: string # A comma-separated list of source fields to include in the response. If this parameter is specified, only these source fields are returned. You can exclude fields from this subset using the `_source_excludes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
-  --seq-no-primary-term: string@bool-completer # If `true`, the request returns the sequence number and primary term of the last modification of each hit.
+  --seq-no-primary-term: oneof<nothing, bool> # If `true`, the request returns the sequence number and primary term of the last modification of each hit.
   --q: string # A query in the Lucene query string syntax. Query parameter searches do not support the full Elasticsearch Query DSL but are handy for testing.  IMPORTANT: This parameter overrides the query parameter in the request body. If both parameters are specified, documents matching the query request body parameter are not returned.
   --size: float # The number of hits to return. By default, you cannot page through more than 10,000 hits using the `from` and `size` parameters. To page through more hits, use the `search_after` parameter.
   --qp-from: float # The starting document offset, which must be non-negative. By default, you cannot page through more than 10,000 hits using the `from` and `size` parameters. To page through more hits, use the `search_after` parameter.
   --qp-sort: string # A comma-separated list of `<field>:<direction>` pairs.
   --aggregations: record # Defines the aggregations that are run as part of the search request.
   --collapse: any # Collapses search results the values of the specified field.
-  --explain: string@bool-completer # If `true`, the request returns detailed information about score computation as part of a hit. (default: false)
+  --explain: oneof<nothing, bool> # If `true`, the request returns detailed information about score computation as part of a hit. (default: false)
   --ext: record # Configuration of search extensions defined by Elasticsearch plugins.
   --body-from: float # The starting document offset, which must be non-negative. By default, you cannot page through more than 10,000 hits using the `from` and `size` parameters. To page through more hits, use the `search_after` parameter. (default: 0.0)
   --highlight: any # Specifies the highlighter to use for retrieving highlighted snippets from one or more fields in your search results.
@@ -17939,7 +17938,7 @@ export def "search search" [
   --rank: any # The Reciprocal Rank Fusion (RRF) to use.
   --min-score: float # The minimum `_score` for matching documents. Documents with a lower `_score` are not included in search results and results collected by aggregations.
   --post-filter: any # Use the `post_filter` parameter to filter search results. The search hits are filtered after the aggregations are calculated. A post filter has no impact on the aggregation results.
-  --profile: string@bool-completer # Set to `true` to return detailed timing information about the execution of individual components in a search request. NOTE: This is a debugging tool and adds significant overhead to search execution. (default: false)
+  --profile: oneof<nothing, bool> # Set to `true` to return detailed timing information about the execution of individual components in a search request. NOTE: This is a debugging tool and adds significant overhead to search execution. (default: false)
   --body-query: any # The search definition using the Query DSL.
   --rescore: any # Can be used to improve precision by reordering just the top (for example 100 - 500) documents returned by the `query` and `post_filter` phases.
   --retriever: any # A retriever is a specification to describe top documents returned from a search. A retriever replaces other elements of the search API that also return top documents such as `query` and `knn`.
@@ -17953,9 +17952,9 @@ export def "search search" [
   --suggest: any # Defines a suggester that provides similar looking terms based on a provided text.
   --terminate-after: float # The maximum number of documents to collect for each shard. If a query reaches this limit, Elasticsearch terminates the query early. Elasticsearch collects documents before sorting.  IMPORTANT: Use with caution. Elasticsearch applies this property to each shard handling the request. When possible, let Elasticsearch perform early termination automatically. Avoid specifying this property for requests that target data streams with backing indices across multiple data tiers.  If set to `0` (default), the query does not terminate early. (default: 0.0)
   --timeout: string # The period of time to wait for a response from each shard. If no response is received before the timeout expires, the request fails and returns an error. Defaults to no timeout.
-  --track-scores: string@bool-completer # If `true`, calculate and return document scores, even if the scores are not used for sorting. (default: false)
-  --version: string@bool-completer # If `true`, the request returns the document version as part of a hit. (default: false)
-  --seq-no-primary-term: string@bool-completer # If `true`, the request returns sequence number and primary term of the last modification of each hit.
+  --track-scores: oneof<nothing, bool> # If `true`, calculate and return document scores, even if the scores are not used for sorting. (default: false)
+  --version: oneof<nothing, bool> # If `true`, the request returns the document version as part of a hit. (default: false)
+  --seq-no-primary-term: oneof<nothing, bool> # If `true`, the request returns sequence number and primary term of the last modification of each hit.
   --stored-fields: any # A comma-separated list of stored fields to return as part of a hit. If no fields are specified, no stored fields are included in the response. If this field is specified, the `_source` property defaults to `false`. You can pass `_source: true` to return both source fields and stored fields in the search response.
   --pit: any # Limit the search to a point in time (PIT). If you provide a PIT, you cannot specify an `<index>` in the request path.
   --runtime-mappings: any # One or more runtime fields in the search request. These fields take precedence over mapped fields with the same name.
@@ -17989,25 +17988,25 @@ export def "search search-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --allow-partial-search-results: string@bool-completer # If `true` and there are shard request timeouts or shard failures, the request returns partial results. If `false`, it returns an error with no partial results.  To override the default behavior, you can set the `search.default_allow_partial_results` cluster setting to `false`.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-partial-search-results: oneof<nothing, bool> # If `true` and there are shard request timeouts or shard failures, the request returns partial results. If `false`, it returns an error with no partial results.  To override the default behavior, you can set the `search.default_allow_partial_results` cluster setting to `false`.
   --analyzer: string # The analyzer to use for the query string. This parameter can be used only when the `q` query string parameter is specified.
-  --analyze-wildcard: string@bool-completer # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
+  --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
   --batched-reduce-size: float # The number of shard results that should be reduced at once on the coordinating node. If the potential number of shards in the request can be large, this value should be used as a protection mechanism to reduce the memory overhead per search request.
-  --ccs-minimize-roundtrips: string@bool-completer # If `true`, network round-trips between the coordinating node and the remote clusters are minimized when running cross-cluster search (CCS) requests.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # If `true`, network round-trips between the coordinating node and the remote clusters are minimized when running cross-cluster search (CCS) requests.
   --default-operator: string@default-operator-completer # The default operator for the query string query: `and` or `or`. This parameter can be used only when the `q` query string parameter is specified.
   --df: string # The field to use as a default when no field prefix is given in the query string. This parameter can be used only when the `q` query string parameter is specified.
   --docvalue-fields: string # A comma-separated list of fields to return as the docvalue representation of a field for each hit.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. It supports comma-separated values such as `open,hidden`.
-  --explain: string@bool-completer # If `true`, the request returns detailed information about score computation as part of a hit.
-  --ignore-throttled: string@bool-completer # If `true`, concrete, expanded or aliased indices will be ignored when frozen. (DEPRECATED)
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --include-named-queries-score: string@bool-completer # If `true`, the response includes the score contribution from any named queries.  This functionality reruns each named query on every hit in a search response. Typically, this adds a small overhead to a request. However, using computationally expensive named queries on a large number of hits may add significant overhead.
-  --lenient: string@bool-completer # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
+  --explain: oneof<nothing, bool> # If `true`, the request returns detailed information about score computation as part of a hit.
+  --ignore-throttled: oneof<nothing, bool> # If `true`, concrete, expanded or aliased indices will be ignored when frozen. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --include-named-queries-score: oneof<nothing, bool> # If `true`, the response includes the score contribution from any named queries.  This functionality reruns each named query on every hit in a search response. Typically, this adds a small overhead to a request. However, using computationally expensive named queries on a large number of hits may add significant overhead.
+  --lenient: oneof<nothing, bool> # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
   --max-concurrent-shard-requests: float # The number of concurrent shard requests per node that the search runs concurrently. This value should be used to limit the impact of the search on the cluster in order to limit the number of concurrent shard requests.
   --preference: string # The nodes and shards used for the search. By default, Elasticsearch selects from eligible nodes and shards using adaptive replica selection, accounting for allocation awareness. Valid values are:  * `_only_local` to run the search only on shards on the local node. * `_local` to, if possible, run the search on shards on the local node, or if not, select shards using the default method. * `_only_nodes:<node-id>,<node-id>` to run the search on only the specified nodes IDs. If suitable shards exist on more than one selected node, use shards on those nodes using the default method. If none of the specified nodes are available, select shards from any available node using the default method. * `_prefer_nodes:<node-id>,<node-id>` to if possible, run the search on the specified nodes IDs. If not, select shards using the default method. * `_shards:<shard>,<shard>` to run the search only on the specified shards. You can combine this value with other `preference` values. However, the `_shards` value must come first. For example: `_shards:2,3|_local`. * `<custom-string>` (any string that does not start with `_`) to route searches with the same `<custom-string>` to the same shards in the same order.
   --pre-filter-shard-size: float # A threshold that enforces a pre-filter roundtrip to prefilter search shards based on query rewriting if the number of shards the search request expands to exceeds the threshold. This filter roundtrip can limit the number of shards significantly if for instance a shard can not match any documents based on its rewrite method (if date filters are mandatory to match but the shard bounds and the query are disjoint). When unspecified, the pre-filter phase is executed if any of these conditions is met:  * The request targets more than 128 shards. * The request targets one or more read-only index. * The primary sort of the query targets an indexed field.
-  --request-cache: string@bool-completer # If `true`, the caching of search results is enabled for requests where `size` is `0`. It defaults to index level settings.
+  --request-cache: oneof<nothing, bool> # If `true`, the caching of search results is enabled for requests where `size` is `0`. It defaults to index level settings.
   --routing: string # A custom value that is used to route operations to a specific shard.
   --scroll: string # The period to retain the search context for scrolling. By default, this value cannot exceed `1d` (24 hours). You can change this limit by using the `search.max_keep_alive` cluster-level setting.
   --search-type: string@search-type-completer # Indicates how distributed term frequencies are calculated for relevance scoring.
@@ -18020,22 +18019,22 @@ export def "search search-1" [
   --terminate-after: float # The maximum number of documents to collect for each shard. If a query reaches this limit, Elasticsearch terminates the query early. Elasticsearch collects documents before sorting.  IMPORTANT: Use with caution. Elasticsearch applies this parameter to each shard handling the request. When possible, let Elasticsearch perform early termination automatically. Avoid specifying this parameter for requests that target data streams with backing indices across multiple data tiers. If set to `0` (default), the query does not terminate early.
   --timeout: string # The period of time to wait for a response from each shard. If no response is received before the timeout expires, the request fails and returns an error. It defaults to no timeout.
   --track-total-hits: string # The number of hits matching the query to count accurately. If `true`, the exact number of hits is returned at the cost of some performance. If `false`, the response does not include the total number of hits matching the query.
-  --track-scores: string@bool-completer # If `true`, the request calculates and returns document scores, even if the scores are not used for sorting.
-  --typed-keys: string@bool-completer # If `true`, aggregation and suggester names are be prefixed by their respective types in the response.
-  --rest-total-hits-as-int: string@bool-completer # Indicates whether `hits.total` should be rendered as an integer or an object in the rest search response.
-  --version: string@bool-completer # If `true`, the request returns the document version as part of a hit.
+  --track-scores: oneof<nothing, bool> # If `true`, the request calculates and returns document scores, even if the scores are not used for sorting.
+  --typed-keys: oneof<nothing, bool> # If `true`, aggregation and suggester names are be prefixed by their respective types in the response.
+  --rest-total-hits-as-int: oneof<nothing, bool> # Indicates whether `hits.total` should be rendered as an integer or an object in the rest search response.
+  --version: oneof<nothing, bool> # If `true`, the request returns the document version as part of a hit.
   --qp-source: string # The source fields that are returned for matching documents. These fields are returned in the `hits._source` property of the search response. Valid values are:  * `true` to return the entire document source. * `false` to not return the document source. * `<string>` to return the source fields that are specified as a comma-separated list that supports wildcard (`*`) patterns.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response. You can also use this parameter to exclude fields from the subset specified in `_source_includes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
-  --source-exclude-vectors: string@bool-completer # Whether vectors should be excluded from _source
+  --source-exclude-vectors: oneof<nothing, bool> # Whether vectors should be excluded from _source
   --source-includes: string # A comma-separated list of source fields to include in the response. If this parameter is specified, only these source fields are returned. You can exclude fields from this subset using the `_source_excludes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
-  --seq-no-primary-term: string@bool-completer # If `true`, the request returns the sequence number and primary term of the last modification of each hit.
+  --seq-no-primary-term: oneof<nothing, bool> # If `true`, the request returns the sequence number and primary term of the last modification of each hit.
   --q: string # A query in the Lucene query string syntax. Query parameter searches do not support the full Elasticsearch Query DSL but are handy for testing.  IMPORTANT: This parameter overrides the query parameter in the request body. If both parameters are specified, documents matching the query request body parameter are not returned.
   --size: float # The number of hits to return. By default, you cannot page through more than 10,000 hits using the `from` and `size` parameters. To page through more hits, use the `search_after` parameter.
   --qp-from: float # The starting document offset, which must be non-negative. By default, you cannot page through more than 10,000 hits using the `from` and `size` parameters. To page through more hits, use the `search_after` parameter.
   --qp-sort: string # A comma-separated list of `<field>:<direction>` pairs.
   --aggregations: record # Defines the aggregations that are run as part of the search request.
   --collapse: any # Collapses search results the values of the specified field.
-  --explain: string@bool-completer # If `true`, the request returns detailed information about score computation as part of a hit. (default: false)
+  --explain: oneof<nothing, bool> # If `true`, the request returns detailed information about score computation as part of a hit. (default: false)
   --ext: record # Configuration of search extensions defined by Elasticsearch plugins.
   --body-from: float # The starting document offset, which must be non-negative. By default, you cannot page through more than 10,000 hits using the `from` and `size` parameters. To page through more hits, use the `search_after` parameter. (default: 0.0)
   --highlight: any # Specifies the highlighter to use for retrieving highlighted snippets from one or more fields in your search results.
@@ -18046,7 +18045,7 @@ export def "search search-1" [
   --rank: any # The Reciprocal Rank Fusion (RRF) to use.
   --min-score: float # The minimum `_score` for matching documents. Documents with a lower `_score` are not included in search results and results collected by aggregations.
   --post-filter: any # Use the `post_filter` parameter to filter search results. The search hits are filtered after the aggregations are calculated. A post filter has no impact on the aggregation results.
-  --profile: string@bool-completer # Set to `true` to return detailed timing information about the execution of individual components in a search request. NOTE: This is a debugging tool and adds significant overhead to search execution. (default: false)
+  --profile: oneof<nothing, bool> # Set to `true` to return detailed timing information about the execution of individual components in a search request. NOTE: This is a debugging tool and adds significant overhead to search execution. (default: false)
   --body-query: any # The search definition using the Query DSL.
   --rescore: any # Can be used to improve precision by reordering just the top (for example 100 - 500) documents returned by the `query` and `post_filter` phases.
   --retriever: any # A retriever is a specification to describe top documents returned from a search. A retriever replaces other elements of the search API that also return top documents such as `query` and `knn`.
@@ -18060,9 +18059,9 @@ export def "search search-1" [
   --suggest: any # Defines a suggester that provides similar looking terms based on a provided text.
   --terminate-after: float # The maximum number of documents to collect for each shard. If a query reaches this limit, Elasticsearch terminates the query early. Elasticsearch collects documents before sorting.  IMPORTANT: Use with caution. Elasticsearch applies this property to each shard handling the request. When possible, let Elasticsearch perform early termination automatically. Avoid specifying this property for requests that target data streams with backing indices across multiple data tiers.  If set to `0` (default), the query does not terminate early. (default: 0.0)
   --timeout: string # The period of time to wait for a response from each shard. If no response is received before the timeout expires, the request fails and returns an error. Defaults to no timeout.
-  --track-scores: string@bool-completer # If `true`, calculate and return document scores, even if the scores are not used for sorting. (default: false)
-  --version: string@bool-completer # If `true`, the request returns the document version as part of a hit. (default: false)
-  --seq-no-primary-term: string@bool-completer # If `true`, the request returns sequence number and primary term of the last modification of each hit.
+  --track-scores: oneof<nothing, bool> # If `true`, calculate and return document scores, even if the scores are not used for sorting. (default: false)
+  --version: oneof<nothing, bool> # If `true`, the request returns the document version as part of a hit. (default: false)
+  --seq-no-primary-term: oneof<nothing, bool> # If `true`, the request returns sequence number and primary term of the last modification of each hit.
   --stored-fields: any # A comma-separated list of stored fields to return as part of a hit. If no fields are specified, no stored fields are included in the response. If this field is specified, the `_source` property defaults to `false`. You can pass `_source: true` to return both source fields and stored fields in the search response.
   --pit: any # Limit the search to a point in time (PIT). If you provide a PIT, you cannot specify an `<index>` in the request path.
   --runtime-mappings: any # One or more runtime fields in the search request. These fields take precedence over mapped fields with the same name.
@@ -18097,25 +18096,25 @@ export def "search search-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --allow-partial-search-results: string@bool-completer # If `true` and there are shard request timeouts or shard failures, the request returns partial results. If `false`, it returns an error with no partial results.  To override the default behavior, you can set the `search.default_allow_partial_results` cluster setting to `false`.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-partial-search-results: oneof<nothing, bool> # If `true` and there are shard request timeouts or shard failures, the request returns partial results. If `false`, it returns an error with no partial results.  To override the default behavior, you can set the `search.default_allow_partial_results` cluster setting to `false`.
   --analyzer: string # The analyzer to use for the query string. This parameter can be used only when the `q` query string parameter is specified.
-  --analyze-wildcard: string@bool-completer # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
+  --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
   --batched-reduce-size: float # The number of shard results that should be reduced at once on the coordinating node. If the potential number of shards in the request can be large, this value should be used as a protection mechanism to reduce the memory overhead per search request.
-  --ccs-minimize-roundtrips: string@bool-completer # If `true`, network round-trips between the coordinating node and the remote clusters are minimized when running cross-cluster search (CCS) requests.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # If `true`, network round-trips between the coordinating node and the remote clusters are minimized when running cross-cluster search (CCS) requests.
   --default-operator: string@default-operator-completer # The default operator for the query string query: `and` or `or`. This parameter can be used only when the `q` query string parameter is specified.
   --df: string # The field to use as a default when no field prefix is given in the query string. This parameter can be used only when the `q` query string parameter is specified.
   --docvalue-fields: string # A comma-separated list of fields to return as the docvalue representation of a field for each hit.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. It supports comma-separated values such as `open,hidden`.
-  --explain: string@bool-completer # If `true`, the request returns detailed information about score computation as part of a hit.
-  --ignore-throttled: string@bool-completer # If `true`, concrete, expanded or aliased indices will be ignored when frozen. (DEPRECATED)
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --include-named-queries-score: string@bool-completer # If `true`, the response includes the score contribution from any named queries.  This functionality reruns each named query on every hit in a search response. Typically, this adds a small overhead to a request. However, using computationally expensive named queries on a large number of hits may add significant overhead.
-  --lenient: string@bool-completer # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
+  --explain: oneof<nothing, bool> # If `true`, the request returns detailed information about score computation as part of a hit.
+  --ignore-throttled: oneof<nothing, bool> # If `true`, concrete, expanded or aliased indices will be ignored when frozen. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --include-named-queries-score: oneof<nothing, bool> # If `true`, the response includes the score contribution from any named queries.  This functionality reruns each named query on every hit in a search response. Typically, this adds a small overhead to a request. However, using computationally expensive named queries on a large number of hits may add significant overhead.
+  --lenient: oneof<nothing, bool> # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
   --max-concurrent-shard-requests: float # The number of concurrent shard requests per node that the search runs concurrently. This value should be used to limit the impact of the search on the cluster in order to limit the number of concurrent shard requests.
   --preference: string # The nodes and shards used for the search. By default, Elasticsearch selects from eligible nodes and shards using adaptive replica selection, accounting for allocation awareness. Valid values are:  * `_only_local` to run the search only on shards on the local node. * `_local` to, if possible, run the search on shards on the local node, or if not, select shards using the default method. * `_only_nodes:<node-id>,<node-id>` to run the search on only the specified nodes IDs. If suitable shards exist on more than one selected node, use shards on those nodes using the default method. If none of the specified nodes are available, select shards from any available node using the default method. * `_prefer_nodes:<node-id>,<node-id>` to if possible, run the search on the specified nodes IDs. If not, select shards using the default method. * `_shards:<shard>,<shard>` to run the search only on the specified shards. You can combine this value with other `preference` values. However, the `_shards` value must come first. For example: `_shards:2,3|_local`. * `<custom-string>` (any string that does not start with `_`) to route searches with the same `<custom-string>` to the same shards in the same order.
   --pre-filter-shard-size: float # A threshold that enforces a pre-filter roundtrip to prefilter search shards based on query rewriting if the number of shards the search request expands to exceeds the threshold. This filter roundtrip can limit the number of shards significantly if for instance a shard can not match any documents based on its rewrite method (if date filters are mandatory to match but the shard bounds and the query are disjoint). When unspecified, the pre-filter phase is executed if any of these conditions is met:  * The request targets more than 128 shards. * The request targets one or more read-only index. * The primary sort of the query targets an indexed field.
-  --request-cache: string@bool-completer # If `true`, the caching of search results is enabled for requests where `size` is `0`. It defaults to index level settings.
+  --request-cache: oneof<nothing, bool> # If `true`, the caching of search results is enabled for requests where `size` is `0`. It defaults to index level settings.
   --routing: string # A custom value that is used to route operations to a specific shard.
   --scroll: string # The period to retain the search context for scrolling. By default, this value cannot exceed `1d` (24 hours). You can change this limit by using the `search.max_keep_alive` cluster-level setting.
   --search-type: string@search-type-completer # Indicates how distributed term frequencies are calculated for relevance scoring.
@@ -18128,22 +18127,22 @@ export def "search search-2" [
   --terminate-after: float # The maximum number of documents to collect for each shard. If a query reaches this limit, Elasticsearch terminates the query early. Elasticsearch collects documents before sorting.  IMPORTANT: Use with caution. Elasticsearch applies this parameter to each shard handling the request. When possible, let Elasticsearch perform early termination automatically. Avoid specifying this parameter for requests that target data streams with backing indices across multiple data tiers. If set to `0` (default), the query does not terminate early.
   --timeout: string # The period of time to wait for a response from each shard. If no response is received before the timeout expires, the request fails and returns an error. It defaults to no timeout.
   --track-total-hits: string # The number of hits matching the query to count accurately. If `true`, the exact number of hits is returned at the cost of some performance. If `false`, the response does not include the total number of hits matching the query.
-  --track-scores: string@bool-completer # If `true`, the request calculates and returns document scores, even if the scores are not used for sorting.
-  --typed-keys: string@bool-completer # If `true`, aggregation and suggester names are be prefixed by their respective types in the response.
-  --rest-total-hits-as-int: string@bool-completer # Indicates whether `hits.total` should be rendered as an integer or an object in the rest search response.
-  --version: string@bool-completer # If `true`, the request returns the document version as part of a hit.
+  --track-scores: oneof<nothing, bool> # If `true`, the request calculates and returns document scores, even if the scores are not used for sorting.
+  --typed-keys: oneof<nothing, bool> # If `true`, aggregation and suggester names are be prefixed by their respective types in the response.
+  --rest-total-hits-as-int: oneof<nothing, bool> # Indicates whether `hits.total` should be rendered as an integer or an object in the rest search response.
+  --version: oneof<nothing, bool> # If `true`, the request returns the document version as part of a hit.
   --qp-source: string # The source fields that are returned for matching documents. These fields are returned in the `hits._source` property of the search response. Valid values are:  * `true` to return the entire document source. * `false` to not return the document source. * `<string>` to return the source fields that are specified as a comma-separated list that supports wildcard (`*`) patterns.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response. You can also use this parameter to exclude fields from the subset specified in `_source_includes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
-  --source-exclude-vectors: string@bool-completer # Whether vectors should be excluded from _source
+  --source-exclude-vectors: oneof<nothing, bool> # Whether vectors should be excluded from _source
   --source-includes: string # A comma-separated list of source fields to include in the response. If this parameter is specified, only these source fields are returned. You can exclude fields from this subset using the `_source_excludes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
-  --seq-no-primary-term: string@bool-completer # If `true`, the request returns the sequence number and primary term of the last modification of each hit.
+  --seq-no-primary-term: oneof<nothing, bool> # If `true`, the request returns the sequence number and primary term of the last modification of each hit.
   --q: string # A query in the Lucene query string syntax. Query parameter searches do not support the full Elasticsearch Query DSL but are handy for testing.  IMPORTANT: This parameter overrides the query parameter in the request body. If both parameters are specified, documents matching the query request body parameter are not returned.
   --size: float # The number of hits to return. By default, you cannot page through more than 10,000 hits using the `from` and `size` parameters. To page through more hits, use the `search_after` parameter.
   --qp-from: float # The starting document offset, which must be non-negative. By default, you cannot page through more than 10,000 hits using the `from` and `size` parameters. To page through more hits, use the `search_after` parameter.
   --qp-sort: string # A comma-separated list of `<field>:<direction>` pairs.
   --aggregations: record # Defines the aggregations that are run as part of the search request.
   --collapse: any # Collapses search results the values of the specified field.
-  --explain: string@bool-completer # If `true`, the request returns detailed information about score computation as part of a hit. (default: false)
+  --explain: oneof<nothing, bool> # If `true`, the request returns detailed information about score computation as part of a hit. (default: false)
   --ext: record # Configuration of search extensions defined by Elasticsearch plugins.
   --body-from: float # The starting document offset, which must be non-negative. By default, you cannot page through more than 10,000 hits using the `from` and `size` parameters. To page through more hits, use the `search_after` parameter. (default: 0.0)
   --highlight: any # Specifies the highlighter to use for retrieving highlighted snippets from one or more fields in your search results.
@@ -18154,7 +18153,7 @@ export def "search search-2" [
   --rank: any # The Reciprocal Rank Fusion (RRF) to use.
   --min-score: float # The minimum `_score` for matching documents. Documents with a lower `_score` are not included in search results and results collected by aggregations.
   --post-filter: any # Use the `post_filter` parameter to filter search results. The search hits are filtered after the aggregations are calculated. A post filter has no impact on the aggregation results.
-  --profile: string@bool-completer # Set to `true` to return detailed timing information about the execution of individual components in a search request. NOTE: This is a debugging tool and adds significant overhead to search execution. (default: false)
+  --profile: oneof<nothing, bool> # Set to `true` to return detailed timing information about the execution of individual components in a search request. NOTE: This is a debugging tool and adds significant overhead to search execution. (default: false)
   --body-query: any # The search definition using the Query DSL.
   --rescore: any # Can be used to improve precision by reordering just the top (for example 100 - 500) documents returned by the `query` and `post_filter` phases.
   --retriever: any # A retriever is a specification to describe top documents returned from a search. A retriever replaces other elements of the search API that also return top documents such as `query` and `knn`.
@@ -18168,9 +18167,9 @@ export def "search search-2" [
   --suggest: any # Defines a suggester that provides similar looking terms based on a provided text.
   --terminate-after: float # The maximum number of documents to collect for each shard. If a query reaches this limit, Elasticsearch terminates the query early. Elasticsearch collects documents before sorting.  IMPORTANT: Use with caution. Elasticsearch applies this property to each shard handling the request. When possible, let Elasticsearch perform early termination automatically. Avoid specifying this property for requests that target data streams with backing indices across multiple data tiers.  If set to `0` (default), the query does not terminate early. (default: 0.0)
   --timeout: string # The period of time to wait for a response from each shard. If no response is received before the timeout expires, the request fails and returns an error. Defaults to no timeout.
-  --track-scores: string@bool-completer # If `true`, calculate and return document scores, even if the scores are not used for sorting. (default: false)
-  --version: string@bool-completer # If `true`, the request returns the document version as part of a hit. (default: false)
-  --seq-no-primary-term: string@bool-completer # If `true`, the request returns sequence number and primary term of the last modification of each hit.
+  --track-scores: oneof<nothing, bool> # If `true`, calculate and return document scores, even if the scores are not used for sorting. (default: false)
+  --version: oneof<nothing, bool> # If `true`, the request returns the document version as part of a hit. (default: false)
+  --seq-no-primary-term: oneof<nothing, bool> # If `true`, the request returns sequence number and primary term of the last modification of each hit.
   --stored-fields: any # A comma-separated list of stored fields to return as part of a hit. If no fields are specified, no stored fields are included in the response. If this field is specified, the `_source` property defaults to `false`. You can pass `_source: true` to return both source fields and stored fields in the search response.
   --pit: any # Limit the search to a point in time (PIT). If you provide a PIT, you cannot specify an `<index>` in the request path.
   --runtime-mappings: any # One or more runtime fields in the search request. These fields take precedence over mapped fields with the same name.
@@ -18205,25 +18204,25 @@ export def "search search-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --allow-partial-search-results: string@bool-completer # If `true` and there are shard request timeouts or shard failures, the request returns partial results. If `false`, it returns an error with no partial results.  To override the default behavior, you can set the `search.default_allow_partial_results` cluster setting to `false`.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-partial-search-results: oneof<nothing, bool> # If `true` and there are shard request timeouts or shard failures, the request returns partial results. If `false`, it returns an error with no partial results.  To override the default behavior, you can set the `search.default_allow_partial_results` cluster setting to `false`.
   --analyzer: string # The analyzer to use for the query string. This parameter can be used only when the `q` query string parameter is specified.
-  --analyze-wildcard: string@bool-completer # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
+  --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
   --batched-reduce-size: float # The number of shard results that should be reduced at once on the coordinating node. If the potential number of shards in the request can be large, this value should be used as a protection mechanism to reduce the memory overhead per search request.
-  --ccs-minimize-roundtrips: string@bool-completer # If `true`, network round-trips between the coordinating node and the remote clusters are minimized when running cross-cluster search (CCS) requests.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # If `true`, network round-trips between the coordinating node and the remote clusters are minimized when running cross-cluster search (CCS) requests.
   --default-operator: string@default-operator-completer # The default operator for the query string query: `and` or `or`. This parameter can be used only when the `q` query string parameter is specified.
   --df: string # The field to use as a default when no field prefix is given in the query string. This parameter can be used only when the `q` query string parameter is specified.
   --docvalue-fields: string # A comma-separated list of fields to return as the docvalue representation of a field for each hit.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. It supports comma-separated values such as `open,hidden`.
-  --explain: string@bool-completer # If `true`, the request returns detailed information about score computation as part of a hit.
-  --ignore-throttled: string@bool-completer # If `true`, concrete, expanded or aliased indices will be ignored when frozen. (DEPRECATED)
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --include-named-queries-score: string@bool-completer # If `true`, the response includes the score contribution from any named queries.  This functionality reruns each named query on every hit in a search response. Typically, this adds a small overhead to a request. However, using computationally expensive named queries on a large number of hits may add significant overhead.
-  --lenient: string@bool-completer # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
+  --explain: oneof<nothing, bool> # If `true`, the request returns detailed information about score computation as part of a hit.
+  --ignore-throttled: oneof<nothing, bool> # If `true`, concrete, expanded or aliased indices will be ignored when frozen. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --include-named-queries-score: oneof<nothing, bool> # If `true`, the response includes the score contribution from any named queries.  This functionality reruns each named query on every hit in a search response. Typically, this adds a small overhead to a request. However, using computationally expensive named queries on a large number of hits may add significant overhead.
+  --lenient: oneof<nothing, bool> # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
   --max-concurrent-shard-requests: float # The number of concurrent shard requests per node that the search runs concurrently. This value should be used to limit the impact of the search on the cluster in order to limit the number of concurrent shard requests.
   --preference: string # The nodes and shards used for the search. By default, Elasticsearch selects from eligible nodes and shards using adaptive replica selection, accounting for allocation awareness. Valid values are:  * `_only_local` to run the search only on shards on the local node. * `_local` to, if possible, run the search on shards on the local node, or if not, select shards using the default method. * `_only_nodes:<node-id>,<node-id>` to run the search on only the specified nodes IDs. If suitable shards exist on more than one selected node, use shards on those nodes using the default method. If none of the specified nodes are available, select shards from any available node using the default method. * `_prefer_nodes:<node-id>,<node-id>` to if possible, run the search on the specified nodes IDs. If not, select shards using the default method. * `_shards:<shard>,<shard>` to run the search only on the specified shards. You can combine this value with other `preference` values. However, the `_shards` value must come first. For example: `_shards:2,3|_local`. * `<custom-string>` (any string that does not start with `_`) to route searches with the same `<custom-string>` to the same shards in the same order.
   --pre-filter-shard-size: float # A threshold that enforces a pre-filter roundtrip to prefilter search shards based on query rewriting if the number of shards the search request expands to exceeds the threshold. This filter roundtrip can limit the number of shards significantly if for instance a shard can not match any documents based on its rewrite method (if date filters are mandatory to match but the shard bounds and the query are disjoint). When unspecified, the pre-filter phase is executed if any of these conditions is met:  * The request targets more than 128 shards. * The request targets one or more read-only index. * The primary sort of the query targets an indexed field.
-  --request-cache: string@bool-completer # If `true`, the caching of search results is enabled for requests where `size` is `0`. It defaults to index level settings.
+  --request-cache: oneof<nothing, bool> # If `true`, the caching of search results is enabled for requests where `size` is `0`. It defaults to index level settings.
   --routing: string # A custom value that is used to route operations to a specific shard.
   --scroll: string # The period to retain the search context for scrolling. By default, this value cannot exceed `1d` (24 hours). You can change this limit by using the `search.max_keep_alive` cluster-level setting.
   --search-type: string@search-type-completer # Indicates how distributed term frequencies are calculated for relevance scoring.
@@ -18236,22 +18235,22 @@ export def "search search-3" [
   --terminate-after: float # The maximum number of documents to collect for each shard. If a query reaches this limit, Elasticsearch terminates the query early. Elasticsearch collects documents before sorting.  IMPORTANT: Use with caution. Elasticsearch applies this parameter to each shard handling the request. When possible, let Elasticsearch perform early termination automatically. Avoid specifying this parameter for requests that target data streams with backing indices across multiple data tiers. If set to `0` (default), the query does not terminate early.
   --timeout: string # The period of time to wait for a response from each shard. If no response is received before the timeout expires, the request fails and returns an error. It defaults to no timeout.
   --track-total-hits: string # The number of hits matching the query to count accurately. If `true`, the exact number of hits is returned at the cost of some performance. If `false`, the response does not include the total number of hits matching the query.
-  --track-scores: string@bool-completer # If `true`, the request calculates and returns document scores, even if the scores are not used for sorting.
-  --typed-keys: string@bool-completer # If `true`, aggregation and suggester names are be prefixed by their respective types in the response.
-  --rest-total-hits-as-int: string@bool-completer # Indicates whether `hits.total` should be rendered as an integer or an object in the rest search response.
-  --version: string@bool-completer # If `true`, the request returns the document version as part of a hit.
+  --track-scores: oneof<nothing, bool> # If `true`, the request calculates and returns document scores, even if the scores are not used for sorting.
+  --typed-keys: oneof<nothing, bool> # If `true`, aggregation and suggester names are be prefixed by their respective types in the response.
+  --rest-total-hits-as-int: oneof<nothing, bool> # Indicates whether `hits.total` should be rendered as an integer or an object in the rest search response.
+  --version: oneof<nothing, bool> # If `true`, the request returns the document version as part of a hit.
   --qp-source: string # The source fields that are returned for matching documents. These fields are returned in the `hits._source` property of the search response. Valid values are:  * `true` to return the entire document source. * `false` to not return the document source. * `<string>` to return the source fields that are specified as a comma-separated list that supports wildcard (`*`) patterns.
   --source-excludes: string # A comma-separated list of source fields to exclude from the response. You can also use this parameter to exclude fields from the subset specified in `_source_includes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
-  --source-exclude-vectors: string@bool-completer # Whether vectors should be excluded from _source
+  --source-exclude-vectors: oneof<nothing, bool> # Whether vectors should be excluded from _source
   --source-includes: string # A comma-separated list of source fields to include in the response. If this parameter is specified, only these source fields are returned. You can exclude fields from this subset using the `_source_excludes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
-  --seq-no-primary-term: string@bool-completer # If `true`, the request returns the sequence number and primary term of the last modification of each hit.
+  --seq-no-primary-term: oneof<nothing, bool> # If `true`, the request returns the sequence number and primary term of the last modification of each hit.
   --q: string # A query in the Lucene query string syntax. Query parameter searches do not support the full Elasticsearch Query DSL but are handy for testing.  IMPORTANT: This parameter overrides the query parameter in the request body. If both parameters are specified, documents matching the query request body parameter are not returned.
   --size: float # The number of hits to return. By default, you cannot page through more than 10,000 hits using the `from` and `size` parameters. To page through more hits, use the `search_after` parameter.
   --qp-from: float # The starting document offset, which must be non-negative. By default, you cannot page through more than 10,000 hits using the `from` and `size` parameters. To page through more hits, use the `search_after` parameter.
   --qp-sort: string # A comma-separated list of `<field>:<direction>` pairs.
   --aggregations: record # Defines the aggregations that are run as part of the search request.
   --collapse: any # Collapses search results the values of the specified field.
-  --explain: string@bool-completer # If `true`, the request returns detailed information about score computation as part of a hit. (default: false)
+  --explain: oneof<nothing, bool> # If `true`, the request returns detailed information about score computation as part of a hit. (default: false)
   --ext: record # Configuration of search extensions defined by Elasticsearch plugins.
   --body-from: float # The starting document offset, which must be non-negative. By default, you cannot page through more than 10,000 hits using the `from` and `size` parameters. To page through more hits, use the `search_after` parameter. (default: 0.0)
   --highlight: any # Specifies the highlighter to use for retrieving highlighted snippets from one or more fields in your search results.
@@ -18262,7 +18261,7 @@ export def "search search-3" [
   --rank: any # The Reciprocal Rank Fusion (RRF) to use.
   --min-score: float # The minimum `_score` for matching documents. Documents with a lower `_score` are not included in search results and results collected by aggregations.
   --post-filter: any # Use the `post_filter` parameter to filter search results. The search hits are filtered after the aggregations are calculated. A post filter has no impact on the aggregation results.
-  --profile: string@bool-completer # Set to `true` to return detailed timing information about the execution of individual components in a search request. NOTE: This is a debugging tool and adds significant overhead to search execution. (default: false)
+  --profile: oneof<nothing, bool> # Set to `true` to return detailed timing information about the execution of individual components in a search request. NOTE: This is a debugging tool and adds significant overhead to search execution. (default: false)
   --body-query: any # The search definition using the Query DSL.
   --rescore: any # Can be used to improve precision by reordering just the top (for example 100 - 500) documents returned by the `query` and `post_filter` phases.
   --retriever: any # A retriever is a specification to describe top documents returned from a search. A retriever replaces other elements of the search API that also return top documents such as `query` and `knn`.
@@ -18276,9 +18275,9 @@ export def "search search-3" [
   --suggest: any # Defines a suggester that provides similar looking terms based on a provided text.
   --terminate-after: float # The maximum number of documents to collect for each shard. If a query reaches this limit, Elasticsearch terminates the query early. Elasticsearch collects documents before sorting.  IMPORTANT: Use with caution. Elasticsearch applies this property to each shard handling the request. When possible, let Elasticsearch perform early termination automatically. Avoid specifying this property for requests that target data streams with backing indices across multiple data tiers.  If set to `0` (default), the query does not terminate early. (default: 0.0)
   --timeout: string # The period of time to wait for a response from each shard. If no response is received before the timeout expires, the request fails and returns an error. Defaults to no timeout.
-  --track-scores: string@bool-completer # If `true`, calculate and return document scores, even if the scores are not used for sorting. (default: false)
-  --version: string@bool-completer # If `true`, the request returns the document version as part of a hit. (default: false)
-  --seq-no-primary-term: string@bool-completer # If `true`, the request returns sequence number and primary term of the last modification of each hit.
+  --track-scores: oneof<nothing, bool> # If `true`, calculate and return document scores, even if the scores are not used for sorting. (default: false)
+  --version: oneof<nothing, bool> # If `true`, the request returns the document version as part of a hit. (default: false)
+  --seq-no-primary-term: oneof<nothing, bool> # If `true`, the request returns sequence number and primary term of the last modification of each hit.
   --stored-fields: any # A comma-separated list of stored fields to return as part of a hit. If no fields are specified, no stored fields are included in the response. If this field is specified, the `_source` property defaults to `false`. You can pass `_source: true` to return both source fields and stored fields in the search response.
   --pit: any # Limit the search to a point in time (PIT). If you provide a PIT, you cannot specify an `<index>` in the request path.
   --runtime-mappings: any # One or more runtime fields in the search request. These fields take precedence over mapped fields with the same name.
@@ -18331,7 +18330,7 @@ export def "application-search-application search-application-put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --create: string@bool-completer # If `true`, this request cannot replace or update existing Search Applications.
+  --create: oneof<nothing, bool> # If `true`, this request cannot replace or update existing Search Applications.
   indices: list # Indices that are part of the Search Application.
   --analytics-collection-name: any # Analytics collection associated to the Search Application.
   --template: any # Search template to use on search operations.
@@ -18507,7 +18506,7 @@ export def "application-analytics-event search-application-post-behavioral-analy
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --debug: string@bool-completer # Whether the response type has to include more details
+  --debug: oneof<nothing, bool> # Whether the response type has to include more details
   --body: record
 ]: any -> record<accepted: bool, event: record> {
   let input = $in
@@ -18560,7 +18559,7 @@ export def "application-search-application-search search-application-search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --typed-keys: string@bool-completer # Determines whether aggregation names are prefixed by their respective types in the response.
+  --typed-keys: oneof<nothing, bool> # Determines whether aggregation names are prefixed by their respective types in the response.
   --params: record # Query parameters specific to this request, which will override any defaults specified in the template.
 ]: any -> any {
   let input = $in
@@ -18588,7 +18587,7 @@ export def "application-search-application-search search-application-search-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --typed-keys: string@bool-completer # Determines whether aggregation names are prefixed by their respective types in the response.
+  --typed-keys: oneof<nothing, bool> # Determines whether aggregation names are prefixed by their respective types in the response.
   --params: record # Query parameters specific to this request, which will override any defaults specified in the template.
 ]: any -> any {
   let input = $in
@@ -18621,17 +18620,17 @@ export def "mvt search-mvt-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --exact-bounds: string@bool-completer # If `false`, the meta layer's feature is the bounding box of the tile. If true, the meta layer's feature is a bounding box resulting from a geo_bounds aggregation. The aggregation runs on <field> values that intersect the <zoom>/<x>/<y> tile with wrap_longitude set to false. The resulting bounding box may be larger than the vector tile.
+  --exact-bounds: oneof<nothing, bool> # If `false`, the meta layer's feature is the bounding box of the tile. If true, the meta layer's feature is a bounding box resulting from a geo_bounds aggregation. The aggregation runs on <field> values that intersect the <zoom>/<x>/<y> tile with wrap_longitude set to false. The resulting bounding box may be larger than the vector tile.
   --extent: float # The size, in pixels, of a side of the tile. Vector tiles are square with equal sides.
   --grid-agg: string@grid-agg-completer # Aggregation used to create a grid for `field`.
   --grid-precision: float # Additional zoom levels available through the aggs layer. For example, if <zoom> is 7 and grid_precision is 8, you can zoom in up to level 15. Accepts 0-8. If 0, results don't include the aggs layer.
   --grid-type: string@grid-type-completer # Determines the geometry type for features in the aggs layer. In the aggs layer, each feature represents a geotile_grid cell. If 'grid' each feature is a Polygon of the cells bounding box. If 'point' each feature is a Point that is the centroid of the cell.
   --size: float # Maximum number of features to return in the hits layer. Accepts 0-10000. If 0, results don't include the hits layer.
   --track-total-hits: string # The number of hits matching the query to count accurately. If `true`, the exact number of hits is returned at the cost of some performance. If `false`, the response does not include the total number of hits matching the query.
-  --with-labels: string@bool-completer # If `true`, the hits and aggs layers will contain additional point features representing suggested label positions for the original features.  * `Point` and `MultiPoint` features will have one of the points selected. * `Polygon` and `MultiPolygon` features will have a single point generated, either the centroid, if it is within the polygon, or another point within the polygon selected from the sorted triangle-tree. * `LineString` features will likewise provide a roughly central point selected from the triangle-tree. * The aggregation results will provide one central point for each aggregation bucket.  All attributes from the original features will also be copied to the new label features. In addition, the new features will be distinguishable using the tag `_mvt_label_position`.
+  --with-labels: oneof<nothing, bool> # If `true`, the hits and aggs layers will contain additional point features representing suggested label positions for the original features.  * `Point` and `MultiPoint` features will have one of the points selected. * `Polygon` and `MultiPolygon` features will have a single point generated, either the centroid, if it is within the polygon, or another point within the polygon selected from the sorted triangle-tree. * `LineString` features will likewise provide a roughly central point selected from the triangle-tree. * The aggregation results will provide one central point for each aggregation bucket.  All attributes from the original features will also be copied to the new label features. In addition, the new features will be distinguishable using the tag `_mvt_label_position`.
   --aggs: record # Sub-aggregations for the geotile_grid.  It supports the following aggregation types:  - `avg` - `boxplot` - `cardinality` - `extended stats` - `max` - `median absolute deviation` - `min` - `percentile` - `percentile-rank` - `stats` - `sum` - `value count`  The aggregation names can't start with `_mvt_`. The `_mvt_` prefix is reserved for internal aggregations.
   --buffer: float # The size, in pixels, of a clipping buffer outside the tile. This allows renderers to avoid outline artifacts from geometries that extend past the extent of the tile. (default: 5.0)
-  --exact-bounds: string@bool-completer # If `false`, the meta layer's feature is the bounding box of the tile. If `true`, the meta layer's feature is a bounding box resulting from a `geo_bounds` aggregation. The aggregation runs on <field> values that intersect the `<zoom>/<x>/<y>` tile with `wrap_longitude` set to `false`. The resulting bounding box may be larger than the vector tile. (default: false)
+  --exact-bounds: oneof<nothing, bool> # If `false`, the meta layer's feature is the bounding box of the tile. If `true`, the meta layer's feature is a bounding box resulting from a `geo_bounds` aggregation. The aggregation runs on <field> values that intersect the `<zoom>/<x>/<y>` tile with `wrap_longitude` set to `false`. The resulting bounding box may be larger than the vector tile. (default: false)
   --extent: float # The size, in pixels, of a side of the tile. Vector tiles are square with equal sides. (default: 4096.0)
   --body-fields: any # The fields to return in the `hits` layer. It supports wildcards (`*`). This parameter does not support fields with array values. Fields with array values may return inconsistent results.
   --grid-agg: any # The aggregation used to create a grid for the `field`.
@@ -18642,7 +18641,7 @@ export def "mvt search-mvt-1" [
   --size: float # The maximum number of features to return in the hits layer. Accepts 0-10000. If 0, results don't include the hits layer. (default: 10000.0)
   --body-sort: any # Sort the features in the hits layer. By default, the API calculates a bounding box for each feature. It sorts features based on this box's diagonal length, from longest to shortest.
   --track-total-hits: any # The number of hits matching the query to count accurately. If `true`, the exact number of hits is returned at the cost of some performance. If `false`, the response does not include the total number of hits matching the query. (default: 10000)
-  --with-labels: string@bool-completer # If `true`, the hits and aggs layers will contain additional point features representing suggested label positions for the original features.  * `Point` and `MultiPoint` features will have one of the points selected. * `Polygon` and `MultiPolygon` features will have a single point generated, either the centroid, if it is within the polygon, or another point within the polygon selected from the sorted triangle-tree. * `LineString` features will likewise provide a roughly central point selected from the triangle-tree. * The aggregation results will provide one central point for each aggregation bucket.  All attributes from the original features will also be copied to the new label features. In addition, the new features will be distinguishable using the tag `_mvt_label_position`.
+  --with-labels: oneof<nothing, bool> # If `true`, the hits and aggs layers will contain additional point features representing suggested label positions for the original features.  * `Point` and `MultiPoint` features will have one of the points selected. * `Polygon` and `MultiPolygon` features will have a single point generated, either the centroid, if it is within the polygon, or another point within the polygon selected from the sorted triangle-tree. * `LineString` features will likewise provide a roughly central point selected from the triangle-tree. * The aggregation results will provide one central point for each aggregation bucket.  All attributes from the original features will also be copied to the new label features. In addition, the new features will be distinguishable using the tag `_mvt_label_position`.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -18674,17 +18673,17 @@ export def "mvt search-mvt" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --exact-bounds: string@bool-completer # If `false`, the meta layer's feature is the bounding box of the tile. If true, the meta layer's feature is a bounding box resulting from a geo_bounds aggregation. The aggregation runs on <field> values that intersect the <zoom>/<x>/<y> tile with wrap_longitude set to false. The resulting bounding box may be larger than the vector tile.
+  --exact-bounds: oneof<nothing, bool> # If `false`, the meta layer's feature is the bounding box of the tile. If true, the meta layer's feature is a bounding box resulting from a geo_bounds aggregation. The aggregation runs on <field> values that intersect the <zoom>/<x>/<y> tile with wrap_longitude set to false. The resulting bounding box may be larger than the vector tile.
   --extent: float # The size, in pixels, of a side of the tile. Vector tiles are square with equal sides.
   --grid-agg: string@grid-agg-completer # Aggregation used to create a grid for `field`.
   --grid-precision: float # Additional zoom levels available through the aggs layer. For example, if <zoom> is 7 and grid_precision is 8, you can zoom in up to level 15. Accepts 0-8. If 0, results don't include the aggs layer.
   --grid-type: string@grid-type-completer # Determines the geometry type for features in the aggs layer. In the aggs layer, each feature represents a geotile_grid cell. If 'grid' each feature is a Polygon of the cells bounding box. If 'point' each feature is a Point that is the centroid of the cell.
   --size: float # Maximum number of features to return in the hits layer. Accepts 0-10000. If 0, results don't include the hits layer.
   --track-total-hits: string # The number of hits matching the query to count accurately. If `true`, the exact number of hits is returned at the cost of some performance. If `false`, the response does not include the total number of hits matching the query.
-  --with-labels: string@bool-completer # If `true`, the hits and aggs layers will contain additional point features representing suggested label positions for the original features.  * `Point` and `MultiPoint` features will have one of the points selected. * `Polygon` and `MultiPolygon` features will have a single point generated, either the centroid, if it is within the polygon, or another point within the polygon selected from the sorted triangle-tree. * `LineString` features will likewise provide a roughly central point selected from the triangle-tree. * The aggregation results will provide one central point for each aggregation bucket.  All attributes from the original features will also be copied to the new label features. In addition, the new features will be distinguishable using the tag `_mvt_label_position`.
+  --with-labels: oneof<nothing, bool> # If `true`, the hits and aggs layers will contain additional point features representing suggested label positions for the original features.  * `Point` and `MultiPoint` features will have one of the points selected. * `Polygon` and `MultiPolygon` features will have a single point generated, either the centroid, if it is within the polygon, or another point within the polygon selected from the sorted triangle-tree. * `LineString` features will likewise provide a roughly central point selected from the triangle-tree. * The aggregation results will provide one central point for each aggregation bucket.  All attributes from the original features will also be copied to the new label features. In addition, the new features will be distinguishable using the tag `_mvt_label_position`.
   --aggs: record # Sub-aggregations for the geotile_grid.  It supports the following aggregation types:  - `avg` - `boxplot` - `cardinality` - `extended stats` - `max` - `median absolute deviation` - `min` - `percentile` - `percentile-rank` - `stats` - `sum` - `value count`  The aggregation names can't start with `_mvt_`. The `_mvt_` prefix is reserved for internal aggregations.
   --buffer: float # The size, in pixels, of a clipping buffer outside the tile. This allows renderers to avoid outline artifacts from geometries that extend past the extent of the tile. (default: 5.0)
-  --exact-bounds: string@bool-completer # If `false`, the meta layer's feature is the bounding box of the tile. If `true`, the meta layer's feature is a bounding box resulting from a `geo_bounds` aggregation. The aggregation runs on <field> values that intersect the `<zoom>/<x>/<y>` tile with `wrap_longitude` set to `false`. The resulting bounding box may be larger than the vector tile. (default: false)
+  --exact-bounds: oneof<nothing, bool> # If `false`, the meta layer's feature is the bounding box of the tile. If `true`, the meta layer's feature is a bounding box resulting from a `geo_bounds` aggregation. The aggregation runs on <field> values that intersect the `<zoom>/<x>/<y>` tile with `wrap_longitude` set to `false`. The resulting bounding box may be larger than the vector tile. (default: false)
   --extent: float # The size, in pixels, of a side of the tile. Vector tiles are square with equal sides. (default: 4096.0)
   --body-fields: any # The fields to return in the `hits` layer. It supports wildcards (`*`). This parameter does not support fields with array values. Fields with array values may return inconsistent results.
   --grid-agg: any # The aggregation used to create a grid for the `field`.
@@ -18695,7 +18694,7 @@ export def "mvt search-mvt" [
   --size: float # The maximum number of features to return in the hits layer. Accepts 0-10000. If 0, results don't include the hits layer. (default: 10000.0)
   --body-sort: any # Sort the features in the hits layer. By default, the API calculates a bounding box for each feature. It sorts features based on this box's diagonal length, from longest to shortest.
   --track-total-hits: any # The number of hits matching the query to count accurately. If `true`, the exact number of hits is returned at the cost of some performance. If `false`, the response does not include the total number of hits matching the query. (default: 10000)
-  --with-labels: string@bool-completer # If `true`, the hits and aggs layers will contain additional point features representing suggested label positions for the original features.  * `Point` and `MultiPoint` features will have one of the points selected. * `Polygon` and `MultiPolygon` features will have a single point generated, either the centroid, if it is within the polygon, or another point within the polygon selected from the sorted triangle-tree. * `LineString` features will likewise provide a roughly central point selected from the triangle-tree. * The aggregation results will provide one central point for each aggregation bucket.  All attributes from the original features will also be copied to the new label features. In addition, the new features will be distinguishable using the tag `_mvt_label_position`.
+  --with-labels: oneof<nothing, bool> # If `true`, the hits and aggs layers will contain additional point features representing suggested label positions for the original features.  * `Point` and `MultiPoint` features will have one of the points selected. * `Polygon` and `MultiPolygon` features will have a single point generated, either the centroid, if it is within the polygon, or another point within the polygon selected from the sorted triangle-tree. * `LineString` features will likewise provide a roughly central point selected from the triangle-tree. * The aggregation results will provide one central point for each aggregation bucket.  All attributes from the original features will also be copied to the new label features. In addition, the new features will be distinguishable using the tag `_mvt_label_position`.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -18721,10 +18720,10 @@ export def "search-shards search-shards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --local: string@bool-completer # If `true`, the request retrieves information from the local node only.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --local: oneof<nothing, bool> # If `true`, the request retrieves information from the local node only.
   --master-timeout: string # The period to wait for a connection to the master node. If the master node is not available before the timeout expires, the request fails and returns an error. IT can also be set to `-1` to indicate that the request should never timeout.
   --preference: string # The node or shard the operation should be performed on. It is random by default.
   --routing: string # A custom value used to route operations to a specific shard. Not allowed when `index.slice.enabled` is `true` for the target index; use `_slice` instead.
@@ -18750,10 +18749,10 @@ export def "search-shards search-shards-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --local: string@bool-completer # If `true`, the request retrieves information from the local node only.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --local: oneof<nothing, bool> # If `true`, the request retrieves information from the local node only.
   --master-timeout: string # The period to wait for a connection to the master node. If the master node is not available before the timeout expires, the request fails and returns an error. IT can also be set to `-1` to indicate that the request should never timeout.
   --preference: string # The node or shard the operation should be performed on. It is random by default.
   --routing: string # A custom value used to route operations to a specific shard. Not allowed when `index.slice.enabled` is `true` for the target index; use `_slice` instead.
@@ -18780,10 +18779,10 @@ export def "search-shards search-shards-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --local: string@bool-completer # If `true`, the request retrieves information from the local node only.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --local: oneof<nothing, bool> # If `true`, the request retrieves information from the local node only.
   --master-timeout: string # The period to wait for a connection to the master node. If the master node is not available before the timeout expires, the request fails and returns an error. IT can also be set to `-1` to indicate that the request should never timeout.
   --preference: string # The node or shard the operation should be performed on. It is random by default.
   --routing: string # A custom value used to route operations to a specific shard. Not allowed when `index.slice.enabled` is `true` for the target index; use `_slice` instead.
@@ -18810,10 +18809,10 @@ export def "search-shards search-shards-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --expand-wildcards: string # Type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --local: string@bool-completer # If `true`, the request retrieves information from the local node only.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --local: oneof<nothing, bool> # If `true`, the request retrieves information from the local node only.
   --master-timeout: string # The period to wait for a connection to the master node. If the master node is not available before the timeout expires, the request fails and returns an error. IT can also be set to `-1` to indicate that the request should never timeout.
   --preference: string # The node or shard the operation should be performed on. It is random by default.
   --routing: string # A custom value used to route operations to a specific shard. Not allowed when `index.slice.enabled` is `true` for the target index; use `_slice` instead.
@@ -18841,23 +18840,23 @@ export def "search-template search-template" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --ccs-minimize-roundtrips: string@bool-completer # Indicates whether network round-trips should be minimized as part of cross-cluster search requests execution.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # Indicates whether network round-trips should be minimized as part of cross-cluster search requests execution.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --explain: string@bool-completer # If `true`, the response includes additional details about score computation as part of a hit.
-  --ignore-throttled: string@bool-completer # If `true`, specified concrete, expanded, or aliased indices are not included in the response when throttled. (DEPRECATED)
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --explain: oneof<nothing, bool> # If `true`, the response includes additional details about score computation as part of a hit.
+  --ignore-throttled: oneof<nothing, bool> # If `true`, specified concrete, expanded, or aliased indices are not included in the response when throttled. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --preference: string # The node or shard the operation should be performed on. It is random by default.
-  --profile: string@bool-completer # If `true`, the query execution is profiled.
+  --profile: oneof<nothing, bool> # If `true`, the query execution is profiled.
   --routing: string # A custom value used to route operations to a specific shard.
   --scroll: string # Specifies how long a consistent view of the index should be maintained for scrolled search.
   --search-type: string@search-type-completer # The type of the search operation.
-  --rest-total-hits-as-int: string@bool-completer # If `true`, `hits.total` is rendered as an integer in the response. If `false`, it is rendered as an object.
-  --typed-keys: string@bool-completer # If `true`, the response prefixes aggregation and suggester names with their respective types.
-  --explain: string@bool-completer # If `true`, returns detailed information about score calculation as part of each hit. If you specify both this and the `explain` query parameter, the API uses only the query parameter. (default: false)
+  --rest-total-hits-as-int: oneof<nothing, bool> # If `true`, `hits.total` is rendered as an integer in the response. If `false`, it is rendered as an object.
+  --typed-keys: oneof<nothing, bool> # If `true`, the response prefixes aggregation and suggester names with their respective types.
+  --explain: oneof<nothing, bool> # If `true`, returns detailed information about score calculation as part of each hit. If you specify both this and the `explain` query parameter, the API uses only the query parameter. (default: false)
   --id: any # The ID of the search template to use. If no `source` is specified, this parameter is required.
   --params: record # Key-value pairs used to replace Mustache variables in the template. The key is the variable name. The value is the variable value.
-  --profile: string@bool-completer # If `true`, the query execution is profiled. (default: false)
+  --profile: oneof<nothing, bool> # If `true`, the query execution is profiled. (default: false)
   --body-source: any # An inline search template. Supports the same parameters as the search API's request body. It also supports Mustache variables. If no `id` is specified, this parameter is required.
 ]: any -> any {
   let input = $in
@@ -18886,23 +18885,23 @@ export def "search-template search-template-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --ccs-minimize-roundtrips: string@bool-completer # Indicates whether network round-trips should be minimized as part of cross-cluster search requests execution.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # Indicates whether network round-trips should be minimized as part of cross-cluster search requests execution.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --explain: string@bool-completer # If `true`, the response includes additional details about score computation as part of a hit.
-  --ignore-throttled: string@bool-completer # If `true`, specified concrete, expanded, or aliased indices are not included in the response when throttled. (DEPRECATED)
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --explain: oneof<nothing, bool> # If `true`, the response includes additional details about score computation as part of a hit.
+  --ignore-throttled: oneof<nothing, bool> # If `true`, specified concrete, expanded, or aliased indices are not included in the response when throttled. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --preference: string # The node or shard the operation should be performed on. It is random by default.
-  --profile: string@bool-completer # If `true`, the query execution is profiled.
+  --profile: oneof<nothing, bool> # If `true`, the query execution is profiled.
   --routing: string # A custom value used to route operations to a specific shard.
   --scroll: string # Specifies how long a consistent view of the index should be maintained for scrolled search.
   --search-type: string@search-type-completer # The type of the search operation.
-  --rest-total-hits-as-int: string@bool-completer # If `true`, `hits.total` is rendered as an integer in the response. If `false`, it is rendered as an object.
-  --typed-keys: string@bool-completer # If `true`, the response prefixes aggregation and suggester names with their respective types.
-  --explain: string@bool-completer # If `true`, returns detailed information about score calculation as part of each hit. If you specify both this and the `explain` query parameter, the API uses only the query parameter. (default: false)
+  --rest-total-hits-as-int: oneof<nothing, bool> # If `true`, `hits.total` is rendered as an integer in the response. If `false`, it is rendered as an object.
+  --typed-keys: oneof<nothing, bool> # If `true`, the response prefixes aggregation and suggester names with their respective types.
+  --explain: oneof<nothing, bool> # If `true`, returns detailed information about score calculation as part of each hit. If you specify both this and the `explain` query parameter, the API uses only the query parameter. (default: false)
   --id: any # The ID of the search template to use. If no `source` is specified, this parameter is required.
   --params: record # Key-value pairs used to replace Mustache variables in the template. The key is the variable name. The value is the variable value.
-  --profile: string@bool-completer # If `true`, the query execution is profiled. (default: false)
+  --profile: oneof<nothing, bool> # If `true`, the query execution is profiled. (default: false)
   --body-source: any # An inline search template. Supports the same parameters as the search API's request body. It also supports Mustache variables. If no `id` is specified, this parameter is required.
 ]: any -> any {
   let input = $in
@@ -18932,23 +18931,23 @@ export def "search-template search-template-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --ccs-minimize-roundtrips: string@bool-completer # Indicates whether network round-trips should be minimized as part of cross-cluster search requests execution.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # Indicates whether network round-trips should be minimized as part of cross-cluster search requests execution.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --explain: string@bool-completer # If `true`, the response includes additional details about score computation as part of a hit.
-  --ignore-throttled: string@bool-completer # If `true`, specified concrete, expanded, or aliased indices are not included in the response when throttled. (DEPRECATED)
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --explain: oneof<nothing, bool> # If `true`, the response includes additional details about score computation as part of a hit.
+  --ignore-throttled: oneof<nothing, bool> # If `true`, specified concrete, expanded, or aliased indices are not included in the response when throttled. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --preference: string # The node or shard the operation should be performed on. It is random by default.
-  --profile: string@bool-completer # If `true`, the query execution is profiled.
+  --profile: oneof<nothing, bool> # If `true`, the query execution is profiled.
   --routing: string # A custom value used to route operations to a specific shard.
   --scroll: string # Specifies how long a consistent view of the index should be maintained for scrolled search.
   --search-type: string@search-type-completer # The type of the search operation.
-  --rest-total-hits-as-int: string@bool-completer # If `true`, `hits.total` is rendered as an integer in the response. If `false`, it is rendered as an object.
-  --typed-keys: string@bool-completer # If `true`, the response prefixes aggregation and suggester names with their respective types.
-  --explain: string@bool-completer # If `true`, returns detailed information about score calculation as part of each hit. If you specify both this and the `explain` query parameter, the API uses only the query parameter. (default: false)
+  --rest-total-hits-as-int: oneof<nothing, bool> # If `true`, `hits.total` is rendered as an integer in the response. If `false`, it is rendered as an object.
+  --typed-keys: oneof<nothing, bool> # If `true`, the response prefixes aggregation and suggester names with their respective types.
+  --explain: oneof<nothing, bool> # If `true`, returns detailed information about score calculation as part of each hit. If you specify both this and the `explain` query parameter, the API uses only the query parameter. (default: false)
   --id: any # The ID of the search template to use. If no `source` is specified, this parameter is required.
   --params: record # Key-value pairs used to replace Mustache variables in the template. The key is the variable name. The value is the variable value.
-  --profile: string@bool-completer # If `true`, the query execution is profiled. (default: false)
+  --profile: oneof<nothing, bool> # If `true`, the query execution is profiled. (default: false)
   --body-source: any # An inline search template. Supports the same parameters as the search API's request body. It also supports Mustache variables. If no `id` is specified, this parameter is required.
 ]: any -> any {
   let input = $in
@@ -18978,23 +18977,23 @@ export def "search-template search-template-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --ccs-minimize-roundtrips: string@bool-completer # Indicates whether network round-trips should be minimized as part of cross-cluster search requests execution.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --ccs-minimize-roundtrips: oneof<nothing, bool> # Indicates whether network round-trips should be minimized as part of cross-cluster search requests execution.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. Supports comma-separated values, such as `open,hidden`.
-  --explain: string@bool-completer # If `true`, the response includes additional details about score computation as part of a hit.
-  --ignore-throttled: string@bool-completer # If `true`, specified concrete, expanded, or aliased indices are not included in the response when throttled. (DEPRECATED)
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --explain: oneof<nothing, bool> # If `true`, the response includes additional details about score computation as part of a hit.
+  --ignore-throttled: oneof<nothing, bool> # If `true`, specified concrete, expanded, or aliased indices are not included in the response when throttled. (DEPRECATED)
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
   --preference: string # The node or shard the operation should be performed on. It is random by default.
-  --profile: string@bool-completer # If `true`, the query execution is profiled.
+  --profile: oneof<nothing, bool> # If `true`, the query execution is profiled.
   --routing: string # A custom value used to route operations to a specific shard.
   --scroll: string # Specifies how long a consistent view of the index should be maintained for scrolled search.
   --search-type: string@search-type-completer # The type of the search operation.
-  --rest-total-hits-as-int: string@bool-completer # If `true`, `hits.total` is rendered as an integer in the response. If `false`, it is rendered as an object.
-  --typed-keys: string@bool-completer # If `true`, the response prefixes aggregation and suggester names with their respective types.
-  --explain: string@bool-completer # If `true`, returns detailed information about score calculation as part of each hit. If you specify both this and the `explain` query parameter, the API uses only the query parameter. (default: false)
+  --rest-total-hits-as-int: oneof<nothing, bool> # If `true`, `hits.total` is rendered as an integer in the response. If `false`, it is rendered as an object.
+  --typed-keys: oneof<nothing, bool> # If `true`, the response prefixes aggregation and suggester names with their respective types.
+  --explain: oneof<nothing, bool> # If `true`, returns detailed information about score calculation as part of each hit. If you specify both this and the `explain` query parameter, the API uses only the query parameter. (default: false)
   --id: any # The ID of the search template to use. If no `source` is specified, this parameter is required.
   --params: record # Key-value pairs used to replace Mustache variables in the template. The key is the variable name. The value is the variable value.
-  --profile: string@bool-completer # If `true`, the query execution is profiled. (default: false)
+  --profile: oneof<nothing, bool> # If `true`, the query execution is profiled. (default: false)
   --body-source: any # An inline search template. Supports the same parameters as the search API's request body. It also supports Mustache variables. If no `id` is specified, this parameter is required.
 ]: any -> any {
   let input = $in
@@ -19068,8 +19067,8 @@ export def "searchable-snapshots-cache-clear searchable-snapshots-clear-cache" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indices that are open, closed or both
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -19095,8 +19094,8 @@ export def "searchable-snapshots-cache-clear searchable-snapshots-clear-cache-1"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --expand-wildcards: string # Whether to expand wildcard expression to concrete indices that are open, closed or both
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -19122,7 +19121,7 @@ export def "snapshot-mount searchable-snapshots-mount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --master-timeout: string # The period to wait for the master node. If the master node is not available before the timeout expires, the request fails and returns an error. To indicate that the request should never timeout, set it to `-1`.
-  --wait-for-completion: string@bool-completer # If true, the request blocks until the operation is complete.
+  --wait-for-completion: oneof<nothing, bool> # If true, the request blocks until the operation is complete.
   --storage: string@storage-completer # The mount option for the searchable snapshot index. For further information on mount options, refer to: [Mount options](https://www.elastic.co/docs/deploy-manage/tools/snapshot-and-restore/searchable-snapshots#searchable-snapshot-mount-storage-options)
   index: any # The name of the index contained in the snapshot whose data is to be mounted. If no `renamed_index` is specified, this name will also be used to create the new index.
   --renamed-index: any # The name of the index that will be created.
@@ -19249,7 +19248,7 @@ export def "security-role security-get-role-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-implicit: string@bool-completer # If `true`, include privileges that are implicitly granted by registered `ImplicitPrivilegesProviders` alongside the explicitly configured privileges. Each implicit entry in the response is annotated with `implicitly_granted: true`.
+  --include-implicit: oneof<nothing, bool> # If `true`, include privileges that are implicitly granted by registered `ImplicitPrivilegesProviders` alongside the explicitly configured privileges. Each implicit entry in the response is annotated with `implicitly_granted: true`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -19646,12 +19645,12 @@ export def "security-api-key security-get-api-key" [
   --allow-errors(-e) # Return full response without error handling
   --id: string # An API key id. This parameter cannot be used with any of `name`, `realm_name` or `username`.
   --name: string # An API key name. This parameter cannot be used with any of `id`, `realm_name` or `username`. It supports prefix search with wildcard.
-  --owner: string@bool-completer # A boolean flag that can be used to query API keys owned by the currently authenticated user. The `realm_name` or `username` parameters cannot be specified when this parameter is set to `true` as they are assumed to be the currently authenticated ones.
+  --owner: oneof<nothing, bool> # A boolean flag that can be used to query API keys owned by the currently authenticated user. The `realm_name` or `username` parameters cannot be specified when this parameter is set to `true` as they are assumed to be the currently authenticated ones.
   --realm-name: string # The name of an authentication realm. This parameter cannot be used with either `id` or `name` or when `owner` flag is set to `true`.
   --username: string # The username of a user. This parameter cannot be used with either `id` or `name` or when `owner` flag is set to `true`.
-  --with-limited-by: string@bool-completer # Return the snapshot of the owner user's role descriptors associated with the API key. An API key's actual permission is the intersection of its assigned role descriptors and the owner user's role descriptors.
-  --active-only: string@bool-completer # A boolean flag that can be used to query API keys that are currently active. An API key is considered active if it is neither invalidated, nor expired at query time. You can specify this together with other parameters such as `owner` or `name`. If `active_only` is false, the response will include both active and inactive (expired or invalidated) keys.
-  --with-profile-uid: string@bool-completer # Determines whether to also retrieve the profile uid, for the API key owner principal, if it exists.
+  --with-limited-by: oneof<nothing, bool> # Return the snapshot of the owner user's role descriptors associated with the API key. An API key's actual permission is the intersection of its assigned role descriptors and the owner user's role descriptors.
+  --active-only: oneof<nothing, bool> # A boolean flag that can be used to query API keys that are currently active. An API key is considered active if it is neither invalidated, nor expired at query time. You can specify this together with other parameters such as `owner` or `name`. If `active_only` is false, the response will include both active and inactive (expired or invalidated) keys.
+  --with-profile-uid: oneof<nothing, bool> # Determines whether to also retrieve the profile uid, for the API key owner principal, if it exists.
 ]: nothing -> record<api_keys: table<id: record, name: record, type: record, creation: record, expiration: record, invalidated: bool, invalidation: record, username: record, realm: string, realm_type: string, metadata: record, role_descriptors: record, limited_by: list, access: record, certificate_identity: string, profile_uid: string, _sort: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -19739,7 +19738,7 @@ export def "security-api-key security-invalidate-api-key" [
   --id: any
   --ids: list # A list of API key ids. This parameter cannot be used with any of `name`, `realm_name`, or `username`.
   --name: any # An API key name. This parameter cannot be used with any of `ids`, `realm_name` or `username`.
-  --owner: string@bool-completer # Query API keys owned by the currently authenticated user. The `realm_name` or `username` parameters cannot be specified when this parameter is set to `true` as they are assumed to be the currently authenticated ones.  NOTE: At least one of `ids`, `name`, `username`, and `realm_name` must be specified if `owner` is `false`. (default: false)
+  --owner: oneof<nothing, bool> # Query API keys owned by the currently authenticated user. The `realm_name` or `username` parameters cannot be specified when this parameter is set to `true` as they are assumed to be the currently authenticated ones.  NOTE: At least one of `ids`, `name`, `username`, and `realm_name` must be specified if `owner` is `false`. (default: false)
   --realm-name: string # The name of an authentication realm. This parameter cannot be used with either `ids` or `name`, or when `owner` flag is set to `true`.
   --username: any # The username of a user. This parameter cannot be used with either `ids` or `name` or when `owner` flag is set to `true`.
 ]: any -> record<error_count: float, error_details: table<type: string, reason: any, stack_trace: string, caused_by: record, root_cause: list, suppressed: list>, invalidated_api_keys: list<string>, previously_invalidated_api_keys: list<string>> {
@@ -19980,7 +19979,7 @@ export def "security-role security-get-role" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-implicit: string@bool-completer # If `true`, include privileges that are implicitly granted by registered `ImplicitPrivilegesProviders` alongside the explicitly configured privileges. Each implicit entry in the response is annotated with `implicitly_granted: true`.
+  --include-implicit: oneof<nothing, bool> # If `true`, include privileges that are implicitly granted by registered `ImplicitPrivilegesProviders` alongside the explicitly configured privileges. Each implicit entry in the response is annotated with `implicitly_granted: true`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -20138,7 +20137,7 @@ export def "security-role-mapping security-put-role-mapping" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --refresh: string@refresh-completer # If `true` (the default) then refresh the affected shards to make this operation visible to search, if `wait_for` then wait for a refresh to make this operation visible to search, if `false` then do nothing with refreshes.
-  --enabled: string@bool-completer # Mappings that have `enabled` set to `false` are ignored when role mapping is performed.
+  --enabled: oneof<nothing, bool> # Mappings that have `enabled` set to `false` are ignored when role mapping is performed.
   --metadata: any # Additional metadata that helps define which roles are assigned to each user. Within the metadata object, keys beginning with `_` are reserved for system usage.
   --roles: list # A list of role names that are granted to the users that match the role mapping rules. Exactly one of `roles` or `role_templates` must be specified.
   --role-templates: list # A list of Mustache templates that will be evaluated to determine the roles names that should granted to the users that match the role mapping rules. Exactly one of `roles` or `role_templates` must be specified. — item shape: {format?: any, template: any}
@@ -20173,7 +20172,7 @@ export def "security-role-mapping security-put-role-mapping-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --refresh: string@refresh-completer # If `true` (the default) then refresh the affected shards to make this operation visible to search, if `wait_for` then wait for a refresh to make this operation visible to search, if `false` then do nothing with refreshes.
-  --enabled: string@bool-completer # Mappings that have `enabled` set to `false` are ignored when role mapping is performed.
+  --enabled: oneof<nothing, bool> # Mappings that have `enabled` set to `false` are ignored when role mapping is performed.
   --metadata: any # Additional metadata that helps define which roles are assigned to each user. Within the metadata object, keys beginning with `_` are reserved for system usage.
   --roles: list # A list of role names that are granted to the users that match the role mapping rules. Exactly one of `roles` or `role_templates` must be specified.
   --role-templates: list # A list of Mustache templates that will be evaluated to determine the roles names that should granted to the users that match the role mapping rules. Exactly one of `roles` or `role_templates` must be specified. — item shape: {format?: any, template: any}
@@ -20230,7 +20229,7 @@ export def "security-user security-get-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-profile-uid: string@bool-completer # Determines whether to retrieve the user profile UID, if it exists, for the users.
+  --with-profile-uid: oneof<nothing, bool> # Determines whether to retrieve the user profile UID, if it exists, for the users.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -20262,7 +20261,7 @@ export def "security-user security-put-user" [
   --password: any # The user's password. Passwords must be at least 6 characters long. When adding a user, one of `password` or `password_hash` is required. When updating an existing user, the password is optional, so that other fields on the user (such as their roles) may be updated without modifying the user's password
   --password-hash: string # A hash of the user's password. This must be produced using the same hashing algorithm as has been configured for password storage. For more details, see the explanation of the `xpack.security.authc.password_hashing.algorithm` setting in the user cache and password hash algorithm documentation. Using this parameter allows the client to pre-hash the password for performance and/or confidentiality reasons. The `password` parameter and the `password_hash` parameter cannot be used in the same request.
   --roles: list # A set of roles the user has. The roles determine the user's access permissions. To create a user without any roles, specify an empty list (`[]`).
-  --enabled: string@bool-completer # Specifies whether the user is enabled. (default: true)
+  --enabled: oneof<nothing, bool> # Specifies whether the user is enabled. (default: true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -20297,7 +20296,7 @@ export def "security-user security-put-user-1" [
   --password: any # The user's password. Passwords must be at least 6 characters long. When adding a user, one of `password` or `password_hash` is required. When updating an existing user, the password is optional, so that other fields on the user (such as their roles) may be updated without modifying the user's password
   --password-hash: string # A hash of the user's password. This must be produced using the same hashing algorithm as has been configured for password storage. For more details, see the explanation of the `xpack.security.authc.password_hashing.algorithm` setting in the user cache and password hash algorithm documentation. Using this parameter allows the client to pre-hash the password for performance and/or confidentiality reasons. The `password` parameter and the `password_hash` parameter cannot be used in the same request.
   --roles: list # A set of roles the user has. The roles determine the user's access permissions. To create a user without any roles, specify an empty list (`[]`).
-  --enabled: string@bool-completer # Specifies whether the user is enabled. (default: true)
+  --enabled: oneof<nothing, bool> # Specifies whether the user is enabled. (default: true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -20950,7 +20949,7 @@ export def "security-user security-get-user-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-profile-uid: string@bool-completer # Determines whether to retrieve the user profile UID, if it exists, for the users.
+  --with-profile-uid: oneof<nothing, bool> # Determines whether to retrieve the user profile UID, if it exists, for the users.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -21310,9 +21309,9 @@ export def "security-query-api-key security-query-api-keys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-limited-by: string@bool-completer # Return the snapshot of the owner user's role descriptors associated with the API key. An API key's actual permission is the intersection of its assigned role descriptors and the owner user's role descriptors (effectively limited by it). An API key cannot retrieve any API key’s limited-by role descriptors (including itself) unless it has `manage_api_key` or higher privileges.
-  --with-profile-uid: string@bool-completer # Determines whether to also retrieve the profile UID for the API key owner principal. If it exists, the profile UID is returned under the `profile_uid` response field for each API key.
-  --typed-keys: string@bool-completer # Determines whether aggregation names are prefixed by their respective types in the response.
+  --with-limited-by: oneof<nothing, bool> # Return the snapshot of the owner user's role descriptors associated with the API key. An API key's actual permission is the intersection of its assigned role descriptors and the owner user's role descriptors (effectively limited by it). An API key cannot retrieve any API key’s limited-by role descriptors (including itself) unless it has `manage_api_key` or higher privileges.
+  --with-profile-uid: oneof<nothing, bool> # Determines whether to also retrieve the profile UID for the API key owner principal. If it exists, the profile UID is returned under the `profile_uid` response field for each API key.
+  --typed-keys: oneof<nothing, bool> # Determines whether aggregation names are prefixed by their respective types in the response.
   --aggregations: record # Any aggregations to run over the corpus of returned API keys. Aggregations and queries work together. Aggregations are computed only on the API keys that match the query. This supports only a subset of aggregation types, namely: `terms`, `range`, `date_range`, `missing`, `cardinality`, `value_count`, `composite`, `filter`, and `filters`. Additionally, aggregations only run over the same subset of fields that query works with.
   --body-query: any # A query to filter which API keys to return. If the query parameter is missing, it is equivalent to a `match_all` query. The query supports a subset of query types, including `match_all`, `bool`, `term`, `terms`, `match`, `ids`, `prefix`, `wildcard`, `exists`, `range`, and `simple_query_string`. You can query the following public information associated with an API key: `id`, `type`, `name`, `creation`, `expiration`, `invalidated`, `invalidation`, `username`, `realm`, and `metadata`.  NOTE: The queryable string values associated with API keys are internally mapped as keywords. Consequently, if no `analyzer` parameter is specified for a `match` query, then the provided match query string is interpreted as a single keyword value. Such a match query is hence equivalent to a `term` query.
   --body-from: float # The starting document offset. It must not be negative. By default, you cannot page through more than 10,000 hits using the `from` and `size` parameters. To page through more hits, use the `search_after` parameter. (default: 0.0)
@@ -21345,9 +21344,9 @@ export def "security-query-api-key security-query-api-keys-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-limited-by: string@bool-completer # Return the snapshot of the owner user's role descriptors associated with the API key. An API key's actual permission is the intersection of its assigned role descriptors and the owner user's role descriptors (effectively limited by it). An API key cannot retrieve any API key’s limited-by role descriptors (including itself) unless it has `manage_api_key` or higher privileges.
-  --with-profile-uid: string@bool-completer # Determines whether to also retrieve the profile UID for the API key owner principal. If it exists, the profile UID is returned under the `profile_uid` response field for each API key.
-  --typed-keys: string@bool-completer # Determines whether aggregation names are prefixed by their respective types in the response.
+  --with-limited-by: oneof<nothing, bool> # Return the snapshot of the owner user's role descriptors associated with the API key. An API key's actual permission is the intersection of its assigned role descriptors and the owner user's role descriptors (effectively limited by it). An API key cannot retrieve any API key’s limited-by role descriptors (including itself) unless it has `manage_api_key` or higher privileges.
+  --with-profile-uid: oneof<nothing, bool> # Determines whether to also retrieve the profile UID for the API key owner principal. If it exists, the profile UID is returned under the `profile_uid` response field for each API key.
+  --typed-keys: oneof<nothing, bool> # Determines whether aggregation names are prefixed by their respective types in the response.
   --aggregations: record # Any aggregations to run over the corpus of returned API keys. Aggregations and queries work together. Aggregations are computed only on the API keys that match the query. This supports only a subset of aggregation types, namely: `terms`, `range`, `date_range`, `missing`, `cardinality`, `value_count`, `composite`, `filter`, and `filters`. Additionally, aggregations only run over the same subset of fields that query works with.
   --body-query: any # A query to filter which API keys to return. If the query parameter is missing, it is equivalent to a `match_all` query. The query supports a subset of query types, including `match_all`, `bool`, `term`, `terms`, `match`, `ids`, `prefix`, `wildcard`, `exists`, `range`, and `simple_query_string`. You can query the following public information associated with an API key: `id`, `type`, `name`, `creation`, `expiration`, `invalidated`, `invalidation`, `username`, `realm`, and `metadata`.  NOTE: The queryable string values associated with API keys are internally mapped as keywords. Consequently, if no `analyzer` parameter is specified for a `match` query, then the provided match query string is interpreted as a single keyword value. Such a match query is hence equivalent to a `term` query.
   --body-from: float # The starting document offset. It must not be negative. By default, you cannot page through more than 10,000 hits using the `from` and `size` parameters. To page through more hits, use the `search_after` parameter. (default: 0.0)
@@ -21437,7 +21436,7 @@ export def "security-query-user security-query-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-profile-uid: string@bool-completer # Determines whether to retrieve the user profile UID, if it exists, for the users.
+  --with-profile-uid: oneof<nothing, bool> # Determines whether to retrieve the user profile UID, if it exists, for the users.
   --body-query: any # A query to filter which users to return. If the query parameter is missing, it is equivalent to a `match_all` query. The query supports a subset of query types, including `match_all`, `bool`, `term`, `terms`, `match`, `ids`, `prefix`, `wildcard`, `exists`, `range`, and `simple_query_string`. You can query the following information associated with user: `username`, `roles`, `enabled`, `full_name`, and `email`.
   --body-from: float # The starting document offset. It must not be negative. By default, you cannot page through more than 10,000 hits using the `from` and `size` parameters. To page through more hits, use the `search_after` parameter. (default: 0.0)
   --body-sort: any # The sort definition. Fields eligible for sorting are: `username`, `roles`, `enabled`. In addition, sort can also be applied to the `_doc` field to sort by index order.
@@ -21468,7 +21467,7 @@ export def "security-query-user security-query-user-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-profile-uid: string@bool-completer # Determines whether to retrieve the user profile UID, if it exists, for the users.
+  --with-profile-uid: oneof<nothing, bool> # Determines whether to retrieve the user profile UID, if it exists, for the users.
   --body-query: any # A query to filter which users to return. If the query parameter is missing, it is equivalent to a `match_all` query. The query supports a subset of query types, including `match_all`, `bool`, `term`, `terms`, `match`, `ids`, `prefix`, `wildcard`, `exists`, `range`, and `simple_query_string`. You can query the following information associated with user: `username`, `roles`, `enabled`, `full_name`, and `email`.
   --body-from: float # The starting document offset. It must not be negative. By default, you cannot page through more than 10,000 hits using the `from` and `size` parameters. To page through more hits, use the `search_after` parameter. (default: 0.0)
   --body-sort: any # The sort definition. Fields eligible for sorting are: `username`, `roles`, `enabled`. In addition, sort can also be applied to the `_doc` field to sort by index order.
@@ -22287,10 +22286,10 @@ export def "snapshot snapshot-get" [
   --allow-errors(-e) # Return full response without error handling
   --after: string # An offset identifier to start pagination from as returned by the next field in the response body.
   --from-sort-value: string # The value of the current sort column at which to start retrieval. It can be a string `snapshot-` or a repository name when sorting by snapshot or repository name. It can be a millisecond time value or a number when sorting by `index-` or shard count.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error for any snapshots that are unavailable.
-  --index-details: string@bool-completer # If `true`, the response includes additional information about each index in the snapshot comprising the number of shards in the index, the total size of the index in bytes, and the maximum number of segments per shard in the index. The default is `false`, meaning that this information is omitted.
-  --index-names: string@bool-completer # If `true`, the response includes the name of each index in each snapshot.
-  --include-repository: string@bool-completer # If `true`, the response includes the repository name in each snapshot.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error for any snapshots that are unavailable.
+  --index-details: oneof<nothing, bool> # If `true`, the response includes additional information about each index in the snapshot comprising the number of shards in the index, the total size of the index in bytes, and the maximum number of segments per shard in the index. The default is `false`, meaning that this information is omitted.
+  --index-names: oneof<nothing, bool> # If `true`, the response includes the name of each index in each snapshot.
+  --include-repository: oneof<nothing, bool> # If `true`, the response includes the repository name in each snapshot.
   --master-timeout: string # The period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
   --order: string@order-completer # The sort order. Valid values are `asc` for ascending and `desc` for descending order. The default behavior is ascending order.
   --offset: float # Numeric offset to start pagination from based on the snapshots matching this request. Using a non-zero value for this parameter is mutually exclusive with using the after parameter. Defaults to 0.
@@ -22298,7 +22297,7 @@ export def "snapshot snapshot-get" [
   --slm-policy-filter: string # Filter snapshots by a comma-separated list of snapshot lifecycle management (SLM) policy names that snapshots belong to.  You can use wildcards (`*`) and combinations of wildcards followed by exclude patterns starting with `-`. For example, the pattern `*,-policy-a-\*` will return all snapshots except for those that were created by an SLM policy with a name starting with `policy-a-`. Note that the wildcard pattern `*` matches all snapshots created by an SLM policy but not those snapshots that were not created by an SLM policy. To include snapshots that were not created by an SLM policy, you can use the special pattern `_none` that will match all snapshots without an SLM policy.
   --qp-sort: string@sort-completer-1 # The sort order for the result. The default behavior is sorting by snapshot start time stamp.
   --state: string # Only return snapshots with a state found in the given comma-separated list of snapshot states. The default is all snapshot states.
-  --verbose: string@bool-completer # If `true`, returns additional information about each snapshot such as the version of Elasticsearch which took the snapshot, the start and end times of the snapshot, and the number of shards snapshotted.  NOTE: The parameters `size`, `order`, `after`, `from_sort_value`, `offset`, `slm_policy_filter`, and `sort` are not supported when you set `verbose=false` and the sort order for requests with `verbose=false` is undefined.
+  --verbose: oneof<nothing, bool> # If `true`, returns additional information about each snapshot such as the version of Elasticsearch which took the snapshot, the start and end times of the snapshot, and the number of shards snapshotted.  NOTE: The parameters `size`, `order`, `after`, `from_sort_value`, `offset`, `slm_policy_filter`, and `sort` are not supported when you set `verbose=false` and the sort order for requests with `verbose=false` is undefined.
 ]: nothing -> record<remaining: float, total: float, next: string, responses: table<repository: record, snapshots: list, error: record>, snapshots: table<data_streams: list, duration: record, duration_in_millis: record, end_time: record, end_time_in_millis: record, failures: list, include_global_state: bool, indices: list, index_details: record, metadata: record, reason: string, repository: record, snapshot: record, shards: record, start_time: record, start_time_in_millis: record, state: string, uuid: record, version: record, version_id: record, feature_states: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -22325,14 +22324,14 @@ export def "snapshot snapshot-create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --master-timeout: string # The period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
-  --wait-for-completion: string@bool-completer # If `true`, the request returns a response when the snapshot is complete. If `false`, the request returns a response when the snapshot initializes.
+  --wait-for-completion: oneof<nothing, bool> # If `true`, the request returns a response when the snapshot is complete. If `false`, the request returns a response when the snapshot initializes.
   --expand-wildcards: any # Determines how wildcard patterns in the `indices` parameter match data streams and indices. It supports comma-separated values such as `open,hidden`. (default: all)
   --feature-states: list # The feature states to include in the snapshot. Each feature state includes one or more system indices containing related data. You can view a list of eligible features using the get features API.  If `include_global_state` is `true`, all current feature states are included by default. If `include_global_state` is `false`, no feature states are included by default.  Note that specifying an empty array will result in the default behavior. To exclude all feature states, regardless of the `include_global_state` value, specify an array with only the value `none` (`["none"]`).
-  --ignore-unavailable: string@bool-completer # If `true`, the request ignores data streams and indices in `indices` that are missing or closed. If `false`, the request returns an error for any data stream or index that is missing or closed. (default: false)
-  --include-global-state: string@bool-completer # If `true`, the current cluster state is included in the snapshot. The cluster state includes persistent cluster settings, composable index templates, legacy index templates, ingest pipelines, and ILM policies. It also includes data stored in system indices, such as Watches and task records (configurable via `feature_states`). (default: true)
+  --ignore-unavailable: oneof<nothing, bool> # If `true`, the request ignores data streams and indices in `indices` that are missing or closed. If `false`, the request returns an error for any data stream or index that is missing or closed. (default: false)
+  --include-global-state: oneof<nothing, bool> # If `true`, the current cluster state is included in the snapshot. The cluster state includes persistent cluster settings, composable index templates, legacy index templates, ingest pipelines, and ILM policies. It also includes data stored in system indices, such as Watches and task records (configurable via `feature_states`). (default: true)
   --indices: any # A comma-separated list of data streams and indices to include in the snapshot. It supports a multi-target syntax. The default is an empty array (`[]`), which includes all regular data streams and regular indices. To exclude all data streams and indices, use `-*`.  You can't use this parameter to include or exclude system indices or system data streams from a snapshot. Use `feature_states` instead.
   --metadata: any # Arbitrary metadata to the snapshot, such as a record of who took the snapshot, why it was taken, or any other useful data. It can have any contents but it must be less than 1024 bytes. This information is not automatically generated by Elasticsearch.
-  --partial: string@bool-completer # If `true`, it enables you to restore a partial snapshot of indices with unavailable shards. Only shards that were successfully included in the snapshot will be restored. All missing shards will be recreated as empty.  If `false`, the entire restore operation will fail if one or more indices included in the snapshot do not have all primary shards available. (default: false)
+  --partial: oneof<nothing, bool> # If `true`, it enables you to restore a partial snapshot of indices with unavailable shards. Only shards that were successfully included in the snapshot will be restored. All missing shards will be recreated as empty.  If `false`, the entire restore operation will fail if one or more indices included in the snapshot do not have all primary shards available. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -22362,14 +22361,14 @@ export def "snapshot snapshot-create-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --master-timeout: string # The period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
-  --wait-for-completion: string@bool-completer # If `true`, the request returns a response when the snapshot is complete. If `false`, the request returns a response when the snapshot initializes.
+  --wait-for-completion: oneof<nothing, bool> # If `true`, the request returns a response when the snapshot is complete. If `false`, the request returns a response when the snapshot initializes.
   --expand-wildcards: any # Determines how wildcard patterns in the `indices` parameter match data streams and indices. It supports comma-separated values such as `open,hidden`. (default: all)
   --feature-states: list # The feature states to include in the snapshot. Each feature state includes one or more system indices containing related data. You can view a list of eligible features using the get features API.  If `include_global_state` is `true`, all current feature states are included by default. If `include_global_state` is `false`, no feature states are included by default.  Note that specifying an empty array will result in the default behavior. To exclude all feature states, regardless of the `include_global_state` value, specify an array with only the value `none` (`["none"]`).
-  --ignore-unavailable: string@bool-completer # If `true`, the request ignores data streams and indices in `indices` that are missing or closed. If `false`, the request returns an error for any data stream or index that is missing or closed. (default: false)
-  --include-global-state: string@bool-completer # If `true`, the current cluster state is included in the snapshot. The cluster state includes persistent cluster settings, composable index templates, legacy index templates, ingest pipelines, and ILM policies. It also includes data stored in system indices, such as Watches and task records (configurable via `feature_states`). (default: true)
+  --ignore-unavailable: oneof<nothing, bool> # If `true`, the request ignores data streams and indices in `indices` that are missing or closed. If `false`, the request returns an error for any data stream or index that is missing or closed. (default: false)
+  --include-global-state: oneof<nothing, bool> # If `true`, the current cluster state is included in the snapshot. The cluster state includes persistent cluster settings, composable index templates, legacy index templates, ingest pipelines, and ILM policies. It also includes data stored in system indices, such as Watches and task records (configurable via `feature_states`). (default: true)
   --indices: any # A comma-separated list of data streams and indices to include in the snapshot. It supports a multi-target syntax. The default is an empty array (`[]`), which includes all regular data streams and regular indices. To exclude all data streams and indices, use `-*`.  You can't use this parameter to include or exclude system indices or system data streams from a snapshot. Use `feature_states` instead.
   --metadata: any # Arbitrary metadata to the snapshot, such as a record of who took the snapshot, why it was taken, or any other useful data. It can have any contents but it must be less than 1024 bytes. This information is not automatically generated by Elasticsearch.
-  --partial: string@bool-completer # If `true`, it enables you to restore a partial snapshot of indices with unavailable shards. Only shards that were successfully included in the snapshot will be restored. All missing shards will be recreated as empty.  If `false`, the entire restore operation will fail if one or more indices included in the snapshot do not have all primary shards available. (default: false)
+  --partial: oneof<nothing, bool> # If `true`, it enables you to restore a partial snapshot of indices with unavailable shards. Only shards that were successfully included in the snapshot will be restored. All missing shards will be recreated as empty.  If `false`, the entire restore operation will fail if one or more indices included in the snapshot do not have all primary shards available. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -22398,7 +22397,7 @@ export def "snapshot snapshot-delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --master-timeout: string # The period to wait for the master node. If the master node is not available before the timeout expires, the request fails and returns an error. To indicate that the request should never timeout, set it to `-1`.
-  --wait-for-completion: string@bool-completer # If `true`, the request returns a response when the matching snapshots are all deleted. If `false`, the request returns a response as soon as the deletes are scheduled.
+  --wait-for-completion: oneof<nothing, bool> # If `true`, the request returns a response when the matching snapshots are all deleted. If `false`, the request returns a response as soon as the deletes are scheduled.
 ]: nothing -> record<acknowledged: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -22422,7 +22421,7 @@ export def "snapshot snapshot-get-repository-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --local: string@bool-completer # If `true`, the request gets information from the local node only. If `false`, the request gets information from the master node.
+  --local: oneof<nothing, bool> # If `true`, the request gets information from the local node only. If `false`, the request gets information from the master node.
   --master-timeout: string # The period to wait for the master node. If the master node is not available before the timeout expires, the request fails and returns an error. To indicate that the request should never timeout, set it to `-1`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -22451,7 +22450,7 @@ export def "snapshot snapshot-create-repository" [
   --allow-errors(-e) # Return full response without error handling
   --master-timeout: string # The period to wait for the master node. If the master node is not available before the timeout expires, the request fails and returns an error. To indicate that the request should never timeout, set it to `-1`.
   --timeout: string # The period to wait for a response from all relevant nodes in the cluster after updating the cluster metadata. If no response is received before the timeout expires, the cluster metadata update still applies but the response will indicate that it was not completely acknowledged. To indicate that the request should never timeout, set it to `-1`.
-  --verify: string@bool-completer # If `true`, the request verifies the repository is functional on all master and data nodes in the cluster. If `false`, this verification is skipped. You can also perform this verification with the verify snapshot repository API.
+  --verify: oneof<nothing, bool> # If `true`, the request verifies the repository is functional on all master and data nodes in the cluster. If `false`, this verification is skipped. You can also perform this verification with the verify snapshot repository API.
   --body: record
 ]: any -> any {
   let input = $in
@@ -22482,7 +22481,7 @@ export def "snapshot snapshot-create-repository-1" [
   --allow-errors(-e) # Return full response without error handling
   --master-timeout: string # The period to wait for the master node. If the master node is not available before the timeout expires, the request fails and returns an error. To indicate that the request should never timeout, set it to `-1`.
   --timeout: string # The period to wait for a response from all relevant nodes in the cluster after updating the cluster metadata. If no response is received before the timeout expires, the cluster metadata update still applies but the response will indicate that it was not completely acknowledged. To indicate that the request should never timeout, set it to `-1`.
-  --verify: string@bool-completer # If `true`, the request verifies the repository is functional on all master and data nodes in the cluster. If `false`, this verification is skipped. You can also perform this verification with the verify snapshot repository API.
+  --verify: oneof<nothing, bool> # If `true`, the request verifies the repository is functional on all master and data nodes in the cluster. If `false`, this verification is skipped. You can also perform this verification with the verify snapshot repository API.
   --body: record
 ]: any -> any {
   let input = $in
@@ -22533,7 +22532,7 @@ export def "snapshot snapshot-get-repository" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --local: string@bool-completer # If `true`, the request gets information from the local node only. If `false`, the request gets information from the master node.
+  --local: oneof<nothing, bool> # If `true`, the request gets information from the local node only. If `false`, the request gets information from the master node.
   --master-timeout: string # The period to wait for the master node. If the master node is not available before the timeout expires, the request fails and returns an error. To indicate that the request should never timeout, set it to `-1`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -22559,14 +22558,14 @@ export def "snapshot-analyze snapshot-repository-analyze" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --blob-count: float # The total number of blobs to write to the repository during the test. For realistic experiments, set this parameter to at least `2000`.
-  --check-overwrite-protection: string@bool-completer # Whether to run the overwrite protection check. For realistic experiments, leave this parameter unset.
+  --check-overwrite-protection: oneof<nothing, bool> # Whether to run the overwrite protection check. For realistic experiments, leave this parameter unset.
   --concurrency: float # The number of operations to run concurrently during the test. For realistic experiments, leave this parameter unset.
-  --detailed: string@bool-completer # Indicates whether to return detailed results, including timing information for every operation performed during the analysis. If false, it returns only a summary of the analysis.
+  --detailed: oneof<nothing, bool> # Indicates whether to return detailed results, including timing information for every operation performed during the analysis. If false, it returns only a summary of the analysis.
   --early-read-node-count: float # The number of nodes on which to perform an early read operation while writing each blob. Early read operations are only rarely performed. For realistic experiments, leave this parameter unset.
   --max-blob-size: string # The maximum size of a blob to be written during the test. For realistic experiments, set this parameter to at least `2gb`.
   --max-total-data-size: string # An upper limit on the total size of all the blobs written during the test. For realistic experiments, set this parameter to at least `1tb`.
   --rare-action-probability: float # The probability of performing a rare action such as an early read, an overwrite, or an aborted write on each blob. For realistic experiments, leave this parameter unset.
-  --rarely-abort-writes: string@bool-completer # Indicates whether to rarely cancel writes before they complete. For realistic experiments, leave this parameter unset.
+  --rarely-abort-writes: oneof<nothing, bool> # Indicates whether to rarely cancel writes before they complete. For realistic experiments, leave this parameter unset.
   --read-node-count: float # The number of nodes on which to read a blob after writing. For realistic experiments, leave this parameter unset.
   --register-operation-count: float # The minimum number of linearizable register operations to perform in total. For realistic experiments, set this parameter to at least `100`.
   --seed: float # The seed for the pseudo-random number generator used to generate the list of operations performed during the test. To repeat the same set of operations in multiple experiments, use the same seed in each experiment. Note that the operations are performed concurrently so might not always happen in the same order on each run. For realistic experiments, leave this parameter unset.
@@ -22601,7 +22600,7 @@ export def "snapshot-verify-integrity snapshot-repository-verify-integrity" [
   --max-failed-shard-snapshots: float # The number of shard snapshot failures to track during integrity verification, in order to avoid excessive resource usage. If your repository contains more than this number of shard snapshot failures, the verification will fail.
   --meta-thread-pool-concurrency: float # The maximum number of snapshot metadata operations to run concurrently. The default behavior is to use at most half of the `snapshot_meta` thread pool at once.
   --snapshot-verification-concurrency: float # The number of snapshots to verify concurrently. The default behavior is to use at most half of the `snapshot_meta` thread pool at once.
-  --verify-blob-contents: string@bool-completer # Indicates whether to verify the checksum of every data blob in the repository. If this feature is enabled, Elasticsearch will read the entire repository contents, which may be extremely slow and expensive.
+  --verify-blob-contents: oneof<nothing, bool> # Indicates whether to verify the checksum of every data blob in the repository. If this feature is enabled, Elasticsearch will read the entire repository contents, which may be extremely slow and expensive.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -22628,15 +22627,15 @@ export def "snapshot-restore snapshot-restore" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --master-timeout: string # The period to wait for the master node. If the master node is not available before the timeout expires, the request fails and returns an error. To indicate that the request should never timeout, set it to `-1`.
-  --wait-for-completion: string@bool-completer # If `true`, the request returns a response when the restore operation completes. The operation is complete when it finishes all attempts to recover primary shards for restored indices. This applies even if one or more of the recovery attempts fail.  If `false`, the request returns a response when the restore operation initializes.
+  --wait-for-completion: oneof<nothing, bool> # If `true`, the request returns a response when the restore operation completes. The operation is complete when it finishes all attempts to recover primary shards for restored indices. This applies even if one or more of the recovery attempts fail.  If `false`, the request returns a response when the restore operation initializes.
   --feature-states: list # The feature states to restore. If `include_global_state` is `true`, the request restores all feature states in the snapshot by default. If `include_global_state` is `false`, the request restores no feature states by default. Note that specifying an empty array will result in the default behavior. To restore no feature states, regardless of the `include_global_state` value, specify an array containing only the value `none` (`["none"]`).
   --ignore-index-settings: list # The index settings to not restore from the snapshot. You can't use this option to ignore `index.number_of_shards`.  For data streams, this option applies only to restored backing indices. New backing indices are configured using the data stream's matching index template.
-  --ignore-unavailable: string@bool-completer # If `true`, the request ignores any index or data stream in indices that's missing from the snapshot. If `false`, the request returns an error for any missing index or data stream. (default: false)
-  --include-aliases: string@bool-completer # If `true`, the request restores aliases for any restored data streams and indices. If `false`, the request doesn’t restore aliases. (default: true)
-  --include-global-state: string@bool-completer # If `true`, restore the cluster state. The cluster state includes:  * Persistent cluster settings * Index templates * Legacy index templates * Ingest pipelines * Index lifecycle management (ILM) policies * Stored scripts * For snapshots taken after 7.12.0, feature states  If `include_global_state` is `true`, the restore operation merges the legacy index templates in your cluster with the templates contained in the snapshot, replacing any existing ones whose name matches one in the snapshot. It completely removes all persistent settings, non-legacy index templates, ingest pipelines, and ILM lifecycle policies that exist in your cluster and replaces them with the corresponding items from the snapshot.  Use the `feature_states` parameter to configure how feature states are restored.  If `include_global_state` is `true` and a snapshot was created without a global state then the restore request will fail. (default: false)
+  --ignore-unavailable: oneof<nothing, bool> # If `true`, the request ignores any index or data stream in indices that's missing from the snapshot. If `false`, the request returns an error for any missing index or data stream. (default: false)
+  --include-aliases: oneof<nothing, bool> # If `true`, the request restores aliases for any restored data streams and indices. If `false`, the request doesn’t restore aliases. (default: true)
+  --include-global-state: oneof<nothing, bool> # If `true`, restore the cluster state. The cluster state includes:  * Persistent cluster settings * Index templates * Legacy index templates * Ingest pipelines * Index lifecycle management (ILM) policies * Stored scripts * For snapshots taken after 7.12.0, feature states  If `include_global_state` is `true`, the restore operation merges the legacy index templates in your cluster with the templates contained in the snapshot, replacing any existing ones whose name matches one in the snapshot. It completely removes all persistent settings, non-legacy index templates, ingest pipelines, and ILM lifecycle policies that exist in your cluster and replaces them with the corresponding items from the snapshot.  Use the `feature_states` parameter to configure how feature states are restored.  If `include_global_state` is `true` and a snapshot was created without a global state then the restore request will fail. (default: false)
   --index-settings: any # Index settings to add or change in restored indices, including backing indices. You can't use this option to change `index.number_of_shards`.  For data streams, this option applies only to restored backing indices. New backing indices are configured using the data stream's matching index template.
   --indices: any # A comma-separated list of indices and data streams to restore. It supports a multi-target syntax. The default behavior is all regular indices and regular data streams in the snapshot.  You can't use this parameter to restore system indices or system data streams. Use `feature_states` instead.
-  --partial: string@bool-completer # If `false`, the entire restore operation will fail if one or more indices included in the snapshot do not have all primary shards available.  If true, it allows restoring a partial snapshot of indices with unavailable shards. Only shards that were successfully included in the snapshot will be restored. All missing shards will be recreated as empty. (default: false)
+  --partial: oneof<nothing, bool> # If `false`, the entire restore operation will fail if one or more indices included in the snapshot do not have all primary shards available.  If true, it allows restoring a partial snapshot of indices with unavailable shards. Only shards that were successfully included in the snapshot will be restored. All missing shards will be recreated as empty. (default: false)
   --rename-pattern: string # A rename pattern to apply to restored data streams and indices. Data streams and indices matching the rename pattern will be renamed according to `rename_replacement`.  The rename pattern is applied as defined by the regular expression that supports referencing the original text, according to the `appendReplacement` logic.
   --rename-replacement: string # The rename replacement string that is used with the `rename_pattern`.
 ]: any -> record<accepted: bool, snapshot: record<indices: list<string>, snapshot: string, shards: record<failed: record, successful: record, total: record, failures: list, skipped: record>>> {
@@ -22664,7 +22663,7 @@ export def "snapshot-status snapshot-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error for any snapshots that are unavailable. If `true`, the request ignores snapshots that are unavailable, such as those that are corrupted or temporarily cannot be returned.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error for any snapshots that are unavailable. If `true`, the request ignores snapshots that are unavailable, such as those that are corrupted or temporarily cannot be returned.
   --master-timeout: string # The period to wait for the master node. If the master node is not available before the timeout expires, the request fails and returns an error. To indicate that the request should never timeout, set it to `-1`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -22689,7 +22688,7 @@ export def "snapshot-status snapshot-status-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error for any snapshots that are unavailable. If `true`, the request ignores snapshots that are unavailable, such as those that are corrupted or temporarily cannot be returned.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error for any snapshots that are unavailable. If `true`, the request ignores snapshots that are unavailable, such as those that are corrupted or temporarily cannot be returned.
   --master-timeout: string # The period to wait for the master node. If the master node is not available before the timeout expires, the request fails and returns an error. To indicate that the request should never timeout, set it to `-1`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -22715,7 +22714,7 @@ export def "snapshot-status snapshot-status-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error for any snapshots that are unavailable. If `true`, the request ignores snapshots that are unavailable, such as those that are corrupted or temporarily cannot be returned.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error for any snapshots that are unavailable. If `true`, the request ignores snapshots that are unavailable, such as those that are corrupted or temporarily cannot be returned.
   --master-timeout: string # The period to wait for the master node. If the master node is not available before the timeout expires, the request fails and returns an error. To indicate that the request should never timeout, set it to `-1`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -22862,16 +22861,16 @@ export def "sql sql-query-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --format: string@format-completer-1 # The format for the response. You can also specify a format using the `Accept` HTTP header. If you specify both this parameter and the `Accept` HTTP header, this parameter takes precedence.
-  --allow-partial-search-results: string@bool-completer # If `true`, the response has partial results when there are shard request timeouts or shard failures. If `false`, the API returns an error with no partial results. (default: false)
+  --allow-partial-search-results: oneof<nothing, bool> # If `true`, the response has partial results when there are shard request timeouts or shard failures. If `false`, the API returns an error with no partial results. (default: false)
   --catalog: string # The default catalog (cluster) for queries. If unspecified, the queries execute on the data in the local cluster only.
-  --columnar: string@bool-completer # If `true`, the results are in a columnar fashion: one row represents all the values of a certain column from the current page of results. The API supports this parameter only for CBOR, JSON, SMILE, and YAML responses. (default: false)
+  --columnar: oneof<nothing, bool> # If `true`, the results are in a columnar fashion: one row represents all the values of a certain column from the current page of results. The API supports this parameter only for CBOR, JSON, SMILE, and YAML responses. (default: false)
   --cursor: string # The cursor used to retrieve a set of paginated results. If you specify a cursor, the API only uses the `columnar` and `time_zone` request body parameters. It ignores other request body parameters.
   --fetch-size: float # The maximum number of rows (or entries) to return in one response. (default: 1000.0)
-  --field-multi-value-leniency: string@bool-completer # If `false`, the API returns an exception when encountering multiple values for a field. If `true`, the API is lenient and returns the first value from the array with no guarantee of consistent results. (default: false)
+  --field-multi-value-leniency: oneof<nothing, bool> # If `false`, the API returns an exception when encountering multiple values for a field. If `true`, the API is lenient and returns the first value from the array with no guarantee of consistent results. (default: false)
   --filter: any # The Elasticsearch query DSL for additional filtering. (default: none)
-  --index-using-frozen: string@bool-completer # If `true`, the search can run on frozen indices. (default: false)
+  --index-using-frozen: oneof<nothing, bool> # If `true`, the search can run on frozen indices. (default: false)
   --keep-alive: any # The retention period for an async or saved synchronous search. (default: 5d)
-  --keep-on-completion: string@bool-completer # If `true`, Elasticsearch stores synchronous searches if you also specify the `wait_for_completion_timeout` parameter. If `false`, Elasticsearch only stores async searches that don't finish before the `wait_for_completion_timeout`. (default: false)
+  --keep-on-completion: oneof<nothing, bool> # If `true`, Elasticsearch stores synchronous searches if you also specify the `wait_for_completion_timeout` parameter. If `false`, Elasticsearch only stores async searches that don't finish before the `wait_for_completion_timeout`. (default: false)
   --page-timeout: any # The minimum retention period for the scroll cursor. After this time period, a pagination request might fail because the scroll cursor is no longer available. Subsequent scroll requests prolong the lifetime of the scroll cursor by the duration of `page_timeout` in the scroll request. (default: 45s)
   --params: list # The values for parameters in the query.
   --body-query: string # The SQL query to run.
@@ -22905,16 +22904,16 @@ export def "sql sql-query" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --format: string@format-completer-1 # The format for the response. You can also specify a format using the `Accept` HTTP header. If you specify both this parameter and the `Accept` HTTP header, this parameter takes precedence.
-  --allow-partial-search-results: string@bool-completer # If `true`, the response has partial results when there are shard request timeouts or shard failures. If `false`, the API returns an error with no partial results. (default: false)
+  --allow-partial-search-results: oneof<nothing, bool> # If `true`, the response has partial results when there are shard request timeouts or shard failures. If `false`, the API returns an error with no partial results. (default: false)
   --catalog: string # The default catalog (cluster) for queries. If unspecified, the queries execute on the data in the local cluster only.
-  --columnar: string@bool-completer # If `true`, the results are in a columnar fashion: one row represents all the values of a certain column from the current page of results. The API supports this parameter only for CBOR, JSON, SMILE, and YAML responses. (default: false)
+  --columnar: oneof<nothing, bool> # If `true`, the results are in a columnar fashion: one row represents all the values of a certain column from the current page of results. The API supports this parameter only for CBOR, JSON, SMILE, and YAML responses. (default: false)
   --cursor: string # The cursor used to retrieve a set of paginated results. If you specify a cursor, the API only uses the `columnar` and `time_zone` request body parameters. It ignores other request body parameters.
   --fetch-size: float # The maximum number of rows (or entries) to return in one response. (default: 1000.0)
-  --field-multi-value-leniency: string@bool-completer # If `false`, the API returns an exception when encountering multiple values for a field. If `true`, the API is lenient and returns the first value from the array with no guarantee of consistent results. (default: false)
+  --field-multi-value-leniency: oneof<nothing, bool> # If `false`, the API returns an exception when encountering multiple values for a field. If `true`, the API is lenient and returns the first value from the array with no guarantee of consistent results. (default: false)
   --filter: any # The Elasticsearch query DSL for additional filtering. (default: none)
-  --index-using-frozen: string@bool-completer # If `true`, the search can run on frozen indices. (default: false)
+  --index-using-frozen: oneof<nothing, bool> # If `true`, the search can run on frozen indices. (default: false)
   --keep-alive: any # The retention period for an async or saved synchronous search. (default: 5d)
-  --keep-on-completion: string@bool-completer # If `true`, Elasticsearch stores synchronous searches if you also specify the `wait_for_completion_timeout` parameter. If `false`, Elasticsearch only stores async searches that don't finish before the `wait_for_completion_timeout`. (default: false)
+  --keep-on-completion: oneof<nothing, bool> # If `true`, Elasticsearch stores synchronous searches if you also specify the `wait_for_completion_timeout` parameter. If `false`, Elasticsearch only stores async searches that don't finish before the `wait_for_completion_timeout`. (default: false)
   --page-timeout: any # The minimum retention period for the scroll cursor. After this time period, a pagination request might fail because the scroll cursor is no longer available. Subsequent scroll requests prolong the lifetime of the scroll cursor by the duration of `page_timeout` in the scroll request. (default: 45s)
   --params: list # The values for parameters in the query.
   --body-query: string # The SQL query to run.
@@ -23126,8 +23125,8 @@ export def "synonyms synonyms-put-synonym" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --refresh: string@bool-completer # If `true`, the request will refresh the analyzers with the new synonyms set and wait for the new synonyms to be available before returning. If `false`, analyzers will not be reloaded with the new synonym set
-  --append: string@bool-completer # If `true`, the provided synonym rules are appended to the existing set, with matching IDs overwriting existing rules. If `false`, the entire synonyms set is replaced with the new synonym rules definitions.
+  --refresh: oneof<nothing, bool> # If `true`, the request will refresh the analyzers with the new synonyms set and wait for the new synonyms to be available before returning. If `false`, analyzers will not be reloaded with the new synonym set
+  --append: oneof<nothing, bool> # If `true`, the provided synonym rules are appended to the existing set, with matching IDs overwriting existing rules. If `false`, the entire synonyms set is replaced with the new synonym rules definitions.
   synonyms_set: any # The synonym rules definitions for the synonyms set.
 ]: any -> record<result: record, reload_analyzers_details: record<reload_details: list<record>, _shards: record<failed: record, successful: record, total: record, failures: list, skipped: record>>> {
   let input = $in
@@ -23201,7 +23200,7 @@ export def "synonyms synonyms-put-synonym-rule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --refresh: string@bool-completer # If `true`, the request will refresh the analyzers with the new synonym rule and wait for the new synonyms to be available before returning. If `false`, analyzers will not be reloaded with the new synonym rule
+  --refresh: oneof<nothing, bool> # If `true`, the request will refresh the analyzers with the new synonym rule and wait for the new synonyms to be available before returning. If `false`, analyzers will not be reloaded with the new synonym rule
   synonyms: any # The synonym rule information definition, which must be in Solr format.
 ]: any -> record<result: record, reload_analyzers_details: record<reload_details: list<record>, _shards: record<failed: record, successful: record, total: record, failures: list, skipped: record>>> {
   let input = $in
@@ -23230,7 +23229,7 @@ export def "synonyms synonyms-delete-synonym-rule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --refresh: string@bool-completer # If `true`, the request will refresh the analyzers with the deleted synonym rule and wait for the new synonyms to be available before returning. If `false`, analyzers will not be reloaded with the deleted synonym rule
+  --refresh: oneof<nothing, bool> # If `true`, the request will refresh the analyzers with the deleted synonym rule and wait for the new synonyms to be available before returning. If `false`, analyzers will not be reloaded with the deleted synonym rule
 ]: nothing -> record<result: record, reload_analyzers_details: record<reload_details: list<record>, _shards: record<failed: record, successful: record, total: record, failures: list, skipped: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -23280,7 +23279,7 @@ export def "tasks-cancel tasks-cancel" [
   --actions: string # A comma-separated list or wildcard expression of actions that is used to limit the request.
   --nodes: list # A comma-separated list of node IDs or names that is used to limit the request.
   --parent-task-id: string # A parent task ID that is used to limit the tasks.
-  --wait-for-completion: string@bool-completer # If true, the request blocks until all found tasks are complete.
+  --wait-for-completion: oneof<nothing, bool> # If true, the request blocks until all found tasks are complete.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -23307,7 +23306,7 @@ export def "tasks-cancel tasks-cancel-1" [
   --actions: string # A comma-separated list or wildcard expression of actions that is used to limit the request.
   --nodes: list # A comma-separated list of node IDs or names that is used to limit the request.
   --parent-task-id: string # A parent task ID that is used to limit the tasks.
-  --wait-for-completion: string@bool-completer # If true, the request blocks until all found tasks are complete.
+  --wait-for-completion: oneof<nothing, bool> # If true, the request blocks until all found tasks are complete.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -23332,7 +23331,7 @@ export def "tasks tasks-get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --timeout: string # The period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
-  --wait-for-completion: string@bool-completer # If `true`, the request blocks until the task has completed.
+  --wait-for-completion: oneof<nothing, bool> # If `true`, the request blocks until the task has completed.
 ]: nothing -> record<completed: bool, task: record<action: string, cancelled: bool, cancellable: bool, description: string, headers: record, id: float, node: record, running_time: record, running_time_in_nanos: record, start_time_in_millis: record, status: record, type: string, parent_task_id: record, original_task_id: record, original_start_time_in_millis: record, original_start_time: string>, response: record, error: record<type: string, reason: any, stack_trace: string, caused_by: record<type: string, reason: any, stack_trace: string, caused_by: record, root_cause: list, suppressed: list>, root_cause: list<record>, suppressed: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -23356,12 +23355,12 @@ export def "tasks tasks-list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --actions: string # A comma-separated list or wildcard expression of actions used to limit the request. For example, you can use `cluser:*` to retrieve all cluster-related tasks.
-  --detailed: string@bool-completer # If `true`, the response includes detailed information about the running tasks. This information is useful to distinguish tasks from each other but is more costly to run.
+  --detailed: oneof<nothing, bool> # If `true`, the response includes detailed information about the running tasks. This information is useful to distinguish tasks from each other but is more costly to run.
   --group-by: string@group-by-completer # A key that is used to group tasks in the response. The task lists can be grouped either by nodes or by parent tasks.
   --nodes: string # A comma-separated list of node IDs or names that is used to limit the returned information.
   --parent-task-id: string # A parent task identifier that is used to limit returned information. To return all tasks, omit this parameter or use a value of `-1`. If the parent task is not found, the API does not return a 404 response code.
   --timeout: string # The period to wait for each node to respond. If a node does not respond before its timeout expires, the response does not include its information. However, timed out nodes are included in the `node_failures` property.
-  --wait-for-completion: string@bool-completer # If `true`, the request blocks until the operation is complete.
+  --wait-for-completion: oneof<nothing, bool> # If `true`, the request blocks until the operation is complete.
 ]: nothing -> record<node_failures: table<type: string, reason: any, stack_trace: string, caused_by: record, root_cause: list, suppressed: list>, task_failures: table<task_id: float, node_id: record, status: string, reason: record>, nodes: record, tasks: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -23388,7 +23387,7 @@ export def "terms-enum terms-enum" [
   field: any # The string to match at the start of indexed terms. If not provided, all terms in the field are considered.
   --size: float # The number of matching terms to return. (default: 10.0)
   --timeout: any # The maximum length of time to spend collecting results. If the timeout is exceeded the `complete` flag set to `false` in the response and the results may be partial or empty. (default: 1s)
-  --case-insensitive: string@bool-completer # When `true`, the provided search string is matched against index terms without case sensitivity. (default: false)
+  --case-insensitive: oneof<nothing, bool> # When `true`, the provided search string is matched against index terms without case sensitivity. (default: false)
   --index-filter: any # Filter an index shard if the provided query rewrites to `match_none`.
   --string: string # The string to match at the start of indexed terms. If it is not provided, all terms in the field are considered.  > info > The prefix string cannot be larger than the largest possible keyword value, which is Lucene's term byte-length limit of 32766.
   --search-after: string # The string after which terms in the index should be returned. It allows for a form of pagination if the last result from one request is passed as the `search_after` parameter for a subsequent request.
@@ -23420,7 +23419,7 @@ export def "terms-enum terms-enum-1" [
   field: any # The string to match at the start of indexed terms. If not provided, all terms in the field are considered.
   --size: float # The number of matching terms to return. (default: 10.0)
   --timeout: any # The maximum length of time to spend collecting results. If the timeout is exceeded the `complete` flag set to `false` in the response and the results may be partial or empty. (default: 1s)
-  --case-insensitive: string@bool-completer # When `true`, the provided search string is matched against index terms without case sensitivity. (default: false)
+  --case-insensitive: oneof<nothing, bool> # When `true`, the provided search string is matched against index terms without case sensitivity. (default: false)
   --index-filter: any # Filter an index shard if the provided query rewrites to `match_none`.
   --string: string # The string to match at the start of indexed terms. If it is not provided, all terms in the field are considered.  > info > The prefix string cannot be larger than the largest possible keyword value, which is Lucene's term byte-length limit of 32766.
   --search-after: string # The string after which terms in the index should be returned. It allows for a form of pagination if the last result from one request is passed as the `search_after` parameter for a subsequent request.
@@ -23452,25 +23451,25 @@ export def "termvectors termvectors" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: string # A comma-separated list or wildcard expressions of fields to include in the statistics. It is used as the default list unless a specific field list is provided in the `completion_fields` or `fielddata_fields` parameters.
-  --field-statistics: string@bool-completer # If `true`, the response includes:  * The document count (how many documents contain this field). * The sum of document frequencies (the sum of document frequencies for all terms in this field). * The sum of total term frequencies (the sum of total term frequencies of each term in this field).
-  --offsets: string@bool-completer # If `true`, the response includes term offsets.
-  --payloads: string@bool-completer # If `true`, the response includes term payloads.
-  --positions: string@bool-completer # If `true`, the response includes term positions.
+  --field-statistics: oneof<nothing, bool> # If `true`, the response includes:  * The document count (how many documents contain this field). * The sum of document frequencies (the sum of document frequencies for all terms in this field). * The sum of total term frequencies (the sum of total term frequencies of each term in this field).
+  --offsets: oneof<nothing, bool> # If `true`, the response includes term offsets.
+  --payloads: oneof<nothing, bool> # If `true`, the response includes term payloads.
+  --positions: oneof<nothing, bool> # If `true`, the response includes term positions.
   --preference: string # The node or shard the operation should be performed on. It is random by default.
-  --realtime: string@bool-completer # If true, the request is real-time as opposed to near-real-time.
+  --realtime: oneof<nothing, bool> # If true, the request is real-time as opposed to near-real-time.
   --routing: string # A custom value that is used to route operations to a specific shard.
-  --term-statistics: string@bool-completer # If `true`, the response includes:  * The total term frequency (how often a term occurs in all documents). * The document frequency (the number of documents containing the current term).  By default these values are not returned since term statistics can have a serious performance impact.
+  --term-statistics: oneof<nothing, bool> # If `true`, the response includes:  * The total term frequency (how often a term occurs in all documents). * The document frequency (the number of documents containing the current term).  By default these values are not returned since term statistics can have a serious performance impact.
   --version: float # If `true`, returns the document version as part of a hit.
   --version-type: string@version-type-completer # The version type.
   --doc: record # An artificial document (a document not present in the index) for which you want to retrieve term vectors.
   --filter: any # Filter terms based on their tf-idf scores. This could be useful in order find out a good characteristic vector of a document. This feature works in a similar manner to the second phase of the More Like This Query.
   --per-field-analyzer: record # Override the default per-field analyzer. This is useful in order to generate term vectors in any fashion, especially when using artificial documents. When providing an analyzer for a field that already stores term vectors, the term vectors will be regenerated.
   --body-fields: list # A list of fields to include in the statistics. It is used as the default list unless a specific field list is provided in the `completion_fields` or `fielddata_fields` parameters.
-  --field-statistics: string@bool-completer # If `true`, the response includes:  * The document count (how many documents contain this field). * The sum of document frequencies (the sum of document frequencies for all terms in this field). * The sum of total term frequencies (the sum of total term frequencies of each term in this field). (default: true)
-  --offsets: string@bool-completer # If `true`, the response includes term offsets. (default: true)
-  --payloads: string@bool-completer # If `true`, the response includes term payloads. (default: true)
-  --positions: string@bool-completer # If `true`, the response includes term positions. (default: true)
-  --term-statistics: string@bool-completer # If `true`, the response includes:  * The total term frequency (how often a term occurs in all documents). * The document frequency (the number of documents containing the current term).  By default these values are not returned since term statistics can have a serious performance impact. (default: false)
+  --field-statistics: oneof<nothing, bool> # If `true`, the response includes:  * The document count (how many documents contain this field). * The sum of document frequencies (the sum of document frequencies for all terms in this field). * The sum of total term frequencies (the sum of total term frequencies of each term in this field). (default: true)
+  --offsets: oneof<nothing, bool> # If `true`, the response includes term offsets. (default: true)
+  --payloads: oneof<nothing, bool> # If `true`, the response includes term payloads. (default: true)
+  --positions: oneof<nothing, bool> # If `true`, the response includes term positions. (default: true)
+  --term-statistics: oneof<nothing, bool> # If `true`, the response includes:  * The total term frequency (how often a term occurs in all documents). * The document frequency (the number of documents containing the current term).  By default these values are not returned since term statistics can have a serious performance impact. (default: false)
   --routing: any # A custom value that is used to route operations to a specific shard.
   --version: any # If `true`, returns the document version as part of a hit.
   --version-type: any # The version type.
@@ -23503,25 +23502,25 @@ export def "termvectors termvectors-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: string # A comma-separated list or wildcard expressions of fields to include in the statistics. It is used as the default list unless a specific field list is provided in the `completion_fields` or `fielddata_fields` parameters.
-  --field-statistics: string@bool-completer # If `true`, the response includes:  * The document count (how many documents contain this field). * The sum of document frequencies (the sum of document frequencies for all terms in this field). * The sum of total term frequencies (the sum of total term frequencies of each term in this field).
-  --offsets: string@bool-completer # If `true`, the response includes term offsets.
-  --payloads: string@bool-completer # If `true`, the response includes term payloads.
-  --positions: string@bool-completer # If `true`, the response includes term positions.
+  --field-statistics: oneof<nothing, bool> # If `true`, the response includes:  * The document count (how many documents contain this field). * The sum of document frequencies (the sum of document frequencies for all terms in this field). * The sum of total term frequencies (the sum of total term frequencies of each term in this field).
+  --offsets: oneof<nothing, bool> # If `true`, the response includes term offsets.
+  --payloads: oneof<nothing, bool> # If `true`, the response includes term payloads.
+  --positions: oneof<nothing, bool> # If `true`, the response includes term positions.
   --preference: string # The node or shard the operation should be performed on. It is random by default.
-  --realtime: string@bool-completer # If true, the request is real-time as opposed to near-real-time.
+  --realtime: oneof<nothing, bool> # If true, the request is real-time as opposed to near-real-time.
   --routing: string # A custom value that is used to route operations to a specific shard.
-  --term-statistics: string@bool-completer # If `true`, the response includes:  * The total term frequency (how often a term occurs in all documents). * The document frequency (the number of documents containing the current term).  By default these values are not returned since term statistics can have a serious performance impact.
+  --term-statistics: oneof<nothing, bool> # If `true`, the response includes:  * The total term frequency (how often a term occurs in all documents). * The document frequency (the number of documents containing the current term).  By default these values are not returned since term statistics can have a serious performance impact.
   --version: float # If `true`, returns the document version as part of a hit.
   --version-type: string@version-type-completer # The version type.
   --doc: record # An artificial document (a document not present in the index) for which you want to retrieve term vectors.
   --filter: any # Filter terms based on their tf-idf scores. This could be useful in order find out a good characteristic vector of a document. This feature works in a similar manner to the second phase of the More Like This Query.
   --per-field-analyzer: record # Override the default per-field analyzer. This is useful in order to generate term vectors in any fashion, especially when using artificial documents. When providing an analyzer for a field that already stores term vectors, the term vectors will be regenerated.
   --body-fields: list # A list of fields to include in the statistics. It is used as the default list unless a specific field list is provided in the `completion_fields` or `fielddata_fields` parameters.
-  --field-statistics: string@bool-completer # If `true`, the response includes:  * The document count (how many documents contain this field). * The sum of document frequencies (the sum of document frequencies for all terms in this field). * The sum of total term frequencies (the sum of total term frequencies of each term in this field). (default: true)
-  --offsets: string@bool-completer # If `true`, the response includes term offsets. (default: true)
-  --payloads: string@bool-completer # If `true`, the response includes term payloads. (default: true)
-  --positions: string@bool-completer # If `true`, the response includes term positions. (default: true)
-  --term-statistics: string@bool-completer # If `true`, the response includes:  * The total term frequency (how often a term occurs in all documents). * The document frequency (the number of documents containing the current term).  By default these values are not returned since term statistics can have a serious performance impact. (default: false)
+  --field-statistics: oneof<nothing, bool> # If `true`, the response includes:  * The document count (how many documents contain this field). * The sum of document frequencies (the sum of document frequencies for all terms in this field). * The sum of total term frequencies (the sum of total term frequencies of each term in this field). (default: true)
+  --offsets: oneof<nothing, bool> # If `true`, the response includes term offsets. (default: true)
+  --payloads: oneof<nothing, bool> # If `true`, the response includes term payloads. (default: true)
+  --positions: oneof<nothing, bool> # If `true`, the response includes term positions. (default: true)
+  --term-statistics: oneof<nothing, bool> # If `true`, the response includes:  * The total term frequency (how often a term occurs in all documents). * The document frequency (the number of documents containing the current term).  By default these values are not returned since term statistics can have a serious performance impact. (default: false)
   --routing: any # A custom value that is used to route operations to a specific shard.
   --version: any # If `true`, returns the document version as part of a hit.
   --version-type: any # The version type.
@@ -23553,25 +23552,25 @@ export def "termvectors termvectors-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: string # A comma-separated list or wildcard expressions of fields to include in the statistics. It is used as the default list unless a specific field list is provided in the `completion_fields` or `fielddata_fields` parameters.
-  --field-statistics: string@bool-completer # If `true`, the response includes:  * The document count (how many documents contain this field). * The sum of document frequencies (the sum of document frequencies for all terms in this field). * The sum of total term frequencies (the sum of total term frequencies of each term in this field).
-  --offsets: string@bool-completer # If `true`, the response includes term offsets.
-  --payloads: string@bool-completer # If `true`, the response includes term payloads.
-  --positions: string@bool-completer # If `true`, the response includes term positions.
+  --field-statistics: oneof<nothing, bool> # If `true`, the response includes:  * The document count (how many documents contain this field). * The sum of document frequencies (the sum of document frequencies for all terms in this field). * The sum of total term frequencies (the sum of total term frequencies of each term in this field).
+  --offsets: oneof<nothing, bool> # If `true`, the response includes term offsets.
+  --payloads: oneof<nothing, bool> # If `true`, the response includes term payloads.
+  --positions: oneof<nothing, bool> # If `true`, the response includes term positions.
   --preference: string # The node or shard the operation should be performed on. It is random by default.
-  --realtime: string@bool-completer # If true, the request is real-time as opposed to near-real-time.
+  --realtime: oneof<nothing, bool> # If true, the request is real-time as opposed to near-real-time.
   --routing: string # A custom value that is used to route operations to a specific shard.
-  --term-statistics: string@bool-completer # If `true`, the response includes:  * The total term frequency (how often a term occurs in all documents). * The document frequency (the number of documents containing the current term).  By default these values are not returned since term statistics can have a serious performance impact.
+  --term-statistics: oneof<nothing, bool> # If `true`, the response includes:  * The total term frequency (how often a term occurs in all documents). * The document frequency (the number of documents containing the current term).  By default these values are not returned since term statistics can have a serious performance impact.
   --version: float # If `true`, returns the document version as part of a hit.
   --version-type: string@version-type-completer # The version type.
   --doc: record # An artificial document (a document not present in the index) for which you want to retrieve term vectors.
   --filter: any # Filter terms based on their tf-idf scores. This could be useful in order find out a good characteristic vector of a document. This feature works in a similar manner to the second phase of the More Like This Query.
   --per-field-analyzer: record # Override the default per-field analyzer. This is useful in order to generate term vectors in any fashion, especially when using artificial documents. When providing an analyzer for a field that already stores term vectors, the term vectors will be regenerated.
   --body-fields: list # A list of fields to include in the statistics. It is used as the default list unless a specific field list is provided in the `completion_fields` or `fielddata_fields` parameters.
-  --field-statistics: string@bool-completer # If `true`, the response includes:  * The document count (how many documents contain this field). * The sum of document frequencies (the sum of document frequencies for all terms in this field). * The sum of total term frequencies (the sum of total term frequencies of each term in this field). (default: true)
-  --offsets: string@bool-completer # If `true`, the response includes term offsets. (default: true)
-  --payloads: string@bool-completer # If `true`, the response includes term payloads. (default: true)
-  --positions: string@bool-completer # If `true`, the response includes term positions. (default: true)
-  --term-statistics: string@bool-completer # If `true`, the response includes:  * The total term frequency (how often a term occurs in all documents). * The document frequency (the number of documents containing the current term).  By default these values are not returned since term statistics can have a serious performance impact. (default: false)
+  --field-statistics: oneof<nothing, bool> # If `true`, the response includes:  * The document count (how many documents contain this field). * The sum of document frequencies (the sum of document frequencies for all terms in this field). * The sum of total term frequencies (the sum of total term frequencies of each term in this field). (default: true)
+  --offsets: oneof<nothing, bool> # If `true`, the response includes term offsets. (default: true)
+  --payloads: oneof<nothing, bool> # If `true`, the response includes term payloads. (default: true)
+  --positions: oneof<nothing, bool> # If `true`, the response includes term positions. (default: true)
+  --term-statistics: oneof<nothing, bool> # If `true`, the response includes:  * The total term frequency (how often a term occurs in all documents). * The document frequency (the number of documents containing the current term).  By default these values are not returned since term statistics can have a serious performance impact. (default: false)
   --routing: any # A custom value that is used to route operations to a specific shard.
   --version: any # If `true`, returns the document version as part of a hit.
   --version-type: any # The version type.
@@ -23603,25 +23602,25 @@ export def "termvectors termvectors-3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: string # A comma-separated list or wildcard expressions of fields to include in the statistics. It is used as the default list unless a specific field list is provided in the `completion_fields` or `fielddata_fields` parameters.
-  --field-statistics: string@bool-completer # If `true`, the response includes:  * The document count (how many documents contain this field). * The sum of document frequencies (the sum of document frequencies for all terms in this field). * The sum of total term frequencies (the sum of total term frequencies of each term in this field).
-  --offsets: string@bool-completer # If `true`, the response includes term offsets.
-  --payloads: string@bool-completer # If `true`, the response includes term payloads.
-  --positions: string@bool-completer # If `true`, the response includes term positions.
+  --field-statistics: oneof<nothing, bool> # If `true`, the response includes:  * The document count (how many documents contain this field). * The sum of document frequencies (the sum of document frequencies for all terms in this field). * The sum of total term frequencies (the sum of total term frequencies of each term in this field).
+  --offsets: oneof<nothing, bool> # If `true`, the response includes term offsets.
+  --payloads: oneof<nothing, bool> # If `true`, the response includes term payloads.
+  --positions: oneof<nothing, bool> # If `true`, the response includes term positions.
   --preference: string # The node or shard the operation should be performed on. It is random by default.
-  --realtime: string@bool-completer # If true, the request is real-time as opposed to near-real-time.
+  --realtime: oneof<nothing, bool> # If true, the request is real-time as opposed to near-real-time.
   --routing: string # A custom value that is used to route operations to a specific shard.
-  --term-statistics: string@bool-completer # If `true`, the response includes:  * The total term frequency (how often a term occurs in all documents). * The document frequency (the number of documents containing the current term).  By default these values are not returned since term statistics can have a serious performance impact.
+  --term-statistics: oneof<nothing, bool> # If `true`, the response includes:  * The total term frequency (how often a term occurs in all documents). * The document frequency (the number of documents containing the current term).  By default these values are not returned since term statistics can have a serious performance impact.
   --version: float # If `true`, returns the document version as part of a hit.
   --version-type: string@version-type-completer # The version type.
   --doc: record # An artificial document (a document not present in the index) for which you want to retrieve term vectors.
   --filter: any # Filter terms based on their tf-idf scores. This could be useful in order find out a good characteristic vector of a document. This feature works in a similar manner to the second phase of the More Like This Query.
   --per-field-analyzer: record # Override the default per-field analyzer. This is useful in order to generate term vectors in any fashion, especially when using artificial documents. When providing an analyzer for a field that already stores term vectors, the term vectors will be regenerated.
   --body-fields: list # A list of fields to include in the statistics. It is used as the default list unless a specific field list is provided in the `completion_fields` or `fielddata_fields` parameters.
-  --field-statistics: string@bool-completer # If `true`, the response includes:  * The document count (how many documents contain this field). * The sum of document frequencies (the sum of document frequencies for all terms in this field). * The sum of total term frequencies (the sum of total term frequencies of each term in this field). (default: true)
-  --offsets: string@bool-completer # If `true`, the response includes term offsets. (default: true)
-  --payloads: string@bool-completer # If `true`, the response includes term payloads. (default: true)
-  --positions: string@bool-completer # If `true`, the response includes term positions. (default: true)
-  --term-statistics: string@bool-completer # If `true`, the response includes:  * The total term frequency (how often a term occurs in all documents). * The document frequency (the number of documents containing the current term).  By default these values are not returned since term statistics can have a serious performance impact. (default: false)
+  --field-statistics: oneof<nothing, bool> # If `true`, the response includes:  * The document count (how many documents contain this field). * The sum of document frequencies (the sum of document frequencies for all terms in this field). * The sum of total term frequencies (the sum of total term frequencies of each term in this field). (default: true)
+  --offsets: oneof<nothing, bool> # If `true`, the response includes term offsets. (default: true)
+  --payloads: oneof<nothing, bool> # If `true`, the response includes term payloads. (default: true)
+  --positions: oneof<nothing, bool> # If `true`, the response includes term positions. (default: true)
+  --term-statistics: oneof<nothing, bool> # If `true`, the response includes:  * The total term frequency (how often a term occurs in all documents). * The document frequency (the number of documents containing the current term).  By default these values are not returned since term statistics can have a serious performance impact. (default: false)
   --routing: any # A custom value that is used to route operations to a specific shard.
   --version: any # If `true`, returns the document version as part of a hit.
   --version-type: any # The version type.
@@ -23654,14 +23653,14 @@ export def "text-structure-find-field-structure text-structure-find-field-struct
   --delimiter: string # If you have set `format` to `delimited`, you can specify the character used to delimit the values in each row. Only a single character is supported; the delimiter cannot have multiple characters. By default, the API considers the following possibilities: comma, tab, semi-colon, and pipe (`|`). In this default scenario, all rows must have the same number of fields for the delimited format to be detected. If you specify a delimiter, up to 10% of the rows can have a different number of columns than the first row.
   --documents-to-sample: float # The number of documents to include in the structural analysis. The minimum value is 2.
   --ecs-compatibility: string@ecs-compatibility-completer # The mode of compatibility with ECS compliant Grok patterns. Use this parameter to specify whether to use ECS Grok patterns instead of legacy ones when the structure finder creates a Grok pattern. This setting primarily has an impact when a whole message Grok pattern such as `%{CATALINALOG}` matches the input. If the structure finder identifies a common structure but has no idea of the meaning then generic field names such as `path`, `ipaddress`, `field1`, and `field2` are used in the `grok_pattern` output. The intention in that situation is that a user who knows the meanings will rename the fields before using them.
-  --explain: string@bool-completer # If `true`, the response includes a field named `explanation`, which is an array of strings that indicate how the structure finder produced its result.
+  --explain: oneof<nothing, bool> # If `true`, the response includes a field named `explanation`, which is an array of strings that indicate how the structure finder produced its result.
   --field: string # The field that should be analyzed.
   --format: string@format-completer-2 # The high level structure of the text. By default, the API chooses the format. In this default scenario, all rows must have the same number of fields for a delimited format to be detected. If the format is set to delimited and the delimiter is not set, however, the API tolerates up to 5% of rows that have a different number of columns than the first row.
   --grok-pattern: string # If the format is `semi_structured_text`, you can specify a Grok pattern that is used to extract fields from every message in the text. The name of the timestamp field in the Grok pattern must match what is specified in the `timestamp_field` parameter. If that parameter is not specified, the name of the timestamp field in the Grok pattern must match "timestamp". If `grok_pattern` is not specified, the structure finder creates a Grok pattern.
   --index: string # The name of the index that contains the analyzed field.
   --quote: string # If the format is `delimited`, you can specify the character used to quote the values in each row if they contain newlines or the delimiter character. Only a single character is supported. If this parameter is not specified, the default value is a double quote (`"`). If your delimited text format does not use quoting, a workaround is to set this argument to a character that does not appear anywhere in the sample.
-  --should-trim-fields: string@bool-completer # If the format is `delimited`, you can specify whether values between delimiters should have whitespace trimmed from them. If this parameter is not specified and the delimiter is pipe (`|`), the default value is true. Otherwise, the default value is `false`.
-  --should-parse-recursively: string@bool-completer # If the format is `ndjson`, you can specify whether to parse nested JSON objects recursively. The nested objects are parsed to a maximum depth equal to the default value of the `index.mapping.depth.limit` setting. Anything beyond that depth is parsed as an `object` type field. For formats other than `ndjson`, this parameter is ignored.
+  --should-trim-fields: oneof<nothing, bool> # If the format is `delimited`, you can specify whether values between delimiters should have whitespace trimmed from them. If this parameter is not specified and the delimiter is pipe (`|`), the default value is true. Otherwise, the default value is `false`.
+  --should-parse-recursively: oneof<nothing, bool> # If the format is `ndjson`, you can specify whether to parse nested JSON objects recursively. The nested objects are parsed to a maximum depth equal to the default value of the `index.mapping.depth.limit` setting. Anything beyond that depth is parsed as an `object` type field. For formats other than `ndjson`, this parameter is ignored.
   --timeout: string # The maximum amount of time that the structure analysis can take. If the analysis is still running when the timeout expires, it will be stopped.
   --timestamp-field: string # The name of the field that contains the primary timestamp of each record in the text. In particular, if the text was ingested into an index, this is the field that would be used to populate the `@timestamp` field.  If the format is `semi_structured_text`, this field must match the name of the appropriate extraction in the `grok_pattern`. Therefore, for semi-structured text, it is best not to specify this parameter unless `grok_pattern` is also specified.  For structured text, if you specify this parameter, the field must exist within the text.  If this parameter is not specified, the structure finder makes a decision about which field (if any) is the primary timestamp field. For structured text, it is not compulsory to have a timestamp in the text.
   --timestamp-format: string # The Java time format of the timestamp field in the text. Only a subset of Java time format letter groups are supported:  * `a` * `d` * `dd` * `EEE` * `EEEE` * `H` * `HH` * `h` * `M` * `MM` * `MMM` * `MMMM` * `mm` * `ss` * `XX` * `XXX` * `yy` * `yyyy` * `zzz`  Additionally `S` letter groups (fractional seconds) of length one to nine are supported providing they occur after `ss` and are separated from the `ss` by a period (`.`), comma (`,`), or colon (`:`). Spacing and punctuation is also permitted with the exception a question mark (`?`), newline, and carriage return, together with literal text enclosed in single quotes. For example, `MM/dd HH.mm.ss,SSSSSS 'in' yyyy` is a valid override format.  One valuable use case for this parameter is when the format is semi-structured text, there are multiple timestamp formats in the text, and you know which format corresponds to the primary timestamp, but you do not want to specify the full `grok_pattern`. Another is when the timestamp format is one that the structure finder does not consider by default.  If this parameter is not specified, the structure finder chooses the best format from a built-in set.  If the special value `null` is specified, the structure finder will not look for a primary timestamp in the text. When the format is semi-structured text, this will result in the structure finder treating the text as single-line messages.
@@ -23690,12 +23689,12 @@ export def "text-structure-find-message-structure text-structure-find-message-st
   --column-names: string # If the format is `delimited`, you can specify the column names in a comma-separated list. If this parameter is not specified, the structure finder uses the column names from the header row of the text. If the text does not have a header role, columns are named "column1", "column2", "column3", for example.
   --delimiter: string # If you the format is `delimited`, you can specify the character used to delimit the values in each row. Only a single character is supported; the delimiter cannot have multiple characters. By default, the API considers the following possibilities: comma, tab, semi-colon, and pipe (`|`). In this default scenario, all rows must have the same number of fields for the delimited format to be detected. If you specify a delimiter, up to 10% of the rows can have a different number of columns than the first row.
   --ecs-compatibility: string@ecs-compatibility-completer # The mode of compatibility with ECS compliant Grok patterns. Use this parameter to specify whether to use ECS Grok patterns instead of legacy ones when the structure finder creates a Grok pattern. This setting primarily has an impact when a whole message Grok pattern such as `%{CATALINALOG}` matches the input. If the structure finder identifies a common structure but has no idea of meaning then generic field names such as `path`, `ipaddress`, `field1`, and `field2` are used in the `grok_pattern` output, with the intention that a user who knows the meanings rename these fields before using it.
-  --explain: string@bool-completer # If this parameter is set to true, the response includes a field named `explanation`, which is an array of strings that indicate how the structure finder produced its result.
+  --explain: oneof<nothing, bool> # If this parameter is set to true, the response includes a field named `explanation`, which is an array of strings that indicate how the structure finder produced its result.
   --format: string@format-completer-2 # The high level structure of the text. By default, the API chooses the format. In this default scenario, all rows must have the same number of fields for a delimited format to be detected. If the format is `delimited` and the delimiter is not set, however, the API tolerates up to 5% of rows that have a different number of columns than the first row.
   --grok-pattern: string # If the format is `semi_structured_text`, you can specify a Grok pattern that is used to extract fields from every message in the text. The name of the timestamp field in the Grok pattern must match what is specified in the `timestamp_field` parameter. If that parameter is not specified, the name of the timestamp field in the Grok pattern must match "timestamp". If `grok_pattern` is not specified, the structure finder creates a Grok pattern.
   --quote: string # If the format is `delimited`, you can specify the character used to quote the values in each row if they contain newlines or the delimiter character. Only a single character is supported. If this parameter is not specified, the default value is a double quote (`"`). If your delimited text format does not use quoting, a workaround is to set this argument to a character that does not appear anywhere in the sample.
-  --should-trim-fields: string@bool-completer # If the format is `delimited`, you can specify whether values between delimiters should have whitespace trimmed from them. If this parameter is not specified and the delimiter is pipe (`|`), the default value is true. Otherwise, the default value is `false`.
-  --should-parse-recursively: string@bool-completer # If the format is `ndjson`, you can specify whether to parse nested JSON objects recursively. The nested objects are parsed to a maximum depth equal to the default value of the `index.mapping.depth.limit` setting. Anything beyond that depth is parsed as an `object` type field. For formats other than `ndjson`, this parameter is ignored.
+  --should-trim-fields: oneof<nothing, bool> # If the format is `delimited`, you can specify whether values between delimiters should have whitespace trimmed from them. If this parameter is not specified and the delimiter is pipe (`|`), the default value is true. Otherwise, the default value is `false`.
+  --should-parse-recursively: oneof<nothing, bool> # If the format is `ndjson`, you can specify whether to parse nested JSON objects recursively. The nested objects are parsed to a maximum depth equal to the default value of the `index.mapping.depth.limit` setting. Anything beyond that depth is parsed as an `object` type field. For formats other than `ndjson`, this parameter is ignored.
   --timeout: string # The maximum amount of time that the structure analysis can take. If the analysis is still running when the timeout expires, it will be stopped.
   --timestamp-field: string # The name of the field that contains the primary timestamp of each record in the text. In particular, if the text was ingested into an index, this is the field that would be used to populate the `@timestamp` field.  If the format is `semi_structured_text`, this field must match the name of the appropriate extraction in the `grok_pattern`. Therefore, for semi-structured text, it is best not to specify this parameter unless `grok_pattern` is also specified.  For structured text, if you specify this parameter, the field must exist within the text.  If this parameter is not specified, the structure finder makes a decision about which field (if any) is the primary timestamp field. For structured text, it is not compulsory to have a timestamp in the text.
   --timestamp-format: string # The Java time format of the timestamp field in the text. Only a subset of Java time format letter groups are supported:  * `a` * `d` * `dd` * `EEE` * `EEEE` * `H` * `HH` * `h` * `M` * `MM` * `MMM` * `MMMM` * `mm` * `ss` * `XX` * `XXX` * `yy` * `yyyy` * `zzz`  Additionally `S` letter groups (fractional seconds) of length one to nine are supported providing they occur after `ss` and are separated from the `ss` by a period (`.`), comma (`,`), or colon (`:`). Spacing and punctuation is also permitted with the exception a question mark (`?`), newline, and carriage return, together with literal text enclosed in single quotes. For example, `MM/dd HH.mm.ss,SSSSSS 'in' yyyy` is a valid override format.  One valuable use case for this parameter is when the format is semi-structured text, there are multiple timestamp formats in the text, and you know which format corresponds to the primary timestamp, but you do not want to specify the full `grok_pattern`. Another is when the timestamp format is one that the structure finder does not consider by default.  If this parameter is not specified, the structure finder chooses the best format from a built-in set.  If the special value `null` is specified, the structure finder will not look for a primary timestamp in the text. When the format is semi-structured text, this will result in the structure finder treating the text as single-line messages.
@@ -23728,12 +23727,12 @@ export def "text-structure-find-message-structure text-structure-find-message-st
   --column-names: string # If the format is `delimited`, you can specify the column names in a comma-separated list. If this parameter is not specified, the structure finder uses the column names from the header row of the text. If the text does not have a header role, columns are named "column1", "column2", "column3", for example.
   --delimiter: string # If you the format is `delimited`, you can specify the character used to delimit the values in each row. Only a single character is supported; the delimiter cannot have multiple characters. By default, the API considers the following possibilities: comma, tab, semi-colon, and pipe (`|`). In this default scenario, all rows must have the same number of fields for the delimited format to be detected. If you specify a delimiter, up to 10% of the rows can have a different number of columns than the first row.
   --ecs-compatibility: string@ecs-compatibility-completer # The mode of compatibility with ECS compliant Grok patterns. Use this parameter to specify whether to use ECS Grok patterns instead of legacy ones when the structure finder creates a Grok pattern. This setting primarily has an impact when a whole message Grok pattern such as `%{CATALINALOG}` matches the input. If the structure finder identifies a common structure but has no idea of meaning then generic field names such as `path`, `ipaddress`, `field1`, and `field2` are used in the `grok_pattern` output, with the intention that a user who knows the meanings rename these fields before using it.
-  --explain: string@bool-completer # If this parameter is set to true, the response includes a field named `explanation`, which is an array of strings that indicate how the structure finder produced its result.
+  --explain: oneof<nothing, bool> # If this parameter is set to true, the response includes a field named `explanation`, which is an array of strings that indicate how the structure finder produced its result.
   --format: string@format-completer-2 # The high level structure of the text. By default, the API chooses the format. In this default scenario, all rows must have the same number of fields for a delimited format to be detected. If the format is `delimited` and the delimiter is not set, however, the API tolerates up to 5% of rows that have a different number of columns than the first row.
   --grok-pattern: string # If the format is `semi_structured_text`, you can specify a Grok pattern that is used to extract fields from every message in the text. The name of the timestamp field in the Grok pattern must match what is specified in the `timestamp_field` parameter. If that parameter is not specified, the name of the timestamp field in the Grok pattern must match "timestamp". If `grok_pattern` is not specified, the structure finder creates a Grok pattern.
   --quote: string # If the format is `delimited`, you can specify the character used to quote the values in each row if they contain newlines or the delimiter character. Only a single character is supported. If this parameter is not specified, the default value is a double quote (`"`). If your delimited text format does not use quoting, a workaround is to set this argument to a character that does not appear anywhere in the sample.
-  --should-trim-fields: string@bool-completer # If the format is `delimited`, you can specify whether values between delimiters should have whitespace trimmed from them. If this parameter is not specified and the delimiter is pipe (`|`), the default value is true. Otherwise, the default value is `false`.
-  --should-parse-recursively: string@bool-completer # If the format is `ndjson`, you can specify whether to parse nested JSON objects recursively. The nested objects are parsed to a maximum depth equal to the default value of the `index.mapping.depth.limit` setting. Anything beyond that depth is parsed as an `object` type field. For formats other than `ndjson`, this parameter is ignored.
+  --should-trim-fields: oneof<nothing, bool> # If the format is `delimited`, you can specify whether values between delimiters should have whitespace trimmed from them. If this parameter is not specified and the delimiter is pipe (`|`), the default value is true. Otherwise, the default value is `false`.
+  --should-parse-recursively: oneof<nothing, bool> # If the format is `ndjson`, you can specify whether to parse nested JSON objects recursively. The nested objects are parsed to a maximum depth equal to the default value of the `index.mapping.depth.limit` setting. Anything beyond that depth is parsed as an `object` type field. For formats other than `ndjson`, this parameter is ignored.
   --timeout: string # The maximum amount of time that the structure analysis can take. If the analysis is still running when the timeout expires, it will be stopped.
   --timestamp-field: string # The name of the field that contains the primary timestamp of each record in the text. In particular, if the text was ingested into an index, this is the field that would be used to populate the `@timestamp` field.  If the format is `semi_structured_text`, this field must match the name of the appropriate extraction in the `grok_pattern`. Therefore, for semi-structured text, it is best not to specify this parameter unless `grok_pattern` is also specified.  For structured text, if you specify this parameter, the field must exist within the text.  If this parameter is not specified, the structure finder makes a decision about which field (if any) is the primary timestamp field. For structured text, it is not compulsory to have a timestamp in the text.
   --timestamp-format: string # The Java time format of the timestamp field in the text. Only a subset of Java time format letter groups are supported:  * `a` * `d` * `dd` * `EEE` * `EEEE` * `H` * `HH` * `h` * `M` * `MM` * `MMM` * `MMMM` * `mm` * `ss` * `XX` * `XXX` * `yy` * `yyyy` * `zzz`  Additionally `S` letter groups (fractional seconds) of length one to nine are supported providing they occur after `ss` and are separated from the `ss` by a period (`.`), comma (`,`), or colon (`:`). Spacing and punctuation is also permitted with the exception a question mark (`?`), newline, and carriage return, together with literal text enclosed in single quotes. For example, `MM/dd HH.mm.ss,SSSSSS 'in' yyyy` is a valid override format.  One valuable use case for this parameter is when the format is semi-structured text, there are multiple timestamp formats in the text, and you know which format corresponds to the primary timestamp, but you do not want to specify the full `grok_pattern`. Another is when the timestamp format is one that the structure finder does not consider by default.  If this parameter is not specified, the structure finder chooses the best format from a built-in set.  If the special value `null` is specified, the structure finder will not look for a primary timestamp in the text. When the format is semi-structured text, this will result in the structure finder treating the text as single-line messages.
@@ -23768,15 +23767,15 @@ export def "text-structure-find-structure text-structure-find-structure" [
   --column-names: string # If you have set format to `delimited`, you can specify the column names in a comma-separated list. If this parameter is not specified, the structure finder uses the column names from the header row of the text. If the text does not have a header role, columns are named "column1", "column2", "column3", for example.
   --delimiter: string # If you have set `format` to `delimited`, you can specify the character used to delimit the values in each row. Only a single character is supported; the delimiter cannot have multiple characters. By default, the API considers the following possibilities: comma, tab, semi-colon, and pipe (`|`). In this default scenario, all rows must have the same number of fields for the delimited format to be detected. If you specify a delimiter, up to 10% of the rows can have a different number of columns than the first row.
   --ecs-compatibility: string # The mode of compatibility with ECS compliant Grok patterns. Use this parameter to specify whether to use ECS Grok patterns instead of legacy ones when the structure finder creates a Grok pattern. Valid values are `disabled` and `v1`. This setting primarily has an impact when a whole message Grok pattern such as `%{CATALINALOG}` matches the input. If the structure finder identifies a common structure but has no idea of meaning then generic field names such as `path`, `ipaddress`, `field1`, and `field2` are used in the `grok_pattern` output, with the intention that a user who knows the meanings rename these fields before using it.
-  --explain: string@bool-completer # If this parameter is set to `true`, the response includes a field named explanation, which is an array of strings that indicate how the structure finder produced its result. If the structure finder produces unexpected results for some text, use this query parameter to help you determine why the returned structure was chosen.
+  --explain: oneof<nothing, bool> # If this parameter is set to `true`, the response includes a field named explanation, which is an array of strings that indicate how the structure finder produced its result. If the structure finder produces unexpected results for some text, use this query parameter to help you determine why the returned structure was chosen.
   --format: string@format-completer-2 # The high level structure of the text. Valid values are `ndjson`, `xml`, `delimited`, and `semi_structured_text`. By default, the API chooses the format. In this default scenario, all rows must have the same number of fields for a delimited format to be detected. If the format is set to `delimited` and the delimiter is not set, however, the API tolerates up to 5% of rows that have a different number of columns than the first row.
   --grok-pattern: string # If you have set `format` to `semi_structured_text`, you can specify a Grok pattern that is used to extract fields from every message in the text. The name of the timestamp field in the Grok pattern must match what is specified in the `timestamp_field` parameter. If that parameter is not specified, the name of the timestamp field in the Grok pattern must match "timestamp". If `grok_pattern` is not specified, the structure finder creates a Grok pattern.
-  --has-header-row: string@bool-completer # If you have set `format` to `delimited`, you can use this parameter to indicate whether the column names are in the first row of the text. If this parameter is not specified, the structure finder guesses based on the similarity of the first row of the text to other rows.
+  --has-header-row: oneof<nothing, bool> # If you have set `format` to `delimited`, you can use this parameter to indicate whether the column names are in the first row of the text. If this parameter is not specified, the structure finder guesses based on the similarity of the first row of the text to other rows.
   --line-merge-size-limit: float # The maximum number of characters in a message when lines are merged to form messages while analyzing semi-structured text. If you have extremely long messages you may need to increase this, but be aware that this may lead to very long processing times if the way to group lines into messages is misdetected.
   --lines-to-sample: float # The number of lines to include in the structural analysis, starting from the beginning of the text. The minimum is 2. If the value of this parameter is greater than the number of lines in the text, the analysis proceeds (as long as there are at least two lines in the text) for all of the lines.  NOTE: The number of lines and the variation of the lines affects the speed of the analysis. For example, if you upload text where the first 1000 lines are all variations on the same message, the analysis will find more commonality than would be seen with a bigger sample. If possible, however, it is more efficient to upload sample text with more variety in the first 1000 lines than to request analysis of 100000 lines to achieve some variety.
   --quote: string # If you have set `format` to `delimited`, you can specify the character used to quote the values in each row if they contain newlines or the delimiter character. Only a single character is supported. If this parameter is not specified, the default value is a double quote (`"`). If your delimited text format does not use quoting, a workaround is to set this argument to a character that does not appear anywhere in the sample.
-  --should-trim-fields: string@bool-completer # If you have set `format` to `delimited`, you can specify whether values between delimiters should have whitespace trimmed from them. If this parameter is not specified and the delimiter is pipe (`|`), the default value is `true`. Otherwise, the default value is `false`.
-  --should-parse-recursively: string@bool-completer # If the format is `ndjson`, you can specify whether to parse nested JSON objects recursively. The nested objects are parsed to a maximum depth equal to the default value of the `index.mapping.depth.limit` setting. Anything beyond that depth is parsed as an `object` type field. For formats other than `ndjson`, this parameter is ignored.
+  --should-trim-fields: oneof<nothing, bool> # If you have set `format` to `delimited`, you can specify whether values between delimiters should have whitespace trimmed from them. If this parameter is not specified and the delimiter is pipe (`|`), the default value is `true`. Otherwise, the default value is `false`.
+  --should-parse-recursively: oneof<nothing, bool> # If the format is `ndjson`, you can specify whether to parse nested JSON objects recursively. The nested objects are parsed to a maximum depth equal to the default value of the `index.mapping.depth.limit` setting. Anything beyond that depth is parsed as an `object` type field. For formats other than `ndjson`, this parameter is ignored.
   --timeout: string # The maximum amount of time that the structure analysis can take. If the analysis is still running when the timeout expires then it will be stopped.
   --timestamp-field: string # The name of the field that contains the primary timestamp of each record in the text. In particular, if the text were ingested into an index, this is the field that would be used to populate the `@timestamp` field.  If the `format` is `semi_structured_text`, this field must match the name of the appropriate extraction in the `grok_pattern`. Therefore, for semi-structured text, it is best not to specify this parameter unless `grok_pattern` is also specified.  For structured text, if you specify this parameter, the field must exist within the text.  If this parameter is not specified, the structure finder makes a decision about which field (if any) is the primary timestamp field. For structured text, it is not compulsory to have a timestamp in the text.
   --timestamp-format: string # The Java time format of the timestamp field in the text.  Only a subset of Java time format letter groups are supported:  * `a` * `d` * `dd` * `EEE` * `EEEE` * `H` * `HH` * `h` * `M` * `MM` * `MMM` * `MMMM` * `mm` * `ss` * `XX` * `XXX` * `yy` * `yyyy` * `zzz`  Additionally `S` letter groups (fractional seconds) of length one to nine are supported providing they occur after `ss` and separated from the `ss` by a `.`, `,` or `:`. Spacing and punctuation is also permitted with the exception of `?`, newline and carriage return, together with literal text enclosed in single quotes. For example, `MM/dd HH.mm.ss,SSSSSS 'in' yyyy` is a valid override format.  One valuable use case for this parameter is when the format is semi-structured text, there are multiple timestamp formats in the text, and you know which format corresponds to the primary timestamp, but you do not want to specify the full `grok_pattern`. Another is when the timestamp format is one that the structure finder does not consider by default.  If this parameter is not specified, the structure finder chooses the best format from a built-in set.  If the special value `null` is specified the structure finder will not look for a primary timestamp in the text. When the format is semi-structured text this will result in the structure finder treating the text as single-line messages.
@@ -23864,10 +23863,10 @@ export def "transform transform-get-transform" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  1. Contains wildcard expressions and there are no transforms that match. 2. Contains the _all string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  If this parameter is false, the request returns a 404 status code when there are no matches or only partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  1. Contains wildcard expressions and there are no transforms that match. 2. Contains the _all string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  If this parameter is false, the request returns a 404 status code when there are no matches or only partial matches.
   --qp-from: float # Skips the specified number of transforms.
   --size: float # Specifies the maximum number of transforms to obtain.
-  --exclude-generated: string@bool-completer # Excludes fields that were automatically added when creating the transform. This allows the configuration to be in an acceptable format to be retrieved and then added to another cluster.
+  --exclude-generated: oneof<nothing, bool> # Excludes fields that were automatically added when creating the transform. This allows the configuration to be in an acceptable format to be retrieved and then added to another cluster.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -23891,7 +23890,7 @@ export def "transform transform-put-transform" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --defer-validation: string@bool-completer # When the transform is created, a series of validations occur to ensure its success. For example, there is a check for the existence of the source indices and a check that the destination index is not part of the source index pattern. You can use this parameter to skip the checks, for example when the source index does not exist until after the transform is created. The validations are always run when you start the transform, however, with the exception of privilege checks.
+  --defer-validation: oneof<nothing, bool> # When the transform is created, a series of validations occur to ensure its success. For example, there is a check for the existence of the source indices and a check that the destination index is not part of the source index pattern. You can use this parameter to skip the checks, for example when the source index does not exist until after the transform is created. The validations are always run when you start the transform, however, with the exception of privilege checks.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   dest: any # The destination for the transform.
   --description: string # Free text description of the transform.
@@ -23929,8 +23928,8 @@ export def "transform transform-delete-transform" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # If this value is false, the transform must be stopped before it can be deleted. If true, the transform is deleted regardless of its current state.
-  --delete-dest-index: string@bool-completer # If this value is true, the destination index is deleted together with the transform. If false, the destination index will not be deleted
+  --force: oneof<nothing, bool> # If this value is false, the transform must be stopped before it can be deleted. If true, the transform is deleted regardless of its current state.
+  --delete-dest-index: oneof<nothing, bool> # If this value is true, the destination index is deleted together with the transform. If false, the destination index will not be deleted
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> record<acknowledged: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -23975,10 +23974,10 @@ export def "transform transform-get-transform-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  1. Contains wildcard expressions and there are no transforms that match. 2. Contains the _all string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  If this parameter is false, the request returns a 404 status code when there are no matches or only partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  1. Contains wildcard expressions and there are no transforms that match. 2. Contains the _all string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  If this parameter is false, the request returns a 404 status code when there are no matches or only partial matches.
   --qp-from: float # Skips the specified number of transforms.
   --size: float # Specifies the maximum number of transforms to obtain.
-  --exclude-generated: string@bool-completer # Excludes fields that were automatically added when creating the transform. This allows the configuration to be in an acceptable format to be retrieved and then added to another cluster.
+  --exclude-generated: oneof<nothing, bool> # Excludes fields that were automatically added when creating the transform. This allows the configuration to be in an acceptable format to be retrieved and then added to another cluster.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -24002,7 +24001,7 @@ export def "transform-stats transform-get-transform-stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request:  1. Contains wildcard expressions and there are no transforms that match. 2. Contains the _all string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  If this parameter is false, the request returns a 404 status code when there are no matches or only partial matches.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request:  1. Contains wildcard expressions and there are no transforms that match. 2. Contains the _all string or no identifiers and there are no matches. 3. Contains wildcard expressions and there are only partial matches.  If this parameter is false, the request returns a 404 status code when there are no matches or only partial matches.
   --qp-from: float # Skips the specified number of transforms.
   --size: float # Specifies the maximum number of transforms to obtain.
   --timeout: string # Controls the time to wait for the stats
@@ -24171,7 +24170,7 @@ export def "transform-reset transform-reset-transform" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # If this value is `true`, the transform is reset regardless of its current state. If it's `false`, the transform must be stopped before it can be reset.
+  --force: oneof<nothing, bool> # If this value is `true`, the transform is reset regardless of its current state. If it's `false`, the transform must be stopped before it can be reset.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> record<acknowledged: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -24197,7 +24196,7 @@ export def "transform-schedule-now transform-schedule-now-transform" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --timeout: string # Controls the time to wait for the scheduling to take place
-  --defer: string@bool-completer # When true, defers the scheduling by the transform's configured sync delay instead of triggering immediately. The transform will process new data after the delay elapses rather than right away.
+  --defer: oneof<nothing, bool> # When true, defers the scheduling by the transform's configured sync delay instead of triggering immediately. The transform will process new data after the delay elapses rather than right away.
 ]: nothing -> record<acknowledged: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -24220,7 +24219,7 @@ export def "transform-set-upgrade-mode transform-set-upgrade-mode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # When `true`, it enables `upgrade_mode` which temporarily halts all transform tasks and prohibits new transform tasks from starting.
+  --enabled: oneof<nothing, bool> # When `true`, it enables `upgrade_mode` which temporarily halts all transform tasks and prohibits new transform tasks from starting.
   --timeout: string # The time to wait for the request to be completed.
 ]: nothing -> record<acknowledged: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -24270,11 +24269,11 @@ export def "transform-stop transform-stop-transform" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-match: string@bool-completer # Specifies what to do when the request: contains wildcard expressions and there are no transforms that match; contains the `_all` string or no identifiers and there are no matches; contains wildcard expressions and there are only partial matches.  If it is true, the API returns a successful acknowledgement message when there are no matches. When there are only partial matches, the API stops the appropriate transforms.  If it is false, the request returns a 404 status code when there are no matches or only partial matches.
-  --force: string@bool-completer # If it is true, the API forcefully stops the transforms.
+  --allow-no-match: oneof<nothing, bool> # Specifies what to do when the request: contains wildcard expressions and there are no transforms that match; contains the `_all` string or no identifiers and there are no matches; contains wildcard expressions and there are only partial matches.  If it is true, the API returns a successful acknowledgement message when there are no matches. When there are only partial matches, the API stops the appropriate transforms.  If it is false, the request returns a 404 status code when there are no matches or only partial matches.
+  --force: oneof<nothing, bool> # If it is true, the API forcefully stops the transforms.
   --timeout: string # Period to wait for a response when `wait_for_completion` is `true`. If no response is received before the timeout expires, the request returns a timeout exception. However, the request continues processing and eventually moves the transform to a STOPPED state.
-  --wait-for-checkpoint: string@bool-completer # If it is true, the transform does not completely stop until the current checkpoint is completed. If it is false, the transform stops as soon as possible.
-  --wait-for-completion: string@bool-completer # If it is true, the API blocks until the indexer state completely stops. If it is false, the API returns immediately and the indexer is stopped asynchronously in the background.
+  --wait-for-checkpoint: oneof<nothing, bool> # If it is true, the transform does not completely stop until the current checkpoint is completed. If it is false, the transform stops as soon as possible.
+  --wait-for-completion: oneof<nothing, bool> # If it is true, the API blocks until the indexer state completely stops. If it is false, the API returns immediately and the indexer is stopped asynchronously in the background.
 ]: nothing -> record<acknowledged: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -24298,7 +24297,7 @@ export def "transform-update transform-update-transform" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --defer-validation: string@bool-completer # When true, deferrable validations are not run. This behavior may be desired if the source index does not exist until after the transform is created.
+  --defer-validation: oneof<nothing, bool> # When true, deferrable validations are not run. This behavior may be desired if the source index does not exist until after the transform is created.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
   --dest: any # The destination for the transform.
   --description: string # Free text description of the transform.
@@ -24333,7 +24332,7 @@ export def "transform-upgrade transform-upgrade-transforms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dry-run: string@bool-completer # When true, the request checks for updates but does not run them.
+  --dry-run: oneof<nothing, bool> # When true, the request checks for updates but does not run them.
   --timeout: string # Period to wait for a response. If no response is received before the timeout expires, the request fails and returns an error.
 ]: nothing -> record<needs_update: float, no_action: float, updated: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -24362,10 +24361,10 @@ export def "update update" [
   --allow-errors(-e) # Return full response without error handling
   --if-primary-term: float # Only perform the operation if the document has this primary term.
   --if-seq-no: float # Only perform the operation if the document has this sequence number.
-  --include-source-on-error: string@bool-completer # True or false if to include the document source in the error message in case of parsing errors.
+  --include-source-on-error: oneof<nothing, bool> # True or false if to include the document source in the error message in case of parsing errors.
   --lang: string # The script language.
   --refresh: string@refresh-completer # If 'true', Elasticsearch refreshes the affected shards to make this operation visible to search. If 'wait_for', it waits for a refresh to make this operation visible to search. If 'false', it does nothing with refreshes.
-  --require-alias: string@bool-completer # If `true`, the destination must be an index alias.
+  --require-alias: oneof<nothing, bool> # If `true`, the destination must be an index alias.
   --retry-on-conflict: float # The number of times the operation should be retried when a conflict occurs.
   --routing: string # A custom value used to route operations to a specific shard.
   --timeout: string # The period to wait for the following operations: dynamic mapping updates and waiting for active shards. Elasticsearch waits for at least the timeout period before failing. The actual wait time could be longer, particularly when multiple waits occur.
@@ -24373,11 +24372,11 @@ export def "update update" [
   --qp-source: string # If `false`, source retrieval is turned off. You can also specify a comma-separated list of the fields you want to retrieve.
   --source-excludes: string # The source fields you want to exclude.
   --source-includes: string # The source fields you want to retrieve.
-  --detect-noop: string@bool-completer # If `true`, the `result` in the response is set to `noop` (no operation) when there are no changes to the document. (default: true)
+  --detect-noop: oneof<nothing, bool> # If `true`, the `result` in the response is set to `noop` (no operation) when there are no changes to the document. (default: true)
   --doc: record # A partial update to an existing document. If both `doc` and `script` are specified, `doc` is ignored.
-  --doc-as-upsert: string@bool-completer # If `true`, use the contents of 'doc' as the value of 'upsert'. NOTE: Using ingest pipelines with `doc_as_upsert` is not supported. (default: false)
+  --doc-as-upsert: oneof<nothing, bool> # If `true`, use the contents of 'doc' as the value of 'upsert'. NOTE: Using ingest pipelines with `doc_as_upsert` is not supported. (default: false)
   --script: any # The script to run to update the document.
-  --scripted-upsert: string@bool-completer # If `true`, run the script whether or not the document exists. (default: false)
+  --scripted-upsert: oneof<nothing, bool> # If `true`, run the script whether or not the document exists. (default: false)
   --body-source: any # If `false`, turn off source retrieval. You can also specify a comma-separated list of the fields you want to retrieve. (default: true)
   --upsert: record # If the document does not already exist, the contents of 'upsert' are inserted as a new document. If the document exists, the 'script' is run.
 ]: any -> record<_id: record, _index: record, _primary_term: float, result: record, _seq_no: record, _shards: record<failed: record, successful: record, total: record, failures: list<record>, skipped: record>, _version: record, failure_store: record, forced_refresh: bool, get: record<fields: record, found: bool, _seq_no: record, _primary_term: float, _routing: record, _source: record>> {
@@ -24407,22 +24406,22 @@ export def "update-by-query update-by-query" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
+  --allow-no-indices: oneof<nothing, bool> # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --analyzer: string # The analyzer to use for the query string. This parameter can be used only when the `q` query string parameter is specified.
-  --analyze-wildcard: string@bool-completer # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
+  --analyze-wildcard: oneof<nothing, bool> # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
   --conflicts: string@conflicts-completer # The preferred behavior when update by query hits version conflicts: `abort` or `proceed`.
   --default-operator: string@default-operator-completer # The default operator for query string query: `and` or `or`. This parameter can be used only when the `q` query string parameter is specified.
   --df: string # The field to use as default where no field prefix is given in the query string. This parameter can be used only when the `q` query string parameter is specified.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. It supports comma-separated values, such as `open,hidden`.
   --qp-from: float # Skips the specified number of documents.
-  --ignore-unavailable: string@bool-completer # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
-  --lenient: string@bool-completer # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
+  --ignore-unavailable: oneof<nothing, bool> # If `false`, the request returns an error if it targets a concrete (non-wildcarded) index, alias, or data stream that is missing, closed, or otherwise unavailable. If `true`, unavailable concrete targets are silently ignored.
+  --lenient: oneof<nothing, bool> # If `true`, format-based query failures (such as providing text to a numeric field) in the query string will be ignored. This parameter can be used only when the `q` query string parameter is specified.
   --max-docs: float # The maximum number of documents to process. It defaults to all documents. When set to a value less than or equal to `scroll_size` and `conflicts` is set to `abort`, a scroll will not be used to retrieve the results for the operation.
   --pipeline: string # The ID of the pipeline to use to preprocess incoming documents. If the index has a default ingest pipeline specified, then setting the value to `_none` disables the default ingest pipeline for this request. If a final pipeline is configured it will always run, regardless of the value of this parameter.
   --preference: string # The node or shard the operation should be performed on. It is random by default.
   --q: string # A query in the Lucene query string syntax.
-  --refresh: string@bool-completer # If `true`, Elasticsearch refreshes affected shards to make the operation visible to search after the request completes. This is different than the update API's `refresh` parameter, which causes just the shard that received the request to be refreshed.
-  --request-cache: string@bool-completer # If `true`, the request cache is used for this request. It defaults to the index-level setting.
+  --refresh: oneof<nothing, bool> # If `true`, Elasticsearch refreshes affected shards to make the operation visible to search after the request completes. This is different than the update API's `refresh` parameter, which causes just the shard that received the request to be refreshed.
+  --request-cache: oneof<nothing, bool> # If `true`, the request cache is used for this request. It defaults to the index-level setting.
   --requests-per-second: float # The maximum number of documents to update per second, across the entire update_by_query operation (including slices). It can be either `-1` to turn off throttling or any decimal number like `1.7` or `12` to throttle to that level.
   --routing: string # A custom value used to route operations to a specific shard.
   --scroll: string # The period to retain the search context for scrolling.
@@ -24434,10 +24433,10 @@ export def "update-by-query update-by-query" [
   --stats: list # The specific `tag` of the request for logging and statistical purposes.
   --terminate-after: float # The maximum number of documents to collect for each shard. If a query reaches this limit, Elasticsearch terminates the query early. Elasticsearch collects documents before sorting.  IMPORTANT: Use with caution. Elasticsearch applies this parameter to each shard handling the request. When possible, let Elasticsearch perform early termination automatically. Avoid specifying this parameter for requests that target data streams with backing indices across multiple data tiers.
   --timeout: string # The period each update request waits for the following operations: dynamic mapping updates, waiting for active shards. By default, it is one minute. This guarantees Elasticsearch waits for at least the timeout before failing. The actual wait time could be longer, particularly when multiple waits occur.
-  --version: string@bool-completer # If `true`, returns the document version as part of a hit.
-  --version-type: string@bool-completer # Should the document increment the version number (internal) on hit or not (reindex)
+  --version: oneof<nothing, bool> # If `true`, returns the document version as part of a hit.
+  --version-type: oneof<nothing, bool> # Should the document increment the version number (internal) on hit or not (reindex)
   --wait-for-active-shards: string # The number of shard copies that must be active before proceeding with the operation. Set to `all` or any positive integer up to the total number of shards in the index (`number_of_replicas+1`). The `timeout` parameter controls how long each write request waits for unavailable shards to become available. Both work exactly the way they work in the bulk API.
-  --wait-for-completion: string@bool-completer # If `true`, the request blocks until the operation is complete. If `false`, Elasticsearch performs some preflight checks, launches the request, and returns a task ID that you can use to cancel or get the status of the task. Elasticsearch creates a record of this task as a document at `.tasks/task/${taskId}`.
+  --wait-for-completion: oneof<nothing, bool> # If `true`, the request blocks until the operation is complete. If `false`, Elasticsearch performs some preflight checks, launches the request, and returns a task ID that you can use to cancel or get the status of the task. Elasticsearch creates a record of this task as a document at `.tasks/task/${taskId}`.
   --max-docs: float # The maximum number of documents to update.
   --body-query: any # The documents to update using the Query DSL.
   --script: any # The script to run to update the document source or metadata when updating.
@@ -24701,7 +24700,7 @@ export def "watcher-watch watcher-put-watch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # The initial state of the watch. The default value is `true`, which means the watch is active by default.
+  --active: oneof<nothing, bool> # The initial state of the watch. The default value is `true`, which means the watch is active by default.
   --if-primary-term: float # Only update the watch if the last operation that has changed the watch has the specified primary term
   --if-seq-no: float # Only update the watch if the last operation that has changed the watch has the specified sequence number
   --version: float # Explicit version number for concurrency control
@@ -24739,7 +24738,7 @@ export def "watcher-watch watcher-put-watch-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # The initial state of the watch. The default value is `true`, which means the watch is active by default.
+  --active: oneof<nothing, bool> # The initial state of the watch. The default value is `true`, which means the watch is active by default.
   --if-primary-term: float # Only update the watch if the last operation that has changed the watch has the specified primary term
   --if-seq-no: float # Only update the watch if the last operation that has changed the watch has the specified sequence number
   --version: float # Explicit version number for concurrency control
@@ -24800,11 +24799,11 @@ export def "watcher-watch-execute watcher-execute-watch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --debug: string@bool-completer # Defines whether the watch runs in debug mode.
+  --debug: oneof<nothing, bool> # Defines whether the watch runs in debug mode.
   --action-modes: record # Determines how to handle the watch actions as part of the watch execution.
   --alternative-input: record # When present, the watch uses this object as a payload instead of executing its own input.
-  --ignore-condition: string@bool-completer # When set to `true`, the watch execution uses the always condition. This can also be specified as an HTTP parameter. (default: false)
-  --record-execution: string@bool-completer # When set to `true`, the watch record representing the watch execution result is persisted to the `.watcher-history` index for the current time. In addition, the status of the watch is updated, possibly throttling subsequent runs. This can also be specified as an HTTP parameter. (default: false)
+  --ignore-condition: oneof<nothing, bool> # When set to `true`, the watch execution uses the always condition. This can also be specified as an HTTP parameter. (default: false)
+  --record-execution: oneof<nothing, bool> # When set to `true`, the watch record representing the watch execution result is persisted to the `.watcher-history` index for the current time. In addition, the status of the watch is updated, possibly throttling subsequent runs. This can also be specified as an HTTP parameter. (default: false)
   --simulated-actions: any
   --trigger-data: any # This structure is parsed as the data of the trigger event that will be used during the watch execution.
   --watch: any # When present, this watch is used instead of the one specified in the request. This watch is not persisted to the index and `record_execution` cannot be set. (default: null)
@@ -24835,11 +24834,11 @@ export def "watcher-watch-execute watcher-execute-watch-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --debug: string@bool-completer # Defines whether the watch runs in debug mode.
+  --debug: oneof<nothing, bool> # Defines whether the watch runs in debug mode.
   --action-modes: record # Determines how to handle the watch actions as part of the watch execution.
   --alternative-input: record # When present, the watch uses this object as a payload instead of executing its own input.
-  --ignore-condition: string@bool-completer # When set to `true`, the watch execution uses the always condition. This can also be specified as an HTTP parameter. (default: false)
-  --record-execution: string@bool-completer # When set to `true`, the watch record representing the watch execution result is persisted to the `.watcher-history` index for the current time. In addition, the status of the watch is updated, possibly throttling subsequent runs. This can also be specified as an HTTP parameter. (default: false)
+  --ignore-condition: oneof<nothing, bool> # When set to `true`, the watch execution uses the always condition. This can also be specified as an HTTP parameter. (default: false)
+  --record-execution: oneof<nothing, bool> # When set to `true`, the watch record representing the watch execution result is persisted to the `.watcher-history` index for the current time. In addition, the status of the watch is updated, possibly throttling subsequent runs. This can also be specified as an HTTP parameter. (default: false)
   --simulated-actions: any
   --trigger-data: any # This structure is parsed as the data of the trigger event that will be used during the watch execution.
   --watch: any # When present, this watch is used instead of the one specified in the request. This watch is not persisted to the index and `record_execution` cannot be set. (default: null)
@@ -24869,11 +24868,11 @@ export def "watcher-watch-execute watcher-execute-watch-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --debug: string@bool-completer # Defines whether the watch runs in debug mode.
+  --debug: oneof<nothing, bool> # Defines whether the watch runs in debug mode.
   --action-modes: record # Determines how to handle the watch actions as part of the watch execution.
   --alternative-input: record # When present, the watch uses this object as a payload instead of executing its own input.
-  --ignore-condition: string@bool-completer # When set to `true`, the watch execution uses the always condition. This can also be specified as an HTTP parameter. (default: false)
-  --record-execution: string@bool-completer # When set to `true`, the watch record representing the watch execution result is persisted to the `.watcher-history` index for the current time. In addition, the status of the watch is updated, possibly throttling subsequent runs. This can also be specified as an HTTP parameter. (default: false)
+  --ignore-condition: oneof<nothing, bool> # When set to `true`, the watch execution uses the always condition. This can also be specified as an HTTP parameter. (default: false)
+  --record-execution: oneof<nothing, bool> # When set to `true`, the watch record representing the watch execution result is persisted to the `.watcher-history` index for the current time. In addition, the status of the watch is updated, possibly throttling subsequent runs. This can also be specified as an HTTP parameter. (default: false)
   --simulated-actions: any
   --trigger-data: any # This structure is parsed as the data of the trigger event that will be used during the watch execution.
   --watch: any # When present, this watch is used instead of the one specified in the request. This watch is not persisted to the index and `record_execution` cannot be set. (default: null)
@@ -24903,11 +24902,11 @@ export def "watcher-watch-execute watcher-execute-watch-3" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --debug: string@bool-completer # Defines whether the watch runs in debug mode.
+  --debug: oneof<nothing, bool> # Defines whether the watch runs in debug mode.
   --action-modes: record # Determines how to handle the watch actions as part of the watch execution.
   --alternative-input: record # When present, the watch uses this object as a payload instead of executing its own input.
-  --ignore-condition: string@bool-completer # When set to `true`, the watch execution uses the always condition. This can also be specified as an HTTP parameter. (default: false)
-  --record-execution: string@bool-completer # When set to `true`, the watch record representing the watch execution result is persisted to the `.watcher-history` index for the current time. In addition, the status of the watch is updated, possibly throttling subsequent runs. This can also be specified as an HTTP parameter. (default: false)
+  --ignore-condition: oneof<nothing, bool> # When set to `true`, the watch execution uses the always condition. This can also be specified as an HTTP parameter. (default: false)
+  --record-execution: oneof<nothing, bool> # When set to `true`, the watch record representing the watch execution result is persisted to the `.watcher-history` index for the current time. In addition, the status of the watch is updated, possibly throttling subsequent runs. This can also be specified as an HTTP parameter. (default: false)
   --simulated-actions: any
   --trigger-data: any # This structure is parsed as the data of the trigger event that will be used during the watch execution.
   --watch: any # When present, this watch is used instead of the one specified in the request. This watch is not persisted to the index and `record_execution` cannot be set. (default: null)
@@ -25069,7 +25068,7 @@ export def "watcher-stats watcher-stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --emit-stacktraces: string@bool-completer # Defines whether stack traces are generated for each watch that is running.
+  --emit-stacktraces: oneof<nothing, bool> # Defines whether stack traces are generated for each watch that is running.
   --metric: string # Defines which additional metrics are included in the response.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -25094,7 +25093,7 @@ export def "watcher-stats watcher-stats-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --emit-stacktraces: string@bool-completer # Defines whether stack traces are generated for each watch that is running.
+  --emit-stacktraces: oneof<nothing, bool> # Defines whether stack traces are generated for each watch that is running.
   --metric: string # Defines which additional metrics are included in the response.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -25143,8 +25142,8 @@ export def "xpack xpack-info" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --categories: list # A comma-separated list of the information categories to include in the response. For example, `build,license,features`.
-  --accept-enterprise: string@bool-completer # If used, this otherwise ignored parameter must be set to true (DEPRECATED)
-  --human: string@bool-completer # Defines whether additional human-readable information is included in the response. In particular, it adds descriptions and a tag line.
+  --accept-enterprise: oneof<nothing, bool> # If used, this otherwise ignored parameter must be set to true (DEPRECATED)
+  --human: oneof<nothing, bool> # Defines whether additional human-readable information is included in the response. In particular, it adds descriptions and a tag line.
 ]: nothing -> record<build: record<date: record, hash: string>, features: record<aggregate_metric: record<available: bool, description: string, enabled: bool, native_code_info: record>, analytics: record<available: bool, description: string, enabled: bool, native_code_info: record>, ccr: record<available: bool, description: string, enabled: bool, native_code_info: record>, data_streams: record<available: bool, description: string, enabled: bool, native_code_info: record>, data_tiers: record<available: bool, description: string, enabled: bool, native_code_info: record>, enrich: record<available: bool, description: string, enabled: bool, native_code_info: record>, enterprise_search: record<available: bool, description: string, enabled: bool, native_code_info: record>, eql: record<available: bool, description: string, enabled: bool, native_code_info: record>, esql: record<available: bool, description: string, enabled: bool, native_code_info: record>, graph: record<available: bool, description: string, enabled: bool, native_code_info: record>, gpu_vector_indexing: record<available: bool, description: string, enabled: bool, native_code_info: record>, ilm: record<available: bool, description: string, enabled: bool, native_code_info: record>, logstash: record<available: bool, description: string, enabled: bool, native_code_info: record>, logsdb: record<available: bool, description: string, enabled: bool, native_code_info: record>, ml: record<available: bool, description: string, enabled: bool, native_code_info: record>, monitoring: record<available: bool, description: string, enabled: bool, native_code_info: record>, rollup: record<available: bool, description: string, enabled: bool, native_code_info: record>, runtime_fields: record<available: bool, description: string, enabled: bool, native_code_info: record>, searchable_snapshots: record<available: bool, description: string, enabled: bool, native_code_info: record>, security: record<available: bool, description: string, enabled: bool, native_code_info: record>, slm: record<available: bool, description: string, enabled: bool, native_code_info: record>, spatial: record<available: bool, description: string, enabled: bool, native_code_info: record>, sql: record<available: bool, description: string, enabled: bool, native_code_info: record>, transform: record<available: bool, description: string, enabled: bool, native_code_info: record>, universal_profiling: record<available: bool, description: string, enabled: bool, native_code_info: record>, voting_only: record<available: bool, description: string, enabled: bool, native_code_info: record>, watcher: record<available: bool, description: string, enabled: bool, native_code_info: record>, archive: record<available: bool, description: string, enabled: bool, native_code_info: record>>, license: record<expiry_date_in_millis: record, mode: record, status: record, type: record, uid: string>, tagline: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

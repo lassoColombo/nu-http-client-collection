@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://agent.deepgram.com" "https://api.deepgram.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -415,40 +414,40 @@ export def "listen transcribe" [
   --callback: string # URL to which we'll make the callback request
   --callback-method: string@callback-method-completer # HTTP method by which the callback request will be made (default: POST)
   --extra: string # Arbitrary key-value pairs that are attached to the API response for usage in downstream processing
-  --sentiment: string@bool-completer # Recognizes the sentiment throughout a transcript or text (default: false)
+  --sentiment: oneof<nothing, bool> # Recognizes the sentiment throughout a transcript or text (default: false)
   --summarize: string # Summarize content. For Listen API, supports string version option. For Read API, accepts boolean only.
   --tag: string # Label your requests for the purpose of identification during usage reporting
-  --topics: string@bool-completer # Detect topics throughout a transcript or text (default: false)
+  --topics: oneof<nothing, bool> # Detect topics throughout a transcript or text (default: false)
   --custom-topic: string # Custom topics you want the model to detect within your input audio or text if present Submit up to `100`.
   --custom-topic-mode: string@custom-topic-mode-completer # Sets how the model will interpret strings submitted to the `custom_topic` param. When `strict`, the model will only return topics submitted using the `custom_topic` param. When `extended`, the model will return its own detected topics in addition to those submitted using the `custom_topic` param (default: extended)
-  --intents: string@bool-completer # Recognizes speaker intent throughout a transcript or text (default: false)
+  --intents: oneof<nothing, bool> # Recognizes speaker intent throughout a transcript or text (default: false)
   --custom-intent: string # Custom intents you want the model to detect within your input audio if present
   --custom-intent-mode: string@custom-intent-mode-completer # Sets how the model will interpret intents submitted to the `custom_intent` param. When `strict`, the model will only return intents submitted using the `custom_intent` param. When `extended`, the model will return its own detected intents in the `custom_intent` param. (default: extended)
-  --detect-entities: string@bool-completer # Identifies and extracts key entities from content in submitted audio (default: false)
+  --detect-entities: oneof<nothing, bool> # Identifies and extracts key entities from content in submitted audio (default: false)
   --detect-language: string # Identifies the dominant language spoken in submitted audio
-  --diarize: string@bool-completer # Recognize speaker changes. Each word in the transcript will be assigned a speaker number starting at 0 (default: false)
-  --diarize-model: string@diarize-model-completer # Select and enable a specific batch diarization model version. If specifying this parameter, you should not set the deprecated `diarize=true` parameter. Not accepted on streaming requests.
-  --dictation: string@bool-completer # Dictation mode for controlling formatting with dictated speech (default: false)
+  --diarize: oneof<nothing, bool> # Deprecated: use `diarize_model` instead. Recognize speaker changes. Each word in the transcript will be assigned a speaker number starting at 0. (default: false)
+  --diarize-model: string@diarize-model-completer # Select and enable a specific diarization model version. Specifying this parameter enables diarization and selects the model — you do not need to also set the deprecated `diarize=true` parameter. For batch, supported values are `latest` (currently v2), `v1`, and `v2`. For streaming, supported values are `latest` (currently v1) and `v1`; `v2` returns a validation error on streaming requests.
+  --dictation: oneof<nothing, bool> # Dictation mode for controlling formatting with dictated speech (default: false)
   --encoding: string@encoding-completer # Specify the expected encoding of your submitted audio
-  --filler-words: string@bool-completer # Filler Words can help transcribe interruptions in your audio, like "uh" and "um" (default: false)
+  --filler-words: oneof<nothing, bool> # Filler Words can help transcribe interruptions in your audio, like "uh" and "um" (default: false)
   --keyterm: list # Key term prompting can boost or suppress specialized terminology and brands. Only compatible with Nova-3
   --keywords: string # Keywords can boost or suppress specialized terminology and brands
   --language: string # The [BCP-47 language tag](https://tools.ietf.org/html/bcp47) that hints at the primary spoken language. Depending on the Model and API endpoint you choose only certain languages are available (default: en)
-  --measurements: string@bool-completer # Spoken measurements will be converted to their corresponding abbreviations (default: false)
+  --measurements: oneof<nothing, bool> # Spoken measurements will be converted to their corresponding abbreviations (default: false)
   --model: string # AI model used to process submitted audio
-  --multichannel: string@bool-completer # Transcribe each audio channel independently (default: false)
-  --numerals: string@bool-completer # Numerals converts numbers from written format to numerical format (default: false)
-  --paragraphs: string@bool-completer # Splits audio into paragraphs to improve transcript readability (default: false)
-  --profanity-filter: string@bool-completer # Profanity Filter looks for recognized profanity and converts it to the nearest recognized non-profane word or removes it from the transcript completely (default: false)
-  --punctuate: string@bool-completer # Add punctuation and capitalization to the transcript (default: false)
+  --multichannel: oneof<nothing, bool> # Transcribe each audio channel independently (default: false)
+  --numerals: oneof<nothing, bool> # Numerals converts numbers from written format to numerical format (default: false)
+  --paragraphs: oneof<nothing, bool> # Splits audio into paragraphs to improve transcript readability (default: false)
+  --profanity-filter: oneof<nothing, bool> # Profanity Filter looks for recognized profanity and converts it to the nearest recognized non-profane word or removes it from the transcript completely (default: false)
+  --punctuate: oneof<nothing, bool> # Add punctuation and capitalization to the transcript (default: false)
   --redact: string # Redaction removes sensitive information from your transcripts
   --replace: string # Search for terms or phrases in submitted audio and replaces them
   --search: string # Search for terms or phrases in submitted audio
-  --smart-format: string@bool-completer # Apply formatting to transcript output. When set to true, additional formatting will be applied to transcripts to improve readability (default: false)
-  --utterances: string@bool-completer # Segments speech into meaningful semantic units (default: false)
+  --smart-format: oneof<nothing, bool> # Apply formatting to transcript output. When set to true, additional formatting will be applied to transcripts to improve readability (default: false)
+  --utterances: oneof<nothing, bool> # Segments speech into meaningful semantic units (default: false)
   --utt-split: float # Seconds to wait before detecting a pause between words in submitted audio (format: double, default: 0.8)
   --version: string # Version of an AI model to use
-  --mip-opt-out: string@bool-completer # Opts out requests from the Deepgram Model Improvement Program. Refer to our Docs for pricing impacts before setting this to true. https://dpgr.am/deepgram-mip (default: false)
+  --mip-opt-out: oneof<nothing, bool> # Opts out requests from the Deepgram Model Improvement Program. Refer to our Docs for pricing impacts before setting this to true. https://dpgr.am/deepgram-mip (default: false)
   --Authorization: string # Use `Authorization: Token <API_KEY>` Example: `Authorization: Token 12345abcdef`
   --body-url: string # format: uri
 ]: any -> any {
@@ -480,7 +479,7 @@ export def "speak generate" [
   --allow-errors(-e) # Return full response without error handling
   --callback: string # URL to which we'll make the callback request
   --callback-method: string@callback-method-completer # HTTP method by which the callback request will be made (default: POST)
-  --mip-opt-out: string@bool-completer # Opts out requests from the Deepgram Model Improvement Program. Refer to our Docs for pricing impacts before setting this to true. https://dpgr.am/deepgram-mip (default: false)
+  --mip-opt-out: oneof<nothing, bool> # Opts out requests from the Deepgram Model Improvement Program. Refer to our Docs for pricing impacts before setting this to true. https://dpgr.am/deepgram-mip (default: false)
   --tag: string # Label your requests for the purpose of identification during usage reporting
   --bit-rate: string # The bitrate of the audio in bits per second. Choose from predefined ranges or specific values based on the encoding type.
   --container: string # Container specifies the file format wrapper for the output audio. The available options depend on the encoding type.
@@ -519,13 +518,13 @@ export def "read analyze" [
   --allow-errors(-e) # Return full response without error handling
   --callback: string # URL to which we'll make the callback request
   --callback-method: string@callback-method-completer # HTTP method by which the callback request will be made (default: POST)
-  --sentiment: string@bool-completer # Recognizes the sentiment throughout a transcript or text (default: false)
+  --sentiment: oneof<nothing, bool> # Recognizes the sentiment throughout a transcript or text (default: false)
   --summarize: string # Summarize content. For Listen API, supports string version option. For Read API, accepts boolean only.
   --tag: string # Label your requests for the purpose of identification during usage reporting
-  --topics: string@bool-completer # Detect topics throughout a transcript or text (default: false)
+  --topics: oneof<nothing, bool> # Detect topics throughout a transcript or text (default: false)
   --custom-topic: string # Custom topics you want the model to detect within your input audio or text if present Submit up to `100`.
   --custom-topic-mode: string@custom-topic-mode-completer # Sets how the model will interpret strings submitted to the `custom_topic` param. When `strict`, the model will only return topics submitted using the `custom_topic` param. When `extended`, the model will return its own detected topics in addition to those submitted using the `custom_topic` param (default: extended)
-  --intents: string@bool-completer # Recognizes speaker intent throughout a transcript or text (default: false)
+  --intents: oneof<nothing, bool> # Recognizes speaker intent throughout a transcript or text (default: false)
   --custom-intent: string # Custom intents you want the model to detect within your input audio if present
   --custom-intent-mode: string@custom-intent-mode-completer # Sets how the model will interpret intents submitted to the `custom_intent` param. When `strict`, the model will only return intents submitted using the `custom_intent` param. When `extended`, the model will return its own detected intents in the `custom_intent` param. (default: extended)
   --language: string # The [BCP-47 language tag](https://tools.ietf.org/html/bcp47) that hints at the primary spoken language. Depending on the Model and API endpoint you choose only certain languages are available (default: en)
@@ -691,7 +690,7 @@ export def "projects-models list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-outdated: string@bool-completer # returns non-latest versions of models
+  --include-outdated: oneof<nothing, bool> # returns non-latest versions of models
   --Authorization: string # Use `Authorization: Token <API_KEY>` Example: `Authorization: Token 12345abcdef`
 ]: nothing -> record<stt: table<name: string, canonical_name: string, architecture: string, languages: list, version: string, uuid: string, batch: bool, streaming: bool, formatted_output: bool>, tts: table<name: string, canonical_name: string, architecture: string, languages: list, version: string, uuid: string, metadata: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -743,7 +742,7 @@ export def "models list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-outdated: string@bool-completer # returns non-latest versions of models
+  --include-outdated: oneof<nothing, bool> # returns non-latest versions of models
   --Authorization: string # Use `Authorization: Token <API_KEY>` Example: `Authorization: Token 12345abcdef`
 ]: nothing -> record<stt: table<name: string, canonical_name: string, architecture: string, languages: list, version: string, uuid: string, batch: bool, streaming: bool, formatted_output: bool>, tts: table<name: string, canonical_name: string, architecture: string, languages: list, version: string, uuid: string, metadata: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1155,47 +1154,47 @@ export def "projects-usage get" [
   --start: string # Start date of the requested date range. Format accepted is YYYY-MM-DD (format: date)
   --end: string # End date of the requested date range. Format accepted is YYYY-MM-DD (format: date)
   --accessor: string # Filter for requests where a specific accessor was used
-  --alternatives: string@bool-completer # Filter for requests where alternatives were used
-  --callback-method: string@bool-completer # Filter for requests where callback method was used
-  --callback: string@bool-completer # Filter for requests where callback was used
-  --channels: string@bool-completer # Filter for requests where channels were used
-  --custom-intent-mode: string@bool-completer # Filter for requests where custom intent mode was used
-  --custom-intent: string@bool-completer # Filter for requests where custom intent was used
-  --custom-topic-mode: string@bool-completer # Filter for requests where custom topic mode was used
-  --custom-topic: string@bool-completer # Filter for requests where custom topic was used
+  --alternatives: oneof<nothing, bool> # Filter for requests where alternatives were used
+  --callback-method: oneof<nothing, bool> # Filter for requests where callback method was used
+  --callback: oneof<nothing, bool> # Filter for requests where callback was used
+  --channels: oneof<nothing, bool> # Filter for requests where channels were used
+  --custom-intent-mode: oneof<nothing, bool> # Filter for requests where custom intent mode was used
+  --custom-intent: oneof<nothing, bool> # Filter for requests where custom intent was used
+  --custom-topic-mode: oneof<nothing, bool> # Filter for requests where custom topic mode was used
+  --custom-topic: oneof<nothing, bool> # Filter for requests where custom topic was used
   --deployment: string@deployment-completer # Filter for requests where a specific deployment was used
-  --detect-entities: string@bool-completer # Filter for requests where detect entities was used
-  --detect-language: string@bool-completer # Filter for requests where detect language was used
-  --diarize: string@bool-completer # Filter for requests where diarize was used
-  --dictation: string@bool-completer # Filter for requests where dictation was used
-  --encoding: string@bool-completer # Filter for requests where encoding was used
+  --detect-entities: oneof<nothing, bool> # Filter for requests where detect entities was used
+  --detect-language: oneof<nothing, bool> # Filter for requests where detect language was used
+  --diarize: oneof<nothing, bool> # Filter for requests where diarize was used
+  --dictation: oneof<nothing, bool> # Filter for requests where dictation was used
+  --encoding: oneof<nothing, bool> # Filter for requests where encoding was used
   --endpoint: string@endpoint-completer # Filter for requests where a specific endpoint was used
-  --extra: string@bool-completer # Filter for requests where extra was used
-  --filler-words: string@bool-completer # Filter for requests where filler words was used
-  --intents: string@bool-completer # Filter for requests where intents was used
-  --keyterm: string@bool-completer # Filter for requests where keyterm was used
-  --keywords: string@bool-completer # Filter for requests where keywords was used
-  --language: string@bool-completer # Filter for requests where language was used
-  --measurements: string@bool-completer # Filter for requests where measurements were used
+  --extra: oneof<nothing, bool> # Filter for requests where extra was used
+  --filler-words: oneof<nothing, bool> # Filter for requests where filler words was used
+  --intents: oneof<nothing, bool> # Filter for requests where intents was used
+  --keyterm: oneof<nothing, bool> # Filter for requests where keyterm was used
+  --keywords: oneof<nothing, bool> # Filter for requests where keywords was used
+  --language: oneof<nothing, bool> # Filter for requests where language was used
+  --measurements: oneof<nothing, bool> # Filter for requests where measurements were used
   --method: string@method-completer # Filter for requests where a specific method was used
   --model: string # Filter for requests where a specific model uuid was used
-  --multichannel: string@bool-completer # Filter for requests where multichannel was used
-  --numerals: string@bool-completer # Filter for requests where numerals were used
-  --paragraphs: string@bool-completer # Filter for requests where paragraphs were used
-  --profanity-filter: string@bool-completer # Filter for requests where profanity filter was used
-  --punctuate: string@bool-completer # Filter for requests where punctuate was used
-  --redact: string@bool-completer # Filter for requests where redact was used
-  --replace: string@bool-completer # Filter for requests where replace was used
-  --sample-rate: string@bool-completer # Filter for requests where sample rate was used
-  --search: string@bool-completer # Filter for requests where search was used
-  --sentiment: string@bool-completer # Filter for requests where sentiment was used
-  --smart-format: string@bool-completer # Filter for requests where smart format was used
-  --summarize: string@bool-completer # Filter for requests where summarize was used
+  --multichannel: oneof<nothing, bool> # Filter for requests where multichannel was used
+  --numerals: oneof<nothing, bool> # Filter for requests where numerals were used
+  --paragraphs: oneof<nothing, bool> # Filter for requests where paragraphs were used
+  --profanity-filter: oneof<nothing, bool> # Filter for requests where profanity filter was used
+  --punctuate: oneof<nothing, bool> # Filter for requests where punctuate was used
+  --redact: oneof<nothing, bool> # Filter for requests where redact was used
+  --replace: oneof<nothing, bool> # Filter for requests where replace was used
+  --sample-rate: oneof<nothing, bool> # Filter for requests where sample rate was used
+  --search: oneof<nothing, bool> # Filter for requests where search was used
+  --sentiment: oneof<nothing, bool> # Filter for requests where sentiment was used
+  --smart-format: oneof<nothing, bool> # Filter for requests where smart format was used
+  --summarize: oneof<nothing, bool> # Filter for requests where summarize was used
   --tag: string # Filter for requests where a specific tag was used
-  --topics: string@bool-completer # Filter for requests where topics was used
-  --utt-split: string@bool-completer # Filter for requests where utt split was used
-  --utterances: string@bool-completer # Filter for requests where utterances was used
-  --version: string@bool-completer # Filter for requests where version was used
+  --topics: oneof<nothing, bool> # Filter for requests where topics was used
+  --utt-split: oneof<nothing, bool> # Filter for requests where utt split was used
+  --utterances: oneof<nothing, bool> # Filter for requests where utterances was used
+  --version: oneof<nothing, bool> # Filter for requests where version was used
   --Authorization: string # Use `Authorization: Token <API_KEY>` Example: `Authorization: Token 12345abcdef`
 ]: nothing -> record<start: string, end: string, resolution: record<units: string, amount: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1254,47 +1253,47 @@ export def "projects-usage-breakdown get" [
   --end: string # End date of the requested date range. Format accepted is YYYY-MM-DD (format: date)
   --grouping: string@grouping-completer # Common usage grouping parameters
   --accessor: string # Filter for requests where a specific accessor was used
-  --alternatives: string@bool-completer # Filter for requests where alternatives were used
-  --callback-method: string@bool-completer # Filter for requests where callback method was used
-  --callback: string@bool-completer # Filter for requests where callback was used
-  --channels: string@bool-completer # Filter for requests where channels were used
-  --custom-intent-mode: string@bool-completer # Filter for requests where custom intent mode was used
-  --custom-intent: string@bool-completer # Filter for requests where custom intent was used
-  --custom-topic-mode: string@bool-completer # Filter for requests where custom topic mode was used
-  --custom-topic: string@bool-completer # Filter for requests where custom topic was used
+  --alternatives: oneof<nothing, bool> # Filter for requests where alternatives were used
+  --callback-method: oneof<nothing, bool> # Filter for requests where callback method was used
+  --callback: oneof<nothing, bool> # Filter for requests where callback was used
+  --channels: oneof<nothing, bool> # Filter for requests where channels were used
+  --custom-intent-mode: oneof<nothing, bool> # Filter for requests where custom intent mode was used
+  --custom-intent: oneof<nothing, bool> # Filter for requests where custom intent was used
+  --custom-topic-mode: oneof<nothing, bool> # Filter for requests where custom topic mode was used
+  --custom-topic: oneof<nothing, bool> # Filter for requests where custom topic was used
   --deployment: string@deployment-completer # Filter for requests where a specific deployment was used
-  --detect-entities: string@bool-completer # Filter for requests where detect entities was used
-  --detect-language: string@bool-completer # Filter for requests where detect language was used
-  --diarize: string@bool-completer # Filter for requests where diarize was used
-  --dictation: string@bool-completer # Filter for requests where dictation was used
-  --encoding: string@bool-completer # Filter for requests where encoding was used
+  --detect-entities: oneof<nothing, bool> # Filter for requests where detect entities was used
+  --detect-language: oneof<nothing, bool> # Filter for requests where detect language was used
+  --diarize: oneof<nothing, bool> # Filter for requests where diarize was used
+  --dictation: oneof<nothing, bool> # Filter for requests where dictation was used
+  --encoding: oneof<nothing, bool> # Filter for requests where encoding was used
   --endpoint: string@endpoint-completer # Filter for requests where a specific endpoint was used
-  --extra: string@bool-completer # Filter for requests where extra was used
-  --filler-words: string@bool-completer # Filter for requests where filler words was used
-  --intents: string@bool-completer # Filter for requests where intents was used
-  --keyterm: string@bool-completer # Filter for requests where keyterm was used
-  --keywords: string@bool-completer # Filter for requests where keywords was used
-  --language: string@bool-completer # Filter for requests where language was used
-  --measurements: string@bool-completer # Filter for requests where measurements were used
+  --extra: oneof<nothing, bool> # Filter for requests where extra was used
+  --filler-words: oneof<nothing, bool> # Filter for requests where filler words was used
+  --intents: oneof<nothing, bool> # Filter for requests where intents was used
+  --keyterm: oneof<nothing, bool> # Filter for requests where keyterm was used
+  --keywords: oneof<nothing, bool> # Filter for requests where keywords was used
+  --language: oneof<nothing, bool> # Filter for requests where language was used
+  --measurements: oneof<nothing, bool> # Filter for requests where measurements were used
   --method: string@method-completer # Filter for requests where a specific method was used
   --model: string # Filter for requests where a specific model uuid was used
-  --multichannel: string@bool-completer # Filter for requests where multichannel was used
-  --numerals: string@bool-completer # Filter for requests where numerals were used
-  --paragraphs: string@bool-completer # Filter for requests where paragraphs were used
-  --profanity-filter: string@bool-completer # Filter for requests where profanity filter was used
-  --punctuate: string@bool-completer # Filter for requests where punctuate was used
-  --redact: string@bool-completer # Filter for requests where redact was used
-  --replace: string@bool-completer # Filter for requests where replace was used
-  --sample-rate: string@bool-completer # Filter for requests where sample rate was used
-  --search: string@bool-completer # Filter for requests where search was used
-  --sentiment: string@bool-completer # Filter for requests where sentiment was used
-  --smart-format: string@bool-completer # Filter for requests where smart format was used
-  --summarize: string@bool-completer # Filter for requests where summarize was used
+  --multichannel: oneof<nothing, bool> # Filter for requests where multichannel was used
+  --numerals: oneof<nothing, bool> # Filter for requests where numerals were used
+  --paragraphs: oneof<nothing, bool> # Filter for requests where paragraphs were used
+  --profanity-filter: oneof<nothing, bool> # Filter for requests where profanity filter was used
+  --punctuate: oneof<nothing, bool> # Filter for requests where punctuate was used
+  --redact: oneof<nothing, bool> # Filter for requests where redact was used
+  --replace: oneof<nothing, bool> # Filter for requests where replace was used
+  --sample-rate: oneof<nothing, bool> # Filter for requests where sample rate was used
+  --search: oneof<nothing, bool> # Filter for requests where search was used
+  --sentiment: oneof<nothing, bool> # Filter for requests where sentiment was used
+  --smart-format: oneof<nothing, bool> # Filter for requests where smart format was used
+  --summarize: oneof<nothing, bool> # Filter for requests where summarize was used
   --tag: string # Filter for requests where a specific tag was used
-  --topics: string@bool-completer # Filter for requests where topics was used
-  --utt-split: string@bool-completer # Filter for requests where utt split was used
-  --utterances: string@bool-completer # Filter for requests where utterances was used
-  --version: string@bool-completer # Filter for requests where version was used
+  --topics: oneof<nothing, bool> # Filter for requests where topics was used
+  --utt-split: oneof<nothing, bool> # Filter for requests where utt split was used
+  --utterances: oneof<nothing, bool> # Filter for requests where utterances was used
+  --version: oneof<nothing, bool> # Filter for requests where version was used
   --Authorization: string # Use `Authorization: Token <API_KEY>` Example: `Authorization: Token 12345abcdef`
 ]: nothing -> record<start: string, end: string, resolution: record<units: string, amount: float>, results: table<hours: float, total_hours: float, agent_hours: float, tokens_in: float, tokens_out: float, tts_characters: float, requests: float, grouping: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://test-api.service.hmrc.gov.uk" "https://api.service.hmrc.gov.uk"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -210,7 +209,7 @@ export def "individuals-self-assessment-adjustable-summary-self-employment-adjus
   --income: record # Object containing the adjustments to income values. — shape: {turnover?: float, other?: float}
   --expenses: record # Object containing the adjustments to expenses values. — shape: {costOfGoods?: float, paymentsToSubcontractors?: float, wagesAndStaffCosts?: float, carVanTravelExpenses?: float, premisesRunningCosts?: float, maintenanceCosts?: float, adminCosts?: float, interestOnBankOtherLoans?: float, financeCharges?: float, irrecoverableDebts?: float, professionalFees?: float, depreciation?: float, otherExpenses?: float, advertisingCosts?: float, businessEntertainmentCosts?: float, consolidatedExpenses?: float}
   --additions: record # An object containing the adjustments to additions values. — shape: {costOfGoodsDisallowable?: float, paymentsToSubcontractorsDisallowable?: float, wagesAndStaffCostsDisallowable?: float, carVanTravelExpensesDisallowable?: float, premisesRunningCostsDisallowable?: float, maintenanceCostsDisallowable?: float, adminCostsDisallowable?: float, interestOnBankOtherLoansDisallowable?: float, financeChargesDisallowable?: float, irrecoverableDebtsDisallowable?: float, professionalFeesDisallowable?: float, depreciationDisallowable?: float, otherExpensesDisallowable?: float, advertisingCostsDisallowable?: float, businessEntertainmentCostsDisallowable?: float}
-  --zeroAdjustments: string@bool-completer # Indicates zero adjustments for all income, expenses and additions. The value can only be set to true.
+  --zeroAdjustments: oneof<nothing, bool> # Indicates zero adjustments for all income, expenses and additions. The value can only be set to true.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

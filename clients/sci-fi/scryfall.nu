@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.scryfall.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -148,7 +147,7 @@ export def "cards-search Search" [
   --unique: string@unique-completer
   --order: string@order-completer
   --dir: string@dir-completer
-  --include-extras: string@bool-completer
+  --include-extras: oneof<nothing, bool>
   --page: int # format: int32
 ]: nothing -> record<total_cards: int, has_more: bool, next_page: string, data: table<id: string, oracle_id: string, multiverse_ids: list, mtgo_id: int, arena_id: int, mtgo_foil_id: int, uri: string, scryfall_uri: string, prints_search_uri: string, rulings_uri: string, name: string, layout: string, cmc: float, type_line: string, oracle_text: string, mana_cost: string, power: string, toughness: string, loyalty: string, life_modifier: string, hand_modifier: string, colors: list, color_indicator: list, color_identity: list, all_parts: list, card_faces: list, legalities: record, reserved: bool, edhrec_rank: int, set: string, set_name: string, collector_number: string, set_search_uri: string, scryfall_set_uri: string, image_uris: record, highres_image: bool, reprint: bool, digital: bool, rarity: string, flavor_text: string, artist: string, illustration_id: string, frame: string, full_art: bool, watermark: string, border_color: string, story_spotlight_number: int, story_spotlight_uri: string, timeshifted: bool, colorshifted: bool, futureshifted: bool, purchase_uris: record, related_uris: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -177,7 +176,7 @@ export def "cards-named GetNamed" [
   --format: string
   --face: string
   --version: string
-  --pretty: string@bool-completer
+  --pretty: oneof<nothing, bool>
 ]: nothing -> record<id: string, oracle_id: string, multiverse_ids: list<int>, mtgo_id: int, arena_id: int, mtgo_foil_id: int, uri: string, scryfall_uri: string, prints_search_uri: string, rulings_uri: string, name: string, layout: string, cmc: float, type_line: string, oracle_text: string, mana_cost: string, power: string, toughness: string, loyalty: string, life_modifier: string, hand_modifier: string, colors: list<string>, color_indicator: list<string>, color_identity: list<string>, all_parts: table<id: string, name: string, uri: string>, card_faces: table<name: string, type_line: string, oracle_text: string, mana_cost: string, colors: list, color_indicator: list, power: string, toughness: string, loyalty: string, flavor_text: string, illustration_id: string, image_uris: record>, legalities: record<standard: string, future: string, frontier: string, modern: string, legacy: string, pauper: string, vintage: string, penny: string, commander: string, 1v1: string, duel: string, brawl: string>, reserved: bool, edhrec_rank: int, set: string, set_name: string, collector_number: string, set_search_uri: string, scryfall_set_uri: string, image_uris: record<small: string, normal: string, large: string, png: string, art_crop: string, border_crop: string>, highres_image: bool, reprint: bool, digital: bool, rarity: string, flavor_text: string, artist: string, illustration_id: string, frame: string, full_art: bool, watermark: string, border_color: string, story_spotlight_number: int, story_spotlight_uri: string, timeshifted: bool, colorshifted: bool, futureshifted: bool, purchase_uris: record, related_uris: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

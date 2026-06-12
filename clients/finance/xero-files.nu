@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.xero.com/files.xro/1.0"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -416,7 +415,7 @@ export def "folders createFolder" [
   --Email: string # The email address used to email files to the inbox. Only the inbox will have this element. (e.g. foo@bar.com)
   --FileCount: int # The number of files in the folder (e.g. 5)
   --Id: string # Xero unique identifier for a folder  Files (format: uuid, e.g. 4ff1e5cc-9835-40d5-bb18-09fdb118db9c)
-  --IsInbox: string@bool-completer # to indicate if the folder is the Inbox. The Inbox cannot be renamed or deleted. (e.g. true)
+  --IsInbox: oneof<nothing, bool> # to indicate if the folder is the Inbox. The Inbox cannot be renamed or deleted. (e.g. true)
   --Name: string # The name of the folder (e.g. assets)
 ]: any -> record<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string> {
   let input = $in
@@ -499,7 +498,7 @@ export def "folders updateFolder" [
   --Email: string # The email address used to email files to the inbox. Only the inbox will have this element. (e.g. foo@bar.com)
   --FileCount: int # The number of files in the folder (e.g. 5)
   --Id: string # Xero unique identifier for a folder  Files (format: uuid, e.g. 4ff1e5cc-9835-40d5-bb18-09fdb118db9c)
-  --IsInbox: string@bool-completer # to indicate if the folder is the Inbox. The Inbox cannot be renamed or deleted. (e.g. true)
+  --IsInbox: oneof<nothing, bool> # to indicate if the folder is the Inbox. The Inbox cannot be renamed or deleted. (e.g. true)
   --Name: string # The name of the folder (e.g. assets)
 ]: any -> record<Email: string, FileCount: int, Id: string, IsInbox: bool, Name: string> {
   let input = $in

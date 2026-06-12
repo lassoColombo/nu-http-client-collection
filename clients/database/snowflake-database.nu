@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://org-account.snowflakecomputing.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -103,7 +102,7 @@ export def "databases listDatabases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --history: string@bool-completer # Optionally includes dropped databases that have not yet been purged.
+  --history: oneof<nothing, bool> # Optionally includes dropped databases that have not yet been purged.
 ]: nothing -> table<created_on: string, name: any, kind: string, is_default: bool, is_current: bool, origin: string, owner: string, comment: string, options: string, retention_time: int, dropped_on: string, budget: string, owner_role_type: string, data_retention_time_in_days: int, default_ddl_collation: string, log_level: string, max_data_extension_time_in_days: int, suspend_task_after_num_failures: int, trace_level: string, user_task_managed_initial_warehouse_size: string, user_task_timeout_ms: int, serverless_task_min_statement_size: string, serverless_task_max_statement_size: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -322,7 +321,7 @@ export def "databases delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --restrict: string@bool-completer # Whether to drop the database if foreign keys exist that reference any tables in the database. - `true`: Return a warning about existing foreign key references and don't drop the database. - `false`: Drop the database and all objects in the database, including tables with primary or unique keys that are referenced by foreign keys in other tables. (default: false)
+  --restrict: oneof<nothing, bool> # Whether to drop the database if foreign keys exist that reference any tables in the database. - `true`: Return a warning about existing foreign key references and don't drop the database. - `false`: Drop the database and all objects in the database, including tables with primary or unique keys that are referenced by foreign keys in other tables. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -368,7 +367,7 @@ export def "databases-replication-enable enableDatabaseReplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ignore-edition-check: string@bool-completer # Whether to allow replicating data to accounts on lower editions. Default: `true`. For more information, see the <a href=https://docs.snowflake.com/en/sql-reference/sql/alter-database> ALTER DATABASE</a> reference.
+  --ignore-edition-check: oneof<nothing, bool> # Whether to allow replicating data to accounts on lower editions. Default: `true`. For more information, see the <a href=https://docs.snowflake.com/en/sql-reference/sql/alter-database> ALTER DATABASE</a> reference.
   accounts: list
 ]: any -> any {
   let input = $in

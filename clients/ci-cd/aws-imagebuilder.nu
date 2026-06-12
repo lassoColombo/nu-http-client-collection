@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://imagebuilder.us-east-1.amazonaws.com" "http://imagebuilder.us-east-2.amazonaws.com" "http://imagebuilder.us-west-1.amazonaws.com" "http://imagebuilder.us-west-2.amazonaws.com" "http://imagebuilder.us-gov-west-1.amazonaws.com" "http://imagebuilder.us-gov-east-1.amazonaws.com" "http://imagebuilder.ca-central-1.amazonaws.com" "http://imagebuilder.eu-north-1.amazonaws.com" "http://imagebuilder.eu-west-1.amazonaws.com" "http://imagebuilder.eu-west-2.amazonaws.com" "http://imagebuilder.eu-west-3.amazonaws.com" "http://imagebuilder.eu-central-1.amazonaws.com" "http://imagebuilder.eu-south-1.amazonaws.com" "http://imagebuilder.af-south-1.amazonaws.com" "http://imagebuilder.ap-northeast-1.amazonaws.com" "http://imagebuilder.ap-northeast-2.amazonaws.com" "http://imagebuilder.ap-northeast-3.amazonaws.com" "http://imagebuilder.ap-southeast-1.amazonaws.com" "http://imagebuilder.ap-southeast-2.amazonaws.com" "http://imagebuilder.ap-east-1.amazonaws.com" "http://imagebuilder.ap-south-1.amazonaws.com" "http://imagebuilder.sa-east-1.amazonaws.com" "http://imagebuilder.me-south-1.amazonaws.com" "https://imagebuilder.us-east-1.amazonaws.com" "https://imagebuilder.us-east-2.amazonaws.com" "https://imagebuilder.us-west-1.amazonaws.com" "https://imagebuilder.us-west-2.amazonaws.com" "https://imagebuilder.us-gov-west-1.amazonaws.com" "https://imagebuilder.us-gov-east-1.amazonaws.com" "https://imagebuilder.ca-central-1.amazonaws.com" "https://imagebuilder.eu-north-1.amazonaws.com" "https://imagebuilder.eu-west-1.amazonaws.com" "https://imagebuilder.eu-west-2.amazonaws.com" "https://imagebuilder.eu-west-3.amazonaws.com" "https://imagebuilder.eu-central-1.amazonaws.com" "https://imagebuilder.eu-south-1.amazonaws.com" "https://imagebuilder.af-south-1.amazonaws.com" "https://imagebuilder.ap-northeast-1.amazonaws.com" "https://imagebuilder.ap-northeast-2.amazonaws.com" "https://imagebuilder.ap-northeast-3.amazonaws.com" "https://imagebuilder.ap-southeast-1.amazonaws.com" "https://imagebuilder.ap-southeast-2.amazonaws.com" "https://imagebuilder.ap-east-1.amazonaws.com" "https://imagebuilder.ap-south-1.amazonaws.com" "https://imagebuilder.sa-east-1.amazonaws.com" "https://imagebuilder.me-south-1.amazonaws.com" "http://imagebuilder.cn-north-1.amazonaws.com.cn" "http://imagebuilder.cn-northwest-1.amazonaws.com.cn" "https://imagebuilder.cn-north-1.amazonaws.com.cn" "https://imagebuilder.cn-northwest-1.amazonaws.com.cn"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -293,7 +292,7 @@ export def "create-image CreateImage" [
   --distributionConfigurationArn: string # The Amazon Resource Name (ARN) of the distribution configuration that defines and configures the outputs of your pipeline.
   infrastructureConfigurationArn: string # The Amazon Resource Name (ARN) of the infrastructure configuration that defines the environment in which your image will be built and tested.
   --imageTestsConfiguration: record # Configure image tests for your pipeline build. Tests run after building the image, to verify that the AMI or container image is valid before distributing it. — shape: {imageTestsEnabled?: any, timeoutMinutes?: any}
-  --enhancedImageMetadataEnabled: string@bool-completer # Collects additional information about the image being created, including the operating system (OS) version and package list. This information is used to enhance the overall experience of using EC2 Image Builder. Enabled by default.
+  --enhancedImageMetadataEnabled: oneof<nothing, bool> # Collects additional information about the image being created, including the operating system (OS) version and package list. This information is used to enhance the overall experience of using EC2 Image Builder. Enabled by default.
   --tags: record # The tags of the image.
   clientToken: string # The idempotency token used to make this request idempotent.
   --imageScanningConfiguration: record # Contains settings for Image Builder image resource and container image scans. — shape: {imageScanningEnabled?: any, ecrConfiguration?: any}
@@ -340,7 +339,7 @@ export def "create-image-pipeline CreateImagePipeline" [
   infrastructureConfigurationArn: string # The Amazon Resource Name (ARN) of the infrastructure configuration that will be used to build images created by this image pipeline.
   --distributionConfigurationArn: string # The Amazon Resource Name (ARN) of the distribution configuration that will be used to configure and distribute images created by this image pipeline.
   --imageTestsConfiguration: record # Configure image tests for your pipeline build. Tests run after building the image, to verify that the AMI or container image is valid before distributing it. — shape: {imageTestsEnabled?: any, timeoutMinutes?: any}
-  --enhancedImageMetadataEnabled: string@bool-completer # Collects additional information about the image being created, including the operating system (OS) version and package list. This information is used to enhance the overall experience of using EC2 Image Builder. Enabled by default.
+  --enhancedImageMetadataEnabled: oneof<nothing, bool> # Collects additional information about the image being created, including the operating system (OS) version and package list. This information is used to enhance the overall experience of using EC2 Image Builder. Enabled by default.
   --schedule: record # A schedule configures how often and when a pipeline will automatically create a new image. — shape: {scheduleExpression?: any, timezone?: any, pipelineExecutionStartCondition?: any}
   --status: string@status-completer # The status of the image pipeline.
   --tags: record # The tags of the image pipeline.
@@ -435,7 +434,7 @@ export def "create-infrastructure-configuration CreateInfrastructureConfiguratio
   --subnetId: string # The subnet ID in which to place the instance used to customize your Amazon EC2 AMI.
   --logging: record # Logging configuration defines where Image Builder uploads your logs. — shape: {s3Logs?: any}
   --keyPair: string # The key pair of the infrastructure configuration. You can use this to log on to and debug the instance used to create your image.
-  --terminateInstanceOnFailure: string@bool-completer # The terminate instance on failure setting of the infrastructure configuration. Set to false if you want Image Builder to retain the instance used to configure your AMI if the build or test phase of your workflow fails.
+  --terminateInstanceOnFailure: oneof<nothing, bool> # The terminate instance on failure setting of the infrastructure configuration. Set to false if you want Image Builder to retain the instance used to configure your AMI if the build or test phase of your workflow fails.
   --snsTopicArn: string # <p>The Amazon Resource Name (ARN) for the SNS topic to which we send image build event notifications.</p> <note> <p>EC2 Image Builder is unable to send notifications to SNS topics that are encrypted using keys from other accounts. The key that is used to encrypt the SNS topic must reside in the account that the Image Builder service runs under.</p> </note>
   --resourceTags: record # The tags attached to the resource created by Image Builder.
   --instanceMetadataOptions: record # The instance metadata options that apply to the HTTP requests that pipeline builds use to launch EC2 build and test instances. For more information about instance metadata options, see <a href="https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-options.html">Configure the instance metadata options</a> in the <i> <i>Amazon EC2 User Guide</i> </i> for Linux instances, or <a href="https://docs.aws.amazon.com/AWSEC2/latest/WindowsGuide/configuring-instance-metadata-options.html">Configure the instance metadata options</a> in the <i> <i>Amazon EC2 Windows Guide</i> </i> for Windows instances. — shape: {httpTokens?: any, httpPutResponseHopLimit?: any}
@@ -1244,7 +1243,7 @@ export def "list-components ListComponents" [
   --X-Amz-SignedHeaders: string
   --owner: string@owner-completer # Filters results based on the type of owner for the component. By default, this request returns a list of components that your account owns. To see results for other types of owners, you can specify components that Amazon manages, third party components, or components that other accounts have shared with you.
   --filters: list # <p>Use the following filters to streamline results:</p> <ul> <li> <p> <code>description</code> </p> </li> <li> <p> <code>name</code> </p> </li> <li> <p> <code>platform</code> </p> </li> <li> <p> <code>supportedOsVersion</code> </p> </li> <li> <p> <code>type</code> </p> </li> <li> <p> <code>version</code> </p> </li> </ul> — item shape: {name?: any, values?: any}
-  --byName: string@bool-completer # Returns the list of components for the specified name.
+  --byName: oneof<nothing, bool> # Returns the list of components for the specified name.
   --maxResults: int # The maximum items to return in a request.
   --nextToken: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
 ]: any -> record<requestId: record, componentVersionList: record, nextToken: record> {
@@ -1647,10 +1646,10 @@ export def "list-images ListImages" [
   --X-Amz-SignedHeaders: string
   --owner: string@owner-completer # The owner defines which images you want to list. By default, this request will only show images owned by your account. You can use this field to specify if you want to view images owned by yourself, by Amazon, or those images that have been shared with you by other customers.
   --filters: list # <p>Use the following filters to streamline results:</p> <ul> <li> <p> <code>name</code> </p> </li> <li> <p> <code>osVersion</code> </p> </li> <li> <p> <code>platform</code> </p> </li> <li> <p> <code>type</code> </p> </li> <li> <p> <code>version</code> </p> </li> </ul> — item shape: {name?: any, values?: any}
-  --byName: string@bool-completer # Requests a list of images with a specific recipe name.
+  --byName: oneof<nothing, bool> # Requests a list of images with a specific recipe name.
   --maxResults: int # The maximum items to return in a request.
   --nextToken: string # A token to specify where to start paginating. This is the NextToken from a previously truncated response.
-  --includeDeprecated: string@bool-completer # Includes deprecated images in the response list.
+  --includeDeprecated: oneof<nothing, bool> # Includes deprecated images in the response list.
 ]: any -> record<requestId: record, imageVersionList: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2125,7 +2124,7 @@ export def "update-image-pipeline UpdateImagePipeline" [
   infrastructureConfigurationArn: string # The Amazon Resource Name (ARN) of the infrastructure configuration that Image Builder uses to build images that this image pipeline has updated.
   --distributionConfigurationArn: string # The Amazon Resource Name (ARN) of the distribution configuration that Image Builder uses to configure and distribute images that this image pipeline has updated.
   --imageTestsConfiguration: record # Configure image tests for your pipeline build. Tests run after building the image, to verify that the AMI or container image is valid before distributing it. — shape: {imageTestsEnabled?: any, timeoutMinutes?: any}
-  --enhancedImageMetadataEnabled: string@bool-completer # Collects additional information about the image being created, including the operating system (OS) version and package list. This information is used to enhance the overall experience of using EC2 Image Builder. Enabled by default.
+  --enhancedImageMetadataEnabled: oneof<nothing, bool> # Collects additional information about the image being created, including the operating system (OS) version and package list. This information is used to enhance the overall experience of using EC2 Image Builder. Enabled by default.
   --schedule: record # A schedule configures how often and when a pipeline will automatically create a new image. — shape: {scheduleExpression?: any, timezone?: any, pipelineExecutionStartCondition?: any}
   --status: string@status-completer # The status of the image pipeline.
   clientToken: string # The idempotency token used to make this request idempotent.
@@ -2173,7 +2172,7 @@ export def "update-infrastructure-configuration UpdateInfrastructureConfiguratio
   --subnetId: string # The subnet ID to place the instance used to customize your Amazon EC2 AMI in.
   --logging: record # Logging configuration defines where Image Builder uploads your logs. — shape: {s3Logs?: any}
   --keyPair: string # The key pair of the infrastructure configuration. You can use this to log on to and debug the instance used to create your image.
-  --terminateInstanceOnFailure: string@bool-completer # The terminate instance on failure setting of the infrastructure configuration. Set to false if you want Image Builder to retain the instance used to configure your AMI if the build or test phase of your workflow fails.
+  --terminateInstanceOnFailure: oneof<nothing, bool> # The terminate instance on failure setting of the infrastructure configuration. Set to false if you want Image Builder to retain the instance used to configure your AMI if the build or test phase of your workflow fails.
   --snsTopicArn: string # <p>The Amazon Resource Name (ARN) for the SNS topic to which we send image build event notifications.</p> <note> <p>EC2 Image Builder is unable to send notifications to SNS topics that are encrypted using keys from other accounts. The key that is used to encrypt the SNS topic must reside in the account that the Image Builder service runs under.</p> </note>
   clientToken: string # The idempotency token used to make this request idempotent.
   --resourceTags: record # The tags attached to the resource created by Image Builder.

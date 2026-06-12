@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://video.bunnycdn.com"] }
 def auth-scheme-completer [] { ["accesskey"] }
 
@@ -103,7 +102,7 @@ export def "library-collections GetCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeThumbnails: string@bool-completer # default: false
+  --includeThumbnails: oneof<nothing, bool> # default: false
 ]: nothing -> record<videoLibraryId: int, guid: string, name: string, videoCount: int, totalSize: int, previewVideoIds: string, previewImageUrls: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
@@ -181,7 +180,7 @@ export def "library-collections List" [
   --itemsPerPage: int # format: int32, default: 100
   --search: string # nullable, default: 
   --orderBy: string # nullable, default: date
-  --includeThumbnails: string@bool-completer # default: false
+  --includeThumbnails: oneof<nothing, bool> # default: false
 ]: nothing -> record<totalItems: int, currentPage: int, itemsPerPage: int, items: table<videoLibraryId: int, guid: string, name: string, videoCount: int, totalSize: int, previewVideoIds: string, previewImageUrls: list>> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
@@ -312,16 +311,16 @@ export def "library-videos UploadVideo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --jitEnabled: string@bool-completer # Marks whether JIT encoding should be enabled for this video (works only when Premium Encoding is enabled), overrides library settings
+  --jitEnabled: oneof<nothing, bool> # Marks whether JIT encoding should be enabled for this video (works only when Premium Encoding is enabled), overrides library settings
   --enabledResolutions: string # Comma separated list of resolutions enabled for encoding, available options: 240p, 360p, 480p, 720p, 1080p, 1440p, 2160p (nullable, default: )
   --enabledOutputCodecs: string # List of codecs that will be used to encode the file (overrides library settings). Available values: x264, vp9 (nullable, default: )
-  --transcribeEnabled: string@bool-completer # Setting this to true will enable transcription on this video. Enabling this will incur transcription charges (nullable)
+  --transcribeEnabled: oneof<nothing, bool> # Setting this to true will enable transcription on this video. Enabling this will incur transcription charges (nullable)
   --transcribeLanguages: string # Comma separated list of languages that will be used as target languages, use ISO 639-1 language codes. (nullable)
   --sourceLanguage: string # Language spoken in the video, use ISO 639-1 language codes. (nullable)
-  --generateTitle: string@bool-completer # Whether video title should be generated from transcription. (nullable)
-  --generateDescription: string@bool-completer # Whether video description should be generated from transcription. (nullable)
-  --generateChapters: string@bool-completer # Whether video chapters should be generated from transcription. (nullable)
-  --generateMoments: string@bool-completer # Whether video moments should be generated from transcription. (nullable)
+  --generateTitle: oneof<nothing, bool> # Whether video title should be generated from transcription. (nullable)
+  --generateDescription: oneof<nothing, bool> # Whether video description should be generated from transcription. (nullable)
+  --generateChapters: oneof<nothing, bool> # Whether video chapters should be generated from transcription. (nullable)
+  --generateMoments: oneof<nothing, bool> # Whether video moments should be generated from transcription. (nullable)
   --body: record
 ]: any -> record<success: bool, message: string, statusCode: int> {
   let input = $in
@@ -425,7 +424,7 @@ export def "library-statistics GetVideoStatistics" [
   --allow-errors(-e) # Return full response without error handling
   --dateFrom: string # Optional start of the time range (UTC). If omitted or invalid, the last 30 days are returned. (nullable, format: date-time)
   --dateTo: string # Optional end of the time range (UTC). If omitted with a valid start, defaults to now; otherwise the last 30 days are returned. (nullable, format: date-time)
-  --hourly: string@bool-completer # Optional. If true, returns hourly data; otherwise daily (UTC). Default is daily. (default: false)
+  --hourly: oneof<nothing, bool> # Optional. If true, returns hourly data; otherwise daily (UTC). Default is daily. (default: false)
   --videoGuid: string # Optional video GUID to filter results. When omitted, returns library-level aggregates. (nullable)
 ]: nothing -> record<viewsChart: record, watchTimeChart: record, countryViewCounts: record, countryWatchTime: record, engagementScore: int> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
@@ -498,7 +497,7 @@ export def "library-videos-repackage Repackage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --keepOriginalFiles: string@bool-completer # Marks whether previous file versions should be kept in storage, allows for faster repackage later on. Default is true. (default: true)
+  --keepOriginalFiles: oneof<nothing, bool> # Marks whether previous file versions should be kept in storage, allows for faster repackage later on. Default is true. (default: true)
 ]: nothing -> record<videoLibraryId: int, guid: string, title: string, description: string, dateUploaded: string, views: int, isPublic: bool, length: int, status: any, framerate: float, rotation: int, width: int, height: int, availableResolutions: string, outputCodecs: string, thumbnailCount: int, encodeProgress: int, storageSize: int, captions: table<srclang: string, label: string, version: int>, hasMP4Fallback: bool, collectionId: string, thumbnailFileName: string, thumbnailBlurhash: string, averageWatchTime: int, totalWatchTime: int, category: string, chapters: table<title: string, start: int, end: int>, moments: table<label: string, timestamp: int>, metaTags: table<property: string, value: string>, transcodingMessages: table<timeStamp: string, level: int, issueCode: int, message: string, value: string>, jitEncodingEnabled: bool, smartGenerateStatus: any, smartGenerateFeaturesStatus: any, hasOriginal: bool, originalHash: string, hasHighQualityPreview: bool> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)
@@ -692,12 +691,12 @@ export def "library-videos-transcribe TranscribeVideo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # default: false
+  --force: oneof<nothing, bool> # default: false
   --targetLanguages: list # List of languages that will be used as target languages, use ISO 639-1 language codes. (nullable)
-  --generateTitle: string@bool-completer # Whether video title should be automatically generated. (nullable)
-  --generateDescription: string@bool-completer # Whether video description should be automatically generated. (nullable)
-  --generateChapters: string@bool-completer # Whether video chapters should be automatically generated. (nullable)
-  --generateMoments: string@bool-completer # Whether video moments should be automatically generated. (nullable)
+  --generateTitle: oneof<nothing, bool> # Whether video title should be automatically generated. (nullable)
+  --generateDescription: oneof<nothing, bool> # Whether video description should be automatically generated. (nullable)
+  --generateChapters: oneof<nothing, bool> # Whether video chapters should be automatically generated. (nullable)
+  --generateMoments: oneof<nothing, bool> # Whether video moments should be automatically generated. (nullable)
   --sourceLanguage: string # Video source language, use ISO 639-1 language code. (nullable)
 ]: any -> record<success: bool, message: string, statusCode: int> {
   let input = $in
@@ -726,10 +725,10 @@ export def "library-videos-smart SmartGenerate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --generateTitle: string@bool-completer # Whether video title should be generated. (nullable)
-  --generateDescription: string@bool-completer # Whether video description should be generated. (nullable)
-  --generateChapters: string@bool-completer # Whether video chapters should be generated. (nullable)
-  --generateMoments: string@bool-completer # Whether video moments should be generated. (nullable)
+  --generateTitle: oneof<nothing, bool> # Whether video title should be generated. (nullable)
+  --generateDescription: oneof<nothing, bool> # Whether video description should be generated. (nullable)
+  --generateChapters: oneof<nothing, bool> # Whether video chapters should be generated. (nullable)
+  --generateMoments: oneof<nothing, bool> # Whether video moments should be generated. (nullable)
   --sourceLanguage: string # (Optional) Video source language, use ISO 639-1 language code. (nullable)
 ]: any -> record<success: bool, message: string, statusCode: int> {
   let input = $in
@@ -804,12 +803,12 @@ export def "library-videos-resolutions-cleanup DeleteResolutions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --resolutionsToDelete: string # nullable
-  --deleteNonConfiguredResolutions: string@bool-completer # default: false
-  --allResolutions: string@bool-completer # default: false
-  --deleteOriginal: string@bool-completer # default: false
+  --deleteNonConfiguredResolutions: oneof<nothing, bool> # default: false
+  --allResolutions: oneof<nothing, bool> # default: false
+  --deleteOriginal: oneof<nothing, bool> # default: false
   --outputs: string # Outputs to clean. Supported values: hls, mp4, all (nullable)
-  --deleteMp4Files: string@bool-completer # default: false
-  --dryRun: string@bool-completer # If set to true, no actual file manipulation will happen, only informational data will be returned (default: false)
+  --deleteMp4Files: oneof<nothing, bool> # default: false
+  --dryRun: oneof<nothing, bool> # If set to true, no actual file manipulation will happen, only informational data will be returned (default: false)
 ]: nothing -> record<success: bool, message: string, statusCode: int> {
   let auth = (build-auth $token ($auth_scheme | default "accesskey"))
   let base = ($base_url | default $BASE_URL)

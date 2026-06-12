@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://airbyte.local" "http://localhost:8000/api"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -207,7 +206,7 @@ export def "connections-create createConnection" [
   --namespaceDefinition: string@namespaceDefinition-completer # Method used for computing final namespace in destination
   --namespaceFormat: string # Used when namespaceDefinition is 'customformat'. If blank then behaves like namespaceDefinition = 'destination'. If "${SOURCE_NAMESPACE}" then behaves like namespaceDefinition = 'source'. (e.g. ${SOURCE_NAMESPACE})
   --nonBreakingChangesPreference: string@nonBreakingChangesPreference-completer
-  --notifySchemaChanges: string@bool-completer
+  --notifySchemaChanges: oneof<nothing, bool>
   --operationIds: list
   --prefix: string # Prefix that will be prepended to the name of each stream when it is written to the destination.
   --resourceRequirements: record # optional resource requirements to run workers (blank for unbounded allocations) — shape: {cpu_limit?: string, cpu_request?: string, memory_limit?: string, memory_request?: string}
@@ -437,14 +436,14 @@ export def "connections-update updateConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --breakingChange: string@bool-completer
+  --breakingChange: oneof<nothing, bool>
   connectionId: string # format: uuid
   --geography: string@geography-completer
   --name: string # Name that will be set to this connection
   --namespaceDefinition: string@namespaceDefinition-completer # Method used for computing final namespace in destination
   --namespaceFormat: string # Used when namespaceDefinition is 'customformat'. If blank then behaves like namespaceDefinition = 'destination'. If "${SOURCE_NAMESPACE}" then behaves like namespaceDefinition = 'source'. (e.g. ${SOURCE_NAMESPACE})
   --nonBreakingChangesPreference: string@nonBreakingChangesPreference-completer
-  --notifySchemaChanges: string@bool-completer
+  --notifySchemaChanges: oneof<nothing, bool>
   --operationIds: list
   --prefix: string # Prefix that will be prepended to the name of each stream when it is written to the destination.
   --resourceRequirements: record # optional resource requirements to run workers (blank for unbounded allocations) — shape: {cpu_limit?: string, cpu_request?: string, memory_limit?: string, memory_request?: string}
@@ -1330,8 +1329,8 @@ export def "notifications-try tryNotificationConfig" [
   --allow-errors(-e) # Return full response without error handling
   --customerioConfiguration: record
   notificationType: string@notificationType-completer
-  --sendOnFailure: string@bool-completer # default: true
-  --sendOnSuccess: string@bool-completer # default: false
+  --sendOnFailure: oneof<nothing, bool> # default: true
+  --sendOnSuccess: oneof<nothing, bool> # default: false
   --slackConfiguration: record # shape: {webhook: string}
 ]: any -> record<message: string, status: string> {
   let input = $in
@@ -2143,8 +2142,8 @@ export def "sources-discover-schema discoverSchemaForSource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --connectionId: string # format: uuid
-  --disable-cache: string@bool-completer
-  --notifySchemaChange: string@bool-completer
+  --disable-cache: oneof<nothing, bool>
+  --notifySchemaChange: oneof<nothing, bool>
   sourceId: string # format: uuid
 ]: any -> record<breakingChange: bool, catalog: record<streams: list<record>>, catalogDiff: record<transforms: list<record>>, catalogId: string, connectionStatus: string, jobInfo: record<configId: string, configType: string, connectorConfigurationUpdated: bool, createdAt: int, endedAt: int, id: string, logs: record<logLines: list>, succeeded: bool>> {
   let input = $in
@@ -2451,7 +2450,7 @@ export def "web-backend-connections-get webBackendGetConnection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   connectionId: string # format: uuid
-  --withRefreshedCatalog: string@bool-completer
+  --withRefreshedCatalog: oneof<nothing, bool>
 ]: any -> record<catalogDiff: record<transforms: list<record>>, catalogId: string, connectionId: string, destination: record<connectionConfiguration: any, destinationDefinitionId: string, destinationId: string, destinationName: string, icon: string, name: string, workspaceId: string>, destinationId: string, geography: string, isSyncing: bool, latestSyncJobCreatedAt: int, latestSyncJobStatus: string, name: string, namespaceDefinition: string, namespaceFormat: string, nonBreakingChangesPreference: string, notifySchemaChanges: bool, operationIds: list<string>, operations: table<name: string, operationId: string, operatorConfiguration: record, workspaceId: string>, prefix: string, resourceRequirements: record<cpu_limit: string, cpu_request: string, memory_limit: string, memory_request: string>, schedule: record<timeUnit: string, units: int>, scheduleData: record<basicSchedule: record<timeUnit: string, units: int>, cron: record<cronExpression: string, cronTimeZone: string>>, scheduleType: string, schemaChange: string, source: record<connectionConfiguration: any, icon: string, name: string, sourceDefinitionId: string, sourceId: string, sourceName: string, workspaceId: string>, sourceId: string, status: string, syncCatalog: record<streams: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2514,14 +2513,14 @@ export def "web-backend-connections-update webBackendUpdateConnection" [
   --namespaceDefinition: string@namespaceDefinition-completer # Method used for computing final namespace in destination
   --namespaceFormat: string # Used when namespaceDefinition is 'customformat'. If blank then behaves like namespaceDefinition = 'destination'. If "${SOURCE_NAMESPACE}" then behaves like namespaceDefinition = 'source'. (e.g. ${SOURCE_NAMESPACE})
   --nonBreakingChangesPreference: string@nonBreakingChangesPreference-completer
-  --notifySchemaChanges: string@bool-completer
+  --notifySchemaChanges: oneof<nothing, bool>
   --operations: list # item shape: {name: string, operationId?: string, operatorConfiguration: record, workspaceId: string}
   --prefix: string # Prefix that will be prepended to the name of each stream when it is written to the destination.
   --resourceRequirements: record # optional resource requirements to run workers (blank for unbounded allocations) — shape: {cpu_limit?: string, cpu_request?: string, memory_limit?: string, memory_request?: string}
   --schedule: record # if null, then no schedule is set. — shape: {timeUnit: "minutes"|"hours"|"days"|"weeks"|"months", units: int}
   --scheduleData: record # schedule for when the the connection should run, per the schedule type — shape: {basicSchedule?: record, cron?: record}
   --scheduleType: string@scheduleType-completer # determine how the schedule data should be interpreted
-  --skipReset: string@bool-completer
+  --skipReset: oneof<nothing, bool>
   --sourceCatalogId: string # format: uuid
   --status: string@status-completer # Active means that data is flowing through the connection. Inactive means it is not. Deprecated means the connection is off and cannot be re-activated. the schema field describes the elements of the schema that will be synced.
   --syncCatalog: record # describes the available schema (catalog). — shape: {streams: list}
@@ -2622,14 +2621,14 @@ export def "workspaces-create createWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --anonymousDataCollection: string@bool-completer
+  --anonymousDataCollection: oneof<nothing, bool>
   --defaultGeography: string@defaultGeography-completer
-  --displaySetupWizard: string@bool-completer
+  --displaySetupWizard: oneof<nothing, bool>
   --email: string # format: email
   name: string
-  --news: string@bool-completer
+  --news: oneof<nothing, bool>
   --notifications: list # item shape: {customerioConfiguration?: record, notificationType: "slack"|"customerio", sendOnFailure: bool, sendOnSuccess: bool, slackConfiguration?: record}
-  --securityUpdates: string@bool-completer
+  --securityUpdates: oneof<nothing, bool>
   --webhookConfigs: list # item shape: {authToken?: string, name?: string, validationUrl?: string}
 ]: any -> record<anonymousDataCollection: bool, customerId: string, defaultGeography: string, displaySetupWizard: bool, email: string, feedbackDone: bool, firstCompletedSync: bool, initialSetupComplete: bool, name: string, news: bool, notifications: table<customerioConfiguration: record, notificationType: string, sendOnFailure: bool, sendOnSuccess: bool, slackConfiguration: record>, securityUpdates: bool, slug: string, webhookConfigs: table<id: string, name: string>, workspaceId: string> {
   let input = $in
@@ -2803,14 +2802,14 @@ export def "workspaces-update updateWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --anonymousDataCollection: string@bool-completer
+  --anonymousDataCollection: oneof<nothing, bool>
   --defaultGeography: string@defaultGeography-completer
-  --displaySetupWizard: string@bool-completer
+  --displaySetupWizard: oneof<nothing, bool>
   --email: string # format: email
-  --initialSetupComplete: string@bool-completer
-  --news: string@bool-completer
+  --initialSetupComplete: oneof<nothing, bool>
+  --news: oneof<nothing, bool>
   --notifications: list # item shape: {customerioConfiguration?: record, notificationType: "slack"|"customerio", sendOnFailure: bool, sendOnSuccess: bool, slackConfiguration?: record}
-  --securityUpdates: string@bool-completer
+  --securityUpdates: oneof<nothing, bool>
   --webhookConfigs: list # item shape: {authToken?: string, name?: string, validationUrl?: string}
   workspaceId: string # format: uuid
 ]: any -> record<anonymousDataCollection: bool, customerId: string, defaultGeography: string, displaySetupWizard: bool, email: string, feedbackDone: bool, firstCompletedSync: bool, initialSetupComplete: bool, name: string, news: bool, notifications: table<customerioConfiguration: record, notificationType: string, sendOnFailure: bool, sendOnSuccess: bool, slackConfiguration: record>, securityUpdates: bool, slug: string, webhookConfigs: table<id: string, name: string>, workspaceId: string> {

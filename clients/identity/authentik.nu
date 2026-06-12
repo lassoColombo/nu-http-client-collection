@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost/api/v3"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -170,7 +169,7 @@ export def "admin-file list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --manageable-only: string@bool-completer # default: false
+  --manageable-only: oneof<nothing, bool> # default: false
   --search: string # A search term.
   --usage: string # default: media
 ]: nothing -> table<name: string, mime_type: string, url: string, themed_urls: record<light: string, dark: string>> {
@@ -312,16 +311,16 @@ export def "admin-settings update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --avatars: string # Configure how authentik should show avatars for users.
-  --default-user-change-name: string@bool-completer # Enable the ability for users to change their name.
-  --default-user-change-email: string@bool-completer # Enable the ability for users to change their email address.
-  --default-user-change-username: string@bool-completer # Enable the ability for users to change their username.
+  --default-user-change-name: oneof<nothing, bool> # Enable the ability for users to change their name.
+  --default-user-change-email: oneof<nothing, bool> # Enable the ability for users to change their email address.
+  --default-user-change-username: oneof<nothing, bool> # Enable the ability for users to change their username.
   --event-retention: string # Events will be deleted after this duration.(Format: weeks=3;days=2;hours=3,seconds=2).
   --reputation-lower-limit: int # Reputation cannot decrease lower than this value. Zero or negative.
   --reputation-upper-limit: int # Reputation cannot increase higher than this value. Zero or positive.
   --footer-links: any
-  --gdpr-compliance: string@bool-completer # When enabled, all the events caused by a user will be deleted upon the user's deletion.
-  --impersonation: string@bool-completer # Globally enable/disable impersonation.
-  --impersonation-require-reason: string@bool-completer # Require administrators to provide a reason for impersonating a user.
+  --gdpr-compliance: oneof<nothing, bool> # When enabled, all the events caused by a user will be deleted upon the user's deletion.
+  --impersonation: oneof<nothing, bool> # Globally enable/disable impersonation.
+  --impersonation-require-reason: oneof<nothing, bool> # Require administrators to provide a reason for impersonating a user.
   --default-token-duration: string # Default token duration
   --default-token-length: int # Default token length
   --pagination-default-page-size: int # Default page size for API responses, if no size was requested.
@@ -353,16 +352,16 @@ export def "admin-settings patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --avatars: string # Configure how authentik should show avatars for users.
-  --default-user-change-name: string@bool-completer # Enable the ability for users to change their name.
-  --default-user-change-email: string@bool-completer # Enable the ability for users to change their email address.
-  --default-user-change-username: string@bool-completer # Enable the ability for users to change their username.
+  --default-user-change-name: oneof<nothing, bool> # Enable the ability for users to change their name.
+  --default-user-change-email: oneof<nothing, bool> # Enable the ability for users to change their email address.
+  --default-user-change-username: oneof<nothing, bool> # Enable the ability for users to change their username.
   --event-retention: string # Events will be deleted after this duration.(Format: weeks=3;days=2;hours=3,seconds=2).
   --reputation-lower-limit: int # Reputation cannot decrease lower than this value. Zero or negative.
   --reputation-upper-limit: int # Reputation cannot increase higher than this value. Zero or positive.
   --footer-links: any
-  --gdpr-compliance: string@bool-completer # When enabled, all the events caused by a user will be deleted upon the user's deletion.
-  --impersonation: string@bool-completer # Globally enable/disable impersonation.
-  --impersonation-require-reason: string@bool-completer # Require administrators to provide a reason for impersonating a user.
+  --gdpr-compliance: oneof<nothing, bool> # When enabled, all the events caused by a user will be deleted upon the user's deletion.
+  --impersonation: oneof<nothing, bool> # Globally enable/disable impersonation.
+  --impersonation-require-reason: oneof<nothing, bool> # Require administrators to provide a reason for impersonating a user.
   --default-token-duration: string # Default token duration
   --default-token-length: int # Default token length
   --pagination-default-page-size: int # Default page size for API responses, if no size was requested.
@@ -2711,13 +2710,13 @@ export def "core-applications list" [
   --meta-launch-url: string
   --meta-publisher: string
   --name: string
-  --only-with-launch-url: string@bool-completer
+  --only-with-launch-url: oneof<nothing, bool>
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --search: string # A search term.
   --slug: string
-  --superuser-full-list: string@bool-completer
+  --superuser-full-list: oneof<nothing, bool>
 ]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<pk: string, name: string, slug: string, provider: int, provider_obj: record, backchannel_providers: list, backchannel_providers_obj: list, launch_url: string, open_in_new_tab: bool, meta_launch_url: string, meta_icon: string, meta_icon_url: string, meta_icon_themed_urls: record, meta_description: string, meta_publisher: string, policy_engine_mode: string, group: string, meta_hide: bool>, autocomplete: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2744,14 +2743,14 @@ export def "core-applications create" [
   slug: string # Internal application name, used in URLs.
   --provider: int # nullable
   --backchannel-providers: list
-  --open-in-new-tab: string@bool-completer # Open launch URL in a new browser tab or window.
+  --open-in-new-tab: oneof<nothing, bool> # Open launch URL in a new browser tab or window.
   --meta-launch-url: string # format: uri
   --meta-icon: string
   --meta-description: string
   --meta-publisher: string
   --policy-engine-mode: string@policy-engine-mode-completer
   --group: string
-  --meta-hide: string@bool-completer # Hide this application from the user's My applications page.
+  --meta-hide: oneof<nothing, bool> # Hide this application from the user's My applications page.
 ]: any -> record<pk: string, name: string, slug: string, provider: int, provider_obj: record<pk: int, name: string, authentication_flow: string, authorization_flow: string, invalidation_flow: string, property_mappings: list<string>, component: string, assigned_application_slug: string, assigned_application_name: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string>, backchannel_providers: list<int>, backchannel_providers_obj: table<pk: int, name: string, authentication_flow: string, authorization_flow: string, invalidation_flow: string, property_mappings: list, component: string, assigned_application_slug: string, assigned_application_name: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string>, launch_url: string, open_in_new_tab: bool, meta_launch_url: string, meta_icon: string, meta_icon_url: string, meta_icon_themed_urls: record<light: string, dark: string>, meta_description: string, meta_publisher: string, policy_engine_mode: string, group: string, meta_hide: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2803,14 +2802,14 @@ export def "core-applications update" [
   --body-slug: string # Internal application name, used in URLs.
   --provider: int # nullable
   --backchannel-providers: list
-  --open-in-new-tab: string@bool-completer # Open launch URL in a new browser tab or window.
+  --open-in-new-tab: oneof<nothing, bool> # Open launch URL in a new browser tab or window.
   --meta-launch-url: string # format: uri
   --meta-icon: string
   --meta-description: string
   --meta-publisher: string
   --policy-engine-mode: string@policy-engine-mode-completer
   --group: string
-  --meta-hide: string@bool-completer # Hide this application from the user's My applications page.
+  --meta-hide: oneof<nothing, bool> # Hide this application from the user's My applications page.
 ]: any -> record<pk: string, name: string, slug: string, provider: int, provider_obj: record<pk: int, name: string, authentication_flow: string, authorization_flow: string, invalidation_flow: string, property_mappings: list<string>, component: string, assigned_application_slug: string, assigned_application_name: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string>, backchannel_providers: list<int>, backchannel_providers_obj: table<pk: int, name: string, authentication_flow: string, authorization_flow: string, invalidation_flow: string, property_mappings: list, component: string, assigned_application_slug: string, assigned_application_name: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string>, launch_url: string, open_in_new_tab: bool, meta_launch_url: string, meta_icon: string, meta_icon_url: string, meta_icon_themed_urls: record<light: string, dark: string>, meta_description: string, meta_publisher: string, policy_engine_mode: string, group: string, meta_hide: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2840,14 +2839,14 @@ export def "core-applications patch" [
   --body-slug: string # Internal application name, used in URLs.
   --provider: int # nullable
   --backchannel-providers: list
-  --open-in-new-tab: string@bool-completer # Open launch URL in a new browser tab or window.
+  --open-in-new-tab: oneof<nothing, bool> # Open launch URL in a new browser tab or window.
   --meta-launch-url: string # format: uri
   --meta-icon: string
   --meta-description: string
   --meta-publisher: string
   --policy-engine-mode: string@policy-engine-mode-completer
   --group: string
-  --meta-hide: string@bool-completer # Hide this application from the user's My applications page.
+  --meta-hide: oneof<nothing, bool> # Hide this application from the user's My applications page.
 ]: any -> record<pk: string, name: string, slug: string, provider: int, provider_obj: record<pk: int, name: string, authentication_flow: string, authorization_flow: string, invalidation_flow: string, property_mappings: list<string>, component: string, assigned_application_slug: string, assigned_application_name: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string>, backchannel_providers: list<int>, backchannel_providers_obj: table<pk: int, name: string, authentication_flow: string, authorization_flow: string, invalidation_flow: string, property_mappings: list, component: string, assigned_application_slug: string, assigned_application_name: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string>, launch_url: string, open_in_new_tab: bool, meta_launch_url: string, meta_icon: string, meta_icon_url: string, meta_icon_themed_urls: record<light: string, dark: string>, meta_description: string, meta_publisher: string, policy_engine_mode: string, group: string, meta_hide: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3064,7 +3063,7 @@ export def "core-brands list" [
   --branding-logo: string
   --branding-title: string
   --client-certificates: list
-  --default: string@bool-completer
+  --default: oneof<nothing, bool>
   --domain: string
   --flow-authentication: string # format: uuid
   --flow-device-code: string # format: uuid
@@ -3101,7 +3100,7 @@ export def "core-brands create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   domain: string # Domain that activates this brand. Can be a superset, i.e. `a.b` for `aa.b` and `ba.b`
-  --default: string@bool-completer
+  --default: oneof<nothing, bool>
   --branding-title: string
   --branding-logo: string
   --branding-favicon: string
@@ -3166,7 +3165,7 @@ export def "core-brands update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   domain: string # Domain that activates this brand. Can be a superset, i.e. `a.b` for `aa.b` and `ba.b`
-  --default: string@bool-completer
+  --default: oneof<nothing, bool>
   --branding-title: string
   --branding-logo: string
   --branding-favicon: string
@@ -3209,7 +3208,7 @@ export def "core-brands patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --domain: string # Domain that activates this brand. Can be a superset, i.e. `a.b` for `aa.b` and `ba.b`
-  --default: string@bool-completer
+  --default: oneof<nothing, bool>
   --branding-title: string
   --branding-logo: string
   --branding-favicon: string
@@ -3316,11 +3315,11 @@ export def "core-groups list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --attributes: string # Attributes
-  --include-children: string@bool-completer # default: false
-  --include-inherited-roles: string@bool-completer # default: false
-  --include-parents: string@bool-completer # default: false
-  --include-users: string@bool-completer # default: true
-  --is-superuser: string@bool-completer
+  --include-children: oneof<nothing, bool> # default: false
+  --include-inherited-roles: oneof<nothing, bool> # default: false
+  --include-parents: oneof<nothing, bool> # default: false
+  --include-users: oneof<nothing, bool> # default: true
+  --is-superuser: oneof<nothing, bool>
   --members-by-pk: list
   --members-by-username: list # Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
   --name: string
@@ -3351,7 +3350,7 @@ export def "core-groups create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --is-superuser: string@bool-completer # Users added to this group will be superusers.
+  --is-superuser: oneof<nothing, bool> # Users added to this group will be superusers.
   --parents: list
   --users: list
   --attributes: record
@@ -3381,10 +3380,10 @@ export def "core-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-children: string@bool-completer # default: false
-  --include-inherited-roles: string@bool-completer # default: false
-  --include-parents: string@bool-completer # default: false
-  --include-users: string@bool-completer # default: true
+  --include-children: oneof<nothing, bool> # default: false
+  --include-inherited-roles: oneof<nothing, bool> # default: false
+  --include-parents: oneof<nothing, bool> # default: false
+  --include-users: oneof<nothing, bool> # default: true
 ]: nothing -> record<pk: string, num_pk: int, name: string, is_superuser: bool, parents: list<string>, parents_obj: table<pk: string, name: string, is_superuser: bool, attributes: record, group_uuid: string>, users: list<int>, users_obj: table<pk: int, username: string, name: string, is_active: bool, last_login: string, email: string, attributes: record, uid: string>, attributes: record, roles: list<string>, roles_obj: table<pk: string, name: string>, inherited_roles_obj: table<pk: string, name: string>, children: list<string>, children_obj: table<pk: string, name: string, is_superuser: bool, attributes: record, group_uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3409,7 +3408,7 @@ export def "core-groups update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --is-superuser: string@bool-completer # Users added to this group will be superusers.
+  --is-superuser: oneof<nothing, bool> # Users added to this group will be superusers.
   --parents: list
   --users: list
   --attributes: record
@@ -3440,7 +3439,7 @@ export def "core-groups patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --is-superuser: string@bool-completer # Users added to this group will be superusers.
+  --is-superuser: oneof<nothing, bool> # Users added to this group will be superusers.
   --parents: list
   --users: list
   --attributes: record
@@ -3567,7 +3566,7 @@ export def "core-tokens list" [
   --allow-errors(-e) # Return full response without error handling
   --description: string
   --expires: string # format: date-time
-  --expiring: string@bool-completer
+  --expiring: oneof<nothing, bool>
   --identifier: string
   --intent: string@intent-completer
   --managed: string
@@ -3604,7 +3603,7 @@ export def "core-tokens create" [
   --user: int
   --description: string
   --expires: string # nullable, format: date-time
-  --expiring: string@bool-completer
+  --expiring: oneof<nothing, bool>
 ]: any -> record<pk: string, managed: string, identifier: string, intent: string, user: int, user_obj: record<pk: int, username: string, name: string, is_active: bool, last_login: string, date_joined: string, is_superuser: bool, groups: list<string>, groups_obj: list<record>, roles: list<string>, roles_obj: list<record>, email: string, avatar: string, attributes: record, uid: string, path: string, type: string, uuid: string, password_change_date: string, last_updated: string>, description: string, expires: string, expiring: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3658,7 +3657,7 @@ export def "core-tokens update" [
   --user: int
   --description: string
   --expires: string # nullable, format: date-time
-  --expiring: string@bool-completer
+  --expiring: oneof<nothing, bool>
 ]: any -> record<pk: string, managed: string, identifier: string, intent: string, user: int, user_obj: record<pk: int, username: string, name: string, is_active: bool, last_login: string, date_joined: string, is_superuser: bool, groups: list<string>, groups_obj: list<record>, roles: list<string>, roles_obj: list<record>, email: string, avatar: string, attributes: record, uid: string, path: string, type: string, uuid: string, password_change_date: string, last_updated: string>, description: string, expires: string, expiring: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3690,7 +3689,7 @@ export def "core-tokens patch" [
   --user: int
   --description: string
   --expires: string # nullable, format: date-time
-  --expiring: string@bool-completer
+  --expiring: oneof<nothing, bool>
 ]: any -> record<pk: string, managed: string, identifier: string, intent: string, user: int, user_obj: record<pk: int, username: string, name: string, is_active: bool, last_login: string, date_joined: string, is_superuser: bool, groups: list<string>, groups_obj: list<record>, roles: list<string>, roles_obj: list<record>, email: string, avatar: string, attributes: record, uid: string, path: string, type: string, uuid: string, password_change_date: string, last_updated: string>, description: string, expires: string, expiring: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3938,13 +3937,13 @@ export def "core-users list" [
   --email: string
   --groups-by-name: list
   --groups-by-pk: list
-  --include-groups: string@bool-completer # default: true
-  --include-roles: string@bool-completer # default: true
-  --is-active: string@bool-completer
-  --is-superuser: string@bool-completer
+  --include-groups: oneof<nothing, bool> # default: true
+  --include-roles: oneof<nothing, bool> # default: true
+  --is-active: oneof<nothing, bool>
+  --is-superuser: oneof<nothing, bool>
   --last-login: string # format: date-time
   --last-login-gt: string # format: date-time
-  --last-login-isnull: string@bool-completer
+  --last-login-isnull: oneof<nothing, bool>
   --last-login-lt: string # format: date-time
   --last-updated: string # format: date-time
   --last-updated-gt: string # format: date-time
@@ -3985,7 +3984,7 @@ export def "core-users create" [
   --allow-errors(-e) # Return full response without error handling
   username: string
   name: string # User's display name.
-  --is-active: string@bool-completer # Designates whether this user should be treated as active. Unselect this instead of deleting accounts.
+  --is-active: oneof<nothing, bool> # Designates whether this user should be treated as active. Unselect this instead of deleting accounts.
   --last-login: string # nullable, format: date-time
   --groups: list
   --roles: list
@@ -4042,7 +4041,7 @@ export def "core-users update" [
   --allow-errors(-e) # Return full response without error handling
   username: string
   name: string # User's display name.
-  --is-active: string@bool-completer # Designates whether this user should be treated as active. Unselect this instead of deleting accounts.
+  --is-active: oneof<nothing, bool> # Designates whether this user should be treated as active. Unselect this instead of deleting accounts.
   --last-login: string # nullable, format: date-time
   --groups: list
   --roles: list
@@ -4077,7 +4076,7 @@ export def "core-users patch" [
   --allow-errors(-e) # Return full response without error handling
   --username: string
   --name: string # User's display name.
-  --is-active: string@bool-completer # Designates whether this user should be treated as active. Unselect this instead of deleting accounts.
+  --is-active: oneof<nothing, bool> # Designates whether this user should be treated as active. Unselect this instead of deleting accounts.
   --last-login: string # nullable, format: date-time
   --groups: list
   --roles: list
@@ -4316,11 +4315,11 @@ export def "core-users-export create" [
   --email: string
   --groups-by-name: list
   --groups-by-pk: list
-  --is-active: string@bool-completer
-  --is-superuser: string@bool-completer
+  --is-active: oneof<nothing, bool>
+  --is-superuser: oneof<nothing, bool>
   --last-login: string # format: date-time
   --last-login-gt: string # format: date-time
-  --last-login-isnull: string@bool-completer
+  --last-login-isnull: oneof<nothing, bool>
   --last-login-lt: string # format: date-time
   --last-updated: string # format: date-time
   --last-updated-gt: string # format: date-time
@@ -4423,8 +4422,8 @@ export def "core-users-service-account create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --create-group: string@bool-completer # default: false
-  --expiring: string@bool-completer # default: true
+  --create-group: oneof<nothing, bool> # default: false
+  --expiring: oneof<nothing, bool> # default: true
   --expires: string # If not provided, valid for 360 days (format: date-time)
 ]: any -> record<username: string, token: string, user_uid: string, user_pk: int, group_pk: string> {
   let input = $in
@@ -4450,7 +4449,7 @@ export def "crypto-certificatekeypairs list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --has-key: string@bool-completer # Only return certificate-key pairs with keys
+  --has-key: oneof<nothing, bool> # Only return certificate-key pairs with keys
   --key-type: list
   --managed: string
   --name: string
@@ -4630,7 +4629,7 @@ export def "crypto-certificatekeypairs-view-certificate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --download: string@bool-completer
+  --download: oneof<nothing, bool>
 ]: nothing -> record<data: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4654,7 +4653,7 @@ export def "crypto-certificatekeypairs-view-private-key get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --download: string@bool-completer
+  --download: oneof<nothing, bool>
 ]: nothing -> record<data: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4705,7 +4704,7 @@ export def "endpoints-agents-connectors list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -4735,17 +4734,17 @@ export def "endpoints-agents-connectors create" [
   --allow-errors(-e) # Return full response without error handling
   --connector-uuid: string # format: uuid
   name: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --snapshot-expiry: string
   --auth-session-duration: string
-  --auth-terminate-session-on-expiry: string@bool-completer
+  --auth-terminate-session-on-expiry: oneof<nothing, bool>
   --refresh-interval: string
   --authorization-flow: string # nullable, format: uuid
   --nss-uid-offset: int
   --nss-gid-offset: int
   --challenge-key: string # nullable, format: uuid
   --challenge-idle-timeout: string
-  --challenge-trigger-check-in: string@bool-completer
+  --challenge-trigger-check-in: oneof<nothing, bool>
   --jwt-federation-providers: list
 ]: any -> record<connector_uuid: string, name: string, enabled: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, snapshot_expiry: string, auth_session_duration: string, auth_terminate_session_on_expiry: bool, refresh_interval: string, authorization_flow: string, nss_uid_offset: int, nss_gid_offset: int, challenge_key: string, challenge_idle_timeout: string, challenge_trigger_check_in: bool, jwt_federation_providers: list<int>> {
   let input = $in
@@ -4796,17 +4795,17 @@ export def "endpoints-agents-connectors update" [
   --allow-errors(-e) # Return full response without error handling
   --body-connector-uuid: string # format: uuid
   name: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --snapshot-expiry: string
   --auth-session-duration: string
-  --auth-terminate-session-on-expiry: string@bool-completer
+  --auth-terminate-session-on-expiry: oneof<nothing, bool>
   --refresh-interval: string
   --authorization-flow: string # nullable, format: uuid
   --nss-uid-offset: int
   --nss-gid-offset: int
   --challenge-key: string # nullable, format: uuid
   --challenge-idle-timeout: string
-  --challenge-trigger-check-in: string@bool-completer
+  --challenge-trigger-check-in: oneof<nothing, bool>
   --jwt-federation-providers: list
 ]: any -> record<connector_uuid: string, name: string, enabled: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, snapshot_expiry: string, auth_session_duration: string, auth_terminate_session_on_expiry: bool, refresh_interval: string, authorization_flow: string, nss_uid_offset: int, nss_gid_offset: int, challenge_key: string, challenge_idle_timeout: string, challenge_trigger_check_in: bool, jwt_federation_providers: list<int>> {
   let input = $in
@@ -4835,17 +4834,17 @@ export def "endpoints-agents-connectors patch" [
   --allow-errors(-e) # Return full response without error handling
   --body-connector-uuid: string # format: uuid
   --name: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --snapshot-expiry: string
   --auth-session-duration: string
-  --auth-terminate-session-on-expiry: string@bool-completer
+  --auth-terminate-session-on-expiry: oneof<nothing, bool>
   --refresh-interval: string
   --authorization-flow: string # nullable, format: uuid
   --nss-uid-offset: int
   --nss-gid-offset: int
   --challenge-key: string # nullable, format: uuid
   --challenge-idle-timeout: string
-  --challenge-trigger-check-in: string@bool-completer
+  --challenge-trigger-check-in: oneof<nothing, bool>
   --jwt-federation-providers: list
 ]: any -> record<connector_uuid: string, name: string, enabled: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, snapshot_expiry: string, auth_session_duration: string, auth_terminate_session_on_expiry: bool, refresh_interval: string, authorization_flow: string, nss_uid_offset: int, nss_gid_offset: int, challenge_key: string, challenge_idle_timeout: string, challenge_trigger_check_in: bool, jwt_federation_providers: list<int>> {
   let input = $in
@@ -5102,7 +5101,7 @@ export def "endpoints-agents-enrollment-tokens create" [
   --device-group: string # nullable, format: uuid
   connector: string # format: uuid
   name: string
-  --expiring: string@bool-completer
+  --expiring: oneof<nothing, bool>
   --expires: string # nullable, format: date-time
 ]: any -> record<token_uuid: string, device_group: string, device_group_obj: record<pbm_uuid: string, name: string, attributes: record>, connector: string, name: string, expiring: bool, expires: string> {
   let input = $in
@@ -5154,7 +5153,7 @@ export def "endpoints-agents-enrollment-tokens update" [
   --device-group: string # nullable, format: uuid
   connector: string # format: uuid
   name: string
-  --expiring: string@bool-completer
+  --expiring: oneof<nothing, bool>
   --expires: string # nullable, format: date-time
 ]: any -> record<token_uuid: string, device_group: string, device_group_obj: record<pbm_uuid: string, name: string, attributes: record>, connector: string, name: string, expiring: bool, expires: string> {
   let input = $in
@@ -5184,7 +5183,7 @@ export def "endpoints-agents-enrollment-tokens patch" [
   --device-group: string # nullable, format: uuid
   --connector: string # format: uuid
   --name: string
-  --expiring: string@bool-completer
+  --expiring: oneof<nothing, bool>
   --expires: string # nullable, format: date-time
 ]: any -> record<token_uuid: string, device_group: string, device_group_obj: record<pbm_uuid: string, name: string, attributes: record>, connector: string, name: string, expiring: bool, expires: string> {
   let input = $in
@@ -5799,13 +5798,13 @@ export def "endpoints-device-bindings list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --order: int
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --policy: string # format: uuid
-  --policy-isnull: string@bool-completer
+  --policy-isnull: oneof<nothing, bool>
   --search: string # A search term.
   --target: string # format: uuid
   --target-in: list
@@ -5836,12 +5835,12 @@ export def "endpoints-device-bindings create" [
   --group: string # nullable, format: uuid
   --user: int # nullable
   target: string # format: uuid
-  --negate: string@bool-completer # Negates the outcome of the policy. Messages are unaffected.
-  --enabled: string@bool-completer
+  --negate: oneof<nothing, bool> # Negates the outcome of the policy. Messages are unaffected.
+  --enabled: oneof<nothing, bool>
   order: int
   --timeout: int # Timeout after which Policy execution is terminated.
-  --failure-result: string@bool-completer # Result if the Policy execution fails.
-  --is-primary: string@bool-completer
+  --failure-result: oneof<nothing, bool> # Result if the Policy execution fails.
+  --is-primary: oneof<nothing, bool>
 ]: any -> record<pk: string, policy: string, group: string, user: int, policy_obj: record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int>, group_obj: record<pk: string, num_pk: int, name: string, is_superuser: bool, attributes: record>, user_obj: record<pk: int, username: string, name: string, is_active: bool, last_login: string, email: string, attributes: record, uid: string>, target: string, negate: bool, enabled: bool, order: int, timeout: int, failure_result: bool, is_primary: bool, connector: string, connector_obj: record<connector_uuid: string, name: string, enabled: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5893,12 +5892,12 @@ export def "endpoints-device-bindings update" [
   --group: string # nullable, format: uuid
   --user: int # nullable
   target: string # format: uuid
-  --negate: string@bool-completer # Negates the outcome of the policy. Messages are unaffected.
-  --enabled: string@bool-completer
+  --negate: oneof<nothing, bool> # Negates the outcome of the policy. Messages are unaffected.
+  --enabled: oneof<nothing, bool>
   order: int
   --timeout: int # Timeout after which Policy execution is terminated.
-  --failure-result: string@bool-completer # Result if the Policy execution fails.
-  --is-primary: string@bool-completer
+  --failure-result: oneof<nothing, bool> # Result if the Policy execution fails.
+  --is-primary: oneof<nothing, bool>
 ]: any -> record<pk: string, policy: string, group: string, user: int, policy_obj: record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int>, group_obj: record<pk: string, num_pk: int, name: string, is_superuser: bool, attributes: record>, user_obj: record<pk: int, username: string, name: string, is_active: bool, last_login: string, email: string, attributes: record, uid: string>, target: string, negate: bool, enabled: bool, order: int, timeout: int, failure_result: bool, is_primary: bool, connector: string, connector_obj: record<connector_uuid: string, name: string, enabled: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5928,12 +5927,12 @@ export def "endpoints-device-bindings patch" [
   --group: string # nullable, format: uuid
   --user: int # nullable
   --target: string # format: uuid
-  --negate: string@bool-completer # Negates the outcome of the policy. Messages are unaffected.
-  --enabled: string@bool-completer
+  --negate: oneof<nothing, bool> # Negates the outcome of the policy. Messages are unaffected.
+  --enabled: oneof<nothing, bool>
   --order: int
   --timeout: int # Timeout after which Policy execution is terminated.
-  --failure-result: string@bool-completer # Result if the Policy execution fails.
-  --is-primary: string@bool-completer
+  --failure-result: oneof<nothing, bool> # Result if the Policy execution fails.
+  --is-primary: oneof<nothing, bool>
 ]: any -> record<pk: string, policy: string, group: string, user: int, policy_obj: record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int>, group_obj: record<pk: string, num_pk: int, name: string, is_superuser: bool, attributes: record>, user_obj: record<pk: int, username: string, name: string, is_active: bool, last_login: string, email: string, attributes: record, uid: string>, target: string, negate: bool, enabled: bool, order: int, timeout: int, failure_result: bool, is_primary: bool, connector: string, connector_obj: record<connector_uuid: string, name: string, enabled: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6058,7 +6057,7 @@ export def "endpoints-devices update" [
   name: string
   --access-group: string # nullable, format: uuid
   --access-group-obj: record # shape: {name: string, attributes?: record}
-  --expiring: string@bool-completer
+  --expiring: oneof<nothing, bool>
   --expires: string # nullable, format: date-time
   --attributes: record
 ]: any -> record<device_uuid: string, pbm_uuid: string, name: string, access_group: string, access_group_obj: record<pbm_uuid: string, name: string, attributes: record>, expiring: bool, expires: string, facts: record<data: record<os: record, disks: list, network: record, hardware: record, software: list, processes: list, users: list, groups: list, vendor: record>, connection: string, created: string, expires: string, vendor: record>, attributes: record> {
@@ -6091,7 +6090,7 @@ export def "endpoints-devices patch" [
   --name: string
   --access-group: string # nullable, format: uuid
   --access-group-obj: record # shape: {name: string, attributes?: record}
-  --expiring: string@bool-completer
+  --expiring: oneof<nothing, bool>
   --expires: string # nullable, format: date-time
   --attributes: record
 ]: any -> record<device_uuid: string, pbm_uuid: string, name: string, access_group: string, access_group_obj: record<pbm_uuid: string, name: string, attributes: record>, expiring: bool, expires: string, facts: record<data: record<os: record, disks: list, network: record, hardware: record, software: list, processes: list, users: list, groups: list, vendor: record>, connection: string, created: string, expires: string, vendor: record>, attributes: record> {
@@ -6212,12 +6211,12 @@ export def "endpoints-fleet-connectors create" [
   --allow-errors(-e) # Return full response without error handling
   --connector-uuid: string # format: uuid
   name: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --body-url: string # format: uri
   --body-token: string
   --headers-mapping: string # Configure additional headers to be sent. Mapping should return a dictionary of key-value pairs (nullable, format: uuid)
-  --map-users: string@bool-completer
-  --map-teams-access-group: string@bool-completer
+  --map-users: oneof<nothing, bool>
+  --map-teams-access-group: oneof<nothing, bool>
 ]: any -> record<connector_uuid: string, name: string, enabled: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, url: string, headers_mapping: string, map_users: bool, map_teams_access_group: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6267,12 +6266,12 @@ export def "endpoints-fleet-connectors update" [
   --allow-errors(-e) # Return full response without error handling
   --body-connector-uuid: string # format: uuid
   name: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --body-url: string # format: uri
   --body-token: string
   --headers-mapping: string # Configure additional headers to be sent. Mapping should return a dictionary of key-value pairs (nullable, format: uuid)
-  --map-users: string@bool-completer
-  --map-teams-access-group: string@bool-completer
+  --map-users: oneof<nothing, bool>
+  --map-teams-access-group: oneof<nothing, bool>
 ]: any -> record<connector_uuid: string, name: string, enabled: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, url: string, headers_mapping: string, map_users: bool, map_teams_access_group: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6300,12 +6299,12 @@ export def "endpoints-fleet-connectors patch" [
   --allow-errors(-e) # Return full response without error handling
   --body-connector-uuid: string # format: uuid
   --name: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --body-url: string # format: uri
   --body-token: string
   --headers-mapping: string # Configure additional headers to be sent. Mapping should return a dictionary of key-value pairs (nullable, format: uuid)
-  --map-users: string@bool-completer
-  --map-teams-access-group: string@bool-completer
+  --map-users: oneof<nothing, bool>
+  --map-teams-access-group: oneof<nothing, bool>
 ]: any -> record<connector_uuid: string, name: string, enabled: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, url: string, headers_mapping: string, map_users: bool, map_teams_access_group: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6403,7 +6402,7 @@ export def "endpoints-google-chrome-connectors create" [
   --allow-errors(-e) # Return full response without error handling
   --connector-uuid: string # format: uuid
   name: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   credentials: record
 ]: any -> record<connector_uuid: string, name: string, enabled: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, credentials: record, chrome_url: string> {
   let input = $in
@@ -6454,7 +6453,7 @@ export def "endpoints-google-chrome-connectors update" [
   --allow-errors(-e) # Return full response without error handling
   --body-connector-uuid: string # format: uuid
   name: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   credentials: record
 ]: any -> record<connector_uuid: string, name: string, enabled: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, credentials: record, chrome_url: string> {
   let input = $in
@@ -6483,7 +6482,7 @@ export def "endpoints-google-chrome-connectors patch" [
   --allow-errors(-e) # Return full response without error handling
   --body-connector-uuid: string # format: uuid
   --name: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --credentials: record
 ]: any -> record<connector_uuid: string, name: string, enabled: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, credentials: record, chrome_url: string> {
   let input = $in
@@ -6765,7 +6764,7 @@ export def "enterprise-license-summary get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cached: string@bool-completer # default: true
+  --cached: oneof<nothing, bool> # default: true
 ]: nothing -> record<internal_users: int, external_users: int, status: string, latest_valid: string, license_flags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7119,7 +7118,7 @@ export def "events-notifications list" [
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --search: string # A search term.
-  --seen: string@bool-completer
+  --seen: oneof<nothing, bool>
   --severity: string@severity-completer
   --user: int
 ]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<pk: string, severity: record, body: string, hyperlink: string, hyperlink_label: string, created: string, event: record, seen: bool>, autocomplete: record> {
@@ -7171,7 +7170,7 @@ export def "events-notifications update" [
   --hyperlink: string # nullable
   --hyperlink-label: string # nullable
   --event: record # Event Serializer — shape: {user?: record, action: "login"|"login_failed"|"logout"|"user_write"|"suspicious_request"|"password_set"|"secret_view"|"secret_rotate"|"invitation_used"|"authorize_application"|"source_linked"|"impersonation_started"|"impersonation_ended"|"flow_execution"|"policy_execution"|"policy_exception"|"property_mapping_exception"|"system_task_execution"|"system_task_exception"|"system_exception"|"configuration_error"|"configuration_warning"|"model_created"|"model_updated"|"model_deleted"|"email_sent"|"update_available"|"export_ready"|"review_initiated"|"review_overdue"|"review_attested"|"review_completed"|"custom_", app: string, context?: record, client_ip?: string, expires?: string, brand?: record}
-  --seen: string@bool-completer
+  --seen: oneof<nothing, bool>
 ]: any -> record<pk: string, severity: record, body: string, hyperlink: string, hyperlink_label: string, created: string, event: record<pk: string, user: record, action: string, app: string, context: record, client_ip: string, created: string, expires: string, brand: record>, seen: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7201,7 +7200,7 @@ export def "events-notifications patch" [
   --hyperlink: string # nullable
   --hyperlink-label: string # nullable
   --event: record # Event Serializer — shape: {user?: record, action: "login"|"login_failed"|"logout"|"user_write"|"suspicious_request"|"password_set"|"secret_view"|"secret_rotate"|"invitation_used"|"authorize_application"|"source_linked"|"impersonation_started"|"impersonation_ended"|"flow_execution"|"policy_execution"|"policy_exception"|"property_mapping_exception"|"system_task_execution"|"system_task_exception"|"system_exception"|"configuration_error"|"configuration_warning"|"model_created"|"model_updated"|"model_deleted"|"email_sent"|"update_available"|"export_ready"|"review_initiated"|"review_overdue"|"review_attested"|"review_completed"|"custom_", app: string, context?: record, client_ip?: string, expires?: string, brand?: record}
-  --seen: string@bool-completer
+  --seen: oneof<nothing, bool>
 ]: any -> record<pk: string, severity: record, body: string, hyperlink: string, hyperlink_label: string, created: string, event: record<pk: string, user: record, action: string, app: string, context: record, client_ip: string, created: string, expires: string, brand: record>, seen: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7324,7 +7323,7 @@ export def "events-rules create" [
   --transports: list # Select which transports should be used to notify the user. If none are selected, the notification will only be shown in the authentik UI.
   --severity: any # Controls which severity level the created notifications will have.
   --destination-group: string # Define which group of users this notification should be sent and shown to. If left empty, Notification won't ben sent. (nullable, format: uuid)
-  --destination-event-user: string@bool-completer # When enabled, notification will be sent to user the user that triggered the event.When destination_group is configured, notification is sent to both.
+  --destination-event-user: oneof<nothing, bool> # When enabled, notification will be sent to user the user that triggered the event.When destination_group is configured, notification is sent to both.
 ]: any -> record<pk: string, name: string, transports: list<string>, severity: record, destination_group: string, destination_group_obj: record<pk: string, num_pk: int, name: string, is_superuser: bool, parents: list<string>, parents_obj: list<record>, users: list<int>, users_obj: list<record>, attributes: record, roles: list<string>, roles_obj: list<record>, inherited_roles_obj: list<record>, children: list<string>, children_obj: list<record>>, destination_event_user: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7376,7 +7375,7 @@ export def "events-rules update" [
   --transports: list # Select which transports should be used to notify the user. If none are selected, the notification will only be shown in the authentik UI.
   --severity: any # Controls which severity level the created notifications will have.
   --destination-group: string # Define which group of users this notification should be sent and shown to. If left empty, Notification won't ben sent. (nullable, format: uuid)
-  --destination-event-user: string@bool-completer # When enabled, notification will be sent to user the user that triggered the event.When destination_group is configured, notification is sent to both.
+  --destination-event-user: oneof<nothing, bool> # When enabled, notification will be sent to user the user that triggered the event.When destination_group is configured, notification is sent to both.
 ]: any -> record<pk: string, name: string, transports: list<string>, severity: record, destination_group: string, destination_group_obj: record<pk: string, num_pk: int, name: string, is_superuser: bool, parents: list<string>, parents_obj: list<record>, users: list<int>, users_obj: list<record>, attributes: record, roles: list<string>, roles_obj: list<record>, inherited_roles_obj: list<record>, children: list<string>, children_obj: list<record>>, destination_event_user: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7406,7 +7405,7 @@ export def "events-rules patch" [
   --transports: list # Select which transports should be used to notify the user. If none are selected, the notification will only be shown in the authentik UI.
   --severity: any # Controls which severity level the created notifications will have.
   --destination-group: string # Define which group of users this notification should be sent and shown to. If left empty, Notification won't ben sent. (nullable, format: uuid)
-  --destination-event-user: string@bool-completer # When enabled, notification will be sent to user the user that triggered the event.When destination_group is configured, notification is sent to both.
+  --destination-event-user: oneof<nothing, bool> # When enabled, notification will be sent to user the user that triggered the event.When destination_group is configured, notification is sent to both.
 ]: any -> record<pk: string, name: string, transports: list<string>, severity: record, destination_group: string, destination_group_obj: record<pk: string, num_pk: int, name: string, is_superuser: bool, parents: list<string>, parents_obj: list<record>, users: list<int>, users_obj: list<record>, attributes: record, roles: list<string>, roles_obj: list<record>, inherited_roles_obj: list<record>, children: list<string>, children_obj: list<record>>, destination_event_user: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7481,7 +7480,7 @@ export def "events-transports list" [
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --search: string # A search term.
-  --send-once: string@bool-completer
+  --send-once: oneof<nothing, bool>
   --webhook-url: string
 ]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<pk: string, name: string, mode: string, mode_verbose: string, webhook_url: string, webhook_ca: string, webhook_mapping_body: string, webhook_mapping_headers: string, email_subject_prefix: string, email_template: string, send_once: bool>, autocomplete: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7513,7 +7512,7 @@ export def "events-transports create" [
   --webhook-mapping-headers: string # Configure additional headers to be sent. Mapping should return a dictionary of key-value pairs (nullable, format: uuid)
   --email-subject-prefix: string
   --email-template: string
-  --send-once: string@bool-completer # Only send notification once, for example when sending a webhook into a chat channel.
+  --send-once: oneof<nothing, bool> # Only send notification once, for example when sending a webhook into a chat channel.
 ]: any -> record<pk: string, name: string, mode: string, mode_verbose: string, webhook_url: string, webhook_ca: string, webhook_mapping_body: string, webhook_mapping_headers: string, email_subject_prefix: string, email_template: string, send_once: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7569,7 +7568,7 @@ export def "events-transports update" [
   --webhook-mapping-headers: string # Configure additional headers to be sent. Mapping should return a dictionary of key-value pairs (nullable, format: uuid)
   --email-subject-prefix: string
   --email-template: string
-  --send-once: string@bool-completer # Only send notification once, for example when sending a webhook into a chat channel.
+  --send-once: oneof<nothing, bool> # Only send notification once, for example when sending a webhook into a chat channel.
 ]: any -> record<pk: string, name: string, mode: string, mode_verbose: string, webhook_url: string, webhook_ca: string, webhook_mapping_body: string, webhook_mapping_headers: string, email_subject_prefix: string, email_template: string, send_once: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7603,7 +7602,7 @@ export def "events-transports patch" [
   --webhook-mapping-headers: string # Configure additional headers to be sent. Mapping should return a dictionary of key-value pairs (nullable, format: uuid)
   --email-subject-prefix: string
   --email-template: string
-  --send-once: string@bool-completer # Only send notification once, for example when sending a webhook into a chat channel.
+  --send-once: oneof<nothing, bool> # Only send notification once, for example when sending a webhook into a chat channel.
 ]: any -> record<pk: string, name: string, mode: string, mode_verbose: string, webhook_url: string, webhook_ca: string, webhook_mapping_body: string, webhook_mapping_headers: string, email_subject_prefix: string, email_template: string, send_once: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7694,7 +7693,7 @@ export def "flows-bindings list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --evaluate-on-plan: string@bool-completer
+  --evaluate-on-plan: oneof<nothing, bool>
   --fsb-uuid: string # format: uuid
   --invalid-response-action: string
   --order: int
@@ -7704,7 +7703,7 @@ export def "flows-bindings list" [
   --pbm-uuid: string # format: uuid
   --policies: list
   --policy-engine-mode: string@policy-engine-mode-completer
-  --re-evaluate-policies: string@bool-completer
+  --re-evaluate-policies: oneof<nothing, bool>
   --search: string # A search term.
   --stage: string # format: uuid
   --target: string # format: uuid
@@ -7732,8 +7731,8 @@ export def "flows-bindings create" [
   --allow-errors(-e) # Return full response without error handling
   target: string # format: uuid
   stage: string # format: uuid
-  --evaluate-on-plan: string@bool-completer # Evaluate policies during the Flow planning process.
-  --re-evaluate-policies: string@bool-completer # Evaluate policies when the Stage is presented to the user.
+  --evaluate-on-plan: oneof<nothing, bool> # Evaluate policies during the Flow planning process.
+  --re-evaluate-policies: oneof<nothing, bool> # Evaluate policies when the Stage is presented to the user.
   order: int
   --policy-engine-mode: string@policy-engine-mode-completer
   --invalid-response-action: any # Configure how the flow executor should handle an invalid response to a challenge. RETRY returns the error message and a similar challenge to the executor. RESTART restarts the flow from the beginning, and RESTART_WITH_CONTEXT restarts the flow while keeping the current context.
@@ -7786,8 +7785,8 @@ export def "flows-bindings update" [
   --allow-errors(-e) # Return full response without error handling
   target: string # format: uuid
   stage: string # format: uuid
-  --evaluate-on-plan: string@bool-completer # Evaluate policies during the Flow planning process.
-  --re-evaluate-policies: string@bool-completer # Evaluate policies when the Stage is presented to the user.
+  --evaluate-on-plan: oneof<nothing, bool> # Evaluate policies during the Flow planning process.
+  --re-evaluate-policies: oneof<nothing, bool> # Evaluate policies when the Stage is presented to the user.
   order: int
   --policy-engine-mode: string@policy-engine-mode-completer
   --invalid-response-action: any # Configure how the flow executor should handle an invalid response to a challenge. RETRY returns the error message and a similar challenge to the executor. RESTART restarts the flow from the beginning, and RESTART_WITH_CONTEXT restarts the flow while keeping the current context.
@@ -7818,8 +7817,8 @@ export def "flows-bindings patch" [
   --allow-errors(-e) # Return full response without error handling
   --target: string # format: uuid
   --stage: string # format: uuid
-  --evaluate-on-plan: string@bool-completer # Evaluate policies during the Flow planning process.
-  --re-evaluate-policies: string@bool-completer # Evaluate policies when the Stage is presented to the user.
+  --evaluate-on-plan: oneof<nothing, bool> # Evaluate policies during the Flow planning process.
+  --re-evaluate-policies: oneof<nothing, bool> # Evaluate policies when the Stage is presented to the user.
   --order: int
   --policy-engine-mode: string@policy-engine-mode-completer
   --invalid-response-action: any # Configure how the flow executor should handle an invalid response to a challenge. RETRY returns the error message and a similar challenge to the executor. RESTART restarts the flow from the beginning, and RESTART_WITH_CONTEXT restarts the flow while keeping the current context.
@@ -7942,7 +7941,7 @@ export def "flows-executor solve" [
   --photo-url: string # format: uri
   --auth-date: int
   --hash: string
-  --remember-me: string@bool-completer
+  --remember-me: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8027,7 +8026,7 @@ export def "flows-instances create" [
   designation: any # Decides what this Flow is used for. For example, the Authentication flow is redirect to when an un-authenticated user visits authentik.
   --background: string # Background shown during execution
   --policy-engine-mode: string@policy-engine-mode-completer
-  --compatibility-mode: string@bool-completer # Enable compatibility mode, increases compatibility with password managers on mobile devices.
+  --compatibility-mode: oneof<nothing, bool> # Enable compatibility mode, increases compatibility with password managers on mobile devices.
   --layout: string@layout-completer
   --denied-action: any # Configure what should happen when a flow denies access to a user.
   --authentication: any # Required level of authentication and authorization to access a flow.
@@ -8084,7 +8083,7 @@ export def "flows-instances update" [
   designation: any # Decides what this Flow is used for. For example, the Authentication flow is redirect to when an un-authenticated user visits authentik.
   --background: string # Background shown during execution
   --policy-engine-mode: string@policy-engine-mode-completer
-  --compatibility-mode: string@bool-completer # Enable compatibility mode, increases compatibility with password managers on mobile devices.
+  --compatibility-mode: oneof<nothing, bool> # Enable compatibility mode, increases compatibility with password managers on mobile devices.
   --layout: string@layout-completer
   --denied-action: any # Configure what should happen when a flow denies access to a user.
   --authentication: any # Required level of authentication and authorization to access a flow.
@@ -8119,7 +8118,7 @@ export def "flows-instances patch" [
   --designation: any # Decides what this Flow is used for. For example, the Authentication flow is redirect to when an un-authenticated user visits authentik.
   --background: string # Background shown during execution
   --policy-engine-mode: string@policy-engine-mode-completer
-  --compatibility-mode: string@bool-completer # Enable compatibility mode, increases compatibility with password managers on mobile devices.
+  --compatibility-mode: oneof<nothing, bool> # Enable compatibility mode, increases compatibility with password managers on mobile devices.
   --layout: string@layout-completer
   --denied-action: any # Configure what should happen when a flow denies access to a user.
   --authentication: any # Required level of authentication and authorization to access a flow.
@@ -8328,7 +8327,7 @@ export def "lifecycle-iterations-latest latest" [
   --allow-errors(-e) # Return full response without error handling
   --ordering: string # Which field to use when ordering the results.
   --search: string # A search term.
-  --user-is-reviewer: string@bool-completer
+  --user-is-reviewer: oneof<nothing, bool>
 ]: nothing -> table<id: string, content_type: string, object_id: string, object_verbose: string, object_admin_url: string, state: record, opened_on: string, grace_period_end: string, next_review_date: string, reviews: list<record>, rule: record<id: string, name: string, reviewer_groups: list, min_reviewers: int, reviewers: list>, user_can_review: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8355,7 +8354,7 @@ export def "lifecycle-iterations-open open" [
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --search: string # A search term.
-  --user-is-reviewer: string@bool-completer
+  --user-is-reviewer: oneof<nothing, bool>
 ]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<id: string, content_type: string, object_id: string, object_verbose: string, object_admin_url: string, state: record, opened_on: string, grace_period_end: string, next_review_date: string, reviews: list, rule: record, user_can_review: bool>, autocomplete: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8436,7 +8435,7 @@ export def "lifecycle-rules create" [
   --grace-period: string
   --reviewer-groups: list
   --min-reviewers: int
-  --min-reviewers-is-per-group: string@bool-completer
+  --min-reviewers-is-per-group: oneof<nothing, bool>
   reviewers: list
   --notification-transports: list # Select which transports should be used to notify the reviewers. If none are selected, the notification will only be shown in the authentik UI.
 ]: any -> record<id: string, name: string, content_type: string, object_id: string, interval: string, grace_period: string, reviewer_groups: list<string>, reviewer_groups_obj: table<pk: string, name: string>, min_reviewers: int, min_reviewers_is_per_group: bool, reviewers: list<string>, reviewers_obj: table<pk: int, uuid: string, username: string, name: string>, notification_transports: list<string>, target_verbose: string> {
@@ -8491,7 +8490,7 @@ export def "lifecycle-rules update" [
   --grace-period: string
   --reviewer-groups: list
   --min-reviewers: int
-  --min-reviewers-is-per-group: string@bool-completer
+  --min-reviewers-is-per-group: oneof<nothing, bool>
   reviewers: list
   --notification-transports: list # Select which transports should be used to notify the reviewers. If none are selected, the notification will only be shown in the authentik UI.
 ]: any -> record<id: string, name: string, content_type: string, object_id: string, interval: string, grace_period: string, reviewer_groups: list<string>, reviewer_groups_obj: table<pk: string, name: string>, min_reviewers: int, min_reviewers_is_per_group: bool, reviewers: list<string>, reviewers_obj: table<pk: int, uuid: string, username: string, name: string>, notification_transports: list<string>, target_verbose: string> {
@@ -8525,7 +8524,7 @@ export def "lifecycle-rules patch" [
   --grace-period: string
   --reviewer-groups: list
   --min-reviewers: int
-  --min-reviewers-is-per-group: string@bool-completer
+  --min-reviewers-is-per-group: oneof<nothing, bool>
   --reviewers: list
   --notification-transports: list # Select which transports should be used to notify the reviewers. If none are selected, the notification will only be shown in the authentik UI.
 ]: any -> record<id: string, name: string, content_type: string, object_id: string, interval: string, grace_period: string, reviewer_groups: list<string>, reviewer_groups_obj: table<pk: string, name: string>, min_reviewers: int, min_reviewers_is_per_group: bool, reviewers: list<string>, reviewers_obj: table<pk: int, uuid: string, username: string, name: string>, notification_transports: list<string>, target_verbose: string> {
@@ -8604,7 +8603,7 @@ export def "managed-blueprints create" [
   name: string
   --path: string # default: 
   --context: record
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --content: string
 ]: any -> record<pk: string, name: string, path: string, context: record, last_applied: string, last_applied_hash: string, status: record, enabled: bool, managed_models: list<string>, metadata: record, content: string> {
   let input = $in
@@ -8656,7 +8655,7 @@ export def "managed-blueprints update" [
   name: string
   --path: string # default: 
   --context: record
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --content: string
 ]: any -> record<pk: string, name: string, path: string, context: record, last_applied: string, last_applied_hash: string, status: record, enabled: bool, managed_models: list<string>, metadata: record, content: string> {
   let input = $in
@@ -8686,7 +8685,7 @@ export def "managed-blueprints patch" [
   --name: string
   --path: string # default: 
   --context: record
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --content: string
 ]: any -> record<pk: string, name: string, path: string, context: record, last_applied: string, last_applied_hash: string, status: record, enabled: bool, managed_models: list<string>, metadata: record, content: string> {
   let input = $in
@@ -9115,7 +9114,7 @@ export def "outposts-instances list" [
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
-  --providers-isnull: string@bool-completer
+  --providers-isnull: oneof<nothing, bool>
   --providers-by-pk: list
   --search: string # A search term.
   --service-connection-name--icontains: string
@@ -9284,7 +9283,7 @@ export def "outposts-instances-health list" [
   --name-icontains: string
   --name-iexact: string
   --ordering: string # Which field to use when ordering the results.
-  --providers-isnull: string@bool-completer
+  --providers-isnull: oneof<nothing, bool>
   --providers-by-pk: list
   --search: string # A search term.
   --service-connection-name--icontains: string
@@ -9619,7 +9618,7 @@ export def "outposts-service-connections-docker list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --local: string@bool-completer
+  --local: oneof<nothing, bool>
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -9651,7 +9650,7 @@ export def "outposts-service-connections-docker create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --local: string@bool-completer # If enabled, use the local connection. Required Docker socket/Kubernetes Integration
+  --local: oneof<nothing, bool> # If enabled, use the local connection. Required Docker socket/Kubernetes Integration
   --body-url: string # Can be in the format of 'unix://<path>' when connecting to a local docker daemon, or 'https://<hostname>:2376' when connecting to a remote system.
   --tls-verification: string # CA which the endpoint's Certificate is verified against. Can be left empty for no validation. (nullable, format: uuid)
   --tls-authentication: string # Certificate/Key used for authentication. Can be left empty for no authentication. (nullable, format: uuid)
@@ -9703,7 +9702,7 @@ export def "outposts-service-connections-docker update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --local: string@bool-completer # If enabled, use the local connection. Required Docker socket/Kubernetes Integration
+  --local: oneof<nothing, bool> # If enabled, use the local connection. Required Docker socket/Kubernetes Integration
   --body-url: string # Can be in the format of 'unix://<path>' when connecting to a local docker daemon, or 'https://<hostname>:2376' when connecting to a remote system.
   --tls-verification: string # CA which the endpoint's Certificate is verified against. Can be left empty for no validation. (nullable, format: uuid)
   --tls-authentication: string # Certificate/Key used for authentication. Can be left empty for no authentication. (nullable, format: uuid)
@@ -9733,7 +9732,7 @@ export def "outposts-service-connections-docker patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --local: string@bool-completer # If enabled, use the local connection. Required Docker socket/Kubernetes Integration
+  --local: oneof<nothing, bool> # If enabled, use the local connection. Required Docker socket/Kubernetes Integration
   --body-url: string # Can be in the format of 'unix://<path>' when connecting to a local docker daemon, or 'https://<hostname>:2376' when connecting to a remote system.
   --tls-verification: string # CA which the endpoint's Certificate is verified against. Can be left empty for no validation. (nullable, format: uuid)
   --tls-authentication: string # Certificate/Key used for authentication. Can be left empty for no authentication. (nullable, format: uuid)
@@ -9805,7 +9804,7 @@ export def "outposts-service-connections-kubernetes list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --local: string@bool-completer
+  --local: oneof<nothing, bool>
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -9834,9 +9833,9 @@ export def "outposts-service-connections-kubernetes create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --local: string@bool-completer # If enabled, use the local connection. Required Docker socket/Kubernetes Integration
+  --local: oneof<nothing, bool> # If enabled, use the local connection. Required Docker socket/Kubernetes Integration
   --kubeconfig: record # Paste your kubeconfig here. authentik will automatically use the currently selected context.
-  --verify-ssl: string@bool-completer # Verify SSL Certificates of the Kubernetes API endpoint
+  --verify-ssl: oneof<nothing, bool> # Verify SSL Certificates of the Kubernetes API endpoint
 ]: any -> record<pk: string, name: string, local: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, kubeconfig: record, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9885,9 +9884,9 @@ export def "outposts-service-connections-kubernetes update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --local: string@bool-completer # If enabled, use the local connection. Required Docker socket/Kubernetes Integration
+  --local: oneof<nothing, bool> # If enabled, use the local connection. Required Docker socket/Kubernetes Integration
   --kubeconfig: record # Paste your kubeconfig here. authentik will automatically use the currently selected context.
-  --verify-ssl: string@bool-completer # Verify SSL Certificates of the Kubernetes API endpoint
+  --verify-ssl: oneof<nothing, bool> # Verify SSL Certificates of the Kubernetes API endpoint
 ]: any -> record<pk: string, name: string, local: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, kubeconfig: record, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9914,9 +9913,9 @@ export def "outposts-service-connections-kubernetes patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --local: string@bool-completer # If enabled, use the local connection. Required Docker socket/Kubernetes Integration
+  --local: oneof<nothing, bool> # If enabled, use the local connection. Required Docker socket/Kubernetes Integration
   --kubeconfig: record # Paste your kubeconfig here. authentik will automatically use the currently selected context.
-  --verify-ssl: string@bool-completer # Verify SSL Certificates of the Kubernetes API endpoint
+  --verify-ssl: oneof<nothing, bool> # Verify SSL Certificates of the Kubernetes API endpoint
 ]: any -> record<pk: string, name: string, local: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, kubeconfig: record, verify_ssl: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9985,11 +9984,11 @@ export def "policies-all list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --bindings-isnull: string@bool-completer
+  --bindings-isnull: oneof<nothing, bool>
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
-  --promptstage-isnull: string@bool-completer
+  --promptstage-isnull: oneof<nothing, bool>
   --search: string # A search term.
 ]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int>, autocomplete: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10169,13 +10168,13 @@ export def "policies-bindings list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --order: int
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --policy: string # format: uuid
-  --policy-isnull: string@bool-completer
+  --policy-isnull: oneof<nothing, bool>
   --search: string # A search term.
   --target: string # format: uuid
   --target-in: list
@@ -10206,11 +10205,11 @@ export def "policies-bindings create" [
   --group: string # nullable, format: uuid
   --user: int # nullable
   target: string # format: uuid
-  --negate: string@bool-completer # Negates the outcome of the policy. Messages are unaffected.
-  --enabled: string@bool-completer
+  --negate: oneof<nothing, bool> # Negates the outcome of the policy. Messages are unaffected.
+  --enabled: oneof<nothing, bool>
   order: int
   --timeout: int # Timeout after which Policy execution is terminated.
-  --failure-result: string@bool-completer # Result if the Policy execution fails.
+  --failure-result: oneof<nothing, bool> # Result if the Policy execution fails.
 ]: any -> record<pk: string, policy: string, group: string, user: int, policy_obj: record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int>, group_obj: record<pk: string, num_pk: int, name: string, is_superuser: bool, attributes: record>, user_obj: record<pk: int, username: string, name: string, is_active: bool, last_login: string, email: string, attributes: record, uid: string>, target: string, negate: bool, enabled: bool, order: int, timeout: int, failure_result: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10262,11 +10261,11 @@ export def "policies-bindings update" [
   --group: string # nullable, format: uuid
   --user: int # nullable
   target: string # format: uuid
-  --negate: string@bool-completer # Negates the outcome of the policy. Messages are unaffected.
-  --enabled: string@bool-completer
+  --negate: oneof<nothing, bool> # Negates the outcome of the policy. Messages are unaffected.
+  --enabled: oneof<nothing, bool>
   order: int
   --timeout: int # Timeout after which Policy execution is terminated.
-  --failure-result: string@bool-completer # Result if the Policy execution fails.
+  --failure-result: oneof<nothing, bool> # Result if the Policy execution fails.
 ]: any -> record<pk: string, policy: string, group: string, user: int, policy_obj: record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int>, group_obj: record<pk: string, num_pk: int, name: string, is_superuser: bool, attributes: record>, user_obj: record<pk: int, username: string, name: string, is_active: bool, last_login: string, email: string, attributes: record, uid: string>, target: string, negate: bool, enabled: bool, order: int, timeout: int, failure_result: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10296,11 +10295,11 @@ export def "policies-bindings patch" [
   --group: string # nullable, format: uuid
   --user: int # nullable
   --target: string # format: uuid
-  --negate: string@bool-completer # Negates the outcome of the policy. Messages are unaffected.
-  --enabled: string@bool-completer
+  --negate: oneof<nothing, bool> # Negates the outcome of the policy. Messages are unaffected.
+  --enabled: oneof<nothing, bool>
   --order: int
   --timeout: int # Timeout after which Policy execution is terminated.
-  --failure-result: string@bool-completer # Result if the Policy execution fails.
+  --failure-result: oneof<nothing, bool> # Result if the Policy execution fails.
 ]: any -> record<pk: string, policy: string, group: string, user: int, policy_obj: record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int>, group_obj: record<pk: string, num_pk: int, name: string, is_superuser: bool, attributes: record>, user_obj: record<pk: int, username: string, name: string, is_active: bool, last_login: string, email: string, attributes: record, uid: string>, target: string, negate: bool, enabled: bool, order: int, timeout: int, failure_result: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10370,14 +10369,14 @@ export def "policies-dummy list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --created: string # format: date-time
-  --execution-logging: string@bool-completer
+  --execution-logging: oneof<nothing, bool>
   --last-updated: string # format: date-time
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --policy-uuid: string # format: uuid
-  --qp-result: string@bool-completer
+  --qp-result: oneof<nothing, bool>
   --search: string # A search term.
   --wait-max: int
   --wait-min: int
@@ -10404,8 +10403,8 @@ export def "policies-dummy create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
-  --body-result: string@bool-completer
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --body-result: oneof<nothing, bool>
   --wait-min: int
   --wait-max: int
 ]: any -> record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int, result: bool, wait_min: int, wait_max: int> {
@@ -10456,8 +10455,8 @@ export def "policies-dummy update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
-  --body-result: string@bool-completer
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --body-result: oneof<nothing, bool>
   --wait-min: int
   --wait-max: int
 ]: any -> record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int, result: bool, wait_min: int, wait_max: int> {
@@ -10486,8 +10485,8 @@ export def "policies-dummy patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
-  --body-result: string@bool-completer
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --body-result: oneof<nothing, bool>
   --wait-min: int
   --wait-max: int
 ]: any -> record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int, result: bool, wait_min: int, wait_max: int> {
@@ -10562,7 +10561,7 @@ export def "policies-event-matcher list" [
   --app: string
   --client-ip: string
   --created: string # format: date-time
-  --execution-logging: string@bool-completer
+  --execution-logging: oneof<nothing, bool>
   --last-updated: string # format: date-time
   --model: string
   --name: string
@@ -10595,7 +10594,7 @@ export def "policies-event-matcher create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
   --action: any # Match created events with this action type. When left empty, all action types will be matched. (nullable)
   --client-ip: string # Matches Event's Client IP (strict matching, for network matching use an Expression Policy) (nullable)
   --app: any # Match events created by selected application. When left empty, all applications are matched. (nullable)
@@ -10649,7 +10648,7 @@ export def "policies-event-matcher update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
   --action: any # Match created events with this action type. When left empty, all action types will be matched. (nullable)
   --client-ip: string # Matches Event's Client IP (strict matching, for network matching use an Expression Policy) (nullable)
   --app: any # Match events created by selected application. When left empty, all applications are matched. (nullable)
@@ -10681,7 +10680,7 @@ export def "policies-event-matcher patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
   --action: any # Match created events with this action type. When left empty, all action types will be matched. (nullable)
   --client-ip: string # Matches Event's Client IP (strict matching, for network matching use an Expression Policy) (nullable)
   --app: any # Match events created by selected application. When left empty, all applications are matched. (nullable)
@@ -10756,7 +10755,7 @@ export def "policies-expression list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --created: string # format: date-time
-  --execution-logging: string@bool-completer
+  --execution-logging: oneof<nothing, bool>
   --expression: string
   --last-updated: string # format: date-time
   --name: string
@@ -10788,7 +10787,7 @@ export def "policies-expression create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
   expression: string
 ]: any -> record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int, expression: string> {
   let input = $in
@@ -10838,7 +10837,7 @@ export def "policies-expression update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
   expression: string
 ]: any -> record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int, expression: string> {
   let input = $in
@@ -10866,7 +10865,7 @@ export def "policies-expression patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
   --expression: string
 ]: any -> record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int, expression: string> {
   let input = $in
@@ -10964,14 +10963,14 @@ export def "policies-geoip create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
   --asns: list
   countries: list
-  --check-history-distance: string@bool-completer
+  --check-history-distance: oneof<nothing, bool>
   --history-max-distance-km: int # format: int64
   --distance-tolerance-km: int
   --history-login-count: int
-  --check-impossible-travel: string@bool-completer
+  --check-impossible-travel: oneof<nothing, bool>
   --impossible-tolerance-km: int
 ]: any -> record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int, asns: list<int>, countries: list<string>, countries_obj: table<code: string, name: string>, check_history_distance: bool, history_max_distance_km: int, distance_tolerance_km: int, history_login_count: int, check_impossible_travel: bool, impossible_tolerance_km: int> {
   let input = $in
@@ -11021,14 +11020,14 @@ export def "policies-geoip update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
   --asns: list
   countries: list
-  --check-history-distance: string@bool-completer
+  --check-history-distance: oneof<nothing, bool>
   --history-max-distance-km: int # format: int64
   --distance-tolerance-km: int
   --history-login-count: int
-  --check-impossible-travel: string@bool-completer
+  --check-impossible-travel: oneof<nothing, bool>
   --impossible-tolerance-km: int
 ]: any -> record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int, asns: list<int>, countries: list<string>, countries_obj: table<code: string, name: string>, check_history_distance: bool, history_max_distance_km: int, distance_tolerance_km: int, history_login_count: int, check_impossible_travel: bool, impossible_tolerance_km: int> {
   let input = $in
@@ -11056,14 +11055,14 @@ export def "policies-geoip patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
   --asns: list
   --countries: list
-  --check-history-distance: string@bool-completer
+  --check-history-distance: oneof<nothing, bool>
   --history-max-distance-km: int # format: int64
   --distance-tolerance-km: int
   --history-login-count: int
-  --check-impossible-travel: string@bool-completer
+  --check-impossible-travel: oneof<nothing, bool>
   --impossible-tolerance-km: int
 ]: any -> record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int, asns: list<int>, countries: list<string>, countries_obj: table<code: string, name: string>, check_history_distance: bool, history_max_distance_km: int, distance_tolerance_km: int, history_login_count: int, check_impossible_travel: bool, impossible_tolerance_km: int> {
   let input = $in
@@ -11158,12 +11157,12 @@ export def "policies-password list" [
   --amount-lowercase: int
   --amount-symbols: int
   --amount-uppercase: int
-  --check-have-i-been-pwned: string@bool-completer
-  --check-static-rules: string@bool-completer
-  --check-zxcvbn: string@bool-completer
+  --check-have-i-been-pwned: oneof<nothing, bool>
+  --check-static-rules: oneof<nothing, bool>
+  --check-zxcvbn: oneof<nothing, bool>
   --created: string # format: date-time
   --error-message: string
-  --execution-logging: string@bool-completer
+  --execution-logging: oneof<nothing, bool>
   --hibp-allowed-count: int
   --last-updated: string # format: date-time
   --length-min: int
@@ -11199,7 +11198,7 @@ export def "policies-password create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
   --password-field: string # Field key to check, field keys defined in Prompt stages are available.
   --amount-digits: int
   --amount-uppercase: int
@@ -11208,9 +11207,9 @@ export def "policies-password create" [
   --length-min: int
   --symbol-charset: string
   --error-message: string
-  --check-static-rules: string@bool-completer
-  --check-have-i-been-pwned: string@bool-completer
-  --check-zxcvbn: string@bool-completer
+  --check-static-rules: oneof<nothing, bool>
+  --check-have-i-been-pwned: oneof<nothing, bool>
+  --check-zxcvbn: oneof<nothing, bool>
   --hibp-allowed-count: int # How many times the password hash is allowed to be on haveibeenpwned
   --zxcvbn-score-threshold: int # If the zxcvbn score is equal or less than this value, the policy will fail.
 ]: any -> record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int, password_field: string, amount_digits: int, amount_uppercase: int, amount_lowercase: int, amount_symbols: int, length_min: int, symbol_charset: string, error_message: string, check_static_rules: bool, check_have_i_been_pwned: bool, check_zxcvbn: bool, hibp_allowed_count: int, zxcvbn_score_threshold: int> {
@@ -11261,7 +11260,7 @@ export def "policies-password update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
   --password-field: string # Field key to check, field keys defined in Prompt stages are available.
   --amount-digits: int
   --amount-uppercase: int
@@ -11270,9 +11269,9 @@ export def "policies-password update" [
   --length-min: int
   --symbol-charset: string
   --error-message: string
-  --check-static-rules: string@bool-completer
-  --check-have-i-been-pwned: string@bool-completer
-  --check-zxcvbn: string@bool-completer
+  --check-static-rules: oneof<nothing, bool>
+  --check-have-i-been-pwned: oneof<nothing, bool>
+  --check-zxcvbn: oneof<nothing, bool>
   --hibp-allowed-count: int # How many times the password hash is allowed to be on haveibeenpwned
   --zxcvbn-score-threshold: int # If the zxcvbn score is equal or less than this value, the policy will fail.
 ]: any -> record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int, password_field: string, amount_digits: int, amount_uppercase: int, amount_lowercase: int, amount_symbols: int, length_min: int, symbol_charset: string, error_message: string, check_static_rules: bool, check_have_i_been_pwned: bool, check_zxcvbn: bool, hibp_allowed_count: int, zxcvbn_score_threshold: int> {
@@ -11301,7 +11300,7 @@ export def "policies-password patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
   --password-field: string # Field key to check, field keys defined in Prompt stages are available.
   --amount-digits: int
   --amount-uppercase: int
@@ -11310,9 +11309,9 @@ export def "policies-password patch" [
   --length-min: int
   --symbol-charset: string
   --error-message: string
-  --check-static-rules: string@bool-completer
-  --check-have-i-been-pwned: string@bool-completer
-  --check-zxcvbn: string@bool-completer
+  --check-static-rules: oneof<nothing, bool>
+  --check-have-i-been-pwned: oneof<nothing, bool>
+  --check-zxcvbn: oneof<nothing, bool>
   --hibp-allowed-count: int # How many times the password hash is allowed to be on haveibeenpwned
   --zxcvbn-score-threshold: int # If the zxcvbn score is equal or less than this value, the policy will fail.
 ]: any -> record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int, password_field: string, amount_digits: int, amount_uppercase: int, amount_lowercase: int, amount_symbols: int, length_min: int, symbol_charset: string, error_message: string, check_static_rules: bool, check_have_i_been_pwned: bool, check_zxcvbn: bool, hibp_allowed_count: int, zxcvbn_score_threshold: int> {
@@ -11385,8 +11384,8 @@ export def "policies-password-expiry list" [
   --allow-errors(-e) # Return full response without error handling
   --created: string # format: date-time
   --days: int
-  --deny-only: string@bool-completer
-  --execution-logging: string@bool-completer
+  --deny-only: oneof<nothing, bool>
+  --execution-logging: oneof<nothing, bool>
   --last-updated: string # format: date-time
   --name: string
   --ordering: string # Which field to use when ordering the results.
@@ -11417,9 +11416,9 @@ export def "policies-password-expiry create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
   days: int
-  --deny-only: string@bool-completer
+  --deny-only: oneof<nothing, bool>
 ]: any -> record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int, days: int, deny_only: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11468,9 +11467,9 @@ export def "policies-password-expiry update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
   days: int
-  --deny-only: string@bool-completer
+  --deny-only: oneof<nothing, bool>
 ]: any -> record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int, days: int, deny_only: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11497,9 +11496,9 @@ export def "policies-password-expiry patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
   --days: int
-  --deny-only: string@bool-completer
+  --deny-only: oneof<nothing, bool>
 ]: any -> record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int, days: int, deny_only: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11568,10 +11567,10 @@ export def "policies-reputation list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --check-ip: string@bool-completer
-  --check-username: string@bool-completer
+  --check-ip: oneof<nothing, bool>
+  --check-username: oneof<nothing, bool>
   --created: string # format: date-time
-  --execution-logging: string@bool-completer
+  --execution-logging: oneof<nothing, bool>
   --last-updated: string # format: date-time
   --name: string
   --ordering: string # Which field to use when ordering the results.
@@ -11603,9 +11602,9 @@ export def "policies-reputation create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
-  --check-ip: string@bool-completer
-  --check-username: string@bool-completer
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --check-ip: oneof<nothing, bool>
+  --check-username: oneof<nothing, bool>
   --threshold: int
 ]: any -> record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int, check_ip: bool, check_username: bool, threshold: int> {
   let input = $in
@@ -11655,9 +11654,9 @@ export def "policies-reputation update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
-  --check-ip: string@bool-completer
-  --check-username: string@bool-completer
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --check-ip: oneof<nothing, bool>
+  --check-username: oneof<nothing, bool>
   --threshold: int
 ]: any -> record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int, check_ip: bool, check_username: bool, threshold: int> {
   let input = $in
@@ -11685,9 +11684,9 @@ export def "policies-reputation patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
-  --check-ip: string@bool-completer
-  --check-username: string@bool-completer
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --check-ip: oneof<nothing, bool>
+  --check-username: oneof<nothing, bool>
   --threshold: int
 ]: any -> record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int, check_ip: bool, check_username: bool, threshold: int> {
   let input = $in
@@ -11854,7 +11853,7 @@ export def "policies-unique-password list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --created: string # format: date-time
-  --execution-logging: string@bool-completer
+  --execution-logging: oneof<nothing, bool>
   --last-updated: string # format: date-time
   --name: string
   --num-historical-passwords: int
@@ -11887,7 +11886,7 @@ export def "policies-unique-password create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
   --password-field: string # Field key to check, field keys defined in Prompt stages are available.
   --num-historical-passwords: int # Number of passwords to check against.
 ]: any -> record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int, password_field: string, num_historical_passwords: int> {
@@ -11938,7 +11937,7 @@ export def "policies-unique-password update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
   --password-field: string # Field key to check, field keys defined in Prompt stages are available.
   --num-historical-passwords: int # Number of passwords to check against.
 ]: any -> record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int, password_field: string, num_historical_passwords: int> {
@@ -11967,7 +11966,7 @@ export def "policies-unique-password patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --execution-logging: string@bool-completer # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
+  --execution-logging: oneof<nothing, bool> # When this option is enabled, all executions of this policy will be logged. By default, only execution errors are logged.
   --password-field: string # Field key to check, field keys defined in Prompt stages are available.
   --num-historical-passwords: int # Number of passwords to check against.
 ]: any -> record<pk: string, name: string, execution_logging: bool, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, bound_to: int, password_field: string, num_historical_passwords: int> {
@@ -12039,7 +12038,7 @@ export def "propertymappings-all list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --managed: list
-  --managed-isnull: string@bool-completer
+  --managed-isnull: oneof<nothing, bool>
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -12112,7 +12111,7 @@ export def "propertymappings-all-test create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --format-result: string@bool-completer
+  --format-result: oneof<nothing, bool>
   --user: int # nullable
   --context: record
   --group: string # nullable, format: uuid
@@ -12896,7 +12895,7 @@ export def "propertymappings-provider-radius list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --managed: list
-  --managed-isnull: string@bool-completer
+  --managed-isnull: oneof<nothing, bool>
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -13075,7 +13074,7 @@ export def "propertymappings-provider-saml list" [
   --allow-errors(-e) # Return full response without error handling
   --friendly-name: string
   --managed: list
-  --managed-isnull: string@bool-completer
+  --managed-isnull: oneof<nothing, bool>
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -13260,7 +13259,7 @@ export def "propertymappings-provider-scim list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --managed: list
-  --managed-isnull: string@bool-completer
+  --managed-isnull: oneof<nothing, bool>
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -13438,7 +13437,7 @@ export def "propertymappings-provider-scope list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --managed: list
-  --managed-isnull: string@bool-completer
+  --managed-isnull: oneof<nothing, bool>
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -13623,7 +13622,7 @@ export def "propertymappings-source-kerberos list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --managed: list
-  --managed-isnull: string@bool-completer
+  --managed-isnull: oneof<nothing, bool>
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -13801,7 +13800,7 @@ export def "propertymappings-source-ldap list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --managed: list
-  --managed-isnull: string@bool-completer
+  --managed-isnull: oneof<nothing, bool>
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -13979,7 +13978,7 @@ export def "propertymappings-source-oauth list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --managed: list
-  --managed-isnull: string@bool-completer
+  --managed-isnull: oneof<nothing, bool>
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -14157,7 +14156,7 @@ export def "propertymappings-source-plex list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --managed: list
-  --managed-isnull: string@bool-completer
+  --managed-isnull: oneof<nothing, bool>
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -14335,7 +14334,7 @@ export def "propertymappings-source-saml list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --managed: list
-  --managed-isnull: string@bool-completer
+  --managed-isnull: oneof<nothing, bool>
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -14513,7 +14512,7 @@ export def "propertymappings-source-scim list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --managed: list
-  --managed-isnull: string@bool-completer
+  --managed-isnull: oneof<nothing, bool>
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -14691,7 +14690,7 @@ export def "propertymappings-source-telegram list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --managed: list
-  --managed-isnull: string@bool-completer
+  --managed-isnull: oneof<nothing, bool>
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -14868,8 +14867,8 @@ export def "providers-all list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --application-isnull: string@bool-completer
-  --backchannel: string@bool-completer # When not set all providers are returned. When set to true, only backchannel providers are returned. When set to false, backchannel providers are excluded
+  --application-isnull: oneof<nothing, bool>
+  --backchannel: oneof<nothing, bool> # When not set all providers are returned. When set to true, only backchannel providers are returned. When set to false, backchannel providers are excluded
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
@@ -14984,7 +14983,7 @@ export def "providers-google-workspace list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --delegated-subject: string
-  --exclude-users-service-account: string@bool-completer
+  --exclude-users-service-account: oneof<nothing, bool>
   --filter-group: string # format: uuid
   --name: string
   --ordering: string # Which field to use when ordering the results.
@@ -15019,14 +15018,14 @@ export def "providers-google-workspace create" [
   delegated_subject: string # format: email
   credentials: record
   --scopes: string
-  --exclude-users-service-account: string@bool-completer
+  --exclude-users-service-account: oneof<nothing, bool>
   --filter-group: string # nullable, format: uuid
   --user-delete-action: string@user-delete-action-completer
   --group-delete-action: string@group-delete-action-completer
   default_group_email_domain: string
   --sync-page-size: int # Controls the number of objects synced in a single task
   --sync-page-timeout: string # Timeout for synchronization of a single page
-  --dry-run: string@bool-completer # When enabled, provider will not modify or create objects in the remote system.
+  --dry-run: oneof<nothing, bool> # When enabled, provider will not modify or create objects in the remote system.
 ]: any -> record<pk: int, name: string, property_mappings: list<string>, property_mappings_group: list<string>, component: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, delegated_subject: string, credentials: record, scopes: string, exclude_users_service_account: bool, filter_group: string, user_delete_action: string, group_delete_action: string, default_group_email_domain: string, sync_page_size: int, sync_page_timeout: string, dry_run: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15080,14 +15079,14 @@ export def "providers-google-workspace update" [
   delegated_subject: string # format: email
   credentials: record
   --scopes: string
-  --exclude-users-service-account: string@bool-completer
+  --exclude-users-service-account: oneof<nothing, bool>
   --filter-group: string # nullable, format: uuid
   --user-delete-action: string@user-delete-action-completer
   --group-delete-action: string@group-delete-action-completer
   default_group_email_domain: string
   --sync-page-size: int # Controls the number of objects synced in a single task
   --sync-page-timeout: string # Timeout for synchronization of a single page
-  --dry-run: string@bool-completer # When enabled, provider will not modify or create objects in the remote system.
+  --dry-run: oneof<nothing, bool> # When enabled, provider will not modify or create objects in the remote system.
 ]: any -> record<pk: int, name: string, property_mappings: list<string>, property_mappings_group: list<string>, component: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, delegated_subject: string, credentials: record, scopes: string, exclude_users_service_account: bool, filter_group: string, user_delete_action: string, group_delete_action: string, default_group_email_domain: string, sync_page_size: int, sync_page_timeout: string, dry_run: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15119,14 +15118,14 @@ export def "providers-google-workspace patch" [
   --delegated-subject: string # format: email
   --credentials: record
   --scopes: string
-  --exclude-users-service-account: string@bool-completer
+  --exclude-users-service-account: oneof<nothing, bool>
   --filter-group: string # nullable, format: uuid
   --user-delete-action: string@user-delete-action-completer
   --group-delete-action: string@group-delete-action-completer
   --default-group-email-domain: string
   --sync-page-size: int # Controls the number of objects synced in a single task
   --sync-page-timeout: string # Timeout for synchronization of a single page
-  --dry-run: string@bool-completer # When enabled, provider will not modify or create objects in the remote system.
+  --dry-run: oneof<nothing, bool> # When enabled, provider will not modify or create objects in the remote system.
 ]: any -> record<pk: int, name: string, property_mappings: list<string>, property_mappings_group: list<string>, component: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, delegated_subject: string, credentials: record, scopes: string, exclude_users_service_account: bool, filter_group: string, user_delete_action: string, group_delete_action: string, default_group_email_domain: string, sync_page_size: int, sync_page_timeout: string, dry_run: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15176,7 +15175,7 @@ export def "providers-google-workspace-sync-object create" [
   --allow-errors(-e) # Return full response without error handling
   sync_object_model: string@sync-object-model-completer
   sync_object_id: string
-  --override-dry-run: string@bool-completer # default: false
+  --override-dry-run: oneof<nothing, bool> # default: false
 ]: any -> record<messages: table<timestamp: string, log_level: string, logger: string, event: string, attributes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15489,7 +15488,7 @@ export def "providers-ldap list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --application-isnull: string@bool-completer
+  --application-isnull: oneof<nothing, bool>
   --authorization-flow-slug--iexact: string
   --base-dn-iexact: string
   --certificate-kp-uuid--iexact: string # format: uuid
@@ -15536,7 +15535,7 @@ export def "providers-ldap create" [
   --gid-start-number: int # The start for gidNumbers, this number is added to a number generated from the group.pk to make sure that the numbers aren't too low for POSIX groups. Default is 4000 to ensure that we don't collide with local groups or users primary groups gidNumber
   --search-mode: string@search-mode-completer
   --bind-mode: string@bind-mode-completer
-  --mfa-support: string@bool-completer # When enabled, code-based multi-factor authentication can be used by appending a semicolon and the TOTP code to the password. This should only be enabled if all users that will bind to this provider have a TOTP device configured, as otherwise a password may incorrectly be rejected if it contains a semicolon.
+  --mfa-support: oneof<nothing, bool> # When enabled, code-based multi-factor authentication can be used by appending a semicolon and the TOTP code to the password. This should only be enabled if all users that will bind to this provider have a TOTP device configured, as otherwise a password may incorrectly be rejected if it contains a semicolon.
 ]: any -> record<pk: int, name: string, authentication_flow: string, authorization_flow: string, invalidation_flow: string, property_mappings: list<string>, component: string, assigned_application_slug: string, assigned_application_name: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, base_dn: string, certificate: string, tls_server_name: string, uid_start_number: int, gid_start_number: int, outpost_set: list<string>, search_mode: string, bind_mode: string, mfa_support: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15596,7 +15595,7 @@ export def "providers-ldap update" [
   --gid-start-number: int # The start for gidNumbers, this number is added to a number generated from the group.pk to make sure that the numbers aren't too low for POSIX groups. Default is 4000 to ensure that we don't collide with local groups or users primary groups gidNumber
   --search-mode: string@search-mode-completer
   --bind-mode: string@bind-mode-completer
-  --mfa-support: string@bool-completer # When enabled, code-based multi-factor authentication can be used by appending a semicolon and the TOTP code to the password. This should only be enabled if all users that will bind to this provider have a TOTP device configured, as otherwise a password may incorrectly be rejected if it contains a semicolon.
+  --mfa-support: oneof<nothing, bool> # When enabled, code-based multi-factor authentication can be used by appending a semicolon and the TOTP code to the password. This should only be enabled if all users that will bind to this provider have a TOTP device configured, as otherwise a password may incorrectly be rejected if it contains a semicolon.
 ]: any -> record<pk: int, name: string, authentication_flow: string, authorization_flow: string, invalidation_flow: string, property_mappings: list<string>, component: string, assigned_application_slug: string, assigned_application_name: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, base_dn: string, certificate: string, tls_server_name: string, uid_start_number: int, gid_start_number: int, outpost_set: list<string>, search_mode: string, bind_mode: string, mfa_support: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15634,7 +15633,7 @@ export def "providers-ldap patch" [
   --gid-start-number: int # The start for gidNumbers, this number is added to a number generated from the group.pk to make sure that the numbers aren't too low for POSIX groups. Default is 4000 to ensure that we don't collide with local groups or users primary groups gidNumber
   --search-mode: string@search-mode-completer
   --bind-mode: string@bind-mode-completer
-  --mfa-support: string@bool-completer # When enabled, code-based multi-factor authentication can be used by appending a semicolon and the TOTP code to the password. This should only be enabled if all users that will bind to this provider have a TOTP device configured, as otherwise a password may incorrectly be rejected if it contains a semicolon.
+  --mfa-support: oneof<nothing, bool> # When enabled, code-based multi-factor authentication can be used by appending a semicolon and the TOTP code to the password. This should only be enabled if all users that will bind to this provider have a TOTP device configured, as otherwise a password may incorrectly be rejected if it contains a semicolon.
 ]: any -> record<pk: int, name: string, authentication_flow: string, authorization_flow: string, invalidation_flow: string, property_mappings: list<string>, component: string, assigned_application_slug: string, assigned_application_name: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, base_dn: string, certificate: string, tls_server_name: string, uid_start_number: int, gid_start_number: int, outpost_set: list<string>, search_mode: string, bind_mode: string, mfa_support: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15703,7 +15702,7 @@ export def "providers-microsoft-entra list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --exclude-users-service-account: string@bool-completer
+  --exclude-users-service-account: oneof<nothing, bool>
   --filter-group: string # format: uuid
   --name: string
   --ordering: string # Which field to use when ordering the results.
@@ -15738,13 +15737,13 @@ export def "providers-microsoft-entra create" [
   client_id: string
   client_secret: string
   tenant_id: string
-  --exclude-users-service-account: string@bool-completer
+  --exclude-users-service-account: oneof<nothing, bool>
   --filter-group: string # nullable, format: uuid
   --user-delete-action: string@user-delete-action-completer
   --group-delete-action: string@group-delete-action-completer
   --sync-page-size: int # Controls the number of objects synced in a single task
   --sync-page-timeout: string # Timeout for synchronization of a single page
-  --dry-run: string@bool-completer # When enabled, provider will not modify or create objects in the remote system.
+  --dry-run: oneof<nothing, bool> # When enabled, provider will not modify or create objects in the remote system.
 ]: any -> record<pk: int, name: string, property_mappings: list<string>, property_mappings_group: list<string>, component: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, client_id: string, client_secret: string, tenant_id: string, exclude_users_service_account: bool, filter_group: string, user_delete_action: string, group_delete_action: string, sync_page_size: int, sync_page_timeout: string, dry_run: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15798,13 +15797,13 @@ export def "providers-microsoft-entra update" [
   client_id: string
   client_secret: string
   tenant_id: string
-  --exclude-users-service-account: string@bool-completer
+  --exclude-users-service-account: oneof<nothing, bool>
   --filter-group: string # nullable, format: uuid
   --user-delete-action: string@user-delete-action-completer
   --group-delete-action: string@group-delete-action-completer
   --sync-page-size: int # Controls the number of objects synced in a single task
   --sync-page-timeout: string # Timeout for synchronization of a single page
-  --dry-run: string@bool-completer # When enabled, provider will not modify or create objects in the remote system.
+  --dry-run: oneof<nothing, bool> # When enabled, provider will not modify or create objects in the remote system.
 ]: any -> record<pk: int, name: string, property_mappings: list<string>, property_mappings_group: list<string>, component: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, client_id: string, client_secret: string, tenant_id: string, exclude_users_service_account: bool, filter_group: string, user_delete_action: string, group_delete_action: string, sync_page_size: int, sync_page_timeout: string, dry_run: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15836,13 +15835,13 @@ export def "providers-microsoft-entra patch" [
   --client-id: string
   --client-secret: string
   --tenant-id: string
-  --exclude-users-service-account: string@bool-completer
+  --exclude-users-service-account: oneof<nothing, bool>
   --filter-group: string # nullable, format: uuid
   --user-delete-action: string@user-delete-action-completer
   --group-delete-action: string@group-delete-action-completer
   --sync-page-size: int # Controls the number of objects synced in a single task
   --sync-page-timeout: string # Timeout for synchronization of a single page
-  --dry-run: string@bool-completer # When enabled, provider will not modify or create objects in the remote system.
+  --dry-run: oneof<nothing, bool> # When enabled, provider will not modify or create objects in the remote system.
 ]: any -> record<pk: int, name: string, property_mappings: list<string>, property_mappings_group: list<string>, component: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, client_id: string, client_secret: string, tenant_id: string, exclude_users_service_account: bool, filter_group: string, user_delete_action: string, group_delete_action: string, sync_page_size: int, sync_page_timeout: string, dry_run: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15892,7 +15891,7 @@ export def "providers-microsoft-entra-sync-object create" [
   --allow-errors(-e) # Return full response without error handling
   sync_object_model: string@sync-object-model-completer
   sync_object_id: string
-  --override-dry-run: string@bool-completer # default: false
+  --override-dry-run: oneof<nothing, bool> # default: false
 ]: any -> record<messages: table<timestamp: string, log_level: string, logger: string, event: string, attributes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -16211,7 +16210,7 @@ export def "providers-oauth2 list" [
   --authorization-flow: string # format: uuid
   --client-id: string
   --client-type: string
-  --include-claims-in-id-token: string@bool-completer
+  --include-claims-in-id-token: oneof<nothing, bool>
   --issuer-mode: string
   --name: string
   --ordering: string # Which field to use when ordering the results.
@@ -16258,7 +16257,7 @@ export def "providers-oauth2 create" [
   --access-token-validity: string # Tokens not valid on or after current time + this value (Format: hours=1;minutes=2;seconds=3).
   --refresh-token-validity: string # Tokens not valid on or after current time + this value (Format: hours=1;minutes=2;seconds=3).
   --refresh-token-threshold: string # When refreshing a token, if the refresh token is valid for less than this duration, it will be renewed. When set to seconds=0, token will always be renewed. (Format: hours=1;minutes=2;seconds=3).
-  --include-claims-in-id-token: string@bool-completer # Include User claims from scopes in the id_token, for applications that don't access the userinfo endpoint.
+  --include-claims-in-id-token: oneof<nothing, bool> # Include User claims from scopes in the id_token, for applications that don't access the userinfo endpoint.
   --signing-key: string # Key used to sign the tokens. (nullable, format: uuid)
   --encryption-key: string # Key used to encrypt the tokens. When set, tokens will be encrypted and returned as JWEs. (nullable, format: uuid)
   redirect_uris: list # item shape: {matching_mode: "strict"|"regex", url: string, redirect_uri_type?: any}
@@ -16329,7 +16328,7 @@ export def "providers-oauth2 update" [
   --access-token-validity: string # Tokens not valid on or after current time + this value (Format: hours=1;minutes=2;seconds=3).
   --refresh-token-validity: string # Tokens not valid on or after current time + this value (Format: hours=1;minutes=2;seconds=3).
   --refresh-token-threshold: string # When refreshing a token, if the refresh token is valid for less than this duration, it will be renewed. When set to seconds=0, token will always be renewed. (Format: hours=1;minutes=2;seconds=3).
-  --include-claims-in-id-token: string@bool-completer # Include User claims from scopes in the id_token, for applications that don't access the userinfo endpoint.
+  --include-claims-in-id-token: oneof<nothing, bool> # Include User claims from scopes in the id_token, for applications that don't access the userinfo endpoint.
   --signing-key: string # Key used to sign the tokens. (nullable, format: uuid)
   --encryption-key: string # Key used to encrypt the tokens. When set, tokens will be encrypted and returned as JWEs. (nullable, format: uuid)
   redirect_uris: list # item shape: {matching_mode: "strict"|"regex", url: string, redirect_uri_type?: any}
@@ -16378,7 +16377,7 @@ export def "providers-oauth2 patch" [
   --access-token-validity: string # Tokens not valid on or after current time + this value (Format: hours=1;minutes=2;seconds=3).
   --refresh-token-validity: string # Tokens not valid on or after current time + this value (Format: hours=1;minutes=2;seconds=3).
   --refresh-token-threshold: string # When refreshing a token, if the refresh token is valid for less than this duration, it will be renewed. When set to seconds=0, token will always be renewed. (Format: hours=1;minutes=2;seconds=3).
-  --include-claims-in-id-token: string@bool-completer # Include User claims from scopes in the id_token, for applications that don't access the userinfo endpoint.
+  --include-claims-in-id-token: oneof<nothing, bool> # Include User claims from scopes in the id_token, for applications that don't access the userinfo endpoint.
   --signing-key: string # Key used to sign the tokens. (nullable, format: uuid)
   --encryption-key: string # Key used to encrypt the tokens. When set, tokens will be encrypted and returned as JWEs. (nullable, format: uuid)
   --redirect-uris: list # item shape: {matching_mode: "strict"|"regex", url: string, redirect_uri_type?: any}
@@ -16502,9 +16501,9 @@ export def "providers-proxy list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --application-isnull: string@bool-completer
+  --application-isnull: oneof<nothing, bool>
   --authorization-flow-slug--iexact: string
-  --basic-auth-enabled-iexact: string@bool-completer
+  --basic-auth-enabled-iexact: oneof<nothing, bool>
   --basic-auth-password-attribute-iexact: string
   --basic-auth-user-attribute-iexact: string
   --certificate-kp-uuid--iexact: string # format: uuid
@@ -16512,7 +16511,7 @@ export def "providers-proxy list" [
   --cookie-domain-iexact: string
   --external-host-iexact: string
   --internal-host-iexact: string
-  --internal-host-ssl-validation-iexact: string@bool-completer
+  --internal-host-ssl-validation-iexact: oneof<nothing, bool>
   --mode-iexact: string
   --name-iexact: string
   --ordering: string # Which field to use when ordering the results.
@@ -16550,14 +16549,14 @@ export def "providers-proxy create" [
   --property-mappings: list
   --internal-host: string # format: uri
   external_host: string # format: uri
-  --internal-host-ssl-validation: string@bool-completer # Validate SSL Certificates of upstream servers
+  --internal-host-ssl-validation: oneof<nothing, bool> # Validate SSL Certificates of upstream servers
   --certificate: string # nullable, format: uuid
   --skip-path-regex: string # Regular expressions for which authentication is not required. Each new line is interpreted as a new Regular Expression.
-  --basic-auth-enabled: string@bool-completer # Set a custom HTTP-Basic Authentication header based on values from authentik.
+  --basic-auth-enabled: oneof<nothing, bool> # Set a custom HTTP-Basic Authentication header based on values from authentik.
   --basic-auth-password-attribute: string # User/Group Attribute used for the password part of the HTTP-Basic Header.
   --basic-auth-user-attribute: string # User/Group Attribute used for the user part of the HTTP-Basic Header. If not set, the user's Email address is used.
   --mode: any # Enable support for forwardAuth in traefik and nginx auth_request. Exclusive with internal_host.
-  --intercept-header-auth: string@bool-completer # When enabled, this provider will intercept the authorization header and authenticate requests based on its value.
+  --intercept-header-auth: oneof<nothing, bool> # When enabled, this provider will intercept the authorization header and authenticate requests based on its value.
   --cookie-domain: string
   --jwt-federation-sources: list
   --jwt-federation-providers: list
@@ -16617,14 +16616,14 @@ export def "providers-proxy update" [
   --property-mappings: list
   --internal-host: string # format: uri
   external_host: string # format: uri
-  --internal-host-ssl-validation: string@bool-completer # Validate SSL Certificates of upstream servers
+  --internal-host-ssl-validation: oneof<nothing, bool> # Validate SSL Certificates of upstream servers
   --certificate: string # nullable, format: uuid
   --skip-path-regex: string # Regular expressions for which authentication is not required. Each new line is interpreted as a new Regular Expression.
-  --basic-auth-enabled: string@bool-completer # Set a custom HTTP-Basic Authentication header based on values from authentik.
+  --basic-auth-enabled: oneof<nothing, bool> # Set a custom HTTP-Basic Authentication header based on values from authentik.
   --basic-auth-password-attribute: string # User/Group Attribute used for the password part of the HTTP-Basic Header.
   --basic-auth-user-attribute: string # User/Group Attribute used for the user part of the HTTP-Basic Header. If not set, the user's Email address is used.
   --mode: any # Enable support for forwardAuth in traefik and nginx auth_request. Exclusive with internal_host.
-  --intercept-header-auth: string@bool-completer # When enabled, this provider will intercept the authorization header and authenticate requests based on its value.
+  --intercept-header-auth: oneof<nothing, bool> # When enabled, this provider will intercept the authorization header and authenticate requests based on its value.
   --cookie-domain: string
   --jwt-federation-sources: list
   --jwt-federation-providers: list
@@ -16662,14 +16661,14 @@ export def "providers-proxy patch" [
   --property-mappings: list
   --internal-host: string # format: uri
   --external-host: string # format: uri
-  --internal-host-ssl-validation: string@bool-completer # Validate SSL Certificates of upstream servers
+  --internal-host-ssl-validation: oneof<nothing, bool> # Validate SSL Certificates of upstream servers
   --certificate: string # nullable, format: uuid
   --skip-path-regex: string # Regular expressions for which authentication is not required. Each new line is interpreted as a new Regular Expression.
-  --basic-auth-enabled: string@bool-completer # Set a custom HTTP-Basic Authentication header based on values from authentik.
+  --basic-auth-enabled: oneof<nothing, bool> # Set a custom HTTP-Basic Authentication header based on values from authentik.
   --basic-auth-password-attribute: string # User/Group Attribute used for the password part of the HTTP-Basic Header.
   --basic-auth-user-attribute: string # User/Group Attribute used for the user part of the HTTP-Basic Header. If not set, the user's Email address is used.
   --mode: any # Enable support for forwardAuth in traefik and nginx auth_request. Exclusive with internal_host.
-  --intercept-header-auth: string@bool-completer # When enabled, this provider will intercept the authorization header and authenticate requests based on its value.
+  --intercept-header-auth: oneof<nothing, bool> # When enabled, this provider will intercept the authorization header and authenticate requests based on its value.
   --cookie-domain: string
   --jwt-federation-sources: list
   --jwt-federation-providers: list
@@ -16743,7 +16742,7 @@ export def "providers-rac list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --application-isnull: string@bool-completer
+  --application-isnull: oneof<nothing, bool>
   --name-iexact: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -16777,7 +16776,7 @@ export def "providers-rac create" [
   --property-mappings: list
   --settings: record
   --connection-expiry: string # Determines how long a session lasts. Default of 0 means that the sessions lasts until the browser is closed. (Format: hours=-1;minutes=-2;seconds=-3)
-  --delete-token-on-disconnect: string@bool-completer # When set to true, connection tokens will be deleted upon disconnect.
+  --delete-token-on-disconnect: oneof<nothing, bool> # When set to true, connection tokens will be deleted upon disconnect.
 ]: any -> record<pk: int, name: string, authentication_flow: string, authorization_flow: string, property_mappings: list<string>, component: string, assigned_application_slug: string, assigned_application_name: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, settings: record, outpost_set: list<string>, connection_expiry: string, delete_token_on_disconnect: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -16831,7 +16830,7 @@ export def "providers-rac update" [
   --property-mappings: list
   --settings: record
   --connection-expiry: string # Determines how long a session lasts. Default of 0 means that the sessions lasts until the browser is closed. (Format: hours=-1;minutes=-2;seconds=-3)
-  --delete-token-on-disconnect: string@bool-completer # When set to true, connection tokens will be deleted upon disconnect.
+  --delete-token-on-disconnect: oneof<nothing, bool> # When set to true, connection tokens will be deleted upon disconnect.
 ]: any -> record<pk: int, name: string, authentication_flow: string, authorization_flow: string, property_mappings: list<string>, component: string, assigned_application_slug: string, assigned_application_name: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, settings: record, outpost_set: list<string>, connection_expiry: string, delete_token_on_disconnect: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -16863,7 +16862,7 @@ export def "providers-rac patch" [
   --property-mappings: list
   --settings: record
   --connection-expiry: string # Determines how long a session lasts. Default of 0 means that the sessions lasts until the browser is closed. (Format: hours=-1;minutes=-2;seconds=-3)
-  --delete-token-on-disconnect: string@bool-completer # When set to true, connection tokens will be deleted upon disconnect.
+  --delete-token-on-disconnect: oneof<nothing, bool> # When set to true, connection tokens will be deleted upon disconnect.
 ]: any -> record<pk: int, name: string, authentication_flow: string, authorization_flow: string, property_mappings: list<string>, component: string, assigned_application_slug: string, assigned_application_name: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, settings: record, outpost_set: list<string>, connection_expiry: string, delete_token_on_disconnect: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -16932,7 +16931,7 @@ export def "providers-radius list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --application-isnull: string@bool-completer
+  --application-isnull: oneof<nothing, bool>
   --authorization-flow-slug--iexact: string
   --client-networks-iexact: string
   --name-iexact: string
@@ -16969,7 +16968,7 @@ export def "providers-radius create" [
   --property-mappings: list
   --client-networks: string # List of CIDRs (comma-separated) that clients can connect from. A more specific CIDR will match before a looser one. Clients connecting from a non-specified CIDR will be dropped.
   --shared-secret: string # Shared secret between clients and server to hash packets.
-  --mfa-support: string@bool-completer # When enabled, code-based multi-factor authentication can be used by appending a semicolon and the TOTP code to the password. This should only be enabled if all users that will bind to this provider have a TOTP device configured, as otherwise a password may incorrectly be rejected if it contains a semicolon.
+  --mfa-support: oneof<nothing, bool> # When enabled, code-based multi-factor authentication can be used by appending a semicolon and the TOTP code to the password. This should only be enabled if all users that will bind to this provider have a TOTP device configured, as otherwise a password may incorrectly be rejected if it contains a semicolon.
   --certificate: string # nullable, format: uuid
 ]: any -> record<pk: int, name: string, authentication_flow: string, authorization_flow: string, invalidation_flow: string, property_mappings: list<string>, component: string, assigned_application_slug: string, assigned_application_name: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, client_networks: string, shared_secret: string, outpost_set: list<string>, mfa_support: bool, certificate: string> {
   let input = $in
@@ -17025,7 +17024,7 @@ export def "providers-radius update" [
   --property-mappings: list
   --client-networks: string # List of CIDRs (comma-separated) that clients can connect from. A more specific CIDR will match before a looser one. Clients connecting from a non-specified CIDR will be dropped.
   --shared-secret: string # Shared secret between clients and server to hash packets.
-  --mfa-support: string@bool-completer # When enabled, code-based multi-factor authentication can be used by appending a semicolon and the TOTP code to the password. This should only be enabled if all users that will bind to this provider have a TOTP device configured, as otherwise a password may incorrectly be rejected if it contains a semicolon.
+  --mfa-support: oneof<nothing, bool> # When enabled, code-based multi-factor authentication can be used by appending a semicolon and the TOTP code to the password. This should only be enabled if all users that will bind to this provider have a TOTP device configured, as otherwise a password may incorrectly be rejected if it contains a semicolon.
   --certificate: string # nullable, format: uuid
 ]: any -> record<pk: int, name: string, authentication_flow: string, authorization_flow: string, invalidation_flow: string, property_mappings: list<string>, component: string, assigned_application_slug: string, assigned_application_name: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, client_networks: string, shared_secret: string, outpost_set: list<string>, mfa_support: bool, certificate: string> {
   let input = $in
@@ -17059,7 +17058,7 @@ export def "providers-radius patch" [
   --property-mappings: list
   --client-networks: string # List of CIDRs (comma-separated) that clients can connect from. A more specific CIDR will match before a looser one. Clients connecting from a non-specified CIDR will be dropped.
   --shared-secret: string # Shared secret between clients and server to hash packets.
-  --mfa-support: string@bool-completer # When enabled, code-based multi-factor authentication can be used by appending a semicolon and the TOTP code to the password. This should only be enabled if all users that will bind to this provider have a TOTP device configured, as otherwise a password may incorrectly be rejected if it contains a semicolon.
+  --mfa-support: oneof<nothing, bool> # When enabled, code-based multi-factor authentication can be used by appending a semicolon and the TOTP code to the password. This should only be enabled if all users that will bind to this provider have a TOTP device configured, as otherwise a password may incorrectly be rejected if it contains a semicolon.
   --certificate: string # nullable, format: uuid
 ]: any -> record<pk: int, name: string, authentication_flow: string, authorization_flow: string, invalidation_flow: string, property_mappings: list<string>, component: string, assigned_application_slug: string, assigned_application_name: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, client_networks: string, shared_secret: string, outpost_set: list<string>, mfa_support: bool, certificate: string> {
   let input = $in
@@ -17142,7 +17141,7 @@ export def "providers-saml list" [
   --digest-algorithm: string@digest-algorithm-completer
   --encryption-kp: string # format: uuid
   --invalidation-flow: string # format: uuid
-  --is-backchannel: string@bool-completer
+  --is-backchannel: oneof<nothing, bool>
   --issuer-override: string
   --logout-method: string
   --name: string
@@ -17153,10 +17152,10 @@ export def "providers-saml list" [
   --property-mappings: list
   --search: string # A search term.
   --session-valid-not-on-or-after: string
-  --sign-assertion: string@bool-completer
-  --sign-logout-request: string@bool-completer
-  --sign-logout-response: string@bool-completer
-  --sign-response: string@bool-completer
+  --sign-assertion: oneof<nothing, bool>
+  --sign-logout-request: oneof<nothing, bool>
+  --sign-logout-response: oneof<nothing, bool>
+  --sign-response: oneof<nothing, bool>
   --signature-algorithm: string@signature-algorithm-completer
   --signing-kp: string # format: uuid
   --sls-binding: string
@@ -17204,10 +17203,10 @@ export def "providers-saml create" [
   --signing-kp: string # Keypair used to sign outgoing Responses going to the Service Provider. (nullable, format: uuid)
   --verification-kp: string # When selected, incoming assertion's Signatures will be validated against this certificate. To allow unsigned Requests, leave on default. (nullable, format: uuid)
   --encryption-kp: string # When selected, incoming assertions are encrypted by the IdP using the public key of the encryption keypair. The assertion is decrypted by the SP using the the private key. (nullable, format: uuid)
-  --sign-assertion: string@bool-completer
-  --sign-response: string@bool-completer
-  --sign-logout-request: string@bool-completer
-  --sign-logout-response: string@bool-completer
+  --sign-assertion: oneof<nothing, bool>
+  --sign-response: oneof<nothing, bool>
+  --sign-logout-request: oneof<nothing, bool>
+  --sign-logout-response: oneof<nothing, bool>
   --sp-binding: any # This determines how authentik sends the response back to the Service Provider.
   --sls-binding: any # This determines how authentik sends the logout response back to the Service Provider.
   --logout-method: any # Method to use for logout. Front-channel iframe loads all logout URLs simultaneously in hidden iframes. Front-channel native uses your active browser tab to send post requests and redirect to providers. Back-channel sends logout requests directly from the server without user interaction (requires POST SLS binding).
@@ -17279,10 +17278,10 @@ export def "providers-saml update" [
   --signing-kp: string # Keypair used to sign outgoing Responses going to the Service Provider. (nullable, format: uuid)
   --verification-kp: string # When selected, incoming assertion's Signatures will be validated against this certificate. To allow unsigned Requests, leave on default. (nullable, format: uuid)
   --encryption-kp: string # When selected, incoming assertions are encrypted by the IdP using the public key of the encryption keypair. The assertion is decrypted by the SP using the the private key. (nullable, format: uuid)
-  --sign-assertion: string@bool-completer
-  --sign-response: string@bool-completer
-  --sign-logout-request: string@bool-completer
-  --sign-logout-response: string@bool-completer
+  --sign-assertion: oneof<nothing, bool>
+  --sign-response: oneof<nothing, bool>
+  --sign-logout-request: oneof<nothing, bool>
+  --sign-logout-response: oneof<nothing, bool>
   --sp-binding: any # This determines how authentik sends the response back to the Service Provider.
   --sls-binding: any # This determines how authentik sends the logout response back to the Service Provider.
   --logout-method: any # Method to use for logout. Front-channel iframe loads all logout URLs simultaneously in hidden iframes. Front-channel native uses your active browser tab to send post requests and redirect to providers. Back-channel sends logout requests directly from the server without user interaction (requires POST SLS binding).
@@ -17332,10 +17331,10 @@ export def "providers-saml patch" [
   --signing-kp: string # Keypair used to sign outgoing Responses going to the Service Provider. (nullable, format: uuid)
   --verification-kp: string # When selected, incoming assertion's Signatures will be validated against this certificate. To allow unsigned Requests, leave on default. (nullable, format: uuid)
   --encryption-kp: string # When selected, incoming assertions are encrypted by the IdP using the public key of the encryption keypair. The assertion is decrypted by the SP using the the private key. (nullable, format: uuid)
-  --sign-assertion: string@bool-completer
-  --sign-response: string@bool-completer
-  --sign-logout-request: string@bool-completer
-  --sign-logout-response: string@bool-completer
+  --sign-assertion: oneof<nothing, bool>
+  --sign-response: oneof<nothing, bool>
+  --sign-logout-request: oneof<nothing, bool>
+  --sign-logout-response: oneof<nothing, bool>
   --sp-binding: any # This determines how authentik sends the response back to the Service Provider.
   --sls-binding: any # This determines how authentik sends the logout response back to the Service Provider.
   --logout-method: any # Method to use for logout. Front-channel iframe loads all logout URLs simultaneously in hidden iframes. Front-channel native uses your active browser tab to send post requests and redirect to providers. Back-channel sends logout requests directly from the server without user interaction (requires POST SLS binding).
@@ -17389,7 +17388,7 @@ export def "providers-saml-metadata get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --download: string@bool-completer
+  --download: oneof<nothing, bool>
   --force-binding: string
 ]: nothing -> record<metadata: string, download_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -17487,7 +17486,7 @@ export def "providers-scim list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --exclude-users-service-account: string@bool-completer
+  --exclude-users-service-account: oneof<nothing, bool>
   --group-filters: list
   --name: string
   --ordering: string # Which field to use when ordering the results.
@@ -17521,18 +17520,18 @@ export def "providers-scim create" [
   --property-mappings: list
   --property-mappings-group: list # Property mappings used for group creation/updating.
   --body-url: string # Base URL to SCIM requests, usually ends in /v2
-  --verify-certificates: string@bool-completer
+  --verify-certificates: oneof<nothing, bool>
   --body-token: string # Authentication token
   --auth-mode: string@auth-mode-completer
   --auth-oauth: string # OAuth Source used for authentication (nullable, format: uuid)
   --auth-oauth-params: record # Additional OAuth parameters, such as grant_type
   --compatibility-mode: any # Alter authentik behavior for vendor-specific SCIM implementations.
   --service-provider-config-cache-timeout: string # Cache duration for ServiceProviderConfig responses. Set minutes=0 to disable.
-  --exclude-users-service-account: string@bool-completer
+  --exclude-users-service-account: oneof<nothing, bool>
   --sync-page-size: int # Controls the number of objects synced in a single task
   --sync-page-timeout: string # Timeout for synchronization of a single page
   --group-filters: list # Group filters used to define sync-scope for groups.
-  --dry-run: string@bool-completer # When enabled, provider will not modify or create objects in the remote system.
+  --dry-run: oneof<nothing, bool> # When enabled, provider will not modify or create objects in the remote system.
 ]: any -> record<pk: int, name: string, property_mappings: list<string>, property_mappings_group: list<string>, component: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, url: string, verify_certificates: bool, token: string, auth_mode: string, auth_oauth: string, auth_oauth_params: record, auth_oauth_token_last_updated: string, auth_oauth_token_expires: string, auth_oauth_url_callback: string, auth_oauth_url_start: string, compatibility_mode: record, service_provider_config_cache_timeout: string, exclude_users_service_account: bool, sync_page_size: int, sync_page_timeout: string, group_filters: list<string>, dry_run: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -17584,18 +17583,18 @@ export def "providers-scim update" [
   --property-mappings: list
   --property-mappings-group: list # Property mappings used for group creation/updating.
   --body-url: string # Base URL to SCIM requests, usually ends in /v2
-  --verify-certificates: string@bool-completer
+  --verify-certificates: oneof<nothing, bool>
   --body-token: string # Authentication token
   --auth-mode: string@auth-mode-completer
   --auth-oauth: string # OAuth Source used for authentication (nullable, format: uuid)
   --auth-oauth-params: record # Additional OAuth parameters, such as grant_type
   --compatibility-mode: any # Alter authentik behavior for vendor-specific SCIM implementations.
   --service-provider-config-cache-timeout: string # Cache duration for ServiceProviderConfig responses. Set minutes=0 to disable.
-  --exclude-users-service-account: string@bool-completer
+  --exclude-users-service-account: oneof<nothing, bool>
   --sync-page-size: int # Controls the number of objects synced in a single task
   --sync-page-timeout: string # Timeout for synchronization of a single page
   --group-filters: list # Group filters used to define sync-scope for groups.
-  --dry-run: string@bool-completer # When enabled, provider will not modify or create objects in the remote system.
+  --dry-run: oneof<nothing, bool> # When enabled, provider will not modify or create objects in the remote system.
 ]: any -> record<pk: int, name: string, property_mappings: list<string>, property_mappings_group: list<string>, component: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, url: string, verify_certificates: bool, token: string, auth_mode: string, auth_oauth: string, auth_oauth_params: record, auth_oauth_token_last_updated: string, auth_oauth_token_expires: string, auth_oauth_url_callback: string, auth_oauth_url_start: string, compatibility_mode: record, service_provider_config_cache_timeout: string, exclude_users_service_account: bool, sync_page_size: int, sync_page_timeout: string, group_filters: list<string>, dry_run: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -17625,18 +17624,18 @@ export def "providers-scim patch" [
   --property-mappings: list
   --property-mappings-group: list # Property mappings used for group creation/updating.
   --body-url: string # Base URL to SCIM requests, usually ends in /v2
-  --verify-certificates: string@bool-completer
+  --verify-certificates: oneof<nothing, bool>
   --body-token: string # Authentication token
   --auth-mode: string@auth-mode-completer
   --auth-oauth: string # OAuth Source used for authentication (nullable, format: uuid)
   --auth-oauth-params: record # Additional OAuth parameters, such as grant_type
   --compatibility-mode: any # Alter authentik behavior for vendor-specific SCIM implementations.
   --service-provider-config-cache-timeout: string # Cache duration for ServiceProviderConfig responses. Set minutes=0 to disable.
-  --exclude-users-service-account: string@bool-completer
+  --exclude-users-service-account: oneof<nothing, bool>
   --sync-page-size: int # Controls the number of objects synced in a single task
   --sync-page-timeout: string # Timeout for synchronization of a single page
   --group-filters: list # Group filters used to define sync-scope for groups.
-  --dry-run: string@bool-completer # When enabled, provider will not modify or create objects in the remote system.
+  --dry-run: oneof<nothing, bool> # When enabled, provider will not modify or create objects in the remote system.
 ]: any -> record<pk: int, name: string, property_mappings: list<string>, property_mappings_group: list<string>, component: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, url: string, verify_certificates: bool, token: string, auth_mode: string, auth_oauth: string, auth_oauth_params: record, auth_oauth_token_last_updated: string, auth_oauth_token_expires: string, auth_oauth_url_callback: string, auth_oauth_url_start: string, compatibility_mode: record, service_provider_config_cache_timeout: string, exclude_users_service_account: bool, sync_page_size: int, sync_page_timeout: string, group_filters: list<string>, dry_run: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -17686,7 +17685,7 @@ export def "providers-scim-sync-object create" [
   --allow-errors(-e) # Return full response without error handling
   sync_object_model: string@sync-object-model-completer
   sync_object_id: string
-  --override-dry-run: string@bool-completer # default: false
+  --override-dry-run: oneof<nothing, bool> # default: false
 ]: any -> record<messages: table<timestamp: string, log_level: string, logger: string, event: string, attributes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -17999,7 +17998,7 @@ export def "providers-ssf list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --application-isnull: string@bool-completer
+  --application-isnull: oneof<nothing, bool>
   --name-iexact: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -18031,7 +18030,7 @@ export def "providers-ssf create" [
   signing_key: string # Key used to sign the SSF Events. (format: uuid)
   --oidc-auth-providers: list
   --event-retention: string
-  --push-verify-certificates: string@bool-completer
+  --push-verify-certificates: oneof<nothing, bool>
 ]: any -> record<pk: int, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, signing_key: string, token_obj: record<pk: string, managed: string, identifier: string, intent: string, user: int, user_obj: record<pk: int, username: string, name: string, is_active: bool, last_login: string, date_joined: string, is_superuser: bool, groups: list, groups_obj: list, roles: list, roles_obj: list, email: string, avatar: string, attributes: record, uid: string, path: string, type: string, uuid: string, password_change_date: string, last_updated: string>, description: string, expires: string, expiring: bool>, oidc_auth_providers: list<int>, oidc_auth_providers_obj: table<pk: int, name: string, authentication_flow: string, authorization_flow: string, invalidation_flow: string, property_mappings: list, component: string, assigned_application_slug: string, assigned_application_name: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string>, ssf_url: string, event_retention: string, push_verify_certificates: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -18083,7 +18082,7 @@ export def "providers-ssf update" [
   signing_key: string # Key used to sign the SSF Events. (format: uuid)
   --oidc-auth-providers: list
   --event-retention: string
-  --push-verify-certificates: string@bool-completer
+  --push-verify-certificates: oneof<nothing, bool>
 ]: any -> record<pk: int, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, signing_key: string, token_obj: record<pk: string, managed: string, identifier: string, intent: string, user: int, user_obj: record<pk: int, username: string, name: string, is_active: bool, last_login: string, date_joined: string, is_superuser: bool, groups: list, groups_obj: list, roles: list, roles_obj: list, email: string, avatar: string, attributes: record, uid: string, path: string, type: string, uuid: string, password_change_date: string, last_updated: string>, description: string, expires: string, expiring: bool>, oidc_auth_providers: list<int>, oidc_auth_providers_obj: table<pk: int, name: string, authentication_flow: string, authorization_flow: string, invalidation_flow: string, property_mappings: list, component: string, assigned_application_slug: string, assigned_application_name: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string>, ssf_url: string, event_retention: string, push_verify_certificates: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -18113,7 +18112,7 @@ export def "providers-ssf patch" [
   --signing-key: string # Key used to sign the SSF Events. (format: uuid)
   --oidc-auth-providers: list
   --event-retention: string
-  --push-verify-certificates: string@bool-completer
+  --push-verify-certificates: oneof<nothing, bool>
 ]: any -> record<pk: int, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, signing_key: string, token_obj: record<pk: string, managed: string, identifier: string, intent: string, user: int, user_obj: record<pk: int, username: string, name: string, is_active: bool, last_login: string, date_joined: string, is_superuser: bool, groups: list, groups_obj: list, roles: list, roles_obj: list, email: string, avatar: string, attributes: record, uid: string, path: string, type: string, uuid: string, password_change_date: string, last_updated: string>, description: string, expires: string, expiring: bool>, oidc_auth_providers: list<int>, oidc_auth_providers_obj: table<pk: int, name: string, authentication_flow: string, authorization_flow: string, invalidation_flow: string, property_mappings: list, component: string, assigned_application_slug: string, assigned_application_name: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string>, ssf_url: string, event_retention: string, push_verify_certificates: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -18195,7 +18194,7 @@ export def "providers-wsfed list" [
   --digest-algorithm: string@digest-algorithm-completer
   --encryption-kp: string # format: uuid
   --invalidation-flow: string # format: uuid
-  --is-backchannel: string@bool-completer
+  --is-backchannel: oneof<nothing, bool>
   --issuer-override: string
   --logout-method: string
   --name: string
@@ -18206,10 +18205,10 @@ export def "providers-wsfed list" [
   --property-mappings: list
   --search: string # A search term.
   --session-valid-not-on-or-after: string
-  --sign-assertion: string@bool-completer
-  --sign-logout-request: string@bool-completer
-  --sign-logout-response: string@bool-completer
-  --sign-response: string@bool-completer
+  --sign-assertion: oneof<nothing, bool>
+  --sign-logout-request: oneof<nothing, bool>
+  --sign-logout-response: oneof<nothing, bool>
+  --sign-response: oneof<nothing, bool>
   --signature-algorithm: string@signature-algorithm-completer
   --signing-kp: string # format: uuid
   --sls-binding: string
@@ -18254,8 +18253,8 @@ export def "providers-wsfed create" [
   --signature-algorithm: string@signature-algorithm-completer
   --signing-kp: string # Keypair used to sign outgoing Responses going to the Service Provider. (nullable, format: uuid)
   --encryption-kp: string # When selected, incoming assertions are encrypted by the IdP using the public key of the encryption keypair. The assertion is decrypted by the SP using the the private key. (nullable, format: uuid)
-  --sign-assertion: string@bool-completer
-  --sign-logout-request: string@bool-completer
+  --sign-assertion: oneof<nothing, bool>
+  --sign-logout-request: oneof<nothing, bool>
   --default-name-id-policy: string@default-name-id-policy-completer
 ]: any -> record<pk: int, name: string, authentication_flow: string, authorization_flow: string, invalidation_flow: string, property_mappings: list<string>, component: string, assigned_application_slug: string, assigned_application_name: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, reply_url: string, wtrealm: string, assertion_valid_not_before: string, assertion_valid_not_on_or_after: string, session_valid_not_on_or_after: string, name_id_mapping: string, authn_context_class_ref_mapping: string, digest_algorithm: string, signature_algorithm: string, signing_kp: string, encryption_kp: string, sign_assertion: bool, sign_logout_request: bool, default_name_id_policy: string, url_download_metadata: string, url_wsfed: string> {
   let input = $in
@@ -18320,8 +18319,8 @@ export def "providers-wsfed update" [
   --signature-algorithm: string@signature-algorithm-completer
   --signing-kp: string # Keypair used to sign outgoing Responses going to the Service Provider. (nullable, format: uuid)
   --encryption-kp: string # When selected, incoming assertions are encrypted by the IdP using the public key of the encryption keypair. The assertion is decrypted by the SP using the the private key. (nullable, format: uuid)
-  --sign-assertion: string@bool-completer
-  --sign-logout-request: string@bool-completer
+  --sign-assertion: oneof<nothing, bool>
+  --sign-logout-request: oneof<nothing, bool>
   --default-name-id-policy: string@default-name-id-policy-completer
 ]: any -> record<pk: int, name: string, authentication_flow: string, authorization_flow: string, invalidation_flow: string, property_mappings: list<string>, component: string, assigned_application_slug: string, assigned_application_name: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, reply_url: string, wtrealm: string, assertion_valid_not_before: string, assertion_valid_not_on_or_after: string, session_valid_not_on_or_after: string, name_id_mapping: string, authn_context_class_ref_mapping: string, digest_algorithm: string, signature_algorithm: string, signing_kp: string, encryption_kp: string, sign_assertion: bool, sign_logout_request: bool, default_name_id_policy: string, url_download_metadata: string, url_wsfed: string> {
   let input = $in
@@ -18364,8 +18363,8 @@ export def "providers-wsfed patch" [
   --signature-algorithm: string@signature-algorithm-completer
   --signing-kp: string # Keypair used to sign outgoing Responses going to the Service Provider. (nullable, format: uuid)
   --encryption-kp: string # When selected, incoming assertions are encrypted by the IdP using the public key of the encryption keypair. The assertion is decrypted by the SP using the the private key. (nullable, format: uuid)
-  --sign-assertion: string@bool-completer
-  --sign-logout-request: string@bool-completer
+  --sign-assertion: oneof<nothing, bool>
+  --sign-logout-request: oneof<nothing, bool>
   --default-name-id-policy: string@default-name-id-policy-completer
 ]: any -> record<pk: int, name: string, authentication_flow: string, authorization_flow: string, invalidation_flow: string, property_mappings: list<string>, component: string, assigned_application_slug: string, assigned_application_name: string, assigned_backchannel_application_slug: string, assigned_backchannel_application_name: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, reply_url: string, wtrealm: string, assertion_valid_not_before: string, assertion_valid_not_on_or_after: string, session_valid_not_on_or_after: string, name_id_mapping: string, authn_context_class_ref_mapping: string, digest_algorithm: string, signature_algorithm: string, signing_kp: string, encryption_kp: string, sign_assertion: bool, sign_logout_request: bool, default_name_id_policy: string, url_download_metadata: string, url_wsfed: string> {
   let input = $in
@@ -18415,7 +18414,7 @@ export def "providers-wsfed-metadata get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --download: string@bool-completer
+  --download: oneof<nothing, bool>
   --force-binding: string
 ]: nothing -> record<metadata: string, download_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -18642,7 +18641,7 @@ export def "rac-endpoints list" [
   --page-size: int # Number of results to return per page.
   --provider: int
   --search: string # A search term.
-  --superuser-full-list: string@bool-completer
+  --superuser-full-list: oneof<nothing, bool>
 ]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<pk: string, name: string, provider: int, provider_obj: record, protocol: string, host: string, settings: record, property_mappings: list, auth_mode: string, launch_url: string, maximum_connections: int>, autocomplete: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -19169,9 +19168,9 @@ export def "rbac-roles list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --groups: string # format: uuid
-  --inherited: string@bool-completer # Include inherited roles (requires users or groups filter)
+  --inherited: oneof<nothing, bool> # Include inherited roles (requires users or groups filter)
   --managed: list
-  --managed-isnull: string@bool-completer
+  --managed-isnull: oneof<nothing, bool>
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -20838,21 +20837,21 @@ export def "sources-kerberos list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --kadmin-type: string
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
-  --password-login-update-internal-password: string@bool-completer
+  --password-login-update-internal-password: oneof<nothing, bool>
   --pbm-uuid: string # format: uuid
   --realm: string
   --search: string # A search term.
   --slug: string
   --spnego-server-name: string
   --sync-principal: string
-  --sync-users: string@bool-completer
-  --sync-users-password: string@bool-completer
+  --sync-users: oneof<nothing, bool>
+  --sync-users-password: oneof<nothing, bool>
 ]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<pk: string, name: string, slug: string, enabled: bool, promoted: bool, authentication_flow: string, enrollment_flow: string, user_property_mappings: list, group_property_mappings: list, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, policy_engine_mode: string, user_matching_mode: record, managed: string, user_path_template: string, icon: string, icon_url: string, icon_themed_urls: record, group_matching_mode: record, realm: string, krb5_conf: string, kadmin_type: record, sync_users: bool, sync_users_password: bool, sync_principal: string, sync_ccache: string, connectivity: record, spnego_server_name: string, spnego_ccache: string, password_login_update_internal_password: bool, sync_outgoing_trigger_mode: record>, autocomplete: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -20877,8 +20876,8 @@ export def "sources-kerberos create" [
   --allow-errors(-e) # Return full response without error handling
   name: string # Source's display Name.
   slug: string # Internal source name, used in URLs.
-  --enabled: string@bool-completer
-  --promoted: string@bool-completer # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
+  --enabled: oneof<nothing, bool>
+  --promoted: oneof<nothing, bool> # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
   --authentication-flow: string # Flow to use when authenticating existing users. (nullable, format: uuid)
   --enrollment-flow: string # Flow to use when enrolling new users. (nullable, format: uuid)
   --user-property-mappings: list
@@ -20891,8 +20890,8 @@ export def "sources-kerberos create" [
   realm: string # Kerberos realm
   --krb5-conf: string # Custom krb5.conf to use. Uses the system one by default
   --kadmin-type: any # KAdmin server type
-  --sync-users: string@bool-completer # Sync users from Kerberos into authentik
-  --sync-users-password: string@bool-completer # When a user changes their password, sync it back to Kerberos
+  --sync-users: oneof<nothing, bool> # Sync users from Kerberos into authentik
+  --sync-users-password: oneof<nothing, bool> # When a user changes their password, sync it back to Kerberos
   --sync-principal: string # Principal to authenticate to kadmin for sync.
   --sync-password: string # Password to authenticate to kadmin for sync
   --sync-keytab: string # Keytab to authenticate to kadmin for sync. Must be base64-encoded or in the form TYPE:residual
@@ -20900,7 +20899,7 @@ export def "sources-kerberos create" [
   --spnego-server-name: string # Force the use of a specific server name for SPNEGO. Must be in the form HTTP@hostname
   --spnego-keytab: string # SPNEGO keytab base64-encoded or path to keytab in the form FILE:path
   --spnego-ccache: string # Credential cache to use for SPNEGO in form type:residual
-  --password-login-update-internal-password: string@bool-completer # If enabled, the authentik-stored password will be updated upon login with the Kerberos password backend
+  --password-login-update-internal-password: oneof<nothing, bool> # If enabled, the authentik-stored password will be updated upon login with the Kerberos password backend
   --sync-outgoing-trigger-mode: any # When to trigger sync for outgoing providers
 ]: any -> record<pk: string, name: string, slug: string, enabled: bool, promoted: bool, authentication_flow: string, enrollment_flow: string, user_property_mappings: list<string>, group_property_mappings: list<string>, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, policy_engine_mode: string, user_matching_mode: record, managed: string, user_path_template: string, icon: string, icon_url: string, icon_themed_urls: record<light: string, dark: string>, group_matching_mode: record, realm: string, krb5_conf: string, kadmin_type: record, sync_users: bool, sync_users_password: bool, sync_principal: string, sync_ccache: string, connectivity: record, spnego_server_name: string, spnego_ccache: string, password_login_update_internal_password: bool, sync_outgoing_trigger_mode: record> {
   let input = $in
@@ -20951,8 +20950,8 @@ export def "sources-kerberos update" [
   --allow-errors(-e) # Return full response without error handling
   name: string # Source's display Name.
   --body-slug: string # Internal source name, used in URLs.
-  --enabled: string@bool-completer
-  --promoted: string@bool-completer # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
+  --enabled: oneof<nothing, bool>
+  --promoted: oneof<nothing, bool> # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
   --authentication-flow: string # Flow to use when authenticating existing users. (nullable, format: uuid)
   --enrollment-flow: string # Flow to use when enrolling new users. (nullable, format: uuid)
   --user-property-mappings: list
@@ -20965,8 +20964,8 @@ export def "sources-kerberos update" [
   realm: string # Kerberos realm
   --krb5-conf: string # Custom krb5.conf to use. Uses the system one by default
   --kadmin-type: any # KAdmin server type
-  --sync-users: string@bool-completer # Sync users from Kerberos into authentik
-  --sync-users-password: string@bool-completer # When a user changes their password, sync it back to Kerberos
+  --sync-users: oneof<nothing, bool> # Sync users from Kerberos into authentik
+  --sync-users-password: oneof<nothing, bool> # When a user changes their password, sync it back to Kerberos
   --sync-principal: string # Principal to authenticate to kadmin for sync.
   --sync-password: string # Password to authenticate to kadmin for sync
   --sync-keytab: string # Keytab to authenticate to kadmin for sync. Must be base64-encoded or in the form TYPE:residual
@@ -20974,7 +20973,7 @@ export def "sources-kerberos update" [
   --spnego-server-name: string # Force the use of a specific server name for SPNEGO. Must be in the form HTTP@hostname
   --spnego-keytab: string # SPNEGO keytab base64-encoded or path to keytab in the form FILE:path
   --spnego-ccache: string # Credential cache to use for SPNEGO in form type:residual
-  --password-login-update-internal-password: string@bool-completer # If enabled, the authentik-stored password will be updated upon login with the Kerberos password backend
+  --password-login-update-internal-password: oneof<nothing, bool> # If enabled, the authentik-stored password will be updated upon login with the Kerberos password backend
   --sync-outgoing-trigger-mode: any # When to trigger sync for outgoing providers
 ]: any -> record<pk: string, name: string, slug: string, enabled: bool, promoted: bool, authentication_flow: string, enrollment_flow: string, user_property_mappings: list<string>, group_property_mappings: list<string>, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, policy_engine_mode: string, user_matching_mode: record, managed: string, user_path_template: string, icon: string, icon_url: string, icon_themed_urls: record<light: string, dark: string>, group_matching_mode: record, realm: string, krb5_conf: string, kadmin_type: record, sync_users: bool, sync_users_password: bool, sync_principal: string, sync_ccache: string, connectivity: record, spnego_server_name: string, spnego_ccache: string, password_login_update_internal_password: bool, sync_outgoing_trigger_mode: record> {
   let input = $in
@@ -21003,8 +21002,8 @@ export def "sources-kerberos patch" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # Source's display Name.
   --body-slug: string # Internal source name, used in URLs.
-  --enabled: string@bool-completer
-  --promoted: string@bool-completer # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
+  --enabled: oneof<nothing, bool>
+  --promoted: oneof<nothing, bool> # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
   --authentication-flow: string # Flow to use when authenticating existing users. (nullable, format: uuid)
   --enrollment-flow: string # Flow to use when enrolling new users. (nullable, format: uuid)
   --user-property-mappings: list
@@ -21017,8 +21016,8 @@ export def "sources-kerberos patch" [
   --realm: string # Kerberos realm
   --krb5-conf: string # Custom krb5.conf to use. Uses the system one by default
   --kadmin-type: any # KAdmin server type
-  --sync-users: string@bool-completer # Sync users from Kerberos into authentik
-  --sync-users-password: string@bool-completer # When a user changes their password, sync it back to Kerberos
+  --sync-users: oneof<nothing, bool> # Sync users from Kerberos into authentik
+  --sync-users-password: oneof<nothing, bool> # When a user changes their password, sync it back to Kerberos
   --sync-principal: string # Principal to authenticate to kadmin for sync.
   --sync-password: string # Password to authenticate to kadmin for sync
   --sync-keytab: string # Keytab to authenticate to kadmin for sync. Must be base64-encoded or in the form TYPE:residual
@@ -21026,7 +21025,7 @@ export def "sources-kerberos patch" [
   --spnego-server-name: string # Force the use of a specific server name for SPNEGO. Must be in the form HTTP@hostname
   --spnego-keytab: string # SPNEGO keytab base64-encoded or path to keytab in the form FILE:path
   --spnego-ccache: string # Credential cache to use for SPNEGO in form type:residual
-  --password-login-update-internal-password: string@bool-completer # If enabled, the authentik-stored password will be updated upon login with the Kerberos password backend
+  --password-login-update-internal-password: oneof<nothing, bool> # If enabled, the authentik-stored password will be updated upon login with the Kerberos password backend
   --sync-outgoing-trigger-mode: any # When to trigger sync for outgoing providers
 ]: any -> record<pk: string, name: string, slug: string, enabled: bool, promoted: bool, authentication_flow: string, enrollment_flow: string, user_property_mappings: list<string>, group_property_mappings: list<string>, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, policy_engine_mode: string, user_matching_mode: record, managed: string, user_path_template: string, icon: string, icon_url: string, icon_themed_urls: record<light: string, dark: string>, group_matching_mode: record, realm: string, krb5_conf: string, kadmin_type: record, sync_users: bool, sync_users_password: bool, sync_principal: string, sync_ccache: string, connectivity: record, spnego_server_name: string, spnego_ccache: string, password_login_update_internal_password: bool, sync_outgoing_trigger_mode: record> {
   let input = $in
@@ -21123,29 +21122,29 @@ export def "sources-ldap list" [
   --base-dn: string
   --bind-cn: string
   --client-certificate: string # format: uuid
-  --delete-not-found-objects: string@bool-completer
-  --enabled: string@bool-completer
+  --delete-not-found-objects: oneof<nothing, bool>
+  --enabled: oneof<nothing, bool>
   --group-membership-field: string
   --group-object-filter: string
   --group-property-mappings: list
-  --lookup-groups-from-user: string@bool-completer
+  --lookup-groups-from-user: oneof<nothing, bool>
   --name: string
   --object-uniqueness-field: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
-  --password-login-update-internal-password: string@bool-completer
+  --password-login-update-internal-password: oneof<nothing, bool>
   --pbm-uuid: string # format: uuid
   --peer-certificate: string # format: uuid
   --search: string # A search term.
   --server-uri: string
   --slug: string
-  --sni: string@bool-completer
-  --start-tls: string@bool-completer
-  --sync-groups: string@bool-completer
+  --sni: oneof<nothing, bool>
+  --start-tls: oneof<nothing, bool>
+  --sync-groups: oneof<nothing, bool>
   --sync-parent-group: string # format: uuid
-  --sync-users: string@bool-completer
-  --sync-users-password: string@bool-completer
+  --sync-users: oneof<nothing, bool>
+  --sync-users-password: oneof<nothing, bool>
   --user-membership-attribute: string
   --user-object-filter: string
   --user-property-mappings: list
@@ -21173,8 +21172,8 @@ export def "sources-ldap create" [
   --allow-errors(-e) # Return full response without error handling
   name: string # Source's display Name.
   slug: string # Internal source name, used in URLs.
-  --enabled: string@bool-completer
-  --promoted: string@bool-completer # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
+  --enabled: oneof<nothing, bool>
+  --promoted: oneof<nothing, bool> # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
   --authentication-flow: string # Flow to use when authenticating existing users. (nullable, format: uuid)
   --enrollment-flow: string # Flow to use when enrolling new users. (nullable, format: uuid)
   --user-property-mappings: list
@@ -21188,8 +21187,8 @@ export def "sources-ldap create" [
   --client-certificate: string # Client certificate to authenticate against the LDAP Server's Certificate. (nullable, format: uuid)
   --bind-cn: string
   --bind-password: string
-  --start-tls: string@bool-completer
-  --sni: string@bool-completer
+  --start-tls: oneof<nothing, bool>
+  --sni: oneof<nothing, bool>
   base_dn: string
   --additional-user-dn: string # Prepended to Base DN for User-queries.
   --additional-group-dn: string # Prepended to Base DN for Group-queries.
@@ -21198,13 +21197,13 @@ export def "sources-ldap create" [
   --group-membership-field: string # Field which contains members of a group.
   --user-membership-attribute: string # Attribute which matches the value of `group_membership_field`.
   --object-uniqueness-field: string # Field which contains a unique Identifier.
-  --password-login-update-internal-password: string@bool-completer # Update internal authentik password when login succeeds with LDAP
-  --sync-users: string@bool-completer
-  --sync-users-password: string@bool-completer # When a user changes their password, sync it back to LDAP. This can only be enabled on a single LDAP source.
-  --sync-groups: string@bool-completer
+  --password-login-update-internal-password: oneof<nothing, bool> # Update internal authentik password when login succeeds with LDAP
+  --sync-users: oneof<nothing, bool>
+  --sync-users-password: oneof<nothing, bool> # When a user changes their password, sync it back to LDAP. This can only be enabled on a single LDAP source.
+  --sync-groups: oneof<nothing, bool>
   --sync-parent-group: string # nullable, format: uuid
-  --lookup-groups-from-user: string@bool-completer # Lookup group membership based on a user attribute instead of a group attribute. This allows nested group resolution on systems like FreeIPA and Active Directory
-  --delete-not-found-objects: string@bool-completer # Delete authentik users and groups which were previously supplied by this source, but are now missing from it.
+  --lookup-groups-from-user: oneof<nothing, bool> # Lookup group membership based on a user attribute instead of a group attribute. This allows nested group resolution on systems like FreeIPA and Active Directory
+  --delete-not-found-objects: oneof<nothing, bool> # Delete authentik users and groups which were previously supplied by this source, but are now missing from it.
   --sync-outgoing-trigger-mode: any # When to trigger sync for outgoing providers
 ]: any -> record<pk: string, name: string, slug: string, enabled: bool, promoted: bool, authentication_flow: string, enrollment_flow: string, user_property_mappings: list<string>, group_property_mappings: list<string>, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, policy_engine_mode: string, user_matching_mode: record, managed: string, user_path_template: string, icon: string, icon_url: string, icon_themed_urls: record<light: string, dark: string>, server_uri: string, peer_certificate: string, client_certificate: string, bind_cn: string, start_tls: bool, sni: bool, base_dn: string, additional_user_dn: string, additional_group_dn: string, user_object_filter: string, group_object_filter: string, group_membership_field: string, user_membership_attribute: string, object_uniqueness_field: string, password_login_update_internal_password: bool, sync_users: bool, sync_users_password: bool, sync_groups: bool, sync_parent_group: string, connectivity: record, lookup_groups_from_user: bool, delete_not_found_objects: bool, sync_outgoing_trigger_mode: record> {
   let input = $in
@@ -21255,8 +21254,8 @@ export def "sources-ldap update" [
   --allow-errors(-e) # Return full response without error handling
   name: string # Source's display Name.
   --body-slug: string # Internal source name, used in URLs.
-  --enabled: string@bool-completer
-  --promoted: string@bool-completer # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
+  --enabled: oneof<nothing, bool>
+  --promoted: oneof<nothing, bool> # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
   --authentication-flow: string # Flow to use when authenticating existing users. (nullable, format: uuid)
   --enrollment-flow: string # Flow to use when enrolling new users. (nullable, format: uuid)
   --user-property-mappings: list
@@ -21270,8 +21269,8 @@ export def "sources-ldap update" [
   --client-certificate: string # Client certificate to authenticate against the LDAP Server's Certificate. (nullable, format: uuid)
   --bind-cn: string
   --bind-password: string
-  --start-tls: string@bool-completer
-  --sni: string@bool-completer
+  --start-tls: oneof<nothing, bool>
+  --sni: oneof<nothing, bool>
   base_dn: string
   --additional-user-dn: string # Prepended to Base DN for User-queries.
   --additional-group-dn: string # Prepended to Base DN for Group-queries.
@@ -21280,13 +21279,13 @@ export def "sources-ldap update" [
   --group-membership-field: string # Field which contains members of a group.
   --user-membership-attribute: string # Attribute which matches the value of `group_membership_field`.
   --object-uniqueness-field: string # Field which contains a unique Identifier.
-  --password-login-update-internal-password: string@bool-completer # Update internal authentik password when login succeeds with LDAP
-  --sync-users: string@bool-completer
-  --sync-users-password: string@bool-completer # When a user changes their password, sync it back to LDAP. This can only be enabled on a single LDAP source.
-  --sync-groups: string@bool-completer
+  --password-login-update-internal-password: oneof<nothing, bool> # Update internal authentik password when login succeeds with LDAP
+  --sync-users: oneof<nothing, bool>
+  --sync-users-password: oneof<nothing, bool> # When a user changes their password, sync it back to LDAP. This can only be enabled on a single LDAP source.
+  --sync-groups: oneof<nothing, bool>
   --sync-parent-group: string # nullable, format: uuid
-  --lookup-groups-from-user: string@bool-completer # Lookup group membership based on a user attribute instead of a group attribute. This allows nested group resolution on systems like FreeIPA and Active Directory
-  --delete-not-found-objects: string@bool-completer # Delete authentik users and groups which were previously supplied by this source, but are now missing from it.
+  --lookup-groups-from-user: oneof<nothing, bool> # Lookup group membership based on a user attribute instead of a group attribute. This allows nested group resolution on systems like FreeIPA and Active Directory
+  --delete-not-found-objects: oneof<nothing, bool> # Delete authentik users and groups which were previously supplied by this source, but are now missing from it.
   --sync-outgoing-trigger-mode: any # When to trigger sync for outgoing providers
 ]: any -> record<pk: string, name: string, slug: string, enabled: bool, promoted: bool, authentication_flow: string, enrollment_flow: string, user_property_mappings: list<string>, group_property_mappings: list<string>, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, policy_engine_mode: string, user_matching_mode: record, managed: string, user_path_template: string, icon: string, icon_url: string, icon_themed_urls: record<light: string, dark: string>, server_uri: string, peer_certificate: string, client_certificate: string, bind_cn: string, start_tls: bool, sni: bool, base_dn: string, additional_user_dn: string, additional_group_dn: string, user_object_filter: string, group_object_filter: string, group_membership_field: string, user_membership_attribute: string, object_uniqueness_field: string, password_login_update_internal_password: bool, sync_users: bool, sync_users_password: bool, sync_groups: bool, sync_parent_group: string, connectivity: record, lookup_groups_from_user: bool, delete_not_found_objects: bool, sync_outgoing_trigger_mode: record> {
   let input = $in
@@ -21315,8 +21314,8 @@ export def "sources-ldap patch" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # Source's display Name.
   --body-slug: string # Internal source name, used in URLs.
-  --enabled: string@bool-completer
-  --promoted: string@bool-completer # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
+  --enabled: oneof<nothing, bool>
+  --promoted: oneof<nothing, bool> # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
   --authentication-flow: string # Flow to use when authenticating existing users. (nullable, format: uuid)
   --enrollment-flow: string # Flow to use when enrolling new users. (nullable, format: uuid)
   --user-property-mappings: list
@@ -21330,8 +21329,8 @@ export def "sources-ldap patch" [
   --client-certificate: string # Client certificate to authenticate against the LDAP Server's Certificate. (nullable, format: uuid)
   --bind-cn: string
   --bind-password: string
-  --start-tls: string@bool-completer
-  --sni: string@bool-completer
+  --start-tls: oneof<nothing, bool>
+  --sni: oneof<nothing, bool>
   --base-dn: string
   --additional-user-dn: string # Prepended to Base DN for User-queries.
   --additional-group-dn: string # Prepended to Base DN for Group-queries.
@@ -21340,13 +21339,13 @@ export def "sources-ldap patch" [
   --group-membership-field: string # Field which contains members of a group.
   --user-membership-attribute: string # Attribute which matches the value of `group_membership_field`.
   --object-uniqueness-field: string # Field which contains a unique Identifier.
-  --password-login-update-internal-password: string@bool-completer # Update internal authentik password when login succeeds with LDAP
-  --sync-users: string@bool-completer
-  --sync-users-password: string@bool-completer # When a user changes their password, sync it back to LDAP. This can only be enabled on a single LDAP source.
-  --sync-groups: string@bool-completer
+  --password-login-update-internal-password: oneof<nothing, bool> # Update internal authentik password when login succeeds with LDAP
+  --sync-users: oneof<nothing, bool>
+  --sync-users-password: oneof<nothing, bool> # When a user changes their password, sync it back to LDAP. This can only be enabled on a single LDAP source.
+  --sync-groups: oneof<nothing, bool>
   --sync-parent-group: string # nullable, format: uuid
-  --lookup-groups-from-user: string@bool-completer # Lookup group membership based on a user attribute instead of a group attribute. This allows nested group resolution on systems like FreeIPA and Active Directory
-  --delete-not-found-objects: string@bool-completer # Delete authentik users and groups which were previously supplied by this source, but are now missing from it.
+  --lookup-groups-from-user: oneof<nothing, bool> # Lookup group membership based on a user attribute instead of a group attribute. This allows nested group resolution on systems like FreeIPA and Active Directory
+  --delete-not-found-objects: oneof<nothing, bool> # Delete authentik users and groups which were previously supplied by this source, but are now missing from it.
   --sync-outgoing-trigger-mode: any # When to trigger sync for outgoing providers
 ]: any -> record<pk: string, name: string, slug: string, enabled: bool, promoted: bool, authentication_flow: string, enrollment_flow: string, user_property_mappings: list<string>, group_property_mappings: list<string>, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, policy_engine_mode: string, user_matching_mode: record, managed: string, user_path_template: string, icon: string, icon_url: string, icon_themed_urls: record<light: string, dark: string>, server_uri: string, peer_certificate: string, client_certificate: string, bind_cn: string, start_tls: bool, sni: bool, base_dn: string, additional_user_dn: string, additional_group_dn: string, user_object_filter: string, group_object_filter: string, group_membership_field: string, user_membership_attribute: string, object_uniqueness_field: string, password_login_update_internal_password: bool, sync_users: bool, sync_users_password: bool, sync_groups: bool, sync_parent_group: string, connectivity: record, lookup_groups_from_user: bool, delete_not_found_objects: bool, sync_outgoing_trigger_mode: record> {
   let input = $in
@@ -21465,10 +21464,10 @@ export def "sources-oauth list" [
   --authentication-flow: string # format: uuid
   --authorization-url: string
   --consumer-key: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --enrollment-flow: string # format: uuid
   --group-matching-mode: string
-  --has-jwks: string@bool-completer # Only return sources with JWKS data
+  --has-jwks: oneof<nothing, bool> # Only return sources with JWKS data
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -21505,8 +21504,8 @@ export def "sources-oauth create" [
   --allow-errors(-e) # Return full response without error handling
   name: string # Source's display Name.
   slug: string # Internal source name, used in URLs.
-  --enabled: string@bool-completer
-  --promoted: string@bool-completer # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
+  --enabled: oneof<nothing, bool>
+  --promoted: oneof<nothing, bool> # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
   --authentication-flow: string # Flow to use when authenticating existing users. (nullable, format: uuid)
   --enrollment-flow: string # Flow to use when enrolling new users. (nullable, format: uuid)
   --user-property-mappings: list
@@ -21578,8 +21577,8 @@ export def "sources-oauth update" [
   --allow-errors(-e) # Return full response without error handling
   name: string # Source's display Name.
   --body-slug: string # Internal source name, used in URLs.
-  --enabled: string@bool-completer
-  --promoted: string@bool-completer # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
+  --enabled: oneof<nothing, bool>
+  --promoted: oneof<nothing, bool> # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
   --authentication-flow: string # Flow to use when authenticating existing users. (nullable, format: uuid)
   --enrollment-flow: string # Flow to use when enrolling new users. (nullable, format: uuid)
   --user-property-mappings: list
@@ -21629,8 +21628,8 @@ export def "sources-oauth patch" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # Source's display Name.
   --body-slug: string # Internal source name, used in URLs.
-  --enabled: string@bool-completer
-  --promoted: string@bool-completer # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
+  --enabled: oneof<nothing, bool>
+  --promoted: oneof<nothing, bool> # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
   --authentication-flow: string # Flow to use when authenticating existing users. (nullable, format: uuid)
   --enrollment-flow: string # Flow to use when enrolling new users. (nullable, format: uuid)
   --user-property-mappings: list
@@ -21744,10 +21743,10 @@ export def "sources-plex list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-friends: string@bool-completer
+  --allow-friends: oneof<nothing, bool>
   --authentication-flow: string # format: uuid
   --client-id: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --enrollment-flow: string # format: uuid
   --group-matching-mode: string
   --name: string
@@ -21783,8 +21782,8 @@ export def "sources-plex create" [
   --allow-errors(-e) # Return full response without error handling
   name: string # Source's display Name.
   slug: string # Internal source name, used in URLs.
-  --enabled: string@bool-completer
-  --promoted: string@bool-completer # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
+  --enabled: oneof<nothing, bool>
+  --promoted: oneof<nothing, bool> # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
   --authentication-flow: string # Flow to use when authenticating existing users. (nullable, format: uuid)
   --enrollment-flow: string # Flow to use when enrolling new users. (nullable, format: uuid)
   --user-property-mappings: list
@@ -21796,7 +21795,7 @@ export def "sources-plex create" [
   --group-matching-mode: any # How the source determines if an existing group should be used or a new group created.
   --client-id: string # Client identifier used to talk to Plex.
   --allowed-servers: list # Which servers a user has to be a member of to be granted access. Empty list allows every server.
-  --allow-friends: string@bool-completer # Allow friends to authenticate, even if you don't share a server.
+  --allow-friends: oneof<nothing, bool> # Allow friends to authenticate, even if you don't share a server.
   plex_token: string # Plex token used to check friends
 ]: any -> record<pk: string, name: string, slug: string, enabled: bool, promoted: bool, authentication_flow: string, enrollment_flow: string, user_property_mappings: list<string>, group_property_mappings: list<string>, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, policy_engine_mode: string, user_matching_mode: record, managed: string, user_path_template: string, icon: string, icon_url: string, icon_themed_urls: record<light: string, dark: string>, group_matching_mode: record, client_id: string, allowed_servers: list<string>, allow_friends: bool, plex_token: string> {
   let input = $in
@@ -21847,8 +21846,8 @@ export def "sources-plex update" [
   --allow-errors(-e) # Return full response without error handling
   name: string # Source's display Name.
   --body-slug: string # Internal source name, used in URLs.
-  --enabled: string@bool-completer
-  --promoted: string@bool-completer # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
+  --enabled: oneof<nothing, bool>
+  --promoted: oneof<nothing, bool> # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
   --authentication-flow: string # Flow to use when authenticating existing users. (nullable, format: uuid)
   --enrollment-flow: string # Flow to use when enrolling new users. (nullable, format: uuid)
   --user-property-mappings: list
@@ -21860,7 +21859,7 @@ export def "sources-plex update" [
   --group-matching-mode: any # How the source determines if an existing group should be used or a new group created.
   --client-id: string # Client identifier used to talk to Plex.
   --allowed-servers: list # Which servers a user has to be a member of to be granted access. Empty list allows every server.
-  --allow-friends: string@bool-completer # Allow friends to authenticate, even if you don't share a server.
+  --allow-friends: oneof<nothing, bool> # Allow friends to authenticate, even if you don't share a server.
   plex_token: string # Plex token used to check friends
 ]: any -> record<pk: string, name: string, slug: string, enabled: bool, promoted: bool, authentication_flow: string, enrollment_flow: string, user_property_mappings: list<string>, group_property_mappings: list<string>, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, policy_engine_mode: string, user_matching_mode: record, managed: string, user_path_template: string, icon: string, icon_url: string, icon_themed_urls: record<light: string, dark: string>, group_matching_mode: record, client_id: string, allowed_servers: list<string>, allow_friends: bool, plex_token: string> {
   let input = $in
@@ -21889,8 +21888,8 @@ export def "sources-plex patch" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # Source's display Name.
   --body-slug: string # Internal source name, used in URLs.
-  --enabled: string@bool-completer
-  --promoted: string@bool-completer # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
+  --enabled: oneof<nothing, bool>
+  --promoted: oneof<nothing, bool> # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
   --authentication-flow: string # Flow to use when authenticating existing users. (nullable, format: uuid)
   --enrollment-flow: string # Flow to use when enrolling new users. (nullable, format: uuid)
   --user-property-mappings: list
@@ -21902,7 +21901,7 @@ export def "sources-plex patch" [
   --group-matching-mode: any # How the source determines if an existing group should be used or a new group created.
   --client-id: string # Client identifier used to talk to Plex.
   --allowed-servers: list # Which servers a user has to be a member of to be granted access. Empty list allows every server.
-  --allow-friends: string@bool-completer # Allow friends to authenticate, even if you don't share a server.
+  --allow-friends: oneof<nothing, bool> # Allow friends to authenticate, even if you don't share a server.
   --plex-token: string # Plex token used to check friends
 ]: any -> record<pk: string, name: string, slug: string, enabled: bool, promoted: bool, authentication_flow: string, enrollment_flow: string, user_property_mappings: list<string>, group_property_mappings: list<string>, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, policy_engine_mode: string, user_matching_mode: record, managed: string, user_path_template: string, icon: string, icon_url: string, icon_themed_urls: record<light: string, dark: string>, group_matching_mode: record, client_id: string, allowed_servers: list<string>, allow_friends: bool, plex_token: string> {
   let input = $in
@@ -22026,13 +22025,13 @@ export def "sources-saml list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-idp-initiated: string@bool-completer
+  --allow-idp-initiated: oneof<nothing, bool>
   --authentication-flow: string # format: uuid
   --binding-type: string@binding-type-completer
   --digest-algorithm: string@digest-algorithm-completer
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --enrollment-flow: string # format: uuid
-  --force-authn: string@bool-completer
+  --force-authn: oneof<nothing, bool>
   --issuer: string
   --managed: string
   --name: string
@@ -22045,8 +22044,8 @@ export def "sources-saml list" [
   --pre-authentication-flow: string # format: uuid
   --search: string # A search term.
   --signature-algorithm: string@signature-algorithm-completer
-  --signed-assertion: string@bool-completer
-  --signed-response: string@bool-completer
+  --signed-assertion: oneof<nothing, bool>
+  --signed-response: oneof<nothing, bool>
   --signing-kp: string # format: uuid
   --slo-url: string
   --slug: string
@@ -22078,8 +22077,8 @@ export def "sources-saml create" [
   --allow-errors(-e) # Return full response without error handling
   name: string # Source's display Name.
   slug: string # Internal source name, used in URLs.
-  --enabled: string@bool-completer
-  --promoted: string@bool-completer # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
+  --enabled: oneof<nothing, bool>
+  --promoted: oneof<nothing, bool> # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
   --authentication-flow: string # Flow to use when authenticating existing users. (nullable, format: uuid)
   --enrollment-flow: string # Flow to use when enrolling new users. (nullable, format: uuid)
   --user-property-mappings: list
@@ -22093,8 +22092,8 @@ export def "sources-saml create" [
   --issuer: string # Also known as Entity ID. Defaults the Metadata URL.
   sso_url: string # URL that the initial Login request is sent to. (format: uri)
   --slo-url: string # Optional URL if your IDP supports Single-Logout. (nullable, format: uri)
-  --allow-idp-initiated: string@bool-completer # Allows authentication flows initiated by the IdP. This can be a security risk, as no validation of the request ID is done.
-  --force-authn: string@bool-completer # When enabled, the IdP will re-authenticate the user even if a session exists.
+  --allow-idp-initiated: oneof<nothing, bool> # Allows authentication flows initiated by the IdP. This can be a security risk, as no validation of the request ID is done.
+  --force-authn: oneof<nothing, bool> # When enabled, the IdP will re-authenticate the user even if a session exists.
   --name-id-policy: any # NameID Policy sent to the IdP. Can be unset, in which case no Policy is sent.
   --binding-type: string@binding-type-completer
   --verification-kp: string # When selected, incoming assertion's Signatures will be validated against this certificate. To allow unsigned Requests, leave on default. (nullable, format: uuid)
@@ -22103,8 +22102,8 @@ export def "sources-saml create" [
   --signature-algorithm: string@signature-algorithm-completer
   --temporary-user-delete-after: string # Time offset when temporary users should be deleted. This only applies if your IDP uses the NameID Format 'transient', and the user doesn't log out manually. (Format: hours=1;minutes=2;seconds=3).
   --encryption-kp: string # When selected, incoming assertions are encrypted by the IdP using the public key of the encryption keypair. The assertion is decrypted by the SP using the the private key. (nullable, format: uuid)
-  --signed-assertion: string@bool-completer
-  --signed-response: string@bool-completer
+  --signed-assertion: oneof<nothing, bool>
+  --signed-response: oneof<nothing, bool>
 ]: any -> record<pk: string, name: string, slug: string, enabled: bool, promoted: bool, authentication_flow: string, enrollment_flow: string, user_property_mappings: list<string>, group_property_mappings: list<string>, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, policy_engine_mode: string, user_matching_mode: record, managed: string, user_path_template: string, icon: string, icon_url: string, icon_themed_urls: record<light: string, dark: string>, group_matching_mode: record, pre_authentication_flow: string, issuer: string, sso_url: string, slo_url: string, allow_idp_initiated: bool, force_authn: bool, name_id_policy: record, binding_type: string, verification_kp: string, signing_kp: string, digest_algorithm: string, signature_algorithm: string, temporary_user_delete_after: string, encryption_kp: string, signed_assertion: bool, signed_response: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -22154,8 +22153,8 @@ export def "sources-saml update" [
   --allow-errors(-e) # Return full response without error handling
   name: string # Source's display Name.
   --body-slug: string # Internal source name, used in URLs.
-  --enabled: string@bool-completer
-  --promoted: string@bool-completer # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
+  --enabled: oneof<nothing, bool>
+  --promoted: oneof<nothing, bool> # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
   --authentication-flow: string # Flow to use when authenticating existing users. (nullable, format: uuid)
   --enrollment-flow: string # Flow to use when enrolling new users. (nullable, format: uuid)
   --user-property-mappings: list
@@ -22169,8 +22168,8 @@ export def "sources-saml update" [
   --issuer: string # Also known as Entity ID. Defaults the Metadata URL.
   sso_url: string # URL that the initial Login request is sent to. (format: uri)
   --slo-url: string # Optional URL if your IDP supports Single-Logout. (nullable, format: uri)
-  --allow-idp-initiated: string@bool-completer # Allows authentication flows initiated by the IdP. This can be a security risk, as no validation of the request ID is done.
-  --force-authn: string@bool-completer # When enabled, the IdP will re-authenticate the user even if a session exists.
+  --allow-idp-initiated: oneof<nothing, bool> # Allows authentication flows initiated by the IdP. This can be a security risk, as no validation of the request ID is done.
+  --force-authn: oneof<nothing, bool> # When enabled, the IdP will re-authenticate the user even if a session exists.
   --name-id-policy: any # NameID Policy sent to the IdP. Can be unset, in which case no Policy is sent.
   --binding-type: string@binding-type-completer
   --verification-kp: string # When selected, incoming assertion's Signatures will be validated against this certificate. To allow unsigned Requests, leave on default. (nullable, format: uuid)
@@ -22179,8 +22178,8 @@ export def "sources-saml update" [
   --signature-algorithm: string@signature-algorithm-completer
   --temporary-user-delete-after: string # Time offset when temporary users should be deleted. This only applies if your IDP uses the NameID Format 'transient', and the user doesn't log out manually. (Format: hours=1;minutes=2;seconds=3).
   --encryption-kp: string # When selected, incoming assertions are encrypted by the IdP using the public key of the encryption keypair. The assertion is decrypted by the SP using the the private key. (nullable, format: uuid)
-  --signed-assertion: string@bool-completer
-  --signed-response: string@bool-completer
+  --signed-assertion: oneof<nothing, bool>
+  --signed-response: oneof<nothing, bool>
 ]: any -> record<pk: string, name: string, slug: string, enabled: bool, promoted: bool, authentication_flow: string, enrollment_flow: string, user_property_mappings: list<string>, group_property_mappings: list<string>, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, policy_engine_mode: string, user_matching_mode: record, managed: string, user_path_template: string, icon: string, icon_url: string, icon_themed_urls: record<light: string, dark: string>, group_matching_mode: record, pre_authentication_flow: string, issuer: string, sso_url: string, slo_url: string, allow_idp_initiated: bool, force_authn: bool, name_id_policy: record, binding_type: string, verification_kp: string, signing_kp: string, digest_algorithm: string, signature_algorithm: string, temporary_user_delete_after: string, encryption_kp: string, signed_assertion: bool, signed_response: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -22208,8 +22207,8 @@ export def "sources-saml patch" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # Source's display Name.
   --body-slug: string # Internal source name, used in URLs.
-  --enabled: string@bool-completer
-  --promoted: string@bool-completer # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
+  --enabled: oneof<nothing, bool>
+  --promoted: oneof<nothing, bool> # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
   --authentication-flow: string # Flow to use when authenticating existing users. (nullable, format: uuid)
   --enrollment-flow: string # Flow to use when enrolling new users. (nullable, format: uuid)
   --user-property-mappings: list
@@ -22223,8 +22222,8 @@ export def "sources-saml patch" [
   --issuer: string # Also known as Entity ID. Defaults the Metadata URL.
   --sso-url: string # URL that the initial Login request is sent to. (format: uri)
   --slo-url: string # Optional URL if your IDP supports Single-Logout. (nullable, format: uri)
-  --allow-idp-initiated: string@bool-completer # Allows authentication flows initiated by the IdP. This can be a security risk, as no validation of the request ID is done.
-  --force-authn: string@bool-completer # When enabled, the IdP will re-authenticate the user even if a session exists.
+  --allow-idp-initiated: oneof<nothing, bool> # Allows authentication flows initiated by the IdP. This can be a security risk, as no validation of the request ID is done.
+  --force-authn: oneof<nothing, bool> # When enabled, the IdP will re-authenticate the user even if a session exists.
   --name-id-policy: any # NameID Policy sent to the IdP. Can be unset, in which case no Policy is sent.
   --binding-type: string@binding-type-completer
   --verification-kp: string # When selected, incoming assertion's Signatures will be validated against this certificate. To allow unsigned Requests, leave on default. (nullable, format: uuid)
@@ -22233,8 +22232,8 @@ export def "sources-saml patch" [
   --signature-algorithm: string@signature-algorithm-completer
   --temporary-user-delete-after: string # Time offset when temporary users should be deleted. This only applies if your IDP uses the NameID Format 'transient', and the user doesn't log out manually. (Format: hours=1;minutes=2;seconds=3).
   --encryption-kp: string # When selected, incoming assertions are encrypted by the IdP using the public key of the encryption keypair. The assertion is decrypted by the SP using the the private key. (nullable, format: uuid)
-  --signed-assertion: string@bool-completer
-  --signed-response: string@bool-completer
+  --signed-assertion: oneof<nothing, bool>
+  --signed-response: oneof<nothing, bool>
 ]: any -> record<pk: string, name: string, slug: string, enabled: bool, promoted: bool, authentication_flow: string, enrollment_flow: string, user_property_mappings: list<string>, group_property_mappings: list<string>, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, policy_engine_mode: string, user_matching_mode: record, managed: string, user_path_template: string, icon: string, icon_url: string, icon_themed_urls: record<light: string, dark: string>, group_matching_mode: record, pre_authentication_flow: string, issuer: string, sso_url: string, slo_url: string, allow_idp_initiated: bool, force_authn: bool, name_id_policy: record, binding_type: string, verification_kp: string, signing_kp: string, digest_algorithm: string, signature_algorithm: string, temporary_user_delete_after: string, encryption_kp: string, signed_assertion: bool, signed_response: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -22356,7 +22355,7 @@ export def "sources-scim create" [
   --allow-errors(-e) # Return full response without error handling
   name: string # Source's display Name.
   slug: string # Internal source name, used in URLs.
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --user-property-mappings: list
   --group-property-mappings: list
   --user-path-template: string
@@ -22409,7 +22408,7 @@ export def "sources-scim update" [
   --allow-errors(-e) # Return full response without error handling
   name: string # Source's display Name.
   --body-slug: string # Internal source name, used in URLs.
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --user-property-mappings: list
   --group-property-mappings: list
   --user-path-template: string
@@ -22440,7 +22439,7 @@ export def "sources-scim patch" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # Source's display Name.
   --body-slug: string # Internal source name, used in URLs.
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --user-property-mappings: list
   --group-property-mappings: list
   --user-path-template: string
@@ -22882,7 +22881,7 @@ export def "sources-telegram list" [
   --allow-errors(-e) # Return full response without error handling
   --authentication-flow: string # format: uuid
   --bot-username: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --enrollment-flow: string # format: uuid
   --group-matching-mode: string
   --name: string
@@ -22891,7 +22890,7 @@ export def "sources-telegram list" [
   --page-size: int # Number of results to return per page.
   --pbm-uuid: string # format: uuid
   --policy-engine-mode: string@policy-engine-mode-completer
-  --request-message-access: string@bool-completer
+  --request-message-access: oneof<nothing, bool>
   --search: string # A search term.
   --slug: string
   --user-matching-mode: string
@@ -22919,8 +22918,8 @@ export def "sources-telegram create" [
   --allow-errors(-e) # Return full response without error handling
   name: string # Source's display Name.
   slug: string # Internal source name, used in URLs.
-  --enabled: string@bool-completer
-  --promoted: string@bool-completer # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
+  --enabled: oneof<nothing, bool>
+  --promoted: oneof<nothing, bool> # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
   --authentication-flow: string # Flow to use when authenticating existing users. (nullable, format: uuid)
   --enrollment-flow: string # Flow to use when enrolling new users. (nullable, format: uuid)
   --user-property-mappings: list
@@ -22931,7 +22930,7 @@ export def "sources-telegram create" [
   --icon: string
   bot_username: string # Telegram bot username
   bot_token: string # Telegram bot token
-  --request-message-access: string@bool-completer # Request access to send messages from your bot.
+  --request-message-access: oneof<nothing, bool> # Request access to send messages from your bot.
   pre_authentication_flow: string # Flow used before authentication. (format: uuid)
 ]: any -> record<pk: string, name: string, slug: string, enabled: bool, promoted: bool, authentication_flow: string, enrollment_flow: string, user_property_mappings: list<string>, group_property_mappings: list<string>, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, policy_engine_mode: string, user_matching_mode: record, managed: string, user_path_template: string, icon: string, icon_url: string, icon_themed_urls: record<light: string, dark: string>, bot_username: string, request_message_access: bool, pre_authentication_flow: string> {
   let input = $in
@@ -22982,8 +22981,8 @@ export def "sources-telegram update" [
   --allow-errors(-e) # Return full response without error handling
   name: string # Source's display Name.
   --body-slug: string # Internal source name, used in URLs.
-  --enabled: string@bool-completer
-  --promoted: string@bool-completer # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
+  --enabled: oneof<nothing, bool>
+  --promoted: oneof<nothing, bool> # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
   --authentication-flow: string # Flow to use when authenticating existing users. (nullable, format: uuid)
   --enrollment-flow: string # Flow to use when enrolling new users. (nullable, format: uuid)
   --user-property-mappings: list
@@ -22994,7 +22993,7 @@ export def "sources-telegram update" [
   --icon: string
   bot_username: string # Telegram bot username
   bot_token: string # Telegram bot token
-  --request-message-access: string@bool-completer # Request access to send messages from your bot.
+  --request-message-access: oneof<nothing, bool> # Request access to send messages from your bot.
   pre_authentication_flow: string # Flow used before authentication. (format: uuid)
 ]: any -> record<pk: string, name: string, slug: string, enabled: bool, promoted: bool, authentication_flow: string, enrollment_flow: string, user_property_mappings: list<string>, group_property_mappings: list<string>, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, policy_engine_mode: string, user_matching_mode: record, managed: string, user_path_template: string, icon: string, icon_url: string, icon_themed_urls: record<light: string, dark: string>, bot_username: string, request_message_access: bool, pre_authentication_flow: string> {
   let input = $in
@@ -23023,8 +23022,8 @@ export def "sources-telegram patch" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # Source's display Name.
   --body-slug: string # Internal source name, used in URLs.
-  --enabled: string@bool-completer
-  --promoted: string@bool-completer # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
+  --enabled: oneof<nothing, bool>
+  --promoted: oneof<nothing, bool> # When enabled, this source will be displayed as a prominent button on the login page, instead of a small icon.
   --authentication-flow: string # Flow to use when authenticating existing users. (nullable, format: uuid)
   --enrollment-flow: string # Flow to use when enrolling new users. (nullable, format: uuid)
   --user-property-mappings: list
@@ -23035,7 +23034,7 @@ export def "sources-telegram patch" [
   --icon: string
   --bot-username: string # Telegram bot username
   --bot-token: string # Telegram bot token
-  --request-message-access: string@bool-completer # Request access to send messages from your bot.
+  --request-message-access: oneof<nothing, bool> # Request access to send messages from your bot.
   --pre-authentication-flow: string # Flow used before authentication. (format: uuid)
 ]: any -> record<pk: string, name: string, slug: string, enabled: bool, promoted: bool, authentication_flow: string, enrollment_flow: string, user_property_mappings: list<string>, group_property_mappings: list<string>, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, policy_engine_mode: string, user_matching_mode: record, managed: string, user_path_template: string, icon: string, icon_url: string, icon_themed_urls: record<light: string, dark: string>, bot_username: string, request_message_access: bool, pre_authentication_flow: string> {
   let input = $in
@@ -24411,16 +24410,16 @@ export def "stages-account-lockdown list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deactivate-user: string@bool-completer
-  --delete-sessions: string@bool-completer
+  --deactivate-user: oneof<nothing, bool>
+  --delete-sessions: oneof<nothing, bool>
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
-  --revoke-tokens: string@bool-completer
+  --revoke-tokens: oneof<nothing, bool>
   --search: string # A search term.
   --self-service-completion-flow: string # format: uuid
-  --set-unusable-password: string@bool-completer
+  --set-unusable-password: oneof<nothing, bool>
   --stage-uuid: string # format: uuid
 ]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: list, deactivate_user: bool, set_unusable_password: bool, delete_sessions: bool, revoke_tokens: bool, self_service_completion_flow: string>, autocomplete: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -24445,10 +24444,10 @@ export def "stages-account-lockdown create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --deactivate-user: string@bool-completer # Deactivate the user account (set is_active to False)
-  --set-unusable-password: string@bool-completer # Set an unusable password for the user
-  --delete-sessions: string@bool-completer # Delete all active sessions for the user
-  --revoke-tokens: string@bool-completer # Revoke all tokens for the user (API, app password, recovery, verification, OAuth)
+  --deactivate-user: oneof<nothing, bool> # Deactivate the user account (set is_active to False)
+  --set-unusable-password: oneof<nothing, bool> # Set an unusable password for the user
+  --delete-sessions: oneof<nothing, bool> # Delete all active sessions for the user
+  --revoke-tokens: oneof<nothing, bool> # Revoke all tokens for the user (API, app password, recovery, verification, OAuth)
   --self-service-completion-flow: string # Flow to redirect users to after self-service lockdown. This flow should not require authentication since the user's session is deleted. (nullable, format: uuid)
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, deactivate_user: bool, set_unusable_password: bool, delete_sessions: bool, revoke_tokens: bool, self_service_completion_flow: string> {
   let input = $in
@@ -24498,10 +24497,10 @@ export def "stages-account-lockdown update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --deactivate-user: string@bool-completer # Deactivate the user account (set is_active to False)
-  --set-unusable-password: string@bool-completer # Set an unusable password for the user
-  --delete-sessions: string@bool-completer # Delete all active sessions for the user
-  --revoke-tokens: string@bool-completer # Revoke all tokens for the user (API, app password, recovery, verification, OAuth)
+  --deactivate-user: oneof<nothing, bool> # Deactivate the user account (set is_active to False)
+  --set-unusable-password: oneof<nothing, bool> # Set an unusable password for the user
+  --delete-sessions: oneof<nothing, bool> # Delete all active sessions for the user
+  --revoke-tokens: oneof<nothing, bool> # Revoke all tokens for the user (API, app password, recovery, verification, OAuth)
   --self-service-completion-flow: string # Flow to redirect users to after self-service lockdown. This flow should not require authentication since the user's session is deleted. (nullable, format: uuid)
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, deactivate_user: bool, set_unusable_password: bool, delete_sessions: bool, revoke_tokens: bool, self_service_completion_flow: string> {
   let input = $in
@@ -24529,10 +24528,10 @@ export def "stages-account-lockdown patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --deactivate-user: string@bool-completer # Deactivate the user account (set is_active to False)
-  --set-unusable-password: string@bool-completer # Set an unusable password for the user
-  --delete-sessions: string@bool-completer # Delete all active sessions for the user
-  --revoke-tokens: string@bool-completer # Revoke all tokens for the user (API, app password, recovery, verification, OAuth)
+  --deactivate-user: oneof<nothing, bool> # Deactivate the user account (set is_active to False)
+  --set-unusable-password: oneof<nothing, bool> # Set an unusable password for the user
+  --delete-sessions: oneof<nothing, bool> # Delete all active sessions for the user
+  --revoke-tokens: oneof<nothing, bool> # Revoke all tokens for the user (API, app password, recovery, verification, OAuth)
   --self-service-completion-flow: string # Flow to redirect users to after self-service lockdown. This flow should not require authentication since the user's session is deleted. (nullable, format: uuid)
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, deactivate_user: bool, set_unusable_password: bool, delete_sessions: bool, revoke_tokens: bool, self_service_completion_flow: string> {
   let input = $in
@@ -25018,9 +25017,9 @@ export def "stages-authenticator-email list" [
   --template: string
   --timeout: int
   --token-expiry: string
-  --use-global-settings: string@bool-completer
-  --use-ssl: string@bool-completer
-  --use-tls: string@bool-completer
+  --use-global-settings: oneof<nothing, bool>
+  --use-ssl: oneof<nothing, bool>
+  --use-tls: oneof<nothing, bool>
   --username: string
 ]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: list, configure_flow: string, friendly_name: string, use_global_settings: bool, host: string, port: int, username: string, password: string, use_tls: bool, use_ssl: bool, timeout: int, from_address: string, subject: string, token_expiry: string, template: string>, autocomplete: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -25047,13 +25046,13 @@ export def "stages-authenticator-email create" [
   name: string
   --configure-flow: string # Flow used by an authenticated user to configure this Stage. If empty, user will not be able to configure this stage. (nullable, format: uuid)
   --friendly-name: string
-  --use-global-settings: string@bool-completer # When enabled, global Email connection settings will be used and connection settings below will be ignored.
+  --use-global-settings: oneof<nothing, bool> # When enabled, global Email connection settings will be used and connection settings below will be ignored.
   --host: string
   --port: int
   --username: string
   --password: string
-  --use-tls: string@bool-completer
-  --use-ssl: string@bool-completer
+  --use-tls: oneof<nothing, bool>
+  --use-ssl: oneof<nothing, bool>
   --timeout: int
   --from-address: string # format: email
   --subject: string
@@ -25109,13 +25108,13 @@ export def "stages-authenticator-email update" [
   name: string
   --configure-flow: string # Flow used by an authenticated user to configure this Stage. If empty, user will not be able to configure this stage. (nullable, format: uuid)
   --friendly-name: string
-  --use-global-settings: string@bool-completer # When enabled, global Email connection settings will be used and connection settings below will be ignored.
+  --use-global-settings: oneof<nothing, bool> # When enabled, global Email connection settings will be used and connection settings below will be ignored.
   --host: string
   --port: int
   --username: string
   --password: string
-  --use-tls: string@bool-completer
-  --use-ssl: string@bool-completer
+  --use-tls: oneof<nothing, bool>
+  --use-ssl: oneof<nothing, bool>
   --timeout: int
   --from-address: string # format: email
   --subject: string
@@ -25149,13 +25148,13 @@ export def "stages-authenticator-email patch" [
   --name: string
   --configure-flow: string # Flow used by an authenticated user to configure this Stage. If empty, user will not be able to configure this stage. (nullable, format: uuid)
   --friendly-name: string
-  --use-global-settings: string@bool-completer # When enabled, global Email connection settings will be used and connection settings below will be ignored.
+  --use-global-settings: oneof<nothing, bool> # When enabled, global Email connection settings will be used and connection settings below will be ignored.
   --host: string
   --port: int
   --username: string
   --password: string
-  --use-tls: string@bool-completer
-  --use-ssl: string@bool-completer
+  --use-tls: oneof<nothing, bool>
+  --use-ssl: oneof<nothing, bool>
   --timeout: int
   --from-address: string # format: email
   --subject: string
@@ -25424,7 +25423,7 @@ export def "stages-authenticator-sms list" [
   --provider: string@provider-completer
   --search: string # A search term.
   --stage-uuid: string # format: uuid
-  --verify-only: string@bool-completer
+  --verify-only: oneof<nothing, bool>
 ]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: list, configure_flow: string, friendly_name: string, provider: string, from_number: string, account_sid: string, auth: string, auth_password: string, auth_type: string, verify_only: bool, mapping: string>, autocomplete: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -25456,7 +25455,7 @@ export def "stages-authenticator-sms create" [
   --body-auth: string
   --auth-password: string
   --auth-type: string@auth-type-completer
-  --verify-only: string@bool-completer # When enabled, the Phone number is only used during enrollment to verify the users authenticity. Only a hash of the phone number is saved to ensure it is not reused in the future.
+  --verify-only: oneof<nothing, bool> # When enabled, the Phone number is only used during enrollment to verify the users authenticity. Only a hash of the phone number is saved to ensure it is not reused in the future.
   --mapping: string # Optionally modify the payload being sent to custom providers. (nullable, format: uuid)
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, configure_flow: string, friendly_name: string, provider: string, from_number: string, account_sid: string, auth: string, auth_password: string, auth_type: string, verify_only: bool, mapping: string> {
   let input = $in
@@ -25514,7 +25513,7 @@ export def "stages-authenticator-sms update" [
   --body-auth: string
   --auth-password: string
   --auth-type: string@auth-type-completer
-  --verify-only: string@bool-completer # When enabled, the Phone number is only used during enrollment to verify the users authenticity. Only a hash of the phone number is saved to ensure it is not reused in the future.
+  --verify-only: oneof<nothing, bool> # When enabled, the Phone number is only used during enrollment to verify the users authenticity. Only a hash of the phone number is saved to ensure it is not reused in the future.
   --mapping: string # Optionally modify the payload being sent to custom providers. (nullable, format: uuid)
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, configure_flow: string, friendly_name: string, provider: string, from_number: string, account_sid: string, auth: string, auth_password: string, auth_type: string, verify_only: bool, mapping: string> {
   let input = $in
@@ -25550,7 +25549,7 @@ export def "stages-authenticator-sms patch" [
   --body-auth: string
   --auth-password: string
   --auth-type: string@auth-type-completer
-  --verify-only: string@bool-completer # When enabled, the Phone number is only used during enrollment to verify the users authenticity. Only a hash of the phone number is saved to ensure it is not reused in the future.
+  --verify-only: oneof<nothing, bool> # When enabled, the Phone number is only used during enrollment to verify the users authenticity. Only a hash of the phone number is saved to ensure it is not reused in the future.
   --mapping: string # Optionally modify the payload being sent to custom providers. (nullable, format: uuid)
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, configure_flow: string, friendly_name: string, provider: string, from_number: string, account_sid: string, auth: string, auth_password: string, auth_type: string, verify_only: bool, mapping: string> {
   let input = $in
@@ -26236,7 +26235,7 @@ export def "stages-authenticator-webauthn create" [
   --resident-key-requirement: string@resident-key-requirement-completer
   --hints: list
   --device-type-restrictions: list
-  --prevent-duplicate-devices: string@bool-completer # When enabled, a given device can only be registered once.
+  --prevent-duplicate-devices: oneof<nothing, bool> # When enabled, a given device can only be registered once.
   --max-attempts: int
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, configure_flow: string, friendly_name: string, user_verification: string, authenticator_attachment: record, resident_key_requirement: string, hints: list<string>, device_type_restrictions: list<string>, device_type_restrictions_obj: table<aaguid: string, description: string>, prevent_duplicate_devices: bool, max_attempts: int> {
   let input = $in
@@ -26293,7 +26292,7 @@ export def "stages-authenticator-webauthn update" [
   --resident-key-requirement: string@resident-key-requirement-completer
   --hints: list
   --device-type-restrictions: list
-  --prevent-duplicate-devices: string@bool-completer # When enabled, a given device can only be registered once.
+  --prevent-duplicate-devices: oneof<nothing, bool> # When enabled, a given device can only be registered once.
   --max-attempts: int
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, configure_flow: string, friendly_name: string, user_verification: string, authenticator_attachment: record, resident_key_requirement: string, hints: list<string>, device_type_restrictions: list<string>, device_type_restrictions_obj: table<aaguid: string, description: string>, prevent_duplicate_devices: bool, max_attempts: int> {
   let input = $in
@@ -26328,7 +26327,7 @@ export def "stages-authenticator-webauthn patch" [
   --resident-key-requirement: string@resident-key-requirement-completer
   --hints: list
   --device-type-restrictions: list
-  --prevent-duplicate-devices: string@bool-completer # When enabled, a given device can only be registered once.
+  --prevent-duplicate-devices: oneof<nothing, bool> # When enabled, a given device can only be registered once.
   --max-attempts: int
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, configure_flow: string, friendly_name: string, user_verification: string, authenticator_attachment: record, resident_key_requirement: string, hints: list<string>, device_type_restrictions: list<string>, device_type_restrictions_obj: table<aaguid: string, description: string>, prevent_duplicate_devices: bool, max_attempts: int> {
   let input = $in
@@ -26483,10 +26482,10 @@ export def "stages-captcha create" [
   --js-url: string
   --api-url: string
   --request-content-type: string@request-content-type-completer
-  --interactive: string@bool-completer
+  --interactive: oneof<nothing, bool>
   --score-min-threshold: float # format: double
   --score-max-threshold: float # format: double
-  --error-on-invalid-score: string@bool-completer # When enabled and the received captcha score is outside of the given threshold, the stage will show an error message. When not enabled, the flow will continue, but the data from the captcha will be available in the context for policy decisions
+  --error-on-invalid-score: oneof<nothing, bool> # When enabled and the received captcha score is outside of the given threshold, the stage will show an error message. When not enabled, the flow will continue, but the data from the captcha will be available in the context for policy decisions
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, public_key: string, js_url: string, api_url: string, request_content_type: string, interactive: bool, score_min_threshold: float, score_max_threshold: float, error_on_invalid_score: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -26540,10 +26539,10 @@ export def "stages-captcha update" [
   --js-url: string
   --api-url: string
   --request-content-type: string@request-content-type-completer
-  --interactive: string@bool-completer
+  --interactive: oneof<nothing, bool>
   --score-min-threshold: float # format: double
   --score-max-threshold: float # format: double
-  --error-on-invalid-score: string@bool-completer # When enabled and the received captcha score is outside of the given threshold, the stage will show an error message. When not enabled, the flow will continue, but the data from the captcha will be available in the context for policy decisions
+  --error-on-invalid-score: oneof<nothing, bool> # When enabled and the received captcha score is outside of the given threshold, the stage will show an error message. When not enabled, the flow will continue, but the data from the captcha will be available in the context for policy decisions
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, public_key: string, js_url: string, api_url: string, request_content_type: string, interactive: bool, score_min_threshold: float, score_max_threshold: float, error_on_invalid_score: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -26575,10 +26574,10 @@ export def "stages-captcha patch" [
   --js-url: string
   --api-url: string
   --request-content-type: string@request-content-type-completer
-  --interactive: string@bool-completer
+  --interactive: oneof<nothing, bool>
   --score-min-threshold: float # format: double
   --score-max-threshold: float # format: double
-  --error-on-invalid-score: string@bool-completer # When enabled and the received captcha score is outside of the given threshold, the stage will show an error message. When not enabled, the flow will continue, but the data from the captcha will be available in the context for policy decisions
+  --error-on-invalid-score: oneof<nothing, bool> # When enabled and the received captcha score is outside of the given threshold, the stage will show an error message. When not enabled, the flow will continue, but the data from the captcha will be available in the context for policy decisions
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, public_key: string, js_url: string, api_url: string, request_content_type: string, interactive: bool, score_min_threshold: float, score_max_threshold: float, error_on_invalid_score: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -27007,7 +27006,7 @@ export def "stages-dummy list" [
   --page-size: int # Number of results to return per page.
   --search: string # A search term.
   --stage-uuid: string # format: uuid
-  --throw-error: string@bool-completer
+  --throw-error: oneof<nothing, bool>
 ]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: list, throw_error: bool>, autocomplete: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -27031,7 +27030,7 @@ export def "stages-dummy create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --throw-error: string@bool-completer
+  --throw-error: oneof<nothing, bool>
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, throw_error: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -27080,7 +27079,7 @@ export def "stages-dummy update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --throw-error: string@bool-completer
+  --throw-error: oneof<nothing, bool>
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, throw_error: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -27107,7 +27106,7 @@ export def "stages-dummy patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --throw-error: string@bool-completer
+  --throw-error: oneof<nothing, bool>
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, throw_error: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -27176,7 +27175,7 @@ export def "stages-email list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --activate-user-on-success: string@bool-completer
+  --activate-user-on-success: oneof<nothing, bool>
   --from-address: string
   --host: string
   --name: string
@@ -27189,9 +27188,9 @@ export def "stages-email list" [
   --template: string
   --timeout: int
   --token-expiry: string
-  --use-global-settings: string@bool-completer
-  --use-ssl: string@bool-completer
-  --use-tls: string@bool-completer
+  --use-global-settings: oneof<nothing, bool>
+  --use-ssl: oneof<nothing, bool>
+  --use-tls: oneof<nothing, bool>
   --username: string
 ]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: list, use_global_settings: bool, host: string, port: int, username: string, use_tls: bool, use_ssl: bool, timeout: int, from_address: string, token_expiry: string, subject: string, template: string, activate_user_on_success: bool, recovery_max_attempts: int, recovery_cache_timeout: string>, autocomplete: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -27216,19 +27215,19 @@ export def "stages-email create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --use-global-settings: string@bool-completer # When enabled, global Email connection settings will be used and connection settings below will be ignored.
+  --use-global-settings: oneof<nothing, bool> # When enabled, global Email connection settings will be used and connection settings below will be ignored.
   --host: string
   --port: int
   --username: string
   --password: string
-  --use-tls: string@bool-completer
-  --use-ssl: string@bool-completer
+  --use-tls: oneof<nothing, bool>
+  --use-ssl: oneof<nothing, bool>
   --timeout: int
   --from-address: string # format: email
   --token-expiry: string # Time the token sent is valid (Format: hours=3,minutes=17,seconds=300).
   --subject: string
   --template: string
-  --activate-user-on-success: string@bool-completer # Activate users upon completion of stage.
+  --activate-user-on-success: oneof<nothing, bool> # Activate users upon completion of stage.
   --recovery-max-attempts: int
   --recovery-cache-timeout: string # The time window used to count recent account recovery attempts. If the number of attempts exceed recovery_max_attempts within this period, further attempts will be rate-limited. (Format: hours=1;minutes=2;seconds=3).
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, use_global_settings: bool, host: string, port: int, username: string, use_tls: bool, use_ssl: bool, timeout: int, from_address: string, token_expiry: string, subject: string, template: string, activate_user_on_success: bool, recovery_max_attempts: int, recovery_cache_timeout: string> {
@@ -27279,19 +27278,19 @@ export def "stages-email update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --use-global-settings: string@bool-completer # When enabled, global Email connection settings will be used and connection settings below will be ignored.
+  --use-global-settings: oneof<nothing, bool> # When enabled, global Email connection settings will be used and connection settings below will be ignored.
   --host: string
   --port: int
   --username: string
   --password: string
-  --use-tls: string@bool-completer
-  --use-ssl: string@bool-completer
+  --use-tls: oneof<nothing, bool>
+  --use-ssl: oneof<nothing, bool>
   --timeout: int
   --from-address: string # format: email
   --token-expiry: string # Time the token sent is valid (Format: hours=3,minutes=17,seconds=300).
   --subject: string
   --template: string
-  --activate-user-on-success: string@bool-completer # Activate users upon completion of stage.
+  --activate-user-on-success: oneof<nothing, bool> # Activate users upon completion of stage.
   --recovery-max-attempts: int
   --recovery-cache-timeout: string # The time window used to count recent account recovery attempts. If the number of attempts exceed recovery_max_attempts within this period, further attempts will be rate-limited. (Format: hours=1;minutes=2;seconds=3).
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, use_global_settings: bool, host: string, port: int, username: string, use_tls: bool, use_ssl: bool, timeout: int, from_address: string, token_expiry: string, subject: string, template: string, activate_user_on_success: bool, recovery_max_attempts: int, recovery_cache_timeout: string> {
@@ -27320,19 +27319,19 @@ export def "stages-email patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --use-global-settings: string@bool-completer # When enabled, global Email connection settings will be used and connection settings below will be ignored.
+  --use-global-settings: oneof<nothing, bool> # When enabled, global Email connection settings will be used and connection settings below will be ignored.
   --host: string
   --port: int
   --username: string
   --password: string
-  --use-tls: string@bool-completer
-  --use-ssl: string@bool-completer
+  --use-tls: oneof<nothing, bool>
+  --use-ssl: oneof<nothing, bool>
   --timeout: int
   --from-address: string # format: email
   --token-expiry: string # Time the token sent is valid (Format: hours=3,minutes=17,seconds=300).
   --subject: string
   --template: string
-  --activate-user-on-success: string@bool-completer # Activate users upon completion of stage.
+  --activate-user-on-success: oneof<nothing, bool> # Activate users upon completion of stage.
   --recovery-max-attempts: int
   --recovery-cache-timeout: string # The time window used to count recent account recovery attempts. If the number of attempts exceed recovery_max_attempts within this period, further attempts will be rate-limited. (Format: hours=1;minutes=2;seconds=3).
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, use_global_settings: bool, host: string, port: int, username: string, use_tls: bool, use_ssl: bool, timeout: int, from_address: string, token_expiry: string, subject: string, template: string, activate_user_on_success: bool, recovery_max_attempts: int, recovery_cache_timeout: string> {
@@ -27601,7 +27600,7 @@ export def "stages-identification list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --captcha-stage: string # format: uuid
-  --case-insensitive-matching: string@bool-completer
+  --case-insensitive-matching: oneof<nothing, bool>
   --enrollment-flow: string # format: uuid
   --name: string
   --ordering: string # Which field to use when ordering the results.
@@ -27611,8 +27610,8 @@ export def "stages-identification list" [
   --passwordless-flow: string # format: uuid
   --recovery-flow: string # format: uuid
   --search: string # A search term.
-  --show-matched-user: string@bool-completer
-  --show-source-labels: string@bool-completer
+  --show-matched-user: oneof<nothing, bool>
+  --show-source-labels: oneof<nothing, bool>
   --webauthn-stage: string # format: uuid
 ]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: list, user_fields: list, password_stage: string, captcha_stage: string, case_insensitive_matching: bool, show_matched_user: bool, enrollment_flow: string, recovery_flow: string, passwordless_flow: string, sources: list, show_source_labels: bool, pretend_user_exists: bool, enable_remember_me: bool, webauthn_stage: string>, autocomplete: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -27640,15 +27639,15 @@ export def "stages-identification create" [
   --user-fields: list # Fields of the user object to match against. (Hold shift to select multiple options)
   --password-stage: string # When set, shows a password field, instead of showing the password field as separate step. (nullable, format: uuid)
   --captcha-stage: string # When set, adds functionality exactly like a Captcha stage, but baked into the Identification stage. (nullable, format: uuid)
-  --case-insensitive-matching: string@bool-completer # When enabled, user fields are matched regardless of their casing.
-  --show-matched-user: string@bool-completer # When a valid username/email has been entered, and this option is enabled, the user's username and avatar will be shown. Otherwise, the text that the user entered will be shown
+  --case-insensitive-matching: oneof<nothing, bool> # When enabled, user fields are matched regardless of their casing.
+  --show-matched-user: oneof<nothing, bool> # When a valid username/email has been entered, and this option is enabled, the user's username and avatar will be shown. Otherwise, the text that the user entered will be shown
   --enrollment-flow: string # Optional enrollment flow, which is linked at the bottom of the page. (nullable, format: uuid)
   --recovery-flow: string # Optional recovery flow, which is linked at the bottom of the page. (nullable, format: uuid)
   --passwordless-flow: string # Optional passwordless flow, which is linked at the bottom of the page. (nullable, format: uuid)
   --sources: list # Specify which sources should be shown.
-  --show-source-labels: string@bool-completer
-  --pretend-user-exists: string@bool-completer # When enabled, the stage will succeed and continue even when incorrect user info is entered.
-  --enable-remember-me: string@bool-completer # Show the user the 'Remember me on this device' toggle, allowing repeat users to skip straight to entering their password.
+  --show-source-labels: oneof<nothing, bool>
+  --pretend-user-exists: oneof<nothing, bool> # When enabled, the stage will succeed and continue even when incorrect user info is entered.
+  --enable-remember-me: oneof<nothing, bool> # Show the user the 'Remember me on this device' toggle, allowing repeat users to skip straight to entering their password.
   --webauthn-stage: string # When set, and conditional WebAuthn is available, allow the user to use their passkey as a first factor. (nullable, format: uuid)
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, user_fields: list<string>, password_stage: string, captcha_stage: string, case_insensitive_matching: bool, show_matched_user: bool, enrollment_flow: string, recovery_flow: string, passwordless_flow: string, sources: list<string>, show_source_labels: bool, pretend_user_exists: bool, enable_remember_me: bool, webauthn_stage: string> {
   let input = $in
@@ -27701,15 +27700,15 @@ export def "stages-identification update" [
   --user-fields: list # Fields of the user object to match against. (Hold shift to select multiple options)
   --password-stage: string # When set, shows a password field, instead of showing the password field as separate step. (nullable, format: uuid)
   --captcha-stage: string # When set, adds functionality exactly like a Captcha stage, but baked into the Identification stage. (nullable, format: uuid)
-  --case-insensitive-matching: string@bool-completer # When enabled, user fields are matched regardless of their casing.
-  --show-matched-user: string@bool-completer # When a valid username/email has been entered, and this option is enabled, the user's username and avatar will be shown. Otherwise, the text that the user entered will be shown
+  --case-insensitive-matching: oneof<nothing, bool> # When enabled, user fields are matched regardless of their casing.
+  --show-matched-user: oneof<nothing, bool> # When a valid username/email has been entered, and this option is enabled, the user's username and avatar will be shown. Otherwise, the text that the user entered will be shown
   --enrollment-flow: string # Optional enrollment flow, which is linked at the bottom of the page. (nullable, format: uuid)
   --recovery-flow: string # Optional recovery flow, which is linked at the bottom of the page. (nullable, format: uuid)
   --passwordless-flow: string # Optional passwordless flow, which is linked at the bottom of the page. (nullable, format: uuid)
   --sources: list # Specify which sources should be shown.
-  --show-source-labels: string@bool-completer
-  --pretend-user-exists: string@bool-completer # When enabled, the stage will succeed and continue even when incorrect user info is entered.
-  --enable-remember-me: string@bool-completer # Show the user the 'Remember me on this device' toggle, allowing repeat users to skip straight to entering their password.
+  --show-source-labels: oneof<nothing, bool>
+  --pretend-user-exists: oneof<nothing, bool> # When enabled, the stage will succeed and continue even when incorrect user info is entered.
+  --enable-remember-me: oneof<nothing, bool> # Show the user the 'Remember me on this device' toggle, allowing repeat users to skip straight to entering their password.
   --webauthn-stage: string # When set, and conditional WebAuthn is available, allow the user to use their passkey as a first factor. (nullable, format: uuid)
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, user_fields: list<string>, password_stage: string, captcha_stage: string, case_insensitive_matching: bool, show_matched_user: bool, enrollment_flow: string, recovery_flow: string, passwordless_flow: string, sources: list<string>, show_source_labels: bool, pretend_user_exists: bool, enable_remember_me: bool, webauthn_stage: string> {
   let input = $in
@@ -27740,15 +27739,15 @@ export def "stages-identification patch" [
   --user-fields: list # Fields of the user object to match against. (Hold shift to select multiple options)
   --password-stage: string # When set, shows a password field, instead of showing the password field as separate step. (nullable, format: uuid)
   --captcha-stage: string # When set, adds functionality exactly like a Captcha stage, but baked into the Identification stage. (nullable, format: uuid)
-  --case-insensitive-matching: string@bool-completer # When enabled, user fields are matched regardless of their casing.
-  --show-matched-user: string@bool-completer # When a valid username/email has been entered, and this option is enabled, the user's username and avatar will be shown. Otherwise, the text that the user entered will be shown
+  --case-insensitive-matching: oneof<nothing, bool> # When enabled, user fields are matched regardless of their casing.
+  --show-matched-user: oneof<nothing, bool> # When a valid username/email has been entered, and this option is enabled, the user's username and avatar will be shown. Otherwise, the text that the user entered will be shown
   --enrollment-flow: string # Optional enrollment flow, which is linked at the bottom of the page. (nullable, format: uuid)
   --recovery-flow: string # Optional recovery flow, which is linked at the bottom of the page. (nullable, format: uuid)
   --passwordless-flow: string # Optional passwordless flow, which is linked at the bottom of the page. (nullable, format: uuid)
   --sources: list # Specify which sources should be shown.
-  --show-source-labels: string@bool-completer
-  --pretend-user-exists: string@bool-completer # When enabled, the stage will succeed and continue even when incorrect user info is entered.
-  --enable-remember-me: string@bool-completer # Show the user the 'Remember me on this device' toggle, allowing repeat users to skip straight to entering their password.
+  --show-source-labels: oneof<nothing, bool>
+  --pretend-user-exists: oneof<nothing, bool> # When enabled, the stage will succeed and continue even when incorrect user info is entered.
+  --enable-remember-me: oneof<nothing, bool> # Show the user the 'Remember me on this device' toggle, allowing repeat users to skip straight to entering their password.
   --webauthn-stage: string # When set, and conditional WebAuthn is available, allow the user to use their passkey as a first factor. (nullable, format: uuid)
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, user_fields: list<string>, password_stage: string, captcha_stage: string, case_insensitive_matching: bool, show_matched_user: bool, enrollment_flow: string, recovery_flow: string, passwordless_flow: string, sources: list<string>, show_source_labels: bool, pretend_user_exists: bool, enable_remember_me: bool, webauthn_stage: string> {
   let input = $in
@@ -27851,7 +27850,7 @@ export def "stages-invitation-invitations create" [
   name: string
   --expires: string # nullable, format: date-time
   --fixed-data: record
-  --single-use: string@bool-completer # When enabled, the invitation will be deleted after usage.
+  --single-use: oneof<nothing, bool> # When enabled, the invitation will be deleted after usage.
   --flow: string # When set, only the configured flow can use this invitation. (nullable, format: uuid)
 ]: any -> record<pk: string, name: string, expires: string, fixed_data: record, created_by: record<pk: int, username: string, name: string, is_active: bool, last_login: string, email: string, attributes: record, uid: string>, single_use: bool, flow: string, flow_obj: record<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background: string, background_url: string, background_themed_urls: record<light: string, dark: string>, stages: list<string>, policies: list<string>, cache_count: int, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record, authentication: record>> {
   let input = $in
@@ -27903,7 +27902,7 @@ export def "stages-invitation-invitations update" [
   name: string
   --expires: string # nullable, format: date-time
   --fixed-data: record
-  --single-use: string@bool-completer # When enabled, the invitation will be deleted after usage.
+  --single-use: oneof<nothing, bool> # When enabled, the invitation will be deleted after usage.
   --flow: string # When set, only the configured flow can use this invitation. (nullable, format: uuid)
 ]: any -> record<pk: string, name: string, expires: string, fixed_data: record, created_by: record<pk: int, username: string, name: string, is_active: bool, last_login: string, email: string, attributes: record, uid: string>, single_use: bool, flow: string, flow_obj: record<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background: string, background_url: string, background_themed_urls: record<light: string, dark: string>, stages: list<string>, policies: list<string>, cache_count: int, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record, authentication: record>> {
   let input = $in
@@ -27933,7 +27932,7 @@ export def "stages-invitation-invitations patch" [
   --name: string
   --expires: string # nullable, format: date-time
   --fixed-data: record
-  --single-use: string@bool-completer # When enabled, the invitation will be deleted after usage.
+  --single-use: oneof<nothing, bool> # When enabled, the invitation will be deleted after usage.
   --flow: string # When set, only the configured flow can use this invitation. (nullable, format: uuid)
 ]: any -> record<pk: string, name: string, expires: string, fixed_data: record, created_by: record<pk: int, username: string, name: string, is_active: bool, last_login: string, email: string, attributes: record, uid: string>, single_use: bool, flow: string, flow_obj: record<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background: string, background_url: string, background_themed_urls: record<light: string, dark: string>, stages: list<string>, policies: list<string>, cache_count: int, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record, authentication: record>> {
   let input = $in
@@ -28032,9 +28031,9 @@ export def "stages-invitation-stages list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --continue-flow-without-invitation: string@bool-completer
+  --continue-flow-without-invitation: oneof<nothing, bool>
   --name: string
-  --no-flows: string@bool-completer
+  --no-flows: oneof<nothing, bool>
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
@@ -28063,7 +28062,7 @@ export def "stages-invitation-stages create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --continue-flow-without-invitation: string@bool-completer # If this flag is set, this Stage will jump to the next Stage when no Invitation is given. By default this Stage will cancel the Flow when no invitation is given.
+  --continue-flow-without-invitation: oneof<nothing, bool> # If this flag is set, this Stage will jump to the next Stage when no Invitation is given. By default this Stage will cancel the Flow when no invitation is given.
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, continue_flow_without_invitation: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -28112,7 +28111,7 @@ export def "stages-invitation-stages update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --continue-flow-without-invitation: string@bool-completer # If this flag is set, this Stage will jump to the next Stage when no Invitation is given. By default this Stage will cancel the Flow when no invitation is given.
+  --continue-flow-without-invitation: oneof<nothing, bool> # If this flag is set, this Stage will jump to the next Stage when no Invitation is given. By default this Stage will cancel the Flow when no invitation is given.
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, continue_flow_without_invitation: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -28139,7 +28138,7 @@ export def "stages-invitation-stages patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --continue-flow-without-invitation: string@bool-completer # If this flag is set, this Stage will jump to the next Stage when no Invitation is given. By default this Stage will cancel the Flow when no invitation is given.
+  --continue-flow-without-invitation: oneof<nothing, bool> # If this flag is set, this Stage will jump to the next Stage when no Invitation is given. By default this Stage will cancel the Flow when no invitation is given.
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, continue_flow_without_invitation: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -28395,7 +28394,7 @@ export def "stages-password list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-show-password: string@bool-completer
+  --allow-show-password: oneof<nothing, bool>
   --configure-flow: string # format: uuid
   --failed-attempts-before-cancel: int
   --name: string
@@ -28429,7 +28428,7 @@ export def "stages-password create" [
   backends: list # Selection of backends to test the password against.
   --configure-flow: string # Flow used by an authenticated user to configure this Stage. If empty, user will not be able to configure this stage. (nullable, format: uuid)
   --failed-attempts-before-cancel: int # How many attempts a user has before the flow is canceled. To lock the user out, use a reputation policy and a user_write stage.
-  --allow-show-password: string@bool-completer # When enabled, provides a 'show password' button with the password input field.
+  --allow-show-password: oneof<nothing, bool> # When enabled, provides a 'show password' button with the password input field.
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, backends: list<string>, configure_flow: string, failed_attempts_before_cancel: int, allow_show_password: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -28481,7 +28480,7 @@ export def "stages-password update" [
   backends: list # Selection of backends to test the password against.
   --configure-flow: string # Flow used by an authenticated user to configure this Stage. If empty, user will not be able to configure this stage. (nullable, format: uuid)
   --failed-attempts-before-cancel: int # How many attempts a user has before the flow is canceled. To lock the user out, use a reputation policy and a user_write stage.
-  --allow-show-password: string@bool-completer # When enabled, provides a 'show password' button with the password input field.
+  --allow-show-password: oneof<nothing, bool> # When enabled, provides a 'show password' button with the password input field.
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, backends: list<string>, configure_flow: string, failed_attempts_before_cancel: int, allow_show_password: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -28511,7 +28510,7 @@ export def "stages-password patch" [
   --backends: list # Selection of backends to test the password against.
   --configure-flow: string # Flow used by an authenticated user to configure this Stage. If empty, user will not be able to configure this stage. (nullable, format: uuid)
   --failed-attempts-before-cancel: int # How many attempts a user has before the flow is canceled. To lock the user out, use a reputation policy and a user_write stage.
-  --allow-show-password: string@bool-completer # When enabled, provides a 'show password' button with the password input field.
+  --allow-show-password: oneof<nothing, bool> # When enabled, provides a 'show password' button with the password input field.
 ]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, backends: list<string>, configure_flow: string, failed_attempts_before_cancel: int, allow_show_password: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -28615,13 +28614,13 @@ export def "stages-prompt-prompts create" [
   field_key: string # Name of the form field, also used to store the value
   label: string
   type: string@type-completer-2
-  --required: string@bool-completer
+  --required: oneof<nothing, bool>
   --placeholder: string # Optionally provide a short hint that describes the expected input value. When creating a fixed choice field, enable interpreting as expression and return a list to return multiple choices.
   --initial-value: string # Optionally pre-fill the input with an initial value. When creating a fixed choice field, enable interpreting as expression and return a list to return multiple default choices.
   --order: int
   --sub-text: string
-  --placeholder-expression: string@bool-completer
-  --initial-value-expression: string@bool-completer
+  --placeholder-expression: oneof<nothing, bool>
+  --initial-value-expression: oneof<nothing, bool>
 ]: any -> record<pk: string, name: string, field_key: string, label: string, type: string, required: bool, placeholder: string, initial_value: string, order: int, prompt_stages_obj: table<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: list, fields: list, validation_policies: list>, sub_text: string, placeholder_expression: bool, initial_value_expression: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -28673,13 +28672,13 @@ export def "stages-prompt-prompts update" [
   field_key: string # Name of the form field, also used to store the value
   label: string
   type: string@type-completer-2
-  --required: string@bool-completer
+  --required: oneof<nothing, bool>
   --placeholder: string # Optionally provide a short hint that describes the expected input value. When creating a fixed choice field, enable interpreting as expression and return a list to return multiple choices.
   --initial-value: string # Optionally pre-fill the input with an initial value. When creating a fixed choice field, enable interpreting as expression and return a list to return multiple default choices.
   --order: int
   --sub-text: string
-  --placeholder-expression: string@bool-completer
-  --initial-value-expression: string@bool-completer
+  --placeholder-expression: oneof<nothing, bool>
+  --initial-value-expression: oneof<nothing, bool>
 ]: any -> record<pk: string, name: string, field_key: string, label: string, type: string, required: bool, placeholder: string, initial_value: string, order: int, prompt_stages_obj: table<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: list, fields: list, validation_policies: list>, sub_text: string, placeholder_expression: bool, initial_value_expression: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -28709,13 +28708,13 @@ export def "stages-prompt-prompts patch" [
   --field-key: string # Name of the form field, also used to store the value
   --label: string
   --type: string@type-completer-2
-  --required: string@bool-completer
+  --required: oneof<nothing, bool>
   --placeholder: string # Optionally provide a short hint that describes the expected input value. When creating a fixed choice field, enable interpreting as expression and return a list to return multiple choices.
   --initial-value: string # Optionally pre-fill the input with an initial value. When creating a fixed choice field, enable interpreting as expression and return a list to return multiple default choices.
   --order: int
   --sub-text: string
-  --placeholder-expression: string@bool-completer
-  --initial-value-expression: string@bool-completer
+  --placeholder-expression: oneof<nothing, bool>
+  --initial-value-expression: oneof<nothing, bool>
 ]: any -> record<pk: string, name: string, field_key: string, label: string, type: string, required: bool, placeholder: string, initial_value: string, order: int, prompt_stages_obj: table<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: list, fields: list, validation_policies: list>, sub_text: string, placeholder_expression: bool, initial_value_expression: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -28788,13 +28787,13 @@ export def "stages-prompt-prompts-preview create" [
   field_key: string # Name of the form field, also used to store the value
   label: string
   type: string@type-completer-2
-  --required: string@bool-completer
+  --required: oneof<nothing, bool>
   --placeholder: string # Optionally provide a short hint that describes the expected input value. When creating a fixed choice field, enable interpreting as expression and return a list to return multiple choices.
   --initial-value: string # Optionally pre-fill the input with an initial value. When creating a fixed choice field, enable interpreting as expression and return a list to return multiple default choices.
   --order: int
   --sub-text: string
-  --placeholder-expression: string@bool-completer
-  --initial-value-expression: string@bool-completer
+  --placeholder-expression: oneof<nothing, bool>
+  --initial-value-expression: oneof<nothing, bool>
 ]: any -> record<flow_info: record<title: string, background: string, background_themed_urls: record<light: string, dark: string>, cancel_url: string, layout: string>, component: string, response_errors: record, fields: table<field_key: string, label: string, type: string, required: bool, placeholder: string, initial_value: string, order: int, sub_text: string, choices: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -29026,7 +29025,7 @@ export def "stages-redirect create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --keep-context: string@bool-completer
+  --keep-context: oneof<nothing, bool>
   mode: string@mode-completer-3
   --target-static: string
   --target-flow: string # nullable, format: uuid
@@ -29078,7 +29077,7 @@ export def "stages-redirect update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --keep-context: string@bool-completer
+  --keep-context: oneof<nothing, bool>
   mode: string@mode-completer-3
   --target-static: string
   --target-flow: string # nullable, format: uuid
@@ -29108,7 +29107,7 @@ export def "stages-redirect patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --keep-context: string@bool-completer
+  --keep-context: oneof<nothing, bool>
   --mode: string@mode-completer-3
   --target-static: string
   --target-flow: string # nullable, format: uuid
@@ -29541,7 +29540,7 @@ export def "stages-user-login list" [
   --search: string # A search term.
   --session-duration: string
   --stage-uuid: string # format: uuid
-  --terminate-other-sessions: string@bool-completer
+  --terminate-other-sessions: oneof<nothing, bool>
 ]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: list, session_duration: string, terminate_other_sessions: bool, remember_me_offset: string, network_binding: record, geoip_binding: record, remember_device: string>, autocomplete: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -29566,7 +29565,7 @@ export def "stages-user-login create" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   --session-duration: string # Determines how long a session lasts. Default of 0 means that the sessions lasts until the browser is closed. (Format: hours=-1;minutes=-2;seconds=-3)
-  --terminate-other-sessions: string@bool-completer # Terminate all other sessions of the user logging in.
+  --terminate-other-sessions: oneof<nothing, bool> # Terminate all other sessions of the user logging in.
   --remember-me-offset: string # Offset the session will be extended by when the user picks the remember me option. Default of 0 means that the remember me option will not be shown. (Format: hours=-1;minutes=-2;seconds=-3)
   --network-binding: any # Bind sessions created by this stage to the configured network
   --geoip-binding: any # Bind sessions created by this stage to the configured GeoIP location
@@ -29620,7 +29619,7 @@ export def "stages-user-login update" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   --session-duration: string # Determines how long a session lasts. Default of 0 means that the sessions lasts until the browser is closed. (Format: hours=-1;minutes=-2;seconds=-3)
-  --terminate-other-sessions: string@bool-completer # Terminate all other sessions of the user logging in.
+  --terminate-other-sessions: oneof<nothing, bool> # Terminate all other sessions of the user logging in.
   --remember-me-offset: string # Offset the session will be extended by when the user picks the remember me option. Default of 0 means that the remember me option will not be shown. (Format: hours=-1;minutes=-2;seconds=-3)
   --network-binding: any # Bind sessions created by this stage to the configured network
   --geoip-binding: any # Bind sessions created by this stage to the configured GeoIP location
@@ -29652,7 +29651,7 @@ export def "stages-user-login patch" [
   --allow-errors(-e) # Return full response without error handling
   --name: string
   --session-duration: string # Determines how long a session lasts. Default of 0 means that the sessions lasts until the browser is closed. (Format: hours=-1;minutes=-2;seconds=-3)
-  --terminate-other-sessions: string@bool-completer # Terminate all other sessions of the user logging in.
+  --terminate-other-sessions: oneof<nothing, bool> # Terminate all other sessions of the user logging in.
   --remember-me-offset: string # Offset the session will be extended by when the user picks the remember me option. Default of 0 means that the remember me option will not be shown. (Format: hours=-1;minutes=-2;seconds=-3)
   --network-binding: any # Bind sessions created by this stage to the configured network
   --geoip-binding: any # Bind sessions created by this stage to the configured GeoIP location
@@ -29896,7 +29895,7 @@ export def "stages-user-write list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --create-users-as-inactive: string@bool-completer
+  --create-users-as-inactive: oneof<nothing, bool>
   --create-users-group: string # format: uuid
   --name: string
   --ordering: string # Which field to use when ordering the results.
@@ -29931,7 +29930,7 @@ export def "stages-user-write create" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   --user-creation-mode: string@user-creation-mode-completer
-  --create-users-as-inactive: string@bool-completer # When set, newly created users are inactive and cannot login.
+  --create-users-as-inactive: oneof<nothing, bool> # When set, newly created users are inactive and cannot login.
   --create-users-group: string # Optionally add newly created users to this group. (nullable, format: uuid)
   --user-type: string@user-type-completer
   --user-path-template: string
@@ -29984,7 +29983,7 @@ export def "stages-user-write update" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   --user-creation-mode: string@user-creation-mode-completer
-  --create-users-as-inactive: string@bool-completer # When set, newly created users are inactive and cannot login.
+  --create-users-as-inactive: oneof<nothing, bool> # When set, newly created users are inactive and cannot login.
   --create-users-group: string # Optionally add newly created users to this group. (nullable, format: uuid)
   --user-type: string@user-type-completer
   --user-path-template: string
@@ -30015,7 +30014,7 @@ export def "stages-user-write patch" [
   --allow-errors(-e) # Return full response without error handling
   --name: string
   --user-creation-mode: string@user-creation-mode-completer
-  --create-users-as-inactive: string@bool-completer # When set, newly created users are inactive and cannot login.
+  --create-users-as-inactive: oneof<nothing, bool> # When set, newly created users are inactive and cannot login.
   --create-users-group: string # Optionally add newly created users to this group. (nullable, format: uuid)
   --user-type: string@user-type-completer
   --user-path-template: string
@@ -30090,11 +30089,11 @@ export def "tasks-schedules list" [
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
-  --paused: string@bool-completer
+  --paused: oneof<nothing, bool>
   --rel-obj-content-type-app-label: string
   --rel-obj-content-type-model: string
   --rel-obj-id: string
-  --rel-obj-id-isnull: string@bool-completer
+  --rel-obj-id-isnull: oneof<nothing, bool>
   --search: string # A search term.
 ]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<id: string, identifier: string, uid: string, actor_name: string, rel_obj_app_label: string, rel_obj_model: string, rel_obj_id: string, crontab: string, paused: bool, next_run: string, description: string, last_task_status: record>, autocomplete: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -30141,7 +30140,7 @@ export def "tasks-schedules update" [
   --allow-errors(-e) # Return full response without error handling
   --rel-obj-id: string # nullable
   crontab: string # When to schedule tasks
-  --paused: string@bool-completer # Pause this schedule
+  --paused: oneof<nothing, bool> # Pause this schedule
 ]: any -> record<id: string, identifier: string, uid: string, actor_name: string, rel_obj_app_label: string, rel_obj_model: string, rel_obj_id: string, crontab: string, paused: bool, next_run: string, description: string, last_task_status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -30168,7 +30167,7 @@ export def "tasks-schedules patch" [
   --allow-errors(-e) # Return full response without error handling
   --rel-obj-id: string # nullable
   --crontab: string # When to schedule tasks
-  --paused: string@bool-completer # Pause this schedule
+  --paused: oneof<nothing, bool> # Pause this schedule
 ]: any -> record<id: string, identifier: string, uid: string, actor_name: string, rel_obj_app_label: string, rel_obj_model: string, rel_obj_id: string, crontab: string, paused: bool, next_run: string, description: string, last_task_status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -30223,7 +30222,7 @@ export def "tasks-tasks list" [
   --rel-obj-content-type-app-label: string
   --rel-obj-content-type-model: string
   --rel-obj-id: string
-  --rel-obj-id-isnull: string@bool-completer
+  --rel-obj-id-isnull: oneof<nothing, bool>
   --search: string # A search term.
   --state: string
 ]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<message_id: string, queue_name: string, actor_name: string, state: record, mtime: string, retries: int, eta: string, rel_obj_app_label: string, rel_obj_model: string, rel_obj_id: string, uid: string, logs: list, previous_logs: list, aggregated_status: string, description: string>, autocomplete: record> {
@@ -30360,7 +30359,7 @@ export def "tenants-domains create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   domain: string
-  --is-primary: string@bool-completer
+  --is-primary: oneof<nothing, bool>
   tenant: string # format: uuid
 ]: any -> record<id: int, domain: string, is_primary: bool, tenant: string> {
   let input = $in
@@ -30410,7 +30409,7 @@ export def "tenants-domains update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   domain: string
-  --is-primary: string@bool-completer
+  --is-primary: oneof<nothing, bool>
   tenant: string # format: uuid
 ]: any -> record<id: int, domain: string, is_primary: bool, tenant: string> {
   let input = $in
@@ -30438,7 +30437,7 @@ export def "tenants-domains patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --domain: string
-  --is-primary: string@bool-completer
+  --is-primary: oneof<nothing, bool>
   --tenant: string # format: uuid
 ]: any -> record<id: int, domain: string, is_primary: bool, tenant: string> {
   let input = $in
@@ -30514,7 +30513,7 @@ export def "tenants-tenants create" [
   --allow-errors(-e) # Return full response without error handling
   schema_name: string
   name: string
-  --ready: string@bool-completer
+  --ready: oneof<nothing, bool>
 ]: any -> record<tenant_uuid: string, schema_name: string, name: string, ready: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -30564,7 +30563,7 @@ export def "tenants-tenants update" [
   --allow-errors(-e) # Return full response without error handling
   schema_name: string
   name: string
-  --ready: string@bool-completer
+  --ready: oneof<nothing, bool>
 ]: any -> record<tenant_uuid: string, schema_name: string, name: string, ready: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -30592,7 +30591,7 @@ export def "tenants-tenants patch" [
   --allow-errors(-e) # Return full response without error handling
   --schema-name: string
   --name: string
-  --ready: string@bool-completer
+  --ready: oneof<nothing, bool>
 ]: any -> record<tenant_uuid: string, schema_name: string, name: string, ready: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

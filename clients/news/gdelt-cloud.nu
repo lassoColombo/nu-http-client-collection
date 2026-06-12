@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://gdeltcloud.com" "http://localhost:3000"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -128,8 +127,8 @@ export def "events search-events-v2" [
   --subcategory: string # More specific linked Event subtype, CAMEO+ event description, or CAMEO+ code. Requires parent `category` and must belong to at least one selected category. For Conflict categories, use sub-event types such as `Armed clash`, `Peaceful protest`, or `Air/drone strike`. Validation errors include accepted_values, nearest_values when practical, and a corrected example. (e.g. Armed clash)
   --domain: string@domain-completer # Deprecated legacy CAMEO+ domain enum. Prefer `category`/`categories` for new integrations; retained for backwards compatibility. (DEPRECATED)
   --search: string # Free-text semantic search. The API ranks the filtered candidate set by semantic similarity against stored Event or Story representations. It is not a lexical keyword filter and has no public similarity cutoff. (e.g. attacks on energy infrastructure)
-  --has-fatalities: string@bool-completer # Set `true` for fatality monitoring. v2 intentionally exposes only this boolean fatality filter. (e.g. true)
-  --civilian-targeting: string@bool-completer # Filter Conflict-linked evidence by ACLED civilian_targeting. `true` keeps records where civilians are the primary target; `false` excludes those records.
+  --has-fatalities: oneof<nothing, bool> # Set `true` for fatality monitoring. v2 intentionally exposes only this boolean fatality filter. (e.g. true)
+  --civilian-targeting: oneof<nothing, bool> # Filter Conflict-linked evidence by ACLED civilian_targeting. `true` keeps records where civilians are the primary target; `false` excludes those records.
   --significance-min: float # Significance minimum filter. Composite 0-1 Event significance score.
   --significance-max: float # Significance maximum filter. Composite 0-1 Event significance score.
   --confidence-min: float # Confidence minimum filter. Model confidence for the structured Event record.
@@ -207,8 +206,8 @@ export def "events-summary summarize-events-v2" [
   --category: string # Stable linked Event product category. Use a Conflict event type such as `Battles`, `Protests`, or `Explosions/Remote violence`, or one CAMEO+ domain such as `POLITICAL`, `INFRASTRUCTURE`, or `CRIME`; values may be single or comma-separated. On Story endpoints this filters linked Event evidence. Use `story_category` only for legacy Story-cluster categories such as `conflict_security`. (e.g. Battles)
   --subcategory: string # More specific linked Event subtype, CAMEO+ event description, or CAMEO+ code. Requires parent `category` and must belong to at least one selected category. For Conflict categories, use sub-event types such as `Armed clash`, `Peaceful protest`, or `Air/drone strike`. Validation errors include accepted_values, nearest_values when practical, and a corrected example. (e.g. Armed clash)
   --domain: string@domain-completer # Deprecated legacy CAMEO+ domain enum. Prefer `category`/`categories` for new integrations; retained for backwards compatibility. (DEPRECATED)
-  --has-fatalities: string@bool-completer # Set `true` for fatality monitoring. v2 intentionally exposes only this boolean fatality filter. (e.g. true)
-  --civilian-targeting: string@bool-completer # Filter Conflict-linked evidence by ACLED civilian_targeting. `true` keeps records where civilians are the primary target; `false` excludes those records.
+  --has-fatalities: oneof<nothing, bool> # Set `true` for fatality monitoring. v2 intentionally exposes only this boolean fatality filter. (e.g. true)
+  --civilian-targeting: oneof<nothing, bool> # Filter Conflict-linked evidence by ACLED civilian_targeting. `true` keeps records where civilians are the primary target; `false` excludes those records.
   --significance-min: float # Significance minimum filter. Composite 0-1 Event significance score.
   --significance-max: float # Significance maximum filter. Composite 0-1 Event significance score.
   --confidence-min: float # Confidence minimum filter. Model confidence for the structured Event record.
@@ -263,9 +262,9 @@ export def "stories search-stories-v2" [
   --subcategory: string # More specific linked Event subtype, CAMEO+ event description, or CAMEO+ code. Requires parent `category` and must belong to at least one selected category. For Conflict categories, use sub-event types such as `Armed clash`, `Peaceful protest`, or `Air/drone strike`. Validation errors include accepted_values, nearest_values when practical, and a corrected example. (e.g. Armed clash)
   --domain: string@domain-completer # Deprecated legacy CAMEO+ domain enum. Prefer `category`/`categories` for new integrations; retained for backwards compatibility. (DEPRECATED)
   --search: string # Free-text semantic search. The API ranks the filtered candidate set by semantic similarity against stored Event or Story representations. It is not a lexical keyword filter and has no public similarity cutoff. (e.g. attacks on energy infrastructure)
-  --has-events: string@bool-completer # For Stories, set `true` to require linked structured Events or `false` for Stories without linked Events. (e.g. true)
-  --has-fatalities: string@bool-completer # Set `true` for fatality monitoring. v2 intentionally exposes only this boolean fatality filter. (e.g. true)
-  --civilian-targeting: string@bool-completer # Filter Conflict-linked evidence by ACLED civilian_targeting. `true` keeps records where civilians are the primary target; `false` excludes those records.
+  --has-events: oneof<nothing, bool> # For Stories, set `true` to require linked structured Events or `false` for Stories without linked Events. (e.g. true)
+  --has-fatalities: oneof<nothing, bool> # Set `true` for fatality monitoring. v2 intentionally exposes only this boolean fatality filter. (e.g. true)
+  --civilian-targeting: oneof<nothing, bool> # Filter Conflict-linked evidence by ACLED civilian_targeting. `true` keeps records where civilians are the primary target; `false` excludes those records.
   --article-count-min: int # Minimum Story article count. (e.g. 2)
   --article-count-max: int # Maximum Story article count. (e.g. 25)
   --qp-sort: string@sort-completer # `significance` is the default analyst ranking. Use `recent` when freshness matters more than importance. (default: significance, e.g. significance)
@@ -355,9 +354,9 @@ export def "stories-summary summarize-stories-v2" [
   --event-category: string # Deprecated alias for `category` on Story endpoints. Prefer `category=Battles` or a CAMEO+ domain such as `category=CRIME`. (DEPRECATED)
   --subcategory: string # More specific linked Event subtype, CAMEO+ event description, or CAMEO+ code. Requires parent `category` and must belong to at least one selected category. For Conflict categories, use sub-event types such as `Armed clash`, `Peaceful protest`, or `Air/drone strike`. Validation errors include accepted_values, nearest_values when practical, and a corrected example. (e.g. Armed clash)
   --domain: string@domain-completer # Deprecated legacy CAMEO+ domain enum. Prefer `category`/`categories` for new integrations; retained for backwards compatibility. (DEPRECATED)
-  --has-events: string@bool-completer # For Stories, set `true` to require linked structured Events or `false` for Stories without linked Events. (e.g. true)
-  --has-fatalities: string@bool-completer # Set `true` for fatality monitoring. v2 intentionally exposes only this boolean fatality filter. (e.g. true)
-  --civilian-targeting: string@bool-completer # Filter Conflict-linked evidence by ACLED civilian_targeting. `true` keeps records where civilians are the primary target; `false` excludes those records.
+  --has-events: oneof<nothing, bool> # For Stories, set `true` to require linked structured Events or `false` for Stories without linked Events. (e.g. true)
+  --has-fatalities: oneof<nothing, bool> # Set `true` for fatality monitoring. v2 intentionally exposes only this boolean fatality filter. (e.g. true)
+  --civilian-targeting: oneof<nothing, bool> # Filter Conflict-linked evidence by ACLED civilian_targeting. `true` keeps records where civilians are the primary target; `false` excludes those records.
   --article-count-min: int # Minimum Story article count. (e.g. 2)
   --article-count-max: int # Maximum Story article count. (e.g. 25)
   --limit: int # Number of summary buckets to return. (default: 50, e.g. 50)
@@ -393,8 +392,8 @@ export def "entities search-entities-v2" [
   --category: string # Stable linked Event product category. Use a Conflict event type such as `Battles`, `Protests`, or `Explosions/Remote violence`, or one CAMEO+ domain such as `POLITICAL`, `INFRASTRUCTURE`, or `CRIME`; values may be single or comma-separated. On Story endpoints this filters linked Event evidence. Use `story_category` only for legacy Story-cluster categories such as `conflict_security`. (e.g. Battles)
   --subcategory: string # More specific linked Event subtype, CAMEO+ event description, or CAMEO+ code. Requires parent `category` and must belong to at least one selected category. For Conflict categories, use sub-event types such as `Armed clash`, `Peaceful protest`, or `Air/drone strike`. Validation errors include accepted_values, nearest_values when practical, and a corrected example. (e.g. Armed clash)
   --domain: string@domain-completer # Deprecated legacy CAMEO+ domain enum. Prefer `category`/`categories` for new integrations; retained for backwards compatibility. (DEPRECATED)
-  --has-fatalities: string@bool-completer # Set `true` for fatality monitoring. v2 intentionally exposes only this boolean fatality filter. (e.g. true)
-  --civilian-targeting: string@bool-completer # Filter Conflict-linked evidence by ACLED civilian_targeting. `true` keeps records where civilians are the primary target; `false` excludes those records.
+  --has-fatalities: oneof<nothing, bool> # Set `true` for fatality monitoring. v2 intentionally exposes only this boolean fatality filter. (e.g. true)
+  --civilian-targeting: oneof<nothing, bool> # Filter Conflict-linked evidence by ACLED civilian_targeting. `true` keeps records where civilians are the primary target; `false` excludes those records.
   --qp-sort: string@sort-completer # `significance` is the default analyst ranking. Use `recent` when freshness matters more than importance. (default: significance, e.g. significance)
   --limit: int # Number of records to return. (default: 25, e.g. 25)
   --cursor: string # Pagination cursor from `pagination.next_cursor`.
@@ -474,7 +473,7 @@ export def "energy-assets search-energy-assets-v2" [
   --region: string # Plain English region. Expands to the same ISO-3 country list used by V2 Events. (e.g. Middle East)
   --continent: string # Plain English continent. Expands to the same ISO-3 country list used by V2 Events. (e.g. Asia)
   --status: string # Comma-separated GEM status values. Common values include operating, construction, pre-construction, permitted, announced, proposed, shelved, cancelled, retired, and mothballed. (e.g. operating,construction)
-  --operating-only: string@bool-completer # Shorthand for status=operating. (default: false, e.g. true)
+  --operating-only: oneof<nothing, bool> # Shorthand for status=operating. (default: false, e.g. true)
   --tier: string # Comma-separated within-tracker tier values such as main, utility, distributed, below_threshold, closed, or sub_threshold. (e.g. main,utility)
   --fuel: string # Comma-separated fuel values. Matches the tracker-native fuel string or normalized cross-tracker fuel where populated. (e.g. coal,solar)
   --capacity-mw-min: float # Minimum MW capacity. Meaningful for power-generation trackers only. (e.g. 100)
@@ -520,7 +519,7 @@ export def "energy-assets-summary summarize-energy-assets-v2" [
   --region: string # Plain English region. Expands to the same ISO-3 country list used by V2 Events. (e.g. Middle East)
   --continent: string # Plain English continent. Expands to the same ISO-3 country list used by V2 Events. (e.g. Asia)
   --status: string # Comma-separated GEM status values. Common values include operating, construction, pre-construction, permitted, announced, proposed, shelved, cancelled, retired, and mothballed. (e.g. operating,construction)
-  --operating-only: string@bool-completer # Shorthand for status=operating. (default: false, e.g. true)
+  --operating-only: oneof<nothing, bool> # Shorthand for status=operating. (default: false, e.g. true)
   --tier: string # Comma-separated within-tracker tier values such as main, utility, distributed, below_threshold, closed, or sub_threshold. (e.g. main,utility)
   --fuel: string # Comma-separated fuel values. Matches the tracker-native fuel string or normalized cross-tracker fuel where populated. (e.g. coal,solar)
   --capacity-mw-min: float # Minimum MW capacity. Meaningful for power-generation trackers only. (e.g. 100)
@@ -562,7 +561,7 @@ export def "energy-assets-map map-energy-assets-v2" [
   --region: string # Plain English region. Expands to the same ISO-3 country list used by V2 Events. (e.g. Middle East)
   --continent: string # Plain English continent. Expands to the same ISO-3 country list used by V2 Events. (e.g. Asia)
   --status: string # Comma-separated GEM status values. Common values include operating, construction, pre-construction, permitted, announced, proposed, shelved, cancelled, retired, and mothballed. (e.g. operating,construction)
-  --operating-only: string@bool-completer # Shorthand for status=operating. (default: false, e.g. true)
+  --operating-only: oneof<nothing, bool> # Shorthand for status=operating. (default: false, e.g. true)
   --tier: string # Comma-separated within-tracker tier values such as main, utility, distributed, below_threshold, closed, or sub_threshold. (e.g. main,utility)
   --fuel: string # Comma-separated fuel values. Matches the tracker-native fuel string or normalized cross-tracker fuel where populated. (e.g. coal,solar)
   --capacity-mw-min: float # Minimum MW capacity. Meaningful for power-generation trackers only. (e.g. 100)
@@ -637,7 +636,7 @@ export def "briefs create-brief-v2" [
   --entities: list # Named people or organizations to emphasize.
   --locations: list # Plain-English sub-country locations.
   --assets: list # Named facilities or infrastructure.
-  --public-link: string@bool-completer # When true, also mint a public shareable report URL. (default: false)
+  --public-link: oneof<nothing, bool> # When true, also mint a public shareable report URL. (default: false)
   --title: string # Optional; auto-generated from scope_text when omitted.
   --brief-type: string # Optional; defaults to monitoring_brief, the only generally-available type. (default: monitoring_brief)
 ]: any -> record<id: string, status: string, brief_type: string, title: string, created_at: string, web_url: string, public_url: string, message: string> {

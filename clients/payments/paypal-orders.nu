@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api-m.paypal.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -309,7 +308,7 @@ export def "checkout-orders-track orderstrackcreate" [
   carrier: string@carrier-completer # The carrier for the shipment. Some carriers have a global version as well as local subsidiaries. The subsidiaries are repeated over many countries and might also have an entry in the global list. Choose the carrier for your country. If the carrier is not available for your country, choose the global version of the carrier. If your carrier name is not in the list, set `carrier` to `OTHER` and set carrier name in `carrier_name_other`. For allowed values, see <a href="/docs/tracking/reference/carriers/">Carriers</a>.
   --carrier-name-other: string # The name of the carrier for the shipment. Provide this value only if the carrier parameter is OTHER. This property supports Unicode.
   capture_id: string # The PayPal capture ID.
-  --notify-payer: string@bool-completer # If true, PayPal will send an email notification to the payer of the PayPal transaction. The email contains the tracking details provided through the Orders tracking API request. Independent of any value passed for `notify_payer`, the payer may receive tracking notifications within the PayPal app, based on the user's notification preferences. (default: false)
+  --notify-payer: oneof<nothing, bool> # If true, PayPal will send an email notification to the payer of the PayPal transaction. The email contains the tracking details provided through the Orders tracking API request. Independent of any value passed for `notify_payer`, the payer may receive tracking notifications within the PayPal app, based on the user's notification preferences. (default: false)
   --items: list # An array of details of items in the shipment. — item shape: {name?: string, quantity?: string, sku?: string, url?: string, image_url?: string, upc?: any}
 ]: any -> record {
   let input = $in

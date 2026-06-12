@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.eu-west-1.aws.dash0.com" "https://api.eu-central-1.aws.dash0.com" "https://api.us-west-2.aws.dash0.com" "https://api.europe-west4.gcp.dash0.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -202,7 +201,7 @@ export def "alerting-check-rules post" [
   --keep-firing-for: string
   --labels: record # Label are key-value pairs that can be used to add additional metadata to a check. They map to Prometheus alerting rules' "labels" field.
   --annotations: record # Annotations are key-value pairs that can be used to add additional metadata to a check. They map to Prometheus alerting rules' "annotations" field.  The "summary" and "description" annotations are expected and are used as the human-readable summary and description of the check rule. — shape: {summary?: string, description?: string, folderPath?: string, sharing?: string}
-  --enabled: string@bool-completer # A boolean flag to enable or disable the check rule. When a check rule is disabled, it will not be evaluated, and no check evaluations will be created. This field is optional and defaults to true.
+  --enabled: oneof<nothing, bool> # A boolean flag to enable or disable the check rule. When a check rule is disabled, it will not be evaluated, and no check evaluations will be created. This field is optional and defaults to true.
   --summary: string # Deprecated: use the "summary" annotation instead. (DEPRECATED)
   --description: string # Deprecated: use the "description" annotation instead. (DEPRECATED)
   --keepFiringFor: string # Deprecated: use "keep_firing_for" instead. (DEPRECATED)
@@ -322,7 +321,7 @@ export def "alerting-check-rules put" [
   --keep-firing-for: string
   --labels: record # Label are key-value pairs that can be used to add additional metadata to a check. They map to Prometheus alerting rules' "labels" field.
   --annotations: record # Annotations are key-value pairs that can be used to add additional metadata to a check. They map to Prometheus alerting rules' "annotations" field.  The "summary" and "description" annotations are expected and are used as the human-readable summary and description of the check rule. — shape: {summary?: string, description?: string, folderPath?: string, sharing?: string}
-  --enabled: string@bool-completer # A boolean flag to enable or disable the check rule. When a check rule is disabled, it will not be evaluated, and no check evaluations will be created. This field is optional and defaults to true.
+  --enabled: oneof<nothing, bool> # A boolean flag to enable or disable the check rule. When a check rule is disabled, it will not be evaluated, and no check evaluations will be created. This field is optional and defaults to true.
   --summary: string # Deprecated: use the "summary" annotation instead. (DEPRECATED)
   --description: string # Deprecated: use the "description" annotation instead. (DEPRECATED)
   --keepFiringFor: string # Deprecated: use "keep_firing_for" instead. (DEPRECATED)
@@ -515,7 +514,7 @@ export def "import-check-rule post" [
   --keep-firing-for: string
   --labels: record # Label are key-value pairs that can be used to add additional metadata to a check. They map to Prometheus alerting rules' "labels" field.
   --annotations: record # Annotations are key-value pairs that can be used to add additional metadata to a check. They map to Prometheus alerting rules' "annotations" field.  The "summary" and "description" annotations are expected and are used as the human-readable summary and description of the check rule. — shape: {summary?: string, description?: string, folderPath?: string, sharing?: string}
-  --enabled: string@bool-completer # A boolean flag to enable or disable the check rule. When a check rule is disabled, it will not be evaluated, and no check evaluations will be created. This field is optional and defaults to true.
+  --enabled: oneof<nothing, bool> # A boolean flag to enable or disable the check rule. When a check rule is disabled, it will not be evaluated, and no check evaluations will be created. This field is optional and defaults to true.
   --summary: string # Deprecated: use the "summary" annotation instead. (DEPRECATED)
   --description: string # Deprecated: use the "description" annotation instead. (DEPRECATED)
   --keepFiringFor: string # Deprecated: use "keep_firing_for" instead. (DEPRECATED)
@@ -1590,7 +1589,7 @@ export def "signal-to-metrics list" [
   --originPrefix: string # Filter by origin prefix.
   --name: string # Case-insensitive substring search on the rule name.
   --signal: string@signal-completer # Filter by signal type.
-  --enabled: string@bool-completer # Filter by enabled state.
+  --enabled: oneof<nothing, bool> # Filter by enabled state.
 ]: nothing -> record<signalToMetrics: table<kind: string, metadata: record, spec: record>, hasMore: bool, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2417,7 +2416,7 @@ export def "trace-details post" [
   --dataset: string # Optional dataset to query across. Defaults to whatever is configured to be the default dataset for the organization.
   traceId: string
   --timeRange: any # A range of time between two time references.  (e.g. {from: now-30m, to: now}) — shape: {from: any, to: any}
-  --includeLinkedTraces: string@bool-completer # If true, recursively fetches all traces referenced via forward links (dash0ForwardLinks) and returns them in `additionalResourceSpans`. Implies includeOTLPSchemaExtensions=true.  (default: false)
+  --includeLinkedTraces: oneof<nothing, bool> # If true, recursively fetches all traces referenced via forward links (dash0ForwardLinks) and returns them in `additionalResourceSpans`. Implies includeOTLPSchemaExtensions=true.  (default: false)
 ]: any -> record<resourceSpans: table<resource: record, scopeSpans: list, schemaUrl: string>, resourceLogs: table<resource: record, scopeLogs: list, schemaUrl: string>, webEvents: table<resource: record, scopeLogs: list, schemaUrl: string>, syntheticCheckAttemptDetails: record<syntheticCheckId: string, syntheticCheckVersion: string, runId: string, location: string, attemptId: string, isTestRun: bool, traceId: string, spanId: string, startTime: string, duration: int, statusCode: int, errorType: string, errorMessage: string, failedCriticalAssertions: list<record>, failedDegradedAssertions: list<record>, passedCriticalAssertions: list<any>, passedDegradedAssertions: list<any>, spanAttributes: list<record>, events: list<record>>, additionalResourceSpans: table<resource: record, scopeSpans: list, schemaUrl: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

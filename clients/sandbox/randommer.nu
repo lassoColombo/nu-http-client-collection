@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -651,9 +650,9 @@ export def "text-password get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --length: int # format: int32
-  --hasDigits: string@bool-completer
-  --hasUppercase: string@bool-completer
-  --hasSpecial: string@bool-completer
+  --hasDigits: oneof<nothing, bool>
+  --hasUppercase: oneof<nothing, bool>
+  --hasSpecial: oneof<nothing, bool>
   --X-Api-Key: string # Enter your key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://sandbox-api.onsched.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -339,7 +338,7 @@ export def "consumer-appointments-confirm put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --undo: string@bool-completer # Use this parameter to undo the confirmed status
+  --undo: oneof<nothing, bool> # Use this parameter to undo the confirmed status
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -420,7 +419,7 @@ export def "consumer-appointments-reserve put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --sendNotifications: string@bool-completer
+  --sendNotifications: oneof<nothing, bool>
   --appointmentBookingFields: list # nullable — item shape: {name?: string, value?: string}
   --customFields: record # shape: {field1?: string, field10?: string, field2?: string, field3?: string, field4?: string, field5?: string, field6?: string, field7?: string, field8?: string, field9?: string}
   --customerBookingFields: list # nullable — item shape: {name?: string, value?: string}
@@ -472,7 +471,7 @@ export def "consumer-availability get" [
   --destination: string # For calculating travel based availability, requires distance scope
   --dayAvailabilityStartDate: string # Format YYYY-DD-YY: Start date for day availability, defaults to startDate (format: date-time)
   --dayAvailability: int # Number of days of day availability to return (format: int32)
-  --firstDayAvailable: string@bool-completer # Return available times for the first available day
+  --firstDayAvailable: oneof<nothing, bool> # Return available times for the first available day
 ]: nothing -> record<availableDays: table<available: bool, bookingCount: int, bookingLimit: int, closed: bool, date: string, object: string, reason: string, reasonCode: int>, availableTimes: table<allowableBookings: int, allowableCapacity: int, availableBookings: int, availableCapacity: int, date: string, displayTime: string, duration: int, endDateTime: string, resourceId: string, startDateTime: string, time: int, travelAppointmentId: string, travelTimeMins: int>, businessName: string, calendarId: string, calendarResourceGroupId: string, endDate: string, firstAvailableDate: string, locationId: string, object: string, resourceDescription: string, resourceId: string, resourceIds: string, resourceName: string, serviceDescription: string, serviceDuration: int, serviceId: string, serviceName: string, startDate: string, timezoneName: string, tzRequested: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -528,7 +527,7 @@ export def "consumer-availability-unavailable get" [
   --resourceId: string # Resource Id to filter on
   --duration: int # Duration of the service if different from default (format: int32)
   --tzOffset: int # Request timezone offset to view unavailable times (format: int32)
-  --skipTimePastUnavailability: string@bool-completer # Set as true to remove Time Past (TP) blocks in the response
+  --skipTimePastUnavailability: oneof<nothing, bool> # Set as true to remove Time Past (TP) blocks in the response
 ]: nothing -> record<object: string, unavailableTimes: table<calendarId: string, date: string, endDateTime: string, entityId: int, entityType: string, fromTime: int, locationId: string, objectName: string, reason: string, reasonCode: string, resourceId: string, resourceName: string, serviceId: string, serviceName: string, startDateTime: string, toTime: int, tzOffset: int>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -554,7 +553,7 @@ export def "consumer-customers list" [
   --groupId: string # Filter by groupId
   --email: string # Filter by email address
   --lastname: string # Filter by lastname
-  --deleted: string@bool-completer # Filter by deleted status
+  --deleted: oneof<nothing, bool> # Filter by deleted status
   --offset: int # Starting row of page, default 0 (format: int32)
   --limit: int # Page limit default 20, max 100 (format: int32)
 ]: nothing -> record<count: int, data: table<address: record, birthdate: string, businessName: string, companyName: string, contact: record, createdBy: string, createdOn: string, customFields: record, deletedStatus: bool, deletedTime: string, disabled: bool, email: string, emailInfo: bool, emailPromotion: bool, firstname: string, gender: string, groupId: string, id: string, inviteEmailSent: string, lastVisitDate: string, lastname: string, latitude: string, locationId: string, longitude: string, modifiedBy: string, modifiedOn: string, name: string, notificationType: string, object: string, registeredBy: string, registrationDate: string, resourceId: string, stripeCustomerId: string, subscriptionId: string, verificationDate: string, verifiedBy: string, welcomeEmailSent: string>, hasMore: bool, object: string, total: int, url: string> {
@@ -590,7 +589,7 @@ export def "consumer-customers post" [
   --locationId: string # nullable
   --name: string # nullable
   --notificationType: string # 0 = default(Email), 1 = Email, 2 = SMS, 3 = Email and SMS (nullable)
-  --sendLeadNotification: string@bool-completer
+  --sendLeadNotification: oneof<nothing, bool>
   --stripeCustomerId: string # nullable
   --type: int # nullable, format: int32
 ]: any -> record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, birthdate: string, businessName: string, companyName: string, contact: record<businessPhone: string, businessPhoneExt: string, conferenceInfo: string, homePhone: string, mobilePhone: string, phoneType: string, skypeUsername: string>, createdBy: string, createdOn: string, customFields: record, deletedStatus: bool, deletedTime: string, disabled: bool, email: string, emailInfo: bool, emailPromotion: bool, firstname: string, gender: string, groupId: string, id: string, inviteEmailSent: string, lastVisitDate: string, lastname: string, latitude: string, locationId: string, longitude: string, modifiedBy: string, modifiedOn: string, name: string, notificationType: string, object: string, registeredBy: string, registrationDate: string, resourceId: string, stripeCustomerId: string, subscriptionId: string, verificationDate: string, verifiedBy: string, welcomeEmailSent: string> {
@@ -659,7 +658,7 @@ export def "consumer-customers-customfields get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --locationId: string # id of business location, defaults to primary business location
-  --leadQuestions: string@bool-completer # A true/false indicator to filter on custom fields used for lead questions
+  --leadQuestions: oneof<nothing, bool> # A true/false indicator to filter on custom fields used for lead questions
 ]: nothing -> record<customFields: table<fieldKey: string, fieldLabel: string, fieldLength: int, fieldListItems: list, fieldName: string, fieldPublic: bool, fieldRequired: bool, fieldType: string, id: string, leadQuestion: bool, leadQuestionWeight: float, object: string, sortKey: int>, object: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -790,7 +789,7 @@ export def "consumer-locations list" [
   --serviceId: string # Locations that offer this service
   --friendlyId: string # Frienldy Id of location
   --regionId: string # Locations within a specific region
-  --ignorePrimary: string@bool-completer # Don't include the Primary Location
+  --ignorePrimary: oneof<nothing, bool> # Don't include the Primary Location
   --offset: int # Starting row of page, default 0 (format: int32)
   --limit: int # Page limit, default 20, max 100 (format: int32)
 ]: nothing -> record<count: int, data: table<address: record, adminEmail: string, adminName: string, appointmentReminders: record, businessHolidays: list, businessHours: record, companyId: string, companyName: string, defaults: record, email: string, fax: string, friendlyId: string, id: string, imageUrl: string, latitude: float, logo: string, longitude: float, name: string, object: string, phone: string, primaryBusiness: bool, primaryCalendarId: string, regionId: string, services: list, settings: record, timezoneIana: string, timezoneId: string, timezoneOffset: int, travel: record, website: string>, hasMore: bool, object: string, total: int, url: string> {
@@ -836,7 +835,7 @@ export def "consumer-resourcegroups list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --locationId: string # id of business location, defaults to primary business location
-  --deleted: string@bool-completer # Filter results by deleted status
+  --deleted: oneof<nothing, bool> # Filter results by deleted status
   --offset: int # Starting row of page, default 0 (format: int32)
   --limit: int # Page limit default 20, max 100 (format: int32)
 ]: nothing -> record<count: int, data: table<bookingNotification: int, deletedStatus: bool, deletedTime: string, description: string, email: string, id: string, locationId: string, name: string, object: string>, hasMore: bool, object: string, total: int, url: string> {
@@ -1001,15 +1000,15 @@ export def "consumer-services list" [
   --allow-errors(-e) # Return full response without error handling
   --locationId: string # id of business location, defaults to primary business location
   --serviceGroupId: int # Filter by groupId (format: int32)
-  --defaultService: string@bool-completer # Filter by default service, default is false
-  --allLocations: string@bool-completer # Search All Locations, default is false
+  --defaultService: oneof<nothing, bool> # Filter by default service, default is false
+  --allLocations: oneof<nothing, bool> # Search All Locations, default is false
   --scope: string@scope-completer # Filter by scope, Company, Location or All, default is All
   --name: string # Filter by Name, supports Partial name search
   --serviceId: string # Filter by ServiceId, using this parameter would ignore all other parameters
   --offset: int # Starting row of page, default 0 (format: int32)
   --limit: int # Page limit default 20, max 100 (format: int32)
   --sortOrder: string@sortOrder-completer # Sort results using Natural Sort or Sorted alphabetically by Service Names, default is natural
-  --sortDescending: string@bool-completer # Sort results in Descending Order, default true
+  --sortDescending: oneof<nothing, bool> # Sort results in Descending Order, default true
 ]: nothing -> record<count: int, data: table<availability: record, bookAheadUnit: int, bookAheadValue: int, bookInAdvance: int, bookingInterval: int, bookingLimit: int, calendarId: string, calendarResourceGroupId: string, cancellationFeeAmount: float, cancellationFeeTaxable: bool, companyId: string, consumerPadding: bool, customFields: record, dailyBookingLimitCount: int, dailyBookingLimitMinutes: int, defaultService: bool, description: string, duration: int, durationInterval: int, durationMax: int, durationMin: int, durationSelect: bool, feeAmount: float, feeTaxable: bool, id: string, imageUrl: string, locationId: string, maxBookingLimit: int, maxCapacity: int, maxGroupSize: int, maxResourceBookingLimit: int, mediaPageUrl: string, name: string, nonRefundable: bool, object: string, padding: int, roundRobin: int, serviceGroupId: int, serviceGroupName: string, showOnline: bool, type: string>, hasMore: bool, object: string, total: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

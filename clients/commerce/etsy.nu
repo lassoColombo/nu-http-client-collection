@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://openapi.etsy.com"] }
 def auth-scheme-completer [] { ["x-api-key" "bearer"] }
 
@@ -166,7 +165,7 @@ export def "application-shops-listings createDraftListing" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --legacy: string@bool-completer # This parameter is needed to enable new parameters and response values related to processing profiles.
+  --legacy: oneof<nothing, bool> # This parameter is needed to enable new parameters and response values related to processing profiles.
   quantity: int # The positive non-zero number of products available for purchase in the listing. Note: The listing quantity is the sum of available offering quantities. You can request the quantities for individual offerings from the ListingInventory resource using the [getListingInventory](/documentation/reference#operation/getListingInventory) endpoint. (format: int64)
   title: string # The listing's title string. When creating or updating a listing, valid title strings contain only letters, numbers, punctuation marks, mathematical symbols, whitespace characters, ™, ©, and ®. (regex: /[^\p{L}\p{Nd}\p{P}\p{Sm}\p{Zs}™©®]/u) You can only use the %, :, & and + characters once each.
   description: string # A description string of the product for sale in the listing.
@@ -189,16 +188,16 @@ export def "application-shops-listings createDraftListing" [
   --item-height: float # The numeric height of the product measured in units set in 'item_dimensions_unit'. Default value is null. If set, the value must be greater than 0. (nullable, format: float)
   --item-weight-unit: string@item-weight-unit-completer # A string defining the units used to measure the weight of the product. Default value is null. (nullable)
   --item-dimensions-unit: string@item-dimensions-unit-completer # A string defining the units used to measure the dimensions of the product. Default value is null. (nullable)
-  --is-personalizable: string@bool-completer # [DEPRECATED] When true, this listing is personalizable. The default value is false. NOTE: This field will be removed on Apr. 9th, 2026. See https://developers.etsy.com/documentation/tutorials/personalization-migration for migration details.
-  --personalization-is-required: string@bool-completer # [DEPRECATED] When true, this listing requires personalization. The default value is false. NOTE: This field will be removed on Apr. 9th, 2026. See https://developers.etsy.com/documentation/tutorials/personalization-migration for migration details.
+  --is-personalizable: oneof<nothing, bool> # [DEPRECATED] When true, this listing is personalizable. The default value is false. NOTE: This field will be removed on Apr. 9th, 2026. See https://developers.etsy.com/documentation/tutorials/personalization-migration for migration details.
+  --personalization-is-required: oneof<nothing, bool> # [DEPRECATED] When true, this listing requires personalization. The default value is false. NOTE: This field will be removed on Apr. 9th, 2026. See https://developers.etsy.com/documentation/tutorials/personalization-migration for migration details.
   --personalization-char-count-max: int # [DEPRECATED] This is an integer value representing the maximum length for the personalization message entered by the buyer. Will only change if is_personalizable is 'true'. Note: This field will be removed on Apr. 9th, 2026. See https://developers.etsy.com/documentation/tutorials/personalization-migration for migration details. (format: int64)
   --personalization-instructions: string # [DEPRECATED] A string representing instructions for the buyer to enter the personalization. Will only change if is_personalizable is 'true'. Note: This field will be removed on Apr. 9th, 2026. See https://developers.etsy.com/documentation/tutorials/personalization-migration for migration details.
   --production-partner-ids: list # An array of unique IDs of production partner ids. (nullable)
   --image-ids: list # An array of numeric image IDs of the images in a listing, which can include up to 20 images. (nullable)
-  --is-supply: string@bool-completer # When true, tags the listing as a supply product, else indicates that it's a finished product. Helps buyers locate the listing under the Supplies heading. Requires 'who_made' and 'when_made'.
-  --is-customizable: string@bool-completer # When true, a buyer may contact the seller for a customized order. The default value is true when a shop accepts custom orders. Does not apply to shops that do not accept custom orders.
-  --should-auto-renew: string@bool-completer # When true, renews a listing for four months upon expiration.
-  --is-taxable: string@bool-completer # When true, applicable [shop](/documentation/reference#tag/Shop) tax rates apply to this listing at checkout.
+  --is-supply: oneof<nothing, bool> # When true, tags the listing as a supply product, else indicates that it's a finished product. Helps buyers locate the listing under the Supplies heading. Requires 'who_made' and 'when_made'.
+  --is-customizable: oneof<nothing, bool> # When true, a buyer may contact the seller for a customized order. The default value is true when a shop accepts custom orders. Does not apply to shops that do not accept custom orders.
+  --should-auto-renew: oneof<nothing, bool> # When true, renews a listing for four months upon expiration.
+  --is-taxable: oneof<nothing, bool> # When true, applicable [shop](/documentation/reference#tag/Shop) tax rates apply to this listing at checkout.
   --type: string@type-completer # An enumerated type string that indicates whether the listing is physical or a digital download.
 ]: any -> record<listing_id: int, user_id: int, shop_id: int, title: string, description: string, state: string, creation_timestamp: int, created_timestamp: int, ending_timestamp: int, original_creation_timestamp: int, last_modified_timestamp: int, updated_timestamp: int, state_timestamp: int, quantity: int, shop_section_id: int, featured_rank: int, url: string, num_favorers: int, non_taxable: bool, is_taxable: bool, is_customizable: bool, is_personalizable: bool, listing_type: string, tags: list<string>, materials: list<string>, shipping_profile_id: int, return_policy_id: int, processing_min: int, processing_max: int, who_made: string, when_made: string, is_supply: bool, item_weight: float, item_weight_unit: string, item_length: float, item_width: float, item_height: float, item_dimensions_unit: string, is_private: bool, style: list<string>, file_data: string, has_variations: bool, should_auto_renew: bool, language: string, price: any, converted_price: any, taxonomy_id: int, readiness_state_id: int, suggested_title: string> {
   let input = $in
@@ -232,7 +231,7 @@ export def "application-shops-listings get" [
   --sort-on: string@sort-on-completer # The value to sort a search result of listings on. NOTES: a) `sort_on` only works when combined with one of the search options (keywords, region, etc.). b) when using `score` the returned results will always be in _descending_ order, regardless of the `sort_order` parameter. (default: created)
   --sort-order: string@sort-order-completer # The ascending(up) or descending(down) order to sort listings by. NOTE: sort_order only works when combined with one of the search options (keywords, region, etc.). (default: desc)
   --includes: list # An enumerated string that attaches a valid association. Acceptable inputs are 'Shipping', 'Shop', 'Images', 'User', 'Translations', 'Videos', 'Inventory' and 'Personalization'.
-  --legacy: string@bool-completer # This parameter is needed to enable new parameters and response values related to processing profiles.
+  --legacy: oneof<nothing, bool> # This parameter is needed to enable new parameters and response values related to processing profiles.
 ]: nothing -> record<count: int, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -280,8 +279,8 @@ export def "application-listings get" [
   --allow-errors(-e) # Return full response without error handling
   --includes: list # An enumerated string that attaches a valid association. Acceptable inputs are 'Shipping', 'Shop', 'Images', 'User', 'Translations', 'Videos', 'Inventory' and 'Personalization'.
   --language: string # The IETF language tag for the language of this translation. Ex: `de`, `en`, `es`, `fr`, `it`, `ja`, `nl`, `pl`, `pt`.
-  --legacy: string@bool-completer # This parameter is needed to enable new parameters and response values related to processing profiles.
-  --allow-suggested-title: string@bool-completer # This parameter will include in the response a suggested title for the listing, if one is available. Since suggestions are only available to the listing's owner, client must submit an oauth_access_token scoped to the owner of the listing.
+  --legacy: oneof<nothing, bool> # This parameter is needed to enable new parameters and response values related to processing profiles.
+  --allow-suggested-title: oneof<nothing, bool> # This parameter will include in the response a suggested title for the listing, if one is available. Since suggestions are only available to the listing's owner, client must submit an oauth_access_token scoped to the owner of the listing.
 ]: nothing -> record<listing_id: int, user_id: int, shop_id: int, title: string, description: string, state: string, creation_timestamp: int, created_timestamp: int, ending_timestamp: int, original_creation_timestamp: int, last_modified_timestamp: int, updated_timestamp: int, state_timestamp: int, quantity: int, shop_section_id: int, featured_rank: int, url: string, num_favorers: int, non_taxable: bool, is_taxable: bool, is_customizable: bool, is_personalizable: bool, listing_type: string, tags: list<string>, materials: list<string>, shipping_profile_id: int, return_policy_id: int, processing_min: int, processing_max: int, who_made: string, when_made: string, is_supply: bool, item_weight: float, item_weight_unit: string, item_length: float, item_width: float, item_height: float, item_dimensions_unit: string, is_private: bool, style: list<string>, file_data: string, has_variations: bool, should_auto_renew: bool, language: string, price: any, converted_price: any, taxonomy_id: int, readiness_state_id: int, suggested_title: string, shipping_profile: any, user: any, shop: any, images: list<any>, videos: list<any>, inventory: any, production_partners: list<any>, skus: list<string>, translations: any, views: int, personalization: any, buyer_price: any> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -414,8 +413,8 @@ export def "application-listings-active findAllListingsActive" [
   --max-price: float # The maximum price of listings to be returned by a search result. (format: float)
   --taxonomy-id: int # The numerical taxonomy ID of the listing. See [SellerTaxonomy](/documentation/reference#tag/SellerTaxonomy) and [BuyerTaxonomy](/documentation/reference#tag/BuyerTaxonomy) for more information. (format: int64)
   --shop-location: string # Filters by shop location. If location cannot be parsed, Etsy responds with an error.
-  --legacy: string@bool-completer # This parameter is needed to enable new parameters and response values related to processing profiles.
-  --is-safe: string@bool-completer # When true, filters out mature/adult content from search results.
+  --legacy: oneof<nothing, bool> # This parameter is needed to enable new parameters and response values related to processing profiles.
+  --is-safe: oneof<nothing, bool> # When true, filters out mature/adult content from search results.
   --currency: string # The ISO 4217 alphabetic currency code (e.g., EUR, MXN) for price conversion. If provided, the listing price will be converted to this currency.
   --buyer-country: string # The ISO 3166-1 alpha-2 country code (e.g., DE, MX). Filters results to listings that ship to this country. (format: ISO 3166-1 alpha-2)
 ]: nothing -> record<count: int, results: list<any>> {
@@ -446,7 +445,7 @@ export def "application-shops-listings-active findAllActiveListingsByShop" [
   --sort-order: string@sort-order-completer # The ascending(up) or descending(down) order to sort listings by. NOTE: sort_order only works when combined with one of the search options (keywords, region, etc.). (default: desc)
   --offset: int # The number of records to skip before selecting the first result. (format: int64, default: 0)
   --keywords: string # Search term or phrase that must appear in all results.
-  --legacy: string@bool-completer # This parameter is needed to enable new parameters and response values related to processing profiles.
+  --legacy: oneof<nothing, bool> # This parameter is needed to enable new parameters and response values related to processing profiles.
 ]: nothing -> record<count: int, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -543,8 +542,8 @@ export def "application-shops-listings-images uploadListingImage" [
   --image: string # The file name string of a file to upload (nullable, format: binary)
   --listing-image-id: int # The numeric ID of the primary [listing image](/documentation/reference#tag/ShopListing-Image) for this transaction. (format: int64)
   --rank: int # The positive non-zero numeric position in the images displayed in a listing, with rank 1 images appearing in the left-most position in a listing. (format: int64, default: 1)
-  --overwrite: string@bool-completer # When true, this request replaces the existing image at a given rank. (default: false)
-  --is-watermarked: string@bool-completer # When true, indicates that the uploaded image has a watermark. (default: false)
+  --overwrite: oneof<nothing, bool> # When true, this request replaces the existing image at a given rank. (default: false)
+  --is-watermarked: oneof<nothing, bool> # When true, indicates that the uploaded image has a watermark. (default: false)
   --alt-text: string # Alt text for the listing image. Max length 500 characters. (default: )
 ]: any -> record<listing_id: int, listing_image_id: int, hex_code: string, red: int, green: int, blue: int, hue: int, saturation: int, brightness: int, is_black_and_white: bool, creation_tsz: int, created_timestamp: int, rank: int, url_75x75: string, url_170x135: string, url_570xN: string, url_fullxfull: string, full_height: int, full_width: int, alt_text: string> {
   let input = $in
@@ -571,9 +570,9 @@ export def "application-listings-inventory get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-deleted: string@bool-completer # A boolean value for inventory whether to include deleted products and their offerings. Default value is false.
+  --show-deleted: oneof<nothing, bool> # A boolean value for inventory whether to include deleted products and their offerings. Default value is false.
   --includes: string@includes-completer # An enumerated string that attaches a valid association. Default value is null.
-  --legacy: string@bool-completer # This parameter is needed to enable new parameters and response values related to processing profiles.
+  --legacy: oneof<nothing, bool> # This parameter is needed to enable new parameters and response values related to processing profiles.
 ]: nothing -> record<products: list<any>, price_on_property: list<int>, quantity_on_property: list<int>, sku_on_property: list<int>, readiness_state_on_property: list<int>, listing: any> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -598,7 +597,7 @@ export def "application-listings-inventory updateListingInventory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --legacy: string@bool-completer # This parameter is needed to enable new parameters and response values related to processing profiles.
+  --legacy: oneof<nothing, bool> # This parameter is needed to enable new parameters and response values related to processing profiles.
   --max-variations-supported: string@max-variations-supported-completer # Coming soon: This parameter determines whether a third variation can be added to or updated for a listing. It accepts values of 2 or 3, where 3 enables third-variation support.
   products: list # A JSON array of products available in a listing, even if only one product. All field names in the JSON blobs are lowercase. — item shape: {sku?: string, property_values?: list, offerings: list}
   --price-on-property: list # An array of unique [listing property](/documentation/reference#operation/getListingInventory) ID integers for the properties that change product prices, if any. For example, if you charge specific prices for different sized products in the same listing, then this array contains the property ID for size.
@@ -632,7 +631,7 @@ export def "application-listings-inventory-products get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --legacy: string@bool-completer # This parameter is needed to enable new parameters and response values related to processing profiles.
+  --legacy: oneof<nothing, bool> # This parameter is needed to enable new parameters and response values related to processing profiles.
 ]: nothing -> record<product_id: int, sku: string, is_deleted: bool, offerings: list<any>, property_values: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -658,7 +657,7 @@ export def "application-listings-products-offerings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --legacy: string@bool-completer # This parameter is needed to enable new parameters and response values related to processing profiles.
+  --legacy: oneof<nothing, bool> # This parameter is needed to enable new parameters and response values related to processing profiles.
 ]: nothing -> record<offering_id: int, quantity: int, is_enabled: bool, is_deleted: bool, price: any, readiness_state_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -683,7 +682,7 @@ export def "application-listings-batch get" [
   --allow-errors(-e) # Return full response without error handling
   --listing-ids: list # The list of numeric IDS for the listings in a specific Etsy shop.
   --includes: list # An enumerated string that attaches a valid association. Acceptable inputs are 'Shipping', 'Shop', 'Images', 'User', 'Translations', 'Videos', 'Inventory' and 'Personalization'.
-  --legacy: string@bool-completer # This parameter is needed to enable new parameters and response values related to processing profiles.
+  --legacy: oneof<nothing, bool> # This parameter is needed to enable new parameters and response values related to processing profiles.
   --currency: string # The ISO 4217 alphabetic currency code (e.g., EUR, MXN) for price conversion. If provided, the listing price will be converted to this currency.
   --buyer-country: string # The ISO 3166-1 alpha-2 country code (e.g., GB, DE). Used for buyer-facing price calculations (VAT, inclusive shipping). Does not filter listings. (format: ISO 3166-1 alpha-2)
 ]: nothing -> record<count: int, results: list<any>> {
@@ -711,7 +710,7 @@ export def "application-shops-listings-featured get" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The maximum number of results to return. (format: int64, default: 25)
   --offset: int # The number of records to skip before selecting the first result. (format: int64, default: 0)
-  --legacy: string@bool-completer # This parameter is needed to enable new parameters and response values related to processing profiles.
+  --legacy: oneof<nothing, bool> # This parameter is needed to enable new parameters and response values related to processing profiles.
 ]: nothing -> record<count: int, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -760,7 +759,7 @@ export def "application-shops-listings-personalization updateListingPersonalizat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --supports-multiple-personalization-questions: string@bool-completer # This query parameter indicates that the caller supports up to 5 personalization questions and the following question types: 'text_input', 'dropdown', 'unlabeled_upload', 'labeled_upload'. Sending this param without updating your application can lead to inadvertently deleting seller-entered data. (nullable)
+  --supports-multiple-personalization-questions: oneof<nothing, bool> # This query parameter indicates that the caller supports up to 5 personalization questions and the following question types: 'text_input', 'dropdown', 'unlabeled_upload', 'labeled_upload'. Sending this param without updating your application can lead to inadvertently deleting seller-entered data. (nullable)
   personalization_questions: list # item shape: {question_id?: int, question_text: string, instructions?: string, question_type: "text_input"|"dropdown"|"unlabeled_upload"|"labeled_upload", required: bool, max_allowed_files?: int, max_allowed_characters?: int, options?: list}
 ]: any -> record<personalization_questions: table<question_id: int, question_text: string, instructions: string, question_type: string, required: bool, max_allowed_characters: int, max_allowed_files: int, options: list>> {
   let input = $in
@@ -913,7 +912,7 @@ export def "application-shops-listings-transactions get" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The maximum number of results to return. (format: int64, default: 25)
   --offset: int # The number of records to skip before selecting the first result. (format: int64, default: 0)
-  --legacy: string@bool-completer # This parameter needed to enable new parameters and response values related to processing profiles.
+  --legacy: oneof<nothing, bool> # This parameter needed to enable new parameters and response values related to processing profiles.
 ]: nothing -> record<count: int, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1022,12 +1021,12 @@ export def "application-shops-listings updateListing" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --legacy: string@bool-completer # This parameter is needed to enable new parameters and response values related to processing profiles.
+  --legacy: oneof<nothing, bool> # This parameter is needed to enable new parameters and response values related to processing profiles.
   --image-ids: list # An array of numeric image IDs of the images in a listing, which can include up to 20 images.
   --title: string # The listing's title string. When creating or updating a listing, valid title strings contain only letters, numbers, punctuation marks, mathematical symbols, whitespace characters, ™, ©, and ®. (regex: /[^\p{L}\p{Nd}\p{P}\p{Sm}\p{Zs}™©®]/u) You can only use the %, :, & and + characters once each.
   --description: string # A description string of the product for sale in the listing.
   --materials: list # A list of material strings for materials used in the product. Valid materials strings contain only letters, numbers, and whitespace characters. (regex: /[^\p{L}\p{Nd}\p{Zs}]/u) Default value is null. (nullable)
-  --should-auto-renew: string@bool-completer # When true, renews a listing for four months upon expiration.
+  --should-auto-renew: oneof<nothing, bool> # When true, renews a listing for four months upon expiration.
   --shipping-profile-id: int # The numeric ID of the [shipping profile](/documentation/reference#operation/getShopShippingProfile) associated with the listing. Required when listing type is `physical`. (nullable, format: int64)
   --return-policy-id: int # The numeric ID of the [Return Policy](/documentation/reference#operation/getShopReturnPolicies). Required for active physical listings. This requirement does not apply to listings of EU-based shops. (nullable, format: int64)
   --shop-section-id: int # The numeric ID of the [shop section](/documentation/reference#tag/Shop-Section) for this listing. Default value is null. (nullable, format: int64)
@@ -1037,18 +1036,18 @@ export def "application-shops-listings updateListing" [
   --item-height: float # The numeric height of the product measured in units set in 'item_dimensions_unit'. Default value is null. If set, the value must be greater than 0. (nullable, format: float)
   --item-weight-unit: string@item-weight-unit-completer-1 # A string defining the units used to measure the weight of the product. Default value is null. (nullable)
   --item-dimensions-unit: string@item-dimensions-unit-completer-1 # A string defining the units used to measure the dimensions of the product. Default value is null. (nullable)
-  --is-taxable: string@bool-completer # When true, applicable [shop](/documentation/reference#tag/Shop) tax rates apply to this listing at checkout.
+  --is-taxable: oneof<nothing, bool> # When true, applicable [shop](/documentation/reference#tag/Shop) tax rates apply to this listing at checkout.
   --taxonomy-id: int # The numerical taxonomy ID of the listing. See [SellerTaxonomy](/documentation/reference#tag/SellerTaxonomy) and [BuyerTaxonomy](/documentation/reference#tag/BuyerTaxonomy) for more information. (format: int64)
   --tags: list # A comma-separated list of tag strings for the listing. When creating or updating a listing, valid tag strings contain only letters, numbers, whitespace characters, -, ', ™, ©, and ®. (regex: /[^\p{L}\p{Nd}\p{Zs}\-'™©®]/u) Default value is null. (nullable)
   --who-made: string@who-made-completer # An enumerated string indicating who made the product. Helps buyers locate the listing under the Handmade heading. Requires 'is_supply' and 'when_made'.
   --when-made: string@when-made-completer # An enumerated string for the era in which the maker made the product in this listing. Helps buyers locate the listing under the Vintage heading. Requires 'is_supply' and 'who_made'.
   --featured-rank: int # The positive non-zero numeric position in the featured listings of the shop, with rank 1 listings appearing in the left-most position in featured listing on a shop's home page. (nullable, format: int64)
-  --is-personalizable: string@bool-completer # [DEPRECATED] When true, this listing is personalizable. The default value is false. NOTE: This field will be removed on Apr. 9th, 2026. See https://developers.etsy.com/documentation/tutorials/personalization-migration for migration details.
-  --personalization-is-required: string@bool-completer # [DEPRECATED] When true, this listing requires personalization. The default value is false. NOTE: This field will be removed on Apr. 9th, 2026. See https://developers.etsy.com/documentation/tutorials/personalization-migration for migration details.
+  --is-personalizable: oneof<nothing, bool> # [DEPRECATED] When true, this listing is personalizable. The default value is false. NOTE: This field will be removed on Apr. 9th, 2026. See https://developers.etsy.com/documentation/tutorials/personalization-migration for migration details.
+  --personalization-is-required: oneof<nothing, bool> # [DEPRECATED] When true, this listing requires personalization. The default value is false. NOTE: This field will be removed on Apr. 9th, 2026. See https://developers.etsy.com/documentation/tutorials/personalization-migration for migration details.
   --personalization-char-count-max: int # [DEPRECATED] This is an integer value representing the maximum length for the personalization message entered by the buyer. Will only change if is_personalizable is 'true'. Note: This field will be removed on Apr. 9th, 2026. See https://developers.etsy.com/documentation/tutorials/personalization-migration for migration details. (format: int64)
   --personalization-instructions: string # [DEPRECATED] A string representing instructions for the buyer to enter the personalization. Will only change if is_personalizable is 'true'. Note: This field will be removed on Apr. 9th, 2026. See https://developers.etsy.com/documentation/tutorials/personalization-migration for migration details.
   --state: string@state-completer-1 # When _updating_ a listing, this value can be either `active` or `inactive`. Note: Setting a `draft` listing to `active` will also publish the listing on etsy.com and requires that the listing have an image set. Setting a `sold_out` listing to active will update the quantity to 1 and renew the listing on etsy.com.
-  --is-supply: string@bool-completer # When true, tags the listing as a supply product, else indicates that it's a finished product. Helps buyers locate the listing under the Supplies heading. Requires 'who_made' and 'when_made'.
+  --is-supply: oneof<nothing, bool> # When true, tags the listing as a supply product, else indicates that it's a finished product. Helps buyers locate the listing under the Supplies heading. Requires 'who_made' and 'when_made'.
   --production-partner-ids: list # An array of unique IDs of production partner ids. (nullable)
   --type: string@type-completer # An enumerated type string that indicates whether the listing is physical or a digital download. (nullable)
 ]: any -> record<listing_id: int, user_id: int, shop_id: int, title: string, description: string, state: string, creation_timestamp: int, created_timestamp: int, ending_timestamp: int, original_creation_timestamp: int, last_modified_timestamp: int, updated_timestamp: int, state_timestamp: int, quantity: int, shop_section_id: int, featured_rank: int, url: string, num_favorers: int, non_taxable: bool, is_taxable: bool, is_customizable: bool, is_personalizable: bool, listing_type: string, tags: list<string>, materials: list<string>, shipping_profile_id: int, return_policy_id: int, processing_min: int, processing_max: int, who_made: string, when_made: string, is_supply: bool, item_weight: float, item_weight_unit: string, item_length: float, item_width: float, item_height: float, item_dimensions_unit: string, is_private: bool, style: list<string>, file_data: string, has_variations: bool, should_auto_renew: bool, language: string, price: any, converted_price: any, taxonomy_id: int, readiness_state_id: int, suggested_title: string> {
@@ -1369,7 +1368,7 @@ export def "application-shops-receipts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --legacy: string@bool-completer # This parameter needed to enable new parameters and response values related to processing profiles.
+  --legacy: oneof<nothing, bool> # This parameter needed to enable new parameters and response values related to processing profiles.
 ]: nothing -> record<receipt_id: int, receipt_type: int, seller_user_id: int, seller_email: string, buyer_user_id: int, buyer_email: string, name: string, first_line: string, second_line: string, city: string, state: string, zip: string, status: string, formatted_address: string, country_iso: string, payment_method: string, payment_email: string, message_from_seller: string, message_from_buyer: string, message_from_payment: string, is_paid: bool, is_shipped: bool, create_timestamp: int, created_timestamp: int, update_timestamp: int, updated_timestamp: int, is_gift: bool, gift_message: string, gift_sender: string, grandtotal: any, subtotal: any, total_price: any, total_shipping_cost: any, total_tax_cost: any, total_vat_cost: any, discount_amt: any, gift_wrap_price: any, shipments: list<any>, transactions: list<any>, refunds: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1394,9 +1393,9 @@ export def "application-shops-receipts updateShopReceipt" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --legacy: string@bool-completer # This parameter needed to enable new parameters and response values related to processing profiles.
-  --was-shipped: string@bool-completer # When `true`, returns receipts where the seller shipped the product(s) in this receipt. When `false`, returns receipts where shipment has not been set. (nullable)
-  --was-paid: string@bool-completer # When `true`, returns receipts where the seller has received payment for the receipt. When `false`, returns receipts where payment has not been received. (nullable)
+  --legacy: oneof<nothing, bool> # This parameter needed to enable new parameters and response values related to processing profiles.
+  --was-shipped: oneof<nothing, bool> # When `true`, returns receipts where the seller shipped the product(s) in this receipt. When `false`, returns receipts where shipment has not been set. (nullable)
+  --was-paid: oneof<nothing, bool> # When `true`, returns receipts where the seller has received payment for the receipt. When `false`, returns receipts where payment has not been received. (nullable)
 ]: any -> record<receipt_id: int, receipt_type: int, seller_user_id: int, seller_email: string, buyer_user_id: int, buyer_email: string, name: string, first_line: string, second_line: string, city: string, state: string, zip: string, status: string, formatted_address: string, country_iso: string, payment_method: string, payment_email: string, message_from_seller: string, message_from_buyer: string, message_from_payment: string, is_paid: bool, is_shipped: bool, create_timestamp: int, created_timestamp: int, update_timestamp: int, updated_timestamp: int, is_gift: bool, gift_message: string, gift_sender: string, grandtotal: any, subtotal: any, total_price: any, total_shipping_cost: any, total_tax_cost: any, total_vat_cost: any, discount_amt: any, gift_wrap_price: any, shipments: list<any>, transactions: list<any>, refunds: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1431,11 +1430,11 @@ export def "application-shops-receipts list" [
   --offset: int # The number of records to skip before selecting the first result. (format: int64, default: 0)
   --sort-on: string@sort-on-completer-1 # The value to sort a search result of listings on. (default: created)
   --sort-order: string@sort-order-completer # The ascending(up) or descending(down) order to sort receipts by. (default: desc)
-  --was-paid: string@bool-completer # When `true`, returns receipts where the seller has received payment for the receipt. When `false`, returns receipts where payment has not been received. (nullable)
-  --was-shipped: string@bool-completer # When `true`, returns receipts where the seller shipped the product(s) in this receipt. When `false`, returns receipts where shipment has not been set. (nullable)
-  --was-delivered: string@bool-completer # When `true`, returns receipts that have been marked as delivered. When `false`, returns receipts where shipment has not been marked as delivered. (nullable)
-  --was-canceled: string@bool-completer # When `true`, the endpoint will only return the canceled receipts. When `false`, the endpoint will only return non-canceled receipts. (nullable)
-  --legacy: string@bool-completer # This parameter needed to enable new parameters and response values related to processing profiles.
+  --was-paid: oneof<nothing, bool> # When `true`, returns receipts where the seller has received payment for the receipt. When `false`, returns receipts where payment has not been received. (nullable)
+  --was-shipped: oneof<nothing, bool> # When `true`, returns receipts where the seller shipped the product(s) in this receipt. When `false`, returns receipts where shipment has not been set. (nullable)
+  --was-delivered: oneof<nothing, bool> # When `true`, returns receipts that have been marked as delivered. When `false`, returns receipts where shipment has not been marked as delivered. (nullable)
+  --was-canceled: oneof<nothing, bool> # When `true`, the endpoint will only return the canceled receipts. When `false`, the endpoint will only return non-canceled receipts. (nullable)
+  --legacy: oneof<nothing, bool> # This parameter needed to enable new parameters and response values related to processing profiles.
 ]: nothing -> record<count: int, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1462,7 +1461,7 @@ export def "application-shops-receipts-listings get" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The maximum number of results to return. (format: int64, default: 25)
   --offset: int # The number of records to skip before selecting the first result. (format: int64, default: 0)
-  --legacy: string@bool-completer # This parameter is needed to enable new parameters and response values related to processing profiles.
+  --legacy: oneof<nothing, bool> # This parameter is needed to enable new parameters and response values related to processing profiles.
 ]: nothing -> record<count: int, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1488,10 +1487,10 @@ export def "application-shops-receipts-tracking createReceiptShipment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --legacy: string@bool-completer # This parameter needed to enable new parameters and response values related to processing profiles.
+  --legacy: oneof<nothing, bool> # This parameter needed to enable new parameters and response values related to processing profiles.
   --tracking-code: string # The tracking code for this receipt.
   --carrier-name: string # The carrier name for this receipt.
-  --send-bcc: string@bool-completer # If true, the shipping notification will be sent to the seller as well
+  --send-bcc: oneof<nothing, bool> # If true, the shipping notification will be sent to the seller as well
   --note-to-buyer: string # Message to include in notification to the buyer.
   --mail-class: string # The service level of postal or carrier service selected for the shipment (e.g., First-Class, Priority, Ground, Express). (nullable)
   --weight: float # The total weight of the package. (nullable, format: float)
@@ -1537,7 +1536,7 @@ export def "application-shops-receipts-transactions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --legacy: string@bool-completer # This parameter needed to enable new parameters and response values related to processing profiles.
+  --legacy: oneof<nothing, bool> # This parameter needed to enable new parameters and response values related to processing profiles.
 ]: nothing -> record<count: int, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1778,7 +1777,7 @@ export def "application-shops-holiday-preferences updateHolidayPreferences" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-working: string@bool-completer # A boolean value for whether the shop will process orders on a particular holiday.
+  --is-working: oneof<nothing, bool> # A boolean value for whether the shop will process orders on a particular holiday.
 ]: any -> record<shop_id: int, holiday_id: int, country_iso: string, is_working: bool, holiday_name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1856,8 +1855,8 @@ export def "application-shops-policies-return createShopReturnPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --accepts-returns: string@bool-completer
-  --accepts-exchanges: string@bool-completer
+  --accepts-returns: oneof<nothing, bool>
+  --accepts-exchanges: oneof<nothing, bool>
   --return-deadline: int # The deadline for the Return Policy, measured in days. The value must be one of the following: [7, 14, 21, 30, 45, 60, 90]. (nullable, format: int64)
 ]: any -> record<return_policy_id: int, shop_id: int, accepts_returns: bool, accepts_exchanges: bool, return_deadline: int> {
   let input = $in
@@ -1953,8 +1952,8 @@ export def "application-shops-policies-return updateShopReturnPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --accepts-returns: string@bool-completer
-  --accepts-exchanges: string@bool-completer
+  --accepts-returns: oneof<nothing, bool>
+  --accepts-exchanges: oneof<nothing, bool>
   --return-deadline: int # The deadline for the Return Policy, measured in days. The value must be one of the following: [7, 14, 21, 30, 45, 60, 90]. (nullable, format: int64)
 ]: any -> record<return_policy_id: int, shop_id: int, accepts_returns: bool, accepts_exchanges: bool, return_deadline: int> {
   let input = $in
@@ -1982,7 +1981,7 @@ export def "application-shops-policies-return-listings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --legacy: string@bool-completer # This parameter is needed to enable new parameters and response values related to processing profiles.
+  --legacy: oneof<nothing, bool> # This parameter is needed to enable new parameters and response values related to processing profiles.
 ]: nothing -> record<count: int, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2284,7 +2283,7 @@ export def "application-shops-shop-sections-listings get" [
   --offset: int # The number of records to skip before selecting the first result. (format: int64, default: 0)
   --sort-on: string@sort-on-completer # The value to sort a search result of listings on. NOTES: a) `sort_on` only works when combined with one of the search options (keywords, region, etc.). b) when using `score` the returned results will always be in _descending_ order, regardless of the `sort_order` parameter. (default: created)
   --sort-order: string@sort-order-completer # The ascending(up) or descending(down) order to sort listings by. NOTE: sort_order only works when combined with one of the search options (keywords, region, etc.). (default: desc)
-  --legacy: string@bool-completer # This parameter is needed to enable new parameters and response values related to processing profiles.
+  --legacy: oneof<nothing, bool> # This parameter is needed to enable new parameters and response values related to processing profiles.
 ]: nothing -> record<count: int, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2732,7 +2731,7 @@ export def "application-shops-transactions list" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The maximum number of results to return. (format: int64, default: 25)
   --offset: int # The number of records to skip before selecting the first result. (format: int64, default: 0)
-  --legacy: string@bool-completer # This parameter needed to enable new parameters and response values related to processing profiles.
+  --legacy: oneof<nothing, bool> # This parameter needed to enable new parameters and response values related to processing profiles.
 ]: nothing -> record<count: int, results: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://cloudfront.amazonaws.com" "http://cloudfront.cn-north-1.amazonaws.com.cn" "http://cloudfront.cn-northwest-1.amazonaws.com.cn" "https://cloudfront.cn-north-1.amazonaws.com.cn" "https://cloudfront.cn-northwest-1.amazonaws.com.cn"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -148,7 +147,7 @@ export def "2020-05-31-distribution-copy 05-by-PrimaryDistributionId" [
   --X-Amz-Security-Token: string
   --X-Amz-Signature: string
   --X-Amz-SignedHeaders: string
-  --Staging: string@bool-completer # The type of distribution that your primary distribution will be copied to. The only valid value is <code>True</code>, indicating that you are copying to a staging distribution.
+  --Staging: oneof<nothing, bool> # The type of distribution that your primary distribution will be copied to. The only valid value is <code>True</code>, indicating that you are copying to a staging distribution.
   --If-Match: string # The version identifier of the primary distribution whose configuration you are copying. This is the <code>ETag</code> value returned in the response to <code>GetDistribution</code> and <code>GetDistributionConfig</code>.
   --body: record
 ]: any -> any {
@@ -441,7 +440,7 @@ export def "2020-05-31-distribution-with-tags 05-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --WithTags: string@bool-completer # allows empty value
+  --WithTags: oneof<nothing, bool> # allows empty value
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -1303,7 +1302,7 @@ export def "2020-05-31-streaming-distribution-with-tags 05-by-" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --WithTags: string@bool-completer # allows empty value
+  --WithTags: oneof<nothing, bool> # allows empty value
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string

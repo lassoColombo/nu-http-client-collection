@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.boldsign.com"] }
 def auth-scheme-completer [] { ["bearer" "x-api-key"] }
 
@@ -129,30 +128,30 @@ export def "brand-create CreateBrand" [
   --DisclaimerDescription: string
   --DisclaimerTitle: string
   --RedirectUrl: string
-  --IsDefault: string@bool-completer # default: false
-  --CanHideTagLine: string@bool-completer # default: false
-  --CombineAuditTrail: string@bool-completer # default: false
-  --CombineAttachments: string@bool-completer # default: false
-  --ExcludeAuditTrailFromEmail: string@bool-completer # default: false
+  --IsDefault: oneof<nothing, bool> # default: false
+  --CanHideTagLine: oneof<nothing, bool> # default: false
+  --CombineAuditTrail: oneof<nothing, bool> # default: false
+  --CombineAttachments: oneof<nothing, bool> # default: false
+  --ExcludeAuditTrailFromEmail: oneof<nothing, bool> # default: false
   --EmailSignedDocument: string@EmailSignedDocument-completer # default: Attachment
   --DocumentTimeZone: string
-  --ShowBuiltInFormFields: string@bool-completer # default: true
-  --AllowCustomFieldCreation: string@bool-completer # default: false
-  --ShowSharedCustomFields: string@bool-completer # default: false
-  --HideDecline: string@bool-completer
-  --HideSave: string@bool-completer
-  --DocumentExpirySettingsExpiryDateType: string@DocumentExpirySettingsExpiryDateType-completer
-  --DocumentExpirySettingsExpiryValue: int # format: int32
-  --DocumentExpirySettingsEnableDefaultExpiryAlert: string@bool-completer
-  --DocumentExpirySettingsEnableAutoReminder: string@bool-completer
-  --DocumentExpirySettingsReminderDays: int # format: int32
-  --DocumentExpirySettingsReminderCount: int # format: int32
+  --ShowBuiltInFormFields: oneof<nothing, bool> # default: true
+  --AllowCustomFieldCreation: oneof<nothing, bool> # default: false
+  --ShowSharedCustomFields: oneof<nothing, bool> # default: false
+  --HideDecline: oneof<nothing, bool> # This option prevents signers to decline the document during the signing process.
+  --HideSave: oneof<nothing, bool> # This option prevents signers to save their changes during the signing process and continue signing later.
+  --DocumentExpirySettingsExpiryDateType: string@DocumentExpirySettingsExpiryDateType-completer # This property represents the type for the expiry date (format: Enumeration)
+  --DocumentExpirySettingsExpiryValue: int # This property is used to set the expiry value based on the expiry type (format: int32)
+  --DocumentExpirySettingsEnableDefaultExpiryAlert: oneof<nothing, bool> # This property will send the expiry alert email before the day of expiry for the pending signers.
+  --DocumentExpirySettingsEnableAutoReminder: oneof<nothing, bool> # When auto reminder is enabled, you can select how often to remind in terms of days and select the maximum number of reminders.
+  --DocumentExpirySettingsReminderDays: int # Remind in terms of days. (format: int32)
+  --DocumentExpirySettingsReminderCount: int # Number of reminder count. (format: int32)
   --CustomDomainSettingsDomainName: string
   --CustomDomainSettingsFromName: string
-  --SignatureFrameSettingsEnableSignatureFrame: string@bool-completer # default: false
-  --SignatureFrameSettingsShowRecipientName: string@bool-completer # default: false
-  --SignatureFrameSettingsShowRecipientEmail: string@bool-completer # default: false
-  --SignatureFrameSettingsShowTimeStamp: string@bool-completer # default: false
+  --SignatureFrameSettingsEnableSignatureFrame: oneof<nothing, bool> # default: false
+  --SignatureFrameSettingsShowRecipientName: oneof<nothing, bool> # default: false
+  --SignatureFrameSettingsShowRecipientEmail: oneof<nothing, bool> # default: false
+  --SignatureFrameSettingsShowTimeStamp: oneof<nothing, bool> # default: false
 ]: any -> record<brandId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -178,7 +177,7 @@ export def "brand-edit EditBrand" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --brandId: string # The brand id.
+  --brandId: string
   --BrandName: string
   --BrandLogo: string # format: binary
   --BackgroundColor: string
@@ -188,30 +187,30 @@ export def "brand-edit EditBrand" [
   --DisclaimerDescription: string
   --DisclaimerTitle: string
   --RedirectUrl: string
-  --IsDefault: string@bool-completer # default: false
-  --CanHideTagLine: string@bool-completer # default: false
-  --CombineAuditTrail: string@bool-completer # default: false
-  --CombineAttachments: string@bool-completer # default: false
-  --ExcludeAuditTrailFromEmail: string@bool-completer # default: false
+  --IsDefault: oneof<nothing, bool> # default: false
+  --CanHideTagLine: oneof<nothing, bool> # default: false
+  --CombineAuditTrail: oneof<nothing, bool> # default: false
+  --CombineAttachments: oneof<nothing, bool> # default: false
+  --ExcludeAuditTrailFromEmail: oneof<nothing, bool> # default: false
   --EmailSignedDocument: string@EmailSignedDocument-completer # default: Attachment
   --DocumentTimeZone: string
-  --ShowBuiltInFormFields: string@bool-completer # default: true
-  --AllowCustomFieldCreation: string@bool-completer # default: false
-  --ShowSharedCustomFields: string@bool-completer # default: false
-  --HideDecline: string@bool-completer
-  --HideSave: string@bool-completer
-  --DocumentExpirySettingsExpiryDateType: string@DocumentExpirySettingsExpiryDateType-completer
-  --DocumentExpirySettingsExpiryValue: int # format: int32
-  --DocumentExpirySettingsEnableDefaultExpiryAlert: string@bool-completer
-  --DocumentExpirySettingsEnableAutoReminder: string@bool-completer
-  --DocumentExpirySettingsReminderDays: int # format: int32
-  --DocumentExpirySettingsReminderCount: int # format: int32
+  --ShowBuiltInFormFields: oneof<nothing, bool> # default: true
+  --AllowCustomFieldCreation: oneof<nothing, bool> # default: false
+  --ShowSharedCustomFields: oneof<nothing, bool> # default: false
+  --HideDecline: oneof<nothing, bool> # This option prevents signers to decline the document during the signing process.
+  --HideSave: oneof<nothing, bool> # This option prevents signers to save their changes during the signing process and continue signing later.
+  --DocumentExpirySettingsExpiryDateType: string@DocumentExpirySettingsExpiryDateType-completer # This property represents the type for the expiry date (format: Enumeration)
+  --DocumentExpirySettingsExpiryValue: int # This property is used to set the expiry value based on the expiry type (format: int32)
+  --DocumentExpirySettingsEnableDefaultExpiryAlert: oneof<nothing, bool> # This property will send the expiry alert email before the day of expiry for the pending signers.
+  --DocumentExpirySettingsEnableAutoReminder: oneof<nothing, bool> # When auto reminder is enabled, you can select how often to remind in terms of days and select the maximum number of reminders.
+  --DocumentExpirySettingsReminderDays: int # Remind in terms of days. (format: int32)
+  --DocumentExpirySettingsReminderCount: int # Number of reminder count. (format: int32)
   --CustomDomainSettingsDomainName: string
   --CustomDomainSettingsFromName: string
-  --SignatureFrameSettingsEnableSignatureFrame: string@bool-completer # default: false
-  --SignatureFrameSettingsShowRecipientName: string@bool-completer # default: false
-  --SignatureFrameSettingsShowRecipientEmail: string@bool-completer # default: false
-  --SignatureFrameSettingsShowTimeStamp: string@bool-completer # default: false
+  --SignatureFrameSettingsEnableSignatureFrame: oneof<nothing, bool> # default: false
+  --SignatureFrameSettingsShowRecipientName: oneof<nothing, bool> # default: false
+  --SignatureFrameSettingsShowRecipientEmail: oneof<nothing, bool> # default: false
+  --SignatureFrameSettingsShowTimeStamp: oneof<nothing, bool> # default: false
 ]: any -> record<brandId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -237,7 +236,7 @@ export def "brand-get GetBrand" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --brandId: string # The brand id.
+  --brandId: string
 ]: nothing -> record<brandId: string, brandLogo: string, brandName: string, backgroundColor: string, buttonColor: string, buttonTextColor: string, emailDisplayName: string, disclaimerTitle: string, disclaimerDescription: string, redirectUrl: string, isDefault: bool, canHideTagLine: bool, combineAuditTrail: bool, combineAttachments: bool, excludeAuditTrailFromEmail: bool, emailSignedDocument: string, documentTimeZone: string, showBuiltInFormFields: bool, allowCustomFieldCreation: bool, showSharedCustomFields: bool, hideDecline: bool, hideSave: bool, documentExpirySettings: record<expiryDateType: string, expiryValue: int, enableDefaultExpiryAlert: bool, enableAutoReminder: bool, reminderDays: int, reminderCount: int>, customDomainSettings: record<domainName: string, fromName: string>, isDomainVerified: bool, signatureFrameSettings: record<enableSignatureFrame: bool, showRecipientName: bool, showRecipientEmail: bool, showTimeStamp: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -261,7 +260,7 @@ export def "brand-delete DeleteBrand" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --brandId: string # brand Id.
+  --brandId: string
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -285,7 +284,7 @@ export def "brand-resetdefault ResetDefaultBrand" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --brandId: string # brand Id.
+  --brandId: string
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -355,7 +354,7 @@ export def "contacts-delete DeleteContacts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --id: string # The contact id.
+  --id: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -403,7 +402,7 @@ export def "contacts-update UpdateContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --id: string # The contactId.
+  --id: string
   email: string
   name: string
   --phoneNumber: record # shape: {countryCode?: string, number?: string}
@@ -434,7 +433,7 @@ export def "contacts-get GetContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --id: string # Contact Id.
+  --id: string
 ]: nothing -> record<id: string, name: string, email: string, companyName: string, jobTitle: string, phoneNumber: record<countryCode: string, number: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -463,7 +462,7 @@ export def "custom-field-create CreateCustomField" [
   --fieldDescription: string # nullable
   --fieldOrder: int # format: int32, default: 1
   --brandId: string # nullable
-  --sharedField: string@bool-completer
+  --sharedField: oneof<nothing, bool>
   --formField: record # shape: {fieldType: "Signature"|"Initial"|"CheckBox"|"TextBox"|"Label"|"DateSigned"|"RadioButton"|"Image"|"Attachment"|"EditableDate"|"Hyperlink"|"Dropdown"|"Title"|"Company"|"Formula"|"Drawing", width?: float, height?: float, isRequired?: bool, isReadOnly?: bool, value?: string, fontSize?: float, font?: "Helvetica"|"Courier"|"TimesRoman"|"NotoSans"|"Carlito", fontHexColor?: string, isBoldFont?: bool, isItalicFont?: bool, isUnderLineFont?: bool, lineHeight?: int, characterLimit?: int, placeHolder?: string, validationType?: "None"|"NumbersOnly"|"EmailAddress"|"Currency"|"CustomRegex", validationCustomRegex?: string, validationCustomRegexMessage?: string, dateFormat?: string, timeFormat?: string, imageInfo?: record, attachmentInfo?: record, editableDateFieldSettings?: record, hyperlinkText?: string, dataSyncTag?: string, dropdownOptions?: list, textAlign?: "Left"|"Center"|"Right", textDirection?: "LTR"|"RTL", characterSpacing?: float, idPrefix?: string, restrictIdPrefixChange?: bool, backgroundHexColor?: string, resizeOption?: "GrowVertically"|"GrowHorizontally"|"GrowBoth"|"Fixed"|"AutoResizeFont", isMasked?: bool}
 ]: any -> record<customFieldId: string, message: string> {
   let input = $in
@@ -491,12 +490,12 @@ export def "custom-field-edit EditCustomField" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --customFieldId: string # The custom field id.
+  --customFieldId: string
   --fieldName: string # nullable
   --fieldDescription: string # nullable
   --fieldOrder: int # format: int32, default: 1
   --brandId: string # nullable
-  --sharedField: string@bool-completer
+  --sharedField: oneof<nothing, bool>
   --formField: record # shape: {fieldType: "Signature"|"Initial"|"CheckBox"|"TextBox"|"Label"|"DateSigned"|"RadioButton"|"Image"|"Attachment"|"EditableDate"|"Hyperlink"|"Dropdown"|"Title"|"Company"|"Formula"|"Drawing", width?: float, height?: float, isRequired?: bool, isReadOnly?: bool, value?: string, fontSize?: float, font?: "Helvetica"|"Courier"|"TimesRoman"|"NotoSans"|"Carlito", fontHexColor?: string, isBoldFont?: bool, isItalicFont?: bool, isUnderLineFont?: bool, lineHeight?: int, characterLimit?: int, placeHolder?: string, validationType?: "None"|"NumbersOnly"|"EmailAddress"|"Currency"|"CustomRegex", validationCustomRegex?: string, validationCustomRegexMessage?: string, dateFormat?: string, timeFormat?: string, imageInfo?: record, attachmentInfo?: record, editableDateFieldSettings?: record, hyperlinkText?: string, dataSyncTag?: string, dropdownOptions?: list, textAlign?: "Left"|"Center"|"Right", textDirection?: "LTR"|"RTL", characterSpacing?: float, idPrefix?: string, restrictIdPrefixChange?: bool, backgroundHexColor?: string, resizeOption?: "GrowVertically"|"GrowHorizontally"|"GrowBoth"|"Fixed"|"AutoResizeFont", isMasked?: bool}
 ]: any -> record<customFieldId: string, message: string> {
   let input = $in
@@ -524,7 +523,7 @@ export def "custom-field-delete DeleteCustomField" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --customFieldId: string # The custom field id.
+  --customFieldId: string
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -547,7 +546,7 @@ export def "custom-field-list CustomFieldsList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --brandId: string # The brand id.
+  --brandId: string
 ]: nothing -> record<result: table<customFieldId: string, fieldName: string, fieldDescription: string, fieldOrder: int, brandId: string, sharedField: bool, formField: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -609,45 +608,46 @@ export def "document-send SendDocument" [
   --message: string # nullable
   --signers: list # nullable — item shape: {id?: string, name?: string, emailAddress?: string, privateMessage?: string, authenticationType?: "None"|"EmailOTP"|"AccessCode"|"SMSOTP"|"IdVerification", phoneNumber?: record, deliveryMode?: "Email"|"SMS"|"EmailAndSMS"|"WhatsApp", authenticationCode?: string, identityVerificationSettings?: record, signerOrder?: int, enableEmailOTP?: bool, signerType?: "Signer"|"Reviewer"|"InPersonSigner", hostEmail?: string, signerRole?: string, allowFieldConfiguration?: bool, formFields?: list, language?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20", locale?: "EN"|"NO"|"FR"|"DE"|"ES"|"BG"|"CS"|"DA"|"IT"|"NL"|"PL"|"PT"|"RO"|"RU"|"SV"|"Default"|"JA"|"TH"|"ZH_CN"|"ZH_TW"|"KO", signType?: "Single"|"Group", groupId?: string, recipientNotificationSettings?: record, authenticationRetryCount?: int, enableQes?: bool, authenticationSettings?: record}
   --cc: list # nullable — item shape: {emailAddress: string}
-  --enableSigningOrder: string@bool-completer # default: false
+  --enableSigningOrder: oneof<nothing, bool> # default: false
   --expiryDays: int # DEPRECATED, format: int32
   --expiryDateType: string@expiryDateType-completer # nullable
   --expiryValue: int # format: int64, default: 60
   --reminderSettings: record # shape: {enableAutoReminder?: bool, reminderDays?: int, reminderCount?: int}
-  --enableEmbeddedSigning: string@bool-completer # DEPRECATED, default: false
-  --disableEmails: string@bool-completer # default: false
-  --disableSMS: string@bool-completer # default: false
+  --enableEmbeddedSigning: oneof<nothing, bool> # DEPRECATED, default: false
+  --disableEmails: oneof<nothing, bool> # default: false
+  --disableSMS: oneof<nothing, bool> # default: false
   --brandId: string # nullable
-  --hideDocumentId: string@bool-completer # nullable, default: false
+  --hideDocumentId: oneof<nothing, bool> # nullable, default: false
   --labels: list # nullable
   --fileUrls: list # nullable
   --sendLinkValidTill: string # nullable, format: date-time
-  --useTextTags: string@bool-completer # default: false
+  --useTextTags: oneof<nothing, bool> # default: false
   --textTagDefinitions: list # nullable — item shape: {definitionId: string, type: "Signature"|"Initial"|"CheckBox"|"TextBox"|"Label"|"DateSigned"|"RadioButton"|"Image"|"Attachment"|"EditableDate"|"Hyperlink"|"Dropdown"|"Title"|"Company"|"Formula"|"Drawing", signerIndex: int, isRequired?: bool, placeholder?: string, fieldId?: string, font?: record, validation?: record, size?: record, dateFormat?: string, timeFormat?: string, radioGroupName?: string, groupName?: string, value?: string, dropdownOptions?: list, imageInfo?: record, hyperlinkText?: string, attachmentInfo?: record, backgroundHexColor?: string, isReadOnly?: bool, offset?: record, label?: string, tabIndex?: int, dataSyncTag?: string, textAlign?: "Left"|"Center"|"Right", textDirection?: "LTR"|"RTL", characterSpacing?: float, characterLimit?: int, formulaFieldSettings?: record, resizeOption?: "GrowVertically"|"GrowHorizontally"|"GrowBoth"|"Fixed"|"AutoResizeFont", collaborationSettings?: record, isMasked?: bool, conditionalRules?: list}
-  --enablePrintAndSign: string@bool-completer # default: false
-  --enableReassign: string@bool-completer # default: true
-  --disableExpiryAlert: string@bool-completer # nullable
+  --enablePrintAndSign: oneof<nothing, bool> # default: false
+  --enableReassign: oneof<nothing, bool> # default: true
+  --disableExpiryAlert: oneof<nothing, bool> # nullable
   --documentInfo: list # nullable — item shape: {language?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20", locale: "EN"|"NO"|"FR"|"DE"|"ES"|"BG"|"CS"|"DA"|"IT"|"NL"|"PL"|"PT"|"RO"|"RU"|"SV"|"Default"|"JA"|"TH"|"ZH_CN"|"ZH_TW"|"KO", title: string, description?: string}
   --onBehalfOf: string # nullable
-  --AutoDetectFields: string@bool-completer # default: false
+  --AutoDetectFields: oneof<nothing, bool> # default: false
   --documentDownloadOption: string@documentDownloadOption-completer # nullable
-  --isSandbox: string@bool-completer # nullable
+  --isSandbox: oneof<nothing, bool> # nullable
   --metaData: record # nullable
   --formGroups: list # nullable — item shape: {minimumCount?: int, maximumCount?: int, dataSyncTag?: string, groupNames: list, groupValidation: "Minimum"|"Maximum"|"Absolute"|"Range"}
   --recipientNotificationSettings: record # shape: {signatureRequest?: bool, declined?: bool, revoked?: bool, signed?: bool, completed?: bool, expired?: bool, reassigned?: bool, deleted?: bool, reminders?: bool, editRecipient?: bool, editDocument?: bool, viewed?: bool}
-  --enableAuditTrailLocalization: string@bool-completer # nullable
+  --enableAuditTrailLocalization: oneof<nothing, bool> # nullable
   --downloadFileName: string # nullable
   --scheduledSendTime: int # nullable, format: int64
-  --allowScheduledSend: string@bool-completer # default: false
+  --allowScheduledSend: oneof<nothing, bool> # default: false
   --allowedSignatureTypes: list # nullable
   --groupSignerSettings: record # shape: {enabled?: bool, allowedDirectories?: list}
-  --enableAllowSignEverywhere: string@bool-completer # nullable
+  --enableAllowSignEverywhere: oneof<nothing, bool> # nullable
+  --documentTimeZone: string # nullable
 ]: any -> record<documentId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/document/send")
-  let body = {files: $files, title: $title, message: $message, signers: $signers, cc: $cc, enableSigningOrder: $enableSigningOrder, expiryDays: $expiryDays, expiryDateType: $expiryDateType, expiryValue: $expiryValue, reminderSettings: $reminderSettings, enableEmbeddedSigning: $enableEmbeddedSigning, disableEmails: $disableEmails, disableSMS: $disableSMS, brandId: $brandId, hideDocumentId: $hideDocumentId, labels: $labels, fileUrls: $fileUrls, sendLinkValidTill: $sendLinkValidTill, useTextTags: $useTextTags, textTagDefinitions: $textTagDefinitions, enablePrintAndSign: $enablePrintAndSign, enableReassign: $enableReassign, disableExpiryAlert: $disableExpiryAlert, documentInfo: $documentInfo, onBehalfOf: $onBehalfOf, AutoDetectFields: $AutoDetectFields, documentDownloadOption: $documentDownloadOption, isSandbox: $isSandbox, metaData: $metaData, formGroups: $formGroups, recipientNotificationSettings: $recipientNotificationSettings, enableAuditTrailLocalization: $enableAuditTrailLocalization, downloadFileName: $downloadFileName, scheduledSendTime: $scheduledSendTime, allowScheduledSend: $allowScheduledSend, allowedSignatureTypes: $allowedSignatureTypes, groupSignerSettings: $groupSignerSettings, enableAllowSignEverywhere: $enableAllowSignEverywhere} | compact
+  let body = {files: $files, title: $title, message: $message, signers: $signers, cc: $cc, enableSigningOrder: $enableSigningOrder, expiryDays: $expiryDays, expiryDateType: $expiryDateType, expiryValue: $expiryValue, reminderSettings: $reminderSettings, enableEmbeddedSigning: $enableEmbeddedSigning, disableEmails: $disableEmails, disableSMS: $disableSMS, brandId: $brandId, hideDocumentId: $hideDocumentId, labels: $labels, fileUrls: $fileUrls, sendLinkValidTill: $sendLinkValidTill, useTextTags: $useTextTags, textTagDefinitions: $textTagDefinitions, enablePrintAndSign: $enablePrintAndSign, enableReassign: $enableReassign, disableExpiryAlert: $disableExpiryAlert, documentInfo: $documentInfo, onBehalfOf: $onBehalfOf, AutoDetectFields: $AutoDetectFields, documentDownloadOption: $documentDownloadOption, isSandbox: $isSandbox, metaData: $metaData, formGroups: $formGroups, recipientNotificationSettings: $recipientNotificationSettings, enableAuditTrailLocalization: $enableAuditTrailLocalization, downloadFileName: $downloadFileName, scheduledSendTime: $scheduledSendTime, allowScheduledSend: $allowScheduledSend, allowedSignatureTypes: $allowedSignatureTypes, groupSignerSettings: $groupSignerSettings, enableAllowSignEverywhere: $enableAllowSignEverywhere, documentTimeZone: $documentTimeZone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -667,10 +667,10 @@ export def "document-extend-expiry ExtendExpiry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --documentId: string # Document Id.
+  --documentId: string
   --newExpiryValue: string # nullable
   --newExpiryDate: string # DEPRECATED, nullable
-  --warnPrior: string@bool-completer # nullable
+  --warnPrior: oneof<nothing, bool> # nullable
   --onBehalfOf: string # nullable
 ]: any -> any {
   let input = $in
@@ -708,59 +708,60 @@ export def "document-create-embedded-request-url CreateEmbeddedRequestUrlDocumen
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --redirectUrl: string # nullable, format: uri
-  --showToolbar: string@bool-completer # default: false
+  --showToolbar: oneof<nothing, bool> # default: false
   --sendViewOption: string@sendViewOption-completer # default: PreparePage
-  --showSaveButton: string@bool-completer # default: true
+  --showSaveButton: oneof<nothing, bool> # default: true
   --locale: string@locale-completer # default: EN
-  --showSendButton: string@bool-completer # default: true
-  --showPreviewButton: string@bool-completer # default: true
-  --showNavigationButtons: string@bool-completer # default: true
-  --showTooltip: string@bool-completer # default: false
+  --showSendButton: oneof<nothing, bool> # default: true
+  --showPreviewButton: oneof<nothing, bool> # default: true
+  --showNavigationButtons: oneof<nothing, bool> # default: true
+  --showTooltip: oneof<nothing, bool> # default: false
   --embeddedSendLinkValidTill: string # nullable, format: date-time
   --files: list # nullable
   --title: string # nullable
   --message: string # nullable
   --signers: list # nullable — item shape: {id?: string, name?: string, emailAddress?: string, privateMessage?: string, authenticationType?: "None"|"EmailOTP"|"AccessCode"|"SMSOTP"|"IdVerification", phoneNumber?: record, deliveryMode?: "Email"|"SMS"|"EmailAndSMS"|"WhatsApp", authenticationCode?: string, identityVerificationSettings?: record, signerOrder?: int, enableEmailOTP?: bool, signerType?: "Signer"|"Reviewer"|"InPersonSigner", hostEmail?: string, signerRole?: string, allowFieldConfiguration?: bool, formFields?: list, language?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20", locale?: "EN"|"NO"|"FR"|"DE"|"ES"|"BG"|"CS"|"DA"|"IT"|"NL"|"PL"|"PT"|"RO"|"RU"|"SV"|"Default"|"JA"|"TH"|"ZH_CN"|"ZH_TW"|"KO", signType?: "Single"|"Group", groupId?: string, recipientNotificationSettings?: record, authenticationRetryCount?: int, enableQes?: bool, authenticationSettings?: record}
   --cc: list # nullable — item shape: {emailAddress: string}
-  --enableSigningOrder: string@bool-completer # default: false
+  --enableSigningOrder: oneof<nothing, bool> # default: false
   --expiryDays: int # DEPRECATED, format: int32
   --expiryDateType: string@expiryDateType-completer # nullable
   --expiryValue: int # format: int64, default: 60
   --reminderSettings: record # shape: {enableAutoReminder?: bool, reminderDays?: int, reminderCount?: int}
-  --enableEmbeddedSigning: string@bool-completer # DEPRECATED, default: false
-  --disableEmails: string@bool-completer # default: false
-  --disableSMS: string@bool-completer # default: false
+  --enableEmbeddedSigning: oneof<nothing, bool> # DEPRECATED, default: false
+  --disableEmails: oneof<nothing, bool> # default: false
+  --disableSMS: oneof<nothing, bool> # default: false
   --brandId: string # nullable
-  --hideDocumentId: string@bool-completer # nullable, default: false
+  --hideDocumentId: oneof<nothing, bool> # nullable, default: false
   --labels: list # nullable
   --fileUrls: list # nullable
   --sendLinkValidTill: string # nullable, format: date-time
-  --useTextTags: string@bool-completer # default: false
+  --useTextTags: oneof<nothing, bool> # default: false
   --textTagDefinitions: list # nullable — item shape: {definitionId: string, type: "Signature"|"Initial"|"CheckBox"|"TextBox"|"Label"|"DateSigned"|"RadioButton"|"Image"|"Attachment"|"EditableDate"|"Hyperlink"|"Dropdown"|"Title"|"Company"|"Formula"|"Drawing", signerIndex: int, isRequired?: bool, placeholder?: string, fieldId?: string, font?: record, validation?: record, size?: record, dateFormat?: string, timeFormat?: string, radioGroupName?: string, groupName?: string, value?: string, dropdownOptions?: list, imageInfo?: record, hyperlinkText?: string, attachmentInfo?: record, backgroundHexColor?: string, isReadOnly?: bool, offset?: record, label?: string, tabIndex?: int, dataSyncTag?: string, textAlign?: "Left"|"Center"|"Right", textDirection?: "LTR"|"RTL", characterSpacing?: float, characterLimit?: int, formulaFieldSettings?: record, resizeOption?: "GrowVertically"|"GrowHorizontally"|"GrowBoth"|"Fixed"|"AutoResizeFont", collaborationSettings?: record, isMasked?: bool, conditionalRules?: list}
-  --enablePrintAndSign: string@bool-completer # default: false
-  --enableReassign: string@bool-completer # default: true
-  --disableExpiryAlert: string@bool-completer # nullable
+  --enablePrintAndSign: oneof<nothing, bool> # default: false
+  --enableReassign: oneof<nothing, bool> # default: true
+  --disableExpiryAlert: oneof<nothing, bool> # nullable
   --documentInfo: list # nullable — item shape: {language?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20", locale: "EN"|"NO"|"FR"|"DE"|"ES"|"BG"|"CS"|"DA"|"IT"|"NL"|"PL"|"PT"|"RO"|"RU"|"SV"|"Default"|"JA"|"TH"|"ZH_CN"|"ZH_TW"|"KO", title: string, description?: string}
   --onBehalfOf: string # nullable
-  --AutoDetectFields: string@bool-completer # default: false
+  --AutoDetectFields: oneof<nothing, bool> # default: false
   --documentDownloadOption: string@documentDownloadOption-completer # nullable
-  --isSandbox: string@bool-completer # nullable
+  --isSandbox: oneof<nothing, bool> # nullable
   --metaData: record # nullable
   --formGroups: list # nullable — item shape: {minimumCount?: int, maximumCount?: int, dataSyncTag?: string, groupNames: list, groupValidation: "Minimum"|"Maximum"|"Absolute"|"Range"}
   --recipientNotificationSettings: record # shape: {signatureRequest?: bool, declined?: bool, revoked?: bool, signed?: bool, completed?: bool, expired?: bool, reassigned?: bool, deleted?: bool, reminders?: bool, editRecipient?: bool, editDocument?: bool, viewed?: bool}
-  --enableAuditTrailLocalization: string@bool-completer # nullable
+  --enableAuditTrailLocalization: oneof<nothing, bool> # nullable
   --downloadFileName: string # nullable
   --scheduledSendTime: int # nullable, format: int64
-  --allowScheduledSend: string@bool-completer # default: false
+  --allowScheduledSend: oneof<nothing, bool> # default: false
   --allowedSignatureTypes: list # nullable
   --groupSignerSettings: record # shape: {enabled?: bool, allowedDirectories?: list}
-  --enableAllowSignEverywhere: string@bool-completer # nullable
+  --enableAllowSignEverywhere: oneof<nothing, bool> # nullable
+  --documentTimeZone: string # nullable
 ]: any -> record<documentId: string, sendUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/document/createEmbeddedRequestUrl")
-  let body = {redirectUrl: $redirectUrl, showToolbar: $showToolbar, sendViewOption: $sendViewOption, showSaveButton: $showSaveButton, locale: $locale, showSendButton: $showSendButton, showPreviewButton: $showPreviewButton, showNavigationButtons: $showNavigationButtons, showTooltip: $showTooltip, embeddedSendLinkValidTill: $embeddedSendLinkValidTill, files: $files, title: $title, message: $message, signers: $signers, cc: $cc, enableSigningOrder: $enableSigningOrder, expiryDays: $expiryDays, expiryDateType: $expiryDateType, expiryValue: $expiryValue, reminderSettings: $reminderSettings, enableEmbeddedSigning: $enableEmbeddedSigning, disableEmails: $disableEmails, disableSMS: $disableSMS, brandId: $brandId, hideDocumentId: $hideDocumentId, labels: $labels, fileUrls: $fileUrls, sendLinkValidTill: $sendLinkValidTill, useTextTags: $useTextTags, textTagDefinitions: $textTagDefinitions, enablePrintAndSign: $enablePrintAndSign, enableReassign: $enableReassign, disableExpiryAlert: $disableExpiryAlert, documentInfo: $documentInfo, onBehalfOf: $onBehalfOf, AutoDetectFields: $AutoDetectFields, documentDownloadOption: $documentDownloadOption, isSandbox: $isSandbox, metaData: $metaData, formGroups: $formGroups, recipientNotificationSettings: $recipientNotificationSettings, enableAuditTrailLocalization: $enableAuditTrailLocalization, downloadFileName: $downloadFileName, scheduledSendTime: $scheduledSendTime, allowScheduledSend: $allowScheduledSend, allowedSignatureTypes: $allowedSignatureTypes, groupSignerSettings: $groupSignerSettings, enableAllowSignEverywhere: $enableAllowSignEverywhere} | compact
+  let body = {redirectUrl: $redirectUrl, showToolbar: $showToolbar, sendViewOption: $sendViewOption, showSaveButton: $showSaveButton, locale: $locale, showSendButton: $showSendButton, showPreviewButton: $showPreviewButton, showNavigationButtons: $showNavigationButtons, showTooltip: $showTooltip, embeddedSendLinkValidTill: $embeddedSendLinkValidTill, files: $files, title: $title, message: $message, signers: $signers, cc: $cc, enableSigningOrder: $enableSigningOrder, expiryDays: $expiryDays, expiryDateType: $expiryDateType, expiryValue: $expiryValue, reminderSettings: $reminderSettings, enableEmbeddedSigning: $enableEmbeddedSigning, disableEmails: $disableEmails, disableSMS: $disableSMS, brandId: $brandId, hideDocumentId: $hideDocumentId, labels: $labels, fileUrls: $fileUrls, sendLinkValidTill: $sendLinkValidTill, useTextTags: $useTextTags, textTagDefinitions: $textTagDefinitions, enablePrintAndSign: $enablePrintAndSign, enableReassign: $enableReassign, disableExpiryAlert: $disableExpiryAlert, documentInfo: $documentInfo, onBehalfOf: $onBehalfOf, AutoDetectFields: $AutoDetectFields, documentDownloadOption: $documentDownloadOption, isSandbox: $isSandbox, metaData: $metaData, formGroups: $formGroups, recipientNotificationSettings: $recipientNotificationSettings, enableAuditTrailLocalization: $enableAuditTrailLocalization, downloadFileName: $downloadFileName, scheduledSendTime: $scheduledSendTime, allowScheduledSend: $allowScheduledSend, allowedSignatureTypes: $allowedSignatureTypes, groupSignerSettings: $groupSignerSettings, enableAllowSignEverywhere: $enableAllowSignEverywhere, documentTimeZone: $documentTimeZone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -779,14 +780,14 @@ export def "document-create-embedded-edit-url createEmbeddedEditUrl" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --documentId: string # The document id.
+  --documentId: string
   --redirectUrl: string # nullable, format: uri
-  --showToolbar: string@bool-completer # default: false
+  --showToolbar: oneof<nothing, bool> # default: false
   --sendViewOption: string@sendViewOption-completer # default: PreparePage
   --locale: string@locale-completer # default: EN
-  --showSendButton: string@bool-completer # default: true
-  --showPreviewButton: string@bool-completer # default: true
-  --showNavigationButtons: string@bool-completer # default: true
+  --showSendButton: oneof<nothing, bool> # default: true
+  --showPreviewButton: oneof<nothing, bool> # default: true
+  --showNavigationButtons: oneof<nothing, bool> # default: true
   --linkValidTill: string # nullable, format: date-time
   --onBehalfOf: string # nullable
 ]: any -> record<editUrl: string> {
@@ -918,8 +919,8 @@ export def "document-properties GetDocumentProperties" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --documentId: string # Document Id.
-]: nothing -> record<documentId: string, brandId: string, messageTitle: string, documentDescription: string, status: string, files: table<id: string, documentName: string, order: int, pageCount: int, templateName: string, templateId: string>, senderDetail: record<name: string, privateMessage: string, emailAddress: string, isViewed: bool>, signerDetails: table<id: string, signerName: string, signerRole: string, signerEmail: string, status: string, enableAccessCode: bool, isAuthenticationFailed: bool, enableEmailOTP: bool, authenticationType: string, isDeliveryFailed: bool, isViewed: bool, order: int, signerType: string, hostEmail: string, hostName: string, isReassigned: bool, privateMessage: string, allowFieldConfiguration: bool, formFields: list, language: int, locale: string, signType: string, groupId: string, phoneNumber: record, idVerification: record, recipientNotificationSettings: record, authenticationRetryCount: int, enableQes: bool, deliveryMode: string, authenticationSettings: record, groupSigners: list>, formGroups: table<minimumCount: int, maximumCount: int, dataSyncTag: string, groupNames: list, groupValidation: string>, commonFields: table<id: string, formFieldId: string, type: string, value: string, font: string, isRequired: bool, isReadOnly: bool, lineHeight: float, fontSize: float, fontColor: string, isUnderline: bool, isItalic: bool, isBold: bool, groupName: string, label: string, placeholder: string, validationtype: string, validationCustomRegex: string, validationCustomRegexMessage: string, dateFormat: string, timeFormat: string, imageInfo: record, attachmentInfo: record, fileInfo: record, editableDateFieldSettings: record, hyperlinkText: string, conditionalRules: list, bounds: record, pageNumber: int, dataSyncTag: string, dropdownOptions: list, textAlign: string, textDirection: string, characterSpacing: float, backgroundHexColor: string, tabIndex: int, formulaFieldSettings: record, resizeOption: string, allowEditFormField: bool, allowDeleteFormField: bool, collaborationSettings: record, hidden: bool, isMasked: bool>, behalfOf: record<name: string, emailAddress: string>, ccDetails: table<emailAddress: string, isViewed: bool>, reminderSettings: record<enableAutoReminder: bool, reminderDays: int, reminderCount: int>, reassign: table<signerEmail: string, order: int, message: string>, documentHistory: table<id: string, name: string, email: string, fromName: string, fromEmail: string, fromPhoneNumber: string, toName: string, toEmail: string, toPhoneNumber: string, ipaddress: string, action: string, timestamp: int, recipientChangeLog: record, documentChangeLog: record, fieldChangeLog: record>, activityBy: string, activityDate: int, activityAction: string, createdDate: int, expiryDays: int, expiryDate: int, enableSigningOrder: bool, isDeleted: bool, revokeMessage: string, declineMessage: string, applicationId: string, labels: list<string>, disableEmails: bool, enablePrintAndSign: bool, enableReassign: bool, disableExpiryAlert: bool, hideDocumentId: bool, expiryDateType: string, expiryValue: int, documentDownloadOption: string, metaData: record, recipientNotificationSettings: record<signatureRequest: bool, declined: bool, revoked: bool, signed: bool, completed: bool, expired: bool, reassigned: bool, deleted: bool, reminders: bool, editRecipient: bool, editDocument: bool, viewed: bool>, enableAuditTrailLocalization: bool, downloadFileName: string, scheduledSendTime: int, allowedSignatureTypes: list<string>, groupSignerSettings: record<enabled: bool, allowedDirectories: list<string>>, inEditingMode: bool, displayStatus: string, enableAllowSignEverywhere: bool, isCombinedAudit: bool, isCombinedAttachment: bool> {
+  --documentId: string
+]: nothing -> record<documentId: string, brandId: string, messageTitle: string, documentDescription: string, status: string, files: table<id: string, documentName: string, order: int, pageCount: int, templateName: string, templateId: string>, senderDetail: record<name: string, privateMessage: string, emailAddress: string, isViewed: bool>, signerDetails: table<id: string, signerName: string, signerRole: string, signerEmail: string, status: string, enableAccessCode: bool, isAuthenticationFailed: bool, enableEmailOTP: bool, authenticationType: string, isDeliveryFailed: bool, isViewed: bool, order: int, signerType: string, hostEmail: string, hostName: string, isReassigned: bool, privateMessage: string, allowFieldConfiguration: bool, formFields: list, language: int, locale: string, signType: string, groupId: string, phoneNumber: record, idVerification: record, recipientNotificationSettings: record, authenticationRetryCount: int, enableQes: bool, deliveryMode: string, authenticationSettings: record, groupSigners: list>, formGroups: table<minimumCount: int, maximumCount: int, dataSyncTag: string, groupNames: list, groupValidation: string>, commonFields: table<id: string, formFieldId: string, type: string, value: string, font: string, isRequired: bool, isReadOnly: bool, lineHeight: float, fontSize: float, fontColor: string, isUnderline: bool, isItalic: bool, isBold: bool, groupName: string, label: string, placeholder: string, validationtype: string, validationCustomRegex: string, validationCustomRegexMessage: string, dateFormat: string, timeFormat: string, imageInfo: record, attachmentInfo: record, fileInfo: record, editableDateFieldSettings: record, hyperlinkText: string, conditionalRules: list, bounds: record, pageNumber: int, dataSyncTag: string, dropdownOptions: list, textAlign: string, textDirection: string, characterSpacing: float, backgroundHexColor: string, tabIndex: int, formulaFieldSettings: record, resizeOption: string, allowEditFormField: bool, allowDeleteFormField: bool, collaborationSettings: record, hidden: bool, isMasked: bool>, behalfOf: record<name: string, emailAddress: string>, ccDetails: table<emailAddress: string, isViewed: bool>, reminderSettings: record<enableAutoReminder: bool, reminderDays: int, reminderCount: int>, reassign: table<signerEmail: string, order: int, message: string>, documentHistory: table<id: string, name: string, email: string, fromName: string, fromEmail: string, fromPhoneNumber: string, toName: string, toEmail: string, toPhoneNumber: string, ipaddress: string, action: string, timestamp: int, recipientChangeLog: record, documentChangeLog: record, fieldChangeLog: record>, activityBy: string, activityDate: int, activityAction: string, createdDate: int, expiryDays: int, expiryDate: int, enableSigningOrder: bool, isDeleted: bool, revokeMessage: string, declineMessage: string, applicationId: string, labels: list<string>, disableEmails: bool, enablePrintAndSign: bool, enableReassign: bool, disableExpiryAlert: bool, hideDocumentId: bool, expiryDateType: string, expiryValue: int, documentDownloadOption: string, metaData: record, recipientNotificationSettings: record<signatureRequest: bool, declined: bool, revoked: bool, signed: bool, completed: bool, expired: bool, reassigned: bool, deleted: bool, reminders: bool, editRecipient: bool, editDocument: bool, viewed: bool>, enableAuditTrailLocalization: bool, downloadFileName: string, scheduledSendTime: int, allowedSignatureTypes: list<string>, groupSignerSettings: record<enabled: bool, allowedDirectories: list<string>>, inEditingMode: bool, displayStatus: string, enableAllowSignEverywhere: bool, isCombinedAudit: bool, isCombinedAttachment: bool, documentTimeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "documentId" $documentId "scalar")] | flatten | str join "&"
@@ -942,8 +943,8 @@ export def "document-download DownloadDocument" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --documentId: string # Document Id.
-  --onBehalfOf: string # The on behalfof email address.
+  --documentId: string
+  --onBehalfOf: string
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -967,9 +968,9 @@ export def "document-download-attachment DownloadAttachment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --documentId: string # Document Id.
-  --attachmentId: string # Attachment Id(Get attachment ID from Properties API).
-  --onBehalfOf: string # The on behalfof email address.
+  --documentId: string
+  --attachmentId: string
+  --onBehalfOf: string
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -993,8 +994,8 @@ export def "document-download-audit-log DownloadAuditLog" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --documentId: string # Document Id.
-  --onBehalfOf: string # The on behalfof email address.
+  --documentId: string
+  --onBehalfOf: string
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1017,7 +1018,7 @@ export def "document-revoke RevokeDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --documentId: string # Document Id.
+  --documentId: string
   message: string
   --onBehalfOf: string # nullable
 ]: any -> any {
@@ -1045,8 +1046,8 @@ export def "document-delete DeleteDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --documentId: string # Document Id.
-  --deletePermanently: string@bool-completer # Delete Permanently. (default: false)
+  --documentId: string
+  --deletePermanently: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1070,8 +1071,8 @@ export def "document-remind RemindDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --documentId: string # Document Id.
-  --receiverEmails: list # Signer emails.
+  --documentId: string
+  --receiverEmails: list
   --message: string # nullable
   --onBehalfOf: string # nullable
   --reminderPhoneNumbers: list # nullable — item shape: {countryCode?: string, number?: string}
@@ -1134,7 +1135,7 @@ export def "document-change-recipient ChangeRecipient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --documentId: string # The documentID details.
+  --documentId: string
   newSignerName: string
   reason: string
   --order: int # nullable, format: int32
@@ -1283,7 +1284,7 @@ export def "document-add-authentication AddAuthentication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --documentId: string # The DocumentId.
+  --documentId: string
   --emailId: string # nullable
   --order: int # nullable, format: int32
   --accessCode: string # nullable
@@ -1319,7 +1320,7 @@ export def "document-prefill-fields PrefillFields" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --documentId: string # The DocumentId.
+  --documentId: string
   --body-fields: list # item shape: {id: string, value: string}
   --onBehalfOf: string # nullable
 ]: any -> any {
@@ -1347,7 +1348,7 @@ export def "document-draft-send DraftSend" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --documentId: string # The ID of the document to be sent.
+  --documentId: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1379,26 +1380,26 @@ export def "document-edit EditDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --documentId: string # Document Id.
+  --documentId: string
   --files: list # nullable — item shape: {editAction: "Add"|"Update"|"Remove", file?: string, fileUrl?: string, id?: string}
   --title: string # nullable
   --message: string # nullable
   --signers: list # nullable — item shape: {editAction: "Add"|"Update"|"Remove", id?: string, name?: string, emailAddress?: string, privateMessage?: string, authenticationType?: "None"|"EmailOTP"|"AccessCode"|"SMSOTP"|"IdVerification", phoneNumber?: record, deliveryMode?: "Email"|"SMS"|"EmailAndSMS"|"WhatsApp", authenticationCode?: string, identityVerificationSettings?: record, signerOrder?: int, enableEmailOTP?: bool, signerType?: "Signer"|"Reviewer"|"InPersonSigner", hostEmail?: string, signerRole?: string, allowFieldConfiguration?: bool, formFields?: list, language?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20", locale?: "EN"|"NO"|"FR"|"DE"|"ES"|"BG"|"CS"|"DA"|"IT"|"NL"|"PL"|"PT"|"RO"|"RU"|"SV"|"Default"|"JA"|"TH"|"ZH_CN"|"ZH_TW"|"KO", signType?: "Single"|"Group", groupId?: string, recipientNotificationSettings?: record, authenticationRetryCount?: int, enableQes?: bool, authenticationSettings?: record}
   --cc: list # nullable — item shape: {emailAddress: string}
-  --enableSigningOrder: string@bool-completer # nullable
-  --enableAuditTrailLocalization: string@bool-completer # nullable
+  --enableSigningOrder: oneof<nothing, bool> # nullable
+  --enableAuditTrailLocalization: oneof<nothing, bool> # nullable
   --expiryDateType: string@expiryDateType-completer # nullable
   --expiryValue: int # nullable, format: int64
   --reminderSettings: record # shape: {enableAutoReminder?: bool, reminderDays?: int, reminderCount?: int}
-  --disableEmails: string@bool-completer # nullable
-  --disableSMS: string@bool-completer # nullable
+  --disableEmails: oneof<nothing, bool> # nullable
+  --disableSMS: oneof<nothing, bool> # nullable
   --brandId: string # nullable
-  --hideDocumentId: string@bool-completer # nullable
+  --hideDocumentId: oneof<nothing, bool> # nullable
   --labels: list # nullable
-  --disableExpiryAlert: string@bool-completer # nullable
-  --enablePrintAndSign: string@bool-completer # nullable
-  --enableReassign: string@bool-completer # nullable
-  --useTextTags: string@bool-completer
+  --disableExpiryAlert: oneof<nothing, bool> # nullable
+  --enablePrintAndSign: oneof<nothing, bool> # nullable
+  --enableReassign: oneof<nothing, bool> # nullable
+  --useTextTags: oneof<nothing, bool>
   --textTagDefinitions: list # nullable — item shape: {definitionId: string, type: "Signature"|"Initial"|"CheckBox"|"TextBox"|"Label"|"DateSigned"|"RadioButton"|"Image"|"Attachment"|"EditableDate"|"Hyperlink"|"Dropdown"|"Title"|"Company"|"Formula"|"Drawing", signerIndex: int, isRequired?: bool, placeholder?: string, fieldId?: string, font?: record, validation?: record, size?: record, dateFormat?: string, timeFormat?: string, radioGroupName?: string, groupName?: string, value?: string, dropdownOptions?: list, imageInfo?: record, hyperlinkText?: string, attachmentInfo?: record, backgroundHexColor?: string, isReadOnly?: bool, offset?: record, label?: string, tabIndex?: int, dataSyncTag?: string, textAlign?: "Left"|"Center"|"Right", textDirection?: "LTR"|"RTL", characterSpacing?: float, characterLimit?: int, formulaFieldSettings?: record, resizeOption?: "GrowVertically"|"GrowHorizontally"|"GrowBoth"|"Fixed"|"AutoResizeFont", collaborationSettings?: record, isMasked?: bool, conditionalRules?: list}
   --documentInfo: list # nullable — item shape: {language?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20", locale: "EN"|"NO"|"FR"|"DE"|"ES"|"BG"|"CS"|"DA"|"IT"|"NL"|"PL"|"PT"|"RO"|"RU"|"SV"|"Default"|"JA"|"TH"|"ZH_CN"|"ZH_TW"|"KO", title: string, description?: string}
   --onBehalfOf: string # nullable
@@ -1410,14 +1411,15 @@ export def "document-edit EditDocument" [
   --scheduledSendTime: int # nullable, format: int64
   --allowedSignatureTypes: list # nullable
   --groupSignerSettings: record # shape: {enabled?: bool, allowedDirectories?: list}
-  --enableAllowSignEverywhere: string@bool-completer # nullable
+  --enableAllowSignEverywhere: oneof<nothing, bool> # nullable
+  --documentTimeZone: string # nullable
 ]: any -> record<status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "documentId" $documentId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/document/edit" $qp)
-  let body = {files: $files, title: $title, message: $message, signers: $signers, cc: $cc, enableSigningOrder: $enableSigningOrder, enableAuditTrailLocalization: $enableAuditTrailLocalization, expiryDateType: $expiryDateType, expiryValue: $expiryValue, reminderSettings: $reminderSettings, disableEmails: $disableEmails, disableSMS: $disableSMS, brandId: $brandId, hideDocumentId: $hideDocumentId, labels: $labels, disableExpiryAlert: $disableExpiryAlert, enablePrintAndSign: $enablePrintAndSign, enableReassign: $enableReassign, useTextTags: $useTextTags, textTagDefinitions: $textTagDefinitions, documentInfo: $documentInfo, onBehalfOf: $onBehalfOf, documentDownloadOption: $documentDownloadOption, metaData: $metaData, recipientNotificationSettings: $recipientNotificationSettings, formGroups: $formGroups, downloadFileName: $downloadFileName, scheduledSendTime: $scheduledSendTime, allowedSignatureTypes: $allowedSignatureTypes, groupSignerSettings: $groupSignerSettings, enableAllowSignEverywhere: $enableAllowSignEverywhere} | compact
+  let body = {files: $files, title: $title, message: $message, signers: $signers, cc: $cc, enableSigningOrder: $enableSigningOrder, enableAuditTrailLocalization: $enableAuditTrailLocalization, expiryDateType: $expiryDateType, expiryValue: $expiryValue, reminderSettings: $reminderSettings, disableEmails: $disableEmails, disableSMS: $disableSMS, brandId: $brandId, hideDocumentId: $hideDocumentId, labels: $labels, disableExpiryAlert: $disableExpiryAlert, enablePrintAndSign: $enablePrintAndSign, enableReassign: $enableReassign, useTextTags: $useTextTags, textTagDefinitions: $textTagDefinitions, documentInfo: $documentInfo, onBehalfOf: $onBehalfOf, documentDownloadOption: $documentDownloadOption, metaData: $metaData, recipientNotificationSettings: $recipientNotificationSettings, formGroups: $formGroups, downloadFileName: $downloadFileName, scheduledSendTime: $scheduledSendTime, allowedSignatureTypes: $allowedSignatureTypes, groupSignerSettings: $groupSignerSettings, enableAllowSignEverywhere: $enableAllowSignEverywhere, documentTimeZone: $documentTimeZone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1436,8 +1438,8 @@ export def "document-cancel-editing cancelEditing" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --documentId: string # The document id.
-  --onBehalfOf: string # The onbehalfof email id.
+  --documentId: string
+  --onBehalfOf: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1516,7 +1518,7 @@ export def "contact-groups-update UpdateGroupContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --groupId: string # The group contact ID.
+  --groupId: string
   --groupName: string # nullable
   --directories: list # nullable
   --contacts: list # nullable — item shape: {name: string, email: string}
@@ -1545,7 +1547,7 @@ export def "contact-groups-get GetGroupContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --groupId: string # Group Contact Id.
+  --groupId: string
 ]: nothing -> record<groupName: string, groupId: string, contacts: table<name: string, email: string>, creator: record<userId: string, createdBy: string>, directories: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1568,7 +1570,7 @@ export def "contact-groups-delete DeleteGroupContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --groupId: string # The group contact id.
+  --groupId: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1591,7 +1593,7 @@ export def "identity-verification-report Report" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --documentId: string # The document id. (format: uuid)
+  --documentId: string # format: uuid
   --emailId: string # nullable
   --countryCode: string # nullable
   --phoneNumber: string # nullable
@@ -1623,7 +1625,7 @@ export def "identity-verification-image Image" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --documentId: string # The document id. (format: uuid)
+  --documentId: string # format: uuid
   --emailId: string # nullable
   --countryCode: string # nullable
   --phoneNumber: string # nullable
@@ -1655,7 +1657,7 @@ export def "identity-verification-create-embedded-verification-url Create-Embedd
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --documentId: string # The document id. (format: uuid)
+  --documentId: string # format: uuid
   --emailId: string # nullable
   --countryCode: string # nullable
   --phoneNumber: string # nullable
@@ -1741,7 +1743,7 @@ export def "sender-identities-update UpdateSenderIdentities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --email: string # The email address.
+  --email: string
   --name: string # nullable
   --notificationSettings: record # shape: {viewed?: bool, sent?: bool, deliveryFailed?: bool, declined?: bool, revoked?: bool, reassigned?: bool, completed?: bool, signed?: bool, expired?: bool, authenticationFailed?: bool, reminders?: bool, attachSignedDocument?: bool}
   --redirectUrl: string # nullable, format: uri
@@ -1772,7 +1774,7 @@ export def "sender-identities-delete DeleteSenderIdentities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --email: string # The email address.
+  --email: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1795,7 +1797,7 @@ export def "sender-identities-resend-invitation ResendInvitationSenderIdentities
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --email: string # The email address.
+  --email: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1818,7 +1820,7 @@ export def "sender-identities-rerequest ReRequestSenderIdentities" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --email: string # The email address.
+  --email: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1867,8 +1869,8 @@ export def "sender-identities-properties GetSenderIdentityProperties" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --id: string # The sender identity id.
-  --email: string # The sender identity email.
+  --id: string
+  --email: string
 ]: nothing -> record<id: string, name: string, email: string, status: string, createdBy: string, approvedDate: string, notificationSettings: record<viewed: bool, sent: bool, deliveryFailed: bool, declined: bool, revoked: bool, reassigned: bool, completed: bool, signed: bool, expired: bool, authenticationFailed: bool, reminders: bool, attachSignedDocument: bool>, brandId: string, redirectUrl: string, metaData: record, locale: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1891,7 +1893,7 @@ export def "teams-get GetTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --teamId: string # Team Id.
+  --teamId: string
 ]: nothing -> record<teamId: string, teamName: string, users: table<userId: string, email: string, firstName: string, lastName: string, userRole: string, userStatus: string>, createdDate: int, modifiedDate: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2038,19 +2040,19 @@ export def "template-create CreateTemplate" [
   --files: list # nullable
   --fileUrls: list # nullable
   --roles: list # nullable — item shape: {name?: string, index: int, defaultSignerName?: string, defaultSignerEmail?: string, signerOrder?: int, signerType?: "Signer"|"Reviewer"|"InPersonSigner", hostEmail?: string, language?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20", locale?: "EN"|"NO"|"FR"|"DE"|"ES"|"BG"|"CS"|"DA"|"IT"|"NL"|"PL"|"PT"|"RO"|"RU"|"SV"|"Default"|"JA"|"TH"|"ZH_CN"|"ZH_TW"|"KO", signType?: "Single"|"Group", defaultGroupId?: string, imposeAuthentication?: "None"|"EmailOTP"|"AccessCode"|"SMSOTP"|"IdVerification", phoneNumber?: record, deliveryMode?: "Email"|"SMS"|"EmailAndSMS"|"WhatsApp", allowFieldConfiguration?: bool, formFields?: list, allowRoleEdit?: bool, allowRoleDelete?: bool, recipientNotificationSettings?: record, enableQes?: bool}
-  --allowModifyFiles: string@bool-completer # default: true
+  --allowModifyFiles: oneof<nothing, bool> # default: true
   --cc: list # nullable — item shape: {emailAddress: string}
   --brandId: string # nullable
-  --allowMessageEditing: string@bool-completer # default: true
-  --allowNewRoles: string@bool-completer # default: true
-  --allowNewFiles: string@bool-completer # default: true
-  --enableReassign: string@bool-completer # default: true
-  --enablePrintAndSign: string@bool-completer # default: false
-  --enableSigningOrder: string@bool-completer # default: false
+  --allowMessageEditing: oneof<nothing, bool> # default: true
+  --allowNewRoles: oneof<nothing, bool> # default: true
+  --allowNewFiles: oneof<nothing, bool> # default: true
+  --enableReassign: oneof<nothing, bool> # default: true
+  --enablePrintAndSign: oneof<nothing, bool> # default: false
+  --enableSigningOrder: oneof<nothing, bool> # default: false
   --documentInfo: list # nullable — item shape: {language?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20", locale: "EN"|"NO"|"FR"|"DE"|"ES"|"BG"|"CS"|"DA"|"IT"|"NL"|"PL"|"PT"|"RO"|"RU"|"SV"|"Default"|"JA"|"TH"|"ZH_CN"|"ZH_TW"|"KO", title: string, description?: string}
-  --useTextTags: string@bool-completer # default: false
+  --useTextTags: oneof<nothing, bool> # default: false
   --textTagDefinitions: list # nullable — item shape: {definitionId: string, type: "Signature"|"Initial"|"CheckBox"|"TextBox"|"Label"|"DateSigned"|"RadioButton"|"Image"|"Attachment"|"EditableDate"|"Hyperlink"|"Dropdown"|"Title"|"Company"|"Formula"|"Drawing", signerIndex: int, isRequired?: bool, placeholder?: string, fieldId?: string, font?: record, validation?: record, size?: record, dateFormat?: string, timeFormat?: string, radioGroupName?: string, groupName?: string, value?: string, dropdownOptions?: list, imageInfo?: record, hyperlinkText?: string, attachmentInfo?: record, backgroundHexColor?: string, isReadOnly?: bool, offset?: record, label?: string, tabIndex?: int, dataSyncTag?: string, textAlign?: "Left"|"Center"|"Right", textDirection?: "LTR"|"RTL", characterSpacing?: float, characterLimit?: int, formulaFieldSettings?: record, resizeOption?: "GrowVertically"|"GrowHorizontally"|"GrowBoth"|"Fixed"|"AutoResizeFont", collaborationSettings?: record, isMasked?: bool, conditionalRules?: list}
-  --autoDetectFields: string@bool-completer # default: false
+  --autoDetectFields: oneof<nothing, bool> # default: false
   --onBehalfOf: string # nullable
   --labels: list # nullable
   --templateLabels: list # nullable
@@ -2059,13 +2061,14 @@ export def "template-create CreateTemplate" [
   --allowedSignatureTypes: list # nullable
   --formFieldPermission: record # shape: {canAdd?: bool, canModify?: bool, canModifyDefaultValue?: bool}
   --groupSignerSettings: record # shape: {enabled?: bool, allowedDirectories?: list}
-  --enableAllowSignEverywhere: string@bool-completer # nullable
+  --enableAllowSignEverywhere: oneof<nothing, bool> # nullable
+  --documentTimeZone: string # nullable
 ]: any -> record<templateId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/template/create")
-  let body = {title: $title, description: $description, documentTitle: $documentTitle, documentMessage: $documentMessage, files: $files, fileUrls: $fileUrls, roles: $roles, allowModifyFiles: $allowModifyFiles, cc: $cc, brandId: $brandId, allowMessageEditing: $allowMessageEditing, allowNewRoles: $allowNewRoles, allowNewFiles: $allowNewFiles, enableReassign: $enableReassign, enablePrintAndSign: $enablePrintAndSign, enableSigningOrder: $enableSigningOrder, documentInfo: $documentInfo, useTextTags: $useTextTags, textTagDefinitions: $textTagDefinitions, autoDetectFields: $autoDetectFields, onBehalfOf: $onBehalfOf, labels: $labels, templateLabels: $templateLabels, formGroups: $formGroups, recipientNotificationSettings: $recipientNotificationSettings, allowedSignatureTypes: $allowedSignatureTypes, formFieldPermission: $formFieldPermission, groupSignerSettings: $groupSignerSettings, enableAllowSignEverywhere: $enableAllowSignEverywhere} | compact
+  let body = {title: $title, description: $description, documentTitle: $documentTitle, documentMessage: $documentMessage, files: $files, fileUrls: $fileUrls, roles: $roles, allowModifyFiles: $allowModifyFiles, cc: $cc, brandId: $brandId, allowMessageEditing: $allowMessageEditing, allowNewRoles: $allowNewRoles, allowNewFiles: $allowNewFiles, enableReassign: $enableReassign, enablePrintAndSign: $enablePrintAndSign, enableSigningOrder: $enableSigningOrder, documentInfo: $documentInfo, useTextTags: $useTextTags, textTagDefinitions: $textTagDefinitions, autoDetectFields: $autoDetectFields, onBehalfOf: $onBehalfOf, labels: $labels, templateLabels: $templateLabels, formGroups: $formGroups, recipientNotificationSettings: $recipientNotificationSettings, allowedSignatureTypes: $allowedSignatureTypes, formFieldPermission: $formFieldPermission, groupSignerSettings: $groupSignerSettings, enableAllowSignEverywhere: $enableAllowSignEverywhere, documentTimeZone: $documentTimeZone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2094,16 +2097,16 @@ export def "template-create-embedded-template-url CreateEmbeddedTemplateUrl" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --redirectUrl: string # nullable, format: uri
-  --showToolbar: string@bool-completer # default: false
+  --showToolbar: oneof<nothing, bool> # default: false
   --viewOption: string@viewOption-completer # default: PreparePage
-  --showSaveButton: string@bool-completer # default: true
+  --showSaveButton: oneof<nothing, bool> # default: true
   --locale: string@locale-completer # default: EN
-  --showSendButton: string@bool-completer # DEPRECATED, nullable
-  --showCreateButton: string@bool-completer # default: true
-  --showPreviewButton: string@bool-completer # default: true
-  --showNavigationButtons: string@bool-completer # default: true
+  --showSendButton: oneof<nothing, bool> # DEPRECATED, nullable
+  --showCreateButton: oneof<nothing, bool> # default: true
+  --showPreviewButton: oneof<nothing, bool> # default: true
+  --showNavigationButtons: oneof<nothing, bool> # default: true
   --linkValidTill: string # nullable, format: date-time
-  --showTooltip: string@bool-completer # default: false
+  --showTooltip: oneof<nothing, bool> # default: false
   title: string
   --description: string # nullable
   --documentTitle: string # nullable
@@ -2111,19 +2114,19 @@ export def "template-create-embedded-template-url CreateEmbeddedTemplateUrl" [
   --files: list # nullable
   --fileUrls: list # nullable
   --roles: list # nullable — item shape: {name?: string, index: int, defaultSignerName?: string, defaultSignerEmail?: string, signerOrder?: int, signerType?: "Signer"|"Reviewer"|"InPersonSigner", hostEmail?: string, language?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20", locale?: "EN"|"NO"|"FR"|"DE"|"ES"|"BG"|"CS"|"DA"|"IT"|"NL"|"PL"|"PT"|"RO"|"RU"|"SV"|"Default"|"JA"|"TH"|"ZH_CN"|"ZH_TW"|"KO", signType?: "Single"|"Group", defaultGroupId?: string, imposeAuthentication?: "None"|"EmailOTP"|"AccessCode"|"SMSOTP"|"IdVerification", phoneNumber?: record, deliveryMode?: "Email"|"SMS"|"EmailAndSMS"|"WhatsApp", allowFieldConfiguration?: bool, formFields?: list, allowRoleEdit?: bool, allowRoleDelete?: bool, recipientNotificationSettings?: record, enableQes?: bool}
-  --allowModifyFiles: string@bool-completer # default: true
+  --allowModifyFiles: oneof<nothing, bool> # default: true
   --cc: list # nullable — item shape: {emailAddress: string}
   --brandId: string # nullable
-  --allowMessageEditing: string@bool-completer # default: true
-  --allowNewRoles: string@bool-completer # default: true
-  --allowNewFiles: string@bool-completer # default: true
-  --enableReassign: string@bool-completer # default: true
-  --enablePrintAndSign: string@bool-completer # default: false
-  --enableSigningOrder: string@bool-completer # default: false
+  --allowMessageEditing: oneof<nothing, bool> # default: true
+  --allowNewRoles: oneof<nothing, bool> # default: true
+  --allowNewFiles: oneof<nothing, bool> # default: true
+  --enableReassign: oneof<nothing, bool> # default: true
+  --enablePrintAndSign: oneof<nothing, bool> # default: false
+  --enableSigningOrder: oneof<nothing, bool> # default: false
   --documentInfo: list # nullable — item shape: {language?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20", locale: "EN"|"NO"|"FR"|"DE"|"ES"|"BG"|"CS"|"DA"|"IT"|"NL"|"PL"|"PT"|"RO"|"RU"|"SV"|"Default"|"JA"|"TH"|"ZH_CN"|"ZH_TW"|"KO", title: string, description?: string}
-  --useTextTags: string@bool-completer # default: false
+  --useTextTags: oneof<nothing, bool> # default: false
   --textTagDefinitions: list # nullable — item shape: {definitionId: string, type: "Signature"|"Initial"|"CheckBox"|"TextBox"|"Label"|"DateSigned"|"RadioButton"|"Image"|"Attachment"|"EditableDate"|"Hyperlink"|"Dropdown"|"Title"|"Company"|"Formula"|"Drawing", signerIndex: int, isRequired?: bool, placeholder?: string, fieldId?: string, font?: record, validation?: record, size?: record, dateFormat?: string, timeFormat?: string, radioGroupName?: string, groupName?: string, value?: string, dropdownOptions?: list, imageInfo?: record, hyperlinkText?: string, attachmentInfo?: record, backgroundHexColor?: string, isReadOnly?: bool, offset?: record, label?: string, tabIndex?: int, dataSyncTag?: string, textAlign?: "Left"|"Center"|"Right", textDirection?: "LTR"|"RTL", characterSpacing?: float, characterLimit?: int, formulaFieldSettings?: record, resizeOption?: "GrowVertically"|"GrowHorizontally"|"GrowBoth"|"Fixed"|"AutoResizeFont", collaborationSettings?: record, isMasked?: bool, conditionalRules?: list}
-  --autoDetectFields: string@bool-completer # default: false
+  --autoDetectFields: oneof<nothing, bool> # default: false
   --onBehalfOf: string # nullable
   --labels: list # nullable
   --templateLabels: list # nullable
@@ -2132,13 +2135,14 @@ export def "template-create-embedded-template-url CreateEmbeddedTemplateUrl" [
   --allowedSignatureTypes: list # nullable
   --formFieldPermission: record # shape: {canAdd?: bool, canModify?: bool, canModifyDefaultValue?: bool}
   --groupSignerSettings: record # shape: {enabled?: bool, allowedDirectories?: list}
-  --enableAllowSignEverywhere: string@bool-completer # nullable
+  --enableAllowSignEverywhere: oneof<nothing, bool> # nullable
+  --documentTimeZone: string # nullable
 ]: any -> record<templateId: string, createUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/template/createEmbeddedTemplateUrl")
-  let body = {redirectUrl: $redirectUrl, showToolbar: $showToolbar, viewOption: $viewOption, showSaveButton: $showSaveButton, locale: $locale, showSendButton: $showSendButton, showCreateButton: $showCreateButton, showPreviewButton: $showPreviewButton, showNavigationButtons: $showNavigationButtons, linkValidTill: $linkValidTill, showTooltip: $showTooltip, title: $title, description: $description, documentTitle: $documentTitle, documentMessage: $documentMessage, files: $files, fileUrls: $fileUrls, roles: $roles, allowModifyFiles: $allowModifyFiles, cc: $cc, brandId: $brandId, allowMessageEditing: $allowMessageEditing, allowNewRoles: $allowNewRoles, allowNewFiles: $allowNewFiles, enableReassign: $enableReassign, enablePrintAndSign: $enablePrintAndSign, enableSigningOrder: $enableSigningOrder, documentInfo: $documentInfo, useTextTags: $useTextTags, textTagDefinitions: $textTagDefinitions, autoDetectFields: $autoDetectFields, onBehalfOf: $onBehalfOf, labels: $labels, templateLabels: $templateLabels, formGroups: $formGroups, recipientNotificationSettings: $recipientNotificationSettings, allowedSignatureTypes: $allowedSignatureTypes, formFieldPermission: $formFieldPermission, groupSignerSettings: $groupSignerSettings, enableAllowSignEverywhere: $enableAllowSignEverywhere} | compact
+  let body = {redirectUrl: $redirectUrl, showToolbar: $showToolbar, viewOption: $viewOption, showSaveButton: $showSaveButton, locale: $locale, showSendButton: $showSendButton, showCreateButton: $showCreateButton, showPreviewButton: $showPreviewButton, showNavigationButtons: $showNavigationButtons, linkValidTill: $linkValidTill, showTooltip: $showTooltip, title: $title, description: $description, documentTitle: $documentTitle, documentMessage: $documentMessage, files: $files, fileUrls: $fileUrls, roles: $roles, allowModifyFiles: $allowModifyFiles, cc: $cc, brandId: $brandId, allowMessageEditing: $allowMessageEditing, allowNewRoles: $allowNewRoles, allowNewFiles: $allowNewFiles, enableReassign: $enableReassign, enablePrintAndSign: $enablePrintAndSign, enableSigningOrder: $enableSigningOrder, documentInfo: $documentInfo, useTextTags: $useTextTags, textTagDefinitions: $textTagDefinitions, autoDetectFields: $autoDetectFields, onBehalfOf: $onBehalfOf, labels: $labels, templateLabels: $templateLabels, formGroups: $formGroups, recipientNotificationSettings: $recipientNotificationSettings, allowedSignatureTypes: $allowedSignatureTypes, formFieldPermission: $formFieldPermission, groupSignerSettings: $groupSignerSettings, enableAllowSignEverywhere: $enableAllowSignEverywhere, documentTimeZone: $documentTimeZone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2157,17 +2161,17 @@ export def "template-get-embedded-template-edit-url post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --templateId: string # The template id.
+  --templateId: string
   --redirectUrl: string # nullable, format: uri
-  --showToolbar: string@bool-completer # default: false
+  --showToolbar: oneof<nothing, bool> # default: false
   --viewOption: string@viewOption-completer # default: PreparePage
-  --showSaveButton: string@bool-completer # default: true
+  --showSaveButton: oneof<nothing, bool> # default: true
   --locale: string@locale-completer # default: EN
-  --showCreateButton: string@bool-completer # default: true
-  --showPreviewButton: string@bool-completer # default: true
-  --showNavigationButtons: string@bool-completer # default: true
+  --showCreateButton: oneof<nothing, bool> # default: true
+  --showPreviewButton: oneof<nothing, bool> # default: true
+  --showNavigationButtons: oneof<nothing, bool> # default: true
   --linkValidTill: string # nullable, format: date-time
-  --showTooltip: string@bool-completer # default: false
+  --showTooltip: oneof<nothing, bool> # default: false
   --onBehalfOf: string # nullable
 ]: any -> record<editUrl: string> {
   let input = $in
@@ -2194,8 +2198,8 @@ export def "template-delete DeleteTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --templateId: string # The template id.
-  --onBehalfOf: string # The on behalfof email address.
+  --templateId: string
+  --onBehalfOf: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2226,7 +2230,7 @@ export def "template-send SendUsingTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --templateId: string # The template id.
+  --templateId: string
   --files: list # nullable
   --fileUrls: list # nullable
   --documentId: string # nullable
@@ -2235,41 +2239,42 @@ export def "template-send SendUsingTemplate" [
   --roles: list # nullable — item shape: {roleIndex?: int, signerName?: string, signerOrder?: int, signerEmail?: string, hostEmail?: string, privateMessage?: string, authenticationCode?: string, enableEmailOTP?: bool, authenticationType?: "None"|"EmailOTP"|"AccessCode"|"SMSOTP"|"IdVerification", phoneNumber?: record, deliveryMode?: "Email"|"SMS"|"EmailAndSMS"|"WhatsApp", signerType?: "Signer"|"Reviewer"|"InPersonSigner", signerRole?: string, allowFieldConfiguration?: bool, formFields?: list, existingFormFields?: list, identityVerificationSettings?: record, language?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20", locale?: "EN"|"NO"|"FR"|"DE"|"ES"|"BG"|"CS"|"DA"|"IT"|"NL"|"PL"|"PT"|"RO"|"RU"|"SV"|"Default"|"JA"|"TH"|"ZH_CN"|"ZH_TW"|"KO", signType?: "Single"|"Group", groupId?: string, recipientNotificationSettings?: record, authenticationRetryCount?: int, enableQes?: bool, authenticationSettings?: record}
   --brandId: string # nullable
   --labels: list # nullable
-  --disableEmails: string@bool-completer
-  --disableSMS: string@bool-completer # default: false
-  --hideDocumentId: string@bool-completer # nullable
+  --disableEmails: oneof<nothing, bool>
+  --disableSMS: oneof<nothing, bool> # default: false
+  --hideDocumentId: oneof<nothing, bool> # nullable
   --reminderSettings: record # shape: {enableAutoReminder?: bool, reminderDays?: int, reminderCount?: int}
   --cc: list # nullable — item shape: {emailAddress: string}
   --expiryDays: int # DEPRECATED, format: int32
   --expiryDateType: string@expiryDateType-completer # nullable
   --expiryValue: int # format: int64, default: 60
-  --enablePrintAndSign: string@bool-completer
-  --enableReassign: string@bool-completer # nullable
-  --enableSigningOrder: string@bool-completer # nullable
-  --disableExpiryAlert: string@bool-completer # nullable
+  --enablePrintAndSign: oneof<nothing, bool>
+  --enableReassign: oneof<nothing, bool> # nullable
+  --enableSigningOrder: oneof<nothing, bool> # nullable
+  --disableExpiryAlert: oneof<nothing, bool> # nullable
   --documentInfo: list # nullable — item shape: {language?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20", locale: "EN"|"NO"|"FR"|"DE"|"ES"|"BG"|"CS"|"DA"|"IT"|"NL"|"PL"|"PT"|"RO"|"RU"|"SV"|"Default"|"JA"|"TH"|"ZH_CN"|"ZH_TW"|"KO", title: string, description?: string}
   --onBehalfOf: string # nullable
-  --isSandbox: string@bool-completer # nullable
+  --isSandbox: oneof<nothing, bool> # nullable
   --roleRemovalIndices: list # nullable
   --documentDownloadOption: string@documentDownloadOption-completer # nullable
   --metaData: record # nullable
   --formGroups: list # nullable — item shape: {minimumCount?: int, maximumCount?: int, dataSyncTag?: string, groupNames: list, groupValidation: "Minimum"|"Maximum"|"Absolute"|"Range"}
   --removeFormFields: list # nullable
   --recipientNotificationSettings: record # shape: {signatureRequest?: bool, declined?: bool, revoked?: bool, signed?: bool, completed?: bool, expired?: bool, reassigned?: bool, deleted?: bool, reminders?: bool, editRecipient?: bool, editDocument?: bool, viewed?: bool}
-  --enableAuditTrailLocalization: string@bool-completer # nullable
+  --enableAuditTrailLocalization: oneof<nothing, bool> # nullable
   --downloadFileName: string # nullable
   --scheduledSendTime: int # nullable, format: int64
-  --allowScheduledSend: string@bool-completer # default: false
+  --allowScheduledSend: oneof<nothing, bool> # default: false
   --allowedSignatureTypes: list # nullable
   --groupSignerSettings: record # shape: {enabled?: bool, allowedDirectories?: list}
-  --enableAllowSignEverywhere: string@bool-completer # nullable
+  --enableAllowSignEverywhere: oneof<nothing, bool> # nullable
+  --documentTimeZone: string # nullable
 ]: any -> record<documentId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "templateId" $templateId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/template/send" $qp)
-  let body = {files: $files, fileUrls: $fileUrls, documentId: $documentId, title: $title, message: $message, roles: $roles, brandId: $brandId, labels: $labels, disableEmails: $disableEmails, disableSMS: $disableSMS, hideDocumentId: $hideDocumentId, reminderSettings: $reminderSettings, cc: $cc, expiryDays: $expiryDays, expiryDateType: $expiryDateType, expiryValue: $expiryValue, enablePrintAndSign: $enablePrintAndSign, enableReassign: $enableReassign, enableSigningOrder: $enableSigningOrder, disableExpiryAlert: $disableExpiryAlert, documentInfo: $documentInfo, onBehalfOf: $onBehalfOf, isSandbox: $isSandbox, roleRemovalIndices: $roleRemovalIndices, documentDownloadOption: $documentDownloadOption, metaData: $metaData, formGroups: $formGroups, removeFormFields: $removeFormFields, recipientNotificationSettings: $recipientNotificationSettings, enableAuditTrailLocalization: $enableAuditTrailLocalization, downloadFileName: $downloadFileName, scheduledSendTime: $scheduledSendTime, allowScheduledSend: $allowScheduledSend, allowedSignatureTypes: $allowedSignatureTypes, groupSignerSettings: $groupSignerSettings, enableAllowSignEverywhere: $enableAllowSignEverywhere} | compact
+  let body = {files: $files, fileUrls: $fileUrls, documentId: $documentId, title: $title, message: $message, roles: $roles, brandId: $brandId, labels: $labels, disableEmails: $disableEmails, disableSMS: $disableSMS, hideDocumentId: $hideDocumentId, reminderSettings: $reminderSettings, cc: $cc, expiryDays: $expiryDays, expiryDateType: $expiryDateType, expiryValue: $expiryValue, enablePrintAndSign: $enablePrintAndSign, enableReassign: $enableReassign, enableSigningOrder: $enableSigningOrder, disableExpiryAlert: $disableExpiryAlert, documentInfo: $documentInfo, onBehalfOf: $onBehalfOf, isSandbox: $isSandbox, roleRemovalIndices: $roleRemovalIndices, documentDownloadOption: $documentDownloadOption, metaData: $metaData, formGroups: $formGroups, removeFormFields: $removeFormFields, recipientNotificationSettings: $recipientNotificationSettings, enableAuditTrailLocalization: $enableAuditTrailLocalization, downloadFileName: $downloadFileName, scheduledSendTime: $scheduledSendTime, allowScheduledSend: $allowScheduledSend, allowedSignatureTypes: $allowedSignatureTypes, groupSignerSettings: $groupSignerSettings, enableAllowSignEverywhere: $enableAllowSignEverywhere, documentTimeZone: $documentTimeZone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2300,7 +2305,7 @@ export def "template-merge-and-send MergeAndSend" [
   --files: list # nullable
   --fileUrls: list # nullable
   --templateIds: list # nullable
-  --useTextTags: string@bool-completer
+  --useTextTags: oneof<nothing, bool>
   --textTagDefinitions: list # nullable — item shape: {definitionId: string, type: "Signature"|"Initial"|"CheckBox"|"TextBox"|"Label"|"DateSigned"|"RadioButton"|"Image"|"Attachment"|"EditableDate"|"Hyperlink"|"Dropdown"|"Title"|"Company"|"Formula"|"Drawing", signerIndex: int, isRequired?: bool, placeholder?: string, fieldId?: string, font?: record, validation?: record, size?: record, dateFormat?: string, timeFormat?: string, radioGroupName?: string, groupName?: string, value?: string, dropdownOptions?: list, imageInfo?: record, hyperlinkText?: string, attachmentInfo?: record, backgroundHexColor?: string, isReadOnly?: bool, offset?: record, label?: string, tabIndex?: int, dataSyncTag?: string, textAlign?: "Left"|"Center"|"Right", textDirection?: "LTR"|"RTL", characterSpacing?: float, characterLimit?: int, formulaFieldSettings?: record, resizeOption?: "GrowVertically"|"GrowHorizontally"|"GrowBoth"|"Fixed"|"AutoResizeFont", collaborationSettings?: record, isMasked?: bool, conditionalRules?: list}
   --documentId: string # nullable
   --title: string # nullable
@@ -2308,40 +2313,41 @@ export def "template-merge-and-send MergeAndSend" [
   --roles: list # nullable — item shape: {roleIndex?: int, signerName?: string, signerOrder?: int, signerEmail?: string, hostEmail?: string, privateMessage?: string, authenticationCode?: string, enableEmailOTP?: bool, authenticationType?: "None"|"EmailOTP"|"AccessCode"|"SMSOTP"|"IdVerification", phoneNumber?: record, deliveryMode?: "Email"|"SMS"|"EmailAndSMS"|"WhatsApp", signerType?: "Signer"|"Reviewer"|"InPersonSigner", signerRole?: string, allowFieldConfiguration?: bool, formFields?: list, existingFormFields?: list, identityVerificationSettings?: record, language?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20", locale?: "EN"|"NO"|"FR"|"DE"|"ES"|"BG"|"CS"|"DA"|"IT"|"NL"|"PL"|"PT"|"RO"|"RU"|"SV"|"Default"|"JA"|"TH"|"ZH_CN"|"ZH_TW"|"KO", signType?: "Single"|"Group", groupId?: string, recipientNotificationSettings?: record, authenticationRetryCount?: int, enableQes?: bool, authenticationSettings?: record}
   --brandId: string # nullable
   --labels: list # nullable
-  --disableEmails: string@bool-completer
-  --disableSMS: string@bool-completer # default: false
-  --hideDocumentId: string@bool-completer # nullable
+  --disableEmails: oneof<nothing, bool>
+  --disableSMS: oneof<nothing, bool> # default: false
+  --hideDocumentId: oneof<nothing, bool> # nullable
   --reminderSettings: record # shape: {enableAutoReminder?: bool, reminderDays?: int, reminderCount?: int}
   --cc: list # nullable — item shape: {emailAddress: string}
   --expiryDays: int # DEPRECATED, format: int32
   --expiryDateType: string@expiryDateType-completer # nullable
   --expiryValue: int # format: int64, default: 60
-  --enablePrintAndSign: string@bool-completer
-  --enableReassign: string@bool-completer # nullable
-  --enableSigningOrder: string@bool-completer # nullable
-  --disableExpiryAlert: string@bool-completer # nullable
+  --enablePrintAndSign: oneof<nothing, bool>
+  --enableReassign: oneof<nothing, bool> # nullable
+  --enableSigningOrder: oneof<nothing, bool> # nullable
+  --disableExpiryAlert: oneof<nothing, bool> # nullable
   --documentInfo: list # nullable — item shape: {language?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20", locale: "EN"|"NO"|"FR"|"DE"|"ES"|"BG"|"CS"|"DA"|"IT"|"NL"|"PL"|"PT"|"RO"|"RU"|"SV"|"Default"|"JA"|"TH"|"ZH_CN"|"ZH_TW"|"KO", title: string, description?: string}
   --onBehalfOf: string # nullable
-  --isSandbox: string@bool-completer # nullable
+  --isSandbox: oneof<nothing, bool> # nullable
   --roleRemovalIndices: list # nullable
   --documentDownloadOption: string@documentDownloadOption-completer # nullable
   --metaData: record # nullable
   --formGroups: list # nullable — item shape: {minimumCount?: int, maximumCount?: int, dataSyncTag?: string, groupNames: list, groupValidation: "Minimum"|"Maximum"|"Absolute"|"Range"}
   --removeFormFields: list # nullable
   --recipientNotificationSettings: record # shape: {signatureRequest?: bool, declined?: bool, revoked?: bool, signed?: bool, completed?: bool, expired?: bool, reassigned?: bool, deleted?: bool, reminders?: bool, editRecipient?: bool, editDocument?: bool, viewed?: bool}
-  --enableAuditTrailLocalization: string@bool-completer # nullable
+  --enableAuditTrailLocalization: oneof<nothing, bool> # nullable
   --downloadFileName: string # nullable
   --scheduledSendTime: int # nullable, format: int64
-  --allowScheduledSend: string@bool-completer # default: false
+  --allowScheduledSend: oneof<nothing, bool> # default: false
   --allowedSignatureTypes: list # nullable
   --groupSignerSettings: record # shape: {enabled?: bool, allowedDirectories?: list}
-  --enableAllowSignEverywhere: string@bool-completer # nullable
+  --enableAllowSignEverywhere: oneof<nothing, bool> # nullable
+  --documentTimeZone: string # nullable
 ]: any -> record<documentId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/template/mergeAndSend")
-  let body = {files: $files, fileUrls: $fileUrls, templateIds: $templateIds, useTextTags: $useTextTags, textTagDefinitions: $textTagDefinitions, documentId: $documentId, title: $title, message: $message, roles: $roles, brandId: $brandId, labels: $labels, disableEmails: $disableEmails, disableSMS: $disableSMS, hideDocumentId: $hideDocumentId, reminderSettings: $reminderSettings, cc: $cc, expiryDays: $expiryDays, expiryDateType: $expiryDateType, expiryValue: $expiryValue, enablePrintAndSign: $enablePrintAndSign, enableReassign: $enableReassign, enableSigningOrder: $enableSigningOrder, disableExpiryAlert: $disableExpiryAlert, documentInfo: $documentInfo, onBehalfOf: $onBehalfOf, isSandbox: $isSandbox, roleRemovalIndices: $roleRemovalIndices, documentDownloadOption: $documentDownloadOption, metaData: $metaData, formGroups: $formGroups, removeFormFields: $removeFormFields, recipientNotificationSettings: $recipientNotificationSettings, enableAuditTrailLocalization: $enableAuditTrailLocalization, downloadFileName: $downloadFileName, scheduledSendTime: $scheduledSendTime, allowScheduledSend: $allowScheduledSend, allowedSignatureTypes: $allowedSignatureTypes, groupSignerSettings: $groupSignerSettings, enableAllowSignEverywhere: $enableAllowSignEverywhere} | compact
+  let body = {files: $files, fileUrls: $fileUrls, templateIds: $templateIds, useTextTags: $useTextTags, textTagDefinitions: $textTagDefinitions, documentId: $documentId, title: $title, message: $message, roles: $roles, brandId: $brandId, labels: $labels, disableEmails: $disableEmails, disableSMS: $disableSMS, hideDocumentId: $hideDocumentId, reminderSettings: $reminderSettings, cc: $cc, expiryDays: $expiryDays, expiryDateType: $expiryDateType, expiryValue: $expiryValue, enablePrintAndSign: $enablePrintAndSign, enableReassign: $enableReassign, enableSigningOrder: $enableSigningOrder, disableExpiryAlert: $disableExpiryAlert, documentInfo: $documentInfo, onBehalfOf: $onBehalfOf, isSandbox: $isSandbox, roleRemovalIndices: $roleRemovalIndices, documentDownloadOption: $documentDownloadOption, metaData: $metaData, formGroups: $formGroups, removeFormFields: $removeFormFields, recipientNotificationSettings: $recipientNotificationSettings, enableAuditTrailLocalization: $enableAuditTrailLocalization, downloadFileName: $downloadFileName, scheduledSendTime: $scheduledSendTime, allowScheduledSend: $allowScheduledSend, allowedSignatureTypes: $allowedSignatureTypes, groupSignerSettings: $groupSignerSettings, enableAllowSignEverywhere: $enableAllowSignEverywhere, documentTimeZone: $documentTimeZone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2368,60 +2374,61 @@ export def "template-create-embedded-request-url CreateEmbeddedRequestUrlTemplat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --templateId: string # The template id.
+  --templateId: string
   --files: list # nullable
   --fileUrls: list # nullable
   --redirectUrl: string # nullable, format: uri
-  --showToolbar: string@bool-completer
+  --showToolbar: oneof<nothing, bool>
   --sendViewOption: string@sendViewOption-completer
-  --showSaveButton: string@bool-completer
+  --showSaveButton: oneof<nothing, bool>
   --locale: string@locale-completer
-  --showSendButton: string@bool-completer
-  --showPreviewButton: string@bool-completer
-  --showNavigationButtons: string@bool-completer
+  --showSendButton: oneof<nothing, bool>
+  --showPreviewButton: oneof<nothing, bool>
+  --showNavigationButtons: oneof<nothing, bool>
   --sendLinkValidTill: string # nullable, format: date-time
-  --showTooltip: string@bool-completer
+  --showTooltip: oneof<nothing, bool>
   --documentId: string # nullable
   --title: string # nullable
   --message: string # nullable
   --roles: list # nullable — item shape: {roleIndex?: int, signerName?: string, signerOrder?: int, signerEmail?: string, hostEmail?: string, privateMessage?: string, authenticationCode?: string, enableEmailOTP?: bool, authenticationType?: "None"|"EmailOTP"|"AccessCode"|"SMSOTP"|"IdVerification", phoneNumber?: record, deliveryMode?: "Email"|"SMS"|"EmailAndSMS"|"WhatsApp", signerType?: "Signer"|"Reviewer"|"InPersonSigner", signerRole?: string, allowFieldConfiguration?: bool, formFields?: list, existingFormFields?: list, identityVerificationSettings?: record, language?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20", locale?: "EN"|"NO"|"FR"|"DE"|"ES"|"BG"|"CS"|"DA"|"IT"|"NL"|"PL"|"PT"|"RO"|"RU"|"SV"|"Default"|"JA"|"TH"|"ZH_CN"|"ZH_TW"|"KO", signType?: "Single"|"Group", groupId?: string, recipientNotificationSettings?: record, authenticationRetryCount?: int, enableQes?: bool, authenticationSettings?: record}
   --brandId: string # nullable
   --labels: list # nullable
-  --disableEmails: string@bool-completer
-  --disableSMS: string@bool-completer # default: false
-  --hideDocumentId: string@bool-completer # nullable
+  --disableEmails: oneof<nothing, bool>
+  --disableSMS: oneof<nothing, bool> # default: false
+  --hideDocumentId: oneof<nothing, bool> # nullable
   --reminderSettings: record # shape: {enableAutoReminder?: bool, reminderDays?: int, reminderCount?: int}
   --cc: list # nullable — item shape: {emailAddress: string}
   --expiryDays: int # DEPRECATED, format: int32
   --expiryDateType: string@expiryDateType-completer # nullable
   --expiryValue: int # format: int64, default: 60
-  --enablePrintAndSign: string@bool-completer
-  --enableReassign: string@bool-completer # nullable
-  --enableSigningOrder: string@bool-completer # nullable
-  --disableExpiryAlert: string@bool-completer # nullable
+  --enablePrintAndSign: oneof<nothing, bool>
+  --enableReassign: oneof<nothing, bool> # nullable
+  --enableSigningOrder: oneof<nothing, bool> # nullable
+  --disableExpiryAlert: oneof<nothing, bool> # nullable
   --documentInfo: list # nullable — item shape: {language?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20", locale: "EN"|"NO"|"FR"|"DE"|"ES"|"BG"|"CS"|"DA"|"IT"|"NL"|"PL"|"PT"|"RO"|"RU"|"SV"|"Default"|"JA"|"TH"|"ZH_CN"|"ZH_TW"|"KO", title: string, description?: string}
   --onBehalfOf: string # nullable
-  --isSandbox: string@bool-completer # nullable
+  --isSandbox: oneof<nothing, bool> # nullable
   --roleRemovalIndices: list # nullable
   --documentDownloadOption: string@documentDownloadOption-completer # nullable
   --metaData: record # nullable
   --formGroups: list # nullable — item shape: {minimumCount?: int, maximumCount?: int, dataSyncTag?: string, groupNames: list, groupValidation: "Minimum"|"Maximum"|"Absolute"|"Range"}
   --removeFormFields: list # nullable
   --recipientNotificationSettings: record # shape: {signatureRequest?: bool, declined?: bool, revoked?: bool, signed?: bool, completed?: bool, expired?: bool, reassigned?: bool, deleted?: bool, reminders?: bool, editRecipient?: bool, editDocument?: bool, viewed?: bool}
-  --enableAuditTrailLocalization: string@bool-completer # nullable
+  --enableAuditTrailLocalization: oneof<nothing, bool> # nullable
   --downloadFileName: string # nullable
   --scheduledSendTime: int # nullable, format: int64
-  --allowScheduledSend: string@bool-completer # default: false
+  --allowScheduledSend: oneof<nothing, bool> # default: false
   --allowedSignatureTypes: list # nullable
   --groupSignerSettings: record # shape: {enabled?: bool, allowedDirectories?: list}
-  --enableAllowSignEverywhere: string@bool-completer # nullable
+  --enableAllowSignEverywhere: oneof<nothing, bool> # nullable
+  --documentTimeZone: string # nullable
 ]: any -> record<documentId: string, sendUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "templateId" $templateId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/template/createEmbeddedRequestUrl" $qp)
-  let body = {files: $files, fileUrls: $fileUrls, redirectUrl: $redirectUrl, showToolbar: $showToolbar, sendViewOption: $sendViewOption, showSaveButton: $showSaveButton, locale: $locale, showSendButton: $showSendButton, showPreviewButton: $showPreviewButton, showNavigationButtons: $showNavigationButtons, sendLinkValidTill: $sendLinkValidTill, showTooltip: $showTooltip, documentId: $documentId, title: $title, message: $message, roles: $roles, brandId: $brandId, labels: $labels, disableEmails: $disableEmails, disableSMS: $disableSMS, hideDocumentId: $hideDocumentId, reminderSettings: $reminderSettings, cc: $cc, expiryDays: $expiryDays, expiryDateType: $expiryDateType, expiryValue: $expiryValue, enablePrintAndSign: $enablePrintAndSign, enableReassign: $enableReassign, enableSigningOrder: $enableSigningOrder, disableExpiryAlert: $disableExpiryAlert, documentInfo: $documentInfo, onBehalfOf: $onBehalfOf, isSandbox: $isSandbox, roleRemovalIndices: $roleRemovalIndices, documentDownloadOption: $documentDownloadOption, metaData: $metaData, formGroups: $formGroups, removeFormFields: $removeFormFields, recipientNotificationSettings: $recipientNotificationSettings, enableAuditTrailLocalization: $enableAuditTrailLocalization, downloadFileName: $downloadFileName, scheduledSendTime: $scheduledSendTime, allowScheduledSend: $allowScheduledSend, allowedSignatureTypes: $allowedSignatureTypes, groupSignerSettings: $groupSignerSettings, enableAllowSignEverywhere: $enableAllowSignEverywhere} | compact
+  let body = {files: $files, fileUrls: $fileUrls, redirectUrl: $redirectUrl, showToolbar: $showToolbar, sendViewOption: $sendViewOption, showSaveButton: $showSaveButton, locale: $locale, showSendButton: $showSendButton, showPreviewButton: $showPreviewButton, showNavigationButtons: $showNavigationButtons, sendLinkValidTill: $sendLinkValidTill, showTooltip: $showTooltip, documentId: $documentId, title: $title, message: $message, roles: $roles, brandId: $brandId, labels: $labels, disableEmails: $disableEmails, disableSMS: $disableSMS, hideDocumentId: $hideDocumentId, reminderSettings: $reminderSettings, cc: $cc, expiryDays: $expiryDays, expiryDateType: $expiryDateType, expiryValue: $expiryValue, enablePrintAndSign: $enablePrintAndSign, enableReassign: $enableReassign, enableSigningOrder: $enableSigningOrder, disableExpiryAlert: $disableExpiryAlert, documentInfo: $documentInfo, onBehalfOf: $onBehalfOf, isSandbox: $isSandbox, roleRemovalIndices: $roleRemovalIndices, documentDownloadOption: $documentDownloadOption, metaData: $metaData, formGroups: $formGroups, removeFormFields: $removeFormFields, recipientNotificationSettings: $recipientNotificationSettings, enableAuditTrailLocalization: $enableAuditTrailLocalization, downloadFileName: $downloadFileName, scheduledSendTime: $scheduledSendTime, allowScheduledSend: $allowScheduledSend, allowedSignatureTypes: $allowedSignatureTypes, groupSignerSettings: $groupSignerSettings, enableAllowSignEverywhere: $enableAllowSignEverywhere, documentTimeZone: $documentTimeZone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2452,17 +2459,17 @@ export def "template-merge-create-embedded-request-url MergeCreateEmbeddedReques
   --files: list # nullable
   --fileUrls: list # nullable
   --redirectUrl: string # nullable, format: uri
-  --showToolbar: string@bool-completer
+  --showToolbar: oneof<nothing, bool>
   --sendViewOption: string@sendViewOption-completer
-  --showSaveButton: string@bool-completer
+  --showSaveButton: oneof<nothing, bool>
   --locale: string@locale-completer
-  --showSendButton: string@bool-completer
-  --showPreviewButton: string@bool-completer
-  --showNavigationButtons: string@bool-completer
+  --showSendButton: oneof<nothing, bool>
+  --showPreviewButton: oneof<nothing, bool>
+  --showNavigationButtons: oneof<nothing, bool>
   --sendLinkValidTill: string # nullable, format: date-time
-  --showTooltip: string@bool-completer
+  --showTooltip: oneof<nothing, bool>
   --templateIds: list # nullable
-  --useTextTags: string@bool-completer
+  --useTextTags: oneof<nothing, bool>
   --textTagDefinitions: list # nullable — item shape: {definitionId: string, type: "Signature"|"Initial"|"CheckBox"|"TextBox"|"Label"|"DateSigned"|"RadioButton"|"Image"|"Attachment"|"EditableDate"|"Hyperlink"|"Dropdown"|"Title"|"Company"|"Formula"|"Drawing", signerIndex: int, isRequired?: bool, placeholder?: string, fieldId?: string, font?: record, validation?: record, size?: record, dateFormat?: string, timeFormat?: string, radioGroupName?: string, groupName?: string, value?: string, dropdownOptions?: list, imageInfo?: record, hyperlinkText?: string, attachmentInfo?: record, backgroundHexColor?: string, isReadOnly?: bool, offset?: record, label?: string, tabIndex?: int, dataSyncTag?: string, textAlign?: "Left"|"Center"|"Right", textDirection?: "LTR"|"RTL", characterSpacing?: float, characterLimit?: int, formulaFieldSettings?: record, resizeOption?: "GrowVertically"|"GrowHorizontally"|"GrowBoth"|"Fixed"|"AutoResizeFont", collaborationSettings?: record, isMasked?: bool, conditionalRules?: list}
   --documentId: string # nullable
   --title: string # nullable
@@ -2470,40 +2477,41 @@ export def "template-merge-create-embedded-request-url MergeCreateEmbeddedReques
   --roles: list # nullable — item shape: {roleIndex?: int, signerName?: string, signerOrder?: int, signerEmail?: string, hostEmail?: string, privateMessage?: string, authenticationCode?: string, enableEmailOTP?: bool, authenticationType?: "None"|"EmailOTP"|"AccessCode"|"SMSOTP"|"IdVerification", phoneNumber?: record, deliveryMode?: "Email"|"SMS"|"EmailAndSMS"|"WhatsApp", signerType?: "Signer"|"Reviewer"|"InPersonSigner", signerRole?: string, allowFieldConfiguration?: bool, formFields?: list, existingFormFields?: list, identityVerificationSettings?: record, language?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20", locale?: "EN"|"NO"|"FR"|"DE"|"ES"|"BG"|"CS"|"DA"|"IT"|"NL"|"PL"|"PT"|"RO"|"RU"|"SV"|"Default"|"JA"|"TH"|"ZH_CN"|"ZH_TW"|"KO", signType?: "Single"|"Group", groupId?: string, recipientNotificationSettings?: record, authenticationRetryCount?: int, enableQes?: bool, authenticationSettings?: record}
   --brandId: string # nullable
   --labels: list # nullable
-  --disableEmails: string@bool-completer
-  --disableSMS: string@bool-completer # default: false
-  --hideDocumentId: string@bool-completer # nullable
+  --disableEmails: oneof<nothing, bool>
+  --disableSMS: oneof<nothing, bool> # default: false
+  --hideDocumentId: oneof<nothing, bool> # nullable
   --reminderSettings: record # shape: {enableAutoReminder?: bool, reminderDays?: int, reminderCount?: int}
   --cc: list # nullable — item shape: {emailAddress: string}
   --expiryDays: int # DEPRECATED, format: int32
   --expiryDateType: string@expiryDateType-completer # nullable
   --expiryValue: int # format: int64, default: 60
-  --enablePrintAndSign: string@bool-completer
-  --enableReassign: string@bool-completer # nullable
-  --enableSigningOrder: string@bool-completer # nullable
-  --disableExpiryAlert: string@bool-completer # nullable
+  --enablePrintAndSign: oneof<nothing, bool>
+  --enableReassign: oneof<nothing, bool> # nullable
+  --enableSigningOrder: oneof<nothing, bool> # nullable
+  --disableExpiryAlert: oneof<nothing, bool> # nullable
   --documentInfo: list # nullable — item shape: {language?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20", locale: "EN"|"NO"|"FR"|"DE"|"ES"|"BG"|"CS"|"DA"|"IT"|"NL"|"PL"|"PT"|"RO"|"RU"|"SV"|"Default"|"JA"|"TH"|"ZH_CN"|"ZH_TW"|"KO", title: string, description?: string}
   --onBehalfOf: string # nullable
-  --isSandbox: string@bool-completer # nullable
+  --isSandbox: oneof<nothing, bool> # nullable
   --roleRemovalIndices: list # nullable
   --documentDownloadOption: string@documentDownloadOption-completer # nullable
   --metaData: record # nullable
   --formGroups: list # nullable — item shape: {minimumCount?: int, maximumCount?: int, dataSyncTag?: string, groupNames: list, groupValidation: "Minimum"|"Maximum"|"Absolute"|"Range"}
   --removeFormFields: list # nullable
   --recipientNotificationSettings: record # shape: {signatureRequest?: bool, declined?: bool, revoked?: bool, signed?: bool, completed?: bool, expired?: bool, reassigned?: bool, deleted?: bool, reminders?: bool, editRecipient?: bool, editDocument?: bool, viewed?: bool}
-  --enableAuditTrailLocalization: string@bool-completer # nullable
+  --enableAuditTrailLocalization: oneof<nothing, bool> # nullable
   --downloadFileName: string # nullable
   --scheduledSendTime: int # nullable, format: int64
-  --allowScheduledSend: string@bool-completer # default: false
+  --allowScheduledSend: oneof<nothing, bool> # default: false
   --allowedSignatureTypes: list # nullable
   --groupSignerSettings: record # shape: {enabled?: bool, allowedDirectories?: list}
-  --enableAllowSignEverywhere: string@bool-completer # nullable
+  --enableAllowSignEverywhere: oneof<nothing, bool> # nullable
+  --documentTimeZone: string # nullable
 ]: any -> record<documentId: string, sendUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/template/mergeCreateEmbeddedRequestUrl")
-  let body = {files: $files, fileUrls: $fileUrls, redirectUrl: $redirectUrl, showToolbar: $showToolbar, sendViewOption: $sendViewOption, showSaveButton: $showSaveButton, locale: $locale, showSendButton: $showSendButton, showPreviewButton: $showPreviewButton, showNavigationButtons: $showNavigationButtons, sendLinkValidTill: $sendLinkValidTill, showTooltip: $showTooltip, templateIds: $templateIds, useTextTags: $useTextTags, textTagDefinitions: $textTagDefinitions, documentId: $documentId, title: $title, message: $message, roles: $roles, brandId: $brandId, labels: $labels, disableEmails: $disableEmails, disableSMS: $disableSMS, hideDocumentId: $hideDocumentId, reminderSettings: $reminderSettings, cc: $cc, expiryDays: $expiryDays, expiryDateType: $expiryDateType, expiryValue: $expiryValue, enablePrintAndSign: $enablePrintAndSign, enableReassign: $enableReassign, enableSigningOrder: $enableSigningOrder, disableExpiryAlert: $disableExpiryAlert, documentInfo: $documentInfo, onBehalfOf: $onBehalfOf, isSandbox: $isSandbox, roleRemovalIndices: $roleRemovalIndices, documentDownloadOption: $documentDownloadOption, metaData: $metaData, formGroups: $formGroups, removeFormFields: $removeFormFields, recipientNotificationSettings: $recipientNotificationSettings, enableAuditTrailLocalization: $enableAuditTrailLocalization, downloadFileName: $downloadFileName, scheduledSendTime: $scheduledSendTime, allowScheduledSend: $allowScheduledSend, allowedSignatureTypes: $allowedSignatureTypes, groupSignerSettings: $groupSignerSettings, enableAllowSignEverywhere: $enableAllowSignEverywhere} | compact
+  let body = {files: $files, fileUrls: $fileUrls, redirectUrl: $redirectUrl, showToolbar: $showToolbar, sendViewOption: $sendViewOption, showSaveButton: $showSaveButton, locale: $locale, showSendButton: $showSendButton, showPreviewButton: $showPreviewButton, showNavigationButtons: $showNavigationButtons, sendLinkValidTill: $sendLinkValidTill, showTooltip: $showTooltip, templateIds: $templateIds, useTextTags: $useTextTags, textTagDefinitions: $textTagDefinitions, documentId: $documentId, title: $title, message: $message, roles: $roles, brandId: $brandId, labels: $labels, disableEmails: $disableEmails, disableSMS: $disableSMS, hideDocumentId: $hideDocumentId, reminderSettings: $reminderSettings, cc: $cc, expiryDays: $expiryDays, expiryDateType: $expiryDateType, expiryValue: $expiryValue, enablePrintAndSign: $enablePrintAndSign, enableReassign: $enableReassign, enableSigningOrder: $enableSigningOrder, disableExpiryAlert: $disableExpiryAlert, documentInfo: $documentInfo, onBehalfOf: $onBehalfOf, isSandbox: $isSandbox, roleRemovalIndices: $roleRemovalIndices, documentDownloadOption: $documentDownloadOption, metaData: $metaData, formGroups: $formGroups, removeFormFields: $removeFormFields, recipientNotificationSettings: $recipientNotificationSettings, enableAuditTrailLocalization: $enableAuditTrailLocalization, downloadFileName: $downloadFileName, scheduledSendTime: $scheduledSendTime, allowScheduledSend: $allowScheduledSend, allowedSignatureTypes: $allowedSignatureTypes, groupSignerSettings: $groupSignerSettings, enableAllowSignEverywhere: $enableAllowSignEverywhere, documentTimeZone: $documentTimeZone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2522,8 +2530,8 @@ export def "template-properties GetTemplateProperties" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --templateId: string # Template Id.
-]: nothing -> record<templateId: string, title: string, description: string, documentTitle: string, documentMessage: string, files: table<documentId: string, documentName: string, order: int, pageCount: int>, roles: table<name: string, index: int, defaultSignerName: string, defaultSignerEmail: string, phoneNumber: record, signerOrder: int, signerType: string, hostEmail: string, hostName: string, language: int, locale: string, signType: string, defaultGroupId: string, allowRoleEdit: bool, allowRoleDelete: bool, enableAccessCode: bool, enableEmailOTP: bool, imposeAuthentication: string, deliveryMode: string, allowFieldConfiguration: bool, formFields: list, enableEditRecipients: bool, enableDeleteRecipients: bool, recipientNotificationSettings: record, enableQes: bool, groupSigners: list>, formGroups: table<minimumCount: int, maximumCount: int, dataSyncTag: string, groupNames: list, groupValidation: string>, commonFields: table<id: string, fieldType: string, type: string, value: string, font: string, isRequired: bool, isReadOnly: bool, lineHeight: int, fontSize: int, fontHexColor: string, isUnderLineFont: bool, isItalicFont: bool, isBoldFont: bool, groupName: string, label: string, placeholder: string, validationtype: string, validationCustomRegex: string, validationCustomRegexMessage: string, dateFormat: string, timeFormat: string, imageInfo: record, attachmentInfo: record, editableDateFieldSettings: record, dropdownOptions: list, bounds: record, pageNumber: int, conditionalRules: list, dataSyncTag: string, textAlign: string, textDirection: string, characterSpacing: float, characterLimit: int, hyperlinkText: string, backgroundHexColor: string, tabIndex: int, formulaFieldSettings: record, resizeOption: string, allowEditFormField: bool, allowDeleteFormField: bool, collaborationSettings: record, isMasked: bool, isDefaultValueRequired: bool>, cCDetails: list<string>, brandId: string, allowMessageEditing: bool, allowNewRoles: bool, allowNewFiles: bool, allowModifyFiles: bool, enableReassign: bool, EnablePrintAndSign: bool, enableSigningOrder: bool, createdDate: int, createdBy: record<emailAddress: string, name: string>, sharedTemplateDetail: table<teamId: string, accessType: string>, documentInfo: table<language: int, locale: string, title: string, description: string>, labels: list<string>, templateLabels: list<string>, behalfOf: record<name: string, emailAddress: string>, documentDownloadOption: string, recipientNotificationSettings: record<signatureRequest: bool, declined: bool, revoked: bool, signed: bool, completed: bool, expired: bool, reassigned: bool, deleted: bool, reminders: bool, editRecipient: bool, editDocument: bool, viewed: bool>, formFieldPermission: record<canAdd: bool, canModify: bool, canModifyDefaultValue: bool>, allowedSignatureTypes: list<string>, groupSignerSettings: record<enabled: bool, allowedDirectories: list<string>>, sharing: record<teams: list<record>>, enableAllowSignEverywhere: bool> {
+  --templateId: string
+]: nothing -> record<templateId: string, title: string, description: string, documentTitle: string, documentMessage: string, files: table<documentId: string, documentName: string, order: int, pageCount: int>, roles: table<name: string, index: int, defaultSignerName: string, defaultSignerEmail: string, phoneNumber: record, signerOrder: int, signerType: string, hostEmail: string, hostName: string, language: int, locale: string, signType: string, defaultGroupId: string, allowRoleEdit: bool, allowRoleDelete: bool, enableAccessCode: bool, enableEmailOTP: bool, imposeAuthentication: string, deliveryMode: string, allowFieldConfiguration: bool, formFields: list, enableEditRecipients: bool, enableDeleteRecipients: bool, recipientNotificationSettings: record, enableQes: bool, groupSigners: list>, formGroups: table<minimumCount: int, maximumCount: int, dataSyncTag: string, groupNames: list, groupValidation: string>, commonFields: table<id: string, fieldType: string, type: string, value: string, font: string, isRequired: bool, isReadOnly: bool, lineHeight: int, fontSize: int, fontHexColor: string, isUnderLineFont: bool, isItalicFont: bool, isBoldFont: bool, groupName: string, label: string, placeholder: string, validationtype: string, validationCustomRegex: string, validationCustomRegexMessage: string, dateFormat: string, timeFormat: string, imageInfo: record, attachmentInfo: record, editableDateFieldSettings: record, dropdownOptions: list, bounds: record, pageNumber: int, conditionalRules: list, dataSyncTag: string, textAlign: string, textDirection: string, characterSpacing: float, characterLimit: int, hyperlinkText: string, backgroundHexColor: string, tabIndex: int, formulaFieldSettings: record, resizeOption: string, allowEditFormField: bool, allowDeleteFormField: bool, collaborationSettings: record, isMasked: bool, isDefaultValueRequired: bool>, cCDetails: list<string>, brandId: string, allowMessageEditing: bool, allowNewRoles: bool, allowNewFiles: bool, allowModifyFiles: bool, enableReassign: bool, EnablePrintAndSign: bool, enableSigningOrder: bool, createdDate: int, createdBy: record<emailAddress: string, name: string>, sharedTemplateDetail: table<teamId: string, accessType: string>, documentInfo: table<language: int, locale: string, title: string, description: string>, labels: list<string>, templateLabels: list<string>, behalfOf: record<name: string, emailAddress: string>, documentDownloadOption: string, recipientNotificationSettings: record<signatureRequest: bool, declined: bool, revoked: bool, signed: bool, completed: bool, expired: bool, reassigned: bool, deleted: bool, reminders: bool, editRecipient: bool, editDocument: bool, viewed: bool>, formFieldPermission: record<canAdd: bool, canModify: bool, canModifyDefaultValue: bool>, allowedSignatureTypes: list<string>, groupSignerSettings: record<enabled: bool, allowedDirectories: list<string>>, sharing: record<teams: list<record>>, enableAllowSignEverywhere: bool, documentTimeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "templateId" $templateId "scalar")] | flatten | str join "&"
@@ -2545,9 +2553,9 @@ export def "template-download Download" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --templateId: string # Template Id.
-  --onBehalfOf: string # The on behalfof email address.
-  --includeFormFieldValues: string@bool-completer # Include form field data. (default: false)
+  --templateId: string
+  --onBehalfOf: string
+  --includeFormFieldValues: oneof<nothing, bool> # default: false
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2577,7 +2585,7 @@ export def "template-edit EditTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --templateId: string # The template id.
+  --templateId: string
   --title: string # nullable
   --description: string # nullable
   --documentTitle: string # nullable
@@ -2585,13 +2593,13 @@ export def "template-edit EditTemplate" [
   --roles: list # nullable — item shape: {name?: string, index: int, defaultSignerName?: string, defaultSignerEmail?: string, signerOrder?: int, signerType?: "Signer"|"Reviewer"|"InPersonSigner", hostEmail?: string, language?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20", locale?: "EN"|"NO"|"FR"|"DE"|"ES"|"BG"|"CS"|"DA"|"IT"|"NL"|"PL"|"PT"|"RO"|"RU"|"SV"|"Default"|"JA"|"TH"|"ZH_CN"|"ZH_TW"|"KO", signType?: "Single"|"Group", defaultGroupId?: string, imposeAuthentication?: "None"|"EmailOTP"|"AccessCode"|"SMSOTP"|"IdVerification", phoneNumber?: record, deliveryMode?: "Email"|"SMS"|"EmailAndSMS"|"WhatsApp", allowFieldConfiguration?: bool, formFields?: list, allowRoleEdit?: bool, allowRoleDelete?: bool, recipientNotificationSettings?: record, enableQes?: bool}
   --cc: list # nullable — item shape: {emailAddress: string}
   --brandId: string # nullable
-  --allowMessageEditing: string@bool-completer # nullable
-  --allowNewRoles: string@bool-completer # nullable
-  --allowNewFiles: string@bool-completer # nullable
-  --allowModifyFiles: string@bool-completer # nullable
-  --enableReassign: string@bool-completer # nullable
-  --enablePrintAndSign: string@bool-completer # nullable
-  --enableSigningOrder: string@bool-completer # nullable
+  --allowMessageEditing: oneof<nothing, bool> # nullable
+  --allowNewRoles: oneof<nothing, bool> # nullable
+  --allowNewFiles: oneof<nothing, bool> # nullable
+  --allowModifyFiles: oneof<nothing, bool> # nullable
+  --enableReassign: oneof<nothing, bool> # nullable
+  --enablePrintAndSign: oneof<nothing, bool> # nullable
+  --enableSigningOrder: oneof<nothing, bool> # nullable
   --documentInfo: list # nullable — item shape: {language?: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"|"10"|"11"|"12"|"13"|"14"|"15"|"16"|"17"|"18"|"19"|"20", locale: "EN"|"NO"|"FR"|"DE"|"ES"|"BG"|"CS"|"DA"|"IT"|"NL"|"PL"|"PT"|"RO"|"RU"|"SV"|"Default"|"JA"|"TH"|"ZH_CN"|"ZH_TW"|"KO", title: string, description?: string}
   --onBehalfOf: string # nullable
   --labels: list # nullable
@@ -2601,14 +2609,15 @@ export def "template-edit EditTemplate" [
   --allowedSignatureTypes: list # nullable
   --formFieldPermission: record # shape: {canAdd?: bool, canModify?: bool, canModifyDefaultValue?: bool}
   --groupSignerSettings: record # shape: {enabled?: bool, allowedDirectories?: list}
-  --enableAllowSignEverywhere: string@bool-completer # nullable
+  --enableAllowSignEverywhere: oneof<nothing, bool> # nullable
+  --documentTimeZone: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "templateId" $templateId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/template/edit" $qp)
-  let body = {title: $title, description: $description, documentTitle: $documentTitle, documentMessage: $documentMessage, roles: $roles, cc: $cc, brandId: $brandId, allowMessageEditing: $allowMessageEditing, allowNewRoles: $allowNewRoles, allowNewFiles: $allowNewFiles, allowModifyFiles: $allowModifyFiles, enableReassign: $enableReassign, enablePrintAndSign: $enablePrintAndSign, enableSigningOrder: $enableSigningOrder, documentInfo: $documentInfo, onBehalfOf: $onBehalfOf, labels: $labels, templateLabels: $templateLabels, formGroups: $formGroups, recipientNotificationSettings: $recipientNotificationSettings, allowedSignatureTypes: $allowedSignatureTypes, formFieldPermission: $formFieldPermission, groupSignerSettings: $groupSignerSettings, enableAllowSignEverywhere: $enableAllowSignEverywhere} | compact
+  let body = {title: $title, description: $description, documentTitle: $documentTitle, documentMessage: $documentMessage, roles: $roles, cc: $cc, brandId: $brandId, allowMessageEditing: $allowMessageEditing, allowNewRoles: $allowNewRoles, allowNewFiles: $allowNewFiles, allowModifyFiles: $allowModifyFiles, enableReassign: $enableReassign, enablePrintAndSign: $enablePrintAndSign, enableSigningOrder: $enableSigningOrder, documentInfo: $documentInfo, onBehalfOf: $onBehalfOf, labels: $labels, templateLabels: $templateLabels, formGroups: $formGroups, recipientNotificationSettings: $recipientNotificationSettings, allowedSignatureTypes: $allowedSignatureTypes, formFieldPermission: $formFieldPermission, groupSignerSettings: $groupSignerSettings, enableAllowSignEverywhere: $enableAllowSignEverywhere, documentTimeZone: $documentTimeZone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2684,7 +2693,7 @@ export def "template-share ShareTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --templateId: string # Template Id.
+  --templateId: string
   --teams: list # nullable — item shape: {teamId: string, action: "Grant"|"Revoke", accessLevel?: "Use"|"Edit"}
 ]: any -> any {
   let input = $in
@@ -2711,9 +2720,9 @@ export def "template-create-embedded-preview-url createEmbeddedPreviewUrl" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --templateId: string # The template id.
+  --templateId: string
   --linkValidTill: string # nullable, format: date-time
-  --showToolbar: string@bool-completer
+  --showToolbar: oneof<nothing, bool>
 ]: any -> record<templateUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2863,7 +2872,7 @@ export def "users-get GetUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --userId: string # User Id.
+  --userId: string
 ]: nothing -> record<userId: string, email: string, firstName: string, lastName: string, teamId: string, teamName: string, role: string, userStatus: string, createdDate: int, modifiedDate: int, metaData: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2912,7 +2921,7 @@ export def "users-change-team ChangeTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --userId: string # user Id.
+  --userId: string
   toTeamId: string
   --transferDocumentsToUserId: string # nullable
 ]: any -> any {

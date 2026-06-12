@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://email.us-east-1.amazonaws.com" "http://email.us-east-2.amazonaws.com" "http://email.us-west-1.amazonaws.com" "http://email.us-west-2.amazonaws.com" "http://email.us-gov-west-1.amazonaws.com" "http://email.us-gov-east-1.amazonaws.com" "http://email.ca-central-1.amazonaws.com" "http://email.eu-north-1.amazonaws.com" "http://email.eu-west-1.amazonaws.com" "http://email.eu-west-2.amazonaws.com" "http://email.eu-west-3.amazonaws.com" "http://email.eu-central-1.amazonaws.com" "http://email.eu-south-1.amazonaws.com" "http://email.af-south-1.amazonaws.com" "http://email.ap-northeast-1.amazonaws.com" "http://email.ap-northeast-2.amazonaws.com" "http://email.ap-northeast-3.amazonaws.com" "http://email.ap-southeast-1.amazonaws.com" "http://email.ap-southeast-2.amazonaws.com" "http://email.ap-east-1.amazonaws.com" "http://email.ap-south-1.amazonaws.com" "http://email.sa-east-1.amazonaws.com" "http://email.me-south-1.amazonaws.com" "https://email.us-east-1.amazonaws.com" "https://email.us-east-2.amazonaws.com" "https://email.us-west-1.amazonaws.com" "https://email.us-west-2.amazonaws.com" "https://email.us-gov-west-1.amazonaws.com" "https://email.us-gov-east-1.amazonaws.com" "https://email.ca-central-1.amazonaws.com" "https://email.eu-north-1.amazonaws.com" "https://email.eu-west-1.amazonaws.com" "https://email.eu-west-2.amazonaws.com" "https://email.eu-west-3.amazonaws.com" "https://email.eu-central-1.amazonaws.com" "https://email.eu-south-1.amazonaws.com" "https://email.af-south-1.amazonaws.com" "https://email.ap-northeast-1.amazonaws.com" "https://email.ap-northeast-2.amazonaws.com" "https://email.ap-northeast-3.amazonaws.com" "https://email.ap-southeast-1.amazonaws.com" "https://email.ap-southeast-2.amazonaws.com" "https://email.ap-east-1.amazonaws.com" "https://email.ap-south-1.amazonaws.com" "https://email.sa-east-1.amazonaws.com" "https://email.me-south-1.amazonaws.com" "http://email.cn-north-1.amazonaws.com.cn" "http://email.cn-northwest-1.amazonaws.com.cn" "https://email.cn-north-1.amazonaws.com.cn" "https://email.cn-northwest-1.amazonaws.com.cn"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -3871,7 +3870,7 @@ export def "action-set-identity-dkim-enabled SetIdentityDkimEnabled" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Identity: string # The identity for which DKIM signing should be enabled or disabled.
-  --DkimEnabled: string@bool-completer # Sets whether DKIM signing is enabled for an identity. Set to <code>true</code> to enable DKIM signing for this identity; <code>false</code> to disable it. 
+  --DkimEnabled: oneof<nothing, bool> # Sets whether DKIM signing is enabled for an identity. Set to <code>true</code> to enable DKIM signing for this identity; <code>false</code> to disable it. 
   --Action: string@Action-completer-52
   --Version: string@Version-completer
   --X-Amz-Content-Sha256: string
@@ -3942,7 +3941,7 @@ export def "action-set-identity-feedback-forwarding-enabled SetIdentityFeedbackF
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Identity: string # The identity for which to set bounce and complaint notification forwarding. Examples: <code>user@example.com</code>, <code>example.com</code>.
-  --ForwardingEnabled: string@bool-completer # Sets whether Amazon SES will forward bounce and complaint notifications as email. <code>true</code> specifies that Amazon SES will forward bounce and complaint notifications as email, in addition to any Amazon SNS topic publishing otherwise specified. <code>false</code> specifies that Amazon SES will publish bounce and complaint notifications only through Amazon SNS. This value can only be set to <code>false</code> when Amazon SNS topics are set for both <code>Bounce</code> and <code>Complaint</code> notification types.
+  --ForwardingEnabled: oneof<nothing, bool> # Sets whether Amazon SES will forward bounce and complaint notifications as email. <code>true</code> specifies that Amazon SES will forward bounce and complaint notifications as email, in addition to any Amazon SNS topic publishing otherwise specified. <code>false</code> specifies that Amazon SES will publish bounce and complaint notifications only through Amazon SNS. This value can only be set to <code>false</code> when Amazon SNS topics are set for both <code>Bounce</code> and <code>Complaint</code> notification types.
   --Action: string@Action-completer-53
   --Version: string@Version-completer
   --X-Amz-Content-Sha256: string
@@ -4014,7 +4013,7 @@ export def "action-set-identity-headers-in-notifications-enabled SetIdentityHead
   --allow-errors(-e) # Return full response without error handling
   --Identity: string # The identity for which to enable or disable headers in notifications. Examples: <code>user@example.com</code>, <code>example.com</code>.
   --NotificationType: string@NotificationType-completer # The notification type for which to enable or disable headers in notifications. 
-  --Enabled: string@bool-completer # <p>Sets whether Amazon SES includes the original email headers in Amazon SNS notifications of the specified notification type. A value of <code>true</code> specifies that Amazon SES will include headers in notifications, and a value of <code>false</code> specifies that Amazon SES will not include headers in notifications.</p> <p>This value can only be set when <code>NotificationType</code> is already set to use a particular Amazon SNS topic.</p>
+  --Enabled: oneof<nothing, bool> # <p>Sets whether Amazon SES includes the original email headers in Amazon SNS notifications of the specified notification type. A value of <code>true</code> specifies that Amazon SES will include headers in notifications, and a value of <code>false</code> specifies that Amazon SES will not include headers in notifications.</p> <p>This value can only be set when <code>NotificationType</code> is already set to use a particular Amazon SNS topic.</p>
   --Action: string@Action-completer-54
   --Version: string@Version-completer
   --X-Amz-Content-Sha256: string
@@ -4371,7 +4370,7 @@ export def "action-update-account-sending-enabled UpdateAccountSendingEnabled" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Enabled: string@bool-completer # Describes whether email sending is enabled or disabled for your Amazon SES account in the current AWS Region.
+  --Enabled: oneof<nothing, bool> # Describes whether email sending is enabled or disabled for your Amazon SES account in the current AWS Region.
   --Action: string@Action-completer-59
   --Version: string@Version-completer
   --X-Amz-Content-Sha256: string
@@ -4513,7 +4512,7 @@ export def "action-update-configuration-set-reputation-metrics-enabled UpdateCon
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ConfigurationSetName: string # The name of the configuration set that you want to update.
-  --Enabled: string@bool-completer # Describes whether or not Amazon SES will publish reputation metrics for the configuration set, such as bounce and complaint rates, to Amazon CloudWatch.
+  --Enabled: oneof<nothing, bool> # Describes whether or not Amazon SES will publish reputation metrics for the configuration set, such as bounce and complaint rates, to Amazon CloudWatch.
   --Action: string@Action-completer-61
   --Version: string@Version-completer
   --X-Amz-Content-Sha256: string
@@ -4584,7 +4583,7 @@ export def "action-update-configuration-set-sending-enabled UpdateConfigurationS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ConfigurationSetName: string # The name of the configuration set that you want to update.
-  --Enabled: string@bool-completer # Describes whether email sending is enabled or disabled for the configuration set. 
+  --Enabled: oneof<nothing, bool> # Describes whether email sending is enabled or disabled for the configuration set. 
   --Action: string@Action-completer-62
   --Version: string@Version-completer
   --X-Amz-Content-Sha256: string

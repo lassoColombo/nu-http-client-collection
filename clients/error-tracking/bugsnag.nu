@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.bugsnag.com" "https://virtserver.swaggerhub.com/smartbear-public/bugsnag-data-access-api/2" "https://api.bugsnag.smartbear.com" "https://virtserver.swaggerhub.com/smartbear/bugsnag-data-access-api/2"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -125,7 +124,7 @@ export def "user-organizations listUserOrganizations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --admin: string@bool-completer # `true` if only Organizations the Current User is an admin of should be returned
+  --admin: oneof<nothing, bool> # `true` if only Organizations the Current User is an admin of should be returned
   --per-page: float # Number of results per page (default: 30, e.g. 10)
 ]: nothing -> table<name: string, billing_emails: list<string>, auto_upgrade: bool, id: string, slug: string, api_key: string, creator: record<email: string, id: string, name: string>, collaborators_url: string, projects_url: string, created_at: string, updated_at: string, upgrade_url: string, managed_by_platform_services: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -178,8 +177,8 @@ export def "saved-searches createSavedSearch" [
   name: string # name of the saved search (e.g. most events)
   filters: record # shape: {user.id?: list, user.email?: list, user.name?: list, error.id?: list, error.status?: list, error.assigned_to?: list, error.has_issue?: bool, app.release_stage?: list, app.context?: list, app.type?: list, version.introduced_in?: list, version.seen_in?: list, version_code.introduced_in?: list, version_code.seen_in?: list, release.introduced_in?: list, release.seen_in?: list, feature_flag.seen_in?: list, feature_flag.exclusive_to?: list, event.class?: list, event.message?: list, event.file?: list, event.method?: list, event.severity?: list, event.since?: list, event.before?: list, browser.name?: list, browser.version?: list, os.name?: list, os.version?: list, device.hostname?: list, device.manufacturer?: list, device.model?: list, request.url?: list, request.ip?: list, device.jailbroken?: list, app.in_foreground?: list}
   --body-sort: string@sort-completer
-  --shared: string@bool-completer # whether this saved search is shared among collaborators (default: false, e.g. false)
-  --project-default: string@bool-completer # whether this saved search is the project default for the current user (e.g. false)
+  --shared: oneof<nothing, bool> # whether this saved search is shared among collaborators (default: false, e.g. false)
+  --project-default: oneof<nothing, bool> # whether this saved search is the project default for the current user (e.g. false)
 ]: any -> record<id: string, user_id: string, project_id: string, name: string, filters: record<user_id: list<record>, user_email: list<record>, user_name: list<record>, error_id: list<record>, error_status: list<record>, error_assigned_to: list<record>, error_has_issue: bool, app_release_stage: list<record>, app_context: list<record>, app_type: list<record>, version_introduced_in: list<record>, version_seen_in: list<record>, version_code_introduced_in: list<record>, version_code_seen_in: list<record>, release_introduced_in: list<record>, release_seen_in: list<record>, feature_flag_seen_in: list<record>, feature_flag_exclusive_to: list<record>, event_class: list<record>, event_message: list<record>, event_file: list<record>, event_method: list<record>, event_severity: list<record>, event_since: list<record>, event_before: list<record>, browser_name: list<record>, browser_version: list<record>, os_name: list<record>, os_version: list<record>, device_hostname: list<record>, device_manufacturer: list<record>, device_model: list<record>, request_url: list<record>, request_ip: list<record>, device_jailbroken: list<record>, app_in_foreground: list<record>>, sort: string, shared: bool, project_default: bool, updated_by_id: string, created_at: string, updated_at: string, has_assigned_to_me: bool, has_assigned_to: bool, has_created_issue_filter: bool, has_status_filter: bool, new_error_inclusion: string, open_error_inclusion: string, for_review_error_inclusion: string, snoozed_error_inclusion: string, fixed_error_inclusion: string, ignored_error_inclusion: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -231,8 +230,8 @@ export def "saved-searches updateSavedSearchById" [
   --name: string # name of the saved search (e.g. most events)
   --filters: record # shape: {user.id?: list, user.email?: list, user.name?: list, error.id?: list, error.status?: list, error.assigned_to?: list, error.has_issue?: bool, app.release_stage?: list, app.context?: list, app.type?: list, version.introduced_in?: list, version.seen_in?: list, version_code.introduced_in?: list, version_code.seen_in?: list, release.introduced_in?: list, release.seen_in?: list, feature_flag.seen_in?: list, feature_flag.exclusive_to?: list, event.class?: list, event.message?: list, event.file?: list, event.method?: list, event.severity?: list, event.since?: list, event.before?: list, browser.name?: list, browser.version?: list, os.name?: list, os.version?: list, device.hostname?: list, device.manufacturer?: list, device.model?: list, request.url?: list, request.ip?: list, device.jailbroken?: list, app.in_foreground?: list}
   --body-sort: string@sort-completer
-  --shared: string@bool-completer # whether this saved search is shared among collaborators (default: false, e.g. false)
-  --project-default: string@bool-completer # whether this saved search is the project default for the current user (e.g. false)
+  --shared: oneof<nothing, bool> # whether this saved search is shared among collaborators (default: false, e.g. false)
+  --project-default: oneof<nothing, bool> # whether this saved search is the project default for the current user (e.g. false)
 ]: any -> record<id: string, user_id: string, project_id: string, name: string, filters: record<user_id: list<record>, user_email: list<record>, user_name: list<record>, error_id: list<record>, error_status: list<record>, error_assigned_to: list<record>, error_has_issue: bool, app_release_stage: list<record>, app_context: list<record>, app_type: list<record>, version_introduced_in: list<record>, version_seen_in: list<record>, version_code_introduced_in: list<record>, version_code_seen_in: list<record>, release_introduced_in: list<record>, release_seen_in: list<record>, feature_flag_seen_in: list<record>, feature_flag_exclusive_to: list<record>, event_class: list<record>, event_message: list<record>, event_file: list<record>, event_method: list<record>, event_severity: list<record>, event_since: list<record>, event_before: list<record>, browser_name: list<record>, browser_version: list<record>, os_name: list<record>, os_version: list<record>, device_hostname: list<record>, device_manufacturer: list<record>, device_model: list<record>, request_url: list<record>, request_ip: list<record>, device_jailbroken: list<record>, app_in_foreground: list<record>>, sort: string, shared: bool, project_default: bool, updated_by_id: string, created_at: string, updated_at: string, has_assigned_to_me: bool, has_assigned_to: bool, has_created_issue_filter: bool, has_status_filter: bool, new_error_inclusion: string, open_error_inclusion: string, for_review_error_inclusion: string, snoozed_error_inclusion: string, fixed_error_inclusion: string, ignored_error_inclusion: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -331,7 +330,7 @@ export def "organizations-projects createOrganizationProject" [
   --allow-errors(-e) # Return full response without error handling
   name: string # The new Project's name. Note that the first character should not start with a '$'. (e.g. Example Project)
   type: string@type-completer # used for Projects that use a framework other than those listed above
-  --ignore-old-browsers: string@bool-completer # For javascript projects this will filter errors from older browsers (e.g. true)
+  --ignore-old-browsers: oneof<nothing, bool> # For javascript projects this will filter errors from older browsers (e.g. true)
 ]: any -> record<name: string, global_grouping: list<any>, location_grouping: list<any>, discarded_app_versions: list<any>, discarded_errors: list<any>, url_whitelist: list<any>, ignore_old_browsers: bool, ignored_browser_versions: record, resolve_on_deploy: bool, id: string, organization_id: string, type: string, performance_display_type: string, slug: string, api_key: string, upload_api_key: string, must_use_upload_api_key: bool, is_full_view: bool, release_stages: list<any>, language: string, created_at: string, updated_at: string, url: string, html_url: string, errors_url: string, events_url: string, open_error_count: float, for_review_error_count: float, collaborators_count: float, teams_count: float, custom_event_fields_used: float, ecmascript_parse_version: record, stability_target_type: string, target_stability: record<value: float, updated_at: string, updated_by_id: string>, critical_stability: record<value: float, updated_at: string, updated_by_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -395,7 +394,7 @@ export def "projects-errors bulkUpdateErrors" [
   --assigned-collaborator-id: string # The Collaborator to assign to the Error. Errors may be assigned only to users who have accepted their Bugsnag invitation and have access to the project.   (e.g. 515fb9337c1074f6fd000002)
   --assigned-team-id: string # The Team to assign to the Error. Mutually exclusive with `assigned_collaborator_id`. (e.g. 515fb9337c1074f6fd000003)
   --issue-url: string # Specifies the HTTP link to an external issue when adding or updating a link. 
-  --verify-issue-url: string@bool-completer # Setting `false` will prevent Bugsnag from attempting to verify the `issue_url` with the configured issue tracker when linking an issue. Defaults to `true` if the parameter is not supplied. If no configured issue tracker the parameter is ignored.
+  --verify-issue-url: oneof<nothing, bool> # Setting `false` will prevent Bugsnag from attempting to verify the `issue_url` with the configured issue tracker when linking an issue. Defaults to `true` if the parameter is not supplied. If no configured issue tracker the parameter is ignored.
   --issue-title: string # If the Error has a `created_issue`, the `issue_title` request field can be set to update the issue's title.
   --notification-id: string # ID of the issue tracker to use for `create_issue` and `link_issue` operations. The most recent issue tracker is used if the parameter is omitted, and no issue tracker is used even if `notification_id` is set for `link_issue` operations if `verify_issue_url` is `false`.   (e.g. 337515fb9c1074f6fd000001)
   --reopen-rules: record # shape: {reopen_if: "occurs_after"|"n_occurrences_in_m_hours"|"n_additional_occurrences"|"n_additional_users", additional_users?: float, seconds?: float, occurrences?: float, hours?: float, additional_occurrences?: float}
@@ -481,7 +480,7 @@ export def "projects-errors updateErrorOnProject" [
   --assigned-collaborator-id: string # The Collaborator to assign to the Error. Errors may be assigned only to users who have accepted their Bugsnag invitation and have access to the project.   (e.g. 515fb9337c1074f6fd000002)
   --assigned-team-id: string # The Team to assign to the Error. Mutually exclusive with `assigned_collaborator_id`. (e.g. 515fb9337c1074f6fd000003)
   --issue-url: string # Specifies the HTTP link to an external issue when adding or updating a link. 
-  --verify-issue-url: string@bool-completer # Setting `false` will prevent Bugsnag from attempting to verify the `issue_url` with the configured issue tracker when linking an issue. Defaults to `true` if the parameter is not supplied. If no configured issue tracker the parameter is ignored.
+  --verify-issue-url: oneof<nothing, bool> # Setting `false` will prevent Bugsnag from attempting to verify the `issue_url` with the configured issue tracker when linking an issue. Defaults to `true` if the parameter is not supplied. If no configured issue tracker the parameter is ignored.
   --issue-title: string # If the Error has a `created_issue`, the `issue_title` request field can be set to update the issue's title.
   --notification-id: string # ID of the issue tracker to use for `create_issue` and `link_issue` operations. The most recent issue tracker is used if the parameter is omitted, and no issue tracker is used even if `notification_id` is set for `link_issue` operations if `verify_issue_url` is `false`.   (e.g. 337515fb9c1074f6fd000001)
   --reopen-rules: record # shape: {reopen_if: "occurs_after"|"n_occurrences_in_m_hours"|"n_additional_occurrences"|"n_additional_users", additional_users?: float, seconds?: float, occurrences?: float, hours?: float, additional_occurrences?: float}
@@ -587,7 +586,7 @@ export def "projects-errors-events listEventsOnError" [
   --filters: record
   --filter-groups: record
   --filter-groups-join: string@filter-groups-join-completer
-  --full-reports: string@bool-completer # default: false
+  --full-reports: oneof<nothing, bool> # default: false
 ]: nothing -> table<id: string, is_full_report: bool, url: string, project_url: string, error_id: string, received_at: string, exceptions: list<record>, error_class: string, message: string, severity: string, unhandled: bool, context: string, app: record<releaseStage: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -640,7 +639,7 @@ export def "projects-events listEventsOnProject" [
   --filters: record
   --filter-groups: record
   --filter-groups-join: string@filter-groups-join-completer
-  --full-reports: string@bool-completer # default: false
+  --full-reports: oneof<nothing, bool> # default: false
 ]: nothing -> table<id: string, is_full_report: bool, url: string, project_url: string, error_id: string, received_at: string, exceptions: list<record>, error_class: string, message: string, severity: string, unhandled: bool, context: string, app: record<releaseStage: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1071,7 +1070,7 @@ export def "configured-integrations-trigger-configs updateConfiguredIntegrations
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # e.g. true
+  --active: oneof<nothing, bool> # e.g. true
   --settings: list # settings for the trigger — item shape: {saved_search_id?: string, basic_filter?: record, include_all_states?: bool, release_stages?: list, threshold?: float, condition?: "always"|"when_degraded", period?: string}
 ]: any -> record<active: bool, settings: table<saved_search_id: string, basic_filter: record, include_all_states: bool, release_stages: list, threshold: float, condition: string, period: string>> {
   let input = $in
@@ -1101,7 +1100,7 @@ export def "configured-integrations-test configuredIntegrationTest" [
   --component: string # Comma separated list of components to create the issue in (e.g. Ticket, Action)
   --customFields: string # Additional JSON-encoded Jira fields (e.g. {"customfield_10024": {"value": "Engineering"}})
   --host: string # URL of your Jira instance (e.g. https://example.atlassian.net)
-  --ignore-tls-validation: string@bool-completer # Whether to ignore TLS validation when making API calls (e.g. false)
+  --ignore-tls-validation: oneof<nothing, bool> # Whether to ignore TLS validation when making API calls (e.g. false)
   --issueType: string # The type of issue to be created (e.g. Task)
   --password: string # API token generated for your Jira account (use your password for Jira Server) (e.g. e112Fq0cc5)
   --project-key: string # The project key for the Jira project (e.g. jira)
@@ -1265,7 +1264,7 @@ export def "organizations updateOrganizationById" [
   --allow-errors(-e) # Return full response without error handling
   name: string # e.g. Acme Co.
   --billing-emails: list # e.g. [emily@example.com]
-  --auto-upgrade: string@bool-completer # whether we should upgrade your plan in response to the organization reaching its plan limit of events. If this value is `false` your events will be throttled when you reach your plan limit. (e.g. true)
+  --auto-upgrade: oneof<nothing, bool> # whether we should upgrade your plan in response to the organization reaching its plan limit of events. If this value is `false` your events will be throttled when you reach your plan limit. (e.g. true)
   --invoice-address: string # Additional information to print on your invoice (e.g. Vendor ID number 4567)
   --invoice-info: string # Deprecated field. Use `invoice_address` (e.g. Vendor ID number 4567)
 ]: any -> record<name: string, billing_emails: list<string>, auto_upgrade: bool, id: string, slug: string, api_key: string, creator: record<email: string, id: string, name: string>, collaborators_url: string, projects_url: string, created_at: string, updated_at: string, upgrade_url: string, managed_by_platform_services: bool> {
@@ -1389,7 +1388,7 @@ export def "organizations-collaborators inviteOrganizationCollaborator" [
   --password: string # A password for the invited user
   --project-ids: list # The ids of projects in the current organization that the invited user should have access to.
   --project-roles: record # The IDs of the projects to which the user should have access, and the roles they should have, either 'project_owner' or 'project_member'.
-  --admin: string@bool-completer # Whether to give admin permissions to the invited user.
+  --admin: oneof<nothing, bool> # Whether to give admin permissions to the invited user.
 ]: any -> record<id: string, name: string, email: string, two_factor_enabled: bool, two_factor_enabled_on: string, recovery_codes_remaining: float, password_updated_on: string, show_time_in_utc: bool, heroku: bool, created_at: string, is_admin: bool, pending_invitation: bool, last_request_at: string, project_ids: list<string>, paid_for: bool, project_roles: record<515fb9337c1074f6fd000001: string>, managed_by_smartbear_id: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1441,7 +1440,7 @@ export def "organizations-collaborators updateOrganizationCollaborator" [
   --allow-errors(-e) # Return full response without error handling
   --project-ids: list # The ids of projects in the current organization that the invited user should have access to.
   --project-roles: record # The IDs of the projects to which the user should have access, and the roles they should have, either 'project_owner' or 'project_member'.
-  --admin: string@bool-completer # Whether to give admin permissions to the user.
+  --admin: oneof<nothing, bool> # Whether to give admin permissions to the user.
 ]: any -> record<id: string, name: string, email: string, two_factor_enabled: bool, two_factor_enabled_on: string, recovery_codes_remaining: float, password_updated_on: string, show_time_in_utc: bool, heroku: bool, created_at: string, is_admin: bool, pending_invitation: bool, last_request_at: string, project_ids: list<string>, paid_for: bool, project_roles: record<515fb9337c1074f6fd000001: string>, managed_by_smartbear_id: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1493,7 +1492,7 @@ export def "organizations-collaborators-bulk-invite bulkInviteOrganizationCollab
   emails: list # A list of emails to invite
   --project-ids: list # The ids of projects in the current organization that the invited user should have access to. Leave blank if the admin field is set to true. Admins have access to all projects. Only one of project_roles and project_ids may be supplied.
   --project-roles: record # The IDs of the projects to which the user should have access, and the roles they should have, either 'project_owner' or 'project_member'. Leave blank if the admin field is set to true. Admins have access to all projects. Only one of project_roles and project_ids may be supplied. This field may only be supplied if the enterprise-roles feature is enabled for the account.
-  --admin: string@bool-completer # Whether to give admin permissions to the invited user(s).
+  --admin: oneof<nothing, bool> # Whether to give admin permissions to the invited user(s).
 ]: any -> table<id: string, name: string, email: string, two_factor_enabled: bool, two_factor_enabled_on: string, recovery_codes_remaining: float, password_updated_on: string, show_time_in_utc: bool, heroku: bool, created_at: string, is_admin: bool, pending_invitation: bool, last_request_at: string, project_ids: list<string>, paid_for: bool, project_roles: record<515fb9337c1074f6fd000001: string>, managed_by_smartbear_id: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1669,7 +1668,7 @@ export def "organizations-collaborators-team-memberships addOrganizationCollabor
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --team-ids: list # IDs of the teams to assign the collaborator to. This variable is optional, but required if add_all_teams is false
-  --add-all-teams: string@bool-completer # Whether to assign the collaborator to all teams in the organization
+  --add-all-teams: oneof<nothing, bool> # Whether to assign the collaborator to all teams in the organization
 ]: any -> record<id: string, name: string, email: string, two_factor_enabled: bool, two_factor_enabled_on: string, recovery_codes_remaining: float, password_updated_on: string, show_time_in_utc: bool, heroku: bool, created_at: string, is_admin: bool, pending_invitation: bool, last_request_at: string, project_ids: list<string>, paid_for: bool, project_roles: record<515fb9337c1074f6fd000001: string>, managed_by_smartbear_id: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1845,7 +1844,7 @@ export def "organizations-teams-suggested-collaborators listOrganizationTeamSugg
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --q: string # A partial or full user name or email to filter the results by.
-  --include-has-access: string@bool-completer # Request all collaborators in the organization, including those that are not members of the team. By default only collaborators who are not members of the team will be returned.
+  --include-has-access: oneof<nothing, bool> # Request all collaborators in the organization, including those that are not members of the team. By default only collaborators who are not members of the team will be returned.
   --per-page: float # default: 30, e.g. 10
   --offset: string # token to retrieve next page of results
 ]: nothing -> table<id: string, name: string, email: string, has_access: bool> {
@@ -1900,7 +1899,7 @@ export def "organizations-collaborators-suggested-teams listOrganizationCollabor
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --q: string # A partial or full team name to filter the results by
-  --include-is-member: string@bool-completer # Request all teams in the organization, including those that the collaborator is already on. By default only teams the collaborator is not a member of will be returned
+  --include-is-member: oneof<nothing, bool> # Request all teams in the organization, including those that the collaborator is already on. By default only teams the collaborator is not a member of will be returned
   --per-page: float # default: 30, e.g. 10
   --offset: string # token to retrieve next page of results
 ]: nothing -> table<project_id: string, project_name: string, is_member: bool> {
@@ -1955,7 +1954,7 @@ export def "organizations-teams-team-memberships addOrganizationTeamMemberships"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --collaborator-ids: list # Collaborators to add to the team.
-  --add-all-collaborators: string@bool-completer # Add all organization collaborators to the team. This should not be set if `collaborator_ids` is specified.
+  --add-all-collaborators: oneof<nothing, bool> # Add all organization collaborators to the team. This should not be set if `collaborator_ids` is specified.
 ]: any -> record<id: string, name: string, collaborator_count: float, project_count: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2033,7 +2032,7 @@ export def "organizations-teams-project-accesses updateOrganizationTeamProjectAc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --add-all-projects: string@bool-completer # Whether to add all remaining projects to the team. If `true`, `project_role` must also be supplied. User making the request must be an organization administrator if using `true`. (e.g. true)
+  --add-all-projects: oneof<nothing, bool> # Whether to add all remaining projects to the team. If `true`, `project_role` must also be supplied. User making the request must be an organization administrator if using `true`. (e.g. true)
   --project-role: string@project-role-completer
   --project-roles: record # A map of project IDs to the roles to be assigned to them. Must be `project_owner` unless the organization has access to the `enterprise-roles` feature. Cannot be supplied if `add_all_projects` is `true`. — shape: {515fb9337c1074f6fd000002: "project_owner"|"project_member"}
 ]: any -> table<id: string, name: string, collaborator_count: float, project_count: float> {
@@ -2085,7 +2084,7 @@ export def "organizations-teams-suggested-projects listOrganizationTeamSuggested
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-has-access: string@bool-completer # should projects the team already has access to be included?
+  --include-has-access: oneof<nothing, bool> # should projects the team already has access to be included?
   --q: string # A partial or full project name to filter the results by.
   --per-page: float # default: 30, e.g. 10
   --offset: string # token to retrieve next page of results
@@ -2166,7 +2165,7 @@ export def "organizations-event-data-deletions organizationEventDataDeletions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --skip-confirmation: string@bool-completer # whether to skip requiring another request to confirm the deletion (default: false)
+  --skip-confirmation: oneof<nothing, bool> # whether to skip requiring another request to confirm the deletion (default: false)
   filters: record # shape: {user.id?: list, user.email?: list, user.name?: list, error.id?: list, error.status?: list, error.assigned_to?: list, error.has_issue?: bool, app.release_stage?: list, app.context?: list, app.type?: list, version.introduced_in?: list, version.seen_in?: list, version_code.introduced_in?: list, version_code.seen_in?: list, release.introduced_in?: list, release.seen_in?: list, feature_flag.seen_in?: list, feature_flag.exclusive_to?: list, event.class?: list, event.message?: list, event.file?: list, event.method?: list, event.severity?: list, event.since?: list, event.before?: list, browser.name?: list, browser.version?: list, os.name?: list, os.version?: list, device.hostname?: list, device.manufacturer?: list, device.model?: list, request.url?: list, request.ip?: list, device.jailbroken?: list, app.in_foreground?: list}
   --filter-groups: record # A map of filter groups, where each group is keyed with a unique identifier for the group e.g: ``` {  "0": { ... },  "1": { ... } } ``` See the [Advanced Filters documentation](https://developer.smartbear.com/bugsnag/docs/data-access-filtering#advanced-filters) for more details.
   --filter-groups-join: string@filter-groups-join-completer # The join operator to apply between filter groups. - and - All conditions must be satisfied - or (default) - At least one condition must be satisfied
@@ -2319,7 +2318,7 @@ export def "organizations-scim-users updateScimCollaborator" [
   userName: string # e.g. james.smith@example.com
   name: record # shape: {formatted?: string, givenName: string, familyName: string}
   emails: list # item shape: {value: string}
-  --active: string@bool-completer # Whether the user is part of the organization.
+  --active: oneof<nothing, bool> # Whether the user is part of the organization.
 ]: any -> record<id: string, userName: string, name: record<formatted: string, givenName: string, familyName: string>, emails: table<value: string>, active: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2580,9 +2579,9 @@ export def "projects updateProject" [
   --discarded-app-versions: list # A list of app versions whose events will be [discarded](https://docs.bugsnag.com/product/event-usage/#discard-by-app-version) if received for the Project. Supports [regular expressions](https://developer.mozilla.org/en/docs/Web/JavaScript/Reference/Global_Objects/RegExp#Special_characters_meaning_in_regular_expressions) and [semver ranges](https://github.com/npm/node-semver#ranges). Errors matching these versions won't be processed by Bugsnag, and you won't receive notifications about them.
   --discarded-errors: list # A list of Error classes whose events will be [discarded](https://docs.bugsnag.com/product/event-usage/#discard-by-error-class) if received for the Project. Errors with these classes won't be processed by Bugsnag, and you won't receive notifications about them.
   --url-whitelist: list # When configured, the script source of each error's innermost stack trace's top frame is checked. If the script was not served from a matching domain the error will not be processed by BugSnag and will be discarded.  Provide a list of newline separated domain names. To match example.com and its subdomains specify *.example.com.  Relevant to JavaScript Projects only.
-  --ignore-old-browsers: string@bool-completer # Whether the Events in the Project will be ignored if they originate from old web browsers.  Relevant to JavaScript Projects only.  (e.g. true)
+  --ignore-old-browsers: oneof<nothing, bool> # Whether the Events in the Project will be ignored if they originate from old web browsers.  Relevant to JavaScript Projects only.  (e.g. true)
   --ignored-browser-versions: record # Relevant to JavaScript Projects only.  A mapping a of browser name to browser version. If set, Events in the Project will be ignored if they originate from a browser specified here whose version is earlier than the given version.  Keys must be one of the following strings: chrome, ie, firefox, safari, android, uc, opera, opera_mini, samsung, blackberry, sogou, other.  Values must be a number indicating which which version to ignore up to (but not including), or one of the strings: `ignore_all`, `ignore_none`  Example:  ``` { "chrome": "ignore_none", "safari": 6, "other": "ignore_all" } ```
-  --resolve-on-deploy: string@bool-completer # If true, every error in the Project will be marked as 'fixed' after using the Deploy Tracking API to notify Bugsnag of a new production deploy.  Applies to non-JavaScript Projects only.  (e.g. true)
+  --resolve-on-deploy: oneof<nothing, bool> # If true, every error in the Project will be marked as 'fixed' after using the Deploy Tracking API to notify Bugsnag of a new production deploy.  Applies to non-JavaScript Projects only.  (e.g. true)
   --collaborator-ids: list # If provided in the request, the Project will be updated so that its set of Collaborators will reflect those indicated by this list of ids. Existing Collaborators whose ids do not appear in the list will be removed from the Project.
 ]: any -> record<name: string, global_grouping: list<any>, location_grouping: list<any>, discarded_app_versions: list<any>, discarded_errors: list<any>, url_whitelist: list<any>, ignore_old_browsers: bool, ignored_browser_versions: record, resolve_on_deploy: bool, id: string, organization_id: string, type: string, performance_display_type: string, slug: string, api_key: string, upload_api_key: string, must_use_upload_api_key: bool, is_full_view: bool, release_stages: list<any>, language: string, created_at: string, updated_at: string, url: string, html_url: string, errors_url: string, events_url: string, open_error_count: float, for_review_error_count: float, collaborators_count: float, teams_count: float, custom_event_fields_used: float, ecmascript_parse_version: record, stability_target_type: string, target_stability: record<value: float, updated_at: string, updated_by_id: string>, critical_stability: record<value: float, updated_at: string, updated_by_id: string>> {
   let input = $in
@@ -2700,7 +2699,7 @@ export def "projects-event-fields createProjectEventField" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   path: string # [Path](https://docs.bugsnag.com/product/custom-filters/advanced-custom-filters/#custom-filter-path) to locate the relevant data inside an Event data structure (e.g. metaData.plan.tier)
-  --reindex: string@bool-completer # Whether to reindex historical events for this field (e.g. false)
+  --reindex: oneof<nothing, bool> # Whether to reindex historical events for this field (e.g. false)
   filter_options: record # shape: {name?: string}
   --pivot-options: record # shape: {name?: string, fields?: list, summary?: bool, values?: bool, cardinality?: bool, average?: bool}
 ]: any -> record<custom: bool, display_id: string, filter_options: record<name: string, description: string, aliases: list<string>, hint_text: string, hint_url: string>, values: table<id: string, name: string>, match_types: list<string>, pivot_options: record<name: string, fields: list<record>, summary: bool, values: bool, cardinality: bool, average: bool>, reindex_in_progress: bool, reindex_percentage: float> {
@@ -2732,7 +2731,7 @@ export def "projects-event-fields updateProjectEventFieldByDisplayId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   path: string # [Path](https://docs.bugsnag.com/product/custom-filters/advanced-custom-filters/#custom-filter-path) to locate the relevant data inside an Event data structure (e.g. metaData.plan.tier)
-  --reindex: string@bool-completer # Whether to reindex historical events for this field (e.g. false)
+  --reindex: oneof<nothing, bool> # Whether to reindex historical events for this field (e.g. false)
   filter_options: record # shape: {name?: string}
   --pivot-options: record # shape: {name?: string, fields?: list, summary?: bool, values?: bool, cardinality?: bool, average?: bool}
 ]: any -> record<custom: bool, display_id: string, filter_options: record<name: string, description: string, aliases: list<string>, hint_text: string, hint_url: string>, values: table<id: string, name: string>, match_types: list<string>, pivot_options: record<name: string, fields: list<record>, summary: bool, values: bool, cardinality: bool, average: bool>, reindex_in_progress: bool, reindex_percentage: float> {
@@ -2784,8 +2783,8 @@ export def "projects-release-groups listProjectReleaseGroups" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --release-stage-name: string # name of release stage to list release groups for (e.g. production)
-  --top-only: string@bool-completer # return only the top release groups (default false) (e.g. true)
-  --visible-only: string@bool-completer # return only visible release groups (default false) (e.g. true)
+  --top-only: oneof<nothing, bool> # return only the top release groups (default false) (e.g. true)
+  --visible-only: oneof<nothing, bool> # return only visible release groups (default false) (e.g. true)
   --per-page: float # how many results to return per page (e.g. 30)
   --page-token: string # value from the next relation in the Link response header to obtain the next page of results
 ]: nothing -> table<id: string, project_id: string, release_stage_name: string, app_version: string, first_released_at: string, first_release_id: string, releases_count: float, has_secondary_versions: bool, build_tool: string, builder_name: string, source_control: record<service: string, commit_url: string, revision: string, diff_url_to_previous: string, previous_app_version: string>, total_sessions_count: float, unhandled_sessions_count: float, sessions_count_in_last_24h: float, accumulative_daily_users_seen: float, accumulative_daily_users_with_unhandled: float, top_release_group: bool, visible: bool> {
@@ -2833,7 +2832,7 @@ export def "release-groups updateReleaseGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --visible: string@bool-completer # the updated visibility (e.g. false)
+  --visible: oneof<nothing, bool> # the updated visibility (e.g. false)
 ]: any -> record<id: string, project_id: string, release_stage_name: string, app_version: string, first_released_at: string, first_release_id: string, releases_count: float, has_secondary_versions: bool, build_tool: string, builder_name: string, source_control: record<service: string, commit_url: string, revision: string, diff_url_to_previous: string, previous_app_version: string>, total_sessions_count: float, unhandled_sessions_count: float, sessions_count_in_last_24h: float, accumulative_daily_users_seen: float, accumulative_daily_users_with_unhandled: float, top_release_group: bool, visible: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3011,7 +3010,7 @@ export def "projects-event-data-deletions createProjectEventDataDeletion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --skip-confirmation: string@bool-completer # whether to skip requiring another request to confirm the deletion (default: false)
+  --skip-confirmation: oneof<nothing, bool> # whether to skip requiring another request to confirm the deletion (default: false)
   filters: record # shape: {user.id?: list, user.email?: list, user.name?: list, error.id?: list, error.status?: list, error.assigned_to?: list, error.has_issue?: bool, app.release_stage?: list, app.context?: list, app.type?: list, version.introduced_in?: list, version.seen_in?: list, version_code.introduced_in?: list, version_code.seen_in?: list, release.introduced_in?: list, release.seen_in?: list, feature_flag.seen_in?: list, feature_flag.exclusive_to?: list, event.class?: list, event.message?: list, event.file?: list, event.method?: list, event.severity?: list, event.since?: list, event.before?: list, browser.name?: list, browser.version?: list, os.name?: list, os.version?: list, device.hostname?: list, device.manufacturer?: list, device.model?: list, request.url?: list, request.ip?: list, device.jailbroken?: list, app.in_foreground?: list}
   --filter-groups: record # A map of filter groups, where each group is keyed with a unique identifier for the group e.g: ``` {  "0": { ... },  "1": { ... } } ``` See the [Advanced Filters documentation](https://developer.smartbear.com/bugsnag/docs/data-access-filtering#advanced-filters) for more details.
   --filter-groups-join: string@filter-groups-join-completer # The join operator to apply between filter groups. - and - All conditions must be satisfied - or (default) - At least one condition must be satisfied
@@ -3087,11 +3086,11 @@ export def "projects-feature-flags listProjectFeatureFlags" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --release-stage-name: string # Release stage name to get the feature flags for. (e.g. production)
-  --starred-at-top: string@bool-completer # Whether to return starred Feature Flags at the top of the Feature Flags list. (default: false, e.g. false)
-  --include-variant-summary: string@bool-completer # Whether to include a summary of the Variants for each Feature Flag. (default: false, e.g. false)
+  --starred-at-top: oneof<nothing, bool> # Whether to return starred Feature Flags at the top of the Feature Flags list. (default: false, e.g. false)
+  --include-variant-summary: oneof<nothing, bool> # Whether to include a summary of the Variants for each Feature Flag. (default: false, e.g. false)
   --q: string # Search for feature flags with a name matching this query parameter. Supports case-insensitive substring matching. (e.g. name)
   --first-seen: string@first-seen-completer # Filter to Feature Flags that were first seen in the release stage within the specified time frame. (default: all)
-  --include-inactive: string@bool-completer # Whether to include inactive Feature Flags. (default: false, e.g. false)
+  --include-inactive: oneof<nothing, bool> # Whether to include inactive Feature Flags. (default: false, e.g. false)
   --qp-sort: string@sort-completer-7 # Which field to sort on. (default: name)
   --direction: string@direction-completer # Which direction to sort the results by. (default: asc)
   --per-page: float # How many results to return per page. (default: 30)
@@ -3145,7 +3144,7 @@ export def "projects-feature-flags get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --release-stage-name: string # Release stage name to get the feature flags for. (e.g. production)
-  --include-variant-summary: string@bool-completer # Whether to include a summary of the Variants for the Feature Flag. (default: false, e.g. false)
+  --include-variant-summary: oneof<nothing, bool> # Whether to include a summary of the Variants for the Feature Flag. (default: false, e.g. false)
 ]: nothing -> record<id: string, name: string, first_seen: string, is_starred: bool, is_active: bool, variant_summary: record<variant_count: float, first_variant_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3378,7 +3377,7 @@ export def "projects-span-groups listProjectSpanGroups" [
   --per-page: int # the number of results per page (e.g. 1)
   --offset: int # the offset for the next page of results (e.g. 10)
   --filters: list # The current filters that are being applied.
-  --starred-only: string@bool-completer # Whether to only return Span Groups the requesting user has starred. (e.g. false)
+  --starred-only: oneof<nothing, bool> # Whether to only return Span Groups the requesting user has starred. (e.g. false)
 ]: nothing -> table<id: string, category: string, name: string, display_name: string, is_starred: bool, statistics: record<duration_statistics: record, total_spans: float, estimated_spans: float, last_seen: string, category_statistics: record, rendering_statistics: record, system_metrics_statistics: record, http_statistics: record>, performance_target: record<id: string, project_id: string, type: string, span_group: record, config: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3428,7 +3427,7 @@ export def "projects-span-groups updateProjectSpanGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-starred: string@bool-completer # whether or not the Span Group is starred by the user. (e.g. true)
+  --is-starred: oneof<nothing, bool> # whether or not the Span Group is starred by the user. (e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3664,7 +3663,7 @@ export def "projects-page-load-span-groups listProjectPageLoadSpanGroups" [
   --per-page: float # the number of results per page (e.g. 1)
   --offset: float # the offset for the next page of results (e.g. 10)
   --filters: list # The current filters that are being applied.
-  --starred-only: string@bool-completer # Whether to only return Page Load Span Groups the requesting user has starred. (e.g. false)
+  --starred-only: oneof<nothing, bool> # Whether to only return Page Load Span Groups the requesting user has starred. (e.g. false)
 ]: nothing -> table<id: string, display_name: string, is_starred: bool, full_page_load_span_group: record<id: string, category: string, name: string, display_name: string, is_starred: bool, statistics: record, performance_target: record>, route_change_span_group: record<id: string, category: string, name: string, display_name: string, is_starred: bool, statistics: record, performance_target: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

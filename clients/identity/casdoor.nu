@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://localhost" "http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -265,7 +264,7 @@ export def "add-adapter ApiControllerAddAdapter" [
   --port: int # format: int64
   --table: string
   --type: string
-  --useSameDb: string@bool-completer
+  --useSameDb: oneof<nothing, bool>
   --user: string
 ]: any -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let input = $in
@@ -309,21 +308,21 @@ export def "add-application ApiControllerAddApplication" [
   --createdTime: string
   --defaultGroup: string
   --description: string
-  --disableSamlAttributes: string@bool-completer
-  --disableSignin: string@bool-completer
+  --disableSamlAttributes: oneof<nothing, bool>
+  --disableSignin: oneof<nothing, bool>
   --displayName: string
-  --enableAutoSignin: string@bool-completer
-  --enableCodeSignin: string@bool-completer
-  --enableExclusiveSignin: string@bool-completer
-  --enableLinkWithEmail: string@bool-completer
-  --enablePassword: string@bool-completer
-  --enableSamlAssertionSignature: string@bool-completer
-  --enableSamlC14n10: string@bool-completer
-  --enableSamlCompress: string@bool-completer
-  --enableSamlPostBinding: string@bool-completer
-  --enableSignUp: string@bool-completer
-  --enableSigninSession: string@bool-completer
-  --enableWebAuthn: string@bool-completer
+  --enableAutoSignin: oneof<nothing, bool>
+  --enableCodeSignin: oneof<nothing, bool>
+  --enableExclusiveSignin: oneof<nothing, bool>
+  --enableLinkWithEmail: oneof<nothing, bool>
+  --enablePassword: oneof<nothing, bool>
+  --enableSamlAssertionSignature: oneof<nothing, bool>
+  --enableSamlC14n10: oneof<nothing, bool>
+  --enableSamlCompress: oneof<nothing, bool>
+  --enableSamlPostBinding: oneof<nothing, bool>
+  --enableSignUp: oneof<nothing, bool>
+  --enableSigninSession: oneof<nothing, bool>
+  --enableWebAuthn: oneof<nothing, bool>
   --expireInHours: float # format: double
   --failedSigninFrozenTime: int # format: int64
   --failedSigninLimit: int # format: int64
@@ -342,7 +341,7 @@ export def "add-application ApiControllerAddApplication" [
   --homepageUrl: string
   --ipRestriction: string
   --ipWhitelist: string
-  --isShared: string@bool-completer
+  --isShared: oneof<nothing, bool>
   --logo: string
   --name: string
   --order: int # format: int64
@@ -371,7 +370,7 @@ export def "add-application ApiControllerAddApplication" [
   --tokenFields: list
   --tokenFormat: string
   --tokenSigningMethod: string
-  --useEmailAsSamlNameId: string@bool-completer
+  --useEmailAsSamlNameId: oneof<nothing, bool>
 ]: any -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -492,9 +491,9 @@ export def "add-group ApiControllerAddGroup" [
   --contactEmail: string
   --createdTime: string
   --displayName: string
-  --haveChildren: string@bool-completer
-  --isEnabled: string@bool-completer
-  --isTopGroup: string@bool-completer
+  --haveChildren: oneof<nothing, bool>
+  --isEnabled: oneof<nothing, bool>
+  --isTopGroup: oneof<nothing, bool>
   --key: string
   --manager: string
   --name: string
@@ -535,7 +534,7 @@ export def "add-invitation ApiControllerAddInvitation" [
   --defaultCode: string
   --displayName: string
   --email: string
-  --isRegexp: string@bool-completer
+  --isRegexp: oneof<nothing, bool>
   --name: string
   --owner: string
   --phone: string
@@ -569,13 +568,13 @@ export def "add-ldap ApiControllerAddLdap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowSelfSignedCert: string@bool-completer
+  --allowSelfSignedCert: oneof<nothing, bool>
   --autoSync: int # format: int64
   --baseDn: string
   --createdTime: string
   --customAttributes: any
   --defaultGroup: string
-  --enableSsl: string@bool-completer
+  --enableSsl: oneof<nothing, bool>
   --filter: string
   --filterFields: list
   --host: string
@@ -691,16 +690,16 @@ export def "add-organization ApiControllerAddOrganization" [
   --defaultApplication: string
   --defaultAvatar: string
   --defaultPassword: string
-  --disableSignin: string@bool-completer
+  --disableSignin: oneof<nothing, bool>
   --displayName: string
-  --enableSoftDeletion: string@bool-completer
-  --enableTour: string@bool-completer
+  --enableSoftDeletion: oneof<nothing, bool>
+  --enableTour: oneof<nothing, bool>
   --favicon: string
-  --hasPrivilegeConsent: string@bool-completer
+  --hasPrivilegeConsent: oneof<nothing, bool>
   --initScore: int # format: int64
   --ipRestriction: string
   --ipWhitelist: string
-  --isProfilePublic: string@bool-completer
+  --isProfilePublic: oneof<nothing, bool>
   --languages: list
   --logo: string
   --logoDark: string
@@ -720,7 +719,7 @@ export def "add-organization ApiControllerAddOrganization" [
   --passwordType: string
   --tags: list
   --themeData: record # shape: {borderRadius?: int, colorPrimary?: string, isCompact?: bool, isEnabled?: bool, themeType?: string}
-  --useEmailAsUsername: string@bool-completer
+  --useEmailAsUsername: oneof<nothing, bool>
   --userBalance: float # format: double
   --userNavItems: list
   --userTypes: list
@@ -813,7 +812,7 @@ export def "add-permission ApiControllerAddPermission" [
   --domains: list
   --effect: string
   --groups: list
-  --isEnabled: string@bool-completer
+  --isEnabled: oneof<nothing, bool>
   --model: string
   --name: string
   --owner: string
@@ -851,7 +850,7 @@ export def "add-plan ApiControllerAddPlan" [
   --currency: string
   --description: string
   --displayName: string
-  --isEnabled: string@bool-completer
+  --isEnabled: oneof<nothing, bool>
   --name: string
   --options: list
   --owner: string
@@ -914,7 +913,7 @@ export def "add-pricing ApiControllerAddPricing" [
   --createdTime: string
   --description: string
   --displayName: string
-  --isEnabled: string@bool-completer
+  --isEnabled: oneof<nothing, bool>
   --name: string
   --owner: string
   --plans: list
@@ -948,10 +947,10 @@ export def "add-product ApiControllerAddProduct" [
   --currency: string
   --description: string
   --detail: string
-  --disableCustomRecharge: string@bool-completer
+  --disableCustomRecharge: oneof<nothing, bool>
   --displayName: string
   --image: string
-  --isRecharge: string@bool-completer
+  --isRecharge: oneof<nothing, bool>
   --name: string
   --owner: string
   --price: float # format: double
@@ -1001,13 +1000,13 @@ export def "add-provider ApiControllerAddProvider" [
   --customLogo: string
   --customTokenUrl: string
   --customUserInfoUrl: string
-  --disableSsl: string@bool-completer
+  --disableSsl: oneof<nothing, bool>
   --displayName: string
   --domain: string
   --emailRegex: string
-  --enablePkce: string@bool-completer
-  --enableProxy: string@bool-completer
-  --enableSignAuthnRequest: string@bool-completer
+  --enablePkce: oneof<nothing, bool>
+  --enableProxy: oneof<nothing, bool>
+  --enableSignAuthnRequest: oneof<nothing, bool>
   --endpoint: string
   --host: string
   --httpHeaders: any
@@ -1120,7 +1119,7 @@ export def "add-role ApiControllerAddRole" [
   --displayName: string
   --domains: list
   --groups: list
-  --isEnabled: string@bool-completer
+  --isEnabled: oneof<nothing, bool>
   --name: string
   --owner: string
   --roles: list
@@ -1149,7 +1148,7 @@ export def "add-session ApiControllerAddSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ExclusiveSignin: string@bool-completer
+  --ExclusiveSignin: oneof<nothing, bool>
   --application: string
   --createdTime: string
   --name: string
@@ -1225,8 +1224,8 @@ export def "add-syncer ApiControllerAddSyncer" [
   --databaseType: string
   --errorText: string
   --host: string
-  --isEnabled: string@bool-completer
-  --isReadOnly: string@bool-completer
+  --isEnabled: oneof<nothing, bool>
+  --isReadOnly: oneof<nothing, bool>
   --name: string
   --organization: string
   --owner: string
@@ -1304,7 +1303,7 @@ export def "add-ticket-message ApiControllerAddTicketMessage" [
   --allow-errors(-e) # Return full response without error handling
   --id: string # The id ( owner/name ) of the ticket
   --author: string
-  --isAdmin: string@bool-completer
+  --isAdmin: oneof<nothing, bool>
   --text: string
   --timestamp: string
 ]: any -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
@@ -1338,7 +1337,7 @@ export def "add-token ApiControllerAddToken" [
   --code: string
   --codeChallenge: string
   --codeExpireIn: int # format: int64
-  --codeIsUsed: string@bool-completer
+  --codeIsUsed: oneof<nothing, bool>
   --createdTime: string
   --expiresIn: int # format: int64
   --name: string
@@ -1477,7 +1476,7 @@ export def "add-user ApiControllerAddUser" [
   --dropbox: string
   --education: string
   --email: string
-  --emailVerified: string@bool-completer
+  --emailVerified: oneof<nothing, bool>
   --eveonline: string
   --externalId: string
   --faceIds: list # item shape: {ImageUrl?: string, faceIdData?: list, name?: string}
@@ -1504,12 +1503,12 @@ export def "add-user ApiControllerAddUser" [
   --invitation: string
   --invitationCode: string
   --ipWhitelist: string
-  --isAdmin: string@bool-completer
-  --isDefaultAvatar: string@bool-completer
-  --isDeleted: string@bool-completer
-  --isForbidden: string@bool-completer
-  --isOnline: string@bool-completer
-  --isVerified: string@bool-completer
+  --isAdmin: oneof<nothing, bool>
+  --isDefaultAvatar: oneof<nothing, bool>
+  --isDeleted: oneof<nothing, bool>
+  --isForbidden: oneof<nothing, bool>
+  --isOnline: oneof<nothing, bool>
+  --isVerified: oneof<nothing, bool>
   --kakao: string
   --karma: int # format: int64
   --kwai: string
@@ -1530,13 +1529,13 @@ export def "add-user ApiControllerAddUser" [
   --meetup: string
   --metamask: string
   --mfaAccounts: list # item shape: {accountName?: string, issuer?: string, origin?: string, secretKey?: string}
-  --mfaEmailEnabled: string@bool-completer
+  --mfaEmailEnabled: oneof<nothing, bool>
   --mfaItems: list # item shape: {name?: string, rule?: string}
-  --mfaPhoneEnabled: string@bool-completer
-  --mfaPushEnabled: string@bool-completer
+  --mfaPhoneEnabled: oneof<nothing, bool>
+  --mfaPushEnabled: oneof<nothing, bool>
   --mfaPushProvider: string
   --mfaPushReceiver: string
-  --mfaRadiusEnabled: string@bool-completer
+  --mfaRadiusEnabled: oneof<nothing, bool>
   --mfaRadiusProvider: string
   --mfaRadiusUsername: string
   --mfaRememberDeadline: string
@@ -1544,7 +1543,7 @@ export def "add-user ApiControllerAddUser" [
   --multiFactorAuths: list # item shape: {countryCode?: string, enabled?: bool, isPreferred?: bool, mfaRememberInHours?: int, mfaType?: string, recoveryCodes?: list, secret?: string, url?: string}
   --name: string
   --naver: string
-  --needUpdatePassword: string@bool-completer
+  --needUpdatePassword: oneof<nothing, bool>
   --nextcloud: string
   --okta: string
   --onedrive: string
@@ -1654,14 +1653,14 @@ export def "add-webhook ApiControllerAddWebhook" [
   --createdTime: string
   --events: list
   --headers: list # item shape: {name?: string, value?: string}
-  --isEnabled: string@bool-completer
-  --isUserExtended: string@bool-completer
+  --isEnabled: oneof<nothing, bool>
+  --isUserExtended: oneof<nothing, bool>
   --method: string
   --name: string
   --objectFields: list
   --organization: string
   --owner: string
-  --singleOrgOnly: string@bool-completer
+  --singleOrgOnly: oneof<nothing, bool>
   --tokenFields: list
   --body-url: string
 ]: any -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
@@ -1800,7 +1799,7 @@ export def "delete-adapter ApiControllerDeleteAdapter" [
   --port: int # format: int64
   --table: string
   --type: string
-  --useSameDb: string@bool-completer
+  --useSameDb: oneof<nothing, bool>
   --user: string
 ]: any -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let input = $in
@@ -1844,21 +1843,21 @@ export def "delete-application ApiControllerDeleteApplication" [
   --createdTime: string
   --defaultGroup: string
   --description: string
-  --disableSamlAttributes: string@bool-completer
-  --disableSignin: string@bool-completer
+  --disableSamlAttributes: oneof<nothing, bool>
+  --disableSignin: oneof<nothing, bool>
   --displayName: string
-  --enableAutoSignin: string@bool-completer
-  --enableCodeSignin: string@bool-completer
-  --enableExclusiveSignin: string@bool-completer
-  --enableLinkWithEmail: string@bool-completer
-  --enablePassword: string@bool-completer
-  --enableSamlAssertionSignature: string@bool-completer
-  --enableSamlC14n10: string@bool-completer
-  --enableSamlCompress: string@bool-completer
-  --enableSamlPostBinding: string@bool-completer
-  --enableSignUp: string@bool-completer
-  --enableSigninSession: string@bool-completer
-  --enableWebAuthn: string@bool-completer
+  --enableAutoSignin: oneof<nothing, bool>
+  --enableCodeSignin: oneof<nothing, bool>
+  --enableExclusiveSignin: oneof<nothing, bool>
+  --enableLinkWithEmail: oneof<nothing, bool>
+  --enablePassword: oneof<nothing, bool>
+  --enableSamlAssertionSignature: oneof<nothing, bool>
+  --enableSamlC14n10: oneof<nothing, bool>
+  --enableSamlCompress: oneof<nothing, bool>
+  --enableSamlPostBinding: oneof<nothing, bool>
+  --enableSignUp: oneof<nothing, bool>
+  --enableSigninSession: oneof<nothing, bool>
+  --enableWebAuthn: oneof<nothing, bool>
   --expireInHours: float # format: double
   --failedSigninFrozenTime: int # format: int64
   --failedSigninLimit: int # format: int64
@@ -1877,7 +1876,7 @@ export def "delete-application ApiControllerDeleteApplication" [
   --homepageUrl: string
   --ipRestriction: string
   --ipWhitelist: string
-  --isShared: string@bool-completer
+  --isShared: oneof<nothing, bool>
   --logo: string
   --name: string
   --order: int # format: int64
@@ -1906,7 +1905,7 @@ export def "delete-application ApiControllerDeleteApplication" [
   --tokenFields: list
   --tokenFormat: string
   --tokenSigningMethod: string
-  --useEmailAsSamlNameId: string@bool-completer
+  --useEmailAsSamlNameId: oneof<nothing, bool>
 ]: any -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2036,9 +2035,9 @@ export def "delete-group ApiControllerDeleteGroup" [
   --contactEmail: string
   --createdTime: string
   --displayName: string
-  --haveChildren: string@bool-completer
-  --isEnabled: string@bool-completer
-  --isTopGroup: string@bool-completer
+  --haveChildren: oneof<nothing, bool>
+  --isEnabled: oneof<nothing, bool>
+  --isTopGroup: oneof<nothing, bool>
   --key: string
   --manager: string
   --name: string
@@ -2079,7 +2078,7 @@ export def "delete-invitation ApiControllerDeleteInvitation" [
   --defaultCode: string
   --displayName: string
   --email: string
-  --isRegexp: string@bool-completer
+  --isRegexp: oneof<nothing, bool>
   --name: string
   --owner: string
   --phone: string
@@ -2113,13 +2112,13 @@ export def "delete-ldap ApiControllerDeleteLdap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowSelfSignedCert: string@bool-completer
+  --allowSelfSignedCert: oneof<nothing, bool>
   --autoSync: int # format: int64
   --baseDn: string
   --createdTime: string
   --customAttributes: any
   --defaultGroup: string
-  --enableSsl: string@bool-completer
+  --enableSsl: oneof<nothing, bool>
   --filter: string
   --filterFields: list
   --host: string
@@ -2256,16 +2255,16 @@ export def "delete-organization ApiControllerDeleteOrganization" [
   --defaultApplication: string
   --defaultAvatar: string
   --defaultPassword: string
-  --disableSignin: string@bool-completer
+  --disableSignin: oneof<nothing, bool>
   --displayName: string
-  --enableSoftDeletion: string@bool-completer
-  --enableTour: string@bool-completer
+  --enableSoftDeletion: oneof<nothing, bool>
+  --enableTour: oneof<nothing, bool>
   --favicon: string
-  --hasPrivilegeConsent: string@bool-completer
+  --hasPrivilegeConsent: oneof<nothing, bool>
   --initScore: int # format: int64
   --ipRestriction: string
   --ipWhitelist: string
-  --isProfilePublic: string@bool-completer
+  --isProfilePublic: oneof<nothing, bool>
   --languages: list
   --logo: string
   --logoDark: string
@@ -2285,7 +2284,7 @@ export def "delete-organization ApiControllerDeleteOrganization" [
   --passwordType: string
   --tags: list
   --themeData: record # shape: {borderRadius?: int, colorPrimary?: string, isCompact?: bool, isEnabled?: bool, themeType?: string}
-  --useEmailAsUsername: string@bool-completer
+  --useEmailAsUsername: oneof<nothing, bool>
   --userBalance: float # format: double
   --userNavItems: list
   --userTypes: list
@@ -2378,7 +2377,7 @@ export def "delete-permission ApiControllerDeletePermission" [
   --domains: list
   --effect: string
   --groups: list
-  --isEnabled: string@bool-completer
+  --isEnabled: oneof<nothing, bool>
   --model: string
   --name: string
   --owner: string
@@ -2416,7 +2415,7 @@ export def "delete-plan ApiControllerDeletePlan" [
   --currency: string
   --description: string
   --displayName: string
-  --isEnabled: string@bool-completer
+  --isEnabled: oneof<nothing, bool>
   --name: string
   --options: list
   --owner: string
@@ -2453,7 +2452,7 @@ export def "delete-pricing ApiControllerDeletePricing" [
   --createdTime: string
   --description: string
   --displayName: string
-  --isEnabled: string@bool-completer
+  --isEnabled: oneof<nothing, bool>
   --name: string
   --owner: string
   --plans: list
@@ -2487,10 +2486,10 @@ export def "delete-product ApiControllerDeleteProduct" [
   --currency: string
   --description: string
   --detail: string
-  --disableCustomRecharge: string@bool-completer
+  --disableCustomRecharge: oneof<nothing, bool>
   --displayName: string
   --image: string
-  --isRecharge: string@bool-completer
+  --isRecharge: oneof<nothing, bool>
   --name: string
   --owner: string
   --price: float # format: double
@@ -2540,13 +2539,13 @@ export def "delete-provider ApiControllerDeleteProvider" [
   --customLogo: string
   --customTokenUrl: string
   --customUserInfoUrl: string
-  --disableSsl: string@bool-completer
+  --disableSsl: oneof<nothing, bool>
   --displayName: string
   --domain: string
   --emailRegex: string
-  --enablePkce: string@bool-completer
-  --enableProxy: string@bool-completer
-  --enableSignAuthnRequest: string@bool-completer
+  --enablePkce: oneof<nothing, bool>
+  --enableProxy: oneof<nothing, bool>
+  --enableSignAuthnRequest: oneof<nothing, bool>
   --endpoint: string
   --host: string
   --httpHeaders: any
@@ -2635,7 +2634,7 @@ export def "delete-role ApiControllerDeleteRole" [
   --displayName: string
   --domains: list
   --groups: list
-  --isEnabled: string@bool-completer
+  --isEnabled: oneof<nothing, bool>
   --name: string
   --owner: string
   --roles: list
@@ -2664,7 +2663,7 @@ export def "delete-session ApiControllerDeleteSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ExclusiveSignin: string@bool-completer
+  --ExclusiveSignin: oneof<nothing, bool>
   --application: string
   --createdTime: string
   --name: string
@@ -2740,8 +2739,8 @@ export def "delete-syncer ApiControllerDeleteSyncer" [
   --databaseType: string
   --errorText: string
   --host: string
-  --isEnabled: string@bool-completer
-  --isReadOnly: string@bool-completer
+  --isEnabled: oneof<nothing, bool>
+  --isReadOnly: oneof<nothing, bool>
   --name: string
   --organization: string
   --owner: string
@@ -2823,7 +2822,7 @@ export def "delete-token ApiControllerDeleteToken" [
   --code: string
   --codeChallenge: string
   --codeExpireIn: int # format: int64
-  --codeIsUsed: string@bool-completer
+  --codeIsUsed: oneof<nothing, bool>
   --createdTime: string
   --expiresIn: int # format: int64
   --name: string
@@ -2960,7 +2959,7 @@ export def "delete-user ApiControllerDeleteUser" [
   --dropbox: string
   --education: string
   --email: string
-  --emailVerified: string@bool-completer
+  --emailVerified: oneof<nothing, bool>
   --eveonline: string
   --externalId: string
   --faceIds: list # item shape: {ImageUrl?: string, faceIdData?: list, name?: string}
@@ -2987,12 +2986,12 @@ export def "delete-user ApiControllerDeleteUser" [
   --invitation: string
   --invitationCode: string
   --ipWhitelist: string
-  --isAdmin: string@bool-completer
-  --isDefaultAvatar: string@bool-completer
-  --isDeleted: string@bool-completer
-  --isForbidden: string@bool-completer
-  --isOnline: string@bool-completer
-  --isVerified: string@bool-completer
+  --isAdmin: oneof<nothing, bool>
+  --isDefaultAvatar: oneof<nothing, bool>
+  --isDeleted: oneof<nothing, bool>
+  --isForbidden: oneof<nothing, bool>
+  --isOnline: oneof<nothing, bool>
+  --isVerified: oneof<nothing, bool>
   --kakao: string
   --karma: int # format: int64
   --kwai: string
@@ -3013,13 +3012,13 @@ export def "delete-user ApiControllerDeleteUser" [
   --meetup: string
   --metamask: string
   --mfaAccounts: list # item shape: {accountName?: string, issuer?: string, origin?: string, secretKey?: string}
-  --mfaEmailEnabled: string@bool-completer
+  --mfaEmailEnabled: oneof<nothing, bool>
   --mfaItems: list # item shape: {name?: string, rule?: string}
-  --mfaPhoneEnabled: string@bool-completer
-  --mfaPushEnabled: string@bool-completer
+  --mfaPhoneEnabled: oneof<nothing, bool>
+  --mfaPushEnabled: oneof<nothing, bool>
   --mfaPushProvider: string
   --mfaPushReceiver: string
-  --mfaRadiusEnabled: string@bool-completer
+  --mfaRadiusEnabled: oneof<nothing, bool>
   --mfaRadiusProvider: string
   --mfaRadiusUsername: string
   --mfaRememberDeadline: string
@@ -3027,7 +3026,7 @@ export def "delete-user ApiControllerDeleteUser" [
   --multiFactorAuths: list # item shape: {countryCode?: string, enabled?: bool, isPreferred?: bool, mfaRememberInHours?: int, mfaType?: string, recoveryCodes?: list, secret?: string, url?: string}
   --name: string
   --naver: string
-  --needUpdatePassword: string@bool-completer
+  --needUpdatePassword: oneof<nothing, bool>
   --nextcloud: string
   --okta: string
   --onedrive: string
@@ -3117,14 +3116,14 @@ export def "delete-webhook ApiControllerDeleteWebhook" [
   --createdTime: string
   --events: list
   --headers: list # item shape: {name?: string, value?: string}
-  --isEnabled: string@bool-completer
-  --isUserExtended: string@bool-completer
+  --isEnabled: oneof<nothing, bool>
+  --isUserExtended: oneof<nothing, bool>
   --method: string
   --name: string
   --objectFields: list
   --organization: string
   --owner: string
-  --singleOrgOnly: string@bool-completer
+  --singleOrgOnly: oneof<nothing, bool>
   --tokenFields: list
   --body-url: string
 ]: any -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
@@ -4319,7 +4318,7 @@ export def "get-plan ApiControllerGetPlan" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string # The id ( owner/name ) of the plan
-  --includeOption: string@bool-completer # Should include plan's option
+  --includeOption: oneof<nothing, bool> # Should include plan's option
 ]: nothing -> record<createdTime: string, currency: string, description: string, displayName: string, isEnabled: bool, name: string, options: list<string>, owner: string, paymentProviders: list<string>, period: string, price: float, product: string, role: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5791,8 +5790,8 @@ export def "run-syncer ApiControllerRunSyncer" [
   --databaseType: string
   --errorText: string
   --host: string
-  --isEnabled: string@bool-completer
-  --isReadOnly: string@bool-completer
+  --isEnabled: oneof<nothing, bool>
+  --isReadOnly: oneof<nothing, bool>
   --name: string
   --organization: string
   --owner: string
@@ -6143,7 +6142,7 @@ export def "update-adapter ApiControllerUpdateAdapter" [
   --port: int # format: int64
   --table: string
   --type: string
-  --useSameDb: string@bool-completer
+  --useSameDb: oneof<nothing, bool>
   --user: string
 ]: any -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let input = $in
@@ -6189,21 +6188,21 @@ export def "update-application ApiControllerUpdateApplication" [
   --createdTime: string
   --defaultGroup: string
   --description: string
-  --disableSamlAttributes: string@bool-completer
-  --disableSignin: string@bool-completer
+  --disableSamlAttributes: oneof<nothing, bool>
+  --disableSignin: oneof<nothing, bool>
   --displayName: string
-  --enableAutoSignin: string@bool-completer
-  --enableCodeSignin: string@bool-completer
-  --enableExclusiveSignin: string@bool-completer
-  --enableLinkWithEmail: string@bool-completer
-  --enablePassword: string@bool-completer
-  --enableSamlAssertionSignature: string@bool-completer
-  --enableSamlC14n10: string@bool-completer
-  --enableSamlCompress: string@bool-completer
-  --enableSamlPostBinding: string@bool-completer
-  --enableSignUp: string@bool-completer
-  --enableSigninSession: string@bool-completer
-  --enableWebAuthn: string@bool-completer
+  --enableAutoSignin: oneof<nothing, bool>
+  --enableCodeSignin: oneof<nothing, bool>
+  --enableExclusiveSignin: oneof<nothing, bool>
+  --enableLinkWithEmail: oneof<nothing, bool>
+  --enablePassword: oneof<nothing, bool>
+  --enableSamlAssertionSignature: oneof<nothing, bool>
+  --enableSamlC14n10: oneof<nothing, bool>
+  --enableSamlCompress: oneof<nothing, bool>
+  --enableSamlPostBinding: oneof<nothing, bool>
+  --enableSignUp: oneof<nothing, bool>
+  --enableSigninSession: oneof<nothing, bool>
+  --enableWebAuthn: oneof<nothing, bool>
   --expireInHours: float # format: double
   --failedSigninFrozenTime: int # format: int64
   --failedSigninLimit: int # format: int64
@@ -6222,7 +6221,7 @@ export def "update-application ApiControllerUpdateApplication" [
   --homepageUrl: string
   --ipRestriction: string
   --ipWhitelist: string
-  --isShared: string@bool-completer
+  --isShared: oneof<nothing, bool>
   --logo: string
   --name: string
   --order: int # format: int64
@@ -6251,7 +6250,7 @@ export def "update-application ApiControllerUpdateApplication" [
   --tokenFields: list
   --tokenFormat: string
   --tokenSigningMethod: string
-  --useEmailAsSamlNameId: string@bool-completer
+  --useEmailAsSamlNameId: oneof<nothing, bool>
 ]: any -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6380,9 +6379,9 @@ export def "update-group ApiControllerUpdateGroup" [
   --contactEmail: string
   --createdTime: string
   --displayName: string
-  --haveChildren: string@bool-completer
-  --isEnabled: string@bool-completer
-  --isTopGroup: string@bool-completer
+  --haveChildren: oneof<nothing, bool>
+  --isEnabled: oneof<nothing, bool>
+  --isTopGroup: oneof<nothing, bool>
   --key: string
   --manager: string
   --name: string
@@ -6425,7 +6424,7 @@ export def "update-invitation ApiControllerUpdateInvitation" [
   --defaultCode: string
   --displayName: string
   --email: string
-  --isRegexp: string@bool-completer
+  --isRegexp: oneof<nothing, bool>
   --name: string
   --owner: string
   --phone: string
@@ -6460,13 +6459,13 @@ export def "update-ldap ApiControllerUpdateLdap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowSelfSignedCert: string@bool-completer
+  --allowSelfSignedCert: oneof<nothing, bool>
   --autoSync: int # format: int64
   --baseDn: string
   --createdTime: string
   --customAttributes: any
   --defaultGroup: string
-  --enableSsl: string@bool-completer
+  --enableSsl: oneof<nothing, bool>
   --filter: string
   --filterFields: list
   --host: string
@@ -6587,16 +6586,16 @@ export def "update-organization ApiControllerUpdateOrganization" [
   --defaultApplication: string
   --defaultAvatar: string
   --defaultPassword: string
-  --disableSignin: string@bool-completer
+  --disableSignin: oneof<nothing, bool>
   --displayName: string
-  --enableSoftDeletion: string@bool-completer
-  --enableTour: string@bool-completer
+  --enableSoftDeletion: oneof<nothing, bool>
+  --enableTour: oneof<nothing, bool>
   --favicon: string
-  --hasPrivilegeConsent: string@bool-completer
+  --hasPrivilegeConsent: oneof<nothing, bool>
   --initScore: int # format: int64
   --ipRestriction: string
   --ipWhitelist: string
-  --isProfilePublic: string@bool-completer
+  --isProfilePublic: oneof<nothing, bool>
   --languages: list
   --logo: string
   --logoDark: string
@@ -6616,7 +6615,7 @@ export def "update-organization ApiControllerUpdateOrganization" [
   --passwordType: string
   --tags: list
   --themeData: record # shape: {borderRadius?: int, colorPrimary?: string, isCompact?: bool, isEnabled?: bool, themeType?: string}
-  --useEmailAsUsername: string@bool-completer
+  --useEmailAsUsername: oneof<nothing, bool>
   --userBalance: float # format: double
   --userNavItems: list
   --userTypes: list
@@ -6713,7 +6712,7 @@ export def "update-permission ApiControllerUpdatePermission" [
   --domains: list
   --effect: string
   --groups: list
-  --isEnabled: string@bool-completer
+  --isEnabled: oneof<nothing, bool>
   --model: string
   --name: string
   --owner: string
@@ -6753,7 +6752,7 @@ export def "update-plan ApiControllerUpdatePlan" [
   --currency: string
   --description: string
   --displayName: string
-  --isEnabled: string@bool-completer
+  --isEnabled: oneof<nothing, bool>
   --name: string
   --options: list
   --owner: string
@@ -6818,7 +6817,7 @@ export def "update-pricing ApiControllerUpdatePricing" [
   --createdTime: string
   --description: string
   --displayName: string
-  --isEnabled: string@bool-completer
+  --isEnabled: oneof<nothing, bool>
   --name: string
   --owner: string
   --plans: list
@@ -6854,10 +6853,10 @@ export def "update-product ApiControllerUpdateProduct" [
   --currency: string
   --description: string
   --detail: string
-  --disableCustomRecharge: string@bool-completer
+  --disableCustomRecharge: oneof<nothing, bool>
   --displayName: string
   --image: string
-  --isRecharge: string@bool-completer
+  --isRecharge: oneof<nothing, bool>
   --name: string
   --owner: string
   --price: float # format: double
@@ -6909,13 +6908,13 @@ export def "update-provider ApiControllerUpdateProvider" [
   --customLogo: string
   --customTokenUrl: string
   --customUserInfoUrl: string
-  --disableSsl: string@bool-completer
+  --disableSsl: oneof<nothing, bool>
   --displayName: string
   --domain: string
   --emailRegex: string
-  --enablePkce: string@bool-completer
-  --enableProxy: string@bool-completer
-  --enableSignAuthnRequest: string@bool-completer
+  --enablePkce: oneof<nothing, bool>
+  --enableProxy: oneof<nothing, bool>
+  --enableSignAuthnRequest: oneof<nothing, bool>
   --endpoint: string
   --host: string
   --httpHeaders: any
@@ -7009,7 +7008,7 @@ export def "update-role ApiControllerUpdateRole" [
   --displayName: string
   --domains: list
   --groups: list
-  --isEnabled: string@bool-completer
+  --isEnabled: oneof<nothing, bool>
   --name: string
   --owner: string
   --roles: list
@@ -7039,7 +7038,7 @@ export def "update-session ApiControllerUpdateSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ExclusiveSignin: string@bool-completer
+  --ExclusiveSignin: oneof<nothing, bool>
   --application: string
   --createdTime: string
   --name: string
@@ -7118,8 +7117,8 @@ export def "update-syncer ApiControllerUpdateSyncer" [
   --databaseType: string
   --errorText: string
   --host: string
-  --isEnabled: string@bool-completer
-  --isReadOnly: string@bool-completer
+  --isEnabled: oneof<nothing, bool>
+  --isReadOnly: oneof<nothing, bool>
   --name: string
   --organization: string
   --owner: string
@@ -7205,7 +7204,7 @@ export def "update-token ApiControllerUpdateToken" [
   --code: string
   --codeChallenge: string
   --codeExpireIn: int # format: int64
-  --codeIsUsed: string@bool-completer
+  --codeIsUsed: oneof<nothing, bool>
   --createdTime: string
   --expiresIn: int # format: int64
   --name: string
@@ -7348,7 +7347,7 @@ export def "update-user ApiControllerUpdateUser" [
   --dropbox: string
   --education: string
   --email: string
-  --emailVerified: string@bool-completer
+  --emailVerified: oneof<nothing, bool>
   --eveonline: string
   --externalId: string
   --faceIds: list # item shape: {ImageUrl?: string, faceIdData?: list, name?: string}
@@ -7375,12 +7374,12 @@ export def "update-user ApiControllerUpdateUser" [
   --invitation: string
   --invitationCode: string
   --ipWhitelist: string
-  --isAdmin: string@bool-completer
-  --isDefaultAvatar: string@bool-completer
-  --isDeleted: string@bool-completer
-  --isForbidden: string@bool-completer
-  --isOnline: string@bool-completer
-  --isVerified: string@bool-completer
+  --isAdmin: oneof<nothing, bool>
+  --isDefaultAvatar: oneof<nothing, bool>
+  --isDeleted: oneof<nothing, bool>
+  --isForbidden: oneof<nothing, bool>
+  --isOnline: oneof<nothing, bool>
+  --isVerified: oneof<nothing, bool>
   --kakao: string
   --karma: int # format: int64
   --kwai: string
@@ -7401,13 +7400,13 @@ export def "update-user ApiControllerUpdateUser" [
   --meetup: string
   --metamask: string
   --mfaAccounts: list # item shape: {accountName?: string, issuer?: string, origin?: string, secretKey?: string}
-  --mfaEmailEnabled: string@bool-completer
+  --mfaEmailEnabled: oneof<nothing, bool>
   --mfaItems: list # item shape: {name?: string, rule?: string}
-  --mfaPhoneEnabled: string@bool-completer
-  --mfaPushEnabled: string@bool-completer
+  --mfaPhoneEnabled: oneof<nothing, bool>
+  --mfaPushEnabled: oneof<nothing, bool>
   --mfaPushProvider: string
   --mfaPushReceiver: string
-  --mfaRadiusEnabled: string@bool-completer
+  --mfaRadiusEnabled: oneof<nothing, bool>
   --mfaRadiusProvider: string
   --mfaRadiusUsername: string
   --mfaRememberDeadline: string
@@ -7415,7 +7414,7 @@ export def "update-user ApiControllerUpdateUser" [
   --multiFactorAuths: list # item shape: {countryCode?: string, enabled?: bool, isPreferred?: bool, mfaRememberInHours?: int, mfaType?: string, recoveryCodes?: list, secret?: string, url?: string}
   --name: string
   --naver: string
-  --needUpdatePassword: string@bool-completer
+  --needUpdatePassword: oneof<nothing, bool>
   --nextcloud: string
   --okta: string
   --onedrive: string
@@ -7507,14 +7506,14 @@ export def "update-webhook ApiControllerUpdateWebhook" [
   --createdTime: string
   --events: list
   --headers: list # item shape: {name?: string, value?: string}
-  --isEnabled: string@bool-completer
-  --isUserExtended: string@bool-completer
+  --isEnabled: oneof<nothing, bool>
+  --isUserExtended: oneof<nothing, bool>
   --method: string
   --name: string
   --objectFields: list
   --organization: string
   --owner: string
-  --singleOrgOnly: string@bool-completer
+  --singleOrgOnly: oneof<nothing, bool>
   --tokenFields: list
   --body-url: string
 ]: any -> record<data: any, data2: any, data3: any, msg: string, name: string, status: string, sub: string> {

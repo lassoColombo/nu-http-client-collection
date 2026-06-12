@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer" "basic"] }
 
@@ -327,11 +326,11 @@ export def "addresses create" [
   --email: string # The party email (nullable)
   --phone-number: string # The party phone number. (nullable)
   --state-code: string # The address state code (nullable)
-  --residential: string@bool-completer # Indicate if the address is residential or commercial (enterprise) (nullable, default: false)
+  --residential: oneof<nothing, bool> # Indicate if the address is residential or commercial (enterprise) (nullable, default: false)
   --street-number: string # The address street number (nullable)
   --address-line1: string # The address line with street number <br/>         **(required for shipment purchase)**          (nullable)
   --address-line2: string # The address line with suite number (nullable)
-  --validate-location: string@bool-completer # Indicate if the address should be validated (nullable, default: false)
+  --validate-location: oneof<nothing, bool> # Indicate if the address should be validated (nullable, default: false)
   --meta: record # Template metadata for template identification.         Structure: {"label": "Warehouse A", "is_default": true, "usage": ["sender", "return"]}          (nullable)
 ]: any -> record<id: string, postal_code: string, city: string, federal_tax_id: string, state_tax_id: string, person_name: string, company_name: string, country_code: string, email: string, phone_number: string, state_code: string, residential: bool, street_number: string, address_line1: string, address_line2: string, validate_location: bool, meta: record, object_type: string, validation: record<success: bool, meta: record>> {
   let input = $in
@@ -391,11 +390,11 @@ export def "addresses update" [
   --email: string # The party email (nullable)
   --phone-number: string # The party phone number. (nullable)
   --state-code: string # The address state code (nullable)
-  --residential: string@bool-completer # Indicate if the address is residential or commercial (enterprise) (nullable, default: false)
+  --residential: oneof<nothing, bool> # Indicate if the address is residential or commercial (enterprise) (nullable, default: false)
   --street-number: string # The address street number (nullable)
   --address-line1: string # The address line with street number <br/>         **(required for shipment purchase)**          (nullable)
   --address-line2: string # The address line with suite number (nullable)
-  --validate-location: string@bool-completer # Indicate if the address should be validated (nullable, default: false)
+  --validate-location: oneof<nothing, bool> # Indicate if the address should be validated (nullable, default: false)
   --meta: record # Template metadata for template identification.         Structure: {"label": "Warehouse A", "is_default": true, "usage": ["sender", "return"]}          (nullable)
 ]: any -> record<id: string, postal_code: string, city: string, federal_tax_id: string, state_tax_id: string, person_name: string, company_name: string, country_code: string, email: string, phone_number: string, state_code: string, residential: bool, street_number: string, address_line1: string, address_line2: string, validate_location: bool, meta: record, object_type: string, validation: record<success: bool, meta: record>> {
   let input = $in
@@ -734,11 +733,11 @@ export def "connections list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --carrier-name: string # The unique carrier slug. <br/>Values: `aramex`, `asendia`, `asendia_us`, `australiapost`, `boxknight`, `bpost`, `canadapost`, `canpar`, `chronopost`, `colissimo`, `dhl_express`, `dhl_parcel_de`, `dhl_poland`, `dhl_universal`, `dicom`, `dpd`, `dpd_meta`, `dtdc`, `easypost`, `easyship`, `eshipper`, `fedex`, `freightcom`, `generic`, `geodis`, `gls`, `hay_post`, `hermes`, `landmark`, `laposte`, `locate2u`, `mydhl`, `nationex`, `parcelone`, `postat`, `purolator`, `roadie`, `royalmail`, `sapient`, `seko`, `sendle`, `shipengine`, `spring`, `teleship`, `tge`, `tnt`, `ups`, `usps`, `usps_international`, `veho`, `zoom2u`
   --metadata-key: string
   --metadata-value: string
-  --system-only: string@bool-completer
+  --system-only: oneof<nothing, bool>
 ]: nothing -> record<count: int, next: string, previous: string, results: table<id: string, object_type: string, carrier_name: string, display_name: string, carrier_id: string, capabilities: list, config: record, metadata: record, is_system: bool, active: bool, test_mode: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -767,7 +766,7 @@ export def "connections add" [
   --capabilities: list # The carrier enabled capabilities. (nullable)
   --config: record # Carrier connection custom config. (default: {})
   --metadata: record # User metadata for the carrier. (default: {})
-  --active: string@bool-completer # The active flag indicates whether the carrier account is active or not. (default: true)
+  --active: oneof<nothing, bool> # The active flag indicates whether the carrier account is active or not. (default: true)
 ]: any -> record<id: string, object_type: string, carrier_name: string, display_name: string, carrier_id: string, capabilities: list<string>, config: record, metadata: record, is_system: bool, active: bool, test_mode: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -821,7 +820,7 @@ export def "connections update" [
   --capabilities: list # The carrier enabled capabilities. (nullable)
   --config: record # Carrier connection custom config. (default: {})
   --metadata: record # User metadata for the carrier. (default: {})
-  --active: string@bool-completer # The active flag indicates whether the carrier account is active or not. (default: true)
+  --active: oneof<nothing, bool> # The active flag indicates whether the carrier account is active or not. (default: true)
 ]: any -> record<id: string, object_type: string, carrier_name: string, display_name: string, carrier_id: string, capabilities: list<string>, config: record, metadata: record, is_system: bool, active: bool, test_mode: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -922,7 +921,7 @@ export def "documents-templates create" [
   name: string # The template name
   slug: string # The template slug
   template: string # The template content
-  --active: string@bool-completer # disable template flag. (default: true)
+  --active: oneof<nothing, bool> # disable template flag. (default: true)
   --description: string # The template description
   --metadata: record # The template metadata
   --options: record # The template rendering options
@@ -977,7 +976,7 @@ export def "documents-templates update" [
   --name: string # The template name
   --slug: string # The template slug
   --template: string # The template content
-  --active: string@bool-completer # disable template flag. (default: true)
+  --active: oneof<nothing, bool> # disable template flag. (default: true)
   --description: string # The template description
   --metadata: record # The template metadata
   --options: record # The template rendering options
@@ -1381,7 +1380,7 @@ export def "parcels create" [
   --package-preset: string # The parcel's package preset.<br/>         For carrier specific package presets, please consult the reference.          (nullable)
   --description: string # The parcel's description (nullable)
   --content: string # The parcel's content description (nullable)
-  --is-document: string@bool-completer # Indicates if the parcel is composed of documents only (nullable, default: false)
+  --is-document: oneof<nothing, bool> # Indicates if the parcel is composed of documents only (nullable, default: false)
   weight_unit: string@weight-unit-completer # The parcel's weight unit
   --dimension-unit: string@dimension-unit-completer # The parcel's dimension unit (nullable)
   --items: list # The parcel items. — item shape: {weight: float, weight_unit: "KG"|"LB"|"OZ"|"G", title?: string, description?: string, quantity?: int, sku?: string, hs_code?: string, value_amount?: float, value_currency?: "EUR"|"AED"|"USD"|"XCD"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"XOF"|"BGN"|"BHD"|"BIF"|"BMD"|"BND"|"BOB"|"BRL"|"BSD"|"BTN"|"BWP"|"BYN"|"BZD"|"CAD"|"CDF"|"XAF"|"CHF"|"NZD"|"CLP"|"CNY"|"COP"|"CRC"|"CUC"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ERN"|"ETB"|"FJD"|"GBP"|"GEL"|"GHS"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"IRR"|"ISK"|"JMD"|"JOD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KPW"|"KRW"|"KWD"|"KYD"|"KZT"|"LAK"|"LKR"|"LRD"|"LSL"|"LYD"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MYR"|"MZN"|"NAD"|"XPF"|"NGN"|"NIO"|"NOK"|"NPR"|"OMR"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SDG"|"SEK"|"SGD"|"SHP"|"SLL"|"SOS"|"SRD"|"SSP"|"STD"|"SYP"|"SZL"|"THB"|"TJS"|"TND"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UYU"|"UZS"|"VEF"|"VND"|"VUV"|"WST"|"YER"|"ZAR"|"", origin_country?: "AC"|"AD"|"AE"|"AF"|"AG"|"AI"|"AL"|"AM"|"AN"|"AO"|"AR"|"AS"|"AT"|"AU"|"AW"|"AZ"|"BA"|"BB"|"BD"|"BE"|"BF"|"BG"|"BH"|"BI"|"BJ"|"BM"|"BN"|"BO"|"BR"|"BS"|"BT"|"BW"|"BY"|"BZ"|"CA"|"CD"|"CF"|"CG"|"CH"|"CI"|"CK"|"CL"|"CM"|"CN"|"CO"|"CR"|"CU"|"CV"|"CY"|"CZ"|"DE"|"DJ"|"DK"|"DM"|"DO"|"DZ"|"EC"|"EE"|"EG"|"ER"|"ES"|"ET"|"FI"|"FJ"|"FK"|"FM"|"FO"|"FR"|"GA"|"GB"|"GD"|"GE"|"GF"|"GG"|"GH"|"GI"|"GL"|"GM"|"GN"|"GP"|"GQ"|"GR"|"GT"|"GU"|"GW"|"GY"|"HK"|"HN"|"HR"|"HT"|"HU"|"IC"|"ID"|"IE"|"IL"|"IN"|"IQ"|"IR"|"IS"|"IT"|"JE"|"JM"|"JO"|"JP"|"KE"|"KG"|"KH"|"KI"|"KM"|"KN"|"KP"|"KR"|"KV"|"KW"|"KY"|"KZ"|"LA"|"LB"|"LC"|"LI"|"LK"|"LR"|"LS"|"LT"|"LU"|"LV"|"LY"|"MA"|"MC"|"MD"|"ME"|"MG"|"MH"|"MK"|"ML"|"MM"|"MN"|"MO"|"MP"|"MQ"|"MR"|"MS"|"MT"|"MU"|"MV"|"MW"|"MX"|"MY"|"MZ"|"NA"|"NC"|"NE"|"NG"|"NI"|"NL"|"NO"|"NP"|"NR"|"NU"|"NZ"|"OM"|"PA"|"PE"|"PF"|"PG"|"PH"|"PK"|"PL"|"PR"|"PT"|"PW"|"PY"|"QA"|"RE"|"RO"|"RS"|"RU"|"RW"|"SA"|"SB"|"SC"|"SD"|"SE"|"SG"|"SH"|"SI"|"SK"|"SL"|"SM"|"SN"|"SO"|"SR"|"SS"|"ST"|"SV"|"SY"|"SZ"|"TC"|"TD"|"TG"|"TH"|"TJ"|"TL"|"TN"|"TO"|"TR"|"TT"|"TV"|"TW"|"TZ"|"UA"|"UG"|"US"|"UY"|"UZ"|"VA"|"VC"|"VE"|"VG"|"VI"|"VN"|"VU"|"WS"|"XB"|"XC"|"XE"|"XM"|"XN"|"XS"|"XY"|"YE"|"YT"|"ZA"|"ZM"|"ZW"|"EH"|"IM"|"BL"|"MF"|"SX"|"", product_url?: string, image_url?: string, product_id?: string, variant_id?: string, parent_id?: string, metadata?: record, meta?: record}
@@ -1445,7 +1444,7 @@ export def "parcels update" [
   --package-preset: string # The parcel's package preset.<br/>         For carrier specific package presets, please consult the reference.          (nullable)
   --description: string # The parcel's description (nullable)
   --content: string # The parcel's content description (nullable)
-  --is-document: string@bool-completer # Indicates if the parcel is composed of documents only (nullable, default: false)
+  --is-document: oneof<nothing, bool> # Indicates if the parcel is composed of documents only (nullable, default: false)
   --weight-unit: string@weight-unit-completer # The parcel's weight unit
   --dimension-unit: string@dimension-unit-completer # The parcel's dimension unit (nullable)
   --items: list # The parcel items. — item shape: {weight: float, weight_unit: "KG"|"LB"|"OZ"|"G", title?: string, description?: string, quantity?: int, sku?: string, hs_code?: string, value_amount?: float, value_currency?: "EUR"|"AED"|"USD"|"XCD"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZN"|"BAM"|"BBD"|"BDT"|"XOF"|"BGN"|"BHD"|"BIF"|"BMD"|"BND"|"BOB"|"BRL"|"BSD"|"BTN"|"BWP"|"BYN"|"BZD"|"CAD"|"CDF"|"XAF"|"CHF"|"NZD"|"CLP"|"CNY"|"COP"|"CRC"|"CUC"|"CVE"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EGP"|"ERN"|"ETB"|"FJD"|"GBP"|"GEL"|"GHS"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"INR"|"IRR"|"ISK"|"JMD"|"JOD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KPW"|"KRW"|"KWD"|"KYD"|"KZT"|"LAK"|"LKR"|"LRD"|"LSL"|"LYD"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MUR"|"MVR"|"MWK"|"MXN"|"MYR"|"MZN"|"NAD"|"XPF"|"NGN"|"NIO"|"NOK"|"NPR"|"OMR"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SDG"|"SEK"|"SGD"|"SHP"|"SLL"|"SOS"|"SRD"|"SSP"|"STD"|"SYP"|"SZL"|"THB"|"TJS"|"TND"|"TOP"|"TRY"|"TTD"|"TWD"|"TZS"|"UAH"|"UYU"|"UZS"|"VEF"|"VND"|"VUV"|"WST"|"YER"|"ZAR"|"", origin_country?: "AC"|"AD"|"AE"|"AF"|"AG"|"AI"|"AL"|"AM"|"AN"|"AO"|"AR"|"AS"|"AT"|"AU"|"AW"|"AZ"|"BA"|"BB"|"BD"|"BE"|"BF"|"BG"|"BH"|"BI"|"BJ"|"BM"|"BN"|"BO"|"BR"|"BS"|"BT"|"BW"|"BY"|"BZ"|"CA"|"CD"|"CF"|"CG"|"CH"|"CI"|"CK"|"CL"|"CM"|"CN"|"CO"|"CR"|"CU"|"CV"|"CY"|"CZ"|"DE"|"DJ"|"DK"|"DM"|"DO"|"DZ"|"EC"|"EE"|"EG"|"ER"|"ES"|"ET"|"FI"|"FJ"|"FK"|"FM"|"FO"|"FR"|"GA"|"GB"|"GD"|"GE"|"GF"|"GG"|"GH"|"GI"|"GL"|"GM"|"GN"|"GP"|"GQ"|"GR"|"GT"|"GU"|"GW"|"GY"|"HK"|"HN"|"HR"|"HT"|"HU"|"IC"|"ID"|"IE"|"IL"|"IN"|"IQ"|"IR"|"IS"|"IT"|"JE"|"JM"|"JO"|"JP"|"KE"|"KG"|"KH"|"KI"|"KM"|"KN"|"KP"|"KR"|"KV"|"KW"|"KY"|"KZ"|"LA"|"LB"|"LC"|"LI"|"LK"|"LR"|"LS"|"LT"|"LU"|"LV"|"LY"|"MA"|"MC"|"MD"|"ME"|"MG"|"MH"|"MK"|"ML"|"MM"|"MN"|"MO"|"MP"|"MQ"|"MR"|"MS"|"MT"|"MU"|"MV"|"MW"|"MX"|"MY"|"MZ"|"NA"|"NC"|"NE"|"NG"|"NI"|"NL"|"NO"|"NP"|"NR"|"NU"|"NZ"|"OM"|"PA"|"PE"|"PF"|"PG"|"PH"|"PK"|"PL"|"PR"|"PT"|"PW"|"PY"|"QA"|"RE"|"RO"|"RS"|"RU"|"RW"|"SA"|"SB"|"SC"|"SD"|"SE"|"SG"|"SH"|"SI"|"SK"|"SL"|"SM"|"SN"|"SO"|"SR"|"SS"|"ST"|"SV"|"SY"|"SZ"|"TC"|"TD"|"TG"|"TH"|"TJ"|"TL"|"TN"|"TO"|"TR"|"TT"|"TV"|"TW"|"TZ"|"UA"|"UG"|"US"|"UY"|"UZ"|"VA"|"VC"|"VE"|"VG"|"VI"|"VN"|"VU"|"WS"|"XB"|"XC"|"XE"|"XM"|"XN"|"XS"|"XY"|"YE"|"YT"|"ZA"|"ZM"|"ZW"|"EH"|"IM"|"BL"|"MF"|"SX"|"", product_url?: string, image_url?: string, product_id?: string, variant_id?: string, parent_id?: string, metadata?: record, meta?: record}
@@ -2025,7 +2024,7 @@ export def "proxy-shipping label" [
   --reference: string # The shipment reference (nullable)
   --order-id: string # The order identifier associated with this shipment (nullable)
   --label-type: string@label-type-completer # The shipment label file type. (default: PDF)
-  --is-return: string@bool-completer # Indicates whether this shipment is a return shipment. When true, addresses are auto-swapped and the request is routed to the carrier's return shipment API. (default: false)
+  --is-return: oneof<nothing, bool> # Indicates whether this shipment is a return shipment. When true, addresses are auto-swapped and the request is routed to the carrier's return shipment API. (default: false)
   selected_rate_id: string # The shipment selected rate.
   rates: list # The list for shipment rates fetched previously — item shape: {id?: string, object_type?: string, carrier_name: string, carrier_id: string, currency?: string, service?: string, total_charge?: float, transit_days?: int, extra_charges?: list, estimated_delivery?: string, meta?: record, test_mode: bool}
 ]: any -> record<id: string, object_type: string, tracking_url: string, shipper: record<id: string, postal_code: string, city: string, federal_tax_id: string, state_tax_id: string, person_name: string, company_name: string, country_code: string, email: string, phone_number: string, state_code: string, residential: bool, street_number: string, address_line1: string, address_line2: string, validate_location: bool, meta: record, object_type: string, validation: record<success: bool, meta: record>>, recipient: record<id: string, postal_code: string, city: string, federal_tax_id: string, state_tax_id: string, person_name: string, company_name: string, country_code: string, email: string, phone_number: string, state_code: string, residential: bool, street_number: string, address_line1: string, address_line2: string, validate_location: bool, meta: record, object_type: string, validation: record<success: bool, meta: record>>, return_address: record<id: string, postal_code: string, city: string, federal_tax_id: string, state_tax_id: string, person_name: string, company_name: string, country_code: string, email: string, phone_number: string, state_code: string, residential: bool, street_number: string, address_line1: string, address_line2: string, validate_location: bool, meta: record, object_type: string, validation: record<success: bool, meta: record>>, billing_address: record<id: string, postal_code: string, city: string, federal_tax_id: string, state_tax_id: string, person_name: string, company_name: string, country_code: string, email: string, phone_number: string, state_code: string, residential: bool, street_number: string, address_line1: string, address_line2: string, validate_location: bool, meta: record, object_type: string, validation: record<success: bool, meta: record>>, parcels: table<id: string, weight: float, width: float, height: float, length: float, packaging_type: string, package_preset: string, description: string, content: string, is_document: bool, weight_unit: string, dimension_unit: string, items: list, reference_number: string, freight_class: string, options: record, meta: record, object_type: string>, services: list<string>, options: record, payment: record<paid_by: string, currency: string, account_number: string>, customs: record<commodities: list<record>, duty: record<paid_by: string, currency: string, declared_value: float, account_number: string>, duty_billing_address: record<id: string, postal_code: string, city: string, federal_tax_id: string, state_tax_id: string, person_name: string, company_name: string, country_code: string, email: string, phone_number: string, state_code: string, residential: bool, street_number: string, address_line1: string, address_line2: string, validate_location: bool, meta: record>, content_type: string, content_description: string, incoterm: string, invoice: string, invoice_date: string, commercial_invoice: bool, certify: bool, signer: string, options: record>, rates: table<id: string, object_type: string, carrier_name: string, carrier_id: string, currency: string, service: string, total_charge: float, transit_days: int, extra_charges: list, estimated_delivery: string, meta: record, test_mode: bool>, reference: string, order_id: string, label_type: string, carrier_ids: list<string>, tracker_id: string, created_at: string, metadata: record, messages: table<message: string, code: string, level: string, details: record, carrier_name: string, carrier_id: string>, status: string, carrier_name: string, carrier_id: string, tracking_number: string, shipment_identifier: string, selected_rate: record<id: string, object_type: string, carrier_name: string, carrier_id: string, currency: string, service: string, total_charge: float, transit_days: int, extra_charges: list<record>, estimated_delivery: string, meta: record, test_mode: bool>, docs: record<label: string, invoice: string, extra_documents: list<record>>, meta: record, return_shipment: record, service: string, selected_rate_id: string, test_mode: bool, is_return: bool> {
@@ -2165,10 +2164,10 @@ export def "shipments list" [
   --carrier-name: string # The unique carrier slug. <br/>Values: `aramex`, `asendia`, `asendia_us`, `australiapost`, `boxknight`, `bpost`, `canadapost`, `canpar`, `chronopost`, `colissimo`, `dhl_express`, `dhl_parcel_de`, `dhl_poland`, `dhl_universal`, `dicom`, `dpd`, `dpd_meta`, `dtdc`, `easypost`, `easyship`, `eshipper`, `fedex`, `freightcom`, `generic`, `geodis`, `gls`, `hay_post`, `hermes`, `landmark`, `laposte`, `locate2u`, `mydhl`, `nationex`, `parcelone`, `postat`, `purolator`, `roadie`, `royalmail`, `sapient`, `seko`, `sendle`, `shipengine`, `spring`, `teleship`, `tge`, `tnt`, `ups`, `usps`, `usps_international`, `veho`, `zoom2u`
   --created-after: string # format: date-time
   --created-before: string # format: date-time
-  --has-manifest: string@bool-completer
-  --has-tracker: string@bool-completer
+  --has-manifest: oneof<nothing, bool>
+  --has-tracker: oneof<nothing, bool>
   --id: string
-  --is-return: string@bool-completer
+  --is-return: oneof<nothing, bool>
   --keyword: string
   --meta-key: string
   --meta-value: string
@@ -2216,7 +2215,7 @@ export def "shipments create" [
   --reference: string # The shipment reference (nullable)
   --order-id: string # The order identifier associated with this shipment (nullable)
   --label-type: string@label-type-completer # The shipment label file type. (default: PDF)
-  --is-return: string@bool-completer # Indicates whether this shipment is a return shipment. When true, addresses are auto-swapped and the request is routed to the carrier's return shipment API. (default: false)
+  --is-return: oneof<nothing, bool> # Indicates whether this shipment is a return shipment. When true, addresses are auto-swapped and the request is routed to the carrier's return shipment API. (default: false)
   --service: string # **Specify a service to Buy a label in one call without rating.**
   --services: list # The requested carrier service for the shipment.<br/>         Please consult the reference for specific carriers services.<br/>         **Note that this is a list because on a Multi-carrier rate request         you could specify a service per carrier.**          (nullable, default: [])
   --carrier-ids: list # The list of configured carriers you wish to get rates from.<br/>         **Note that the request will be sent to all carriers in nothing is specified**          (nullable, default: [])
@@ -2434,7 +2433,7 @@ export def "trackers add" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --hub: string
-  --pending-pickup: string@bool-completer # Add this flag to add the tracker whether the tracking info exist or not.When the package is eventually picked up, the tracker with capture real time updates.
+  --pending-pickup: oneof<nothing, bool> # Add this flag to add the tracker whether the tracking info exist or not.When the package is eventually picked up, the tracker with capture real time updates.
   tracking_number: string # The package tracking number
   carrier_name: string@carrier-name-completer-1 # The tracking carrier
   --account-number: string # The shipper account number (nullable)
@@ -2569,7 +2568,7 @@ export def "trackers-inject-events inject" [
   --allow-errors(-e) # Return full response without error handling
   events: list # List of tracking events to inject into the tracker — item shape: {date?: string, time?: string, timestamp?: string, status?: "pending"|"picked_up"|"unknown"|"on_hold"|"cancelled"|"delivered"|"in_transit"|"delivery_delayed"|"out_for_delivery"|"ready_for_pickup"|"delivery_failed"|"return_to_sender"|""|"", code?: string, reason?: "carrier_damaged_parcel"|"carrier_sorting_error"|"carrier_address_not_found"|"carrier_parcel_lost"|"carrier_not_enough_time"|"carrier_vehicle_issue"|"carrier_capacity_exceeded"|"carrier_mechanical_delay"|"retailer_cancelled"|"retailer_incorrect_data"|"retailer_not_ready"|"retailer_incorrect_parcel"|"retailer_incorrect_dimensions"|"retailer_packaging_issue"|"consignee_refused"|"consignee_business_closed"|"consignee_not_available"|"consignee_not_home"|"consignee_cancelled"|"consignee_verification_failed"|"consignee_incorrect_address"|"consignee_access_restricted"|"consignee_safe_place_unavailable"|"customs_delay"|"customs_documentation"|"customs_duties_unpaid"|"customs_prohibited"|"customs_inspection"|"weather_delay"|"natural_disaster"|"force_majeure"|"parcel_being_researched"|"security_issue"|"regulatory_hold"|"unknown"|""|"", description?: string, location?: string, latitude?: float, longitude?: float}
   --status: string@status-completer # Optional: Override the tracker status (nullable)
-  --delivered: string@bool-completer # Optional: Mark the tracker as delivered (default: false)
+  --delivered: oneof<nothing, bool> # Optional: Mark the tracker as delivered (default: false)
   --estimated-delivery: string # Optional: Set the estimated delivery date (nullable, format: date)
 ]: any -> record<operation: string, success: bool> {
   let input = $in
@@ -2619,7 +2618,7 @@ export def "webhooks create" [
   --body-url: string # The URL of the webhook endpoint. (format: uri)
   --description: string # An optional description of what the webhook is used for. (nullable)
   enabled_events: list # The list of events to enable for this endpoint.
-  --disabled: string@bool-completer # Indicates that the webhook is disabled (nullable)
+  --disabled: oneof<nothing, bool> # Indicates that the webhook is disabled (nullable)
 ]: any -> record<id: string, url: string, description: string, enabled_events: list<string>, disabled: bool, object_type: string, last_event_at: string, secret: string, test_mode: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2670,7 +2669,7 @@ export def "webhooks update" [
   --body-url: string # The URL of the webhook endpoint. (format: uri)
   --description: string # An optional description of what the webhook is used for. (nullable)
   --enabled-events: list # The list of events to enable for this endpoint.
-  --disabled: string@bool-completer # Indicates that the webhook is disabled (nullable)
+  --disabled: oneof<nothing, bool> # Indicates that the webhook is disabled (nullable)
 ]: any -> record<id: string, url: string, description: string, enabled_events: list<string>, disabled: bool, object_type: string, last_event_at: string, secret: string, test_mode: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost/api"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -357,7 +356,7 @@ export def "users-contacts-phone-numbers post" [
   --allow-errors(-e) # Return full response without error handling
   --regionCode: string
   --target: string
-  --primary: string@bool-completer # May only be enabled for a single phone number contact at a time
+  --primary: oneof<nothing, bool> # May only be enabled for a single phone number contact at a time
 ]: any -> record<id: int, regionCode: string, target: string, primary: bool, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -407,7 +406,7 @@ export def "users-contacts-phone-numbers put" [
   --allow-errors(-e) # Return full response without error handling
   --regionCode: string
   --target: string
-  --primary: string@bool-completer # May only be enabled for a single phone number contact at a time
+  --primary: oneof<nothing, bool> # May only be enabled for a single phone number contact at a time
 ]: any -> record<id: int, regionCode: string, target: string, primary: bool, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1009,7 +1008,7 @@ export def "users post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --send-no-invitation: string@bool-completer # Provide ?send-no-invitation=true if you do not wish to send an invitation email. (default: false)
+  --send-no-invitation: oneof<nothing, bool> # Provide ?send-no-invitation=true if you do not wish to send an invitation email. (default: false)
   firstName: string
   lastName: string
   email: string
@@ -1500,14 +1499,14 @@ export def "schedules post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --abort-on-gaps: string@bool-completer # Used for static schedules to prevent creating schedules with gaps
+  --abort-on-gaps: oneof<nothing, bool> # Used for static schedules to prevent creating schedules with gaps
   --id: int # format: int64
   --name: string
   --timezone: string@timezone-completer
   --type: string@type-completer-3
   --scheduleLayers: list # item shape: {name?: string, startsOn: string, endsOn?: string, users: list, rotation: string, restrictionType?: "TIMES_OF_WEEK", restrictions?: list}
   --shifts: list # item shape: {user?: record, end?: string, start?: string}
-  --showGaps: string@bool-completer
+  --showGaps: oneof<nothing, bool>
   --defaultShiftDuration: string # format: P7D
   --currentShift: record # shape: {user?: record, end?: string, start?: string}
   --nextShift: record # shape: {user?: record, end?: string, start?: string}
@@ -1565,14 +1564,14 @@ export def "schedules put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --abort-on-gaps: string@bool-completer # Used for static schedules to prevent updating schedules with gaps
+  --abort-on-gaps: oneof<nothing, bool> # Used for static schedules to prevent updating schedules with gaps
   --body-id: int # format: int64
   --name: string
   --timezone: string@timezone-completer
   --type: string@type-completer-3
   --scheduleLayers: list # item shape: {name?: string, startsOn: string, endsOn?: string, users: list, rotation: string, restrictionType?: "TIMES_OF_WEEK", restrictions?: list}
   --shifts: list # item shape: {user?: record, end?: string, start?: string}
-  --showGaps: string@bool-completer
+  --showGaps: oneof<nothing, bool>
   --defaultShiftDuration: string # format: P7D
   --currentShift: record # shape: {user?: record, end?: string, start?: string}
   --nextShift: record # shape: {user?: record, end?: string, start?: string}
@@ -1625,7 +1624,7 @@ export def "schedules-shifts get" [
   --allow-errors(-e) # Return full response without error handling
   --qp-from: string # from date, default is start of last month (format: date-time)
   --until: string # until date, default is from date plus 3 months
-  --exclude-overrides: string@bool-completer # if true, shifts won't include overrides (default: false)
+  --exclude-overrides: oneof<nothing, bool> # if true, shifts won't include overrides (default: false)
 ]: nothing -> table<user: record<id: int, firstName: string, lastName: string, email: string, timezone: string, position: string, department: string, avatarUrl: string, language: string, region: string, role: string, shiftColor: string, mutedUntil: string, createdAt: string, updatedAt: string>, end: string, start: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1795,7 +1794,7 @@ export def "alert-sources post" [
   --autoResolutionTimeout: string # format: ISO-8601
   --alertGroupingWindow: string # format: ISO-8601
   --alertCreation: string@alertCreation-completer # default: ONE_ALERT_PER_EMAIL
-  --active: string@bool-completer # default: true
+  --active: oneof<nothing, bool> # default: true
   --alertPriorityRule: string@alertPriorityRule-completer
   --supportHours: record # For POST and PUT requests only the id field is required for sub entities, e.g. status page -> service, alert source -> support hour — shape: {id: int}
   --summaryTemplate: record # shape: {textTemplate?: string, elements?: list}
@@ -1810,12 +1809,12 @@ export def "alert-sources post" [
   --eventTypeFilterCreate: string # Defines an optional create alert rule in ICL language. This is a code based implementation, more info on syntax: https://docs.ilert.com/rest-api/icl-ilert-condition-language. For block based configuration please use the web UI. It has no effect on manually created alerts. Note: this field is an ?include, it will not appear in lists.
   --eventTypeFilterAccept: string # Defines an optional accept alert rule in ICL language This is a code based implementation, more info on syntax: https://docs.ilert.com/rest-api/icl-ilert-condition-language. For block based configuration please use the web UI. It has no effect on manually created alerts. Note: this field is an ?include, it will not appear in lists.
   --eventTypeFilterResolve: string # Defines an optional resolve alert rule in ICL language This is a code based implementation, more info on syntax: https://docs.ilert.com/rest-api/icl-ilert-condition-language. For block based configuration please use the web UI. It has no effect on manually created alerts. Note: this field is an ?include, it will not appear in lists.
-  --autoRaiseAlerts: string@bool-completer # Only effective when a support hour is linked to this alert source.
+  --autoRaiseAlerts: oneof<nothing, bool> # Only effective when a support hour is linked to this alert source.
   --scoreThreshold: float # Only used when alertCreation is set to INTELLIGENT_GROUPING. (format: double)
   --severity: int
   --services: list # item shape: {id?: float, name?: string, alias?: string, status?: "OPERATIONAL"|"UNDER_MAINTENANCE"|"DEGRADED"|"PARTIAL_OUTAGE"|"MAJOR_OUTAGE", description?: string, oneOpenIncidentOnly?: bool, showUptimeHistory?: bool, teams?: list, uptime?: record}
   --setupStatus: string@setupStatus-completer
-  --autoCreateServices: string@bool-completer # default: false
+  --autoCreateServices: oneof<nothing, bool> # default: false
 ]: any -> record<id: int, teams: table<id: int, name: string>, name: string, iconUrl: string, lightIconUrl: string, darkIconUrl: string, escalationPolicy: record<id: int, name: string, escalationRules: list<record>, teams: list<record>, repeating: bool, frequency: int, delayMin: int, routingKey: string>, integrationType: string, integrationKey: string, integrationUrl: string, autoResolutionTimeout: string, alertGroupingWindow: string, alertCreation: string, status: string, active: bool, alertPriorityRule: string, supportHours: record<id: int, name: string, teams: list<record>, timezone: string, supportDays: record<MONDAY: record, TUESDAY: record, WEDNESDAY: record, THURSDAY: record, FRIDAY: record, SATURDAY: record, SUNDAY: record>, exceptions: list<record>>, bidirectional: bool, summaryTemplate: record<textTemplate: string, elements: list<record>>, detailsTemplate: record<textTemplate: string, elements: list<record>>, routingTemplate: record<textTemplate: string, elements: list<record>>, linkTemplates: table<text: string, hrefTemplate: record>, priorityTemplate: record<valueTemplate: record<textTemplate: string, elements: list>, mappings: list<record>>, severityTemplate: record<valueTemplate: record<textTemplate: string, elements: list>, mappings: list<record>>, eventFilter: string, alertKeyTemplate: record<textTemplate: string, elements: list<record>>, servicesTemplate: table<textTemplate: string, elements: list>, eventTypeFilterCreate: string, eventTypeFilterAccept: string, eventTypeFilterResolve: string, autoRaiseAlerts: bool, scoreThreshold: float, severity: int, services: table<id: float, name: string, alias: string, status: string, description: string, oneOpenIncidentOnly: bool, showUptimeHistory: bool, teams: list, subscribed: bool, uptime: record, incidents: list>, setupStatus: string, autoCreateServices: bool, createdAt: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1887,7 +1886,7 @@ export def "alert-sources put" [
   --autoResolutionTimeout: string # format: ISO-8601
   --alertGroupingWindow: string # format: ISO-8601
   --alertCreation: string@alertCreation-completer # default: ONE_ALERT_PER_EMAIL
-  --active: string@bool-completer # default: true
+  --active: oneof<nothing, bool> # default: true
   --alertPriorityRule: string@alertPriorityRule-completer
   --supportHours: record # For POST and PUT requests only the id field is required for sub entities, e.g. status page -> service, alert source -> support hour — shape: {id: int}
   --summaryTemplate: record # shape: {textTemplate?: string, elements?: list}
@@ -1902,12 +1901,12 @@ export def "alert-sources put" [
   --eventTypeFilterCreate: string # Defines an optional create alert rule in ICL language. This is a code based implementation, more info on syntax: https://docs.ilert.com/rest-api/icl-ilert-condition-language. For block based configuration please use the web UI. It has no effect on manually created alerts. Note: this field is an ?include, it will not appear in lists.
   --eventTypeFilterAccept: string # Defines an optional accept alert rule in ICL language This is a code based implementation, more info on syntax: https://docs.ilert.com/rest-api/icl-ilert-condition-language. For block based configuration please use the web UI. It has no effect on manually created alerts. Note: this field is an ?include, it will not appear in lists.
   --eventTypeFilterResolve: string # Defines an optional resolve alert rule in ICL language This is a code based implementation, more info on syntax: https://docs.ilert.com/rest-api/icl-ilert-condition-language. For block based configuration please use the web UI. It has no effect on manually created alerts. Note: this field is an ?include, it will not appear in lists.
-  --autoRaiseAlerts: string@bool-completer # Only effective when a support hour is linked to this alert source.
+  --autoRaiseAlerts: oneof<nothing, bool> # Only effective when a support hour is linked to this alert source.
   --scoreThreshold: float # Only used when alertCreation is set to INTELLIGENT_GROUPING. (format: double)
   --severity: int
   --services: list # item shape: {id?: float, name?: string, alias?: string, status?: "OPERATIONAL"|"UNDER_MAINTENANCE"|"DEGRADED"|"PARTIAL_OUTAGE"|"MAJOR_OUTAGE", description?: string, oneOpenIncidentOnly?: bool, showUptimeHistory?: bool, teams?: list, uptime?: record}
   --setupStatus: string@setupStatus-completer
-  --autoCreateServices: string@bool-completer # default: false
+  --autoCreateServices: oneof<nothing, bool> # default: false
 ]: any -> record<id: int, teams: table<id: int, name: string>, name: string, iconUrl: string, lightIconUrl: string, darkIconUrl: string, escalationPolicy: record<id: int, name: string, escalationRules: list<record>, teams: list<record>, repeating: bool, frequency: int, delayMin: int, routingKey: string>, integrationType: string, integrationKey: string, integrationUrl: string, autoResolutionTimeout: string, alertGroupingWindow: string, alertCreation: string, status: string, active: bool, alertPriorityRule: string, supportHours: record<id: int, name: string, teams: list<record>, timezone: string, supportDays: record<MONDAY: record, TUESDAY: record, WEDNESDAY: record, THURSDAY: record, FRIDAY: record, SATURDAY: record, SUNDAY: record>, exceptions: list<record>>, bidirectional: bool, summaryTemplate: record<textTemplate: string, elements: list<record>>, detailsTemplate: record<textTemplate: string, elements: list<record>>, routingTemplate: record<textTemplate: string, elements: list<record>>, linkTemplates: table<text: string, hrefTemplate: record>, priorityTemplate: record<valueTemplate: record<textTemplate: string, elements: list>, mappings: list<record>>, severityTemplate: record<valueTemplate: record<textTemplate: string, elements: list>, mappings: list<record>>, eventFilter: string, alertKeyTemplate: record<textTemplate: string, elements: list<record>>, servicesTemplate: table<textTemplate: string, elements: list>, eventTypeFilterCreate: string, eventTypeFilterAccept: string, eventTypeFilterResolve: string, autoRaiseAlerts: bool, scoreThreshold: float, severity: int, services: table<id: float, name: string, alias: string, status: string, description: string, oneOpenIncidentOnly: bool, showUptimeHistory: bool, teams: list, subscribed: bool, uptime: record, incidents: list>, setupStatus: string, autoCreateServices: bool, createdAt: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2377,7 +2376,7 @@ export def "escalation-policies post" [
   name: string
   escalationRules: list # item shape: {escalationTimeout: int, user?: record, schedule?: record, team?: record, users?: list, schedules?: list, teams?: list}
   --teams: list # item shape: {id?: int, name?: string}
-  --repeating: string@bool-completer # default: false
+  --repeating: oneof<nothing, bool> # default: false
   --frequency: int # format: int32, default: 1
   --delayMin: int # format: int32, default: 0
   --routingKey: string # optional
@@ -2454,7 +2453,7 @@ export def "escalation-policies put" [
   name: string
   escalationRules: list # item shape: {escalationTimeout: int, user?: record, schedule?: record, team?: record, users?: list, schedules?: list, teams?: list}
   --teams: list # item shape: {id?: int, name?: string}
-  --repeating: string@bool-completer # default: false
+  --repeating: oneof<nothing, bool> # default: false
   --frequency: int # format: int32, default: 1
   --delayMin: int # format: int32, default: 0
   --routingKey: string # optional
@@ -3210,7 +3209,7 @@ export def "incident-templates post" [
   --summary: string
   --status: string@status-completer # the incident status
   --message: string
-  --sendNotification: string@bool-completer
+  --sendNotification: oneof<nothing, bool>
   --teams: list # item shape: {id?: int, name?: string}
 ]: any -> record<id: float, name: string, summary: string, status: string, message: string, sendNotification: bool, teams: table<id: int, name: string>> {
   let input = $in
@@ -3263,7 +3262,7 @@ export def "incident-templates put" [
   --summary: string
   --status: string@status-completer # the incident status
   --message: string
-  --sendNotification: string@bool-completer
+  --sendNotification: oneof<nothing, bool>
   --teams: list # item shape: {id?: int, name?: string}
 ]: any -> record<id: float, name: string, summary: string, status: string, message: string, sendNotification: bool, teams: table<id: int, name: string>> {
   let input = $in
@@ -3339,8 +3338,8 @@ export def "services post" [
   --alias: string
   --status: string@status-completer-1 # the service status
   --description: string
-  --oneOpenIncidentOnly: string@bool-completer
-  --showUptimeHistory: string@bool-completer
+  --oneOpenIncidentOnly: oneof<nothing, bool>
+  --showUptimeHistory: oneof<nothing, bool>
   --teams: list # item shape: {id?: int, name?: string}
 ]: any -> record<id: float, name: string, alias: string, status: string, description: string, oneOpenIncidentOnly: bool, showUptimeHistory: bool, teams: table<id: int, name: string>> {
   let input = $in
@@ -3395,8 +3394,8 @@ export def "services put" [
   --alias: string
   --status: string@status-completer-1 # the service status
   --description: string
-  --oneOpenIncidentOnly: string@bool-completer
-  --showUptimeHistory: string@bool-completer
+  --oneOpenIncidentOnly: oneof<nothing, bool>
+  --showUptimeHistory: oneof<nothing, bool>
   --teams: list # item shape: {id?: int, name?: string}
 ]: any -> record<id: float, name: string, alias: string, status: string, description: string, oneOpenIncidentOnly: bool, showUptimeHistory: bool, teams: table<id: int, name: string>> {
   let input = $in
@@ -3475,7 +3474,7 @@ export def "incidents post" [
   --summary: string
   --status: string@status-completer # the incident status
   --message: string
-  --sendNotification: string@bool-completer
+  --sendNotification: oneof<nothing, bool>
   --createdAt: string # May be overwritten during the creation of the incident, otherwise read-only (format: date-time)
   --updatedAt: string # May be overwritten during the creation of the incident, otherwise read-only (format: date-time)
   --affectedServices: list # item shape: {impact?: "OPERATIONAL"|"UNDER_MAINTENANCE"|"DEGRADED"|"PARTIAL_OUTAGE"|"MAJOR_OUTAGE", service?: record}
@@ -3507,7 +3506,7 @@ export def "incidents-publish-info post" [
   --summary: string
   --status: string@status-completer # the incident status
   --message: string
-  --sendNotification: string@bool-completer
+  --sendNotification: oneof<nothing, bool>
   --createdAt: string # May be overwritten during the creation of the incident, otherwise read-only (format: date-time)
   --updatedAt: string # May be overwritten during the creation of the incident, otherwise read-only (format: date-time)
   --affectedServices: list # item shape: {impact?: "OPERATIONAL"|"UNDER_MAINTENANCE"|"DEGRADED"|"PARTIAL_OUTAGE"|"MAJOR_OUTAGE", service?: record}
@@ -3564,7 +3563,7 @@ export def "incidents put" [
   --summary: string
   --status: string@status-completer # the incident status
   --message: string
-  --sendNotification: string@bool-completer
+  --sendNotification: oneof<nothing, bool>
   --createdAt: string # May be overwritten during the creation of the incident, otherwise read-only (format: date-time)
   --updatedAt: string # May be overwritten during the creation of the incident, otherwise read-only (format: date-time)
   --affectedServices: list # item shape: {impact?: "OPERATIONAL"|"UNDER_MAINTENANCE"|"DEGRADED"|"PARTIAL_OUTAGE"|"MAJOR_OUTAGE", service?: record}
@@ -3719,14 +3718,14 @@ export def "status-pages post" [
   --faviconUrl: string
   --logoUrl: string
   --visibility: string@visibility-completer
-  --hiddenFromSearch: string@bool-completer
-  --showSubscribeAction: string@bool-completer
-  --showIncidentHistoryOption: string@bool-completer
+  --hiddenFromSearch: oneof<nothing, bool>
+  --showSubscribeAction: oneof<nothing, bool>
+  --showIncidentHistoryOption: oneof<nothing, bool>
   --pageTitle: string
   --pageDescription: string
   --pageLayout: string@pageLayout-completer
   --logoRedirectUrl: string
-  --activated: string@bool-completer
+  --activated: oneof<nothing, bool>
   --status: string@status-completer-1 # the service status
   --teams: list # item shape: {id?: int, name?: string}
   --services: list # item shape: {id?: float, name?: string, alias?: string, status?: "OPERATIONAL"|"UNDER_MAINTENANCE"|"DEGRADED"|"PARTIAL_OUTAGE"|"MAJOR_OUTAGE", description?: string, oneOpenIncidentOnly?: bool, showUptimeHistory?: bool, teams?: list}
@@ -3793,14 +3792,14 @@ export def "status-pages put" [
   --faviconUrl: string
   --logoUrl: string
   --visibility: string@visibility-completer
-  --hiddenFromSearch: string@bool-completer
-  --showSubscribeAction: string@bool-completer
-  --showIncidentHistoryOption: string@bool-completer
+  --hiddenFromSearch: oneof<nothing, bool>
+  --showSubscribeAction: oneof<nothing, bool>
+  --showIncidentHistoryOption: oneof<nothing, bool>
   --pageTitle: string
   --pageDescription: string
   --pageLayout: string@pageLayout-completer
   --logoRedirectUrl: string
-  --activated: string@bool-completer
+  --activated: oneof<nothing, bool>
   --status: string@status-completer-1 # the service status
   --teams: list # item shape: {id?: int, name?: string}
   --services: list # item shape: {id?: float, name?: string, alias?: string, status?: "OPERATIONAL"|"UNDER_MAINTENANCE"|"DEGRADED"|"PARTIAL_OUTAGE"|"MAJOR_OUTAGE", description?: string, oneOpenIncidentOnly?: bool, showUptimeHistory?: bool, teams?: list}
@@ -4072,7 +4071,7 @@ export def "service-outages get" [
   --service: float # the id of the service for which the outages should be fetched
   --qp-from: string # from date, ISO-UTC e.g. 2021-05-25T21:24:56.771Z (format: date-time)
   --until: string # until date, ISO-UTC e.g. 2021-05-26T21:24:56.771Z (format: date-time)
-  --ignore-overrides: string@bool-completer # if the outages should not take overrides into account, default is false
+  --ignore-overrides: oneof<nothing, bool> # if the outages should not take overrides into account, default is false
 ]: nothing -> table<status: string, from: string, until: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4374,11 +4373,11 @@ export def "metrics post" [
   --description: string
   aggregationType: string@aggregationType-completer
   displayType: string@displayType-completer
-  --interpolateGaps: string@bool-completer # default: false
+  --interpolateGaps: oneof<nothing, bool> # default: false
   --lockYAxisMax: float # format: double
   --lockYAxisMin: float # format: double
   --mouseOverDecimal: float # format: int32
-  --showValuesOnMouseOver: string@bool-completer # default: false
+  --showValuesOnMouseOver: oneof<nothing, bool> # default: false
   --teams: list # item shape: {id?: int, name?: string}
   --unitLabel: string
   --metadata: record # Only required if the metric has a dataSource. You may not change this after creation. (default: null) — shape: {query?: string}
@@ -4435,11 +4434,11 @@ export def "metrics put" [
   --description: string
   aggregationType: string@aggregationType-completer
   displayType: string@displayType-completer
-  --interpolateGaps: string@bool-completer # default: false
+  --interpolateGaps: oneof<nothing, bool> # default: false
   --lockYAxisMax: float # format: double
   --lockYAxisMin: float # format: double
   --mouseOverDecimal: float # format: int32
-  --showValuesOnMouseOver: string@bool-completer # default: false
+  --showValuesOnMouseOver: oneof<nothing, bool> # default: false
   --teams: list # item shape: {id?: int, name?: string}
   --unitLabel: string
   --metadata: record # Only required if the metric has a dataSource. You may not change this after creation. (default: null) — shape: {query?: string}

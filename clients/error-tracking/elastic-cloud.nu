@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.elastic-cloud.com" "https://api.elastic-cloud.com/api/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -372,7 +371,7 @@ export def "deployments create-deployment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --request-id: string # An optional idempotency token - if two create requests share the same request_id token (min size 32 characters, max 128) then only one deployment will be created, the second request will return the info of that deployment (in the same format described below, but with blanks for auth-related fields)
-  --validate-only: string@bool-completer # If true, will just validate the Deployment definition but will not perform the creation (default: false)
+  --validate-only: oneof<nothing, bool> # If true, will just validate the Deployment definition but will not perform the creation (default: false)
   --template-id: string # An optional template id - if present, the referenced template will be used to fill in the resources field of the deployment creation request. If any resources are present in the request together with the template, the ones coming in the request will prevail and no merging with the template will be performed.
   --name: string # A name for the deployment; otherwise this will be the generated deployment id
   --resources: record # Describes the resources that will belong to a Deployment — shape: {elasticsearch?: list, kibana?: list, apm?: list, appsearch?: list, enterprise_search?: list, integrations_server?: list}
@@ -521,7 +520,7 @@ export def "deployments-extensions get-extension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-deployments: string@bool-completer # Include deployments referencing this extension. Up to only 10000 deployments will be included. (default: false)
+  --include-deployments: oneof<nothing, bool> # Include deployments referencing this extension. Up to only 10000 deployments will be included. (default: false)
 ]: nothing -> record<id: string, name: string, description: string, url: string, download_url: string, extension_type: string, version: string, deployments: list<string>, file_metadata: record<last_modified_date: string, size: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -624,10 +623,10 @@ export def "deployments-templates get-deployment-templates-v2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --metadata: string # An optional key/value pair in the form of (key:value) that will act as a filter and exclude any templates that do not have a matching metadata item associated.
-  --show-instance-configurations: string@bool-completer # If true, will return details for each instance configuration referenced by the template. (default: true)
-  --show-max-zones: string@bool-completer # If true, will populate the max_zones field in the instance configurations. Only relevant if show_instance_configurations=true. (default: false)
+  --show-instance-configurations: oneof<nothing, bool> # If true, will return details for each instance configuration referenced by the template. (default: true)
+  --show-max-zones: oneof<nothing, bool> # If true, will populate the max_zones field in the instance configurations. Only relevant if show_instance_configurations=true. (default: false)
   --stack-version: string # If present, it will cause the returned deployment templates to be adapted to return only the elements allowed in that version.
-  --hide-deprecated: string@bool-completer # If true, templates flagged as deprecated will NOT be returned. (default: false)
+  --hide-deprecated: oneof<nothing, bool> # If true, templates flagged as deprecated will NOT be returned. (default: false)
   --region: string # Region of the deployment templates
 ]: nothing -> table<id: string, name: string, description: string, deployment_template: record<name: string, resources: record, settings: record, metadata: record, alias: string, region: string, version: string>, system_owned: bool, source: record<facilitator: string, action: string, date: string, user_id: string, admin_id: string, remote_addresses: list>, metadata: list<record>, instance_configurations: list<record>, order: int, min_version: string, template_category_id: string, kibana_deeplink: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -652,8 +651,8 @@ export def "deployments-templates get-deployment-template-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-instance-configurations: string@bool-completer # If true, will return details for each instance configuration referenced by the template. (default: true)
-  --show-max-zones: string@bool-completer # If true, will populate the max_zones field in the instance configurations. Only relevant if show_instance_configurations=true. (default: false)
+  --show-instance-configurations: oneof<nothing, bool> # If true, will return details for each instance configuration referenced by the template. (default: true)
+  --show-max-zones: oneof<nothing, bool> # If true, will populate the max_zones field in the instance configurations. Only relevant if show_instance_configurations=true. (default: false)
   --stack-version: string # If present, it will cause the returned deployment template to be adapted to return only the elements allowed in that version.
   --region: string # Region of the deployment template
 ]: nothing -> record<id: string, name: string, description: string, deployment_template: record<name: string, resources: record<elasticsearch: list, kibana: list, apm: list, appsearch: list, enterprise_search: list, integrations_server: list>, settings: record<traffic_filter_settings: record, observability: record, byok: record, autoscaling_enabled: bool, solution_type: string>, metadata: record<tags: list>, alias: string, region: string, version: string>, system_owned: bool, source: record<facilitator: string, action: string, date: string, user_id: string, admin_id: string, remote_addresses: list<string>>, metadata: table<key: string, value: string>, instance_configurations: table<id: string, name: string, config_version: int, description: string, instance_type: string, node_types: list, discrete_sizes: record, storage_multiplier: float, cpu_multiplier: float, metadata: record, max_zones: int>, order: int, min_version: string, template_category_id: string, kibana_deeplink: table<semver: string, uri: string>> {
@@ -781,7 +780,7 @@ export def "deployments-traffic-filter-rulesets get-traffic-filter-rulesets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-associations: string@bool-completer # Retrieves a list of resources that are associated to the specified ruleset. (default: false)
+  --include-associations: oneof<nothing, bool> # Retrieves a list of resources that are associated to the specified ruleset. (default: false)
   --region: string # If provided limits the rulesets to that region only.
   --organization-id: string # Retrieves a list of resources that are associated to the specified organization ID. It only takes effect if the user is an admin.
 ]: nothing -> record<rulesets: table<id: string, name: string, description: string, type: string, include_by_default: bool, region: string, rules: list, associations: list, total_associations: int>> {
@@ -810,7 +809,7 @@ export def "deployments-traffic-filter-rulesets create-traffic-filter-ruleset" [
   name: string # Name of the ruleset
   --description: string # Description of the ruleset
   type: string # Type of the ruleset
-  --include-by-default: string@bool-completer # Should the ruleset be automatically included in the new deployments
+  --include-by-default: oneof<nothing, bool> # Should the ruleset be automatically included in the new deployments
   region: string # The ruleset can be attached only to deployments in the specific region
   rules: list # List of rules — item shape: {id?: string, remote_cluster_org_id?: string, remote_cluster_id?: string, description?: string, source?: string, azure_endpoint_name?: string, azure_endpoint_guid?: string, egress_rule?: record}
 ]: any -> record<id: string> {
@@ -838,7 +837,7 @@ export def "deployments-traffic-filter-rulesets get-traffic-filter-ruleset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-associations: string@bool-completer # Retrieves a list of resources that are associated to the specified ruleset. (default: false)
+  --include-associations: oneof<nothing, bool> # Retrieves a list of resources that are associated to the specified ruleset. (default: false)
 ]: nothing -> record<id: string, name: string, description: string, type: string, include_by_default: bool, region: string, rules: table<id: string, remote_cluster_org_id: string, remote_cluster_id: string, description: string, source: string, azure_endpoint_name: string, azure_endpoint_guid: string, egress_rule: record>, associations: table<entity_type: string, id: string>, total_associations: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -866,7 +865,7 @@ export def "deployments-traffic-filter-rulesets update-traffic-filter-ruleset" [
   name: string # Name of the ruleset
   --description: string # Description of the ruleset
   type: string # Type of the ruleset
-  --include-by-default: string@bool-completer # Should the ruleset be automatically included in the new deployments
+  --include-by-default: oneof<nothing, bool> # Should the ruleset be automatically included in the new deployments
   region: string # The ruleset can be attached only to deployments in the specific region
   rules: list # List of rules — item shape: {id?: string, remote_cluster_org_id?: string, remote_cluster_id?: string, description?: string, source?: string, azure_endpoint_name?: string, azure_endpoint_guid?: string, egress_rule?: record}
 ]: any -> record<id: string> {
@@ -894,7 +893,7 @@ export def "deployments-traffic-filter-rulesets delete-traffic-filter-ruleset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ignore-associations: string@bool-completer # When true, ignores the associations and deletes the ruleset. When false, recognizes the associations, which prevents the deletion of the rule set. (default: false)
+  --ignore-associations: oneof<nothing, bool> # When true, ignores the associations and deletes the ruleset. When false, recognizes the associations, which prevents the deletion of the rule set. (default: false)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -991,20 +990,20 @@ export def "deployments get-deployment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-security: string@bool-completer # Whether to include the Elasticsearch 2.x security information in the response - can be large per cluster and also include credentials (default: false)
-  --show-metadata: string@bool-completer # Whether to include the full cluster metadata in the response - can be large per cluster and also include credentials (default: false)
-  --show-plans: string@bool-completer # Whether to include the full current and pending plan information in the response - can be large per cluster (default: true)
-  --show-plan-logs: string@bool-completer # Whether to include with the current and pending plan information the attempt log - can be very large per cluster (default: false)
-  --show-plan-history: string@bool-completer # Whether to include the plan history with the current and pending plan information. The results can be very large per cluster.  By default, if a given resource kind (e.g. Elasticsearch, Kibana, etc.) has more than 100 plans  (which should be very rare, most likely caused by a bug) only 100 plans are returned for the given resource type:  The first 10 plans, and the last 90 plans for that resource type.  If ALL of the plans are desired, pass the `force_all_plan_history` parameter with a value of `true`.  (default: false)
-  --show-plan-defaults: string@bool-completer # If showing plans, whether to show values that are left at their default value (less readable but more informative) (default: false)
-  --convert-legacy-plans: string@bool-completer # If showing plans, whether to leave pre-2.0.0 plans in their legacy format (the default), or whether to update them to 2.0.x+ format (if 'true') (default: false)
+  --show-security: oneof<nothing, bool> # Whether to include the Elasticsearch 2.x security information in the response - can be large per cluster and also include credentials (default: false)
+  --show-metadata: oneof<nothing, bool> # Whether to include the full cluster metadata in the response - can be large per cluster and also include credentials (default: false)
+  --show-plans: oneof<nothing, bool> # Whether to include the full current and pending plan information in the response - can be large per cluster (default: true)
+  --show-plan-logs: oneof<nothing, bool> # Whether to include with the current and pending plan information the attempt log - can be very large per cluster (default: false)
+  --show-plan-history: oneof<nothing, bool> # Whether to include the plan history with the current and pending plan information. The results can be very large per cluster.  By default, if a given resource kind (e.g. Elasticsearch, Kibana, etc.) has more than 100 plans  (which should be very rare, most likely caused by a bug) only 100 plans are returned for the given resource type:  The first 10 plans, and the last 90 plans for that resource type.  If ALL of the plans are desired, pass the `force_all_plan_history` parameter with a value of `true`.  (default: false)
+  --show-plan-defaults: oneof<nothing, bool> # If showing plans, whether to show values that are left at their default value (less readable but more informative) (default: false)
+  --convert-legacy-plans: oneof<nothing, bool> # If showing plans, whether to leave pre-2.0.0 plans in their legacy format (the default), or whether to update them to 2.0.x+ format (if 'true') (default: false)
   --show-system-alerts: int # Number of system alerts (such as forced restarts due to memory limits) to be included in the response - can be large per cluster. Negative numbers or 0 will not return field. (default: 0)
-  --show-settings: string@bool-completer # Whether to show cluster settings in the response. (default: false)
-  --show-instance-metrics: string@bool-completer # Whether to show resources instance metrics in the response. (default: true)
-  --show-instance-configurations: string@bool-completer # If true, will return details for each instance configuration referenced by the deployment. (default: true)
-  --enrich-with-template: string@bool-completer # If showing plans, whether to enrich the plan by including the missing elements from the deployment template it is based on (default: true)
-  --force-all-plan-history: string@bool-completer # Force show the entire plan history no matter how long.  As noted in the `show_plan_history` parameter description, by default, a maximum of 100 plans are shown per resource.   If `true`, this parameter overrides the default, and ALL plans are returned.  Use with care as the plan history can be VERY large. Consider pairing with `show_plan_logs=false`.   (default: false)
-  --clear-transient: string@bool-completer # If set (defaults to false) then removes the transient section from all child resources, making it safe to reapply via an update (default: false)
+  --show-settings: oneof<nothing, bool> # Whether to show cluster settings in the response. (default: false)
+  --show-instance-metrics: oneof<nothing, bool> # Whether to show resources instance metrics in the response. (default: true)
+  --show-instance-configurations: oneof<nothing, bool> # If true, will return details for each instance configuration referenced by the deployment. (default: true)
+  --enrich-with-template: oneof<nothing, bool> # If showing plans, whether to enrich the plan by including the missing elements from the deployment template it is based on (default: true)
+  --force-all-plan-history: oneof<nothing, bool> # Force show the entire plan history no matter how long.  As noted in the `show_plan_history` parameter description, by default, a maximum of 100 plans are shown per resource.   If `true`, this parameter overrides the default, and ALL plans are returned.  Use with care as the plan history can be VERY large. Consider pairing with `show_plan_logs=false`.   (default: false)
+  --clear-transient: oneof<nothing, bool> # If set (defaults to false) then removes the transient section from all child resources, making it safe to reapply via an update (default: false)
 ]: nothing -> record<id: string, name: string, alias: string, healthy: bool, resources: record<elasticsearch: list<record>, kibana: list<record>, apm: list<record>, appsearch: list<record>, enterprise_search: list<record>, integrations_server: list<record>>, settings: record<traffic_filter_settings: record<rulesets: list>, observability: record<logging: record, metrics: record>, autoscaling_enabled: bool, auto_ops: record<status: string>, byok: record<key_resource_path: string>, solution_type: string>, metadata: record<tags: list<record>, byok_enabled: bool>, observability: record<healthy: bool, logging: record<healthy: bool, urls: record, issues: list>, metrics: record<healthy: bool, urls: record, issues: list>, issues: list<record>>, instance_configurations: table<id: string, name: string, config_version: int, description: string, instance_type: string, node_types: list, discrete_sizes: record, storage_multiplier: float, cpu_multiplier: float, metadata: record, max_zones: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1031,12 +1030,12 @@ export def "deployments update-deployment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hide-pruned-orphans: string@bool-completer # Whether or not to hide orphaned resources that were shut down (relevant if prune on the request is true) (default: false)
-  --skip-snapshot: string@bool-completer # Whether or not to skip snapshots before shutting down orphaned resources (relevant if prune on the request is true) (default: false)
-  --validate-only: string@bool-completer # If true, will just validate the Deployment definition but will not perform the update (default: false)
+  --hide-pruned-orphans: oneof<nothing, bool> # Whether or not to hide orphaned resources that were shut down (relevant if prune on the request is true) (default: false)
+  --skip-snapshot: oneof<nothing, bool> # Whether or not to skip snapshots before shutting down orphaned resources (relevant if prune on the request is true) (default: false)
+  --validate-only: oneof<nothing, bool> # If true, will just validate the Deployment definition but will not perform the update (default: false)
   --version: string # If specified then checks for conflicts against the version stored in the persistent store (returned in 'x-cloud-resource-version' of the GET request)
   --name: string # A new name for the deployment, otherwise stays the same.
-  --prune-orphans: string@bool-completer # Whether or not to prune orphan resources that are no longer mentioned in this request. Note that resourcesare tracked by ref_id, and if a resource's ref_id is changed, any previous running resources created with that previousref_id are considered to be orphaned as well.
+  --prune-orphans: oneof<nothing, bool> # Whether or not to prune orphan resources that are no longer mentioned in this request. Note that resourcesare tracked by ref_id, and if a resource's ref_id is changed, any previous running resources created with that previousref_id are considered to be orphaned as well.
   --resources: record # Describes the Deployment resource updates — shape: {elasticsearch?: list, kibana?: list, apm?: list, appsearch?: list, enterprise_search?: list, integrations_server?: list}
   --settings: record # Additional configuration for the new deployment object. — shape: {observability?: record, autoscaling_enabled?: bool, auto_ops?: record}
   --metadata: record # Additional information about the current deployment object. — shape: {tags?: list}
@@ -1067,7 +1066,7 @@ export def "deployments-restore restore-deployment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --restore-snapshot: string@bool-completer # Whether or not to restore a snapshot for those resources that allow it. (default: false)
+  --restore-snapshot: oneof<nothing, bool> # Whether or not to restore a snapshot for those resources that allow it. (default: false)
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1091,8 +1090,8 @@ export def "deployments-shutdown shutdown-deployment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hide: string@bool-completer # Whether or not to hide the deployment and its resources.Only applicable for Platform administrators.
-  --skip-snapshot: string@bool-completer # Whether or not to skip snapshots before shutting down the resources (default: false)
+  --hide: oneof<nothing, bool> # Whether or not to hide the deployment and its resources.Only applicable for Platform administrators.
+  --skip-snapshot: oneof<nothing, bool> # Whether or not to skip snapshots before shutting down the resources (default: false)
 ]: nothing -> record<id: string, name: string, orphaned: record<elasticsearch: list<record>, kibana: list<string>, apm: list<string>, appsearch: list<string>, enterprise_search: list<string>, integrations_server: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1117,13 +1116,13 @@ export def "deployments-apm get-deployment-apm-resource-info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-metadata: string@bool-completer # Whether to include the full cluster metadata in the response - can be large per cluster and also include credentials. (default: false)
-  --show-plans: string@bool-completer # Whether to include the full current and pending plan information in the response - can be large per cluster. (default: true)
-  --show-plan-logs: string@bool-completer # Whether to include with the current and pending plan information the attempt log - can be very large per cluster. (default: false)
-  --show-plan-history: string@bool-completer # Whether to include with the current and pending plan information the plan history- can be very large per cluster. (default: false)
-  --show-plan-defaults: string@bool-completer # If showing plans, whether to show values that are left at their default value (less readable but more informative). (default: false)
-  --show-settings: string@bool-completer # Whether to show cluster settings in the response. (default: false)
-  --clear-transient: string@bool-completer # If set (defaults to false) then removes the transient section from all child resources, making it safe to reapply via an update (default: false)
+  --show-metadata: oneof<nothing, bool> # Whether to include the full cluster metadata in the response - can be large per cluster and also include credentials. (default: false)
+  --show-plans: oneof<nothing, bool> # Whether to include the full current and pending plan information in the response - can be large per cluster. (default: true)
+  --show-plan-logs: oneof<nothing, bool> # Whether to include with the current and pending plan information the attempt log - can be very large per cluster. (default: false)
+  --show-plan-history: oneof<nothing, bool> # Whether to include with the current and pending plan information the plan history- can be very large per cluster. (default: false)
+  --show-plan-defaults: oneof<nothing, bool> # If showing plans, whether to show values that are left at their default value (less readable but more informative). (default: false)
+  --show-settings: oneof<nothing, bool> # Whether to show cluster settings in the response. (default: false)
+  --clear-transient: oneof<nothing, bool> # If set (defaults to false) then removes the transient section from all child resources, making it safe to reapply via an update (default: false)
 ]: nothing -> record<ref_id: string, elasticsearch_cluster_ref_id: string, id: string, region: string, info: record<id: string, name: string, elasticsearch_cluster: record<elasticsearch_id: string, links: record>, deployment_id: string, healthy: bool, status: string, plan_info: record<healthy: bool, current: record, pending: record, history: list>, metadata: record<version: int, last_modified: string, endpoint: string, service_url: string, aliased_endpoint: string, aliased_url: string, cloud_id: string, raw: record, ports: record, services_urls: list>, topology: record<healthy: bool, instances: list>, external_links: list<record>, links: record, settings: record<metadata: record>, region: string, apm_server_mode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1171,13 +1170,13 @@ export def "deployments-appsearch get-deployment-appsearch-resource-info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-metadata: string@bool-completer # Whether to include the full cluster metadata in the response - can be large per cluster and also include credentials. (default: false)
-  --show-plans: string@bool-completer # Whether to include the full current and pending plan information in the response - can be large per cluster. (default: true)
-  --show-plan-logs: string@bool-completer # Whether to include with the current and pending plan information the attempt log - can be very large per cluster. (default: false)
-  --show-plan-history: string@bool-completer # Whether to include with the current and pending plan information the plan history- can be very large per cluster. (default: false)
-  --show-plan-defaults: string@bool-completer # If showing plans, whether to show values that are left at their default value (less readable but more informative). (default: false)
-  --show-settings: string@bool-completer # Whether to show cluster settings in the response. (default: false)
-  --clear-transient: string@bool-completer # If set (defaults to false) then removes the transient section from all child resources, making it safe to reapply via an update (default: false)
+  --show-metadata: oneof<nothing, bool> # Whether to include the full cluster metadata in the response - can be large per cluster and also include credentials. (default: false)
+  --show-plans: oneof<nothing, bool> # Whether to include the full current and pending plan information in the response - can be large per cluster. (default: true)
+  --show-plan-logs: oneof<nothing, bool> # Whether to include with the current and pending plan information the attempt log - can be very large per cluster. (default: false)
+  --show-plan-history: oneof<nothing, bool> # Whether to include with the current and pending plan information the plan history- can be very large per cluster. (default: false)
+  --show-plan-defaults: oneof<nothing, bool> # If showing plans, whether to show values that are left at their default value (less readable but more informative). (default: false)
+  --show-settings: oneof<nothing, bool> # Whether to show cluster settings in the response. (default: false)
+  --clear-transient: oneof<nothing, bool> # If set (defaults to false) then removes the transient section from all child resources, making it safe to reapply via an update (default: false)
 ]: nothing -> record<ref_id: string, elasticsearch_cluster_ref_id: string, id: string, region: string, info: record<id: string, name: string, elasticsearch_cluster: record<elasticsearch_id: string, links: record>, deployment_id: string, healthy: bool, status: string, plan_info: record<healthy: bool, current: record, pending: record, history: list>, metadata: record<version: int, last_modified: string, endpoint: string, service_url: string, aliased_endpoint: string, aliased_url: string, cloud_id: string, raw: record, ports: record, services_urls: list>, topology: record<healthy: bool, instances: list>, external_links: list<record>, links: record, settings: record<metadata: record>, region: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1225,7 +1224,7 @@ export def "deployments-appsearch-read-only-mode set-appsearch-read-only-mode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Enabled or disabled read-only mode
+  --enabled: oneof<nothing, bool> # Enabled or disabled read-only mode
 ]: any -> record<enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1274,17 +1273,17 @@ export def "deployments-elasticsearch get-deployment-es-resource-info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-security: string@bool-completer # Whether to include the Elasticsearch 2.x security information in the response - can be large per cluster and also include credentials. (default: false)
-  --show-metadata: string@bool-completer # Whether to include the full cluster metadata in the response - can be large per cluster and also include credentials. (default: false)
-  --show-plans: string@bool-completer # Whether to include the full current and pending plan information in the response - can be large per cluster. (default: true)
-  --show-plan-logs: string@bool-completer # Whether to include with the current and pending plan information the attempt log - can be very large per cluster. (default: false)
-  --show-plan-history: string@bool-completer # Whether to include with the current and pending plan information the plan history- can be very large per cluster. (default: false)
-  --show-plan-defaults: string@bool-completer # If showing plans, whether to show values that are left at their default value (less readable but more informative). (default: false)
-  --convert-legacy-plans: string@bool-completer # If showing plans, whether to leave pre-2.0.0 plans in their legacy format (the default), or whether to update them to 2.0.x+ format (if 'true'). (default: false)
+  --show-security: oneof<nothing, bool> # Whether to include the Elasticsearch 2.x security information in the response - can be large per cluster and also include credentials. (default: false)
+  --show-metadata: oneof<nothing, bool> # Whether to include the full cluster metadata in the response - can be large per cluster and also include credentials. (default: false)
+  --show-plans: oneof<nothing, bool> # Whether to include the full current and pending plan information in the response - can be large per cluster. (default: true)
+  --show-plan-logs: oneof<nothing, bool> # Whether to include with the current and pending plan information the attempt log - can be very large per cluster. (default: false)
+  --show-plan-history: oneof<nothing, bool> # Whether to include with the current and pending plan information the plan history- can be very large per cluster. (default: false)
+  --show-plan-defaults: oneof<nothing, bool> # If showing plans, whether to show values that are left at their default value (less readable but more informative). (default: false)
+  --convert-legacy-plans: oneof<nothing, bool> # If showing plans, whether to leave pre-2.0.0 plans in their legacy format (the default), or whether to update them to 2.0.x+ format (if 'true'). (default: false)
   --show-system-alerts: int # Number of system alerts (such as forced restarts due to memory limits) to be included in the response - can be large per cluster. Negative numbers or 0 will not return field. (default: 0)
-  --show-settings: string@bool-completer # Whether to show cluster settings in the response. (default: false)
-  --enrich-with-template: string@bool-completer # If showing plans, whether to enrich the plan by including the missing elements from the deployment template it is based on. (default: true)
-  --clear-transient: string@bool-completer # If set (defaults to false) then removes the transient section from all child resources, making it safe to reapply via an update (default: false)
+  --show-settings: oneof<nothing, bool> # Whether to show cluster settings in the response. (default: false)
+  --enrich-with-template: oneof<nothing, bool> # If showing plans, whether to enrich the plan by including the missing elements from the deployment template it is based on. (default: true)
+  --clear-transient: oneof<nothing, bool> # If set (defaults to false) then removes the transient section from all child resources, making it safe to reapply via an update (default: false)
 ]: nothing -> record<ref_id: string, id: string, region: string, info: record<cluster_id: string, cluster_name: string, deployment_id: string, healthy: bool, status: string, plan_info: record<healthy: bool, current: record, pending: record, history: list>, elasticsearch: record<healthy: bool, shard_info: record, shards_status: record, master_info: record, blocking_issues: record, cluster_blocking_issues: record>, metadata: record<version: int, last_modified: string, endpoint: string, service_url: string, aliased_endpoint: string, aliased_url: string, cloud_id: string, raw: record, ports: record, services_urls: list>, topology: record<healthy: bool, instances: list>, system_alerts: list<record>, associated_kibana_clusters: list<record>, associated_apm_clusters: list<record>, associated_appsearch_clusters: list<record>, associated_enterprise_search_clusters: list<record>, security: record<version: int, last_modified: string, users: list, roles: record, users_roles: list>, elasticsearch_monitoring_info: record<healthy: bool, last_modified: string, last_update_status: string, source_cluster_ids: list, destination_cluster_ids: list>, snapshots: record<healthy: bool, count: int, latest_successful: bool, latest_status: string, scheduled_time: string, latest_end_time: string, latest_successful_end_time: string, recent_success: bool>, external_links: list<record>, links: record, settings: record<snapshot: record, monitoring: record, metadata: record, curation: record, dedicated_masters_threshold: int, traffic_filter: record, trust: record, keystore_contents: record>, region: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1309,7 +1308,7 @@ export def "deployments-elasticsearch-enable-ccr enable-deployment-resource-ccr"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --validate-only: string@bool-completer # When `true`, will not enable CCR but returns warnings if any elements may lose availability during CCR enablement (default: false)
+  --validate-only: oneof<nothing, bool> # When `true`, will not enable CCR but returns warnings if any elements may lose availability during CCR enablement (default: false)
 ]: nothing -> record<warnings: table<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1335,7 +1334,7 @@ export def "deployments-elasticsearch-enable-ilm enable-deployment-resource-ilm"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --validate-only: string@bool-completer # When `true`, does not enable ILM but returns warnings if any applications may lose availability during ILM migration. (default: false)
+  --validate-only: oneof<nothing, bool> # When `true`, does not enable ILM but returns warnings if any applications may lose availability during ILM migration. (default: false)
   index_patterns: list # A locally-unique user-specified id for Kibana — item shape: {index_pattern: string, policy_name: string, node_attributes?: record}
 ]: any -> record<warnings: table<code: string, message: string>> {
   let input = $in
@@ -1364,7 +1363,7 @@ export def "deployments-elasticsearch-enable-slm enable-deployment-resource-slm"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --validate-only: string@bool-completer # When `true`, does not enable SLM but returns warnings if any applications may lose availability during SLM migration. (default: false)
+  --validate-only: oneof<nothing, bool> # When `true`, does not enable SLM but returns warnings if any applications may lose availability during SLM migration. (default: false)
 ]: nothing -> record<warnings: table<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1389,7 +1388,7 @@ export def "deployments-elasticsearch-reset-password reset-elasticsearch-user-pa
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --check-completion: string@bool-completer # If true, will not reset elastic user password and instead will return a status code signaling whether or not the current credentials are ready to use (eg from creation or the last call to _reset_password) (default: false)
+  --check-completion: oneof<nothing, bool> # If true, will not reset elastic user password and instead will return a status code signaling whether or not the current credentials are ready to use (eg from creation or the last call to _reset_password) (default: false)
 ]: nothing -> record<username: string, password: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1414,9 +1413,9 @@ export def "deployments-elasticsearch-restart restart-deployment-es-resource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --restore-snapshot: string@bool-completer # When set to true and restoring from shutdown, then will restore the cluster from the last snapshot (if available). (default: true)
-  --skip-snapshot: string@bool-completer # If true, will not take a snapshot of the cluster before restarting. (default: true)
-  --cancel-pending: string@bool-completer # If true, cancels any pending plans before restarting. If false and there are pending plans, returns an error. (default: false)
+  --restore-snapshot: oneof<nothing, bool> # When set to true and restoring from shutdown, then will restore the cluster from the last snapshot (if available). (default: true)
+  --skip-snapshot: oneof<nothing, bool> # If true, will not take a snapshot of the cluster before restarting. (default: true)
+  --cancel-pending: oneof<nothing, bool> # If true, cancels any pending plans before restarting. If false and there are pending plans, returns an error. (default: false)
   --group-attribute: string # Indicates the property or properties used to divide the list of instances to restart in groups. Valid options are: '\_\_all\_\_' (restart all at once), '\_\_zone\_\_' by logical zone, '\_\_name\_\_' one instance at a time, or a comma-separated list of attributes of the instances (default: __zone__)
   --shard-init-wait-time: int # The time, in seconds, to wait for shards that show no progress of initializing, before rolling the next group (default: 10 minutes) (default: 600)
 ]: nothing -> record<warnings: table<code: string, message: string>> {
@@ -1443,8 +1442,8 @@ export def "deployments-elasticsearch-shutdown shutdown-deployment-es-resource" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hide: string@bool-completer # Hide cluster on shutdown. Hidden clusters are not listed by default. Only applicable for Platform administrators.
-  --skip-snapshot: string@bool-completer # If true, will skip taking a snapshot of the cluster before shutting the cluster down (if even possible). (default: false)
+  --hide: oneof<nothing, bool> # Hide cluster on shutdown. Hidden clusters are not listed by default. Only applicable for Platform administrators.
+  --skip-snapshot: oneof<nothing, bool> # If true, will skip taking a snapshot of the cluster before shutting the cluster down (if even possible). (default: false)
 ]: nothing -> record<warnings: table<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1524,7 +1523,7 @@ export def "deployments-elasticsearch-keystore set-deployment-es-resource-keysto
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --validate-only: string@bool-completer # When `true`, does nothing except return the entries' allowlist and reloadability statuses. (default: false)
+  --validate-only: oneof<nothing, bool> # When `true`, does nothing except return the entries' allowlist and reloadability statuses. (default: false)
   secrets: record # List of secrets
 ]: any -> record<secrets: record> {
   let input = $in
@@ -1741,13 +1740,13 @@ export def "deployments-enterprise-search get-deployment-enterprise-search-resou
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-metadata: string@bool-completer # Whether to include the full cluster metadata in the response - can be large per cluster and also include credentials. (default: false)
-  --show-plans: string@bool-completer # Whether to include the full current and pending plan information in the response - can be large per cluster. (default: true)
-  --show-plan-logs: string@bool-completer # Whether to include with the current and pending plan information the attempt log - can be very large per cluster. (default: false)
-  --show-plan-history: string@bool-completer # Whether to include with the current and pending plan information the plan history- can be very large per cluster. (default: false)
-  --show-plan-defaults: string@bool-completer # If showing plans, whether to show values that are left at their default value (less readable but more informative). (default: false)
-  --show-settings: string@bool-completer # Whether to show cluster settings in the response. (default: false)
-  --clear-transient: string@bool-completer # If set (defaults to false) then removes the transient section from all child resources, making it safe to reapply via an update (default: false)
+  --show-metadata: oneof<nothing, bool> # Whether to include the full cluster metadata in the response - can be large per cluster and also include credentials. (default: false)
+  --show-plans: oneof<nothing, bool> # Whether to include the full current and pending plan information in the response - can be large per cluster. (default: true)
+  --show-plan-logs: oneof<nothing, bool> # Whether to include with the current and pending plan information the attempt log - can be very large per cluster. (default: false)
+  --show-plan-history: oneof<nothing, bool> # Whether to include with the current and pending plan information the plan history- can be very large per cluster. (default: false)
+  --show-plan-defaults: oneof<nothing, bool> # If showing plans, whether to show values that are left at their default value (less readable but more informative). (default: false)
+  --show-settings: oneof<nothing, bool> # Whether to show cluster settings in the response. (default: false)
+  --clear-transient: oneof<nothing, bool> # If set (defaults to false) then removes the transient section from all child resources, making it safe to reapply via an update (default: false)
 ]: nothing -> record<ref_id: string, elasticsearch_cluster_ref_id: string, id: string, region: string, info: record<id: string, name: string, elasticsearch_cluster: record<elasticsearch_id: string, links: record>, deployment_id: string, healthy: bool, status: string, plan_info: record<healthy: bool, current: record, pending: record, history: list>, metadata: record<version: int, last_modified: string, endpoint: string, service_url: string, aliased_endpoint: string, aliased_url: string, cloud_id: string, raw: record, ports: record, services_urls: list>, topology: record<healthy: bool, instances: list>, external_links: list<record>, links: record, settings: record<metadata: record>, region: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1772,13 +1771,13 @@ export def "deployments-integrations-server get-deployment-integrations-server-r
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-metadata: string@bool-completer # Whether to include the full cluster metadata in the response - can be large per cluster and also include credentials. (default: false)
-  --show-plans: string@bool-completer # Whether to include the full current and pending plan information in the response - can be large per cluster. (default: true)
-  --show-plan-logs: string@bool-completer # Whether to include with the current and pending plan information the attempt log - can be very large per cluster. (default: false)
-  --show-plan-history: string@bool-completer # Whether to include with the current and pending plan information the plan history- can be very large per cluster. (default: false)
-  --show-plan-defaults: string@bool-completer # If showing plans, whether to show values that are left at their default value (less readable but more informative). (default: false)
-  --show-settings: string@bool-completer # Whether to show cluster settings in the response. (default: false)
-  --clear-transient: string@bool-completer # If set (defaults to false) then removes the transient section from all child resources, making it safe to reapply via an update (default: false)
+  --show-metadata: oneof<nothing, bool> # Whether to include the full cluster metadata in the response - can be large per cluster and also include credentials. (default: false)
+  --show-plans: oneof<nothing, bool> # Whether to include the full current and pending plan information in the response - can be large per cluster. (default: true)
+  --show-plan-logs: oneof<nothing, bool> # Whether to include with the current and pending plan information the attempt log - can be very large per cluster. (default: false)
+  --show-plan-history: oneof<nothing, bool> # Whether to include with the current and pending plan information the plan history- can be very large per cluster. (default: false)
+  --show-plan-defaults: oneof<nothing, bool> # If showing plans, whether to show values that are left at their default value (less readable but more informative). (default: false)
+  --show-settings: oneof<nothing, bool> # Whether to show cluster settings in the response. (default: false)
+  --clear-transient: oneof<nothing, bool> # If set (defaults to false) then removes the transient section from all child resources, making it safe to reapply via an update (default: false)
 ]: nothing -> record<ref_id: string, elasticsearch_cluster_ref_id: string, id: string, region: string, info: record<id: string, name: string, elasticsearch_cluster: record<elasticsearch_id: string, links: record>, deployment_id: string, healthy: bool, status: string, plan_info: record<healthy: bool, current: record, pending: record, history: list>, metadata: record<version: int, last_modified: string, endpoint: string, service_url: string, aliased_endpoint: string, aliased_url: string, cloud_id: string, raw: record, ports: record, services_urls: list>, topology: record<healthy: bool, instances: list>, external_links: list<record>, links: record, settings: record<metadata: record>, region: string, apm_server_mode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1803,14 +1802,14 @@ export def "deployments-kibana get-deployment-kib-resource-info" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-metadata: string@bool-completer # Whether to include the full cluster metadata in the response - can be large per cluster and also include credentials. (default: false)
-  --show-plans: string@bool-completer # Whether to include the full current and pending plan information in the response - can be large per cluster. (default: true)
-  --show-plan-logs: string@bool-completer # Whether to include with the current and pending plan information the attempt log - can be very large per cluster. (default: false)
-  --show-plan-history: string@bool-completer # Whether to include with the current and pending plan information the plan history- can be very large per cluster. (default: false)
-  --show-plan-defaults: string@bool-completer # If showing plans, whether to show values that are left at their default value (less readable but more informative). (default: false)
-  --convert-legacy-plans: string@bool-completer # If showing plans, whether to leave pre-2.0.0 plans in their legacy format (the default), or whether to update them to 2.0.x+ format (if 'true'). (default: false)
-  --show-settings: string@bool-completer # Whether to show cluster settings in the response. (default: false)
-  --clear-transient: string@bool-completer # If set (defaults to false) then removes the transient section from all child resources, making it safe to reapply via an update (default: false)
+  --show-metadata: oneof<nothing, bool> # Whether to include the full cluster metadata in the response - can be large per cluster and also include credentials. (default: false)
+  --show-plans: oneof<nothing, bool> # Whether to include the full current and pending plan information in the response - can be large per cluster. (default: true)
+  --show-plan-logs: oneof<nothing, bool> # Whether to include with the current and pending plan information the attempt log - can be very large per cluster. (default: false)
+  --show-plan-history: oneof<nothing, bool> # Whether to include with the current and pending plan information the plan history- can be very large per cluster. (default: false)
+  --show-plan-defaults: oneof<nothing, bool> # If showing plans, whether to show values that are left at their default value (less readable but more informative). (default: false)
+  --convert-legacy-plans: oneof<nothing, bool> # If showing plans, whether to leave pre-2.0.0 plans in their legacy format (the default), or whether to update them to 2.0.x+ format (if 'true'). (default: false)
+  --show-settings: oneof<nothing, bool> # Whether to show cluster settings in the response. (default: false)
+  --clear-transient: oneof<nothing, bool> # If set (defaults to false) then removes the transient section from all child resources, making it safe to reapply via an update (default: false)
 ]: nothing -> record<ref_id: string, elasticsearch_cluster_ref_id: string, id: string, region: string, info: record<cluster_id: string, cluster_name: string, elasticsearch_cluster: record<elasticsearch_id: string, links: record>, deployment_id: string, healthy: bool, status: string, plan_info: record<healthy: bool, current: record, pending: record, history: list>, metadata: record<version: int, last_modified: string, endpoint: string, service_url: string, aliased_endpoint: string, aliased_url: string, cloud_id: string, raw: record, ports: record, services_urls: list>, topology: record<healthy: bool, instances: list>, external_links: list<record>, links: record, settings: record<metadata: record>, region: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1835,7 +1834,7 @@ export def "deployments-migrate-template migrate-deployment-template" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --template-id: string # The ID of the deployment template to migrate to
-  --skip-instance-metrics-check: string@bool-completer # If true, will skip the instance metrics check for memory and disk usage calculations (default: false)
+  --skip-instance-metrics-check: oneof<nothing, bool> # If true, will skip the instance metrics check for memory and disk usage calculations (default: false)
 ]: nothing -> record<name: string, prune_orphans: bool, resources: record<elasticsearch: list<record>, kibana: list<record>, apm: list<record>, appsearch: list<record>, enterprise_search: list<record>, integrations_server: list<record>>, settings: record<observability: record<logging: record, metrics: record>, autoscaling_enabled: bool, auto_ops: record<status: string>>, metadata: record<tags: list<record>>, alias: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1960,7 +1959,7 @@ export def "deployments-restore restore-deployment-resource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --restore-snapshot: string@bool-completer # Whether or not to restore a snapshot for those resources that allow it. (default: false)
+  --restore-snapshot: oneof<nothing, bool> # Whether or not to restore a snapshot for those resources that allow it. (default: false)
 ]: nothing -> record<id: string, kind: string, ref_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2083,7 +2082,7 @@ export def "deployments-instances-start start-deployment-resource-instances" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ignore-missing: string@bool-completer # If true and the instance does not exist then quietly proceed to the next instance, otherwise treated as an error (default: false)
+  --ignore-missing: oneof<nothing, bool> # If true and the instance does not exist then quietly proceed to the next instance, otherwise treated as an error (default: false)
 ]: nothing -> record<warnings: table<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2110,7 +2109,7 @@ export def "deployments-instances-stop stop-deployment-resource-instances" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ignore-missing: string@bool-completer # If true and the instance does not exist then quietly proceed to the next instance, otherwise treated as an error. (default: false)
+  --ignore-missing: oneof<nothing, bool> # If true and the instance does not exist then quietly proceed to the next instance, otherwise treated as an error. (default: false)
 ]: nothing -> record<warnings: table<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2137,7 +2136,7 @@ export def "deployments-instances-maintenance-mode-start start-deployment-resour
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ignore-missing: string@bool-completer # If true and the instance does not exist then quietly proceed to the next instance, otherwise treated as an error. (default: false)
+  --ignore-missing: oneof<nothing, bool> # If true and the instance does not exist then quietly proceed to the next instance, otherwise treated as an error. (default: false)
 ]: nothing -> record<warnings: table<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2164,7 +2163,7 @@ export def "deployments-instances-maintenance-mode-stop stop-deployment-resource
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ignore-missing: string@bool-completer # If true and the instance does not exist then quietly proceed to the next instance, otherwise treated as an error. (default: false)
+  --ignore-missing: oneof<nothing, bool> # If true and the instance does not exist then quietly proceed to the next instance, otherwise treated as an error. (default: false)
 ]: nothing -> record<warnings: table<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2190,8 +2189,8 @@ export def "deployments-plan-pending cancel-deployment-resource-pending-plan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force-delete: string@bool-completer # When `true`, deletes the pending plan instead of attempting a graceful cancellation. The default is `false`. (default: false)
-  --ignore-missing: string@bool-completer # When `true`, returns successfully, even when plans are missing. The default is `false`. (default: false)
+  --force-delete: oneof<nothing, bool> # When `true`, deletes the pending plan instead of attempting a graceful cancellation. The default is `false`. (default: false)
+  --ignore-missing: oneof<nothing, bool> # When `true`, returns successfully, even when plans are missing. The default is `false`. (default: false)
 ]: nothing -> record<id: string, kind: string, ref_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2269,7 +2268,7 @@ export def "deployments-restart restart-deployment-stateless-resource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cancel-pending: string@bool-completer # If true, cancels any pending plans before restarting. If false and there are pending plans, returns an error. (default: false)
+  --cancel-pending: oneof<nothing, bool> # If true, cancels any pending plans before restarting. If false and there are pending plans, returns an error. (default: false)
 ]: nothing -> record<warnings: table<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2295,8 +2294,8 @@ export def "deployments-shutdown shutdown-deployment-stateless-resource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hide: string@bool-completer # Hide cluster on shutdown. Hidden clusters are not listed by default. Only applicable for Platform administrators.
-  --skip-snapshot: string@bool-completer # If true, will skip taking a snapshot of the cluster before shutting the cluster down (if even possible) (default: false)
+  --hide: oneof<nothing, bool> # Hide cluster on shutdown. Hidden clusters are not listed by default. Only applicable for Platform administrators.
+  --skip-snapshot: oneof<nothing, bool> # If true, will skip taking a snapshot of the cluster before shutting the cluster down (if even possible) (default: false)
 ]: nothing -> record<warnings: table<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2408,7 +2407,7 @@ export def "organizations update-organization" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # The organization's friendly name
-  --default-disk-usage-alerts-enabled: string@bool-completer # Whether the default disk alerts are enabled
+  --default-disk-usage-alerts-enabled: oneof<nothing, bool> # Whether the default disk alerts are enabled
   --notifications-allowed-email-domains: list # The list of allowed domains for notification-email recipients
   --billing-contacts: list # The list of contacts for billing notifications
   --operational-contacts: list # The list of contacts for operational notifications
@@ -2560,7 +2559,7 @@ export def "organizations-idp setup-organization-idp" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether or not the IdP is enabled
+  --enabled: oneof<nothing, bool> # Whether or not the IdP is enabled
   login_identifier_prefix: string # The prefix of the login identifier that will be generated
   saml_idp: record # SAML2 IdP configuration object — shape: {public_certificate: list, issuer: string, sso_url: string}
 ]: any -> record<login_identifier: string, sso_login_url: string, metadata_url: string, acs: string, sp_entity_id: string, signing_certificate: list<string>, configuration: record<enabled: bool, login_identifier_prefix: string, saml_idp: record<public_certificate: list, issuer: string, sso_url: string>>> {
@@ -2729,7 +2728,7 @@ export def "organizations-members delete-organization-memberships" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # Whether or not to force the removal of Org memberships (effective only for Platform Admins) (default: false)
+  --force: oneof<nothing, bool> # Whether or not to force the removal of Org memberships (effective only for Platform Admins) (default: false)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2823,8 +2822,8 @@ export def "stack-versions get-version-stacks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-deleted: string@bool-completer # Whether to show deleted stack versions or not (default: false)
-  --show-unusable: string@bool-completer # Whether to show versions that are unusable by the authenticated user (default: false)
+  --show-deleted: oneof<nothing, bool> # Whether to show deleted stack versions or not (default: false)
+  --show-unusable: oneof<nothing, bool> # Whether to show versions that are unusable by the authenticated user (default: false)
 ]: nothing -> record<stacks: table<version: string, template: record, elasticsearch: record, kibana: record, apm: record, appsearch: record, metadata: record, deleted: bool, upgradable_to: list, min_upgradable_from: string, whitelisted: bool, accessible: bool, rolling_upgrade_compatible_versions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

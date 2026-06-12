@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost/api/v1"] }
 def auth-scheme-completer [] { ["x-n8n-api-key" "bearer"] }
 
@@ -165,7 +164,7 @@ export def "credentials createCredential" [
   name: string # e.g. Joe's Github Credentials
   type: string # e.g. githubApi
   data: record # e.g. {accessToken: ada612vad6fa5df4adf5a5dsf4389adsf76da7s}
-  --isResolvable: string@bool-completer # Whether this credential has resolvable fields (e.g. false)
+  --isResolvable: oneof<nothing, bool> # Whether this credential has resolvable fields (e.g. false)
   --projectId: string # Project to create the credential in. Defaults to the user's personal project. (e.g. VmwOO9HeTEj20kxM)
 ]: any -> record<id: string, name: string, type: string, isManaged: bool, isGlobal: bool, isResolvable: bool, resolvableAllowFallback: bool, resolverId: string, createdAt: string, updatedAt: string> {
   let input = $in
@@ -217,9 +216,9 @@ export def "credentials updateCredential" [
   --name: string # The name of the credential (e.g. Updated Credential Name)
   --type: string # The credential type. If changing type, data must also be provided. (e.g. githubApi)
   --data: record # The credential data. Required when changing credential type. (e.g. {accessToken: new_token_value})
-  --isGlobal: string@bool-completer # Whether this credential is available globally (e.g. false)
-  --isResolvable: string@bool-completer # Whether this credential has resolvable fields (e.g. false)
-  --isPartialData: string@bool-completer # If true, unredacts and merges existing credential data with the provided data. If false, replaces the entire data object. (default: false, e.g. false)
+  --isGlobal: oneof<nothing, bool> # Whether this credential is available globally (e.g. false)
+  --isResolvable: oneof<nothing, bool> # Whether this credential has resolvable fields (e.g. false)
+  --isPartialData: oneof<nothing, bool> # If true, unredacts and merges existing credential data with the provided data. If false, replaces the entire data object. (default: false, e.g. false)
 ]: any -> record<id: string, name: string, type: string, isManaged: bool, isGlobal: bool, isResolvable: bool, resolvableAllowFallback: bool, resolverId: string, createdAt: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-n8n-api-key"))
@@ -333,8 +332,8 @@ export def "executions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeData: string@bool-completer # Whether or not to include the execution's detailed data.
-  --redactExecutionData: string@bool-completer # Controls execution data redaction. When `true`, execution output data is always redacted. When `false`, requests unredacted (revealed) data — requires the `execution:reveal` scope. When omitted, follows the workflow redaction policy.
+  --includeData: oneof<nothing, bool> # Whether or not to include the execution's detailed data.
+  --redactExecutionData: oneof<nothing, bool> # Controls execution data redaction. When `true`, execution output data is always redacted. When `false`, requests unredacted (revealed) data — requires the `execution:reveal` scope. When omitted, follows the workflow redaction policy.
   --status: string@status-completer # Status to filter the executions by.
   --workflowId: string # Workflow to filter the executions by. (e.g. 1000)
   --projectId: string # e.g. VmwOO9HeTEj20kxM
@@ -362,8 +361,8 @@ export def "executions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeData: string@bool-completer # Whether or not to include the execution's detailed data.
-  --redactExecutionData: string@bool-completer # Controls execution data redaction. When `true`, execution output data is always redacted. When `false`, requests unredacted (revealed) data — requires the `execution:reveal` scope. When omitted, follows the workflow redaction policy.
+  --includeData: oneof<nothing, bool> # Whether or not to include the execution's detailed data.
+  --redactExecutionData: oneof<nothing, bool> # Controls execution data redaction. When `true`, execution output data is always redacted. When `false`, requests unredacted (revealed) data — requires the `execution:reveal` scope. When omitted, follows the workflow redaction policy.
 ]: nothing -> record<id: float, data: record<redactionInfo: record<isRedacted: bool, reason: string, canReveal: bool>>, finished: bool, mode: string, retryOf: float, retrySuccessId: float, startedAt: string, stoppedAt: string, workflowId: float, waitTill: string, customData: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-n8n-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -407,7 +406,7 @@ export def "executions-retry post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --loadWorkflow: string@bool-completer # Whether to load the currently saved workflow to execute instead of the one saved at the time of the execution. If set to true, it will retry with the latest version of the workflow.
+  --loadWorkflow: oneof<nothing, bool> # Whether to load the currently saved workflow to execute instead of the one saved at the time of the execution. If set to true, it will retry with the latest version of the workflow.
 ]: any -> record<id: float, data: record<redactionInfo: record<isRedacted: bool, reason: string, canReveal: bool>>, finished: bool, mode: string, retryOf: float, retrySuccessId: float, startedAt: string, stoppedAt: string, workflowId: float, waitTill: string, customData: record, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-n8n-api-key"))
@@ -674,11 +673,11 @@ export def "workflows get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # e.g. true
+  --active: oneof<nothing, bool> # e.g. true
   --tags: string # e.g. test,production
   --name: string # e.g. My Workflow
   --projectId: string # e.g. VmwOO9HeTEj20kxM
-  --excludePinnedData: string@bool-completer # Set this to avoid retrieving pinned data (e.g. true)
+  --excludePinnedData: oneof<nothing, bool> # Set this to avoid retrieving pinned data (e.g. true)
   --limit: float # The maximum number of items to return. (default: 100, e.g. 100)
   --cursor: string # Paginate by setting the cursor parameter to the nextCursor attribute returned by the previous request's response. Default value fetches the first "page" of the collection. See pagination for more detail.
 ]: nothing -> record<data: table<id: string, name: string, description: string, active: bool, createdAt: string, updatedAt: string, isArchived: bool, versionId: string, triggerCount: int, nodes: list, connections: record, settings: record, staticData: any, pinData: record, meta: record, tags: list, shared: list, activeVersion: record>, nextCursor: string> {
@@ -703,7 +702,7 @@ export def "workflows get-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --excludePinnedData: string@bool-completer # Set this to avoid retrieving pinned data (e.g. true)
+  --excludePinnedData: oneof<nothing, bool> # Set this to avoid retrieving pinned data (e.g. true)
 ]: nothing -> record<id: string, name: string, description: string, active: bool, createdAt: string, updatedAt: string, isArchived: bool, versionId: string, triggerCount: int, nodes: table<id: string, name: string, webhookId: string, disabled: bool, notesInFlow: bool, notes: string, type: string, typeVersion: float, executeOnce: bool, alwaysOutputData: bool, retryOnFail: bool, maxTries: float, waitBetweenTries: float, continueOnFail: bool, onError: string, position: list, parameters: record, credentials: record, customTelemetryTags: record, createdAt: string, updatedAt: string>, connections: record, settings: record<saveExecutionProgress: bool, saveManualExecutions: bool, saveDataErrorExecution: string, saveDataSuccessExecution: string, executionTimeout: float, errorWorkflow: string, timezone: string, executionOrder: string, callerPolicy: string, callerIds: string, timeSavedPerExecution: float, redactionPolicy: string, availableInMCP: bool, customTelemetryTags: list<record>>, staticData: any, pinData: record, meta: record<onboardingId: string, templateId: string, instanceId: string, templateCredsSetupCompleted: bool>, tags: table<id: string, name: string, createdAt: string, updatedAt: string>, shared: table<role: string, workflowId: string, projectId: string, project: record, createdAt: string, updatedAt: string>, activeVersion: record<versionId: string, workflowId: string, nodes: list<record>, connections: record, authors: string, createdAt: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-n8n-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -968,7 +967,7 @@ export def "users list" [
   --limit: float # The maximum number of items to return. (default: 100, e.g. 100)
   --offset: float # The number of items to skip before starting to collect the result set. (default: 0, e.g. 0)
   --cursor: string # Paginate by setting the cursor parameter to the nextCursor attribute returned by the previous request's response. Default value fetches the first "page" of the collection. See pagination for more detail.
-  --includeRole: string@bool-completer # Whether to include the user's role or not. (default: false, e.g. true)
+  --includeRole: oneof<nothing, bool> # Whether to include the user's role or not. (default: false, e.g. true)
   --projectId: string # e.g. VmwOO9HeTEj20kxM
 ]: nothing -> record<data: table<id: string, email: string, firstName: string, lastName: string, isPending: bool, createdAt: string, updatedAt: string, role: string, mfaEnabled: bool>, nextCursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-n8n-api-key"))
@@ -1015,7 +1014,7 @@ export def "users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeRole: string@bool-completer # Whether to include the user's role or not. (default: false, e.g. true)
+  --includeRole: oneof<nothing, bool> # Whether to include the user's role or not. (default: false, e.g. true)
 ]: nothing -> record<id: string, email: string, firstName: string, lastName: string, isPending: bool, createdAt: string, updatedAt: string, role: string, mfaEnabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-n8n-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1083,7 +1082,7 @@ export def "source-control-pull post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # e.g. true
+  --force: oneof<nothing, bool> # e.g. true
   --autoPublish: string@autoPublish-completer # Controls automatic workflow publishing after import: - `none`: Keep workflows in their local published state (default) - `all`: Publish all imported workflows - `published`: Publish only workflows that were published locally before import  (default: none, e.g. published)
 ]: any -> table<file: string, id: string, name: string, type: string, status: string, location: string, conflict: bool, updatedAt: string, pushed: bool, isLocalPublished: bool, isRemoteArchived: bool, parentFolderId: string, folderPath: list<string>, owner: record<type: string, projectId: string, projectName: string>, publishingError: string> {
   let input = $in
@@ -1391,8 +1390,8 @@ export def "data-tables-rows-update update-data-table-rows" [
   --allow-errors(-e) # Return full response without error handling
   filter: record # Filter conditions to match rows for update — shape: {type?: "and"|"or", filters: list}
   data: record # Column values to update
-  --returnData: string@bool-completer # If true, return the updated rows; if false, return true on success (default: false)
-  --dryRun: string@bool-completer # If true, preview changes without persisting them (default: false)
+  --returnData: oneof<nothing, bool> # If true, return the updated rows; if false, return true on success (default: false)
+  --dryRun: oneof<nothing, bool> # If true, preview changes without persisting them (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-n8n-api-key"))
@@ -1421,8 +1420,8 @@ export def "data-tables-rows-upsert upsert-data-table-row" [
   --allow-errors(-e) # Return full response without error handling
   filter: record # Filter conditions to match existing row. If no row matches, a new row is inserted. — shape: {type?: "and"|"or", filters: list}
   data: record # Column values for the row
-  --returnData: string@bool-completer # If true, return the upserted row; if false, return true on success (default: false)
-  --dryRun: string@bool-completer # If true, preview changes without persisting them (default: false)
+  --returnData: oneof<nothing, bool> # If true, return the upserted row; if false, return true on success (default: false)
+  --dryRun: oneof<nothing, bool> # If true, preview changes without persisting them (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-n8n-api-key"))
@@ -1449,8 +1448,8 @@ export def "data-tables-rows-delete delete-data-table-rows" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string # JSON string of filter conditions. Required to prevent accidental deletion of all data. (format: jsonString, e.g. {"type":"and","filters":[{"columnName":"status","condition":"eq","value":"archived"}]})
-  --returnData: string@bool-completer # If true, return the deleted rows; if false, return true on success (default: false)
-  --dryRun: string@bool-completer # If true, preview which rows would be deleted without actually deleting them (default: false)
+  --returnData: oneof<nothing, bool> # If true, return the deleted rows; if false, return true on success (default: false)
+  --dryRun: oneof<nothing, bool> # If true, preview which rows would be deleted without actually deleting them (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-n8n-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1766,7 +1765,7 @@ export def "community-packages post" [
   --allow-errors(-e) # Return full response without error handling
   name: string # npm package name (must start with n8n-nodes-)
   --version: string # Specific semver version to install
-  --verify: string@bool-completer # Whether to verify the package against the n8n-vetted package list. Required when the instance has N8N_UNVERIFIED_PACKAGES_ENABLED=false.
+  --verify: oneof<nothing, bool> # Whether to verify the package against the n8n-vetted package list. Required when the instance has N8N_UNVERIFIED_PACKAGES_ENABLED=false.
 ]: any -> record<packageName: string, installedVersion: string, authorName: string, authorEmail: string, installedNodes: table<name: string, type: string, latestVersion: float>, createdAt: string, updatedAt: string, updateAvailable: string, failedLoading: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-n8n-api-key"))
@@ -1812,7 +1811,7 @@ export def "community-packages patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --version: string # Specific semver version to update to
-  --verify: string@bool-completer # Whether to verify the package against the n8n-vetted package list. Setting to false will allow installing or updating to an unverified version. Default is true.
+  --verify: oneof<nothing, bool> # Whether to verify the package against the n8n-vetted package list. Setting to false will allow installing or updating to an unverified version. Default is true.
 ]: any -> record<packageName: string, installedVersion: string, authorName: string, authorEmail: string, installedNodes: table<name: string, type: string, latestVersion: float>, createdAt: string, updatedAt: string, updateAvailable: string, failedLoading: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-n8n-api-key"))

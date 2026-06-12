@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://broker-api.sandbox.alpaca.markets" "https://broker-api.alpaca.markets"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -711,7 +710,7 @@ export def "trading-accounts-positions closeAllPositionsForAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cancel-orders: string@bool-completer # If true is specified, cancel all open orders before liquidating all positions.
+  --cancel-orders: oneof<nothing, bool> # If true is specified, cancel all open orders before liquidating all positions.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -867,7 +866,7 @@ export def "trading-accounts-orders list" [
   --after: string # The response will include only ones submitted after this timestamp (exclusive.) (format: date-time, e.g. 2021-03-16T18:38:01.942282Z)
   --until: string # The response will include only ones submitted until this timestamp (exclusive.) (format: date-time, e.g. 2021-03-16T18:38:01.942282Z)
   --direction: string@direction-completer-1 # The chronological order of response based on the submission time. asc or desc. Defaults to desc. (e.g. desc)
-  --nested: string@bool-completer # If true, the result will roll up multi-leg orders under the legs field of primary order.
+  --nested: oneof<nothing, bool> # If true, the result will roll up multi-leg orders under the legs field of primary order.
   --symbols: string # A comma-separated list of symbols to filter by. (e.g. AAPL,TSLA,MSFT)
 ]: nothing -> table<id: string, client_order_id: string, created_at: string, updated_at: string, submitted_at: string, filled_at: string, expired_at: string, canceled_at: string, failed_at: string, replaced_at: string, replaced_by: string, replaces: string, asset_id: string, symbol: string, asset_class: string, notional: string, qty: string, filled_qty: string, filled_avg_price: string, order_class: string, order_type: string, type: string, side: string, time_in_force: string, limit_price: string, stop_price: string, status: string, extended_hours: bool, legs: list<any>, trail_price: string, trail_percent: string, hwm: string, commission: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -904,7 +903,7 @@ export def "trading-accounts-orders createOrderForAccount" [
   --stop-price: string # Required if type is stop or stop_limit (format: decimal, e.g. 3.14)
   --trail-price: string # If type is trailing_stop, then one of trail_price or trail_percent is required (format: decimal, e.g. 3.14)
   --trail-percent: string # If type is trailing_stop, then one of trail_price or trail_percent is required (format: decimal, e.g. 5.0)
-  --extended-hours: string@bool-completer # Defaults to false. If true, order will be eligible to execute in premarket/afterhours. Only works with type limit and time_in_force = day. (e.g. false)
+  --extended-hours: oneof<nothing, bool> # Defaults to false. If true, order will be eligible to execute in premarket/afterhours. Only works with type limit and time_in_force = day. (e.g. false)
   --client-order-id: string # A unique identifier for the order. Automatically generated if not sent. (<= 48 characters) (e.g. eb9e2aaa-f71a-4f51-b5b4-52a6c565dad4)
   --order-class: string@order-class-completer # e.g. bracket
   --take-profit: record # Takes in a string/number value for limit_price — shape: {limit_price?: string}

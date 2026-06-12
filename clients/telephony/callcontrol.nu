@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.callcontrol.com"] }
 def auth-scheme-completer [] { ["apikey"] }
 
@@ -180,7 +179,7 @@ export def "2015-11-01-enterprise-upsert-user UpsertUser" [
   --Age: int # format: int32
   --BlackList: list
   --BlockBehavior: string@BlockBehavior-completer
-  --BreakThroughQhWithMultipleCalls: string@bool-completer
+  --BreakThroughQhWithMultipleCalls: oneof<nothing, bool>
   --Email: string
   --FirstName: string
   --Gender: string
@@ -191,9 +190,9 @@ export def "2015-11-01-enterprise-upsert-user UpsertUser" [
   --QuietHourList: list # item shape: {DayOfWeekList?: list, DurationMin?: int, StartHourLocal?: int, StartMinLocal?: int, TimeZoneName?: string}
   --Salutation: string
   --Suffix: string
-  --UseCommunityBlacklist: string@bool-completer
+  --UseCommunityBlacklist: oneof<nothing, bool>
   --WhiteList: list
-  --WhiteListBreaksQh: string@bool-completer
+  --WhiteListBreaksQh: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
@@ -229,7 +228,7 @@ export def "2015-11-01-report Report" [
   --ReportedCallerId: string
   --ReportedCallerName: string
   --Reporter: string
-  --UnwantedCall: string@bool-completer
+  --UnwantedCall: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))

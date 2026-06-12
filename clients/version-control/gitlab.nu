@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://gitlab.com"] }
 def auth-scheme-completer [] { ["private-token" "query-private_token"] }
 
@@ -561,7 +560,7 @@ export def "groups-epics-notes-award-emoji delete" [
   do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
-# Gets a list of group badges viewable by the authenticated user.
+# List group badges.
 #
 # GET /api/v4/groups/{id}/badges
 # operationId: getApiV4GroupsIdBadges
@@ -587,7 +586,7 @@ export def "groups-badges list" [
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
-# Adds a badge to a group.
+# Add a badge to a group.
 #
 # POST /api/v4/groups/{id}/badges
 # operationId: postApiV4GroupsIdBadges
@@ -640,7 +639,7 @@ export def "groups-badges-render get" [
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
-# Gets a badge of a group.
+# Get a badge of a group.
 #
 # GET /api/v4/groups/{id}/badges/{badge_id}
 # operationId: getApiV4GroupsIdBadgesBadgeId
@@ -663,7 +662,7 @@ export def "groups-badges get" [
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
-# Updates a badge of a group.
+# Update a badge of a group.
 #
 # PUT /api/v4/groups/{id}/badges/{badge_id}
 # operationId: putApiV4GroupsIdBadgesBadgeId
@@ -692,7 +691,7 @@ export def "groups-badges put" [
   do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
 }
 
-# Removes a badge from the group.
+# Remove a badge from the group.
 #
 # DELETE /api/v4/groups/{id}/badges/{badge_id}
 # operationId: deleteApiV4GroupsIdBadgesBadgeId
@@ -822,23 +821,23 @@ export def "groups list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --statistics: string@bool-completer # Include project statistics (default: false)
-  --archived: string@bool-completer # Limit by archived status
+  --statistics: oneof<nothing, bool> # Include project statistics (default: false)
+  --archived: oneof<nothing, bool> # Limit by archived status
   --skip-groups: list # Array of group ids to exclude from list
-  --all-available: string@bool-completer # When `true`, returns all accessible groups. When `false`, returns only groups where the user is a member.
+  --all-available: oneof<nothing, bool> # When `true`, returns all accessible groups. When `false`, returns only groups where the user is a member.
   --visibility: string@visibility-completer # Limit by visibility
   --search: string # Search for a specific group
-  --owned: string@bool-completer # Limit by owned by authenticated user (default: false)
+  --owned: oneof<nothing, bool> # Limit by owned by authenticated user (default: false)
   --order-by: string@order-by-completer # Order by name, path, id or similarity if searching (default: name)
   --qp-sort: string@sort-completer # Sort by asc (ascending) or desc (descending) (default: asc)
   --min-access-level: int@min-access-level-completer # Minimum access level of authenticated user (format: int32)
-  --top-level-only: string@bool-completer # Only include top-level groups
+  --top-level-only: oneof<nothing, bool> # Only include top-level groups
   --marked-for-deletion-on: string # Return groups that are marked for deletion on this date (format: date)
-  --active: string@bool-completer # Limit by groups that are not archived and not marked for deletion
+  --active: oneof<nothing, bool> # Limit by groups that are not archived and not marked for deletion
   --repository-storage: string # Filter by repository storage used by the group
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --with-custom-attributes: string@bool-completer # Include custom attributes in the response (default: false)
+  --with-custom-attributes: oneof<nothing, bool> # Include custom attributes in the response (default: false)
 ]: nothing -> table<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, lock_math_rendering_limits_enabled: bool, default_branch: string, default_branch_protection: int, default_branch_protection_defaults: string, avatar_url: string, request_access_enabled: bool, full_name: string, full_path: string, created_at: string, parent_id: string, organization_id: int, shared_runners_setting: string, max_artifacts_size: int, custom_attributes: record<key: string, value: string>, statistics: record<storage_size: string, repository_size: string, wiki_size: string, lfs_objects_size: string, job_artifacts_size: string, pipeline_artifacts_size: string, packages_size: string, snippets_size: string, uploads_size: string>, marked_for_deletion_on: string, root_storage_statistics: record<build_artifacts_size: int, container_registry_size: int, container_registry_size_is_estimated: bool, dependency_proxy_size: int, lfs_objects_size: int, packages_size: int, pipeline_artifacts_size: int, repository_size: int, snippets_size: int, storage_size: int, uploads_size: int, wiki_size: int>, ldap_cn: string, ldap_access: string, ldap_group_links: record<cn: string, group_access: int, provider: string, filter: string, member_role_id: int>, saml_group_links: record<name: string, access_level: int, member_role_id: int, provider: string>, file_template_project_id: string, wiki_access_level: string, repository_storage: string, duo_core_features_enabled: bool, duo_features_enabled: string, lock_duo_features_enabled: string, auto_duo_code_review_enabled: string, web_based_commit_signing_enabled: string, allow_personal_snippets: string, duo_namespace_access_rules: string, built_in_project_templates_enabled: bool, lock_built_in_project_templates_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -871,38 +870,38 @@ export def "groups post" [
   --description: string # The description of the group
   --visibility: string@visibility-completer # The visibility of the group
   --avatar: path # Avatar image for the group
-  --share-with-group-lock: string@bool-completer # Prevent sharing a project with another group within this group
-  --require-two-factor-authentication: string@bool-completer # Require all users in this group to setup Two-factor authentication
+  --share-with-group-lock: oneof<nothing, bool> # Prevent sharing a project with another group within this group
+  --require-two-factor-authentication: oneof<nothing, bool> # Require all users in this group to setup Two-factor authentication
   --two-factor-grace-period: int # Time before Two-factor authentication is enforced (format: int32)
   --project-creation-level: string@project-creation-level-completer # Determine if developers can create projects in the group
-  --auto-devops-enabled: string@bool-completer # Default to Auto DevOps pipeline for all projects within this group
+  --auto-devops-enabled: oneof<nothing, bool> # Default to Auto DevOps pipeline for all projects within this group
   --subgroup-creation-level: string@subgroup-creation-level-completer # Allowed to create subgroups
-  --emails-disabled: string@bool-completer # _(Deprecated)_ Disable email notifications. Use: emails_enabled
-  --emails-enabled: string@bool-completer # Enable email notifications
-  --show-diff-preview-in-email: string@bool-completer # Include the code diff preview in merge request notification emails
-  --mentions-disabled: string@bool-completer # Disable a group from getting mentioned
-  --lfs-enabled: string@bool-completer # Enable/disable LFS for the projects in this group
-  --request-access-enabled: string@bool-completer # Allow users to request member access
+  --emails-disabled: oneof<nothing, bool> # _(Deprecated)_ Disable email notifications. Use: emails_enabled
+  --emails-enabled: oneof<nothing, bool> # Enable email notifications
+  --show-diff-preview-in-email: oneof<nothing, bool> # Include the code diff preview in merge request notification emails
+  --mentions-disabled: oneof<nothing, bool> # Disable a group from getting mentioned
+  --lfs-enabled: oneof<nothing, bool> # Enable/disable LFS for the projects in this group
+  --request-access-enabled: oneof<nothing, bool> # Allow users to request member access
   --default-branch: string # The default branch of group's projects (e.g. main)
   --default-branch-protection: int@default-branch-protection-completer # Determine if developers can push to default branch (format: int32)
   --default-branch-protection-defaults: record # Determine if developers can push to default branch — shape: {allowed_to_push?: list, allow_force_push?: bool, allowed_to_merge?: list, code_owner_approval_required?: bool, developer_can_initial_push?: bool}
   --enabled-git-access-protocol: string@enabled-git-access-protocol-completer # Allow only the selected protocols to be used for Git access.
-  --membership-lock: string@bool-completer # Prevent adding new members to projects within this group
+  --membership-lock: oneof<nothing, bool> # Prevent adding new members to projects within this group
   --ldap-cn: string # LDAP Common Name
   --ldap-access: int # A valid access level (format: int32)
   --shared-runners-minutes-limit: int # (admin-only) compute minutes quota for this group (format: int32)
   --extra-shared-runners-minutes-limit: int # (admin-only) Extra compute minutes quota for this group (format: int32)
   --wiki-access-level: string@wiki-access-level-completer # Wiki access level. One of `disabled`, `private` or `enabled`
   --duo-availability: string@duo-availability-completer # Duo availability. One of `default_on`, `default_off`, `never_on` or `always_on`
-  --duo-remote-flows-availability: string@bool-completer # Enable GitLab Duo remote flows for this group
-  --duo-foundational-flows-availability: string@bool-completer # Enable GitLab foundational Duo flows for this group
-  --duo-custom-agents-availability: string@bool-completer # Enable GitLab Duo custom agents for this group
-  --duo-custom-flows-availability: string@bool-completer # Enable GitLab Duo custom flows for this group
-  --duo-external-agents-availability: string@bool-completer # Enable GitLab Duo external agents for this group
+  --duo-remote-flows-availability: oneof<nothing, bool> # Enable GitLab Duo remote flows for this group
+  --duo-foundational-flows-availability: oneof<nothing, bool> # Enable GitLab foundational Duo flows for this group
+  --duo-custom-agents-availability: oneof<nothing, bool> # Enable GitLab Duo custom agents for this group
+  --duo-custom-flows-availability: oneof<nothing, bool> # Enable GitLab Duo custom flows for this group
+  --duo-external-agents-availability: oneof<nothing, bool> # Enable GitLab Duo external agents for this group
   --tool-approval-for-session-availability: string@tool-approval-for-session-availability-completer # Tool approval for session availability. One of `default_on`, `default_off` or `never_on`
-  --amazon-q-auto-review-enabled: string@bool-completer # Enable Amazon Q auto review for merge request
-  --experiment-features-enabled: string@bool-completer # Enable experiment features for this group
-  --model-prompt-cache-enabled: string@bool-completer # Enable model prompt cache for this group
+  --amazon-q-auto-review-enabled: oneof<nothing, bool> # Enable Amazon Q auto review for merge request
+  --experiment-features-enabled: oneof<nothing, bool> # Enable experiment features for this group
+  --model-prompt-cache-enabled: oneof<nothing, bool> # Enable model prompt cache for this group
   --foundational-agents-statuses: list # Whether each foundational agent has been enabled or disabled. — item shape: {reference: string, enabled: bool}
   --ai-settings-attributes: record # AI-related settings — shape: {duo_agent_platform_enabled?: bool, duo_workflow_mcp_enabled?: bool, ai_usage_data_collection_enabled?: bool, ai_catalog_restricted_to_group_hierarchy?: bool, foundational_agents_default_enabled?: bool, prompt_injection_protection_level?: "no_checks"|"log_only"|"interrupt", include_recommended_allowed?: bool, allow_all_unix_sockets?: bool, allow_project_extension?: bool, minimum_access_level_execute?: "10"|"15"|"20"|"30"|"40"|"50", minimum_access_level_execute_async?: "30"|"40"|"50", minimum_access_level_manage?: "30"|"40"|"50", minimum_access_level_enable_on_projects?: "30"|"40"|"50"}
 ]: any -> record<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, lock_math_rendering_limits_enabled: bool, default_branch: string, default_branch_protection: int, default_branch_protection_defaults: string, avatar_url: string, request_access_enabled: bool, full_name: string, full_path: string, created_at: string, parent_id: string, organization_id: int, shared_runners_setting: string, max_artifacts_size: int, custom_attributes: record<key: string, value: string>, statistics: record<storage_size: string, repository_size: string, wiki_size: string, lfs_objects_size: string, job_artifacts_size: string, pipeline_artifacts_size: string, packages_size: string, snippets_size: string, uploads_size: string>, marked_for_deletion_on: string, root_storage_statistics: record<build_artifacts_size: int, container_registry_size: int, container_registry_size_is_estimated: bool, dependency_proxy_size: int, lfs_objects_size: int, packages_size: int, pipeline_artifacts_size: int, repository_size: int, snippets_size: int, storage_size: int, uploads_size: int, wiki_size: int>, ldap_cn: string, ldap_access: string, ldap_group_links: record<cn: string, group_access: int, provider: string, filter: string, member_role_id: int>, saml_group_links: record<name: string, access_level: int, member_role_id: int, provider: string>, file_template_project_id: string, wiki_access_level: string, repository_storage: string, duo_core_features_enabled: bool, duo_features_enabled: string, lock_duo_features_enabled: string, auto_duo_code_review_enabled: string, web_based_commit_signing_enabled: string, allow_personal_snippets: string, duo_namespace_access_rules: string, built_in_project_templates_enabled: bool, lock_built_in_project_templates_enabled: bool> {
@@ -940,69 +939,69 @@ export def "groups put" [
   --description: string # The description of the group
   --visibility: string@visibility-completer # The visibility of the group
   --avatar: path # Avatar image for the group
-  --share-with-group-lock: string@bool-completer # Prevent sharing a project with another group within this group
-  --require-two-factor-authentication: string@bool-completer # Require all users in this group to setup Two-factor authentication
+  --share-with-group-lock: oneof<nothing, bool> # Prevent sharing a project with another group within this group
+  --require-two-factor-authentication: oneof<nothing, bool> # Require all users in this group to setup Two-factor authentication
   --two-factor-grace-period: int # Time before Two-factor authentication is enforced (format: int32)
   --project-creation-level: string@project-creation-level-completer # Determine if developers can create projects in the group
-  --auto-devops-enabled: string@bool-completer # Default to Auto DevOps pipeline for all projects within this group
+  --auto-devops-enabled: oneof<nothing, bool> # Default to Auto DevOps pipeline for all projects within this group
   --subgroup-creation-level: string@subgroup-creation-level-completer # Allowed to create subgroups
-  --emails-disabled: string@bool-completer # _(Deprecated)_ Disable email notifications. Use: emails_enabled
-  --emails-enabled: string@bool-completer # Enable email notifications
-  --show-diff-preview-in-email: string@bool-completer # Include the code diff preview in merge request notification emails
-  --mentions-disabled: string@bool-completer # Disable a group from getting mentioned
-  --lfs-enabled: string@bool-completer # Enable/disable LFS for the projects in this group
-  --request-access-enabled: string@bool-completer # Allow users to request member access
+  --emails-disabled: oneof<nothing, bool> # _(Deprecated)_ Disable email notifications. Use: emails_enabled
+  --emails-enabled: oneof<nothing, bool> # Enable email notifications
+  --show-diff-preview-in-email: oneof<nothing, bool> # Include the code diff preview in merge request notification emails
+  --mentions-disabled: oneof<nothing, bool> # Disable a group from getting mentioned
+  --lfs-enabled: oneof<nothing, bool> # Enable/disable LFS for the projects in this group
+  --request-access-enabled: oneof<nothing, bool> # Allow users to request member access
   --default-branch: string # The default branch of group's projects (e.g. main)
   --default-branch-protection: int@default-branch-protection-completer # Determine if developers can push to default branch (format: int32)
   --default-branch-protection-defaults: record # Determine if developers can push to default branch — shape: {allowed_to_push?: list, allow_force_push?: bool, allowed_to_merge?: list, code_owner_approval_required?: bool, developer_can_initial_push?: bool}
   --enabled-git-access-protocol: string@enabled-git-access-protocol-completer # Allow only the selected protocols to be used for Git access.
-  --membership-lock: string@bool-completer # Prevent adding new members to projects within this group
+  --membership-lock: oneof<nothing, bool> # Prevent adding new members to projects within this group
   --ldap-cn: string # LDAP Common Name
   --ldap-access: int # A valid access level (format: int32)
   --shared-runners-minutes-limit: int # (admin-only) compute minutes quota for this group (format: int32)
   --extra-shared-runners-minutes-limit: int # (admin-only) Extra compute minutes quota for this group (format: int32)
   --wiki-access-level: string@wiki-access-level-completer # Wiki access level. One of `disabled`, `private` or `enabled`
   --duo-availability: string@duo-availability-completer # Duo availability. One of `default_on`, `default_off`, `never_on` or `always_on`
-  --duo-remote-flows-availability: string@bool-completer # Enable GitLab Duo remote flows for this group
-  --duo-foundational-flows-availability: string@bool-completer # Enable GitLab foundational Duo flows for this group
-  --duo-custom-agents-availability: string@bool-completer # Enable GitLab Duo custom agents for this group
-  --duo-custom-flows-availability: string@bool-completer # Enable GitLab Duo custom flows for this group
-  --duo-external-agents-availability: string@bool-completer # Enable GitLab Duo external agents for this group
+  --duo-remote-flows-availability: oneof<nothing, bool> # Enable GitLab Duo remote flows for this group
+  --duo-foundational-flows-availability: oneof<nothing, bool> # Enable GitLab foundational Duo flows for this group
+  --duo-custom-agents-availability: oneof<nothing, bool> # Enable GitLab Duo custom agents for this group
+  --duo-custom-flows-availability: oneof<nothing, bool> # Enable GitLab Duo custom flows for this group
+  --duo-external-agents-availability: oneof<nothing, bool> # Enable GitLab Duo external agents for this group
   --tool-approval-for-session-availability: string@tool-approval-for-session-availability-completer # Tool approval for session availability. One of `default_on`, `default_off` or `never_on`
-  --amazon-q-auto-review-enabled: string@bool-completer # Enable Amazon Q auto review for merge request
-  --experiment-features-enabled: string@bool-completer # Enable experiment features for this group
-  --model-prompt-cache-enabled: string@bool-completer # Enable model prompt cache for this group
+  --amazon-q-auto-review-enabled: oneof<nothing, bool> # Enable Amazon Q auto review for merge request
+  --experiment-features-enabled: oneof<nothing, bool> # Enable experiment features for this group
+  --model-prompt-cache-enabled: oneof<nothing, bool> # Enable model prompt cache for this group
   --foundational-agents-statuses: list # Whether each foundational agent has been enabled or disabled. — item shape: {reference: string, enabled: bool}
   --ai-settings-attributes: record # AI-related settings — shape: {duo_agent_platform_enabled?: bool, duo_workflow_mcp_enabled?: bool, ai_usage_data_collection_enabled?: bool, ai_catalog_restricted_to_group_hierarchy?: bool, foundational_agents_default_enabled?: bool, prompt_injection_protection_level?: "no_checks"|"log_only"|"interrupt", include_recommended_allowed?: bool, allow_all_unix_sockets?: bool, allow_project_extension?: bool, minimum_access_level_execute?: "10"|"15"|"20"|"30"|"40"|"50", minimum_access_level_execute_async?: "30"|"40"|"50", minimum_access_level_manage?: "30"|"40"|"50", minimum_access_level_enable_on_projects?: "30"|"40"|"50"}
-  --prevent-sharing-groups-outside-hierarchy: string@bool-completer # Prevent sharing groups within this namespace with any groups outside the namespace. Only available on top-level groups.
+  --prevent-sharing-groups-outside-hierarchy: oneof<nothing, bool> # Prevent sharing groups within this namespace with any groups outside the namespace. Only available on top-level groups.
   --step-up-auth-required-oauth-provider: string # OAuth provider required for step-up authentication. Pass empty string to disable.
-  --lock-math-rendering-limits-enabled: string@bool-completer # Indicates if math rendering limits are locked for all descendent groups.
-  --math-rendering-limits-enabled: string@bool-completer # Indicates if math rendering limits are used for this group.
+  --lock-math-rendering-limits-enabled: oneof<nothing, bool> # Indicates if math rendering limits are locked for all descendent groups.
+  --math-rendering-limits-enabled: oneof<nothing, bool> # Indicates if math rendering limits are used for this group.
   --max-artifacts-size: int # Set the maximum file size for each job's artifacts (format: int32)
   --file-template-project-id: int # The ID of a project to use for custom templates in this group (format: int32)
-  --prevent-forking-outside-group: string@bool-completer # Prevent forking projects inside this group to external namespaces
+  --prevent-forking-outside-group: oneof<nothing, bool> # Prevent forking projects inside this group to external namespaces
   --unique-project-download-limit: int # Maximum number of unique projects a user can download in the specified time period before they are banned. (format: int32)
   --unique-project-download-limit-interval-in-seconds: int # Time period during which a user can download a maximum amount of projects before they are banned. (format: int32)
   --unique-project-download-limit-allowlist: list # List of usernames excluded from the unique project download limit
   --unique-project-download-limit-alertlist: list # List of user ids who will be emailed when Git abuse rate limit is exceeded
-  --auto-ban-user-on-excessive-projects-download: string@bool-completer # Ban users from the group when they exceed maximum number of unique projects download in the specified time period
+  --auto-ban-user-on-excessive-projects-download: oneof<nothing, bool> # Ban users from the group when they exceed maximum number of unique projects download in the specified time period
   --ip-restriction-ranges: string # List of IP addresses which need to be restricted for group
   --allowed-email-domains-list: string # List of allowed email domains for group
-  --service-access-tokens-expiration-enforced: string@bool-completer # To enforce token expiration for Service accounts users for group
-  --duo-core-features-enabled: string@bool-completer # [Experimental] Indicates whether GitLab Duo Core features are enabled for the group
-  --duo-features-enabled: string@bool-completer # Indicates whether GitLab Duo features are enabled for the group
-  --lock-duo-features-enabled: string@bool-completer # Indicates if the GitLab Duo features enabled setting is enforced for all subgroups
-  --auto-duo-code-review-enabled: string@bool-completer # Enable automatic reviews by GitLab Duo on merge requests
-  --web-based-commit-signing-enabled: string@bool-completer # Enable web based commit signing for this group
-  --only-allow-merge-if-pipeline-succeeds: string@bool-completer # Only allow to merge if builds succeed
-  --allow-merge-on-skipped-pipeline: string@bool-completer # Allow to merge if pipeline is skipped
-  --only-allow-merge-if-all-discussions-are-resolved: string@bool-completer # Only allow to merge if all threads are resolved
+  --service-access-tokens-expiration-enforced: oneof<nothing, bool> # To enforce token expiration for Service accounts users for group
+  --duo-core-features-enabled: oneof<nothing, bool> # [Experimental] Indicates whether GitLab Duo Core features are enabled for the group
+  --duo-features-enabled: oneof<nothing, bool> # Indicates whether GitLab Duo features are enabled for the group
+  --lock-duo-features-enabled: oneof<nothing, bool> # Indicates if the GitLab Duo features enabled setting is enforced for all subgroups
+  --auto-duo-code-review-enabled: oneof<nothing, bool> # Enable automatic reviews by GitLab Duo on merge requests
+  --web-based-commit-signing-enabled: oneof<nothing, bool> # Enable web based commit signing for this group
+  --only-allow-merge-if-pipeline-succeeds: oneof<nothing, bool> # Only allow to merge if builds succeed
+  --allow-merge-on-skipped-pipeline: oneof<nothing, bool> # Allow to merge if pipeline is skipped
+  --only-allow-merge-if-all-discussions-are-resolved: oneof<nothing, bool> # Only allow to merge if all threads are resolved
   --enabled-foundational-flows: list # References of enabled foundational flows
   --duo-template-project-id: int # The ID of a project to use as the Duo Code Review custom instructions template for this group (format: int32)
-  --allow-personal-snippets: string@bool-completer # Allow creation of personal snippets for enterprise users of this group
+  --allow-personal-snippets: oneof<nothing, bool> # Allow creation of personal snippets for enterprise users of this group
   --duo-namespace-access-rules: list # AI entity access rules for controlling Duo feature access — item shape: {through_namespace?: record, features: list}
-  --built-in-project-templates-enabled: string@bool-completer # Enable built-in project templates for project creation
-  --lock-built-in-project-templates-enabled: string@bool-completer # Enforce the built-in project templates setting for all subgroups
+  --built-in-project-templates-enabled: oneof<nothing, bool> # Enable built-in project templates for project creation
+  --lock-built-in-project-templates-enabled: oneof<nothing, bool> # Enforce the built-in project templates setting for all subgroups
 ]: any -> record<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, lock_math_rendering_limits_enabled: bool, default_branch: string, default_branch_protection: int, default_branch_protection_defaults: string, avatar_url: string, request_access_enabled: bool, full_name: string, full_path: string, created_at: string, parent_id: string, organization_id: int, shared_runners_setting: string, max_artifacts_size: int, custom_attributes: record<key: string, value: string>, statistics: record<storage_size: string, repository_size: string, wiki_size: string, lfs_objects_size: string, job_artifacts_size: string, pipeline_artifacts_size: string, packages_size: string, snippets_size: string, uploads_size: string>, marked_for_deletion_on: string, root_storage_statistics: record<build_artifacts_size: int, container_registry_size: int, container_registry_size_is_estimated: bool, dependency_proxy_size: int, lfs_objects_size: int, packages_size: int, pipeline_artifacts_size: int, repository_size: int, snippets_size: int, storage_size: int, uploads_size: int, wiki_size: int>, ldap_cn: string, ldap_access: string, ldap_group_links: record<cn: string, group_access: int, provider: string, filter: string, member_role_id: int>, saml_group_links: record<name: string, access_level: int, member_role_id: int, provider: string>, file_template_project_id: string, wiki_access_level: string, repository_storage: string, duo_core_features_enabled: bool, duo_features_enabled: string, lock_duo_features_enabled: string, auto_duo_code_review_enabled: string, web_based_commit_signing_enabled: string, allow_personal_snippets: string, duo_namespace_access_rules: string, built_in_project_templates_enabled: bool, lock_built_in_project_templates_enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -1028,8 +1027,8 @@ export def "groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-custom-attributes: string@bool-completer # Include custom attributes in the response (default: false)
-  --with-projects: string@bool-completer # Omit project details (default: true)
+  --with-custom-attributes: oneof<nothing, bool> # Include custom attributes in the response (default: false)
+  --with-projects: oneof<nothing, bool> # Omit project details (default: true)
 ]: nothing -> record<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, lock_math_rendering_limits_enabled: bool, default_branch: string, default_branch_protection: int, default_branch_protection_defaults: string, avatar_url: string, request_access_enabled: bool, full_name: string, full_path: string, created_at: string, parent_id: string, organization_id: int, shared_runners_setting: string, max_artifacts_size: int, custom_attributes: record<key: string, value: string>, statistics: record<storage_size: string, repository_size: string, wiki_size: string, lfs_objects_size: string, job_artifacts_size: string, pipeline_artifacts_size: string, packages_size: string, snippets_size: string, uploads_size: string>, marked_for_deletion_on: string, root_storage_statistics: record<build_artifacts_size: int, container_registry_size: int, container_registry_size_is_estimated: bool, dependency_proxy_size: int, lfs_objects_size: int, packages_size: int, pipeline_artifacts_size: int, repository_size: int, snippets_size: int, storage_size: int, uploads_size: int, wiki_size: int>, ldap_cn: string, ldap_access: string, ldap_group_links: record<cn: string, group_access: int, provider: string, filter: string, member_role_id: int>, saml_group_links: record<name: string, access_level: int, member_role_id: int, provider: string>, file_template_project_id: string, wiki_access_level: string, repository_storage: string, duo_core_features_enabled: bool, duo_features_enabled: string, lock_duo_features_enabled: string, auto_duo_code_review_enabled: string, web_based_commit_signing_enabled: string, allow_personal_snippets: string, duo_namespace_access_rules: string, built_in_project_templates_enabled: bool, lock_built_in_project_templates_enabled: bool, shared_with_groups: list<record>, runners_token: string, enabled_git_access_protocol: string, prevent_sharing_groups_outside_hierarchy: bool, step_up_auth_required_oauth_provider: string, projects: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string, forked_from_project: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list, topics: list, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record, custom_attributes: record, repository_storage: string>, container_registry_image_prefix: string, _links: record<self: string, issues: string, merge_requests: string, repo_branches: string, labels: string, events: string, members: string, cluster_agents: string>, marked_for_deletion_at: string, marked_for_deletion_on: string, packages_enabled: bool, empty_repo: bool, archived: bool, owner: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, resolve_outdated_diff_discussions: bool, container_expiration_policy: record<cadence: string, enabled: string, keep_n: string, older_than: string, name_regex: string, name_regex_keep: string, next_run_at: string>, repository_object_format: string, issues_enabled: bool, merge_requests_enabled: bool, wiki_enabled: bool, jobs_enabled: bool, snippets_enabled: bool, container_registry_enabled: bool, service_desk_enabled: bool, service_desk_address: string, can_create_merge_request_in: bool, issues_access_level: string, repository_access_level: string, merge_requests_access_level: string, forking_access_level: string, wiki_access_level: string, builds_access_level: string, snippets_access_level: string, pages_access_level: string, analytics_access_level: string, container_registry_access_level: string, security_and_compliance_access_level: string, releases_access_level: string, environments_access_level: string, feature_flags_access_level: string, infrastructure_access_level: string, monitor_access_level: string, model_experiments_access_level: string, model_registry_access_level: string, package_registry_access_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, shared_runners_enabled: bool, lfs_enabled: bool, creator_id: int, mr_default_target_self: bool, import_url: string, import_type: string, import_status: string, import_error: string, open_issues_count: int, description_html: string, updated_at: string, ci_default_git_depth: int, ci_delete_pipelines_in_seconds: int, ci_forward_deployment_enabled: bool, ci_forward_deployment_rollback_allowed: bool, ci_job_token_scope_enabled: bool, ci_separated_caches: bool, ci_allow_fork_pipelines_to_run_in_parent_project: bool, ci_id_token_sub_claim_components: list<string>, build_git_strategy: string, keep_latest_artifact: bool, restrict_user_defined_variables: bool, ci_pipeline_variables_minimum_override_role: string, runner_token_expiration_interval: int, group_runners_enabled: bool, resource_group_default_process_mode: string, auto_cancel_pending_pipelines: string, build_timeout: int, auto_devops_enabled: bool, auto_devops_deploy_strategy: string, ci_push_repository_for_job_token_allowed: bool, protect_merge_request_pipelines: bool, ci_display_pipeline_variables: bool, runners_token: string, ci_config_path: string, public_jobs: bool, shared_with_groups: list<record>, only_allow_merge_if_pipeline_succeeds: bool, allow_merge_on_skipped_pipeline: bool, request_access_enabled: bool, only_allow_merge_if_all_discussions_are_resolved: bool, remove_source_branch_after_merge: bool, printing_merge_request_link_enabled: bool, merge_method: string, squash_option: string, enforce_auth_checks_on_uploads: bool, suggestion_commit_message: string, merge_commit_template: string, squash_commit_template: string, mr_default_title_template: string, issue_branch_template: string, statistics: record<commit_count: int, storage_size: int, repository_size: int, wiki_size: int, lfs_objects_size: int, job_artifacts_size: int, pipeline_artifacts_size: int, packages_size: int, snippets_size: int, uploads_size: int, container_registry_size: int>, warn_about_potentially_unwanted_characters: bool, autoclose_referenced_issues: bool, max_artifacts_size: int, approvals_before_merge: string, mirror: string, mirror_user_id: string, mirror_trigger_builds: string, only_mirror_protected_branches: string, mirror_overwrites_diverged_branches: string, external_authorization_classification_label: string, requirements_enabled: string, requirements_access_level: string, security_and_compliance_enabled: string, secret_push_protection_enabled: bool, pre_receive_secret_detection_enabled: bool, compliance_frameworks: string, issues_template: string, merge_requests_template: string, ci_restrict_pipeline_cancellation_role: string, merge_pipelines_enabled: string, merge_trains_enabled: string, merge_trains_skip_train_allowed: string, max_pipelines_per_merge_train: string, only_allow_merge_if_all_status_checks_passed: string, allow_pipeline_trigger_approve_deployment: bool, prevent_merge_without_jira_issue: string, auto_duo_code_review_enabled: string, duo_remote_flows_enabled: string, duo_foundational_flows_enabled: string, duo_sast_fp_detection_enabled: string, duo_secret_detection_fp_enabled: string, duo_sast_vr_workflow_enabled: string, web_based_commit_signing_enabled: string, spp_repository_pipeline_access: bool, security_policy_pipeline_must_succeed: bool, merge_request_title_regex: string, merge_request_title_regex_description: string>, shared_projects: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string, forked_from_project: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list, topics: list, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record, custom_attributes: record, repository_storage: string>, container_registry_image_prefix: string, _links: record<self: string, issues: string, merge_requests: string, repo_branches: string, labels: string, events: string, members: string, cluster_agents: string>, marked_for_deletion_at: string, marked_for_deletion_on: string, packages_enabled: bool, empty_repo: bool, archived: bool, owner: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, resolve_outdated_diff_discussions: bool, container_expiration_policy: record<cadence: string, enabled: string, keep_n: string, older_than: string, name_regex: string, name_regex_keep: string, next_run_at: string>, repository_object_format: string, issues_enabled: bool, merge_requests_enabled: bool, wiki_enabled: bool, jobs_enabled: bool, snippets_enabled: bool, container_registry_enabled: bool, service_desk_enabled: bool, service_desk_address: string, can_create_merge_request_in: bool, issues_access_level: string, repository_access_level: string, merge_requests_access_level: string, forking_access_level: string, wiki_access_level: string, builds_access_level: string, snippets_access_level: string, pages_access_level: string, analytics_access_level: string, container_registry_access_level: string, security_and_compliance_access_level: string, releases_access_level: string, environments_access_level: string, feature_flags_access_level: string, infrastructure_access_level: string, monitor_access_level: string, model_experiments_access_level: string, model_registry_access_level: string, package_registry_access_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, shared_runners_enabled: bool, lfs_enabled: bool, creator_id: int, mr_default_target_self: bool, import_url: string, import_type: string, import_status: string, import_error: string, open_issues_count: int, description_html: string, updated_at: string, ci_default_git_depth: int, ci_delete_pipelines_in_seconds: int, ci_forward_deployment_enabled: bool, ci_forward_deployment_rollback_allowed: bool, ci_job_token_scope_enabled: bool, ci_separated_caches: bool, ci_allow_fork_pipelines_to_run_in_parent_project: bool, ci_id_token_sub_claim_components: list<string>, build_git_strategy: string, keep_latest_artifact: bool, restrict_user_defined_variables: bool, ci_pipeline_variables_minimum_override_role: string, runner_token_expiration_interval: int, group_runners_enabled: bool, resource_group_default_process_mode: string, auto_cancel_pending_pipelines: string, build_timeout: int, auto_devops_enabled: bool, auto_devops_deploy_strategy: string, ci_push_repository_for_job_token_allowed: bool, protect_merge_request_pipelines: bool, ci_display_pipeline_variables: bool, runners_token: string, ci_config_path: string, public_jobs: bool, shared_with_groups: list<record>, only_allow_merge_if_pipeline_succeeds: bool, allow_merge_on_skipped_pipeline: bool, request_access_enabled: bool, only_allow_merge_if_all_discussions_are_resolved: bool, remove_source_branch_after_merge: bool, printing_merge_request_link_enabled: bool, merge_method: string, squash_option: string, enforce_auth_checks_on_uploads: bool, suggestion_commit_message: string, merge_commit_template: string, squash_commit_template: string, mr_default_title_template: string, issue_branch_template: string, statistics: record<commit_count: int, storage_size: int, repository_size: int, wiki_size: int, lfs_objects_size: int, job_artifacts_size: int, pipeline_artifacts_size: int, packages_size: int, snippets_size: int, uploads_size: int, container_registry_size: int>, warn_about_potentially_unwanted_characters: bool, autoclose_referenced_issues: bool, max_artifacts_size: int, approvals_before_merge: string, mirror: string, mirror_user_id: string, mirror_trigger_builds: string, only_mirror_protected_branches: string, mirror_overwrites_diverged_branches: string, external_authorization_classification_label: string, requirements_enabled: string, requirements_access_level: string, security_and_compliance_enabled: string, secret_push_protection_enabled: bool, pre_receive_secret_detection_enabled: bool, compliance_frameworks: string, issues_template: string, merge_requests_template: string, ci_restrict_pipeline_cancellation_role: string, merge_pipelines_enabled: string, merge_trains_enabled: string, merge_trains_skip_train_allowed: string, max_pipelines_per_merge_train: string, only_allow_merge_if_all_status_checks_passed: string, allow_pipeline_trigger_approve_deployment: bool, prevent_merge_without_jira_issue: string, auto_duo_code_review_enabled: string, duo_remote_flows_enabled: string, duo_foundational_flows_enabled: string, duo_sast_fp_detection_enabled: string, duo_secret_detection_fp_enabled: string, duo_sast_vr_workflow_enabled: string, web_based_commit_signing_enabled: string, spp_repository_pipeline_access: bool, security_policy_pipeline_must_succeed: bool, merge_request_title_regex: string, merge_request_title_regex_description: string>, shared_runners_minutes_limit: string, extra_shared_runners_minutes_limit: string, prevent_forking_outside_group: string, service_access_tokens_expiration_enforced: string, experiment_features_enabled: string, membership_lock: string, ip_restriction_ranges: string, allowed_email_domains_list: string, only_allow_merge_if_pipeline_succeeds: string, allow_merge_on_skipped_pipeline: string, only_allow_merge_if_all_discussions_are_resolved: string, unique_project_download_limit: string, unique_project_download_limit_interval_in_seconds: string, unique_project_download_limit_allowlist: string, unique_project_download_limit_alertlist: string, auto_ban_user_on_excessive_projects_download: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1149,7 +1148,7 @@ export def "groups-groups-shared get" [
   --qp-sort: string@sort-completer # Sort by asc (ascending) or desc (descending) (default: asc)
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --with-custom-attributes: string@bool-completer # Include custom attributes in the response (default: false)
+  --with-custom-attributes: oneof<nothing, bool> # Include custom attributes in the response (default: false)
 ]: nothing -> table<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, lock_math_rendering_limits_enabled: bool, default_branch: string, default_branch_protection: int, default_branch_protection_defaults: string, avatar_url: string, request_access_enabled: bool, full_name: string, full_path: string, created_at: string, parent_id: string, organization_id: int, shared_runners_setting: string, max_artifacts_size: int, custom_attributes: record<key: string, value: string>, statistics: record<storage_size: string, repository_size: string, wiki_size: string, lfs_objects_size: string, job_artifacts_size: string, pipeline_artifacts_size: string, packages_size: string, snippets_size: string, uploads_size: string>, marked_for_deletion_on: string, root_storage_statistics: record<build_artifacts_size: int, container_registry_size: int, container_registry_size_is_estimated: bool, dependency_proxy_size: int, lfs_objects_size: int, packages_size: int, pipeline_artifacts_size: int, repository_size: int, snippets_size: int, storage_size: int, uploads_size: int, wiki_size: int>, ldap_cn: string, ldap_access: string, ldap_group_links: record<cn: string, group_access: int, provider: string, filter: string, member_role_id: int>, saml_group_links: record<name: string, access_level: int, member_role_id: int, provider: string>, file_template_project_id: string, wiki_access_level: string, repository_storage: string, duo_core_features_enabled: bool, duo_features_enabled: string, lock_duo_features_enabled: string, auto_duo_code_review_enabled: string, web_based_commit_signing_enabled: string, allow_personal_snippets: string, duo_namespace_access_rules: string, built_in_project_templates_enabled: bool, lock_built_in_project_templates_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1178,7 +1177,7 @@ export def "groups-invited-groups get" [
   --min-access-level: int@min-access-level-completer # Minimum access level of authenticated user (format: int32)
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --with-custom-attributes: string@bool-completer # Include custom attributes in the response (default: false)
+  --with-custom-attributes: oneof<nothing, bool> # Include custom attributes in the response (default: false)
 ]: nothing -> table<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, lock_math_rendering_limits_enabled: bool, default_branch: string, default_branch_protection: int, default_branch_protection_defaults: string, avatar_url: string, request_access_enabled: bool, full_name: string, full_path: string, created_at: string, parent_id: string, organization_id: int, shared_runners_setting: string, max_artifacts_size: int, custom_attributes: record<key: string, value: string>, statistics: record<storage_size: string, repository_size: string, wiki_size: string, lfs_objects_size: string, job_artifacts_size: string, pipeline_artifacts_size: string, packages_size: string, snippets_size: string, uploads_size: string>, marked_for_deletion_on: string, root_storage_statistics: record<build_artifacts_size: int, container_registry_size: int, container_registry_size_is_estimated: bool, dependency_proxy_size: int, lfs_objects_size: int, packages_size: int, pipeline_artifacts_size: int, repository_size: int, snippets_size: int, storage_size: int, uploads_size: int, wiki_size: int>, ldap_cn: string, ldap_access: string, ldap_group_links: record<cn: string, group_access: int, provider: string, filter: string, member_role_id: int>, saml_group_links: record<name: string, access_level: int, member_role_id: int, provider: string>, file_template_project_id: string, wiki_access_level: string, repository_storage: string, duo_core_features_enabled: bool, duo_features_enabled: string, lock_duo_features_enabled: string, auto_duo_code_review_enabled: string, web_based_commit_signing_enabled: string, allow_personal_snippets: string, duo_namespace_access_rules: string, built_in_project_templates_enabled: bool, lock_built_in_project_templates_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1202,25 +1201,25 @@ export def "groups-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Limit by projects that are not archived and not marked for deletion
-  --archived: string@bool-completer # Limit by archived status
+  --active: oneof<nothing, bool> # Limit by projects that are not archived and not marked for deletion
+  --archived: oneof<nothing, bool> # Limit by archived status
   --visibility: string@visibility-completer # Limit by visibility
   --search: string # Return list of authorized projects matching the search criteria
   --order-by: string@order-by-completer-1 # Return projects ordered by field (default: created_at)
   --qp-sort: string@sort-completer # Return projects sorted in ascending and descending order (default: desc)
-  --simple: string@bool-completer # Return only the ID, URL, name, and path of each project (default: false)
-  --owned: string@bool-completer # Limit by owned by authenticated user (default: false)
-  --starred: string@bool-completer # Limit by starred status (default: false)
-  --with-issues-enabled: string@bool-completer # Limit by enabled issues feature (default: false)
-  --with-merge-requests-enabled: string@bool-completer # Limit by enabled merge requests feature (default: false)
-  --with-shared: string@bool-completer # Include projects shared to this group (default: true)
-  --include-subgroups: string@bool-completer # Includes projects in subgroups of this group (default: false)
-  --include-ancestor-groups: string@bool-completer # Includes projects in ancestors of this group (default: false)
+  --simple: oneof<nothing, bool> # Return only the ID, URL, name, and path of each project (default: false)
+  --owned: oneof<nothing, bool> # Limit by owned by authenticated user (default: false)
+  --starred: oneof<nothing, bool> # Limit by starred status (default: false)
+  --with-issues-enabled: oneof<nothing, bool> # Limit by enabled issues feature (default: false)
+  --with-merge-requests-enabled: oneof<nothing, bool> # Limit by enabled merge requests feature (default: false)
+  --with-shared: oneof<nothing, bool> # Include projects shared to this group (default: true)
+  --include-subgroups: oneof<nothing, bool> # Includes projects in subgroups of this group (default: false)
+  --include-ancestor-groups: oneof<nothing, bool> # Includes projects in ancestors of this group (default: false)
   --min-access-level: int@min-access-level-completer # Limit by minimum access level of authenticated user on projects (format: int32)
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --with-custom-attributes: string@bool-completer # Include custom attributes in the response (default: false)
-  --with-security-reports: string@bool-completer # Return only projects having security report artifacts present (default: false)
+  --with-custom-attributes: oneof<nothing, bool> # Include custom attributes in the response (default: false)
+  --with-security-reports: oneof<nothing, bool> # Return only projects having security report artifacts present (default: false)
 ]: nothing -> table<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string, forked_from_project: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list, topics: list, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record, custom_attributes: record, repository_storage: string>, container_registry_image_prefix: string, _links: record<self: string, issues: string, merge_requests: string, repo_branches: string, labels: string, events: string, members: string, cluster_agents: string>, marked_for_deletion_at: string, marked_for_deletion_on: string, packages_enabled: bool, empty_repo: bool, archived: bool, owner: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, resolve_outdated_diff_discussions: bool, container_expiration_policy: record<cadence: string, enabled: string, keep_n: string, older_than: string, name_regex: string, name_regex_keep: string, next_run_at: string>, repository_object_format: string, issues_enabled: bool, merge_requests_enabled: bool, wiki_enabled: bool, jobs_enabled: bool, snippets_enabled: bool, container_registry_enabled: bool, service_desk_enabled: bool, service_desk_address: string, can_create_merge_request_in: bool, issues_access_level: string, repository_access_level: string, merge_requests_access_level: string, forking_access_level: string, wiki_access_level: string, builds_access_level: string, snippets_access_level: string, pages_access_level: string, analytics_access_level: string, container_registry_access_level: string, security_and_compliance_access_level: string, releases_access_level: string, environments_access_level: string, feature_flags_access_level: string, infrastructure_access_level: string, monitor_access_level: string, model_experiments_access_level: string, model_registry_access_level: string, package_registry_access_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, shared_runners_enabled: bool, lfs_enabled: bool, creator_id: int, mr_default_target_self: bool, import_url: string, import_type: string, import_status: string, import_error: string, open_issues_count: int, description_html: string, updated_at: string, ci_default_git_depth: int, ci_delete_pipelines_in_seconds: int, ci_forward_deployment_enabled: bool, ci_forward_deployment_rollback_allowed: bool, ci_job_token_scope_enabled: bool, ci_separated_caches: bool, ci_allow_fork_pipelines_to_run_in_parent_project: bool, ci_id_token_sub_claim_components: list<string>, build_git_strategy: string, keep_latest_artifact: bool, restrict_user_defined_variables: bool, ci_pipeline_variables_minimum_override_role: string, runner_token_expiration_interval: int, group_runners_enabled: bool, resource_group_default_process_mode: string, auto_cancel_pending_pipelines: string, build_timeout: int, auto_devops_enabled: bool, auto_devops_deploy_strategy: string, ci_push_repository_for_job_token_allowed: bool, protect_merge_request_pipelines: bool, ci_display_pipeline_variables: bool, runners_token: string, ci_config_path: string, public_jobs: bool, shared_with_groups: list<record>, only_allow_merge_if_pipeline_succeeds: bool, allow_merge_on_skipped_pipeline: bool, request_access_enabled: bool, only_allow_merge_if_all_discussions_are_resolved: bool, remove_source_branch_after_merge: bool, printing_merge_request_link_enabled: bool, merge_method: string, squash_option: string, enforce_auth_checks_on_uploads: bool, suggestion_commit_message: string, merge_commit_template: string, squash_commit_template: string, mr_default_title_template: string, issue_branch_template: string, statistics: record<commit_count: int, storage_size: int, repository_size: int, wiki_size: int, lfs_objects_size: int, job_artifacts_size: int, pipeline_artifacts_size: int, packages_size: int, snippets_size: int, uploads_size: int, container_registry_size: int>, warn_about_potentially_unwanted_characters: bool, autoclose_referenced_issues: bool, max_artifacts_size: int, approvals_before_merge: string, mirror: string, mirror_user_id: string, mirror_trigger_builds: string, only_mirror_protected_branches: string, mirror_overwrites_diverged_branches: string, external_authorization_classification_label: string, requirements_enabled: string, requirements_access_level: string, security_and_compliance_enabled: string, secret_push_protection_enabled: bool, pre_receive_secret_detection_enabled: bool, compliance_frameworks: string, issues_template: string, merge_requests_template: string, ci_restrict_pipeline_cancellation_role: string, merge_pipelines_enabled: string, merge_trains_enabled: string, merge_trains_skip_train_allowed: string, max_pipelines_per_merge_train: string, only_allow_merge_if_all_status_checks_passed: string, allow_pipeline_trigger_approve_deployment: bool, prevent_merge_without_jira_issue: string, auto_duo_code_review_enabled: string, duo_remote_flows_enabled: string, duo_foundational_flows_enabled: string, duo_sast_fp_detection_enabled: string, duo_secret_detection_fp_enabled: string, duo_sast_vr_workflow_enabled: string, web_based_commit_signing_enabled: string, spp_repository_pipeline_access: bool, security_policy_pipeline_must_succeed: bool, merge_request_title_regex: string, merge_request_title_regex_description: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1244,19 +1243,19 @@ export def "groups-projects-shared get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Limit by archived status
+  --archived: oneof<nothing, bool> # Limit by archived status
   --visibility: string@visibility-completer # Limit by visibility
   --search: string # Return list of authorized projects matching the search criteria
   --order-by: string@order-by-completer-2 # Return projects ordered by field (default: created_at)
   --qp-sort: string@sort-completer # Return projects sorted in ascending and descending order (default: desc)
-  --simple: string@bool-completer # Return only the ID, URL, name, and path of each project (default: false)
-  --starred: string@bool-completer # Limit by starred status (default: false)
-  --with-issues-enabled: string@bool-completer # Limit by enabled issues feature (default: false)
-  --with-merge-requests-enabled: string@bool-completer # Limit by enabled merge requests feature (default: false)
+  --simple: oneof<nothing, bool> # Return only the ID, URL, name, and path of each project (default: false)
+  --starred: oneof<nothing, bool> # Limit by starred status (default: false)
+  --with-issues-enabled: oneof<nothing, bool> # Limit by enabled issues feature (default: false)
+  --with-merge-requests-enabled: oneof<nothing, bool> # Limit by enabled merge requests feature (default: false)
   --min-access-level: int@min-access-level-completer # Limit by minimum access level of authenticated user on projects (format: int32)
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --with-custom-attributes: string@bool-completer # Include custom attributes in the response (default: false)
+  --with-custom-attributes: oneof<nothing, bool> # Include custom attributes in the response (default: false)
 ]: nothing -> table<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string, forked_from_project: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list, topics: list, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record, custom_attributes: record, repository_storage: string>, container_registry_image_prefix: string, _links: record<self: string, issues: string, merge_requests: string, repo_branches: string, labels: string, events: string, members: string, cluster_agents: string>, marked_for_deletion_at: string, marked_for_deletion_on: string, packages_enabled: bool, empty_repo: bool, archived: bool, owner: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, resolve_outdated_diff_discussions: bool, container_expiration_policy: record<cadence: string, enabled: string, keep_n: string, older_than: string, name_regex: string, name_regex_keep: string, next_run_at: string>, repository_object_format: string, issues_enabled: bool, merge_requests_enabled: bool, wiki_enabled: bool, jobs_enabled: bool, snippets_enabled: bool, container_registry_enabled: bool, service_desk_enabled: bool, service_desk_address: string, can_create_merge_request_in: bool, issues_access_level: string, repository_access_level: string, merge_requests_access_level: string, forking_access_level: string, wiki_access_level: string, builds_access_level: string, snippets_access_level: string, pages_access_level: string, analytics_access_level: string, container_registry_access_level: string, security_and_compliance_access_level: string, releases_access_level: string, environments_access_level: string, feature_flags_access_level: string, infrastructure_access_level: string, monitor_access_level: string, model_experiments_access_level: string, model_registry_access_level: string, package_registry_access_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, shared_runners_enabled: bool, lfs_enabled: bool, creator_id: int, mr_default_target_self: bool, import_url: string, import_type: string, import_status: string, import_error: string, open_issues_count: int, description_html: string, updated_at: string, ci_default_git_depth: int, ci_delete_pipelines_in_seconds: int, ci_forward_deployment_enabled: bool, ci_forward_deployment_rollback_allowed: bool, ci_job_token_scope_enabled: bool, ci_separated_caches: bool, ci_allow_fork_pipelines_to_run_in_parent_project: bool, ci_id_token_sub_claim_components: list<string>, build_git_strategy: string, keep_latest_artifact: bool, restrict_user_defined_variables: bool, ci_pipeline_variables_minimum_override_role: string, runner_token_expiration_interval: int, group_runners_enabled: bool, resource_group_default_process_mode: string, auto_cancel_pending_pipelines: string, build_timeout: int, auto_devops_enabled: bool, auto_devops_deploy_strategy: string, ci_push_repository_for_job_token_allowed: bool, protect_merge_request_pipelines: bool, ci_display_pipeline_variables: bool, runners_token: string, ci_config_path: string, public_jobs: bool, shared_with_groups: list<record>, only_allow_merge_if_pipeline_succeeds: bool, allow_merge_on_skipped_pipeline: bool, request_access_enabled: bool, only_allow_merge_if_all_discussions_are_resolved: bool, remove_source_branch_after_merge: bool, printing_merge_request_link_enabled: bool, merge_method: string, squash_option: string, enforce_auth_checks_on_uploads: bool, suggestion_commit_message: string, merge_commit_template: string, squash_commit_template: string, mr_default_title_template: string, issue_branch_template: string, statistics: record<commit_count: int, storage_size: int, repository_size: int, wiki_size: int, lfs_objects_size: int, job_artifacts_size: int, pipeline_artifacts_size: int, packages_size: int, snippets_size: int, uploads_size: int, container_registry_size: int>, warn_about_potentially_unwanted_characters: bool, autoclose_referenced_issues: bool, max_artifacts_size: int, approvals_before_merge: string, mirror: string, mirror_user_id: string, mirror_trigger_builds: string, only_mirror_protected_branches: string, mirror_overwrites_diverged_branches: string, external_authorization_classification_label: string, requirements_enabled: string, requirements_access_level: string, security_and_compliance_enabled: string, secret_push_protection_enabled: bool, pre_receive_secret_detection_enabled: bool, compliance_frameworks: string, issues_template: string, merge_requests_template: string, ci_restrict_pipeline_cancellation_role: string, merge_pipelines_enabled: string, merge_trains_enabled: string, merge_trains_skip_train_allowed: string, max_pipelines_per_merge_train: string, only_allow_merge_if_all_status_checks_passed: string, allow_pipeline_trigger_approve_deployment: bool, prevent_merge_without_jira_issue: string, auto_duo_code_review_enabled: string, duo_remote_flows_enabled: string, duo_foundational_flows_enabled: string, duo_sast_fp_detection_enabled: string, duo_secret_detection_fp_enabled: string, duo_sast_vr_workflow_enabled: string, web_based_commit_signing_enabled: string, spp_repository_pipeline_access: bool, security_policy_pipeline_must_succeed: bool, merge_request_title_regex: string, merge_request_title_regex_description: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1280,23 +1279,23 @@ export def "groups-subgroups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --statistics: string@bool-completer # Include project statistics (default: false)
-  --archived: string@bool-completer # Limit by archived status
+  --statistics: oneof<nothing, bool> # Include project statistics (default: false)
+  --archived: oneof<nothing, bool> # Limit by archived status
   --skip-groups: list # Array of group ids to exclude from list
-  --all-available: string@bool-completer # When `true`, returns all accessible groups. When `false`, returns only groups where the user is a member.
+  --all-available: oneof<nothing, bool> # When `true`, returns all accessible groups. When `false`, returns only groups where the user is a member.
   --visibility: string@visibility-completer # Limit by visibility
   --search: string # Search for a specific group
-  --owned: string@bool-completer # Limit by owned by authenticated user (default: false)
+  --owned: oneof<nothing, bool> # Limit by owned by authenticated user (default: false)
   --order-by: string@order-by-completer # Order by name, path, id or similarity if searching (default: name)
   --qp-sort: string@sort-completer # Sort by asc (ascending) or desc (descending) (default: asc)
   --min-access-level: int@min-access-level-completer # Minimum access level of authenticated user (format: int32)
-  --top-level-only: string@bool-completer # Only include top-level groups
+  --top-level-only: oneof<nothing, bool> # Only include top-level groups
   --marked-for-deletion-on: string # Return groups that are marked for deletion on this date (format: date)
-  --active: string@bool-completer # Limit by groups that are not archived and not marked for deletion
+  --active: oneof<nothing, bool> # Limit by groups that are not archived and not marked for deletion
   --repository-storage: string # Filter by repository storage used by the group
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --with-custom-attributes: string@bool-completer # Include custom attributes in the response (default: false)
+  --with-custom-attributes: oneof<nothing, bool> # Include custom attributes in the response (default: false)
 ]: nothing -> table<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, lock_math_rendering_limits_enabled: bool, default_branch: string, default_branch_protection: int, default_branch_protection_defaults: string, avatar_url: string, request_access_enabled: bool, full_name: string, full_path: string, created_at: string, parent_id: string, organization_id: int, shared_runners_setting: string, max_artifacts_size: int, custom_attributes: record<key: string, value: string>, statistics: record<storage_size: string, repository_size: string, wiki_size: string, lfs_objects_size: string, job_artifacts_size: string, pipeline_artifacts_size: string, packages_size: string, snippets_size: string, uploads_size: string>, marked_for_deletion_on: string, root_storage_statistics: record<build_artifacts_size: int, container_registry_size: int, container_registry_size_is_estimated: bool, dependency_proxy_size: int, lfs_objects_size: int, packages_size: int, pipeline_artifacts_size: int, repository_size: int, snippets_size: int, storage_size: int, uploads_size: int, wiki_size: int>, ldap_cn: string, ldap_access: string, ldap_group_links: record<cn: string, group_access: int, provider: string, filter: string, member_role_id: int>, saml_group_links: record<name: string, access_level: int, member_role_id: int, provider: string>, file_template_project_id: string, wiki_access_level: string, repository_storage: string, duo_core_features_enabled: bool, duo_features_enabled: string, lock_duo_features_enabled: string, auto_duo_code_review_enabled: string, web_based_commit_signing_enabled: string, allow_personal_snippets: string, duo_namespace_access_rules: string, built_in_project_templates_enabled: bool, lock_built_in_project_templates_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1320,23 +1319,23 @@ export def "groups-descendant-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --statistics: string@bool-completer # Include project statistics (default: false)
-  --archived: string@bool-completer # Limit by archived status
+  --statistics: oneof<nothing, bool> # Include project statistics (default: false)
+  --archived: oneof<nothing, bool> # Limit by archived status
   --skip-groups: list # Array of group ids to exclude from list
-  --all-available: string@bool-completer # When `true`, returns all accessible groups. When `false`, returns only groups where the user is a member.
+  --all-available: oneof<nothing, bool> # When `true`, returns all accessible groups. When `false`, returns only groups where the user is a member.
   --visibility: string@visibility-completer # Limit by visibility
   --search: string # Search for a specific group
-  --owned: string@bool-completer # Limit by owned by authenticated user (default: false)
+  --owned: oneof<nothing, bool> # Limit by owned by authenticated user (default: false)
   --order-by: string@order-by-completer # Order by name, path, id or similarity if searching (default: name)
   --qp-sort: string@sort-completer # Sort by asc (ascending) or desc (descending) (default: asc)
   --min-access-level: int@min-access-level-completer # Minimum access level of authenticated user (format: int32)
-  --top-level-only: string@bool-completer # Only include top-level groups
+  --top-level-only: oneof<nothing, bool> # Only include top-level groups
   --marked-for-deletion-on: string # Return groups that are marked for deletion on this date (format: date)
-  --active: string@bool-completer # Limit by groups that are not archived and not marked for deletion
+  --active: oneof<nothing, bool> # Limit by groups that are not archived and not marked for deletion
   --repository-storage: string # Filter by repository storage used by the group
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --with-custom-attributes: string@bool-completer # Include custom attributes in the response (default: false)
+  --with-custom-attributes: oneof<nothing, bool> # Include custom attributes in the response (default: false)
 ]: nothing -> table<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, lock_math_rendering_limits_enabled: bool, default_branch: string, default_branch_protection: int, default_branch_protection_defaults: string, avatar_url: string, request_access_enabled: bool, full_name: string, full_path: string, created_at: string, parent_id: string, organization_id: int, shared_runners_setting: string, max_artifacts_size: int, custom_attributes: record<key: string, value: string>, statistics: record<storage_size: string, repository_size: string, wiki_size: string, lfs_objects_size: string, job_artifacts_size: string, pipeline_artifacts_size: string, packages_size: string, snippets_size: string, uploads_size: string>, marked_for_deletion_on: string, root_storage_statistics: record<build_artifacts_size: int, container_registry_size: int, container_registry_size_is_estimated: bool, dependency_proxy_size: int, lfs_objects_size: int, packages_size: int, pipeline_artifacts_size: int, repository_size: int, snippets_size: int, storage_size: int, uploads_size: int, wiki_size: int>, ldap_cn: string, ldap_access: string, ldap_group_links: record<cn: string, group_access: int, provider: string, filter: string, member_role_id: int>, saml_group_links: record<name: string, access_level: int, member_role_id: int, provider: string>, file_template_project_id: string, wiki_access_level: string, repository_storage: string, duo_core_features_enabled: bool, duo_features_enabled: string, lock_duo_features_enabled: string, auto_duo_code_review_enabled: string, web_based_commit_signing_enabled: string, allow_personal_snippets: string, duo_namespace_access_rules: string, built_in_project_templates_enabled: bool, lock_built_in_project_templates_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1587,8 +1586,8 @@ export def "groups-saml-users get" [
   --allow-errors(-e) # Return full response without error handling
   --username: string # Return single user with a specific username.
   --search: string # Search users by name, email, username.
-  --active: string@bool-completer # Return only active users. (default: false)
-  --blocked: string@bool-completer # Return only blocked users. (default: false)
+  --active: oneof<nothing, bool> # Return only active users. (default: false)
+  --blocked: oneof<nothing, bool> # Return only blocked users. (default: false)
   --created-after: string # Return users created after the specified time. (format: date-time)
   --created-before: string # Return users created before the specified time. (format: date-time)
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
@@ -1618,8 +1617,8 @@ export def "groups-provisioned-users get" [
   --allow-errors(-e) # Return full response without error handling
   --username: string # Return a single user with a specific username
   --search: string # Search users by name, email or username
-  --active: string@bool-completer # Return only active users (default: false)
-  --blocked: string@bool-completer # Return only blocked users (default: false)
+  --active: oneof<nothing, bool> # Return only active users (default: false)
+  --blocked: oneof<nothing, bool> # Return only blocked users (default: false)
   --created-after: string # Return users created after the specified time (format: date-time)
   --created-before: string # Return users created before the specified time (format: date-time)
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
@@ -1723,7 +1722,7 @@ export def "groups-runners get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer # The type of runners to return
-  --paused: string@bool-completer # Whether to include only runners that are accepting or ignoring new jobs
+  --paused: oneof<nothing, bool> # Whether to include only runners that are accepting or ignoring new jobs
   --status: string@status-completer # The status of runners to return
   --tag-list: list # A list of runner tags (e.g. [macos, shell])
   --version-prefix: string # The version prefix of runners to return (e.g. 15.1.)
@@ -2055,7 +2054,7 @@ export def "groups-deploy-tokens list" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --active: string@bool-completer # Limit by active status
+  --active: oneof<nothing, bool> # Limit by active status
 ]: nothing -> table<id: int, name: string, username: string, expires_at: string, scopes: list<any>, revoked: bool, expired: bool> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -2227,12 +2226,12 @@ export def "groups-clusters put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # Cluster name
-  --enabled: string@bool-completer # Determines if cluster is active or not
+  --enabled: oneof<nothing, bool> # Determines if cluster is active or not
   --domain: string # Cluster base domain
   --environment-scope: string # The associated environment to the cluster
-  --namespace-per-environment: string@bool-completer # Deploy each environment to a separate Kubernetes namespace (default: true)
+  --namespace-per-environment: oneof<nothing, bool> # Deploy each environment to a separate Kubernetes namespace (default: true)
   --management-project-id: int # The ID of the management project (format: int32)
-  --managed: string@bool-completer # Determines if GitLab will manage namespaces and service accounts for this cluster
+  --managed: oneof<nothing, bool> # Determines if GitLab will manage namespaces and service accounts for this cluster
   --platform-kubernetes-attributes: record # Platform Kubernetes data — shape: {api_url?: string, token?: string, ca_cert?: string, namespace?: string}
 ]: any -> record<id: string, name: string, created_at: string, domain: string, enabled: string, managed: string, provider_type: string, platform_type: string, environment_scope: string, cluster_type: string, namespace_per_environment: string, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, platform_kubernetes: record<api_url: string, namespace: string, authorization_type: string, ca_cert: string>, provider_gcp: record<cluster_id: string, status_name: string, gcp_project_id: string, zone: string, machine_type: string, num_nodes: string, endpoint: string>, management_project: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string>, group: record<id: int, web_url: string, name: string>> {
   let input = $in
@@ -2284,12 +2283,12 @@ export def "groups-clusters-user post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string # Cluster name
-  --enabled: string@bool-completer # Determines if cluster is active or not, defaults to true (default: true)
+  --enabled: oneof<nothing, bool> # Determines if cluster is active or not, defaults to true (default: true)
   --environment-scope: string # The associated environment to the cluster (default: *)
-  --namespace-per-environment: string@bool-completer # Deploy each environment to a separate Kubernetes namespace (default: true)
+  --namespace-per-environment: oneof<nothing, bool> # Deploy each environment to a separate Kubernetes namespace (default: true)
   --domain: string # Cluster base domain
   --management-project-id: int # The ID of the management project (format: int32)
-  --managed: string@bool-completer # Determines if GitLab will manage namespaces and service accounts for this cluster, defaults to true (default: true)
+  --managed: oneof<nothing, bool> # Determines if GitLab will manage namespaces and service accounts for this cluster, defaults to true (default: true)
   platform_kubernetes_attributes: record # Platform Kubernetes data — shape: {api_url: string, token: string, ca_cert?: string, namespace?: string, authorization_type?: "unknown_authorization"|"rbac"|"abac"}
 ]: any -> record<id: string, name: string, created_at: string, domain: string, enabled: string, managed: string, provider_type: string, platform_type: string, environment_scope: string, cluster_type: string, namespace_per_environment: string, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, platform_kubernetes: record<api_url: string, namespace: string, authorization_type: string, ca_cert: string>, provider_gcp: record<cluster_id: string, status_name: string, gcp_project_id: string, zone: string, machine_type: string, num_nodes: string, endpoint: string>, management_project: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string>, group: record<id: int, web_url: string, name: string>> {
   let input = $in
@@ -2566,7 +2565,7 @@ export def "groups-export-relations post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --batched: string@bool-completer # Whether to export in batches
+  --batched: oneof<nothing, bool> # Whether to export in batches
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -2594,7 +2593,7 @@ export def "groups-export-relations-download get" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --relation: string # Group relation name
-  --batched: string@bool-completer # Whether to download in batches
+  --batched: oneof<nothing, bool> # Whether to download in batches
   --batch-number: int # Batch number to download (format: int32)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -2694,7 +2693,7 @@ export def "groups-packages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --exclude-subgroups: string@bool-completer # Determines if subgroups should be excluded (default: false)
+  --exclude-subgroups: oneof<nothing, bool> # Determines if subgroups should be excluded (default: false)
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
   --order-by: string@order-by-completer-3 # Return packages ordered by `created_at`, `name`, `version` or `type` fields. (default: created_at)
@@ -2702,7 +2701,7 @@ export def "groups-packages get" [
   --package-type: string@package-type-completer # Return packages of a certain type
   --package-name: string # Return packages with this name
   --package-version: string # Return packages with this version
-  --include-versionless: string@bool-completer # Returns packages without a version
+  --include-versionless: oneof<nothing, bool> # Returns packages without a version
   --status: string@status-completer-1 # Return packages with specified status
 ]: nothing -> table<id: int, name: string, conan_package_name: string, version: string, package_type: string, status: string, _links: record<web_path: string, delete_api_path: string>, created_at: string, last_downloaded_at: string, creator_id: int, project_id: int, project_path: string, tags: string, pipeline: record<id: int, iid: int, project_id: int, sha: string, ref: string, status: string, source: string, created_at: string, updated_at: string, web_url: string, user: record>, pipelines: record<id: int, iid: int, project_id: int, sha: string, ref: string, status: string, source: string, created_at: string, updated_at: string, web_url: string, user: record>, versions: record<id: string, version: string, created_at: string, tags: string, pipeline: record>> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -2824,10 +2823,10 @@ export def "groups-variables post" [
   --allow-errors(-e) # Return full response without error handling
   key: string # The ID of a group or URL-encoded path of the group owned by the         authenticated user
   value: string # The value of a variable
-  --protected: string@bool-completer # Whether the variable is protected
-  --masked-and-hidden: string@bool-completer # Whether the variable is masked and hidden
-  --masked: string@bool-completer # Whether the variable is masked
-  --body-raw: string@bool-completer # Whether the variable will be expanded
+  --protected: oneof<nothing, bool> # Whether the variable is protected
+  --masked-and-hidden: oneof<nothing, bool> # Whether the variable is masked and hidden
+  --masked: oneof<nothing, bool> # Whether the variable is masked
+  --body-raw: oneof<nothing, bool> # Whether the variable will be expanded
   --variable-type: string@variable-type-completer # The type of the variable. Default: env_var
   --environment-scope: string # The environment scope of the variable
   --description: string # The description of the variable
@@ -2881,9 +2880,9 @@ export def "groups-variables put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --value: string # The value of a variable
-  --protected: string@bool-completer # Whether the variable is protected
-  --masked: string@bool-completer # Whether the variable is masked
-  --body-raw: string@bool-completer # Whether the variable will be expanded
+  --protected: oneof<nothing, bool> # Whether the variable is protected
+  --masked: oneof<nothing, bool> # Whether the variable is masked
+  --body-raw: oneof<nothing, bool> # Whether the variable will be expanded
   --variable-type: string@variable-type-completer # The type of the variable. Default: env_var
   --environment-scope: string # The environment scope of the variable
   --description: string # The description of the variable
@@ -2961,8 +2960,8 @@ export def "groups-integrations-apple-app-store put" [
   app_store_key_id: string # Apple App Store Connect key ID.
   app_store_private_key_file_name: string # Apple App Store Connect private key file name.
   app_store_private_key: string # Apple App Store Connect private key.
-  --app-store-protected-refs: string@bool-completer # Set variables on protected branches and tags only.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --app-store-protected-refs: oneof<nothing, bool> # Set variables on protected branches and tags only.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -2990,8 +2989,8 @@ export def "groups-integrations-asana put" [
   --allow-errors(-e) # Return full response without error handling
   api_key: string # User API token. The user must have access to the task. All comments are attributed to this user.
   --restrict-to-branch: string # Comma-separated list of branches to be automatically inspected. Leave blank to include all branches.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3019,8 +3018,8 @@ export def "groups-integrations-assembla put" [
   --allow-errors(-e) # Return full response without error handling
   --body-token: string # The authentication token.
   --subdomain: string # The subdomain setting.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3046,13 +3045,13 @@ export def "groups-integrations-bamboo put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-ssl-verification: string@bool-completer # Enable SSL verification. Defaults to `true` (enabled).
+  --enable-ssl-verification: oneof<nothing, bool> # Enable SSL verification. Defaults to `true` (enabled).
   bamboo_url: string # Bamboo root URL (for example, `https://bamboo.example.com`).
   build_key: string # Bamboo build plan key (for example, `KEY`).
   username: string # User with API access to the Bamboo server.
   password: string # Password of the user.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3081,8 +3080,8 @@ export def "groups-integrations-bugzilla put" [
   project_url: string # URL of the project.
   issues_url: string # URL of the issue.
   new_issue_url: string # URL of the new issue.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3110,11 +3109,11 @@ export def "groups-integrations-buildkite put" [
   --allow-errors(-e) # Return full response without error handling
   project_url: string # Pipeline URL (for example, `https://buildkite.com/example/pipeline`).
   --body-token: string # Token you get after you create a Buildkite pipeline with a GitLab repository.
-  --enable-ssl-verification: string@bool-completer # DEPRECATED: This parameter has no effect because SSL verification is always enabled.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --enable-ssl-verification: oneof<nothing, bool> # DEPRECATED: This parameter has no effect because SSL verification is always enabled.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3143,8 +3142,8 @@ export def "groups-integrations-campfire put" [
   --body-token: string # API authentication token from Campfire. To get the token, sign in to Campfire and select **My info**.
   --subdomain: string # `.campfirenow.com` subdomain when you're signed in.
   --room: string # ID portion of the Campfire room URL.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3171,7 +3170,7 @@ export def "groups-integrations-confluence put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   confluence_url: string # URL of the Confluence Workspace hosted on `atlassian.net`.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3200,8 +3199,8 @@ export def "groups-integrations-custom-issue-tracker put" [
   project_url: string # URL of the project.
   issues_url: string # URL of the issue.
   new_issue_url: string # URL of the new issue.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3230,20 +3229,20 @@ export def "groups-integrations-datadog put" [
   --datadog-site: string # Datadog site to send data to. Learn more about Datadog sites in the <a target="_blank" rel="noopener noreferrer" href="https://docs.datadoghq.com/getting_started/site/">documentation</a>.
   --api-url: string # Full URL of your Datadog site. Only required if you do not use a standard Datadog site.
   api_key: string # <a target="_blank" rel="noopener noreferrer" href="https://docs.datadoghq.com/account_management/api-app-keys/">API key</a> used for authentication with Datadog.
-  --datadog-ci-visibility: string@bool-completer # Enable CI Visibility
-  --archive-trace-events: string@bool-completer # When enabled, job logs are collected by Datadog and displayed along with pipeline execution traces.
+  --datadog-ci-visibility: oneof<nothing, bool> # Enable CI Visibility
+  --archive-trace-events: oneof<nothing, bool> # When enabled, job logs are collected by Datadog and displayed along with pipeline execution traces.
   --datadog-service: string # Tag all pipeline data from this GitLab instance in Datadog. Can be used when managing several self-managed deployments.
   --datadog-env: string # For self-managed deployments, `env` tag for all the data sent to Datadog.
   --datadog-tags: string # Custom tags in Datadog. Specify one tag per line in the format `key:value\nkey2:value2`.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --build-events: string@bool-completer # Trigger event when a build is created.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --subgroup-events: string@bool-completer
-  --project-events: string@bool-completer
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --build-events: oneof<nothing, bool> # Trigger event when a build is created.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --subgroup-events: oneof<nothing, bool>
+  --project-events: oneof<nothing, bool>
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3272,7 +3271,7 @@ export def "groups-integrations-diffblue-cover put" [
   diffblue_license_key: string # Diffblue Cover license key.
   diffblue_access_token_name: string # Access token name used by Diffblue Cover in pipelines.
   diffblue_access_token_secret: string # Access token secret used by Diffblue Cover in pipelines.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3299,8 +3298,8 @@ export def "groups-integrations-discord put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   webhook: string # Discord webhook (for example, `https://discord.com/api/webhooks/…`).
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
   --push-channel: string # The name of the channel to receive push_events notifications
   --issue-channel: string # The name of the channel to receive issues_events notifications
@@ -3315,19 +3314,19 @@ export def "groups-integrations-discord put" [
   --pipeline-channel: string # The name of the channel to receive pipeline_events notifications
   --wiki-page-channel: string # The name of the channel to receive wiki_page_events notifications
   --vulnerability-channel: string # The name of the channel to receive vulnerability_events notifications
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --deployment-events: string@bool-completer # Trigger event when a deployment starts or finishes.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --deployment-events: oneof<nothing, bool> # Trigger event when a deployment starts or finishes.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3353,13 +3352,13 @@ export def "groups-integrations-drone-ci put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-ssl-verification: string@bool-completer # Enable SSL verification. Defaults to `true` (enabled).
+  --enable-ssl-verification: oneof<nothing, bool> # Enable SSL verification. Defaults to `true` (enabled).
   drone_url: string # Drone CI URL (for example, `http://drone.example.com`).
   --body-token: string # Drone CI token.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3385,13 +3384,13 @@ export def "groups-integrations-emails-on-push put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --send-from-committer-email: string@bool-completer # Send from committer
-  --disable-diffs: string@bool-completer # Disable code diffs
+  --send-from-committer-email: oneof<nothing, bool> # Send from committer
+  --disable-diffs: oneof<nothing, bool> # Disable code diffs
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
   recipients: string # Emails separated by whitespace.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3418,7 +3417,7 @@ export def "groups-integrations-external-wiki put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   external_wiki_url: string # URL of the external wiki.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3445,8 +3444,8 @@ export def "groups-integrations-gitlab-slack-application put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --channel: string # Default channel to use if no other channel is configured.
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
   --labels-to-be-notified: string # Labels to send notifications for. Leave blank to receive notifications for all events.
   --labels-to-be-notified-behavior: string # Labels to be notified for. Valid options are `match_any` and `match_all`. The default value is `match_any`.
@@ -3463,22 +3462,22 @@ export def "groups-integrations-gitlab-slack-application put" [
   --pipeline-channel: string # The name of the channel to receive pipeline_events notifications
   --wiki-page-channel: string # The name of the channel to receive wiki_page_events notifications
   --vulnerability-channel: string # The name of the channel to receive vulnerability_events notifications
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --deployment-events: string@bool-completer # Trigger event when a deployment starts or finishes.
-  --incident-events: string@bool-completer # Trigger event when an incident is created.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --vulnerability-events: string@bool-completer
-  --alert-events: string@bool-completer # Trigger event when a new, unique alert is recorded.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --deployment-events: oneof<nothing, bool> # Trigger event when a deployment starts or finishes.
+  --incident-events: oneof<nothing, bool> # Trigger event when an incident is created.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --vulnerability-events: oneof<nothing, bool>
+  --alert-events: oneof<nothing, bool> # Trigger event when a new, unique alert is recorded.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3507,8 +3506,8 @@ export def "groups-integrations-google-play put" [
   package_name: string # Package name of the app in Google Play.
   service_account_key_file_name: string # File name of the Google Play service account key.
   service_account_key: string # Google Play service account key.
-  --google-play-protected-refs: string@bool-completer # Set variables on protected branches and tags only.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --google-play-protected-refs: oneof<nothing, bool> # Set variables on protected branches and tags only.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3535,21 +3534,21 @@ export def "groups-integrations-hangouts-chat put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   webhook: string # The Hangouts Chat webhook (for example, `https://chat.googleapis.com/v1/spaces...`).
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3579,7 +3578,7 @@ export def "groups-integrations-harbor put" [
   project_name: string # The name of the project in the Harbor instance. For example, `testproject`.
   username: string # The username created in the Harbor interface.
   password: string # The password of the user.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3609,9 +3608,9 @@ export def "groups-integrations-irker put" [
   --server-port: int # irker daemon port. The default value is `6659`. (format: int32)
   --default-irc-uri: string # URI to add before each recipient. The default value is `irc://irc.network.net:6697/`.
   recipients: string # Comma-separated list of channels or email addresses.
-  --colorize-messages: string@bool-completer # Colorize messages
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --colorize-messages: oneof<nothing, bool> # Colorize messages
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3637,15 +3636,15 @@ export def "groups-integrations-jenkins put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-ssl-verification: string@bool-completer # Enable SSL verification. Defaults to `true` (enabled).
+  --enable-ssl-verification: oneof<nothing, bool> # Enable SSL verification. Defaults to `true` (enabled).
   jenkins_url: string # URL of the Jenkins server.
   project_name: string # Name of the Jenkins project.
   --username: string # Username of the Jenkins server.
   --password: string # Password of the Jenkins server.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3681,19 +3680,19 @@ export def "groups-integrations-jira put" [
   --jira-issue-transition-id: string # The ID of one or more transitions for [custom issue transitions](../integration/jira/issues.md#custom-issue-transitions).Ignored when `jira_issue_transition_automatic` is enabled. Defaults to a blank string,which disables custom transitions.
   --issues-enabled: string # Enable viewing Jira issues in GitLab.
   --project-keys: list # Keys of Jira projects to display. When `issues_enabled` is `true`, this setting filters which Jira projects are shown in GitLab. It does not restrict the API token's access.
-  --vulnerabilities-enabled: string@bool-completer # Turn on Jira issue creation for GitLab vulnerabilities.
+  --vulnerabilities-enabled: oneof<nothing, bool> # Turn on Jira issue creation for GitLab vulnerabilities.
   --vulnerabilities-issuetype: string # Jira issue type to use when creating issues from vulnerabilities.
   --project-key: string # Key of the project to use when creating issues from vulnerabilities.This parameter is required if using the integration to create Jira issues from vulnerabilities.
-  --customize-jira-issue-enabled: string@bool-completer # When set to `true`, opens a prefilled form on the Jira instancewhen creating a Jira issue from a vulnerability.
-  --jira-check-enabled: string@bool-completer # Verify Jira issues referenced in commit messages exist before allowing the push.
-  --jira-exists-check-enabled: string@bool-completer # Verify the Jira issues referenced in commit messages exist in Jira.
-  --jira-assignee-check-enabled: string@bool-completer # Verify the committer is the assignee of the Jira issues referenced in commit messages.
-  --jira-status-check-enabled: string@bool-completer # Verify the status of Jira issues referenced in commit messages.
+  --customize-jira-issue-enabled: oneof<nothing, bool> # When set to `true`, opens a prefilled form on the Jira instancewhen creating a Jira issue from a vulnerability.
+  --jira-check-enabled: oneof<nothing, bool> # Verify Jira issues referenced in commit messages exist before allowing the push.
+  --jira-exists-check-enabled: oneof<nothing, bool> # Verify the Jira issues referenced in commit messages exist in Jira.
+  --jira-assignee-check-enabled: oneof<nothing, bool> # Verify the committer is the assignee of the Jira issues referenced in commit messages.
+  --jira-status-check-enabled: oneof<nothing, bool> # Verify the status of Jira issues referenced in commit messages.
   --jira-allowed-statuses-as-string: string # Comma-separated list of allowed Jira issue statuses.
-  --comment-on-event-enabled: string@bool-completer # Enable comments inside Jira issues on each GitLab event (commit / merge request)
-  --commit-events: string@bool-completer # Trigger event when a commit is created or updated.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --comment-on-event-enabled: oneof<nothing, bool> # Enable comments inside Jira issues on each GitLab event (commit / merge request)
+  --commit-events: oneof<nothing, bool> # Trigger event when a commit is created or updated.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3720,9 +3719,9 @@ export def "groups-integrations-jira-cloud-app put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --jira-cloud-app-service-ids: string # Copy and paste your JSM Service ID here. Use comma (,) to separate multiple IDs.
-  --jira-cloud-app-enable-deployment-gating: string@bool-completer # Enable to approve or reject blocked GitLab deployments from Jira Service Management.
+  --jira-cloud-app-enable-deployment-gating: oneof<nothing, bool> # Enable to approve or reject blocked GitLab deployments from Jira Service Management.
   --jira-cloud-app-deployment-gating-environments: string # Enter the environment (production,staging,testing,development) where you want to enable deployment gating. Use comma (,) to separate multiple environments.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3749,8 +3748,8 @@ export def "groups-integrations-linear put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   workspace_url: string # Linear workspace URL (for example, https://linear.app/example)
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3779,23 +3778,23 @@ export def "groups-integrations-matrix put" [
   --hostname: string # Custom hostname of the Matrix server. The default value is `https://matrix-client.matrix.org`.
   --body-token: string # The Matrix access token (for example, `syt-zyx57W2v1u123ew11`).
   room: string # Unique identifier for the target room (in the format `!qPKKM111FFKKsfoCVy:matrix.org`).
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --incident-events: string@bool-completer # Trigger event when an incident is created.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --vulnerability-events: string@bool-completer
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --incident-events: oneof<nothing, bool> # Trigger event when an incident is created.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --vulnerability-events: oneof<nothing, bool>
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3822,7 +3821,7 @@ export def "groups-integrations-mattermost-slash-commands put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-token: string # The Mattermost token.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3851,10 +3850,10 @@ export def "groups-integrations-packagist put" [
   username: string # Username of a Packagist account.
   --body-token: string # API token of the Packagist server.
   --server: string # URL of the Packagist server. The default value is `https://packagist.org`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3882,8 +3881,8 @@ export def "groups-integrations-phorge put" [
   --allow-errors(-e) # Return full response without error handling
   project_url: string # URL of the project.
   issues_url: string # URL of the issue.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3910,13 +3909,13 @@ export def "groups-integrations-pipelines-email put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   recipients: string # Comma-separated list of recipient email addresses.
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
-  --notify-only-default-branch: string@bool-completer # Send notifications for the default branch.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
+  --notify-only-default-branch: oneof<nothing, bool> # Send notifications for the default branch.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --notify-child-pipelines: string@bool-completer # Send notifications for child pipelines.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --notify-child-pipelines: oneof<nothing, bool> # Send notifications for child pipelines.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3944,8 +3943,8 @@ export def "groups-integrations-pivotaltracker put" [
   --allow-errors(-e) # Return full response without error handling
   --body-token: string # The Pivotal Tracker token.
   --restrict-to-branch: string # Comma-separated list of branches to automatically inspect. Leave blank to include all branches.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -3972,21 +3971,21 @@ export def "groups-integrations-pumble put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   webhook: string # The Pumble webhook (for example, `https://api.pumble.com/workspaces/x/...`).
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -4017,8 +4016,8 @@ export def "groups-integrations-pushover put" [
   --device: string # Leave blank for all active devices.
   priority: string # The priority.
   --sound: string # The sound of the notification.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -4047,8 +4046,8 @@ export def "groups-integrations-redmine put" [
   project_url: string # URL of the project.
   issues_url: string # URL of the issue.
   new_issue_url: string # URL of the new issue.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -4077,8 +4076,8 @@ export def "groups-integrations-ewm put" [
   project_url: string # URL of the project.
   issues_url: string # URL of the issue.
   new_issue_url: string # URL of the new issue.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -4106,8 +4105,8 @@ export def "groups-integrations-youtrack put" [
   --allow-errors(-e) # Return full response without error handling
   project_url: string # URL of the project.
   issues_url: string # URL of the issue.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -4135,8 +4134,8 @@ export def "groups-integrations-clickup put" [
   --allow-errors(-e) # Return full response without error handling
   project_url: string # URL of the project.
   issues_url: string # URL of the issue.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -4165,8 +4164,8 @@ export def "groups-integrations-slack put" [
   webhook: string # Slack notifications webhook (for example, `https://hooks.slack.com/services/...`).
   --username: string # Slack notifications username.
   --channel: string # Default channel to use if no other channel is configured.
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
   --labels-to-be-notified: string # Labels to send notifications for. Leave blank to receive notifications for all events.
   --labels-to-be-notified-behavior: string # Labels to be notified for. Valid options are `match_any` and `match_all`. The default value is `match_any`.
@@ -4183,22 +4182,22 @@ export def "groups-integrations-slack put" [
   --pipeline-channel: string # The name of the channel to receive pipeline_events notifications
   --wiki-page-channel: string # The name of the channel to receive wiki_page_events notifications
   --vulnerability-channel: string # The name of the channel to receive vulnerability_events notifications
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --deployment-events: string@bool-completer # Trigger event when a deployment starts or finishes.
-  --incident-events: string@bool-completer # Trigger event when an incident is created.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --vulnerability-events: string@bool-completer
-  --alert-events: string@bool-completer # Trigger event when a new, unique alert is recorded.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --deployment-events: oneof<nothing, bool> # Trigger event when a deployment starts or finishes.
+  --incident-events: oneof<nothing, bool> # Trigger event when an incident is created.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --vulnerability-events: oneof<nothing, bool>
+  --alert-events: oneof<nothing, bool> # Trigger event when a new, unique alert is recorded.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -4225,21 +4224,21 @@ export def "groups-integrations-microsoft-teams put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   webhook: string # The Microsoft Teams webhook (for example, `https://outlook.office.com/webhook/...`).
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -4268,8 +4267,8 @@ export def "groups-integrations-mattermost put" [
   webhook: string # Mattermost notifications webhook (for example, `http://mattermost.example.com/hooks/...`).
   --username: string # Mattermost notifications username.
   --channel: string # Default channel to use if no other channel is configured.
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
   --labels-to-be-notified: string # Labels to send notifications for. Leave blank to receive notifications for all events.
   --labels-to-be-notified-behavior: string # Labels to be notified for. Valid options are `match_any` and `match_all`. The default value is `match_any`.
@@ -4286,21 +4285,21 @@ export def "groups-integrations-mattermost put" [
   --pipeline-channel: string # The name of the channel to receive pipeline_events notifications
   --wiki-page-channel: string # The name of the channel to receive wiki_page_events notifications
   --vulnerability-channel: string # The name of the channel to receive vulnerability_events notifications
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --deployment-events: string@bool-completer # Trigger event when a deployment starts or finishes.
-  --incident-events: string@bool-completer # Trigger event when an incident is created.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --vulnerability-events: string@bool-completer
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --deployment-events: oneof<nothing, bool> # Trigger event when a deployment starts or finishes.
+  --incident-events: oneof<nothing, bool> # Trigger event when an incident is created.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --vulnerability-events: oneof<nothing, bool>
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -4326,14 +4325,14 @@ export def "groups-integrations-teamcity put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-ssl-verification: string@bool-completer # Enable SSL verification. Defaults to `true` (enabled).
+  --enable-ssl-verification: oneof<nothing, bool> # Enable SSL verification. Defaults to `true` (enabled).
   teamcity_url: string # TeamCity root URL (for example, `https://teamcity.example.com`).
   build_type: string # The build configuration ID of the TeamCity project.
   username: string # A user with permissions to trigger a manual build.
   password: string # The password of the user.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -4363,23 +4362,23 @@ export def "groups-integrations-telegram put" [
   --body-token: string # The Telegram bot token (for example, `123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`).
   room: string # Unique identifier for the target chat or the username of the target channel (in the format `@channelusername`).
   --thread: string # Unique identifier for the target message thread (topic in a forum supergroup).
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --incident-events: string@bool-completer # Trigger event when an incident is created.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --vulnerability-events: string@bool-completer
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --incident-events: oneof<nothing, bool> # Trigger event when an incident is created.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --vulnerability-events: oneof<nothing, bool>
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -4406,21 +4405,21 @@ export def "groups-integrations-unify-circuit put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   webhook: string # The Unify Circuit webhook (for example, `https://circuit.com/rest/v2/webhooks/incoming/...`).
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -4447,21 +4446,21 @@ export def "groups-integrations-webex-teams put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   webhook: string # The Webex Teams webhook. For example, https://api.ciscospark.com/v1/webhooks/incoming/...
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -4491,7 +4490,7 @@ export def "groups-integrations-zentao put" [
   --api-url: string # If different from Web URL.
   api_token: string
   zentao_product_xid: string
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -4519,9 +4518,9 @@ export def "groups-integrations-squash-tm put" [
   --allow-errors(-e) # Return full response without error handling
   --body-url: string # URL of the Squash TM webhook.
   --body-token: string # Secret token.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -4549,9 +4548,9 @@ export def "groups-integrations-github put" [
   --allow-errors(-e) # Return full response without error handling
   --body-token: string # GitHub API token with `repo:status` OAuth scope.
   repository_url: string # GitHub repository URL.
-  --static-context: string@bool-completer # Append the hostname of your GitLab instance to the status check name.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --static-context: oneof<nothing, bool> # Append the hostname of your GitLab instance to the status check name.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -4579,7 +4578,7 @@ export def "groups-integrations-git-guardian put" [
   --allow-errors(-e) # Return full response without error handling
   --api-url: string # GitGuardian API base URL. Defaults to https://api.gitguardian.com. Use https://api.eu1.gitguardian.com for the EU region, or the URL of your self-hosted GitGuardian instance. Must use HTTPS.
   --body-token: string # Personal access token to authenticate calls to the GitGuardian API.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -4608,7 +4607,7 @@ export def "groups-integrations-google-cloud-platform-artifact-registry put" [
   artifact_registry_project_id: string # ID of the Google Cloud project.
   artifact_registry_repositories: string # Repository of Artifact Registry.
   artifact_registry_location: string # Location of the Artifact Registry repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -4638,7 +4637,7 @@ export def "groups-integrations-google-cloud-platform-workload-identity-federati
   workload_identity_federation_project_number: string # Google Cloud project number for the Workload Identity Federation.
   workload_identity_pool_id: string # ID of the Workload Identity Pool.
   workload_identity_pool_provider_id: string # ID of the Workload Identity Pool provider.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -4664,10 +4663,10 @@ export def "groups-integrations-mock-ci put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-ssl-verification: string@bool-completer # Enable SSL verification. Defaults to `true` (enabled).
+  --enable-ssl-verification: oneof<nothing, bool> # Enable SSL verification. Defaults to `true` (enabled).
   mock_service_url: string # URL of the Mock CI integration.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -4693,7 +4692,7 @@ export def "groups-integrations-mock-monitoring put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -4874,7 +4873,7 @@ export def "groups-issues get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-labels-details: string@bool-completer # Return titles of labels and other details (default: false)
+  --with-labels-details: oneof<nothing, bool> # Return titles of labels and other details (default: false)
   --state: string@state-completer # Return opened, closed, or all issues (default: all)
   --closed-by-id: int # Return issues which were closed by the user with the given ID. (format: int32)
   --order-by: string@order-by-completer-4 # Return issues ordered by `created_at`, `due_date`, `label_priority`, `milestone_due`, `popularity`, `priority`, `relative_position`, `title`, or `updated_at` fields. (default: created_at)
@@ -4908,7 +4907,7 @@ export def "groups-issues get" [
   --notiteration-title: string # Return issues which are not assigned to the iteration with the given title
   --scope: string@scope-completer # Return issues for the given scope: `created_by_me`, `assigned_to_me` or `all`
   --my-reaction-emoji: string # Return issues reacted by the authenticated user by the given emoji
-  --confidential: string@bool-completer # Filter confidential or public issues
+  --confidential: oneof<nothing, bool> # Filter confidential or public issues
   --weight: int # The weight of the issue (format: int32)
   --epic-id: int # The ID of an epic associated with the issues (format: int32)
   --health-status: string@health-status-completer # The health status of the issue. Must be one of: on_track, needs_attention, at_risk, none, any
@@ -4916,7 +4915,7 @@ export def "groups-issues get" [
   --iteration-title: string # Return issues which are assigned to the iteration with the given title
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --non-archived: string@bool-completer # Return issues from non archived projects (default: true)
+  --non-archived: oneof<nothing, bool> # Return issues from non archived projects (default: true)
 ]: nothing -> record<id: int, iid: int, project_id: int, title: string, description: string, state: string, created_at: string, updated_at: string, closed_at: string, closed_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, labels: list<string>, milestone: record<id: int, iid: int, project_id: int, group_id: string, title: string, description: string, state: string, created_at: string, updated_at: string, due_date: string, start_date: string, expired: bool, web_url: string>, assignees: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, author: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, type: string, assignee: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, user_notes_count: int, merge_requests_count: int, upvotes: int, downvotes: int, start_date: string, due_date: string, confidential: bool, discussion_locked: bool, issue_type: string, web_url: string, time_stats: record<time_estimate: int, total_time_spent: int, human_time_estimate: string, human_total_time_spent: string>, task_completion_status: record<count: int, completed_count: int>, weight: int, blocking_issues_count: int, has_tasks: bool, task_status: string, _links: record<self: string, notes: string, award_emoji: string, project: string, closed_as_duplicate_of: string>, references: record<short: string, relative: string, full: string>, severity: string, subscribed: bool, moved_to_id: int, imported: bool, imported_from: string, service_desk_reply_to: string, epic_iid: string, epic: record<id: string, iid: string, title: string, url: string, group_id: string, human_readable_end_date: string, human_readable_timestamp: string>, iteration: record<id: int, iid: int, sequence: int, group_id: int, title: string, description: string, state: int, created_at: string, updated_at: string, start_date: string, due_date: string, web_url: string>, health_status: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -4967,7 +4966,7 @@ export def "groups-issues-statistics get" [
   --notiteration-title: string # Return issues which are not assigned to the iteration with the given title
   --scope: string@scope-completer # Return issues for the given scope: `created_by_me`, `assigned_to_me` or `all`
   --my-reaction-emoji: string # Return issues reacted by the authenticated user by the given emoji
-  --confidential: string@bool-completer # Filter confidential or public issues
+  --confidential: oneof<nothing, bool> # Filter confidential or public issues
   --weight: int # The weight of the issue (format: int32)
   --epic-id: int # The ID of an epic associated with the issues (format: int32)
   --health-status: string@health-status-completer # The health status of the issue. Must be one of: on_track, needs_attention, at_risk, none, any
@@ -5191,8 +5190,8 @@ export def "groups-members list" [
   --qp-query: string # A query string to search for members
   --user-ids: list # Array of user ids to look up for membership
   --skip-users: list # Array of user ids to be skipped for membership
-  --show-seat-info: string@bool-completer # Show seat information for members
-  --with-saml-identity: string@bool-completer # List only members with linked SAML identity
+  --show-seat-info: oneof<nothing, bool> # Show seat information for members
+  --with-saml-identity: oneof<nothing, bool> # List only members with linked SAML identity
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
 ]: nothing -> table<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string, access_level: string, created_at: string, created_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, expires_at: string, group_saml_identity: record<provider: string, extern_uid: string, saml_provider_id: string>, group_scim_identity: record<extern_uid: string, group_id: string, active: string>, email: string, is_using_seat: string, override: string, membership_state: string, member_role: record<id: int, group_id: int, name: any, description: any, base_access_level: int, apply_security_scan_profiles: bool, admin_merge_request: bool, archive_project: bool, admin_ai_catalog_item_consumer: bool, remove_project: bool, remove_group: bool, manage_security_policy_link: bool, admin_ai_catalog_item: bool, admin_compliance_framework: bool, admin_cicd_variables: bool, manage_deploy_tokens: bool, manage_group_access_tokens: bool, admin_group_member: bool, admin_integrations: bool, manage_merge_request_settings: bool, manage_project_access_tokens: bool, admin_protected_branch: bool, admin_protected_environments: bool, admin_push_rules: bool, admin_runners: bool, admin_security_attributes: bool, admin_terraform_state: bool, admin_vulnerability: bool, admin_web_hook: bool, read_compliance_dashboard: bool, read_security_scan_profiles: bool, read_virtual_registry: bool, update_sec_ai_workflow_settings: bool, read_admin_cicd: bool, read_crm_contact: bool, read_dependency: bool, read_admin_groups: bool, read_admin_projects: bool, read_code: bool, read_runners: bool, read_security_attribute: bool, read_admin_subscription: bool, read_admin_monitoring: bool, read_admin_users: bool, read_vulnerability: bool>> {
@@ -5250,7 +5249,7 @@ export def "groups-members-all list" [
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string # A query string to search for members
   --user-ids: list # Array of user ids to look up for membership
-  --show-seat-info: string@bool-completer # Show seat information for members
+  --show-seat-info: oneof<nothing, bool> # Show seat information for members
   --state: string@state-completer-1 # Filter results by member state
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
@@ -5330,8 +5329,8 @@ export def "groups-members delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --skip-subresources: string@bool-completer # Flag indicating if the deletion of direct memberships of the removed member in subgroups and projects should be skipped (default: false)
-  --unassign-issuables: string@bool-completer # Flag indicating if the removed member should be unassigned from any issues or merge requests within given group or project (default: false)
+  --skip-subresources: oneof<nothing, bool> # Flag indicating if the deletion of direct memberships of the removed member in subgroups and projects should be skipped (default: false)
+  --unassign-issuables: oneof<nothing, bool> # Flag indicating if the removed member should be unassigned from any issues or merge requests within given group or project (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -5635,8 +5634,8 @@ export def "groups-merge-requests get" [
   --state: string@state-completer-2 # Returns `all` merge requests or just those that are `opened`, `closed`, `locked`, or `merged`. (default: all)
   --order-by: string@order-by-completer-5 # Returns merge requests ordered by `created_at`, `label_priority`, `milestone_due`, `popularity`, `priority`, `title`, `updated_at` or `merged_at` fields. Introduced in GitLab 14.8. (default: created_at)
   --qp-sort: string@sort-completer # Returns merge requests sorted in `asc` or `desc` order. (default: desc)
-  --with-labels-details: string@bool-completer # If `true`, response returns more details for each label in labels field: `:name`,`:color`, `:description`, `:description_html`, `:text_color` (default: false)
-  --with-merge-status-recheck: string@bool-completer # If `true`, this projection requests (but does not guarantee) that the `merge_status` field be recalculated asynchronously. Introduced in GitLab 13.0. (default: false)
+  --with-labels-details: oneof<nothing, bool> # If `true`, response returns more details for each label in labels field: `:name`,`:color`, `:description`, `:description_html`, `:text_color` (default: false)
+  --with-merge-status-recheck: oneof<nothing, bool> # If `true`, this projection requests (but does not guarantee) that the `merge_status` field be recalculated asynchronously. Introduced in GitLab 13.0. (default: false)
   --created-after: string # Returns merge requests created on or after the given time. Expected in ISO 8601 format. (format: date-time, e.g. 2019-03-15T08:00:00Z)
   --created-before: string # Returns merge requests created on or before the given time. Expected in ISO 8601 format. (format: date-time, e.g. 2019-03-15T08:00:00Z)
   --updated-after: string # Returns merge requests updated on or after the given time. Expected in ISO 8601 format. (format: date-time, e.g. 2019-03-15T08:00:00Z)
@@ -5649,7 +5648,7 @@ export def "groups-merge-requests get" [
   --search: string # Search merge requests against their `title` and `description`.
   --in-param: string # Modify the scope of the search attribute. `title`, `description`, or a string joining them with comma. (e.g. title,description)
   --wip: string@wip-completer # Deprecated. Use `draft` instead. Filter merge requests against their `wip` status. `yes` to return only draft merge requests, `no` to return non-draft merge requests.
-  --draft: string@bool-completer # Filter merge requests against their `draft` status. `true` to return only draft merge requests, `false` to return non-draft merge requests.
+  --draft: oneof<nothing, bool> # Filter merge requests against their `draft` status. `true` to return only draft merge requests, `false` to return non-draft merge requests.
   --notauthor-id: int # `<Negated>` Returns merge requests created by the given user `id`. Mutually exclusive with `author_username`. Combine with `scope=all` or `scope=assigned_to_me`. (format: int32)
   --notauthor-username: string # `<Negated>` Returns merge requests created by the given `username`. Mutually exclusive with `author_id`.
   --notassignee-id: int # `<Negated>` Returns merge requests assigned to the given user `id`. `None` returns unassigned merge requests. `Any` returns merge requests with an assignee. (format: int32)
@@ -5669,7 +5668,7 @@ export def "groups-merge-requests get" [
   --approved-by-usernames: string # Return merge requests which have been approved by the specified users with the given             usernames
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --non-archived: string@bool-completer # Returns merge requests from non archived projects only. (default: true)
+  --non-archived: oneof<nothing, bool> # Returns merge requests from non archived projects only. (default: true)
 ]: nothing -> table<id: int, iid: int, project_id: int, title: string, description: string, state: string, created_at: string, updated_at: string, merged_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, merge_user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, merged_at: string, closed_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, closed_at: string, title_html: string, description_html: string, target_branch: string, source_branch: string, user_notes_count: int, upvotes: int, downvotes: int, author: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, assignees: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, assignee: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, reviewers: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, source_project_id: int, target_project_id: int, labels: list<string>, draft: bool, imported: bool, imported_from: string, work_in_progress: bool, milestone: record<id: int, iid: int, project_id: int, group_id: string, title: string, description: string, state: string, created_at: string, updated_at: string, due_date: string, start_date: string, expired: bool, web_url: string>, merge_when_pipeline_succeeds: bool, merge_status: string, detailed_merge_status: string, merge_after: string, sha: string, merge_commit_sha: string, squash_commit_sha: string, discussion_locked: bool, should_remove_source_branch: bool, force_remove_source_branch: bool, prepared_at: string, allow_collaboration: bool, allow_maintainer_to_push: bool, reference: string, references: record<short: string, relative: string, full: string>, web_url: string, time_stats: record<time_estimate: int, total_time_spent: int, human_time_estimate: string, human_total_time_spent: string>, squash: bool, squash_on_merge: bool, task_completion_status: record<count: int, completed_count: int>, has_conflicts: bool, blocking_discussions_resolved: bool, approvals_before_merge: int> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -5984,7 +5983,7 @@ export def "groups-packages-nuget-query get" [
   --q: string # The search term (e.g. MyNuGet)
   --skip: int # The number of results to skip (format: int32, default: 0, e.g. 1)
   --take: int # The number of results to return (format: int32, default: 20, e.g. 1)
-  --prerelease: string@bool-completer # Include prerelease versions (default: true)
+  --prerelease: oneof<nothing, bool> # Include prerelease versions (default: true)
 ]: nothing -> record<totalHits: int, data: table<_type: string, id: string, title: string, totalDownloads: int, verified: bool, version: string, versions: record, tags: string, authors: string, description: string, summary: string, projectUrl: string, licenseUrl: string, iconUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -6080,7 +6079,7 @@ export def "groups-releases get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-sort: string@sort-completer # The direction of the order. Either `desc` (default) for descending order or `asc` for ascending order (default: desc)
-  --simple: string@bool-completer # Return only limited fields for each release (default: false)
+  --simple: oneof<nothing, bool> # Return only limited fields for each release (default: false)
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
 ]: nothing -> table<name: string, tag_name: string, description: string, created_at: string, released_at: string, upcoming_release: bool, description_html: string, author: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, commit: record<id: string, short_id: string, created_at: string, parent_ids: list, title: string, message: string, author_name: string, author_email: string, authored_date: string, committer_name: string, committer_email: string, committed_date: string, trailers: record, extended_trailers: record, web_url: string>, milestones: record<id: int, iid: int, project_id: int, group_id: string, title: string, description: string, state: string, created_at: string, updated_at: string, due_date: string, start_date: string, expired: bool, web_url: string, issue_stats: record>, commit_path: string, tag_path: string, assets: record<count: int, sources: record, links: record>, evidences: record<sha: string, filepath: string, collected_at: string>, _links: record<closed_issues_url: string, closed_merge_requests_url: string, edit_url: string, merged_merge_requests_url: string, opened_issues_url: string, opened_merge_requests_url: string, self: string>> {
@@ -6135,13 +6134,13 @@ export def "groups-search get" [
   --search: string # The expression it should be searched for
   --scope: string@scope-completer-2 # The scope of the search
   --state: string@state-completer-3 # Filter results by state
-  --confidential: string@bool-completer # Filter results by confidentiality
+  --confidential: oneof<nothing, bool> # Filter results by confidentiality
   --type: list # Filter work items by type. Only applies to work_items scope. Available types: issue, task, epic, incident, test_case, requirement, objective, key_result, ticket.
-  --include-archived: string@bool-completer # Includes archived projects in the search. Introduced in GitLab 18.9. (default: false)
+  --include-archived: oneof<nothing, bool> # Includes archived projects in the search. Introduced in GitLab 18.9. (default: false)
   --qp-fields: list # Array of fields you wish to search. Available with advanced search.
-  --exclude-forks: string@bool-completer # Excludes forked projects in the search. Available with exact code search. Introduced in GitLab 18.9.
+  --exclude-forks: oneof<nothing, bool> # Excludes forked projects in the search. Available with exact code search. Introduced in GitLab 18.9.
   --num-context-lines: int # Number of context lines around each match. Available with advanced and exact code search. Introduced in GitLab 18.11. (format: int32)
-  --regex: string@bool-completer # Performs a regex code search. Available with exact code search. Introduced in GitLab 18.9
+  --regex: oneof<nothing, bool> # Performs a regex code search. Available with exact code search. Introduced in GitLab 18.9
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
 ]: nothing -> any {
@@ -6167,7 +6166,7 @@ export def "groups-wikis list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-content: string@bool-completer # Include pages' content (default: false)
+  --with-content: oneof<nothing, bool> # Include pages' content (default: false)
 ]: nothing -> table<format: string, slug: string, title: string, wiki_page_meta_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -6223,7 +6222,7 @@ export def "groups-wikis get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --version: string # The version hash of a wiki page
-  --render-html: string@bool-completer # Render content to HTML (default: false)
+  --render-html: oneof<nothing, bool> # Render content to HTML (default: false)
 ]: nothing -> record<format: string, slug: string, title: string, wiki_page_meta_id: int, content: string, encoding: string, front_matter: record> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -7159,7 +7158,7 @@ export def "projects-snippets-notes-award-emoji delete" [
   do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
-# Gets a list of project badges viewable by the authenticated user.
+# List project badges.
 #
 # GET /api/v4/projects/{id}/badges
 # operationId: getApiV4ProjectsIdBadges
@@ -7185,7 +7184,7 @@ export def "projects-badges list" [
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
-# Adds a badge to a project.
+# Add a badge to a project.
 #
 # POST /api/v4/projects/{id}/badges
 # operationId: postApiV4ProjectsIdBadges
@@ -7238,7 +7237,7 @@ export def "projects-badges-render get" [
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
-# Gets a badge of a project.
+# Get a badge of a project.
 #
 # GET /api/v4/projects/{id}/badges/{badge_id}
 # operationId: getApiV4ProjectsIdBadgesBadgeId
@@ -7261,7 +7260,7 @@ export def "projects-badges get" [
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
-# Updates a badge of a project.
+# Update a badge of a project.
 #
 # PUT /api/v4/projects/{id}/badges/{badge_id}
 # operationId: putApiV4ProjectsIdBadgesBadgeId
@@ -7290,7 +7289,7 @@ export def "projects-badges put" [
   do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
 }
 
-# Removes a badge from the project.
+# Remove a badge from the project.
 #
 # DELETE /api/v4/projects/{id}/badges/{badge_id}
 # operationId: deleteApiV4ProjectsIdBadgesBadgeId
@@ -7452,8 +7451,8 @@ export def "projects-repository-branches-protect put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --developers-can-push: string@bool-completer # Flag if developers can push to that branch
-  --developers-can-merge: string@bool-completer # Flag if developers can merge to that branch
+  --developers-can-push: oneof<nothing, bool> # Flag if developers can push to that branch
+  --developers-can-merge: oneof<nothing, bool> # Flag if developers can merge to that branch
 ]: any -> record<name: string, commit: record<id: string, short_id: string, created_at: string, parent_ids: list<string>, title: string, message: string, author_name: string, author_email: string, authored_date: string, committer_name: string, committer_email: string, committed_date: string, trailers: record, extended_trailers: record, web_url: string>, merged: bool, protected: bool, developers_can_push: bool, developers_can_merge: bool, can_push: bool, default: bool, web_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -7554,7 +7553,7 @@ export def "projects-jobs-artifacts-download get" [
   --allow-errors(-e) # Return full response without error handling
   --job: string # The name of the job.
   --job-token: string # To be used with triggers for multi-project pipelines, available only on Premium and Ultimate tiers.
-  --search-recent-successful-pipelines: string@bool-completer # Search across recent successful pipelines instead of just the latest one. (default: false)
+  --search-recent-successful-pipelines: oneof<nothing, bool> # Search across recent successful pipelines instead of just the latest one. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -7582,7 +7581,7 @@ export def "projects-jobs-artifacts-raw-artifact-path get" [
   --job: string # The name of the job.
   --artifact-path: string # Path to a file inside the artifacts archive.
   --job-token: string # To be used with triggers for multi-project pipelines, available only on Premium and Ultimate tiers.
-  --search-recent-successful-pipelines: string@bool-completer # Search across recent successful pipelines instead of just the latest one. (default: false)
+  --search-recent-successful-pipelines: oneof<nothing, bool> # Search across recent successful pipelines instead of just the latest one. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -7656,7 +7655,7 @@ export def "projects-jobs-artifacts-tree get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --path: string # Path to browse in the artifacts archive. Defaults to root directory. (default: , e.g. coverage/reports)
-  --recursive: string@bool-completer # If `true`, return all entries recursively. (default: false)
+  --recursive: oneof<nothing, bool> # If `true`, return all entries recursively. (default: false)
   --job-token: string # CI/CD job token for multi-project pipelines. Premium and Ultimate only.
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
@@ -7831,7 +7830,7 @@ export def "projects-jobs-cancel post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # Force cancellation for a job with a state of `canceling` (e.g. true)
+  --force: oneof<nothing, bool> # Force cancellation for a job with a state of `canceling` (e.g. true)
 ]: any -> record<id: int, status: string, stage: string, name: string, ref: string, tag: bool, coverage: float, allow_failure: bool, created_at: string, started_at: string, finished_at: string, erased_at: string, duration: float, queued_duration: float, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string, created_at: string, bio: string, location: string, linkedin: string, twitter: string, discord: string, website_url: string, github: string, job_title: string, pronouns: string, organization: string, bot: bool, work_information: string, followers: string, following: string, is_followed: string, local_time: string>, commit: record<id: string, short_id: string, created_at: string, parent_ids: list<string>, title: string, message: string, author_name: string, author_email: string, authored_date: string, committer_name: string, committer_email: string, committed_date: string, trailers: record, extended_trailers: record, web_url: string>, pipeline: record<id: int, iid: int, project_id: int, sha: string, ref: string, status: string, source: string, created_at: string, updated_at: string, web_url: string>, failure_reason: string, web_url: string, project: record<ci_job_token_scope_enabled: string>, artifacts_file: record<filename: string, size: int>, artifacts: table<file_type: string, size: int, filename: string, file_format: string>, runner: record<id: int, description: string, ip_address: string, active: bool, paused: bool, is_shared: bool, runner_type: string, name: string, online: bool, created_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, created_at: string, status: string, job_execution_status: string>, runner_manager: record<id: int, system_id: string, version: string, revision: string, platform: string, architecture: string, created_at: string, contacted_at: string, ip_address: string, status: string, job_execution_status: string>, artifacts_expire_at: string, archived: bool, tag_list: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -8062,7 +8061,7 @@ export def "projects-runners get" [
   --allow-errors(-e) # Return full response without error handling
   --scope: string@scope-completer-3 # Deprecated: Use `type` or `status` instead. The scope of runners to return
   --type: string@type-completer # The type of runners to return
-  --paused: string@bool-completer # Whether to include only runners that are accepting or ignoring new jobs
+  --paused: oneof<nothing, bool> # Whether to include only runners that are accepting or ignoring new jobs
   --status: string@status-completer # The status of runners to return
   --tag-list: list # A list of runner tags (e.g. [macos, shell])
   --version-prefix: string # The version prefix of runners to return (e.g. 15.1.)
@@ -8289,7 +8288,7 @@ export def "projects-pipelines list" [
   --status: string@status-completer-2 # The status of pipelines (e.g. pending)
   --ref: string # The ref of pipelines (e.g. develop)
   --sha: string # The sha of pipelines (e.g. a91957a858320c0e17f3a0eca7cfacbff50ea29a)
-  --yaml-errors: string@bool-completer # Returns pipelines with invalid configurations
+  --yaml-errors: oneof<nothing, bool> # Returns pipelines with invalid configurations
   --username: string # The username of the user who triggered pipelines (e.g. root)
   --updated-before: string # Return pipelines updated before the specified datetime. Format: ISO 8601 YYYY-MM-DDTHH:MM:SSZ (format: date-time, e.g. 2015-12-24T15:51:21.880Z)
   --updated-after: string # Return pipelines updated after the specified datetime. Format: ISO 8601 YYYY-MM-DDTHH:MM:SSZ (format: date-time, e.g. 2015-12-24T15:51:21.880Z)
@@ -8422,7 +8421,7 @@ export def "projects-pipelines-jobs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-retried: string@bool-completer # Includes retried jobs (default: false)
+  --include-retried: oneof<nothing, bool> # Includes retried jobs (default: false)
   --scope: string@scope-completer-5 # The scope of builds to show (e.g. [pending, running])
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
@@ -8649,7 +8648,7 @@ export def "projects-pipeline-schedules post" [
   ref: string # The branch/tag name will be triggered (e.g. develop)
   cron: string # The cron (e.g. * * * * *)
   --cron-timezone: string # The timezone (default: UTC, e.g. Asia/Tokyo)
-  --active: string@bool-completer # The activation of pipeline schedule (default: true, e.g. true)
+  --active: oneof<nothing, bool> # The activation of pipeline schedule (default: true, e.g. true)
   --inputs: list # Inputs for the pipeline schedule (e.g. [{name: array_input, value: [1, 2]}, {name: boolean_input, value: true}]) — item shape: {name: string, value: string}
 ]: any -> record<id: int, description: string, ref: string, cron: string, cron_timezone: string, next_run_at: string, active: bool, created_at: string, updated_at: string, owner: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, inputs: record<name: string, value: string>, last_pipeline: record<id: int, iid: int, project_id: int, sha: string, ref: string, status: string, source: string, created_at: string, updated_at: string, web_url: string>, variables: record<variable_type: string, key: string, value: string, hidden: bool, protected: bool, masked: bool, raw: bool, environment_scope: string, description: string>> {
   let input = $in
@@ -8705,7 +8704,7 @@ export def "projects-pipeline-schedules put" [
   --ref: string # The branch/tag name will be triggered (e.g. develop)
   --cron: string # The cron (e.g. * * * * *)
   --cron-timezone: string # The timezone (e.g. Asia/Tokyo)
-  --active: string@bool-completer # The activation of pipeline schedule (e.g. true)
+  --active: oneof<nothing, bool> # The activation of pipeline schedule (e.g. true)
   --inputs: list # Inputs for the pipeline schedule (e.g. [{name: deploy_strategy, value: blue-green}]) — item shape: {name: string, destroy?: bool, value: string}
 ]: any -> record<id: int, description: string, ref: string, cron: string, cron_timezone: string, next_run_at: string, active: bool, created_at: string, updated_at: string, owner: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, inputs: record<name: string, value: string>, last_pipeline: record<id: int, iid: int, project_id: int, sha: string, ref: string, status: string, source: string, created_at: string, updated_at: string, web_url: string>, variables: record<variable_type: string, key: string, value: string, hidden: bool, protected: bool, masked: bool, raw: bool, environment_scope: string, description: string>> {
   let input = $in
@@ -9121,10 +9120,10 @@ export def "projects-variables post" [
   --allow-errors(-e) # Return full response without error handling
   key: string # The key of a variable
   value: string # The value of a variable
-  --protected: string@bool-completer # Whether the variable is protected
-  --masked: string@bool-completer # Whether the variable is masked
-  --masked-and-hidden: string@bool-completer # Whether the variable is masked and hidden
-  --body-raw: string@bool-completer # Whether the variable will be expanded
+  --protected: oneof<nothing, bool> # Whether the variable is protected
+  --masked: oneof<nothing, bool> # Whether the variable is masked
+  --masked-and-hidden: oneof<nothing, bool> # Whether the variable is masked and hidden
+  --body-raw: oneof<nothing, bool> # Whether the variable will be expanded
   --variable-type: string@variable-type-completer # The type of the variable. Default: env_var
   --environment-scope: string # The environment_scope of the variable
   --description: string # The description of the variable
@@ -9181,10 +9180,10 @@ export def "projects-variables put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --value: string # The value of a variable
-  --protected: string@bool-completer # Whether the variable is protected
-  --masked: string@bool-completer # Whether the variable is masked
+  --protected: oneof<nothing, bool> # Whether the variable is protected
+  --masked: oneof<nothing, bool> # Whether the variable is masked
   --environment-scope: string # The environment_scope of a variable
-  --body-raw: string@bool-completer # Whether the variable will be expanded
+  --body-raw: oneof<nothing, bool> # Whether the variable will be expanded
   --variable-type: string@variable-type-completer # The type of the variable. Default: env_var
   --filter: record # Available filters: [environment_scope]. Example: filter[environment_scope]=production — shape: {environment_scope?: string}
   --description: string # The description of the variable
@@ -9488,13 +9487,13 @@ export def "projects-repository-commits list" [
   --since: string # Only commits after or on this date will be returned (format: date-time, e.g. 2021-09-20T11:50:22.001Z)
   --until: string # Only commits before or on this date will be returned (format: date-time, e.g. 2021-09-20T11:50:22.001Z)
   --path: string # The file path (e.g. README.md)
-  --follow: string@bool-completer # Follow file renames when filtering by path
+  --follow: oneof<nothing, bool> # Follow file renames when filtering by path
   --author: string # Search commits by commit author (e.g. John Smith)
-  --all: string@bool-completer # Every commit will be returned
-  --with-stats: string@bool-completer # Stats about each commit will be added to the response
-  --first-parent: string@bool-completer # Only include the first parent of merges
+  --all: oneof<nothing, bool> # Every commit will be returned
+  --with-stats: oneof<nothing, bool> # Stats about each commit will be added to the response
+  --first-parent: oneof<nothing, bool> # Only include the first parent of merges
   --order: string@order-completer # List commits in order (default: default)
-  --trailers: string@bool-completer # Parse and include Git trailers for every commit (default: false)
+  --trailers: oneof<nothing, bool> # Parse and include Git trailers for every commit (default: false)
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
 ]: nothing -> table<id: string, short_id: string, created_at: string, parent_ids: list<string>, title: string, message: string, author_name: string, author_email: string, authored_date: string, committer_name: string, committer_email: string, committed_date: string, trailers: record, extended_trailers: record, web_url: string> {
@@ -9547,7 +9546,7 @@ export def "projects-repository-commits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --stats: string@bool-completer # Include commit stats (default: true)
+  --stats: oneof<nothing, bool> # Include commit stats (default: true)
 ]: nothing -> record<id: string, short_id: string, created_at: string, parent_ids: list<string>, title: string, message: string, author_name: string, author_email: string, authored_date: string, committer_name: string, committer_email: string, committed_date: string, trailers: record, extended_trailers: record, web_url: string, stats: record<additions: int, deletions: int, total: int>, status: string, project_id: int, last_pipeline: record<id: int, iid: int, project_id: int, sha: string, ref: string, status: string, source: string, created_at: string, updated_at: string, web_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -9574,7 +9573,7 @@ export def "projects-repository-commits-diff get" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --unidiff: string@bool-completer # A diff in a Unified diff format (default: false)
+  --unidiff: oneof<nothing, bool> # A diff in a Unified diff format (default: false)
 ]: nothing -> table<diff: string, collapsed: bool, too_large: bool, new_path: string, old_path: string, a_mode: string, b_mode: string, new_file: bool, renamed_file: bool, deleted_file: bool, generated_file: bool> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -9655,7 +9654,7 @@ export def "projects-repository-commits-sequence get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --first-parent: string@bool-completer # Only include the first parent of merges (default: false)
+  --first-parent: oneof<nothing, bool> # Only include the first parent of merges (default: false)
 ]: nothing -> record<count: int> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -9681,7 +9680,7 @@ export def "projects-repository-commits-cherry-pick post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   branch: string # The name of the branch (e.g. master)
-  --dry-run: string@bool-completer # Does not commit any changes (default: false)
+  --dry-run: oneof<nothing, bool> # Does not commit any changes (default: false)
   --message: string # A custom commit message to use for the picked commit (e.g. Initial commit)
 ]: any -> record<id: string, short_id: string, created_at: string, parent_ids: list<string>, title: string, message: string, author_name: string, author_email: string, authored_date: string, committer_name: string, committer_email: string, committed_date: string, trailers: record, extended_trailers: record, web_url: string> {
   let input = $in
@@ -9710,7 +9709,7 @@ export def "projects-repository-commits-revert post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   branch: string # Target branch name (e.g. master)
-  --dry-run: string@bool-completer # Does not commit any changes (default: false)
+  --dry-run: oneof<nothing, bool> # Does not commit any changes (default: false)
 ]: any -> record<id: string, short_id: string, created_at: string, parent_ids: list<string>, title: string, message: string, author_name: string, author_email: string, authored_date: string, committer_name: string, committer_email: string, committed_date: string, trailers: record, extended_trailers: record, web_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -9818,7 +9817,7 @@ export def "projects-repository-commits-statuses get" [
   --stage: string # Filter statuses by build stage. (e.g. test)
   --name: string # Filter statuses by job name. (e.g. bundler:audit)
   --pipeline-id: int # Filter statuses by pipeline ID. (format: int32, e.g. 1234)
-  --all: string@bool-completer # Include all statuses instead of latest only. Default is `false`. (default: false)
+  --all: oneof<nothing, bool> # Include all statuses instead of latest only. Default is `false`. (default: false)
   --order-by: string@order-by-completer-7 # Values for sorting statuses. Valid values are `id` and `pipeline_id`. Default is `id`. (default: id)
   --qp-sort: string@sort-completer # Sort statuses in ascending or descending order. Valid values are `asc` and `desc`. Default is `asc`. (default: asc)
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
@@ -9977,7 +9976,7 @@ export def "projects-packages-conan-conans-search get-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --q: string # Search query (e.g. Hello*)
-  --ignorecase: string@bool-completer # Ignore case when searching (case-insensitive search)
+  --ignorecase: oneof<nothing, bool> # Ignore case when searching (case-insensitive search)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -10514,7 +10513,7 @@ export def "projects-packages-conan-conans-search get-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --q: string # Search query (e.g. Hello*)
-  --ignorecase: string@bool-completer # Ignore case when searching (case-insensitive search)
+  --ignorecase: oneof<nothing, bool> # Ignore case when searching (case-insensitive search)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -11333,7 +11332,7 @@ export def "projects-deploy-keys post" [
   --allow-errors(-e) # Return full response without error handling
   key: string # New deploy key
   title: string # New deploy key's title
-  --can-push: string@bool-completer # Can deploy key push to the project's repository
+  --can-push: oneof<nothing, bool> # Can deploy key push to the project's repository
   --expires-at: string # The expiration date of the SSH key in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ) (format: date-time)
 ]: any -> record<id: int, title: string, created_at: string, expires_at: string, last_used_at: string, key: string, usage_type: string, fingerprint: string, fingerprint_sha256: string, projects_with_write_access: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string>, projects_with_readonly_access: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string>, can_push: bool> {
   let input = $in
@@ -11385,7 +11384,7 @@ export def "projects-deploy-keys put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --title: string # New deploy key's title
-  --can-push: string@bool-completer # Can deploy key push to the project's repository
+  --can-push: oneof<nothing, bool> # Can deploy key push to the project's repository
 ]: any -> record<id: int, title: string, created_at: string, expires_at: string, last_used_at: string, key: string, usage_type: string, fingerprint: string, fingerprint_sha256: string, projects_with_write_access: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string>, projects_with_readonly_access: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -11459,7 +11458,7 @@ export def "projects-deploy-tokens list" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --active: string@bool-completer # Limit by active status
+  --active: oneof<nothing, bool> # Limit by active status
 ]: nothing -> table<id: int, name: string, username: string, expires_at: string, scopes: list<any>, revoked: bool, expired: bool> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -11594,7 +11593,7 @@ export def "projects-deployments post" [
   environment: string # The name of the environment to create the deployment for
   sha: string # The SHA of the commit that is deployed
   ref: string # The name of the branch or tag that is deployed
-  --tag: string@bool-completer # A boolean that indicates if the deployed ref is a tag (`true`) or not (`false`)
+  --tag: oneof<nothing, bool> # A boolean that indicates if the deployed ref is a tag (`true`) or not (`false`)
   status: string@status-completer-4 # The status of the deployment that is created. One of `running`, `success`, `failed`, or `canceled`
 ]: any -> record<id: int, iid: int, ref: string, sha: string, created_at: string, updated_at: string, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, environment: record<id: int, name: string, slug: string, external_url: string, created_at: string, updated_at: string>, deployable: record<id: int, status: string, stage: string, name: string, ref: string, tag: bool, coverage: float, allow_failure: bool, created_at: string, started_at: string, finished_at: string, erased_at: string, duration: float, queued_duration: float, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string, created_at: string, bio: string, location: string, linkedin: string, twitter: string, discord: string, website_url: string, github: string, job_title: string, pronouns: string, organization: string, bot: bool, work_information: string, followers: string, following: string, is_followed: string, local_time: string>, commit: record<id: string, short_id: string, created_at: string, parent_ids: list, title: string, message: string, author_name: string, author_email: string, authored_date: string, committer_name: string, committer_email: string, committed_date: string, trailers: record, extended_trailers: record, web_url: string>, pipeline: record<id: int, iid: int, project_id: int, sha: string, ref: string, status: string, source: string, created_at: string, updated_at: string, web_url: string>, failure_reason: string, web_url: string, project: record<ci_job_token_scope_enabled: string>, artifacts_file: record<filename: string, size: int>, artifacts: list<record>, runner: record<id: int, description: string, ip_address: string, active: bool, paused: bool, is_shared: bool, runner_type: string, name: string, online: bool, created_by: record, created_at: string, status: string, job_execution_status: string>, runner_manager: record<id: int, system_id: string, version: string, revision: string, platform: string, architecture: string, created_at: string, contacted_at: string, ip_address: string, status: string, job_execution_status: string>, artifacts_expire_at: string, archived: bool, tag_list: list<string>>, status: string, pending_approval_count: int, approvals: record<user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, status: string, created_at: string, comment: string>, approval_summary: record<rules: record<id: int, user_id: int, group_id: int, access_level: int, access_level_description: string, required_approvals: int, group_inheritance_type: int, deployment_approvals: record>>> {
   let input = $in
@@ -11709,8 +11708,8 @@ export def "projects-deployments-merge-requests get" [
   --state: string@state-completer-2 # Returns `all` merge requests or just those that are `opened`, `closed`, `locked`, or `merged`. (default: all)
   --order-by: string@order-by-completer-5 # Returns merge requests ordered by `created_at`, `label_priority`, `milestone_due`, `popularity`, `priority`, `title`, `updated_at` or `merged_at` fields. Introduced in GitLab 14.8. (default: created_at)
   --qp-sort: string@sort-completer # Returns merge requests sorted in `asc` or `desc` order. (default: desc)
-  --with-labels-details: string@bool-completer # If `true`, response returns more details for each label in labels field: `:name`,`:color`, `:description`, `:description_html`, `:text_color` (default: false)
-  --with-merge-status-recheck: string@bool-completer # If `true`, this projection requests (but does not guarantee) that the `merge_status` field be recalculated asynchronously. Introduced in GitLab 13.0. (default: false)
+  --with-labels-details: oneof<nothing, bool> # If `true`, response returns more details for each label in labels field: `:name`,`:color`, `:description`, `:description_html`, `:text_color` (default: false)
+  --with-merge-status-recheck: oneof<nothing, bool> # If `true`, this projection requests (but does not guarantee) that the `merge_status` field be recalculated asynchronously. Introduced in GitLab 13.0. (default: false)
   --created-after: string # Returns merge requests created on or after the given time. Expected in ISO 8601 format. (format: date-time, e.g. 2019-03-15T08:00:00Z)
   --created-before: string # Returns merge requests created on or before the given time. Expected in ISO 8601 format. (format: date-time, e.g. 2019-03-15T08:00:00Z)
   --updated-after: string # Returns merge requests updated on or after the given time. Expected in ISO 8601 format. (format: date-time, e.g. 2019-03-15T08:00:00Z)
@@ -11723,7 +11722,7 @@ export def "projects-deployments-merge-requests get" [
   --search: string # Search merge requests against their `title` and `description`.
   --in-param: string # Modify the scope of the search attribute. `title`, `description`, or a string joining them with comma. (e.g. title,description)
   --wip: string@wip-completer # Deprecated. Use `draft` instead. Filter merge requests against their `wip` status. `yes` to return only draft merge requests, `no` to return non-draft merge requests.
-  --draft: string@bool-completer # Filter merge requests against their `draft` status. `true` to return only draft merge requests, `false` to return non-draft merge requests.
+  --draft: oneof<nothing, bool> # Filter merge requests against their `draft` status. `true` to return only draft merge requests, `false` to return non-draft merge requests.
   --notauthor-id: int # `<Negated>` Returns merge requests created by the given user `id`. Mutually exclusive with `author_username`. Combine with `scope=all` or `scope=assigned_to_me`. (format: int32)
   --notauthor-username: string # `<Negated>` Returns merge requests created by the given `username`. Mutually exclusive with `author_id`.
   --notassignee-id: int # `<Negated>` Returns merge requests assigned to the given user `id`. `None` returns unassigned merge requests. `Any` returns merge requests with an assignee. (format: int32)
@@ -11818,7 +11817,7 @@ export def "projects-merge-requests-draft-notes post" [
   note: string # The content of a note.
   --in-reply-to-discussion-id: string # The ID of a discussion the draft note replies to.
   --commit-id: string # The sha of a commit to associate the draft note to.
-  --resolve-discussion: string@bool-completer # The associated discussion should be resolved.
+  --resolve-discussion: oneof<nothing, bool> # The associated discussion should be resolved.
   --position: record # Position when creating a note — shape: {base_sha: string, start_sha: string, head_sha: string, position_type: "text"|"image"|"file", new_path?: string, new_line?: int, old_path?: string, old_line?: int, width?: int, height?: int, x?: int, y?: int, line_range?: record}
 ]: any -> record<id: int, author_id: int, merge_request_id: int, resolve_discussion: bool, discussion_id: int, note: string, commit_id: int, line_code: string, position: record> {
   let input = $in
@@ -12112,7 +12111,7 @@ export def "projects-environments-review-apps delete" [
   --allow-errors(-e) # Return full response without error handling
   --before: string # The date before which environments can be deleted. Defaults to 30 days ago. Expected in ISO 8601 format (`YYYY-MM-DDTHH:MM:SSZ`) (format: date-time, default: {})
   --limit: int # Maximum number of environments to delete. Defaults to 100 (format: int32, default: 100)
-  --dry-run: string@bool-completer # Defaults to true for safety reasons. It performs a dry run where no actual deletion will be performed. Set to false to actually delete the environment (default: true)
+  --dry-run: oneof<nothing, bool> # Defaults to true for safety reasons. It performs a dry run where no actual deletion will be performed. Set to false to actually delete the environment (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -12137,7 +12136,7 @@ export def "projects-environments-stop post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # Force environment to stop without executing `on_stop` actions (default: false)
+  --force: oneof<nothing, bool> # Force environment to stop without executing `on_stop` actions (default: false)
 ]: any -> record<id: int, name: string, slug: string, external_url: string, created_at: string, updated_at: string, tier: string, project: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string>, last_deployment: record<id: int, iid: int, ref: string, sha: string, created_at: string, updated_at: string, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, environment: record<id: int, name: string, slug: string, external_url: string, created_at: string, updated_at: string>, deployable: record<id: int, status: string, stage: string, name: string, ref: string, tag: bool, coverage: float, allow_failure: bool, created_at: string, started_at: string, finished_at: string, erased_at: string, duration: float, queued_duration: float, user: record, commit: record, pipeline: record, failure_reason: string, web_url: string, project: record, artifacts_file: record, artifacts: list, runner: record, runner_manager: record, artifacts_expire_at: string, archived: bool, tag_list: list>, status: string>, state: string, auto_stop_at: string, cluster_agent: record<id: string, name: string, config_project: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string>, created_at: string, created_by_user_id: string, is_receptive: string>, kubernetes_namespace: string, flux_resource_path: string, description: string, auto_stop_setting: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -12278,8 +12277,8 @@ export def "projects-error-tracking-settings patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Pass true to enable the already configured Error Tracking settings or false to disable it.
-  --integrated: string@bool-completer # Pass true to enable the integrated Error Tracking backend. Available in GitLab 14.2 and later.
+  --active: oneof<nothing, bool> # Pass true to enable the already configured Error Tracking settings or false to disable it.
+  --integrated: oneof<nothing, bool> # Pass true to enable the integrated Error Tracking backend. Available in GitLab 14.2 and later.
 ]: any -> record<active: bool, project_name: string, sentry_external_url: string, api_url: string, integrated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -12305,8 +12304,8 @@ export def "projects-error-tracking-settings put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Pass true to enable the configured Error Tracking settings or false to disable it.
-  --integrated: string@bool-completer # Pass true to enable the integrated Error Tracking backend.
+  --active: oneof<nothing, bool> # Pass true to enable the configured Error Tracking settings or false to disable it.
+  --integrated: oneof<nothing, bool> # Pass true to enable the integrated Error Tracking backend.
 ]: any -> record<active: bool, project_name: string, sentry_external_url: string, api_url: string, integrated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -12361,7 +12360,7 @@ export def "projects-feature-flags post" [
   --allow-errors(-e) # Return full response without error handling
   name: string # The name of the feature flag
   --description: string # The description of the feature flag
-  --active: string@bool-completer # The active state of the flag. Defaults to `true`. Supported in GitLab 13.3 and later
+  --active: oneof<nothing, bool> # The active state of the flag. Defaults to `true`. Supported in GitLab 13.3 and later
   --version: string # The version of the feature flag. Must be `new_version_flag`. Omit to create a Legacy feature flag.
   --strategies: list # Array of feature flag strategies — item shape: {name: string, parameters?: string, user_list_id?: int, scopes?: list}
 ]: any -> record<name: string, description: string, active: bool, version: string, created_at: string, updated_at: string, scopes: list<any>, strategies: record<id: int, name: string, parameters: string, scopes: record<id: int, environment_scope: string>, user_list: record<id: int, iid: int, name: string, user_xids: string>>> {
@@ -12416,7 +12415,7 @@ export def "projects-feature-flags put" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # The new name of the feature flag. Supported in GitLab 13.3 and later
   --description: string # The description of the feature flag
-  --active: string@bool-completer # The active state of the flag. Supported in GitLab 13.3 and later
+  --active: oneof<nothing, bool> # The active state of the flag. Supported in GitLab 13.3 and later
   --strategies: list # Array of feature flag strategies — item shape: {id?: int, name?: string, parameters?: string, user_list_id?: int, _destroy?: bool, scopes?: list}
 ]: any -> record<name: string, description: string, active: bool, version: string, created_at: string, updated_at: string, scopes: list<any>, strategies: record<id: int, name: string, parameters: string, scopes: record<id: int, environment_scope: string>, user_list: record<id: int, iid: int, name: string, user_xids: string>>> {
   let input = $in
@@ -12647,7 +12646,7 @@ export def "projects-repository-files-raw get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ref: string # The name of branch, tag or commit (e.g. main)
-  --lfs: string@bool-completer # Retrieve binary data for a file that is an lfs pointer (default: false)
+  --lfs: oneof<nothing, bool> # Retrieve binary data for a file that is an lfs pointer (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -13244,8 +13243,8 @@ export def "projects-services-apple-app-store put" [
   app_store_key_id: string # Apple App Store Connect key ID.
   app_store_private_key_file_name: string # Apple App Store Connect private key file name.
   app_store_private_key: string # Apple App Store Connect private key.
-  --app-store-protected-refs: string@bool-completer # Set variables on protected branches and tags only.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --app-store-protected-refs: oneof<nothing, bool> # Set variables on protected branches and tags only.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -13273,8 +13272,8 @@ export def "projects-services-asana put" [
   --allow-errors(-e) # Return full response without error handling
   api_key: string # User API token. The user must have access to the task. All comments are attributed to this user.
   --restrict-to-branch: string # Comma-separated list of branches to be automatically inspected. Leave blank to include all branches.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -13302,8 +13301,8 @@ export def "projects-services-assembla put" [
   --allow-errors(-e) # Return full response without error handling
   --body-token: string # The authentication token.
   --subdomain: string # The subdomain setting.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -13329,13 +13328,13 @@ export def "projects-services-bamboo put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-ssl-verification: string@bool-completer # Enable SSL verification. Defaults to `true` (enabled).
+  --enable-ssl-verification: oneof<nothing, bool> # Enable SSL verification. Defaults to `true` (enabled).
   bamboo_url: string # Bamboo root URL (for example, `https://bamboo.example.com`).
   build_key: string # Bamboo build plan key (for example, `KEY`).
   username: string # User with API access to the Bamboo server.
   password: string # Password of the user.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -13364,8 +13363,8 @@ export def "projects-services-bugzilla put" [
   project_url: string # URL of the project.
   issues_url: string # URL of the issue.
   new_issue_url: string # URL of the new issue.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -13393,11 +13392,11 @@ export def "projects-services-buildkite put" [
   --allow-errors(-e) # Return full response without error handling
   project_url: string # Pipeline URL (for example, `https://buildkite.com/example/pipeline`).
   --body-token: string # Token you get after you create a Buildkite pipeline with a GitLab repository.
-  --enable-ssl-verification: string@bool-completer # DEPRECATED: This parameter has no effect because SSL verification is always enabled.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --enable-ssl-verification: oneof<nothing, bool> # DEPRECATED: This parameter has no effect because SSL verification is always enabled.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -13426,8 +13425,8 @@ export def "projects-services-campfire put" [
   --body-token: string # API authentication token from Campfire. To get the token, sign in to Campfire and select **My info**.
   --subdomain: string # `.campfirenow.com` subdomain when you're signed in.
   --room: string # ID portion of the Campfire room URL.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -13454,7 +13453,7 @@ export def "projects-services-confluence put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   confluence_url: string # URL of the Confluence Workspace hosted on `atlassian.net`.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -13483,8 +13482,8 @@ export def "projects-services-custom-issue-tracker put" [
   project_url: string # URL of the project.
   issues_url: string # URL of the issue.
   new_issue_url: string # URL of the new issue.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -13513,20 +13512,20 @@ export def "projects-services-datadog put" [
   --datadog-site: string # Datadog site to send data to. Learn more about Datadog sites in the <a target="_blank" rel="noopener noreferrer" href="https://docs.datadoghq.com/getting_started/site/">documentation</a>.
   --api-url: string # Full URL of your Datadog site. Only required if you do not use a standard Datadog site.
   api_key: string # <a target="_blank" rel="noopener noreferrer" href="https://docs.datadoghq.com/account_management/api-app-keys/">API key</a> used for authentication with Datadog.
-  --datadog-ci-visibility: string@bool-completer # Enable CI Visibility
-  --archive-trace-events: string@bool-completer # When enabled, job logs are collected by Datadog and displayed along with pipeline execution traces.
+  --datadog-ci-visibility: oneof<nothing, bool> # Enable CI Visibility
+  --archive-trace-events: oneof<nothing, bool> # When enabled, job logs are collected by Datadog and displayed along with pipeline execution traces.
   --datadog-service: string # Tag all pipeline data from this GitLab instance in Datadog. Can be used when managing several self-managed deployments.
   --datadog-env: string # For self-managed deployments, `env` tag for all the data sent to Datadog.
   --datadog-tags: string # Custom tags in Datadog. Specify one tag per line in the format `key:value\nkey2:value2`.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --build-events: string@bool-completer # Trigger event when a build is created.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --subgroup-events: string@bool-completer
-  --project-events: string@bool-completer
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --build-events: oneof<nothing, bool> # Trigger event when a build is created.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --subgroup-events: oneof<nothing, bool>
+  --project-events: oneof<nothing, bool>
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -13555,7 +13554,7 @@ export def "projects-services-diffblue-cover put" [
   diffblue_license_key: string # Diffblue Cover license key.
   diffblue_access_token_name: string # Access token name used by Diffblue Cover in pipelines.
   diffblue_access_token_secret: string # Access token secret used by Diffblue Cover in pipelines.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -13582,8 +13581,8 @@ export def "projects-services-discord put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   webhook: string # Discord webhook (for example, `https://discord.com/api/webhooks/…`).
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
   --push-channel: string # The name of the channel to receive push_events notifications
   --issue-channel: string # The name of the channel to receive issues_events notifications
@@ -13598,19 +13597,19 @@ export def "projects-services-discord put" [
   --pipeline-channel: string # The name of the channel to receive pipeline_events notifications
   --wiki-page-channel: string # The name of the channel to receive wiki_page_events notifications
   --vulnerability-channel: string # The name of the channel to receive vulnerability_events notifications
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --deployment-events: string@bool-completer # Trigger event when a deployment starts or finishes.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --deployment-events: oneof<nothing, bool> # Trigger event when a deployment starts or finishes.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -13636,13 +13635,13 @@ export def "projects-services-drone-ci put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-ssl-verification: string@bool-completer # Enable SSL verification. Defaults to `true` (enabled).
+  --enable-ssl-verification: oneof<nothing, bool> # Enable SSL verification. Defaults to `true` (enabled).
   drone_url: string # Drone CI URL (for example, `http://drone.example.com`).
   --body-token: string # Drone CI token.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -13668,13 +13667,13 @@ export def "projects-services-emails-on-push put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --send-from-committer-email: string@bool-completer # Send from committer
-  --disable-diffs: string@bool-completer # Disable code diffs
+  --send-from-committer-email: oneof<nothing, bool> # Send from committer
+  --disable-diffs: oneof<nothing, bool> # Disable code diffs
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
   recipients: string # Emails separated by whitespace.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -13701,7 +13700,7 @@ export def "projects-services-external-wiki put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   external_wiki_url: string # URL of the external wiki.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -13728,8 +13727,8 @@ export def "projects-services-gitlab-slack-application put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --channel: string # Default channel to use if no other channel is configured.
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
   --labels-to-be-notified: string # Labels to send notifications for. Leave blank to receive notifications for all events.
   --labels-to-be-notified-behavior: string # Labels to be notified for. Valid options are `match_any` and `match_all`. The default value is `match_any`.
@@ -13746,22 +13745,22 @@ export def "projects-services-gitlab-slack-application put" [
   --pipeline-channel: string # The name of the channel to receive pipeline_events notifications
   --wiki-page-channel: string # The name of the channel to receive wiki_page_events notifications
   --vulnerability-channel: string # The name of the channel to receive vulnerability_events notifications
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --deployment-events: string@bool-completer # Trigger event when a deployment starts or finishes.
-  --incident-events: string@bool-completer # Trigger event when an incident is created.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --vulnerability-events: string@bool-completer
-  --alert-events: string@bool-completer # Trigger event when a new, unique alert is recorded.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --deployment-events: oneof<nothing, bool> # Trigger event when a deployment starts or finishes.
+  --incident-events: oneof<nothing, bool> # Trigger event when an incident is created.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --vulnerability-events: oneof<nothing, bool>
+  --alert-events: oneof<nothing, bool> # Trigger event when a new, unique alert is recorded.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -13790,8 +13789,8 @@ export def "projects-services-google-play put" [
   package_name: string # Package name of the app in Google Play.
   service_account_key_file_name: string # File name of the Google Play service account key.
   service_account_key: string # Google Play service account key.
-  --google-play-protected-refs: string@bool-completer # Set variables on protected branches and tags only.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --google-play-protected-refs: oneof<nothing, bool> # Set variables on protected branches and tags only.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -13818,21 +13817,21 @@ export def "projects-services-hangouts-chat put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   webhook: string # The Hangouts Chat webhook (for example, `https://chat.googleapis.com/v1/spaces...`).
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -13862,7 +13861,7 @@ export def "projects-services-harbor put" [
   project_name: string # The name of the project in the Harbor instance. For example, `testproject`.
   username: string # The username created in the Harbor interface.
   password: string # The password of the user.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -13892,9 +13891,9 @@ export def "projects-services-irker put" [
   --server-port: int # irker daemon port. The default value is `6659`. (format: int32)
   --default-irc-uri: string # URI to add before each recipient. The default value is `irc://irc.network.net:6697/`.
   recipients: string # Comma-separated list of channels or email addresses.
-  --colorize-messages: string@bool-completer # Colorize messages
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --colorize-messages: oneof<nothing, bool> # Colorize messages
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -13920,15 +13919,15 @@ export def "projects-services-jenkins put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-ssl-verification: string@bool-completer # Enable SSL verification. Defaults to `true` (enabled).
+  --enable-ssl-verification: oneof<nothing, bool> # Enable SSL verification. Defaults to `true` (enabled).
   jenkins_url: string # URL of the Jenkins server.
   project_name: string # Name of the Jenkins project.
   --username: string # Username of the Jenkins server.
   --password: string # Password of the Jenkins server.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -13964,19 +13963,19 @@ export def "projects-services-jira put" [
   --jira-issue-transition-id: string # The ID of one or more transitions for [custom issue transitions](../integration/jira/issues.md#custom-issue-transitions).Ignored when `jira_issue_transition_automatic` is enabled. Defaults to a blank string,which disables custom transitions.
   --issues-enabled: string # Enable viewing Jira issues in GitLab.
   --project-keys: list # Keys of Jira projects to display. When `issues_enabled` is `true`, this setting filters which Jira projects are shown in GitLab. It does not restrict the API token's access.
-  --vulnerabilities-enabled: string@bool-completer # Turn on Jira issue creation for GitLab vulnerabilities.
+  --vulnerabilities-enabled: oneof<nothing, bool> # Turn on Jira issue creation for GitLab vulnerabilities.
   --vulnerabilities-issuetype: string # Jira issue type to use when creating issues from vulnerabilities.
   --project-key: string # Key of the project to use when creating issues from vulnerabilities.This parameter is required if using the integration to create Jira issues from vulnerabilities.
-  --customize-jira-issue-enabled: string@bool-completer # When set to `true`, opens a prefilled form on the Jira instancewhen creating a Jira issue from a vulnerability.
-  --jira-check-enabled: string@bool-completer # Verify Jira issues referenced in commit messages exist before allowing the push.
-  --jira-exists-check-enabled: string@bool-completer # Verify the Jira issues referenced in commit messages exist in Jira.
-  --jira-assignee-check-enabled: string@bool-completer # Verify the committer is the assignee of the Jira issues referenced in commit messages.
-  --jira-status-check-enabled: string@bool-completer # Verify the status of Jira issues referenced in commit messages.
+  --customize-jira-issue-enabled: oneof<nothing, bool> # When set to `true`, opens a prefilled form on the Jira instancewhen creating a Jira issue from a vulnerability.
+  --jira-check-enabled: oneof<nothing, bool> # Verify Jira issues referenced in commit messages exist before allowing the push.
+  --jira-exists-check-enabled: oneof<nothing, bool> # Verify the Jira issues referenced in commit messages exist in Jira.
+  --jira-assignee-check-enabled: oneof<nothing, bool> # Verify the committer is the assignee of the Jira issues referenced in commit messages.
+  --jira-status-check-enabled: oneof<nothing, bool> # Verify the status of Jira issues referenced in commit messages.
   --jira-allowed-statuses-as-string: string # Comma-separated list of allowed Jira issue statuses.
-  --comment-on-event-enabled: string@bool-completer # Enable comments inside Jira issues on each GitLab event (commit / merge request)
-  --commit-events: string@bool-completer # Trigger event when a commit is created or updated.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --comment-on-event-enabled: oneof<nothing, bool> # Enable comments inside Jira issues on each GitLab event (commit / merge request)
+  --commit-events: oneof<nothing, bool> # Trigger event when a commit is created or updated.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14003,9 +14002,9 @@ export def "projects-services-jira-cloud-app put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --jira-cloud-app-service-ids: string # Copy and paste your JSM Service ID here. Use comma (,) to separate multiple IDs.
-  --jira-cloud-app-enable-deployment-gating: string@bool-completer # Enable to approve or reject blocked GitLab deployments from Jira Service Management.
+  --jira-cloud-app-enable-deployment-gating: oneof<nothing, bool> # Enable to approve or reject blocked GitLab deployments from Jira Service Management.
   --jira-cloud-app-deployment-gating-environments: string # Enter the environment (production,staging,testing,development) where you want to enable deployment gating. Use comma (,) to separate multiple environments.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14032,8 +14031,8 @@ export def "projects-services-linear put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   workspace_url: string # Linear workspace URL (for example, https://linear.app/example)
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14062,23 +14061,23 @@ export def "projects-services-matrix put" [
   --hostname: string # Custom hostname of the Matrix server. The default value is `https://matrix-client.matrix.org`.
   --body-token: string # The Matrix access token (for example, `syt-zyx57W2v1u123ew11`).
   room: string # Unique identifier for the target room (in the format `!qPKKM111FFKKsfoCVy:matrix.org`).
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --incident-events: string@bool-completer # Trigger event when an incident is created.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --vulnerability-events: string@bool-completer
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --incident-events: oneof<nothing, bool> # Trigger event when an incident is created.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --vulnerability-events: oneof<nothing, bool>
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14105,7 +14104,7 @@ export def "projects-services-mattermost-slash-commands put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-token: string # The Mattermost token.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14134,10 +14133,10 @@ export def "projects-services-packagist put" [
   username: string # Username of a Packagist account.
   --body-token: string # API token of the Packagist server.
   --server: string # URL of the Packagist server. The default value is `https://packagist.org`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14165,8 +14164,8 @@ export def "projects-services-phorge put" [
   --allow-errors(-e) # Return full response without error handling
   project_url: string # URL of the project.
   issues_url: string # URL of the issue.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14193,13 +14192,13 @@ export def "projects-services-pipelines-email put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   recipients: string # Comma-separated list of recipient email addresses.
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
-  --notify-only-default-branch: string@bool-completer # Send notifications for the default branch.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
+  --notify-only-default-branch: oneof<nothing, bool> # Send notifications for the default branch.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --notify-child-pipelines: string@bool-completer # Send notifications for child pipelines.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --notify-child-pipelines: oneof<nothing, bool> # Send notifications for child pipelines.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14227,8 +14226,8 @@ export def "projects-services-pivotaltracker put" [
   --allow-errors(-e) # Return full response without error handling
   --body-token: string # The Pivotal Tracker token.
   --restrict-to-branch: string # Comma-separated list of branches to automatically inspect. Leave blank to include all branches.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14255,21 +14254,21 @@ export def "projects-services-pumble put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   webhook: string # The Pumble webhook (for example, `https://api.pumble.com/workspaces/x/...`).
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14300,8 +14299,8 @@ export def "projects-services-pushover put" [
   --device: string # Leave blank for all active devices.
   priority: string # The priority.
   --sound: string # The sound of the notification.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14330,8 +14329,8 @@ export def "projects-services-redmine put" [
   project_url: string # URL of the project.
   issues_url: string # URL of the issue.
   new_issue_url: string # URL of the new issue.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14360,8 +14359,8 @@ export def "projects-services-ewm put" [
   project_url: string # URL of the project.
   issues_url: string # URL of the issue.
   new_issue_url: string # URL of the new issue.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14389,8 +14388,8 @@ export def "projects-services-youtrack put" [
   --allow-errors(-e) # Return full response without error handling
   project_url: string # URL of the project.
   issues_url: string # URL of the issue.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14418,8 +14417,8 @@ export def "projects-services-clickup put" [
   --allow-errors(-e) # Return full response without error handling
   project_url: string # URL of the project.
   issues_url: string # URL of the issue.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14448,8 +14447,8 @@ export def "projects-services-slack put" [
   webhook: string # Slack notifications webhook (for example, `https://hooks.slack.com/services/...`).
   --username: string # Slack notifications username.
   --channel: string # Default channel to use if no other channel is configured.
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
   --labels-to-be-notified: string # Labels to send notifications for. Leave blank to receive notifications for all events.
   --labels-to-be-notified-behavior: string # Labels to be notified for. Valid options are `match_any` and `match_all`. The default value is `match_any`.
@@ -14466,22 +14465,22 @@ export def "projects-services-slack put" [
   --pipeline-channel: string # The name of the channel to receive pipeline_events notifications
   --wiki-page-channel: string # The name of the channel to receive wiki_page_events notifications
   --vulnerability-channel: string # The name of the channel to receive vulnerability_events notifications
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --deployment-events: string@bool-completer # Trigger event when a deployment starts or finishes.
-  --incident-events: string@bool-completer # Trigger event when an incident is created.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --vulnerability-events: string@bool-completer
-  --alert-events: string@bool-completer # Trigger event when a new, unique alert is recorded.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --deployment-events: oneof<nothing, bool> # Trigger event when a deployment starts or finishes.
+  --incident-events: oneof<nothing, bool> # Trigger event when an incident is created.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --vulnerability-events: oneof<nothing, bool>
+  --alert-events: oneof<nothing, bool> # Trigger event when a new, unique alert is recorded.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14508,21 +14507,21 @@ export def "projects-services-microsoft-teams put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   webhook: string # The Microsoft Teams webhook (for example, `https://outlook.office.com/webhook/...`).
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14551,8 +14550,8 @@ export def "projects-services-mattermost put" [
   webhook: string # Mattermost notifications webhook (for example, `http://mattermost.example.com/hooks/...`).
   --username: string # Mattermost notifications username.
   --channel: string # Default channel to use if no other channel is configured.
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
   --labels-to-be-notified: string # Labels to send notifications for. Leave blank to receive notifications for all events.
   --labels-to-be-notified-behavior: string # Labels to be notified for. Valid options are `match_any` and `match_all`. The default value is `match_any`.
@@ -14569,21 +14568,21 @@ export def "projects-services-mattermost put" [
   --pipeline-channel: string # The name of the channel to receive pipeline_events notifications
   --wiki-page-channel: string # The name of the channel to receive wiki_page_events notifications
   --vulnerability-channel: string # The name of the channel to receive vulnerability_events notifications
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --deployment-events: string@bool-completer # Trigger event when a deployment starts or finishes.
-  --incident-events: string@bool-completer # Trigger event when an incident is created.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --vulnerability-events: string@bool-completer
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --deployment-events: oneof<nothing, bool> # Trigger event when a deployment starts or finishes.
+  --incident-events: oneof<nothing, bool> # Trigger event when an incident is created.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --vulnerability-events: oneof<nothing, bool>
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14609,14 +14608,14 @@ export def "projects-services-teamcity put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-ssl-verification: string@bool-completer # Enable SSL verification. Defaults to `true` (enabled).
+  --enable-ssl-verification: oneof<nothing, bool> # Enable SSL verification. Defaults to `true` (enabled).
   teamcity_url: string # TeamCity root URL (for example, `https://teamcity.example.com`).
   build_type: string # The build configuration ID of the TeamCity project.
   username: string # A user with permissions to trigger a manual build.
   password: string # The password of the user.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14646,23 +14645,23 @@ export def "projects-services-telegram put" [
   --body-token: string # The Telegram bot token (for example, `123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`).
   room: string # Unique identifier for the target chat or the username of the target channel (in the format `@channelusername`).
   --thread: string # Unique identifier for the target message thread (topic in a forum supergroup).
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --incident-events: string@bool-completer # Trigger event when an incident is created.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --vulnerability-events: string@bool-completer
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --incident-events: oneof<nothing, bool> # Trigger event when an incident is created.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --vulnerability-events: oneof<nothing, bool>
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14689,21 +14688,21 @@ export def "projects-services-unify-circuit put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   webhook: string # The Unify Circuit webhook (for example, `https://circuit.com/rest/v2/webhooks/incoming/...`).
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14730,21 +14729,21 @@ export def "projects-services-webex-teams put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   webhook: string # The Webex Teams webhook. For example, https://api.ciscospark.com/v1/webhooks/incoming/...
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14774,7 +14773,7 @@ export def "projects-services-zentao put" [
   --api-url: string # If different from Web URL.
   api_token: string
   zentao_product_xid: string
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14802,9 +14801,9 @@ export def "projects-services-squash-tm put" [
   --allow-errors(-e) # Return full response without error handling
   --body-url: string # URL of the Squash TM webhook.
   --body-token: string # Secret token.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14832,9 +14831,9 @@ export def "projects-services-github put" [
   --allow-errors(-e) # Return full response without error handling
   --body-token: string # GitHub API token with `repo:status` OAuth scope.
   repository_url: string # GitHub repository URL.
-  --static-context: string@bool-completer # Append the hostname of your GitLab instance to the status check name.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --static-context: oneof<nothing, bool> # Append the hostname of your GitLab instance to the status check name.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14862,7 +14861,7 @@ export def "projects-services-git-guardian put" [
   --allow-errors(-e) # Return full response without error handling
   --api-url: string # GitGuardian API base URL. Defaults to https://api.gitguardian.com. Use https://api.eu1.gitguardian.com for the EU region, or the URL of your self-hosted GitGuardian instance. Must use HTTPS.
   --body-token: string # Personal access token to authenticate calls to the GitGuardian API.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14891,7 +14890,7 @@ export def "projects-services-google-cloud-platform-artifact-registry put" [
   artifact_registry_project_id: string # ID of the Google Cloud project.
   artifact_registry_repositories: string # Repository of Artifact Registry.
   artifact_registry_location: string # Location of the Artifact Registry repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14921,7 +14920,7 @@ export def "projects-services-google-cloud-platform-workload-identity-federation
   workload_identity_federation_project_number: string # Google Cloud project number for the Workload Identity Federation.
   workload_identity_pool_id: string # ID of the Workload Identity Pool.
   workload_identity_pool_provider_id: string # ID of the Workload Identity Pool provider.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14947,10 +14946,10 @@ export def "projects-services-mock-ci put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-ssl-verification: string@bool-completer # Enable SSL verification. Defaults to `true` (enabled).
+  --enable-ssl-verification: oneof<nothing, bool> # Enable SSL verification. Defaults to `true` (enabled).
   mock_service_url: string # URL of the Mock CI integration.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -14976,7 +14975,7 @@ export def "projects-services-mock-monitoring put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15100,8 +15099,8 @@ export def "projects-integrations-apple-app-store put" [
   app_store_key_id: string # Apple App Store Connect key ID.
   app_store_private_key_file_name: string # Apple App Store Connect private key file name.
   app_store_private_key: string # Apple App Store Connect private key.
-  --app-store-protected-refs: string@bool-completer # Set variables on protected branches and tags only.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --app-store-protected-refs: oneof<nothing, bool> # Set variables on protected branches and tags only.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15129,8 +15128,8 @@ export def "projects-integrations-asana put" [
   --allow-errors(-e) # Return full response without error handling
   api_key: string # User API token. The user must have access to the task. All comments are attributed to this user.
   --restrict-to-branch: string # Comma-separated list of branches to be automatically inspected. Leave blank to include all branches.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15158,8 +15157,8 @@ export def "projects-integrations-assembla put" [
   --allow-errors(-e) # Return full response without error handling
   --body-token: string # The authentication token.
   --subdomain: string # The subdomain setting.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15185,13 +15184,13 @@ export def "projects-integrations-bamboo put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-ssl-verification: string@bool-completer # Enable SSL verification. Defaults to `true` (enabled).
+  --enable-ssl-verification: oneof<nothing, bool> # Enable SSL verification. Defaults to `true` (enabled).
   bamboo_url: string # Bamboo root URL (for example, `https://bamboo.example.com`).
   build_key: string # Bamboo build plan key (for example, `KEY`).
   username: string # User with API access to the Bamboo server.
   password: string # Password of the user.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15220,8 +15219,8 @@ export def "projects-integrations-bugzilla put" [
   project_url: string # URL of the project.
   issues_url: string # URL of the issue.
   new_issue_url: string # URL of the new issue.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15249,11 +15248,11 @@ export def "projects-integrations-buildkite put" [
   --allow-errors(-e) # Return full response without error handling
   project_url: string # Pipeline URL (for example, `https://buildkite.com/example/pipeline`).
   --body-token: string # Token you get after you create a Buildkite pipeline with a GitLab repository.
-  --enable-ssl-verification: string@bool-completer # DEPRECATED: This parameter has no effect because SSL verification is always enabled.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --enable-ssl-verification: oneof<nothing, bool> # DEPRECATED: This parameter has no effect because SSL verification is always enabled.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15282,8 +15281,8 @@ export def "projects-integrations-campfire put" [
   --body-token: string # API authentication token from Campfire. To get the token, sign in to Campfire and select **My info**.
   --subdomain: string # `.campfirenow.com` subdomain when you're signed in.
   --room: string # ID portion of the Campfire room URL.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15310,7 +15309,7 @@ export def "projects-integrations-confluence put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   confluence_url: string # URL of the Confluence Workspace hosted on `atlassian.net`.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15339,8 +15338,8 @@ export def "projects-integrations-custom-issue-tracker put" [
   project_url: string # URL of the project.
   issues_url: string # URL of the issue.
   new_issue_url: string # URL of the new issue.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15369,20 +15368,20 @@ export def "projects-integrations-datadog put" [
   --datadog-site: string # Datadog site to send data to. Learn more about Datadog sites in the <a target="_blank" rel="noopener noreferrer" href="https://docs.datadoghq.com/getting_started/site/">documentation</a>.
   --api-url: string # Full URL of your Datadog site. Only required if you do not use a standard Datadog site.
   api_key: string # <a target="_blank" rel="noopener noreferrer" href="https://docs.datadoghq.com/account_management/api-app-keys/">API key</a> used for authentication with Datadog.
-  --datadog-ci-visibility: string@bool-completer # Enable CI Visibility
-  --archive-trace-events: string@bool-completer # When enabled, job logs are collected by Datadog and displayed along with pipeline execution traces.
+  --datadog-ci-visibility: oneof<nothing, bool> # Enable CI Visibility
+  --archive-trace-events: oneof<nothing, bool> # When enabled, job logs are collected by Datadog and displayed along with pipeline execution traces.
   --datadog-service: string # Tag all pipeline data from this GitLab instance in Datadog. Can be used when managing several self-managed deployments.
   --datadog-env: string # For self-managed deployments, `env` tag for all the data sent to Datadog.
   --datadog-tags: string # Custom tags in Datadog. Specify one tag per line in the format `key:value\nkey2:value2`.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --build-events: string@bool-completer # Trigger event when a build is created.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --subgroup-events: string@bool-completer
-  --project-events: string@bool-completer
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --build-events: oneof<nothing, bool> # Trigger event when a build is created.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --subgroup-events: oneof<nothing, bool>
+  --project-events: oneof<nothing, bool>
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15411,7 +15410,7 @@ export def "projects-integrations-diffblue-cover put" [
   diffblue_license_key: string # Diffblue Cover license key.
   diffblue_access_token_name: string # Access token name used by Diffblue Cover in pipelines.
   diffblue_access_token_secret: string # Access token secret used by Diffblue Cover in pipelines.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15438,8 +15437,8 @@ export def "projects-integrations-discord put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   webhook: string # Discord webhook (for example, `https://discord.com/api/webhooks/…`).
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
   --push-channel: string # The name of the channel to receive push_events notifications
   --issue-channel: string # The name of the channel to receive issues_events notifications
@@ -15454,19 +15453,19 @@ export def "projects-integrations-discord put" [
   --pipeline-channel: string # The name of the channel to receive pipeline_events notifications
   --wiki-page-channel: string # The name of the channel to receive wiki_page_events notifications
   --vulnerability-channel: string # The name of the channel to receive vulnerability_events notifications
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --deployment-events: string@bool-completer # Trigger event when a deployment starts or finishes.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --deployment-events: oneof<nothing, bool> # Trigger event when a deployment starts or finishes.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15492,13 +15491,13 @@ export def "projects-integrations-drone-ci put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-ssl-verification: string@bool-completer # Enable SSL verification. Defaults to `true` (enabled).
+  --enable-ssl-verification: oneof<nothing, bool> # Enable SSL verification. Defaults to `true` (enabled).
   drone_url: string # Drone CI URL (for example, `http://drone.example.com`).
   --body-token: string # Drone CI token.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15524,13 +15523,13 @@ export def "projects-integrations-emails-on-push put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --send-from-committer-email: string@bool-completer # Send from committer
-  --disable-diffs: string@bool-completer # Disable code diffs
+  --send-from-committer-email: oneof<nothing, bool> # Send from committer
+  --disable-diffs: oneof<nothing, bool> # Disable code diffs
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
   recipients: string # Emails separated by whitespace.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15557,7 +15556,7 @@ export def "projects-integrations-external-wiki put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   external_wiki_url: string # URL of the external wiki.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15584,8 +15583,8 @@ export def "projects-integrations-gitlab-slack-application put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --channel: string # Default channel to use if no other channel is configured.
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
   --labels-to-be-notified: string # Labels to send notifications for. Leave blank to receive notifications for all events.
   --labels-to-be-notified-behavior: string # Labels to be notified for. Valid options are `match_any` and `match_all`. The default value is `match_any`.
@@ -15602,22 +15601,22 @@ export def "projects-integrations-gitlab-slack-application put" [
   --pipeline-channel: string # The name of the channel to receive pipeline_events notifications
   --wiki-page-channel: string # The name of the channel to receive wiki_page_events notifications
   --vulnerability-channel: string # The name of the channel to receive vulnerability_events notifications
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --deployment-events: string@bool-completer # Trigger event when a deployment starts or finishes.
-  --incident-events: string@bool-completer # Trigger event when an incident is created.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --vulnerability-events: string@bool-completer
-  --alert-events: string@bool-completer # Trigger event when a new, unique alert is recorded.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --deployment-events: oneof<nothing, bool> # Trigger event when a deployment starts or finishes.
+  --incident-events: oneof<nothing, bool> # Trigger event when an incident is created.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --vulnerability-events: oneof<nothing, bool>
+  --alert-events: oneof<nothing, bool> # Trigger event when a new, unique alert is recorded.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15646,8 +15645,8 @@ export def "projects-integrations-google-play put" [
   package_name: string # Package name of the app in Google Play.
   service_account_key_file_name: string # File name of the Google Play service account key.
   service_account_key: string # Google Play service account key.
-  --google-play-protected-refs: string@bool-completer # Set variables on protected branches and tags only.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --google-play-protected-refs: oneof<nothing, bool> # Set variables on protected branches and tags only.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15674,21 +15673,21 @@ export def "projects-integrations-hangouts-chat put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   webhook: string # The Hangouts Chat webhook (for example, `https://chat.googleapis.com/v1/spaces...`).
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15718,7 +15717,7 @@ export def "projects-integrations-harbor put" [
   project_name: string # The name of the project in the Harbor instance. For example, `testproject`.
   username: string # The username created in the Harbor interface.
   password: string # The password of the user.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15748,9 +15747,9 @@ export def "projects-integrations-irker put" [
   --server-port: int # irker daemon port. The default value is `6659`. (format: int32)
   --default-irc-uri: string # URI to add before each recipient. The default value is `irc://irc.network.net:6697/`.
   recipients: string # Comma-separated list of channels or email addresses.
-  --colorize-messages: string@bool-completer # Colorize messages
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --colorize-messages: oneof<nothing, bool> # Colorize messages
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15776,15 +15775,15 @@ export def "projects-integrations-jenkins put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-ssl-verification: string@bool-completer # Enable SSL verification. Defaults to `true` (enabled).
+  --enable-ssl-verification: oneof<nothing, bool> # Enable SSL verification. Defaults to `true` (enabled).
   jenkins_url: string # URL of the Jenkins server.
   project_name: string # Name of the Jenkins project.
   --username: string # Username of the Jenkins server.
   --password: string # Password of the Jenkins server.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15820,19 +15819,19 @@ export def "projects-integrations-jira put" [
   --jira-issue-transition-id: string # The ID of one or more transitions for [custom issue transitions](../integration/jira/issues.md#custom-issue-transitions).Ignored when `jira_issue_transition_automatic` is enabled. Defaults to a blank string,which disables custom transitions.
   --issues-enabled: string # Enable viewing Jira issues in GitLab.
   --project-keys: list # Keys of Jira projects to display. When `issues_enabled` is `true`, this setting filters which Jira projects are shown in GitLab. It does not restrict the API token's access.
-  --vulnerabilities-enabled: string@bool-completer # Turn on Jira issue creation for GitLab vulnerabilities.
+  --vulnerabilities-enabled: oneof<nothing, bool> # Turn on Jira issue creation for GitLab vulnerabilities.
   --vulnerabilities-issuetype: string # Jira issue type to use when creating issues from vulnerabilities.
   --project-key: string # Key of the project to use when creating issues from vulnerabilities.This parameter is required if using the integration to create Jira issues from vulnerabilities.
-  --customize-jira-issue-enabled: string@bool-completer # When set to `true`, opens a prefilled form on the Jira instancewhen creating a Jira issue from a vulnerability.
-  --jira-check-enabled: string@bool-completer # Verify Jira issues referenced in commit messages exist before allowing the push.
-  --jira-exists-check-enabled: string@bool-completer # Verify the Jira issues referenced in commit messages exist in Jira.
-  --jira-assignee-check-enabled: string@bool-completer # Verify the committer is the assignee of the Jira issues referenced in commit messages.
-  --jira-status-check-enabled: string@bool-completer # Verify the status of Jira issues referenced in commit messages.
+  --customize-jira-issue-enabled: oneof<nothing, bool> # When set to `true`, opens a prefilled form on the Jira instancewhen creating a Jira issue from a vulnerability.
+  --jira-check-enabled: oneof<nothing, bool> # Verify Jira issues referenced in commit messages exist before allowing the push.
+  --jira-exists-check-enabled: oneof<nothing, bool> # Verify the Jira issues referenced in commit messages exist in Jira.
+  --jira-assignee-check-enabled: oneof<nothing, bool> # Verify the committer is the assignee of the Jira issues referenced in commit messages.
+  --jira-status-check-enabled: oneof<nothing, bool> # Verify the status of Jira issues referenced in commit messages.
   --jira-allowed-statuses-as-string: string # Comma-separated list of allowed Jira issue statuses.
-  --comment-on-event-enabled: string@bool-completer # Enable comments inside Jira issues on each GitLab event (commit / merge request)
-  --commit-events: string@bool-completer # Trigger event when a commit is created or updated.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --comment-on-event-enabled: oneof<nothing, bool> # Enable comments inside Jira issues on each GitLab event (commit / merge request)
+  --commit-events: oneof<nothing, bool> # Trigger event when a commit is created or updated.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15859,9 +15858,9 @@ export def "projects-integrations-jira-cloud-app put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --jira-cloud-app-service-ids: string # Copy and paste your JSM Service ID here. Use comma (,) to separate multiple IDs.
-  --jira-cloud-app-enable-deployment-gating: string@bool-completer # Enable to approve or reject blocked GitLab deployments from Jira Service Management.
+  --jira-cloud-app-enable-deployment-gating: oneof<nothing, bool> # Enable to approve or reject blocked GitLab deployments from Jira Service Management.
   --jira-cloud-app-deployment-gating-environments: string # Enter the environment (production,staging,testing,development) where you want to enable deployment gating. Use comma (,) to separate multiple environments.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15888,8 +15887,8 @@ export def "projects-integrations-linear put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   workspace_url: string # Linear workspace URL (for example, https://linear.app/example)
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15918,23 +15917,23 @@ export def "projects-integrations-matrix put" [
   --hostname: string # Custom hostname of the Matrix server. The default value is `https://matrix-client.matrix.org`.
   --body-token: string # The Matrix access token (for example, `syt-zyx57W2v1u123ew11`).
   room: string # Unique identifier for the target room (in the format `!qPKKM111FFKKsfoCVy:matrix.org`).
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --incident-events: string@bool-completer # Trigger event when an incident is created.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --vulnerability-events: string@bool-completer
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --incident-events: oneof<nothing, bool> # Trigger event when an incident is created.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --vulnerability-events: oneof<nothing, bool>
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15961,7 +15960,7 @@ export def "projects-integrations-mattermost-slash-commands put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-token: string # The Mattermost token.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -15990,10 +15989,10 @@ export def "projects-integrations-packagist put" [
   username: string # Username of a Packagist account.
   --body-token: string # API token of the Packagist server.
   --server: string # URL of the Packagist server. The default value is `https://packagist.org`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16021,8 +16020,8 @@ export def "projects-integrations-phorge put" [
   --allow-errors(-e) # Return full response without error handling
   project_url: string # URL of the project.
   issues_url: string # URL of the issue.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16049,13 +16048,13 @@ export def "projects-integrations-pipelines-email put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   recipients: string # Comma-separated list of recipient email addresses.
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
-  --notify-only-default-branch: string@bool-completer # Send notifications for the default branch.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
+  --notify-only-default-branch: oneof<nothing, bool> # Send notifications for the default branch.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --notify-child-pipelines: string@bool-completer # Send notifications for child pipelines.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --notify-child-pipelines: oneof<nothing, bool> # Send notifications for child pipelines.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16083,8 +16082,8 @@ export def "projects-integrations-pivotaltracker put" [
   --allow-errors(-e) # Return full response without error handling
   --body-token: string # The Pivotal Tracker token.
   --restrict-to-branch: string # Comma-separated list of branches to automatically inspect. Leave blank to include all branches.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16111,21 +16110,21 @@ export def "projects-integrations-pumble put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   webhook: string # The Pumble webhook (for example, `https://api.pumble.com/workspaces/x/...`).
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16156,8 +16155,8 @@ export def "projects-integrations-pushover put" [
   --device: string # Leave blank for all active devices.
   priority: string # The priority.
   --sound: string # The sound of the notification.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16186,8 +16185,8 @@ export def "projects-integrations-redmine put" [
   project_url: string # URL of the project.
   issues_url: string # URL of the issue.
   new_issue_url: string # URL of the new issue.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16216,8 +16215,8 @@ export def "projects-integrations-ewm put" [
   project_url: string # URL of the project.
   issues_url: string # URL of the issue.
   new_issue_url: string # URL of the new issue.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16245,8 +16244,8 @@ export def "projects-integrations-youtrack put" [
   --allow-errors(-e) # Return full response without error handling
   project_url: string # URL of the project.
   issues_url: string # URL of the issue.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16274,8 +16273,8 @@ export def "projects-integrations-clickup put" [
   --allow-errors(-e) # Return full response without error handling
   project_url: string # URL of the project.
   issues_url: string # URL of the issue.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16304,8 +16303,8 @@ export def "projects-integrations-slack put" [
   webhook: string # Slack notifications webhook (for example, `https://hooks.slack.com/services/...`).
   --username: string # Slack notifications username.
   --channel: string # Default channel to use if no other channel is configured.
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
   --labels-to-be-notified: string # Labels to send notifications for. Leave blank to receive notifications for all events.
   --labels-to-be-notified-behavior: string # Labels to be notified for. Valid options are `match_any` and `match_all`. The default value is `match_any`.
@@ -16322,22 +16321,22 @@ export def "projects-integrations-slack put" [
   --pipeline-channel: string # The name of the channel to receive pipeline_events notifications
   --wiki-page-channel: string # The name of the channel to receive wiki_page_events notifications
   --vulnerability-channel: string # The name of the channel to receive vulnerability_events notifications
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --deployment-events: string@bool-completer # Trigger event when a deployment starts or finishes.
-  --incident-events: string@bool-completer # Trigger event when an incident is created.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --vulnerability-events: string@bool-completer
-  --alert-events: string@bool-completer # Trigger event when a new, unique alert is recorded.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --deployment-events: oneof<nothing, bool> # Trigger event when a deployment starts or finishes.
+  --incident-events: oneof<nothing, bool> # Trigger event when an incident is created.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --vulnerability-events: oneof<nothing, bool>
+  --alert-events: oneof<nothing, bool> # Trigger event when a new, unique alert is recorded.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16364,21 +16363,21 @@ export def "projects-integrations-microsoft-teams put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   webhook: string # The Microsoft Teams webhook (for example, `https://outlook.office.com/webhook/...`).
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16407,8 +16406,8 @@ export def "projects-integrations-mattermost put" [
   webhook: string # Mattermost notifications webhook (for example, `http://mattermost.example.com/hooks/...`).
   --username: string # Mattermost notifications username.
   --channel: string # Default channel to use if no other channel is configured.
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
   --labels-to-be-notified: string # Labels to send notifications for. Leave blank to receive notifications for all events.
   --labels-to-be-notified-behavior: string # Labels to be notified for. Valid options are `match_any` and `match_all`. The default value is `match_any`.
@@ -16425,21 +16424,21 @@ export def "projects-integrations-mattermost put" [
   --pipeline-channel: string # The name of the channel to receive pipeline_events notifications
   --wiki-page-channel: string # The name of the channel to receive wiki_page_events notifications
   --vulnerability-channel: string # The name of the channel to receive vulnerability_events notifications
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --deployment-events: string@bool-completer # Trigger event when a deployment starts or finishes.
-  --incident-events: string@bool-completer # Trigger event when an incident is created.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --vulnerability-events: string@bool-completer
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --deployment-events: oneof<nothing, bool> # Trigger event when a deployment starts or finishes.
+  --incident-events: oneof<nothing, bool> # Trigger event when an incident is created.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --vulnerability-events: oneof<nothing, bool>
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16465,14 +16464,14 @@ export def "projects-integrations-teamcity put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-ssl-verification: string@bool-completer # Enable SSL verification. Defaults to `true` (enabled).
+  --enable-ssl-verification: oneof<nothing, bool> # Enable SSL verification. Defaults to `true` (enabled).
   teamcity_url: string # TeamCity root URL (for example, `https://teamcity.example.com`).
   build_type: string # The build configuration ID of the TeamCity project.
   username: string # A user with permissions to trigger a manual build.
   password: string # The password of the user.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16502,23 +16501,23 @@ export def "projects-integrations-telegram put" [
   --body-token: string # The Telegram bot token (for example, `123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`).
   room: string # Unique identifier for the target chat or the username of the target channel (in the format `@channelusername`).
   --thread: string # Unique identifier for the target message thread (topic in a forum supergroup).
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --incident-events: string@bool-completer # Trigger event when an incident is created.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --vulnerability-events: string@bool-completer
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --incident-events: oneof<nothing, bool> # Trigger event when an incident is created.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --vulnerability-events: oneof<nothing, bool>
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16545,21 +16544,21 @@ export def "projects-integrations-unify-circuit put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   webhook: string # The Unify Circuit webhook (for example, `https://circuit.com/rest/v2/webhooks/incoming/...`).
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16586,21 +16585,21 @@ export def "projects-integrations-webex-teams put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   webhook: string # The Webex Teams webhook. For example, https://api.ciscospark.com/v1/webhooks/incoming/...
-  --notify-only-broken-pipelines: string@bool-completer # Send notifications for broken pipelines.
-  --notify-only-when-pipeline-status-changes: string@bool-completer # Send notifications only when the pipeline status changes.
+  --notify-only-broken-pipelines: oneof<nothing, bool> # Send notifications for broken pipelines.
+  --notify-only-when-pipeline-status-changes: oneof<nothing, bool> # Send notifications only when the pipeline status changes.
   --branches-to-be-notified: string # Branches to send notifications for. Valid options are `all`, `default`, `protected`, and `default_and_protected`. The default value is `default`.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --work-item-events: string@bool-completer
-  --confidential-work-item-events: string@bool-completer
-  --merge-requests-events: string@bool-completer # Trigger event when a merge request is created, updated, or merged.
-  --note-events: string@bool-completer # Trigger event for new comments.
-  --confidential-note-events: string@bool-completer # Trigger event for new comments on confidential work items.
-  --tag-push-events: string@bool-completer # Trigger event for new tags pushed to the repository.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --wiki-page-events: string@bool-completer # Trigger event when a wiki page is created or updated.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --work-item-events: oneof<nothing, bool>
+  --confidential-work-item-events: oneof<nothing, bool>
+  --merge-requests-events: oneof<nothing, bool> # Trigger event when a merge request is created, updated, or merged.
+  --note-events: oneof<nothing, bool> # Trigger event for new comments.
+  --confidential-note-events: oneof<nothing, bool> # Trigger event for new comments on confidential work items.
+  --tag-push-events: oneof<nothing, bool> # Trigger event for new tags pushed to the repository.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --wiki-page-events: oneof<nothing, bool> # Trigger event when a wiki page is created or updated.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16630,7 +16629,7 @@ export def "projects-integrations-zentao put" [
   --api-url: string # If different from Web URL.
   api_token: string
   zentao_product_xid: string
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16658,9 +16657,9 @@ export def "projects-integrations-squash-tm put" [
   --allow-errors(-e) # Return full response without error handling
   --body-url: string # URL of the Squash TM webhook.
   --body-token: string # Secret token.
-  --issues-events: string@bool-completer # Trigger event when a work item is created, updated, or closed.
-  --confidential-issues-events: string@bool-completer # Trigger event when a confidential work item is created, updated, or closed.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --issues-events: oneof<nothing, bool> # Trigger event when a work item is created, updated, or closed.
+  --confidential-issues-events: oneof<nothing, bool> # Trigger event when a confidential work item is created, updated, or closed.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16688,9 +16687,9 @@ export def "projects-integrations-github put" [
   --allow-errors(-e) # Return full response without error handling
   --body-token: string # GitHub API token with `repo:status` OAuth scope.
   repository_url: string # GitHub repository URL.
-  --static-context: string@bool-completer # Append the hostname of your GitLab instance to the status check name.
-  --pipeline-events: string@bool-completer # Trigger event when a pipeline status changes.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --static-context: oneof<nothing, bool> # Append the hostname of your GitLab instance to the status check name.
+  --pipeline-events: oneof<nothing, bool> # Trigger event when a pipeline status changes.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16718,7 +16717,7 @@ export def "projects-integrations-git-guardian put" [
   --allow-errors(-e) # Return full response without error handling
   --api-url: string # GitGuardian API base URL. Defaults to https://api.gitguardian.com. Use https://api.eu1.gitguardian.com for the EU region, or the URL of your self-hosted GitGuardian instance. Must use HTTPS.
   --body-token: string # Personal access token to authenticate calls to the GitGuardian API.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16747,7 +16746,7 @@ export def "projects-integrations-google-cloud-platform-artifact-registry put" [
   artifact_registry_project_id: string # ID of the Google Cloud project.
   artifact_registry_repositories: string # Repository of Artifact Registry.
   artifact_registry_location: string # Location of the Artifact Registry repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16777,7 +16776,7 @@ export def "projects-integrations-google-cloud-platform-workload-identity-federa
   workload_identity_federation_project_number: string # Google Cloud project number for the Workload Identity Federation.
   workload_identity_pool_id: string # ID of the Workload Identity Pool.
   workload_identity_pool_provider_id: string # ID of the Workload Identity Pool provider.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16803,10 +16802,10 @@ export def "projects-integrations-mock-ci put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-ssl-verification: string@bool-completer # Enable SSL verification. Defaults to `true` (enabled).
+  --enable-ssl-verification: oneof<nothing, bool> # Enable SSL verification. Defaults to `true` (enabled).
   mock_service_url: string # URL of the Mock CI integration.
-  --push-events: string@bool-completer # Trigger event for pushes to the repository.
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --push-events: oneof<nothing, bool> # Trigger event for pushes to the repository.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -16832,7 +16831,7 @@ export def "projects-integrations-mock-monitoring put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --use-inherited-settings: string@bool-completer # Indicates whether to inherit the default settings. Defaults to `false`.
+  --use-inherited-settings: oneof<nothing, bool> # Indicates whether to inherit the default settings. Defaults to `false`.
 ]: any -> record<id: int, title: string, slug: string, created_at: string, updated_at: string, active: bool, commit_events: bool, push_events: bool, issues_events: bool, incident_events: bool, alert_events: bool, confidential_issues_events: bool, merge_requests_events: bool, tag_push_events: bool, deployment_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, job_events: bool, comment_on_event_enabled: bool, inherited: bool, vulnerability_events: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -17262,7 +17261,7 @@ export def "projects-issues list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-labels-details: string@bool-completer # Return titles of labels and other details (default: false)
+  --with-labels-details: oneof<nothing, bool> # Return titles of labels and other details (default: false)
   --state: string@state-completer # Return opened, closed, or all issues (default: all)
   --closed-by-id: int # Return issues which were closed by the user with the given ID. (format: int32)
   --order-by: string@order-by-completer-4 # Return issues ordered by `created_at`, `due_date`, `label_priority`, `milestone_due`, `popularity`, `priority`, `relative_position`, `title`, or `updated_at` fields. (default: created_at)
@@ -17296,7 +17295,7 @@ export def "projects-issues list" [
   --notiteration-title: string # Return issues which are not assigned to the iteration with the given title
   --scope: string@scope-completer # Return issues for the given scope: `created_by_me`, `assigned_to_me` or `all`
   --my-reaction-emoji: string # Return issues reacted by the authenticated user by the given emoji
-  --confidential: string@bool-completer # Filter confidential or public issues
+  --confidential: oneof<nothing, bool> # Filter confidential or public issues
   --weight: int # The weight of the issue (format: int32)
   --epic-id: int # The ID of an epic associated with the issues (format: int32)
   --health-status: string@health-status-completer # The health status of the issue. Must be one of: on_track, needs_attention, at_risk, none, any
@@ -17343,8 +17342,8 @@ export def "projects-issues post" [
   --remove-labels: list # Comma-separated list of label names
   --due-date: string # Date string in the format YEAR-MONTH-DAY
   --start-date: string # Date string in the format YEAR-MONTH-DAY
-  --confidential: string@bool-completer # Boolean parameter if the issue should be confidential
-  --discussion-locked: string@bool-completer #  Boolean parameter indicating if the issue's discussion is locked
+  --confidential: oneof<nothing, bool> # Boolean parameter if the issue should be confidential
+  --discussion-locked: oneof<nothing, bool> #  Boolean parameter indicating if the issue's discussion is locked
   --issue-type: string@issue-type-completer # The type of the issue. Accepts: issue, incident, test_case, requirement, task, ticket
   --weight: int # The weight of the issue (format: int32)
   --epic-id: int # The ID of an epic to associate the issue with (format: int32)
@@ -17401,7 +17400,7 @@ export def "projects-issues-statistics get" [
   --notiteration-title: string # Return issues which are not assigned to the iteration with the given title
   --scope: string@scope-completer # Return issues for the given scope: `created_by_me`, `assigned_to_me` or `all`
   --my-reaction-emoji: string # Return issues reacted by the authenticated user by the given emoji
-  --confidential: string@bool-completer # Filter confidential or public issues
+  --confidential: oneof<nothing, bool> # Filter confidential or public issues
   --weight: int # The weight of the issue (format: int32)
   --epic-id: int # The ID of an epic associated with the issues (format: int32)
   --health-status: string@health-status-completer # The health status of the issue. Must be one of: on_track, needs_attention, at_risk, none, any
@@ -17467,8 +17466,8 @@ export def "projects-issues put" [
   --remove-labels: list # Comma-separated list of label names
   --due-date: string # Date string in the format YEAR-MONTH-DAY
   --start-date: string # Date string in the format YEAR-MONTH-DAY
-  --confidential: string@bool-completer # Boolean parameter if the issue should be confidential
-  --discussion-locked: string@bool-completer #  Boolean parameter indicating if the issue's discussion is locked
+  --confidential: oneof<nothing, bool> # Boolean parameter if the issue should be confidential
+  --discussion-locked: oneof<nothing, bool> #  Boolean parameter indicating if the issue's discussion is locked
   --issue-type: string@issue-type-completer # The type of the issue. Accepts: issue, incident, test_case, requirement, task, ticket
   --weight: int # The weight of the issue (format: int32)
   --epic-id: int # The ID of an epic to associate the issue with (format: int32)
@@ -17579,7 +17578,7 @@ export def "projects-issues-clone post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   to_project_id: int # The ID of the new project (format: int32)
-  --with-notes: string@bool-completer # Clone issue with notes (default: false)
+  --with-notes: oneof<nothing, bool> # Clone issue with notes (default: false)
 ]: any -> record<id: int, iid: int, project_id: int, title: string, description: string, state: string, created_at: string, updated_at: string, closed_at: string, closed_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, labels: list<string>, milestone: record<id: int, iid: int, project_id: int, group_id: string, title: string, description: string, state: string, created_at: string, updated_at: string, due_date: string, start_date: string, expired: bool, web_url: string>, assignees: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, author: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, type: string, assignee: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, user_notes_count: int, merge_requests_count: int, upvotes: int, downvotes: int, start_date: string, due_date: string, confidential: bool, discussion_locked: bool, issue_type: string, web_url: string, time_stats: record<time_estimate: int, total_time_spent: int, human_time_estimate: string, human_total_time_spent: string>, task_completion_status: record<count: int, completed_count: int>, weight: int, blocking_issues_count: int, has_tasks: bool, task_status: string, _links: record<self: string, notes: string, award_emoji: string, project: string, closed_as_duplicate_of: string>, references: record<short: string, relative: string, full: string>, severity: string, subscribed: bool, moved_to_id: int, imported: bool, imported_from: string, service_desk_reply_to: string, epic_iid: string, epic: record<id: string, iid: string, title: string, url: string, group_id: string, human_readable_end_date: string, human_readable_timestamp: string>, iteration: record<id: int, iid: int, sequence: int, group_id: int, title: string, description: string, state: int, created_at: string, updated_at: string, start_date: string, due_date: string, web_url: string>, health_status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -17827,8 +17826,8 @@ export def "projects-ci-lint get" [
   --allow-errors(-e) # Return full response without error handling
   --sha: string # Deprecated: Use content_ref instead
   --content-ref: string # The CI/CD configuration content is taken from this commit SHA, branch or tag. Defaults to the HEAD of the project's default branch
-  --dry-run: string@bool-completer # Run pipeline creation simulation, or only do static check. This is false by default (default: false)
-  --include-jobs: string@bool-completer # If the list of jobs that would exist in a static check or pipeline         simulation should be included in the response. This is false by default
+  --dry-run: oneof<nothing, bool> # Run pipeline creation simulation, or only do static check. This is false by default (default: false)
+  --include-jobs: oneof<nothing, bool> # If the list of jobs that would exist in a static check or pipeline         simulation should be included in the response. This is false by default
   --ref: string # Deprecated: Use dry_run_ref instead
   --dry-run-ref: string # Branch or tag used as context when executing a dry run. Defaults to the default branch of the project. Only used when dry_run is true
 ]: nothing -> record<valid: bool, errors: list<string>, warnings: list<string>, merged_yaml: string, includes: table<type: string, location: string, blob: string, raw: string, extra: record, context_project: string, context_sha: string>, jobs: list<record>> {
@@ -17855,8 +17854,8 @@ export def "projects-ci-lint post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   content: string # Content of .gitlab-ci.yml
-  --dry-run: string@bool-completer # Run pipeline creation simulation, or only do static check. This is false by default (default: false)
-  --include-jobs: string@bool-completer # If the list of jobs that would exist in a static check or pipeline         simulation should be included in the response. This is false by default
+  --dry-run: oneof<nothing, bool> # Run pipeline creation simulation, or only do static check. This is false by default (default: false)
+  --include-jobs: oneof<nothing, bool> # If the list of jobs that would exist in a static check or pipeline         simulation should be included in the response. This is false by default
   --ref: string # When dry_run is true, sets the branch or tag to use. Defaults to the project’s default branch when not set
 ]: any -> record<valid: bool, errors: list<string>, warnings: list<string>, merged_yaml: string, includes: table<type: string, location: string, blob: string, raw: string, extra: record, context_project: string, context_sha: string>, jobs: list<record>> {
   let input = $in
@@ -18133,8 +18132,8 @@ export def "projects-members list" [
   --qp-query: string # A query string to search for members
   --user-ids: list # Array of user ids to look up for membership
   --skip-users: list # Array of user ids to be skipped for membership
-  --show-seat-info: string@bool-completer # Show seat information for members
-  --with-saml-identity: string@bool-completer # List only members with linked SAML identity
+  --show-seat-info: oneof<nothing, bool> # Show seat information for members
+  --with-saml-identity: oneof<nothing, bool> # List only members with linked SAML identity
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
 ]: nothing -> table<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string, access_level: string, created_at: string, created_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, expires_at: string, group_saml_identity: record<provider: string, extern_uid: string, saml_provider_id: string>, group_scim_identity: record<extern_uid: string, group_id: string, active: string>, email: string, is_using_seat: string, override: string, membership_state: string, member_role: record<id: int, group_id: int, name: any, description: any, base_access_level: int, apply_security_scan_profiles: bool, admin_merge_request: bool, archive_project: bool, admin_ai_catalog_item_consumer: bool, remove_project: bool, remove_group: bool, manage_security_policy_link: bool, admin_ai_catalog_item: bool, admin_compliance_framework: bool, admin_cicd_variables: bool, manage_deploy_tokens: bool, manage_group_access_tokens: bool, admin_group_member: bool, admin_integrations: bool, manage_merge_request_settings: bool, manage_project_access_tokens: bool, admin_protected_branch: bool, admin_protected_environments: bool, admin_push_rules: bool, admin_runners: bool, admin_security_attributes: bool, admin_terraform_state: bool, admin_vulnerability: bool, admin_web_hook: bool, read_compliance_dashboard: bool, read_security_scan_profiles: bool, read_virtual_registry: bool, update_sec_ai_workflow_settings: bool, read_admin_cicd: bool, read_crm_contact: bool, read_dependency: bool, read_admin_groups: bool, read_admin_projects: bool, read_code: bool, read_runners: bool, read_security_attribute: bool, read_admin_subscription: bool, read_admin_monitoring: bool, read_admin_users: bool, read_vulnerability: bool>> {
@@ -18192,7 +18191,7 @@ export def "projects-members-all list" [
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string # A query string to search for members
   --user-ids: list # Array of user ids to look up for membership
-  --show-seat-info: string@bool-completer # Show seat information for members
+  --show-seat-info: oneof<nothing, bool> # Show seat information for members
   --state: string@state-completer-1 # Filter results by member state
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
@@ -18272,8 +18271,8 @@ export def "projects-members delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --skip-subresources: string@bool-completer # Flag indicating if the deletion of direct memberships of the removed member in subgroups and projects should be skipped (default: false)
-  --unassign-issuables: string@bool-completer # Flag indicating if the removed member should be unassigned from any issues or merge requests within given group or project (default: false)
+  --skip-subresources: oneof<nothing, bool> # Flag indicating if the deletion of direct memberships of the removed member in subgroups and projects should be skipped (default: false)
+  --unassign-issuables: oneof<nothing, bool> # Flag indicating if the removed member should be unassigned from any issues or merge requests within given group or project (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -18477,8 +18476,8 @@ export def "projects-merge-requests list" [
   --state: string@state-completer-2 # Returns `all` merge requests or just those that are `opened`, `closed`, `locked`, or `merged`. (default: all)
   --order-by: string@order-by-completer-5 # Returns merge requests ordered by `created_at`, `label_priority`, `milestone_due`, `popularity`, `priority`, `title`, `updated_at` or `merged_at` fields. Introduced in GitLab 14.8. (default: created_at)
   --qp-sort: string@sort-completer # Returns merge requests sorted in `asc` or `desc` order. (default: desc)
-  --with-labels-details: string@bool-completer # If `true`, response returns more details for each label in labels field: `:name`,`:color`, `:description`, `:description_html`, `:text_color` (default: false)
-  --with-merge-status-recheck: string@bool-completer # If `true`, this projection requests (but does not guarantee) that the `merge_status` field be recalculated asynchronously. Introduced in GitLab 13.0. (default: false)
+  --with-labels-details: oneof<nothing, bool> # If `true`, response returns more details for each label in labels field: `:name`,`:color`, `:description`, `:description_html`, `:text_color` (default: false)
+  --with-merge-status-recheck: oneof<nothing, bool> # If `true`, this projection requests (but does not guarantee) that the `merge_status` field be recalculated asynchronously. Introduced in GitLab 13.0. (default: false)
   --created-after: string # Returns merge requests created on or after the given time. Expected in ISO 8601 format. (format: date-time, e.g. 2019-03-15T08:00:00Z)
   --created-before: string # Returns merge requests created on or before the given time. Expected in ISO 8601 format. (format: date-time, e.g. 2019-03-15T08:00:00Z)
   --updated-after: string # Returns merge requests updated on or after the given time. Expected in ISO 8601 format. (format: date-time, e.g. 2019-03-15T08:00:00Z)
@@ -18491,7 +18490,7 @@ export def "projects-merge-requests list" [
   --search: string # Search merge requests against their `title` and `description`.
   --in-param: string # Modify the scope of the search attribute. `title`, `description`, or a string joining them with comma. (e.g. title,description)
   --wip: string@wip-completer # Deprecated. Use `draft` instead. Filter merge requests against their `wip` status. `yes` to return only draft merge requests, `no` to return non-draft merge requests.
-  --draft: string@bool-completer # Filter merge requests against their `draft` status. `true` to return only draft merge requests, `false` to return non-draft merge requests.
+  --draft: oneof<nothing, bool> # Filter merge requests against their `draft` status. `true` to return only draft merge requests, `false` to return non-draft merge requests.
   --notauthor-id: int # `<Negated>` Returns merge requests created by the given user `id`. Mutually exclusive with `author_username`. Combine with `scope=all` or `scope=assigned_to_me`. (format: int32)
   --notauthor-username: string # `<Negated>` Returns merge requests created by the given `username`. Mutually exclusive with `author_id`.
   --notassignee-id: int # `<Negated>` Returns merge requests assigned to the given user `id`. `None` returns unassigned merge requests. `Any` returns merge requests with an assignee. (format: int32)
@@ -18548,10 +18547,10 @@ export def "projects-merge-requests post" [
   --remove-labels: list # Comma-separated label names to remove from a merge request.
   --milestone-id: int # The global ID of a milestone to assign the merge request to. (format: int32)
   --milestone: string # The title of a project or ancestor-group milestone to assign the merge request to. Mutually exclusive with `milestone_id`.
-  --remove-source-branch: string@bool-completer # Flag indicating if a merge request should remove the source branch when merging.
-  --allow-collaboration: string@bool-completer # Allow commits from members who can merge to the target branch.
-  --allow-maintainer-to-push: string@bool-completer # [deprecated] See allow_collaboration
-  --squash: string@bool-completer # Squash commits into a single commit when merging.
+  --remove-source-branch: oneof<nothing, bool> # Flag indicating if a merge request should remove the source branch when merging.
+  --allow-collaboration: oneof<nothing, bool> # Allow commits from members who can merge to the target branch.
+  --allow-maintainer-to-push: oneof<nothing, bool> # [deprecated] See allow_collaboration
+  --squash: oneof<nothing, bool> # Squash commits into a single commit when merging.
   --merge-after: string # Date after which the merge request can be merged.
   --approvals-before-merge: int # Number of approvals required before this can be merged (format: int32)
 ]: any -> record<id: int, iid: int, project_id: int, title: string, description: string, state: string, created_at: string, updated_at: string, merged_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, merge_user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, merged_at: string, closed_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, closed_at: string, title_html: string, description_html: string, target_branch: string, source_branch: string, user_notes_count: int, upvotes: int, downvotes: int, author: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, assignees: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, assignee: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, reviewers: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, source_project_id: int, target_project_id: int, labels: list<string>, draft: bool, imported: bool, imported_from: string, work_in_progress: bool, milestone: record<id: int, iid: int, project_id: int, group_id: string, title: string, description: string, state: string, created_at: string, updated_at: string, due_date: string, start_date: string, expired: bool, web_url: string>, merge_when_pipeline_succeeds: bool, merge_status: string, detailed_merge_status: string, merge_after: string, sha: string, merge_commit_sha: string, squash_commit_sha: string, discussion_locked: bool, should_remove_source_branch: bool, force_remove_source_branch: bool, prepared_at: string, allow_collaboration: bool, allow_maintainer_to_push: bool, reference: string, references: record<short: string, relative: string, full: string>, web_url: string, time_stats: record<time_estimate: int, total_time_spent: int, human_time_estimate: string, human_total_time_spent: string>, squash: bool, squash_on_merge: bool, task_completion_status: record<count: int, completed_count: int>, has_conflicts: bool, blocking_discussions_resolved: bool, approvals_before_merge: int, subscribed: bool, changes_count: string, latest_build_started_at: string, latest_build_finished_at: string, first_deployed_to_production_at: string, pipeline: record<id: int, iid: int, project_id: int, sha: string, ref: string, status: string, source: string, created_at: string, updated_at: string, web_url: string>, head_pipeline: record<id: int, iid: int, project_id: int, sha: string, ref: string, status: string, source: string, created_at: string, updated_at: string, web_url: string, before_sha: string, tag: bool, yaml_errors: string, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, started_at: string, finished_at: string, committed_at: string, duration: int, queued_duration: int, coverage: float, detailed_status: record<icon: string, text: string, label: string, group: string, tooltip: string, has_details: bool, details_path: string, illustration: record, favicon: string, action: record>, archived: bool>, diff_refs: record<base_sha: string, head_sha: string, start_sha: string>, merge_error: string, rebase_in_progress: bool, diverged_commits_count: int, first_contribution: bool, user: record<can_merge: bool>> {
@@ -18603,9 +18602,9 @@ export def "projects-merge-requests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --render-html: string@bool-completer # If `true`, response includes rendered HTML for title and description.
-  --include-diverged-commits-count: string@bool-completer # If `true`, response includes the commits behind the target branch.
-  --include-rebase-in-progress: string@bool-completer # If `true`, response includes whether a rebase operation is in progress.
+  --render-html: oneof<nothing, bool> # If `true`, response includes rendered HTML for title and description.
+  --include-diverged-commits-count: oneof<nothing, bool> # If `true`, response includes the commits behind the target branch.
+  --include-rebase-in-progress: oneof<nothing, bool> # If `true`, response includes whether a rebase operation is in progress.
 ]: nothing -> record<id: int, iid: int, project_id: int, title: string, description: string, state: string, created_at: string, updated_at: string, merged_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, merge_user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, merged_at: string, closed_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, closed_at: string, title_html: string, description_html: string, target_branch: string, source_branch: string, user_notes_count: int, upvotes: int, downvotes: int, author: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, assignees: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, assignee: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, reviewers: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, source_project_id: int, target_project_id: int, labels: list<string>, draft: bool, imported: bool, imported_from: string, work_in_progress: bool, milestone: record<id: int, iid: int, project_id: int, group_id: string, title: string, description: string, state: string, created_at: string, updated_at: string, due_date: string, start_date: string, expired: bool, web_url: string>, merge_when_pipeline_succeeds: bool, merge_status: string, detailed_merge_status: string, merge_after: string, sha: string, merge_commit_sha: string, squash_commit_sha: string, discussion_locked: bool, should_remove_source_branch: bool, force_remove_source_branch: bool, prepared_at: string, allow_collaboration: bool, allow_maintainer_to_push: bool, reference: string, references: record<short: string, relative: string, full: string>, web_url: string, time_stats: record<time_estimate: int, total_time_spent: int, human_time_estimate: string, human_total_time_spent: string>, squash: bool, squash_on_merge: bool, task_completion_status: record<count: int, completed_count: int>, has_conflicts: bool, blocking_discussions_resolved: bool, approvals_before_merge: int, subscribed: bool, changes_count: string, latest_build_started_at: string, latest_build_finished_at: string, first_deployed_to_production_at: string, pipeline: record<id: int, iid: int, project_id: int, sha: string, ref: string, status: string, source: string, created_at: string, updated_at: string, web_url: string>, head_pipeline: record<id: int, iid: int, project_id: int, sha: string, ref: string, status: string, source: string, created_at: string, updated_at: string, web_url: string, before_sha: string, tag: bool, yaml_errors: string, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, started_at: string, finished_at: string, committed_at: string, duration: int, queued_duration: int, coverage: float, detailed_status: record<icon: string, text: string, label: string, group: string, tooltip: string, has_details: bool, details_path: string, illustration: record, favicon: string, action: record>, archived: bool>, diff_refs: record<base_sha: string, head_sha: string, start_sha: string>, merge_error: string, rebase_in_progress: bool, diverged_commits_count: int, first_contribution: bool, user: record<can_merge: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -18633,7 +18632,7 @@ export def "projects-merge-requests put" [
   --title: string # The title of the merge request.
   --target-branch: string # The target branch.
   --state-event: string@state-event-completer # New state (close/reopen).
-  --discussion-locked: string@bool-completer # Flag indicating if the merge request’s discussion is locked. If the discussion is locked only project members can add, edit or resolve comments.
+  --discussion-locked: oneof<nothing, bool> # Flag indicating if the merge request’s discussion is locked. If the discussion is locked only project members can add, edit or resolve comments.
   --assignee-id: int # Assignee user ID. (format: int32)
   --assignee-ids: list # The IDs of the users to assign the merge request to, as a comma-separated list. Set to 0 or provide an empty value to unassign all assignees.
   --reviewer-ids: list # The IDs of the users to review the merge request, as a comma-separated list. Set to 0 or provide an empty value to unassign all reviewers.
@@ -18643,10 +18642,10 @@ export def "projects-merge-requests put" [
   --remove-labels: list # Comma-separated label names to remove from a merge request.
   --milestone-id: int # The global ID of a milestone to assign the merge request to. (format: int32)
   --milestone: string # The title of a project or ancestor-group milestone to assign the merge request to. Mutually exclusive with `milestone_id`.
-  --remove-source-branch: string@bool-completer # Flag indicating if a merge request should remove the source branch when merging.
-  --allow-collaboration: string@bool-completer # Allow commits from members who can merge to the target branch.
-  --allow-maintainer-to-push: string@bool-completer # [deprecated] See allow_collaboration
-  --squash: string@bool-completer # Squash commits into a single commit when merging.
+  --remove-source-branch: oneof<nothing, bool> # Flag indicating if a merge request should remove the source branch when merging.
+  --allow-collaboration: oneof<nothing, bool> # Allow commits from members who can merge to the target branch.
+  --allow-maintainer-to-push: oneof<nothing, bool> # [deprecated] See allow_collaboration
+  --squash: oneof<nothing, bool> # Squash commits into a single commit when merging.
   --merge-after: string # Date after which the merge request can be merged.
   --approvals-before-merge: int # Number of approvals required before this can be merged (format: int32)
 ]: any -> record<id: int, iid: int, project_id: int, title: string, description: string, state: string, created_at: string, updated_at: string, merged_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, merge_user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, merged_at: string, closed_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, closed_at: string, title_html: string, description_html: string, target_branch: string, source_branch: string, user_notes_count: int, upvotes: int, downvotes: int, author: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, assignees: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, assignee: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, reviewers: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, source_project_id: int, target_project_id: int, labels: list<string>, draft: bool, imported: bool, imported_from: string, work_in_progress: bool, milestone: record<id: int, iid: int, project_id: int, group_id: string, title: string, description: string, state: string, created_at: string, updated_at: string, due_date: string, start_date: string, expired: bool, web_url: string>, merge_when_pipeline_succeeds: bool, merge_status: string, detailed_merge_status: string, merge_after: string, sha: string, merge_commit_sha: string, squash_commit_sha: string, discussion_locked: bool, should_remove_source_branch: bool, force_remove_source_branch: bool, prepared_at: string, allow_collaboration: bool, allow_maintainer_to_push: bool, reference: string, references: record<short: string, relative: string, full: string>, web_url: string, time_stats: record<time_estimate: int, total_time_spent: int, human_time_estimate: string, human_total_time_spent: string>, squash: bool, squash_on_merge: bool, task_completion_status: record<count: int, completed_count: int>, has_conflicts: bool, blocking_discussions_resolved: bool, approvals_before_merge: int, subscribed: bool, changes_count: string, latest_build_started_at: string, latest_build_finished_at: string, first_deployed_to_production_at: string, pipeline: record<id: int, iid: int, project_id: int, sha: string, ref: string, status: string, source: string, created_at: string, updated_at: string, web_url: string>, head_pipeline: record<id: int, iid: int, project_id: int, sha: string, ref: string, status: string, source: string, created_at: string, updated_at: string, web_url: string, before_sha: string, tag: bool, yaml_errors: string, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, started_at: string, finished_at: string, committed_at: string, duration: int, queued_duration: int, coverage: float, detailed_status: record<icon: string, text: string, label: string, group: string, tooltip: string, has_details: bool, details_path: string, illustration: record, favicon: string, action: record>, archived: bool>, diff_refs: record<base_sha: string, head_sha: string, start_sha: string>, merge_error: string, rebase_in_progress: bool, diverged_commits_count: int, first_contribution: bool, user: record<can_merge: bool>> {
@@ -18822,7 +18821,7 @@ export def "projects-merge-requests-changes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --unidiff: string@bool-completer # A diff in a Unified diff format (default: false)
+  --unidiff: oneof<nothing, bool> # A diff in a Unified diff format (default: false)
 ]: nothing -> record<id: int, iid: int, project_id: int, title: string, description: string, state: string, created_at: string, updated_at: string, merged_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, merge_user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, merged_at: string, closed_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, closed_at: string, title_html: string, description_html: string, target_branch: string, source_branch: string, user_notes_count: int, upvotes: int, downvotes: int, author: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, assignees: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, assignee: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, reviewers: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, source_project_id: int, target_project_id: int, labels: list<string>, draft: bool, imported: bool, imported_from: string, work_in_progress: bool, milestone: record<id: int, iid: int, project_id: int, group_id: string, title: string, description: string, state: string, created_at: string, updated_at: string, due_date: string, start_date: string, expired: bool, web_url: string>, merge_when_pipeline_succeeds: bool, merge_status: string, detailed_merge_status: string, merge_after: string, sha: string, merge_commit_sha: string, squash_commit_sha: string, discussion_locked: bool, should_remove_source_branch: bool, force_remove_source_branch: bool, prepared_at: string, allow_collaboration: bool, allow_maintainer_to_push: bool, reference: string, references: record<short: string, relative: string, full: string>, web_url: string, time_stats: record<time_estimate: int, total_time_spent: int, human_time_estimate: string, human_total_time_spent: string>, squash: bool, squash_on_merge: bool, task_completion_status: record<count: int, completed_count: int>, has_conflicts: bool, blocking_discussions_resolved: bool, approvals_before_merge: int, subscribed: bool, changes_count: string, latest_build_started_at: string, latest_build_finished_at: string, first_deployed_to_production_at: string, pipeline: record<id: int, iid: int, project_id: int, sha: string, ref: string, status: string, source: string, created_at: string, updated_at: string, web_url: string>, head_pipeline: record<id: int, iid: int, project_id: int, sha: string, ref: string, status: string, source: string, created_at: string, updated_at: string, web_url: string, before_sha: string, tag: bool, yaml_errors: string, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, started_at: string, finished_at: string, committed_at: string, duration: int, queued_duration: int, coverage: float, detailed_status: record<icon: string, text: string, label: string, group: string, tooltip: string, has_details: bool, details_path: string, illustration: record, favicon: string, action: record>, archived: bool>, diff_refs: record<base_sha: string, head_sha: string, start_sha: string>, merge_error: string, rebase_in_progress: bool, diverged_commits_count: int, first_contribution: bool, user: record<can_merge: bool>, changes: table<diff: string, collapsed: bool, too_large: bool, new_path: string, old_path: string, a_mode: string, b_mode: string, new_file: bool, renamed_file: bool, deleted_file: bool, generated_file: bool>, overflow: bool> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -18849,7 +18848,7 @@ export def "projects-merge-requests-diffs get" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --unidiff: string@bool-completer # A diff in a Unified diff format (default: false)
+  --unidiff: oneof<nothing, bool> # A diff in a Unified diff format (default: false)
 ]: nothing -> table<diff: string, collapsed: bool, too_large: bool, new_path: string, old_path: string, a_mode: string, b_mode: string, new_file: bool, renamed_file: bool, deleted_file: bool, generated_file: bool> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -18920,7 +18919,7 @@ export def "projects-merge-requests-pipelines post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --async: string@bool-completer # Indicates if the merge request pipeline creation should be performed asynchronously. If set to `true`, the pipeline will be created outside of the API request and the endpoint will return an empty response with a `202` status code. When the response is `202`, the creation can still fail outside of this request. (default: false)
+  --async: oneof<nothing, bool> # Indicates if the merge request pipeline creation should be performed asynchronously. If set to `true`, the pipeline will be created outside of the API request and the endpoint will return an empty response with a `202` status code. When the response is `202`, the creation can still fail outside of this request. (default: false)
 ]: any -> record<id: int, iid: int, project_id: int, sha: string, ref: string, status: string, source: string, created_at: string, updated_at: string, web_url: string, before_sha: string, tag: bool, yaml_errors: string, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, started_at: string, finished_at: string, committed_at: string, duration: int, queued_duration: int, coverage: float, detailed_status: record<icon: string, text: string, label: string, group: string, tooltip: string, has_details: bool, details_path: string, illustration: record, favicon: string, action: record<icon: string, title: string, path: string, method: string, button_title: string, confirmation_message: string>>, archived: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -18949,12 +18948,12 @@ export def "projects-merge-requests-merge put" [
   --allow-errors(-e) # Return full response without error handling
   --merge-commit-message: string # Custom merge commit message.
   --squash-commit-message: string # Custom squash commit message.
-  --should-remove-source-branch: string@bool-completer # If `true`, removes the source branch.
-  --merge-when-pipeline-succeeds: string@bool-completer # Deprecated: Use auto_merge instead.
-  --auto-merge: string@bool-completer # If `true`, the merge request is set to auto merge.
+  --should-remove-source-branch: oneof<nothing, bool> # If `true`, removes the source branch.
+  --merge-when-pipeline-succeeds: oneof<nothing, bool> # Deprecated: Use auto_merge instead.
+  --auto-merge: oneof<nothing, bool> # If `true`, the merge request is set to auto merge.
   --sha: string # If present, then this SHA must match the HEAD of the source branch, otherwise the merge fails.
-  --squash: string@bool-completer # If `true`, the commits are squashed into a single commit on merge.
-  --skip-merge-train: string@bool-completer # If `true` skips train restart when merging immediately in a merge train configured project.
+  --squash: oneof<nothing, bool> # If `true`, the commits are squashed into a single commit on merge.
+  --skip-merge-train: oneof<nothing, bool> # If `true` skips train restart when merging immediately in a merge train configured project.
 ]: any -> record<id: int, iid: int, project_id: int, title: string, description: string, state: string, created_at: string, updated_at: string, merged_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, merge_user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, merged_at: string, closed_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, closed_at: string, title_html: string, description_html: string, target_branch: string, source_branch: string, user_notes_count: int, upvotes: int, downvotes: int, author: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, assignees: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, assignee: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, reviewers: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, source_project_id: int, target_project_id: int, labels: list<string>, draft: bool, imported: bool, imported_from: string, work_in_progress: bool, milestone: record<id: int, iid: int, project_id: int, group_id: string, title: string, description: string, state: string, created_at: string, updated_at: string, due_date: string, start_date: string, expired: bool, web_url: string>, merge_when_pipeline_succeeds: bool, merge_status: string, detailed_merge_status: string, merge_after: string, sha: string, merge_commit_sha: string, squash_commit_sha: string, discussion_locked: bool, should_remove_source_branch: bool, force_remove_source_branch: bool, prepared_at: string, allow_collaboration: bool, allow_maintainer_to_push: bool, reference: string, references: record<short: string, relative: string, full: string>, web_url: string, time_stats: record<time_estimate: int, total_time_spent: int, human_time_estimate: string, human_total_time_spent: string>, squash: bool, squash_on_merge: bool, task_completion_status: record<count: int, completed_count: int>, has_conflicts: bool, blocking_discussions_resolved: bool, approvals_before_merge: int, subscribed: bool, changes_count: string, latest_build_started_at: string, latest_build_finished_at: string, first_deployed_to_production_at: string, pipeline: record<id: int, iid: int, project_id: int, sha: string, ref: string, status: string, source: string, created_at: string, updated_at: string, web_url: string>, head_pipeline: record<id: int, iid: int, project_id: int, sha: string, ref: string, status: string, source: string, created_at: string, updated_at: string, web_url: string, before_sha: string, tag: bool, yaml_errors: string, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, started_at: string, finished_at: string, committed_at: string, duration: int, queued_duration: int, coverage: float, detailed_status: record<icon: string, text: string, label: string, group: string, tooltip: string, has_details: bool, details_path: string, illustration: record, favicon: string, action: record>, archived: bool>, diff_refs: record<base_sha: string, head_sha: string, start_sha: string>, merge_error: string, rebase_in_progress: bool, diverged_commits_count: int, first_contribution: bool, user: record<can_merge: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -19027,7 +19026,7 @@ export def "projects-merge-requests-rebase put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --skip-ci: string@bool-completer # Set to true to skip creating a CI pipeline.
+  --skip-ci: oneof<nothing, bool> # Set to true to skip creating a CI pipeline.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -19159,7 +19158,7 @@ export def "projects-merge-requests-approve post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --sha: string # When present, must have the HEAD SHA of the source branch
-  --publish-review: string@bool-completer # When `true` submits pending review comments
+  --publish-review: oneof<nothing, bool> # When `true` submits pending review comments
   --approval-password: string # Current user's password if project is set to require explicit auth on approval (e.g. secret)
 ]: any -> record<user_has_approved: bool, user_can_approve: bool, approved: bool, approved_by: record<user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, approved_at: string>> {
   let input = $in
@@ -19283,7 +19282,7 @@ export def "projects-merge-requests-versions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --unidiff: string@bool-completer # A diff in a Unified diff format (default: false)
+  --unidiff: oneof<nothing, bool> # A diff in a Unified diff format (default: false)
 ]: nothing -> record<id: int, head_commit_sha: string, base_commit_sha: string, start_commit_sha: string, created_at: string, merge_request_id: int, state: string, real_size: string, patch_id_sha: string, commits: table<id: string, short_id: string, created_at: string, parent_ids: list, title: string, message: string, author_name: string, author_email: string, authored_date: string, committer_name: string, committer_email: string, committed_date: string, trailers: record, extended_trailers: record, web_url: string>, diffs: table<diff: string, collapsed: bool, too_large: bool, new_path: string, old_path: string, a_mode: string, b_mode: string, new_file: bool, renamed_file: bool, deleted_file: bool, generated_file: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -19762,7 +19761,7 @@ export def "projects-packages-nuget-query get" [
   --q: string # The search term (e.g. MyNuGet)
   --skip: int # The number of results to skip (format: int32, default: 0, e.g. 1)
   --take: int # The number of results to return (format: int32, default: 20, e.g. 1)
-  --prerelease: string@bool-completer # Include prerelease versions (default: true)
+  --prerelease: oneof<nothing, bool> # Include prerelease versions (default: true)
 ]: nothing -> record<totalHits: int, data: table<_type: string, id: string, title: string, totalDownloads: int, verified: bool, version: string, versions: record, tags: string, authors: string, description: string, summary: string, projectUrl: string, licenseUrl: string, iconUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -20150,8 +20149,8 @@ export def "projects-pages patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --pages-unique-domain-enabled: string@bool-completer # Whether to use unique domain
-  --pages-https-only: string@bool-completer # Whether to force HTTPS
+  --pages-unique-domain-enabled: oneof<nothing, bool> # Whether to use unique domain
+  --pages-https-only: oneof<nothing, bool> # Whether to force HTTPS
   --pages-primary-domain: string # Set pages primary domain
 ]: any -> any {
   let input = $in
@@ -20228,7 +20227,7 @@ export def "projects-pages-domains post" [
   domain: string # The domain
   --certificate: path # The certificate
   --key: path # The key
-  --auto-ssl-enabled: string@bool-completer # Enables automatic generation of SSL certificates issued by Let's Encrypt for custom domains. (default: false)
+  --auto-ssl-enabled: oneof<nothing, bool> # Enables automatic generation of SSL certificates issued by Let's Encrypt for custom domains. (default: false)
   --user-provided-certificate: string
   --user-provided-key: string
 ]: any -> record<domain: string, url: string, verified: string, verification_code: string, enabled_until: string, auto_ssl_enabled: string, certificate: record<subject: string, expired: string, certificate: string, certificate_text: string>> {
@@ -20282,7 +20281,7 @@ export def "projects-pages-domains put" [
   --allow-errors(-e) # Return full response without error handling
   --certificate: path # The certificate
   --key: path # The key
-  --auto-ssl-enabled: string@bool-completer # Enables automatic generation of SSL certificates issued by Let's Encrypt for custom domains.
+  --auto-ssl-enabled: oneof<nothing, bool> # Enables automatic generation of SSL certificates issued by Let's Encrypt for custom domains.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -20429,10 +20428,10 @@ export def "projects-clusters put" [
   --name: string # Cluster name
   --domain: string # Cluster base domain
   --environment-scope: string # The associated environment to the cluster
-  --namespace-per-environment: string@bool-completer # Deploy each environment to a separate Kubernetes namespace (default: true)
+  --namespace-per-environment: oneof<nothing, bool> # Deploy each environment to a separate Kubernetes namespace (default: true)
   --management-project-id: int # The ID of the management project (format: int32)
-  --enabled: string@bool-completer # Determines if cluster is active or not
-  --managed: string@bool-completer # Determines if GitLab will manage namespaces and service accounts for this cluster
+  --enabled: oneof<nothing, bool> # Determines if cluster is active or not
+  --managed: oneof<nothing, bool> # Determines if GitLab will manage namespaces and service accounts for this cluster
   --platform-kubernetes-attributes: record # Platform Kubernetes data — shape: {api_url?: string, token?: string, ca_cert?: string, namespace?: string}
 ]: any -> record<id: string, name: string, created_at: string, domain: string, enabled: string, managed: string, provider_type: string, platform_type: string, environment_scope: string, cluster_type: string, namespace_per_environment: string, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, platform_kubernetes: record<api_url: string, namespace: string, authorization_type: string, ca_cert: string>, provider_gcp: record<cluster_id: string, status_name: string, gcp_project_id: string, zone: string, machine_type: string, num_nodes: string, endpoint: string>, management_project: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string>, project: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string>> {
   let input = $in
@@ -20484,12 +20483,12 @@ export def "projects-clusters-user post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string # Cluster name
-  --enabled: string@bool-completer # Determines if cluster is active or not, defaults to true (default: true)
+  --enabled: oneof<nothing, bool> # Determines if cluster is active or not, defaults to true (default: true)
   --domain: string # Cluster base domain
   --environment-scope: string # The associated environment to the cluster (default: *)
-  --namespace-per-environment: string@bool-completer # Deploy each environment to a separate Kubernetes namespace (default: true)
+  --namespace-per-environment: oneof<nothing, bool> # Deploy each environment to a separate Kubernetes namespace (default: true)
   --management-project-id: int # The ID of the management project (format: int32)
-  --managed: string@bool-completer # Determines if GitLab will manage namespaces and service accounts for this cluster, defaults to true (default: true)
+  --managed: oneof<nothing, bool> # Determines if GitLab will manage namespaces and service accounts for this cluster, defaults to true (default: true)
   platform_kubernetes_attributes: record # Platform Kubernetes data — shape: {api_url: string, token: string, ca_cert?: string, namespace?: string, authorization_type?: "unknown_authorization"|"rbac"|"abac"}
 ]: any -> record<id: string, name: string, created_at: string, domain: string, enabled: string, managed: string, provider_type: string, platform_type: string, environment_scope: string, cluster_type: string, namespace_per_environment: string, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, platform_kubernetes: record<api_url: string, namespace: string, authorization_type: string, ca_cert: string>, provider_gcp: record<cluster_id: string, status_name: string, gcp_project_id: string, zone: string, machine_type: string, num_nodes: string, endpoint: string>, management_project: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string>, project: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string>> {
   let input = $in
@@ -20518,8 +20517,8 @@ export def "projects-registry-repositories get" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --tags: string@bool-completer # Determines if tags should be included (default: false)
-  --tags-count: string@bool-completer # Determines if the tags count should be included (default: false)
+  --tags: oneof<nothing, bool> # Determines if tags should be included (default: false)
+  --tags-count: oneof<nothing, bool> # Determines if the tags count should be included (default: false)
 ]: nothing -> table<id: int, name: string, path: string, project_id: int, location: string, created_at: string, cleanup_policy_started_at: string, tags_count: int, tags: record<name: string, path: string, location: string>, delete_api_path: string, size: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -21157,7 +21156,7 @@ export def "projects-export-relations post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --batched: string@bool-completer # Whether to export in batches
+  --batched: oneof<nothing, bool> # Whether to export in batches
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -21185,7 +21184,7 @@ export def "projects-export-relations-download get" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
   --relation: string # Project relation name
-  --batched: string@bool-completer # Whether to download in batches
+  --batched: oneof<nothing, bool> # Whether to download in batches
   --batch-number: int # Batch number to download (format: int32)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -21368,30 +21367,30 @@ export def "projects-hooks post" [
   --body-url: string # The URL to send the request to (e.g. http://example.com/hook)
   --name: string # Name of the hook
   --description: string # Description of the hook
-  --push-events: string@bool-completer # Trigger hook on push events
-  --issues-events: string@bool-completer # Trigger hook on issues events
-  --confidential-issues-events: string@bool-completer # Trigger hook on confidential issues events
-  --merge-requests-events: string@bool-completer # Trigger hook on merge request events
-  --tag-push-events: string@bool-completer # Trigger hook on tag push events
-  --note-events: string@bool-completer # Trigger hook on note (comment) events
-  --confidential-note-events: string@bool-completer # Trigger hook on confidential note (comment) events
-  --job-events: string@bool-completer # Trigger hook on job events
-  --pipeline-events: string@bool-completer # Trigger hook on pipeline events
-  --wiki-page-events: string@bool-completer # Trigger hook on wiki events
-  --deployment-events: string@bool-completer # Trigger hook on deployment events
-  --feature-flag-events: string@bool-completer # Trigger hook on feature flag events
-  --releases-events: string@bool-completer # Trigger hook on release events
-  --milestone-events: string@bool-completer # Trigger hook on milestone events
-  --emoji-events: string@bool-completer # Trigger hook on emoji events
-  --resource-access-token-events: string@bool-completer # Trigger hook on project access token expiry events
-  --resource-deploy-token-events: string@bool-completer # Trigger hook on deploy token expiry events
-  --enable-ssl-verification: string@bool-completer # Do SSL verification when triggering the hook
+  --push-events: oneof<nothing, bool> # Trigger hook on push events
+  --issues-events: oneof<nothing, bool> # Trigger hook on issues events
+  --confidential-issues-events: oneof<nothing, bool> # Trigger hook on confidential issues events
+  --merge-requests-events: oneof<nothing, bool> # Trigger hook on merge request events
+  --tag-push-events: oneof<nothing, bool> # Trigger hook on tag push events
+  --note-events: oneof<nothing, bool> # Trigger hook on note (comment) events
+  --confidential-note-events: oneof<nothing, bool> # Trigger hook on confidential note (comment) events
+  --job-events: oneof<nothing, bool> # Trigger hook on job events
+  --pipeline-events: oneof<nothing, bool> # Trigger hook on pipeline events
+  --wiki-page-events: oneof<nothing, bool> # Trigger hook on wiki events
+  --deployment-events: oneof<nothing, bool> # Trigger hook on deployment events
+  --feature-flag-events: oneof<nothing, bool> # Trigger hook on feature flag events
+  --releases-events: oneof<nothing, bool> # Trigger hook on release events
+  --milestone-events: oneof<nothing, bool> # Trigger hook on milestone events
+  --emoji-events: oneof<nothing, bool> # Trigger hook on emoji events
+  --resource-access-token-events: oneof<nothing, bool> # Trigger hook on project access token expiry events
+  --resource-deploy-token-events: oneof<nothing, bool> # Trigger hook on deploy token expiry events
+  --enable-ssl-verification: oneof<nothing, bool> # Do SSL verification when triggering the hook
   --body-token: string # Secret token to validate received payloads; this will not be returned in the response
   --signing-token: string # HMAC signing token used to compute the webhook-signature header. Must be in whsec_<base64> format encoding a 32-byte key. Not returned in the response
   --push-events-branch-filter: string # Trigger hook on specified branch only
   --custom-webhook-template: string # Custom template for the request payload
   --branch-filter-strategy: string@branch-filter-strategy-completer # Filter push events by branch. Possible values are `wildcard` (default), `regex`, and `all_branches`
-  --vulnerability-events: string@bool-completer # Trigger hook on vulnerability events
+  --vulnerability-events: oneof<nothing, bool> # Trigger hook on vulnerability events
   --url-variables: list # URL variables for interpolation — item shape: {key: string, value: string}
   --custom-headers: list # Custom headers — item shape: {key: string, value: string}
 ]: any -> record<id: int, url: string, name: string, description: string, created_at: string, push_events: bool, tag_push_events: bool, merge_requests_events: bool, repository_update_events: bool, enable_ssl_verification: bool, organization_id: int, alert_status: string, disabled_until: string, url_variables: list<record>, push_events_branch_filter: string, branch_filter_strategy: string, custom_webhook_template: string, custom_headers: list<record>, token_present: bool, signing_token_present: bool, project_id: int, issues_events: bool, confidential_issues_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, deployment_events: bool, feature_flag_events: bool, job_events: bool, releases_events: bool, milestone_events: bool, emoji_events: bool, resource_access_token_events: bool, resource_deploy_token_events: bool, vulnerability_events: bool> {
@@ -21448,30 +21447,30 @@ export def "projects-hooks put" [
   --body-url: string # The URL to send the request to
   --name: string # Name of the hook
   --description: string # Description of the hook
-  --push-events: string@bool-completer # Trigger hook on push events
-  --issues-events: string@bool-completer # Trigger hook on issues events
-  --confidential-issues-events: string@bool-completer # Trigger hook on confidential issues events
-  --merge-requests-events: string@bool-completer # Trigger hook on merge request events
-  --tag-push-events: string@bool-completer # Trigger hook on tag push events
-  --note-events: string@bool-completer # Trigger hook on note (comment) events
-  --confidential-note-events: string@bool-completer # Trigger hook on confidential note (comment) events
-  --job-events: string@bool-completer # Trigger hook on job events
-  --pipeline-events: string@bool-completer # Trigger hook on pipeline events
-  --wiki-page-events: string@bool-completer # Trigger hook on wiki events
-  --deployment-events: string@bool-completer # Trigger hook on deployment events
-  --feature-flag-events: string@bool-completer # Trigger hook on feature flag events
-  --releases-events: string@bool-completer # Trigger hook on release events
-  --milestone-events: string@bool-completer # Trigger hook on milestone events
-  --emoji-events: string@bool-completer # Trigger hook on emoji events
-  --resource-access-token-events: string@bool-completer # Trigger hook on project access token expiry events
-  --resource-deploy-token-events: string@bool-completer # Trigger hook on deploy token expiry events
-  --enable-ssl-verification: string@bool-completer # Do SSL verification when triggering the hook
+  --push-events: oneof<nothing, bool> # Trigger hook on push events
+  --issues-events: oneof<nothing, bool> # Trigger hook on issues events
+  --confidential-issues-events: oneof<nothing, bool> # Trigger hook on confidential issues events
+  --merge-requests-events: oneof<nothing, bool> # Trigger hook on merge request events
+  --tag-push-events: oneof<nothing, bool> # Trigger hook on tag push events
+  --note-events: oneof<nothing, bool> # Trigger hook on note (comment) events
+  --confidential-note-events: oneof<nothing, bool> # Trigger hook on confidential note (comment) events
+  --job-events: oneof<nothing, bool> # Trigger hook on job events
+  --pipeline-events: oneof<nothing, bool> # Trigger hook on pipeline events
+  --wiki-page-events: oneof<nothing, bool> # Trigger hook on wiki events
+  --deployment-events: oneof<nothing, bool> # Trigger hook on deployment events
+  --feature-flag-events: oneof<nothing, bool> # Trigger hook on feature flag events
+  --releases-events: oneof<nothing, bool> # Trigger hook on release events
+  --milestone-events: oneof<nothing, bool> # Trigger hook on milestone events
+  --emoji-events: oneof<nothing, bool> # Trigger hook on emoji events
+  --resource-access-token-events: oneof<nothing, bool> # Trigger hook on project access token expiry events
+  --resource-deploy-token-events: oneof<nothing, bool> # Trigger hook on deploy token expiry events
+  --enable-ssl-verification: oneof<nothing, bool> # Do SSL verification when triggering the hook
   --body-token: string # Secret token to validate received payloads; this will not be returned in the response
   --signing-token: string # HMAC signing token used to compute the webhook-signature header. Must be in whsec_<base64> format encoding a 32-byte key. Not returned in the response
   --push-events-branch-filter: string # Trigger hook on specified branch only
   --custom-webhook-template: string # Custom template for the request payload
   --branch-filter-strategy: string@branch-filter-strategy-completer # Filter push events by branch. Possible values are `wildcard` (default), `regex`, and `all_branches`
-  --vulnerability-events: string@bool-completer # Trigger hook on vulnerability events
+  --vulnerability-events: oneof<nothing, bool> # Trigger hook on vulnerability events
   --url-variables: list # URL variables for interpolation — item shape: {key: string, value: string}
   --custom-headers: list # Custom headers — item shape: {key: string, value: string}
 ]: any -> record<id: int, url: string, name: string, description: string, created_at: string, push_events: bool, tag_push_events: bool, merge_requests_events: bool, repository_update_events: bool, enable_ssl_verification: bool, organization_id: int, alert_status: string, disabled_until: string, url_variables: list<record>, push_events_branch_filter: string, branch_filter_strategy: string, custom_webhook_template: string, custom_headers: list<record>, token_present: bool, signing_token_present: bool, project_id: int, issues_events: bool, confidential_issues_events: bool, note_events: bool, confidential_note_events: bool, pipeline_events: bool, wiki_page_events: bool, deployment_events: bool, feature_flag_events: bool, job_events: bool, releases_events: bool, milestone_events: bool, emoji_events: bool, resource_access_token_events: bool, resource_deploy_token_events: bool, vulnerability_events: bool> {
@@ -21623,18 +21622,18 @@ export def "projects-import post" [
   --namespace: string # (deprecated) The ID or path of the namespace to import the project to. Defaults to the current user's namespace.
   --namespace-id: int # The ID of the namespace that the project will be imported into. Defaults to the current user's namespace.
   --namespace-path: string # The path of the namespace that the project will be imported into. Defaults to the current user's namespace.
-  --overwrite: string@bool-completer # If there is a project in the same namespace and with the same name overwrite it
+  --overwrite: oneof<nothing, bool> # If there is a project in the same namespace and with the same name overwrite it
   --override-paramsdescription: string # The description of the project
   --override-paramsbuild-git-strategy: string@override-paramsbuild-git-strategy-completer # The Git strategy. Defaults to `fetch`
   --override-paramsbuild-timeout: int # Build timeout
   --override-paramsauto-cancel-pending-pipelines: string@override-paramsauto-cancel-pending-pipelines-completer # Auto-cancel pending pipelines
   --override-paramsci-config-path: string # The path to CI config file. Defaults to `.gitlab-ci.yml`
-  --override-paramsservice-desk-enabled: string@bool-completer # Disable or enable the service desk
-  --override-paramsissues-enabled: string@bool-completer # Flag indication if the issue tracker is enabled
-  --override-paramsmerge-requests-enabled: string@bool-completer # Flag indication if merge requests are enabled
-  --override-paramswiki-enabled: string@bool-completer # Flag indication if the wiki is enabled
-  --override-paramsjobs-enabled: string@bool-completer # Flag indication if jobs are enabled
-  --override-paramssnippets-enabled: string@bool-completer # Flag indication if snippets are enabled
+  --override-paramsservice-desk-enabled: oneof<nothing, bool> # Disable or enable the service desk
+  --override-paramsissues-enabled: oneof<nothing, bool> # Flag indication if the issue tracker is enabled
+  --override-paramsmerge-requests-enabled: oneof<nothing, bool> # Flag indication if merge requests are enabled
+  --override-paramswiki-enabled: oneof<nothing, bool> # Flag indication if the wiki is enabled
+  --override-paramsjobs-enabled: oneof<nothing, bool> # Flag indication if jobs are enabled
+  --override-paramssnippets-enabled: oneof<nothing, bool> # Flag indication if snippets are enabled
   --override-paramsissues-access-level: string@override-paramsissues-access-level-completer # Issues access level. One of `disabled`, `private` or `enabled`
   --override-paramsrepository-access-level: string@override-paramsrepository-access-level-completer # Repository access level. One of `disabled`, `private` or `enabled`
   --override-paramsmerge-requests-access-level: string@override-paramsmerge-requests-access-level-completer # Merge requests access level. One of `disabled`, `private` or `enabled`
@@ -21654,62 +21653,62 @@ export def "projects-import post" [
   --override-paramsmonitor-access-level: string@override-paramsmonitor-access-level-completer # Monitor access level. One of `disabled`, `private` or `enabled`
   --override-paramsmodel-experiments-access-level: string@override-paramsmodel-experiments-access-level-completer # Model experiments access level. One of `disabled`, `private` or `enabled`
   --override-paramsmodel-registry-access-level: string@override-paramsmodel-registry-access-level-completer # Model registry access level. One of `disabled`, `private` or `enabled`
-  --override-paramsemails-disabled: string@bool-completer # Deprecated: Use emails_enabled instead.
-  --override-paramsemails-enabled: string@bool-completer # Enable email notifications
-  --override-paramsshow-default-award-emojis: string@bool-completer # Show default award emojis
-  --override-paramsshow-diff-preview-in-email: string@bool-completer # Include the code diff preview in merge request notification emails
-  --override-paramswarn-about-potentially-unwanted-characters: string@bool-completer # Warn about potentially unwanted characters
-  --override-paramsenforce-auth-checks-on-uploads: string@bool-completer # Enforce auth check on uploads
-  --override-paramsshared-runners-enabled: string@bool-completer # Flag indication if shared runners are enabled for that project
-  --override-paramsgroup-runners-enabled: string@bool-completer # Flag indication if group runners are enabled for that project
+  --override-paramsemails-disabled: oneof<nothing, bool> # Deprecated: Use emails_enabled instead.
+  --override-paramsemails-enabled: oneof<nothing, bool> # Enable email notifications
+  --override-paramsshow-default-award-emojis: oneof<nothing, bool> # Show default award emojis
+  --override-paramsshow-diff-preview-in-email: oneof<nothing, bool> # Include the code diff preview in merge request notification emails
+  --override-paramswarn-about-potentially-unwanted-characters: oneof<nothing, bool> # Warn about potentially unwanted characters
+  --override-paramsenforce-auth-checks-on-uploads: oneof<nothing, bool> # Enforce auth check on uploads
+  --override-paramsshared-runners-enabled: oneof<nothing, bool> # Flag indication if shared runners are enabled for that project
+  --override-paramsgroup-runners-enabled: oneof<nothing, bool> # Flag indication if group runners are enabled for that project
   --override-paramsresource-group-default-process-mode: string@override-paramsresource-group-default-process-mode-completer # The process mode of the resource group
-  --override-paramsresolve-outdated-diff-discussions: string@bool-completer # Automatically resolve merge request diff threads on lines changed with a push
-  --override-paramsremove-source-branch-after-merge: string@bool-completer # Remove the source branch by default after merge
-  --override-paramspackages-enabled: string@bool-completer # Deprecated: Use :package_registry_access_level instead. Enable project packages feature
-  --override-paramscontainer-registry-enabled: string@bool-completer # Deprecated: Use :container_registry_access_level instead. Flag indication if the container registry is enabled for that project
+  --override-paramsresolve-outdated-diff-discussions: oneof<nothing, bool> # Automatically resolve merge request diff threads on lines changed with a push
+  --override-paramsremove-source-branch-after-merge: oneof<nothing, bool> # Remove the source branch by default after merge
+  --override-paramspackages-enabled: oneof<nothing, bool> # Deprecated: Use :package_registry_access_level instead. Enable project packages feature
+  --override-paramscontainer-registry-enabled: oneof<nothing, bool> # Deprecated: Use :container_registry_access_level instead. Flag indication if the container registry is enabled for that project
   --override-paramscontainer-expiration-policy-attributescadence: string # Container expiration policy cadence for recurring job
   --override-paramscontainer-expiration-policy-attributeskeep-n: int # Container expiration policy number of images to keep
   --override-paramscontainer-expiration-policy-attributesolder-than: string # Container expiration policy remove images older than value
   --override-paramscontainer-expiration-policy-attributesname-regex: string # Container expiration policy regex for image removal
   --override-paramscontainer-expiration-policy-attributesname-regex-keep: string # Container expiration policy regex for image retention
-  --override-paramscontainer-expiration-policy-attributesenabled: string@bool-completer # Flag indication if container expiration policy is enabled
-  --override-paramslfs-enabled: string@bool-completer # Flag indication if Git LFS is enabled for that project
+  --override-paramscontainer-expiration-policy-attributesenabled: oneof<nothing, bool> # Flag indication if container expiration policy is enabled
+  --override-paramslfs-enabled: oneof<nothing, bool> # Flag indication if Git LFS is enabled for that project
   --override-paramsvisibility: string@override-paramsvisibility-completer # The visibility of the project.
-  --override-paramspublic-builds: string@bool-completer # Deprecated: Use public_jobs instead.
-  --override-paramspublic-jobs: string@bool-completer # Perform public builds
-  --override-paramsrequest-access-enabled: string@bool-completer # Allow users to request member access
-  --override-paramsonly-allow-merge-if-pipeline-succeeds: string@bool-completer # Only allow to merge if builds succeed
-  --override-paramsallow-merge-on-skipped-pipeline: string@bool-completer # Allow to merge if pipeline is skipped
-  --override-paramsonly-allow-merge-if-all-discussions-are-resolved: string@bool-completer # Only allow to merge if all threads are resolved
+  --override-paramspublic-builds: oneof<nothing, bool> # Deprecated: Use public_jobs instead.
+  --override-paramspublic-jobs: oneof<nothing, bool> # Perform public builds
+  --override-paramsrequest-access-enabled: oneof<nothing, bool> # Allow users to request member access
+  --override-paramsonly-allow-merge-if-pipeline-succeeds: oneof<nothing, bool> # Only allow to merge if builds succeed
+  --override-paramsallow-merge-on-skipped-pipeline: oneof<nothing, bool> # Allow to merge if pipeline is skipped
+  --override-paramsonly-allow-merge-if-all-discussions-are-resolved: oneof<nothing, bool> # Only allow to merge if all threads are resolved
   --override-paramstag-list: list # Deprecated: Use :topics instead
   --override-paramstopics: list # The list of topics for a project
   --override-paramsavatar: path # Avatar image for project
-  --override-paramsprinting-merge-request-link-enabled: string@bool-completer # Show link to create/view merge request when pushing from the command line
+  --override-paramsprinting-merge-request-link-enabled: oneof<nothing, bool> # Show link to create/view merge request when pushing from the command line
   --override-paramsmerge-method: string@override-paramsmerge-method-completer # The merge method used when merging merge requests
   --override-paramssuggestion-commit-message: string # The commit message used to apply merge request suggestions
   --override-paramsmerge-commit-template: string # Template used to create merge commit message
   --override-paramssquash-commit-template: string # Template used to create squash commit message
   --override-paramsissue-branch-template: string # Template used to create a branch from an issue
-  --override-paramsauto-devops-enabled: string@bool-completer # Flag indication if Auto DevOps is enabled
+  --override-paramsauto-devops-enabled: oneof<nothing, bool> # Flag indication if Auto DevOps is enabled
   --override-paramsauto-devops-deploy-strategy: string@override-paramsauto-devops-deploy-strategy-completer # Auto Deploy strategy
-  --override-paramsautoclose-referenced-issues: string@bool-completer # Flag indication if referenced issues auto-closing is enabled
+  --override-paramsautoclose-referenced-issues: oneof<nothing, bool> # Flag indication if referenced issues auto-closing is enabled
   --override-paramsrepository-storage: string # Which storage shard the repository is on. Available only to admins
   --override-paramssquash-option: string@override-paramssquash-option-completer # Squash default for project. One of `never`, `always`, `default_on`, or `default_off`.
-  --override-paramsmr-default-target-self: string@bool-completer # Merge requests of this forked project targets itself by default
+  --override-paramsmr-default-target-self: oneof<nothing, bool> # Merge requests of this forked project targets itself by default
   --override-paramsmr-default-title-template: string # Template used to generate the default merge request title. Maximum 100 characters.
-  --override-paramsonly-allow-merge-if-all-status-checks-passed: string@bool-completer # Blocks merge requests from merging unless all status checks have passed
+  --override-paramsonly-allow-merge-if-all-status-checks-passed: oneof<nothing, bool> # Blocks merge requests from merging unless all status checks have passed
   --override-paramsapprovals-before-merge: int # How many approvers should approve merge request by default
-  --override-paramsmirror: string@bool-completer # [Deprecated] Enables pull mirroring in a project
-  --override-paramsmirror-trigger-builds: string@bool-completer # [Deprecated] Pull mirroring triggers builds
+  --override-paramsmirror: oneof<nothing, bool> # [Deprecated] Enables pull mirroring in a project
+  --override-paramsmirror-trigger-builds: oneof<nothing, bool> # [Deprecated] Pull mirroring triggers builds
   --override-paramsexternal-authorization-classification-label: string # The classification label for the project
   --override-paramsrequirements-access-level: string@override-paramsrequirements-access-level-completer # Requirements feature access level. One of `disabled`, `private` or `enabled`
-  --override-paramsprevent-merge-without-jira-issue: string@bool-completer # Require an associated issue from Jira
-  --override-paramsauto-duo-code-review-enabled: string@bool-completer # Enable automatic reviews by GitLab Duo on merge requests
-  --override-paramsduo-remote-flows-enabled: string@bool-completer # Enable GitLab Duo remote flows for this project
-  --override-paramsduo-sast-fp-detection-enabled: string@bool-completer # Enable GitLab Duo SAST false positive detection for this project
-  --override-paramsduo-secret-detection-fp-enabled: string@bool-completer # Enable GitLab Duo Secret Detection false positive detection for this project
-  --override-paramsduo-sast-vr-workflow-enabled: string@bool-completer # Enable GitLab Duo SAST vulnerability resolution workflow for this project
-  --override-paramsspp-repository-pipeline-access: string@bool-completer # Grant read-only access to security policy configurations for enforcement in linked CI/CD projects
+  --override-paramsprevent-merge-without-jira-issue: oneof<nothing, bool> # Require an associated issue from Jira
+  --override-paramsauto-duo-code-review-enabled: oneof<nothing, bool> # Enable automatic reviews by GitLab Duo on merge requests
+  --override-paramsduo-remote-flows-enabled: oneof<nothing, bool> # Enable GitLab Duo remote flows for this project
+  --override-paramsduo-sast-fp-detection-enabled: oneof<nothing, bool> # Enable GitLab Duo SAST false positive detection for this project
+  --override-paramsduo-secret-detection-fp-enabled: oneof<nothing, bool> # Enable GitLab Duo Secret Detection false positive detection for this project
+  --override-paramsduo-sast-vr-workflow-enabled: oneof<nothing, bool> # Enable GitLab Duo SAST vulnerability resolution workflow for this project
+  --override-paramsspp-repository-pipeline-access: oneof<nothing, bool> # Grant read-only access to security policy configurations for enforcement in linked CI/CD projects
   --override-paramsmerge-request-title-regex: string # The regex the Merge Request must adhere to
   --override-paramsmerge-request-title-regex-description: string # The description for the regex the Merge Request must adhere to
   --filepath: string # Path to locally stored body (generated by Workhorse)
@@ -21804,18 +21803,18 @@ export def "projects-remote-import post" [
   --namespace: string # (deprecated) The ID or path of the namespace to import the project to. Defaults to the current user's namespace.
   --namespace-id: int # The ID of the namespace that the project will be imported into. Defaults to the current user's namespace.
   --namespace-path: string # The path of the namespace that the project will be imported into. Defaults to the current user's namespace.
-  --overwrite: string@bool-completer # If there is a project in the same namespace and with the same name overwrite it
+  --overwrite: oneof<nothing, bool> # If there is a project in the same namespace and with the same name overwrite it
   --override-paramsdescription: string # The description of the project
   --override-paramsbuild-git-strategy: string@override-paramsbuild-git-strategy-completer # The Git strategy. Defaults to `fetch`
   --override-paramsbuild-timeout: int # Build timeout
   --override-paramsauto-cancel-pending-pipelines: string@override-paramsauto-cancel-pending-pipelines-completer # Auto-cancel pending pipelines
   --override-paramsci-config-path: string # The path to CI config file. Defaults to `.gitlab-ci.yml`
-  --override-paramsservice-desk-enabled: string@bool-completer # Disable or enable the service desk
-  --override-paramsissues-enabled: string@bool-completer # Flag indication if the issue tracker is enabled
-  --override-paramsmerge-requests-enabled: string@bool-completer # Flag indication if merge requests are enabled
-  --override-paramswiki-enabled: string@bool-completer # Flag indication if the wiki is enabled
-  --override-paramsjobs-enabled: string@bool-completer # Flag indication if jobs are enabled
-  --override-paramssnippets-enabled: string@bool-completer # Flag indication if snippets are enabled
+  --override-paramsservice-desk-enabled: oneof<nothing, bool> # Disable or enable the service desk
+  --override-paramsissues-enabled: oneof<nothing, bool> # Flag indication if the issue tracker is enabled
+  --override-paramsmerge-requests-enabled: oneof<nothing, bool> # Flag indication if merge requests are enabled
+  --override-paramswiki-enabled: oneof<nothing, bool> # Flag indication if the wiki is enabled
+  --override-paramsjobs-enabled: oneof<nothing, bool> # Flag indication if jobs are enabled
+  --override-paramssnippets-enabled: oneof<nothing, bool> # Flag indication if snippets are enabled
   --override-paramsissues-access-level: string@override-paramsissues-access-level-completer # Issues access level. One of `disabled`, `private` or `enabled`
   --override-paramsrepository-access-level: string@override-paramsrepository-access-level-completer # Repository access level. One of `disabled`, `private` or `enabled`
   --override-paramsmerge-requests-access-level: string@override-paramsmerge-requests-access-level-completer # Merge requests access level. One of `disabled`, `private` or `enabled`
@@ -21835,62 +21834,62 @@ export def "projects-remote-import post" [
   --override-paramsmonitor-access-level: string@override-paramsmonitor-access-level-completer # Monitor access level. One of `disabled`, `private` or `enabled`
   --override-paramsmodel-experiments-access-level: string@override-paramsmodel-experiments-access-level-completer # Model experiments access level. One of `disabled`, `private` or `enabled`
   --override-paramsmodel-registry-access-level: string@override-paramsmodel-registry-access-level-completer # Model registry access level. One of `disabled`, `private` or `enabled`
-  --override-paramsemails-disabled: string@bool-completer # Deprecated: Use emails_enabled instead.
-  --override-paramsemails-enabled: string@bool-completer # Enable email notifications
-  --override-paramsshow-default-award-emojis: string@bool-completer # Show default award emojis
-  --override-paramsshow-diff-preview-in-email: string@bool-completer # Include the code diff preview in merge request notification emails
-  --override-paramswarn-about-potentially-unwanted-characters: string@bool-completer # Warn about potentially unwanted characters
-  --override-paramsenforce-auth-checks-on-uploads: string@bool-completer # Enforce auth check on uploads
-  --override-paramsshared-runners-enabled: string@bool-completer # Flag indication if shared runners are enabled for that project
-  --override-paramsgroup-runners-enabled: string@bool-completer # Flag indication if group runners are enabled for that project
+  --override-paramsemails-disabled: oneof<nothing, bool> # Deprecated: Use emails_enabled instead.
+  --override-paramsemails-enabled: oneof<nothing, bool> # Enable email notifications
+  --override-paramsshow-default-award-emojis: oneof<nothing, bool> # Show default award emojis
+  --override-paramsshow-diff-preview-in-email: oneof<nothing, bool> # Include the code diff preview in merge request notification emails
+  --override-paramswarn-about-potentially-unwanted-characters: oneof<nothing, bool> # Warn about potentially unwanted characters
+  --override-paramsenforce-auth-checks-on-uploads: oneof<nothing, bool> # Enforce auth check on uploads
+  --override-paramsshared-runners-enabled: oneof<nothing, bool> # Flag indication if shared runners are enabled for that project
+  --override-paramsgroup-runners-enabled: oneof<nothing, bool> # Flag indication if group runners are enabled for that project
   --override-paramsresource-group-default-process-mode: string@override-paramsresource-group-default-process-mode-completer # The process mode of the resource group
-  --override-paramsresolve-outdated-diff-discussions: string@bool-completer # Automatically resolve merge request diff threads on lines changed with a push
-  --override-paramsremove-source-branch-after-merge: string@bool-completer # Remove the source branch by default after merge
-  --override-paramspackages-enabled: string@bool-completer # Deprecated: Use :package_registry_access_level instead. Enable project packages feature
-  --override-paramscontainer-registry-enabled: string@bool-completer # Deprecated: Use :container_registry_access_level instead. Flag indication if the container registry is enabled for that project
+  --override-paramsresolve-outdated-diff-discussions: oneof<nothing, bool> # Automatically resolve merge request diff threads on lines changed with a push
+  --override-paramsremove-source-branch-after-merge: oneof<nothing, bool> # Remove the source branch by default after merge
+  --override-paramspackages-enabled: oneof<nothing, bool> # Deprecated: Use :package_registry_access_level instead. Enable project packages feature
+  --override-paramscontainer-registry-enabled: oneof<nothing, bool> # Deprecated: Use :container_registry_access_level instead. Flag indication if the container registry is enabled for that project
   --override-paramscontainer-expiration-policy-attributescadence: string # Container expiration policy cadence for recurring job
   --override-paramscontainer-expiration-policy-attributeskeep-n: int # Container expiration policy number of images to keep
   --override-paramscontainer-expiration-policy-attributesolder-than: string # Container expiration policy remove images older than value
   --override-paramscontainer-expiration-policy-attributesname-regex: string # Container expiration policy regex for image removal
   --override-paramscontainer-expiration-policy-attributesname-regex-keep: string # Container expiration policy regex for image retention
-  --override-paramscontainer-expiration-policy-attributesenabled: string@bool-completer # Flag indication if container expiration policy is enabled
-  --override-paramslfs-enabled: string@bool-completer # Flag indication if Git LFS is enabled for that project
+  --override-paramscontainer-expiration-policy-attributesenabled: oneof<nothing, bool> # Flag indication if container expiration policy is enabled
+  --override-paramslfs-enabled: oneof<nothing, bool> # Flag indication if Git LFS is enabled for that project
   --override-paramsvisibility: string@override-paramsvisibility-completer # The visibility of the project.
-  --override-paramspublic-builds: string@bool-completer # Deprecated: Use public_jobs instead.
-  --override-paramspublic-jobs: string@bool-completer # Perform public builds
-  --override-paramsrequest-access-enabled: string@bool-completer # Allow users to request member access
-  --override-paramsonly-allow-merge-if-pipeline-succeeds: string@bool-completer # Only allow to merge if builds succeed
-  --override-paramsallow-merge-on-skipped-pipeline: string@bool-completer # Allow to merge if pipeline is skipped
-  --override-paramsonly-allow-merge-if-all-discussions-are-resolved: string@bool-completer # Only allow to merge if all threads are resolved
+  --override-paramspublic-builds: oneof<nothing, bool> # Deprecated: Use public_jobs instead.
+  --override-paramspublic-jobs: oneof<nothing, bool> # Perform public builds
+  --override-paramsrequest-access-enabled: oneof<nothing, bool> # Allow users to request member access
+  --override-paramsonly-allow-merge-if-pipeline-succeeds: oneof<nothing, bool> # Only allow to merge if builds succeed
+  --override-paramsallow-merge-on-skipped-pipeline: oneof<nothing, bool> # Allow to merge if pipeline is skipped
+  --override-paramsonly-allow-merge-if-all-discussions-are-resolved: oneof<nothing, bool> # Only allow to merge if all threads are resolved
   --override-paramstag-list: list # Deprecated: Use :topics instead
   --override-paramstopics: list # The list of topics for a project
   --override-paramsavatar: path # Avatar image for project
-  --override-paramsprinting-merge-request-link-enabled: string@bool-completer # Show link to create/view merge request when pushing from the command line
+  --override-paramsprinting-merge-request-link-enabled: oneof<nothing, bool> # Show link to create/view merge request when pushing from the command line
   --override-paramsmerge-method: string@override-paramsmerge-method-completer # The merge method used when merging merge requests
   --override-paramssuggestion-commit-message: string # The commit message used to apply merge request suggestions
   --override-paramsmerge-commit-template: string # Template used to create merge commit message
   --override-paramssquash-commit-template: string # Template used to create squash commit message
   --override-paramsissue-branch-template: string # Template used to create a branch from an issue
-  --override-paramsauto-devops-enabled: string@bool-completer # Flag indication if Auto DevOps is enabled
+  --override-paramsauto-devops-enabled: oneof<nothing, bool> # Flag indication if Auto DevOps is enabled
   --override-paramsauto-devops-deploy-strategy: string@override-paramsauto-devops-deploy-strategy-completer # Auto Deploy strategy
-  --override-paramsautoclose-referenced-issues: string@bool-completer # Flag indication if referenced issues auto-closing is enabled
+  --override-paramsautoclose-referenced-issues: oneof<nothing, bool> # Flag indication if referenced issues auto-closing is enabled
   --override-paramsrepository-storage: string # Which storage shard the repository is on. Available only to admins
   --override-paramssquash-option: string@override-paramssquash-option-completer # Squash default for project. One of `never`, `always`, `default_on`, or `default_off`.
-  --override-paramsmr-default-target-self: string@bool-completer # Merge requests of this forked project targets itself by default
+  --override-paramsmr-default-target-self: oneof<nothing, bool> # Merge requests of this forked project targets itself by default
   --override-paramsmr-default-title-template: string # Template used to generate the default merge request title. Maximum 100 characters.
-  --override-paramsonly-allow-merge-if-all-status-checks-passed: string@bool-completer # Blocks merge requests from merging unless all status checks have passed
+  --override-paramsonly-allow-merge-if-all-status-checks-passed: oneof<nothing, bool> # Blocks merge requests from merging unless all status checks have passed
   --override-paramsapprovals-before-merge: int # How many approvers should approve merge request by default
-  --override-paramsmirror: string@bool-completer # [Deprecated] Enables pull mirroring in a project
-  --override-paramsmirror-trigger-builds: string@bool-completer # [Deprecated] Pull mirroring triggers builds
+  --override-paramsmirror: oneof<nothing, bool> # [Deprecated] Enables pull mirroring in a project
+  --override-paramsmirror-trigger-builds: oneof<nothing, bool> # [Deprecated] Pull mirroring triggers builds
   --override-paramsexternal-authorization-classification-label: string # The classification label for the project
   --override-paramsrequirements-access-level: string@override-paramsrequirements-access-level-completer # Requirements feature access level. One of `disabled`, `private` or `enabled`
-  --override-paramsprevent-merge-without-jira-issue: string@bool-completer # Require an associated issue from Jira
-  --override-paramsauto-duo-code-review-enabled: string@bool-completer # Enable automatic reviews by GitLab Duo on merge requests
-  --override-paramsduo-remote-flows-enabled: string@bool-completer # Enable GitLab Duo remote flows for this project
-  --override-paramsduo-sast-fp-detection-enabled: string@bool-completer # Enable GitLab Duo SAST false positive detection for this project
-  --override-paramsduo-secret-detection-fp-enabled: string@bool-completer # Enable GitLab Duo Secret Detection false positive detection for this project
-  --override-paramsduo-sast-vr-workflow-enabled: string@bool-completer # Enable GitLab Duo SAST vulnerability resolution workflow for this project
-  --override-paramsspp-repository-pipeline-access: string@bool-completer # Grant read-only access to security policy configurations for enforcement in linked CI/CD projects
+  --override-paramsprevent-merge-without-jira-issue: oneof<nothing, bool> # Require an associated issue from Jira
+  --override-paramsauto-duo-code-review-enabled: oneof<nothing, bool> # Enable automatic reviews by GitLab Duo on merge requests
+  --override-paramsduo-remote-flows-enabled: oneof<nothing, bool> # Enable GitLab Duo remote flows for this project
+  --override-paramsduo-sast-fp-detection-enabled: oneof<nothing, bool> # Enable GitLab Duo SAST false positive detection for this project
+  --override-paramsduo-secret-detection-fp-enabled: oneof<nothing, bool> # Enable GitLab Duo Secret Detection false positive detection for this project
+  --override-paramsduo-sast-vr-workflow-enabled: oneof<nothing, bool> # Enable GitLab Duo SAST vulnerability resolution workflow for this project
+  --override-paramsspp-repository-pipeline-access: oneof<nothing, bool> # Grant read-only access to security policy configurations for enforcement in linked CI/CD projects
   --override-paramsmerge-request-title-regex: string # The regex the Merge Request must adhere to
   --override-paramsmerge-request-title-regex-description: string # The description for the regex the Merge Request must adhere to
 ]: any -> record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, import_status: string, import_type: string, correlation_id: string, failed_relations: table<id: int, created_at: string, exception_class: string, source: string, exception_message: string, relation_name: string, line_number: int>, import_error: string, stats: record> {
@@ -22009,18 +22008,18 @@ export def "projects-remote-import-s3 post" [
   --namespace: string # (deprecated) The ID or path of the namespace to import the project to. Defaults to the current user's namespace.
   --namespace-id: int # The ID of the namespace that the project will be imported into. Defaults to the current user's namespace.
   --namespace-path: string # The path of the namespace that the project will be imported into. Defaults to the current user's namespace.
-  --overwrite: string@bool-completer # If there is a project in the same namespace and with the same name overwrite it
+  --overwrite: oneof<nothing, bool> # If there is a project in the same namespace and with the same name overwrite it
   --override-paramsdescription: string # The description of the project
   --override-paramsbuild-git-strategy: string@override-paramsbuild-git-strategy-completer # The Git strategy. Defaults to `fetch`
   --override-paramsbuild-timeout: int # Build timeout
   --override-paramsauto-cancel-pending-pipelines: string@override-paramsauto-cancel-pending-pipelines-completer # Auto-cancel pending pipelines
   --override-paramsci-config-path: string # The path to CI config file. Defaults to `.gitlab-ci.yml`
-  --override-paramsservice-desk-enabled: string@bool-completer # Disable or enable the service desk
-  --override-paramsissues-enabled: string@bool-completer # Flag indication if the issue tracker is enabled
-  --override-paramsmerge-requests-enabled: string@bool-completer # Flag indication if merge requests are enabled
-  --override-paramswiki-enabled: string@bool-completer # Flag indication if the wiki is enabled
-  --override-paramsjobs-enabled: string@bool-completer # Flag indication if jobs are enabled
-  --override-paramssnippets-enabled: string@bool-completer # Flag indication if snippets are enabled
+  --override-paramsservice-desk-enabled: oneof<nothing, bool> # Disable or enable the service desk
+  --override-paramsissues-enabled: oneof<nothing, bool> # Flag indication if the issue tracker is enabled
+  --override-paramsmerge-requests-enabled: oneof<nothing, bool> # Flag indication if merge requests are enabled
+  --override-paramswiki-enabled: oneof<nothing, bool> # Flag indication if the wiki is enabled
+  --override-paramsjobs-enabled: oneof<nothing, bool> # Flag indication if jobs are enabled
+  --override-paramssnippets-enabled: oneof<nothing, bool> # Flag indication if snippets are enabled
   --override-paramsissues-access-level: string@override-paramsissues-access-level-completer # Issues access level. One of `disabled`, `private` or `enabled`
   --override-paramsrepository-access-level: string@override-paramsrepository-access-level-completer # Repository access level. One of `disabled`, `private` or `enabled`
   --override-paramsmerge-requests-access-level: string@override-paramsmerge-requests-access-level-completer # Merge requests access level. One of `disabled`, `private` or `enabled`
@@ -22040,62 +22039,62 @@ export def "projects-remote-import-s3 post" [
   --override-paramsmonitor-access-level: string@override-paramsmonitor-access-level-completer # Monitor access level. One of `disabled`, `private` or `enabled`
   --override-paramsmodel-experiments-access-level: string@override-paramsmodel-experiments-access-level-completer # Model experiments access level. One of `disabled`, `private` or `enabled`
   --override-paramsmodel-registry-access-level: string@override-paramsmodel-registry-access-level-completer # Model registry access level. One of `disabled`, `private` or `enabled`
-  --override-paramsemails-disabled: string@bool-completer # Deprecated: Use emails_enabled instead.
-  --override-paramsemails-enabled: string@bool-completer # Enable email notifications
-  --override-paramsshow-default-award-emojis: string@bool-completer # Show default award emojis
-  --override-paramsshow-diff-preview-in-email: string@bool-completer # Include the code diff preview in merge request notification emails
-  --override-paramswarn-about-potentially-unwanted-characters: string@bool-completer # Warn about potentially unwanted characters
-  --override-paramsenforce-auth-checks-on-uploads: string@bool-completer # Enforce auth check on uploads
-  --override-paramsshared-runners-enabled: string@bool-completer # Flag indication if shared runners are enabled for that project
-  --override-paramsgroup-runners-enabled: string@bool-completer # Flag indication if group runners are enabled for that project
+  --override-paramsemails-disabled: oneof<nothing, bool> # Deprecated: Use emails_enabled instead.
+  --override-paramsemails-enabled: oneof<nothing, bool> # Enable email notifications
+  --override-paramsshow-default-award-emojis: oneof<nothing, bool> # Show default award emojis
+  --override-paramsshow-diff-preview-in-email: oneof<nothing, bool> # Include the code diff preview in merge request notification emails
+  --override-paramswarn-about-potentially-unwanted-characters: oneof<nothing, bool> # Warn about potentially unwanted characters
+  --override-paramsenforce-auth-checks-on-uploads: oneof<nothing, bool> # Enforce auth check on uploads
+  --override-paramsshared-runners-enabled: oneof<nothing, bool> # Flag indication if shared runners are enabled for that project
+  --override-paramsgroup-runners-enabled: oneof<nothing, bool> # Flag indication if group runners are enabled for that project
   --override-paramsresource-group-default-process-mode: string@override-paramsresource-group-default-process-mode-completer # The process mode of the resource group
-  --override-paramsresolve-outdated-diff-discussions: string@bool-completer # Automatically resolve merge request diff threads on lines changed with a push
-  --override-paramsremove-source-branch-after-merge: string@bool-completer # Remove the source branch by default after merge
-  --override-paramspackages-enabled: string@bool-completer # Deprecated: Use :package_registry_access_level instead. Enable project packages feature
-  --override-paramscontainer-registry-enabled: string@bool-completer # Deprecated: Use :container_registry_access_level instead. Flag indication if the container registry is enabled for that project
+  --override-paramsresolve-outdated-diff-discussions: oneof<nothing, bool> # Automatically resolve merge request diff threads on lines changed with a push
+  --override-paramsremove-source-branch-after-merge: oneof<nothing, bool> # Remove the source branch by default after merge
+  --override-paramspackages-enabled: oneof<nothing, bool> # Deprecated: Use :package_registry_access_level instead. Enable project packages feature
+  --override-paramscontainer-registry-enabled: oneof<nothing, bool> # Deprecated: Use :container_registry_access_level instead. Flag indication if the container registry is enabled for that project
   --override-paramscontainer-expiration-policy-attributescadence: string # Container expiration policy cadence for recurring job
   --override-paramscontainer-expiration-policy-attributeskeep-n: int # Container expiration policy number of images to keep
   --override-paramscontainer-expiration-policy-attributesolder-than: string # Container expiration policy remove images older than value
   --override-paramscontainer-expiration-policy-attributesname-regex: string # Container expiration policy regex for image removal
   --override-paramscontainer-expiration-policy-attributesname-regex-keep: string # Container expiration policy regex for image retention
-  --override-paramscontainer-expiration-policy-attributesenabled: string@bool-completer # Flag indication if container expiration policy is enabled
-  --override-paramslfs-enabled: string@bool-completer # Flag indication if Git LFS is enabled for that project
+  --override-paramscontainer-expiration-policy-attributesenabled: oneof<nothing, bool> # Flag indication if container expiration policy is enabled
+  --override-paramslfs-enabled: oneof<nothing, bool> # Flag indication if Git LFS is enabled for that project
   --override-paramsvisibility: string@override-paramsvisibility-completer # The visibility of the project.
-  --override-paramspublic-builds: string@bool-completer # Deprecated: Use public_jobs instead.
-  --override-paramspublic-jobs: string@bool-completer # Perform public builds
-  --override-paramsrequest-access-enabled: string@bool-completer # Allow users to request member access
-  --override-paramsonly-allow-merge-if-pipeline-succeeds: string@bool-completer # Only allow to merge if builds succeed
-  --override-paramsallow-merge-on-skipped-pipeline: string@bool-completer # Allow to merge if pipeline is skipped
-  --override-paramsonly-allow-merge-if-all-discussions-are-resolved: string@bool-completer # Only allow to merge if all threads are resolved
+  --override-paramspublic-builds: oneof<nothing, bool> # Deprecated: Use public_jobs instead.
+  --override-paramspublic-jobs: oneof<nothing, bool> # Perform public builds
+  --override-paramsrequest-access-enabled: oneof<nothing, bool> # Allow users to request member access
+  --override-paramsonly-allow-merge-if-pipeline-succeeds: oneof<nothing, bool> # Only allow to merge if builds succeed
+  --override-paramsallow-merge-on-skipped-pipeline: oneof<nothing, bool> # Allow to merge if pipeline is skipped
+  --override-paramsonly-allow-merge-if-all-discussions-are-resolved: oneof<nothing, bool> # Only allow to merge if all threads are resolved
   --override-paramstag-list: list # Deprecated: Use :topics instead
   --override-paramstopics: list # The list of topics for a project
   --override-paramsavatar: path # Avatar image for project
-  --override-paramsprinting-merge-request-link-enabled: string@bool-completer # Show link to create/view merge request when pushing from the command line
+  --override-paramsprinting-merge-request-link-enabled: oneof<nothing, bool> # Show link to create/view merge request when pushing from the command line
   --override-paramsmerge-method: string@override-paramsmerge-method-completer # The merge method used when merging merge requests
   --override-paramssuggestion-commit-message: string # The commit message used to apply merge request suggestions
   --override-paramsmerge-commit-template: string # Template used to create merge commit message
   --override-paramssquash-commit-template: string # Template used to create squash commit message
   --override-paramsissue-branch-template: string # Template used to create a branch from an issue
-  --override-paramsauto-devops-enabled: string@bool-completer # Flag indication if Auto DevOps is enabled
+  --override-paramsauto-devops-enabled: oneof<nothing, bool> # Flag indication if Auto DevOps is enabled
   --override-paramsauto-devops-deploy-strategy: string@override-paramsauto-devops-deploy-strategy-completer # Auto Deploy strategy
-  --override-paramsautoclose-referenced-issues: string@bool-completer # Flag indication if referenced issues auto-closing is enabled
+  --override-paramsautoclose-referenced-issues: oneof<nothing, bool> # Flag indication if referenced issues auto-closing is enabled
   --override-paramsrepository-storage: string # Which storage shard the repository is on. Available only to admins
   --override-paramssquash-option: string@override-paramssquash-option-completer # Squash default for project. One of `never`, `always`, `default_on`, or `default_off`.
-  --override-paramsmr-default-target-self: string@bool-completer # Merge requests of this forked project targets itself by default
+  --override-paramsmr-default-target-self: oneof<nothing, bool> # Merge requests of this forked project targets itself by default
   --override-paramsmr-default-title-template: string # Template used to generate the default merge request title. Maximum 100 characters.
-  --override-paramsonly-allow-merge-if-all-status-checks-passed: string@bool-completer # Blocks merge requests from merging unless all status checks have passed
+  --override-paramsonly-allow-merge-if-all-status-checks-passed: oneof<nothing, bool> # Blocks merge requests from merging unless all status checks have passed
   --override-paramsapprovals-before-merge: int # How many approvers should approve merge request by default
-  --override-paramsmirror: string@bool-completer # [Deprecated] Enables pull mirroring in a project
-  --override-paramsmirror-trigger-builds: string@bool-completer # [Deprecated] Pull mirroring triggers builds
+  --override-paramsmirror: oneof<nothing, bool> # [Deprecated] Enables pull mirroring in a project
+  --override-paramsmirror-trigger-builds: oneof<nothing, bool> # [Deprecated] Pull mirroring triggers builds
   --override-paramsexternal-authorization-classification-label: string # The classification label for the project
   --override-paramsrequirements-access-level: string@override-paramsrequirements-access-level-completer # Requirements feature access level. One of `disabled`, `private` or `enabled`
-  --override-paramsprevent-merge-without-jira-issue: string@bool-completer # Require an associated issue from Jira
-  --override-paramsauto-duo-code-review-enabled: string@bool-completer # Enable automatic reviews by GitLab Duo on merge requests
-  --override-paramsduo-remote-flows-enabled: string@bool-completer # Enable GitLab Duo remote flows for this project
-  --override-paramsduo-sast-fp-detection-enabled: string@bool-completer # Enable GitLab Duo SAST false positive detection for this project
-  --override-paramsduo-secret-detection-fp-enabled: string@bool-completer # Enable GitLab Duo Secret Detection false positive detection for this project
-  --override-paramsduo-sast-vr-workflow-enabled: string@bool-completer # Enable GitLab Duo SAST vulnerability resolution workflow for this project
-  --override-paramsspp-repository-pipeline-access: string@bool-completer # Grant read-only access to security policy configurations for enforcement in linked CI/CD projects
+  --override-paramsprevent-merge-without-jira-issue: oneof<nothing, bool> # Require an associated issue from Jira
+  --override-paramsauto-duo-code-review-enabled: oneof<nothing, bool> # Enable automatic reviews by GitLab Duo on merge requests
+  --override-paramsduo-remote-flows-enabled: oneof<nothing, bool> # Enable GitLab Duo remote flows for this project
+  --override-paramsduo-sast-fp-detection-enabled: oneof<nothing, bool> # Enable GitLab Duo SAST false positive detection for this project
+  --override-paramsduo-secret-detection-fp-enabled: oneof<nothing, bool> # Enable GitLab Duo Secret Detection false positive detection for this project
+  --override-paramsduo-sast-vr-workflow-enabled: oneof<nothing, bool> # Enable GitLab Duo SAST vulnerability resolution workflow for this project
+  --override-paramsspp-repository-pipeline-access: oneof<nothing, bool> # Grant read-only access to security policy configurations for enforcement in linked CI/CD projects
   --override-paramsmerge-request-title-regex: string # The regex the Merge Request must adhere to
   --override-paramsmerge-request-title-regex-description: string # The description for the regex the Merge Request must adhere to
 ]: any -> record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, import_status: string, import_type: string, correlation_id: string, failed_relations: table<id: int, created_at: string, exception_class: string, source: string, exception_message: string, relation_name: string, line_number: int>, import_error: string, stats: record> {
@@ -22146,7 +22145,7 @@ export def "projects-job-token-scope patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Indicates CI/CD job tokens generated in other projects have restricted access to this project.
+  --enabled: oneof<nothing, bool> # Indicates CI/CD job tokens generated in other projects have restricted access to this project.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -22327,7 +22326,7 @@ export def "projects-packages list" [
   --package-type: string@package-type-completer # Return packages of a certain type
   --package-name: string # Return packages with this name
   --package-version: string # Return packages with this version
-  --include-versionless: string@bool-completer # Returns packages without a version
+  --include-versionless: oneof<nothing, bool> # Returns packages without a version
   --status: string@status-completer-1 # Return packages with specified status
 ]: nothing -> table<id: int, name: string, conan_package_name: string, version: string, package_type: string, status: string, _links: record<web_path: string, delete_api_path: string>, created_at: string, last_downloaded_at: string, creator_id: int, project_id: int, project_path: string, tags: string, pipeline: record<id: int, iid: int, project_id: int, sha: string, ref: string, status: string, source: string, created_at: string, updated_at: string, web_url: string, user: record>, pipelines: record<id: int, iid: int, project_id: int, sha: string, ref: string, status: string, source: string, created_at: string, updated_at: string, web_url: string, user: record>, versions: record<id: string, version: string, created_at: string, tags: string, pipeline: record>> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -22529,7 +22528,7 @@ export def "projects-snapshot get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wiki: string@bool-completer # Set to true to receive the wiki repository
+  --wiki: oneof<nothing, bool> # Set to true to receive the wiki repository
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -22954,16 +22953,16 @@ export def "projects list" [
   --allow-errors(-e) # Return full response without error handling
   --order-by: string@order-by-completer-11 # Return projects ordered by field. storage_size, repository_size, wiki_size, packages_size are only available to admins. Similarity is available when searching and is limited to projects the user has access to. (default: created_at)
   --qp-sort: string@sort-completer # Return projects sorted in ascending and descending order (default: desc)
-  --archived: string@bool-completer # Limit by archived status
+  --archived: oneof<nothing, bool> # Limit by archived status
   --visibility: string@visibility-completer # Limit by visibility
   --search: string # Return list of projects matching the search criteria
-  --search-namespaces: string@bool-completer # Include ancestor namespaces when matching search criteria
-  --owned: string@bool-completer # Limit by owned by authenticated user (default: false)
-  --starred: string@bool-completer # Limit by starred status (default: false)
-  --imported: string@bool-completer # Limit by imported by authenticated user (default: false)
-  --membership: string@bool-completer # Limit by projects that the current user is a member of (default: false)
-  --with-issues-enabled: string@bool-completer # Limit by enabled issues feature (default: false)
-  --with-merge-requests-enabled: string@bool-completer # Limit by enabled merge requests feature (default: false)
+  --search-namespaces: oneof<nothing, bool> # Include ancestor namespaces when matching search criteria
+  --owned: oneof<nothing, bool> # Limit by owned by authenticated user (default: false)
+  --starred: oneof<nothing, bool> # Limit by starred status (default: false)
+  --imported: oneof<nothing, bool> # Limit by imported by authenticated user (default: false)
+  --membership: oneof<nothing, bool> # Limit by projects that the current user is a member of (default: false)
+  --with-issues-enabled: oneof<nothing, bool> # Limit by enabled issues feature (default: false)
+  --with-merge-requests-enabled: oneof<nothing, bool> # Limit by enabled merge requests feature (default: false)
   --with-programming-language: string # Limit to repositories which use the given programming language
   --min-access-level: int@min-access-level-completer # Limit by minimum access level of authenticated user (format: int32)
   --id-after: int # Limit results to projects with IDs greater than the specified ID (format: int32)
@@ -22975,17 +22974,17 @@ export def "projects list" [
   --topic-id: int # Limit results to projects with the assigned topic given by the topic ID (format: int32)
   --updated-before: string # Return projects updated before the specified datetime. Format: ISO 8601 YYYY-MM-DDTHH:MM:SSZ (format: date-time)
   --updated-after: string # Return projects updated after the specified datetime. Format: ISO 8601 YYYY-MM-DDTHH:MM:SSZ (format: date-time)
-  --include-pending-delete: string@bool-completer # Include projects in pending delete state. Can only be set by admins
+  --include-pending-delete: oneof<nothing, bool> # Include projects in pending delete state. Can only be set by admins
   --marked-for-deletion-on: string # Date when the project was marked for deletion (format: date)
-  --active: string@bool-completer # Limit by projects that are not archived and not marked for deletion
-  --wiki-checksum-failed: string@bool-completer # Limit by projects where wiki checksum is failed (default: false)
-  --repository-checksum-failed: string@bool-completer # Limit by projects where repository checksum is failed (default: false)
-  --include-hidden: string@bool-completer # Include hidden projects. Can only be set by admins (default: false)
+  --active: oneof<nothing, bool> # Limit by projects that are not archived and not marked for deletion
+  --wiki-checksum-failed: oneof<nothing, bool> # Limit by projects where wiki checksum is failed (default: false)
+  --repository-checksum-failed: oneof<nothing, bool> # Limit by projects where repository checksum is failed (default: false)
+  --include-hidden: oneof<nothing, bool> # Include hidden projects. Can only be set by admins (default: false)
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --simple: string@bool-completer # Return only the ID, URL, name, and path of each project (default: false)
-  --statistics: string@bool-completer # Include project statistics (default: false)
-  --with-custom-attributes: string@bool-completer # Include custom attributes in the response (default: false)
+  --simple: oneof<nothing, bool> # Return only the ID, URL, name, and path of each project (default: false)
+  --statistics: oneof<nothing, bool> # Include project statistics (default: false)
+  --with-custom-attributes: oneof<nothing, bool> # Include custom attributes in the response (default: false)
 ]: nothing -> table<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -23017,12 +23016,12 @@ export def "projects post" [
   --build-timeout: int # Build timeout (format: int32)
   --auto-cancel-pending-pipelines: string@auto-cancel-pending-pipelines-completer # Auto-cancel pending pipelines
   --ci-config-path: string # The path to CI config file. Defaults to `.gitlab-ci.yml`
-  --service-desk-enabled: string@bool-completer # Disable or enable the service desk
-  --issues-enabled: string@bool-completer # Flag indication if the issue tracker is enabled
-  --merge-requests-enabled: string@bool-completer # Flag indication if merge requests are enabled
-  --wiki-enabled: string@bool-completer # Flag indication if the wiki is enabled
-  --jobs-enabled: string@bool-completer # Flag indication if jobs are enabled
-  --snippets-enabled: string@bool-completer # Flag indication if snippets are enabled
+  --service-desk-enabled: oneof<nothing, bool> # Disable or enable the service desk
+  --issues-enabled: oneof<nothing, bool> # Flag indication if the issue tracker is enabled
+  --merge-requests-enabled: oneof<nothing, bool> # Flag indication if merge requests are enabled
+  --wiki-enabled: oneof<nothing, bool> # Flag indication if the wiki is enabled
+  --jobs-enabled: oneof<nothing, bool> # Flag indication if jobs are enabled
+  --snippets-enabled: oneof<nothing, bool> # Flag indication if snippets are enabled
   --issues-access-level: string@issues-access-level-completer # Issues access level. One of `disabled`, `private` or `enabled`
   --repository-access-level: string@repository-access-level-completer # Repository access level. One of `disabled`, `private` or `enabled`
   --merge-requests-access-level: string@merge-requests-access-level-completer # Merge requests access level. One of `disabled`, `private` or `enabled`
@@ -23042,62 +23041,62 @@ export def "projects post" [
   --monitor-access-level: string@monitor-access-level-completer # Monitor access level. One of `disabled`, `private` or `enabled`
   --model-experiments-access-level: string@model-experiments-access-level-completer # Model experiments access level. One of `disabled`, `private` or `enabled`
   --model-registry-access-level: string@model-registry-access-level-completer # Model registry access level. One of `disabled`, `private` or `enabled`
-  --emails-disabled: string@bool-completer # Deprecated: Use emails_enabled instead.
-  --emails-enabled: string@bool-completer # Enable email notifications
-  --show-default-award-emojis: string@bool-completer # Show default award emojis
-  --show-diff-preview-in-email: string@bool-completer # Include the code diff preview in merge request notification emails
-  --warn-about-potentially-unwanted-characters: string@bool-completer # Warn about potentially unwanted characters
-  --enforce-auth-checks-on-uploads: string@bool-completer # Enforce auth check on uploads
-  --shared-runners-enabled: string@bool-completer # Flag indication if shared runners are enabled for that project
-  --group-runners-enabled: string@bool-completer # Flag indication if group runners are enabled for that project
+  --emails-disabled: oneof<nothing, bool> # Deprecated: Use emails_enabled instead.
+  --emails-enabled: oneof<nothing, bool> # Enable email notifications
+  --show-default-award-emojis: oneof<nothing, bool> # Show default award emojis
+  --show-diff-preview-in-email: oneof<nothing, bool> # Include the code diff preview in merge request notification emails
+  --warn-about-potentially-unwanted-characters: oneof<nothing, bool> # Warn about potentially unwanted characters
+  --enforce-auth-checks-on-uploads: oneof<nothing, bool> # Enforce auth check on uploads
+  --shared-runners-enabled: oneof<nothing, bool> # Flag indication if shared runners are enabled for that project
+  --group-runners-enabled: oneof<nothing, bool> # Flag indication if group runners are enabled for that project
   --resource-group-default-process-mode: string@resource-group-default-process-mode-completer # The process mode of the resource group
-  --resolve-outdated-diff-discussions: string@bool-completer # Automatically resolve merge request diff threads on lines changed with a push
-  --remove-source-branch-after-merge: string@bool-completer # Remove the source branch by default after merge
-  --packages-enabled: string@bool-completer # Deprecated: Use :package_registry_access_level instead. Enable project packages feature
-  --container-registry-enabled: string@bool-completer # Deprecated: Use :container_registry_access_level instead. Flag indication if the container registry is enabled for that project
+  --resolve-outdated-diff-discussions: oneof<nothing, bool> # Automatically resolve merge request diff threads on lines changed with a push
+  --remove-source-branch-after-merge: oneof<nothing, bool> # Remove the source branch by default after merge
+  --packages-enabled: oneof<nothing, bool> # Deprecated: Use :package_registry_access_level instead. Enable project packages feature
+  --container-registry-enabled: oneof<nothing, bool> # Deprecated: Use :container_registry_access_level instead. Flag indication if the container registry is enabled for that project
   --container-expiration-policy-attributes: record # Object that contains information on the container expiration policy — shape: {cadence?: string, keep_n?: int, older_than?: string, name_regex?: string, name_regex_keep?: string, enabled?: bool}
-  --lfs-enabled: string@bool-completer # Flag indication if Git LFS is enabled for that project
+  --lfs-enabled: oneof<nothing, bool> # Flag indication if Git LFS is enabled for that project
   --visibility: string@visibility-completer # The visibility of the project.
-  --public-builds: string@bool-completer # Deprecated: Use public_jobs instead.
-  --public-jobs: string@bool-completer # Perform public builds
-  --request-access-enabled: string@bool-completer # Allow users to request member access
-  --only-allow-merge-if-pipeline-succeeds: string@bool-completer # Only allow to merge if builds succeed
-  --allow-merge-on-skipped-pipeline: string@bool-completer # Allow to merge if pipeline is skipped
-  --only-allow-merge-if-all-discussions-are-resolved: string@bool-completer # Only allow to merge if all threads are resolved
+  --public-builds: oneof<nothing, bool> # Deprecated: Use public_jobs instead.
+  --public-jobs: oneof<nothing, bool> # Perform public builds
+  --request-access-enabled: oneof<nothing, bool> # Allow users to request member access
+  --only-allow-merge-if-pipeline-succeeds: oneof<nothing, bool> # Only allow to merge if builds succeed
+  --allow-merge-on-skipped-pipeline: oneof<nothing, bool> # Allow to merge if pipeline is skipped
+  --only-allow-merge-if-all-discussions-are-resolved: oneof<nothing, bool> # Only allow to merge if all threads are resolved
   --tag-list: list # Deprecated: Use :topics instead
   --topics: list # The list of topics for a project
   --avatar: path # Avatar image for project
-  --printing-merge-request-link-enabled: string@bool-completer # Show link to create/view merge request when pushing from the command line
+  --printing-merge-request-link-enabled: oneof<nothing, bool> # Show link to create/view merge request when pushing from the command line
   --merge-method: string@merge-method-completer # The merge method used when merging merge requests
   --suggestion-commit-message: string # The commit message used to apply merge request suggestions
   --merge-commit-template: string # Template used to create merge commit message
   --squash-commit-template: string # Template used to create squash commit message
   --issue-branch-template: string # Template used to create a branch from an issue
-  --auto-devops-enabled: string@bool-completer # Flag indication if Auto DevOps is enabled
+  --auto-devops-enabled: oneof<nothing, bool> # Flag indication if Auto DevOps is enabled
   --auto-devops-deploy-strategy: string@auto-devops-deploy-strategy-completer # Auto Deploy strategy
-  --autoclose-referenced-issues: string@bool-completer # Flag indication if referenced issues auto-closing is enabled
+  --autoclose-referenced-issues: oneof<nothing, bool> # Flag indication if referenced issues auto-closing is enabled
   --repository-storage: string # Which storage shard the repository is on. Available only to admins
   --squash-option: string@squash-option-completer # Squash default for project. One of `never`, `always`, `default_on`, or `default_off`.
-  --mr-default-target-self: string@bool-completer # Merge requests of this forked project targets itself by default
+  --mr-default-target-self: oneof<nothing, bool> # Merge requests of this forked project targets itself by default
   --mr-default-title-template: string # Template used to generate the default merge request title. Maximum 100 characters.
-  --only-allow-merge-if-all-status-checks-passed: string@bool-completer # Blocks merge requests from merging unless all status checks have passed
+  --only-allow-merge-if-all-status-checks-passed: oneof<nothing, bool> # Blocks merge requests from merging unless all status checks have passed
   --approvals-before-merge: int # How many approvers should approve merge request by default (format: int32)
-  --mirror: string@bool-completer # [Deprecated] Enables pull mirroring in a project
-  --mirror-trigger-builds: string@bool-completer # [Deprecated] Pull mirroring triggers builds
+  --mirror: oneof<nothing, bool> # [Deprecated] Enables pull mirroring in a project
+  --mirror-trigger-builds: oneof<nothing, bool> # [Deprecated] Pull mirroring triggers builds
   --external-authorization-classification-label: string # The classification label for the project
   --requirements-access-level: string@requirements-access-level-completer # Requirements feature access level. One of `disabled`, `private` or `enabled`
-  --prevent-merge-without-jira-issue: string@bool-completer # Require an associated issue from Jira
-  --auto-duo-code-review-enabled: string@bool-completer # Enable automatic reviews by GitLab Duo on merge requests
-  --duo-remote-flows-enabled: string@bool-completer # Enable GitLab Duo remote flows for this project
-  --duo-sast-fp-detection-enabled: string@bool-completer # Enable GitLab Duo SAST false positive detection for this project
-  --duo-secret-detection-fp-enabled: string@bool-completer # Enable GitLab Duo Secret Detection false positive detection for this project
-  --duo-sast-vr-workflow-enabled: string@bool-completer # Enable GitLab Duo SAST vulnerability resolution workflow for this project
-  --spp-repository-pipeline-access: string@bool-completer # Grant read-only access to security policy configurations for enforcement in linked CI/CD projects
+  --prevent-merge-without-jira-issue: oneof<nothing, bool> # Require an associated issue from Jira
+  --auto-duo-code-review-enabled: oneof<nothing, bool> # Enable automatic reviews by GitLab Duo on merge requests
+  --duo-remote-flows-enabled: oneof<nothing, bool> # Enable GitLab Duo remote flows for this project
+  --duo-sast-fp-detection-enabled: oneof<nothing, bool> # Enable GitLab Duo SAST false positive detection for this project
+  --duo-secret-detection-fp-enabled: oneof<nothing, bool> # Enable GitLab Duo Secret Detection false positive detection for this project
+  --duo-sast-vr-workflow-enabled: oneof<nothing, bool> # Enable GitLab Duo SAST vulnerability resolution workflow for this project
+  --spp-repository-pipeline-access: oneof<nothing, bool> # Grant read-only access to security policy configurations for enforcement in linked CI/CD projects
   --merge-request-title-regex: string # The regex the Merge Request must adhere to
   --merge-request-title-regex-description: string # The description for the regex the Merge Request must adhere to
   --repository-object-format: string@repository-object-format-completer # The object format of the project repository
-  --initialize-with-readme: string@bool-completer # Initialize a project with a README.md
-  --use-custom-template: string@bool-completer # Use custom template
+  --initialize-with-readme: oneof<nothing, bool> # Initialize a project with a README.md
+  --use-custom-template: oneof<nothing, bool> # Use custom template
   --group-with-project-templates-id: int # Group ID that serves as the template source (format: int32)
   --namespace-id: int # Namespace ID for the new project. Default to the user namespace. (format: int32)
   --import-url: string # URL from which the project is imported
@@ -23137,12 +23136,12 @@ export def "projects-user post" [
   --build-timeout: int # Build timeout (format: int32)
   --auto-cancel-pending-pipelines: string@auto-cancel-pending-pipelines-completer # Auto-cancel pending pipelines
   --ci-config-path: string # The path to CI config file. Defaults to `.gitlab-ci.yml`
-  --service-desk-enabled: string@bool-completer # Disable or enable the service desk
-  --issues-enabled: string@bool-completer # Flag indication if the issue tracker is enabled
-  --merge-requests-enabled: string@bool-completer # Flag indication if merge requests are enabled
-  --wiki-enabled: string@bool-completer # Flag indication if the wiki is enabled
-  --jobs-enabled: string@bool-completer # Flag indication if jobs are enabled
-  --snippets-enabled: string@bool-completer # Flag indication if snippets are enabled
+  --service-desk-enabled: oneof<nothing, bool> # Disable or enable the service desk
+  --issues-enabled: oneof<nothing, bool> # Flag indication if the issue tracker is enabled
+  --merge-requests-enabled: oneof<nothing, bool> # Flag indication if merge requests are enabled
+  --wiki-enabled: oneof<nothing, bool> # Flag indication if the wiki is enabled
+  --jobs-enabled: oneof<nothing, bool> # Flag indication if jobs are enabled
+  --snippets-enabled: oneof<nothing, bool> # Flag indication if snippets are enabled
   --issues-access-level: string@issues-access-level-completer # Issues access level. One of `disabled`, `private` or `enabled`
   --repository-access-level: string@repository-access-level-completer # Repository access level. One of `disabled`, `private` or `enabled`
   --merge-requests-access-level: string@merge-requests-access-level-completer # Merge requests access level. One of `disabled`, `private` or `enabled`
@@ -23162,62 +23161,62 @@ export def "projects-user post" [
   --monitor-access-level: string@monitor-access-level-completer # Monitor access level. One of `disabled`, `private` or `enabled`
   --model-experiments-access-level: string@model-experiments-access-level-completer # Model experiments access level. One of `disabled`, `private` or `enabled`
   --model-registry-access-level: string@model-registry-access-level-completer # Model registry access level. One of `disabled`, `private` or `enabled`
-  --emails-disabled: string@bool-completer # Deprecated: Use emails_enabled instead.
-  --emails-enabled: string@bool-completer # Enable email notifications
-  --show-default-award-emojis: string@bool-completer # Show default award emojis
-  --show-diff-preview-in-email: string@bool-completer # Include the code diff preview in merge request notification emails
-  --warn-about-potentially-unwanted-characters: string@bool-completer # Warn about potentially unwanted characters
-  --enforce-auth-checks-on-uploads: string@bool-completer # Enforce auth check on uploads
-  --shared-runners-enabled: string@bool-completer # Flag indication if shared runners are enabled for that project
-  --group-runners-enabled: string@bool-completer # Flag indication if group runners are enabled for that project
+  --emails-disabled: oneof<nothing, bool> # Deprecated: Use emails_enabled instead.
+  --emails-enabled: oneof<nothing, bool> # Enable email notifications
+  --show-default-award-emojis: oneof<nothing, bool> # Show default award emojis
+  --show-diff-preview-in-email: oneof<nothing, bool> # Include the code diff preview in merge request notification emails
+  --warn-about-potentially-unwanted-characters: oneof<nothing, bool> # Warn about potentially unwanted characters
+  --enforce-auth-checks-on-uploads: oneof<nothing, bool> # Enforce auth check on uploads
+  --shared-runners-enabled: oneof<nothing, bool> # Flag indication if shared runners are enabled for that project
+  --group-runners-enabled: oneof<nothing, bool> # Flag indication if group runners are enabled for that project
   --resource-group-default-process-mode: string@resource-group-default-process-mode-completer # The process mode of the resource group
-  --resolve-outdated-diff-discussions: string@bool-completer # Automatically resolve merge request diff threads on lines changed with a push
-  --remove-source-branch-after-merge: string@bool-completer # Remove the source branch by default after merge
-  --packages-enabled: string@bool-completer # Deprecated: Use :package_registry_access_level instead. Enable project packages feature
-  --container-registry-enabled: string@bool-completer # Deprecated: Use :container_registry_access_level instead. Flag indication if the container registry is enabled for that project
+  --resolve-outdated-diff-discussions: oneof<nothing, bool> # Automatically resolve merge request diff threads on lines changed with a push
+  --remove-source-branch-after-merge: oneof<nothing, bool> # Remove the source branch by default after merge
+  --packages-enabled: oneof<nothing, bool> # Deprecated: Use :package_registry_access_level instead. Enable project packages feature
+  --container-registry-enabled: oneof<nothing, bool> # Deprecated: Use :container_registry_access_level instead. Flag indication if the container registry is enabled for that project
   --container-expiration-policy-attributes: record # Object that contains information on the container expiration policy — shape: {cadence?: string, keep_n?: int, older_than?: string, name_regex?: string, name_regex_keep?: string, enabled?: bool}
-  --lfs-enabled: string@bool-completer # Flag indication if Git LFS is enabled for that project
+  --lfs-enabled: oneof<nothing, bool> # Flag indication if Git LFS is enabled for that project
   --visibility: string@visibility-completer # The visibility of the project.
-  --public-builds: string@bool-completer # Deprecated: Use public_jobs instead.
-  --public-jobs: string@bool-completer # Perform public builds
-  --request-access-enabled: string@bool-completer # Allow users to request member access
-  --only-allow-merge-if-pipeline-succeeds: string@bool-completer # Only allow to merge if builds succeed
-  --allow-merge-on-skipped-pipeline: string@bool-completer # Allow to merge if pipeline is skipped
-  --only-allow-merge-if-all-discussions-are-resolved: string@bool-completer # Only allow to merge if all threads are resolved
+  --public-builds: oneof<nothing, bool> # Deprecated: Use public_jobs instead.
+  --public-jobs: oneof<nothing, bool> # Perform public builds
+  --request-access-enabled: oneof<nothing, bool> # Allow users to request member access
+  --only-allow-merge-if-pipeline-succeeds: oneof<nothing, bool> # Only allow to merge if builds succeed
+  --allow-merge-on-skipped-pipeline: oneof<nothing, bool> # Allow to merge if pipeline is skipped
+  --only-allow-merge-if-all-discussions-are-resolved: oneof<nothing, bool> # Only allow to merge if all threads are resolved
   --tag-list: list # Deprecated: Use :topics instead
   --topics: list # The list of topics for a project
   --avatar: path # Avatar image for project
-  --printing-merge-request-link-enabled: string@bool-completer # Show link to create/view merge request when pushing from the command line
+  --printing-merge-request-link-enabled: oneof<nothing, bool> # Show link to create/view merge request when pushing from the command line
   --merge-method: string@merge-method-completer # The merge method used when merging merge requests
   --suggestion-commit-message: string # The commit message used to apply merge request suggestions
   --merge-commit-template: string # Template used to create merge commit message
   --squash-commit-template: string # Template used to create squash commit message
   --issue-branch-template: string # Template used to create a branch from an issue
-  --auto-devops-enabled: string@bool-completer # Flag indication if Auto DevOps is enabled
+  --auto-devops-enabled: oneof<nothing, bool> # Flag indication if Auto DevOps is enabled
   --auto-devops-deploy-strategy: string@auto-devops-deploy-strategy-completer # Auto Deploy strategy
-  --autoclose-referenced-issues: string@bool-completer # Flag indication if referenced issues auto-closing is enabled
+  --autoclose-referenced-issues: oneof<nothing, bool> # Flag indication if referenced issues auto-closing is enabled
   --repository-storage: string # Which storage shard the repository is on. Available only to admins
   --squash-option: string@squash-option-completer # Squash default for project. One of `never`, `always`, `default_on`, or `default_off`.
-  --mr-default-target-self: string@bool-completer # Merge requests of this forked project targets itself by default
+  --mr-default-target-self: oneof<nothing, bool> # Merge requests of this forked project targets itself by default
   --mr-default-title-template: string # Template used to generate the default merge request title. Maximum 100 characters.
-  --only-allow-merge-if-all-status-checks-passed: string@bool-completer # Blocks merge requests from merging unless all status checks have passed
+  --only-allow-merge-if-all-status-checks-passed: oneof<nothing, bool> # Blocks merge requests from merging unless all status checks have passed
   --approvals-before-merge: int # How many approvers should approve merge request by default (format: int32)
-  --mirror: string@bool-completer # [Deprecated] Enables pull mirroring in a project
-  --mirror-trigger-builds: string@bool-completer # [Deprecated] Pull mirroring triggers builds
+  --mirror: oneof<nothing, bool> # [Deprecated] Enables pull mirroring in a project
+  --mirror-trigger-builds: oneof<nothing, bool> # [Deprecated] Pull mirroring triggers builds
   --external-authorization-classification-label: string # The classification label for the project
   --requirements-access-level: string@requirements-access-level-completer # Requirements feature access level. One of `disabled`, `private` or `enabled`
-  --prevent-merge-without-jira-issue: string@bool-completer # Require an associated issue from Jira
-  --auto-duo-code-review-enabled: string@bool-completer # Enable automatic reviews by GitLab Duo on merge requests
-  --duo-remote-flows-enabled: string@bool-completer # Enable GitLab Duo remote flows for this project
-  --duo-sast-fp-detection-enabled: string@bool-completer # Enable GitLab Duo SAST false positive detection for this project
-  --duo-secret-detection-fp-enabled: string@bool-completer # Enable GitLab Duo Secret Detection false positive detection for this project
-  --duo-sast-vr-workflow-enabled: string@bool-completer # Enable GitLab Duo SAST vulnerability resolution workflow for this project
-  --spp-repository-pipeline-access: string@bool-completer # Grant read-only access to security policy configurations for enforcement in linked CI/CD projects
+  --prevent-merge-without-jira-issue: oneof<nothing, bool> # Require an associated issue from Jira
+  --auto-duo-code-review-enabled: oneof<nothing, bool> # Enable automatic reviews by GitLab Duo on merge requests
+  --duo-remote-flows-enabled: oneof<nothing, bool> # Enable GitLab Duo remote flows for this project
+  --duo-sast-fp-detection-enabled: oneof<nothing, bool> # Enable GitLab Duo SAST false positive detection for this project
+  --duo-secret-detection-fp-enabled: oneof<nothing, bool> # Enable GitLab Duo Secret Detection false positive detection for this project
+  --duo-sast-vr-workflow-enabled: oneof<nothing, bool> # Enable GitLab Duo SAST vulnerability resolution workflow for this project
+  --spp-repository-pipeline-access: oneof<nothing, bool> # Grant read-only access to security policy configurations for enforcement in linked CI/CD projects
   --merge-request-title-regex: string # The regex the Merge Request must adhere to
   --merge-request-title-regex-description: string # The description for the regex the Merge Request must adhere to
   --repository-object-format: string@repository-object-format-completer # The object format of the project repository
-  --initialize-with-readme: string@bool-completer # Initialize a project with a README.md
-  --use-custom-template: string@bool-completer # Use custom template
+  --initialize-with-readme: oneof<nothing, bool> # Initialize a project with a README.md
+  --use-custom-template: oneof<nothing, bool> # Use custom template
   --group-with-project-templates-id: int # Group ID that serves as the template source (format: int32)
   --namespace-id: int # Namespace ID for the new project. Default to the user namespace. (format: int32)
   --import-url: string # URL from which the project is imported
@@ -23272,9 +23271,9 @@ export def "projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --statistics: string@bool-completer # Include project statistics (default: false)
-  --with-custom-attributes: string@bool-completer # Include custom attributes in the response (default: false)
-  --license: string@bool-completer # Include project license data (default: false)
+  --statistics: oneof<nothing, bool> # Include project statistics (default: false)
+  --with-custom-attributes: oneof<nothing, bool> # Include custom attributes in the response (default: false)
+  --license: oneof<nothing, bool> # Include project license data (default: false)
 ]: nothing -> record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string, forked_from_project: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string>, container_registry_image_prefix: string, _links: record<self: string, issues: string, merge_requests: string, repo_branches: string, labels: string, events: string, members: string, cluster_agents: string>, marked_for_deletion_at: string, marked_for_deletion_on: string, packages_enabled: bool, empty_repo: bool, archived: bool, owner: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, resolve_outdated_diff_discussions: bool, container_expiration_policy: record<cadence: string, enabled: string, keep_n: string, older_than: string, name_regex: string, name_regex_keep: string, next_run_at: string>, repository_object_format: string, issues_enabled: bool, merge_requests_enabled: bool, wiki_enabled: bool, jobs_enabled: bool, snippets_enabled: bool, container_registry_enabled: bool, service_desk_enabled: bool, service_desk_address: string, can_create_merge_request_in: bool, issues_access_level: string, repository_access_level: string, merge_requests_access_level: string, forking_access_level: string, wiki_access_level: string, builds_access_level: string, snippets_access_level: string, pages_access_level: string, analytics_access_level: string, container_registry_access_level: string, security_and_compliance_access_level: string, releases_access_level: string, environments_access_level: string, feature_flags_access_level: string, infrastructure_access_level: string, monitor_access_level: string, model_experiments_access_level: string, model_registry_access_level: string, package_registry_access_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, shared_runners_enabled: bool, lfs_enabled: bool, creator_id: int, mr_default_target_self: bool, import_url: string, import_type: string, import_status: string, import_error: string, open_issues_count: int, description_html: string, updated_at: string, ci_default_git_depth: int, ci_delete_pipelines_in_seconds: int, ci_forward_deployment_enabled: bool, ci_forward_deployment_rollback_allowed: bool, ci_job_token_scope_enabled: bool, ci_separated_caches: bool, ci_allow_fork_pipelines_to_run_in_parent_project: bool, ci_id_token_sub_claim_components: list<string>, build_git_strategy: string, keep_latest_artifact: bool, restrict_user_defined_variables: bool, ci_pipeline_variables_minimum_override_role: string, runner_token_expiration_interval: int, group_runners_enabled: bool, resource_group_default_process_mode: string, auto_cancel_pending_pipelines: string, build_timeout: int, auto_devops_enabled: bool, auto_devops_deploy_strategy: string, ci_push_repository_for_job_token_allowed: bool, protect_merge_request_pipelines: bool, ci_display_pipeline_variables: bool, runners_token: string, ci_config_path: string, public_jobs: bool, shared_with_groups: list<record>, only_allow_merge_if_pipeline_succeeds: bool, allow_merge_on_skipped_pipeline: bool, request_access_enabled: bool, only_allow_merge_if_all_discussions_are_resolved: bool, remove_source_branch_after_merge: bool, printing_merge_request_link_enabled: bool, merge_method: string, squash_option: string, enforce_auth_checks_on_uploads: bool, suggestion_commit_message: string, merge_commit_template: string, squash_commit_template: string, mr_default_title_template: string, issue_branch_template: string, statistics: record<commit_count: int, storage_size: int, repository_size: int, wiki_size: int, lfs_objects_size: int, job_artifacts_size: int, pipeline_artifacts_size: int, packages_size: int, snippets_size: int, uploads_size: int, container_registry_size: int>, warn_about_potentially_unwanted_characters: bool, autoclose_referenced_issues: bool, max_artifacts_size: int, approvals_before_merge: string, mirror: string, mirror_user_id: string, mirror_trigger_builds: string, only_mirror_protected_branches: string, mirror_overwrites_diverged_branches: string, external_authorization_classification_label: string, requirements_enabled: string, requirements_access_level: string, security_and_compliance_enabled: string, secret_push_protection_enabled: bool, pre_receive_secret_detection_enabled: bool, compliance_frameworks: string, issues_template: string, merge_requests_template: string, ci_restrict_pipeline_cancellation_role: string, merge_pipelines_enabled: string, merge_trains_enabled: string, merge_trains_skip_train_allowed: string, max_pipelines_per_merge_train: string, only_allow_merge_if_all_status_checks_passed: string, allow_pipeline_trigger_approve_deployment: bool, prevent_merge_without_jira_issue: string, auto_duo_code_review_enabled: string, duo_remote_flows_enabled: string, duo_foundational_flows_enabled: string, duo_sast_fp_detection_enabled: string, duo_secret_detection_fp_enabled: string, duo_sast_vr_workflow_enabled: string, web_based_commit_signing_enabled: string, spp_repository_pipeline_access: bool, security_policy_pipeline_must_succeed: bool, merge_request_title_regex: string, merge_request_title_regex_description: string, permissions: record<project_access: record<access_level: string, notification_level: string>, group_access: record<access_level: string, notification_level: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -23307,12 +23306,12 @@ export def "projects put" [
   --build-timeout: int # Build timeout (format: int32)
   --auto-cancel-pending-pipelines: string@auto-cancel-pending-pipelines-completer # Auto-cancel pending pipelines
   --ci-config-path: string # The path to CI config file. Defaults to `.gitlab-ci.yml`
-  --service-desk-enabled: string@bool-completer # Disable or enable the service desk
-  --issues-enabled: string@bool-completer # Flag indication if the issue tracker is enabled
-  --merge-requests-enabled: string@bool-completer # Flag indication if merge requests are enabled
-  --wiki-enabled: string@bool-completer # Flag indication if the wiki is enabled
-  --jobs-enabled: string@bool-completer # Flag indication if jobs are enabled
-  --snippets-enabled: string@bool-completer # Flag indication if snippets are enabled
+  --service-desk-enabled: oneof<nothing, bool> # Disable or enable the service desk
+  --issues-enabled: oneof<nothing, bool> # Flag indication if the issue tracker is enabled
+  --merge-requests-enabled: oneof<nothing, bool> # Flag indication if merge requests are enabled
+  --wiki-enabled: oneof<nothing, bool> # Flag indication if the wiki is enabled
+  --jobs-enabled: oneof<nothing, bool> # Flag indication if jobs are enabled
+  --snippets-enabled: oneof<nothing, bool> # Flag indication if snippets are enabled
   --issues-access-level: string@issues-access-level-completer # Issues access level. One of `disabled`, `private` or `enabled`
   --repository-access-level: string@repository-access-level-completer # Repository access level. One of `disabled`, `private` or `enabled`
   --merge-requests-access-level: string@merge-requests-access-level-completer # Merge requests access level. One of `disabled`, `private` or `enabled`
@@ -23332,89 +23331,89 @@ export def "projects put" [
   --monitor-access-level: string@monitor-access-level-completer # Monitor access level. One of `disabled`, `private` or `enabled`
   --model-experiments-access-level: string@model-experiments-access-level-completer # Model experiments access level. One of `disabled`, `private` or `enabled`
   --model-registry-access-level: string@model-registry-access-level-completer # Model registry access level. One of `disabled`, `private` or `enabled`
-  --emails-disabled: string@bool-completer # Deprecated: Use emails_enabled instead.
-  --emails-enabled: string@bool-completer # Enable email notifications
-  --show-default-award-emojis: string@bool-completer # Show default award emojis
-  --show-diff-preview-in-email: string@bool-completer # Include the code diff preview in merge request notification emails
-  --warn-about-potentially-unwanted-characters: string@bool-completer # Warn about potentially unwanted characters
-  --enforce-auth-checks-on-uploads: string@bool-completer # Enforce auth check on uploads
-  --shared-runners-enabled: string@bool-completer # Flag indication if shared runners are enabled for that project
-  --group-runners-enabled: string@bool-completer # Flag indication if group runners are enabled for that project
+  --emails-disabled: oneof<nothing, bool> # Deprecated: Use emails_enabled instead.
+  --emails-enabled: oneof<nothing, bool> # Enable email notifications
+  --show-default-award-emojis: oneof<nothing, bool> # Show default award emojis
+  --show-diff-preview-in-email: oneof<nothing, bool> # Include the code diff preview in merge request notification emails
+  --warn-about-potentially-unwanted-characters: oneof<nothing, bool> # Warn about potentially unwanted characters
+  --enforce-auth-checks-on-uploads: oneof<nothing, bool> # Enforce auth check on uploads
+  --shared-runners-enabled: oneof<nothing, bool> # Flag indication if shared runners are enabled for that project
+  --group-runners-enabled: oneof<nothing, bool> # Flag indication if group runners are enabled for that project
   --resource-group-default-process-mode: string@resource-group-default-process-mode-completer # The process mode of the resource group
-  --resolve-outdated-diff-discussions: string@bool-completer # Automatically resolve merge request diff threads on lines changed with a push
-  --remove-source-branch-after-merge: string@bool-completer # Remove the source branch by default after merge
-  --packages-enabled: string@bool-completer # Deprecated: Use :package_registry_access_level instead. Enable project packages feature
-  --container-registry-enabled: string@bool-completer # Deprecated: Use :container_registry_access_level instead. Flag indication if the container registry is enabled for that project
+  --resolve-outdated-diff-discussions: oneof<nothing, bool> # Automatically resolve merge request diff threads on lines changed with a push
+  --remove-source-branch-after-merge: oneof<nothing, bool> # Remove the source branch by default after merge
+  --packages-enabled: oneof<nothing, bool> # Deprecated: Use :package_registry_access_level instead. Enable project packages feature
+  --container-registry-enabled: oneof<nothing, bool> # Deprecated: Use :container_registry_access_level instead. Flag indication if the container registry is enabled for that project
   --container-expiration-policy-attributes: record # Object that contains information on the container expiration policy — shape: {cadence?: string, keep_n?: int, older_than?: string, name_regex?: string, name_regex_keep?: string, enabled?: bool}
-  --lfs-enabled: string@bool-completer # Flag indication if Git LFS is enabled for that project
+  --lfs-enabled: oneof<nothing, bool> # Flag indication if Git LFS is enabled for that project
   --visibility: string@visibility-completer # The visibility of the project.
-  --public-builds: string@bool-completer # Deprecated: Use public_jobs instead.
-  --public-jobs: string@bool-completer # Perform public builds
-  --request-access-enabled: string@bool-completer # Allow users to request member access
-  --only-allow-merge-if-pipeline-succeeds: string@bool-completer # Only allow to merge if builds succeed
-  --allow-merge-on-skipped-pipeline: string@bool-completer # Allow to merge if pipeline is skipped
-  --only-allow-merge-if-all-discussions-are-resolved: string@bool-completer # Only allow to merge if all threads are resolved
+  --public-builds: oneof<nothing, bool> # Deprecated: Use public_jobs instead.
+  --public-jobs: oneof<nothing, bool> # Perform public builds
+  --request-access-enabled: oneof<nothing, bool> # Allow users to request member access
+  --only-allow-merge-if-pipeline-succeeds: oneof<nothing, bool> # Only allow to merge if builds succeed
+  --allow-merge-on-skipped-pipeline: oneof<nothing, bool> # Allow to merge if pipeline is skipped
+  --only-allow-merge-if-all-discussions-are-resolved: oneof<nothing, bool> # Only allow to merge if all threads are resolved
   --tag-list: list # Deprecated: Use :topics instead
   --topics: list # The list of topics for a project
   --avatar: path # Avatar image for project
-  --printing-merge-request-link-enabled: string@bool-completer # Show link to create/view merge request when pushing from the command line
+  --printing-merge-request-link-enabled: oneof<nothing, bool> # Show link to create/view merge request when pushing from the command line
   --merge-method: string@merge-method-completer # The merge method used when merging merge requests
   --suggestion-commit-message: string # The commit message used to apply merge request suggestions
   --merge-commit-template: string # Template used to create merge commit message
   --squash-commit-template: string # Template used to create squash commit message
   --issue-branch-template: string # Template used to create a branch from an issue
-  --auto-devops-enabled: string@bool-completer # Flag indication if Auto DevOps is enabled
+  --auto-devops-enabled: oneof<nothing, bool> # Flag indication if Auto DevOps is enabled
   --auto-devops-deploy-strategy: string@auto-devops-deploy-strategy-completer # Auto Deploy strategy
-  --autoclose-referenced-issues: string@bool-completer # Flag indication if referenced issues auto-closing is enabled
+  --autoclose-referenced-issues: oneof<nothing, bool> # Flag indication if referenced issues auto-closing is enabled
   --repository-storage: string # Which storage shard the repository is on. Available only to admins
   --squash-option: string@squash-option-completer # Squash default for project. One of `never`, `always`, `default_on`, or `default_off`.
-  --mr-default-target-self: string@bool-completer # Merge requests of this forked project targets itself by default
+  --mr-default-target-self: oneof<nothing, bool> # Merge requests of this forked project targets itself by default
   --mr-default-title-template: string # Template used to generate the default merge request title. Maximum 100 characters.
-  --only-allow-merge-if-all-status-checks-passed: string@bool-completer # Blocks merge requests from merging unless all status checks have passed
+  --only-allow-merge-if-all-status-checks-passed: oneof<nothing, bool> # Blocks merge requests from merging unless all status checks have passed
   --approvals-before-merge: int # How many approvers should approve merge request by default (format: int32)
-  --mirror: string@bool-completer # [Deprecated] Enables pull mirroring in a project
-  --mirror-trigger-builds: string@bool-completer # [Deprecated] Pull mirroring triggers builds
+  --mirror: oneof<nothing, bool> # [Deprecated] Enables pull mirroring in a project
+  --mirror-trigger-builds: oneof<nothing, bool> # [Deprecated] Pull mirroring triggers builds
   --external-authorization-classification-label: string # The classification label for the project
   --requirements-access-level: string@requirements-access-level-completer # Requirements feature access level. One of `disabled`, `private` or `enabled`
-  --prevent-merge-without-jira-issue: string@bool-completer # Require an associated issue from Jira
-  --auto-duo-code-review-enabled: string@bool-completer # Enable automatic reviews by GitLab Duo on merge requests
-  --duo-remote-flows-enabled: string@bool-completer # Enable GitLab Duo remote flows for this project
-  --duo-sast-fp-detection-enabled: string@bool-completer # Enable GitLab Duo SAST false positive detection for this project
-  --duo-secret-detection-fp-enabled: string@bool-completer # Enable GitLab Duo Secret Detection false positive detection for this project
-  --duo-sast-vr-workflow-enabled: string@bool-completer # Enable GitLab Duo SAST vulnerability resolution workflow for this project
-  --spp-repository-pipeline-access: string@bool-completer # Grant read-only access to security policy configurations for enforcement in linked CI/CD projects
+  --prevent-merge-without-jira-issue: oneof<nothing, bool> # Require an associated issue from Jira
+  --auto-duo-code-review-enabled: oneof<nothing, bool> # Enable automatic reviews by GitLab Duo on merge requests
+  --duo-remote-flows-enabled: oneof<nothing, bool> # Enable GitLab Duo remote flows for this project
+  --duo-sast-fp-detection-enabled: oneof<nothing, bool> # Enable GitLab Duo SAST false positive detection for this project
+  --duo-secret-detection-fp-enabled: oneof<nothing, bool> # Enable GitLab Duo Secret Detection false positive detection for this project
+  --duo-sast-vr-workflow-enabled: oneof<nothing, bool> # Enable GitLab Duo SAST vulnerability resolution workflow for this project
+  --spp-repository-pipeline-access: oneof<nothing, bool> # Grant read-only access to security policy configurations for enforcement in linked CI/CD projects
   --merge-request-title-regex: string # The regex the Merge Request must adhere to
   --merge-request-title-regex-description: string # The description for the regex the Merge Request must adhere to
   --ci-default-git-depth: int # Default number of revisions for shallow cloning (format: int32)
-  --keep-latest-artifact: string@bool-completer # Indicates if the latest artifact should be kept for this project.
-  --ci-forward-deployment-enabled: string@bool-completer # Prevent older deployment jobs that are still pending
-  --ci-forward-deployment-rollback-allowed: string@bool-completer # Allow job retries for rollback deployments
-  --ci-allow-fork-pipelines-to-run-in-parent-project: string@bool-completer # Allow fork merge request pipelines to run in parent project
-  --ci-separated-caches: string@bool-completer # Enable or disable separated caches based on branch protection.
-  --restrict-user-defined-variables: string@bool-completer # Restrict use of user-defined variables when triggering a pipeline
+  --keep-latest-artifact: oneof<nothing, bool> # Indicates if the latest artifact should be kept for this project.
+  --ci-forward-deployment-enabled: oneof<nothing, bool> # Prevent older deployment jobs that are still pending
+  --ci-forward-deployment-rollback-allowed: oneof<nothing, bool> # Allow job retries for rollback deployments
+  --ci-allow-fork-pipelines-to-run-in-parent-project: oneof<nothing, bool> # Allow fork merge request pipelines to run in parent project
+  --ci-separated-caches: oneof<nothing, bool> # Enable or disable separated caches based on branch protection.
+  --restrict-user-defined-variables: oneof<nothing, bool> # Restrict use of user-defined variables when triggering a pipeline
   --ci-pipeline-variables-minimum-override-role: string@ci-pipeline-variables-minimum-override-role-completer # Limit ability to override CI/CD variables when triggering a pipeline to only users with at least the set minimum role
-  --ci-push-repository-for-job-token-allowed: string@bool-completer # Allow pushing to this project's repository by authenticating with a CI/CD job token generated in this project.
+  --ci-push-repository-for-job-token-allowed: oneof<nothing, bool> # Allow pushing to this project's repository by authenticating with a CI/CD job token generated in this project.
   --ci-id-token-sub-claim-components: list # Claims that will be used to build the sub claim in id tokens
   --ci-delete-pipelines-in-seconds: int # Pipelines older than the configured time are deleted (format: int32)
   --max-artifacts-size: int # Set the maximum file size for each job's artifacts (format: int32)
-  --protect-merge-request-pipelines: string@bool-completer # Make protected CI/CD variables and runners available in merge request pipelines
-  --ci-display-pipeline-variables: string@bool-completer # Display all manually-defined variables in the pipeline details page after running a pipeline manually
-  --allow-pipeline-trigger-approve-deployment: string@bool-completer # Allow pipeline triggerer to approve deployments
+  --protect-merge-request-pipelines: oneof<nothing, bool> # Make protected CI/CD variables and runners available in merge request pipelines
+  --ci-display-pipeline-variables: oneof<nothing, bool> # Display all manually-defined variables in the pipeline details page after running a pipeline manually
+  --allow-pipeline-trigger-approve-deployment: oneof<nothing, bool> # Allow pipeline triggerer to approve deployments
   --mirror-user-id: int # [Deprecated] User responsible for all the activity surrounding a pull mirror event. Can only be set by admins (format: int32)
-  --only-mirror-protected-branches: string@bool-completer # [Deprecated] Only mirror protected branches
+  --only-mirror-protected-branches: oneof<nothing, bool> # [Deprecated] Only mirror protected branches
   --mirror-branch-regex: string # [Deprecated] Only mirror branches match regex
-  --mirror-overwrites-diverged-branches: string@bool-completer # [Deprecated] Pull mirror overwrites diverged branches
+  --mirror-overwrites-diverged-branches: oneof<nothing, bool> # [Deprecated] Pull mirror overwrites diverged branches
   --import-url: string # URL from which the project is imported
   --fallback-approvals-required: int # Overall approvals required when no rule is present (format: int32)
   --issues-template: string # Default description for Issues. Description is parsed with GitLab Flavored Markdown.
   --merge-requests-template: string # Default description for merge requests. Description is parsed with GitLab Flavored Markdown.
-  --merge-pipelines-enabled: string@bool-completer # Enable merged results pipelines.
-  --merge-trains-enabled: string@bool-completer # Enable merge trains.
-  --merge-trains-skip-train-allowed: string@bool-completer # Allow merge train merge requests to be merged without waiting for pipelines to finish.
+  --merge-pipelines-enabled: oneof<nothing, bool> # Enable merged results pipelines.
+  --merge-trains-enabled: oneof<nothing, bool> # Enable merge trains.
+  --merge-trains-skip-train-allowed: oneof<nothing, bool> # Allow merge train merge requests to be merged without waiting for pipelines to finish.
   --max-pipelines-per-merge-train: int # Maximum number of parallel pipelines per merge train for this project. (format: int32)
   --ci-restrict-pipeline-cancellation-role: string # Roles allowed to cancel pipelines and jobs.
-  --web-based-commit-signing-enabled: string@bool-completer # Enable web based commit signing for this project
-  --security-policy-pipeline-must-succeed: string@bool-completer # Require all security policy pipelines to succeed before merge requests can be merged
+  --web-based-commit-signing-enabled: oneof<nothing, bool> # Enable web based commit signing for this project
+  --security-policy-pipeline-must-succeed: oneof<nothing, bool> # Require all security policy pipelines to succeed before merge requests can be merged
 ]: any -> record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string, forked_from_project: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string>, container_registry_image_prefix: string, _links: record<self: string, issues: string, merge_requests: string, repo_branches: string, labels: string, events: string, members: string, cluster_agents: string>, marked_for_deletion_at: string, marked_for_deletion_on: string, packages_enabled: bool, empty_repo: bool, archived: bool, owner: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, resolve_outdated_diff_discussions: bool, container_expiration_policy: record<cadence: string, enabled: string, keep_n: string, older_than: string, name_regex: string, name_regex_keep: string, next_run_at: string>, repository_object_format: string, issues_enabled: bool, merge_requests_enabled: bool, wiki_enabled: bool, jobs_enabled: bool, snippets_enabled: bool, container_registry_enabled: bool, service_desk_enabled: bool, service_desk_address: string, can_create_merge_request_in: bool, issues_access_level: string, repository_access_level: string, merge_requests_access_level: string, forking_access_level: string, wiki_access_level: string, builds_access_level: string, snippets_access_level: string, pages_access_level: string, analytics_access_level: string, container_registry_access_level: string, security_and_compliance_access_level: string, releases_access_level: string, environments_access_level: string, feature_flags_access_level: string, infrastructure_access_level: string, monitor_access_level: string, model_experiments_access_level: string, model_registry_access_level: string, package_registry_access_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, shared_runners_enabled: bool, lfs_enabled: bool, creator_id: int, mr_default_target_self: bool, import_url: string, import_type: string, import_status: string, import_error: string, open_issues_count: int, description_html: string, updated_at: string, ci_default_git_depth: int, ci_delete_pipelines_in_seconds: int, ci_forward_deployment_enabled: bool, ci_forward_deployment_rollback_allowed: bool, ci_job_token_scope_enabled: bool, ci_separated_caches: bool, ci_allow_fork_pipelines_to_run_in_parent_project: bool, ci_id_token_sub_claim_components: list<string>, build_git_strategy: string, keep_latest_artifact: bool, restrict_user_defined_variables: bool, ci_pipeline_variables_minimum_override_role: string, runner_token_expiration_interval: int, group_runners_enabled: bool, resource_group_default_process_mode: string, auto_cancel_pending_pipelines: string, build_timeout: int, auto_devops_enabled: bool, auto_devops_deploy_strategy: string, ci_push_repository_for_job_token_allowed: bool, protect_merge_request_pipelines: bool, ci_display_pipeline_variables: bool, runners_token: string, ci_config_path: string, public_jobs: bool, shared_with_groups: list<record>, only_allow_merge_if_pipeline_succeeds: bool, allow_merge_on_skipped_pipeline: bool, request_access_enabled: bool, only_allow_merge_if_all_discussions_are_resolved: bool, remove_source_branch_after_merge: bool, printing_merge_request_link_enabled: bool, merge_method: string, squash_option: string, enforce_auth_checks_on_uploads: bool, suggestion_commit_message: string, merge_commit_template: string, squash_commit_template: string, mr_default_title_template: string, issue_branch_template: string, statistics: record<commit_count: int, storage_size: int, repository_size: int, wiki_size: int, lfs_objects_size: int, job_artifacts_size: int, pipeline_artifacts_size: int, packages_size: int, snippets_size: int, uploads_size: int, container_registry_size: int>, warn_about_potentially_unwanted_characters: bool, autoclose_referenced_issues: bool, max_artifacts_size: int, approvals_before_merge: string, mirror: string, mirror_user_id: string, mirror_trigger_builds: string, only_mirror_protected_branches: string, mirror_overwrites_diverged_branches: string, external_authorization_classification_label: string, requirements_enabled: string, requirements_access_level: string, security_and_compliance_enabled: string, secret_push_protection_enabled: bool, pre_receive_secret_detection_enabled: bool, compliance_frameworks: string, issues_template: string, merge_requests_template: string, ci_restrict_pipeline_cancellation_role: string, merge_pipelines_enabled: string, merge_trains_enabled: string, merge_trains_skip_train_allowed: string, max_pipelines_per_merge_train: string, only_allow_merge_if_all_status_checks_passed: string, allow_pipeline_trigger_approve_deployment: bool, prevent_merge_without_jira_issue: string, auto_duo_code_review_enabled: string, duo_remote_flows_enabled: string, duo_foundational_flows_enabled: string, duo_sast_fp_detection_enabled: string, duo_secret_detection_fp_enabled: string, duo_sast_vr_workflow_enabled: string, web_based_commit_signing_enabled: string, spp_repository_pipeline_access: bool, security_policy_pipeline_must_succeed: bool, merge_request_title_regex: string, merge_request_title_regex_description: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -23469,7 +23468,7 @@ export def "projects-fork post-by-id" [
   --name: string # The name that will be assigned to the fork (e.g. Fork)
   --description: string # The description that will be assigned to the fork (e.g. Description)
   --visibility: string@visibility-completer # The visibility of the fork
-  --mr-default-target-self: string@bool-completer # Merge requests of this forked project targets itself by default
+  --mr-default-target-self: oneof<nothing, bool> # Merge requests of this forked project targets itself by default
   --branches: string # Branches to fork
 ]: any -> record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string, forked_from_project: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string>, container_registry_image_prefix: string, _links: record<self: string, issues: string, merge_requests: string, repo_branches: string, labels: string, events: string, members: string, cluster_agents: string>, marked_for_deletion_at: string, marked_for_deletion_on: string, packages_enabled: bool, empty_repo: bool, archived: bool, owner: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, resolve_outdated_diff_discussions: bool, container_expiration_policy: record<cadence: string, enabled: string, keep_n: string, older_than: string, name_regex: string, name_regex_keep: string, next_run_at: string>, repository_object_format: string, issues_enabled: bool, merge_requests_enabled: bool, wiki_enabled: bool, jobs_enabled: bool, snippets_enabled: bool, container_registry_enabled: bool, service_desk_enabled: bool, service_desk_address: string, can_create_merge_request_in: bool, issues_access_level: string, repository_access_level: string, merge_requests_access_level: string, forking_access_level: string, wiki_access_level: string, builds_access_level: string, snippets_access_level: string, pages_access_level: string, analytics_access_level: string, container_registry_access_level: string, security_and_compliance_access_level: string, releases_access_level: string, environments_access_level: string, feature_flags_access_level: string, infrastructure_access_level: string, monitor_access_level: string, model_experiments_access_level: string, model_registry_access_level: string, package_registry_access_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, shared_runners_enabled: bool, lfs_enabled: bool, creator_id: int, mr_default_target_self: bool, import_url: string, import_type: string, import_status: string, import_error: string, open_issues_count: int, description_html: string, updated_at: string, ci_default_git_depth: int, ci_delete_pipelines_in_seconds: int, ci_forward_deployment_enabled: bool, ci_forward_deployment_rollback_allowed: bool, ci_job_token_scope_enabled: bool, ci_separated_caches: bool, ci_allow_fork_pipelines_to_run_in_parent_project: bool, ci_id_token_sub_claim_components: list<string>, build_git_strategy: string, keep_latest_artifact: bool, restrict_user_defined_variables: bool, ci_pipeline_variables_minimum_override_role: string, runner_token_expiration_interval: int, group_runners_enabled: bool, resource_group_default_process_mode: string, auto_cancel_pending_pipelines: string, build_timeout: int, auto_devops_enabled: bool, auto_devops_deploy_strategy: string, ci_push_repository_for_job_token_allowed: bool, protect_merge_request_pipelines: bool, ci_display_pipeline_variables: bool, runners_token: string, ci_config_path: string, public_jobs: bool, shared_with_groups: list<record>, only_allow_merge_if_pipeline_succeeds: bool, allow_merge_on_skipped_pipeline: bool, request_access_enabled: bool, only_allow_merge_if_all_discussions_are_resolved: bool, remove_source_branch_after_merge: bool, printing_merge_request_link_enabled: bool, merge_method: string, squash_option: string, enforce_auth_checks_on_uploads: bool, suggestion_commit_message: string, merge_commit_template: string, squash_commit_template: string, mr_default_title_template: string, issue_branch_template: string, statistics: record<commit_count: int, storage_size: int, repository_size: int, wiki_size: int, lfs_objects_size: int, job_artifacts_size: int, pipeline_artifacts_size: int, packages_size: int, snippets_size: int, uploads_size: int, container_registry_size: int>, warn_about_potentially_unwanted_characters: bool, autoclose_referenced_issues: bool, max_artifacts_size: int, approvals_before_merge: string, mirror: string, mirror_user_id: string, mirror_trigger_builds: string, only_mirror_protected_branches: string, mirror_overwrites_diverged_branches: string, external_authorization_classification_label: string, requirements_enabled: string, requirements_access_level: string, security_and_compliance_enabled: string, secret_push_protection_enabled: bool, pre_receive_secret_detection_enabled: bool, compliance_frameworks: string, issues_template: string, merge_requests_template: string, ci_restrict_pipeline_cancellation_role: string, merge_pipelines_enabled: string, merge_trains_enabled: string, merge_trains_skip_train_allowed: string, max_pipelines_per_merge_train: string, only_allow_merge_if_all_status_checks_passed: string, allow_pipeline_trigger_approve_deployment: bool, prevent_merge_without_jira_issue: string, auto_duo_code_review_enabled: string, duo_remote_flows_enabled: string, duo_foundational_flows_enabled: string, duo_sast_fp_detection_enabled: string, duo_secret_detection_fp_enabled: string, duo_sast_vr_workflow_enabled: string, web_based_commit_signing_enabled: string, spp_repository_pipeline_access: bool, security_policy_pipeline_must_succeed: bool, merge_request_title_regex: string, merge_request_title_regex_description: string> {
   let input = $in
@@ -23520,16 +23519,16 @@ export def "projects-forks get" [
   --allow-errors(-e) # Return full response without error handling
   --order-by: string@order-by-completer-11 # Return projects ordered by field. storage_size, repository_size, wiki_size, packages_size are only available to admins. Similarity is available when searching and is limited to projects the user has access to. (default: created_at)
   --qp-sort: string@sort-completer # Return projects sorted in ascending and descending order (default: desc)
-  --archived: string@bool-completer # Limit by archived status
+  --archived: oneof<nothing, bool> # Limit by archived status
   --visibility: string@visibility-completer # Limit by visibility
   --search: string # Return list of projects matching the search criteria
-  --search-namespaces: string@bool-completer # Include ancestor namespaces when matching search criteria
-  --owned: string@bool-completer # Limit by owned by authenticated user (default: false)
-  --starred: string@bool-completer # Limit by starred status (default: false)
-  --imported: string@bool-completer # Limit by imported by authenticated user (default: false)
-  --membership: string@bool-completer # Limit by projects that the current user is a member of (default: false)
-  --with-issues-enabled: string@bool-completer # Limit by enabled issues feature (default: false)
-  --with-merge-requests-enabled: string@bool-completer # Limit by enabled merge requests feature (default: false)
+  --search-namespaces: oneof<nothing, bool> # Include ancestor namespaces when matching search criteria
+  --owned: oneof<nothing, bool> # Limit by owned by authenticated user (default: false)
+  --starred: oneof<nothing, bool> # Limit by starred status (default: false)
+  --imported: oneof<nothing, bool> # Limit by imported by authenticated user (default: false)
+  --membership: oneof<nothing, bool> # Limit by projects that the current user is a member of (default: false)
+  --with-issues-enabled: oneof<nothing, bool> # Limit by enabled issues feature (default: false)
+  --with-merge-requests-enabled: oneof<nothing, bool> # Limit by enabled merge requests feature (default: false)
   --with-programming-language: string # Limit to repositories which use the given programming language
   --min-access-level: int@min-access-level-completer # Limit by minimum access level of authenticated user (format: int32)
   --id-after: int # Limit results to projects with IDs greater than the specified ID (format: int32)
@@ -23541,16 +23540,16 @@ export def "projects-forks get" [
   --topic-id: int # Limit results to projects with the assigned topic given by the topic ID (format: int32)
   --updated-before: string # Return projects updated before the specified datetime. Format: ISO 8601 YYYY-MM-DDTHH:MM:SSZ (format: date-time)
   --updated-after: string # Return projects updated after the specified datetime. Format: ISO 8601 YYYY-MM-DDTHH:MM:SSZ (format: date-time)
-  --include-pending-delete: string@bool-completer # Include projects in pending delete state. Can only be set by admins
+  --include-pending-delete: oneof<nothing, bool> # Include projects in pending delete state. Can only be set by admins
   --marked-for-deletion-on: string # Date when the project was marked for deletion (format: date)
-  --active: string@bool-completer # Limit by projects that are not archived and not marked for deletion
-  --wiki-checksum-failed: string@bool-completer # Limit by projects where wiki checksum is failed (default: false)
-  --repository-checksum-failed: string@bool-completer # Limit by projects where repository checksum is failed (default: false)
-  --include-hidden: string@bool-completer # Include hidden projects. Can only be set by admins (default: false)
+  --active: oneof<nothing, bool> # Limit by projects that are not archived and not marked for deletion
+  --wiki-checksum-failed: oneof<nothing, bool> # Limit by projects where wiki checksum is failed (default: false)
+  --repository-checksum-failed: oneof<nothing, bool> # Limit by projects where repository checksum is failed (default: false)
+  --include-hidden: oneof<nothing, bool> # Include hidden projects. Can only be set by admins (default: false)
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --simple: string@bool-completer # Return only the ID, URL, name, and path of each project (default: false)
-  --with-custom-attributes: string@bool-completer # Include custom attributes in the response (default: false)
+  --simple: oneof<nothing, bool> # Return only the ID, URL, name, and path of each project (default: false)
+  --with-custom-attributes: oneof<nothing, bool> # Include custom attributes in the response (default: false)
 ]: nothing -> table<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string, forked_from_project: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list, topics: list, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record, custom_attributes: record, repository_storage: string>, container_registry_image_prefix: string, _links: record<self: string, issues: string, merge_requests: string, repo_branches: string, labels: string, events: string, members: string, cluster_agents: string>, marked_for_deletion_at: string, marked_for_deletion_on: string, packages_enabled: bool, empty_repo: bool, archived: bool, owner: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, resolve_outdated_diff_discussions: bool, container_expiration_policy: record<cadence: string, enabled: string, keep_n: string, older_than: string, name_regex: string, name_regex_keep: string, next_run_at: string>, repository_object_format: string, issues_enabled: bool, merge_requests_enabled: bool, wiki_enabled: bool, jobs_enabled: bool, snippets_enabled: bool, container_registry_enabled: bool, service_desk_enabled: bool, service_desk_address: string, can_create_merge_request_in: bool, issues_access_level: string, repository_access_level: string, merge_requests_access_level: string, forking_access_level: string, wiki_access_level: string, builds_access_level: string, snippets_access_level: string, pages_access_level: string, analytics_access_level: string, container_registry_access_level: string, security_and_compliance_access_level: string, releases_access_level: string, environments_access_level: string, feature_flags_access_level: string, infrastructure_access_level: string, monitor_access_level: string, model_experiments_access_level: string, model_registry_access_level: string, package_registry_access_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, shared_runners_enabled: bool, lfs_enabled: bool, creator_id: int, mr_default_target_self: bool, import_url: string, import_type: string, import_status: string, import_error: string, open_issues_count: int, description_html: string, updated_at: string, ci_default_git_depth: int, ci_delete_pipelines_in_seconds: int, ci_forward_deployment_enabled: bool, ci_forward_deployment_rollback_allowed: bool, ci_job_token_scope_enabled: bool, ci_separated_caches: bool, ci_allow_fork_pipelines_to_run_in_parent_project: bool, ci_id_token_sub_claim_components: list<string>, build_git_strategy: string, keep_latest_artifact: bool, restrict_user_defined_variables: bool, ci_pipeline_variables_minimum_override_role: string, runner_token_expiration_interval: int, group_runners_enabled: bool, resource_group_default_process_mode: string, auto_cancel_pending_pipelines: string, build_timeout: int, auto_devops_enabled: bool, auto_devops_deploy_strategy: string, ci_push_repository_for_job_token_allowed: bool, protect_merge_request_pipelines: bool, ci_display_pipeline_variables: bool, runners_token: string, ci_config_path: string, public_jobs: bool, shared_with_groups: list<record>, only_allow_merge_if_pipeline_succeeds: bool, allow_merge_on_skipped_pipeline: bool, request_access_enabled: bool, only_allow_merge_if_all_discussions_are_resolved: bool, remove_source_branch_after_merge: bool, printing_merge_request_link_enabled: bool, merge_method: string, squash_option: string, enforce_auth_checks_on_uploads: bool, suggestion_commit_message: string, merge_commit_template: string, squash_commit_template: string, mr_default_title_template: string, issue_branch_template: string, statistics: record<commit_count: int, storage_size: int, repository_size: int, wiki_size: int, lfs_objects_size: int, job_artifacts_size: int, pipeline_artifacts_size: int, packages_size: int, snippets_size: int, uploads_size: int, container_registry_size: int>, warn_about_potentially_unwanted_characters: bool, autoclose_referenced_issues: bool, max_artifacts_size: int, approvals_before_merge: string, mirror: string, mirror_user_id: string, mirror_trigger_builds: string, only_mirror_protected_branches: string, mirror_overwrites_diverged_branches: string, external_authorization_classification_label: string, requirements_enabled: string, requirements_access_level: string, security_and_compliance_enabled: string, secret_push_protection_enabled: bool, pre_receive_secret_detection_enabled: bool, compliance_frameworks: string, issues_template: string, merge_requests_template: string, ci_restrict_pipeline_cancellation_role: string, merge_pipelines_enabled: string, merge_trains_enabled: string, merge_trains_skip_train_allowed: string, max_pipelines_per_merge_train: string, only_allow_merge_if_all_status_checks_passed: string, allow_pipeline_trigger_approve_deployment: bool, prevent_merge_without_jira_issue: string, auto_duo_code_review_enabled: string, duo_remote_flows_enabled: string, duo_foundational_flows_enabled: string, duo_sast_fp_detection_enabled: string, duo_secret_detection_fp_enabled: string, duo_sast_vr_workflow_enabled: string, web_based_commit_signing_enabled: string, spp_repository_pipeline_access: bool, security_policy_pipeline_must_succeed: bool, merge_request_title_regex: string, merge_request_title_regex_description: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -23859,8 +23858,8 @@ export def "projects-groups get" [
   --allow-errors(-e) # Return full response without error handling
   --search: string # Return list of groups matching the search criteria (e.g. group)
   --skip-groups: list # Array of group ids to exclude from list
-  --with-shared: string@bool-completer # Include shared groups (default: false)
-  --shared-visible-only: string@bool-completer # Limit to shared groups user has access to (default: false)
+  --with-shared: oneof<nothing, bool> # Include shared groups (default: false)
+  --shared-visible-only: oneof<nothing, bool> # Limit to shared groups user has access to (default: false)
   --shared-min-access-level: int@shared-min-access-level-completer # Limit returned shared groups by minimum access level to the project (format: int32)
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
@@ -23892,7 +23891,7 @@ export def "projects-invited-groups get" [
   --min-access-level: int@min-access-level-completer # Limit by minimum access level of authenticated user (format: int32)
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --with-custom-attributes: string@bool-completer # Include custom attributes in the response (default: false)
+  --with-custom-attributes: oneof<nothing, bool> # Include custom attributes in the response (default: false)
 ]: nothing -> table<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, lock_math_rendering_limits_enabled: bool, default_branch: string, default_branch_protection: int, default_branch_protection_defaults: string, avatar_url: string, request_access_enabled: bool, full_name: string, full_path: string, created_at: string, parent_id: string, organization_id: int, shared_runners_setting: string, max_artifacts_size: int, custom_attributes: record<key: string, value: string>, statistics: record<storage_size: string, repository_size: string, wiki_size: string, lfs_objects_size: string, job_artifacts_size: string, pipeline_artifacts_size: string, packages_size: string, snippets_size: string, uploads_size: string>, marked_for_deletion_on: string, root_storage_statistics: record<build_artifacts_size: int, container_registry_size: int, container_registry_size_is_estimated: bool, dependency_proxy_size: int, lfs_objects_size: int, packages_size: int, pipeline_artifacts_size: int, repository_size: int, snippets_size: int, storage_size: int, uploads_size: int, wiki_size: int>, ldap_cn: string, ldap_access: string, ldap_group_links: record<cn: string, group_access: int, provider: string, filter: string, member_role_id: int>, saml_group_links: record<name: string, access_level: int, member_role_id: int, provider: string>, file_template_project_id: string, wiki_access_level: string, repository_storage: string, duo_core_features_enabled: bool, duo_features_enabled: string, lock_duo_features_enabled: string, auto_duo_code_review_enabled: string, web_based_commit_signing_enabled: string, allow_personal_snippets: string, duo_namespace_access_rules: string, built_in_project_templates_enabled: bool, lock_built_in_project_templates_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -24120,12 +24119,12 @@ export def "projects-protected-branches post" [
   name: string # The name of the protected branch (e.g. main)
   --push-access-level: int@push-access-level-completer # Access levels allowed to push (defaults: `40`, maintainer access level) (format: int32)
   --merge-access-level: int@merge-access-level-completer # Access levels allowed to merge (defaults: `40`, maintainer access level) (format: int32)
-  --allow-force-push: string@bool-completer # Allow force push for all users with push access. (default: false)
+  --allow-force-push: oneof<nothing, bool> # Allow force push for all users with push access. (default: false)
   --allowed-to-push: list # Array of users, groups, deploy keys, or access levels allowed to push to protected branches — item shape: {deploy_key_id?: int, access_level?: "30"|"40"|"60"|"0", user_id?: int, group_id?: int, id?: int, _destroy?: bool}
   --unprotect-access-level: int@unprotect-access-level-completer # Access levels allowed to unprotect (defaults: `40`, maintainer access level) (format: int32)
   --allowed-to-merge: list # Array of users, groups, or access levels allowed to merge protected branches — item shape: {access_level?: "30"|"40"|"60"|"0", user_id?: int, group_id?: int, id?: int, _destroy?: bool}
   --allowed-to-unprotect: list # Array of users, groups, or access levels allowed to unprotect protected branches — item shape: {access_level?: "30"|"40"|"60", user_id?: int, group_id?: int, id?: int, _destroy?: bool}
-  --code-owner-approval-required: string@bool-completer # Prevent pushes to this branch if it matches an item in CODEOWNERS
+  --code-owner-approval-required: oneof<nothing, bool> # Prevent pushes to this branch if it matches an item in CODEOWNERS
 ]: any -> record<id: int, name: string, push_access_levels: table<id: int, access_level: int, access_level_description: string, deploy_key_id: int, user_id: int, group_id: int>, merge_access_levels: table<id: int, access_level: int, access_level_description: string, deploy_key_id: int, user_id: int, group_id: int>, allow_force_push: bool, unprotect_access_levels: table<id: int, access_level: int, access_level_description: string, deploy_key_id: int, user_id: int, group_id: int>, code_owner_approval_required: bool, inherited: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -24178,12 +24177,12 @@ export def "projects-protected-branches patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-force-push: string@bool-completer # Allow force push for all users with push access.
+  --allow-force-push: oneof<nothing, bool> # Allow force push for all users with push access.
   --allowed-to-push: list # Array of users, groups, deploy keys, or access levels allowed to push to protected branches — item shape: {deploy_key_id?: int, access_level?: "30"|"40"|"60"|"0", user_id?: int, group_id?: int, id?: int, _destroy?: bool}
   --unprotect-access-level: int@unprotect-access-level-completer # Access levels allowed to unprotect (defaults: `40`, maintainer access level) (format: int32)
   --allowed-to-merge: list # Array of users, groups, or access levels allowed to merge protected branches — item shape: {access_level?: "30"|"40"|"60"|"0", user_id?: int, group_id?: int, id?: int, _destroy?: bool}
   --allowed-to-unprotect: list # Array of users, groups, or access levels allowed to unprotect protected branches — item shape: {access_level?: "30"|"40"|"60", user_id?: int, group_id?: int, id?: int, _destroy?: bool}
-  --code-owner-approval-required: string@bool-completer # Prevent pushes to this branch if it matches an item in CODEOWNERS
+  --code-owner-approval-required: oneof<nothing, bool> # Prevent pushes to this branch if it matches an item in CODEOWNERS
 ]: any -> record<id: int, name: string, push_access_levels: table<id: int, access_level: int, access_level_description: string, deploy_key_id: int, user_id: int, group_id: int>, merge_access_levels: table<id: int, access_level: int, access_level_description: string, deploy_key_id: int, user_id: int, group_id: int>, allow_force_push: bool, unprotect_access_levels: table<id: int, access_level: int, access_level_description: string, deploy_key_id: int, user_id: int, group_id: int>, code_owner_approval_required: bool, inherited: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -24466,7 +24465,7 @@ export def "projects-releases list" [
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
   --order-by: string@order-by-completer-12 # The field to use as order. Either `released_at` (default) or `created_at` (default: released_at)
   --qp-sort: string@sort-completer # The direction of the order. Either `desc` (default) for descending order or `asc` for ascending order (default: desc)
-  --include-html-description: string@bool-completer # If `true`, a response includes HTML rendered markdown of the release description
+  --include-html-description: oneof<nothing, bool> # If `true`, a response includes HTML rendered markdown of the release description
   --updated-before: string # Return releases updated before the specified datetime. Format: ISO 8601 YYYY-MM-DDTHH:MM:SSZ (format: date-time)
   --updated-after: string # Return releases updated after the specified datetime. Format: ISO 8601 YYYY-MM-DDTHH:MM:SSZ (format: date-time)
 ]: nothing -> table<name: string, tag_name: string, description: string, created_at: string, released_at: string, upcoming_release: bool, description_html: string, author: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, commit: record<id: string, short_id: string, created_at: string, parent_ids: list, title: string, message: string, author_name: string, author_email: string, authored_date: string, committer_name: string, committer_email: string, committed_date: string, trailers: record, extended_trailers: record, web_url: string>, milestones: record<id: int, iid: int, project_id: int, group_id: string, title: string, description: string, state: string, created_at: string, updated_at: string, due_date: string, start_date: string, expired: bool, web_url: string, issue_stats: record>, commit_path: string, tag_path: string, assets: record<count: int, sources: record, links: record>, evidences: record<sha: string, filepath: string, collected_at: string>, _links: record<closed_issues_url: string, closed_merge_requests_url: string, edit_url: string, merged_merge_requests_url: string, opened_issues_url: string, opened_merge_requests_url: string, self: string>> {
@@ -24502,7 +24501,7 @@ export def "projects-releases post" [
   --milestones: list # The title of each milestone the release is associated with. GitLab Premium customers can specify group milestones. Cannot be combined with `milestone_ids` parameter.
   --milestone-ids: string # The ID of each milestone the release is associated with. GitLab Premium customers can specify group milestones. Cannot be combined with `milestones` parameter.
   --released-at: string # Date and time for the release. Defaults to the current time. Expected in ISO 8601 format (`2019-03-15T08:00:00Z`). Only provide this field if creating an upcoming or historical release. (format: date-time)
-  --legacy-catalog-publish: string@bool-completer # If true, the release will be published to the CI catalog. This parameter is for internal use only and will be removed in a future release. If the feature flag ci_release_cli_catalog_publish_option is disabled, this parameter will be ignored and the release will published to the CI catalog as it was before this parameter was introduced.
+  --legacy-catalog-publish: oneof<nothing, bool> # If true, the release will be published to the CI catalog. This parameter is for internal use only and will be removed in a future release. If the feature flag ci_release_cli_catalog_publish_option is disabled, this parameter will be ignored and the release will published to the CI catalog as it was before this parameter was introduced.
 ]: any -> record<name: string, tag_name: string, description: string, created_at: string, released_at: string, upcoming_release: bool, description_html: string, author: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, commit: record<id: string, short_id: string, created_at: string, parent_ids: list<string>, title: string, message: string, author_name: string, author_email: string, authored_date: string, committer_name: string, committer_email: string, committed_date: string, trailers: record, extended_trailers: record, web_url: string>, milestones: record<id: int, iid: int, project_id: int, group_id: string, title: string, description: string, state: string, created_at: string, updated_at: string, due_date: string, start_date: string, expired: bool, web_url: string, issue_stats: record<total: int, closed: int>>, commit_path: string, tag_path: string, assets: record<count: int, sources: record<format: string, url: string>, links: record<id: int, name: string, url: string, direct_asset_url: string, link_type: string>>, evidences: record<sha: string, filepath: string, collected_at: string>, _links: record<closed_issues_url: string, closed_merge_requests_url: string, edit_url: string, merged_merge_requests_url: string, opened_issues_url: string, opened_merge_requests_url: string, self: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -24529,7 +24528,7 @@ export def "projects-releases get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-html-description: string@bool-completer # If `true`, a response includes HTML rendered markdown of the release description
+  --include-html-description: oneof<nothing, bool> # If `true`, a response includes HTML rendered markdown of the release description
 ]: nothing -> record<name: string, tag_name: string, description: string, created_at: string, released_at: string, upcoming_release: bool, description_html: string, author: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, commit: record<id: string, short_id: string, created_at: string, parent_ids: list<string>, title: string, message: string, author_name: string, author_email: string, authored_date: string, committer_name: string, committer_email: string, committed_date: string, trailers: record, extended_trailers: record, web_url: string>, milestones: record<id: int, iid: int, project_id: int, group_id: string, title: string, description: string, state: string, created_at: string, updated_at: string, due_date: string, start_date: string, expired: bool, web_url: string, issue_stats: record<total: int, closed: int>>, commit_path: string, tag_path: string, assets: record<count: int, sources: record<format: string, url: string>, links: record<id: int, name: string, url: string, direct_asset_url: string, link_type: string>>, evidences: record<sha: string, filepath: string, collected_at: string>, _links: record<closed_issues_url: string, closed_merge_requests_url: string, edit_url: string, merged_merge_requests_url: string, opened_issues_url: string, opened_merge_requests_url: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -24842,10 +24841,10 @@ export def "projects-remote-mirrors post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-url: string # The URL for a remote mirror (e.g. https://*****:*****@example.com/gitlab/example.git)
-  --enabled: string@bool-completer # Determines if the mirror is enabled
+  --enabled: oneof<nothing, bool> # Determines if the mirror is enabled
   --auth-method: string@auth-method-completer # Determines the mirror authentication method
-  --keep-divergent-refs: string@bool-completer # Determines if divergent refs are kept on the target
-  --only-protected-branches: string@bool-completer # Determines if only protected branches are mirrored
+  --keep-divergent-refs: oneof<nothing, bool> # Determines if divergent refs are kept on the target
+  --only-protected-branches: oneof<nothing, bool> # Determines if only protected branches are mirrored
   --mirror-branch-regex: string # Determines if only matched branches are mirrored
   --host-keys: list # SSH host keys in bare format (ssh-ed25519 AAAA...) or full known_hosts format (hostname ssh-ed25519 AAAA...). Bare keys use the hostname from the mirror URL.
 ]: any -> record<id: int, enabled: bool, url: string, update_status: string, last_update_at: string, last_update_started_at: string, last_successful_update_at: string, last_error: string, only_protected_branches: bool, keep_divergent_refs: bool, auth_method: string, host_keys: table<fingerprint_sha256: string>, mirror_branch_regex: string> {
@@ -24897,10 +24896,10 @@ export def "projects-remote-mirrors put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Determines if the mirror is enabled (e.g. true)
+  --enabled: oneof<nothing, bool> # Determines if the mirror is enabled (e.g. true)
   --auth-method: string # Determines the mirror authentication method
-  --keep-divergent-refs: string@bool-completer # Determines if divergent refs are kept on the target
-  --only-protected-branches: string@bool-completer # Determines if only protected branches are mirrored
+  --keep-divergent-refs: oneof<nothing, bool> # Determines if divergent refs are kept on the target
+  --only-protected-branches: oneof<nothing, bool> # Determines if only protected branches are mirrored
   --mirror-branch-regex: string # Determines if only matched branches are mirrored
   --host-keys: list # SSH host keys in bare format (ssh-ed25519 AAAA...) or full known_hosts format (hostname ssh-ed25519 AAAA...). Bare keys use the hostname from the mirror URL.
 ]: any -> record<id: int, enabled: bool, url: string, update_status: string, last_update_at: string, last_update_started_at: string, last_successful_update_at: string, last_error: string, only_protected_branches: bool, keep_divergent_refs: bool, auth_method: string, host_keys: table<fingerprint_sha256: string>, mirror_branch_regex: string> {
@@ -24999,7 +24998,7 @@ export def "projects-repository-tree get" [
   --allow-errors(-e) # Return full response without error handling
   --ref: string # The name of a repository branch or tag, if not given the default branch is used (e.g. main)
   --path: string # The path of the tree (e.g. files/html)
-  --recursive: string@bool-completer # Used to get a recursive tree (default: false)
+  --recursive: oneof<nothing, bool> # Used to get a recursive tree (default: false)
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
   --pagination: string@pagination-completer # Specify the pagination method ("none" is only valid if "recursive" is true) (default: legacy)
@@ -25076,7 +25075,7 @@ export def "projects-repository-archive get" [
   --sha: string # The commit sha of the archive to be downloaded (e.g. 7d70e02340bac451f281cecf0a980907974bd8be)
   --format: string # The archive format (e.g. tar.gz)
   --path: string # Subfolder of the repository to be downloaded (e.g. files/archives)
-  --include-lfs-blobs: string@bool-completer # Used to exclude LFS objects from archive (default: true)
+  --include-lfs-blobs: oneof<nothing, bool> # Used to exclude LFS objects from archive (default: true)
   --exclude-paths: list # Comma-separated list of paths to exclude from the archive
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -25104,8 +25103,8 @@ export def "projects-repository-compare get" [
   --qp-from: string # The commit, branch name, or tag name to start comparison (e.g. main)
   --qp-to: string # The commit, branch name, or tag name to stop comparison (e.g. feature)
   --from-project-id: int # The project to compare from (format: int32, e.g. 1)
-  --straight: string@bool-completer # Comparison method, `true` for direct comparison between `from` and `to` (`from`..`to`), `false` to compare using merge base (`from`...`to`) (default: false)
-  --unidiff: string@bool-completer # A diff in a Unified diff format (default: false)
+  --straight: oneof<nothing, bool> # Comparison method, `true` for direct comparison between `from` and `to` (`from`..`to`), `false` to compare using merge base (`from`...`to`) (default: false)
+  --unidiff: oneof<nothing, bool> # A diff in a Unified diff format (default: false)
 ]: nothing -> record<commit: record<id: string, short_id: string, created_at: string, parent_ids: list<string>, title: string, message: string, author_name: string, author_email: string, authored_date: string, committer_name: string, committer_email: string, committed_date: string, trailers: record, extended_trailers: record, web_url: string>, commits: table<id: string, short_id: string, created_at: string, parent_ids: list, title: string, message: string, author_name: string, author_email: string, authored_date: string, committer_name: string, committer_email: string, committed_date: string, trailers: record, extended_trailers: record, web_url: string>, diffs: table<diff: string, collapsed: bool, too_large: bool, new_path: string, old_path: string, a_mode: string, b_mode: string, new_file: bool, renamed_file: bool, deleted_file: bool, generated_file: bool>, compare_timeout: bool, compare_same_ref: bool, web_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -25129,7 +25128,7 @@ export def "projects-repository-health get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --generate: string@bool-completer # Triggers a new health report to be generated (default: false)
+  --generate: oneof<nothing, bool> # Triggers a new health report to be generated (default: false)
 ]: nothing -> record<size: int, references: record<loose_count: int, packed_size: int, reference_backend: string>, objects: record<size: int, recent_size: int, stale_size: int, keep_size: int, packfile_count: int, reverse_index_count: int, cruft_count: int, keep_count: int, loose_objects_count: int, stale_loose_objects_count: int, loose_objects_garbage_count: int>, commit_graph: record<commit_graph_chain_length: int, has_bloom_filters: bool, has_generation_data: bool, has_generation_data_overflow: bool>, bitmap: record<has_hash_cache: bool, has_lookup_table: bool, version: int>, multi_pack_index: record<packfile_count: int, version: int>, multi_pack_index_bitmap: record<has_hash_cache: bool, has_lookup_table: bool, version: int>, alternates: record, is_object_pool: bool, last_full_repack: record<seconds: int, nanos: int>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -25634,11 +25633,11 @@ export def "projects-search get" [
   --scope: string@scope-completer-8 # The scope of the search
   --ref: string # The name of a repository branch or tag. If not given, the default branch is used
   --state: string@state-completer-3 # Filter results by state
-  --confidential: string@bool-completer # Filter results by confidentiality
+  --confidential: oneof<nothing, bool> # Filter results by confidentiality
   --type: list # Filter work items by type. Only applies to work_items scope. Available types: issue, task, epic, incident, test_case, requirement, objective, key_result, ticket.
   --qp-fields: list # Array of fields you wish to search. Available with advanced search.
   --num-context-lines: int # Number of context lines around each match. Available with advanced and exact code search. Introduced in GitLab 18.11. (format: int32)
-  --regex: string@bool-completer # Performs a regex code search. Available with exact code search. Introduced in GitLab 18.9
+  --regex: oneof<nothing, bool> # Performs a regex code search. Available with exact code search. Introduced in GitLab 18.9
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
 ]: nothing -> any {
@@ -26254,7 +26253,7 @@ export def "projects-wikis list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-content: string@bool-completer # Include pages' content (default: false)
+  --with-content: oneof<nothing, bool> # Include pages' content (default: false)
 ]: nothing -> table<format: string, slug: string, title: string, wiki_page_meta_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -26310,7 +26309,7 @@ export def "projects-wikis get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --version: string # The version hash of a wiki page
-  --render-html: string@bool-completer # Render content to HTML (default: false)
+  --render-html: oneof<nothing, bool> # Render content to HTML (default: false)
 ]: nothing -> record<format: string, slug: string, title: string, wiki_page_meta_id: int, content: string, encoding: string, front_matter: record> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -26589,9 +26588,9 @@ export def "admin-ci-variables post" [
   key: string # The key of the variable. Max 255 characters
   --description: string # The description of the variable
   value: string # The value of a variable
-  --protected: string@bool-completer # Whether the variable is protected
-  --masked: string@bool-completer # Whether the variable is masked
-  --body-raw: string@bool-completer # Whether the variable will be expanded
+  --protected: oneof<nothing, bool> # Whether the variable is protected
+  --masked: oneof<nothing, bool> # Whether the variable is masked
+  --body-raw: oneof<nothing, bool> # Whether the variable will be expanded
   --variable-type: string@variable-type-completer # The type of a variable. Available types are: env_var (default) and file
 ]: any -> record<variable_type: string, key: string, value: string, hidden: bool, protected: bool, masked: bool, raw: bool, environment_scope: string, description: string> {
   let input = $in
@@ -26642,9 +26641,9 @@ export def "admin-ci-variables put" [
   --allow-errors(-e) # Return full response without error handling
   --description: string # The description of the variable
   --value: string # The value of a variable
-  --protected: string@bool-completer # Whether the variable is protected
-  --masked: string@bool-completer # Whether the variable is masked
-  --body-raw: string@bool-completer # Whether the variable will be expanded
+  --protected: oneof<nothing, bool> # Whether the variable is protected
+  --masked: oneof<nothing, bool> # Whether the variable is masked
+  --body-raw: oneof<nothing, bool> # Whether the variable will be expanded
   --variable-type: string@variable-type-completer # The type of a variable. Available types are: env_var (default) and file
 ]: any -> record<variable_type: string, key: string, value: string, hidden: bool, protected: bool, masked: bool, raw: bool, environment_scope: string, description: string> {
   let input = $in
@@ -26761,12 +26760,12 @@ export def "admin-clusters put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # Cluster name
-  --enabled: string@bool-completer # Enable or disable Gitlab's connection to your Kubernetes cluster
+  --enabled: oneof<nothing, bool> # Enable or disable Gitlab's connection to your Kubernetes cluster
   --environment-scope: string # The associated environment to the cluster
-  --namespace-per-environment: string@bool-completer # Deploy each environment to a separate Kubernetes namespace (default: true)
+  --namespace-per-environment: oneof<nothing, bool> # Deploy each environment to a separate Kubernetes namespace (default: true)
   --domain: string # Cluster base domain
   --management-project-id: int # The ID of the management project (format: int32)
-  --managed: string@bool-completer # Determines if GitLab will manage namespaces and service accounts for this cluster
+  --managed: oneof<nothing, bool> # Determines if GitLab will manage namespaces and service accounts for this cluster
   --platform-kubernetes-attributes: record # Platform Kubernetes data — shape: {api_url?: string, token?: string, ca_cert?: string, namespace?: string}
 ]: any -> record<id: string, name: string, created_at: string, domain: string, enabled: string, managed: string, provider_type: string, platform_type: string, environment_scope: string, cluster_type: string, namespace_per_environment: string, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, platform_kubernetes: record<api_url: string, namespace: string, authorization_type: string, ca_cert: string>, provider_gcp: record<cluster_id: string, status_name: string, gcp_project_id: string, zone: string, machine_type: string, num_nodes: string, endpoint: string>, management_project: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string>> {
   let input = $in
@@ -26816,12 +26815,12 @@ export def "admin-clusters-add post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string # Cluster name
-  --enabled: string@bool-completer # Determines if cluster is active or not, defaults to true (default: true)
+  --enabled: oneof<nothing, bool> # Determines if cluster is active or not, defaults to true (default: true)
   --environment-scope: string # The associated environment to the cluster (default: *)
-  --namespace-per-environment: string@bool-completer # Deploy each environment to a separate Kubernetes namespace (default: true)
+  --namespace-per-environment: oneof<nothing, bool> # Deploy each environment to a separate Kubernetes namespace (default: true)
   --domain: string # Cluster base domain
   --management-project-id: int # The ID of the management project (format: int32)
-  --managed: string@bool-completer # Determines if GitLab will manage namespaces and service accounts for this cluster, defaults to true (default: true)
+  --managed: oneof<nothing, bool> # Determines if GitLab will manage namespaces and service accounts for this cluster, defaults to true (default: true)
   platform_kubernetes_attributes: record # Platform Kubernetes data — shape: {api_url: string, token: string, ca_cert?: string, namespace?: string, authorization_type?: "unknown_authorization"|"rbac"|"abac"}
 ]: any -> record<id: string, name: string, created_at: string, domain: string, enabled: string, managed: string, provider_type: string, platform_type: string, environment_scope: string, cluster_type: string, namespace_per_environment: string, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, platform_kubernetes: record<api_url: string, namespace: string, authorization_type: string, ca_cert: string>, provider_gcp: record<cluster_id: string, status_name: string, gcp_project_id: string, zone: string, machine_type: string, num_nodes: string, endpoint: string>, management_project: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string>> {
   let input = $in
@@ -26928,7 +26927,7 @@ export def "broadcast-messages post" [
   --target-access-levels: list # Target user roles
   --target-path: string # Target path
   --broadcast-type: string@broadcast-type-completer # Broadcast type. Defaults to banner (default: banner)
-  --dismissable: string@bool-completer # Is dismissable
+  --dismissable: oneof<nothing, bool> # Is dismissable
   --theme: string@theme-completer # The theme for the message
 ]: any -> record<id: int, message: string, starts_at: string, ends_at: string, color: string, font: string, target_access_levels: list<any>, target_path: string, broadcast_type: string, theme: string, dismissable: bool, active: bool> {
   let input = $in
@@ -26985,7 +26984,7 @@ export def "broadcast-messages put" [
   --target-access-levels: list # Target user roles
   --target-path: string # Target path
   --broadcast-type: string@broadcast-type-completer # Broadcast Type
-  --dismissable: string@bool-completer # Is dismissable
+  --dismissable: oneof<nothing, bool> # Is dismissable
   --theme: string@theme-completer # The theme for the message
 ]: any -> record<id: int, message: string, starts_at: string, ends_at: string, color: string, font: string, target_access_levels: list<any>, target_path: string, broadcast_type: string, theme: string, dismissable: bool, active: bool> {
   let input = $in
@@ -27036,7 +27035,7 @@ export def "applications post" [
   name: string # Name of the application. (e.g. MyApplication)
   redirect_uri: string # Redirect URI of the application. (e.g. https://redirect.uri)
   scopes: string # Scopes of the application. You can specify multiple scopes by separating\                                  each scope using a space
-  --confidential: string@bool-completer # The application is used where the client secret can be kept confidential. Native mobile apps \                         and Single Page Apps are considered non-confidential. Defaults to true if not supplied (default: true)
+  --confidential: oneof<nothing, bool> # The application is used where the client secret can be kept confidential. Native mobile apps \                         and Single Page Apps are considered non-confidential. Defaults to true if not supplied (default: true)
 ]: any -> record<id: int, application_id: string, application_name: string, callback_url: string, confidential: bool, scopes: list<any>, secret: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -27399,11 +27398,11 @@ export def "runners post" [
   --maintainer-note: string # Deprecated: see `maintenance_note`
   --maintenance-note: string # Free-form maintenance notes for the runner (1024 characters)
   --info: record # Runner's metadata — shape: {name?: string, version?: string, revision?: string, platform?: string, architecture?: string}
-  --active: string@bool-completer # Deprecated: Use `paused` instead. Specifies if the runner is allowed to receive new jobs
-  --paused: string@bool-completer # Specifies if the runner should ignore new jobs
-  --locked: string@bool-completer # Specifies if the runner should be locked for the current project
+  --active: oneof<nothing, bool> # Deprecated: Use `paused` instead. Specifies if the runner is allowed to receive new jobs
+  --paused: oneof<nothing, bool> # Specifies if the runner should ignore new jobs
+  --locked: oneof<nothing, bool> # Specifies if the runner should be locked for the current project
   --access-level: string@access-level-completer-2 # The access level of the runner
-  --run-untagged: string@bool-completer # Specifies if the runner should handle untagged jobs
+  --run-untagged: oneof<nothing, bool> # Specifies if the runner should handle untagged jobs
   --tag-list: list # A list of runner tags
   --maximum-timeout: int # Maximum timeout that limits the amount of time (in seconds) that runners can run jobs (format: int32)
 ]: any -> record<id: string, token: string, token_expires_at: string> {
@@ -27455,7 +27454,7 @@ export def "runners list" [
   --allow-errors(-e) # Return full response without error handling
   --scope: string@scope-completer-3 # Deprecated: Use `type` or `status` instead. The scope of runners to return
   --type: string@type-completer # The type of runners to return
-  --paused: string@bool-completer # Whether to include only runners that are accepting or ignoring new jobs
+  --paused: oneof<nothing, bool> # Whether to include only runners that are accepting or ignoring new jobs
   --status: string@status-completer # The status of runners to return
   --tag-list: list # A list of runner tags (e.g. [macos, shell])
   --version-prefix: string # The version prefix of runners to return (e.g. 15.1.)
@@ -27581,7 +27580,7 @@ export def "runners-all get" [
   --allow-errors(-e) # Return full response without error handling
   --scope: string@scope-completer-3 # Deprecated: Use `type` or `status` instead. The scope of runners to return
   --type: string@type-completer # The type of runners to return
-  --paused: string@bool-completer # Whether to include only runners that are accepting or ignoring new jobs
+  --paused: oneof<nothing, bool> # Whether to include only runners that are accepting or ignoring new jobs
   --status: string@status-completer # The status of runners to return
   --tag-list: list # A list of runner tags (e.g. [macos, shell])
   --version-prefix: string # The version prefix of runners to return (e.g. 15.1.)
@@ -27610,7 +27609,7 @@ export def "runners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-projects: string@bool-completer # Include projects in the response. Set to false to improve performance for runners with many projects. (default: true)
+  --include-projects: oneof<nothing, bool> # Include projects in the response. Set to false to improve performance for runners with many projects. (default: true)
 ]: nothing -> record<id: int, description: string, ip_address: string, active: bool, paused: bool, is_shared: bool, runner_type: string, name: string, online: bool, created_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, created_at: string, status: string, job_execution_status: string, tag_list: string, run_untagged: string, locked: string, maximum_timeout: string, access_level: string, version: string, revision: string, platform: string, architecture: string, contacted_at: string, maintenance_note: string, projects: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string>, groups: record<id: int, web_url: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -27635,11 +27634,11 @@ export def "runners put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # The description of the runner
-  --active: string@bool-completer # Deprecated: Use `paused` instead. Flag indicating whether the runner is allowed to receive jobs
-  --paused: string@bool-completer # Specifies if the runner should ignore new jobs
+  --active: oneof<nothing, bool> # Deprecated: Use `paused` instead. Flag indicating whether the runner is allowed to receive jobs
+  --paused: oneof<nothing, bool> # Specifies if the runner should ignore new jobs
   --tag-list: list # The list of tags for a runner (e.g. [macos, shell])
-  --run-untagged: string@bool-completer # Specifies if the runner can execute untagged jobs
-  --locked: string@bool-completer # Specifies if the runner is locked
+  --run-untagged: oneof<nothing, bool> # Specifies if the runner can execute untagged jobs
+  --locked: oneof<nothing, bool> # Specifies if the runner is locked
   --access-level: string@access-level-completer-2 # The access level of the runner
   --maximum-timeout: int # Maximum timeout that limits the amount of time (in seconds) that runners can run jobs (format: int32)
   --maintenance-note: string # Free-form maintenance notes for the runner (1024 characters)
@@ -27874,7 +27873,7 @@ export def "jobs-trace patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-token: string # Job's authentication token
-  --debug-trace: string@bool-completer # Enable or disable the debug trace
+  --debug-trace: oneof<nothing, bool> # Enable or disable the debug trace
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -27961,7 +27960,7 @@ export def "jobs-artifacts get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-token: string # Job's authentication token
-  --direct-download: string@bool-completer # Perform direct download from remote storage instead of proxying artifacts (default: false)
+  --direct-download: oneof<nothing, bool> # Perform direct download from remote storage instead of proxying artifacts (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -28120,7 +28119,7 @@ export def "packages-conan-conans-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --q: string # Search query (e.g. Hello*)
-  --ignorecase: string@bool-completer # Ignore case when searching (case-insensitive search)
+  --ignorecase: oneof<nothing, bool> # Ignore case when searching (case-insensitive search)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -28928,9 +28927,9 @@ export def "registry-repositories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --tags: string@bool-completer # Determines if tags should be included (default: false)
-  --tags-count: string@bool-completer # Determines if the tags count should be included (default: false)
-  --size: string@bool-completer # Determines if the size should be included (default: false)
+  --tags: oneof<nothing, bool> # Determines if tags should be included (default: false)
+  --tags-count: oneof<nothing, bool> # Determines if the tags count should be included (default: false)
+  --size: oneof<nothing, bool> # Determines if the size should be included (default: false)
 ]: nothing -> record<id: int, name: string, path: string, project_id: int, location: string, created_at: string, cleanup_policy_started_at: string, tags_count: int, tags: record<name: string, path: string, location: string>, delete_api_path: string, size: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -29040,16 +29039,16 @@ export def "users-projects get" [
   --allow-errors(-e) # Return full response without error handling
   --order-by: string@order-by-completer-11 # Return projects ordered by field. storage_size, repository_size, wiki_size, packages_size are only available to admins. Similarity is available when searching and is limited to projects the user has access to. (default: created_at)
   --qp-sort: string@sort-completer # Return projects sorted in ascending and descending order (default: desc)
-  --archived: string@bool-completer # Limit by archived status
+  --archived: oneof<nothing, bool> # Limit by archived status
   --visibility: string@visibility-completer # Limit by visibility
   --search: string # Return list of projects matching the search criteria
-  --search-namespaces: string@bool-completer # Include ancestor namespaces when matching search criteria
-  --owned: string@bool-completer # Limit by owned by authenticated user (default: false)
-  --starred: string@bool-completer # Limit by starred status (default: false)
-  --imported: string@bool-completer # Limit by imported by authenticated user (default: false)
-  --membership: string@bool-completer # Limit by projects that the current user is a member of (default: false)
-  --with-issues-enabled: string@bool-completer # Limit by enabled issues feature (default: false)
-  --with-merge-requests-enabled: string@bool-completer # Limit by enabled merge requests feature (default: false)
+  --search-namespaces: oneof<nothing, bool> # Include ancestor namespaces when matching search criteria
+  --owned: oneof<nothing, bool> # Limit by owned by authenticated user (default: false)
+  --starred: oneof<nothing, bool> # Limit by starred status (default: false)
+  --imported: oneof<nothing, bool> # Limit by imported by authenticated user (default: false)
+  --membership: oneof<nothing, bool> # Limit by projects that the current user is a member of (default: false)
+  --with-issues-enabled: oneof<nothing, bool> # Limit by enabled issues feature (default: false)
+  --with-merge-requests-enabled: oneof<nothing, bool> # Limit by enabled merge requests feature (default: false)
   --with-programming-language: string # Limit to repositories which use the given programming language
   --min-access-level: int@min-access-level-completer # Limit by minimum access level of authenticated user (format: int32)
   --id-after: int # Limit results to projects with IDs greater than the specified ID (format: int32)
@@ -29061,17 +29060,17 @@ export def "users-projects get" [
   --topic-id: int # Limit results to projects with the assigned topic given by the topic ID (format: int32)
   --updated-before: string # Return projects updated before the specified datetime. Format: ISO 8601 YYYY-MM-DDTHH:MM:SSZ (format: date-time)
   --updated-after: string # Return projects updated after the specified datetime. Format: ISO 8601 YYYY-MM-DDTHH:MM:SSZ (format: date-time)
-  --include-pending-delete: string@bool-completer # Include projects in pending delete state. Can only be set by admins
+  --include-pending-delete: oneof<nothing, bool> # Include projects in pending delete state. Can only be set by admins
   --marked-for-deletion-on: string # Date when the project was marked for deletion (format: date)
-  --active: string@bool-completer # Limit by projects that are not archived and not marked for deletion
-  --wiki-checksum-failed: string@bool-completer # Limit by projects where wiki checksum is failed (default: false)
-  --repository-checksum-failed: string@bool-completer # Limit by projects where repository checksum is failed (default: false)
-  --include-hidden: string@bool-completer # Include hidden projects. Can only be set by admins (default: false)
+  --active: oneof<nothing, bool> # Limit by projects that are not archived and not marked for deletion
+  --wiki-checksum-failed: oneof<nothing, bool> # Limit by projects where wiki checksum is failed (default: false)
+  --repository-checksum-failed: oneof<nothing, bool> # Limit by projects where repository checksum is failed (default: false)
+  --include-hidden: oneof<nothing, bool> # Include hidden projects. Can only be set by admins (default: false)
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --simple: string@bool-completer # Return only the ID, URL, name, and path of each project (default: false)
-  --statistics: string@bool-completer # Include project statistics (default: false)
-  --with-custom-attributes: string@bool-completer # Include custom attributes in the response (default: false)
+  --simple: oneof<nothing, bool> # Return only the ID, URL, name, and path of each project (default: false)
+  --statistics: oneof<nothing, bool> # Include project statistics (default: false)
+  --with-custom-attributes: oneof<nothing, bool> # Include custom attributes in the response (default: false)
 ]: nothing -> table<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -29099,7 +29098,7 @@ export def "users-contributed-projects get" [
   --qp-sort: string@sort-completer # Return projects sorted in ascending and descending order (default: desc)
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --simple: string@bool-completer # Return only the ID, URL, name, and path of each project (default: false)
+  --simple: oneof<nothing, bool> # Return only the ID, URL, name, and path of each project (default: false)
 ]: nothing -> table<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -29125,16 +29124,16 @@ export def "users-starred-projects get" [
   --allow-errors(-e) # Return full response without error handling
   --order-by: string@order-by-completer-11 # Return projects ordered by field. storage_size, repository_size, wiki_size, packages_size are only available to admins. Similarity is available when searching and is limited to projects the user has access to. (default: created_at)
   --qp-sort: string@sort-completer # Return projects sorted in ascending and descending order (default: desc)
-  --archived: string@bool-completer # Limit by archived status
+  --archived: oneof<nothing, bool> # Limit by archived status
   --visibility: string@visibility-completer # Limit by visibility
   --search: string # Return list of projects matching the search criteria
-  --search-namespaces: string@bool-completer # Include ancestor namespaces when matching search criteria
-  --owned: string@bool-completer # Limit by owned by authenticated user (default: false)
-  --starred: string@bool-completer # Limit by starred status (default: false)
-  --imported: string@bool-completer # Limit by imported by authenticated user (default: false)
-  --membership: string@bool-completer # Limit by projects that the current user is a member of (default: false)
-  --with-issues-enabled: string@bool-completer # Limit by enabled issues feature (default: false)
-  --with-merge-requests-enabled: string@bool-completer # Limit by enabled merge requests feature (default: false)
+  --search-namespaces: oneof<nothing, bool> # Include ancestor namespaces when matching search criteria
+  --owned: oneof<nothing, bool> # Limit by owned by authenticated user (default: false)
+  --starred: oneof<nothing, bool> # Limit by starred status (default: false)
+  --imported: oneof<nothing, bool> # Limit by imported by authenticated user (default: false)
+  --membership: oneof<nothing, bool> # Limit by projects that the current user is a member of (default: false)
+  --with-issues-enabled: oneof<nothing, bool> # Limit by enabled issues feature (default: false)
+  --with-merge-requests-enabled: oneof<nothing, bool> # Limit by enabled merge requests feature (default: false)
   --with-programming-language: string # Limit to repositories which use the given programming language
   --min-access-level: int@min-access-level-completer # Limit by minimum access level of authenticated user (format: int32)
   --id-after: int # Limit results to projects with IDs greater than the specified ID (format: int32)
@@ -29146,16 +29145,16 @@ export def "users-starred-projects get" [
   --topic-id: int # Limit results to projects with the assigned topic given by the topic ID (format: int32)
   --updated-before: string # Return projects updated before the specified datetime. Format: ISO 8601 YYYY-MM-DDTHH:MM:SSZ (format: date-time)
   --updated-after: string # Return projects updated after the specified datetime. Format: ISO 8601 YYYY-MM-DDTHH:MM:SSZ (format: date-time)
-  --include-pending-delete: string@bool-completer # Include projects in pending delete state. Can only be set by admins
+  --include-pending-delete: oneof<nothing, bool> # Include projects in pending delete state. Can only be set by admins
   --marked-for-deletion-on: string # Date when the project was marked for deletion (format: date)
-  --active: string@bool-completer # Limit by projects that are not archived and not marked for deletion
-  --wiki-checksum-failed: string@bool-completer # Limit by projects where wiki checksum is failed (default: false)
-  --repository-checksum-failed: string@bool-completer # Limit by projects where repository checksum is failed (default: false)
-  --include-hidden: string@bool-completer # Include hidden projects. Can only be set by admins (default: false)
+  --active: oneof<nothing, bool> # Limit by projects that are not archived and not marked for deletion
+  --wiki-checksum-failed: oneof<nothing, bool> # Limit by projects where wiki checksum is failed (default: false)
+  --repository-checksum-failed: oneof<nothing, bool> # Limit by projects where repository checksum is failed (default: false)
+  --include-hidden: oneof<nothing, bool> # Include hidden projects. Can only be set by admins (default: false)
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --simple: string@bool-completer # Return only the ID, URL, name, and path of each project (default: false)
-  --statistics: string@bool-completer # Include project statistics (default: false)
+  --simple: oneof<nothing, bool> # Return only the ID, URL, name, and path of each project (default: false)
+  --statistics: oneof<nothing, bool> # Include project statistics (default: false)
 ]: nothing -> table<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -29231,7 +29230,7 @@ export def "features post" [
   --repository: string # A repository path, for example `gitlab-org/gitlab-test.git`, `gitlab-org/gitlab-test.wiki.git`, `snippets/21.git`, to name a few. Use comma to separate multiple repository paths
   --runner: string # A runner ID, or comma-separated list of runner IDs
   --endpoint: string # A caller_id identifying a code path, for example `GET /api/v4/projects/:id` or `ProjectsController#show`. Use comma to separate multiple endpoint paths
-  --force: string@bool-completer # Skip feature flag validation checks, such as a YAML definition
+  --force: oneof<nothing, bool> # Skip feature flag validation checks, such as a YAML definition
 ]: any -> record<name: string, state: string, gates: record<key: string, value: int>, definition: record<name: string, feature_issue_url: string, introduced_by_url: string, rollout_issue_url: string, milestone: string, log_state_changes: bool, type: string, group: string, default_enabled: bool, intended_to_rollout_by: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -29628,7 +29627,7 @@ export def "issues list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-labels-details: string@bool-completer # Return titles of labels and other details (default: false)
+  --with-labels-details: oneof<nothing, bool> # Return titles of labels and other details (default: false)
   --state: string@state-completer # Return opened, closed, or all issues (default: all)
   --closed-by-id: int # Return issues which were closed by the user with the given ID. (format: int32)
   --order-by: string@order-by-completer-4 # Return issues ordered by `created_at`, `due_date`, `label_priority`, `milestone_due`, `popularity`, `priority`, `relative_position`, `title`, or `updated_at` fields. (default: created_at)
@@ -29662,7 +29661,7 @@ export def "issues list" [
   --notiteration-title: string # Return issues which are not assigned to the iteration with the given title
   --scope: string@scope-completer # Return issues for the given scope: `created_by_me`, `assigned_to_me` or `all` (default: created_by_me)
   --my-reaction-emoji: string # Return issues reacted by the authenticated user by the given emoji
-  --confidential: string@bool-completer # Filter confidential or public issues
+  --confidential: oneof<nothing, bool> # Filter confidential or public issues
   --weight: int # The weight of the issue (format: int32)
   --epic-id: int # The ID of an epic associated with the issues (format: int32)
   --health-status: string@health-status-completer # The health status of the issue. Must be one of: on_track, needs_attention, at_risk, none, any
@@ -29670,7 +29669,7 @@ export def "issues list" [
   --iteration-title: string # Return issues which are assigned to the iteration with the given title
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --non-archived: string@bool-completer # Return issues from non archived projects (default: true)
+  --non-archived: oneof<nothing, bool> # Return issues from non archived projects (default: true)
 ]: nothing -> record<id: int, iid: int, project_id: int, title: string, description: string, state: string, created_at: string, updated_at: string, closed_at: string, closed_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, labels: list<string>, milestone: record<id: int, iid: int, project_id: int, group_id: string, title: string, description: string, state: string, created_at: string, updated_at: string, due_date: string, start_date: string, expired: bool, web_url: string>, assignees: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, author: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, type: string, assignee: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, user_notes_count: int, merge_requests_count: int, upvotes: int, downvotes: int, start_date: string, due_date: string, confidential: bool, discussion_locked: bool, issue_type: string, web_url: string, time_stats: record<time_estimate: int, total_time_spent: int, human_time_estimate: string, human_total_time_spent: string>, task_completion_status: record<count: int, completed_count: int>, weight: int, blocking_issues_count: int, has_tasks: bool, task_status: string, _links: record<self: string, notes: string, award_emoji: string, project: string, closed_as_duplicate_of: string>, references: record<short: string, relative: string, full: string>, severity: string, subscribed: bool, moved_to_id: int, imported: bool, imported_from: string, service_desk_reply_to: string, epic_iid: string, epic: record<id: string, iid: string, title: string, url: string, group_id: string, human_readable_end_date: string, human_readable_timestamp: string>, iteration: record<id: int, iid: int, sequence: int, group_id: int, title: string, description: string, state: int, created_at: string, updated_at: string, start_date: string, due_date: string, web_url: string>, health_status: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -29761,7 +29760,7 @@ export def "markdown post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   text: string # The Markdown text to render
-  --gfm: string@bool-completer # Render text using GitLab Flavored Markdown. Default is false
+  --gfm: oneof<nothing, bool> # Render text using GitLab Flavored Markdown. Default is false
   --project: string # Use project as a context when creating references using GitLab Flavored Markdown
 ]: any -> record<html: string> {
   let input = $in
@@ -29799,8 +29798,8 @@ export def "merge-requests get" [
   --state: string@state-completer-2 # Returns `all` merge requests or just those that are `opened`, `closed`, `locked`, or `merged`. (default: all)
   --order-by: string@order-by-completer-5 # Returns merge requests ordered by `created_at`, `label_priority`, `milestone_due`, `popularity`, `priority`, `title`, `updated_at` or `merged_at` fields. Introduced in GitLab 14.8. (default: created_at)
   --qp-sort: string@sort-completer # Returns merge requests sorted in `asc` or `desc` order. (default: desc)
-  --with-labels-details: string@bool-completer # If `true`, response returns more details for each label in labels field: `:name`,`:color`, `:description`, `:description_html`, `:text_color` (default: false)
-  --with-merge-status-recheck: string@bool-completer # If `true`, this projection requests (but does not guarantee) that the `merge_status` field be recalculated asynchronously. Introduced in GitLab 13.0. (default: false)
+  --with-labels-details: oneof<nothing, bool> # If `true`, response returns more details for each label in labels field: `:name`,`:color`, `:description`, `:description_html`, `:text_color` (default: false)
+  --with-merge-status-recheck: oneof<nothing, bool> # If `true`, this projection requests (but does not guarantee) that the `merge_status` field be recalculated asynchronously. Introduced in GitLab 13.0. (default: false)
   --created-after: string # Returns merge requests created on or after the given time. Expected in ISO 8601 format. (format: date-time, e.g. 2019-03-15T08:00:00Z)
   --created-before: string # Returns merge requests created on or before the given time. Expected in ISO 8601 format. (format: date-time, e.g. 2019-03-15T08:00:00Z)
   --updated-after: string # Returns merge requests updated on or after the given time. Expected in ISO 8601 format. (format: date-time, e.g. 2019-03-15T08:00:00Z)
@@ -29813,7 +29812,7 @@ export def "merge-requests get" [
   --search: string # Search merge requests against their `title` and `description`.
   --in-param: string # Modify the scope of the search attribute. `title`, `description`, or a string joining them with comma. (e.g. title,description)
   --wip: string@wip-completer # Deprecated. Use `draft` instead. Filter merge requests against their `wip` status. `yes` to return only draft merge requests, `no` to return non-draft merge requests.
-  --draft: string@bool-completer # Filter merge requests against their `draft` status. `true` to return only draft merge requests, `false` to return non-draft merge requests.
+  --draft: oneof<nothing, bool> # Filter merge requests against their `draft` status. `true` to return only draft merge requests, `false` to return non-draft merge requests.
   --notauthor-id: int # `<Negated>` Returns merge requests created by the given user `id`. Mutually exclusive with `author_username`. Combine with `scope=all` or `scope=assigned_to_me`. (format: int32)
   --notauthor-username: string # `<Negated>` Returns merge requests created by the given `username`. Mutually exclusive with `author_id`.
   --notassignee-id: int # `<Negated>` Returns merge requests assigned to the given user `id`. `None` returns unassigned merge requests. `Any` returns merge requests with an assignee. (format: int32)
@@ -29833,7 +29832,7 @@ export def "merge-requests get" [
   --approved-by-usernames: string # Return merge requests which have been approved by the specified users with the given             usernames
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --non-archived: string@bool-completer # Returns merge requests from non archived projects only. (default: false)
+  --non-archived: oneof<nothing, bool> # Returns merge requests from non archived projects only. (default: false)
 ]: nothing -> table<id: int, iid: int, project_id: int, title: string, description: string, state: string, created_at: string, updated_at: string, merged_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, merge_user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, merged_at: string, closed_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, closed_at: string, title_html: string, description_html: string, target_branch: string, source_branch: string, user_notes_count: int, upvotes: int, downvotes: int, author: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, assignees: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, assignee: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, reviewers: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, source_project_id: int, target_project_id: int, labels: list<string>, draft: bool, imported: bool, imported_from: string, work_in_progress: bool, milestone: record<id: int, iid: int, project_id: int, group_id: string, title: string, description: string, state: string, created_at: string, updated_at: string, due_date: string, start_date: string, expired: bool, web_url: string>, merge_when_pipeline_succeeds: bool, merge_status: string, detailed_merge_status: string, merge_after: string, sha: string, merge_commit_sha: string, squash_commit_sha: string, discussion_locked: bool, should_remove_source_branch: bool, force_remove_source_branch: bool, prepared_at: string, allow_collaboration: bool, allow_maintainer_to_push: bool, reference: string, references: record<short: string, relative: string, full: string>, web_url: string, time_stats: record<time_estimate: int, total_time_spent: int, human_time_estimate: string, human_total_time_spent: string>, squash: bool, squash_on_merge: bool, task_completion_status: record<count: int, completed_count: int>, has_conflicts: bool, blocking_discussions_resolved: bool, approvals_before_merge: int> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -30004,9 +30003,9 @@ export def "namespaces list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --search: string # Returns a list of namespaces the user is authorized to view based on the search criteria
-  --owned-only: string@bool-completer # In GitLab 14.2 and later, returns a list of owned namespaces only
-  --top-level-only: string@bool-completer # Only include top level namespaces (default: false)
-  --full-path-search: string@bool-completer # If `true`, the `search` parameter is matched against the full path of the namespaces (default: false)
+  --owned-only: oneof<nothing, bool> # In GitLab 14.2 and later, returns a list of owned namespaces only
+  --top-level-only: oneof<nothing, bool> # Only include top level namespaces (default: false)
+  --full-path-search: oneof<nothing, bool> # If `true`, the `search` parameter is matched against the full path of the namespaces (default: false)
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
   --requested-hosted-plan: string # Name of the hosted plan requested by the customer
@@ -30314,7 +30313,7 @@ export def "personal-access-tokens list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --user-id: int # Filter PATs by User ID (format: int32, e.g. 2)
-  --revoked: string@bool-completer # Filter tokens where revoked state matches parameter
+  --revoked: oneof<nothing, bool> # Filter tokens where revoked state matches parameter
   --state: string@state-completer-5 # Filter tokens which are either active or not (e.g. active)
   --created-before: string # Filter tokens which were created before given datetime (format: date-time, e.g. 2022-01-01T00:00:00Z)
   --created-after: string # Filter tokens which were created after given datetime (format: date-time, e.g. 2021-01-01T00:00:00Z)
@@ -30421,13 +30420,13 @@ export def "search get" [
   --search: string # The expression it should be searched for
   --scope: string@scope-completer-9 # The scope of the search
   --state: string@state-completer-3 # Filter results by state
-  --confidential: string@bool-completer # Filter results by confidentiality
+  --confidential: oneof<nothing, bool> # Filter results by confidentiality
   --type: list # Filter work items by type. Only applies to work_items scope. Available types: issue, task, epic, incident, test_case, requirement, objective, key_result, ticket.
-  --include-archived: string@bool-completer # Includes archived projects in the search. Introduced in GitLab 18.9. (default: false)
+  --include-archived: oneof<nothing, bool> # Includes archived projects in the search. Introduced in GitLab 18.9. (default: false)
   --qp-fields: list # Array of fields you wish to search. Available with advanced search.
-  --exclude-forks: string@bool-completer # Excludes forked projects in the search. Available with exact code search. Introduced in GitLab 18.9.
+  --exclude-forks: oneof<nothing, bool> # Excludes forked projects in the search. Available with exact code search. Introduced in GitLab 18.9.
   --num-context-lines: int # Number of context lines around each match. Available with advanced and exact code search. Introduced in GitLab 18.11. (format: int32)
-  --regex: string@bool-completer # Performs a regex code search. Available with exact code search. Introduced in GitLab 18.9
+  --regex: oneof<nothing, bool> # Performs a regex code search. Available with exact code search. Introduced in GitLab 18.9
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
 ]: nothing -> any {
@@ -30889,11 +30888,11 @@ export def "hooks post" [
   --description: string # Description of the hook
   --body-token: string # Secret token to validate received payloads; this isn't returned in the response
   --signing-token: string # HMAC signing token used to compute the webhook-signature header. Must be in whsec_<base64> format encoding a 32-byte key. Not returned in the response
-  --push-events: string@bool-completer # When true, the hook fires on push events
-  --tag-push-events: string@bool-completer # When true, the hook fires on new tags being pushed
-  --merge-requests-events: string@bool-completer # Trigger hook on merge requests events
-  --repository-update-events: string@bool-completer # Trigger hook on repository update events
-  --enable-ssl-verification: string@bool-completer # Do SSL verification when triggering the hook
+  --push-events: oneof<nothing, bool> # When true, the hook fires on push events
+  --tag-push-events: oneof<nothing, bool> # When true, the hook fires on new tags being pushed
+  --merge-requests-events: oneof<nothing, bool> # Trigger hook on merge requests events
+  --repository-update-events: oneof<nothing, bool> # Trigger hook on repository update events
+  --enable-ssl-verification: oneof<nothing, bool> # Do SSL verification when triggering the hook
   --push-events-branch-filter: string # Trigger hook on specified branch only
   --branch-filter-strategy: string@branch-filter-strategy-completer # Filter push events by branch. Possible values are `wildcard` (default), `regex`, and `all_branches`
   --custom-webhook-template: string # Custom template for the request payload
@@ -30953,11 +30952,11 @@ export def "hooks put" [
   --description: string # Description of the hook
   --body-token: string # Secret token to validate received payloads; this isn't returned in the response
   --signing-token: string # HMAC signing token used to compute the webhook-signature header. Must be in whsec_<base64> format encoding a 32-byte key. Not returned in the response
-  --push-events: string@bool-completer # When true, the hook fires on push events
-  --tag-push-events: string@bool-completer # When true, the hook fires on new tags being pushed
-  --merge-requests-events: string@bool-completer # Trigger hook on merge requests events
-  --repository-update-events: string@bool-completer # Trigger hook on repository update events
-  --enable-ssl-verification: string@bool-completer # Do SSL verification when triggering the hook
+  --push-events: oneof<nothing, bool> # When true, the hook fires on push events
+  --tag-push-events: oneof<nothing, bool> # When true, the hook fires on new tags being pushed
+  --merge-requests-events: oneof<nothing, bool> # Trigger hook on merge requests events
+  --repository-update-events: oneof<nothing, bool> # Trigger hook on repository update events
+  --enable-ssl-verification: oneof<nothing, bool> # Do SSL verification when triggering the hook
   --push-events-branch-filter: string # Trigger hook on specified branch only
   --branch-filter-strategy: string@branch-filter-strategy-completer # Filter push events by branch. Possible values are `wildcard` (default), `regex`, and `all_branches`
   --custom-webhook-template: string # Custom template for the request payload
@@ -31238,7 +31237,7 @@ export def "usage-data-metric-definitions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-paths: string@bool-completer # Include file paths in the metric definitions (default: false, e.g. true)
+  --include-paths: oneof<nothing, bool> # Include file paths in the metric definitions (default: false, e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -31287,7 +31286,7 @@ export def "usage-data-track-event post" [
   --project-id: int # Project ID (format: int32, e.g. 1234)
   --project-path: string # Project path (used to resolve project_id if not provided) (e.g. namespace/project)
   --additional-properties: record # Additional properties to be tracked (e.g. {label: login_button, value: 1})
-  --send-to-snowplow: string@bool-completer # Send the tracked event to Snowplow (default: false, e.g. true)
+  --send-to-snowplow: oneof<nothing, bool> # Send the tracked event to Snowplow (default: false, e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -31380,10 +31379,10 @@ export def "user-runners post" [
   project_id: int # The ID of the project that the runner is created in (format: int32, e.g. 1)
   --description: string # Description of the runner
   --maintenance-note: string # Free-form maintenance notes for the runner (1024 characters)
-  --paused: string@bool-completer # Specifies if the runner should ignore new jobs (defaults to false)
-  --locked: string@bool-completer # Specifies if the runner should be locked for the current project (defaults to false)
+  --paused: oneof<nothing, bool> # Specifies if the runner should ignore new jobs (defaults to false)
+  --locked: oneof<nothing, bool> # Specifies if the runner should be locked for the current project (defaults to false)
   --access-level: string@access-level-completer-2 # The access level of the runner
-  --run-untagged: string@bool-completer # Specifies if the runner should handle untagged jobs  (defaults to true)
+  --run-untagged: oneof<nothing, bool> # Specifies if the runner should handle untagged jobs  (defaults to true)
   --tag-list: list # A list of runner tags
   --maximum-timeout: int # Maximum timeout that limits the amount of time (in seconds) that runners can run jobs (format: int32)
   --token-expires-at: string # The expiration time for the runner authentication token (ISO 8601 format). Must be between 5 minutes and 15 days in the future, and cannot exceed instance/group/project limits. (format: date-time)
@@ -31523,7 +31522,7 @@ export def "application-appearance put" [
   --footer-message: string # Message within the system footer bar
   --message-background-color: string # Background color for the system header / footer bar
   --message-font-color: string # Font color for the system header / footer bar
-  --email-header-and-footer-enabled: string@bool-completer # Add header and footer to all outgoing emails if enabled
+  --email-header-and-footer-enabled: oneof<nothing, bool> # Add header and footer to all outgoing emails if enabled
   --site-name: string # Last part of the webpage title. Defaults to empty.
 ]: any -> record<title: string, description: string, pwa_name: string, pwa_short_name: string, pwa_description: string, logo: string, pwa_icon: string, header_logo: string, favicon: string, new_project_guidelines: string, member_guidelines: string, profile_image_guidelines: string, header_message: string, footer_message: string, message_background_color: string, message_font_color: string, email_header_and_footer_enabled: bool, site_name: string> {
   let input = $in
@@ -31599,7 +31598,7 @@ export def "deploy-keys get" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --public: string@bool-completer # Only return deploy keys that are public (default: false)
+  --public: oneof<nothing, bool> # Only return deploy keys that are public (default: false)
 ]: nothing -> table<id: int, title: string, created_at: string, expires_at: string, last_used_at: string, key: string, usage_type: string, fingerprint: string, fingerprint_sha256: string, projects_with_write_access: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string>, projects_with_readonly_access: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -31651,7 +31650,7 @@ export def "deploy-tokens get" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
-  --active: string@bool-completer # Limit by active status
+  --active: oneof<nothing, bool> # Limit by active status
 ]: nothing -> table<id: int, name: string, username: string, expires_at: string, scopes: list<any>, revoked: bool, expired: bool> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -31869,7 +31868,7 @@ export def "issues-statistics get" [
   --notiteration-title: string # Return issues which are not assigned to the iteration with the given title
   --scope: string@scope-completer-10 # Return issues for the given scope: `created_by_me`, `assigned_to_me` or `all` (default: created_by_me)
   --my-reaction-emoji: string # Return issues reacted by the authenticated user by the given emoji
-  --confidential: string@bool-completer # Filter confidential or public issues
+  --confidential: oneof<nothing, bool> # Filter confidential or public issues
   --weight: int # The weight of the issue (format: int32)
   --epic-id: int # The ID of an epic associated with the issues (format: int32)
   --health-status: string@health-status-completer # The health status of the issue. Must be one of: on_track, needs_attention, at_risk, none, any
@@ -31940,7 +31939,7 @@ export def "topics list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --search: string # Return list of topics matching the search criteria (e.g. search)
-  --without-projects: string@bool-completer # Return list of topics without assigned projects
+  --without-projects: oneof<nothing, bool> # Return list of topics without assigned projects
   --organization-id: int # The organization id for the topics (format: int32, default: {})
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)

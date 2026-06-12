@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://test-api.service.hmrc.gov.uk/organisations/business-rates" "https://api.service.hmrc.gov.uk/organisations/business-rates"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -1064,7 +1063,7 @@ export def "my-organisation-messages GetMessageSummary" [
   --ccaCaseRef: string # The ccaCaseRef of the check case
   --hereditamentAddress: string # The address of the check case
   --ipOrganisationName: string # The organisation the message relates to
-  --isRead: string@bool-completer # Filters the results to include only messages that have been read (true) or have not been read (false)
+  --isRead: oneof<nothing, bool> # Filters the results to include only messages that have been read (true) or have not been read (false)
   --fromCreatedDateTime: string # Filters the results to include only messages created on or after this datetime. Values must be in UTC format `YYYY-MM-DDThh:mm:ssZ` (format: date-time)
   --toCreatedDateTime: string # Filters the results to include only messages created on or before this datetime. Values must be in UTC format `YYYY-MM-DDThh:mm:ssZ` (format: date-time)
   --sortField: string@sortField-completer-2 # The sort field for the messages

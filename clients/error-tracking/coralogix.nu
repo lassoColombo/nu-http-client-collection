@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.coralogix.com" "https://api.coralogix.com/mgmt/openapi/3" "https://api.eu2.coralogix.com/mgmt/openapi/3" "https://api.coralogix.us/mgmt/openapi/3" "https://api.cx498.coralogix.com/mgmt/openapi/3" "https://api.coralogix.in/mgmt/openapi/3" "https://api.coralogixsg.com/mgmt/openapi/3" "https://api.ap3.coralogix.com/mgmt/openapi/3"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -121,7 +120,7 @@ export def "aaa-api-keys CreateApiKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accessPolicy: string # JSON string representing the access policy for this API key. Defines granular permissions for users and groups. (e.g. {"version":"2025-01-01","default":{"permissions":{"data-ingest-api-keys:ReadAccessPolicy":"grant","data-ingest-api-keys:Manage":"deny","data-ingest-api-keys:UpdateAccessPolicy":"deny","data-ingest-api-keys:ReadConfig":"grant"}},"rules":[]})
-  --hashed: string@bool-completer # e.g. true
+  --hashed: oneof<nothing, bool> # e.g. true
   --keyPermissions: record # This data structure allows to specify loose permissions and permission presets for an API key. — shape: {permissions?: list, presets?: list}
   --name: string # e.g. my_api_key
   --owner: any
@@ -196,7 +195,7 @@ export def "aaa-api-keys UpdateApiKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accessPolicy: string # JSON string representing the access policy for this API key. Defines granular permissions for users and groups. To delete an existing policy, pass an empty string. (e.g. {"version":"2025-01-01","default":{"permissions":{"data-ingest-api-keys:ReadAccessPolicy":"grant","data-ingest-api-keys:Manage":"deny","data-ingest-api-keys:UpdateAccessPolicy":"deny","data-ingest-api-keys:ReadConfig":"grant"}},"rules":[]})
-  --isActive: string@bool-completer # e.g. true
+  --isActive: oneof<nothing, bool> # e.g. true
   --newName: string # e.g. my_new_name
   --permissions: record # This data structure represents a set of permissions on an API key. — shape: {permissions?: list}
   --presets: record # This data structure represents a set of permissions presets on an API key. — shape: {presets?: list}
@@ -684,7 +683,7 @@ export def "aaa-team-saml-active SetActive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isActive: string@bool-completer
+  --isActive: oneof<nothing, bool>
   --teamId: int # format: int64
 ]: any -> record {
   let input = $in
@@ -1221,7 +1220,7 @@ export def "alerts-alerts-general SetActive" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # e.g. true
+  --active: oneof<nothing, bool> # e.g. true
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2410,7 +2409,7 @@ export def "data-exploration-saved-views ReplaceView" [
   --allow-errors(-e) # Return full response without error handling
   --filters: record # shape: {filters?: list}
   --folderId: string # Unique identifier for folders (e.g. 3dc02998-0b50-4ea8-b68a-4779d716fa1f)
-  --isCompactMode: string@bool-completer
+  --isCompactMode: oneof<nothing, bool>
   name: string # View name (e.g. Logs view)
   --searchQuery: record # shape: {query: string, syntaxType?: "SYNTAX_TYPE_UNSPECIFIED"|"SYNTAX_TYPE_LUCENE"|"SYNTAX_TYPE_DATAPRIME"}
   timeSelection: any
@@ -2678,7 +2677,7 @@ export def "dataplans-data-usage-export-status UpdateDataUsageMetricsExportStatu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # e.g. true
+  --enabled: oneof<nothing, bool> # e.g. true
 ]: any -> record<enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2706,8 +2705,8 @@ export def "dataplans-data-usage-logs-count GetLogsCount" [
   --date-range: record
   --resolution: string
   --filters: record
-  --subsystem-aggregation: string@bool-completer
-  --application-aggregation: string@bool-completer
+  --subsystem-aggregation: oneof<nothing, bool>
+  --application-aggregation: oneof<nothing, bool>
 ]: nothing -> record<logsCount: table<applicationName: string, logsCount: string, priority: string, severity: string, subsystemName: string, timestamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2755,7 +2754,7 @@ export def "dataplans-policies GetCompanyPolicies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled-only: string@bool-completer # e.g. true
+  --enabled-only: oneof<nothing, bool> # e.g. true
   --source-type: string@source-type-completer
 ]: nothing -> record<policies: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2787,7 +2786,7 @@ export def "dataplans-policies UpdatePolicy" [
   --applicationRule: record # shape: {name?: string, ruleTypeId?: "RULE_TYPE_ID_UNSPECIFIED"|"RULE_TYPE_ID_IS"|"RULE_TYPE_ID_IS_NOT"|"RULE_TYPE_ID_START_WITH"|"RULE_TYPE_ID_INCLUDES"}
   --archiveRetention: record # shape: {id?: string}
   --description: string # e.g. My Policy Description
-  --enabled: string@bool-completer # e.g. true
+  --enabled: oneof<nothing, bool> # e.g. true
   --id: string # e.g. policy_id
   --logRules: record # Log rules for a policy. — shape: {severities: list}
   --name: string # e.g. My Policy
@@ -2826,7 +2825,7 @@ export def "dataplans-policies CreatePolicy" [
   --applicationRule: record # shape: {name?: string, ruleTypeId?: "RULE_TYPE_ID_UNSPECIFIED"|"RULE_TYPE_ID_IS"|"RULE_TYPE_ID_IS_NOT"|"RULE_TYPE_ID_START_WITH"|"RULE_TYPE_ID_INCLUDES"}
   --archiveRetention: record # shape: {id?: string}
   --description: string # e.g. My Policy Description
-  --disabled: string@bool-completer
+  --disabled: oneof<nothing, bool>
   --name: string # e.g. My Policy
   --placement: any
   --priority: string@priority-completer-1
@@ -3036,7 +3035,7 @@ export def "dataplans-policies-toggle TogglePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # e.g. true
+  --enabled: oneof<nothing, bool> # e.g. true
   id: string # e.g. id
 ]: any -> record<enabled: bool, id: string> {
   let input = $in
@@ -3419,7 +3418,7 @@ export def "events2metrics-events2metrics ReplaceE2M" [
   --createTime: string # e.g. 2022-06-30T12:30:00Z'
   --description: string # e.g. avg and max the latency of catalog service
   --id: string # e.g. d6a3658e-78d2-47d0-9b81-b2c551f01b09
-  --isInternal: string@bool-completer
+  --isInternal: oneof<nothing, bool>
   --metricFields: list # item shape: {aggregations: list, sourceField: string, targetBaseMetricName: string}
   --metricLabels: list # item shape: {sourceField: string, targetLabel: string}
   --name: string # e.g. Service_catalog_latency
@@ -3996,7 +3995,7 @@ export def "integrations-contextual-data GetContextualDataIntegrations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-testing-integrations: string@bool-completer
+  --include-testing-integrations: oneof<nothing, bool>
 ]: nothing -> record<integrations: table<amountIntegrations: int, errors: list, integration: record, isNew: bool, upgradeAvailable: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4073,7 +4072,7 @@ export def "integrations-contextual-data-definition GetContextualDataIntegration
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-testing-integrations: string@bool-completer
+  --include-testing-integrations: oneof<nothing, bool>
 ]: nothing -> record<integrationDefinition: record<featureFlag: string, integrationType: any, key: string, revisions: list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4124,7 +4123,7 @@ export def "integrations-contextual-data GetContextualDataIntegrationDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-testing-revisions: string@bool-completer
+  --include-testing-revisions: oneof<nothing, bool>
 ]: nothing -> record<integrationDetail: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4171,7 +4170,7 @@ export def "integrations-extensions-all GetAllExtensions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: record # Filter by integration ids — shape: {integrations?: list}
-  --includeHiddenExtensions: string@bool-completer
+  --includeHiddenExtensions: oneof<nothing, bool>
 ]: any -> record<extensions: table<darkModeImage: string, deprecation: record, id: string, image: string, integrations: list, isHidden: bool, keywords: list, name: string, revisions: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4300,7 +4299,7 @@ export def "integrations-extensions-testing TestExtensionRevision" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cleanupAfterTest: string@bool-completer
+  --cleanupAfterTest: oneof<nothing, bool>
   --extensionData: record # Extension details for ingestion — shape: {binaries?: list, changelog?: list, darkModeImage?: string, deprecation?: record, description?: string, excerpt?: string, id?: string, image?: string, integrationDetails?: list, integrations?: list, isHidden?: bool, items?: list, keywords?: list, labels?: list, name?: string, version?: string}
 ]: any -> record {
   let input = $in
@@ -4378,8 +4377,8 @@ export def "integrations-extensions GetExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-dashboard-binaries: string@bool-completer
-  --include-testing-revision: string@bool-completer
+  --include-dashboard-binaries: oneof<nothing, bool>
+  --include-testing-revision: oneof<nothing, bool>
 ]: nothing -> record<changelog: table<descriptionMd: string, version: string>, darkModeImage: string, deprecation: record<reason: string, replacementExtensions: list<string>>, id: string, image: string, integrations: list<string>, isHidden: bool, keywords: list<string>, name: string, permissionDeniedRevisions: table<binaries: list, description: string, excerpt: string, integrationDetails: list, isTesting: bool, items: list, labels: list, permissionDeniedItems: list, version: string>, revisions: table<binaries: list, description: string, excerpt: string, integrationDetails: list, isTesting: bool, items: list, labels: list, permissionDeniedItems: list, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4402,7 +4401,7 @@ export def "integrations-integrations GetIntegrations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-testing-revision: string@bool-completer
+  --include-testing-revision: oneof<nothing, bool>
 ]: nothing -> record<integrations: table<amountIntegrations: int, errors: list, integration: record, isNew: bool, upgradeAvailable: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4426,7 +4425,7 @@ export def "integrations-integrations-definition GetIntegrationDefinition" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-testing-revision: string@bool-completer
+  --include-testing-revision: oneof<nothing, bool>
 ]: nothing -> record<integrationDefinition: record<featureFlag: string, integrationType: any, key: string, revisions: list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4639,7 +4638,7 @@ export def "integrations-integrations-rum-sync SyncRumData" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer
+  --force: oneof<nothing, bool>
 ]: any -> record<syncExecuted: bool, syncedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4690,7 +4689,7 @@ export def "integrations-integrations GetIntegrationDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-testing-revision: string@bool-completer
+  --include-testing-revision: oneof<nothing, bool>
 ]: nothing -> record<integrationDetail: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4988,7 +4987,7 @@ export def "logs-data-setup SetTarget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isActive: string@bool-completer # e.g. true
+  --isActive: oneof<nothing, bool> # e.g. true
   --s3: record # This data structure represents an S3 target. — shape: {bucket: string, region?: string}
 ]: any -> record<target: any> {
   let input = $in
@@ -6068,8 +6067,8 @@ export def "parsing-rules-rule-groups CreateRuleGroup" [
   --allow-errors(-e) # Return full response without error handling
   --creator: string
   --description: string
-  --enabled: string@bool-completer
-  --hidden: string@bool-completer
+  --enabled: oneof<nothing, bool>
+  --hidden: oneof<nothing, bool>
   --name: string
   --order: int # format: int64
   --ruleMatchers: list
@@ -6146,8 +6145,8 @@ export def "parsing-rules-rule-groups-mapping GetRuleGroupModelMapping" [
   --allow-errors(-e) # Return full response without error handling
   --creator: string
   --description: string
-  --enabled: string@bool-completer
-  --hidden: string@bool-completer
+  --enabled: oneof<nothing, bool>
+  --hidden: oneof<nothing, bool>
   --name: string
   --order: int # format: int64
   --ruleMatchers: list
@@ -6203,8 +6202,8 @@ export def "parsing-rules-rule-groups UpdateRuleGroup" [
   --allow-errors(-e) # Return full response without error handling
   --creator: string
   --description: string
-  --enabled: string@bool-completer
-  --hidden: string@bool-completer
+  --enabled: oneof<nothing, bool>
+  --hidden: oneof<nothing, bool>
   --name: string
   --order: int # format: int64
   --ruleMatchers: list
@@ -6405,7 +6404,7 @@ export def "alert-scheduler-rules-bulk GetBulkAlertSchedulerRule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --active-timeframe: record
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --alert-scheduler-rules-ids: string
   --next-page-token: string # e.g. 
 ]: nothing -> record<alertSchedulerRules: table<alertSchedulerRule: record, nextActiveTimeframes: list>, nextPageToken: string> {
@@ -6549,7 +6548,7 @@ export def "dashboards-dashboards ReplaceDashboard" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   dashboard: any
-  --isLocked: string@bool-completer
+  --isLocked: oneof<nothing, bool>
   requestId: string
 ]: any -> record {
   let input = $in
@@ -6576,7 +6575,7 @@ export def "dashboards-dashboards CreateDashboard" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   dashboard: any
-  --isLocked: string@bool-completer
+  --isLocked: oneof<nothing, bool>
   requestId: string
 ]: any -> record<dashboardId: string> {
   let input = $in
@@ -6900,7 +6899,7 @@ export def "slo-slos ReplaceSlo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --silence-data-validations: string@bool-completer
+  --silence-data-validations: oneof<nothing, bool>
   --createTime: string # format: date-time
   --creator: string # e.g. test@domain.com
   --description: string # e.g. A brief description of my SLO
@@ -6944,7 +6943,7 @@ export def "slo-slos CreateSlo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --silence-data-validations: string@bool-completer
+  --silence-data-validations: oneof<nothing, bool>
   --createTime: string # format: date-time
   --creator: string # e.g. test@domain.com
   --description: string # e.g. A brief description of my SLO
@@ -7234,7 +7233,7 @@ export def "actions CreateAction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --applicationNames: list
-  --isPrivate: string@bool-completer
+  --isPrivate: oneof<nothing, bool>
   --name: string
   --sourceType: string@sourceType-completer-1
   --subsystemNames: list

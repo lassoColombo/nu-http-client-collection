@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -187,7 +186,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --api-version: string # The client API version.
-  --isArchiveEnabled: string@bool-completer # The value that indicates whether archiving is enabled or not.
+  --isArchiveEnabled: oneof<nothing, bool> # The value that indicates whether archiving is enabled or not.
 ]: any -> record<properties: record<agentConfiguration: record<cpu: int>, createTime: string, customRegistries: list<string>, finishTime: string, imageUpdateTrigger: record<id: string, images: list, timestamp: string>, isArchiveEnabled: bool, lastUpdatedTime: string, outputImages: list<record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, runErrorMessage: string, runId: string, runType: string, sourceRegistryAuth: string, sourceTrigger: record<branchName: string, commitId: string, eventType: string, id: string, providerType: string, pullRequestId: string, repositoryUrl: string>, startTime: string, status: string, task: string, timerTrigger: record<scheduleOccurrence: string, timerTriggerName: string>, updateTriggerToken: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -272,7 +271,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --api-version: string # The client API version.
-  --isArchiveEnabled: string@bool-completer # The value that indicates whether archiving is enabled for the run or not. (default: false)
+  --isArchiveEnabled: oneof<nothing, bool> # The value that indicates whether archiving is enabled for the run or not. (default: false)
   type: string # The type of the run request.
 ]: any -> record<properties: record<agentConfiguration: record<cpu: int>, createTime: string, customRegistries: list<string>, finishTime: string, imageUpdateTrigger: record<id: string, images: list, timestamp: string>, isArchiveEnabled: bool, lastUpdatedTime: string, outputImages: list<record>, platform: record<architecture: string, os: string, variant: string>, provisioningState: string, runErrorMessage: string, runId: string, runType: string, sourceRegistryAuth: string, sourceTrigger: record<branchName: string, commitId: string, eventType: string, id: string, providerType: string, pullRequestId: string, repositoryUrl: string>, startTime: string, status: string, task: string, timerTrigger: record<scheduleOccurrence: string, timerTriggerName: string>, updateTriggerToken: string>> {
   let input = $in

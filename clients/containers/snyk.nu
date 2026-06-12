@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.snyk.io/api/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -311,7 +310,7 @@ export def "group-tags-delete Delete-tag-from-group" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # force delete tag that has entities (default is `false`).
+  --force: oneof<nothing, bool> # force delete tag that has entities (default is `false`).
   --key: string # Valid tag key.
   --value: string # Valid tag value.
 ]: any -> any {
@@ -787,17 +786,17 @@ export def "org-integrations-settings Update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoDepUpgradeEnabled: string@bool-completer # Defines if the functionality is enabled
+  --autoDepUpgradeEnabled: oneof<nothing, bool> # Defines if the functionality is enabled
   --autoDepUpgradeIgnoredDependencies: list # A list of strings defining what dependencies should be ignored
   --autoDepUpgradeLimit: float # A limit on how many automatic dependency upgrade PRs can be opened simultaneously
   --autoDepUpgradeMinAge: float # The age (in days) that an automatic dependency check is valid for
   --autoRemediationPrs: record # Defines automatic remediation policies — shape: {backlogPrsEnabled?: bool, freshPrsEnabled?: bool, usePatchRemediation?: bool}
-  --dockerfileSCMEnabled: string@bool-completer # If true, will automatically detect and scan Dockerfiles in your Git repositories, surface base image vulnerabilities and recommend possible fixes
+  --dockerfileSCMEnabled: oneof<nothing, bool> # If true, will automatically detect and scan Dockerfiles in your Git repositories, surface base image vulnerabilities and recommend possible fixes
   --manualRemediationPrs: record # Defines manual remediation policies — shape: {usePatchRemediation?: bool}
   --pullRequestAssignment: record # assign Snyk pull requests — shape: {assignees?: list, enabled?: bool, type?: "auto"|"manual"}
-  --pullRequestFailOnAnyVulns: string@bool-completer # If an opened PR should fail to be validated if any vulnerable dependencies have been detected
-  --pullRequestFailOnlyForHighSeverity: string@bool-completer # If an opened PR only should fail its validation if any dependencies are marked as being of high severity
-  --pullRequestTestEnabled: string@bool-completer # If opened PRs should be tested
+  --pullRequestFailOnAnyVulns: oneof<nothing, bool> # If an opened PR should fail to be validated if any vulnerable dependencies have been detected
+  --pullRequestFailOnlyForHighSeverity: oneof<nothing, bool> # If an opened PR only should fail its validation if any dependencies are marked as being of high severity
+  --pullRequestTestEnabled: oneof<nothing, bool> # If opened PRs should be tested
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -847,7 +846,7 @@ export def "org-invite Invite-users" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --email: string # The email of the user.
-  --isAdmin: string@bool-completer # (optional) Set the role as admin.
+  --isAdmin: oneof<nothing, bool> # (optional) Set the role as admin.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -903,7 +902,7 @@ export def "org-members List-Members" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeGroupAdmins: string@bool-completer # Include group administrators who also have access to this organization. (default: false, e.g. true)
+  --includeGroupAdmins: oneof<nothing, bool> # Include group administrators who also have access to this organization. (default: false, e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1159,8 +1158,8 @@ export def "org-project-aggregated-issues List-all-Aggregated-issues" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filters: record # shape: {exploitMaturity?: list, ignored?: bool, patched?: bool, priority?: record, severities?: list, types?: list}
-  --includeDescription: string@bool-completer # If set to `true`, Include issue's description, if set to `false` (by default), it won't (Non-IaC projects only)
-  --includeIntroducedThrough: string@bool-completer # If set to `true`, Include issue's introducedThrough, if set to `false` (by default), it won't. It's for container only projects (Non-IaC projects only)
+  --includeDescription: oneof<nothing, bool> # If set to `true`, Include issue's description, if set to `false` (by default), it won't (Non-IaC projects only)
+  --includeIntroducedThrough: oneof<nothing, bool> # If set to `true`, Include issue's introducedThrough, if set to `false` (by default), it won't. It's for container only projects (Non-IaC projects only)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1296,8 +1295,8 @@ export def "org-project-history-aggregated-issues List-all-project-snapshot-aggr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filters: record # shape: {exploitMaturity?: list, ignored?: bool, patched?: bool, priority?: record, severities?: list, types?: list}
-  --includeDescription: string@bool-completer # If set to `true`, Include issue's description, if set to `false` (by default), it won't (Non-IaC projects only)
-  --includeIntroducedThrough: string@bool-completer # If set to `true`, Include issue's introducedThrough, if set to `false` (by default), it won't. It's for container only projects (Non-IaC projects only)
+  --includeDescription: oneof<nothing, bool> # If set to `true`, Include issue's description, if set to `false` (by default), it won't (Non-IaC projects only)
+  --includeIntroducedThrough: oneof<nothing, bool> # If set to `true`, Include issue's introducedThrough, if set to `false` (by default), it won't. It's for container only projects (Non-IaC projects only)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1401,7 +1400,7 @@ export def "org-project-ignore Add-ignore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --disregardIfFixable: string@bool-completer # Only ignore the issue if no upgrade or patch is available.
+  --disregardIfFixable: oneof<nothing, bool> # Only ignore the issue if no upgrade or patch is available.
   --expires: string # The timestamp that the issue will no longer be ignored.
   --ignorePath: string # The path to ignore (default is `*` which represents all paths).
   --reason: string # The reason that the issue was ignored.
@@ -1634,15 +1633,15 @@ export def "org-project-settings Update-project-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoDepUpgradeEnabled: string@bool-completer # If set to `true`, Snyk will raise dependency upgrade PRs automatically.
+  --autoDepUpgradeEnabled: oneof<nothing, bool> # If set to `true`, Snyk will raise dependency upgrade PRs automatically.
   --autoDepUpgradeIgnoredDependencies: list # An array of comma-separated strings with names of dependencies you wish Snyk to ignore to upgrade.
   --autoDepUpgradeLimit: float # The limit on auto dependency upgrade PRs.
   --autoDepUpgradeMinAge: float # The age (in days) that an automatic dependency check is valid for
   --autoRemediationPrs: record # Defines automatic remediation policies — shape: {backlogPrsEnabled?: bool, freshPrsEnabled?: bool, usePatchRemediation?: bool}
   --pullRequestAssignment: record # assign Snyk pull requests — shape: {assignees?: list, enabled?: bool, type?: "auto"|"manual"}
-  --pullRequestFailOnAnyVulns: string@bool-completer # If set to `true`, fail Snyk Test if the repo has any vulnerabilities. Otherwise, fail only when the PR is adding a vulnerable dependency.
-  --pullRequestFailOnlyForHighSeverity: string@bool-completer # If set to `true`, fail Snyk Test only for high and critical severity vulnerabilities
-  --pullRequestTestEnabled: string@bool-completer # If set to `true`, Snyk Test checks PRs for vulnerabilities.:cq
+  --pullRequestFailOnAnyVulns: oneof<nothing, bool> # If set to `true`, fail Snyk Test if the repo has any vulnerabilities. Otherwise, fail only when the PR is adding a vulnerable dependency.
+  --pullRequestFailOnlyForHighSeverity: oneof<nothing, bool> # If set to `true`, fail Snyk Test only for high and critical severity vulnerabilities
+  --pullRequestTestEnabled: oneof<nothing, bool> # If set to `true`, Snyk Test checks PRs for vulnerabilities.:cq
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

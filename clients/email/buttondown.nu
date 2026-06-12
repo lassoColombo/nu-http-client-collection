@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.buttondown.com/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -168,8 +167,8 @@ export def "advertising-units unit" [
   --behavior: string # The behavior type of the advertising unit. (default: )
   --body-url: string # The URL for the advertising unit's landing page. (default: )
   --price: any # The price in the smallest currency unit.
-  --allows-html: string@bool-completer # Whether the advertising unit accepts HTML content. (default: false)
-  --allows-image: string@bool-completer # Whether the advertising unit accepts an image. (default: false)
+  --allows-html: oneof<nothing, bool> # Whether the advertising unit accepts HTML content. (default: false)
+  --allows-image: oneof<nothing, bool> # Whether the advertising unit accepts an image. (default: false)
   --max-characters: any # Maximum number of characters allowed for the ad content.
   --submission-deadline-days: int # Number of days before the slot date that content must be submitted. (default: 3)
 ]: any -> record<id: string, creation_date: string, status: string, slots: table<id: string, creation_date: string, date: string, status: string, invoice_url: any, sku_id: string, submission_url: string, sponsor_company: string, sponsor_email: string, sponsor_name: string, content: string, content_image_id: any, content_url: string, content_approved_at: any, content_rejected_at: any, content_rejection_reason: string, content_submitted_at: any, inquiry_message: string>, title: string, description: string, behavior: string, url: string, price: any, allows_html: bool, allows_image: bool, max_characters: any, submission_deadline_days: int> {
@@ -489,7 +488,7 @@ export def "automations automation" [
   actions: list # The actions to perform when the trigger fires. — item shape: {type: "add_tags"|"remove_tags"|"send_email"|"add_metadata"|"change_email_address"|"gift_premium_subscription"|"ungift_premium_subscription"|"send_discord_invitation"|"send_github_invitation"|"create_subscriber"|"unsubscribe_subscriber"|"shopify_unsubscribe"|"shopify_resubscribe"|"shopify_set_tags"|"shopify_create_customer"|"send_notification"|"forward_reply"|"create_arena_post"|"create_bluesky_post"|"create_linkedin_post"|"create_mastodon_post"|"create_tumblr_post"|"create_twitter_post"|"create_export"|"create_gift_subscriber"|"send_post_request"|"send_confirmation_reminder"|"update_email_type", metadata?: record, timing?: any}
   --filters: any # Conditions that must be met for the automation to run. Omit or pass null for no filter.
   --metadata: record # Additional metadata for the automation.
-  --should-evaluate-filter-after-delay: string@bool-completer # If true, filters are re-evaluated after the delay has passed. (default: false)
+  --should-evaluate-filter-after-delay: oneof<nothing, bool> # If true, filters are re-evaluated after the delay has passed. (default: false)
 ]: any -> record<id: string, creation_date: string, name: string, status: string, trigger: string, actions: table<type: string, metadata: record, timing: any>, filters: record<filters: list<record>, groups: list<any>, predicate: string>, metadata: record, should_evaluate_filter_after_delay: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -641,7 +640,7 @@ export def "books book" [
   --description: string # A description of the book. (default: )
   --year: any # The year the book was published.
   --isbn: string # The ISBN of the book. (default: )
-  --shared: string@bool-completer # Whether the book is displayed publicly on the archive. (default: true)
+  --shared: oneof<nothing, bool> # Whether the book is displayed publicly on the archive. (default: true)
 ]: any -> record<id: string, creation_date: string, title: string, url: string, image_url: string, description: string, year: any, isbn: string, shared: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -980,8 +979,8 @@ export def "emails email" [
   --filters: any # Tag-based filter rules determining which subscribers receive this email. (default: {filters: [], groups: [], predicate: and})
   --commenting-mode: any # Controls whether subscribers can comment on this email. (default: enabled)
   --related-email-ids: list # IDs of emails related to this one. Shown at the bottom of the email and archive pages.
-  --featured: string@bool-completer # Designated whether or not this email should be highlighted within the archives. (default: false)
-  --should-trigger-pay-per-email-billing: string@bool-completer # Whether this email should trigger pay-per-email billing for paid subscribers. Use this to differentiate between free updates and premium newsletters. (default: false)
+  --featured: oneof<nothing, bool> # Designated whether or not this email should be highlighted within the archives. (default: false)
+  --should-trigger-pay-per-email-billing: oneof<nothing, bool> # Whether this email should trigger pay-per-email billing for paid subscribers. Use this to differentiate between free updates and premium newsletters. (default: false)
 ]: any -> record<id: string, creation_date: string, absolute_url: string, analytics: any, callouts: list<string>, attachments: any, body: string, canonical_url: string, commenting_mode: string, description: string, archival_mode: string, email_type: record, featured: bool, filters: record<filters: list<record>, groups: list<any>, predicate: string>, image: string, metadata: record, modification_date: string, publish_date: any, related_email_ids: list<string>, secondary_id: any, should_trigger_pay_per_email_billing: bool, slug: any, source: string, status: string, subject: string, suppression_reason: any, template: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1404,7 +1403,7 @@ export def "external-feeds feed" [
   --body-body: string # The body template for emails generated from this feed.
   --label: string # An optional internal label for this feed. (default: )
   --metadata: record # Metadata to be passed to emails rendered by this RSS feed. (e.g. {foo: bar})
-  --skip-old-items: string@bool-completer # Skip items with publish date older than one day from when they're discovered (default: false)
+  --skip-old-items: oneof<nothing, bool> # Skip items with publish date older than one day from when they're discovered (default: false)
 ]: any -> record<id: string, creation_date: string, last_checked_date: any, status: string, behavior: string, cadence: string, cadence_metadata: record, filters: record<filters: list<record>, groups: list<any>, predicate: string>, url: string, subject: string, body: string, label: string, metadata: record, skip_old_items: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1584,7 +1583,7 @@ export def "forms form" [
   --css: string # Custom CSS applied to the hosted form page. (default: , e.g. )
   --success-body: string # Markdown shown to the subscriber after a successful submission. (default: , e.g. Thank you for your submission!)
   --surveys: list # IDs of surveys to attach to this form. Responses are associated with the submitting subscriber. (e.g. [])
-  --admin: string@bool-completer # If true, the form acts as an admin-only signup form — it skips confirmation and can accept additional subscriber fields. (default: false, e.g. false)
+  --admin: oneof<nothing, bool> # If true, the form acts as an admin-only signup form — it skips confirmation and can accept additional subscriber fields. (default: false, e.g. false)
   --status: any # The status of the form. Only `active` forms accept submissions. (default: active, e.g. active)
 ]: any -> record<id: string, creation_date: string, title: string, slug: string, body: string, css: string, success_body: string, surveys: list<string>, admin: bool, status: string, subscriber_count: int, confirmed_subscriber_count: int, page_view_count: int> {
   let input = $in
@@ -1612,7 +1611,7 @@ export def "forms forms" [
   --allow-errors(-e) # Return full response without error handling
   --status: list # If provided, only return forms with the given status. (e.g. [active])
   --status: list # If provided, only return forms without the given status. (e.g. [disabled])
-  --admin: string@bool-completer # If provided, filter by admin-only flag.
+  --admin: oneof<nothing, bool> # If provided, filter by admin-only flag.
   --ordering: string # The ordering to apply to the results. (default: -creation_date, e.g. -creation_date)
   --page: int # The page number of the paginated response. (default: 1, e.g. 1)
 ]: nothing -> record<results: table<id: string, creation_date: string, title: string, slug: string, body: string, css: string, success_body: string, surveys: list, admin: bool, status: string, subscriber_count: int, confirmed_subscriber_count: int, page_view_count: int>, next: any, previous: any, count: int> {
@@ -2421,7 +2420,7 @@ export def "subscribers subscriber" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-Buttondown-Collision-Behavior: string@X-Buttondown-Collision-Behavior-completer # The behavior to apply when a subscriber with the same email address already exists. Defaults to "no_op", which will return a 400 error if a subscriber with the same email address already exists. Other values include:  - "overwrite", which will overwrite the existing subscriber's data with the new one. - "add", which will add the new subscriber data to the existing one.         
-  --X-Buttondown-Bypass-Firewall: string@bool-completer # Bypass the firewall for this subscriber creation. Subject to aggressive rate limiting (5 per hour per newsletter).
+  --X-Buttondown-Bypass-Firewall: oneof<nothing, bool> # Bypass the firewall for this subscriber creation. Subject to aggressive rate limiting (5 per hour per newsletter).
   email_address: string # The email address of the subscriber. (format: email, e.g. telemachus@buttondown.email)
   --notes: string # Any notes you want to attach to the subscriber. These are not publicly visible. (default: , e.g. One of our first subscribers!)
   --metadata: record # A structured key-value blob that you can use to store arbitrary data on the object. Metadata can be nested — you can store objects and arrays within your metadata. (You can [read more about metadata.](https://docs.buttondown.com/metadata)) (default: {})
@@ -2865,9 +2864,9 @@ export def "surveys survey" [
   answers: list # The list of pre-defined answer choices. Order is preserved unless `randomize_answers` is true. (e.g. [Red, Green, Blue])
   --notes: string # Internal notes about the survey. Not shown to subscribers. (default: , e.g. )
   --response-cadence: any # How often a given subscriber can respond — e.g. `once` (single response per subscriber) or `unlimited`. (default: once, e.g. once)
-  --is-freeform-response-enabled: string@bool-completer # If true, subscribers can provide a freeform text response in addition to (or instead of) picking from `answers`. (default: false, e.g. false)
+  --is-freeform-response-enabled: oneof<nothing, bool> # If true, subscribers can provide a freeform text response in addition to (or instead of) picking from `answers`. (default: false, e.g. false)
   --input-type: any # The UI control used to collect responses (e.g. `radio`, `checkbox`). (default: radio, e.g. radio)
-  --randomize-answers: string@bool-completer # If true, the order of `answers` is shuffled each time the survey is rendered. (default: false, e.g. false)
+  --randomize-answers: oneof<nothing, bool> # If true, the order of `answers` is shuffled each time the survey is rendered. (default: false, e.g. false)
 ]: any -> record<id: string, creation_date: string, identifier: string, question: string, response_count: int, answers: list<string>, notes: string, randomize_answers: bool, response_cadence: string, status: string, is_freeform_response_enabled: bool, input_type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2998,7 +2997,7 @@ export def "tags tag" [
   color: string # The hex color code associated with the tag. (e.g. #FFD700)
   --description: any # An internal description of the tag, only visible to the newsletter author.
   --public-description: any # A public-facing description of the tag, visible to subscribers in the subscriber portal.
-  --subscriber-editable: string@bool-completer # If true, subscribers can add or remove this tag from their own profile via the subscriber portal. (default: false, e.g. false)
+  --subscriber-editable: oneof<nothing, bool> # If true, subscribers can add or remove this tag from their own profile via the subscriber portal. (default: false, e.g. false)
 ]: any -> record<id: string, creation_date: string, name: string, color: string, description: any, public_description: any, subscriber_editable: bool, secondary_id: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

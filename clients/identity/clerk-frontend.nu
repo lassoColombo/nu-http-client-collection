@@ -65,7 +65,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://example-destined-camel-13.clerk.accounts.dev"] }
 def auth-scheme-completer [] { ["cookie-__client" "query-__dev_session" "bearer" "query-_is_native" "basic"] }
 
@@ -483,7 +482,7 @@ export def "me-oauth-consent submitOAuthConsent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --consented: string@bool-completer # The user's consent decision. `true` grants the requested scopes and continues the authorization flow; any other value is treated as a denial and returns an `access_denied` error in the redirect.
+  --consented: oneof<nothing, bool> # The user's consent decision. `true` grants the requested scopes and continues the authorization flow; any other value is treated as a denial and returns an `access_denied` error in the redirect.
   --organization-id: string # Optional. The organization to scope the issued token to. The authenticated user must be a member of this organization. If omitted, the user's currently active organization is used.  (nullable)
 ]: any -> any {
   let input = $in
@@ -780,7 +779,7 @@ export def "client-sign-ins createSignIn" [
   --ticket: string # Ticket to be used for signing in. (nullable)
   --redirect-url: string # nullable
   --action-complete-redirect-url: string # nullable
-  --transfer: string@bool-completer # nullable
+  --transfer: oneof<nothing, bool> # nullable
   --code: string # The authorization or grant code for an OAuth exchange. Only used with `oauth_token_[provider]` strategies. (nullable)
   --body-token: string # The ID token from an OpenID Connect flow. Only used with `oauth_token_[provider]` and `google_one_tap` strategies. (nullable)
   --oidc-login-hint: string # Used with `oauth_[provider]`. The given value will be forwarded to the OIDC `login_hint` parameter of the generated redirect URL. (nullable)
@@ -835,7 +834,7 @@ export def "client-sign-ins-reset-password resetPassword" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   password: string
-  --sign-out-of-other-sessions: string@bool-completer # nullable
+  --sign-out-of-other-sessions: oneof<nothing, bool> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -990,7 +989,7 @@ export def "client-sign-ups createSignUps" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Origin: string # The origin of the request
-  --transfer: string@bool-completer # nullable
+  --transfer: oneof<nothing, bool> # nullable
   --password: string # nullable
   --first-name: string # nullable
   --last-name: string # nullable
@@ -1009,7 +1008,7 @@ export def "client-sign-ups createSignUps" [
   --captcha-token: string # nullable
   --captcha-error: string # nullable
   --captcha-widget-type: string # nullable
-  --legal-accepted: string@bool-completer # Has the value `true` if the user has accepted the legal requirements. (nullable)
+  --legal-accepted: oneof<nothing, bool> # Has the value `true` if the user has accepted the legal requirements. (nullable)
   --oidc-login-hint: string # Used with `oauth_[provider]`. The given value will be forwarded to the OIDC `login_hint` parameter of the generated redirect URL. (nullable)
   --oidc-prompt: string # Used with `oauth_[provider]` or `enterprise_sso`. The given value will be forwarded to the OIDC `prompt` parameter of the generated redirect URL. When using shared credentials this value might be adjusted for security reasons. (nullable)
 ]: any -> any {
@@ -1077,7 +1076,7 @@ export def "client-sign-ups updateSignUps" [
   --web3-wallet: string # nullable
   --body-token: string # The ID token from an OpenID Connect flow. Only used with `oauth_token_[provider]` and `google_one_tap` strategies. (nullable)
   --code: string # The authorization or grant code for an OAuth exchange. Only used with `oauth_token_[provider]` strategies. (nullable)
-  --legal-accepted: string@bool-completer # Has the value `true` if the user has accepted the legal requirements.  (nullable)
+  --legal-accepted: oneof<nothing, bool> # Has the value `true` if the user has accepted the legal requirements.  (nullable)
   --oidc-login-hint: string # Used with `oauth_[provider]`. The given value will be forwarded to the OIDC `login_hint` parameter of the generated redirect URL. (nullable)
   --oidc-prompt: string # Used with `oauth_[provider]` or `enterprise_sso`. The given value will be forwarded to the OIDC `prompt` parameter of the generated redirect URL. When using shared credentials this value might be adjusted for security reasons. (nullable)
 ]: any -> any {
@@ -1968,7 +1967,7 @@ export def "me-phone-numbers post" [
   --allow-errors(-e) # Return full response without error handling
   --clerk-session-id: string # The session_id associated with the requesting user.
   phone_number: string # The phone number to be added to the user.
-  --reserved-for-second-factor: string@bool-completer # Whether the phone number is reserved for multi-factor authentication. (nullable)
+  --reserved-for-second-factor: oneof<nothing, bool> # Whether the phone number is reserved for multi-factor authentication. (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -2076,8 +2075,8 @@ export def "me-phone-numbers UpdatePhoneNumber" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --clerk-session-id: string # The session_id associated with the requesting user.
-  --reserved-for-second-factor: string@bool-completer # Whether the phone number is reserved for multi-factor authentication. (nullable)
-  --default-second-factor: string@bool-completer # Marks the phone number as the default that will be used in multi-factor authentication. (nullable)
+  --reserved-for-second-factor: oneof<nothing, bool> # Whether the phone number is reserved for multi-factor authentication. (nullable)
+  --default-second-factor: oneof<nothing, bool> # Marks the phone number as the default that will be used in multi-factor authentication. (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -2777,7 +2776,7 @@ export def "me-change-password changePassword" [
   --allow-errors(-e) # Return full response without error handling
   --current-password: string # nullable
   --new-password: string
-  --sign-out-of-other-sessions: string@bool-completer # nullable
+  --sign-out-of-other-sessions: oneof<nothing, bool> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -2850,7 +2849,7 @@ export def "me-billing-subscription-items GetUserBillingSubscriptionItems" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
-  --paginated: string@bool-completer # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
+  --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
@@ -2897,7 +2896,7 @@ export def "me-billing-payment-methods GetUserPaymentMethods" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
-  --paginated: string@bool-completer # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
+  --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
@@ -3044,7 +3043,7 @@ export def "me-billing-checkouts-confirm ConfirmUserBillingCheckout" [
   --payment-method-id: string # The ID of the payment method to use for this checkout (nullable)
   --gateway: string # The payment gateway to use (e.g., stripe) (nullable)
   --payment-token: string # A payment token for processing the payment (nullable)
-  --use-test-card: string@bool-completer # Whether to use a test card for payment processing (nullable)
+  --use-test-card: oneof<nothing, bool> # Whether to use a test card for payment processing (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -3071,7 +3070,7 @@ export def "me-billing-payment-attempts GetUserPaymentAttempts" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
-  --paginated: string@bool-completer # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
+  --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
@@ -3139,7 +3138,7 @@ export def "me-billing-statements GetUserStatements" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
-  --paginated: string@bool-completer # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
+  --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
@@ -3240,7 +3239,7 @@ export def "organizations-billing-checkouts-confirm ConfirmOrganizationBillingCh
   --payment-method-id: string # The ID of the payment method to use for this checkout (nullable)
   --gateway: string # The payment gateway to use (e.g., stripe) (nullable)
   --payment-token: string # A payment token for processing the payment (nullable)
-  --use-test-card: string@bool-completer # Whether to use a test card for payment processing (nullable)
+  --use-test-card: oneof<nothing, bool> # Whether to use a test card for payment processing (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -3544,7 +3543,7 @@ export def "me-organization-memberships get" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
-  --paginated: string@bool-completer # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
+  --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
   let base = ($base_url | default $BASE_URL)
@@ -3985,7 +3984,7 @@ export def "organizations-memberships ListOrganizationMemberships" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
-  --paginated: string@bool-completer # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
+  --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
   --qp-query: string # Returns members that match the given query. For possible matches, we check for any of the user's identifier, usernames, user IDs, first and last names. The query value doesn't need to match the exact value you are looking for, it is capable of partial matches as well.
   --role: string # Filter by roles. This can be one of the predefined roles (`org:admin`, `org:basic_member`) or a custom role defined.
 ]: nothing -> any {
@@ -4089,7 +4088,7 @@ export def "organizations-domains ListOrganizationDomains" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
-  --verified: string@bool-completer # Filter by whether a domain is verified
+  --verified: oneof<nothing, bool> # Filter by whether a domain is verified
   --enrollment-mode: string # Filter by enrollment mode
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))
@@ -4162,7 +4161,7 @@ export def "organizations-domains-update-enrollment-mode UpdateOrganizationDomai
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   enrollment_mode: string
-  --delete-pending: string@bool-completer # nullable
+  --delete-pending: oneof<nothing, bool> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-__client"))

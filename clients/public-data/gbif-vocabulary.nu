@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.gbif.org/v1" "https://api.gbif-uat.org/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -112,13 +111,13 @@ export def "vocabularies-concepts listConcepts" [
   --parent: string # The name of the parent concept.
   --replacedByKey: int # The key of the replacement of the concept. (format: int64)
   --name: string # The name of the concept
-  --deprecated: string@bool-completer # Is the concept deprecated?
+  --deprecated: oneof<nothing, bool> # Is the concept deprecated?
   --key: int # The key of the concept. (format: int64)
-  --hasParent: string@bool-completer # Does the concept have parent?
-  --hasReplacement: string@bool-completer # Does the concept have replacement?
-  --includeChildrenCount: string@bool-completer # Should the search results include the count of the children of the concept?
-  --includeChildren: string@bool-completer # Should the search results include the children of the concept?
-  --includeParents: string@bool-completer # Should the search results include the parents of the concept?
+  --hasParent: oneof<nothing, bool> # Does the concept have parent?
+  --hasReplacement: oneof<nothing, bool> # Does the concept have replacement?
+  --includeChildrenCount: oneof<nothing, bool> # Should the search results include the count of the children of the concept?
+  --includeChildren: oneof<nothing, bool> # Should the search results include the children of the concept?
+  --includeParents: oneof<nothing, bool> # Should the search results include the parents of the concept?
   --hiddenLabel: string # The hidden label to filter by
   --q: string # Simple full text search parameter. The value for this parameter can be a simple word or a phrase. Wildcards are not supported
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
@@ -213,7 +212,7 @@ export def "vocabulary-tags listTags" [
   --allow-errors(-e) # Return full response without error handling
   --q: string # Query for full-text search.
   --name: string # The name of the tag. Useful to use with the isInUse parameter.
-  --isInUse: string@bool-completer # If true it searches for tags that are currently being used in at least one concept.
+  --isInUse: oneof<nothing, bool> # If true it searches for tags that are currently being used in at least one concept.
   --arg3: record
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
@@ -274,9 +273,9 @@ export def "vocabularies listVocabularies" [
   --arg0: record
   --name: string # The name of the vocabulary.
   --namespace: string # The namespace of the vocabulary.
-  --deprecated: string@bool-completer # Is the vocabulary deprecated?
+  --deprecated: oneof<nothing, bool> # Is the vocabulary deprecated?
   --key: int # The key of the vocabulary. (format: int64)
-  --hasUnreleasedChanges: string@bool-completer # Has the vocabulary changes that haven't been released yet?
+  --hasUnreleasedChanges: oneof<nothing, bool> # Has the vocabulary changes that haven't been released yet?
   --q: string # Simple full text search parameter. The value for this parameter can be a simple word or a phrase. Wildcards are not supported
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
@@ -344,8 +343,8 @@ export def "vocabularies-concepts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeParents: string@bool-completer
-  --includeChildren: string@bool-completer
+  --includeParents: oneof<nothing, bool>
+  --includeChildren: oneof<nothing, bool>
 ]: nothing -> record<key: int, name: string, externalDefinitions: list<string>, editorialNotes: list<string>, replacedByKey: int, deprecated: string, deprecatedBy: string, created: string, createdBy: string, modified: string, modifiedBy: string, vocabularyKey: int, definition: table<key: int, language: string, value: string, createdBy: string, created: string, modifiedBy: string, modified: string>, label: table<key: int, language: string, value: string, createdBy: string, created: string>, parentKey: int, sameAsUris: list<string>, tags: table<key: int, name: string, description: string, color: string, created: string, createdBy: string, modified: string, modifiedBy: string>, vocabularyName: string, parents: list<string>, childrenCount: int, children: list<string>, alternativeLabelsLink: string, hiddenLabelsLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -610,7 +609,7 @@ export def "vocabularies-concepts-deprecate deprecateConcept" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --replacementKey: int # format: int64
-  --deprecateChildren: string@bool-completer
+  --deprecateChildren: oneof<nothing, bool>
   --deprecatedBy: string
 ]: any -> any {
   let input = $in
@@ -638,7 +637,7 @@ export def "vocabularies-concepts-deprecate restoreDeprecatedConcept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --restoreDeprecatedChildren: string@bool-completer
+  --restoreDeprecatedChildren: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -663,7 +662,7 @@ export def "vocabularies-deprecate deprecateVocabulary" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --replacementKey: int # format: int64
-  --deprecateConcepts: string@bool-completer
+  --deprecateConcepts: oneof<nothing, bool>
   --deprecatedBy: string
 ]: any -> any {
   let input = $in
@@ -690,7 +689,7 @@ export def "vocabularies-deprecate restoreDeprecatedVocabulary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --restoreDeprecatedConcepts: string@bool-completer
+  --restoreDeprecatedConcepts: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1485,13 +1484,13 @@ export def "vocabularies-concepts-latest-release listConceptsFromLatestRelease" 
   --parent: string # The name of the parent concept.
   --replacedByKey: int # The key of the replacement of the concept. (format: int64)
   --name: string # The name of the concept
-  --deprecated: string@bool-completer # Is the concept deprecated?
+  --deprecated: oneof<nothing, bool> # Is the concept deprecated?
   --key: int # The key of the concept. (format: int64)
-  --hasParent: string@bool-completer # Does the concept have parent?
-  --hasReplacement: string@bool-completer # Does the concept have replacement?
-  --includeChildrenCount: string@bool-completer # Should the search results include the count of the children of the concept?
-  --includeChildren: string@bool-completer # Should the search results include the children of the concept?
-  --includeParents: string@bool-completer # Should the search results include the parents of the concept?
+  --hasParent: oneof<nothing, bool> # Does the concept have parent?
+  --hasReplacement: oneof<nothing, bool> # Does the concept have replacement?
+  --includeChildrenCount: oneof<nothing, bool> # Should the search results include the count of the children of the concept?
+  --includeChildren: oneof<nothing, bool> # Should the search results include the children of the concept?
+  --includeParents: oneof<nothing, bool> # Should the search results include the parents of the concept?
   --hiddenLabel: string # The hidden label to filter by
   --q: string # Simple full text search parameter. The value for this parameter can be a simple word or a phrase. Wildcards are not supported
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
@@ -1547,8 +1546,8 @@ export def "vocabularies-concepts-latest-release get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeParents: string@bool-completer
-  --includeChildren: string@bool-completer
+  --includeParents: oneof<nothing, bool>
+  --includeChildren: oneof<nothing, bool>
 ]: nothing -> record<key: int, name: string, externalDefinitions: list<string>, editorialNotes: list<string>, replacedByKey: int, deprecated: string, deprecatedBy: string, created: string, createdBy: string, modified: string, modifiedBy: string, vocabularyKey: int, definition: table<key: int, language: string, value: string, createdBy: string, created: string, modifiedBy: string, modified: string>, label: table<key: int, language: string, value: string, createdBy: string, created: string>, parentKey: int, sameAsUris: list<string>, tags: table<key: int, name: string, description: string, color: string, created: string, createdBy: string, modified: string, modifiedBy: string>, vocabularyName: string, parents: list<string>, childrenCount: int, children: list<string>, alternativeLabelsLink: string, hiddenLabelsLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://unknown"] }
 def auth-scheme-completer [] { ["api-key"] }
 
@@ -312,7 +311,7 @@ export def "chat-chat-completions assistant" [
   --accept: string@accept-completer # Response content type
   --X-Pinecone-Api-Version: string # Required date-based version header
   messages: list # The list of messages sent to the assistant, used for context retrieval and generating response with the LLM. — item shape: {role?: string, content?: string}
-  --stream: string@bool-completer # If `false`, the assistant returns a single JSON response. If `true`, the assistant returns a stream of responses. (default: false)
+  --stream: oneof<nothing, bool> # If `false`, the assistant returns a single JSON response. If `true`, the assistant returns a stream of responses. (default: false)
   --model: string # The large language model used to generate responses. (default: gpt-4o)
   --temperature: float # Controls the randomness of the model's output: lower values make responses more deterministic, while higher values increase creativity and variability. If the model does not support a temperature parameter, the parameter will be ignored. (format: float, default: 0.0)
   --filter: record # Optional metadata-based filter to restrict which documents are retrieved for the assistant's response context. (e.g. {genre: {$ne: documentary}})
@@ -348,12 +347,12 @@ export def "chat assistant" [
   --accept: string@accept-completer # Response content type
   --X-Pinecone-Api-Version: string # Required date-based version header
   messages: list # The list of messages sent to the assistant, used for context retrieval and generating response with the LLM. — item shape: {role?: string, content?: string}
-  --stream: string@bool-completer # If `false`, the assistant returns a single JSON response. If `true`, the assistant returns a stream of responses. (default: false)
+  --stream: oneof<nothing, bool> # If `false`, the assistant returns a single JSON response. If `true`, the assistant returns a stream of responses. (default: false)
   --model: string # The large language model used to generate responses. (default: gpt-4o)
   --temperature: float # Controls the randomness of the model's output: lower values make responses more deterministic, while higher values increase creativity and variability. If the model does not support a temperature parameter, the parameter will be ignored. (format: float, default: 0.0)
   --filter: record # Optional metadata-based filter to restrict which documents are retrieved for the assistant's response context. (e.g. {genre: {$ne: documentary}})
-  --json-response: string@bool-completer # If `true`, instructs the assistant to return a JSON-formatted response. Cannot be used together with streaming mode. (default: false)
-  --include-highlights: string@bool-completer # If `true`, instructs the assistant to include highlights from the referenced documents that support its response. (default: false)
+  --json-response: oneof<nothing, bool> # If `true`, instructs the assistant to return a JSON-formatted response. Cannot be used together with streaming mode. (default: false)
+  --include-highlights: oneof<nothing, bool> # If `true`, instructs the assistant to include highlights from the referenced documents that support its response. (default: false)
   --context-options: record # Controls the context snippets sent to the LLM. — shape: {top_k?: int, snippet_size?: int, multimodal?: bool, include_binary_content?: bool}
 ]: any -> record<id: string, finish_reason: string, message: record<role: string, content: string>, model: string, citations: table<position: int, references: list>, usage: record<prompt_tokens: int, completion_tokens: int, total_tokens: int>, context_snippet_count: int, content_filter_results: record<spec: string, results: any>> {
   let input = $in
@@ -389,8 +388,8 @@ export def "chat-context assistant" [
   --messages: list # The list of messages to use for generating the context. Exactly one of query or messages should be provided. — item shape: {role?: string, content?: string}
   --top-k: int # The maximum number of context snippets to return. Default is 16. Maximum is 64. (e.g. 20)
   --snippet-size: int # The maximum context snippet size. Default is 2048 tokens. Minimum is 512 tokens. Maximum is 8192 tokens. (e.g. 4096)
-  --multimodal: string@bool-completer # Whether or not to retrieve image-related context snippets. If `false`, only text snippets are returned. (default: true)
-  --include-binary-content: string@bool-completer # If image-related context snippets are returned, this field determines whether or not they should include base64 image data. If `false`, only the image captions are returned. Only available when `multimodal=true`. (default: true)
+  --multimodal: oneof<nothing, bool> # Whether or not to retrieve image-related context snippets. If `false`, only text snippets are returned. (default: true)
+  --include-binary-content: oneof<nothing, bool> # If image-related context snippets are returned, this field determines whether or not they should include base64 image data. If `false`, only the image captions are returned. Only available when `multimodal=true`. (default: true)
 ]: any -> record<id: string, snippets: list<record>, usage: record<prompt_tokens: int, completion_tokens: int, total_tokens: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))

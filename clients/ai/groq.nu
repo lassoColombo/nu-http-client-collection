@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.groq.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -313,11 +312,11 @@ export def "openai-chat-completions createChatCompletion" [
   --allow-errors(-e) # Return full response without error handling
   messages: list # A list of messages comprising the conversation so far.
   model: any # ID of the model to use. For details on which models are compatible with the Chat API, see available [models](https://console.groq.com/docs/models) (e.g. meta-llama/llama-4-scout-17b-16e-instruct)
-  --disable-tool-validation: string@bool-completer # If set to true, groq will return called tools without validating that the tool is present in request.tools. tool_choice=required/none will still be enforced, but the request cannot require a specific tool be used.  (default: false)
+  --disable-tool-validation: oneof<nothing, bool> # If set to true, groq will return called tools without validating that the tool is present in request.tools. tool_choice=required/none will still be enforced, but the request cannot require a specific tool be used.  (default: false)
   --frequency-penalty: float # This is not yet supported by any of our models. Number between -2.0 and 2.0. Positive values penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim. (nullable, default: 0)
-  --include-reasoning: string@bool-completer # Whether to include reasoning in the response.  If true, the response will include a `reasoning` field. If false, the model's reasoning will not be included in the response. This field is mutually exclusive with `reasoning_format`.  (nullable)
+  --include-reasoning: oneof<nothing, bool> # Whether to include reasoning in the response.  If true, the response will include a `reasoning` field. If false, the model's reasoning will not be included in the response. This field is mutually exclusive with `reasoning_format`.  (nullable)
   --logit-bias: record # This is not yet supported by any of our models. Modify the likelihood of specified tokens appearing in the completion.  (nullable)
-  --logprobs: string@bool-completer # This is not yet supported by any of our models. Whether to return log probabilities of the output tokens or not. If true, returns the log probabilities of each output token returned in the `content` of `message`.  (nullable, default: false)
+  --logprobs: oneof<nothing, bool> # This is not yet supported by any of our models. Whether to return log probabilities of the output tokens or not. If true, returns the log probabilities of each output token returned in the `content` of `message`.  (nullable, default: false)
   --top-logprobs: int # This is not yet supported by any of our models. An integer between 0 and 20 specifying the number of most likely tokens to return at each token position, each with an associated log probability. `logprobs` must be set to `true` if this parameter is used.  (nullable)
   --max-tokens: int # Deprecated in favor of `max_completion_tokens`. The maximum number of tokens that can be generated in the chat completion. The total length of input tokens and generated tokens is limited by the model's context length.  (DEPRECATED, nullable)
   --max-completion-tokens: int # The maximum number of tokens that can be generated in the chat completion. The total length of input tokens and generated tokens is limited by the model's context length. (nullable)
@@ -329,17 +328,17 @@ export def "openai-chat-completions createChatCompletion" [
   --stop: any # Up to 4 sequences where the API will stop generating further tokens. The returned text will not contain the stop sequence.  (nullable)
   --reasoning-effort: string@reasoning-effort-completer # qwen3 models support the following values Set to 'none' to disable reasoning. Set to 'default' or null to let Qwen reason.  openai/gpt-oss-20b and openai/gpt-oss-120b support 'low', 'medium', or 'high'. 'medium' is the default value.  (nullable)
   --reasoning-format: string@reasoning-format-completer # Specifies how to output reasoning tokens This field is mutually exclusive with `include_reasoning`.  (nullable)
-  --stream: string@bool-completer # If set, partial message deltas will be sent. Tokens will be sent as data-only [server-sent events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#Event_stream_format) as they become available, with the stream terminated by a `data: [DONE]` message. [Example code](/docs/text-chat#streaming-a-chat-completion).  (nullable, default: false)
+  --stream: oneof<nothing, bool> # If set, partial message deltas will be sent. Tokens will be sent as data-only [server-sent events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#Event_stream_format) as they become available, with the stream terminated by a `data: [DONE]` message. [Example code](/docs/text-chat#streaming-a-chat-completion).  (nullable, default: false)
   --temperature: float # What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic. We generally recommend altering this or top_p but not both. (nullable, default: 1, e.g. 1)
   --top-p: float # An alternative to sampling with temperature, called nucleus sampling, where the model considers the results of the tokens with top_p probability mass. So 0.1 means only the tokens comprising the top 10% probability mass are considered. We generally recommend altering this or temperature but not both. (nullable, default: 1, e.g. 1)
   --tools: list # A list of tools the model may call. Currently, only functions are supported as a tool. Use this to provide a list of functions the model may generate JSON inputs for. A max of 128 functions are supported.  (nullable) — item shape: {type: any, function?: record}
   --tool-choice: any # Controls which (if any) tool is called by the model. `none` means the model will not call any tool and instead generates a message. `auto` means the model can pick between generating a message or calling one or more tools. `required` means the model must call one or more tools. Specifying a particular tool via `{"type": "function", "function": {"name": "my_function"}}` forces the model to call that tool.  `none` is the default when no tools are present. `auto` is the default if tools are present.  (nullable)
-  --parallel-tool-calls: string@bool-completer # Whether to enable parallel function calling during tool use.  (nullable, default: true)
+  --parallel-tool-calls: oneof<nothing, bool> # Whether to enable parallel function calling during tool use.  (nullable, default: true)
   --user: string # A unique identifier representing your end-user, which can help us monitor and detect abuse. (nullable)
   --function-call: any # Deprecated in favor of `tool_choice`.  Controls which (if any) function is called by the model. `none` means the model will not call a function and instead generates a message. `auto` means the model can pick between generating a message or calling a function. Specifying a particular function via `{"name": "my_function"}` forces the model to call that function.  `none` is the default when no functions are present. `auto` is the default if functions are present.  (DEPRECATED, nullable)
   --functions: list # Deprecated in favor of `tools`.  A list of functions the model may generate JSON inputs for.  (DEPRECATED, nullable) — item shape: {description?: string, name: string, parameters?: record}
   --metadata: record # This parameter is not currently supported.  (nullable)
-  --store: string@bool-completer # This parameter is not currently supported.  (nullable)
+  --store: oneof<nothing, bool> # This parameter is not currently supported.  (nullable)
   --include-domains: list # Deprecated: Use search_settings.include_domains instead. A list of domains to include in the search results when the model uses a web search tool.  (DEPRECATED, nullable)
   --exclude-domains: list # Deprecated: Use search_settings.exclude_domains instead. A list of domains to exclude from the search results when the model uses a web search tool.  (DEPRECATED, nullable)
   --search-settings: record # Settings for web search functionality when the model uses a web search tool.  (nullable) — shape: {include_domains?: list, exclude_domains?: list, include_images?: bool, country?: string}
@@ -711,9 +710,9 @@ export def "openai-responses createResponse" [
   --text: record # Response format configuration. Supports plain text or structured JSON output. — shape: {format?: any}
   --reasoning: record # Configuration for reasoning capabilities when using [models that support reasoning](https://console.groq.com/docs/reasoning).  (nullable) — shape: {effort?: "low"|"medium"|"high"}
   --metadata: record # Custom key-value pairs for storing additional information. Maximum of 16 pairs.  (nullable)
-  --parallel-tool-calls: string@bool-completer # Enable parallel execution of multiple tool calls.  (nullable, default: true)
-  --store: string@bool-completer # Response storage flag. Note: Currently only supports false or null values.  (nullable, default: false)
-  --stream: string@bool-completer # Enable streaming mode to receive response data as server-sent events.  (nullable, default: false)
+  --parallel-tool-calls: oneof<nothing, bool> # Enable parallel execution of multiple tool calls.  (nullable, default: true)
+  --store: oneof<nothing, bool> # Response storage flag. Note: Currently only supports false or null values.  (nullable, default: false)
+  --stream: oneof<nothing, bool> # Enable streaming mode to receive response data as server-sent events.  (nullable, default: false)
   --user: string # Optional identifier for tracking end-user requests. Useful for usage monitoring and compliance.  (e.g. user-1234)
   --service-tier: string@service-tier-completer-1 # Specifies the latency tier to use for processing the request.  (nullable, default: auto)
   --truncation: string@truncation-completer # Context truncation strategy. Supported values: `auto` or `disabled`.  (nullable, default: disabled)

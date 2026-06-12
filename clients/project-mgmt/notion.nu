@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.notion.com"] }
 def auth-scheme-completer [] { ["bearer" "basic"] }
 
@@ -252,11 +251,11 @@ export def "pages patch-page" [
   --properties: record
   --icon: any
   --cover: any
-  --is-locked: string@bool-completer # Whether the page should be locked from editing in the Notion app UI. If not provided, the locked state will not be updated.
+  --is-locked: oneof<nothing, bool> # Whether the page should be locked from editing in the Notion app UI. If not provided, the locked state will not be updated.
   --template: any
-  --erase-content: string@bool-completer # Whether to erase all existing content from the page. When used with a template, the template content replaces the existing content. When used without a template, simply clears the page content.
-  --in-trash: string@bool-completer
-  --is-archived: string@bool-completer
+  --erase-content: oneof<nothing, bool> # Whether to erase all existing content from the page. When used with a template, the template content replaces the existing content. When used without a template, simply clears the page content.
+  --in-trash: oneof<nothing, bool>
+  --is-archived: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -342,7 +341,7 @@ export def "pages-markdown retrieve-page-markdown" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-transcript: string@bool-completer
+  --include-transcript: oneof<nothing, bool>
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
 ]: nothing -> record<object: string, id: string, markdown: string, truncated: bool, unknown_block_ids: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -432,7 +431,7 @@ export def "blocks update-a-block" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Notion-Version: string@Notion-Version-completer # The [API version](/reference/versioning) to use for this request. The latest version is `2026-03-11`.
-  --in-trash: string@bool-completer
+  --in-trash: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -574,7 +573,7 @@ export def "data-sources update-a-data-source" [
   --title: list # Title of data source as it appears in Notion. — item shape: {annotations?: record}
   --icon: any # Page icon.
   --properties: record # The property schema of the data source. The keys are property names or IDs, and the values are property configuration objects. Properties set to null will be removed.
-  --in-trash: string@bool-completer # Whether the database should be moved to or from the trash. If not provided, the trash status will not be updated.
+  --in-trash: oneof<nothing, bool> # Whether the database should be moved to or from the trash. If not provided, the trash status will not be updated.
   --parent: record # shape: {type?: string, database_id: string}
 ]: any -> any {
   let input = $in
@@ -609,7 +608,7 @@ export def "data-sources-query post-database-query" [
   --filter: any
   --start-cursor: string
   --page-size: float
-  --in-trash: string@bool-completer
+  --in-trash: oneof<nothing, bool>
   --result-type: string@result-type-completer # Optionally filter the results to only include pages or data sources. Regular, non-wiki databases only support page children. The default behavior is no result type filtering, in other words, returning both pages and data sources for wikis.
 ]: any -> record<type: string, page_or_data_source: record, object: string, next_cursor: string, has_more: bool, results: list<any>, request_status: record<type: string, incomplete_reason: string>> {
   let input = $in
@@ -732,11 +731,11 @@ export def "databases update-database" [
   --parent: any # The parent page or workspace to move the database to. If not provided, the database will not be moved.
   --title: list # The updated title of the database, if any. If not provided, the title will not be updated. — item shape: {annotations?: record}
   --description: list # The updated description of the database, if any. If not provided, the description will not be updated. — item shape: {annotations?: record}
-  --is-inline: string@bool-completer # Whether the database should be displayed inline in the parent page. If not provided, the inline status will not be updated.
+  --is-inline: oneof<nothing, bool> # Whether the database should be displayed inline in the parent page. If not provided, the inline status will not be updated.
   --icon: any
   --cover: any
-  --in-trash: string@bool-completer # Whether the database should be moved to or from the trash. If not provided, the trash status will not be updated.
-  --is-locked: string@bool-completer # Whether the database should be locked from editing in the Notion app UI. If not provided, the locked state will not be updated.
+  --in-trash: oneof<nothing, bool> # Whether the database should be moved to or from the trash. If not provided, the trash status will not be updated.
+  --is-locked: oneof<nothing, bool> # Whether the database should be locked from editing in the Notion app UI. If not provided, the locked state will not be updated.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -770,7 +769,7 @@ export def "databases create-database" [
   parent: any # The parent page or workspace where the database will be created.
   --title: list # The title of the database. — item shape: {annotations?: record}
   --description: list # The description of the database. — item shape: {annotations?: record}
-  --is-inline: string@bool-completer # Whether the database should be displayed inline in the parent page. Defaults to false.
+  --is-inline: oneof<nothing, bool> # Whether the database should be displayed inline in the parent page. Defaults to false.
   --initial-data-source: record # shape: {properties?: record}
   --icon: any
   --cover: any

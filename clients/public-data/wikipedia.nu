@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost/api/rest_v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -188,8 +187,8 @@ export def "page-html list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --redirect: string@bool-completer # Requests for [redirect pages](https://www.mediawiki.org/wiki/Help:Redirects) return HTTP 302 with a redirect target in `Location` header and content in the body. To get a 200 response instead, supply `false` to the `redirect` parameter.
-  --stash: string@bool-completer # Whether to temporary stash data-parsoid metadata in order to support transforming the modified content later. If this parameter is set, requests are rate-limited on a per-client basis (max 5 requests per second per client)
+  --redirect: oneof<nothing, bool> # Requests for [redirect pages](https://www.mediawiki.org/wiki/Help:Redirects) return HTTP 302 with a redirect target in `Location` header and content in the body. To get a 200 response instead, supply `false` to the `redirect` parameter.
+  --stash: oneof<nothing, bool> # Whether to temporary stash data-parsoid metadata in order to support transforming the modified content later. If this parameter is set, requests are rate-limited on a per-client basis (max 5 requests per second per client)
   --Accept-Language: string # The desired language variant code for wikis where LanguageConverter is enabled. Example: `sr-el` for Latin transcription of the Serbian language.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -218,8 +217,8 @@ export def "page-html get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --redirect: string@bool-completer # Requests for [redirect pages](https://www.mediawiki.org/wiki/Help:Redirects) return HTTP 302 with a redirect target in `Location` header and content in the body. To get a 200 response instead, supply `false` to the `redirect` parameter.
-  --stash: string@bool-completer # Whether to temporary stash data-parsoid metadata in order to support transforming the modified content later. If this parameter is set, requests are rate-limited on a per-client basis (max 5 requests per second per client)
+  --redirect: oneof<nothing, bool> # Requests for [redirect pages](https://www.mediawiki.org/wiki/Help:Redirects) return HTTP 302 with a redirect target in `Location` header and content in the body. To get a 200 response instead, supply `false` to the `redirect` parameter.
+  --stash: oneof<nothing, bool> # Whether to temporary stash data-parsoid metadata in order to support transforming the modified content later. If this parameter is set, requests are rate-limited on a per-client basis (max 5 requests per second per client)
   --Accept-Language: string # The desired language variant code for wikis where LanguageConverter is enabled. Example: `sr-el` for Latin transcription of the Serbian language.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -291,7 +290,7 @@ export def "page-summary get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-2 # Response content type
-  --redirect: string@bool-completer # Requests for [redirect pages](https://www.mediawiki.org/wiki/Help:Redirects) return HTTP 302 with a redirect target in `Location` header and content in the body. To get a 200 response instead, supply `false` to the `redirect` parameter.
+  --redirect: oneof<nothing, bool> # Requests for [redirect pages](https://www.mediawiki.org/wiki/Help:Redirects) return HTTP 302 with a redirect target in `Location` header and content in the body. To get a 200 response instead, supply `false` to the `redirect` parameter.
   --Accept-Language: string # The desired language variant code for wikis where LanguageConverter is enabled. Example: `sr-el` for Latin transcription of the Serbian language.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -319,7 +318,7 @@ export def "page-media-list list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-3 # Response content type
-  --redirect: string@bool-completer # Requests for [redirect pages](https://www.mediawiki.org/wiki/Help:Redirects) return HTTP 302 with a redirect target in `Location` header and content in the body. To get a 200 response instead, supply `false` to the `redirect` parameter.
+  --redirect: oneof<nothing, bool> # Requests for [redirect pages](https://www.mediawiki.org/wiki/Help:Redirects) return HTTP 302 with a redirect target in `Location` header and content in the body. To get a 200 response instead, supply `false` to the `redirect` parameter.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -345,7 +344,7 @@ export def "page-media-list get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-3 # Response content type
-  --redirect: string@bool-completer # Requests for [redirect pages](https://www.mediawiki.org/wiki/Help:Redirects) return HTTP 302 with a redirect target in `Location` header and content in the body. To get a 200 response instead, supply `false` to the `redirect` parameter.
+  --redirect: oneof<nothing, bool> # Requests for [redirect pages](https://www.mediawiki.org/wiki/Help:Redirects) return HTTP 302 with a redirect target in `Location` header and content in the body. To get a 200 response instead, supply `false` to the `redirect` parameter.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -370,7 +369,7 @@ export def "page-mobile-html list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-4 # Response content type
-  --redirect: string@bool-completer # Requests for [redirect pages](https://www.mediawiki.org/wiki/Help:Redirects) return HTTP 302 with a redirect target in `Location` header and content in the body. To get a 200 response instead, supply `false` to the `redirect` parameter.
+  --redirect: oneof<nothing, bool> # Requests for [redirect pages](https://www.mediawiki.org/wiki/Help:Redirects) return HTTP 302 with a redirect target in `Location` header and content in the body. To get a 200 response instead, supply `false` to the `redirect` parameter.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -396,7 +395,7 @@ export def "page-mobile-html get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-4 # Response content type
-  --redirect: string@bool-completer # Requests for [redirect pages](https://www.mediawiki.org/wiki/Help:Redirects) return HTTP 302 with a redirect target in `Location` header and content in the body. To get a 200 response instead, supply `false` to the `redirect` parameter.
+  --redirect: oneof<nothing, bool> # Requests for [redirect pages](https://www.mediawiki.org/wiki/Help:Redirects) return HTTP 302 with a redirect target in `Location` header and content in the body. To get a 200 response instead, supply `false` to the `redirect` parameter.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -465,7 +464,7 @@ export def "page-talk list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-6 # Response content type
-  --redirect: string@bool-completer # Requests for [redirect pages](https://www.mediawiki.org/wiki/Help:Redirects) return HTTP 302 with a redirect target in `Location` header and content in the body. To get a 200 response instead, supply `false` to the `redirect` parameter.
+  --redirect: oneof<nothing, bool> # Requests for [redirect pages](https://www.mediawiki.org/wiki/Help:Redirects) return HTTP 302 with a redirect target in `Location` header and content in the body. To get a 200 response instead, supply `false` to the `redirect` parameter.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -490,7 +489,7 @@ export def "page-talk get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-6 # Response content type
-  --redirect: string@bool-completer # Requests for [redirect pages](https://www.mediawiki.org/wiki/Help:Redirects) return HTTP 302 with a redirect target in `Location` header and content in the body. To get a 200 response instead, supply `false` to the `redirect` parameter.
+  --redirect: oneof<nothing, bool> # Requests for [redirect pages](https://www.mediawiki.org/wiki/Help:Redirects) return HTTP 302 with a redirect target in `Location` header and content in the body. To get a 200 response instead, supply `false` to the `redirect` parameter.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -515,7 +514,7 @@ export def "transform-html-to-wikitext post" [
   --accept: string@accept-completer-7 # Response content type
   --if-match: string # The `ETag` header of the original render indicating it's revision and timeuuid. Required if both `title` and `revision` parameters are present.
   html: string # The HTML to transform
-  --scrub-wikitext: string@bool-completer # Normalise the DOM to yield cleaner wikitext?
+  --scrub-wikitext: oneof<nothing, bool> # Normalise the DOM to yield cleaner wikitext?
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -545,7 +544,7 @@ export def "transform-html-to-wikitext post-by-title" [
   --accept: string@accept-completer-7 # Response content type
   --if-match: string # The `ETag` header of the original render indicating it's revision and timeuuid. Required if both `title` and `revision` parameters are present.
   html: string # The HTML to transform
-  --scrub-wikitext: string@bool-completer # Normalise the DOM to yield cleaner wikitext?
+  --scrub-wikitext: oneof<nothing, bool> # Normalise the DOM to yield cleaner wikitext?
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -576,7 +575,7 @@ export def "transform-html-to-wikitext post-by-title-revision" [
   --accept: string@accept-completer-7 # Response content type
   --if-match: string # The `ETag` header of the original render indicating it's revision and timeuuid. Required if both `title` and `revision` parameters are present.
   html: string # The HTML to transform
-  --scrub-wikitext: string@bool-completer # Normalise the DOM to yield cleaner wikitext?
+  --scrub-wikitext: oneof<nothing, bool> # Normalise the DOM to yield cleaner wikitext?
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -604,8 +603,8 @@ export def "transform-wikitext-to-html post" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-8 # Response content type
   wikitext: string # The Wikitext to transform to HTML
-  --body-only: string@bool-completer # Return only `body.innerHTML`
-  --stash: string@bool-completer # Whether to temporarily stash the result of the transformation
+  --body-only: oneof<nothing, bool> # Return only `body.innerHTML`
+  --stash: oneof<nothing, bool> # Whether to temporarily stash the result of the transformation
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -632,8 +631,8 @@ export def "transform-wikitext-to-html post-by-title" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-8 # Response content type
   wikitext: string # The Wikitext to transform to HTML
-  --body-only: string@bool-completer # Return only `body.innerHTML`
-  --stash: string@bool-completer # Whether to temporarily stash the result of the transformation
+  --body-only: oneof<nothing, bool> # Return only `body.innerHTML`
+  --stash: oneof<nothing, bool> # Whether to temporarily stash the result of the transformation
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -661,8 +660,8 @@ export def "transform-wikitext-to-html post-by-title-revision" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-8 # Response content type
   wikitext: string # The Wikitext to transform to HTML
-  --body-only: string@bool-completer # Return only `body.innerHTML`
-  --stash: string@bool-completer # Whether to temporarily stash the result of the transformation
+  --body-only: oneof<nothing, bool> # Return only `body.innerHTML`
+  --stash: oneof<nothing, bool> # Whether to temporarily stash the result of the transformation
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

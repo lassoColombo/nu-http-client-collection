@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.g.alchemy.com/prices/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -159,7 +158,7 @@ export def "tokens-historical get-historical-token-prices" [
   --startTime: any # Start of the time range. (e.g. 2024-01-01T00:00:00Z)
   --endTime: any # End of the time range. (e.g. 2024-01-31T23:59:59Z)
   --interval: string@interval-completer # Time interval for data points. Max ranges: (5m, 7d), (1h, 30d), (1d, 1yr)  (default: 1d, e.g. 1d)
-  --withMarketData: string@bool-completer # Whether to include market cap and volume for each token (default: false, e.g. true)
+  --withMarketData: oneof<nothing, bool> # Whether to include market cap and volume for each token (default: false, e.g. true)
   --network: string # Network identifier (e.g., eth-mainnet). (default: eth-mainnet, e.g. eth-mainnet)
   --address: string # Token contract address. (default: 0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48, e.g. 0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48)
 ]: any -> record<data: any> {

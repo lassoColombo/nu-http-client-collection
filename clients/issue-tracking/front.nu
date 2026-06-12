@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api2.frontapp.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -559,7 +558,7 @@ export def "channels-drafts create-draft" [
   --attachments: list # Binary data of attached files. Must use `Content-Type: multipart/form-data` if specified. See [example](https://gist.github.com/hdornier/e04d04921032e98271f46ff8a539a4cb) or read more about [Attachments](https://dev.frontapp.com/docs/attachments-1). Max 25 MB.
   --mode: string@mode-completer # Mode of the draft to create. Can be 'private' (draft is visible to the author only) or 'shared' (draft is visible to all teammates with access to the conversation). (default: private)
   --signature-id: string # ID of the signature to attach to this draft. If null, no signature is attached.
-  --should-add-default-signature: string@bool-completer # Whether or not Front should try to resolve a signature for the message. Is ignored if signature_id is included. Default false;
+  --should-add-default-signature: oneof<nothing, bool> # Whether or not Front should try to resolve a signature for the message. Is ignored if signature_id is included. Default false;
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -630,7 +629,7 @@ export def "channels-messages create-message" [
   --options: record # shape: {tag_ids?: list, archive?: bool}
   --attachments: list # Binary data of attached files. Must use `Content-Type: multipart/form-data` if specified. See [example](https://gist.github.com/hdornier/e04d04921032e98271f46ff8a539a4cb) or read more about [Attachments](https://dev.frontapp.com/docs/attachments-1). Max 25 MB.
   --signature-id: string # ID of the signature to attach to this draft. Only supported for email channels; using this on other channel types returns a 403 forbidden error. If null, no signature is attached.
-  --should-add-default-signature: string@bool-completer # Whether or not Front should try to resolve a signature for the message. Only applies to email channels and is ignored if signature_id is included or if author_id is omitted. Default false.
+  --should-add-default-signature: oneof<nothing, bool> # Whether or not Front should try to resolve a signature for the message. Only applies to email channels and is ignored if signature_id is included or if author_id is omitted. Default false.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -701,7 +700,7 @@ export def "comments update-comment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-body: string # Content of the comment. Can include markdown formatting. Can only be updated if the comment was created using the same token.
-  --is-pinned: string@bool-completer # Whether or not the comment is pinned in its conversation.
+  --is-pinned: oneof<nothing, bool> # Whether or not the comment is pinned in its conversation.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -774,7 +773,7 @@ export def "comments-replies add-comment-reply" [
   --allow-errors(-e) # Return full response without error handling
   --author-id: string # ID of the teammate creating the comment. Alternatively, you can supply the author as a [resource alias](https://dev.frontapp.com/docs/resource-aliases-1). If omitted, will post as the API Token or OAuth client of the requester.
   --body-body: string # Content of the comment. Can include markdown formatting.
-  --is-pinned: string@bool-completer # Whether or not the comment is pinned in its conversation.
+  --is-pinned: oneof<nothing, bool> # Whether or not the comment is pinned in its conversation.
   --attachments: list # Binary data of attached files. Must use `Content-Type: multipart/form-data` if specified. See [example](https://gist.github.com/hdornier/e04d04921032e98271f46ff8a539a4cb) or read more about [Attachments](https://dev.frontapp.com/docs/attachments-1).  Max 25 MB.
 ]: any -> any {
   let input = $in
@@ -893,7 +892,7 @@ export def "company-tags create-company-tag" [
   name: string # Name of the tag
   --description: string # Description of the tag
   --highlight: string@highlight-completer # Highlight color of the tag.
-  --is-visible-in-conversation-lists: string@bool-completer # Whether the tag is visible in conversation lists. (default: false)
+  --is-visible-in-conversation-lists: oneof<nothing, bool> # Whether the tag is visible in conversation lists. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1457,7 +1456,7 @@ export def "contacts-handles delete-contact-handle" [
   --allow-errors(-e) # Return full response without error handling
   handle: string # Handle used to reach the contact. (e.g. dwight@limitlesspaper.com)
   --body-source: string@source-completer # Source of the handle. Can be `email`, `phone`, `twitter`, `facebook`, `intercom`, `front_chat`, or `custom`. (e.g. email)
-  --force: string@bool-completer # Force the deletetion of the contact if the handle is the last one (default: false)
+  --force: oneof<nothing, bool> # Force the deletetion of the contact if the handle is the last one (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1763,7 +1762,7 @@ export def "conversations-comments add-comment" [
   --allow-errors(-e) # Return full response without error handling
   --author-id: string # ID of the teammate creating the comment. Alternatively, you can supply the author as a [resource alias](https://dev.frontapp.com/docs/resource-aliases-1). If omitted, will post as the API Token or OAuth client of the requester.
   --body-body: string # Content of the comment. Can include markdown formatting.
-  --is-pinned: string@bool-completer # Whether or not the comment is pinned in its conversation.
+  --is-pinned: oneof<nothing, bool> # Whether or not the comment is pinned in its conversation.
   --attachments: list # Binary data of attached files. Must use `Content-Type: multipart/form-data` if specified. See [example](https://gist.github.com/hdornier/e04d04921032e98271f46ff8a539a4cb) or read more about [Attachments](https://dev.frontapp.com/docs/attachments-1).  Max 25 MB.
 ]: any -> any {
   let input = $in
@@ -1822,7 +1821,7 @@ export def "conversations-drafts create-draft-reply" [
   --attachments: list # Binary data of attached files. Must use `Content-Type: multipart/form-data` if specified. See [example](https://gist.github.com/hdornier/e04d04921032e98271f46ff8a539a4cb) or read more about [Attachments](https://dev.frontapp.com/docs/attachments-1). Max 25 MB.
   --mode: string@mode-completer # Mode of the draft to create. Can be 'private' (draft is visible to the author only) or 'shared' (draft is visible to all teammates with access to the conversation). (default: private)
   --signature-id: string # ID of the signature to attach to this draft. If null, no signature is attached.
-  --should-add-default-signature: string@bool-completer # Whether or not Front should try to resolve a signature for the message. Is ignored if signature_id is included. Default false;
+  --should-add-default-signature: oneof<nothing, bool> # Whether or not Front should try to resolve a signature for the message. Is ignored if signature_id is included. Default false;
   channel_id: string # ID of the channel from which the draft will be sent. Alternatively, you can supply the channel address as a [resource alias](https://dev.frontapp.com/docs/resource-aliases-1).
 ]: any -> any {
   let input = $in
@@ -1896,7 +1895,7 @@ export def "conversations-followers add-conversation-followers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ignore-errors: string@bool-completer # Whether to ignore invalid teammate IDs and continue adding valid ones. (default: false)
+  --ignore-errors: oneof<nothing, bool> # Whether to ignore invalid teammate IDs and continue adding valid ones. (default: false)
   teammate_ids: list # IDs of the teammate to add to the followers list. Alternatively, you can supply the teammates as a [resource alias](https://dev.frontapp.com/docs/resource-aliases-1).
 ]: any -> any {
   let input = $in
@@ -2066,7 +2065,7 @@ export def "conversations-messages create-message-reply" [
   --options: record # shape: {tag_ids?: list, archive?: bool}
   --attachments: list # Binary data of attached files. Must use `Content-Type: multipart/form-data` if specified. See [example](https://gist.github.com/hdornier/e04d04921032e98271f46ff8a539a4cb) or read more about [Attachments](https://dev.frontapp.com/docs/attachments-1).  Max 25 MB.
   --signature-id: string # ID of the signature to attach to this draft. Only supported for email channels; using this on other channel types returns a 403 forbidden error. If null, no signature is attached.
-  --should-add-default-signature: string@bool-completer # Whether or not Front should try to resolve a signature for the message. Only applies to email channels and is ignored if signature_id is included or if author_id is omitted. Default false;
+  --should-add-default-signature: oneof<nothing, bool> # Whether or not Front should try to resolve a signature for the message. Only applies to email channels and is ignored if signature_id is included or if author_id is omitted. Default false;
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2341,7 +2340,7 @@ export def "inboxes create-inbox" [
   --allow-errors(-e) # Return full response without error handling
   name: string # The name of the inbox
   --teammate-ids: list # An array of teammate IDs that should have access to the inbox. Alternatively, you can supply teammate emails as a [resource alias](https://dev.frontapp.com/docs/resource-aliases-1).
-  --is-public: string@bool-completer # Whether the inbox is public or not
+  --is-public: oneof<nothing, bool> # Whether the inbox is public or not
   --custom-fields: record # An object whose key is the `name` property defined for the custom field in the Front UI. The value of the key must use the same `type` specified for the custom field, as described in https://dev.frontapp.com/reference/custom-fields (e.g. {city: London, UK, isVIP: true, renewal_date: 1525417200, sla_time: 90, owner: leela@planet-express.com, replyTo: inb_55c8c149, Job Title: firefighter})
 ]: any -> any {
   let input = $in
@@ -4153,8 +4152,8 @@ export def "signatures update-signature" [
   --name: string # Name of the signature
   --sender-info: string # Sender info of the signature that will appear in the From line of emails sent.
   --body-body: string # Body of the signature
-  --is-visible-for-all-teammate-channels: string@bool-completer # Whether or not the signature is visible in all individual channels for teammates in the given team. Can only be set for shared signatures.
-  --is-default: string@bool-completer # If true, the signature will be set as the default signature for the team or teammate. (default: false)
+  --is-visible-for-all-teammate-channels: oneof<nothing, bool> # Whether or not the signature is visible in all individual channels for teammates in the given team. Can only be set for shared signatures.
+  --is-default: oneof<nothing, bool> # If true, the signature will be set as the default signature for the team or teammate. (default: false)
   --channel-ids: list # The specific shared channels this signature if available in. If null, then it will be available in all channels. If unspecified, will retain previous value. Alternatively, you can specify channels using a [resource alias](https://dev.frontapp.com/docs/resource-aliases-1).
 ]: any -> any {
   let input = $in
@@ -4231,7 +4230,7 @@ export def "tags create-tag" [
   name: string # Name of the tag
   --description: string # Description of the tag
   --highlight: string@highlight-completer # Highlight color of the tag.
-  --is-visible-in-conversation-lists: string@bool-completer # Whether the tag is visible in conversation lists. (default: false)
+  --is-visible-in-conversation-lists: oneof<nothing, bool> # Whether the tag is visible in conversation lists. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4283,7 +4282,7 @@ export def "tags update-a-tag" [
   --description: string # Description of the tag
   --highlight: string@highlight-completer # Highlight color of the tag.
   --parent-tag-id: string # ID of the parent of this tag. Set to `null` to remove  the parent tag.
-  --is-visible-in-conversation-lists: string@bool-completer # Whether the tag is visible in conversation lists.
+  --is-visible-in-conversation-lists: oneof<nothing, bool> # Whether the tag is visible in conversation lists.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4356,7 +4355,7 @@ export def "tags-children create-child-tag" [
   name: string # Name of the tag
   --description: string # Description of the tag
   --highlight: string@highlight-completer # Highlight color of the tag.
-  --is-visible-in-conversation-lists: string@bool-completer # Whether the tag is visible in conversation lists. (default: false)
+  --is-visible-in-conversation-lists: oneof<nothing, bool> # Whether the tag is visible in conversation lists. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4819,7 +4818,7 @@ export def "teammates update-teammate" [
   --username: string # New username. It must be unique and can only contains lowercase letters, numbers and underscores.
   --first-name: string # New first name
   --last-name: string # New last name
-  --is-available: string@bool-completer # New availability status
+  --is-available: oneof<nothing, bool> # New availability status
   --custom-fields: record # An object whose key is the `name` property defined for the custom field in the Front UI. The value of the key must use the same `type` specified for the custom field, as described in https://dev.frontapp.com/reference/custom-fields (e.g. {city: London, UK, isVIP: true, renewal_date: 1525417200, sla_time: 90, owner: leela@planet-express.com, replyTo: inb_55c8c149, Job Title: firefighter})
 ]: any -> any {
   let input = $in
@@ -5304,7 +5303,7 @@ export def "teammates-signatures create-teammate-signature" [
   name: string # Name of the signature
   --sender-info: string # Sender info of the signature that will appear in the From line of emails sent.
   --body-body: string # Body of the signature
-  --is-default: string@bool-completer # If true, the signature will be set as the default signature for the teammate. (default: false)
+  --is-default: oneof<nothing, bool> # If true, the signature will be set as the default signature for the teammate. (default: false)
   --channel-ids: list # The specific channels this signature is available in. If omitted or null, the signature will be available in all channels the teammate has access to. Alternatively, you can specify channels using a [resource alias](https://dev.frontapp.com/docs/resource-aliases-1).
 ]: any -> any {
   let input = $in
@@ -5361,7 +5360,7 @@ export def "teammates-tags create-teammate-tag" [
   name: string # Name of the tag
   --description: string # Description of the tag
   --highlight: string@highlight-completer # Highlight color of the tag.
-  --is-visible-in-conversation-lists: string@bool-completer # Whether the tag is visible in conversation lists. (default: false)
+  --is-visible-in-conversation-lists: oneof<nothing, bool> # Whether the tag is visible in conversation lists. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5694,7 +5693,7 @@ export def "teams-inboxes create-team-inbox" [
   --allow-errors(-e) # Return full response without error handling
   name: string # The name of the inbox
   --teammate-ids: list # An array of teammate IDs that should have access to the inbox. Alternatively, you can supply teammate emails as a [resource alias](https://dev.frontapp.com/docs/resource-aliases-1).
-  --is-public: string@bool-completer # Whether the inbox is public or not
+  --is-public: oneof<nothing, bool> # Whether the inbox is public or not
   --custom-fields: record # An object whose key is the `name` property defined for the custom field in the Front UI. The value of the key must use the same `type` specified for the custom field, as described in https://dev.frontapp.com/reference/custom-fields (e.g. {city: London, UK, isVIP: true, renewal_date: 1525417200, sla_time: 90, owner: leela@planet-express.com, replyTo: inb_55c8c149, Job Title: firefighter})
 ]: any -> any {
   let input = $in
@@ -5929,8 +5928,8 @@ export def "teams-signatures create-team-signature" [
   name: string # Name of the signature
   --sender-info: string # Sender info of the signature that will appear in the From line of emails sent.
   --body-body: string # Body of the signature
-  --is-visible-for-all-teammate-channels: string@bool-completer # Whether or not the signature is visible in all individual channels for teammates in the given team.
-  --is-default: string@bool-completer # If true, the signature will be set as the default signature for the team. (default: false)
+  --is-visible-for-all-teammate-channels: oneof<nothing, bool> # Whether or not the signature is visible in all individual channels for teammates in the given team.
+  --is-default: oneof<nothing, bool> # If true, the signature will be set as the default signature for the team. (default: false)
   --channel-ids: list # The specific channels this signature is available in. If omitted or null, the signature will be available in all channels the team has access to. Alternatively, you can specify channels using a [resource alias](https://dev.frontapp.com/docs/resource-aliases-1).
 ]: any -> any {
   let input = $in
@@ -5987,7 +5986,7 @@ export def "teams-tags create-team-tag" [
   name: string # Name of the tag
   --description: string # Description of the tag
   --highlight: string@highlight-completer # Highlight color of the tag.
-  --is-visible-in-conversation-lists: string@bool-completer # Whether the tag is visible in conversation lists. (default: false)
+  --is-visible-in-conversation-lists: oneof<nothing, bool> # Whether the tag is visible in conversation lists. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6120,7 +6119,7 @@ export def "teams-views create-team-view" [
   inbox_ids: list # List of inbox IDs to filter by
   --tag-ids: list # List of tag IDs to filter by
   --not-tag-ids: list # List of tag IDs to exclude
-  --no-tags: string@bool-completer # Whether to filter for conversations without tags
+  --no-tags: oneof<nothing, bool> # Whether to filter for conversations without tags
   --assignee-ids: list # List of assignee IDs to filter by
   --not-assignee-ids: list # List of assignee IDs to exclude
   --highlight: string # Color highlight for the view
@@ -6273,7 +6272,7 @@ export def "views update-view" [
   --inbox-ids: list # List of inbox IDs to filter by
   --tag-ids: list # List of tag IDs to filter by
   --not-tag-ids: list # List of tag IDs to exclude
-  --no-tags: string@bool-completer # Whether to filter for conversations without tags
+  --no-tags: oneof<nothing, bool> # Whether to filter for conversations without tags
   --assignee-ids: list # List of assignee IDs to filter by
   --not-assignee-ids: list # List of assignee IDs to exclude
   --highlight: string # Color highlight for the view

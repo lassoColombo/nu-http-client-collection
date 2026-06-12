@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://ob.nordigen.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -667,11 +666,11 @@ export def "requisitions requisition-created" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --account-selection: string@bool-completer # option to enable account selection view for the end user (default: false)
+  --account-selection: oneof<nothing, bool> # option to enable account selection view for the end user (default: false)
   --agreement: string # EUA associated with this requisition (format: uuid)
   institution_id: string # an Institution ID for this Requisition
   --redirect: string # redirect URL to your application after end-user authorization with ASPSP (nullable, format: uri)
-  --redirect-immediate: string@bool-completer # enable redirect back to the client after account list received (default: false)
+  --redirect-immediate: oneof<nothing, bool> # enable redirect back to the client after account list received (default: false)
   --reference: string # additional ID to identify the end user
   --ssn: string # optional SSN field to verify ownership of the account
   --user-language: string # A two-letter country code (ISO 639-1)

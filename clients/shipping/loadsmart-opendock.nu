@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://neutron.opendock.com" "https://neutron.staging.opendock.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -235,7 +234,7 @@ export def "warehouse updateOneBaseWarehouseControllerWarehouse" [
   --refNumberValidationUrl: string
   --refNumberValidationPasscode: string
   --settings: record
-  --allowCarrierScheduling: string@bool-completer
+  --allowCarrierScheduling: oneof<nothing, bool>
   --ccEmails: list
   --amenities: list # e.g. [Lumper services, Drivers restroom, Overnight parking, Free Wi-Fi]
   --ppeRequirements: list # e.g. [Face Mask, Safety Glasses, Hard Hat, Safety Boots, Gloves, High Visibility Vest, Long Pants, Long Sleeves, No Smoking, Hair and Beard Net]
@@ -341,7 +340,7 @@ export def "warehouse createOneBaseWarehouseControllerWarehouse" [
   --refNumberValidationUrl: string
   --refNumberValidationPasscode: string
   --settings: record
-  --allowCarrierScheduling: string@bool-completer
+  --allowCarrierScheduling: oneof<nothing, bool>
   --ccEmails: list
   --amenities: list # e.g. [Lumper services, Drivers restroom, Overnight parking, Free Wi-Fi]
   --ppeRequirements: list # e.g. [Face Mask, Safety Glasses, Hard Hat, Safety Boots, Gloves, High Visibility Vest, Long Pants, Long Sleeves, No Smoking, Hair and Beard Net]
@@ -655,7 +654,7 @@ export def "carrier list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --onlyIncludeFavorites: string@bool-completer # Filters returned carriers to only include "Favorite" carriers.
+  --onlyIncludeFavorites: oneof<nothing, bool> # Filters returned carriers to only include "Favorite" carriers.
   --qp-fields: list # Selects resource fields. <a href="https://github.com/nestjsx/crud/wiki/Requests#select" target="_blank">Docs</a>
   --s: string # Adds search condition. <a href="https://github.com/nestjsx/crud/wiki/Requests#search" target="_blank">Docs</a>
   --filter: list # Adds filter condition. <a href="https://github.com/nestjsx/crud/wiki/Requests#filter" target="_blank">Docs</a>
@@ -1314,8 +1313,8 @@ export def "dock createOneBaseDockControllerDock" [
   --minCarrierLeadTimeForUpdates-hr: float
   --maxCarrierLeadTime-hr: float
   --ccEmails: list
-  --allowCarrierScheduling: string@bool-completer
-  --allowOverBooking: string@bool-completer
+  --allowCarrierScheduling: oneof<nothing, bool>
+  --allowOverBooking: oneof<nothing, bool>
   --sortOrder: float
   --settings: record
   --schedule: record # shape: {sunday: list, monday: list, tuesday: list, wednesday: list, thursday: list, friday: list, saturday: list, version: float, closedIntervals: list}
@@ -1384,8 +1383,8 @@ export def "dock updateOneBaseDockControllerDock" [
   --minCarrierLeadTimeForUpdates-hr: float
   --maxCarrierLeadTime-hr: float
   --ccEmails: list
-  --allowCarrierScheduling: string@bool-completer
-  --allowOverBooking: string@bool-completer
+  --allowCarrierScheduling: oneof<nothing, bool>
+  --allowOverBooking: oneof<nothing, bool>
   --sortOrder: float
   --settings: record
   --schedule: record # shape: {sunday: list, monday: list, tuesday: list, wednesday: list, thursday: list, friday: list, saturday: list, version: float, closedIntervals: list}
@@ -1417,7 +1416,7 @@ export def "dock delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hardDelete: string@bool-completer
+  --hardDelete: oneof<nothing, bool>
 ]: any -> record<id: string, createDateTime: string, createdBy: record, lastChangedDateTime: string, schedule: record<sunday: list<record>, monday: list<record>, tuesday: list<record>, wednesday: list<record>, thursday: list<record>, friday: list<record>, saturday: list<record>, version: float, closedIntervals: list<record>>, org: record<id: string, createDateTime: string, createdBy: record, lastChangedDateTime: string, warehouses: list<record>, reportSearches: record, customTags: list<string>, samlConfig: record, orgType: string, expiresAt: string>, orgId: string, loadTypeIds: list<string>, instructions: string, minCarrierLeadTime_hr: float, minCarrierLeadTimeForUpdates_hr: float, maxCarrierLeadTime_hr: float, ccEmails: list<string>, allowCarrierScheduling: bool, allowOverBooking: bool, capacityParent: any, capacityChildren: any, capacityParentId: string, sortOrder: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1622,7 +1621,7 @@ export def "loadtype createOneBaseLoadTypeControllerLoadType" [
   --operation: string@operation-completer
   --equipmentType: string@equipmentType-completer
   --transportationMode: string@transportationMode-completer
-  --allowCarrierScheduling: string@bool-completer
+  --allowCarrierScheduling: oneof<nothing, bool>
   --description: record
   --settings: record
   --schedule: record # shape: {sunday: list, monday: list, tuesday: list, wednesday: list, thursday: list, friday: list, saturday: list, version: float, closedIntervals: list}
@@ -1743,7 +1742,7 @@ export def "loadtype updateOneBaseLoadTypeControllerLoadType" [
   --operation: string@operation-completer
   --equipmentType: string@equipmentType-completer
   --transportationMode: string@transportationMode-completer
-  --allowCarrierScheduling: string@bool-completer
+  --allowCarrierScheduling: oneof<nothing, bool>
   --description: record
   --settings: record
   --schedule: record # shape: {sunday: list, monday: list, tuesday: list, wednesday: list, thursday: list, friday: list, saturday: list, version: float, closedIntervals: list}
@@ -1773,7 +1772,7 @@ export def "loadtype-get-availability availability" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceAsCarrier: string@bool-completer # When passing this argument as true, the availability will consider the availability for a carrier user, default = false (e.g. true)
+  --forceAsCarrier: oneof<nothing, bool> # When passing this argument as true, the availability will consider the availability for a carrier user, default = false (e.g. true)
   start: string # format: date-time, e.g. 2026-05-24T19:16:46.221Z
   end: string # format: date-time, e.g. 2026-05-24T19:16:46.221Z
 ]: any -> list<record> {
@@ -2464,7 +2463,7 @@ export def "custom-forms-form-field createOneBaseFormFieldControllerFormField" [
   order: float # The order of the field in the form (e.g. 1)
   formId: string
   fieldId: string
-  --required: string@bool-completer
+  --required: oneof<nothing, bool>
   --overrideLabel: string # The label of the field for this form instance, overrides the field label (e.g. Last Name)
 ]: any -> record<id: string, createDateTime: string, createdBy: record, lastChangedDateTime: string, order: float, required: bool, overrideLabel: string, formId: string, fieldId: string> {
   let input = $in
@@ -2527,7 +2526,7 @@ export def "custom-forms-form-field updateOneBaseFormFieldControllerFormField" [
   --order: int
   --fieldId: string
   --overrideLabel: string
-  --required: string@bool-completer
+  --required: oneof<nothing, bool>
 ]: any -> record<id: string, createDateTime: string, createdBy: record, lastChangedDateTime: string, order: float, required: bool, overrideLabel: string, formId: string, fieldId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2670,7 +2669,7 @@ export def "custom-forms-trigger updateOneBaseTriggerControllerTrigger" [
   --flowId: record
   --objectId: string
   --entityName: string@entityName-completer # The entity name that qualifies the objectId this trigger will be activated
-  --updateRelatedTriggers: string@bool-completer # If true, it will update the related triggers of the flow, with the same flow.parentCode (default: false)
+  --updateRelatedTriggers: oneof<nothing, bool> # If true, it will update the related triggers of the flow, with the same flow.parentCode (default: false)
 ]: any -> record<id: string, createDateTime: string, createdBy: record, lastChangedDateTime: string, app: string, category: string, feature: string, flowId: record, objectId: string, entityName: string, dataEntityName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2938,7 +2937,7 @@ export def "appointment createOneBaseAppointmentControllerAppointment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --bypassCustomFieldsValidation: string@bool-completer
+  --bypassCustomFieldsValidation: oneof<nothing, bool>
   --tags: record
   --status: string@status-completer
   --userId: record
@@ -2951,7 +2950,7 @@ export def "appointment createOneBaseAppointmentControllerAppointment" [
   --customFields: list
   --notes: string
   --ccEmails: list
-  --muteNotifications: string@bool-completer
+  --muteNotifications: oneof<nothing, bool>
   --metadata: record
   --units: record
 ]: any -> record<data: record<id: string, createDateTime: string, createdBy: string, lastChangedDateTime: string, lastChangedBy: string, isActive: bool, tags: list<string>, type: string, status: string, statusTimeline: record<NoShow: record, Arrived: record, Cancelled: record, Completed: record, Requested: record, Scheduled: record, InProgress: record>, userId: record, loadTypeId: string, dockId: string, orgId: string, start: string, end: string, eta: record, refNumber: string, refNumbers: list<string>, customFields: list<record>, notes: record, ccEmails: list<string>, recurringParentId: record, recurringPattern: record, reschedules: record, confirmationNumber: string, muteNotifications: bool, isCheckedInByCarrier: bool, metadata: record<unitLimitBreached: bool, externalValidationFailed: bool, externalValidationErrorMessage: record, unitLimitOverrideReason: record, clonedFromId: record>, units: record, searchableCustomFields: record, recurringParent: record, recurringChildren: list<record>>, entity: string, action: string> {
@@ -3031,7 +3030,7 @@ export def "appointment delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hardDelete: string@bool-completer
+  --hardDelete: oneof<nothing, bool>
 ]: any -> record<data: record<id: string, createDateTime: string, createdBy: string, lastChangedDateTime: string, lastChangedBy: string, isActive: bool, tags: list<string>, type: string, status: string, statusTimeline: record<NoShow: record, Arrived: record, Cancelled: record, Completed: record, Requested: record, Scheduled: record, InProgress: record>, userId: record, loadTypeId: string, dockId: string, orgId: string, start: string, end: string, eta: record, refNumber: string, refNumbers: list<string>, customFields: list<record>, notes: record, ccEmails: list<string>, recurringParentId: record, recurringPattern: record, reschedules: record, confirmationNumber: string, muteNotifications: bool, isCheckedInByCarrier: bool, metadata: record<unitLimitBreached: bool, externalValidationFailed: bool, externalValidationErrorMessage: record, unitLimitOverrideReason: record, clonedFromId: record>, units: record, searchableCustomFields: record, recurringParent: record, recurringChildren: list<record>>, entity: string, action: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3069,12 +3068,12 @@ export def "appointment updateOneBaseAppointmentControllerAppointment" [
   --customFields: list
   --notes: string
   --ccEmails: list
-  --muteNotifications: string@bool-completer
+  --muteNotifications: oneof<nothing, bool>
   --metadata: record
   --units: record
   --type: string@type-completer-2
   --statusTimeline: record
-  --isCheckedInByCarrier: string@bool-completer
+  --isCheckedInByCarrier: oneof<nothing, bool>
 ]: any -> record<data: record<id: string, createDateTime: string, createdBy: string, lastChangedDateTime: string, lastChangedBy: string, isActive: bool, tags: list<string>, type: string, status: string, statusTimeline: record<NoShow: record, Arrived: record, Cancelled: record, Completed: record, Requested: record, Scheduled: record, InProgress: record>, userId: record, loadTypeId: string, dockId: string, orgId: string, start: string, end: string, eta: record, refNumber: string, refNumbers: list<string>, customFields: list<record>, notes: record, ccEmails: list<string>, recurringParentId: record, recurringPattern: record, reschedules: record, confirmationNumber: string, muteNotifications: bool, isCheckedInByCarrier: bool, metadata: record<unitLimitBreached: bool, externalValidationFailed: bool, externalValidationErrorMessage: record, unitLimitOverrideReason: record, clonedFromId: record>, units: record, searchableCustomFields: record, recurringParent: record, recurringChildren: list<record>>, entity: string, action: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3327,13 +3326,13 @@ export def "asset-visit createOneBaseAssetVisitControllerAssetVisit" [
   --dotNumber: record
   --companyId: string # format: uuid
   phone: string # Driver Phone number in E.164 format
-  --useWhatsApp: string@bool-completer # Whether to communicate via WhatsApp
-  --isPlanned: string@bool-completer
+  --useWhatsApp: oneof<nothing, bool> # Whether to communicate via WhatsApp
+  --isPlanned: oneof<nothing, bool>
   --companyHint: string # Company name
   --visitType: string@visitType-completer # The type of the asset visit
   --driverNotes: string # Driver notes for check-in
   --driverAppointmentIdentifier: string # Appointment identifier entered by the driver for check-in
-  --hasArrived: string@bool-completer
+  --hasArrived: oneof<nothing, bool>
   --assetContainerDetails: list
 ]: any -> record<id: string, createDateTime: string, createdBy: record, lastChangedDateTime: string, orgId: string, warehouseId: string, appointmentId: string, secondaryAppointmentId: string, companyId: string, phone: string, isPlanned: bool, companyHint: string, driverNotes: string, driverAppointmentIdentifier: string, visitType: string, checkInAcknowledged: bool, rejectReason: record> {
   let input = $in
@@ -4587,7 +4586,7 @@ export def "yard-spot-assignment-reassign reassignSpot" [
   spotId: string # format: uuid
   --reason: string
   --observation: string
-  --moveContainer: string@bool-completer # When set to true, it moves only the asset container
+  --moveContainer: oneof<nothing, bool> # When set to true, it moves only the asset container
 ]: any -> record<id: string, createDateTime: string, createdBy: record, lastChangedDateTime: string, spotId: string, assetVisitId: record, assetContainerId: record, observation: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4659,7 +4658,7 @@ export def "yard-view-list-rows get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --warehouseId: string
-  --includeWaiting: string@bool-completer
+  --includeWaiting: oneof<nothing, bool>
 ]: nothing -> record<rows: table<id: string, isWaiting: bool, spot: record, spotArea: record, spotReserves: list, assetArrivedAt: string, assetContainer: record, assetVisit: record, appointment: record, dropAppointmentCompany: record, pickupAppointmentCompany: record, dropoffAppointment: record, pickupAppointment: record, openMoveTask: record, customFormData: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5359,9 +5358,9 @@ export def "metrics-appointments-excel post" [
   --tags: list
   --dateField: record
   --appointmentTypes: list
-  --allCarriers: string@bool-completer
+  --allCarriers: oneof<nothing, bool>
   --exportFields: list
-  --skipCustomFields: string@bool-completer
+  --skipCustomFields: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5660,9 +5659,9 @@ export def "metrics-v2-appointments post" [
   --tags: list
   --dateField: record
   --appointmentTypes: list
-  --allCarriers: string@bool-completer
+  --allCarriers: oneof<nothing, bool>
   --exportFields: list
-  --skipCustomFields: string@bool-completer
+  --skipCustomFields: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

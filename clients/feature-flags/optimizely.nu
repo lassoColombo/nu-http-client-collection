@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.optimizely.com/v2"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -149,7 +148,7 @@ export def "attributes attribute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Whether or not the Attribute has been archived (default: false)
+  --archived: oneof<nothing, bool> # Whether or not the Attribute has been archived (default: false)
   --description: string # A short description of the Attribute
   key: string # Unique string identifier for this Attribute within the project (e.g. subscriber_status)
   --name: string # The name of the Attribute. For Full Stack projects, the name will be set to the value of the key. (e.g. Subscriber Status)
@@ -223,7 +222,7 @@ export def "attributes attribute-by-attribute_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Whether or not the Attribute has been archived (default: false)
+  --archived: oneof<nothing, bool> # Whether or not the Attribute has been archived (default: false)
   --description: string # A short description of the Attribute
   --key: string # Unique string identifier for this Attribute within the project (e.g. subscriber_status)
   --name: string # The name of the Attribute (e.g. Subscriber Status)
@@ -254,8 +253,8 @@ export def "audiences audiences" [
   --per-page: int # Optional pagination argument that specifies the maximum number of objects to return per request (default: 25)
   --page: int # Optional pagination argument that specifies the page to return. If you have 140 objects and you choose to return 100 objects per page you will be able to access the last 40 objects on page 2. The default value is 1.  (default: 1)
   --project-id: int # The Project ID of the Project you would like to list all Audiences for (format: int64)
-  --for-journey: string@bool-completer # Filter audiences by journey status
-  --archived: string@bool-completer # Filter audiences by archived status
+  --for-journey: oneof<nothing, bool> # Filter audiences by journey status
+  --archived: oneof<nothing, bool> # Filter audiences by archived status
 ]: nothing -> table<archived: bool, conditions: string, created: string, description: string, experiment_count: int, for_journey: bool, id: int, is_classic: bool, last_modified: string, name: string, project_id: int, segmentation: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -278,14 +277,14 @@ export def "audiences audience" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Whether the Audience has been archived (default: false)
+  --archived: oneof<nothing, bool> # Whether the Audience has been archived (default: false)
   --conditions: string # A string defining the targeting rules for an Audience (e.g. ["and", {"type": "language", "value": "es"}, {"type": "location", "value": "US-CA-SANFRANCISCO"}])
   --description: string # A short description of the Audience (e.g. People that speak spanish and are in San Francisco)
-  --for-journey: string@bool-completer # Whether the Audience has been part of journey or not (default: false)
-  --is-classic: string@bool-completer # Whether or not Audience is a classic Audience. If true, the Audience is only compatible with classic Experiments. Otherwise, the Audience may be used in Optimizely X Campaigns.
+  --for-journey: oneof<nothing, bool> # Whether the Audience has been part of journey or not (default: false)
+  --is-classic: oneof<nothing, bool> # Whether or not Audience is a classic Audience. If true, the Audience is only compatible with classic Experiments. Otherwise, the Audience may be used in Optimizely X Campaigns.
   --name: string # The name of the Audience (e.g. Spanish speaking San Franciscans)
   project_id: int # The ID of the Project the Audience was created in (format: int64, e.g. 1000)
-  --segmentation: string@bool-completer # True if the Audience is available for segmentation on the results page (Audiences can only be used for segmentation in Optimizely Classic). Set to False if you intend to use this Audience only in Optimizely X. Note that a maximum of 10 Audiences can have segmentation set to True in any given Optimizely Classic project. (default: false)
+  --segmentation: oneof<nothing, bool> # True if the Audience is available for segmentation on the results page (Audiences can only be used for segmentation in Optimizely Classic). Set to False if you intend to use this Audience only in Optimizely X. Note that a maximum of 10 Audiences can have segmentation set to True in any given Optimizely Classic project. (default: false)
 ]: any -> record<archived: bool, conditions: string, created: string, description: string, experiment_count: int, for_journey: bool, id: int, is_classic: bool, last_modified: string, name: string, project_id: int, segmentation: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -333,12 +332,12 @@ export def "audiences audience-by-audience_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # True if the Audience has been archived
+  --archived: oneof<nothing, bool> # True if the Audience has been archived
   --conditions: string # A string defining the targeting rules for an Audience
   --description: string # A short description of the Audience
-  --for-journey: string@bool-completer # Whether the Audience has been part of journey or not
+  --for-journey: oneof<nothing, bool> # Whether the Audience has been part of journey or not
   --name: string # The name of the Audience (e.g. Spanish speaking San Franciscans)
-  --segmentation: string@bool-completer # True if the Audience is available for segmentation on the results page (Enterprise plans only)
+  --segmentation: oneof<nothing, bool> # True if the Audience is available for segmentation on the results page (Enterprise plans only)
 ]: any -> record<archived: bool, conditions: string, created: string, description: string, experiment_count: int, for_journey: bool, id: int, is_classic: bool, last_modified: string, name: string, project_id: int, segmentation: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -419,8 +418,8 @@ export def "campaigns campaigns" [
   --per-page: int # Optional pagination argument that specifies the maximum number of objects to return per request (default: 25)
   --page: int # Optional pagination argument that specifies the page to return. If you have 140 objects and you choose to return 100 objects per page you will be able to access the last 40 objects on page 2. The default value is 1.  (default: 1)
   --project-id: int # The Project ID of the Project you would like to list all Campaigns for (format: int64)
-  --for-journey: string@bool-completer # Filter campaigns by journey status
-  --archived: string@bool-completer # Filter campaigns by archived status
+  --for-journey: oneof<nothing, bool> # Filter campaigns by journey status
+  --archived: oneof<nothing, bool> # Filter campaigns by archived status
 ]: nothing -> table<archived: bool, changes: list<record>, created: string, custom_field_values: record, description: string, earliest: string, experiment_priorities: list<list>, for_journey: bool, holdback: int, id: int, journey_id: string, last_modified: string, latest: string, metrics: list<record>, name: string, page_ids: list<int>, project_id: int, status: string, type: string, url_targeting: record<activation_code: string, activation_type: string, conditions: string, edit_url: string, key: string, page_id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -447,12 +446,12 @@ export def "campaigns campaign" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --action: string@action-completer # Action to change the state of the Campaign. 'publish' publishes your campaign, making any changes live to the world. Status will be 'paused'. 'start' publishes your campaign, making any changes live to the world. Status will be 'running'.
-  --archived: string@bool-completer # Whether the Campaign has been archived (default: false)
+  --archived: oneof<nothing, bool> # Whether the Campaign has been archived (default: false)
   --changes: list # A list of changes to apply to the Campaign.  This corresponds to the Campaign's Shared Code in the application.  Only supports 'custom_css' or 'custom_code' type changes. — item shape: {async?: bool, dependencies?: list, name?: string, selector?: string, type: "custom_code"|"custom_css", value: string}
   --custom-field-values: record # Map of custom field `api_name` to value for this Campaign. Keys correspond to the `api_name` of a custom field definition for the Project, and values are typed according to that definition's `field_type`. Returns an empty object when no values are set.
   --description: string # The description or goal for a Campaign (e.g. Tailor the landing page hero element for specific audiences)
   --experiment-priorities: list # A list of lists of Experiment IDs that indicate the relative priority of how to show those Experiments in the context of the Campaign. Each list inside of the list represents a group of Experiments of equal priority where groups that appear earlier in the list are of higher priority to be shown.
-  --for-journey: string@bool-completer # Whether the Campaign has been part of journey or not (default: false)
+  --for-journey: oneof<nothing, bool> # Whether the Campaign has been part of journey or not (default: false)
   --holdback: int # Percentage of visitors to exclude from personalization, measured in basis points. 100 basis points = 1% traffic. For example, a value of 500 would mean that 95% of visitors will see a personalized experience and 5% will see the holdback. (e.g. 500)
   --journey-id: string # The ID of the journey the Campaign is part of
   --metrics: list # An ordered list of metrics to track for the Campaign — item shape: {aggregator?: "unique"|"count"|"sum"|"bounce"|"exit"|"ratio", display_title?: string, event_id?: int, event_properties?: record, field?: "revenue"|"value", metrics?: list, scope?: "session"|"visitor"|"event", time_window?: string, winning_direction?: "increasing"|"decreasing"}
@@ -538,7 +537,7 @@ export def "campaigns campaign-by-campaign_id-2" [
   --changes: list # A list of changes to apply to the Campaign — item shape: {async?: bool, dependencies?: list, name?: string, selector?: string, type: "custom_code"|"custom_css", value: string}
   --description: string # The description or goal for a Campaign (e.g. Tailor the landing page hero element for specific audiences)
   --experiment-priorities: list # A list of lists of Experiment IDs that indicate the relative priority of how to show those Experiments in the context of the Campaign. Each list inside of the list represents a group of Experiments of equal priority where groups that appear earlier in the list are of higher priority to be shown.
-  --for-journey: string@bool-completer # Whether the Campaign has been part of journey or not
+  --for-journey: oneof<nothing, bool> # Whether the Campaign has been part of journey or not
   --holdback: int # Percentage of visitors to exclude from personalization, measured in basis points. 100 basis points = 1% traffic. For example, a value of 500 would mean that 95% of visitors will see a personalized experience and 5% will see the holdback. (e.g. 500)
   --journey-id: string # The ID of the journey the Campaign is part of
   --metrics: list # An ordered list of metrics to track for the Campaign — item shape: {aggregator?: "unique"|"count"|"sum"|"bounce"|"exit"|"ratio", display_title?: string, event_id?: int, event_properties?: record, field?: "revenue"|"value", metrics?: list, scope?: "session"|"visitor"|"event", time_window?: string, winning_direction?: "increasing"|"decreasing"}
@@ -658,10 +657,10 @@ export def "environments environment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Boolean representing whether the Environment is archived. (e.g. false)
+  --archived: oneof<nothing, bool> # Boolean representing whether the Environment is archived. (e.g. false)
   --datafile: record
   --description: string # A short description of the Environment. (e.g. For testing purposes before deploying to Production)
-  --has-restricted-permissions: string@bool-completer # Boolean representing whether starting experiments should be restricted to publishers and above in this Environment. (default: false)
+  --has-restricted-permissions: oneof<nothing, bool> # Boolean representing whether starting experiments should be restricted to publishers and above in this Environment. (default: false)
   key: string # Unique string identifier for this Environment within the Project.
   name: string # Name of the Environment. (e.g. Staging)
   --priority: int # Integer representing the priority of the Environment. This is used for ordering in the UI. (e.g. 3)
@@ -735,9 +734,9 @@ export def "environments environment-by-environment_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Boolean representing whether the Environment is archived. (e.g. false)
+  --archived: oneof<nothing, bool> # Boolean representing whether the Environment is archived. (e.g. false)
   --description: string # Text description of the Environment. (e.g. For testing purposes before deploying to Production)
-  --has-restricted-permissions: string@bool-completer # Boolean representing whether starting experiments should be restricted to publishers and above in this Environment. (default: false)
+  --has-restricted-permissions: oneof<nothing, bool> # Boolean representing whether starting experiments should be restricted to publishers and above in this Environment. (default: false)
   --key: string # Unique string identifier for this Environment within the Project.
   --name: string # Name of the Environment. (e.g. Staging)
   --priority: int # Integer representing the priority of the Environment. This is used for ordering in the UI. (e.g. 3)
@@ -790,7 +789,7 @@ export def "events events" [
   --per-page: int # Optional pagination argument that specifies the maximum number of objects to return per request (default: 25)
   --page: int # Optional pagination argument that specifies the page to return. If you have 140 objects and you choose to return 100 objects per page you will be able to access the last 40 objects on page 2. The default value is 1.  (default: 1)
   --project-id: int # The ID of the Project you would like to list all Events for (format: int64)
-  --include-classic: string@bool-completer # Whether or not to include classic Events in the list of Events. If this parameter is not provided it will default to false (default: false)
+  --include-classic: oneof<nothing, bool> # Whether or not to include classic Events in the list of Events. If this parameter is not provided it will default to false (default: false)
 ]: nothing -> table<archived: bool, category: string, config: record<selector: string>, created: string, description: string, event_properties: list<record>, event_type: string, id: int, is_classic: bool, is_editable: bool, key: string, last_modified: string, name: string, page_id: int, project_id: int, variation_specific: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -814,7 +813,7 @@ export def "events event" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-classic: string@bool-completer # Whether or not to return a classic Event if the specified event_id belongs to a classic Event. If this parameter is not provided it will default to false
+  --include-classic: oneof<nothing, bool> # Whether or not to return a classic Event if the specified event_id belongs to a classic Event. If this parameter is not provided it will default to false
 ]: nothing -> record<archived: bool, category: string, config: record<selector: string>, created: string, description: string, event_properties: table<data_type: string, name: string>, event_type: string, id: int, is_classic: bool, is_editable: bool, key: string, last_modified: string, name: string, page_id: int, project_id: int, variation_specific: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -841,7 +840,7 @@ export def "experiments experiments" [
   --page: int # Optional pagination argument that specifies the page to return. If you have 140 objects and you choose to return 100 objects per page you will be able to access the last 40 objects on page 2. The default value is 1.  (default: 1)
   --project-id: int # The Project ID of the Project you would like to list all Experiments for. You have to either use this argument or the campaign_id argument (format: int64)
   --campaign-id: int # The Campaign ID of the Campaign you would like to list all Experiments for. You have to either use this argument or the project_id argument (format: int64)
-  --include-classic: string@bool-completer # Whether or not to include classic Experiments in the list of Experiments. If this parameter is not provided it will default to false (default: false)
+  --include-classic: oneof<nothing, bool> # Whether or not to include classic Experiments in the list of Experiments. If this parameter is not provided it will default to false (default: false)
 ]: nothing -> table<allocation_policy: string, audience_conditions: string, campaign_id: int, changes: list<record>, created: string, custom_field_values: record, description: string, earliest: string, environments: record, feature_id: int, feature_key: string, feature_name: string, holdback: int, id: int, is_classic: bool, key: string, last_modified: string, latest: string, metrics: list<record>, multivariate_traffic_policy: string, name: string, page_ids: list<int>, project_id: int, results_token: string, schedule: record<start_time: string, stop_time: string, time_zone: string>, status: string, traffic_allocation: int, type: string, url_targeting: record<activation_code: string, activation_type: string, conditions: string, edit_url: string, key: string, page_id: int>, variations: list<record>, whitelist: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1069,7 +1068,7 @@ export def "experiments-sections section-by-experiment_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Whether or not the Section has been archived (default: false)
+  --archived: oneof<nothing, bool> # Whether or not the Section has been archived (default: false)
   --description: string # A short description of this Section
   --body-experiment-id: int # The ID of the Multivariate Test this Section belongs to
   --id: int # The ID of this Section
@@ -1149,7 +1148,7 @@ export def "experiments-sections section-by-section_id-experiment_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Whether or not the Section has been archived (default: false)
+  --archived: oneof<nothing, bool> # Whether or not the Section has been archived (default: false)
   --description: string # A short description of this Section
   --name: string # The name of this Section (e.g. Headline Variations)
   --variations: list # item shape: {actions?: list, archived?: bool, description?: string, feature_enabled?: bool, key?: string, name?: string, status?: "active"|"paused"|"archived", variable_values?: record, weight: int}
@@ -1375,7 +1374,7 @@ export def "extensions extension" [
   --allow-errors(-e) # Return full response without error handling
   --description: string # The description for the extension
   edit_url: string # The URL to load when editing the extension
-  --enabled: string@bool-completer # Whether the extension is enabled. A disabled extension won't appear in the editor and won't be built into the snippet
+  --enabled: oneof<nothing, bool> # Whether the extension is enabled. A disabled extension won't appear in the editor and won't be built into the snippet
   --body-fields: list # Array of editable fields in the extension (default: [], e.g. [{api_name: text, default_value: My Butterbar, field_type: text, label: A text field}]) — item shape: {api_name: string, default_value: string, field_type: "selector"|"text"|"multi_text"|"rich_text"|"number"|"html"|"css"|"js"|"toggle"|"dropdown"|"multi_select"|"image"|"color"|"slider", label: string, options?: record}
   implementation: record # shape: {apply_js?: string, css?: string, html?: string, reset_js?: string}
   name: string # Name of the extension (e.g. My Extension)
@@ -1451,10 +1450,10 @@ export def "extensions extension-by-extension_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Whether the extension is archived
+  --archived: oneof<nothing, bool> # Whether the extension is archived
   --description: string # The description for the extension
   --edit-url: string # The URL to load when editing the extension
-  --enabled: string@bool-completer # Whether the extension is enabled
+  --enabled: oneof<nothing, bool> # Whether the extension is enabled
   --body-fields: list # Array of editable fields in the extension (e.g. [{api_name: text, default_value: My Butterbar, field_type: text, label: A text field}]) — item shape: {api_name: string, default_value: string, field_type: "selector"|"text"|"multi_text"|"rich_text"|"number"|"html"|"css"|"js"|"toggle"|"dropdown"|"multi_select"|"image"|"color"|"slider", label: string, options?: record}
   --implementation: record # shape: {apply_js?: string, css?: string, html?: string, reset_js?: string}
   --name: string # Name of the extension (e.g. My Extension)
@@ -1508,7 +1507,7 @@ export def "features feature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Whether the Feature has been archived (default: false)
+  --archived: oneof<nothing, bool> # Whether the Feature has been archived (default: false)
   --description: string # A short description of this Feature
   --environments: record # The configuration for this Feature's Rollout within each Environment, keyed by Environment key
   key: string # Unique string identifier for this Feature within the Project (e.g. new_checkout_page)
@@ -1585,7 +1584,7 @@ export def "features feature-by-feature_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Whether the Feature has been archived
+  --archived: oneof<nothing, bool> # Whether the Feature has been archived
   --description: string # A short description of this Feature
   --environments: record # The configuration for this Feature's Rollout within each Environment, keyed by Environment key.
   --key: string # Unique string identifier for this Feature within the Project (e.g. new_checkout_page)
@@ -1641,7 +1640,7 @@ export def "groups group" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Whether the group is archived
+  --archived: oneof<nothing, bool> # Whether the group is archived
   --description: string # The description for an Exclusion Group
   --entities: list # Array of Group Entities in the Exclusion Group (e.g. [{id: 1234, kind: Experiment, weight: 5000}]) — item shape: {id: int, kind: "Campaign"|"Experiment", weight: int}
   name: string # Name of the Exclusion Group (e.g. Homepage Group)
@@ -1716,7 +1715,7 @@ export def "groups group-by-group_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Whether the Exclusion Group has been archived (default: false)
+  --archived: oneof<nothing, bool> # Whether the Exclusion Group has been archived (default: false)
   --description: string # The updated description of the Exclusion Group (e.g. The Exclusion Group is updated!)
   --entities: list # Array of experiments or campaigns in the Exclusion Group, represented as a GroupEntity object (e.g. [{id: 1234, kind: Experiment, weight: 5000}]) — item shape: {id: int, kind: "Campaign"|"Experiment", weight: int}
   --name: string # The updated name of the Exclusion Group (e.g. Updated Exclusion Group)
@@ -1767,7 +1766,7 @@ export def "list-attributes attribute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Whether or not the List Attribute has been archived (default: false)
+  --archived: oneof<nothing, bool> # Whether or not the List Attribute has been archived (default: false)
   --description: string # A short description of the List Attribute
   key_field: string # The name of the object which holds targeting ids on your website
   --list-content: string # A comma separated string of IDs or ZIP Codes. Items will be matched against the key_field to determine if an active visitor should be targeted by the list.  Note that if the list currently contains data, providing this value will overwrite the previous data.
@@ -1843,7 +1842,7 @@ export def "list-attributes attribute-by-list_attribute_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Whether or not the List Attribute has been archived
+  --archived: oneof<nothing, bool> # Whether or not the List Attribute has been archived
   --description: string # A short description of the List Attribute
   --key-field: string # The name of the object which holds targeting ids on your website
   --list-content: string # A comma separated string of IDs or ZIP Codes. Items will be matched against the key_field to determine if an active visitor should be targeted by the list.  Note that if the list currently contains data, providing this value will overwrite the previous data.
@@ -1900,7 +1899,7 @@ export def "pages page" [
   --allow-errors(-e) # Return full response without error handling
   --activation-code: string # Stringified Javascript function that determines when the Page is activated. Only required when activation_type is 'polling' or 'callback'. (e.g. function callbackFn(activate, options) { activate(); })
   --activation-type: string@activation-type-completer # Page activation type is a trigger that determines when the page is activated. Triggers tell Optimizely when to start checking whether certain conditions are true 'Immediate' activation mode activates the page as soon as the snippet loads. 'Polling' activation mode polls every 50ms until 'activation_code' evaluates to True, then activates the page. 'Callback' activation mode activates the page when the event defined by 'activation_code' is triggered. 'Manual' activation mode requires code within the subject app to explicitly trigger page activation. 'DOM Changed' sets the page to trigger when the DOM changes [Learn more](https://help.optimizely.com/Build_Campaigns_and_Experiments/Support_for_dynamic_websites%3A_Use_Optimizely_on_single_page_applications#Triggers). 'URL Changed' sets the page to trigger when the URL changes [Learn more](https://help.optimizely.com/Build_Campaigns_and_Experiments/Support_for_dynamic_websites%3A_Use_Optimizely_on_single_page_applications#Triggers).  (e.g. callback)
-  --archived: string@bool-completer # Whether the Page has been archived (default: false)
+  --archived: oneof<nothing, bool> # Whether the Page has been archived (default: false)
   --category: string@category-completer # The category this Page is grouped under (default: other)
   --conditions: string # Stringified array of the conditions that activate the Page. The array contains Page Condition JSON dicts joined by "and" and "or". Each individual Page Condition dict has format {"type": "url", "match_type": <match_type>, "value": <value>} where match_types are: "simple" match type will match if "value" matches the hostname and path of the Page URL. "exact" match type will match only an exact string match between "value" and the Page URL. "substring" match type will match if "value" is a substring of the Page URL. "regex" match type will match if "value" is a regular expression match for the Page URL.  (e.g. ["and", {"type": "url", "match_type": "substring", "value": "optimize"}])
   edit_url: string # URL of the Page (e.g. https://www.optimizely.com)
@@ -1979,7 +1978,7 @@ export def "pages page-by-page_id-2" [
   --allow-errors(-e) # Return full response without error handling
   --activation-code: string # Stringified Javascript function that determines when the Page is activated. Only required when activation_type is 'polling' or 'callback'.
   --activation-type: string@activation-type-completer # Page activation type is a trigger that determines when the page is activated. Triggers tell Optimizely when to start checking whether certain conditions are true 'Immediate' activation mode activates the page as soon as the snippet loads. 'Polling' activation mode polls every 50ms until 'activation_code' evaluates to True, then activates the page. 'Callback' activation mode activates the page when the event defined by 'activation_code' is triggered. 'Manual' activation mode requires code within the subject app to explicitly trigger page activation. 'DOM Changed' sets the page to trigger when the DOM changes [Learn more](https://help.optimizely.com/Build_Campaigns_and_Experiments/Support_for_dynamic_websites%3A_Use_Optimizely_on_single_page_applications#Triggers). 'URL Changed' sets the page to trigger when the URL changes [Learn more](https://help.optimizely.com/Build_Campaigns_and_Experiments/Support_for_dynamic_websites%3A_Use_Optimizely_on_single_page_applications#Triggers).
-  --archived: string@bool-completer # Whether the Page is archived
+  --archived: oneof<nothing, bool> # Whether the Page is archived
   --category: string@category-completer # The category this Page is grouped under
   --conditions: string # Stringified array of the conditions that activate the Page. The array contains Page Condition JSON dicts joined by "and" and "or". Each individual Page Condition dict has format {"type": "url", "match_type": <match_type>, "value": <value>} where match_types are: "simple" match type will match if "value" matches the hostname and path of the Page URL. "exact" match type will match only an exact string match between "value" and the Page URL. "substring" match type will match if "value" is a substring of the Page URL. "regex" match type will match if "value" is a regular expression match for the Page URL.  (e.g. ["and", {"type": "url", "match_type": "substring", "value": "optimize"}])
   --edit-url: string # URL of the Page
@@ -2012,7 +2011,7 @@ export def "pages-events event-by-page_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Whether or not this Event is archived
+  --archived: oneof<nothing, bool> # Whether or not this Event is archived
   --category: string@category-completer-1
   --config: record # shape: {selector: string}
   --description: string # A description of this Event
@@ -2069,7 +2068,7 @@ export def "pages-events event-by-page_id-event_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Whether or not to archive this Event
+  --archived: oneof<nothing, bool> # Whether or not to archive this Event
   --category: string@category-completer-1
   --config: record # shape: {selector: string}
   --description: string # A description of this Event
@@ -2151,7 +2150,7 @@ export def "projects project" [
   --confidence-threshold: float # The significance level at which you would like to declare winning and losing variations. A lower number minimizes the time needed to declare a winning or losing variation, but increases the risk that your results aren't true winners and losers. The precision for this number is up to 4 decimal places  (format: double, e.g. 0.9)
   --dcp-service-id: int # The ID of a Dynamic Customer Profile Service associated with this Project (format: int64, e.g. 121234)
   --description: string # A short description of the Project (e.g. Project for user sign up flow)
-  --is-flags-enabled: string@bool-completer # If is_flags_enabled is true, this project uses the new Flags-First user experience and will use the [Flags API](https://library.optimizely.com/docs/api/flags/v1/index.html) to make changes to entities.
+  --is-flags-enabled: oneof<nothing, bool> # If is_flags_enabled is true, this project uses the new Flags-First user experience and will use the [Flags API](https://library.optimizely.com/docs/api/flags/v1/index.html) to make changes to entities.
   name: string # The name of the Project (e.g. Test Project)
   --platform: string@platform-completer # The platform of the Project (default: web)
   --sdks: list # For Full Stack, Mobile, and OTT projects, the language used for the SDK
@@ -2238,7 +2237,7 @@ export def "projects-custom-events event-by-project_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Whether or not to archive this Event
+  --archived: oneof<nothing, bool> # Whether or not to archive this Event
   --category: string@category-completer-1
   --description: string # A description of this Event
   --event-properties: list # A set of user-defined data elements for the event. Metrics can filter on particular values of these properties. — item shape: {data_type?: "boolean"|"number"|"string", name?: string}
@@ -2294,7 +2293,7 @@ export def "projects-custom-events event-by-project_id-event_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Whether or not to archive this Event
+  --archived: oneof<nothing, bool> # Whether or not to archive this Event
   --category: string@category-completer-1
   --description: string # A description of this Event
   --key: string # Unique string identifier for this Event within the Project (e.g. loaded_new_app)
@@ -2455,8 +2454,8 @@ export def "search results" [
   --type-expand: list # Filters search results by experiment, rule or campaign types. Specifying multiple types will search across all types specified.
   --project-type: list # Filters search results by project type. Specifying one of fx, full_stack, or web will filter results accordingly.
   --expand: list # Include the project name with the search result
-  --archived: string@bool-completer # Whether or not to include archived entities in the search results. If this parameter is not provided it will default to false and no archived entities will be included. (default: false)
-  --fullsearch: string@bool-completer # Whether or not to perform full document search for the given search keyword. If this parameter is not provided it will default to false. (default: false)
+  --archived: oneof<nothing, bool> # Whether or not to include archived entities in the search results. If this parameter is not provided it will default to false and no archived entities will be included. (default: false)
+  --fullsearch: oneof<nothing, bool> # Whether or not to perform full document search for the given search keyword. If this parameter is not provided it will default to false. (default: false)
   --status: list # Filters search results by the current status of the entity if it has one. Works for Experiments and Campaigns, and it may work for others. Specifying multiple statuses will search for entities with ANY of those statuses.
   --qp-sort: string # The property to sort by.
   --order: string # The property to sort by.

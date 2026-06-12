@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.pagerduty.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -206,7 +205,7 @@ export def "tags get-by-entity_type-id" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<offset: int, limit: int, more: bool, total: int, tags: table<id: string, summary: string, type: string, self: string, html_url: string, label: string>> {
@@ -286,7 +285,7 @@ export def "addons listAddon" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --include: string@include-completer # Array of additional Models to include in response.
   --service-ids: list # Filters the results, showing only Add-ons for the given services
   --filter: string@filter-completer # Filters the results, showing only Add-ons of the given type
@@ -429,7 +428,7 @@ export def "alert-grouping-settings listAlertGroupingSettings" [
   --allow-errors(-e) # Return full response without error handling
   --after: string # Cursor to retrieve next page; only present if next page exists.
   --before: string # Cursor to retrieve previous page; only present if not on first page.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --limit: int # The number of results per page.
   --service-ids: list # An array of service IDs. Only results related to these services will be returned.
   --Accept: string # The `Accept` header is used as a versioning header.
@@ -1853,7 +1852,7 @@ export def "business-services listBusinessServices" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<offset: int, limit: int, more: bool, total: int, business_services: table<name: string, description: string, point_of_contact: string, team: record>> {
@@ -2288,7 +2287,7 @@ export def "change-events listChangeEvents" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --team-ids: list # An array of team IDs. Only results related to these teams will be returned. Account must have the `teams` ability to use this parameter.
   --integration-ids: list # An array of integration IDs. Only results related to these integrations will be returned.
   --since: string # The start of the date range over which you want to search, as a UTC ISO 8601 datetime string. Will return an HTTP 400 for non-UTC datetimes. (format: date-time)
@@ -2402,7 +2401,7 @@ export def "escalation-policies listEscalationPolicies" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --qp-query: string # Filters the result, showing only the records whose name matches the query.
   --user-ids: list # Filters the results, showing only escalation policies on which any of the users is a target.
   --team-ids: list # An array of team IDs. Only results related to these teams will be returned. Account must have the `teams` ability to use this parameter.
@@ -3690,7 +3689,7 @@ export def "extension-schemas listExtensionSchemas" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<offset: int, limit: int, more: bool, total: int, extension_schemas: table<icon_url: string, logo_url: string, label: string, key: string, description: string, guide_url: string, send_types: list, url: string>> {
@@ -3745,7 +3744,7 @@ export def "extensions listExtensions" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --qp-query: string # Filters the result, showing only the records whose name matches the query.
   --extension-object-id: string # The id of the extension object you want to filter by.
   --extension-schema-id: string # Filter the extensions by extension vendor id.
@@ -3917,7 +3916,7 @@ export def "incident-workflows listIncidentWorkflows" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --qp-query: string # Filters the result, showing only the records whose name matches the query.
   --include: string@include-completer-5 # Array of additional details to include.
   --Accept: string # The `Accept` header is used as a versioning header.
@@ -4149,7 +4148,7 @@ export def "incident-workflows-triggers listIncidentWorkflowTriggers" [
   --service-id: string # If provided, only show triggers configured for incidents in the given service. Useful for listing all workflows associated with the given service. Cannot be specified if `incident_id` is provided. (e.g. P4RG7YW)
   --trigger-type: string@trigger-type-completer # If provided, only show triggers of the given type. For example “manual” to search for manual triggers
   --workflow-name-contains: string # If provided, only show triggers configured to start workflows whose name contain the provided value. (e.g. High Priority)
-  --is-disabled: string@bool-completer # If provided, filters between disabled and enabled Triggers. This query parameter is deprecated, and will be removed in a future version of this API.  (DEPRECATED)
+  --is-disabled: oneof<nothing, bool> # If provided, filters between disabled and enabled Triggers. This query parameter is deprecated, and will be removed in a future version of this API.  (DEPRECATED)
   --sort-by: string@sort-by-completer-2 # If provided, returns triggers sorted by the specified property.
   --limit: int # The minimum of the `limit` parameter used in the request or the maximum request size of the API.
   --cursor: string # Optional parameter used to request the "next" set of results from an API.  The value provided here is most commonly obtained from the `next_cursor` field of the previous request.  When no value is provided, the request starts at the beginning of the result set.
@@ -4350,7 +4349,7 @@ export def "incidents listIncidents" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page. Maximum of 100.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --date-range: string@date-range-completer # When set to all, the since and until parameters and defaults are ignored.
   --incident-key: string # Incident de-duplication key. Incidents with child alerts do not have an incident key; querying by incident key will return incidents whose alerts have alert_key matching the given incident key.
   --service-ids: list # Returns only the incidents associated with the passed service(s). This expects one or more service IDs.
@@ -4392,7 +4391,7 @@ export def "incidents updateIncidents" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --From: string # The email address of a valid user associated with the account making the request.
@@ -4518,7 +4517,7 @@ export def "incidents-alerts listIncidentAlerts" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --alert-key: string # Alert de-duplication key.
   --statuses: string@statuses-completer-1 # Return only alerts with the given statuses. (More status codes may be introduced in the future.)
   --sort-by: string@sort-by-completer-3 # Used to specify both the field you wish to sort the results on (created_at/resolved_at), as well as the direction (asc/desc) of the results. The sort_by field and direction should be separated by a colon. A maximum of two fields can be included, separated by a comma. Sort direction defaults to ascending.
@@ -4553,7 +4552,7 @@ export def "incidents-alerts updateIncidentAlerts" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   --From: string # The email address of a valid user associated with the account making the request.
@@ -4751,11 +4750,11 @@ export def "incidents-log-entries listIncidentLogEntries" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --time-zone: string # Time zone in which results will be rendered. This will default to the account time zone. (format: tzinfo)
   --since: string # The start of the date range over which you want to search. (format: date-time)
   --until: string # The end of the date range over which you want to search. (format: date-time)
-  --is-overview: string@bool-completer # If `true`, will return a subset of log entries that show only the most important changes to the incident. (default: false)
+  --is-overview: oneof<nothing, bool> # If `true`, will return a subset of log entries that show only the most important changes to the incident. (default: false)
   --include: string@include-completer-9 # Array of additional Models to include in response.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -4964,7 +4963,7 @@ export def "incidents-past-incidents get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results to be returned in the response. (default: 5)
-  --total: string@bool-completer # By default the `total` field in the response body is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated with the total number of Past Incidents.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in the response body is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated with the total number of Past Incidents.  (default: false)
 ]: nothing -> record<past_incidents: table<incident: record, score: float>, total: float, limit: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6130,11 +6129,11 @@ export def "log-entries listLogEntries" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --time-zone: string # Time zone in which results will be rendered. This will default to the account time zone. (format: tzinfo)
   --since: string # The start of the date range over which you want to search. (format: date-time)
   --until: string # The end of the date range over which you want to search. (format: date-time)
-  --is-overview: string@bool-completer # If `true`, will return a subset of log entries that show only the most important changes to the incident. (default: false)
+  --is-overview: oneof<nothing, bool> # If `true`, will return a subset of log entries that show only the most important changes to the incident. (default: false)
   --include: string@include-completer-9 # Array of additional Models to include in response.
   --team-ids: list # An array of team IDs. Only results related to these teams will be returned. Account must have the `teams` ability to use this parameter.
   --Accept: string # The `Accept` header is used as a versioning header.
@@ -6227,7 +6226,7 @@ export def "maintenance-windows listMaintenanceWindows" [
   --qp-query: string # Filters the result, showing only the records whose name matches the query.
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --team-ids: list # An array of team IDs. Only results related to these teams will be returned. Account must have the `teams` ability to use this parameter.
   --service-ids: list # An array of service IDs. Only results related to these services will be returned.
   --include: string@include-completer-11 # Array of additional Models to include in response.
@@ -6374,7 +6373,7 @@ export def "notifications listNotifications" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --time-zone: string # Time zone in which results will be rendered. This will default to the account time zone. (format: tzinfo)
   --since: string # The start of the date range over which you want to search. The time element is optional. (format: date-time)
   --until: string # The end of the date range over which you want to search. This should be in the same format as since. The size of the date range must be less than 3 months. (format: date-time)
@@ -6466,14 +6465,14 @@ export def "oncalls listOnCalls" [
   --time-zone: string # Time zone in which results will be rendered. This will default to the account time zone. (format: tzinfo)
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --include: string@include-completer-13 # Array of additional details to include.
   --user-ids: list # Filters the results, showing only on-calls for the specified user IDs.
   --escalation-policy-ids: list # Filters the results, showing only on-calls for the specified escalation policy IDs.
   --schedule-ids: list # Filters the results, showing only on-calls for the specified schedule IDs. If `null` is provided in the array, it includes permanent on-calls due to direct user escalation targets.
   --since: string # The start of the time range over which you want to search. If an on-call period overlaps with the range, it will be included in the result. Defaults to current time. On-call shifts are limited to 90 days in the future. (format: date-time)
   --until: string # The end of the time range over which you want to search. If an on-call period overlaps with the range, it will be included in the result. Defaults to current time. On-call shifts are limited to 90 days in the future, and the `until` time cannot be before the `since` time. (format: date-time)
-  --earliest: string@bool-completer # This will filter on-calls such that only the earliest on-call for each combination of escalation policy, escalation level, and user is returned. This is useful for determining when the "next" on-calls are for a given set of filters.
+  --earliest: oneof<nothing, bool> # This will filter on-calls such that only the earliest on-call for each combination of escalation policy, escalation level, and user is returned. This is useful for determining when the "next" on-calls are for a given set of filters.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<offset: int, limit: int, more: bool, total: int, oncalls: table<escalation_policy: record, user: record, schedule: any, escalation_level: int, start: string, end: string>> {
@@ -6562,7 +6561,7 @@ export def "priorities listPriorities" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<offset: int, limit: int, more: bool, total: int, priorities: table<name: string, description: string>> {
@@ -6591,7 +6590,7 @@ export def "rulesets listRulesets" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<offset: int, limit: int, more: bool, total: int, rulesets: table<id: string, self: string, type: string, name: string, routing_keys: list, created_at: string, creator: record, updated_at: string, updater: record, team: record>> {
@@ -6733,7 +6732,7 @@ export def "rulesets-rules listRulesetEventRules" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<offset: int, limit: int, more: bool, total: int, rules: table<id: string, self: string, disabled: bool, conditions: record, time_frame: record, variables: list, position: int, catch_all: bool, actions: record>> {
@@ -6878,7 +6877,7 @@ export def "schedules listSchedules" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --qp-query: string # Filters the result, showing only the records whose name matches the query.
   --include: string@include-completer-14 # Array of additional details to include.
   --time-zone: string # Time zone in which results will be rendered. This will default to the current user's time zone and then the account's time zone. (format: tzinfo)
@@ -6912,7 +6911,7 @@ export def "schedules createSchedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --overflow: string@bool-completer # Any on-call schedule entries that pass the date range bounds will be truncated at the bounds, unless the parameter `overflow=true` is passed. This parameter defaults to false. For instance, if your schedule is a rotation that changes daily at midnight UTC, and your date range is from `2011-06-01T10:00:00Z` to `2011-06-01T14:00:00Z`:   - If you don't pass the `overflow=true` parameter, you will get one schedule entry returned with a start of `2011-06-01T10:00:00Z` and end of `2011-06-01T14:00:00Z`. - If you do pass the `overflow=true` parameter, you will get one schedule entry returned with a start of `2011-06-01T00:00:00Z` and end of `2011-06-02T00:00:00Z`.  (default: false)
+  --overflow: oneof<nothing, bool> # Any on-call schedule entries that pass the date range bounds will be truncated at the bounds, unless the parameter `overflow=true` is passed. This parameter defaults to false. For instance, if your schedule is a rotation that changes daily at midnight UTC, and your date range is from `2011-06-01T10:00:00Z` to `2011-06-01T14:00:00Z`:   - If you don't pass the `overflow=true` parameter, you will get one schedule entry returned with a start of `2011-06-01T10:00:00Z` and end of `2011-06-01T14:00:00Z`. - If you do pass the `overflow=true` parameter, you will get one schedule entry returned with a start of `2011-06-01T00:00:00Z` and end of `2011-06-02T00:00:00Z`.  (default: false)
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   schedule: any
@@ -6947,7 +6946,7 @@ export def "schedules get-by-id" [
   --time-zone: string # Time zone in which results will be rendered. This will default to the schedule's time zone. (format: tzinfo)
   --since: string # The start of the date range over which you want to show schedule entries. Defaults to 2 weeks before until if an until is given. Optional parameter. When provided with include[] for schedule types, populates the rendered_schedule_entries fields in the response. (format: date-time)
   --until: string # The end of the date range over which you want to show schedule entries. Defaults to 2 weeks after since if a since is given. Optional parameter. When provided with include[] for schedule types, populates the rendered_schedule_entries fields in the response. (format: date-time)
-  --overflow: string@bool-completer # Any on-call schedule entries that pass the date range bounds will be truncated at the bounds, unless the parameter `overflow=true` is passed. This parameter defaults to false. For instance, if your schedule is a rotation that changes daily at midnight UTC, and your date range is from `2011-06-01T10:00:00Z` to `2011-06-01T14:00:00Z`:   - If you don't pass the `overflow=true` parameter, you will get one schedule entry returned with a start of `2011-06-01T10:00:00Z` and end of `2011-06-01T14:00:00Z`. - If you do pass the `overflow=true` parameter, you will get one schedule entry returned with a start of `2011-06-01T00:00:00Z` and end of `2011-06-02T00:00:00Z`.  (default: false)
+  --overflow: oneof<nothing, bool> # Any on-call schedule entries that pass the date range bounds will be truncated at the bounds, unless the parameter `overflow=true` is passed. This parameter defaults to false. For instance, if your schedule is a rotation that changes daily at midnight UTC, and your date range is from `2011-06-01T10:00:00Z` to `2011-06-01T14:00:00Z`:   - If you don't pass the `overflow=true` parameter, you will get one schedule entry returned with a start of `2011-06-01T10:00:00Z` and end of `2011-06-01T14:00:00Z`. - If you do pass the `overflow=true` parameter, you will get one schedule entry returned with a start of `2011-06-01T00:00:00Z` and end of `2011-06-02T00:00:00Z`.  (default: false)
   --include-next-oncall-for-user: string # Specify an `user_id`, and the schedule list API will return information about this user's next on-call.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -7002,7 +7001,7 @@ export def "schedules updateSchedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --overflow: string@bool-completer # Any on-call schedule entries that pass the date range bounds will be truncated at the bounds, unless the parameter `overflow=true` is passed. This parameter defaults to false. For instance, if your schedule is a rotation that changes daily at midnight UTC, and your date range is from `2011-06-01T10:00:00Z` to `2011-06-01T14:00:00Z`:   - If you don't pass the `overflow=true` parameter, you will get one schedule entry returned with a start of `2011-06-01T10:00:00Z` and end of `2011-06-01T14:00:00Z`. - If you do pass the `overflow=true` parameter, you will get one schedule entry returned with a start of `2011-06-01T00:00:00Z` and end of `2011-06-02T00:00:00Z`.  (default: false)
+  --overflow: oneof<nothing, bool> # Any on-call schedule entries that pass the date range bounds will be truncated at the bounds, unless the parameter `overflow=true` is passed. This parameter defaults to false. For instance, if your schedule is a rotation that changes daily at midnight UTC, and your date range is from `2011-06-01T10:00:00Z` to `2011-06-01T14:00:00Z`:   - If you don't pass the `overflow=true` parameter, you will get one schedule entry returned with a start of `2011-06-01T10:00:00Z` and end of `2011-06-01T14:00:00Z`. - If you do pass the `overflow=true` parameter, you will get one schedule entry returned with a start of `2011-06-01T00:00:00Z` and end of `2011-06-02T00:00:00Z`.  (default: false)
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   schedule: any
@@ -7067,8 +7066,8 @@ export def "schedules-overrides listScheduleOverrides" [
   --allow-errors(-e) # Return full response without error handling
   --since: string # The start of the date range over which you want to search. (format: date-time, e.g. 2026-04-01T00:00:00Z)
   --until: string # The end of the date range over which you want to search. (format: date-time, e.g. 2026-05-30T00:00:00Z)
-  --editable: string@bool-completer # When this parameter is present, only editable overrides will be returned. The result will only include the id of the override if this parameter is present. Only future overrides are editable.
-  --overflow: string@bool-completer # Any on-call schedule entries that pass the date range bounds will be truncated at the bounds, unless the parameter overflow=true is passed. This parameter defaults to false.
+  --editable: oneof<nothing, bool> # When this parameter is present, only editable overrides will be returned. The result will only include the id of the override if this parameter is present. Only future overrides are editable.
+  --overflow: oneof<nothing, bool> # Any on-call schedule entries that pass the date range bounds will be truncated at the bounds, unless the parameter overflow=true is passed. This parameter defaults to false.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<overrides: table<id: string, start: string, end: string, user: record>> {
@@ -7184,7 +7183,7 @@ export def "schedules-preview createSchedulePreview" [
   --allow-errors(-e) # Return full response without error handling
   --since: string # The start of the date range over which you want to search. (format: date-time)
   --until: string # The end of the date range over which you want to search. (format: date-time)
-  --overflow: string@bool-completer # Any on-call schedule entries that pass the date range bounds will be truncated at the bounds, unless the parameter `overflow=true` is passed. This parameter defaults to false. For instance, if your schedule is a rotation that changes daily at midnight UTC, and your date range is from `2011-06-01T10:00:00Z` to `2011-06-01T14:00:00Z`:   - If you don't pass the `overflow=true` parameter, you will get one schedule entry returned with a start of `2011-06-01T10:00:00Z` and end of `2011-06-01T14:00:00Z`. - If you do pass the `overflow=true` parameter, you will get one schedule entry returned with a start of `2011-06-01T00:00:00Z` and end of `2011-06-02T00:00:00Z`.  (default: false)
+  --overflow: oneof<nothing, bool> # Any on-call schedule entries that pass the date range bounds will be truncated at the bounds, unless the parameter `overflow=true` is passed. This parameter defaults to false. For instance, if your schedule is a rotation that changes daily at midnight UTC, and your date range is from `2011-06-01T10:00:00Z` to `2011-06-01T14:00:00Z`:   - If you don't pass the `overflow=true` parameter, you will get one schedule entry returned with a start of `2011-06-01T10:00:00Z` and end of `2011-06-01T14:00:00Z`. - If you do pass the `overflow=true` parameter, you will get one schedule entry returned with a start of `2011-06-01T00:00:00Z` and end of `2011-06-02T00:00:00Z`.  (default: false)
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
   schedule: any
@@ -7330,7 +7329,7 @@ export def "services listServices" [
   --qp-query: string # Filters the result, showing only the records whose name matches the query.
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --team-ids: list # An array of team IDs. Only results related to these teams will be returned. Account must have the `teams` ability to use this parameter.
   --time-zone: string # Time zone in which results will be rendered. This will default to the account time zone. (format: tzinfo)
   --sort-by: string@sort-by-completer # Used to specify the field you wish to sort the results on. (default: name)
@@ -7511,7 +7510,7 @@ export def "services-change-events listServiceChangeEvents" [
   --until: string # The end of the date range over which you want to search, as a UTC ISO 8601 datetime string. Will return an HTTP 400 for non-UTC datetimes. (format: date-time)
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --team-ids: list # An array of team IDs. Only results related to these teams will be returned. Account must have the `teams` ability to use this parameter.
   --integration-ids: list # An array of integration IDs. Only results related to these integrations will be returned.
   --Accept: string # The `Accept` header is used as a versioning header.
@@ -7633,7 +7632,7 @@ export def "services-rules listServiceEventRules" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --include: string@include-completer-2 # Array of additional Models to include in response.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -8288,7 +8287,7 @@ export def "standards listStandards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --resource-type: string@resource-type-completer
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<standards: table<active: bool, description: string, id: string, name: string, type: string, resource_type: string, exclusions: list, inclusions: list>> {
@@ -8321,7 +8320,7 @@ export def "standards updateStandard" [
   --allow-errors(-e) # Return full response without error handling
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --values: record # shape: {regex?: string}
   --description: string
   --inclusions: list # item shape: {type?: "technical_service_reference", id?: string}
@@ -9340,7 +9339,7 @@ export def "tags listTags" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --qp-query: string # Filters the result, showing only the tags whose label matches the query.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -9453,7 +9452,7 @@ export def "tags get-by-id-entity_type" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<offset: int, limit: int, more: bool, total: int, users: table<type: string>, teams: table<type: string>, escalation_policies: table<type: string>> {
@@ -9511,7 +9510,7 @@ export def "teams listTeams" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --qp-query: string # Filters the result, showing only the records whose name matches the query.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -9713,7 +9712,7 @@ export def "teams-members listTeamUsers" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --include: string@include-completer-12 # Array of additional Models to include in response.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -9886,7 +9885,7 @@ export def "templates list" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --qp-query: string # Template name or description to search
   --template-type: string # Filters templates by type. (default: status_update)
   --sort-by: string@sort-by-completer-4 # Used to specify both the field you wish to sort the results on (name/created_at), as well as the direction (asc/desc) of the results. The sort_by field and direction should be separated by a colon. Sort direction defaults to ascending. (default: created_at:asc)
@@ -10067,7 +10066,7 @@ export def "users listUsers" [
   --team-ids: list # An array of team IDs. Only results related to these teams will be returned. Account must have the `teams` ability to use this parameter.
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --include: string@include-completer-18 # Array of additional Models to include in response.
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
@@ -11131,7 +11130,7 @@ export def "vendors listVendors" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --Accept: string # The `Accept` header is used as a versioning header.
   --Content-Type: string@Content-Type-completer
 ]: nothing -> record<offset: int, limit: int, more: bool, total: int, vendors: table<name: string, website_url: string, logo_url: string, thumbnail_url: string, description: string, integration_guide_url: string>> {
@@ -11161,7 +11160,7 @@ export def "schedules listSchedulesV3" [
   --limit: int # Maximum number of schedules to return (default: 100)
   --offset: int # default: 0
   --qp-query: string # Filters the result, showing only the records whose name matches the query.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --team-ids: list # An array of team IDs. Only results related to these teams will be returned. Account must have the `teams` ability to use this parameter.
 ]: nothing -> record<schedules: table<id: string, type: string, summary: string, self: string, html_url: string>, limit: int, offset: int, more: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11215,7 +11214,7 @@ export def "schedules get-by-id-1" [
   --since: string # Start of time range (ISO 8601) (format: date-time, e.g. 2025-01-01T00:00:00Z)
   --until: string # End of time range (ISO 8601) (format: date-time, e.g. 2025-01-31T23:59:59Z)
   --time-zone: string # IANA timezone identifier for rendering shift times. Defaults to the schedule's configured time zone.  (e.g. America/New_York)
-  --overflow: string@bool-completer # Include shifts that extend beyond the requested time range boundaries (default: false)
+  --overflow: oneof<nothing, bool> # Include shifts that extend beyond the requested time range boundaries (default: false)
   --include: list # Additional data to include in the schedule response: - `final_schedule`: computed on-call assignments for the time range  (e.g. [final_schedule])
 ]: nothing -> record<schedule: record<id: string, type: string, name: string, time_zone: string, description: string, teams: list<record>, escalation_policies: list<record>, users: list<record>, rotations: list<record>, final_schedule: record<type: string, rendered_coverage_percentage: float, computed_shift_assignments: list>, http_cal_url: string, web_cal_url: string, self: string, html_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11323,7 +11322,7 @@ export def "schedules-custom-shifts listCustomShifts" [
   --since: string # Start of time range (ISO 8601) (format: date-time, e.g. 2026-06-01T00:00:00Z)
   --until: string # End of time range (ISO 8601) (format: date-time, e.g. 2026-06-28T23:59:59Z)
   --time-zone: string # IANA timezone identifier for rendering shift times. Defaults to the schedule's configured time zone.  (e.g. America/New_York)
-  --overflow: string@bool-completer # Include shifts that extend beyond the requested time range boundaries (default: false)
+  --overflow: oneof<nothing, bool> # Include shifts that extend beyond the requested time range boundaries (default: false)
   --limit: int # default: 25
   --offset: int # default: 0
 ]: nothing -> record<custom_shifts: table<id: string, type: string, start_time: string, end_time: string, assignments: list, self: string, html_url: string>, limit: int, offset: int, more: bool> {
@@ -11453,7 +11452,7 @@ export def "schedules-overrides listOverrides" [
   --since: string # Start of time range (ISO 8601) (format: date-time, e.g. 2026-06-01T00:00:00Z)
   --until: string # End of time range (ISO 8601) (format: date-time, e.g. 2026-06-28T23:59:59Z)
   --time-zone: string # IANA timezone identifier for rendering shift times. Defaults to the schedule's configured time zone.  (e.g. America/New_York)
-  --overflow: string@bool-completer # Include shifts that extend beyond the requested time range boundaries (default: false)
+  --overflow: oneof<nothing, bool> # Include shifts that extend beyond the requested time range boundaries (default: false)
   --limit: int # default: 25
   --offset: int # default: 0
 ]: nothing -> record<overrides: table<id: string, type: string, rotation_id: string, custom_shift_id: string, start_time: string, end_time: string, overridden_member: record, overriding_member: record, self: string, html_url: string>, limit: int, offset: int, more: bool> {
@@ -11840,7 +11839,7 @@ export def "webhook-subscriptions listWebhookSubscriptions" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The number of results per page.
   --offset: int # Offset to start pagination search results.
-  --total: string@bool-completer # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
+  --total: oneof<nothing, bool> # By default the `total` field in pagination responses is set to `null` to provide the fastest possible response times. Set `total` to `true` for this field to be populated.  See our [Pagination Docs](https://developer.pagerduty.com/docs/rest-api-v2/pagination/) for more information.  (default: false)
   --filter-type: string@filter-type-completer # The type of resource to filter upon.
   --filter-id: string # The id of the resource to filter upon. Required if filter_type is service or team.
   --Accept: string # The `Accept` header is used as a versioning header.
@@ -12169,7 +12168,7 @@ export def "workflows-integrations listWorkflowIntegrations" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The minimum of the `limit` parameter used in the request or the maximum request size of the API.
   --cursor: string # Optional parameter used to request the "next" set of results from an API.  The value provided here is most commonly obtained from the `next_cursor` field of the previous request.  When no value is provided, the request starts at the beginning of the result set.
-  --include-deprecated: string@bool-completer # Whether to include deprecated Integrations in the response. (default: false)
+  --include-deprecated: oneof<nothing, bool> # Whether to include deprecated Integrations in the response. (default: false)
   --Accept: string # The `Accept` header is used as a versioning header.
 ]: nothing -> record<limit: int, next_cursor: string, integrations: table<id: string, type: string, domain_name: string, package_name: string, name: string, description: string, icon_svg: string, tags: list, search_keywords: list, is_deprecated: bool, entitled: bool, application: string, configuration_schema: record, secrets_schema: record, created_at: string, created_by: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12287,7 +12286,7 @@ export def "workflows-integrations-connections createWorkflowIntegrationConnecti
   --external-id: string # The ID of the external system that this connection is used to connect to
   --external-id-label: string # The label of the external system that this connection is used to connect to
   --scopes: list
-  --is-default: string@bool-completer # Whether or not this connection is the default connection for this integration
+  --is-default: oneof<nothing, bool> # Whether or not this connection is the default connection for this integration
   --configuration: record # The configuration for this connection. The configuration schema is defined in the Workflow Integration's `configuration_schema` property. It is dynamic based on the specific Workflow Integration.
   secrets: record # The secrets for this connection. The secrets schema is defined in the Workflow Integration's `secrets_schema` property. It is dynamic based on the specific Workflow Integration. This field is write-only and will always be `null` on a response so that secrets are not leaked.
   --teams: list # The teams whose managers are allowed to use or edit this connection — item shape: {team_id?: string, type?: "team_reference"}
@@ -12355,7 +12354,7 @@ export def "workflows-integrations-connections updateWorkflowIntegrationConnecti
   --external-id: string # The ID of the external system that this connection is used to connect to
   --external-id-label: string # The label of the external system that this connection is used to connect to
   --scopes: list
-  --is-default: string@bool-completer # Whether or not this connection is the default connection for this integration
+  --is-default: oneof<nothing, bool> # Whether or not this connection is the default connection for this integration
   --configuration: record # The configuration for this connection. The configuration schema is defined in the Workflow Integration's `configuration_schema` property. It is dynamic based on the specific Workflow Integration.
   secrets: record # The secrets for this connection. The secrets schema is defined in the Workflow Integration's `secrets_schema` property. It is dynamic based on the specific Workflow Integration. This field is write-only and will always be `null` on a response so that secrets are not leaked.
   --teams: list # The teams whose managers are allowed to use or edit this connection — item shape: {team_id?: string, type?: "team_reference"}

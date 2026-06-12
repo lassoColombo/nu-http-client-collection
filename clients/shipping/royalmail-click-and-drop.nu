@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://localhost/api/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -105,7 +104,7 @@ export def "manifests CreateManifestsAsync" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accountBatchNumbers: list # Cannot be mixed with other parameter types. (e.g. [B1111, B12345])
-  --allOrders: string@bool-completer # Set to <code>true</code> and leave all the other parameters empty to manifest all orders in an eligible state  up to and including the current day (orders with a future despatch date will not be included). Do not specify this parameter or alternatively set to <code>false</code> if specifying any other parameter options.  (e.g. false)
+  --allOrders: oneof<nothing, bool> # Set to <code>true</code> and leave all the other parameters empty to manifest all orders in an eligible state  up to and including the current day (orders with a future despatch date will not be included). Do not specify this parameter or alternatively set to <code>false</code> if specifying any other parameter options.  (e.g. false)
   --endDateTime: string # Date and time in UTC. Used together with <b>startDateTime</b> to manifest all orders in an eligible state in a date/time range.  If a <b>startDateTime</b> is specified without this parameter the end of the date/time range will be the latest  possible order. Cannot be mixed with other parameter types.  (format: date-time)
   --orderIdentifiers: list # Can be specified together with <b>orderReferences</b>  in the same call, but cannot be mixed with other parameter types
   --orderReferences: list # Can be specified together with <b>orderIdentifiers</b> in the same call, but cannot be mixed with other parameter types
@@ -351,8 +350,8 @@ export def "orders-label GetOrdersLabelAsync" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --documentType: string@documentType-completer # Document generation mode. When documentType is set to "postageLabel" the additional parameters below must be used. These additional parameters will be ignored when documentType is not set to "postageLabel"
-  --includeReturnsLabel: string@bool-completer # Include returns label. Required when documentType is set to 'postageLabel'
-  --includeCN: string@bool-completer # Include CN22/CN23 with label. Optional parameter. If this parameter is used the setting will override the default account behaviour specified in the "Label format" setting "Generate customs declarations with orders"
+  --includeReturnsLabel: oneof<nothing, bool> # Include returns label. Required when documentType is set to 'postageLabel'
+  --includeCN: oneof<nothing, bool> # Include CN22/CN23 with label. Optional parameter. If this parameter is used the setting will override the default account behaviour specified in the "Label format" setting "Generate customs declarations with orders"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

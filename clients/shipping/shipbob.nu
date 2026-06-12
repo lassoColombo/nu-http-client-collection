@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.shipbob.com" "https://sandbox-api.shipbob.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -192,10 +191,10 @@ export def "2026-01-order get-orders" [
   --StartDate: string # Start date to filter orders inserted later than (format: date-time)
   --EndDate: string # End date to filter orders inserted earlier than (format: date-time)
   --SortOrder: string # Order to sort results in
-  --HasTracking: string@bool-completer # Has any portion of this order been assigned a tracking number
+  --HasTracking: oneof<nothing, bool> # Has any portion of this order been assigned a tracking number
   --LastUpdateStartDate: string # Start date to filter orders updated later than (format: date-time)
   --LastUpdateEndDate: string # End date to filter orders updated later than (format: date-time)
-  --IsTrackingUploaded: string@bool-completer # Filter orders that their tracking information was fully uploaded
+  --IsTrackingUploaded: oneof<nothing, bool> # Filter orders that their tracking information was fully uploaded
   --LastTrackingUpdateStartDate: string # Start date to filter orders with tracking updates later than the supplied date. Will only return orders that have tracking information (format: date-time)
   --LastTrackingUpdateEndDate: string # End date to filter orders updated later than the supplied date. Will only return orders that have tracking information (format: date-time)
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
@@ -332,7 +331,7 @@ export def "2026-01-shipment-batch-update-tracking-upload mark-tracking-uploaded
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
-  --is-tracking-uploaded: string@bool-completer # Indicates whether the Shipment was marked with tracking information uploaded to a third-party system where the order originated. Applies to all shipments in shipment_ids
+  --is-tracking-uploaded: oneof<nothing, bool> # Indicates whether the Shipment was marked with tracking information uploaded to a third-party system where the order originated. Applies to all shipments in shipment_ids
   --shipment-ids: list # Shipment IDs to apply the tracking upload status to (nullable)
 ]: any -> record<results: table<error: record, isSuccess: bool, shipmentId: int>, summary: record<failed: int, successful: int, total: int>> {
   let input = $in
@@ -781,7 +780,7 @@ export def "2026-01-product create-product" [
   --name: string # The name of the product (nullable)
   --taxonomy-id: int # The taxonomy ID for categorizing the product (nullable)
   --type-id: string@type-id-completer # The product type ID (1 = Regular, 2 = Bundle)
-  --is-quarantine: string@bool-completer # Flag indicating whether the product should be created in quarantine status
+  --is-quarantine: oneof<nothing, bool> # Flag indicating whether the product should be created in quarantine status
   --variants: list # List of variants to create with the product. At least one variant is required. Each variant must have a unique SKU. (nullable) — item shape: {additional_hazmat_attributes?: record, bundle_definition?: list, channel_metadata?: list, customs?: record, dimension?: record, fulfillment_settings?: record, gtin?: string, is_digital?: bool, lot_information?: record, name?: string, packaging_material_type_id?: int, packaging_requirement_id?: int, return_preferences?: record, sku?: string, status_id?: "0"|"1", upc?: string, weight?: float, barcodes?: list}
 ]: any -> record<created_on: string, id: int, name: string, taxonomy: record<id: int, name: string, parent_id: int, parent_name: string, path: string>, type: string, updated_on: string, user_id: int, variants: list<any>> {
   let input = $in
@@ -1014,7 +1013,7 @@ export def "2026-01-product-variants update-product-variants" [
   --dimension: record # shape: {height?: float, length?: float, width?: float}
   --fulfillment-settings: record # shape: {dangerous_goods?: bool, is_bpm_parcel?: bool, is_case_pick?: bool, msds_url?: string, requires_prop65?: bool, serial_scan?: record}
   --gtin: string # nullable
-  --is-digital: string@bool-completer
+  --is-digital: oneof<nothing, bool>
   --lot-information: record # shape: {is_lot?: bool, minimum_shelf_life_days?: int}
   --name: string # nullable
   --packaging-material-type-id: int # nullable
@@ -1285,8 +1284,8 @@ export def "2026-01-inventory-level get-all-inventory-levels" [
   --allow-errors(-e) # Return full response without error handling
   --SearchBy: string # Search is available for 3 fields: Inventory ID, Name, and SKU. Expected behavior for search by Inventory ID is exact match. Expected behavior for search by Inventory Name or SKU is partial match (consecutive characters, case insensitive).
   --InventoryIds: string # Comma-separated list of inventory IDs to filter results. Use this to retrieve inventory levels for specific inventory items only.
-  --IsActive: string@bool-completer # Filter inventory levels by active status. Set to true to return only active inventory items, false for inactive items. Omit to return all items regardless of status.
-  --IsDigital: string@bool-completer # Filter inventory levels by digital product status. Set to true to return only digital products, false for physical products. Digital products are items that don't require physical fulfillment.
+  --IsActive: oneof<nothing, bool> # Filter inventory levels by active status. Set to true to return only active inventory items, false for inactive items. Omit to return all items regardless of status.
+  --IsDigital: oneof<nothing, bool> # Filter inventory levels by digital product status. Set to true to return only digital products, false for physical products. Digital products are items that don't require physical fulfillment.
   --PageSize: string # Number of inventory level items to return per page. Controls pagination size for the response. (format: int32)
   --SortBy: string # Sort results by field name. Default is ascending order. Prefix with '-' for descending order (e.g., '-total_on_hand_quantity' sorts by quantity descending). Multiple fields can be comma-separated.
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
@@ -1367,8 +1366,8 @@ export def "2026-01-inventory get-all-inventories" [
   --SearchBy: string # Search is available for 3 fields: Inventory ID, Name, and SKU. Expected behavior for search by Inventory ID is exact match. Expected behavior for search by Inventory Name or SKU is partial match (consecutive characters, case insensitive).
   --FilterOperations: string # Advanced filtering operations. Apply multiple key-value filters to refine inventory results. Each filter operation contains a 'key' (field name) and 'rawValue' (filter value) to match.
   --InventoryIds: string # Comma-separated list of inventory IDs to filter results. Use this to retrieve information for specific inventory items only.
-  --IsActive: string@bool-completer # Filter by active status. True returns only active inventory items, False returns only inactive items. Omit to return both.
-  --IsDigital: string@bool-completer # Filter by digital product status. True returns only digital products (no physical fulfillment), False returns only physical products. Omit to return both.
+  --IsActive: oneof<nothing, bool> # Filter by active status. True returns only active inventory items, False returns only inactive items. Omit to return both.
+  --IsDigital: oneof<nothing, bool> # Filter by digital product status. True returns only digital products (no physical fulfillment), False returns only physical products. Omit to return both.
   --PageSize: string # Number of items to return per page. Controls pagination size for the response. (format: int32)
   --SortBy: string # Sort results by field name. Default is ascending order. Prefix with '-' for descending order (e.g., '-name' sorts by name descending). Multiple fields can be comma-separated.
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
@@ -1435,8 +1434,8 @@ export def "2026-01-inventory-level-locations get-all-inventory-levels-grouped-b
   --LocationId: string # Filter by specific fulfillment center location ID. Use this to retrieve inventory levels for a particular fulfillment center. (format: int32)
   --SearchBy: string # Search is available for 3 fields: Inventory ID, Name, and SKU. Expected behavior for search by Inventory ID is exact match. Expected behavior for search by Inventory Name or SKU is partial match (consecutive characters, case insensitive).
   --InventoryIds: string # Comma-separated list of inventory IDs to filter results. Use this to retrieve location-grouped inventory levels for specific inventory items only.
-  --IsActive: string@bool-completer # Filter inventory levels by active status. Set to true to return only active inventory items, false for inactive items. Omit to return all items regardless of status.
-  --IsDigital: string@bool-completer # Filter inventory levels by digital product status. Set to true to return only digital products, false for physical products. Digital products are items that don't require physical fulfillment.
+  --IsActive: oneof<nothing, bool> # Filter inventory levels by active status. Set to true to return only active inventory items, false for inactive items. Omit to return all items regardless of status.
+  --IsDigital: oneof<nothing, bool> # Filter inventory levels by digital product status. Set to true to return only digital products, false for physical products. Digital products are items that don't require physical fulfillment.
   --PageSize: string # Number of location-grouped inventory level items to return per page. Controls pagination size for the response. (format: int32)
   --SortBy: string # Sort results by field name. Default is ascending order. Prefix with '-' for descending order (e.g., '-name' sorts by name descending). Multiple fields can be comma-separated.
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
@@ -1492,8 +1491,8 @@ export def "2026-01-inventory-level-lots get-all-inventory-levels-grouped-by-lot
   --LocationId: string # Filter by specific fulfillment center location ID. Use this to retrieve lot-based inventory levels for a particular warehouse or distribution center. (format: int32)
   --SearchBy: string # Search is available for 3 fields: Inventory ID, Name, and SKU. Expected behavior for search by Inventory ID is exact match. Expected behavior for search by Inventory Name or SKU is partial match (consecutive characters, case insensitive).
   --InventoryIds: string # Comma-separated list of inventory IDs to filter results. Use this to retrieve lot-grouped inventory levels for specific inventory items only.
-  --IsActive: string@bool-completer # Filter inventory levels by active status. Set to true to return only active inventory items, false for inactive items. Omit to return all items regardless of status.
-  --IsDigital: string@bool-completer # Filter inventory levels by digital product status. Set to true to return only digital products, false for physical products. Digital products are items that don't require physical fulfillment.
+  --IsActive: oneof<nothing, bool> # Filter inventory levels by active status. Set to true to return only active inventory items, false for inactive items. Omit to return all items regardless of status.
+  --IsDigital: oneof<nothing, bool> # Filter inventory levels by digital product status. Set to true to return only digital products, false for physical products. Digital products are items that don't require physical fulfillment.
   --PageSize: string # Number of lot-grouped inventory level items to return per page. Controls pagination size for the response. (format: int32)
   --SortBy: string # Sort results by field name. Default is ascending order. Prefix with '-' for descending order (e.g., '-lot_date' sorts by lot date descending). Multiple fields can be comma-separated.
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
@@ -1589,7 +1588,7 @@ export def "2026-01-receiving get-multiple-warehouse-receiving-orders" [
   --InsertEndDate: string # Latest date that a WRO was created  (format: date-time)
   --FulfillmentCenterIds: string # Comma separated list of WRO fulfillment center IDs to filter by
   --PurchaseOrderNumbers: string # Comma separated list of WRO PO numbers to filter by
-  --ExternalSync: string@bool-completer # Flag to return external_sync_timestamp WROs
+  --ExternalSync: oneof<nothing, bool> # Flag to return external_sync_timestamp WROs
   --CompletedStartDate: string # Earliest date that a WRO was completed  (format: date-time)
   --CompletedEndDate: string # Latest date that a WRO was completed  (format: date-time)
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
@@ -1743,7 +1742,7 @@ export def "2026-01-receiving-set-external-sync set-external-sync-flag-for-wros"
   --allow-errors(-e) # Return full response without error handling
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --ids: list # nullable
-  --is-external-sync: string@bool-completer
+  --is-external-sync: oneof<nothing, bool>
 ]: any -> record<box_labels_uri: string, box_packaging_type: string, expected_arrival_date: string, external_sync_timestamp: string, fulfillment_center: record<address1: string, address2: string, city: string, country: string, email: string, id: int, name: string, phone_number: string, state: string, timezone: string, zip_code: string>, id: int, insert_date: string, inventory_quantities: table<expected_quantity: int, inventory_id: int, received_quantity: int, sku: string, stowed_quantity: int>, last_updated_date: string, package_type: string, purchase_order_number: string, status: string, status_history: table<id: int, status: string, timestamp: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2043,9 +2042,9 @@ export def "2026-01-location get-locations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --IncludeInactive: string@bool-completer # Whether the inactive locations should be included or not
-  --ReceivingEnabled: string@bool-completer # Return all the receiving enabled locations
-  --AccessGranted: string@bool-completer # Return all the access granted locations
+  --IncludeInactive: oneof<nothing, bool> # Whether the inactive locations should be included or not
+  --ReceivingEnabled: oneof<nothing, bool> # Return all the receiving enabled locations
+  --AccessGranted: oneof<nothing, bool> # Return all the access granted locations
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
 ]: nothing -> table<abbreviation: string, access_granted: bool, attributes: list<string>, id: int, is_active: bool, is_receiving_enabled: bool, is_shipping_enabled: bool, name: string, region: record<id: int, name: string>, services: list<record>, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2075,7 +2074,7 @@ export def "2026-01-transactions-query search-transactions" [
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --from-date: string # Start date for filtering transactions by charge date. Defaults to 7 days before the current date if not specified. (nullable, format: date-time)
   --invoice-ids: list # List of invoice IDs to filter transactions by. (nullable)
-  --invoiced-status: string@bool-completer # Filter transactions by invoicing status. True returns billed transactions, false returns unbilled transactions, and null returns both billed and unbilled transactions. (nullable)
+  --invoiced-status: oneof<nothing, bool> # Filter transactions by invoicing status. True returns billed transactions, false returns unbilled transactions, and null returns both billed and unbilled transactions. (nullable)
   --page-size: int # Number of transactions to return per page. Default is 100. Must be between 1 and 1000.
   --reference-ids: list # List of reference IDs (such as Shipment IDs, WRO IDs) to filter transactions. Can be numeric or string identifiers. (nullable)
   --reference-types: list # The types of references associated with the reference IDs to filter by. (nullable)

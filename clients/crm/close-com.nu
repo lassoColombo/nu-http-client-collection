@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.close.com/api/v1"] }
 def auth-scheme-completer [] { ["basic" "bearer"] }
 
@@ -708,10 +707,10 @@ export def "task create" [
   --created-by: string
   --date: any
   --date-created: any
-  --disable-notification: string@bool-completer # default: false
+  --disable-notification: oneof<nothing, bool> # default: false
   --due-date: any
-  --is-complete: string@bool-completer
-  --is-dateless: string@bool-completer
+  --is-complete: oneof<nothing, bool>
+  --is-dateless: oneof<nothing, bool>
   --lead-id: string
   --organization-id: string
   --priority: string@priority-completer
@@ -777,7 +776,7 @@ export def "task bulk-update" [
   --Authorization: string # Use your API key as the username and leave the password empty.
   --assigned-to: string
   --date: any
-  --is-complete: string@bool-completer
+  --is-complete: oneof<nothing, bool>
   --organization-id: string
   --priority: string@priority-completer
   --resolution: any
@@ -845,8 +844,8 @@ export def "task update" [
   --created-by: string
   --date: any
   --due-date: any
-  --is-complete: string@bool-completer
-  --is-dateless: string@bool-completer
+  --is-complete: oneof<nothing, bool>
+  --is-dateless: oneof<nothing, bool>
   --lead-id: string
   --organization-id: string
   --priority: string@priority-completer
@@ -1353,7 +1352,7 @@ export def "activity-note create" [
   --note: string # nullable
   --note-html: string # nullable
   --organization-id: string # nullable
-  --pinned: string@bool-completer # nullable
+  --pinned: oneof<nothing, bool> # nullable
   --title: string # nullable
   --user-id: string # nullable
 ]: any -> record<_type: string, activity_at: string, contact_id: string, created_by: string, created_by_name: string, date_created: string, date_updated: string, id: string, lead_id: string, organization_id: string, updated_by: string, updated_by_name: string, user_id: string, user_name: string, users: list<string>> {
@@ -1415,7 +1414,7 @@ export def "activity-note update" [
   --contact-id: string # nullable
   --note: string # nullable
   --note-html: string # nullable
-  --pinned: string@bool-completer # nullable
+  --pinned: oneof<nothing, bool> # nullable
   --title: string # nullable
 ]: any -> record<_type: string, activity_at: string, contact_id: string, created_by: string, created_by_name: string, date_created: string, date_updated: string, id: string, lead_id: string, organization_id: string, updated_by: string, updated_by_name: string, user_id: string, user_name: string, users: list<string>> {
   let input = $in
@@ -1704,7 +1703,7 @@ export def "activity-email create" [
   --date-created: string # nullable, format: date-time
   --email-account-id: string # nullable
   --followup-date: string # nullable, format: date-time
-  --followup-sequence-add-cc-bcc: string@bool-completer # nullable
+  --followup-sequence-add-cc-bcc: oneof<nothing, bool> # nullable
   --followup-sequence-delay: int # nullable
   --followup-sequence-id: string # nullable
   --in-reply-to-id: string # nullable
@@ -1781,7 +1780,7 @@ export def "activity-email update" [
   --contact-id: string # nullable
   --email-account-id: string # nullable
   --followup-date: string # nullable, format: date-time
-  --followup-sequence-add-cc-bcc: string@bool-completer # nullable
+  --followup-sequence-add-cc-bcc: oneof<nothing, bool> # nullable
   --followup-sequence-delay: int # nullable
   --followup-sequence-id: string # nullable
   --in-reply-to-id: string # nullable
@@ -1976,7 +1975,7 @@ export def "activity-sms create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --send-to-inbox: string@bool-completer
+  --send-to-inbox: oneof<nothing, bool>
   --Authorization: string # Use your API key as the username and leave the password empty.
   --activity-at: string # nullable, format: date-time
   --attachments: list # nullable — item shape: {content_type: "application/pdf"|"application/vcard"|"audio/3gpp"|"audio/3gpp2"|"audio/L24"|"audio/ac3"|"audio/amr"|"audio/amr-nb"|"audio/basic"|"audio/mp4"|"audio/mpeg"|"audio/ogg"|"audio/vnd.rn-realaudio"|"audio/vnd.wave"|"audio/webm"|"image/bmp"|"image/gif"|"image/jpeg"|"image/jpg"|"image/png"|"image/tiff"|"text/calendar"|"text/csv"|"text/directory"|"text/richtext"|"text/rtf"|"text/vcard"|"text/x-vcard"|"video/3gpp"|"video/3gpp-tt"|"video/3gpp2"|"video/H261"|"video/H263"|"video/H263-1998"|"video/H263-2000"|"video/H264"|"video/mp4"|"video/mpeg"|"video/quicktime"|"video/webm", filename: string, url: string}
@@ -2152,7 +2151,7 @@ export def "activity-whatsapp-message create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --send-to-inbox: string@bool-completer
+  --send-to-inbox: oneof<nothing, bool>
   --Authorization: string # Use your API key as the username and leave the password empty.
   activity_at: string # format: date-time
   --attachments: list # item shape: {content_type: string, filename: string, url: string}
@@ -2483,7 +2482,7 @@ export def "activity-custom create" [
   --date-created: string # nullable, format: date-time
   lead_id: string
   --organization-id: string # nullable
-  --pinned: string@bool-completer # nullable
+  --pinned: oneof<nothing, bool> # nullable
   --status: string@status-completer-2
   --user-id: string # nullable
 ]: any -> record {
@@ -2541,7 +2540,7 @@ export def "activity-custom update" [
   --Authorization: string # Use your API key as the username and leave the password empty.
   --activity-at: string # nullable, format: date-time
   --contact-id: string # nullable
-  --pinned: string@bool-completer # nullable
+  --pinned: oneof<nothing, bool> # nullable
   --status: string@status-completer-2
 ]: any -> record {
   let input = $in
@@ -3182,7 +3181,7 @@ export def "webhook create" [
   --Authorization: string # Use your API key as the username and leave the password empty.
   events: list # A list of events to subscribe to. Each event has an `object_type` and an `action` from values in the [event log](https://developer.close.com/api/resources/events/list-of-event-types). You can also use [Webhook Filters](https://developer.close.com/api/resources/webhooks/webhook-filters) while creating your subscription so that an event only fires to a Webhook when certain conditions are met. — item shape: {action: string, extra_filter?: record, object_type: string}
   --body-url: string # Destination URL for the webhook subscription
-  --verify-ssl: string@bool-completer # Verify SSL certificate of destination webhook URL. Set to `false` to disable SSL certificate validation. We recommend using https to protect your data during delivery. (default: true)
+  --verify-ssl: oneof<nothing, bool> # Verify SSL certificate of destination webhook URL. Set to `false` to disable SSL certificate validation. We recommend using https to protect your data during delivery. (default: true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3240,7 +3239,7 @@ export def "webhook update" [
   --events: list # A list of events to subscribe to. Each event has an `object_type` and an `action` from values in the [event log](https://developer.close.com/api/resources/events/list-of-event-types). You can also use [Webhook Filters](https://developer.close.com/api/resources/webhooks/webhook-filters) while creating your subscription so that an event only fires to a Webhook when certain conditions are met. (nullable) — item shape: {action: string, extra_filter?: record, object_type: string}
   --status: any
   --body-url: string # Destination URL for the webhook subscription (nullable)
-  --verify-ssl: string@bool-completer # Verify SSL certificate of destination webhook URL. Set to `false` to disable SSL certificate validation. We recommend using https to protect your data during delivery. (nullable)
+  --verify-ssl: oneof<nothing, bool> # Verify SSL certificate of destination webhook URL. Set to `false` to disable SSL certificate validation. We recommend using https to protect your data during delivery. (nullable)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4404,8 +4403,8 @@ export def "enrich-field create" [
   object_id: string
   object_type: string@object-type-completer
   organization_id: string
-  --overwrite-existing-value: string@bool-completer # default: false
-  --set-new-value: string@bool-completer # default: true
+  --overwrite-existing-value: oneof<nothing, bool> # default: false
+  --set-new-value: oneof<nothing, bool> # default: true
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6109,7 +6108,7 @@ export def "form list" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Number of results to return. (default: 100)
   --skip: int # Number of results to skip before returning, for pagination. (default: 0)
-  --is-archived: string@bool-completer # Filter by archive status.
+  --is-archived: oneof<nothing, bool> # Filter by archive status.
   --qp-fields: string # Comma-separated list of fields to include in the response.
   --Authorization: string # Use your API key as the username and leave the password empty.
 ]: nothing -> record<data: table<date_created: string, date_updated: string, field_definitions: list, id: string, is_archived: bool, name: string, organization_id: string>, has_more: bool> {
@@ -6165,8 +6164,8 @@ export def "email-template list" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Number of results to return. (default: 100)
   --skip: int # Number of results to skip before returning, for pagination. (default: 0)
-  --is-archived: string@bool-completer
-  --is-shared: string@bool-completer
+  --is-archived: oneof<nothing, bool>
+  --is-shared: oneof<nothing, bool>
   --Authorization: string # Use your API key as the username and leave the password empty.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6223,7 +6222,7 @@ export def "email-template get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: string # Comma-separated list of fields to include in the response.
-  --include-embedded: string@bool-completer # Include embedded templates used by Workflows.
+  --include-embedded: oneof<nothing, bool> # Include embedded templates used by Workflows.
   --Authorization: string # Use your API key as the username and leave the password empty.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6373,7 +6372,7 @@ export def "sms-template create" [
   --allow-errors(-e) # Return full response without error handling
   --Authorization: string # Use your API key as the username and leave the password empty.
   --attachments: list # item shape: {content_type: string, filename: string, url: string}
-  --is-shared: string@bool-completer
+  --is-shared: oneof<nothing, bool>
   name: string
   --text: string
 ]: any -> record {
@@ -6403,8 +6402,8 @@ export def "sms-template get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-attachments: string@bool-completer # Include file attachments in the response. (default: false)
-  --include-embedded: string@bool-completer # Include embedded templates used by Workflows. (default: false)
+  --include-attachments: oneof<nothing, bool> # Include file attachments in the response. (default: false)
+  --include-embedded: oneof<nothing, bool> # Include embedded templates used by Workflows. (default: false)
   --Authorization: string # Use your API key as the username and leave the password empty.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6434,7 +6433,7 @@ export def "sms-template update" [
   --allow-errors(-e) # Return full response without error handling
   --Authorization: string # Use your API key as the username and leave the password empty.
   --attachments: list # item shape: {content_type: string, filename: string, url: string}
-  --is-shared: string@bool-completer
+  --is-shared: oneof<nothing, bool>
   --name: string
   --status: string@status-completer-3
   --text: string
@@ -6634,7 +6633,7 @@ export def "playbook list" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Number of results to return. (default: 100)
   --skip: int # Number of results to skip before returning, for pagination. (default: 0)
-  --is-archived: string@bool-completer # Filter for archived or not-archived playbooks. When not provided, both archived and not-archived playbooks will be returned.
+  --is-archived: oneof<nothing, bool> # Filter for archived or not-archived playbooks. When not provided, both archived and not-archived playbooks will be returned.
   --position-gt: int # Filters for where the playbook's `position` is greater than the given value.
   --created-at-lt: string # Filters for where the playbook's `created_at` (creation date) is before the given value. (format: date-time)
   --Authorization: string # Use your API key as the username and leave the password empty.
@@ -7485,7 +7484,7 @@ export def "phone-number list" [
   --qp-fields: string # Comma-separated list of fields to include in the response.
   --number: string
   --user-id: string
-  --is-group-number: string@bool-completer
+  --is-group-number: oneof<nothing, bool>
   --Authorization: string # Use your API key as the username and leave the password empty.
 ]: nothing -> record<data: table<address_id: string, bundle_id: string, carrier: any, carrier_type: any, country: string, date_created: string, date_updated: string, forward_to: string, forward_to_enabled: bool, forward_to_formatted: string, id: string, is_group_number: bool, is_premium: bool, is_verified: bool, label: string, last_billed_price: float, mms_enabled: bool, next_billing_on: string, number: string, number_formatted: string, organization_id: string, participants: list, phone_numbers: list, phone_numbers_formatted: list, press_1_to_accept: bool, sms_enabled: bool, supports_mms_to_countries: list, supports_sms_to_countries: list, type: string, user_id: string, voicemail_greeting_url: string, was_ported: bool>, has_more: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7517,8 +7516,8 @@ export def "phone-number-request-internal create" [
   country: string # A two letter ISO country code (e.g. `US` for United States).
   --prefix: string # A string with the phone number prefix or area code, not including the country code. (default: )
   sharing: string@sharing-completer
-  --with-mms: string@bool-completer # By default, MMS-capable numbers are rented if Close supports MMS for the given country. Renting an MMS-capable number can be forced by setting this flag to `true`. If set to `false`, certain prefixes that don't support MMS can be rented in countries where Close supports MMS. In most scenarios, this flag should not be passed. When you request an MMS number, you must set `with_sms` to `true` as well. (nullable)
-  --with-sms: string@bool-completer # By default, SMS-capable numbers are rented if Close supports SMS for the given country. Renting an SMS-capable number can be forced by setting this flag to `true`. If set to `false`, certain prefixes that don't support SMS can be rented in countries where Close supports SMS. In most scenarios, this flag should not be passed unless a `has-voice-only` error status is received. (nullable)
+  --with-mms: oneof<nothing, bool> # By default, MMS-capable numbers are rented if Close supports MMS for the given country. Renting an MMS-capable number can be forced by setting this flag to `true`. If set to `false`, certain prefixes that don't support MMS can be rented in countries where Close supports MMS. In most scenarios, this flag should not be passed. When you request an MMS number, you must set `with_sms` to `true` as well. (nullable)
+  --with-sms: oneof<nothing, bool> # By default, SMS-capable numbers are rented if Close supports SMS for the given country. Renting an SMS-capable number can be forced by setting this flag to `true`. If set to `false`, certain prefixes that don't support SMS can be rented in countries where Close supports SMS. In most scenarios, this flag should not be passed unless a `has-voice-only` error status is received. (nullable)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7575,11 +7574,11 @@ export def "phone-number update" [
   --allow-errors(-e) # Return full response without error handling
   --Authorization: string # Use your API key as the username and leave the password empty.
   --forward-to: string
-  --forward-to-enabled: string@bool-completer
+  --forward-to-enabled: oneof<nothing, bool>
   --label: string
   --participants: list
   --phone-numbers: list
-  --press-1-to-accept: string@bool-completer
+  --press-1-to-accept: oneof<nothing, bool>
   --voicemail-greeting-url: string # nullable
 ]: any -> record<address_id: string, bundle_id: string, carrier: any, carrier_type: any, country: string, date_created: string, date_updated: string, forward_to: string, forward_to_enabled: bool, forward_to_formatted: string, id: string, is_group_number: bool, is_premium: bool, is_verified: bool, label: string, last_billed_price: float, mms_enabled: bool, next_billing_on: string, number: string, number_formatted: string, organization_id: string, participants: list<string>, phone_numbers: list<string>, phone_numbers_formatted: list<string>, press_1_to_accept: bool, sms_enabled: bool, supports_mms_to_countries: list<string>, supports_sms_to_countries: list<string>, type: string, user_id: string, voicemail_greeting_url: string, was_ported: bool> {
   let input = $in
@@ -7714,7 +7713,7 @@ export def "blocked-phone-number-settings update-settings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Authorization: string # Use your API key as the username and leave the password empty.
-  --reject-anonymous-inbound-calls: string@bool-completer
+  --reject-anonymous-inbound-calls: oneof<nothing, bool>
 ]: any -> record<reject_anonymous_inbound_calls: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8023,10 +8022,10 @@ export def "organization update" [
   --expand: string
   --Authorization: string # Use your API key as the username and leave the password empty.
   --currency: string # Default currency as a three-letter [ISO 4217](https://en.wikipedia.org/wiki/ISO_4217) currency code.
-  --enable-unsubscribe-link: string@bool-completer # Enable the unsubscribe link by default in new email templates.
+  --enable-unsubscribe-link: oneof<nothing, bool> # Enable the unsubscribe link by default in new email templates.
   --lead-statuses: list # The organization's lead statuses. Provide the full list in the desired order to reorder them. — item shape: {id?: string, label?: string}
   --name: string # The organization's name.
-  --require-unsubscribe-link: string@bool-completer # Require an unsubscribe link in Bulk Emails and Workflows.
+  --require-unsubscribe-link: oneof<nothing, bool> # Require an unsubscribe link in Bulk Emails and Workflows.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8087,9 +8086,9 @@ export def "membership bulk-update" [
   --auto-record-calls: string@auto-record-calls-completer
   --default-caller-id: string # ID of the phone number to use as this member's default outbound caller ID. (nullable)
   --hangup-recording-url: string # URL of the audio file used as this member's voicemail drop recording. (nullable)
-  --may-workflows-impersonate: string@bool-completer # Whether Workflows may send emails on this member's behalf.
+  --may-workflows-impersonate: oneof<nothing, bool> # Whether Workflows may send emails on this member's behalf.
   --role-id: string # One of `admin`, `superuser`, `user`, or `restricteduser` for the corresponding predefined role, or the ID of a custom [Role](https://developer.close.com/api/resources/roles).
-  --track-email-opens: string@bool-completer # Whether email opens are tracked for emails this member sends.
+  --track-email-opens: oneof<nothing, bool> # Whether email opens are tracked for emails this member sends.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8121,9 +8120,9 @@ export def "membership update" [
   --auto-record-calls: string@auto-record-calls-completer
   --default-caller-id: string # ID of the phone number to use as this member's default outbound caller ID. (nullable)
   --hangup-recording-url: string # URL of the audio file used as this member's voicemail drop recording. (nullable)
-  --may-workflows-impersonate: string@bool-completer # Whether Workflows may send emails on this member's behalf.
+  --may-workflows-impersonate: oneof<nothing, bool> # Whether Workflows may send emails on this member's behalf.
   --role-id: string # One of `admin`, `superuser`, `user`, or `restricteduser` for the corresponding predefined role, or the ID of a custom [Role](https://developer.close.com/api/resources/roles).
-  --track-email-opens: string@bool-completer # Whether email opens are tracked for emails this member sends.
+  --track-email-opens: oneof<nothing, bool> # Whether email opens are tracked for emails this member sends.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))

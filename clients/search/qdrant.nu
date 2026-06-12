@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost:6333" "https://localhost:6333"] }
 def auth-scheme-completer [] { ["api-key" "bearer"] }
 
@@ -209,9 +208,9 @@ export def "telemetry telemetry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --anonymize: string@bool-completer # If true, anonymize result
+  --anonymize: oneof<nothing, bool> # If true, anonymize result
   --details-level: int # Level of details in telemetry data. Minimal level is 0, maximal is infinity
-  --per-collection: string@bool-completer # If true, include per-collection request statistics in the response
+  --per-collection: oneof<nothing, bool> # If true, include per-collection request statistics in the response
   --timeout: int # Timeout for this request (default: 60)
 ]: nothing -> record<usage: any, time: float, status: string, result: record<id: string, app: any, collections: record<number_of_collections: int, max_collections: int, collections: list, snapshots: list>, cluster: any, requests: any, memory: any, hardware: any, search_pool: any>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -235,8 +234,8 @@ export def "metrics metrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --anonymize: string@bool-completer # If true, anonymize result
-  --per-collection: string@bool-completer # If true, include per-collection request metrics with a collection label instead of global request metrics
+  --anonymize: oneof<nothing, bool> # If true, anonymize result
+  --per-collection: oneof<nothing, bool> # If true, include per-collection request metrics with a collection label instead of global request metrics
   --timeout: int # Timeout for this request (default: 60)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -433,7 +432,7 @@ export def "cluster-peer peer" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --timeout: int # Wait for operation commit timeout in seconds. If timeout is reached - request will return with service error.
-  --force: string@bool-completer # If true - removes peer even if it has shards/replicas on it. (default: false)
+  --force: oneof<nothing, bool> # If true - removes peer even if it has shards/replicas on it. (default: false)
 ]: nothing -> record<usage: any, time: float, status: string, result: bool> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -506,7 +505,7 @@ export def "collections collection-by-collection_name-1" [
   --sharding-method: any # Sharding method Default is Auto - points are distributed across all available shards Custom - points are distributed across shards according to shard key
   --replication-factor: int # Number of shards replicas. Default is 1 Minimum is 1 (nullable, format: uint32)
   --write-consistency-factor: int # Defines how many replicas should apply the operation for us to consider it successful. Increasing this number will make the collection more resilient to inconsistencies, but will also make it fail if not enough replicas are available. Does not have any performance impact. (nullable, format: uint32)
-  --on-disk-payload: string@bool-completer # If true - point's payload will not be stored in memory. It will be read from the disk every time it is requested. This setting saves RAM by (slightly) increasing the response time. Note: those payload values that are involved in filtering and are indexed - remain in RAM.  Default: true (nullable)
+  --on-disk-payload: oneof<nothing, bool> # If true - point's payload will not be stored in memory. It will be read from the disk every time it is requested. This setting saves RAM by (slightly) increasing the response time. Note: those payload values that are involved in filtering and are indexed - remain in RAM.  Default: true (nullable)
   --hnsw-config: any # Custom params for HNSW index. If none - values from service configuration file are used.
   --wal-config: any # Custom params for WAL. If none - values from service configuration file are used.
   --optimizers-config: any # Custom params for Optimizers.  If none - values from service configuration file are used.
@@ -626,7 +625,7 @@ export def "collections-index index-by-collection_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
   field_name: string
@@ -680,7 +679,7 @@ export def "collections-index index-by-collection_name-field_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
 ]: nothing -> record<usage: any, time: float, status: string, result: record<operation_id: int, status: string>> {
@@ -709,7 +708,7 @@ export def "collections-vectors name-by-collection_name-vector_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
   --dense: record # Configuration for creating a new dense named vector.  Only includes properties that define the vector space and cannot be changed after creation. Storage type, index type, and quantization are inferred. — shape: {size: int, distance: "Cosine"|"Euclid"|"Dot"|"Manhattan", multivector_config?: any, datatype?: any}
@@ -741,7 +740,7 @@ export def "collections-vectors name-by-collection_name-vector_name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
 ]: nothing -> record<usage: any, time: float, status: string, result: record<operation_id: int, status: string>> {
@@ -903,7 +902,7 @@ export def "collections-snapshots-upload snapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
   --priority: string@priority-completer # Defines source of truth for snapshot recovery
   --checksum: string # Optional SHA256 checksum to verify snapshot integrity before recovery.
   --snapshot: string # format: binary
@@ -933,7 +932,7 @@ export def "collections-snapshots-recover snapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
   location: string # Examples: - URL `http://localhost:8080/collections/my_collection/snapshots/my_snapshot` - Local path `file:///qdrant/snapshots/test_collection-2022-08-04-10-49-10.snapshot` (format: uri)
   --priority: any # Defines which data should be used as a source of truth if there are other replicas in the cluster. If set to `Snapshot`, the snapshot will be used as a source of truth, and the current state will be overwritten. If set to `Replica`, the current state will be used as a source of truth, and after recovery if will be synchronized with the snapshot.
   --checksum: string # Optional SHA256 checksum to verify snapshot integrity before recovery. (nullable)
@@ -986,7 +985,7 @@ export def "collections-snapshots snapshot-by-collection_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
 ]: nothing -> record<time: float, status: string, result: record<name: string, creation_time: string, size: int, checksum: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1011,7 +1010,7 @@ export def "collections-snapshots snapshot-by-collection_name-snapshot_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
 ]: nothing -> record<time: float, status: string, result: bool> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1079,7 +1078,7 @@ export def "snapshots snapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
 ]: nothing -> record<time: float, status: string, result: record<name: string, creation_time: string, size: int, checksum: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1103,7 +1102,7 @@ export def "snapshots snapshot-by-snapshot_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
 ]: nothing -> record<time: float, status: string, result: bool> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1175,7 +1174,7 @@ export def "collections-shards-snapshots-upload snapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
   --priority: string@priority-completer # Defines source of truth for snapshot recovery
   --checksum: string # Optional SHA256 checksum to verify snapshot integrity before recovery.
   --snapshot: string # format: binary
@@ -1206,7 +1205,7 @@ export def "collections-shards-snapshots-recover snapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
   location: any
   --priority: any
   --checksum: string # Optional SHA256 checksum to verify snapshot integrity before recovery. (nullable)
@@ -1261,7 +1260,7 @@ export def "collections-shards-snapshots snapshot-by-collection_name-shard_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
 ]: nothing -> record<time: float, status: string, result: record<name: string, creation_time: string, size: int, checksum: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1287,7 +1286,7 @@ export def "collections-shards-snapshots snapshot-by-collection_name-shard_id-sn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
 ]: nothing -> record<time: float, status: string, result: bool> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1395,7 +1394,7 @@ export def "collections-points points-by-collection_name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
   --batch: record # shape: {ids: list, vectors: any, payloads?: list}
@@ -1430,7 +1429,7 @@ export def "collections-points-delete points" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
   --points: list
@@ -1463,7 +1462,7 @@ export def "collections-points-vectors vectors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
   points: list # Points with named vectors — item shape: {id: any, vector: any}
@@ -1495,7 +1494,7 @@ export def "collections-points-vectors-delete vectors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
   --points: list # Deletes values from each point in this list (nullable)
@@ -1528,7 +1527,7 @@ export def "collections-points-payload payload-by-collection_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
   payload: record # e.g. {city: London, color: green}
@@ -1562,7 +1561,7 @@ export def "collections-points-payload payload-by-collection_name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
   payload: record # e.g. {city: London, color: green}
@@ -1596,7 +1595,7 @@ export def "collections-points-payload-delete payload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
   keys: list # List of payload keys to remove from payload
@@ -1630,7 +1629,7 @@ export def "collections-points-payload-clear payload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
   --points: list
@@ -1662,7 +1661,7 @@ export def "collections-points-batch update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --wait: string@bool-completer # If true, wait for changes to actually happen
+  --wait: oneof<nothing, bool> # If true, wait for changes to actually happen
   --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
   operations: list
@@ -2037,7 +2036,7 @@ export def "collections-points-count points" [
   --timeout: int # If set, overrides global timeout for this request. Unit is seconds.
   --shard-key: any # Specify in which shards to look for the points, if not specified - look in all shards
   --filter: any # Look only for points which satisfies this conditions
-  --exact: string@bool-completer # If true, count exact number of points. If false, count approximate number of points faster. Approximate count might be unreliable during the indexing process. Default: true (default: true)
+  --exact: oneof<nothing, bool> # If true, count exact number of points. If false, count approximate number of points faster. Approximate count might be unreliable during the indexing process. Default: true (default: true)
 ]: any -> record<usage: any, time: float, status: string, result: record<count: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -2070,7 +2069,7 @@ export def "collections-facet facet" [
   key: string # Payload key to use for faceting.
   --limit: int # Max number of hits to return. Default is 10. (nullable, format: uint)
   --filter: any # Filter conditions - only consider points that satisfy these conditions.
-  --exact: string@bool-completer # Whether to do a more expensive exact count for each of the values in the facet. Default is false. (nullable)
+  --exact: oneof<nothing, bool> # Whether to do a more expensive exact count for each of the values in the facet. Default is false. (nullable)
 ]: any -> record<usage: any, time: float, status: string, result: record<hits: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))

@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost//api.ote-godaddy.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -141,8 +140,8 @@ export def "domains-agreements get" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --tlds: list # list of TLDs whose legal agreements are to be retrieved
-  --privacy: string@bool-completer # Whether or not privacy has been requested
-  --forTransfer: string@bool-completer # Whether or not domain tranfer has been requested
+  --privacy: oneof<nothing, bool> # Whether or not privacy has been requested
+  --forTransfer: oneof<nothing, bool> # Whether or not domain tranfer has been requested
   --X-Market-Id: string # Unique identifier of the Market used to retrieve/translate Legal Agreements
 ]: nothing -> table<agreementKey: string, content: string, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -171,7 +170,7 @@ export def "domains-available available" [
   --accept: string@accept-completer # Response content type
   --domain: string # Domain name whose availability is to be checked
   --checkType: string@checkType-completer # Optimize for time ('FAST') or accuracy ('FULL') (default: FAST)
-  --forTransfer: string@bool-completer # Whether or not to include domains available for transfer. If set to True, checkType is ignored (default: false)
+  --forTransfer: oneof<nothing, bool> # Whether or not to include domains available for transfer. If set to True, checkType is ignored (default: false)
 ]: nothing -> record<available: bool, currency: string, definitive: bool, domain: string, period: int, price: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -277,8 +276,8 @@ export def "domains-purchase purchase" [
   domain: string # For internationalized domain names with non-ascii characters, the domain name is converted to punycode before format and pattern validation rules are checked (format: domain)
   --nameServers: list
   --period: int # format: integer-positive, default: 1
-  --privacy: string@bool-completer # default: false
-  --renewAuto: string@bool-completer # default: true
+  --privacy: oneof<nothing, bool> # default: false
+  --renewAuto: oneof<nothing, bool> # default: true
 ]: any -> record<currency: string, itemCount: int, orderId: int, total: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -341,8 +340,8 @@ export def "domains-purchase-validate validate" [
   domain: string # For internationalized domain names with non-ascii characters, the domain name is converted to punycode before format and pattern validation rules are checked (format: domain)
   --nameServers: list
   --period: int # format: integer-positive, default: 1
-  --privacy: string@bool-completer # default: false
-  --renewAuto: string@bool-completer # default: true
+  --privacy: oneof<nothing, bool> # default: false
+  --renewAuto: oneof<nothing, bool> # default: true
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -476,10 +475,10 @@ export def "domains update" [
   --allow-errors(-e) # Return full response without error handling
   --X-Shopper-Id: string # Shopper for whom Domain is to be updated. NOTE: This is only required if you are a Reseller managing a domain purchased outside the scope of your reseller account. For instance, if you're a Reseller, but purchased a Domain via http://www.godaddy.com
   --consent: any # shape: {agreedAt: string, agreedBy: string, agreementKeys: list}
-  --exposeWhois: string@bool-completer # Whether or not the domain contact details should be shown in the WHOIS
-  --locked: string@bool-completer # Whether or not the domain should be locked to prevent transfers
+  --exposeWhois: oneof<nothing, bool> # Whether or not the domain contact details should be shown in the WHOIS
+  --locked: oneof<nothing, bool> # Whether or not the domain should be locked to prevent transfers
   --nameServers: list # Fully-qualified domain names for Name Servers to associate with the domain
-  --renewAuto: string@bool-completer # Whether or not the domain should be configured to automatically renew
+  --renewAuto: oneof<nothing, bool> # Whether or not the domain should be configured to automatically renew
   --subaccountId: string # Reseller subaccount shopperid who can manage the domain
 ]: any -> any {
   let input = $in
@@ -817,8 +816,8 @@ export def "domains-transfer transferIn" [
   --contactRegistrant: any # shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
   --contactTech: any # shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
   --period: int # Can be more than 1 but no more than 10 years total including current registration length (format: integer-positive, default: 1)
-  --privacy: string@bool-completer # Whether or not privacy has been requested (default: false)
-  --renewAuto: string@bool-completer # Whether or not the domain should be configured to automatically renew (default: true)
+  --privacy: oneof<nothing, bool> # Whether or not privacy has been requested (default: false)
+  --renewAuto: oneof<nothing, bool> # Whether or not the domain should be configured to automatically renew (default: true)
 ]: any -> record<currency: string, itemCount: int, orderId: int, total: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -895,7 +894,7 @@ export def "customers-domains-forwards domainsForwardsGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeSubs: string@bool-completer # Optionally include all sub domains if the fqdn specified is a domain and not a sub domain.
+  --includeSubs: oneof<nothing, bool> # Optionally include all sub domains if the fqdn specified is a domain and not a sub domain.
 ]: nothing -> table<fqdn: string, mask: record<description: string, keywords: string, title: string>, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

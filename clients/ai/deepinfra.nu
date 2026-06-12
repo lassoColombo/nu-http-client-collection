@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.deepinfra.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -154,7 +153,7 @@ export def "me get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --checklist: string@bool-completer # default: false
+  --checklist: oneof<nothing, bool> # default: false
   --xi-api-key: string
   --x-api-key: string
 ]: nothing -> record<uid: string, email: any, email_verified: bool, account_setup: bool, require_email_verified: bool, display_name: string, provider: string, picture: any, is_admin: bool, can_access_agents: bool, name: string, first_name: string, last_name: string, country: string, is_business_account: bool, company: string, website: string, title: string, is_team_account: bool, is_team_owner: bool, team_role: any, team_display_name: any, is_team_upgrade_enabled: bool, vercel_connection: any, checklist: any> {
@@ -1116,7 +1115,7 @@ export def "models-publicity post" [
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
   --x-api-key: string
-  --public: string@bool-completer # whether to make the model public of private
+  --public: oneof<nothing, bool> # whether to make the model public of private
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2018,7 +2017,7 @@ export def "lora-create post" [
   base_model: string
   lora_name: string
   --body-source: record # shape: {type: "civitai", civit_url?: any}
-  --private: string@bool-completer
+  --private: oneof<nothing, bool>
   --description: any # default: 
 ]: any -> record<type: string, deploy_id: string, model_name: string, version: string, task: string, status: string, fail_reason: string, created_at: string, updated_at: string, instances: any, config: any, settings: any, standard_args: any, extra_args: any> {
   let input = $in
@@ -2468,7 +2467,7 @@ export def "completions post" [
   --min-p: float # Float that represents the minimum probability for a token to be considered, relative to the probability of the most likely token. Must be in [0, 1]. Set to 0 to disable this. (default: 0.0)
   --top-k: int # Sample from the best k (number of) tokens. 0 means off (default: 0)
   --n: int # number of sequences to return (default: 1)
-  --stream: string@bool-completer # whether to stream the output via SSE or return the full response (default: false)
+  --stream: oneof<nothing, bool> # whether to stream the output via SSE or return the full response (default: false)
   --logprobs: any # return top tokens and their log-probabilities
   --echo: any # return prompt as part of the respons
   --stop: any # up to 16 sequences where the API will stop generating further tokens
@@ -2515,7 +2514,7 @@ export def "chat-completions post" [
   --service-tier: any # The service tier used for processing the request. When set to 'priority', the request will be processed with higher priority (only applies to models that support it).
   model: string # model name
   messages: list # conversation messages: (user,assistant,tool)*,user including one system message anywhere
-  --stream: string@bool-completer # whether to stream the output via SSE or return the full response (default: false)
+  --stream: oneof<nothing, bool> # whether to stream the output via SSE or return the full response (default: false)
   --temperature: float # What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic (default: 1.0)
   --top-p: float # An alternative to sampling with temperature, called nucleus sampling, where the model considers the results of the tokens with top_p probability mass. So 0.1 means only the tokens comprising the top 10% probability mass are considered. (default: 1.0)
   --min-p: float # Float that represents the minimum probability for a token to be considered, relative to the probability of the most likely token. Must be in [0, 1]. Set to 0 to disable this. (default: 0.0)
@@ -2784,10 +2783,10 @@ export def "api-tokens-vercel-export post" [
   --xi-api-key: string
   --x-api-key: string
   project_id_or_name: string
-  --is-sensitive: string@bool-completer
-  --env-development: string@bool-completer
-  --env-preview: string@bool-completer
-  --env-production: string@bool-completer
+  --is-sensitive: oneof<nothing, bool>
+  --env-development: oneof<nothing, bool>
+  --env-preview: oneof<nothing, bool>
+  --env-production: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3553,7 +3552,7 @@ export def "payment-checklist get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --compute-owed: string@bool-completer # default: false
+  --compute-owed: oneof<nothing, bool> # default: false
   --session: any
 ]: nothing -> record<email: bool, billing_address: bool, billing_address_info: any, payment_method: bool, payment_method_info: any, suspended: bool, overdue_invoices: float, last_checked: int, stripe_balance: float, recent: float, limit: any, suspend_reason: any, topup: bool, topup_amount: int, topup_threshold: int, topup_failed: bool, billing_type: any, intermediate_invoicing_threshold: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3831,7 +3830,7 @@ export def "payment-funds post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --use-checkout: string@bool-completer # default: false
+  --use-checkout: oneof<nothing, bool> # default: false
   --session: any
   amount: int # Amount to add in cents
 ]: any -> record<checkout_url: any> {
@@ -3864,7 +3863,7 @@ export def "payment-topup post" [
   --session: any
   --amount: int # Amount to top up in cents (default: 0)
   --threshold: int # Top up threshold in cents, if balance goes below this value, top up will be triggered (default: 0)
-  --enabled: string@bool-completer # If true, top up will be triggered when balance goes below threshold (default: true)
+  --enabled: oneof<nothing, bool> # If true, top up will be triggered when balance goes below threshold (default: true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

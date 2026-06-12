@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -227,7 +226,7 @@ export def "export-charts get" [
   --breakdowns: list # Array of dimensions to break down the data by (default: [])
   --interval: string@interval-completer # The time interval for data aggregation (e.g., day, week, month) (default: day)
   --range: string@range-completer # The time range for which data should be displayed (default: 30d)
-  --previous: string@bool-completer # Whether to show data from the previous period for comparison (default: false)
+  --previous: oneof<nothing, bool> # Whether to show data from the previous period for comparison (default: false)
   --startDate: string # Custom start date for the data range (overrides range if provided)
   --endDate: string # Custom end date for the data range (overrides range if provided)
   --project-id: string
@@ -1771,7 +1770,7 @@ export def "manage-projects post" [
   name: string
   --domain: any
   --cors: list # default: []
-  --crossDomain: string@bool-completer # default: false
+  --crossDomain: oneof<nothing, bool> # default: false
   --types: list # default: []
 ]: any -> any {
   let input = $in
@@ -1821,8 +1820,8 @@ export def "manage-projects patch" [
   --name: string
   --domain: any
   --cors: list
-  --crossDomain: string@bool-completer
-  --allowUnsafeRevenueTracking: string@bool-completer
+  --crossDomain: oneof<nothing, bool>
+  --allowUnsafeRevenueTracking: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

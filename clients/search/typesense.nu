@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost:8108"] }
 def auth-scheme-completer [] { ["x-typesense-api-key"] }
 
@@ -135,7 +134,7 @@ export def "collections createCollection" [
   --default-sorting-field: string # The name of an int32 / float field that determines the order in which the search results are ranked when a sort_by clause is not provided during searching. This field must indicate some kind of popularity. (default: , e.g. num_employees)
   --token-separators: list # List of symbols or special characters to be used for splitting the text into individual words in addition to space and new-line characters.  (default: [])
   --synonym-sets: list # List of synonym set names to associate with this collection
-  --enable-nested-fields: string@bool-completer # Enables experimental support at a collection level for nested object or object array fields. This field is only available if the Typesense server is version `0.24.0.rcn34` or later. (default: false, e.g. true)
+  --enable-nested-fields: oneof<nothing, bool> # Enables experimental support at a collection level for nested object or object array fields. This field is only available if the Typesense server is version `0.24.0.rcn34` or later. (default: false, e.g. true)
   --symbols-to-index: list # List of symbols or special characters to be indexed.  (default: [])
   --voice-query-model: record # Configuration for the voice query model — shape: {model_name?: string}
   --metadata: record # Optional details about the collection, e.g., when it was created, who created it etc.
@@ -676,14 +675,14 @@ export def "curation-sets-items upsertCurationSetItem" [
   --includes: list # List of document `id`s that should be included in the search results with their corresponding `position`s. — item shape: {id: string, position: int}
   --excludes: list # List of document `id`s that should be excluded from the search results. — item shape: {id: string}
   --filter-by: string # A filter by clause that is applied to any search query that matches the curation rule.
-  --remove-matched-tokens: string@bool-completer # Indicates whether search query tokens that exist in the curation's rule should be removed from the search query.
+  --remove-matched-tokens: oneof<nothing, bool> # Indicates whether search query tokens that exist in the curation's rule should be removed from the search query.
   --metadata: record # Return a custom JSON object in the Search API response, when this rule is triggered. This can can be used to display a pre-defined message (eg: a promotion banner) on the front-end when a particular rule is triggered.
   --sort-by: string # A sort by clause that is applied to any search query that matches the curation rule.
   --replace-query: string # Replaces the current search query with this value, when the search query matches the curation rule.
-  --filter-curated-hits: string@bool-completer # When set to true, the filter conditions of the query is applied to the curated records as well. Default: false.
+  --filter-curated-hits: oneof<nothing, bool> # When set to true, the filter conditions of the query is applied to the curated records as well. Default: false.
   --effective-from-ts: int # A Unix timestamp that indicates the date/time from which the curation will be active. You can use this to create rules that start applying from a future point in time.
   --effective-to-ts: int # A Unix timestamp that indicates the date/time until which the curation will be active. You can use this to create rules that stop applying after a period of time.
-  --stop-processing: string@bool-completer # When set to true, curation processing will stop at the first matching rule. When set to false curation processing will continue and multiple curation actions will be triggered in sequence. Curations are processed in the lexical sort order of their id field.
+  --stop-processing: oneof<nothing, bool> # When set to true, curation processing will stop at the first matching rule. When set to false curation processing will continue and multiple curation actions will be triggered in sequence. Curations are processed in the lexical sort order of their id field.
   --id: string # ID of the curation item
 ]: any -> record<rule: record<tags: list<string>, query: string, match: string, filter_by: string>, includes: table<id: string, position: int>, excludes: table<id: string>, filter_by: string, remove_matched_tokens: bool, metadata: record, sort_by: string, replace_query: string, filter_curated_hits: bool, effective_from_ts: int, effective_to_ts: int, stop_processing: bool, id: string> {
   let input = $in
@@ -1350,7 +1349,7 @@ export def "multi-search multiSearch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --multiSearchParameters: record
-  --union: string@bool-completer # When true, merges the search results from each search query into a single ordered set of hits. (default: false)
+  --union: oneof<nothing, bool> # When true, merges the search results from each search query into a single ordered set of hits. (default: false)
   searches: list # item shape: {q?: string, query_by?: string, query_by_weights?: string, text_match_type?: string, prefix?: string, infix?: string, max_extra_prefix?: int, max_extra_suffix?: int, filter_by?: string, sort_by?: string, facet_by?: string, max_facet_values?: int, facet_query?: string, num_typos?: string, page?: int, per_page?: int, limit?: int, offset?: int, group_by?: string, group_limit?: int, group_missing_values?: bool, include_fields?: string, exclude_fields?: string, highlight_full_fields?: string, highlight_affix_num_tokens?: int, highlight_start_tag?: string, highlight_end_tag?: string, snippet_threshold?: int, drop_tokens_threshold?: int, drop_tokens_mode?: "right_to_left"|"left_to_right"|"both_sides:3", typo_tokens_threshold?: int, enable_typos_for_alpha_numerical_tokens?: bool, filter_curated_hits?: bool, enable_synonyms?: bool, enable_analytics?: bool, synonym_prefix?: bool, synonym_num_typos?: int, pinned_hits?: string, hidden_hits?: string, curation_tags?: string, highlight_fields?: string, pre_segmented_query?: bool, preset?: string, enable_curations?: bool, prioritize_exact_match?: bool, prioritize_token_position?: bool, prioritize_num_matching_fields?: bool, enable_typos_for_numerical_tokens?: bool, exhaustive_search?: bool, search_cutoff_ms?: int, use_cache?: bool, cache_ttl?: int, min_len_1typo?: int, min_len_2typo?: int, vector_query?: string, remote_embedding_timeout_ms?: int, remote_embedding_num_tries?: int, facet_strategy?: string, stopwords?: string, facet_return_parent?: string, voice_query?: string, conversation?: bool, conversation_model_id?: string, conversation_id?: string, validate_field_names?: bool, collection?: string, x-typesense-api-key?: string, rerank_hybrid_matches?: bool}
 ]: any -> record<results: table<facet_counts: list, found: int, found_docs: int, search_time_ms: int, out_of: int, search_cutoff: bool, page: int, grouped_hits: list, hits: list, request_params: record, conversation: record, union_request_params: list, metadata: record, code: int, error: string>, conversation: record<answer: string, conversation_history: list<record>, conversation_id: string, query: string>> {
   let input = $in

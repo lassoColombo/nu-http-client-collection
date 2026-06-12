@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.hetzner.cloud/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -841,7 +840,7 @@ export def "floating-ips-actions-change-protection post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete: string@bool-completer # If true, prevents the Floating IP from being deleted (e.g. true)
+  --delete: oneof<nothing, bool> # If true, prevents the Floating IP from being deleted (e.g. true)
 ]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -912,7 +911,7 @@ export def "images list" [
   --type: string@type-completer-2 # Can be used multiple times.
   --status: string@status-completer-1 # Can be used multiple times. The response will only contain Images matching the status.
   --bound-to: string # Can be used multiple times. Server ID linked to the Image. Only available for Images of type `backup`
-  --include-deprecated: string@bool-completer # Can be used multiple times.
+  --include-deprecated: oneof<nothing, bool> # Can be used multiple times.
   --name: string # Can be used to filter resources by their name. The response will only contain the resources matching the specified name
   --label-selector: string # Can be used to filter resources by labels. The response will only contain resources matching the label selector.
 ]: nothing -> record<images: table<bound_to: int, created: string, created_from: record, deleted: string, deprecated: string, description: string, disk_size: float, id: int, image_size: float, labels: record, name: string, os_flavor: string, os_version: string, protection: record, rapid_deploy: bool, status: string, type: string>, meta: record<pagination: record<last_page: float, next_page: float, page: float, per_page: float, previous_page: float, total_entries: float>>> {
@@ -1030,7 +1029,7 @@ export def "images-actions-change-protection post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete: string@bool-completer # If true, prevents the snapshot from being deleted (e.g. true)
+  --delete: oneof<nothing, bool> # If true, prevents the snapshot from being deleted (e.g. true)
 ]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1197,7 +1196,7 @@ export def "load-balancers post" [
   name: string # Name of the Load Balancer (e.g. Web Frontend)
   --network: int # ID of the network the Load Balancer should be attached to on creation (e.g. 123)
   --network-zone: string # Name of network zone (e.g. eu-central)
-  --public-interface: string@bool-completer # Enable or disable the public interface of the Load Balancer (e.g. true)
+  --public-interface: oneof<nothing, bool> # Enable or disable the public interface of the Load Balancer (e.g. true)
   --services: list # Array of services — item shape: {destination_port: int, health_check: record, http?: record, listen_port: int, protocol: "tcp"|"http"|"https", proxyprotocol: bool}
   --targets: list # Array of targets — item shape: {health_status?: list, ip?: record, label_selector?: record, server?: record, targets?: list, type: "server"|"label_selector"|"ip", use_private_ip?: bool}
 ]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, load_balancer: record<algorithm: record<type: string>, created: string, id: int, included_traffic: int, ingoing_traffic: int, labels: record, load_balancer_type: record<deprecated: string, description: string, id: float, max_assigned_certificates: float, max_connections: float, max_services: float, max_targets: float, name: string, prices: list>, location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, name: string, outgoing_traffic: int, private_net: list<record>, protection: record<delete: bool>, public_net: record<enabled: bool, ipv4: record, ipv6: record>, services: list<record>, targets: list<record>>> {
@@ -1323,7 +1322,7 @@ export def "load-balancers-actions-add-service post" [
   --http: record # Configuration option for protocols http and https — shape: {certificates?: list, cookie_lifetime?: int, cookie_name?: string, redirect_http?: bool, sticky_sessions?: bool}
   listen_port: int # Port the Load Balancer listens on (e.g. 443)
   protocol: string@protocol-completer # Protocol of the Load Balancer (e.g. https)
-  --proxyprotocol: string@bool-completer # Is Proxyprotocol enabled or not (e.g. false)
+  --proxyprotocol: oneof<nothing, bool> # Is Proxyprotocol enabled or not (e.g. false)
 ]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1355,7 +1354,7 @@ export def "load-balancers-actions-add-target post" [
   --label-selector: record # Configuration for label selector targets, required if type is `label_selector` — shape: {selector: string}
   --server: record # Configuration for type Server, required if type is `server` — shape: {id: float}
   type: string@type-completer-4 # Type of the resource
-  --use-private-ip: string@bool-completer # Use the private network IP instead of the public IP of the Server, requires the Server and Load Balancer to be in the same network. Default value is false. (e.g. true)
+  --use-private-ip: oneof<nothing, bool> # Use the private network IP instead of the public IP of the Server, requires the Server and Load Balancer to be in the same network. Default value is false. (e.g. true)
 ]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1457,7 +1456,7 @@ export def "load-balancers-actions-change-protection post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete: string@bool-completer # If true, prevents the Load Balancer from being deleted (e.g. true)
+  --delete: oneof<nothing, bool> # If true, prevents the Load Balancer from being deleted (e.g. true)
 ]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1637,7 +1636,7 @@ export def "load-balancers-actions-update-service post" [
   --http: record # Configuration option for protocols http and https — shape: {certificates?: list, cookie_lifetime?: int, cookie_name?: string, redirect_http?: bool, sticky_sessions?: bool}
   listen_port: int # Port the Load Balancer listens on (e.g. 443)
   protocol: string@protocol-completer # Protocol of the Load Balancer (e.g. https)
-  --proxyprotocol: string@bool-completer # Is Proxyprotocol enabled or not (e.g. false)
+  --proxyprotocol: oneof<nothing, bool> # Is Proxyprotocol enabled or not (e.g. false)
 ]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1979,7 +1978,7 @@ export def "networks-actions-change-protection post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete: string@bool-completer # If true, prevents the Network from being deleted (e.g. true)
+  --delete: oneof<nothing, bool> # If true, prevents the Network from being deleted (e.g. true)
 ]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2242,7 +2241,7 @@ export def "primary-ips post" [
   --allow-errors(-e) # Return full response without error handling
   --assignee-id: int # ID of the resource the Primary IP should be assigned to. Omitted if it should not be assigned. (e.g. 17)
   assignee_type: string@assignee-type-completer # Resource type the Primary IP can be assigned to (e.g. server)
-  --auto-delete: string@bool-completer # Delete the Primary IP when the Server it is assigned to is deleted. If omitted defaults to `false`. (e.g. false)
+  --auto-delete: oneof<nothing, bool> # Delete the Primary IP when the Server it is assigned to is deleted. If omitted defaults to `false`. (e.g. false)
   --datacenter: string # ID or name of Datacenter the Primary IP will be bound to. Needs to be omitted if `assignee_id` is passed. (e.g. fsn1-dc8)
   --labels: record # User-defined labels (key-value pairs) (e.g. {labelkey: value})
   name: string # e.g. my-ip
@@ -2313,7 +2312,7 @@ export def "primary-ips put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --auto-delete: string@bool-completer # Delete this Primary IP when the resource it is assigned to is deleted (e.g. true)
+  --auto-delete: oneof<nothing, bool> # Delete this Primary IP when the resource it is assigned to is deleted (e.g. true)
   --labels: record # User-defined labels (key-value pairs) (e.g. {labelkey: value})
   --name: string # New unique name to set (e.g. my-ip)
 ]: any -> record<primary_ip: record<assignee_id: int, assignee_type: string, auto_delete: bool, blocked: bool, created: string, datacenter: record<description: string, id: int, location: record, name: string, server_types: record>, dns_ptr: list<record>, id: int, ip: string, labels: record, name: string, protection: record<delete: bool>, type: string>> {
@@ -2392,7 +2391,7 @@ export def "primary-ips-actions-change-protection post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete: string@bool-completer # If true, prevents the Primary IP from being deleted (e.g. true)
+  --delete: oneof<nothing, bool> # If true, prevents the Primary IP from being deleted (e.g. true)
 ]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2507,7 +2506,7 @@ export def "servers post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --automount: string@bool-completer # Auto-mount Volumes after attach (e.g. false)
+  --automount: oneof<nothing, bool> # Auto-mount Volumes after attach (e.g. false)
   --datacenter: string # ID or name of Datacenter to create Server in (must not be used together with location) (e.g. nbg1-dc3)
   --firewalls: list # Firewalls which should be applied on the Server's public network interface at creation time (e.g. [{firewall: 38}]) — item shape: {firewall?: int}
   image: string # ID or name of the Image the Server is created from (e.g. ubuntu-20.04)
@@ -2519,7 +2518,7 @@ export def "servers post" [
   --public-net: record # Public Network options — shape: {enable_ipv4?: bool, enable_ipv6?: bool, ipv4?: int, ipv6?: int}
   server_type: string # ID or name of the Server type this Server should be created with (e.g. cx11)
   --ssh-keys: list # SSH key IDs (`integer`) or names (`string`) which should be injected into the Server at creation time (e.g. [my-ssh-key])
-  --start-after-create: string@bool-completer # Start Server right after creation. Defaults to true. (e.g. true)
+  --start-after-create: oneof<nothing, bool> # Start Server right after creation. Defaults to true. (e.g. true)
   --user-data: string # Cloud-Init user data to use during Server creation. This field is limited to 32KiB. (e.g. #cloud-config runcmd: - [touch, /root/cloud-init-worked] )
   --volumes: list # Volume IDs which should be attached to the Server at the creation time. Volumes must be in the same Location. (e.g. [123])
 ]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, next_actions: table<command: string, error: record, finished: string, id: int, progress: float, resources: list, started: string, status: string>, root_password: string, server: record<backup_window: string, created: string, datacenter: record<description: string, id: int, location: record, name: string, server_types: record>, id: int, image: record<bound_to: int, created: string, created_from: record, deleted: string, deprecated: string, description: string, disk_size: float, id: int, image_size: float, labels: record, name: string, os_flavor: string, os_version: string, protection: record, rapid_deploy: bool, status: string, type: string>, included_traffic: float, ingoing_traffic: float, iso: record<deprecated: string, description: string, id: int, name: string, type: string>, labels: record, load_balancers: list<int>, locked: bool, name: string, outgoing_traffic: float, placement_group: record<created: string, id: int, labels: record, name: string, servers: list, type: string>, primary_disk_size: float, private_net: list<record>, protection: record<delete: bool, rebuild: bool>, public_net: record<firewalls: list, floating_ips: list, ipv4: record, ipv6: record>, rescue_enabled: bool, server_type: record<cores: float, cpu_type: string, deprecated: bool, description: string, disk: float, id: int, memory: float, name: string, prices: list, storage_type: string>, status: string, volumes: list<int>>> {
@@ -2767,8 +2766,8 @@ export def "servers-actions-change-protection post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete: string@bool-completer # If true, prevents the Server from being deleted (currently delete and rebuild attribute needs to have the same value) (e.g. true)
-  --rebuild: string@bool-completer # If true, prevents the Server from being rebuilt (currently delete and rebuild attribute needs to have the same value) (e.g. true)
+  --delete: oneof<nothing, bool> # If true, prevents the Server from being deleted (currently delete and rebuild attribute needs to have the same value) (e.g. true)
+  --rebuild: oneof<nothing, bool> # If true, prevents the Server from being rebuilt (currently delete and rebuild attribute needs to have the same value) (e.g. true)
 ]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2794,7 +2793,7 @@ export def "servers-actions-change-type post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   server_type: string # ID or name of Server type the Server should migrate to (e.g. cx11)
-  --upgrade-disk: string@bool-completer # If false, do not upgrade the disk (this allows downgrading the Server type later) (e.g. true)
+  --upgrade-disk: oneof<nothing, bool> # If false, do not upgrade the disk (this allows downgrading the Server type later) (e.g. true)
 ]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3366,7 +3365,7 @@ export def "volumes post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --automount: string@bool-completer # Auto-mount Volume after attach. `server` must be provided. (e.g. false)
+  --automount: oneof<nothing, bool> # Auto-mount Volume after attach. `server` must be provided. (e.g. false)
   --format: string # Format Volume after creation. One of: `xfs`, `ext4` (e.g. xfs)
   --labels: record # User-defined labels (key-value pairs) (e.g. {labelkey: value})
   --location: string # Location to create the Volume in (can be omitted if Server is specified) (e.g. nbg1)
@@ -3490,7 +3489,7 @@ export def "volumes-actions-attach post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --automount: string@bool-completer # Auto-mount the Volume after attaching it (e.g. false)
+  --automount: oneof<nothing, bool> # Auto-mount the Volume after attaching it (e.g. false)
   server: int # ID of the Server the Volume will be attached to (e.g. 43)
 ]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let input = $in
@@ -3516,7 +3515,7 @@ export def "volumes-actions-change-protection post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete: string@bool-completer # If true, prevents the Volume from being deleted (e.g. true)
+  --delete: oneof<nothing, bool> # If true, prevents the Volume from being deleted (e.g. true)
 ]: any -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost/api/v2" ""] }
 def auth-scheme-completer [] { ["bearer" "basic"] }
 
@@ -239,7 +238,7 @@ export def "dbrps GetDBRPs" [
   --org: string # An organization name. Only returns DBRP mappings for the specified organization.
   --id: string # A DBPR mapping ID. Only returns the specified DBRP mapping.
   --bucketID: string # A bucket ID. Only returns DBRP mappings that belong to the specified bucket.
-  --default: string@bool-completer # Specifies filtering on default
+  --default: oneof<nothing, bool> # Specifies filtering on default
   --db: string # A database. Only returns DBRP mappings that belong to the 1.x database.
   --rp: string # A [retention policy](https://docs.influxdata.com/influxdb/v1.8/concepts/glossary/#retention-policy-rp). Specifies the 1.x retention policy to filter on.
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
@@ -273,7 +272,7 @@ export def "dbrps PostDBRP" [
   bucketID: string # A bucket ID. Identifies the bucket used as the target for the translation.
   database: string # A database name. Identifies the InfluxDB v1 database.
   retention_policy: string # A [retention policy](https://docs.influxdata.com/influxdb/v1.8/concepts/glossary/#retention-policy-rp) name. Identifies the InfluxDB v1 retention policy mapping.
-  --default: string@bool-completer # Set to `true` to use this DBRP mapping as the default retention policy for the database (specified by the `database` property's value).
+  --default: oneof<nothing, bool> # Set to `true` to use this DBRP mapping as the default retention policy for the database (specified by the `database` property's value).
 ]: any -> record<id: string, orgID: string, bucketID: string, database: string, retention_policy: string, default: bool, virtual: bool, links: record<next: string, self: string, prev: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -333,7 +332,7 @@ export def "dbrps PatchDBRPID" [
   --org: string # An organization name. Specifies the organization that owns the DBRP mapping.
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --retention-policy: string # A [retention policy](https://docs.influxdata.com/influxdb/v1.8/concepts/glossary/#retention-policy-rp) name. Identifies the InfluxDB v1 retention policy mapping.
-  --default: string@bool-completer # Set to `true` to use this DBRP mapping as the default retention policy for the database (specified by the `database` property's value). To remove the default mapping, set to `false`.
+  --default: oneof<nothing, bool> # Set to `true` to use this DBRP mapping as the default retention policy for the database (specified by the `database` property's value). To remove the default mapping, set to `false`.
 ]: any -> record<content: record<id: string, orgID: string, bucketID: string, database: string, retention_policy: string, default: bool, virtual: bool, links: record<next: string, self: string, prev: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2141,7 +2140,7 @@ export def "orgs GetOrgs" [
   --allow-errors(-e) # Return full response without error handling
   --offset: int # The offset for pagination. The number of records to skip.  For more information about pagination parameters, see [Pagination](https://docs.influxdata.com/influxdb/cloud/api/#tag/Pagination).
   --limit: int # Limits the number of records returned. Default is `20`.  (default: 20)
-  --descending: string@bool-completer # default: false
+  --descending: oneof<nothing, bool> # default: false
   --org: string # An organization name. Only returns the specified organization.
   --orgID: string # An organization ID. Only returns the specified organization.
   --userID: string # A user ID. Only returns organizations where the specified user is a member or owner.
@@ -2729,7 +2728,7 @@ export def "templates-apply ApplyTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dryRun: string@bool-completer # Only applies a dry run of the templates passed in the request.  - Validates the template and generates a resource diff and summary. - Doesn't install templates or make changes to the InfluxDB instance.
+  --dryRun: oneof<nothing, bool> # Only applies a dry run of the templates passed in the request.  - Validates the template and generates a resource diff and summary. - Doesn't install templates or make changes to the InfluxDB instance.
   --orgID: string # Organization ID. InfluxDB applies templates to this organization. The organization owns all resources created by the template.  To find your organization, see how to [view organizations](https://docs.influxdata.com/influxdb/cloud/organizations/view-orgs/).
   --stackID: string # ID of the stack to update.  To apply templates to an existing stack in the organization, use the `stackID` parameter. If you apply templates without providing a stack ID, InfluxDB initializes a new stack with all new resources.  To find a stack ID, use the InfluxDB [`/api/v2/stacks` API endpoint](#operation/ListStacks) to list stacks.  #### Related guides  - [Stacks](https://docs.influxdata.com/influxdb/cloud/influxdb-templates/stacks/) - [View stacks](https://docs.influxdata.com/influxdb/cloud/influxdb-templates/stacks/view/)
   --template: record # A template object to apply. A template object has a `contents` property with an array of InfluxDB resource configurations.  Pass `template` to apply only one template object. If you use `template`, you can't use the `templates` parameter. If you want to apply multiple template objects, use `templates` instead. — shape: {contentType?: string, sources?: list, contents?: list}
@@ -4861,7 +4860,7 @@ export def "orgs-usage GetOrgUsageID" [
   --allow-errors(-e) # Return full response without error handling
   --start: int # Earliest time to include in results. For more information about timestamps, see [Manipulate timestamps with Flux](https://docs.influxdata.com/influxdb/cloud/query-data/flux/manipulate-timestamps/).  (format: unix timestamp)
   --stop: int # Latest time to include in results. For more information about timestamps, see [Manipulate timestamps with Flux](https://docs.influxdata.com/influxdb/cloud/query-data/flux/manipulate-timestamps/).  (format: unix timestamp)
-  --qp-raw: string@bool-completer # return raw usage data (default: false)
+  --qp-raw: oneof<nothing, bool> # return raw usage data (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4915,7 +4914,7 @@ export def "dashboards GetDashboards" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --offset: int # The offset for pagination. The number of records to skip.  For more information about pagination parameters, see [Pagination](https://docs.influxdata.com/influxdb/cloud/api/#tag/Pagination).
-  --descending: string@bool-completer # default: false
+  --descending: oneof<nothing, bool> # default: false
   --limit: int # The maximum number of [dashboards](https://docs.influxdata.com/influxdb/cloud/reference/glossary/#dashboard) to return. Default is `20`. The minimum is `-1` and the maximum is `100`.  (default: 20)
   --owner: string # A user ID. Only returns [dashboards](https://docs.influxdata.com/influxdb/cloud/reference/glossary/#dashboard) where the specified user has the `owner` role.
   --sortBy: string@sortBy-completer # The column to sort by.

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://apis.fedex.com" "https://apis-sandbox.fedex.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -132,7 +131,7 @@ export def "track-trackingnumbers post" [
   --allow-errors(-e) # Return full response without error handling
   --x-locale: string # e.g. en_US
   --x-customer-transaction-id: string
-  --includeDetailedScans: string@bool-completer # When true, include per-event detailed scan history
+  --includeDetailedScans: oneof<nothing, bool> # When true, include per-event detailed scan history
   --trackingInfo: list # item shape: {shipDateBegin?: string, shipDateEnd?: string, trackingNumberInfo?: record}
 ]: any -> record<transactionId: string, customerTransactionId: string, output: record<completeTrackResults: list<record>>> {
   let input = $in
@@ -160,7 +159,7 @@ export def "track-referencenumbers post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDetailedScans: string@bool-completer
+  --includeDetailedScans: oneof<nothing, bool>
   --trackingInfo: list # item shape: {shipDateBegin?: string, shipDateEnd?: string, carrierCode?: string, referenceTypeCode?: "BILL_OF_LADING"|"INVOICE"|"PURCHASE_ORDER"|"REFERENCE"|"SHIPPER_REFERENCE", value?: string, destinationCountryCode?: string, destinationPostalCode?: string, shipperAccountNumber?: string}
 ]: any -> record<transactionId: string, customerTransactionId: string, output: record<completeTrackResults: list<record>>> {
   let input = $in
@@ -186,7 +185,7 @@ export def "track-tcn post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDetailedScans: string@bool-completer
+  --includeDetailedScans: oneof<nothing, bool>
   --trackingInfo: list # item shape: {trackingNumberInfo?: record}
 ]: any -> record<transactionId: string, customerTransactionId: string, output: record<completeTrackResults: list<record>>> {
   let input = $in

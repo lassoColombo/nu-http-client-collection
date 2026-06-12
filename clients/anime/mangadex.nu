@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.mangadex.org" "https://api.mangadex.dev"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -207,7 +206,7 @@ export def "manga post-manga" [
   status: string@status-completer
   --year: int # Year of release (nullable)
   contentRating: string@contentRating-completer
-  --chapterNumbersResetOnNewVolume: string@bool-completer
+  --chapterNumbersResetOnNewVolume: oneof<nothing, bool>
   --tags: list
   --primaryCover: string # nullable, format: uuid
   --version: int
@@ -697,7 +696,7 @@ export def "group post-group" [
   --description: string # nullable
   --twitter: string # nullable, format: uri
   --mangaUpdates: string # nullable
-  --inactive: string@bool-completer
+  --inactive: oneof<nothing, bool>
   --publishDelay: string # nullable
 ]: any -> record<result: string, response: string, data: record<id: string, type: string, attributes: record<name: string, altNames: list, website: string, ircServer: string, ircChannel: string, discord: string, contactEmail: string, description: string, twitter: string, mangaUpdates: string, focusedLanguage: list, locked: bool, official: bool, verified: bool, inactive: bool, exLicensed: bool, publishDelay: string, version: int, createdAt: string, updatedAt: string>, relationships: list<record>>> {
   let input = $in
@@ -763,8 +762,8 @@ export def "group put-group-id" [
   --twitter: string # nullable, format: uri
   --mangaUpdates: string # nullable, format: uri
   --focusedLanguages: list # nullable
-  --inactive: string@bool-completer
-  --locked: string@bool-completer
+  --inactive: oneof<nothing, bool>
+  --locked: oneof<nothing, bool>
   --publishDelay: string
   version: int
 ]: any -> record<result: string, response: string, data: record<id: string, type: string, attributes: record<name: string, altNames: list, website: string, ircServer: string, ircChannel: string, discord: string, contactEmail: string, description: string, twitter: string, mangaUpdates: string, focusedLanguage: list, locked: bool, official: bool, verified: bool, inactive: bool, exLicensed: bool, publishDelay: string, version: int, createdAt: string, updatedAt: string>, relationships: list<record>>> {
@@ -1868,7 +1867,7 @@ export def "manga-read post-manga-chapter-readmarkers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --updateHistory: string@bool-completer # Adding this will cause the chapter to be stored in the user's reading history
+  --updateHistory: oneof<nothing, bool> # Adding this will cause the chapter to be stored in the user's reading history
   --chapterIdsRead: list
   --chapterIdsUnread: list
 ]: any -> record<result: string> {
@@ -1897,7 +1896,7 @@ export def "manga-read get-manga-chapter-readmarkers-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ids: list # Manga ids
-  --grouped: string@bool-completer # Group results by manga ids
+  --grouped: oneof<nothing, bool> # Group results by manga ids
 ]: nothing -> record<result: string, data: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1949,7 +1948,7 @@ export def "at-home-server get-at-home-server-chapterId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forcePort443: string@bool-completer # Force selecting from MangaDex@Home servers that use the standard HTTPS port 443.  While the conventional port for HTTPS traffic is 443 and servers are encouraged to use it, it is not a hard requirement as it technically isn't anything special.  However, some misbehaving school/office network will at time block traffic to non-standard ports, and setting this flag to `true` will ensure selection of a server that uses these. (default: false)
+  --forcePort443: oneof<nothing, bool> # Force selecting from MangaDex@Home servers that use the standard HTTPS port 443.  While the conventional port for HTTPS traffic is 443 and servers are encouraged to use it, it is not a hard requirement as it technically isn't anything special.  However, some misbehaving school/office network will at time block traffic to non-standard ports, and setting this flag to `true` will ensure selection of a server that uses these. (default: false)
 ]: nothing -> record<result: string, baseUrl: string, chapter: record<hash: string, data: list<string>, dataSaver: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2597,7 +2596,7 @@ export def "upload-commit commit-upload-session" [
   --Content-Type: string
   --chapterDraft: record # shape: {volume: string, chapter: string, title: string, translatedLanguage: string, externalUrl?: string, publishAt?: string}
   --pageOrder: list # ordered list of Upload Session File ids
-  --termsAccepted: string@bool-completer # mandatory on chapter upload, refer to terms at https://mangadex.org/compliance
+  --termsAccepted: oneof<nothing, bool> # mandatory on chapter upload, refer to terms at https://mangadex.org/compliance
 ]: any -> record<id: string, type: string, attributes: record<title: string, volume: string, chapter: string, pages: int, translatedLanguage: string, uploader: string, externalUrl: string, version: int, createdAt: string, updatedAt: string, publishAt: string, readableAt: string, isUnavailable: bool>, relationships: table<id: string, type: string, related: string, attributes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

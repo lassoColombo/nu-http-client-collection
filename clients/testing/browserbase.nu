@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.browserbase.com"] }
 def auth-scheme-completer [] { ["x-bb-api-key"] }
 
@@ -433,9 +432,9 @@ export def "fetch create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-url: string # The URL to fetch (format: uri)
-  --allowRedirects: string@bool-completer # Whether to follow HTTP redirects (default: false)
-  --allowInsecureSsl: string@bool-completer # Whether to bypass TLS certificate verification (default: false)
-  --proxies: string@bool-completer # Whether to enable proxy support for the request (default: false)
+  --allowRedirects: oneof<nothing, bool> # Whether to follow HTTP redirects (default: false)
+  --allowInsecureSsl: oneof<nothing, bool> # Whether to bypass TLS certificate verification (default: false)
+  --proxies: oneof<nothing, bool> # Whether to enable proxy support for the request (default: false)
   --format: any # Output format for the response content. `raw` (default) returns the response body unchanged; `json` returns structured data (requires `schema`); `markdown` returns the page as markdown. (default: raw)
   --schema: record # JSON Schema describing the desired structure of the response. Only used when `format` is `json`.
 ]: any -> record<id: string, statusCode: int, headers: record, content: any, contentType: string, encoding: string> {
@@ -843,7 +842,7 @@ export def "sessions create" [
   --extensionId: string # The uploaded Extension ID. See [Upload Extension](/reference/api/upload-an-extension).
   --browserSettings: record # shape: {context?: record, extensionId?: string, viewport?: record, blockAds?: bool, solveCaptchas?: bool, recordSession?: bool, logSession?: bool, advancedStealth?: bool, verified?: bool, captchaImageSelector?: string, captchaInputSelector?: string, os?: "windows"|"mac"|"linux"|"mobile"|"tablet", ignoreCertificateErrors?: bool}
   --timeout: int # Duration in seconds after which the session will automatically end. Defaults to the Project's `defaultTimeout`.
-  --keepAlive: string@bool-completer # Set to true to keep the session alive even after disconnections. Available on the Hobby Plan and above.
+  --keepAlive: oneof<nothing, bool> # Set to true to keep the session alive even after disconnections. Available on the Hobby Plan and above.
   --proxies: any # Proxy configuration. Can be true for default proxy, or an array of proxy configurations.
   --proxySettings: record # Supplementary proxy settings. Optional. — shape: {caCertificates?: list}
   --region: string@region-completer # The region where the Session should run. (default: us-west-2)

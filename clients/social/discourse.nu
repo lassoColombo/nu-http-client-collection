@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://discourse.example.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -196,7 +195,7 @@ export def "admin-backupsjson createBackup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-uploads: string@bool-completer
+  --with-uploads: oneof<nothing, bool>
 ]: any -> record<success: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -372,9 +371,9 @@ export def "categoriesjson createCategory" [
   --emoji: string
   --icon: string
   --parent-category-id: int
-  --allow-badges: string@bool-completer
+  --allow-badges: oneof<nothing, bool>
   --slug: string
-  --topic-featured-links-allowed: string@bool-completer
+  --topic-featured-links-allowed: oneof<nothing, bool>
   --permissions: record # shape: {everyone?: int, staff?: int}
   --search-priority: int
   --form-template-ids: list
@@ -403,7 +402,7 @@ export def "categoriesjson listCategories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-subcategories: string@bool-completer
+  --include-subcategories: oneof<nothing, bool>
 ]: nothing -> record<category_list: record<can_create_category: bool, can_create_topic: bool, categories: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -436,9 +435,9 @@ export def "categories updateCategory" [
   --emoji: string
   --icon: string
   --parent-category-id: int
-  --allow-badges: string@bool-completer
+  --allow-badges: oneof<nothing, bool>
   --slug: string
-  --topic-featured-links-allowed: string@bool-completer
+  --topic-featured-links-allowed: oneof<nothing, bool>
   --permissions: record # shape: {everyone?: int, staff?: int}
   --search-priority: int
   --form-template-ids: list
@@ -729,7 +728,7 @@ export def "invitesjson createInvite" [
   --Api-Key: string
   --Api-Username: string
   --email: string # required for email invites only (e.g. not-a-user-yet@example.com)
-  --skip-email: string@bool-completer # default: false
+  --skip-email: oneof<nothing, bool> # default: false
   --custom-message: string # optional, for email invites
   --max-redemptions-allowed: int # optional, for link invites (default: 1, e.g. 5)
   --topic-id: int
@@ -765,7 +764,7 @@ export def "invites-create-multiplejson createMultipleInvites" [
   --Api-Key: string
   --Api-Username: string
   --email: string # pass 1 email per invite to be generated. other properties will be shared by each invite. (e.g. [not-a-user-yet-1@example.com, not-a-user-yet-2@example.com])
-  --skip-email: string@bool-completer # default: false
+  --skip-email: oneof<nothing, bool> # default: false
   --custom-message: string # optional, for email invites
   --max-redemptions-allowed: int # optional, for link invites (default: 1, e.g. 5)
   --topic-id: int
@@ -879,7 +878,7 @@ export def "postsjson createTopicPostPM" [
   --reply-to-post-number: int # Optional, the post number to reply to inside a topic.
   --embed-url: string # Provide a URL from a remote system to associate a forum topic with that URL, typically for using Discourse as a comments system for an external blog.
   --external-id: string # Provide an external_id from a remote system to associate a forum topic with that id.
-  --auto-track: string@bool-completer # If false, the user will not track the topic. By default, the user will track the topic.
+  --auto-track: oneof<nothing, bool> # If false, the user will not track the topic. By default, the user will track the topic.
 ]: any -> record<id: int, name: string, username: string, avatar_template: string, created_at: string, raw: string, cooked: string, post_number: int, post_type: int, posts_count: int, updated_at: string, reply_count: int, reply_to_post_number: string, quote_count: int, incoming_link_count: int, reads: int, readers_count: int, score: float, yours: bool, topic_id: int, topic_slug: string, display_username: string, primary_group_name: string, flair_name: string, flair_url: string, flair_bg_color: string, flair_color: string, flair_group_id: int, badges_granted: list<any>, version: int, can_edit: bool, can_delete: bool, can_recover: bool, can_see_hidden_post: bool, can_wiki: bool, user_title: string, bookmarked: bool, actions_summary: table<id: int, can_act: bool>, moderator: bool, admin: bool, staff: bool, user_id: int, draft_sequence: int, hidden: bool, trust_level: int, deleted_at: string, user_deleted: bool, edit_reason: string, can_view_edit_history: bool, wiki: bool, reviewable_id: int, reviewable_score_count: int, reviewable_score_pending_count: int, post_url: string, post_localizations: list<any>, mentioned_users: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -929,7 +928,7 @@ export def "posts updatePost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --post: record # shape: {raw: string, edit_reason?: string}
-  --bypass-bump: string@bool-completer # Skip bumping the topic when updating the post. Requires staff or TL4 permissions.
+  --bypass-bump: oneof<nothing, bool> # Skip bumping the topic when updating the post. Requires staff or TL4 permissions.
 ]: any -> record<post: record<id: int, username: string, avatar_template: string, created_at: string, cooked: string, post_number: int, post_type: int, posts_count: int, updated_at: string, reply_count: int, reply_to_post_number: string, quote_count: int, incoming_link_count: int, reads: int, readers_count: int, score: float, yours: bool, topic_id: int, topic_slug: string, primary_group_name: string, flair_name: string, flair_url: string, flair_bg_color: string, flair_color: string, flair_group_id: int, badges_granted: list<any>, version: int, can_edit: bool, can_delete: bool, can_recover: bool, can_see_hidden_post: bool, can_wiki: bool, user_title: string, bookmarked: bool, raw: string, actions_summary: list<record>, moderator: bool, admin: bool, staff: bool, user_id: int, draft_sequence: int, hidden: bool, trust_level: int, deleted_at: string, user_deleted: bool, edit_reason: string, can_view_edit_history: bool, wiki: bool, reviewable_id: int, reviewable_score_count: int, reviewable_score_pending_count: int, post_url: string, post_localizations: list<any>, mentioned_users: list<any>, name: string, display_username: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -955,7 +954,7 @@ export def "posts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force-destroy: string@bool-completer # The `SiteSetting.can_permanently_delete` needs to be enabled first before this param can be used. Also this endpoint needs to be called first without `force_destroy` and then followed up with a second call 5 minutes later with `force_destroy` to permanently delete. (e.g. true)
+  --force-destroy: oneof<nothing, bool> # The `SiteSetting.can_permanently_delete` needs to be enabled first before this param can be used. Also this endpoint needs to be called first without `force_destroy` and then followed up with a second call 5 minutes later with `force_destroy` to permanently delete. (e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1036,7 +1035,7 @@ export def "post-actionsjson performPostAction" [
   --Api-Username: string
   id: int # The ID of the post to perform the action on
   post_action_type_id: int # The ID of the post action type (e.g., 2 for like)
-  --flag-topic: string@bool-completer # Whether to flag the entire topic
+  --flag-topic: oneof<nothing, bool> # Whether to flag the entire topic
 ]: any -> record<id: int, name: string, username: string, avatar_template: string, created_at: string, cooked: string, post_number: int, post_type: int, posts_count: int, updated_at: string, reply_count: int, reply_to_post_number: string, quote_count: int, incoming_link_count: int, reads: int, readers_count: int, score: float, yours: bool, topic_id: int, topic_slug: string, display_username: string, primary_group_name: string, flair_name: string, flair_url: string, flair_bg_color: string, flair_color: string, flair_group_id: int, badges_granted: list<any>, version: int, can_edit: bool, can_delete: bool, can_recover: bool, can_see_hidden_post: bool, can_wiki: bool, user_title: string, bookmarked: bool, actions_summary: table<id: int, count: int, acted: bool, can_undo: bool, can_act: bool>, moderator: bool, admin: bool, staff: bool, user_id: int, hidden: bool, trust_level: int, deleted_at: string, user_deleted: bool, edit_reason: string, can_view_edit_history: bool, wiki: bool, reviewable_id: int, reviewable_score_count: int, reviewable_score_pending_count: int, post_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1458,7 +1457,7 @@ export def "t-invite-groupjson inviteGroupToTopic" [
   --Api-Key: string
   --Api-Username: string
   --group: string # The name of the group to invite
-  --should-notify: string@bool-completer # Whether to notify the group, it defaults to true
+  --should-notify: oneof<nothing, bool> # Whether to notify the group, it defaults to true
 ]: any -> record<group: record<id: int, name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1665,7 +1664,7 @@ export def "t-timerjson createTopicTimer" [
   --Api-Username: string
   --time: string # e.g. 
   --status-type: string
-  --based-on-last-post: string@bool-completer
+  --based-on-last-post: oneof<nothing, bool>
   --category-id: int
 ]: any -> record<success: string, execute_at: string, duration: string, based_on_last_post: bool, closed: bool, category_id: int> {
   let input = $in
@@ -1717,7 +1716,7 @@ export def "uploadsjson createUpload" [
   --allow-errors(-e) # Return full response without error handling
   upload_type: string@upload-type-completer
   --user-id: int # required if uploading an avatar
-  --synchronous: string@bool-completer # Use this flag to return an id and url
+  --synchronous: oneof<nothing, bool> # Use this flag to return an id and url
   --file: string # format: binary
 ]: any -> record<id: int, url: string, original_filename: string, filesize: int, width: int, height: int, thumbnail_width: int, thumbnail_height: int, extension: string, short_url: string, short_path: string, retain_hours: string, human_filesize: string, dominant_color: string, thumbnail: record<id: int, upload_id: int, url: string, extension: string, width: int, height: int, filesize: int>, optimized_video: record<id: int, upload_id: int, url: string, extension: string, filesize: int, sha1: string, original_filename: string>> {
   let input = $in
@@ -1935,8 +1934,8 @@ export def "usersjson createUser" [
   email: string
   password: string
   username: string
-  --active: string@bool-completer # This param requires an admin api key in the request header or it will be ignored
-  --approved: string@bool-completer
+  --active: oneof<nothing, bool> # This param requires an admin api key in the request header or it will be ignored
+  --approved: oneof<nothing, bool>
   --user-fields: record # shape: {1?: bool}
   --external-ids: record
 ]: any -> record<success: bool, active: bool, message: string, user_id: int> {
@@ -2203,10 +2202,10 @@ export def "admin-users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete-posts: string@bool-completer
-  --block-email: string@bool-completer
-  --block-urls: string@bool-completer
-  --block-ip: string@bool-completer
+  --delete-posts: oneof<nothing, bool>
+  --block-email: oneof<nothing, bool>
+  --block-urls: oneof<nothing, bool>
+  --block-ip: oneof<nothing, bool>
 ]: any -> record<deleted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2402,8 +2401,8 @@ export def "admin-usersjson adminListUsers" [
   --order: string@order-completer-2
   --asc: string@asc-completer
   --page: int
-  --show-emails: string@bool-completer # Include user email addresses in response. These requests will be logged in the staff action logs.
-  --stats: string@bool-completer # Include user stats information
+  --show-emails: oneof<nothing, bool> # Include user email addresses in response. These requests will be logged in the staff action logs.
+  --stats: oneof<nothing, bool> # Include user stats information
   --email: string # Filter to the user with this email address
   --ip: string # Filter to users with this IP address
 ]: nothing -> table<id: int, username: string, name: string, avatar_template: string, email: string, secondary_emails: list<any>, active: bool, admin: bool, moderator: bool, last_seen_at: string, last_emailed_at: string, created_at: string, last_seen_age: float, last_emailed_age: float, created_at_age: float, trust_level: int, manual_locked_trust_level: string, title: string, time_read: int, staged: bool, days_visited: int, posts_read_count: int, topics_entered: int, post_count: int> {
@@ -2432,8 +2431,8 @@ export def "admin-users-list adminListUsersFlag" [
   --order: string@order-completer-2
   --asc: string@asc-completer
   --page: int
-  --show-emails: string@bool-completer # Include user email addresses in response. These requests will be logged in the staff action logs.
-  --stats: string@bool-completer # Include user stats information
+  --show-emails: oneof<nothing, bool> # Include user email addresses in response. These requests will be logged in the staff action logs.
+  --stats: oneof<nothing, bool> # Include user stats information
   --email: string # Filter to the user with this email address
   --ip: string # Filter to users with this IP address
 ]: nothing -> table<id: int, username: string, name: string, avatar_template: string, email: string, secondary_emails: list<any>, active: bool, admin: bool, moderator: bool, last_seen_at: string, last_emailed_at: string, created_at: string, last_seen_age: float, last_emailed_age: float, created_at_age: float, trust_level: int, manual_locked_trust_level: string, title: string, time_read: int, staged: bool, days_visited: int, posts_read_count: int, topics_entered: int, post_count: int> {

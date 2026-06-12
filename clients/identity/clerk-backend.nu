@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.clerk.com/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -129,7 +128,7 @@ export def "public-interstitial GetPublicInterstitial" [
   --proxy-url: string # The proxy URL of your instance
   --domain: string # The domain of your instance
   --sign-in-url: string # The sign in URL of your instance
-  --use-domain-for-script: string@bool-completer # Whether to use the domain for the script URL
+  --use-domain-for-script: oneof<nothing, bool> # Whether to use the domain for the script URL
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -175,7 +174,7 @@ export def "clients GetClientList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --paginated: string@bool-completer # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
+  --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
 ]: nothing -> any {
@@ -249,8 +248,8 @@ export def "email-addresses CreateEmailAddress" [
   --allow-errors(-e) # Return full response without error handling
   user_id: string # The ID representing the user
   email_address: string # The new email address. Must adhere to the RFC 5322 specification for email address format.
-  --verified: string@bool-completer # When created, the email address will be marked as verified. (nullable)
-  --primary: string@bool-completer # Create this email address as the primary email address for the user. Default: false, unless it is the first email address. (nullable)
+  --verified: oneof<nothing, bool> # When created, the email address will be marked as verified. (nullable)
+  --primary: oneof<nothing, bool> # Create this email address as the primary email address for the user. Default: false, unless it is the first email address. (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -320,8 +319,8 @@ export def "email-addresses UpdateEmailAddress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --verified: string@bool-completer # The email address will be marked as verified. (nullable)
-  --primary: string@bool-completer # Set this email address as the primary email address for the user. (nullable)
+  --verified: oneof<nothing, bool> # The email address will be marked as verified. (nullable)
+  --primary: oneof<nothing, bool> # Set this email address as the primary email address for the user. (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -424,9 +423,9 @@ export def "phone-numbers CreatePhoneNumber" [
   --allow-errors(-e) # Return full response without error handling
   user_id: string # The ID representing the user
   phone_number: string # The new phone number. Must adhere to the E.164 standard for phone number format.
-  --verified: string@bool-completer # When created, the phone number will be marked as verified. (nullable)
-  --primary: string@bool-completer # Create this phone number as the primary phone number for the user. Default: false, unless it is the first phone number. (nullable)
-  --reserved-for-second-factor: string@bool-completer # Create this phone number as reserved for multi-factor authentication. The phone number must also be verified. If there are no other reserved second factors, the phone number will be set as the default second factor. (nullable)
+  --verified: oneof<nothing, bool> # When created, the phone number will be marked as verified. (nullable)
+  --primary: oneof<nothing, bool> # Create this phone number as the primary phone number for the user. Default: false, unless it is the first phone number. (nullable)
+  --reserved-for-second-factor: oneof<nothing, bool> # Create this phone number as reserved for multi-factor authentication. The phone number must also be verified. If there are no other reserved second factors, the phone number will be set as the default second factor. (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -496,9 +495,9 @@ export def "phone-numbers UpdatePhoneNumber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --verified: string@bool-completer # The phone number will be marked as verified. (nullable)
-  --primary: string@bool-completer # Set this phone number as the primary phone number for the user. (nullable)
-  --reserved-for-second-factor: string@bool-completer # Set this phone number as reserved for multi-factor authentication. The phone number must also be verified. If there are no other reserved second factors, the phone number will be set as the default second factor. (nullable)
+  --verified: oneof<nothing, bool> # The phone number will be marked as verified. (nullable)
+  --primary: oneof<nothing, bool> # Set this phone number as the primary phone number for the user. (nullable)
+  --reserved-for-second-factor: oneof<nothing, bool> # Set this phone number as reserved for multi-factor authentication. The phone number must also be verified. If there are no other reserved second factors, the phone number will be set as the default second factor. (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -602,7 +601,7 @@ export def "sessions GetSessionList" [
   --client-id: string # List sessions for the given client
   --user-id: string # List sessions for the given user
   --status: string@status-completer # Filter sessions by the provided status
-  --paginated: string@bool-completer # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
+  --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
 ]: nothing -> any {
@@ -784,7 +783,7 @@ export def "templates GetTemplateList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --paginated: string@bool-completer # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
+  --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
 ]: nothing -> any {
@@ -842,7 +841,7 @@ export def "templates UpsertTemplate" [
   --subject: string # The email subject. Applicable only to email templates. (nullable)
   --markup: string # The editor markup used to generate the body of the template (nullable)
   --body-body: string # The template body before variable interpolation
-  --delivered-by-clerk: string@bool-completer # Whether Clerk should deliver emails or SMS messages based on the current template (nullable)
+  --delivered-by-clerk: oneof<nothing, bool> # Whether Clerk should deliver emails or SMS messages based on the current template (nullable)
   --from-email-name: string # The local part of the From email address that will be used for emails. For example, in the address 'hello@example.com', the local part is 'hello'. Applicable only to email templates.
   --reply-to-email-name: string # The local part of the Reply To email address that will be used for emails. For example, in the address 'hello@example.com', the local part is 'hello'. Applicable only to email templates.
 ]: any -> any {
@@ -930,7 +929,7 @@ export def "templates-toggle-delivery ToggleTemplateDelivery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delivered-by-clerk: string@bool-completer # Whether Clerk should deliver emails or SMS messages based on the current template
+  --delivered-by-clerk: oneof<nothing, bool> # Whether Clerk should deliver emails or SMS messages based on the current template
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -968,7 +967,7 @@ export def "users GetUserList" [
   --phone-number-query: string # Returns users with phone numbers that match the given query, via case-insensitive partial match. For example, `phone_number_query=555` will match a user with the phone number `+1555xxxxxxx`.
   --username-query: string # Returns users with usernames that match the given query, via case-insensitive partial match. For example, `username_query=CoolUser` will match a user with the username `SomeCoolUser`.
   --name-query: string # Returns users with names that match the given query, via case-insensitive partial match.
-  --banned: string@bool-completer # Returns users which are either banned (`banned=true`) or not banned (`banned=false`).
+  --banned: oneof<nothing, bool> # Returns users which are either banned (`banned=true`) or not banned (`banned=false`).
   --last-active-at-before: int # Returns users whose last session activity was before the given date (with millisecond precision). Example: use 1700690400000 to retrieve users whose last session activity was before 2023-11-23. (e.g. 1700690400000)
   --last-active-at-after: int # Returns users whose last session activity was after the given date (with millisecond precision). Example: use 1700690400000 to retrieve users whose last session activity was after 2023-11-23. (e.g. 1700690400000)
   --last-active-at-since: int # Returns users that had session activity since the given date. Example: use 1700690400000 to retrieve users that had session activity from 2023-11-23 until the current day. Deprecated in favor of `last_active_at_after`. (DEPRECATED, e.g. 1700690400000)
@@ -1016,23 +1015,23 @@ export def "users CreateUser" [
   --password: string # The plaintext password to give the user. Must be at least 8 characters long, and cannot be in any list of hacked passwords. (nullable)
   --password-digest: string # In case you already have the password digests and not the passwords, you can use them for the newly created user via this property. The digests should be generated with one of the supported algorithms. The hashing algorithm can be specified using the `password_hasher` property. (nullable)
   --password-hasher: string # The hashing algorithm that was used to generate the password digest.  The algorithms we support at the moment are [`bcrypt`](https://en.wikipedia.org/wiki/Bcrypt), [`bcrypt_sha256_django`](https://docs.djangoproject.com/en/4.0/topics/auth/passwords/), [`md5`](https://en.wikipedia.org/wiki/MD5), `pbkdf2_sha1`, `pbkdf2_sha256`, [`pbkdf2_sha256_django`](https://docs.djangoproject.com/en/4.0/topics/auth/passwords/), `pbkdf2_sha512`, [`phpass`](https://www.openwall.com/phpass/), `md5_phpass`, [`scrypt_firebase`](https://firebaseopensource.com/projects/firebase/scrypt/), [`scrypt_werkzeug`](https://werkzeug.palletsprojects.com/en/3.0.x/utils/#werkzeug.security.generate_password_hash), [`sha256`](https://en.wikipedia.org/wiki/SHA-2), [`ldap_ssha`](https://www.openldap.org/faq/data/cache/347.html), the [`argon2`](https://argon2.online/) variants: `argon2i` and `argon2id`, `sha512_symfony`, the SHA-512 variant of the [Symfony](https://symfony.com/doc/current/security/passwords.html) legacy hasher, and `pbkdf2_sha512_hex`, a variant of `pbkdf2_sha512` that accepts hex-encoded salt and hash.  Each of the supported hashers expects the incoming digest to be in a particular format. See the [Clerk docs](https://clerk.com/docs/references/backend/user/create-user) for more information.
-  --skip-password-checks: string@bool-completer # When set to `true` all password checks are skipped. It is recommended to use this method only when migrating plaintext passwords to Clerk. Upon migration the user base should be prompted to pick stronger password. (nullable)
-  --skip-password-requirement: string@bool-completer # When set to `true`, `password` is not required anymore when creating the user and can be omitted. This is useful when you are trying to create a user that doesn't have a password, in an instance that is using passwords. Please note that you cannot use this flag if password is the only way for a user to sign into your instance. (nullable)
+  --skip-password-checks: oneof<nothing, bool> # When set to `true` all password checks are skipped. It is recommended to use this method only when migrating plaintext passwords to Clerk. Upon migration the user base should be prompted to pick stronger password. (nullable)
+  --skip-password-requirement: oneof<nothing, bool> # When set to `true`, `password` is not required anymore when creating the user and can be omitted. This is useful when you are trying to create a user that doesn't have a password, in an instance that is using passwords. Please note that you cannot use this flag if password is the only way for a user to sign into your instance. (nullable)
   --totp-secret: string # In case TOTP is configured on the instance, you can provide the secret to enable it on the newly created user without the need to reset it. Please note that currently the supported options are: * Period: 30 seconds * Code length: 6 digits * Algorithm: SHA1 (nullable)
   --backup-codes: list # If Backup Codes are configured on the instance, you can provide them to enable it on the newly created user without the need to reset them. You must provide the backup codes in plain format or the corresponding bcrypt digest.
   --public-metadata: record # Metadata saved on the user, that is visible to both your Frontend and Backend APIs
   --private-metadata: record # Metadata saved on the user, that is only visible to your Backend API
   --unsafe-metadata: record # Metadata saved on the user, that can be updated from both the Frontend and Backend APIs. Note: Since this data can be modified from the frontend, it is not guaranteed to be safe.
-  --delete-self-enabled: string@bool-completer # If enabled, user can delete themselves via FAPI.  (nullable)
+  --delete-self-enabled: oneof<nothing, bool> # If enabled, user can delete themselves via FAPI.  (nullable)
   --legal-accepted-at: string # A custom timestamp denoting _when_ the user accepted legal requirements, specified in RFC3339 format (e.g. `2012-10-20T07:15:20.902Z`). (nullable)
-  --skip-legal-checks: string@bool-completer # When set to `true` all legal checks are skipped. It is not recommended to skip legal checks unless you are migrating a user to Clerk. (nullable)
-  --skip-user-requirement: string@bool-completer # When set to `true`, identification types are not enforced. At least one identification type must be enabled and provided on your instance (email, phone, web3 wallet, or username). Users created without required identification types cannot use those authentication strategies It is not recommended to use this flag unless you need to allow Clerk UI components to prompt for required fields while BAPI creates users with minimal data, or for migration a user to Clerk. (nullable)
-  --create-organization-enabled: string@bool-completer # If enabled, user can create organizations via FAPI.  (nullable)
+  --skip-legal-checks: oneof<nothing, bool> # When set to `true` all legal checks are skipped. It is not recommended to skip legal checks unless you are migrating a user to Clerk. (nullable)
+  --skip-user-requirement: oneof<nothing, bool> # When set to `true`, identification types are not enforced. At least one identification type must be enabled and provided on your instance (email, phone, web3 wallet, or username). Users created without required identification types cannot use those authentication strategies It is not recommended to use this flag unless you need to allow Clerk UI components to prompt for required fields while BAPI creates users with minimal data, or for migration a user to Clerk. (nullable)
+  --create-organization-enabled: oneof<nothing, bool> # If enabled, user can create organizations via FAPI.  (nullable)
   --create-organizations-limit: int # The maximum number of organizations the user can create. 0 means unlimited.  (nullable)
   --created-at: string # A custom date/time denoting _when_ the user signed up to the application, specified in RFC3339 format (e.g. `2012-10-20T07:15:20.902Z`). (nullable)
-  --bypass-client-trust: string@bool-completer # When set to `true`, the user will bypass client trust checks during sign-in. (nullable)
-  --banned: string@bool-completer # When set to `true`, the user is created already banned and cannot sign in. Requires the same plan support as the ban user endpoint. (nullable)
-  --locked: string@bool-completer # When set to `true`, the user is created already locked. Requires the user lockout feature to be enabled on the instance. (nullable)
+  --bypass-client-trust: oneof<nothing, bool> # When set to `true`, the user will bypass client trust checks during sign-in. (nullable)
+  --banned: oneof<nothing, bool> # When set to `true`, the user is created already banned and cannot sign in. Requires the same plan support as the ban user endpoint. (nullable)
+  --locked: oneof<nothing, bool> # When set to `true`, the user is created already locked. Requires the user lockout feature to be enabled on the instance. (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1070,7 +1069,7 @@ export def "users-count GetUsersCount" [
   --phone-number-query: string # Counts users with phone numbers that match the given query, via case-insensitive partial match. For example, `phone_number_query=555` will match a user with the phone number `+1555xxxxxxx`, and will be included in the resulting count.
   --username-query: string # Counts users with usernames that match the given query, via case-insensitive partial match. For example, `username_query=CoolUser` will match a user with the username `SomeCoolUser`, and will be included in the resulting count.
   --name-query: string # Returns users with names that match the given query, via case-insensitive partial match.
-  --banned: string@bool-completer # Counts users which are either banned (`banned=true`) or not banned (`banned=false`).
+  --banned: oneof<nothing, bool> # Counts users which are either banned (`banned=true`) or not banned (`banned=false`).
   --last-active-at-before: int # Returns users whose last session activity was before the given date (with millisecond precision). Example: use 1700690400000 to retrieve users whose last session activity was before 2023-11-23. (e.g. 1700690400000)
   --last-active-at-after: int # Returns users whose last session activity was after the given date (with millisecond precision). Example: use 1700690400000 to retrieve users whose last session activity was after 2023-11-23. (e.g. 1700690400000)
   --last-active-at-since: int # Returns users that had session activity since the given date. Example: use 1700690400000 to retrieve users that had session activity from 2023-11-23 until the current day. Deprecated in favor of `last_active_at_after`. (DEPRECATED, e.g. 1700690400000)
@@ -1130,7 +1129,7 @@ export def "users UpdateUser" [
   --last-name: string # The last name to assign to the user (nullable)
   --locale: string # The locale to assign to the user (e.g., "en-US", "fr-FR") (nullable)
   --primary-email-address-id: string # The ID of the email address to set as primary. It must be verified, and present on the current user. (nullable)
-  --notify-primary-email-address-changed: string@bool-completer # If set to `true`, the user will be notified that their primary email address has changed. By default, no notification is sent. (nullable, default: false)
+  --notify-primary-email-address-changed: oneof<nothing, bool> # If set to `true`, the user will be notified that their primary email address has changed. By default, no notification is sent. (nullable, default: false)
   --primary-phone-number-id: string # The ID of the phone number to set as primary. It must be verified, and present on the current user. (nullable)
   --primary-web3-wallet-id: string # The ID of the web3 wallets to set as primary. It must be verified, and present on the current user. (nullable)
   --username: string # The username to give to the user. It must be unique across your instance. (nullable)
@@ -1138,17 +1137,17 @@ export def "users UpdateUser" [
   --password: string # The plaintext password to give the user. Must be at least 8 characters long, and cannot be in any list of hacked passwords. (nullable)
   --password-digest: string # In case you already have the password digests and not the passwords, you can use them for the newly created user via this property. The digests should be generated with one of the supported algorithms. The hashing algorithm can be specified using the `password_hasher` property.
   --password-hasher: string # The hashing algorithm that was used to generate the password digest.  The algorithms we support at the moment are [`bcrypt`](https://en.wikipedia.org/wiki/Bcrypt), [`bcrypt_sha256_django`](https://docs.djangoproject.com/en/4.0/topics/auth/passwords/), [`md5`](https://en.wikipedia.org/wiki/MD5), `pbkdf2_sha1`, `pbkdf2_sha256`, [`pbkdf2_sha256_django`](https://docs.djangoproject.com/en/4.0/topics/auth/passwords/), `pbkdf2_sha512`, [`phpass`](https://www.openwall.com/phpass/), `md5_phpass`, [`scrypt_firebase`](https://firebaseopensource.com/projects/firebase/scrypt/), [`scrypt_werkzeug`](https://werkzeug.palletsprojects.com/en/3.0.x/utils/#werkzeug.security.generate_password_hash), [`sha256`](https://en.wikipedia.org/wiki/SHA-2), [`ldap_ssha`](https://www.openldap.org/faq/data/cache/347.html), the [`argon2`](https://argon2.online/) variants: `argon2i` and `argon2id`, `sha512_symfony`, the SHA-512 variant of the [Symfony](https://symfony.com/doc/current/security/passwords.html) legacy hasher, and `pbkdf2_sha512_hex`, a variant of `pbkdf2_sha512` that accepts hex-encoded salt and hash.  Each of the supported hashers expects the incoming digest to be in a particular format. See the [Clerk docs](https://clerk.com/docs/references/backend/user/create-user) for more information.
-  --skip-password-checks: string@bool-completer # Set it to `true` if you're updating the user's password and want to skip any password policy settings check. This parameter can only be used when providing a `password`. (nullable)
-  --sign-out-of-other-sessions: string@bool-completer # Set to `true` to sign out the user from all their active sessions once their password is updated. This parameter can only be used when providing a `password`. (nullable)
+  --skip-password-checks: oneof<nothing, bool> # Set it to `true` if you're updating the user's password and want to skip any password policy settings check. This parameter can only be used when providing a `password`. (nullable)
+  --sign-out-of-other-sessions: oneof<nothing, bool> # Set to `true` to sign out the user from all their active sessions once their password is updated. This parameter can only be used when providing a `password`. (nullable)
   --totp-secret: string # In case TOTP is configured on the instance, you can provide the secret to enable it on the specific user without the need to reset it. (nullable)
   --backup-codes: list # If Backup Codes are configured on the instance, you can provide them to enable it on the specific user without the need to reset them.
-  --delete-self-enabled: string@bool-completer # If true, the user can delete themselves with the Frontend API. (nullable)
-  --create-organization-enabled: string@bool-completer # If true, the user can create organizations with the Frontend API. (nullable)
+  --delete-self-enabled: oneof<nothing, bool> # If true, the user can delete themselves with the Frontend API. (nullable)
+  --create-organization-enabled: oneof<nothing, bool> # If true, the user can create organizations with the Frontend API. (nullable)
   --legal-accepted-at: string # A custom timestamp denoting _when_ the user accepted legal requirements, specified in RFC3339 format. (nullable)
-  --skip-legal-checks: string@bool-completer # When set to `true` all legal checks are skipped. (nullable)
+  --skip-legal-checks: oneof<nothing, bool> # When set to `true` all legal checks are skipped. (nullable)
   --create-organizations-limit: int # The maximum number of organizations the user can create. 0 means unlimited. (nullable)
   --created-at: string # A custom date/time denoting _when_ the user signed up to the application. (nullable)
-  --bypass-client-trust: string@bool-completer # When set to `true`, the user will bypass client trust checks during sign-in. (nullable)
+  --bypass-client-trust: oneof<nothing, bool> # When set to `true`, the user will bypass client trust checks during sign-in. (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1513,7 +1512,7 @@ export def "users-oauth-access-tokens GetOAuthAccessToken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --paginated: string@bool-completer # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
+  --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
 ]: nothing -> any {
@@ -1777,7 +1776,7 @@ export def "users-password-set-compromised SetUserPasswordCompromised" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --revoke-all-sessions: string@bool-completer # nullable
+  --revoke-all-sessions: oneof<nothing, bool> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1827,8 +1826,8 @@ export def "invitations CreateInvitation" [
   email_address: string # The email address the invitation will be sent to
   --public-metadata: record # Metadata that will be attached to the newly created invitation. The value of this property should be a well-formed JSON object. Once the user accepts the invitation and signs up, these metadata will end up in the user's public metadata.
   --redirect-url: string # Optional URL which specifies where to redirect the user once they click the invitation link. This is only required if you have implemented a [custom flow](https://clerk.com/docs/authentication/invitations#custom-flow) and you're not using Clerk Hosted Pages or Clerk Components.
-  --notify: string@bool-completer # Optional flag which denotes whether an email invitation should be sent to the given email address. Defaults to `true`. (nullable, default: true)
-  --ignore-existing: string@bool-completer # Whether an invitation should be created if there is already an existing invitation for this email address, or it's claimed by another user. (nullable, default: false)
+  --notify: oneof<nothing, bool> # Optional flag which denotes whether an email invitation should be sent to the given email address. Defaults to `true`. (nullable, default: true)
+  --ignore-existing: oneof<nothing, bool> # Whether an invitation should be created if there is already an existing invitation for this email address, or it's claimed by another user. (nullable, default: false)
   --expires-in-days: int # The number of days the invitation will be valid for. By default, the invitation expires after 30 days. (nullable)
   --template-slug: string@template-slug-completer # The slug of the email template to use for the invitation email.
 ]: any -> any {
@@ -1858,7 +1857,7 @@ export def "invitations ListInvitations" [
   --status: string@status-completer-1 # Filter invitations based on their status
   --qp-query: string # Filter invitations based on their `email_address` or `id`
   --order-by: string # Allows to return invitations in a particular order. At the moment, you can order the returned invitations either by their `created_at`, `email_address` or `expires_at`. In order to specify the direction, you can use the `+/-` symbols prepended in the property to order by. For example, if you want invitations to be returned in descending order according to their `created_at` property, you can use `-created_at`. If you don't use `+` or `-`, then `+` is implied. Defaults to `-created_at`. (default: -created_at)
-  --paginated: string@bool-completer # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
+  --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
 ]: nothing -> any {
@@ -1956,7 +1955,7 @@ export def "allowlist-identifiers ListAllowlistIdentifiers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --paginated: string@bool-completer # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
+  --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
 ]: nothing -> any {
@@ -1982,7 +1981,7 @@ export def "allowlist-identifiers CreateAllowlistIdentifier" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   identifier: string # The identifier to be added in the allow-list. This can be an email address, a phone number, or a web3 wallet.
-  --notify: string@bool-completer # This flag denotes whether the given identifier will receive an invitation to join the application. Note that this only works for email address and phone number identifiers. (default: false)
+  --notify: oneof<nothing, bool> # This flag denotes whether the given identifier will receive an invitation to join the application. Note that this only works for email address and phone number identifiers. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2097,10 +2096,10 @@ export def "beta-features-instance-settings UpdateInstanceAuthConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --restricted-to-allowlist: string@bool-completer # Whether sign up is restricted to email addresses, phone numbers and usernames that are on the allowlist. (nullable, default: false)
+  --restricted-to-allowlist: oneof<nothing, bool> # Whether sign up is restricted to email addresses, phone numbers and usernames that are on the allowlist. (nullable, default: false)
   --from-email-address: string # The local part of the email address from which authentication-related emails (e.g. OTP code, magic links) will be sent. Only alphanumeric values are allowed. Note that this value should contain only the local part of the address (e.g. `foo` for `foo@example.com`). (nullable)
-  --progressive-sign-up: string@bool-completer # Enable the Progressive Sign Up algorithm. This feature is deprecated, please contact support if you need assistance. (nullable)
-  --test-mode: string@bool-completer # Toggles test mode for this instance, allowing the use of test email addresses and phone numbers. Defaults to true for development instances. (nullable)
+  --progressive-sign-up: oneof<nothing, bool> # Enable the Progressive Sign Up algorithm. This feature is deprecated, please contact support if you need assistance. (nullable)
+  --test-mode: oneof<nothing, bool> # Toggles test mode for this instance, allowing the use of test email addresses and phone numbers. Defaults to true for development instances. (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2128,7 +2127,7 @@ export def "beta-features-domain UpdateProductionInstanceDomain" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --home-url: string # The new home URL of the production instance e.g. https://www.example.com
-  --is-secondary: string@bool-completer # Whether the domain is a secondary app.
+  --is-secondary: oneof<nothing, bool> # Whether the domain is a secondary app.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2226,7 +2225,7 @@ export def "domains AddDomain" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string # The new domain name. Can contain the port for development instances.
-  --is-satellite: string@bool-completer # Marks the new domain as satellite. Only `true` is accepted at the moment.
+  --is-satellite: oneof<nothing, bool> # Marks the new domain as satellite. Only `true` is accepted at the moment.
   --proxy-url: string # The full URL of the proxy which will forward requests to the Clerk Frontend API for this domain. Applicable only to production instances. (nullable)
 ]: any -> any {
   let input = $in
@@ -2277,7 +2276,7 @@ export def "domains UpdateDomain" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # The new domain name. For development instances, can contain the port, i.e `myhostname:3000`. For production instances, must be a valid FQDN, i.e `mysite.com`. Cannot contain protocol scheme. (nullable)
   --proxy-url: string # The full URL of the proxy that will forward requests to Clerk's Frontend API. Can only be updated for production instances. (nullable)
-  --is-secondary: string@bool-completer # Whether this is a domain for a secondary app, meaning that any subdomain provided is significant and will be stored as part of the domain. This is useful for supporting multiple apps (one primary and multiple secondaries) on the same root domain (eTLD+1). (nullable)
+  --is-secondary: oneof<nothing, bool> # Whether this is a domain for a secondary app, meaning that any subdomain provided is significant and will be stored as part of the domain. This is useful for supporting multiple apps (one primary and multiple secondaries) on the same root domain (eTLD+1). (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2324,14 +2323,14 @@ export def "instance UpdateInstance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --test-mode: string@bool-completer # Toggles test mode for this instance, allowing the use of test email addresses and phone numbers. Defaults to true for development instances. (nullable)
-  --hibp: string@bool-completer # Whether the instance should be using the HIBP service to check passwords for breaches (nullable)
+  --test-mode: oneof<nothing, bool> # Toggles test mode for this instance, allowing the use of test email addresses and phone numbers. Defaults to true for development instances. (nullable)
+  --hibp: oneof<nothing, bool> # Whether the instance should be using the HIBP service to check passwords for breaches (nullable)
   --support-email: string # nullable
   --clerk-js-version: string # nullable
   --development-origin: string # nullable
   --allowed-origins: list # For browser-like stacks such as browser extensions, Electron (not officially supported), or Capacitor.js (not officially supported), the instance allowed origins need to be updated with the request origin value. For Chrome extensions popup, background, or service worker pages, the origin is chrome-extension://extension_uuid. For Electron apps the default origin is http://localhost:3000. For Capacitor, the origin is capacitor://localhost.
-  --cookieless-dev: string@bool-completer # Whether the instance should operate in cookieless development mode (i.e. without third-party cookies). Deprecated: Please use `url_based_session_syncing` instead. (DEPRECATED, nullable)
-  --url-based-session-syncing: string@bool-completer # Whether the instance should use URL-based session syncing in development mode (i.e. without third-party cookies). (nullable)
+  --cookieless-dev: oneof<nothing, bool> # Whether the instance should operate in cookieless development mode (i.e. without third-party cookies). Deprecated: Please use `url_based_session_syncing` instead. (DEPRECATED, nullable)
+  --url-based-session-syncing: oneof<nothing, bool> # Whether the instance should use URL-based session syncing in development mode (i.e. without third-party cookies). (nullable)
   --preferred-sign-in-strategy-when-password-required: string@preferred-sign-in-strategy-when-password-required-completer # When password is required at the instance level, sets the preferred sign-in strategy surfaced to Clerk components. Has no effect when password is not required. Defaults to `password`. Set to an empty string to clear the override. (nullable)
 ]: any -> any {
   let input = $in
@@ -2357,11 +2356,11 @@ export def "instance-restrictions UpdateInstanceRestrictions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowlist: string@bool-completer # nullable
-  --blocklist: string@bool-completer # nullable
-  --allowlist-blocklist-disabled-on-sign-in: string@bool-completer # nullable
-  --block-email-subaddresses: string@bool-completer # nullable
-  --block-disposable-email-domains: string@bool-completer # nullable
+  --allowlist: oneof<nothing, bool> # nullable
+  --blocklist: oneof<nothing, bool> # nullable
+  --allowlist-blocklist-disabled-on-sign-in: oneof<nothing, bool> # nullable
+  --block-email-subaddresses: oneof<nothing, bool> # nullable
+  --block-disposable-email-domains: oneof<nothing, bool> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2407,8 +2406,8 @@ export def "instance-protect UpdateInstanceProtect" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --rules-enabled: string@bool-completer # nullable
-  --specter-enabled: string@bool-completer # nullable
+  --rules-enabled: oneof<nothing, bool> # nullable
+  --specter-enabled: oneof<nothing, bool> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2500,8 +2499,8 @@ export def "instance-oauth-application-settings UpdateInstanceOAuthApplicationSe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dynamic-oauth-client-registration: string@bool-completer # Whether dynamic OAuth client registration is enabled for the instance (RFC 7591). (nullable)
-  --oauth-jwt-access-tokens: string@bool-completer # Whether OAuth JWT access tokens are enabled for the instance (disabled indicates opaque access tokens). (nullable)
+  --dynamic-oauth-client-registration: oneof<nothing, bool> # Whether dynamic OAuth client registration is enabled for the instance (RFC 7591). (nullable)
+  --oauth-jwt-access-tokens: oneof<nothing, bool> # Whether OAuth JWT access tokens are enabled for the instance (disabled indicates opaque access tokens). (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2527,7 +2526,7 @@ export def "instance-change-domain ChangeProductionInstanceDomain" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --home-url: string # The new home URL of the production instance e.g. https://www.example.com
-  --is-secondary: string@bool-completer # Whether this is a domain for a secondary app, meaning that any subdomain provided is significant and will be stored as part of the domain. This is useful for supporting multiple apps (one primary and multiple secondaries) on the same root domain (eTLD+1).
+  --is-secondary: oneof<nothing, bool> # Whether this is a domain for a secondary app, meaning that any subdomain provided is significant and will be stored as part of the domain. This is useful for supporting multiple apps (one primary and multiple secondaries) on the same root domain (eTLD+1).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2573,11 +2572,11 @@ export def "instance-organization-settings UpdateInstanceOrganizationSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # nullable
+  --enabled: oneof<nothing, bool> # nullable
   --max-allowed-memberships: int # nullable
-  --admin-delete-enabled: string@bool-completer # nullable
-  --domains-enabled: string@bool-completer # nullable
-  --slug-disabled: string@bool-completer # nullable
+  --admin-delete-enabled: oneof<nothing, bool> # nullable
+  --domains-enabled: oneof<nothing, bool> # nullable
+  --slug-disabled: oneof<nothing, bool> # nullable
   --domains-enrollment-modes: list # Specify which enrollment modes to enable for your Organization Domains. Supported modes are 'automatic_invitation' & 'automatic_suggestion'.
   --creator-role-id: string # Specify what the default organization role is for an organization creator. (nullable)
   --domains-default-role-id: string # Specify what the default organization role is for the organization domains. (nullable)
@@ -2668,7 +2667,7 @@ export def "jwt-templates ListJWTTemplates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --paginated: string@bool-completer # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
+  --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
 ]: nothing -> any {
@@ -2697,7 +2696,7 @@ export def "jwt-templates CreateJWTTemplate" [
   claims: record # JWT template claims in JSON format
   --lifetime: int # JWT lifetime (nullable)
   --allowed-clock-skew: int # JWT allowed clock skew (nullable)
-  --custom-signing-key: string@bool-completer # Whether a custom signing key/algorithm is also provided for this template
+  --custom-signing-key: oneof<nothing, bool> # Whether a custom signing key/algorithm is also provided for this template
   --signing-algorithm: string # The custom signing algorithm to use when minting JWTs. Required if `custom_signing_key` is `true`. (nullable)
   --signing-key: string # The custom signing private key to use when minting JWTs. Required if `custom_signing_key` is `true`. (nullable)
 ]: any -> any {
@@ -2751,7 +2750,7 @@ export def "jwt-templates UpdateJWTTemplate" [
   claims: record # JWT template claims in JSON format
   --lifetime: int # JWT lifetime (nullable)
   --allowed-clock-skew: int # JWT allowed clock skew (nullable)
-  --custom-signing-key: string@bool-completer # Whether a custom signing key/algorithm is also provided for this template
+  --custom-signing-key: oneof<nothing, bool> # Whether a custom signing key/algorithm is also provided for this template
   --signing-algorithm: string # The custom signing algorithm to use when minting JWTs. Required if `custom_signing_key` is `true`. (nullable)
   --signing-key: string # The custom signing private key to use when minting JWTs. Required if `custom_signing_key` is `true`. (nullable)
 ]: any -> any {
@@ -3021,8 +3020,8 @@ export def "organizations ListOrganizations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-members-count: string@bool-completer # Flag to denote whether the member counts of each organization should be included in the response or not.
-  --include-missing-member-with-elevated-permissions: string@bool-completer # Flag to denote whether or not to include a member with elevated permissions who is not currently a member of the organization.
+  --include-members-count: oneof<nothing, bool> # Flag to denote whether the member counts of each organization should be included in the response or not.
+  --include-missing-member-with-elevated-permissions: oneof<nothing, bool> # Flag to denote whether or not to include a member with elevated permissions who is not currently a member of the organization.
   --qp-query: string # Returns organizations with ID, name, or slug that match the given query. Uses exact match for organization ID and partial match for name and slug.
   --user-id: list # Returns organizations that include any of the specified user IDs as members. Any user IDs not found are ignored. For each user ID, the `+` and `-` can be prepended to the ID, which denote whether the respective organization should be included or excluded from the result set.
   --organization-id: list # Returns organizations with the organization IDs specified. Any organization IDs not found are ignored. For each organization ID, the `+` and `-` can be prepended to the ID, which denote whether the respective organization should be included or excluded from the result set. Accepts up to 100 organization IDs. Example: ?organization_id=+org_1&organization_id=-org_2
@@ -3084,8 +3083,8 @@ export def "organizations GetOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-members-count: string@bool-completer # Flag to denote whether or not the organization's members count should be included in the response.
-  --include-missing-member-with-elevated-permissions: string@bool-completer # Flag to denote whether or not to include a member with elevated permissions who is not currently a member of the organization.
+  --include-members-count: oneof<nothing, bool> # Flag to denote whether or not the organization's members count should be included in the response.
+  --include-missing-member-with-elevated-permissions: oneof<nothing, bool> # Flag to denote whether or not to include a member with elevated permissions who is not currently a member of the organization.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3112,7 +3111,7 @@ export def "organizations UpdateOrganization" [
   --name: string # The new name of the organization. May not contain URLs or HTML. Max length: 256 (nullable)
   --slug: string # The new slug of the organization, which needs to be unique in the instance (nullable)
   --max-allowed-memberships: int # The maximum number of memberships allowed for this organization (nullable)
-  --admin-delete-enabled: string@bool-completer # If true, an admin can delete this organization with the Frontend API. (nullable)
+  --admin-delete-enabled: oneof<nothing, bool> # If true, an admin can delete this organization with the Frontend API. (nullable)
   --created-at: string # A custom date/time denoting _when_ the organization was created, specified in RFC3339 format (e.g. `2012-10-20T07:15:20.902Z`). (nullable)
   --role-set-key: string # The key of the [role set](https://clerk.com/docs/guides/organizations/control-access/role-sets) to assign to this organization. (nullable)
 ]: any -> any {
@@ -3346,7 +3345,7 @@ export def "organizations-invitations CreateOrganizationInvitation" [
   --private-metadata: record # Metadata saved on the organization invitation, fully accessible (read/write) from the Backend API but not visible from the Frontend API. When the organization invitation is accepted, the metadata will be transferred to the newly created organization membership. (nullable)
   --redirect-url: string # Optional URL that the invitee will be redirected to once they accept the invitation by clicking the join link in the invitation email. (nullable)
   --expires-in-days: int # The number of days the invitation will be valid for. By default, the invitation has a 30 days expire. (nullable)
-  --notify: string@bool-completer # Optional flag which denotes whether an email invitation should be sent to the given email address. Defaults to `true`. (nullable, default: true)
+  --notify: oneof<nothing, bool> # Optional flag which denotes whether an email invitation should be sent to the given email address. Defaults to `true`. (nullable, default: true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3531,7 +3530,7 @@ export def "organization-roles CreateOrganizationRole" [
   key: string # A unique key for the organization role. Must start with 'org:' and contain only lowercase alphanumeric characters and underscores.
   --description: string # Optional description for the role (nullable)
   --permissions: list # Array of permission IDs to assign to the role (nullable)
-  --include-in-initial-role-set: string@bool-completer # Whether this role should be included in the initial role set (nullable)
+  --include-in-initial-role-set: oneof<nothing, bool> # Whether this role should be included in the initial role set (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3826,7 +3825,7 @@ export def "organizations-domains CreateOrganizationDomain" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name of the new domain
   --enrollment-mode: string # The enrollment_mode for the new domain. This can be `automatic_invitation`, `automatic_suggestion` or `manual_invitation`
-  --verified: string@bool-completer # The status of domain's verification. Defaults to true (nullable)
+  --verified: oneof<nothing, bool> # The status of domain's verification. Defaults to true (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3881,7 +3880,7 @@ export def "organizations-domains UpdateOrganizationDomain" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --enrollment-mode: string # The enrollment_mode for the new domain. This can be `automatic_invitation`, `automatic_suggestion` or `manual_invitation` (nullable)
-  --verified: string@bool-completer # The status of the domain's verification (nullable)
+  --verified: oneof<nothing, bool> # The status of the domain's verification (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4008,7 +4007,7 @@ export def "redirect-urls ListRedirectURLs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --paginated: string@bool-completer # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
+  --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
 ]: nothing -> any {
@@ -4174,7 +4173,7 @@ export def "sign-ups UpdateSignUp" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --external-id: string # The ID of the guest attempting to sign up as used in your external systems or your previous authentication solution. This will be copied to the resulting user when the sign-up is completed. (nullable)
-  --custom-action: string@bool-completer # If true, the sign-up will be marked as a custom action. (nullable)
+  --custom-action: oneof<nothing, bool> # If true, the sign-up will be marked as a custom action. (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4230,9 +4229,9 @@ export def "oauth-applications CreateOAuthApplication" [
   --redirect-uris: list # An array of redirect URIs of the new OAuth application (nullable)
   --callback-url: string # The callback URL of the new OAuth application (DEPRECATED, nullable)
   --scopes: string # Define the allowed scopes for the new OAuth applications that dictate the user payload of the OAuth user info endpoint. Available scopes are `profile`, `email`, `public_metadata`, `private_metadata`. Provide the requested scopes as a string, separated by spaces. (nullable, default: profile email, e.g. profile email public_metadata)
-  --consent-screen-enabled: string@bool-completer # True to enable a consent screen to display in the authentication flow. (nullable, default: true)
-  --pkce-required: string@bool-completer # True to require the Proof Key of Code Exchange (PKCE) flow. (nullable, default: false)
-  --public: string@bool-completer # If true, this client is public and you can use the Proof Key of Code Exchange (PKCE) flow. (nullable)
+  --consent-screen-enabled: oneof<nothing, bool> # True to enable a consent screen to display in the authentication flow. (nullable, default: true)
+  --pkce-required: oneof<nothing, bool> # True to require the Proof Key of Code Exchange (PKCE) flow. (nullable, default: false)
+  --public: oneof<nothing, bool> # If true, this client is public and you can use the Proof Key of Code Exchange (PKCE) flow. (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4285,9 +4284,9 @@ export def "oauth-applications UpdateOAuthApplication" [
   --redirect-uris: list # An array of redirect URIs of the new OAuth application (nullable)
   --callback-url: string # The new callback URL of the OAuth application (DEPRECATED, nullable)
   --scopes: string # Define the allowed scopes for the new OAuth applications that dictate the user payload of the OAuth user info endpoint. Available scopes are `profile`, `email`, `public_metadata`, `private_metadata`. Provide the requested scopes as a string, separated by spaces. (nullable, default: profile email, e.g. profile email public_metadata private_metadata)
-  --consent-screen-enabled: string@bool-completer # True to enable a consent screen to display in the authentication flow. This cannot be disabled for dynamically registered OAuth Applications. (nullable)
-  --pkce-required: string@bool-completer # True to require the Proof Key of Code Exchange (PKCE) flow. (nullable)
-  --public: string@bool-completer # If true, this client is public and you can use the Proof Key of Code Exchange (PKCE) flow. (nullable)
+  --consent-screen-enabled: oneof<nothing, bool> # True to enable a consent screen to display in the authentication flow. This cannot be disabled for dynamically registered OAuth Applications. (nullable)
+  --pkce-required: oneof<nothing, bool> # True to require the Proof Key of Code Exchange (PKCE) flow. (nullable)
+  --public: oneof<nothing, bool> # If true, this client is public and you can use the Proof Key of Code Exchange (PKCE) flow. (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4427,7 +4426,7 @@ export def "saml-connections CreateSAMLConnection" [
   --idp-metadata: string # The XML content of the IdP metadata file. If present, it takes priority over the corresponding individual properties (nullable)
   --organization-id: string # The ID of the organization to which users of this SAML Connection will be added (nullable)
   --attribute-mapping: record # Define the attribute name mapping between Identity Provider and Clerk's user properties (nullable) — shape: {user_id?: string, email_address?: string, first_name?: string, last_name?: string}
-  --force-authn: string@bool-completer # Enable or deactivate ForceAuthn
+  --force-authn: oneof<nothing, bool> # Enable or deactivate ForceAuthn
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4491,14 +4490,14 @@ export def "saml-connections UpdateSAMLConnection" [
   --idp-metadata: string # The XML content of the IdP metadata file. If present, it takes priority over the corresponding individual properties (nullable)
   --organization-id: string # The ID of the organization to which users of this SAML Connection will be added (nullable)
   --attribute-mapping: record # Define the attribute name mapping between Identity Provider and Clerk's user properties (nullable) — shape: {user_id?: string, email_address?: string, first_name?: string, last_name?: string}
-  --active: string@bool-completer # Activate or de-activate the SAML Connection (nullable)
-  --sync-user-attributes: string@bool-completer # Controls whether to update the user's attributes in each sign-in (nullable)
-  --allow-subdomains: string@bool-completer # Allow users with an email address subdomain to use this connection in order to authenticate (nullable)
-  --allow-idp-initiated: string@bool-completer # Enable or deactivate IdP-initiated flows (nullable)
-  --disable-additional-identifications: string@bool-completer # Enable or deactivate additional identifications (nullable)
-  --allow-organization-account-linking: string@bool-completer # Whether this connection supports account linking via organization membership (nullable)
-  --force-authn: string@bool-completer # Enable or deactivate ForceAuthn
-  --consent-verified-domains-deletion: string@bool-completer # When enabling the connection, controls behavior when verified domains used for enrollment modes like automatic invitation or automatic suggestion already exist for the same domain. If true, those verified domains are removed and the connection is enabled. If false or omitted, the request fails when any such verified domain exists. (nullable)
+  --active: oneof<nothing, bool> # Activate or de-activate the SAML Connection (nullable)
+  --sync-user-attributes: oneof<nothing, bool> # Controls whether to update the user's attributes in each sign-in (nullable)
+  --allow-subdomains: oneof<nothing, bool> # Allow users with an email address subdomain to use this connection in order to authenticate (nullable)
+  --allow-idp-initiated: oneof<nothing, bool> # Enable or deactivate IdP-initiated flows (nullable)
+  --disable-additional-identifications: oneof<nothing, bool> # Enable or deactivate additional identifications (nullable)
+  --allow-organization-account-linking: oneof<nothing, bool> # Whether this connection supports account linking via organization membership (nullable)
+  --force-authn: oneof<nothing, bool> # Enable or deactivate ForceAuthn
+  --consent-verified-domains-deletion: oneof<nothing, bool> # When enabling the connection, controls behavior when verified domains used for enrollment modes like automatic invitation or automatic suggestion already exist for the same domain. If true, those verified domains are removed and the connection is enabled. If false or omitted, the request fails when any such verified domain exists. (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4550,7 +4549,7 @@ export def "enterprise-connections ListEnterpriseConnections" [
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
   --organization-id: string # Filter enterprise connections by organization ID
-  --active: string@bool-completer # Filter by active status. If true, only active connections are returned. If false, only inactive connections are returned. If omitted, all connections are returned.
+  --active: oneof<nothing, bool> # Filter by active status. If true, only active connections are returned. If false, only inactive connections are returned. If omitted, all connections are returned.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4580,8 +4579,8 @@ export def "enterprise-connections CreateEnterpriseConnection" [
   provider: string@provider-completer-1 # The identity provider (e.g. saml_custom, oidc_custom, oidc_github_enterprise, oidc_gitlab)
   domains: list # Domains associated with the enterprise connection (required; at least one). Values are normalized to lowercase. Each domain must be a valid fully qualified domain name.
   --organization-id: string # Organization ID when the connection is linked to an organization (nullable)
-  --allow-organization-account-linking: string@bool-completer # Whether this connection supports account linking via organization membership (nullable)
-  --active: string@bool-completer # Whether the enterprise connection is active. When true, IdP metadata must be provided via the `saml` object. (nullable)
+  --allow-organization-account-linking: oneof<nothing, bool> # Whether this connection supports account linking via organization membership (nullable)
+  --active: oneof<nothing, bool> # Whether the enterprise connection is active. When true, IdP metadata must be provided via the `saml` object. (nullable)
   --saml: record # SAML connection-specific properties. Only applied when the enterprise connection uses SAML (e.g. provider is saml_custom). Use this to set IdP configuration, attribute mapping, and other SAML-specific settings at creation time. (nullable) — shape: {idp_entity_id?: string, idp_sso_url?: string, idp_certificate?: string, idp_metadata_url?: string, idp_metadata?: string, attribute_mapping?: record, allow_subdomains?: bool, allow_idp_initiated?: bool, force_authn?: bool}
   --oidc: record # OIDC connection-specific properties. Only applied when the enterprise connection uses OIDC (e.g. provider is oidc_custom, oidc_github_enterprise, or oidc_gitlab). (nullable) — shape: {client_id?: string, client_secret?: string, discovery_url?: string, auth_url?: string, token_url?: string, user_info_url?: string, requires_pkce?: bool}
   --custom-attributes: list # Custom attributes to map from the IdP to the user's profile via SSO or SCIM provisioning. Requires the custom attributes feature to be enabled for the instance. — item shape: {name: string, key: string, sso_path?: string, scim_path?: string, multi_valued?: bool}
@@ -4637,10 +4636,10 @@ export def "enterprise-connections UpdateEnterpriseConnection" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # The display name of the enterprise connection (nullable)
   --domains: list # Domains associated with the enterprise connection. Values are normalized to lowercase. Empty array means ignored (no change); non-empty array means set domains to the given list (replaces existing). (nullable)
-  --active: string@bool-completer # Whether the enterprise connection is active. When set to true (enabling), any existing verified organization domains for the same domain(s) will be removed so the connection can be enabled. (nullable)
-  --sync-user-attributes: string@bool-completer # Whether to sync user attributes on sign-in (nullable)
-  --disable-additional-identifications: string@bool-completer # Whether to disable additional identifications (nullable)
-  --allow-organization-account-linking: string@bool-completer # Whether this connection supports account linking via organization membership (nullable)
+  --active: oneof<nothing, bool> # Whether the enterprise connection is active. When set to true (enabling), any existing verified organization domains for the same domain(s) will be removed so the connection can be enabled. (nullable)
+  --sync-user-attributes: oneof<nothing, bool> # Whether to sync user attributes on sign-in (nullable)
+  --disable-additional-identifications: oneof<nothing, bool> # Whether to disable additional identifications (nullable)
+  --allow-organization-account-linking: oneof<nothing, bool> # Whether this connection supports account linking via organization membership (nullable)
   --organization-id: string # Organization ID to link to this enterprise connection. Only linking is supported; sending this field sets or changes the linked organization. There is no way to unlink an organization once linked. (nullable)
   --saml: record # SAML connection-specific properties. Only applied when the enterprise connection uses SAML. Use this to update IdP configuration, attribute mapping, and other SAML-specific settings. (nullable) — shape: {name?: string, idp_entity_id?: string, idp_sso_url?: string, idp_certificate?: string, idp_metadata_url?: string, idp_metadata?: string, attribute_mapping?: record, allow_subdomains?: bool, allow_idp_initiated?: bool, force_authn?: bool}
   --oidc: record # OIDC connection-specific properties. Only applied when the enterprise connection uses OIDC (e.g. oidc_custom, oidc_github_enterprise, or oidc_gitlab). (nullable) — shape: {client_id?: string, client_secret?: string, discovery_url?: string, auth_url?: string, token_url?: string, user_info_url?: string, requires_pkce?: bool}
@@ -4866,7 +4865,7 @@ export def "waitlist-entries CreateWaitlistEntry" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   email_address: string # The email address to add to the waitlist
-  --notify: string@bool-completer # Optional flag which denotes whether a confirmation email should be sent to the given email address. Defaults to `true`. (nullable, default: true)
+  --notify: oneof<nothing, bool> # Optional flag which denotes whether a confirmation email should be sent to the given email address. Defaults to `true`. (nullable, default: true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4938,7 +4937,7 @@ export def "waitlist-entries-invite InviteWaitlistEntry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ignore-existing: string@bool-completer # Whether an invitation should be created if there is already an existing invitation for this email address, or it's claimed by another user. (nullable, default: false)
+  --ignore-existing: oneof<nothing, bool> # Whether an invitation should be created if there is already an existing invitation for this email address, or it's claimed by another user. (nullable, default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4985,7 +4984,7 @@ export def "billing-plans GetCommercePlanList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --paginated: string@bool-completer # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
+  --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
   --payer-type: string@payer-type-completer # Filter plans by payer type
@@ -5011,7 +5010,7 @@ export def "billing-prices GetBillingPriceList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --paginated: string@bool-completer # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
+  --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
   --plan-id: string # Filter prices by plan ID
@@ -5067,13 +5066,13 @@ export def "billing-subscription-items GetCommerceSubscriptionItemList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --paginated: string@bool-completer # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
+  --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
   --status: string@status-completer-3 # Filter subscription items by status
   --payer-type: string@payer-type-completer # Filter subscription items by payer type
   --plan-id: string # Filter subscription items by plan ID
-  --include-free: string@bool-completer # Whether to include free plan subscription items (default: false)
+  --include-free: oneof<nothing, bool> # Whether to include free plan subscription items (default: false)
   --qp-query: string # Search query to filter subscription items
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5098,7 +5097,7 @@ export def "billing-subscription-items CancelCommerceSubscriptionItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --end-now: string@bool-completer # Whether to cancel the subscription immediately (true) or at the end of the current billing period (false, default) (default: false)
+  --end-now: oneof<nothing, bool> # Whether to cancel the subscription immediately (true) or at the end of the current billing period (false, default) (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5174,7 +5173,7 @@ export def "billing-statements GetBillingStatementList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --paginated: string@bool-completer # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
+  --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
 ]: nothing -> any {
@@ -5222,7 +5221,7 @@ export def "billing-statements-payment-attempts GetBillingStatementPaymentAttemp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --paginated: string@bool-completer # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
+  --paginated: oneof<nothing, bool> # Whether to paginate the results. If true, the results will be paginated. If false, the results will not be paginated.
   --limit: int # Applies a limit to the number of results returned. Can be used for paginating the results together with `offset`. (default: 10)
   --offset: int # Skip the first `offset` results when paginating. Needs to be an integer greater or equal to zero. To be used in conjunction with `limit`. (default: 0)
 ]: nothing -> any {
@@ -5854,8 +5853,8 @@ export def "m2m-tokens get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --subject: string
-  --revoked: string@bool-completer # nullable, default: false
-  --expired: string@bool-completer # nullable, default: false
+  --revoked: oneof<nothing, bool> # nullable, default: false
+  --expired: oneof<nothing, bool> # nullable, default: false
   --limit: float # default: 10
   --offset: float # nullable, default: 0
 ]: nothing -> record<m2m_tokens: table<object: string, id: string, subject: string, claims: any, scopes: list, revoked: bool, revocation_reason: string, expired: bool, expiration: float, last_used_at: float, created_at: float, updated_at: float>, total_count: float> {

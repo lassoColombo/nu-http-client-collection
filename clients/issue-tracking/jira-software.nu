@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://your-domain.atlassian.net"] }
 def auth-scheme-completer [] { ["bearer" "basic"] }
 
@@ -168,8 +167,8 @@ export def "rest-agile-10-board list" [
   --projectKeyOrId: string # Filters results to boards that are relevant to a project. Relevance means that the jql filter defined in board contains a reference to a project.
   --accountIdLocation: string
   --projectLocation: string
-  --includePrivate: string@bool-completer # Appends private boards to the end of the list. The name and type fields are excluded for security reasons.
-  --negateLocationFiltering: string@bool-completer # If set to true, negate filters used for querying by location. By default false.
+  --includePrivate: oneof<nothing, bool> # Appends private boards to the end of the list. The name and type fields are excluded for security reasons.
+  --negateLocationFiltering: oneof<nothing, bool> # If set to true, negate filters used for querying by location. By default false.
   --orderBy: string@orderBy-completer # Ordering of the results by a given field. If not provided, values will not be sorted. Valid values: name.
   --expand: string # List of fields to expand for each board. Valid values: admins, permissions.
   --projectTypeLocation: list # Filters results to boards that are relevant to a project types. Support Jira Software, Jira Service Management. Valid values: software, service\_desk. By default software.
@@ -300,7 +299,7 @@ export def "rest-agile-10-board-backlog get" [
   --startAt: int # The starting index of the returned issues. Base index: 0. See the 'Pagination' section at the top of this page for more details. (format: int64)
   --maxResults: int # The maximum number of issues to return per page. Default: 50. See the 'Pagination' section at the top of this page for more details. Note, the total number of issues returned is limited by the property 'jira.search.views.default.max' in your Jira instance. If you exceed this limit, your results will be truncated. (format: int32)
   --jql: string # Filters results using a JQL query. If you define an order in your JQL query, it will override the default order of the returned issues.   Note that `username` and `userkey` can't be used as search terms for this parameter due to privacy reasons. Use `accountId` instead.
-  --validateQuery: string@bool-completer # Specifies whether to validate the JQL query or not. Default: true.
+  --validateQuery: oneof<nothing, bool> # Specifies whether to validate the JQL query or not. Default: true.
   --qp-fields: list # The list of fields to return for each issue. By default, all navigable and Agile fields are returned.
   --expand: string # This parameter is currently not used.
 ]: nothing -> record<expand: string, issues: table<changelog: record, editmeta: record, expand: string, fields: record, fieldsToInclude: record, id: string, key: string, names: record, operations: record, properties: record, renderedFields: record, schema: record, self: string, transitions: list, versionedRepresentations: record>, maxResults: int, names: record, schema: record, startAt: int, total: int, warningMessages: list<string>> {
@@ -330,7 +329,7 @@ export def "rest-software-10-board-backlog get" [
   --maxResults: int # The maximum number of items to return per page. To manage page size, the API may return fewer items per page where there is a large number of fields or properties returned. It returns max 5000 issues. (format: int32)
   --reconcileIssues: list # Strong consistency issue IDs to be reconciled with search results. Accepts max 50 IDs. This list of IDs should be consistent with each paginated request across different pages.
   --jql: string # Filters results using a JQL query. If you define an order in your JQL query, it will override the default order of the returned issues.   Note that `username` and `userkey` can't be used as search terms for this parameter due to privacy reasons. Use `accountId` instead.
-  --validateQuery: string@bool-completer # Specifies whether to validate the JQL query or not. Default: true.
+  --validateQuery: oneof<nothing, bool> # Specifies whether to validate the JQL query or not. Default: true.
   --qp-fields: list # The list of fields to return for each issue. By default, all navigable and Software project fields are returned.
   --expand: string # A comma-separated list of the parameters to expand.
 ]: nothing -> record<expand: string, isLast: bool, issues: table<changelog: record, editmeta: record, expand: string, fields: record, fieldsToInclude: record, id: string, key: string, names: record, operations: record, properties: record, renderedFields: record, schema: record, self: string, transitions: list, versionedRepresentations: record>, names: record, nextPageToken: string, schema: record, warningMessages: list<string>> {
@@ -433,7 +432,7 @@ export def "rest-agile-10-board-epic-none-issue get" [
   --startAt: int # The starting index of the returned issues. Base index: 0. See the 'Pagination' section at the top of this page for more details. (format: int64)
   --maxResults: int # The maximum number of issues to return per page. See the 'Pagination' section at the top of this page for more details. Note, the total number of issues returned is limited by the property 'jira.search.views.default.max' in your Jira instance. If you exceed this limit, your results will be truncated. (format: int32)
   --jql: string # Filters results using a JQL query. If you define an order in your JQL query, it will override the default order of the returned issues.   Note that `username` and `userkey` can't be used as search terms for this parameter due to privacy reasons. Use `accountId` instead.
-  --validateQuery: string@bool-completer # Specifies whether to validate the JQL query or not. Default: true.
+  --validateQuery: oneof<nothing, bool> # Specifies whether to validate the JQL query or not. Default: true.
   --qp-fields: list # The list of fields to return for each issue. By default, all navigable and Agile fields are returned.
   --expand: string # A comma-separated list of the parameters to expand.
 ]: nothing -> any {
@@ -463,7 +462,7 @@ export def "rest-software-10-board-epic-none-issue get" [
   --maxResults: int # The maximum number of items to return per page. To manage page size, the API may return fewer items per page where there is a large number of fields or properties returned. It returns max 5000 issues. (format: int32)
   --reconcileIssues: list # Strong consistency issue IDs to be reconciled with search results. Accepts max 50 IDs. This list of IDs should be consistent with each paginated request across different pages.
   --jql: string # Filters results using a JQL query. If you define an order in your JQL query, it will override the default order of the returned issues.   Note that `username` and `userkey` can't be used as search terms for this parameter due to privacy reasons. Use `accountId` instead.
-  --validateQuery: string@bool-completer # Specifies whether to validate the JQL query or not. Default: true.
+  --validateQuery: oneof<nothing, bool> # Specifies whether to validate the JQL query or not. Default: true.
   --qp-fields: list # The list of fields to return for each issue. By default, all navigable and Software project fields are returned.
   --expand: string # A comma-separated list of the parameters to expand.
 ]: nothing -> record<expand: string, isLast: bool, issues: table<changelog: record, editmeta: record, expand: string, fields: record, fieldsToInclude: record, id: string, key: string, names: record, operations: record, properties: record, renderedFields: record, schema: record, self: string, transitions: list, versionedRepresentations: record>, names: record, nextPageToken: string, schema: record, warningMessages: list<string>> {
@@ -495,7 +494,7 @@ export def "rest-agile-10-board-epic-issue get" [
   --startAt: int # The starting index of the returned issues. Base index: 0. See the 'Pagination' section at the top of this page for more details. (format: int64)
   --maxResults: int # The maximum number of issues to return per page. Default: 50. See the 'Pagination' section at the top of this page for more details. Note, the total number of issues returned is limited by the property 'jira.search.views.default.max' in your Jira instance. If you exceed this limit, your results will be truncated. (format: int32)
   --jql: string # Filters results using a JQL query. If you define an order in your JQL query, it will override the default order of the returned issues.
-  --validateQuery: string@bool-completer # Specifies whether to validate the JQL query or not. Default: true.
+  --validateQuery: oneof<nothing, bool> # Specifies whether to validate the JQL query or not. Default: true.
   --qp-fields: list # The list of fields to return for each issue. By default, all navigable and Agile fields are returned.
   --expand: string # A comma-separated list of the parameters to expand.
 ]: nothing -> any {
@@ -526,7 +525,7 @@ export def "rest-software-10-board-epic-issue get" [
   --maxResults: int # The maximum number of items to return per page. To manage page size, the API may return fewer items per page where there is a large number of fields or properties returned. It returns max 5000 issues. (format: int32)
   --reconcileIssues: list # Strong consistency issue IDs to be reconciled with search results. Accepts max 50 IDs. This list of IDs should be consistent with each paginated request across different pages.
   --jql: string # Filters results using a JQL query. If you define an order in your JQL query, it will override the default order of the returned issues.   Note that `username` and `userkey` can't be used as search terms for this parameter due to privacy reasons. Use `accountId` instead.
-  --validateQuery: string@bool-completer # Specifies whether to validate the JQL query or not. Default: true.
+  --validateQuery: oneof<nothing, bool> # Specifies whether to validate the JQL query or not. Default: true.
   --qp-fields: list # The list of fields to return for each issue. By default, all navigable and Software project fields are returned.
   --expand: string # A comma-separated list of the parameters to expand.
 ]: nothing -> record<expand: string, isLast: bool, issues: table<changelog: record, editmeta: record, expand: string, fields: record, fieldsToInclude: record, id: string, key: string, names: record, operations: record, properties: record, renderedFields: record, schema: record, self: string, transitions: list, versionedRepresentations: record>, names: record, nextPageToken: string, schema: record, warningMessages: list<string>> {
@@ -575,7 +574,7 @@ export def "rest-agile-10-board-features toggleFeatures" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-boardId: int # format: int64
-  --enabling: string@bool-completer
+  --enabling: oneof<nothing, bool>
   --feature: string
 ]: any -> record<features: table<boardFeature: string, boardId: int, featureId: string, featureType: string, imageUri: string, learnMoreArticleId: string, learnMoreLink: string, localisedDescription: string, localisedGroup: string, localisedName: string, permissibleEstimationTypes: list, state: string, toggleLocked: bool>> {
   let input = $in
@@ -607,7 +606,7 @@ export def "rest-agile-10-board-issue get" [
   --startAt: int # The starting index of the returned issues. Base index: 0. See the 'Pagination' section at the top of this page for more details. (format: int64)
   --maxResults: int # The maximum number of issues to return per page. See the 'Pagination' section at the top of this page for more details. Note, the total number of issues returned is limited by the property 'jira.search.views.default.max' in your Jira instance. If you exceed this limit, your results will be truncated. (format: int32)
   --jql: string # Filters results using a JQL query. If you define an order in your JQL query, it will override the default order of the returned issues.   Note that `username` and `userkey` can't be used as search terms for this parameter due to privacy reasons. Use `accountId` instead.
-  --validateQuery: string@bool-completer # Specifies whether to validate the JQL query or not. Default: true.
+  --validateQuery: oneof<nothing, bool> # Specifies whether to validate the JQL query or not. Default: true.
   --qp-fields: list # The list of fields to return for each issue. By default, all navigable and Agile fields are returned.
   --expand: string # This parameter is currently not used.
 ]: nothing -> record<expand: string, issues: table<changelog: record, editmeta: record, expand: string, fields: record, fieldsToInclude: record, id: string, key: string, names: record, operations: record, properties: record, renderedFields: record, schema: record, self: string, transitions: list, versionedRepresentations: record>, maxResults: int, names: record, schema: record, startAt: int, total: int, warningMessages: list<string>> {
@@ -666,7 +665,7 @@ export def "rest-software-10-board-issue get" [
   --maxResults: int # The maximum number of items to return per page. To manage page size, the API may return fewer items per page where there is a large number of fields or properties returned. It returns max 5000 issues. (format: int32)
   --reconcileIssues: list # Strong consistency issue IDs to be reconciled with search results. Accepts max 50 IDs. This list of IDs should be consistent with each paginated request across different pages.
   --jql: string # Filters results using a JQL query. If you define an order in your JQL query, it will override the default order of the returned issues.   Note that `username` and `userkey` can't be used as search terms for this parameter due to privacy reasons. Use `accountId` instead.
-  --validateQuery: string@bool-completer # Specifies whether to validate the JQL query or not. Default: true.
+  --validateQuery: oneof<nothing, bool> # Specifies whether to validate the JQL query or not. Default: true.
   --qp-fields: list # The list of fields to return for each issue. By default, all navigable and Software project fields are returned.
   --expand: string # A comma-separated list of the parameters to expand.
 ]: nothing -> record<expand: string, isLast: bool, issues: table<changelog: record, editmeta: record, expand: string, fields: record, fieldsToInclude: record, id: string, key: string, names: record, operations: record, properties: record, renderedFields: record, schema: record, self: string, transitions: list, versionedRepresentations: record>, names: record, nextPageToken: string, schema: record, warningMessages: list<string>> {
@@ -959,7 +958,7 @@ export def "rest-agile-10-board-sprint-issue get" [
   --startAt: int # The starting index of the returned issues. Base index: 0. See the 'Pagination' section at the top of this page for more details. (format: int64)
   --maxResults: int # The maximum number of issues to return per page. See the 'Pagination' section at the top of this page for more details. Note, the total number of issues returned is limited by the property 'jira.search.views.default.max' in your Jira instance. If you exceed this limit, your results will be truncated. (format: int32)
   --jql: string # Filters results using a JQL query. If you define an order in your JQL query, it will override the default order of the returned issues.   Note that `username` and `userkey` can't be used as search terms for this parameter due to privacy reasons. Use `accountId` instead.
-  --validateQuery: string@bool-completer # Specifies whether to validate the JQL query or not. Default: true.
+  --validateQuery: oneof<nothing, bool> # Specifies whether to validate the JQL query or not. Default: true.
   --qp-fields: list # The list of fields to return for each issue. By default, all navigable and Agile fields are returned.
   --expand: string # A comma-separated list of the parameters to expand.
 ]: nothing -> any {
@@ -990,7 +989,7 @@ export def "rest-software-10-board-sprint-issue get" [
   --maxResults: int # The maximum number of items to return per page. To manage page size, the API may return fewer items per page where there is a large number of fields or properties returned. It returns max 5000 issues. (format: int32)
   --reconcileIssues: list # Strong consistency issue IDs to be reconciled with search results. Accepts max 50 IDs. This list of IDs should be consistent with each paginated request across different pages.
   --jql: string # Filters results using a JQL query. If you define an order in your JQL query, it will override the default order of the returned issues.   Note that `username` and `userkey` can't be used as search terms for this parameter due to privacy reasons. Use `accountId` instead.
-  --validateQuery: string@bool-completer # Specifies whether to validate the JQL query or not. Default: true.
+  --validateQuery: oneof<nothing, bool> # Specifies whether to validate the JQL query or not. Default: true.
   --qp-fields: list # The list of fields to return for each issue. By default, all navigable and Software project fields are returned.
   --expand: string # A comma-separated list of the parameters to expand.
 ]: nothing -> record<expand: string, isLast: bool, issues: table<changelog: record, editmeta: record, expand: string, fields: record, fieldsToInclude: record, id: string, key: string, names: record, operations: record, properties: record, renderedFields: record, schema: record, self: string, transitions: list, versionedRepresentations: record>, names: record, nextPageToken: string, schema: record, warningMessages: list<string>> {
@@ -1046,7 +1045,7 @@ export def "rest-agile-10-epic-none-issue get" [
   --startAt: int # The starting index of the returned issues. Base index: 0. See the 'Pagination' section at the top of this page for more details. (format: int64)
   --maxResults: int # The maximum number of issues to return per page. See the 'Pagination' section at the top of this page for more details. Note, the total number of issues returned is limited by the property 'jira.search.views.default.max' in your Jira instance. If you exceed this limit, your results will be truncated. (format: int32)
   --jql: string # Filters results using a JQL query. If you define an order in your JQL query, it will override the default order of the returned issues.
-  --validateQuery: string@bool-completer # Specifies whether to validate the JQL query or not. Default: true.
+  --validateQuery: oneof<nothing, bool> # Specifies whether to validate the JQL query or not. Default: true.
   --qp-fields: list # The list of fields to return for each issue. By default, all navigable and Agile fields are returned.
   --expand: string # A comma-separated list of the parameters to expand.
 ]: nothing -> any {
@@ -1100,7 +1099,7 @@ export def "rest-software-10-epic-none-issue get" [
   --maxResults: int # The maximum number of items to return per page. To manage page size, the API may return fewer items per page where there is a large number of fields or properties returned. It returns max 5000 issues. (format: int32)
   --reconcileIssues: list # Strong consistency issue IDs to be reconciled with search results. Accepts max 50 IDs. This list of IDs should be consistent with each paginated request across different pages.
   --jql: string # Filters results using a JQL query. If you define an order in your JQL query, it will override the default order of the returned issues.   Note that `username` and `userkey` can't be used as search terms for this parameter due to privacy reasons. Use `accountId` instead.
-  --validateQuery: string@bool-completer # Specifies whether to validate the JQL query or not. Default: true.
+  --validateQuery: oneof<nothing, bool> # Specifies whether to validate the JQL query or not. Default: true.
   --qp-fields: list # The list of fields to return for each issue. By default, all navigable and Software project fields are returned.
   --expand: string # A comma-separated list of the parameters to expand.
 ]: nothing -> record<expand: string, isLast: bool, issues: table<changelog: record, editmeta: record, expand: string, fields: record, fieldsToInclude: record, id: string, key: string, names: record, operations: record, properties: record, renderedFields: record, schema: record, self: string, transitions: list, versionedRepresentations: record>, names: record, nextPageToken: string, schema: record, warningMessages: list<string>> {
@@ -1150,7 +1149,7 @@ export def "rest-agile-10-epic partiallyUpdateEpic" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --color: record # shape: {key?: "color_1"|"color_2"|"color_3"|"color_4"|"color_5"|"color_6"|"color_7"|"color_8"|"color_9"|"color_10"|"color_11"|"color_12"|"color_13"|"color_14"}
-  --done: string@bool-completer
+  --done: oneof<nothing, bool>
   --name: string
   --summary: string
 ]: any -> any {
@@ -1183,7 +1182,7 @@ export def "rest-agile-10-epic-issue get" [
   --startAt: int # The starting index of the returned issues. Base index: 0. See the 'Pagination' section at the top of this page for more details. (format: int64)
   --maxResults: int # The maximum number of issues to return per page. Default: 50. See the 'Pagination' section at the top of this page for more details. Note, the total number of issues returned is limited by the property 'jira.search.views.default.max' in your Jira instance. If you exceed this limit, your results will be truncated. (format: int32)
   --jql: string # Filters results using a JQL query. If you define an order in your JQL query, it will override the default order of the returned issues.   Note that `username` and `userkey` can't be used as search terms for this parameter due to privacy reasons. Use `accountId` instead.
-  --validateQuery: string@bool-completer # Specifies whether to validate the JQL query or not. Default: true.
+  --validateQuery: oneof<nothing, bool> # Specifies whether to validate the JQL query or not. Default: true.
   --qp-fields: list # The list of fields to return for each issue. By default, all navigable and Agile fields are returned.
   --expand: string # A comma-separated list of the parameters to expand.
 ]: nothing -> any {
@@ -1239,7 +1238,7 @@ export def "rest-software-10-epic-issue get" [
   --maxResults: int # The maximum number of items to return per page. To manage page size, the API may return fewer items per page where there is a large number of fields or properties returned. It returns max 5000 issues. (format: int32)
   --reconcileIssues: list # Strong consistency issue IDs to be reconciled with search results. Accepts max 50 IDs. This list of IDs should be consistent with each paginated request across different pages.
   --jql: string # Filters results using a JQL query. If you define an order in your JQL query, it will override the default order of the returned issues.   Note that `username` and `userkey` can't be used as search terms for this parameter due to privacy reasons. Use `accountId` instead.
-  --validateQuery: string@bool-completer # Specifies whether to validate the JQL query or not. Default: true.
+  --validateQuery: oneof<nothing, bool> # Specifies whether to validate the JQL query or not. Default: true.
   --qp-fields: list # The list of fields to return for each issue. By default, all navigable and Software project fields are returned.
   --expand: string # A comma-separated list of the parameters to expand.
 ]: nothing -> record<expand: string, isLast: bool, issues: table<changelog: record, editmeta: record, expand: string, fields: record, fieldsToInclude: record, id: string, key: string, names: record, operations: record, properties: record, renderedFields: record, schema: record, self: string, transitions: list, versionedRepresentations: record>, names: record, nextPageToken: string, schema: record, warningMessages: list<string>> {
@@ -1323,7 +1322,7 @@ export def "rest-agile-10-issue get" [
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: list # The list of fields to return for each issue. By default, all navigable and Agile fields are returned.
   --expand: string # A comma-separated list of the parameters to expand.
-  --updateHistory: string@bool-completer # A boolean indicating whether the issue retrieved by this method should be added to the current user's issue history
+  --updateHistory: oneof<nothing, bool> # A boolean indicating whether the issue retrieved by this method should be added to the current user's issue history
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1547,7 +1546,7 @@ export def "rest-agile-10-sprint-issue get" [
   --startAt: int # The starting index of the returned issues. Base index: 0. See the 'Pagination' section at the top of this page for more details. (format: int64)
   --maxResults: int # The maximum number of issues to return per page. See the 'Pagination' section at the top of this page for more details. Note, the total number of issues returned is limited by the property 'jira.search.views.default.max' in your Jira instance. If you exceed this limit, your results will be truncated. (format: int32)
   --jql: string # Filters results using a JQL query. If you define an order in your JQL query, it will override the default order of the returned issues.   Note that `username` and `userkey` can't be used as search terms for this parameter due to privacy reasons. Use `accountId` instead.
-  --validateQuery: string@bool-completer # Specifies whether to validate the JQL query or not. Default: true.
+  --validateQuery: oneof<nothing, bool> # Specifies whether to validate the JQL query or not. Default: true.
   --qp-fields: list # The list of fields to return for each issue. By default, all navigable and Agile fields are returned.
   --expand: string # A comma-separated list of the parameters to expand.
 ]: nothing -> any {
@@ -1606,7 +1605,7 @@ export def "rest-software-10-sprint-issue get" [
   --maxResults: int # The maximum number of items to return per page. To manage page size, the API may return fewer items per page where there is a large number of fields or properties returned. It returns max 5000 issues. (format: int32)
   --reconcileIssues: list # Strong consistency issue IDs to be reconciled with search results. Accepts max 50 IDs. This list of IDs should be consistent with each paginated request across different pages.
   --jql: string # Filters results using a JQL query. If you define an order in your JQL query, it will override the default order of the returned issues.   Note that `username` and `userkey` can't be used as search terms for this parameter due to privacy reasons. Use `accountId` instead.
-  --validateQuery: string@bool-completer # Specifies whether to validate the JQL query or not. Default: true.
+  --validateQuery: oneof<nothing, bool> # Specifies whether to validate the JQL query or not. Default: true.
   --qp-fields: list # The list of fields to return for each issue. By default, all navigable and Software project fields are returned.
   --expand: string # A comma-separated list of the parameters to expand.
 ]: nothing -> record<expand: string, isLast: bool, issues: table<changelog: record, editmeta: record, expand: string, fields: record, fieldsToInclude: record, id: string, key: string, names: record, operations: record, properties: record, renderedFields: record, schema: record, self: string, transitions: list, versionedRepresentations: record>, names: record, nextPageToken: string, schema: record, warningMessages: list<string>> {
@@ -1755,7 +1754,7 @@ export def "rest-devinfo-010-bulk storeDevelopmentInformation" [
   --allow-errors(-e) # Return full response without error handling
   --Authorization: string # All requests must be signed with either a Connect JWT token or OAuth token for an on-premise integration that corresponds to an app installed in Jira. If the JWT token corresponds to a Connect app that does not define the jiraDevelopmentTool module it will be rejected with a 403. See https://developer.atlassian.com/blog/2015/01/understanding-jwt/ for more details about Connect JWT tokens. See https://developer.atlassian.com/cloud/jira/software/integrate-jsw-cloud-with-onpremises-tools/ for details about on-premise integrations.
   repositories: list # List of repositories containing development information. Must not contain duplicates. Maximum number of entities across all repositories is 1000. — item shape: {name: string, description?: string, forkOf?: string, url: string, commits?: list, branches?: list, pullRequests?: list, avatar?: string, avatarDescription?: string, id: string, updateSequenceId: int}
-  --preventTransitions: string@bool-completer # Flag to prevent automatic issue transitions and smart commits being fired, default is false.
+  --preventTransitions: oneof<nothing, bool> # Flag to prevent automatic issue transitions and smart commits being fired, default is false.
   --operationType: string@operationType-completer # Indicates the operation being performed by the provider system when sending this data. "NORMAL" - Data received during normal operation (e.g. a user pushing a branch). "BACKFILL" - Data received while backfilling existing data (e.g. indexing a newly connected account). Default is "NORMAL". Please note that "BACKFILL" operations have a much higher rate-limiting threshold but are also processed slower in comparison to "NORMAL" operations. (e.g. NORMAL)
   --properties: record # Arbitrary properties to tag the submitted repositories with. These properties can be used for delete operations to e.g. clean up all development information associated with an account in the event that the account is removed from the provider system. Note that these properties will never be returned with repository or entity data. They are not intended for use as metadata to associate with a repository. Maximum length of each key or value is 255 characters. Maximum allowed number of properties key/value pairs is 5. Properties keys cannot start with '_' character. Properties keys cannot contain ':' character. 
   --providerMetadata: record # Information about the provider. This is useful for auditing, logging, debugging, and other internal uses. It is not considered private information. Hence, it may not contain personally identifiable information. — shape: {product?: string}

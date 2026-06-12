@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://{TENANT}.auth0.com/api/v2"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -165,10 +164,10 @@ export def "actions-actions actions" [
   --allow-errors(-e) # Return full response without error handling
   --triggerId: string@triggerId-completer # An actions extensibility point.
   --actionName: string # The name of the action to retrieve.
-  --deployed: string@bool-completer # Optional filter to only retrieve actions that are deployed.
+  --deployed: oneof<nothing, bool> # Optional filter to only retrieve actions that are deployed.
   --page: int # Use this field to request a specific page of the list results.
   --per-page: int # The maximum number of results to be returned by the server in single response. 20 by default
-  --installed: string@bool-completer # Optional. When true, return only installed actions. When false, return only custom actions. Returns all actions by default.
+  --installed: oneof<nothing, bool> # Optional. When true, return only installed actions. When false, return only custom actions. Returns all actions by default.
 ]: nothing -> record<total: float, page: float, per_page: float, actions: table<id: string, name: string, supported_triggers: list, all_changes_deployed: bool, created_at: string, updated_at: string, code: string, dependencies: list, runtime: string, secrets: list, deployed_version: record, installed_integration_id: string, integration: record, status: string, built_at: string, deploy: bool, modules: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -202,7 +201,7 @@ export def "actions-actions action" [
   --runtime: string # The Node runtime. For example: `node22`, defaults to `node22` (default: node22)
   --secrets: list # The list of secrets that are included in an action or a version of an action. — item shape: {name?: string, value?: string}
   --modules: list # The list of action modules and their versions used by this action. — item shape: {module_id?: string, module_name?: string, module_version_id?: string, module_version_number?: int}
-  --deploy: string@bool-completer # True if the action should be deployed after creation. (default: false)
+  --deploy: oneof<nothing, bool> # True if the action should be deployed after creation. (default: false)
 ]: any -> record<id: string, name: string, supported_triggers: table<id: string, version: string, status: string, runtimes: list, default_runtime: string, compatible_triggers: list, binding_policy: string>, all_changes_deployed: bool, created_at: string, updated_at: string, code: string, dependencies: table<name: string, version: string, registry_url: string>, runtime: string, secrets: table<name: string, updated_at: string>, deployed_version: record<id: string, action_id: string, code: string, dependencies: list<record>, deployed: bool, runtime: string, secrets: list<record>, status: string, number: float, errors: list<record>, action: record<id: string, name: string, supported_triggers: list, all_changes_deployed: bool, created_at: string, updated_at: string>, built_at: string, created_at: string, updated_at: string, supported_triggers: list<record>, modules: list<record>>, installed_integration_id: string, integration: record<id: string, catalog_id: string, url_slug: string, partner_id: string, name: string, description: string, short_description: string, logo: string, feature_type: string, terms_of_use_url: string, privacy_policy_url: string, public_support_link: string, current_release: record<id: string, trigger: record, semver: record, required_secrets: list, required_configuration: list>, created_at: string, updated_at: string>, status: string, built_at: string, deploy: bool, modules: table<module_id: string, module_name: string, module_version_id: string, module_version_number: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -277,7 +276,7 @@ export def "actions-actions-versions-deploy version" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --update-draft: string@bool-completer # True if the draft of the action should be updated with the reverted version. (default: false)
+  --update-draft: oneof<nothing, bool> # True if the draft of the action should be updated with the reverted version. (default: false)
 ]: any -> record<id: string, action_id: string, code: string, dependencies: table<name: string, version: string, registry_url: string>, deployed: bool, runtime: string, secrets: table<name: string, updated_at: string>, status: string, number: float, errors: table<id: string, msg: string, url: string>, action: record<id: string, name: string, supported_triggers: list<record>, all_changes_deployed: bool, created_at: string, updated_at: string>, built_at: string, created_at: string, updated_at: string, supported_triggers: table<id: string, version: string, status: string, runtimes: list, default_runtime: string, compatible_triggers: list, binding_policy: string>, modules: table<module_id: string, module_name: string, module_version_id: string, module_version_number: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -325,7 +324,7 @@ export def "actions-actions action-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # Force action deletion detaching bindings
+  --force: oneof<nothing, bool> # Force action deletion detaching bindings
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -485,7 +484,7 @@ export def "actions-modules module" [
   --secrets: list # The secrets to associate with the action module. — item shape: {name: string, value: string}
   --dependencies: list # The npm dependencies of the action module. — item shape: {name: string, version: string}
   --api-version: string # The API version of the module.
-  --publish: string@bool-completer # Whether to publish the module immediately after creation.
+  --publish: oneof<nothing, bool> # Whether to publish the module immediately after creation.
 ]: any -> record<id: string, name: string, code: string, dependencies: table<name: string, version: string>, secrets: table<name: string, updated_at: string>, actions_using_module_total: int, all_changes_published: bool, latest_version_number: int, created_at: string, updated_at: string, latest_version: record<id: string, version_number: int, code: string, dependencies: list<record>, secrets: list<record>, created_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -847,7 +846,7 @@ export def "attack-protection-bot-detection bot-detection-1" [
   --challenge-passwordless-policy: string@challenge-passwordless-policy-completer # The policy that defines how often to show CAPTCHA
   --challenge-password-reset-policy: string@challenge-password-reset-policy-completer # The policy that defines how often to show CAPTCHA
   --allowlist: list # List of IP addresses or CIDR blocks to allowlist
-  --monitoring-mode-enabled: string@bool-completer # Whether monitoring mode is enabled (logs but does not block)
+  --monitoring-mode-enabled: oneof<nothing, bool> # Whether monitoring mode is enabled (logs but does not block)
 ]: any -> record<bot_detection_level: string, challenge_password_policy: string, challenge_passwordless_policy: string, challenge_password_reset_policy: string, allowlist: list<string>, monitoring_mode_enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -894,7 +893,7 @@ export def "attack-protection-breached-password-detection breached-password-dete
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether or not breached password detection is active. (default: true)
+  --enabled: oneof<nothing, bool> # Whether or not breached password detection is active. (default: true)
   --shields: list # Action to take when a breached password is detected during a login.       Possible values: <code>block</code>, <code>user_notification</code>, <code>admin_notification</code>.
   --admin-notification-frequency: list # When "admin_notification" is enabled, determines how often email notifications are sent.         Possible values: <code>immediately</code>, <code>daily</code>, <code>weekly</code>, <code>monthly</code>.
   --method: string@method-completer # The subscription level for breached password detection methods. Use "enhanced" to enable Credential Guard.         Possible values: <code>standard</code>, <code>enhanced</code>. (default: standard)
@@ -944,7 +943,7 @@ export def "attack-protection-brute-force-protection brute-force-protection-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether or not brute force attack protections are active.
+  --enabled: oneof<nothing, bool> # Whether or not brute force attack protections are active.
   --shields: list # Action to take when a brute force protection threshold is violated.         Possible values: <code>block</code>, <code>user_notification</code>.
   --allowlist: list # List of trusted IP addresses that will not have attack protection enforced against them.
   --mode: string@mode-completer # Account Lockout: Determines whether or not IP address is used when counting failed attempts.           Possible values: <code>count_per_identifier_and_ip</code>, <code>count_per_identifier</code>. (default: count_per_identifier_and_ip)
@@ -1054,7 +1053,7 @@ export def "attack-protection-suspicious-ip-throttling suspicious-ip-throttling-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether or not suspicious IP throttling attack protections are active.
+  --enabled: oneof<nothing, bool> # Whether or not suspicious IP throttling attack protections are active.
   --shields: list # Action to take when a suspicious IP throttling threshold is violated.           Possible values: <code>block</code>, <code>admin_notification</code>.
   --allowlist: list # List of trusted IP addresses that will not have attack protection enforced against them.
   --stage: record # Holds per-stage configuration options (max_attempts and rate). — shape: {pre-login?: record, pre-user-registration?: record}
@@ -1135,7 +1134,7 @@ export def "branding-phone-providers providers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --disabled: string@bool-completer # Whether the provider is enabled (false) or disabled (true).
+  --disabled: oneof<nothing, bool> # Whether the provider is enabled (false) or disabled (true).
 ]: nothing -> record<providers: table<id: string, tenant: string, name: string, channel: string, disabled: bool, configuration: record, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1160,7 +1159,7 @@ export def "branding-phone-providers provider" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string@name-completer # Name of the phone notification provider
-  --disabled: string@bool-completer # Whether the provider is enabled (false) or disabled (true).
+  --disabled: oneof<nothing, bool> # Whether the provider is enabled (false) or disabled (true).
   --configuration: record # shape: {default_from?: string, mssid?: string, sid?: string, delivery_methods?: list}
   credentials: any # Provider credentials required to use authenticate to the provider.
 ]: any -> record<id: string, tenant: string, name: string, channel: string, disabled: bool, configuration: record, created_at: string, updated_at: string> {
@@ -1234,7 +1233,7 @@ export def "branding-phone-providers provider-by-id-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string@name-completer # Name of the phone notification provider
-  --disabled: string@bool-completer # Whether the provider is enabled (false) or disabled (true).
+  --disabled: oneof<nothing, bool> # Whether the provider is enabled (false) or disabled (true).
   --credentials: any # Provider credentials required to use authenticate to the provider.
   --configuration: record # shape: {default_from?: string, mssid?: string, sid?: string, delivery_methods?: list}
 ]: any -> record<id: string, tenant: string, name: string, channel: string, disabled: bool, configuration: record, created_at: string, updated_at: string> {
@@ -1288,7 +1287,7 @@ export def "branding-phone-templates templates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --disabled: string@bool-completer # Whether the template is enabled (false) or disabled (true).
+  --disabled: oneof<nothing, bool> # Whether the template is enabled (false) or disabled (true).
 ]: nothing -> record<templates: table<id: string, channel: string, customizable: bool, tenant: string, content: record, type: string, disabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1313,7 +1312,7 @@ export def "branding-phone-templates template" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer
-  --disabled: string@bool-completer # Whether the template is enabled (false) or disabled (true). (default: false)
+  --disabled: oneof<nothing, bool> # Whether the template is enabled (false) or disabled (true). (default: false)
   --content: record # shape: {syntax?: string, from?: string, body?: record}
 ]: any -> record<id: string, channel: string, customizable: bool, tenant: string, content: record<syntax: string, from: string, body: record<text: string, voice: string>>, type: string, disabled: bool> {
   let input = $in
@@ -1386,7 +1385,7 @@ export def "branding-phone-templates template-by-id-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --content: record # shape: {from?: string, body?: record}
-  --disabled: string@bool-completer # Whether the template is enabled (false) or disabled (true). (default: false)
+  --disabled: oneof<nothing, bool> # Whether the template is enabled (false) or disabled (true). (default: false)
 ]: any -> record<id: string, channel: string, customizable: bool, tenant: string, content: record<syntax: string, from: string, body: record<text: string, voice: string>>, type: string, disabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1668,12 +1667,12 @@ export def "client-grants client-grants" [
   --allow-errors(-e) # Return full response without error handling
   --per-page: int # Number of results per page.
   --page: int # Page index of the results to return. First page is 0.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
   --qp-from: string # Optional Id from which to start selection.
   --take: int # Number of results per page. Defaults to 50.
   --audience: string # Optional filter on audience.
   --client-id: string # Optional filter on client_id.
-  --allow-any-organization: string@bool-completer # Optional filter on allow_any_organization.
+  --allow-any-organization: oneof<nothing, bool> # Optional filter on allow_any_organization.
   --subject-type: string@subject-type-completer # The type of application access the client grant allows.
   --default-for: string@default-for-completer # Applies this client grant as the default for all clients in the specified group. The only accepted value is <a href="https://auth0.com/docs/get-started/applications/application-access-to-apis-client-grants#default-permissions-for-third-party-applications">`third_party_clients`</a>, which applies the grant to all third-party clients. Per-client grants for the same audience take precedence. Mutually exclusive with `client_id`.
 ]: nothing -> any {
@@ -1702,11 +1701,11 @@ export def "client-grants client-grants-1" [
   audience: string # The audience (API identifier) of this client grant
   --default-for: string@default-for-completer # Applies this client grant as the default for all clients in the specified group. The only accepted value is <a href="https://auth0.com/docs/get-started/applications/application-access-to-apis-client-grants#default-permissions-for-third-party-applications">`third_party_clients`</a>, which applies the grant to all third-party clients. Per-client grants for the same audience take precedence. Mutually exclusive with `client_id`.
   --organization-usage: string@organization-usage-completer # Defines whether organizations can be used with client credentials exchanges for this grant.
-  --allow-any-organization: string@bool-completer # If enabled, any organization can be used with this grant. If disabled (default), the grant must be explicitly assigned to the desired organizations. (default: false)
+  --allow-any-organization: oneof<nothing, bool> # If enabled, any organization can be used with this grant. If disabled (default), the grant must be explicitly assigned to the desired organizations. (default: false)
   --scope: list # Scopes allowed for this client grant.
   --subject-type: string@subject-type-completer # The type of application access the client grant allows.
   --authorization-details-types: list # Types of authorization_details allowed for this client grant.
-  --allow-all-scopes: string@bool-completer # If enabled, all scopes configured on the resource server are allowed for this grant.
+  --allow-all-scopes: oneof<nothing, bool> # If enabled, all scopes configured on the resource server are allowed for this grant.
 ]: any -> record<id: string, client_id: string, audience: string, scope: list<string>, organization_usage: string, allow_any_organization: bool, default_for: string, is_system: bool, subject_type: string, authorization_details_types: list<string>, allow_all_scopes: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1778,9 +1777,9 @@ export def "client-grants id-by-id-1" [
   --allow-errors(-e) # Return full response without error handling
   --scope: list # Scopes allowed for this client grant. (nullable)
   --organization-usage: string@organization-usage-completer-1 # Controls how organizations may be used with this grant (nullable)
-  --allow-any-organization: string@bool-completer # Controls allowing any organization to be used with this grant (nullable)
+  --allow-any-organization: oneof<nothing, bool> # Controls allowing any organization to be used with this grant (nullable)
   --authorization-details-types: list # Types of authorization_details allowed for this client grant.
-  --allow-all-scopes: string@bool-completer # If enabled, all scopes configured on the resource server are allowed for this grant. (nullable)
+  --allow-all-scopes: oneof<nothing, bool> # If enabled, all scopes configured on the resource server are allowed for this grant. (nullable)
 ]: any -> record<id: string, client_id: string, audience: string, scope: list<string>, organization_usage: string, allow_any_organization: bool, default_for: string, is_system: bool, subject_type: string, authorization_details_types: list<string>, allow_all_scopes: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1808,7 +1807,7 @@ export def "client-grants-organizations client-grant-organizations" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page. Defaults to 50.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
   --qp-from: string # Optional Id from which to start selection.
   --take: int # Number of results per page. Defaults to 50.
 ]: nothing -> any {
@@ -1834,14 +1833,14 @@ export def "clients clients" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: string # Comma-separated list of fields to include or exclude (based on value provided for include_fields) in the result. Leave empty to retrieve all fields.
-  --include-fields: string@bool-completer # Whether specified fields are to be included (true) or excluded (false).
+  --include-fields: oneof<nothing, bool> # Whether specified fields are to be included (true) or excluded (false).
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page. Default value is 50, maximum value is 100
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
   --qp-from: string # Optional Id from which to start selection.
   --take: int # Number of results per page. Defaults to 50.
-  --is-global: string@bool-completer # Optional filter on the global client parameter.
-  --is-first-party: string@bool-completer # Optional filter on whether or not a client is a first-party client.
+  --is-global: oneof<nothing, bool> # Optional filter on the global client parameter.
+  --is-first-party: oneof<nothing, bool> # Optional filter on whether or not a client is a first-party client.
   --app-type: string # Optional filter by a comma-separated list of application types.
   --external-client-id: string # Optional filter by the <a href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-04.html">Client ID Metadata Document</a> URI for CIMD-registered clients.
   --q: string # Advanced Query in <a href="https://lucene.apache.org/core/2_9_4/queryparsersyntax.html">Lucene</a> syntax.<br /><b>Permitted Queries</b>:<br /><ul><li><i>client_grant.organization_id:{organization_id}</i></li><li><i>client_grant.allow_any_organization:true</i></li></ul><b>Additional Restrictions</b>:<br /><ul><li>Cannot be used in combination with other filters</li><li>Requires use of the <i>from</i> and <i>take</i> paging parameters (checkpoint paginatinon)</li><li>Reduced rate limits apply. See <a href="https://auth0.com/docs/troubleshoot/customer-support/operational-policies/rate-limit-policy/rate-limit-configurations/enterprise-public">Rate Limit Configurations</a></li></ul><i><b>Note</b>: Recent updates may not be immediately reflected in query results</i>
@@ -1897,17 +1896,17 @@ export def "clients clients-1" [
   --allowed-logout-urls: list # Comma-separated list of URLs that are valid to redirect to after logout from Auth0. Wildcards are allowed for subdomains.
   --grant-types: list # List of grant types supported for this application. Can include `authorization_code`, `implicit`, `refresh_token`, `client_credentials`, `password`, `http://auth0.com/oauth/grant-type/password-realm`, `http://auth0.com/oauth/grant-type/mfa-oob`, `http://auth0.com/oauth/grant-type/mfa-otp`, `http://auth0.com/oauth/grant-type/mfa-recovery-code`, `urn:openid:params:grant-type:ciba`, `urn:ietf:params:oauth:grant-type:device_code`, and `urn:auth0:params:oauth:grant-type:token-exchange:federated-connection-access-token`.
   --token-endpoint-auth-method: string@token-endpoint-auth-method-completer # Defines the requested authentication method for the token endpoint. Can be `none` (public client without a client secret), `client_secret_post` (client uses HTTP POST parameters), or `client_secret_basic` (client uses HTTP Basic). (default: none)
-  --is-token-endpoint-ip-header-trusted: string@bool-completer # If true, trust that the IP specified in the `auth0-forwarded-for` header is the end-user's IP for brute-force-protection on token endpoint. (default: false)
+  --is-token-endpoint-ip-header-trusted: oneof<nothing, bool> # If true, trust that the IP specified in the `auth0-forwarded-for` header is the end-user's IP for brute-force-protection on token endpoint. (default: false)
   --app-type: string@app-type-completer # The type of application this client represents
-  --is-first-party: string@bool-completer # Whether this client a first party client or not (default: true)
-  --oidc-conformant: string@bool-completer # Whether this client conforms to <a href='https://auth0.com/docs/api-auth/tutorials/adoption'>strict OIDC specifications</a> (true) or uses legacy features (false). (default: false)
+  --is-first-party: oneof<nothing, bool> # Whether this client a first party client or not (default: true)
+  --oidc-conformant: oneof<nothing, bool> # Whether this client conforms to <a href='https://auth0.com/docs/api-auth/tutorials/adoption'>strict OIDC specifications</a> (true) or uses legacy features (false). (default: false)
   --jwt-configuration: record # Configuration related to JWTs for the client. — shape: {lifetime_in_seconds?: int, secret_encoded?: bool, scopes?: record, alg?: "HS256"|"RS256"|"RS512"|"PS256"}
   --encryption-key: record # Encryption used for WsFed responses with this client. (nullable) — shape: {pub?: string, cert?: string, subject?: string}
-  --sso: string@bool-completer # Applies only to SSO clients and determines whether Auth0 will handle Single Sign On (true) or whether the Identity Provider will (false).
-  --cross-origin-authentication: string@bool-completer # Whether this client can be used to make cross-origin authentication requests (true) or it is not allowed to make such requests (false). (default: false)
+  --sso: oneof<nothing, bool> # Applies only to SSO clients and determines whether Auth0 will handle Single Sign On (true) or whether the Identity Provider will (false).
+  --cross-origin-authentication: oneof<nothing, bool> # Whether this client can be used to make cross-origin authentication requests (true) or it is not allowed to make such requests (false). (default: false)
   --cross-origin-loc: string # URL of the location in your site where the cross origin verification takes place for the cross-origin auth flow when performing Auth in your own domain instead of Auth0 hosted login page. (format: url)
-  --sso-disabled: string@bool-completer # <code>true</code> to disable Single Sign On, <code>false</code> otherwise (default: <code>false</code>)
-  --custom-login-page-on: string@bool-completer # <code>true</code> if the custom login page is to be used, <code>false</code> otherwise. Defaults to <code>true</code>
+  --sso-disabled: oneof<nothing, bool> # <code>true</code> to disable Single Sign On, <code>false</code> otherwise (default: <code>false</code>)
+  --custom-login-page-on: oneof<nothing, bool> # <code>true</code> if the custom login page is to be used, <code>false</code> otherwise. Defaults to <code>true</code>
   --custom-login-page: string # The content (HTML, CSS, JS) of the custom login page.
   --custom-login-page-preview: string # The content (HTML, CSS, JS) of the custom login page. (Used on Previews)
   --form-template: string # HTML form template to be used for WS-Federation.
@@ -1922,11 +1921,11 @@ export def "clients clients-1" [
   --organization-require-behavior: string@organization-require-behavior-completer # Defines how to proceed during an authentication transaction when `client.organization_usage: 'require'`. Can be `no_prompt` (default), `pre_login_prompt` or `post_login_prompt`. `post_login_prompt` requires `oidc_conformant: true`. (default: no_prompt)
   --organization-discovery-methods: list # Defines the available methods for organization discovery during the `pre_login_prompt`. Users can discover their organization either by `email`, `organization_name` or both.
   --client-authentication-methods: record # Defines client authentication methods. — shape: {private_key_jwt?: record, tls_client_auth?: record, self_signed_tls_client_auth?: record}
-  --require-pushed-authorization-requests: string@bool-completer # Makes the use of Pushed Authorization Requests mandatory for this client (default: false)
-  --require-proof-of-possession: string@bool-completer # Makes the use of Proof-of-Possession mandatory for this client (default: false)
+  --require-pushed-authorization-requests: oneof<nothing, bool> # Makes the use of Pushed Authorization Requests mandatory for this client (default: false)
+  --require-proof-of-possession: oneof<nothing, bool> # Makes the use of Proof-of-Possession mandatory for this client (default: false)
   --signed-request-object: record # JWT-secured Authorization Requests (JAR) settings. — shape: {required?: bool, credentials?: list}
   --compliance-level: string@compliance-level-completer # Defines the compliance level for this client, which may restrict it's capabilities (nullable)
-  --skip-non-verifiable-callback-uri-confirmation-prompt: string@bool-completer # Controls whether a confirmation prompt is shown during login flows when the redirect URI uses non-verifiable callback URIs (for example, a custom URI schema such as `myapp://`, or `localhost`). If set to true, a confirmation prompt will not be shown. We recommend that this is set to false for improved protection from malicious apps. See https://auth0.com/docs/secure/security-guidance/measures-against-app-impersonation for more information.
+  --skip-non-verifiable-callback-uri-confirmation-prompt: oneof<nothing, bool> # Controls whether a confirmation prompt is shown during login flows when the redirect URI uses non-verifiable callback URIs (for example, a custom URI schema such as `myapp://`, or `localhost`). If set to true, a confirmation prompt will not be shown. We recommend that this is set to false for improved protection from malicious apps. See https://auth0.com/docs/secure/security-guidance/measures-against-app-impersonation for more information.
   --token-exchange: record # Configuration for token exchange. — shape: {allow_any_profile_of_type?: list}
   --par-request-expiry: int # Specifies how long, in seconds, a Pushed Authorization Request URI remains valid (nullable)
   --token-quota: record # shape: {client_credentials: record}
@@ -2038,7 +2037,7 @@ export def "clients-credentials credentials-by-client_id-1" [
   --subject-dn: string # Subject Distinguished Name. Mutually exclusive with `pem` property. Applies to `cert_subject_dn` credential type.
   --pem: string # PEM-formatted public key (SPKI and PKCS1) or X509 certificate. Must be JSON escaped. (default: -----BEGIN PUBLIC KEY----- MIIBIjANBg... -----END PUBLIC KEY----- )
   --alg: string@alg-completer # Algorithm which will be used with the credential. Can be one of RS256, RS384, PS256. If not specified, RS256 will be used. Applies to `public_key` credential type. (default: RS256)
-  --parse-expiry-from-cert: string@bool-completer # Parse expiry from x509 certificate. If true, attempts to parse the expiry date from the provided PEM. Applies to `public_key` credential type. (default: false)
+  --parse-expiry-from-cert: oneof<nothing, bool> # Parse expiry from x509 certificate. If true, attempts to parse the expiry date from the provided PEM. Applies to `public_key` credential type. (default: false)
   --expires-at: string # The ISO 8601 formatted date representing the expiration of the credential. If not specified (not recommended), the credential never expires. Applies to `public_key` credential type. (format: date-time, default: 2023-02-07T12:40:17.807Z)
   --kid: string # Optional kid (Key ID), used to uniquely identify the credential. If not specified, a kid value will be auto-generated. The kid header parameter in JWTs sent by your client should match this value. Valid format is [0-9a-zA-Z-_]{10,64}
 ]: any -> record<id: string, name: string, kid: string, alg: string, credential_type: string, subject_dn: string, thumbprint_sha256: string, created_at: string, updated_at: string, expires_at: string> {
@@ -2140,7 +2139,7 @@ export def "clients id-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: string # Comma-separated list of fields to include or exclude (based on value provided for include_fields) in the result. Leave empty to retrieve all fields.
-  --include-fields: string@bool-completer # Whether specified fields are to be included (true) or excluded (false).
+  --include-fields: oneof<nothing, bool> # Whether specified fields are to be included (true) or excluded (false).
 ]: nothing -> record<client_id: string, tenant: string, name: string, description: string, global: bool, client_secret: string, app_type: string, logo_uri: string, is_first_party: bool, oidc_conformant: bool, callbacks: list<string>, allowed_origins: list<string>, web_origins: list<string>, client_aliases: list<string>, allowed_clients: list<string>, allowed_logout_urls: list<string>, session_transfer: record<can_create_session_transfer_token: bool, enforce_cascade_revocation: bool, allowed_authentication_methods: list<string>, enforce_device_binding: string, allow_refresh_token: bool, enforce_online_refresh_tokens: bool, delegation: record<allow_delegated_access: bool, enforce_device_binding: string>>, oidc_logout: record<backchannel_logout_urls: list<string>, backchannel_logout_initiators: record<mode: string, selected_initiators: list>, backchannel_logout_session_metadata: record<include: bool>>, grant_types: list<string>, jwt_configuration: record<lifetime_in_seconds: int, secret_encoded: bool, scopes: record, alg: string>, signing_keys: table<pkcs7: string, cert: string, subject: string>, encryption_key: record<pub: string, cert: string, subject: string>, sso: bool, sso_disabled: bool, cross_origin_authentication: bool, cross_origin_loc: string, custom_login_page_on: bool, custom_login_page: string, custom_login_page_preview: string, form_template: string, addons: record<aws: record<principal: string, role: string, lifetime_in_seconds: int>, azure_blob: record<accountName: string, storageAccessKey: string, containerName: string, blobName: string, expiration: int, signedIdentifier: string, blob_read: bool, blob_write: bool, blob_delete: bool, container_read: bool, container_write: bool, container_delete: bool, container_list: bool>, azure_sb: record<namespace: string, sasKeyName: string, sasKey: string, entityPath: string, expiration: int>, rms: record<url: string>, mscrm: record<url: string>, slack: record<team: string>, sentry: record<org_slug: string, base_url: string>, box: record, cloudbees: record, concur: record, dropbox: record, echosign: record<domain: string>, egnyte: record<domain: string>, firebase: record<secret: string, private_key_id: string, private_key: string, client_email: string, lifetime_in_seconds: int>, newrelic: record<account: string>, office365: record<domain: string, connection: string>, salesforce: record<entity_id: string>, salesforce_api: record<clientid: string, principal: string, communityName: string, community_url_section: string>, salesforce_sandbox_api: record<clientid: string, principal: string, communityName: string, community_url_section: string>, samlp: record<mappings: record, audience: string, recipient: string, createUpnClaim: bool, mapUnknownClaimsAsIs: bool, passthroughClaimsWithNoMapping: bool, mapIdentities: bool, signatureAlgorithm: string, digestAlgorithm: string, issuer: string, destination: string, lifetimeInSeconds: int, signResponse: bool, nameIdentifierFormat: string, nameIdentifierProbes: list, authnContextClassRef: string>, layer: record<providerId: string, keyId: string, privateKey: string, principal: string, expiration: int>, sap_api: record<clientid: string, usernameAttribute: string, tokenEndpointUrl: string, scope: string, servicePassword: string, nameIdentifierFormat: string>, sharepoint: record<url: string, external_url: any>, springcm: record<acsurl: string>, wams: record<masterkey: string>, wsfed: record, zendesk: record<accountName: string>, zoom: record<account: string>, sso_integration: record<name: string, version: string>, oag: record>, token_endpoint_auth_method: string, is_token_endpoint_ip_header_trusted: bool, client_metadata: record, mobile: record<android: record<app_package_name: string, sha256_cert_fingerprints: list>, ios: record<team_id: string, app_bundle_identifier: string>>, initiate_login_uri: string, native_social_login: any, refresh_token: record<rotation_type: string, expiration_type: string, leeway: int, token_lifetime: int, infinite_token_lifetime: bool, idle_token_lifetime: int, infinite_idle_token_lifetime: bool, policies: list<record>>, default_organization: record<organization_id: string, flows: list<string>>, organization_usage: string, organization_require_behavior: string, organization_discovery_methods: list<string>, client_authentication_methods: record<private_key_jwt: record<credentials: list>, tls_client_auth: record<credentials: list>, self_signed_tls_client_auth: record<credentials: list>>, require_pushed_authorization_requests: bool, require_proof_of_possession: bool, signed_request_object: record<required: bool, credentials: list<record>>, compliance_level: string, skip_non_verifiable_callback_uri_confirmation_prompt: bool, token_exchange: record<allow_any_profile_of_type: list<string>>, par_request_expiry: int, token_quota: record<client_credentials: record<enforce: bool, per_day: int, per_hour: int>>, express_configuration: record<initiate_login_uri_template: string, user_attribute_profile_id: string, connection_profile_id: string, enable_client: bool, enable_organization: bool, linked_clients: list<record>, okta_oin_client_id: string, admin_login_domain: string, oin_submission_id: string>, my_organization_configuration: record<connection_profile_id: string, user_attribute_profile_id: string, allowed_strategies: list<string>, connection_deletion_behavior: string>, third_party_security_mode: string, redirection_policy: string, resource_server_identifier: string, async_approval_notification_channels: list<string>, external_metadata_type: string, external_metadata_created_by: string, external_client_id: string, jwks_uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2218,16 +2217,16 @@ export def "clients id-by-id-2" [
   --allowed-logout-urls: list # URLs that are valid to redirect to after logout from Auth0
   --jwt-configuration: record # Configuration related to JWTs for the client. — shape: {lifetime_in_seconds?: int, secret_encoded?: bool, scopes?: record, alg?: "HS256"|"RS256"|"RS512"|"PS256"}
   --encryption-key: record # Encryption used for WsFed responses with this client. (nullable) — shape: {pub?: string, cert?: string, subject?: string}
-  --sso: string@bool-completer # <code>true</code> to use Auth0 instead of the IdP to do Single Sign On, <code>false</code> otherwise (default: <code>false</code>)
-  --cross-origin-authentication: string@bool-completer # <code>true</code> if this client can be used to make cross-origin authentication requests, <code>false</code> otherwise if cross origin is disabled
+  --sso: oneof<nothing, bool> # <code>true</code> to use Auth0 instead of the IdP to do Single Sign On, <code>false</code> otherwise (default: <code>false</code>)
+  --cross-origin-authentication: oneof<nothing, bool> # <code>true</code> if this client can be used to make cross-origin authentication requests, <code>false</code> otherwise if cross origin is disabled
   --cross-origin-loc: string # URL for the location in your site where the cross origin verification takes place for the cross-origin auth flow when performing Auth in your own domain instead of Auth0 hosted login page. (nullable, format: url-or-null)
-  --sso-disabled: string@bool-completer # <code>true</code> to disable Single Sign On, <code>false</code> otherwise (default: <code>false</code>)
-  --custom-login-page-on: string@bool-completer # <code>true</code> if the custom login page is to be used, <code>false</code> otherwise.
+  --sso-disabled: oneof<nothing, bool> # <code>true</code> to disable Single Sign On, <code>false</code> otherwise (default: <code>false</code>)
+  --custom-login-page-on: oneof<nothing, bool> # <code>true</code> if the custom login page is to be used, <code>false</code> otherwise.
   --token-endpoint-auth-method: string@token-endpoint-auth-method-completer-1 # Defines the requested authentication method for the token endpoint. Can be `none` (public client without a client secret), `client_secret_post` (client uses HTTP POST parameters), or `client_secret_basic` (client uses HTTP Basic). (nullable, default: none)
-  --is-token-endpoint-ip-header-trusted: string@bool-completer # If true, trust that the IP specified in the `auth0-forwarded-for` header is the end-user's IP for brute-force-protection on token endpoint. (default: false)
+  --is-token-endpoint-ip-header-trusted: oneof<nothing, bool> # If true, trust that the IP specified in the `auth0-forwarded-for` header is the end-user's IP for brute-force-protection on token endpoint. (default: false)
   --app-type: string@app-type-completer # The type of application this client represents
-  --is-first-party: string@bool-completer # Whether this client a first party client or not (default: true)
-  --oidc-conformant: string@bool-completer # Whether this client will conform to strict OIDC specifications (default: false)
+  --is-first-party: oneof<nothing, bool> # Whether this client a first party client or not (default: true)
+  --oidc-conformant: oneof<nothing, bool> # Whether this client will conform to strict OIDC specifications (default: false)
   --custom-login-page: string # The content (HTML, CSS, JS) of the custom login page
   --custom-login-page-preview: string
   --token-quota: record # nullable — shape: {client_credentials: record}
@@ -2243,11 +2242,11 @@ export def "clients id-by-id-2" [
   --organization-require-behavior: string@organization-require-behavior-completer-1 # Defines how to proceed during an authentication transaction when `client.organization_usage: 'require'`. Can be `no_prompt` (default), `pre_login_prompt` or `post_login_prompt`. `post_login_prompt` requires `oidc_conformant: true`. (nullable, default: no_prompt)
   --organization-discovery-methods: list # Defines the available methods for organization discovery during the `pre_login_prompt`. Users can discover their organization either by `email`, `organization_name` or both. (nullable)
   --client-authentication-methods: record # Defines client authentication methods. (nullable) — shape: {private_key_jwt?: record, tls_client_auth?: record, self_signed_tls_client_auth?: record}
-  --require-pushed-authorization-requests: string@bool-completer # Makes the use of Pushed Authorization Requests mandatory for this client (default: false)
-  --require-proof-of-possession: string@bool-completer # Makes the use of Proof-of-Possession mandatory for this client (default: false)
+  --require-pushed-authorization-requests: oneof<nothing, bool> # Makes the use of Pushed Authorization Requests mandatory for this client (default: false)
+  --require-proof-of-possession: oneof<nothing, bool> # Makes the use of Proof-of-Possession mandatory for this client (default: false)
   --signed-request-object: record # JWT-secured Authorization Requests (JAR) settings. — shape: {required?: bool, credentials?: list}
   --compliance-level: string@compliance-level-completer # Defines the compliance level for this client, which may restrict it's capabilities (nullable)
-  --skip-non-verifiable-callback-uri-confirmation-prompt: string@bool-completer # Controls whether a confirmation prompt is shown during login flows when the redirect URI uses non-verifiable callback URIs (for example, a custom URI schema such as `myapp://`, or `localhost`). If set to true, a confirmation prompt will not be shown. We recommend that this is set to false for improved protection from malicious apps. See https://auth0.com/docs/secure/security-guidance/measures-against-app-impersonation for more information. (nullable)
+  --skip-non-verifiable-callback-uri-confirmation-prompt: oneof<nothing, bool> # Controls whether a confirmation prompt is shown during login flows when the redirect URI uses non-verifiable callback URIs (for example, a custom URI schema such as `myapp://`, or `localhost`). If set to true, a confirmation prompt will not be shown. We recommend that this is set to false for improved protection from malicious apps. See https://auth0.com/docs/secure/security-guidance/measures-against-app-impersonation for more information. (nullable)
   --token-exchange: record # Configuration for token exchange. (nullable) — shape: {allow_any_profile_of_type?: list}
   --par-request-expiry: int # Specifies how long, in seconds, a Pushed Authorization Request URI remains valid (nullable)
   --express-configuration: record # Application specific configuration for use with the OIN Express Configuration feature. (nullable) — shape: {initiate_login_uri_template: string, user_attribute_profile_id: string, connection_profile_id: string, enable_client: bool, enable_organization: bool, linked_clients?: list, okta_oin_client_id: string, admin_login_domain: string, oin_submission_id?: string}
@@ -2284,7 +2283,7 @@ export def "clients-connections connections" [
   --qp-from: string # Optional Id from which to start selection.
   --take: int # Number of results per page. Defaults to 50.
   --qp-fields: string # A comma separated list of fields to include or exclude (depending on include_fields) from the result, empty to retrieve all fields
-  --include-fields: string@bool-completer # <code>true</code> if the fields specified are to be included in the result, <code>false</code> otherwise (defaults to <code>true</code>)
+  --include-fields: oneof<nothing, bool> # <code>true</code> if the fields specified are to be included in the result, <code>false</code> otherwise (defaults to <code>true</code>)
 ]: nothing -> record<connections: table<name: string, display_name: string, options: record, id: string, strategy: string, realms: list, is_domain_connection: bool, show_as_button: bool, metadata: record, authentication: record, connected_accounts: record>, next: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2507,13 +2506,13 @@ export def "connections connections" [
   --allow-errors(-e) # Return full response without error handling
   --per-page: int # The amount of entries per page. Defaults to 100 if not provided
   --page: int # The page number. Zero based
-  --include-totals: string@bool-completer # true if a query summary must be included in the result, false otherwise. Not returned when using checkpoint pagination. Default <code>false</code>.
+  --include-totals: oneof<nothing, bool> # true if a query summary must be included in the result, false otherwise. Not returned when using checkpoint pagination. Default <code>false</code>.
   --qp-from: string # Optional Id from which to start selection.
   --take: int # Number of results per page. Defaults to 50.
   --strategy: list # Provide strategies to only retrieve connections with such strategies
   --name: string # Provide the name of the connection to retrieve
   --qp-fields: string # A comma separated list of fields to include or exclude (depending on include_fields) from the result, empty to retrieve all fields
-  --include-fields: string@bool-completer # <code>true</code> if the fields specified are to be included in the result, <code>false</code> otherwise (defaults to <code>true</code>)
+  --include-fields: oneof<nothing, bool> # <code>true</code> if the fields specified are to be included in the result, <code>false</code> otherwise (defaults to <code>true</code>)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2544,8 +2543,8 @@ export def "connections connections-1" [
   strategy: string@strategy-completer # The identity provider identifier for the connection
   --options: record # The connection's options (depend on the connection strategy) — shape: {validation?: record, non_persistent_attrs?: list, precedence?: list, attributes?: record, enable_script_context?: bool, enabledDatabaseCustomization?: bool, import_mode?: bool, configuration?: record, customScripts?: record, authentication_methods?: record, passkey_options?: record, passwordPolicy?: "none"|"low"|"fair"|"good"|"excellent"|"", password_complexity_options?: record, password_history?: record, password_no_personal_info?: record, password_dictionary?: record, api_enable_users?: bool, api_enable_groups?: bool, basic_profile?: bool, ext_admin?: bool, ext_is_suspended?: bool, ext_agreed_terms?: bool, ext_groups?: bool, ext_assigned_plans?: bool, ext_profile?: bool, disable_self_service_change_password?: bool, upstream_params?: record, set_user_root_attributes?: "on_each_login"|"on_first_login"|"never_on_login", gateway_authentication?: record, federated_connections_access_tokens?: record, password_options?: record, assertion_decryption_settings?: record, id_token_signed_response_algs?: list, token_endpoint_auth_method?: "client_secret_post"|"private_key_jwt", token_endpoint_auth_signing_alg?: "ES256"|"ES384"|"PS256"|"PS384"|"RS256"|"RS384"|"RS512", token_endpoint_jwtca_aud_format?: "issuer"|"token_endpoint"}
   --enabled-clients: list # Use of this property is NOT RECOMMENDED. Use the PATCH /v2/connections/{id}/clients endpoint to enable the connection for a set of clients.
-  --is-domain-connection: string@bool-completer # <code>true</code> promotes to a domain-level connection so that third-party applications can use it. <code>false</code> does not promote the connection, so only first-party applications with the connection enabled can use it. (Defaults to <code>false</code>.)
-  --show-as-button: string@bool-completer # Enables showing a button for the connection in the login page (new experience only). If false, it will be usable only by HRD. (Defaults to <code>false</code>.)
+  --is-domain-connection: oneof<nothing, bool> # <code>true</code> promotes to a domain-level connection so that third-party applications can use it. <code>false</code> does not promote the connection, so only first-party applications with the connection enabled can use it. (Defaults to <code>false</code>.)
+  --show-as-button: oneof<nothing, bool> # Enables showing a button for the connection in the login page (new experience only). If false, it will be usable only by HRD. (Defaults to <code>false</code>.)
   --realms: list # Defines the realms for which the connection will be used (ie: email domains). If the array is empty or the property is not specified, the connection name will be added as realm.
   --metadata: record # Metadata associated with the connection in the form of an object with string values (max 255 chars).  Maximum of 10 metadata properties allowed.
   --authentication: record # Configure the purpose of a connection to be used for authentication during login. — shape: {active: bool}
@@ -2624,7 +2623,7 @@ export def "connections id-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: string # A comma separated list of fields to include or exclude (depending on include_fields) from the result, empty to retrieve all fields
-  --include-fields: string@bool-completer # <code>true</code> if the fields specified are to be included in the result, <code>false</code> otherwise (defaults to <code>true</code>)
+  --include-fields: oneof<nothing, bool> # <code>true</code> if the fields specified are to be included in the result, <code>false</code> otherwise (defaults to <code>true</code>)
 ]: nothing -> record<name: string, display_name: string, options: record, id: string, strategy: string, realms: list<string>, enabled_clients: list<string>, is_domain_connection: bool, show_as_button: bool, metadata: record, authentication: record<active: bool>, connected_accounts: record<active: bool, cross_app_access: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2676,8 +2675,8 @@ export def "connections id-by-id-2" [
   --display-name: string # The connection name used in the new universal login experience. If display_name is not included in the request, the field will be overwritten with the name value.
   --options: record # The connection's options (depend on the connection strategy). To update these options, the `update:connections_options` scope must be present. To verify your changes, also include the `read:connections_options` scope. If this scope is not specified, you will not be able to review the updated object. (nullable) — shape: {validation?: record, non_persistent_attrs?: list, precedence?: list, attributes?: record, enable_script_context?: bool, enabledDatabaseCustomization?: bool, import_mode?: bool, configuration?: record, customScripts?: record, authentication_methods?: record, passkey_options?: record, passwordPolicy?: "none"|"low"|"fair"|"good"|"excellent"|"", password_complexity_options?: record, password_history?: record, password_no_personal_info?: record, password_dictionary?: record, api_enable_users?: bool, api_enable_groups?: bool, basic_profile?: bool, ext_admin?: bool, ext_is_suspended?: bool, ext_agreed_terms?: bool, ext_groups?: bool, ext_assigned_plans?: bool, ext_profile?: bool, disable_self_service_change_password?: bool, upstream_params?: record, set_user_root_attributes?: "on_each_login"|"on_first_login"|"never_on_login", gateway_authentication?: record, federated_connections_access_tokens?: record, password_options?: record, assertion_decryption_settings?: record, id_token_signed_response_algs?: list, token_endpoint_auth_method?: "client_secret_post"|"private_key_jwt", token_endpoint_auth_signing_alg?: "ES256"|"ES384"|"PS256"|"PS384"|"RS256"|"RS384"|"RS512", token_endpoint_jwtca_aud_format?: "issuer"|"token_endpoint"}
   --enabled-clients: list # DEPRECATED property. Use the PATCH /v2/connections/{id}/clients endpoint to enable or disable the connection for any clients. (nullable)
-  --is-domain-connection: string@bool-completer # <code>true</code> promotes to a domain-level connection so that third-party applications can use it. <code>false</code> does not promote the connection, so only first-party applications with the connection enabled can use it. (Defaults to <code>false</code>.)
-  --show-as-button: string@bool-completer # Enables showing a button for the connection in the login page (new experience only). If false, it will be usable only by HRD. (Defaults to <code>false</code>.)
+  --is-domain-connection: oneof<nothing, bool> # <code>true</code> promotes to a domain-level connection so that third-party applications can use it. <code>false</code> does not promote the connection, so only first-party applications with the connection enabled can use it. (Defaults to <code>false</code>.)
+  --show-as-button: oneof<nothing, bool> # Enables showing a button for the connection in the login page (new experience only). If false, it will be usable only by HRD. (Defaults to <code>false</code>.)
   --realms: list # Defines the realms for which the connection will be used (ie: email domains). If the array is empty or the property is not specified, the connection name will be added as realm.
   --metadata: record # Metadata associated with the connection in the form of an object with string values (max 255 chars).  Maximum of 10 metadata properties allowed.
   --authentication: record # Configure the purpose of a connection to be used for authentication during login. — shape: {active: bool}
@@ -2803,7 +2802,7 @@ export def "connections-directory-provisioning directory-provisioning-by-id-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --mapping: list # The mapping between Auth0 and IDP user attributes — item shape: {auth0: string, idp: string}
-  --synchronize-automatically: string@bool-completer # Whether periodic automatic synchronization is enabled
+  --synchronize-automatically: oneof<nothing, bool> # Whether periodic automatic synchronization is enabled
   --synchronize-groups: string@synchronize-groups-completer # Group synchronization configuration
 ]: any -> record<connection_id: string, connection_name: string, strategy: string, mapping: table<auth0: string, idp: string>, synchronize_automatically: bool, synchronize_groups: string, created_at: string, updated_at: string, last_synchronization_at: string, last_synchronization_status: string, last_synchronization_error: string> {
   let input = $in
@@ -2832,7 +2831,7 @@ export def "connections-directory-provisioning directory-provisioning-by-id-3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --mapping: list # The mapping between Auth0 and IDP user attributes — item shape: {auth0: string, idp: string}
-  --synchronize-automatically: string@bool-completer # Whether periodic automatic synchronization is enabled
+  --synchronize-automatically: oneof<nothing, bool> # Whether periodic automatic synchronization is enabled
   --synchronize-groups: string@synchronize-groups-completer # Group synchronization configuration
 ]: any -> record<connection_id: string, connection_name: string, strategy: string, mapping: table<auth0: string, idp: string>, synchronize_automatically: bool, synchronize_groups: string, created_at: string, updated_at: string, last_synchronization_at: string, last_synchronization_status: string, last_synchronization_error: string> {
   let input = $in
@@ -3272,7 +3271,7 @@ export def "custom-domains custom-domains" [
   --qp-from: string # Optional Id from which to start selection.
   --q: string # Query in <a href ="https://lucene.apache.org/core/2_9_4/queryparsersyntax.html">Lucene query string syntax</a>.
   --qp-fields: string # Comma-separated list of fields to include or exclude (based on value provided for include_fields) in the result. Leave empty to retrieve all fields.
-  --include-fields: string@bool-completer # Whether specified fields are to be included (true) or excluded (false).
+  --include-fields: oneof<nothing, bool> # Whether specified fields are to be included (true) or excluded (false).
   --qp-sort: string # Field to sort by. Only <code>domain:1</code> (ascending order by domain) is supported at this time.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3492,9 +3491,9 @@ export def "device-credentials device-credentials" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page.  There is a maximum of 1000 results allowed from this endpoint.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
   --qp-fields: string # Comma-separated list of fields to include or exclude (based on value provided for include_fields) in the result. Leave empty to retrieve all fields.
-  --include-fields: string@bool-completer # Whether specified fields are to be included (true) or excluded (false).
+  --include-fields: oneof<nothing, bool> # Whether specified fields are to be included (true) or excluded (false).
   --user-id: string # user_id of the devices to retrieve.
   --client-id: string # client_id of the devices to retrieve.
   --type: string@type-completer-2 # Type of credentials to retrieve. Must be `public_key`, `refresh_token` or `rotating_refresh_token`. The property will default to `refresh_token` when paging is requested
@@ -3578,8 +3577,8 @@ export def "email-templates email-templates" [
   --subject: string # Subject line of the email. (nullable)
   --syntax: string # Syntax of the template body. (nullable, default: liquid)
   --urlLifetimeInSeconds: float # Lifetime in seconds that the link within the email will be valid for. (nullable)
-  --includeEmailInRedirect: string@bool-completer # Whether the `reset_email` and `verify_email` templates should include the user's email address as the `email` parameter in the returnUrl (true) or whether no email address should be included in the redirect (false). Defaults to true.
-  --enabled: string@bool-completer # Whether the template is enabled (true) or disabled (false). (nullable)
+  --includeEmailInRedirect: oneof<nothing, bool> # Whether the `reset_email` and `verify_email` templates should include the user's email address as the `email` parameter in the returnUrl (true) or whether no email address should be included in the redirect (false). Defaults to true.
+  --enabled: oneof<nothing, bool> # Whether the template is enabled (true) or disabled (false). (nullable)
 ]: any -> record<template: string, body: string, from: string, resultUrl: string, subject: string, syntax: string, urlLifetimeInSeconds: float, includeEmailInRedirect: bool, enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3634,8 +3633,8 @@ export def "email-templates templateName-by-templateName-1" [
   --subject: string # Subject line of the email. (nullable)
   --syntax: string # Syntax of the template body. (nullable, default: liquid)
   --urlLifetimeInSeconds: float # Lifetime in seconds that the link within the email will be valid for. (nullable)
-  --includeEmailInRedirect: string@bool-completer # Whether the `reset_email` and `verify_email` templates should include the user's email address as the `email` parameter in the returnUrl (true) or whether no email address should be included in the redirect (false). Defaults to true.
-  --enabled: string@bool-completer # Whether the template is enabled (true) or disabled (false). (nullable)
+  --includeEmailInRedirect: oneof<nothing, bool> # Whether the `reset_email` and `verify_email` templates should include the user's email address as the `email` parameter in the returnUrl (true) or whether no email address should be included in the redirect (false). Defaults to true.
+  --enabled: oneof<nothing, bool> # Whether the template is enabled (true) or disabled (false). (nullable)
 ]: any -> record<template: string, body: string, from: string, resultUrl: string, subject: string, syntax: string, urlLifetimeInSeconds: float, includeEmailInRedirect: bool, enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3668,8 +3667,8 @@ export def "email-templates templateName-by-templateName-2" [
   --subject: string # Subject line of the email. (nullable)
   --syntax: string # Syntax of the template body. (nullable, default: liquid)
   --urlLifetimeInSeconds: float # Lifetime in seconds that the link within the email will be valid for. (nullable)
-  --includeEmailInRedirect: string@bool-completer # Whether the `reset_email` and `verify_email` templates should include the user's email address as the `email` parameter in the returnUrl (true) or whether no email address should be included in the redirect (false). Defaults to true.
-  --enabled: string@bool-completer # Whether the template is enabled (true) or disabled (false). (nullable)
+  --includeEmailInRedirect: oneof<nothing, bool> # Whether the `reset_email` and `verify_email` templates should include the user's email address as the `email` parameter in the returnUrl (true) or whether no email address should be included in the redirect (false). Defaults to true.
+  --enabled: oneof<nothing, bool> # Whether the template is enabled (true) or disabled (false). (nullable)
 ]: any -> record<template: string, body: string, from: string, resultUrl: string, subject: string, syntax: string, urlLifetimeInSeconds: float, includeEmailInRedirect: bool, enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3695,7 +3694,7 @@ export def "emails-provider provider" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: string # Comma-separated list of fields to include or exclude (dependent upon include_fields) from the result. Leave empty to retrieve `name` and `enabled`. Additional fields available include `credentials`, `default_from_address`, and `settings`.
-  --include-fields: string@bool-completer # Whether specified fields are to be included (true) or excluded (false).
+  --include-fields: oneof<nothing, bool> # Whether specified fields are to be included (true) or excluded (false).
 ]: nothing -> record<name: string, enabled: bool, default_from_address: string, credentials: record<api_user: string, region: string, smtp_host: string, smtp_port: int, smtp_user: string>, settings: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3741,7 +3740,7 @@ export def "emails-provider provider-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string@name-completer-1 # Name of the email provider. Can be `mailgun`, `mandrill`, `sendgrid`, `resend`, `ses`, `sparkpost`, `smtp`, `azure_cs`, `ms365`, or `custom`.
-  --enabled: string@bool-completer # Whether the provider is enabled (true) or disabled (false).
+  --enabled: oneof<nothing, bool> # Whether the provider is enabled (true) or disabled (false).
   --default-from-address: string # Email address to use as "from" when no other address specified.
   --credentials: record # Credentials required to use the provider. — shape: {api_key?: string, accessKeyId?: string, secretAccessKey?: string, region?: string, smtp_host?: string, smtp_port?: int, smtp_user?: string, smtp_pass?: string, domain?: string, connectionString?: string, tenantId?: string, clientId?: string, clientSecret?: string}
   --settings: record # Specific provider setting (nullable)
@@ -3771,7 +3770,7 @@ export def "emails-provider provider-3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string@name-completer-1 # Name of the email provider. Can be `mailgun`, `mandrill`, `sendgrid`, `resend`, `ses`, `sparkpost`, `smtp`, `azure_cs`, `ms365`, or `custom`.
-  --enabled: string@bool-completer # Whether the provider is enabled (true) or disabled (false). (default: true)
+  --enabled: oneof<nothing, bool> # Whether the provider is enabled (true) or disabled (false). (default: true)
   --default-from-address: string # Email address to use as "from" when no other address specified.
   credentials: record # Credentials required to use the provider. — shape: {api_key?: string, accessKeyId?: string, secretAccessKey?: string, region?: string, smtp_host?: string, smtp_port?: int, smtp_user?: string, smtp_pass?: string, domain?: string, connectionString?: string, tenantId?: string, clientId?: string, clientSecret?: string}
   --settings: record # Specific provider setting (nullable)
@@ -4085,9 +4084,9 @@ export def "flows flows" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page. Defaults to 50.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
   --hydrate: list # hydration param
-  --synchronous: string@bool-completer # flag to filter by sync/async flows
+  --synchronous: oneof<nothing, bool> # flag to filter by sync/async flows
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4138,7 +4137,7 @@ export def "flows-vault-connections connections" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page. Defaults to 50.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4260,7 +4259,7 @@ export def "flows-executions executions" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page. Defaults to 50.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
   --qp-from: string # Optional Id from which to start selection.
   --take: int # Number of results per page. Defaults to 50.
 ]: nothing -> any {
@@ -4408,7 +4407,7 @@ export def "forms forms" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page. Defaults to 50.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
   --hydrate: list # Query parameter to hydrate the response with additional data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4550,7 +4549,7 @@ export def "grants grants" [
   --allow-errors(-e) # Return full response without error handling
   --per-page: int # Number of results per page.
   --page: int # Page index of the results to return. First page is 0.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
   --user-id: string # user_id of the grants to retrieve.
   --client-id: string # client_id of the grants to retrieve.
   --audience: string # audience of the grants to retrieve.
@@ -4626,10 +4625,10 @@ export def "groups groups" [
   --external-id: string # Filter groups by external ID.
   --search: string # Search for groups by name or external ID.
   --qp-fields: string # A comma separated list of fields to include or exclude (depending on include_fields) from the result, empty to retrieve all fields
-  --include-fields: string@bool-completer # Whether specified fields are to be included (true) or excluded (false).
+  --include-fields: oneof<nothing, bool> # Whether specified fields are to be included (true) or excluded (false).
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page. Defaults to 50.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
   --qp-from: string # Optional Id from which to start selection.
   --take: int # Number of results per page. Defaults to 50.
 ]: nothing -> any {
@@ -4700,7 +4699,7 @@ export def "groups-members members" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: string # A comma separated list of fields to include or exclude (depending on include_fields) from the result, empty to retrieve all fields
-  --include-fields: string@bool-completer # Whether specified fields are to be included (true) or excluded (false).
+  --include-fields: oneof<nothing, bool> # Whether specified fields are to be included (true) or excluded (false).
   --qp-from: string # Optional Id from which to start selection.
   --take: int # Number of results per page. Defaults to 50.
 ]: nothing -> record<members: table<id: string, member_type: string, type: string, connection_id: string, created_at: string>, next: string> {
@@ -4727,10 +4726,10 @@ export def "guardian-enrollments-ticket ticket" [
   --allow-errors(-e) # Return full response without error handling
   user_id: string # user_id for the enrollment ticket (format: user-id)
   --email: string # alternate email to which the enrollment email will be sent. Optional - by default, the email will be sent to the user's default address (format: email)
-  --send-mail: string@bool-completer # Send an email to the user to start the enrollment
+  --send-mail: oneof<nothing, bool> # Send an email to the user to start the enrollment
   --email-locale: string # Optional. Specify the locale of the enrollment email. Used with send_email.
   --factor: string@factor-completer # Optional. Specifies which factor the user must enroll with.<br />Note: Parameter can only be used with Universal Login; it cannot be used with Classic Login or custom MFA pages.
-  --allow-multiple-enrollments: string@bool-completer # Optional. Allows a user who has previously enrolled in MFA to enroll with additional factors.<br />Note: Parameter can only be used with Universal Login; it cannot be used with Classic Login or custom MFA pages.
+  --allow-multiple-enrollments: oneof<nothing, bool> # Optional. Allows a user who has previously enrolled in MFA to enroll with additional factors.<br />Note: Parameter can only be used with Universal Login; it cannot be used with Classic Login or custom MFA pages.
 ]: any -> record<ticket_id: string, ticket_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5104,7 +5103,7 @@ export def "guardian-factors-push-notification-providers-apns apns-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --sandbox: string@bool-completer
+  --sandbox: oneof<nothing, bool>
   --bundle-id: string # nullable
   --p12: string # nullable
 ]: any -> record<sandbox: bool, bundle_id: string> {
@@ -5131,7 +5130,7 @@ export def "guardian-factors-push-notification-providers-apns apns-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --sandbox: string@bool-completer
+  --sandbox: oneof<nothing, bool>
   --bundle-id: string # nullable
   --p12: string # nullable
 ]: any -> record<sandbox: bool, bundle_id: string> {
@@ -5526,7 +5525,7 @@ export def "guardian-factors name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether this factor is enabled (true) or disabled (false).
+  --enabled: oneof<nothing, bool> # Whether this factor is enabled (true) or disabled (false).
 ]: any -> record<enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5598,8 +5597,8 @@ export def "hooks hooks" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
-  --enabled: string@bool-completer # Optional filter on whether a hook is enabled (true) or disabled (false).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --enabled: oneof<nothing, bool> # Optional filter on whether a hook is enabled (true) or disabled (false).
   --qp-fields: string # Comma-separated list of fields to include in the result. Leave empty to retrieve all fields.
   --triggerId: string@triggerId-completer-1 # Retrieves hooks that match the trigger
 ]: nothing -> any {
@@ -5626,7 +5625,7 @@ export def "hooks hooks-1" [
   --allow-errors(-e) # Return full response without error handling
   name: string # Name of this hook. (default: my-hook)
   script: string # Code to be executed when this hook runs. (default: module.exports = function(client, scope, audience, context, cb) cb(null, access_token); };)
-  --enabled: string@bool-completer # Whether this hook will be executed (true) or ignored (false). (default: false)
+  --enabled: oneof<nothing, bool> # Whether this hook will be executed (true) or ignored (false). (default: false)
   --dependencies: record # Dependencies of this hook used by webtask server.
   triggerId: string@triggerId-completer-1 # Retrieves hooks that match the trigger
 ]: any -> record<triggerId: string, id: string, name: string, enabled: bool, script: string, dependencies: record> {
@@ -5702,7 +5701,7 @@ export def "hooks id-by-id-2" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # Name of this hook. (default: my-hook)
   --script: string # Code to be executed when this hook runs. (default: module.exports = function(client, scope, audience, context, cb) cb(null, access_token); };)
-  --enabled: string@bool-completer # Whether this hook will be executed (true) or ignored (false). (default: false)
+  --enabled: oneof<nothing, bool> # Whether this hook will be executed (true) or ignored (false). (default: false)
   --dependencies: record # Dependencies of this hook used by webtask server.
 ]: any -> record<triggerId: string, id: string, name: string, enabled: bool, script: string, dependencies: record> {
   let input = $in
@@ -5856,9 +5855,9 @@ export def "jobs-users-imports users-imports" [
   --allow-errors(-e) # Return full response without error handling
   users: string
   connection_id: string # connection_id of the connection to which users will be imported. (default: con_0000000000000001)
-  --upsert: string@bool-completer # Whether to update users if they already exist (true) or to ignore them (false). (default: false)
+  --upsert: oneof<nothing, bool> # Whether to update users if they already exist (true) or to ignore them (false). (default: false)
   --external-id: string # Customer-defined ID.
-  --send-completion-email: string@bool-completer # Whether to send a completion email to all tenant owners when the job is finished (true) or not (false). (default: true)
+  --send-completion-email: oneof<nothing, bool> # Whether to send a completion email to all tenant owners when the job is finished (true) or not (false). (default: true)
 ]: any -> record<status: string, type: string, created_at: string, id: string, connection_id: string, external_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6026,7 +6025,7 @@ export def "keys-encryption keys" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page. Default value is 50, maximum value is 100.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6299,7 +6298,7 @@ export def "log-streams log-streams-1" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # log stream name
   --type: string@type-completer-5
-  --isPriority: string@bool-completer # True for priority log streams, false for non-priority
+  --isPriority: oneof<nothing, bool> # True for priority log streams, false for non-priority
   --filters: list # Only logs events matching these filters will be delivered by the stream. If omitted or empty, all events will be delivered. — item shape: {type?: "category", name?: "auth.login.fail"|"auth.login.notification"|"auth.login.success"|"auth.logout.fail"|"auth.logout.success"|"auth.signup.fail"|"auth.signup.success"|"auth.silent_auth.fail"|"auth.silent_auth.success"|"auth.token_exchange.fail"|"auth.token_exchange.success"|"management.fail"|"management.success"|"scim.event"|"system.notification"|"user.fail"|"user.notification"|"user.success"|"actions"|"other"}
   --pii-config: record # shape: {log_fields: list, method?: "mask"|"hash", algorithm?: "xxhash"}
   --sink: record # shape: {httpAuthorization?: string, httpContentFormat?: "JSONARRAY"|"JSONLINES"|"JSONOBJECT", httpContentType?: string, httpEndpoint: string, httpCustomHeaders?: list}
@@ -6377,7 +6376,7 @@ export def "log-streams id-by-id-2" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # log stream name
   --status: string@status-completer-1 # The status of the log stream. Possible values: `active`, `paused`, `suspended`
-  --isPriority: string@bool-completer # True for priority log streams, false for non-priority
+  --isPriority: oneof<nothing, bool> # True for priority log streams, false for non-priority
   --filters: list # Only logs events matching these filters will be delivered by the stream. If omitted or empty, all events will be delivered. — item shape: {type?: "category", name?: "auth.login.fail"|"auth.login.notification"|"auth.login.success"|"auth.logout.fail"|"auth.logout.success"|"auth.signup.fail"|"auth.signup.success"|"auth.silent_auth.fail"|"auth.silent_auth.success"|"auth.token_exchange.fail"|"auth.token_exchange.success"|"management.fail"|"management.success"|"scim.event"|"system.notification"|"user.fail"|"user.notification"|"user.success"|"actions"|"other"}
   --pii-config: record # shape: {log_fields: list, method?: "mask"|"hash", algorithm?: "xxhash"}
   --sink: any
@@ -6409,8 +6408,8 @@ export def "logs logs" [
   --per-page: int #  Number of results per page. Paging is disabled if parameter not sent. Default: <code>50</code>. Max value: <code>100</code>
   --qp-sort: string # Field to use for sorting appended with <code>:1</code>  for ascending and <code>:-1</code> for descending. e.g. <code>date:-1</code>
   --qp-fields: string # Comma-separated list of fields to include or exclude (based on value provided for <code>include_fields</code>) in the result. Leave empty to retrieve all fields.
-  --include-fields: string@bool-completer # Whether specified fields are to be included (<code>true</code>) or excluded (<code>false</code>)
-  --include-totals: string@bool-completer # Return results as an array when false (default). Return results inside an object that also contains a total result count when true.
+  --include-fields: oneof<nothing, bool> # Whether specified fields are to be included (<code>true</code>) or excluded (<code>false</code>)
+  --include-totals: oneof<nothing, bool> # Return results as an array when false (default). Return results inside an object that also contains a total result count when true.
   --qp-from: string # Log Event Id from which to start selection from.
   --take: int # Number of entries to retrieve when using the <code>from</code> parameter. Default <code>50</code>, max <code>100</code>
   --search: string # Retrieves logs that match the specified search criteria. This parameter can be combined with all the others in the /api/logs endpoint but is specified separately for clarity. If no fields are provided a case insensitive 'starts with' search is performed on all of the following fields: client_name, connection, user_name. Otherwise, you can specify multiple fields and specify the search using the %field%:%search%, for example: application:node user:"John@contoso.com". Values specified without quotes are matched using a case insensitive 'starts with' search. If quotes are used a case insensitve exact search is used. If multiple fields are used, the AND operator is used to join the clauses.
@@ -6460,7 +6459,7 @@ export def "network-acls network-acls" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Use this field to request a specific page of the list results.
   --per-page: int # The amount of results per page.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6485,7 +6484,7 @@ export def "network-acls network-acls-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   description: string
-  --active: string@bool-completer # Indicates whether or not this access control list is actively being used
+  --active: oneof<nothing, bool> # Indicates whether or not this access control list is actively being used
   --priority: float # Indicates the order in which the ACL will be evaluated relative to other ACL rules. (default: 50)
   rule: record # shape: {action: record, match?: record, not_match?: record, scope: "management"|"authentication"|"tenant"|"dynamic_client_registration"}
 ]: any -> any {
@@ -6559,7 +6558,7 @@ export def "network-acls id-by-id-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string
-  --active: string@bool-completer # Indicates whether or not this access control list is actively being used
+  --active: oneof<nothing, bool> # Indicates whether or not this access control list is actively being used
   --priority: float # Indicates the order in which the ACL will be evaluated relative to other ACL rules.
   --rule: record # shape: {action: record, match?: record, not_match?: record, scope: "management"|"authentication"|"tenant"|"dynamic_client_registration"}
 ]: any -> record<id: string, description: string, active: bool, priority: float, rule: record<action: record<block: bool, allow: bool, log: bool, redirect: bool, redirect_uri: string>, match: record<asns: list, geo_country_codes: list, geo_subdivision_codes: list, ipv4_cidrs: list, ipv6_cidrs: list, ja3_fingerprints: list, ja4_fingerprints: list, user_agents: list, hostnames: list, connecting_ipv4_cidrs: list, connecting_ipv6_cidrs: list>, not_match: record<asns: list, geo_country_codes: list, geo_subdivision_codes: list, ipv4_cidrs: list, ipv6_cidrs: list, ja3_fingerprints: list, ja4_fingerprints: list, user_agents: list, hostnames: list, connecting_ipv4_cidrs: list, connecting_ipv6_cidrs: list>, scope: string>, created_at: string, updated_at: string> {
@@ -6589,7 +6588,7 @@ export def "network-acls id-by-id-3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   description: string
-  --active: string@bool-completer # Indicates whether or not this access control list is actively being used
+  --active: oneof<nothing, bool> # Indicates whether or not this access control list is actively being used
   --priority: float # Indicates the order in which the ACL will be evaluated relative to other ACL rules. (default: 50)
   rule: record # shape: {action: record, match?: record, not_match?: record, scope: "management"|"authentication"|"tenant"|"dynamic_client_registration"}
 ]: any -> record<id: string, description: string, active: bool, priority: float, rule: record<action: record<block: bool, allow: bool, log: bool, redirect: bool, redirect_uri: string>, match: record<asns: list, geo_country_codes: list, geo_subdivision_codes: list, ipv4_cidrs: list, ipv6_cidrs: list, ja3_fingerprints: list, ja4_fingerprints: list, user_agents: list, hostnames: list, connecting_ipv4_cidrs: list, connecting_ipv6_cidrs: list>, not_match: record<asns: list, geo_country_codes: list, geo_subdivision_codes: list, ipv4_cidrs: list, ipv6_cidrs: list, ja3_fingerprints: list, ja4_fingerprints: list, user_agents: list, hostnames: list, connecting_ipv4_cidrs: list, connecting_ipv6_cidrs: list>, scope: string>, created_at: string, updated_at: string> {
@@ -6618,7 +6617,7 @@ export def "organizations organizations" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page. Defaults to 50.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
   --qp-from: string # Optional Id from which to start selection.
   --take: int # Number of results per page. Defaults to 50.
   --qp-sort: string # Field to sort by. Use <code>field:order</code> where order is <code>1</code> for ascending and <code>-1</code> for descending. e.g. <code>created_at:1</code>. We currently support sorting by the following fields: <code>name</code>, <code>display_name</code> and <code>created_at</code>.
@@ -6781,7 +6780,7 @@ export def "organizations-client-grants organization-client-grants-by-id" [
   --grant-ids: list # Optional filter on the ID of the client grant. Must be URL encoded and may be specified multiple times (max 10).<br /><b>e.g.</b> <i>../client-grants?grant_ids=id1&grant_ids=id2</i>
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page. Defaults to 50.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6856,8 +6855,8 @@ export def "organizations-connections connections" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page. Defaults to 50.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
-  --is-enabled: string@bool-completer # Filter connections by enabled status.
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --is-enabled: oneof<nothing, bool> # Filter connections by enabled status.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6882,11 +6881,11 @@ export def "organizations-connections connection-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --organization-connection-name: string # Name of the connection in the scope of this organization.
-  --assign-membership-on-login: string@bool-completer # When true, all users that log in with this connection will be automatically granted membership in the organization. When false, users must be granted membership in the organization before logging in with this connection.
-  --show-as-button: string@bool-completer # Determines whether a connection should be displayed on this organization’s login prompt. Only applicable for enterprise connections. Default: true.
-  --is-signup-enabled: string@bool-completer # Determines whether organization signup should be enabled for this organization connection. Only applicable for database connections. Default: false.
+  --assign-membership-on-login: oneof<nothing, bool> # When true, all users that log in with this connection will be automatically granted membership in the organization. When false, users must be granted membership in the organization before logging in with this connection.
+  --show-as-button: oneof<nothing, bool> # Determines whether a connection should be displayed on this organization’s login prompt. Only applicable for enterprise connections. Default: true.
+  --is-signup-enabled: oneof<nothing, bool> # Determines whether organization signup should be enabled for this organization connection. Only applicable for database connections. Default: false.
   --organization-access-level: string@organization-access-level-completer # Access level for the organization (e.g., "none", "full").
-  --is-enabled: string@bool-completer # Whether the connection is enabled for the organization.
+  --is-enabled: oneof<nothing, bool> # Whether the connection is enabled for the organization.
   connection_id: string # Connection identifier. (format: connection-id)
 ]: any -> record<organization_connection_name: string, assign_membership_on_login: bool, show_as_button: bool, is_signup_enabled: bool, organization_access_level: string, is_enabled: bool, connection_id: string, connection: record<name: string, strategy: string>> {
   let input = $in
@@ -6961,11 +6960,11 @@ export def "organizations-connections connection-by-id-connection_id-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --organization-connection-name: string # Name of the connection in the scope of this organization. (nullable)
-  --assign-membership-on-login: string@bool-completer # When true, all users that log in with this connection will be automatically granted membership in the organization. When false, users must be granted membership in the organization before logging in with this connection.
-  --show-as-button: string@bool-completer # Determines whether a connection should be displayed on this organization’s login prompt. Only applicable for enterprise connections. Default: true.
-  --is-signup-enabled: string@bool-completer # Determines whether organization signup should be enabled for this organization connection. Only applicable for database connections. Default: false.
+  --assign-membership-on-login: oneof<nothing, bool> # When true, all users that log in with this connection will be automatically granted membership in the organization. When false, users must be granted membership in the organization before logging in with this connection.
+  --show-as-button: oneof<nothing, bool> # Determines whether a connection should be displayed on this organization’s login prompt. Only applicable for enterprise connections. Default: true.
+  --is-signup-enabled: oneof<nothing, bool> # Determines whether organization signup should be enabled for this organization connection. Only applicable for database connections. Default: false.
   --organization-access-level: string@organization-access-level-completer-1 # Access level for the organization (e.g., "none", "full"). (nullable)
-  --is-enabled: string@bool-completer # Whether the connection is enabled for the organization. (nullable)
+  --is-enabled: oneof<nothing, bool> # Whether the connection is enabled for the organization. (nullable)
 ]: any -> record<organization_connection_name: string, assign_membership_on_login: bool, show_as_button: bool, is_signup_enabled: bool, organization_access_level: string, is_enabled: bool, connection_id: string, connection: record<name: string, strategy: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7018,7 +7017,7 @@ export def "organizations-discovery-domains discovery-domains-by-id-1" [
   --allow-errors(-e) # Return full response without error handling
   domain: string # The domain name to associate with the organization e.g. acme.com.
   --status: string@status-completer-2 # The verification status of the discovery domain.
-  --use-for-organization-discovery: string@bool-completer # Indicates whether this domain should be used for organization discovery.
+  --use-for-organization-discovery: oneof<nothing, bool> # Indicates whether this domain should be used for organization discovery.
 ]: any -> record<id: string, domain: string, status: string, use_for_organization_discovery: bool, verification_txt: string, verification_host: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7115,7 +7114,7 @@ export def "organizations-discovery-domains id-by-id-discovery_domain_id-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --status: string@status-completer-2 # The verification status of the discovery domain.
-  --use-for-organization-discovery: string@bool-completer # Indicates whether this domain should be used for organization discovery.
+  --use-for-organization-discovery: oneof<nothing, bool> # Indicates whether this domain should be used for organization discovery.
 ]: any -> record<id: string, domain: string, status: string, use_for_organization_discovery: bool, verification_txt: string, verification_host: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7143,7 +7142,7 @@ export def "organizations-enabled-connections connections-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page. Defaults to 50.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7168,9 +7167,9 @@ export def "organizations-enabled-connections connections-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   connection_id: string # Single connection ID to add to the organization. (format: connection-id)
-  --assign-membership-on-login: string@bool-completer # When true, all users that log in with this connection will be automatically granted membership in the organization. When false, users must be granted membership in the organization before logging in with this connection.
-  --is-signup-enabled: string@bool-completer # Determines whether organization signup should be enabled for this organization connection. Only applicable for database connections. Default: false.
-  --show-as-button: string@bool-completer # Determines whether a connection should be displayed on this organization’s login prompt. Only applicable for enterprise connections. Default: true.
+  --assign-membership-on-login: oneof<nothing, bool> # When true, all users that log in with this connection will be automatically granted membership in the organization. When false, users must be granted membership in the organization before logging in with this connection.
+  --is-signup-enabled: oneof<nothing, bool> # Determines whether organization signup should be enabled for this organization connection. Only applicable for database connections. Default: false.
+  --show-as-button: oneof<nothing, bool> # Determines whether a connection should be displayed on this organization’s login prompt. Only applicable for enterprise connections. Default: true.
 ]: any -> record<connection_id: string, assign_membership_on_login: bool, show_as_button: bool, is_signup_enabled: bool, connection: record<name: string, strategy: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7243,9 +7242,9 @@ export def "organizations-enabled-connections connectionId-by-id-connectionId-2"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --assign-membership-on-login: string@bool-completer # When true, all users that log in with this connection will be automatically granted membership in the organization. When false, users must be granted membership in the organization before logging in with this connection.
-  --is-signup-enabled: string@bool-completer # Determines whether organization signup should be enabled for this organization connection. Only applicable for database connections. Default: false.
-  --show-as-button: string@bool-completer # Determines whether a connection should be displayed on this organization’s login prompt. Only applicable for enterprise connections. Default: true.
+  --assign-membership-on-login: oneof<nothing, bool> # When true, all users that log in with this connection will be automatically granted membership in the organization. When false, users must be granted membership in the organization before logging in with this connection.
+  --is-signup-enabled: oneof<nothing, bool> # Determines whether organization signup should be enabled for this organization connection. Only applicable for database connections. Default: false.
+  --show-as-button: oneof<nothing, bool> # Determines whether a connection should be displayed on this organization’s login prompt. Only applicable for enterprise connections. Default: true.
 ]: any -> record<connection_id: string, assign_membership_on_login: bool, show_as_button: bool, is_signup_enabled: bool, connection: record<name: string, strategy: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7273,9 +7272,9 @@ export def "organizations-invitations invitations-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page. Defaults to 50.
-  --include-totals: string@bool-completer # When true, return results inside an object that also contains the start and limit.  When false (default), a direct array of results is returned.  We do not yet support returning the total invitations count.
+  --include-totals: oneof<nothing, bool> # When true, return results inside an object that also contains the start and limit.  When false (default), a direct array of results is returned.  We do not yet support returning the total invitations count.
   --qp-fields: string # Comma-separated list of fields to include or exclude (based on value provided for include_fields) in the result. Leave empty to retrieve all fields.
-  --include-fields: string@bool-completer # Whether specified fields are to be included (true) or excluded (false). Defaults to true.
+  --include-fields: oneof<nothing, bool> # Whether specified fields are to be included (true) or excluded (false). Defaults to true.
   --qp-sort: string # Field to sort by. Use field:order where order is 1 for ascending and -1 for descending Defaults to created_at:-1.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7310,7 +7309,7 @@ export def "organizations-invitations invitations-by-id-1" [
   --user-metadata: record # Data related to the user that does not affect the application's core functionality.
   --ttl-sec: int # Number of seconds for which the invitation is valid before expiration. If unspecified or set to 0, this value defaults to 604800 seconds (7 days). Max value: 2592000 seconds (30 days).
   --roles: list # List of roles IDs to associated with the user.
-  --send-invitation-email: string@bool-completer # Whether the user will receive an invitation email (true) or no email (false), true by default (default: true)
+  --send-invitation-email: oneof<nothing, bool> # Whether the user will receive an invitation email (true) or no email (false), true by default (default: true)
 ]: any -> record<id: string, organization_id: string, inviter: record<name: string>, invitee: record<email: string>, invitation_url: string, created_at: string, expires_at: string, client_id: string, connection_id: string, app_metadata: record, user_metadata: record, roles: list<string>, ticket_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7338,7 +7337,7 @@ export def "organizations-invitations id-by-id-invitation_id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: string # Comma-separated list of fields to include or exclude (based on value provided for include_fields) in the result. Leave empty to retrieve all fields.
-  --include-fields: string@bool-completer # Whether specified fields are to be included (true) or excluded (false). Defaults to true.
+  --include-fields: oneof<nothing, bool> # Whether specified fields are to be included (true) or excluded (false). Defaults to true.
 ]: nothing -> record<id: string, organization_id: string, inviter: record<name: string>, invitee: record<email: string>, invitation_url: string, created_at: string, expires_at: string, client_id: string, connection_id: string, app_metadata: record, user_metadata: record, roles: list<string>, ticket_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7387,11 +7386,11 @@ export def "organizations-members members-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page. Defaults to 50.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
   --qp-from: string # Optional Id from which to start selection.
   --take: int # Number of results per page. Defaults to 50.
   --qp-fields: string # Comma-separated list of fields to include or exclude (based on value provided for include_fields) in the result. Leave empty to retrieve all fields.
-  --include-fields: string@bool-completer # Whether specified fields are to be included (true) or excluded (false).
+  --include-fields: oneof<nothing, bool> # Whether specified fields are to be included (true) or excluded (false).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7470,7 +7469,7 @@ export def "organizations-members-roles roles-by-id-user_id" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page. Defaults to 50.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7569,8 +7568,8 @@ export def "prompts prompts-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --universal-login-experience: string@universal-login-experience-completer # Which login experience to use. Can be `new` or `classic`.
-  --identifier-first: string@bool-completer # Whether identifier first is enabled or not (nullable)
-  --webauthn-platform-first-factor: string@bool-completer # Use WebAuthn with Device Biometrics as the first authentication factor (nullable)
+  --identifier-first: oneof<nothing, bool> # Whether identifier first is enabled or not (nullable)
+  --webauthn-platform-first-factor: oneof<nothing, bool> # Use WebAuthn with Device Biometrics as the first authentication factor (nullable)
 ]: any -> record<universal_login_experience: string, identifier_first: bool, webauthn_platform_first_factor: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7596,10 +7595,10 @@ export def "prompts-rendering rendering" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: string # Comma-separated list of fields to include or exclude (based on value provided for include_fields) in the result. Leave empty to retrieve all fields.
-  --include-fields: string@bool-completer # Whether specified fields are to be included (default: true) or excluded (false).
+  --include-fields: oneof<nothing, bool> # Whether specified fields are to be included (default: true) or excluded (false).
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page. Maximum value is 100, default value is 50.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total configuration count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total configuration count (true) or as a direct array of results (false, default).
   --prompt: string # Name of the prompt to filter by
   --screen: string # Name of the screen to filter by
   --rendering-mode: string@rendering-mode-completer # Rendering mode to filter by
@@ -7776,8 +7775,8 @@ export def "prompts-screen-rendering rendering-by-prompt-screen-1" [
   --allow-errors(-e) # Return full response without error handling
   --rendering-mode: string@rendering-mode-completer # Rendering mode to filter by
   --context-configuration: list # Context values to make available (nullable)
-  --default-head-tags-disabled: string@bool-completer # Override Universal Login default head tags (nullable, default: false)
-  --use-page-template: string@bool-completer # Use page template with ACUL (nullable, default: false)
+  --default-head-tags-disabled: oneof<nothing, bool> # Override Universal Login default head tags (nullable, default: false)
+  --use-page-template: oneof<nothing, bool> # Use page template with ACUL (nullable, default: false)
   --head-tags: list # An array of head tags (nullable) — item shape: {tag?: string, attributes?: record, content?: string}
   --filters: record # Optional filters to apply rendering rules to specific entities (nullable) — shape: {match_type?: "includes_any"|"excludes_any", clients?: list, organizations?: list, domains?: list}
 ]: any -> record<rendering_mode: string, context_configuration: list<any>, default_head_tags_disabled: bool, use_page_template: bool, head_tags: table<tag: string, attributes: record, content: string>, filters: record<match_type: string, clients: list<record>, organizations: list<record>, domains: list<record>>> {
@@ -7809,7 +7808,7 @@ export def "refresh-tokens tokens" [
   --qp-from: string # An opaque cursor from which to start the selection (exclusive). Expires after 24 hours. Obtained from the next property of a previous response.
   --take: int # Number of results per page. Defaults to 50.
   --qp-fields: string # Comma-separated list of fields to include or exclude (based on value provided for include_fields) in the result. Leave empty to retrieve all fields.
-  --include-fields: string@bool-completer # Whether specified fields are to be included (true) or excluded (false).
+  --include-fields: oneof<nothing, bool> # Whether specified fields are to be included (true) or excluded (false).
 ]: nothing -> record<refresh_tokens: table<id: string, user_id: string, created_at: any, idle_expires_at: any, expires_at: any, device: record, client_id: string, session_id: string, rotating: bool, resource_servers: list, refresh_token_metadata: record, last_exchanged_at: any>, next: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7932,8 +7931,8 @@ export def "resource-servers resource-servers" [
   --identifiers: list # An optional filter on the resource server identifier. Must be URL encoded and may be specified multiple times (max 10).<br /><b>e.g.</b> <i>../resource-servers?identifiers=id1&identifiers=id2</i>
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
-  --include-fields: string@bool-completer # Whether specified fields are to be included (true) or excluded (false).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-fields: oneof<nothing, bool> # Whether specified fields are to be included (true) or excluded (false).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7966,12 +7965,12 @@ export def "resource-servers resource-servers-1" [
   --scopes: list # List of permissions (scopes) that this API uses. — item shape: {value: string, description?: string}
   --signing-alg: string@signing-alg-completer-1 # Algorithm used to sign JWTs. Can be `HS256` (default) or `RS256`. `PS256` available via addon. (default: HS256)
   --signing-secret: string # Secret used to sign tokens when using symmetric algorithms (HS256).
-  --allow-offline-access: string@bool-completer # Whether refresh tokens can be issued for this API (true) or not (false).
-  --allow-online-access: string@bool-completer # Whether Online Refresh Tokens can be issued for this API (true) or not (false).
+  --allow-offline-access: oneof<nothing, bool> # Whether refresh tokens can be issued for this API (true) or not (false).
+  --allow-online-access: oneof<nothing, bool> # Whether Online Refresh Tokens can be issued for this API (true) or not (false).
   --token-lifetime: int # Expiration value (in seconds) for access tokens issued for this API from the token endpoint.
   --token-dialect: string@token-dialect-completer # Dialect of issued access token. `access_token` is a JWT containing standard Auth0 claims; `rfc9068_profile` is a JWT conforming to the IETF JWT Access Token Profile. `access_token_authz` and `rfc9068_profile_authz` additionally include RBAC permissions claims.
-  --skip-consent-for-verifiable-first-party-clients: string@bool-completer # Whether to skip user consent for applications flagged as first party (true) or not (false).
-  --enforce-policies: string@bool-completer # Whether to enforce authorization policies (true) or to ignore them (false).
+  --skip-consent-for-verifiable-first-party-clients: oneof<nothing, bool> # Whether to skip user consent for applications flagged as first party (true) or not (false).
+  --enforce-policies: oneof<nothing, bool> # Whether to enforce authorization policies (true) or to ignore them (false).
   --token-encryption: record # nullable — shape: {format: "compact-nested-jwe", encryption_key: record}
   --consent-policy: string@consent-policy-completer # nullable
   --authorization-details: list # nullable
@@ -8003,7 +8002,7 @@ export def "resource-servers id-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-fields: string@bool-completer # Whether specified fields are to be included (true) or excluded (false).
+  --include-fields: oneof<nothing, bool> # Whether specified fields are to be included (true) or excluded (false).
 ]: nothing -> record<id: string, name: string, is_system: bool, identifier: string, scopes: table<value: string, description: string>, signing_alg: string, signing_secret: string, allow_offline_access: bool, allow_online_access: bool, skip_consent_for_verifiable_first_party_clients: bool, token_lifetime: int, token_lifetime_for_web: int, enforce_policies: bool, token_dialect: string, token_encryption: record<format: any, encryption_key: record<name: string, alg: string, kid: string, pem: string>>, consent_policy: string, authorization_details: list<any>, proof_of_possession: record<mechanism: string, required: bool, required_for: string>, subject_type_authorization: record<user: record<policy: string>, client: record<policy: string>>, authorization_policy: record<policy_id: string>, client_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8058,12 +8057,12 @@ export def "resource-servers id-by-id-2" [
   --scopes: list # List of permissions (scopes) that this API uses. — item shape: {value: string, description?: string}
   --signing-alg: string@signing-alg-completer-1 # Algorithm used to sign JWTs. Can be `HS256` (default) or `RS256`. `PS256` available via addon. (default: HS256)
   --signing-secret: string # Secret used to sign tokens when using symmetric algorithms (HS256).
-  --skip-consent-for-verifiable-first-party-clients: string@bool-completer # Whether to skip user consent for applications flagged as first party (true) or not (false).
-  --allow-offline-access: string@bool-completer # Whether refresh tokens can be issued for this API (true) or not (false).
-  --allow-online-access: string@bool-completer # Whether Online Refresh Tokens can be issued for this API (true) or not (false).
+  --skip-consent-for-verifiable-first-party-clients: oneof<nothing, bool> # Whether to skip user consent for applications flagged as first party (true) or not (false).
+  --allow-offline-access: oneof<nothing, bool> # Whether refresh tokens can be issued for this API (true) or not (false).
+  --allow-online-access: oneof<nothing, bool> # Whether Online Refresh Tokens can be issued for this API (true) or not (false).
   --token-lifetime: int # Expiration value (in seconds) for access tokens issued for this API from the token endpoint.
   --token-dialect: string@token-dialect-completer # Dialect of issued access token. `access_token` is a JWT containing standard Auth0 claims; `rfc9068_profile` is a JWT conforming to the IETF JWT Access Token Profile. `access_token_authz` and `rfc9068_profile_authz` additionally include RBAC permissions claims.
-  --enforce-policies: string@bool-completer # Whether authorization policies are enforced (true) or not enforced (false).
+  --enforce-policies: oneof<nothing, bool> # Whether authorization policies are enforced (true) or not enforced (false).
   --token-encryption: record # nullable — shape: {format: "compact-nested-jwe", encryption_key: record}
   --consent-policy: string@consent-policy-completer # nullable
   --authorization-details: list # nullable
@@ -8115,7 +8114,7 @@ export def "risk-assessments-settings settings-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether or not risk assessment is enabled.
+  --enabled: oneof<nothing, bool> # Whether or not risk assessment is enabled.
 ]: any -> record<enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8188,7 +8187,7 @@ export def "roles roles" [
   --allow-errors(-e) # Return full response without error handling
   --per-page: int # Number of results per page. Defaults to 50.
   --page: int # Page index of the results to return. First page is 0.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
   --name-filter: string # Optional filter on name (case-insensitive).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8312,7 +8311,7 @@ export def "roles-permissions permission" [
   --allow-errors(-e) # Return full response without error handling
   --per-page: int # Number of results per page. Defaults to 50.
   --page: int # Page index of the results to return. First page is 0.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8392,7 +8391,7 @@ export def "roles-users user" [
   --allow-errors(-e) # Return full response without error handling
   --per-page: int # Number of results per page. Defaults to 50.
   --page: int # Page index of the results to return. First page is 0.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
   --qp-from: string # Optional Id from which to start selection.
   --take: int # Number of results per page. Defaults to 50.
 ]: nothing -> any {
@@ -8445,10 +8444,10 @@ export def "rules rules" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
-  --enabled: string@bool-completer # Optional filter on whether a rule is enabled (true) or disabled (false).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --enabled: oneof<nothing, bool> # Optional filter on whether a rule is enabled (true) or disabled (false).
   --qp-fields: string # Comma-separated list of fields to include or exclude (based on value provided for include_fields) in the result. Leave empty to retrieve all fields.
-  --include-fields: string@bool-completer # Whether specified fields are to be included (true) or excluded (false).
+  --include-fields: oneof<nothing, bool> # Whether specified fields are to be included (true) or excluded (false).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8474,7 +8473,7 @@ export def "rules rules-1" [
   name: string # Name of this rule. (default: my-rule)
   script: string # Code to be executed when this rule runs. (default: function (user, context, callback) {   callback(null, user, context); })
   --order: float # Order that this rule should execute in relative to other rules. Lower-valued rules execute first. (default: 2)
-  --enabled: string@bool-completer # Whether the rule is enabled (true), or disabled (false). (default: true)
+  --enabled: oneof<nothing, bool> # Whether the rule is enabled (true), or disabled (false). (default: true)
 ]: any -> record<name: string, id: string, enabled: bool, script: string, order: float, stage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8570,7 +8569,7 @@ export def "rules id-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: string # Comma-separated list of fields to include or exclude (based on value provided for include_fields) in the result. Leave empty to retrieve all fields.
-  --include-fields: string@bool-completer # Whether specified fields are to be included (true) or excluded (false).
+  --include-fields: oneof<nothing, bool> # Whether specified fields are to be included (true) or excluded (false).
 ]: nothing -> record<name: string, id: string, enabled: bool, script: string, order: float, stage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8619,7 +8618,7 @@ export def "rules id-by-id-2" [
   --script: string # Code to be executed when this rule runs. (default: function (user, context, callback) {   callback(null, user, context); })
   --name: string # Name of this rule. (default: my-rule)
   --order: float # Order that this rule should execute in relative to other rules. Lower-valued rules execute first. (default: 2)
-  --enabled: string@bool-completer # Whether the rule is enabled (true), or disabled (false). (default: true)
+  --enabled: oneof<nothing, bool> # Whether the rule is enabled (true), or disabled (false). (default: true)
 ]: any -> record<name: string, id: string, enabled: bool, script: string, order: float, stage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8646,7 +8645,7 @@ export def "self-service-profiles self-service-profiles" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page. Defaults to 50.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8841,7 +8840,7 @@ export def "self-service-profiles-sso-ticket sso-ticket" [
   --ttl-sec: int # Number of seconds for which the ticket is valid before expiration. If unspecified or set to 0, this value defaults to 432000 seconds (5 days).
   --domain-aliases-config: record # Configuration for the setup of the connection’s domain_aliases in the Self-Service Enterprise Configuration flow. — shape: {domain_verification: "none"|"optional"|"required", pending_domains?: list}
   --provisioning-config: record # Configuration for the setup of Provisioning in the self-service flow. — shape: {scopes?: list, google_workspace?: record, token_lifetime?: int}
-  --use-for-organization-discovery: string@bool-completer # Indicates whether a verified domain should be used for organization discovery during authentication.
+  --use-for-organization-discovery: oneof<nothing, bool> # Indicates whether a verified domain should be used for organization discovery during authentication.
   --enabled-features: record # Specifies which features are enabled for an "edit connection" ticket. Only applicable when connection ID is provided. — shape: {sso?: bool, domain_verification?: bool, provisioning?: bool}
 ]: any -> record<ticket: string> {
   let input = $in
@@ -9048,7 +9047,7 @@ export def "supplemental-signals supplemental-signals-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --akamai-enabled: string@bool-completer # Indicates if incoming Akamai Headers should be processed
+  --akamai-enabled: oneof<nothing, bool> # Indicates if incoming Akamai Headers should be processed
 ]: any -> record<akamai_enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9074,7 +9073,7 @@ export def "tenants-settings route" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: string # Comma-separated list of fields to include or exclude (based on value provided for include_fields) in the result. Leave empty to retrieve all fields.
-  --include-fields: string@bool-completer # Whether specified fields are to be included (true) or excluded (false).
+  --include-fields: oneof<nothing, bool> # Whether specified fields are to be included (true) or excluded (false).
 ]: nothing -> record<change_password: record<enabled: bool, html: string>, guardian_mfa_page: record<enabled: bool, html: string>, default_audience: string, default_directory: string, error_page: record<html: string, show_log_link: bool, url: string>, device_flow: record<charset: string, mask: string>, default_token_quota: record<clients: record<client_credentials: record>, organizations: record<client_credentials: record>>, flags: record<change_pwd_flow_v1: bool, enable_apis_section: bool, disable_impersonation: bool, enable_client_connections: bool, enable_pipeline2: bool, allow_legacy_delegation_grant_types: bool, allow_legacy_ro_grant_types: bool, allow_legacy_tokeninfo_endpoint: bool, enable_legacy_profile: bool, enable_idtoken_api2: bool, enable_public_signup_user_exists_error: bool, enable_sso: bool, allow_changing_enable_sso: bool, disable_clickjack_protection_headers: bool, no_disclose_enterprise_connections: bool, enforce_client_authentication_on_passwordless_start: bool, enable_adfs_waad_email_verification: bool, revoke_refresh_token_grant: bool, dashboard_log_streams_next: bool, dashboard_insights_view: bool, disable_fields_map_fix: bool, mfa_show_factor_list_on_enrollment: bool, remove_alg_from_jwks: bool, improved_signup_bot_detection_in_classic: bool, genai_trial: bool, enable_dynamic_client_registration: bool, disable_management_api_sms_obfuscation: bool, trust_azure_adfs_email_verified_connection_property: bool, custom_domains_provisioning: bool>, friendly_name: string, picture_url: string, support_email: string, support_url: string, allowed_logout_urls: list<string>, session_lifetime: float, idle_session_lifetime: float, ephemeral_session_lifetime: float, idle_ephemeral_session_lifetime: float, sandbox_version: string, legacy_sandbox_version: string, sandbox_versions_available: list<string>, default_redirection_uri: string, enabled_locales: list<string>, session_cookie: record<mode: string>, sessions: record<oidc_logout_prompt_enabled: bool>, oidc_logout: record<rp_logout_end_session_endpoint_discovery: bool>, allow_organization_name_in_authentication_api: bool, customize_mfa_in_postlogin_action: bool, acr_values_supported: list<string>, mtls: record<enable_endpoint_aliases: bool>, pushed_authorization_requests_supported: bool, authorization_response_iss_parameter_supported: bool, skip_non_verifiable_callback_uri_confirmation_prompt: bool, resource_parameter_profile: string, client_id_metadata_document_supported: bool, phone_consolidated_experience: bool, enable_ai_guide: bool, dynamic_client_registration_security_mode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9131,17 +9130,17 @@ export def "tenants-settings settings" [
   --session-cookie: record # Session cookie configuration (nullable) — shape: {mode: "persistent"|"non-persistent"}
   --sessions: record # Sessions related settings for tenant (nullable) — shape: {oidc_logout_prompt_enabled?: bool}
   --oidc-logout: record # Settings related to OIDC RP-initiated Logout — shape: {rp_logout_end_session_endpoint_discovery?: bool}
-  --customize-mfa-in-postlogin-action: string@bool-completer # Whether to enable flexible factors for MFA in the PostLogin action (nullable, default: false)
-  --allow-organization-name-in-authentication-api: string@bool-completer # Whether to accept an organization name instead of an ID on auth endpoints (nullable, default: false)
+  --customize-mfa-in-postlogin-action: oneof<nothing, bool> # Whether to enable flexible factors for MFA in the PostLogin action (nullable, default: false)
+  --allow-organization-name-in-authentication-api: oneof<nothing, bool> # Whether to accept an organization name instead of an ID on auth endpoints (nullable, default: false)
   --acr-values-supported: list # Supported ACR values (nullable)
   --mtls: record # mTLS configuration. (nullable) — shape: {enable_endpoint_aliases?: bool}
-  --pushed-authorization-requests-supported: string@bool-completer # Enables the use of Pushed Authorization Requests (nullable, default: false)
-  --authorization-response-iss-parameter-supported: string@bool-completer # Supports iss parameter in authorization responses (nullable, default: false)
-  --skip-non-verifiable-callback-uri-confirmation-prompt: string@bool-completer # Controls whether a confirmation prompt is shown during login flows when the redirect URI uses non-verifiable callback URIs (for example, a custom URI schema such as `myapp://`, or `localhost`). If set to true, a confirmation prompt will not be shown. We recommend that this is set to false for improved protection from malicious apps. See https://auth0.com/docs/secure/security-guidance/measures-against-app-impersonation for more information. (nullable)
+  --pushed-authorization-requests-supported: oneof<nothing, bool> # Enables the use of Pushed Authorization Requests (nullable, default: false)
+  --authorization-response-iss-parameter-supported: oneof<nothing, bool> # Supports iss parameter in authorization responses (nullable, default: false)
+  --skip-non-verifiable-callback-uri-confirmation-prompt: oneof<nothing, bool> # Controls whether a confirmation prompt is shown during login flows when the redirect URI uses non-verifiable callback URIs (for example, a custom URI schema such as `myapp://`, or `localhost`). If set to true, a confirmation prompt will not be shown. We recommend that this is set to false for improved protection from malicious apps. See https://auth0.com/docs/secure/security-guidance/measures-against-app-impersonation for more information. (nullable)
   --resource-parameter-profile: string@resource-parameter-profile-completer # Profile that determines how the identity of the protected resource (i.e., API) can be specified in the OAuth endpoints when access is being requested. When set to audience (default), the audience parameter is used to specify the resource server. When set to compatibility, the audience parameter is still checked first, but if it not provided, then the resource parameter can be used to specify the resource server. (default: audience)
-  --client-id-metadata-document-supported: string@bool-completer # Whether the authorization server supports retrieving client metadata from a client_id URL. (default: false)
-  --enable-ai-guide: string@bool-completer # Whether Auth0 Guide (AI-powered assistance) is enabled for this tenant.
-  --phone-consolidated-experience: string@bool-completer # Whether Phone Consolidated Experience is enabled for this tenant.
+  --client-id-metadata-document-supported: oneof<nothing, bool> # Whether the authorization server supports retrieving client metadata from a client_id URL. (default: false)
+  --enable-ai-guide: oneof<nothing, bool> # Whether Auth0 Guide (AI-powered assistance) is enabled for this tenant.
+  --phone-consolidated-experience: oneof<nothing, bool> # Whether Phone Consolidated Experience is enabled for this tenant.
   --dynamic-client-registration-security-mode: string@dynamic-client-registration-security-mode-completer # Sets the `third_party_security_mode` assigned to clients created via Dynamic Client Registration. `strict` applies enhanced security controls. `permissive` preserves <a href="https://auth0.com/docs/get-started/applications/third-party-applications/permissive-mode#dynamic-client-registration-in-permissive-mode">pre-existing behavior</a> and is only available to tenants with prior third-party client usage.
 ]: any -> record<change_password: record<enabled: bool, html: string>, guardian_mfa_page: record<enabled: bool, html: string>, default_audience: string, default_directory: string, error_page: record<html: string, show_log_link: bool, url: string>, device_flow: record<charset: string, mask: string>, default_token_quota: record<clients: record<client_credentials: record>, organizations: record<client_credentials: record>>, flags: record<change_pwd_flow_v1: bool, enable_apis_section: bool, disable_impersonation: bool, enable_client_connections: bool, enable_pipeline2: bool, allow_legacy_delegation_grant_types: bool, allow_legacy_ro_grant_types: bool, allow_legacy_tokeninfo_endpoint: bool, enable_legacy_profile: bool, enable_idtoken_api2: bool, enable_public_signup_user_exists_error: bool, enable_sso: bool, allow_changing_enable_sso: bool, disable_clickjack_protection_headers: bool, no_disclose_enterprise_connections: bool, enforce_client_authentication_on_passwordless_start: bool, enable_adfs_waad_email_verification: bool, revoke_refresh_token_grant: bool, dashboard_log_streams_next: bool, dashboard_insights_view: bool, disable_fields_map_fix: bool, mfa_show_factor_list_on_enrollment: bool, remove_alg_from_jwks: bool, improved_signup_bot_detection_in_classic: bool, genai_trial: bool, enable_dynamic_client_registration: bool, disable_management_api_sms_obfuscation: bool, trust_azure_adfs_email_verified_connection_property: bool, custom_domains_provisioning: bool>, friendly_name: string, picture_url: string, support_email: string, support_url: string, allowed_logout_urls: list<string>, session_lifetime: float, idle_session_lifetime: float, ephemeral_session_lifetime: float, idle_ephemeral_session_lifetime: float, sandbox_version: string, legacy_sandbox_version: string, sandbox_versions_available: list<string>, default_redirection_uri: string, enabled_locales: list<string>, session_cookie: record<mode: string>, sessions: record<oidc_logout_prompt_enabled: bool>, oidc_logout: record<rp_logout_end_session_endpoint_discovery: bool>, allow_organization_name_in_authentication_api: bool, customize_mfa_in_postlogin_action: bool, acr_values_supported: list<string>, mtls: record<enable_endpoint_aliases: bool>, pushed_authorization_requests_supported: bool, authorization_response_iss_parameter_supported: bool, skip_non_verifiable_callback_uri_confirmation_prompt: bool, resource_parameter_profile: string, client_id_metadata_document_supported: bool, phone_consolidated_experience: bool, enable_ai_guide: bool, dynamic_client_registration_security_mode: string> {
   let input = $in
@@ -9173,7 +9172,7 @@ export def "tickets-email-verification email-verification" [
   --client-id: string # ID of the client (application). If provided for tenants using the New Universal Login experience, the email template and UI displays application details, and the user is prompted to redirect to the application's <a target='' href='https://auth0.com/docs/authenticate/login/auth0-universal-login/configure-default-login-routes#completing-the-password-reset-flow'>default login route</a> after the ticket is used. client_id is required to use the <a target='' href='https://auth0.com/docs/customize/actions/flows-and-triggers/post-change-password-flow'>Password Reset Post Challenge</a> trigger. (format: client-id, default: DaM8bokEXBWrTUFCiJjWn50jei6ardyX)
   --organization-id: string # (Optional) Organization ID – the ID of the Organization. If provided, organization parameters will be made available to the email template and organization branding will be applied to the prompt. In addition, the redirect link in the prompt will include organization_id and organization_name query string parameters. (format: organization-id, default: org_2eondWoxcMIpaLQc)
   --ttl-sec: int # Number of seconds for which the ticket is valid before expiration. If unspecified or set to 0, this value defaults to 432000 seconds (5 days).
-  --includeEmailInRedirect: string@bool-completer # Whether to include the email address as part of the returnUrl in the reset_email (true), or not (false).
+  --includeEmailInRedirect: oneof<nothing, bool> # Whether to include the email address as part of the returnUrl in the reset_email (true), or not (false).
   --identity: record # This must be provided to verify primary social, enterprise and passwordless email identities. Also, is needed to verify secondary identities. — shape: {user_id: string, provider: "ad"|"adfs"|"amazon"|"apple"|"dropbox"|"bitbucket"|"auth0-oidc"|"auth0"|"baidu"|"bitly"|"box"|"custom"|"daccount"|"dwolla"|"email"|"evernote-sandbox"|"evernote"|"exact"|"facebook"|"fitbit"|"github"|"google-apps"|"google-oauth2"|"instagram"|"ip"|"line"|"linkedin"|"oauth1"|"oauth2"|"office365"|"oidc"|"okta"|"paypal"|"paypal-sandbox"|"pingfederate"|"planningcenter"|"salesforce-community"|"salesforce-sandbox"|"salesforce"|"samlp"|"sharepoint"|"shopify"|"shop"|"sms"|"soundcloud"|"thirtysevensignals"|"twitter"|"untappd"|"vkontakte"|"waad"|"weibo"|"windowslive"|"wordpress"|"yahoo"|"yandex", connection_id?: string}
 ]: any -> record<ticket: string> {
   let input = $in
@@ -9207,8 +9206,8 @@ export def "tickets-password-change password-change" [
   --connection-id: string # ID of the connection. If provided, allows the user to be specified using email instead of user_id. If you set this value, you must also send the email parameter. You cannot send user_id when specifying a connection_id. (default: con_0000000000000001)
   --email: string # Email address of the user for whom the tickets should be created. Requires the connection_id parameter. Cannot be specified when using user_id. (format: email)
   --ttl-sec: int # Number of seconds for which the ticket is valid before expiration. If unspecified or set to 0, this value defaults to 432000 seconds (5 days).
-  --mark-email-as-verified: string@bool-completer # Whether to set the email_verified attribute to true (true) or whether it should not be updated (false). (default: false)
-  --includeEmailInRedirect: string@bool-completer # Whether to include the email address as part of the returnUrl in the reset_email (true), or not (false).
+  --mark-email-as-verified: oneof<nothing, bool> # Whether to set the email_verified attribute to true (true) or whether it should not be updated (false). (default: false)
+  --includeEmailInRedirect: oneof<nothing, bool> # Whether to include the email address as part of the returnUrl in the reset_email (true), or not (false).
   --identity: record # The user's identity. If you set this value, you must also send the user_id parameter. — shape: {user_id: string, provider: "auth0", connection_id?: string}
 ]: any -> record<ticket: string> {
   let input = $in
@@ -9525,7 +9524,7 @@ export def "user-blocks user-blocks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --identifier: string # Should be any of a username, phone number, or email.
-  --consider-brute-force-enablement: string@bool-completer #            If true and Brute Force Protection is enabled and configured to block logins, will return a list of blocked IP addresses.           If true and Brute Force Protection is disabled, will return an empty list.         
+  --consider-brute-force-enablement: oneof<nothing, bool> #            If true and Brute Force Protection is enabled and configured to block logins, will return a list of blocked IP addresses.           If true and Brute Force Protection is disabled, will return an empty list.         
 ]: nothing -> record<blocked_for: table<identifier: string, ip: string, connection: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9572,7 +9571,7 @@ export def "user-blocks id-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --consider-brute-force-enablement: string@bool-completer #            If true and Brute Force Protection is enabled and configured to block logins, will return a list of blocked IP addresses.           If true and Brute Force Protection is disabled, will return an empty list.         
+  --consider-brute-force-enablement: oneof<nothing, bool> #            If true and Brute Force Protection is enabled and configured to block logins, will return a list of blocked IP addresses.           If true and Brute Force Protection is disabled, will return an empty list.         
 ]: nothing -> record<blocked_for: table<identifier: string, ip: string, connection: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9619,14 +9618,14 @@ export def "users users" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
   --qp-sort: string # Field to sort by. Use <code>field:order</code> where order is <code>1</code> for ascending and <code>-1</code> for descending. e.g. <code>created_at:1</code>
   --connection: string # Connection filter. Only applies when using <code>search_engine=v1</code>. To filter by connection with <code>search_engine=v2|v3</code>, use <code>q=identities.connection:"connection_name"</code>
   --qp-fields: string # Comma-separated list of fields to include or exclude (based on value provided for include_fields) in the result. Leave empty to retrieve all fields.
-  --include-fields: string@bool-completer # Whether specified fields are to be included (true) or excluded (false).
+  --include-fields: oneof<nothing, bool> # Whether specified fields are to be included (true) or excluded (false).
   --q: string # Query in <a target='_new' href ='https://lucene.apache.org/core/2_9_4/queryparsersyntax.html'>Lucene query string syntax</a>. Some query types cannot be used on metadata fields, for details see <a href='https://auth0.com/docs/users/search/v3/query-syntax#searchable-fields'>Searchable Fields</a>.
   --search-engine: string@search-engine-completer # The version of the search engine
-  --primary-order: string@bool-completer # If true (default), results are returned in a deterministic order. If false, results may be returned in a non-deterministic order, which can enhance performance for complex queries targeting a small number of users. Set to false only when consistent ordering and pagination is not required.
+  --primary-order: oneof<nothing, bool> # If true (default), results are returned in a deterministic order. If false, results may be returned in a non-deterministic order, which can enhance performance for complex queries targeting a small number of users. Set to false only when consistent ordering and pagination is not required.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9652,9 +9651,9 @@ export def "users users-1" [
   --email: string # The user's email. (format: email, default: john.doe@gmail.com)
   --phone-number: string # The user's phone number (following the E.164 recommendation). (default: +199999999999999)
   --user-metadata: record # Data related to the user that does not affect the application's core functionality.
-  --blocked: string@bool-completer # Whether this user was blocked by an administrator (true) or not (false). (default: false)
-  --email-verified: string@bool-completer # Whether this email address is verified (true) or unverified (false). User will receive a verification email after creation if `email_verified` is false or not specified (default: false)
-  --phone-verified: string@bool-completer # Whether this phone number has been verified (true) or not (false). (default: false)
+  --blocked: oneof<nothing, bool> # Whether this user was blocked by an administrator (true) or not (false). (default: false)
+  --email-verified: oneof<nothing, bool> # Whether this email address is verified (true) or unverified (false). User will receive a verification email after creation if `email_verified` is false or not specified (default: false)
+  --phone-verified: oneof<nothing, bool> # Whether this phone number has been verified (true) or not (false). (default: false)
   --app-metadata: record # Data related to the user that does affect the application's core functionality.
   --given-name: string # The user's given name(s). (default: John)
   --family-name: string # The user's family name(s). (default: Doe)
@@ -9664,7 +9663,7 @@ export def "users users-1" [
   --user-id: string # The external user's id provided by the identity provider. (default: abc)
   connection: string # Name of the connection this user should be created in. (default: Initial-Connection)
   --password: string # Initial password for this user. Only valid for auth0 connection strategy. (default: secret)
-  --verify-email: string@bool-completer # Whether the user will receive a verification email after creation (true) or no email (false). Overrides behavior of `email_verified` parameter. (default: false)
+  --verify-email: oneof<nothing, bool> # Whether the user will receive a verification email after creation (true) or no email (false). Overrides behavior of `email_verified` parameter. (default: false)
   --username: string # The user's username. Only valid if the connection requires a username. (default: johndoe)
 ]: any -> record<user_id: string, email: string, email_verified: bool, username: string, phone_number: string, phone_verified: bool, created_at: any, updated_at: any, identities: table<connection: string, user_id: string, provider: string, isSocial: bool, access_token: string, access_token_secret: string, refresh_token: string, profileData: record>, app_metadata: record, user_metadata: record, picture: string, name: string, nickname: string, multifactor: list<string>, last_ip: string, last_login: any, logins_count: int, blocked: bool, given_name: string, family_name: string> {
   let input = $in
@@ -9691,7 +9690,7 @@ export def "users-by-email users-by-email" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: string # Comma-separated list of fields to include or exclude (based on value provided for include_fields) in the result. Leave empty to retrieve all fields.
-  --include-fields: string@bool-completer # Whether specified fields are to be included (true) or excluded (false). Defaults to true.
+  --include-fields: oneof<nothing, bool> # Whether specified fields are to be included (true) or excluded (false). Defaults to true.
   --email: string # Email address to search for (case-sensitive).
 ]: nothing -> table<user_id: string, email: string, email_verified: bool, username: string, phone_number: string, phone_verified: bool, created_at: any, updated_at: any, identities: list<record>, app_metadata: record, user_metadata: record, picture: string, name: string, nickname: string, multifactor: list<string>, last_ip: string, last_login: any, logins_count: int, blocked: bool, given_name: string, family_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9717,7 +9716,7 @@ export def "users id-by-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: string # Comma-separated list of fields to include or exclude (based on value provided for include_fields) in the result. Leave empty to retrieve all fields.
-  --include-fields: string@bool-completer # Whether specified fields are to be included (true) or excluded (false).
+  --include-fields: oneof<nothing, bool> # Whether specified fields are to be included (true) or excluded (false).
 ]: nothing -> record<user_id: string, email: string, email_verified: bool, username: string, phone_number: string, phone_verified: bool, created_at: any, updated_at: any, identities: table<connection: string, user_id: string, provider: string, isSocial: bool, access_token: string, access_token_secret: string, refresh_token: string, profileData: record>, app_metadata: record, user_metadata: record, picture: string, name: string, nickname: string, multifactor: list<string>, last_ip: string, last_login: any, logins_count: int, blocked: bool, given_name: string, family_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9763,11 +9762,11 @@ export def "users id-by-id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --blocked: string@bool-completer # Whether this user was blocked by an administrator (true) or not (false). (default: false)
-  --email-verified: string@bool-completer # Whether this email address is verified (true) or unverified (false). If set to false the user will not receive a verification email unless `verify_email` is set to true. (default: false)
+  --blocked: oneof<nothing, bool> # Whether this user was blocked by an administrator (true) or not (false). (default: false)
+  --email-verified: oneof<nothing, bool> # Whether this email address is verified (true) or unverified (false). If set to false the user will not receive a verification email unless `verify_email` is set to true. (default: false)
   --email: string # Email address of this user. (nullable, format: email, default: john.doe@gmail.com)
   --phone-number: string # The user's phone number (following the E.164 recommendation). (nullable, default: +199999999999999)
-  --phone-verified: string@bool-completer # Whether this phone number has been verified (true) or not (false). (default: false)
+  --phone-verified: oneof<nothing, bool> # Whether this phone number has been verified (true) or not (false). (default: false)
   --user-metadata: record # Data related to the user that does not affect the application's core functionality.
   --app-metadata: record # Data related to the user that does affect the application's core functionality.
   --given-name: string # Given name/first name/forename of this user. (nullable, default: John)
@@ -9775,8 +9774,8 @@ export def "users id-by-id-2" [
   --name: string # Name of this user. (nullable, default: John Doe)
   --nickname: string # Preferred nickname or alias of this user. (nullable, default: Johnny)
   --picture: string # URL to picture, photo, or avatar of this user. (nullable, format: strict-uri, default: https://secure.gravatar.com/avatar/15626c5e0c749cb912f9d1ad48dba440?s=480&r=pg&d=https%3A%2F%2Fssl.gstatic.com%2Fs2%2Fprofiles%2Fimages%2Fsilhouette80.png)
-  --verify-email: string@bool-completer # Whether this user will receive a verification email after creation (true) or no email (false). Overrides behavior of `email_verified` parameter. (default: false)
-  --verify-phone-number: string@bool-completer # Whether this user will receive a text after changing the phone number (true) or no text (false). Only valid when changing phone number for SMS connections. (default: false)
+  --verify-email: oneof<nothing, bool> # Whether this user will receive a verification email after creation (true) or no email (false). Overrides behavior of `email_verified` parameter. (default: false)
+  --verify-phone-number: oneof<nothing, bool> # Whether this user will receive a text after changing the phone number (true) or no text (false). Only valid when changing phone number for SMS connections. (default: false)
   --password: string # New password for this user. Only valid for database connections. (nullable, default: secret)
   --connection: string # Name of the connection to target for this user update. (default: Initial-Connection)
   --client-id: string # Auth0 client ID. Only valid when updating email address. (default: DaM8bokEXBWrTUFCiJjWn50jei6ardyX)
@@ -9808,7 +9807,7 @@ export def "users-authentication-methods authentication-methods-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page index of the results to return. First page is 0. Default is 0.
   --per-page: int # Number of results per page. Default is 50.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10102,10 +10101,10 @@ export def "users-groups groups" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: string # A comma separated list of fields to include or exclude (depending on include_fields) from the result, empty to retrieve all fields
-  --include-fields: string@bool-completer # Whether specified fields are to be included (true) or excluded (false).
+  --include-fields: oneof<nothing, bool> # Whether specified fields are to be included (true) or excluded (false).
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page. Defaults to 50.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
   --qp-from: string # Optional Id from which to start selection.
   --take: int # Number of results per page. Defaults to 50.
 ]: nothing -> any {
@@ -10187,7 +10186,7 @@ export def "users-logs user" [
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page. Paging is disabled if parameter not sent.
   --qp-sort: string # Field to sort by. Use `fieldname:1` for ascending order and `fieldname:-1` for descending.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10258,7 +10257,7 @@ export def "users-organizations organizations" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page index of the results to return. First page is 0.
   --per-page: int # Number of results per page. Defaults to 50.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10284,7 +10283,7 @@ export def "users-permissions permissions-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --per-page: int # Number of results per page.
   --page: int # Page index of the results to return. First page is 0.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10385,7 +10384,7 @@ export def "users-revoke-access access" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --session-id: string # ID of the session to revoke. (format: session-id)
-  --preserve-refresh-tokens: string@bool-completer # Whether to preserve the refresh tokens associated with the session. (default: false)
+  --preserve-refresh-tokens: oneof<nothing, bool> # Whether to preserve the refresh tokens associated with the session. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10440,7 +10439,7 @@ export def "users-roles roles-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --per-page: int # Number of results per page.
   --page: int # Page index of the results to return. First page is 0.
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10516,7 +10515,7 @@ export def "users-refresh-tokens user-by-user_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
   --qp-from: string # An optional cursor from which to start the selection (exclusive).
   --take: int # Number of results per page. Defaults to 50.
 ]: nothing -> record<tokens: table<id: string, user_id: string, created_at: any, idle_expires_at: any, expires_at: any, device: record, client_id: string, session_id: string, rotating: bool, resource_servers: list, refresh_token_metadata: record, last_exchanged_at: any>, next: string> {
@@ -10564,7 +10563,7 @@ export def "users-sessions user-by-user_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-totals: string@bool-completer # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
+  --include-totals: oneof<nothing, bool> # Return results inside an object that contains the total result count (true) or as a direct array of results (false, default).
   --qp-from: string # An optional cursor from which to start the selection (exclusive).
   --take: int # Number of results per page. Defaults to 50.
 ]: nothing -> record<sessions: table<id: string, user_id: string, created_at: any, updated_at: any, authenticated_at: any, idle_expires_at: any, expires_at: any, last_interacted_at: any, device: record, clients: list, authentication: record, cookie: record, session_metadata: record>, next: string> {

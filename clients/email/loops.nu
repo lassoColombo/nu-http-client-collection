@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://app.loops.so/api"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -123,7 +122,7 @@ export def "contacts-create post" [
   email: string
   --firstName: string
   --lastName: string
-  --subscribed: string@bool-completer
+  --subscribed: oneof<nothing, bool>
   --userGroup: string
   --userId: string
   --mailingLists: record # An object of mailing list IDs and boolean subscription statuses.
@@ -153,7 +152,7 @@ export def "contacts-update put" [
   --email: string
   --firstName: string
   --lastName: string
-  --subscribed: string@bool-completer
+  --subscribed: oneof<nothing, bool>
   --userGroup: string
   --userId: string
   --mailingLists: record # An object of mailing list IDs and boolean subscription statuses.
@@ -396,7 +395,7 @@ export def "transactional post" [
   --Idempotency-Key: string # Include a unique ID for this request (maximum 100 characters) to avoid duplicate emails. [More info](https://loops.so/docs/api-reference/send-transactional-email#param-idempotency-key)
   email: string
   transactionalId: string # The ID of the transactional email to send.
-  --addToAudience: string@bool-completer # If `true`, a contact will be created in your audience using the `email` value (if a matching contact doesn't already exist).
+  --addToAudience: oneof<nothing, bool> # If `true`, a contact will be created in your audience using the `email` value (if a matching contact doesn't already exist).
   --dataVariables: record # An object containing contact data as defined by the data variables added to the transactional email template.
   --attachments: list # A list containing file objects to be sent along with an email message. — item shape: {filename: string, contentType: string, data: string}
 ]: any -> record<success: bool> {

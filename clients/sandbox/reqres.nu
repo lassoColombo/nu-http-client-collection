@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://reqres.in" "http://localhost:8000"] }
 def auth-scheme-completer [] { ["x-api-key" "bearer"] }
 
@@ -512,7 +511,7 @@ export def "collections-records listCollectionRecords" [
   --created-after: string # Filter records created after timestamp. (format: date-time)
   --data-contains: string # JSON string for containment filter.
   --order: string@order-completer # Sort order by created_at.
-  --include-deleted: string@bool-completer # Include soft-deleted records.
+  --include-deleted: oneof<nothing, bool> # Include soft-deleted records.
   --X-Reqres-Env: string # Environment key (for example: prod or dev).
 ]: nothing -> record<data: table<id: string, collection_id: string, project_id: string, app_user_id: string, created_by: string, created_at: string, updated_at: string, deleted_at: string, data: record>, meta: record<page: int, limit: int, total: int, pages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))

@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -107,7 +106,7 @@ export def "domains-search item" [
   --domain: string # Domain includes
   --zone: string # In Zone
   --country: string # Hosting Country
-  --isDead: string@bool-completer # Dead or Not, default not
+  --isDead: oneof<nothing, bool> # Dead or Not, default not
   --A: string # A record includes
   --NS: string # NS record includes
   --CNAME: string # CNAME record includes
@@ -142,7 +141,7 @@ export def "domains-tld item" [
   --limit: int # Results per page (default: 50)
   --domain: string # Domain includes
   --country: string # Hosting Country
-  --isDead: string@bool-completer # Dead or Not, default not
+  --isDead: oneof<nothing, bool> # Dead or Not, default not
   --A: string # A record includes
   --NS: string # NS record includes
   --CNAME: string # CNAME record includes
@@ -200,7 +199,7 @@ export def "domains-tld-search get" [
   --limit: int # Results per page (default: 50)
   --domain: string # Domain includes
   --country: string # Hosting Country
-  --isDead: string@bool-completer # Dead or Not, default not
+  --isDead: oneof<nothing, bool> # Dead or Not, default not
   --A: string # A record includes
   --NS: string # NS record includes
   --CNAME: string # CNAME record includes

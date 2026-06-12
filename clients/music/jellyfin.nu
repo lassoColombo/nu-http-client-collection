@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -156,7 +155,7 @@ export def "system-activity-log-entries GetLogEntries" [
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
   --minDate: string # Optional. The minimum date. Format = ISO. (format: date-time)
-  --hasUserId: string@bool-completer # Optional. Filter log entries if it has user id, or not.
+  --hasUserId: oneof<nothing, bool> # Optional. Filter log entries if it has user id, or not.
 ]: nothing -> record<Items: table<Id: int, Name: string, Overview: string, ShortOverview: string, Type: string, ItemId: string, Date: string, UserId: string, UserPrimaryImageTag: string, Severity: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -256,14 +255,14 @@ export def "artists GetArtists" [
   --excludeItemTypes: list # Optional. If specified, results will be filtered out based on item type. This allows multiple, comma delimited.
   --includeItemTypes: list # Optional. If specified, results will be filtered based on item type. This allows multiple, comma delimited.
   --filters: list # Optional. Specify additional filters to apply.
-  --isFavorite: string@bool-completer # Optional filter by items that are marked as favorite, or not.
+  --isFavorite: oneof<nothing, bool> # Optional filter by items that are marked as favorite, or not.
   --mediaTypes: list # Optional filter by MediaType. Allows multiple, comma delimited.
   --genres: list # Optional. If specified, results will be filtered based on genre. This allows multiple, pipe delimited.
   --genreIds: list # Optional. If specified, results will be filtered based on genre id. This allows multiple, pipe delimited.
   --officialRatings: list # Optional. If specified, results will be filtered based on OfficialRating. This allows multiple, pipe delimited.
   --tags: list # Optional. If specified, results will be filtered based on tag. This allows multiple, pipe delimited.
   --years: list # Optional. If specified, results will be filtered based on production year. This allows multiple, comma delimited.
-  --enableUserData: string@bool-completer # Optional, include user data.
+  --enableUserData: oneof<nothing, bool> # Optional, include user data.
   --imageTypeLimit: int # Optional, the max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
   --person: string # Optional. If specified, results will be filtered to include only those containing the specified person.
@@ -277,8 +276,8 @@ export def "artists GetArtists" [
   --nameLessThan: string # Optional filter by items whose name is equally or lesser than a given input string.
   --sortBy: list # Optional. Specify one or more sort orders, comma delimited.
   --sortOrder: list # Sort Order - Ascending,Descending.
-  --enableImages: string@bool-completer # Optional, include image information in output. (default: true)
-  --enableTotalRecordCount: string@bool-completer # Total record count. (default: true)
+  --enableImages: oneof<nothing, bool> # Optional, include image information in output. (default: true)
+  --enableTotalRecordCount: oneof<nothing, bool> # Total record count. (default: true)
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -336,14 +335,14 @@ export def "artists-album-artists GetAlbumArtists" [
   --excludeItemTypes: list # Optional. If specified, results will be filtered out based on item type. This allows multiple, comma delimited.
   --includeItemTypes: list # Optional. If specified, results will be filtered based on item type. This allows multiple, comma delimited.
   --filters: list # Optional. Specify additional filters to apply.
-  --isFavorite: string@bool-completer # Optional filter by items that are marked as favorite, or not.
+  --isFavorite: oneof<nothing, bool> # Optional filter by items that are marked as favorite, or not.
   --mediaTypes: list # Optional filter by MediaType. Allows multiple, comma delimited.
   --genres: list # Optional. If specified, results will be filtered based on genre. This allows multiple, pipe delimited.
   --genreIds: list # Optional. If specified, results will be filtered based on genre id. This allows multiple, pipe delimited.
   --officialRatings: list # Optional. If specified, results will be filtered based on OfficialRating. This allows multiple, pipe delimited.
   --tags: list # Optional. If specified, results will be filtered based on tag. This allows multiple, pipe delimited.
   --years: list # Optional. If specified, results will be filtered based on production year. This allows multiple, comma delimited.
-  --enableUserData: string@bool-completer # Optional, include user data.
+  --enableUserData: oneof<nothing, bool> # Optional, include user data.
   --imageTypeLimit: int # Optional, the max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
   --person: string # Optional. If specified, results will be filtered to include only those containing the specified person.
@@ -357,8 +356,8 @@ export def "artists-album-artists GetAlbumArtists" [
   --nameLessThan: string # Optional filter by items whose name is equally or lesser than a given input string.
   --sortBy: list # Optional. Specify one or more sort orders, comma delimited.
   --sortOrder: list # Sort Order - Ascending,Descending.
-  --enableImages: string@bool-completer # Optional, include image information in output. (default: true)
-  --enableTotalRecordCount: string@bool-completer # Total record count. (default: true)
+  --enableImages: oneof<nothing, bool> # Optional, include image information in output. (default: true)
+  --enableTotalRecordCount: oneof<nothing, bool> # Total record count. (default: true)
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -384,7 +383,7 @@ export def "audio-stream GetAudioStream" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --container: string # The audio container.
-  --static: string@bool-completer # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
+  --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
   --deviceProfileId: string # Optional. The dlna device profile id to utilize. (DEPRECATED)
@@ -395,10 +394,10 @@ export def "audio-stream GetAudioStream" [
   --mediaSourceId: string # The media version id, if playing an alternate version.
   --deviceId: string # The device id of the client requesting. Used to stop encoding processes when needed.
   --audioCodec: string # Optional. Specify an audio codec to encode to, e.g. mp3. If omitted the server will auto-select using the url's extension.
-  --enableAutoStreamCopy: string@bool-completer # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
-  --allowVideoStreamCopy: string@bool-completer # Whether or not to allow copying of the video stream url.
-  --allowAudioStreamCopy: string@bool-completer # Whether or not to allow copying of the audio stream url.
-  --breakOnNonKeyFrames: string@bool-completer # Optional. Whether to break on non key frames.
+  --enableAutoStreamCopy: oneof<nothing, bool> # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
+  --allowVideoStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the video stream url.
+  --allowAudioStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the audio stream url.
+  --breakOnNonKeyFrames: oneof<nothing, bool> # Optional. Whether to break on non key frames.
   --audioSampleRate: int # Optional. Specify a specific audio sample rate, e.g. 44100. (format: int32)
   --maxAudioBitDepth: int # Optional. The maximum audio bit depth. (format: int32)
   --audioBitRate: int # Optional. Specify an audio bitrate to encode to, e.g. 128000. If omitted this will be left to encoder defaults. (format: int32)
@@ -408,7 +407,7 @@ export def "audio-stream GetAudioStream" [
   --level: string # Optional. Specify a level for the encoder profile (varies by encoder), e.g. 3, 3.1.
   --framerate: float # Optional. A specific video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
   --maxFramerate: float # Optional. A specific maximum video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
-  --copyTimestamps: string@bool-completer # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
+  --copyTimestamps: oneof<nothing, bool> # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
   --startTimeTicks: int # Optional. Specify a starting offset, in ticks. 1 tick = 10000 ms. (format: int64)
   --width: int # Optional. The fixed horizontal resolution of the encoded video. (format: int32)
   --height: int # Optional. The fixed vertical resolution of the encoded video. (format: int32)
@@ -417,13 +416,13 @@ export def "audio-stream GetAudioStream" [
   --subtitleMethod: string@subtitleMethod-completer # Optional. Specify the subtitle delivery method.
   --maxRefFrames: int # Optional. (format: int32)
   --maxVideoBitDepth: int # Optional. The maximum video bit depth. (format: int32)
-  --requireAvc: string@bool-completer # Optional. Whether to require avc.
-  --deInterlace: string@bool-completer # Optional. Whether to deinterlace the video.
-  --requireNonAnamorphic: string@bool-completer # Optional. Whether to require a non anamorphic stream.
+  --requireAvc: oneof<nothing, bool> # Optional. Whether to require avc.
+  --deInterlace: oneof<nothing, bool> # Optional. Whether to deinterlace the video.
+  --requireNonAnamorphic: oneof<nothing, bool> # Optional. Whether to require a non anamorphic stream.
   --transcodingMaxAudioChannels: int # Optional. The maximum number of audio channels to transcode. (format: int32)
   --cpuCoreLimit: int # Optional. The limit of how many cpu cores to use. (format: int32)
   --liveStreamId: string # The live stream id.
-  --enableMpegtsM2TsMode: string@bool-completer # Optional. Whether to enable the MpegtsM2Ts mode.
+  --enableMpegtsM2TsMode: oneof<nothing, bool> # Optional. Whether to enable the MpegtsM2Ts mode.
   --videoCodec: string # Optional. Specify a video codec to encode to, e.g. h264. If omitted the server will auto-select using the url's extension.
   --subtitleCodec: string # Optional. Specify a subtitle codec to encode to.
   --transcodeReasons: string # Optional. The transcoding reason.
@@ -431,7 +430,7 @@ export def "audio-stream GetAudioStream" [
   --videoStreamIndex: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --streamOptions: record # Optional. The streaming options.
-  --enableAudioVbrEncoding: string@bool-completer # Optional. Whether to enable Audio Encoding. (default: true)
+  --enableAudioVbrEncoding: oneof<nothing, bool> # Optional. Whether to enable Audio Encoding. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -457,7 +456,7 @@ export def "audio-stream HeadAudioStream" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --container: string # The audio container.
-  --static: string@bool-completer # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
+  --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
   --deviceProfileId: string # Optional. The dlna device profile id to utilize. (DEPRECATED)
@@ -468,10 +467,10 @@ export def "audio-stream HeadAudioStream" [
   --mediaSourceId: string # The media version id, if playing an alternate version.
   --deviceId: string # The device id of the client requesting. Used to stop encoding processes when needed.
   --audioCodec: string # Optional. Specify an audio codec to encode to, e.g. mp3. If omitted the server will auto-select using the url's extension.
-  --enableAutoStreamCopy: string@bool-completer # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
-  --allowVideoStreamCopy: string@bool-completer # Whether or not to allow copying of the video stream url.
-  --allowAudioStreamCopy: string@bool-completer # Whether or not to allow copying of the audio stream url.
-  --breakOnNonKeyFrames: string@bool-completer # Optional. Whether to break on non key frames.
+  --enableAutoStreamCopy: oneof<nothing, bool> # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
+  --allowVideoStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the video stream url.
+  --allowAudioStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the audio stream url.
+  --breakOnNonKeyFrames: oneof<nothing, bool> # Optional. Whether to break on non key frames.
   --audioSampleRate: int # Optional. Specify a specific audio sample rate, e.g. 44100. (format: int32)
   --maxAudioBitDepth: int # Optional. The maximum audio bit depth. (format: int32)
   --audioBitRate: int # Optional. Specify an audio bitrate to encode to, e.g. 128000. If omitted this will be left to encoder defaults. (format: int32)
@@ -481,7 +480,7 @@ export def "audio-stream HeadAudioStream" [
   --level: string # Optional. Specify a level for the encoder profile (varies by encoder), e.g. 3, 3.1.
   --framerate: float # Optional. A specific video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
   --maxFramerate: float # Optional. A specific maximum video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
-  --copyTimestamps: string@bool-completer # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
+  --copyTimestamps: oneof<nothing, bool> # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
   --startTimeTicks: int # Optional. Specify a starting offset, in ticks. 1 tick = 10000 ms. (format: int64)
   --width: int # Optional. The fixed horizontal resolution of the encoded video. (format: int32)
   --height: int # Optional. The fixed vertical resolution of the encoded video. (format: int32)
@@ -490,13 +489,13 @@ export def "audio-stream HeadAudioStream" [
   --subtitleMethod: string@subtitleMethod-completer # Optional. Specify the subtitle delivery method.
   --maxRefFrames: int # Optional. (format: int32)
   --maxVideoBitDepth: int # Optional. The maximum video bit depth. (format: int32)
-  --requireAvc: string@bool-completer # Optional. Whether to require avc.
-  --deInterlace: string@bool-completer # Optional. Whether to deinterlace the video.
-  --requireNonAnamorphic: string@bool-completer # Optional. Whether to require a non anamorphic stream.
+  --requireAvc: oneof<nothing, bool> # Optional. Whether to require avc.
+  --deInterlace: oneof<nothing, bool> # Optional. Whether to deinterlace the video.
+  --requireNonAnamorphic: oneof<nothing, bool> # Optional. Whether to require a non anamorphic stream.
   --transcodingMaxAudioChannels: int # Optional. The maximum number of audio channels to transcode. (format: int32)
   --cpuCoreLimit: int # Optional. The limit of how many cpu cores to use. (format: int32)
   --liveStreamId: string # The live stream id.
-  --enableMpegtsM2TsMode: string@bool-completer # Optional. Whether to enable the MpegtsM2Ts mode.
+  --enableMpegtsM2TsMode: oneof<nothing, bool> # Optional. Whether to enable the MpegtsM2Ts mode.
   --videoCodec: string # Optional. Specify a video codec to encode to, e.g. h264. If omitted the server will auto-select using the url's extension.
   --subtitleCodec: string # Optional. Specify a subtitle codec to encode to.
   --transcodeReasons: string # Optional. The transcoding reason.
@@ -504,7 +503,7 @@ export def "audio-stream HeadAudioStream" [
   --videoStreamIndex: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --streamOptions: record # Optional. The streaming options.
-  --enableAudioVbrEncoding: string@bool-completer # Optional. Whether to enable Audio Encoding. (default: true)
+  --enableAudioVbrEncoding: oneof<nothing, bool> # Optional. Whether to enable Audio Encoding. (default: true)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -530,7 +529,7 @@ export def "audio-stream-container GetAudioStreamByContainer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --static: string@bool-completer # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
+  --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
   --deviceProfileId: string # Optional. The dlna device profile id to utilize. (DEPRECATED)
@@ -541,10 +540,10 @@ export def "audio-stream-container GetAudioStreamByContainer" [
   --mediaSourceId: string # The media version id, if playing an alternate version.
   --deviceId: string # The device id of the client requesting. Used to stop encoding processes when needed.
   --audioCodec: string # Optional. Specify an audio codec to encode to, e.g. mp3. If omitted the server will auto-select using the url's extension.
-  --enableAutoStreamCopy: string@bool-completer # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
-  --allowVideoStreamCopy: string@bool-completer # Whether or not to allow copying of the video stream url.
-  --allowAudioStreamCopy: string@bool-completer # Whether or not to allow copying of the audio stream url.
-  --breakOnNonKeyFrames: string@bool-completer # Optional. Whether to break on non key frames.
+  --enableAutoStreamCopy: oneof<nothing, bool> # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
+  --allowVideoStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the video stream url.
+  --allowAudioStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the audio stream url.
+  --breakOnNonKeyFrames: oneof<nothing, bool> # Optional. Whether to break on non key frames.
   --audioSampleRate: int # Optional. Specify a specific audio sample rate, e.g. 44100. (format: int32)
   --maxAudioBitDepth: int # Optional. The maximum audio bit depth. (format: int32)
   --audioBitRate: int # Optional. Specify an audio bitrate to encode to, e.g. 128000. If omitted this will be left to encoder defaults. (format: int32)
@@ -554,7 +553,7 @@ export def "audio-stream-container GetAudioStreamByContainer" [
   --level: string # Optional. Specify a level for the encoder profile (varies by encoder), e.g. 3, 3.1.
   --framerate: float # Optional. A specific video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
   --maxFramerate: float # Optional. A specific maximum video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
-  --copyTimestamps: string@bool-completer # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
+  --copyTimestamps: oneof<nothing, bool> # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
   --startTimeTicks: int # Optional. Specify a starting offset, in ticks. 1 tick = 10000 ms. (format: int64)
   --width: int # Optional. The fixed horizontal resolution of the encoded video. (format: int32)
   --height: int # Optional. The fixed vertical resolution of the encoded video. (format: int32)
@@ -563,13 +562,13 @@ export def "audio-stream-container GetAudioStreamByContainer" [
   --subtitleMethod: string@subtitleMethod-completer # Optional. Specify the subtitle delivery method.
   --maxRefFrames: int # Optional. (format: int32)
   --maxVideoBitDepth: int # Optional. The maximum video bit depth. (format: int32)
-  --requireAvc: string@bool-completer # Optional. Whether to require avc.
-  --deInterlace: string@bool-completer # Optional. Whether to deinterlace the video.
-  --requireNonAnamorphic: string@bool-completer # Optional. Whether to require a non anamorphic stream.
+  --requireAvc: oneof<nothing, bool> # Optional. Whether to require avc.
+  --deInterlace: oneof<nothing, bool> # Optional. Whether to deinterlace the video.
+  --requireNonAnamorphic: oneof<nothing, bool> # Optional. Whether to require a non anamorphic stream.
   --transcodingMaxAudioChannels: int # Optional. The maximum number of audio channels to transcode. (format: int32)
   --cpuCoreLimit: int # Optional. The limit of how many cpu cores to use. (format: int32)
   --liveStreamId: string # The live stream id.
-  --enableMpegtsM2TsMode: string@bool-completer # Optional. Whether to enable the MpegtsM2Ts mode.
+  --enableMpegtsM2TsMode: oneof<nothing, bool> # Optional. Whether to enable the MpegtsM2Ts mode.
   --videoCodec: string # Optional. Specify a video codec to encode to, e.g. h264. If omitted the server will auto-select using the url's extension.
   --subtitleCodec: string # Optional. Specify a subtitle codec to encode to.
   --transcodeReasons: string # Optional. The transcoding reason.
@@ -577,7 +576,7 @@ export def "audio-stream-container GetAudioStreamByContainer" [
   --videoStreamIndex: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --streamOptions: record # Optional. The streaming options.
-  --enableAudioVbrEncoding: string@bool-completer # Optional. Whether to enable Audio Encoding. (default: true)
+  --enableAudioVbrEncoding: oneof<nothing, bool> # Optional. Whether to enable Audio Encoding. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -603,7 +602,7 @@ export def "audio-stream-container HeadAudioStreamByContainer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --static: string@bool-completer # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
+  --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
   --deviceProfileId: string # Optional. The dlna device profile id to utilize. (DEPRECATED)
@@ -614,10 +613,10 @@ export def "audio-stream-container HeadAudioStreamByContainer" [
   --mediaSourceId: string # The media version id, if playing an alternate version.
   --deviceId: string # The device id of the client requesting. Used to stop encoding processes when needed.
   --audioCodec: string # Optional. Specify an audio codec to encode to, e.g. mp3. If omitted the server will auto-select using the url's extension.
-  --enableAutoStreamCopy: string@bool-completer # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
-  --allowVideoStreamCopy: string@bool-completer # Whether or not to allow copying of the video stream url.
-  --allowAudioStreamCopy: string@bool-completer # Whether or not to allow copying of the audio stream url.
-  --breakOnNonKeyFrames: string@bool-completer # Optional. Whether to break on non key frames.
+  --enableAutoStreamCopy: oneof<nothing, bool> # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
+  --allowVideoStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the video stream url.
+  --allowAudioStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the audio stream url.
+  --breakOnNonKeyFrames: oneof<nothing, bool> # Optional. Whether to break on non key frames.
   --audioSampleRate: int # Optional. Specify a specific audio sample rate, e.g. 44100. (format: int32)
   --maxAudioBitDepth: int # Optional. The maximum audio bit depth. (format: int32)
   --audioBitRate: int # Optional. Specify an audio bitrate to encode to, e.g. 128000. If omitted this will be left to encoder defaults. (format: int32)
@@ -627,7 +626,7 @@ export def "audio-stream-container HeadAudioStreamByContainer" [
   --level: string # Optional. Specify a level for the encoder profile (varies by encoder), e.g. 3, 3.1.
   --framerate: float # Optional. A specific video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
   --maxFramerate: float # Optional. A specific maximum video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
-  --copyTimestamps: string@bool-completer # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
+  --copyTimestamps: oneof<nothing, bool> # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
   --startTimeTicks: int # Optional. Specify a starting offset, in ticks. 1 tick = 10000 ms. (format: int64)
   --width: int # Optional. The fixed horizontal resolution of the encoded video. (format: int32)
   --height: int # Optional. The fixed vertical resolution of the encoded video. (format: int32)
@@ -636,13 +635,13 @@ export def "audio-stream-container HeadAudioStreamByContainer" [
   --subtitleMethod: string@subtitleMethod-completer # Optional. Specify the subtitle delivery method.
   --maxRefFrames: int # Optional. (format: int32)
   --maxVideoBitDepth: int # Optional. The maximum video bit depth. (format: int32)
-  --requireAvc: string@bool-completer # Optional. Whether to require avc.
-  --deInterlace: string@bool-completer # Optional. Whether to deinterlace the video.
-  --requireNonAnamorphic: string@bool-completer # Optional. Whether to require a non anamorphic stream.
+  --requireAvc: oneof<nothing, bool> # Optional. Whether to require avc.
+  --deInterlace: oneof<nothing, bool> # Optional. Whether to deinterlace the video.
+  --requireNonAnamorphic: oneof<nothing, bool> # Optional. Whether to require a non anamorphic stream.
   --transcodingMaxAudioChannels: int # Optional. The maximum number of audio channels to transcode. (format: int32)
   --cpuCoreLimit: int # Optional. The limit of how many cpu cores to use. (format: int32)
   --liveStreamId: string # The live stream id.
-  --enableMpegtsM2TsMode: string@bool-completer # Optional. Whether to enable the MpegtsM2Ts mode.
+  --enableMpegtsM2TsMode: oneof<nothing, bool> # Optional. Whether to enable the MpegtsM2Ts mode.
   --videoCodec: string # Optional. Specify a video codec to encode to, e.g. h264. If omitted the server will auto-select using the url's extension.
   --subtitleCodec: string # Optional. Specify a subtitle codec to encode to.
   --transcodeReasons: string # Optional. The transcoding reason.
@@ -650,7 +649,7 @@ export def "audio-stream-container HeadAudioStreamByContainer" [
   --videoStreamIndex: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --streamOptions: record # Optional. The streaming options.
-  --enableAudioVbrEncoding: string@bool-completer # Optional. Whether to enable Audio Encoding. (default: true)
+  --enableAudioVbrEncoding: oneof<nothing, bool> # Optional. Whether to enable Audio Encoding. (default: true)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -696,10 +695,10 @@ export def "backup-create CreateBackup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --Metadata: string@bool-completer # Gets or sets a value indicating whether the archive contains the Metadata contents.
-  --Trickplay: string@bool-completer # Gets or sets a value indicating whether the archive contains the Trickplay contents.
-  --Subtitles: string@bool-completer # Gets or sets a value indicating whether the archive contains the Subtitle contents.
-  --Database: string@bool-completer # Gets or sets a value indicating whether the archive contains the Database contents.
+  --Metadata: oneof<nothing, bool> # Gets or sets a value indicating whether the archive contains the Metadata contents.
+  --Trickplay: oneof<nothing, bool> # Gets or sets a value indicating whether the archive contains the Trickplay contents.
+  --Subtitles: oneof<nothing, bool> # Gets or sets a value indicating whether the archive contains the Subtitle contents.
+  --Database: oneof<nothing, bool> # Gets or sets a value indicating whether the archive contains the Database contents.
 ]: any -> record<ServerVersion: string, BackupEngineVersion: string, DateCreated: string, Path: string, Options: record<Metadata: bool, Trickplay: bool, Subtitles: bool, Database: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -843,9 +842,9 @@ export def "channels GetChannels" [
   --userId: string # User Id to filter by. Use System.Guid.Empty to not filter by user. (format: uuid)
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
-  --supportsLatestItems: string@bool-completer # Optional. Filter by channels that support getting latest items.
-  --supportsMediaDeletion: string@bool-completer # Optional. Filter by channels that support media deletion.
-  --isFavorite: string@bool-completer # Optional. Filter by channels that are favorite.
+  --supportsLatestItems: oneof<nothing, bool> # Optional. Filter by channels that support getting latest items.
+  --supportsMediaDeletion: oneof<nothing, bool> # Optional. Filter by channels that support media deletion.
+  --isFavorite: oneof<nothing, bool> # Optional. Filter by channels that are favorite.
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1003,7 +1002,7 @@ export def "collections CreateCollection" [
   --name: string # The name of the collection.
   --ids: list # Item Ids to add to the collection.
   --parentId: string # Optional. Create the collection within a specific folder. (format: uuid)
-  --isLocked: string@bool-completer # Whether or not to lock the new collection. (default: false)
+  --isLocked: oneof<nothing, bool> # Whether or not to lock the new collection. (default: false)
 ]: nothing -> record<Id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1102,16 +1101,16 @@ export def "system-configuration UpdateConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --LogFileRetentionDays: int # Gets or sets the number of days we should retain log files. (format: int32)
-  --IsStartupWizardCompleted: string@bool-completer # Gets or sets a value indicating whether this instance is first run.
+  --IsStartupWizardCompleted: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is first run.
   --CachePath: string # Gets or sets the cache path. (nullable)
   --PreviousVersion: string # Gets or sets the last known version that was ran using the configuration. (nullable)
   --PreviousVersionStr: string # Gets or sets the stringified PreviousVersion to be stored/loaded, because System.Version itself isn't xml-serializable. (nullable)
-  --EnableMetrics: string@bool-completer # Gets or sets a value indicating whether to enable prometheus metrics exporting.
-  --EnableNormalizedItemByNameIds: string@bool-completer
-  --IsPortAuthorized: string@bool-completer # Gets or sets a value indicating whether this instance is port authorized.
-  --QuickConnectAvailable: string@bool-completer # Gets or sets a value indicating whether quick connect is available for use on this server.
-  --EnableCaseSensitiveItemIds: string@bool-completer # Gets or sets a value indicating whether [enable case-sensitive item ids].
-  --DisableLiveTvChannelUserDataName: string@bool-completer
+  --EnableMetrics: oneof<nothing, bool> # Gets or sets a value indicating whether to enable prometheus metrics exporting.
+  --EnableNormalizedItemByNameIds: oneof<nothing, bool>
+  --IsPortAuthorized: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is port authorized.
+  --QuickConnectAvailable: oneof<nothing, bool> # Gets or sets a value indicating whether quick connect is available for use on this server.
+  --EnableCaseSensitiveItemIds: oneof<nothing, bool> # Gets or sets a value indicating whether [enable case-sensitive item ids].
+  --DisableLiveTvChannelUserDataName: oneof<nothing, bool>
   --MetadataPath: string # Gets or sets the metadata path.
   --PreferredMetadataLanguage: string # Gets or sets the preferred metadata language.
   --MetadataCountryCode: string # Gets or sets the metadata country code.
@@ -1129,34 +1128,34 @@ export def "system-configuration UpdateConfiguration" [
   --CacheSize: int # Gets or sets the maximum amount of items to cache. (format: int32)
   --ImageSavingConvention: any@ImageSavingConvention-completer # Gets or sets the image saving convention.
   --MetadataOptions: list # item shape: {ItemType?: string, DisabledMetadataSavers?: list, LocalMetadataReaderOrder?: list, DisabledMetadataFetchers?: list, MetadataFetcherOrder?: list, DisabledImageFetchers?: list, ImageFetcherOrder?: list}
-  --SkipDeserializationForBasicTypes: string@bool-completer
+  --SkipDeserializationForBasicTypes: oneof<nothing, bool>
   --ServerName: string
   --UICulture: string
-  --SaveMetadataHidden: string@bool-completer
+  --SaveMetadataHidden: oneof<nothing, bool>
   --ContentTypes: list # item shape: {Name?: string, Value?: string}
   --RemoteClientBitrateLimit: int # format: int32
-  --EnableFolderView: string@bool-completer
-  --EnableGroupingMoviesIntoCollections: string@bool-completer
-  --EnableGroupingShowsIntoCollections: string@bool-completer
-  --DisplaySpecialsWithinSeasons: string@bool-completer
+  --EnableFolderView: oneof<nothing, bool>
+  --EnableGroupingMoviesIntoCollections: oneof<nothing, bool>
+  --EnableGroupingShowsIntoCollections: oneof<nothing, bool>
+  --DisplaySpecialsWithinSeasons: oneof<nothing, bool>
   --CodecsUsed: list
   --PluginRepositories: list # item shape: {Name?: string, Url?: string, Enabled?: bool}
-  --EnableExternalContentInSuggestions: string@bool-completer
+  --EnableExternalContentInSuggestions: oneof<nothing, bool>
   --ImageExtractionTimeoutMs: int # format: int32
   --PathSubstitutions: list # item shape: {From?: string, To?: string}
-  --EnableSlowResponseWarning: string@bool-completer # Gets or sets a value indicating whether slow server responses should be logged as a warning.
+  --EnableSlowResponseWarning: oneof<nothing, bool> # Gets or sets a value indicating whether slow server responses should be logged as a warning.
   --SlowResponseThresholdMs: int # Gets or sets the threshold for the slow response time warning in ms. (format: int64)
   --CorsHosts: list # Gets or sets the cors hosts.
   --ActivityLogRetentionDays: int # Gets or sets the number of days we should retain activity logs. (nullable, format: int32)
   --LibraryScanFanoutConcurrency: int # Gets or sets the how the library scan fans out. (format: int32)
   --LibraryMetadataRefreshConcurrency: int # Gets or sets the how many metadata refreshes can run concurrently. (format: int32)
-  --AllowClientLogUpload: string@bool-completer # Gets or sets a value indicating whether clients should be allowed to upload logs.
+  --AllowClientLogUpload: oneof<nothing, bool> # Gets or sets a value indicating whether clients should be allowed to upload logs.
   --DummyChapterDuration: int # Gets or sets the dummy chapter duration in seconds, use 0 (zero) or less to disable generation altogether. (format: int32)
   --ChapterImageResolution: any@ChapterImageResolution-completer # Gets or sets the chapter image resolution.
   --ParallelImageEncodingLimit: int # Gets or sets the limit for parallel image encoding. (format: int32)
   --CastReceiverApplications: list # Gets or sets the list of cast receiver applications. — item shape: {Id?: string, Name?: string}
   --TrickplayOptions: any # Gets or sets the trickplay options.
-  --EnableLegacyAuthorization: string@bool-completer # Gets or sets a value indicating whether old authorization methods are allowed.
+  --EnableLegacyAuthorization: oneof<nothing, bool> # Gets or sets a value indicating whether old authorization methods are allowed.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1230,7 +1229,7 @@ export def "system-configuration-branding UpdateBrandingConfiguration" [
   --allow-errors(-e) # Return full response without error handling
   --LoginDisclaimer: string # Gets or sets the login disclaimer. (nullable)
   --CustomCss: string # Gets or sets the custom CSS. (nullable)
-  --SplashscreenEnabled: string@bool-completer # Gets or sets a value indicating whether to enable the splashscreen.
+  --SplashscreenEnabled: oneof<nothing, bool> # Gets or sets a value indicating whether to enable the splashscreen.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1302,7 +1301,7 @@ export def "web-configuration-pages GetConfigurationPages" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --enableInMainMenu: string@bool-completer # Whether to enable in the main menu.
+  --enableInMainMenu: oneof<nothing, bool> # Whether to enable in the main menu.
 ]: nothing -> table<Name: string, EnableInMainMenu: bool, MenuSection: string, MenuIcon: string, DisplayName: string, PluginId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1482,15 +1481,15 @@ export def "display-preferences UpdateDisplayPreferences" [
   --ViewType: string # Gets or sets the type of the view. (nullable)
   --SortBy: string # Gets or sets the sort by. (nullable)
   --IndexBy: string # Gets or sets the index by. (nullable)
-  --RememberIndexing: string@bool-completer # Gets or sets a value indicating whether [remember indexing].
+  --RememberIndexing: oneof<nothing, bool> # Gets or sets a value indicating whether [remember indexing].
   --PrimaryImageHeight: int # Gets or sets the height of the primary image. (format: int32)
   --PrimaryImageWidth: int # Gets or sets the width of the primary image. (format: int32)
   --CustomPrefs: record # Gets or sets the custom prefs.
   --ScrollDirection: any@ScrollDirection-completer # An enum representing the axis that should be scrolled.
-  --ShowBackdrop: string@bool-completer # Gets or sets a value indicating whether to show backdrops on this item.
-  --RememberSorting: string@bool-completer # Gets or sets a value indicating whether [remember sorting].
+  --ShowBackdrop: oneof<nothing, bool> # Gets or sets a value indicating whether to show backdrops on this item.
+  --RememberSorting: oneof<nothing, bool> # Gets or sets a value indicating whether [remember sorting].
   --SortOrder: any@SortOrder-completer # An enum representing the sorting order.
-  --ShowSidebar: string@bool-completer # Gets or sets a value indicating whether [show sidebar].
+  --ShowSidebar: oneof<nothing, bool> # Gets or sets a value indicating whether [show sidebar].
   --Client: string # Gets or sets the client. (nullable)
 ]: any -> any {
   let input = $in
@@ -1524,7 +1523,7 @@ export def "audio-hls1 GetHlsAudioSegment" [
   --allow-errors(-e) # Return full response without error handling
   --runtimeTicks: int # The position of the requested segment in ticks. (format: int64)
   --actualSegmentLengthTicks: int # The length of the requested segment in ticks. (format: int64)
-  --static: string@bool-completer # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
+  --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
   --deviceProfileId: string # Optional. The dlna device profile id to utilize. (DEPRECATED)
@@ -1535,10 +1534,10 @@ export def "audio-hls1 GetHlsAudioSegment" [
   --mediaSourceId: string # The media version id, if playing an alternate version.
   --deviceId: string # The device id of the client requesting. Used to stop encoding processes when needed.
   --audioCodec: string # Optional. Specify an audio codec to encode to, e.g. mp3.
-  --enableAutoStreamCopy: string@bool-completer # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
-  --allowVideoStreamCopy: string@bool-completer # Whether or not to allow copying of the video stream url.
-  --allowAudioStreamCopy: string@bool-completer # Whether or not to allow copying of the audio stream url.
-  --breakOnNonKeyFrames: string@bool-completer # Optional. Whether to break on non key frames.
+  --enableAutoStreamCopy: oneof<nothing, bool> # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
+  --allowVideoStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the video stream url.
+  --allowAudioStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the audio stream url.
+  --breakOnNonKeyFrames: oneof<nothing, bool> # Optional. Whether to break on non key frames.
   --audioSampleRate: int # Optional. Specify a specific audio sample rate, e.g. 44100. (format: int32)
   --maxAudioBitDepth: int # Optional. The maximum audio bit depth. (format: int32)
   --maxStreamingBitrate: int # Optional. The maximum streaming bitrate. (format: int32)
@@ -1549,7 +1548,7 @@ export def "audio-hls1 GetHlsAudioSegment" [
   --level: string # Optional. Specify a level for the encoder profile (varies by encoder), e.g. 3, 3.1.
   --framerate: float # Optional. A specific video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
   --maxFramerate: float # Optional. A specific maximum video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
-  --copyTimestamps: string@bool-completer # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
+  --copyTimestamps: oneof<nothing, bool> # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
   --startTimeTicks: int # Optional. Specify a starting offset, in ticks. 1 tick = 10000 ms. (format: int64)
   --width: int # Optional. The fixed horizontal resolution of the encoded video. (format: int32)
   --height: int # Optional. The fixed vertical resolution of the encoded video. (format: int32)
@@ -1558,13 +1557,13 @@ export def "audio-hls1 GetHlsAudioSegment" [
   --subtitleMethod: string@subtitleMethod-completer # Optional. Specify the subtitle delivery method.
   --maxRefFrames: int # Optional. (format: int32)
   --maxVideoBitDepth: int # Optional. The maximum video bit depth. (format: int32)
-  --requireAvc: string@bool-completer # Optional. Whether to require avc.
-  --deInterlace: string@bool-completer # Optional. Whether to deinterlace the video.
-  --requireNonAnamorphic: string@bool-completer # Optional. Whether to require a non anamorphic stream.
+  --requireAvc: oneof<nothing, bool> # Optional. Whether to require avc.
+  --deInterlace: oneof<nothing, bool> # Optional. Whether to deinterlace the video.
+  --requireNonAnamorphic: oneof<nothing, bool> # Optional. Whether to require a non anamorphic stream.
   --transcodingMaxAudioChannels: int # Optional. The maximum number of audio channels to transcode. (format: int32)
   --cpuCoreLimit: int # Optional. The limit of how many cpu cores to use. (format: int32)
   --liveStreamId: string # The live stream id.
-  --enableMpegtsM2TsMode: string@bool-completer # Optional. Whether to enable the MpegtsM2Ts mode.
+  --enableMpegtsM2TsMode: oneof<nothing, bool> # Optional. Whether to enable the MpegtsM2Ts mode.
   --videoCodec: string # Optional. Specify a video codec to encode to, e.g. h264.
   --subtitleCodec: string # Optional. Specify a subtitle codec to encode to.
   --transcodeReasons: string # Optional. The transcoding reason.
@@ -1572,7 +1571,7 @@ export def "audio-hls1 GetHlsAudioSegment" [
   --videoStreamIndex: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --streamOptions: record # Optional. The streaming options.
-  --enableAudioVbrEncoding: string@bool-completer # Optional. Whether to enable Audio Encoding. (default: true)
+  --enableAudioVbrEncoding: oneof<nothing, bool> # Optional. Whether to enable Audio Encoding. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1597,7 +1596,7 @@ export def "audio-mainm3u8 GetVariantHlsAudioPlaylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --static: string@bool-completer # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
+  --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
   --deviceProfileId: string # Optional. The dlna device profile id to utilize. (DEPRECATED)
@@ -1608,10 +1607,10 @@ export def "audio-mainm3u8 GetVariantHlsAudioPlaylist" [
   --mediaSourceId: string # The media version id, if playing an alternate version.
   --deviceId: string # The device id of the client requesting. Used to stop encoding processes when needed.
   --audioCodec: string # Optional. Specify an audio codec to encode to, e.g. mp3.
-  --enableAutoStreamCopy: string@bool-completer # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
-  --allowVideoStreamCopy: string@bool-completer # Whether or not to allow copying of the video stream url.
-  --allowAudioStreamCopy: string@bool-completer # Whether or not to allow copying of the audio stream url.
-  --breakOnNonKeyFrames: string@bool-completer # Optional. Whether to break on non key frames.
+  --enableAutoStreamCopy: oneof<nothing, bool> # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
+  --allowVideoStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the video stream url.
+  --allowAudioStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the audio stream url.
+  --breakOnNonKeyFrames: oneof<nothing, bool> # Optional. Whether to break on non key frames.
   --audioSampleRate: int # Optional. Specify a specific audio sample rate, e.g. 44100. (format: int32)
   --maxAudioBitDepth: int # Optional. The maximum audio bit depth. (format: int32)
   --maxStreamingBitrate: int # Optional. The maximum streaming bitrate. (format: int32)
@@ -1622,7 +1621,7 @@ export def "audio-mainm3u8 GetVariantHlsAudioPlaylist" [
   --level: string # Optional. Specify a level for the encoder profile (varies by encoder), e.g. 3, 3.1.
   --framerate: float # Optional. A specific video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
   --maxFramerate: float # Optional. A specific maximum video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
-  --copyTimestamps: string@bool-completer # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
+  --copyTimestamps: oneof<nothing, bool> # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
   --startTimeTicks: int # Optional. Specify a starting offset, in ticks. 1 tick = 10000 ms. (format: int64)
   --width: int # Optional. The fixed horizontal resolution of the encoded video. (format: int32)
   --height: int # Optional. The fixed vertical resolution of the encoded video. (format: int32)
@@ -1631,13 +1630,13 @@ export def "audio-mainm3u8 GetVariantHlsAudioPlaylist" [
   --subtitleMethod: string@subtitleMethod-completer # Optional. Specify the subtitle delivery method.
   --maxRefFrames: int # Optional. (format: int32)
   --maxVideoBitDepth: int # Optional. The maximum video bit depth. (format: int32)
-  --requireAvc: string@bool-completer # Optional. Whether to require avc.
-  --deInterlace: string@bool-completer # Optional. Whether to deinterlace the video.
-  --requireNonAnamorphic: string@bool-completer # Optional. Whether to require a non anamorphic stream.
+  --requireAvc: oneof<nothing, bool> # Optional. Whether to require avc.
+  --deInterlace: oneof<nothing, bool> # Optional. Whether to deinterlace the video.
+  --requireNonAnamorphic: oneof<nothing, bool> # Optional. Whether to require a non anamorphic stream.
   --transcodingMaxAudioChannels: int # Optional. The maximum number of audio channels to transcode. (format: int32)
   --cpuCoreLimit: int # Optional. The limit of how many cpu cores to use. (format: int32)
   --liveStreamId: string # The live stream id.
-  --enableMpegtsM2TsMode: string@bool-completer # Optional. Whether to enable the MpegtsM2Ts mode.
+  --enableMpegtsM2TsMode: oneof<nothing, bool> # Optional. Whether to enable the MpegtsM2Ts mode.
   --videoCodec: string # Optional. Specify a video codec to encode to, e.g. h264.
   --subtitleCodec: string # Optional. Specify a subtitle codec to encode to.
   --transcodeReasons: string # Optional. The transcoding reason.
@@ -1645,7 +1644,7 @@ export def "audio-mainm3u8 GetVariantHlsAudioPlaylist" [
   --videoStreamIndex: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --streamOptions: record # Optional. The streaming options.
-  --enableAudioVbrEncoding: string@bool-completer # Optional. Whether to enable Audio Encoding. (default: true)
+  --enableAudioVbrEncoding: oneof<nothing, bool> # Optional. Whether to enable Audio Encoding. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1670,7 +1669,7 @@ export def "audio-masterm3u8 GetMasterHlsAudioPlaylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --static: string@bool-completer # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
+  --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
   --deviceProfileId: string # Optional. The dlna device profile id to utilize. (DEPRECATED)
@@ -1681,10 +1680,10 @@ export def "audio-masterm3u8 GetMasterHlsAudioPlaylist" [
   --mediaSourceId: string # The media version id, if playing an alternate version.
   --deviceId: string # The device id of the client requesting. Used to stop encoding processes when needed.
   --audioCodec: string # Optional. Specify an audio codec to encode to, e.g. mp3.
-  --enableAutoStreamCopy: string@bool-completer # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
-  --allowVideoStreamCopy: string@bool-completer # Whether or not to allow copying of the video stream url.
-  --allowAudioStreamCopy: string@bool-completer # Whether or not to allow copying of the audio stream url.
-  --breakOnNonKeyFrames: string@bool-completer # Optional. Whether to break on non key frames.
+  --enableAutoStreamCopy: oneof<nothing, bool> # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
+  --allowVideoStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the video stream url.
+  --allowAudioStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the audio stream url.
+  --breakOnNonKeyFrames: oneof<nothing, bool> # Optional. Whether to break on non key frames.
   --audioSampleRate: int # Optional. Specify a specific audio sample rate, e.g. 44100. (format: int32)
   --maxAudioBitDepth: int # Optional. The maximum audio bit depth. (format: int32)
   --maxStreamingBitrate: int # Optional. The maximum streaming bitrate. (format: int32)
@@ -1695,7 +1694,7 @@ export def "audio-masterm3u8 GetMasterHlsAudioPlaylist" [
   --level: string # Optional. Specify a level for the encoder profile (varies by encoder), e.g. 3, 3.1.
   --framerate: float # Optional. A specific video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
   --maxFramerate: float # Optional. A specific maximum video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
-  --copyTimestamps: string@bool-completer # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
+  --copyTimestamps: oneof<nothing, bool> # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
   --startTimeTicks: int # Optional. Specify a starting offset, in ticks. 1 tick = 10000 ms. (format: int64)
   --width: int # Optional. The fixed horizontal resolution of the encoded video. (format: int32)
   --height: int # Optional. The fixed vertical resolution of the encoded video. (format: int32)
@@ -1704,13 +1703,13 @@ export def "audio-masterm3u8 GetMasterHlsAudioPlaylist" [
   --subtitleMethod: string@subtitleMethod-completer # Optional. Specify the subtitle delivery method.
   --maxRefFrames: int # Optional. (format: int32)
   --maxVideoBitDepth: int # Optional. The maximum video bit depth. (format: int32)
-  --requireAvc: string@bool-completer # Optional. Whether to require avc.
-  --deInterlace: string@bool-completer # Optional. Whether to deinterlace the video.
-  --requireNonAnamorphic: string@bool-completer # Optional. Whether to require a non anamorphic stream.
+  --requireAvc: oneof<nothing, bool> # Optional. Whether to require avc.
+  --deInterlace: oneof<nothing, bool> # Optional. Whether to deinterlace the video.
+  --requireNonAnamorphic: oneof<nothing, bool> # Optional. Whether to require a non anamorphic stream.
   --transcodingMaxAudioChannels: int # Optional. The maximum number of audio channels to transcode. (format: int32)
   --cpuCoreLimit: int # Optional. The limit of how many cpu cores to use. (format: int32)
   --liveStreamId: string # The live stream id.
-  --enableMpegtsM2TsMode: string@bool-completer # Optional. Whether to enable the MpegtsM2Ts mode.
+  --enableMpegtsM2TsMode: oneof<nothing, bool> # Optional. Whether to enable the MpegtsM2Ts mode.
   --videoCodec: string # Optional. Specify a video codec to encode to, e.g. h264.
   --subtitleCodec: string # Optional. Specify a subtitle codec to encode to.
   --transcodeReasons: string # Optional. The transcoding reason.
@@ -1718,8 +1717,8 @@ export def "audio-masterm3u8 GetMasterHlsAudioPlaylist" [
   --videoStreamIndex: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --streamOptions: record # Optional. The streaming options.
-  --enableAdaptiveBitrateStreaming: string@bool-completer # Enable adaptive bitrate streaming. (default: false)
-  --enableAudioVbrEncoding: string@bool-completer # Optional. Whether to enable Audio Encoding. (default: true)
+  --enableAdaptiveBitrateStreaming: oneof<nothing, bool> # Enable adaptive bitrate streaming. (default: false)
+  --enableAudioVbrEncoding: oneof<nothing, bool> # Optional. Whether to enable Audio Encoding. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1744,7 +1743,7 @@ export def "audio-masterm3u8 HeadMasterHlsAudioPlaylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --static: string@bool-completer # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
+  --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
   --deviceProfileId: string # Optional. The dlna device profile id to utilize. (DEPRECATED)
@@ -1755,10 +1754,10 @@ export def "audio-masterm3u8 HeadMasterHlsAudioPlaylist" [
   --mediaSourceId: string # The media version id, if playing an alternate version.
   --deviceId: string # The device id of the client requesting. Used to stop encoding processes when needed.
   --audioCodec: string # Optional. Specify an audio codec to encode to, e.g. mp3.
-  --enableAutoStreamCopy: string@bool-completer # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
-  --allowVideoStreamCopy: string@bool-completer # Whether or not to allow copying of the video stream url.
-  --allowAudioStreamCopy: string@bool-completer # Whether or not to allow copying of the audio stream url.
-  --breakOnNonKeyFrames: string@bool-completer # Optional. Whether to break on non key frames.
+  --enableAutoStreamCopy: oneof<nothing, bool> # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
+  --allowVideoStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the video stream url.
+  --allowAudioStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the audio stream url.
+  --breakOnNonKeyFrames: oneof<nothing, bool> # Optional. Whether to break on non key frames.
   --audioSampleRate: int # Optional. Specify a specific audio sample rate, e.g. 44100. (format: int32)
   --maxAudioBitDepth: int # Optional. The maximum audio bit depth. (format: int32)
   --maxStreamingBitrate: int # Optional. The maximum streaming bitrate. (format: int32)
@@ -1769,7 +1768,7 @@ export def "audio-masterm3u8 HeadMasterHlsAudioPlaylist" [
   --level: string # Optional. Specify a level for the encoder profile (varies by encoder), e.g. 3, 3.1.
   --framerate: float # Optional. A specific video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
   --maxFramerate: float # Optional. A specific maximum video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
-  --copyTimestamps: string@bool-completer # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
+  --copyTimestamps: oneof<nothing, bool> # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
   --startTimeTicks: int # Optional. Specify a starting offset, in ticks. 1 tick = 10000 ms. (format: int64)
   --width: int # Optional. The fixed horizontal resolution of the encoded video. (format: int32)
   --height: int # Optional. The fixed vertical resolution of the encoded video. (format: int32)
@@ -1778,13 +1777,13 @@ export def "audio-masterm3u8 HeadMasterHlsAudioPlaylist" [
   --subtitleMethod: string@subtitleMethod-completer # Optional. Specify the subtitle delivery method.
   --maxRefFrames: int # Optional. (format: int32)
   --maxVideoBitDepth: int # Optional. The maximum video bit depth. (format: int32)
-  --requireAvc: string@bool-completer # Optional. Whether to require avc.
-  --deInterlace: string@bool-completer # Optional. Whether to deinterlace the video.
-  --requireNonAnamorphic: string@bool-completer # Optional. Whether to require a non anamorphic stream.
+  --requireAvc: oneof<nothing, bool> # Optional. Whether to require avc.
+  --deInterlace: oneof<nothing, bool> # Optional. Whether to deinterlace the video.
+  --requireNonAnamorphic: oneof<nothing, bool> # Optional. Whether to require a non anamorphic stream.
   --transcodingMaxAudioChannels: int # Optional. The maximum number of audio channels to transcode. (format: int32)
   --cpuCoreLimit: int # Optional. The limit of how many cpu cores to use. (format: int32)
   --liveStreamId: string # The live stream id.
-  --enableMpegtsM2TsMode: string@bool-completer # Optional. Whether to enable the MpegtsM2Ts mode.
+  --enableMpegtsM2TsMode: oneof<nothing, bool> # Optional. Whether to enable the MpegtsM2Ts mode.
   --videoCodec: string # Optional. Specify a video codec to encode to, e.g. h264.
   --subtitleCodec: string # Optional. Specify a subtitle codec to encode to.
   --transcodeReasons: string # Optional. The transcoding reason.
@@ -1792,8 +1791,8 @@ export def "audio-masterm3u8 HeadMasterHlsAudioPlaylist" [
   --videoStreamIndex: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --streamOptions: record # Optional. The streaming options.
-  --enableAdaptiveBitrateStreaming: string@bool-completer # Enable adaptive bitrate streaming. (default: false)
-  --enableAudioVbrEncoding: string@bool-completer # Optional. Whether to enable Audio Encoding. (default: true)
+  --enableAdaptiveBitrateStreaming: oneof<nothing, bool> # Enable adaptive bitrate streaming. (default: false)
+  --enableAudioVbrEncoding: oneof<nothing, bool> # Optional. Whether to enable Audio Encoding. (default: true)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1823,7 +1822,7 @@ export def "videos-hls1 GetHlsVideoSegment" [
   --allow-errors(-e) # Return full response without error handling
   --runtimeTicks: int # The position of the requested segment in ticks. (format: int64)
   --actualSegmentLengthTicks: int # The length of the requested segment in ticks. (format: int64)
-  --static: string@bool-completer # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
+  --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
   --deviceProfileId: string # Optional. The dlna device profile id to utilize. (DEPRECATED)
@@ -1834,10 +1833,10 @@ export def "videos-hls1 GetHlsVideoSegment" [
   --mediaSourceId: string # The media version id, if playing an alternate version.
   --deviceId: string # The device id of the client requesting. Used to stop encoding processes when needed.
   --audioCodec: string # Optional. Specify an audio codec to encode to, e.g. mp3.
-  --enableAutoStreamCopy: string@bool-completer # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
-  --allowVideoStreamCopy: string@bool-completer # Whether or not to allow copying of the video stream url.
-  --allowAudioStreamCopy: string@bool-completer # Whether or not to allow copying of the audio stream url.
-  --breakOnNonKeyFrames: string@bool-completer # Optional. Whether to break on non key frames.
+  --enableAutoStreamCopy: oneof<nothing, bool> # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
+  --allowVideoStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the video stream url.
+  --allowAudioStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the audio stream url.
+  --breakOnNonKeyFrames: oneof<nothing, bool> # Optional. Whether to break on non key frames.
   --audioSampleRate: int # Optional. Specify a specific audio sample rate, e.g. 44100. (format: int32)
   --maxAudioBitDepth: int # Optional. The maximum audio bit depth. (format: int32)
   --audioBitRate: int # Optional. Specify an audio bitrate to encode to, e.g. 128000. If omitted this will be left to encoder defaults. (format: int32)
@@ -1847,7 +1846,7 @@ export def "videos-hls1 GetHlsVideoSegment" [
   --level: string # Optional. Specify a level for the encoder profile (varies by encoder), e.g. 3, 3.1.
   --framerate: float # Optional. A specific video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
   --maxFramerate: float # Optional. A specific maximum video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
-  --copyTimestamps: string@bool-completer # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
+  --copyTimestamps: oneof<nothing, bool> # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
   --startTimeTicks: int # Optional. Specify a starting offset, in ticks. 1 tick = 10000 ms. (format: int64)
   --width: int # Optional. The fixed horizontal resolution of the encoded video. (format: int32)
   --height: int # Optional. The fixed vertical resolution of the encoded video. (format: int32)
@@ -1858,13 +1857,13 @@ export def "videos-hls1 GetHlsVideoSegment" [
   --subtitleMethod: string@subtitleMethod-completer # Optional. Specify the subtitle delivery method.
   --maxRefFrames: int # Optional. (format: int32)
   --maxVideoBitDepth: int # Optional. The maximum video bit depth. (format: int32)
-  --requireAvc: string@bool-completer # Optional. Whether to require avc.
-  --deInterlace: string@bool-completer # Optional. Whether to deinterlace the video.
-  --requireNonAnamorphic: string@bool-completer # Optional. Whether to require a non anamorphic stream.
+  --requireAvc: oneof<nothing, bool> # Optional. Whether to require avc.
+  --deInterlace: oneof<nothing, bool> # Optional. Whether to deinterlace the video.
+  --requireNonAnamorphic: oneof<nothing, bool> # Optional. Whether to require a non anamorphic stream.
   --transcodingMaxAudioChannels: int # Optional. The maximum number of audio channels to transcode. (format: int32)
   --cpuCoreLimit: int # Optional. The limit of how many cpu cores to use. (format: int32)
   --liveStreamId: string # The live stream id.
-  --enableMpegtsM2TsMode: string@bool-completer # Optional. Whether to enable the MpegtsM2Ts mode.
+  --enableMpegtsM2TsMode: oneof<nothing, bool> # Optional. Whether to enable the MpegtsM2Ts mode.
   --videoCodec: string # Optional. Specify a video codec to encode to, e.g. h264.
   --subtitleCodec: string # Optional. Specify a subtitle codec to encode to.
   --transcodeReasons: string # Optional. The transcoding reason.
@@ -1872,8 +1871,8 @@ export def "videos-hls1 GetHlsVideoSegment" [
   --videoStreamIndex: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --streamOptions: record # Optional. The streaming options.
-  --enableAudioVbrEncoding: string@bool-completer # Optional. Whether to enable Audio Encoding. (default: true)
-  --alwaysBurnInSubtitleWhenTranscoding: string@bool-completer # Whether to always burn in subtitles when transcoding. (default: false)
+  --enableAudioVbrEncoding: oneof<nothing, bool> # Optional. Whether to enable Audio Encoding. (default: true)
+  --alwaysBurnInSubtitleWhenTranscoding: oneof<nothing, bool> # Whether to always burn in subtitles when transcoding. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1899,7 +1898,7 @@ export def "videos-livem3u8 GetLiveHlsStream" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --container: string # The audio container.
-  --static: string@bool-completer # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
+  --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
   --deviceProfileId: string # Optional. The dlna device profile id to utilize. (DEPRECATED)
@@ -1910,10 +1909,10 @@ export def "videos-livem3u8 GetLiveHlsStream" [
   --mediaSourceId: string # The media version id, if playing an alternate version.
   --deviceId: string # The device id of the client requesting. Used to stop encoding processes when needed.
   --audioCodec: string # Optional. Specify an audio codec to encode to, e.g. mp3.
-  --enableAutoStreamCopy: string@bool-completer # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
-  --allowVideoStreamCopy: string@bool-completer # Whether or not to allow copying of the video stream url.
-  --allowAudioStreamCopy: string@bool-completer # Whether or not to allow copying of the audio stream url.
-  --breakOnNonKeyFrames: string@bool-completer # Optional. Whether to break on non key frames.
+  --enableAutoStreamCopy: oneof<nothing, bool> # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
+  --allowVideoStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the video stream url.
+  --allowAudioStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the audio stream url.
+  --breakOnNonKeyFrames: oneof<nothing, bool> # Optional. Whether to break on non key frames.
   --audioSampleRate: int # Optional. Specify a specific audio sample rate, e.g. 44100. (format: int32)
   --maxAudioBitDepth: int # Optional. The maximum audio bit depth. (format: int32)
   --audioBitRate: int # Optional. Specify an audio bitrate to encode to, e.g. 128000. If omitted this will be left to encoder defaults. (format: int32)
@@ -1923,7 +1922,7 @@ export def "videos-livem3u8 GetLiveHlsStream" [
   --level: string # Optional. Specify a level for the encoder profile (varies by encoder), e.g. 3, 3.1.
   --framerate: float # Optional. A specific video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
   --maxFramerate: float # Optional. A specific maximum video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
-  --copyTimestamps: string@bool-completer # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
+  --copyTimestamps: oneof<nothing, bool> # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
   --startTimeTicks: int # Optional. Specify a starting offset, in ticks. 1 tick = 10000 ms. (format: int64)
   --width: int # Optional. The fixed horizontal resolution of the encoded video. (format: int32)
   --height: int # Optional. The fixed vertical resolution of the encoded video. (format: int32)
@@ -1932,13 +1931,13 @@ export def "videos-livem3u8 GetLiveHlsStream" [
   --subtitleMethod: string@subtitleMethod-completer # Optional. Specify the subtitle delivery method.
   --maxRefFrames: int # Optional. (format: int32)
   --maxVideoBitDepth: int # Optional. The maximum video bit depth. (format: int32)
-  --requireAvc: string@bool-completer # Optional. Whether to require avc.
-  --deInterlace: string@bool-completer # Optional. Whether to deinterlace the video.
-  --requireNonAnamorphic: string@bool-completer # Optional. Whether to require a non anamorphic stream.
+  --requireAvc: oneof<nothing, bool> # Optional. Whether to require avc.
+  --deInterlace: oneof<nothing, bool> # Optional. Whether to deinterlace the video.
+  --requireNonAnamorphic: oneof<nothing, bool> # Optional. Whether to require a non anamorphic stream.
   --transcodingMaxAudioChannels: int # Optional. The maximum number of audio channels to transcode. (format: int32)
   --cpuCoreLimit: int # Optional. The limit of how many cpu cores to use. (format: int32)
   --liveStreamId: string # The live stream id.
-  --enableMpegtsM2TsMode: string@bool-completer # Optional. Whether to enable the MpegtsM2Ts mode.
+  --enableMpegtsM2TsMode: oneof<nothing, bool> # Optional. Whether to enable the MpegtsM2Ts mode.
   --videoCodec: string # Optional. Specify a video codec to encode to, e.g. h264.
   --subtitleCodec: string # Optional. Specify a subtitle codec to encode to.
   --transcodeReasons: string # Optional. The transcoding reason.
@@ -1948,9 +1947,9 @@ export def "videos-livem3u8 GetLiveHlsStream" [
   --streamOptions: record # Optional. The streaming options.
   --maxWidth: int # Optional. The max width. (format: int32)
   --maxHeight: int # Optional. The max height. (format: int32)
-  --enableSubtitlesInManifest: string@bool-completer # Optional. Whether to enable subtitles in the manifest.
-  --enableAudioVbrEncoding: string@bool-completer # Optional. Whether to enable Audio Encoding. (default: true)
-  --alwaysBurnInSubtitleWhenTranscoding: string@bool-completer # Whether to always burn in subtitles when transcoding. (default: false)
+  --enableSubtitlesInManifest: oneof<nothing, bool> # Optional. Whether to enable subtitles in the manifest.
+  --enableAudioVbrEncoding: oneof<nothing, bool> # Optional. Whether to enable Audio Encoding. (default: true)
+  --alwaysBurnInSubtitleWhenTranscoding: oneof<nothing, bool> # Whether to always burn in subtitles when transcoding. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1975,7 +1974,7 @@ export def "videos-mainm3u8 GetVariantHlsVideoPlaylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --static: string@bool-completer # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
+  --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
   --deviceProfileId: string # Optional. The dlna device profile id to utilize. (DEPRECATED)
@@ -1986,10 +1985,10 @@ export def "videos-mainm3u8 GetVariantHlsVideoPlaylist" [
   --mediaSourceId: string # The media version id, if playing an alternate version.
   --deviceId: string # The device id of the client requesting. Used to stop encoding processes when needed.
   --audioCodec: string # Optional. Specify an audio codec to encode to, e.g. mp3.
-  --enableAutoStreamCopy: string@bool-completer # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
-  --allowVideoStreamCopy: string@bool-completer # Whether or not to allow copying of the video stream url.
-  --allowAudioStreamCopy: string@bool-completer # Whether or not to allow copying of the audio stream url.
-  --breakOnNonKeyFrames: string@bool-completer # Optional. Whether to break on non key frames.
+  --enableAutoStreamCopy: oneof<nothing, bool> # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
+  --allowVideoStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the video stream url.
+  --allowAudioStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the audio stream url.
+  --breakOnNonKeyFrames: oneof<nothing, bool> # Optional. Whether to break on non key frames.
   --audioSampleRate: int # Optional. Specify a specific audio sample rate, e.g. 44100. (format: int32)
   --maxAudioBitDepth: int # Optional. The maximum audio bit depth. (format: int32)
   --audioBitRate: int # Optional. Specify an audio bitrate to encode to, e.g. 128000. If omitted this will be left to encoder defaults. (format: int32)
@@ -1999,7 +1998,7 @@ export def "videos-mainm3u8 GetVariantHlsVideoPlaylist" [
   --level: string # Optional. Specify a level for the encoder profile (varies by encoder), e.g. 3, 3.1.
   --framerate: float # Optional. A specific video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
   --maxFramerate: float # Optional. A specific maximum video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
-  --copyTimestamps: string@bool-completer # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
+  --copyTimestamps: oneof<nothing, bool> # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
   --startTimeTicks: int # Optional. Specify a starting offset, in ticks. 1 tick = 10000 ms. (format: int64)
   --width: int # Optional. The fixed horizontal resolution of the encoded video. (format: int32)
   --height: int # Optional. The fixed vertical resolution of the encoded video. (format: int32)
@@ -2010,13 +2009,13 @@ export def "videos-mainm3u8 GetVariantHlsVideoPlaylist" [
   --subtitleMethod: string@subtitleMethod-completer # Optional. Specify the subtitle delivery method.
   --maxRefFrames: int # Optional. (format: int32)
   --maxVideoBitDepth: int # Optional. The maximum video bit depth. (format: int32)
-  --requireAvc: string@bool-completer # Optional. Whether to require avc.
-  --deInterlace: string@bool-completer # Optional. Whether to deinterlace the video.
-  --requireNonAnamorphic: string@bool-completer # Optional. Whether to require a non anamorphic stream.
+  --requireAvc: oneof<nothing, bool> # Optional. Whether to require avc.
+  --deInterlace: oneof<nothing, bool> # Optional. Whether to deinterlace the video.
+  --requireNonAnamorphic: oneof<nothing, bool> # Optional. Whether to require a non anamorphic stream.
   --transcodingMaxAudioChannels: int # Optional. The maximum number of audio channels to transcode. (format: int32)
   --cpuCoreLimit: int # Optional. The limit of how many cpu cores to use. (format: int32)
   --liveStreamId: string # The live stream id.
-  --enableMpegtsM2TsMode: string@bool-completer # Optional. Whether to enable the MpegtsM2Ts mode.
+  --enableMpegtsM2TsMode: oneof<nothing, bool> # Optional. Whether to enable the MpegtsM2Ts mode.
   --videoCodec: string # Optional. Specify a video codec to encode to, e.g. h264.
   --subtitleCodec: string # Optional. Specify a subtitle codec to encode to.
   --transcodeReasons: string # Optional. The transcoding reason.
@@ -2024,8 +2023,8 @@ export def "videos-mainm3u8 GetVariantHlsVideoPlaylist" [
   --videoStreamIndex: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --streamOptions: record # Optional. The streaming options.
-  --enableAudioVbrEncoding: string@bool-completer # Optional. Whether to enable Audio Encoding. (default: true)
-  --alwaysBurnInSubtitleWhenTranscoding: string@bool-completer # Whether to always burn in subtitles when transcoding. (default: false)
+  --enableAudioVbrEncoding: oneof<nothing, bool> # Optional. Whether to enable Audio Encoding. (default: true)
+  --alwaysBurnInSubtitleWhenTranscoding: oneof<nothing, bool> # Whether to always burn in subtitles when transcoding. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2050,7 +2049,7 @@ export def "videos-masterm3u8 GetMasterHlsVideoPlaylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --static: string@bool-completer # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
+  --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
   --deviceProfileId: string # Optional. The dlna device profile id to utilize. (DEPRECATED)
@@ -2061,10 +2060,10 @@ export def "videos-masterm3u8 GetMasterHlsVideoPlaylist" [
   --mediaSourceId: string # The media version id, if playing an alternate version.
   --deviceId: string # The device id of the client requesting. Used to stop encoding processes when needed.
   --audioCodec: string # Optional. Specify an audio codec to encode to, e.g. mp3.
-  --enableAutoStreamCopy: string@bool-completer # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
-  --allowVideoStreamCopy: string@bool-completer # Whether or not to allow copying of the video stream url.
-  --allowAudioStreamCopy: string@bool-completer # Whether or not to allow copying of the audio stream url.
-  --breakOnNonKeyFrames: string@bool-completer # Optional. Whether to break on non key frames.
+  --enableAutoStreamCopy: oneof<nothing, bool> # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
+  --allowVideoStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the video stream url.
+  --allowAudioStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the audio stream url.
+  --breakOnNonKeyFrames: oneof<nothing, bool> # Optional. Whether to break on non key frames.
   --audioSampleRate: int # Optional. Specify a specific audio sample rate, e.g. 44100. (format: int32)
   --maxAudioBitDepth: int # Optional. The maximum audio bit depth. (format: int32)
   --audioBitRate: int # Optional. Specify an audio bitrate to encode to, e.g. 128000. If omitted this will be left to encoder defaults. (format: int32)
@@ -2074,7 +2073,7 @@ export def "videos-masterm3u8 GetMasterHlsVideoPlaylist" [
   --level: string # Optional. Specify a level for the encoder profile (varies by encoder), e.g. 3, 3.1.
   --framerate: float # Optional. A specific video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
   --maxFramerate: float # Optional. A specific maximum video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
-  --copyTimestamps: string@bool-completer # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
+  --copyTimestamps: oneof<nothing, bool> # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
   --startTimeTicks: int # Optional. Specify a starting offset, in ticks. 1 tick = 10000 ms. (format: int64)
   --width: int # Optional. The fixed horizontal resolution of the encoded video. (format: int32)
   --height: int # Optional. The fixed vertical resolution of the encoded video. (format: int32)
@@ -2085,13 +2084,13 @@ export def "videos-masterm3u8 GetMasterHlsVideoPlaylist" [
   --subtitleMethod: string@subtitleMethod-completer # Optional. Specify the subtitle delivery method.
   --maxRefFrames: int # Optional. (format: int32)
   --maxVideoBitDepth: int # Optional. The maximum video bit depth. (format: int32)
-  --requireAvc: string@bool-completer # Optional. Whether to require avc.
-  --deInterlace: string@bool-completer # Optional. Whether to deinterlace the video.
-  --requireNonAnamorphic: string@bool-completer # Optional. Whether to require a non anamorphic stream.
+  --requireAvc: oneof<nothing, bool> # Optional. Whether to require avc.
+  --deInterlace: oneof<nothing, bool> # Optional. Whether to deinterlace the video.
+  --requireNonAnamorphic: oneof<nothing, bool> # Optional. Whether to require a non anamorphic stream.
   --transcodingMaxAudioChannels: int # Optional. The maximum number of audio channels to transcode. (format: int32)
   --cpuCoreLimit: int # Optional. The limit of how many cpu cores to use. (format: int32)
   --liveStreamId: string # The live stream id.
-  --enableMpegtsM2TsMode: string@bool-completer # Optional. Whether to enable the MpegtsM2Ts mode.
+  --enableMpegtsM2TsMode: oneof<nothing, bool> # Optional. Whether to enable the MpegtsM2Ts mode.
   --videoCodec: string # Optional. Specify a video codec to encode to, e.g. h264.
   --subtitleCodec: string # Optional. Specify a subtitle codec to encode to.
   --transcodeReasons: string # Optional. The transcoding reason.
@@ -2099,10 +2098,10 @@ export def "videos-masterm3u8 GetMasterHlsVideoPlaylist" [
   --videoStreamIndex: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --streamOptions: record # Optional. The streaming options.
-  --enableAdaptiveBitrateStreaming: string@bool-completer # Enable adaptive bitrate streaming. (default: false)
-  --enableTrickplay: string@bool-completer # Enable trickplay image playlists being added to master playlist. (default: true)
-  --enableAudioVbrEncoding: string@bool-completer # Whether to enable Audio Encoding. (default: true)
-  --alwaysBurnInSubtitleWhenTranscoding: string@bool-completer # Whether to always burn in subtitles when transcoding. (default: false)
+  --enableAdaptiveBitrateStreaming: oneof<nothing, bool> # Enable adaptive bitrate streaming. (default: false)
+  --enableTrickplay: oneof<nothing, bool> # Enable trickplay image playlists being added to master playlist. (default: true)
+  --enableAudioVbrEncoding: oneof<nothing, bool> # Whether to enable Audio Encoding. (default: true)
+  --alwaysBurnInSubtitleWhenTranscoding: oneof<nothing, bool> # Whether to always burn in subtitles when transcoding. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2127,7 +2126,7 @@ export def "videos-masterm3u8 HeadMasterHlsVideoPlaylist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --static: string@bool-completer # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
+  --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
   --deviceProfileId: string # Optional. The dlna device profile id to utilize. (DEPRECATED)
@@ -2138,10 +2137,10 @@ export def "videos-masterm3u8 HeadMasterHlsVideoPlaylist" [
   --mediaSourceId: string # The media version id, if playing an alternate version.
   --deviceId: string # The device id of the client requesting. Used to stop encoding processes when needed.
   --audioCodec: string # Optional. Specify an audio codec to encode to, e.g. mp3.
-  --enableAutoStreamCopy: string@bool-completer # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
-  --allowVideoStreamCopy: string@bool-completer # Whether or not to allow copying of the video stream url.
-  --allowAudioStreamCopy: string@bool-completer # Whether or not to allow copying of the audio stream url.
-  --breakOnNonKeyFrames: string@bool-completer # Optional. Whether to break on non key frames.
+  --enableAutoStreamCopy: oneof<nothing, bool> # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
+  --allowVideoStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the video stream url.
+  --allowAudioStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the audio stream url.
+  --breakOnNonKeyFrames: oneof<nothing, bool> # Optional. Whether to break on non key frames.
   --audioSampleRate: int # Optional. Specify a specific audio sample rate, e.g. 44100. (format: int32)
   --maxAudioBitDepth: int # Optional. The maximum audio bit depth. (format: int32)
   --audioBitRate: int # Optional. Specify an audio bitrate to encode to, e.g. 128000. If omitted this will be left to encoder defaults. (format: int32)
@@ -2151,7 +2150,7 @@ export def "videos-masterm3u8 HeadMasterHlsVideoPlaylist" [
   --level: string # Optional. Specify a level for the encoder profile (varies by encoder), e.g. 3, 3.1.
   --framerate: float # Optional. A specific video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
   --maxFramerate: float # Optional. A specific maximum video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
-  --copyTimestamps: string@bool-completer # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
+  --copyTimestamps: oneof<nothing, bool> # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
   --startTimeTicks: int # Optional. Specify a starting offset, in ticks. 1 tick = 10000 ms. (format: int64)
   --width: int # Optional. The fixed horizontal resolution of the encoded video. (format: int32)
   --height: int # Optional. The fixed vertical resolution of the encoded video. (format: int32)
@@ -2162,13 +2161,13 @@ export def "videos-masterm3u8 HeadMasterHlsVideoPlaylist" [
   --subtitleMethod: string@subtitleMethod-completer # Optional. Specify the subtitle delivery method.
   --maxRefFrames: int # Optional. (format: int32)
   --maxVideoBitDepth: int # Optional. The maximum video bit depth. (format: int32)
-  --requireAvc: string@bool-completer # Optional. Whether to require avc.
-  --deInterlace: string@bool-completer # Optional. Whether to deinterlace the video.
-  --requireNonAnamorphic: string@bool-completer # Optional. Whether to require a non anamorphic stream.
+  --requireAvc: oneof<nothing, bool> # Optional. Whether to require avc.
+  --deInterlace: oneof<nothing, bool> # Optional. Whether to deinterlace the video.
+  --requireNonAnamorphic: oneof<nothing, bool> # Optional. Whether to require a non anamorphic stream.
   --transcodingMaxAudioChannels: int # Optional. The maximum number of audio channels to transcode. (format: int32)
   --cpuCoreLimit: int # Optional. The limit of how many cpu cores to use. (format: int32)
   --liveStreamId: string # The live stream id.
-  --enableMpegtsM2TsMode: string@bool-completer # Optional. Whether to enable the MpegtsM2Ts mode.
+  --enableMpegtsM2TsMode: oneof<nothing, bool> # Optional. Whether to enable the MpegtsM2Ts mode.
   --videoCodec: string # Optional. Specify a video codec to encode to, e.g. h264.
   --subtitleCodec: string # Optional. Specify a subtitle codec to encode to.
   --transcodeReasons: string # Optional. The transcoding reason.
@@ -2176,10 +2175,10 @@ export def "videos-masterm3u8 HeadMasterHlsVideoPlaylist" [
   --videoStreamIndex: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --streamOptions: record # Optional. The streaming options.
-  --enableAdaptiveBitrateStreaming: string@bool-completer # Enable adaptive bitrate streaming. (default: false)
-  --enableTrickplay: string@bool-completer # Enable trickplay image playlists being added to master playlist. (default: true)
-  --enableAudioVbrEncoding: string@bool-completer # Whether to enable Audio Encoding. (default: true)
-  --alwaysBurnInSubtitleWhenTranscoding: string@bool-completer # Whether to always burn in subtitles when transcoding. (default: false)
+  --enableAdaptiveBitrateStreaming: oneof<nothing, bool> # Enable adaptive bitrate streaming. (default: false)
+  --enableTrickplay: oneof<nothing, bool> # Enable trickplay image playlists being added to master playlist. (default: true)
+  --enableAudioVbrEncoding: oneof<nothing, bool> # Whether to enable Audio Encoding. (default: true)
+  --alwaysBurnInSubtitleWhenTranscoding: oneof<nothing, bool> # Whether to always burn in subtitles when transcoding. (default: false)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2226,8 +2225,8 @@ export def "environment-directory-contents GetDirectoryContents" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --path: string # The path.
-  --includeFiles: string@bool-completer # An optional filter to include or exclude files from the results. true/false. (default: false)
-  --includeDirectories: string@bool-completer # An optional filter to include or exclude folders from the results. true/false. (default: false)
+  --includeFiles: oneof<nothing, bool> # An optional filter to include or exclude files from the results. true/false. (default: false)
+  --includeDirectories: oneof<nothing, bool> # An optional filter to include or exclude folders from the results. true/false. (default: false)
 ]: nothing -> table<Name: string, Path: string, Type: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2320,9 +2319,9 @@ export def "environment-validate-path ValidatePath" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ValidateWritable: string@bool-completer # Gets or sets a value indicating whether validate if path is writable.
+  --ValidateWritable: oneof<nothing, bool> # Gets or sets a value indicating whether validate if path is writable.
   --Path: string # Gets or sets the path. (nullable)
-  --IsFile: string@bool-completer # Gets or sets is path file. (nullable)
+  --IsFile: oneof<nothing, bool> # Gets or sets is path file. (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2378,13 +2377,13 @@ export def "items-filters2 GetQueryFilters" [
   --userId: string # Optional. User id. (format: uuid)
   --parentId: string # Optional. Specify this to localize the search to a specific item or folder. Omit to use the root. (format: uuid)
   --includeItemTypes: list # Optional. If specified, results will be filtered based on item type. This allows multiple, comma delimited.
-  --isAiring: string@bool-completer # Optional. Is item airing.
-  --isMovie: string@bool-completer # Optional. Is item movie.
-  --isSports: string@bool-completer # Optional. Is item sports.
-  --isKids: string@bool-completer # Optional. Is item kids.
-  --isNews: string@bool-completer # Optional. Is item news.
-  --isSeries: string@bool-completer # Optional. Is item series.
-  --recursive: string@bool-completer # Optional. Search recursive.
+  --isAiring: oneof<nothing, bool> # Optional. Is item airing.
+  --isMovie: oneof<nothing, bool> # Optional. Is item movie.
+  --isSports: oneof<nothing, bool> # Optional. Is item sports.
+  --isKids: oneof<nothing, bool> # Optional. Is item kids.
+  --isNews: oneof<nothing, bool> # Optional. Is item news.
+  --isSeries: oneof<nothing, bool> # Optional. Is item series.
+  --recursive: oneof<nothing, bool> # Optional. Search recursive.
 ]: nothing -> record<Genres: table<Name: string, Id: string>, Tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2415,7 +2414,7 @@ export def "genres GetGenres" [
   --qp-fields: list # Optional. Specify additional fields of information to return in the output.
   --excludeItemTypes: list # Optional. If specified, results will be filtered out based on item type. This allows multiple, comma delimited.
   --includeItemTypes: list # Optional. If specified, results will be filtered in based on item type. This allows multiple, comma delimited.
-  --isFavorite: string@bool-completer # Optional filter by items that are marked as favorite, or not.
+  --isFavorite: oneof<nothing, bool> # Optional filter by items that are marked as favorite, or not.
   --imageTypeLimit: int # Optional, the max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
   --userId: string # User id. (format: uuid)
@@ -2424,8 +2423,8 @@ export def "genres GetGenres" [
   --nameLessThan: string # Optional filter by items whose name is equally or lesser than a given input string.
   --sortBy: list # Optional. Specify one or more sort orders, comma delimited.
   --sortOrder: list # Sort Order - Ascending,Descending.
-  --enableImages: string@bool-completer # Optional, include image information in output. (default: true)
-  --enableTotalRecordCount: string@bool-completer # Optional. Include total record count. (default: true)
+  --enableImages: oneof<nothing, bool> # Optional, include image information in output. (default: true)
+  --enableTotalRecordCount: oneof<nothing, bool> # Optional. Include total record count. (default: true)
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3851,8 +3850,8 @@ export def "albums-instant-mix GetInstantMixFromAlbum" [
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
   --qp-fields: list # Optional. Specify additional fields of information to return in the output.
-  --enableImages: string@bool-completer # Optional. Include image information in output.
-  --enableUserData: string@bool-completer # Optional. Include user data.
+  --enableImages: oneof<nothing, bool> # Optional. Include image information in output.
+  --enableUserData: oneof<nothing, bool> # Optional. Include user data.
   --imageTypeLimit: int # Optional. The max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
@@ -3882,8 +3881,8 @@ export def "artists-instant-mix GetInstantMixFromArtists" [
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
   --qp-fields: list # Optional. Specify additional fields of information to return in the output.
-  --enableImages: string@bool-completer # Optional. Include image information in output.
-  --enableUserData: string@bool-completer # Optional. Include user data.
+  --enableImages: oneof<nothing, bool> # Optional. Include image information in output.
+  --enableUserData: oneof<nothing, bool> # Optional. Include user data.
   --imageTypeLimit: int # Optional. The max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
@@ -3915,8 +3914,8 @@ export def "artists-instant-mix GetInstantMixFromArtists2" [
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
   --qp-fields: list # Optional. Specify additional fields of information to return in the output.
-  --enableImages: string@bool-completer # Optional. Include image information in output.
-  --enableUserData: string@bool-completer # Optional. Include user data.
+  --enableImages: oneof<nothing, bool> # Optional. Include image information in output.
+  --enableUserData: oneof<nothing, bool> # Optional. Include user data.
   --imageTypeLimit: int # Optional. The max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
@@ -3946,8 +3945,8 @@ export def "items-instant-mix GetInstantMixFromItem" [
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
   --qp-fields: list # Optional. Specify additional fields of information to return in the output.
-  --enableImages: string@bool-completer # Optional. Include image information in output.
-  --enableUserData: string@bool-completer # Optional. Include user data.
+  --enableImages: oneof<nothing, bool> # Optional. Include image information in output.
+  --enableUserData: oneof<nothing, bool> # Optional. Include user data.
   --imageTypeLimit: int # Optional. The max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
@@ -3977,8 +3976,8 @@ export def "music-genres-instant-mix GetInstantMixFromMusicGenreByName" [
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
   --qp-fields: list # Optional. Specify additional fields of information to return in the output.
-  --enableImages: string@bool-completer # Optional. Include image information in output.
-  --enableUserData: string@bool-completer # Optional. Include user data.
+  --enableImages: oneof<nothing, bool> # Optional. Include image information in output.
+  --enableUserData: oneof<nothing, bool> # Optional. Include user data.
   --imageTypeLimit: int # Optional. The max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
@@ -4008,8 +4007,8 @@ export def "music-genres-instant-mix GetInstantMixFromMusicGenreById" [
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
   --qp-fields: list # Optional. Specify additional fields of information to return in the output.
-  --enableImages: string@bool-completer # Optional. Include image information in output.
-  --enableUserData: string@bool-completer # Optional. Include user data.
+  --enableImages: oneof<nothing, bool> # Optional. Include image information in output.
+  --enableUserData: oneof<nothing, bool> # Optional. Include user data.
   --imageTypeLimit: int # Optional. The max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
@@ -4039,8 +4038,8 @@ export def "playlists-instant-mix GetInstantMixFromPlaylist" [
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
   --qp-fields: list # Optional. Specify additional fields of information to return in the output.
-  --enableImages: string@bool-completer # Optional. Include image information in output.
-  --enableUserData: string@bool-completer # Optional. Include user data.
+  --enableImages: oneof<nothing, bool> # Optional. Include image information in output.
+  --enableUserData: oneof<nothing, bool> # Optional. Include user data.
   --imageTypeLimit: int # Optional. The max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
@@ -4070,8 +4069,8 @@ export def "songs-instant-mix GetInstantMixFromSong" [
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
   --qp-fields: list # Optional. Specify additional fields of information to return in the output.
-  --enableImages: string@bool-completer # Optional. Include image information in output.
-  --enableUserData: string@bool-completer # Optional. Include user data.
+  --enableImages: oneof<nothing, bool> # Optional. Include image information in output.
+  --enableUserData: oneof<nothing, bool> # Optional. Include user data.
   --imageTypeLimit: int # Optional. The max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
@@ -4121,7 +4120,7 @@ export def "items-remote-search-apply ApplySearchCriteria" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --replaceAllImages: string@bool-completer # Optional. Whether or not to replace all images. Default: True. (default: true)
+  --replaceAllImages: oneof<nothing, bool> # Optional. Whether or not to replace all images. Default: True. (default: true)
   --Name: string # Gets or sets the name. (nullable)
   --ProviderIds: record # Gets or sets the provider ids. (nullable)
   --ProductionYear: int # Gets or sets the year. (nullable, format: int32)
@@ -4163,7 +4162,7 @@ export def "items-remote-search-book GetBookRemoteSearchResults" [
   --SearchInfo: any # nullable
   --ItemId: string # format: uuid
   --SearchProviderName: string # Gets or sets the provider name to search within if set. (nullable)
-  --IncludeDisabledProviders: string@bool-completer # Gets or sets a value indicating whether disabled providers should be included.
+  --IncludeDisabledProviders: oneof<nothing, bool> # Gets or sets a value indicating whether disabled providers should be included.
 ]: any -> table<Name: string, ProviderIds: record, ProductionYear: int, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, PremiereDate: string, ImageUrl: string, SearchProviderName: string, Overview: string, AlbumArtist: record<Name: string, ProviderIds: record, ProductionYear: int, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, PremiereDate: string, ImageUrl: string, SearchProviderName: string, Overview: string, AlbumArtist: record, Artists: list>, Artists: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4192,7 +4191,7 @@ export def "items-remote-search-box-set GetBoxSetRemoteSearchResults" [
   --SearchInfo: any # nullable
   --ItemId: string # format: uuid
   --SearchProviderName: string # Gets or sets the provider name to search within if set. (nullable)
-  --IncludeDisabledProviders: string@bool-completer # Gets or sets a value indicating whether disabled providers should be included.
+  --IncludeDisabledProviders: oneof<nothing, bool> # Gets or sets a value indicating whether disabled providers should be included.
 ]: any -> table<Name: string, ProviderIds: record, ProductionYear: int, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, PremiereDate: string, ImageUrl: string, SearchProviderName: string, Overview: string, AlbumArtist: record<Name: string, ProviderIds: record, ProductionYear: int, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, PremiereDate: string, ImageUrl: string, SearchProviderName: string, Overview: string, AlbumArtist: record, Artists: list>, Artists: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4221,7 +4220,7 @@ export def "items-remote-search-movie GetMovieRemoteSearchResults" [
   --SearchInfo: any # nullable
   --ItemId: string # format: uuid
   --SearchProviderName: string # Gets or sets the provider name to search within if set. (nullable)
-  --IncludeDisabledProviders: string@bool-completer # Gets or sets a value indicating whether disabled providers should be included.
+  --IncludeDisabledProviders: oneof<nothing, bool> # Gets or sets a value indicating whether disabled providers should be included.
 ]: any -> table<Name: string, ProviderIds: record, ProductionYear: int, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, PremiereDate: string, ImageUrl: string, SearchProviderName: string, Overview: string, AlbumArtist: record<Name: string, ProviderIds: record, ProductionYear: int, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, PremiereDate: string, ImageUrl: string, SearchProviderName: string, Overview: string, AlbumArtist: record, Artists: list>, Artists: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4250,7 +4249,7 @@ export def "items-remote-search-music-album GetMusicAlbumRemoteSearchResults" [
   --SearchInfo: any # nullable
   --ItemId: string # format: uuid
   --SearchProviderName: string # Gets or sets the provider name to search within if set. (nullable)
-  --IncludeDisabledProviders: string@bool-completer # Gets or sets a value indicating whether disabled providers should be included.
+  --IncludeDisabledProviders: oneof<nothing, bool> # Gets or sets a value indicating whether disabled providers should be included.
 ]: any -> table<Name: string, ProviderIds: record, ProductionYear: int, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, PremiereDate: string, ImageUrl: string, SearchProviderName: string, Overview: string, AlbumArtist: record<Name: string, ProviderIds: record, ProductionYear: int, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, PremiereDate: string, ImageUrl: string, SearchProviderName: string, Overview: string, AlbumArtist: record, Artists: list>, Artists: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4279,7 +4278,7 @@ export def "items-remote-search-music-artist GetMusicArtistRemoteSearchResults" 
   --SearchInfo: any # nullable
   --ItemId: string # format: uuid
   --SearchProviderName: string # Gets or sets the provider name to search within if set. (nullable)
-  --IncludeDisabledProviders: string@bool-completer # Gets or sets a value indicating whether disabled providers should be included.
+  --IncludeDisabledProviders: oneof<nothing, bool> # Gets or sets a value indicating whether disabled providers should be included.
 ]: any -> table<Name: string, ProviderIds: record, ProductionYear: int, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, PremiereDate: string, ImageUrl: string, SearchProviderName: string, Overview: string, AlbumArtist: record<Name: string, ProviderIds: record, ProductionYear: int, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, PremiereDate: string, ImageUrl: string, SearchProviderName: string, Overview: string, AlbumArtist: record, Artists: list>, Artists: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4308,7 +4307,7 @@ export def "items-remote-search-music-video GetMusicVideoRemoteSearchResults" [
   --SearchInfo: any # nullable
   --ItemId: string # format: uuid
   --SearchProviderName: string # Gets or sets the provider name to search within if set. (nullable)
-  --IncludeDisabledProviders: string@bool-completer # Gets or sets a value indicating whether disabled providers should be included.
+  --IncludeDisabledProviders: oneof<nothing, bool> # Gets or sets a value indicating whether disabled providers should be included.
 ]: any -> table<Name: string, ProviderIds: record, ProductionYear: int, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, PremiereDate: string, ImageUrl: string, SearchProviderName: string, Overview: string, AlbumArtist: record<Name: string, ProviderIds: record, ProductionYear: int, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, PremiereDate: string, ImageUrl: string, SearchProviderName: string, Overview: string, AlbumArtist: record, Artists: list>, Artists: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4337,7 +4336,7 @@ export def "items-remote-search-person GetPersonRemoteSearchResults" [
   --SearchInfo: any # nullable
   --ItemId: string # format: uuid
   --SearchProviderName: string # Gets or sets the provider name to search within if set. (nullable)
-  --IncludeDisabledProviders: string@bool-completer # Gets or sets a value indicating whether disabled providers should be included.
+  --IncludeDisabledProviders: oneof<nothing, bool> # Gets or sets a value indicating whether disabled providers should be included.
 ]: any -> table<Name: string, ProviderIds: record, ProductionYear: int, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, PremiereDate: string, ImageUrl: string, SearchProviderName: string, Overview: string, AlbumArtist: record<Name: string, ProviderIds: record, ProductionYear: int, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, PremiereDate: string, ImageUrl: string, SearchProviderName: string, Overview: string, AlbumArtist: record, Artists: list>, Artists: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4366,7 +4365,7 @@ export def "items-remote-search-series GetSeriesRemoteSearchResults" [
   --SearchInfo: any # nullable
   --ItemId: string # format: uuid
   --SearchProviderName: string # Gets or sets the provider name to search within if set. (nullable)
-  --IncludeDisabledProviders: string@bool-completer # Gets or sets a value indicating whether disabled providers should be included.
+  --IncludeDisabledProviders: oneof<nothing, bool> # Gets or sets a value indicating whether disabled providers should be included.
 ]: any -> table<Name: string, ProviderIds: record, ProductionYear: int, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, PremiereDate: string, ImageUrl: string, SearchProviderName: string, Overview: string, AlbumArtist: record<Name: string, ProviderIds: record, ProductionYear: int, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, PremiereDate: string, ImageUrl: string, SearchProviderName: string, Overview: string, AlbumArtist: record, Artists: list>, Artists: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4395,7 +4394,7 @@ export def "items-remote-search-trailer GetTrailerRemoteSearchResults" [
   --SearchInfo: any # nullable
   --ItemId: string # format: uuid
   --SearchProviderName: string # Gets or sets the provider name to search within if set. (nullable)
-  --IncludeDisabledProviders: string@bool-completer # Gets or sets a value indicating whether disabled providers should be included.
+  --IncludeDisabledProviders: oneof<nothing, bool> # Gets or sets a value indicating whether disabled providers should be included.
 ]: any -> table<Name: string, ProviderIds: record, ProductionYear: int, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, PremiereDate: string, ImageUrl: string, SearchProviderName: string, Overview: string, AlbumArtist: record<Name: string, ProviderIds: record, ProductionYear: int, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, PremiereDate: string, ImageUrl: string, SearchProviderName: string, Overview: string, AlbumArtist: record, Artists: list>, Artists: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4423,9 +4422,9 @@ export def "items-refresh RefreshItem" [
   --allow-errors(-e) # Return full response without error handling
   --metadataRefreshMode: string@metadataRefreshMode-completer # (Optional) Specifies the metadata refresh mode. (default: None)
   --imageRefreshMode: string@imageRefreshMode-completer # (Optional) Specifies the image refresh mode. (default: None)
-  --replaceAllMetadata: string@bool-completer # (Optional) Determines if metadata should be replaced. Only applicable if mode is FullRefresh. (default: false)
-  --replaceAllImages: string@bool-completer # (Optional) Determines if images should be replaced. Only applicable if mode is FullRefresh. (default: false)
-  --regenerateTrickplay: string@bool-completer # (Optional) Determines if trickplay images should be replaced. Only applicable if mode is FullRefresh. (default: false)
+  --replaceAllMetadata: oneof<nothing, bool> # (Optional) Determines if metadata should be replaced. Only applicable if mode is FullRefresh. (default: false)
+  --replaceAllImages: oneof<nothing, bool> # (Optional) Determines if images should be replaced. Only applicable if mode is FullRefresh. (default: false)
+  --regenerateTrickplay: oneof<nothing, bool> # (Optional) Determines if trickplay images should be replaced. Only applicable if mode is FullRefresh. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4451,40 +4450,40 @@ export def "items GetItems" [
   --accept: string@accept-completer # Response content type
   --userId: string # The user id supplied as query parameter; this is required when not using an API key. (format: uuid)
   --maxOfficialRating: string # Optional filter by maximum official rating (PG, PG-13, TV-MA, etc).
-  --hasThemeSong: string@bool-completer # Optional filter by items with theme songs.
-  --hasThemeVideo: string@bool-completer # Optional filter by items with theme videos.
-  --hasSubtitles: string@bool-completer # Optional filter by items with subtitles.
-  --hasSpecialFeature: string@bool-completer # Optional filter by items with special features.
-  --hasTrailer: string@bool-completer # Optional filter by items with trailers.
+  --hasThemeSong: oneof<nothing, bool> # Optional filter by items with theme songs.
+  --hasThemeVideo: oneof<nothing, bool> # Optional filter by items with theme videos.
+  --hasSubtitles: oneof<nothing, bool> # Optional filter by items with subtitles.
+  --hasSpecialFeature: oneof<nothing, bool> # Optional filter by items with special features.
+  --hasTrailer: oneof<nothing, bool> # Optional filter by items with trailers.
   --adjacentTo: string # Optional. Return items that are siblings of a supplied item. (format: uuid)
   --indexNumber: int # Optional filter by index number. (format: int32)
   --parentIndexNumber: int # Optional filter by parent index number. (format: int32)
-  --hasParentalRating: string@bool-completer # Optional filter by items that have or do not have a parental rating.
-  --isHd: string@bool-completer # Optional filter by items that are HD or not.
-  --is4K: string@bool-completer # Optional filter by items that are 4K or not.
+  --hasParentalRating: oneof<nothing, bool> # Optional filter by items that have or do not have a parental rating.
+  --isHd: oneof<nothing, bool> # Optional filter by items that are HD or not.
+  --is4K: oneof<nothing, bool> # Optional filter by items that are 4K or not.
   --locationTypes: list # Optional. If specified, results will be filtered based on LocationType. This allows multiple, comma delimited.
   --excludeLocationTypes: list # Optional. If specified, results will be filtered based on the LocationType. This allows multiple, comma delimited.
-  --isMissing: string@bool-completer # Optional filter by items that are missing episodes or not.
-  --isUnaired: string@bool-completer # Optional filter by items that are unaired episodes or not.
+  --isMissing: oneof<nothing, bool> # Optional filter by items that are missing episodes or not.
+  --isUnaired: oneof<nothing, bool> # Optional filter by items that are unaired episodes or not.
   --minCommunityRating: float # Optional filter by minimum community rating. (format: double)
   --minCriticRating: float # Optional filter by minimum critic rating. (format: double)
   --minPremiereDate: string # Optional. The minimum premiere date. Format = ISO. (format: date-time)
   --minDateLastSaved: string # Optional. The minimum last saved date. Format = ISO. (format: date-time)
   --minDateLastSavedForUser: string # Optional. The minimum last saved date for the current user. Format = ISO. (format: date-time)
   --maxPremiereDate: string # Optional. The maximum premiere date. Format = ISO. (format: date-time)
-  --hasOverview: string@bool-completer # Optional filter by items that have an overview or not.
-  --hasImdbId: string@bool-completer # Optional filter by items that have an IMDb id or not.
-  --hasTmdbId: string@bool-completer # Optional filter by items that have a TMDb id or not.
-  --hasTvdbId: string@bool-completer # Optional filter by items that have a TVDb id or not.
-  --isMovie: string@bool-completer # Optional filter for live tv movies.
-  --isSeries: string@bool-completer # Optional filter for live tv series.
-  --isNews: string@bool-completer # Optional filter for live tv news.
-  --isKids: string@bool-completer # Optional filter for live tv kids.
-  --isSports: string@bool-completer # Optional filter for live tv sports.
+  --hasOverview: oneof<nothing, bool> # Optional filter by items that have an overview or not.
+  --hasImdbId: oneof<nothing, bool> # Optional filter by items that have an IMDb id or not.
+  --hasTmdbId: oneof<nothing, bool> # Optional filter by items that have a TMDb id or not.
+  --hasTvdbId: oneof<nothing, bool> # Optional filter by items that have a TVDb id or not.
+  --isMovie: oneof<nothing, bool> # Optional filter for live tv movies.
+  --isSeries: oneof<nothing, bool> # Optional filter for live tv series.
+  --isNews: oneof<nothing, bool> # Optional filter for live tv news.
+  --isKids: oneof<nothing, bool> # Optional filter for live tv kids.
+  --isSports: oneof<nothing, bool> # Optional filter for live tv sports.
   --excludeItemIds: list # Optional. If specified, results will be filtered by excluding item ids. This allows multiple, comma delimited.
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
-  --recursive: string@bool-completer # When searching within folders, this determines whether or not the search will be recursive. true/false.
+  --recursive: oneof<nothing, bool> # When searching within folders, this determines whether or not the search will be recursive. true/false.
   --searchTerm: string # Optional. Filter based on a search term.
   --sortOrder: list # Sort Order - Ascending, Descending.
   --parentId: string # Specify this to localize the search to a specific item or folder. Omit to use the root. (format: uuid)
@@ -4492,16 +4491,16 @@ export def "items GetItems" [
   --excludeItemTypes: list # Optional. If specified, results will be filtered based on item type. This allows multiple, comma delimited.
   --includeItemTypes: list # Optional. If specified, results will be filtered based on the item type. This allows multiple, comma delimited.
   --filters: list # Optional. Specify additional filters to apply. This allows multiple, comma delimited. Options: IsFolder, IsNotFolder, IsUnplayed, IsPlayed, IsFavorite, IsResumable, Likes, Dislikes.
-  --isFavorite: string@bool-completer # Optional filter by items that are marked as favorite, or not.
+  --isFavorite: oneof<nothing, bool> # Optional filter by items that are marked as favorite, or not.
   --mediaTypes: list # Optional filter by MediaType. Allows multiple, comma delimited.
   --imageTypes: list # Optional. If specified, results will be filtered based on those containing image types. This allows multiple, comma delimited.
   --sortBy: list # Optional. Specify one or more sort orders, comma delimited. Options: Album, AlbumArtist, Artist, Budget, CommunityRating, CriticRating, DateCreated, DatePlayed, PlayCount, PremiereDate, ProductionYear, SortName, Random, Revenue, Runtime.
-  --isPlayed: string@bool-completer # Optional filter by items that are played, or not.
+  --isPlayed: oneof<nothing, bool> # Optional filter by items that are played, or not.
   --genres: list # Optional. If specified, results will be filtered based on genre. This allows multiple, pipe delimited.
   --officialRatings: list # Optional. If specified, results will be filtered based on OfficialRating. This allows multiple, pipe delimited.
   --tags: list # Optional. If specified, results will be filtered based on tag. This allows multiple, pipe delimited.
   --years: list # Optional. If specified, results will be filtered based on production year. This allows multiple, comma delimited.
-  --enableUserData: string@bool-completer # Optional, include user data.
+  --enableUserData: oneof<nothing, bool> # Optional, include user data.
   --imageTypeLimit: int # Optional, the max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
   --person: string # Optional. If specified, results will be filtered to include only those containing the specified person.
@@ -4518,23 +4517,23 @@ export def "items GetItems" [
   --ids: list # Optional. If specific items are needed, specify a list of item id's to retrieve. This allows multiple, comma delimited.
   --videoTypes: list # Optional filter by VideoType (videofile, dvd, bluray, iso). Allows multiple, comma delimited.
   --minOfficialRating: string # Optional filter by minimum official rating (PG, PG-13, TV-MA, etc).
-  --isLocked: string@bool-completer # Optional filter by items that are locked.
-  --isPlaceHolder: string@bool-completer # Optional filter by items that are placeholders.
-  --hasOfficialRating: string@bool-completer # Optional filter by items that have official ratings.
-  --collapseBoxSetItems: string@bool-completer # Whether or not to hide items behind their boxsets.
+  --isLocked: oneof<nothing, bool> # Optional filter by items that are locked.
+  --isPlaceHolder: oneof<nothing, bool> # Optional filter by items that are placeholders.
+  --hasOfficialRating: oneof<nothing, bool> # Optional filter by items that have official ratings.
+  --collapseBoxSetItems: oneof<nothing, bool> # Whether or not to hide items behind their boxsets.
   --minWidth: int # Optional. Filter by the minimum width of the item. (format: int32)
   --minHeight: int # Optional. Filter by the minimum height of the item. (format: int32)
   --maxWidth: int # Optional. Filter by the maximum width of the item. (format: int32)
   --maxHeight: int # Optional. Filter by the maximum height of the item. (format: int32)
-  --is3D: string@bool-completer # Optional filter by items that are 3D, or not.
+  --is3D: oneof<nothing, bool> # Optional filter by items that are 3D, or not.
   --seriesStatus: list # Optional filter by Series Status. Allows multiple, comma delimited.
   --nameStartsWithOrGreater: string # Optional filter by items whose name is sorted equally or greater than a given input string.
   --nameStartsWith: string # Optional filter by items whose name is sorted equally than a given input string.
   --nameLessThan: string # Optional filter by items whose name is equally or lesser than a given input string.
   --studioIds: list # Optional. If specified, results will be filtered based on studio id. This allows multiple, pipe delimited.
   --genreIds: list # Optional. If specified, results will be filtered based on genre id. This allows multiple, pipe delimited.
-  --enableTotalRecordCount: string@bool-completer # Optional. Enable the total record count. (default: true)
-  --enableImages: string@bool-completer # Optional, include image information in output. (default: true)
+  --enableTotalRecordCount: oneof<nothing, bool> # Optional. Enable the total record count. (default: true)
+  --enableImages: oneof<nothing, bool> # Optional, include image information in output. (default: true)
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4613,10 +4612,10 @@ export def "user-items-user-data UpdateItemUserData" [
   --UnplayedItemCount: int # Gets or sets the unplayed item count. (nullable, format: int32)
   --PlaybackPositionTicks: int # Gets or sets the playback position ticks. (nullable, format: int64)
   --PlayCount: int # Gets or sets the play count. (nullable, format: int32)
-  --IsFavorite: string@bool-completer # Gets or sets a value indicating whether this instance is favorite. (nullable)
-  --Likes: string@bool-completer # Gets or sets a value indicating whether this MediaBrowser.Model.Dto.UpdateUserItemDataDto is likes. (nullable)
+  --IsFavorite: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is favorite. (nullable)
+  --Likes: oneof<nothing, bool> # Gets or sets a value indicating whether this MediaBrowser.Model.Dto.UpdateUserItemDataDto is likes. (nullable)
   --LastPlayedDate: string # Gets or sets the last played date. (nullable, format: date-time)
-  --Played: string@bool-completer # Gets or sets a value indicating whether this MediaBrowser.Model.Dto.UserItemDataDto is played. (nullable)
+  --Played: oneof<nothing, bool> # Gets or sets a value indicating whether this MediaBrowser.Model.Dto.UserItemDataDto is played. (nullable)
   --Key: string # Gets or sets the key. (nullable)
   --ItemId: string # Gets or sets the item identifier. (nullable)
 ]: any -> record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string> {
@@ -4652,14 +4651,14 @@ export def "user-items-resume GetResumeItems" [
   --parentId: string # Specify this to localize the search to a specific item or folder. Omit to use the root. (format: uuid)
   --qp-fields: list # Optional. Specify additional fields of information to return in the output. This allows multiple, comma delimited. Options: Budget, Chapters, DateCreated, Genres, HomePageUrl, IndexOptions, MediaStreams, Overview, ParentId, Path, People, ProviderIds, PrimaryImageAspectRatio, Revenue, SortName, Studios, Taglines.
   --mediaTypes: list # Optional. Filter by MediaType. Allows multiple, comma delimited.
-  --enableUserData: string@bool-completer # Optional. Include user data.
+  --enableUserData: oneof<nothing, bool> # Optional. Include user data.
   --imageTypeLimit: int # Optional. The max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
   --excludeItemTypes: list # Optional. If specified, results will be filtered based on item type. This allows multiple, comma delimited.
   --includeItemTypes: list # Optional. If specified, results will be filtered based on the item type. This allows multiple, comma delimited.
-  --enableTotalRecordCount: string@bool-completer # Optional. Enable the total record count. (default: true)
-  --enableImages: string@bool-completer # Optional. Include image information in output. (default: true)
-  --excludeActiveSessions: string@bool-completer # Optional. Whether to exclude the currently active sessions. (default: false)
+  --enableTotalRecordCount: oneof<nothing, bool> # Optional. Enable the total record count. (default: true)
+  --enableImages: oneof<nothing, bool> # Optional. Include image information in output. (default: true)
+  --excludeActiveSessions: oneof<nothing, bool> # Optional. Whether to exclude the currently active sessions. (default: false)
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4707,10 +4706,10 @@ export def "items UpdateItem" [
   --AirsBeforeSeasonNumber: int # nullable, format: int32
   --AirsAfterSeasonNumber: int # nullable, format: int32
   --AirsBeforeEpisodeNumber: int # nullable, format: int32
-  --CanDelete: string@bool-completer # nullable
-  --CanDownload: string@bool-completer # nullable
-  --HasLyrics: string@bool-completer # nullable
-  --HasSubtitles: string@bool-completer # nullable
+  --CanDelete: oneof<nothing, bool> # nullable
+  --CanDownload: oneof<nothing, bool> # nullable
+  --HasLyrics: oneof<nothing, bool> # nullable
+  --HasSubtitles: oneof<nothing, bool> # nullable
   --PreferredMetadataLanguage: string # nullable
   --PreferredMetadataCountryCode: string # nullable
   --Container: string # nullable
@@ -4723,7 +4722,7 @@ export def "items UpdateItem" [
   --CriticRating: float # Gets or sets the critic rating. (nullable, format: float)
   --ProductionLocations: list # nullable
   --Path: string # Gets or sets the path. (nullable)
-  --EnableMediaSourceDisplay: string@bool-completer # nullable
+  --EnableMediaSourceDisplay: oneof<nothing, bool> # nullable
   --OfficialRating: string # Gets or sets the official rating. (nullable)
   --CustomRating: string # Gets or sets the custom rating. (nullable)
   --ChannelId: string # Gets or sets the channel identifier. (nullable, format: uuid)
@@ -4737,7 +4736,7 @@ export def "items UpdateItem" [
   --PlayAccess: any@PlayAccess-completer # Gets or sets the play access. (nullable)
   --AspectRatio: string # Gets or sets the aspect ratio. (nullable)
   --ProductionYear: int # Gets or sets the production year. (nullable, format: int32)
-  --IsPlaceHolder: string@bool-completer # Gets or sets a value indicating whether this instance is place holder. (nullable)
+  --IsPlaceHolder: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is place holder. (nullable)
   --Number: string # Gets or sets the number. (nullable)
   --ChannelNumber: string # nullable
   --IndexNumber: int # Gets or sets the index number. (nullable, format: int32)
@@ -4745,8 +4744,8 @@ export def "items UpdateItem" [
   --ParentIndexNumber: int # Gets or sets the parent index number. (nullable, format: int32)
   --RemoteTrailers: list # Gets or sets the trailer urls. (nullable) — item shape: {Url?: string, Name?: string}
   --ProviderIds: record # Gets or sets the provider ids. (nullable)
-  --IsHD: string@bool-completer # Gets or sets a value indicating whether this instance is HD. (nullable)
-  --IsFolder: string@bool-completer # Gets or sets a value indicating whether this instance is folder. (nullable)
+  --IsHD: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is HD. (nullable)
+  --IsFolder: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is folder. (nullable)
   --ParentId: string # Gets or sets the parent id. (nullable, format: uuid)
   --Type: any@Type-completer # The base item kind.
   --People: list # Gets or sets the people. (nullable) — item shape: {Name?: string, Id?: string, Role?: string, Type?: "Unknown"|"Actor"|"Director"|"Composer"|"Writer"|"GuestStar"|"Producer"|"Conductor"|"Lyricist"|"Arranger"|"Engineer"|"Mixer"|"Remixer"|"Creator"|"Artist"|"AlbumArtist"|"Author"|"Illustrator"|"Penciller"|"Inker"|"Colorist"|"Letterer"|"CoverArtist"|"Editor"|"Translator", PrimaryImageTag?: string, ImageBlurHashes?: record}
@@ -4813,7 +4812,7 @@ export def "items UpdateItem" [
   --AlbumCount: int # Gets or sets the album count. (nullable, format: int32)
   --ArtistCount: int # nullable, format: int32
   --MusicVideoCount: int # Gets or sets the music video count. (nullable, format: int32)
-  --LockData: string@bool-completer # Gets or sets a value indicating whether [enable internet providers]. (nullable)
+  --LockData: oneof<nothing, bool> # Gets or sets a value indicating whether [enable internet providers]. (nullable)
   --Width: int # nullable, format: int32
   --Height: int # nullable, format: int32
   --CameraMake: string # nullable
@@ -4833,17 +4832,17 @@ export def "items UpdateItem" [
   --ChannelPrimaryImageTag: string # Gets or sets the channel primary image tag. (nullable)
   --StartDate: string # Gets or sets the start date of the recording, in UTC. (nullable, format: date-time)
   --CompletionPercentage: float # Gets or sets the completion percentage. (nullable, format: double)
-  --IsRepeat: string@bool-completer # Gets or sets a value indicating whether this instance is repeat. (nullable)
+  --IsRepeat: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is repeat. (nullable)
   --EpisodeTitle: string # Gets or sets the episode title. (nullable)
   --ChannelType: any@ChannelType-completer # Gets or sets the type of the channel. (nullable)
   --Audio: any@Audio-completer # Gets or sets the audio. (nullable)
-  --IsMovie: string@bool-completer # Gets or sets a value indicating whether this instance is movie. (nullable)
-  --IsSports: string@bool-completer # Gets or sets a value indicating whether this instance is sports. (nullable)
-  --IsSeries: string@bool-completer # Gets or sets a value indicating whether this instance is series. (nullable)
-  --IsLive: string@bool-completer # Gets or sets a value indicating whether this instance is live. (nullable)
-  --IsNews: string@bool-completer # Gets or sets a value indicating whether this instance is news. (nullable)
-  --IsKids: string@bool-completer # Gets or sets a value indicating whether this instance is kids. (nullable)
-  --IsPremiere: string@bool-completer # Gets or sets a value indicating whether this instance is premiere. (nullable)
+  --IsMovie: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is movie. (nullable)
+  --IsSports: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is sports. (nullable)
+  --IsSeries: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is series. (nullable)
+  --IsLive: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is live. (nullable)
+  --IsNews: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is news. (nullable)
+  --IsKids: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is kids. (nullable)
+  --IsPremiere: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is premiere. (nullable)
   --TimerId: string # Gets or sets the timer identifier. (nullable)
   --NormalizationGain: float # Gets or sets the gain required for audio normalization. (nullable, format: float)
   --CurrentProgram: any # Gets or sets the current program. (nullable)
@@ -5148,7 +5147,7 @@ export def "items-theme-media GetThemeMedia" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
-  --inheritFromParent: string@bool-completer # Optional. Determines whether or not parent items should be searched for theme media. (default: false)
+  --inheritFromParent: oneof<nothing, bool> # Optional. Determines whether or not parent items should be searched for theme media. (default: false)
   --sortBy: list # Optional. Specify one or more sort orders, comma delimited. Options: Album, AlbumArtist, Artist, Budget, CommunityRating, CriticRating, DateCreated, DatePlayed, PlayCount, PremiereDate, ProductionYear, SortName, Random, Revenue, Runtime.
   --sortOrder: list # Optional. Sort Order - Ascending, Descending.
 ]: nothing -> record<ThemeVideosResult: record<Items: list<record>, TotalRecordCount: int, StartIndex: int, OwnerId: string>, ThemeSongsResult: record<Items: list<record>, TotalRecordCount: int, StartIndex: int, OwnerId: string>, SoundtrackSongsResult: record<Items: list<record>, TotalRecordCount: int, StartIndex: int, OwnerId: string>> {
@@ -5176,7 +5175,7 @@ export def "items-theme-songs GetThemeSongs" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
-  --inheritFromParent: string@bool-completer # Optional. Determines whether or not parent items should be searched for theme media. (default: false)
+  --inheritFromParent: oneof<nothing, bool> # Optional. Determines whether or not parent items should be searched for theme media. (default: false)
   --sortBy: list # Optional. Specify one or more sort orders, comma delimited. Options: Album, AlbumArtist, Artist, Budget, CommunityRating, CriticRating, DateCreated, DatePlayed, PlayCount, PremiereDate, ProductionYear, SortName, Random, Revenue, Runtime.
   --sortOrder: list # Optional. Sort Order - Ascending, Descending.
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int, OwnerId: string> {
@@ -5204,7 +5203,7 @@ export def "items-theme-videos GetThemeVideos" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Filter by user id, and attach user data. (format: uuid)
-  --inheritFromParent: string@bool-completer # Optional. Determines whether or not parent items should be searched for theme media. (default: false)
+  --inheritFromParent: oneof<nothing, bool> # Optional. Determines whether or not parent items should be searched for theme media. (default: false)
   --sortBy: list # Optional. Specify one or more sort orders, comma delimited. Options: Album, AlbumArtist, Artist, Budget, CommunityRating, CriticRating, DateCreated, DatePlayed, PlayCount, PremiereDate, ProductionYear, SortName, Random, Revenue, Runtime.
   --sortOrder: list # Optional. Sort Order - Ascending, Descending.
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int, OwnerId: string> {
@@ -5231,7 +5230,7 @@ export def "items-counts GetItemCounts" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --userId: string # Optional. Get counts from a specific user's library. (format: uuid)
-  --isFavorite: string@bool-completer # Optional. Get counts of favorite items.
+  --isFavorite: oneof<nothing, bool> # Optional. Get counts of favorite items.
 ]: nothing -> record<MovieCount: int, SeriesCount: int, EpisodeCount: int, ArtistCount: int, ProgramCount: int, TrailerCount: int, SongCount: int, AlbumCount: int, MusicVideoCount: int, BoxSetCount: int, BookCount: int, ItemCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5256,7 +5255,7 @@ export def "libraries-available-options GetLibraryOptionsInfo" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --libraryContentType: string@libraryContentType-completer # Library content type.
-  --isNewLibrary: string@bool-completer # Whether this is a new library. (default: false)
+  --isNewLibrary: oneof<nothing, bool> # Whether this is a new library. (default: false)
 ]: nothing -> record<MetadataSavers: table<Name: string, DefaultEnabled: bool>, MetadataReaders: table<Name: string, DefaultEnabled: bool>, SubtitleFetchers: table<Name: string, DefaultEnabled: bool>, LyricFetchers: table<Name: string, DefaultEnabled: bool>, MediaSegmentProviders: table<Name: string, DefaultEnabled: bool>, TypeOptions: table<Type: string, MetadataFetchers: list, ImageFetchers: list, SupportedImageTypes: list, DefaultImageOptions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5306,7 +5305,7 @@ export def "library-media-folders GetMediaFolders" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --isHidden: string@bool-completer # Optional. Filter by folders that are marked hidden, or not.
+  --isHidden: oneof<nothing, bool> # Optional. Filter by folders that are marked hidden, or not.
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5575,7 +5574,7 @@ export def "library-virtual-folders AddVirtualFolder" [
   --name: string # The name of the virtual folder.
   --collectionType: string@collectionType-completer # The type of the collection.
   --paths: list # The paths of the virtual folder.
-  --refreshLibrary: string@bool-completer # Whether to refresh the library. (default: false)
+  --refreshLibrary: oneof<nothing, bool> # Whether to refresh the library. (default: false)
   --LibraryOptions: any # Gets or sets library options. (nullable)
 ]: any -> any {
   let input = $in
@@ -5603,7 +5602,7 @@ export def "library-virtual-folders RemoveVirtualFolder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name of the folder.
-  --refreshLibrary: string@bool-completer # Whether to refresh the library. (default: false)
+  --refreshLibrary: oneof<nothing, bool> # Whether to refresh the library. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5654,7 +5653,7 @@ export def "library-virtual-folders-name RenameVirtualFolder" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name of the virtual folder.
   --newName: string # The new name.
-  --refreshLibrary: string@bool-completer # Whether to refresh the library. (default: false)
+  --refreshLibrary: oneof<nothing, bool> # Whether to refresh the library. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5677,7 +5676,7 @@ export def "library-virtual-folders-paths AddMediaPath" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --refreshLibrary: string@bool-completer # Whether to refresh the library. (default: false)
+  --refreshLibrary: oneof<nothing, bool> # Whether to refresh the library. (default: false)
   Name: string # Gets or sets the name of the library.
   --Path: string # Gets or sets the path to add. (nullable)
   --PathInfo: any # Gets or sets the path info. (nullable)
@@ -5708,7 +5707,7 @@ export def "library-virtual-folders-paths RemoveMediaPath" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name of the library.
   --path: string # The path to remove.
-  --refreshLibrary: string@bool-completer # Whether to refresh the library. (default: false)
+  --refreshLibrary: oneof<nothing, bool> # Whether to refresh the library. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5813,24 +5812,24 @@ export def "live-tv-channels GetLiveTvChannels" [
   --type: string@type-completer # Optional. Filter by channel type.
   --userId: string # Optional. Filter by user and attach user data. (format: uuid)
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
-  --isMovie: string@bool-completer # Optional. Filter for movies.
-  --isSeries: string@bool-completer # Optional. Filter for series.
-  --isNews: string@bool-completer # Optional. Filter for news.
-  --isKids: string@bool-completer # Optional. Filter for kids.
-  --isSports: string@bool-completer # Optional. Filter for sports.
+  --isMovie: oneof<nothing, bool> # Optional. Filter for movies.
+  --isSeries: oneof<nothing, bool> # Optional. Filter for series.
+  --isNews: oneof<nothing, bool> # Optional. Filter for news.
+  --isKids: oneof<nothing, bool> # Optional. Filter for kids.
+  --isSports: oneof<nothing, bool> # Optional. Filter for sports.
   --limit: int # Optional. The maximum number of records to return. (format: int32)
-  --isFavorite: string@bool-completer # Optional. Filter by channels that are favorites, or not.
-  --isLiked: string@bool-completer # Optional. Filter by channels that are liked, or not.
-  --isDisliked: string@bool-completer # Optional. Filter by channels that are disliked, or not.
-  --enableImages: string@bool-completer # Optional. Include image information in output.
+  --isFavorite: oneof<nothing, bool> # Optional. Filter by channels that are favorites, or not.
+  --isLiked: oneof<nothing, bool> # Optional. Filter by channels that are liked, or not.
+  --isDisliked: oneof<nothing, bool> # Optional. Filter by channels that are disliked, or not.
+  --enableImages: oneof<nothing, bool> # Optional. Include image information in output.
   --imageTypeLimit: int # Optional. The max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # "Optional. The image types to include in the output.
   --qp-fields: list # Optional. Specify additional fields of information to return in the output.
-  --enableUserData: string@bool-completer # Optional. Include user data.
+  --enableUserData: oneof<nothing, bool> # Optional. Include user data.
   --sortBy: list # Optional. Key to sort by.
   --sortOrder: string@sortOrder-completer # Optional. Sort order.
-  --enableFavoriteSorting: string@bool-completer # Optional. Incorporate favorite and like status into channel sorting. (default: false)
-  --addCurrentProgram: string@bool-completer # Optional. Adds current program info to each channel. (default: true)
+  --enableFavoriteSorting: oneof<nothing, bool> # Optional. Incorporate favorite and like status into channel sorting. (default: false)
+  --addCurrentProgram: oneof<nothing, bool> # Optional. Adds current program info to each channel. (default: true)
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5925,8 +5924,8 @@ export def "live-tv-listing-providers AddListingProvider" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --pw: string # Password.
-  --validateListings: string@bool-completer # Validate listings. (default: false)
-  --validateLogin: string@bool-completer # Validate login. (default: false)
+  --validateListings: oneof<nothing, bool> # Validate listings. (default: false)
+  --validateLogin: oneof<nothing, bool> # Validate login. (default: false)
   --Id: string # nullable
   --Type: string # nullable
   --Username: string # nullable
@@ -5936,7 +5935,7 @@ export def "live-tv-listing-providers AddListingProvider" [
   --Country: string # nullable
   --Path: string # nullable
   --EnabledTuners: list # nullable
-  --EnableAllTuners: string@bool-completer
+  --EnableAllTuners: oneof<nothing, bool>
   --NewsCategories: list # nullable
   --SportsCategories: list # nullable
   --KidsCategories: list # nullable
@@ -6112,30 +6111,30 @@ export def "live-tv-programs GetLiveTvPrograms" [
   --channelIds: list # The channels to return guide information for.
   --userId: string # Optional. Filter by user id. (format: uuid)
   --minStartDate: string # Optional. The minimum premiere start date. (format: date-time)
-  --hasAired: string@bool-completer # Optional. Filter by programs that have completed airing, or not.
-  --isAiring: string@bool-completer # Optional. Filter by programs that are currently airing, or not.
+  --hasAired: oneof<nothing, bool> # Optional. Filter by programs that have completed airing, or not.
+  --isAiring: oneof<nothing, bool> # Optional. Filter by programs that are currently airing, or not.
   --maxStartDate: string # Optional. The maximum premiere start date. (format: date-time)
   --minEndDate: string # Optional. The minimum premiere end date. (format: date-time)
   --maxEndDate: string # Optional. The maximum premiere end date. (format: date-time)
-  --isMovie: string@bool-completer # Optional. Filter for movies.
-  --isSeries: string@bool-completer # Optional. Filter for series.
-  --isNews: string@bool-completer # Optional. Filter for news.
-  --isKids: string@bool-completer # Optional. Filter for kids.
-  --isSports: string@bool-completer # Optional. Filter for sports.
+  --isMovie: oneof<nothing, bool> # Optional. Filter for movies.
+  --isSeries: oneof<nothing, bool> # Optional. Filter for series.
+  --isNews: oneof<nothing, bool> # Optional. Filter for news.
+  --isKids: oneof<nothing, bool> # Optional. Filter for kids.
+  --isSports: oneof<nothing, bool> # Optional. Filter for sports.
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
   --sortBy: list # Optional. Specify one or more sort orders, comma delimited. Options: Name, StartDate.
   --sortOrder: list # Sort Order - Ascending,Descending.
   --genres: list # The genres to return guide information for.
   --genreIds: list # The genre ids to return guide information for.
-  --enableImages: string@bool-completer # Optional. Include image information in output.
+  --enableImages: oneof<nothing, bool> # Optional. Include image information in output.
   --imageTypeLimit: int # Optional. The max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
-  --enableUserData: string@bool-completer # Optional. Include user data.
+  --enableUserData: oneof<nothing, bool> # Optional. Include user data.
   --seriesTimerId: string # Optional. Filter by series timer id.
   --librarySeriesId: string # Optional. Filter by library series id. (format: uuid)
   --qp-fields: list # Optional. Specify additional fields of information to return in the output.
-  --enableTotalRecordCount: string@bool-completer # Retrieve total record count. (default: true)
+  --enableTotalRecordCount: oneof<nothing, bool> # Retrieve total record count. (default: true)
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6162,27 +6161,27 @@ export def "live-tv-programs GetPrograms" [
   --ChannelIds: list # Gets or sets the channels to return guide information for. (nullable)
   --UserId: string # Gets or sets optional. Filter by user id. (nullable, format: uuid)
   --MinStartDate: string # Gets or sets the minimum premiere start date. (nullable, format: date-time)
-  --HasAired: string@bool-completer # Gets or sets filter by programs that have completed airing, or not. (nullable)
-  --IsAiring: string@bool-completer # Gets or sets filter by programs that are currently airing, or not. (nullable)
+  --HasAired: oneof<nothing, bool> # Gets or sets filter by programs that have completed airing, or not. (nullable)
+  --IsAiring: oneof<nothing, bool> # Gets or sets filter by programs that are currently airing, or not. (nullable)
   --MaxStartDate: string # Gets or sets the maximum premiere start date. (nullable, format: date-time)
   --MinEndDate: string # Gets or sets the minimum premiere end date. (nullable, format: date-time)
   --MaxEndDate: string # Gets or sets the maximum premiere end date. (nullable, format: date-time)
-  --IsMovie: string@bool-completer # Gets or sets filter for movies. (nullable)
-  --IsSeries: string@bool-completer # Gets or sets filter for series. (nullable)
-  --IsNews: string@bool-completer # Gets or sets filter for news. (nullable)
-  --IsKids: string@bool-completer # Gets or sets filter for kids. (nullable)
-  --IsSports: string@bool-completer # Gets or sets filter for sports. (nullable)
+  --IsMovie: oneof<nothing, bool> # Gets or sets filter for movies. (nullable)
+  --IsSeries: oneof<nothing, bool> # Gets or sets filter for series. (nullable)
+  --IsNews: oneof<nothing, bool> # Gets or sets filter for news. (nullable)
+  --IsKids: oneof<nothing, bool> # Gets or sets filter for kids. (nullable)
+  --IsSports: oneof<nothing, bool> # Gets or sets filter for sports. (nullable)
   --StartIndex: int # Gets or sets the record index to start at. All items with a lower index will be dropped from the results. (nullable, format: int32)
   --Limit: int # Gets or sets the maximum number of records to return. (nullable, format: int32)
   --SortBy: list # Gets or sets specify one or more sort orders, comma delimited. Options: Name, StartDate. (nullable)
   --SortOrder: list # Gets or sets sort order. (nullable)
   --Genres: list # Gets or sets the genres to return guide information for. (nullable)
   --GenreIds: list # Gets or sets the genre ids to return guide information for. (nullable)
-  --EnableImages: string@bool-completer # Gets or sets include image information in output. (nullable)
-  --EnableTotalRecordCount: string@bool-completer # Gets or sets a value indicating whether retrieve total record count. (default: true)
+  --EnableImages: oneof<nothing, bool> # Gets or sets include image information in output. (nullable)
+  --EnableTotalRecordCount: oneof<nothing, bool> # Gets or sets a value indicating whether retrieve total record count. (default: true)
   --ImageTypeLimit: int # Gets or sets the max number of images to return, per image type. (nullable, format: int32)
   --EnableImageTypes: list # Gets or sets the image types to include in the output. (nullable)
-  --EnableUserData: string@bool-completer # Gets or sets include user data. (nullable)
+  --EnableUserData: oneof<nothing, bool> # Gets or sets include user data. (nullable)
   --SeriesTimerId: string # Gets or sets filter by series timer id. (nullable)
   --LibrarySeriesId: string # Gets or sets filter by library series id. (nullable, format: uuid)
   --Fields: list # Gets or sets specify additional fields of information to return in the output. (nullable)
@@ -6239,20 +6238,20 @@ export def "live-tv-programs-recommended GetRecommendedPrograms" [
   --userId: string # Optional. filter by user id. (format: uuid)
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
-  --isAiring: string@bool-completer # Optional. Filter by programs that are currently airing, or not.
-  --hasAired: string@bool-completer # Optional. Filter by programs that have completed airing, or not.
-  --isSeries: string@bool-completer # Optional. Filter for series.
-  --isMovie: string@bool-completer # Optional. Filter for movies.
-  --isNews: string@bool-completer # Optional. Filter for news.
-  --isKids: string@bool-completer # Optional. Filter for kids.
-  --isSports: string@bool-completer # Optional. Filter for sports.
-  --enableImages: string@bool-completer # Optional. Include image information in output.
+  --isAiring: oneof<nothing, bool> # Optional. Filter by programs that are currently airing, or not.
+  --hasAired: oneof<nothing, bool> # Optional. Filter by programs that have completed airing, or not.
+  --isSeries: oneof<nothing, bool> # Optional. Filter for series.
+  --isMovie: oneof<nothing, bool> # Optional. Filter for movies.
+  --isNews: oneof<nothing, bool> # Optional. Filter for news.
+  --isKids: oneof<nothing, bool> # Optional. Filter for kids.
+  --isSports: oneof<nothing, bool> # Optional. Filter for sports.
+  --enableImages: oneof<nothing, bool> # Optional. Include image information in output.
   --imageTypeLimit: int # Optional. The max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
   --genreIds: list # The genres to return guide information for.
   --qp-fields: list # Optional. Specify additional fields of information to return in the output.
-  --enableUserData: string@bool-completer # Optional. include user data.
-  --enableTotalRecordCount: string@bool-completer # Retrieve total record count. (default: true)
+  --enableUserData: oneof<nothing, bool> # Optional. include user data.
+  --enableTotalRecordCount: oneof<nothing, bool> # Retrieve total record count. (default: true)
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6281,20 +6280,20 @@ export def "live-tv-recordings GetRecordings" [
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
   --status: string@status-completer # Optional. Filter by recording status.
-  --isInProgress: string@bool-completer # Optional. Filter by recordings that are in progress, or not.
+  --isInProgress: oneof<nothing, bool> # Optional. Filter by recordings that are in progress, or not.
   --seriesTimerId: string # Optional. Filter by recordings belonging to a series timer.
-  --enableImages: string@bool-completer # Optional. Include image information in output.
+  --enableImages: oneof<nothing, bool> # Optional. Include image information in output.
   --imageTypeLimit: int # Optional. The max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
   --qp-fields: list # Optional. Specify additional fields of information to return in the output.
-  --enableUserData: string@bool-completer # Optional. Include user data.
-  --isMovie: string@bool-completer # Optional. Filter for movies.
-  --isSeries: string@bool-completer # Optional. Filter for series.
-  --isKids: string@bool-completer # Optional. Filter for kids.
-  --isSports: string@bool-completer # Optional. Filter for sports.
-  --isNews: string@bool-completer # Optional. Filter for news.
-  --isLibraryItem: string@bool-completer # Optional. Filter for is library item.
-  --enableTotalRecordCount: string@bool-completer # Optional. Return total record count. (default: true)
+  --enableUserData: oneof<nothing, bool> # Optional. Include user data.
+  --isMovie: oneof<nothing, bool> # Optional. Filter for movies.
+  --isSeries: oneof<nothing, bool> # Optional. Filter for series.
+  --isKids: oneof<nothing, bool> # Optional. Filter for kids.
+  --isSports: oneof<nothing, bool> # Optional. Filter for sports.
+  --isNews: oneof<nothing, bool> # Optional. Filter for news.
+  --isLibraryItem: oneof<nothing, bool> # Optional. Filter for is library item.
+  --enableTotalRecordCount: oneof<nothing, bool> # Optional. Return total record count. (default: true)
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6447,14 +6446,14 @@ export def "live-tv-recordings-series GetRecordingsSeries" [
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
   --status: string@status-completer # Optional. Filter by recording status.
-  --isInProgress: string@bool-completer # Optional. Filter by recordings that are in progress, or not.
+  --isInProgress: oneof<nothing, bool> # Optional. Filter by recordings that are in progress, or not.
   --seriesTimerId: string # Optional. Filter by recordings belonging to a series timer.
-  --enableImages: string@bool-completer # Optional. Include image information in output.
+  --enableImages: oneof<nothing, bool> # Optional. Include image information in output.
   --imageTypeLimit: int # Optional. The max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
   --qp-fields: list # Optional. Specify additional fields of information to return in the output.
-  --enableUserData: string@bool-completer # Optional. Include user data.
-  --enableTotalRecordCount: string@bool-completer # Optional. Return total record count. (default: true)
+  --enableUserData: oneof<nothing, bool> # Optional. Include user data.
+  --enableTotalRecordCount: oneof<nothing, bool> # Optional. Return total record count. (default: true)
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6520,16 +6519,16 @@ export def "live-tv-series-timers CreateSeriesTimer" [
   --Priority: int # Gets or sets the priority. (format: int32)
   --PrePaddingSeconds: int # Gets or sets the pre padding seconds. (format: int32)
   --PostPaddingSeconds: int # Gets or sets the post padding seconds. (format: int32)
-  --IsPrePaddingRequired: string@bool-completer # Gets or sets a value indicating whether this instance is pre padding required.
+  --IsPrePaddingRequired: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is pre padding required.
   --ParentBackdropItemId: string # Gets or sets the Id of the Parent that has a backdrop if the item does not have one. (nullable)
   --ParentBackdropImageTags: list # Gets or sets the parent backdrop image tags. (nullable)
-  --IsPostPaddingRequired: string@bool-completer # Gets or sets a value indicating whether this instance is post padding required.
+  --IsPostPaddingRequired: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is post padding required.
   --KeepUntil: any@KeepUntil-completer
-  --RecordAnyTime: string@bool-completer # Gets or sets a value indicating whether [record any time].
-  --SkipEpisodesInLibrary: string@bool-completer
-  --RecordAnyChannel: string@bool-completer # Gets or sets a value indicating whether [record any channel].
+  --RecordAnyTime: oneof<nothing, bool> # Gets or sets a value indicating whether [record any time].
+  --SkipEpisodesInLibrary: oneof<nothing, bool>
+  --RecordAnyChannel: oneof<nothing, bool> # Gets or sets a value indicating whether [record any channel].
   --KeepUpTo: int # format: int32
-  --RecordNewOnly: string@bool-completer # Gets or sets a value indicating whether [record new only].
+  --RecordNewOnly: oneof<nothing, bool> # Gets or sets a value indicating whether [record new only].
   --Days: list # Gets or sets the days. (nullable)
   --DayPattern: any@DayPattern-completer # Gets or sets the day pattern. (nullable)
   --ImageTags: record # Gets or sets the image tags. (nullable)
@@ -6625,16 +6624,16 @@ export def "live-tv-series-timers UpdateSeriesTimer" [
   --Priority: int # Gets or sets the priority. (format: int32)
   --PrePaddingSeconds: int # Gets or sets the pre padding seconds. (format: int32)
   --PostPaddingSeconds: int # Gets or sets the post padding seconds. (format: int32)
-  --IsPrePaddingRequired: string@bool-completer # Gets or sets a value indicating whether this instance is pre padding required.
+  --IsPrePaddingRequired: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is pre padding required.
   --ParentBackdropItemId: string # Gets or sets the Id of the Parent that has a backdrop if the item does not have one. (nullable)
   --ParentBackdropImageTags: list # Gets or sets the parent backdrop image tags. (nullable)
-  --IsPostPaddingRequired: string@bool-completer # Gets or sets a value indicating whether this instance is post padding required.
+  --IsPostPaddingRequired: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is post padding required.
   --KeepUntil: any@KeepUntil-completer
-  --RecordAnyTime: string@bool-completer # Gets or sets a value indicating whether [record any time].
-  --SkipEpisodesInLibrary: string@bool-completer
-  --RecordAnyChannel: string@bool-completer # Gets or sets a value indicating whether [record any channel].
+  --RecordAnyTime: oneof<nothing, bool> # Gets or sets a value indicating whether [record any time].
+  --SkipEpisodesInLibrary: oneof<nothing, bool>
+  --RecordAnyChannel: oneof<nothing, bool> # Gets or sets a value indicating whether [record any channel].
   --KeepUpTo: int # format: int32
-  --RecordNewOnly: string@bool-completer # Gets or sets a value indicating whether [record new only].
+  --RecordNewOnly: oneof<nothing, bool> # Gets or sets a value indicating whether [record new only].
   --Days: list # Gets or sets the days. (nullable)
   --DayPattern: any@DayPattern-completer # Gets or sets the day pattern. (nullable)
   --ImageTags: record # Gets or sets the image tags. (nullable)
@@ -6669,8 +6668,8 @@ export def "live-tv-timers GetTimers" [
   --accept: string@accept-completer # Response content type
   --channelId: string # Optional. Filter by channel id.
   --seriesTimerId: string # Optional. Filter by timers belonging to a series timer.
-  --isActive: string@bool-completer # Optional. Filter by timers that are active.
-  --isScheduled: string@bool-completer # Optional. Filter by timers that are scheduled.
+  --isActive: oneof<nothing, bool> # Optional. Filter by timers that are active.
+  --isScheduled: oneof<nothing, bool> # Optional. Filter by timers that are scheduled.
 ]: nothing -> record<Items: table<Id: string, Type: string, ServerId: string, ExternalId: string, ChannelId: string, ExternalChannelId: string, ChannelName: string, ChannelPrimaryImageTag: string, ProgramId: string, ExternalProgramId: string, Name: string, Overview: string, StartDate: string, EndDate: string, ServiceName: string, Priority: int, PrePaddingSeconds: int, PostPaddingSeconds: int, IsPrePaddingRequired: bool, ParentBackdropItemId: string, ParentBackdropImageTags: list, IsPostPaddingRequired: bool, KeepUntil: record, Status: record, SeriesTimerId: string, ExternalSeriesTimerId: string, RunTimeTicks: int, ProgramInfo: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6711,10 +6710,10 @@ export def "live-tv-timers CreateTimer" [
   --Priority: int # Gets or sets the priority. (format: int32)
   --PrePaddingSeconds: int # Gets or sets the pre padding seconds. (format: int32)
   --PostPaddingSeconds: int # Gets or sets the post padding seconds. (format: int32)
-  --IsPrePaddingRequired: string@bool-completer # Gets or sets a value indicating whether this instance is pre padding required.
+  --IsPrePaddingRequired: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is pre padding required.
   --ParentBackdropItemId: string # Gets or sets the Id of the Parent that has a backdrop if the item does not have one. (nullable)
   --ParentBackdropImageTags: list # Gets or sets the parent backdrop image tags. (nullable)
-  --IsPostPaddingRequired: string@bool-completer # Gets or sets a value indicating whether this instance is post padding required.
+  --IsPostPaddingRequired: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is post padding required.
   --KeepUntil: any@KeepUntil-completer
   --Status: any@Status-completer # Gets or sets the status.
   --SeriesTimerId: string # Gets or sets the series timer identifier. (nullable)
@@ -6809,10 +6808,10 @@ export def "live-tv-timers UpdateTimer" [
   --Priority: int # Gets or sets the priority. (format: int32)
   --PrePaddingSeconds: int # Gets or sets the pre padding seconds. (format: int32)
   --PostPaddingSeconds: int # Gets or sets the post padding seconds. (format: int32)
-  --IsPrePaddingRequired: string@bool-completer # Gets or sets a value indicating whether this instance is pre padding required.
+  --IsPrePaddingRequired: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is pre padding required.
   --ParentBackdropItemId: string # Gets or sets the Id of the Parent that has a backdrop if the item does not have one. (nullable)
   --ParentBackdropImageTags: list # Gets or sets the parent backdrop image tags. (nullable)
-  --IsPostPaddingRequired: string@bool-completer # Gets or sets a value indicating whether this instance is post padding required.
+  --IsPostPaddingRequired: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is post padding required.
   --KeepUntil: any@KeepUntil-completer
   --Status: any@Status-completer # Gets or sets the status.
   --SeriesTimerId: string # Gets or sets the series timer identifier. (nullable)
@@ -6873,17 +6872,17 @@ export def "live-tv-tuner-hosts AddTunerHost" [
   --Type: string # nullable
   --DeviceId: string # nullable
   --FriendlyName: string # nullable
-  --ImportFavoritesOnly: string@bool-completer
-  --AllowHWTranscoding: string@bool-completer
-  --AllowFmp4TranscodingContainer: string@bool-completer
-  --AllowStreamSharing: string@bool-completer
+  --ImportFavoritesOnly: oneof<nothing, bool>
+  --AllowHWTranscoding: oneof<nothing, bool>
+  --AllowFmp4TranscodingContainer: oneof<nothing, bool>
+  --AllowStreamSharing: oneof<nothing, bool>
   --FallbackMaxStreamingBitrate: int # format: int32
-  --EnableStreamLooping: string@bool-completer
+  --EnableStreamLooping: oneof<nothing, bool>
   --Source: string # nullable
   --TunerCount: int # format: int32
   --UserAgent: string # nullable
-  --IgnoreDts: string@bool-completer
-  --ReadAtNativeFramerate: string@bool-completer
+  --IgnoreDts: oneof<nothing, bool>
+  --ReadAtNativeFramerate: oneof<nothing, bool>
 ]: any -> record<Id: string, Url: string, Type: string, DeviceId: string, FriendlyName: string, ImportFavoritesOnly: bool, AllowHWTranscoding: bool, AllowFmp4TranscodingContainer: bool, AllowStreamSharing: bool, FallbackMaxStreamingBitrate: int, EnableStreamLooping: bool, Source: string, TunerCount: int, UserAgent: string, IgnoreDts: bool, ReadAtNativeFramerate: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6976,7 +6975,7 @@ export def "live-tv-tuners-discover DiscoverTuners" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --newDevicesOnly: string@bool-completer # Only discover new tuners. (default: false)
+  --newDevicesOnly: oneof<nothing, bool> # Only discover new tuners. (default: false)
 ]: nothing -> table<Id: string, Url: string, Type: string, DeviceId: string, FriendlyName: string, ImportFavoritesOnly: bool, AllowHWTranscoding: bool, AllowFmp4TranscodingContainer: bool, AllowStreamSharing: bool, FallbackMaxStreamingBitrate: int, EnableStreamLooping: bool, Source: string, TunerCount: int, UserAgent: string, IgnoreDts: bool, ReadAtNativeFramerate: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7000,7 +6999,7 @@ export def "live-tv-tuners-discvover DiscvoverTuners" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --newDevicesOnly: string@bool-completer # Only discover new tuners. (default: false)
+  --newDevicesOnly: oneof<nothing, bool> # Only discover new tuners. (default: false)
 ]: nothing -> table<Id: string, Url: string, Type: string, DeviceId: string, FriendlyName: string, ImportFavoritesOnly: bool, AllowHWTranscoding: bool, AllowFmp4TranscodingContainer: bool, AllowStreamSharing: bool, FallbackMaxStreamingBitrate: int, EnableStreamLooping: bool, Source: string, TunerCount: int, UserAgent: string, IgnoreDts: bool, ReadAtNativeFramerate: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7303,12 +7302,12 @@ export def "items-playback-info GetPostedPlaybackInfo" [
   --maxAudioChannels: int # The maximum number of audio channels. (DEPRECATED, format: int32)
   --mediaSourceId: string # The media source id. (DEPRECATED)
   --liveStreamId: string # The livestream id. (DEPRECATED)
-  --autoOpenLiveStream: string@bool-completer # Whether to auto open the livestream. (DEPRECATED)
-  --enableDirectPlay: string@bool-completer # Whether to enable direct play. Default: true. (DEPRECATED)
-  --enableDirectStream: string@bool-completer # Whether to enable direct stream. Default: true. (DEPRECATED)
-  --enableTranscoding: string@bool-completer # Whether to enable transcoding. Default: true. (DEPRECATED)
-  --allowVideoStreamCopy: string@bool-completer # Whether to allow to copy the video stream. Default: true. (DEPRECATED)
-  --allowAudioStreamCopy: string@bool-completer # Whether to allow to copy the audio stream. Default: true. (DEPRECATED)
+  --autoOpenLiveStream: oneof<nothing, bool> # Whether to auto open the livestream. (DEPRECATED)
+  --enableDirectPlay: oneof<nothing, bool> # Whether to enable direct play. Default: true. (DEPRECATED)
+  --enableDirectStream: oneof<nothing, bool> # Whether to enable direct stream. Default: true. (DEPRECATED)
+  --enableTranscoding: oneof<nothing, bool> # Whether to enable transcoding. Default: true. (DEPRECATED)
+  --allowVideoStreamCopy: oneof<nothing, bool> # Whether to allow to copy the video stream. Default: true. (DEPRECATED)
+  --allowAudioStreamCopy: oneof<nothing, bool> # Whether to allow to copy the audio stream. Default: true. (DEPRECATED)
   --UserId: string # Gets or sets the playback userId. (nullable, format: uuid)
   --MaxStreamingBitrate: int # Gets or sets the max streaming bitrate. (nullable, format: int32)
   --StartTimeTicks: int # Gets or sets the start time in ticks. (nullable, format: int64)
@@ -7318,13 +7317,13 @@ export def "items-playback-info GetPostedPlaybackInfo" [
   --MediaSourceId: string # Gets or sets the media source id. (nullable)
   --LiveStreamId: string # Gets or sets the live stream id. (nullable)
   --DeviceProfile: any # A MediaBrowser.Model.Dlna.DeviceProfile represents a set of metadata which determines which content a certain device is able to play. <br /> Specifically, it defines the supported <see cref="P:MediaBrowser.Model.Dlna.DeviceProfile.ContainerProfiles">containers</see> and <see cref="P:MediaBrowser.Model.Dlna.DeviceProfile.CodecProfiles">codecs</see> (video and/or audio, including codec profiles and levels) the device is able to direct play (without transcoding or remuxing), as well as which <see cref="P:MediaBrowser.Model.Dlna.DeviceProfile.TranscodingProfiles">containers/codecs to transcode to</see> in case it isn't. (nullable)
-  --EnableDirectPlay: string@bool-completer # Gets or sets a value indicating whether to enable direct play. (nullable)
-  --EnableDirectStream: string@bool-completer # Gets or sets a value indicating whether to enable direct stream. (nullable)
-  --EnableTranscoding: string@bool-completer # Gets or sets a value indicating whether to enable transcoding. (nullable)
-  --AllowVideoStreamCopy: string@bool-completer # Gets or sets a value indicating whether to enable video stream copy. (nullable)
-  --AllowAudioStreamCopy: string@bool-completer # Gets or sets a value indicating whether to allow audio stream copy. (nullable)
-  --AutoOpenLiveStream: string@bool-completer # Gets or sets a value indicating whether to auto open the live stream. (nullable)
-  --AlwaysBurnInSubtitleWhenTranscoding: string@bool-completer # Gets or sets a value indicating whether always burn in subtitles when transcoding. (nullable)
+  --EnableDirectPlay: oneof<nothing, bool> # Gets or sets a value indicating whether to enable direct play. (nullable)
+  --EnableDirectStream: oneof<nothing, bool> # Gets or sets a value indicating whether to enable direct stream. (nullable)
+  --EnableTranscoding: oneof<nothing, bool> # Gets or sets a value indicating whether to enable transcoding. (nullable)
+  --AllowVideoStreamCopy: oneof<nothing, bool> # Gets or sets a value indicating whether to enable video stream copy. (nullable)
+  --AllowAudioStreamCopy: oneof<nothing, bool> # Gets or sets a value indicating whether to allow audio stream copy. (nullable)
+  --AutoOpenLiveStream: oneof<nothing, bool> # Gets or sets a value indicating whether to auto open the live stream. (nullable)
+  --AlwaysBurnInSubtitleWhenTranscoding: oneof<nothing, bool> # Gets or sets a value indicating whether always burn in subtitles when transcoding. (nullable)
 ]: any -> record<MediaSources: table<Protocol: record, Id: string, Path: string, EncoderPath: string, EncoderProtocol: record, Type: record, Container: string, Size: int, Name: string, IsRemote: bool, ETag: string, RunTimeTicks: int, ReadAtNativeFramerate: bool, IgnoreDts: bool, IgnoreIndex: bool, GenPtsInput: bool, SupportsTranscoding: bool, SupportsDirectStream: bool, SupportsDirectPlay: bool, IsInfiniteStream: bool, UseMostCompatibleTranscodingProfile: bool, RequiresOpening: bool, OpenToken: string, RequiresClosing: bool, LiveStreamId: string, BufferMs: int, RequiresLooping: bool, SupportsProbing: bool, VideoType: record, IsoType: record, Video3DFormat: record, MediaStreams: list, MediaAttachments: list, Formats: list, Bitrate: int, FallbackMaxStreamingBitrate: int, Timestamp: record, RequiredHttpHeaders: record, TranscodingUrl: string, TranscodingSubProtocol: record, TranscodingContainer: string, AnalyzeDurationMs: int, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, HasSegments: bool>, PlaySessionId: string, ErrorCode: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7383,9 +7382,9 @@ export def "live-streams-open OpenLiveStream" [
   --subtitleStreamIndex: int # The subtitle stream index. (format: int32)
   --maxAudioChannels: int # The maximum number of audio channels. (format: int32)
   --itemId: string # The item id. (format: uuid)
-  --enableDirectPlay: string@bool-completer # Whether to enable direct play. Default: true.
-  --enableDirectStream: string@bool-completer # Whether to enable direct stream. Default: true.
-  --alwaysBurnInSubtitleWhenTranscoding: string@bool-completer # Always burn-in subtitle when transcoding.
+  --enableDirectPlay: oneof<nothing, bool> # Whether to enable direct play. Default: true.
+  --enableDirectStream: oneof<nothing, bool> # Whether to enable direct stream. Default: true.
+  --alwaysBurnInSubtitleWhenTranscoding: oneof<nothing, bool> # Always burn-in subtitle when transcoding.
   --OpenToken: string # Gets or sets the open token. (nullable)
   --UserId: string # Gets or sets the user id. (nullable, format: uuid)
   --PlaySessionId: string # Gets or sets the play session id. (nullable)
@@ -7395,9 +7394,9 @@ export def "live-streams-open OpenLiveStream" [
   --SubtitleStreamIndex: int # Gets or sets the subtitle stream index. (nullable, format: int32)
   --MaxAudioChannels: int # Gets or sets the max audio channels. (nullable, format: int32)
   --ItemId: string # Gets or sets the item id. (nullable, format: uuid)
-  --EnableDirectPlay: string@bool-completer # Gets or sets a value indicating whether to enable direct play. (nullable)
-  --EnableDirectStream: string@bool-completer # Gets or sets a value indicating whether to enable direct stream. (nullable)
-  --AlwaysBurnInSubtitleWhenTranscoding: string@bool-completer # Gets or sets a value indicating whether always burn in subtitles when transcoding. (nullable)
+  --EnableDirectPlay: oneof<nothing, bool> # Gets or sets a value indicating whether to enable direct play. (nullable)
+  --EnableDirectStream: oneof<nothing, bool> # Gets or sets a value indicating whether to enable direct stream. (nullable)
+  --AlwaysBurnInSubtitleWhenTranscoding: oneof<nothing, bool> # Gets or sets a value indicating whether always burn in subtitles when transcoding. (nullable)
   --DeviceProfile: any # A MediaBrowser.Model.Dlna.DeviceProfile represents a set of metadata which determines which content a certain device is able to play. <br /> Specifically, it defines the supported <see cref="P:MediaBrowser.Model.Dlna.DeviceProfile.ContainerProfiles">containers</see> and <see cref="P:MediaBrowser.Model.Dlna.DeviceProfile.CodecProfiles">codecs</see> (video and/or audio, including codec profiles and levels) the device is able to direct play (without transcoding or remuxing), as well as which <see cref="P:MediaBrowser.Model.Dlna.DeviceProfile.TranscodingProfiles">containers/codecs to transcode to</see> in case it isn't. (nullable)
   --DirectPlayProtocols: list # Gets or sets the device play protocols.
 ]: any -> record<MediaSource: record<Protocol: record, Id: string, Path: string, EncoderPath: string, EncoderProtocol: record, Type: record, Container: string, Size: int, Name: string, IsRemote: bool, ETag: string, RunTimeTicks: int, ReadAtNativeFramerate: bool, IgnoreDts: bool, IgnoreIndex: bool, GenPtsInput: bool, SupportsTranscoding: bool, SupportsDirectStream: bool, SupportsDirectPlay: bool, IsInfiniteStream: bool, UseMostCompatibleTranscodingProfile: bool, RequiresOpening: bool, OpenToken: string, RequiresClosing: bool, LiveStreamId: string, BufferMs: int, RequiresLooping: bool, SupportsProbing: bool, VideoType: record, IsoType: record, Video3DFormat: record, MediaStreams: list<record>, MediaAttachments: list<record>, Formats: list<string>, Bitrate: int, FallbackMaxStreamingBitrate: int, Timestamp: record, RequiredHttpHeaders: record, TranscodingUrl: string, TranscodingSubProtocol: record, TranscodingContainer: string, AnalyzeDurationMs: int, DefaultAudioStreamIndex: int, DefaultSubtitleStreamIndex: int, HasSegments: bool>> {
@@ -7511,7 +7510,7 @@ export def "music-genres GetMusicGenres" [
   --qp-fields: list # Optional. Specify additional fields of information to return in the output.
   --excludeItemTypes: list # Optional. If specified, results will be filtered out based on item type. This allows multiple, comma delimited.
   --includeItemTypes: list # Optional. If specified, results will be filtered in based on item type. This allows multiple, comma delimited.
-  --isFavorite: string@bool-completer # Optional filter by items that are marked as favorite, or not.
+  --isFavorite: oneof<nothing, bool> # Optional filter by items that are marked as favorite, or not.
   --imageTypeLimit: int # Optional, the max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
   --userId: string # User id. (format: uuid)
@@ -7520,8 +7519,8 @@ export def "music-genres GetMusicGenres" [
   --nameLessThan: string # Optional filter by items whose name is equally or lesser than a given input string.
   --sortBy: list # Optional. Specify one or more sort orders, comma delimited.
   --sortOrder: list # Sort Order - Ascending,Descending.
-  --enableImages: string@bool-completer # Optional, include image information in output. (default: true)
-  --enableTotalRecordCount: string@bool-completer # Optional. Include total record count. (default: true)
+  --enableImages: oneof<nothing, bool> # Optional, include image information in output. (default: true)
+  --enableTotalRecordCount: oneof<nothing, bool> # Optional. Include total record count. (default: true)
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7715,15 +7714,15 @@ export def "persons GetPersons" [
   --searchTerm: string # The search term.
   --qp-fields: list # Optional. Specify additional fields of information to return in the output.
   --filters: list # Optional. Specify additional filters to apply.
-  --isFavorite: string@bool-completer # Optional filter by items that are marked as favorite, or not. userId is required.
-  --enableUserData: string@bool-completer # Optional, include user data.
+  --isFavorite: oneof<nothing, bool> # Optional filter by items that are marked as favorite, or not. userId is required.
+  --enableUserData: oneof<nothing, bool> # Optional, include user data.
   --imageTypeLimit: int # Optional, the max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
   --excludePersonTypes: list # Optional. If specified results will be filtered to exclude those containing the specified PersonType. Allows multiple, comma-delimited.
   --personTypes: list # Optional. If specified results will be filtered to include only those containing the specified PersonType. Allows multiple, comma-delimited.
   --appearsInItemId: string # Optional. If specified, person results will be filtered on items related to said persons. (format: uuid)
   --userId: string # User id. (format: uuid)
-  --enableImages: string@bool-completer # Optional, include image information in output. (default: true)
+  --enableImages: oneof<nothing, bool> # Optional, include image information in output. (default: true)
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7786,7 +7785,7 @@ export def "playlists CreatePlaylist" [
   --UserId: string # Gets or sets the user id. (nullable, format: uuid)
   --MediaType: any@MediaType-completer # Gets or sets the media type. (nullable)
   --Users: list # Gets or sets the playlist users. — item shape: {UserId?: string, CanEdit?: bool}
-  --IsPublic: string@bool-completer # Gets or sets a value indicating whether the playlist is public.
+  --IsPublic: oneof<nothing, bool> # Gets or sets a value indicating whether the playlist is public.
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7817,7 +7816,7 @@ export def "playlists UpdatePlaylist" [
   --Name: string # Gets or sets the name of the new playlist. (nullable)
   --Ids: list # Gets or sets item ids of the playlist. (nullable)
   --Users: list # Gets or sets the playlist users. (nullable) — item shape: {UserId?: string, CanEdit?: bool}
-  --IsPublic: string@bool-completer # Gets or sets a value indicating whether the playlist is public. (nullable)
+  --IsPublic: oneof<nothing, bool> # Gets or sets a value indicating whether the playlist is public. (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7920,8 +7919,8 @@ export def "playlists-items GetPlaylistItems" [
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
   --qp-fields: list # Optional. Specify additional fields of information to return in the output.
-  --enableImages: string@bool-completer # Optional. Include image information in output.
-  --enableUserData: string@bool-completer # Optional. Include user data.
+  --enableImages: oneof<nothing, bool> # Optional. Include image information in output.
+  --enableUserData: oneof<nothing, bool> # Optional. Include user data.
   --imageTypeLimit: int # Optional. The max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
@@ -8019,7 +8018,7 @@ export def "playlists-users UpdatePlaylistUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CanEdit: string@bool-completer # Gets or sets a value indicating whether the user can edit the playlist. (nullable)
+  --CanEdit: oneof<nothing, bool> # Gets or sets a value indicating whether the user can edit the playlist. (nullable)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8076,7 +8075,7 @@ export def "playing-items OnPlaybackStart" [
   --playMethod: string@playMethod-completer # The play method.
   --liveStreamId: string # The live stream id.
   --playSessionId: string # The play session id.
-  --canSeek: string@bool-completer # Indicates if the client can seek. (default: false)
+  --canSeek: oneof<nothing, bool> # Indicates if the client can seek. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8141,8 +8140,8 @@ export def "playing-items-progress OnPlaybackProgress" [
   --liveStreamId: string # The live stream id.
   --playSessionId: string # The play session id.
   --repeatMode: string@repeatMode-completer # The repeat mode.
-  --isPaused: string@bool-completer # Indicates if the player is paused. (default: false)
-  --isMuted: string@bool-completer # Indicates if the player is muted. (default: false)
+  --isPaused: oneof<nothing, bool> # Indicates if the player is paused. (default: false)
+  --isMuted: oneof<nothing, bool> # Indicates if the player is muted. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8166,15 +8165,15 @@ export def "sessions-playing ReportPlaybackStart" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CanSeek: string@bool-completer # Gets or sets a value indicating whether this instance can seek.
+  --CanSeek: oneof<nothing, bool> # Gets or sets a value indicating whether this instance can seek.
   --Item: any # Gets or sets the item. (nullable)
   --ItemId: string # Gets or sets the item identifier. (format: uuid)
   --SessionId: string # Gets or sets the session id. (nullable)
   --MediaSourceId: string # Gets or sets the media version identifier. (nullable)
   --AudioStreamIndex: int # Gets or sets the index of the audio stream. (nullable, format: int32)
   --SubtitleStreamIndex: int # Gets or sets the index of the subtitle stream. (nullable, format: int32)
-  --IsPaused: string@bool-completer # Gets or sets a value indicating whether this instance is paused.
-  --IsMuted: string@bool-completer # Gets or sets a value indicating whether this instance is muted.
+  --IsPaused: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is paused.
+  --IsMuted: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is muted.
   --PositionTicks: int # Gets or sets the position ticks. (nullable, format: int64)
   --PlaybackStartTimeTicks: int # nullable, format: int64
   --VolumeLevel: int # Gets or sets the volume level. (nullable, format: int32)
@@ -8235,15 +8234,15 @@ export def "sessions-playing-progress ReportPlaybackProgress" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --CanSeek: string@bool-completer # Gets or sets a value indicating whether this instance can seek.
+  --CanSeek: oneof<nothing, bool> # Gets or sets a value indicating whether this instance can seek.
   --Item: any # Gets or sets the item. (nullable)
   --ItemId: string # Gets or sets the item identifier. (format: uuid)
   --SessionId: string # Gets or sets the session id. (nullable)
   --MediaSourceId: string # Gets or sets the media version identifier. (nullable)
   --AudioStreamIndex: int # Gets or sets the index of the audio stream. (nullable, format: int32)
   --SubtitleStreamIndex: int # Gets or sets the index of the subtitle stream. (nullable, format: int32)
-  --IsPaused: string@bool-completer # Gets or sets a value indicating whether this instance is paused.
-  --IsMuted: string@bool-completer # Gets or sets a value indicating whether this instance is muted.
+  --IsPaused: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is paused.
+  --IsMuted: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is muted.
   --PositionTicks: int # Gets or sets the position ticks. (nullable, format: int64)
   --PlaybackStartTimeTicks: int # nullable, format: int64
   --VolumeLevel: int # Gets or sets the volume level. (nullable, format: int32)
@@ -8288,7 +8287,7 @@ export def "sessions-playing-stopped ReportPlaybackStopped" [
   --PositionTicks: int # Gets or sets the position ticks. (nullable, format: int64)
   --LiveStreamId: string # Gets or sets the live stream identifier. (nullable)
   --PlaySessionId: string # Gets or sets the play session identifier. (nullable)
-  --Failed: string@bool-completer # Gets or sets a value indicating whether this MediaBrowser.Model.Session.PlaybackStopInfo is failed.
+  --Failed: oneof<nothing, bool> # Gets or sets a value indicating whether this MediaBrowser.Model.Session.PlaybackStopInfo is failed.
   --NextMediaType: string # nullable
   --PlaylistItemId: string # nullable
   --NowPlayingQueue: list # nullable — item shape: {Id?: string, PlaylistItemId?: string}
@@ -8671,7 +8670,7 @@ export def "items-remote-images GetRemoteImages" [
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
   --providerName: string # Optional. The image provider to use.
-  --includeAllLanguages: string@bool-completer # Optional. Include all languages. (default: false)
+  --includeAllLanguages: oneof<nothing, bool> # Optional. Include all languages. (default: false)
 ]: nothing -> record<Images: table<ProviderName: string, Url: string, ThumbnailUrl: string, Height: int, Width: int, CommunityRating: float, VoteCount: int, Language: string, Type: record, RatingType: record>, TotalRecordCount: int, Providers: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8743,8 +8742,8 @@ export def "scheduled-tasks GetTasks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --isHidden: string@bool-completer # Optional filter tasks that are hidden, or not.
-  --isEnabled: string@bool-completer # Optional filter tasks that are enabled, or not.
+  --isHidden: oneof<nothing, bool> # Optional filter tasks that are hidden, or not.
+  --isEnabled: oneof<nothing, bool> # Optional filter tasks that are enabled, or not.
 ]: nothing -> table<Name: string, State: record, CurrentProgressPercentage: float, Id: string, LastExecutionResult: record<StartTimeUtc: string, EndTimeUtc: string, Status: record, Name: string, Key: string, Id: string, ErrorMessage: string, LongErrorMessage: string>, Triggers: list<record>, Description: string, Category: string, IsHidden: bool, Key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8868,16 +8867,16 @@ export def "search-hints GetSearchHints" [
   --excludeItemTypes: list # If specified, results with these item types are filtered out. This allows multiple, comma delimited.
   --mediaTypes: list # If specified, only results with the specified media types are returned. This allows multiple, comma delimited.
   --parentId: string # If specified, only children of the parent are returned. (format: uuid)
-  --isMovie: string@bool-completer # Optional filter for movies.
-  --isSeries: string@bool-completer # Optional filter for series.
-  --isNews: string@bool-completer # Optional filter for news.
-  --isKids: string@bool-completer # Optional filter for kids.
-  --isSports: string@bool-completer # Optional filter for sports.
-  --includePeople: string@bool-completer # Optional filter whether to include people. (default: true)
-  --includeMedia: string@bool-completer # Optional filter whether to include media. (default: true)
-  --includeGenres: string@bool-completer # Optional filter whether to include genres. (default: true)
-  --includeStudios: string@bool-completer # Optional filter whether to include studios. (default: true)
-  --includeArtists: string@bool-completer # Optional filter whether to include artists. (default: true)
+  --isMovie: oneof<nothing, bool> # Optional filter for movies.
+  --isSeries: oneof<nothing, bool> # Optional filter for series.
+  --isNews: oneof<nothing, bool> # Optional filter for news.
+  --isKids: oneof<nothing, bool> # Optional filter for kids.
+  --isSports: oneof<nothing, bool> # Optional filter for sports.
+  --includePeople: oneof<nothing, bool> # Optional filter whether to include people. (default: true)
+  --includeMedia: oneof<nothing, bool> # Optional filter whether to include media. (default: true)
+  --includeGenres: oneof<nothing, bool> # Optional filter whether to include genres. (default: true)
+  --includeStudios: oneof<nothing, bool> # Optional filter whether to include studios. (default: true)
+  --includeArtists: oneof<nothing, bool> # Optional filter whether to include artists. (default: true)
 ]: nothing -> record<SearchHints: table<ItemId: string, Id: string, Name: string, MatchedTerm: string, IndexNumber: int, ProductionYear: int, ParentIndexNumber: int, PrimaryImageTag: string, ThumbImageTag: string, ThumbImageItemId: string, BackdropImageTag: string, BackdropImageItemId: string, Type: record, IsFolder: bool, RunTimeTicks: int, MediaType: record, StartDate: string, EndDate: string, Series: string, Status: string, Album: string, AlbumId: string, AlbumArtist: string, Artists: list, SongCount: int, EpisodeCount: int, ChannelId: string, ChannelName: string, PrimaryImageAspectRatio: float>, TotalRecordCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9203,8 +9202,8 @@ export def "sessions-capabilities PostCapabilities" [
   --id: string # The session id.
   --playableMediaTypes: list # A list of playable media types, comma delimited. Audio, Video, Book, Photo.
   --supportedCommands: list # A list of supported remote control commands, comma delimited.
-  --supportsMediaControl: string@bool-completer # Determines whether media can be played remotely.. (default: false)
-  --supportsPersistentIdentifier: string@bool-completer # Determines whether the device supports a unique identifier. (default: true)
+  --supportsMediaControl: oneof<nothing, bool> # Determines whether media can be played remotely.. (default: false)
+  --supportsPersistentIdentifier: oneof<nothing, bool> # Determines whether the device supports a unique identifier. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9230,8 +9229,8 @@ export def "sessions-capabilities-full PostFullCapabilities" [
   --id: string # The session id.
   --PlayableMediaTypes: list # Gets or sets the list of playable media types.
   --SupportedCommands: list # Gets or sets the list of supported commands.
-  --SupportsMediaControl: string@bool-completer # Gets or sets a value indicating whether session supports media control.
-  --SupportsPersistentIdentifier: string@bool-completer # Gets or sets a value indicating whether session supports a persistent identifier.
+  --SupportsMediaControl: oneof<nothing, bool> # Gets or sets a value indicating whether session supports media control.
+  --SupportsPersistentIdentifier: oneof<nothing, bool> # Gets or sets a value indicating whether session supports a persistent identifier.
   --DeviceProfile: any # Gets or sets the device profile. (nullable)
   --AppStoreUrl: string # Gets or sets the app store url. (nullable)
   --IconUrl: string # Gets or sets the icon url. (nullable)
@@ -9399,8 +9398,8 @@ export def "startup-remote-access SetRemoteAccess" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --EnableRemoteAccess: string@bool-completer # Gets or sets a value indicating whether enable remote access.
-  --EnableAutomaticPortMapping: string@bool-completer # Gets or sets a value indicating whether enable automatic port mapping. (DEPRECATED)
+  --EnableRemoteAccess: oneof<nothing, bool> # Gets or sets a value indicating whether enable remote access.
+  --EnableAutomaticPortMapping: oneof<nothing, bool> # Gets or sets a value indicating whether enable automatic port mapping. (DEPRECATED)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9481,16 +9480,16 @@ export def "studios GetStudios" [
   --qp-fields: list # Optional. Specify additional fields of information to return in the output.
   --excludeItemTypes: list # Optional. If specified, results will be filtered out based on item type. This allows multiple, comma delimited.
   --includeItemTypes: list # Optional. If specified, results will be filtered based on item type. This allows multiple, comma delimited.
-  --isFavorite: string@bool-completer # Optional filter by items that are marked as favorite, or not.
-  --enableUserData: string@bool-completer # Optional, include user data.
+  --isFavorite: oneof<nothing, bool> # Optional filter by items that are marked as favorite, or not.
+  --enableUserData: oneof<nothing, bool> # Optional, include user data.
   --imageTypeLimit: int # Optional, the max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
   --userId: string # User id. (format: uuid)
   --nameStartsWithOrGreater: string # Optional filter by items whose name is sorted equally or greater than a given input string.
   --nameStartsWith: string # Optional filter by items whose name is sorted equally than a given input string.
   --nameLessThan: string # Optional filter by items whose name is equally or lesser than a given input string.
-  --enableImages: string@bool-completer # Optional, include image information in output. (default: true)
-  --enableTotalRecordCount: string@bool-completer # Total record count. (default: true)
+  --enableImages: oneof<nothing, bool> # Optional, include image information in output. (default: true)
+  --enableTotalRecordCount: oneof<nothing, bool> # Total record count. (default: true)
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9585,7 +9584,7 @@ export def "items-remote-search-subtitles SearchRemoteSubtitles" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --isPerfectMatch: string@bool-completer # Optional. Only show subtitles which are a perfect match.
+  --isPerfectMatch: oneof<nothing, bool> # Optional. Only show subtitles which are a perfect match.
 ]: nothing -> table<ThreeLetterISOLanguageName: string, Id: string, ProviderName: string, Name: string, Format: string, Author: string, Comment: string, DateCreated: string, CommunityRating: float, FrameRate: float, DownloadCount: int, IsHashMatch: bool, AiTranslated: bool, MachineTranslated: bool, Forced: bool, HearingImpaired: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9682,8 +9681,8 @@ export def "videos-subtitles UploadSubtitle" [
   --allow-errors(-e) # Return full response without error handling
   Language: string # Gets or sets the subtitle language.
   Format: string # Gets or sets the subtitle format.
-  --IsForced: string@bool-completer # Gets or sets a value indicating whether the subtitle is forced.
-  --IsHearingImpaired: string@bool-completer # Gets or sets a value indicating whether the subtitle is for hearing impaired.
+  --IsForced: oneof<nothing, bool> # Gets or sets a value indicating whether the subtitle is forced.
+  --IsHearingImpaired: oneof<nothing, bool> # Gets or sets a value indicating whether the subtitle is for hearing impaired.
   Data: string # Gets or sets the subtitle data.
 ]: any -> any {
   let input = $in
@@ -9748,8 +9747,8 @@ export def "videos-subtitles-stream-route-format GetSubtitleWithTicks" [
   --startPositionTicks: int # The start position of the subtitle in ticks. (DEPRECATED, format: int64)
   --format: string # The format of the returned subtitle. (DEPRECATED)
   --endPositionTicks: int # Optional. The end position of the subtitle in ticks. (format: int64)
-  --copyTimestamps: string@bool-completer # Optional. Whether to copy the timestamps. (default: false)
-  --addVttTimeMap: string@bool-completer # Optional. Whether to add a VTT time map. (default: false)
+  --copyTimestamps: oneof<nothing, bool> # Optional. Whether to copy the timestamps. (default: false)
+  --addVttTimeMap: oneof<nothing, bool> # Optional. Whether to add a VTT time map. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9785,8 +9784,8 @@ export def "videos-subtitles-stream-route-format GetSubtitle" [
   --index: int # The subtitle stream index. (DEPRECATED, format: int32)
   --format: string # The format of the returned subtitle. (DEPRECATED)
   --endPositionTicks: int # Optional. The end position of the subtitle in ticks. (format: int64)
-  --copyTimestamps: string@bool-completer # Optional. Whether to copy the timestamps. (default: false)
-  --addVttTimeMap: string@bool-completer # Optional. Whether to add a VTT time map. (default: false)
+  --copyTimestamps: oneof<nothing, bool> # Optional. Whether to copy the timestamps. (default: false)
+  --addVttTimeMap: oneof<nothing, bool> # Optional. Whether to add a VTT time map. (default: false)
   --startPositionTicks: int # The start position of the subtitle in ticks. (format: int64, default: 0)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9816,7 +9815,7 @@ export def "items-suggestions GetSuggestions" [
   --type: list # The type.
   --startIndex: int # Optional. The start index. (format: int32)
   --limit: int # Optional. The limit. (format: int32)
-  --enableTotalRecordCount: string@bool-completer # Whether to enable the total record count. (default: false)
+  --enableTotalRecordCount: oneof<nothing, bool> # Whether to enable the total record count. (default: false)
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9864,7 +9863,7 @@ export def "sync-play-buffering SyncPlayBuffering" [
   --allow-errors(-e) # Return full response without error handling
   --When: string # Gets or sets when the request has been made by the client. (format: date-time)
   --PositionTicks: int # Gets or sets the position ticks. (format: int64)
-  --IsPlaying: string@bool-completer # Gets or sets a value indicating whether the client playback is unpaused.
+  --IsPlaying: oneof<nothing, bool> # Gets or sets a value indicating whether the client playback is unpaused.
   --PlaylistItemId: string # Gets or sets the playlist item identifier of the playing item. (format: uuid)
 ]: any -> any {
   let input = $in
@@ -10134,7 +10133,7 @@ export def "sync-play-ready SyncPlayReady" [
   --allow-errors(-e) # Return full response without error handling
   --When: string # Gets or sets when the request has been made by the client. (format: date-time)
   --PositionTicks: int # Gets or sets the position ticks. (format: int64)
-  --IsPlaying: string@bool-completer # Gets or sets a value indicating whether the client playback is unpaused.
+  --IsPlaying: oneof<nothing, bool> # Gets or sets a value indicating whether the client playback is unpaused.
   --PlaylistItemId: string # Gets or sets the playlist item identifier of the playing item. (format: uuid)
 ]: any -> any {
   let input = $in
@@ -10161,8 +10160,8 @@ export def "sync-play-remove-from-playlist SyncPlayRemoveFromPlaylist" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --PlaylistItemIds: list # Gets or sets the playlist identifiers of the items. Ignored when clearing the playlist.
-  --ClearPlaylist: string@bool-completer # Gets or sets a value indicating whether the entire playlist should be cleared.
-  --ClearPlayingItem: string@bool-completer # Gets or sets a value indicating whether the playing item should be removed as well. Used only when clearing the playlist.
+  --ClearPlaylist: oneof<nothing, bool> # Gets or sets a value indicating whether the entire playlist should be cleared.
+  --ClearPlayingItem: oneof<nothing, bool> # Gets or sets a value indicating whether the playing item should be removed as well. Used only when clearing the playlist.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10212,7 +10211,7 @@ export def "sync-play-set-ignore-wait SyncPlaySetIgnoreWait" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --IgnoreWait: string@bool-completer # Gets or sets a value indicating whether the client should be ignored.
+  --IgnoreWait: oneof<nothing, bool> # Gets or sets a value indicating whether the client should be ignored.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10646,55 +10645,55 @@ export def "trailers GetTrailers" [
   --accept: string@accept-completer # Response content type
   --userId: string # The user id supplied as query parameter; this is required when not using an API key. (format: uuid)
   --maxOfficialRating: string # Optional filter by maximum official rating (PG, PG-13, TV-MA, etc).
-  --hasThemeSong: string@bool-completer # Optional filter by items with theme songs.
-  --hasThemeVideo: string@bool-completer # Optional filter by items with theme videos.
-  --hasSubtitles: string@bool-completer # Optional filter by items with subtitles.
-  --hasSpecialFeature: string@bool-completer # Optional filter by items with special features.
-  --hasTrailer: string@bool-completer # Optional filter by items with trailers.
+  --hasThemeSong: oneof<nothing, bool> # Optional filter by items with theme songs.
+  --hasThemeVideo: oneof<nothing, bool> # Optional filter by items with theme videos.
+  --hasSubtitles: oneof<nothing, bool> # Optional filter by items with subtitles.
+  --hasSpecialFeature: oneof<nothing, bool> # Optional filter by items with special features.
+  --hasTrailer: oneof<nothing, bool> # Optional filter by items with trailers.
   --adjacentTo: string # Optional. Return items that are siblings of a supplied item. (format: uuid)
   --parentIndexNumber: int # Optional filter by parent index number. (format: int32)
-  --hasParentalRating: string@bool-completer # Optional filter by items that have or do not have a parental rating.
-  --isHd: string@bool-completer # Optional filter by items that are HD or not.
-  --is4K: string@bool-completer # Optional filter by items that are 4K or not.
+  --hasParentalRating: oneof<nothing, bool> # Optional filter by items that have or do not have a parental rating.
+  --isHd: oneof<nothing, bool> # Optional filter by items that are HD or not.
+  --is4K: oneof<nothing, bool> # Optional filter by items that are 4K or not.
   --locationTypes: list # Optional. If specified, results will be filtered based on LocationType. This allows multiple, comma delimited.
   --excludeLocationTypes: list # Optional. If specified, results will be filtered based on the LocationType. This allows multiple, comma delimited.
-  --isMissing: string@bool-completer # Optional filter by items that are missing episodes or not.
-  --isUnaired: string@bool-completer # Optional filter by items that are unaired episodes or not.
+  --isMissing: oneof<nothing, bool> # Optional filter by items that are missing episodes or not.
+  --isUnaired: oneof<nothing, bool> # Optional filter by items that are unaired episodes or not.
   --minCommunityRating: float # Optional filter by minimum community rating. (format: double)
   --minCriticRating: float # Optional filter by minimum critic rating. (format: double)
   --minPremiereDate: string # Optional. The minimum premiere date. Format = ISO. (format: date-time)
   --minDateLastSaved: string # Optional. The minimum last saved date. Format = ISO. (format: date-time)
   --minDateLastSavedForUser: string # Optional. The minimum last saved date for the current user. Format = ISO. (format: date-time)
   --maxPremiereDate: string # Optional. The maximum premiere date. Format = ISO. (format: date-time)
-  --hasOverview: string@bool-completer # Optional filter by items that have an overview or not.
-  --hasImdbId: string@bool-completer # Optional filter by items that have an IMDb id or not.
-  --hasTmdbId: string@bool-completer # Optional filter by items that have a TMDb id or not.
-  --hasTvdbId: string@bool-completer # Optional filter by items that have a TVDb id or not.
-  --isMovie: string@bool-completer # Optional filter for live tv movies.
-  --isSeries: string@bool-completer # Optional filter for live tv series.
-  --isNews: string@bool-completer # Optional filter for live tv news.
-  --isKids: string@bool-completer # Optional filter for live tv kids.
-  --isSports: string@bool-completer # Optional filter for live tv sports.
+  --hasOverview: oneof<nothing, bool> # Optional filter by items that have an overview or not.
+  --hasImdbId: oneof<nothing, bool> # Optional filter by items that have an IMDb id or not.
+  --hasTmdbId: oneof<nothing, bool> # Optional filter by items that have a TMDb id or not.
+  --hasTvdbId: oneof<nothing, bool> # Optional filter by items that have a TVDb id or not.
+  --isMovie: oneof<nothing, bool> # Optional filter for live tv movies.
+  --isSeries: oneof<nothing, bool> # Optional filter for live tv series.
+  --isNews: oneof<nothing, bool> # Optional filter for live tv news.
+  --isKids: oneof<nothing, bool> # Optional filter for live tv kids.
+  --isSports: oneof<nothing, bool> # Optional filter for live tv sports.
   --excludeItemIds: list # Optional. If specified, results will be filtered by excluding item ids. This allows multiple, comma delimited.
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
-  --recursive: string@bool-completer # When searching within folders, this determines whether or not the search will be recursive. true/false.
+  --recursive: oneof<nothing, bool> # When searching within folders, this determines whether or not the search will be recursive. true/false.
   --searchTerm: string # Optional. Filter based on a search term.
   --sortOrder: list # Sort Order - Ascending, Descending.
   --parentId: string # Specify this to localize the search to a specific item or folder. Omit to use the root. (format: uuid)
   --qp-fields: list # Optional. Specify additional fields of information to return in the output. This allows multiple, comma delimited. Options: Budget, Chapters, DateCreated, Genres, HomePageUrl, IndexOptions, MediaStreams, Overview, ParentId, Path, People, ProviderIds, PrimaryImageAspectRatio, Revenue, SortName, Studios, Taglines.
   --excludeItemTypes: list # Optional. If specified, results will be filtered based on item type. This allows multiple, comma delimited.
   --filters: list # Optional. Specify additional filters to apply. This allows multiple, comma delimited. Options: IsFolder, IsNotFolder, IsUnplayed, IsPlayed, IsFavorite, IsResumable, Likes, Dislikes.
-  --isFavorite: string@bool-completer # Optional filter by items that are marked as favorite, or not.
+  --isFavorite: oneof<nothing, bool> # Optional filter by items that are marked as favorite, or not.
   --mediaTypes: list # Optional filter by MediaType. Allows multiple, comma delimited.
   --imageTypes: list # Optional. If specified, results will be filtered based on those containing image types. This allows multiple, comma delimited.
   --sortBy: list # Optional. Specify one or more sort orders, comma delimited. Options: Album, AlbumArtist, Artist, Budget, CommunityRating, CriticRating, DateCreated, DatePlayed, PlayCount, PremiereDate, ProductionYear, SortName, Random, Revenue, Runtime.
-  --isPlayed: string@bool-completer # Optional filter by items that are played, or not.
+  --isPlayed: oneof<nothing, bool> # Optional filter by items that are played, or not.
   --genres: list # Optional. If specified, results will be filtered based on genre. This allows multiple, pipe delimited.
   --officialRatings: list # Optional. If specified, results will be filtered based on OfficialRating. This allows multiple, pipe delimited.
   --tags: list # Optional. If specified, results will be filtered based on tag. This allows multiple, pipe delimited.
   --years: list # Optional. If specified, results will be filtered based on production year. This allows multiple, comma delimited.
-  --enableUserData: string@bool-completer # Optional, include user data.
+  --enableUserData: oneof<nothing, bool> # Optional, include user data.
   --imageTypeLimit: int # Optional, the max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
   --person: string # Optional. If specified, results will be filtered to include only those containing the specified person.
@@ -10711,23 +10710,23 @@ export def "trailers GetTrailers" [
   --ids: list # Optional. If specific items are needed, specify a list of item id's to retrieve. This allows multiple, comma delimited.
   --videoTypes: list # Optional filter by VideoType (videofile, dvd, bluray, iso). Allows multiple, comma delimited.
   --minOfficialRating: string # Optional filter by minimum official rating (PG, PG-13, TV-MA, etc).
-  --isLocked: string@bool-completer # Optional filter by items that are locked.
-  --isPlaceHolder: string@bool-completer # Optional filter by items that are placeholders.
-  --hasOfficialRating: string@bool-completer # Optional filter by items that have official ratings.
-  --collapseBoxSetItems: string@bool-completer # Whether or not to hide items behind their boxsets.
+  --isLocked: oneof<nothing, bool> # Optional filter by items that are locked.
+  --isPlaceHolder: oneof<nothing, bool> # Optional filter by items that are placeholders.
+  --hasOfficialRating: oneof<nothing, bool> # Optional filter by items that have official ratings.
+  --collapseBoxSetItems: oneof<nothing, bool> # Whether or not to hide items behind their boxsets.
   --minWidth: int # Optional. Filter by the minimum width of the item. (format: int32)
   --minHeight: int # Optional. Filter by the minimum height of the item. (format: int32)
   --maxWidth: int # Optional. Filter by the maximum width of the item. (format: int32)
   --maxHeight: int # Optional. Filter by the maximum height of the item. (format: int32)
-  --is3D: string@bool-completer # Optional filter by items that are 3D, or not.
+  --is3D: oneof<nothing, bool> # Optional filter by items that are 3D, or not.
   --seriesStatus: list # Optional filter by Series Status. Allows multiple, comma delimited.
   --nameStartsWithOrGreater: string # Optional filter by items whose name is sorted equally or greater than a given input string.
   --nameStartsWith: string # Optional filter by items whose name is sorted equally than a given input string.
   --nameLessThan: string # Optional filter by items whose name is equally or lesser than a given input string.
   --studioIds: list # Optional. If specified, results will be filtered based on studio id. This allows multiple, pipe delimited.
   --genreIds: list # Optional. If specified, results will be filtered based on genre id. This allows multiple, pipe delimited.
-  --enableTotalRecordCount: string@bool-completer # Optional. Enable the total record count. (default: true)
-  --enableImages: string@bool-completer # Optional, include image information in output. (default: true)
+  --enableTotalRecordCount: oneof<nothing, bool> # Optional. Enable the total record count. (default: true)
+  --enableImages: oneof<nothing, bool> # Optional, include image information in output. (default: true)
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10807,15 +10806,15 @@ export def "shows-episodes GetEpisodes" [
   --qp-fields: list # Optional. Specify additional fields of information to return in the output. This allows multiple, comma delimited. Options: Budget, Chapters, DateCreated, Genres, HomePageUrl, IndexOptions, MediaStreams, Overview, ParentId, Path, People, ProviderIds, PrimaryImageAspectRatio, Revenue, SortName, Studios, Taglines, TrailerUrls.
   --season: int # Optional filter by season number. (format: int32)
   --seasonId: string # Optional. Filter by season id. (format: uuid)
-  --isMissing: string@bool-completer # Optional. Filter by items that are missing episodes or not.
+  --isMissing: oneof<nothing, bool> # Optional. Filter by items that are missing episodes or not.
   --adjacentTo: string # Optional. Return items that are siblings of a supplied item. (format: uuid)
   --startItemId: string # Optional. Skip through the list until a given item is found. (format: uuid)
   --startIndex: int # Optional. The record index to start at. All items with a lower index will be dropped from the results. (format: int32)
   --limit: int # Optional. The maximum number of records to return. (format: int32)
-  --enableImages: string@bool-completer # Optional, include image information in output.
+  --enableImages: oneof<nothing, bool> # Optional, include image information in output.
   --imageTypeLimit: int # Optional, the max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
-  --enableUserData: string@bool-completer # Optional. Include user data.
+  --enableUserData: oneof<nothing, bool> # Optional. Include user data.
   --sortBy: string@sortBy-completer # Optional. Specify one or more sort orders, comma delimited. Options: Album, AlbumArtist, Artist, Budget, CommunityRating, CriticRating, DateCreated, DatePlayed, PlayCount, PremiereDate, ProductionYear, SortName, Random, Revenue, Runtime.
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10843,13 +10842,13 @@ export def "shows-seasons GetSeasons" [
   --accept: string@accept-completer # Response content type
   --userId: string # The user id. (format: uuid)
   --qp-fields: list # Optional. Specify additional fields of information to return in the output. This allows multiple, comma delimited. Options: Budget, Chapters, DateCreated, Genres, HomePageUrl, IndexOptions, MediaStreams, Overview, ParentId, Path, People, ProviderIds, PrimaryImageAspectRatio, Revenue, SortName, Studios, Taglines, TrailerUrls.
-  --isSpecialSeason: string@bool-completer # Optional. Filter by special season.
-  --isMissing: string@bool-completer # Optional. Filter by items that are missing episodes or not.
+  --isSpecialSeason: oneof<nothing, bool> # Optional. Filter by special season.
+  --isMissing: oneof<nothing, bool> # Optional. Filter by items that are missing episodes or not.
   --adjacentTo: string # Optional. Return items that are siblings of a supplied item. (format: uuid)
-  --enableImages: string@bool-completer # Optional. Include image information in output.
+  --enableImages: oneof<nothing, bool> # Optional. Include image information in output.
   --imageTypeLimit: int # Optional. The max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
-  --enableUserData: string@bool-completer # Optional. Include user data.
+  --enableUserData: oneof<nothing, bool> # Optional. Include user data.
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10880,15 +10879,15 @@ export def "shows-next-up GetNextUp" [
   --qp-fields: list # Optional. Specify additional fields of information to return in the output.
   --seriesId: string # Optional. Filter by series id. (format: uuid)
   --parentId: string # Optional. Specify this to localize the search to a specific item or folder. Omit to use the root. (format: uuid)
-  --enableImages: string@bool-completer # Optional. Include image information in output.
+  --enableImages: oneof<nothing, bool> # Optional. Include image information in output.
   --imageTypeLimit: int # Optional. The max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
-  --enableUserData: string@bool-completer # Optional. Include user data.
+  --enableUserData: oneof<nothing, bool> # Optional. Include user data.
   --nextUpDateCutoff: string # Optional. Starting date of shows to show in Next Up section. (format: date-time)
-  --enableTotalRecordCount: string@bool-completer # Whether to enable the total records count. Defaults to true. (default: true)
-  --disableFirstEpisode: string@bool-completer # Whether to disable sending the first episode in a series as next up. (DEPRECATED, default: false)
-  --enableResumable: string@bool-completer # Whether to include resumable episodes in next up results. (default: true)
-  --enableRewatching: string@bool-completer # Whether to include watched episodes in next up results. (default: false)
+  --enableTotalRecordCount: oneof<nothing, bool> # Whether to enable the total records count. Defaults to true. (default: true)
+  --disableFirstEpisode: oneof<nothing, bool> # Whether to disable sending the first episode in a series as next up. (DEPRECATED, default: false)
+  --enableResumable: oneof<nothing, bool> # Whether to include resumable episodes in next up results. (default: true)
+  --enableRewatching: oneof<nothing, bool> # Whether to include watched episodes in next up results. (default: false)
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10917,10 +10916,10 @@ export def "shows-upcoming GetUpcomingEpisodes" [
   --limit: int # Optional. The maximum number of records to return. (format: int32)
   --qp-fields: list # Optional. Specify additional fields of information to return in the output.
   --parentId: string # Optional. Specify this to localize the search to a specific item or folder. Omit to use the root. (format: uuid)
-  --enableImages: string@bool-completer # Optional. Include image information in output.
+  --enableImages: oneof<nothing, bool> # Optional. Include image information in output.
   --imageTypeLimit: int # Optional. The max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
-  --enableUserData: string@bool-completer # Optional. Include user data.
+  --enableUserData: oneof<nothing, bool> # Optional. Include user data.
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10958,10 +10957,10 @@ export def "audio-universal GetUniversalAudioStream" [
   --transcodingProtocol: string@transcodingProtocol-completer # Optional. The transcoding protocol.
   --maxAudioSampleRate: int # Optional. The maximum audio sample rate. (format: int32)
   --maxAudioBitDepth: int # Optional. The maximum audio bit depth. (format: int32)
-  --enableRemoteMedia: string@bool-completer # Optional. Whether to enable remote media.
-  --enableAudioVbrEncoding: string@bool-completer # Optional. Whether to enable Audio Encoding. (default: true)
-  --breakOnNonKeyFrames: string@bool-completer # Optional. Whether to break on non key frames. (default: false)
-  --enableRedirection: string@bool-completer # Whether to enable redirection. Defaults to true. (default: true)
+  --enableRemoteMedia: oneof<nothing, bool> # Optional. Whether to enable remote media.
+  --enableAudioVbrEncoding: oneof<nothing, bool> # Optional. Whether to enable Audio Encoding. (default: true)
+  --breakOnNonKeyFrames: oneof<nothing, bool> # Optional. Whether to break on non key frames. (default: false)
+  --enableRedirection: oneof<nothing, bool> # Whether to enable redirection. Defaults to true. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10999,10 +10998,10 @@ export def "audio-universal HeadUniversalAudioStream" [
   --transcodingProtocol: string@transcodingProtocol-completer # Optional. The transcoding protocol.
   --maxAudioSampleRate: int # Optional. The maximum audio sample rate. (format: int32)
   --maxAudioBitDepth: int # Optional. The maximum audio bit depth. (format: int32)
-  --enableRemoteMedia: string@bool-completer # Optional. Whether to enable remote media.
-  --enableAudioVbrEncoding: string@bool-completer # Optional. Whether to enable Audio Encoding. (default: true)
-  --breakOnNonKeyFrames: string@bool-completer # Optional. Whether to break on non key frames. (default: false)
-  --enableRedirection: string@bool-completer # Whether to enable redirection. Defaults to true. (default: true)
+  --enableRemoteMedia: oneof<nothing, bool> # Optional. Whether to enable remote media.
+  --enableAudioVbrEncoding: oneof<nothing, bool> # Optional. Whether to enable Audio Encoding. (default: true)
+  --breakOnNonKeyFrames: oneof<nothing, bool> # Optional. Whether to break on non key frames. (default: false)
+  --enableRedirection: oneof<nothing, bool> # Whether to enable redirection. Defaults to true. (default: true)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11026,8 +11025,8 @@ export def "users GetUsers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --isHidden: string@bool-completer # Optional filter by IsHidden=true or false.
-  --isDisabled: string@bool-completer # Optional filter by IsDisabled=true or false.
+  --isHidden: oneof<nothing, bool> # Optional filter by IsHidden=true or false.
+  --isDisabled: oneof<nothing, bool> # Optional filter by IsDisabled=true or false.
 ]: nothing -> table<Name: string, ServerId: string, ServerName: string, Id: string, PrimaryImageTag: string, HasPassword: bool, HasConfiguredPassword: bool, HasConfiguredEasyPassword: bool, EnableAutoLogin: bool, LastLoginDate: string, LastActivityDate: string, Configuration: record<AudioLanguagePreference: string, PlayDefaultAudioTrack: bool, SubtitleLanguagePreference: string, DisplayMissingEpisodes: bool, GroupedFolders: list, SubtitleMode: record, DisplayCollectionsView: bool, EnableLocalPassword: bool, OrderedViews: list, LatestItemsExcludes: list, MyMediaExcludes: list, HidePlayedInLatest: bool, RememberAudioSelections: bool, RememberSubtitleSelections: bool, EnableNextEpisodeAutoPlay: bool, CastReceiverId: string>, Policy: record<IsAdministrator: bool, IsHidden: bool, EnableCollectionManagement: bool, EnableSubtitleManagement: bool, EnableLyricManagement: bool, IsDisabled: bool, MaxParentalRating: int, MaxParentalSubRating: int, BlockedTags: list, AllowedTags: list, EnableUserPreferenceAccess: bool, AccessSchedules: list, BlockUnratedItems: list, EnableRemoteControlOfOtherUsers: bool, EnableSharedDeviceControl: bool, EnableRemoteAccess: bool, EnableLiveTvManagement: bool, EnableLiveTvAccess: bool, EnableMediaPlayback: bool, EnableAudioPlaybackTranscoding: bool, EnableVideoPlaybackTranscoding: bool, EnablePlaybackRemuxing: bool, ForceRemoteSourceTranscoding: bool, EnableContentDeletion: bool, EnableContentDeletionFromFolders: list, EnableContentDownloading: bool, EnableSyncTranscoding: bool, EnableMediaConversion: bool, EnabledDevices: list, EnableAllDevices: bool, EnabledChannels: list, EnableAllChannels: bool, EnabledFolders: list, EnableAllFolders: bool, InvalidLoginAttemptCount: int, LoginAttemptsBeforeLockout: int, MaxActiveSessions: int, EnablePublicSharing: bool, BlockedMediaFolders: list, BlockedChannels: list, RemoteClientBitrateLimit: int, AuthenticationProviderId: string, PasswordResetProviderId: string, SyncPlayAccess: record>, PrimaryImageAspectRatio: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11057,10 +11056,10 @@ export def "users UpdateUser" [
   --ServerName: string # Gets or sets the name of the server. This is not used by the server and is for client-side usage only. (nullable)
   --Id: string # Gets or sets the id. (format: uuid)
   --PrimaryImageTag: string # Gets or sets the primary image tag. (nullable)
-  --HasPassword: string@bool-completer # Gets or sets a value indicating whether this instance has password.
-  --HasConfiguredPassword: string@bool-completer # Gets or sets a value indicating whether this instance has configured password.
-  --HasConfiguredEasyPassword: string@bool-completer # Gets or sets a value indicating whether this instance has configured easy password. (DEPRECATED)
-  --EnableAutoLogin: string@bool-completer # Gets or sets whether async login is enabled or not. (nullable)
+  --HasPassword: oneof<nothing, bool> # Gets or sets a value indicating whether this instance has password.
+  --HasConfiguredPassword: oneof<nothing, bool> # Gets or sets a value indicating whether this instance has configured password.
+  --HasConfiguredEasyPassword: oneof<nothing, bool> # Gets or sets a value indicating whether this instance has configured easy password. (DEPRECATED)
+  --EnableAutoLogin: oneof<nothing, bool> # Gets or sets whether async login is enabled or not. (nullable)
   --LastLoginDate: string # Gets or sets the last login date. (nullable, format: date-time)
   --LastActivityDate: string # Gets or sets the last activity date. (nullable, format: date-time)
   --Configuration: any # Gets or sets the configuration. (nullable)
@@ -11138,44 +11137,44 @@ export def "users-policy UpdateUserPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --IsAdministrator: string@bool-completer # Gets or sets a value indicating whether this instance is administrator.
-  --IsHidden: string@bool-completer # Gets or sets a value indicating whether this instance is hidden.
-  --EnableCollectionManagement: string@bool-completer # Gets or sets a value indicating whether this instance can manage collections. (default: false)
-  --EnableSubtitleManagement: string@bool-completer # Gets or sets a value indicating whether this instance can manage subtitles. (default: false)
-  --EnableLyricManagement: string@bool-completer # Gets or sets a value indicating whether this user can manage lyrics. (default: false)
-  --IsDisabled: string@bool-completer # Gets or sets a value indicating whether this instance is disabled.
+  --IsAdministrator: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is administrator.
+  --IsHidden: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is hidden.
+  --EnableCollectionManagement: oneof<nothing, bool> # Gets or sets a value indicating whether this instance can manage collections. (default: false)
+  --EnableSubtitleManagement: oneof<nothing, bool> # Gets or sets a value indicating whether this instance can manage subtitles. (default: false)
+  --EnableLyricManagement: oneof<nothing, bool> # Gets or sets a value indicating whether this user can manage lyrics. (default: false)
+  --IsDisabled: oneof<nothing, bool> # Gets or sets a value indicating whether this instance is disabled.
   --MaxParentalRating: int # Gets or sets the max parental rating. (nullable, format: int32)
   --MaxParentalSubRating: int # nullable, format: int32
   --BlockedTags: list # nullable
   --AllowedTags: list # nullable
-  --EnableUserPreferenceAccess: string@bool-completer
+  --EnableUserPreferenceAccess: oneof<nothing, bool>
   --AccessSchedules: list # nullable — item shape: {UserId?: string, DayOfWeek?: "Sunday"|"Monday"|"Tuesday"|"Wednesday"|"Thursday"|"Friday"|"Saturday"|"Everyday"|"Weekday"|"Weekend", StartHour?: float, EndHour?: float}
   --BlockUnratedItems: list # nullable
-  --EnableRemoteControlOfOtherUsers: string@bool-completer
-  --EnableSharedDeviceControl: string@bool-completer
-  --EnableRemoteAccess: string@bool-completer
-  --EnableLiveTvManagement: string@bool-completer
-  --EnableLiveTvAccess: string@bool-completer
-  --EnableMediaPlayback: string@bool-completer
-  --EnableAudioPlaybackTranscoding: string@bool-completer
-  --EnableVideoPlaybackTranscoding: string@bool-completer
-  --EnablePlaybackRemuxing: string@bool-completer
-  --ForceRemoteSourceTranscoding: string@bool-completer
-  --EnableContentDeletion: string@bool-completer
+  --EnableRemoteControlOfOtherUsers: oneof<nothing, bool>
+  --EnableSharedDeviceControl: oneof<nothing, bool>
+  --EnableRemoteAccess: oneof<nothing, bool>
+  --EnableLiveTvManagement: oneof<nothing, bool>
+  --EnableLiveTvAccess: oneof<nothing, bool>
+  --EnableMediaPlayback: oneof<nothing, bool>
+  --EnableAudioPlaybackTranscoding: oneof<nothing, bool>
+  --EnableVideoPlaybackTranscoding: oneof<nothing, bool>
+  --EnablePlaybackRemuxing: oneof<nothing, bool>
+  --ForceRemoteSourceTranscoding: oneof<nothing, bool>
+  --EnableContentDeletion: oneof<nothing, bool>
   --EnableContentDeletionFromFolders: list # nullable
-  --EnableContentDownloading: string@bool-completer
-  --EnableSyncTranscoding: string@bool-completer # Gets or sets a value indicating whether [enable synchronize].
-  --EnableMediaConversion: string@bool-completer
+  --EnableContentDownloading: oneof<nothing, bool>
+  --EnableSyncTranscoding: oneof<nothing, bool> # Gets or sets a value indicating whether [enable synchronize].
+  --EnableMediaConversion: oneof<nothing, bool>
   --EnabledDevices: list # nullable
-  --EnableAllDevices: string@bool-completer
+  --EnableAllDevices: oneof<nothing, bool>
   --EnabledChannels: list # nullable
-  --EnableAllChannels: string@bool-completer
+  --EnableAllChannels: oneof<nothing, bool>
   --EnabledFolders: list # nullable
-  --EnableAllFolders: string@bool-completer
+  --EnableAllFolders: oneof<nothing, bool>
   --InvalidLoginAttemptCount: int # format: int32
   --LoginAttemptsBeforeLockout: int # format: int32
   --MaxActiveSessions: int # format: int32
-  --EnablePublicSharing: string@bool-completer
+  --EnablePublicSharing: oneof<nothing, bool>
   --BlockedMediaFolders: list # nullable
   --BlockedChannels: list # nullable
   --RemoteClientBitrateLimit: int # format: int32
@@ -11261,20 +11260,20 @@ export def "users-configuration UpdateUserConfiguration" [
   --allow-errors(-e) # Return full response without error handling
   --userId: string # The user id. (format: uuid)
   --AudioLanguagePreference: string # Gets or sets the audio language preference. (nullable)
-  --PlayDefaultAudioTrack: string@bool-completer # Gets or sets a value indicating whether [play default audio track].
+  --PlayDefaultAudioTrack: oneof<nothing, bool> # Gets or sets a value indicating whether [play default audio track].
   --SubtitleLanguagePreference: string # Gets or sets the subtitle language preference. (nullable)
-  --DisplayMissingEpisodes: string@bool-completer
+  --DisplayMissingEpisodes: oneof<nothing, bool>
   --GroupedFolders: list
   --SubtitleMode: any@SubtitleMode-completer # An enum representing a subtitle playback mode.
-  --DisplayCollectionsView: string@bool-completer
-  --EnableLocalPassword: string@bool-completer
+  --DisplayCollectionsView: oneof<nothing, bool>
+  --EnableLocalPassword: oneof<nothing, bool>
   --OrderedViews: list
   --LatestItemsExcludes: list
   --MyMediaExcludes: list
-  --HidePlayedInLatest: string@bool-completer
-  --RememberAudioSelections: string@bool-completer
-  --RememberSubtitleSelections: string@bool-completer
-  --EnableNextEpisodeAutoPlay: string@bool-completer
+  --HidePlayedInLatest: oneof<nothing, bool>
+  --RememberAudioSelections: oneof<nothing, bool>
+  --RememberSubtitleSelections: oneof<nothing, bool>
+  --EnableNextEpisodeAutoPlay: oneof<nothing, bool>
   --CastReceiverId: string # Gets or sets the id of the selected cast receiver. (nullable)
 ]: any -> any {
   let input = $in
@@ -11406,7 +11405,7 @@ export def "users-password UpdateUserPassword" [
   --CurrentPassword: string # Gets or sets the current sha1-hashed password. (nullable)
   --CurrentPw: string # Gets or sets the current plain text password. (nullable)
   --NewPw: string # Gets or sets the new plain text password. (nullable)
-  --ResetPassword: string@bool-completer # Gets or sets a value indicating whether to reset the password.
+  --ResetPassword: oneof<nothing, bool> # Gets or sets a value indicating whether to reset the password.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11534,13 +11533,13 @@ export def "items-latest GetLatestMedia" [
   --parentId: string # Specify this to localize the search to a specific item or folder. Omit to use the root. (format: uuid)
   --qp-fields: list # Optional. Specify additional fields of information to return in the output.
   --includeItemTypes: list # Optional. If specified, results will be filtered based on item type. This allows multiple, comma delimited.
-  --isPlayed: string@bool-completer # Filter by items that are played, or not.
-  --enableImages: string@bool-completer # Optional. include image information in output.
+  --isPlayed: oneof<nothing, bool> # Filter by items that are played, or not.
+  --enableImages: oneof<nothing, bool> # Optional. include image information in output.
   --imageTypeLimit: int # Optional. the max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
-  --enableUserData: string@bool-completer # Optional. include user data.
+  --enableUserData: oneof<nothing, bool> # Optional. include user data.
   --limit: int # Return item limit. (format: int32, default: 20)
-  --groupItems: string@bool-completer # Whether or not to group items into a parent container. (default: true)
+  --groupItems: oneof<nothing, bool> # Whether or not to group items into a parent container. (default: true)
 ]: nothing -> table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list<record>, MediaSources: list<record>, CriticRating: float, ProductionLocations: list<string>, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list<string>, Genres: list<string>, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list<record>, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list<record>, Studios: list<record>, GenreItems: list<record>, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list<string>, LocalTrailerCount: int, UserData: record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string>, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list<string>, Tags: list<string>, PrimaryImageAspectRatio: float, Artists: list<string>, ArtistItems: list<record>, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list<record>, SeasonName: string, MediaStreams: list<record>, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list<string>, ScreenshotImageTags: list<string>, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record<Primary: record, Art: record, Backdrop: record, Banner: record, Logo: record, Thumb: record, Disc: record, Box: record, Screenshot: record, Menu: record, Chapter: record, BoxRear: record, Profile: record>, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list<record>, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list<string>, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11665,7 +11664,7 @@ export def "user-items-rating UpdateUserItemRating" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --userId: string # User id. (format: uuid)
-  --likes: string@bool-completer # Whether this M:Jellyfin.Api.Controllers.UserLibraryController.UpdateUserItemRating(System.Nullable{System.Guid},System.Guid,System.Nullable{System.Boolean}) is likes.
+  --likes: oneof<nothing, bool> # Whether this M:Jellyfin.Api.Controllers.UserLibraryController.UpdateUserItemRating(System.Nullable{System.Guid},System.Guid,System.Nullable{System.Boolean}) is likes.
 ]: nothing -> record<Rating: float, PlayedPercentage: float, UnplayedItemCount: int, PlaybackPositionTicks: int, PlayCount: int, IsFavorite: bool, Likes: bool, LastPlayedDate: string, Played: bool, Key: string, ItemId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11690,9 +11689,9 @@ export def "user-views GetUserViews" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --userId: string # User id. (format: uuid)
-  --includeExternalContent: string@bool-completer # Whether or not to include external views such as channels or live tv.
+  --includeExternalContent: oneof<nothing, bool> # Whether or not to include external views such as channels or live tv.
   --presetViews: list # Preset views.
-  --includeHidden: string@bool-completer # Whether or not to include hidden content. (default: false)
+  --includeHidden: oneof<nothing, bool> # Whether or not to include hidden content. (default: false)
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11813,7 +11812,7 @@ export def "videos-stream GetVideoStream" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --container: string # The video container. Possible values are: ts, webm, asf, wmv, ogv, mp4, m4v, mkv, mpeg, mpg, avi, 3gp, wmv, wtv, m2ts, mov, iso, flv.
-  --static: string@bool-completer # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
+  --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
   --deviceProfileId: string # Optional. The dlna device profile id to utilize. (DEPRECATED)
@@ -11824,10 +11823,10 @@ export def "videos-stream GetVideoStream" [
   --mediaSourceId: string # The media version id, if playing an alternate version.
   --deviceId: string # The device id of the client requesting. Used to stop encoding processes when needed.
   --audioCodec: string # Optional. Specify an audio codec to encode to, e.g. mp3. If omitted the server will auto-select using the url's extension.
-  --enableAutoStreamCopy: string@bool-completer # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
-  --allowVideoStreamCopy: string@bool-completer # Whether or not to allow copying of the video stream url.
-  --allowAudioStreamCopy: string@bool-completer # Whether or not to allow copying of the audio stream url.
-  --breakOnNonKeyFrames: string@bool-completer # Optional. Whether to break on non key frames.
+  --enableAutoStreamCopy: oneof<nothing, bool> # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
+  --allowVideoStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the video stream url.
+  --allowAudioStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the audio stream url.
+  --breakOnNonKeyFrames: oneof<nothing, bool> # Optional. Whether to break on non key frames.
   --audioSampleRate: int # Optional. Specify a specific audio sample rate, e.g. 44100. (format: int32)
   --maxAudioBitDepth: int # Optional. The maximum audio bit depth. (format: int32)
   --audioBitRate: int # Optional. Specify an audio bitrate to encode to, e.g. 128000. If omitted this will be left to encoder defaults. (format: int32)
@@ -11837,7 +11836,7 @@ export def "videos-stream GetVideoStream" [
   --level: string # Optional. Specify a level for the encoder profile (varies by encoder), e.g. 3, 3.1.
   --framerate: float # Optional. A specific video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
   --maxFramerate: float # Optional. A specific maximum video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
-  --copyTimestamps: string@bool-completer # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
+  --copyTimestamps: oneof<nothing, bool> # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
   --startTimeTicks: int # Optional. Specify a starting offset, in ticks. 1 tick = 10000 ms. (format: int64)
   --width: int # Optional. The fixed horizontal resolution of the encoded video. (format: int32)
   --height: int # Optional. The fixed vertical resolution of the encoded video. (format: int32)
@@ -11848,13 +11847,13 @@ export def "videos-stream GetVideoStream" [
   --subtitleMethod: string@subtitleMethod-completer # Optional. Specify the subtitle delivery method.
   --maxRefFrames: int # Optional. (format: int32)
   --maxVideoBitDepth: int # Optional. The maximum video bit depth. (format: int32)
-  --requireAvc: string@bool-completer # Optional. Whether to require avc.
-  --deInterlace: string@bool-completer # Optional. Whether to deinterlace the video.
-  --requireNonAnamorphic: string@bool-completer # Optional. Whether to require a non anamorphic stream.
+  --requireAvc: oneof<nothing, bool> # Optional. Whether to require avc.
+  --deInterlace: oneof<nothing, bool> # Optional. Whether to deinterlace the video.
+  --requireNonAnamorphic: oneof<nothing, bool> # Optional. Whether to require a non anamorphic stream.
   --transcodingMaxAudioChannels: int # Optional. The maximum number of audio channels to transcode. (format: int32)
   --cpuCoreLimit: int # Optional. The limit of how many cpu cores to use. (format: int32)
   --liveStreamId: string # The live stream id.
-  --enableMpegtsM2TsMode: string@bool-completer # Optional. Whether to enable the MpegtsM2Ts mode.
+  --enableMpegtsM2TsMode: oneof<nothing, bool> # Optional. Whether to enable the MpegtsM2Ts mode.
   --videoCodec: string # Optional. Specify a video codec to encode to, e.g. h264. If omitted the server will auto-select using the url's extension.
   --subtitleCodec: string # Optional. Specify a subtitle codec to encode to.
   --transcodeReasons: string # Optional. The transcoding reason.
@@ -11862,7 +11861,7 @@ export def "videos-stream GetVideoStream" [
   --videoStreamIndex: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --streamOptions: record # Optional. The streaming options.
-  --enableAudioVbrEncoding: string@bool-completer # Optional. Whether to enable Audio Encoding. (default: true)
+  --enableAudioVbrEncoding: oneof<nothing, bool> # Optional. Whether to enable Audio Encoding. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11888,7 +11887,7 @@ export def "videos-stream HeadVideoStream" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --container: string # The video container. Possible values are: ts, webm, asf, wmv, ogv, mp4, m4v, mkv, mpeg, mpg, avi, 3gp, wmv, wtv, m2ts, mov, iso, flv.
-  --static: string@bool-completer # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
+  --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
   --deviceProfileId: string # Optional. The dlna device profile id to utilize. (DEPRECATED)
@@ -11899,10 +11898,10 @@ export def "videos-stream HeadVideoStream" [
   --mediaSourceId: string # The media version id, if playing an alternate version.
   --deviceId: string # The device id of the client requesting. Used to stop encoding processes when needed.
   --audioCodec: string # Optional. Specify an audio codec to encode to, e.g. mp3. If omitted the server will auto-select using the url's extension.
-  --enableAutoStreamCopy: string@bool-completer # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
-  --allowVideoStreamCopy: string@bool-completer # Whether or not to allow copying of the video stream url.
-  --allowAudioStreamCopy: string@bool-completer # Whether or not to allow copying of the audio stream url.
-  --breakOnNonKeyFrames: string@bool-completer # Optional. Whether to break on non key frames.
+  --enableAutoStreamCopy: oneof<nothing, bool> # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
+  --allowVideoStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the video stream url.
+  --allowAudioStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the audio stream url.
+  --breakOnNonKeyFrames: oneof<nothing, bool> # Optional. Whether to break on non key frames.
   --audioSampleRate: int # Optional. Specify a specific audio sample rate, e.g. 44100. (format: int32)
   --maxAudioBitDepth: int # Optional. The maximum audio bit depth. (format: int32)
   --audioBitRate: int # Optional. Specify an audio bitrate to encode to, e.g. 128000. If omitted this will be left to encoder defaults. (format: int32)
@@ -11912,7 +11911,7 @@ export def "videos-stream HeadVideoStream" [
   --level: string # Optional. Specify a level for the encoder profile (varies by encoder), e.g. 3, 3.1.
   --framerate: float # Optional. A specific video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
   --maxFramerate: float # Optional. A specific maximum video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
-  --copyTimestamps: string@bool-completer # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
+  --copyTimestamps: oneof<nothing, bool> # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
   --startTimeTicks: int # Optional. Specify a starting offset, in ticks. 1 tick = 10000 ms. (format: int64)
   --width: int # Optional. The fixed horizontal resolution of the encoded video. (format: int32)
   --height: int # Optional. The fixed vertical resolution of the encoded video. (format: int32)
@@ -11923,13 +11922,13 @@ export def "videos-stream HeadVideoStream" [
   --subtitleMethod: string@subtitleMethod-completer # Optional. Specify the subtitle delivery method.
   --maxRefFrames: int # Optional. (format: int32)
   --maxVideoBitDepth: int # Optional. The maximum video bit depth. (format: int32)
-  --requireAvc: string@bool-completer # Optional. Whether to require avc.
-  --deInterlace: string@bool-completer # Optional. Whether to deinterlace the video.
-  --requireNonAnamorphic: string@bool-completer # Optional. Whether to require a non anamorphic stream.
+  --requireAvc: oneof<nothing, bool> # Optional. Whether to require avc.
+  --deInterlace: oneof<nothing, bool> # Optional. Whether to deinterlace the video.
+  --requireNonAnamorphic: oneof<nothing, bool> # Optional. Whether to require a non anamorphic stream.
   --transcodingMaxAudioChannels: int # Optional. The maximum number of audio channels to transcode. (format: int32)
   --cpuCoreLimit: int # Optional. The limit of how many cpu cores to use. (format: int32)
   --liveStreamId: string # The live stream id.
-  --enableMpegtsM2TsMode: string@bool-completer # Optional. Whether to enable the MpegtsM2Ts mode.
+  --enableMpegtsM2TsMode: oneof<nothing, bool> # Optional. Whether to enable the MpegtsM2Ts mode.
   --videoCodec: string # Optional. Specify a video codec to encode to, e.g. h264. If omitted the server will auto-select using the url's extension.
   --subtitleCodec: string # Optional. Specify a subtitle codec to encode to.
   --transcodeReasons: string # Optional. The transcoding reason.
@@ -11937,7 +11936,7 @@ export def "videos-stream HeadVideoStream" [
   --videoStreamIndex: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --streamOptions: record # Optional. The streaming options.
-  --enableAudioVbrEncoding: string@bool-completer # Optional. Whether to enable Audio Encoding. (default: true)
+  --enableAudioVbrEncoding: oneof<nothing, bool> # Optional. Whether to enable Audio Encoding. (default: true)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11962,7 +11961,7 @@ export def "videos-stream-container GetVideoStreamByContainer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --static: string@bool-completer # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
+  --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
   --deviceProfileId: string # Optional. The dlna device profile id to utilize.
@@ -11973,10 +11972,10 @@ export def "videos-stream-container GetVideoStreamByContainer" [
   --mediaSourceId: string # The media version id, if playing an alternate version.
   --deviceId: string # The device id of the client requesting. Used to stop encoding processes when needed.
   --audioCodec: string # Optional. Specify an audio codec to encode to, e.g. mp3. If omitted the server will auto-select using the url's extension.
-  --enableAutoStreamCopy: string@bool-completer # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
-  --allowVideoStreamCopy: string@bool-completer # Whether or not to allow copying of the video stream url.
-  --allowAudioStreamCopy: string@bool-completer # Whether or not to allow copying of the audio stream url.
-  --breakOnNonKeyFrames: string@bool-completer # Optional. Whether to break on non key frames.
+  --enableAutoStreamCopy: oneof<nothing, bool> # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
+  --allowVideoStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the video stream url.
+  --allowAudioStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the audio stream url.
+  --breakOnNonKeyFrames: oneof<nothing, bool> # Optional. Whether to break on non key frames.
   --audioSampleRate: int # Optional. Specify a specific audio sample rate, e.g. 44100. (format: int32)
   --maxAudioBitDepth: int # Optional. The maximum audio bit depth. (format: int32)
   --audioBitRate: int # Optional. Specify an audio bitrate to encode to, e.g. 128000. If omitted this will be left to encoder defaults. (format: int32)
@@ -11986,7 +11985,7 @@ export def "videos-stream-container GetVideoStreamByContainer" [
   --level: string # Optional. Specify a level for the encoder profile (varies by encoder), e.g. 3, 3.1.
   --framerate: float # Optional. A specific video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
   --maxFramerate: float # Optional. A specific maximum video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
-  --copyTimestamps: string@bool-completer # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
+  --copyTimestamps: oneof<nothing, bool> # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
   --startTimeTicks: int # Optional. Specify a starting offset, in ticks. 1 tick = 10000 ms. (format: int64)
   --width: int # Optional. The fixed horizontal resolution of the encoded video. (format: int32)
   --height: int # Optional. The fixed vertical resolution of the encoded video. (format: int32)
@@ -11997,13 +11996,13 @@ export def "videos-stream-container GetVideoStreamByContainer" [
   --subtitleMethod: string@subtitleMethod-completer # Optional. Specify the subtitle delivery method.
   --maxRefFrames: int # Optional. (format: int32)
   --maxVideoBitDepth: int # Optional. The maximum video bit depth. (format: int32)
-  --requireAvc: string@bool-completer # Optional. Whether to require avc.
-  --deInterlace: string@bool-completer # Optional. Whether to deinterlace the video.
-  --requireNonAnamorphic: string@bool-completer # Optional. Whether to require a non anamorphic stream.
+  --requireAvc: oneof<nothing, bool> # Optional. Whether to require avc.
+  --deInterlace: oneof<nothing, bool> # Optional. Whether to deinterlace the video.
+  --requireNonAnamorphic: oneof<nothing, bool> # Optional. Whether to require a non anamorphic stream.
   --transcodingMaxAudioChannels: int # Optional. The maximum number of audio channels to transcode. (format: int32)
   --cpuCoreLimit: int # Optional. The limit of how many cpu cores to use. (format: int32)
   --liveStreamId: string # The live stream id.
-  --enableMpegtsM2TsMode: string@bool-completer # Optional. Whether to enable the MpegtsM2Ts mode.
+  --enableMpegtsM2TsMode: oneof<nothing, bool> # Optional. Whether to enable the MpegtsM2Ts mode.
   --videoCodec: string # Optional. Specify a video codec to encode to, e.g. h264. If omitted the server will auto-select using the url's extension.
   --subtitleCodec: string # Optional. Specify a subtitle codec to encode to.
   --transcodeReasons: string # Optional. The transcoding reason.
@@ -12011,7 +12010,7 @@ export def "videos-stream-container GetVideoStreamByContainer" [
   --videoStreamIndex: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --streamOptions: record # Optional. The streaming options.
-  --enableAudioVbrEncoding: string@bool-completer # Optional. Whether to enable Audio Encoding. (default: true)
+  --enableAudioVbrEncoding: oneof<nothing, bool> # Optional. Whether to enable Audio Encoding. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12036,7 +12035,7 @@ export def "videos-stream-container HeadVideoStreamByContainer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --static: string@bool-completer # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
+  --static: oneof<nothing, bool> # Optional. If true, the original file will be streamed statically without any encoding. Use either no url extension or the original file extension. true/false.
   --params: string # The streaming parameters.
   --tag: string # The tag.
   --deviceProfileId: string # Optional. The dlna device profile id to utilize.
@@ -12047,10 +12046,10 @@ export def "videos-stream-container HeadVideoStreamByContainer" [
   --mediaSourceId: string # The media version id, if playing an alternate version.
   --deviceId: string # The device id of the client requesting. Used to stop encoding processes when needed.
   --audioCodec: string # Optional. Specify an audio codec to encode to, e.g. mp3. If omitted the server will auto-select using the url's extension.
-  --enableAutoStreamCopy: string@bool-completer # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
-  --allowVideoStreamCopy: string@bool-completer # Whether or not to allow copying of the video stream url.
-  --allowAudioStreamCopy: string@bool-completer # Whether or not to allow copying of the audio stream url.
-  --breakOnNonKeyFrames: string@bool-completer # Optional. Whether to break on non key frames.
+  --enableAutoStreamCopy: oneof<nothing, bool> # Whether or not to allow automatic stream copy if requested values match the original source. Defaults to true.
+  --allowVideoStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the video stream url.
+  --allowAudioStreamCopy: oneof<nothing, bool> # Whether or not to allow copying of the audio stream url.
+  --breakOnNonKeyFrames: oneof<nothing, bool> # Optional. Whether to break on non key frames.
   --audioSampleRate: int # Optional. Specify a specific audio sample rate, e.g. 44100. (format: int32)
   --maxAudioBitDepth: int # Optional. The maximum audio bit depth. (format: int32)
   --audioBitRate: int # Optional. Specify an audio bitrate to encode to, e.g. 128000. If omitted this will be left to encoder defaults. (format: int32)
@@ -12060,7 +12059,7 @@ export def "videos-stream-container HeadVideoStreamByContainer" [
   --level: string # Optional. Specify a level for the encoder profile (varies by encoder), e.g. 3, 3.1.
   --framerate: float # Optional. A specific video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
   --maxFramerate: float # Optional. A specific maximum video framerate to encode to, e.g. 23.976. Generally this should be omitted unless the device has specific requirements. (format: float)
-  --copyTimestamps: string@bool-completer # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
+  --copyTimestamps: oneof<nothing, bool> # Whether or not to copy timestamps when transcoding with an offset. Defaults to false.
   --startTimeTicks: int # Optional. Specify a starting offset, in ticks. 1 tick = 10000 ms. (format: int64)
   --width: int # Optional. The fixed horizontal resolution of the encoded video. (format: int32)
   --height: int # Optional. The fixed vertical resolution of the encoded video. (format: int32)
@@ -12071,13 +12070,13 @@ export def "videos-stream-container HeadVideoStreamByContainer" [
   --subtitleMethod: string@subtitleMethod-completer # Optional. Specify the subtitle delivery method.
   --maxRefFrames: int # Optional. (format: int32)
   --maxVideoBitDepth: int # Optional. The maximum video bit depth. (format: int32)
-  --requireAvc: string@bool-completer # Optional. Whether to require avc.
-  --deInterlace: string@bool-completer # Optional. Whether to deinterlace the video.
-  --requireNonAnamorphic: string@bool-completer # Optional. Whether to require a non anamorphic stream.
+  --requireAvc: oneof<nothing, bool> # Optional. Whether to require avc.
+  --deInterlace: oneof<nothing, bool> # Optional. Whether to deinterlace the video.
+  --requireNonAnamorphic: oneof<nothing, bool> # Optional. Whether to require a non anamorphic stream.
   --transcodingMaxAudioChannels: int # Optional. The maximum number of audio channels to transcode. (format: int32)
   --cpuCoreLimit: int # Optional. The limit of how many cpu cores to use. (format: int32)
   --liveStreamId: string # The live stream id.
-  --enableMpegtsM2TsMode: string@bool-completer # Optional. Whether to enable the MpegtsM2Ts mode.
+  --enableMpegtsM2TsMode: oneof<nothing, bool> # Optional. Whether to enable the MpegtsM2Ts mode.
   --videoCodec: string # Optional. Specify a video codec to encode to, e.g. h264. If omitted the server will auto-select using the url's extension.
   --subtitleCodec: string # Optional. Specify a subtitle codec to encode to.
   --transcodeReasons: string # Optional. The transcoding reason.
@@ -12085,7 +12084,7 @@ export def "videos-stream-container HeadVideoStreamByContainer" [
   --videoStreamIndex: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --streamOptions: record # Optional. The streaming options.
-  --enableAudioVbrEncoding: string@bool-completer # Optional. Whether to enable Audio Encoding. (default: true)
+  --enableAudioVbrEncoding: oneof<nothing, bool> # Optional. Whether to enable Audio Encoding. (default: true)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12141,12 +12140,12 @@ export def "years GetYears" [
   --includeItemTypes: list # Optional. If specified, results will be included based on item type. This allows multiple, comma delimited.
   --mediaTypes: list # Optional. Filter by MediaType. Allows multiple, comma delimited.
   --sortBy: list # Optional. Specify one or more sort orders, comma delimited. Options: Album, AlbumArtist, Artist, Budget, CommunityRating, CriticRating, DateCreated, DatePlayed, PlayCount, PremiereDate, ProductionYear, SortName, Random, Revenue, Runtime.
-  --enableUserData: string@bool-completer # Optional. Include user data.
+  --enableUserData: oneof<nothing, bool> # Optional. Include user data.
   --imageTypeLimit: int # Optional. The max number of images to return, per image type. (format: int32)
   --enableImageTypes: list # Optional. The image types to include in the output.
   --userId: string # User Id. (format: uuid)
-  --recursive: string@bool-completer # Search recursively. (default: true)
-  --enableImages: string@bool-completer # Optional. Include image information in output. (default: true)
+  --recursive: oneof<nothing, bool> # Search recursively. (default: true)
+  --enableImages: oneof<nothing, bool> # Optional. Include image information in output. (default: true)
 ]: nothing -> record<Items: table<Name: string, OriginalTitle: string, ServerId: string, Id: string, Etag: string, SourceType: string, PlaylistItemId: string, DateCreated: string, DateLastMediaAdded: string, ExtraType: record, AirsBeforeSeasonNumber: int, AirsAfterSeasonNumber: int, AirsBeforeEpisodeNumber: int, CanDelete: bool, CanDownload: bool, HasLyrics: bool, HasSubtitles: bool, PreferredMetadataLanguage: string, PreferredMetadataCountryCode: string, Container: string, SortName: string, ForcedSortName: string, Video3DFormat: record, PremiereDate: string, ExternalUrls: list, MediaSources: list, CriticRating: float, ProductionLocations: list, Path: string, EnableMediaSourceDisplay: bool, OfficialRating: string, CustomRating: string, ChannelId: string, ChannelName: string, Overview: string, Taglines: list, Genres: list, CommunityRating: float, CumulativeRunTimeTicks: int, RunTimeTicks: int, PlayAccess: record, AspectRatio: string, ProductionYear: int, IsPlaceHolder: bool, Number: string, ChannelNumber: string, IndexNumber: int, IndexNumberEnd: int, ParentIndexNumber: int, RemoteTrailers: list, ProviderIds: record, IsHD: bool, IsFolder: bool, ParentId: string, Type: record, People: list, Studios: list, GenreItems: list, ParentLogoItemId: string, ParentBackdropItemId: string, ParentBackdropImageTags: list, LocalTrailerCount: int, UserData: record, RecursiveItemCount: int, ChildCount: int, SeriesName: string, SeriesId: string, SeasonId: string, SpecialFeatureCount: int, DisplayPreferencesId: string, Status: string, AirTime: string, AirDays: list, Tags: list, PrimaryImageAspectRatio: float, Artists: list, ArtistItems: list, Album: string, CollectionType: record, DisplayOrder: string, AlbumId: string, AlbumPrimaryImageTag: string, SeriesPrimaryImageTag: string, AlbumArtist: string, AlbumArtists: list, SeasonName: string, MediaStreams: list, VideoType: record, PartCount: int, MediaSourceCount: int, ImageTags: record, BackdropImageTags: list, ScreenshotImageTags: list, ParentLogoImageTag: string, ParentArtItemId: string, ParentArtImageTag: string, SeriesThumbImageTag: string, ImageBlurHashes: record, SeriesStudio: string, ParentThumbItemId: string, ParentThumbImageTag: string, ParentPrimaryImageItemId: string, ParentPrimaryImageTag: string, Chapters: list, Trickplay: record, LocationType: record, IsoType: record, MediaType: record, EndDate: string, LockedFields: list, TrailerCount: int, MovieCount: int, SeriesCount: int, ProgramCount: int, EpisodeCount: int, SongCount: int, AlbumCount: int, ArtistCount: int, MusicVideoCount: int, LockData: bool, Width: int, Height: int, CameraMake: string, CameraModel: string, Software: string, ExposureTime: float, FocalLength: float, ImageOrientation: record, Aperture: float, ShutterSpeed: float, Latitude: float, Longitude: float, Altitude: float, IsoSpeedRating: int, SeriesTimerId: string, ProgramId: string, ChannelPrimaryImageTag: string, StartDate: string, CompletionPercentage: float, IsRepeat: bool, EpisodeTitle: string, ChannelType: record, Audio: record, IsMovie: bool, IsSports: bool, IsSeries: bool, IsLive: bool, IsNews: bool, IsKids: bool, IsPremiere: bool, TimerId: string, NormalizationGain: float, CurrentProgram: record>, TotalRecordCount: int, StartIndex: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

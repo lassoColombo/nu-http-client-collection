@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://app.koyeb.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -806,7 +805,7 @@ export def "services CreateService" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dry-run: string@bool-completer # If set only run validation
+  --dry-run: oneof<nothing, bool> # If set only run validation
   --body: record
 ]: any -> any {
   let input = $in
@@ -902,7 +901,7 @@ export def "services UpdateService2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --update-mask: string
-  --dry-run: string@bool-completer # If set, run validation and check that the service exists
+  --dry-run: oneof<nothing, bool> # If set, run validation and check that the service exists
   --body: record
 ]: any -> any {
   let input = $in
@@ -930,7 +929,7 @@ export def "services UpdateService" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --update-mask: string
-  --dry-run: string@bool-completer # If set, run validation and check that the service exists
+  --dry-run: oneof<nothing, bool> # If set, run validation and check that the service exists
   --body: record
 ]: any -> any {
   let input = $in
@@ -1004,8 +1003,8 @@ export def "services-resume ResumeService" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --skip-build: string@bool-completer # If set to true, the build stage will be skipped and the image coming from the last successful build step will be used instead. The call fails if no previous successful builds happened.
-  --use-cache: string@bool-completer
+  --skip-build: oneof<nothing, bool> # If set to true, the build stage will be skipped and the image coming from the last successful build step will be used instead. The call fails if no previous successful builds happened.
+  --use-cache: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1853,7 +1852,7 @@ export def "domains UpdateDomain" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --update-mask: string
-  --dry-run: string@bool-completer # If set, run validation and check that the domain is available.
+  --dry-run: oneof<nothing, bool> # If set, run validation and check that the domain is available.
   --body: record
 ]: any -> any {
   let input = $in
@@ -4058,8 +4057,8 @@ export def "streams-instances-exec ExecCommand" [
   --bodytty-sizeheight: int # format: int32
   --bodytty-sizewidth: int # format: int32
   --bodystdindata: string # Data is base64 encoded (format: byte)
-  --bodystdinclose: string@bool-completer # Indicate last data frame
-  --bodydisableTty: string@bool-completer # Disable TTY. It's enough to specify it in the first frame
+  --bodystdinclose: oneof<nothing, bool> # Indicate last data frame
+  --bodydisableTty: oneof<nothing, bool> # Disable TTY. It's enough to specify it in the first frame
   --id-type: string@id-type-completer # When specified, it is used to determine if the kind of resource the id refers to. If missing, defaults to the instance id. (default: INVALID)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

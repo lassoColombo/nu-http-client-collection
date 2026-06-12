@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost/api" "https://localhost/api"] }
 def auth-scheme-completer [] { ["x-api-key" "bearer"] }
 
@@ -213,7 +212,7 @@ export def "custom-templates CustomTemplateList" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: list # Template types
-  --edge: string@bool-completer # Filter by edge templates
+  --edge: oneof<nothing, bool> # Filter by edge templates
 ]: nothing -> table<CreatedByUserId: int, Description: string, EntryPoint: string, GitConfig: record<authentication: record, configFilePath: string, configHash: string, referenceName: string, tlsskipVerify: bool, url: string>, Id: int, Logo: string, Note: string, Platform: int, ProjectPath: string, ResourceControl: record<AccessLevel: int, AdministratorsOnly: bool, Id: int, OwnerId: int, Public: bool, ResourceId: string, SubResourceIds: list, System: bool, TeamAccesses: list, Type: int, UserAccesses: list>, Title: string, Type: int, edgeTemplate: bool, isComposeFormat: bool, variables: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -312,20 +311,20 @@ export def "custom-templates CustomTemplateUpdate" [
   --allow-errors(-e) # Return full response without error handling
   --composeFilePathInRepository: string # Path to the Stack file inside the Git repository (default: docker-compose.yml, e.g. docker-compose.yml)
   description: string # Description of the template (e.g. High performance web server)
-  --edgeTemplate: string@bool-completer # EdgeTemplate indicates if this template purpose for Edge Stack (e.g. false)
+  --edgeTemplate: oneof<nothing, bool> # EdgeTemplate indicates if this template purpose for Edge Stack (e.g. false)
   fileContent: string # Content of stack file
-  --isComposeFormat: string@bool-completer # IsComposeFormat indicates if the Kubernetes template is created from a Docker Compose file (e.g. false)
+  --isComposeFormat: oneof<nothing, bool> # IsComposeFormat indicates if the Kubernetes template is created from a Docker Compose file (e.g. false)
   --logo: string # URL of the template's logo (e.g. https://portainer.io/img/logo.svg)
   --note: string # A note that will be displayed in the UI. Supports HTML content (e.g. This is my <b>custom</b> template)
   --platform: int@platform-completer # Platform associated to the template. Valid values are: 1 - 'linux', 2 - 'windows' Required for Docker stacks (e.g. 1)
-  --repositoryAuthentication: string@bool-completer # Use basic authentication to clone the Git repository (e.g. true)
+  --repositoryAuthentication: oneof<nothing, bool> # Use basic authentication to clone the Git repository (e.g. true)
   --repositoryGitCredentialID: int # GitCredentialID used to identify the bound git credential. Required when RepositoryAuthentication is true and RepositoryUsername/RepositoryPassword are not provided (e.g. 0)
   --repositoryPassword: string # Password used in basic authentication. Required when RepositoryAuthentication is true and RepositoryGitCredentialID is 0 (e.g. myGitPassword)
   --repositoryReferenceName: string # Reference name of a Git repository hosting the Stack file (e.g. refs/heads/master)
   repositoryURL: string # URL of a Git repository hosting the Stack file (e.g. https://github.com/openfaas/faas)
   --repositoryUsername: string # Username used in basic authentication. Required when RepositoryAuthentication is true and RepositoryGitCredentialID is 0 (e.g. myGitUsername)
   title: string # Title of the template (e.g. Nginx)
-  --tlsskipVerify: string@bool-completer # TLSSkipVerify skips SSL verification when cloning the Git repository (e.g. false)
+  --tlsskipVerify: oneof<nothing, bool> # TLSSkipVerify skips SSL verification when cloning the Git repository (e.g. false)
   type: int@type-completer # Type of created stack (1 - swarm, 2 - compose, 3 - kubernetes) (e.g. 1)
   --body-variables: list # Definitions of variables in the stack file — item shape: {defaultValue?: string, description?: string, label?: string, name?: string}
 ]: any -> record<CreatedByUserId: int, Description: string, EntryPoint: string, GitConfig: record<authentication: record<gitCredentialID: int, password: string, username: string>, configFilePath: string, configHash: string, referenceName: string, tlsskipVerify: bool, url: string>, Id: int, Logo: string, Note: string, Platform: int, ProjectPath: string, ResourceControl: record<AccessLevel: int, AdministratorsOnly: bool, Id: int, OwnerId: int, Public: bool, ResourceId: string, SubResourceIds: list<string>, System: bool, TeamAccesses: list<record>, Type: int, UserAccesses: list<record>>, Title: string, Type: int, edgeTemplate: bool, isComposeFormat: bool, variables: table<defaultValue: string, description: string, label: string, name: string>> {
@@ -432,18 +431,18 @@ export def "custom-templates-create-repository CustomTemplateCreateRepository" [
   --allow-errors(-e) # Return full response without error handling
   --composeFilePathInRepository: string # Path to the Stack file inside the Git repository (default: docker-compose.yml, e.g. docker-compose.yml)
   description: string # Description of the template (e.g. High performance web server)
-  --edgeTemplate: string@bool-completer # EdgeTemplate indicates if this template purpose for Edge Stack (e.g. false)
-  --isComposeFormat: string@bool-completer # IsComposeFormat indicates if the Kubernetes template is created from a Docker Compose file (e.g. false)
+  --edgeTemplate: oneof<nothing, bool> # EdgeTemplate indicates if this template purpose for Edge Stack (e.g. false)
+  --isComposeFormat: oneof<nothing, bool> # IsComposeFormat indicates if the Kubernetes template is created from a Docker Compose file (e.g. false)
   --logo: string # URL of the template's logo (e.g. https://portainer.io/img/logo.svg)
   --note: string # A note that will be displayed in the UI. Supports HTML content (e.g. This is my <b>custom</b> template)
   --platform: int@platform-completer # Platform associated to the template. Valid values are: 1 - 'linux', 2 - 'windows' Required for Docker stacks (e.g. 1)
-  --repositoryAuthentication: string@bool-completer # Use basic authentication to clone the Git repository (e.g. true)
+  --repositoryAuthentication: oneof<nothing, bool> # Use basic authentication to clone the Git repository (e.g. true)
   --repositoryPassword: string # Password used in basic authentication. Required when RepositoryAuthentication is true. (e.g. myGitPassword)
   --repositoryReferenceName: string # Reference name of a Git repository hosting the Stack file (e.g. refs/heads/master)
   repositoryURL: string # URL of a Git repository hosting the Stack file (e.g. https://github.com/openfaas/faas)
   --repositoryUsername: string # Username used in basic authentication. Required when RepositoryAuthentication is true. (e.g. myGitUsername)
   title: string # Title of the template (e.g. Nginx)
-  --tlsskipVerify: string@bool-completer # TLSSkipVerify skips SSL verification when cloning the Git repository (e.g. false)
+  --tlsskipVerify: oneof<nothing, bool> # TLSSkipVerify skips SSL verification when cloning the Git repository (e.g. false)
   type: int@type-completer-1 # Type of created stack: * 1 - swarm * 2 - compose * 3 - kubernetes (e.g. 1)
   --body-variables: list # Definitions of variables in the stack file — item shape: {defaultValue?: string, description?: string, label?: string, name?: string}
 ]: any -> record<CreatedByUserId: int, Description: string, EntryPoint: string, GitConfig: record<authentication: record<gitCredentialID: int, password: string, username: string>, configFilePath: string, configHash: string, referenceName: string, tlsskipVerify: bool, url: string>, Id: int, Logo: string, Note: string, Platform: int, ProjectPath: string, ResourceControl: record<AccessLevel: int, AdministratorsOnly: bool, Id: int, OwnerId: int, Public: bool, ResourceId: string, SubResourceIds: list<string>, System: bool, TeamAccesses: list<record>, Type: int, UserAccesses: list<record>>, Title: string, Type: int, edgeTemplate: bool, isComposeFormat: bool, variables: table<defaultValue: string, description: string, label: string, name: string>> {
@@ -472,7 +471,7 @@ export def "custom-templates-create-string CustomTemplateCreateString" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   description: string # Description of the template (e.g. High performance web server)
-  --edgeTemplate: string@bool-completer # EdgeTemplate indicates if this template purpose for Edge Stack (e.g. false)
+  --edgeTemplate: oneof<nothing, bool> # EdgeTemplate indicates if this template purpose for Edge Stack (e.g. false)
   fileContent: string # Content of stack file
   --logo: string # URL of the template's logo (e.g. https://portainer.io/img/logo.svg)
   --note: string # A note that will be displayed in the UI. Supports HTML content (e.g. This is my <b>custom</b> template)
@@ -528,7 +527,7 @@ export def "docker-images dockerImagesList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --withUsage: string@bool-completer # Include image usage information
+  --withUsage: oneof<nothing, bool> # Include image usage information
 ]: nothing -> table<created: int, id: string, nodeName: string, size: int, tags: list<string>, used: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -572,10 +571,10 @@ export def "edge-groups EdgeGroupCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dynamic: string@bool-completer
+  --dynamic: oneof<nothing, bool>
   --endpoints: list
   --name: string
-  --partialMatch: string@bool-completer
+  --partialMatch: oneof<nothing, bool>
   --tagIDs: list
 ]: any -> record<Dynamic: bool, Endpoints: list<int>, Id: int, Name: string, PartialMatch: bool, TagIds: list<int>> {
   let input = $in
@@ -646,10 +645,10 @@ export def "edge-groups EgeGroupUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dynamic: string@bool-completer
+  --dynamic: oneof<nothing, bool>
   --endpoints: list
   --name: string
-  --partialMatch: string@bool-completer
+  --partialMatch: oneof<nothing, bool>
   --tagIDs: list
 ]: any -> record<Dynamic: bool, Endpoints: list<int>, Id: int, Name: string, PartialMatch: bool, TagIds: list<int>> {
   let input = $in
@@ -774,7 +773,7 @@ export def "edge-jobs EdgeJobUpdate" [
   --endpoints: list
   --fileContent: string
   --name: string
-  --recurring: string@bool-completer
+  --recurring: oneof<nothing, bool>
 ]: any -> record<Created: int, CronExpression: string, EdgeGroups: list<int>, Endpoints: record, Id: int, Name: string, Recurring: bool, ScriptPath: string, Version: int, groupLogsCollection: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -917,7 +916,7 @@ export def "edge-jobs-create-file EdgeJobCreateFile" [
   CronExpression: string # A cron expression to schedule this job
   EdgeGroups: string # JSON stringified array of Edge Groups ids
   Endpoints: string # JSON stringified array of Environment ids
-  --Recurring: string@bool-completer # If recurring
+  --Recurring: oneof<nothing, bool> # If recurring
 ]: any -> record<Dynamic: bool, Endpoints: list<int>, Id: int, Name: string, PartialMatch: bool, TagIds: list<int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -948,7 +947,7 @@ export def "edge-jobs-create-string EdgeJobCreateString" [
   --endpoints: list
   --fileContent: string
   --name: string
-  --recurring: string@bool-completer
+  --recurring: oneof<nothing, bool>
 ]: any -> record<Dynamic: bool, Endpoints: list<int>, Id: int, Name: string, PartialMatch: bool, TagIds: list<int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1070,8 +1069,8 @@ export def "edge-stacks EdgeStackUpdate" [
   --deploymentType: int@deploymentType-completer # Deployment type to deploy this stack Valid values are: 0 - 'compose', 1 - 'kubernetes' compose is enabled only for docker environments kubernetes is enabled only for kubernetes environments (e.g. 0)
   --edgeGroups: list
   --stackFileContent: string
-  --updateVersion: string@bool-completer
-  --useManifestNamespaces: string@bool-completer # Uses the manifest's namespaces instead of the default one
+  --updateVersion: oneof<nothing, bool>
+  --useManifestNamespaces: oneof<nothing, bool> # Uses the manifest's namespaces instead of the default one
 ]: any -> record<CreationDate: int, EdgeGroups: list<int>, EntryPoint: string, Id: int, Name: string, NumDeployments: int, ProjectPath: string, Prune: bool, Status: record, Version: int, deploymentType: int, manifestPath: string, useManifestNamespaces: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1178,9 +1177,9 @@ export def "edge-stacks-create-file EdgeStackCreateFile" [
   EdgeGroups: string # JSON stringified array of Edge Groups ids
   DeploymentType: int # deploy type 0 - 'compose', 1 - 'kubernetes', 2 - 'nomad'
   --Registries: string # JSON stringified array of Registry ids to use for this stack
-  --UseManifestNamespaces: string@bool-completer # Uses the manifest's namespaces instead of the default one, relevant only for kube environments
-  --PrePullImage: string@bool-completer # Pre Pull image
-  --RetryDeploy: string@bool-completer # Retry deploy
+  --UseManifestNamespaces: oneof<nothing, bool> # Uses the manifest's namespaces instead of the default one, relevant only for kube environments
+  --PrePullImage: oneof<nothing, bool> # Pre Pull image
+  --RetryDeploy: oneof<nothing, bool> # Retry deploy
 ]: any -> record<CreationDate: int, EdgeGroups: list<int>, EntryPoint: string, Id: int, Name: string, NumDeployments: int, ProjectPath: string, Prune: bool, Status: record, Version: int, deploymentType: int, manifestPath: string, useManifestNamespaces: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1213,13 +1212,13 @@ export def "edge-stacks-create-repository EdgeStackCreateRepository" [
   --filePathInRepository: string # Path to the Stack file inside the Git repository (default: docker-compose.yml, e.g. docker-compose.yml)
   name: string # Name of the stack (e.g. myStack)
   --registries: list # List of Registries to use for this stack
-  --repositoryAuthentication: string@bool-completer # Use basic authentication to clone the Git repository (e.g. true)
+  --repositoryAuthentication: oneof<nothing, bool> # Use basic authentication to clone the Git repository (e.g. true)
   --repositoryPassword: string # Password used in basic authentication. Required when RepositoryAuthentication is true. (e.g. myGitPassword)
   --repositoryReferenceName: string # Reference name of a Git repository hosting the Stack file (e.g. refs/heads/master)
   repositoryURL: string # URL of a Git repository hosting the Stack file (e.g. https://github.com/openfaas/faas)
   --repositoryUsername: string # Username used in basic authentication. Required when RepositoryAuthentication is true. (e.g. myGitUsername)
-  --tlsskipVerify: string@bool-completer # TLSSkipVerify skips SSL verification when cloning the Git repository (e.g. false)
-  --useManifestNamespaces: string@bool-completer # Uses the manifest's namespaces instead of the default one
+  --tlsskipVerify: oneof<nothing, bool> # TLSSkipVerify skips SSL verification when cloning the Git repository (e.g. false)
+  --useManifestNamespaces: oneof<nothing, bool> # Uses the manifest's namespaces instead of the default one
 ]: any -> record<CreationDate: int, EdgeGroups: list<int>, EntryPoint: string, Id: int, Name: string, NumDeployments: int, ProjectPath: string, Prune: bool, Status: record, Version: int, deploymentType: int, manifestPath: string, useManifestNamespaces: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1251,7 +1250,7 @@ export def "edge-stacks-create-string EdgeStackCreateString" [
   name: string # Name of the stack (e.g. myStack)
   --registries: list # List of Registries to use for this stack
   stackFileContent: string # Content of the Stack file (e.g. version: 3  services:  web:  image:nginx)
-  --useManifestNamespaces: string@bool-completer # Uses the manifest's namespaces instead of the default one
+  --useManifestNamespaces: oneof<nothing, bool> # Uses the manifest's namespaces instead of the default one
 ]: any -> record<CreationDate: int, EdgeGroups: list<int>, EntryPoint: string, Id: int, Name: string, NumDeployments: int, ProjectPath: string, Prune: bool, Status: record, Version: int, deploymentType: int, manifestPath: string, useManifestNamespaces: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1475,14 +1474,14 @@ export def "endpoints EndpointList" [
   --status: list # List environments(endpoints) by this status
   --types: list # List environments(endpoints) of this type
   --tagIds: list # search environments(endpoints) with these tags (depends on tagsPartialMatch)
-  --tagsPartialMatch: string@bool-completer # If true, will return environment(endpoint) which has one of tagIds, if false (or missing) will return only environments(endpoints) that has all the tags
+  --tagsPartialMatch: oneof<nothing, bool> # If true, will return environment(endpoint) which has one of tagIds, if false (or missing) will return only environments(endpoints) that has all the tags
   --endpointIds: list # will return only these environments(endpoints)
-  --provisioned: string@bool-completer # If true, will return environment(endpoint) that were provisioned
+  --provisioned: oneof<nothing, bool> # If true, will return environment(endpoint) that were provisioned
   --agentVersions: list # will return only environments with on of these agent versions
-  --edgeAsync: string@bool-completer # if exists true show only edge async agents, false show only standard edge agents. if missing, will show both types (relevant only for edge agents)
-  --edgeDeviceUntrusted: string@bool-completer # if true, show only untrusted edge agents, if false show only trusted edge agents (relevant only for edge agents)
+  --edgeAsync: oneof<nothing, bool> # if exists true show only edge async agents, false show only standard edge agents. if missing, will show both types (relevant only for edge agents)
+  --edgeDeviceUntrusted: oneof<nothing, bool> # if true, show only untrusted edge agents, if false show only trusted edge agents (relevant only for edge agents)
   --edgeCheckInPassedSeconds: float # if bigger then zero, show only edge agents that checked-in in the last provided seconds (relevant only for edge agents)
-  --excludeSnapshots: string@bool-completer # if true, the snapshot data won't be retrieved
+  --excludeSnapshots: oneof<nothing, bool> # if true, the snapshot data won't be retrieved
   --name: string # will return only environments(endpoints) with this name
   --edgeStackStatus: string # only applied when edgeStackId exists. Filter the returned environments based on their deployment status in the stack (not the environment status!)
 ]: nothing -> table<AMTDeviceGUID: string, AuthorizedTeams: list<int>, AuthorizedUsers: list<int>, AzureCredentials: record<ApplicationID: string, AuthenticationKey: string, TenantID: string>, ComposeSyntaxMaxVersion: string, EdgeCheckinInterval: int, EdgeID: string, EdgeKey: string, EnableGPUManagement: bool, Gpus: list<record>, GroupId: int, Heartbeat: bool, Id: int, IsEdgeDevice: bool, Kubernetes: record<Configuration: record, Flags: record, Snapshots: list>, Name: string, PostInitMigrations: record<MigrateGPUs: bool, MigrateIngresses: bool>, PublicURL: string, Snapshots: list<record>, Status: int, TLS: bool, TLSCACert: string, TLSCert: string, TLSConfig: record<TLS: bool, TLSCACert: string, TLSCert: string, TLSKey: string, TLSSkipVerify: bool>, TLSKey: string, TagIds: list<int>, Tags: list<string>, TeamAccessPolicies: record, Type: int, URL: string, UserAccessPolicies: record, UserTrusted: bool, agent: record<version: string>, edge: record<CommandInterval: int, PingInterval: int, SnapshotInterval: int, asyncMode: bool>, lastCheckInDate: int, queryDate: int, securitySettings: record<allowBindMountsForRegularUsers: bool, allowContainerCapabilitiesForRegularUsers: bool, allowDeviceMappingForRegularUsers: bool, allowHostNamespaceForRegularUsers: bool, allowPrivilegedModeForRegularUsers: bool, allowStackManagementForRegularUsers: bool, allowSysctlSettingForRegularUsers: bool, allowVolumeBrowserForRegularUsers: bool, enableHostManagementFeatures: bool>> {
@@ -1512,9 +1511,9 @@ export def "endpoints EndpointCreate" [
   --URL: string # URL or IP address of a Docker host (example: docker.mydomain.tld:2375). Defaults to local if not specified (Linux: /var/run/docker.sock, Windows: //./pipe/docker_engine). Cannot be empty if EndpointCreationType is set to 4 (Edge agent environment)
   --PublicURL: string # URL or IP address where exposed containers will be reachable. Defaults to URL if not specified (example: docker.mydomain.tld:2375)
   --GroupID: int # Environment(Endpoint) group identifier. If not specified will default to 1 (unassigned).
-  --TLS: string@bool-completer # Require TLS to connect against this environment(endpoint). Must be true if EndpointCreationType is set to 2 (Agent environment)
-  --TLSSkipVerify: string@bool-completer # Skip server verification when using TLS. Must be true if EndpointCreationType is set to 2 (Agent environment)
-  --TLSSkipClientVerify: string@bool-completer # Skip client verification when using TLS. Must be true if EndpointCreationType is set to 2 (Agent environment)
+  --TLS: oneof<nothing, bool> # Require TLS to connect against this environment(endpoint). Must be true if EndpointCreationType is set to 2 (Agent environment)
+  --TLSSkipVerify: oneof<nothing, bool> # Skip server verification when using TLS. Must be true if EndpointCreationType is set to 2 (Agent environment)
+  --TLSSkipClientVerify: oneof<nothing, bool> # Skip client verification when using TLS. Must be true if EndpointCreationType is set to 2 (Agent environment)
   --TLSCACertFile: path # TLS CA certificate file
   --TLSCertFile: path # TLS client certificate file
   --TLSKeyFile: path # TLS client key file
@@ -1611,9 +1610,9 @@ export def "endpoints EndpointUpdate" [
   --status: int # The status of the environment(endpoint) (1 - up, 2 - down) (e.g. 1)
   --tagIDs: list # List of tag identifiers to which this environment(endpoint) is associated (e.g. [1, 2])
   --teamAccessPolicies: record
-  --tls: string@bool-completer # Require TLS to connect against this environment(endpoint) (e.g. true)
-  --tlsskipClientVerify: string@bool-completer # Skip client verification when using TLS (e.g. false)
-  --tlsskipVerify: string@bool-completer # Skip server verification when using TLS (e.g. false)
+  --tls: oneof<nothing, bool> # Require TLS to connect against this environment(endpoint) (e.g. true)
+  --tlsskipClientVerify: oneof<nothing, bool> # Skip client verification when using TLS (e.g. false)
+  --tlsskipVerify: oneof<nothing, bool> # Skip server verification when using TLS (e.g. false)
   --body-url: string # URL or IP address of a Docker host (e.g. docker.mydomain.tld:2375)
   --userAccessPolicies: record
 ]: any -> record<AMTDeviceGUID: string, AuthorizedTeams: list<int>, AuthorizedUsers: list<int>, AzureCredentials: record<ApplicationID: string, AuthenticationKey: string, TenantID: string>, ComposeSyntaxMaxVersion: string, EdgeCheckinInterval: int, EdgeID: string, EdgeKey: string, EnableGPUManagement: bool, Gpus: table<name: string, value: string>, GroupId: int, Heartbeat: bool, Id: int, IsEdgeDevice: bool, Kubernetes: record<Configuration: record<AllowNoneIngressClass: bool, EnableResourceOverCommit: bool, IngressAvailabilityPerNamespace: bool, IngressClasses: list, ResourceOverCommitPercentage: int, RestrictDefaultNamespace: bool, StorageClasses: list, UseLoadBalancer: bool, UseServerMetrics: bool>, Flags: record<IsServerIngressClassDetected: bool, IsServerMetricsDetected: bool, IsServerStorageDetected: bool>, Snapshots: list<record>>, Name: string, PostInitMigrations: record<MigrateGPUs: bool, MigrateIngresses: bool>, PublicURL: string, Snapshots: table<ContainerCount: int, DockerSnapshotRaw: record, DockerVersion: string, GpuUseAll: bool, GpuUseList: list, HealthyContainerCount: int, ImageCount: int, NodeCount: int, RunningContainerCount: int, ServiceCount: int, StackCount: int, StoppedContainerCount: int, Swarm: bool, Time: int, TotalCPU: int, TotalMemory: int, UnhealthyContainerCount: int, VolumeCount: int>, Status: int, TLS: bool, TLSCACert: string, TLSCert: string, TLSConfig: record<TLS: bool, TLSCACert: string, TLSCert: string, TLSKey: string, TLSSkipVerify: bool>, TLSKey: string, TagIds: list<int>, Tags: list<string>, TeamAccessPolicies: record, Type: int, URL: string, UserAccessPolicies: record, UserTrusted: bool, agent: record<version: string>, edge: record<CommandInterval: int, PingInterval: int, SnapshotInterval: int, asyncMode: bool>, lastCheckInDate: int, queryDate: int, securitySettings: record<allowBindMountsForRegularUsers: bool, allowContainerCapabilitiesForRegularUsers: bool, allowDeviceMappingForRegularUsers: bool, allowHostNamespaceForRegularUsers: bool, allowPrivilegedModeForRegularUsers: bool, allowStackManagementForRegularUsers: bool, allowSysctlSettingForRegularUsers: bool, allowVolumeBrowserForRegularUsers: bool, enableHostManagementFeatures: bool>> {
@@ -1781,7 +1780,7 @@ export def "endpoints-forceupdateservice endpointForceUpdateService" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --pullImage: string@bool-completer # PullImage if true will pull the image
+  --pullImage: oneof<nothing, bool> # PullImage if true will pull the image
   --serviceID: string # ServiceId to update
 ]: any -> record<Warnings: list<string>> {
   let input = $in
@@ -1995,16 +1994,16 @@ export def "endpoints-settings EndpointSettingsUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowBindMountsForRegularUsers: string@bool-completer # Whether non-administrator should be able to use bind mounts when creating containers (e.g. false)
-  --allowContainerCapabilitiesForRegularUsers: string@bool-completer # Whether non-administrator should be able to use container capabilities (e.g. true)
-  --allowDeviceMappingForRegularUsers: string@bool-completer # Whether non-administrator should be able to use device mapping (e.g. true)
-  --allowHostNamespaceForRegularUsers: string@bool-completer # Whether non-administrator should be able to use the host pid (e.g. true)
-  --allowPrivilegedModeForRegularUsers: string@bool-completer # Whether non-administrator should be able to use privileged mode when creating containers (e.g. false)
-  --allowStackManagementForRegularUsers: string@bool-completer # Whether non-administrator should be able to manage stacks (e.g. true)
-  --allowSysctlSettingForRegularUsers: string@bool-completer # Whether non-administrator should be able to use sysctl settings (e.g. true)
-  --allowVolumeBrowserForRegularUsers: string@bool-completer # Whether non-administrator should be able to browse volumes (e.g. true)
-  --enableGPUManagement: string@bool-completer # e.g. false
-  --enableHostManagementFeatures: string@bool-completer # Whether host management features are enabled (e.g. true)
+  --allowBindMountsForRegularUsers: oneof<nothing, bool> # Whether non-administrator should be able to use bind mounts when creating containers (e.g. false)
+  --allowContainerCapabilitiesForRegularUsers: oneof<nothing, bool> # Whether non-administrator should be able to use container capabilities (e.g. true)
+  --allowDeviceMappingForRegularUsers: oneof<nothing, bool> # Whether non-administrator should be able to use device mapping (e.g. true)
+  --allowHostNamespaceForRegularUsers: oneof<nothing, bool> # Whether non-administrator should be able to use the host pid (e.g. true)
+  --allowPrivilegedModeForRegularUsers: oneof<nothing, bool> # Whether non-administrator should be able to use privileged mode when creating containers (e.g. false)
+  --allowStackManagementForRegularUsers: oneof<nothing, bool> # Whether non-administrator should be able to manage stacks (e.g. true)
+  --allowSysctlSettingForRegularUsers: oneof<nothing, bool> # Whether non-administrator should be able to use sysctl settings (e.g. true)
+  --allowVolumeBrowserForRegularUsers: oneof<nothing, bool> # Whether non-administrator should be able to browse volumes (e.g. true)
+  --enableGPUManagement: oneof<nothing, bool> # e.g. false
+  --enableHostManagementFeatures: oneof<nothing, bool> # Whether host management features are enabled (e.g. true)
   --gpus: list # item shape: {name?: string, value?: string}
 ]: any -> record<AMTDeviceGUID: string, AuthorizedTeams: list<int>, AuthorizedUsers: list<int>, AzureCredentials: record<ApplicationID: string, AuthenticationKey: string, TenantID: string>, ComposeSyntaxMaxVersion: string, EdgeCheckinInterval: int, EdgeID: string, EdgeKey: string, EnableGPUManagement: bool, Gpus: table<name: string, value: string>, GroupId: int, Heartbeat: bool, Id: int, IsEdgeDevice: bool, Kubernetes: record<Configuration: record<AllowNoneIngressClass: bool, EnableResourceOverCommit: bool, IngressAvailabilityPerNamespace: bool, IngressClasses: list, ResourceOverCommitPercentage: int, RestrictDefaultNamespace: bool, StorageClasses: list, UseLoadBalancer: bool, UseServerMetrics: bool>, Flags: record<IsServerIngressClassDetected: bool, IsServerMetricsDetected: bool, IsServerStorageDetected: bool>, Snapshots: list<record>>, Name: string, PostInitMigrations: record<MigrateGPUs: bool, MigrateIngresses: bool>, PublicURL: string, Snapshots: table<ContainerCount: int, DockerSnapshotRaw: record, DockerVersion: string, GpuUseAll: bool, GpuUseList: list, HealthyContainerCount: int, ImageCount: int, NodeCount: int, RunningContainerCount: int, ServiceCount: int, StackCount: int, StoppedContainerCount: int, Swarm: bool, Time: int, TotalCPU: int, TotalMemory: int, UnhealthyContainerCount: int, VolumeCount: int>, Status: int, TLS: bool, TLSCACert: string, TLSCert: string, TLSConfig: record<TLS: bool, TLSCACert: string, TLSCert: string, TLSKey: string, TLSSkipVerify: bool>, TLSKey: string, TagIds: list<int>, Tags: list<string>, TeamAccessPolicies: record, Type: int, URL: string, UserAccessPolicies: record, UserTrusted: bool, agent: record<version: string>, edge: record<CommandInterval: int, PingInterval: int, SnapshotInterval: int, asyncMode: bool>, lastCheckInDate: int, queryDate: int, securitySettings: record<allowBindMountsForRegularUsers: bool, allowContainerCapabilitiesForRegularUsers: bool, allowDeviceMappingForRegularUsers: bool, allowHostNamespaceForRegularUsers: bool, allowPrivilegedModeForRegularUsers: bool, allowStackManagementForRegularUsers: bool, allowSysctlSettingForRegularUsers: bool, allowVolumeBrowserForRegularUsers: bool, enableHostManagementFeatures: bool>> {
   let input = $in
@@ -2119,7 +2118,7 @@ export def "fdo fdoConfigure" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --ownerPassword: string
   --ownerURL: string
   --ownerUsername: string
@@ -2352,7 +2351,7 @@ export def "gitops-repo-file-preview GitOperationRepoFilePreview" [
   --reference: string # e.g. refs/heads/master
   repository: string # e.g. https://github.com/openfaas/faas
   --targetFile: string # Path to file whose content will be read (e.g. docker-compose.yml)
-  --tlsskipVerify: string@bool-completer # TLSSkipVerify skips SSL verification when cloning the Git repository (e.g. false)
+  --tlsskipVerify: oneof<nothing, bool> # TLSSkipVerify skips SSL verification when cloning the Git repository (e.g. false)
   --username: string # e.g. myGitUsername
 ]: any -> record<fileContent: string> {
   let input = $in
@@ -2379,7 +2378,7 @@ export def "kubernetes-ingresscontrollers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowedOnly: string@bool-completer # Only return allowed ingress controllers
+  --allowedOnly: oneof<nothing, bool> # Only return allowed ingress controllers
 ]: nothing -> table<Availability: bool, ClassName: string, Name: string, New: bool, Type: string, Used: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2853,7 +2852,7 @@ export def "kubernetes-namespaces-services get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --lookupapplications: string@bool-completer # Lookup applications associated with each service
+  --lookupapplications: oneof<nothing, bool> # Lookup applications associated with each service
 ]: nothing -> table<allocateLoadBalancerNodePorts: bool, annotations: record, applications: list<record>, clusterIPs: list<string>, creationTimestamp: string, externalIPs: list<string>, externalName: string, ingressStatus: list<record>, labels: record, name: string, namespace: string, ports: list<record>, selector: record, type: string, uid: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2881,7 +2880,7 @@ export def "kubernetes-namespaces-services createKubernetesService" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allocateLoadBalancerNodePorts: string@bool-completer
+  --allocateLoadBalancerNodePorts: oneof<nothing, bool>
   --annotations: record
   --applications: list # serviceList screen — item shape: {kind?: string, labels?: record, name?: string, namespace?: string, uid?: string}
   --clusterIPs: list
@@ -2925,7 +2924,7 @@ export def "kubernetes-namespaces-services updateKubernetesService" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allocateLoadBalancerNodePorts: string@bool-completer
+  --allocateLoadBalancerNodePorts: oneof<nothing, bool>
   --annotations: record
   --applications: list # serviceList screen — item shape: {kind?: string, labels?: record, name?: string, namespace?: string, uid?: string}
   --clusterIPs: list
@@ -2966,7 +2965,7 @@ export def "kubernetes-namespaces-system KubernetesNamespacesToggleSystem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --system: string@bool-completer # Toggle the system state of this namespace to true or false (e.g. true)
+  --system: oneof<nothing, bool> # Toggle the system state of this namespace to true or false (e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3135,7 +3134,7 @@ export def "open-amt OpenAMTConfigure" [
   --certFileName: string
   --certFilePassword: string
   --domainName: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --mpspassword: string
   --mpsserver: string
   --mpsuser: string
@@ -3308,7 +3307,7 @@ export def "registries RegistryCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --authentication: string@bool-completer # Is authentication against this registry enabled (e.g. false)
+  --authentication: oneof<nothing, bool> # Is authentication against this registry enabled (e.g. false)
   --baseURL: string # BaseURL required for ProGet registry (e.g. registry.mydomain.tld:2375)
   --ecr: record # shape: {Region?: string}
   --gitlab: record # shape: {InstanceURL?: string, ProjectId?: int, ProjectPath?: string}
@@ -3389,7 +3388,7 @@ export def "registries RegistryUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --authentication: string@bool-completer # Is authentication against this registry enabled (e.g. false)
+  --authentication: oneof<nothing, bool> # Is authentication against this registry enabled (e.g. false)
   --baseURL: string # BaseURL is used for quay registry (e.g. registry.mydomain.tld:2375)
   --ecr: record # shape: {Region?: string}
   name: string # Name that will be used to identify this registry (e.g. my-registry)
@@ -3423,14 +3422,14 @@ export def "registries-configure RegistryConfigure" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --authentication: string@bool-completer # Is authentication against this registry enabled (e.g. false)
+  --authentication: oneof<nothing, bool> # Is authentication against this registry enabled (e.g. false)
   --password: string # Password used to authenticate against this registry. required when Authentication is true (e.g. registry_password)
   --region: string # ECR region
-  --tls: string@bool-completer # Use TLS (e.g. true)
+  --tls: oneof<nothing, bool> # Use TLS (e.g. true)
   --tlscacertFile: list # The TLS CA certificate file
   --tlscertFile: list # The TLS client certificate file
   --tlskeyFile: list # The TLS client key file
-  --tlsskipVerify: string@bool-completer # Skip the verification of the server TLS certificate (e.g. false)
+  --tlsskipVerify: oneof<nothing, bool> # Skip the verification of the server TLS certificate (e.g. false)
   --username: string # Username used to authenticate against this registry. Required when Authentication is true (e.g. registry_user)
 ]: any -> any {
   let input = $in
@@ -3456,8 +3455,8 @@ export def "resource-controls ResourceControlCreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --administratorsOnly: string@bool-completer # Permit access to resource only to admins (e.g. true)
-  --public: string@bool-completer # Permit access to the associated resource to any user (e.g. true)
+  --administratorsOnly: oneof<nothing, bool> # Permit access to resource only to admins (e.g. true)
+  --public: oneof<nothing, bool> # Permit access to the associated resource to any user (e.g. true)
   resourceID: string # e.g. 617c5f22bb9b023d6daab7cba43a57576f83492867bc767d1c59416b065e5f08
   --subResourceIDs: list # List of Docker resources that will inherit this access control (e.g. [617c5f22bb9b023d6daab7cba43a57576f83492867bc767d1c59416b065e5f08])
   --teams: list # List of team identifiers with access to the associated resource (e.g. [56, 7])
@@ -3510,8 +3509,8 @@ export def "resource-controls ResourceControlUpdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --administratorsOnly: string@bool-completer # Permit access to resource only to admins (e.g. true)
-  --public: string@bool-completer # Permit access to the associated resource to any user (e.g. true)
+  --administratorsOnly: oneof<nothing, bool> # Permit access to resource only to admins (e.g. true)
+  --public: oneof<nothing, bool> # Permit access to the associated resource to any user (e.g. true)
   --teams: list # List of team identifiers with access to the associated resource (e.g. [7])
   --users: list # List of user identifiers with access to the associated resource (e.g. [4])
 ]: any -> record<AccessLevel: int, AdministratorsOnly: bool, Id: int, OwnerId: int, Public: bool, ResourceId: string, SubResourceIds: list<string>, System: bool, TeamAccesses: table<AccessLevel: int, TeamId: int>, Type: int, UserAccesses: table<AccessLevel: int, UserId: int>> {
@@ -3613,13 +3612,13 @@ export def "settings SettingsUpdate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --EdgePortainerURL: string # EdgePortainerURL is the URL that is exposed to edge agents
-  --ShowKomposeBuildOption: string@bool-completer # Show the Kompose build option (discontinued in 2.18) (e.g. false)
+  --ShowKomposeBuildOption: oneof<nothing, bool> # Show the Kompose build option (discontinued in 2.18) (e.g. false)
   --authenticationMethod: int # Active authentication method for the Portainer instance. Valid values are: 1 for internal, 2 for LDAP, or 3 for oauth (e.g. 1)
   --blackListedLabels: list # A list of label name & value that will be used to hide containers when querying containers — item shape: {name?: string, value?: string}
   --edgeAgentCheckinInterval: int # e.g. 5
-  --enableEdgeComputeFeatures: string@bool-completer # Whether edge compute features are enabled (e.g. true)
-  --enableTelemetry: string@bool-completer # Whether telemetry is enabled (e.g. false)
-  --enforceEdgeID: string@bool-completer # EnforceEdgeID makes Portainer store the Edge ID instead of accepting anyone (e.g. false)
+  --enableEdgeComputeFeatures: oneof<nothing, bool> # Whether edge compute features are enabled (e.g. true)
+  --enableTelemetry: oneof<nothing, bool> # Whether telemetry is enabled (e.g. false)
+  --enforceEdgeID: oneof<nothing, bool> # EnforceEdgeID makes Portainer store the Edge ID instead of accepting anyone (e.g. false)
   --globalDeploymentOptions: record # shape: {hideStacksFunctionality?: bool}
   --helmRepositoryURL: string # Helm repository URL (e.g. https://charts.bitnami.com/bitnami)
   --internalAuthSettings: record # shape: {requiredPasswordLength?: int}
@@ -3630,7 +3629,7 @@ export def "settings SettingsUpdate" [
   --oauthSettings: record # shape: {AccessTokenURI?: string, AuthorizationURI?: string, ClientID?: string, ClientSecret?: string, DefaultTeamID?: int, KubeSecretKey?: list, LogoutURI?: string, OAuthAutoCreateUsers?: bool, RedirectURI?: string, ResourceURI?: string, SSO?: bool, Scopes?: string, UserIdentifier?: string}
   --snapshotInterval: string # The interval in which environment(endpoint) snapshots are created (e.g. 5m)
   --templatesURL: string # URL to the templates that will be displayed in the UI when navigating to App Templates (e.g. https://raw.githubusercontent.com/portainer/templates/master/templates.json)
-  --trustOnFirstConnect: string@bool-completer # TrustOnFirstConnect makes Portainer accepting edge agent connection by default (e.g. false)
+  --trustOnFirstConnect: oneof<nothing, bool> # TrustOnFirstConnect makes Portainer accepting edge agent connection by default (e.g. false)
   --userSessionTimeout: string # The duration of a user session (e.g. 5m)
 ]: any -> record<AgentSecret: string, AllowBindMountsForRegularUsers: bool, AllowContainerCapabilitiesForRegularUsers: bool, AllowDeviceMappingForRegularUsers: bool, AllowHostNamespaceForRegularUsers: bool, AllowPrivilegedModeForRegularUsers: bool, AllowStackManagementForRegularUsers: bool, AllowVolumeBrowserForRegularUsers: bool, AuthenticationMethod: int, BlackListedLabels: table<name: string, value: string>, DisplayDonationHeader: bool, DisplayExternalContributors: bool, EdgeAgentCheckinInterval: int, EdgePortainerUrl: string, EnableEdgeComputeFeatures: bool, EnableHostManagementFeatures: bool, EnableTelemetry: bool, EnforceEdgeID: bool, FeatureFlagSettings: record, GlobalDeploymentOptions: record<hideStacksFunctionality: bool>, HelmRepositoryURL: string, InternalAuthSettings: record<requiredPasswordLength: int>, IsDockerDesktopExtension: bool, KubeconfigExpiry: string, KubectlShellImage: string, LDAPSettings: record<AnonymousMode: bool, AutoCreateUsers: bool, GroupSearchSettings: list<record>, Password: string, ReaderDN: string, SearchSettings: list<record>, StartTLS: bool, TLSConfig: record<TLS: bool, TLSCACert: string, TLSCert: string, TLSKey: string, TLSSkipVerify: bool>, URL: string>, LogoURL: string, OAuthSettings: record<AccessTokenURI: string, AuthorizationURI: string, ClientID: string, ClientSecret: string, DefaultTeamID: int, KubeSecretKey: list<int>, LogoutURI: string, OAuthAutoCreateUsers: bool, RedirectURI: string, ResourceURI: string, SSO: bool, Scopes: string, UserIdentifier: string>, ShowKomposeBuildOption: bool, SnapshotInterval: string, TemplatesURL: string, TrustOnFirstConnect: bool, UserSessionTimeout: string, edge: record<CommandInterval: int, PingInterval: int, SnapshotInterval: int, asyncMode: bool>, fdoConfiguration: record<enabled: bool, ownerPassword: string, ownerURL: string, ownerUsername: string>, openAMTConfiguration: record<certFileContent: string, certFileName: string, certFilePassword: string, domainName: string, enabled: bool, mpsPassword: string, mpsServer: string, mpsToken: string, mpsUser: string>> {
   let input = $in
@@ -3699,7 +3698,7 @@ export def "ssl SSLUpdate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --cert: string # SSL Certificates
-  --httpenabled: string@bool-completer
+  --httpenabled: oneof<nothing, bool>
   --key: string
 ]: any -> any {
   let input = $in
@@ -3779,7 +3778,7 @@ export def "stacks StackDelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --external: string@bool-completer # Set to true to delete an external stack. Only external Swarm stacks are supported
+  --external: oneof<nothing, bool> # Set to true to delete an external stack. Only external Swarm stacks are supported
   --endpointId: int # Environment identifier
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3829,8 +3828,8 @@ export def "stacks StackUpdate" [
   --allow-errors(-e) # Return full response without error handling
   --endpointId: int # Environment identifier
   --env: list # A list of environment(endpoint) variables used during stack deployment — item shape: {name?: string, value?: string}
-  --prune: string@bool-completer # Prune services that are no longer referenced (only available for Swarm stacks) (e.g. true)
-  --pullImage: string@bool-completer # Force a pulling to current image with the original tag though the image is already the latest (e.g. false)
+  --prune: oneof<nothing, bool> # Prune services that are no longer referenced (only available for Swarm stacks) (e.g. true)
+  --pullImage: oneof<nothing, bool> # Force a pulling to current image with the original tag though the image is already the latest (e.g. false)
   --stackFileContent: string # New content of the Stack file (e.g. version: 3  services:  web:  image:nginx)
 ]: any -> record<AdditionalFiles: list<string>, AutoUpdate: record<forcePullImage: bool, forceUpdate: bool, interval: string, jobID: string, webhook: string>, EndpointId: int, EntryPoint: string, Env: table<name: string, value: string>, Id: int, Name: string, Option: record<prune: bool>, ResourceControl: record<AccessLevel: int, AdministratorsOnly: bool, Id: int, OwnerId: int, Public: bool, ResourceId: string, SubResourceIds: list<string>, System: bool, TeamAccesses: list<record>, Type: int, UserAccesses: list<record>>, Status: int, SwarmId: string, Type: int, createdBy: string, creationDate: int, fromAppTemplate: bool, gitConfig: record<authentication: record<gitCredentialID: int, password: string, username: string>, configFilePath: string, configHash: string, referenceName: string, tlsskipVerify: bool, url: string>, isComposeFormat: bool, namespace: string, projectPath: string, updateDate: int, updatedBy: string> {
   let input = $in
@@ -3860,7 +3859,7 @@ export def "stacks-associate StackAssociate" [
   --allow-errors(-e) # Return full response without error handling
   --endpointId: int # Environment identifier
   --swarmId: int # Swarm identifier
-  --orphanedRunning: string@bool-completer # Indicates whether the stack is orphaned
+  --orphanedRunning: oneof<nothing, bool> # Indicates whether the stack is orphaned
 ]: nothing -> record<AdditionalFiles: list<string>, AutoUpdate: record<forcePullImage: bool, forceUpdate: bool, interval: string, jobID: string, webhook: string>, EndpointId: int, EntryPoint: string, Env: table<name: string, value: string>, Id: int, Name: string, Option: record<prune: bool>, ResourceControl: record<AccessLevel: int, AdministratorsOnly: bool, Id: int, OwnerId: int, Public: bool, ResourceId: string, SubResourceIds: list<string>, System: bool, TeamAccesses: list<record>, Type: int, UserAccesses: list<record>>, Status: int, SwarmId: string, Type: int, createdBy: string, creationDate: int, fromAppTemplate: bool, gitConfig: record<authentication: record<gitCredentialID: int, password: string, username: string>, configFilePath: string, configHash: string, referenceName: string, tlsskipVerify: bool, url: string>, isComposeFormat: bool, namespace: string, projectPath: string, updateDate: int, updatedBy: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3911,12 +3910,12 @@ export def "stacks-git StackUpdateGit" [
   --endpointId: int # Stacks created before version 1.18.0 might not have an associated environment(endpoint) identifier. Use this optional parameter to set the environment(endpoint) identifier used by the stack.
   --autoUpdate: record # shape: {forcePullImage?: bool, forceUpdate?: bool, interval?: string, jobID?: string, webhook?: string}
   --env: list # item shape: {name?: string, value?: string}
-  --prune: string@bool-completer
-  --repositoryAuthentication: string@bool-completer
+  --prune: oneof<nothing, bool>
+  --repositoryAuthentication: oneof<nothing, bool>
   --repositoryPassword: string
   --repositoryReferenceName: string
   --repositoryUsername: string
-  --tlsskipVerify: string@bool-completer
+  --tlsskipVerify: oneof<nothing, bool>
 ]: any -> record<AdditionalFiles: list<string>, AutoUpdate: record<forcePullImage: bool, forceUpdate: bool, interval: string, jobID: string, webhook: string>, EndpointId: int, EntryPoint: string, Env: table<name: string, value: string>, Id: int, Name: string, Option: record<prune: bool>, ResourceControl: record<AccessLevel: int, AdministratorsOnly: bool, Id: int, OwnerId: int, Public: bool, ResourceId: string, SubResourceIds: list<string>, System: bool, TeamAccesses: list<record>, Type: int, UserAccesses: list<record>>, Status: int, SwarmId: string, Type: int, createdBy: string, creationDate: int, fromAppTemplate: bool, gitConfig: record<authentication: record<gitCredentialID: int, password: string, username: string>, configFilePath: string, configHash: string, referenceName: string, tlsskipVerify: bool, url: string>, isComposeFormat: bool, namespace: string, projectPath: string, updateDate: int, updatedBy: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3946,9 +3945,9 @@ export def "stacks-git-redeploy StackGitRedeploy" [
   --allow-errors(-e) # Return full response without error handling
   --endpointId: int # Stacks created before version 1.18.0 might not have an associated environment(endpoint) identifier. Use this optional parameter to set the environment(endpoint) identifier used by the stack.
   --env: list # item shape: {name?: string, value?: string}
-  --prune: string@bool-completer
-  --pullImage: string@bool-completer # Force a pulling to current image with the original tag though the image is already the latest (e.g. false)
-  --repositoryAuthentication: string@bool-completer
+  --prune: oneof<nothing, bool>
+  --pullImage: oneof<nothing, bool> # Force a pulling to current image with the original tag though the image is already the latest (e.g. false)
+  --repositoryAuthentication: oneof<nothing, bool>
   --repositoryPassword: string
   --repositoryReferenceName: string
   --repositoryUsername: string
@@ -4060,16 +4059,16 @@ export def "stacks-create-kubernetes-repository StackCreateKubernetesGit" [
   --endpointId: int # Identifier of the environment that will be used to deploy the stack
   --additionalFiles: list
   --autoUpdate: record # shape: {forcePullImage?: bool, forceUpdate?: bool, interval?: string, jobID?: string, webhook?: string}
-  --composeFormat: string@bool-completer
+  --composeFormat: oneof<nothing, bool>
   --manifestFile: string
   --namespace: string
-  --repositoryAuthentication: string@bool-completer
+  --repositoryAuthentication: oneof<nothing, bool>
   --repositoryPassword: string
   --repositoryReferenceName: string
   --repositoryURL: string
   --repositoryUsername: string
   --stackName: string
-  --tlsskipVerify: string@bool-completer # TLSSkipVerify skips SSL verification when cloning the Git repository (e.g. false)
+  --tlsskipVerify: oneof<nothing, bool> # TLSSkipVerify skips SSL verification when cloning the Git repository (e.g. false)
 ]: any -> record<AdditionalFiles: list<string>, AutoUpdate: record<forcePullImage: bool, forceUpdate: bool, interval: string, jobID: string, webhook: string>, EndpointId: int, EntryPoint: string, Env: table<name: string, value: string>, Id: int, Name: string, Option: record<prune: bool>, ResourceControl: record<AccessLevel: int, AdministratorsOnly: bool, Id: int, OwnerId: int, Public: bool, ResourceId: string, SubResourceIds: list<string>, System: bool, TeamAccesses: list<record>, Type: int, UserAccesses: list<record>>, Status: int, SwarmId: string, Type: int, createdBy: string, creationDate: int, fromAppTemplate: bool, gitConfig: record<authentication: record<gitCredentialID: int, password: string, username: string>, configFilePath: string, configHash: string, referenceName: string, tlsskipVerify: bool, url: string>, isComposeFormat: bool, namespace: string, projectPath: string, updateDate: int, updatedBy: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -4096,8 +4095,8 @@ export def "stacks-create-kubernetes-string StackCreateKubernetesFile" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --endpointId: int # Identifier of the environment that will be used to deploy the stack
-  --composeFormat: string@bool-completer
-  --fromAppTemplate: string@bool-completer # Whether the stack is from a app template (e.g. false)
+  --composeFormat: oneof<nothing, bool>
+  --fromAppTemplate: oneof<nothing, bool> # Whether the stack is from a app template (e.g. false)
   --namespace: string
   --stackFileContent: string
   --stackName: string
@@ -4127,7 +4126,7 @@ export def "stacks-create-kubernetes-url StackCreateKubernetesUrl" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --endpointId: int # Identifier of the environment that will be used to deploy the stack
-  --composeFormat: string@bool-completer
+  --composeFormat: oneof<nothing, bool>
   --manifestURL: string
   --namespace: string
   --stackName: string
@@ -4193,14 +4192,14 @@ export def "stacks-create-standalone-repository StackCreateDockerStandaloneRepos
   --autoUpdate: record # shape: {forcePullImage?: bool, forceUpdate?: bool, interval?: string, jobID?: string, webhook?: string}
   --composeFile: string # Path to the Stack file inside the Git repository (default: docker-compose.yml, e.g. docker-compose.yml)
   --env: list # A list of environment variables used during stack deployment — item shape: {name?: string, value?: string}
-  --fromAppTemplate: string@bool-completer # Whether the stack is from a app template (e.g. false)
+  --fromAppTemplate: oneof<nothing, bool> # Whether the stack is from a app template (e.g. false)
   name: string # Name of the stack (e.g. myStack)
-  --repositoryAuthentication: string@bool-completer # Use basic authentication to clone the Git repository (e.g. true)
+  --repositoryAuthentication: oneof<nothing, bool> # Use basic authentication to clone the Git repository (e.g. true)
   --repositoryPassword: string # Password used in basic authentication. Required when RepositoryAuthentication is true. (e.g. myGitPassword)
   --repositoryReferenceName: string # Reference name of a Git repository hosting the Stack file (e.g. refs/heads/master)
   repositoryURL: string # URL of a Git repository hosting the Stack file (e.g. https://github.com/openfaas/faas)
   --repositoryUsername: string # Username used in basic authentication. Required when RepositoryAuthentication is true. (e.g. myGitUsername)
-  --tlsskipVerify: string@bool-completer # TLSSkipVerify skips SSL verification when cloning the Git repository (e.g. false)
+  --tlsskipVerify: oneof<nothing, bool> # TLSSkipVerify skips SSL verification when cloning the Git repository (e.g. false)
 ]: any -> record<AdditionalFiles: list<string>, AutoUpdate: record<forcePullImage: bool, forceUpdate: bool, interval: string, jobID: string, webhook: string>, EndpointId: int, EntryPoint: string, Env: table<name: string, value: string>, Id: int, Name: string, Option: record<prune: bool>, ResourceControl: record<AccessLevel: int, AdministratorsOnly: bool, Id: int, OwnerId: int, Public: bool, ResourceId: string, SubResourceIds: list<string>, System: bool, TeamAccesses: list<record>, Type: int, UserAccesses: list<record>>, Status: int, SwarmId: string, Type: int, createdBy: string, creationDate: int, fromAppTemplate: bool, gitConfig: record<authentication: record<gitCredentialID: int, password: string, username: string>, configFilePath: string, configHash: string, referenceName: string, tlsskipVerify: bool, url: string>, isComposeFormat: bool, namespace: string, projectPath: string, updateDate: int, updatedBy: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -4229,7 +4228,7 @@ export def "stacks-create-standalone-string StackCreateDockerStandaloneString" [
   --allow-errors(-e) # Return full response without error handling
   --endpointId: int # Identifier of the environment that will be used to deploy the stack
   --env: list # A list of environment variables used during stack deployment — item shape: {name?: string, value?: string}
-  --fromAppTemplate: string@bool-completer # Whether the stack is from a app template (e.g. false)
+  --fromAppTemplate: oneof<nothing, bool> # Whether the stack is from a app template (e.g. false)
   name: string # Name of the stack (e.g. myStack)
   stackFileContent: string # Content of the Stack file (e.g. version: 3  services:  web:  image:nginx)
 ]: any -> record<AdditionalFiles: list<string>, AutoUpdate: record<forcePullImage: bool, forceUpdate: bool, interval: string, jobID: string, webhook: string>, EndpointId: int, EntryPoint: string, Env: table<name: string, value: string>, Id: int, Name: string, Option: record<prune: bool>, ResourceControl: record<AccessLevel: int, AdministratorsOnly: bool, Id: int, OwnerId: int, Public: bool, ResourceId: string, SubResourceIds: list<string>, System: bool, TeamAccesses: list<record>, Type: int, UserAccesses: list<record>>, Status: int, SwarmId: string, Type: int, createdBy: string, creationDate: int, fromAppTemplate: bool, gitConfig: record<authentication: record<gitCredentialID: int, password: string, username: string>, configFilePath: string, configHash: string, referenceName: string, tlsskipVerify: bool, url: string>, isComposeFormat: bool, namespace: string, projectPath: string, updateDate: int, updatedBy: string> {
@@ -4295,15 +4294,15 @@ export def "stacks-create-swarm-repository StackCreateDockerSwarmRepository" [
   --autoUpdate: record # shape: {forcePullImage?: bool, forceUpdate?: bool, interval?: string, jobID?: string, webhook?: string}
   --composeFile: string # Path to the Stack file inside the Git repository (default: docker-compose.yml, e.g. docker-compose.yml)
   --env: list # A list of environment variables used during stack deployment — item shape: {name?: string, value?: string}
-  --fromAppTemplate: string@bool-completer # Whether the stack is from a app template (e.g. false)
+  --fromAppTemplate: oneof<nothing, bool> # Whether the stack is from a app template (e.g. false)
   name: string # Name of the stack (e.g. myStack)
-  --repositoryAuthentication: string@bool-completer # Use basic authentication to clone the Git repository (e.g. true)
+  --repositoryAuthentication: oneof<nothing, bool> # Use basic authentication to clone the Git repository (e.g. true)
   --repositoryPassword: string # Password used in basic authentication. Required when RepositoryAuthentication is true. (e.g. myGitPassword)
   --repositoryReferenceName: string # Reference name of a Git repository hosting the Stack file (e.g. refs/heads/master)
   repositoryURL: string # URL of a Git repository hosting the Stack file (e.g. https://github.com/openfaas/faas)
   --repositoryUsername: string # Username used in basic authentication. Required when RepositoryAuthentication is true. (e.g. myGitUsername)
   swarmID: string # Swarm cluster identifier (e.g. jpofkc0i9uo9wtx1zesuk649w)
-  --tlsskipVerify: string@bool-completer # TLSSkipVerify skips SSL verification when cloning the Git repository (e.g. false)
+  --tlsskipVerify: oneof<nothing, bool> # TLSSkipVerify skips SSL verification when cloning the Git repository (e.g. false)
 ]: any -> record<AdditionalFiles: list<string>, AutoUpdate: record<forcePullImage: bool, forceUpdate: bool, interval: string, jobID: string, webhook: string>, EndpointId: int, EntryPoint: string, Env: table<name: string, value: string>, Id: int, Name: string, Option: record<prune: bool>, ResourceControl: record<AccessLevel: int, AdministratorsOnly: bool, Id: int, OwnerId: int, Public: bool, ResourceId: string, SubResourceIds: list<string>, System: bool, TeamAccesses: list<record>, Type: int, UserAccesses: list<record>>, Status: int, SwarmId: string, Type: int, createdBy: string, creationDate: int, fromAppTemplate: bool, gitConfig: record<authentication: record<gitCredentialID: int, password: string, username: string>, configFilePath: string, configHash: string, referenceName: string, tlsskipVerify: bool, url: string>, isComposeFormat: bool, namespace: string, projectPath: string, updateDate: int, updatedBy: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -4332,7 +4331,7 @@ export def "stacks-create-swarm-string StackCreateDockerSwarmString" [
   --allow-errors(-e) # Return full response without error handling
   --endpointId: int # Identifier of the environment that will be used to deploy the stack
   --env: list # A list of environment variables used during stack deployment — item shape: {name?: string, value?: string}
-  --fromAppTemplate: string@bool-completer # Whether the stack is from a app template (e.g. false)
+  --fromAppTemplate: oneof<nothing, bool> # Whether the stack is from a app template (e.g. false)
   name: string # Name of the stack (e.g. myStack)
   stackFileContent: string # Content of the Stack file (e.g. version: 3  services:  web:  image:nginx)
   swarmID: string # Swarm cluster identifier (e.g. jpofkc0i9uo9wtx1zesuk649w)
@@ -4362,7 +4361,7 @@ export def "stacks-name StackDeleteKubernetesByName" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --external: string@bool-completer # Set to true to delete an external stack. Only external Swarm stacks are supported
+  --external: oneof<nothing, bool> # Set to true to delete an external stack. Only external Swarm stacks are supported
   --endpointId: int # Environment identifier
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -4748,7 +4747,7 @@ export def "teams TeamList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --onlyLedTeams: string@bool-completer # Only list teams that the user is leader of
+  --onlyLedTeams: oneof<nothing, bool> # Only list teams that the user is leader of
   --environmentId: int # Identifier of the environment(endpoint) that will be used to filter the authorized teams
 ]: nothing -> table<Id: int, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -5137,7 +5136,7 @@ export def "users UserUpdate" [
   password: string # e.g. cg9Wgky3
   role: int@role-completer # User role (1 for administrator account and 2 for regular account) (e.g. 2)
   --theme: record # shape: {color?: "dark"|"light"|"highcontrast"|"auto"}
-  --useCache: string@bool-completer # e.g. true
+  --useCache: oneof<nothing, bool> # e.g. true
   username: string # e.g. bob
 ]: any -> record<Id: int, Role: int, ThemeSettings: record<color: string>, TokenIssueAt: int, UseCache: bool, UserTheme: string, Username: string, endpointAuthorizations: record, portainerAuthorizations: record> {
   let input = $in

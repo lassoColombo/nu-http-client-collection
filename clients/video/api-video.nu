@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://ws.api.video"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -286,8 +285,8 @@ export def "live-streams live-streams-1" [
   --allow-errors(-e) # Return full response without error handling
   name: string # Add a name for your live stream here. (e.g. My Live Stream Video)
   --playerId: string # The unique identifier for the player. (e.g. pl4f4ferf5erfr5zed4fsdd)
-  --public: string@bool-completer # BETA FEATURE Please limit all public = false ("private") livestreams to 3,000 users. Whether your video can be viewed by everyone, or requires authentication to see it. A setting of false will require a unique token for each view.
-  --record: string@bool-completer # Whether you are recording or not. True for record, false for not record. (default: false, e.g. true)
+  --public: oneof<nothing, bool> # BETA FEATURE Please limit all public = false ("private") livestreams to 3,000 users. Whether your video can be viewed by everyone, or requires authentication to see it. A setting of false will require a unique token for each view.
+  --record: oneof<nothing, bool> # Whether you are recording or not. True for record, false for not record. (default: false, e.g. true)
 ]: any -> record<assets: record<hls: string, iframe: string, player: string, thumbnail: string>, broadcasting: bool, liveStreamId: string, name: string, playerId: string, public: bool, record: bool, streamKey: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -359,8 +358,8 @@ export def "live-streams live-streams-liveStreamId-by-liveStreamId-2" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name you want to use for your live stream. (e.g. My Live Stream Video)
   --playerId: string # The unique ID for the player associated with a live stream that you want to update. (e.g. pl45KFKdlddgk654dspkze)
-  --public: string@bool-completer # BETA FEATURE Please limit all public = false ("private") livestreams to 3,000 users. Whether your video can be viewed by everyone, or requires authentication to see it. A setting of false will require a unique token for each view.
-  --record: string@bool-completer # Use this to indicate whether you want the recording on or off. On is true, off is false. (e.g. true)
+  --public: oneof<nothing, bool> # BETA FEATURE Please limit all public = false ("private") livestreams to 3,000 users. Whether your video can be viewed by everyone, or requires authentication to see it. A setting of false will require a unique token for each view.
+  --record: oneof<nothing, bool> # Use this to indicate whether you want the recording on or off. On is true, off is false. (e.g. true)
 ]: any -> record<assets: record<hls: string, iframe: string, player: string, thumbnail: string>, broadcasting: bool, liveStreamId: string, name: string, playerId: string, public: bool, record: bool, streamKey: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -462,11 +461,11 @@ export def "players players-1" [
   --backgroundBottom: string # RGBA color: bottom 50% of background. Default: rgba(0, 0, 0, .7)
   --backgroundText: string # RGBA color for title text. Default: rgba(255, 255, 255, 1)
   --backgroundTop: string # RGBA color: top 50% of background. Default: rgba(0, 0, 0, .7)
-  --enableApi: string@bool-completer # enable/disable player SDK access. Default: true (default: true)
-  --enableControls: string@bool-completer # enable/disable player controls. Default: true (default: true)
-  --forceAutoplay: string@bool-completer # enable/disable player autoplay. Default: false (default: false)
-  --forceLoop: string@bool-completer # enable/disable looping. Default: false (default: false)
-  --hideTitle: string@bool-completer # enable/disable title. Default: false (default: false)
+  --enableApi: oneof<nothing, bool> # enable/disable player SDK access. Default: true (default: true)
+  --enableControls: oneof<nothing, bool> # enable/disable player controls. Default: true (default: true)
+  --forceAutoplay: oneof<nothing, bool> # enable/disable player autoplay. Default: false (default: false)
+  --forceLoop: oneof<nothing, bool> # enable/disable looping. Default: false (default: false)
+  --hideTitle: oneof<nothing, bool> # enable/disable title. Default: false (default: false)
   --link: string # RGBA color for all controls. Default: rgba(255, 255, 255, 1)
   --linkHover: string # RGBA color for all controls when hovered. Default: rgba(255, 255, 255, 1)
   --text: string # RGBA color for timer text. Default: rgba(255, 255, 255, 1)
@@ -545,11 +544,11 @@ export def "players players-playerId-by-playerId-2" [
   --backgroundBottom: string # RGBA color: bottom 50% of background. Default: rgba(0, 0, 0, .7)
   --backgroundText: string # RGBA color for title text. Default: rgba(255, 255, 255, 1)
   --backgroundTop: string # RGBA color: top 50% of background. Default: rgba(0, 0, 0, .7)
-  --enableApi: string@bool-completer # enable/disable player SDK access. Default: true (default: true)
-  --enableControls: string@bool-completer # enable/disable player controls. Default: true (default: true)
-  --forceAutoplay: string@bool-completer # enable/disable player autoplay. Default: false (default: false)
-  --forceLoop: string@bool-completer # enable/disable looping. Default: false (default: false)
-  --hideTitle: string@bool-completer # enable/disable title. Default: false (default: false)
+  --enableApi: oneof<nothing, bool> # enable/disable player SDK access. Default: true (default: true)
+  --enableControls: oneof<nothing, bool> # enable/disable player controls. Default: true (default: true)
+  --forceAutoplay: oneof<nothing, bool> # enable/disable player autoplay. Default: false (default: false)
+  --forceLoop: oneof<nothing, bool> # enable/disable looping. Default: false (default: false)
+  --hideTitle: oneof<nothing, bool> # enable/disable title. Default: false (default: false)
   --link: string # RGBA color for all controls. Default: rgba(255, 255, 255, 1)
   --linkHover: string # RGBA color for all controls when hovered. Default: rgba(255, 255, 255, 1)
   --text: string # RGBA color for timer text. Default: rgba(255, 255, 255, 1)
@@ -789,10 +788,10 @@ export def "videos POST-video" [
   --allow-errors(-e) # Return full response without error handling
   --description: string # A brief description of your video. (e.g. A video about string theory.)
   --metadata: list # A list of key value pairs that you use to provide metadata for your video. These pairs can be made dynamic, allowing you to segment your audience. Read more on [dynamic metadata](https://api.video/blog/endpoints/dynamic-metadata). (e.g. [{"key": "Author", "value": "John Doe"}]) — item shape: {key?: string, value?: string}
-  --mp4Support: string@bool-completer # Enables mp4 version in addition to streamed version. (default: true, e.g. true)
-  --panoramic: string@bool-completer # Indicates if your video is a 360/immersive video. (default: false, e.g. false)
+  --mp4Support: oneof<nothing, bool> # Enables mp4 version in addition to streamed version. (default: true, e.g. true)
+  --panoramic: oneof<nothing, bool> # Indicates if your video is a 360/immersive video. (default: false, e.g. false)
   --playerId: string # The unique identification number for your video player. (e.g. pl45KFKdlddgk654dspkze)
-  --public: string@bool-completer # Whether your video can be viewed by everyone, or requires authentication to see it. A setting of false will require a unique token for each view. Default is true. Tutorials on [private videos](https://api.video/blog/endpoints/private-videos). (default: true, e.g. true)
+  --public: oneof<nothing, bool> # Whether your video can be viewed by everyone, or requires authentication to see it. A setting of false will require a unique token for each view. Default is true. Tutorials on [private videos](https://api.video/blog/endpoints/private-videos). (default: true, e.g. true)
   --publishedAt: string # The API uses ISO-8601 format for time, and includes 3 places for milliseconds. (format: date-time, e.g. 2020-07-14T23:36:18.598Z)
   --body-source: string # If you add a video already on the web, this is where you enter the url for the video. (e.g. https://www.myvideo.url.com/video.mp4)
   --tags: list # A list of tags you want to use to describe your video. (e.g. ["maths", "string theory", "video"])
@@ -869,10 +868,10 @@ export def "videos PATCH-video" [
   --allow-errors(-e) # Return full response without error handling
   --description: string # A brief description of the video. (e.g. A film about good books.)
   --metadata: list # A list (array) of dictionaries where each dictionary contains a key value pair that describes the video. As with tags, you must send the complete list of metadata you want as whatever you send here will overwrite the existing metadata for the video. [Dynamic Metadata](https://api.video/blog/endpoints/dynamic-metadata) allows you to define a key that allows any value pair. — item shape: {key?: string, value?: string}
-  --mp4Support: string@bool-completer # Whether the player supports the mp4 format. (e.g. true)
-  --panoramic: string@bool-completer # Whether the video is a 360 degree or immersive video. (e.g. false)
+  --mp4Support: oneof<nothing, bool> # Whether the player supports the mp4 format. (e.g. true)
+  --panoramic: oneof<nothing, bool> # Whether the video is a 360 degree or immersive video. (e.g. false)
   --playerId: string # The unique ID for the player you want to associate with your video. (e.g. pl4k0jvEUuaTdRAEjQ4Jfrgz)
-  --public: string@bool-completer # Whether the video is publicly available or not. False means it is set to private. Default is true. Tutorials on [private videos](https://api.video/blog/endpoints/private-videos). (e.g. true)
+  --public: oneof<nothing, bool> # Whether the video is publicly available or not. False means it is set to private. Default is true. Tutorials on [private videos](https://api.video/blog/endpoints/private-videos). (e.g. true)
   --tags: list # A list of terms or words you want to tag the video with. Make sure the list includes all the tags you want as whatever you send in this list will overwrite the existing list for the video. (e.g. ["maths", "string theory", "video"])
   --title: string # The title you want to use for your video.
 ]: any -> record<assets: record<hls: string, iframe: string, mp4: string, player: string, thumbnail: string>, description: string, metadata: table<key: string, value: string>, mp4Support: bool, panoramic: bool, playerId: string, public: bool, publishedAt: string, source: record<liveStream: record<links: list, liveStreamId: string>, type: string, uri: string>, tags: list<any>, title: string, updatedAt: string, videoId: string> {
@@ -972,7 +971,7 @@ export def "videos-captions videos-videoId-captions-language-by-videoId-language
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --default: string@bool-completer
+  --default: oneof<nothing, bool>
 ]: any -> record<default: bool, src: string, srclang: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

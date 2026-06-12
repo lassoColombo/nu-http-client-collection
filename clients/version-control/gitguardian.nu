@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.gitguardian.com" "https://api.eu1.gitguardian.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -423,8 +422,8 @@ export def "incidents-secrets list-incidents" [
   --ignorer-api-token-id: string # format: uuid, e.g. fdf075f9-1662-4cf1-9171-af50568158a8
   --resolver-id: int # e.g. 4932
   --resolver-api-token-id: string # format: uuid, e.g. fdf075f9-1662-4cf1-9171-af50568158a8
-  --feedback: string@bool-completer
-  --only-on-provider-archived-sources: string@bool-completer
+  --feedback: oneof<nothing, bool>
+  --only-on-provider-archived-sources: oneof<nothing, bool>
   --risk-score-min: int # e.g. 80
   --risk-score-max: int # e.g. 30
 ]: nothing -> table<id: int, date: string, detector: record<name: string, display_name: string, nature: string, family: string, category: string, detector_group_name: string, detector_group_display_name: string>, secret_id: int, secret_hash: string, hmsl_hash: string, gitguardian_url: string, regression: bool, status: record, assignee_id: int, assignee_email: string, occurrences_count: int, secret_presence: record<files_requiring_code_fix: int, files_pending_merge: int, files_fixed: int, outside_vcs: int, removed_outside_vcs: int, in_vcs: int, removed_in_vcs: int>, ignore_reason: string, triggered_at: string, ignored_at: string, ignorer_id: int, ignorer_api_token_id: string, resolver_id: int, resolver_api_token_id: string, secret_revoked: bool, severity: string, validity: string, resolved_at: string, share_url: string, tags: list<string>, custom_tags: list<record>, feedback_list: list<record>, incident_name: string, risk_score: int, severity_rule_id: int, is_vaulted: bool, public_exposure: record<source_publicly_visible: bool, public_incident_linked: bool, leaked_outside_perimeter: bool>, destination_tickets: list<record>, occurrences: list<record>> {
@@ -526,7 +525,7 @@ export def "incidents-secrets-assign assign-incident" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --send-email: string@bool-completer # Whether to notify the assignee. (default: true)
+  --send-email: oneof<nothing, bool> # Whether to notify the assignee. (default: true)
   --email: string # email of the member to assign. This parameter is mutually exclusive with `member_id`.  (e.g. eric@gitguardian.com)
   --member-id: float # id of the member to assign. This parameter is mutually exclusive with `email`.  (e.g. 4295)
 ]: any -> record<id: int, date: string, detector: record<name: string, display_name: string, nature: string, family: string, category: string, detector_group_name: string, detector_group_display_name: string>, secret_id: int, secret_hash: string, hmsl_hash: string, gitguardian_url: string, regression: bool, status: record, assignee_id: int, assignee_email: string, occurrences_count: int, secret_presence: record<files_requiring_code_fix: int, files_pending_merge: int, files_fixed: int, outside_vcs: int, removed_outside_vcs: int, in_vcs: int, removed_in_vcs: int>, ignore_reason: string, triggered_at: string, ignored_at: string, ignorer_id: int, ignorer_api_token_id: string, resolver_id: int, resolver_api_token_id: string, secret_revoked: bool, severity: string, validity: string, resolved_at: string, share_url: string, tags: list<string>, custom_tags: table<id: string, key: string, value: string>, feedback_list: table<created_at: string, updated_at: string, member_id: int, email: string, answers: list>, incident_name: string, risk_score: int, severity_rule_id: int, is_vaulted: bool, public_exposure: record<source_publicly_visible: bool, public_incident_linked: bool, leaked_outside_perimeter: bool>, destination_tickets: table<id: string, type: string, link: string>, occurrences: table<id: int, incident_id: int, kind: record, source: record, author_name: string, author_info: string, date: string, url: string, matches: list, tags: list, incident_name: string, sha: string, presence: string, filepath: string, change_type: string>> {
@@ -577,7 +576,7 @@ export def "incidents-secrets-resolve resolve-incident" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --secret-revoked: string@bool-completer # e.g. true
+  --secret-revoked: oneof<nothing, bool> # e.g. true
 ]: any -> record<id: int, date: string, detector: record<name: string, display_name: string, nature: string, family: string, category: string, detector_group_name: string, detector_group_display_name: string>, secret_id: int, secret_hash: string, hmsl_hash: string, gitguardian_url: string, regression: bool, status: record, assignee_id: int, assignee_email: string, occurrences_count: int, secret_presence: record<files_requiring_code_fix: int, files_pending_merge: int, files_fixed: int, outside_vcs: int, removed_outside_vcs: int, in_vcs: int, removed_in_vcs: int>, ignore_reason: string, triggered_at: string, ignored_at: string, ignorer_id: int, ignorer_api_token_id: string, resolver_id: int, resolver_api_token_id: string, secret_revoked: bool, severity: string, validity: string, resolved_at: string, share_url: string, tags: list<string>, custom_tags: table<id: string, key: string, value: string>, feedback_list: table<created_at: string, updated_at: string, member_id: int, email: string, answers: list>, incident_name: string, risk_score: int, severity_rule_id: int, is_vaulted: bool, public_exposure: record<source_publicly_visible: bool, public_incident_linked: bool, leaked_outside_perimeter: bool>, destination_tickets: table<id: string, type: string, link: string>, occurrences: table<id: int, incident_id: int, kind: record, source: record, author_name: string, author_info: string, date: string, url: string, matches: list, tags: list, incident_name: string, sha: string, presence: string, filepath: string, change_type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -651,8 +650,8 @@ export def "incidents-secrets-share share-incident" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --auto-healing: string@bool-completer # Allow the developer to resolve or ignore through the share link (default: false, e.g. true)
-  --feedback-collection: string@bool-completer # Allow the developer to submit their feedback through the share link (default: true, e.g. true)
+  --auto-healing: oneof<nothing, bool> # Allow the developer to resolve or ignore through the share link (default: false, e.g. true)
+  --feedback-collection: oneof<nothing, bool> # Allow the developer to submit their feedback through the share link (default: true, e.g. true)
   --lifespan: int # Lifespan, in hours, of the share link. If 0 or unset, a default value will be applied based on the workspace settings. (default: 0, e.g. 720)
 ]: any -> record<share_url: string, incident_id: int, feedback_collection: bool, auto_healing: bool, token: string, expire_at: string, revoked_at: string> {
   let input = $in
@@ -1009,7 +1008,7 @@ export def "secret-incidents-members list-secret-incident-member-access" [
   --access-level: string
   --search: string
   --ordering: string@ordering-completer-3 # Sort the results by their field value. The default sort is ASC, DESC if the field is preceded by a '-'.
-  --direct-access: string@bool-completer # Filter on direct or indirect accesses.
+  --direct-access: oneof<nothing, bool> # Filter on direct or indirect accesses.
 ]: nothing -> table<id: int, name: string, email: string, role: record, access_level: record, active: bool, created_at: string, last_login: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1036,7 +1035,7 @@ export def "secret-incidents-teams list-secret-incident-team-access" [
   --cursor: string # Pagination cursor.
   --per-page: int # Number of items to list per page. (default: 20)
   --search: string
-  --direct-access: string@bool-completer # Filter on direct or indirect accesses.
+  --direct-access: oneof<nothing, bool> # Filter on direct or indirect accesses.
 ]: nothing -> table<id: int, name: string, description: string, is_global: bool, gitguardian_url: string, external_provider_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1064,7 +1063,7 @@ export def "secret-incidents-invitations list-secret-incident-invitation-access"
   --per-page: int # Number of items to list per page. (default: 20)
   --search: string
   --ordering: string@ordering-completer-4 # Sort the results by their field value. The default sort is ASC, DESC if the field is preceded by a '-'.
-  --direct-access: string@bool-completer # Filter on direct or indirect accesses.
+  --direct-access: oneof<nothing, bool> # Filter on direct or indirect accesses.
 ]: nothing -> table<id: int, email: string, role: record, access_level: record, date: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1199,7 +1198,7 @@ export def "public-incidents-secrets list-public-incidents" [
   --ignorer-api-token-id: string # format: uuid, e.g. fdf075f9-1662-4cf1-9171-af50568158a8
   --resolver-id: int # e.g. 4932
   --resolver-api-token-id: string # format: uuid, e.g. fdf075f9-1662-4cf1-9171-af50568158a8
-  --feedback: string@bool-completer
+  --feedback: oneof<nothing, bool>
   --declarative-secret-status: string
   --risk-score-min: int # e.g. 80
   --risk-score-max: int # e.g. 30
@@ -1388,7 +1387,7 @@ export def "public-incidents-secrets-assign assign-public-incidents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --send-email: string@bool-completer # Whether to notify the assignee. (default: true)
+  --send-email: oneof<nothing, bool> # Whether to notify the assignee. (default: true)
   --email: string # email of the member to assign. This parameter is mutually exclusive with `member_id`.  (e.g. eric@gitguardian.com)
   --member-id: float # id of the member to assign. This parameter is mutually exclusive with `email`.  (e.g. 4295)
 ]: any -> record<id: int, detector: record<name: string, display_name: string, nature: string, family: string, category: string, detector_group_name: string, detector_group_display_name: string>, date: string, secret_id: int, secret_hash: string, hmsl_hash: string, occurrences_count: int, status: record, triggered_at: string, ignored_at: string, ignore_reason: string, ignorer_id: int, ignorer_api_token_id: string, resolved_at: string, resolver_id: int, resolver_api_token_id: string, secret_revoked: bool, validity: string, severity: string, assignee_id: int, assignee_email: string, share_url: string, feedback_list: table<created_at: string, updated_at: string, member_id: int, email: string, answers: list>, declarative_secret_status: string, resolve_reason: string, gitguardian_url: string, tags: list<string>, custom_tags: table<id: string, key: string, value: string>, risk_score: int, severity_rule_id: int, incident_name: string, is_vaulted: bool> {
@@ -1439,8 +1438,8 @@ export def "public-incidents-secrets-share share-public-incidents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --feedback-collection: string@bool-completer # Whether to allow feedback collection on the shared incident. (default: false)
-  --auto-healing: string@bool-completer # Whether to allow auto-healing actions on the shared incident. (default: false)
+  --feedback-collection: oneof<nothing, bool> # Whether to allow feedback collection on the shared incident. (default: false)
+  --auto-healing: oneof<nothing, bool> # Whether to allow auto-healing actions on the shared incident. (default: false)
   --lifespan: float # The lifespan of the share link in hours. (e.g. 24)
 ]: any -> record<share_url: string, incident_id: int, feedback_collection: bool, auto_healing: bool, token: string, expire_at: string, revoked_at: string> {
   let input = $in
@@ -1694,7 +1693,7 @@ export def "invitations create-invitations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --send-email: string@bool-completer # Whether to send an email to the invitee with a link to accept the invitation.
+  --send-email: oneof<nothing, bool> # Whether to send an email to the invitee with a link to accept the invitation.
   email: string # email of the user to invite.  (e.g. eric@gitguardian.com)
   --role: any # Use `access_level` instead.  (DEPRECATED, default: member, e.g. manager)
   --access-level: any # default: member, e.g. manager
@@ -1891,8 +1890,8 @@ export def "invitations-secret-incidents list-invitation-secret-incident-access"
   --ignorer-api-token-id: string # format: uuid, e.g. fdf075f9-1662-4cf1-9171-af50568158a8
   --resolver-id: int # e.g. 4932
   --resolver-api-token-id: string # format: uuid, e.g. fdf075f9-1662-4cf1-9171-af50568158a8
-  --feedback: string@bool-completer
-  --only-on-provider-archived-sources: string@bool-completer
+  --feedback: oneof<nothing, bool>
+  --only-on-provider-archived-sources: oneof<nothing, bool>
 ]: nothing -> table<id: int, date: string, detector: record<name: string, display_name: string, nature: string, family: string, category: string, detector_group_name: string, detector_group_display_name: string>, secret_id: int, secret_hash: string, hmsl_hash: string, gitguardian_url: string, regression: bool, status: record, assignee_id: int, assignee_email: string, occurrences_count: int, secret_presence: record<files_requiring_code_fix: int, files_pending_merge: int, files_fixed: int, outside_vcs: int, removed_outside_vcs: int, in_vcs: int, removed_in_vcs: int>, ignore_reason: string, triggered_at: string, ignored_at: string, ignorer_id: int, ignorer_api_token_id: string, resolver_id: int, resolver_api_token_id: string, secret_revoked: bool, severity: string, validity: string, resolved_at: string, share_url: string, tags: list<string>, custom_tags: list<record>, feedback_list: list<record>, incident_name: string, risk_score: int, severity_rule_id: int, is_vaulted: bool, public_exposure: record<source_publicly_visible: bool, public_incident_linked: bool, leaked_outside_perimeter: bool>, destination_tickets: list<record>, occurrences: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1922,7 +1921,7 @@ export def "members list-members" [
   --per-page: int # Number of items to list per page. (default: 20)
   --role: string # DEPRECATED
   --access-level: string
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --search: string
   --ordering: string@ordering-completer-3 # Sort the results by their field value. The default sort is ASC, DESC if the field is preceded by a '-'.
 ]: nothing -> table<id: int, name: string, email: string, role: record, access_level: record, active: bool, created_at: string, last_login: string> {
@@ -1970,7 +1969,7 @@ export def "members delete-member" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --send-email: string@bool-completer # Whether to notify the member about the removal. (default: true)
+  --send-email: oneof<nothing, bool> # Whether to notify the member about the removal. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1995,10 +1994,10 @@ export def "members update-member" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --send-email: string@bool-completer # Whether to notify the member about the update. (default: true)
+  --send-email: oneof<nothing, bool> # Whether to notify the member about the update. (default: true)
   --role: any # DEPRECATED
   --access-level: any
-  --active: string@bool-completer # Whether this member is activated on the workspace. (e.g. true)
+  --active: oneof<nothing, bool> # Whether this member is activated on the workspace. (e.g. true)
 ]: any -> record<id: int, name: string, email: string, role: record, access_level: record, active: bool, created_at: string, last_login: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2028,7 +2027,7 @@ export def "members-teams list-member-teams" [
   --cursor: string # Pagination cursor.
   --per-page: int # Number of items to list per page. (default: 20)
   --search: string
-  --is-global: string@bool-completer
+  --is-global: oneof<nothing, bool>
 ]: nothing -> table<id: int, name: string, description: string, is_global: bool, gitguardian_url: string, external_provider_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2078,7 +2077,7 @@ export def "members set-member-resource-access" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --send-email: string@bool-completer # Whether to notify the member about the access. (default: true)
+  --send-email: oneof<nothing, bool> # Whether to notify the member about the access. (default: true)
   --permission: string # e.g. can_edit
 ]: any -> record<member_id: int, resource_id: int, resource_type: string, permission: string> {
   let input = $in
@@ -2152,8 +2151,8 @@ export def "members-secret-incidents list-member-secret-incident-access" [
   --ignorer-api-token-id: string # format: uuid, e.g. fdf075f9-1662-4cf1-9171-af50568158a8
   --resolver-id: int # e.g. 4932
   --resolver-api-token-id: string # format: uuid, e.g. fdf075f9-1662-4cf1-9171-af50568158a8
-  --feedback: string@bool-completer
-  --only-on-provider-archived-sources: string@bool-completer
+  --feedback: oneof<nothing, bool>
+  --only-on-provider-archived-sources: oneof<nothing, bool>
 ]: nothing -> table<id: int, date: string, detector: record<name: string, display_name: string, nature: string, family: string, category: string, detector_group_name: string, detector_group_display_name: string>, secret_id: int, secret_hash: string, hmsl_hash: string, gitguardian_url: string, regression: bool, status: record, assignee_id: int, assignee_email: string, occurrences_count: int, secret_presence: record<files_requiring_code_fix: int, files_pending_merge: int, files_fixed: int, outside_vcs: int, removed_outside_vcs: int, in_vcs: int, removed_in_vcs: int>, ignore_reason: string, triggered_at: string, ignored_at: string, ignorer_id: int, ignorer_api_token_id: string, resolver_id: int, resolver_api_token_id: string, secret_revoked: bool, severity: string, validity: string, resolved_at: string, share_url: string, tags: list<string>, custom_tags: list<record>, feedback_list: list<record>, incident_name: string, risk_score: int, severity_rule_id: int, is_vaulted: bool, public_exposure: record<source_publicly_visible: bool, public_incident_linked: bool, leaked_outside_perimeter: bool>, destination_tickets: list<record>, occurrences: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2207,7 +2206,7 @@ export def "members-email-notifications update-member-email-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --send-email: string@bool-completer # Whether to notify the member about the update. (default: true)
+  --send-email: oneof<nothing, bool> # Whether to notify the member about the update. (default: true)
   --private-issue-realtime: record # shape: {is_active?: bool, settings?: record}
   --weekly-recap: record # shape: {is_active?: bool, settings?: record}
   --private-issue-access: record # shape: {is_active?: bool, settings?: record}
@@ -2320,7 +2319,7 @@ export def "secret-detectors list-secret-detectors" [
   --allow-errors(-e) # Return full response without error handling
   --cursor: string # Pagination cursor.
   --per-page: int # Number of items to list per page. (default: 20)
-  --is-active: string@bool-completer # e.g. true
+  --is-active: oneof<nothing, bool> # e.g. true
   --type: string # e.g. generic
   --search: string # e.g. aws
   --ordering: string@ordering-completer-7 # Sort the results by their field value. The default sort is ASC, DESC if the field is preceded by a '-'.
@@ -2426,8 +2425,8 @@ export def "sources list-sources" [
   --visibility: string@visibility-completer # e.g. public
   --external-id: string # e.g. 1
   --source-criticality: string@source-criticality-completer # e.g. critical
-  --monitored: string@bool-completer # e.g. true
-  --provider-metadata-archived: string@bool-completer # e.g. true
+  --monitored: oneof<nothing, bool> # e.g. true
+  --provider-metadata-archived: oneof<nothing, bool> # e.g. true
   --team-id: int # e.g. 42
 ]: nothing -> table<id: int, url: string, type: string, full_name: string, health: record, default_branch: string, default_branch_head: string, open_incidents_count: int, closed_incidents_count: int, secret_incidents_breakdown: record<open_secret_incidents: record, closed_secret_incidents: record>, visibility: string, external_id: string, source_criticality: string, last_scan: record, monitored: bool, provider_metadata: record<archived: bool>, deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2476,7 +2475,7 @@ export def "sources update-source" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --source-criticality: string # Criticality of the source.  (e.g. critical)
-  --monitored: string@bool-completer # Whether the source is currently monitored by GitGuardian.  (e.g. true)
+  --monitored: oneof<nothing, bool> # Whether the source is currently monitored by GitGuardian.  (e.g. true)
 ]: any -> record<id: int, url: string, type: string, full_name: string, health: record, default_branch: string, default_branch_head: string, open_incidents_count: int, closed_incidents_count: int, secret_incidents_breakdown: record<open_secret_incidents: record<total: int, severity_breakdown: record>, closed_secret_incidents: record<total: int, severity_breakdown: record>>, visibility: string, external_id: string, source_criticality: string, last_scan: record, monitored: bool, provider_metadata: record<archived: bool>, deleted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2521,8 +2520,8 @@ export def "sources-incidents-secrets list-sources-incidents" [
   --ignorer-api-token-id: string # format: uuid, e.g. fdf075f9-1662-4cf1-9171-af50568158a8
   --resolver-id: int # e.g. 4932
   --resolver-api-token-id: string # format: uuid, e.g. fdf075f9-1662-4cf1-9171-af50568158a8
-  --feedback: string@bool-completer
-  --only-on-provider-archived-sources: string@bool-completer
+  --feedback: oneof<nothing, bool>
+  --only-on-provider-archived-sources: oneof<nothing, bool>
 ]: nothing -> table<id: int, date: string, detector: record<name: string, display_name: string, nature: string, family: string, category: string, detector_group_name: string, detector_group_display_name: string>, secret_id: int, secret_hash: string, hmsl_hash: string, gitguardian_url: string, regression: bool, status: record, assignee_id: int, assignee_email: string, occurrences_count: int, secret_presence: record<files_requiring_code_fix: int, files_pending_merge: int, files_fixed: int, outside_vcs: int, removed_outside_vcs: int, in_vcs: int, removed_in_vcs: int>, ignore_reason: string, triggered_at: string, ignored_at: string, ignorer_id: int, ignorer_api_token_id: string, resolver_id: int, resolver_api_token_id: string, secret_revoked: bool, severity: string, validity: string, resolved_at: string, share_url: string, tags: list<string>, custom_tags: list<record>, feedback_list: list<record>, incident_name: string, risk_score: int, severity_rule_id: int, is_vaulted: bool, public_exposure: record<source_publicly_visible: bool, public_incident_linked: bool, leaked_outside_perimeter: bool>, destination_tickets: list<record>, occurrences: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2876,9 +2875,9 @@ export def "teams list-teams" [
   --allow-errors(-e) # Return full response without error handling
   --cursor: string # Pagination cursor.
   --per-page: int # Number of items to list per page. (default: 20)
-  --is-global: string@bool-completer
+  --is-global: oneof<nothing, bool>
   --search: string
-  --linked-to-an-external-provider: string@bool-completer
+  --linked-to-an-external-provider: oneof<nothing, bool>
 ]: nothing -> table<id: int, name: string, description: string, is_global: bool, gitguardian_url: string, external_provider_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3022,7 +3021,7 @@ export def "teams-incidents-secrets list-team-incidents" [
   --ignorer-api-token-id: string # format: uuid, e.g. fdf075f9-1662-4cf1-9171-af50568158a8
   --resolver-id: int # e.g. 4932
   --resolver-api-token-id: string # format: uuid, e.g. fdf075f9-1662-4cf1-9171-af50568158a8
-  --only-on-provider-archived-sources: string@bool-completer
+  --only-on-provider-archived-sources: oneof<nothing, bool>
 ]: nothing -> table<id: int, date: string, detector: record<name: string, display_name: string, nature: string, family: string, category: string, detector_group_name: string, detector_group_display_name: string>, secret_id: int, secret_hash: string, hmsl_hash: string, gitguardian_url: string, regression: bool, status: record, assignee_id: int, assignee_email: string, occurrences_count: int, secret_presence: record<files_requiring_code_fix: int, files_pending_merge: int, files_fixed: int, outside_vcs: int, removed_outside_vcs: int, in_vcs: int, removed_in_vcs: int>, ignore_reason: string, triggered_at: string, ignored_at: string, ignorer_id: int, ignorer_api_token_id: string, resolver_id: int, resolver_api_token_id: string, secret_revoked: bool, severity: string, validity: string, resolved_at: string, share_url: string, tags: list<string>, custom_tags: list<record>, feedback_list: list<record>, incident_name: string, risk_score: int, severity_rule_id: int, is_vaulted: bool, public_exposure: record<source_publicly_visible: bool, public_incident_linked: bool, leaked_outside_perimeter: bool>, destination_tickets: list<record>, occurrences: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3072,7 +3071,7 @@ export def "teams set-team-resource-access" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --send-email: string@bool-completer # Whether to notify the team members about the access. (default: true)
+  --send-email: oneof<nothing, bool> # Whether to notify the team members about the access. (default: true)
   --permission: string # e.g. can_edit
 ]: any -> record<team_id: int, resource_id: int, resource_type: string, permission: string> {
   let input = $in
@@ -3149,8 +3148,8 @@ export def "teams-secret-incidents list-team-secret-incident-access" [
   --ignorer-api-token-id: string # format: uuid, e.g. fdf075f9-1662-4cf1-9171-af50568158a8
   --resolver-id: int # e.g. 4932
   --resolver-api-token-id: string # format: uuid, e.g. fdf075f9-1662-4cf1-9171-af50568158a8
-  --feedback: string@bool-completer
-  --only-on-provider-archived-sources: string@bool-completer
+  --feedback: oneof<nothing, bool>
+  --only-on-provider-archived-sources: oneof<nothing, bool>
 ]: nothing -> table<id: int, date: string, detector: record<name: string, display_name: string, nature: string, family: string, category: string, detector_group_name: string, detector_group_display_name: string>, secret_id: int, secret_hash: string, hmsl_hash: string, gitguardian_url: string, regression: bool, status: record, assignee_id: int, assignee_email: string, occurrences_count: int, secret_presence: record<files_requiring_code_fix: int, files_pending_merge: int, files_fixed: int, outside_vcs: int, removed_outside_vcs: int, in_vcs: int, removed_in_vcs: int>, ignore_reason: string, triggered_at: string, ignored_at: string, ignorer_id: int, ignorer_api_token_id: string, resolver_id: int, resolver_api_token_id: string, secret_revoked: bool, severity: string, validity: string, resolved_at: string, share_url: string, tags: list<string>, custom_tags: list<record>, feedback_list: list<record>, incident_name: string, risk_score: int, severity_rule_id: int, is_vaulted: bool, public_exposure: record<source_publicly_visible: bool, public_incident_linked: bool, leaked_outside_perimeter: bool>, destination_tickets: list<record>, occurrences: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3177,7 +3176,7 @@ export def "teams-team-invitations list-team-invitation" [
   --cursor: string # Pagination cursor.
   --per-page: int # Number of items to list per page. (default: 20)
   --invitation-id: int # The id of an invitation to filter on
-  --is-team-leader: string@bool-completer # e.g. true
+  --is-team-leader: oneof<nothing, bool> # e.g. true
   --team-permission: string # e.g. can_manage
   --incident-permission: string # e.g. can_edit
 ]: nothing -> table<id: int, invitation_id: int, team_id: int, is_team_leader: bool, team_permission: string, incident_permission: string> {
@@ -3205,7 +3204,7 @@ export def "teams-team-invitations create-team-invitations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   invitation_id: int # e.g. 4851
-  --is-team-leader: string@bool-completer # e.g. false
+  --is-team-leader: oneof<nothing, bool> # e.g. false
   --team-permission: string # team_permission is replaced by is_team_leader (DEPRECATED, e.g. cannot_manage)
   --incident-permission: string # e.g. can_edit
 ]: any -> record<id: int, invitation_id: int, team_id: int, is_team_leader: bool, team_permission: string, incident_permission: string> {
@@ -3235,7 +3234,7 @@ export def "teams-team-invitations update-team-invitation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-team-leader: string@bool-completer # e.g. false
+  --is-team-leader: oneof<nothing, bool> # e.g. false
   --team-permission: string # team_permission is replaced by is_team_leader (DEPRECATED, e.g. cannot_manage)
   --incident-permission: string # e.g. can_view
 ]: any -> record<id: int, invitation_id: int, team_id: int, is_team_leader: bool, team_permission: string, incident_permission: string> {
@@ -3288,7 +3287,7 @@ export def "teams-team-memberships list-team-memberships" [
   --allow-errors(-e) # Return full response without error handling
   --cursor: string # Pagination cursor.
   --per-page: int # Number of items to list per page. (default: 20)
-  --is-team-leader: string@bool-completer # e.g. true
+  --is-team-leader: oneof<nothing, bool> # e.g. true
   --team-permission: string # e.g. can_manage
   --incident-permission: string # e.g. can_edit
   --member-id: float # e.g. 1234
@@ -3316,9 +3315,9 @@ export def "teams-team-memberships create-team-membership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --send-email: string@bool-completer # Whether to notify the member about the team membership. (default: true)
+  --send-email: oneof<nothing, bool> # Whether to notify the member about the team membership. (default: true)
   --member-id: int # Id of a workspace member. (e.g. 2489)
-  --is-team-leader: string@bool-completer # e.g. false
+  --is-team-leader: oneof<nothing, bool> # e.g. false
   --team-permission: string # team_permission is replaced by is_team_leader (DEPRECATED, e.g. cannot_manage)
   --incident-permission: string # e.g. can_edit
 ]: any -> record<id: int, member_id: int, team_id: int, is_team_leader: bool, team_permission: string, incident_permission: string> {
@@ -3349,7 +3348,7 @@ export def "teams-team-memberships update-team-membership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-team-leader: string@bool-completer # e.g. false
+  --is-team-leader: oneof<nothing, bool> # e.g. false
   --team-permission: string # team_permission is replaced by is_team_leader (DEPRECATED, e.g. cannot_manage)
   --incident-permission: string # e.g. can_view
 ]: any -> record<id: int, member_id: int, team_id: int, is_team_leader: bool, team_permission: string, incident_permission: string> {
@@ -3378,7 +3377,7 @@ export def "teams-team-memberships delete-team-membership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --send-email: string@bool-completer # Whether to notify the member about the removal from the team. (default: true)
+  --send-email: oneof<nothing, bool> # Whether to notify the member about the removal from the team. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3477,7 +3476,7 @@ export def "teams-team-requests delete-team-request" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --send-email: string@bool-completer # Whether to notify the member about the request having been denied. (default: true)
+  --send-email: oneof<nothing, bool> # Whether to notify the member about the request having been denied. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3503,8 +3502,8 @@ export def "teams-team-requests-accept accept-team-request" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --send-email: string@bool-completer # Whether to notify the member about the request having been accepted. (default: true)
-  --is-team-leader: string@bool-completer # e.g. false
+  --send-email: oneof<nothing, bool> # Whether to notify the member about the request having been accepted. (default: true)
+  --is-team-leader: oneof<nothing, bool> # e.g. false
   --team-permission: string # team_permission is replaced by is_team_leader (DEPRECATED, e.g. cannot_manage)
   --incident-permission: string # e.g. can_view
 ]: any -> record<id: int, member_id: int, team_id: int, is_team_leader: bool, team_permission: string, incident_permission: string> {
@@ -3628,7 +3627,7 @@ export def "honeytokens list-honeytoken" [
   --revoker-api-token-id: string
   --tags: string
   --ordering: string@ordering-completer-12 # Sort the results by their field value. The default sort is ASC, DESC if the field is preceded by a '-'.
-  --show-token: string@bool-completer # default: false
+  --show-token: oneof<nothing, bool> # default: false
   --X-Privacy-Mode: string@X-Privacy-Mode-completer # When set to `true`, sensitive values in the response are obfuscated (replaced with `<GG>OBFUSCATED</GG>`). Useful for sharing API responses without exposing sensitive data.
 ]: nothing -> table<id: string, name: string, description: string, created_at: string, gitguardian_url: string, status: string, triggered_at: string, revoked_at: string, open_events_count: int, type: string, creator_id: int, revoker_id: int, creator_api_token_id: string, revoker_api_token_id: string, token: record, tags: list<string>, custom_tags: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3799,7 +3798,7 @@ export def "honeytokens retrieve-honeytoken" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-token: string@bool-completer # default: false
+  --show-token: oneof<nothing, bool> # default: false
   --X-Privacy-Mode: string@X-Privacy-Mode-completer # When set to `true`, sensitive values in the response are obfuscated (replaced with `<GG>OBFUSCATED</GG>`). Useful for sharing API responses without exposing sensitive data.
 ]: nothing -> record<id: string, name: string, description: string, created_at: string, gitguardian_url: string, status: string, triggered_at: string, revoked_at: string, open_events_count: int, type: string, creator_id: int, revoker_id: int, creator_api_token_id: string, revoker_api_token_id: string, token: record, tags: list<string>, custom_tags: table<id: string, key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4016,7 +4015,7 @@ export def "honeytokens-sources list-honeytoken-sources" [
   --cursor: string # Pagination cursor.
   --per-page: int # Number of items to list per page. (default: 20)
   --ordering: string@ordering-completer-13 # Sort the results by their field value. The default sort is ASC, DESC if the field is preceded by a '-'.
-  --provider-metadata-archived: string@bool-completer # e.g. true
+  --provider-metadata-archived: oneof<nothing, bool> # e.g. true
 ]: nothing -> table<provider_metadata: record<archived: bool>, type: record, name: string, url: string, open_issues_count: float, total_files_count: float, files: list<string>, source_id: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

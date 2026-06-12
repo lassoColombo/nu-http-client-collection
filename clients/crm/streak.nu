@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -99,7 +98,7 @@ export def "billing-backfill-pro-plus-trial-end post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dryRun: string@bool-completer # default: false
+  --dryRun: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -142,7 +141,7 @@ export def "users post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --automaticallySendInvoiceEmails: string@bool-completer # Whether invoice emails should be sent automatically. (nullable)
+  --automaticallySendInvoiceEmails: oneof<nothing, bool> # Whether invoice emails should be sent automatically. (nullable)
   --emailsToSendInvoiceTo: list # Who should receive invoices (nullable)
   --customerSpecifiedInvoiceData: string # Custom data that should be shown on the invoice (nullable)
 ]: any -> record<email: string, creationTimestamp: int, lastUpdatedTimestamp: int, lastSavedTimestamp: int, lastSeenTimestamp: int, googleProfileId: string, googleProfilePhotoUrl: string, googleProfileLink: string, googleProfileFullName: string, googleProfileFirstName: string, googleProfileLastName: string, timezoneId: string, userType: string, securityReportOnTeamsPipelines: bool, externalSharingRestrictionOnTeamsPipelines: bool, automaticallySendInvoiceEmails: bool, emailsToSendInvoiceTo: list<string>, customerSpecifiedInvoiceData: string, firstOauthTimestamp: int, wantsTaskDigestEmail: bool, displayName: string, key: string> {
@@ -215,7 +214,7 @@ export def "boxes-comments post" [
   message: string # Comment text.
   --mentions: list # Mention ranges in the comment text. (nullable) — item shape: {userKey: string, offset?: int, length?: int}
   --parent: string # Parent comment key when creating a reply. (nullable)
-  --searchForAtMentions: string@bool-completer # Whether to scan the comment text for unstructured @mentions of users display name, first name or email address. (nullable)
+  --searchForAtMentions: oneof<nothing, bool> # Whether to scan the comment text for unstructured @mentions of users display name, first name or email address. (nullable)
 ]: any -> record<key: string, commentKey: string, boxKey: string, pipelineKey: string, creatorKey: string, newsfeedEntryKey: string, timestamp: int, message: string, mentions: table<userKey: string, offset: int, length: int>, parent: string, children: list<any>, reactionSummary: table<emoji: string, count: int, users: list>, lastSavedTimestamp: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

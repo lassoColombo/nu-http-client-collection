@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api-sandbox.rebilly.com" "https://api.rebilly.com"] }
 def auth-scheme-completer [] { ["bearer" "reb-apikey"] }
 
@@ -425,7 +424,7 @@ export def "authentication-options PutAuthenticationOption" [
   --Organization-Id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --authTokenTtl: int # The default lifetime of the auth-token in seconds.
   --credentialTtl: int # The default lifetime of the credential in seconds.
-  --otpRequired: string@bool-completer # Should OTP be required to exchange token.
+  --otpRequired: oneof<nothing, bool> # Should OTP be required to exchange token.
   --passwordPattern: string # Allowed password pattern.
   --resetTokenTtl: int # The default lifetime of the reset-token in seconds.
 ]: any -> record<authTokenTtl: int, credentialTtl: int, otpRequired: bool, passwordPattern: string, resetTokenTtl: int> {
@@ -481,7 +480,7 @@ export def "authentication-tokens PostAuthenticationToken" [
   --allow-errors(-e) # Return full response without error handling
   --Organization-Id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   mode: string@mode-completer # The token's generation mode. (default: password)
-  --otpRequired: string@bool-completer # Should OTP be required to exchange this token.
+  --otpRequired: oneof<nothing, bool> # Should OTP be required to exchange this token.
 ]: any -> record<credentialId: record, mode: string, otpRequired: bool, token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
@@ -566,7 +565,7 @@ export def "authentication-tokens-exchange PostAuthenticationTokenExchange" [
   --acl: list # item shape: {permissions: any, scope: any}
   --customClaims: record # e.g. {documents: [identity-proof, address-proof], redirectUrl: https://mywebsite.com}
   --expiredTime: string # Session expired time. Defaults to one hour. (format: date-time)
-  --invalidate: string@bool-completer # Whether to invalidate token after exchange or not. (default: true, e.g. true)
+  --invalidate: oneof<nothing, bool> # Whether to invalidate token after exchange or not. (default: true, e.g. true)
   --oneTimePassword: string # The one time password sent via an email. Should contain digits only. (e.g. 123456)
   --updatedTime: any # Session updated time.
 ]: any -> record<_links: table<rel: string>, acl: table<permissions: record, scope: record>, createdTime: string, customClaims: record, customerId: record, expiredTime: string, id: record, invalidate: bool, oneTimePassword: string, token: string, type: string, updatedTime: record> {
@@ -2085,7 +2084,7 @@ export def "files PostFile" [
   --Organization-Id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --description: string # The file description. (e.g. My file description)
   --file: string # The file in base64 encoded format. (e.g. R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=)
-  --isPublic: string@bool-completer # The File visibility. If public a permalink is provided. (e.g. false)
+  --isPublic: oneof<nothing, bool> # The File visibility. If public a permalink is provided. (e.g. false)
   --name: string # The file name used for downloading. (e.g. logo.png)
   --tags: list # The tags list. (e.g. [test, tags])
   --body-url: string # The URL of the file to upload. (e.g. https://blog.rebilly.com/wp-content/uploads/2017/09/rb_LogoInverted_Small.png)
@@ -2170,7 +2169,7 @@ export def "files PutFile" [
   --createdTime: any # The upload date/time.
   --description: string # The File description.
   --extension: string # The File extension.
-  --isPublic: string@bool-completer # Is the file available publicly (without authentication). If true, the permalink in the _links section contains the public URL.
+  --isPublic: oneof<nothing, bool> # Is the file available publicly (without authentication). If true, the permalink in the _links section contains the public URL.
   --name: string # Original File name.
   --tags: list # The tags list.
   --updatedTime: any # The latest update date/time.
@@ -2915,12 +2914,12 @@ export def "kyc-documents-matches PostKycDocumentMatches" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Organization-Id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --containsImage: string@bool-completer # Flag that indicates if there is an image that contains a face on it. (e.g. true)
+  --containsImage: oneof<nothing, bool> # Flag that indicates if there is an image that contains a face on it. (e.g. true)
   --dateOfBirth: string # The date of birth found on the document, null if not found. (format: date-time)
   --expiryDate: string # The expiry date found on the document, null if not found. (format: date-time)
   --firstName: string # The customer first name if it was matched, null otherwise. (e.g. John)
-  --isIdentityDocument: string@bool-completer # Flag that indicates if this looks like and ID. (e.g. true)
-  --isPublishedOnline: string@bool-completer # If there is an exact match found online. (e.g. false)
+  --isIdentityDocument: oneof<nothing, bool> # Flag that indicates if this looks like and ID. (e.g. true)
+  --isPublishedOnline: oneof<nothing, bool> # If there is an exact match found online. (e.g. false)
   --issueDate: string # The issued date found on the document, null if not found. (format: date-time)
   --lastName: string # The customer last name if it was matched, null otherwise. (e.g. Doe)
   --nationality: string # The nationality found on the document, null otherwise. (e.g. US)
@@ -3612,8 +3611,8 @@ export def "payouts PostPayout" [
   --description: string # The payment description. (nullable)
   --gatewayAccountId: any # Rebilly will select the appropriate payment gateway account for the transaction based on the properties of the transaction and the `gateway-account-requested` event rules configurations. If you wish to prevent Rebilly from making the gateway account selection, you may supply a gateway account id here, and it will be used instead. Only use this field if you intend to override the settings. (nullable)
   --invoiceIds: list # The array of invoice identifiers. (nullable)
-  --isMerchantInitiated: string@bool-completer # True if the transaction was initiated by the merchant. (default: false)
-  --isProcessedOutside: string@bool-completer # True if transaction was processed outside Rebilly. (default: false)
+  --isMerchantInitiated: oneof<nothing, bool> # True if the transaction was initiated by the merchant. (default: false)
+  --isProcessedOutside: oneof<nothing, bool> # True if transaction was processed outside Rebilly. (default: false)
   --notificationUrl: string # The URL where a server-to-server notification request type `POST` with a transaction payload will be sent when the transaction's result is finalized. Do not trust the notification; follow with a `GET` request to confirm the result of the transaction. Please respond with a `2xx` HTTP status code, or we will reattempt the request again. You may use `{id}` or `{result}` as placeholders in the URL and we will replace them with the transaction's id and result accordingly.  (nullable, format: uri)
   --paymentInstruction: any # Payment instruction. If not supplied, customer's default payment instrument will be used.
   --paymentInstrument: any # DEPRECATED
@@ -3995,7 +3994,7 @@ export def "products PostProduct" [
   --description: string # The product description.
   name: string # The product name. (e.g. Premium membership)
   --options: list # The product options such as color, size, etc. The product options definition does not include option values. Those are defined within the plans.
-  --requiresShipping: string@bool-completer # If the product requires shipping, shipping calculations will be applied. (e.g. false)
+  --requiresShipping: oneof<nothing, bool> # If the product requires shipping, shipping calculations will be applied. (e.g. false)
   --unitLabel: string # The unit label, such as per `seat` or per `unit`. (default: unit, e.g. seat)
   --updatedTime: any # The product updated time.
   --accountingCode: string # The product accounting code. (e.g. 4010)
@@ -4084,7 +4083,7 @@ export def "products PutProduct" [
   --description: string # The product description.
   name: string # The product name. (e.g. Premium membership)
   --options: list # The product options such as color, size, etc. The product options definition does not include option values. Those are defined within the plans.
-  --requiresShipping: string@bool-completer # If the product requires shipping, shipping calculations will be applied. (e.g. false)
+  --requiresShipping: oneof<nothing, bool> # If the product requires shipping, shipping calculations will be applied. (e.g. false)
   --unitLabel: string # The unit label, such as per `seat` or per `unit`. (default: unit, e.g. seat)
   --updatedTime: any # The product updated time.
   --accountingCode: string # The product accounting code. (e.g. 4010)
@@ -4352,7 +4351,7 @@ export def "subscription-cancellations PostSubscriptionCancellation" [
   --createdTime: any # The time of resource creation (when it is posted).
   --description: string # Cancel reason description in free form.
   --lineItems: any # Items to be added to the new invoice. Proration item is generated and added automatically.
-  --prorated: string@bool-completer # Defines if the customer gets a pro-rata credit for the time remaining between `churnTime` and subscription's next renewal time.  (default: false)
+  --prorated: oneof<nothing, bool> # Defines if the customer gets a pro-rata credit for the time remaining between `churnTime` and subscription's next renewal time.  (default: false)
   --reason: string@reason-completer # Cancellation reason. (default: other)
   --status: string@status-completer-1 # "draft" defines that the cancellation isn't applied on an invoice and subscription but can be inspected to see the charge. "confirmed" will set a subscription to be canceled when the `churnTime` is reached. "completed" is a read-only status which is set by the system when the churnTime is reached. The cancellation may not be changed or deleted when the status is "completed".  (default: confirmed)
   subscriptionId: any # Identifier of the canceled subscription order.
@@ -4440,7 +4439,7 @@ export def "subscription-cancellations PutSubscriptionCancellation" [
   --createdTime: any # The time of resource creation (when it is posted).
   --description: string # Cancel reason description in free form.
   --lineItems: any # Items to be added to the new invoice. Proration item is generated and added automatically.
-  --prorated: string@bool-completer # Defines if the customer gets a pro-rata credit for the time remaining between `churnTime` and subscription's next renewal time.  (default: false)
+  --prorated: oneof<nothing, bool> # Defines if the customer gets a pro-rata credit for the time remaining between `churnTime` and subscription's next renewal time.  (default: false)
   --reason: string@reason-completer # Cancellation reason. (default: other)
   --status: string@status-completer-1 # "draft" defines that the cancellation isn't applied on an invoice and subscription but can be inspected to see the charge. "confirmed" will set a subscription to be canceled when the `churnTime` is reached. "completed" is a read-only status which is set by the system when the churnTime is reached. The cancellation may not be changed or deleted when the status is "completed".  (default: confirmed)
   subscriptionId: any # Identifier of the canceled subscription order.
@@ -4669,9 +4668,9 @@ export def "subscriptions-change-items PostSubscriptionItemsChange" [
   --Organization-Id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --effectiveTime: string # The date from which the renewal time (for `reset` operations) and proration calculations are made.  If omitted, it will default to the current time. (format: date-time)
   items: list # item shape: {plan: any, quantity: int}
-  --keepTrial: string@bool-completer # If set to true and the subscription order has an active trial, it will use that trial further. Works with 'retain' renewalPolicy only. (default: false)
-  --preview: string@bool-completer # If set to true, it will not change the subscription.  It allows for a way to preview the changes that would be made to a subscription. (default: false)
-  --prorated: string@bool-completer # Whether or not to give a pro rata credit for the amount of time remaining between the `effectiveTime` and the end of the current period. In addition, if the `renewalTime` is retained (by setting the `renewalPolicy` to `retain`), then a pro rata debit will occur as well, for the amount between the `effectiveTime` and the `renewalTime` as a percentage of the normal period size.
+  --keepTrial: oneof<nothing, bool> # If set to true and the subscription order has an active trial, it will use that trial further. Works with 'retain' renewalPolicy only. (default: false)
+  --preview: oneof<nothing, bool> # If set to true, it will not change the subscription.  It allows for a way to preview the changes that would be made to a subscription. (default: false)
+  --prorated: oneof<nothing, bool> # Whether or not to give a pro rata credit for the amount of time remaining between the `effectiveTime` and the end of the current period. In addition, if the `renewalTime` is retained (by setting the `renewalPolicy` to `retain`), then a pro rata debit will occur as well, for the amount between the `effectiveTime` and the `renewalTime` as a percentage of the normal period size.
   renewalPolicy: string@renewalPolicy-completer # The value determines whether the subscription retains its current `renewalTime` or resets it to a newly calculated `renewalTime`.
 ]: any -> record<orderType: string> {
   let input = $in
@@ -5261,8 +5260,8 @@ export def "transactions PostTransaction" [
   --description: string # The payment description. (nullable)
   --gatewayAccountId: any # Rebilly will select the appropriate payment gateway account for the transaction based on the properties of the transaction and the `gateway-account-requested` event rules configurations. If you wish to prevent Rebilly from making the gateway account selection, you may supply a gateway account id here, and it will be used instead. Only use this field if you intend to override the settings. (nullable)
   --invoiceIds: list # The array of invoice identifiers. (nullable)
-  --isMerchantInitiated: string@bool-completer # True if the transaction was initiated by the merchant. (default: false)
-  --isProcessedOutside: string@bool-completer # True if transaction was processed outside Rebilly. (default: false)
+  --isMerchantInitiated: oneof<nothing, bool> # True if the transaction was initiated by the merchant. (default: false)
+  --isProcessedOutside: oneof<nothing, bool> # True if transaction was processed outside Rebilly. (default: false)
   --notificationUrl: string # The URL where a server-to-server notification request type `POST` with a transaction payload will be sent when the transaction's result is finalized. Do not trust the notification; follow with a `GET` request to confirm the result of the transaction. Please respond with a `2xx` HTTP status code, or we will reattempt the request again. You may use `{id}` or `{result}` as placeholders in the URL and we will replace them with the transaction's id and result accordingly.  (nullable, format: uri)
   --paymentInstruction: any # Payment instruction. If not supplied, customer's default payment instrument will be used.
   --paymentInstrument: any # DEPRECATED

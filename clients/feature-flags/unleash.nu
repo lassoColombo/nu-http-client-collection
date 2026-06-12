@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://app.unleash-instance.example.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -160,7 +159,7 @@ export def "admin-scim-settings set-scim-settings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Authorization: string # API key needed to access this API
-  --enabled: string@bool-completer # Whether SCIM provisioning is currently enabled.
+  --enabled: oneof<nothing, bool> # Whether SCIM provisioning is currently enabled.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -242,7 +241,7 @@ export def "admin-projects-context create-context-field-for-project" [
   --allow-errors(-e) # Return full response without error handling
   --Authorization: string # API key needed to access this API
   --description: string # A description of the context field
-  --stickiness: string@bool-completer # `true` if this field should be available for use with [custom stickiness](https://docs.getunleash.io/concepts/stickiness#custom-stickiness), otherwise `false`
+  --stickiness: oneof<nothing, bool> # `true` if this field should be available for use with [custom stickiness](https://docs.getunleash.io/concepts/stickiness#custom-stickiness), otherwise `false`
   --sortOrder: int # How this context field should be sorted if no other sort order is selected
   --legalValues: list # A list of allowed values for this context field — item shape: {value: string, description?: string}
   --project: string # The project this context field belongs to (if it is project-specific)
@@ -304,7 +303,7 @@ export def "admin-projects-context update-context-field-for-project" [
   --allow-errors(-e) # Return full response without error handling
   --Authorization: string # API key needed to access this API
   --description: string # A description of the context field
-  --stickiness: string@bool-completer # `true` if this field should be available for use with [custom stickiness](https://docs.getunleash.io/concepts/stickiness#custom-stickiness), otherwise `false`
+  --stickiness: oneof<nothing, bool> # `true` if this field should be available for use with [custom stickiness](https://docs.getunleash.io/concepts/stickiness#custom-stickiness), otherwise `false`
   --sortOrder: int # How this context field should be sorted if no other sort order is selected
   --legalValues: list # A list of allowed values for this context field — item shape: {value: string, description?: string}
   --project: string # The project this context field belongs to (if it is project-specific)
@@ -457,7 +456,7 @@ export def "admin-projects-features-environments-milestone-strategies update-pro
   --sortOrder: float # The order of the strategy in the list in feature environment configuration (format: double)
   --constraints: list # A list of the constraints attached to the strategy. See https://docs.getunleash.io/concepts/activation-strategies#constraints — item shape: {contextName: string, operator: "NOT_IN"|"IN"|"STR_ENDS_WITH"|"STR_STARTS_WITH"|"STR_CONTAINS"|"NUM_EQ"|"NUM_GT"|"NUM_GTE"|"NUM_LT"|"NUM_LTE"|"DATE_AFTER"|"DATE_BEFORE"|"SEMVER_EQ"|"SEMVER_GT"|"SEMVER_LT"|"REGEX", caseInsensitive?: bool, inverted?: bool, values?: list, value?: string}
   --title: string # A descriptive title for the strategy (nullable)
-  --disabled: string@bool-completer # A toggle to disable the strategy. defaults to true. Disabled strategies are not evaluated or returned to the SDKs (nullable)
+  --disabled: oneof<nothing, bool> # A toggle to disable the strategy. defaults to true. Disabled strategies are not evaluated or returned to the SDKs (nullable)
   --variants: list # Strategy level variants — item shape: {name: string, weight: int, weightType: "variable"|"fix", stickiness: string, payload?: record}
   --segments: list # A list of segment ids attached to the strategy
   --parameters: record # A list of parameters for a strategy
@@ -1025,7 +1024,7 @@ export def "admin-impact-metrics-external-source set-external-impact-metrics-sou
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Authorization: string # API key needed to access this API
-  --enabled: string@bool-completer # Whether the external impact-metrics source is active. When `true`, `url` must be a valid non-empty URL.
+  --enabled: oneof<nothing, bool> # Whether the external impact-metrics source is active. When `true`, `url` must be a valid non-empty URL.
   --body-url: string # Base URL of the external impact-metrics source. Basic-Auth credentials may be embedded in the URL (e.g. `https://user:pass@metrics.example.com`); they are extracted into an `Authorization` header on outbound requests. Required (non-empty, valid URL) when `enabled` is true; an empty string is discarded when `enabled` is false.
 ]: any -> record {
   let input = $in
@@ -1156,7 +1155,7 @@ export def "admin-signal-endpoints create-signal-endpoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Authorization: string # API key needed to access this API
-  --enabled: string@bool-completer # Whether the signal endpoint is currently enabled. If not specified, defaults to true.
+  --enabled: oneof<nothing, bool> # Whether the signal endpoint is currently enabled. If not specified, defaults to true.
   name: string # The signal endpoint name. Must be URL-safe.
   --description: string # A more detailed description of the signal endpoint and its intended use. (nullable)
 ]: any -> record<id: int, enabled: bool, name: string, description: string, createdAt: string, createdByUserId: int, url: string, tokens: table<id: int, token: string, name: string, signalEndpointId: int, createdAt: string, createdByUserId: int>> {
@@ -1187,7 +1186,7 @@ export def "admin-signal-endpoints update-signal-endpoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Authorization: string # API key needed to access this API
-  --enabled: string@bool-completer # Whether the signal endpoint is currently enabled. If not specified, defaults to true.
+  --enabled: oneof<nothing, bool> # Whether the signal endpoint is currently enabled. If not specified, defaults to true.
   name: string # The signal endpoint name. Must be URL-safe.
   --description: string # A more detailed description of the signal endpoint and its intended use. (nullable)
 ]: any -> record<id: int, enabled: bool, name: string, description: string, createdAt: string, createdByUserId: int, url: string, tokens: table<id: int, token: string, name: string, signalEndpointId: int, createdAt: string, createdByUserId: int>> {
@@ -1565,7 +1564,7 @@ export def "admin-projects-actions create-actions" [
   name: string # The name of the action set
   --description: string # The description of the action set (nullable)
   actorId: int # The id of the service account that will execute the action
-  --enabled: string@bool-completer # Whether this action set is enabled or not (default: true)
+  --enabled: oneof<nothing, bool> # Whether this action set is enabled or not (default: true)
   actions: list # The list of actions to execute in sequential order when the action set is triggered — item shape: {action: string, sortOrder: int, executionParams?: record}
   --body-match: record # Defines a matching rule for the signal that will trigger the action set — shape: {source: "signal-endpoint", sourceId: float, payload: record}
 ]: any -> record<id: int, project: string, createdAt: string, createdByUserId: int, name: string, description: string, actorId: int, enabled: bool, actions: table<id: int, createdAt: string, createdByUserId: int, action: string, sortOrder: int, executionParams: record>, match: record<source: string, sourceId: float, payload: record>> {
@@ -1602,7 +1601,7 @@ export def "admin-projects-actions update-actions" [
   name: string # The name of the action set
   --description: string # The description of the action set (nullable)
   actorId: int # The id of the service account that will execute the action
-  --enabled: string@bool-completer # Whether this action set is enabled or not (default: true)
+  --enabled: oneof<nothing, bool> # Whether this action set is enabled or not (default: true)
   actions: list # The list of actions to execute in sequential order when the action set is triggered — item shape: {action: string, sortOrder: int, executionParams?: record}
   --body-match: record # Defines a matching rule for the signal that will trigger the action set — shape: {source: "signal-endpoint", sourceId: float, payload: record}
 ]: any -> record<id: int, project: string, createdAt: string, createdByUserId: int, name: string, description: string, actorId: int, enabled: bool, actions: table<id: int, createdAt: string, createdByUserId: int, action: string, sortOrder: int, executionParams: record>, match: record<source: string, sourceId: float, payload: record>> {
@@ -2270,8 +2269,8 @@ export def "admin-signup submit-signup-data" [
   --name: string # The user's name.
   --companyRole: string # The role of the user within the company.
   --companyName: string # The name of the company.
-  --companyIsNA: string@bool-completer # Whether the company is based in North America.
-  --productUpdatesEmailConsent: string@bool-completer # Whether the user has consented to receive product update emails.
+  --companyIsNA: oneof<nothing, bool> # Whether the company is based in North America.
+  --productUpdatesEmailConsent: oneof<nothing, bool> # Whether the user has consented to receive product update emails.
   --password: string # The user's new password.
   --inviteEmails: list # A list of email addresses to invite.
 ]: any -> any {

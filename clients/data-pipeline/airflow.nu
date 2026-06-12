@@ -63,7 +63,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost/api/v1" "https://apache.local"] }
 def auth-scheme-completer [] { ["basic" "bearer" "negotiate"] }
 
@@ -356,7 +355,7 @@ export def "dags dags" [
   --offset: int # The number of items to skip before starting to collect the result set.
   --order-by: string # The name of the field to order the results by. Prefix a field name with `-` to reverse the sort order.  *New in version 2.1.0*
   --tags: list # List of tags to filter results.  *New in version 2.2.0*
-  --only-active: string@bool-completer # Only filter active DAGs.  *New in version 2.1.1*  (default: true)
+  --only-active: oneof<nothing, bool> # Only filter active DAGs.  *New in version 2.1.1*  (default: true)
   --dag-id-pattern: string # If set, only return DAGs with dag_ids matching this pattern.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -385,9 +384,9 @@ export def "dags dags-1" [
   --offset: int # The number of items to skip before starting to collect the result set.
   --tags: list # List of tags to filter results.  *New in version 2.2.0* — item shape: {name?: string}
   --update-mask: list # The fields to update on the resource. If absent or empty, all modifiable fields are updated. A comma-separated list of fully qualified names of fields.
-  --only-active: string@bool-completer # Only filter active DAGs.  *New in version 2.1.1*  (default: true)
+  --only-active: oneof<nothing, bool> # Only filter active DAGs.  *New in version 2.1.1*  (default: true)
   --dag-id-pattern: string # If set, only update DAGs with dag_ids matching this pattern.
-  --is-paused: string@bool-completer # Whether the DAG is paused. (nullable)
+  --is-paused: oneof<nothing, bool> # Whether the DAG is paused. (nullable)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -460,7 +459,7 @@ export def "dags dag-by-dag_id-2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --update-mask: list # The fields to update on the resource. If absent or empty, all modifiable fields are updated. A comma-separated list of fully qualified names of fields.
-  --is-paused: string@bool-completer # Whether the DAG is paused. (nullable)
+  --is-paused: oneof<nothing, bool> # Whether the DAG is paused. (nullable)
 ]: any -> record<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list<string>, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: table<name: string>, timetable_description: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -488,17 +487,17 @@ export def "dags-clear-task-instances instances" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dag-run-id: string # The DagRun ID for this task instance (nullable)
-  --dry-run: string@bool-completer # If set, don't actually run this operation. The response will contain a list of task instances planned to be cleaned, but not modified in any way.  (default: true)
+  --dry-run: oneof<nothing, bool> # If set, don't actually run this operation. The response will contain a list of task instances planned to be cleaned, but not modified in any way.  (default: true)
   --end-date: string # The maximum execution date to clear. (format: datetime)
-  --include-downstream: string@bool-completer # If set to true, downstream tasks are also affected. (default: false)
-  --include-future: string@bool-completer # If set to True, also tasks from future DAG Runs are affected. (default: false)
-  --include-parentdag: string@bool-completer # Clear tasks in the parent dag of the subdag.
-  --include-past: string@bool-completer # If set to True, also tasks from past DAG Runs are affected. (default: false)
-  --include-subdags: string@bool-completer # Clear tasks in subdags and clear external tasks indicated by ExternalTaskMarker.
-  --include-upstream: string@bool-completer # If set to true, upstream tasks are also affected. (default: false)
-  --only-failed: string@bool-completer # Only clear failed tasks. (default: true)
-  --only-running: string@bool-completer # Only clear running tasks. (default: false)
-  --reset-dag-runs: string@bool-completer # Set state of DAG runs to RUNNING.
+  --include-downstream: oneof<nothing, bool> # If set to true, downstream tasks are also affected. (default: false)
+  --include-future: oneof<nothing, bool> # If set to True, also tasks from future DAG Runs are affected. (default: false)
+  --include-parentdag: oneof<nothing, bool> # Clear tasks in the parent dag of the subdag.
+  --include-past: oneof<nothing, bool> # If set to True, also tasks from past DAG Runs are affected. (default: false)
+  --include-subdags: oneof<nothing, bool> # Clear tasks in subdags and clear external tasks indicated by ExternalTaskMarker.
+  --include-upstream: oneof<nothing, bool> # If set to true, upstream tasks are also affected. (default: false)
+  --only-failed: oneof<nothing, bool> # Only clear failed tasks. (default: true)
+  --only-running: oneof<nothing, bool> # Only clear running tasks. (default: false)
+  --reset-dag-runs: oneof<nothing, bool> # Set state of DAG runs to RUNNING.
   --start-date: string # The minimum execution date to clear. (format: datetime)
   --task-ids: list # A list of task ids to clear.  *New in version 2.1.0*
 ]: any -> record<task_instances: table<dag_id: string, dag_run_id: string, execution_date: string, task_id: string>> {
@@ -665,7 +664,7 @@ export def "dags-dag-runs-clear run" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dry-run: string@bool-completer # If set, don't actually run this operation. The response will contain a list of task instances planned to be cleaned, but not modified in any way.  (default: true)
+  --dry-run: oneof<nothing, bool> # If set, don't actually run this operation. The response will contain a list of task instances planned to be cleaned, but not modified in any way.  (default: true)
 ]: any -> record<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -770,7 +769,7 @@ export def "dags-dag-runs-task-instances instance-by-dag_id-dag_run_id-task_id-1
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dry-run: string@bool-completer # If set, don't actually run this operation. The response will contain the task instance planned to be affected, but won't be modified in any way.  (default: false)
+  --dry-run: oneof<nothing, bool> # If set, don't actually run this operation. The response will contain the task instance planned to be affected, but won't be modified in any way.  (default: false)
   --new-state: string@new-state-completer # Expected new state.
 ]: any -> record<dag_id: string, dag_run_id: string, execution_date: string, task_id: string> {
   let input = $in
@@ -864,7 +863,7 @@ export def "dags-dag-runs-task-instances-logs log" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --full-content: string@bool-completer # A full content will be returned. By default, only the first fragment will be returned.
+  --full-content: oneof<nothing, bool> # A full content will be returned. By default, only the first fragment will be returned.
   --map-index: int # Filter on map index for mapped task.
   --qp-token: string # A token that allows you to continue fetching logs. If passed, it will specify the location from which the download should be continued.
 ]: nothing -> record<content: string, continuation_token: string> {
@@ -948,7 +947,7 @@ export def "dags-dag-runs-task-instances-xcom-entries entry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deserialize: string@bool-completer # Whether to deserialize an XCom value when using a custom XCom backend.  The XCom API endpoint calls `orm_deserialize_value` by default since an XCom may contain value that is potentially expensive to deserialize in the web server. Setting this to true overrides the consideration, and calls `deserialize_value` instead.  This parameter is not meaningful when using the default XCom backend.  *New in version 2.4.0*  (default: false)
+  --deserialize: oneof<nothing, bool> # Whether to deserialize an XCom value when using a custom XCom backend.  The XCom API endpoint calls `orm_deserialize_value` by default since an XCom may contain value that is potentially expensive to deserialize in the web server. Setting this to true overrides the consideration, and calls `deserialize_value` instead.  This parameter is not meaningful when using the default XCom backend.  *New in version 2.4.0*  (default: false)
 ]: nothing -> record<dag_id: string, execution_date: string, key: string, task_id: string, timestamp: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1000,7 +999,7 @@ export def "dags-dag-runs-task-instances instance-by-dag_id-dag_run_id-task_id-m
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dry-run: string@bool-completer # If set, don't actually run this operation. The response will contain the task instance planned to be affected, but won't be modified in any way.  (default: false)
+  --dry-run: oneof<nothing, bool> # If set, don't actually run this operation. The response will contain the task instance planned to be affected, but won't be modified in any way.  (default: false)
   --new-state: string@new-state-completer # Expected new state.
 ]: any -> record<dag_id: string, dag_run_id: string, execution_date: string, task_id: string> {
   let input = $in
@@ -1149,12 +1148,12 @@ export def "dags-update-task-instances-state state" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dag-run-id: string # The task instance's DAG run ID. Either set this or execution_date but not both.  *New in version 2.3.0*
-  --dry-run: string@bool-completer # If set, don't actually run this operation. The response will contain a list of task instances planned to be affected, but won't be modified in any way.  (default: true)
+  --dry-run: oneof<nothing, bool> # If set, don't actually run this operation. The response will contain a list of task instances planned to be affected, but won't be modified in any way.  (default: true)
   --execution-date: string # The execution date. Either set this or dag_run_id but not both. (format: datetime)
-  --include-downstream: string@bool-completer # If set to true, downstream tasks are also affected.
-  --include-future: string@bool-completer # If set to True, also tasks from future DAG Runs are affected.
-  --include-past: string@bool-completer # If set to True, also tasks from past DAG Runs are affected.
-  --include-upstream: string@bool-completer # If set to true, upstream tasks are also affected.
+  --include-downstream: oneof<nothing, bool> # If set to true, downstream tasks are also affected.
+  --include-future: oneof<nothing, bool> # If set to True, also tasks from future DAG Runs are affected.
+  --include-past: oneof<nothing, bool> # If set to True, also tasks from past DAG Runs are affected.
+  --include-upstream: oneof<nothing, bool> # If set to true, upstream tasks are also affected.
   --new-state: string@new-state-completer # Expected new state.
   --task-id: string # The task ID.
 ]: any -> record<task_instances: table<dag_id: string, dag_run_id: string, execution_date: string, task_id: string>> {

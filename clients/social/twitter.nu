@@ -83,7 +83,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://x.com/i/api" "https://twitter.com/i/api"] }
 def auth-scheme-completer [] { ["accept" "accept-encoding" "accept-language" "x-twitter-active-user" "x-twitter-auth-type" "bearer" "x-twitter-client-language" "x-client-transaction-id" "x-client-uuid" "cookie-auth_token" "cookie-ct0" "cookie-gt0" "x-csrf-token" "x-guest-token" "priority" "referer" "sec-ch-ua" "sec-ch-ua-mobile" "sec-ch-ua-platform" "sec-fetch-dest" "sec-fetch-mode" "sec-fetch-site" "user-agent"] }
 
@@ -139,7 +138,7 @@ export def "11-friends-following-listjson get" [
   --cursor: int # default: -1, e.g. -1
   --user-id: string # default: 44196397, e.g. 44196397
   --count: int # default: 3, e.g. 3
-  --with-total-count: string@bool-completer # default: true, e.g. true
+  --with-total-count: oneof<nothing, bool> # default: true, e.g. true
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accept"))
   let base = ($base_url | default $BASE_URL)
@@ -281,27 +280,27 @@ export def "2-search-adaptivejson get" [
   --skip-status: int # default: 1, e.g. 1
   --cards-platform: string # default: Web-12, e.g. Web-12
   --include-cards: int # default: 1, e.g. 1
-  --include-ext-alt-text: string@bool-completer # default: true, e.g. true
-  --include-ext-limited-action-results: string@bool-completer # default: false, e.g. false
-  --include-quote-count: string@bool-completer # default: true, e.g. true
+  --include-ext-alt-text: oneof<nothing, bool> # default: true, e.g. true
+  --include-ext-limited-action-results: oneof<nothing, bool> # default: false, e.g. false
+  --include-quote-count: oneof<nothing, bool> # default: true, e.g. true
   --include-reply-count: int # default: 1, e.g. 1
   --tweet-mode: string # default: extended, e.g. extended
-  --include-ext-views: string@bool-completer # default: true, e.g. true
-  --include-entities: string@bool-completer # default: true, e.g. true
-  --include-user-entities: string@bool-completer # default: true, e.g. true
-  --include-ext-media-color: string@bool-completer # default: true, e.g. true
-  --include-ext-media-availability: string@bool-completer # default: true, e.g. true
-  --include-ext-sensitive-media-warning: string@bool-completer # default: true, e.g. true
-  --include-ext-trusted-friends-metadata: string@bool-completer # default: true, e.g. true
-  --send-error-codes: string@bool-completer # default: true, e.g. true
-  --simple-quoted-tweet: string@bool-completer # default: true, e.g. true
+  --include-ext-views: oneof<nothing, bool> # default: true, e.g. true
+  --include-entities: oneof<nothing, bool> # default: true, e.g. true
+  --include-user-entities: oneof<nothing, bool> # default: true, e.g. true
+  --include-ext-media-color: oneof<nothing, bool> # default: true, e.g. true
+  --include-ext-media-availability: oneof<nothing, bool> # default: true, e.g. true
+  --include-ext-sensitive-media-warning: oneof<nothing, bool> # default: true, e.g. true
+  --include-ext-trusted-friends-metadata: oneof<nothing, bool> # default: true, e.g. true
+  --send-error-codes: oneof<nothing, bool> # default: true, e.g. true
+  --simple-quoted-tweet: oneof<nothing, bool> # default: true, e.g. true
   --q: string # default: elon musk, e.g. elon musk
   --query-source: string # default: trend_click, e.g. trend_click
   --count: int # default: 20, e.g. 20
   --requestContext: string # default: launch, e.g. launch
   --pc: int # default: 1, e.g. 1
   --spelling-corrections: int # default: 1, e.g. 1
-  --include-ext-edit-control: string@bool-completer # default: true, e.g. true
+  --include-ext-edit-control: oneof<nothing, bool> # default: true, e.g. true
   --ext: string # default: mediaStats,highlightedLabel,hasNftAvatar,voiceInfo,birdwatchPivot,enrichments,superFollowMetadata,unmentionInfo,editControl,vibe, e.g. mediaStats,highlightedLabel,hasNftAvatar,voiceInfo,birdwatchPivot,enrichments,superFollowMetadata,unmentionInfo,editControl,vibe
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "accept"))

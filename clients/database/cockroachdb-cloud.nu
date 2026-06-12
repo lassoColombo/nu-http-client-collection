@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://cockroachlabs.cloud"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -545,7 +544,7 @@ export def "scim-users CreateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --displayName: string
   emails: list # item shape: {display?: string, primary?: bool, type?: string, value: string}
   --externalId: string
@@ -714,7 +713,7 @@ export def "scim-users UpdateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --displayName: string
   --emails: list # item shape: {display?: string, primary?: bool, type?: string, value: string}
   --externalId: string
@@ -975,7 +974,7 @@ export def "clusters ListClusters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-inactive: string@bool-completer # If `true`, show clusters that have been deleted or failed to initialize. Note that inactive clusters will only be included if the requesting user has organization-scoped cluster read permissions. (default: false)
+  --show-inactive: oneof<nothing, bool> # If `true`, show clusters that have been deleted or failed to initialize. Note that inactive clusters will only be included if the requesting user has organization-scoped cluster read permissions. (default: false)
   --paginationpage: string
   --paginationlimit: int # format: int32
   --paginationas-of-time: string # format: date-time
@@ -1032,7 +1031,7 @@ export def "clusters-available-regions ListAvailableRegions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --provider: string@provider-completer # Optional CloudProvider for filtering.   - GCP: The Google Cloud Platform cloud provider.  - AWS: The Amazon Web Services cloud provider.  - AZURE: The Azure cloud provider.
-  --serverless: string@bool-completer # Optional filter to only show regions available for serverless clusters. (default: false)
+  --serverless: oneof<nothing, bool> # Optional filter to only show regions available for serverless clusters. (default: false)
   --paginationpage: string
   --paginationlimit: int # format: int32
   --paginationas-of-time: string # format: date-time
@@ -1190,7 +1189,7 @@ export def "clusters-backups-config UpdateBackupConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Indicates whether backups are enabled.
+  --enabled: oneof<nothing, bool> # Indicates whether backups are enabled.
   --frequency-minutes: int # How frequently in minutes that backups are taken, which will determine the [RPO](https://www.cockroachlabs.com/docs/stable/disaster-recovery-overview) of the cluster.  Valid values are [5, 10, 15, 30, 60, 240, 1440]. (format: int32)
   --retention-days: int # The number of days to retain backups for. Can only be set once, further changes require opening a support ticket. Valid values are [2, 7, 30, 90, 365]. (format: int32)
 ]: any -> record<enabled: bool, frequency_minutes: int, retention_days: int> {
@@ -1800,7 +1799,7 @@ export def "clusters-logexport EnableLogExport" [
   --groups: list # groups is a collection of log group configurations that allows the customer to define collections of CRDB log channels that are aggregated separately at the target sink. — item shape: {channels: list, enable_sending_queue?: bool, log_name: string, min_level?: "UNSPECIFIED"|"WARNING"|"ERROR"|"FATAL", redact?: bool}
   log_name: string # log_name is an identifier for the logs in the customer's log sink.
   --omitted-channels: list # omitted_channels is a list of channels that the user does not want to export logs for.
-  --redact: string@bool-completer # redact allows the customer to set a default redaction policy for logs before they are exported to the target sink. If a group config omits a redact flag and this one is set to `true`, then that group will receive redacted logs.
+  --redact: oneof<nothing, bool> # redact allows the customer to set a default redaction policy for logs before they are exported to the target sink. If a group config omits a redact flag and this one is set to `true`, then that group will receive redacted logs.
   --region: string # region allows the customer to override the destination region for all logs for a cluster.
   type: string@type-completer # LogExportType encodes the cloud selection that we're exporting to along with the cloud logging platform.  Currently, each cloud has a single logging platform.
 ]: any -> record<cluster_id: string, created_at: string, spec: record<auth_principal: string, aws_external_id: string, azure_shared_key: string, groups: list<record>, log_name: string, omitted_channels: list<string>, redact: bool, region: string, type: string>, status: string, updated_at: string, user_message: string> {
@@ -2139,8 +2138,8 @@ export def "clusters-networking-allowlist AddAllowlistEntry" [
   cidr_ip: string
   cidr_mask: int # format: int32
   --name: string
-  --sql: string@bool-completer
-  --ui: string@bool-completer
+  --sql: oneof<nothing, bool>
+  --ui: oneof<nothing, bool>
 ]: any -> record<cidr_ip: string, cidr_mask: int, name: string, sql: bool, ui: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2193,8 +2192,8 @@ export def "clusters-networking-allowlist UpdateAllowlistEntry" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --sql: string@bool-completer
-  --ui: string@bool-completer
+  --sql: oneof<nothing, bool>
+  --ui: oneof<nothing, bool>
 ]: any -> record<cidr_ip: string, cidr_mask: int, name: string, sql: bool, ui: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2223,8 +2222,8 @@ export def "clusters-networking-allowlist AddAllowlistEntry2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --sql: string@bool-completer
-  --ui: string@bool-completer
+  --sql: oneof<nothing, bool>
+  --ui: oneof<nothing, bool>
 ]: any -> record<cidr_ip: string, cidr_mask: int, name: string, sql: bool, ui: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2515,7 +2514,7 @@ export def "clusters-networking-egress-rules-egress-traffic-policy SetEgressTraf
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-all: string@bool-completer # allow_all, if true results in unrestricted egress traffic. If false, egress traffic is set to default-deny and is managed via the Egress Rule Management API.
+  --allow-all: oneof<nothing, bool> # allow_all, if true results in unrestricted egress traffic. If false, egress traffic is set to default-deny and is managed via the Egress Rule Management API.
   --idempotency-key: string # idempotency_key uniquely identifies this request. If not set, it will be set by the server.
 ]: any -> record {
   let input = $in
@@ -3451,7 +3450,7 @@ export def "physical-replication-streams ListPhysicalReplicationStreams" [
   --primary-cluster-id: string # primary_cluster_id, if set, will cause only replication streams with this cluster as the primary to be returned.
   --standby-cluster-id: string # standby_cluster_id, if set, will cause only replication streams with this cluster as the standby to be returned.
   --cluster-id: string # cluster_id, if set, will cause replication streams with this cluster as the primary or the standby to be returned.
-  --show-completed: string@bool-completer # show_completed specifies whether or not replication streams in the completed state are shown.
+  --show-completed: oneof<nothing, bool> # show_completed specifies whether or not replication streams in the completed state are shown.
   --paginationpage: string
   --paginationlimit: int # format: int32
   --paginationas-of-time: string # format: date-time

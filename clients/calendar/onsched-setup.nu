@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://sandbox-api.onsched.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -209,7 +208,7 @@ export def "setup-businessusers post" [
   --name: string # nullable
   --resourceId: string # nullable
   --role: string # nullable
-  --sendRegistrationInvite: string@bool-completer
+  --sendRegistrationInvite: oneof<nothing, bool>
 ]: any -> record<accountId: string, businessName: string, email: string, id: string, identityAccount: bool, locationId: string, name: string, object: string, permissions: table<access: string, function: string, object: string>, resourceId: string, resourceName: string, role: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -329,7 +328,7 @@ export def "setup-businessusers put" [
   --name: string # nullable
   --resourceId: string # nullable
   --role: string # nullable
-  --sendRegistrationInvite: string@bool-completer
+  --sendRegistrationInvite: oneof<nothing, bool>
 ]: any -> record<accountId: string, businessName: string, email: string, id: string, identityAccount: bool, locationId: string, name: string, object: string, permissions: table<access: string, function: string, object: string>, resourceId: string, resourceName: string, role: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -354,7 +353,7 @@ export def "setup-calendars list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --locationId: string # id of business location, defaults to primary business location
-  --deleted: string@bool-completer # Filter by deleted status
+  --deleted: oneof<nothing, bool> # Filter by deleted status
   --offset: int # Starting row of page, default 0 (format: int32)
   --limit: int # Page limit default 20, max 100 (format: int32)
 ]: nothing -> record<count: int, data: table<availability: record, bookingsPerSlot: int, deletedStatus: bool, deletedTime: string, id: string, interval: int, locationId: string, name: string, object: string, primary: bool, resourceGroupId: string, type: string>, hasMore: bool, object: string, total: int, url: string> {
@@ -436,7 +435,7 @@ export def "setup-calendars-block put" [
   --endTime: int # nullable, format: int32
   --reason: string # nullable
   --repeat: record # shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-  --repeats: string@bool-completer # nullable
+  --repeats: oneof<nothing, bool> # nullable
   --startDate: string # nullable, format: date
   --startTime: int # nullable, format: int32
 ]: any -> record<calendarId: string, deletedStatus: bool, deletedTime: string, endDate: string, endTime: int, id: string, locationId: string, object: string, reason: string, repeat: record<frequency: string, interval: int, monthDay: string, monthType: string, weekdays: string>, repeats: bool, startDate: string, startTime: int> {
@@ -563,7 +562,7 @@ export def "setup-calendars-block post" [
   --endTime: int # nullable, format: int32
   --reason: string # nullable
   --repeat: record # shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-  --repeats: string@bool-completer # nullable
+  --repeats: oneof<nothing, bool> # nullable
   --startDate: string # nullable, format: date
   --startTime: int # nullable, format: int32
 ]: any -> record<businessId: int, deletedStatus: bool, deletedTime: string, endDate: string, endTime: int, id: int, object: string, reason: string, repeat: record<frequency: string, interval: int, monthDay: string, monthType: string, weekdays: string>, repeats: bool, resourceId: int, startDate: string, startTime: int> {
@@ -684,7 +683,7 @@ export def "setup-companies post" [
   --city: string # nullable
   --country: string # nullable
   --customerWebhookUrl: string # nullable
-  --disableEmailAndSmsNotifications: string@bool-completer # nullable
+  --disableEmailAndSmsNotifications: oneof<nothing, bool> # nullable
   --email: string # nullable
   --fax: string # nullable
   --name: string # nullable
@@ -728,7 +727,7 @@ export def "setup-companies put" [
   --city: string # nullable
   --country: string # nullable
   --customerWebhookUrl: string # nullable
-  --disableEmailAndSmsNotifications: string@bool-completer # nullable
+  --disableEmailAndSmsNotifications: oneof<nothing, bool> # nullable
   --email: string # nullable
   --fax: string # nullable
   --name: string # nullable
@@ -937,9 +936,9 @@ export def "setup-companies-email-templates-master post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --centerEmailContent: string@bool-completer # nullable
-  --centerEmailContentPanel: string@bool-completer # nullable
-  --centerEmailFooter: string@bool-completer # nullable
+  --centerEmailContent: oneof<nothing, bool> # nullable
+  --centerEmailContentPanel: oneof<nothing, bool> # nullable
+  --centerEmailFooter: oneof<nothing, bool> # nullable
   --contentBackgroundColor: string # nullable
   --contentColor: string # nullable
   --contentLinkColor: string # nullable
@@ -949,20 +948,20 @@ export def "setup-companies-email-templates-master post" [
   --footerFontSize: string # nullable
   --footerLogoHeight: string # nullable
   --footerLogoPadding: string # nullable
-  --footerPanelEmailContact: string@bool-completer # nullable
-  --footerPanelPhoneContact: string@bool-completer # nullable
-  --footerPanelWebsiteContact: string@bool-completer # nullable
+  --footerPanelEmailContact: oneof<nothing, bool> # nullable
+  --footerPanelPhoneContact: oneof<nothing, bool> # nullable
+  --footerPanelWebsiteContact: oneof<nothing, bool> # nullable
   --headerLogoHeight: string # nullable
   --headerLogoPadding: string # nullable
   --panelBackgroundColor: string # nullable
   --panelColor: string # nullable
   --panelLinkColor: string # nullable
   --privacyPolicyLink: string # nullable
-  --showContentPanel: string@bool-completer # nullable
-  --showFooterLogo: string@bool-completer # nullable
-  --showFooterPanel: string@bool-completer # nullable
-  --showHeaderLogo: string@bool-completer # nullable
-  --showHeaderPanel: string@bool-completer # nullable
+  --showContentPanel: oneof<nothing, bool> # nullable
+  --showFooterLogo: oneof<nothing, bool> # nullable
+  --showFooterPanel: oneof<nothing, bool> # nullable
+  --showHeaderLogo: oneof<nothing, bool> # nullable
+  --showHeaderPanel: oneof<nothing, bool> # nullable
 ]: any -> record<centerEmailContent: bool, centerEmailContentPanel: bool, centerEmailFooter: bool, contentBackgroundColor: string, contentColor: string, contentLinkColor: string, emailBackgroundColor: string, emailColor: string, emailLinkColor: string, footerFontSize: string, footerLogoHeight: string, footerLogoPadding: string, footerPanelEmailContact: bool, footerPanelPhoneContact: bool, footerPanelWebsiteContact: bool, headerLogoHeight: string, headerLogoPadding: string, panelBackgroundColor: string, panelColor: string, panelLinkColor: string, privacyPolicyLink: string, showContentPanel: bool, showFooterLogo: bool, showFooterPanel: bool, showHeaderLogo: bool, showHeaderPanel: bool, version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1146,7 +1145,7 @@ export def "setup-customers list" [
   --groupId: string # Filter by groupId
   --email: string # Filter by email address.
   --lastname: string # Search by lastname.
-  --deleted: string@bool-completer # Filter by deleted status.
+  --deleted: oneof<nothing, bool> # Filter by deleted status.
   --offset: int # Starting row of page, default 0 (format: int32)
   --limit: int # Page limit default 20, max 100 (format: int32)
 ]: nothing -> record<count: int, data: table<address: record, birthdate: string, businessName: string, companyName: string, contact: record, createdBy: string, createdOn: string, customFields: record, deletedStatus: bool, deletedTime: string, disabled: bool, email: string, emailInfo: bool, emailPromotion: bool, firstname: string, gender: string, groupId: string, id: string, inviteEmailSent: string, lastVisitDate: string, lastname: string, latitude: string, locationId: string, longitude: string, modifiedBy: string, modifiedOn: string, name: string, notificationType: string, object: string, registeredBy: string, registrationDate: string, resourceId: string, stripeCustomerId: string, subscriptionId: string, verificationDate: string, verifiedBy: string, welcomeEmailSent: string>, hasMore: bool, object: string, total: int, url: string> {
@@ -1215,7 +1214,7 @@ export def "setup-locations list" [
   --name: string # Location name(full or partial) to filter on
   --serviceId: string # Find locations that offer this service
   --friendlyId: string # friendlyId of location
-  --deleted: string@bool-completer # Filter locations on deleted status
+  --deleted: oneof<nothing, bool> # Filter locations on deleted status
   --offset: int # Starting row of page, default 0 (format: int32)
   --limit: int # Page limit default 20, max 100 (format: int32)
 ]: nothing -> record<count: int, data: table<address: record, adminEmail: string, adminName: string, appointmentReminders: record, businessHolidays: list, businessHours: record, companyId: string, companyName: string, defaults: record, email: string, fax: string, friendlyId: string, id: string, imageUrl: string, latitude: float, logo: string, longitude: float, name: string, object: string, phone: string, primaryBusiness: bool, primaryCalendarId: string, regionId: string, services: list, settings: record, timezoneIana: string, timezoneId: string, timezoneOffset: int, travel: record, website: string>, hasMore: bool, object: string, total: int, url: string> {
@@ -1397,7 +1396,7 @@ export def "setup-locations put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --removeRegion: string@bool-completer
+  --removeRegion: oneof<nothing, bool>
   --address: record # shape: {addressLine1?: string, addressLine2?: string, city?: string, country?: string, postalCode?: string, state?: string}
   --adminEmail: string # nullable
   --adminName: string # nullable
@@ -1491,7 +1490,7 @@ export def "setup-locations-deleteallimages delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --uppercase: string@bool-completer
+  --uppercase: oneof<nothing, bool>
 ]: nothing -> bool {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1624,9 +1623,9 @@ export def "setup-locations-email-templates-master post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --centerEmailContent: string@bool-completer # nullable
-  --centerEmailContentPanel: string@bool-completer # nullable
-  --centerEmailFooter: string@bool-completer # nullable
+  --centerEmailContent: oneof<nothing, bool> # nullable
+  --centerEmailContentPanel: oneof<nothing, bool> # nullable
+  --centerEmailFooter: oneof<nothing, bool> # nullable
   --contentBackgroundColor: string # nullable
   --contentColor: string # nullable
   --contentLinkColor: string # nullable
@@ -1636,20 +1635,20 @@ export def "setup-locations-email-templates-master post" [
   --footerFontSize: string # nullable
   --footerLogoHeight: string # nullable
   --footerLogoPadding: string # nullable
-  --footerPanelEmailContact: string@bool-completer # nullable
-  --footerPanelPhoneContact: string@bool-completer # nullable
-  --footerPanelWebsiteContact: string@bool-completer # nullable
+  --footerPanelEmailContact: oneof<nothing, bool> # nullable
+  --footerPanelPhoneContact: oneof<nothing, bool> # nullable
+  --footerPanelWebsiteContact: oneof<nothing, bool> # nullable
   --headerLogoHeight: string # nullable
   --headerLogoPadding: string # nullable
   --panelBackgroundColor: string # nullable
   --panelColor: string # nullable
   --panelLinkColor: string # nullable
   --privacyPolicyLink: string # nullable
-  --showContentPanel: string@bool-completer # nullable
-  --showFooterLogo: string@bool-completer # nullable
-  --showFooterPanel: string@bool-completer # nullable
-  --showHeaderLogo: string@bool-completer # nullable
-  --showHeaderPanel: string@bool-completer # nullable
+  --showContentPanel: oneof<nothing, bool> # nullable
+  --showFooterLogo: oneof<nothing, bool> # nullable
+  --showFooterPanel: oneof<nothing, bool> # nullable
+  --showHeaderLogo: oneof<nothing, bool> # nullable
+  --showHeaderPanel: oneof<nothing, bool> # nullable
 ]: any -> record<centerEmailContent: bool, centerEmailContentPanel: bool, centerEmailFooter: bool, contentBackgroundColor: string, contentColor: string, contentLinkColor: string, emailBackgroundColor: string, emailColor: string, emailLinkColor: string, footerFontSize: string, footerLogoHeight: string, footerLogoPadding: string, footerPanelEmailContact: bool, footerPanelPhoneContact: bool, footerPanelWebsiteContact: bool, headerLogoHeight: string, headerLogoPadding: string, panelBackgroundColor: string, panelColor: string, panelLinkColor: string, privacyPolicyLink: string, showContentPanel: bool, showFooterLogo: bool, showFooterPanel: bool, showHeaderLogo: bool, showHeaderPanel: bool, version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1934,7 +1933,7 @@ export def "setup-resourcegroups list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --locationId: string # id of business location, defaults to primary business location
-  --deleted: string@bool-completer # Filter results by deleted status
+  --deleted: oneof<nothing, bool> # Filter results by deleted status
   --offset: int # Starting row of page, default 0 (format: int32)
   --limit: int # Page limit default 20, max 100 (format: int32)
 ]: nothing -> record<count: int, data: table<bookingNotification: int, deletedStatus: bool, deletedTime: string, description: string, email: string, id: string, locationId: string, name: string, object: string>, hasMore: bool, object: string, total: int, url: string> {
@@ -2079,7 +2078,7 @@ export def "setup-resources list" [
   --resourceGroupId: string # Filter by group Id
   --email: string # Filter by email address
   --name: string # Search by name
-  --deleted: string@bool-completer # Show by deleted status, default is false
+  --deleted: oneof<nothing, bool> # Show by deleted status, default is false
   --googleAuthReturnUrl: string # Google calendar authorization return url
   --outlookAuthReturnUrl: string # Outlook calendar authorization return url
   --offset: int # Starting row of page, default 0 (format: int32)
@@ -2122,7 +2121,7 @@ export def "setup-resources post" [
   --locationId: string # nullable
   --name: string # nullable
   --options: record # Options for the new resource — shape: {bioLink?: string, bookingNotification?: int, calendarAvailability?: int, displayColor?: string, effectiveDate?: string, gender?: string, googleCalendarId?: string, hourly?: float, ignoreBusinessHours?: bool, notificationType?: int, outlookCalendarId?: string, sortKey?: int}
-  --recurringAvailability: string@bool-completer # nullable
+  --recurringAvailability: oneof<nothing, bool> # nullable
   --serviceIds: list # nullable
   --timezoneId: string # nullable
 ]: any -> record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, availability: record<fri: record<endTime: int, startTime: int>, mon: record<endTime: int, startTime: int>, sat: record<endTime: int, startTime: int>, sun: record<endTime: int, startTime: int>, thu: record<endTime: int, startTime: int>, tue: record<endTime: int, startTime: int>, wed: record<endTime: int, startTime: int>>, bioLink: string, bookingNotification: int, calendarAvailability: int, contact: record<businessPhone: string, businessPhoneExt: string, conferenceInfo: string, homePhone: string, mobilePhone: string, phoneType: string, skypeUsername: string>, customFields: record<field1: string, field10: string, field2: string, field3: string, field4: string, field5: string, field6: string, field7: string, field8: string, field9: string>, deletedStatus: bool, deletedTime: string, description: string, effectiveDate: string, email: string, gender: string, googleCalendarAuthUrl: string, googleCalendarAuthorized: bool, googleCalendarId: string, groupId: int, hourly: float, id: string, ignoreBusinessHours: bool, imageUrl: string, locationId: string, name: string, notificationType: int, object: string, options: record<bioLink: string, bookingNotification: int, calendarAvailability: int, displayColor: string, effectiveDate: string, gender: string, googleCalendarId: string, hourly: float, ignoreBusinessHours: bool, notificationType: int, outlookCalendarId: string, sortKey: int>, outlookCalendarAuthUrl: string, outlookCalendarAuthorized: bool, outlookCalendarId: string, phone: record<businessPhone: string, businessPhoneExt: string, homePhone: string, mobilePhone: string, phoneType: string>, recurringAvailability: bool, services: table<object: string, serviceId: int, serviceName: string>, skypeName: string, sortKey: int, timezoneIana: string, timezoneId: string, timezoneOffset: int> {
@@ -2197,7 +2196,7 @@ export def "setup-resources-allocations put" [
   --endTime: int # nullable, format: int32
   --reason: string # nullable
   --repeat: record # shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-  --repeats: string@bool-completer # nullable
+  --repeats: oneof<nothing, bool> # nullable
   --startDate: string # nullable, format: date
   --startTime: int # nullable, format: int32
 ]: any -> record<businessId: int, deletedStatus: bool, deletedTime: string, endDate: string, endTime: int, id: int, object: string, reason: string, repeat: record<frequency: string, interval: int, monthDay: string, monthType: string, weekdays: string>, repeats: bool, resourceId: int, startDate: string, startTime: int> {
@@ -2246,12 +2245,12 @@ export def "setup-resources-block put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allDay: string@bool-completer # nullable
+  --allDay: oneof<nothing, bool> # nullable
   --endDate: string # nullable, format: date
   --endTime: int # nullable, format: int32
   --reason: string # nullable
   --repeat: record # shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-  --repeats: string@bool-completer # nullable
+  --repeats: oneof<nothing, bool> # nullable
   --startDate: string # nullable, format: date
   --startTime: int # nullable, format: int32
 ]: any -> record<businessId: int, deletedStatus: bool, deletedTime: string, endDate: string, endTime: int, id: int, object: string, reason: string, repeat: record<frequency: string, interval: int, monthDay: string, monthType: string, weekdays: string>, repeats: bool, resourceId: int, startDate: string, startTime: int> {
@@ -2437,7 +2436,7 @@ export def "setup-resources put" [
   --locationId: string # nullable
   --name: string # nullable
   --options: record # shape: {bioLink?: string, bookingNotification?: int, calendarAvailability?: int, displayColor?: string, effectiveDate?: string, gender?: string, googleCalendarId?: string, hourly?: float, ignoreBusinessHours?: bool, notificationType?: int, outlookCalendarId?: string, sortKey?: int}
-  --recurringAvailability: string@bool-completer # nullable
+  --recurringAvailability: oneof<nothing, bool> # nullable
   --serviceIds: list # nullable
   --timezoneId: string # nullable
 ]: any -> record<address: record<addressLine1: string, addressLine2: string, city: string, country: string, postalCode: string, state: string>, availability: record<fri: record<endTime: int, startTime: int>, mon: record<endTime: int, startTime: int>, sat: record<endTime: int, startTime: int>, sun: record<endTime: int, startTime: int>, thu: record<endTime: int, startTime: int>, tue: record<endTime: int, startTime: int>, wed: record<endTime: int, startTime: int>>, bioLink: string, bookingNotification: int, calendarAvailability: int, contact: record<businessPhone: string, businessPhoneExt: string, conferenceInfo: string, homePhone: string, mobilePhone: string, phoneType: string, skypeUsername: string>, customFields: record<field1: string, field10: string, field2: string, field3: string, field4: string, field5: string, field6: string, field7: string, field8: string, field9: string>, deletedStatus: bool, deletedTime: string, description: string, effectiveDate: string, email: string, gender: string, googleCalendarAuthUrl: string, googleCalendarAuthorized: bool, googleCalendarId: string, groupId: int, hourly: float, id: string, ignoreBusinessHours: bool, imageUrl: string, locationId: string, name: string, notificationType: int, object: string, options: record<bioLink: string, bookingNotification: int, calendarAvailability: int, displayColor: string, effectiveDate: string, gender: string, googleCalendarId: string, hourly: float, ignoreBusinessHours: bool, notificationType: int, outlookCalendarId: string, sortKey: int>, outlookCalendarAuthUrl: string, outlookCalendarAuthorized: bool, outlookCalendarId: string, phone: record<businessPhone: string, businessPhoneExt: string, homePhone: string, mobilePhone: string, phoneType: string>, recurringAvailability: bool, services: table<object: string, serviceId: int, serviceName: string>, skypeName: string, sortKey: int, timezoneIana: string, timezoneId: string, timezoneOffset: int> {
@@ -2496,7 +2495,7 @@ export def "setup-resources-allocations post" [
   --endTime: int # nullable, format: int32
   --reason: string # nullable
   --repeat: record # shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-  --repeats: string@bool-completer # nullable
+  --repeats: oneof<nothing, bool> # nullable
   --startDate: string # nullable, format: date
   --startTime: int # nullable, format: int32
 ]: any -> record<businessId: int, deletedStatus: bool, deletedTime: string, endDate: string, endTime: int, id: int, object: string, reason: string, repeat: record<frequency: string, interval: int, monthDay: string, monthType: string, weekdays: string>, repeats: bool, resourceId: int, startDate: string, startTime: int> {
@@ -2583,12 +2582,12 @@ export def "setup-resources-block post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allDay: string@bool-completer # nullable
+  --allDay: oneof<nothing, bool> # nullable
   --endDate: string # nullable, format: date
   --endTime: int # nullable, format: int32
   --reason: string # nullable
   --repeat: record # shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-  --repeats: string@bool-completer # nullable
+  --repeats: oneof<nothing, bool> # nullable
   --startDate: string # nullable, format: date
   --startTime: int # nullable, format: int32
 ]: any -> record<businessId: int, deletedStatus: bool, deletedTime: string, endDate: string, endTime: int, id: int, object: string, reason: string, repeat: record<frequency: string, interval: int, monthDay: string, monthType: string, weekdays: string>, repeats: bool, resourceId: int, startDate: string, startTime: int> {
@@ -2998,7 +2997,7 @@ export def "setup-services list" [
   --allow-errors(-e) # Return full response without error handling
   --locationId: string # id of business location, defaults to primary business location
   --serviceGroupId: int # Filter services by groupId (format: int32)
-  --deleted: string@bool-completer # Filter by deleted status
+  --deleted: oneof<nothing, bool> # Filter by deleted status
   --offset: int # Starting row of page, default 0 (format: int32)
   --limit: int # Page limit default 20, max 100 (format: int32)
 ]: nothing -> record<count: int, data: table<availability: record, bookAheadUnit: int, bookAheadValue: int, bookInAdvance: int, bookingInterval: int, bookingLimit: int, calendarId: string, calendarResourceGroupId: string, cancellationFeeAmount: float, cancellationFeeTaxable: bool, companyId: string, consumerPadding: bool, customFields: record, dailyBookingLimitCount: int, dailyBookingLimitMinutes: int, defaultService: bool, description: string, duration: int, durationInterval: int, durationMax: int, durationMin: int, durationSelect: bool, feeAmount: float, feeTaxable: bool, id: string, imageUrl: string, locationId: string, maxBookingLimit: int, maxCapacity: int, maxGroupSize: int, maxResourceBookingLimit: int, mediaPageUrl: string, name: string, nonRefundable: bool, object: string, padding: int, roundRobin: int, serviceGroupId: int, serviceGroupName: string, showOnline: bool, type: string>, hasMore: bool, object: string, total: int, url: string> {
@@ -3040,7 +3039,7 @@ export def "setup-services post" [
   --mediaPageUrl: string # nullable
   --name: string # nullable
   --options: record # shape: {consumerPadding?: bool, defaultService?: bool, durationInterval?: int, durationMax?: int, durationMin?: int, durationSelect?: bool, padding?: int}
-  --public: string@bool-completer
+  --public: oneof<nothing, bool>
   --serviceGroupId: string # nullable
   --settings: record # shape: {bookAheadUnit?: int, bookAheadValue?: int, bookInAdvance?: int}
   --type: string # nullable
@@ -3117,7 +3116,7 @@ export def "setup-services-allocations put" [
   --locationId: string # nullable
   --reason: string # nullable
   --repeat: record # shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-  --repeats: string@bool-completer # nullable
+  --repeats: oneof<nothing, bool> # nullable
   --resourceId: string # nullable
   --startDate: string # nullable, format: date
   --startTime: int # nullable, format: int32
@@ -3171,7 +3170,7 @@ export def "setup-services-block put" [
   --endTime: int # nullable, format: int32
   --reason: string # nullable
   --repeat: record # shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-  --repeats: string@bool-completer # nullable
+  --repeats: oneof<nothing, bool> # nullable
   --startDate: string # nullable, format: date
   --startTime: int # nullable, format: int32
 ]: any -> record<deletedStatus: bool, deletedTime: string, endDate: string, endTime: int, id: string, locationId: string, object: string, reason: string, repeat: record<frequency: string, interval: int, monthDay: string, monthType: string, weekdays: string>, repeats: bool, serviceId: string, startDate: string, startTime: int> {
@@ -3326,7 +3325,7 @@ export def "setup-services put" [
   --mediaPageUrl: string # nullable
   --name: string # nullable
   --options: record # shape: {consumerPadding?: bool, defaultService?: bool, durationInterval?: int, durationMax?: int, durationMin?: int, durationSelect?: bool, padding?: int}
-  --public: string@bool-completer # nullable
+  --public: oneof<nothing, bool> # nullable
   --serviceGroupId: string # nullable
   --settings: record # shape: {bookAheadUnit?: int, bookAheadValue?: int, bookInAdvance?: int}
   --type: string # nullable
@@ -3389,7 +3388,7 @@ export def "setup-services-allocations post" [
   --locationId: string # nullable
   --reason: string # nullable
   --repeat: record # shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-  --repeats: string@bool-completer # nullable
+  --repeats: oneof<nothing, bool> # nullable
   --resourceId: string # nullable
   --startDate: string # nullable, format: date
   --startTime: int # nullable, format: int32
@@ -3508,7 +3507,7 @@ export def "setup-services-block post" [
   --locationId: string # nullable
   --reason: string # nullable
   --repeat: record # shape: {frequency?: string, interval?: int, monthDay?: int, monthType?: string, weekdays?: string}
-  --repeats: string@bool-completer
+  --repeats: oneof<nothing, bool>
   --startDate: string # nullable, format: date
   --startTime: int # nullable, format: int32
 ]: any -> record<deletedStatus: bool, deletedTime: string, endDate: string, endTime: int, id: string, locationId: string, object: string, reason: string, repeat: record<frequency: string, interval: int, monthDay: string, monthType: string, weekdays: string>, repeats: bool, serviceId: string, startDate: string, startTime: int> {

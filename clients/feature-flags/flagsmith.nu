@@ -63,7 +63,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["x-environment-key" "bearer" "basic"] }
 
@@ -158,7 +157,7 @@ export def "experiments-environments-update-flag-v1 create" [
   --allow-errors(-e) # Return full response without error handling
   feature: record # shape: {name?: string, id?: int}
   --segment: record # shape: {id: int, priority?: int}
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   value: record # shape: {type: "integer"|"string"|"boolean", value: string}
 ]: any -> any {
   let input = $in
@@ -362,7 +361,7 @@ export def "analytics-telemetry create" [
   features: int
   segments: int
   users: int
-  --debug-enabled: string@bool-completer
+  --debug-enabled: oneof<nothing, bool>
   env: string
 ]: any -> record<organisations: int, projects: int, environments: int, features: int, segments: int, users: int, debug_enabled: bool, env: string> {
   let input = $in
@@ -388,7 +387,7 @@ export def "audit list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --environments: list
-  --is-system-event: string@bool-completer
+  --is-system-event: oneof<nothing, bool>
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --project: int
@@ -594,7 +593,7 @@ export def "auth-oauth-github create" [
   access_token: string # Code or access token returned from the FE interaction with the third party login provider.
   --sign-up-type: any # Provide information about how the user signed up (i.e. via invite or not)  * `NO_INVITE` - No Invite * `INVITE_EMAIL` - Invite Email * `INVITE_LINK` - Invite Link
   --hubspot-cookie: string # nullable
-  --marketing-consent-given: string@bool-completer # nullable
+  --marketing-consent-given: oneof<nothing, bool> # nullable
   --utm-data: any
 ]: any -> record<key: string> {
   let input = $in
@@ -622,7 +621,7 @@ export def "auth-oauth-google create" [
   access_token: string # Code or access token returned from the FE interaction with the third party login provider.
   --sign-up-type: any # Provide information about how the user signed up (i.e. via invite or not)  * `NO_INVITE` - No Invite * `INVITE_EMAIL` - Invite Email * `INVITE_LINK` - Invite Link
   --hubspot-cookie: string # nullable
-  --marketing-consent-given: string@bool-completer # nullable
+  --marketing-consent-given: oneof<nothing, bool> # nullable
   --utm-data: any
 ]: any -> record<key: string> {
   let input = $in
@@ -890,7 +889,7 @@ export def "auth-saml-configuration create" [
   name: string # An alphanumeric string to uniquely identify the saml configuration.
   frontend_url: string # Base URL to redirect to on a successful SAML authentication, e.g. https://app.flagsmith.com/ (format: uri)
   --idp-metadata-xml: string # nullable
-  --allow-idp-initiated: string@bool-completer
+  --allow-idp-initiated: oneof<nothing, bool>
 ]: any -> record<id: int, organisation: int, name: string, frontend_url: string, idp_metadata_xml: string, allow_idp_initiated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -940,7 +939,7 @@ export def "auth-saml-configuration update" [
   --body-name: string # An alphanumeric string to uniquely identify the saml configuration.
   frontend_url: string # Base URL to redirect to on a successful SAML authentication, e.g. https://app.flagsmith.com/ (format: uri)
   --idp-metadata-xml: string # nullable
-  --allow-idp-initiated: string@bool-completer
+  --allow-idp-initiated: oneof<nothing, bool>
 ]: any -> record<id: int, organisation: int, name: string, frontend_url: string, idp_metadata_xml: string, allow_idp_initiated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -969,7 +968,7 @@ export def "auth-saml-configuration patch" [
   --body-name: string # An alphanumeric string to uniquely identify the saml configuration.
   --frontend-url: string # Base URL to redirect to on a successful SAML authentication, e.g. https://app.flagsmith.com/ (format: uri)
   --idp-metadata-xml: string # nullable
-  --allow-idp-initiated: string@bool-completer
+  --allow-idp-initiated: oneof<nothing, bool>
 ]: any -> record<id: int, organisation: int, name: string, frontend_url: string, idp_metadata_xml: string, allow_idp_initiated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1185,7 +1184,7 @@ export def "auth-users delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --current-password: string
-  --delete-orphan-organisations: string@bool-completer # default: false
+  --delete-orphan-organisations: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1619,13 +1618,13 @@ export def "environments create" [
   --api-key: string
   --description: string # nullable
   project: int # Changing the project selected will remove all previous Feature States for the previously associated projects Features that are related to this Environment. New default Feature States will be created for the new selected projects Features for this Environment.
-  --allow-client-traits: string@bool-completer # Allows clients using the client API key to set traits.
+  --allow-client-traits: oneof<nothing, bool> # Allows clients using the client API key to set traits.
   --banner-text: string # nullable
   --banner-colour: string # hex code for the banner colour (nullable)
-  --hide-disabled-flags: string@bool-completer # If true will exclude flags from SDK which are disabled. NOTE: If set, this will override the project `hide_disabled_flags` (nullable)
-  --use-identity-composite-key-for-hashing: string@bool-completer # Enable this to have consistent multivariate and percentage split evaluations across all SDKs (in local and server side mode)
-  --hide-sensitive-data: string@bool-completer # If true, will hide sensitive data(e.g: traits, description etc) from the SDK endpoints
-  --use-identity-overrides-in-local-eval: string@bool-completer # When enabled, identity overrides will be included in the environment document
+  --hide-disabled-flags: oneof<nothing, bool> # If true will exclude flags from SDK which are disabled. NOTE: If set, this will override the project `hide_disabled_flags` (nullable)
+  --use-identity-composite-key-for-hashing: oneof<nothing, bool> # Enable this to have consistent multivariate and percentage split evaluations across all SDKs (in local and server side mode)
+  --hide-sensitive-data: oneof<nothing, bool> # If true, will hide sensitive data(e.g: traits, description etc) from the SDK endpoints
+  --use-identity-overrides-in-local-eval: oneof<nothing, bool> # When enabled, identity overrides will be included in the environment document
   --metadata: list # item shape: {model_field: int, field_value: string}
 ]: any -> record<id: int, uuid: string, name: string, api_key: string, description: string, project: int, minimum_change_request_approvals: int, allow_client_traits: bool, banner_text: string, banner_colour: string, hide_disabled_flags: bool, use_mv_v2_evaluation: bool, use_identity_composite_key_for_hashing: bool, hide_sensitive_data: bool, use_v2_feature_versioning: bool, use_identity_overrides_in_local_eval: bool, is_creating: bool, metadata: table<id: int, model_field: int, field_value: string>> {
   let input = $in
@@ -1676,13 +1675,13 @@ export def "environments update" [
   name: string
   --body-api-key: string
   --description: string # nullable
-  --allow-client-traits: string@bool-completer # Allows clients using the client API key to set traits.
+  --allow-client-traits: oneof<nothing, bool> # Allows clients using the client API key to set traits.
   --banner-text: string # nullable
   --banner-colour: string # hex code for the banner colour (nullable)
-  --hide-disabled-flags: string@bool-completer # If true will exclude flags from SDK which are disabled. NOTE: If set, this will override the project `hide_disabled_flags` (nullable)
-  --use-identity-composite-key-for-hashing: string@bool-completer # Enable this to have consistent multivariate and percentage split evaluations across all SDKs (in local and server side mode)
-  --hide-sensitive-data: string@bool-completer # If true, will hide sensitive data(e.g: traits, description etc) from the SDK endpoints
-  --use-identity-overrides-in-local-eval: string@bool-completer # When enabled, identity overrides will be included in the environment document
+  --hide-disabled-flags: oneof<nothing, bool> # If true will exclude flags from SDK which are disabled. NOTE: If set, this will override the project `hide_disabled_flags` (nullable)
+  --use-identity-composite-key-for-hashing: oneof<nothing, bool> # Enable this to have consistent multivariate and percentage split evaluations across all SDKs (in local and server side mode)
+  --hide-sensitive-data: oneof<nothing, bool> # If true, will hide sensitive data(e.g: traits, description etc) from the SDK endpoints
+  --use-identity-overrides-in-local-eval: oneof<nothing, bool> # When enabled, identity overrides will be included in the environment document
   --metadata: list # item shape: {model_field: int, field_value: string}
 ]: any -> record<id: int, uuid: string, name: string, api_key: string, description: string, project: int, minimum_change_request_approvals: int, allow_client_traits: bool, banner_text: string, banner_colour: string, hide_disabled_flags: bool, use_mv_v2_evaluation: bool, use_identity_composite_key_for_hashing: bool, hide_sensitive_data: bool, use_v2_feature_versioning: bool, use_identity_overrides_in_local_eval: bool, is_creating: bool, metadata: table<id: int, model_field: int, field_value: string>> {
   let input = $in
@@ -1712,13 +1711,13 @@ export def "environments patch" [
   --name: string
   --body-api-key: string
   --description: string # nullable
-  --allow-client-traits: string@bool-completer # Allows clients using the client API key to set traits.
+  --allow-client-traits: oneof<nothing, bool> # Allows clients using the client API key to set traits.
   --banner-text: string # nullable
   --banner-colour: string # hex code for the banner colour (nullable)
-  --hide-disabled-flags: string@bool-completer # If true will exclude flags from SDK which are disabled. NOTE: If set, this will override the project `hide_disabled_flags` (nullable)
-  --use-identity-composite-key-for-hashing: string@bool-completer # Enable this to have consistent multivariate and percentage split evaluations across all SDKs (in local and server side mode)
-  --hide-sensitive-data: string@bool-completer # If true, will hide sensitive data(e.g: traits, description etc) from the SDK endpoints
-  --use-identity-overrides-in-local-eval: string@bool-completer # When enabled, identity overrides will be included in the environment document
+  --hide-disabled-flags: oneof<nothing, bool> # If true will exclude flags from SDK which are disabled. NOTE: If set, this will override the project `hide_disabled_flags` (nullable)
+  --use-identity-composite-key-for-hashing: oneof<nothing, bool> # Enable this to have consistent multivariate and percentage split evaluations across all SDKs (in local and server side mode)
+  --hide-sensitive-data: oneof<nothing, bool> # If true, will hide sensitive data(e.g: traits, description etc) from the SDK endpoints
+  --use-identity-overrides-in-local-eval: oneof<nothing, bool> # When enabled, identity overrides will be included in the environment document
   --metadata: list # item shape: {model_field: int, field_value: string}
 ]: any -> record<id: int, uuid: string, name: string, api_key: string, description: string, project: int, minimum_change_request_approvals: int, allow_client_traits: bool, banner_text: string, banner_colour: string, hide_disabled_flags: bool, use_mv_v2_evaluation: bool, use_identity_composite_key_for_hashing: bool, hide_sensitive_data: bool, use_v2_feature_versioning: bool, use_identity_overrides_in_local_eval: bool, is_creating: bool, metadata: table<id: int, model_field: int, field_value: string>> {
   let input = $in
@@ -1766,7 +1765,7 @@ export def "environments-clone create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --clone-feature-states-async: string@bool-completer # If True, the environment will be created immediately, but the feature states will be created asynchronously. Environment will have `is_creating: true` until this process is completed. (default: false)
+  --clone-feature-states-async: oneof<nothing, bool> # If True, the environment will be created immediately, but the feature states will be created asynchronously. Environment will have `is_creating: true` until this process is completed. (default: false)
 ]: any -> record<id: int, name: string, api_key: string, project: int, clone_feature_states_async: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1966,7 +1965,7 @@ export def "environments-api-keys create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   name: string
   --expires-at: string # nullable, format: date-time
 ]: any -> record<id: int, key: string, active: bool, created_at: string, name: string, expires_at: string> {
@@ -1995,7 +1994,7 @@ export def "environments-api-keys update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   name: string
   --expires-at: string # nullable, format: date-time
 ]: any -> record<id: int, key: string, active: bool, created_at: string, name: string, expires_at: string> {
@@ -2024,7 +2023,7 @@ export def "environments-api-keys patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --name: string
   --expires-at: string # nullable, format: date-time
 ]: any -> record<id: int, key: string, active: bool, created_at: string, name: string, expires_at: string> {
@@ -2086,7 +2085,7 @@ export def "environments-create-change-request request" [
   --group-assignments: list # item shape: {group: int}
   --environment-feature-versions: list
   --change-sets: list # nullable — item shape: {feature: int, live_from?: string, feature_states_to_update: list, feature_states_to_create: list, segment_ids_to_delete_overrides: list}
-  --ignore-conflicts: string@bool-completer
+  --ignore-conflicts: oneof<nothing, bool>
 ]: any -> record<id: int, created_at: string, updated_at: string, title: string, description: string, feature_states: table<id: int, feature: int, feature_segment: int, enabled: bool, feature_state_value: record, multivariate_feature_state_values: list, live_from: string>, deleted_at: string, environment: int, committed_at: string, approvals: table<id: int, user: int, approved_at: string>, user: int, committed_by: int, group_assignments: table<group: int>, environment_feature_versions: list<string>, change_sets: table<id: int, feature: int, live_from: string, feature_states_to_update: list, feature_states_to_create: list, segment_ids_to_delete_overrides: list>, ignore_conflicts: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2190,7 +2189,7 @@ export def "environments-edge-identities-edge-featurestates create" [
   --feature-state-value: string # Feature state value (string, integer, or boolean) (nullable)
   feature: int # Feature ID
   --multivariate-feature-state-values: list # item shape: {multivariate_feature_option: int, percentage_allocation: float}
-  --enabled: string@bool-completer # default: false
+  --enabled: oneof<nothing, bool> # default: false
 ]: any -> record<feature_state_value: string, feature: int, multivariate_feature_state_values: table<multivariate_feature_option: int, percentage_allocation: float>, enabled: bool, featurestate_uuid: string, identity_uuid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2244,7 +2243,7 @@ export def "environments-edge-identities-edge-featurestates update" [
   --feature-state-value: string # Feature state value (string, integer, or boolean) (nullable)
   feature: int # Feature ID
   --multivariate-feature-state-values: list # item shape: {multivariate_feature_option: int, percentage_allocation: float}
-  --enabled: string@bool-completer # default: false
+  --enabled: oneof<nothing, bool> # default: false
 ]: any -> record<feature_state_value: string, feature: int, multivariate_feature_state_values: table<multivariate_feature_option: int, percentage_allocation: float>, enabled: bool, featurestate_uuid: string, identity_uuid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3098,7 +3097,7 @@ export def "environments-features-create-segment-override override" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   feature_state_value: record # shape: {type?: any, string_value?: string, integer_value?: int, boolean_value?: bool}
   --feature-segment: any
   --multivariate-feature-state-values: list # item shape: {multivariate_feature_option: int, percentage_allocation: float}
@@ -3157,7 +3156,7 @@ export def "environments-featurestates create" [
   --allow-errors(-e) # Return full response without error handling
   --multivariate-feature-state-values: list # item shape: {multivariate_feature_option: int, percentage_allocation: float}
   --identifier: string # Can be passed as an alternative to `identity`
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --live-from: string # nullable, format: date-time
   feature: int
   --environment: int # nullable
@@ -3217,7 +3216,7 @@ export def "environments-featurestates state" [
   --allow-errors(-e) # Return full response without error handling
   --multivariate-feature-state-values: list # item shape: {multivariate_feature_option: int, percentage_allocation: float}
   --identifier: string # Can be passed as an alternative to `identity`
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --live-from: string # nullable, format: date-time
   feature: int
   --environment: int # nullable
@@ -3252,7 +3251,7 @@ export def "environments-featurestates patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --feature: int
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<feature: int, enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3382,7 +3381,7 @@ export def "environments-identities-featurestates create" [
   --allow-errors(-e) # Return full response without error handling
   --multivariate-feature-state-values: list # item shape: {multivariate_feature_option: int, percentage_allocation: float}
   --identifier: string # Can be passed as an alternative to `identity`
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --live-from: string # nullable, format: date-time
   feature: int
   --environment: int # nullable
@@ -3444,7 +3443,7 @@ export def "environments-identities-featurestates update" [
   --allow-errors(-e) # Return full response without error handling
   --multivariate-feature-state-values: list # item shape: {multivariate_feature_option: int, percentage_allocation: float}
   --identifier: string # Can be passed as an alternative to `identity`
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --live-from: string # nullable, format: date-time
   feature: int
   --environment: int # nullable
@@ -3480,7 +3479,7 @@ export def "environments-identities-featurestates patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --feature: int
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<feature: int, enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3610,7 +3609,7 @@ export def "environments-identities-traits create" [
   --value-type: any
   --integer-value: int # nullable
   --string-value: string # nullable
-  --boolean-value: string@bool-completer # nullable
+  --boolean-value: oneof<nothing, bool> # nullable
   --float-value: float # nullable, format: double
 ]: any -> record<id: int, trait_key: string, value_type: any, integer_value: int, string_value: string, boolean_value: bool, float_value: float, created_date: string> {
   let input = $in
@@ -3665,7 +3664,7 @@ export def "environments-identities-traits update" [
   --value-type: any
   --integer-value: int # nullable
   --string-value: string # nullable
-  --boolean-value: string@bool-completer # nullable
+  --boolean-value: oneof<nothing, bool> # nullable
   --float-value: float # nullable, format: double
 ]: any -> record<id: int, trait_key: string, value_type: any, integer_value: int, string_value: string, boolean_value: bool, float_value: float, created_date: string> {
   let input = $in
@@ -3697,7 +3696,7 @@ export def "environments-identities-traits patch" [
   --value-type: any
   --integer-value: int # nullable
   --string-value: string # nullable
-  --boolean-value: string@bool-completer # nullable
+  --boolean-value: oneof<nothing, bool> # nullable
   --float-value: float # nullable, format: double
 ]: any -> record<id: int, trait_key: string, value_type: any, integer_value: int, string_value: string, boolean_value: bool, float_value: float, created_date: string> {
   let input = $in
@@ -3725,7 +3724,7 @@ export def "environments-identities-traits delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deleteAllMatchingTraits: string@bool-completer # Deletes all traits in this environment matching the key of the deleted trait
+  --deleteAllMatchingTraits: oneof<nothing, bool> # Deletes all traits in this environment matching the key of the deleted trait
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5023,7 +5022,7 @@ export def "environments-integrations-slack create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   channel_id: string # Id of the slack channel to post messages to
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<id: int, channel_id: string, enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5093,7 +5092,7 @@ export def "environments-integrations-slack update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   channel_id: string # Id of the slack channel to post messages to
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<id: int, channel_id: string, enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5120,7 +5119,7 @@ export def "environments-integrations-slack patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --channel-id: string # Id of the slack channel to post messages to
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<id: int, channel_id: string, enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5376,7 +5375,7 @@ export def "environments-list-change-requests requests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --committed: string@bool-completer # Filter on the committed status of a change request.
+  --committed: oneof<nothing, bool> # Filter on the committed status of a change request.
   --feature-id: int # Filter for a particular feature.
   --live-from-after: string # Filter change requests due to go live after this datetime. (format: date-time)
   --page: int # A page number within the paginated result set.
@@ -5451,7 +5450,7 @@ export def "environments-user-group-permissions create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --permissions: list
-  --admin: string@bool-completer
+  --admin: oneof<nothing, bool>
   group: int
 ]: any -> record<id: int, permissions: list<string>, admin: bool, group: int> {
   let input = $in
@@ -5501,7 +5500,7 @@ export def "environments-user-group-permissions update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --permissions: list
-  --admin: string@bool-completer
+  --admin: oneof<nothing, bool>
   group: int
 ]: any -> record<id: int, permissions: list<string>, admin: bool, group: int> {
   let input = $in
@@ -5529,7 +5528,7 @@ export def "environments-user-group-permissions patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --permissions: list
-  --admin: string@bool-completer
+  --admin: oneof<nothing, bool>
   --group: int
 ]: any -> record<id: int, permissions: list<string>, admin: bool, group: int> {
   let input = $in
@@ -5599,7 +5598,7 @@ export def "environments-user-permissions create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --permissions: list
-  --admin: string@bool-completer
+  --admin: oneof<nothing, bool>
   user: int
 ]: any -> record<id: int, permissions: list<string>, admin: bool, user: int> {
   let input = $in
@@ -5649,7 +5648,7 @@ export def "environments-user-permissions update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --permissions: list
-  --admin: string@bool-completer
+  --admin: oneof<nothing, bool>
   user: int
 ]: any -> record<id: int, permissions: list<string>, admin: bool, user: int> {
   let input = $in
@@ -5677,7 +5676,7 @@ export def "environments-user-permissions patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --permissions: list
-  --admin: string@bool-completer
+  --admin: oneof<nothing, bool>
   --user: int
 ]: any -> record<id: int, permissions: list<string>, admin: bool, user: int> {
   let input = $in
@@ -5932,7 +5931,7 @@ export def "environments-webhooks create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-url: string # format: uri
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --secret: string
 ]: any -> record<id: int, url: string, enabled: bool, created_at: string, updated_at: string, secret: string> {
   let input = $in
@@ -5961,7 +5960,7 @@ export def "environments-webhooks update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-url: string # format: uri
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --secret: string
 ]: any -> record<id: int, url: string, enabled: bool, created_at: string, updated_at: string, secret: string> {
   let input = $in
@@ -5990,7 +5989,7 @@ export def "environments-webhooks patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-url: string # format: uri
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --secret: string
 ]: any -> record<id: int, url: string, enabled: bool, created_at: string, updated_at: string, secret: string> {
   let input = $in
@@ -6074,7 +6073,7 @@ export def "environments-features-versions version" [
   --feature-states-to-create: list # Array of feature states that will be created in the new version. Note: these can only include segment overrides. (nullable) — item shape: {enabled?: bool, feature_state_value: record, feature_segment?: any, multivariate_feature_state_values?: list}
   --feature-states-to-update: list # Array of feature states to update in the new version. (nullable) — item shape: {enabled?: bool, feature_state_value: record, feature_segment?: any, multivariate_feature_state_values?: list}
   --segment-ids-to-delete-overrides: list # List of segment ids for which the segment overrides will be removed in the new version. (nullable)
-  --publish-immediately: string@bool-completer # Boolean to confirm whether the new version should be publish immediately or not. (default: false)
+  --publish-immediately: oneof<nothing, bool> # Boolean to confirm whether the new version should be publish immediately or not. (default: false)
 ]: any -> record<created_at: string, updated_at: string, published: bool, live_from: string, uuid: string, is_live: bool, published_by: int, created_by: int, description: string, feature_states_to_create: table<id: int, feature: int, enabled: bool, feature_state_value: record, feature_segment: any, deleted_at: string, uuid: string, created_at: string, updated_at: string, live_from: string, environment: int, identity: int, change_request: int, multivariate_feature_state_values: list>, feature_states_to_update: table<id: int, feature: int, enabled: bool, feature_state_value: record, feature_segment: any, deleted_at: string, uuid: string, created_at: string, updated_at: string, live_from: string, environment: int, identity: int, change_request: int, multivariate_feature_state_values: list>, segment_ids_to_delete_overrides: list<int>, publish_immediately: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6128,7 +6127,7 @@ export def "environments-features-versions-featurestates state-by-environment_fe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   feature_state_value: record # shape: {type?: any, string_value?: string, integer_value?: int, boolean_value?: bool}
   --feature-segment: any
   --multivariate-feature-state-values: list # item shape: {multivariate_feature_option: int, percentage_allocation: float}
@@ -6162,7 +6161,7 @@ export def "environments-features-versions-featurestates state-by-environment_fe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   feature_state_value: record # shape: {type?: any, string_value?: string, integer_value?: int, boolean_value?: bool}
   --feature-segment: any
   --multivariate-feature-state-values: list # item shape: {multivariate_feature_option: int, percentage_allocation: float}
@@ -6195,7 +6194,7 @@ export def "environments-features-versions-featurestates patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --feature-state-value: record # shape: {type?: any, string_value?: string, integer_value?: int, boolean_value?: bool}
   --feature-segment: any
   --multivariate-feature-state-values: list # item shape: {multivariate_feature_option: int, percentage_allocation: float}
@@ -6302,7 +6301,7 @@ export def "environments-environments-edge-identities-featurestates update" [
   --feature-state-value: string # Feature state value (string, integer, or boolean) (nullable)
   feature: any # Feature identifier (ID or name)
   --multivariate-feature-state-values: list # item shape: {multivariate_feature_option: int, percentage_allocation: float}
-  --enabled: string@bool-completer # default: false
+  --enabled: oneof<nothing, bool> # default: false
   identifier: string
 ]: any -> record<feature_state_value: string, feature: int, multivariate_feature_state_values: table<multivariate_feature_option: int, percentage_allocation: float>, enabled: bool, featurestate_uuid: string, identity_uuid: string> {
   let input = $in
@@ -6730,7 +6729,7 @@ export def "features-featurestates create" [
   --feature-state-value: record # shape: {type?: any, string_value?: string, integer_value?: int, boolean_value?: bool}
   --multivariate-feature-state-values: list # item shape: {multivariate_feature_option: int, percentage_allocation: float}
   --identifier: string # Can be passed as an alternative to `identity`
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --live-from: string # nullable, format: date-time
   feature: int
   --environment: int # nullable
@@ -6768,7 +6767,7 @@ export def "features-featurestates state" [
   --feature-state-value: record # shape: {type?: any, string_value?: string, integer_value?: int, boolean_value?: bool}
   --multivariate-feature-state-values: list # item shape: {multivariate_feature_option: int, percentage_allocation: float}
   --identifier: string # Can be passed as an alternative to `identity`
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --live-from: string # nullable, format: date-time
   feature: int
   --environment: int # nullable
@@ -6805,7 +6804,7 @@ export def "features-featurestates patch" [
   --feature-state-value: record # shape: {type?: any, string_value?: string, integer_value?: int, boolean_value?: bool}
   --multivariate-feature-state-values: list # item shape: {multivariate_feature_option: int, percentage_allocation: float}
   --identifier: string # Can be passed as an alternative to `identity`
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --live-from: string # nullable, format: date-time
   --feature: int
   --environment: int # nullable
@@ -6911,7 +6910,7 @@ export def "features-workflows-change-requests update" [
   --group-assignments: list # item shape: {group: int}
   --environment-feature-versions: list
   --change-sets: list # nullable — item shape: {feature: int, live_from?: string, feature_states_to_update: list, feature_states_to_create: list, segment_ids_to_delete_overrides: list}
-  --ignore-conflicts: string@bool-completer
+  --ignore-conflicts: oneof<nothing, bool>
 ]: any -> record<id: int, created_at: string, updated_at: string, title: string, description: string, feature_states: table<id: int, feature: int, feature_segment: int, enabled: bool, feature_state_value: record, multivariate_feature_state_values: list, live_from: string>, deleted_at: string, environment: int, committed_at: string, approvals: table<id: int, user: int, approved_at: string>, user: int, committed_by: int, group_assignments: table<group: int>, environment_feature_versions: list<string>, change_sets: table<id: int, feature: int, live_from: string, feature_states_to_update: list, feature_states_to_create: list, segment_ids_to_delete_overrides: list>, ignore_conflicts: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6947,7 +6946,7 @@ export def "features-workflows-change-requests patch" [
   --group-assignments: list # item shape: {group: int}
   --environment-feature-versions: list
   --change-sets: list # nullable — item shape: {feature: int, live_from?: string, feature_states_to_update: list, feature_states_to_create: list, segment_ids_to_delete_overrides: list}
-  --ignore-conflicts: string@bool-completer
+  --ignore-conflicts: oneof<nothing, bool>
 ]: any -> record<id: int, created_at: string, updated_at: string, title: string, description: string, feature_states: table<id: int, feature: int, feature_segment: int, enabled: bool, feature_state_value: record, multivariate_feature_state_values: list, live_from: string>, deleted_at: string, environment: int, committed_at: string, approvals: table<id: int, user: int, approved_at: string>, user: int, committed_by: int, group_assignments: table<group: int>, environment_feature_versions: list<string>, change_sets: table<id: int, feature: int, live_from: string, feature_states_to_update: list, feature_states_to_create: list, segment_ids_to_delete_overrides: list>, ignore_conflicts: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7145,7 +7144,7 @@ export def "identities identities" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --identifier: string
-  --transient: string@bool-completer # default: false
+  --transient: oneof<nothing, bool> # default: false
 ]: nothing -> record<identifier: string, flags: table<feature: record, enabled: bool, feature_state_value: any>, traits: table<trait_key: string, trait_value: any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-environment-key"))
   let base = ($base_url | default $BASE_URL)
@@ -7467,8 +7466,8 @@ export def "organisations create" [
   name: string
   --webhook-notification-email: string # nullable, format: email
   --subscription: record # shape: {subscription_id?: string, subscription_date?: string, plan?: string, max_seats?: int, max_api_calls?: int, cancellation_date?: string, customer_id?: string, billing_status?: any, payment_method?: any, notes?: string}
-  --restrict-project-create-to-admin: string@bool-completer
-  --force-2fa: string@bool-completer
+  --restrict-project-create-to-admin: oneof<nothing, bool>
+  --force-2fa: oneof<nothing, bool>
 ]: any -> record<id: int, uuid: string, name: string, created_date: string, webhook_notification_email: string, num_seats: int, subscription: record<id: int, has_active_billing_periods: bool, deleted_at: string, uuid: string, subscription_id: string, subscription_date: string, plan: string, max_seats: int, max_api_calls: int, cancellation_date: string, customer_id: string, billing_status: any, payment_method: any, notes: string>, role: string, persist_trait_data: bool, block_access_to_admin: bool, restrict_project_create_to_admin: bool, force_2fa: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7538,7 +7537,7 @@ export def "organisations-audit list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --environments: list
-  --is-system-event: string@bool-completer
+  --is-system-event: oneof<nothing, bool>
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --project: int
@@ -7718,7 +7717,7 @@ export def "organisations-groups create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --is-default: string@bool-completer # If set to true, all new users will be added to this group
+  --is-default: oneof<nothing, bool> # If set to true, all new users will be added to this group
   --external-id: string # Unique ID of the group in an external system (nullable)
 ]: any -> record<id: int, name: string, users: table<id: int, email: string, first_name: string, last_name: string, last_login: string, group_admin: bool>, is_default: bool, external_id: string> {
   let input = $in
@@ -7862,7 +7861,7 @@ export def "organisations-groups update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --is-default: string@bool-completer # If set to true, all new users will be added to this group
+  --is-default: oneof<nothing, bool> # If set to true, all new users will be added to this group
   --external-id: string # Unique ID of the group in an external system (nullable)
 ]: any -> record<id: int, name: string, users: table<id: int, email: string, first_name: string, last_name: string, last_login: string, group_admin: bool>, is_default: bool, external_id: string> {
   let input = $in
@@ -7891,7 +7890,7 @@ export def "organisations-groups patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --is-default: string@bool-completer # If set to true, all new users will be added to this group
+  --is-default: oneof<nothing, bool> # If set to true, all new users will be added to this group
   --external-id: string # Unique ID of the group in an external system (nullable)
 ]: any -> record<id: int, name: string, users: table<id: int, email: string, first_name: string, last_name: string, last_login: string, group_admin: bool>, is_default: bool, external_id: string> {
   let input = $in
@@ -8111,7 +8110,7 @@ export def "organisations-integrations-github-repositories create" [
   project: int
   repository_owner: string
   repository_name: string
-  --tagging-enabled: string@bool-completer
+  --tagging-enabled: oneof<nothing, bool>
 ]: any -> record<id: int, github_configuration: int, project: int, repository_owner: string, repository_name: string, tagging_enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8164,7 +8163,7 @@ export def "organisations-integrations-github-repositories update" [
   project: int
   repository_owner: string
   repository_name: string
-  --tagging-enabled: string@bool-completer
+  --tagging-enabled: oneof<nothing, bool>
 ]: any -> record<id: int, github_configuration: int, project: int, repository_owner: string, repository_name: string, tagging_enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8194,7 +8193,7 @@ export def "organisations-integrations-github-repositories patch" [
   --project: int
   --repository-owner: string
   --repository-name: string
-  --tagging-enabled: string@bool-completer
+  --tagging-enabled: oneof<nothing, bool>
 ]: any -> record<id: int, github_configuration: int, project: int, repository_owner: string, repository_name: string, tagging_enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8701,9 +8700,9 @@ export def "organisations-master-api-keys create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # A free-form name for the API key. Need not be unique. 50 characters max.
-  --revoked: string@bool-completer # If the API key is revoked, clients cannot use it anymore. (This cannot be undone.)
+  --revoked: oneof<nothing, bool> # If the API key is revoked, clients cannot use it anymore. (This cannot be undone.)
   --expiry-date: string # Once API key expires, clients cannot use it anymore. (nullable, format: date-time)
-  --is-admin: string@bool-completer # default: true
+  --is-admin: oneof<nothing, bool> # default: true
 ]: any -> record<id: string, prefix: string, created: string, name: string, revoked: bool, expiry_date: string, key: string, is_admin: bool, has_expired: bool, created_by: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8799,9 +8798,9 @@ export def "organisations-master-api-keys update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # A free-form name for the API key. Need not be unique. 50 characters max.
-  --revoked: string@bool-completer # If the API key is revoked, clients cannot use it anymore. (This cannot be undone.)
+  --revoked: oneof<nothing, bool> # If the API key is revoked, clients cannot use it anymore. (This cannot be undone.)
   --expiry-date: string # Once API key expires, clients cannot use it anymore. (nullable, format: date-time)
-  --is-admin: string@bool-completer # default: true
+  --is-admin: oneof<nothing, bool> # default: true
 ]: any -> record<id: string, prefix: string, created: string, name: string, revoked: bool, expiry_date: string, key: string, is_admin: bool, has_expired: bool, created_by: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8828,9 +8827,9 @@ export def "organisations-master-api-keys patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # A free-form name for the API key. Need not be unique. 50 characters max.
-  --revoked: string@bool-completer # If the API key is revoked, clients cannot use it anymore. (This cannot be undone.)
+  --revoked: oneof<nothing, bool> # If the API key is revoked, clients cannot use it anymore. (This cannot be undone.)
   --expiry-date: string # Once API key expires, clients cannot use it anymore. (nullable, format: date-time)
-  --is-admin: string@bool-completer # default: true
+  --is-admin: oneof<nothing, bool> # default: true
 ]: any -> record<id: string, prefix: string, created: string, name: string, revoked: bool, expiry_date: string, key: string, is_admin: bool, has_expired: bool, created_by: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9257,7 +9256,7 @@ export def "organisations-roles-environments-permissions create" [
   --allow-errors(-e) # Return full response without error handling
   environment: int
   permissions: list # item shape: {permission_key: string, tags?: list}
-  --admin: string@bool-completer
+  --admin: oneof<nothing, bool>
 ]: any -> record<id: int, role: int, environment: int, permissions: table<permission_key: string, tags: list>, admin: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9310,7 +9309,7 @@ export def "organisations-roles-environments-permissions update" [
   --allow-errors(-e) # Return full response without error handling
   environment: int
   permissions: list # item shape: {permission_key: string, tags?: list}
-  --admin: string@bool-completer
+  --admin: oneof<nothing, bool>
 ]: any -> record<id: int, role: int, environment: int, permissions: table<permission_key: string, tags: list>, admin: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9340,7 +9339,7 @@ export def "organisations-roles-environments-permissions patch" [
   --allow-errors(-e) # Return full response without error handling
   --environment: int
   --permissions: list # item shape: {permission_key: string, tags?: list}
-  --admin: string@bool-completer
+  --admin: oneof<nothing, bool>
 ]: any -> record<id: int, role: int, environment: int, permissions: table<permission_key: string, tags: list>, admin: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9867,7 +9866,7 @@ export def "organisations-roles-projects-permissions create" [
   --allow-errors(-e) # Return full response without error handling
   project: int
   permissions: list # item shape: {permission_key: string, tags?: list}
-  --admin: string@bool-completer
+  --admin: oneof<nothing, bool>
 ]: any -> record<id: int, role: int, project: int, permissions: table<permission_key: string, tags: list>, admin: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9920,7 +9919,7 @@ export def "organisations-roles-projects-permissions update" [
   --allow-errors(-e) # Return full response without error handling
   project: int
   permissions: list # item shape: {permission_key: string, tags?: list}
-  --admin: string@bool-completer
+  --admin: oneof<nothing, bool>
 ]: any -> record<id: int, role: int, project: int, permissions: table<permission_key: string, tags: list>, admin: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9950,7 +9949,7 @@ export def "organisations-roles-projects-permissions patch" [
   --allow-errors(-e) # Return full response without error handling
   --project: int
   --permissions: list # item shape: {permission_key: string, tags?: list}
-  --admin: string@bool-completer
+  --admin: oneof<nothing, bool>
 ]: any -> record<id: int, role: int, project: int, permissions: table<permission_key: string, tags: list>, admin: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10649,7 +10648,7 @@ export def "organisations-webhooks create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-url: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --secret: string
 ]: any -> record<id: int, url: string, enabled: bool, secret: string, created_at: string, updated_at: string> {
   let input = $in
@@ -10699,7 +10698,7 @@ export def "organisations-webhooks update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-url: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --secret: string
 ]: any -> record<id: int, url: string, enabled: bool, secret: string, created_at: string, updated_at: string> {
   let input = $in
@@ -10727,7 +10726,7 @@ export def "organisations-webhooks patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-url: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --secret: string
 ]: any -> record<id: int, url: string, enabled: bool, secret: string, created_at: string, updated_at: string> {
   let input = $in
@@ -10800,8 +10799,8 @@ export def "organisations update" [
   name: string
   --webhook-notification-email: string # nullable, format: email
   --subscription: record # shape: {subscription_id?: string, subscription_date?: string, plan?: string, max_seats?: int, max_api_calls?: int, cancellation_date?: string, customer_id?: string, billing_status?: any, payment_method?: any, notes?: string}
-  --restrict-project-create-to-admin: string@bool-completer
-  --force-2fa: string@bool-completer
+  --restrict-project-create-to-admin: oneof<nothing, bool>
+  --force-2fa: oneof<nothing, bool>
 ]: any -> record<id: int, uuid: string, name: string, created_date: string, webhook_notification_email: string, num_seats: int, subscription: record<id: int, has_active_billing_periods: bool, deleted_at: string, uuid: string, subscription_id: string, subscription_date: string, plan: string, max_seats: int, max_api_calls: int, cancellation_date: string, customer_id: string, billing_status: any, payment_method: any, notes: string>, role: string, persist_trait_data: bool, block_access_to_admin: bool, restrict_project_create_to_admin: bool, force_2fa: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10830,8 +10829,8 @@ export def "organisations patch" [
   --name: string
   --webhook-notification-email: string # nullable, format: email
   --subscription: record # shape: {subscription_id?: string, subscription_date?: string, plan?: string, max_seats?: int, max_api_calls?: int, cancellation_date?: string, customer_id?: string, billing_status?: any, payment_method?: any, notes?: string}
-  --restrict-project-create-to-admin: string@bool-completer
-  --force-2fa: string@bool-completer
+  --restrict-project-create-to-admin: oneof<nothing, bool>
+  --force-2fa: oneof<nothing, bool>
 ]: any -> record<id: int, uuid: string, name: string, created_date: string, webhook_notification_email: string, num_seats: int, subscription: record<id: int, has_active_billing_periods: bool, deleted_at: string, uuid: string, subscription_id: string, subscription_date: string, plan: string, max_seats: int, max_api_calls: int, cancellation_date: string, customer_id: string, billing_status: any, payment_method: any, notes: string>, role: string, persist_trait_data: bool, block_access_to_admin: bool, restrict_project_create_to_admin: bool, force_2fa: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11201,12 +11200,12 @@ export def "projects create" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   organisation: int
-  --hide-disabled-flags: string@bool-completer # If true will exclude flags from SDK which are disabled
-  --prevent-flag-defaults: string@bool-completer # Prevent defaults from being set in all environments when creating a feature.
-  --only-allow-lower-case-feature-names: string@bool-completer # Used by UI to validate feature names
+  --hide-disabled-flags: oneof<nothing, bool> # If true will exclude flags from SDK which are disabled
+  --prevent-flag-defaults: oneof<nothing, bool> # Prevent defaults from being set in all environments when creating a feature.
+  --only-allow-lower-case-feature-names: oneof<nothing, bool> # Used by UI to validate feature names
   --feature-name-regex: string # Used for validating feature names (nullable)
   --minimum-change-request-approvals: int # nullable
-  --enforce-feature-owners: string@bool-completer # Require at least one user or group owner when creating a feature.
+  --enforce-feature-owners: oneof<nothing, bool> # Require at least one user or group owner when creating a feature.
 ]: any -> record<id: int, uuid: string, name: string, organisation: int, hide_disabled_flags: bool, enable_dynamo_db: bool, migration_status: string, use_edge_identities: bool, prevent_flag_defaults: bool, enable_realtime_updates: bool, only_allow_lower_case_feature_names: bool, feature_name_regex: string, show_edge_identity_overrides_for_feature: bool, stale_flags_limit_days: int, edge_v2_migration_status: record, minimum_change_request_approvals: int, enforce_feature_owners: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11255,12 +11254,12 @@ export def "projects project-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --hide-disabled-flags: string@bool-completer # If true will exclude flags from SDK which are disabled
-  --prevent-flag-defaults: string@bool-completer # Prevent defaults from being set in all environments when creating a feature.
-  --only-allow-lower-case-feature-names: string@bool-completer # Used by UI to validate feature names
+  --hide-disabled-flags: oneof<nothing, bool> # If true will exclude flags from SDK which are disabled
+  --prevent-flag-defaults: oneof<nothing, bool> # Prevent defaults from being set in all environments when creating a feature.
+  --only-allow-lower-case-feature-names: oneof<nothing, bool> # Used by UI to validate feature names
   --feature-name-regex: string # Used for validating feature names (nullable)
   --minimum-change-request-approvals: int # nullable
-  --enforce-feature-owners: string@bool-completer # Require at least one user or group owner when creating a feature.
+  --enforce-feature-owners: oneof<nothing, bool> # Require at least one user or group owner when creating a feature.
 ]: any -> record<id: int, uuid: string, name: string, organisation: int, hide_disabled_flags: bool, enable_dynamo_db: bool, migration_status: string, use_edge_identities: bool, prevent_flag_defaults: bool, enable_realtime_updates: bool, only_allow_lower_case_feature_names: bool, feature_name_regex: string, show_edge_identity_overrides_for_feature: bool, stale_flags_limit_days: int, edge_v2_migration_status: record, minimum_change_request_approvals: int, enforce_feature_owners: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11286,12 +11285,12 @@ export def "projects patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --hide-disabled-flags: string@bool-completer # If true will exclude flags from SDK which are disabled
-  --prevent-flag-defaults: string@bool-completer # Prevent defaults from being set in all environments when creating a feature.
-  --only-allow-lower-case-feature-names: string@bool-completer # Used by UI to validate feature names
+  --hide-disabled-flags: oneof<nothing, bool> # If true will exclude flags from SDK which are disabled
+  --prevent-flag-defaults: oneof<nothing, bool> # Prevent defaults from being set in all environments when creating a feature.
+  --only-allow-lower-case-feature-names: oneof<nothing, bool> # Used by UI to validate feature names
   --feature-name-regex: string # Used for validating feature names (nullable)
   --minimum-change-request-approvals: int # nullable
-  --enforce-feature-owners: string@bool-completer # Require at least one user or group owner when creating a feature.
+  --enforce-feature-owners: oneof<nothing, bool> # Require at least one user or group owner when creating a feature.
 ]: any -> record<id: int, uuid: string, name: string, organisation: int, hide_disabled_flags: bool, enable_dynamo_db: bool, migration_status: string, use_edge_identities: bool, prevent_flag_defaults: bool, enable_realtime_updates: bool, only_allow_lower_case_feature_names: bool, feature_name_regex: string, show_edge_identity_overrides_for_feature: bool, stale_flags_limit_days: int, edge_v2_migration_status: record, minimum_change_request_approvals: int, enforce_feature_owners: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11446,7 +11445,7 @@ export def "projects-audit list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --environments: list
-  --is-system-event: string@bool-completer
+  --is-system-event: oneof<nothing, bool>
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --project: int
@@ -11496,7 +11495,7 @@ export def "projects-change-requests requests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --committed: string@bool-completer # Filter on the committed status of a change request.
+  --committed: oneof<nothing, bool> # Filter on the committed status of a change request.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --search: string # Fuzzy search across Change Request titles.
@@ -11908,8 +11907,8 @@ export def "projects-features features" [
   --environment: int # Integer ID of the environment to view features in the context of.
   --group-owners: string # Comma separated list of group owner ids to filter on
   --identity: string # ID of the identity to sort features with identity overrides first.
-  --is-archived: string@bool-completer
-  --is-enabled: string@bool-completer # Boolean value to filter features as enabled or disabled.
+  --is-archived: oneof<nothing, bool>
+  --is-enabled: oneof<nothing, bool> # Boolean value to filter features as enabled or disabled.
   --owners: string # Comma separated list of owner ids to filter on
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
@@ -11949,15 +11948,15 @@ export def "projects-features feature-by-project_pk" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   --type: any
-  --default-enabled: string@bool-completer
+  --default-enabled: oneof<nothing, bool>
   --initial-value: string # nullable
   --description: string # nullable
   --tags: list
   --multivariate-options: list # item shape: {type?: any, integer_value?: int, string_value?: string, boolean_value?: bool, default_percentage_allocation?: float}
-  --is-archived: string@bool-completer
+  --is-archived: oneof<nothing, bool>
   --owners: list
   --group-owners: list
-  --is-server-key-only: string@bool-completer
+  --is-server-key-only: oneof<nothing, bool>
   --metadata: list # item shape: {model_field: int, field_value: string}
 ]: any -> record<id: int, name: string, type: any, default_enabled: bool, initial_value: string, created_date: string, description: string, tags: list<int>, multivariate_options: table<id: int, uuid: string, type: any, integer_value: int, string_value: string, boolean_value: bool, default_percentage_allocation: float, key: string>, is_archived: bool, owners: list<int>, group_owners: list<int>, uuid: string, project: int, environment_feature_state: any, segment_feature_state: any, num_segment_overrides: int, num_identity_overrides: int, is_num_identity_overrides_complete: bool, is_server_key_only: bool, last_modified_in_any_environment: string, last_modified_in_current_environment: string, metadata: table<id: int, model_field: int, field_value: string>, code_references_counts: table<repository_url: string, count: int, last_successful_repository_scanned_at: string, last_feature_found_at: string>> {
   let input = $in
@@ -12196,7 +12195,7 @@ export def "projects-features-mv-options option-by-feature_pk-project_pk" [
   --type: any
   --integer-value: int # nullable
   --string-value: string # nullable
-  --boolean-value: string@bool-completer # nullable
+  --boolean-value: oneof<nothing, bool> # nullable
   --default-percentage-allocation: float # format: double
   --key: string # A stable, human-readable identifier for the variant. (nullable)
   feature: int
@@ -12253,7 +12252,7 @@ export def "projects-features-mv-options option-by-feature_pk-id-project_pk" [
   --type: any
   --integer-value: int # nullable
   --string-value: string # nullable
-  --boolean-value: string@bool-completer # nullable
+  --boolean-value: oneof<nothing, bool> # nullable
   --default-percentage-allocation: float # format: double
   --key: string # A stable, human-readable identifier for the variant. (nullable)
   feature: int
@@ -12286,7 +12285,7 @@ export def "projects-features-mv-options patch" [
   --type: any
   --integer-value: int # nullable
   --string-value: string # nullable
-  --boolean-value: string@bool-completer # nullable
+  --boolean-value: oneof<nothing, bool> # nullable
   --default-percentage-allocation: float # format: double
   --key: string # A stable, human-readable identifier for the variant. (nullable)
   --feature: int
@@ -12370,8 +12369,8 @@ export def "projects-features feature-by-id-project_pk" [
   --description: string # nullable
   --tags: list
   --multivariate-options: list # item shape: {type?: any, integer_value?: int, string_value?: string, boolean_value?: bool, default_percentage_allocation?: float}
-  --is-archived: string@bool-completer
-  --is-server-key-only: string@bool-completer
+  --is-archived: oneof<nothing, bool>
+  --is-server-key-only: oneof<nothing, bool>
   --metadata: list # item shape: {model_field: int, field_value: string}
 ]: any -> record<id: int, name: string, type: any, default_enabled: bool, initial_value: string, created_date: string, description: string, tags: list<int>, multivariate_options: table<id: int, uuid: string, type: any, integer_value: int, string_value: string, boolean_value: bool, default_percentage_allocation: float, key: string>, is_archived: bool, owners: list<int>, group_owners: list<int>, uuid: string, project: int, environment_feature_state: any, segment_feature_state: any, num_segment_overrides: int, num_identity_overrides: int, is_num_identity_overrides_complete: bool, is_server_key_only: bool, last_modified_in_any_environment: string, last_modified_in_current_environment: string, metadata: table<id: int, model_field: int, field_value: string>, code_references_counts: table<repository_url: string, count: int, last_successful_repository_scanned_at: string, last_feature_found_at: string>> {
   let input = $in
@@ -12405,8 +12404,8 @@ export def "projects-features patch" [
   --description: string # nullable
   --tags: list
   --multivariate-options: list # item shape: {type?: any, integer_value?: int, string_value?: string, boolean_value?: bool, default_percentage_allocation?: float}
-  --is-archived: string@bool-completer
-  --is-server-key-only: string@bool-completer
+  --is-archived: oneof<nothing, bool>
+  --is-server-key-only: oneof<nothing, bool>
   --metadata: list # item shape: {model_field: int, field_value: string}
 ]: any -> record<id: int, name: string, type: any, default_enabled: bool, initial_value: string, created_date: string, description: string, tags: list<int>, multivariate_options: table<id: int, uuid: string, type: any, integer_value: int, string_value: string, boolean_value: bool, default_percentage_allocation: float, key: string>, is_archived: bool, owners: list<int>, group_owners: list<int>, uuid: string, project: int, environment_feature_state: any, segment_feature_state: any, num_segment_overrides: int, num_identity_overrides: int, is_num_identity_overrides_complete: bool, is_server_key_only: bool, last_modified_in_any_environment: string, last_modified_in_current_environment: string, metadata: table<id: int, model_field: int, field_value: string>, code_references_counts: table<repository_url: string, count: int, last_successful_repository_scanned_at: string, last_feature_found_at: string>> {
   let input = $in
@@ -12777,7 +12776,7 @@ export def "projects-integrations-datadog create" [
   --allow-errors(-e) # Return full response without error handling
   --body-base-url: string # format: uri
   api_key: string
-  --use-custom-source: string@bool-completer
+  --use-custom-source: oneof<nothing, bool>
 ]: any -> record<id: int, base_url: string, api_key: string, use_custom_source: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12827,7 +12826,7 @@ export def "projects-integrations-datadog update" [
   --allow-errors(-e) # Return full response without error handling
   --body-base-url: string # format: uri
   api_key: string
-  --use-custom-source: string@bool-completer
+  --use-custom-source: oneof<nothing, bool>
 ]: any -> record<id: int, base_url: string, api_key: string, use_custom_source: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12855,7 +12854,7 @@ export def "projects-integrations-datadog patch" [
   --allow-errors(-e) # Return full response without error handling
   --body-base-url: string # format: uri
   --api-key: string
-  --use-custom-source: string@bool-completer
+  --use-custom-source: oneof<nothing, bool>
 ]: any -> record<id: int, base_url: string, api_key: string, use_custom_source: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12925,7 +12924,7 @@ export def "projects-integrations-gitlab create" [
   --allow-errors(-e) # Return full response without error handling
   gitlab_instance_url: string # format: uri
   access_token: string
-  --labeling-enabled: string@bool-completer
+  --labeling-enabled: oneof<nothing, bool>
 ]: any -> record<id: int, gitlab_instance_url: string, access_token: string, labeling_enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12975,7 +12974,7 @@ export def "projects-integrations-gitlab update" [
   --allow-errors(-e) # Return full response without error handling
   gitlab_instance_url: string # format: uri
   access_token: string
-  --labeling-enabled: string@bool-completer
+  --labeling-enabled: oneof<nothing, bool>
 ]: any -> record<id: int, gitlab_instance_url: string, access_token: string, labeling_enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -13003,7 +13002,7 @@ export def "projects-integrations-gitlab patch" [
   --allow-errors(-e) # Return full response without error handling
   --gitlab-instance-url: string # format: uri
   --access-token: string
-  --labeling-enabled: string@bool-completer
+  --labeling-enabled: oneof<nothing, bool>
 ]: any -> record<id: int, gitlab_instance_url: string, access_token: string, labeling_enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -13344,7 +13343,7 @@ export def "projects-metadata-fields list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --entity: string@entity-completer # Filter by entity type (feature, segment, or environment).  * `feature` - feature * `segment` - segment * `environment` - environment
-  --include-organisation: string@bool-completer # Include inherited organisation-level fields. Project-level fields override same-named org fields. (default: false)
+  --include-organisation: oneof<nothing, bool> # Include inherited organisation-level fields. Project-level fields override same-named org fields. (default: false)
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
 ]: nothing -> record<count: int, next: string, previous: string, results: table<id: int, name: string, type: string, description: string, organisation: int, project: int, model_fields: list>> {
@@ -13702,7 +13701,7 @@ export def "projects-segments segments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --identity: string # Optionally provide the id of an identity to get only the segments they match
-  --include-feature-specific: string@bool-completer # default: true
+  --include-feature-specific: oneof<nothing, bool> # default: true
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --q: string # Search term to find segment with given term in their name
@@ -13952,7 +13951,7 @@ export def "projects-tags create" [
   label: string
   --color: string # Hexadecimal value of the tag color
   --description: string # nullable
-  --is-permanent: string@bool-completer # When applied to a feature, it means this feature should be excluded from stale flags logic.
+  --is-permanent: oneof<nothing, bool> # When applied to a feature, it means this feature should be excluded from stale flags logic.
 ]: any -> record<id: int, label: string, color: string, description: string, project: int, uuid: string, is_permanent: bool, is_system_tag: bool, type: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -14003,7 +14002,7 @@ export def "projects-tags update" [
   label: string
   --color: string # Hexadecimal value of the tag color
   --description: string # nullable
-  --is-permanent: string@bool-completer # When applied to a feature, it means this feature should be excluded from stale flags logic.
+  --is-permanent: oneof<nothing, bool> # When applied to a feature, it means this feature should be excluded from stale flags logic.
 ]: any -> record<id: int, label: string, color: string, description: string, project: int, uuid: string, is_permanent: bool, is_system_tag: bool, type: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -14032,7 +14031,7 @@ export def "projects-tags patch" [
   --label: string
   --color: string # Hexadecimal value of the tag color
   --description: string # nullable
-  --is-permanent: string@bool-completer # When applied to a feature, it means this feature should be excluded from stale flags logic.
+  --is-permanent: oneof<nothing, bool> # When applied to a feature, it means this feature should be excluded from stale flags logic.
 ]: any -> record<id: int, label: string, color: string, description: string, project: int, uuid: string, is_permanent: bool, is_system_tag: bool, type: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -14123,7 +14122,7 @@ export def "projects-user-group-permissions create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --permissions: list
-  --admin: string@bool-completer
+  --admin: oneof<nothing, bool>
   group: int
 ]: any -> record<id: int, permissions: list<string>, admin: bool, group: int> {
   let input = $in
@@ -14173,7 +14172,7 @@ export def "projects-user-group-permissions update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --permissions: list
-  --admin: string@bool-completer
+  --admin: oneof<nothing, bool>
   group: int
 ]: any -> record<id: int, permissions: list<string>, admin: bool, group: int> {
   let input = $in
@@ -14201,7 +14200,7 @@ export def "projects-user-group-permissions patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --permissions: list
-  --admin: string@bool-completer
+  --admin: oneof<nothing, bool>
   --group: int
 ]: any -> record<id: int, permissions: list<string>, admin: bool, group: int> {
   let input = $in
@@ -14271,7 +14270,7 @@ export def "projects-user-permissions create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --permissions: list
-  --admin: string@bool-completer
+  --admin: oneof<nothing, bool>
   user: int
 ]: any -> record<id: int, permissions: list<string>, admin: bool, user: int> {
   let input = $in
@@ -14321,7 +14320,7 @@ export def "projects-user-permissions update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --permissions: list
-  --admin: string@bool-completer
+  --admin: oneof<nothing, bool>
   user: int
 ]: any -> record<id: int, permissions: list<string>, admin: bool, user: int> {
   let input = $in
@@ -14349,7 +14348,7 @@ export def "projects-user-permissions patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --permissions: list
-  --admin: string@bool-completer
+  --admin: oneof<nothing, bool>
   --user: int
 ]: any -> record<id: int, permissions: list<string>, admin: bool, user: int> {
   let input = $in

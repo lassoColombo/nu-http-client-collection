@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.na-01.cloud.solarwinds.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -144,7 +143,7 @@ export def "cloud-aws-control-tower-activate activateAwsIntegration" [
   --allow-errors(-e) # Return full response without error handling
   managementAccountId: string # AWS Control Tower Management Account ID.
   accountId: string # AWS Accounts ID to be integrated.
-  --enable: string@bool-completer # True to enable the integration, false to disable.
+  --enable: oneof<nothing, bool> # True to enable the integration, false to disable.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1531,7 +1530,7 @@ export def "metrics-measurements listMultiMetricMeasurements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forcePositional: string@bool-completer # Forces a positional response; see the operation description. (default: false)
+  --forcePositional: oneof<nothing, bool> # Forces a positional response; see the operation description. (default: false)
   --pageSize: int # Number of items in a response page. Default varies by API. (format: int32)
   --skipToken: string # Token for the requested page.
   metrics: list # List of metric measurement requests. — item shape: {id?: string, name: string, filter?: string, groupBy?: list, aggregateBy?: any, preGroupBy?: list, preGroupByMethod?: any, seriesType?: any, fillMethod?: any, fillIfEmpty?: bool}

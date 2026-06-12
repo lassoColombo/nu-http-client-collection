@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.logflare.app" "https://logflare.app"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -197,7 +196,7 @@ export def "backends LogflareWebApiBackendControllercreate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --config: record
-  --default-ingest?: string@bool-completer
+  --default-ingest?: oneof<nothing, bool>
   --id: int
   --inserted-at: string # format: date-time
   --metadata: record
@@ -275,7 +274,7 @@ export def "backends LogflareWebApiBackendControllerupdate-2" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --config: record
-  --default-ingest?: string@bool-completer
+  --default-ingest?: oneof<nothing, bool>
   --id: int
   --inserted-at: string # format: date-time
   --metadata: record
@@ -309,7 +308,7 @@ export def "backends LogflareWebApiBackendControllerupdate" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --config: record
-  --default-ingest?: string@bool-completer
+  --default-ingest?: oneof<nothing, bool>
   --id: int
   --inserted-at: string # format: date-time
   --metadata: record
@@ -385,13 +384,13 @@ export def "endpoints LogflareWebApiEndpointControllercreate" [
   --allow-errors(-e) # Return full response without error handling
   --cache-duration-seconds: int
   --description: string # nullable
-  --enable-auth: string@bool-completer
+  --enable-auth: oneof<nothing, bool>
   --id: int
   --max-limit: int
   name: string
   --proactive-requerying-seconds: int
   --body-query: string
-  --sandboxable: string@bool-completer # nullable
+  --sandboxable: oneof<nothing, bool> # nullable
   --source-mapping: record # nullable
   --body-token: string
 ]: any -> record<cache_duration_seconds: int, description: string, enable_auth: bool, id: int, max_limit: int, name: string, proactive_requerying_seconds: int, query: string, sandboxable: bool, source_mapping: record, token: string> {
@@ -533,13 +532,13 @@ export def "endpoints LogflareWebApiEndpointControllerupdate-2" [
   --accept: string@accept-completer # Response content type
   --cache-duration-seconds: int
   --description: string # nullable
-  --enable-auth: string@bool-completer
+  --enable-auth: oneof<nothing, bool>
   --id: int
   --max-limit: int
   name: string
   --proactive-requerying-seconds: int
   --body-query: string
-  --sandboxable: string@bool-completer # nullable
+  --sandboxable: oneof<nothing, bool> # nullable
   --source-mapping: record # nullable
   --body-token: string
 ]: any -> record<cache_duration_seconds: int, description: string, enable_auth: bool, id: int, max_limit: int, name: string, proactive_requerying_seconds: int, query: string, sandboxable: bool, source_mapping: record, token: string> {
@@ -570,13 +569,13 @@ export def "endpoints LogflareWebApiEndpointControllerupdate" [
   --accept: string@accept-completer # Response content type
   --cache-duration-seconds: int
   --description: string # nullable
-  --enable-auth: string@bool-completer
+  --enable-auth: oneof<nothing, bool>
   --id: int
   --max-limit: int
   name: string
   --proactive-requerying-seconds: int
   --body-query: string
-  --sandboxable: string@bool-completer # nullable
+  --sandboxable: oneof<nothing, bool> # nullable
   --source-mapping: record # nullable
   --body-token: string
 ]: any -> record<cache_duration_seconds: int, description: string, enable_auth: bool, id: int, max_limit: int, name: string, proactive_requerying_seconds: int, query: string, sandboxable: bool, source_mapping: record, token: string> {
@@ -1011,10 +1010,10 @@ export def "sources LogflareWebApiSourceControllercreate" [
   --bigquery-table-ttl: int
   --bq-table-id: string
   --custom-event-message-keys: string
-  --default-ingest-backend-enabled?: string@bool-completer
+  --default-ingest-backend-enabled?: oneof<nothing, bool>
   --description: string # nullable
-  --favorite: string@bool-completer
-  --has-rejected-events: string@bool-completer
+  --favorite: oneof<nothing, bool>
+  --has-rejected-events: oneof<nothing, bool>
   --id: int
   --inserted-at: string # format: date-time
   --metrics: record
@@ -1188,10 +1187,10 @@ export def "sources LogflareWebApiSourceControllerupdate-2" [
   --bigquery-table-ttl: int
   --bq-table-id: string
   --custom-event-message-keys: string
-  --default-ingest-backend-enabled?: string@bool-completer
+  --default-ingest-backend-enabled?: oneof<nothing, bool>
   --description: string # nullable
-  --favorite: string@bool-completer
-  --has-rejected-events: string@bool-completer
+  --favorite: oneof<nothing, bool>
+  --has-rejected-events: oneof<nothing, bool>
   --id: int
   --inserted-at: string # format: date-time
   --metrics: record
@@ -1231,10 +1230,10 @@ export def "sources LogflareWebApiSourceControllerupdate" [
   --bigquery-table-ttl: int
   --bq-table-id: string
   --custom-event-message-keys: string
-  --default-ingest-backend-enabled?: string@bool-completer
+  --default-ingest-backend-enabled?: oneof<nothing, bool>
   --description: string # nullable
-  --favorite: string@bool-completer
-  --has-rejected-events: string@bool-completer
+  --favorite: oneof<nothing, bool>
+  --has-rejected-events: oneof<nothing, bool>
   --id: int
   --inserted-at: string # format: date-time
   --metrics: record

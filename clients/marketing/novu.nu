@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.novu.co" "https://eu.api.novu.co"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -400,7 +399,7 @@ export def "domains listDomains" [
   --limit: float # Limit the number of items to return (e.g. 10)
   --orderDirection: string@orderDirection-completer # Direction of sorting
   --orderBy: string # Field to order by
-  --includeCursor: string@bool-completer # Include cursor item in response
+  --includeCursor: oneof<nothing, bool> # Include cursor item in response
   --name: string # Domain name to filter results by.
 ]: nothing -> record<data: record<data: list<record>, next: string, previous: string, totalCount: float, totalCountCapped: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -570,7 +569,7 @@ export def "domains-routes listDomainRoutes" [
   --limit: float # Limit the number of items to return (e.g. 10)
   --orderDirection: string@orderDirection-completer # Direction of sorting
   --orderBy: string # Field to order by
-  --includeCursor: string@bool-completer # Include cursor item in response
+  --includeCursor: oneof<nothing, bool> # Include cursor item in response
   --agentId: string # Agent identifier to filter routes by.
 ]: nothing -> record<data: record<data: list<record>, next: string, previous: string, totalCount: float, totalCountCapped: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -705,7 +704,7 @@ export def "domains-routes-test testDomainRoute" [
   subject: string
   --text: string
   --html: string
-  --dryRun: string@bool-completer # When true, returns the payload that would be delivered without invoking outbound webhooks or the agent HTTP endpoint.
+  --dryRun: oneof<nothing, bool> # When true, returns the payload that would be delivered without invoking outbound webhooks or the agent HTTP endpoint.
 ]: any -> record<data: record<matched: bool, dryRun: bool, domainStatus: string, mxRecordConfigured: bool, type: string, wouldDeliverTo: string, payload: record, webhook: record<skipped: bool, latencyMs: float>, agent: record<agentId: string, httpStatus: float, agentReply: record, latencyMs: float>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -807,8 +806,8 @@ export def "integrations createIntegration" [
   --channel: string@channel-completer # The channel type for the integration. Not required for agent-kind integrations.
   --kind: string@kind-completer # Distinguishes delivery integrations from agent-runtime integrations. Defaults to "delivery". Agent integrations do not require a channel.
   --credentials: any # The credentials for the integration
-  --active: string@bool-completer # If the integration is active, the validation on the credentials field will run
-  --check: string@bool-completer # Flag to check the integration status
+  --active: oneof<nothing, bool> # If the integration is active, the validation on the credentials field will run
+  --check: oneof<nothing, bool> # Flag to check the integration status
   --conditions: list # Conditions for the integration — item shape: {isNegated: bool, type: "BOOLEAN"|"TEXT"|"DATE"|"NUMBER"|"STATEMENT"|"LIST"|"MULTI_LIST"|"GROUP", value: "AND"|"OR", children: list}
   --configurations: record # Configurations for the integration
 ]: any -> record<data: record<_id: string, _environmentId: string, _organizationId: string, name: string, identifier: string, providerId: string, channel: string, kind: string, credentials: record<apiKey: string, user: string, secretKey: string, domain: string, password: string, host: string, port: string, secure: bool, region: string, accountSid: string, messageProfileId: string, token: string, from: string, senderName: string, projectName: string, applicationId: string, clientId: string, requireTls: bool, ignoreTls: bool, tlsOptions: record, baseUrl: string, webhookUrl: string, redirectUrl: string, hmac: bool, serviceAccount: string, ipPoolName: string, apiKeyRequestHeader: string, secretKeyRequestHeader: string, idPath: string, datePath: string, apiToken: string, authenticateByToken: bool, authenticationTokenKey: string, instanceId: string, alertUid: string, title: string, imageUrl: string, state: string, externalLink: string, channelId: string, phoneNumberIdentification: string, accessKey: string, appSid: string, senderId: string, tenantId: string, AppIOBaseUrl: string, signingSecret: string, outboundIntegrationId: string, useFromAddressOverride: bool, fromAddressOverride: string, emailSlugPrefix: string, externalEnvironmentId: string, externalVaultId: string, externalWorkspaceId: string>, configurations: record<inboundWebhookEnabled: bool, inboundWebhookSigningKey: string>, active: bool, deleted: bool, deletedAt: string, deletedBy: string, primary: bool, conditions: list<record>>> {
@@ -862,9 +861,9 @@ export def "integrations updateIntegrationById" [
   --name: string
   --identifier: string
   --environmentId: string
-  --active: string@bool-completer # If the integration is active the validation on the credentials field will run
+  --active: oneof<nothing, bool> # If the integration is active the validation on the credentials field will run
   --credentials: record # shape: {apiKey?: string, user?: string, secretKey?: string, domain?: string, password?: string, host?: string, port?: string, secure?: bool, region?: string, accountSid?: string, messageProfileId?: string, token?: string, from?: string, senderName?: string, projectName?: string, applicationId?: string, clientId?: string, requireTls?: bool, ignoreTls?: bool, tlsOptions?: record, baseUrl?: string, webhookUrl?: string, redirectUrl?: string, hmac?: bool, serviceAccount?: string, ipPoolName?: string, apiKeyRequestHeader?: string, secretKeyRequestHeader?: string, idPath?: string, datePath?: string, apiToken?: string, authenticateByToken?: bool, authenticationTokenKey?: string, instanceId?: string, alertUid?: string, title?: string, imageUrl?: string, state?: string, externalLink?: string, channelId?: string, phoneNumberIdentification?: string, accessKey?: string, appSid?: string, senderId?: string, tenantId?: string, AppIOBaseUrl?: string, signingSecret?: string, outboundIntegrationId?: string, useFromAddressOverride?: bool, fromAddressOverride?: string, emailSlugPrefix?: string, externalEnvironmentId?: string, externalVaultId?: string, externalWorkspaceId?: string}
-  --check: string@bool-completer
+  --check: oneof<nothing, bool>
   --conditions: list # item shape: {isNegated: bool, type: "BOOLEAN"|"TEXT"|"DATE"|"NUMBER"|"STATEMENT"|"LIST"|"MULTI_LIST"|"GROUP", value: "AND"|"OR", children: list}
   --configurations: record # Configurations for the integration
 ]: any -> record<data: record<_id: string, _environmentId: string, _organizationId: string, name: string, identifier: string, providerId: string, channel: string, kind: string, credentials: record<apiKey: string, user: string, secretKey: string, domain: string, password: string, host: string, port: string, secure: bool, region: string, accountSid: string, messageProfileId: string, token: string, from: string, senderName: string, projectName: string, applicationId: string, clientId: string, requireTls: bool, ignoreTls: bool, tlsOptions: record, baseUrl: string, webhookUrl: string, redirectUrl: string, hmac: bool, serviceAccount: string, ipPoolName: string, apiKeyRequestHeader: string, secretKeyRequestHeader: string, idPath: string, datePath: string, apiToken: string, authenticateByToken: bool, authenticationTokenKey: string, instanceId: string, alertUid: string, title: string, imageUrl: string, state: string, externalLink: string, channelId: string, phoneNumberIdentification: string, accessKey: string, appSid: string, senderId: string, tenantId: string, AppIOBaseUrl: string, signingSecret: string, outboundIntegrationId: string, useFromAddressOverride: bool, fromAddressOverride: string, emailSlugPrefix: string, externalEnvironmentId: string, externalVaultId: string, externalWorkspaceId: string>, configurations: record<inboundWebhookEnabled: bool, inboundWebhookSigningKey: string>, active: bool, deleted: bool, deletedAt: string, deletedBy: string, primary: bool, conditions: list<record>>> {
@@ -967,7 +966,7 @@ export def "integrations-chat-oauth post" [
   --userScope: list # **Slack only, link_user mode**: User-level OAuth scopes to request during authorization. Used when mode is "link_user" to identify the Slack user via "Sign in with Slack". If not specified, defaults to: identity.basic. (e.g. [identity.basic])
   --mode: string@mode-completer # OAuth flow mode. Use "connect" (default) to create a workspace channel connection, or "link_user" to identify the subscriber's Slack user ID without creating a connection. (e.g. link_user)
   --connectionMode: string@connectionMode-completer # Connection mode that determines how the channel connection is scoped. Use "subscriber" (default) to associate the connection with a specific subscriber. Use "shared" to associate the connection with a context instead of a subscriber — subscriberId will not be stored on the connection. (e.g. shared)
-  --autoLinkUser: string@bool-completer # When true, after the workspace/tenant connection is created the OAuth flow also links the subscriber who clicked "Connect" as a personal endpoint. For Slack, this uses the authed_user.id already returned by oauth.v2.access — no extra redirect. For MS Teams, this triggers a second OAuth redirect for delegated user-identity consent. Defaults to false when omitted; the SlackConnectButton and MsTeamsConnectButton SDK components default this to true. (e.g. true)
+  --autoLinkUser: oneof<nothing, bool> # When true, after the workspace/tenant connection is created the OAuth flow also links the subscriber who clicked "Connect" as a personal endpoint. For Slack, this uses the authed_user.id already returned by oauth.v2.access — no extra redirect. For MS Teams, this triggers a second OAuth redirect for delegated user-identity consent. Defaults to false when omitted; the SlackConnectButton and MsTeamsConnectButton SDK components default this to true. (e.g. true)
 ]: any -> record<data: record<url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -998,7 +997,7 @@ export def "integrations-channel-connections-oauth generateConnectOAuthUrl" [
   --context: record
   --scope: list # **Slack only**: OAuth scopes to request during authorization. If not specified, default scopes will be used: chat:write, chat:write.public, channels:read, groups:read, users:read, users:read.email. **MS Teams**: ignored — uses admin consent with pre-configured Azure AD permissions. (e.g. [chat:write, chat:write.public, channels:read])
   --connectionMode: string@connectionMode-completer # Connection mode that determines how the channel connection is scoped. "subscriber" (default) associates the connection with a specific subscriber. "shared" associates the connection with a context instead of a subscriber. (e.g. shared)
-  --autoLinkUser: string@bool-completer # When true (default when connectionMode is "subscriber"), after the workspace/tenant connection is created the OAuth flow also links the subscriber who clicked "Connect" as a personal endpoint. For Slack, uses the authed_user.id returned by oauth.v2.access — no extra redirect. For MS Teams, triggers a second OAuth redirect for delegated user-identity consent. Set to false to only create the workspace connection without linking the individual user. (e.g. true)
+  --autoLinkUser: oneof<nothing, bool> # When true (default when connectionMode is "subscriber"), after the workspace/tenant connection is created the OAuth flow also links the subscriber who clicked "Connect" as a personal endpoint. For Slack, uses the authed_user.id returned by oauth.v2.access — no extra redirect. For MS Teams, triggers a second OAuth redirect for delegated user-identity consent. Set to false to only create the workspace connection without linking the individual user. (e.g. true)
 ]: any -> record<data: record<url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1084,7 +1083,7 @@ export def "contexts listContexts" [
   --limit: float # Limit the number of items to return (e.g. 10)
   --orderDirection: string@orderDirection-completer # Direction of sorting
   --orderBy: string # Field to order by
-  --includeCursor: string@bool-completer # Include cursor item in response
+  --includeCursor: oneof<nothing, bool> # Include cursor item in response
   --id: string # Filter contexts by id (e.g. tenant-prod-123)
   --search: string # Search contexts by type or id (supports partial matching across both fields) (e.g. tenant)
 ]: nothing -> record<data: record<data: list<record>, next: string, previous: string, totalCount: float, totalCountCapped: bool>> {
@@ -1288,7 +1287,7 @@ export def "subscribers-online-status updateSubscriberOnlineFlag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isOnline: string@bool-completer
+  --isOnline: oneof<nothing, bool>
 ]: any -> record<data: record<_id: string, firstName: string, lastName: string, email: string, phone: string, avatar: string, locale: string, channels: list<record>, topics: list<string>, isOnline: bool, lastOnlineAt: string, __v: float, data: record, timezone: string, subscriberId: string, _organizationId: string, _environmentId: string, deleted: bool, createdAt: string, updatedAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1318,8 +1317,8 @@ export def "subscribers-notifications-feed get" [
   --allow-errors(-e) # Return full response without error handling
   --page: float # e.g. 0
   --limit: float # default: 10, e.g. 10
-  --read: string@bool-completer
-  --seen: string@bool-completer
+  --read: oneof<nothing, bool>
+  --seen: oneof<nothing, bool>
   --payload: string # Base64 encoded string of the partial payload JSON object (e.g. btoa(JSON.stringify({ foo: 123 })) results in base64 encoded string like eyJmb28iOjEyM30=)
 ]: nothing -> record<data: record<totalCount: float, hasMore: bool, data: list<record>, pageSize: float, page: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1346,7 +1345,7 @@ export def "subscribers-notifications-unseen get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --seen: string@bool-completer # Indicates whether to count seen notifications. (default: false)
+  --seen: oneof<nothing, bool> # Indicates whether to count seen notifications. (default: false)
   --limit: float # The maximum number of notifications to return. (default: 100)
 ]: nothing -> record<data: record<count: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1464,7 +1463,7 @@ export def "subscribers searchSubscribers" [
   --limit: float # Limit the number of items to return (e.g. 10)
   --orderDirection: string@orderDirection-completer # Direction of sorting
   --orderBy: string # Field to order by
-  --includeCursor: string@bool-completer # Include cursor item in response
+  --includeCursor: oneof<nothing, bool> # Include cursor item in response
   --email: string # Email address of the subscriber to filter results.
   --name: string # Name of the subscriber to filter results.
   --phone: string # Phone number of the subscriber to filter results.
@@ -1491,7 +1490,7 @@ export def "subscribers createSubscriber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --failIfExists: string@bool-completer # If true, the request will fail if a subscriber with the same subscriberId already exists
+  --failIfExists: oneof<nothing, bool> # If true, the request will fail if a subscriber with the same subscriberId already exists
   --firstName: string # First name of the subscriber (nullable, e.g. John)
   --lastName: string # Last name of the subscriber (nullable, e.g. Doe)
   --email: string # Email address of the subscriber (nullable, e.g. john.doe@example.com)
@@ -1691,7 +1690,7 @@ export def "subscribers-subscriptions listSubscriberTopics" [
   --limit: float # Limit the number of items to return (max 100) (e.g. 10)
   --orderDirection: string@orderDirection-completer # Direction of sorting
   --orderBy: string # Field to order by
-  --includeCursor: string@bool-completer # Include cursor item in response
+  --includeCursor: oneof<nothing, bool> # Include cursor item in response
   --key: string # Filter by topic key
   --contextKeys: list # Filter by exact context keys, order insensitive (format: "type:id") (e.g. [tenant:org-123, region:us-east-1])
 ]: nothing -> record<data: record<data: list<record>, next: string, previous: string, totalCount: float, totalCountCapped: bool>> {
@@ -1720,10 +1719,10 @@ export def "subscribers-notifications get" [
   --limit: float # default: 10, e.g. 10
   --after: string
   --offset: float # e.g. 0
-  --read: string@bool-completer # Filter by read/unread state
-  --archived: string@bool-completer # Filter by archived state
-  --snoozed: string@bool-completer # Filter by snoozed state
-  --seen: string@bool-completer # Filter by seen state
+  --read: oneof<nothing, bool> # Filter by read/unread state
+  --archived: oneof<nothing, bool> # Filter by archived state
+  --snoozed: oneof<nothing, bool> # Filter by snoozed state
+  --seen: oneof<nothing, bool> # Filter by seen state
   --data: string # Filter by data attributes (JSON string)
   --severity: list # Filter by severity levels
   --createdGte: float # Filter notifications created on or after this timestamp (Unix timestamp in milliseconds) (e.g. 1704067200000)
@@ -2149,7 +2148,7 @@ export def "layouts create" [
   --allow-errors(-e) # Return full response without error handling
   layoutId: string # Unique identifier for the layout
   name: string # Name of the layout
-  --isTranslationEnabled: string@bool-completer # Enable or disable translations for this layout (default: false)
+  --isTranslationEnabled: oneof<nothing, bool> # Enable or disable translations for this layout (default: false)
   --body-source: string@source-completer # Source of layout creation (default: dashboard)
 ]: any -> record<data: record<_id: string, layoutId: string, slug: string, name: string, isDefault: bool, isTranslationEnabled: bool, updatedAt: string, updatedBy: record<_id: string, firstName: string, lastName: string, externalId: string>, createdAt: string, origin: string, type: string, variables: record, controls: record<dataSchema: record, uiSchema: record, values: record>>> {
   let input = $in
@@ -2204,7 +2203,7 @@ export def "layouts update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string # Name of the layout
-  --isTranslationEnabled: string@bool-completer # Enable or disable translations for this layout (default: false)
+  --isTranslationEnabled: oneof<nothing, bool> # Enable or disable translations for this layout (default: false)
   --controlValues: any # Control values for the layout. Omit to leave unchanged, or set to null to clear stored control values. (nullable)
 ]: any -> record<data: record<_id: string, layoutId: string, slug: string, name: string, isDefault: bool, isTranslationEnabled: bool, updatedAt: string, updatedBy: record<_id: string, firstName: string, lastName: string, externalId: string>, createdAt: string, origin: string, type: string, variables: record, controls: record<dataSchema: record, uiSchema: record, values: record>>> {
   let input = $in
@@ -2277,7 +2276,7 @@ export def "layouts-duplicate duplicate" [
   --allow-errors(-e) # Return full response without error handling
   name: string # Name of the layout
   --body-layoutId: string # Identifier for the duplicated layout. When omitted, it is derived from the name.
-  --isTranslationEnabled: string@bool-completer # Enable or disable translations for this layout (default: false)
+  --isTranslationEnabled: oneof<nothing, bool> # Enable or disable translations for this layout (default: false)
 ]: any -> record<data: record<_id: string, layoutId: string, slug: string, name: string, isDefault: bool, isTranslationEnabled: bool, updatedAt: string, updatedBy: record<_id: string, firstName: string, lastName: string, externalId: string>, createdAt: string, origin: string, type: string, variables: record, controls: record<dataSchema: record, uiSchema: record, values: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2453,7 +2452,7 @@ export def "topics listTopics" [
   --limit: float # Limit the number of items to return (max 100) (e.g. 10)
   --orderDirection: string@orderDirection-completer # Direction of sorting
   --orderBy: string # Field to order by
-  --includeCursor: string@bool-completer # Include cursor item in response
+  --includeCursor: oneof<nothing, bool> # Include cursor item in response
   --key: string # Key of the topic to filter results.
   --name: string # Name of the topic to filter results.
 ]: nothing -> record<data: record<data: list<record>, next: string, previous: string, totalCount: float, totalCountCapped: bool>> {
@@ -2478,7 +2477,7 @@ export def "topics upsertTopic" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --failIfExists: string@bool-completer # If true, the request will fail if a topic with the same key already exists
+  --failIfExists: oneof<nothing, bool> # If true, the request will fail if a topic with the same key already exists
   key: string # The unique key identifier for the topic. The key must contain only alphanumeric characters (a-z, A-Z, 0-9), hyphens (-), underscores (_), colons (:), or be a valid email address. (e.g. task:12345)
   --name: string # The display name for the topic (e.g. Task Title)
 ]: any -> record<data: record<_id: string, key: string, name: string, createdAt: string, updatedAt: string>> {
@@ -2582,7 +2581,7 @@ export def "topics-subscriptions listTopicSubscriptions" [
   --limit: float # Limit the number of items to return (max 100) (e.g. 10)
   --orderDirection: string@orderDirection-completer # Direction of sorting
   --orderBy: string # Field to order by
-  --includeCursor: string@bool-completer # Include cursor item in response
+  --includeCursor: oneof<nothing, bool> # Include cursor item in response
   --subscriberId: string # Filter by subscriber ID
   --contextKeys: list # Filter by exact context keys, order insensitive (format: "type:id") (e.g. [tenant:org-123, region:us-east-1])
 ]: nothing -> record<data: record<data: list<record>, next: string, previous: string, totalCount: float, totalCountCapped: bool>> {
@@ -2743,7 +2742,7 @@ export def "environment-variables createEnvironmentVariable" [
   --allow-errors(-e) # Return full response without error handling
   key: string # Unique key for the variable. Must start with a letter and contain only letters, digits, and underscores.
   --type: string@type-completer-1 # The type of the variable
-  --isSecret: string@bool-completer # Whether this variable is a secret (encrypted at rest, masked in responses)
+  --isSecret: oneof<nothing, bool> # Whether this variable is a secret (encrypted at rest, masked in responses)
   --values: list # item shape: {_environmentId: string, value: string}
 ]: any -> record<data: record<_id: string, _organizationId: string, key: string, type: string, isSecret: bool, values: list<record>, createdAt: string, updatedAt: string>> {
   let input = $in
@@ -2817,7 +2816,7 @@ export def "environment-variables updateEnvironmentVariable" [
   --allow-errors(-e) # Return full response without error handling
   --key: string # Unique key for the variable. Must start with a letter and contain only letters, digits, and underscores.
   --type: string@type-completer-1 # The type of the variable
-  --isSecret: string@bool-completer
+  --isSecret: oneof<nothing, bool>
   --values: list # item shape: {_environmentId: string, value: string}
 ]: any -> record<data: record<_id: string, _organizationId: string, key: string, type: string, isSecret: bool, values: list<record>, createdAt: string, updatedAt: string>> {
   let input = $in
@@ -2868,10 +2867,10 @@ export def "workflows create" [
   name: string # Name of the workflow
   --description: string # Description of the workflow
   --tags: list # Tags associated with the workflow
-  --active: string@bool-completer # Whether the workflow is active (default: false)
-  --validatePayload: string@bool-completer # Enable or disable payload schema validation
+  --active: oneof<nothing, bool> # Whether the workflow is active (default: false)
+  --validatePayload: oneof<nothing, bool> # Enable or disable payload schema validation
   --payloadSchema: record # The payload JSON Schema for the workflow (nullable)
-  --isTranslationEnabled: string@bool-completer # Enable or disable translations for this workflow (default: false)
+  --isTranslationEnabled: oneof<nothing, bool> # Enable or disable translations for this workflow (default: false)
   workflowId: string # Unique identifier for the workflow
   steps: list # Steps of the workflow
   --body-source: string@source-completer-1 # Source of workflow creation (default: editor)
@@ -2960,10 +2959,10 @@ export def "workflows update" [
   name: string # Name of the workflow
   --description: string # Description of the workflow
   --tags: list # Tags associated with the workflow
-  --active: string@bool-completer # Whether the workflow is active (default: false)
-  --validatePayload: string@bool-completer # Enable or disable payload schema validation
+  --active: oneof<nothing, bool> # Whether the workflow is active (default: false)
+  --validatePayload: oneof<nothing, bool> # Enable or disable payload schema validation
   --payloadSchema: record # The payload JSON Schema for the workflow (nullable)
-  --isTranslationEnabled: string@bool-completer # Enable or disable translations for this workflow (default: false)
+  --isTranslationEnabled: oneof<nothing, bool> # Enable or disable translations for this workflow (default: false)
   --body-workflowId: string # Workflow ID (allowed only for code-first workflows)
   steps: list # Steps of the workflow
   preferences: any # Workflow preferences
@@ -3040,13 +3039,13 @@ export def "workflows patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Activate or deactivate the workflow
+  --active: oneof<nothing, bool> # Activate or deactivate the workflow
   --name: string # New name for the workflow
   --description: string # Updated description of the workflow
   --tags: list # Tags associated with the workflow
   --payloadSchema: record # The payload JSON Schema for the workflow (nullable)
-  --validatePayload: string@bool-completer # Enable or disable payload schema validation
-  --isTranslationEnabled: string@bool-completer # Enable or disable translations for this workflow
+  --validatePayload: oneof<nothing, bool> # Enable or disable payload schema validation
+  --isTranslationEnabled: oneof<nothing, bool> # Enable or disable translations for this workflow
 ]: any -> record<data: record<name: string, description: string, tags: list<string>, active: bool, validatePayload: bool, payloadSchema: record, isTranslationEnabled: bool, _id: string, workflowId: string, slug: string, updatedAt: string, createdAt: string, updatedBy: record<_id: string, firstName: string, lastName: string, externalId: string>, lastPublishedAt: string, lastPublishedBy: record<_id: string, firstName: string, lastName: string, externalId: string>, steps: list<any>, origin: string, preferences: record<user: record, default: record>, status: string, issues: record, lastTriggeredAt: string, payloadExample: record, severity: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3147,7 +3146,7 @@ export def "environments-publish publishEnvironment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --sourceEnvironmentId: string # Source environment ID to sync from. Defaults to the Development environment if not provided. (e.g. 507f1f77bcf86cd799439011)
-  --dryRun: string@bool-completer # Perform a dry run without making actual changes (default: false)
+  --dryRun: oneof<nothing, bool> # Perform a dry run without making actual changes (default: false)
   --resources: list # Array of specific resources to publish. If not provided, all resources will be published. — item shape: {resourceType: "REGULAR"|"ECHO"|"BRIDGE", resourceId: string}
 ]: any -> record<data: record<results: list<record>, summary: record<resources: float, successful: float, failed: float, skipped: float>>> {
   let input = $in
@@ -3204,7 +3203,7 @@ export def "channel-connections listChannelConnections" [
   --limit: float # Limit the number of items to return (max 100) (e.g. 10)
   --orderDirection: string@orderDirection-completer # Direction of sorting
   --orderBy: string # Field to order by
-  --includeCursor: string@bool-completer # Include cursor item in response
+  --includeCursor: oneof<nothing, bool> # Include cursor item in response
   --subscriberId: string # The subscriber ID to filter results by (e.g. subscriber-123)
   --channel: string@channel-completer # Filter by channel type (email, sms, push, chat, etc.). (e.g. chat)
   --providerId: string@providerId-completer-1 # Filter by provider identifier (e.g., sendgrid, twilio, slack, etc.). (e.g. slack)
@@ -3343,7 +3342,7 @@ export def "channel-endpoints listChannelEndpoints" [
   --limit: float # Limit the number of items to return (max 100) (e.g. 10)
   --orderDirection: string@orderDirection-completer # Direction of sorting
   --orderBy: string # Field to order by
-  --includeCursor: string@bool-completer # Include cursor item in response
+  --includeCursor: oneof<nothing, bool> # Include cursor item in response
   --subscriberId: string # The subscriber ID to filter results by (e.g. subscriber-123)
   --contextKeys: list # Filter by exact context keys, order insensitive (format: "type:id") (e.g. [tenant:org-123, region:us-east-1])
   --channel: string@channel-completer # Channel type to filter results.

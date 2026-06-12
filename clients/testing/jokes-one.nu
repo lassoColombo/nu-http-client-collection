@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.jokes.one" "http://api.jokes.one"] }
 def auth-scheme-completer [] { ["x-jokesone-api-secret"] }
 
@@ -319,7 +318,7 @@ export def "joke-search get" [
   --minlength: int # Joke minimum Length (format: int32, default: 100)
   --maxlength: int # Joke maximum Length (format: int32, default: 300)
   --author: string # Joke Author (format: string)
-  --private: string@bool-completer # Should search private collection? Default searches public collection. (format: boolean, default: false)
+  --private: oneof<nothing, bool> # Should search private collection? Default searches public collection. (format: boolean, default: false)
 ]: nothing -> record<contents: record<jokes: list<record>>, success: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-jokesone-api-secret"))
   let base = ($base_url | default $BASE_URL)

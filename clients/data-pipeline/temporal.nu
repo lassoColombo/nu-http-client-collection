@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -140,7 +139,7 @@ export def "namespaces ListNamespaces" [
   --allow-errors(-e) # Return full response without error handling
   --pageSize: int # format: int32
   --nextPageToken: string # format: bytes
-  --namespaceFilterincludeDeleted: string@bool-completer # By default namespaces in NAMESPACE_STATE_DELETED state are not included.  Setting include_deleted to true will include deleted namespaces.  Note: Namespace is in NAMESPACE_STATE_DELETED state when it was deleted from the system but associated data is not deleted yet.
+  --namespaceFilterincludeDeleted: oneof<nothing, bool> # By default namespaces in NAMESPACE_STATE_DELETED state are not included.  Setting include_deleted to true will include deleted namespaces.  Note: Namespace is in NAMESPACE_STATE_DELETED state when it was deleted from the system but associated data is not deleted yet.
 ]: nothing -> record<namespaces: table<namespaceInfo: record, config: record, replicationConfig: record, failoverVersion: string, isGlobalNamespace: bool, failoverHistory: list, pollerGroupInfos: list>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -172,7 +171,7 @@ export def "namespaces RegisterNamespace" [
   --activeClusterName: string
   --data: record # A key-value map for any customized purpose.
   --securityToken: string
-  --isGlobalNamespace: string@bool-completer
+  --isGlobalNamespace: oneof<nothing, bool>
   --historyArchivalState: string@historyArchivalState-completer # If unspecified (ARCHIVAL_STATE_UNSPECIFIED) then default server configuration is used. (format: enum)
   --historyArchivalUri: string
   --visibilityArchivalState: string@visibilityArchivalState-completer # If unspecified (ARCHIVAL_STATE_UNSPECIFIED) then default server configuration is used. (format: enum)
@@ -203,7 +202,7 @@ export def "namespaces DescribeNamespace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string
-  --weakConsistency: string@bool-completer # If true, the server may serve the response from an eventually-consistent  source instead of reading through to persistence. Defaults to false,  which preserves read-after-write consistency. SDKs should set this when  fetching namespace capabilities on worker/client startup.
+  --weakConsistency: oneof<nothing, bool> # If true, the server may serve the response from an eventually-consistent  source instead of reading through to persistence. Defaults to false,  which preserves read-after-write consistency. SDKs should set this when  fetching namespace capabilities on worker/client startup.
 ]: nothing -> record<namespaceInfo: record<name: string, state: string, description: string, ownerEmail: string, data: record, id: string, capabilities: record<eagerWorkflowStart: bool, syncUpdate: bool, asyncUpdate: bool, workerHeartbeats: bool, reportedProblemsSearchAttribute: bool, workflowPause: bool, standaloneActivities: bool, workerPollCompleteOnShutdown: bool, pollerAutoscaling: bool, workerCommands: bool, standaloneNexusOperation: bool, workflowUpdateCallbacks: bool>, limits: record<blobSizeLimitError: string, memoSizeLimitError: string>, supportsSchedules: bool>, config: record<workflowExecutionRetentionTtl: string, badBinaries: record<binaries: record>, historyArchivalState: string, historyArchivalUri: string, visibilityArchivalState: string, visibilityArchivalUri: string, customSearchAttributeAliases: record>, replicationConfig: record<activeClusterName: string, clusters: list<record>, state: string>, failoverVersion: string, isGlobalNamespace: bool, failoverHistory: table<failoverTime: string, failoverVersion: string>, pollerGroupInfos: table<id: string, weight: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -290,11 +289,11 @@ export def "namespaces-activities-deprecated-reset ResetActivity-by-namespace" [
   --identity: string # The identity of the client who initiated this request.
   --id: string # Only activity with this ID will be reset.
   --type: string # Reset all running activities with of this type.
-  --matchAll: string@bool-completer # Reset all running activities.
-  --resetHeartbeat: string@bool-completer # Indicates that activity should reset heartbeat details.  This flag will be applied only to the new instance of the activity.
-  --keepPaused: string@bool-completer # If activity is paused, it will remain paused after reset
+  --matchAll: oneof<nothing, bool> # Reset all running activities.
+  --resetHeartbeat: oneof<nothing, bool> # Indicates that activity should reset heartbeat details.  This flag will be applied only to the new instance of the activity.
+  --keepPaused: oneof<nothing, bool> # If activity is paused, it will remain paused after reset
   --jitter: string # If set, and activity is in backoff, the activity will start at a random time within the specified jitter duration.  (unless it is paused and keep_paused is set)
-  --restoreOriginalOptions: string@bool-completer # If set, the activity options will be restored to the defaults.  Default options are then options activity was created with.  They are part of the first schedule event.
+  --restoreOriginalOptions: oneof<nothing, bool> # If set, the activity options will be restored to the defaults.  Default options are then options activity was created with.  They are part of the first schedule event.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -325,9 +324,9 @@ export def "namespaces-activities-deprecated-unpause UnpauseActivity-by-namespac
   --identity: string # The identity of the client who initiated this request.
   --id: string # Only the activity with this ID will be unpaused.
   --type: string # Unpause all running activities with of this type.
-  --unpauseAll: string@bool-completer # Unpause all running activities.
-  --resetAttempts: string@bool-completer # Providing this flag will also reset the number of attempts.
-  --resetHeartbeat: string@bool-completer # Providing this flag will also reset the heartbeat details.
+  --unpauseAll: oneof<nothing, bool> # Unpause all running activities.
+  --resetAttempts: oneof<nothing, bool> # Providing this flag will also reset the number of attempts.
+  --resetHeartbeat: oneof<nothing, bool> # Providing this flag will also reset the heartbeat details.
   --jitter: string # If set, the activity will start at a random time within the specified jitter duration.
 ]: any -> record {
   let input = $in
@@ -361,8 +360,8 @@ export def "namespaces-activities-deprecated-update-options UpdateActivityOption
   --updateMask: string # Controls which fields from `activity_options` will be applied (format: field-mask)
   --id: string # Only activity with this ID will be updated.
   --type: string # Update all running activities of this type.
-  --matchAll: string@bool-completer # Update all running activities.
-  --restoreOriginal: string@bool-completer # If set, the activity options will be restored to the default.  Default options are then options activity was created with.  They are part of the first schedule event.  This flag cannot be combined with any other option; if you supply  restore_original together with other options, the request will be rejected.
+  --matchAll: oneof<nothing, bool> # Update all running activities.
+  --restoreOriginal: oneof<nothing, bool> # If set, the activity options will be restored to the default.  Default options are then options activity was created with.  They are part of the first schedule event.  This flag cannot be combined with any other option; if you supply  restore_original together with other options, the request will be rejected.
 ]: any -> record<activityOptions: record<taskQueue: record<name: string, kind: string, normalName: string>, scheduleToCloseTimeout: string, scheduleToStartTimeout: string, startToCloseTimeout: string, heartbeatTimeout: string, retryPolicy: record<initialInterval: string, backoffCoefficient: float, maximumInterval: string, maximumAttempts: int, nonRetryableErrorTypes: list>, priority: record<priorityKey: int, fairnessKey: string, fairnessWeight: float>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -390,11 +389,11 @@ export def "namespaces-activities DescribeActivityExecution-by-namespace-activit
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --runId: string # Activity run ID. If empty the request targets the latest run.
-  --includeInput: string@bool-completer # Include the input field in the response.
-  --includeOutcome: string@bool-completer # Include the outcome (result/failure) in the response if the activity has completed.
+  --includeInput: oneof<nothing, bool> # Include the input field in the response.
+  --includeOutcome: oneof<nothing, bool> # Include the outcome (result/failure) in the response if the activity has completed.
   --longPollToken: string # Token from a previous DescribeActivityExecutionResponse. If present, long-poll until activity  state changes from the state encoded in this token. If absent, return current state immediately.  If present, run_id must also be present.  Note that activity state may change multiple times between requests, therefore it is not  guaranteed that a client making a sequence of long-poll requests will see a complete  sequence of state changes. (format: bytes)
-  --includeHeartbeatDetails: string@bool-completer # Include the heartbeat_details field inside info in the response if available.
-  --includeLastFailure: string@bool-completer # Include the last_failure field inside info in the response if available.
+  --includeHeartbeatDetails: oneof<nothing, bool> # Include the heartbeat_details field inside info in the response if available.
+  --includeLastFailure: oneof<nothing, bool> # Include the last_failure field inside info in the response if available.
 ]: nothing -> record<runId: string, info: record<activityId: string, runId: string, activityType: record<name: string>, status: string, runState: string, taskQueue: string, scheduleToCloseTimeout: string, scheduleToStartTimeout: string, startToCloseTimeout: string, heartbeatTimeout: string, retryPolicy: record<initialInterval: string, backoffCoefficient: float, maximumInterval: string, maximumAttempts: int, nonRetryableErrorTypes: list>, heartbeatDetails: record<payloads: list>, lastHeartbeatTime: string, lastStartedTime: string, attempt: int, executionDuration: string, scheduleTime: string, expirationTime: string, closeTime: string, lastFailure: record<message: string, source: string, stackTrace: string, encodedAttributes: record, cause: record, applicationFailureInfo: record, timeoutFailureInfo: record, canceledFailureInfo: record, terminatedFailureInfo: record, serverFailureInfo: record, resetWorkflowFailureInfo: record, activityFailureInfo: record, childWorkflowExecutionFailureInfo: record, nexusOperationExecutionFailureInfo: record, nexusHandlerFailureInfo: record>, lastWorkerIdentity: string, currentRetryInterval: string, lastAttemptCompleteTime: string, nextAttemptScheduleTime: string, lastDeploymentVersion: record<buildId: string, deploymentName: string>, priority: record<priorityKey: int, fairnessKey: string, fairnessWeight: float>, stateTransitionCount: string, stateSizeBytes: string, searchAttributes: record<indexedFields: record>, header: record<fields: record>, userMetadata: record<summary: record, details: record>, canceledReason: string, links: list<record>, totalHeartbeatCount: string, sdkName: string, sdkVersion: string, startDelay: string>, input: record<payloads: list<any>>, outcome: record<result: record<payloads: list>, failure: record<message: string, source: string, stackTrace: string, encodedAttributes: record, cause: record, applicationFailureInfo: record, timeoutFailureInfo: record, canceledFailureInfo: record, terminatedFailureInfo: record, serverFailureInfo: record, resetWorkflowFailureInfo: record, activityFailureInfo: record, childWorkflowExecutionFailureInfo: record, nexusOperationExecutionFailureInfo: record, nexusHandlerFailureInfo: record>>, longPollToken: string, callbacks: table<callback: record, registrationTime: string, state: string, attempt: int, lastAttemptCompleteTime: string, lastAttemptFailure: record, nextAttemptScheduleTime: string, blockedReason: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -665,10 +664,10 @@ export def "namespaces-activities-reset ResetActivityExecution-by-namespace-acti
   --body-activityId: string # The ID of the activity to target.
   --runId: string # Run ID of the workflow or standalone activity.
   --identity: string # The identity of the client who initiated this request.
-  --resetHeartbeat: string@bool-completer # Indicates that activity should reset heartbeat details.  This flag will be applied only to the new instance of the activity.
-  --keepPaused: string@bool-completer # If activity is paused, it will remain paused after reset
+  --resetHeartbeat: oneof<nothing, bool> # Indicates that activity should reset heartbeat details.  This flag will be applied only to the new instance of the activity.
+  --keepPaused: oneof<nothing, bool> # If activity is paused, it will remain paused after reset
   --jitter: string # If set, and activity is in backoff, the activity will start at a random time within the specified jitter duration.  (unless it is paused and keep_paused is set)
-  --restoreOriginalOptions: string@bool-completer # If set, the activity options will be restored to the defaults.  Default options are then options activity was created with.  They are part of the first schedule event.
+  --restoreOriginalOptions: oneof<nothing, bool> # If set, the activity options will be restored to the defaults.  Default options are then options activity was created with.  They are part of the first schedule event.
   --resourceId: string # Resource ID for routing. Contains "workflow:{workflow_id}" for workflow activities or "activity:{activity_id}" for standalone activities.
 ]: any -> record {
   let input = $in
@@ -767,8 +766,8 @@ export def "namespaces-activities-unpause UnpauseActivityExecution-by-namespace-
   --body-activityId: string # The ID of the activity to target.
   --runId: string # Run ID of the workflow or standalone activity.
   --identity: string # The identity of the client who initiated this request.
-  --resetAttempts: string@bool-completer # Providing this flag will also reset the number of attempts.
-  --resetHeartbeat: string@bool-completer # Providing this flag will also reset the heartbeat details.
+  --resetAttempts: oneof<nothing, bool> # Providing this flag will also reset the number of attempts.
+  --resetHeartbeat: oneof<nothing, bool> # Providing this flag will also reset the heartbeat details.
   --reason: string # Reason to unpause the activity.
   --jitter: string # If set, the activity will start at a random time within the specified jitter duration.
   --resourceId: string # Resource ID for routing. Contains "workflow:{workflow_id}" for workflow activities or "activity:{activity_id}" for standalone activities.
@@ -805,7 +804,7 @@ export def "namespaces-activities-update-options UpdateActivityExecutionOptions-
   --identity: string # The identity of the client who initiated this request
   --activityOptions: any # Activity options. Partial updates are accepted and controlled by update_mask
   --updateMask: string # Controls which fields from `activity_options` will be applied (format: field-mask)
-  --restoreOriginal: string@bool-completer # If set, the activity options will be restored to the default.  Default options are then options activity was created with.  They are part of the first schedule event.  This flag cannot be combined with any other option; if you supply  restore_original together with other options, the request will be rejected.
+  --restoreOriginal: oneof<nothing, bool> # If set, the activity options will be restored to the default.  Default options are then options activity was created with.  They are part of the first schedule event.  This flag cannot be combined with any other option; if you supply  restore_original together with other options, the request will be rejected.
   --resourceId: string # Resource ID for routing. Contains "workflow:{workflow_id}" for workflow activities or "activity:{activity_id}" for standalone activities.
 ]: any -> record<activityOptions: record<taskQueue: record<name: string, kind: string, normalName: string>, scheduleToCloseTimeout: string, scheduleToStartTimeout: string, startToCloseTimeout: string, heartbeatTimeout: string, retryPolicy: record<initialInterval: string, backoffCoefficient: float, maximumInterval: string, maximumAttempts: int, nonRetryableErrorTypes: list>, priority: record<priorityKey: int, fairnessKey: string, fairnessWeight: float>>> {
   let input = $in
@@ -1327,8 +1326,8 @@ export def "namespaces-nexus-operations DescribeNexusOperationExecution-by-names
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --runId: string # Operation run ID. If empty the request targets the latest run.
-  --includeInput: string@bool-completer # Include the input field in the response.
-  --includeOutcome: string@bool-completer # Include the outcome (result/failure) in the response if the operation has completed.
+  --includeInput: oneof<nothing, bool> # Include the input field in the response.
+  --includeOutcome: oneof<nothing, bool> # Include the outcome (result/failure) in the response if the operation has completed.
   --longPollToken: string # Token from a previous DescribeNexusOperationExecutionResponse. If present, this RPC will long-poll until operation  state changes from the state encoded in this token. If absent, return current state immediately.  If present, run_id must also be present.  Note that operation state may change multiple times between requests, therefore it is not  guaranteed that a client making a sequence of long-poll requests will see a complete  sequence of state changes. (format: bytes)
 ]: nothing -> record<runId: string, info: record<operationId: string, runId: string, endpoint: string, service: string, operation: string, status: string, state: string, scheduleToCloseTimeout: string, scheduleToStartTimeout: string, startToCloseTimeout: string, attempt: int, scheduleTime: string, expirationTime: string, closeTime: string, lastAttemptCompleteTime: string, lastAttemptFailure: record<message: string, source: string, stackTrace: string, encodedAttributes: record, cause: record, applicationFailureInfo: record, timeoutFailureInfo: record, canceledFailureInfo: record, terminatedFailureInfo: record, serverFailureInfo: record, resetWorkflowFailureInfo: record, activityFailureInfo: record, childWorkflowExecutionFailureInfo: record, nexusOperationExecutionFailureInfo: record, nexusHandlerFailureInfo: record>, nextAttemptScheduleTime: string, executionDuration: string, cancellationInfo: record<requestedTime: string, state: string, attempt: int, lastAttemptCompleteTime: string, lastAttemptFailure: record, nextAttemptScheduleTime: string, blockedReason: string, reason: string>, blockedReason: string, requestId: string, operationToken: string, stateTransitionCount: string, searchAttributes: record<indexedFields: record>, nexusHeader: record, userMetadata: record<summary: record, details: record>, links: list<record>, identity: string, stateSizeBytes: string>, input: record, result: record, failure: record<message: string, source: string, stackTrace: string, encodedAttributes: record, cause: record<message: string, source: string, stackTrace: string, encodedAttributes: record, cause: any, applicationFailureInfo: record, timeoutFailureInfo: record, canceledFailureInfo: record, terminatedFailureInfo: record, serverFailureInfo: record, resetWorkflowFailureInfo: record, activityFailureInfo: record, childWorkflowExecutionFailureInfo: record, nexusOperationExecutionFailureInfo: record, nexusHandlerFailureInfo: record>, applicationFailureInfo: record<type: string, nonRetryable: bool, details: record, nextRetryDelay: string, category: string>, timeoutFailureInfo: record<timeoutType: string, lastHeartbeatDetails: record>, canceledFailureInfo: record<details: record, identity: string>, terminatedFailureInfo: record<identity: string>, serverFailureInfo: record<nonRetryable: bool>, resetWorkflowFailureInfo: record<lastHeartbeatDetails: record>, activityFailureInfo: record<scheduledEventId: string, startedEventId: string, identity: string, activityType: record, activityId: string, retryState: string>, childWorkflowExecutionFailureInfo: record<namespace: string, workflowExecution: record, workflowType: record, initiatedEventId: string, startedEventId: string, retryState: string>, nexusOperationExecutionFailureInfo: record<scheduledEventId: string, endpoint: string, service: string, operation: string, operationId: string, operationToken: string>, nexusHandlerFailureInfo: record<type: string, retryBehavior: string>>, longPollToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1819,16 +1818,16 @@ export def "namespaces-task-queues DescribeTaskQueue-by-namespace-task_queue.nam
   --taskQueuekind: string@taskQueuekind-completer # Default: TASK_QUEUE_KIND_NORMAL. (format: enum)
   --taskQueuenormalName: string # Iff kind == TASK_QUEUE_KIND_STICKY, then this field contains the name of  the normal task queue that the sticky worker is running on.
   --taskQueueType: string@taskQueueType-completer # If unspecified (TASK_QUEUE_TYPE_UNSPECIFIED), then default value (TASK_QUEUE_TYPE_WORKFLOW) will be used.  Only supported in default mode (use `task_queue_types` in ENHANCED mode instead). (format: enum)
-  --reportStats: string@bool-completer # Report stats for the requested task queue type(s).
-  --reportConfig: string@bool-completer # Report Task Queue Config
-  --includeTaskQueueStatus: string@bool-completer # Deprecated, use `report_stats` instead.  If true, the task queue status will be included in the response.
+  --reportStats: oneof<nothing, bool> # Report stats for the requested task queue type(s).
+  --reportConfig: oneof<nothing, bool> # Report Task Queue Config
+  --includeTaskQueueStatus: oneof<nothing, bool> # Deprecated, use `report_stats` instead.  If true, the task queue status will be included in the response.
   --apiMode: string@apiMode-completer # Deprecated. ENHANCED mode is also being deprecated.  Select the API mode to use for this request: DEFAULT mode (if unset) or ENHANCED mode.  Consult the documentation for each field to understand which mode it is supported in. (format: enum)
   --versionsbuildIds: list # Include specific Build IDs.
-  --versionsunversioned: string@bool-completer # Include the unversioned queue.
-  --versionsallActive: string@bool-completer # Include all active versions. A version is considered active if, in the last few minutes,  it has had new tasks or polls, or it has been the subject of certain task queue API calls.
+  --versionsunversioned: oneof<nothing, bool> # Include the unversioned queue.
+  --versionsallActive: oneof<nothing, bool> # Include all active versions. A version is considered active if, in the last few minutes,  it has had new tasks or polls, or it has been the subject of certain task queue API calls.
   --taskQueueTypes: list # Deprecated (as part of the ENHANCED mode deprecation).  Task queue types to report info about. If not specified, all types are considered.
-  --reportPollers: string@bool-completer # Deprecated (as part of the ENHANCED mode deprecation).  Report list of pollers for requested task queue types and versions.
-  --reportTaskReachability: string@bool-completer # Deprecated (as part of the ENHANCED mode deprecation).  Report task reachability for the requested versions and all task types (task reachability is not reported  per task type).
+  --reportPollers: oneof<nothing, bool> # Deprecated (as part of the ENHANCED mode deprecation).  Report list of pollers for requested task queue types and versions.
+  --reportTaskReachability: oneof<nothing, bool> # Deprecated (as part of the ENHANCED mode deprecation).  Report task reachability for the requested versions and all task types (task reachability is not reported  per task type).
 ]: nothing -> record<pollers: table<lastAccessTime: string, identity: string, ratePerSecond: float, workerVersionCapabilities: record, deploymentOptions: record>, stats: record<approximateBacklogCount: string, approximateBacklogAge: string, tasksAddRate: float, tasksDispatchRate: float>, statsByPriorityKey: record, versioningInfo: record<currentDeploymentVersion: record<buildId: string, deploymentName: string>, currentVersion: string, rampingDeploymentVersion: record<buildId: string, deploymentName: string>, rampingVersion: string, rampingVersionPercentage: float, updateTime: string>, config: record<queueRateLimit: record<rateLimit: record, metadata: record>, fairnessKeysRateLimitDefault: record<rateLimit: record, metadata: record>, fairnessWeightOverrides: record>, effectiveRateLimit: record<requestsPerSecond: float, rateLimitSource: string>, taskQueueStatus: record<backlogCountHint: string, readLevel: string, ackLevel: string, ratePerSecond: float, taskIdBlock: record<startId: string, endId: string>>, versionsInfo: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1861,7 +1860,7 @@ export def "namespaces-update UpdateNamespace" [
   --replicationConfig: record # shape: {activeClusterName?: string, clusters?: list, state?: "REPLICATION_STATE_UNSPECIFIED"|"REPLICATION_STATE_NORMAL"|"REPLICATION_STATE_HANDOVER"}
   --securityToken: string
   --deleteBadBinary: string
-  --promoteNamespace: string@bool-completer # promote local namespace to global namespace. Ignored if namespace is already global namespace.
+  --promoteNamespace: oneof<nothing, bool> # promote local namespace to global namespace. Ignored if namespace is already global namespace.
 ]: any -> record<namespaceInfo: record<name: string, state: string, description: string, ownerEmail: string, data: record, id: string, capabilities: record<eagerWorkflowStart: bool, syncUpdate: bool, asyncUpdate: bool, workerHeartbeats: bool, reportedProblemsSearchAttribute: bool, workflowPause: bool, standaloneActivities: bool, workerPollCompleteOnShutdown: bool, pollerAutoscaling: bool, workerCommands: bool, standaloneNexusOperation: bool, workflowUpdateCallbacks: bool>, limits: record<blobSizeLimitError: string, memoSizeLimitError: string>, supportsSchedules: bool>, config: record<workflowExecutionRetentionTtl: string, badBinaries: record<binaries: record>, historyArchivalState: string, historyArchivalUri: string, visibilityArchivalState: string, visibilityArchivalUri: string, customSearchAttributeAliases: record>, replicationConfig: record<activeClusterName: string, clusters: list<record>, state: string>, failoverVersion: string, isGlobalNamespace: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1888,7 +1887,7 @@ export def "namespaces-worker-count CountWorkers-by-namespace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string # Query to filter workers before counting.  Supported filter fields are the same as in ListWorkersRequest.
-  --includeSystemWorkers: string@bool-completer # When true, the count will include system workers that are created implicitly  by the server and not by the user. By default, system workers are excluded.
+  --includeSystemWorkers: oneof<nothing, bool> # When true, the count will include system workers that are created implicitly  by the server and not by the user. By default, system workers are excluded.
 ]: nothing -> record<count: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1948,7 +1947,7 @@ export def "namespaces-worker-deployment-versions DescribeWorkerDeploymentVersio
   --version: string # Deprecated. Use `deployment_version`.
   --deploymentVersionbuildId: string # A unique identifier for this Version within the Deployment it is a part of.  Not necessarily unique within the namespace.  The combination of `deployment_name` and `build_id` uniquely identifies this  Version within the namespace, because Deployment names are unique within a namespace.
   --deploymentVersiondeploymentName: string # Identifies the Worker Deployment this Version is part of.
-  --reportTaskQueueStats: string@bool-completer # Report stats for task queues which have been polled by this version.
+  --reportTaskQueueStats: oneof<nothing, bool> # Report stats for task queues which have been polled by this version.
 ]: nothing -> record<workerDeploymentVersionInfo: record<version: string, status: string, deploymentVersion: record<buildId: string, deploymentName: string>, deploymentName: string, createTime: string, routingChangedTime: string, currentSinceTime: string, rampingSinceTime: string, firstActivationTime: string, lastCurrentTime: string, lastDeactivationTime: string, rampPercentage: float, taskQueueInfos: list<record>, drainageInfo: record<status: string, lastChangedTime: string, lastCheckedTime: string>, metadata: record<entries: record>, computeConfig: record<scalingGroups: record>, lastModifierIdentity: string>, versionTaskQueues: table<name: string, type: string, stats: record, statsByPriorityKey: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1977,7 +1976,7 @@ export def "namespaces-worker-deployment-versions DeleteWorkerDeploymentVersion-
   --version: string # Deprecated. Use `deployment_version`.
   --deploymentVersionbuildId: string # A unique identifier for this Version within the Deployment it is a part of.  Not necessarily unique within the namespace.  The combination of `deployment_name` and `build_id` uniquely identifies this  Version within the namespace, because Deployment names are unique within a namespace.
   --deploymentVersiondeploymentName: string # Identifies the Worker Deployment this Version is part of.
-  --skipDrainage: string@bool-completer # Pass to force deletion even if the Version is draining. In this case the open pinned  workflows will be stuck until manually moved to another version by UpdateWorkflowExecutionOptions.
+  --skipDrainage: oneof<nothing, bool> # Pass to force deletion even if the Version is draining. In this case the open pinned  workflows will be stuck until manually moved to another version by UpdateWorkflowExecutionOptions.
   --identity: string # Optional. The identity of the client who initiated this request.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2210,8 +2209,8 @@ export def "namespaces-worker-deployments-set-current-version SetWorkerDeploymen
   --buildId: string # The build id of the Version that you want to set as Current.  Pass an empty value to set the Current Version to nil.  A nil Current Version represents all the unversioned workers (those with `UNVERSIONED` (or unspecified) `WorkerVersioningMode`.)
   --conflictToken: string # Optional. This can be the value of conflict_token from a Describe, or another Worker  Deployment API. Passing a non-nil conflict token will cause this request to fail if the  Deployment's configuration has been modified between the API call that generated the  token and this one. (format: bytes)
   --identity: string # Optional. The identity of the client who initiated this request.
-  --ignoreMissingTaskQueues: string@bool-completer # Optional. By default this request would be rejected if not all the expected Task Queues are  being polled by the new Version, to protect against accidental removal of Task Queues, or  worker health issues. Pass `true` here to bypass this protection.  The set of expected Task Queues is the set of all the Task Queues that were ever poller by  the existing Current Version of the Deployment, with the following exclusions:    - Task Queues that are not used anymore (inferred by having empty backlog and a task      add_rate of 0.)    - Task Queues that are moved to another Worker Deployment (inferred by the Task Queue      having a different Current Version than the Current Version of this deployment.)  WARNING: Do not set this flag unless you are sure that the missing task queue pollers are not  needed. If the request is unexpectedly rejected due to missing pollers, then that means the  pollers have not reached to the server yet. Only set this if you expect those pollers to  never arrive.
-  --allowNoPollers: string@bool-completer # Optional. By default this request will be rejected if no pollers have been seen for the proposed  Current Version, in order to protect users from routing tasks to pollers that do not exist, leading  to possible timeouts. Pass `true` here to bypass this protection.
+  --ignoreMissingTaskQueues: oneof<nothing, bool> # Optional. By default this request would be rejected if not all the expected Task Queues are  being polled by the new Version, to protect against accidental removal of Task Queues, or  worker health issues. Pass `true` here to bypass this protection.  The set of expected Task Queues is the set of all the Task Queues that were ever poller by  the existing Current Version of the Deployment, with the following exclusions:    - Task Queues that are not used anymore (inferred by having empty backlog and a task      add_rate of 0.)    - Task Queues that are moved to another Worker Deployment (inferred by the Task Queue      having a different Current Version than the Current Version of this deployment.)  WARNING: Do not set this flag unless you are sure that the missing task queue pollers are not  needed. If the request is unexpectedly rejected due to missing pollers, then that means the  pollers have not reached to the server yet. Only set this if you expect those pollers to  never arrive.
+  --allowNoPollers: oneof<nothing, bool> # Optional. By default this request will be rejected if no pollers have been seen for the proposed  Current Version, in order to protect users from routing tasks to pollers that do not exist, leading  to possible timeouts. Pass `true` here to bypass this protection.
 ]: any -> record<conflictToken: string, previousVersion: string, previousDeploymentVersion: record<buildId: string, deploymentName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2241,7 +2240,7 @@ export def "namespaces-worker-deployments-set-manager SetWorkerDeploymentManager
   --body-namespace: string
   --body-deploymentName: string
   --managerIdentity: string # Arbitrary value for `manager_identity`.  Empty will unset the field.
-  --self: string@bool-completer # True will set `manager_identity` to `identity`.
+  --self: oneof<nothing, bool> # True will set `manager_identity` to `identity`.
   --conflictToken: string # Optional. This can be the value of conflict_token from a Describe, or another Worker  Deployment API. Passing a non-nil conflict token will cause this request to fail if the  Deployment's configuration has been modified between the API call that generated the  token and this one. (format: bytes)
   --identity: string # Required. The identity of the client who initiated this request.
 ]: any -> record<conflictToken: string, previousManagerIdentity: string> {
@@ -2277,8 +2276,8 @@ export def "namespaces-worker-deployments-set-ramping-version SetWorkerDeploymen
   --percentage: float # Ramp percentage to set. Valid range: [0,100]. (format: float)
   --conflictToken: string # Optional. This can be the value of conflict_token from a Describe, or another Worker  Deployment API. Passing a non-nil conflict token will cause this request to fail if the  Deployment's configuration has been modified between the API call that generated the  token and this one. (format: bytes)
   --identity: string # Optional. The identity of the client who initiated this request.
-  --ignoreMissingTaskQueues: string@bool-completer # Optional. By default this request would be rejected if not all the expected Task Queues are  being polled by the new Version, to protect against accidental removal of Task Queues, or  worker health issues. Pass `true` here to bypass this protection.  The set of expected Task Queues equals to all the Task Queues ever polled from the existing  Current Version of the Deployment, with the following exclusions:    - Task Queues that are not used anymore (inferred by having empty backlog and a task      add_rate of 0.)    - Task Queues that are moved to another Worker Deployment (inferred by the Task Queue      having a different Current Version than the Current Version of this deployment.)  WARNING: Do not set this flag unless you are sure that the missing task queue poller are not  needed. If the request is unexpectedly rejected due to missing pollers, then that means the  pollers have not reached to the server yet. Only set this if you expect those pollers to  never arrive.  Note: this check only happens when the ramping version is about to change, not every time  that the percentage changes. Also note that the check is against the deployment's Current  Version, not the previous Ramping Version.
-  --allowNoPollers: string@bool-completer # Optional. By default this request will be rejected if no pollers have been seen for the proposed  Current Version, in order to protect users from routing tasks to pollers that do not exist, leading  to possible timeouts. Pass `true` here to bypass this protection.
+  --ignoreMissingTaskQueues: oneof<nothing, bool> # Optional. By default this request would be rejected if not all the expected Task Queues are  being polled by the new Version, to protect against accidental removal of Task Queues, or  worker health issues. Pass `true` here to bypass this protection.  The set of expected Task Queues equals to all the Task Queues ever polled from the existing  Current Version of the Deployment, with the following exclusions:    - Task Queues that are not used anymore (inferred by having empty backlog and a task      add_rate of 0.)    - Task Queues that are moved to another Worker Deployment (inferred by the Task Queue      having a different Current Version than the Current Version of this deployment.)  WARNING: Do not set this flag unless you are sure that the missing task queue poller are not  needed. If the request is unexpectedly rejected due to missing pollers, then that means the  pollers have not reached to the server yet. Only set this if you expect those pollers to  never arrive.  Note: this check only happens when the ramping version is about to change, not every time  that the percentage changes. Also note that the check is against the deployment's Current  Version, not the previous Ramping Version.
+  --allowNoPollers: oneof<nothing, bool> # Optional. By default this request will be rejected if no pollers have been seen for the proposed  Current Version, in order to protect users from routing tasks to pollers that do not exist, leading  to possible timeouts. Pass `true` here to bypass this protection.
 ]: any -> record<conflictToken: string, previousVersion: string, previousDeploymentVersion: record<buildId: string, deploymentName: string>, previousPercentage: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2333,7 +2332,7 @@ export def "namespaces-workers ListWorkers-by-namespace" [
   --pageSize: int # format: int32
   --nextPageToken: string # format: bytes
   --qp-query: string # `query` in ListWorkers is used to filter workers based on worker attributes.  Supported attributes: * WorkerInstanceKey * WorkerIdentity * HostName * TaskQueue * DeploymentName * BuildId * SdkName * SdkVersion * StartTime * Status
-  --includeSystemWorkers: string@bool-completer # When true, the response will include system workers that are created implicitly  by the server and not by the user. By default, system workers are excluded.
+  --includeSystemWorkers: oneof<nothing, bool> # When true, the response will include system workers that are created implicitly  by the server and not by the user. By default, system workers are excluded.
 ]: nothing -> record<workersInfo: table<workerHeartbeat: record>, workers: table<workerInstanceKey: string, workerIdentity: string, taskQueue: string, deploymentVersion: record, sdkName: string, sdkVersion: string, status: string, startTime: string, hostName: string, workerGroupingKey: string, processId: string, plugins: list, drivers: list>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2522,7 +2521,7 @@ export def "namespaces-workflow-rules CreateWorkflowRule-by-namespace" [
   --allow-errors(-e) # Return full response without error handling
   --body-namespace: string
   --spec: any # The rule specification .
-  --forceScan: string@bool-completer # If true, the rule will be applied to the currently running workflows via batch job.  If not set , the rule will only be applied when triggering condition is satisfied.  visibility_query in the rule will be used to select the workflows to apply the rule to.
+  --forceScan: oneof<nothing, bool> # If true, the rule will be applied to the currently running workflows via batch job.  If not set , the rule will only be applied when triggering condition is satisfied.  visibility_query in the rule will be used to select the workflows to apply the rule to.
   --requestId: string # Used to de-dupe requests. Typically should be UUID.
   --identity: string # Identity of the actor who created the rule. Will be stored with the rule.
   --description: string # Rule description.Will be stored with the rule.
@@ -2654,9 +2653,9 @@ export def "namespaces-workflows-history GetWorkflowExecutionHistory-by-namespac
   --executionrunId: string
   --maximumPageSize: int # format: int32
   --nextPageToken: string # If a `GetWorkflowExecutionHistoryResponse` or a `PollWorkflowTaskQueueResponse` had one of  these, it should be passed here to fetch the next page. (format: bytes)
-  --waitNewEvent: string@bool-completer # If set to true, the RPC call will not resolve until there is a new event which matches  the `history_event_filter_type`, or a timeout is hit.
+  --waitNewEvent: oneof<nothing, bool> # If set to true, the RPC call will not resolve until there is a new event which matches  the `history_event_filter_type`, or a timeout is hit.
   --historyEventFilterType: string@historyEventFilterType-completer # Filter returned events such that they match the specified filter type.  Default: HISTORY_EVENT_FILTER_TYPE_ALL_EVENT. (format: enum)
-  --skipArchival: string@bool-completer
+  --skipArchival: oneof<nothing, bool>
 ]: nothing -> record<history: record<events: list<record>>, rawHistory: table<encodingType: string, data: string>, nextPageToken: string, archived: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2798,7 +2797,7 @@ export def "namespaces-workflows StartWorkflowExecution-by-namespace-workflowId"
   --memo: record # A user-defined set of *unindexed* fields that are exposed when listing/searching workflows — shape: {fields?: record}
   --searchAttributes: record # A user-defined set of *indexed* fields that are used/exposed when listing/searching workflows.  The payload is not serialized in a user-defined way. — shape: {indexedFields?: record}
   --header: record # Contains metadata that can be attached to a variety of requests, like starting a workflow, and  can be propagated between, for example, workflows and activities. — shape: {fields?: record}
-  --requestEagerExecution: string@bool-completer # Request to get the first workflow task inline in the response bypassing matching service and worker polling.  If set to `true` the caller is expected to have a worker available and capable of processing the task.  The returned task will be marked as started and is expected to be completed by the specified  `workflow_task_timeout`.
+  --requestEagerExecution: oneof<nothing, bool> # Request to get the first workflow task inline in the response bypassing matching service and worker polling.  If set to `true` the caller is expected to have a worker available and capable of processing the task.  The returned task will be marked as started and is expected to be completed by the specified  `workflow_task_timeout`.
   --continuedFailure: any # These values will be available as ContinuedFailure and LastCompletionResult in the  WorkflowExecutionStarted event and through SDKs. The are currently only used by the  server itself (for the schedules feature) and are not intended to be exposed in  StartWorkflowExecution.
   --lastCompletionResult: record # See `Payload` — shape: {payloads?: list}
   --workflowStartDelay: string # Time to wait before dispatching the first workflow task. Cannot be used with `cron_schedule`.  If the workflow gets a signal before the delay, a workflow task will be dispatched and the rest  of the delay will be ignored.
@@ -2980,10 +2979,10 @@ export def "namespaces-workflows-activities-reset ResetActivityExecution-by-name
   --body-activityId: string # The ID of the activity to target.
   --runId: string # Run ID of the workflow or standalone activity.
   --identity: string # The identity of the client who initiated this request.
-  --resetHeartbeat: string@bool-completer # Indicates that activity should reset heartbeat details.  This flag will be applied only to the new instance of the activity.
-  --keepPaused: string@bool-completer # If activity is paused, it will remain paused after reset
+  --resetHeartbeat: oneof<nothing, bool> # Indicates that activity should reset heartbeat details.  This flag will be applied only to the new instance of the activity.
+  --keepPaused: oneof<nothing, bool> # If activity is paused, it will remain paused after reset
   --jitter: string # If set, and activity is in backoff, the activity will start at a random time within the specified jitter duration.  (unless it is paused and keep_paused is set)
-  --restoreOriginalOptions: string@bool-completer # If set, the activity options will be restored to the defaults.  Default options are then options activity was created with.  They are part of the first schedule event.
+  --restoreOriginalOptions: oneof<nothing, bool> # If set, the activity options will be restored to the defaults.  Default options are then options activity was created with.  They are part of the first schedule event.
   --resourceId: string # Resource ID for routing. Contains "workflow:{workflow_id}" for workflow activities or "activity:{activity_id}" for standalone activities.
 ]: any -> record {
   let input = $in
@@ -3052,8 +3051,8 @@ export def "namespaces-workflows-activities-unpause UnpauseActivityExecution-by-
   --body-activityId: string # The ID of the activity to target.
   --runId: string # Run ID of the workflow or standalone activity.
   --identity: string # The identity of the client who initiated this request.
-  --resetAttempts: string@bool-completer # Providing this flag will also reset the number of attempts.
-  --resetHeartbeat: string@bool-completer # Providing this flag will also reset the heartbeat details.
+  --resetAttempts: oneof<nothing, bool> # Providing this flag will also reset the number of attempts.
+  --resetHeartbeat: oneof<nothing, bool> # Providing this flag will also reset the heartbeat details.
   --reason: string # Reason to unpause the activity.
   --jitter: string # If set, the activity will start at a random time within the specified jitter duration.
   --resourceId: string # Resource ID for routing. Contains "workflow:{workflow_id}" for workflow activities or "activity:{activity_id}" for standalone activities.
@@ -3091,7 +3090,7 @@ export def "namespaces-workflows-activities-update-options UpdateActivityExecuti
   --identity: string # The identity of the client who initiated this request
   --activityOptions: any # Activity options. Partial updates are accepted and controlled by update_mask
   --updateMask: string # Controls which fields from `activity_options` will be applied (format: field-mask)
-  --restoreOriginal: string@bool-completer # If set, the activity options will be restored to the default.  Default options are then options activity was created with.  They are part of the first schedule event.  This flag cannot be combined with any other option; if you supply  restore_original together with other options, the request will be rejected.
+  --restoreOriginal: oneof<nothing, bool> # If set, the activity options will be restored to the default.  Default options are then options activity was created with.  They are part of the first schedule event.  This flag cannot be combined with any other option; if you supply  restore_original together with other options, the request will be rejected.
   --resourceId: string # Resource ID for routing. Contains "workflow:{workflow_id}" for workflow activities or "activity:{activity_id}" for standalone activities.
 ]: any -> record<activityOptions: record<taskQueue: record<name: string, kind: string, normalName: string>, scheduleToCloseTimeout: string, scheduleToStartTimeout: string, startToCloseTimeout: string, heartbeatTimeout: string, retryPolicy: record<initialInterval: string, backoffCoefficient: float, maximumInterval: string, maximumAttempts: int, nonRetryableErrorTypes: list>, priority: record<priorityKey: int, fairnessKey: string, fairnessWeight: float>>> {
   let input = $in
@@ -3615,7 +3614,7 @@ export def "cluster-namespaces ListNamespaces" [
   --allow-errors(-e) # Return full response without error handling
   --pageSize: int # format: int32
   --nextPageToken: string # format: bytes
-  --namespaceFilterincludeDeleted: string@bool-completer # By default namespaces in NAMESPACE_STATE_DELETED state are not included.  Setting include_deleted to true will include deleted namespaces.  Note: Namespace is in NAMESPACE_STATE_DELETED state when it was deleted from the system but associated data is not deleted yet.
+  --namespaceFilterincludeDeleted: oneof<nothing, bool> # By default namespaces in NAMESPACE_STATE_DELETED state are not included.  Setting include_deleted to true will include deleted namespaces.  Note: Namespace is in NAMESPACE_STATE_DELETED state when it was deleted from the system but associated data is not deleted yet.
 ]: nothing -> record<namespaces: table<namespaceInfo: record, config: record, replicationConfig: record, failoverVersion: string, isGlobalNamespace: bool, failoverHistory: list, pollerGroupInfos: list>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3647,7 +3646,7 @@ export def "cluster-namespaces RegisterNamespace" [
   --activeClusterName: string
   --data: record # A key-value map for any customized purpose.
   --securityToken: string
-  --isGlobalNamespace: string@bool-completer
+  --isGlobalNamespace: oneof<nothing, bool>
   --historyArchivalState: string@historyArchivalState-completer # If unspecified (ARCHIVAL_STATE_UNSPECIFIED) then default server configuration is used. (format: enum)
   --historyArchivalUri: string
   --visibilityArchivalState: string@visibilityArchivalState-completer # If unspecified (ARCHIVAL_STATE_UNSPECIFIED) then default server configuration is used. (format: enum)
@@ -3678,7 +3677,7 @@ export def "cluster-namespaces DescribeNamespace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string
-  --weakConsistency: string@bool-completer # If true, the server may serve the response from an eventually-consistent  source instead of reading through to persistence. Defaults to false,  which preserves read-after-write consistency. SDKs should set this when  fetching namespace capabilities on worker/client startup.
+  --weakConsistency: oneof<nothing, bool> # If true, the server may serve the response from an eventually-consistent  source instead of reading through to persistence. Defaults to false,  which preserves read-after-write consistency. SDKs should set this when  fetching namespace capabilities on worker/client startup.
 ]: nothing -> record<namespaceInfo: record<name: string, state: string, description: string, ownerEmail: string, data: record, id: string, capabilities: record<eagerWorkflowStart: bool, syncUpdate: bool, asyncUpdate: bool, workerHeartbeats: bool, reportedProblemsSearchAttribute: bool, workflowPause: bool, standaloneActivities: bool, workerPollCompleteOnShutdown: bool, pollerAutoscaling: bool, workerCommands: bool, standaloneNexusOperation: bool, workflowUpdateCallbacks: bool>, limits: record<blobSizeLimitError: string, memoSizeLimitError: string>, supportsSchedules: bool>, config: record<workflowExecutionRetentionTtl: string, badBinaries: record<binaries: record>, historyArchivalState: string, historyArchivalUri: string, visibilityArchivalState: string, visibilityArchivalUri: string, customSearchAttributeAliases: record>, replicationConfig: record<activeClusterName: string, clusters: list<record>, state: string>, failoverVersion: string, isGlobalNamespace: bool, failoverHistory: table<failoverTime: string, failoverVersion: string>, pollerGroupInfos: table<id: string, weight: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3733,7 +3732,7 @@ export def "cluster-namespaces-update UpdateNamespace" [
   --replicationConfig: record # shape: {activeClusterName?: string, clusters?: list, state?: "REPLICATION_STATE_UNSPECIFIED"|"REPLICATION_STATE_NORMAL"|"REPLICATION_STATE_HANDOVER"}
   --securityToken: string
   --deleteBadBinary: string
-  --promoteNamespace: string@bool-completer # promote local namespace to global namespace. Ignored if namespace is already global namespace.
+  --promoteNamespace: oneof<nothing, bool> # promote local namespace to global namespace. Ignored if namespace is already global namespace.
 ]: any -> record<namespaceInfo: record<name: string, state: string, description: string, ownerEmail: string, data: record, id: string, capabilities: record<eagerWorkflowStart: bool, syncUpdate: bool, asyncUpdate: bool, workerHeartbeats: bool, reportedProblemsSearchAttribute: bool, workflowPause: bool, standaloneActivities: bool, workerPollCompleteOnShutdown: bool, pollerAutoscaling: bool, workerCommands: bool, standaloneNexusOperation: bool, workflowUpdateCallbacks: bool>, limits: record<blobSizeLimitError: string, memoSizeLimitError: string>, supportsSchedules: bool>, config: record<workflowExecutionRetentionTtl: string, badBinaries: record<binaries: record>, historyArchivalState: string, historyArchivalUri: string, visibilityArchivalState: string, visibilityArchivalUri: string, customSearchAttributeAliases: record>, replicationConfig: record<activeClusterName: string, clusters: list<record>, state: string>, failoverVersion: string, isGlobalNamespace: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3947,11 +3946,11 @@ export def "namespaces-activities-deprecated-reset ResetActivity-by-namespace-1"
   --identity: string # The identity of the client who initiated this request.
   --id: string # Only activity with this ID will be reset.
   --type: string # Reset all running activities with of this type.
-  --matchAll: string@bool-completer # Reset all running activities.
-  --resetHeartbeat: string@bool-completer # Indicates that activity should reset heartbeat details.  This flag will be applied only to the new instance of the activity.
-  --keepPaused: string@bool-completer # If activity is paused, it will remain paused after reset
+  --matchAll: oneof<nothing, bool> # Reset all running activities.
+  --resetHeartbeat: oneof<nothing, bool> # Indicates that activity should reset heartbeat details.  This flag will be applied only to the new instance of the activity.
+  --keepPaused: oneof<nothing, bool> # If activity is paused, it will remain paused after reset
   --jitter: string # If set, and activity is in backoff, the activity will start at a random time within the specified jitter duration.  (unless it is paused and keep_paused is set)
-  --restoreOriginalOptions: string@bool-completer # If set, the activity options will be restored to the defaults.  Default options are then options activity was created with.  They are part of the first schedule event.
+  --restoreOriginalOptions: oneof<nothing, bool> # If set, the activity options will be restored to the defaults.  Default options are then options activity was created with.  They are part of the first schedule event.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3982,9 +3981,9 @@ export def "namespaces-activities-deprecated-unpause UnpauseActivity-by-namespac
   --identity: string # The identity of the client who initiated this request.
   --id: string # Only the activity with this ID will be unpaused.
   --type: string # Unpause all running activities with of this type.
-  --unpauseAll: string@bool-completer # Unpause all running activities.
-  --resetAttempts: string@bool-completer # Providing this flag will also reset the number of attempts.
-  --resetHeartbeat: string@bool-completer # Providing this flag will also reset the heartbeat details.
+  --unpauseAll: oneof<nothing, bool> # Unpause all running activities.
+  --resetAttempts: oneof<nothing, bool> # Providing this flag will also reset the number of attempts.
+  --resetHeartbeat: oneof<nothing, bool> # Providing this flag will also reset the heartbeat details.
   --jitter: string # If set, the activity will start at a random time within the specified jitter duration.
 ]: any -> record {
   let input = $in
@@ -4018,8 +4017,8 @@ export def "namespaces-activities-deprecated-update-options UpdateActivityOption
   --updateMask: string # Controls which fields from `activity_options` will be applied (format: field-mask)
   --id: string # Only activity with this ID will be updated.
   --type: string # Update all running activities of this type.
-  --matchAll: string@bool-completer # Update all running activities.
-  --restoreOriginal: string@bool-completer # If set, the activity options will be restored to the default.  Default options are then options activity was created with.  They are part of the first schedule event.  This flag cannot be combined with any other option; if you supply  restore_original together with other options, the request will be rejected.
+  --matchAll: oneof<nothing, bool> # Update all running activities.
+  --restoreOriginal: oneof<nothing, bool> # If set, the activity options will be restored to the default.  Default options are then options activity was created with.  They are part of the first schedule event.  This flag cannot be combined with any other option; if you supply  restore_original together with other options, the request will be rejected.
 ]: any -> record<activityOptions: record<taskQueue: record<name: string, kind: string, normalName: string>, scheduleToCloseTimeout: string, scheduleToStartTimeout: string, startToCloseTimeout: string, heartbeatTimeout: string, retryPolicy: record<initialInterval: string, backoffCoefficient: float, maximumInterval: string, maximumAttempts: int, nonRetryableErrorTypes: list>, priority: record<priorityKey: int, fairnessKey: string, fairnessWeight: float>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4047,11 +4046,11 @@ export def "namespaces-activities DescribeActivityExecution-by-namespace-activit
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --runId: string # Activity run ID. If empty the request targets the latest run.
-  --includeInput: string@bool-completer # Include the input field in the response.
-  --includeOutcome: string@bool-completer # Include the outcome (result/failure) in the response if the activity has completed.
+  --includeInput: oneof<nothing, bool> # Include the input field in the response.
+  --includeOutcome: oneof<nothing, bool> # Include the outcome (result/failure) in the response if the activity has completed.
   --longPollToken: string # Token from a previous DescribeActivityExecutionResponse. If present, long-poll until activity  state changes from the state encoded in this token. If absent, return current state immediately.  If present, run_id must also be present.  Note that activity state may change multiple times between requests, therefore it is not  guaranteed that a client making a sequence of long-poll requests will see a complete  sequence of state changes. (format: bytes)
-  --includeHeartbeatDetails: string@bool-completer # Include the heartbeat_details field inside info in the response if available.
-  --includeLastFailure: string@bool-completer # Include the last_failure field inside info in the response if available.
+  --includeHeartbeatDetails: oneof<nothing, bool> # Include the heartbeat_details field inside info in the response if available.
+  --includeLastFailure: oneof<nothing, bool> # Include the last_failure field inside info in the response if available.
 ]: nothing -> record<runId: string, info: record<activityId: string, runId: string, activityType: record<name: string>, status: string, runState: string, taskQueue: string, scheduleToCloseTimeout: string, scheduleToStartTimeout: string, startToCloseTimeout: string, heartbeatTimeout: string, retryPolicy: record<initialInterval: string, backoffCoefficient: float, maximumInterval: string, maximumAttempts: int, nonRetryableErrorTypes: list>, heartbeatDetails: record<payloads: list>, lastHeartbeatTime: string, lastStartedTime: string, attempt: int, executionDuration: string, scheduleTime: string, expirationTime: string, closeTime: string, lastFailure: record<message: string, source: string, stackTrace: string, encodedAttributes: record, cause: record, applicationFailureInfo: record, timeoutFailureInfo: record, canceledFailureInfo: record, terminatedFailureInfo: record, serverFailureInfo: record, resetWorkflowFailureInfo: record, activityFailureInfo: record, childWorkflowExecutionFailureInfo: record, nexusOperationExecutionFailureInfo: record, nexusHandlerFailureInfo: record>, lastWorkerIdentity: string, currentRetryInterval: string, lastAttemptCompleteTime: string, nextAttemptScheduleTime: string, lastDeploymentVersion: record<buildId: string, deploymentName: string>, priority: record<priorityKey: int, fairnessKey: string, fairnessWeight: float>, stateTransitionCount: string, stateSizeBytes: string, searchAttributes: record<indexedFields: record>, header: record<fields: record>, userMetadata: record<summary: record, details: record>, canceledReason: string, links: list<record>, totalHeartbeatCount: string, sdkName: string, sdkVersion: string, startDelay: string>, input: record<payloads: list<any>>, outcome: record<result: record<payloads: list>, failure: record<message: string, source: string, stackTrace: string, encodedAttributes: record, cause: record, applicationFailureInfo: record, timeoutFailureInfo: record, canceledFailureInfo: record, terminatedFailureInfo: record, serverFailureInfo: record, resetWorkflowFailureInfo: record, activityFailureInfo: record, childWorkflowExecutionFailureInfo: record, nexusOperationExecutionFailureInfo: record, nexusHandlerFailureInfo: record>>, longPollToken: string, callbacks: table<callback: record, registrationTime: string, state: string, attempt: int, lastAttemptCompleteTime: string, lastAttemptFailure: record, nextAttemptScheduleTime: string, blockedReason: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4322,10 +4321,10 @@ export def "namespaces-activities-reset ResetActivityExecution-by-namespace-acti
   --body-activityId: string # The ID of the activity to target.
   --runId: string # Run ID of the workflow or standalone activity.
   --identity: string # The identity of the client who initiated this request.
-  --resetHeartbeat: string@bool-completer # Indicates that activity should reset heartbeat details.  This flag will be applied only to the new instance of the activity.
-  --keepPaused: string@bool-completer # If activity is paused, it will remain paused after reset
+  --resetHeartbeat: oneof<nothing, bool> # Indicates that activity should reset heartbeat details.  This flag will be applied only to the new instance of the activity.
+  --keepPaused: oneof<nothing, bool> # If activity is paused, it will remain paused after reset
   --jitter: string # If set, and activity is in backoff, the activity will start at a random time within the specified jitter duration.  (unless it is paused and keep_paused is set)
-  --restoreOriginalOptions: string@bool-completer # If set, the activity options will be restored to the defaults.  Default options are then options activity was created with.  They are part of the first schedule event.
+  --restoreOriginalOptions: oneof<nothing, bool> # If set, the activity options will be restored to the defaults.  Default options are then options activity was created with.  They are part of the first schedule event.
   --resourceId: string # Resource ID for routing. Contains "workflow:{workflow_id}" for workflow activities or "activity:{activity_id}" for standalone activities.
 ]: any -> record {
   let input = $in
@@ -4424,8 +4423,8 @@ export def "namespaces-activities-unpause UnpauseActivityExecution-by-namespace-
   --body-activityId: string # The ID of the activity to target.
   --runId: string # Run ID of the workflow or standalone activity.
   --identity: string # The identity of the client who initiated this request.
-  --resetAttempts: string@bool-completer # Providing this flag will also reset the number of attempts.
-  --resetHeartbeat: string@bool-completer # Providing this flag will also reset the heartbeat details.
+  --resetAttempts: oneof<nothing, bool> # Providing this flag will also reset the number of attempts.
+  --resetHeartbeat: oneof<nothing, bool> # Providing this flag will also reset the heartbeat details.
   --reason: string # Reason to unpause the activity.
   --jitter: string # If set, the activity will start at a random time within the specified jitter duration.
   --resourceId: string # Resource ID for routing. Contains "workflow:{workflow_id}" for workflow activities or "activity:{activity_id}" for standalone activities.
@@ -4462,7 +4461,7 @@ export def "namespaces-activities-update-options UpdateActivityExecutionOptions-
   --identity: string # The identity of the client who initiated this request
   --activityOptions: any # Activity options. Partial updates are accepted and controlled by update_mask
   --updateMask: string # Controls which fields from `activity_options` will be applied (format: field-mask)
-  --restoreOriginal: string@bool-completer # If set, the activity options will be restored to the default.  Default options are then options activity was created with.  They are part of the first schedule event.  This flag cannot be combined with any other option; if you supply  restore_original together with other options, the request will be rejected.
+  --restoreOriginal: oneof<nothing, bool> # If set, the activity options will be restored to the default.  Default options are then options activity was created with.  They are part of the first schedule event.  This flag cannot be combined with any other option; if you supply  restore_original together with other options, the request will be rejected.
   --resourceId: string # Resource ID for routing. Contains "workflow:{workflow_id}" for workflow activities or "activity:{activity_id}" for standalone activities.
 ]: any -> record<activityOptions: record<taskQueue: record<name: string, kind: string, normalName: string>, scheduleToCloseTimeout: string, scheduleToStartTimeout: string, startToCloseTimeout: string, heartbeatTimeout: string, retryPolicy: record<initialInterval: string, backoffCoefficient: float, maximumInterval: string, maximumAttempts: int, nonRetryableErrorTypes: list>, priority: record<priorityKey: int, fairnessKey: string, fairnessWeight: float>>> {
   let input = $in
@@ -4984,8 +4983,8 @@ export def "namespaces-nexus-operations DescribeNexusOperationExecution-by-names
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --runId: string # Operation run ID. If empty the request targets the latest run.
-  --includeInput: string@bool-completer # Include the input field in the response.
-  --includeOutcome: string@bool-completer # Include the outcome (result/failure) in the response if the operation has completed.
+  --includeInput: oneof<nothing, bool> # Include the input field in the response.
+  --includeOutcome: oneof<nothing, bool> # Include the outcome (result/failure) in the response if the operation has completed.
   --longPollToken: string # Token from a previous DescribeNexusOperationExecutionResponse. If present, this RPC will long-poll until operation  state changes from the state encoded in this token. If absent, return current state immediately.  If present, run_id must also be present.  Note that operation state may change multiple times between requests, therefore it is not  guaranteed that a client making a sequence of long-poll requests will see a complete  sequence of state changes. (format: bytes)
 ]: nothing -> record<runId: string, info: record<operationId: string, runId: string, endpoint: string, service: string, operation: string, status: string, state: string, scheduleToCloseTimeout: string, scheduleToStartTimeout: string, startToCloseTimeout: string, attempt: int, scheduleTime: string, expirationTime: string, closeTime: string, lastAttemptCompleteTime: string, lastAttemptFailure: record<message: string, source: string, stackTrace: string, encodedAttributes: record, cause: record, applicationFailureInfo: record, timeoutFailureInfo: record, canceledFailureInfo: record, terminatedFailureInfo: record, serverFailureInfo: record, resetWorkflowFailureInfo: record, activityFailureInfo: record, childWorkflowExecutionFailureInfo: record, nexusOperationExecutionFailureInfo: record, nexusHandlerFailureInfo: record>, nextAttemptScheduleTime: string, executionDuration: string, cancellationInfo: record<requestedTime: string, state: string, attempt: int, lastAttemptCompleteTime: string, lastAttemptFailure: record, nextAttemptScheduleTime: string, blockedReason: string, reason: string>, blockedReason: string, requestId: string, operationToken: string, stateTransitionCount: string, searchAttributes: record<indexedFields: record>, nexusHeader: record, userMetadata: record<summary: record, details: record>, links: list<record>, identity: string, stateSizeBytes: string>, input: record, result: record, failure: record<message: string, source: string, stackTrace: string, encodedAttributes: record, cause: record<message: string, source: string, stackTrace: string, encodedAttributes: record, cause: any, applicationFailureInfo: record, timeoutFailureInfo: record, canceledFailureInfo: record, terminatedFailureInfo: record, serverFailureInfo: record, resetWorkflowFailureInfo: record, activityFailureInfo: record, childWorkflowExecutionFailureInfo: record, nexusOperationExecutionFailureInfo: record, nexusHandlerFailureInfo: record>, applicationFailureInfo: record<type: string, nonRetryable: bool, details: record, nextRetryDelay: string, category: string>, timeoutFailureInfo: record<timeoutType: string, lastHeartbeatDetails: record>, canceledFailureInfo: record<details: record, identity: string>, terminatedFailureInfo: record<identity: string>, serverFailureInfo: record<nonRetryable: bool>, resetWorkflowFailureInfo: record<lastHeartbeatDetails: record>, activityFailureInfo: record<scheduledEventId: string, startedEventId: string, identity: string, activityType: record, activityId: string, retryState: string>, childWorkflowExecutionFailureInfo: record<namespace: string, workflowExecution: record, workflowType: record, initiatedEventId: string, startedEventId: string, retryState: string>, nexusOperationExecutionFailureInfo: record<scheduledEventId: string, endpoint: string, service: string, operation: string, operationId: string, operationToken: string>, nexusHandlerFailureInfo: record<type: string, retryBehavior: string>>, longPollToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5454,16 +5453,16 @@ export def "namespaces-task-queues DescribeTaskQueue-by-namespace-task_queue.nam
   --taskQueuekind: string@taskQueuekind-completer # Default: TASK_QUEUE_KIND_NORMAL. (format: enum)
   --taskQueuenormalName: string # Iff kind == TASK_QUEUE_KIND_STICKY, then this field contains the name of  the normal task queue that the sticky worker is running on.
   --taskQueueType: string@taskQueueType-completer # If unspecified (TASK_QUEUE_TYPE_UNSPECIFIED), then default value (TASK_QUEUE_TYPE_WORKFLOW) will be used.  Only supported in default mode (use `task_queue_types` in ENHANCED mode instead). (format: enum)
-  --reportStats: string@bool-completer # Report stats for the requested task queue type(s).
-  --reportConfig: string@bool-completer # Report Task Queue Config
-  --includeTaskQueueStatus: string@bool-completer # Deprecated, use `report_stats` instead.  If true, the task queue status will be included in the response.
+  --reportStats: oneof<nothing, bool> # Report stats for the requested task queue type(s).
+  --reportConfig: oneof<nothing, bool> # Report Task Queue Config
+  --includeTaskQueueStatus: oneof<nothing, bool> # Deprecated, use `report_stats` instead.  If true, the task queue status will be included in the response.
   --apiMode: string@apiMode-completer # Deprecated. ENHANCED mode is also being deprecated.  Select the API mode to use for this request: DEFAULT mode (if unset) or ENHANCED mode.  Consult the documentation for each field to understand which mode it is supported in. (format: enum)
   --versionsbuildIds: list # Include specific Build IDs.
-  --versionsunversioned: string@bool-completer # Include the unversioned queue.
-  --versionsallActive: string@bool-completer # Include all active versions. A version is considered active if, in the last few minutes,  it has had new tasks or polls, or it has been the subject of certain task queue API calls.
+  --versionsunversioned: oneof<nothing, bool> # Include the unversioned queue.
+  --versionsallActive: oneof<nothing, bool> # Include all active versions. A version is considered active if, in the last few minutes,  it has had new tasks or polls, or it has been the subject of certain task queue API calls.
   --taskQueueTypes: list # Deprecated (as part of the ENHANCED mode deprecation).  Task queue types to report info about. If not specified, all types are considered.
-  --reportPollers: string@bool-completer # Deprecated (as part of the ENHANCED mode deprecation).  Report list of pollers for requested task queue types and versions.
-  --reportTaskReachability: string@bool-completer # Deprecated (as part of the ENHANCED mode deprecation).  Report task reachability for the requested versions and all task types (task reachability is not reported  per task type).
+  --reportPollers: oneof<nothing, bool> # Deprecated (as part of the ENHANCED mode deprecation).  Report list of pollers for requested task queue types and versions.
+  --reportTaskReachability: oneof<nothing, bool> # Deprecated (as part of the ENHANCED mode deprecation).  Report task reachability for the requested versions and all task types (task reachability is not reported  per task type).
 ]: nothing -> record<pollers: table<lastAccessTime: string, identity: string, ratePerSecond: float, workerVersionCapabilities: record, deploymentOptions: record>, stats: record<approximateBacklogCount: string, approximateBacklogAge: string, tasksAddRate: float, tasksDispatchRate: float>, statsByPriorityKey: record, versioningInfo: record<currentDeploymentVersion: record<buildId: string, deploymentName: string>, currentVersion: string, rampingDeploymentVersion: record<buildId: string, deploymentName: string>, rampingVersion: string, rampingVersionPercentage: float, updateTime: string>, config: record<queueRateLimit: record<rateLimit: record, metadata: record>, fairnessKeysRateLimitDefault: record<rateLimit: record, metadata: record>, fairnessWeightOverrides: record>, effectiveRateLimit: record<requestsPerSecond: float, rateLimitSource: string>, taskQueueStatus: record<backlogCountHint: string, readLevel: string, ackLevel: string, ratePerSecond: float, taskIdBlock: record<startId: string, endId: string>>, versionsInfo: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5488,7 +5487,7 @@ export def "namespaces-worker-count CountWorkers-by-namespace-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string # Query to filter workers before counting.  Supported filter fields are the same as in ListWorkersRequest.
-  --includeSystemWorkers: string@bool-completer # When true, the count will include system workers that are created implicitly  by the server and not by the user. By default, system workers are excluded.
+  --includeSystemWorkers: oneof<nothing, bool> # When true, the count will include system workers that are created implicitly  by the server and not by the user. By default, system workers are excluded.
 ]: nothing -> record<count: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5548,7 +5547,7 @@ export def "namespaces-worker-deployment-versions DescribeWorkerDeploymentVersio
   --version: string # Deprecated. Use `deployment_version`.
   --deploymentVersionbuildId: string # A unique identifier for this Version within the Deployment it is a part of.  Not necessarily unique within the namespace.  The combination of `deployment_name` and `build_id` uniquely identifies this  Version within the namespace, because Deployment names are unique within a namespace.
   --deploymentVersiondeploymentName: string # Identifies the Worker Deployment this Version is part of.
-  --reportTaskQueueStats: string@bool-completer # Report stats for task queues which have been polled by this version.
+  --reportTaskQueueStats: oneof<nothing, bool> # Report stats for task queues which have been polled by this version.
 ]: nothing -> record<workerDeploymentVersionInfo: record<version: string, status: string, deploymentVersion: record<buildId: string, deploymentName: string>, deploymentName: string, createTime: string, routingChangedTime: string, currentSinceTime: string, rampingSinceTime: string, firstActivationTime: string, lastCurrentTime: string, lastDeactivationTime: string, rampPercentage: float, taskQueueInfos: list<record>, drainageInfo: record<status: string, lastChangedTime: string, lastCheckedTime: string>, metadata: record<entries: record>, computeConfig: record<scalingGroups: record>, lastModifierIdentity: string>, versionTaskQueues: table<name: string, type: string, stats: record, statsByPriorityKey: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5577,7 +5576,7 @@ export def "namespaces-worker-deployment-versions DeleteWorkerDeploymentVersion-
   --version: string # Deprecated. Use `deployment_version`.
   --deploymentVersionbuildId: string # A unique identifier for this Version within the Deployment it is a part of.  Not necessarily unique within the namespace.  The combination of `deployment_name` and `build_id` uniquely identifies this  Version within the namespace, because Deployment names are unique within a namespace.
   --deploymentVersiondeploymentName: string # Identifies the Worker Deployment this Version is part of.
-  --skipDrainage: string@bool-completer # Pass to force deletion even if the Version is draining. In this case the open pinned  workflows will be stuck until manually moved to another version by UpdateWorkflowExecutionOptions.
+  --skipDrainage: oneof<nothing, bool> # Pass to force deletion even if the Version is draining. In this case the open pinned  workflows will be stuck until manually moved to another version by UpdateWorkflowExecutionOptions.
   --identity: string # Optional. The identity of the client who initiated this request.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5810,8 +5809,8 @@ export def "namespaces-worker-deployments-set-current-version SetWorkerDeploymen
   --buildId: string # The build id of the Version that you want to set as Current.  Pass an empty value to set the Current Version to nil.  A nil Current Version represents all the unversioned workers (those with `UNVERSIONED` (or unspecified) `WorkerVersioningMode`.)
   --conflictToken: string # Optional. This can be the value of conflict_token from a Describe, or another Worker  Deployment API. Passing a non-nil conflict token will cause this request to fail if the  Deployment's configuration has been modified between the API call that generated the  token and this one. (format: bytes)
   --identity: string # Optional. The identity of the client who initiated this request.
-  --ignoreMissingTaskQueues: string@bool-completer # Optional. By default this request would be rejected if not all the expected Task Queues are  being polled by the new Version, to protect against accidental removal of Task Queues, or  worker health issues. Pass `true` here to bypass this protection.  The set of expected Task Queues is the set of all the Task Queues that were ever poller by  the existing Current Version of the Deployment, with the following exclusions:    - Task Queues that are not used anymore (inferred by having empty backlog and a task      add_rate of 0.)    - Task Queues that are moved to another Worker Deployment (inferred by the Task Queue      having a different Current Version than the Current Version of this deployment.)  WARNING: Do not set this flag unless you are sure that the missing task queue pollers are not  needed. If the request is unexpectedly rejected due to missing pollers, then that means the  pollers have not reached to the server yet. Only set this if you expect those pollers to  never arrive.
-  --allowNoPollers: string@bool-completer # Optional. By default this request will be rejected if no pollers have been seen for the proposed  Current Version, in order to protect users from routing tasks to pollers that do not exist, leading  to possible timeouts. Pass `true` here to bypass this protection.
+  --ignoreMissingTaskQueues: oneof<nothing, bool> # Optional. By default this request would be rejected if not all the expected Task Queues are  being polled by the new Version, to protect against accidental removal of Task Queues, or  worker health issues. Pass `true` here to bypass this protection.  The set of expected Task Queues is the set of all the Task Queues that were ever poller by  the existing Current Version of the Deployment, with the following exclusions:    - Task Queues that are not used anymore (inferred by having empty backlog and a task      add_rate of 0.)    - Task Queues that are moved to another Worker Deployment (inferred by the Task Queue      having a different Current Version than the Current Version of this deployment.)  WARNING: Do not set this flag unless you are sure that the missing task queue pollers are not  needed. If the request is unexpectedly rejected due to missing pollers, then that means the  pollers have not reached to the server yet. Only set this if you expect those pollers to  never arrive.
+  --allowNoPollers: oneof<nothing, bool> # Optional. By default this request will be rejected if no pollers have been seen for the proposed  Current Version, in order to protect users from routing tasks to pollers that do not exist, leading  to possible timeouts. Pass `true` here to bypass this protection.
 ]: any -> record<conflictToken: string, previousVersion: string, previousDeploymentVersion: record<buildId: string, deploymentName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5841,7 +5840,7 @@ export def "namespaces-worker-deployments-set-manager SetWorkerDeploymentManager
   --body-namespace: string
   --body-deploymentName: string
   --managerIdentity: string # Arbitrary value for `manager_identity`.  Empty will unset the field.
-  --self: string@bool-completer # True will set `manager_identity` to `identity`.
+  --self: oneof<nothing, bool> # True will set `manager_identity` to `identity`.
   --conflictToken: string # Optional. This can be the value of conflict_token from a Describe, or another Worker  Deployment API. Passing a non-nil conflict token will cause this request to fail if the  Deployment's configuration has been modified between the API call that generated the  token and this one. (format: bytes)
   --identity: string # Required. The identity of the client who initiated this request.
 ]: any -> record<conflictToken: string, previousManagerIdentity: string> {
@@ -5877,8 +5876,8 @@ export def "namespaces-worker-deployments-set-ramping-version SetWorkerDeploymen
   --percentage: float # Ramp percentage to set. Valid range: [0,100]. (format: float)
   --conflictToken: string # Optional. This can be the value of conflict_token from a Describe, or another Worker  Deployment API. Passing a non-nil conflict token will cause this request to fail if the  Deployment's configuration has been modified between the API call that generated the  token and this one. (format: bytes)
   --identity: string # Optional. The identity of the client who initiated this request.
-  --ignoreMissingTaskQueues: string@bool-completer # Optional. By default this request would be rejected if not all the expected Task Queues are  being polled by the new Version, to protect against accidental removal of Task Queues, or  worker health issues. Pass `true` here to bypass this protection.  The set of expected Task Queues equals to all the Task Queues ever polled from the existing  Current Version of the Deployment, with the following exclusions:    - Task Queues that are not used anymore (inferred by having empty backlog and a task      add_rate of 0.)    - Task Queues that are moved to another Worker Deployment (inferred by the Task Queue      having a different Current Version than the Current Version of this deployment.)  WARNING: Do not set this flag unless you are sure that the missing task queue poller are not  needed. If the request is unexpectedly rejected due to missing pollers, then that means the  pollers have not reached to the server yet. Only set this if you expect those pollers to  never arrive.  Note: this check only happens when the ramping version is about to change, not every time  that the percentage changes. Also note that the check is against the deployment's Current  Version, not the previous Ramping Version.
-  --allowNoPollers: string@bool-completer # Optional. By default this request will be rejected if no pollers have been seen for the proposed  Current Version, in order to protect users from routing tasks to pollers that do not exist, leading  to possible timeouts. Pass `true` here to bypass this protection.
+  --ignoreMissingTaskQueues: oneof<nothing, bool> # Optional. By default this request would be rejected if not all the expected Task Queues are  being polled by the new Version, to protect against accidental removal of Task Queues, or  worker health issues. Pass `true` here to bypass this protection.  The set of expected Task Queues equals to all the Task Queues ever polled from the existing  Current Version of the Deployment, with the following exclusions:    - Task Queues that are not used anymore (inferred by having empty backlog and a task      add_rate of 0.)    - Task Queues that are moved to another Worker Deployment (inferred by the Task Queue      having a different Current Version than the Current Version of this deployment.)  WARNING: Do not set this flag unless you are sure that the missing task queue poller are not  needed. If the request is unexpectedly rejected due to missing pollers, then that means the  pollers have not reached to the server yet. Only set this if you expect those pollers to  never arrive.  Note: this check only happens when the ramping version is about to change, not every time  that the percentage changes. Also note that the check is against the deployment's Current  Version, not the previous Ramping Version.
+  --allowNoPollers: oneof<nothing, bool> # Optional. By default this request will be rejected if no pollers have been seen for the proposed  Current Version, in order to protect users from routing tasks to pollers that do not exist, leading  to possible timeouts. Pass `true` here to bypass this protection.
 ]: any -> record<conflictToken: string, previousVersion: string, previousDeploymentVersion: record<buildId: string, deploymentName: string>, previousPercentage: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5933,7 +5932,7 @@ export def "namespaces-workers ListWorkers-by-namespace-1" [
   --pageSize: int # format: int32
   --nextPageToken: string # format: bytes
   --qp-query: string # `query` in ListWorkers is used to filter workers based on worker attributes.  Supported attributes: * WorkerInstanceKey * WorkerIdentity * HostName * TaskQueue * DeploymentName * BuildId * SdkName * SdkVersion * StartTime * Status
-  --includeSystemWorkers: string@bool-completer # When true, the response will include system workers that are created implicitly  by the server and not by the user. By default, system workers are excluded.
+  --includeSystemWorkers: oneof<nothing, bool> # When true, the response will include system workers that are created implicitly  by the server and not by the user. By default, system workers are excluded.
 ]: nothing -> record<workersInfo: table<workerHeartbeat: record>, workers: table<workerInstanceKey: string, workerIdentity: string, taskQueue: string, deploymentVersion: record, sdkName: string, sdkVersion: string, status: string, startTime: string, hostName: string, workerGroupingKey: string, processId: string, plugins: list, drivers: list>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6122,7 +6121,7 @@ export def "namespaces-workflow-rules CreateWorkflowRule-by-namespace-1" [
   --allow-errors(-e) # Return full response without error handling
   --body-namespace: string
   --spec: any # The rule specification .
-  --forceScan: string@bool-completer # If true, the rule will be applied to the currently running workflows via batch job.  If not set , the rule will only be applied when triggering condition is satisfied.  visibility_query in the rule will be used to select the workflows to apply the rule to.
+  --forceScan: oneof<nothing, bool> # If true, the rule will be applied to the currently running workflows via batch job.  If not set , the rule will only be applied when triggering condition is satisfied.  visibility_query in the rule will be used to select the workflows to apply the rule to.
   --requestId: string # Used to de-dupe requests. Typically should be UUID.
   --identity: string # Identity of the actor who created the rule. Will be stored with the rule.
   --description: string # Rule description.Will be stored with the rule.
@@ -6254,9 +6253,9 @@ export def "namespaces-workflows-history GetWorkflowExecutionHistory-by-namespac
   --executionrunId: string
   --maximumPageSize: int # format: int32
   --nextPageToken: string # If a `GetWorkflowExecutionHistoryResponse` or a `PollWorkflowTaskQueueResponse` had one of  these, it should be passed here to fetch the next page. (format: bytes)
-  --waitNewEvent: string@bool-completer # If set to true, the RPC call will not resolve until there is a new event which matches  the `history_event_filter_type`, or a timeout is hit.
+  --waitNewEvent: oneof<nothing, bool> # If set to true, the RPC call will not resolve until there is a new event which matches  the `history_event_filter_type`, or a timeout is hit.
   --historyEventFilterType: string@historyEventFilterType-completer # Filter returned events such that they match the specified filter type.  Default: HISTORY_EVENT_FILTER_TYPE_ALL_EVENT. (format: enum)
-  --skipArchival: string@bool-completer
+  --skipArchival: oneof<nothing, bool>
 ]: nothing -> record<history: record<events: list<record>>, rawHistory: table<encodingType: string, data: string>, nextPageToken: string, archived: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6398,7 +6397,7 @@ export def "namespaces-workflows StartWorkflowExecution-by-namespace-workflowId-
   --memo: record # A user-defined set of *unindexed* fields that are exposed when listing/searching workflows — shape: {fields?: record}
   --searchAttributes: record # A user-defined set of *indexed* fields that are used/exposed when listing/searching workflows.  The payload is not serialized in a user-defined way. — shape: {indexedFields?: record}
   --header: record # Contains metadata that can be attached to a variety of requests, like starting a workflow, and  can be propagated between, for example, workflows and activities. — shape: {fields?: record}
-  --requestEagerExecution: string@bool-completer # Request to get the first workflow task inline in the response bypassing matching service and worker polling.  If set to `true` the caller is expected to have a worker available and capable of processing the task.  The returned task will be marked as started and is expected to be completed by the specified  `workflow_task_timeout`.
+  --requestEagerExecution: oneof<nothing, bool> # Request to get the first workflow task inline in the response bypassing matching service and worker polling.  If set to `true` the caller is expected to have a worker available and capable of processing the task.  The returned task will be marked as started and is expected to be completed by the specified  `workflow_task_timeout`.
   --continuedFailure: any # These values will be available as ContinuedFailure and LastCompletionResult in the  WorkflowExecutionStarted event and through SDKs. The are currently only used by the  server itself (for the schedules feature) and are not intended to be exposed in  StartWorkflowExecution.
   --lastCompletionResult: record # See `Payload` — shape: {payloads?: list}
   --workflowStartDelay: string # Time to wait before dispatching the first workflow task. Cannot be used with `cron_schedule`.  If the workflow gets a signal before the delay, a workflow task will be dispatched and the rest  of the delay will be ignored.
@@ -6580,10 +6579,10 @@ export def "namespaces-workflows-activities-reset ResetActivityExecution-by-name
   --body-activityId: string # The ID of the activity to target.
   --runId: string # Run ID of the workflow or standalone activity.
   --identity: string # The identity of the client who initiated this request.
-  --resetHeartbeat: string@bool-completer # Indicates that activity should reset heartbeat details.  This flag will be applied only to the new instance of the activity.
-  --keepPaused: string@bool-completer # If activity is paused, it will remain paused after reset
+  --resetHeartbeat: oneof<nothing, bool> # Indicates that activity should reset heartbeat details.  This flag will be applied only to the new instance of the activity.
+  --keepPaused: oneof<nothing, bool> # If activity is paused, it will remain paused after reset
   --jitter: string # If set, and activity is in backoff, the activity will start at a random time within the specified jitter duration.  (unless it is paused and keep_paused is set)
-  --restoreOriginalOptions: string@bool-completer # If set, the activity options will be restored to the defaults.  Default options are then options activity was created with.  They are part of the first schedule event.
+  --restoreOriginalOptions: oneof<nothing, bool> # If set, the activity options will be restored to the defaults.  Default options are then options activity was created with.  They are part of the first schedule event.
   --resourceId: string # Resource ID for routing. Contains "workflow:{workflow_id}" for workflow activities or "activity:{activity_id}" for standalone activities.
 ]: any -> record {
   let input = $in
@@ -6652,8 +6651,8 @@ export def "namespaces-workflows-activities-unpause UnpauseActivityExecution-by-
   --body-activityId: string # The ID of the activity to target.
   --runId: string # Run ID of the workflow or standalone activity.
   --identity: string # The identity of the client who initiated this request.
-  --resetAttempts: string@bool-completer # Providing this flag will also reset the number of attempts.
-  --resetHeartbeat: string@bool-completer # Providing this flag will also reset the heartbeat details.
+  --resetAttempts: oneof<nothing, bool> # Providing this flag will also reset the number of attempts.
+  --resetHeartbeat: oneof<nothing, bool> # Providing this flag will also reset the heartbeat details.
   --reason: string # Reason to unpause the activity.
   --jitter: string # If set, the activity will start at a random time within the specified jitter duration.
   --resourceId: string # Resource ID for routing. Contains "workflow:{workflow_id}" for workflow activities or "activity:{activity_id}" for standalone activities.
@@ -6691,7 +6690,7 @@ export def "namespaces-workflows-activities-update-options UpdateActivityExecuti
   --identity: string # The identity of the client who initiated this request
   --activityOptions: any # Activity options. Partial updates are accepted and controlled by update_mask
   --updateMask: string # Controls which fields from `activity_options` will be applied (format: field-mask)
-  --restoreOriginal: string@bool-completer # If set, the activity options will be restored to the default.  Default options are then options activity was created with.  They are part of the first schedule event.  This flag cannot be combined with any other option; if you supply  restore_original together with other options, the request will be rejected.
+  --restoreOriginal: oneof<nothing, bool> # If set, the activity options will be restored to the default.  Default options are then options activity was created with.  They are part of the first schedule event.  This flag cannot be combined with any other option; if you supply  restore_original together with other options, the request will be rejected.
   --resourceId: string # Resource ID for routing. Contains "workflow:{workflow_id}" for workflow activities or "activity:{activity_id}" for standalone activities.
 ]: any -> record<activityOptions: record<taskQueue: record<name: string, kind: string, normalName: string>, scheduleToCloseTimeout: string, scheduleToStartTimeout: string, startToCloseTimeout: string, heartbeatTimeout: string, retryPolicy: record<initialInterval: string, backoffCoefficient: float, maximumInterval: string, maximumAttempts: int, nonRetryableErrorTypes: list>, priority: record<priorityKey: int, fairnessKey: string, fairnessWeight: float>>> {
   let input = $in

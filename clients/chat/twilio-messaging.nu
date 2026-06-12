@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://messaging.twilio.com"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -333,20 +332,20 @@ export def "services CreateService" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AreaCodeGeomatch: string@bool-completer # Whether to enable [Area Code Geomatch](https://www.twilio.com/docs/sms/services#area-code-geomatch) on the Service Instance.
+  --AreaCodeGeomatch: oneof<nothing, bool> # Whether to enable [Area Code Geomatch](https://www.twilio.com/docs/sms/services#area-code-geomatch) on the Service Instance.
   --FallbackMethod: string@FallbackMethod-completer # The HTTP method we should use to call `fallback_url`. Can be: `GET` or `POST`. (format: http-method)
-  --FallbackToLongCode: string@bool-completer # Whether to enable [Fallback to Long Code](https://www.twilio.com/docs/sms/services#fallback-to-long-code) for messages sent through the Service instance.
+  --FallbackToLongCode: oneof<nothing, bool> # Whether to enable [Fallback to Long Code](https://www.twilio.com/docs/sms/services#fallback-to-long-code) for messages sent through the Service instance.
   --FallbackUrl: string # The URL that we call using `fallback_method` if an error occurs while retrieving or executing the TwiML from the Inbound Request URL. If the `use_inbound_webhook_on_number` field is enabled then the webhook url defined on the phone number will override the `fallback_url` defined for the Messaging Service. (format: uri)
   FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
   --InboundMethod: string@InboundMethod-completer # The HTTP method we should use to call `inbound_request_url`. Can be `GET` or `POST` and the default is `POST`. (format: http-method)
   --InboundRequestUrl: string # The URL we call using `inbound_method` when a message is received by any phone number or short code in the Service. When this property is `null`, receiving inbound messages is disabled. All messages sent to the Twilio phone number or short code will not be logged and received on the Account. If the `use_inbound_webhook_on_number` field is enabled then the webhook url defined on the phone number will override the `inbound_request_url` defined for the Messaging Service. (format: uri)
-  --MmsConverter: string@bool-completer # Whether to enable the [MMS Converter](https://www.twilio.com/docs/sms/services#mms-converter) for messages sent through the Service instance.
+  --MmsConverter: oneof<nothing, bool> # Whether to enable the [MMS Converter](https://www.twilio.com/docs/sms/services#mms-converter) for messages sent through the Service instance.
   --ScanMessageContent: string@ScanMessageContent-completer
-  --SmartEncoding: string@bool-completer # Whether to enable [Smart Encoding](https://www.twilio.com/docs/sms/services#smart-encoding) for messages sent through the Service instance.
+  --SmartEncoding: oneof<nothing, bool> # Whether to enable [Smart Encoding](https://www.twilio.com/docs/sms/services#smart-encoding) for messages sent through the Service instance.
   --StatusCallback: string # The URL we should call to [pass status updates](https://www.twilio.com/docs/sms/api/message-resource#message-status-values) about message delivery. (format: uri)
-  --StickySender: string@bool-completer # Whether to enable [Sticky Sender](https://www.twilio.com/docs/sms/services#sticky-sender) on the Service instance.
-  --SynchronousValidation: string@bool-completer # Reserved.
-  --UseInboundWebhookOnNumber: string@bool-completer # A boolean value that indicates either the webhook url configured on the phone number will be used or `inbound_request_url`/`fallback_url` url will be called when a message is received from the phone number. If this field is enabled then the webhook url defined on the phone number will override the `inbound_request_url`/`fallback_url` defined for the Messaging Service.
+  --StickySender: oneof<nothing, bool> # Whether to enable [Sticky Sender](https://www.twilio.com/docs/sms/services#sticky-sender) on the Service instance.
+  --SynchronousValidation: oneof<nothing, bool> # Reserved.
+  --UseInboundWebhookOnNumber: oneof<nothing, bool> # A boolean value that indicates either the webhook url configured on the phone number will be used or `inbound_request_url`/`fallback_url` url will be called when a message is received from the phone number. If this field is enabled then the webhook url defined on the phone number will override the `inbound_request_url`/`fallback_url` defined for the Messaging Service.
   --Usecase: string # A string that describes the scenario in which the Messaging Service will be used. Examples: [notification, marketing, verification, poll ..].
   --ValidityPeriod: int # How long, in seconds, messages sent from the Service are valid. Can be an integer from `1` to `14,400`.
 ]: any -> record<account_sid: string, area_code_geomatch: bool, date_created: string, date_updated: string, fallback_method: string, fallback_to_long_code: bool, fallback_url: string, friendly_name: string, inbound_method: string, inbound_request_url: string, links: record, mms_converter: bool, scan_message_content: string, sid: string, smart_encoding: bool, status_callback: string, sticky_sender: bool, synchronous_validation: bool, url: string, us_app_to_person_registered: bool, use_inbound_webhook_on_number: bool, usecase: string, validity_period: int> {
@@ -445,8 +444,8 @@ export def "services-compliance-usa2p CreateUsAppToPerson" [
   --allow-errors(-e) # Return full response without error handling
   BrandRegistrationSid: string # A2P Brand Registration SID
   Description: string # A short description of what this SMS campaign does. Min length: 40 characters. Max length: 4096 characters.
-  --HasEmbeddedLinks: string@bool-completer # Indicates that this SMS campaign will send messages that contain links.
-  --HasEmbeddedPhone: string@bool-completer # Indicates that this SMS campaign will send messages that contain phone numbers.
+  --HasEmbeddedLinks: oneof<nothing, bool> # Indicates that this SMS campaign will send messages that contain links.
+  --HasEmbeddedPhone: oneof<nothing, bool> # Indicates that this SMS campaign will send messages that contain phone numbers.
   --HelpKeywords: list # End users should be able to text in a keyword to receive help. Those keywords must be provided as part of the campaign registration request. This field is required if managing help keywords yourself (i.e. not using Twilio's Default or Advanced Opt Out features). Values must be alphanumeric. 255 character maximum.
   --HelpMessage: string # When customers receive the help keywords from their end users, Twilio customers are expected to send back an auto-generated response; this may include the brand name and additional support contact information. This field is required if managing help keywords yourself (i.e. not using Twilio's Default or Advanced Opt Out features). 20 character minimum. 320 character maximum.
   MessageFlow: string # Required for all Campaigns. Details around how a consumer opts-in to their campaign, therefore giving consent to receive their messages. If multiple opt-in methods can be used for the same campaign, they must all be listed. 40 character minimum. 2048 character maximum.
@@ -871,20 +870,20 @@ export def "services UpdateService" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --AreaCodeGeomatch: string@bool-completer # Whether to enable [Area Code Geomatch](https://www.twilio.com/docs/sms/services#area-code-geomatch) on the Service Instance.
+  --AreaCodeGeomatch: oneof<nothing, bool> # Whether to enable [Area Code Geomatch](https://www.twilio.com/docs/sms/services#area-code-geomatch) on the Service Instance.
   --FallbackMethod: string@FallbackMethod-completer # The HTTP method we should use to call `fallback_url`. Can be: `GET` or `POST`. (format: http-method)
-  --FallbackToLongCode: string@bool-completer # Whether to enable [Fallback to Long Code](https://www.twilio.com/docs/sms/services#fallback-to-long-code) for messages sent through the Service instance.
+  --FallbackToLongCode: oneof<nothing, bool> # Whether to enable [Fallback to Long Code](https://www.twilio.com/docs/sms/services#fallback-to-long-code) for messages sent through the Service instance.
   --FallbackUrl: string # The URL that we call using `fallback_method` if an error occurs while retrieving or executing the TwiML from the Inbound Request URL. If the `use_inbound_webhook_on_number` field is enabled then the webhook url defined on the phone number will override the `fallback_url` defined for the Messaging Service. (format: uri)
   --FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
   --InboundMethod: string@InboundMethod-completer # The HTTP method we should use to call `inbound_request_url`. Can be `GET` or `POST` and the default is `POST`. (format: http-method)
   --InboundRequestUrl: string # The URL we call using `inbound_method` when a message is received by any phone number or short code in the Service. When this property is `null`, receiving inbound messages is disabled. All messages sent to the Twilio phone number or short code will not be logged and received on the Account. If the `use_inbound_webhook_on_number` field is enabled then the webhook url defined on the phone number will override the `inbound_request_url` defined for the Messaging Service. (format: uri)
-  --MmsConverter: string@bool-completer # Whether to enable the [MMS Converter](https://www.twilio.com/docs/sms/services#mms-converter) for messages sent through the Service instance.
+  --MmsConverter: oneof<nothing, bool> # Whether to enable the [MMS Converter](https://www.twilio.com/docs/sms/services#mms-converter) for messages sent through the Service instance.
   --ScanMessageContent: string@ScanMessageContent-completer
-  --SmartEncoding: string@bool-completer # Whether to enable [Smart Encoding](https://www.twilio.com/docs/sms/services#smart-encoding) for messages sent through the Service instance.
+  --SmartEncoding: oneof<nothing, bool> # Whether to enable [Smart Encoding](https://www.twilio.com/docs/sms/services#smart-encoding) for messages sent through the Service instance.
   --StatusCallback: string # The URL we should call to [pass status updates](https://www.twilio.com/docs/sms/api/message-resource#message-status-values) about message delivery. (format: uri)
-  --StickySender: string@bool-completer # Whether to enable [Sticky Sender](https://www.twilio.com/docs/sms/services#sticky-sender) on the Service instance.
-  --SynchronousValidation: string@bool-completer # Reserved.
-  --UseInboundWebhookOnNumber: string@bool-completer # A boolean value that indicates either the webhook url configured on the phone number will be used or `inbound_request_url`/`fallback_url` url will be called when a message is received from the phone number. If this field is enabled then the webhook url defined on the phone number will override the `inbound_request_url`/`fallback_url` defined for the Messaging Service.
+  --StickySender: oneof<nothing, bool> # Whether to enable [Sticky Sender](https://www.twilio.com/docs/sms/services#sticky-sender) on the Service instance.
+  --SynchronousValidation: oneof<nothing, bool> # Reserved.
+  --UseInboundWebhookOnNumber: oneof<nothing, bool> # A boolean value that indicates either the webhook url configured on the phone number will be used or `inbound_request_url`/`fallback_url` url will be called when a message is received from the phone number. If this field is enabled then the webhook url defined on the phone number will override the `inbound_request_url`/`fallback_url` defined for the Messaging Service.
   --Usecase: string # A string that describes the scenario in which the Messaging Service will be used. Examples: [notification, marketing, verification, poll ..]
   --ValidityPeriod: int # How long, in seconds, messages sent from the Service are valid. Can be an integer from `1` to `14,400`.
 ]: any -> record<account_sid: string, area_code_geomatch: bool, date_created: string, date_updated: string, fallback_method: string, fallback_to_long_code: bool, fallback_url: string, friendly_name: string, inbound_method: string, inbound_request_url: string, links: record, mms_converter: bool, scan_message_content: string, sid: string, smart_encoding: bool, status_callback: string, sticky_sender: bool, synchronous_validation: bool, url: string, us_app_to_person_registered: bool, use_inbound_webhook_on_number: bool, usecase: string, validity_period: int> {
@@ -1074,8 +1073,8 @@ export def "a2p-brand-registrations CreateBrandRegistrations" [
   A2PProfileBundleSid: string # A2P Messaging Profile Bundle Sid.
   --BrandType: string # Type of brand being created. One of: "STANDARD", "SOLE_PROPRIETOR". SOLE_PROPRIETOR is for low volume, SOLE_PROPRIETOR use cases. STANDARD is for all other use cases.
   CustomerProfileBundleSid: string # Customer Profile Bundle Sid.
-  --Mock: string@bool-completer # A boolean that specifies whether brand should be a mock or not. If true, brand will be registered as a mock brand. Defaults to false if no value is provided.
-  --SkipAutomaticSecVet: string@bool-completer # A flag to disable automatic secondary vetting for brands which it would otherwise be done.
+  --Mock: oneof<nothing, bool> # A boolean that specifies whether brand should be a mock or not. If true, brand will be registered as a mock brand. Defaults to false if no value is provided.
+  --SkipAutomaticSecVet: oneof<nothing, bool> # A flag to disable automatic secondary vetting for brands which it would otherwise be done.
 ]: any -> record<a2p_profile_bundle_sid: string, account_sid: string, brand_feedback: list<string>, brand_score: int, brand_type: string, customer_profile_bundle_sid: string, date_created: string, date_updated: string, failure_reason: string, government_entity: bool, identity_status: string, links: record, mock: bool, russell_3000: bool, sid: string, skip_automatic_sec_vet: bool, status: string, tax_exempt_status: string, tcr_id: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))

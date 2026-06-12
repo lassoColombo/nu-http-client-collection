@@ -63,7 +63,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost" "https://api.clockify.me/api" "https://reports.api.clockify.me" "https://auditlog-api.api.clockify.me"] }
 def auth-scheme-completer [] { ["x-addon-token" "x-api-key" "x-marketplace-token"] }
 
@@ -192,7 +191,7 @@ export def "user get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-memberships: string@bool-completer # If set to true, memberships will be included. (default: false, e.g. true)
+  --include-memberships: oneof<nothing, bool> # If set to true, memberships will be included. (default: false, e.g. true)
 ]: nothing -> record<activeWorkspace: string, customFields: table<customFieldId: string, customFieldName: string, customFieldType: record, userId: string, value: record>, defaultWorkspace: string, email: string, id: string, memberships: table<costRate: record, hourlyRate: record, membershipStatus: string, membershipType: string, targetId: string, userId: string>, name: string, profilePicture: string, settings: record<alerts: bool, approval: bool, collapseAllProjectLists: bool, dashboardPinToTop: bool, dashboardSelection: string, dashboardViewType: string, dateFormat: string, groupSimilarEntriesDisabled: bool, invoiceReminders: bool, isCompactViewOn: bool, lang: string, longRunning: bool, multiFactorEnabled: bool, myStartOfDay: string, onboarding: bool, projectListCollapse: int, projectPickerTaskFilter: bool, pto: bool, reminders: bool, scheduledReports: bool, scheduling: bool, sendNewsletter: bool, showOnlyWorkingDays: bool, summaryReportSettings: record<group: string, subgroup: string>, theme: string, timeFormat: string, timeTrackingManual: bool, timeZone: string, weekStart: string, weeklyUpdates: bool>, status: record<ACTIVE: string, DELETED: string, LIMITED: string, LIMITED_DELETED: string, NOT_REGISTERED: string, PENDING_EMAIL_VERIFICATION: string, active: bool, limitedAccount: bool, notRegistered: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "x-marketplace-token"))
   let base = ($base_url | default "https://api.clockify.me/api")
@@ -581,10 +580,10 @@ export def "workspaces-clients updateClient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archive-projects: string@bool-completer
-  --mark-tasks-as-done: string@bool-completer
+  --archive-projects: oneof<nothing, bool>
+  --mark-tasks-as-done: oneof<nothing, bool>
   --address: string # Represents a client's address. (e.g. Ground Floor, ABC Bldg., Palo Alto, California, USA 94020)
-  --archived: string@bool-completer # Indicates if client will be archived or not. (default: false)
+  --archived: oneof<nothing, bool> # Indicates if client will be archived or not. (default: false)
   --ccEmails: list
   --currencyId: string # Represents a currency identifier across the system. (e.g. 53a687e29ae1f428e7ebe888)
   --email: string # Represents a client email. (format: email, e.g. clientx@example.com)
@@ -673,7 +672,7 @@ export def "workspaces-custom-fields create" [
   --description: string # Represents custom field description. (e.g. This field contains a location.)
   --entityType: string@entityType-completer # Represents custom field entity type (e.g. TIMEENTRY)
   name: string # Represents custom field name. (e.g. location)
-  --onlyAdminCanEdit: string@bool-completer # Flag to set whether custom field is modifiable only by admin users. (default: false)
+  --onlyAdminCanEdit: oneof<nothing, bool> # Flag to set whether custom field is modifiable only by admin users. (default: false)
   --placeholder: string # Represents custom field placeholder value. (e.g. Location)
   --status: string@status-completer-1 # Represents custom field status (e.g. VISIBLE)
   type: string@type-completer # Represents custom field type. (e.g. DROPDOWN_MULTIPLE)
@@ -730,9 +729,9 @@ export def "workspaces-custom-fields editCustomField" [
   --allowedValues: list # Represents a list of custom field's allowed values. (e.g. [New York, London, Manila, Sydney, Belgrade])
   --description: string # Represents a custom field description. (e.g. This field contains a location.)
   name: string # Represents a custom field name. (e.g. location)
-  --onlyAdminCanEdit: string@bool-completer # Flag to set whether custom field is modifiable only by admin users. (default: false)
+  --onlyAdminCanEdit: oneof<nothing, bool> # Flag to set whether custom field is modifiable only by admin users. (default: false)
   --placeholder: string # Represents a custom field placeholder value. (e.g. This is a sample placeholder.)
-  --required: string@bool-completer # Flag to set whether custom field is mandatory or not. (default: false)
+  --required: oneof<nothing, bool> # Flag to set whether custom field is mandatory or not. (default: false)
   --status: string@status-completer-1 # Represents a custom field status (e.g. VISIBLE)
   type: string@type-completer # Represents a custom field type. (e.g. DROPDOWN_MULTIPLE)
   --workspaceDefaultValue: record # Represents a custom field's default value in the workspace. (e.g. Manila)
@@ -872,7 +871,7 @@ export def "workspaces-expenses createExpense" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   amount: float # Represents an expense amount as the double data type. (format: double, e.g. 99.5)
-  --billable: string@bool-completer # Indicates whether expense is billable or not. (default: false)
+  --billable: oneof<nothing, bool> # Indicates whether expense is billable or not. (default: false)
   categoryId: string # Represents a category identifier across the system. (e.g. 45y687e29ae1f428e7ebe890)
   date: string # Provides a valid yyyy-MM-ddThh:mm:ssZ format date. (format: date-time, e.g. 2020-01-01T00:00:00Z)
   file: string # format: binary
@@ -909,7 +908,7 @@ export def "workspaces-expenses-categories get" [
   --sort-order: string@sort-order-completer # Represents the sorting order. (e.g. ASCENDING)
   --page: int # Page number. (format: int32, default: 1, e.g. 1)
   --page-size: int # Page size. (format: int32, default: 50, e.g. 50)
-  --archived: string@bool-completer # Flag to filter results based on whether category is archived or not. (default: false, e.g. true)
+  --archived: oneof<nothing, bool> # Flag to filter results based on whether category is archived or not. (default: false, e.g. true)
   --name: string # If provided, you'll get a filtered list of expense categories that matches the provided string in their name. (e.g. procurement)
 ]: nothing -> record<categories: table<archived: bool, hasUnitPrice: bool, id: string, name: string, priceInCents: int, unit: string, workspaceId: string>, count: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -934,7 +933,7 @@ export def "workspaces-expenses-categories createExpenseCategory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hasUnitPrice: string@bool-completer # Flag whether expense category has unit price or none. (default: false)
+  --hasUnitPrice: oneof<nothing, bool> # Flag whether expense category has unit price or none. (default: false)
   name: string # Represents a valid expense category name. (e.g. Procurement)
   --priceInCents: int # Represents price in cents as integer. (format: int32, e.g. 1000)
   --unit: string # Represents a valid expense category unit. (e.g. piece)
@@ -987,7 +986,7 @@ export def "workspaces-expenses-categories updateCategory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hasUnitPrice: string@bool-completer # Flag whether expense category has unit price or none. (default: false)
+  --hasUnitPrice: oneof<nothing, bool> # Flag whether expense category has unit price or none. (default: false)
   name: string # Represents a valid expense category name. (e.g. Procurement)
   --priceInCents: int # Represents price in cents as integer. (format: int32, e.g. 1000)
   --unit: string # Represents a valid expense category unit. (e.g. piece)
@@ -1017,7 +1016,7 @@ export def "workspaces-expenses-categories-status updateExpenseCategoryStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Flag whether to archive the expense category or not. (default: false)
+  --archived: oneof<nothing, bool> # Flag whether to archive the expense category or not. (default: false)
 ]: any -> record<archived: bool, hasUnitPrice: bool, id: string, name: string, priceInCents: int, unit: string, workspaceId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1091,7 +1090,7 @@ export def "workspaces-expenses updateExpense" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   amount: float # Represents an expense amount as the double data type. (format: double, e.g. 99.5)
-  --billable: string@bool-completer # Indicates whether expense is billable or not. (default: false)
+  --billable: oneof<nothing, bool> # Indicates whether expense is billable or not. (default: false)
   categoryId: string # Represents a category identifier across the system. (e.g. 45y687e29ae1f428e7ebe890)
   changeFields: list # Represents a list of expense change fields. (e.g. [USER, DATE, PROJECT])
   date: string # Provides a valid yyyy-MM-ddThh:mm:ssZ format date. (format: date-time, e.g. 2020-01-01T00:00:00Z)
@@ -1180,9 +1179,9 @@ export def "workspaces-holidays createHoliday" [
   --automaticTimeEntryCreation: record # Provides automatic time entry creation settings. — shape: {defaultEntities: record, enabled?: bool}
   --color: string # Provide color in format ^#(?:[0-9a-fA-F]{6}){1}$. Explanation: A valid color code should start with '#' and consist of six hexadecimal characters, representing a color in hexadecimal format. Color value is in standard RGB hexadecimal format. (e.g. #8BC34A)
   datePeriod: record # Provide startDate and endDate for the holiday. — shape: {endDate: string, startDate: string}
-  --everyoneIncludingNew: string@bool-completer # Indicates whether the holiday is shown to new users. (default: false, e.g. true)
+  --everyoneIncludingNew: oneof<nothing, bool> # Indicates whether the holiday is shown to new users. (default: false, e.g. true)
   name: string # Provide the name of the holiday. (e.g. Labour Day)
-  --occursAnnually: string@bool-completer # Indicates whether the holiday occurs annually. (default: false, e.g. true)
+  --occursAnnually: oneof<nothing, bool> # Indicates whether the holiday occurs annually. (default: false, e.g. true)
   --userGroups: record # Provide list with user group ids and corresponding status. — shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN", ids?: list, status?: "ALL"|"ACTIVE"|"INACTIVE"}
   --users: record # Provide list with user ids and corresponding status. — shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN", ids?: list, status?: "ALL"|"ACTIVE"|"INACTIVE"}
 ]: any -> record<automaticTimeEntryCreation: bool, datePeriod: record<endDate: string, startDate: string>, everyoneIncludingNew: bool, id: string, name: string, occursAnnually: bool, projectId: string, taskId: string, userGroupIds: list<string>, userIds: list<string>, workspaceId: string> {
@@ -1267,9 +1266,9 @@ export def "workspaces-holidays updateHoliday" [
   --automaticTimeEntryCreation: record # Provides automatic time entry creation settings. — shape: {defaultEntities: record, enabled?: bool}
   --color: string # Provide color in format ^#(?:[0-9a-fA-F]{6}){1}$. Explanation: A valid color code should start with '#' and consist of six hexadecimal characters, representing a color in hexadecimal format. Color value is in standard RGB hexadecimal format. (e.g. #8BC34A)
   datePeriod: record # Provide startDate and endDate for the holiday. — shape: {endDate: string, startDate: string}
-  --everyoneIncludingNew: string@bool-completer # Indicates whether the holiday is shown to new users. (default: false, e.g. false)
+  --everyoneIncludingNew: oneof<nothing, bool> # Indicates whether the holiday is shown to new users. (default: false, e.g. false)
   name: string # Provide the name you would like to use for updating the holiday. (e.g. New Year's Day)
-  --occursAnnually: string@bool-completer # Indicates whether the holiday occurs annually. (default: false, e.g. true)
+  --occursAnnually: oneof<nothing, bool> # Indicates whether the holiday occurs annually. (default: false, e.g. true)
   --userGroups: record # Provide list with user group ids and corresponding status. — shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "PENDING"|"ACTIVE"|"DECLINED"|"INACTIVE"|"ALL"}
   --users: record # Provide list with users ids and corresponding status. — shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ALL"|"ACTIVE"|"INACTIVE", statuses?: list}
 ]: any -> record<automaticTimeEntryCreation: bool, datePeriod: record<endDate: string, startDate: string>, everyoneIncludingNew: bool, id: string, name: string, occursAnnually: bool, projectId: string, taskId: string, userGroupIds: list<string>, userIds: list<string>, workspaceId: string> {
@@ -1402,7 +1401,7 @@ export def "workspaces-invoices-info post" [
   --sortColumn: string@sortColumn-completer # Represents the column name to be used as sorting criteria. (e.g. ID)
   --sortOrder: string@sortOrder-completer # Represents the sorting order. (e.g. ASCENDING)
   --statuses: list # Represents a list of invoice statuses. If provided, you'll get a filtered list of invoices that matches any of the invoice status provided. (e.g. [SENT, PAID, PARTIALLY_PAID])
-  --strictSearch: string@bool-completer # Flag to toggle on/off strict search mode. When set to true, search by invoice number only will return invoices whose number exactly matches the string value given for the 'invoiceNumber' parameter. When set to false, results will also include invoices whose number contain the string value, but could be longer than the string value itself. For example, if there is an invoice with the number '123456', and the search value is '123', setting strict-name-search to true will not return that invoice in the results, whereas setting it to false will. (default: false)
+  --strictSearch: oneof<nothing, bool> # Flag to toggle on/off strict search mode. When set to true, search by invoice number only will return invoices whose number exactly matches the string value given for the 'invoiceNumber' parameter. When set to false, results will also include invoices whose number contain the string value, but could be longer than the string value itself. For example, if there is an invoice with the number '123456', and the search value is '123', setting strict-name-search to true will not return that invoice in the results, whereas setting it to false will. (default: false)
 ]: any -> record<invoices: table<amount: int, balance: int, billFrom: string, clientId: string, clientName: string, currency: string, daysOverdue: int, dueDate: string, id: string, issuedDate: string, number: string, paid: int, status: string, visibleZeroFields: record>, total: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1652,9 +1651,9 @@ export def "workspaces-invoices-items-import importTimeEntriesAndExpenses" [
   --expensesGroupBy: string@expensesGroupBy-completer # Represents a group field when using the GROUPED expense group type. (default: PROJECT, e.g. CATEGORY)
   --expensesGroupType: string@expensesGroupType-completer # Represents an expense group type. (default: DETAILED)
   --body-from: string # Represents date and time in the yyyy-MM-ddThh:mm:ssZ format. (e.g. 2025-06-01T00:00:00Z)
-  --importExpenses: string@bool-completer # Indicates if billable expenses should be imported alongside time entries. (default: false)
+  --importExpenses: oneof<nothing, bool> # Indicates if billable expenses should be imported alongside time entries. (default: false)
   projectFilter: record # Represents a project filter for imported items. — shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ACTIVE"|"ARCHIVED"|"ALL"}
-  --roundTimeEntryDuration: string@bool-completer # Indicates if imported time entry durations should be rounded to the nearest 15 minute interval. (default: false)
+  --roundTimeEntryDuration: oneof<nothing, bool> # Indicates if imported time entry durations should be rounded to the nearest 15 minute interval. (default: false)
   --timeEntryFieldsForDetailedGroup: list # Represents a set of time entry fields to include when using DETAILED time entry grouping type. (e.g. [PROJECT, DESCRIPTION])
   timeEntryGroupType: string@timeEntryGroupType-completer # Represents a time entry group type. (e.g. GROUPED)
   --timeEntryPrimaryGroupBy: string@timeEntryPrimaryGroupBy-completer # Represents a primary group field when using the GROUPED time entry grouping type. (e.g. PROJECT)
@@ -1869,7 +1868,7 @@ export def "workspaces-member-profile updateMemberProfileWithAdditionalData" [
   --allow-errors(-e) # Return full response without error handling
   --imageUrl: string # Represents an image url. A field that can only be updated for limited users. (e.g. https://www.url.com/imageurl-1234567890.jpg)
   --name: string # This body field is deprecated and can only be updated for limited users. Represents name of the user and can be changed on the CAKE.com Account profile page. (DEPRECATED, e.g. John Doe)
-  --removeProfileImage: string@bool-completer # Indicates whether to remove profile image or not. A field that can only be updated for limited users. (default: false)
+  --removeProfileImage: oneof<nothing, bool> # Indicates whether to remove profile image or not. A field that can only be updated for limited users. (default: false)
   --userCustomFields: list # Represents a list of upsert user custom field objects. — item shape: {customFieldId: string, value?: record}
   --weekStart: string@weekStart-completer # Represents a day of the week. (e.g. MONDAY)
   --workCapacity: string # Represents work capacity as a time duration in the ISO-8601 format. For example, for a 7hr work day, input should be PT7H. (e.g. PT7H)
@@ -1900,26 +1899,26 @@ export def "workspaces-projects list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # If provided, you'll get a filtered list of projects that contains the provided string in the project name. (e.g. Software Development)
-  --strict-name-search: string@bool-completer # Flag to toggle on/off strict search mode. When set to true, search by name will only return projects whose name exactly matches the string value given for the 'name' parameter. When set to false, results will also include projects whose name contain the string value, but could be longer than the string value itself. For example, if there is a project with the name 'applications', and the search value is 'app', setting strict-name-search to true will not return that project in the results, whereas setting it to false will. (default: false)
-  --archived: string@bool-completer # If provided and set to true, you'll only get archived projects. If omitted, you'll get both archived and non-archived projects. (default: false)
-  --billable: string@bool-completer # If provided and set to true, you'll only get billable projects. If omitted, you'll get both billable and non-billable projects. (default: false)
+  --strict-name-search: oneof<nothing, bool> # Flag to toggle on/off strict search mode. When set to true, search by name will only return projects whose name exactly matches the string value given for the 'name' parameter. When set to false, results will also include projects whose name contain the string value, but could be longer than the string value itself. For example, if there is a project with the name 'applications', and the search value is 'app', setting strict-name-search to true will not return that project in the results, whereas setting it to false will. (default: false)
+  --archived: oneof<nothing, bool> # If provided and set to true, you'll only get archived projects. If omitted, you'll get both archived and non-archived projects. (default: false)
+  --billable: oneof<nothing, bool> # If provided and set to true, you'll only get billable projects. If omitted, you'll get both billable and non-billable projects. (default: false)
   --clients: list # If provided, you'll get a filtered list of projects that contain clients which match any of the provided ids. (e.g. [5a0ab5acb07987125438b60f, 64c777ddd3fcab07cfbb210c])
-  --contains-client: string@bool-completer # If set to true, you'll get a filtered list of projects that contain clients which match the provided id(s) in 'clients' field. If set to false, you'll get a filtered list of projects which do NOT contain clients that match the provided id(s) in 'clients' field. (default: true)
+  --contains-client: oneof<nothing, bool> # If set to true, you'll get a filtered list of projects that contain clients which match the provided id(s) in 'clients' field. If set to false, you'll get a filtered list of projects which do NOT contain clients that match the provided id(s) in 'clients' field. (default: true)
   --client-status: string@client-status-completer # Filters projects based on client status provided. (e.g. ACTIVE)
   --users: list # If provided, you'll get a filtered list of projects that contain users which match any of the provided ids. (e.g. [5a0ab5acb07987125438b60f, 64c777ddd3fcab07cfbb210c])
-  --contains-user: string@bool-completer # If set to true, you'll get a filtered list of projects that contain users which match the provided id(s) in 'users' field. If set to false, you'll get a filtered list of projects which do NOT contain users which match the provided id(s) in 'users' field. (default: true)
+  --contains-user: oneof<nothing, bool> # If set to true, you'll get a filtered list of projects that contain users which match the provided id(s) in 'users' field. If set to false, you'll get a filtered list of projects which do NOT contain users which match the provided id(s) in 'users' field. (default: true)
   --user-status: string@user-status-completer # Filters projects based on user status provided. (e.g. ALL)
-  --is-template: string@bool-completer # Filters projects based on whether they are used as a template or not. (default: false)
+  --is-template: oneof<nothing, bool> # Filters projects based on whether they are used as a template or not. (default: false)
   --sort-column: string@sort-column-completer-3 # Sorts the results by the given column/field. (e.g. NAME)
   --sort-order: string@sort-order-completer # Sorting mode. (e.g. ASCENDING)
-  --hydrated: string@bool-completer # If set to true, results will contain additional information about the project. (default: false)
+  --hydrated: oneof<nothing, bool> # If set to true, results will contain additional information about the project. (default: false)
   --page: int # Page number. (format: int32, default: 1, e.g. 1)
   --page-size: int # Page size. (format: int32, default: 50, e.g. 50)
   --access: string@access-completer # Valid set of string(s). If provided, you'll get a filtered list of projects that matches the provided access. (e.g. PUBLIC)
   --expense-limit: int # Represents the maximum number of expenses to fetch. (format: int32, default: 20, e.g. 10)
   --expense-date: string # If provided, you will get expenses dated before the provided value in yyyy-MM-dd format. (e.g. 2024-12-31)
   --userGroups: list # If provided, you'll get a filtered list of projects that contain groups which match any of the provided ids. (e.g. [5a0ab5acb07987125438b60f, 64c777ddd3fcab07cfbb210c])
-  --contains-group: string@bool-completer # If set to true, you'll get a filtered list of projects that contain groups which match the provided id(s) in 'userGroups' field. If set to false, you'll get a filtered list of projects which do NOT contain groups which match the provided id(s) in 'userGroups' field. (default: true)
+  --contains-group: oneof<nothing, bool> # If set to true, you'll get a filtered list of projects that contain groups which match the provided id(s) in 'userGroups' field. If set to false, you'll get a filtered list of projects which do NOT contain groups which match the provided id(s) in 'userGroups' field. (default: true)
 ]: nothing -> table<archived: bool, billable: bool, budgetEstimate: record<active: bool, estimate: int, includeExpenses: bool, resetOption: string, type: string>, color: string, costRate: record<amount: int, currency: string>, duration: string, estimate: record<estimate: string, type: string>, hourlyRate: record<amount: int, currency: string>, id: string, memberships: list<record>, name: string, note: string, public: bool, template: bool, timeEstimate: record<active: bool, estimate: string, includeNonBillable: bool, resetOption: string, type: string>, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
@@ -1948,13 +1947,13 @@ export def "workspaces-projects createNewProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --billable: string@bool-completer # Indicates whether project is billable or not. (default: false)
+  --billable: oneof<nothing, bool> # Indicates whether project is billable or not. (default: false)
   --clientId: string # Represents client identifier across the system. (e.g. 9t641568b07987035750704)
   --color: string # Color format ^#(?:[0-9a-fA-F]{6}){1}$. Explanation: A valid color code should start with '#' and consist of six hexadecimal characters, representing a color in hexadecimal format. Color value is in standard RGB hexadecimal format. (e.g. #000000)
   --costRate: record # shape: {amount: int, since?: string}
   --estimate: record # Represents an estimate request object. — shape: {estimate?: string, type?: "AUTO"|"MANUAL"}
   --hourlyRate: record # shape: {amount: int, since?: string}
-  --isPublic: string@bool-completer # Indicates whether project is public or not. (default: false)
+  --isPublic: oneof<nothing, bool> # Indicates whether project is public or not. (default: false)
   --memberships: list # Represents a list of membership request objects. — item shape: {hourlyRate?: record, membershipStatus?: "PENDING"|"ACTIVE"|"DECLINED"|"INACTIVE"|"ALL", membershipType?: "WORKSPACE"|"PROJECT"|"USERGROUP", userId?: string}
   name: string # Represents a project name. (e.g. Software Development)
   --note: string # Represents project note. (e.g. This is a sample note for the project.)
@@ -1986,7 +1985,7 @@ export def "workspaces-projects-from-template createProjectFromTemplate" [
   --allow-errors(-e) # Return full response without error handling
   --clientId: string # Represents a client identifier across the system. (e.g. 9t641568b07987035750704)
   --color: string # Color format ^#(?:[0-9a-fA-F]{6}){1}$. Explanation: A valid color code should start with '#' and consist of six hexadecimal characters, representing a color in hexadecimal format. Color value is in standard RGB hexadecimal format. (e.g. #000000)
-  --isPublic: string@bool-completer # Indicates whether the project is public or not. (default: false)
+  --isPublic: oneof<nothing, bool> # Indicates whether the project is public or not. (default: false)
   name: string # Represents a project name. (e.g. Software Development)
   templateProjectId: string # Represents a project identifier across the system. (e.g. 5b641568b07987035750505e)
 ]: any -> record<archived: bool, billable: bool, budgetEstimate: record<active: bool, estimate: int, includeExpenses: bool, resetOption: string, type: string>, clientId: string, clientName: string, color: string, costRate: record<amount: int, currency: string>, duration: string, estimate: record<estimate: string, type: string>, estimateReset: record<dayOfMonth: int, dayOfWeek: string, hour: int, interval: string, month: string>, hourlyRate: record<amount: int, currency: string>, id: string, isPublic: bool, isTemplate: bool, memberships: table<costRate: record, hourlyRate: record, membershipStatus: string, membershipType: string, targetId: string, userId: string>, name: string, note: string, public: bool, template: bool, timeEstimate: record<active: bool, estimate: string, includeNonBillable: bool, resetOption: string, type: string>, workspaceId: string> {
@@ -2038,7 +2037,7 @@ export def "workspaces-projects get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hydrated: string@bool-completer # If set to true, results will contain additional information about the project (default: false)
+  --hydrated: oneof<nothing, bool> # If set to true, results will contain additional information about the project (default: false)
   --custom-field-entity-type: string # If provided, you'll get a filtered list of custom fields that matches the provided string with the custom field entity type. (default: TIMEENTRY, e.g. TIMEENTRY)
   --expense-limit: int # Represents the maximum number of expenses to fetch. (format: int32, default: 20, e.g. 10)
   --expense-date: string # If provided, you will get expenses dated before the provided value in yyyy-MM-dd format. (e.g. 2024-12-31)
@@ -2068,13 +2067,13 @@ export def "workspaces-projects updateProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Indicates whether project is archived or not. (default: false)
-  --billable: string@bool-completer # Indicates whether project is billable or not. (default: false)
+  --archived: oneof<nothing, bool> # Indicates whether project is archived or not. (default: false)
+  --billable: oneof<nothing, bool> # Indicates whether project is billable or not. (default: false)
   --clientId: string # Represents client identifier across the system. (e.g. 9t641568b07987035750704)
   --color: string # Color format ^#(?:[0-9a-fA-F]{6}){1}$. Explanation: A valid color code should start with '#' and consist of six hexadecimal characters, representing a color in hexadecimal format. Color value is in standard RGB hexadecimal format. (e.g. #000000)
   --costRate: record # shape: {amount: int, since?: string}
   --hourlyRate: record # shape: {amount: int, since?: string}
-  --isPublic: string@bool-completer # Indicates whether project is public or not. (default: false)
+  --isPublic: oneof<nothing, bool> # Indicates whether project is public or not. (default: false)
   --name: string # Represents a project name. (e.g. Software Development)
   --note: string # Represents project note. (e.g. This is a sample note for the project.)
 ]: any -> record<archived: bool, billable: bool, budgetEstimate: record<active: bool, estimate: int, includeExpenses: bool, resetOption: string, type: string>, clientId: string, clientName: string, color: string, costRate: record<amount: int, currency: string>, duration: string, estimate: record<estimate: string, type: string>, estimateReset: record<dayOfMonth: int, dayOfWeek: string, hour: int, interval: string, month: string>, hourlyRate: record<amount: int, currency: string>, id: string, isPublic: bool, isTemplate: bool, memberships: table<costRate: record, hourlyRate: record, membershipStatus: string, membershipType: string, targetId: string, userId: string>, name: string, note: string, public: bool, template: bool, timeEstimate: record<active: bool, estimate: string, includeNonBillable: bool, resetOption: string, type: string>, workspaceId: string> {
@@ -2245,7 +2244,7 @@ export def "workspaces-projects-memberships addUsersToProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --remove: string@bool-completer # Setting this flag to 'true' will remove the given users from the project. (default: false)
+  --remove: oneof<nothing, bool> # Setting this flag to 'true' will remove the given users from the project. (default: false)
   --userGroups: record # Provide list with user group ids and corresponding status. — shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN", ids?: list, status?: "ALL"|"ACTIVE"|"INACTIVE"}
   --userIds: list # Represents array of user ids which should be added/removed. (e.g. [45b687e29ae1f428e7ebe123, 67s687e29ae1f428e7ebe678])
 ]: any -> any {
@@ -2275,8 +2274,8 @@ export def "workspaces-projects-tasks list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # If provided, you'll get a filtered list of tasks that matches the provided string in their name. (e.g. Bugfixing)
-  --strict-name-search: string@bool-completer # Flag to toggle on/off strict search mode. When set to true, search by name only will return tasks whose name exactly matches the string value given for the 'name' parameter. When set to false, results will also include tasks whose name contain the string value, but could be longer than the string value itself. For example, if there is a task with the name 'applications', and the search value is 'app', setting strict-name-search to true will not return that task in the results, whereas setting it to false will. (default: false)
-  --is-active: string@bool-completer # Filters search results whether task is active or not. (default: false)
+  --strict-name-search: oneof<nothing, bool> # Flag to toggle on/off strict search mode. When set to true, search by name only will return tasks whose name exactly matches the string value given for the 'name' parameter. When set to false, results will also include tasks whose name contain the string value, but could be longer than the string value itself. For example, if there is a task with the name 'applications', and the search value is 'app', setting strict-name-search to true will not return that task in the results, whereas setting it to false will. (default: false)
+  --is-active: oneof<nothing, bool> # Filters search results whether task is active or not. (default: false)
   --page: int # Page number. (format: int32, default: 1, e.g. 1)
   --page-size: int # Page size. (format: int32, default: 50, e.g. 50)
   --sort-column: string@sort-column-completer-4 # Represents the column as criteria for sorting tasks. (e.g. ID)
@@ -2306,7 +2305,7 @@ export def "workspaces-projects-tasks createTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --contains-assignee: string@bool-completer # Flag to set whether task will have assignee or none. (default: true)
+  --contains-assignee: oneof<nothing, bool> # Flag to set whether task will have assignee or none. (default: true)
   --assigneeId: string # DEPRECATED
   --assigneeIds: list # Represents list of assignee ids for the task. (e.g. [45b687e29ae1f428e7ebe123, 67s687e29ae1f428e7ebe678])
   --budgetEstimate: int # Represents a task budget estimate as long. (format: int64, e.g. 10000)
@@ -2450,11 +2449,11 @@ export def "workspaces-projects-tasks updateTask" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --contains-assignee: string@bool-completer # Flag to set whether task will have assignee or none. (default: true)
+  --contains-assignee: oneof<nothing, bool> # Flag to set whether task will have assignee or none. (default: true)
   --membership-status: string@membership-status-completer # Represents a membership status. (e.g. ACTIVE)
   --assigneeId: string # DEPRECATED
   --assigneeIds: list # Represents list of assignee ids for the task. (e.g. [45b687e29ae1f428e7ebe123, 67s687e29ae1f428e7ebe678])
-  --billable: string@bool-completer # Indicates whether a task is billable or not. (default: false)
+  --billable: oneof<nothing, bool> # Indicates whether a task is billable or not. (default: false)
   --budgetEstimate: int # Represents a task budget estimate as integer. (format: int64, e.g. 10000)
   --estimate: string # Represents a task duration estimate. (e.g. PT1H30M)
   name: string # Represents task name. (e.g. Bugfixing)
@@ -2487,7 +2486,7 @@ export def "workspaces-projects-template updateIsProjectTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isTemplate: string@bool-completer # Indicates whether project is a template or not. (default: false)
+  --isTemplate: oneof<nothing, bool> # Indicates whether project is a template or not. (default: false)
 ]: any -> record<archived: bool, billable: bool, budgetEstimate: record<active: bool, estimate: int, includeExpenses: bool, resetOption: string, type: string>, clientId: string, clientName: string, color: string, costRate: record<amount: int, currency: string>, duration: string, estimate: record<estimate: string, type: string>, estimateReset: record<dayOfMonth: int, dayOfWeek: string, hour: int, interval: string, month: string>, hourlyRate: record<amount: int, currency: string>, id: string, isPublic: bool, isTemplate: bool, memberships: table<costRate: record, hourlyRate: record, membershipStatus: string, membershipType: string, targetId: string, userId: string>, name: string, note: string, public: bool, template: bool, timeEstimate: record<active: bool, estimate: string, includeNonBillable: bool, resetOption: string, type: string>, workspaceId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2691,7 +2690,7 @@ export def "workspaces-scheduling-assignments-publish publishAssignments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   end: string # Represents end date in yyyy-MM-ddThh:mm:ssZ format. (e.g. 2021-01-01T00:00:00Z)
-  --notifyUsers: string@bool-completer # Indicates whether to notify users when assignment is published. (default: false)
+  --notifyUsers: oneof<nothing, bool> # Indicates whether to notify users when assignment is published. (default: false)
   --search: string # Represents a search string. (e.g. search keyword)
   start: string # Represents start date in yyyy-MM-ddThh:mm:ssZ format. (e.g. 2020-01-01T00:00:00Z)
   --userFilter: record # Represents a user filter request object. — shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, sourceType?: "USER_GROUP", status?: "PENDING"|"ACTIVE"|"DECLINED"|"INACTIVE"|"ALL", statuses?: list}
@@ -2723,10 +2722,10 @@ export def "workspaces-scheduling-assignments-recurring createRecurring" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --billable: string@bool-completer # Indicates whether assignment is billable or not. (default: false)
+  --billable: oneof<nothing, bool> # Indicates whether assignment is billable or not. (default: false)
   end: string # Represents an end date in the yyyy-MM-ddThh:mm:ssZ format. (e.g. 2021-01-01T00:00:00Z)
   hoursPerDay: float # Represents assignment total hours per day. (format: double, e.g. 7.5)
-  --includeNonWorkingDays: string@bool-completer # Indicates whether to include non-working days or not. (default: false)
+  --includeNonWorkingDays: oneof<nothing, bool> # Indicates whether to include non-working days or not. (default: false)
   --note: string # Represents an assignment note. (e.g. This is a sample note for an assignment.)
   projectId: string # Represents a project identifier across the system. (e.g. 56b687e29ae1f428e7ebe504)
   --recurringAssignment: record # Represents a recurring assignment object. This parameter is optional. — shape: {repeat?: bool, weeks: int}
@@ -2785,10 +2784,10 @@ export def "workspaces-scheduling-assignments-recurring editRecurring" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --billable: string@bool-completer # Indicates whether assignment is billable or not. (default: false)
+  --billable: oneof<nothing, bool> # Indicates whether assignment is billable or not. (default: false)
   end: string # Represents an end date in the yyyy-MM-ddThh:mm:ssZ format. (e.g. 2021-01-01T00:00:00Z)
   --hoursPerDay: float # Represents assignment total hours per day. (format: double, e.g. 7.5)
-  --includeNonWorkingDays: string@bool-completer # Indicates whether to include non-working days or not. (default: false)
+  --includeNonWorkingDays: oneof<nothing, bool> # Indicates whether to include non-working days or not. (default: false)
   --note: string # Represents an assignment note. (e.g. This is a sample note for an assignment.)
   --seriesUpdateOption: string@seriesUpdateOption-completer # Valid series option (e.g. THIS_ONE)
   start: string # Represents start date in yyyy-MM-ddThh:mm:ssZ format. (e.g. 2020-01-01T00:00:00Z)
@@ -2820,7 +2819,7 @@ export def "workspaces-scheduling-assignments-series editRecurringPeriod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --repeat: string@bool-completer # Indicates whether assignment is recurring or not. (default: false)
+  --repeat: oneof<nothing, bool> # Indicates whether assignment is recurring or not. (default: false)
   weeks: int # Indicates number of weeks for assignment. (format: int32, e.g. 5)
 ]: any -> table<billable: bool, excludeDays: list<record>, hoursPerDay: float, id: string, includeNonWorkingDays: bool, note: string, period: record<end: string, start: string>, projectId: string, published: bool, recurring: record<repeat: bool, seriesId: string, weeks: int>, startTime: string, taskId: string, userId: string, workspaceId: string> {
   let input = $in
@@ -2939,13 +2938,13 @@ export def "workspaces-tags list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # If provided, you'll get a filtered list of tags that matches the provided string in their name. (e.g. feature_X)
-  --strict-name-search: string@bool-completer # Flag to toggle on/off strict search mode. When set to true, search by name will only return tags whose name exactly matches the string value given for the 'name' parameter. When set to false, results will also include tags whose name contain the string value, but could be longer than the string value itself. For example, if there is a tag with the name 'applications', and the search value is 'app', setting strict-name-search to true will not return that tag in the results, whereas setting it to false will. (default: false)
+  --strict-name-search: oneof<nothing, bool> # Flag to toggle on/off strict search mode. When set to true, search by name will only return tags whose name exactly matches the string value given for the 'name' parameter. When set to false, results will also include tags whose name contain the string value, but could be longer than the string value itself. For example, if there is a tag with the name 'applications', and the search value is 'app', setting strict-name-search to true will not return that tag in the results, whereas setting it to false will. (default: false)
   --excluded-ids: string # Represents a list of excluded ids (e.g. [90p687e29ae1f428e7ebe657, 3r8687e29ae1f428e7eg567y])
   --sort-column: string@sort-column-completer-4 # Represents a column to be used as sorting criteria. (e.g. NAME)
   --sort-order: string@sort-order-completer # Represents a sorting mode. (e.g. ASCENDING)
   --page: int # Page number. (format: int32, default: 1, e.g. 1)
   --page-size: int # Page size. (format: int32, default: 50, e.g. 50)
-  --archived: string@bool-completer # Filters the result whether tags are archived or not. (default: false, e.g. false)
+  --archived: oneof<nothing, bool> # Filters the result whether tags are archived or not. (default: false, e.g. false)
 ]: nothing -> table<archived: bool, id: string, name: string, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
@@ -3042,7 +3041,7 @@ export def "workspaces-tags updateTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Indicates whether a tag will be archived or not. (default: false)
+  --archived: oneof<nothing, bool> # Indicates whether a tag will be archived or not. (default: false)
   --name: string # Represents a tag name. (e.g. Sprint1)
 ]: any -> record<archived: bool, id: string, name: string, workspaceId: string> {
   let input = $in
@@ -3072,8 +3071,8 @@ export def "workspaces-templates list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # If provided, you'll get a filtered list of templates that contain the provided string in their name.
-  --cleansed: string@bool-completer # If set to true will filter out inactive template projects and tasks. (default: false)
-  --hydrated: string@bool-completer # If set to true will return hydrated template projects and tasks. (default: false)
+  --cleansed: oneof<nothing, bool> # If set to true will filter out inactive template projects and tasks. (default: false)
+  --hydrated: oneof<nothing, bool> # If set to true will return hydrated template projects and tasks. (default: false)
   --page: int # format: int32, default: 1
   --page-size: int # format: int32, default: 50
 ]: nothing -> table<id: string, name: string, userId: string, workspaceId: string> {
@@ -3154,8 +3153,8 @@ export def "workspaces-templates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cleansed: string@bool-completer # If set to true will filter out inactive template projects and tasks. (default: false)
-  --hydrated: string@bool-completer # If set to true will return hydrated template projects and tasks. (default: false)
+  --cleansed: oneof<nothing, bool> # If set to true will filter out inactive template projects and tasks. (default: false)
+  --hydrated: oneof<nothing, bool> # If set to true will return hydrated template projects and tasks. (default: false)
 ]: nothing -> record<id: string, name: string, userId: string, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
@@ -3210,7 +3209,7 @@ export def "workspaces-time-entries createTimeEntry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --billable: string@bool-completer # Indicates whether a time entry is billable or not. (default: false)
+  --billable: oneof<nothing, bool> # Indicates whether a time entry is billable or not. (default: false)
   --customAttributes: list # Represents a list of create custom field request objects. — item shape: {name: string, namespace: string, value: string}
   --customFields: list # Represents a list of value objects for user’s custom fields. — item shape: {customFieldId: string, sourceType?: "WORKSPACE"|"PROJECT"|"TIMEENTRY", value?: record}
   --description: string # Represents time entry description. (e.g. This is a sample time entry description.)
@@ -3246,7 +3245,7 @@ export def "workspaces-time-entries-invoiced updateInvoicedStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --invoiced: string@bool-completer # Indicates whether time entry is invoiced or not. (default: false)
+  --invoiced: oneof<nothing, bool> # Indicates whether time entry is invoiced or not. (default: false)
   timeEntryIds: list # Represents a list of invoiced time entry ids (e.g. [54m377ddd3fcab07cfbb432w, 25b687e29ae1f428e7ebe123]) — item shape: {dateOfCreationFromObjectId?: string}
 ]: any -> any {
   let input = $in
@@ -3322,7 +3321,7 @@ export def "workspaces-time-entries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hydrated: string@bool-completer # Flag to set whether to include additional information of a time entry or not. (default: false)
+  --hydrated: oneof<nothing, bool> # Flag to set whether to include additional information of a time entry or not. (default: false)
 ]: nothing -> record<billable: bool, costRate: record<amount: int, currency: string>, customFieldValues: table<customFieldId: string, name: string, timeEntryId: string, type: string, value: record>, description: string, hourlyRate: record<amount: int, currency: string>, id: string, isLocked: bool, kioskId: string, projectId: string, tagIds: list<string>, taskId: string, timeInterval: record<duration: string, end: string, start: string>, type: string, userId: string, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
@@ -3348,7 +3347,7 @@ export def "workspaces-time-entries updateTimeEntry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --billable: string@bool-completer # Indicates whether a time entry is billable or not. (default: false)
+  --billable: oneof<nothing, bool> # Indicates whether a time entry is billable or not. (default: false)
   --customFields: list # Represents a list of value objects for user’s custom fields. — item shape: {customFieldId: string, sourceType?: "WORKSPACE"|"PROJECT"|"TIMEENTRY", value?: record}
   --description: string # Represents time entry description. (e.g. This is a sample time entry description.)
   --end: string # Represents an end date in yyyy-MM-ddThh:mm:ssZ format. (format: date-time, e.g. 2021-01-01T00:00:00Z)
@@ -3502,15 +3501,15 @@ export def "workspaces-time-off-policies createPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowHalfDay: string@bool-completer # Indicates whether policy allows half days. (default: false, e.g. false)
-  --allowNegativeBalance: string@bool-completer # Indicates whether policy allows negative balances. (default: false, e.g. true)
+  --allowHalfDay: oneof<nothing, bool> # Indicates whether policy allows half days. (default: false, e.g. false)
+  --allowNegativeBalance: oneof<nothing, bool> # Indicates whether policy allows negative balances. (default: false, e.g. true)
   approve: record # Represents approval settings. — shape: {requiresApproval?: bool, specificMembers?: bool, teamManagers?: bool, userIds?: list}
-  --archived: string@bool-completer # Indicates whether policy is archived. (default: false, e.g. true)
+  --archived: oneof<nothing, bool> # Indicates whether policy is archived. (default: false, e.g. true)
   --automaticAccrual: record # Provide automatic accrual settings. — shape: {amount: float, period?: "MONTH"|"YEAR", timeUnit?: "DAYS"|"HOURS"}
   --automaticTimeEntryCreation: record # Provides automatic time entry creation settings. — shape: {defaultEntities: record, enabled?: bool}
   --color: string # Provide color in format ^#(?:[0-9a-fA-F]{6}){1}$. Explanation: A valid color code should start with '#' and consist of six hexadecimal characters, representing a color in hexadecimal format. Color value is in standard RGB hexadecimal format. (e.g. #8BC34A)
-  --everyoneIncludingNew: string@bool-completer # Indicates whether the policy is to be applied to future new users. (default: false, e.g. false)
-  --hasExpiration: string@bool-completer # Indicates whether the policy balance should have expiration (default: false, e.g. false)
+  --everyoneIncludingNew: oneof<nothing, bool> # Indicates whether the policy is to be applied to future new users. (default: false, e.g. false)
+  --hasExpiration: oneof<nothing, bool> # Indicates whether the policy balance should have expiration (default: false, e.g. false)
   --icon: string@icon-completer # Provide icon. (e.g. UMBRELLA)
   name: string # Represents a name of new policy. (e.g. Mental health days)
   --negativeBalance: record # Provide the negative balance data you would like to use for updating the policy. — shape: {amount: float, period?: "MONTH"|"YEAR", shouldReset?: bool}
@@ -3622,15 +3621,15 @@ export def "workspaces-time-off-policies updatePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowHalfDay: string@bool-completer # Indicates whether policy allows half day. (default: false, e.g. true)
-  --allowNegativeBalance: string@bool-completer # Indicates whether policy allows negative balance. (default: false, e.g. false)
+  --allowHalfDay: oneof<nothing, bool> # Indicates whether policy allows half day. (default: false, e.g. true)
+  --allowNegativeBalance: oneof<nothing, bool> # Indicates whether policy allows negative balance. (default: false, e.g. false)
   approve: record # Represents approval settings. — shape: {requiresApproval?: bool, specificMembers?: bool, teamManagers?: bool, userIds?: list}
-  --archived: string@bool-completer # Indicates whether policy is archived. (default: false, e.g. false)
+  --archived: oneof<nothing, bool> # Indicates whether policy is archived. (default: false, e.g. false)
   --automaticAccrual: record # Provide automatic accrual settings. — shape: {amount: float, period?: "MONTH"|"YEAR", timeUnit?: "DAYS"|"HOURS"}
   --automaticTimeEntryCreation: record # Provides automatic time entry creation settings. — shape: {defaultEntities: record, enabled?: bool}
   --color: string # Provide color in format ^#(?:[0-9a-fA-F]{6}){1}$. Explanation: A valid color code should start with '#' and consist of six hexadecimal characters, representing a color in hexadecimal format. Color value is in standard RGB hexadecimal format. (e.g. #8BC34A)
-  --everyoneIncludingNew: string@bool-completer # Indicates whether the policy is shown to new users. (default: false, e.g. false)
-  --hasExpiration: string@bool-completer # Indicates whether the policy has expiration. (default: false, e.g. false)
+  --everyoneIncludingNew: oneof<nothing, bool> # Indicates whether the policy is shown to new users. (default: false, e.g. false)
+  --hasExpiration: oneof<nothing, bool> # Indicates whether the policy has expiration. (default: false, e.g. false)
   --icon: string@icon-completer # Provide icon. (e.g. UMBRELLA)
   name: string # Provide the name you would like to use for updating the policy. (e.g. Days)
   --negativeBalance: record # Provide the negative balance data you would like to use for updating the policy. — shape: {amount: float, period?: "MONTH"|"YEAR", shouldReset?: bool}
@@ -3811,7 +3810,7 @@ export def "workspaces-user-groups get" [
   --sort-order: string@sort-order-completer # Sorting mode. (e.g. ASCENDING)
   --page: int # Page number. (format: int32, default: 1, e.g. 1)
   --page-size: int # Page size. (format: int32, default: 50, e.g. 50)
-  --includeTeamManagers: string@bool-completer # If provided, you'll get a list of team managers assigned to this user group. (default: false, e.g. true)
+  --includeTeamManagers: oneof<nothing, bool> # If provided, you'll get a list of team managers assigned to this user group. (default: false, e.g. true)
 ]: nothing -> table<id: string, name: string, teamManagers: list<record>, userIds: list<string>, workspaceId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default "https://api.clockify.me/api")
@@ -3994,9 +3993,9 @@ export def "workspaces-user-time-entries get" [
   --project: string # If provided, you'll get a filtered list of time entries that matches the provided string in their project id. (e.g. 5b641568b07987035750505e)
   --task: string # If provided, you'll get a filtered list of time entries that matches the provided string in their task id. (e.g. 64c777ddd3fcab07cfbb210c)
   --tags: list # If provided, you'll get a filtered list of time entries that matches the provided string(s) in their tag id(s). (e.g. [5e4117fe8c625f38930d57b7, 7e4117fe8c625f38930d57b8])
-  --project-required: string@bool-completer # Flag to set whether to only get time entries which have a project. (default: false)
-  --task-required: string@bool-completer # Flag to set whether to only get time entries which have tasks. (default: false)
-  --hydrated: string@bool-completer # Flag to set whether to include additional information on time entries or not. (default: false)
+  --project-required: oneof<nothing, bool> # Flag to set whether to only get time entries which have a project. (default: false)
+  --task-required: oneof<nothing, bool> # Flag to set whether to only get time entries which have tasks. (default: false)
+  --hydrated: oneof<nothing, bool> # Flag to set whether to include additional information on time entries or not. (default: false)
   --page: int # Page number. (format: int32, default: 1, e.g. 1)
   --page-size: int # Page size. (format: int32, default: 50, e.g. 50)
   --in-progress: string # Flag to set whether to filter only in progress time entries.
@@ -4055,7 +4054,7 @@ export def "workspaces-user-time-entries createForOthers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --from-entry: string # Represents a time entry identifier across the system. (e.g. 64c777ddd3fcab07cfbb210c)
-  --billable: string@bool-completer # Indicates whether a time entry is billable or not. (default: false)
+  --billable: oneof<nothing, bool> # Indicates whether a time entry is billable or not. (default: false)
   --customAttributes: list # Represents a list of create custom field request objects. — item shape: {name: string, namespace: string, value: string}
   --customFields: list # Represents a list of value objects for user’s custom fields. — item shape: {customFieldId: string, sourceType?: "WORKSPACE"|"PROJECT"|"TIMEENTRY", value?: record}
   --description: string # Represents time entry description. (e.g. This is a sample time entry description.)
@@ -4092,7 +4091,7 @@ export def "workspaces-user-time-entries replaceMany" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hydrated: string@bool-completer # If set to true, results will contain additional information about the time entry. (default: false)
+  --hydrated: oneof<nothing, bool> # If set to true, results will contain additional information about the time entry. (default: false)
   --body: record
 ]: any -> table<billable: bool, customFieldValues: list<record>, description: string, id: string, isLocked: bool, kioskId: string, projectId: string, tagIds: list<string>, taskId: string, timeInterval: record<duration: string, end: string, start: string>, type: string, userId: string, workspaceId: string> {
   let input = $in
@@ -4207,7 +4206,7 @@ export def "workspaces-users-info filterUsersOfWorkspace" [
   --allow-errors(-e) # Return full response without error handling
   --accountStatuses: list # If provided, you'll get a filtered list of users with the corresponding account status filter. If not, this will only filter ACTIVE, PENDING_EMAIL_VERIFICATION, and NOT_REGISTERED Users. (e.g. [LIMITED, ACTIVE])
   --email: string # If provided, you'll get a filtered list of users that contain the provided string in their email address. (e.g. mail@example.com)
-  --includeRoles: string@bool-completer # If you pass along includeRoles=true, you'll get each user's detailed manager role (including projects and members for whom they're managers) (default: false)
+  --includeRoles: oneof<nothing, bool> # If you pass along includeRoles=true, you'll get each user's detailed manager role (including projects and members for whom they're managers) (default: false)
   --memberships: string@memberships-completer # If provided, you'll get all users along with workspaces, groups, or projects they have access to. (default: NONE, e.g. NONE)
   --name: string # If provided, you'll get a filtered list of users that contain the provided string in their name. (e.g. John)
   --page: int # Page number. (format: int32, default: 1, e.g. 1)
@@ -4600,7 +4599,7 @@ export def "workspaces-webhooks-logs post" [
   --page: int # Page number. (format: int32, default: 0, e.g. 1)
   --size: int # Page size. (format: int32, default: 50, e.g. 50)
   --body-from: string # Represents date and time in yyyy-MM-ddThh:mm:ssZ format. If provided, results will include logs which occurred after this value. (format: date-time, e.g. 2023-02-01T13:00:46Z)
-  --sortByNewest: string@bool-completer # If set to true, logs will be sorted with most recent first. (default: false)
+  --sortByNewest: oneof<nothing, bool> # If set to true, logs will be sorted with most recent first. (default: false)
   --status: string@status-completer-7 # Filters logs by status.
   --body-to: string # Represents date and time in yyyy-MM-ddThh:mm:ssZ format. If provided, results will include logs which occurred before this value. (format: date-time, e.g. 2023-02-05T13:00:46Z)
 ]: any -> table<id: string, requestBody: string, respondedAt: string, responseBody: string, statusCode: int, webhookEventStatusId: string, webhookId: string> {
@@ -4724,9 +4723,9 @@ export def "workspaces-reports-attendance generateAttendanceReport" [
   --amountShown: string@amountShown-completer # If provided, you'll get filtered result including reports with provided amount shown. (e.g. COST)
   --amounts: list
   --approvalState: string@approvalState-completer # If provided, you'll get filtered result including reports with provided approval state. (e.g. APPROVED)
-  --archived: string@bool-completer # Indicates whether the report is archived (e.g. false)
+  --archived: oneof<nothing, bool> # Indicates whether the report is archived (e.g. false)
   attendanceFilter: record # Represents an attendance report filter. — shape: {balanceFilters?: list, breakFilters?: list, capacityFilters?: list, endFilters?: list, groups?: list, hasTimeOff?: bool, overtimeFilters?: list, page?: int, pageSize?: int, sortColumn?: "GROUP"|"USER"|"DATE"|"START"|"END"|"BREAK"|"WORK"|"CAPACITY"|"OVERTIME"|"UNDERTIME"|"BALANCE"|"TIME_OFF", startFilters?: list, undertimeFilters?: list, workFilters?: list}
-  --billable: string@bool-completer # Indicates whether the report is billable (e.g. true)
+  --billable: oneof<nothing, bool> # Indicates whether the report is billable (e.g. true)
   --clients: record # shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ACTIVE"|"ARCHIVED"|"ALL"}
   --currency: record # shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ACTIVE"|"ARCHIVED"|"ALL"}
   --customFields: list # item shape: {id?: string, isEmpty?: bool, numberCondition?: "EQUAL"|"GREATER_THAN"|"LESS_THAN", type?: "TXT"|"NUMBER"|"DROPDOWN_SINGLE"|"DROPDOWN_MULTIPLE"|"CHECKBOX"|"LINK", value?: record}
@@ -4739,7 +4738,7 @@ export def "workspaces-reports-attendance generateAttendanceReport" [
   --exportType: string@exportType-completer # If provided, you'll get filtered result including reports with provided export type. (e.g. JSON)
   --invoicingState: string@invoicingState-completer # If provided, you'll get filtered result including reports with provided invoicing state. (e.g. INVOICED)
   --projects: record # shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ACTIVE"|"ARCHIVED"|"ALL"}
-  --rounding: string@bool-completer # Indicates whether the report filter is rounding (e.g. false)
+  --rounding: oneof<nothing, bool> # Indicates whether the report filter is rounding (e.g. false)
   --sortOrder: string@sortOrder-completer # If provided, you'll get sorted result by provided sort order. (e.g. ASCENDING)
   --summaryFilter: record # Represents a summary report filter. — shape: {groups?: list, sortColumn?: "GROUP"|"DURATION"|"AMOUNT"|"EARNED"|"COST"|"PROFIT", summaryChartType?: "BILLABILITY"|"PROJECT"}
   --tags: record # Represents an object for filtering entries by tags. — shape: {containedInTimeentry?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ACTIVE"|"ARCHIVED"|"ALL"}
@@ -4751,7 +4750,7 @@ export def "workspaces-reports-attendance generateAttendanceReport" [
   --users: record # shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ALL"|"ACTIVE_WITH_PENDING"|"ACTIVE"|"PENDING"|"INACTIVE"}
   --weekStart: string@weekStart-completer # If provided, you'll get filtered result including reports with provided week start. (e.g. MONDAY)
   --weeklyFilter: record # Represents a weekly report filter. — shape: {group?: string, subgroup?: string}
-  --withoutDescription: string@bool-completer # If set to 'true', report will only include entries with empty description (e.g. false)
+  --withoutDescription: oneof<nothing, bool> # If set to 'true', report will only include entries with empty description (e.g. false)
   --zoomLevel: string@zoomLevel-completer # If provided, you'll get filtered result including reports with provided zoom level. (e.g. WEEK)
 ]: any -> any {
   let input = $in
@@ -4794,9 +4793,9 @@ export def "workspaces-reports-detailed generateDetailedReport" [
   --amountShown: string@amountShown-completer # If provided, you'll get filtered result including reports with provided amount shown. (e.g. COST)
   --amounts: list
   --approvalState: string@approvalState-completer # If provided, you'll get filtered result including reports with provided approval state. (e.g. APPROVED)
-  --archived: string@bool-completer # Indicates whether the report is archived (e.g. false)
+  --archived: oneof<nothing, bool> # Indicates whether the report is archived (e.g. false)
   --attendanceFilter: record # Represents an attendance report filter. — shape: {balanceFilters?: list, breakFilters?: list, capacityFilters?: list, endFilters?: list, groups?: list, hasTimeOff?: bool, overtimeFilters?: list, page?: int, pageSize?: int, sortColumn?: "GROUP"|"USER"|"DATE"|"START"|"END"|"BREAK"|"WORK"|"CAPACITY"|"OVERTIME"|"UNDERTIME"|"BALANCE"|"TIME_OFF", startFilters?: list, undertimeFilters?: list, workFilters?: list}
-  --billable: string@bool-completer # Indicates whether the report is billable (e.g. true)
+  --billable: oneof<nothing, bool> # Indicates whether the report is billable (e.g. true)
   --clients: record # shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ACTIVE"|"ARCHIVED"|"ALL"}
   --currency: record # shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ACTIVE"|"ARCHIVED"|"ALL"}
   --customFields: list # item shape: {id?: string, isEmpty?: bool, numberCondition?: "EQUAL"|"GREATER_THAN"|"LESS_THAN", type?: "TXT"|"NUMBER"|"DROPDOWN_SINGLE"|"DROPDOWN_MULTIPLE"|"CHECKBOX"|"LINK", value?: record}
@@ -4809,7 +4808,7 @@ export def "workspaces-reports-detailed generateDetailedReport" [
   --exportType: string@exportType-completer # If provided, you'll get filtered result including reports with provided export type. (e.g. JSON)
   --invoicingState: string@invoicingState-completer # If provided, you'll get filtered result including reports with provided invoicing state. (e.g. INVOICED)
   --projects: record # shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ACTIVE"|"ARCHIVED"|"ALL"}
-  --rounding: string@bool-completer # Indicates whether the report filter is rounding (e.g. false)
+  --rounding: oneof<nothing, bool> # Indicates whether the report filter is rounding (e.g. false)
   --sortOrder: string@sortOrder-completer # If provided, you'll get sorted result by provided sort order. (e.g. ASCENDING)
   --summaryFilter: record # Represents a summary report filter. — shape: {groups?: list, sortColumn?: "GROUP"|"DURATION"|"AMOUNT"|"EARNED"|"COST"|"PROFIT", summaryChartType?: "BILLABILITY"|"PROJECT"}
   --tags: record # Represents an object for filtering entries by tags. — shape: {containedInTimeentry?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ACTIVE"|"ARCHIVED"|"ALL"}
@@ -4822,7 +4821,7 @@ export def "workspaces-reports-detailed generateDetailedReport" [
   --users: record # shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ALL"|"ACTIVE_WITH_PENDING"|"ACTIVE"|"PENDING"|"INACTIVE"}
   --weekStart: string@weekStart-completer # If provided, you'll get filtered result including reports with provided week start. (e.g. MONDAY)
   --weeklyFilter: record # Represents a weekly report filter. — shape: {group?: string, subgroup?: string}
-  --withoutDescription: string@bool-completer # If set to 'true', report will only include entries with empty description (e.g. false)
+  --withoutDescription: oneof<nothing, bool> # If set to 'true', report will only include entries with empty description (e.g. false)
   --zoomLevel: string@zoomLevel-completer # If provided, you'll get filtered result including reports with provided zoom level. (e.g. WEEK)
 ]: any -> any {
   let input = $in
@@ -4857,7 +4856,7 @@ export def "workspaces-reports-expenses-detailed generateDetailedReportV1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --approvalState: string@approvalState-completer # Represents an approval state (e.g. APPROVED)
-  --billable: string@bool-completer # Indicates whether report is billable (e.g. true)
+  --billable: oneof<nothing, bool> # Indicates whether report is billable (e.g. true)
   --categories: record # shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ACTIVE"|"ARCHIVED"|"ALL"}
   --clients: record # shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ACTIVE"|"ARCHIVED"|"ALL"}
   --currency: record # shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ACTIVE"|"ARCHIVED"|"ALL"}
@@ -4878,7 +4877,7 @@ export def "workspaces-reports-expenses-detailed generateDetailedReportV1" [
   --userLocale: string # Represents a user locale (e.g. en)
   --users: record # shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ALL"|"ACTIVE_WITH_PENDING"|"ACTIVE"|"PENDING"|"INACTIVE"}
   --weekStart: string@weekStart-completer # Represents week start (e.g. MONDAY)
-  --withoutNote: string@bool-completer # If set to 'true', report will only include entries with empty note (e.g. false)
+  --withoutNote: oneof<nothing, bool> # If set to 'true', report will only include entries with empty note (e.g. false)
   --zoomLevel: string@zoomLevel-completer # Represents a zoom level (e.g. WEEK)
 ]: any -> record<expenses: table<amount: float, approvalRequestId: string, billable: bool, categoryHasUnitPrice: bool, categoryId: string, categoryName: string, categoryUnit: string, date: string, exportFields: list, fileId: string, fileName: string, id: string, invoicingInfo: record, locked: bool, notes: string, projectColor: string, projectId: string, projectName: string, quantity: float, reportName: string, time: string, userEmail: string, userId: string, userName: string, userStatus: string, workspaceId: string>, totals: record<expensesCount: int, totalAmount: float, totalAmountBillable: float>> {
   let input = $in
@@ -4921,9 +4920,9 @@ export def "workspaces-reports-summary generateSummaryReport" [
   --amountShown: string@amountShown-completer # If provided, you'll get filtered result including reports with provided amount shown. (e.g. COST)
   --amounts: list
   --approvalState: string@approvalState-completer # If provided, you'll get filtered result including reports with provided approval state. (e.g. APPROVED)
-  --archived: string@bool-completer # Indicates whether the report is archived (e.g. false)
+  --archived: oneof<nothing, bool> # Indicates whether the report is archived (e.g. false)
   --attendanceFilter: record # Represents an attendance report filter. — shape: {balanceFilters?: list, breakFilters?: list, capacityFilters?: list, endFilters?: list, groups?: list, hasTimeOff?: bool, overtimeFilters?: list, page?: int, pageSize?: int, sortColumn?: "GROUP"|"USER"|"DATE"|"START"|"END"|"BREAK"|"WORK"|"CAPACITY"|"OVERTIME"|"UNDERTIME"|"BALANCE"|"TIME_OFF", startFilters?: list, undertimeFilters?: list, workFilters?: list}
-  --billable: string@bool-completer # Indicates whether the report is billable (e.g. true)
+  --billable: oneof<nothing, bool> # Indicates whether the report is billable (e.g. true)
   --clients: record # shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ACTIVE"|"ARCHIVED"|"ALL"}
   --currency: record # shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ACTIVE"|"ARCHIVED"|"ALL"}
   --customFields: list # item shape: {id?: string, isEmpty?: bool, numberCondition?: "EQUAL"|"GREATER_THAN"|"LESS_THAN", type?: "TXT"|"NUMBER"|"DROPDOWN_SINGLE"|"DROPDOWN_MULTIPLE"|"CHECKBOX"|"LINK", value?: record}
@@ -4936,7 +4935,7 @@ export def "workspaces-reports-summary generateSummaryReport" [
   --exportType: string@exportType-completer # If provided, you'll get filtered result including reports with provided export type. (e.g. JSON)
   --invoicingState: string@invoicingState-completer # If provided, you'll get filtered result including reports with provided invoicing state. (e.g. INVOICED)
   --projects: record # shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ACTIVE"|"ARCHIVED"|"ALL"}
-  --rounding: string@bool-completer # Indicates whether the report filter is rounding (e.g. false)
+  --rounding: oneof<nothing, bool> # Indicates whether the report filter is rounding (e.g. false)
   --sortOrder: string@sortOrder-completer # If provided, you'll get sorted result by provided sort order. (e.g. ASCENDING)
   summaryFilter: record # Represents a summary report filter. — shape: {groups?: list, sortColumn?: "GROUP"|"DURATION"|"AMOUNT"|"EARNED"|"COST"|"PROFIT", summaryChartType?: "BILLABILITY"|"PROJECT"}
   --tags: record # Represents an object for filtering entries by tags. — shape: {containedInTimeentry?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ACTIVE"|"ARCHIVED"|"ALL"}
@@ -4949,7 +4948,7 @@ export def "workspaces-reports-summary generateSummaryReport" [
   --users: record # shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ALL"|"ACTIVE_WITH_PENDING"|"ACTIVE"|"PENDING"|"INACTIVE"}
   --weekStart: string@weekStart-completer # If provided, you'll get filtered result including reports with provided week start. (e.g. MONDAY)
   --weeklyFilter: record # Represents a weekly report filter. — shape: {group?: string, subgroup?: string}
-  --withoutDescription: string@bool-completer # If set to 'true', report will only include entries with empty description (e.g. false)
+  --withoutDescription: oneof<nothing, bool> # If set to 'true', report will only include entries with empty description (e.g. false)
   --zoomLevel: string@zoomLevel-completer # If provided, you'll get filtered result including reports with provided zoom level. (e.g. WEEK)
 ]: any -> any {
   let input = $in
@@ -4992,9 +4991,9 @@ export def "workspaces-reports-weekly generateWeeklyReport" [
   --amountShown: string@amountShown-completer # If provided, you'll get filtered result including reports with provided amount shown. (e.g. COST)
   --amounts: list
   --approvalState: string@approvalState-completer # If provided, you'll get filtered result including reports with provided approval state. (e.g. APPROVED)
-  --archived: string@bool-completer # Indicates whether the report is archived (e.g. false)
+  --archived: oneof<nothing, bool> # Indicates whether the report is archived (e.g. false)
   --attendanceFilter: record # Represents an attendance report filter. — shape: {balanceFilters?: list, breakFilters?: list, capacityFilters?: list, endFilters?: list, groups?: list, hasTimeOff?: bool, overtimeFilters?: list, page?: int, pageSize?: int, sortColumn?: "GROUP"|"USER"|"DATE"|"START"|"END"|"BREAK"|"WORK"|"CAPACITY"|"OVERTIME"|"UNDERTIME"|"BALANCE"|"TIME_OFF", startFilters?: list, undertimeFilters?: list, workFilters?: list}
-  --billable: string@bool-completer # Indicates whether the report is billable (e.g. true)
+  --billable: oneof<nothing, bool> # Indicates whether the report is billable (e.g. true)
   --clients: record # shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ACTIVE"|"ARCHIVED"|"ALL"}
   --currency: record # shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ACTIVE"|"ARCHIVED"|"ALL"}
   --customFields: list # item shape: {id?: string, isEmpty?: bool, numberCondition?: "EQUAL"|"GREATER_THAN"|"LESS_THAN", type?: "TXT"|"NUMBER"|"DROPDOWN_SINGLE"|"DROPDOWN_MULTIPLE"|"CHECKBOX"|"LINK", value?: record}
@@ -5007,7 +5006,7 @@ export def "workspaces-reports-weekly generateWeeklyReport" [
   --exportType: string@exportType-completer # If provided, you'll get filtered result including reports with provided export type. (e.g. JSON)
   --invoicingState: string@invoicingState-completer # If provided, you'll get filtered result including reports with provided invoicing state. (e.g. INVOICED)
   --projects: record # shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ACTIVE"|"ARCHIVED"|"ALL"}
-  --rounding: string@bool-completer # Indicates whether the report filter is rounding (e.g. false)
+  --rounding: oneof<nothing, bool> # Indicates whether the report filter is rounding (e.g. false)
   --sortOrder: string@sortOrder-completer # If provided, you'll get sorted result by provided sort order. (e.g. ASCENDING)
   --summaryFilter: record # Represents a summary report filter. — shape: {groups?: list, sortColumn?: "GROUP"|"DURATION"|"AMOUNT"|"EARNED"|"COST"|"PROFIT", summaryChartType?: "BILLABILITY"|"PROJECT"}
   --tags: record # Represents an object for filtering entries by tags. — shape: {containedInTimeentry?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ACTIVE"|"ARCHIVED"|"ALL"}
@@ -5020,7 +5019,7 @@ export def "workspaces-reports-weekly generateWeeklyReport" [
   --users: record # shape: {contains?: "CONTAINS"|"DOES_NOT_CONTAIN"|"CONTAINS_ONLY", ids?: list, status?: "ALL"|"ACTIVE_WITH_PENDING"|"ACTIVE"|"PENDING"|"INACTIVE"}
   --weekStart: string@weekStart-completer # If provided, you'll get filtered result including reports with provided week start. (e.g. MONDAY)
   weeklyFilter: record # Represents a weekly report filter. — shape: {group?: string, subgroup?: string}
-  --withoutDescription: string@bool-completer # If set to 'true', report will only include entries with empty description (e.g. false)
+  --withoutDescription: oneof<nothing, bool> # If set to 'true', report will only include entries with empty description (e.g. false)
   --zoomLevel: string@zoomLevel-completer # If provided, you'll get filtered result including reports with provided zoom level. (e.g. WEEK)
 ]: any -> any {
   let input = $in
@@ -5075,8 +5074,8 @@ export def "workspaces-shared-reports saveSharedReportV1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: record # shape: {amountShown?: "EARNED"|"COST"|"PROFIT"|"HIDE_AMOUNT"|"EXPORT", amounts?: list, approvalState?: "APPROVED"|"UNAPPROVED"|"ALL", archived?: bool, attendanceFilter?: record, billable?: bool, clients?: record, currency?: record, customFields?: list, dateFormat?: string, dateRangeEnd: string, dateRangeStart: string, dateRangeType?: "ABSOLUTE"|"TODAY"|"YESTERDAY"|"THIS_WEEK"|"LAST_WEEK"|"PAST_TWO_WEEKS"|"THIS_MONTH"|"LAST_MONTH"|"THIS_YEAR"|"LAST_YEAR", description?: string, detailedFilter?: record, exportType?: "JSON"|"JSON_V1"|"PDF"|"CSV"|"XLSX"|"ZIP", invoicingState?: "INVOICED"|"UNINVOICED"|"ALL", projects?: record, rounding?: bool, sortOrder?: "ASCENDING"|"DESCENDING", summaryFilter?: record, tags?: record, tasks?: record, timeFormat?: string, timeZone?: string, userCustomFields?: list, userGroups?: record, userLocale?: string, users?: record, weekStart?: "MONDAY"|"TUESDAY"|"WEDNESDAY"|"THURSDAY"|"FRIDAY"|"SATURDAY"|"SUNDAY", weeklyFilter?: record, withoutDescription?: bool, zoomLevel?: "WEEK"|"MONTH"|"YEAR"}
-  --fixedDate: string@bool-completer # Indicates whether the shared report has a fixed date range.
-  --isPublic: string@bool-completer # Indicates whether the shared report is public or not (e.g. false)
+  --fixedDate: oneof<nothing, bool> # Indicates whether the shared report has a fixed date range.
+  --isPublic: oneof<nothing, bool> # Indicates whether the shared report is public or not (e.g. false)
   --name: string # Represents a shared report's name (e.g. Weekly 1)
   --type: string@type-completer-3 # Represent the type of shared report. (e.g. WEEKLY)
   --visibleToUserGroups: list # Represents user group ids. (e.g. "[5b715448b079875110792222", "5b715448b079875110791111"])
@@ -5130,8 +5129,8 @@ export def "workspaces-shared-reports updateSharedReportV1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --fixedDate: string@bool-completer # Indicates whether the shared report has a fixed date range. (e.g. false)
-  --isPublic: string@bool-completer # Indicates whether the shared report is public. (e.g. false)
+  --fixedDate: oneof<nothing, bool> # Indicates whether the shared report has a fixed date range. (e.g. false)
+  --isPublic: oneof<nothing, bool> # Indicates whether the shared report is public. (e.g. false)
   name: string # Represents a shared reports name. (e.g. Weekly Updated Report)
   --visibleToUserGroups: list # Provide user groups ids to which the shared report is visible. (e.g. "[5b715448b079875110792222", "5b715448b079875110791111"])
   --visibleToUsers: list # Provide user ids to which the shared report is visible. (e.g. [5b715448b079875110791234, 5b715448b079875110791432, 5b715448b079875110791324])

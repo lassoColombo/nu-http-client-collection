@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://salesforce.local"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -130,7 +129,7 @@ export def "language-datasets listDatasets" [
   --allow-errors(-e) # Return full response without error handling
   --offset: string # Index of the dataset from which you want to start paging (default: 0)
   --count: string # Number of datsets to return. Maximum valid value is 25. If you specify a number greater than 25, the call returns 25 datasets. (default: 25)
-  --global: string@bool-completer # If true, returns all global datasets. Global datasets are public datasets that Salesforce provides. (default: false)
+  --global: oneof<nothing, bool> # If true, returns all global datasets. Global datasets are public datasets that Salesforce provides. (default: false)
 ]: nothing -> record<data: table<available: bool, createdAt: string, id: int, labelSummary: record, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -694,7 +693,7 @@ export def "vision-datasets listDatasets-by-" [
   --allow-errors(-e) # Return full response without error handling
   --offset: string # Index of the dataset from which you want to start paging (default: 0)
   --count: string # Number of datsets to return. Maximum valid value is 25. If you specify a number greater than 25, the call returns 25 datasets. (default: 25)
-  --global: string@bool-completer # If true, returns all global datasets. Global datasets are public datasets that Salesforce provides. (default: false)
+  --global: oneof<nothing, bool> # If true, returns all global datasets. Global datasets are public datasets that Salesforce provides. (default: false)
 ]: nothing -> record<data: table<available: bool, createdAt: string, id: int, labelSummary: record, language: string, name: string, numOfDuplicates: int, object: string, statusMsg: string, totalExamples: int, totalLabels: int, type: string, updatedAt: string>, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

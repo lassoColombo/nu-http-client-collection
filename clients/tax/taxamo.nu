@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.taxamo.com"] }
 def auth-scheme-completer [] { ["token"] }
 
@@ -101,7 +100,7 @@ export def "dictionaries-countries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --tax-supported: string@bool-completer # Should only countries with tax supported be listed?
+  --tax-supported: oneof<nothing, bool> # Should only countries with tax supported be listed?
 ]: nothing -> record<dictionary: table<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
@@ -519,7 +518,7 @@ export def "tax-calculate calculateSimpleTax" [
   --billing-country-code: string # Billing two letter ISO country code.
   --invoice-address-postal-code: string # Invoice address/postal_code
   --total-amount: float # Total amount. Required if amount or both unit price and quantity are not provided.
-  --tax-deducted: string@bool-completer # If the transaction is in a country supported by Taxamo, but the tax is not calculated due to merchant settings or EU B2B transaction for example.
+  --tax-deducted: oneof<nothing, bool> # If the transaction is in a country supported by Taxamo, but the tax is not calculated due to merchant settings or EU B2B transaction for example.
 ]: nothing -> record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
@@ -618,11 +617,11 @@ export def "transactions listTransactions" [
   --allow-errors(-e) # Return full response without error handling
   --filter-text: string # Filtering expression
   --offset: int # Offset
-  --has-note: string@bool-completer # Return only transactions with a note field set.
+  --has-note: oneof<nothing, bool> # Return only transactions with a note field set.
   --key-or-custom-id: string # Taxamo provided transaction key or custom id
   --currency-code: string # Three letter ISO currency code.
   --order-date-to: string # Order date to in yyyy-MM-dd format.
-  --sort-reverse: string@bool-completer # If true, results are sorted in descending order.
+  --sort-reverse: oneof<nothing, bool> # If true, results are sorted in descending order.
   --limit: int # Limit (no more than 1000, defaults to 100).
   --invoice-number: string # Transaction invoice number.
   --tax-country-codes: string # Comma separated list of two letter ISO tax country codes.
@@ -656,7 +655,7 @@ export def "transactions createTransaction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --manual-mode: string@bool-completer # Use manual mode, bypassing country detection. Only allowed with private token. This flag allows to use original_transaction_key field
+  --manual-mode: oneof<nothing, bool> # Use manual mode, bypassing country detection. Only allowed with private token. This flag allows to use original_transaction_key field
   transaction: record # shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, order_date?: string, original_transaction_key?: string, status?: string, sub_account_id?: string, supply_date?: string, tax_country_code?: string, tax_data?: record, tax_deducted?: bool, transaction_lines: list, verification_token?: string}
 ]: any -> record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>> {
   let input = $in

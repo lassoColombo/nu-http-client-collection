@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://app.billbee.io"] }
 def auth-scheme-completer [] { ["x-billbee-api-key" "basic"] }
 
@@ -117,7 +116,7 @@ export def "automaticprovision-createaccount CreateAccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --AcceptTerms: string@bool-completer # Set to true, if the user has accepted the Billbee terms &amp; conditions
+  --AcceptTerms: oneof<nothing, bool> # Set to true, if the user has accepted the Billbee terms &amp; conditions
   --Address: record # Represents the invoice address of a Billbee user — shape: {Address1?: string, Address2?: string, City?: string, Company?: string, Country?: string, Name?: string, VatId?: string, Zip?: string}
   --AffiliateCouponCode: string # Specifies an billbee affiliate code to attach to the user
   --DefaultCurrrency: string # Optionally specify the default currency of the user
@@ -830,7 +829,7 @@ export def "orders GetList" [
   --modifiedAtMin: string # If given, the last modification has to be newer than the given date (format: date-time)
   --modifiedAtMax: string # If given, the last modification has to be older or equal than the given date. (format: date-time)
   --articleTitleSource: int@articleTitleSource-completer # The source field for the article title. 0 = Order Position (default), 1 = Article Title, 2 = Article Invoice Text (format: int32)
-  --excludeTags: string@bool-completer # If true the list of tags passed to the call are used to filter orders to not include these tags
+  --excludeTags: oneof<nothing, bool> # If true the list of tags passed to the call are used to filter orders to not include these tags
 ]: nothing -> record<Data: table<AcceptLossOfReturnRight: bool, AdjustmentCost: float, AdjustmentReason: string, ApiAccountId: int, ApiAccountName: string, ArchivedAt: string, BillBeeOrderId: int, BillBeeParentOrderId: int, Buyer: record, Comments: list, ConfirmedAt: string, CreatedAt: string, Currency: string, CustomInvoiceNote: string, Customer: record, CustomerNumber: string, CustomerVatId: string, DeliverySourceCountryCode: string, DistributionCenter: string, History: list, Id: string, InvoiceAddress: record, InvoiceDate: string, InvoiceNumber: int, InvoiceNumberPostfix: string, InvoiceNumberPrefix: string, IsCancelationFor: string, IsFromBillbeeApi: bool, LanguageCode: string, LastModifiedAt: string, MerchantVatId: string, OrderItems: list, OrderNumber: string, PaidAmount: float, PayedAt: string, PaymentInstruction: string, PaymentMethod: int, PaymentReference: string, PaymentTransactionId: string, Payments: list, RebateDifference: float, RestoredAt: string, Seller: record, SellerComment: string, ShipWeightKg: float, ShippedAt: string, ShippingAddress: record, ShippingCost: float, ShippingIds: list, ShippingProfileId: string, ShippingProfileName: string, ShippingProviderId: int, ShippingProviderName: string, ShippingProviderProductId: int, ShippingProviderProductName: string, ShippingServices: list, State: int, Tags: list, TaxRate1: float, TaxRate2: float, TotalCost: float, UpdatedAt: string, VatId: string, VatMode: int>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string, Paging: record<Page: int, PageSize: int, TotalPages: int, TotalRows: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -865,7 +864,7 @@ export def "orders PostNewOrder" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
   --shopId: int # Deprecated, if orderData.ApiAccountId is set, it will be used instead of 'shopId' (format: int64)
-  --AcceptLossOfReturnRight: string@bool-completer # Customer accepts loss due to withdrawal
+  --AcceptLossOfReturnRight: oneof<nothing, bool> # Customer accepts loss due to withdrawal
   --AdjustmentCost: float # format: double
   --AdjustmentReason: string
   --ApiAccountId: int # Id of the account, this order belongs to (format: int64)
@@ -892,7 +891,7 @@ export def "orders PostNewOrder" [
   --InvoiceNumberPostfix: string # The postfix of the invoice number
   --InvoiceNumberPrefix: string # The prefix of the invoice number
   --IsCancelationFor: string # An optional Order Id (externalid) for an order if this is a cancel order (shopify only at the moment)
-  --IsFromBillbeeApi: string@bool-completer # Indicates whether the order was created through the Billbee-Api or not.
+  --IsFromBillbeeApi: oneof<nothing, bool> # Indicates whether the order was created through the Billbee-Api or not.
   --LanguageCode: string # The two-letter language code of the customer
   --LastModifiedAt: string # Date of the last update, the order got (format: date-time)
   --MerchantVatId: string # The vat-id, that should be displayed on the invoice and other order documents
@@ -955,7 +954,7 @@ export def "orders-create-delivery-note CreateDeliveryNote" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --includePdf: string@bool-completer # If true, the PDF is included in the response as base64 encoded string
+  --includePdf: oneof<nothing, bool> # If true, the PDF is included in the response as base64 encoded string
   --sendToCloudId: int # Optionally specify the id of a billbee connected cloud device to send the pdf to (format: int64)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
@@ -981,7 +980,7 @@ export def "orders-create-invoice CreateInvoice" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --includeInvoicePdf: string@bool-completer # If true, the PDF is included in the response as base64 encoded string
+  --includeInvoicePdf: oneof<nothing, bool> # If true, the PDF is included in the response as base64 encoded string
   --templateId: int # You can pass the id of an invoice template to overwrite the assigned template for invoice creation (format: int64)
   --sendToCloudId: int # You can pass the id of a connected cloud printer/storage to send the invoice to it (format: int64)
 ]: nothing -> record {
@@ -1087,8 +1086,8 @@ export def "orders-invoices GetInvoiceList" [
   --tag: list
   --minPayDate: string # format: date-time
   --maxPayDate: string # format: date-time
-  --includePositions: string@bool-completer
-  --excludeTags: string@bool-completer # If true the list of tags passed to the call are used to filter orders to not include these tags
+  --includePositions: oneof<nothing, bool>
+  --excludeTags: oneof<nothing, bool> # If true the list of tags passed to the call are used to filter orders to not include these tags
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1191,10 +1190,10 @@ export def "orders-parse-placeholders ParsePlaceholders" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --IsHtml: string@bool-completer # If true, the string will be handled as html.
+  --IsHtml: oneof<nothing, bool> # If true, the string will be handled as html.
   --Language: string # The ISO 639-1 code of the target language. Using default if not set.
   --TextToParse: string # The text to parse and replace the placeholders in.
-  --Trim: string@bool-completer # If true, then the placeholder values are trimmed after usage.
+  --Trim: oneof<nothing, bool> # If true, then the placeholder values are trimmed after usage.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
@@ -1429,9 +1428,9 @@ export def "products CreateArticle" [
   --Id: int # format: int64
   --Images: list # item shape: {ArticleId?: int, Id?: int, IsDefault?: bool, Position?: int, ThumbPathExt?: string, ThumbUrl?: string, Url?: string}
   --InvoiceText: list # item shape: {LanguageCode?: string, Text?: string}
-  --IsCustomizable: string@bool-completer
-  --IsDeactivated: string@bool-completer
-  --IsDigital: string@bool-completer
+  --IsCustomizable: oneof<nothing, bool>
+  --IsDeactivated: oneof<nothing, bool>
+  --IsDigital: oneof<nothing, bool>
   --LengthCm: float # format: double
   --Manufacturer: string
   --Materials: list # item shape: {LanguageCode?: string, Text?: string}
@@ -1702,10 +1701,10 @@ export def "products-updatestock UpdateStock" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --AutosubtractReservedAmount: string@bool-completer # Automatically reduce the NewQuantity by the currently not fulfilled amount
+  --AutosubtractReservedAmount: oneof<nothing, bool> # Automatically reduce the NewQuantity by the currently not fulfilled amount
   --BillbeeId: int # Optional the ID of the Billbee product to update (format: int64)
   --DeltaQuantity: float # This parameter is currently ignored (format: double)
-  --ForceSendStockToShops: string@bool-completer # If true, every sent stockchange is stored and transmitted to the connected shop, even if the value has not changed
+  --ForceSendStockToShops: oneof<nothing, bool> # If true, every sent stockchange is stored and transmitted to the connected shop, even if the value has not changed
   --NewQuantity: float # The new absolute stock quantity for the product you want to set (format: double)
   --OldQuantity: float # This parameter is currently ignored (format: double)
   --Reason: string # Optional a reason text for the stock update
@@ -1888,7 +1887,7 @@ export def "products-images PutImages" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --replace: string@bool-completer # If you pass true, the images will be replaced by the passed images. Otherwise the passed images will be appended to the product.
+  --replace: oneof<nothing, bool> # If you pass true, the images will be replaced by the passed images. Otherwise the passed images will be appended to the product.
   --body: record
 ]: any -> record<Data: record<ArticleId: int, Id: int, IsDefault: bool, Position: int, ThumbPathExt: string, ThumbUrl: string, Url: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
   let input = $in
@@ -1967,7 +1966,7 @@ export def "products-images PutImage" [
   --accept: string@accept-completer-1 # Response content type
   --ArticleId: int # format: int64
   --Id: int # format: int64
-  --IsDefault: string@bool-completer
+  --IsDefault: oneof<nothing, bool>
   --Position: int # format: int32
   --ThumbPathExt: string
   --ThumbUrl: string
@@ -2164,7 +2163,7 @@ export def "shipment-shipwithlabel ShipWithLabel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --ChangeStateToSend: string@bool-completer # Optional parameter to automatically change the orderstate to sent after creating the shipment
+  --ChangeStateToSend: oneof<nothing, bool> # Optional parameter to automatically change the orderstate to sent after creating the shipment
   --ClientReference: string # Optional specify a reference text to be included on the label. Works not with all carriers
   --Dimension: record # shape: {height?: float, length?: float, width?: float}
   --OrderId: int # The Billbee internal id of the order to ship (format: int64)
@@ -2246,7 +2245,7 @@ export def "webhooks Post" [
   --Filters: list
   --Headers: record
   --Id: string
-  --IsPaused: string@bool-completer
+  --IsPaused: oneof<nothing, bool>
   --Properties: record
   Secret: string
   WebHookUri: string
@@ -2348,7 +2347,7 @@ export def "webhooks Put" [
   --Filters: list
   --Headers: record
   --Id: string
-  --IsPaused: string@bool-completer
+  --IsPaused: oneof<nothing, bool>
   --Properties: record
   Secret: string
   WebHookUri: string

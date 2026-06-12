@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.growthbook.io/api" "https://{domain}/api"] }
 def auth-scheme-completer [] { ["bearer" "basic"] }
 
@@ -184,7 +183,7 @@ export def "features post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   id: string # A unique key name for the feature. Feature keys can only include letters, numbers, hyphens, and underscores.
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
   --description: string # Description of the feature
   --owner: string # The userId or email address of the owner. If an email address is provided, it will be used to look up the userId of the matching organization member. If an ID is provided, it will be validated as existing in the organization. When omitted, it defaults to the user associated with the request's Personal Access Token (PAT), if one is being used.
   --project: string # An associated project ID
@@ -249,7 +248,7 @@ export def "features updateFeature" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # Description of the feature
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
   --project: string # An associated project ID
   --owner: string # The userId or email address of the owner. If an email address is provided, it will be used to look up the userId of the matching organization member. If an ID is provided, it will be validated as existing in the organization.
   --defaultValue: string
@@ -567,7 +566,7 @@ export def "features-revisions-metadata put-by-id-version" [
   --owner: string # The userId or email address of the owner. If an email address is provided, it will be used to look up the userId of the matching organization member. If an ID is provided, it will be validated as existing in the organization.
   --project: string
   --tags: list
-  --neverStale: string@bool-completer
+  --neverStale: oneof<nothing, bool>
   --customFields: record
   --jsonSchema: record # shape: {schemaType: "schema"|"simple", schema: string, simple: record, date: any, enabled: bool}
 ]: any -> record<revision: record<featureId: string, baseVersion: int, version: int, comment: string, date: string, status: string, createdBy: string, publishedBy: string, defaultValue: string, rules: record, definitions: record, environmentsEnabled: record, envPrerequisites: record, prerequisites: list<record>, metadata: record<description: string, owner: string, project: string, tags: list, neverStale: bool, valueType: string, jsonSchema: record, customFields: record>, rampActions: list<any>>> {
@@ -692,7 +691,7 @@ export def "features-revisions-archive put-by-id-version" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
   --revisionTitle: string
   --revisionComment: string
 ]: any -> record<revision: record<featureId: string, baseVersion: int, version: int, comment: string, date: string, status: string, createdBy: string, publishedBy: string, defaultValue: string, rules: record, definitions: record, environmentsEnabled: record, envPrerequisites: record, prerequisites: list<record>, metadata: record<description: string, owner: string, project: string, tags: list, neverStale: bool, valueType: string, jsonSchema: record, customFields: record>, rampActions: list<any>>> {
@@ -724,7 +723,7 @@ export def "features-revisions-toggle post-by-id-version" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   environment: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --revisionTitle: string
   --revisionComment: string
 ]: any -> record<revision: record<featureId: string, baseVersion: int, version: int, comment: string, date: string, status: string, createdBy: string, publishedBy: string, defaultValue: string, rules: record, definitions: record, environmentsEnabled: record, envPrerequisites: record, prerequisites: list<record>, metadata: record<description: string, owner: string, project: string, tags: list, neverStale: bool, valueType: string, jsonSchema: record, customFields: record>, rampActions: list<any>>> {
@@ -1199,7 +1198,7 @@ export def "features post-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   id: string # A unique key name for the feature. Feature keys can only include letters, numbers, hyphens, and underscores.
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
   --description: string # Description of the feature
   --owner: string # The userId or email address of the owner. If an email address is provided, it will be used to look up the userId of the matching organization member. If an ID is provided, it will be validated as existing in the organization. When omitted, it defaults to the user associated with the request's Personal Access Token (PAT), if one is being used.
   --project: string # An associated project ID
@@ -1261,7 +1260,7 @@ export def "features updateFeatureV2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # Description of the feature
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
   --project: string # An associated project ID
   --owner: string # The userId or email address of the owner. If an email address is provided, it will be used to look up the userId of the matching organization member. If an ID is provided, it will be validated as existing in the organization.
   --defaultValue: string
@@ -1562,7 +1561,7 @@ export def "features-revisions-metadata put-by-id-version-1" [
   --owner: string # The userId or email address of the owner. If an email address is provided, it will be used to look up the userId of the matching organization member. If an ID is provided, it will be validated as existing in the organization.
   --project: string
   --tags: list
-  --neverStale: string@bool-completer
+  --neverStale: oneof<nothing, bool>
   --customFields: record
   --jsonSchema: record # shape: {schemaType: "schema"|"simple", schema: string, simple: record, date: any, enabled: bool}
 ]: any -> record<revision: record<featureId: string, baseVersion: int, version: int, comment: string, date: string, status: string, createdBy: record<type: string, id: string, name: string, email: string>, publishedBy: record<type: string, id: string, name: string, email: string>, defaultValue: string, rules: list<record>, definitions: record, environmentsEnabled: record, envPrerequisites: record, prerequisites: list<record>, metadata: record<description: string, owner: string, project: string, tags: list, neverStale: bool, valueType: string, jsonSchema: record, customFields: record>, rampActions: list<any>>> {
@@ -1679,7 +1678,7 @@ export def "features-revisions-archive put-by-id-version-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
   --revisionTitle: string # Title for a newly created draft. Only used when version is "new"; ignored for existing revisions.
   --revisionComment: string # Comment for a newly created draft. Only used when version is "new"; ignored for existing revisions.
 ]: any -> record<revision: record<featureId: string, baseVersion: int, version: int, comment: string, date: string, status: string, createdBy: record<type: string, id: string, name: string, email: string>, publishedBy: record<type: string, id: string, name: string, email: string>, defaultValue: string, rules: list<record>, definitions: record, environmentsEnabled: record, envPrerequisites: record, prerequisites: list<record>, metadata: record<description: string, owner: string, project: string, tags: list, neverStale: bool, valueType: string, jsonSchema: record, customFields: record>, rampActions: list<any>>> {
@@ -1709,7 +1708,7 @@ export def "features-revisions-toggle post-by-id-version-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   environment: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --revisionTitle: string # Title for a newly created draft. Only used when version is "new"; ignored for existing revisions.
   --revisionComment: string # Comment for a newly created draft. Only used when version is "new"; ignored for existing revisions.
 ]: any -> record<revision: record<featureId: string, baseVersion: int, version: int, comment: string, date: string, status: string, createdBy: record<type: string, id: string, name: string, email: string>, publishedBy: record<type: string, id: string, name: string, email: string>, defaultValue: string, rules: list<record>, definitions: record, environmentsEnabled: record, envPrerequisites: record, prerequisites: list<record>, metadata: record<description: string, owner: string, project: string, tags: list, neverStale: bool, valueType: string, jsonSchema: record, customFields: record>, rampActions: list<any>>> {
@@ -2146,7 +2145,7 @@ export def "archetypes post" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   --description: string
-  --isPublic: string@bool-completer # Whether to make this Archetype available to other team members
+  --isPublic: oneof<nothing, bool> # Whether to make this Archetype available to other team members
   --attributes: record # The attributes to set when using this Archetype
   --projects: list
   --environments: list # Limit this Archetype to specific environments. Omit or leave empty to apply to all environments.
@@ -2199,7 +2198,7 @@ export def "archetypes put" [
   --allow-errors(-e) # Return full response without error handling
   --name: string
   --description: string
-  --isPublic: string@bool-completer # Whether to make this Archetype available to other team members
+  --isPublic: oneof<nothing, bool> # Whether to make this Archetype available to other team members
   --attributes: record # The attributes to set when using this Archetype
   --projects: list
   --environments: list # Limit this Archetype to specific environments. Omit or leave empty to apply to all environments.
@@ -2288,7 +2287,7 @@ export def "experiments post" [
   --datasourceId: string # ID for the [DataSource](#tag/DataSource_model). Can only be set if a templateId is not provided.
   --assignmentQueryId: string # The ID property of one of the assignment query objects associated with the datasource. Can only be set if a templateId is not provided.
   trackingKey: string
-  --bypassDuplicateKeyCheck: string@bool-completer # If true, allow creating an experiment even if another experiment with the same tracking key already exists. This is ignored if the organization requires unique tracking keys as a rule.
+  --bypassDuplicateKeyCheck: oneof<nothing, bool> # If true, allow creating an experiment even if another experiment with the same tracking key already exists. This is ignored if the organization requires unique tracking keys as a rule.
   name: string # Name of the experiment
   --type: string@type-completer
   --project: string # Project ID which the experiment belongs to
@@ -2303,25 +2302,25 @@ export def "experiments post" [
   --segmentId: string # Only users in this segment will be included
   --queryFilter: string # WHERE clause to add to the default experiment query
   --owner: string # The userId or email address of the owner. If an email address is provided, it will be used to look up the userId of the matching organization member. If an ID is provided, it will be validated as existing in the organization. When omitted, it defaults to the user associated with the request's Personal Access Token (PAT), if one is being used.
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
   --status: string@status-completer
-  --autoRefresh: string@bool-completer
+  --autoRefresh: oneof<nothing, bool>
   --hashAttribute: string
   --fallbackAttribute: string
   --hashVersion: any
-  --disableStickyBucketing: string@bool-completer
+  --disableStickyBucketing: oneof<nothing, bool>
   --bucketVersion: float
   --minBucketVersion: float
   --releasedVariationId: string
-  --excludeFromPayload: string@bool-completer
+  --excludeFromPayload: oneof<nothing, bool>
   --inProgressConversions: string@inProgressConversions-completer
   --attributionModel: string@attributionModel-completer # Setting attribution model to `"experimentDuration"` is the same as selecting "Ignore Conversion Windows" for the Conversion Window Override. Setting it to `"lookbackOverride"` requires a `lookbackOverride` object to be provided.
   --lookbackOverride: record # Controls the lookback override for the experiment. For type "window", value must be a non-negative number and valueUnit is required. — shape: {type: "date"|"window", value: any, valueUnit?: "minutes"|"hours"|"days"|"weeks"}
   --statsEngine: string@statsEngine-completer
   variations: list # item shape: {id?: string, key: string, name: string, description?: string, screenshots?: list}
   --phases: list # item shape: {name: string, dateStarted: string, dateEnded?: string, reasonForStopping?: string, seed?: string, coverage?: float, namespace?: record, prerequisites?: list, reason?: string, condition?: string, savedGroupTargeting?: list, variationWeights?: list}
-  --regressionAdjustmentEnabled: string@bool-completer # Controls whether regression adjustment (CUPED) is enabled for experiment analyses
-  --sequentialTestingEnabled: string@bool-completer # Only applicable to frequentist analyses
+  --regressionAdjustmentEnabled: oneof<nothing, bool> # Controls whether regression adjustment (CUPED) is enabled for experiment analyses
+  --sequentialTestingEnabled: oneof<nothing, bool> # Only applicable to frequentist analyses
   --sequentialTestingTuningParameter: float
   --shareLevel: string@shareLevel-completer
   --banditScheduleValue: float
@@ -2422,7 +2421,7 @@ export def "experiments updateExperiment" [
   --datasourceId: string # Can only be set if existing experiment does not have a datasource
   --assignmentQueryId: string
   --trackingKey: string
-  --bypassDuplicateKeyCheck: string@bool-completer # If true, allow updating the tracking key even if another experiment with the same tracking key already exist. This is ignored if the organization requires unique tracking keys as a rule.
+  --bypassDuplicateKeyCheck: oneof<nothing, bool> # If true, allow updating the tracking key even if another experiment with the same tracking key already exist. This is ignored if the organization requires unique tracking keys as a rule.
   --name: string # Name of the experiment
   --type: string@type-completer
   --project: string # Project ID which the experiment belongs to
@@ -2436,28 +2435,28 @@ export def "experiments updateExperiment" [
   --segmentId: string # Only users in this segment will be included
   --queryFilter: string # WHERE clause to add to the default experiment query
   --owner: string # The userId or email address of the owner. If an email address is provided, it will be used to look up the userId of the matching organization member. If an ID is provided, it will be validated as existing in the organization.
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
   --status: string@status-completer
-  --autoRefresh: string@bool-completer
+  --autoRefresh: oneof<nothing, bool>
   --hashAttribute: string
   --fallbackAttribute: string
   --hashVersion: any
-  --disableStickyBucketing: string@bool-completer
+  --disableStickyBucketing: oneof<nothing, bool>
   --bucketVersion: float
   --minBucketVersion: float
   --results: string@results-completer # The result status of the experiment. Maps to resultSummary.status in the GET response.
   --winner: float # The index of the winning variation (0-indexed). Maps to resultSummary.winner (variation ID) in the GET response.
   --analysis: string # Analysis summary or conclusions for the experiment. Maps to resultSummary.conclusions in the GET response.
   --releasedVariationId: string # The ID of the released variation. Maps to resultSummary.releasedVariationId in the GET response.
-  --excludeFromPayload: string@bool-completer # If true, the experiment is excluded from the SDK payload. Maps to resultSummary.excludeFromPayload in the GET response.
+  --excludeFromPayload: oneof<nothing, bool> # If true, the experiment is excluded from the SDK payload. Maps to resultSummary.excludeFromPayload in the GET response.
   --inProgressConversions: string@inProgressConversions-completer
   --attributionModel: string@attributionModel-completer # Setting attribution model to `"experimentDuration"` is the same as selecting "Ignore Conversion Windows" for the Conversion Window Override. Setting it to `"lookbackOverride"` requires a `lookbackOverride` object to be provided.
   --lookbackOverride: record # Controls the lookback override for the experiment. For type "window", value must be a non-negative number and valueUnit is required. — shape: {type: "date"|"window", value: any, valueUnit?: "minutes"|"hours"|"days"|"weeks"}
   --statsEngine: string@statsEngine-completer
   --variations: list # item shape: {id?: string, key: string, name: string, description?: string, screenshots?: list}
   --phases: list # item shape: {name: string, dateStarted: string, dateEnded?: string, reasonForStopping?: string, seed?: string, coverage?: float, namespace?: record, prerequisites?: list, reason?: string, condition?: string, savedGroupTargeting?: list, variationWeights?: list}
-  --regressionAdjustmentEnabled: string@bool-completer # Controls whether regression adjustment (CUPED) is enabled for experiment analyses
-  --sequentialTestingEnabled: string@bool-completer # Only applicable to frequentist analyses
+  --regressionAdjustmentEnabled: oneof<nothing, bool> # Controls whether regression adjustment (CUPED) is enabled for experiment analyses
+  --sequentialTestingEnabled: oneof<nothing, bool> # Only applicable to frequentist analyses
   --sequentialTestingTuningParameter: float
   --shareLevel: string@shareLevel-completer
   --banditScheduleValue: float
@@ -2546,7 +2545,7 @@ export def "experiments-start post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --skipChecklist: string@bool-completer # If true, skips validating the experiment satisifies all pre-launch checklist items
+  --skipChecklist: oneof<nothing, bool> # If true, skips validating the experiment satisifies all pre-launch checklist items
 ]: any -> record<experiment: record<id: string, trackingKey: string, dateCreated: string, dateUpdated: string, name: string, type: string, project: string, hypothesis: string, description: string, tags: list<string>, owner: string, ownerEmail: string, archived: bool, status: string, autoRefresh: bool, hashAttribute: string, fallbackAttribute: string, hashVersion: any, disableStickyBucketing: bool, bucketVersion: float, minBucketVersion: float, variations: list<record>, phases: list<record>, settings: record<datasourceId: string, assignmentQueryId: string, experimentId: string, segmentId: string, queryFilter: string, inProgressConversions: string, attributionModel: string, lookbackOverride: record, statsEngine: string, regressionAdjustmentEnabled: bool, sequentialTestingEnabled: bool, sequentialTestingTuningParameter: float, postStratificationEnabled: any, decisionFrameworkSettings: record, metricOverrides: list, goals: list, secondaryMetrics: list, guardrails: list, activationMetric: record>, resultSummary: record<status: string, winner: string, conclusions: string, releasedVariationId: string, excludeFromPayload: bool>, shareLevel: string, publicUrl: string, banditScheduleValue: float, banditScheduleUnit: string, banditBurnInValue: float, banditBurnInUnit: string, banditConversionWindowValue: float, banditConversionWindowUnit: string, linkedFeatures: list<string>, hasVisualChangesets: bool, hasURLRedirects: bool, customFields: record, customMetricSlices: list<record>, precomputedUnitDimensionIds: list<string>, defaultDashboardId: string, templateId: string, statusUpdateSchedule: any, nextScheduledStatusUpdate: any, enhancedStatus: record<status: string, detailedStatus: string>>, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2599,7 +2598,7 @@ export def "experiments-stop post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   results: string@results-completer # The experiment conclusion status.
-  --enableTemporaryRollout: string@bool-completer # If true, include this stopped experiment in SDK payload and force the release variation (`releasedVariationId`) to all traffic.
+  --enableTemporaryRollout: oneof<nothing, bool> # If true, include this stopped experiment in SDK payload and force the release variation (`releasedVariationId`) to all traffic.
   --releasedVariationId: string # Required if enableTemporaryRollout is true. Variation ID (e.g. var_abc123) to release to 100% of traffic eligible for this experiment.
   --winnerVariationId: string # Variation ID (e.g. var_abc123) of the winning variation. Used only as metadata. Required if results is 'won' and there are multiple test variations. Otherwise, defaults to the test variation when results is 'won' and to the baseline variation for other results.
   --analysis: string # Optional markdown summary displayed on the experiment results page.
@@ -2630,7 +2629,7 @@ export def "experiments-modify-temporary-rollout post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enableTemporaryRollout: string@bool-completer # If true, keep the stopped experiment in SDK payload and force traffic to the winner variation. If false, end temporary rollout and remove from SDK payload.
+  --enableTemporaryRollout: oneof<nothing, bool> # If true, keep the stopped experiment in SDK payload and force traffic to the winner variation. If false, end temporary rollout and remove from SDK payload.
   --releasedVariationId: string # Variation ID (e.g. var_abc123) to release to 100% of traffic eligible for this experiment. Required if enableTemporaryRollout is true.
 ]: any -> record<experiment: record<id: string, trackingKey: string, dateCreated: string, dateUpdated: string, name: string, type: string, project: string, hypothesis: string, description: string, tags: list<string>, owner: string, ownerEmail: string, archived: bool, status: string, autoRefresh: bool, hashAttribute: string, fallbackAttribute: string, hashVersion: any, disableStickyBucketing: bool, bucketVersion: float, minBucketVersion: float, variations: list<record>, phases: list<record>, settings: record<datasourceId: string, assignmentQueryId: string, experimentId: string, segmentId: string, queryFilter: string, inProgressConversions: string, attributionModel: string, lookbackOverride: record, statsEngine: string, regressionAdjustmentEnabled: bool, sequentialTestingEnabled: bool, sequentialTestingTuningParameter: float, postStratificationEnabled: any, decisionFrameworkSettings: record, metricOverrides: list, goals: list, secondaryMetrics: list, guardrails: list, activationMetric: record>, resultSummary: record<status: string, winner: string, conclusions: string, releasedVariationId: string, excludeFromPayload: bool>, shareLevel: string, publicUrl: string, banditScheduleValue: float, banditScheduleUnit: string, banditBurnInValue: float, banditBurnInUnit: string, banditConversionWindowValue: float, banditConversionWindowUnit: string, linkedFeatures: list<string>, hasVisualChangesets: bool, hasURLRedirects: bool, customFields: record, customMetricSlices: list<record>, precomputedUnitDimensionIds: list<string>, defaultDashboardId: string, templateId: string, statusUpdateSchedule: any, nextScheduledStatusUpdate: any, enhancedStatus: record<status: string, detailedStatus: string>>> {
   let input = $in
@@ -2873,7 +2872,7 @@ export def "metrics post" [
   type: string@type-completer-1 # Type of metric. See [Metrics documentation](/app/metrics/legacy)
   --tags: list # List of tags
   --projects: list # List of project IDs for projects that can access this metric
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
   --behavior: record # shape: {goal?: "increase"|"decrease", cappingSettings?: record, cap?: float, capping?: any, capValue?: float, windowSettings?: record, conversionWindowStart?: float, conversionWindowEnd?: float, priorSettings?: record, riskThresholdSuccess?: float, riskThresholdDanger?: float, minPercentChange?: float, maxPercentChange?: float, minSampleSize?: float, targetMDE?: float}
   --sql: record # Preferred way to define SQL. Only one of `sql`, `sqlBuilder` or `mixpanel` allowed, and at least one must be specified. — shape: {identifierTypes: list, conversionSQL: string, userAggregationSQL?: string, denominatorMetricId?: string}
   --sqlBuilder: record # An alternative way to specify a SQL metric, rather than a full query. Using `sql` is preferred to `sqlBuilder`. Only one of `sql`, `sqlBuilder` or `mixpanel` allowed, and at least one must be specified. — shape: {identifierTypeColumns: list, tableName: string, valueColumnName?: string, timestampColumnName: string, conditions?: list}
@@ -2936,7 +2935,7 @@ export def "metrics put" [
   --type: string@type-completer-1 # Type of metric. See [Metrics documentation](/app/metrics/legacy)
   --tags: list # List of tags
   --projects: list # List of project IDs for projects that can access this metric
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
   --behavior: record # shape: {goal?: "increase"|"decrease", cappingSettings?: record, cap?: float, capping?: any, capValue?: float, windowSettings?: record, conversionWindowStart?: float, conversionWindowEnd?: float, priorSettings?: record, riskThresholdSuccess?: float, riskThresholdDanger?: float, minPercentChange?: float, maxPercentChange?: float, minSampleSize?: float, targetMDE?: float}
   --sql: record # Preferred way to define SQL. Only one of `sql`, `sqlBuilder` or `mixpanel` allowed. — shape: {identifierTypes?: list, conversionSQL?: string, userAggregationSQL?: string, denominatorMetricId?: string}
   --sqlBuilder: record # An alternative way to specify a SQL metric, rather than a full query. Using `sql` is preferred to `sqlBuilder`. Only one of `sql`, `sqlBuilder` or `mixpanel` allowed — shape: {identifierTypeColumns?: list, tableName?: string, valueColumnName?: string, timestampColumnName?: string, conditions?: list}
@@ -3432,8 +3431,8 @@ export def "environments post" [
   --allow-errors(-e) # Return full response without error handling
   id: string # The ID of the new environment
   --description: string # The description of the new environment
-  --toggleOnList: string@bool-completer # Show on feature list page
-  --defaultState: string@bool-completer # Default state for new features
+  --toggleOnList: oneof<nothing, bool> # Show on feature list page
+  --defaultState: oneof<nothing, bool> # Default state for new features
   --projects: list
   --parent: string # An environment that the new environment should inherit feature rules from. Requires an enterprise license
 ]: any -> record<environment: record<id: string, description: string, toggleOnList: bool, defaultState: bool, projects: list<string>, parent: string>> {
@@ -3462,8 +3461,8 @@ export def "environments put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # The description of the new environment
-  --toggleOnList: string@bool-completer # Show on feature list page
-  --defaultState: string@bool-completer # Default state for new features
+  --toggleOnList: oneof<nothing, bool> # Show on feature list page
+  --defaultState: oneof<nothing, bool> # Default state for new features
   --projects: list
 ]: any -> record<environment: record<id: string, description: string, toggleOnList: bool, defaultState: bool, projects: list<string>, parent: string>> {
   let input = $in
@@ -3537,8 +3536,8 @@ export def "attributes post" [
   property: string # The attribute property
   datatype: string@datatype-completer # The attribute datatype
   --description: string # The description of the new attribute
-  --archived: string@bool-completer # The attribute is archived
-  --hashAttribute: string@bool-completer # Shall the attribute be hashed
+  --archived: oneof<nothing, bool> # The attribute is archived
+  --hashAttribute: oneof<nothing, bool> # Shall the attribute be hashed
   --enum: string
   --format: string@format-completer # The attribute's format
   --projects: list
@@ -3570,8 +3569,8 @@ export def "attributes put" [
   --allow-errors(-e) # Return full response without error handling
   --datatype: string@datatype-completer # The attribute datatype
   --description: string # The description of the new attribute
-  --archived: string@bool-completer # The attribute is archived
-  --hashAttribute: string@bool-completer # Shall the attribute be hashed
+  --archived: oneof<nothing, bool> # The attribute is archived
+  --hashAttribute: oneof<nothing, bool> # Shall the attribute be hashed
   --enum: string
   --format: string@format-completer # The attribute's format
   --projects: list
@@ -3654,22 +3653,22 @@ export def "sdk-connections post" [
   --sdkVersion: string
   environment: string
   --projects: list
-  --encryptPayload: string@bool-completer
-  --includeVisualExperiments: string@bool-completer
-  --includeDraftExperiments: string@bool-completer
-  --includeDraftExperimentRefs: string@bool-completer # When true, experiment-ref rules linked to draft experiments are included in feature definitions. Off by default.
-  --includeExperimentNames: string@bool-completer
-  --includeRedirectExperiments: string@bool-completer
-  --includeRuleIds: string@bool-completer
-  --includeProjectIdInMetadata: string@bool-completer
-  --includeCustomFieldsInMetadata: string@bool-completer
+  --encryptPayload: oneof<nothing, bool>
+  --includeVisualExperiments: oneof<nothing, bool>
+  --includeDraftExperiments: oneof<nothing, bool>
+  --includeDraftExperimentRefs: oneof<nothing, bool> # When true, experiment-ref rules linked to draft experiments are included in feature definitions. Off by default.
+  --includeExperimentNames: oneof<nothing, bool>
+  --includeRedirectExperiments: oneof<nothing, bool>
+  --includeRuleIds: oneof<nothing, bool>
+  --includeProjectIdInMetadata: oneof<nothing, bool>
+  --includeCustomFieldsInMetadata: oneof<nothing, bool>
   --allowedCustomFieldsInMetadata: list
-  --includeTagsInMetadata: string@bool-completer
-  --proxyEnabled: string@bool-completer
+  --includeTagsInMetadata: oneof<nothing, bool>
+  --proxyEnabled: oneof<nothing, bool>
   --proxyHost: string
-  --hashSecureAttributes: string@bool-completer
-  --remoteEvalEnabled: string@bool-completer
-  --savedGroupReferencesEnabled: string@bool-completer
+  --hashSecureAttributes: oneof<nothing, bool>
+  --remoteEvalEnabled: oneof<nothing, bool>
+  --savedGroupReferencesEnabled: oneof<nothing, bool>
 ]: any -> record<sdkConnection: record<id: string, dateCreated: string, dateUpdated: string, name: string, organization: string, languages: list<string>, sdkVersion: string, environment: string, project: string, projects: list<string>, encryptPayload: bool, encryptionKey: string, includeVisualExperiments: bool, includeDraftExperiments: bool, includeDraftExperimentRefs: bool, includeExperimentNames: bool, includeRedirectExperiments: bool, includeRuleIds: bool, includeProjectIdInMetadata: bool, includeCustomFieldsInMetadata: bool, allowedCustomFieldsInMetadata: list<string>, includeTagsInMetadata: bool, key: string, proxyEnabled: bool, proxyHost: string, proxySigningKey: string, sseEnabled: bool, hashSecureAttributes: bool, remoteEvalEnabled: bool, savedGroupReferencesEnabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3722,22 +3721,22 @@ export def "sdk-connections put" [
   --sdkVersion: string
   --environment: string
   --projects: list
-  --encryptPayload: string@bool-completer
-  --includeVisualExperiments: string@bool-completer
-  --includeDraftExperiments: string@bool-completer
-  --includeDraftExperimentRefs: string@bool-completer # When true, experiment-ref rules linked to draft experiments are included in feature definitions. Off by default.
-  --includeExperimentNames: string@bool-completer
-  --includeRedirectExperiments: string@bool-completer
-  --includeRuleIds: string@bool-completer
-  --includeProjectIdInMetadata: string@bool-completer
-  --includeCustomFieldsInMetadata: string@bool-completer
+  --encryptPayload: oneof<nothing, bool>
+  --includeVisualExperiments: oneof<nothing, bool>
+  --includeDraftExperiments: oneof<nothing, bool>
+  --includeDraftExperimentRefs: oneof<nothing, bool> # When true, experiment-ref rules linked to draft experiments are included in feature definitions. Off by default.
+  --includeExperimentNames: oneof<nothing, bool>
+  --includeRedirectExperiments: oneof<nothing, bool>
+  --includeRuleIds: oneof<nothing, bool>
+  --includeProjectIdInMetadata: oneof<nothing, bool>
+  --includeCustomFieldsInMetadata: oneof<nothing, bool>
   --allowedCustomFieldsInMetadata: list
-  --includeTagsInMetadata: string@bool-completer
-  --proxyEnabled: string@bool-completer
+  --includeTagsInMetadata: oneof<nothing, bool>
+  --proxyEnabled: oneof<nothing, bool>
   --proxyHost: string
-  --hashSecureAttributes: string@bool-completer
-  --remoteEvalEnabled: string@bool-completer
-  --savedGroupReferencesEnabled: string@bool-completer
+  --hashSecureAttributes: oneof<nothing, bool>
+  --remoteEvalEnabled: oneof<nothing, bool>
+  --savedGroupReferencesEnabled: oneof<nothing, bool>
 ]: any -> record<sdkConnection: record<id: string, dateCreated: string, dateUpdated: string, name: string, organization: string, languages: list<string>, sdkVersion: string, environment: string, project: string, projects: list<string>, encryptPayload: bool, encryptionKey: string, includeVisualExperiments: bool, includeDraftExperiments: bool, includeDraftExperimentRefs: bool, includeExperimentNames: bool, includeRedirectExperiments: bool, includeRuleIds: bool, includeProjectIdInMetadata: bool, includeCustomFieldsInMetadata: bool, allowedCustomFieldsInMetadata: list<string>, includeTagsInMetadata: bool, key: string, proxyEnabled: bool, proxyHost: string, proxySigningKey: string, sseEnabled: bool, hashSecureAttributes: bool, remoteEvalEnabled: bool, savedGroupReferencesEnabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4025,7 +4024,7 @@ export def "saved-groups post" [
   --values: list # When type = 'list', this is the list of values for the attribute key
   --owner: string # The userId or email address of the owner. If an email address is provided, it will be used to look up the userId of the matching organization member. If an ID is provided, it will be validated as existing in the organization. When omitted, it defaults to the user associated with the request's Personal Access Token (PAT), if one is being used.
   --projects: list
-  --bypassApproval: string@bool-completer # Set to true to skip the approval flow when the org requires approvals on saved groups. Requires the `bypassApprovalChecks` permission on every project the saved group belongs to. When the org does not require approvals, this flag has no effect.
+  --bypassApproval: oneof<nothing, bool> # Set to true to skip the approval flow when the org requires approvals on saved groups. Requires the `bypassApprovalChecks` permission on every project the saved group belongs to. When the org does not require approvals, this flag has no effect.
 ]: any -> record<savedGroup: record<id: string, type: string, dateCreated: string, dateUpdated: string, name: string, owner: string, ownerEmail: string, condition: string, attributeKey: string, values: list<string>, description: string, projects: list<string>, archived: bool, useEmptyListGroup: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4107,7 +4106,7 @@ export def "saved-groups updateSavedGroup" [
   --values: list # When type = 'list', this is the list of values for the attribute key
   --owner: string # The userId or email address of the owner. If an email address is provided, it will be used to look up the userId of the matching organization member. If an ID is provided, it will be validated as existing in the organization.
   --projects: list
-  --bypassApproval: string@bool-completer # Set to true to skip the approval flow when the org requires approvals on saved groups. Requires the `bypassApprovalChecks` permission on the saved group's existing projects. When the org does not require approvals, this flag has no effect.
+  --bypassApproval: oneof<nothing, bool> # Set to true to skip the approval flow when the org requires approvals on saved groups. Requires the `bypassApprovalChecks` permission on the saved group's existing projects. When the org does not require approvals, this flag has no effect.
 ]: any -> record<savedGroup: record<id: string, type: string, dateCreated: string, dateUpdated: string, name: string, owner: string, ownerEmail: string, condition: string, attributeKey: string, values: list<string>, description: string, projects: list<string>, archived: bool, useEmptyListGroup: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4395,7 +4394,7 @@ export def "saved-groups-revisions-archive put" [
   --allow-errors(-e) # Return full response without error handling
   --revisionTitle: string
   --revisionComment: string
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
 ]: any -> record<revision: record<id: string, version: int, title: string, status: string, authorId: string, authorEmail: string, contributors: list<string>, revertedFrom: string, reviews: list<record>, activityLog: list<record>, resolution: record<action: string, userId: string, dateCreated: string>, dateCreated: string, dateUpdated: string, baseSavedGroup: record<id: string, type: string, dateCreated: string, dateUpdated: string, name: string, owner: string, ownerEmail: string, condition: string, attributeKey: string, values: list, description: string, projects: list, archived: bool, useEmptyListGroup: bool>, proposedSavedGroup: record<id: string, type: string, dateCreated: string, dateUpdated: string, name: string, owner: string, ownerEmail: string, condition: string, attributeKey: string, values: list, description: string, projects: list, archived: bool, useEmptyListGroup: bool>, proposedChanges: list<any>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4864,7 +4863,7 @@ export def "fact-tables updateFactTable" [
   --columns: list # Optional array of columns that you want to update. Only allows updating properties of existing columns. Cannot create new columns or delete existing ones. Columns cannot be added or deleted; column structure is determined by SQL parsing. Slice-related properties require an enterprise license. — item shape: {column: string, datatype: "number"|"string"|"date"|"boolean"|"json"|"binary"|"other"|"", numberFormat?: ""|"currency"|"time:seconds"|"memory:bytes"|"memory:kilobytes", jsonFields?: record, name?: string, description?: string, alwaysInlineFilter?: bool, deleted?: bool, isAutoSliceColumn?: bool, autoSlices?: list, lockedAutoSlices?: list}
   --columnsError: any # Error message if there was an issue parsing the SQL schema
   --managedBy: string@managedBy-completer-1 # Set this to "api" to disable editing in the GrowthBook UI
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
 ]: any -> record<factTable: record<id: string, name: string, description: string, owner: string, ownerEmail: string, projects: list<string>, tags: list<string>, datasource: string, userIdTypes: list<string>, aggregatedFactTableSettings: record<idTypes: list, updateTime: record, lookbackWindow: int>, sql: string, eventName: string, columns: list<record>, columnsError: any, archived: bool, managedBy: string, dateCreated: string, dateUpdated: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5065,7 +5064,7 @@ export def "fact-tables-aggregated-tables-refresh refreshAggregatedFactTable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --idType: string # Limit the refresh to a single id type. If omitted, all of the fact table's aggregatedFactTableSettings.idTypes are refreshed.
-  --fullRestate: string@bool-completer # Drop and recreate the table, re-scanning the retained window. This is significantly more expensive than the default incremental append (it scans ~2-3 months of history).
+  --fullRestate: oneof<nothing, bool> # Drop and recreate the table, re-scanning the retained window. This is significantly more expensive than the default incremental append (it scans ~2-3 months of history).
 ]: any -> record<queued: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5134,7 +5133,7 @@ export def "fact-metrics post" [
   metricType: string@metricType-completer
   numerator: record # shape: {factTableId: string, column?: string, aggregation?: "sum"|"max"|"count distinct"|"hll merge"|"kll merge", filters?: list, inlineFilters?: record, rowFilters?: list, aggregateFilterColumn?: string, aggregateFilter?: string}
   --denominator: record # Only when metricType is 'ratio' — shape: {factTableId: string, column: string, aggregation?: "sum"|"max"|"count distinct"|"hll merge"|"kll merge", filters?: list, inlineFilters?: record, rowFilters?: list}
-  --inverse: string@bool-completer # Set to true for things like Bounce Rate, where you want the metric to decrease
+  --inverse: oneof<nothing, bool> # Set to true for things like Bounce Rate, where you want the metric to decrease
   --quantileSettings: record # Controls the settings for quantile metrics (mandatory if metricType is "quantile") — shape: {type: "event"|"unit", ignoreZeros: bool, quantile: float, quantileEventCountColumn?: string}
   --cappingSettings: record # Controls how outliers are handled — shape: {type: "none"|"absolute"|"percentile", value?: float, ignoreZeros?: bool}
   --windowSettings: record # Controls the conversion window for the metric — shape: {type: "none"|"conversion"|"lookback", delayHours?: float, delayValue?: float, delayUnit?: "minutes"|"hours"|"days"|"weeks", windowValue?: float, windowUnit?: "minutes"|"hours"|"days"|"weeks"}
@@ -5142,7 +5141,7 @@ export def "fact-metrics post" [
   --regressionAdjustmentSettings: record # Controls the regression adjustment (CUPED) settings for the metric — shape: {override: bool, enabled?: bool, days?: float}
   --riskThresholdSuccess: float # No longer used. Threshold for Risk to be considered low enough, as a proportion (e.g. put 0.0025 for 0.25%). <br/> Must be a non-negative number and must not be higher than `riskThresholdDanger`. (DEPRECATED)
   --riskThresholdDanger: float # No longer used. Threshold for Risk to be considered too high, as a proportion (e.g. put 0.0125 for 1.25%). <br/> Must be a non-negative number. (DEPRECATED)
-  --displayAsPercentage: string@bool-completer # If true and the metric is a ratio or dailyParticipation metric, variation means will be displayed as a percentage. Defaults to true for dailyParticipation metrics and false for ratio metrics.
+  --displayAsPercentage: oneof<nothing, bool> # If true and the metric is a ratio or dailyParticipation metric, variation means will be displayed as a percentage. Defaults to true for dailyParticipation metrics and false for ratio metrics.
   --minPercentChange: float # Minimum percent change to consider uplift significant, as a proportion (e.g. put 0.005 for 0.5%)
   --maxPercentChange: float # Maximum percent change to consider uplift significant, as a proportion (e.g. put 0.5 for 50%)
   --minSampleSize: float
@@ -5213,7 +5212,7 @@ export def "fact-metrics updateFactMetric" [
   --metricType: string@metricType-completer
   --numerator: record # shape: {factTableId: string, column?: string, aggregation?: "sum"|"max"|"count distinct"|"hll merge"|"kll merge", filters?: list, inlineFilters?: record, rowFilters?: list, aggregateFilterColumn?: string, aggregateFilter?: string}
   --denominator: record # Only when metricType is 'ratio' — shape: {factTableId: string, column: string, aggregation?: "sum"|"max"|"count distinct"|"hll merge"|"kll merge", filters?: list, inlineFilters?: record, rowFilters?: list}
-  --inverse: string@bool-completer # Set to true for things like Bounce Rate, where you want the metric to decrease
+  --inverse: oneof<nothing, bool> # Set to true for things like Bounce Rate, where you want the metric to decrease
   --quantileSettings: record # Controls the settings for quantile metrics (mandatory if metricType is "quantile") — shape: {type: "event"|"unit", ignoreZeros: bool, quantile: float, quantileEventCountColumn?: string}
   --cappingSettings: record # Controls how outliers are handled — shape: {type: "none"|"absolute"|"percentile", value?: float, ignoreZeros?: bool}
   --windowSettings: record # Controls the conversion window for the metric — shape: {type: "none"|"conversion"|"lookback", delayHours?: float, delayValue?: float, delayUnit?: "minutes"|"hours"|"days"|"weeks", windowValue?: float, windowUnit?: "minutes"|"hours"|"days"|"weeks"}
@@ -5221,13 +5220,13 @@ export def "fact-metrics updateFactMetric" [
   --regressionAdjustmentSettings: record # Controls the regression adjustment (CUPED) settings for the metric — shape: {override: bool, enabled?: bool, days?: float}
   --riskThresholdSuccess: float # No longer used. Threshold for Risk to be considered low enough, as a proportion (e.g. put 0.0025 for 0.25%). <br/> Must be a non-negative number and must not be higher than `riskThresholdDanger`. (DEPRECATED)
   --riskThresholdDanger: float # No longer used. Threshold for Risk to be considered too high, as a proportion (e.g. put 0.0125 for 1.25%). <br/> Must be a non-negative number. (DEPRECATED)
-  --displayAsPercentage: string@bool-completer # If true and the metric is a ratio or dailyParticipation metric, variation means will be displayed as a percentage. Defaults to true for dailyParticipation metrics and false for ratio metrics.
+  --displayAsPercentage: oneof<nothing, bool> # If true and the metric is a ratio or dailyParticipation metric, variation means will be displayed as a percentage. Defaults to true for dailyParticipation metrics and false for ratio metrics.
   --minPercentChange: float # Minimum percent change to consider uplift significant, as a proportion (e.g. put 0.005 for 0.5%)
   --maxPercentChange: float # Maximum percent change to consider uplift significant, as a proportion (e.g. put 0.5 for 50%)
   --minSampleSize: float
   --targetMDE: float
   --managedBy: string@managedBy-completer-1 # Set this to "api" to disable editing in the GrowthBook UI
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
   --metricAutoSlices: list # Array of slice column names that will be automatically included in metric analysis. This is an enterprise feature.
 ]: any -> record<factMetric: record<id: string, name: string, description: string, owner: string, ownerEmail: string, projects: list<string>, tags: list<string>, datasource: string, metricType: string, numerator: record<factTableId: string, column: string, aggregation: string, filters: list, inlineFilters: record, rowFilters: list, aggregateFilterColumn: string, aggregateFilter: string>, denominator: record<factTableId: string, column: string, filters: list, inlineFilters: record, rowFilters: list>, inverse: bool, quantileSettings: record<type: string, ignoreZeros: bool, quantile: float, quantileEventCountColumn: string>, cappingSettings: record<type: string, value: float, ignoreZeros: bool>, windowSettings: record<type: string, delayValue: float, delayUnit: string, windowValue: float, windowUnit: string>, priorSettings: record<override: bool, proper: bool, mean: float, stddev: float>, regressionAdjustmentSettings: record<override: bool, enabled: bool, days: float>, riskThresholdSuccess: float, riskThresholdDanger: float, displayAsPercentage: bool, minPercentChange: float, maxPercentChange: float, minSampleSize: float, targetMDE: float, managedBy: string, dateCreated: string, dateUpdated: string, archived: bool, metricAutoSlices: list<string>>> {
   let input = $in
@@ -5282,7 +5281,7 @@ export def "fact-metrics-analysis post" [
   --populationId: any # The ID of the population (e.g., segment ID) when populationType is not 'factTable'. Defaults to null.
   --additionalNumeratorFilters: list # We support passing in adhoc filters for an analysis that don't live on the metric itself. These are in addition to the metric's filters. To use this, you can pass in an array of Fact Table Filter Ids.
   --additionalDenominatorFilters: list # We support passing in adhoc filters for an analysis that don't live on the metric itself. These are in addition to the metric's filters. To use this, you can pass in an array of Fact Table Filter Ids.
-  --useCache: string@bool-completer # Whether to use a cached query if one exists. Defaults to true.
+  --useCache: oneof<nothing, bool> # Whether to use a cached query if one exists. Defaults to true.
 ]: any -> record<metricAnalysis: record<id: string, status: string, settings: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5762,7 +5761,7 @@ export def "ramp-schedules-actions-complete completeRampSchedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --disableRule: string@bool-completer
+  --disableRule: oneof<nothing, bool>
 ]: any -> record<rampSchedule: record<id: string, dateCreated: string, dateUpdated: string, name: string, entityType: string, entityId: string, targets: list<record>, startActions: list<record>, steps: list<record>, endActions: list<record>, startDate: any, cutoffDate: any, status: string, currentStepIndex: int, startedAt: any, phaseStartedAt: any, pausedAt: any, nextStepAt: any, nextProcessAt: any, elapsedMs: any, lockdownConfig: record<mode: string>, monitoringConfig: any, experimentHealthAction: string, currentStepEnteredAt: any, stepApproval: any, monitoringStartDate: any, lastRollbackAt: any, lastRollbackReason: any, monitoringStatus: any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5869,7 +5868,7 @@ export def "ramp-schedules-actions-advance apiAdvanceRampSchedule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --reason: string # Reason for advancing
-  --force: string@bool-completer # Bypass a pending approval gate on the current step. Requires admin-level (`canBypassApprovalChecks`) permission. When omitted or `false`, a 409 is returned if the step has an unsatisfied `holdConditions.requiresApproval` gate.
+  --force: oneof<nothing, bool> # Bypass a pending approval gate on the current step. Requires admin-level (`canBypassApprovalChecks`) permission. When omitted or `false`, a 409 is returned if the step has an unsatisfied `holdConditions.requiresApproval` gate.
 ]: any -> record<rampSchedule: record<id: string, dateCreated: string, dateUpdated: string, name: string, entityType: string, entityId: string, targets: list<record>, startActions: list<record>, steps: list<record>, endActions: list<record>, startDate: any, cutoffDate: any, status: string, currentStepIndex: int, startedAt: any, phaseStartedAt: any, pausedAt: any, nextStepAt: any, nextProcessAt: any, elapsedMs: any, lockdownConfig: record<mode: string>, monitoringConfig: any, experimentHealthAction: string, currentStepEnteredAt: any, stepApproval: any, monitoringStartDate: any, lastRollbackAt: any, lastRollbackReason: any, monitoringStatus: any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5943,7 +5942,7 @@ export def "ramp-schedules-actions-set-auto-update setAutoUpdateRampSchedule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Legacy alias for monitoring mode (`true` => auto, `false` => manual).
+  --enabled: oneof<nothing, bool> # Legacy alias for monitoring mode (`true` => auto, `false` => manual).
 ]: any -> record<id: string, dateCreated: string, dateUpdated: string, name: string, entityType: string, entityId: string, targets: table<id: string, entityType: string, entityId: string, ruleId: any, environment: any, status: string, activatingRevisionVersion: any>, startActions: table<targetType: string, targetId: string, patch: record>, steps: table<interval: any, approvalNotes: any, monitored: bool, holdConditions: record, actions: list>, endActions: table<targetType: string, targetId: string, patch: record>, startDate: any, cutoffDate: any, status: string, currentStepIndex: int, startedAt: any, phaseStartedAt: any, pausedAt: any, nextStepAt: any, nextProcessAt: any, elapsedMs: any, lockdownConfig: record<mode: string>, monitoringConfig: any, experimentHealthAction: string, currentStepEnteredAt: any, stepApproval: any, monitoringStartDate: any, lastRollbackAt: any, lastRollbackReason: any, monitoringStatus: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5975,7 +5974,7 @@ export def "ramp-schedules-monitoring updateRampScheduleMonitoring" [
   --signalMetricIds: list
   --updateScheduleMinutes: any
   --monitoringMode: string@monitoringMode-completer
-  --autoUpdate: string@bool-completer
+  --autoUpdate: oneof<nothing, bool>
   --srmAction: string@srmAction-completer
   --noTrafficAction: string@noTrafficAction-completer
   --noTrafficGracePeriodHours: any # How long to wait for traffic before applying `noTrafficAction`. Defaults to 24 hours when null or not set.
@@ -6117,8 +6116,8 @@ export def "reports post" [
   --dimension: string # Dimension to cut results by
   --dateStarted: string # Analysis start date (ISO 8601) (format: date-time)
   --dateEnded: string # Analysis end date (ISO 8601) (format: date-time)
-  --regressionAdjustmentEnabled: string@bool-completer # Enable CUPED regression adjustment
-  --sequentialTestingEnabled: string@bool-completer # Enable sequential testing
+  --regressionAdjustmentEnabled: oneof<nothing, bool> # Enable CUPED regression adjustment
+  --sequentialTestingEnabled: oneof<nothing, bool> # Enable sequential testing
   --sequentialTestingTuningParameter: float # Tuning parameter for sequential testing (frequentist only)
   --differenceType: string@differenceType-completer # How lifts are expressed in results. Defaults to experiment setting.
   --attributionModel: string@attributionModel-completer # Metric conversion window attribution model. Defaults to experiment setting.
@@ -6127,7 +6126,7 @@ export def "reports post" [
   --customMetricSlices: list # Custom metric slice definitions — item shape: {slices: list}
   --segment: string # Segment ID to filter users by. Defaults to experiment setting.
   --queryFilter: string # Raw SQL WHERE clause added to the exposure query. Defaults to experiment setting.
-  --skipPartialData: string@bool-completer # When true, exclude users who have not completed the full conversion window.
+  --skipPartialData: oneof<nothing, bool> # When true, exclude users who have not completed the full conversion window.
   --shareLevel: string@shareLevel-completer-1 # Visibility of the created report. Defaults to `private`. Set to `public` to receive a shareable `shareUrl` in the response.
 ]: any -> record<report: record<id: string, dateCreated: string, dateUpdated: string, title: string, description: string, type: string, status: string, shareLevel: string, shareUrl: string, experimentId: string, snapshotId: string, snapshotStatus: string, snapshotError: string, analysisSettings: record<statsEngine: string, goalMetrics: list, secondaryMetrics: list, guardrailMetrics: list, activationMetric: string, metricOverrides: list, customMetricSlices: list, dimension: string, differenceType: string, dateStarted: string, dateEnded: string, regressionAdjustmentEnabled: bool, sequentialTestingEnabled: bool, sequentialTestingTuningParameter: float, attributionModel: string, lookbackOverride: any, trackingKey: string, exposureQueryId: string, segment: string, queryFilter: string, skipPartialData: bool>, experimentMetadata: record<type: string, variations: list, phases: list>, results: record<id: string, dateUpdated: string, experimentId: string, phase: string, dateStart: string, dateEnd: string, dimension: record, settings: record, queryIds: list, results: list>>> {
   let input = $in
@@ -6242,14 +6241,14 @@ export def "reports-settings put" [
   --differenceType: string@differenceType-completer # How lifts are expressed in results
   --dateStarted: string # Analysis start date (ISO 8601) (format: date-time)
   --dateEnded: any # Analysis end date (ISO 8601). Pass `null` to clear the end date and analyze through today.
-  --regressionAdjustmentEnabled: string@bool-completer # Enable CUPED regression adjustment
-  --sequentialTestingEnabled: string@bool-completer # Enable sequential testing
+  --regressionAdjustmentEnabled: oneof<nothing, bool> # Enable CUPED regression adjustment
+  --sequentialTestingEnabled: oneof<nothing, bool> # Enable sequential testing
   --sequentialTestingTuningParameter: float # Tuning parameter for sequential testing (frequentist only)
   --attributionModel: string@attributionModel-completer # Metric conversion window attribution model
   --lookbackOverride: any # Lookback window when `attributionModel` is `lookbackOverride`
   --segment: string # Segment ID to filter users by
   --queryFilter: string # Raw SQL WHERE clause added to the exposure query
-  --skipPartialData: string@bool-completer # When true, exclude users who have not completed the full conversion window
+  --skipPartialData: oneof<nothing, bool> # When true, exclude users who have not completed the full conversion window
   --variations: list # Override variation names, keys, or traffic weights used in this report. Weights are merged into the latest phase. Changes take effect on the next refresh. — item shape: {id: string, name?: string, key?: string, weight?: float}
   --coverage: float # Traffic coverage (0–1) for the latest phase. Used when computing scaled impact.
 ]: any -> record<report: record<id: string, dateCreated: string, dateUpdated: string, title: string, description: string, type: string, status: string, shareLevel: string, shareUrl: string, experimentId: string, snapshotId: string, snapshotStatus: string, snapshotError: string, analysisSettings: record<statsEngine: string, goalMetrics: list, secondaryMetrics: list, guardrailMetrics: list, activationMetric: string, metricOverrides: list, customMetricSlices: list, dimension: string, differenceType: string, dateStarted: string, dateEnded: string, regressionAdjustmentEnabled: bool, sequentialTestingEnabled: bool, sequentialTestingTuningParameter: float, attributionModel: string, lookbackOverride: any, trackingKey: string, exposureQueryId: string, segment: string, queryFilter: string, skipPartialData: bool>, experimentMetadata: record<type: string, variations: list, phases: list>, results: record<id: string, dateUpdated: string, experimentId: string, phase: string, dateStart: string, dateEnd: string, dimension: record, settings: record, queryIds: list, results: list>>> {
@@ -6488,7 +6487,7 @@ export def "visual-editor-ai-edit post" [
   --domDigest: record # shape: {url: string, title: string, structural?: list, headings?: list, buttons?: list, links?: list, inputs?: list, images?: list}
   --conversationHistory: list # item shape: {role: "user"|"assistant", text: string}
   --locale: string
-  --streamingMode: string@bool-completer
+  --streamingMode: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6843,7 +6842,7 @@ export def "dashboards updateDashboard" [
   --title: string # The display name of the Dashboard
   --editLevel: string@editLevel-completer-1 # Dashboards that are "published" are editable by organization members with appropriate permissions
   --shareLevel: string@shareLevel-completer-2 # General Dashboards only. Dashboards that are "published" are viewable by organization members with appropriate permissions
-  --enableAutoUpdates: string@bool-completer # If enabled for a General Dashboard, also requires an updateSchedule
+  --enableAutoUpdates: oneof<nothing, bool> # If enabled for a General Dashboard, also requires an updateSchedule
   --updateSchedule: any # General Dashboards only. Experiment Dashboards update based on the parent experiment instead
   --projects: list # General Dashboards only, Experiment Dashboards use the experiment's projects
   --blocks: list
@@ -6874,7 +6873,7 @@ export def "dashboards createDashboard" [
   title: string # The display name of the Dashboard
   editLevel: string@editLevel-completer-1 # Dashboards that are "published" are editable by organization members with appropriate permissions
   shareLevel: string@shareLevel-completer-2 # General Dashboards only. Dashboards that are "published" are viewable by organization members with appropriate permissions
-  --enableAutoUpdates: string@bool-completer # If enabled for a General Dashboard, also requires an updateSchedule
+  --enableAutoUpdates: oneof<nothing, bool> # If enabled for a General Dashboard, also requires an updateSchedule
   --updateSchedule: any # General Dashboards only. Experiment Dashboards update based on the parent experiment instead
   --experimentId: string # The parent experiment for an Experiment Dashboard, or undefined for a general dashboard
   --projects: list # General Dashboards only, Experiment Dashboards use the experiment's projects
@@ -6953,7 +6952,7 @@ export def "custom-fields createCustomField" [
   --defaultValue: any
   type: string@type-completer-4 # The type of value this custom field will take
   --values: string
-  --required: string@bool-completer
+  --required: oneof<nothing, bool>
   --projects: list
   sections: list # What types of objects this custom field is applicable to (feature, experiment)
 ]: any -> record<customField: record<id: string, dateCreated: string, dateUpdated: string, name: string, description: string, placeholder: string, defaultValue: any, type: string, values: string, required: bool, creator: string, projects: list<string>, sections: list<string>, active: bool>> {
@@ -7055,10 +7054,10 @@ export def "custom-fields updateCustomField" [
   --placeholder: string
   --defaultValue: any
   --values: string
-  --required: string@bool-completer
+  --required: oneof<nothing, bool>
   --projects: list
   --sections: list # What types of objects this custom field is applicable to (feature, experiment)
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
 ]: any -> record<customField: record<id: string, dateCreated: string, dateUpdated: string, name: string, description: string, placeholder: string, defaultValue: any, type: string, values: string, required: bool, creator: string, projects: list<string>, sections: list<string>, active: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7135,7 +7134,7 @@ export def "metric-groups updateMetricGroup" [
   --metrics: list
   --datasource: string
   --owner: string # The userId or email address of the owner. If an email address is provided, it will be used to look up the userId of the matching organization member. If an ID is provided, it will be validated as existing in the organization.
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
 ]: any -> record<metricGroup: record<id: string, dateCreated: string, dateUpdated: string, owner: string, ownerEmail: string, name: string, description: string, tags: list<string>, projects: list<string>, metrics: list<string>, datasource: string, archived: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7167,7 +7166,7 @@ export def "metric-groups createMetricGroup" [
   metrics: list
   datasource: string
   --owner: string # The userId or email address of the owner. If an email address is provided, it will be used to look up the userId of the matching organization member. If an ID is provided, it will be validated as existing in the organization.
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
 ]: any -> record<metricGroup: record<id: string, dateCreated: string, dateUpdated: string, owner: string, ownerEmail: string, name: string, description: string, tags: list<string>, projects: list<string>, metrics: list<string>, datasource: string, archived: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7241,7 +7240,7 @@ export def "teams updateTeam" [
   --createdBy: string
   --description: string
   --role: string # The global role for members of this team
-  --limitAccessByEnvironment: string@bool-completer
+  --limitAccessByEnvironment: oneof<nothing, bool>
   --environments: list # An empty array means 'all environments'
   --projectRoles: list # item shape: {role: string, limitAccessByEnvironment: bool, environments: list, teams?: list, project: string}
   --managedBy: any
@@ -7299,7 +7298,7 @@ export def "teams createTeam" [
   --createdBy: string
   description: string
   role: string # The global role for members of this team
-  --limitAccessByEnvironment: string@bool-completer
+  --limitAccessByEnvironment: oneof<nothing, bool>
   --environments: list # An empty array means 'all environments'
   --projectRoles: list # item shape: {role: string, limitAccessByEnvironment: bool, environments: list, teams?: list, project: string}
   --managedBy: any
@@ -7460,14 +7459,14 @@ export def "experiment-templates updateExperimentTemplate" [
   --exposureQueryId: string
   --hashAttribute: string
   --fallbackAttribute: string
-  --disableStickyBucketing: string@bool-completer
+  --disableStickyBucketing: oneof<nothing, bool>
   --goalMetrics: list
   --secondaryMetrics: list
   --guardrailMetrics: list
   --activationMetric: string
   --statsEngine: string@statsEngine-completer
   --segment: string
-  --skipPartialData: string@bool-completer
+  --skipPartialData: oneof<nothing, bool>
   --targeting: record # shape: {coverage: float, savedGroups?: list, prerequisites?: list, condition: string}
   --customMetricSlices: list # item shape: {slices: list}
 ]: any -> record<experimentTemplate: record<id: string, dateCreated: string, dateUpdated: string, project: string, owner: string, ownerEmail: string, templateMetadata: record<name: string, description: string>, type: string, hypothesis: string, description: string, tags: list<string>, customFields: record, datasource: string, exposureQueryId: string, hashAttribute: string, fallbackAttribute: string, disableStickyBucketing: bool, goalMetrics: list<string>, secondaryMetrics: list<string>, guardrailMetrics: list<string>, activationMetric: string, statsEngine: string, segment: string, skipPartialData: bool, targeting: record<coverage: float, savedGroups: list, prerequisites: list, condition: string>, customMetricSlices: list<record>>> {
@@ -7508,14 +7507,14 @@ export def "experiment-templates createExperimentTemplate" [
   exposureQueryId: string
   --hashAttribute: string
   --fallbackAttribute: string
-  --disableStickyBucketing: string@bool-completer
+  --disableStickyBucketing: oneof<nothing, bool>
   --goalMetrics: list
   --secondaryMetrics: list
   --guardrailMetrics: list
   --activationMetric: string
   statsEngine: string@statsEngine-completer
   --segment: string
-  --skipPartialData: string@bool-completer
+  --skipPartialData: oneof<nothing, bool>
   targeting: record # shape: {coverage: float, savedGroups?: list, prerequisites?: list, condition: string}
   --customMetricSlices: list # item shape: {slices: list}
 ]: any -> record<experimentTemplate: record<id: string, dateCreated: string, dateUpdated: string, project: string, owner: string, ownerEmail: string, templateMetadata: record<name: string, description: string>, type: string, hypothesis: string, description: string, tags: list<string>, customFields: record, datasource: string, exposureQueryId: string, hashAttribute: string, fallbackAttribute: string, disableStickyBucketing: bool, goalMetrics: list<string>, secondaryMetrics: list<string>, guardrailMetrics: list<string>, activationMetric: string, statsEngine: string, segment: string, skipPartialData: bool, targeting: record<coverage: float, savedGroups: list, prerequisites: list, condition: string>, customMetricSlices: list<record>>> {
@@ -7747,7 +7746,7 @@ export def "ramp-schedule-templates updateRampScheduleTemplate" [
   --name: string
   --steps: list # item shape: {interval: any, approvalNotes?: any, monitored?: bool, holdConditions?: record, actions: list}
   --endPatch: record # shape: {coverage?: float, condition?: string, savedGroups?: list, prerequisites?: list, allEnvironments?: bool, environments?: list}
-  --official: string@bool-completer
+  --official: oneof<nothing, bool>
   --monitoringConfig: any
   --lockdownConfig: record # shape: {mode: "none"|"locked"}
 ]: any -> record<rampScheduleTemplate: record<id: string, dateCreated: string, dateUpdated: string, name: string, steps: list<record>, endPatch: record<coverage: float, condition: string, savedGroups: list, prerequisites: list, allEnvironments: bool, environments: list>, official: bool, monitoringConfig: any, lockdownConfig: any>> {
@@ -7780,7 +7779,7 @@ export def "ramp-schedule-templates createRampScheduleTemplate" [
   name: string
   steps: list # item shape: {interval: any, approvalNotes?: any, monitored?: bool, holdConditions?: record, actions: list}
   --endPatch: record # shape: {coverage?: float, condition?: string, savedGroups?: list, prerequisites?: list, allEnvironments?: bool, environments?: list}
-  --official: string@bool-completer
+  --official: oneof<nothing, bool>
   --monitoringConfig: any
   --lockdownConfig: record # shape: {mode: "none"|"locked"}
 ]: any -> record<rampScheduleTemplate: record<id: string, dateCreated: string, dateUpdated: string, name: string, steps: list<record>, endPatch: record<coverage: float, condition: string, savedGroups: list, prerequisites: list, allEnvironments: bool, environments: list>, official: bool, monitoringConfig: any, lockdownConfig: any>> {

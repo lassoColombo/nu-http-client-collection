@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.loadsmart.com" "https://api.sandbox.loadsmart.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -268,7 +267,7 @@ export def "carrier-drivers post" [
   --allow-errors(-e) # Return full response without error handling
   name: string # Driver's full name
   --phone-number: string # Phone number following the format [E.164](https://www.itu.int/rec/T-REC-E.164/) (nullable)
-  --sms-enabled: string@bool-completer # If this driver can receive Loadsmart text messages (default: true)
+  --sms-enabled: oneof<nothing, bool> # If this driver can receive Loadsmart text messages (default: true)
 ]: any -> record<data: record<id: string, name: string, phone_number: string, sms_enabled: bool, location: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -316,7 +315,7 @@ export def "carrier put" [
   --allow-errors(-e) # Return full response without error handling
   name: string # Driver's full name
   --phone-number: string # Phone number following the format [E.164](https://www.itu.int/rec/T-REC-E.164/) (nullable)
-  --sms-enabled: string@bool-completer # If this driver can receive Loadsmart text messages (default: true)
+  --sms-enabled: oneof<nothing, bool> # If this driver can receive Loadsmart text messages (default: true)
 ]: any -> record<data: record<id: string, name: string, phone_number: string, sms_enabled: bool, location: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -783,7 +782,7 @@ export def "shipments-stops-confirm-appointment put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmed: string@bool-completer # If it is confirmed
+  --confirmed: oneof<nothing, bool> # If it is confirmed
   --window-start: string # A datetime that represents the start of a time window for this appointment. In UTC time. (format: date-time)
   --window-end: string # A datetime that represents the end of a time window for this appointment. In UTC time. (format: date-time)
   --scheduler-appt-id: string # An ID that represents this appointment. (format: uuid)

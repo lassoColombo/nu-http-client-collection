@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://iotanalytics.us-east-1.amazonaws.com" "http://iotanalytics.us-east-2.amazonaws.com" "http://iotanalytics.us-west-1.amazonaws.com" "http://iotanalytics.us-west-2.amazonaws.com" "http://iotanalytics.us-gov-west-1.amazonaws.com" "http://iotanalytics.us-gov-east-1.amazonaws.com" "http://iotanalytics.ca-central-1.amazonaws.com" "http://iotanalytics.eu-north-1.amazonaws.com" "http://iotanalytics.eu-west-1.amazonaws.com" "http://iotanalytics.eu-west-2.amazonaws.com" "http://iotanalytics.eu-west-3.amazonaws.com" "http://iotanalytics.eu-central-1.amazonaws.com" "http://iotanalytics.eu-south-1.amazonaws.com" "http://iotanalytics.af-south-1.amazonaws.com" "http://iotanalytics.ap-northeast-1.amazonaws.com" "http://iotanalytics.ap-northeast-2.amazonaws.com" "http://iotanalytics.ap-northeast-3.amazonaws.com" "http://iotanalytics.ap-southeast-1.amazonaws.com" "http://iotanalytics.ap-southeast-2.amazonaws.com" "http://iotanalytics.ap-east-1.amazonaws.com" "http://iotanalytics.ap-south-1.amazonaws.com" "http://iotanalytics.sa-east-1.amazonaws.com" "http://iotanalytics.me-south-1.amazonaws.com" "https://iotanalytics.us-east-1.amazonaws.com" "https://iotanalytics.us-east-2.amazonaws.com" "https://iotanalytics.us-west-1.amazonaws.com" "https://iotanalytics.us-west-2.amazonaws.com" "https://iotanalytics.us-gov-west-1.amazonaws.com" "https://iotanalytics.us-gov-east-1.amazonaws.com" "https://iotanalytics.ca-central-1.amazonaws.com" "https://iotanalytics.eu-north-1.amazonaws.com" "https://iotanalytics.eu-west-1.amazonaws.com" "https://iotanalytics.eu-west-2.amazonaws.com" "https://iotanalytics.eu-west-3.amazonaws.com" "https://iotanalytics.eu-central-1.amazonaws.com" "https://iotanalytics.eu-south-1.amazonaws.com" "https://iotanalytics.af-south-1.amazonaws.com" "https://iotanalytics.ap-northeast-1.amazonaws.com" "https://iotanalytics.ap-northeast-2.amazonaws.com" "https://iotanalytics.ap-northeast-3.amazonaws.com" "https://iotanalytics.ap-southeast-1.amazonaws.com" "https://iotanalytics.ap-southeast-2.amazonaws.com" "https://iotanalytics.ap-east-1.amazonaws.com" "https://iotanalytics.ap-south-1.amazonaws.com" "https://iotanalytics.sa-east-1.amazonaws.com" "https://iotanalytics.me-south-1.amazonaws.com" "http://iotanalytics.cn-north-1.amazonaws.com.cn" "http://iotanalytics.cn-northwest-1.amazonaws.com.cn" "https://iotanalytics.cn-north-1.amazonaws.com.cn" "https://iotanalytics.cn-northwest-1.amazonaws.com.cn"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -604,7 +603,7 @@ export def "channels DescribeChannel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeStatistics: string@bool-completer # If true, additional statistical information about the channel is included in the response. This feature can't be used with a channel whose S3 storage is customer-managed.
+  --includeStatistics: oneof<nothing, bool> # If true, additional statistical information about the channel is included in the response. This feature can't be used with a channel whose S3 storage is customer-managed.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string
@@ -814,7 +813,7 @@ export def "datastores DescribeDatastore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeStatistics: string@bool-completer # If true, additional statistical information about the data store is included in the response. This feature can't be used with a data store whose S3 storage is customer-managed.
+  --includeStatistics: oneof<nothing, bool> # If true, additional statistical information about the data store is included in the response. This feature can't be used with a data store whose S3 storage is customer-managed.
   --X-Amz-Content-Sha256: string
   --X-Amz-Date: string
   --X-Amz-Algorithm: string

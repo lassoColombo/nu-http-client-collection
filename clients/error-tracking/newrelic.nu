@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.newrelic.com" "https://api.newrelic.com/v2" "https://api.eu.newrelic.com/v2" "https://staging-api.newrelic.com/v2"] }
 def auth-scheme-completer [] { ["api-key"] }
 
@@ -107,7 +106,7 @@ export def "applicationsjson get" [
   --filterhost: string # Filter by application host
   --filterids: list # Filter by application ids
   --filterlanguage: string # Filter by application language
-  --exclude-links: string@bool-completer # Exclude links section from the response
+  --exclude-links: oneof<nothing, bool> # Exclude links section from the response
   --page: int # Pagination index
 ]: nothing -> record<application: record<application_summary: record<apdex_score: float, apdex_target: float, concurrent_instance_count: int, error_rate: float, host_count: int, instance_count: int, response_time: float, throughput: float>, end_user_summary: record<apdex_score: float, apdex_target: float, response_time: float, throughput: float>, health_status: string, id: int, language: string, last_reported_at: string, links: record<servers: list, application_hosts: list, application_instances: list>, name: string, reporting: bool, settings: record<app_apdex_threshold: float, enable_real_user_monitoring: bool, end_user_apdex_threshold: float, use_server_side_config: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -265,8 +264,8 @@ export def "applications-hosts-metrics-datajson get" [
   --qp-from: string # Retrieve metrics after this time (format: date-time)
   --qp-to: string # Retrieve metrics before this time (format: date-time)
   --period: int # Period of timeslices in seconds
-  --summarize: string@bool-completer # Summarize the data
-  --qp-raw: string@bool-completer # Return unformatted raw values
+  --summarize: oneof<nothing, bool> # Summarize the data
+  --qp-raw: oneof<nothing, bool> # Return unformatted raw values
 ]: nothing -> record<metric_data: record<from: string, metrics: list<record>, metrics_found: string, metrics_not_found: string, to: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -395,8 +394,8 @@ export def "applications-instances-metrics-datajson get" [
   --qp-from: string # Retrieve metrics after this time (format: date-time)
   --qp-to: string # Retrieve metrics before this time (format: date-time)
   --period: int # Period of timeslices in seconds
-  --summarize: string@bool-completer # Summarize the data
-  --qp-raw: string@bool-completer # Return unformatted raw values
+  --summarize: oneof<nothing, bool> # Summarize the data
+  --qp-raw: oneof<nothing, bool> # Return unformatted raw values
 ]: nothing -> record<metric_data: record<from: string, metrics: list<record>, metrics_found: string, metrics_not_found: string, to: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -451,8 +450,8 @@ export def "applications-metrics-datajson get" [
   --qp-from: string # Retrieve metrics after this time (format: date-time)
   --qp-to: string # Retrieve metrics before this time (format: date-time)
   --period: int # Period of timeslices in seconds
-  --summarize: string@bool-completer # Summarize the data
-  --qp-raw: string@bool-completer # Return unformatted raw values
+  --summarize: oneof<nothing, bool> # Summarize the data
+  --qp-raw: oneof<nothing, bool> # Return unformatted raw values
 ]: nothing -> record<metric_data: record<from: string, metrics: list<record>, metrics_found: string, metrics_not_found: string, to: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -668,8 +667,8 @@ export def "mobile-applications-metrics-datajson get" [
   --qp-from: string # Retrieve metrics after this time (format: date-time)
   --qp-to: string # Retrieve metrics before this time (format: date-time)
   --period: int # Period of timeslices in seconds
-  --summarize: string@bool-completer # Summarize the data
-  --qp-raw: string@bool-completer # Return unformatted raw values
+  --summarize: oneof<nothing, bool> # Summarize the data
+  --qp-raw: oneof<nothing, bool> # Return unformatted raw values
 ]: nothing -> record<metric_data: record<from: string, metrics: list<record>, metrics_found: string, metrics_not_found: string, to: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1069,7 +1068,7 @@ export def "alerts-incidentsjson get" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --page: int # Pagination index
-  --only-open: string@bool-completer # Filter by open incidents
+  --only-open: oneof<nothing, bool> # Filter by open incidents
 ]: nothing -> record<incident: record<closed_at: int, id: int, incident_preference: int, links: record<policy_id: int, violations: list>, opened_at: int>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1543,7 +1542,7 @@ export def "alerts-violationsjson get" [
   --page: int # Pagination index
   --start-date: string # Retrieve violations created after this time (format: date-time)
   --end-date: string # Retrieve violations created before this time (format: date-time)
-  --only-open: string@bool-completer # Filter by open violations
+  --only-open: oneof<nothing, bool> # Filter by open violations
 ]: nothing -> record<violation: record<closed_at: int, condition_name: string, duration: int, entity: record<group_id: int, id: int, name: string, product: string, type: string>, id: int, label: string, links: record<condition_id: int, incident_id: int, policy_id: int>, opened_at: int, policy_name: string, priority: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)

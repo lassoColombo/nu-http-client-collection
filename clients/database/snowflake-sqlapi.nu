@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://org-account.snowflakecomputing.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -103,8 +102,8 @@ export def "statements SubmitStatement" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --requestId: string # Unique ID of the API request. This ensures that the execution is idempotent. If not specified, a new UUID is generated and assigned. (format: uuid)
-  --async: string@bool-completer # Set to true to execute the statement asynchronously and return the statement handle. If the parameter is not specified or is set to false, a statement is executed and the first result is returned if the execution is completed in 45 seconds. If the statement execution takes longer to complete, the statement handle is returned. (e.g. true)
-  --nullable: string@bool-completer # Set to true to execute the statement to generate the result set including null. If the parameter is set to false, the result set value null will be replaced with a string 'null'. (e.g. true)
+  --async: oneof<nothing, bool> # Set to true to execute the statement asynchronously and return the statement handle. If the parameter is not specified or is set to false, a statement is executed and the first result is returned if the execution is completed in 45 seconds. If the statement execution takes longer to complete, the statement handle is returned. (e.g. true)
+  --nullable: oneof<nothing, bool> # Set to true to execute the statement to generate the result set including null. If the parameter is set to false, the result set value null will be replaced with a string 'null'. (e.g. true)
   --Accept: string # The response payload format. The schema should be specified in resultSetMetaData in the request payload. (e.g. application/json)
   --User-Agent: string # Set this to the name and version of your application (e.g. “applicationName/applicationVersion”). You must use a value that complies with RFC 7231. (e.g. myApplication/1.0)
   --X-Snowflake-Authorization-Token-Type: string # Specify the authorization token type for the Authorization header. KEYPAIR_JWT is for Keypair JWT or OAUTH for oAuth token. If not specified, OAUTH is assumed. (e.g. KEYPAIR_JWT)

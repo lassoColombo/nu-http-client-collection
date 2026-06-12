@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api-2445581398133.apicast.io:443/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -1368,7 +1367,7 @@ export def "application-entity-campaign createCampaignEntity" [
   --expected-revenue: float # Expected Revenue (format: float, e.g. 4235.91)
   --expected-start-at: string # Expected Start At (format: date-time, e.g. 2015-01-01T05:18:23-0700)
   --id: string # Campaign Identifier (e.g. 21312411)
-  --is-active: string@bool-completer # Is Active (e.g. true)
+  --is-active: oneof<nothing, bool> # Is Active (e.g. true)
   --name: string # Name (e.g. Name of the campaign)
   --numbers-sent: int # Numbers Sent (format: int32, e.g. 571)
   --objective: string # Objective (e.g. Objective of the campaign)
@@ -1722,7 +1721,7 @@ export def "application-entity-campaign updateCampaignEntity" [
   --expected-revenue: float # Expected Revenue (format: float, e.g. 4235.91)
   --expected-start-at: string # Expected Start At (format: date-time, e.g. 2015-01-01T05:18:23-0700)
   --id: string # Campaign Identifier (e.g. 21312411)
-  --is-active: string@bool-completer # Is Active (e.g. true)
+  --is-active: oneof<nothing, bool> # Is Active (e.g. true)
   --name: string # Name (e.g. Name of the campaign)
   --numbers-sent: int # Numbers Sent (format: int32, e.g. 571)
   --objective: string # Objective (e.g. Objective of the campaign)
@@ -1768,8 +1767,8 @@ export def "application-entity-case createCaseEntity" [
   --expected-end-at: string # Expected End At (format: date-time, e.g. 2015-02-10T17:12:23-0700)
   --id: string # Case Identifier (e.g. 21312411)
   --internal-comments: string # Internal Comments (e.g. Internal Comments)
-  --is-closed: string@bool-completer # Is Closed (e.g. true)
-  --is-escalated: string@bool-completer # Is Escalated (e.g. true)
+  --is-closed: oneof<nothing, bool> # Is Closed (e.g. true)
+  --is-escalated: oneof<nothing, bool> # Is Escalated (e.g. true)
   --number: string # Number (e.g. 21312411)
   --origin: string # Origin (e.g. phone)
   --pipeline-with-stage: string # Pipeline With Stage (e.g. Default / Contacted)
@@ -2122,8 +2121,8 @@ export def "application-entity-case updateCaseEntity" [
   --expected-end-at: string # Expected End At (format: date-time, e.g. 2015-02-10T17:12:23-0700)
   --id: string # Case Identifier (e.g. 21312411)
   --internal-comments: string # Internal Comments (e.g. Internal Comments)
-  --is-closed: string@bool-completer # Is Closed (e.g. true)
-  --is-escalated: string@bool-completer # Is Escalated (e.g. true)
+  --is-closed: oneof<nothing, bool> # Is Closed (e.g. true)
+  --is-escalated: oneof<nothing, bool> # Is Escalated (e.g. true)
   --number: string # Number (e.g. 21312411)
   --origin: string # Origin (e.g. phone)
   --pipeline-with-stage: string # Pipeline With Stage (e.g. Default / Contacted)
@@ -2552,7 +2551,7 @@ export def "application-entity-contact createContactEntity" [
   --created-at: string # Created At (format: date-time, e.g. 2015-01-01T05:18:23-0700)
   --department: string # Department (e.g. D2C)
   --description: string # Description (e.g. Description of the contact)
-  --do-not-call: string@bool-completer # Do Not Call
+  --do-not-call: oneof<nothing, bool> # Do Not Call
   --email: list # Email — item shape: {address?: string, type?: string}
   --first-name: string # First Name (e.g. Bill)
   --id: string # Contact Identifier (e.g. 21312411)
@@ -2565,7 +2564,7 @@ export def "application-entity-contact createContactEntity" [
   --position: string # Position (job) (e.g. Director of Vendor Relations)
   --relation: record # shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
   --salutation: string # Salutation (e.g. Mr.)
-  --sync-to-outlook: string@bool-completer # Sync To Outlook
+  --sync-to-outlook: oneof<nothing, bool> # Sync To Outlook
   --type: string # Type (e.g. Bill Wall)
   --updated-at: string # Updated At (format: date-time, e.g. 2015-02-10T17:12:23-0700)
   --website: list # Website — item shape: {address?: string, type?: string}
@@ -2912,7 +2911,7 @@ export def "application-entity-contact updateContactEntity" [
   --created-at: string # Created At (format: date-time, e.g. 2015-01-01T05:18:23-0700)
   --department: string # Department (e.g. D2C)
   --description: string # Description (e.g. Description of the contact)
-  --do-not-call: string@bool-completer # Do Not Call
+  --do-not-call: oneof<nothing, bool> # Do Not Call
   --email: list # Email — item shape: {address?: string, type?: string}
   --first-name: string # First Name (e.g. Bill)
   --id: string # Contact Identifier (e.g. 21312411)
@@ -2925,7 +2924,7 @@ export def "application-entity-contact updateContactEntity" [
   --position: string # Position (job) (e.g. Director of Vendor Relations)
   --relation: record # shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
   --salutation: string # Salutation (e.g. Mr.)
-  --sync-to-outlook: string@bool-completer # Sync To Outlook
+  --sync-to-outlook: oneof<nothing, bool> # Sync To Outlook
   --type: string # Type (e.g. Bill Wall)
   --updated-at: string # Updated At (format: date-time, e.g. 2015-02-10T17:12:23-0700)
   --website: list # Website — item shape: {address?: string, type?: string}
@@ -3379,7 +3378,7 @@ export def "application-entity-event createEventEntity" [
   --description: string # Description (e.g. Description of the event)
   --ended-at: string # Ended At (format: date-time, e.g. 2015-01-01T05:18:23-0700)
   --id: string # Event Identifier (e.g. 21312411)
-  --is-all-day: string@bool-completer # Is All Day
+  --is-all-day: oneof<nothing, bool> # Is All Day
   --location: string # Location (e.g. London)
   --relation: record # shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
   --started-at: string # Started At (format: date-time, e.g. 2015-01-01T05:18:23-0700)
@@ -3723,7 +3722,7 @@ export def "application-entity-event updateEventEntity" [
   --description: string # Description (e.g. Description of the event)
   --ended-at: string # Ended At (format: date-time, e.g. 2015-01-01T05:18:23-0700)
   --id: string # Event Identifier (e.g. 21312411)
-  --is-all-day: string@bool-completer # Is All Day
+  --is-all-day: oneof<nothing, bool> # Is All Day
   --location: string # Location (e.g. London)
   --relation: record # shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
   --started-at: string # Started At (format: date-time, e.g. 2015-01-01T05:18:23-0700)
@@ -4591,7 +4590,7 @@ export def "application-entity-lead createLeadEntity" [
   --created-at: string # Created At (format: date-time, e.g. 2015-01-01T05:18:23-0700)
   --department: string # Department (e.g. D2C)
   --description: string # Description (e.g. Description of the contact)
-  --do-not-call: string@bool-completer # Do Not Call
+  --do-not-call: oneof<nothing, bool> # Do Not Call
   --email: list # Email — item shape: {address?: string, type?: string}
   --first-name: string # First Name (e.g. Bill)
   --id: string # Lead Identifier (e.g. 21312411)
@@ -4957,7 +4956,7 @@ export def "application-entity-lead updateLeadEntity" [
   --created-at: string # Created At (format: date-time, e.g. 2015-01-01T05:18:23-0700)
   --department: string # Department (e.g. D2C)
   --description: string # Description (e.g. Description of the contact)
-  --do-not-call: string@bool-completer # Do Not Call
+  --do-not-call: oneof<nothing, bool> # Do Not Call
   --email: list # Email — item shape: {address?: string, type?: string}
   --first-name: string # First Name (e.g. Bill)
   --id: string # Lead Identifier (e.g. 21312411)
@@ -6984,8 +6983,8 @@ export def "application-entity-price-book createPriceBookEntity" [
   --currency: record # shape: {code?: string}
   --description: string # Description (e.g. Description)
   --id: string # PriceBook Identifier (e.g. 21312411)
-  --is-active: string@bool-completer # Is Active (e.g. true)
-  --is-standard: string@bool-completer # Is Standard (e.g. true)
+  --is-active: oneof<nothing, bool> # Is Active (e.g. true)
+  --is-standard: oneof<nothing, bool> # Is Standard (e.g. true)
   --name: string # Name (e.g. Bill Wall)
   --relation: record # shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
   --type: string # Number (e.g. 21312411)
@@ -7328,8 +7327,8 @@ export def "application-entity-price-book updatePriceBookEntity" [
   --currency: record # shape: {code?: string}
   --description: string # Description (e.g. Description)
   --id: string # PriceBook Identifier (e.g. 21312411)
-  --is-active: string@bool-completer # Is Active (e.g. true)
-  --is-standard: string@bool-completer # Is Standard (e.g. true)
+  --is-active: oneof<nothing, bool> # Is Active (e.g. true)
+  --is-standard: oneof<nothing, bool> # Is Standard (e.g. true)
   --name: string # Name (e.g. Bill Wall)
   --relation: record # shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
   --type: string # Number (e.g. 21312411)
@@ -7369,12 +7368,12 @@ export def "application-entity-price-book-item createPriceBookItemEntity" [
   --code: string # Code (e.g. 21312411)
   --created-at: string # Created At (format: date-time, e.g. 2015-01-01T05:18:23-0700)
   --id: string # PriceBookItem Identifier (e.g. 21312411)
-  --is-active: string@bool-completer # Is Active (e.g. true)
+  --is-active: oneof<nothing, bool> # Is Active (e.g. true)
   --name: string # Name (e.g. Bill Wall)
   --price: list # Price — item shape: {currency?: string, value?: float}
   --relation: record # shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
   --updated-at: string # Updated At (format: date-time, e.g. 2015-02-10T17:12:23-0700)
-  --use-standard-price: string@bool-completer # Is Standard (e.g. true)
+  --use-standard-price: oneof<nothing, bool> # Is Standard (e.g. true)
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7712,12 +7711,12 @@ export def "application-entity-price-book-item updatePriceBookItemEntity" [
   --code: string # Code (e.g. 21312411)
   --created-at: string # Created At (format: date-time, e.g. 2015-01-01T05:18:23-0700)
   --id: string # PriceBookItem Identifier (e.g. 21312411)
-  --is-active: string@bool-completer # Is Active (e.g. true)
+  --is-active: oneof<nothing, bool> # Is Active (e.g. true)
   --name: string # Name (e.g. Bill Wall)
   --price: list # Price — item shape: {currency?: string, value?: float}
   --relation: record # shape: {account?: list, attachment?: list, call?: list, campaign?: list, case?: list, comment?: list, contact?: list, email?: list, event?: list, invoice?: list, invoiceItem?: list, lead?: list, meeting?: list, note?: list, opportunity?: list, opportunityProduct?: list, post?: list, priceBook?: list, priceBookItem?: list, product?: list, project?: list, quote?: list, quoteItem?: list, tag?: list, task?: list, ticket?: list, user?: list}
   --updated-at: string # Updated At (format: date-time, e.g. 2015-02-10T17:12:23-0700)
-  --use-standard-price: string@bool-completer # Is Standard (e.g. true)
+  --use-standard-price: oneof<nothing, bool> # Is Standard (e.g. true)
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7759,8 +7758,8 @@ export def "application-entity-product createProductEntity" [
   --description: string # Description (e.g. Some long description)
   --id: string # Product Identifier (e.g. 21312411)
   --image: list # Image — item shape: {type?: string, url?: string}
-  --is-active: string@bool-completer # Is active (e.g. true)
-  --is-taxable: string@bool-completer # Is taxable (e.g. true)
+  --is-active: oneof<nothing, bool> # Is active (e.g. true)
+  --is-taxable: oneof<nothing, bool> # Is taxable (e.g. true)
   --manufacturer: string # Manufacturer (e.g. M&M)
   --name: string # Name (e.g. CPU)
   --price: list # Price — item shape: {currency?: string, value?: float}
@@ -8120,8 +8119,8 @@ export def "application-entity-product updateProductEntity" [
   --description: string # Description (e.g. Some long description)
   --id: string # Product Identifier (e.g. 21312411)
   --image: list # Image — item shape: {type?: string, url?: string}
-  --is-active: string@bool-completer # Is active (e.g. true)
-  --is-taxable: string@bool-completer # Is taxable (e.g. true)
+  --is-active: oneof<nothing, bool> # Is active (e.g. true)
+  --is-taxable: oneof<nothing, bool> # Is taxable (e.g. true)
   --manufacturer: string # Manufacturer (e.g. M&M)
   --name: string # Name (e.g. CPU)
   --price: list # Price — item shape: {currency?: string, value?: float}
@@ -10541,8 +10540,8 @@ export def "application-entity-user createUserEntity" [
   --email: list # Email — item shape: {address?: string, type?: string}
   --first-name: string # First Name (e.g. Bill)
   --id: string # User Identifier (e.g. 21312411)
-  --is-admin: string@bool-completer # Is admin (e.g. true)
-  --is-associable: string@bool-completer # Is associable (e.g. true)
+  --is-admin: oneof<nothing, bool> # Is admin (e.g. true)
+  --is-associable: oneof<nothing, bool> # Is associable (e.g. true)
   --last-name: string # Last Name (e.g. Wall)
   --messenger: list # Messenger — item shape: {location?: string, type?: string}
   --middle-name: string # Middle Name (e.g. van)
@@ -10900,8 +10899,8 @@ export def "application-entity-user updateUserEntity" [
   --email: list # Email — item shape: {address?: string, type?: string}
   --first-name: string # First Name (e.g. Bill)
   --id: string # User Identifier (e.g. 21312411)
-  --is-admin: string@bool-completer # Is admin (e.g. true)
-  --is-associable: string@bool-completer # Is associable (e.g. true)
+  --is-admin: oneof<nothing, bool> # Is admin (e.g. true)
+  --is-associable: oneof<nothing, bool> # Is associable (e.g. true)
   --last-name: string # Last Name (e.g. Wall)
   --messenger: list # Messenger — item shape: {location?: string, type?: string}
   --middle-name: string # Middle Name (e.g. van)

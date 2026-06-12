@@ -63,7 +63,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.datadoghq.com" "https://api.us3.datadoghq.com" "https://api.us5.datadoghq.com" "https://api.ap1.datadoghq.com" "https://api.ap2.datadoghq.com" "https://api.datadoghq.eu" "https://api.ddog-gov.com" "https://api.us2.ddog-gov.com" "https://event-management-intake.datadoghq.com" "https://http-intake.logs.datadoghq.com" "https://navy.oncall.datadoghq.com" "https://browser-intake-datadoghq.com" "https://{subdomain}.{site}" "https://{site}"] }
 def auth-scheme-completer [] { ["bearer" "dd-api-key" "dd-application-key"] }
 
@@ -195,7 +194,7 @@ export def "unstable-fleet-agents ListFleetAgents" [
   --page-number: int # Page number for pagination (starts at 0). (format: int64, default: 0)
   --page-size: int # Number of results per page (must be greater than 0 and less than or equal to 100). (format: int64, default: 10)
   --sort-attribute: string # Attribute to sort by.
-  --sort-descending: string@bool-completer # Sort order (true for descending, false for ascending).
+  --sort-descending: oneof<nothing, bool> # Sort order (true for descending, false for ascending).
   --tags: string # Comma-separated list of tags to filter agents.
   --filter: string # Filter string for narrowing down agent results. (e.g. hostname:my-hostname OR env:dev)
 ]: nothing -> record<data: record<attributes: record<agents: list>, id: string, type: string>, meta: record<total_filtered_count: int>> {
@@ -246,7 +245,7 @@ export def "unstable-fleet-agents-tracers ListFleetAgentTracers" [
   --page-number: int # Page number for pagination (starts at 0). (format: int64, default: 0)
   --page-size: int # Number of results per page (must be greater than 0 and less than or equal to 100). (format: int64, default: 10)
   --sort-attribute: string # Attribute to sort by.
-  --sort-descending: string@bool-completer # Sort order (true for descending, false for ascending). (default: true)
+  --sort-descending: oneof<nothing, bool> # Sort order (true for descending, false for ascending). (default: true)
 ]: nothing -> record<data: record<attributes: record<tracers: list>, id: string, type: string>, meta: record<total_filtered_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -535,7 +534,7 @@ export def "unstable-fleet-tracers ListFleetTracers" [
   --page-number: int # Page number for pagination (starts at 0). (format: int64, default: 0)
   --page-size: int # Number of results per page (must be greater than 0 and less than or equal to 100). (format: int64, default: 10)
   --sort-attribute: string # Attribute to sort by.
-  --sort-descending: string@bool-completer # Sort order (true for descending, false for ascending). (default: true)
+  --sort-descending: oneof<nothing, bool> # Sort order (true for descending, false for ascending). (default: true)
   --filter: string # Filter string for narrowing down tracer results. (e.g. hostname:my-host OR env:prod)
 ]: nothing -> record<data: record<attributes: record<tracers: list>, id: string, type: string>, meta: record<total_filtered_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
@@ -1655,7 +1654,7 @@ export def "api-keys ListAPIKeys" [
   --filtermodified-atstart: string # Only include API keys modified on or after the specified date. (e.g. 2020-11-24T18:46:21+00:00)
   --filtermodified-atend: string # Only include API keys modified on or before the specified date. (e.g. 2020-11-24T18:46:21+00:00)
   --include: string # Comma separated list of resource paths for related resources to include in the response. Supported resource paths are `created_by` and `modified_by`. (e.g. created_by,modified_by)
-  --filterremote-config-read-enabled: string@bool-completer # Filter API keys by remote config read enabled status.
+  --filterremote-config-read-enabled: oneof<nothing, bool> # Filter API keys by remote config read enabled status.
   --filtercategory: string # Filter API keys by category.
 ]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, included: list<any>, meta: record<max_allowed: int, page: record<total_filtered_count: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
@@ -2225,10 +2224,10 @@ export def "app-builder-apps ListApps" [
   --filteruser-uuid: string # Filter apps by the app creator's UUID. (format: uuid, e.g. 65bb1f25-52e1-4510-9f8d-22d1516ed693)
   --filtername: string # Filter by app name.
   --filterquery: string # Filter apps by the app name or the app creator.
-  --filterdeployed: string@bool-completer # Filter apps by whether they are published.
+  --filterdeployed: oneof<nothing, bool> # Filter apps by whether they are published.
   --filtertags: string # Filter apps by tags.
-  --filterfavorite: string@bool-completer # Filter apps by whether you have added them to your favorites.
-  --filterself-service: string@bool-completer # Filter apps by whether they are enabled for self-service.
+  --filterfavorite: oneof<nothing, bool> # Filter apps by whether you have added them to your favorites.
+  --filterself-service: oneof<nothing, bool> # Filter apps by whether they are enabled for self-service.
   --qp-sort: list # The fields and direction to sort apps by.
 ]: nothing -> record<data: table<attributes: record, id: string, meta: record, relationships: record, type: string>, included: table<attributes: record, id: string, meta: record, type: string>, meta: record<page: record<totalCount: int, totalFilteredCount: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
@@ -3082,7 +3081,7 @@ export def "cases SearchCases" [
   --pagenumber: int # Specific page number to return. (format: int64, default: 0, e.g. 0)
   --sortfield: string@sortfield-completer # Specify which field to sort (e.g. created_at)
   --filter: string # Search query (e.g. status:open (team:case-management OR team:event-management))
-  --sortasc: string@bool-completer # Specify if order is ascending or not (default: false)
+  --sortasc: oneof<nothing, bool> # Specify if order is ascending or not (default: false)
 ]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, meta: record<page: record<current: int, size: int, total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4678,7 +4677,7 @@ export def "cases-timelines ListCaseTimeline" [
   --allow-errors(-e) # Return full response without error handling
   --pagesize: int # Number of timeline cells to return per page. (format: int64, default: 100)
   --pagenumber: int # Zero-based page number for pagination. (format: int64, default: 0)
-  --sortascending: string@bool-completer # If `true`, returns timeline cells in chronological order (oldest first). Defaults to `false` (newest first). (default: false)
+  --sortascending: oneof<nothing, bool> # If `true`, returns timeline cells in chronological order (oldest first). Defaults to `false` (newest first). (default: false)
 ]: nothing -> record<data: table<attributes: record, id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4860,7 +4859,7 @@ export def "catalog-entity ListCatalogEntity" [
   --filterrelationtype: string@filterrelationtype-completer # Filter entities by relation type.
   --filterexclude-snapshot: string # Filter entities by excluding snapshotted entities.
   --include: string@include-completer # Include relationship data.
-  --includeDiscovered: string@bool-completer # If true, includes discovered services from APM and USM that do not have entity definitions. (default: false)
+  --includeDiscovered: oneof<nothing, bool> # If true, includes discovered services from APM and USM that do not have entity definitions. (default: false)
 ]: nothing -> record<data: table<attributes: record, id: string, meta: record, relationships: record, type: string>, included: list<any>, links: record<next: string, previous: string, self: string>, meta: record<count: int, includeCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5031,7 +5030,7 @@ export def "catalog-relation ListCatalogRelation" [
   --filterfrom-ref: string # Filter relations by the reference of the first entity in the relation. (e.g. service:shopping-cart)
   --filterto-ref: string # Filter relations by the reference of the second entity in the relation. (e.g. service:shopping-cart)
   --include: string@include-completer-1 # Include relationship data.
-  --includeDiscovered: string@bool-completer # If true, includes relationships discovered by APM and USM. (default: false)
+  --includeDiscovered: oneof<nothing, bool> # If true, includes relationships discovered by APM and USM. (default: false)
 ]: nothing -> record<data: table<attributes: record, id: string, meta: record, relationships: record, subtype: string, type: string>, included: table<attributes: record, id: string, meta: record, relationships: record, type: string>, links: record<next: string, previous: string, self: string>, meta: record<count: int, includeCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5741,7 +5740,7 @@ export def "cloud-security-management-resource-filters GetResourceEvaluationFilt
   --allow-errors(-e) # Return full response without error handling
   --cloud-provider: string # Filter resource filters by cloud provider (e.g. aws, gcp, azure).
   --account-id: string # Filter resource filters by cloud provider account ID. This parameter is only valid when provider is specified.
-  --skip-cache: string@bool-completer # Skip cache for resource filters.
+  --skip-cache: oneof<nothing, bool> # Skip cache for resource filters.
 ]: nothing -> record<data: record<attributes: record<cloud_provider: record, uuid: string>, id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5893,9 +5892,9 @@ export def "compliance-findings-rule-based-view GetRuleBasedView" [
   --qp-to: int # Timestamp of the query end, in milliseconds since the Unix epoch. (format: int64, e.g. 1739982278000)
   --framework: string # Compliance framework handle to filter rules and findings by. (default: , e.g. hipaa)
   --version: string # Version of the compliance framework to filter rules and findings by. (e.g. 1)
-  --query-findings-without-framework-version: string@bool-completer # When `true`, returns findings without a `framework_version` tag. Used for findings from custom frameworks or those created before framework versioning was introduced. (default: false, e.g. false)
-  --include-rules-without-findings: string@bool-completer # When `true`, includes rules in the response that have no associated findings. (default: false, e.g. false)
-  --is-custom: string@bool-completer # Set to `true` when the requested `framework` is a custom framework. (e.g. false)
+  --query-findings-without-framework-version: oneof<nothing, bool> # When `true`, returns findings without a `framework_version` tag. Used for findings from custom frameworks or those created before framework versioning was introduced. (default: false, e.g. false)
+  --include-rules-without-findings: oneof<nothing, bool> # When `true`, includes rules in the response that have no associated findings. (default: false, e.g. false)
+  --is-custom: oneof<nothing, bool> # Set to `true` when the requested `framework` is a custom framework. (e.g. false)
   --qp-query: string # Additional event-platform filters applied to the underlying findings query. For example, `scored:true project_id:datadog-prod-us5`. (default: , e.g. scored:true)
 ]: nothing -> record<data: record<attributes: record<count: int, rules: list>, id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
@@ -7422,7 +7421,7 @@ export def "cost-by-tag-monthly-cost-attribution GetMonthlyCostAttribution" [
   --sort-name: string # The billing dimension to sort by. Always sorted by total cost. Example: `infra_host`.
   --tag-breakdown-keys: string # Comma separated list of tag keys used to group cost. If no value is provided the cost will not be broken down by tags. To see which tags are available, look for the value of `tag_config_source` in the API response.
   --next-record-id: string # List following results with a next_record_id provided in the previous query.
-  --include-descendants: string@bool-completer # Include child org cost in the response. Defaults to `true`. (default: true)
+  --include-descendants: oneof<nothing, bool> # Include child org cost in the response. Defaults to `true`. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -9060,7 +9059,7 @@ export def "downtime ListDowntimes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --current-only: string@bool-completer # Only return downtimes that are active when the request is made.
+  --current-only: oneof<nothing, bool> # Only return downtimes that are active when the request is made.
   --include: string # Comma-separated list of resource paths for related resources to include in the response. Supported resource paths are `created_by` and `monitor`. (e.g. created_by,monitor)
   --pageoffset: int # Specific offset to use as the beginning of the returned page. (format: int64, default: 0, e.g. 0)
   --pagelimit: int # Maximum number of downtimes in the response. (format: int64, default: 30, e.g. 100)
@@ -9421,7 +9420,7 @@ export def "feature-flags ListFeatureFlags" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --key: string # Filter feature flags by key (partial matching). (e.g. flag-search-term)
-  --is-archived: string@bool-completer # Filter by archived status. (e.g. false)
+  --is-archived: oneof<nothing, bool> # Filter by archived status. (e.g. false)
   --limit: int # Maximum number of results to return. (format: int64, default: 100, e.g. 10)
   --offset: int # Number of results to skip. (format: int64, default: 0, e.g. 0)
 ]: nothing -> record<data: table<attributes: record, id: string, type: string>, meta: record<page: record<total_count: int, total_filtered_count: int>>> {
@@ -10819,7 +10818,7 @@ export def "incidents-config-types ListIncidentTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-deleted: string@bool-completer # Include deleted incident types in the response. (default: false)
+  --include-deleted: oneof<nothing, bool> # Include deleted incident types in the response. (default: false)
 ]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -10941,7 +10940,7 @@ export def "incidents-config-user-defined-fields ListIncidentUserDefinedFields" 
   --allow-errors(-e) # Return full response without error handling
   --pagesize: int # The number of results to return per page. Must be between 0 and 1000. (format: int64, default: 1000)
   --pagenumber: int # The page number to retrieve, starting at 0. (format: int64, default: 0)
-  --include-deleted: string@bool-completer # When true, include soft-deleted fields in the response. (default: false)
+  --include-deleted: oneof<nothing, bool> # When true, include soft-deleted fields in the response. (default: false)
   --filterincident-type: string # Filter results to fields associated with the given incident type UUID.
   --include: string # Comma-separated list of related resources to include. Supported values are "last_modified_by_user", "created_by_user", and "incident_type".
 ]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, meta: record<offset: int, size: int>> {
@@ -15022,9 +15021,9 @@ export def "llm-obs-experiments ListLLMObsExperiments" [
   --filterexperiment: string # Filter by logical experiment name. This is the `name` field set when creating an experiment through `POST /experiments`. Returns all experiment runs that share the same name, enabling cross-commit and cross-branch comparisons.
   --filtermetadata: string # Filter by JSONB metadata containment. Provide a JSON object string where experiments whose metadata contains all specified key-value pairs are returned. For example: `{"commit":"abc123","branch":"main"}`.
   --filterparent-experiment-id: string # Filter experiments by the ID of their parent (baseline) experiment. Returns all experiments that were run against the given baseline. Can be specified multiple times.
-  --filteris-deleted: string@bool-completer # When `true`, return only soft-deleted experiments. Defaults to `false`.
-  --includeuser-data: string@bool-completer # When `true`, enrich each experiment with its author's user data in the `author` field.
-  --includedataset-names: string@bool-completer # When `true`, enrich each experiment with its dataset name in the `dataset_name` field.
+  --filteris-deleted: oneof<nothing, bool> # When `true`, return only soft-deleted experiments. Defaults to `false`.
+  --includeuser-data: oneof<nothing, bool> # When `true`, enrich each experiment with its author's user data in the `author` field.
+  --includedataset-names: oneof<nothing, bool> # When `true`, enrich each experiment with its dataset name in the `dataset_name` field.
   --pagecursor: string # Use the pagination cursor returned in `meta.after` to retrieve the next page of results.
   --pagelimit: int # Maximum number of results to return per page. Values above 5000 are clamped to 5000. Defaults to 5000. (format: int64)
 ]: nothing -> record<data: table<attributes: record, id: string, type: string>, meta: record<after: string>> {
@@ -15389,7 +15388,7 @@ export def "llm-obs-spans-events ListLLMObsSpans" [
   --pagelimit: int # Maximum number of spans to return. Defaults to `10`. (format: int64)
   --pagecursor: string # Cursor from the previous response to retrieve the next page.
   --qp-sort: string # Sort order for the results.
-  --include-attachments: string@bool-completer # Whether to include attachment data in the response. Defaults to `true`.
+  --include-attachments: oneof<nothing, bool> # Whether to include attachment data in the response. Defaults to `true`.
 ]: nothing -> record<data: table<attributes: record, id: string, type: string>, links: record<next: string>, meta: record<elapsed: int, page: record<after: string>, request_id: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -15886,10 +15885,10 @@ export def "llm-obs-datasets-records-upload UploadLLMObsDatasetRecordsFile" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deduplicate: string@bool-completer # Whether to skip records whose `input` already exists in the dataset. Defaults to `false`. (default: false)
-  --overwrite: string@bool-completer # Whether to overwrite existing records that share the same user-provided `id`. Defaults to `true`. (default: true)
+  --deduplicate: oneof<nothing, bool> # Whether to skip records whose `input` already exists in the dataset. Defaults to `false`. (default: false)
+  --overwrite: oneof<nothing, bool> # Whether to overwrite existing records that share the same user-provided `id`. Defaults to `true`. (default: true)
   --tags: list # Tags to apply to every uploaded record, in addition to any tags defined on individual rows. Can be repeated, e.g. `tags=env:prod&tags=team:ai`.
-  --includeuser-data: string@bool-completer # Whether to enrich the response with user metadata.
+  --includeuser-data: oneof<nothing, bool> # Whether to enrich the response with user metadata.
   --file: string # The records file to upload. Currently only CSV is supported. The file must include an `input` column. Optional columns include `id`, `expected_output`, `metadata`, and `tags`. (format: binary)
 ]: any -> any {
   let input = $in
@@ -16911,14 +16910,14 @@ export def "metrics ListTagConfigurations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --filterconfigured: string@bool-completer # Only return custom metrics that have been configured with Metrics Without Limits. (e.g. true)
+  --filterconfigured: oneof<nothing, bool> # Only return custom metrics that have been configured with Metrics Without Limits. (e.g. true)
   --filtertags-configured: string # Only return metrics that have the given tag key(s) in their Metrics Without Limits configuration (included or excluded). (e.g. app,env)
   --filtermetric-type: string@filtermetric-type-completer # Only return metrics of the given metric type. (default: distribution, e.g. distribution)
-  --filterinclude-percentiles: string@bool-completer # Only return distribution metrics that have percentile aggregations enabled (true) or disabled (false). (e.g. true)
-  --filterqueried: string@bool-completer # Only return metrics that have been queried (true) or not queried (false) in the look back window. Set the window with `filter[queried][window][seconds]`; if omitted, a default window is used. (e.g. true)
+  --filterinclude-percentiles: oneof<nothing, bool> # Only return distribution metrics that have percentile aggregations enabled (true) or disabled (false). (e.g. true)
+  --filterqueried: oneof<nothing, bool> # Only return metrics that have been queried (true) or not queried (false) in the look back window. Set the window with `filter[queried][window][seconds]`; if omitted, a default window is used. (e.g. true)
   --filterqueriedwindowseconds: int # This parameter has no effect unless `filter[queried]` is also set. Only return metrics that have been queried or not queried in the specified window. The default value is 2,592,000 seconds (30 days), the maximum value is 15,552,000 seconds (180 days), and the minimum value is 1 second. For example: `filter[queried]=true&filter[queried][window][seconds]=604800`. (format: int64, default: 2592000, e.g. 15552000)
   --filtertags: string # Only return metrics that were submitted with tags matching this expression. You can use AND, OR, IN, and wildcards. For example: `filter[tags]=env IN (staging,test) AND service:web*`. (e.g. env IN (staging,test) AND service:web*)
-  --filterrelated-assets: string@bool-completer # Only return metrics that are used in at least one dashboard, monitor, notebook, or SLO. (e.g. true)
+  --filterrelated-assets: oneof<nothing, bool> # Only return metrics that are used in at least one dashboard, monitor, notebook, or SLO. (e.g. true)
   --windowseconds: int # Only return metrics that have been actively reporting in the specified window. The default value is 3600 seconds (1 hour), the maximum value is 2,592,000 seconds (30 days), and the minimum value is 1 second. (format: int64, default: 3600, e.g. 3600)
   --pagesize: int # Maximum number of results per page. Send `page[size]` on the first request to opt in to pagination. On each subsequent request, send `page[cursor]` set to the value of `meta.pagination.next_cursor` from the previous response. The default value is 10000, the maximum value is 10000, and the minimum value is 1. (format: int32, default: 10000)
   --pagecursor: string # Cursor for pagination. Use `page[size]` to opt-in to pagination and get the first page; for subsequent pages, use the value from `meta.pagination.next_cursor` in the response. Pagination is complete when `next_cursor` is null.
@@ -17176,8 +17175,8 @@ export def "metrics-all-tags ListTagsByMetricName" [
   --windowseconds: int # The number of seconds of look back (from now) to query for tag data. Default value is 14400 (4 hours), minimum value is 14400 (4 hours). (format: int64, e.g. 14400)
   --filtertags: string # Filter results to tags from data points that have the specified tags. For example, `filter[tags]=env:staging,host:123` returns tags only from data points with both `env:staging` and `host:123`. (e.g. env:staging,host:123)
   --filtermatch: string # Filter returned tags to those matching a substring. For example, `filter[match]=env` returns tags like `env:prod`, `environment:staging`, etc. (e.g. env)
-  --filterinclude-tag-values: string@bool-completer # Whether to include tag values in the response. Defaults to true. (e.g. true)
-  --filterallow-partial: string@bool-completer # Whether to allow partial results. Defaults to false. (e.g. false)
+  --filterinclude-tag-values: oneof<nothing, bool> # Whether to include tag values in the response. Defaults to true. (e.g. true)
+  --filterallow-partial: oneof<nothing, bool> # Whether to allow partial results. Defaults to false. (e.g. false)
   --pagelimit: int # Maximum number of results to return. (format: int32, default: 1000000, e.g. 1000)
 ]: nothing -> record<data: record<attributes: record<ingested_tags: list, tags: list>, id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
@@ -17227,7 +17226,7 @@ export def "metrics-estimate EstimateMetricsOutputSeries" [
   --filtergroups: string # Comma-separated list of tag keys that the metric is configured to query with. For example: `filter[groups]=app,host`. (e.g. app,host)
   --filterhours-ago: int # The number of hours of look back (from now) to estimate cardinality with. If unspecified, it defaults to 0 hours. (format: int32, e.g. 49)
   --filternum-aggregations: int # Deprecated. Number of aggregations has no impact on volume. (format: int32, e.g. 1)
-  --filterpct: string@bool-completer # A boolean, for distribution metrics only, to estimate cardinality if the metric includes additional percentile aggregators. (e.g. true)
+  --filterpct: oneof<nothing, bool> # A boolean, for distribution metrics only, to estimate cardinality if the metric includes additional percentile aggregators. (e.g. true)
   --filtertimespan-h: int # A window, in hours, from the look back to estimate cardinality with. The minimum and default is 1 hour. (format: int32, e.g. 6)
 ]: nothing -> record<data: record<attributes: record<estimate_type: string, estimated_at: string, estimated_output_series: int>, id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
@@ -17729,9 +17728,9 @@ export def "model-lab-api-runs ListModelLabRuns" [
   --filtertags: string # Filter by tags. Format: key:value,key2:value2.
   --filterparams: string # Filter by params. Format: key:value,key2:>0.5,key3:true.
   --filterparent-run-id: string # Filter by parent run ID. Use 'null' to return only root runs (runs with no parent).
-  --pinned-first: string@bool-completer # Sort pinned runs before non-pinned runs. Pinned runs are ordered by pin time descending.
-  --include-pinned: string@bool-completer # Include all runs pinned by the current user, regardless of other filters.
-  --include-descendant-matches: string@bool-completer # When true, also return runs whose descendants match the active filters. The descendant_match field in each result indicates whether the run was included via a descendant match.
+  --pinned-first: oneof<nothing, bool> # Sort pinned runs before non-pinned runs. Pinned runs are ordered by pin time descending.
+  --include-pinned: oneof<nothing, bool> # Include all runs pinned by the current user, regardless of other filters.
+  --include-descendant-matches: oneof<nothing, bool> # When true, also return runs whose descendants match the active filters. The descendant_match field in each result indicates whether the run was included via a descendant match.
   --qp-sort: string # Sort field. Valid values: name, created_at, updated_at, duration. Prefix with '-' for descending order (e.g., -updated_at). (default: -updated_at)
   --pagesize: int # Number of items per page. Maximum is 100. (format: int64, default: 25)
   --pagenumber: int # Page number (1-indexed). (format: int64, default: 1)
@@ -18209,7 +18208,7 @@ export def "monitor-template GetMonitorUserTemplate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-all-versions: string@bool-completer # Whether to include all versions of the template in the response in the versions field. (e.g. false)
+  --with-all-versions: oneof<nothing, bool> # Whether to include all versions of the template in the response in the versions field. (e.g. false)
 ]: nothing -> record<data: record<attributes: record<created: string, description: string, modified: string, monitor_definition: record, tags: list, template_variables: list, title: string, version: int, versions: list>, id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -18360,7 +18359,7 @@ export def "ndm-interfaces GetInterfaces" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --device-id: string # The ID of the device to get interfaces from. (e.g. example:1.2.3.4)
-  --get-ip-addresses: string@bool-completer # Whether to get the IP addresses of the interfaces. (e.g. true)
+  --get-ip-addresses: oneof<nothing, bool> # Whether to get the IP addresses of the interfaces. (e.g. true)
 ]: nothing -> record<data: table<attributes: record, id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -20348,7 +20347,7 @@ export def "posture-management-findings ListFindings" [
   --pagecursor: string # Return the next page of findings pointed to by the cursor. (e.g. eyJhZnRlciI6IkFRQUFBWWJiaEJXQS1OY1dqUUFBQUFCQldXSmlhRUpYUVVGQlJFSktkbTlDTUdaWFRVbDNRVUUiLCJ2YWx1ZXMiOlsiY3JpdGljYWwiXX0=)
   --filtertags: string # Return findings that have these associated tags (repeatable). (e.g. filter[tags]=cloud_provider:aws&filter[tags]=aws_account:999999999999)
   --filterevaluation-changed-at: string # Return findings that have changed from pass to fail or vice versa on a specified date (Unix ms) or date range (using comparison operators). (e.g. >=1678721573794)
-  --filtermuted: string@bool-completer # Set to `true` to return findings that are muted. Set to `false` to return unmuted findings.
+  --filtermuted: oneof<nothing, bool> # Set to `true` to return findings that are muted. Set to `false` to return unmuted findings.
   --filterrule-id: string # Return findings for the specified rule ID.
   --filterrule-name: string # Return findings for the specified rule.
   --filterresource-type: string # Return only findings for the specified resource type.
@@ -20357,7 +20356,7 @@ export def "posture-management-findings ListFindings" [
   --filterevaluation: string@filterevaluation-completer # Return only `pass` or `fail` findings. (e.g. pass)
   --filterstatus: string@filterstatus-completer-1 # Return only findings with the specified status. (e.g. critical)
   --filtervulnerability-type: list # Return findings that match the selected vulnerability types (repeatable). (e.g. [misconfiguration])
-  --detailed-findings: string@bool-completer # Return additional fields for some findings. (e.g. [true])
+  --detailed-findings: oneof<nothing, bool> # Return additional fields for some findings. (e.g. [true])
 ]: nothing -> record<data: table<attributes: record, id: string, type: string>, meta: record<page: record<cursor: string, total_filtered_count: int>, snapshot_timestamp: int>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -20924,7 +20923,7 @@ export def "pruned-trace GetPrunedTraceByID" [
   --include-path: list # Restrict the pruned tree to spans matching the given `key:value` pairs. Values may be passed as repeated query parameters. (e.g. [service:web-store])
   --tag-include: list # Regex patterns of tag keys whose values must be included in the pruned spans. Values may be passed as repeated query parameters. (e.g. [^http\.])
   --tag-exclude: list # Regex patterns of tag keys whose values must be excluded from the pruned spans. Values may be passed as repeated query parameters. (e.g. [^_dd\.])
-  --only-service-entry-spans: string@bool-completer # When set to `true`, only service entry spans are included in the pruned tree. (e.g. false)
+  --only-service-entry-spans: oneof<nothing, bool> # When set to `true`, only service entry spans are included in the pruned tree. (e.g. false)
 ]: nothing -> record<data: record<attributes: record<is_truncated: bool, size_bytes: int, summarized_trace: record>, id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -22098,7 +22097,7 @@ export def "restriction-policy UpdateRestrictionPolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-self-lockout: string@bool-completer # Allows admins (users with the `user_access_manage` permission) to remove their own access from the resource if set to `true`. By default, this is set to `false`, preventing admins from locking themselves out.
+  --allow-self-lockout: oneof<nothing, bool> # Allows admins (users with the `user_access_manage` permission) to remove their own access from the resource if set to `true`. By default, this is set to `false`, preventing admins from locking themselves out.
   data: record # Restriction policy object. — shape: {attributes: record, id: string, type: "restriction_policy"}
 ]: any -> record<data: record<attributes: record<bindings: list>, id: string, type: string>> {
   let input = $in
@@ -23758,7 +23757,7 @@ export def "scorecard-campaigns GetScorecardCampaign" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --include: string # Include related data (for example, scores). (e.g. scores)
-  --include-meta: string@bool-completer # Include metadata (entity and rule counts). (e.g. true)
+  --include-meta: oneof<nothing, bool> # Include metadata (entity and rule counts). (e.g. true)
 ]: nothing -> record<data: record<attributes: record<created_at: string, description: string, due_date: string, entity_scope: string, guidance: string, key: string, modified_at: string, name: string, owner: string, start_date: string, status: string>, id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -23815,7 +23814,7 @@ export def "scorecard-outcomes ListScorecardOutcomes" [
   --fieldsrule: string # Return only specified values in the included rule details. (e.g. name)
   --filteroutcomeservice-name: string # Filter outcomes on a specific service name. (e.g. web-store)
   --filteroutcomestate: string # Filter outcomes by a specific state. (e.g. fail)
-  --filterruleenabled: string@bool-completer # Filter outcomes based on whether a rule is enabled or disabled. (e.g. true)
+  --filterruleenabled: oneof<nothing, bool> # Filter outcomes based on whether a rule is enabled or disabled. (e.g. true)
   --filterruleid: string # Filter outcomes based on rule ID. (e.g. f4485c79-0762-449c-96cf-c31e54a659f6)
   --filterrulename: string # Filter outcomes based on rule name. (e.g. SLOs Defined)
 ]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, included: table<attributes: record, id: string, type: string>, links: record<next: string>> {
@@ -23898,8 +23897,8 @@ export def "scorecard-rules ListScorecardRules" [
   --pageoffset: int # Specific offset to use as the beginning of the returned page. (format: int64, default: 0, e.g. 0)
   --include: string # Include related scorecard details in the response. (e.g. scorecard)
   --filterruleid: string # Filter the rules on a rule ID. (e.g. 37d2f990-c885-4972-949b-8b798213a166)
-  --filterruleenabled: string@bool-completer # Filter for enabled rules only. (e.g. true)
-  --filterrulecustom: string@bool-completer # Filter for custom rules only. (e.g. true)
+  --filterruleenabled: oneof<nothing, bool> # Filter for enabled rules only. (e.g. true)
+  --filterrulecustom: oneof<nothing, bool> # Filter for custom rules only. (e.g. true)
   --filterrulename: string # Filter rules on the rule name. (e.g. Code Repos Defined)
   --filterruledescription: string # Filter rules on the rule description. (e.g. Identifying)
   --fieldsrule: string # Return only specific fields in the response for rule attributes. (e.g. name, description)
@@ -24033,8 +24032,8 @@ export def "scorecard-scores ListScorecardScores" [
   --filterrulename: string # Filter scores by rule name.
   --filterrulelevel: string # Filter scores by rule level(s), comma-separated.
   --filterrulescorecard-id: string # Filter scores by scorecard ID(s), comma-separated.
-  --filterruleis-custom: string@bool-completer # Filter scores to show only custom rules.
-  --filterruleis-enabled: string@bool-completer # Filter scores to show only enabled rules.
+  --filterruleis-custom: oneof<nothing, bool> # Filter scores to show only custom rules.
+  --filterruleis-enabled: oneof<nothing, bool> # Filter scores to show only enabled rules.
   --qp-sort: string # Sort scores by field. Use a hyphen prefix for descending order. Options: score, numerator, denominator, total_pass, total_fail, total_skip, total_no_data.
   --pageoffset: int # Offset for pagination. (format: int64, default: 0)
   --pagelimit: int # Number of scores to return. Max is 1000. (format: int64, default: 100)
@@ -24765,9 +24764,9 @@ export def "security-vulnerabilities ListVulnerabilities" [
   --filterlibraryname: string # Filter by library name. (e.g. linux-aws-5.15)
   --filterlibraryversion: string # Filter by library version. (e.g. 5.15.0)
   --filteradvisoryid: string # Filter by advisory ID. (e.g. CVE-2023-0615)
-  --filterrisksexploitation-probability: string@bool-completer # Filter by exploitation probability. (e.g. false)
-  --filterriskspoc-exploit-available: string@bool-completer # Filter by POC exploit availability. (e.g. false)
-  --filterrisksexploit-available: string@bool-completer # Filter by public exploit availability. (e.g. false)
+  --filterrisksexploitation-probability: oneof<nothing, bool> # Filter by exploitation probability. (e.g. false)
+  --filterriskspoc-exploit-available: oneof<nothing, bool> # Filter by POC exploit availability. (e.g. false)
+  --filterrisksexploit-available: oneof<nothing, bool> # Filter by public exploit availability. (e.g. false)
   --filterrisksepssscoreop: float # Filter by vulnerability [EPSS](https://www.first.org/epss/) severity score. (format: double, e.g. 0.00042)
   --filterrisksepssseverity: string@filterrisksepssseverity-completer # Filter by vulnerability [EPSS](https://www.first.org/epss/) severity. (e.g. Medium)
   --filterlanguage: string # Filter by language. (e.g. ubuntu)
@@ -24775,20 +24774,20 @@ export def "security-vulnerabilities ListVulnerabilities" [
   --filtercode-locationlocation: string # Filter by vulnerability location. (e.g. com.example.Class:100)
   --filtercode-locationfile-path: string # Filter by vulnerability file path. (e.g. src/Class.java:100)
   --filtercode-locationmethod: string # Filter by method. (e.g. FooBar)
-  --filterfix-available: string@bool-completer # Filter by fix availability. (e.g. false)
+  --filterfix-available: oneof<nothing, bool> # Filter by fix availability. (e.g. false)
   --filterrepo-digests: string # Filter by vulnerability `repo_digest` (when the vulnerability is related to `Image` asset). (e.g. sha256:0ae7da091191787229d321e3638e39c319a97d6e20f927d465b519d699215bf7)
   --filterorigin: string # Filter by origin. (e.g. agentless-scanner)
-  --filterrunning-kernel: string@bool-completer # Filter for whether the vulnerability affects a running kernel (for vulnerabilities related to a `Host` asset). (e.g. true)
+  --filterrunning-kernel: oneof<nothing, bool> # Filter for whether the vulnerability affects a running kernel (for vulnerabilities related to a `Host` asset). (e.g. true)
   --filterassetname: string # Filter by asset name. This field supports the usage of wildcards (*). (e.g. datadog-agent)
   --filterassettype: string@filterassettype-completer-1 # Filter by asset type. (e.g. Repository)
   --filterassetversionfirst: string # Filter by the first version of the asset this vulnerability has been detected on. (e.g. v1.15.1)
   --filterassetversionlast: string # Filter by the last version of the asset this vulnerability has been detected on. (e.g. v1.15.1)
   --filterassetrepository-url: string # Filter by the repository url associated to the asset. (e.g. github.com/DataDog/datadog-agent.git)
-  --filterassetrisksin-production: string@bool-completer # Filter whether the asset is in production or not. (e.g. false)
-  --filterassetrisksunder-attack: string@bool-completer # Filter whether the asset is under attack or not. (e.g. false)
-  --filterassetrisksis-publicly-accessible: string@bool-completer # Filter whether the asset is publicly accessible or not. (e.g. false)
-  --filterassetriskshas-privileged-access: string@bool-completer # Filter whether the asset is publicly accessible or not. (e.g. false)
-  --filterassetriskshas-access-to-sensitive-data: string@bool-completer # Filter whether the asset  has access to sensitive data or not. (e.g. false)
+  --filterassetrisksin-production: oneof<nothing, bool> # Filter whether the asset is in production or not. (e.g. false)
+  --filterassetrisksunder-attack: oneof<nothing, bool> # Filter whether the asset is under attack or not. (e.g. false)
+  --filterassetrisksis-publicly-accessible: oneof<nothing, bool> # Filter whether the asset is publicly accessible or not. (e.g. false)
+  --filterassetriskshas-privileged-access: oneof<nothing, bool> # Filter whether the asset is publicly accessible or not. (e.g. false)
+  --filterassetriskshas-access-to-sensitive-data: oneof<nothing, bool> # Filter whether the asset  has access to sensitive data or not. (e.g. false)
   --filterassetenvironments: string # Filter by asset environments. (e.g. staging)
   --filterassetteams: string # Filter by asset teams. (e.g. compute)
   --filterassetarch: string # Filter by asset architecture. (e.g. arm64)
@@ -24941,11 +24940,11 @@ export def "security-vulnerable-assets ListVulnerableAssets" [
   --filterversionfirst: string # Filter by the first version of the asset since it has been vulnerable. (e.g. v1.15.1)
   --filterversionlast: string # Filter by the last detected version of the asset. (e.g. v1.15.1)
   --filterrepository-url: string # Filter by the repository url associated to the asset. (e.g. github.com/DataDog/datadog-agent.git)
-  --filterrisksin-production: string@bool-completer # Filter whether the asset is in production or not. (e.g. false)
-  --filterrisksunder-attack: string@bool-completer # Filter whether the asset (Service) is under attack or not. (e.g. false)
-  --filterrisksis-publicly-accessible: string@bool-completer # Filter whether the asset (Host) is publicly accessible or not. (e.g. false)
-  --filterriskshas-privileged-access: string@bool-completer # Filter whether the asset (Host) has privileged access or not. (e.g. false)
-  --filterriskshas-access-to-sensitive-data: string@bool-completer # Filter whether the asset (Host)  has access to sensitive data or not. (e.g. false)
+  --filterrisksin-production: oneof<nothing, bool> # Filter whether the asset is in production or not. (e.g. false)
+  --filterrisksunder-attack: oneof<nothing, bool> # Filter whether the asset (Service) is under attack or not. (e.g. false)
+  --filterrisksis-publicly-accessible: oneof<nothing, bool> # Filter whether the asset (Host) is publicly accessible or not. (e.g. false)
+  --filterriskshas-privileged-access: oneof<nothing, bool> # Filter whether the asset (Host) has privileged access or not. (e.g. false)
+  --filterriskshas-access-to-sensitive-data: oneof<nothing, bool> # Filter whether the asset (Host)  has access to sensitive data or not. (e.g. false)
   --filterenvironments: string # Filter by environment. (e.g. staging)
   --filterteams: string # Filter by teams. (e.g. compute)
   --filterarch: string # Filter by architecture. (e.g. arm64)
@@ -25629,8 +25628,8 @@ export def "security-monitoring-configuration-suppressions-rules GetSuppressions
   --cases: list # Cases for generating signals. (e.g. []) — item shape: {actions?: list, condition?: string, name?: string, notifications?: list, status: "info"|"low"|"medium"|"high"|"critical"}
   --filters: list # Additional queries to filter matched events before they are processed. This field is deprecated for log detection, signal correlation, and workload security rules. — item shape: {action?: "require"|"suppress", query?: string}
   --groupSignalsBy: list # Additional grouping to perform on top of the existing groups in the query section. Must be a subset of the existing groups. (e.g. [service])
-  --hasExtendedTitle: string@bool-completer # Whether the notifications include the triggering group-by values in their title. (e.g. true)
-  --isEnabled: string@bool-completer # Whether the rule is enabled. (e.g. true)
+  --hasExtendedTitle: oneof<nothing, bool> # Whether the notifications include the triggering group-by values in their title. (e.g. true)
+  --isEnabled: oneof<nothing, bool> # Whether the rule is enabled. (e.g. true)
   --message: string # Message for generated signals. (e.g. )
   --name: string # The name of the rule. (e.g. My security monitoring rule.)
   --options: record # Options. — shape: {anomalyDetectionOptions?: record, complianceRuleOptions?: record, decreaseCriticalityBasedOnEnv?: bool, detectionMethod?: "threshold"|"new_value"|"anomaly_detection"|"impossible_travel"|"hardcoded"|"third_party"|"anomaly_threshold"|"sequence_detection", evaluationWindow?: "0"|"60"|"300"|"600"|"900"|"1800"|"3600"|"7200"|"10800"|"21600"|"43200"|"86400", hardcodedEvaluatorType?: "log4shell", impossibleTravelOptions?: record, keepAlive?: "0"|"60"|"300"|"600"|"900"|"1800"|"3600"|"7200"|"10800"|"21600"|"43200"|"86400", maxSignalDuration?: "0"|"60"|"300"|"600"|"900"|"1800"|"3600"|"7200"|"10800"|"21600"|"43200"|"86400", newValueOptions?: record, sequenceDetectionOptions?: record, thirdPartyRuleOptions?: record}
@@ -26164,8 +26163,8 @@ export def "security-monitoring-rules CreateSecurityMonitoringRule" [
   --cases: list # Cases for generating signals. (e.g. []) — item shape: {actions?: list, condition?: string, name?: string, notifications?: list, status: "info"|"low"|"medium"|"high"|"critical"}
   --filters: list # Additional queries to filter matched events before they are processed. This field is deprecated for log detection, signal correlation, and workload security rules. — item shape: {action?: "require"|"suppress", query?: string}
   --groupSignalsBy: list # Additional grouping to perform on top of the existing groups in the query section. Must be a subset of the existing groups. (e.g. [service])
-  --hasExtendedTitle: string@bool-completer # Whether the notifications include the triggering group-by values in their title. (e.g. true)
-  --isEnabled: string@bool-completer # Whether the rule is enabled. (e.g. true)
+  --hasExtendedTitle: oneof<nothing, bool> # Whether the notifications include the triggering group-by values in their title. (e.g. true)
+  --isEnabled: oneof<nothing, bool> # Whether the rule is enabled. (e.g. true)
   --message: string # Message for generated signals. (e.g. )
   --name: string # The name of the rule. (e.g. My security monitoring rule.)
   --options: record # Options. — shape: {anomalyDetectionOptions?: record, complianceRuleOptions?: record, decreaseCriticalityBasedOnEnv?: bool, detectionMethod?: "threshold"|"new_value"|"anomaly_detection"|"impossible_travel"|"hardcoded"|"third_party"|"anomaly_threshold"|"sequence_detection", evaluationWindow?: "0"|"60"|"300"|"600"|"900"|"1800"|"3600"|"7200"|"10800"|"21600"|"43200"|"86400", hardcodedEvaluatorType?: "log4shell", impossibleTravelOptions?: record, keepAlive?: "0"|"60"|"300"|"600"|"900"|"1800"|"3600"|"7200"|"10800"|"21600"|"43200"|"86400", maxSignalDuration?: "0"|"60"|"300"|"600"|"900"|"1800"|"3600"|"7200"|"10800"|"21600"|"43200"|"86400", newValueOptions?: record, sequenceDetectionOptions?: record, thirdPartyRuleOptions?: record}
@@ -26266,8 +26265,8 @@ export def "security-monitoring-rules-convert ConvertSecurityMonitoringRuleFromJ
   --customName: string # Custom/Overridden name of the rule (used in case of Default rule update).
   --filters: list # Additional queries to filter matched events before they are processed. This field is deprecated for log detection, signal correlation, and workload security rules. — item shape: {action?: "require"|"suppress", query?: string}
   --groupSignalsBy: list # Additional grouping to perform on top of the existing groups in the query section. Must be a subset of the existing groups. (e.g. [service])
-  --hasExtendedTitle: string@bool-completer # Whether the notifications include the triggering group-by values in their title. (e.g. true)
-  --isEnabled: string@bool-completer # Whether the rule is enabled. (e.g. true)
+  --hasExtendedTitle: oneof<nothing, bool> # Whether the notifications include the triggering group-by values in their title. (e.g. true)
+  --isEnabled: oneof<nothing, bool> # Whether the rule is enabled. (e.g. true)
   --message: string # Message for generated signals. (e.g. )
   --name: string # The name of the rule. (e.g. My security monitoring rule.)
   --options: record # Options. — shape: {anomalyDetectionOptions?: record, complianceRuleOptions?: record, decreaseCriticalityBasedOnEnv?: bool, detectionMethod?: "threshold"|"new_value"|"anomaly_detection"|"impossible_travel"|"hardcoded"|"third_party"|"anomaly_threshold"|"sequence_detection", evaluationWindow?: "0"|"60"|"300"|"600"|"900"|"1800"|"3600"|"7200"|"10800"|"21600"|"43200"|"86400", hardcodedEvaluatorType?: "log4shell", impossibleTravelOptions?: record, keepAlive?: "0"|"60"|"300"|"600"|"900"|"1800"|"3600"|"7200"|"10800"|"21600"|"43200"|"86400", maxSignalDuration?: "0"|"60"|"300"|"600"|"900"|"1800"|"3600"|"7200"|"10800"|"21600"|"43200"|"86400", newValueOptions?: record, sequenceDetectionOptions?: record, thirdPartyRuleOptions?: record}
@@ -26369,8 +26368,8 @@ export def "security-monitoring-rules-validation ValidateSecurityMonitoringRule"
   --customName: string # Custom/Overridden name of the rule (used in case of Default rule update).
   --filters: list # Additional queries to filter matched events before they are processed. This field is deprecated for log detection, signal correlation, and workload security rules. — item shape: {action?: "require"|"suppress", query?: string}
   --groupSignalsBy: list # Additional grouping to perform on top of the existing groups in the query section. Must be a subset of the existing groups. (e.g. [service])
-  --hasExtendedTitle: string@bool-completer # Whether the notifications include the triggering group-by values in their title. (e.g. true)
-  --isEnabled: string@bool-completer # Whether the rule is enabled. (e.g. true)
+  --hasExtendedTitle: oneof<nothing, bool> # Whether the notifications include the triggering group-by values in their title. (e.g. true)
+  --isEnabled: oneof<nothing, bool> # Whether the rule is enabled. (e.g. true)
   --message: string # Message for generated signals. (e.g. )
   --name: string # The name of the rule. (e.g. My security monitoring rule.)
   --options: record # Options. — shape: {anomalyDetectionOptions?: record, complianceRuleOptions?: record, decreaseCriticalityBasedOnEnv?: bool, detectionMethod?: "threshold"|"new_value"|"anomaly_detection"|"impossible_travel"|"hardcoded"|"third_party"|"anomaly_threshold"|"sequence_detection", evaluationWindow?: "0"|"60"|"300"|"600"|"900"|"1800"|"3600"|"7200"|"10800"|"21600"|"43200"|"86400", hardcodedEvaluatorType?: "log4shell", impossibleTravelOptions?: record, keepAlive?: "0"|"60"|"300"|"600"|"900"|"1800"|"3600"|"7200"|"10800"|"21600"|"43200"|"86400", maxSignalDuration?: "0"|"60"|"300"|"600"|"900"|"1800"|"3600"|"7200"|"10800"|"21600"|"43200"|"86400", newValueOptions?: record, sequenceDetectionOptions?: record, thirdPartyRuleOptions?: record}
@@ -26465,8 +26464,8 @@ export def "security-monitoring-rules UpdateSecurityMonitoringRule" [
   --customName: string # Custom/Overridden name (used in case of Default rule update).
   --filters: list # Additional queries to filter matched events before they are processed. This field is deprecated for log detection, signal correlation, and workload security rules. — item shape: {action?: "require"|"suppress", query?: string}
   --groupSignalsBy: list # Additional grouping to perform on top of the existing groups in the query section. Must be a subset of the existing groups. (e.g. [service])
-  --hasExtendedTitle: string@bool-completer # Whether the notifications include the triggering group-by values in their title. (e.g. true)
-  --isEnabled: string@bool-completer # Whether the rule is enabled.
+  --hasExtendedTitle: oneof<nothing, bool> # Whether the notifications include the triggering group-by values in their title. (e.g. true)
+  --isEnabled: oneof<nothing, bool> # Whether the rule is enabled.
   --message: string # Message for generated signals.
   --name: string # Name of the rule.
   --options: record # Options. — shape: {anomalyDetectionOptions?: record, complianceRuleOptions?: record, decreaseCriticalityBasedOnEnv?: bool, detectionMethod?: "threshold"|"new_value"|"anomaly_detection"|"impossible_travel"|"hardcoded"|"third_party"|"anomaly_threshold"|"sequence_detection", evaluationWindow?: "0"|"60"|"300"|"600"|"900"|"1800"|"3600"|"7200"|"10800"|"21600"|"43200"|"86400", hardcodedEvaluatorType?: "log4shell", impossibleTravelOptions?: record, keepAlive?: "0"|"60"|"300"|"600"|"900"|"1800"|"3600"|"7200"|"10800"|"21600"|"43200"|"86400", maxSignalDuration?: "0"|"60"|"300"|"600"|"900"|"1800"|"3600"|"7200"|"10800"|"21600"|"43200"|"86400", newValueOptions?: record, sequenceDetectionOptions?: record, thirdPartyRuleOptions?: record}
@@ -28213,7 +28212,7 @@ export def "slo-status GetSloStatus" [
   --allow-errors(-e) # Return full response without error handling
   --from-ts: int # The starting timestamp for the SLO status query in epoch seconds. (format: int64, e.g. 1690901870)
   --to-ts: int # The ending timestamp for the SLO status query in epoch seconds. (format: int64, e.g. 1706803070)
-  --disable-corrections: string@bool-completer # Whether to exclude correction windows from the SLO status calculation. Defaults to false. (default: false, e.g. false)
+  --disable-corrections: oneof<nothing, bool> # Whether to exclude correction windows from the SLO status calculation. Defaults to false. (default: false, e.g. false)
 ]: nothing -> record<data: record<attributes: record<error_budget_remaining: float, raw_error_budget_remaining: record, sli: float, span_precision: int, state: string>, id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -28237,7 +28236,7 @@ export def "sourcemaps DeleteSourcemaps" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --mapkind: string@mapkind-completer # The type of source map. Valid values are `js`, `jvm`, `ios`, `react`, `flutter`, `elf`, `ndk`, `il2cpp`. (e.g. js)
-  --dry-run: string@bool-completer # When set to `true`, returns the source maps that would be deleted without performing the actual deletion. When set to `false`, performs the deletion. (e.g. true)
+  --dry-run: oneof<nothing, bool> # When set to `true`, returns the source maps that would be deleted without performing the actual deletion. When set to `false`, performs the deletion. (e.g. true)
   --filterservice: list # Filter by service names (multiple values allowed). Required for `js`, `jvm`, `react`, and `flutter` map kinds. (e.g. [my-web-service])
   --filterversion: list # Filter by version values (multiple values allowed, maximum 10). Required for `js`, `jvm`, `react`, and `flutter` map kinds. (e.g. [1.0.0])
   --filtervariant: list # Filter by variant values (multiple values allowed). Supported for `jvm`.
@@ -28347,7 +28346,7 @@ export def "sourcemaps-restore RestoreSourcemaps" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --mapkind: string@mapkind-completer # The type of source map. Valid values are `js`, `jvm`, `ios`, `react`, `flutter`, `elf`, `ndk`, `il2cpp`. (e.g. js)
-  --dry-run: string@bool-completer # When set to `true`, returns the source maps that would be restored without performing the actual restoration. When set to `false`, performs the restoration. (e.g. true)
+  --dry-run: oneof<nothing, bool> # When set to `true`, returns the source maps that would be restored without performing the actual restoration. When set to `false`, performs the restoration. (e.g. true)
   --filterservice: list # Filter by service names (multiple values allowed). Required for `js`, `jvm`, `react`, and `flutter` map kinds. (e.g. [my-web-service])
   --filterversion: list # Filter by version values (multiple values allowed, maximum 10). Required for `js`, `jvm`, `react`, and `flutter` map kinds. (e.g. [1.0.0])
   --filtervariant: list # Filter by variant values (multiple values allowed). Supported for `jvm`.
@@ -29393,8 +29392,8 @@ export def "static-analysis-rulesets GetStaticAnalysisRuleset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-tests: string@bool-completer # When true, test cases for each rule are included in the response.
-  --include-testing-rules: string@bool-completer # When true, rules that are in testing mode are included in the response.
+  --include-tests: oneof<nothing, bool> # When true, test cases for each rule are included in the response.
+  --include-testing-rules: oneof<nothing, bool> # When true, rules that are in testing mode are included in the response.
 ]: nothing -> record<data: record<attributes: record<description: string, name: string, rules: list, short_description: string>, id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -29692,7 +29691,7 @@ export def "statuspages UpdateStatusPage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete-subscribers: string@bool-completer # Whether to delete existing subscribers when updating a status page's type. (default: false)
+  --delete-subscribers: oneof<nothing, bool> # Whether to delete existing subscribers when updating a status page's type. (default: false)
   --include: string # Comma-separated list of resources to include. Supported values: created_by_user, last_modified_by_user.
   --data: record # The data object for updating a status page. — shape: {attributes: record, id: string, type: "status_pages"}
 ]: any -> record<data: record<attributes: record<company_logo: string, components: list, created_at: string, custom_domain: string, custom_domain_enabled: bool, domain_prefix: string, email_header_image: string, enabled: bool, favicon: string, modified_at: string, name: string, page_url: string, subscriptions_enabled: bool, type: string, visualization_type: string>, id: string, relationships: record<created_by_user: record, last_modified_by_user: record>, type: string>, included: list<any>> {
@@ -29853,7 +29852,7 @@ export def "statuspages-degradations CreateDegradation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notify-subscribers: string@bool-completer # Whether to notify page subscribers of the degradation. (default: true)
+  --notify-subscribers: oneof<nothing, bool> # Whether to notify page subscribers of the degradation. (default: true)
   --include: string # Comma-separated list of resources to include. Supported values: created_by_user, last_modified_by_user, status_page.
   --data: record # The data object for creating a degradation. — shape: {attributes: record, type: "degradations"}
 ]: any -> record<data: record<attributes: record<components_affected: list, created_at: string, description: string, is_backfilled: bool, modified_at: string, source: record, status: string, title: string, updates: list>, id: string, relationships: record<created_by_user: record, last_modified_by_user: record, status_page: record>, type: string>, included: list<any>> {
@@ -29961,7 +29960,7 @@ export def "statuspages-degradations UpdateDegradation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notify-subscribers: string@bool-completer # Whether to notify page subscribers of the degradation. (default: true)
+  --notify-subscribers: oneof<nothing, bool> # Whether to notify page subscribers of the degradation. (default: true)
   --include: string # Comma-separated list of resources to include. Supported values: created_by_user, last_modified_by_user, status_page.
   --data: record # The data object for updating a degradation. — shape: {attributes: record, id: string, type: "degradations"}
 ]: any -> record<data: record<attributes: record<components_affected: list, created_at: string, description: string, is_backfilled: bool, modified_at: string, source: record, status: string, title: string, updates: list>, id: string, relationships: record<created_by_user: record, last_modified_by_user: record, status_page: record>, type: string>, included: list<any>> {
@@ -29991,7 +29990,7 @@ export def "statuspages-maintenances CreateMaintenance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notify-subscribers: string@bool-completer # Whether to notify page subscribers of the maintenance. (default: true)
+  --notify-subscribers: oneof<nothing, bool> # Whether to notify page subscribers of the maintenance. (default: true)
   --include: string # Comma-separated list of resources to include. Supported values: created_by_user, last_modified_by_user, status_page.
   --data: record # The data object for creating a maintenance. — shape: {attributes: record, type: "maintenances"}
 ]: any -> record<data: record<attributes: record<completed_date: string, completed_description: string, components_affected: list, in_progress_description: string, is_backfilled: bool, modified_at: string, published_date: string, scheduled_description: string, start_date: string, status: string, title: string, updates: list>, id: string, relationships: record<created_by_user: record, last_modified_by_user: record, status_page: record>, type: string>, included: list<any>> {
@@ -30076,7 +30075,7 @@ export def "statuspages-maintenances UpdateMaintenance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notify-subscribers: string@bool-completer # Whether to notify page subscribers of the maintenance. (default: true)
+  --notify-subscribers: oneof<nothing, bool> # Whether to notify page subscribers of the maintenance. (default: true)
   --include: string # Comma-separated list of resources to include. Supported values: created_by_user, last_modified_by_user, status_page.
   --data: record # The data object for updating a maintenance. — shape: {attributes: record, id: string, type: "maintenances"}
 ]: any -> record<data: record<attributes: record<completed_date: string, completed_description: string, components_affected: list, in_progress_description: string, is_backfilled: bool, modified_at: string, published_date: string, scheduled_description: string, start_date: string, status: string, title: string, updates: list>, id: string, relationships: record<created_by_user: record, last_modified_by_user: record, status_page: record>, type: string>, included: list<any>> {
@@ -30484,7 +30483,7 @@ export def "synthetics-suites-search SearchSuites" [
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string # The search query.
   --qp-sort: string # The sort order for the results (e.g., `name,asc` or `name,desc`). (default: name,asc)
-  --facets-only: string@bool-completer # If true, return only facets instead of full test details. (default: false)
+  --facets-only: oneof<nothing, bool> # If true, return only facets instead of full test details. (default: false)
   --start: int # The offset from which to start returning results. (format: int64, default: 0)
   --count: int # The maximum number of results to return. (format: int64, default: 50)
 ]: nothing -> record<data: record<attributes: record<suites: list, total: int>, id: string, type: string>> {
@@ -31000,8 +30999,8 @@ export def "synthetics-tests-version-history GetSyntheticsTestVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-change-metadata: string@bool-completer # If `true`, include change metadata in the response.
-  --only-check-existence: string@bool-completer # If `true`, only check whether the version exists without returning its full payload. Returns an empty object if the version exists, or 404 if not.
+  --include-change-metadata: oneof<nothing, bool> # If `true`, include change metadata in the response.
+  --only-check-existence: oneof<nothing, bool> # If `true`, only check whether the version exists without returning its full payload. Returns an empty object if the version exists, or 404 if not.
 ]: nothing -> record<data: record<attributes: record<author: record, change_metadata: list, payload: record, version_payload_created_at: string>, id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -31247,7 +31246,7 @@ export def "team ListTeams" [
   --qp-sort: string@sort-completer-14 # Specifies the order of the returned teams
   --include: list # Included related resources optionally requested. Allowed enum values: `team_links, user_team_permissions`
   --filterkeyword: string # Search query. Can be team name, team handle, or email of team member
-  --filterme: string@bool-completer # When true, only returns teams the current user belongs to
+  --filterme: oneof<nothing, bool> # When true, only returns teams the current user belongs to
   --fieldsteam: list # List of fields that need to be fetched.
 ]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, included: list<any>, links: record<first: string, last: string, next: string, prev: string, self: string>, meta: record<pagination: record<first_offset: int, last_offset: int, limit: int, next_offset: int, offset: int, prev_offset: int, total: int, type: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
@@ -32234,7 +32233,7 @@ export def "usage-estimated-cost GetEstimatedCostByOrg" [
   --start-date: string # Datetime in ISO-8601 format, UTC, precise to day: `[YYYY-MM-DD]` for cost beginning this day. **Either start_month or start_date should be specified, but not both.** (start_date cannot go beyond two months in the past). Provide an `end_date` to view day-over-day cumulative cost. (format: date-time)
   --end-date: string # Datetime in ISO-8601 format, UTC, precise to day: `[YYYY-MM-DD]` for cost ending this day. (format: date-time)
   --cost-aggregation: string@cost-aggregation-completer # Controls how costs are aggregated when using `start_date`. The `cumulative` option returns month-to-date running totals.
-  --include-connected-accounts: string@bool-completer # Boolean to specify whether to include accounts connected to the current account as partner customers in the Datadog partner network program. Defaults to `false`. (default: false)
+  --include-connected-accounts: oneof<nothing, bool> # Boolean to specify whether to include accounts connected to the current account as partner customers in the Datadog partner network program. Defaults to `false`. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -32260,7 +32259,7 @@ export def "usage-historical-cost GetHistoricalCostByOrg" [
   --start-month: string # Datetime in ISO-8601 format, UTC, precise to month: `[YYYY-MM]` for cost beginning this month. (format: date-time)
   --view: string # String to specify whether cost is broken down at a parent-org level or at the sub-org level. Available views are `summary` and `sub-org`.  Defaults to `summary`.
   --end-month: string # Datetime in ISO-8601 format, UTC, precise to month: `[YYYY-MM]` for cost ending this month. (format: date-time)
-  --include-connected-accounts: string@bool-completer # Boolean to specify whether to include accounts connected to the current account as partner customers in the Datadog partner network program. Defaults to `false`. (default: false)
+  --include-connected-accounts: oneof<nothing, bool> # Boolean to specify whether to include accounts connected to the current account as partner customers in the Datadog partner network program. Defaults to `false`. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -32286,9 +32285,9 @@ export def "usage-hourly-usage GetHourlyUsage" [
   --filtertimestampstart: string # Datetime in ISO-8601 format, UTC, precise to hour: [YYYY-MM-DDThh] for usage beginning at this hour. (format: date-time)
   --filtertimestampend: string # Datetime in ISO-8601 format, UTC, precise to hour: [YYYY-MM-DDThh] for usage ending **before** this hour. (format: date-time)
   --filterproduct-families: string # Comma separated list of product families to retrieve. Available families are `all`, `ai`, `analyzed_logs`, `application_performance_monitoring`, `application_security`, `audit_trail`, `bits_ai`, `serverless`, `ci_app`, `cloud_cost_management`, `cloud_siem`, `csm_container_enterprise`, `csm_host_enterprise`, `csm_host_pro`, `cspm`, `custom_events`, `cws`, `data_observability`, `dbm`, `digital_experience_management`, `error_tracking`, `fargate`, `infra_hosts`, `incident_management`, `indexed_logs`, `indexed_spans`, `infrastructure_monitoring`, `ingested_spans`, `iot`, `lambda_traced_invocations`, `llm_observability`, `log_management`, `logs`, `network_flows`, `network_hosts`, `network_monitoring`, `observability_pipelines`, `online_archive`, `platform_capabilities`, `product_analytics`, `profiling`, `rum`, `rum_browser_sessions`, `rum_mobile_sessions`, `sds`, `security`, `snmp`, `software_delivery`, `synthetics_api`, `synthetics_browser`, `synthetics_mobile`, `synthetics_parallel_testing`, `timeseries`, `vuln_management` and `workflow_executions`. The following product family has been **deprecated**: `audit_logs`.
-  --filterinclude-descendants: string@bool-completer # Include child org usage in the response. Defaults to false. (default: false)
-  --filterinclude-connected-accounts: string@bool-completer # Boolean to specify whether to include accounts connected to the current account as partner customers in the Datadog partner network program. Defaults to false. (default: false)
-  --filterinclude-breakdown: string@bool-completer # Include breakdown of usage by subcategories where applicable (for product family logs only). Defaults to false. (default: false)
+  --filterinclude-descendants: oneof<nothing, bool> # Include child org usage in the response. Defaults to false. (default: false)
+  --filterinclude-connected-accounts: oneof<nothing, bool> # Boolean to specify whether to include accounts connected to the current account as partner customers in the Datadog partner network program. Defaults to false. (default: false)
+  --filterinclude-breakdown: oneof<nothing, bool> # Include breakdown of usage by subcategories where applicable (for product family logs only). Defaults to false. (default: false)
   --filterversions: string # Comma separated list of product family versions to use in the format `product_family:version`. For example, `infra_hosts:1.0.0`. If this parameter is not used, the API will use the latest version of each requested product family. Currently all families have one version `1.0.0`.
   --pagelimit: int # Maximum number of results to return (between 1 and 500) - defaults to 500 if limit not specified. (format: int32, default: 500)
   --pagenext-record-id: string # List following results with a next_record_id provided in the previous query.
@@ -32367,7 +32366,7 @@ export def "usage-projected-cost GetProjectedCost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --view: string # String to specify whether cost is broken down at a parent-org level or at the sub-org level. Available views are `summary` and `sub-org`. Defaults to `summary`.
-  --include-connected-accounts: string@bool-completer # Boolean to specify whether to include accounts connected to the current account as partner customers in the Datadog partner network program. Defaults to `false`. (default: false)
+  --include-connected-accounts: oneof<nothing, bool> # Boolean to specify whether to include accounts connected to the current account as partner customers in the Datadog partner network program. Defaults to `false`. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -32861,7 +32860,7 @@ export def "widgets SearchWidgets" [
   --allow-errors(-e) # Return full response without error handling
   --filterwidgetType: string@filterwidgetType-completer # Filter widgets by widget type. (e.g. bar_chart)
   --filtercreatorHandle: string # Filter widgets by the email handle of the creator. (e.g. john.doe@example.com)
-  --filterisFavorited: string@bool-completer # Filter to only widgets favorited by the current user.
+  --filterisFavorited: oneof<nothing, bool> # Filter to only widgets favorited by the current user.
   --filtertitle: string # Filter widgets by title (substring match).
   --filtertags: string # Filter widgets by tags. Format as bracket-delimited CSV, e.g. `[tag1,tag2]`.
   --qp-sort: string # Sort field for the results.  **`title`, `created_at`, `modified_at`** — both ascending and descending are supported. Use the bare field name for ascending (e.g. `sort=title`) or prefix with `-` for descending (e.g. `sort=-modified_at`).  **`is_favorited`** — returns favorites-first ordering (favorited widgets first, then the rest). Direction is fixed; the `-` prefix is ignored for this field. (default: -modified_at, e.g. -modified_at)

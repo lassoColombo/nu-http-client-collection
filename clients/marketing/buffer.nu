@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.bufferapp.com/1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -193,7 +192,7 @@ export def "profiles-updates-pending-media-type-extension get" [
   --page: int # Specifies the page of status updates to receive. If not specified the first page of results will be returned.
   --count: int # Specifies the number of status updates to receive. If provided, must be between 1 and 100.
   --since: string # Specifies a unix timestamp which only status updates created after this time will be retrieved. (format: date)
-  --utc: string@bool-completer # If utc is set times will be returned relative to UTC rather than the users associated timezone.
+  --utc: oneof<nothing, bool> # If utc is set times will be returned relative to UTC rather than the users associated timezone.
 ]: nothing -> record<total: float, updates: table<created_at: float, day: string, due_at: float, due_time: string, id: string, profile_id: string, profile_service: string, status: string, text: string, text_formatted: string, user_id: string, via: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -242,7 +241,7 @@ export def "profiles-updates-sent-media-type-extension get" [
   --page: int # Specifies the page of status updates to receive. If not specified the first page of results will be returned.
   --count: int # Specifies the number of status updates to receive. If provided, must be between 1 and 100.
   --since: string # Specifies a unix timestamp which only status updates created after this time will be retrieved. (format: date)
-  --utc: string@bool-completer # If utc is set times will be returned relative to UTC rather than the users associated timezone.
+  --utc: oneof<nothing, bool> # If utc is set times will be returned relative to UTC rather than the users associated timezone.
 ]: nothing -> record<total: float, updates: table<created_at: float, day: string, due_at: float, due_time: string, id: string, profile_id: string, profile_service: string, status: string, text: string, text_formatted: string, user_id: string, via: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.turso.tech"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -237,10 +236,10 @@ export def "organizations-databases-configuration updateDatabaseConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --size-limit: string # The maximum size of the database in bytes. Values with units are also accepted, e.g. 1mb, 256mb, 1gb.
-  --allow-attach: string@bool-completer # Allow or disallow attaching databases to the current database. (DEPRECATED)
-  --block-reads: string@bool-completer # Block all database reads. (e.g. false)
-  --block-writes: string@bool-completer # Block all database writes. (e.g. false)
-  --delete-protection: string@bool-completer # Prevent the database from being deleted. (e.g. true)
+  --allow-attach: oneof<nothing, bool> # Allow or disallow attaching databases to the current database. (DEPRECATED)
+  --block-reads: oneof<nothing, bool> # Block all database reads. (e.g. false)
+  --block-writes: oneof<nothing, bool> # Block all database writes. (e.g. false)
+  --delete-protection: oneof<nothing, bool> # Prevent the database from being deleted. (e.g. true)
   --allowed-ips: list # List of allowed IP addresses and CIDR blocks. Only connections from these sources are accepted. Pass an empty array to clear the list. Omit to leave unchanged. (e.g. [203.0.113.7, 10.0.0.0/8])
   --allowed-aws-vpc-ids: list # List of allowed AWS VPC endpoint IDs (vpce-...). Only connections arriving through these endpoints are accepted. Pass an empty array to clear the list. Omit to leave unchanged. (e.g. [vpce-0fe6c8807461bba49])
 ]: any -> record<size_limit: string, allow_attach: bool, block_reads: bool, block_writes: bool, delete_protection: bool, allowed_ips: list<string>, allowed_aws_vpc_ids: list<string>> {
@@ -538,7 +537,7 @@ export def "organizations-groups-configuration updateGroupConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete-protection: string@bool-completer # Prevent the group from being deleted. (e.g. true)
+  --delete-protection: oneof<nothing, bool> # Prevent the group from being deleted. (e.g. true)
 ]: any -> record<delete_protection: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -803,8 +802,8 @@ export def "organizations updateOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --overages: string@bool-completer # Enable or disable overages for the organization.
-  --require-mfa: string@bool-completer # Require all members of the organization to have multi-factor authentication enabled. The requesting user must have MFA enabled on their own account before enabling this requirement.
+  --overages: oneof<nothing, bool> # Enable or disable overages for the organization.
+  --require-mfa: oneof<nothing, bool> # Require all members of the organization to have multi-factor authentication enabled. The requesting user must have MFA enabled on their own account before enabling this requirement.
 ]: any -> record<organization: record<name: string, slug: string, type: string, overages: bool, require_mfa: bool, blocked_reads: bool, blocked_writes: bool, plan_id: string, plan_timeline: string, platform: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.gbif.org/v1" "https://api.gbif-uat.org/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -187,7 +186,7 @@ export def "grscicoll-collection listCollections" [
   --contentType: string # Content type of a GrSciColl collection. Accepts multiple values, for example `contentType=Paleontological&contentType=EarthPlanetary`.
   --preservationType: string # Preservation type of a GrSciColl collection. Accepts multiple values, for example `preservationType=SampleCryopreserved&preservationType=SampleFluidPreserved`.
   --accessionStatus: string # Accession status of a GrSciColl collection. Accepts multiple values, for example `accessionStatus=Institutional&accessionStatus=Project
-  --personalCollection: string@bool-completer # Flag for personal GRSciColl collections
+  --personalCollection: oneof<nothing, bool> # Flag for personal GRSciColl collections
   --sourceId: string # sourceId of MasterSourceMetadata
   --qp-source: string@source-completer # Source attribute of MasterSourceMetadata
   --code: string # Code of a GrSciColl institution or collection
@@ -203,10 +202,10 @@ export def "grscicoll-collection listCollections" [
   --gbifRegion: string@gbifRegion-completer # Filters by a gbif region
   --city: string # Filters by the city of the address. It searches in both the physical and the mailing address.
   --fuzzyName: string # It searches by name fuzzily so the parameter doesn't have to be the exact name
-  --active: string@bool-completer # Active status of a GrSciColl institution or collection
+  --active: oneof<nothing, bool> # Active status of a GrSciColl institution or collection
   --masterSourceType: string@masterSourceType-completer # The master source type of a GRSciColl institution or collection
   --numberSpecimens: string # Number of specimens. It supports ranges and a `*` can be used as a wildcard
-  --displayOnNHCPortal: string@bool-completer # Flag to show this record in the NHC portal
+  --displayOnNHCPortal: oneof<nothing, bool> # Flag to show this record in the NHC portal
   --replacedBy: string # Key of the entity that replaced another entity (format: uuid)
   --occurrenceCount: string # Count of occurrences linked. It supports ranges and a `*` can be used as a wildcard
   --typeSpecimenCount: string # Count of type specimens linked. It supports ranges and a `*` can be used as a wildcard
@@ -254,8 +253,8 @@ export def "grscicoll-collection createCollection" [
   name: string # Descriptive name of the collection.  *(NB Not required for updates.)*
   --description: string # Description or summary of the contents of the collection.
   --contentTypes: list # Content type of the elements found in the collection.
-  --active: string@bool-completer # Whether the collection is active/maintained.
-  --personalCollection: string@bool-completer # Whether this collection belongs to an individual.
+  --active: oneof<nothing, bool> # Whether the collection is active/maintained.
+  --personalCollection: oneof<nothing, bool> # Whether this collection belongs to an individual.
   --doi: string # A Digital Object Identifier for the collection.
   --email: list # Email addresses associated with the collection.
   --phone: list # Telephone numbers associated with the collection.
@@ -278,7 +277,7 @@ export def "grscicoll-collection createCollection" [
   --masterSourceMetadata: record # shape: {source: "DATASET"|"ORGANIZATION"|"IH_IRN", sourceId: string}
   --department: string # An organizational department managing the collection.
   --division: string # An organizational division managing the collection.
-  --displayOnNHCPortal: string@bool-completer # Whether the collection is shown on the NHC portal.
+  --displayOnNHCPortal: oneof<nothing, bool> # Whether the collection is shown on the NHC portal.
   --occurrenceCount: int # An estimate of the number of occurrences linked to the institution. (format: int32)
   --typeSpecimenCount: int # An estimate of the number of type specimens linked to the institution. (format: int32)
   --featuredImageUrl: string # URI to the image to be featured on the collection page, this image should be associated with a license. (format: uri)
@@ -314,7 +313,7 @@ export def "grscicoll-collection-latimer-core listCollectionsAsLatimerCore" [
   --contentType: string # Content type of a GrSciColl collection. Accepts multiple values, for example `contentType=Paleontological&contentType=EarthPlanetary`.
   --preservationType: string # Preservation type of a GrSciColl collection. Accepts multiple values, for example `preservationType=SampleCryopreserved&preservationType=SampleFluidPreserved`.
   --accessionStatus: string # Accession status of a GrSciColl collection. Accepts multiple values, for example `accessionStatus=Institutional&accessionStatus=Project
-  --personalCollection: string@bool-completer # Flag for personal GRSciColl collections
+  --personalCollection: oneof<nothing, bool> # Flag for personal GRSciColl collections
   --sourceId: string # sourceId of MasterSourceMetadata
   --qp-source: string@source-completer # Source attribute of MasterSourceMetadata
   --code: string # Code of a GrSciColl institution or collection
@@ -330,10 +329,10 @@ export def "grscicoll-collection-latimer-core listCollectionsAsLatimerCore" [
   --gbifRegion: string@gbifRegion-completer # Filters by a gbif region
   --city: string # Filters by the city of the address. It searches in both the physical and the mailing address.
   --fuzzyName: string # It searches by name fuzzily so the parameter doesn't have to be the exact name
-  --active: string@bool-completer # Active status of a GrSciColl institution or collection
+  --active: oneof<nothing, bool> # Active status of a GrSciColl institution or collection
   --masterSourceType: string@masterSourceType-completer # The master source type of a GRSciColl institution or collection
   --numberSpecimens: string # Number of specimens. It supports ranges and a `*` can be used as a wildcard
-  --displayOnNHCPortal: string@bool-completer # Flag to show this record in the NHC portal
+  --displayOnNHCPortal: oneof<nothing, bool> # Flag to show this record in the NHC portal
   --replacedBy: string # Key of the entity that replaced another entity (format: uuid)
   --occurrenceCount: string # Count of occurrences linked. It supports ranges and a `*` can be used as a wildcard
   --typeSpecimenCount: string # Count of type specimens linked. It supports ranges and a `*` can be used as a wildcard
@@ -383,7 +382,7 @@ export def "grscicoll-collection-latimer-core createCollectionFromLatimerCore" [
   --discipline: list
   --typeOfObjectGroup: list
   --hasOrganisationalUnit: list # item shape: {organisationalUnitName?: string, organisationalUnitType?: string, address?: list, contactDetail?: list, identifier?: list, measurementOrFact?: list, reference?: list}
-  --isCurrentCollection: string@bool-completer
+  --isCurrentCollection: oneof<nothing, bool>
   --preservationMethod: list
   --address: list # item shape: {key?: int, address?: string, city?: string, province?: string, postalCode?: string, country?: "AF"|"AX"|"AL"|"DZ"|"AS"|"AD"|"AO"|"AI"|"AQ"|"AG"|"AR"|"AM"|"AW"|"AU"|"AT"|"AZ"|"BS"|"BH"|"BD"|"BB"|"BY"|"BE"|"BZ"|"BJ"|"BM"|"BT"|"BO"|"BQ"|"BA"|"BW"|"BV"|"BR"|"IO"|"BN"|"BG"|"BF"|"BI"|"KH"|"CM"|"CA"|"CV"|"KY"|"CF"|"TD"|"CL"|"CN"|"CX"|"CC"|"CO"|"KM"|"CD"|"CG"|"CK"|"CR"|"CI"|"HR"|"CU"|"CW"|"CY"|"CZ"|"DK"|"DJ"|"DM"|"DO"|"EC"|"EG"|"SV"|"GQ"|"ER"|"EE"|"ET"|"FK"|"FO"|"FJ"|"FI"|"FR"|"GF"|"PF"|"TF"|"GA"|"GM"|"GE"|"DE"|"GH"|"GI"|"GR"|"GL"|"GD"|"GP"|"GU"|"GT"|"GG"|"GN"|"GW"|"GY"|"HT"|"HM"|"VA"|"HN"|"HK"|"HU"|"IS"|"IN"|"ID"|"IR"|"IQ"|"IE"|"IM"|"IL"|"IT"|"JM"|"JP"|"JE"|"JO"|"KZ"|"KE"|"KI"|"KP"|"KR"|"KW"|"KG"|"LA"|"LV"|"LB"|"LS"|"LR"|"LY"|"LI"|"LT"|"LU"|"MO"|"MK"|"MG"|"MW"|"MY"|"MV"|"ML"|"MT"|"MH"|"MQ"|"MR"|"MU"|"YT"|"MX"|"FM"|"MD"|"MC"|"MN"|"ME"|"MS"|"MA"|"MZ"|"MM"|"NA"|"NR"|"NP"|"NL"|"NC"|"NZ"|"NI"|"NE"|"NG"|"NU"|"NF"|"MP"|"NO"|"OM"|"PK"|"PW"|"PS"|"PA"|"PG"|"PY"|"PE"|"PH"|"PN"|"PL"|"PT"|"PR"|"QA"|"RE"|"RO"|"RU"|"RW"|"BL"|"SH"|"KN"|"LC"|"MF"|"PM"|"VC"|"WS"|"SM"|"ST"|"SA"|"SN"|"RS"|"SC"|"SL"|"SG"|"SX"|"SK"|"SI"|"SB"|"SO"|"ZA"|"GS"|"SS"|"ES"|"LK"|"SD"|"SR"|"SJ"|"SZ"|"SE"|"CH"|"SY"|"TW"|"TJ"|"TZ"|"TH"|"TL"|"TG"|"TK"|"TO"|"TT"|"TN"|"TR"|"TM"|"TC"|"TV"|"UG"|"UA"|"AE"|"GB"|"US"|"UM"|"UY"|"UZ"|"VU"|"VE"|"VN"|"VG"|"VI"|"WF"|"EH"|"YE"|"ZM"|"ZW"|"AA"|"XK"|"XZ"|"ZZ"}
   --collectionStatusHistory: list # item shape: {status?: string, statusType?: string}
@@ -479,7 +478,7 @@ export def "dataset createDataset" [
   --networkKeys: list # A list of GBIF Networks to which this dataset belongs.
   --doi: string # The primary Digital Object Identifier (DOI) for this dataset.
   --version: string # The version of the published dataset.
-  --external: string@bool-completer # Not currently used.
+  --external: oneof<nothing, bool> # Not currently used.
   --numConstituents: int # If set, the number of sub-datasets of this parent dataset. (format: int32)
   type: string@type-completer # The primary type of the dataset.  *(NB Not required for updates.)*
   --subtype: string@subtype-completer # The sub-type of the dataset.
@@ -564,7 +563,7 @@ export def "installation createInstallation" [
   type: string@type-completer-1 # The type of the installation. Defines what protocols are usedfor communication.  *(NB Not required for updates.)*
   title: string # A name for the installation.  *(NB Not required for updates.)*
   --description: string # A description for the installation.
-  --disabled: string@bool-completer # Whether the installation is disabled. A disabled installation is not checked for new or deleted datasets, or metadata changes to existingdatasets. However, data updates from existing datasets are not affected.
+  --disabled: oneof<nothing, bool> # Whether the installation is disabled. A disabled installation is not checked for new or deleted datasets, or metadata changes to existingdatasets. However, data updates from existing datasets are not affected.
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -607,10 +606,10 @@ export def "grscicoll-institution listInstitutions" [
   --gbifRegion: string@gbifRegion-completer # Filters by a gbif region
   --city: string # Filters by the city of the address. It searches in both the physical and the mailing address.
   --fuzzyName: string # It searches by name fuzzily so the parameter doesn't have to be the exact name
-  --active: string@bool-completer # Active status of a GrSciColl institution or collection
+  --active: oneof<nothing, bool> # Active status of a GrSciColl institution or collection
   --masterSourceType: string@masterSourceType-completer # The master source type of a GRSciColl institution or collection
   --numberSpecimens: string # Number of specimens. It supports ranges and a `*` can be used as a wildcard
-  --displayOnNHCPortal: string@bool-completer # Flag to show this record in the NHC portal
+  --displayOnNHCPortal: oneof<nothing, bool> # Flag to show this record in the NHC portal
   --replacedBy: string # Key of the entity that replaced another entity (format: uuid)
   --occurrenceCount: string # Count of occurrences linked. It supports ranges and a `*` can be used as a wildcard
   --typeSpecimenCount: string # Count of type specimens linked. It supports ranges and a `*` can be used as a wildcard
@@ -658,7 +657,7 @@ export def "grscicoll-institution createInstitution" [
   name: string # Name or title of the institution.  *(NB Not required for updates.)*
   --description: string # Description of the institution.
   --types: list # Types of the institution, describing its main activities.
-  --active: string@bool-completer # Whether the institution is active or operational.
+  --active: oneof<nothing, bool> # Whether the institution is active or operational.
   --email: list # Email addresses associated with the institution.
   --phone: list # Telephone numbers associated with the instutiton.
   --homepage: string # The institution's WWW homepage. (format: uri)
@@ -680,7 +679,7 @@ export def "grscicoll-institution createInstitution" [
   --convertedToCollection: string # Indicates if the institution was converted to a collection and specifies the UUID key of that collection (format: uuid)
   --masterSource: string@masterSource-completer # The primary source of this institution record.
   --masterSourceMetadata: record # shape: {source: "DATASET"|"ORGANIZATION"|"IH_IRN", sourceId: string}
-  --displayOnNHCPortal: string@bool-completer # Whether the institution is shown on the NHC portal.
+  --displayOnNHCPortal: oneof<nothing, bool> # Whether the institution is shown on the NHC portal.
   --occurrenceCount: int # An estimate of the number of occurrences linked to the institution. (format: int32)
   --typeSpecimenCount: int # An estimate of the number of type specimens linked to the institution. (format: int32)
   --featuredImageUrl: string # URI to the image to be featured on the institution page, this image should be associated with a license. (format: uri)
@@ -728,10 +727,10 @@ export def "grscicoll-institution-latimer-core listInstitutionsAsLatimerCore" [
   --gbifRegion: string@gbifRegion-completer # Filters by a gbif region
   --city: string # Filters by the city of the address. It searches in both the physical and the mailing address.
   --fuzzyName: string # It searches by name fuzzily so the parameter doesn't have to be the exact name
-  --active: string@bool-completer # Active status of a GrSciColl institution or collection
+  --active: oneof<nothing, bool> # Active status of a GrSciColl institution or collection
   --masterSourceType: string@masterSourceType-completer # The master source type of a GRSciColl institution or collection
   --numberSpecimens: string # Number of specimens. It supports ranges and a `*` can be used as a wildcard
-  --displayOnNHCPortal: string@bool-completer # Flag to show this record in the NHC portal
+  --displayOnNHCPortal: oneof<nothing, bool> # Flag to show this record in the NHC portal
   --replacedBy: string # Key of the entity that replaced another entity (format: uuid)
   --occurrenceCount: string # Count of occurrences linked. It supports ranges and a `*` can be used as a wildcard
   --typeSpecimenCount: string # Count of type specimens linked. It supports ranges and a `*` can be used as a wildcard
@@ -908,7 +907,7 @@ export def "organization listOrganizations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isEndorsed: string@bool-completer # Whether the organization is endorsed by a node.
+  --isEndorsed: oneof<nothing, bool> # Whether the organization is endorsed by a node.
   --networkKey: string # Filter for organizations publishing datasets belonging to a network. (format: uuid)
   --numPublishedDatasets: string # Filter by number of published datasets. Examples: '5' (exactly 5), '1,*' (at least 1), '*,10' (at most 10), '5,15' (between 5 and 15).
   --canModify: string # Filter for organizations the specified user has permission to modify.
@@ -951,7 +950,7 @@ export def "organization createOrganization" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   endorsingNodeKey: string # The participant node which has endorsed or would endorse this publishing organization.  *(NB Not required for updates.)* (format: uuid)
-  --endorsementApproved: string@bool-completer # Whether the participant node in `endorsingNodeKey` has endorsed this publishing organization — whether `endorsementStatus == ENDORSED`.
+  --endorsementApproved: oneof<nothing, bool> # Whether the participant node in `endorsingNodeKey` has endorsed this publishing organization — whether `endorsementStatus == ENDORSED`.
   --endorsementStatus: string@endorsementStatus-completer # The endorsement decision regarding this publishing organization made by the participant node in `endorsingNodeKey`.
   title: string # The title of the publishing organization.  *(NB Not required for updates.)*
   --abbreviation: string # The abbreviation for the publishing organization.
@@ -1011,10 +1010,10 @@ export def "grscicoll-institution-geojson listInstitutionsGeoJson" [
   --gbifRegion: string@gbifRegion-completer # Filters by a gbif region
   --city: string # Filters by the city of the address. It searches in both the physical and the mailing address.
   --fuzzyName: string # It searches by name fuzzily so the parameter doesn't have to be the exact name
-  --active: string@bool-completer # Active status of a GrSciColl institution or collection
+  --active: oneof<nothing, bool> # Active status of a GrSciColl institution or collection
   --masterSourceType: string@masterSourceType-completer # The master source type of a GRSciColl institution or collection
   --numberSpecimens: string # Number of specimens. It supports ranges and a `*` can be used as a wildcard
-  --displayOnNHCPortal: string@bool-completer # Flag to show this record in the NHC portal
+  --displayOnNHCPortal: oneof<nothing, bool> # Flag to show this record in the NHC portal
   --replacedBy: string # Key of the entity that replaced another entity (format: uuid)
   --occurrenceCount: string # Count of occurrences linked. It supports ranges and a `*` can be used as a wildcard
   --typeSpecimenCount: string # Count of type specimens linked. It supports ranges and a `*` can be used as a wildcard
@@ -1049,7 +1048,7 @@ export def "grscicoll-search searchCollectionsInstitutions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --q: string # Simple full text search parameter. The value for this parameter can be a simple word or a phrase. Wildcards are not supported
-  --hl: string@bool-completer # Set `hl=true` to highlight terms matching the query when in fulltext search fields. The highlight will be an emphasis tag of class `gbifHl`.
+  --hl: oneof<nothing, bool> # Set `hl=true` to highlight terms matching the query when in fulltext search fields. The highlight will be an emphasis tag of class `gbifHl`.
   --entityType: string # Code of a GrSciColl institution or collection
   --displayOnNHCPortal: list
   --country: string@country-completer # The 2-letter country code (as per ISO-3166-1) of the country.
@@ -1102,10 +1101,10 @@ export def "dataset-search searchDatasets" [
   --contactUserId: string # Filter datasets by contact user ID (e.g., ORCID).
   --contactEmail: string # Filter datasets by contact email address.
   --q: string # Simple full text search parameter. The value for this parameter can be a simple word or a phrase. Wildcards are not supported
-  --hl: string@bool-completer # Set `hl=true` to highlight terms matching the query when in fulltext search fields. The highlight will be an emphasis tag of class `gbifHl`.
+  --hl: oneof<nothing, bool> # Set `hl=true` to highlight terms matching the query when in fulltext search fields. The highlight will be an emphasis tag of class `gbifHl`.
   --facet: list # A facet name used to retrieve the most frequent values for a field. This parameter may be repeated to request multiple facets.
   --facetMinCount: int # Used in combination with the facet parameter. Set `facetMinCount={#}` to exclude facets with a count less than `{#}`. (format: int32)
-  --facetMultiselect: string@bool-completer # Used in combination with the facet parameter. Set `facetMultiselect=true` to still return counts for values that are not currently filtered.
+  --facetMultiselect: oneof<nothing, bool> # Used in combination with the facet parameter. Set `facetMultiselect=true` to still return counts for values that are not currently filtered.
   --facetLimit: int # Facet parameters allow paging requests using the parameters facetOffset and facetLimit (format: int32)
   --facetOffset: int # Facet parameters allow paging requests using the parameters facetOffset and facetLimit (format: int32)
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
@@ -1138,7 +1137,7 @@ export def "grscicoll-collection-export listCollectionsExport" [
   --contentType: string # Content type of a GrSciColl collection. Accepts multiple values, for example `contentType=Paleontological&contentType=EarthPlanetary`.
   --preservationType: string # Preservation type of a GrSciColl collection. Accepts multiple values, for example `preservationType=SampleCryopreserved&preservationType=SampleFluidPreserved`.
   --accessionStatus: string # Accession status of a GrSciColl collection. Accepts multiple values, for example `accessionStatus=Institutional&accessionStatus=Project
-  --personalCollection: string@bool-completer # Flag for personal GRSciColl collections
+  --personalCollection: oneof<nothing, bool> # Flag for personal GRSciColl collections
   --sourceId: string # sourceId of MasterSourceMetadata
   --qp-source: string@source-completer # Source attribute of MasterSourceMetadata
   --code: string # Code of a GrSciColl institution or collection
@@ -1154,10 +1153,10 @@ export def "grscicoll-collection-export listCollectionsExport" [
   --gbifRegion: string@gbifRegion-completer # Filters by a gbif region
   --city: string # Filters by the city of the address. It searches in both the physical and the mailing address.
   --fuzzyName: string # It searches by name fuzzily so the parameter doesn't have to be the exact name
-  --active: string@bool-completer # Active status of a GrSciColl institution or collection
+  --active: oneof<nothing, bool> # Active status of a GrSciColl institution or collection
   --masterSourceType: string@masterSourceType-completer # The master source type of a GRSciColl institution or collection
   --numberSpecimens: string # Number of specimens. It supports ranges and a `*` can be used as a wildcard
-  --displayOnNHCPortal: string@bool-completer # Flag to show this record in the NHC portal
+  --displayOnNHCPortal: oneof<nothing, bool> # Flag to show this record in the NHC portal
   --replacedBy: string # Key of the entity that replaced another entity (format: uuid)
   --occurrenceCount: string # Count of occurrences linked. It supports ranges and a `*` can be used as a wildcard
   --typeSpecimenCount: string # Count of type specimens linked. It supports ranges and a `*` can be used as a wildcard
@@ -1197,7 +1196,7 @@ export def "grscicoll-institution-export listInstitutionsExport" [
   --contentType: string # Content type of a GrSciColl collection. Accepts multiple values, for example `contentType=Paleontological&contentType=EarthPlanetary`.
   --preservationType: string # Preservation type of a GrSciColl collection. Accepts multiple values, for example `preservationType=SampleCryopreserved&preservationType=SampleFluidPreserved`.
   --accessionStatus: string # Accession status of a GrSciColl collection. Accepts multiple values, for example `accessionStatus=Institutional&accessionStatus=Project
-  --personalCollection: string@bool-completer # Flag for personal GRSciColl collections
+  --personalCollection: oneof<nothing, bool> # Flag for personal GRSciColl collections
   --sourceId: string # sourceId of MasterSourceMetadata
   --qp-source: string@source-completer # Source attribute of MasterSourceMetadata
   --code: string # Code of a GrSciColl institution or collection
@@ -1213,10 +1212,10 @@ export def "grscicoll-institution-export listInstitutionsExport" [
   --gbifRegion: string@gbifRegion-completer # Filters by a gbif region
   --city: string # Filters by the city of the address. It searches in both the physical and the mailing address.
   --fuzzyName: string # It searches by name fuzzily so the parameter doesn't have to be the exact name
-  --active: string@bool-completer # Active status of a GrSciColl institution or collection
+  --active: oneof<nothing, bool> # Active status of a GrSciColl institution or collection
   --masterSourceType: string@masterSourceType-completer # The master source type of a GRSciColl institution or collection
   --numberSpecimens: string # Number of specimens. It supports ranges and a `*` can be used as a wildcard
-  --displayOnNHCPortal: string@bool-completer # Flag to show this record in the NHC portal
+  --displayOnNHCPortal: oneof<nothing, bool> # Flag to show this record in the NHC portal
   --replacedBy: string # Key of the entity that replaced another entity (format: uuid)
   --occurrenceCount: string # Count of occurrences linked. It supports ranges and a `*` can be used as a wildcard
   --typeSpecimenCount: string # Count of type specimens linked. It supports ranges and a `*` can be used as a wildcard
@@ -1702,7 +1701,7 @@ export def "dataset updateDataset" [
   --networkKeys: list # A list of GBIF Networks to which this dataset belongs.
   --doi: string # The primary Digital Object Identifier (DOI) for this dataset.
   --version: string # The version of the published dataset.
-  --external: string@bool-completer # Not currently used.
+  --external: oneof<nothing, bool> # Not currently used.
   --numConstituents: int # If set, the number of sub-datasets of this parent dataset. (format: int32)
   type: string@type-completer # The primary type of the dataset.  *(NB Not required for updates.)*
   --subtype: string@subtype-completer # The sub-type of the dataset.
@@ -1791,7 +1790,7 @@ export def "grscicoll-institution-search searchInstitutions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hl: string@bool-completer # Set `hl=true` to highlight terms matching the query when in fulltext search fields. The highlight will be an emphasis tag of class `gbifHl`.
+  --hl: oneof<nothing, bool> # Set `hl=true` to highlight terms matching the query when in fulltext search fields. The highlight will be an emphasis tag of class `gbifHl`.
   --type: string # Type of a GrSciColl institution. Accepts multiple values, for example `type=Museum&type=BotanicalGarden
   --institutionalGovernance: string # Institutional governance of a GrSciColl institution. Accepts multiple values, for example `InstitutionalGovernance=NonProfit&InstitutionalGovernance=Local`
   --discipline: string # Discipline of a GrSciColl institution. Accepts multiple values, for example `discipline=Zoology&discipline=Biological`
@@ -1810,10 +1809,10 @@ export def "grscicoll-institution-search searchInstitutions" [
   --gbifRegion: string@gbifRegion-completer # Filters by a gbif region
   --city: string # Filters by the city of the address. It searches in both the physical and the mailing address.
   --fuzzyName: string # It searches by name fuzzily so the parameter doesn't have to be the exact name
-  --active: string@bool-completer # Active status of a GrSciColl institution or collection
+  --active: oneof<nothing, bool> # Active status of a GrSciColl institution or collection
   --masterSourceType: string@masterSourceType-completer # The master source type of a GRSciColl institution or collection
   --numberSpecimens: string # Number of specimens. It supports ranges and a `*` can be used as a wildcard
-  --displayOnNHCPortal: string@bool-completer # Flag to show this record in the NHC portal
+  --displayOnNHCPortal: oneof<nothing, bool> # Flag to show this record in the NHC portal
   --replacedBy: string # Key of the entity that replaced another entity (format: uuid)
   --occurrenceCount: string # Count of occurrences linked. It supports ranges and a `*` can be used as a wildcard
   --typeSpecimenCount: string # Count of type specimens linked. It supports ranges and a `*` can be used as a wildcard
@@ -1899,7 +1898,7 @@ export def "grscicoll-collection-search searchCollections" [
   --contentType: string # Content type of a GrSciColl collection. Accepts multiple values, for example `contentType=Paleontological&contentType=EarthPlanetary`.
   --preservationType: string # Preservation type of a GrSciColl collection. Accepts multiple values, for example `preservationType=SampleCryopreserved&preservationType=SampleFluidPreserved`.
   --accessionStatus: string # Accession status of a GrSciColl collection. Accepts multiple values, for example `accessionStatus=Institutional&accessionStatus=Project
-  --personalCollection: string@bool-completer # Flag for personal GRSciColl collections
+  --personalCollection: oneof<nothing, bool> # Flag for personal GRSciColl collections
   --sourceId: string # sourceId of MasterSourceMetadata
   --qp-source: string@source-completer # Source attribute of MasterSourceMetadata
   --descriptorGroupKey: int # Key of the descriptor group (format: int64)
@@ -1920,7 +1919,7 @@ export def "grscicoll-collection-search searchCollections" [
   --issues: string # Issues of the descriptor
   --taxonIssues: string # Taxon Issues of the descriptor
   --checklistKey: string # Checklist key to use with the taxonomy filters.
-  --hl: string@bool-completer # Set `hl=true` to highlight terms matching the query when in fulltext search fields. The highlight will be an emphasis tag of class `gbifHl`.
+  --hl: oneof<nothing, bool> # Set `hl=true` to highlight terms matching the query when in fulltext search fields. The highlight will be an emphasis tag of class `gbifHl`.
   --code: string # Code of a GrSciColl institution or collection
   --name: string # Name of a GrSciColl institution or collection
   --alternativeCode: string # Alternative code of a GrSciColl institution or collection
@@ -1933,10 +1932,10 @@ export def "grscicoll-collection-search searchCollections" [
   --gbifRegion: string@gbifRegion-completer # Filters by a gbif region
   --city: string # Filters by the city of the address. It searches in both the physical and the mailing address.
   --fuzzyName: string # It searches by name fuzzily so the parameter doesn't have to be the exact name
-  --active: string@bool-completer # Active status of a GrSciColl institution or collection
+  --active: oneof<nothing, bool> # Active status of a GrSciColl institution or collection
   --masterSourceType: string@masterSourceType-completer # The master source type of a GRSciColl institution or collection
   --numberSpecimens: string # Number of specimens. It supports ranges and a `*` can be used as a wildcard
-  --displayOnNHCPortal: string@bool-completer # Flag to show this record in the NHC portal
+  --displayOnNHCPortal: oneof<nothing, bool> # Flag to show this record in the NHC portal
   --replacedBy: string # Key of the entity that replaced another entity (format: uuid)
   --occurrenceCount: string # Count of occurrences linked. It supports ranges and a `*` can be used as a wildcard
   --typeSpecimenCount: string # Count of type specimens linked. It supports ranges and a `*` can be used as a wildcard
@@ -2095,8 +2094,8 @@ export def "grscicoll-collection updateCollection" [
   name: string # Descriptive name of the collection.  *(NB Not required for updates.)*
   --description: string # Description or summary of the contents of the collection.
   --contentTypes: list # Content type of the elements found in the collection.
-  --active: string@bool-completer # Whether the collection is active/maintained.
-  --personalCollection: string@bool-completer # Whether this collection belongs to an individual.
+  --active: oneof<nothing, bool> # Whether the collection is active/maintained.
+  --personalCollection: oneof<nothing, bool> # Whether this collection belongs to an individual.
   --doi: string # A Digital Object Identifier for the collection.
   --email: list # Email addresses associated with the collection.
   --phone: list # Telephone numbers associated with the collection.
@@ -2119,7 +2118,7 @@ export def "grscicoll-collection updateCollection" [
   --masterSourceMetadata: record # shape: {source: "DATASET"|"ORGANIZATION"|"IH_IRN", sourceId: string}
   --department: string # An organizational department managing the collection.
   --division: string # An organizational division managing the collection.
-  --displayOnNHCPortal: string@bool-completer # Whether the collection is shown on the NHC portal.
+  --displayOnNHCPortal: oneof<nothing, bool> # Whether the collection is shown on the NHC portal.
   --occurrenceCount: int # An estimate of the number of occurrences linked to the institution. (format: int32)
   --typeSpecimenCount: int # An estimate of the number of type specimens linked to the institution. (format: int32)
   --featuredImageUrl: string # URI to the image to be featured on the collection page, this image should be associated with a license. (format: uri)
@@ -2211,7 +2210,7 @@ export def "grscicoll-collection-latimer-core updateCollectionFromLatimerCore" [
   --discipline: list
   --typeOfObjectGroup: list
   --hasOrganisationalUnit: list # item shape: {organisationalUnitName?: string, organisationalUnitType?: string, address?: list, contactDetail?: list, identifier?: list, measurementOrFact?: list, reference?: list}
-  --isCurrentCollection: string@bool-completer
+  --isCurrentCollection: oneof<nothing, bool>
   --preservationMethod: list
   --address: list # item shape: {key?: int, address?: string, city?: string, province?: string, postalCode?: string, country?: "AF"|"AX"|"AL"|"DZ"|"AS"|"AD"|"AO"|"AI"|"AQ"|"AG"|"AR"|"AM"|"AW"|"AU"|"AT"|"AZ"|"BS"|"BH"|"BD"|"BB"|"BY"|"BE"|"BZ"|"BJ"|"BM"|"BT"|"BO"|"BQ"|"BA"|"BW"|"BV"|"BR"|"IO"|"BN"|"BG"|"BF"|"BI"|"KH"|"CM"|"CA"|"CV"|"KY"|"CF"|"TD"|"CL"|"CN"|"CX"|"CC"|"CO"|"KM"|"CD"|"CG"|"CK"|"CR"|"CI"|"HR"|"CU"|"CW"|"CY"|"CZ"|"DK"|"DJ"|"DM"|"DO"|"EC"|"EG"|"SV"|"GQ"|"ER"|"EE"|"ET"|"FK"|"FO"|"FJ"|"FI"|"FR"|"GF"|"PF"|"TF"|"GA"|"GM"|"GE"|"DE"|"GH"|"GI"|"GR"|"GL"|"GD"|"GP"|"GU"|"GT"|"GG"|"GN"|"GW"|"GY"|"HT"|"HM"|"VA"|"HN"|"HK"|"HU"|"IS"|"IN"|"ID"|"IR"|"IQ"|"IE"|"IM"|"IL"|"IT"|"JM"|"JP"|"JE"|"JO"|"KZ"|"KE"|"KI"|"KP"|"KR"|"KW"|"KG"|"LA"|"LV"|"LB"|"LS"|"LR"|"LY"|"LI"|"LT"|"LU"|"MO"|"MK"|"MG"|"MW"|"MY"|"MV"|"ML"|"MT"|"MH"|"MQ"|"MR"|"MU"|"YT"|"MX"|"FM"|"MD"|"MC"|"MN"|"ME"|"MS"|"MA"|"MZ"|"MM"|"NA"|"NR"|"NP"|"NL"|"NC"|"NZ"|"NI"|"NE"|"NG"|"NU"|"NF"|"MP"|"NO"|"OM"|"PK"|"PW"|"PS"|"PA"|"PG"|"PY"|"PE"|"PH"|"PN"|"PL"|"PT"|"PR"|"QA"|"RE"|"RO"|"RU"|"RW"|"BL"|"SH"|"KN"|"LC"|"MF"|"PM"|"VC"|"WS"|"SM"|"ST"|"SA"|"SN"|"RS"|"SC"|"SL"|"SG"|"SX"|"SK"|"SI"|"SB"|"SO"|"ZA"|"GS"|"SS"|"ES"|"LK"|"SD"|"SR"|"SJ"|"SZ"|"SE"|"CH"|"SY"|"TW"|"TJ"|"TZ"|"TH"|"TL"|"TG"|"TK"|"TO"|"TT"|"TN"|"TR"|"TM"|"TC"|"TV"|"UG"|"UA"|"AE"|"GB"|"US"|"UM"|"UY"|"UZ"|"VU"|"VE"|"VN"|"VG"|"VI"|"WF"|"EH"|"YE"|"ZM"|"ZW"|"AA"|"XK"|"XZ"|"ZZ"}
   --collectionStatusHistory: list # item shape: {status?: string, statusType?: string}
@@ -2306,7 +2305,7 @@ export def "installation updateInstallation" [
   type: string@type-completer-1 # The type of the installation. Defines what protocols are usedfor communication.  *(NB Not required for updates.)*
   title: string # A name for the installation.  *(NB Not required for updates.)*
   --description: string # A description for the installation.
-  --disabled: string@bool-completer # Whether the installation is disabled. A disabled installation is not checked for new or deleted datasets, or metadata changes to existingdatasets. However, data updates from existing datasets are not affected.
+  --disabled: oneof<nothing, bool> # Whether the installation is disabled. A disabled installation is not checked for new or deleted datasets, or metadata changes to existingdatasets. However, data updates from existing datasets are not affected.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2390,7 +2389,7 @@ export def "grscicoll-institution updateInstitution" [
   name: string # Name or title of the institution.  *(NB Not required for updates.)*
   --description: string # Description of the institution.
   --types: list # Types of the institution, describing its main activities.
-  --active: string@bool-completer # Whether the institution is active or operational.
+  --active: oneof<nothing, bool> # Whether the institution is active or operational.
   --email: list # Email addresses associated with the institution.
   --phone: list # Telephone numbers associated with the instutiton.
   --homepage: string # The institution's WWW homepage. (format: uri)
@@ -2412,7 +2411,7 @@ export def "grscicoll-institution updateInstitution" [
   --convertedToCollection: string # Indicates if the institution was converted to a collection and specifies the UUID key of that collection (format: uuid)
   --masterSource: string@masterSource-completer # The primary source of this institution record.
   --masterSourceMetadata: record # shape: {source: "DATASET"|"ORGANIZATION"|"IH_IRN", sourceId: string}
-  --displayOnNHCPortal: string@bool-completer # Whether the institution is shown on the NHC portal.
+  --displayOnNHCPortal: oneof<nothing, bool> # Whether the institution is shown on the NHC portal.
   --occurrenceCount: int # An estimate of the number of occurrences linked to the institution. (format: int32)
   --typeSpecimenCount: int # An estimate of the number of type specimens linked to the institution. (format: int32)
   --featuredImageUrl: string # URI to the image to be featured on the institution page, this image should be associated with a license. (format: uri)
@@ -2663,7 +2662,7 @@ export def "organization updateOrganization" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   endorsingNodeKey: string # The participant node which has endorsed or would endorse this publishing organization.  *(NB Not required for updates.)* (format: uuid)
-  --endorsementApproved: string@bool-completer # Whether the participant node in `endorsingNodeKey` has endorsed this publishing organization — whether `endorsementStatus == ENDORSED`.
+  --endorsementApproved: oneof<nothing, bool> # Whether the participant node in `endorsingNodeKey` has endorsed this publishing organization — whether `endorsementStatus == ENDORSED`.
   --endorsementStatus: string@endorsementStatus-completer # The endorsement decision regarding this publishing organization made by the participant node in `endorsingNodeKey`.
   title: string # The title of the publishing organization.  *(NB Not required for updates.)*
   --abbreviation: string # The abbreviation for the publishing organization.
@@ -4060,7 +4059,7 @@ export def "organization-contact updateContact" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer-4 # The type of contact.
-  --primary: string@bool-completer # Whether this is the primary contact for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
   --salutation: string # The salutation is used in addressing an individual with a particular title, such as Dr., Ms., Mrs., Mr., etc.
   --firstName: string # The personal name of the contact.
@@ -4102,7 +4101,7 @@ export def "organization-contact addContact" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer-4 # The type of contact.
-  --primary: string@bool-completer # Whether this is the primary contact for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
   --salutation: string # The salutation is used in addressing an individual with a particular title, such as Dr., Ms., Mrs., Mr., etc.
   --firstName: string # The personal name of the contact.
@@ -4166,7 +4165,7 @@ export def "network-contact updateContact-by-key" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer-4 # The type of contact.
-  --primary: string@bool-completer # Whether this is the primary contact for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
   --salutation: string # The salutation is used in addressing an individual with a particular title, such as Dr., Ms., Mrs., Mr., etc.
   --firstName: string # The personal name of the contact.
@@ -4208,7 +4207,7 @@ export def "network-contact addContact-by-key" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer-4 # The type of contact.
-  --primary: string@bool-completer # Whether this is the primary contact for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
   --salutation: string # The salutation is used in addressing an individual with a particular title, such as Dr., Ms., Mrs., Mr., etc.
   --firstName: string # The personal name of the contact.
@@ -4272,7 +4271,7 @@ export def "installation-contact updateContact-by-key" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer-4 # The type of contact.
-  --primary: string@bool-completer # Whether this is the primary contact for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
   --salutation: string # The salutation is used in addressing an individual with a particular title, such as Dr., Ms., Mrs., Mr., etc.
   --firstName: string # The personal name of the contact.
@@ -4314,7 +4313,7 @@ export def "installation-contact addContact-by-key" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer-4 # The type of contact.
-  --primary: string@bool-completer # Whether this is the primary contact for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
   --salutation: string # The salutation is used in addressing an individual with a particular title, such as Dr., Ms., Mrs., Mr., etc.
   --firstName: string # The personal name of the contact.
@@ -4378,7 +4377,7 @@ export def "dataset-contact updateContact-by-key" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer-4 # The type of contact.
-  --primary: string@bool-completer # Whether this is the primary contact for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
   --salutation: string # The salutation is used in addressing an individual with a particular title, such as Dr., Ms., Mrs., Mr., etc.
   --firstName: string # The personal name of the contact.
@@ -4420,7 +4419,7 @@ export def "dataset-contact addContact-by-key" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer-4 # The type of contact.
-  --primary: string@bool-completer # Whether this is the primary contact for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
   --salutation: string # The salutation is used in addressing an individual with a particular title, such as Dr., Ms., Mrs., Mr., etc.
   --firstName: string # The personal name of the contact.
@@ -4463,7 +4462,7 @@ export def "grscicoll-institution-contact-person updateContactPerson" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer-4 # The type of contact.
-  --primary: string@bool-completer # Whether this is the primary contact for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
   --salutation: string # The salutation is used in addressing an individual with a particular title, such as Dr., Ms., Mrs., Mr., etc.
   --firstName: string # The personal name of the contact.
@@ -4529,7 +4528,7 @@ export def "grscicoll-collection-contact-person updateContactPerson-by-key-conta
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer-4 # The type of contact.
-  --primary: string@bool-completer # Whether this is the primary contact for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
   --salutation: string # The salutation is used in addressing an individual with a particular title, such as Dr., Ms., Mrs., Mr., etc.
   --firstName: string # The personal name of the contact.
@@ -4595,7 +4594,7 @@ export def "organization-contact updateContact-by-key-contactKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer-4 # The type of contact.
-  --primary: string@bool-completer # Whether this is the primary contact for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
   --salutation: string # The salutation is used in addressing an individual with a particular title, such as Dr., Ms., Mrs., Mr., etc.
   --firstName: string # The personal name of the contact.
@@ -4660,7 +4659,7 @@ export def "node-contact updateContact-by-key" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer-4 # The type of contact.
-  --primary: string@bool-completer # Whether this is the primary contact for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
   --salutation: string # The salutation is used in addressing an individual with a particular title, such as Dr., Ms., Mrs., Mr., etc.
   --firstName: string # The personal name of the contact.
@@ -4703,7 +4702,7 @@ export def "node-contact updateContact-by-key-contactKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer-4 # The type of contact.
-  --primary: string@bool-completer # Whether this is the primary contact for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
   --salutation: string # The salutation is used in addressing an individual with a particular title, such as Dr., Ms., Mrs., Mr., etc.
   --firstName: string # The personal name of the contact.
@@ -4746,7 +4745,7 @@ export def "network-contact updateContact-by-key-contactKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer-4 # The type of contact.
-  --primary: string@bool-completer # Whether this is the primary contact for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
   --salutation: string # The salutation is used in addressing an individual with a particular title, such as Dr., Ms., Mrs., Mr., etc.
   --firstName: string # The personal name of the contact.
@@ -4812,7 +4811,7 @@ export def "installation-contact updateContact-by-key-contactKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer-4 # The type of contact.
-  --primary: string@bool-completer # Whether this is the primary contact for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
   --salutation: string # The salutation is used in addressing an individual with a particular title, such as Dr., Ms., Mrs., Mr., etc.
   --firstName: string # The personal name of the contact.
@@ -4878,7 +4877,7 @@ export def "dataset-contact updateContact-by-key-contactKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer-4 # The type of contact.
-  --primary: string@bool-completer # Whether this is the primary contact for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
   --salutation: string # The salutation is used in addressing an individual with a particular title, such as Dr., Ms., Mrs., Mr., etc.
   --firstName: string # The personal name of the contact.
@@ -5341,7 +5340,7 @@ export def "organization-identifier addIdentifier" [
   --allow-errors(-e) # Return full response without error handling
   type: string@type-completer-6
   identifier: string # Value for the identifier
-  --primary: string@bool-completer # Whether this is the primary identifier for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary identifier for the associated entity.
 ]: any -> int {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5391,7 +5390,7 @@ export def "node-identifier addIdentifier-by-key" [
   --allow-errors(-e) # Return full response without error handling
   type: string@type-completer-6
   identifier: string # Value for the identifier
-  --primary: string@bool-completer # Whether this is the primary identifier for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary identifier for the associated entity.
 ]: any -> int {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5441,7 +5440,7 @@ export def "network-identifier addIdentifier-by-key" [
   --allow-errors(-e) # Return full response without error handling
   type: string@type-completer-6
   identifier: string # Value for the identifier
-  --primary: string@bool-completer # Whether this is the primary identifier for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary identifier for the associated entity.
 ]: any -> int {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5491,7 +5490,7 @@ export def "installation-identifier addIdentifier-by-key" [
   --allow-errors(-e) # Return full response without error handling
   type: string@type-completer-6
   identifier: string # Value for the identifier
-  --primary: string@bool-completer # Whether this is the primary identifier for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary identifier for the associated entity.
 ]: any -> int {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5541,7 +5540,7 @@ export def "grscicoll-institution-identifier addIdentifier-by-key" [
   --allow-errors(-e) # Return full response without error handling
   type: string@type-completer-6
   identifier: string # Value for the identifier
-  --primary: string@bool-completer # Whether this is the primary identifier for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary identifier for the associated entity.
 ]: any -> int {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5591,7 +5590,7 @@ export def "grscicoll-collection-identifier addIdentifier-by-key" [
   --allow-errors(-e) # Return full response without error handling
   type: string@type-completer-6
   identifier: string # Value for the identifier
-  --primary: string@bool-completer # Whether this is the primary identifier for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary identifier for the associated entity.
 ]: any -> int {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5641,7 +5640,7 @@ export def "dataset-identifier addIdentifier-by-key" [
   --allow-errors(-e) # Return full response without error handling
   type: string@type-completer-6
   identifier: string # Value for the identifier
-  --primary: string@bool-completer # Whether this is the primary identifier for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary identifier for the associated entity.
 ]: any -> int {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7358,7 +7357,7 @@ export def "grscicoll-institution-contact-person addContactPerson" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer-4 # The type of contact.
-  --primary: string@bool-completer # Whether this is the primary contact for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
   --salutation: string # The salutation is used in addressing an individual with a particular title, such as Dr., Ms., Mrs., Mr., etc.
   --firstName: string # The personal name of the contact.
@@ -7422,7 +7421,7 @@ export def "grscicoll-collection-contact-person addContactPerson-by-key" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer-4 # The type of contact.
-  --primary: string@bool-completer # Whether this is the primary contact for the associated entity.
+  --primary: oneof<nothing, bool> # Whether this is the primary contact for the associated entity.
   --userId: list # A list of user identifiers for this contact.
   --salutation: string # The salutation is used in addressing an individual with a particular title, such as Dr., Ms., Mrs., Mr., etc.
   --firstName: string # The personal name of the contact.
@@ -7779,7 +7778,7 @@ export def "grscicoll-collection-change-suggestion addChangeSuggestion-by-" [
   --modified: string # format: date-time
   --modifiedBy: string
   --ihIdentifier: string
-  --createInstitution: string@bool-completer
+  --createInstitution: oneof<nothing, bool>
 ]: any -> int {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7917,7 +7916,7 @@ export def "grscicoll-collection-change-suggestion updateChangeSuggestion-by-key
   --modified: string # format: date-time
   --modifiedBy: string
   --ihIdentifier: string
-  --createInstitution: string@bool-completer
+  --createInstitution: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8243,7 +8242,7 @@ export def "grscicoll-collection-descriptor-group list" [
   --searchRequest: record
   --title: string # Descriptor group title
   --description: string # Descriptor group description
-  --deleted: string@bool-completer # Boolean flag to indicate if we want deleted descriptor groups
+  --deleted: oneof<nothing, bool> # Boolean flag to indicate if we want deleted descriptor groups
   --q: string # Simple full text search parameter. The value for this parameter can be a simple word or a phrase. Wildcards are not supported
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
@@ -8335,7 +8334,7 @@ export def "organization-deleted get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --searchParams: record
-  --isEndorsed: string@bool-completer # Whether the organization is endorsed by a node.
+  --isEndorsed: oneof<nothing, bool> # Whether the organization is endorsed by a node.
   --networkKey: string # Filter for organizations publishing datasets belonging to a network. (format: uuid)
   --numPublishedDatasets: string # Filter by number of published datasets. Examples: '5' (exactly 5), '1,*' (at least 1), '*,10' (at most 10), '5,15' (between 5 and 15).
   --contactUserId: string # Filter organizations by contact user ID (e.g., ORCID).
@@ -8390,10 +8389,10 @@ export def "grscicoll-institution-deleted listDeleted" [
   --gbifRegion: string@gbifRegion-completer # Filters by a gbif region
   --city: string # Filters by the city of the address. It searches in both the physical and the mailing address.
   --fuzzyName: string # It searches by name fuzzily so the parameter doesn't have to be the exact name
-  --active: string@bool-completer # Active status of a GrSciColl institution or collection
+  --active: oneof<nothing, bool> # Active status of a GrSciColl institution or collection
   --masterSourceType: string@masterSourceType-completer # The master source type of a GRSciColl institution or collection
   --numberSpecimens: string # Number of specimens. It supports ranges and a `*` can be used as a wildcard
-  --displayOnNHCPortal: string@bool-completer # Flag to show this record in the NHC portal
+  --displayOnNHCPortal: oneof<nothing, bool> # Flag to show this record in the NHC portal
   --replacedBy: string # Key of the entity that replaced another entity (format: uuid)
   --occurrenceCount: string # Count of occurrences linked. It supports ranges and a `*` can be used as a wildcard
   --typeSpecimenCount: string # Count of type specimens linked. It supports ranges and a `*` can be used as a wildcard
@@ -8432,7 +8431,7 @@ export def "grscicoll-collection-deleted listDeleted-by-" [
   --contentType: string # Content type of a GrSciColl collection. Accepts multiple values, for example `contentType=Paleontological&contentType=EarthPlanetary`.
   --preservationType: string # Preservation type of a GrSciColl collection. Accepts multiple values, for example `preservationType=SampleCryopreserved&preservationType=SampleFluidPreserved`.
   --accessionStatus: string # Accession status of a GrSciColl collection. Accepts multiple values, for example `accessionStatus=Institutional&accessionStatus=Project
-  --personalCollection: string@bool-completer # Flag for personal GRSciColl collections
+  --personalCollection: oneof<nothing, bool> # Flag for personal GRSciColl collections
   --sourceId: string # sourceId of MasterSourceMetadata
   --qp-source: string@source-completer # Source attribute of MasterSourceMetadata
   --code: string # Code of a GrSciColl institution or collection
@@ -8448,10 +8447,10 @@ export def "grscicoll-collection-deleted listDeleted-by-" [
   --gbifRegion: string@gbifRegion-completer # Filters by a gbif region
   --city: string # Filters by the city of the address. It searches in both the physical and the mailing address.
   --fuzzyName: string # It searches by name fuzzily so the parameter doesn't have to be the exact name
-  --active: string@bool-completer # Active status of a GrSciColl institution or collection
+  --active: oneof<nothing, bool> # Active status of a GrSciColl institution or collection
   --masterSourceType: string@masterSourceType-completer # The master source type of a GRSciColl institution or collection
   --numberSpecimens: string # Number of specimens. It supports ranges and a `*` can be used as a wildcard
-  --displayOnNHCPortal: string@bool-completer # Flag to show this record in the NHC portal
+  --displayOnNHCPortal: oneof<nothing, bool> # Flag to show this record in the NHC portal
   --replacedBy: string # Key of the entity that replaced another entity (format: uuid)
   --occurrenceCount: string # Count of occurrences linked. It supports ranges and a `*` can be used as a wildcard
   --typeSpecimenCount: string # Count of type specimens linked. It supports ranges and a `*` can be used as a wildcard
@@ -8738,7 +8737,7 @@ export def "grscicoll-collection-descriptor-group-export CollectionDescriptorGro
   --contentType: string # Content type of a GrSciColl collection. Accepts multiple values, for example `contentType=Paleontological&contentType=EarthPlanetary`.
   --preservationType: string # Preservation type of a GrSciColl collection. Accepts multiple values, for example `preservationType=SampleCryopreserved&preservationType=SampleFluidPreserved`.
   --accessionStatus: string # Accession status of a GrSciColl collection. Accepts multiple values, for example `accessionStatus=Institutional&accessionStatus=Project
-  --personalCollection: string@bool-completer # Flag for personal GRSciColl collections
+  --personalCollection: oneof<nothing, bool> # Flag for personal GRSciColl collections
   --sourceId: string # sourceId of MasterSourceMetadata
   --qp-source: string@source-completer # Source attribute of MasterSourceMetadata
   --code: string # Code of a GrSciColl institution or collection
@@ -8754,10 +8753,10 @@ export def "grscicoll-collection-descriptor-group-export CollectionDescriptorGro
   --gbifRegion: string@gbifRegion-completer # Filters by a gbif region
   --city: string # Filters by the city of the address. It searches in both the physical and the mailing address.
   --fuzzyName: string # It searches by name fuzzily so the parameter doesn't have to be the exact name
-  --active: string@bool-completer # Active status of a GrSciColl institution or collection
+  --active: oneof<nothing, bool> # Active status of a GrSciColl institution or collection
   --masterSourceType: string@masterSourceType-completer # The master source type of a GRSciColl institution or collection
   --numberSpecimens: string # Number of specimens. It supports ranges and a `*` can be used as a wildcard
-  --displayOnNHCPortal: string@bool-completer # Flag to show this record in the NHC portal
+  --displayOnNHCPortal: oneof<nothing, bool> # Flag to show this record in the NHC portal
   --replacedBy: string # Key of the entity that replaced another entity (format: uuid)
   --occurrenceCount: string # Count of occurrences linked. It supports ranges and a `*` can be used as a wildcard
   --typeSpecimenCount: string # Count of type specimens linked. It supports ranges and a `*` can be used as a wildcard
@@ -8863,7 +8862,7 @@ export def "organization-geojson listOrganizationAsGeoJson" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isEndorsed: string@bool-completer # Whether the organization is endorsed by a node.
+  --isEndorsed: oneof<nothing, bool> # Whether the organization is endorsed by a node.
   --networkKey: string # Filter for organizations publishing datasets belonging to a network. (format: uuid)
   --numPublishedDatasets: string # Filter by number of published datasets. Examples: '5' (exactly 5), '1,*' (at least 1), '*,10' (at most 10), '5,15' (between 5 and 15).
   --identifierType: string@identifierType-completer # An identifier type for the identifier parameter.
@@ -9123,9 +9122,9 @@ export def "grscicoll-lookup lookupCollectionsInstitutions" [
   --collectionCode: string # The code of a collection
   --collectionId: string # The identifier of a collection
   --country: string@country-completer # The 2-letter country code (as per ISO-3166-1) of the country.
-  --verbose: string@bool-completer # If set, it returns the accepted matches and other alternatives that were also found. Otherwise, it only returns the accepted ones
+  --verbose: oneof<nothing, bool> # If set, it returns the accepted matches and other alternatives that were also found. Otherwise, it only returns the accepted ones
   --q: string # Simple full text search parameter. The value for this parameter can be a simple word or a phrase. Wildcards are not supported
-  --hl: string@bool-completer # Set `hl=true` to highlight terms matching the query when in fulltext search fields. The highlight will be an emphasis tag of class `gbifHl`.
+  --hl: oneof<nothing, bool> # Set `hl=true` to highlight terms matching the query when in fulltext search fields. The highlight will be an emphasis tag of class `gbifHl`.
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<institutionMatch: record<matchType: string, status: string, reasons: list<string>, entityMatched: record<key: string, selfLink: string, name: string, code: string, active: bool>>, collectionMatch: record<matchType: string, status: string, reasons: list<string>, entityMatched: record<key: string, selfLink: string, name: string, code: string, active: bool, institutionKey: string, institutionLink: string, institutionCode: string, institutionName: string>>, alternativeMatches: record<institutionMatches: list<record>, collectionMatches: list<record>>> {

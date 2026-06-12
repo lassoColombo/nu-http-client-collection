@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.gcore.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -279,7 +278,7 @@ export def "cdn-origin-groups get-origin-groups-list" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # Origin group name.
   --sources: string # Origin sources (IP addresses or domains) in the origin group.
-  --has-related-resources: string@bool-completer # Defines whether the origin group has related CDN resources.  Possible values: - **true** – Origin group has related CDN resources. - **false** – Origin group does not have related CDN resources.
+  --has-related-resources: oneof<nothing, bool> # Defines whether the origin group has related CDN resources.  Possible values: - **true** – Origin group has related CDN resources. - **false** – Origin group does not have related CDN resources.
   --limit: int # Maximum number of items to return in the response. Cannot exceed 1000.
   --offset: int # Number of items to skip from the beginning of the list.
 ]: nothing -> any {
@@ -308,7 +307,7 @@ export def "cdn-origin-groups create-origin-group" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # Origin group name. (e.g. YourOriginGroup)
-  --use-next: string@bool-completer # Defines whether to use the next origin from the origin group if origin responds with the cases specified in `proxy_next_upstream`. If you enable it, you must specify cases in `proxy_next_upstream`.  Possible values: - **true** - Option is enabled. - **false** - Option is disabled. (e.g. true)
+  --use-next: oneof<nothing, bool> # Defines whether to use the next origin from the origin group if origin responds with the cases specified in `proxy_next_upstream`. If you enable it, you must specify cases in `proxy_next_upstream`.  Possible values: - **true** - Option is enabled. - **false** - Option is disabled. (e.g. true)
   --proxy-next-upstream: list # Defines cases when the request should be passed on to the next origin.  Possible values: - **error** - an error occurred while establishing a connection with the origin, passing a request to it, or reading the response header - **timeout** - a timeout has occurred while establishing a connection with the origin, passing a request to it, or reading the response header - **`invalid_header`** - a origin returned an empty or invalid response - **`http_403`** - a origin returned a response with the code 403 - **`http_404`** - a origin returned a response with the code 404 - **`http_429`** - a origin returned a response with the code 429 - **`http_500`** - a origin returned a response with the code 500 - **`http_502`** - a origin returned a response with the code 502 - **`http_503`** - a origin returned a response with the code 503 - **`http_504`** - a origin returned a response with the code 504 (default: [error, timeout], e.g. [error, timeout, invalid_header, http_500, http_502, http_503, http_504])
   --auth-type: string # **Deprecated.** No longer necessary. Defaults to `none`.  Origin authentication type.  Possible values: - **none** - Used for public origins. - **awsSignatureV4** - Used for S3 storage. (DEPRECATED, default: none, e.g. none)
   --sources: list
@@ -365,7 +364,7 @@ export def "cdn-origin-groups change-origin-group" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # Origin group name. (e.g. YourOriginGroup)
-  --use-next: string@bool-completer # Defines whether to use the next origin from the origin group if origin responds with the cases specified in `proxy_next_upstream`. If you enable it, you must specify cases in `proxy_next_upstream`.  Possible values: - **true** - Option is enabled. - **false** - Option is disabled. (e.g. true)
+  --use-next: oneof<nothing, bool> # Defines whether to use the next origin from the origin group if origin responds with the cases specified in `proxy_next_upstream`. If you enable it, you must specify cases in `proxy_next_upstream`.  Possible values: - **true** - Option is enabled. - **false** - Option is disabled. (e.g. true)
   --proxy-next-upstream: list # Defines cases when the request should be passed on to the next origin.  Possible values: - **error** - an error occurred while establishing a connection with the origin, passing a request to it, or reading the response header - **timeout** - a timeout has occurred while establishing a connection with the origin, passing a request to it, or reading the response header - **`invalid_header`** - a origin returned an empty or invalid response - **`http_403`** - a origin returned a response with the code 403 - **`http_404`** - a origin returned a response with the code 404 - **`http_429`** - a origin returned a response with the code 429 - **`http_500`** - a origin returned a response with the code 500 - **`http_502`** - a origin returned a response with the code 502 - **`http_503`** - a origin returned a response with the code 503 - **`http_504`** - a origin returned a response with the code 504 (default: [error, timeout], e.g. [error, timeout, invalid_header, http_500, http_502, http_503, http_504])
   --auth-type: string # **Deprecated.** No longer necessary. Defaults to `none`.  Origin authentication type.  Possible values: - **none** - Used for public origins. - **awsSignatureV4** - Used for S3 storage. (DEPRECATED, default: none, e.g. none)
   --sources: list # e.g. [{enabled: true, source: yourdomain.com, backup: false}]
@@ -401,7 +400,7 @@ export def "cdn-origin-groups patch-origin-group" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # Origin group name. (e.g. YourOriginGroup)
-  --use-next: string@bool-completer # Defines whether to use the next origin from the origin group if origin responds with the cases specified in `proxy_next_upstream`. If you enable it, you must specify cases in `proxy_next_upstream`.  Possible values: - **true** - Option is enabled. - **false** - Option is disabled. (e.g. true)
+  --use-next: oneof<nothing, bool> # Defines whether to use the next origin from the origin group if origin responds with the cases specified in `proxy_next_upstream`. If you enable it, you must specify cases in `proxy_next_upstream`.  Possible values: - **true** - Option is enabled. - **false** - Option is disabled. (e.g. true)
   --proxy-next-upstream: list # Defines cases when the request should be passed on to the next origin.  Possible values: - **error** - an error occurred while establishing a connection with the origin, passing a request to it, or reading the response header - **timeout** - a timeout has occurred while establishing a connection with the origin, passing a request to it, or reading the response header - **`invalid_header`** - a origin returned an empty or invalid response - **`http_403`** - a origin returned a response with the code 403 - **`http_404`** - a origin returned a response with the code 404 - **`http_429`** - a origin returned a response with the code 429 - **`http_500`** - a origin returned a response with the code 500 - **`http_502`** - a origin returned a response with the code 502 - **`http_503`** - a origin returned a response with the code 503 - **`http_504`** - a origin returned a response with the code 504 (default: [error, timeout], e.g. [error, timeout, invalid_header, http_500, http_502, http_503, http_504])
   --auth-type: string # **Deprecated.** No longer necessary. Defaults to `none`.  Origin authentication type.  Possible values: - **none** - Used for public origins. - **awsSignatureV4** - Used for S3 storage. (DEPRECATED, default: none, e.g. none)
   --sources: list # e.g. [{enabled: true, source: yourdomain.com, backup: false}]
@@ -453,21 +452,21 @@ export def "cdn-resources get-cdn-resources-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deleted: string@bool-completer # Defines whether a CDN resource has been deleted.  Possible values: - **true** - CDN resource has been deleted. - **false** - CDN resource has not been deleted.
-  --enabled: string@bool-completer # Enables or disables a CDN resource change by a user.  Possible values: - **true** - CDN resource is enabled. - **false** - CDN resource is disabled.
+  --deleted: oneof<nothing, bool> # Defines whether a CDN resource has been deleted.  Possible values: - **true** - CDN resource has been deleted. - **false** - CDN resource has not been deleted.
+  --enabled: oneof<nothing, bool> # Enables or disables a CDN resource change by a user.  Possible values: - **true** - CDN resource is enabled. - **false** - CDN resource is disabled.
   --originGroup: int # Origin group ID.
-  --sslEnabled: string@bool-completer # Defines whether the HTTPS protocol is enabled for content delivery.  Possible values: - **true** - HTTPS protocol is enabled for CDN resource. - **false** - HTTPS protocol is disabled for CDN resource.
+  --sslEnabled: oneof<nothing, bool> # Defines whether the HTTPS protocol is enabled for content delivery.  Possible values: - **true** - HTTPS protocol is enabled for CDN resource. - **false** - HTTPS protocol is disabled for CDN resource.
   --sslData: int # SSL certificate ID.
   --sslData-in: int # SSL certificates IDs.  Example: - ?`sslData_in`=1643,1644,1652
   --min-created: string # Earliest date of CDN resource creation for which CDN resources should be returned (ISO 8601/RFC 3339 format, UTC.)
   --max-created: string # Most recent date of CDN resource creation for which CDN resources should be returned (ISO 8601/RFC 3339 format, UTC.)
   --cname: string # Delivery domain (CNAME) of the CDN resource.
   --secondaryHostnames: string # Additional delivery domains (CNAMEs) of the CDN resource.
-  --vp-enabled: string@bool-completer # Defines whether the CDN resource is integrated with the Streaming platform.  Possible values: - **true** - CDN resource is used for Streaming platform. - **false** - CDN resource is not used for Streaming platform.
+  --vp-enabled: oneof<nothing, bool> # Defines whether the CDN resource is integrated with the Streaming platform.  Possible values: - **true** - CDN resource is used for Streaming platform. - **false** - CDN resource is not used for Streaming platform.
   --rules: string # Rule name or pattern.
-  --shielded: string@bool-completer # Defines whether origin shielding is enabled for the CDN resource.  Possible values: - **true** - Origin shielding is enabled for the CDN resource. - **false** - Origin shielding is disabled for the CDN resource.
+  --shielded: oneof<nothing, bool> # Defines whether origin shielding is enabled for the CDN resource.  Possible values: - **true** - Origin shielding is enabled for the CDN resource. - **false** - Origin shielding is disabled for the CDN resource.
   --shield-dc: string # Name of the origin shielding data center location.
-  --suspend: string@bool-completer # Defines whether the CDN resource was automatically suspended by the system.  Possible values: - **true** - CDN resource is selected for automatic suspension in the next 7 days. - **false** - CDN resource is not selected for automatic suspension.
+  --suspend: oneof<nothing, bool> # Defines whether the CDN resource was automatically suspended by the system.  Possible values: - **true** - CDN resource is selected for automatic suspension in the next 7 days. - **false** - CDN resource is not selected for automatic suspension.
   --status: string@status-completer # CDN resource status.
   --limit: int # Maximum number of items to return in the response. Cannot exceed 1000.
   --offset: int # Number of items to skip from the beginning of the list.
@@ -497,18 +496,18 @@ export def "cdn-resources create-cdn-resource" [
   cname: string # Delivery domains that will be used for content delivery through a CDN.  Delivery domains should be added to your DNS settings. (e.g. cdn.site.com)
   --originGroup: int # Origin group ID with which the CDN resource is associated.  Exactly one of `origin` or `originGroup` must be provided during resource creation. (e.g. 132)
   --origin: string # IP address or domain name of the origin and the port, if custom port is used.  Exactly one of `origin` or `originGroup` must be provided during resource creation. (e.g. example.com)
-  --active: string@bool-completer # Enables or disables a CDN resource.  Possible values: - **true** - CDN resource is active. Content is being delivered. - **false** - CDN resource is deactivated. Content is not being delivered. (default: true, e.g. true)
+  --active: oneof<nothing, bool> # Enables or disables a CDN resource.  Possible values: - **true** - CDN resource is active. Content is being delivered. - **false** - CDN resource is deactivated. Content is not being delivered. (default: true, e.g. true)
   --originProtocol: string@originProtocol-completer # Protocol used by CDN servers to request content from an origin source.  Possible values: - **HTTPS** - CDN servers will connect to the origin via HTTPS. - **HTTP** - CDN servers will connect to the origin via HTTP. - **MATCH** - connection protocol will be chosen automatically (content on the origin source should be available for the CDN both through HTTP and HTTPS).  If protocol is not specified, HTTP is used to connect to an origin server. (default: HTTP, e.g. HTTPS)
   --name: string # CDN resource name. (nullable, e.g. Resource for images)
   --description: string # Optional comment describing the CDN resource. (e.g. My resource)
   --secondaryHostnames: list # Additional delivery domains (CNAMEs) that will be used to deliver content via the CDN.  Up to ten additional CNAMEs are possible. (e.g. [first.example.com, second.example.com])
-  --sslEnabled: string@bool-completer # Defines whether the HTTPS protocol enabled for content delivery.  Possible values: - **true** - HTTPS is enabled. - **false** - HTTPS is disabled. (default: false, e.g. false)
+  --sslEnabled: oneof<nothing, bool> # Defines whether the HTTPS protocol enabled for content delivery.  Possible values: - **true** - HTTPS is enabled. - **false** - HTTPS is disabled. (default: false, e.g. false)
   --sslData: int # ID of the SSL certificate linked to the CDN resource.  Can be used only with `"sslEnabled": true`. (nullable, e.g. 192)
-  --proxy-ssl-enabled: string@bool-completer # Enables or disables SSL certificate validation of the origin server before completing any connection.  Possible values: - **true** - Origin SSL certificate validation is enabled. - **false** - Origin SSL certificate validation is disabled. (default: false, e.g. false)
+  --proxy-ssl-enabled: oneof<nothing, bool> # Enables or disables SSL certificate validation of the origin server before completing any connection.  Possible values: - **true** - Origin SSL certificate validation is enabled. - **false** - Origin SSL certificate validation is disabled. (default: false, e.g. false)
   --proxy-ssl-ca: int # ID of the trusted CA certificate used to verify an origin.  It can be used only with `"proxy_ssl_enabled": true`. (nullable)
   --proxy-ssl-data: int # ID of the SSL certificate used to verify an origin.  It can be used only with `"proxy_ssl_enabled": true`. (nullable)
   --primary-resource: int # ID of the main CDN resource which has a shared caching zone with a reserve CDN resource.  If the parameter is not empty, then the current CDN resource is the reserve. You cannot change some options, create rules, set up origin shielding, or use the reserve CDN resource for Streaming. (nullable)
-  --waap-api-domain-enabled: string@bool-completer # Defines whether the associated WAAP Domain is identified as an API Domain.  Possible values: - **true** - The associated WAAP Domain is designated as an API Domain. - **false** - The associated WAAP Domain is not designated as an API Domain.
+  --waap-api-domain-enabled: oneof<nothing, bool> # Defines whether the associated WAAP Domain is identified as an API Domain.  Possible values: - **true** - The associated WAAP Domain is designated as an API Domain. - **false** - The associated WAAP Domain is not designated as an API Domain.
   --options: record # List of options that can be configured for the CDN resource.  In case of `null` value the option is not added to the CDN resource. Option may inherit its value from the global account settings. — shape: {allowedHttpMethods?: record, brotli_compression?: record, browser_cache_settings?: record, cache_http_headers?: record, cors?: record, country_acl?: record, disable_cache?: record, disable_proxy_force_ranges?: record, edge_cache_settings?: record, fastedge?: record, fetch_compressed?: record, follow_origin_redirect?: record, force_return?: record, forward_host_header?: record, grpc_passthrough?: record, gzipOn?: record, hostHeader?: record, http3_enabled?: record, ignore_cookie?: record, ignoreQueryString?: record, image_stack?: record, ip_address_acl?: record, limit_bandwidth?: record, network_error_logging?: record, proxy_cache_key?: record, proxy_cache_methods_set?: record, proxy_connect_timeout?: record, proxy_read_timeout?: record, query_params_blacklist?: record, query_params_whitelist?: record, query_string_forwarding?: record, redirect_http_to_https?: record, redirect_https_to_http?: record, referrer_acl?: record, response_headers_hiding_policy?: record, rewrite?: record, secure_key?: record, slice?: record, sni?: record, stale?: record, static_response_headers?: record, staticHeaders?: record, staticRequestHeaders?: record, tls_versions?: record, use_default_le_chain?: record, use_dns01_le_challenge?: record, use_rsa_le_cert?: record, user_agent_acl?: record, waap?: record, websockets?: record}
 ]: any -> record<id: int, cname: string, active: bool, enabled: bool, status: string, deleted: bool, client: int, name: string, description: string, created: string, updated: string, originGroup: int, originGroup_name: string, originProtocol: string, secondaryHostnames: list<string>, shielded: bool, shield_dc: string, shield_enabled: bool, shield_routing_map: int, sslEnabled: bool, sslData: int, proxy_ssl_enabled: bool, proxy_ssl_ca: int, proxy_ssl_data: int, preset_applied: bool, vp_enabled: bool, full_custom_enabled: bool, can_purge_by_urls: bool, suspend_date: string, suspended: bool, primary_resource: int, is_primary: bool, waap_domain_id: string, rules: list<record>, options: record<allowedHttpMethods: record<enabled: bool, value: list>, brotli_compression: record<enabled: bool, value: list>, browser_cache_settings: record<enabled: bool, value: string>, cache_http_headers: record<enabled: bool, value: list>, cors: record<enabled: bool, value: list, always: bool>, country_acl: record<enabled: bool, policy_type: string, excepted_values: list>, disable_cache: record<enabled: bool, value: bool>, disable_proxy_force_ranges: record<enabled: bool, value: bool>, edge_cache_settings: record<enabled: bool, value: string, custom_values: record, default: string>, fastedge: record<enabled: bool, on_request_headers: record, on_request_headers_after_cache: record, on_request_body: record, on_response_headers: record, on_response_body: record>, fetch_compressed: record<enabled: bool, value: bool>, follow_origin_redirect: record<enabled: bool, codes: list>, force_return: record<enabled: bool, code: int, body: string, time_interval: record>, forward_host_header: record<enabled: bool, value: bool>, grpc_passthrough: record<enabled: bool, value: bool>, gzipOn: record<enabled: bool, value: bool>, hostHeader: record<enabled: bool, value: string>, http3_enabled: record<enabled: bool, value: bool>, ignore_cookie: record<enabled: bool, value: bool>, ignoreQueryString: record<enabled: bool, value: bool>, image_stack: record<enabled: bool, avif_enabled: bool, webp_enabled: bool, quality: int, png_lossless: bool>, ip_address_acl: record<enabled: bool, policy_type: string, excepted_values: list>, limit_bandwidth: record<enabled: bool, limit_type: string, speed: int, buffer: int>, network_error_logging: record<enabled: bool, value: bool>, proxy_cache_key: record<enabled: bool, value: string>, proxy_cache_methods_set: record<enabled: bool, value: bool>, proxy_connect_timeout: record<enabled: bool, value: string>, proxy_read_timeout: record<enabled: bool, value: string>, query_params_blacklist: record<enabled: bool, value: list>, query_params_whitelist: record<enabled: bool, value: list>, query_string_forwarding: record<enabled: bool, forward_from_file_types: list, forward_to_file_types: list, forward_only_keys: list, forward_except_keys: list>, redirect_http_to_https: record<enabled: bool, value: bool>, redirect_https_to_http: record<enabled: bool, value: bool>, referrer_acl: record<enabled: bool, policy_type: string, excepted_values: list>, response_headers_hiding_policy: record<enabled: bool, mode: string, excepted: list>, rewrite: record<enabled: bool, flag: string, body: string>, secure_key: record<enabled: bool, key: string, type: int>, slice: record<enabled: bool, value: bool>, sni: record<enabled: bool, sni_type: string, custom_hostname: string>, stale: record<enabled: bool, value: list>, static_response_headers: record<enabled: bool, value: list>, staticHeaders: record<enabled: bool, value: record>, staticRequestHeaders: record<enabled: bool, value: record>, tls_versions: record<enabled: bool, value: list>, use_default_le_chain: record<enabled: bool, value: bool>, use_dns01_le_challenge: record<enabled: bool, value: bool>, use_rsa_le_cert: record<enabled: bool, value: bool>, user_agent_acl: record<enabled: bool, policy_type: string, excepted_values: list>, waap: record<enabled: bool, value: bool>, websockets: record<enabled: bool, value: bool>>> {
   let input = $in
@@ -558,18 +557,18 @@ export def "cdn-resources change-cdn-resource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Enables or disables a CDN resource.  Possible values: - **true** - CDN resource is active. Content is being delivered. - **false** - CDN resource is deactivated. Content is not being delivered. (default: true, e.g. true)
+  --active: oneof<nothing, bool> # Enables or disables a CDN resource.  Possible values: - **true** - CDN resource is active. Content is being delivered. - **false** - CDN resource is deactivated. Content is not being delivered. (default: true, e.g. true)
   --name: string # CDN resource name. (nullable, e.g. Resource for images)
   --description: string # Optional comment describing the CDN resource. (e.g. My resource)
   --secondaryHostnames: list # Additional delivery domains (CNAMEs) that will be used to deliver content via the CDN.  Up to ten additional CNAMEs are possible. (e.g. [first.example.com, second.example.com])
   originGroup: int # Origin group ID with which the CDN resource is associated. (e.g. 132)
   --originProtocol: string@originProtocol-completer # Protocol used by CDN servers to request content from an origin source.  Possible values: - **HTTPS** - CDN servers will connect to the origin via HTTPS. - **HTTP** - CDN servers will connect to the origin via HTTP. - **MATCH** - connection protocol will be chosen automatically (content on the origin source should be available for the CDN both through HTTP and HTTPS).  If protocol is not specified, HTTP is used to connect to an origin server. (default: HTTP, e.g. HTTPS)
-  --sslEnabled: string@bool-completer # Defines whether the HTTPS protocol enabled for content delivery.  Possible values: - **true** - HTTPS is enabled. - **false** - HTTPS is disabled. (default: false, e.g. false)
+  --sslEnabled: oneof<nothing, bool> # Defines whether the HTTPS protocol enabled for content delivery.  Possible values: - **true** - HTTPS is enabled. - **false** - HTTPS is disabled. (default: false, e.g. false)
   --sslData: int # ID of the SSL certificate linked to the CDN resource.  Can be used only with `"sslEnabled": true`. (nullable, e.g. 192)
-  --proxy-ssl-enabled: string@bool-completer # Enables or disables SSL certificate validation of the origin server before completing any connection.  Possible values: - **true** - Origin SSL certificate validation is enabled. - **false** - Origin SSL certificate validation is disabled. (default: false, e.g. false)
+  --proxy-ssl-enabled: oneof<nothing, bool> # Enables or disables SSL certificate validation of the origin server before completing any connection.  Possible values: - **true** - Origin SSL certificate validation is enabled. - **false** - Origin SSL certificate validation is disabled. (default: false, e.g. false)
   --proxy-ssl-ca: int # ID of the trusted CA certificate used to verify an origin.  It can be used only with `"proxy_ssl_enabled": true`. (nullable)
   --proxy-ssl-data: int # ID of the SSL certificate used to verify an origin.  It can be used only with `"proxy_ssl_enabled": true`. (nullable)
-  --waap-api-domain-enabled: string@bool-completer # Defines whether the associated WAAP Domain is identified as an API Domain.  Possible values: - **true** - The associated WAAP Domain is designated as an API Domain. - **false** - The associated WAAP Domain is not designated as an API Domain.
+  --waap-api-domain-enabled: oneof<nothing, bool> # Defines whether the associated WAAP Domain is identified as an API Domain.  Possible values: - **true** - The associated WAAP Domain is designated as an API Domain. - **false** - The associated WAAP Domain is not designated as an API Domain.
   --options: record # List of options that can be configured for the CDN resource.  In case of `null` value the option is not added to the CDN resource. Option may inherit its value from the global account settings. — shape: {allowedHttpMethods?: record, brotli_compression?: record, browser_cache_settings?: record, cache_http_headers?: record, cors?: record, country_acl?: record, disable_cache?: record, disable_proxy_force_ranges?: record, edge_cache_settings?: record, fastedge?: record, fetch_compressed?: record, follow_origin_redirect?: record, force_return?: record, forward_host_header?: record, grpc_passthrough?: record, gzipOn?: record, hostHeader?: record, http3_enabled?: record, ignore_cookie?: record, ignoreQueryString?: record, image_stack?: record, ip_address_acl?: record, limit_bandwidth?: record, network_error_logging?: record, proxy_cache_key?: record, proxy_cache_methods_set?: record, proxy_connect_timeout?: record, proxy_read_timeout?: record, query_params_blacklist?: record, query_params_whitelist?: record, query_string_forwarding?: record, redirect_http_to_https?: record, redirect_https_to_http?: record, referrer_acl?: record, response_headers_hiding_policy?: record, rewrite?: record, secure_key?: record, slice?: record, sni?: record, stale?: record, static_response_headers?: record, staticHeaders?: record, staticRequestHeaders?: record, tls_versions?: record, use_default_le_chain?: record, use_dns01_le_challenge?: record, use_rsa_le_cert?: record, user_agent_acl?: record, waap?: record, websockets?: record}
 ]: any -> record<id: int, cname: string, active: bool, enabled: bool, status: string, deleted: bool, client: int, name: string, description: string, created: string, updated: string, originGroup: int, originGroup_name: string, originProtocol: string, secondaryHostnames: list<string>, shielded: bool, shield_dc: string, shield_enabled: bool, shield_routing_map: int, sslEnabled: bool, sslData: int, proxy_ssl_enabled: bool, proxy_ssl_ca: int, proxy_ssl_data: int, preset_applied: bool, vp_enabled: bool, full_custom_enabled: bool, can_purge_by_urls: bool, suspend_date: string, suspended: bool, primary_resource: int, is_primary: bool, waap_domain_id: string, rules: list<record>, options: record<allowedHttpMethods: record<enabled: bool, value: list>, brotli_compression: record<enabled: bool, value: list>, browser_cache_settings: record<enabled: bool, value: string>, cache_http_headers: record<enabled: bool, value: list>, cors: record<enabled: bool, value: list, always: bool>, country_acl: record<enabled: bool, policy_type: string, excepted_values: list>, disable_cache: record<enabled: bool, value: bool>, disable_proxy_force_ranges: record<enabled: bool, value: bool>, edge_cache_settings: record<enabled: bool, value: string, custom_values: record, default: string>, fastedge: record<enabled: bool, on_request_headers: record, on_request_headers_after_cache: record, on_request_body: record, on_response_headers: record, on_response_body: record>, fetch_compressed: record<enabled: bool, value: bool>, follow_origin_redirect: record<enabled: bool, codes: list>, force_return: record<enabled: bool, code: int, body: string, time_interval: record>, forward_host_header: record<enabled: bool, value: bool>, grpc_passthrough: record<enabled: bool, value: bool>, gzipOn: record<enabled: bool, value: bool>, hostHeader: record<enabled: bool, value: string>, http3_enabled: record<enabled: bool, value: bool>, ignore_cookie: record<enabled: bool, value: bool>, ignoreQueryString: record<enabled: bool, value: bool>, image_stack: record<enabled: bool, avif_enabled: bool, webp_enabled: bool, quality: int, png_lossless: bool>, ip_address_acl: record<enabled: bool, policy_type: string, excepted_values: list>, limit_bandwidth: record<enabled: bool, limit_type: string, speed: int, buffer: int>, network_error_logging: record<enabled: bool, value: bool>, proxy_cache_key: record<enabled: bool, value: string>, proxy_cache_methods_set: record<enabled: bool, value: bool>, proxy_connect_timeout: record<enabled: bool, value: string>, proxy_read_timeout: record<enabled: bool, value: string>, query_params_blacklist: record<enabled: bool, value: list>, query_params_whitelist: record<enabled: bool, value: list>, query_string_forwarding: record<enabled: bool, forward_from_file_types: list, forward_to_file_types: list, forward_only_keys: list, forward_except_keys: list>, redirect_http_to_https: record<enabled: bool, value: bool>, redirect_https_to_http: record<enabled: bool, value: bool>, referrer_acl: record<enabled: bool, policy_type: string, excepted_values: list>, response_headers_hiding_policy: record<enabled: bool, mode: string, excepted: list>, rewrite: record<enabled: bool, flag: string, body: string>, secure_key: record<enabled: bool, key: string, type: int>, slice: record<enabled: bool, value: bool>, sni: record<enabled: bool, sni_type: string, custom_hostname: string>, stale: record<enabled: bool, value: list>, static_response_headers: record<enabled: bool, value: list>, staticHeaders: record<enabled: bool, value: record>, staticRequestHeaders: record<enabled: bool, value: record>, tls_versions: record<enabled: bool, value: list>, use_default_le_chain: record<enabled: bool, value: bool>, use_dns01_le_challenge: record<enabled: bool, value: bool>, use_rsa_le_cert: record<enabled: bool, value: bool>, user_agent_acl: record<enabled: bool, policy_type: string, excepted_values: list>, waap: record<enabled: bool, value: bool>, websockets: record<enabled: bool, value: bool>>> {
   let input = $in
@@ -597,15 +596,15 @@ export def "cdn-resources patch-cdn-resource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Enables or disables a CDN resource.  Possible values: - **true** - CDN resource is active. Content is being delivered. - **false** - CDN resource is deactivated. Content is not being delivered. (default: true, e.g. true)
+  --active: oneof<nothing, bool> # Enables or disables a CDN resource.  Possible values: - **true** - CDN resource is active. Content is being delivered. - **false** - CDN resource is deactivated. Content is not being delivered. (default: true, e.g. true)
   --name: string # CDN resource name. (nullable, e.g. Resource for images)
   --description: string # Optional comment describing the CDN resource. (e.g. My resource)
   --secondaryHostnames: list # Additional delivery domains (CNAMEs) that will be used to deliver content via the CDN.  Up to ten additional CNAMEs are possible. (e.g. [first.example.com, second.example.com])
   --originGroup: int # Origin group ID with which the CDN resource is associated. (e.g. 132)
   --originProtocol: string@originProtocol-completer # Protocol used by CDN servers to request content from an origin source.  Possible values: - **HTTPS** - CDN servers will connect to the origin via HTTPS. - **HTTP** - CDN servers will connect to the origin via HTTP. - **MATCH** - connection protocol will be chosen automatically (content on the origin source should be available for the CDN both through HTTP and HTTPS).  If protocol is not specified, HTTP is used to connect to an origin server. (default: HTTP, e.g. HTTPS)
-  --sslEnabled: string@bool-completer # Defines whether the HTTPS protocol enabled for content delivery.  Possible values: - **true** - HTTPS is enabled. - **false** - HTTPS is disabled. (default: false, e.g. false)
+  --sslEnabled: oneof<nothing, bool> # Defines whether the HTTPS protocol enabled for content delivery.  Possible values: - **true** - HTTPS is enabled. - **false** - HTTPS is disabled. (default: false, e.g. false)
   --sslData: int # ID of the SSL certificate linked to the CDN resource.  Can be used only with `"sslEnabled": true`. (nullable, e.g. 192)
-  --proxy-ssl-enabled: string@bool-completer # Enables or disables SSL certificate validation of the origin server before completing any connection.  Possible values: - **true** - Origin SSL certificate validation is enabled. - **false** - Origin SSL certificate validation is disabled. (default: false, e.g. false)
+  --proxy-ssl-enabled: oneof<nothing, bool> # Enables or disables SSL certificate validation of the origin server before completing any connection.  Possible values: - **true** - Origin SSL certificate validation is enabled. - **false** - Origin SSL certificate validation is disabled. (default: false, e.g. false)
   --proxy-ssl-ca: int # ID of the trusted CA certificate used to verify an origin.  It can be used only with `"proxy_ssl_enabled": true`. (nullable)
   --proxy-ssl-data: int # ID of the SSL certificate used to verify an origin.  It can be used only with `"proxy_ssl_enabled": true`. (nullable)
   --options: record # List of options that can be configured for the CDN resource.  In case of `null` value the option is not added to the CDN resource. Option may inherit its value from the global account settings. — shape: {allowedHttpMethods?: record, brotli_compression?: record, browser_cache_settings?: record, cache_http_headers?: record, cors?: record, country_acl?: record, disable_cache?: record, disable_proxy_force_ranges?: record, edge_cache_settings?: record, fastedge?: record, fetch_compressed?: record, follow_origin_redirect?: record, force_return?: record, forward_host_header?: record, grpc_passthrough?: record, gzipOn?: record, hostHeader?: record, http3_enabled?: record, ignore_cookie?: record, ignoreQueryString?: record, image_stack?: record, ip_address_acl?: record, limit_bandwidth?: record, network_error_logging?: record, proxy_cache_key?: record, proxy_cache_methods_set?: record, proxy_connect_timeout?: record, proxy_read_timeout?: record, query_params_blacklist?: record, query_params_whitelist?: record, query_string_forwarding?: record, redirect_http_to_https?: record, redirect_https_to_http?: record, referrer_acl?: record, response_headers_hiding_policy?: record, rewrite?: record, secure_key?: record, slice?: record, sni?: record, stale?: record, static_response_headers?: record, staticHeaders?: record, staticRequestHeaders?: record, tls_versions?: record, use_default_le_chain?: record, use_dns01_le_challenge?: record, use_rsa_le_cert?: record, user_agent_acl?: record, waap?: record, websockets?: record}
@@ -883,8 +882,8 @@ export def "cdn-logs-uploader-policies create-policy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-empty-logs: string@bool-completer # Include empty logs in the upload. (default: false)
-  --include-shield-logs: string@bool-completer # Include logs from origin shielding in the upload. (default: false)
+  --include-empty-logs: oneof<nothing, bool> # Include empty logs in the upload. (default: false)
+  --include-shield-logs: oneof<nothing, bool> # Include logs from origin shielding in the upload. (default: false)
   --name: string # Name of the policy. (default: Policy)
   --description: string # Description of the policy.
   --retry-interval-minutes: int # Interval in minutes to retry failed uploads. (default: 60)
@@ -898,7 +897,7 @@ export def "cdn-logs-uploader-policies create-policy" [
   --file-name-template: string # Template for log file name. (default: {{YYYY}}/{{MM}}/{{DD}}/{{HH}}/{{mm}}/{{ss}}/{{HOST}}_{{CNAME}}_access.log.gz)
   --format-type: string@format-type-completer # Format type for logs.  Possible values: - **""** - empty, it means it will apply the format configurations from the policy. - **"json"** - output the logs as json lines.
   --tags: record # Tags allow for dynamic decoration of logs by adding predefined fields to the log format. These tags serve as customizable key-value pairs that can be included in log entries to enhance context and readability.
-  --escape-special-characters: string@bool-completer # When set to true, the service sanitizes string values by escaping characters that may be unsafe for transport, logging, or downstream processing.  The following categories of characters are escaped: - Control and non-printable characters - Quotation marks and escape characters - Characters outside the standard ASCII range  The resulting output contains only printable ASCII characters. (default: false)
+  --escape-special-characters: oneof<nothing, bool> # When set to true, the service sanitizes string values by escaping characters that may be unsafe for transport, logging, or downstream processing.  The following categories of characters are escaped: - Control and non-printable characters - Quotation marks and escape characters - Characters outside the standard ASCII range  The resulting output contains only printable ASCII characters. (default: false)
   --log-sample-rate: float # Sampling rate for logs. A value between 0 and 1 that determines the fraction of log entries to collect.  - **1** - collect all logs (default). - **0.5** - collect approximately 50% of logs. - **0** - collect no logs (effectively disables logging without removing the policy). (format: float, default: 1)
 ]: any -> record<id: int, client_id: int, created: string, updated: string, include_empty_logs: bool, include_shield_logs: bool, name: string, description: string, retry_interval_minutes: int, rotate_interval_minutes: int, rotate_threshold_mb: int, rotate_threshold_lines: int, date_format: string, field_delimiter: string, field_separator: string, fields: list<string>, file_name_template: string, format_type: string, tags: record, escape_special_characters: bool, log_sample_rate: float, related_uploader_configs: list<int>> {
   let input = $in
@@ -947,8 +946,8 @@ export def "cdn-logs-uploader-policies change-policy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-empty-logs: string@bool-completer # Include empty logs in the upload. (default: false)
-  --include-shield-logs: string@bool-completer # Include logs from origin shielding in the upload. (default: false)
+  --include-empty-logs: oneof<nothing, bool> # Include empty logs in the upload. (default: false)
+  --include-shield-logs: oneof<nothing, bool> # Include logs from origin shielding in the upload. (default: false)
   --name: string # Name of the policy. (default: Policy)
   --description: string # Description of the policy.
   --retry-interval-minutes: int # Interval in minutes to retry failed uploads. (default: 60)
@@ -962,7 +961,7 @@ export def "cdn-logs-uploader-policies change-policy" [
   --file-name-template: string # Template for log file name. (default: {{YYYY}}/{{MM}}/{{DD}}/{{HH}}/{{mm}}/{{ss}}/{{HOST}}_{{CNAME}}_access.log.gz)
   --format-type: string@format-type-completer # Format type for logs.  Possible values: - **""** - empty, it means it will apply the format configurations from the policy. - **"json"** - output the logs as json lines.
   --tags: record # Tags allow for dynamic decoration of logs by adding predefined fields to the log format. These tags serve as customizable key-value pairs that can be included in log entries to enhance context and readability.
-  --escape-special-characters: string@bool-completer # When set to true, the service sanitizes string values by escaping characters that may be unsafe for transport, logging, or downstream processing.  The following categories of characters are escaped: - Control and non-printable characters - Quotation marks and escape characters - Characters outside the standard ASCII range  The resulting output contains only printable ASCII characters. (default: false)
+  --escape-special-characters: oneof<nothing, bool> # When set to true, the service sanitizes string values by escaping characters that may be unsafe for transport, logging, or downstream processing.  The following categories of characters are escaped: - Control and non-printable characters - Quotation marks and escape characters - Characters outside the standard ASCII range  The resulting output contains only printable ASCII characters. (default: false)
   --log-sample-rate: float # Sampling rate for logs. A value between 0 and 1 that determines the fraction of log entries to collect.  - **1** - collect all logs (default). - **0.5** - collect approximately 50% of logs. - **0** - collect no logs (effectively disables logging without removing the policy). (format: float, default: 1)
 ]: any -> record<id: int, client_id: int, created: string, updated: string, include_empty_logs: bool, include_shield_logs: bool, name: string, description: string, retry_interval_minutes: int, rotate_interval_minutes: int, rotate_threshold_mb: int, rotate_threshold_lines: int, date_format: string, field_delimiter: string, field_separator: string, fields: list<string>, file_name_template: string, format_type: string, tags: record, escape_special_characters: bool, log_sample_rate: float, related_uploader_configs: list<int>> {
   let input = $in
@@ -989,8 +988,8 @@ export def "cdn-logs-uploader-policies patch-policy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-empty-logs: string@bool-completer # Include empty logs in the upload.
-  --include-shield-logs: string@bool-completer # Include logs from origin shielding in the upload.
+  --include-empty-logs: oneof<nothing, bool> # Include empty logs in the upload.
+  --include-shield-logs: oneof<nothing, bool> # Include logs from origin shielding in the upload.
   --name: string # Name of the policy.
   --description: string # Description of the policy.
   --retry-interval-minutes: int # Interval in minutes to retry failed uploads.
@@ -1004,7 +1003,7 @@ export def "cdn-logs-uploader-policies patch-policy" [
   --file-name-template: string # Template for log file name.
   --format-type: string@format-type-completer # Format type for logs.  Possible values: - **""** - empty, it means it will apply the format configurations from the policy. - **"json"** - output the logs as json lines.
   --tags: record # Tags allow for dynamic decoration of logs by adding predefined fields to the log format. These tags serve as customizable key-value pairs that can be included in log entries to enhance context and readability.
-  --escape-special-characters: string@bool-completer # When set to true, the service sanitizes string values by escaping characters that may be unsafe for transport, logging, or downstream processing.  The following categories of characters are escaped: - Control and non-printable characters - Quotation marks and escape characters - Characters outside the standard ASCII range  The resulting output contains only printable ASCII characters.
+  --escape-special-characters: oneof<nothing, bool> # When set to true, the service sanitizes string values by escaping characters that may be unsafe for transport, logging, or downstream processing.  The following categories of characters are escaped: - Control and non-printable characters - Quotation marks and escape characters - Characters outside the standard ASCII range  The resulting output contains only printable ASCII characters.
   --log-sample-rate: float # Sampling rate for logs. A value between 0 and 1 that determines the fraction of log entries to collect.  - **1** - collect all logs (default). - **0.5** - collect approximately 50% of logs. - **0** - collect no logs (effectively disables logging without removing the policy). (format: float)
 ]: any -> record<id: int, client_id: int, created: string, updated: string, include_empty_logs: bool, include_shield_logs: bool, name: string, description: string, retry_interval_minutes: int, rotate_interval_minutes: int, rotate_threshold_mb: int, rotate_threshold_lines: int, date_format: string, field_delimiter: string, field_separator: string, fields: list<string>, file_name_template: string, format_type: string, tags: record, escape_special_characters: bool, log_sample_rate: float, related_uploader_configs: list<int>> {
   let input = $in
@@ -1277,11 +1276,11 @@ export def "cdn-logs-uploader-configs create-config" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Enables or disables the config. (default: true)
+  --enabled: oneof<nothing, bool> # Enables or disables the config. (default: true)
   name: string # Name of the config.
   policy: int # ID of the policy that should be assigned to given config.
   target: int # ID of the target to which logs should be uploaded.
-  --for-all-resources: string@bool-completer # If set to true, the config will be applied to all CDN resources. If set to false, the config will be applied to the resources specified in the `resources` field. (default: false)
+  --for-all-resources: oneof<nothing, bool> # If set to true, the config will be applied to all CDN resources. If set to false, the config will be applied to the resources specified in the `resources` field. (default: false)
   --resources: list # List of resource IDs to which the config should be applied.
 ]: any -> record<id: int, client_id: int, created: string, updated: string, enabled: bool, name: string, policy: int, target: int, for_all_resources: bool, resources: list<int>, status: record<status: string, code: int, updated: string, details: string>> {
   let input = $in
@@ -1330,11 +1329,11 @@ export def "cdn-logs-uploader-configs change-config" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Enables or disables the config. (default: true)
+  --enabled: oneof<nothing, bool> # Enables or disables the config. (default: true)
   name: string # Name of the config.
   policy: int # ID of the policy that should be assigned to given config.
   target: int # ID of the target to which logs should be uploaded.
-  --for-all-resources: string@bool-completer # If set to true, the config will be applied to all CDN resources. If set to false, the config will be applied to the resources specified in the `resources` field. (default: false)
+  --for-all-resources: oneof<nothing, bool> # If set to true, the config will be applied to all CDN resources. If set to false, the config will be applied to the resources specified in the `resources` field. (default: false)
   --resources: list # List of resource IDs to which the config should be applied.
 ]: any -> record<id: int, client_id: int, created: string, updated: string, enabled: bool, name: string, policy: int, target: int, for_all_resources: bool, resources: list<int>, status: record<status: string, code: int, updated: string, details: string>> {
   let input = $in
@@ -1361,11 +1360,11 @@ export def "cdn-logs-uploader-configs patch-config" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Enables or disables the config.
+  --enabled: oneof<nothing, bool> # Enables or disables the config.
   --name: string # Name of the config.
   --policy: int # ID of the policy that should be assigned to given config.
   --target: int # ID of the target to which logs should be uploaded.
-  --for-all-resources: string@bool-completer # If set to true, the config will be applied to all CDN resources. If set to false, the config will be applied to the resources specified in the `resources` field.
+  --for-all-resources: oneof<nothing, bool> # If set to true, the config will be applied to all CDN resources. If set to false, the config will be applied to the resources specified in the `resources` field.
   --resources: list # List of resource IDs to which the config should be applied.
 ]: any -> record<id: int, client_id: int, created: string, updated: string, enabled: bool, name: string, policy: int, target: int, for_all_resources: bool, resources: list<int>, status: record<status: string, code: int, updated: string, details: string>> {
   let input = $in
@@ -1566,7 +1565,7 @@ export def "cdn-resources-rules create-rule" [
   name: string # Rule name. (e.g. My first rule)
   rule: string # Path to the file or folder for which the rule will be applied.  The rule is applied if the requested URI matches the rule path.  We add a leading forward slash to any rule path. Specify a path without a forward slash. (e.g. /folder/images/*.png)
   ruleType: int # Rule type.  Possible values: - **Type 0** - Regular expression. Must start with '^/' or '/'. - **Type 1** - Regular expression. Note that for this rule type we automatically add / to each rule pattern before your regular expression. This type is **legacy**, please use Type 0. (e.g. 0)
-  --active: string@bool-completer # Enables or disables a rule.  Possible values: - **true** - Rule is active, rule settings are applied. - **false** - Rule is inactive, rule settings are not applied. (e.g. true)
+  --active: oneof<nothing, bool> # Enables or disables a rule.  Possible values: - **true** - Rule is active, rule settings are applied. - **false** - Rule is inactive, rule settings are not applied. (e.g. true)
   --weight: int # Rule execution order: from lowest (1) to highest.  If requested URI matches multiple rules, the one higher in the order of the rules will be applied. (e.g. 1)
   --overrideOriginProtocol: string@overrideOriginProtocol-completer # Sets a protocol other than the one specified in the CDN resource settings to connect to the origin.  Possible values: - **HTTPS** - CDN servers connect to origin via HTTPS protocol. - **HTTP** - CDN servers connect to origin via HTTP protocol. - **MATCH** - Connection protocol is chosen automatically; in this case, content on origin source should be available for the CDN both through HTTP and HTTPS protocols. - **null** - `originProtocol` setting is inherited from the CDN resource settings. (nullable)
   --originGroup: int # ID of the origin group to which the rule is applied.  If the origin group is not specified, the rule is applied to the origin group that the CDN resource is associated with. (nullable)
@@ -1621,7 +1620,7 @@ export def "cdn-resources-rules change-rule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Enables or disables a rule.  Possible values: - **true** - Rule is active, rule settings are applied. - **false** - Rule is inactive, rule settings are not applied. (e.g. true)
+  --active: oneof<nothing, bool> # Enables or disables a rule.  Possible values: - **true** - Rule is active, rule settings are applied. - **false** - Rule is inactive, rule settings are not applied. (e.g. true)
   --name: string # Rule name. (e.g. My first rule)
   rule: string # Path to the file or folder for which the rule will be applied.  The rule is applied if the requested URI matches the rule path.  We add a leading forward slash to any rule path. Specify a path without a forward slash. (e.g. /folder/images/*.png)
   ruleType: int # Rule type.  Possible values: - **Type 0** - Regular expression. Must start with '^/' or '/'. - **Type 1** - Regular expression. Note that for this rule type we automatically add / to each rule pattern before your regular expression. This type is **legacy**, please use Type 0. (e.g. 0)
@@ -1656,7 +1655,7 @@ export def "cdn-resources-rules patch-rule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Enables or disables a rule.  Possible values: - **true** - Rule is active, rule settings are applied. - **false** - Rule is inactive, rule settings are not applied. (e.g. true)
+  --active: oneof<nothing, bool> # Enables or disables a rule.  Possible values: - **true** - Rule is active, rule settings are applied. - **false** - Rule is inactive, rule settings are not applied. (e.g. true)
   --name: string # Rule name. (e.g. My first rule)
   --rule: string # Path to the file or folder for which the rule will be applied.  The rule is applied if the requested URI matches the rule path.  We add a leading forward slash to any rule path. Specify a path without a forward slash. (e.g. /folder/images/*.png)
   --ruleType: int # Rule type.  Possible values: - **Type 0** - Regular expression. Must start with '^/' or '/'. - **Type 1** - Regular expression. Note that for this rule type we automatically add / to each rule pattern before your regular expression. This type is **legacy**, please use Type 0. (e.g. 0)
@@ -1903,7 +1902,7 @@ export def "cdn-ssl-data get-ssl-certificates-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --automated: string@bool-completer # How the SSL certificate was issued.  Possible values: - **true** – Certificate was issued automatically. - **false** – Certificate was added by a user.
+  --automated: oneof<nothing, bool> # How the SSL certificate was issued.  Possible values: - **true** – Certificate was issued automatically. - **false** – Certificate was added by a user.
   --validity-not-after-lte: string # Date and time when the certificate become untrusted (ISO 8601/RFC 3339 format, UTC.)  Response will contain only certificates valid until the specified time.
   --resource-id: int # CDN resource ID for which certificates are requested.
   --limit: int # Maximum number of items to return in the response. Cannot exceed 1000.
@@ -1933,8 +1932,8 @@ export def "cdn-ssl-data add-ssl-certificate" [
   --name: string # SSL certificate name.  It must be unique. (e.g. New certificate)
   --sslCertificate: string # Public part of the SSL certificate.  All chain of the SSL certificate should be added. (e.g. -----BEGIN CERTIFICATE----- MIIFWzCCBEOgAwIBAgISBK6qoNitg//89H/YJamujpWlMA0GCSqGSIb3DQEBCwUA MEoxCzAJBgNVBAYTAlVTMRYwFAYDVQQKEw1MZXQncyBFbmNyeXB0MSMwIQYDVQQD ExpMZXQncyBFbmNyeXB0IEF1dGhvcml0eSBYMzAeFw0xODExMTMxMjQwMDJaFw0x OTAyMTExMjQwMDJaMBwxGjAYBgNVBAMTEWNkbjIudG50LWNsdWIuY29tMIIBIjAN BgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzaHExDEXNSf6ELS0WUR7qq8gs9cc xx99sM2zs3Jld0twPmuldkVNe5xte/Hj03r4SesfOBczR7pn+t60YujPvUQDN8lx WYpvRuetOneyf4gNPatwzR/W1GWGlahet1xPVYGrttqL4gCJeShIXvU4aCyzW941 Pt0wCs+bg9u+59fXFkigWrWJPkwbR7bJ14XTStYynMbYLfCg+VPeGWj3d8wOhQcf AD86o8TLTbVfK2BDXwS5S8Dgf5u8g+WvmVHYDIkYKCxcLj0jP61Y7uHoFbSg41oN A9yPOa+0cYxA7U702V2WjxbfIeATYtNLZvH17lk+DYlQl8q3MLwguqZdgwIDAQAB iIqI2xquGONtHFDOKJvy1O2qYTVRtNRVZqhc1ol+mw== -----END CERTIFICATE----- -----BEGIN CERTIFICATE----- MIIEkjCCA3qgAwIBAgIQCgFBQgAAAVOFc2oLheynCDANBgkqhkiG9w0BAQsFADA/ MSQwIgYDVQQKExtEaWdpdGFsIFNpZ25hdHVyZSBUcnVzdCBDby4xFzAVBgNVBAMT DkRTVCBSb290IENBIFgzMB4XDTE2MDMxNzE2NDA0NloXDTIxMDMxNzE2NDA0Nlow SjELMAkGA1UEBhMCVVMxFjAUBgNVBAoTDUxldCdzIEVuY3J5cHQxIzAhBgNVBAMT GkxldCdzIEVuY3J5cHQgQXV0aG9yaXR5IFgzMIIBIjANBgkqhkiG9w0BAQEFAAOC AQ8AMIIBCgKCAQEAnNMM8FrlLke3cl03g7NoYzDq1zUmGSXhvb418XCSL7e4S0EF q6meNQhY7LEqxGiHC6PjdeTm86dicbp5gWAf15Gan/PQeGdxyGkOlZHP/uaZ6WA8 SMx+yk13EiSdRxta67nsHjcAHJyse6cF6s5K671B5TaYucv9bTyWaN8jKkKQDIZ0 KOqkqm57TH2H3eDJAkSnh6/DNFu0Qg== -----END CERTIFICATE----- )
   --sslPrivateKey: string # Private key of the SSL certificate. (e.g. -----BEGIN PRIVATE KEY----- MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDZcNCZiNNHfX2O dZpf12mv2rAZwqGZBAdpox0wntEPK3JciQ7ZRloLJeHuCNIJs9MidnH7Xk8zveju mab6HmfIzvMJAAm88OYWMFQRiYe1ggJEHMe7yYPQbtXwTqWDYdWmjPPma3Ujqqmb hmVX2rsYILD7cUjS+e0Ucfqx3QODQj/aujTt1rS0gFhJ0soY5m+C6VimPCx4Bjyw 5rhtskJDRrfXxrIhVXOvSPFRyxDSfjt3win8vjhhZ3oFPWgrl9lVhn0zaB5hjDsd -----END PRIVATE KEY----- )
-  --validate-root-ca: string@bool-completer # Defines whether to check the SSL certificate for a signature from a trusted certificate authority.  Possible values:  - **true** - SSL certificate must be verified to be signed by a trusted certificate authority. - **false** - SSL certificate will not be verified to be signed by a trusted certificate authority. (e.g. true)
-  --automated: string@bool-completer # Must be **true** to issue certificate automatically. (e.g. true)
+  --validate-root-ca: oneof<nothing, bool> # Defines whether to check the SSL certificate for a signature from a trusted certificate authority.  Possible values:  - **true** - SSL certificate must be verified to be signed by a trusted certificate authority. - **false** - SSL certificate will not be verified to be signed by a trusted certificate authority. (e.g. true)
+  --automated: oneof<nothing, bool> # Must be **true** to issue certificate automatically. (e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1985,7 +1984,7 @@ export def "cdn-ssl-data change-ssl-certificate" [
   name: string # SSL certificate name.  It must be unique. (e.g. New certificate)
   sslCertificate: string # Public part of the SSL certificate.  All chain of the SSL certificate should be added. (e.g. -----BEGIN CERTIFICATE----- MIIFWzCCBEOgAwIBAgISBK6qoNitg//89H/YJamujpWlMA0GCSqGSIb3DQEBCwUA MEoxCzAJBgNVBAYTAlVTMRYwFAYDVQQKEw1MZXQncyBFbmNyeXB0MSMwIQYDVQQD ExpMZXQncyBFbmNyeXB0IEF1dGhvcml0eSBYMzAeFw0xODExMTMxMjQwMDJaFw0x OTAyMTExMjQwMDJaMBwxGjAYBgNVBAMTEWNkbjIudG50LWNsdWIuY29tMIIBIjAN BgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzaHExDEXNSf6ELS0WUR7qq8gs9cc xx99sM2zs3Jld0twPmuldkVNe5xte/Hj03r4SesfOBczR7pn+t60YujPvUQDN8lx WYpvRuetOneyf4gNPatwzR/W1GWGlahet1xPVYGrttqL4gCJeShIXvU4aCyzW941 Pt0wCs+bg9u+59fXFkigWrWJPkwbR7bJ14XTStYynMbYLfCg+VPeGWj3d8wOhQcf AD86o8TLTbVfK2BDXwS5S8Dgf5u8g+WvmVHYDIkYKCxcLj0jP61Y7uHoFbSg41oN A9yPOa+0cYxA7U702V2WjxbfIeATYtNLZvH17lk+DYlQl8q3MLwguqZdgwIDAQAB iIqI2xquGONtHFDOKJvy1O2qYTVRtNRVZqhc1ol+mw== -----END CERTIFICATE----- -----BEGIN CERTIFICATE----- MIIEkjCCA3qgAwIBAgIQCgFBQgAAAVOFc2oLheynCDANBgkqhkiG9w0BAQsFADA/ MSQwIgYDVQQKExtEaWdpdGFsIFNpZ25hdHVyZSBUcnVzdCBDby4xFzAVBgNVBAMT DkRTVCBSb290IENBIFgzMB4XDTE2MDMxNzE2NDA0NloXDTIxMDMxNzE2NDA0Nlow SjELMAkGA1UEBhMCVVMxFjAUBgNVBAoTDUxldCdzIEVuY3J5cHQxIzAhBgNVBAMT GkxldCdzIEVuY3J5cHQgQXV0aG9yaXR5IFgzMIIBIjANBgkqhkiG9w0BAQEFAAOC AQ8AMIIBCgKCAQEAnNMM8FrlLke3cl03g7NoYzDq1zUmGSXhvb418XCSL7e4S0EF q6meNQhY7LEqxGiHC6PjdeTm86dicbp5gWAf15Gan/PQeGdxyGkOlZHP/uaZ6WA8 SMx+yk13EiSdRxta67nsHjcAHJyse6cF6s5K671B5TaYucv9bTyWaN8jKkKQDIZ0 KOqkqm57TH2H3eDJAkSnh6/DNFu0Qg== -----END CERTIFICATE----- )
   sslPrivateKey: string # Private key of the SSL certificate. (e.g. -----BEGIN PRIVATE KEY----- MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDZcNCZiNNHfX2O dZpf12mv2rAZwqGZBAdpox0wntEPK3JciQ7ZRloLJeHuCNIJs9MidnH7Xk8zveju mab6HmfIzvMJAAm88OYWMFQRiYe1ggJEHMe7yYPQbtXwTqWDYdWmjPPma3Ujqqmb hmVX2rsYILD7cUjS+e0Ucfqx3QODQj/aujTt1rS0gFhJ0soY5m+C6VimPCx4Bjyw 5rhtskJDRrfXxrIhVXOvSPFRyxDSfjt3win8vjhhZ3oFPWgrl9lVhn0zaB5hjDsd -----END PRIVATE KEY----- )
-  --validate-root-ca: string@bool-completer # Defines whether to check the SSL certificate for a signature from a trusted certificate authority.  Possible values:  - **true** - SSL certificate must be verified to be signed by a trusted certificate authority. - **false** - SSL certificate will not be verified to be signed by a trusted certificate authority. (e.g. true)
+  --validate-root-ca: oneof<nothing, bool> # Defines whether to check the SSL certificate for a signature from a trusted certificate authority.  Possible values:  - **true** - SSL certificate must be verified to be signed by a trusted certificate authority. - **false** - SSL certificate will not be verified to be signed by a trusted certificate authority. (e.g. true)
 ]: any -> record<id: int, deleted: bool, cert_issuer: string, cert_subject_cn: string, cert_subject_alt: string, validity_not_before: string, validity_not_after: string, sslCertificateChain: string, hasRelatedResources: bool, name: string, automated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2032,7 +2031,7 @@ export def "cdn-ssl-certificates get-trusted-ca-certificates-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --automated: string@bool-completer # How the certificate was issued.  Possible values: - **true** – Certificate was issued automatically. - **false** – Certificate was added by a user.
+  --automated: oneof<nothing, bool> # How the certificate was issued.  Possible values: - **true** – Certificate was issued automatically. - **false** – Certificate was added by a user.
   --validity-not-after-lte: string # Date and time when the certificate become untrusted (ISO 8601/RFC 3339 format, UTC.)  Response will contain certificates valid until the specified time.
   --resource-id: int # CDN resource ID for which the certificates are requested.
   --limit: int # Maximum number of items to return in the response. Cannot exceed 1000.
@@ -2194,7 +2193,7 @@ export def "cdn-statistics-aggregate-stats aggregated-statistics" [
   --regions: string # Regions for which data is displayed.  Possible values: - **na** – North America - **eu** – Europe - **cis** – Commonwealth of Independent States - **asia** – Asia - **au** – Australia - **latam** – Latin America - **me** – Middle East - **africa** - Africa - **sa** - South America
   --countries: string # Names of countries for which data should be displayed. English short name from [ISO 3166 standard][1] without the definite article ("the") should be used.   [1]: https://www.iso.org/obp/ui/#search/code/  To request multiple values, use: - &countries=france&countries=denmark
   --resource: int # CDN resources IDs by that statistics data is grouped.  To request multiple values, use: - &resource=1&resource=2  If CDN resource ID is not specified, data related to all CDN resources is returned.
-  --flat: string@bool-completer # The way the parameters are arranged in the response.  Possible values: - **true** – Flat structure is used. - **false** – Embedded structure is used (default.)
+  --flat: oneof<nothing, bool> # The way the parameters are arranged in the response.  Possible values: - **true** – Flat structure is used. - **false** – Embedded structure is used (default.)
 ]: nothing -> record<resource: record, 1__example_: record, region: record, cis__example_: record, metrics: record, upstream_bytes: int, sent_bytes: int, total_bytes: int, backblaze_bytes: int, requests: int, responses_2xx: int, responses_3xx: int, responses_4xx: int, responses_5xx: int, responses_hit: int, responses_miss: int, response_types: record, cache_hit_traffic_ratio: int, 95_percentile: int, min_bandwidth: int, max_bandwidth: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2246,7 +2245,7 @@ export def "cdn-statistics-shield-usage-aggregated aggregated-origin-shielding-u
   --qp-to: string # End of the requested time period (ISO 8601/RFC 3339 format, UTC.)
   --group-by: string # Output data grouping.  Possible value: - **resource** - Data is grouped by CDN resources.
   --resource: int # CDN resources IDs by that statistics data is grouped.  To request multiple values, use: - &resource=1&resource=2  If CDN resource ID is not specified, data related to all CDN resources is returned.
-  --flat: string@bool-completer # The way the parameters are arranged in the response.  Possible values: - **true** – Flat structure is used. - **false** – Embedded structure is used (default.)
+  --flat: oneof<nothing, bool> # The way the parameters are arranged in the response.  Possible values: - **true** – Flat structure is used. - **false** – Embedded structure is used (default.)
 ]: nothing -> record<resource: record, 1__example_: record, metrics: record, shield_usage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2298,7 +2297,7 @@ export def "cdn-statistics-raw-logs-usage-aggregated aggregated-raw-logs-usage-s
   --qp-to: string # End of the requested time period (ISO 8601/RFC 3339 format, UTC.)
   --group-by: string # Output data grouping.  Possible value: - **resource** - Data is grouped by CDN resources.
   --resource: int # CDN resources IDs by that statistics data is grouped.  To request multiple values, use: - &resource=1&resource=2  If CDN resource ID is not specified, data related to all CDN resources is returned.
-  --flat: string@bool-completer # The way the parameters are arranged in the response.  Possible values: - **true** – Flat structure is used. - **false** – Embedded structure is used (default.)
+  --flat: oneof<nothing, bool> # The way the parameters are arranged in the response.  Possible values: - **true** – Flat structure is used. - **false** – Embedded structure is used (default.)
 ]: nothing -> record<resource: record, 1__example_: record, metrics: record, raw_logs_usage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2580,7 +2579,7 @@ export def "cdn-resources issue-lets-encrypt-certificate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   sslData: int # ID of Let's Encrypt certificate obtained [here](/docs/api-reference/cdn/ssl-certificates/add-ssl-certificate).  It can be used only with "sslEnabled": true. (e.g. 192)
-  --sslEnabled: string@bool-completer # Defines whether the HTTPS protocol is enabled for CDN resource.  Possible values: - **true** — HTTPS is enabled for the CDN resource. Certificate can be linked. - **false** — HTTPS is disabled for the CDN resource. Certificate cannot be linked. (e.g. true)
+  --sslEnabled: oneof<nothing, bool> # Defines whether the HTTPS protocol is enabled for CDN resource.  Possible values: - **true** — HTTPS is enabled for the CDN resource. Certificate can be linked. - **false** — HTTPS is disabled for the CDN resource. Certificate cannot be linked. (e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2607,7 +2606,7 @@ export def "cdn-resources revoke-lets-encrypt-certificate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --sslData: int # ID of Let's Encrypt certificate linked to the CDN resource.  It must be **null** to revoke Let's Encrypt certificate. (nullable)
-  --sslEnabled: string@bool-completer # Defines whether the HTTPS protocol is enabled for CDN resource.  Possible values: - **true** — HTTPS is enabled for the CDN resource. SSL certificate can be linked. - **false** — HTTPS is disabled for the CDN resource. SSL certificate cannot be linked.  It must be **false** to revoke the Let's Encrypt certificate. (e.g. false)
+  --sslEnabled: oneof<nothing, bool> # Defines whether the HTTPS protocol is enabled for CDN resource.  Possible values: - **true** — HTTPS is enabled for the CDN resource. SSL certificate can be linked. - **false** — HTTPS is disabled for the CDN resource. SSL certificate cannot be linked.  It must be **false** to revoke the Let's Encrypt certificate. (e.g. false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

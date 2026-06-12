@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.open5e.com" "https://api-beta.open5e.com" "http://localhost:8000"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -131,13 +130,13 @@ export def "items list" [
   --document-key--iexact: string
   --document-gamesystem--key--in: list # Multiple values may be separated by commas.
   --document-gamesystem--key--iexact: string
-  --is-weapon: string@bool-completer # Weapons
-  --is-armor: string@bool-completer # Armor
-  --is-light: string@bool-completer # Light Weapons
-  --is-versatile: string@bool-completer # Versatile Weapons
-  --is-thrown: string@bool-completer # Thrown Weapons
-  --is-finesse: string@bool-completer # Finesse Weapons
-  --is-two-handed: string@bool-completer # Two-handed Weapons
+  --is-weapon: oneof<nothing, bool> # Weapons
+  --is-armor: oneof<nothing, bool> # Armor
+  --is-light: oneof<nothing, bool> # Light Weapons
+  --is-versatile: oneof<nothing, bool> # Versatile Weapons
+  --is-thrown: oneof<nothing, bool> # Thrown Weapons
+  --is-finesse: oneof<nothing, bool> # Finesse Weapons
+  --is-two-handed: oneof<nothing, bool> # Two-handed Weapons
   --ordering: string # Which field to use when ordering the results.
   --search: string # A search term.
   --page: int # A page number within the paginated result set.
@@ -213,14 +212,14 @@ export def "magicitems list" [
   --document-gamesystem--key--iexact: string
   --rarity: string # Unique key for the Item.
   --rarity-in: list # Multiple values may be separated by commas.
-  --requires-attunement: string@bool-completer # Requires Attunement
-  --is-weapon: string@bool-completer # Weapons
-  --is-armor: string@bool-completer # Armor
-  --is-light: string@bool-completer # Light Weapons
-  --is-versatile: string@bool-completer # Versatile Weapons
-  --is-thrown: string@bool-completer # Thrown Weapons
-  --is-finesse: string@bool-completer # Finesse Weapons
-  --is-two-handed: string@bool-completer # Two-handed Weapons
+  --requires-attunement: oneof<nothing, bool> # Requires Attunement
+  --is-weapon: oneof<nothing, bool> # Weapons
+  --is-armor: oneof<nothing, bool> # Armor
+  --is-light: oneof<nothing, bool> # Light Weapons
+  --is-versatile: oneof<nothing, bool> # Versatile Weapons
+  --is-thrown: oneof<nothing, bool> # Thrown Weapons
+  --is-finesse: oneof<nothing, bool> # Finesse Weapons
+  --is-two-handed: oneof<nothing, bool> # Two-handed Weapons
   --ordering: string # Which field to use when ordering the results.
   --search: string # A search term.
   --page: int # A page number within the paginated result set.
@@ -547,11 +546,11 @@ export def "weapons list" [
   --document-gamesystem--key--iexact: string
   --damage-dice-in: list # Multiple values may be separated by commas.
   --damage-dice-iexact: string
-  --is-light: string@bool-completer # Is Light
-  --is-versatile: string@bool-completer # Is Versatile
-  --is-thrown: string@bool-completer # Is Thrown
-  --is-finesse: string@bool-completer # Is Finesse
-  --is-two-handed: string@bool-completer # Is Two-handed
+  --is-light: oneof<nothing, bool> # Is Light
+  --is-versatile: oneof<nothing, bool> # Is Versatile
+  --is-thrown: oneof<nothing, bool> # Is Thrown
+  --is-finesse: oneof<nothing, bool> # Is Finesse
+  --is-two-handed: oneof<nothing, bool> # Is Two-handed
   --ordering: string # Which field to use when ordering the results.
   --search: string # A search term.
   --page: int # A page number within the paginated result set.
@@ -611,7 +610,7 @@ export def "armor list" [
   --document-gamesystem--key--in: list # Multiple values may be separated by commas.
   --document-gamesystem--key--iexact: string
   --document-gamesystem--key: string
-  --grants-stealth-disadvantage: string@bool-completer
+  --grants-stealth-disadvantage: oneof<nothing, bool>
   --strength-score-required: int
   --strength-score-required-lt: int
   --strength-score-required-lte: int
@@ -622,7 +621,7 @@ export def "armor list" [
   --ac-base-lte: int
   --ac-base-gt: int
   --ac-base-gte: int
-  --ac-add-dexmod: string@bool-completer
+  --ac-add-dexmod: oneof<nothing, bool>
   --ac-cap-dexmod: int
   --ordering: string # Which field to use when ordering the results.
   --search: string # A search term.
@@ -852,7 +851,7 @@ export def "species list" [
   --document-gamesystem--key--in: list # Multiple values may be separated by commas.
   --document-gamesystem--key--iexact: string
   --document-gamesystem--key: string
-  --subspecies-of-isnull: string@bool-completer
+  --subspecies-of-isnull: oneof<nothing, bool>
   --subspecies-of-key--in: list # Multiple values may be separated by commas.
   --subspecies-of-key--iexact: string
   --subspecies-of-key: string
@@ -962,30 +961,30 @@ export def "creatures list" [
   --ability-score-charisma-lte: int
   --ability-score-charisma-gt: int
   --ability-score-charisma-gte: int
-  --saving-throw-strength-isnull: string@bool-completer
-  --saving-throw-dexterity-isnull: string@bool-completer
-  --saving-throw-constitution-isnull: string@bool-completer
-  --saving-throw-intelligence-isnull: string@bool-completer
-  --saving-throw-wisdom-isnull: string@bool-completer
-  --saving-throw-charisma-isnull: string@bool-completer
-  --skill-bonus-acrobatics-isnull: string@bool-completer
-  --skill-bonus-animal-handling-isnull: string@bool-completer
-  --skill-bonus-arcana-isnull: string@bool-completer
-  --skill-bonus-athletics-isnull: string@bool-completer
-  --skill-bonus-deception-isnull: string@bool-completer
-  --skill-bonus-history-isnull: string@bool-completer
-  --skill-bonus-insight-isnull: string@bool-completer
-  --skill-bonus-intimidation-isnull: string@bool-completer
-  --skill-bonus-investigation-isnull: string@bool-completer
-  --skill-bonus-medicine-isnull: string@bool-completer
-  --skill-bonus-nature-isnull: string@bool-completer
-  --skill-bonus-perception-isnull: string@bool-completer
-  --skill-bonus-performance-isnull: string@bool-completer
-  --skill-bonus-persuasion-isnull: string@bool-completer
-  --skill-bonus-religion-isnull: string@bool-completer
-  --skill-bonus-sleight-of-hand-isnull: string@bool-completer
-  --skill-bonus-stealth-isnull: string@bool-completer
-  --skill-bonus-survival-isnull: string@bool-completer
+  --saving-throw-strength-isnull: oneof<nothing, bool>
+  --saving-throw-dexterity-isnull: oneof<nothing, bool>
+  --saving-throw-constitution-isnull: oneof<nothing, bool>
+  --saving-throw-intelligence-isnull: oneof<nothing, bool>
+  --saving-throw-wisdom-isnull: oneof<nothing, bool>
+  --saving-throw-charisma-isnull: oneof<nothing, bool>
+  --skill-bonus-acrobatics-isnull: oneof<nothing, bool>
+  --skill-bonus-animal-handling-isnull: oneof<nothing, bool>
+  --skill-bonus-arcana-isnull: oneof<nothing, bool>
+  --skill-bonus-athletics-isnull: oneof<nothing, bool>
+  --skill-bonus-deception-isnull: oneof<nothing, bool>
+  --skill-bonus-history-isnull: oneof<nothing, bool>
+  --skill-bonus-insight-isnull: oneof<nothing, bool>
+  --skill-bonus-intimidation-isnull: oneof<nothing, bool>
+  --skill-bonus-investigation-isnull: oneof<nothing, bool>
+  --skill-bonus-medicine-isnull: oneof<nothing, bool>
+  --skill-bonus-nature-isnull: oneof<nothing, bool>
+  --skill-bonus-perception-isnull: oneof<nothing, bool>
+  --skill-bonus-performance-isnull: oneof<nothing, bool>
+  --skill-bonus-persuasion-isnull: oneof<nothing, bool>
+  --skill-bonus-religion-isnull: oneof<nothing, bool>
+  --skill-bonus-sleight-of-hand-isnull: oneof<nothing, bool>
+  --skill-bonus-stealth-isnull: oneof<nothing, bool>
+  --skill-bonus-survival-isnull: oneof<nothing, bool>
   --passive-perception: int
   --passive-perception-lt: int
   --passive-perception-lte: int
@@ -1230,8 +1229,8 @@ export def "languages list" [
   --document-gamesystem--key--in: list # Multiple values may be separated by commas.
   --document-gamesystem--key--iexact: string
   --document-gamesystem--key: string
-  --is-exotic: string@bool-completer
-  --is-secret: string@bool-completer
+  --is-exotic: oneof<nothing, bool>
+  --is-secret: oneof<nothing, bool>
   --ordering: string # Which field to use when ordering the results.
   --search: string # A search term.
   --page: int # A page number within the paginated result set.
@@ -1436,11 +1435,11 @@ export def "spells list" [
   --duration-in: list # Multiple values may be separated by commas.
   --duration-iexact: string
   --duration: string@duration-completer # Description of the duration of the effect such as "instantaneous" or "1 minute"  * `instantaneous` - instantaneous * `instantaneous or special` - instantaneous or special * `1 turn` - 1 turn * `1 round` - 1 round * `concentration + 1 round` - concentration + 1 round * `2 rounds` - 2 rounds * `3 rounds` - 3 rounds * `4 rounds` - 4 rounds * `1d4+2 rounds` - 1d4+2 rounds * `5 rounds` - 5 rounds * `6 rounds` - 6 rounds * `10 rounds` - 10 rounds * `up to 1 minute` - up to 1 minute * `1 minute` - 1 minute * `1 minute, or until expended` - 1 minute, or until expended * `1 minute, until expended` - 1 minute, until expended * `1 minute` - 1 minute * `5 minutes` - 5 minutes * `10 minutes` - 10 minutes * `1 minute or 1 hour` - 1 minute or 1 hour * `up to 1 hour` - up to 1 hour * `1 hour` - 1 hour * `1 hour or until triggered` - 1 hour or until triggered * `2 hours` - 2 hours * `3 hours` - 3 hours * `1d10 hours` - 1d10 hours * `6 hours` - 6 hours * `2-12 hours` - 2-12 hours * `up to 8 hours` - up to 8 hours * `8 hours` - 8 hours * `1 hour/caster level` - 1 hour/caster level * `10 hours` - 10 hours * `12 hours` - 12 hours * `24 hours or until the target attempts a third death saving throw` - 24 hours or until the target attempts a third death saving throw * `24 hours` - 24 hours * `1 day` - 1 day * `3 days` - 3 days * `5 days` - 5 days * `7 days` - 7 days * `10 days` - 10 days * `13 days` - 13 days * `30 days` - 30 days * `1 year` - 1 year * `special` - special * `until dispelled or destroyed` - until dispelled or destroyed * `until destroyed` - until destroyed * `until dispelled` - until dispelled * `until cured or dispelled` - until cured or dispelled * `until dispelled or triggered` - until dispelled or triggered * `permanent until discharged` - permanent until discharged * `permanent; one generation` - permanent; one generation * `permanent` - permanent
-  --concentration: string@bool-completer
-  --verbal: string@bool-completer
-  --somatic: string@bool-completer
-  --material: string@bool-completer
-  --material-consumed: string@bool-completer
+  --concentration: oneof<nothing, bool>
+  --verbal: oneof<nothing, bool>
+  --somatic: oneof<nothing, bool>
+  --material: oneof<nothing, bool>
+  --material-consumed: oneof<nothing, bool>
   --casting-time-in: list # Multiple values may be separated by commas.
   --casting-time-iexact: string
   --casting-time: string@casting-time-completer # Casting time key, such as 'action'  * `reaction` - Reaction * `bonus-action` - 1 Bonus Action * `action` - 1 Action * `turn` - 1 Turn * `round` - 1 Round * `1minute` - 1 Minute * `5minutes` - 5 Minutes * `10minutes` - 10 Minutes * `1hour` - 1 Hour * `4hours` - 4 Hours * `7hours` - 7 Hours * `8hours` - 8 Hours * `9hours` - 9 Hours * `12hours` - 12 Hours * `24hours` - 24 Hours * `1week` - 1 Week
@@ -1563,7 +1562,7 @@ export def "classes list" [
   --document-gamesystem--key--iexact: string
   --document-gamesystem--key: string
   --subclass-of: string # Unique key for the Item.
-  --is-subclass: string@bool-completer
+  --is-subclass: oneof<nothing, bool>
   --ordering: string # Which field to use when ordering the results.
   --search: string # A search term.
   --page: int # A page number within the paginated result set.
@@ -2059,7 +2058,7 @@ export def "weaponproperties list" [
   --name: string
   --name-icontains: string
   --type: string
-  --type-isnull: string@bool-completer
+  --type-isnull: oneof<nothing, bool>
   --document-key--in: list # Multiple values may be separated by commas.
   --document-key--iexact: string
   --document-key: string
@@ -2186,9 +2185,9 @@ export def "search list" [
   --page: int # A page number within the paginated result set.
   --limit: int # Number of results to return per page.
   --qp-query: string # The search term to find. Required parameter.
-  --strict: string@bool-completer # Strict mode: only return explicitly requested search types. When false (default), exact search always runs with fuzzy fallback if no results found.
-  --fuzzy: string@bool-completer # Include fuzzy individual word matches in name fields only. Default: false (but used as fallback in default mode).
-  --vector: string@bool-completer # Include vector search results against name + description. Finds semantically similar content using TF-IDF similarity. Default: false.
+  --strict: oneof<nothing, bool> # Strict mode: only return explicitly requested search types. When false (default), exact search always runs with fuzzy fallback if no results found.
+  --fuzzy: oneof<nothing, bool> # Include fuzzy individual word matches in name fields only. Default: false (but used as fallback in default mode).
+  --vector: oneof<nothing, bool> # Include vector search results against name + description. Finds semantically similar content using TF-IDF similarity. Default: false.
   --object-model: string # Filter results to specific content type. Default: all types.
   --document-pk: string # Filter results to specific document. Use document key/slug. Default: all documents.
   --schema: string # API schema version to search. Default: 'v2'.

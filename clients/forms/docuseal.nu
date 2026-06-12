@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.docuseal.com" "https://api.docuseal.eu"] }
 def auth-scheme-completer [] { ["x-auth-token"] }
 
@@ -109,7 +108,7 @@ export def "templates list" [
   --slug: string # Filter templates by unique slug. (e.g. opaKWh8WWTAcVG)
   --external-id: string # The unique application-specific identifier provided for the template via API or Embedded template form builder. It allows you to receive only templates with your specified external ID.
   --folder: string # Filter templates by folder name.
-  --archived: string@bool-completer # Get only archived templates instead of active ones.
+  --archived: oneof<nothing, bool> # Get only archived templates instead of active ones.
   --limit: int # The number of templates to return. Default value is 10. Maximum value is 100.
   --after: int # The unique identifier of the template to start the list from. It allows you to receive only templates with an ID greater than the specified value. Pass ID value from the `pagination.next` response to load the next batch of templates.
   --before: int # The unique identifier of the template to end the list with. It allows you to receive only templates with an ID less than the specified value.
@@ -183,7 +182,7 @@ export def "templates updateTemplate" [
   --name: string # The name of the template. (e.g. New Document Name)
   --folder-name: string # The folder's name to which the template should be moved. (e.g. New Folder)
   --roles: list # An array of submitter role names to update the template with. (e.g. [Agent, Customer])
-  --archived: string@bool-completer # Set `false` to unarchive template.
+  --archived: oneof<nothing, bool> # Set `false` to unarchive template.
 ]: any -> record<id: int, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
@@ -213,7 +212,7 @@ export def "submissions list" [
   --q: string # Filter submissions based on submitter's name, email or phone partial match.
   --slug: string # Filter submissions by unique slug. (e.g. NtLDQM7eJX2ZMd)
   --template-folder: string # Filter submissions by template folder name.
-  --archived: string@bool-completer # Returns only archived submissions when `true` and only active submissions when `false`.
+  --archived: oneof<nothing, bool> # Returns only archived submissions when `true` and only active submissions when `false`.
   --limit: int # The number of submissions to return. Default value is 10. Maximum value is 100.
   --after: int # The unique identifier of the submission to start the list from. It allows you to receive only submissions with an ID greater than the specified value. Pass ID value from the `pagination.next` response to load the next batch of submissions.
   --before: int # The unique identifier of the submission that marks the end of the list. It allows you to receive only submissions with an ID less than the specified value.
@@ -242,8 +241,8 @@ export def "submissions createSubmission" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   template_id: int # The unique identifier of the template. Document template forms can be created via the Web UI, <a href="https://www.docuseal.com/guides/use-embedded-text-field-tags-in-the-pdf-to-create-a-fillable-form" class="link">PDF and DOCX API</a>, or <a href="https://www.docuseal.com/guides/create-pdf-document-fillable-form-with-html-api" class="link">HTML API</a>. (e.g. 1000001)
-  --send-email: string@bool-completer # Set `false` to disable signature request emails sending. (default: true)
-  --send-sms: string@bool-completer # Set `true` to send signature request via phone number and SMS. (default: false)
+  --send-email: oneof<nothing, bool> # Set `false` to disable signature request emails sending. (default: true)
+  --send-sms: oneof<nothing, bool> # Set `true` to send signature request via phone number and SMS. (default: false)
   --order: string@order-completer # Pass 'random' to send signature request emails to all parties right away. The order is 'preserved' by default so the second party will receive a signature request email only after the document is signed by the first party. (default: preserved)
   --completed-redirect-url: string # Specify URL to redirect to after the submission completion.
   --bcc-completed: string # Specify BCC address to send signed documents to after the completion.
@@ -321,7 +320,7 @@ export def "submissions-documents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --merge: string@bool-completer # When `true`, merges all documents into a single PDF. (default: false, e.g. false)
+  --merge: oneof<nothing, bool> # When `true`, merges all documents into a single PDF. (default: false, e.g. false)
 ]: nothing -> record<id: int, documents: table<name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -347,7 +346,7 @@ export def "submissions-emails createSubmissionsFromEmails" [
   --allow-errors(-e) # Return full response without error handling
   template_id: int # The unique identifier of the template. (e.g. 1000001)
   emails: string # A comma-separated list of email addresses to send the submission to. (e.g. {{emails}})
-  --send-email: string@bool-completer # Set `false` to disable signature request emails sending. (default: true)
+  --send-email: oneof<nothing, bool> # Set `false` to disable signature request emails sending. (default: true)
   --message: record # Custom signature request email message. — shape: {subject?: string, body?: string}
 ]: any -> table<id: int, submission_id: int, uuid: string, email: string, slug: string, status: string, values: list<record>, metadata: record, sent_at: string, opened_at: string, completed_at: string, declined_at: string, created_at: string, updated_at: string, name: string, phone: string, external_id: string, preferences: record<send_email: bool, send_sms: bool>, role: string, embed_src: string> {
   let input = $in
@@ -377,8 +376,8 @@ export def "submissions-pdf createSubmissionFromPdf" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # Name of the document submission. (e.g. Test Submission Document)
-  --send-email: string@bool-completer # Set `false` to disable signature request emails sending. (default: true)
-  --send-sms: string@bool-completer # Set `true` to send signature request via phone number and SMS. (default: false)
+  --send-email: oneof<nothing, bool> # Set `false` to disable signature request emails sending. (default: true)
+  --send-sms: oneof<nothing, bool> # Set `true` to send signature request via phone number and SMS. (default: false)
   --order: string@order-completer # Pass 'random' to send signature request emails to all parties right away. The order is 'preserved' by default so the second party will receive a signature request email only after the document is signed by the first party. (default: preserved)
   --completed-redirect-url: string # Specify URL to redirect to after the submission completion.
   --bcc-completed: string # Specify BCC address to send signed documents to after the completion.
@@ -388,9 +387,9 @@ export def "submissions-pdf createSubmissionFromPdf" [
   documents: list # An array of PDF documents to create a submission. — item shape: {name: string, file: string, fields?: list, position?: int}
   submitters: list # The list of submitters for the submission. — item shape: {name?: string, role?: string, email?: string, phone?: string, values?: record, external_id?: string, completed?: bool, metadata?: record, send_email?: bool, send_sms?: bool, reply_to?: string, completed_redirect_url?: string, order?: int, require_phone_2fa?: bool, require_email_2fa?: bool, invite_by?: string, fields?: list, roles?: list}
   --message: record # Custom signature request email message. — shape: {subject?: string, body?: string}
-  --flatten: string@bool-completer # Remove PDF form fields from the documents. (default: false)
-  --merge-documents: string@bool-completer # Set `true` to merge the documents into a single PDF file. (default: false)
-  --remove-tags: string@bool-completer # Pass `false` to disable the removal of {{text}} tags from the PDF. This can be used along with transparent text tags for faster and more robust PDF processing. (default: true)
+  --flatten: oneof<nothing, bool> # Remove PDF form fields from the documents. (default: false)
+  --merge-documents: oneof<nothing, bool> # Set `true` to merge the documents into a single PDF file. (default: false)
+  --remove-tags: oneof<nothing, bool> # Pass `false` to disable the removal of {{text}} tags from the PDF. This can be used along with transparent text tags for faster and more robust PDF processing. (default: true)
 ]: any -> record<id: int, name: string, submitters: table<id: int, uuid: string, email: string, slug: string, sent_at: string, opened_at: string, completed_at: string, declined_at: string, created_at: string, updated_at: string, name: string, phone: string, external_id: string, status: string, values: list, role: string, metadata: record, preferences: record, embed_src: string>, source: string, submitters_order: string, status: string, schema: table<attachment_uuid: string, name: string>, fields: table<uuid: string, submitter_uuid: string, name: string, type: string, required: bool, preferences: record, areas: list>, expire_at: string, created_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
@@ -419,8 +418,8 @@ export def "submissions-docx createSubmissionFromDocx" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # Name of the document submission. (e.g. Test Submission Document)
-  --send-email: string@bool-completer # Set `false` to disable signature request emails sending. (default: true)
-  --send-sms: string@bool-completer # Set `true` to send signature request via phone number and SMS. (default: false)
+  --send-email: oneof<nothing, bool> # Set `false` to disable signature request emails sending. (default: true)
+  --send-sms: oneof<nothing, bool> # Set `true` to send signature request via phone number and SMS. (default: false)
   --body-variables: record # Dynamic content variables object. Variable values can be strings, numbers, arrays, objects, or HTML content used to generate styled text, paragraphs, and tables in DOCX. (e.g. {variable_name: value})
   --order: string@order-completer # Pass 'random' to send signature request emails to all parties right away. The order is 'preserved' by default so the second party will receive a signature request email only after the document is signed by the first party. (default: preserved)
   --completed-redirect-url: string # Specify URL to redirect to after the submission completion.
@@ -431,8 +430,8 @@ export def "submissions-docx createSubmissionFromDocx" [
   documents: list # An array of DOCX documents to create a submission. — item shape: {name: string, file: string, position?: int}
   submitters: list # The list of submitters for the submission. — item shape: {name?: string, role?: string, email?: string, phone?: string, values?: record, external_id?: string, completed?: bool, metadata?: record, send_email?: bool, send_sms?: bool, reply_to?: string, completed_redirect_url?: string, order?: int, require_phone_2fa?: bool, require_email_2fa?: bool, invite_by?: string, fields?: list, roles?: list}
   --message: record # Custom signature request email message. — shape: {subject?: string, body?: string}
-  --merge-documents: string@bool-completer # Set `true` to merge the documents into a single PDF file. (default: false)
-  --remove-tags: string@bool-completer # Pass `false` to disable the removal of {{text}} tags from the document. This can be used along with transparent text tags for faster and more robust document processing. (default: true)
+  --merge-documents: oneof<nothing, bool> # Set `true` to merge the documents into a single PDF file. (default: false)
+  --remove-tags: oneof<nothing, bool> # Pass `false` to disable the removal of {{text}} tags from the document. This can be used along with transparent text tags for faster and more robust document processing. (default: true)
 ]: any -> record<id: int, name: string, submitters: table<id: int, uuid: string, email: string, slug: string, sent_at: string, opened_at: string, completed_at: string, declined_at: string, created_at: string, updated_at: string, name: string, phone: string, external_id: string, status: string, values: list, role: string, metadata: record, preferences: record, embed_src: string>, source: string, submitters_order: string, status: string, schema: table<attachment_uuid: string, name: string>, fields: table<uuid: string, submitter_uuid: string, name: string, type: string, required: bool, preferences: record, areas: list>, expire_at: string, created_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
@@ -461,8 +460,8 @@ export def "submissions-html createSubmissionFromHtml" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # Name of the document submission. (e.g. Test Submission Document)
-  --send-email: string@bool-completer # Set `false` to disable signature request emails sending. (default: true)
-  --send-sms: string@bool-completer # Set `true` to send signature request via phone number and SMS. (default: false)
+  --send-email: oneof<nothing, bool> # Set `false` to disable signature request emails sending. (default: true)
+  --send-sms: oneof<nothing, bool> # Set `true` to send signature request via phone number and SMS. (default: false)
   --order: string@order-completer # Pass 'random' to send signature request emails to all parties right away. The order is 'preserved' by default so the second party will receive a signature request email only after the document is signed by the first party. (default: preserved)
   --completed-redirect-url: string # Specify URL to redirect to after the submission completion.
   --bcc-completed: string # Specify BCC address to send signed documents to after the completion.
@@ -472,7 +471,7 @@ export def "submissions-html createSubmissionFromHtml" [
   documents: list # The list of documents built from HTML. Can be used to create a submission with multiple documents. — item shape: {name?: string, html: string, html_header?: string, html_footer?: string, size?: "Letter"|"Legal"|"Tabloid"|"Ledger"|"A0"|"A1"|"A2"|"A3"|"A4"|"A5"|"A6", position?: int}
   submitters: list # The list of submitters for the submission. — item shape: {name?: string, role?: string, email?: string, phone?: string, values?: record, external_id?: string, completed?: bool, metadata?: record, send_email?: bool, send_sms?: bool, reply_to?: string, completed_redirect_url?: string, order?: int, require_phone_2fa?: bool, require_email_2fa?: bool, invite_by?: string, fields?: list, roles?: list}
   --message: record # Custom signature request email message. — shape: {subject?: string, body?: string}
-  --merge-documents: string@bool-completer # Set `true` to merge the documents into a single PDF file. (default: false)
+  --merge-documents: oneof<nothing, bool> # Set `true` to merge the documents into a single PDF file. (default: false)
 ]: any -> record<id: int, name: string, submitters: table<id: int, uuid: string, email: string, slug: string, sent_at: string, opened_at: string, completed_at: string, declined_at: string, created_at: string, updated_at: string, name: string, phone: string, external_id: string, status: string, values: list, role: string, metadata: record, preferences: record, embed_src: string>, source: string, submitters_order: string, status: string, schema: table<attachment_uuid: string, name: string>, fields: table<uuid: string, submitter_uuid: string, name: string, type: string, required: bool, preferences: record, areas: list>, expire_at: string, created_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
@@ -527,14 +526,14 @@ export def "submitters updateSubmitter" [
   --phone: string # The phone number of the submitter, formatted according to the E.164 standard. (e.g. +1234567890)
   --values: record # An object with pre-filled values for the submission. Use field names for keys of the object. For more configurations see `fields` param.
   --external-id: string # Your application-specific unique string key to identify this submitter within your app.
-  --send-email: string@bool-completer # Set `true` to re-send signature request emails.
-  --send-sms: string@bool-completer # Set `true` to re-send signature request via phone number SMS. (default: false)
+  --send-email: oneof<nothing, bool> # Set `true` to re-send signature request emails.
+  --send-sms: oneof<nothing, bool> # Set `true` to re-send signature request via phone number SMS. (default: false)
   --reply-to: string # Specify Reply-To address to use in the notification emails.
-  --completed: string@bool-completer # Pass `true` to mark submitter as completed and auto-signed via API.
+  --completed: oneof<nothing, bool> # Pass `true` to mark submitter as completed and auto-signed via API.
   --metadata: record # Metadata object with additional submitter information. (e.g. { "customField": "value" })
   --completed-redirect-url: string # Submitter specific URL to redirect to after the submission completion.
-  --require-phone-2fa: string@bool-completer # Set to `true` to require phone 2FA verification via a one-time code sent to the phone number in order to access the documents. (default: false)
-  --require-email-2fa: string@bool-completer # Set to `true` to require email 2FA verification via a one-time code sent to the email address in order to access the documents. (default: false)
+  --require-phone-2fa: oneof<nothing, bool> # Set to `true` to require phone 2FA verification via a one-time code sent to the phone number in order to access the documents. (default: false)
+  --require-email-2fa: oneof<nothing, bool> # Set to `true` to require email 2FA verification via a one-time code sent to the email address in order to access the documents. (default: false)
   --message: record # Custom signature request email message. — shape: {subject?: string, body?: string}
   --body-fields: list # A list of configurations for template document form fields. — item shape: {name: string, default_value?: any, readonly?: bool, required?: bool, validation?: record, preferences?: record}
 ]: any -> record<id: int, submission_id: int, uuid: string, email: string, slug: string, sent_at: string, opened_at: string, completed_at: string, declined_at: string, created_at: string, updated_at: string, name: string, phone: string, status: string, external_id: string, metadata: record, preferences: record, values: table<field: string, value: any>, documents: table<name: string, url: string>, role: string, embed_src: string> {
@@ -595,7 +594,7 @@ export def "templates-documents addDocumentToTemplate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --documents: list # The list of documents to add or replace in the template. — item shape: {name?: string, file?: string, html?: string, position?: int, replace?: bool, remove?: bool}
-  --merge: string@bool-completer # Set to `true` to merge all existing and new documents into a single PDF document in the template. (default: false)
+  --merge: oneof<nothing, bool> # Set to `true` to merge all existing and new documents into a single PDF document in the template. (default: false)
 ]: any -> record<id: int, slug: string, name: string, preferences: record, schema: table<attachment_uuid: string, name: string>, fields: table<uuid: string, submitter_uuid: string, name: string, type: string, required: bool, preferences: record, areas: list>, submitters: table<name: string, uuid: string>, author_id: int, archived_at: string, created_at: string, updated_at: string, source: string, external_id: string, folder_id: int, folder_name: string, shared_link: bool, author: record<id: int, first_name: string, last_name: string, email: string>, documents: table<id: int, uuid: string, url: string, preview_image_url: string, filename: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
@@ -656,7 +655,7 @@ export def "templates-html createTemplateFromHtml" [
   --size: string@size-completer # Page size. Letter 8.5 x 11 will be assigned when not specified. (default: Letter, e.g. A4)
   --external-id: string # Your application-specific unique string key to identify this template within your app. Existing template with specified `external_id` will be updated with a new HTML. (e.g. 714d974e-83d8-11ee-b962-0242ac120002)
   --folder-name: string # The folder's name in which the template should be created.
-  --shared-link: string@bool-completer # Set to `true` to make the template available via a shared link. This will allow anyone with the link to create a submission from this template. (default: true)
+  --shared-link: oneof<nothing, bool> # Set to `true` to make the template available via a shared link. This will allow anyone with the link to create a submission from this template. (default: true)
   --documents: list # The list of documents built from HTML. Can be used to create a template with multiple documents. Leave `documents` param empty when using a top-level `html` param for a template with a single document. — item shape: {html: string, name?: string}
 ]: any -> record<id: int, slug: string, name: string, preferences: record, schema: table<attachment_uuid: string, name: string>, fields: table<uuid: string, submitter_uuid: string, name: string, type: string, required: bool, preferences: record, areas: list>, submitters: table<name: string, uuid: string>, author_id: int, archived_at: string, created_at: string, updated_at: string, source: string, external_id: string, folder_id: int, folder_name: string, shared_link: bool, author: record<id: int, first_name: string, last_name: string, email: string>, documents: table<id: int, uuid: string, url: string, preview_image_url: string, filename: string>> {
   let input = $in
@@ -686,7 +685,7 @@ export def "templates-docx createTemplateFromDocx" [
   --name: string # Name of the template. (e.g. Test DOCX)
   --external-id: string # Your application-specific unique string key to identify this template within your app. Existing template with specified `external_id` will be updated with a new document. (e.g. unique-key)
   --folder-name: string # The folder's name in which the template should be created.
-  --shared-link: string@bool-completer # Set to `true` to make the template available via a shared link. This will allow anyone with the link to create a submission from this template. (default: true)
+  --shared-link: oneof<nothing, bool> # Set to `true` to make the template available via a shared link. This will allow anyone with the link to create a submission from this template. (default: true)
   documents: list # An array of DOCX documents to create a template. — item shape: {name: string, file: string, dynamic?: bool, fields?: list}
 ]: any -> record<id: int, slug: string, name: string, preferences: record, schema: table<attachment_uuid: string, name: string>, fields: table<uuid: string, submitter_uuid: string, name: string, type: string, required: bool, preferences: record, areas: list>, submitters: table<name: string, uuid: string>, author_id: int, archived_at: string, created_at: string, updated_at: string, source: string, external_id: string, folder_id: int, folder_name: string, shared_link: bool, author: record<id: int, first_name: string, last_name: string, email: string>, documents: table<id: int, uuid: string, url: string, preview_image_url: string, filename: string>> {
   let input = $in
@@ -716,10 +715,10 @@ export def "templates-pdf createTemplateFromPdf" [
   --name: string # Name of the template. (e.g. Test PDF)
   --folder-name: string # The folder's name in which the template should be created.
   --external-id: string # Your application-specific unique string key to identify this template within your app. Existing template with specified `external_id` will be updated with a new PDF. (e.g. unique-key)
-  --shared-link: string@bool-completer # Set to `true` to make the template available via a shared link. This will allow anyone with the link to create a submission from this template. (default: true)
+  --shared-link: oneof<nothing, bool> # Set to `true` to make the template available via a shared link. This will allow anyone with the link to create a submission from this template. (default: true)
   documents: list # An array of PDF documents to create a template. — item shape: {name: string, file: string, fields?: list}
-  --flatten: string@bool-completer # Remove PDF form fields from the documents. (default: false)
-  --remove-tags: string@bool-completer # Pass `false` to disable the removal of {{text}} tags from the PDF. This can be used along with transparent text tags for faster and more robust PDF processing. (default: true)
+  --flatten: oneof<nothing, bool> # Remove PDF form fields from the documents. (default: false)
+  --remove-tags: oneof<nothing, bool> # Pass `false` to disable the removal of {{text}} tags from the PDF. This can be used along with transparent text tags for faster and more robust PDF processing. (default: true)
 ]: any -> record<id: int, slug: string, name: string, preferences: record, schema: table<attachment_uuid: string, name: string>, fields: table<uuid: string, submitter_uuid: string, name: string, type: string, required: bool, preferences: record, areas: list>, submitters: table<name: string, uuid: string>, author_id: int, archived_at: string, created_at: string, updated_at: string, source: string, external_id: string, folder_id: int, folder_name: string, shared_link: bool, author: record<id: int, first_name: string, last_name: string, email: string>, documents: table<id: int, uuid: string, url: string, preview_image_url: string, filename: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
@@ -748,7 +747,7 @@ export def "templates-merge mergeTemplate" [
   --name: string # Template name. Existing name with (Merged) suffix will be used if not specified. (e.g. Merged Template)
   --folder-name: string # The name of the folder in which the merged template should be placed.
   --external-id: string # Your application-specific unique string key to identify this template within your app.
-  --shared-link: string@bool-completer # Set to `true` to make the template available via a shared link. This will allow anyone with the link to create a submission from this template. (default: true)
+  --shared-link: oneof<nothing, bool> # Set to `true` to make the template available via a shared link. This will allow anyone with the link to create a submission from this template. (default: true)
   --roles: list # An array of submitter role names to be used in the merged template. (e.g. [Agent, Customer])
 ]: any -> record<id: int, slug: string, name: string, preferences: record, schema: table<attachment_uuid: string, name: string>, fields: table<uuid: string, submitter_uuid: string, name: string, type: string, required: bool, preferences: record, areas: list>, submitters: table<name: string, uuid: string>, author_id: int, archived_at: string, created_at: string, updated_at: string, source: string, external_id: string, folder_id: int, folder_name: string, shared_link: bool, author: record<id: int, first_name: string, last_name: string, email: string>, documents: table<id: int, uuid: string, url: string, preview_image_url: string, filename: string>> {
   let input = $in

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.knock.app"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -193,7 +192,7 @@ export def "users-guides-messages-interacted markUserGuideAsInteracted-2" [
   guide_id: string # The unique identifier for the guide. (format: uuid)
   guide_key: string # The key of the guide.
   guide_step_ref: string # The step reference of the guide.
-  --is-final: string@bool-completer # Whether the guide is final.
+  --is-final: oneof<nothing, bool> # Whether the guide is final.
   --metadata: record # The metadata of the guide.
   --tenant: string # The tenant ID of the guide. (nullable)
 ]: any -> record<status: string> {
@@ -310,7 +309,7 @@ export def "users-guides-messages-archived markUserGuideAsUnarchived" [
   guide_id: string # The unique identifier for the guide. (format: uuid)
   guide_key: string # The key of the guide.
   guide_step_ref: string # The step reference of the guide.
-  --is-final: string@bool-completer # Whether the guide is final.
+  --is-final: oneof<nothing, bool> # Whether the guide is final.
   --metadata: record # The metadata of the guide.
   --tenant: string # The tenant ID of the guide. (nullable)
 ]: any -> record<status: string> {
@@ -344,7 +343,7 @@ export def "users-guides-messages-archived markUserGuideAsArchived-2" [
   guide_id: string # The unique identifier for the guide. (format: uuid)
   guide_key: string # The key of the guide.
   guide_step_ref: string # The step reference of the guide.
-  --is-final: string@bool-completer # Whether the guide is final.
+  --is-final: oneof<nothing, bool> # Whether the guide is final.
   --metadata: record # The metadata of the guide.
   --tenant: string # The tenant ID of the guide. (nullable)
 ]: any -> record<status: string> {
@@ -889,7 +888,7 @@ export def "users-guides-engagements-reset resetUserGuideEngagement" [
   guide_id: string # The unique identifier for the guide. (format: uuid)
   guide_key: string # The key of the guide.
   guide_step_ref: string # The step reference of the guide.
-  --is-final: string@bool-completer # Whether the guide is final.
+  --is-final: oneof<nothing, bool> # Whether the guide is final.
   --metadata: record # The metadata of the guide.
   --tenant: string # The tenant ID of the guide. (nullable)
 ]: any -> record<status: string> {
@@ -1119,7 +1118,7 @@ export def "users-feeds listUserInAppFeedItems" [
   --status: string@status-completer # The status of the feed items. (e.g. unread)
   --qp-source: string # The workflow key associated with the message in the feed. (e.g. my_source)
   --tenant: string # The tenant associated with the feed items. (e.g. my_tenant)
-  --has-tenant: string@bool-completer # Whether the feed items have a tenant. (e.g. true)
+  --has-tenant: oneof<nothing, bool> # Whether the feed items have a tenant. (e.g. true)
   --workflow-categories: list # The workflow categories of the feed items. (e.g. [my_workflow_category])
   --archived: string@archived-completer # The archived status of the feed items. (e.g. exclude)
   --trigger-data: string # The trigger data of the feed items (as a JSON string). (e.g. { "key": "value" })
@@ -1636,7 +1635,7 @@ export def "audiences-members addAudienceMembers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --create-audience: string@bool-completer # Create the audience if it does not exist.
+  --create-audience: oneof<nothing, bool> # Create the audience if it does not exist.
   members: list # A list of audience members to add. You can add up to 1,000 members per request. — item shape: {tenant?: string, user: any}
 ]: any -> any {
   let input = $in
@@ -1747,7 +1746,7 @@ export def "users-guides-messages-archived markUserGuideAsArchived" [
   guide_id: string # The unique identifier for the guide. (format: uuid)
   guide_key: string # The key of the guide.
   guide_step_ref: string # The step reference of the guide.
-  --is-final: string@bool-completer # Whether the guide is final.
+  --is-final: oneof<nothing, bool> # Whether the guide is final.
   --metadata: record # The metadata of the guide.
   --tenant: string # The tenant ID of the guide. (nullable)
 ]: any -> record<status: string> {
@@ -1946,7 +1945,7 @@ export def "tenants get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --resolve-full-preference-settings: string@bool-completer # When true, merges environment-level default preferences into the tenant's `settings.preference_set` field before returning the response. Defaults to false.
+  --resolve-full-preference-settings: oneof<nothing, bool> # When true, merges environment-level default preferences into the tenant's `settings.preference_set` field before returning the response. Defaults to false.
 ]: nothing -> record<__typename: string, id: string, name: string, settings: record<branding: record<icon_url: string, logo_url: string, primary_color: string, primary_color_contrast: string>, preference_set: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1971,7 +1970,7 @@ export def "tenants setTenant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --resolve-full-preference-settings: string@bool-completer # When true, merges environment-level default preferences into the tenant's `settings.preference_set` field before returning the response. Defaults to false.
+  --resolve-full-preference-settings: oneof<nothing, bool> # When true, merges environment-level default preferences into the tenant's `settings.preference_set` field before returning the response. Defaults to false.
   --channel-data: any # The channel data for the tenant.
   --name: string # An optional name for the tenant. (nullable)
   --settings: record # The settings for the tenant. Includes branding and preference set. — shape: {branding?: record, preference_set?: any}
@@ -2007,7 +2006,7 @@ export def "users-guides-messages-seen markUserGuideAsSeen-2" [
   guide_id: string # The unique identifier for the guide. (format: uuid)
   guide_key: string # The key of the guide.
   guide_step_ref: string # The step reference of the guide.
-  --is-final: string@bool-completer # Whether the guide is final.
+  --is-final: oneof<nothing, bool> # Whether the guide is final.
   --metadata: record # The metadata of the guide.
   --tenant: string # The tenant ID of the guide. (nullable)
 ]: any -> record<status: string> {
@@ -2486,7 +2485,7 @@ export def "objects-preferences updateObjectPreferenceSet" [
   --categories: any # An object where the key is the category and the values are the preference settings for that category.
   --channel-types: any # An object where the key is the channel type and the values are the preference settings for that channel type.
   --channels: any # An object where the key is the channel ID and the values are the preference settings for that channel ID.
-  --commercial-subscribed: string@bool-completer # Whether the recipient is subscribed to commercial communications. When false, the recipient will not receive commercial workflow notifications. (nullable)
+  --commercial-subscribed: oneof<nothing, bool> # Whether the recipient is subscribed to commercial communications. When false, the recipient will not receive commercial workflow notifications. (nullable)
   --workflows: any # An object where the key is the workflow key and the values are the preference settings for that workflow.
 ]: any -> record<categories: any, channel_types: any, channels: any, commercial_subscribed: bool, id: string, workflows: any> {
   let input = $in
@@ -2520,7 +2519,7 @@ export def "users-guides-messages-seen markUserGuideAsSeen" [
   guide_id: string # The unique identifier for the guide. (format: uuid)
   guide_key: string # The key of the guide.
   guide_step_ref: string # The step reference of the guide.
-  --is-final: string@bool-completer # Whether the guide is final.
+  --is-final: oneof<nothing, bool> # Whether the guide is final.
   --metadata: record # The metadata of the guide.
   --tenant: string # The tenant ID of the guide. (nullable)
 ]: any -> record<status: string> {
@@ -2788,7 +2787,7 @@ export def "providers-slack-channels listChannelsForSlackProvider" [
   --access-token-object: string # A JSON encoded string containing the access token object reference. (e.g. {"collection":"projects","object_id":"project_123"})
   --query-optionscursor: string # Paginate through collections of data by setting the cursor parameter to a next_cursor attribute returned by a previous request's response_metadata. Default value fetches the first "page" of the collection.
   --query-optionslimit: int # The maximum number of channels to return. Defaults to 200.
-  --query-optionsexclude-archived: string@bool-completer # Set to true to exclude archived channels from the list. Defaults to `true` when not explicitly provided.
+  --query-optionsexclude-archived: oneof<nothing, bool> # Set to true to exclude archived channels from the list. Defaults to `true` when not explicitly provided.
   --query-optionstypes: string # Mix and match channel types by providing a comma-separated list of any combination of public_channel, private_channel, mpim, im. Defaults to `"public_channel,private_channel"`. If the user's Slack ID is unavailable, this option is ignored and only public channels are returned.
   --query-optionsteam-id: string # Encoded team ID (T1234) to list channels in, required if org token is used.
 ]: nothing -> record<next_cursor: string, slack_channels: table<context_team_id: string, id: string, is_im: bool, is_private: bool, name: string>> {
@@ -2819,7 +2818,7 @@ export def "workflow-recipient-runs listWorkflowRecipientRuns" [
   --workflow: string # Limits the results to workflow recipient runs for the given workflow key.
   --status: list # Limits the results to workflow recipient runs with the given status.
   --tenant: string # Limits the results to workflow recipient runs for the given tenant.
-  --has-errors: string@bool-completer # Limits the results to workflow recipient runs that have errors.
+  --has-errors: oneof<nothing, bool> # Limits the results to workflow recipient runs that have errors.
   --recipient: string # Limits the results to workflow recipient runs for the given recipient. Accepts a user ID string or an object reference with `id` and `collection`. (e.g. user_123)
   --starting-at: string # Limits the results to workflow recipient runs started after the given date. (format: date-time, e.g. 2025-01-01T00:00:00Z)
   --ending-at: string # Limits the results to workflow recipient runs started before the given date. (format: date-time, e.g. 2025-01-01T00:00:00Z)
@@ -2979,7 +2978,7 @@ export def "users-guides-messages-interacted markUserGuideAsInteracted" [
   guide_id: string # The unique identifier for the guide. (format: uuid)
   guide_key: string # The key of the guide.
   guide_step_ref: string # The step reference of the guide.
-  --is-final: string@bool-completer # Whether the guide is final.
+  --is-final: oneof<nothing, bool> # Whether the guide is final.
   --metadata: record # The metadata of the guide.
   --tenant: string # The tenant ID of the guide. (nullable)
 ]: any -> record<status: string> {
@@ -3033,7 +3032,7 @@ export def "channels-messages-bulk bulkUpdateMessagesForChannel" [
   --archived: string@archived-completer # Limits the results to messages with the given archived status.
   --delivery-status: string@delivery-status-completer # Limits the results to messages with the given delivery status.
   --engagement-status: string@engagement-status-completer # Limits the results to messages with the given engagement status.
-  --has-tenant: string@bool-completer # Limits the results to messages that have a tenant or not.
+  --has-tenant: oneof<nothing, bool> # Limits the results to messages that have a tenant or not.
   --newer-than: string # Limits the results to messages inserted after the given date. (format: date-time)
   --older-than: string # Limits the results to messages inserted before the given date. (format: date-time)
   --recipient-ids: list # Limits the results to messages with the given recipient IDs.
@@ -3184,7 +3183,7 @@ export def "users-preferences updateUserPreferenceSet" [
   --categories: any # An object where the key is the category and the values are the preference settings for that category.
   --channel-types: any # An object where the key is the channel type and the values are the preference settings for that channel type.
   --channels: any # An object where the key is the channel ID and the values are the preference settings for that channel ID.
-  --commercial-subscribed: string@bool-completer # Whether the recipient is subscribed to commercial communications. When false, the recipient will not receive commercial workflow notifications. (nullable)
+  --commercial-subscribed: oneof<nothing, bool> # Whether the recipient is subscribed to commercial communications. When false, the recipient will not receive commercial workflow notifications. (nullable)
   --workflows: any # An object where the key is the workflow key and the values are the preference settings for that workflow.
 ]: any -> record<categories: any, channel_types: any, channels: any, commercial_subscribed: bool, id: string, workflows: any> {
   let input = $in

@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://vtex.local" "https://{accountName}.{environment}.com.br" "http://example.com/.exampleParameterValue.com.br/api/rnb" "https://rnb.vtexcommercestable.com.br/api/pricing/pvt" "https://rnb.exampleParameterValue.com.br/api/pricing/pvt" "http://example.com/.vtexcommercestable.com.br/api/rnb" "http://example.com/.{environment}.com.br/api/rnb" "https://rnb.{environment}.com.br/api/pricing/pvt"] }
 def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 
@@ -112,7 +111,7 @@ export def "rnb-pub-notifications Usagenotification" [
   itemsCount: int # format: int32
   orderId: string
   profileId: string
-  --used: string@bool-completer
+  --used: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
@@ -316,55 +315,55 @@ export def "rnb-pvt-calculatorconfiguration CreateOrUpdateCalculatorConfiguratio
   --Content-Type: string # Type of the content being sent.
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
   --absoluteShippingDiscountValue: float # Maximum shipping value. (e.g. 0)
-  --accumulateWithManualPrice: string@bool-completer # Allows the promotion to apply to products whose prices have been manually added by a call-center operator. (e.g. false)
-  --activateGiftsMultiplier: string@bool-completer # If set as `true`, it activates gifts Multiplier. (e.g. false)
+  --accumulateWithManualPrice: oneof<nothing, bool> # Allows the promotion to apply to products whose prices have been manually added by a call-center operator. (e.g. false)
+  --activateGiftsMultiplier: oneof<nothing, bool> # If set as `true`, it activates gifts Multiplier. (e.g. false)
   --activeDaysOfWeek: list # Defines which days of the week the Promotion or Tax will applied.
   --affiliates: list # Marketplace order identifier. The discount will apply to selected affiliates. — item shape: {id?: string, name?: string}
-  --applyToAllShippings: string@bool-completer # Promotion or Tax will be applied to all kind of shipping. (e.g. false)
-  --areSalesChannelIdsExclusive: string@bool-completer # If set to `false`, this Promotion or Tax will be applied to any trade policies present on the `idsSalesChannel` field. If set to `true`, trade policies present on that field will make this Promotion or Tax not to be applied. (e.g. false)
+  --applyToAllShippings: oneof<nothing, bool> # Promotion or Tax will be applied to all kind of shipping. (e.g. false)
+  --areSalesChannelIdsExclusive: oneof<nothing, bool> # If set to `false`, this Promotion or Tax will be applied to any trade policies present on the `idsSalesChannel` field. If set to `true`, trade policies present on that field will make this Promotion or Tax not to be applied. (e.g. false)
   --beginDateUtc: string # Promotion or Tax Begin Date (UTC). (e.g. 2020-05-01T18:47:15.89Z)
   --brands: list # Object composed by the brands that will activate or deactivate the Promotion or Tax. — item shape: {id?: string, name?: string}
-  --brandsAreInclusive: string@bool-completer # If set to `true`, this Promotion or Tax will be applied to any brand present on the `brands` field. If set to `false`, brands present on that field will make this Promotion or Tax not to be applied. (e.g. true)
+  --brandsAreInclusive: oneof<nothing, bool> # If set to `true`, this Promotion or Tax will be applied to any brand present on the `brands` field. If set to `false`, brands present on that field will make this Promotion or Tax not to be applied. (e.g. true)
   --campaigns: list # Campaign Audiences that activate this Promotion or Tax. (e.g. [Campaign Audience test])
   --cardIssuers: list # DEPRECATED
   --categories: list # Object composed by the categories that will activate or deactivate the Promotion or Tax. — item shape: {id?: string, name?: string}
-  --categoriesAreInclusive: string@bool-completer # If set to `true`, this Promotion or Tax will be applied to any category present on the `categories` field. If set to `false`, categories present on that field will make this Promotion or Tax not to be applied. (e.g. true)
+  --categoriesAreInclusive: oneof<nothing, bool> # If set to `true`, this Promotion or Tax will be applied to any category present on the `categories` field. If set to `false`, categories present on that field will make this Promotion or Tax not to be applied. (e.g. true)
   --clusterExpressions: list # An expression to use with clusters.
   --collections: list # Object composed by the collections that will activate or deactivate the Promotion or Tax. — item shape: {id?: string, name?: string}
   --collections1BuyTogether: list # Collections that will generate the Promotion, type **Buy Together**, **More for less**, **Progressive Discount**, **Buy One Get One**.
   --collections2BuyTogether: list # DEPRECATED
-  --collectionsIsInclusive: string@bool-completer # If set to `true`, this Promotion or Tax will be applied to any collection present on the `collections` field. If set to `false`, collections present on that field will make this Promotion or Tax not to be applied. (e.g. false)
-  --compareListPriceAndPrice: string@bool-completer # If the **List Price** and **Price** are the same. (e.g. false)
+  --collectionsIsInclusive: oneof<nothing, bool> # If set to `true`, this Promotion or Tax will be applied to any collection present on the `collections` field. If set to `false`, collections present on that field will make this Promotion or Tax not to be applied. (e.g. false)
+  --compareListPriceAndPrice: oneof<nothing, bool> # If the **List Price** and **Price** are the same. (e.g. false)
   --conditionsIds: list # Array with conditions IDs.
   --coupon: list # DEPRECATED
-  --cumulative: string@bool-completer # Defines if a Promotion or Tax can accumulate with another one. (`true`) or not (`false`). (e.g. false)
+  --cumulative: oneof<nothing, bool> # Defines if a Promotion or Tax can accumulate with another one. (`true`) or not (`false`). (e.g. false)
   --daysAgoOfPurchases: int # Number of days that are considered to add the purchase history. (e.g. 0)
   --description: string # Internal description of the Promotion or Tax. (e.g. Description of the promotion.)
-  --disableDeal: string@bool-completer # DEPRECATED
+  --disableDeal: oneof<nothing, bool> # DEPRECATED
   --discountType: string # The type of discount that will apply to the promotion. (e.g. percentual)
-  --enableBuyTogetherPerSku: string@bool-completer # Enable **Buy Together** per SKU. (e.g. false)
+  --enableBuyTogetherPerSku: oneof<nothing, bool> # Enable **Buy Together** per SKU. (e.g. false)
   --endDateUtc: string # Promotion or Tax End Date (UTC). (e.g. 2020-05-01T18:47:15.89Z)
-  --firstBuyIsProfileOptimistic: string@bool-completer # Applies the discount even if the user is not logged. (e.g. false)
+  --firstBuyIsProfileOptimistic: oneof<nothing, bool> # Applies the discount even if the user is not logged. (e.g. false)
   --giftListTypes: list # Gifts List Type.
   --idCalculatorConfiguration: string # Promotion ID or Tax ID. (e.g. ba087fa9-8587-44b3-8ef1-ade8d053e9e9)
   --idSeller: string # Seller Name. (e.g. 1)
-  --idSellerIsInclusive: string@bool-completer # If set to `true`, this Promotion or Tax will be applied to any seller present on the `idSeller` field. If set to `false`, sellers present on that field will make this Promotion or Tax not to be applied. (e.g. false)
+  --idSellerIsInclusive: oneof<nothing, bool> # If set to `true`, this Promotion or Tax will be applied to any seller present on the `idSeller` field. If set to `false`, sellers present on that field will make this Promotion or Tax not to be applied. (e.g. false)
   --idsSalesChannel: list # List of Trade Policies that activate this Promotion or Tax.
   --installment: int # DEPRECATED
-  --isActive: string@bool-completer # If set as `true` the Promotion or Tax is activated. If set as `false` the Promotion or Tax is deactivated. (e.g. true)
-  --isArchived: string@bool-completer # If set as `true` the Promotion or Tax is archived. If set as `false` the Promotion or Tax is not archived. (e.g. false)
-  --isDifferentListPriceAndPrice: string@bool-completer # Applies the Promotion or Tax only if the list price and price is different. (e.g. false)
-  --isFeatured: string@bool-completer # Insert a flag with the promotion name used in the product's window display and page. (e.g. true)
-  --isFirstBuy: string@bool-completer # Applies the discount only if it's a first buy. (e.g. false)
-  --isMinMaxInstallments: string@bool-completer # Set if the Promotion or Tax will be applied considering a minimum and maximum values for installments. (e.g. false)
-  --isSlaSelected: string@bool-completer # Applies selected discount only when one of the defined shipping method is selected by the customer. (e.g. false)
+  --isActive: oneof<nothing, bool> # If set as `true` the Promotion or Tax is activated. If set as `false` the Promotion or Tax is deactivated. (e.g. true)
+  --isArchived: oneof<nothing, bool> # If set as `true` the Promotion or Tax is archived. If set as `false` the Promotion or Tax is not archived. (e.g. false)
+  --isDifferentListPriceAndPrice: oneof<nothing, bool> # Applies the Promotion or Tax only if the list price and price is different. (e.g. false)
+  --isFeatured: oneof<nothing, bool> # Insert a flag with the promotion name used in the product's window display and page. (e.g. true)
+  --isFirstBuy: oneof<nothing, bool> # Applies the discount only if it's a first buy. (e.g. false)
+  --isMinMaxInstallments: oneof<nothing, bool> # Set if the Promotion or Tax will be applied considering a minimum and maximum values for installments. (e.g. false)
+  --isSlaSelected: oneof<nothing, bool> # Applies selected discount only when one of the defined shipping method is selected by the customer. (e.g. false)
   --itemMaxPrice: float # Maximum price of the item. (e.g. 0)
   --itemMinPrice: float # Minimum price of the item. (e.g. 0)
   --lastModified: string # Date when the Promotion or Tax was last modified. (e.g. 2021-02-23T20:58:38.7963862Z)
   --listSku1BuyTogether: list # SKU first list for the promotion **Buy Together**. (e.g. [SKU])
   --listSku2BuyTogether: list # SKU second list for the promotion **Buy Together**. (e.g. [SKU])
   --marketingTags: list # Promotion or Tax Marketing tags.
-  --marketingTagsAreNotInclusive: string@bool-completer # If set to `false`, this Promotion or Tax will be applied to any marketing tag present on the `marketingTags` field. If set to `true`, marketing tags present on that field will make this Promotion or Tax not to be applied. (e.g. false)
+  --marketingTagsAreNotInclusive: oneof<nothing, bool> # If set to `false`, this Promotion or Tax will be applied to any marketing tag present on the `marketingTags` field. If set to `true`, marketing tags present on that field will make this Promotion or Tax not to be applied. (e.g. false)
   --maxInstallment: int # Maximum value for installment. (e.g. 0)
   --maxNumberOfAffectedItems: int # The maximum number of affected items for a promotion. (e.g. 0)
   --maxNumberOfAffectedItemsGroupKey: string # The maximum number of affected items by group key for a promotion. (e.g. perCart)
@@ -375,7 +374,7 @@ export def "rnb-pvt-calculatorconfiguration CreateOrUpdateCalculatorConfiguratio
   --merchants: list # DEPRECATED
   --minInstallment: int # Minimum value for installment. (e.g. 0)
   --minimumQuantityBuyTogether: int # Minimum quantity for **Buy Together** promotion. (e.g. 0)
-  --multipleUsePerClient: string@bool-completer # Defines if the promotion can be used multiple times per client. (e.g. false)
+  --multipleUsePerClient: oneof<nothing, bool> # Defines if the promotion can be used multiple times per client. (e.g. false)
   --name: string # Promotion name or Tax name. (e.g. Promoção Social Seller)
   --newOffset: float # New time offset from UTC in seconds. (e.g. -3)
   --nominalDiscountValue: float # Exact discount to be applied for the total purchase value. (e.g. 0)
@@ -395,26 +394,26 @@ export def "rnb-pvt-calculatorconfiguration CreateOrUpdateCalculatorConfiguratio
   --percentualShippingDiscountValue: float # Percentage discount to be applied for shipping value. (e.g. 0)
   --percentualTax: float # Percentual Tax over purchase total value. (e.g. 0)
   --products: list # Object composed by the products that will activate or deactivate the Promotion or Tax. — item shape: {id?: string, name?: string}
-  --productsAreInclusive: string@bool-completer # If set to `true`, this Promotion or Tax will be applied to any product present on the `products` field. If set to `false`, products present on that field will make this Promotion or Tax not to be applied. (e.g. true)
+  --productsAreInclusive: oneof<nothing, bool> # If set to `true`, this Promotion or Tax will be applied to any product present on the `products` field. If set to `false`, products present on that field will make this Promotion or Tax not to be applied. (e.g. true)
   --productsSpecifications: list # DEPRECATED
   --quantityToAffectBuyTogether: int # Quantity to affect **Buy Together** promotion. (e.g. 0)
   --rebatePercentualDiscountValue: float # Percentual Shipping Discount Value. (e.g. 0)
   --restrictionsBins: list # The discount will be granted if the card's BIN is given.
   --shippingPercentualTax: float # Shipping Percentual Tax over purchase total value. (e.g. 0)
-  --shouldDistributeDiscountAmongMatchedItems: string@bool-completer # Should distribute discount among matched items. (e.g. false)
+  --shouldDistributeDiscountAmongMatchedItems: oneof<nothing, bool> # Should distribute discount among matched items. (e.g. false)
   --skus: list # Object composed by the SKUs that will activate or deactivate the Promotion or Tax. — item shape: {id?: string, name?: string}
-  --skusAreInclusive: string@bool-completer # If set to `true`, this Promotion or Tax will be applied to any SKU present on the `skus` field. If set to `false`, SKUs present on that field will make this Promotion or Tax not to be applied. (e.g. true)
+  --skusAreInclusive: oneof<nothing, bool> # If set to `true`, this Promotion or Tax will be applied to any SKU present on the `skus` field. If set to `false`, SKUs present on that field will make this Promotion or Tax not to be applied. (e.g. true)
   --skusGift: record # SKU Gift Object. Total discount on the product value set as a gift. — shape: {gifts?: list, quantitySelectable?: int}
   --slasIds: list # The discount will be granted if the shipping method is the same as the one given.
   --stores: list # DEPRECATED
-  --storesAreInclusive: string@bool-completer # DEPRECATED
+  --storesAreInclusive: oneof<nothing, bool> # DEPRECATED
   --totalValueCeling: float # Maximum chart value to activate the Promotion or Tax. (e.g. 0)
   --totalValueFloor: float # Minimum chart value to activate the Promotion or Tax. (e.g. 0)
-  --totalValueIncludeAllItems: string@bool-completer # DEPRECATED
+  --totalValueIncludeAllItems: oneof<nothing, bool> # DEPRECATED
   --totalValueMode: string # Defines if products that already are receiving a promotion will be considered on the chart total value. There are three options available: `IncludeMatchedItems`, `ExcludeMatchedItems`, `AllItems`. (e.g. IncludeMatchedItems)
   --totalValuePurchase: float # Total value a client must have in past orders to activate the Promotion or Tax. (e.g. 0)
   --type: string # Defines what is the type of the promotion or indicates if it is a tax. Possible values: `regular` ([Regular Promotion](https://help.vtex.com/tutorial/regular-promotion--tutorials_327)), `combo` ([Buy Together](https://help.vtex.com/en/tutorial/buy-together--tutorials_323)), `forThePriceOf` ([More for Less](https://help.vtex.com/en/tutorial/creating-a-more-for-less-promotion--tutorials_325)), `progressive` ([Progressive Discount](https://help.vtex.com/en/tutorial/progressive-discount--tutorials_324)), `buyAndWin` ([Buy One Get One](https://help.vtex.com/en/tutorial/buy-one-get-one--tutorials_322)), `maxPricePerItem` (Deprecated), `campaign` ([Campaign Promotion](https://help.vtex.com/en/tutorial/campaign-promotion--1ChYXhK2AQGuS6wAqS8Ume)), `tax` (Tax), `multipleEffects` (Multiple Effects). (e.g. regular)
-  --useNewProgressiveAlgorithm: string@bool-completer # Use new progressive algorithm. (e.g. false)
+  --useNewProgressiveAlgorithm: oneof<nothing, bool> # Use new progressive algorithm. (e.g. false)
   --utmCampaign: string # Coupon utmCampaign code. (e.g. testSource)
   --utmSource: string # Coupon utmSource code. (e.g. testSource)
   --zipCodeRanges: list # Range of the zip code that applies the promotion. — item shape: {inclusive?: bool}
@@ -503,9 +502,9 @@ export def "rnb-pvt-campaign-configuration Setcampaignconfiguration" [
   --beginDateUtc: string # Start date of the campaign audience in UTC format. (e.g. 2020-05-01T21:30:00Z)
   --endDateUtc: string # End date of the campaign audience in UTC format. (e.g. 2020-05-02T01:30:00Z)
   --id: string # Campaign audience ID. (e.g. dd270d06-1ed1-47fc-b04e-a2431121b5a4)
-  --isActive: string@bool-completer # Defines if the campaign audience is active (`true`) or not (`false`). (e.g. true)
-  --isAndOperator: string@bool-completer # When `true`, determines that all the `targetConfigurations` need to be valid for the campaign audience to be active. When `false`, determines that if at least one of the `targetConfigurations` is valid, the campaign audience will be active. (e.g. true)
-  --isArchived: string@bool-completer # Defines if the campaign audience is archived (`true`) or not (`false`). (e.g. false)
+  --isActive: oneof<nothing, bool> # Defines if the campaign audience is active (`true`) or not (`false`). (e.g. true)
+  --isAndOperator: oneof<nothing, bool> # When `true`, determines that all the `targetConfigurations` need to be valid for the campaign audience to be active. When `false`, determines that if at least one of the `targetConfigurations` is valid, the campaign audience will be active. (e.g. true)
+  --isArchived: oneof<nothing, bool> # Defines if the campaign audience is archived (`true`) or not (`false`). (e.g. false)
   --lastModified: record # Object with information about the last update of the campaign audience. — shape: {dateUtc?: string, user?: string}
   --name: string # Campaign audience name. (e.g. Interna)
   --targetConfigurations: list # Array that contains all target audience that the campaign audience will be valid. — item shape: {affiliates?: list, areSalesChannelIdsExclusive?: bool, brands?: list, brandsAreInclusive?: bool, campaigns?: list, cardIssuers?: list, categories?: list, categoriesAreInclusive?: bool, clusterExpressions?: list, clusterOperator?: string, collections?: list, collections1BuyTogether?: list, collections2BuyTogether?: list, collectionsIsInclusive?: bool, compareListPriceAndPrice?: bool, coupon?: list, daysAgoOfPurchases?: int, enableBuyTogetherPerSku?: bool, featured?: bool, firstBuyIsProfileOptimistic?: bool, giftListTypes?: list, id?: string, idSellerIsInclusive?: bool, idsSalesChannel?: list, installment?: int, isDifferentListPriceAndPrice?: bool, isFirstBuy?: bool, isMinMaxInstallments?: bool, isSlaSelected?: bool, itemMaxPrice?: float, itemMinPrice?: float, listBrand1BuyTogether?: list, listCategory1BuyTogether?: list, listSku1BuyTogether?: list, listSku2BuyTogether?: list, marketingTags?: list, marketingTagsAreNotInclusive?: bool, maxInstallment?: int, maxUsage?: int, maxUsagePerClient?: int, merchants?: list, minInstallment?: int, minimumQuantityBuyTogether?: int, multipleUsePerClient?: bool, name?: string, origin?: string, paymentsMethods?: list, paymentsRules?: list, percentualDiscountValueList?: list, products?: list, productsAreInclusive?: bool, productsSpecifications?: list, quantityToAffectBuyTogether?: int, restrictionsBins?: list, shouldDistributeDiscountAmongMatchedItems?: bool, skus?: list, skusAreInclusive?: bool, slasIds?: list, stores?: list, storesAreInclusive?: bool, totalValueCeling?: float, totalValueFloor?: float, totalValueIncludeAllItems?: bool, totalValueMode?: string, totalValuePurchase?: float, useNewProgressiveAlgorithm?: bool, zipCodeRanges?: list}
@@ -590,7 +589,7 @@ export def "rnb-pvt-coupon Update" [
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
   couponCode: string # Coupon code. (e.g. test)
   expirationIntervalPerUse: string # Coupon expiration interval per use. (e.g. 00:00:00)
-  --isArchived: string@bool-completer # Defines if the coupon is archived (`true`) or not (`false`). (e.g. false)
+  --isArchived: oneof<nothing, bool> # Defines if the coupon is archived (`true`) or not (`false`). (e.g. false)
   maxItemsPerClient: int # Maximum items per client that the coupon can be applied. (e.g. 10)
   utmCampaign: string # UTM campaign code. (e.g. coupon3)
   utmSource: string # UTM source code. (e.g. coupon3)
@@ -741,12 +740,12 @@ export def "rnb-pvt-import-calculator-configuration post" [
   --Content-Type: string # Type of the content being sent. (e.g. text/csv)
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
   --X-VTEX-calculator-name: string # Promotion Name. (e.g. Test)
-  --X-VTEX-cumulative: string@bool-completer # Defines if the Promotion is cumulative with other promotions. (e.g. false)
+  --X-VTEX-cumulative: oneof<nothing, bool> # Defines if the Promotion is cumulative with other promotions. (e.g. false)
   --X-VTEX-cluster-operator: string # This header allows implementing the Promotion in multiples client clusters. You can set the value as `all` - the Promotion will be valid to all the clusters - or `any` - the Promotion will be valid to any of the clusters. (e.g. any)
   --X-VTEX-cluster-expression: string # Cluster that will be included in the Promotion. To add multiple clusters, create a header for each one of them. (e.g. cluster_name=true)
   --X-VTEX-start-date: string # Promotion start date. (e.g. 2020-08-18T16:00:00+3:00)
   --X-VTEX-end-date: string # Promotion end date. (e.g. 2020-08-18T16:30:00+3:00)
-  --X-VTEX-accumulate-with-manual-prices: string@bool-completer # Condition that will accumulate the Promotion with manual prices or not. (e.g. false)
+  --X-VTEX-accumulate-with-manual-prices: oneof<nothing, bool> # Condition that will accumulate the Promotion with manual prices or not. (e.g. false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -776,12 +775,12 @@ export def "rnb-pvt-import-calculator-configuration put" [
   --Content-Type: string # Type of the content being sent. (e.g. text/csv)
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
   --X-VTEX-calculator-name: string # Promotion Name. (e.g. Test)
-  --X-VTEX-cumulative: string@bool-completer # Defines if the Promotion is cumulative with other promotions. (e.g. false)
+  --X-VTEX-cumulative: oneof<nothing, bool> # Defines if the Promotion is cumulative with other promotions. (e.g. false)
   --X-VTEX-cluster-operator: string # This header allows implementing the Promotion in multiples client clusters. You can set the value as `all` - the Promotion will be valid to all the clusters - or `any` - the Promotion will be valid to any of the clusters. (e.g. any)
   --X-VTEX-cluster-expression: string # Cluster that will be included in the Promotion. To add multiple clusters, create a header for each one of them. (e.g. cluster_name=true)
   --X-VTEX-start-date: string # Promotion start date. (e.g. 2020-08-18T16:00:00+3:00)
   --X-VTEX-end-date: string # Promotion end date. (e.g. 2020-08-18T16:30:00+3:00)
-  --X-VTEX-accumulate-with-manual-prices: string@bool-completer # Condition that will accumulate the Promotion with manual prices or not. (e.g. false)
+  --X-VTEX-accumulate-with-manual-prices: oneof<nothing, bool> # Condition that will accumulate the Promotion with manual prices or not. (e.g. false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -1096,7 +1095,7 @@ export def "pub-bundles CalculatediscountsandtaxesBundles" [
   --allow-errors(-e) # Return full response without error handling
   --Content-Type: string # Type of the content being sent.
   --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --isShoppingCart: string@bool-completer
+  --isShoppingCart: oneof<nothing, bool>
   items: list # item shape: {id: string, index: int, isGift: bool, logisticsInfos: list, measurementUnit: string, params: list, priceSheet: list, priceTags: list, productSpecifications: list, quantity: int, sellerId: string, unitMultiplier: int}
   origin: string
   params: list # item shape: {name: string, value: string}

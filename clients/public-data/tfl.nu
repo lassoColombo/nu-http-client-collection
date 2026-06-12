@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.tfl.gov.uk"] }
 def auth-scheme-completer [] { ["query-app_key" "query-app_id"] }
 
@@ -233,9 +232,9 @@ export def "cabwise-search Get" [
   --radius: float # The radius of the bounding circle in metres (format: double)
   --name: string # Trading name of operating company
   --maxResults: int # An optional parameter to limit the number of results return. Default and maximum is 20. (format: int32)
-  --legacyFormat: string@bool-completer # Legacy Format
-  --forceXml: string@bool-completer # Force Xml
-  --twentyFourSevenOnly: string@bool-completer # Twenty Four Seven Only
+  --legacyFormat: oneof<nothing, bool> # Legacy Format
+  --forceXml: oneof<nothing, bool> # Force Xml
+  --twentyFourSevenOnly: oneof<nothing, bool> # Twenty Four Seven Only
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
@@ -284,7 +283,7 @@ export def "journey-journey-results-to JourneyResults" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --via: string # Travel through point on the journey. Can be WGS84 coordinates expressed as "lat,long", a UK postcode, a Naptan (StopPoint) id, an ICS StopId, or a free-text string (will cause disambiguation unless it exactly matches a point of interest name).
-  --nationalSearch: string@bool-completer # Does the journey cover stops outside London? eg. "nationalSearch=true"
+  --nationalSearch: oneof<nothing, bool> # Does the journey cover stops outside London? eg. "nationalSearch=true"
   --date: string # The date must be in yyyyMMdd format
   --time: string # The time must be in HHmm format
   --timeIs: string@timeIs-completer # Does the time given relate to arrival or leaving time? Possible options: "departing" | "arriving"
@@ -300,18 +299,18 @@ export def "journey-journey-results-to JourneyResults" [
   --cyclePreference: string@cyclePreference-completer # The cycle preference. eg possible options: "allTheWay" | "leaveAtStation" | "takeOnTransport" | "cycleHire"
   --adjustment: string # Time adjustment command. eg possible options: "TripFirst" | "TripLast"
   --bikeProficiency: list # A comma separated list of cycling proficiency levels. eg possible options: "easy,moderate,fast"
-  --alternativeCycle: string@bool-completer # Option to determine whether to return alternative cycling journey
-  --alternativeWalking: string@bool-completer # Option to determine whether to return alternative walking journey
-  --applyHtmlMarkup: string@bool-completer # Flag to determine whether certain text (e.g. walking instructions) should be output with HTML tags or not.
-  --useMultiModalCall: string@bool-completer # A boolean to indicate whether or not to return 3 public transport journeys, a bus journey, a cycle hire journey, a personal cycle journey and a walking journey
-  --walkingOptimization: string@bool-completer # A boolean to indicate whether to optimize journeys using walking
-  --taxiOnlyTrip: string@bool-completer # A boolean to indicate whether to return one or more taxi journeys. Note, setting this to true will override "useMultiModalCall".
-  --routeBetweenEntrances: string@bool-completer # A boolean to indicate whether public transport routes should include directions between platforms and station entrances.
-  --useRealTimeLiveArrivals: string@bool-completer # A boolean to indicate if we want to receive real time live arrivals data where available.
-  --calcOneDirection: string@bool-completer # A boolean to make Journey Planner calculate journeys in one temporal direction only. In other words, only calculate journeys after the 'depart' time, or before the 'arrive' time. By default, the Journey Planner engine (EFA) calculates journeys in both temporal directions.
-  --includeAlternativeRoutes: string@bool-completer # A boolean to make Journey Planner return alternative routes. Alternative routes are calculated by removing one or more lines included in the fastest route and re-calculating. By default, these journeys will not be returned.
+  --alternativeCycle: oneof<nothing, bool> # Option to determine whether to return alternative cycling journey
+  --alternativeWalking: oneof<nothing, bool> # Option to determine whether to return alternative walking journey
+  --applyHtmlMarkup: oneof<nothing, bool> # Flag to determine whether certain text (e.g. walking instructions) should be output with HTML tags or not.
+  --useMultiModalCall: oneof<nothing, bool> # A boolean to indicate whether or not to return 3 public transport journeys, a bus journey, a cycle hire journey, a personal cycle journey and a walking journey
+  --walkingOptimization: oneof<nothing, bool> # A boolean to indicate whether to optimize journeys using walking
+  --taxiOnlyTrip: oneof<nothing, bool> # A boolean to indicate whether to return one or more taxi journeys. Note, setting this to true will override "useMultiModalCall".
+  --routeBetweenEntrances: oneof<nothing, bool> # A boolean to indicate whether public transport routes should include directions between platforms and station entrances.
+  --useRealTimeLiveArrivals: oneof<nothing, bool> # A boolean to indicate if we want to receive real time live arrivals data where available.
+  --calcOneDirection: oneof<nothing, bool> # A boolean to make Journey Planner calculate journeys in one temporal direction only. In other words, only calculate journeys after the 'depart' time, or before the 'arrive' time. By default, the Journey Planner engine (EFA) calculates journeys in both temporal directions.
+  --includeAlternativeRoutes: oneof<nothing, bool> # A boolean to make Journey Planner return alternative routes. Alternative routes are calculated by removing one or more lines included in the fastest route and re-calculating. By default, these journeys will not be returned.
   --overrideMultiModalScenario: int # An optional integer to indicate what multi modal scenario we want to use. (format: int32)
-  --combineTransferLegs: string@bool-completer # A boolean to indicate whether walking leg to station entrance and walking leg from station entrance to platform should be combined. Defaults to true
+  --combineTransferLegs: oneof<nothing, bool> # A boolean to indicate whether walking leg to station entrance and walking leg from station entrance to platform should be combined. Defaults to true
 ]: nothing -> record<journeys: table<startDateTime: string, duration: int, arrivalDateTime: string, description: string, alternativeRoute: bool, legs: list, fare: record>, lines: table<id: string, name: string, modeName: string, disruptions: list, created: string, modified: string, lineStatuses: list, routeSections: list, serviceTypes: list, crowding: record>, cycleHireDockingStationData: record<originNumberOfBikes: int, destinationNumberOfBikes: int, originNumberOfEmptySlots: int, destinationNumberOfEmptySlots: int, originId: string, destinationId: string>, stopMessages: list<string>, recommendedMaxAgeMinutes: int, searchCriteria: record<dateTime: string, dateTimeType: string, timeAdjustments: record<earliest: record, earlier: record, later: record, latest: record>>, journeyVector: record<from: string, to: string, via: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
@@ -546,7 +545,7 @@ export def "line-route-sequence RouteSequence" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --serviceTypes: list # A comma seperated list of service types to filter on. Supported values: Regular, Night. Defaulted to 'Regular' if not specified
-  --excludeCrowding: string@bool-completer # That excludes crowding from line disruptions. Can be true or false.
+  --excludeCrowding: oneof<nothing, bool> # That excludes crowding from line disruptions. Can be true or false.
 ]: nothing -> record<lineId: string, lineName: string, direction: string, isOutboundOnly: bool, mode: string, lineStrings: list<string>, stations: table<routeId: int, parentId: string, stationId: string, icsId: string, topMostParentId: string, direction: string, towards: string, modes: list, stopType: string, stopLetter: string, zone: string, accessibilitySummary: string, hasDisruption: bool, lines: list, status: bool, id: string, url: string, name: string, lat: float, lon: float>, stopPointSequences: table<lineId: string, lineName: string, direction: string, branchId: int, nextBranchIds: list, prevBranchIds: list, stopPoint: list, serviceType: string>, orderedLineRoutes: table<name: string, naptanIds: list, serviceType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
@@ -573,7 +572,7 @@ export def "line-status-to Status" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --detail: string@bool-completer # Include details of the disruptions that are causing the line status including the affected stops and routes
+  --detail: oneof<nothing, bool> # Include details of the disruptions that are causing the line status including the affected stops and routes
   --startDate: string
   --endDate: string
   --dateRangestartDate: string # format: date-time
@@ -602,7 +601,7 @@ export def "line-status StatusByIds" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --detail: string@bool-completer # Include details of the disruptions that are causing the line status including the affected stops and routes
+  --detail: oneof<nothing, bool> # Include details of the disruptions that are causing the line status including the affected stops and routes
 ]: nothing -> table<id: string, name: string, modeName: string, disruptions: list<record>, created: string, modified: string, lineStatuses: list<record>, routeSections: list<record>, serviceTypes: list<record>, crowding: record<passengerFlows: list, trainLoadings: list>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
@@ -676,7 +675,7 @@ export def "line-mode-status StatusByMode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --detail: string@bool-completer # Include details of the disruptions that are causing the line status including the affected stops and routes
+  --detail: oneof<nothing, bool> # Include details of the disruptions that are causing the line status including the affected stops and routes
   --severityLevel: string # If specified, ensures that only those line status(es) are returned within the lines that have disruptions with the matching severity level.
 ]: nothing -> table<id: string, name: string, modeName: string, disruptions: list<record>, created: string, modified: string, lineStatuses: list<record>, routeSections: list<record>, serviceTypes: list<record>, crowding: record<passengerFlows: list, trainLoadings: list>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
@@ -702,7 +701,7 @@ export def "line-stop-points StopPoints" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --tflOperatedNationalRailStationsOnly: string@bool-completer # If the national-rail line is requested, this flag will filter the national rail stations so that only those operated by TfL are returned
+  --tflOperatedNationalRailStationsOnly: oneof<nothing, bool> # If the national-rail line is requested, this flag will filter the national rail stations so that only those operated by TfL are returned
 ]: nothing -> table<naptanId: string, platformName: string, indicator: string, stopLetter: string, modes: list<string>, icsCode: string, smsCode: string, stopType: string, stationNaptan: string, accessibilitySummary: string, hubNaptanCode: string, lines: list<record>, lineGroup: list<record>, lineModeGroups: list<record>, fullName: string, naptanMode: string, status: bool, individualStopId: string, id: string, url: string, commonName: string, distance: float, placeType: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, lat: float, lon: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1079,7 +1078,7 @@ export def "place-type GetByType" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --activeOnly: string@bool-completer # An optional parameter to limit the results to active records only (Currently only the 'VariableMessageSign' place type is supported)
+  --activeOnly: oneof<nothing, bool> # An optional parameter to limit the results to active records only (Currently only the 'VariableMessageSign' place type is supported)
 ]: nothing -> table<id: string, url: string, commonName: string, distance: float, placeType: string, additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, lat: float, lon: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1104,7 +1103,7 @@ export def "place Get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --includeChildren: string@bool-completer # Defaults to false. If true child places e.g. individual charging stations at a charge point while be included, otherwise just the URLs of any child places will be returned
+  --includeChildren: oneof<nothing, bool> # Defaults to false. If true child places e.g. individual charging stations at a charge point while be included, otherwise just the URLs of any child places will be returned
 ]: nothing -> table<id: string, url: string, commonName: string, distance: float, placeType: string, additionalProperties: list<record>, children: list<any>, childrenUrls: list<string>, lat: float, lon: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1130,9 +1129,9 @@ export def "place GetByGeo" [
   --accept: string@accept-completer # Response content type
   --radius: float # The radius of the bounding circle in metres when only lat/lon are specified. (format: double)
   --categories: list # An optional list of comma separated property categories to return in the Place's property bag. If null or empty, all categories of property are returned. Pass the keyword "none" to return no properties (a valid list of categories can be obtained from the /Place/Meta/categories endpoint)
-  --includeChildren: string@bool-completer # Defaults to false. If true child places e.g. individual charging stations at a charge point while be included, otherwise just the URLs of any child places will be returned
+  --includeChildren: oneof<nothing, bool> # Defaults to false. If true child places e.g. individual charging stations at a charge point while be included, otherwise just the URLs of any child places will be returned
   --type: list # Place types to filter on, or null to return all types
-  --activeOnly: string@bool-completer # An optional parameter to limit the results to active records only (Currently only the 'VariableMessageSign' place type is supported)
+  --activeOnly: oneof<nothing, bool> # An optional parameter to limit the results to active records only (Currently only the 'VariableMessageSign' place type is supported)
   --numberOfPlacesToReturn: int # If specified, limits the number of returned places equal to the given value (format: int32)
   --placeGeoswLat: float # format: double
   --placeGeoswLon: float # format: double
@@ -1323,10 +1322,10 @@ export def "road-disruption Disruption" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --stripContent: string@bool-completer # Optional, defaults to false. When true, removes every property/node except for id, point, severity, severityDescription, startDate, endDate, corridor details, location, comments and streets
+  --stripContent: oneof<nothing, bool> # Optional, defaults to false. When true, removes every property/node except for id, point, severity, severityDescription, startDate, endDate, corridor details, location, comments and streets
   --severities: list # an optional list of Severity names to filter on (a valid list of severities can be obtained from the /Road/Meta/severities endpoint)
   --categories: list # an optional list of category names to filter on (a valid list of categories can be obtained from the /Road/Meta/categories endpoint)
-  --closures: string@bool-completer # Optional, defaults to true. When true, always includes disruptions that have road closures, regardless of the severity filter. When false, the severity filter works as normal.
+  --closures: oneof<nothing, bool> # Optional, defaults to true. When true, always includes disruptions that have road closures, regardless of the severity filter. When false, the severity filter works as normal.
 ]: nothing -> table<id: string, url: string, point: string, severity: string, ordinal: int, category: string, subCategory: string, comments: string, currentUpdate: string, currentUpdateDateTime: string, corridorIds: list<string>, startDateTime: string, endDateTime: string, lastModifiedTime: string, levelOfInterest: string, location: string, status: string, geography: record<geography: record>, geometry: record<geography: record>, streets: list<record>, isProvisional: bool, hasClosures: bool, linkText: string, linkUrl: string, roadProject: record<projectId: string, schemeName: string, projectName: string, projectDescription: string, projectPageUrl: string, consultationPageUrl: string, consultationStartDate: string, consultationEndDate: string, constructionStartDate: string, constructionEndDate: string, boroughsBenefited: list, cycleSuperhighwayId: string, phase: string, contactName: string, contactEmail: string, externalPageUrl: string, projectSummaryPageUrl: string>, publishStartDate: string, publishEndDate: string, timeFrame: string, roadDisruptionLines: list<record>, roadDisruptionImpactAreas: list<record>, recurringSchedules: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1376,7 +1375,7 @@ export def "road-all-disruption DisruptionById" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --stripContent: string@bool-completer # Optional, defaults to false. When true, removes every property/node except for id, point, severity, severityDescription, startDate, endDate, corridor details, location and comments.
+  --stripContent: oneof<nothing, bool> # Optional, defaults to false. When true, removes every property/node except for id, point, severity, severityDescription, startDate, endDate, corridor details, location and comments.
 ]: nothing -> record<id: string, url: string, point: string, severity: string, ordinal: int, category: string, subCategory: string, comments: string, currentUpdate: string, currentUpdateDateTime: string, corridorIds: list<string>, startDateTime: string, endDateTime: string, lastModifiedTime: string, levelOfInterest: string, location: string, status: string, geography: record<geography: record<coordinateSystemId: int, wellKnownText: string, wellKnownBinary: string>>, geometry: record<geography: record<coordinateSystemId: int, wellKnownText: string, wellKnownBinary: string>>, streets: table<name: string, closure: string, directions: string, segments: list, sourceSystemId: int, sourceSystemKey: string>, isProvisional: bool, hasClosures: bool, linkText: string, linkUrl: string, roadProject: record<projectId: string, schemeName: string, projectName: string, projectDescription: string, projectPageUrl: string, consultationPageUrl: string, consultationStartDate: string, consultationEndDate: string, constructionStartDate: string, constructionEndDate: string, boroughsBenefited: list<string>, cycleSuperhighwayId: string, phase: string, contactName: string, contactEmail: string, externalPageUrl: string, projectSummaryPageUrl: string>, publishStartDate: string, publishEndDate: string, timeFrame: string, roadDisruptionLines: table<id: int, roadDisruptionId: string, isDiversion: bool, multiLineString: record, startDate: string, endDate: string, startTime: string, endTime: string>, roadDisruptionImpactAreas: table<id: int, roadDisruptionId: string, polygon: record, startDate: string, endDate: string, startTime: string, endTime: string>, recurringSchedules: table<startTime: string, endTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1625,7 +1624,7 @@ export def "stop-point Get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --includeCrowdingData: string@bool-completer # Include the crowding data (static). To Filter further use: /StopPoint/{ids}/Crowding/{line}
+  --includeCrowdingData: oneof<nothing, bool> # Include the crowding data (static). To Filter further use: /StopPoint/{ids}/Crowding/{line}
 ]: nothing -> table<naptanId: string, platformName: string, indicator: string, stopLetter: string, modes: list<string>, icsCode: string, smsCode: string, stopType: string, stationNaptan: string, accessibilitySummary: string, hubNaptanCode: string, lines: list<record>, lineGroup: list<record>, lineModeGroups: list<record>, fullName: string, naptanMode: string, status: bool, individualStopId: string, id: string, url: string, commonName: string, distance: float, placeType: string, additionalProperties: list<record>, children: list<record>, childrenUrls: list<string>, lat: float, lon: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1873,7 +1872,7 @@ export def "stop-point-mode-disruption DisruptionByMode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --includeRouteBlockedStops: string@bool-completer
+  --includeRouteBlockedStops: oneof<nothing, bool>
 ]: nothing -> table<atcoCode: string, fromDate: string, toDate: string, description: string, commonName: string, type: string, mode: string, stationAtcoCode: string, appearance: string, additionalInformation: string, closureText: string, concernedLines: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1898,9 +1897,9 @@ export def "stop-point-disruption Disruption" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --getFamily: string@bool-completer # Specify true to return disruptions for entire family, or false to return disruptions for just this stop point. Defaults to false.
-  --includeRouteBlockedStops: string@bool-completer
-  --flattenResponse: string@bool-completer # Specify true to associate all disruptions with parent stop point. (Only applicable when getFamily is true).
+  --getFamily: oneof<nothing, bool> # Specify true to return disruptions for entire family, or false to return disruptions for just this stop point. Defaults to false.
+  --includeRouteBlockedStops: oneof<nothing, bool>
+  --flattenResponse: oneof<nothing, bool> # Specify true to associate all disruptions with parent stop point. (Only applicable when getFamily is true).
 ]: nothing -> table<atcoCode: string, fromDate: string, toDate: string, description: string, commonName: string, type: string, mode: string, stationAtcoCode: string, appearance: string, additionalInformation: string, closureText: string, concernedLines: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
@@ -1952,10 +1951,10 @@ export def "stop-point GetByGeoPoint" [
   --accept: string@accept-completer # Response content type
   --stopTypes: list # a list of stopTypes that should be returned (a list of valid stop types can be obtained from the StopPoint/meta/stoptypes endpoint)
   --radius: int # the radius of the bounding circle in metres (default : 200) (format: int32)
-  --useStopPointHierarchy: string@bool-completer # Re-arrange the output into a parent/child hierarchy
+  --useStopPointHierarchy: oneof<nothing, bool> # Re-arrange the output into a parent/child hierarchy
   --modes: list # the list of modes to search (comma separated mode names e.g. tube,dlr)
   --categories: list # an optional list of comma separated property categories to return in the StopPoint's property bag. If null or empty, all categories of property are returned. Pass the keyword "none" to return no properties (a valid list of categories can be obtained from the /StopPoint/Meta/categories endpoint)
-  --returnLines: string@bool-completer # true to return the lines that each stop point serves as a nested resource
+  --returnLines: oneof<nothing, bool> # true to return the lines that each stop point serves as a nested resource
   --locationlat: float # format: double
   --locationlon: float # format: double
 ]: nothing -> record<centrePoint: list<float>, stopPoints: table<naptanId: string, platformName: string, indicator: string, stopLetter: string, modes: list, icsCode: string, smsCode: string, stopType: string, stationNaptan: string, accessibilitySummary: string, hubNaptanCode: string, lines: list, lineGroup: list, lineModeGroups: list, fullName: string, naptanMode: string, status: bool, individualStopId: string, id: string, url: string, commonName: string, distance: float, placeType: string, additionalProperties: list, children: list, childrenUrls: list, lat: float, lon: float>, pageSize: int, total: int, page: int> {
@@ -2008,11 +2007,11 @@ export def "stop-point-search Search" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --modes: list # An optional, parameter separated list of the modes to filter by
-  --faresOnly: string@bool-completer # True to only return stations in that have Fares data available for single fares to another station.
+  --faresOnly: oneof<nothing, bool> # True to only return stations in that have Fares data available for single fares to another station.
   --maxResults: int # An optional result limit, defaulting to and with a maximum of 50. Since children of the stop point heirarchy are returned for matches,             it is possible that the flattened result set will contain more than 50 items. (format: int32)
   --lines: list # An optional, parameter separated list of the lines to filter by
-  --includeHubs: string@bool-completer # If true, returns results including HUBs.
-  --tflOperatedNationalRailStationsOnly: string@bool-completer # If the national-rail mode is included, this flag will filter the national rail stations so that only those operated by TfL are returned
+  --includeHubs: oneof<nothing, bool> # If true, returns results including HUBs.
+  --tflOperatedNationalRailStationsOnly: oneof<nothing, bool> # If the national-rail mode is included, this flag will filter the national rail stations so that only those operated by TfL are returned
 ]: nothing -> record<query: string, from: int, page: int, pageSize: int, provider: string, total: int, matches: table<id: string, url: string, name: string, lat: float, lon: float>, maxScore: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
@@ -2038,11 +2037,11 @@ export def "stop-point-search list" [
   --accept: string@accept-completer # Response content type
   --qp-query: string # The query string, case-insensitive. Leading and trailing wildcards are applied automatically.
   --modes: list # An optional, parameter separated list of the modes to filter by
-  --faresOnly: string@bool-completer # True to only return stations in that have Fares data available for single fares to another station.
+  --faresOnly: oneof<nothing, bool> # True to only return stations in that have Fares data available for single fares to another station.
   --maxResults: int # An optional result limit, defaulting to and with a maximum of 50. Since children of the stop point heirarchy are returned for matches,             it is possible that the flattened result set will contain more than 50 items. (format: int32)
   --lines: list # An optional, parameter separated list of the lines to filter by
-  --includeHubs: string@bool-completer # If true, returns results including HUBs.
-  --tflOperatedNationalRailStationsOnly: string@bool-completer # If the national-rail mode is included, this flag will filter the national rail stations so that only those operated by TfL are returned
+  --includeHubs: oneof<nothing, bool> # If true, returns results including HUBs.
+  --tflOperatedNationalRailStationsOnly: oneof<nothing, bool> # If the national-rail mode is included, this flag will filter the national rail stations so that only those operated by TfL are returned
 ]: nothing -> record<query: string, from: int, page: int, pageSize: int, provider: string, total: int, matches: table<id: string, url: string, name: string, lat: float, lon: float>, maxScore: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)

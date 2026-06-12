@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost" "https://api.fireworks.ai" "https://api.fireworks.ai/inference"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -857,7 +856,7 @@ export def "accounts-datasets GetDatasetDownloadEndpoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --readMask: string # The fields to be returned in the response. If empty or "*", all fields will be returned.
-  --downloadLineage: string@bool-completer # If true, downloads entire lineage chain (all related datasets). Filenames will be prefixed with dataset IDs to avoid collisions.
+  --downloadLineage: oneof<nothing, bool> # If true, downloads entire lineage chain (all related datasets). Filenames will be prefixed with dataset IDs to avoid collisions.
 ]: nothing -> record<filenameToSignedUrls: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.fireworks.ai")
@@ -991,16 +990,16 @@ export def "accounts-deployed-models CreateDeployedModel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --replaceMergedAddon: string@bool-completer # Merges new addon to the base model, while unmerging/deleting any existing addon in the deployment. Must be specified for hot reload deployments
+  --replaceMergedAddon: oneof<nothing, bool> # Merges new addon to the base model, while unmerging/deleting any existing addon in the deployment. Must be specified for hot reload deployments
   --displayName: string
   --description: string # Description of the resource.
   --model: string
   --deployment: string # The resource name of the base deployment the model is deployed to.
-  --default: string@bool-completer # If true, this is the default target when querying this model without the `#<deployment>` suffix. The first deployment a model is deployed to will have this field set to true.
+  --default: oneof<nothing, bool> # If true, this is the default target when querying this model without the `#<deployment>` suffix. The first deployment a model is deployed to will have this field set to true.
   --state: string@state-completer-3 # - UNDEPLOYING: The model is being undeployed.  - DEPLOYING: The model is being deployed.  - DEPLOYED: The model is deployed and ready for inference.  - UPDATING: there are updates happening with the deployed model (default: STATE_UNSPECIFIED)
-  --serverless: string@bool-completer
+  --serverless: oneof<nothing, bool>
   --status: record # shape: {code?: "OK"|"CANCELLED"|"UNKNOWN"|"INVALID_ARGUMENT"|"DEADLINE_EXCEEDED"|"NOT_FOUND"|"ALREADY_EXISTS"|"PERMISSION_DENIED"|"UNAUTHENTICATED"|"RESOURCE_EXHAUSTED"|"FAILED_PRECONDITION"|"ABORTED"|"OUT_OF_RANGE"|"UNIMPLEMENTED"|"INTERNAL"|"UNAVAILABLE"|"DATA_LOSS", message?: string}
-  --public: string@bool-completer # If true, the deployed model will be publicly reachable.
+  --public: oneof<nothing, bool> # If true, the deployed model will be publicly reachable.
 ]: any -> record<name: string, displayName: string, description: string, createTime: string, model: string, deployment: string, default: bool, state: string, serverless: bool, status: record<code: string, message: string>, public: bool, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1058,11 +1057,11 @@ export def "accounts-deployed-models UpdateDeployedModel" [
   --description: string # Description of the resource.
   --model: string
   --deployment: string # The resource name of the base deployment the model is deployed to.
-  --default: string@bool-completer # If true, this is the default target when querying this model without the `#<deployment>` suffix. The first deployment a model is deployed to will have this field set to true.
+  --default: oneof<nothing, bool> # If true, this is the default target when querying this model without the `#<deployment>` suffix. The first deployment a model is deployed to will have this field set to true.
   --state: string@state-completer-3 # - UNDEPLOYING: The model is being undeployed.  - DEPLOYING: The model is being deployed.  - DEPLOYED: The model is deployed and ready for inference.  - UPDATING: there are updates happening with the deployed model (default: STATE_UNSPECIFIED)
-  --serverless: string@bool-completer
+  --serverless: oneof<nothing, bool>
   --status: record # shape: {code?: "OK"|"CANCELLED"|"UNKNOWN"|"INVALID_ARGUMENT"|"DEADLINE_EXCEEDED"|"NOT_FOUND"|"ALREADY_EXISTS"|"PERMISSION_DENIED"|"UNAUTHENTICATED"|"RESOURCE_EXHAUSTED"|"FAILED_PRECONDITION"|"ABORTED"|"OUT_OF_RANGE"|"UNIMPLEMENTED"|"INTERNAL"|"UNAVAILABLE"|"DATA_LOSS", message?: string}
-  --public: string@bool-completer # If true, the deployed model will be publicly reachable.
+  --public: oneof<nothing, bool> # If true, the deployed model will be publicly reachable.
 ]: any -> record<name: string, displayName: string, description: string, createTime: string, model: string, deployment: string, default: bool, state: string, serverless: bool, status: record<code: string, message: string>, public: bool, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1147,13 +1146,13 @@ export def "accounts-deployment-shapes CreateDeploymentShape" [
   --acceleratorCount: int # The number of accelerators used per replica. If not specified, the default is the estimated minimum required by the base model. (format: int32)
   --acceleratorType: string@acceleratorType-completer # default: ACCELERATOR_TYPE_UNSPECIFIED
   --precision: string@precision-completer # default: PRECISION_UNSPECIFIED
-  --disableDeploymentSizeValidation: string@bool-completer # If true, the deployment size validation is disabled.
-  --enableAddons: string@bool-completer # If true, LORA addons are enabled for deployments created from this shape.
+  --disableDeploymentSizeValidation: oneof<nothing, bool> # If true, the deployment size validation is disabled.
+  --enableAddons: oneof<nothing, bool> # If true, LORA addons are enabled for deployments created from this shape.
   --draftTokenCount: int # The number of candidate tokens to generate per step for speculative decoding. Default is the base model's draft_token_count. (format: int32)
   --draftModel: string # The draft model name for speculative decoding. e.g. accounts/fireworks/models/my-draft-model If empty, speculative decoding using a draft model is disabled. Default is the base model's default_draft_model. Deprecated: set default_draft_model on the base model instead.
   --ngramSpeculationLength: int # The length of previous input sequence to be considered for N-gram speculation. (format: int32)
-  --disableSpeculativeDecoding: string@bool-completer # If true, speculative decoding is disabled for deployments created from this shape, even if the base model has default draft model settings.
-  --enableSessionAffinity: string@bool-completer # Whether to apply sticky routing based on `user` field.
+  --disableSpeculativeDecoding: oneof<nothing, bool> # If true, speculative decoding is disabled for deployments created from this shape, even if the base model has default draft model settings.
+  --enableSessionAffinity: oneof<nothing, bool> # Whether to apply sticky routing based on `user` field.
   --numLoraDeviceCached: int # format: int32
   --maxContextLength: int # The maximum context length supported by the model (context window). If set to 0 or not specified, the model's default maximum context length will be used. (format: int32)
   --presetType: string@presetType-completer # default: PRESET_TYPE_UNSPECIFIED
@@ -1185,7 +1184,7 @@ export def "accounts-deployment-shapes GetDeploymentShape" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --readMask: string # The fields to be returned in the response. If empty or "*", all fields will be returned.
-  --skipShapeValidation: string@bool-completer # If true, returns the latest version regardless of validation status. By default, returns the latest validated version.
+  --skipShapeValidation: oneof<nothing, bool> # If true, returns the latest version regardless of validation status. By default, returns the latest validated version.
 ]: nothing -> record<name: string, displayName: string, description: string, createTime: string, updateTime: string, baseModel: string, modelType: string, parameterCount: string, acceleratorCount: int, acceleratorType: string, precision: string, disableDeploymentSizeValidation: bool, enableAddons: bool, draftTokenCount: int, draftModel: string, ngramSpeculationLength: int, disableSpeculativeDecoding: bool, enableSessionAffinity: bool, numLoraDeviceCached: int, maxContextLength: int, presetType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.fireworks.ai")
@@ -1210,20 +1209,20 @@ export def "accounts-deployment-shapes UpdateDeploymentShape" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --fromLatestValidated: string@bool-completer # When true, the update will use the latest validated version snapshot as the base for fields not present in the update mask; otherwise, the current shape is used.
+  --fromLatestValidated: oneof<nothing, bool> # When true, the update will use the latest validated version snapshot as the base for fields not present in the update mask; otherwise, the current shape is used.
   --displayName: string # Human-readable display name of the deployment shape. e.g. "My Deployment Shape" Must be fewer than 64 characters long.
   --description: string # The description of the deployment shape. Must be fewer than 1000 characters long.
   baseModel: string
   --acceleratorCount: int # The number of accelerators used per replica. If not specified, the default is the estimated minimum required by the base model. (format: int32)
   --acceleratorType: string@acceleratorType-completer # default: ACCELERATOR_TYPE_UNSPECIFIED
   --precision: string@precision-completer # default: PRECISION_UNSPECIFIED
-  --disableDeploymentSizeValidation: string@bool-completer # If true, the deployment size validation is disabled.
-  --enableAddons: string@bool-completer # If true, LORA addons are enabled for deployments created from this shape.
+  --disableDeploymentSizeValidation: oneof<nothing, bool> # If true, the deployment size validation is disabled.
+  --enableAddons: oneof<nothing, bool> # If true, LORA addons are enabled for deployments created from this shape.
   --draftTokenCount: int # The number of candidate tokens to generate per step for speculative decoding. Default is the base model's draft_token_count. (format: int32)
   --draftModel: string # The draft model name for speculative decoding. e.g. accounts/fireworks/models/my-draft-model If empty, speculative decoding using a draft model is disabled. Default is the base model's default_draft_model. Deprecated: set default_draft_model on the base model instead.
   --ngramSpeculationLength: int # The length of previous input sequence to be considered for N-gram speculation. (format: int32)
-  --disableSpeculativeDecoding: string@bool-completer # If true, speculative decoding is disabled for deployments created from this shape, even if the base model has default draft model settings.
-  --enableSessionAffinity: string@bool-completer # Whether to apply sticky routing based on `user` field.
+  --disableSpeculativeDecoding: oneof<nothing, bool> # If true, speculative decoding is disabled for deployments created from this shape, even if the base model has default draft model settings.
+  --enableSessionAffinity: oneof<nothing, bool> # Whether to apply sticky routing based on `user` field.
   --numLoraDeviceCached: int # format: int32
   --maxContextLength: int # The maximum context length supported by the model (context window). If set to 0 or not specified, the model's default maximum context length will be used. (format: int32)
   --presetType: string@presetType-completer # default: PRESET_TYPE_UNSPECIFIED
@@ -1335,8 +1334,8 @@ export def "accounts-deployment-shapes-versions UpdateDeploymentShapeVersion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --snapshot: record # shape: {displayName?: string, description?: string, baseModel: string, acceleratorCount?: int, acceleratorType?: "ACCELERATOR_TYPE_UNSPECIFIED"|"NVIDIA_A100_80GB"|"NVIDIA_H100_80GB"|"AMD_MI300X_192GB"|"NVIDIA_A10G_24GB"|"NVIDIA_A100_40GB"|"NVIDIA_L4_24GB"|"NVIDIA_H200_141GB"|"NVIDIA_B200_180GB"|"AMD_MI325X_256GB"|"AMD_MI350X_288GB"|"NVIDIA_B300_288GB", precision?: "PRECISION_UNSPECIFIED"|"FP16"|"FP8"|"FP8_MM"|"FP8_AR"|"FP8_MM_KV_ATTN"|"FP8_KV"|"FP8_MM_V2"|"FP8_V2"|"FP8_MM_KV_ATTN_V2"|"NF4"|"FP4"|"BF16"|"FP4_BLOCKSCALED_MM"|"FP4_MX_MOE", disableDeploymentSizeValidation?: bool, enableAddons?: bool, draftTokenCount?: int, draftModel?: string, ngramSpeculationLength?: int, disableSpeculativeDecoding?: bool, enableSessionAffinity?: bool, numLoraDeviceCached?: int, maxContextLength?: int, presetType?: "PRESET_TYPE_UNSPECIFIED"|"MINIMAL"|"FAST"|"THROUGHPUT"|"FULL_PRECISION"|"AGENTIC_CODING"|"CHAT"|"SUMMARIZATION"}
-  --validated: string@bool-completer # If true, this version has been validated.
-  --public: string@bool-completer # If true, this version will be publicly readable.
+  --validated: oneof<nothing, bool> # If true, this version has been validated.
+  --public: oneof<nothing, bool> # If true, this version will be publicly readable.
 ]: any -> record<name: string, createTime: string, snapshot: record<name: string, displayName: string, description: string, createTime: string, updateTime: string, baseModel: string, modelType: string, parameterCount: string, acceleratorCount: int, acceleratorType: string, precision: string, disableDeploymentSizeValidation: bool, enableAddons: bool, draftTokenCount: int, draftModel: string, ngramSpeculationLength: int, disableSpeculativeDecoding: bool, enableSessionAffinity: bool, numLoraDeviceCached: int, maxContextLength: int, presetType: string>, validated: bool, public: bool, latestValidated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1366,7 +1365,7 @@ export def "accounts-deployments ListDeployments" [
   --pageToken: string # A page token, received from a previous ListDeployments call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to ListDeployments must match the call that provided the page token.
   --filter: string # Only deployment satisfying the provided filter (if specified) will be returned. See https://google.aip.dev/160 for the filter grammar.
   --orderBy: string # A comma-separated list of fields to order by. e.g. "foo,bar" The default sort order is ascending. To specify a descending order for a field, append a " desc" suffix. e.g. "foo desc,bar" Subfields are specified with a "." character. e.g. "foo.bar" If not specified, the default order is by "create_time".
-  --showDeleted: string@bool-completer # If set, DELETED deployments will be included.
+  --showDeleted: oneof<nothing, bool> # If set, DELETED deployments will be included.
   --readMask: string # The fields to be returned in the response. If empty or "*", all fields will be returned.
 ]: nothing -> record<deployments: table<name: string, displayName: string, description: string, createTime: string, expireTime: string, purgeTime: string, deleteTime: string, state: string, status: record, annotations: record, minReplicaCount: int, maxReplicaCount: int, maxWithRevocableReplicaCount: int, desiredReplicaCount: int, replicaCount: int, autoscalingPolicy: record, baseModel: string, acceleratorCount: int, acceleratorType: string, precision: string, cluster: string, enableAddons: bool, draftTokenCount: int, draftModel: string, ngramSpeculationLength: int, enableSessionAffinity: bool, directRouteApiKeys: list, numPeftDeviceCached: int, directRouteType: string, directRouteHandle: string, deploymentTemplate: string, autoTune: record, placement: record, region: string, maxContextLength: int, updateTime: string, disableDeploymentSizeValidation: bool, enableHotLoad: bool, hotLoadBucketType: string, enableHotReloadLatestAddon: bool, deploymentShape: string, activeModelVersion: string, targetModelVersion: string, replicaStats: record, hotLoadBucketUrl: string, pricingPlanId: string, hotLoadTrainerJob: string>, nextPageToken: string, totalSize: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1395,12 +1394,12 @@ export def "accounts-deployments CreateDeployment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --disableAutoDeploy: string@bool-completer # By default, a deployment created with a currently undeployed base model will be deployed to this deployment. If true, this auto-deploy function is disabled.
-  --disableSpeculativeDecoding: string@bool-completer # By default, a deployment will use the speculative decoding settings from the base model. If true, this will disable speculative decoding.
+  --disableAutoDeploy: oneof<nothing, bool> # By default, a deployment created with a currently undeployed base model will be deployed to this deployment. If true, this auto-deploy function is disabled.
+  --disableSpeculativeDecoding: oneof<nothing, bool> # By default, a deployment will use the speculative decoding settings from the base model. If true, this will disable speculative decoding.
   --deploymentId: string # The ID of the deployment. If not specified, a random ID will be generated.
-  --validateOnly: string@bool-completer # If true, this will not create the deployment, but will return the deployment that would be created.
-  --skipShapeValidation: string@bool-completer # By default, a deployment will ensure the deployment shape provided is validated. If true, we will not require the deployment shape to be validated.
-  --skipImageTagValidation: string@bool-completer # If true, skip the image tag policy validation that blocks certain image tags. This allows creating deployments with image tags that would otherwise be blocked.
+  --validateOnly: oneof<nothing, bool> # If true, this will not create the deployment, but will return the deployment that would be created.
+  --skipShapeValidation: oneof<nothing, bool> # By default, a deployment will ensure the deployment shape provided is validated. If true, we will not require the deployment shape to be validated.
+  --skipImageTagValidation: oneof<nothing, bool> # If true, skip the image tag policy validation that blocks certain image tags. This allows creating deployments with image tags that would otherwise be blocked.
   --displayName: string # Human-readable display name of the deployment. e.g. "My Deployment" Must be fewer than 64 characters long.
   --description: string # Description of the deployment.
   --expireTime: string # Deprecated: This field is deprecated and no longer causes auto-deletion. The time at which this deployment will automatically be deleted. (format: date-time)
@@ -1415,11 +1414,11 @@ export def "accounts-deployments CreateDeployment" [
   --acceleratorCount: int # The number of accelerators used per replica. If not specified, the default is the estimated minimum required by the base model. (format: int32)
   --acceleratorType: string@acceleratorType-completer # default: ACCELERATOR_TYPE_UNSPECIFIED
   --precision: string@precision-completer # default: PRECISION_UNSPECIFIED
-  --enableAddons: string@bool-completer # If true, PEFT addons are enabled for this deployment.
+  --enableAddons: oneof<nothing, bool> # If true, PEFT addons are enabled for this deployment.
   --draftTokenCount: int # The number of candidate tokens to generate per step for speculative decoding. Default is the base model's draft_token_count. Set CreateDeploymentRequest.disable_speculative_decoding to false to disable this behavior. (format: int32)
   --draftModel: string # The draft model name for speculative decoding. e.g. accounts/fireworks/models/my-draft-model If empty, speculative decoding using a draft model is disabled. Default is the base model's default_draft_model. Set CreateDeploymentRequest.disable_speculative_decoding to false to disable this behavior.
   --ngramSpeculationLength: int # The length of previous input sequence to be considered for N-gram speculation. (format: int32)
-  --enableSessionAffinity: string@bool-completer # Whether to apply sticky routing based on `user` field. Serverless will be set to true when creating deployment.
+  --enableSessionAffinity: oneof<nothing, bool> # Whether to apply sticky routing based on `user` field. Serverless will be set to true when creating deployment.
   --directRouteApiKeys: list # The set of API keys used to access the direct route deployment. If direct routing is not enabled, this field is unused.
   --numPeftDeviceCached: int # format: int32
   --directRouteType: string@directRouteType-completer # default: DIRECT_ROUTE_TYPE_UNSPECIFIED
@@ -1428,10 +1427,10 @@ export def "accounts-deployments CreateDeployment" [
   --placement: record # The desired geographic region where the deployment must be placed. Exactly one field will be specified. — shape: {region?: "REGION_UNSPECIFIED"|"US_IOWA_1"|"US_VIRGINIA_1"|"US_VIRGINIA_2"|"US_ILLINOIS_1"|"AP_TOKYO_1"|"US_ARIZONA_1"|"US_TEXAS_1"|"US_ILLINOIS_2"|"EU_FRANKFURT_1"|"US_TEXAS_2"|"EU_ICELAND_1"|"EU_ICELAND_2"|"US_WASHINGTON_1"|"US_WASHINGTON_2"|"US_WASHINGTON_3"|"AP_TOKYO_2"|"US_CALIFORNIA_1"|"US_UTAH_1"|"US_GEORGIA_1"|"US_GEORGIA_2"|"US_WASHINGTON_4"|"US_GEORGIA_3"|"NA_BRITISHCOLUMBIA_1"|"US_GEORGIA_4"|"US_OHIO_1"|"US_NEWYORK_1"|"EU_NETHERLANDS_1"|"US_WASHINGTON_5"|"US_MINNESOTA_1"|"US_CALIFORNIA_2"|"AP_MALAYSIA_1"|"US_OHIO_2", multiRegion?: "MULTI_REGION_UNSPECIFIED"|"GLOBAL"|"US"|"EUROPE"|"APAC", regions?: list}
   --region: string@region-completer # default: REGION_UNSPECIFIED
   --maxContextLength: int # The maximum context length supported by the model (context window). If set to 0 or not specified, the model's default maximum context length will be used. (format: int32)
-  --disableDeploymentSizeValidation: string@bool-completer # Whether the deployment size validation is disabled.
-  --enableHotLoad: string@bool-completer # Whether to use hot load for this deployment.
+  --disableDeploymentSizeValidation: oneof<nothing, bool> # Whether the deployment size validation is disabled.
+  --enableHotLoad: oneof<nothing, bool> # Whether to use hot load for this deployment.
   --hotLoadBucketType: string@hotLoadBucketType-completer # default: BUCKET_TYPE_UNSPECIFIED
-  --enableHotReloadLatestAddon: string@bool-completer # Allows up to 1 addon at a time to be loaded, and will merge it into the base model.
+  --enableHotReloadLatestAddon: oneof<nothing, bool> # Allows up to 1 addon at a time to be loaded, and will merge it into the base model.
   --deploymentShape: string # The name of the deployment shape that this deployment is using. On the server side, this will be replaced with the deployment shape version name.
   --activeModelVersion: string # The model version that is currently active and applied to running replicas of a deployment.
   --targetModelVersion: string # The target model version that is being rolled out to the deployment. In a ready steady state, the target model version is the same as the active model version.
@@ -1495,7 +1494,7 @@ export def "accounts-deployments UpdateDeployment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --skipShapeValidation: string@bool-completer # By default, updating a deployment shape will ensure the new deployment shape provided is validated. If true, we will not require the deployment shape to be validated.
+  --skipShapeValidation: oneof<nothing, bool> # By default, updating a deployment shape will ensure the new deployment shape provided is validated. If true, we will not require the deployment shape to be validated.
   --displayName: string # Human-readable display name of the deployment. e.g. "My Deployment" Must be fewer than 64 characters long.
   --description: string # Description of the deployment.
   --expireTime: string # Deprecated: This field is deprecated and no longer causes auto-deletion. The time at which this deployment will automatically be deleted. (format: date-time)
@@ -1510,11 +1509,11 @@ export def "accounts-deployments UpdateDeployment" [
   --acceleratorCount: int # The number of accelerators used per replica. If not specified, the default is the estimated minimum required by the base model. (format: int32)
   --acceleratorType: string@acceleratorType-completer # default: ACCELERATOR_TYPE_UNSPECIFIED
   --precision: string@precision-completer # default: PRECISION_UNSPECIFIED
-  --enableAddons: string@bool-completer # If true, PEFT addons are enabled for this deployment.
+  --enableAddons: oneof<nothing, bool> # If true, PEFT addons are enabled for this deployment.
   --draftTokenCount: int # The number of candidate tokens to generate per step for speculative decoding. Default is the base model's draft_token_count. Set CreateDeploymentRequest.disable_speculative_decoding to false to disable this behavior. (format: int32)
   --draftModel: string # The draft model name for speculative decoding. e.g. accounts/fireworks/models/my-draft-model If empty, speculative decoding using a draft model is disabled. Default is the base model's default_draft_model. Set CreateDeploymentRequest.disable_speculative_decoding to false to disable this behavior.
   --ngramSpeculationLength: int # The length of previous input sequence to be considered for N-gram speculation. (format: int32)
-  --enableSessionAffinity: string@bool-completer # Whether to apply sticky routing based on `user` field. Serverless will be set to true when creating deployment.
+  --enableSessionAffinity: oneof<nothing, bool> # Whether to apply sticky routing based on `user` field. Serverless will be set to true when creating deployment.
   --directRouteApiKeys: list # The set of API keys used to access the direct route deployment. If direct routing is not enabled, this field is unused.
   --numPeftDeviceCached: int # format: int32
   --directRouteType: string@directRouteType-completer # default: DIRECT_ROUTE_TYPE_UNSPECIFIED
@@ -1523,10 +1522,10 @@ export def "accounts-deployments UpdateDeployment" [
   --placement: record # The desired geographic region where the deployment must be placed. Exactly one field will be specified. — shape: {region?: "REGION_UNSPECIFIED"|"US_IOWA_1"|"US_VIRGINIA_1"|"US_VIRGINIA_2"|"US_ILLINOIS_1"|"AP_TOKYO_1"|"US_ARIZONA_1"|"US_TEXAS_1"|"US_ILLINOIS_2"|"EU_FRANKFURT_1"|"US_TEXAS_2"|"EU_ICELAND_1"|"EU_ICELAND_2"|"US_WASHINGTON_1"|"US_WASHINGTON_2"|"US_WASHINGTON_3"|"AP_TOKYO_2"|"US_CALIFORNIA_1"|"US_UTAH_1"|"US_GEORGIA_1"|"US_GEORGIA_2"|"US_WASHINGTON_4"|"US_GEORGIA_3"|"NA_BRITISHCOLUMBIA_1"|"US_GEORGIA_4"|"US_OHIO_1"|"US_NEWYORK_1"|"EU_NETHERLANDS_1"|"US_WASHINGTON_5"|"US_MINNESOTA_1"|"US_CALIFORNIA_2"|"AP_MALAYSIA_1"|"US_OHIO_2", multiRegion?: "MULTI_REGION_UNSPECIFIED"|"GLOBAL"|"US"|"EUROPE"|"APAC", regions?: list}
   --region: string@region-completer # default: REGION_UNSPECIFIED
   --maxContextLength: int # The maximum context length supported by the model (context window). If set to 0 or not specified, the model's default maximum context length will be used. (format: int32)
-  --disableDeploymentSizeValidation: string@bool-completer # Whether the deployment size validation is disabled.
-  --enableHotLoad: string@bool-completer # Whether to use hot load for this deployment.
+  --disableDeploymentSizeValidation: oneof<nothing, bool> # Whether the deployment size validation is disabled.
+  --enableHotLoad: oneof<nothing, bool> # Whether to use hot load for this deployment.
   --hotLoadBucketType: string@hotLoadBucketType-completer # default: BUCKET_TYPE_UNSPECIFIED
-  --enableHotReloadLatestAddon: string@bool-completer # Allows up to 1 addon at a time to be loaded, and will merge it into the base model.
+  --enableHotReloadLatestAddon: oneof<nothing, bool> # Allows up to 1 addon at a time to be loaded, and will merge it into the base model.
   --deploymentShape: string # The name of the deployment shape that this deployment is using. On the server side, this will be replaced with the deployment shape version name.
   --activeModelVersion: string # The model version that is currently active and applied to running replicas of a deployment.
   --targetModelVersion: string # The target model version that is being rolled out to the deployment. In a ready steady state, the target model version is the same as the active model version.
@@ -1561,8 +1560,8 @@ export def "accounts-deployments DeleteDeployment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hard: string@bool-completer # If true, this will perform a hard deletion.
-  --ignoreChecks: string@bool-completer # If true, this will ignore checks and force the deletion of a deployment that is currently deployed and is in use.
+  --hard: oneof<nothing, bool> # If true, this will perform a hard deletion.
+  --ignoreChecks: oneof<nothing, bool> # If true, this will ignore checks and force the deletion of a deployment that is currently deployed and is in use.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.fireworks.ai")
@@ -1791,7 +1790,7 @@ export def "accounts-developer-passes CreateDeveloperPass" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoRenew: string@bool-completer # Whether the developer pass will automatically renew upon expiry.
+  --autoRenew: oneof<nothing, bool> # Whether the developer pass will automatically renew upon expiry.
   --state: string@state-completer-5 # default: STATE_UNSPECIFIED
 ]: any -> record<name: string, autoRenew: bool, endTime: string, createTime: string, updateTime: string, state: string, lastRenewTime: string> {
   let input = $in
@@ -1844,7 +1843,7 @@ export def "accounts-developer-passes UpdateDeveloperPass" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoRenew: string@bool-completer # Whether the developer pass will automatically renew upon expiry.
+  --autoRenew: oneof<nothing, bool> # Whether the developer pass will automatically renew upon expiry.
   --state: string@state-completer-5 # default: STATE_UNSPECIFIED
 ]: any -> record<name: string, autoRenew: bool, endTime: string, createTime: string, updateTime: string, state: string, lastRenewTime: string> {
   let input = $in
@@ -2431,7 +2430,7 @@ export def "accounts-evaluators UpdateEvaluator" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --prepareCodeUpload: string@bool-completer # If true, prepare a new code upload/build attempt by transitioning the evaluator to BUILDING state. Can be used without update_mask.
+  --prepareCodeUpload: oneof<nothing, bool> # If true, prepare a new code upload/build attempt by transitioning the evaluator to BUILDING state. Can be used without update_mask.
   --displayName: string
   --description: string
   --state: string@state-completer-6 # default: STATE_UNSPECIFIED
@@ -2898,7 +2897,7 @@ export def "accounts-generic-deployment-types DeleteGenericDeploymentType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hard: string@bool-completer # If true, this will perform a hard deletion.
+  --hard: oneof<nothing, bool> # If true, this will perform a hard deletion.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.fireworks.ai")
@@ -2950,7 +2949,7 @@ export def "accounts-generic-deployment-types-versions DeleteGenericDeploymentTy
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hard: string@bool-completer # If true, this will perform a hard deletion.
+  --hard: oneof<nothing, bool> # If true, this will perform a hard deletion.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.fireworks.ai")
@@ -3004,7 +3003,7 @@ export def "accounts-generic-deployments CreateGenericDeployment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --genericDeploymentId: string # The ID of the deployment. If not specified, a random ID will be generated.
-  --validateOnly: string@bool-completer # If true, this will not create the deployment, but will return the deployment that would be created.
+  --validateOnly: oneof<nothing, bool> # If true, this will not create the deployment, but will return the deployment that would be created.
   releaseValues: record
   placement: record # The desired geographic region where the deployment must be placed. Exactly one field will be specified. — shape: {region?: "REGION_UNSPECIFIED"|"US_IOWA_1"|"US_VIRGINIA_1"|"US_VIRGINIA_2"|"US_ILLINOIS_1"|"AP_TOKYO_1"|"US_ARIZONA_1"|"US_TEXAS_1"|"US_ILLINOIS_2"|"EU_FRANKFURT_1"|"US_TEXAS_2"|"EU_ICELAND_1"|"EU_ICELAND_2"|"US_WASHINGTON_1"|"US_WASHINGTON_2"|"US_WASHINGTON_3"|"AP_TOKYO_2"|"US_CALIFORNIA_1"|"US_UTAH_1"|"US_GEORGIA_1"|"US_GEORGIA_2"|"US_WASHINGTON_4"|"US_GEORGIA_3"|"NA_BRITISHCOLUMBIA_1"|"US_GEORGIA_4"|"US_OHIO_1"|"US_NEWYORK_1"|"EU_NETHERLANDS_1"|"US_WASHINGTON_5"|"US_MINNESOTA_1"|"US_CALIFORNIA_2"|"AP_MALAYSIA_1"|"US_OHIO_2", multiRegion?: "MULTI_REGION_UNSPECIFIED"|"GLOBAL"|"US"|"EUROPE"|"APAC", regions?: list}
   genericDeploymentType: string
@@ -3092,8 +3091,8 @@ export def "accounts-generic-deployments DeleteGenericDeployment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hard: string@bool-completer # If true, this will perform a hard deletion.
-  --ignoreChecks: string@bool-completer # If true, this will ignore checks and force the deletion of a deployment that is currently deployed and is in use.
+  --hard: oneof<nothing, bool> # If true, this will perform a hard deletion.
+  --ignoreChecks: oneof<nothing, bool> # If true, this will ignore checks and force the deletion of a deployment that is currently deployed and is in use.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.fireworks.ai")
@@ -3154,10 +3153,10 @@ export def "accounts-identity-providers CreateIdentityProvider" [
   --tenantDomains: list
   --state: string@state-completer-7 # default: STATE_UNSPECIFIED
   --status: record # shape: {code?: "OK"|"CANCELLED"|"UNKNOWN"|"INVALID_ARGUMENT"|"DEADLINE_EXCEEDED"|"NOT_FOUND"|"ALREADY_EXISTS"|"PERMISSION_DENIED"|"UNAUTHENTICATED"|"RESOURCE_EXHAUSTED"|"FAILED_PRECONDITION"|"ABORTED"|"OUT_OF_RANGE"|"UNIMPLEMENTED"|"INTERNAL"|"UNAVAILABLE"|"DATA_LOSS", message?: string}
-  --enableJitUserProvisioning: string@bool-completer # Enable Just-In-Time (JIT) user provisioning. When enabled, users are automatically created in the account on first SSO login if they don't already exist. When disabled, users must be pre-provisioned before they can authenticate via SSO.
+  --enableJitUserProvisioning: oneof<nothing, bool> # Enable Just-In-Time (JIT) user provisioning. When enabled, users are automatically created in the account on first SSO login if they don't already exist. When disabled, users must be pre-provisioned before they can authenticate via SSO.
   --jitDefaultRole: string # Default role assigned to JIT-provisioned users. Valid values: "admin", "user", "contributor", "inference-user". Only applies when enable_jit_user_provisioning is true and RBAC V2 is enabled. If empty or unset, defaults to "inference-user" (least privilege). If RBAC V2 is not enabled for the account, JIT users always get "user" role.
-  --enforceSso: string@bool-completer
-  --enableIdpInitiatedSso: string@bool-completer # Enable IdP-initiated SAML (Security Assertion Markup Language) single sign-on. When enabled, users can start the login flow from their identity provider's portal (e.g., Okta app launcher) instead of from the Fireworks login page. Only supported for SAML identity providers.
+  --enforceSso: oneof<nothing, bool>
+  --enableIdpInitiatedSso: oneof<nothing, bool> # Enable IdP-initiated SAML (Security Assertion Markup Language) single sign-on. When enabled, users can start the login flow from their identity provider's portal (e.g., Okta app launcher) instead of from the Fireworks login page. Only supported for SAML identity providers.
 ]: any -> record<name: string, displayName: string, createTime: string, updateTime: string, samlConfig: record<metadataUrl: string, metadataXml: string>, oidcConfig: record<issuerUrl: string, clientId: string, clientSecret: string>, tenantDomains: list<string>, state: string, status: record<code: string, message: string>, domainUrl: string, issuerUrl: string, clientId: string, enableJitUserProvisioning: bool, jitDefaultRole: string, enforceSso: bool, enableIdpInitiatedSso: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3218,10 +3217,10 @@ export def "accounts-identity-providers UpdateIdentityProvider" [
   --tenantDomains: list
   --state: string@state-completer-7 # default: STATE_UNSPECIFIED
   --status: record # shape: {code?: "OK"|"CANCELLED"|"UNKNOWN"|"INVALID_ARGUMENT"|"DEADLINE_EXCEEDED"|"NOT_FOUND"|"ALREADY_EXISTS"|"PERMISSION_DENIED"|"UNAUTHENTICATED"|"RESOURCE_EXHAUSTED"|"FAILED_PRECONDITION"|"ABORTED"|"OUT_OF_RANGE"|"UNIMPLEMENTED"|"INTERNAL"|"UNAVAILABLE"|"DATA_LOSS", message?: string}
-  --enableJitUserProvisioning: string@bool-completer # Enable Just-In-Time (JIT) user provisioning. When enabled, users are automatically created in the account on first SSO login if they don't already exist. When disabled, users must be pre-provisioned before they can authenticate via SSO.
+  --enableJitUserProvisioning: oneof<nothing, bool> # Enable Just-In-Time (JIT) user provisioning. When enabled, users are automatically created in the account on first SSO login if they don't already exist. When disabled, users must be pre-provisioned before they can authenticate via SSO.
   --jitDefaultRole: string # Default role assigned to JIT-provisioned users. Valid values: "admin", "user", "contributor", "inference-user". Only applies when enable_jit_user_provisioning is true and RBAC V2 is enabled. If empty or unset, defaults to "inference-user" (least privilege). If RBAC V2 is not enabled for the account, JIT users always get "user" role.
-  --enforceSso: string@bool-completer
-  --enableIdpInitiatedSso: string@bool-completer # Enable IdP-initiated SAML (Security Assertion Markup Language) single sign-on. When enabled, users can start the login flow from their identity provider's portal (e.g., Okta app launcher) instead of from the Fireworks login page. Only supported for SAML identity providers.
+  --enforceSso: oneof<nothing, bool>
+  --enableIdpInitiatedSso: oneof<nothing, bool> # Enable IdP-initiated SAML (Security Assertion Markup Language) single sign-on. When enabled, users can start the login flow from their identity provider's portal (e.g., Okta app launcher) instead of from the Fireworks login page. Only supported for SAML identity providers.
 ]: any -> record<name: string, displayName: string, createTime: string, updateTime: string, samlConfig: record<metadataUrl: string, metadataXml: string>, oidcConfig: record<issuerUrl: string, clientId: string, clientSecret: string>, tenantDomains: list<string>, state: string, status: record<code: string, message: string>, domainUrl: string, issuerUrl: string, clientId: string, enableJitUserProvisioning: bool, jitDefaultRole: string, enforceSso: bool, enableIdpInitiatedSso: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3371,16 +3370,16 @@ export def "accounts-models UpdateModel" [
   --baseModelDetails: record # shape: {worldSize?: int, checkpointFormat?: "CHECKPOINT_FORMAT_UNSPECIFIED"|"NATIVE"|"HUGGINGFACE"|"UNINITIALIZED", huggingfaceFiles?: list, parameterCount?: string, moe?: bool, tunable?: bool, modelType?: string, supportsFireattention?: bool, defaultPrecision?: "PRECISION_UNSPECIFIED"|"FP16"|"FP8"|"FP8_MM"|"FP8_AR"|"FP8_MM_KV_ATTN"|"FP8_KV"|"FP8_MM_V2"|"FP8_V2"|"FP8_MM_KV_ATTN_V2"|"NF4"|"FP4"|"BF16"|"FP4_BLOCKSCALED_MM"|"FP4_MX_MOE", supportsMtp?: bool}
   --peftDetails: record # shape: {baseModel: string, r: int, targetModules: list, mergeAddonModelName?: string}
   --teftDetails: record
-  --public: string@bool-completer # If true, the model will be publicly readable.
+  --public: oneof<nothing, bool> # If true, the model will be publicly readable.
   --conversationConfig: record # shape: {style: string, system?: string, template?: string}
   --contextLength: int # The maximum context length supported by the model. (format: int32)
-  --supportsImageInput: string@bool-completer # If set, images can be provided as input to the model.
-  --supportsTools: string@bool-completer # If set, tools (i.e. functions) can be provided as input to the model, and the model may respond with one or more tool calls.
+  --supportsImageInput: oneof<nothing, bool> # If set, images can be provided as input to the model.
+  --supportsTools: oneof<nothing, bool> # If set, tools (i.e. functions) can be provided as input to the model, and the model may respond with one or more tool calls.
   --defaultDraftModel: string # The default draft model to use when creating a deployment. If empty, speculative decoding is disabled by default.
   --defaultDraftTokenCount: int # The default draft token count to use when creating a deployment. Must be specified if default_draft_model is specified. (format: int32)
   --deprecationDate: record # * A full date, with non-zero year, month, and day values * A month and day value, with a zero year, such as an anniversary * A year on its own, with zero month and day values * A year and month value, with a zero day, such as a credit card expiration date  Related types are [google.type.TimeOfDay][google.type.TimeOfDay] and `google.protobuf.Timestamp`. — shape: {year?: int, month?: int, day?: int}
-  --supportsLora: string@bool-completer # Whether this model supports LoRA.
-  --useHfApplyChatTemplate: string@bool-completer # If true, the model will use the Hugging Face apply_chat_template API to apply the chat template.
+  --supportsLora: oneof<nothing, bool> # Whether this model supports LoRA.
+  --useHfApplyChatTemplate: oneof<nothing, bool> # If true, the model will use the Hugging Face apply_chat_template API to apply the chat template.
   --trainingContextLength: int # The maximum context length supported by the model. (format: int32)
   --snapshotType: string@snapshotType-completer # default: FULL_SNAPSHOT
 ]: any -> record<name: string, displayName: string, description: string, createTime: string, state: string, status: record<code: string, message: string>, kind: string, githubUrl: string, huggingFaceUrl: string, baseModelDetails: record<worldSize: int, checkpointFormat: string, huggingfaceFiles: list<string>, parameterCount: string, moe: bool, tunable: bool, modelType: string, supportsFireattention: bool, defaultPrecision: string, supportsMtp: bool>, peftDetails: record<baseModel: string, r: int, targetModules: list<string>, baseModelType: string, mergeAddonModelName: string>, teftDetails: record, public: bool, conversationConfig: record<style: string, system: string, template: string>, contextLength: int, supportsImageInput: bool, supportsTools: bool, importedFrom: string, fineTuningJob: string, defaultDraftModel: string, defaultDraftTokenCount: int, deployedModelRefs: table<name: string, deployment: string, state: string, default: bool, public: bool>, cluster: string, deprecationDate: record<year: int, month: int, day: int>, calibrated: bool, tunable: bool, supportsLora: bool, useHfApplyChatTemplate: bool, updateTime: string, defaultSamplingParams: record, rlTunable: bool, trainingContextLength: int, snapshotType: string, supportsServerless: bool, supervisedLoraTunable: bool, supervisedFullParameterTunable: bool, rlLoraTunable: bool, rlFullParameterTunable: bool> {
@@ -3540,7 +3539,7 @@ export def "accounts-models GetModelUploadEndpoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   filenameToSize: record # A mapping from the file name to its size in bytes.
-  --enableResumableUpload: string@bool-completer # If true, enable resumable upload instead of PUT.
+  --enableResumableUpload: oneof<nothing, bool> # If true, enable resumable upload instead of PUT.
   --readMask: string # The fields to be returned in the response. If empty or "*", all fields will be returned.
 ]: any -> record<filenameToSignedUrls: record, filenameToUnsignedUris: record> {
   let input = $in
@@ -3626,9 +3625,9 @@ export def "accounts-models ValidateModelUpload" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --skipHfConfigValidation: string@bool-completer # If true, skip the Hugging Face config validation.
-  --trustRemoteCode: string@bool-completer # If true, trusts remote code when validating the Hugging Face config.
-  --configOnly: string@bool-completer # If true, skip tokenizer and parameter name validation.
+  --skipHfConfigValidation: oneof<nothing, bool> # If true, skip the Hugging Face config validation.
+  --trustRemoteCode: oneof<nothing, bool> # If true, trusts remote code when validating the Hugging Face config.
+  --configOnly: oneof<nothing, bool> # If true, skip tokenizer and parameter name validation.
 ]: nothing -> record<warnings: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.fireworks.ai")
@@ -3808,7 +3807,7 @@ export def "accounts-quotas UpdateQuota" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowMissing: string@bool-completer # If true, and the quota does not exist, it will be created.
+  --allowMissing: oneof<nothing, bool> # If true, and the quota does not exist, it will be created.
   --value: string # The value of the quota being enforced. This may be lower than the max_value if the user manually lowers it. (format: int64)
   --maxValue: string # The maximum approved value. (format: int64)
 ]: any -> record<name: string, value: string, maxValue: string, usage: float, updateTime: string> {
@@ -3877,7 +3876,7 @@ export def "accounts-reinforcement-fine-tuning-jobs CreateReinforcementFineTunin
   --displayName: string
   dataset: string # The name of the dataset used for training.
   --evaluationDataset: string # The name of a separate dataset to use for evaluation.
-  --evalAutoCarveout: string@bool-completer # Whether to auto-carve the dataset for eval.
+  --evalAutoCarveout: oneof<nothing, bool> # Whether to auto-carve the dataset for eval.
   --state: string@state-completer # JobState represents the state an asynchronous job can be in.   - JOB_STATE_PAUSED: Job is paused, typically due to account suspension or manual intervention.  - JOB_STATE_DELETED: Job has been deleted. (default: JOB_STATE_UNSPECIFIED)
   --status: record # shape: {code?: "OK"|"CANCELLED"|"UNKNOWN"|"INVALID_ARGUMENT"|"DEADLINE_EXCEEDED"|"NOT_FOUND"|"ALREADY_EXISTS"|"PERMISSION_DENIED"|"UNAUTHENTICATED"|"RESOURCE_EXHAUSTED"|"FAILED_PRECONDITION"|"ABORTED"|"OUT_OF_RANGE"|"UNIMPLEMENTED"|"INTERNAL"|"UNAVAILABLE"|"DATA_LOSS", message?: string}
   --trainingConfig: record # shape: {outputModel?: string, baseModel?: string, warmStartFrom?: string, jinjaTemplate?: string, learningRate?: float, maxContextLength?: int, loraRank?: int, epochs?: int, batchSize?: int, gradientAccumulationSteps?: int, learningRateWarmupSteps?: int, batchSizeSamples?: int, optimizerWeightDecay?: float, trainerShardingScheme?: record, loraAlpha?: int, loraDropout?: float, loraTargetModules?: list}
@@ -3957,7 +3956,7 @@ export def "accounts-reinforcement-fine-tuning-jobs UpdateReinforcementFineTunin
   --displayName: string
   dataset: string # The name of the dataset used for training.
   --evaluationDataset: string # The name of a separate dataset to use for evaluation.
-  --evalAutoCarveout: string@bool-completer # Whether to auto-carve the dataset for eval.
+  --evalAutoCarveout: oneof<nothing, bool> # Whether to auto-carve the dataset for eval.
   --state: string@state-completer # JobState represents the state an asynchronous job can be in.   - JOB_STATE_PAUSED: Job is paused, typically due to account suspension or manual intervention.  - JOB_STATE_DELETED: Job has been deleted. (default: JOB_STATE_UNSPECIFIED)
   --status: record # shape: {code?: "OK"|"CANCELLED"|"UNKNOWN"|"INVALID_ARGUMENT"|"DEADLINE_EXCEEDED"|"NOT_FOUND"|"ALREADY_EXISTS"|"PERMISSION_DENIED"|"UNAUTHENTICATED"|"RESOURCE_EXHAUSTED"|"FAILED_PRECONDITION"|"ABORTED"|"OUT_OF_RANGE"|"UNIMPLEMENTED"|"INTERNAL"|"UNAVAILABLE"|"DATA_LOSS", message?: string}
   --trainingConfig: record # shape: {outputModel?: string, baseModel?: string, warmStartFrom?: string, jinjaTemplate?: string, learningRate?: float, maxContextLength?: int, loraRank?: int, epochs?: int, batchSize?: int, gradientAccumulationSteps?: int, learningRateWarmupSteps?: int, batchSizeSamples?: int, optimizerWeightDecay?: float, trainerShardingScheme?: record, loraAlpha?: int, loraDropout?: float, loraTargetModules?: list}
@@ -4162,7 +4161,7 @@ export def "accounts-rlor-trainer-jobs CreateRlorTrainerJob" [
   --displayName: string
   --dataset: string # The name of the dataset used for training.
   --evaluationDataset: string # The name of a separate dataset to use for evaluation.
-  --evalAutoCarveout: string@bool-completer # Whether to auto-carve the dataset for eval.
+  --evalAutoCarveout: oneof<nothing, bool> # Whether to auto-carve the dataset for eval.
   --state: string@state-completer # JobState represents the state an asynchronous job can be in.   - JOB_STATE_PAUSED: Job is paused, typically due to account suspension or manual intervention.  - JOB_STATE_DELETED: Job has been deleted. (default: JOB_STATE_UNSPECIFIED)
   --status: record # shape: {code?: "OK"|"CANCELLED"|"UNKNOWN"|"INVALID_ARGUMENT"|"DEADLINE_EXCEEDED"|"NOT_FOUND"|"ALREADY_EXISTS"|"PERMISSION_DENIED"|"UNAUTHENTICATED"|"RESOURCE_EXHAUSTED"|"FAILED_PRECONDITION"|"ABORTED"|"OUT_OF_RANGE"|"UNIMPLEMENTED"|"INTERNAL"|"UNAVAILABLE"|"DATA_LOSS", message?: string}
   --trainingConfig: record # shape: {outputModel?: string, baseModel?: string, warmStartFrom?: string, jinjaTemplate?: string, learningRate?: float, maxContextLength?: int, loraRank?: int, epochs?: int, batchSize?: int, gradientAccumulationSteps?: int, learningRateWarmupSteps?: int, batchSizeSamples?: int, optimizerWeightDecay?: float, trainerShardingScheme?: record, loraAlpha?: int, loraDropout?: float, loraTargetModules?: list}
@@ -4171,17 +4170,17 @@ export def "accounts-rlor-trainer-jobs CreateRlorTrainerJob" [
   --awsS3Config: record # AwsS3Config is the configuration for AWS S3 dataset access which will be used by a training job. — shape: {credentialsSecret?: string, iamRoleArn?: string}
   --azureBlobStorageConfig: record # AzureBlobStorageConfig is the configuration for Azure Blob Storage dataset access which will be used by a training job. — shape: {credentialsSecret?: string, managedIdentityClientId?: string, tenantId?: string}
   --jobProgress: record # Progress of a job, e.g. RLOR, EVJ, BIJ etc. — shape: {percent?: int, epoch?: int, totalInputRequests?: int, totalProcessedRequests?: int, successfullyProcessedRequests?: int, failedRequests?: int, outputRows?: int, inputTokens?: int, outputTokens?: int, cachedInputTokenCount?: int}
-  --keepAlive: string@bool-completer
+  --keepAlive: oneof<nothing, bool>
   --rolloutDeploymentName: string # Rollout deployment name associated with this RLOR trainer job. This is optional. If not set, trainer will not trigger weight sync to rollout engine.
   --lossConfig: record # Loss method + hyperparameters for reinforcement-learning-style fine-tuning (e.g. RFT / RL trainers). For preference jobs (DPO API), the default loss method is GRPO when METHOD_UNSPECIFIED. — shape: {method?: "METHOD_UNSPECIFIED"|"GRPO"|"DAPO"|"DPO"|"ORPO"|"GSPO_TOKEN", klBeta?: float, dpo?: record, orpo?: record}
   --nodeCount: int # The number of nodes to use for the fine-tuning job. If not specified, the default is 1. (format: int32)
-  --serviceMode: string@bool-completer
+  --serviceMode: oneof<nothing, bool>
   --hotLoadDeploymentId: string # The deployment ID used for hot loading. When set, checkpoints are saved to this deployment's hot load bucket, enabling weight swaps on inference. Only valid for service-mode or keep-alive jobs.
   --purpose: string@purpose-completer # Scheduling purpose for training jobs and deployments. (default: PURPOSE_UNSPECIFIED)
-  --forwardOnly: string@bool-completer # When true, run the trainer in forward-only mode (no backward/optimizer). Used for reference models in GRPO that only need forward passes.
+  --forwardOnly: oneof<nothing, bool> # When true, run the trainer in forward-only mode (no backward/optimizer). Used for reference models in GRPO that only need forward passes.
   --managedBy: string # For managed service use only. Users do not need to set this field.
   --inactivityTimeout: string # Trainer inactivity timeout. The trainer reports tracked activity, including trainer API operations and active-session heartbeats. If no tracked activity is observed for this duration, the trainer is automatically stopped. When unset or 0, defaults to 60 minutes. Set disableInactivityCleanup to true to disable automatic cleanup. GPU usage continues to accrue while the trainer is running.
-  --disableInactivityCleanup: string@bool-completer # Disable trainer inactivity cleanup. When true, the trainer is not automatically stopped due to inactivity. GPU usage continues to accrue while the trainer is running.
+  --disableInactivityCleanup: oneof<nothing, bool> # Disable trainer inactivity cleanup. When true, the trainer is not automatically stopped due to inactivity. GPU usage continues to accrue while the trainer is running.
 ]: any -> record<name: string, displayName: string, createTime: string, completedTime: string, dataset: string, evaluationDataset: string, evalAutoCarveout: bool, state: string, status: record<code: string, message: string>, createdBy: string, trainingConfig: record<outputModel: string, baseModel: string, warmStartFrom: string, jinjaTemplate: string, learningRate: float, maxContextLength: int, loraRank: int, epochs: int, batchSize: int, gradientAccumulationSteps: int, learningRateWarmupSteps: int, batchSizeSamples: int, optimizerWeightDecay: float, trainerShardingScheme: record<tensorParallelism: int, pipelineParallelism: int, contextParallelism: int, expertParallelism: int, sequenceParallelism: bool>, loraAlpha: int, loraDropout: float, loraTargetModules: list<string>>, rewardWeights: list<string>, wandbConfig: record<enabled: bool, apiKey: string, project: string, entity: string, runId: string, url: string>, awsS3Config: record<credentialsSecret: string, iamRoleArn: string>, azureBlobStorageConfig: record<credentialsSecret: string, managedIdentityClientId: string, tenantId: string>, jobProgress: record<percent: int, epoch: int, totalInputRequests: int, totalProcessedRequests: int, successfullyProcessedRequests: int, failedRequests: int, outputRows: int, inputTokens: int, outputTokens: int, cachedInputTokenCount: int>, keepAlive: bool, rolloutDeploymentName: string, lossConfig: record<method: string, klBeta: float, dpo: record<beta: float, refCacheConcurrency: int, refCacheBatchSize: int>, orpo: record<lambda: float>>, nodeCount: int, acceleratorSeconds: record, serviceMode: bool, directRouteHandle: string, hotLoadDeploymentId: string, purpose: string, forwardOnly: bool, managedBy: string, inactivityTimeout: string, disableInactivityCleanup: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4422,7 +4421,7 @@ export def "accounts-routers CreateRouter" [
   --model: string # The model name to route requests to. model is only applicable to single-region deployments. For multi-region deployments, model must be empty.
   --weightedRandom: record # Use replica count as weight.
   --evenLoad: record # Dynamically adjust traffic allocation to balance the load per replica across the deployments as much as possible.
-  --public: string@bool-completer # True if the router is public (any account can query the underlying workload), false if the router is private (only the account that owns the router can query the underlying workload).
+  --public: oneof<nothing, bool> # True if the router is public (any account can query the underlying workload), false if the router is private (only the account that owns the router can query the underlying workload).
 ]: any -> record<name: string, displayName: string, createTime: string, createdBy: string, state: string, status: record<code: string, message: string>, deployments: list<string>, model: string, weightedRandom: record, evenLoad: record, aliases: list<string>, autoGenerated: bool, public: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4483,7 +4482,7 @@ export def "accounts-routers UpdateRouter" [
   --model: string # The model name to route requests to. model is only applicable to single-region deployments. For multi-region deployments, model must be empty.
   --weightedRandom: record # Use replica count as weight.
   --evenLoad: record # Dynamically adjust traffic allocation to balance the load per replica across the deployments as much as possible.
-  --public: string@bool-completer # True if the router is public (any account can query the underlying workload), false if the router is private (only the account that owns the router can query the underlying workload).
+  --public: oneof<nothing, bool> # True if the router is public (any account can query the underlying workload), false if the router is private (only the account that owns the router can query the underlying workload).
 ]: any -> record<name: string, displayName: string, createTime: string, createdBy: string, state: string, status: record<code: string, message: string>, deployments: list<string>, model: string, weightedRandom: record, evenLoad: record, aliases: list<string>, autoGenerated: bool, public: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4691,8 +4690,8 @@ export def "accounts-serverless-token-usage GetAccountServerlessTokenUsage" [
   --start: string # Start of the time range. Defaults to 30 days before `end`. (format: date-time)
   --end: string # End of the time range. Defaults to the request time. (format: date-time)
   --interval: string # Step size for each point (peak or average TPM within each window). Defaults to 4 hours.
-  --includePeakTokensPerMinuteByBaseModel: string@bool-completer # Whether to include each section in the response. At least one must be true; otherwise the request fails with INVALID_ARGUMENT.
-  --includeAverageTokensPerMinuteByBaseModel: string@bool-completer
+  --includePeakTokensPerMinuteByBaseModel: oneof<nothing, bool> # Whether to include each section in the response. At least one must be true; otherwise the request fails with INVALID_ARGUMENT.
+  --includeAverageTokensPerMinuteByBaseModel: oneof<nothing, bool>
 ]: nothing -> record<averageTokensPerMinuteByBaseModel: table<labels: record, values: list>, totalPeakGeneratedTokensPerMinute: record<labels: record, values: list<record>>, totalPeakUncachedPromptTokensPerMinute: record<labels: record, values: list<record>>, totalPeakCachedPromptTokensPerMinute: record<labels: record, values: list<record>>, peakGeneratedTokensPerMinuteByBaseModel: table<labels: record, values: list>, peakUncachedPromptTokensPerMinuteByBaseModel: table<labels: record, values: list>, peakCachedPromptTokensPerMinuteByBaseModel: table<labels: record, values: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://api.fireworks.ai")
@@ -4761,20 +4760,20 @@ export def "accounts-supervised-fine-tuning-jobs CreateSupervisedFineTuningJob" 
   --baseModel: string # The name of the base model to be fine-tuned Only one of 'base_model' or 'warm_start_from' should be specified.
   --warmStartFrom: string # The PEFT addon model in Fireworks format to be fine-tuned from Only one of 'base_model' or 'warm_start_from' should be specified.
   --jinjaTemplate: string
-  --earlyStop: string@bool-completer # Whether to stop training early if the validation loss does not improve.
+  --earlyStop: oneof<nothing, bool> # Whether to stop training early if the validation loss does not improve.
   --epochs: int # The number of epochs to train for. (format: int32)
   --learningRate: float # The learning rate used for training. (format: float)
   --maxContextLength: int # The maximum context length to use with the model. (format: int32)
   --loraRank: int # The rank of the LoRA layers. (format: int32)
   --wandbConfig: record # WandbConfig is the configuration for the Weights & Biases (wandb) logging which will be used by a training job. — shape: {enabled?: bool, apiKey?: string, project?: string, entity?: string, runId?: string}
   --evaluationDataset: string # The name of a separate dataset to use for evaluation.
-  --isTurbo: string@bool-completer # Whether to run the fine-tuning job in turbo mode.
-  --evalAutoCarveout: string@bool-completer # Whether to auto-carve the dataset for eval.
+  --isTurbo: oneof<nothing, bool> # Whether to run the fine-tuning job in turbo mode.
+  --evalAutoCarveout: oneof<nothing, bool> # Whether to auto-carve the dataset for eval.
   --nodes: int # Deprecated: multi-node scheduling is now handled by the cookbook orchestrator in V2 workflows. This field is ignored for V2 jobs and will be removed in a future release. (format: int32)
   --batchSize: int # format: int32
-  --mtpEnabled: string@bool-completer # Deprecated: MTP is not supported in V2 training. These fields are retained for V1 Helm-based SFT backward compatibility only.
+  --mtpEnabled: oneof<nothing, bool> # Deprecated: MTP is not supported in V2 training. These fields are retained for V1 Helm-based SFT backward compatibility only.
   --mtpNumDraftTokens: int # Deprecated: see mtp_enabled. (format: int32)
-  --mtpFreezeBaseModel: string@bool-completer # Deprecated: see mtp_enabled.
+  --mtpFreezeBaseModel: oneof<nothing, bool> # Deprecated: see mtp_enabled.
   --jobProgress: record # Progress of a job, e.g. RLOR, EVJ, BIJ etc. — shape: {percent?: int, epoch?: int, totalInputRequests?: int, totalProcessedRequests?: int, successfullyProcessedRequests?: int, failedRequests?: int, outputRows?: int, inputTokens?: int, outputTokens?: int, cachedInputTokenCount?: int}
   --metricsFileSignedUrl: string
   --gradientAccumulationSteps: int # format: int32
@@ -4925,20 +4924,20 @@ export def "accounts-supervised-fine-tuning-jobs-estimate-cost EstimateSupervise
   --baseModel: string # The name of the base model to be fine-tuned Only one of 'base_model' or 'warm_start_from' should be specified.
   --warmStartFrom: string # The PEFT addon model in Fireworks format to be fine-tuned from Only one of 'base_model' or 'warm_start_from' should be specified.
   --jinjaTemplate: string
-  --earlyStop: string@bool-completer # Whether to stop training early if the validation loss does not improve.
+  --earlyStop: oneof<nothing, bool> # Whether to stop training early if the validation loss does not improve.
   --epochs: int # The number of epochs to train for. (format: int32)
   --learningRate: float # The learning rate used for training. (format: float)
   --maxContextLength: int # The maximum context length to use with the model. (format: int32)
   --loraRank: int # The rank of the LoRA layers. (format: int32)
   --wandbConfig: record # WandbConfig is the configuration for the Weights & Biases (wandb) logging which will be used by a training job. — shape: {enabled?: bool, apiKey?: string, project?: string, entity?: string, runId?: string}
   --evaluationDataset: string # The name of a separate dataset to use for evaluation.
-  --isTurbo: string@bool-completer # Whether to run the fine-tuning job in turbo mode.
-  --evalAutoCarveout: string@bool-completer # Whether to auto-carve the dataset for eval.
+  --isTurbo: oneof<nothing, bool> # Whether to run the fine-tuning job in turbo mode.
+  --evalAutoCarveout: oneof<nothing, bool> # Whether to auto-carve the dataset for eval.
   --nodes: int # Deprecated: multi-node scheduling is now handled by the cookbook orchestrator in V2 workflows. This field is ignored for V2 jobs and will be removed in a future release. (format: int32)
   --batchSize: int # format: int32
-  --mtpEnabled: string@bool-completer # Deprecated: MTP is not supported in V2 training. These fields are retained for V1 Helm-based SFT backward compatibility only.
+  --mtpEnabled: oneof<nothing, bool> # Deprecated: MTP is not supported in V2 training. These fields are retained for V1 Helm-based SFT backward compatibility only.
   --mtpNumDraftTokens: int # Deprecated: see mtp_enabled. (format: int32)
-  --mtpFreezeBaseModel: string@bool-completer # Deprecated: see mtp_enabled.
+  --mtpFreezeBaseModel: oneof<nothing, bool> # Deprecated: see mtp_enabled.
   --jobProgress: record # Progress of a job, e.g. RLOR, EVJ, BIJ etc. — shape: {percent?: int, epoch?: int, totalInputRequests?: int, totalProcessedRequests?: int, successfullyProcessedRequests?: int, failedRequests?: int, outputRows?: int, inputTokens?: int, outputTokens?: int, cachedInputTokenCount?: int}
   --metricsFileSignedUrl: string
   --gradientAccumulationSteps: int # format: int32
@@ -5570,8 +5569,8 @@ export def "accounts-training-shapes-versions UpdateTrainingShapeVersion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --snapshot: record # shape: {displayName?: string, description?: string, baseModel: string, deploymentShapeVersion?: string, trainerImageTag: string, trainerMode?: "TRAINER_MODE_UNSPECIFIED"|"POLICY_TRAINER"|"FORWARD_ONLY"|"LORA_TRAINER", nodeCount?: int, trainerShardingScheme?: record, acceleratorType?: "ACCELERATOR_TYPE_UNSPECIFIED"|"NVIDIA_A100_80GB"|"NVIDIA_H100_80GB"|"AMD_MI300X_192GB"|"NVIDIA_A10G_24GB"|"NVIDIA_A100_40GB"|"NVIDIA_L4_24GB"|"NVIDIA_H200_141GB"|"NVIDIA_B200_180GB"|"AMD_MI325X_256GB"|"AMD_MI350X_288GB"|"NVIDIA_B300_288GB", acceleratorCount?: int, baseModelWeightPrecision?: "WEIGHT_PRECISION_UNSPECIFIED"|"BFLOAT16"|"INT8"|"NF4"|"FP8"|"FP4_FP8", maxSupportedContextLength?: int}
-  --validated: string@bool-completer # Whether this version has been validated through capacity tests. Only superusers can set this flag.
-  --public: string@bool-completer # If true, this version will be publicly readable.
+  --validated: oneof<nothing, bool> # Whether this version has been validated through capacity tests. Only superusers can set this flag.
+  --public: oneof<nothing, bool> # If true, this version will be publicly readable.
 ]: any -> record<name: string, createTime: string, snapshot: record<name: string, displayName: string, description: string, createTime: string, updateTime: string, baseModel: string, deploymentShapeVersion: string, trainerImageTag: string, trainerMode: string, nodeCount: int, trainerShardingScheme: record<tensorParallelism: int, pipelineParallelism: int, contextParallelism: int, expertParallelism: int, sequenceParallelism: bool>, modelType: string, parameterCount: string, acceleratorType: string, acceleratorCount: int, baseModelWeightPrecision: string, maxSupportedContextLength: int>, validated: bool, public: bool, latestValidated: bool, updateTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5628,7 +5627,7 @@ export def "accounts-users CreateUser" [
   --allow-errors(-e) # Return full response without error handling
   --userId: string # The user ID to use in the user name. e.g. my-user If not specified, a default ID is generated from user.email.
   --displayName: string # Human-readable display name of the user. e.g. "Alice" Must be fewer than 64 characters long.
-  --serviceAccount: string@bool-completer
+  --serviceAccount: oneof<nothing, bool>
   role: string # The user's role: admin, user, contributor, inference-user, or custom. When set to "custom", the user's permissions are governed by permission_preset.
   --email: string # The user's email address.
   --state: string@state-completer-7 # default: STATE_UNSPECIFIED
@@ -5688,7 +5687,7 @@ export def "accounts-users UpdateUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --displayName: string # Human-readable display name of the user. e.g. "Alice" Must be fewer than 64 characters long.
-  --serviceAccount: string@bool-completer
+  --serviceAccount: oneof<nothing, bool>
   role: string # The user's role: admin, user, contributor, inference-user, or custom. When set to "custom", the user's permissions are governed by permission_preset.
   --email: string # The user's email address.
   --state: string@state-completer-7 # default: STATE_UNSPECIFIED
@@ -6020,7 +6019,7 @@ export def "completions post" [
   --top-logprobs: any # An integer between 0 and 5 specifying the number of most likely tokens to return at each token position, each with an associated log probability. The minimum value is 0 and the maximum value is 5.  When `logprobs` is set, `top_logprobs` can be used to modify how many top log probabilities are returned. If `top_logprobs` is not set, the API will return up to `logprobs` tokens per position.  Required range: `0 <= x <= 5`
   --echo: any # Echo back the prompt in addition to the completion. (default: false)
   --echo-last: any # Echo back the last N tokens of the prompt in addition to the completion. This is useful for obtaining logprobs of the prompt suffix but without transferring too much data. Passing `echo_last=len(prompt)` is the same as `echo=True`
-  --ignore-eos: string@bool-completer # This setting controls whether the model should ignore the End of Sequence (EOS) token. When set to `True`, the model will continue generating tokens even after the EOS token is produced. By default, it stops when the EOS token is reached. (default: false)
+  --ignore-eos: oneof<nothing, bool> # This setting controls whether the model should ignore the End of Sequence (EOS) token. When set to `True`, the model will continue generating tokens even after the EOS token is produced. By default, it stops when the EOS token is reached. (default: false)
   --context-length-exceeded-behavior: string@context-length-exceeded-behavior-completer # What to do if the token count of prompt plus `max_tokens` exceeds the model's context window.  Passing `truncate` limits the `max_tokens` to at most `context_window_length - prompt_length`. This is the default.  Passing `error` would trigger a request error.  The default of `'truncate'` is selected as it allows to ask for high `max_tokens` value while respecting the context window length without having to do client-side prompt tokenization.  Note, that it differs from OpenAI's behavior that matches that of `error`. (default: truncate)
   --response-format: any # Allows to force the model to produce specific output format.  Setting to `{ "type": "json_object" }` enables JSON mode, which guarantees the message the model generates is valid JSON.  If `"type"` is `"json_schema"`, a JSON schema must be provided. E.g., `response_format = {"type": "json_schema", "json_schema": <json_schema>}`.  Important: when using JSON mode, it's crucial to also instruct the model to produce JSON via a system or user message. Without this, the model may generate an unending stream of whitespace until the generation reaches the token limit, resulting in a long-running and seemingly "stuck" request.  Also note that the message content may be partially cut off if `finish_reason="length"`, which indicates the generation exceeded `max_tokens` or the conversation exceeded the max context length. In this case the return value might not be a valid JSON.
   --logit-bias: any # Modify the likelihood of specified tokens appearing in the completion. Accepts a json object that maps tokens (specified by their token ID in the tokenizer) to an associated bias value from -100 to 100. Mathematically, the bias is added to the logits generated by the model prior to sampling.
@@ -6094,7 +6093,7 @@ export def "chat-completions post" [
   --top-logprobs: any # An integer between 0 and 5 specifying the number of most likely tokens to return at each token position, each with an associated log probability. The minimum value is 0 and the maximum value is 5.  When `logprobs` is set, `top_logprobs` can be used to modify how many top log probabilities are returned. If `top_logprobs` is not set, the API will return up to `logprobs` tokens per position.  Required range: `0 <= x <= 5`
   --echo: any # Echo back the prompt in addition to the completion. (default: false)
   --echo-last: any # Echo back the last N tokens of the prompt in addition to the completion. This is useful for obtaining logprobs of the prompt suffix but without transferring too much data. Passing `echo_last=len(prompt)` is the same as `echo=True`
-  --ignore-eos: string@bool-completer # This setting controls whether the model should ignore the End of Sequence (EOS) token. When set to `True`, the model will continue generating tokens even after the EOS token is produced. By default, it stops when the EOS token is reached. (default: false)
+  --ignore-eos: oneof<nothing, bool> # This setting controls whether the model should ignore the End of Sequence (EOS) token. When set to `True`, the model will continue generating tokens even after the EOS token is produced. By default, it stops when the EOS token is reached. (default: false)
   --context-length-exceeded-behavior: string@context-length-exceeded-behavior-completer # What to do if the token count of prompt plus `max_tokens` exceeds the model's context window.  Passing `truncate` limits the `max_tokens` to at most `context_window_length - prompt_length`. This is the default.  Passing `error` would trigger a request error.  The default of `'truncate'` is selected as it allows to ask for high `max_tokens` value while respecting the context window length without having to do client-side prompt tokenization.  Note, that it differs from OpenAI's behavior that matches that of `error`. (default: truncate)
   --logit-bias: any # Modify the likelihood of specified tokens appearing in the completion. Accepts a json object that maps tokens (specified by their token ID in the tokenizer) to an associated bias value from -100 to 100. Mathematically, the bias is added to the logits generated by the model prior to sampling.
   --speculation: any # Speculative decoding prompt or token IDs to speed up generation.
@@ -6142,7 +6141,7 @@ export def "messages post" [
   --metadata: record # shape: {user_id?: any}
   --output-config: record # shape: {effort?: any, format?: any}
   --stop-sequences: list # Custom text sequences that will cause the model to stop generating.  Models will normally stop when they have naturally completed their turn, which will result in a response `stop_reason` of `"end_turn"`.  If you want the model to stop generating when it encounters custom strings of text, you can use the `stop_sequences` parameter. If the model encounters one of the custom sequences, the response `stop_reason` value will be `"stop_sequence"` and the response `stop_sequence` value will contain the matched stop sequence.
-  --stream: string@bool-completer # Whether to incrementally stream the response using server-sent events.  See [streaming](/guides/querying-text-models) for details.
+  --stream: oneof<nothing, bool> # Whether to incrementally stream the response using server-sent events.  See [streaming](/guides/querying-text-models) for details.
   --system: any # System prompt.  A system prompt is a way of providing context and instructions to the model, such as specifying a particular goal or role. See the [guide to system prompts](/guides/querying-text-models).
   --temperature: float # Amount of randomness injected into the response.  Defaults to `1.0`. Ranges from `0.0` to `1.0`. Use `temperature` closer to `0.0` for analytical / multiple choice, and closer to `1.0` for creative and generative tasks.  Note that even with `temperature` of `0.0`, the results will not be fully deterministic.
   --thinking: any # Configuration for enabling the model's extended thinking.  When enabled, responses include `thinking` content blocks showing the model's thinking process before the final answer. Requires a minimum budget of 1,024 tokens and counts towards your `max_tokens` limit.  See [reasoning](/guides/reasoning) for details.  **Note:** The `adaptive` thinking type is not supported yet.

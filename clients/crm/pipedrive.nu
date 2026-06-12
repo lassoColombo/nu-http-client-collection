@@ -63,7 +63,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.pipedrive.com/v1" "https://oauth.pipedrive.com"] }
 def auth-scheme-completer [] { ["basic" "x-api-token" "bearer"] }
 
@@ -428,7 +427,7 @@ export def "channels addChannel" [
   name: string # The name of the channel (e.g. My Channel)
   provider_channel_id: string # The channel ID
   --avatar-url: string # The URL for an icon that represents your channel (format: url)
-  --template-support: string@bool-completer # If true, enables templates logic on UI. Requires getTemplates endpoint implemented. Find out more [here](https://pipedrive.readme.io/docs/implementing-messaging-app-extension). (default: false)
+  --template-support: oneof<nothing, bool> # If true, enables templates logic on UI. Requires getTemplates endpoint implemented. Find out more [here](https://pipedrive.readme.io/docs/implementing-messaging-app-extension). (default: false)
   --provider-type: string@provider-type-completer # It controls the icons (like the icon next to the conversation) (default: other)
 ]: any -> record<success: bool, data: record<id: string, name: string, avatar_url: string, provider_channel_id: string, marketplace_client_id: string, pd_company_id: int, pd_user_id: int, created_at: string, provider_type: string, template_support: bool>> {
   let input = $in
@@ -1088,7 +1087,7 @@ export def "deal-fields addDealField" [
   --allow-errors(-e) # Return full response without error handling
   name: string # The name of the field
   --options: list # When `field_type` is either set or enum, possible options must be supplied as a JSON-encoded sequential array of objects. Example: `[{"label":"New Item"}]`
-  --add-visible-flag: string@bool-completer # Whether the field is available in the 'add new' modal or not (both in the web and mobile app) (default: true)
+  --add-visible-flag: oneof<nothing, bool> # Whether the field is available in the 'add new' modal or not (both in the web and mobile app) (default: true)
   field_type: string@field-type-completer # The type of the field<table><tr><th>Value</th><th>Description</th></tr><tr><td>`address`</td><td>Address field</td></tr><tr><td>`date`</td><td>Date (format YYYY-MM-DD)</td></tr><tr><td>`daterange`</td><td>Date-range field (has a start date and end date value, both YYYY-MM-DD)</td></tr><tr><td>`double`</td><td>Numeric value</td></tr><tr><td>`enum`</td><td>Options field with a single possible chosen option</td></tr><tr></tr><tr><td>`monetary`</td><td>Monetary field (has a numeric value and a currency value)</td></tr><tr><td>`org`</td><td>Organization field (contains an organization ID which is stored on the same account)</td></tr><tr><td>`people`</td><td>Person field (contains a person ID which is stored on the same account)</td></tr><tr><td>`phone`</td><td>Phone field (up to 255 numbers and/or characters)</td></tr><tr><td>`set`</td><td>Options field with a possibility of having multiple chosen options</td></tr><tr><td>`text`</td><td>Long text (up to 65k characters)</td></tr><tr><td>`time`</td><td>Time field (format HH:MM:SS)</td></tr><tr><td>`timerange`</td><td>Time-range field (has a start time and end time value, both HH:MM:SS)</td></tr><tr><td>`user`</td><td>User field (contains a user ID of another Pipedrive user)</td></tr><tr><td>`varchar`</td><td>Text (up to 255 characters)</td></tr><tr><td>`varchar_auto`</td><td>Autocomplete text (up to 255 characters)</td></tr><tr><td>`visible_to`</td><td>System field that keeps item's visibility setting</td></tr></table>
 ]: any -> record<success: bool, data: record> {
   let input = $in
@@ -1184,7 +1183,7 @@ export def "deal-fields updateDealField" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name of the field
   --options: list # When `field_type` is either set or enum, possible options must be supplied as a JSON-encoded sequential array of objects. All active items must be supplied and already existing items must have their ID supplied. New items only require a label. Example: `[{"id":123,"label":"Existing Item"},{"label":"New Item"}]`
-  --add-visible-flag: string@bool-completer # Whether the field is available in 'add new' modal or not (both in web and mobile app) (default: true)
+  --add-visible-flag: oneof<nothing, bool> # Whether the field is available in 'add new' modal or not (both in web and mobile app) (default: true)
 ]: any -> record<success: bool, data: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
@@ -1462,7 +1461,7 @@ export def "filters addFilter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-field-code: string@bool-completer # If set to `true`, each condition in the response includes a `field_code` field identifying the field by its code name
+  --include-field-code: oneof<nothing, bool> # If set to `true`, each condition in the response includes a `field_code` field identifying the field by its code name
   name: string # The name of the filter
   conditions: record # The conditions of the filter as a JSON object. Please note that a maximum of 16 conditions is allowed per filter and `date` values must be supplied in the `YYYY-MM-DD` format. It requires a minimum structure as follows: `{"glue":"and","conditions":[{"glue":"and","conditions": [CONDITION_OBJECTS]},{"glue":"or","conditions":[CONDITION_OBJECTS]}]}`. Replace `CONDITION_OBJECTS` with JSON objects of the following structure: `{"object":"","field_id":"", "operator":"","value":"", "extra_value":""}` or leave the array empty. Depending on the object type you should use another API endpoint to get `field_id`. There are five types of objects you can choose from: `"person"`, `"deal"`, `"organization"`, `"product"`, `"activity"` and you can use these types of operators depending on what type of a field you have: `"IS NOT NULL"`, `"IS NULL"`, `"<="`, `">="`, `"<"`, `">"`, `"!="`, `"="`, `"LIKE '$%'"`, `"LIKE '%$%'"`, `"NOT LIKE '$%'"`. To get a better understanding of how filters work try creating them directly from the Pipedrive application.
   type: string # The type of filter to create
@@ -1535,7 +1534,7 @@ export def "filters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-field-code: string@bool-completer # If set to `true`, each condition in the response includes a `field_code` field identifying the field by its code name
+  --include-field-code: oneof<nothing, bool> # If set to `true`, each condition in the response includes a `field_code` field identifying the field by its code name
 ]: nothing -> record<success: bool, data: record<id: int, name: string, filter_code: string, is_editable: bool, active_flag: bool, type: string, temporary_flag: bool, user_id: int, add_time: string, update_time: string, visible_to: record, last_used_time: string, custom_view_id: int, conditions: record<glue: string, conditions: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1559,7 +1558,7 @@ export def "filters updateFilter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-field-code: string@bool-completer # If set to `true`, each condition in the response includes a `field_code` field identifying the field by its code name
+  --include-field-code: oneof<nothing, bool> # If set to `true`, each condition in the response includes a `field_code` field identifying the field by its code name
   --name: string # The name of the filter
   conditions: record # The conditions of the filter as a JSON object. Please note that a maximum of 16 conditions is allowed per filter and `date` values must be supplied in the `YYYY-MM-DD` format. It requires a minimum structure as follows: `{"glue":"and","conditions":[{"glue":"and","conditions": [CONDITION_OBJECTS]},{"glue":"or","conditions":[CONDITION_OBJECTS]}]}`. Replace `CONDITION_OBJECTS` with JSON objects of the following structure: `{"object":"","field_id":"", "operator":"","value":"", "extra_value":""}` or leave the array empty. Depending on the object type you should use another API endpoint to get `field_id`. There are five types of objects you can choose from: `"person"`, `"deal"`, `"organization"`, `"product"`, `"activity"` and you can use these types of operators depending on what type of a field you have: `"IS NOT NULL"`, `"IS NULL"`, `"<="`, `">="`, `"<"`, `">"`, `"!="`, `"="`, `"LIKE '$%'"`, `"LIKE '%$%'"`, `"NOT LIKE '$%'"`. To get a better understanding of how filters work try creating them directly from the Pipedrive application.
 ]: any -> record<success: bool, data: record<id: int, name: string, filter_code: string, is_editable: bool, active_flag: bool, type: string, temporary_flag: bool, user_id: int, add_time: string, update_time: string, visible_to: record, last_used_time: string, custom_view_id: int, conditions: record<glue: string, conditions: list>>> {
@@ -1619,7 +1618,7 @@ export def "goals-find get" [
   --allow-errors(-e) # Return full response without error handling
   --typename: string@typename-completer # The type of the goal. If provided, everyone's goals will be returned.
   --title: string # The title of the goal
-  --is-active: string@bool-completer # Whether the goal is active or not (default: true)
+  --is-active: oneof<nothing, bool> # Whether the goal is active or not (default: true)
   --assigneeid: int # The ID of the user who's goal to fetch. When omitted, only your goals will be returned.
   --assigneetype: string@assigneetype-completer # The type of the goal's assignee. If provided, everyone's goals will be returned.
   --expected-outcometarget: float # The numeric value of the outcome. If provided, everyone's goals will be returned.
@@ -1769,7 +1768,7 @@ export def "leads addLead" [
   --value: record # The potential value of the lead represented by a JSON object: `{ "amount": 200, "currency": "EUR" }`. Both amount and currency are required. (nullable) — shape: {amount: float, currency: string}
   --expected-close-date: string # The date of when the deal which will be created from the lead is expected to be closed. In ISO 8601 format: YYYY-MM-DD. (format: date)
   --visible-to: string # The visibility of the lead. If omitted, the visibility will be set to the default visibility setting of this item type for the authorized user. Read more about visibility groups <a href="https://support.pipedrive.com/en/article/visibility-groups" target="_blank" rel="noopener noreferrer">here</a>.<h4>Light / Growth and Professional plans</h4><table><tr><th style="width: 40px">Value</th><th>Description</th></tr><tr><td>`1`</td><td>Owner &amp; followers</td><tr><td>`3`</td><td>Entire company</td></tr></table><h4>Premium / Ultimate plan</h4><table><tr><th style="width: 40px">Value</th><th>Description</th></tr><tr><td>`1`</td><td>Owner only</td><tr><td>`3`</td><td>Owner's visibility group</td></tr><tr><td>`5`</td><td>Owner's visibility group and sub-groups</td></tr><tr><td>`7`</td><td>Entire company</td></tr></table>
-  --was-seen: string@bool-completer # A flag indicating whether the lead was seen by someone in the Pipedrive UI
+  --was-seen: oneof<nothing, bool> # A flag indicating whether the lead was seen by someone in the Pipedrive UI
   --origin-id: string # The optional ID to further distinguish the origin of the lead - e.g. Which API integration created this lead. If omitted, `origin_id` will be set to null. (nullable)
   --channel: int # The ID of Marketing channel this lead was created from. Provided value must be one of the channels configured for your company. You can fetch allowed values with <a href="https://developers.pipedrive.com/docs/api/v1/DealFields#getDealField" target="_blank" rel="noopener noreferrer">GET /v1/dealFields</a>. If omitted, channel will be set to null. (nullable)
   --channel-id: string # The optional ID to further distinguish the Marketing channel. If omitted, `channel_id` will be set to null. (nullable)
@@ -1855,11 +1854,11 @@ export def "leads updateLead" [
   --label-ids: list # The IDs of the lead labels which will be associated with the lead
   --person-id: int # The ID of a person which this lead will be linked to. If the person does not exist yet, it needs to be created first. A lead always has to be linked to a person or organization or both.  (nullable)
   --organization-id: int # The ID of an organization which this lead will be linked to. If the organization does not exist yet, it needs to be created first. A lead always has to be linked to a person or organization or both. (nullable)
-  --is-archived: string@bool-completer # A flag indicating whether the lead is archived or not
+  --is-archived: oneof<nothing, bool> # A flag indicating whether the lead is archived or not
   --value: record # The potential value of the lead represented by a JSON object: `{ "amount": 200, "currency": "EUR" }`. Both amount and currency are required. (nullable) — shape: {amount: float, currency: string}
   --expected-close-date: string # The date of when the deal which will be created from the lead is expected to be closed. In ISO 8601 format: YYYY-MM-DD. (nullable, format: date)
   --visible-to: string # The visibility of the lead. If omitted, the visibility will be set to the default visibility setting of this item type for the authorized user. Read more about visibility groups <a href="https://support.pipedrive.com/en/article/visibility-groups" target="_blank" rel="noopener noreferrer">here</a>.<h4>Light / Growth and Professional plans</h4><table><tr><th style="width: 40px">Value</th><th>Description</th></tr><tr><td>`1`</td><td>Owner &amp; followers</td><tr><td>`3`</td><td>Entire company</td></tr></table><h4>Premium / Ultimate plan</h4><table><tr><th style="width: 40px">Value</th><th>Description</th></tr><tr><td>`1`</td><td>Owner only</td><tr><td>`3`</td><td>Owner's visibility group</td></tr><tr><td>`5`</td><td>Owner's visibility group and sub-groups</td></tr><tr><td>`7`</td><td>Entire company</td></tr></table>
-  --was-seen: string@bool-completer # A flag indicating whether the lead was seen by someone in the Pipedrive UI
+  --was-seen: oneof<nothing, bool> # A flag indicating whether the lead was seen by someone in the Pipedrive UI
   --channel: int # The ID of Marketing channel this lead was created from. Provided value must be one of the channels configured for your company which you can fetch with <a href="https://developers.pipedrive.com/docs/api/v1/DealFields#getDealField" target="_blank" rel="noopener noreferrer">GET /v1/dealFields</a>. (nullable)
   --channel-id: string # The optional ID to further distinguish the Marketing channel. (nullable)
 ]: any -> record<success: bool, data: record<id: string, title: string, owner_id: int, creator_id: int, label_ids: list<string>, person_id: int, organization_id: int, source_name: string, origin: string, origin_id: string, channel: int, channel_id: string, source_deal_id: int, is_archived: bool, was_seen: bool, value: record<amount: float, currency: string>, expected_close_date: string, next_activity_id: int, add_time: string, update_time: string, visible_to: string, cc_email: string>> {
@@ -1932,7 +1931,7 @@ export def "leads-search searchLeads" [
   --allow-errors(-e) # Return full response without error handling
   --term: string # The search term to look for. Minimum 2 characters (or 1 if using `exact_match`). Please note that the search term has to be URL encoded.
   --qp-fields: string@fields-completer # A comma-separated string array. The fields to perform the search from. Defaults to all of them.
-  --exact-match: string@bool-completer # When enabled, only full exact matches against the given term are returned. It is <b>not</b> case sensitive.
+  --exact-match: oneof<nothing, bool> # When enabled, only full exact matches against the given term are returned. It is <b>not</b> case sensitive.
   --person-id: int # Will filter leads by the provided person ID. The upper limit of found leads associated with the person is 2000.
   --organization-id: int # Will filter leads by the provided organization ID. The upper limit of found leads associated with the organization is 2000.
   --include-fields: string@include-fields-completer # Supports including optional fields in the results which are not provided by default
@@ -3159,7 +3158,7 @@ export def "organization-fields addOrganizationField" [
   --allow-errors(-e) # Return full response without error handling
   name: string # The name of the field
   --options: list # When `field_type` is either set or enum, possible options must be supplied as a JSON-encoded sequential array of objects. Example: `[{"label":"New Item"}]`
-  --add-visible-flag: string@bool-completer # Whether the field is available in the 'add new' modal or not (both in the web and mobile app) (default: true)
+  --add-visible-flag: oneof<nothing, bool> # Whether the field is available in the 'add new' modal or not (both in the web and mobile app) (default: true)
   field_type: string@field-type-completer # The type of the field<table><tr><th>Value</th><th>Description</th></tr><tr><td>`address`</td><td>Address field</td></tr><tr><td>`date`</td><td>Date (format YYYY-MM-DD)</td></tr><tr><td>`daterange`</td><td>Date-range field (has a start date and end date value, both YYYY-MM-DD)</td></tr><tr><td>`double`</td><td>Numeric value</td></tr><tr><td>`enum`</td><td>Options field with a single possible chosen option</td></tr><tr></tr><tr><td>`monetary`</td><td>Monetary field (has a numeric value and a currency value)</td></tr><tr><td>`org`</td><td>Organization field (contains an organization ID which is stored on the same account)</td></tr><tr><td>`people`</td><td>Person field (contains a person ID which is stored on the same account)</td></tr><tr><td>`phone`</td><td>Phone field (up to 255 numbers and/or characters)</td></tr><tr><td>`set`</td><td>Options field with a possibility of having multiple chosen options</td></tr><tr><td>`text`</td><td>Long text (up to 65k characters)</td></tr><tr><td>`time`</td><td>Time field (format HH:MM:SS)</td></tr><tr><td>`timerange`</td><td>Time-range field (has a start time and end time value, both HH:MM:SS)</td></tr><tr><td>`user`</td><td>User field (contains a user ID of another Pipedrive user)</td></tr><tr><td>`varchar`</td><td>Text (up to 255 characters)</td></tr><tr><td>`varchar_auto`</td><td>Autocomplete text (up to 255 characters)</td></tr><tr><td>`visible_to`</td><td>System field that keeps item's visibility setting</td></tr></table>
 ]: any -> record<success: bool, data: record> {
   let input = $in
@@ -3255,7 +3254,7 @@ export def "organization-fields updateOrganizationField" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name of the field
   --options: list # When `field_type` is either set or enum, possible options must be supplied as a JSON-encoded sequential array of objects. All active items must be supplied and already existing items must have their ID supplied. New items only require a label. Example: `[{"id":123,"label":"Existing Item"},{"label":"New Item"}]`
-  --add-visible-flag: string@bool-completer # Whether the field is available in 'add new' modal or not (both in web and mobile app) (default: true)
+  --add-visible-flag: oneof<nothing, bool> # Whether the field is available in 'add new' modal or not (both in web and mobile app) (default: true)
 ]: any -> record<success: bool, data: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
@@ -3801,7 +3800,7 @@ export def "person-fields addPersonField" [
   --allow-errors(-e) # Return full response without error handling
   name: string # The name of the field
   --options: list # When `field_type` is either set or enum, possible options must be supplied as a JSON-encoded sequential array of objects. Example: `[{"label":"New Item"}]`
-  --add-visible-flag: string@bool-completer # Whether the field is available in the 'add new' modal or not (both in the web and mobile app) (default: true)
+  --add-visible-flag: oneof<nothing, bool> # Whether the field is available in the 'add new' modal or not (both in the web and mobile app) (default: true)
   field_type: string@field-type-completer # The type of the field<table><tr><th>Value</th><th>Description</th></tr><tr><td>`address`</td><td>Address field</td></tr><tr><td>`date`</td><td>Date (format YYYY-MM-DD)</td></tr><tr><td>`daterange`</td><td>Date-range field (has a start date and end date value, both YYYY-MM-DD)</td></tr><tr><td>`double`</td><td>Numeric value</td></tr><tr><td>`enum`</td><td>Options field with a single possible chosen option</td></tr><tr></tr><tr><td>`monetary`</td><td>Monetary field (has a numeric value and a currency value)</td></tr><tr><td>`org`</td><td>Organization field (contains an organization ID which is stored on the same account)</td></tr><tr><td>`people`</td><td>Person field (contains a person ID which is stored on the same account)</td></tr><tr><td>`phone`</td><td>Phone field (up to 255 numbers and/or characters)</td></tr><tr><td>`set`</td><td>Options field with a possibility of having multiple chosen options</td></tr><tr><td>`text`</td><td>Long text (up to 65k characters)</td></tr><tr><td>`time`</td><td>Time field (format HH:MM:SS)</td></tr><tr><td>`timerange`</td><td>Time-range field (has a start time and end time value, both HH:MM:SS)</td></tr><tr><td>`user`</td><td>User field (contains a user ID of another Pipedrive user)</td></tr><tr><td>`varchar`</td><td>Text (up to 255 characters)</td></tr><tr><td>`varchar_auto`</td><td>Autocomplete text (up to 255 characters)</td></tr><tr><td>`visible_to`</td><td>System field that keeps item's visibility setting</td></tr></table>
 ]: any -> record<success: bool, data: record> {
   let input = $in
@@ -3897,7 +3896,7 @@ export def "person-fields updatePersonField" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name of the field
   --options: list # When `field_type` is either set or enum, possible options must be supplied as a JSON-encoded sequential array of objects. All active items must be supplied and already existing items must have their ID supplied. New items only require a label. Example: `[{"id":123,"label":"Existing Item"},{"label":"New Item"}]`
-  --add-visible-flag: string@bool-completer # Whether the field is available in 'add new' modal or not (both in web and mobile app) (default: true)
+  --add-visible-flag: oneof<nothing, bool> # Whether the field is available in 'add new' modal or not (both in web and mobile app) (default: true)
 ]: any -> record<success: bool, data: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
@@ -4305,7 +4304,7 @@ export def "projects list" [
   --filter-id: int # The ID of the filter to use
   --status: string # If supplied, includes only projects with the specified statuses. Possible values are `open`, `completed`, `canceled` and `deleted`. By default `deleted` projects are not returned. (e.g. open,completed)
   --phase-id: int # If supplied, only projects in specified phase are returned
-  --include-archived: string@bool-completer # If supplied with `true` then archived projects are also included in the response. By default only not archived projects are returned.
+  --include-archived: oneof<nothing, bool> # If supplied with `true` then archived projects are also included in the response. By default only not archived projects are returned.
 ]: nothing -> record<success: bool, data: table<id: int>, additional_data: record<next_cursor: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -5022,7 +5021,7 @@ export def "roles-pipelines get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --visible: string@bool-completer # Whether to return the visible or hidden pipelines for the role (default: true)
+  --visible: oneof<nothing, bool> # Whether to return the visible or hidden pipelines for the role (default: true)
 ]: nothing -> record<success: bool, data: record<pipeline_ids: list<float>, visible: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
@@ -5262,7 +5261,7 @@ export def "users addUser" [
   --allow-errors(-e) # Return full response without error handling
   email: string # The email of the user
   --access: list # The access given to the user. Each item in the array represents access to a specific app. Optionally may include either admin flag or permission set ID to specify which access to give within the app. If both are omitted, the default access for the corresponding app will be used. It requires structure as follows: `[{ app: 'sales', permission_set_id: '62cc4d7f-4038-4352-abf3-a8c1c822b631' }, { app: 'global', admin: true }, { app: 'account_settings' }]`  (default: [{app: sales}]) — item shape: {app: "global"|"sales"|"campaigns"|"projects"|"account_settings"|"partnership", admin?: bool, permission_set_id?: string}
-  --active-flag: string@bool-completer # Whether the user is active or not. `false` = Not activated, `true` = Activated (default: true)
+  --active-flag: oneof<nothing, bool> # Whether the user is active or not. `false` = Not activated, `true` = Activated (default: true)
 ]: any -> record<success: bool, data: record<id: int, name: string, default_currency: string, locale: string, lang: int, email: string, phone: string, activated: bool, last_login: string, created: string, modified: string, has_created_company: bool, access: list<record>, active_flag: bool, timezone_name: string, timezone_offset: string, role_id: int, icon_url: string, is_you: bool, is_deleted: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
@@ -5355,7 +5354,7 @@ export def "users updateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active-flag: string@bool-completer # Whether the user is active or not. `false` = Not activated, `true` = Activated
+  --active-flag: oneof<nothing, bool> # Whether the user is active or not. `false` = Not activated, `true` = Activated
 ]: any -> record<success: bool, data: record<id: int, name: string, default_currency: string, locale: string, lang: int, email: string, phone: string, activated: bool, last_login: string, created: string, modified: string, has_created_company: bool, access: list<record>, active_flag: bool, timezone_name: string, timezone_offset: string, role_id: int, icon_url: string, is_you: bool, is_deleted: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))

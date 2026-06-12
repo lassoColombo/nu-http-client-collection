@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://unknown"] }
 def auth-scheme-completer [] { ["api-key"] }
 
@@ -244,8 +243,8 @@ export def "query queryVectors" [
   --namespace: string # The namespace to query. (e.g. example-namespace)
   topK: int # The number of results to return for each query. (format: int64, e.g. 10)
   --filter: record # The filter to apply. You can use vector metadata to limit your search. See [Understanding metadata](https://docs.pinecone.io/guides/index-data/indexing-overview#metadata). (e.g. {genre: {$in: [comedy, documentary, drama]}, year: {$eq: 2019}})
-  --includeValues: string@bool-completer # Indicates whether vector values are included in the response. For on-demand indexes, setting this to `true` may increase latency, especially with higher `topK` values, because vector values are retrieved from object storage. Unless you need vector values, set this to `false` for better performance. (default: false, e.g. true)
-  --includeMetadata: string@bool-completer # Indicates whether metadata is included in the response as well as the ids. (default: false, e.g. true)
+  --includeValues: oneof<nothing, bool> # Indicates whether vector values are included in the response. For on-demand indexes, setting this to `true` may increase latency, especially with higher `topK` values, because vector values are retrieved from object storage. Unless you need vector values, set this to `false` for better performance. (default: false, e.g. true)
+  --includeMetadata: oneof<nothing, bool> # Indicates whether metadata is included in the response as well as the ids. (default: false, e.g. true)
   --queries: list # DEPRECATED. Use `vector` or `id` instead. (DEPRECATED) — item shape: {values: list, sparseValues?: record, topK?: int, namespace?: string, filter?: record}
   --vector: list # The query vector. This should be the same length as the dimension of the index being queried. Each `query` request can contain only one of the parameters `id` or `vector`. (e.g. [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8])
   --sparseVector: record # Vector sparse data. Represented as a list of indices and a list of  corresponded values, which must be with the same length. — shape: {indices: list, values: list}
@@ -280,7 +279,7 @@ export def "vectors-delete post" [
   --allow-errors(-e) # Return full response without error handling
   --X-Pinecone-Api-Version: string # Required date-based version header
   --ids: list # Vectors to delete. (e.g. [id-0, id-1])
-  --deleteAll: string@bool-completer # This indicates that all vectors in the index namespace should be deleted. (default: false, e.g. false)
+  --deleteAll: oneof<nothing, bool> # This indicates that all vectors in the index namespace should be deleted. (default: false, e.g. false)
   --namespace: string # The namespace to delete records from, if applicable. (e.g. example-namespace)
   --filter: record # If specified, the metadata filter here will be used to select the vectors to delete. This is mutually exclusive with specifying ids to delete in the ids param or using delete_all=True. See [Delete data](https://docs.pinecone.io/guides/manage-data/delete-data#delete-records-by-metadata).
 ]: any -> record {
@@ -404,7 +403,7 @@ export def "vectors-update updateVector" [
   --setMetadata: record # Metadata to set for the record. (e.g. {genre: documentary, year: 2019})
   --namespace: string # The namespace containing the record to update. (e.g. example-namespace)
   --filter: record # A metadata filter expression. When updating metadata across records in a namespace,  the update is applied to all records that match the filter.  See [Understanding metadata](https://docs.pinecone.io/guides/index-data/indexing-overview#metadata). (e.g. {genre: {$in: [comedy, documentary, drama]}, year: {$eq: 2019}})
-  --dryRun: string@bool-completer # If `true`, return the number of records that match the `filter`, but do not execute the update.  Default is `false`. (default: false, e.g. false)
+  --dryRun: oneof<nothing, bool> # If `true`, return the number of records that match the `filter`, but do not execute the update.  Default is `false`. (default: false, e.g. false)
 ]: any -> record<matchedRecords: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))

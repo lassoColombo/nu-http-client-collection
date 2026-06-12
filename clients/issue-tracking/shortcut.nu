@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://www.clubhouseapi.com/api"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -362,7 +361,7 @@ export def "get-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-filtered: string@bool-completer # e.g. true
+  --is-filtered: oneof<nothing, bool> # e.g. true
   --page-size: int # e.g. 25
   --page: int # e.g. 1
 ]: nothing -> any {
@@ -541,7 +540,7 @@ export def "get-suggested-follows-all get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --in-onboarding: string@bool-completer # e.g. true
+  --in-onboarding: oneof<nothing, bool> # e.g. true
   --page-size: int # e.g. 50
   --page: int # e.g. 1
 ]: nothing -> any {

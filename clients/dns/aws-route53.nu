@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://route53.amazonaws.com" "http://route53.us-gov.amazonaws.com" "https://route53.us-gov.amazonaws.com" "http://route53.amazonaws.com.cn" "https://route53.amazonaws.com.cn"] }
 def auth-scheme-completer [] { ["bearer"] }
 

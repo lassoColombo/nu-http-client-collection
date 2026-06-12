@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://cloud.airbyte.com/api" "http://localhost:8000/api"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -150,13 +149,13 @@ export def "workspaces-create createWorkspace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --email: string # format: email
-  --anonymousDataCollection: string@bool-completer
+  --anonymousDataCollection: oneof<nothing, bool>
   name: string
-  --news: string@bool-completer
-  --securityUpdates: string@bool-completer
+  --news: oneof<nothing, bool>
+  --securityUpdates: oneof<nothing, bool>
   --notifications: list # item shape: {notificationType: "slack"|"customerio", sendOnSuccess: bool, sendOnFailure: bool, slackConfiguration?: record, customerioConfiguration?: record}
   --notificationSettings: record # shape: {sendOnSuccess?: record, sendOnFailure?: record, sendOnSyncDisabled?: record, sendOnSyncDisabledWarning?: record, sendOnConnectionUpdate?: record, sendOnConnectionUpdateActionRequired?: record, sendOnBreakingChangeWarning?: record, sendOnBreakingChangeSyncsDisabled?: record, sendOnConnectionSyncQueued?: record}
-  --displaySetupWizard: string@bool-completer
+  --displaySetupWizard: oneof<nothing, bool>
   --dataplaneGroupId: string # format: uuid
   --webhookConfigs: list # item shape: {name?: string, authToken?: string, validationUrl?: string, customDbtHost?: string}
   organizationId: string # format: uuid
@@ -189,13 +188,13 @@ export def "workspaces-create-if-not-exist createWorkspaceIfNotExist" [
   --allow-errors(-e) # Return full response without error handling
   id: string # format: uuid
   --email: string # format: email
-  --anonymousDataCollection: string@bool-completer
+  --anonymousDataCollection: oneof<nothing, bool>
   name: string
-  --news: string@bool-completer
-  --securityUpdates: string@bool-completer
+  --news: oneof<nothing, bool>
+  --securityUpdates: oneof<nothing, bool>
   --notifications: list # item shape: {notificationType: "slack"|"customerio", sendOnSuccess: bool, sendOnFailure: bool, slackConfiguration?: record, customerioConfiguration?: record}
   --notificationSettings: record # shape: {sendOnSuccess?: record, sendOnFailure?: record, sendOnSyncDisabled?: record, sendOnSyncDisabledWarning?: record, sendOnConnectionUpdate?: record, sendOnConnectionUpdateActionRequired?: record, sendOnBreakingChangeWarning?: record, sendOnBreakingChangeSyncsDisabled?: record, sendOnConnectionSyncQueued?: record}
-  --displaySetupWizard: string@bool-completer
+  --displaySetupWizard: oneof<nothing, bool>
   --dataplaneGroupId: string # format: uuid
   --webhookConfigs: list # item shape: {name?: string, authToken?: string, validationUrl?: string, customDbtHost?: string}
   organizationId: string # format: uuid
@@ -224,7 +223,7 @@ export def "workspaces-delete post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   workspaceId: string # format: uuid
-  --includeTombstone: string@bool-completer
+  --includeTombstone: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -251,7 +250,7 @@ export def "workspaces-list-paginated listWorkspacesPaginated" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   workspaceIds: list
-  --includeDeleted: string@bool-completer # default: false
+  --includeDeleted: oneof<nothing, bool> # default: false
   pagination: record # shape: {pageSize?: int, rowOffset?: int}
   --nameContains: string
 ]: any -> record<workspaces: table<workspaceId: string, customerId: string, email: string, name: string, slug: string, initialSetupComplete: bool, displaySetupWizard: bool, anonymousDataCollection: bool, news: bool, securityUpdates: bool, notifications: list, notificationSettings: record, firstCompletedSync: bool, feedbackDone: bool, dataplaneGroupId: string, webhookConfigs: list, organizationId: string, tombstone: bool, workspaceLimits: record>> {
@@ -361,7 +360,7 @@ export def "workspaces-get post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   workspaceId: string # format: uuid
-  --includeTombstone: string@bool-completer
+  --includeTombstone: oneof<nothing, bool>
 ]: any -> record<workspaceId: string, customerId: string, email: string, name: string, slug: string, initialSetupComplete: bool, displaySetupWizard: bool, anonymousDataCollection: bool, news: bool, securityUpdates: bool, notifications: table<notificationType: string, sendOnSuccess: bool, sendOnFailure: bool, slackConfiguration: record, customerioConfiguration: record>, notificationSettings: record<sendOnSuccess: record<notificationType: list, slackConfiguration: record, customerioConfiguration: record>, sendOnFailure: record<notificationType: list, slackConfiguration: record, customerioConfiguration: record>, sendOnSyncDisabled: record<notificationType: list, slackConfiguration: record, customerioConfiguration: record>, sendOnSyncDisabledWarning: record<notificationType: list, slackConfiguration: record, customerioConfiguration: record>, sendOnConnectionUpdate: record<notificationType: list, slackConfiguration: record, customerioConfiguration: record>, sendOnConnectionUpdateActionRequired: record<notificationType: list, slackConfiguration: record, customerioConfiguration: record>, sendOnBreakingChangeWarning: record<notificationType: list, slackConfiguration: record, customerioConfiguration: record>, sendOnBreakingChangeSyncsDisabled: record<notificationType: list, slackConfiguration: record, customerioConfiguration: record>, sendOnConnectionSyncQueued: record<notificationType: list, slackConfiguration: record, customerioConfiguration: record>>, firstCompletedSync: bool, feedbackDone: bool, dataplaneGroupId: string, webhookConfigs: table<id: string, name: string, customDbtHost: string>, organizationId: string, tombstone: bool, workspaceLimits: record<sources: record<current: int, max: int>, destinations: record<current: int, max: int>, activeConnections: record<current: int, max: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -462,7 +461,7 @@ export def "workspaces-get-organization-info post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   workspaceId: string # format: uuid
-  --includeTombstone: string@bool-completer
+  --includeTombstone: oneof<nothing, bool>
 ]: any -> record<organizationId: string, organizationName: string, sso: bool, billing: record<subscriptionStatus: string, paymentStatus: string, accountType: string, gracePeriodEndsAt: int>, organizationPlanId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -494,11 +493,11 @@ export def "workspaces-update updateWorkspace" [
   workspaceId: string # format: uuid
   --name: string
   --email: string # format: email
-  --initialSetupComplete: string@bool-completer
-  --displaySetupWizard: string@bool-completer
-  --anonymousDataCollection: string@bool-completer
-  --news: string@bool-completer
-  --securityUpdates: string@bool-completer
+  --initialSetupComplete: oneof<nothing, bool>
+  --displaySetupWizard: oneof<nothing, bool>
+  --anonymousDataCollection: oneof<nothing, bool>
+  --news: oneof<nothing, bool>
+  --securityUpdates: oneof<nothing, bool>
   --notifications: list # item shape: {notificationType: "slack"|"customerio", sendOnSuccess: bool, sendOnFailure: bool, slackConfiguration?: record, customerioConfiguration?: record}
   --notificationSettings: record # shape: {sendOnSuccess?: record, sendOnFailure?: record, sendOnSyncDisabled?: record, sendOnSyncDisabledWarning?: record, sendOnConnectionUpdate?: record, sendOnConnectionUpdateActionRequired?: record, sendOnBreakingChangeWarning?: record, sendOnBreakingChangeSyncsDisabled?: record, sendOnConnectionSyncQueued?: record}
   --notificationsConfig: record # Configures workspace notifications. — shape: {failure?: record, success?: record, connectionUpdate?: record, connectionUpdateActionRequired?: record, syncDisabled?: record, syncDisabledWarning?: record}
@@ -659,8 +658,8 @@ export def "notifications-try tryNotificationConfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   notificationType: string@notificationType-completer
-  --sendOnSuccess: string@bool-completer # default: false
-  --sendOnFailure: string@bool-completer # default: true
+  --sendOnSuccess: oneof<nothing, bool> # default: false
+  --sendOnFailure: oneof<nothing, bool> # default: true
   --slackConfiguration: record # shape: {webhook: string}
   --customerioConfiguration: record
 ]: any -> record<status: string, message: string> {
@@ -837,7 +836,7 @@ export def "source-definitions-list-private listPrivateSourceDefinitions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   workspaceId: string # format: uuid
-  --includeTombstone: string@bool-completer
+  --includeTombstone: oneof<nothing, bool>
 ]: any -> record<sourceDefinitions: table<sourceDefinition: record, granted: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -863,8 +862,8 @@ export def "source-definitions-list-for-workspace listSourceDefinitionsForWorksp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   workspaceId: string # format: uuid
-  --includeTombstone: string@bool-completer
-  --filterByUsed: string@bool-completer # default: false
+  --includeTombstone: oneof<nothing, bool>
+  --filterByUsed: oneof<nothing, bool> # default: false
 ]: any -> record<sourceDefinitions: table<sourceDefinitionId: string, name: string, dockerRepository: string, dockerImageTag: string, documentationUrl: string, icon: string, protocolVersion: string, custom: bool, enterprise: bool, supportLevel: string, releaseStage: string, releaseDate: string, sourceType: string, resourceRequirements: record, maxSecondsBetweenMessages: int, lastPublished: string, cdkVersion: string, metrics: record, language: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -911,7 +910,7 @@ export def "source-definitions-list-enterprise-stubs-for-workspace listEnterpris
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   workspaceId: string # format: uuid
-  --includeTombstone: string@bool-completer
+  --includeTombstone: oneof<nothing, bool>
 ]: any -> record<enterpriseConnectorStubs: table<id: string, definitionId: string, name: string, url: string, icon: string, label: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1319,7 +1318,7 @@ export def "declarative-source-definitions-create-manifest createDeclarativeSour
   --allow-errors(-e) # Return full response without error handling
   workspaceId: string # format: uuid
   sourceDefinitionId: string # format: uuid
-  --setAsActiveManifest: string@bool-completer
+  --setAsActiveManifest: oneof<nothing, bool>
   declarativeManifest: record # shape: {description: string, manifest: record, spec: record, version: int}
   --componentsFileContent: string
 ]: any -> any {
@@ -1537,7 +1536,7 @@ export def "connector-builder-projects-list listConnectorBuilderProjects" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   workspaceId: string # format: uuid
-  --includeTombstone: string@bool-completer
+  --includeTombstone: oneof<nothing, bool>
 ]: any -> record<projects: table<name: string, builderProjectId: string, sourceDefinitionId: string, activeDeclarativeManifestVersion: int, hasDraft: bool, updatedAt: int, baseActorDefinitionVersionInfo: record, contributionInfo: record, componentsFileContent: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1648,7 +1647,7 @@ export def "connector-builder-projects-read-stream readConnectorBuilderProjectSt
   manifest: record # Low code CDK manifest JSON object
   streamName: string # Name of the stream to read
   --customComponentsCode: string # Custom components python code to use during source execution
-  --formGeneratedManifest: string@bool-completer # Indicates if the manifest was auto-generated from the form-based Connector Builder UI (default: false)
+  --formGeneratedManifest: oneof<nothing, bool> # Indicates if the manifest was auto-generated from the form-based Connector Builder UI (default: false)
   --recordLimit: int # Maximum number of records that will be returned to the client from connector builder test reads (default: 1000)
   --pageLimit: int # Maximum number of pages that will be returned to the client from connector builder test reads (default: 5)
   --sliceLimit: int # Maximum number of slices that will be returned to the client from connector builder test reads (default: 5)
@@ -1733,7 +1732,7 @@ export def "connector-builder-projects-capabilities post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   workspaceId: string # format: uuid
-  --includeTombstone: string@bool-completer
+  --includeTombstone: oneof<nothing, bool>
 ]: any -> record<customCodeExecution: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2065,7 +2064,7 @@ export def "sources-list-paginated listSourcesForWorkspacePaginated" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   workspaceIds: list
-  --includeDeleted: string@bool-completer # default: false
+  --includeDeleted: oneof<nothing, bool> # default: false
   pagination: record # shape: {pageSize?: int, rowOffset?: int}
   --nameContains: string
 ]: any -> record<sources: table<sourceDefinitionId: string, sourceId: string, workspaceId: string, connectionConfiguration: record, name: string, sourceName: string, icon: string, isVersionOverrideApplied: bool, isEntitled: bool, breakingChanges: record, supportState: string, status: string, createdAt: int, resourceAllocation: record, numConnections: int, lastSync: int, connectionJobStatuses: record>, page_size: int, num_connections: int> {
@@ -2118,7 +2117,7 @@ export def "sources-get-with-metadata post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   sourceId: string # format: uuid
-  --includeSecretCoordinates: string@bool-completer # If true, the response will include secret coordinates in the connection configuration. (default: false)
+  --includeSecretCoordinates: oneof<nothing, bool> # If true, the response will include secret coordinates in the connection configuration. (default: false)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2280,7 +2279,7 @@ export def "sources-discover-schema discoverSchemaForSource" [
   --allow-errors(-e) # Return full response without error handling
   sourceId: string # format: uuid
   --connectionId: string # format: uuid
-  --disable-cache: string@bool-completer
+  --disable-cache: oneof<nothing, bool>
   --priority: string@priority-completer
 ]: any -> record<catalog: record<streams: list<record>>, jobInfo: record<id: string, configType: string, configId: string, createdAt: int, endedAt: int, succeeded: bool, connectorConfigurationUpdated: bool, logType: string, logs: any, failureReason: record<failureOrigin: string, failureType: string, externalMessage: string, internalMessage: string, stacktrace: string, retryable: bool, timestamp: int, fromTraceMessage: bool, streamDescriptor: record>>, catalogId: string, catalogDiff: record<transforms: list<record>>, breakingChange: bool, connectionStatus: string> {
   let input = $in
@@ -2516,7 +2515,7 @@ export def "destination-definitions-list-private listPrivateDestinationDefinitio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   workspaceId: string # format: uuid
-  --includeTombstone: string@bool-completer
+  --includeTombstone: oneof<nothing, bool>
 ]: any -> record<destinationDefinitions: table<destinationDefinition: record, granted: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2542,8 +2541,8 @@ export def "destination-definitions-list-for-workspace listDestinationDefinition
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   workspaceId: string # format: uuid
-  --includeTombstone: string@bool-completer
-  --filterByUsed: string@bool-completer # default: false
+  --includeTombstone: oneof<nothing, bool>
+  --filterByUsed: oneof<nothing, bool> # default: false
 ]: any -> record<destinationDefinitions: table<destinationDefinitionId: string, name: string, dockerRepository: string, dockerImageTag: string, documentationUrl: string, icon: string, protocolVersion: string, custom: bool, enterprise: bool, supportLevel: string, releaseStage: string, releaseDate: string, resourceRequirements: record, lastPublished: string, cdkVersion: string, metrics: record, language: string, supportsDataActivation: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2569,7 +2568,7 @@ export def "destination-definitions-list-enterprise-stubs-for-workspace listEnte
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   workspaceId: string # format: uuid
-  --includeTombstone: string@bool-completer
+  --includeTombstone: oneof<nothing, bool>
 ]: any -> record<enterpriseConnectorStubs: table<id: string, definitionId: string, name: string, url: string, icon: string, label: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2951,7 +2950,7 @@ export def "destinations-list-paginated listDestinationsForWorkspacesPaginated" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   workspaceIds: list
-  --includeDeleted: string@bool-completer # default: false
+  --includeDeleted: oneof<nothing, bool> # default: false
   pagination: record # shape: {pageSize?: int, rowOffset?: int}
   --nameContains: string
 ]: any -> record<destinations: table<destinationDefinitionId: string, destinationId: string, workspaceId: string, connectionConfiguration: record, name: string, destinationName: string, icon: string, isVersionOverrideApplied: bool, isEntitled: bool, breakingChanges: record, supportState: string, status: string, createdAt: int, resourceAllocation: record, numConnections: int, lastSync: int, connectionJobStatuses: record>, page_size: int, num_connections: int> {
@@ -3004,7 +3003,7 @@ export def "destinations-discover-schema discoverCatalogForDestination" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   destinationId: string # format: uuid
-  --disableCache: string@bool-completer
+  --disableCache: oneof<nothing, bool>
 ]: any -> record<catalog: record<operations: list<record>>, catalogId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3184,12 +3183,12 @@ export def "connections-create createConnection" [
   --sourceCatalogId: string # format: uuid
   --destinationCatalogId: string # format: uuid
   --dataplaneGroupId: string # format: uuid
-  --notifySchemaChanges: string@bool-completer
-  --notifySchemaChangesByEmail: string@bool-completer
+  --notifySchemaChanges: oneof<nothing, bool>
+  --notifySchemaChangesByEmail: oneof<nothing, bool>
   --nonBreakingChangesPreference: string@nonBreakingChangesPreference-completer
   --backfillPreference: string@backfillPreference-completer
   --tags: list # item shape: {tagId: string, workspaceId: string, name: string, color: string}
-  --onDemandEnabled: string@bool-completer # When enabled, this connection will use on-demand capacity if committed capacity is exhausted (default: false)
+  --onDemandEnabled: oneof<nothing, bool> # When enabled, this connection will use on-demand capacity if committed capacity is exhausted (default: false)
 ]: any -> record<connectionId: string, name: string, namespaceDefinition: string, namespaceFormat: string, prefix: string, sourceId: string, destinationId: string, operationIds: list<string>, syncCatalog: record<streams: list<record>>, schedule: record<units: int, timeUnit: string>, scheduleType: string, scheduleData: record<basicSchedule: record<timeUnit: string, units: int>, cron: record<cronExpression: string, cronTimeZone: string>>, status: string, statusReason: string, resourceRequirements: record<cpu_request: string, cpu_limit: string, memory_request: string, memory_limit: string, ephemeral_storage_request: string, ephemeral_storage_limit: string>, sourceCatalogId: string, destinationCatalogId: string, breakingChange: bool, notifySchemaChanges: bool, notifySchemaChangesByEmail: bool, nonBreakingChangesPreference: string, created_at: int, backfillPreference: string, workspaceId: string, dataplaneGroupId: string, tags: table<tagId: string, workspaceId: string, name: string, color: string>, onDemandEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3234,13 +3233,13 @@ export def "connections-update updateConnection" [
   --sourceCatalogId: string # format: uuid
   --destinationCatalogId: string # format: uuid
   --dataplaneGroupId: string # format: uuid
-  --notifySchemaChanges: string@bool-completer
-  --notifySchemaChangesByEmail: string@bool-completer
+  --notifySchemaChanges: oneof<nothing, bool>
+  --notifySchemaChangesByEmail: oneof<nothing, bool>
   --nonBreakingChangesPreference: string@nonBreakingChangesPreference-completer
   --backfillPreference: string@backfillPreference-completer
-  --breakingChange: string@bool-completer
+  --breakingChange: oneof<nothing, bool>
   --tags: list # nullable — item shape: {tagId: string, workspaceId: string, name: string, color: string}
-  --onDemandEnabled: string@bool-completer # When enabled, this connection will use on-demand capacity if committed capacity is exhausted
+  --onDemandEnabled: oneof<nothing, bool> # When enabled, this connection will use on-demand capacity if committed capacity is exhausted
 ]: any -> record<connectionId: string, name: string, namespaceDefinition: string, namespaceFormat: string, prefix: string, sourceId: string, destinationId: string, operationIds: list<string>, syncCatalog: record<streams: list<record>>, schedule: record<units: int, timeUnit: string>, scheduleType: string, scheduleData: record<basicSchedule: record<timeUnit: string, units: int>, cron: record<cronExpression: string, cronTimeZone: string>>, status: string, statusReason: string, resourceRequirements: record<cpu_request: string, cpu_limit: string, memory_request: string, memory_limit: string, ephemeral_storage_request: string, ephemeral_storage_limit: string>, sourceCatalogId: string, destinationCatalogId: string, breakingChange: bool, notifySchemaChanges: bool, notifySchemaChangesByEmail: bool, nonBreakingChangesPreference: string, created_at: int, backfillPreference: string, workspaceId: string, dataplaneGroupId: string, tags: table<tagId: string, workspaceId: string, name: string, color: string>, onDemandEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3268,7 +3267,7 @@ export def "connections-update-with-reason updateConnectionWithReason" [
   --allow-errors(-e) # Return full response without error handling
   connectionUpdate: record # Used to apply a patch-style update to a connection, which means that null properties remain unchanged — shape: {connectionId: string, namespaceDefinition?: "source"|"destination"|"customformat", namespaceFormat?: string, name?: string, prefix?: string, operationIds?: list, syncCatalog?: record, schedule?: record, scheduleType?: "manual"|"basic"|"cron", scheduleData?: record, status?: "active"|"inactive"|"deprecated"|"locked", resourceRequirements?: record, sourceCatalogId?: string, destinationCatalogId?: string, dataplaneGroupId?: string, notifySchemaChanges?: bool, notifySchemaChangesByEmail?: bool, nonBreakingChangesPreference?: "ignore"|"disable"|"propagate_columns"|"propagate_fully", backfillPreference?: "enabled"|"disabled", breakingChange?: bool, tags?: list, onDemandEnabled?: bool}
   --updateReason: string
-  --autoUpdate: string@bool-completer # default: false
+  --autoUpdate: oneof<nothing, bool> # default: false
 ]: any -> record<connectionId: string, name: string, namespaceDefinition: string, namespaceFormat: string, prefix: string, sourceId: string, destinationId: string, operationIds: list<string>, syncCatalog: record<streams: list<record>>, schedule: record<units: int, timeUnit: string>, scheduleType: string, scheduleData: record<basicSchedule: record<timeUnit: string, units: int>, cron: record<cronExpression: string, cronTimeZone: string>>, status: string, statusReason: string, resourceRequirements: record<cpu_request: string, cpu_limit: string, memory_request: string, memory_limit: string, ephemeral_storage_request: string, ephemeral_storage_limit: string>, sourceCatalogId: string, destinationCatalogId: string, breakingChange: bool, notifySchemaChanges: bool, notifySchemaChangesByEmail: bool, nonBreakingChangesPreference: string, created_at: int, backfillPreference: string, workspaceId: string, dataplaneGroupId: string, tags: table<tagId: string, workspaceId: string, name: string, color: string>, onDemandEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3294,7 +3293,7 @@ export def "connections-list listConnectionsForWorkspace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   workspaceId: string # format: uuid
-  --includeTombstone: string@bool-completer
+  --includeTombstone: oneof<nothing, bool>
 ]: any -> record<connections: table<connectionId: string, name: string, namespaceDefinition: string, namespaceFormat: string, prefix: string, sourceId: string, destinationId: string, operationIds: list, syncCatalog: record, schedule: record, scheduleType: string, scheduleData: record, status: string, statusReason: string, resourceRequirements: record, sourceCatalogId: string, destinationCatalogId: string, breakingChange: bool, notifySchemaChanges: bool, notifySchemaChangesByEmail: bool, nonBreakingChangesPreference: string, created_at: int, backfillPreference: string, workspaceId: string, dataplaneGroupId: string, tags: list, onDemandEnabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3323,7 +3322,7 @@ export def "connections-list-paginated listConnectionsForWorkspacesPaginated" [
   workspaceIds: list
   userId: string # format: uuid
   --pagination: record # shape: {pageSize?: int, rowOffset?: int}
-  --includeDeleted: string@bool-completer # default: false
+  --includeDeleted: oneof<nothing, bool> # default: false
   --tagIds: list
 ]: any -> record<connections: table<connectionId: string, name: string, namespaceDefinition: string, namespaceFormat: string, prefix: string, sourceId: string, destinationId: string, operationIds: list, syncCatalog: record, schedule: record, scheduleType: string, scheduleData: record, status: string, statusReason: string, resourceRequirements: record, sourceCatalogId: string, destinationCatalogId: string, breakingChange: bool, notifySchemaChanges: bool, notifySchemaChangesByEmail: bool, nonBreakingChangesPreference: string, created_at: int, backfillPreference: string, workspaceId: string, dataplaneGroupId: string, tags: list, onDemandEnabled: bool>> {
   let input = $in
@@ -3350,7 +3349,7 @@ export def "connections-list-all listAllConnectionsForWorkspace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   workspaceId: string # format: uuid
-  --includeTombstone: string@bool-completer
+  --includeTombstone: oneof<nothing, bool>
 ]: any -> record<connections: table<connectionId: string, name: string, namespaceDefinition: string, namespaceFormat: string, prefix: string, sourceId: string, destinationId: string, operationIds: list, syncCatalog: record, schedule: record, scheduleType: string, scheduleData: record, status: string, statusReason: string, resourceRequirements: record, sourceCatalogId: string, destinationCatalogId: string, breakingChange: bool, notifySchemaChanges: bool, notifySchemaChangesByEmail: bool, nonBreakingChangesPreference: string, created_at: int, backfillPreference: string, workspaceId: string, dataplaneGroupId: string, tags: list, onDemandEnabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4508,7 +4507,7 @@ export def "source-oauths-complete-oauth completeSourceOAuth" [
   --redirectUrl: string # When completing OAuth flow to gain an access token, some API sometimes requires to verify that the app re-send the redirectUrl that was used when consent was given.
   --queryParams: record # The query parameters present in the redirect URL after a user granted consent e.g auth code
   --oAuthInputConfiguration: any # The values required to configure OAuth flows. The schema for this must match the `OAuthConfigSpecification.oauthUserInputFromConnectorConfigSpecification` schema.
-  --returnSecretCoordinate: string@bool-completer # If set to true, returns a secret coordinate which references the stored tokens. By default, returns raw tokens. (default: false)
+  --returnSecretCoordinate: oneof<nothing, bool> # If set to true, returns a secret coordinate which references the stored tokens. By default, returns raw tokens. (default: false)
   --sourceId: string # format: uuid
   --requestedScopes: list # Optional OAuth scopes to request, overriding the connector's default scopes. Only supported for connectors that define scopes as an array.
   --requestedOptionalScopes: list # Optional OAuth optional_scopes to request, overriding the connector's default optional_scopes. Only applied when requestedScopes is also provided.
@@ -4785,7 +4784,7 @@ export def "web-backend-connections-status-counts webBackendGetConnectionStatusC
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   workspaceId: string # format: uuid
-  --includeTombstone: string@bool-completer
+  --includeTombstone: oneof<nothing, bool>
 ]: any -> record<running: int, queued: int, healthy: int, failed: int, paused: int, notSynced: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4810,7 +4809,7 @@ export def "web-backend-connections-get webBackendGetConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --withRefreshedCatalog: string@bool-completer
+  --withRefreshedCatalog: oneof<nothing, bool>
   connectionId: string # format: uuid
 ]: any -> record<connectionId: string, name: string, namespaceDefinition: string, namespaceFormat: string, prefix: string, sourceId: string, destinationId: string, syncCatalog: record<streams: list<record>>, schedule: record<units: int, timeUnit: string>, scheduleType: string, scheduleData: record<basicSchedule: record<timeUnit: string, units: int>, cron: record<cronExpression: string, cronTimeZone: string>>, status: string, statusReason: string, operationIds: list<string>, source: record<sourceDefinitionId: string, sourceId: string, workspaceId: string, connectionConfiguration: record, name: string, sourceName: string, icon: string, isVersionOverrideApplied: bool, isEntitled: bool, breakingChanges: record<upcomingBreakingChanges: list, minUpgradeDeadline: string, deadlineAction: string>, supportState: string, status: string, createdAt: int, resourceAllocation: record<default: record, jobSpecific: list>, numConnections: int, lastSync: int, connectionJobStatuses: record>, destination: record<destinationDefinitionId: string, destinationId: string, workspaceId: string, connectionConfiguration: record, name: string, destinationName: string, icon: string, isVersionOverrideApplied: bool, isEntitled: bool, breakingChanges: record<upcomingBreakingChanges: list, minUpgradeDeadline: string, deadlineAction: string>, supportState: string, status: string, createdAt: int, resourceAllocation: record<default: record, jobSpecific: list>, numConnections: int, lastSync: int, connectionJobStatuses: record>, operations: table<workspaceId: string, operationId: string, name: string, operatorConfiguration: record>, latestSyncJobCreatedAt: int, latestSyncJobStatus: string, isSyncing: bool, resourceRequirements: record<cpu_request: string, cpu_limit: string, memory_request: string, memory_limit: string, ephemeral_storage_request: string, ephemeral_storage_limit: string>, catalogId: string, destinationCatalogId: string, catalogDiff: record<transforms: list<record>>, dataplaneGroupId: string, schemaChange: string, notifySchemaChanges: bool, notifySchemaChangesByEmail: bool, nonBreakingChangesPreference: string, createdAt: int, backfillPreference: string, sourceActorDefinitionVersion: record<dockerRepository: string, dockerImageTag: string, supportsRefreshes: bool, isVersionOverrideApplied: bool, supportLevel: string, supportState: string, breakingChanges: record<upcomingBreakingChanges: list, minUpgradeDeadline: string, deadlineAction: string>, lastPublished: string, cdkVersion: string, supportsFileTransfer: bool, supportsDataActivation: bool, connectorIPCOptions: record>, destinationActorDefinitionVersion: record<dockerRepository: string, dockerImageTag: string, supportsRefreshes: bool, isVersionOverrideApplied: bool, supportLevel: string, supportState: string, breakingChanges: record<upcomingBreakingChanges: list, minUpgradeDeadline: string, deadlineAction: string>, lastPublished: string, cdkVersion: string, supportsFileTransfer: bool, supportsDataActivation: bool, connectorIPCOptions: record>, tags: table<tagId: string, workspaceId: string, name: string, color: string>, onDemandEnabled: bool> {
   let input = $in
@@ -4859,11 +4858,11 @@ export def "web-backend-connections-create webBackendCreateConnection" [
   --sourceCatalogId: string # format: uuid
   --destinationCatalogId: string # format: uuid
   --dataplaneGroupId: string # format: uuid
-  --notifySchemaChanges: string@bool-completer
+  --notifySchemaChanges: oneof<nothing, bool>
   --nonBreakingChangesPreference: string@nonBreakingChangesPreference-completer
   --backfillPreference: string@backfillPreference-completer
   --tags: list # item shape: {tagId: string, workspaceId: string, name: string, color: string}
-  --onDemandEnabled: string@bool-completer # When enabled, this connection will use on-demand capacity if committed capacity is exhausted (default: false)
+  --onDemandEnabled: oneof<nothing, bool> # When enabled, this connection will use on-demand capacity if committed capacity is exhausted (default: false)
 ]: any -> record<connectionId: string, name: string, namespaceDefinition: string, namespaceFormat: string, prefix: string, sourceId: string, destinationId: string, syncCatalog: record<streams: list<record>>, schedule: record<units: int, timeUnit: string>, scheduleType: string, scheduleData: record<basicSchedule: record<timeUnit: string, units: int>, cron: record<cronExpression: string, cronTimeZone: string>>, status: string, statusReason: string, operationIds: list<string>, source: record<sourceDefinitionId: string, sourceId: string, workspaceId: string, connectionConfiguration: record, name: string, sourceName: string, icon: string, isVersionOverrideApplied: bool, isEntitled: bool, breakingChanges: record<upcomingBreakingChanges: list, minUpgradeDeadline: string, deadlineAction: string>, supportState: string, status: string, createdAt: int, resourceAllocation: record<default: record, jobSpecific: list>, numConnections: int, lastSync: int, connectionJobStatuses: record>, destination: record<destinationDefinitionId: string, destinationId: string, workspaceId: string, connectionConfiguration: record, name: string, destinationName: string, icon: string, isVersionOverrideApplied: bool, isEntitled: bool, breakingChanges: record<upcomingBreakingChanges: list, minUpgradeDeadline: string, deadlineAction: string>, supportState: string, status: string, createdAt: int, resourceAllocation: record<default: record, jobSpecific: list>, numConnections: int, lastSync: int, connectionJobStatuses: record>, operations: table<workspaceId: string, operationId: string, name: string, operatorConfiguration: record>, latestSyncJobCreatedAt: int, latestSyncJobStatus: string, isSyncing: bool, resourceRequirements: record<cpu_request: string, cpu_limit: string, memory_request: string, memory_limit: string, ephemeral_storage_request: string, ephemeral_storage_limit: string>, catalogId: string, destinationCatalogId: string, catalogDiff: record<transforms: list<record>>, dataplaneGroupId: string, schemaChange: string, notifySchemaChanges: bool, notifySchemaChangesByEmail: bool, nonBreakingChangesPreference: string, createdAt: int, backfillPreference: string, sourceActorDefinitionVersion: record<dockerRepository: string, dockerImageTag: string, supportsRefreshes: bool, isVersionOverrideApplied: bool, supportLevel: string, supportState: string, breakingChanges: record<upcomingBreakingChanges: list, minUpgradeDeadline: string, deadlineAction: string>, lastPublished: string, cdkVersion: string, supportsFileTransfer: bool, supportsDataActivation: bool, connectorIPCOptions: record>, destinationActorDefinitionVersion: record<dockerRepository: string, dockerImageTag: string, supportsRefreshes: bool, isVersionOverrideApplied: bool, supportLevel: string, supportState: string, breakingChanges: record<upcomingBreakingChanges: list, minUpgradeDeadline: string, deadlineAction: string>, lastPublished: string, cdkVersion: string, supportsFileTransfer: bool, supportsDataActivation: bool, connectorIPCOptions: record>, tags: table<tagId: string, workspaceId: string, name: string, color: string>, onDemandEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4905,17 +4904,17 @@ export def "web-backend-connections-update webBackendUpdateConnection" [
   --scheduleData: record # schedule for when the the connection should run, per the schedule type — shape: {basicSchedule?: record, cron?: record}
   --status: string@status-completer # Active means that data is flowing through the connection. Inactive means it is not. Deprecated means the connection is off and cannot be re-activated. Locked means the connection is temporarily disabled due to external factors (e.g., payment issues). The schema field describes the elements of the schema that will be synced.
   --resourceRequirements: record # optional resource requirements to run workers (blank for unbounded allocations) — shape: {cpu_request?: string, cpu_limit?: string, memory_request?: string, memory_limit?: string, ephemeral_storage_request?: string, ephemeral_storage_limit?: string}
-  --skipReset: string@bool-completer
+  --skipReset: oneof<nothing, bool>
   --operations: list # nullable — item shape: {operationId?: string, workspaceId: string, name: string, operatorConfiguration: record}
   --sourceCatalogId: string # format: uuid
   --destinationCatalogId: string # format: uuid
   --dataplaneGroupId: string # format: uuid
-  --notifySchemaChanges: string@bool-completer
-  --notifySchemaChangesByEmail: string@bool-completer
+  --notifySchemaChanges: oneof<nothing, bool>
+  --notifySchemaChangesByEmail: oneof<nothing, bool>
   --nonBreakingChangesPreference: string@nonBreakingChangesPreference-completer
   --backfillPreference: string@backfillPreference-completer
   --tags: list # nullable — item shape: {tagId: string, workspaceId: string, name: string, color: string}
-  --onDemandEnabled: string@bool-completer # When enabled, this connection will use on-demand capacity if committed capacity is exhausted
+  --onDemandEnabled: oneof<nothing, bool> # When enabled, this connection will use on-demand capacity if committed capacity is exhausted
 ]: any -> record<connectionId: string, name: string, namespaceDefinition: string, namespaceFormat: string, prefix: string, sourceId: string, destinationId: string, syncCatalog: record<streams: list<record>>, schedule: record<units: int, timeUnit: string>, scheduleType: string, scheduleData: record<basicSchedule: record<timeUnit: string, units: int>, cron: record<cronExpression: string, cronTimeZone: string>>, status: string, statusReason: string, operationIds: list<string>, source: record<sourceDefinitionId: string, sourceId: string, workspaceId: string, connectionConfiguration: record, name: string, sourceName: string, icon: string, isVersionOverrideApplied: bool, isEntitled: bool, breakingChanges: record<upcomingBreakingChanges: list, minUpgradeDeadline: string, deadlineAction: string>, supportState: string, status: string, createdAt: int, resourceAllocation: record<default: record, jobSpecific: list>, numConnections: int, lastSync: int, connectionJobStatuses: record>, destination: record<destinationDefinitionId: string, destinationId: string, workspaceId: string, connectionConfiguration: record, name: string, destinationName: string, icon: string, isVersionOverrideApplied: bool, isEntitled: bool, breakingChanges: record<upcomingBreakingChanges: list, minUpgradeDeadline: string, deadlineAction: string>, supportState: string, status: string, createdAt: int, resourceAllocation: record<default: record, jobSpecific: list>, numConnections: int, lastSync: int, connectionJobStatuses: record>, operations: table<workspaceId: string, operationId: string, name: string, operatorConfiguration: record>, latestSyncJobCreatedAt: int, latestSyncJobStatus: string, isSyncing: bool, resourceRequirements: record<cpu_request: string, cpu_limit: string, memory_request: string, memory_limit: string, ephemeral_storage_request: string, ephemeral_storage_limit: string>, catalogId: string, destinationCatalogId: string, catalogDiff: record<transforms: list<record>>, dataplaneGroupId: string, schemaChange: string, notifySchemaChanges: bool, notifySchemaChangesByEmail: bool, nonBreakingChangesPreference: string, createdAt: int, backfillPreference: string, sourceActorDefinitionVersion: record<dockerRepository: string, dockerImageTag: string, supportsRefreshes: bool, isVersionOverrideApplied: bool, supportLevel: string, supportState: string, breakingChanges: record<upcomingBreakingChanges: list, minUpgradeDeadline: string, deadlineAction: string>, lastPublished: string, cdkVersion: string, supportsFileTransfer: bool, supportsDataActivation: bool, connectorIPCOptions: record>, destinationActorDefinitionVersion: record<dockerRepository: string, dockerImageTag: string, supportsRefreshes: bool, isVersionOverrideApplied: bool, supportLevel: string, supportState: string, breakingChanges: record<upcomingBreakingChanges: list, minUpgradeDeadline: string, deadlineAction: string>, lastPublished: string, cdkVersion: string, supportsFileTransfer: bool, supportsDataActivation: bool, connectorIPCOptions: record>, tags: table<tagId: string, workspaceId: string, name: string, color: string>, onDemandEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5037,7 +5036,7 @@ export def "jobs-create createJob" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   connectionId: string # format: uuid
-  --isScheduled: string@bool-completer
+  --isScheduled: oneof<nothing, bool>
 ]: any -> record<job: record<id: int, configType: string, configId: string, enabledStreams: list<record>, createdAt: int, updatedAt: int, startedAt: int, status: string, resetConfig: record<streamsToReset: list>, refreshConfig: record<streamsToRefresh: list>, aggregatedStats: record<recordsEmitted: int, bytesEmitted: int, recordsCommitted: int, bytesCommitted: int, recordsRejected: int>, streamAggregatedStats: list<record>>, attempts: table<attempt: record, logType: string, logs: any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5671,7 +5670,7 @@ export def "users-get-by-auth-id post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   authUserId: string
-  --isAgenticUser: string@bool-completer # Indicates whether this user should have agentic features enabled.  Behavior: - New user + true: User created with agenticEnabledAt timestamp - New user + false/omitted: User created as non-agentic (agenticEnabledAt = null) - Existing agentic user + any value: Timestamp preserved (immutable, cannot downgrade) - Existing non-agentic user + true: User upgraded, agenticEnabledAt set to current time - Existing non-agentic user + false/omitted: Remains non-agentic  Note: agenticEnabledAt is one-way - once set, it cannot be unset. Users can be upgraded from non-agentic to agentic, but not downgraded.
+  --isAgenticUser: oneof<nothing, bool> # Indicates whether this user should have agentic features enabled.  Behavior: - New user + true: User created with agenticEnabledAt timestamp - New user + false/omitted: User created as non-agentic (agenticEnabledAt = null) - Existing agentic user + any value: Timestamp preserved (immutable, cannot downgrade) - Existing non-agentic user + true: User upgraded, agenticEnabledAt set to current time - Existing non-agentic user + false/omitted: Remains non-agentic  Note: agenticEnabledAt is one-way - once set, it cannot be unset. Users can be upgraded from non-agentic to agentic, but not downgraded.
 ]: any -> record<name: string, userId: string, defaultWorkspaceId: string, status: string, companyName: string, email: string, news: bool, metadata: record, agenticEnabledAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5722,7 +5721,7 @@ export def "users-get-or-create-by-auth-id post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   authUserId: string
-  --isAgenticUser: string@bool-completer # Indicates whether this user should have agentic features enabled.  Behavior: - New user + true: User created with agenticEnabledAt timestamp - New user + false/omitted: User created as non-agentic (agenticEnabledAt = null) - Existing agentic user + any value: Timestamp preserved (immutable, cannot downgrade) - Existing non-agentic user + true: User upgraded, agenticEnabledAt set to current time - Existing non-agentic user + false/omitted: Remains non-agentic  Note: agenticEnabledAt is one-way - once set, it cannot be unset. Users can be upgraded from non-agentic to agentic, but not downgraded.
+  --isAgenticUser: oneof<nothing, bool> # Indicates whether this user should have agentic features enabled.  Behavior: - New user + true: User created with agenticEnabledAt timestamp - New user + false/omitted: User created as non-agentic (agenticEnabledAt = null) - Existing agentic user + any value: Timestamp preserved (immutable, cannot downgrade) - Existing non-agentic user + true: User upgraded, agenticEnabledAt set to current time - Existing non-agentic user + false/omitted: Remains non-agentic  Note: agenticEnabledAt is one-way - once set, it cannot be unset. Users can be upgraded from non-agentic to agentic, but not downgraded.
 ]: any -> record<userRead: record<name: string, userId: string, defaultWorkspaceId: string, status: string, companyName: string, email: string, news: bool, metadata: record, agenticEnabledAt: string>, authUserId: string, authProvider: string, newUserCreated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5752,7 +5751,7 @@ export def "users-update updateUser" [
   --defaultWorkspaceId: string # format: uuid
   --status: string@status-completer-1 # user status
   --companyName: string
-  --news: string@bool-completer
+  --news: oneof<nothing, bool>
   --metadata: record # UI metadata used in frontend
 ]: any -> record<name: string, userId: string, defaultWorkspaceId: string, status: string, companyName: string, email: string, news: bool, metadata: record, agenticEnabledAt: string> {
   let input = $in
@@ -5804,7 +5803,7 @@ export def "users-list-access-info-by-workspace-id listAccessInfoByWorkspaceId" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   workspaceId: string # format: uuid
-  --includeTombstone: string@bool-completer
+  --includeTombstone: oneof<nothing, bool>
 ]: any -> record<usersWithAccess: table<userId: string, userEmail: string, userName: string, workspaceId: string, workspacePermission: record, organizationPermission: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6069,7 +6068,7 @@ export def "secret-storage-create createSecretStorage" [
   scopeType: string@scopeType-completer
   scopeId: string # format: uuid
   --config: record
-  --isConfiguredFromEnvironment: string@bool-completer
+  --isConfiguredFromEnvironment: oneof<nothing, bool>
 ]: any -> record<id: string, secretStorageType: string, isConfiguredFromEnvironment: bool, scopeType: string, scopeId: string, config: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6661,9 +6660,9 @@ export def "instance-configuration-setup setupInstanceConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   email: string
-  --anonymousDataCollection: string@bool-completer
-  --initialSetupComplete: string@bool-completer
-  --displaySetupWizard: string@bool-completer
+  --anonymousDataCollection: oneof<nothing, bool>
+  --initialSetupComplete: oneof<nothing, bool>
+  --displaySetupWizard: oneof<nothing, bool>
   --userName: string # Optional name of the user to create. Defaults to 'Default User' if not specified.
   --organizationName: string # Optional name of the organization to create. Defaults to 'Default Organization' if not specified.
 ]: any -> record<edition: string, version: string, licenseStatus: string, licenseExpirationDate: int, auth: record<mode: string, clientId: string, defaultRealm: string, authorizationServerUrl: string, audience: string, extraScopes: string>, airbyteUrl: string, initialSetupComplete: bool, defaultUserId: string, defaultOrganizationId: string, defaultOrganizationEmail: string, defaultWorkspaceId: string, trackingStrategy: string> {
@@ -7172,7 +7171,7 @@ export def "organizations-create createOrganization" [
   userId: string # format: uuid
   organizationName: string
   --email: string
-  --isAgentic: string@bool-completer # default: false
+  --isAgentic: oneof<nothing, bool> # default: false
 ]: any -> record<organizationId: string, organizationName: string, email: string, ssoRealm: string, isAgentic: bool, organizationLimits: record<users: record<current: int, max: int>, workspaces: record<current: int, max: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7225,7 +7224,7 @@ export def "organizations-agentic-status setOrganizationAgenticStatus" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   organizationId: string # format: uuid
-  --isAgentic: string@bool-completer
+  --isAgentic: oneof<nothing, bool>
 ]: any -> record<organizationId: string, organizationName: string, email: string, ssoRealm: string, isAgentic: bool, organizationLimits: record<users: record<current: int, max: int>, workspaces: record<current: int, max: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7498,7 +7497,7 @@ export def "applications-delete post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   applicationId: string # format: uuid
-  --includeTombstone: string@bool-completer
+  --includeTombstone: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7868,7 +7867,7 @@ export def "connector-rollout-start startConnectorRollout" [
   workflow_run_id: string
   rollout_strategy: string@rollout-strategy-completer
   --updated-by: string # format: uuid
-  --migrate-pins: string@bool-completer # default: true
+  --migrate-pins: oneof<nothing, bool> # default: true
 ]: any -> record<data: record<docker_repository: string, docker_image_tag: string, id: string, workflow_run_id: string, actor_definition_id: string, release_candidate_version_id: string, initial_version_id: string, state: string, initial_rollout_pct: int, current_target_rollout_pct: int, final_target_rollout_pct: int, has_breaking_changes: bool, max_step_wait_time_mins: int, updated_by: string, created_at: string, updated_at: string, completed_at: string, expires_at: string, error_msg: string, failed_reason: string, paused_reason: string, rollout_strategy: string, actor_selection_info: record<num_actors: int, num_actors_eligible_or_already_pinned: int, num_pinned_to_connector_rollout: int>, actor_syncs: record, tier: string, tag: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7961,7 +7960,7 @@ export def "connector-rollout-finalize finalizeConnectorRollout" [
   --failed-reason: string
   rollout_strategy: string@rollout-strategy-completer
   --updated-by: string # format: uuid
-  --retain-pins-on-cancellation: string@bool-completer # default: true
+  --retain-pins-on-cancellation: oneof<nothing, bool> # default: true
 ]: any -> record<data: record<docker_repository: string, docker_image_tag: string, id: string, workflow_run_id: string, actor_definition_id: string, release_candidate_version_id: string, initial_version_id: string, state: string, initial_rollout_pct: int, current_target_rollout_pct: int, final_target_rollout_pct: int, has_breaking_changes: bool, max_step_wait_time_mins: int, updated_by: string, created_at: string, updated_at: string, completed_at: string, expires_at: string, error_msg: string, failed_reason: string, paused_reason: string, rollout_strategy: string, actor_selection_info: record<num_actors: int, num_actors_eligible_or_already_pinned: int, num_pinned_to_connector_rollout: int>, actor_syncs: record, tier: string, tag: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7994,7 +7993,7 @@ export def "connector-rollout-manual-start manualStartConnectorRollout" [
   rollout_strategy: string@rollout-strategy-completer
   --initial-rollout-pct: int # format: int32
   --final-target-rollout-pct: int # format: int32
-  --migrate-pins: string@bool-completer # default: true
+  --migrate-pins: oneof<nothing, bool> # default: true
   --filters: record # shape: {tierFilter?: record, jobBypassFilter?: record}
 ]: any -> record<data: record<docker_repository: string, docker_image_tag: string, id: string, workflow_run_id: string, actor_definition_id: string, release_candidate_version_id: string, initial_version_id: string, state: string, initial_rollout_pct: int, current_target_rollout_pct: int, final_target_rollout_pct: int, has_breaking_changes: bool, max_step_wait_time_mins: int, updated_by: string, created_at: string, updated_at: string, completed_at: string, expires_at: string, error_msg: string, failed_reason: string, paused_reason: string, rollout_strategy: string, actor_selection_info: record<num_actors: int, num_actors_eligible_or_already_pinned: int, num_pinned_to_connector_rollout: int>, actor_syncs: record, tier: string, tag: string>> {
   let input = $in
@@ -8028,7 +8027,7 @@ export def "connector-rollout-manual-rollout manualDoConnectorRollout" [
   updated_by: string # format: uuid
   --actor-ids: list
   --target-percentage: int # format: int32
-  --migrate-pins: string@bool-completer # default: true
+  --migrate-pins: oneof<nothing, bool> # default: true
   --filters: record # shape: {tierFilter?: record, jobBypassFilter?: record}
 ]: any -> record<status: string> {
   let input = $in
@@ -8062,7 +8061,7 @@ export def "connector-rollout-manual-finalize manualFinalizeConnectorRollout" [
   state: string@state-completer-1
   --error-msg: string
   --failed-reason: string
-  --retain-pins-on-cancellation: string@bool-completer # default: true
+  --retain-pins-on-cancellation: oneof<nothing, bool> # default: true
 ]: any -> record<status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8529,7 +8528,7 @@ export def "catalogs-diff diffCatalogs" [
   current_catalog_id: string # The ID of the current catalog (format: uuid)
   new_catalog_id: string # The ID of the new catalog (format: uuid)
   --connection-id: string # Optional connection ID for additional workspace validation and breaking change detection based on configured streams (format: uuid)
-  --persist-changes: string@bool-completer # If true, persist the catalog changes to the connection (requires connection_id and WORKSPACE_EDITOR role). Updates breakingChange flag and status (set to INACTIVE if breaking change detected or if nonBreakingChangesPreference is DISABLE and there are any changes). Does not update sourceCatalogId or syncCatalog. (default: false)
+  --persist-changes: oneof<nothing, bool> # If true, persist the catalog changes to the connection (requires connection_id and WORKSPACE_EDITOR role). Updates breakingChange flag and status (set to INACTIVE if breaking change detected or if nonBreakingChangesPreference is DISABLE and there are any changes). Does not update sourceCatalogId or syncCatalog. (default: false)
 ]: any -> record<catalog_diff: record<transforms: list<record>>, schema_change: string, merged_catalog: record<streams: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8679,7 +8678,7 @@ export def "commands-output-check post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   id: string
-  --with-logs: string@bool-completer # default: false
+  --with-logs: oneof<nothing, bool> # default: false
 ]: any -> record<id: string, status: string, connectorConfigurationUpdated: bool, message: string, failureReason: record<failureOrigin: string, failureType: string, externalMessage: string, internalMessage: string, stacktrace: string, retryable: bool, timestamp: int, fromTraceMessage: bool, streamDescriptor: record<name: string, namespace: string>>, logs: record<logType: string, logEvents: record<events: list, version: string>, logLines: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8705,7 +8704,7 @@ export def "commands-output-discover post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   id: string
-  --with-logs: string@bool-completer # default: false
+  --with-logs: oneof<nothing, bool> # default: false
 ]: any -> record<id: string, status: string, catalog: record<streams: list<record>>, catalogId: string, destinationCatalog: record<operations: list<record>>, catalogDiff: record<transforms: list<record>>, failureReason: record<failureOrigin: string, failureType: string, externalMessage: string, internalMessage: string, stacktrace: string, retryable: bool, timestamp: int, fromTraceMessage: bool, streamDescriptor: record<name: string, namespace: string>>, logs: record<logType: string, logEvents: record<events: list, version: string>, logLines: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8756,7 +8755,7 @@ export def "commands-output-spec post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   id: string
-  --with-logs: string@bool-completer # default: false
+  --with-logs: oneof<nothing, bool> # default: false
 ]: any -> record<id: string, status: string, spec: record, failureReason: record<failureOrigin: string, failureType: string, externalMessage: string, internalMessage: string, stacktrace: string, retryable: bool, timestamp: int, fromTraceMessage: bool, streamDescriptor: record<name: string, namespace: string>>, logs: record<logType: string, logEvents: record<events: list, version: string>, logLines: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8884,7 +8883,7 @@ export def "dataplane-group-create createDataplaneGroup" [
   --allow-errors(-e) # Return full response without error handling
   organization_id: string # format: UUID
   name: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<name: string, dataplane_group_id: string, organization_id: string, enabled: bool, created_at: string, updated_at: string, dataplanes: table<name: string, dataplane_id: string, dataplane_group_id: string, enabled: bool, created_at: string, updated_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8911,7 +8910,7 @@ export def "dataplane-group-update updateDataplaneGroup" [
   --allow-errors(-e) # Return full response without error handling
   dataplane_group_id: string # format: uuid
   --name: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<name: string, dataplane_group_id: string, organization_id: string, enabled: bool, created_at: string, updated_at: string, dataplanes: table<name: string, dataplane_id: string, dataplane_group_id: string, enabled: bool, created_at: string, updated_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8988,8 +8987,8 @@ export def "dataplanes-create createDataplane" [
   --allow-errors(-e) # Return full response without error handling
   dataplane_group_id: string # format: UUID
   name: string
-  --enabled: string@bool-completer
-  --instanceScope: string@bool-completer # default: false
+  --enabled: oneof<nothing, bool>
+  --instanceScope: oneof<nothing, bool> # default: false
 ]: any -> record<dataplane_id: string, region_id: string, client_id: string, client_secret: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9016,7 +9015,7 @@ export def "dataplanes-update updateDataplane" [
   --allow-errors(-e) # Return full response without error handling
   dataplane_id: string # format: uuid
   --name: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<name: string, dataplane_id: string, dataplane_group_id: string, enabled: bool, created_at: string, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9647,7 +9646,7 @@ export def "public-regions publicCreateRegion" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   organizationId: string # format: uuid
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<regionId: string, name: string, organizationId: string, enabled: bool, createdAt: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9696,7 +9695,7 @@ export def "public-regions publicUpdateRegion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<regionId: string, name: string, organizationId: string, enabled: bool, createdAt: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9768,7 +9767,7 @@ export def "public-dataplanes publicCreateDataplane" [
   --allow-errors(-e) # Return full response without error handling
   regionId: string # format: uuid
   name: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<dataplaneId: string, regionId: string, clientId: string, clientSecret: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9817,7 +9816,7 @@ export def "public-dataplanes publicUpdateDataplane" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<dataplaneId: string, name: string, regionId: string, enabled: bool, createdAt: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10261,7 +10260,7 @@ export def "public-sources listSources" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --workspaceIds: list # The UUIDs of the workspaces you wish to list sources for. Empty list will retrieve all allowed workspaces. (e.g. df08f6b0-b364-4cc1-9b3f-96f5d2fccfb2,b0796797-de23-4fc7-a5e2-7e131314718c)
-  --includeDeleted: string@bool-completer # Include deleted sources in the returned results. (default: false)
+  --includeDeleted: oneof<nothing, bool> # Include deleted sources in the returned results. (default: false)
   --limit: int # Set the limit on the number of sources returned. The default is 20. (format: int32, default: 20)
   --offset: int # Set the offset to start at when returning sources. The default is 0 (format: int32, default: 0)
 ]: nothing -> record<previous: string, next: string, data: table<sourceId: string, name: string, sourceType: string, definitionId: string, workspaceId: string, configuration: record, createdAt: int, resourceAllocation: record>> {
@@ -10318,7 +10317,7 @@ export def "public-sources publicGetSource" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeSecretCoordinates: string@bool-completer # Rather than return *** for secret properties include the secret coordinate information
+  --includeSecretCoordinates: oneof<nothing, bool> # Rather than return *** for secret properties include the secret coordinate information
 ]: nothing -> record<sourceId: string, name: string, sourceType: string, definitionId: string, workspaceId: string, configuration: record, createdAt: int, resourceAllocation: record<default: record<cpu_request: string, cpu_limit: string, memory_request: string, memory_limit: string, ephemeral_storage_request: string, ephemeral_storage_limit: string>, jobSpecific: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10424,7 +10423,7 @@ export def "public-destinations listDestinations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --workspaceIds: list # The UUIDs of the workspaces you wish to list destinations for. Empty list will retrieve all allowed workspaces.
-  --includeDeleted: string@bool-completer # Include deleted destinations in the returned results. (default: false)
+  --includeDeleted: oneof<nothing, bool> # Include deleted destinations in the returned results. (default: false)
   --limit: int # Set the limit on the number of destinations returned. The default is 20. (format: int32, default: 20)
   --offset: int # Set the offset to start at when returning destinations. The default is 0 (format: int32, default: 0)
 ]: nothing -> record<previous: string, next: string, data: table<destinationId: string, name: string, destinationType: string, definitionId: string, workspaceId: string, configuration: record, createdAt: int, resourceAllocation: record>> {
@@ -10480,7 +10479,7 @@ export def "public-destinations publicGetDestination" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeSecretCoordinates: string@bool-completer # Rather than return *** for secret properties include the secret coordinate information
+  --includeSecretCoordinates: oneof<nothing, bool> # Rather than return *** for secret properties include the secret coordinate information
 ]: nothing -> record<destinationId: string, name: string, destinationType: string, definitionId: string, workspaceId: string, configuration: record, createdAt: int, resourceAllocation: record<default: record<cpu_request: string, cpu_limit: string, memory_request: string, memory_limit: string, ephemeral_storage_request: string, ephemeral_storage_limit: string>, jobSpecific: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10680,7 +10679,7 @@ export def "public-connections listConnections" [
   --allow-errors(-e) # Return full response without error handling
   --workspaceIds: list # The UUIDs of the workspaces you wish to list connections for. Empty list will retrieve all allowed workspaces.
   --tagIds: list # The UUIDs of the tags you wish to list connections for. Empty list will retrieve all connections.
-  --includeDeleted: string@bool-completer # Include deleted connections in the returned results. (default: false)
+  --includeDeleted: oneof<nothing, bool> # Include deleted connections in the returned results. (default: false)
   --limit: int # Set the limit on the number of Connections returned. The default is 20. (format: int32, default: 20)
   --offset: int # Set the offset to start at when returning Connections. The default is 0 (format: int32, default: 0)
 ]: nothing -> record<previous: string, next: string, data: table<connectionId: string, name: string, sourceId: string, destinationId: string, workspaceId: string, status: string, schedule: record, nonBreakingSchemaUpdatesBehavior: string, namespaceDefinition: string, namespaceFormat: string, prefix: string, configurations: record, createdAt: int, tags: list, statusReason: string>> {
@@ -10790,7 +10789,7 @@ export def "public-streams get" [
   --allow-errors(-e) # Return full response without error handling
   --sourceId: string # ID of the source (format: UUID)
   --destinationId: string # ID of the destination (format: UUID)
-  --ignoreCache: string@bool-completer # If true pull the latest schema from the source, else pull from cache (default false) (default: false)
+  --ignoreCache: oneof<nothing, bool> # If true pull the latest schema from the source, else pull from cache (default false) (default: false)
 ]: nothing -> table<streamName: string, syncModes: list<any>, streamnamespace: string, defaultCursorField: list<string>, sourceDefinedCursorField: bool, sourceDefinedPrimaryKey: list<list>, propertyFields: list<list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10814,7 +10813,7 @@ export def "public-workspaces publicListWorkspaces" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --workspaceIds: list # The UUIDs of the workspaces you wish to fetch. Empty list will retrieve all allowed workspaces.
-  --includeDeleted: string@bool-completer # Include deleted workspaces in the returned results. (default: false)
+  --includeDeleted: oneof<nothing, bool> # Include deleted workspaces in the returned results. (default: false)
   --limit: int # Set the limit on the number of workspaces returned. The default is 20. (format: int32, default: 20)
   --offset: int # Set the offset to start at when returning workspaces. The default is 0 (format: int32, default: 0)
 ]: nothing -> record<previous: string, next: string, data: table<workspaceId: string, name: string, dataResidency: string, notifications: record>> {
@@ -12050,7 +12049,7 @@ export def "private-link-update updatePrivateLink" [
   --endpointId: string
   --dnsName: string
   --scopedConfigurationId: string # format: uuid
-  --clearScopedConfigurationId: string@bool-completer
+  --clearScopedConfigurationId: oneof<nothing, bool>
 ]: any -> record<id: string, workspaceId: string, dataplaneGroupId: string, name: string, status: string, serviceConfig: any, endpointId: string, dnsName: string, scopedConfigurationId: string, createdAt: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

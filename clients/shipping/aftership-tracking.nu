@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.aftership.com/tracking/2026-01"] }
 def auth-scheme-completer [] { ["as-api-key"] }
 
@@ -383,7 +382,7 @@ export def "couriers get-couriers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # get user activated couriers
+  --active: oneof<nothing, bool> # get user activated couriers
   --slug: string # Unique courier code Use comma for multiple values. (Example: dhl,ups,usps) (e.g. usps)
   --Content-Type: string@Content-Type-completer # Content-Type (e.g. application/json)
 ]: nothing -> record<meta: record<code: int, message: string, type: string>, data: record<total: int, couriers: list<record>>> {

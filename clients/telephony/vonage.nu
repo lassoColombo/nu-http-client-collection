@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.nexmo.com/v1/calls"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -313,7 +312,7 @@ export def "talk startTalk" [
   --language: string@language-completer # The language to use (default: en-US)
   --level: string # The volume level that the speech is played. This can be any value between `-1` to `1` in `0.1` increments, with `0` being the default. (default: 0, e.g. 0.4)
   --body-loop: int # The number of times to repeat the text the file, 0 for infinite (default: 1)
-  --premium: string@bool-completer # Set to true to use the premium version of the specified style if available, otherwise the standard version will be used. The default value is false. You can find more information about Premium Voices in the [Text-To-Speech guide](/voice/voice-api/guides/text-to-speech#premium-voices). (default: false)
+  --premium: oneof<nothing, bool> # Set to true to use the premium version of the specified style if available, otherwise the standard version will be used. The default value is false. You can find more information about Premium Voices in the [Text-To-Speech guide](/voice/voice-api/guides/text-to-speech#premium-voices). (default: false)
   --style: int # The vocal style (vocal range, tessitura, and timbre) to use (default: 0)
   text: string # The text to read (e.g. Hello. How are you today?)
   --voice-name: string@voice-name-completer # <strong>DEPRECATED</strong> The voice & language to use (DEPRECATED, default: Kimberly)

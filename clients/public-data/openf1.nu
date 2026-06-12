@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -112,8 +111,8 @@ export def "metrics get" [
 # Get Race Lap
 #
 # GET /race_lap
-# operationId: get_race_lap_race_lap_get
-export def "race-lap get" [
+# operationId: get_race_lap_race_lap_post
+export def "race-lap post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,8 +132,8 @@ export def "race-lap get" [
 # Get Race Lap
 #
 # POST /race_lap
-# operationId: get_race_lap_race_lap_get
-export def "race-lap get-1" [
+# operationId: get_race_lap_race_lap_post
+export def "race-lap post-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,31 +266,9 @@ export def "stripe-create-checkout-session post" [
 
 # Endpoint
 #
-# GET /{path}
-# operationId: endpoint__path__get
-export def "api get-by-path" [
-  path: string
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($path)")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# Endpoint
-#
 # POST /{path}
-# operationId: endpoint__path__get
-export def "api get-by-path-1" [
+# operationId: endpoint__path__post
+export def "api post-by-path" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -307,4 +284,26 @@ export def "api get-by-path-1" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Endpoint
+#
+# GET /{path}
+# operationId: endpoint__path__post
+export def "api post-by-path-1" [
+  path: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/($path)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }

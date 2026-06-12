@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.feedback.eu.pendo.io"] }
 def auth-scheme-completer [] { ["query-auth-token" "auth-token"] }
 
@@ -295,7 +294,7 @@ export def "features list" [
   --limit: float # Limit the number of records returned
   --start: float # Offset to start at
   --order-dir: string@order-dir-completer # The sort direction
-  --is-private: string@bool-completer # Filter by whether the features are shown/hidden from customer, if supplied.
+  --is-private: oneof<nothing, bool> # Filter by whether the features are shown/hidden from customer, if supplied.
   --wanted-by: int # Filter by User ID, if supplied.
   --order-by: string@order-by-completer-1 # The field to use for sort
   --tags: string # Tags to limit results by. Multiple tags can be provided via comma delimeted string. Tags with contexts can be used. E.g. "....&tags=TagExample,Multi:TagThis,Multi:TagThat".
@@ -564,7 +563,7 @@ export def "users-invite-end-user post" [
   --email: string
   --full-name: string
   --monthly-value: float # format: float
-  --send-invite: string@bool-completer
+  --send-invite: oneof<nothing, bool>
   --user-external-id: string
 ]: any -> any {
   let input = $in
@@ -805,8 +804,8 @@ export def "votes get" [
   --allow-errors(-e) # Return full response without error handling
   --user-id: int # Include only votes by User that voted on a feature.
   --feature-id: int # Include only votes for Feature with this Feature ID
-  --positive: string@bool-completer # Include only votes that are positive
-  --negative: string@bool-completer # Include only votes that are negative
+  --positive: oneof<nothing, bool> # Include only votes that are positive
+  --negative: oneof<nothing, bool> # Include only votes that are negative
   --offset: float # Offset to start at
   --limit: float # Limit the number of records returned
 ]: nothing -> table<created_at: string, feature_id: int, quantity: int, updated_at: string, user_id: int> {

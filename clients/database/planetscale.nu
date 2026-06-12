@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.planetscale.com/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -166,7 +165,7 @@ export def "organizations organization-by-organization-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --billing-email: string # The billing email for the organization
-  --idp-managed-roles: string@bool-completer # Whether or not the IdP provider is be responsible for managing roles in PlanetScale
+  --idp-managed-roles: oneof<nothing, bool> # Whether or not the IdP provider is be responsible for managing roles in PlanetScale
   --invoice-budget-amount: int # The expected monthly budget for the organization
 ]: any -> record<id: string, name: string, billing_email: string, created_at: string, updated_at: string, plan: string, valid_billing_info: bool, sso: bool, sso_directory: bool, single_tenancy: bool, managed_tenancy: bool, has_past_due_invoices: bool, database_count: int, sso_portal_url: string, features: record, idp_managed_roles: bool, invoice_budget_amount: string, keyspace_shard_limit: int, has_card: bool, payment_info_required: bool> {
   let input = $in
@@ -220,7 +219,7 @@ export def "organizations-cluster-size-skus skus" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --engine: string@engine-completer # The database engine to filter by. Defaults to 'mysql'.
-  --rates: string@bool-completer # Whether to include pricing rates in the response. Defaults to false.
+  --rates: oneof<nothing, bool> # Whether to include pricing rates in the response. Defaults to false.
   --region: string # The region slug to get rates for. If not specified, uses the organization's default region.
 ]: nothing -> table<name: string, display_name: string, cpu: string, storage: int, ram: int, metal: bool, enabled: bool, provider: string, default_vtgate: string, default_vtgate_rate: float, replica_rate: float, rate: float, sort_order: int, architecture: string, development: bool, production: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -329,15 +328,15 @@ export def "organizations-databases settings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --new-name: string # The name to update the database to
-  --automatic-migrations: string@bool-completer # Whether or not to copy migration data to new branches and in deploy requests. (Vitess only)
+  --automatic-migrations: oneof<nothing, bool> # Whether or not to copy migration data to new branches and in deploy requests. (Vitess only)
   --migration-framework: string # A migration framework to use on the database. (Vitess only)
   --migration-table-name: string # Name of table to use as migration table for the database. (Vitess only)
-  --require-approval-for-deploy: string@bool-completer # Whether or not deploy requests must be approved by a database administrator other than the request creator
-  --restrict-branch-region: string@bool-completer # Whether or not to limit branch creation to the same region as the one selected during database creation.
-  --allow-data-branching: string@bool-completer # Whether or not data branching is allowed on the database. (Vitess only)
-  --allow-foreign-key-constraints: string@bool-completer # Whether or not foreign key constraints are allowed on the database. (Vitess only)
-  --insights-raw-queries: string@bool-completer # Whether or not full queries should be collected from the database
-  --production-branch-web-console: string@bool-completer # Whether or not the web console can be used on the production branch of the database
+  --require-approval-for-deploy: oneof<nothing, bool> # Whether or not deploy requests must be approved by a database administrator other than the request creator
+  --restrict-branch-region: oneof<nothing, bool> # Whether or not to limit branch creation to the same region as the one selected during database creation.
+  --allow-data-branching: oneof<nothing, bool> # Whether or not data branching is allowed on the database. (Vitess only)
+  --allow-foreign-key-constraints: oneof<nothing, bool> # Whether or not foreign key constraints are allowed on the database. (Vitess only)
+  --insights-raw-queries: oneof<nothing, bool> # Whether or not full queries should be collected from the database
+  --production-branch-web-console: oneof<nothing, bool> # Whether or not the web console can be used on the production branch of the database
   --default-branch: string # The default branch of the database
 ]: any -> record<id: string, url: string, branches_url: string, branches_count: int, open_schema_recommendations_count: int, development_branches_count: int, production_branches_count: int, issues_count: int, multiple_admins_required_for_deletion: bool, ready: bool, at_backup_restore_branches_limit: bool, at_development_branch_usage_limit: bool, data_import: record<state: string, import_check_errors: string, started_at: string, finished_at: string, data_source: record<hostname: string, port: int, database: string>>, region: record<id: string, provider: string, enabled: bool, public_ip_addresses: list<string>, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>, html_url: string, name: string, state: string, sharded: bool, default_branch_shard_count: int, default_branch_read_only_regions_count: int, default_branch_table_count: int, default_branch: string, require_approval_for_deploy: bool, resizing: bool, resize_queued: bool, config_changing: bool, config_change_queued: bool, allow_data_branching: bool, foreign_keys_enabled: bool, automatic_migrations: bool, restrict_branch_region: bool, insights_raw_queries: bool, plan: string, insights_enabled: bool, production_branch_web_console: bool, migration_table_name: string, migration_framework: string, created_at: string, updated_at: string, schema_last_updated_at: string, kind: string> {
   let input = $in
@@ -534,8 +533,8 @@ export def "organizations-databases-branches branches" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --q: string # Search branches by name
-  --production: string@bool-completer # Filter branches by production status
-  --safe-migrations: string@bool-completer # Filter branches by safe migrations (DDL protection)
+  --production: oneof<nothing, bool> # Filter branches by production status
+  --safe-migrations: oneof<nothing, bool> # Filter branches by safe migrations (DDL protection)
   --order: string@order-completer # Order branches by created_at time
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
@@ -573,7 +572,7 @@ export def "organizations-databases-branches branch-by-organization-database" [
   --cluster-size: string # The database cluster size. Required if a backup_id is provided, optional otherwise. Options: PS_10, PS_20, PS_40, ..., PS_2800
   --storage: record # shape: {minimum_storage_bytes?: int, maximum_storage_bytes?: int}
   --major-version: string # For PostgreSQL databases, the PostgreSQL major version to use for the branch. Defaults to the major version of the parent branch if it exists or the database's default branch major version. Ignored for branches restored from backups.
-  --create-database-if-missing: string@bool-completer # Create a new database for the branch if the database does not exist. Defaults to false.
+  --create-database-if-missing: oneof<nothing, bool> # Create a new database for the branch if the database does not exist. Defaults to false.
   --kind: string@kind-completer # The kind of branch to create. Required when create_database_if_missing is set.
 ]: any -> record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string, restore_checklist_completed_at: string, schema_last_updated_at: string, kind: string, mysql_address: string, mysql_edge_address: string, state: string, direct_vtgate: bool, vtgate_size: string, vtgate_count: int, cluster_name: string, cluster_iops: int, ready: bool, schema_ready: bool, metal: bool, production: bool, safe_migrations: bool, sharded: bool, shard_count: int, stale_schema: bool, actor: record<id: string, display_name: string, avatar_url: string>, restored_from_branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, private_edge_connectivity: bool, has_replicas: bool, has_read_only_replicas: bool, html_url: string, url: string, region: record<id: string, provider: string, enabled: bool, public_ip_addresses: list<string>, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>, parent_branch: string, vtgate_options: record> {
   let input = $in
@@ -654,7 +653,7 @@ export def "organizations-databases-branches branch-by-organization-database-bra
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete-descendants: string@bool-completer # If true, recursively delete all descendant branches along with this branch
+  --delete-descendants: oneof<nothing, bool> # If true, recursively delete all descendant branches along with this branch
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -680,13 +679,13 @@ export def "organizations-databases-branches-backups backups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # Whether to include all backups, including deleted ones
+  --all: oneof<nothing, bool> # Whether to include all backups, including deleted ones
   --state: string@state-completer # Filter backups by state
   --policy: string # Filter backups by backup policy ID
   --qp-from: string # Filter backups started after this date (e.g. 2023-01-01T00:00:00Z)
   --qp-to: string # Filter backups started before this date (e.g. 2023-01-31T23:59:59Z)
   --running-at: string # Filter backups that are running during a specific time (e.g. 2023-01-01T00:00:00Z..2023-01-01T23:59:59Z)
-  --production: string@bool-completer # Filter backups by production branch
+  --production: oneof<nothing, bool> # Filter backups by production branch
   --page: int # If provided, specifies the page offset of returned results (default: 1)
   --per-page: int # If provided, specifies the number of returned results (default: 25)
 ]: nothing -> record<type: string, current_page: int, next_page: int, next_page_url: string, prev_page: int, prev_page_url: string, data: table<id: string, name: string, state: string, size: int, estimated_storage_cost: float, created_at: string, updated_at: string, started_at: string, expires_at: string, completed_at: string, deleted_at: string, pvc_size: int, protected: bool, required: bool, restored_branches: list, actor: record, backup_policy: record, schema_snapshot: record, database_branch: record>> {
@@ -717,7 +716,7 @@ export def "organizations-databases-branches-backups backup-by-organization-data
   --name: string # Name for the backup
   --retention-unit: string@retention-unit-completer # Unit for the retention period of the backup
   --retention-value: int # Value between `1` and `1000` for the retention period of the backup (i.e retention_value `6` and retention_unit `hour` means 6 hours)
-  --emergency: string@bool-completer # Whether the backup is an immediate backup that may affect database performance. Emergency backups are only supported for PostgreSQL databases.
+  --emergency: oneof<nothing, bool> # Whether the backup is an immediate backup that may affect database performance. Emergency backups are only supported for PostgreSQL databases.
 ]: any -> record<id: string, name: string, state: string, size: int, estimated_storage_cost: float, created_at: string, updated_at: string, started_at: string, expires_at: string, completed_at: string, deleted_at: string, pvc_size: int, protected: bool, required: bool, restored_branches: table<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, actor: record<id: string, display_name: string, avatar_url: string>, backup_policy: record<id: string, display_name: string, name: string, target: string, retention_value: int, retention_unit: string, frequency_value: int, frequency_unit: string, schedule_time: string, schedule_day: int, schedule_week: int, created_at: string, updated_at: string, last_ran_at: string, next_run_at: string, required: bool>, schema_snapshot: record<id: string, name: string, created_at: string, updated_at: string, linted_at: string, url: string>, database_branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -771,7 +770,7 @@ export def "organizations-databases-branches-backups backup-by-id-organization-d
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --protected: string@bool-completer # Whether the backup is protected from deletion or not
+  --protected: oneof<nothing, bool> # Whether the backup is protected from deletion or not
 ]: any -> record<id: string, name: string, state: string, size: int, estimated_storage_cost: float, created_at: string, updated_at: string, started_at: string, expires_at: string, completed_at: string, deleted_at: string, pvc_size: int, protected: bool, required: bool, restored_branches: table<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, actor: record<id: string, display_name: string, avatar_url: string>, backup_policy: record<id: string, display_name: string, name: string, target: string, retention_value: int, retention_unit: string, frequency_value: int, frequency_unit: string, schedule_time: string, schedule_day: int, schedule_week: int, created_at: string, updated_at: string, last_ran_at: string, next_run_at: string, required: bool>, schema_snapshot: record<id: string, name: string, created_at: string, updated_at: string, linted_at: string, url: string>, database_branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1467,10 +1466,10 @@ export def "organizations-databases-branches-passwords password-by-organization-
   --allow-errors(-e) # Return full response without error handling
   --name: string # Optional name of the password
   --role: string@role-completer # The database role of the password (i.e. admin)
-  --replica: string@bool-completer # Whether the password is for a read replica
+  --replica: oneof<nothing, bool> # Whether the password is for a read replica
   --ttl: int # Time to live (in seconds) for the password. The password will be invalid when TTL has passed
   --cidrs: list # List of IP addresses or CIDR ranges that can use this password
-  --direct-vtgate: string@bool-completer # Whether the password connects directly to a VTGate
+  --direct-vtgate: oneof<nothing, bool> # Whether the password connects directly to a VTGate
 ]: any -> record<id: string, name: string, role: string, cidrs: list<string>, created_at: string, deleted_at: string, expires_at: string, last_used_at: string, expired: bool, direct_vtgate: bool, direct_vtgate_addresses: list<string>, ttl_seconds: int, access_host_url: string, access_host_regional_url: string, access_host_regional_urls: list<string>, actor: record<id: string, display_name: string, avatar_url: string>, region: record<id: string, provider: string, enabled: bool, public_ip_addresses: list<string>, display_name: string, location: string, slug: string, current_default: bool, mysql_supported: bool, postgresql_supported: bool>, username: string, plain_text: string, replica: bool, renewable: bool, database_branch: record<name: string, id: string, production: bool, mysql_edge_address: string, private_edge_connectivity: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2552,8 +2551,8 @@ export def "organizations-databases-deploy-requests request-by-organization-data
   branch: string # The name of the branch the deploy request is created from
   into_branch: string # The name of the branch the deploy request will be merged into
   --notes: string # Notes about the deploy request
-  --auto-cutover: string@bool-completer # Whether or not to enable auto_cutover for the deploy request. When enabled, will auto cutover to the new schema as soon as it is ready.
-  --auto-delete-branch: string@bool-completer # Whether or not to enable auto_delete_branch for the deploy request. When enabled, will delete the branch once the DR successfully completes.
+  --auto-cutover: oneof<nothing, bool> # Whether or not to enable auto_cutover for the deploy request. When enabled, will auto cutover to the new schema as soon as it is ready.
+  --auto-delete-branch: oneof<nothing, bool> # Whether or not to enable auto_delete_branch for the deploy request. When enabled, will delete the branch once the DR successfully completes.
 ]: any -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2657,7 +2656,7 @@ export def "organizations-databases-deploy-requests-auto-apply apply" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable: string@bool-completer # Whether or not to enable auto-apply for the deploy request
+  --enable: oneof<nothing, bool> # Whether or not to enable auto-apply for the deploy request
 ]: any -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2685,7 +2684,7 @@ export def "organizations-databases-deploy-requests-auto-delete-branch branch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable: string@bool-completer # Whether or not to enable auto-delete branch for the deploy request
+  --enable: oneof<nothing, bool> # Whether or not to enable auto-delete branch for the deploy request
 ]: any -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2761,7 +2760,7 @@ export def "organizations-databases-deploy-requests-deploy request" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --instant-ddl: string@bool-completer # Whether or not to deploy the request with instant DDL. Defaults to false.
+  --instant-ddl: oneof<nothing, bool> # Whether or not to deploy the request with instant DDL. Defaults to false.
 ]: any -> record<id: string, number: int, actor: record<id: string, display_name: string, avatar_url: string>, closed_by: record<id: string, display_name: string, avatar_url: string>, branch: string, branch_id: string, branch_deleted: bool, branch_deleted_by: record<id: string, display_name: string, avatar_url: string>, branch_deleted_at: string, into_branch: string, into_branch_sharded: bool, into_branch_shard_count: int, approved: bool, state: string, deployment_state: string, deployment: record<id: string, auto_cutover: bool, auto_delete_branch: bool, created_at: string, cutover_at: string, cutover_expiring: bool, deploy_check_errors: string, finished_at: string, force_cutover_requested_at: string, queued_at: string, ready_to_cutover_at: string, started_at: string, state: string, submitted_at: string, updated_at: string, into_branch: string, deploy_request_number: int, deployable: bool, preceding_deployments: list<record>, deploy_operations: list<record>, deploy_operation_summaries: list<record>, lint_errors: list<record>, sequential_diff_dependencies: list<record>, lookup_vindex_operations: list<record>, throttler_configurations: record, deployment_revert_request: record, actor: record<id: string, display_name: string, avatar_url: string>, cutover_actor: record<id: string, display_name: string, avatar_url: string>, cancelled_actor: record<id: string, display_name: string, avatar_url: string>, schema_last_updated_at: string, table_locked: bool, locked_table_name: string, instant_ddl: bool, instant_ddl_eligible: bool, queue_paused: bool, queue_pause_reason: string>, num_comments: int, html_url: string, notes: string, html_body: string, created_at: string, updated_at: string, closed_at: string, deployed_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3330,7 +3329,7 @@ export def "organizations-databases-webhooks webhook-by-organization-database" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-url: string # The URL the webhook will send events to
-  --enabled: string@bool-completer # Whether the webhook should be enabled
+  --enabled: oneof<nothing, bool> # Whether the webhook should be enabled
   --events: list # The events this webhook should subscribe to
 ]: any -> record<id: string, url: string, secret: string, enabled: bool, last_sent_result: string, last_sent_success: bool, last_sent_at: string, created_at: string, updated_at: string, events: list<string>> {
   let input = $in
@@ -3384,7 +3383,7 @@ export def "organizations-databases-webhooks webhook-by-organization-database-id
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-url: string # The URL the webhook will send events to
-  --enabled: string@bool-completer # Whether the webhook should be enabled
+  --enabled: oneof<nothing, bool> # Whether the webhook should be enabled
   --events: list # The events this webhook should subscribe to
 ]: any -> record<id: string, url: string, secret: string, enabled: bool, last_sent_result: string, last_sent_success: bool, last_sent_at: string, created_at: string, updated_at: string, events: list<string>> {
   let input = $in
@@ -3491,7 +3490,7 @@ export def "organizations-databases-workflows workflow-by-organization-database"
   source_keyspace: string # Name of the source keyspace
   target_keyspace: string # Name of the target keyspace
   --global-keyspace: string # Name of the global sequence keyspace
-  --defer-secondary-keys: string@bool-completer # Defer secondary keys
+  --defer-secondary-keys: oneof<nothing, bool> # Defer secondary keys
   --on-ddl: string@on-ddl-completer # The behavior when DDL changes during the workflow
   tables: list # List of tables to move
 ]: any -> record<id: string, name: string, number: int, state: string, created_at: string, updated_at: string, started_at: string, completed_at: string, cancelled_at: string, reversed_at: string, retried_at: string, data_copy_completed_at: string, cutover_at: string, replicas_switched: bool, primaries_switched: bool, switch_replicas_at: string, switch_primaries_at: string, verify_data_at: string, workflow_type: string, workflow_subtype: string, defer_secondary_keys: bool, on_ddl: string, workflow_errors: string, may_retry: bool, may_restart: bool, verified_data_stale: bool, sequence_tables_applied: bool, actor: record<id: string, display_name: string, avatar_url: string>, verify_data_by: record<id: string, display_name: string, avatar_url: string>, reversed_by: record<id: string, display_name: string, avatar_url: string>, switch_replicas_by: record<id: string, display_name: string, avatar_url: string>, switch_primaries_by: record<id: string, display_name: string, avatar_url: string>, cancelled_by: record<id: string, display_name: string, avatar_url: string>, completed_by: record<id: string, display_name: string, avatar_url: string>, retried_by: record<id: string, display_name: string, avatar_url: string>, cutover_by: record<id: string, display_name: string, avatar_url: string>, reversed_cutover_by: record<id: string, display_name: string, avatar_url: string>, branch: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, source_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, target_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>, global_keyspace: record<id: string, name: string, created_at: string, updated_at: string, deleted_at: string>> {
@@ -3910,8 +3909,8 @@ export def "organizations-members member" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete-passwords: string@bool-completer # Whether to delete all passwords associated with the member. Only available when removing other members (not yourself).
-  --delete-service-tokens: string@bool-completer # Whether to delete all service tokens associated with the member. Only available when removing other members (not yourself).
+  --delete-passwords: oneof<nothing, bool> # Whether to delete all passwords associated with the member. Only available when removing other members (not yourself).
+  --delete-service-tokens: oneof<nothing, bool> # Whether to delete all service tokens associated with the member. Only available when removing other members (not yourself).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4418,7 +4417,7 @@ export def "organizations-teams-members member-by-organization-team-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete-passwords: string@bool-completer # Whether to delete the member's passwords created through this team
+  --delete-passwords: oneof<nothing, bool> # Whether to delete the member's passwords created through this team
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

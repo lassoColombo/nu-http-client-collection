@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.docusign.com" "https://api-d.docusign.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -125,7 +124,7 @@ export def "accounts-agreements GetAgreementsList" [
   --provisionsterm-length: string
   --source-name: string
   --source-id: string
-  --include-linked-data: string@bool-completer # default: false
+  --include-linked-data: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -227,7 +226,7 @@ export def "accounts-agreements GetAgreement" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-linked-data: string@bool-completer # default: false
+  --include-linked-data: oneof<nothing, bool> # default: false
 ]: nothing -> record<id: string, title: string, file_name: string, document_id: string, type: string, category: string, summary: string, status: string, review_status: string, review_completed_at: string, parties: table<id: string, name_in_agreement: string, preferred_name: string>, provisions: record<effective_date: string, expiration_date: string, execution_date: string, term_length: string>, custom_provisions: record, additional_user_defined_data: record, additional_custom_clm_data: record, additional_custom_esign_data: record, related_agreement_documents: record<parent_agreement_document_id: record>, languages: list<string>, source_name: record, source_id: string, source_account_id: string, linked_data: table<application_name: string, object_name: string, record_id: string>, metadata: record<created_at: string, created_by: string, modified_at: string, modified_by: string, request_id: string, response_timestamp: string, response_duration_ms: int>, _links: record<document: record<href: string>, agreement_types: record<href: string>>, _actions: record<change_type: record<href: string, method: string, description: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

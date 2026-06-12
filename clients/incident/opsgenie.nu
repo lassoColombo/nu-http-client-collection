@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.opsgenie.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -1185,9 +1184,9 @@ export def "integrations createIntegration" [
   type: string@type-completer # Type of the integration. (For instance, "API" for API Integration)
   --id: string
   name: string # Name of the integration. Name must be unique for each integration
-  --enabled: string@bool-completer # This parameter is for specifying whether the integration will be enabled or not
+  --enabled: oneof<nothing, bool> # This parameter is for specifying whether the integration will be enabled or not
   --ownerTeam: record # shape: {id?: string, name?: string}
-  --isGlobal: string@bool-completer # nullable
+  --isGlobal: oneof<nothing, bool> # nullable
   --readOnly: list
 ]: any -> record {
   let input = $in
@@ -1243,9 +1242,9 @@ export def "integrations updateIntegration" [
   type: string@type-completer # Type of the integration. (For instance, "API" for API Integration)
   --body-id: string
   name: string # Name of the integration. Name must be unique for each integration
-  --enabled: string@bool-completer # This parameter is for specifying whether the integration will be enabled or not
+  --enabled: oneof<nothing, bool> # This parameter is for specifying whether the integration will be enabled or not
   --ownerTeam: record # shape: {id?: string, name?: string}
-  --isGlobal: string@bool-completer # nullable
+  --isGlobal: oneof<nothing, bool> # nullable
   --readOnly: list
 ]: any -> record {
   let input = $in
@@ -1507,7 +1506,7 @@ export def "heartbeats createHeartbeat" [
   --description: string # An optional description of the heartbeat
   interval: int # Specifies how often a heartbeat message should be expected (format: int32)
   intervalUnit: string@intervalUnit-completer # Interval specified as 'minutes', 'hours' or 'days'
-  --enabled: string@bool-completer # Enable/disable heartbeat monitoring
+  --enabled: oneof<nothing, bool> # Enable/disable heartbeat monitoring
   --ownerTeam: record # Owner team of the heartbeat, consisting id and/or name of the owner team — shape: {name?: string, id?: string}
   --alertMessage: string # Specifies the alert message for heartbeat expiration alert. If this is not provided, default alert message is 'HeartbeatName is expired'
   --alertTags: list # Specifies the alert tags for heartbeat expiration alert
@@ -1564,7 +1563,7 @@ export def "heartbeats updateHeartbeat" [
   --description: string # An optional description of the heartbeat
   --interval: int # Specifies how often a heartbeat message should be expected (format: int32)
   --intervalUnit: string@intervalUnit-completer # Interval specified as 'minutes', 'hours' or 'days'
-  --enabled: string@bool-completer # Enable/disable heartbeat monitoring
+  --enabled: oneof<nothing, bool> # Enable/disable heartbeat monitoring
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1689,7 +1688,7 @@ export def "policies createAlertPolicy" [
   --policyDescription: string # Description of the policy
   --filter: record # Defines the conditions that will be checked before applying rules and type of the operations that will be applied on conditions — shape: {type: "match-all"|"match-any-condition"|"match-all-conditions"}
   --timeRestrictions: record # shape: {type: "weekday-and-time-of-day"|"time-of-day"}
-  --enabled: string@bool-completer # Activity status of the alert policy
+  --enabled: oneof<nothing, bool> # Activity status of the alert policy
   type: string@type-completer-3 # Type of the policy
 ]: any -> record {
   let input = $in
@@ -1748,7 +1747,7 @@ export def "policies updateAlertPolicy" [
   --policyDescription: string # Description of the policy
   --filter: record # Defines the conditions that will be checked before applying rules and type of the operations that will be applied on conditions — shape: {type: "match-all"|"match-any-condition"|"match-all-conditions"}
   --timeRestrictions: record # shape: {type: "weekday-and-time-of-day"|"time-of-day"}
-  --enabled: string@bool-completer # Activity status of the alert policy
+  --enabled: oneof<nothing, bool> # Activity status of the alert policy
   type: string@type-completer-3 # Type of the policy
 ]: any -> any {
   let input = $in
@@ -2058,7 +2057,7 @@ export def "users createUser" [
   --userAddress: record # shape: {country?: string, state?: string, city?: string, line?: string, zipCode?: string}
   --tags: list # List of labels attached to the user. You can label users to differentiate them from the rest. For example, you can add ITManager tag to differentiate people with this role from others.
   --details: record # Set of user defined properties.
-  --invitationDisabled: string@bool-completer # Invitation email will not be sent if set to true. Default value is false
+  --invitationDisabled: oneof<nothing, bool> # Invitation email will not be sent if set to true. Default value is false
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2149,7 +2148,7 @@ export def "users updateUser" [
   --userAddress: record # shape: {country?: string, state?: string, city?: string, line?: string, zipCode?: string}
   --tags: list # List of labels attached to the user. You can label users to differentiate them from the rest. For example, you can add ITManager tag to differentiate people with this role from others.
   --details: record # Set of user defined properties.
-  --invitationDisabled: string@bool-completer # Invitation email will not be sent if set to true. Default value is false
+  --invitationDisabled: oneof<nothing, bool> # Invitation email will not be sent if set to true. Default value is false
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2503,7 +2502,7 @@ export def "users-notification-rules createNotificationRule" [
   --order: int # The order of the notification rule within the notification rules with the same action type (format: int32)
   --steps: list # List of steps that will be added to notification rule — item shape: {contact: record, sendAfter?: record, enabled: bool}
   --repeat: record # The amount of time in minutes that notification steps will be repeatedly apply — shape: {loopAfter?: int, enabled?: bool}
-  --enabled: string@bool-completer # Defines if notification rule will be enabled or not when it is created
+  --enabled: oneof<nothing, bool> # Defines if notification rule will be enabled or not when it is created
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2592,7 +2591,7 @@ export def "users-notification-rules updateNotificationRule" [
   --steps: list # List of steps that will be added to notification rule — item shape: {contact: record, sendAfter?: record, enabled: bool}
   --repeat: record # The amount of time in minutes that notification steps will be repeatedly apply — shape: {loopAfter?: int, enabled?: bool}
   --order: int # The order of the notification rule within the notification rules with the same action type (format: int32)
-  --enabled: string@bool-completer # Defines if notification rule will be enabled or not when it is created
+  --enabled: oneof<nothing, bool> # Defines if notification rule will be enabled or not when it is created
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2723,7 +2722,7 @@ export def "users-notification-rules-steps createNotificationRuleStep" [
   --allow-errors(-e) # Return full response without error handling
   contact: record # shape: {method: "email"|"sms"|"voice"|"mobile", to: string}
   --sendAfter: record # shape: {timeAmount: int, timeUnit?: "days"|"hours"|"minutes"|"seconds"|"miliseconds"|"micros"|"nanos"}
-  --enabled: string@bool-completer # Specifies whether given step will be enabled or not when it is created.
+  --enabled: oneof<nothing, bool> # Specifies whether given step will be enabled or not when it is created.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2806,7 +2805,7 @@ export def "users-notification-rules-steps updateNotificationRuleStep" [
   --allow-errors(-e) # Return full response without error handling
   --contact: record # shape: {method: "email"|"sms"|"voice"|"mobile", to: string}
   --sendAfter: record # shape: {timeAmount: int, timeUnit?: "days"|"hours"|"minutes"|"seconds"|"miliseconds"|"micros"|"nanos"}
-  --enabled: string@bool-completer # Specifies whether given step will be enabled or not when it is updated.
+  --enabled: oneof<nothing, bool> # Specifies whether given step will be enabled or not when it is updated.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3451,7 +3450,7 @@ export def "schedules createSchedule" [
   name: string # Name of the schedule
   --description: string # The description of schedule
   --timezone: string # Timezone of schedule
-  --enabled: string@bool-completer # Enable/disable state of schedule (nullable)
+  --enabled: oneof<nothing, bool> # Enable/disable state of schedule (nullable)
   --ownerTeam: record # shape: {id?: string, name?: string}
   --rotations: list # item shape: {name?: string, startDate: string, endDate?: string, type: "daily"|"weekly"|"hourly", length?: int, participants: list, timeRestriction?: record}
 ]: any -> record {
@@ -3511,7 +3510,7 @@ export def "schedules updateSchedule" [
   --name: string # Name of the schedule
   --description: string # The description of schedule
   --timezone: string # Timezone of schedule
-  --enabled: string@bool-completer # Enable/disable state of schedule (nullable)
+  --enabled: oneof<nothing, bool> # Enable/disable state of schedule (nullable)
   --ownerTeam: record # shape: {id?: string, name?: string}
   --rotations: list # item shape: {name?: string, startDate: string, endDate?: string, type: "daily"|"weekly"|"hourly", length?: int, participants: list, timeRestriction?: record}
 ]: any -> record {
@@ -3918,7 +3917,7 @@ export def "schedules-on-calls listOnCalls" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --flat: string@bool-completer # Retrieves user names of all on call participants if enabled
+  --flat: oneof<nothing, bool> # Retrieves user names of all on call participants if enabled
   --date: string # Starting date of the timeline (format: date-time)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3945,7 +3944,7 @@ export def "schedules-on-calls get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --scheduleIdentifierType: string@scheduleIdentifierType-completer # Type of the identifier that is provided as an in-line parameter. Possible values are 'id' or 'name' (default: id)
-  --flat: string@bool-completer # Retrieves user names of all on call participants if enabled
+  --flat: oneof<nothing, bool> # Retrieves user names of all on call participants if enabled
   --date: string # Starting date of the timeline (format: date-time)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3972,7 +3971,7 @@ export def "schedules-next-on-calls get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --scheduleIdentifierType: string@scheduleIdentifierType-completer # Type of the identifier that is provided as an in-line parameter. Possible values are 'id' or 'name' (default: id)
-  --flat: string@bool-completer # Retrieves user names of all on call participants if enabled
+  --flat: oneof<nothing, bool> # Retrieves user names of all on call participants if enabled
   --date: string # Starting date of the timeline (format: date-time)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4442,7 +4441,7 @@ export def "policies createPolicy" [
   --teamId: string # TeamId of the policy
   --filter: record # Defines the conditions that will be checked before applying rules and type of the operations that will be applied on conditions — shape: {type: "match-all"|"match-any-condition"|"match-all-conditions"}
   --timeRestrictions: record # shape: {type: "weekday-and-time-of-day"|"time-of-day"}
-  --enabled: string@bool-completer # Activity status of the alert policy
+  --enabled: oneof<nothing, bool> # Activity status of the alert policy
   type: string@type-completer-6 # Type of the policy
 ]: any -> record {
   let input = $in
@@ -4579,7 +4578,7 @@ export def "policies updatePolicy" [
   --teamId: string # TeamId of the policy
   --filter: record # Defines the conditions that will be checked before applying rules and type of the operations that will be applied on conditions — shape: {type: "match-all"|"match-any-condition"|"match-all-conditions"}
   --timeRestrictions: record # shape: {type: "weekday-and-time-of-day"|"time-of-day"}
-  --enabled: string@bool-completer # Activity status of the alert policy
+  --enabled: oneof<nothing, bool> # Activity status of the alert policy
   type: string@type-completer-6 # Type of the policy
 ]: any -> any {
   let input = $in
@@ -4719,7 +4718,7 @@ export def "incidents-create createIncident" [
   --note: string # Additional note that will be added while creating the incident
   serviceId: string # Service on which incident will be created.
   --statusPageEntry: record # Status page entry fields. If this field is leaved blank, message and description of incident will be used for title and detail respectively.
-  --notifyStakeholders: string@bool-completer # Indicate whether stakeholders are notified or not. Default value is false.
+  --notifyStakeholders: oneof<nothing, bool> # Indicate whether stakeholders are notified or not. Default value is false.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

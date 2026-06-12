@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://mandrillapp.com/api/1.0"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -687,7 +686,7 @@ export def "ips-provisionjson post" [
   --allow-errors(-e) # Return full response without error handling
   --key: string
   --pool: string
-  --warmup: string@bool-completer
+  --warmup: oneof<nothing, bool>
 ]: any -> record<requested_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -737,7 +736,7 @@ export def "ips-set-pooljson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --create-pool: string@bool-completer
+  --create-pool: oneof<nothing, bool>
   --ip: string
   --key: string
   --pool: string
@@ -1000,7 +999,7 @@ export def "messages-send-rawjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --async: string@bool-completer
+  --async: oneof<nothing, bool>
   --from-email: string
   --from-name: string
   --ip-pool: string
@@ -1034,7 +1033,7 @@ export def "messages-send-templatejson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --async: string@bool-completer
+  --async: oneof<nothing, bool>
   --ip-pool: string
   --key: string
   --message: record # shape: {attachments?: list, auto_html?: any, auto_text?: any, bcc_address?: string, from_email?: string, from_name?: string, global_merge_vars?: list, google_analytics_campaign?: string, google_analytics_domains?: list, headers?: record, html?: string, images?: list, important?: bool, inline_css?: any, merge?: bool, merge_vars?: list, metadata?: record, preserve_recipients?: any, recipient_metadata?: list, return_path_domain?: any, signing_domain?: any, subaccount?: string, subject?: string, tags?: list, text?: string, to?: list, track_clicks?: any, track_opens?: any, tracking_domain?: any, url_strip_qs?: any, view_content_link?: any}
@@ -1065,7 +1064,7 @@ export def "messages-sendjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --async: string@bool-completer
+  --async: oneof<nothing, bool>
   --ip-pool: string
   --key: string
   --message: record # shape: {attachments?: list, auto_html?: any, auto_text?: any, bcc_address?: string, from_email?: string, from_name?: string, global_merge_vars?: list, google_analytics_campaign?: string, google_analytics_domains?: list, headers?: record, html?: string, images?: list, important?: bool, inline_css?: any, merge?: bool, merge_vars?: list, metadata?: record, preserve_recipients?: any, recipient_metadata?: list, return_path_domain?: any, signing_domain?: any, subaccount?: string, subject?: string, tags?: list, text?: string, to?: list, track_clicks?: any, track_opens?: any, tracking_domain?: any, url_strip_qs?: any, view_content_link?: any}
@@ -1248,7 +1247,7 @@ export def "rejects-listjson post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --email: string
-  --include-expired: string@bool-completer
+  --include-expired: oneof<nothing, bool>
   --key: string
   --subaccount: string
 ]: any -> table<created_at: string, detail: string, email: string, expired: bool, expires_at: string, last_event_at: string, reason: string, sender: record<address: string, clicks: int, complaints: int, created_at: string, hard_bounces: int, opens: int, rejects: int, sent: int, soft_bounces: int, unique_clicks: int, unique_opens: int, unsubs: int>, subaccount: string> {
@@ -1758,7 +1757,7 @@ export def "templates-addjson post" [
   --key: string
   --labels: list
   --name: string
-  --publish: string@bool-completer
+  --publish: oneof<nothing, bool>
   --subject: string
   --text: string
 ]: any -> record<code: string, created_at: string, from_email: string, from_name: string, labels: list<string>, name: string, publish_code: string, publish_from_email: string, publish_from_name: string, publish_name: string, publish_subject: string, publish_text: string, published_at: string, slug: string, subject: string, text: string, updated_at: string> {
@@ -1944,7 +1943,7 @@ export def "templates-updatejson post" [
   --key: string
   --labels: list
   --name: string
-  --publish: string@bool-completer
+  --publish: oneof<nothing, bool>
   --subject: string
   --text: string
 ]: any -> record<code: string, created_at: string, from_email: string, from_name: string, labels: list<string>, name: string, publish_code: string, publish_from_email: string, publish_from_name: string, publish_name: string, publish_subject: string, publish_text: string, published_at: string, slug: string, subject: string, text: string, updated_at: string> {

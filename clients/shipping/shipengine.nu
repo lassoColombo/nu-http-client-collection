@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.shipengine.com"] }
 def auth-scheme-completer [] { ["api-key"] }
 
@@ -156,7 +155,7 @@ export def "account-settings-images image" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string # A human readable name for the image.  (e.g. My logo)
-  --is-default: string@bool-completer # Indicates whether this image is set as default.  (e.g. false)
+  --is-default: oneof<nothing, bool> # Indicates whether this image is set as default.  (e.g. false)
   image_content_type: any # The file type of the image.
   image_data: string # A base64 encoded string representation of the image.  (e.g. iVBORw0KGgoAAAANSUhEUgAAABkAAAAZCAYAAADE6YVjAAAAAXNSR0IArs4c6QAAAiVJREFUSEu91j3IeVEcB/CvSTIoBrFSikEZMdjsjExeUspgUEp5SUpeshrIgEFJJmWwMZHJQGHDhJSXTPfpnH/8ebzd56HnN93u7ZzP/f1+55x7Ob1ejxEKheByufh0HI9HrFYrcKbTKUMu5HI5BALBx5zNZoPxeAySAGc2mzF8Pp/e+BR0Ash8u93uHyKVSnH54J2Mvs8zn8//I6RO70L3xt8g70CPXvAu8hvoWQUeIj+BXpX4KcIGegWQOV4izyA2AGvkHsQW+BFyCUkkEiwWC9Ybl1W5Ls8ZMoAABCIbmE3cINFoFMFgEEajEeVyGSKRCJ1OB3q9ns5nMpmQTCaxXq9/l8loNEKj0YDX66UACYvFQq9brRYcDgdUKhU9RD/SEwLm83lEIhGUSiX0+33E4/GrU5otRMs1mUyYbDYLu90OhUJBMzhlZbPZ4Pf7odFo4HQ6b1rABqJIvV5nttstLc0pSIn2+z0tTy6XQ6FQoI/a7TZ0Ot0V9gqiiMFgYKrVKm0yieVyCZ/PB6vVSpF0Ok2zJHEqIY/HYw1RxOfzMYlE4jwoEAhAJpPBbDZf9eBwOCCVSsHtdp9f6FJ6egorlUqmVqvRfjSbTXS7XXg8nptP8Svk0RF01ROtVguSUTgchlgsPpeOZBaLxTAcDlEsFpHJZPC9XM8yoshgMGBCoRBdQWTCU7hcLjohWb5kM6rValQqlfMKfLbbb77xf/K38hf/XV9ilOpnLqvnogAAAABJRU5ErkJggg==)
 ]: any -> record {
@@ -208,7 +207,7 @@ export def "account-settings-images id-by-label_image_id-1" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --name: string # A human readable name for the image.  (e.g. My logo)
-  --is-default: string@bool-completer # Indicates whether this image is set as default.  (e.g. false)
+  --is-default: oneof<nothing, bool> # Indicates whether this image is set as default.  (e.g. false)
   --image-content-type: any # The file type of the image.
   --image-data: string # A base64 encoded string representation of the image.  (e.g. iVBORw0KGgoAAAANSUhEUgAAABkAAAAZCAYAAADE6YVjAAAAAXNSR0IArs4c6QAAAiVJREFUSEu91j3IeVEcB/CvSTIoBrFSikEZMdjsjExeUspgUEp5SUpeshrIgEFJJmWwMZHJQGHDhJSXTPfpnH/8ebzd56HnN93u7ZzP/f1+55x7Ob1ejxEKheByufh0HI9HrFYrcKbTKUMu5HI5BALBx5zNZoPxeAySAGc2mzF8Pp/e+BR0Ash8u93uHyKVSnH54J2Mvs8zn8//I6RO70L3xt8g70CPXvAu8hvoWQUeIj+BXpX4KcIGegWQOV4izyA2AGvkHsQW+BFyCUkkEiwWC9Ybl1W5Ls8ZMoAABCIbmE3cINFoFMFgEEajEeVyGSKRCJ1OB3q9ns5nMpmQTCaxXq9/l8loNEKj0YDX66UACYvFQq9brRYcDgdUKhU9RD/SEwLm83lEIhGUSiX0+33E4/GrU5otRMs1mUyYbDYLu90OhUJBMzhlZbPZ4Pf7odFo4HQ6b1rABqJIvV5nttstLc0pSIn2+z0tTy6XQ6FQoI/a7TZ0Ot0V9gqiiMFgYKrVKm0yieVyCZ/PB6vVSpF0Ok2zJHEqIY/HYw1RxOfzMYlE4jwoEAhAJpPBbDZf9eBwOCCVSsHtdp9f6FJ6egorlUqmVqvRfjSbTXS7XXg8nptP8Svk0RF01ROtVguSUTgchlgsPpeOZBaLxTAcDlEsFpHJZPC9XM8yoshgMGBCoRBdQWTCU7hcLjohWb5kM6rValQqlfMKfLbbb77xf/K38hf/XV9ilOpnLqvnogAAAABJRU5ErkJggg==)
 ]: any -> any {
@@ -768,7 +767,7 @@ export def "connections-carriers carrier-by-carrier_name" [
   --phone: string # Phone number
   --postal-code: string # Postal Code
   --state: string # State
-  --agree-to-eula: string@bool-completer # Boolean signaling agreement to the Fedex End User License Agreement
+  --agree-to-eula: oneof<nothing, bool> # Boolean signaling agreement to the Fedex End User License Agreement
   --meter-number: string # Meter number
   --mailer-id: any # A string that uniquely identifies the mailer
   --profile-name: string # Profile name
@@ -884,8 +883,8 @@ export def "connections-carriers-settings settings-by-carrier_name-carrier_id-1"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --include-barcode-with-order-number: string@bool-completer
-  --receive-email-on-manifest-processing: string@bool-completer
+  --include-barcode-with-order-number: oneof<nothing, bool>
+  --receive-email-on-manifest-processing: oneof<nothing, bool>
   --email: string # Email
 ]: any -> any {
   let input = $in
@@ -1228,11 +1227,11 @@ export def "labels label" [
   --ship-to-service-point-id: string # A unique identifier for a carrier service point where the shipment will be delivered by the carrier. This will take precedence over a shipment's ship to address. (nullable, e.g. 614940)
   --ship-from-service-point-id: string # A unique identifier for a carrier drop off point where a merchant plans to deliver packages. This will take precedence over a shipment's ship from address. (nullable, e.g. 614940)
   shipment: any # The shipment information used to generate the label
-  --is-return-label: string@bool-completer # Indicates whether this is a return label.  You may also want to set the `rma_number` so you know what is being returned.
+  --is-return-label: oneof<nothing, bool> # Indicates whether this is a return label.  You may also want to set the `rma_number` so you know what is being returned.
   --rma-number: string # An optional Return Merchandise Authorization number.  This field is useful for return labels.  You can set it to any string value.  (nullable)
   --charge-event: any # The label charge event.
   --outbound-label-id: any # The `label_id` of the original (outgoing) label that the return label is for. This associates the two labels together, which is required by some carriers.
-  --test-label: string@bool-completer # Indicate if this label is being used only for testing purposes. If true, then no charge will be added to your account. (DEPRECATED, default: false)
+  --test-label: oneof<nothing, bool> # Indicate if this label is being used only for testing purposes. If true, then no charge will be added to your account. (DEPRECATED, default: false)
   --validate-address: any # default: no_validation
   --label-download-type: any # default: url
   --label-format: any # The file format that you want the label to be in.  We recommend `pdf` format because it is supported by all carriers, whereas some carriers do not support the `png` or `zpl` formats.  (default: pdf)
@@ -1323,11 +1322,11 @@ export def "labels-rate-shopper-id shopper" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   shipment: any # The shipment details for which to create a label. Must be provided inline. The carrier_id, service_code, and shipping_rule_id are not included as these will be automatically determined by the Rate Shopper based on your strategy.
-  --is-return-label: string@bool-completer # Indicates whether this is a return label.  You may also want to set the `rma_number` so you know what is being returned.
+  --is-return-label: oneof<nothing, bool> # Indicates whether this is a return label.  You may also want to set the `rma_number` so you know what is being returned.
   --rma-number: string # An optional Return Merchandise Authorization number.  This field is useful for return labels.  You can set it to any string value.  (nullable)
   --charge-event: any # The label charge event.
   --outbound-label-id: any # The `label_id` of the original (outgoing) label that the return label is for. This associates the two labels together, which is required by some carriers.
-  --test-label: string@bool-completer # Indicate if this label is being used only for testing purposes. If true, then no charge will be added to your account. (DEPRECATED, default: false)
+  --test-label: oneof<nothing, bool> # Indicate if this label is being used only for testing purposes. If true, then no charge will be added to your account. (DEPRECATED, default: false)
   --validate-address: any # default: no_validation
   --label-download-type: any # default: url
   --label-format: any # The file format that you want the label to be in.  We recommend `pdf` format because it is supported by all carriers, whereas some carriers do not support the `png` or `zpl` formats.  (default: pdf)
@@ -2169,7 +2168,7 @@ export def "shipments shipment" [
   ship_from: any # The shipment's origin address. If you frequently ship from the same location, consider [creating a warehouse](https://www.shipengine.com/docs/reference/create-warehouse/). Then you can simply specify the `warehouse_id` rather than the complete address each time.
   --warehouse-id: any # The [warehouse](https://www.shipengine.com/docs/shipping/ship-from-a-warehouse/) that the shipment is being shipped from.  Either `warehouse_id` or `ship_from` must be specified.  (nullable)
   --return-to: any # The return address for this shipment.  Defaults to the `ship_from` address.
-  --is-return: string@bool-completer # An optional indicator if the shipment is intended to be a return. Defaults to false if not provided.  (nullable, default: false)
+  --is-return: oneof<nothing, bool> # An optional indicator if the shipment is intended to be a return. Defaults to false if not provided.  (nullable, default: false)
   --confirmation: any # The type of delivery confirmation that is required for this shipment. (default: none)
   --customs: any # Customs information.  This is usually only needed for international shipments.  (nullable)
   --advanced-options: any # Advanced shipment options.  These are entirely optional.
@@ -2581,7 +2580,7 @@ export def "warehouses warehouse" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-default: string@bool-completer # Designates which single warehouse is the default on the account (nullable, default: false)
+  --is-default: oneof<nothing, bool> # Designates which single warehouse is the default on the account (nullable, default: false)
   name: string # Name of the warehouse (e.g. Zero Cool HQ)
   origin_address: any # The origin address of the warehouse
   --return-address: any # The return address associated with the warehouse
@@ -2633,7 +2632,7 @@ export def "warehouses warehouse-by-warehouse_id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --is-default: string@bool-completer # Designates which single warehouse is the default on the account (nullable, default: false)
+  --is-default: oneof<nothing, bool> # Designates which single warehouse is the default on the account (nullable, default: false)
   name: string # Name of the warehouse (e.g. Zero Cool HQ)
   origin_address: any # The origin address of the warehouse
   --return-address: any # The return address associated with the warehouse
@@ -2686,7 +2685,7 @@ export def "warehouses-settings settings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --is-default: string@bool-completer # The default property on the warehouse. (nullable, e.g. true)
+  --is-default: oneof<nothing, bool> # The default property on the warehouse. (nullable, e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))

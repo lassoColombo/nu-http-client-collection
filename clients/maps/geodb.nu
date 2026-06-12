@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://wft-geo-db.p.rapidapi.com/v1"] }
 def auth-scheme-completer [] { ["x-rapidapi-key"] }
 
@@ -109,10 +108,10 @@ export def "geo-admin-divisions findAdminDivisionsUsingGET" [
   --minPopulation: int # Only places having at least this population (format: int32)
   --maxPopulation: int # Only places having no more than this population (format: int32)
   --namePrefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
-  --namePrefixDefaultLangResults: string@bool-completer # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
+  --namePrefixDefaultLangResults: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
   --timeZoneIds: string # Only places in these time-zones (comma-delimited)
-  --asciiMode: string@bool-completer # Display results using ASCII characters (default: false)
-  --hateoasMode: string@bool-completer # Include HATEOAS-style links in results (default: true)
+  --asciiMode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
+  --hateoasMode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --languageCode: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
@@ -141,7 +140,7 @@ export def "geo-admin-divisions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --asciiMode: string@bool-completer # Display results using ASCII characters (default: false)
+  --asciiMode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
   --languageCode: string # Display results in this language
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
@@ -173,11 +172,11 @@ export def "geo-admin-divisions-nearby-cities findCitiesNearAdminDivisionUsingGE
   --minPopulation: int # Only places having at least this population (format: int32)
   --maxPopulation: int # Only places having no more than this population (format: int32)
   --namePrefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
-  --namePrefixDefaultLangResults: string@bool-completer # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
+  --namePrefixDefaultLangResults: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
   --timeZoneIds: string # Only places in these time-zones (comma-delimited)
   --types: string # Only places for these types (comma-delimited): CITY | ADM2
-  --asciiMode: string@bool-completer # Display results using ASCII characters (default: false)
-  --hateoasMode: string@bool-completer # Include HATEOAS-style links in results (default: true)
+  --asciiMode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
+  --hateoasMode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --languageCode: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
@@ -213,10 +212,10 @@ export def "geo-admin-divisions-nearby-divisions findDivisionsNearAdminDivisionU
   --minPopulation: int # Only places having at least this population (format: int32)
   --maxPopulation: int # Only places having no more than this population (format: int32)
   --namePrefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
-  --namePrefixDefaultLangResults: string@bool-completer # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
+  --namePrefixDefaultLangResults: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
   --timeZoneIds: string # Only places in these time-zones (comma-delimited)
-  --asciiMode: string@bool-completer # Display results using ASCII characters (default: false)
-  --hateoasMode: string@bool-completer # Include HATEOAS-style links in results (default: true)
+  --asciiMode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
+  --hateoasMode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --languageCode: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
@@ -252,11 +251,11 @@ export def "geo-cities findCitiesUsingGET" [
   --minPopulation: int # Only places having at least this population (format: int32)
   --maxPopulation: int # Only places having no more than this population (format: int32)
   --namePrefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
-  --namePrefixDefaultLangResults: string@bool-completer # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
+  --namePrefixDefaultLangResults: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
   --timeZoneIds: string # Only places in these time-zones (comma-delimited)
   --types: string # Only places for these types (comma-delimited): CITY | ADM2
-  --asciiMode: string@bool-completer # Display results using ASCII characters (default: false)
-  --hateoasMode: string@bool-completer # Include HATEOAS-style links in results (default: true)
+  --asciiMode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
+  --hateoasMode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --languageCode: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
@@ -285,7 +284,7 @@ export def "geo-cities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --asciiMode: string@bool-completer # Display results using ASCII characters (default: false)
+  --asciiMode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
   --languageCode: string # Display results in this language
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
@@ -357,7 +356,7 @@ export def "geo-cities-located-in get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --asciiMode: string@bool-completer # Display results using ASCII characters (default: false)
+  --asciiMode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
   --languageCode: string # Display results in this language
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
@@ -389,11 +388,11 @@ export def "geo-cities-nearby-cities findCitiesNearCityUsingGET" [
   --minPopulation: int # Only places having at least this population (format: int32)
   --maxPopulation: int # Only places having no more than this population (format: int32)
   --namePrefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
-  --namePrefixDefaultLangResults: string@bool-completer # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
+  --namePrefixDefaultLangResults: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
   --timeZoneIds: string # Only places in these time-zones (comma-delimited)
   --types: string # Only places for these types (comma-delimited): CITY | ADM2
-  --asciiMode: string@bool-completer # Display results using ASCII characters (default: false)
-  --hateoasMode: string@bool-completer # Include HATEOAS-style links in results (default: true)
+  --asciiMode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
+  --hateoasMode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --languageCode: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
@@ -445,9 +444,9 @@ export def "geo-countries list" [
   --allow-errors(-e) # Return full response without error handling
   --currencyCode: string # Only countries supporting this currency
   --namePrefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
-  --namePrefixDefaultLangResults: string@bool-completer # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
-  --asciiMode: string@bool-completer # Display results using ASCII characters (default: false)
-  --hateoasMode: string@bool-completer # Include HATEOAS-style links in results (default: true)
+  --namePrefixDefaultLangResults: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
+  --asciiMode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
+  --hateoasMode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --languageCode: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
@@ -475,7 +474,7 @@ export def "geo-countries get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --asciiMode: string@bool-completer # Display results using ASCII characters (default: false)
+  --asciiMode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
   --languageCode: string # Display results in this language
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
@@ -501,9 +500,9 @@ export def "geo-countries-regions list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --namePrefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
-  --namePrefixDefaultLangResults: string@bool-completer # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
-  --asciiMode: string@bool-completer # Display results using ASCII characters (default: false)
-  --hateoasMode: string@bool-completer # Include HATEOAS-style links in results (default: true)
+  --namePrefixDefaultLangResults: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
+  --asciiMode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
+  --hateoasMode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --languageCode: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
@@ -532,7 +531,7 @@ export def "geo-countries-regions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --asciiMode: string@bool-completer # Display results using ASCII characters (default: false)
+  --asciiMode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
   --languageCode: string # Display results in this language
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-rapidapi-key"))
@@ -561,10 +560,10 @@ export def "geo-countries-regions-admin-divisions findRegionDivisionsUsingGET" [
   --minPopulation: int # Only places having at least this population (format: int32)
   --maxPopulation: int # Only places having no more than this population (format: int32)
   --namePrefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
-  --namePrefixDefaultLangResults: string@bool-completer # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
+  --namePrefixDefaultLangResults: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
   --timeZoneIds: string # Only places in these time-zones (comma-delimited)
-  --asciiMode: string@bool-completer # Display results using ASCII characters (default: false)
-  --hateoasMode: string@bool-completer # Include HATEOAS-style links in results (default: true)
+  --asciiMode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
+  --hateoasMode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --languageCode: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
@@ -597,11 +596,11 @@ export def "geo-countries-regions-cities findRegionCitiesUsingGET" [
   --minPopulation: int # Only places having at least this population (format: int32)
   --maxPopulation: int # Only places having no more than this population (format: int32)
   --namePrefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
-  --namePrefixDefaultLangResults: string@bool-completer # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
+  --namePrefixDefaultLangResults: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
   --timeZoneIds: string # Only places in these time-zones (comma-delimited)
   --types: string # Only places for these types (comma-delimited): CITY | ADM2
-  --asciiMode: string@bool-completer # Display results using ASCII characters (default: false)
-  --hateoasMode: string@bool-completer # Include HATEOAS-style links in results (default: true)
+  --asciiMode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
+  --hateoasMode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --languageCode: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
@@ -637,11 +636,11 @@ export def "geo-locations-nearby-cities findCitiesNearLocationUsingGET" [
   --minPopulation: int # Only places having at least this population (format: int32)
   --maxPopulation: int # Only places having no more than this population (format: int32)
   --namePrefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
-  --namePrefixDefaultLangResults: string@bool-completer # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
+  --namePrefixDefaultLangResults: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
   --timeZoneIds: string # Only places in these time-zones (comma-delimited)
   --types: string # Only places for these types (comma-delimited): CITY | ADM2
-  --asciiMode: string@bool-completer # Display results using ASCII characters (default: false)
-  --hateoasMode: string@bool-completer # Include HATEOAS-style links in results (default: true)
+  --asciiMode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
+  --hateoasMode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --languageCode: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
@@ -677,10 +676,10 @@ export def "geo-locations-nearby-divisions findDivisionsNearLocationUsingGET" [
   --minPopulation: int # Only places having at least this population (format: int32)
   --maxPopulation: int # Only places having no more than this population (format: int32)
   --namePrefix: string # Only entities whose names start with this prefix. If languageCode is set, the prefix will be matched on the name as it appears in that language.
-  --namePrefixDefaultLangResults: string@bool-completer # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
+  --namePrefixDefaultLangResults: oneof<nothing, bool> # When name-prefix matching, whether or not to match on names in the default language if a non-default languageCode is set.  (default: true)
   --timeZoneIds: string # Only places in these time-zones (comma-delimited)
-  --asciiMode: string@bool-completer # Display results using ASCII characters (default: false)
-  --hateoasMode: string@bool-completer # Include HATEOAS-style links in results (default: true)
+  --asciiMode: oneof<nothing, bool> # Display results using ASCII characters (default: false)
+  --hateoasMode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --languageCode: string # Display results in this language
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
@@ -709,7 +708,7 @@ export def "locale-currencies get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --countryId: string # Currencies for this country id
-  --hateoasMode: string@bool-completer # Include HATEOAS-style links in results (default: true)
+  --hateoasMode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
 ]: nothing -> any {
@@ -734,7 +733,7 @@ export def "locale-languages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hateoasMode: string@bool-completer # Include HATEOAS-style links in results (default: true)
+  --hateoasMode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
 ]: nothing -> any {
@@ -759,7 +758,7 @@ export def "locale-locales get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hateoasMode: string@bool-completer # Include HATEOAS-style links in results (default: true)
+  --hateoasMode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
 ]: nothing -> any {
@@ -784,7 +783,7 @@ export def "locale-timezones list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hateoasMode: string@bool-completer # Include HATEOAS-style links in results (default: true)
+  --hateoasMode: oneof<nothing, bool> # Include HATEOAS-style links in results (default: true)
   --limit: int # The maximum number of results to retrieve (format: int32, default: 10)
   --offset: int # The zero-ary offset index into the results (format: int32, default: 0)
 ]: nothing -> any {

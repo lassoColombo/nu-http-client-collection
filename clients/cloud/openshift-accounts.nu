@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost:14321" "https://api.openshift.com" "https://api.stage.openshift.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -152,8 +151,8 @@ export def "accounts-mgmt-accounts list" [
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
   --orderBy: string # Specifies the order by criteria. The syntax of this parameter is similar to the syntax of the _order by_ clause of an SQL statement, but using the names of the json attributes / column of the account. For example, in order to retrieve all accounts ordered by username:  ```sql username asc ```  Or in order to retrieve all accounts ordered by username _and_ first name:  ```sql username asc, firstName asc ```  If the parameter isn't provided, or if the value is empty, then no explicit ordering will be applied.
   --qp-fields: string # Supplies a comma-separated list of fields to be returned. Fields of sub-structures and of arrays use <structure>.<field> notation. <stucture>.* means all field of a structure Example: For each Subscription to get id, href, plan(id and kind) and labels (all fields)  ``` ocm get subscriptions --parameter fields=id,href,plan.id,plan.kind,labels.* --parameter fetchLabels=true ```
-  --fetchLabels: string@bool-completer # If true, includes the labels on a subscription/organization/account in the output. Could slow request response time.
-  --fetchCapabilities: string@bool-completer # If true, includes the capabilities on a subscription in the output. Could slow request response time.
+  --fetchLabels: oneof<nothing, bool> # If true, includes the labels on a subscription/organization/account in the output. Could slow request response time.
+  --fetchCapabilities: oneof<nothing, bool> # If true, includes the capabilities on a subscription in the output. Could slow request response time.
 ]: nothing -> record<kind: string, page: int, size: int, total: int, items: table<href: string, id: string, kind: string, ban_code: string, ban_description: string, banned: bool, capabilities: list, created_at: string, email: string, first_name: string, labels: list, last_name: string, organization: record, organization_id: string, rhit_account_id: string, rhit_web_user_id: string, service_account: bool, updated_at: string, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -177,13 +176,13 @@ export def "accounts-mgmt-accounts post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dryRun: string@bool-completer # If true, instructs API to avoid making any changes, but rather run through validations only.
+  --dryRun: oneof<nothing, bool> # If true, instructs API to avoid making any changes, but rather run through validations only.
   --href: string
   --id: string
   --kind: string
   --ban-code: string
   --ban-description: string
-  --banned: string@bool-completer # default: false
+  --banned: oneof<nothing, bool> # default: false
   --capabilities: list # item shape: {href?: string, id?: string, kind?: string, inherited: bool, name: string, value: string}
   --created-at: string # format: date-time
   --email: string # format: email
@@ -194,7 +193,7 @@ export def "accounts-mgmt-accounts post" [
   --organization-id: string
   --rhit-account-id: string
   --rhit-web-user-id: string
-  --service-account: string@bool-completer # default: false
+  --service-account: oneof<nothing, bool> # default: false
   --updated-at: string # format: date-time
   username: string
 ]: any -> record<href: string, id: string, kind: string, ban_code: string, ban_description: string, banned: bool, capabilities: table<href: string, id: string, kind: string, inherited: bool, name: string, value: string>, created_at: string, email: string, first_name: string, labels: table<href: string, id: string, kind: string, account_id: string, created_at: string, internal: bool, key: string, managed_by: string, organization_id: string, subscription_id: string, type: string, updated_at: string, value: string>, last_name: string, organization: record<href: string, id: string, kind: string, capabilities: list<record>, created_at: string, ebs_account_id: string, external_id: string, labels: list<record>, name: string, updated_at: string>, organization_id: string, rhit_account_id: string, rhit_web_user_id: string, service_account: bool, updated_at: string, username: string> {
@@ -222,7 +221,7 @@ export def "accounts-mgmt-accounts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deleteAssociatedResources: string@bool-completer # If true, deletes the associated resources (e.g. role bindings) for an account along with the account itself
+  --deleteAssociatedResources: oneof<nothing, bool> # If true, deletes the associated resources (e.g. role bindings) for an account along with the account itself
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -245,9 +244,9 @@ export def "accounts-mgmt-accounts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --fetchLabels: string@bool-completer # If true, includes the labels on a subscription/organization/account in the output. Could slow request response time.
-  --fetchCapabilities: string@bool-completer # If true, includes the capabilities on a subscription in the output. Could slow request response time.
-  --fetchRhit: string@bool-completer # If true, includes the RHIT account_id in the output. Could slow request response time.
+  --fetchLabels: oneof<nothing, bool> # If true, includes the labels on a subscription/organization/account in the output. Could slow request response time.
+  --fetchCapabilities: oneof<nothing, bool> # If true, includes the capabilities on a subscription in the output. Could slow request response time.
+  --fetchRhit: oneof<nothing, bool> # If true, includes the RHIT account_id in the output. Could slow request response time.
 ]: nothing -> record<href: string, id: string, kind: string, ban_code: string, ban_description: string, banned: bool, capabilities: table<href: string, id: string, kind: string, inherited: bool, name: string, value: string>, created_at: string, email: string, first_name: string, labels: table<href: string, id: string, kind: string, account_id: string, created_at: string, internal: bool, key: string, managed_by: string, organization_id: string, subscription_id: string, type: string, updated_at: string, value: string>, last_name: string, organization: record<href: string, id: string, kind: string, capabilities: list<record>, created_at: string, ebs_account_id: string, external_id: string, labels: list<record>, name: string, updated_at: string>, organization_id: string, rhit_account_id: string, rhit_web_user_id: string, service_account: bool, updated_at: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -272,12 +271,12 @@ export def "accounts-mgmt-accounts patch" [
   --allow-errors(-e) # Return full response without error handling
   --ban-code: string
   --ban-description: string
-  --banned: string@bool-completer
+  --banned: oneof<nothing, bool>
   --email: string # format: email
   --first-name: string
   --last-name: string
   --organization-id: string
-  --service-account: string@bool-completer
+  --service-account: oneof<nothing, bool>
 ]: any -> record<href: string, id: string, kind: string, ban_code: string, ban_description: string, banned: bool, capabilities: table<href: string, id: string, kind: string, inherited: bool, name: string, value: string>, created_at: string, email: string, first_name: string, labels: table<href: string, id: string, kind: string, account_id: string, created_at: string, internal: bool, key: string, managed_by: string, organization_id: string, subscription_id: string, type: string, updated_at: string, value: string>, last_name: string, organization: record<href: string, id: string, kind: string, capabilities: list<record>, created_at: string, ebs_account_id: string, external_id: string, labels: list<record>, name: string, updated_at: string>, organization_id: string, rhit_account_id: string, rhit_web_user_id: string, service_account: bool, updated_at: string, username: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -333,7 +332,7 @@ export def "accounts-mgmt-accounts-labels post" [
   --kind: string
   --account-id: string
   --created-at: string # format: date-time
-  --internal: string@bool-completer
+  --internal: oneof<nothing, bool>
   key: string
   --managed-by: string@managed-by-completer
   --organization-id: string
@@ -415,7 +414,7 @@ export def "accounts-mgmt-accounts-labels patch" [
   --kind: string
   --account-id: string
   --created-at: string # format: date-time
-  --internal: string@bool-completer
+  --internal: oneof<nothing, bool>
   --body-key: string
   --managed-by: string@managed-by-completer
   --organization-id: string
@@ -664,15 +663,15 @@ export def "accounts-mgmt-cloud-resources post" [
   --href: string
   --id: string
   --kind: string
-  --active: string@bool-completer # default: true
+  --active: oneof<nothing, bool> # default: true
   --category: string
   --category-pretty: string
-  --ccs-only: string@bool-completer
+  --ccs-only: oneof<nothing, bool>
   --cloud-provider: string
   --cpu-cores: int
   --created-at: string # format: date-time
   --generic-name: string
-  --hcp-only: string@bool-completer
+  --hcp-only: oneof<nothing, bool>
   --memory: int # format: int64
   --memory-pretty: string
   --name-pretty: string
@@ -748,15 +747,15 @@ export def "accounts-mgmt-cloud-resources patch" [
   --href: string
   --body-id: string
   --kind: string
-  --active: string@bool-completer # default: true
+  --active: oneof<nothing, bool> # default: true
   --category: string
   --category-pretty: string
-  --ccs-only: string@bool-completer
+  --ccs-only: oneof<nothing, bool>
   --cloud-provider: string
   --cpu-cores: int
   --created-at: string # format: date-time
   --generic-name: string
-  --hcp-only: string@bool-completer
+  --hcp-only: oneof<nothing, bool>
   --memory: int # format: int64
   --memory-pretty: string
   --name-pretty: string
@@ -789,18 +788,18 @@ export def "accounts-mgmt-cluster-authorizations post" [
   --allow-errors(-e) # Return full response without error handling
   account_username: string
   --availability-zone: string
-  --byoc: string@bool-completer
+  --byoc: oneof<nothing, bool>
   --cloud-account-id: string
   --cloud-provider-id: string
   cluster_id: string
-  --disconnected: string@bool-completer
+  --disconnected: oneof<nothing, bool>
   --display-name: string
   --external-cluster-id: string
-  --managed: string@bool-completer
+  --managed: oneof<nothing, bool>
   --product-category: string@product-category-completer
   --product-id: string@product-id-completer # default: OSD
   --quota-version: string
-  --reserve: string@bool-completer
+  --reserve: oneof<nothing, bool>
   --resources: list # item shape: {href?: string, id?: string, kind?: string, availability_zone_type?: string, billing_marketplace_account?: string, billing_model?: "standard"|"marketplace"|"marketplace-aws"|"marketplace-rhm"|"marketplace-azure"|"marketplace-gcp", byoc: bool, cluster?: bool, count?: int, created_at?: string, resource_name?: string, resource_type?: "compute.node.aws"|"pv.storage.aws"|"cluster.aws"|"network.io.aws"|"network.loadbalancer.aws"|"compute.node.gcp"|"pv.storage.gcp"|"cluster.gcp"|"network.io.gcp"|"network-gcp.loadbalancer.gcp"|"addon"|"compute.node"|"pv.storage"|"cluster"|"network.io"|"network.loadbalancer", scope?: string, subscription?: record, updated_at?: string}
   --rh-region-id: string
   --scope: string
@@ -1055,7 +1054,7 @@ export def "accounts-mgmt-current-account get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --fetchLabels: string@bool-completer # If true, includes the labels on a subscription/organization/account in the output. Could slow request response time.
+  --fetchLabels: oneof<nothing, bool> # If true, includes the labels on a subscription/organization/account in the output. Could slow request response time.
 ]: nothing -> record<href: string, id: string, kind: string, ban_code: string, ban_description: string, banned: bool, capabilities: table<href: string, id: string, kind: string, inherited: bool, name: string, value: string>, created_at: string, email: string, first_name: string, labels: table<href: string, id: string, kind: string, account_id: string, created_at: string, internal: bool, key: string, managed_by: string, organization_id: string, subscription_id: string, type: string, updated_at: string, value: string>, last_name: string, organization: record<href: string, id: string, kind: string, capabilities: list<record>, created_at: string, ebs_account_id: string, external_id: string, labels: list<record>, name: string, updated_at: string>, organization_id: string, rhit_account_id: string, rhit_web_user_id: string, service_account: bool, updated_at: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1410,8 +1409,8 @@ export def "accounts-mgmt-notify-details post" [
   --bcc-address: string
   --cluster-id: string
   --cluster-uuid: string
-  --include-red-hat-associates: string@bool-completer
-  --internal-only: string@bool-completer # The `internal_only` parameter is used for validation. Specifically to check if there is a discrepancy between the email address and the log type.
+  --include-red-hat-associates: oneof<nothing, bool>
+  --internal-only: oneof<nothing, bool> # The `internal_only` parameter is used for validation. Specifically to check if there is a discrepancy between the email address and the log type.
   --log-type: string@log-type-completer # The type of log for which the returned contacts will be used to send a notification. When informed it might influence the returned contacts.
   --org-id: string
   --subject: string
@@ -1443,8 +1442,8 @@ export def "accounts-mgmt-organizations list" [
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
   --orderBy: string # Specifies the order by criteria. The syntax of this parameter is similar to the syntax of the _order by_ clause of an SQL statement, but using the names of the json attributes / column of the account. For example, in order to retrieve all accounts ordered by username:  ```sql username asc ```  Or in order to retrieve all accounts ordered by username _and_ first name:  ```sql username asc, firstName asc ```  If the parameter isn't provided, or if the value is empty, then no explicit ordering will be applied.
-  --fetchLabels: string@bool-completer # If true, includes the labels on a subscription/organization/account in the output. Could slow request response time.
-  --fetchCapabilities: string@bool-completer # If true, includes the capabilities on a subscription in the output. Could slow request response time.
+  --fetchLabels: oneof<nothing, bool> # If true, includes the labels on a subscription/organization/account in the output. Could slow request response time.
+  --fetchCapabilities: oneof<nothing, bool> # If true, includes the capabilities on a subscription in the output. Could slow request response time.
   --qp-fields: string # Supplies a comma-separated list of fields to be returned. Fields of sub-structures and of arrays use <structure>.<field> notation. <stucture>.* means all field of a structure Example: For each Subscription to get id, href, plan(id and kind) and labels (all fields)  ``` ocm get subscriptions --parameter fields=id,href,plan.id,plan.kind,labels.* --parameter fetchLabels=true ```
 ]: nothing -> record<kind: string, page: int, size: int, total: int, items: table<href: string, id: string, kind: string, capabilities: list, created_at: string, ebs_account_id: string, external_id: string, labels: list, name: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1503,8 +1502,8 @@ export def "accounts-mgmt-organizations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --fetchLabels: string@bool-completer # If true, includes the labels on a subscription/organization/account in the output. Could slow request response time.
-  --fetchCapabilities: string@bool-completer # If true, includes the capabilities on a subscription in the output. Could slow request response time.
+  --fetchLabels: oneof<nothing, bool> # If true, includes the labels on a subscription/organization/account in the output. Could slow request response time.
+  --fetchCapabilities: oneof<nothing, bool> # If true, includes the capabilities on a subscription in the output. Could slow request response time.
 ]: nothing -> record<href: string, id: string, kind: string, capabilities: table<href: string, id: string, kind: string, inherited: bool, name: string, value: string>, created_at: string, ebs_account_id: string, external_id: string, labels: table<href: string, id: string, kind: string, account_id: string, created_at: string, internal: bool, key: string, managed_by: string, organization_id: string, subscription_id: string, type: string, updated_at: string, value: string>, name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1585,7 +1584,7 @@ export def "accounts-mgmt-organizations-labels post" [
   --kind: string
   --account-id: string
   --created-at: string # format: date-time
-  --internal: string@bool-completer
+  --internal: oneof<nothing, bool>
   key: string
   --managed-by: string@managed-by-completer
   --organization-id: string
@@ -1667,7 +1666,7 @@ export def "accounts-mgmt-organizations-labels patch" [
   --kind: string
   --account-id: string
   --created-at: string # format: date-time
-  --internal: string@bool-completer
+  --internal: oneof<nothing, bool>
   --body-key: string
   --managed-by: string@managed-by-completer
   --organization-id: string
@@ -1951,7 +1950,7 @@ export def "accounts-mgmt-organizations-consumed-quota get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceRecalc: string@bool-completer # If true, includes that ConsumedQuota should be recalculated.
+  --forceRecalc: oneof<nothing, bool> # If true, includes that ConsumedQuota should be recalculated.
 ]: nothing -> record<kind: string, page: int, size: int, total: int, items: table<href: string, id: string, kind: string, availability_zone_type: string, billing_model: string, byoc: bool, cloud_provider_id: string, count: int, organization_id: string, plan_id: string, resource_name: string, resource_type: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1977,9 +1976,9 @@ export def "accounts-mgmt-organizations-quota-cost get" [
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
-  --fetchRelatedResources: string@bool-completer # If true, includes the related resources in the output. Could slow request response time.
-  --forceRecalc: string@bool-completer # If true, includes that ConsumedQuota should be recalculated.
-  --fetchCloudAccounts: string@bool-completer # If true, includes the marketplace cloud accounts in the output. Could slow request response time.
+  --fetchRelatedResources: oneof<nothing, bool> # If true, includes the related resources in the output. Could slow request response time.
+  --forceRecalc: oneof<nothing, bool> # If true, includes that ConsumedQuota should be recalculated.
+  --fetchCloudAccounts: oneof<nothing, bool> # If true, includes the marketplace cloud accounts in the output. Could slow request response time.
 ]: nothing -> record<kind: string, page: int, size: int, total: int, items: table<href: string, id: string, kind: string, allowed: int, cloud_accounts: list, consumed: int, organization_id: string, quota_id: string, related_resources: list, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2223,7 +2222,7 @@ export def "accounts-mgmt-quota-authorizations post" [
   --display-name: string
   --product-id: string
   --quota-version: string
-  --reserve: string@bool-completer
+  --reserve: oneof<nothing, bool>
   --resource-id: string
   resources: list # item shape: {href?: string, id?: string, kind?: string, availability_zone_type?: string, billing_marketplace_account?: string, billing_model?: "standard"|"marketplace"|"marketplace-aws"|"marketplace-rhm"|"marketplace-azure"|"marketplace-gcp", byoc: bool, cluster?: bool, count?: int, created_at?: string, resource_name?: string, resource_type?: "compute.node.aws"|"pv.storage.aws"|"cluster.aws"|"network.io.aws"|"network.loadbalancer.aws"|"compute.node.gcp"|"pv.storage.gcp"|"cluster.gcp"|"network.io.gcp"|"network-gcp.loadbalancer.gcp"|"addon"|"compute.node"|"pv.storage"|"cluster"|"network.io"|"network.loadbalancer", scope?: string, subscription?: record, updated_at?: string}
   --subscription-id: string
@@ -2253,8 +2252,8 @@ export def "accounts-mgmt-quota-cost get" [
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
-  --fetchRelatedResources: string@bool-completer # If true, includes the related resources in the output. Could slow request response time.
-  --fetchCloudAccounts: string@bool-completer # If true, includes the marketplace cloud accounts in the output. Could slow request response time.
+  --fetchRelatedResources: oneof<nothing, bool> # If true, includes the related resources in the output. Could slow request response time.
+  --fetchCloudAccounts: oneof<nothing, bool> # If true, includes the marketplace cloud accounts in the output. Could slow request response time.
 ]: nothing -> record<kind: string, page: int, size: int, total: int, items: table<href: string, id: string, kind: string, allowed: int, cloud_accounts: list, consumed: int, organization_id: string, quota_id: string, related_resources: list, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2721,7 +2720,7 @@ export def "accounts-mgmt-role-bindings post" [
   --allow-errors(-e) # Return full response without error handling
   --account-group-id: string
   --account-id: string
-  --config-managed: string@bool-completer
+  --config-managed: oneof<nothing, bool>
   --managed-by: string
   --organization-id: string
   role_id: string
@@ -2795,7 +2794,7 @@ export def "accounts-mgmt-role-bindings patch" [
   --allow-errors(-e) # Return full response without error handling
   --account-group-id: string
   --account-id: string
-  --config-managed: string@bool-completer
+  --config-managed: oneof<nothing, bool>
   --managed-by: string
   --organization-id: string
   --role-id: string
@@ -3065,10 +3064,10 @@ export def "accounts-mgmt-subscriptions list" [
   --page: int # Page number of record list when record list exceeds specified page size (default: 1)
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
-  --fetchAccounts: string@bool-completer # If true, includes the account reference information in the output. Could slow request response time.
-  --fetchLabels: string@bool-completer # If true, includes the labels on a subscription/organization/account in the output. Could slow request response time.
-  --fetchCapabilities: string@bool-completer # If true, includes the capabilities on a subscription in the output. Could slow request response time.
-  --fetchOrganization: string@bool-completer # If true, includes the organization object on a subscription in the output. Could slow request response time.
+  --fetchAccounts: oneof<nothing, bool> # If true, includes the account reference information in the output. Could slow request response time.
+  --fetchLabels: oneof<nothing, bool> # If true, includes the labels on a subscription/organization/account in the output. Could slow request response time.
+  --fetchCapabilities: oneof<nothing, bool> # If true, includes the capabilities on a subscription in the output. Could slow request response time.
+  --fetchOrganization: oneof<nothing, bool> # If true, includes the organization object on a subscription in the output. Could slow request response time.
   --qp-fields: string # Supplies a comma-separated list of fields to be returned. Fields of sub-structures and of arrays use <structure>.<field> notation. <stucture>.* means all field of a structure Example: For each Subscription to get id, href, plan(id and kind) and labels (all fields)  ``` ocm get subscriptions --parameter fields=id,href,plan.id,plan.kind,labels.* --parameter fetchLabels=true ```
   --orderBy: string # Specifies the order by criteria. The syntax of this parameter is similar to the syntax of the _order by_ clause of an SQL statement, but using the names of the json attributes / column of the account. For example, in order to retrieve all accounts ordered by username:  ```sql username asc ```  Or in order to retrieve all accounts ordered by username _and_ first name:  ```sql username asc, firstName asc ```  If the parameter isn't provided, or if the value is empty, then no explicit ordering will be applied.
   --labels: string # Specifies the criteria to filter the subscription resource based on their labels. A label is represented as a `key=value` pair,  ``` labels = "foo=bar" ```  and multiple labels are separated by comma,  ``` labels = "foo=bar,fooz=barz" ```
@@ -3143,11 +3142,11 @@ export def "accounts-mgmt-subscriptions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --fetchAccounts: string@bool-completer # If true, includes the account reference information in the output. Could slow request response time.
-  --fetchLabels: string@bool-completer # If true, includes the labels on a subscription/organization/account in the output. Could slow request response time.
-  --fetchCapabilities: string@bool-completer # If true, includes the capabilities on a subscription in the output. Could slow request response time.
-  --fetchClusterTransfers: string@bool-completer # If true, returns either an empty result set or a valid ClusterTransfer list on a subscription in the output. Could slow request response time.
-  --fetchCpuAndSocket: string@bool-completer # If true, fetches, from the clusters service, the total numbers of CPU's and sockets under an obligation, and includes in the output. Could slow request response time.
+  --fetchAccounts: oneof<nothing, bool> # If true, includes the account reference information in the output. Could slow request response time.
+  --fetchLabels: oneof<nothing, bool> # If true, includes the labels on a subscription/organization/account in the output. Could slow request response time.
+  --fetchCapabilities: oneof<nothing, bool> # If true, includes the capabilities on a subscription in the output. Could slow request response time.
+  --fetchClusterTransfers: oneof<nothing, bool> # If true, returns either an empty result set or a valid ClusterTransfer list on a subscription in the output. Could slow request response time.
+  --fetchCpuAndSocket: oneof<nothing, bool> # If true, fetches, from the clusters service, the total numbers of CPU's and sockets under an obligation, and includes in the output. Could slow request response time.
 ]: nothing -> record<capabilities: table<href: string, id: string, kind: string, inherited: bool, name: string, value: string>, cluster_transfers: table<href: string, id: string, kind: string, cluster_uuid: string, created_at: string, expiration_date: string, owner: string, pull_secret_rotation_id: string, recipient: string, recipient_ebs_account_id: string, recipient_external_org_id: string, secret: string, status: string, status_description: string, updated_at: string>, created_at: string, creator: record<href: string, id: string, kind: string, email: string, first_name: string, last_name: string, name: string, username: string>, eval_expiration_date: string, labels: table<href: string, id: string, kind: string, account_id: string, created_at: string, internal: bool, key: string, managed_by: string, organization_id: string, subscription_id: string, type: string, updated_at: string, value: string>, metrics: table<arch: string, channel_info: string, cloud_provider: string, cluster_type: string, compute_nodes_cpu: record, compute_nodes_memory: record, compute_nodes_sockets: record, console_url: string, cpu: record, critical_alerts_firing: float, health_state: string, memory: record, nodes: record, nodes_arch: list, non_virt_nodes: float, openshift_version: string, operating_system: string, operators_condition_failing: float, query_timestamp: string, region: string, sockets: record, state: string, state_description: string, storage: record, subscription_cpu_total: float, subscription_obligation_exists: float, subscription_socket_total: float, upgrade: record>, notification_contacts: table<href: string, id: string, kind: string, ban_code: string, ban_description: string, banned: bool, capabilities: list, created_at: string, email: string, first_name: string, labels: list, last_name: string, organization: record, organization_id: string, rhit_account_id: string, rhit_web_user_id: string, service_account: bool, updated_at: string, username: string>, plan: record<href: string, id: string, kind: string, category: string, name: string, type: string>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3181,13 +3180,13 @@ export def "accounts-mgmt-subscriptions patch" [
   --creator-id: string
   --display-name: string
   --external-cluster-id: string
-  --managed: string@bool-completer
+  --managed: oneof<nothing, bool>
   --organization-id: string
   --plan-id: string
   --product-bundle: string@product-bundle-completer
   --provenance: string
   --region-id: string
-  --released: string@bool-completer
+  --released: oneof<nothing, bool>
   --service-level: string@service-level-completer
   --socket-total: int
   --status: string
@@ -3250,7 +3249,7 @@ export def "accounts-mgmt-subscriptions-labels post" [
   --kind: string
   --account-id: string
   --created-at: string # format: date-time
-  --internal: string@bool-completer
+  --internal: oneof<nothing, bool>
   key: string
   --managed-by: string@managed-by-completer
   --organization-id: string
@@ -3332,7 +3331,7 @@ export def "accounts-mgmt-subscriptions-labels patch" [
   --kind: string
   --account-id: string
   --created-at: string # format: date-time
-  --internal: string@bool-completer
+  --internal: oneof<nothing, bool>
   --body-key: string
   --managed-by: string@managed-by-completer
   --organization-id: string
@@ -3609,7 +3608,7 @@ export def "accounts-mgmt-subscriptions-role-bindings list" [
   --size: int # Maximum number of records to return (default: 100)
   --search: string # Specifies the search criteria. The syntax of this parameter is similar to the syntax of the _where_ clause of an SQL statement, using the names of the json attributes / column names of the account. For example, in order to retrieve all the accounts with a username starting with `my`:  ```sql username like 'my%' ```  > **Important Note**: Account Management Service uses **KSUID** as an **ID** field. KSUID contains a timestamp component that allows them to be sorted by generation time. As this field uses an index, please use it to sort by instead of `created_at` field.  The search criteria can also be applied on related resource. For example, in order to retrieve all the subscriptions labeled by `foo=bar`,  ```sql labels.key = 'foo' and labels.value = 'bar' ```  If the parameter isn't provided, or if the value is empty, then all the accounts that the user has permission to see will be returned.
   --orderBy: string # Specifies the order by criteria. The syntax of this parameter is similar to the syntax of the _order by_ clause of an SQL statement, but using the names of the json attributes / column of the account. For example, in order to retrieve all accounts ordered by username:  ```sql username asc ```  Or in order to retrieve all accounts ordered by username _and_ first name:  ```sql username asc, firstName asc ```  If the parameter isn't provided, or if the value is empty, then no explicit ordering will be applied.
-  --fetchAccounts: string@bool-completer # If true, includes the account reference information in the output. Could slow request response time.
+  --fetchAccounts: oneof<nothing, bool> # If true, includes the account reference information in the output. Could slow request response time.
 ]: nothing -> record<kind: string, page: int, size: int, total: int, items: table<href: string, id: string, kind: string, account: record, account_email: string, account_username: string, created_at: string, role: record, subscription: record, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3842,7 +3841,7 @@ export def "authorizations-export-control-review post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   account_username: string
-  --ignore-cache: string@bool-completer
+  --ignore-cache: oneof<nothing, bool>
 ]: any -> record<restricted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3895,7 +3894,7 @@ export def "authorizations-resource-review post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --reduceClusterList: string@bool-completer # If true, When returning a list of cluster_ids/cluster_uuids/subscription_ids, if those are already included in one of the organizations provided in organization_ids, do not include it in the list.
+  --reduceClusterList: oneof<nothing, bool> # If true, When returning a list of cluster_ids/cluster_uuids/subscription_ids, if those are already included in one of the organizations provided in organization_ids, do not include it in the list.
   --excludeSubscriptionStatuses: string # A comma-separated list of subscription statuses. Subscriptions with these statuses will be excluded from results. This options is mutually exclusive with includeSubscriptionStatuses.
   --includeSubscriptionStatuses: string # A comma-separated list of subscription statuses. Only subscriptions with these statuses will be included into results. This options is mutually exclusive with excludeSubscriptionStatuses.
   --account-username: string
@@ -3978,7 +3977,7 @@ export def "authorizations-self-resource-review post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --reduceClusterList: string@bool-completer # If true, When returning a list of cluster_ids/cluster_uuids/subscription_ids, if those are already included in one of the organizations provided in organization_ids, do not include it in the list.
+  --reduceClusterList: oneof<nothing, bool> # If true, When returning a list of cluster_ids/cluster_uuids/subscription_ids, if those are already included in one of the organizations provided in organization_ids, do not include it in the list.
   --excludeSubscriptionStatuses: string # A comma-separated list of subscription statuses. Subscriptions with these statuses will be excluded from results. This options is mutually exclusive with includeSubscriptionStatuses.
   --includeSubscriptionStatuses: string # A comma-separated list of subscription statuses. Only subscriptions with these statuses will be included into results. This options is mutually exclusive with excludeSubscriptionStatuses.
   --action: string@action-completer-1
@@ -4007,7 +4006,7 @@ export def "authorizations-self-terms-review post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --check-optional-terms: string@bool-completer # default: true
+  --check-optional-terms: oneof<nothing, bool> # default: true
   --event-code: string
   --site-code: string
 ]: any -> record<account_id: string, organization_id: string, redirect_url: string, terms_available: bool, terms_required: bool> {
@@ -4034,7 +4033,7 @@ export def "authorizations-terms-review post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   account_username: string
-  --check-optional-terms: string@bool-completer # default: true
+  --check-optional-terms: oneof<nothing, bool> # default: true
   --event-code: string
   --site-code: string
 ]: any -> record<account_id: string, organization_id: string, redirect_url: string, terms_available: bool, terms_required: bool> {

@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://environment.data.gov.uk/water-quality"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -230,7 +229,7 @@ export def "sampling-point-sampling list" [
   --date: string # Filter by exact date (ISO format: YYYY-MM-DD), cannot be used with dateFrom/dateTo
   --dateFrom: string # Filter by date range start (ISO format: YYYY-MM-DD)
   --dateTo: string # Filter by date range end (ISO format: YYYY-MM-DD)
-  --complianceOnly: string@bool-completer # Filter for compliance samples only (default: false, e.g. true)
+  --complianceOnly: oneof<nothing, bool> # Filter for compliance samples only (default: false, e.g. true)
   --sampleMaterialType: string # Filter by sample material type code(s), optionally as a comma-separated list
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -285,7 +284,7 @@ export def "sampling-point-sample list" [
   --date: string # Filter by exact date (ISO format: YYYY-MM-DD), cannot be used with dateFrom/dateTo
   --dateFrom: string # Filter by date range start (ISO format: YYYY-MM-DD)
   --dateTo: string # Filter by date range end (ISO format: YYYY-MM-DD)
-  --complianceOnly: string@bool-completer # Filter for compliance samples only (default: false, e.g. true)
+  --complianceOnly: oneof<nothing, bool> # Filter for compliance samples only (default: false, e.g. true)
   --sampleMaterialType: string # Filter by sample material type code(s), optionally as a comma-separated list
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -343,7 +342,7 @@ export def "sampling-point-observation get" [
   --date: string # Filter by exact date (ISO format: YYYY-MM-DD), cannot be used with dateFrom/dateTo
   --dateFrom: string # Filter by date range start (ISO format: YYYY-MM-DD) (e.g. 2020-01-01)
   --dateTo: string # Filter by date range end (ISO format: YYYY-MM-DD) (e.g. 2020-12-31)
-  --complianceOnly: string@bool-completer # Filter for compliance samples only (default: false)
+  --complianceOnly: oneof<nothing, bool> # Filter for compliance samples only (default: false)
   --Accept-Crs: string@Accept-Crs-completer # Coordinate Reference System URI for response, e.g. http://www.opengis.net/def/crs/EPSG/0/27700 or http://www.opengis.net/def/crs/EPSG/0/4326
   --CSV-Header: string@CSV-Header-completer # Whether to include the CSV Header row in the response.
   --API-Version: string # Content negotiation header to specify version of the API to use. (e.g. 1)
@@ -408,7 +407,7 @@ export def "data-observation post" [
   --date: string # Filter by exact date (ISO format: YYYY-MM-DD), cannot be used with dateFrom/dateTo
   --dateFrom: string # Filter by date range start (ISO format: YYYY-MM-DD) (e.g. 2020-01-01)
   --dateTo: string # Filter by date range end (ISO format: YYYY-MM-DD) (e.g. 2020-12-31)
-  --complianceOnly: string@bool-completer # Filter for compliance samples only (default: false)
+  --complianceOnly: oneof<nothing, bool> # Filter for compliance samples only (default: false)
   --sampleMaterialType: string # Filter by sample material type code(s), optionally as a comma-separated list
   --easting: string # OS Grid easting coordinate for radius-based search
   --northing: string # OS Grid northing coordinate for radius-based search

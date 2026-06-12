@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.kompany.com"] }
 def auth-scheme-completer [] { ["user_key"] }
 
@@ -510,7 +509,7 @@ export def "company-announcements CompanyIdAnnouncements" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # limit of announcements in response (default 10) (format: int32)
   --offset: int # to paginate through results (default 0) (format: int32)
-  --data: string@bool-completer # If this parameter is set to false, you will only receive ids, and no additional data about announcements and no hits to the metric will be counted. (and potentially minimizing your costs) (format: )
+  --data: oneof<nothing, bool> # If this parameter is set to false, you will only receive ids, and no additional data about announcements and no hits to the metric will be counted. (and potentially minimizing your costs) (format: )
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -560,7 +559,7 @@ export def "company CompanyIdDataset" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --check-stock-listing: string@bool-completer # Try to retrieve additional stock information for this company. (Only available on refresh)
+  --check-stock-listing: oneof<nothing, bool> # Try to retrieve additional stock information for this company. (Only available on refresh)
   --lang: string@lang-completer-1 # Optional data translation (only available in limited jurisdictions) (format: string)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
@@ -633,7 +632,7 @@ export def "ein-verification-lookup EinVerificationLookup" [
   --name: string # Business name of the company (format: string)
   --state: string # Optional state parameter to improve results. (Two letter code for example CA or US-CA for California) (format: string)
   --zip: string # Optional zip code parameter to improve results. (Zip is preferred over state) (format: string)
-  --tight: string@bool-completer # Optional parameter to do tight matching. (Only the best match will be returned rather then the top 5)
+  --tight: oneof<nothing, bool> # Optional parameter to do tight matching. (Only the best match will be returned rather then the top 5)
 ]: nothing -> record<matched_ein_companies: table<address: list, company_score: float, company_score_explanation: string, confidence_score: float, confidence_score_explanation: string, dba_score: string, dba_score_explanation: string, ein: string, formattedAddress: list, irs_score: string, irs_score_explanation: string, name: string, provided_status: string, provided_status_explanation: string>, searchterm_name: string, searchterm_state: string, searchterm_zip: string, tight_search: bool, timestamp: float> {
   let auth = (build-auth $token ($auth_scheme | default "user_key"))
   let base = ($base_url | default $BASE_URL)
@@ -843,10 +842,10 @@ export def "pepsanction-order PepOrder" [
   --Locale: string # Optional name of City or Locale to assist in identifying matches based upon location/geography. (e.g. null)
   --Medialists: string # Optional parameter for selecting only specific media lists. By default all lists are queried (e.g. NMEDIA)
   --MiddleName: string # Optional parameter for middle name when doing a person search (e.g. null)
-  --Monitoring: string@bool-completer # If this Pep Sanction Check should be continuesly monitored. (e.g. false)
+  --Monitoring: oneof<nothing, bool> # If this Pep Sanction Check should be continuesly monitored. (e.g. false)
   --Peplists: string # Optional parameter for selecting only specific pep lists. By default all lists are queried (e.g. GOV,PEPD,SOE)
   --Region: string # Optional name of Region or State to assist in identifying matches based upon location/geography. (e.g. null)
-  --SmartMatch: string@bool-completer # Optional parameter for enabling SmartMatch to retrieve more results (e.g. false)
+  --SmartMatch: oneof<nothing, bool> # Optional parameter for enabling SmartMatch to retrieve more results (e.g. false)
   --Watchlists: string # Optional parameter for selecting only specific watch lists. By default all lists are queried (e.g. SANCTIONS,FINANCE,TERRORISM,CRIME,SMAGOV,OFAC,MEDICAL)
   --Webhook: string # If Monitoring is enabled this parameter is required. This is where updates will be sent to (e.g. null)
 ]: any -> any {
@@ -992,14 +991,14 @@ export def "product-order-concierge ProductOrderConcierge" [
   --companyName: string # Name of the company for which a document should be ordered. (Not required if subjectId is given) (e.g. null)
   --contactEmail: string # Contact E-Mail, will be contacted if concierge costs are exceeding the threshhold configured on your plan (e.g. null)
   --contactPhone: string # Contact phone, will be contacted if concierge costs are exceeding the threshhold configured on your plan (e.g. null)
-  --costConfirmation: string@bool-completer # If the concierge cost should require additional confirmation if a threshold is reached (configured on your plan) (e.g. false)
+  --costConfirmation: oneof<nothing, bool> # If the concierge cost should require additional confirmation if a threshold is reached (configured on your plan) (e.g. false)
   --country: string # Two letter ISO code of the country of the company (e.g. null)
-  --financialData: string@bool-completer # If you want financial data of the company to be retrieved (e.g. false)
-  --historicInformation: string@bool-completer # If you want historical data of the company to be retrieved (e.g. false)
+  --financialData: oneof<nothing, bool> # If you want financial data of the company to be retrieved (e.g. false)
+  --historicInformation: oneof<nothing, bool> # If you want historical data of the company to be retrieved (e.g. false)
   --informationRequirements: string # Requirements on what document or information should be provided. Please be very precise (e.g. null)
-  --locationInvestigation: string@bool-completer # If the companies residency should be investigated (e.g. false)
+  --locationInvestigation: oneof<nothing, bool> # If the companies residency should be investigated (e.g. false)
   --priority: string # Priority of order: standard/express are allowed (e.g. standard)
-  --registerData: string@bool-completer # If you want register data of the company to be retrieved (e.g. false)
+  --registerData: oneof<nothing, bool> # If you want register data of the company to be retrieved (e.g. false)
   --registerNumber: string # Registration number of the company for which a document should be ordered. (Not required if subjectId is given) (e.g. null)
   --subjectId: string # Kompanyid of the company you want to place the order for (e.g. null)
 ]: any -> any {
@@ -1028,7 +1027,7 @@ export def "product-order-ubo ProductOrderUbo" [
   --allow-errors(-e) # Return full response without error handling
   --callbackUrl: string # An optional callback URL to which updates about the order will be sent (for instance if credits are exceeded) (e.g. null)
   --credits: float # Specify a maximum amount of credits which should be used. To disable use -1 (e.g. -1)
-  --includeDocs: string@bool-completer # Include purchase of register document to ubo report (e.g. false)
+  --includeDocs: oneof<nothing, bool> # Include purchase of register document to ubo report (e.g. false)
   --levels: string # Define a threshold for different levels of crawling (e.g. 25,50)
   --strategy: string # Choose a matching strategy. Available options (FULL,LEVELS) (e.g. FULL)
   subjectId: string # KYC API Id (32 byte hexid) of the company you want to place the order for (e.g. null)
@@ -1390,7 +1389,7 @@ export def "vat-verification-leveltwo-check VatLevelTwo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --confirmation: string@bool-completer # If a confirmation document should be ordered
+  --confirmation: oneof<nothing, bool> # If a confirmation document should be ordered
   vatNumber: string # VAT number to validate
 ]: any -> record<address: string, confirmation: string, level: string, name: string, validationStatus: bool> {
   let input = $in

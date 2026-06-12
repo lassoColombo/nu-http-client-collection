@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://notify.twilio.com"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -132,7 +131,7 @@ export def "credentials CreateCredential" [
   --Certificate: string # [APN only] The URL-encoded representation of the certificate. Strip everything outside of the headers, e.g. `-----BEGIN CERTIFICATE-----MIIFnTCCBIWgAwIBAgIIAjy9H849+E8wDQYJKoZIhvcNAQEFBQAwgZYxCzAJBgNV.....A==-----END CERTIFICATE-----`
   --FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
   --PrivateKey: string # [APN only] The URL-encoded representation of the private key. Strip everything outside of the headers, e.g. `-----BEGIN RSA PRIVATE KEY-----MIIEpQIBAAKCAQEAuyf/lNrH9ck8DmNyo3fGgvCI1l9s+cmBY3WIz+cUDqmxiieR\n.-----END RSA PRIVATE KEY-----`
-  --Sandbox: string@bool-completer # [APN only] Whether to send the credential to sandbox APNs. Can be `true` to send to sandbox APNs or `false` to send to production.
+  --Sandbox: oneof<nothing, bool> # [APN only] Whether to send the credential to sandbox APNs. Can be `true` to send to sandbox APNs or `false` to send to production.
   --Secret: string # [FCM only] The `Server key` of your project from Firebase console under Settings / Cloud messaging.
   Type: string@Type-completer
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sandbox: string, sid: string, type: string, url: string> {
@@ -205,7 +204,7 @@ export def "credentials UpdateCredential" [
   --Certificate: string # [APN only] The URL-encoded representation of the certificate. Strip everything outside of the headers, e.g. `-----BEGIN CERTIFICATE-----MIIFnTCCBIWgAwIBAgIIAjy9H849+E8wDQYJKoZIhvcNAQEFBQAwgZYxCzAJBgNV.....A==-----END CERTIFICATE-----`
   --FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
   --PrivateKey: string # [APN only] The URL-encoded representation of the private key. Strip everything outside of the headers, e.g. `-----BEGIN RSA PRIVATE KEY-----MIIEpQIBAAKCAQEAuyf/lNrH9ck8DmNyo3fGgvCI1l9s+cmBY3WIz+cUDqmxiieR\n.-----END RSA PRIVATE KEY-----`
-  --Sandbox: string@bool-completer # [APN only] Whether to send the credential to sandbox APNs. Can be `true` to send to sandbox APNs or `false` to send to production.
+  --Sandbox: oneof<nothing, bool> # [APN only] Whether to send the credential to sandbox APNs. Can be `true` to send to sandbox APNs or `false` to send to production.
   --Secret: string # [FCM only] The `Server key` of your project from Firebase console under Settings / Cloud messaging.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sandbox: string, sid: string, type: string, url: string> {
   let input = $in
@@ -261,13 +260,13 @@ export def "services CreateService" [
   --DefaultApnNotificationProtocolVersion: string # The protocol version to use for sending APNS notifications. Can be overridden on a Binding by Binding basis when creating a [Binding](https://www.twilio.com/docs/notify/api/binding-resource) resource.
   --DefaultFcmNotificationProtocolVersion: string # The protocol version to use for sending FCM notifications. Can be overridden on a Binding by Binding basis when creating a [Binding](https://www.twilio.com/docs/notify/api/binding-resource) resource.
   --DefaultGcmNotificationProtocolVersion: string # The protocol version to use for sending GCM notifications. Can be overridden on a Binding by Binding basis when creating a [Binding](https://www.twilio.com/docs/notify/api/binding-resource) resource.
-  --DeliveryCallbackEnabled: string@bool-completer # Callback configuration that enables delivery callbacks, default false
+  --DeliveryCallbackEnabled: oneof<nothing, bool> # Callback configuration that enables delivery callbacks, default false
   --DeliveryCallbackUrl: string # URL to send delivery status callback.
   --FacebookMessengerPageId: string # Deprecated.
   --FcmCredentialSid: string # The SID of the [Credential](https://www.twilio.com/docs/notify/api/credential-resource) to use for FCM Bindings.
   --FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
   --GcmCredentialSid: string # The SID of the [Credential](https://www.twilio.com/docs/notify/api/credential-resource) to use for GCM Bindings.
-  --LogEnabled: string@bool-completer # Whether to log notifications. Can be: `true` or `false` and the default is `true`.
+  --LogEnabled: oneof<nothing, bool> # Whether to log notifications. Can be: `true` or `false` and the default is `true`.
   --MessagingServiceSid: string # The SID of the [Messaging Service](https://www.twilio.com/docs/sms/send-messages#messaging-services) to use for SMS Bindings. This parameter must be set in order to send SMS notifications.
 ]: any -> record<account_sid: string, alexa_skill_id: string, apn_credential_sid: string, date_created: string, date_updated: string, default_alexa_notification_protocol_version: string, default_apn_notification_protocol_version: string, default_fcm_notification_protocol_version: string, default_gcm_notification_protocol_version: string, delivery_callback_enabled: bool, delivery_callback_url: string, facebook_messenger_page_id: string, fcm_credential_sid: string, friendly_name: string, gcm_credential_sid: string, links: record, log_enabled: bool, messaging_service_sid: string, sid: string, url: string> {
   let input = $in
@@ -487,13 +486,13 @@ export def "services UpdateService" [
   --DefaultApnNotificationProtocolVersion: string # The protocol version to use for sending APNS notifications. Can be overridden on a Binding by Binding basis when creating a [Binding](https://www.twilio.com/docs/notify/api/binding-resource) resource.
   --DefaultFcmNotificationProtocolVersion: string # The protocol version to use for sending FCM notifications. Can be overridden on a Binding by Binding basis when creating a [Binding](https://www.twilio.com/docs/notify/api/binding-resource) resource.
   --DefaultGcmNotificationProtocolVersion: string # The protocol version to use for sending GCM notifications. Can be overridden on a Binding by Binding basis when creating a [Binding](https://www.twilio.com/docs/notify/api/binding-resource) resource.
-  --DeliveryCallbackEnabled: string@bool-completer # Callback configuration that enables delivery callbacks, default false
+  --DeliveryCallbackEnabled: oneof<nothing, bool> # Callback configuration that enables delivery callbacks, default false
   --DeliveryCallbackUrl: string # URL to send delivery status callback.
   --FacebookMessengerPageId: string # Deprecated.
   --FcmCredentialSid: string # The SID of the [Credential](https://www.twilio.com/docs/notify/api/credential-resource) to use for FCM Bindings.
   --FriendlyName: string # A descriptive string that you create to describe the resource. It can be up to 64 characters long.
   --GcmCredentialSid: string # The SID of the [Credential](https://www.twilio.com/docs/notify/api/credential-resource) to use for GCM Bindings.
-  --LogEnabled: string@bool-completer # Whether to log notifications. Can be: `true` or `false` and the default is `true`.
+  --LogEnabled: oneof<nothing, bool> # Whether to log notifications. Can be: `true` or `false` and the default is `true`.
   --MessagingServiceSid: string # The SID of the [Messaging Service](https://www.twilio.com/docs/sms/send-messages#messaging-services) to use for SMS Bindings. This parameter must be set in order to send SMS notifications.
 ]: any -> record<account_sid: string, alexa_skill_id: string, apn_credential_sid: string, date_created: string, date_updated: string, default_alexa_notification_protocol_version: string, default_apn_notification_protocol_version: string, default_fcm_notification_protocol_version: string, default_gcm_notification_protocol_version: string, delivery_callback_enabled: bool, delivery_callback_url: string, facebook_messenger_page_id: string, fcm_credential_sid: string, friendly_name: string, gcm_credential_sid: string, links: record, log_enabled: bool, messaging_service_sid: string, sid: string, url: string> {
   let input = $in

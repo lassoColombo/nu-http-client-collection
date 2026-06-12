@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["x-api-key"] }
 
@@ -266,7 +265,7 @@ export def "driver AddDriver" [
   --Depot: string # Depot address (nullable, e.g. 9 Riverside, Salford M7 1PA )
   --HomeAddress: string # Home address (nullable, e.g. 2 St Josephs Crescent, Liverpool L3 3JF)
   --Zone: string # Zone (nullable, e.g. South)
-  --Active: string@bool-completer # Active flag (nullable, e.g. true)
+  --Active: oneof<nothing, bool> # Active flag (nullable, e.g. true)
   --Note: string # Note (nullable, e.g. My favourite driver)
 ]: any -> record<Status: int, Title: string, Detail: string> {
   let input = $in
@@ -303,7 +302,7 @@ export def "driver UpdateDriver" [
   --Depot: string # Depot address (nullable, e.g. 9 Riverside, Salford M7 1PA )
   --HomeAddress: string # Home address (nullable, e.g. 2 St Josephs Crescent, Liverpool L3 3JF)
   --Zone: string # Zone (nullable, e.g. South)
-  --Active: string@bool-completer # Active flag (nullable, e.g. true)
+  --Active: oneof<nothing, bool> # Active flag (nullable, e.g. true)
   --Note: string # Note (nullable, e.g. My favourite driver)
 ]: any -> record<Status: int, Title: string, Detail: string> {
   let input = $in
@@ -334,8 +333,8 @@ export def "order AddOrder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --updateAddressGps: string@bool-completer # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
-  --updateGoodsPrice: string@bool-completer # Force update existing Price in the Goods directory from the payload data. (default: false)
+  --updateAddressGps: oneof<nothing, bool> # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
+  --updateGoodsPrice: oneof<nothing, bool> # Force update existing Price in the Goods directory from the payload data. (default: false)
   --Number: string # Order/Invoice/Job/Waybill number (nullable, e.g. cv30001-2)
   --Id: string # Unique identifier in user accounting system (nullable, e.g. 10000345)
   --Date: string # Order date, yyyy-MM-dd (nullable, format: date-time, e.g. 2019-02-01)
@@ -401,8 +400,8 @@ export def "order UpdateOrder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --updateAddressGps: string@bool-completer # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
-  --forceUpdate: string@bool-completer # Allows updating completed orders. (default: false)
+  --updateAddressGps: oneof<nothing, bool> # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
+  --forceUpdate: oneof<nothing, bool> # Allows updating completed orders. (default: false)
   --Number: string # Order/Invoice/Job/Waybill number (nullable, e.g. cv30001-2)
   --Id: string # Unique identifier in user accounting system (nullable, e.g. 10000345)
   --Date: string # Order date, yyyy-MM-dd (nullable, format: date-time, e.g. 2019-02-01)
@@ -464,8 +463,8 @@ export def "order-bulk AddOrderBulk" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --updateAddressGps: string@bool-completer # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
-  --updateGoodsPrice: string@bool-completer # Force update existing Price in the Goods directory from the payload data. (default: false)
+  --updateAddressGps: oneof<nothing, bool> # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
+  --updateGoodsPrice: oneof<nothing, bool> # Force update existing Price in the Goods directory from the payload data. (default: false)
   --body: record
 ]: any -> table<Number: string, Id: string, Error: string> {
   let input = $in
@@ -612,7 +611,7 @@ export def "order-track-id UpdateOrderByTrackId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --updateAddressGps: string@bool-completer # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
+  --updateAddressGps: oneof<nothing, bool> # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
   --Number: string # Order/Invoice/Job/Waybill number (nullable, e.g. cv30001-2)
   --Id: string # Unique identifier in user accounting system (nullable, e.g. 10000345)
   --Date: string # Order date, yyyy-MM-dd (nullable, format: date-time, e.g. 2019-02-01)
@@ -1176,18 +1175,18 @@ export def "route AddRoute" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --update: string@bool-completer # Add or remove orders from the route if route already exists on this date. (default: false)
-  --updateAddressGps: string@bool-completer # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
-  --mergeAddresses: string@bool-completer # Merge orders by address onto one site (default: true)
-  --updateGoodsPrice: string@bool-completer # Force update existing Price in the Goods directory from the payload data. (default: false)
+  --update: oneof<nothing, bool> # Add or remove orders from the route if route already exists on this date. (default: false)
+  --updateAddressGps: oneof<nothing, bool> # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
+  --mergeAddresses: oneof<nothing, bool> # Merge orders by address onto one site (default: true)
+  --updateGoodsPrice: oneof<nothing, bool> # Force update existing Price in the Goods directory from the payload data. (default: false)
   --Code: string # Route code/number (nullable, e.g. R0001234)
   --Id: string # Unique identifier in user accounting system (nullable, e.g. 1234)
   --Date: string # Route date, yyyy-MM-dd (nullable, format: date-time, e.g. 2019-02-01)
   --StartTimePlan: string # Planned Start Time, yyyy-MM-ddTHH:mm:ss or HH:mm (nullable, format: date-time, e.g. 13:00)
   --DepotId: string # Unique identifier in user accounting system (nullable, e.g. 1)
   --Depot: string # Depot address (nullable, e.g. 9 Riverside, Salford M7 1PA)
-  --StartFromDepot: string@bool-completer # Start route from depot (nullable, e.g. true)
-  --ReturnToDepot: string@bool-completer # Return to depot (nullable, e.g. true)
+  --StartFromDepot: oneof<nothing, bool> # Start route from depot (nullable, e.g. true)
+  --ReturnToDepot: oneof<nothing, bool> # Return to depot (nullable, e.g. true)
   --DriverLogin: string # Driver's login (nullable, e.g. RT567 )
   --DriverPassword: string # Driver’s password (nullable, e.g. 1)
   --DriverName: string # Driver’s First Name and Last Name (nullable, e.g. Peter G.)
@@ -1225,16 +1224,16 @@ export def "route-code UpdateRouteByCode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --updateAddressGps: string@bool-completer # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
-  --mergeAddresses: string@bool-completer # Merge orders by address onto one site (default: true)
+  --updateAddressGps: oneof<nothing, bool> # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
+  --mergeAddresses: oneof<nothing, bool> # Merge orders by address onto one site (default: true)
   --Code: string # Route code/number (nullable, e.g. R0001234)
   --Id: string # Unique identifier in user accounting system (nullable, e.g. 1234)
   --Date: string # Route date, yyyy-MM-dd (nullable, format: date-time, e.g. 2019-02-01)
   --StartTimePlan: string # Planned Start Time, yyyy-MM-ddTHH:mm:ss or HH:mm (nullable, format: date-time, e.g. 13:00)
   --DepotId: string # Unique identifier in user accounting system (nullable, e.g. 1)
   --Depot: string # Depot address (nullable, e.g. 9 Riverside, Salford M7 1PA)
-  --StartFromDepot: string@bool-completer # Start route from depot (nullable, e.g. true)
-  --ReturnToDepot: string@bool-completer # Return to depot (nullable, e.g. true)
+  --StartFromDepot: oneof<nothing, bool> # Start route from depot (nullable, e.g. true)
+  --ReturnToDepot: oneof<nothing, bool> # Return to depot (nullable, e.g. true)
   --DriverLogin: string # Driver's login (nullable, e.g. RT567 )
   --DriverPassword: string # Driver’s password (nullable, e.g. 1)
   --DriverName: string # Driver’s First Name and Last Name (nullable, e.g. Peter G.)
@@ -1292,7 +1291,7 @@ export def "route-code DeleteRouteByCode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --deleteOrders: string@bool-completer # default: true
+  --deleteOrders: oneof<nothing, bool> # default: true
 ]: nothing -> record<Status: int, Title: string, Detail: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1320,16 +1319,16 @@ export def "route-id UpdateRouteById" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --updateAddressGps: string@bool-completer # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
-  --mergeAddresses: string@bool-completer # Merge orders by address onto one site (default: true)
+  --updateAddressGps: oneof<nothing, bool> # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
+  --mergeAddresses: oneof<nothing, bool> # Merge orders by address onto one site (default: true)
   --Code: string # Route code/number (nullable, e.g. R0001234)
   --Id: string # Unique identifier in user accounting system (nullable, e.g. 1234)
   --Date: string # Route date, yyyy-MM-dd (nullable, format: date-time, e.g. 2019-02-01)
   --StartTimePlan: string # Planned Start Time, yyyy-MM-ddTHH:mm:ss or HH:mm (nullable, format: date-time, e.g. 13:00)
   --DepotId: string # Unique identifier in user accounting system (nullable, e.g. 1)
   --Depot: string # Depot address (nullable, e.g. 9 Riverside, Salford M7 1PA)
-  --StartFromDepot: string@bool-completer # Start route from depot (nullable, e.g. true)
-  --ReturnToDepot: string@bool-completer # Return to depot (nullable, e.g. true)
+  --StartFromDepot: oneof<nothing, bool> # Start route from depot (nullable, e.g. true)
+  --ReturnToDepot: oneof<nothing, bool> # Return to depot (nullable, e.g. true)
   --DriverLogin: string # Driver's login (nullable, e.g. RT567 )
   --DriverPassword: string # Driver’s password (nullable, e.g. 1)
   --DriverName: string # Driver’s First Name and Last Name (nullable, e.g. Peter G.)
@@ -1387,7 +1386,7 @@ export def "route-id DeleteRouteById" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --deleteOrders: string@bool-completer # default: true
+  --deleteOrders: oneof<nothing, bool> # default: true
 ]: nothing -> record<Status: int, Title: string, Detail: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1585,8 +1584,8 @@ export def "route-code-order AddOrderToRouteByCode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --updateAddressGps: string@bool-completer # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
-  --mergeAddresses: string@bool-completer # Merge orders by address onto one site (default: true)
+  --updateAddressGps: oneof<nothing, bool> # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
+  --mergeAddresses: oneof<nothing, bool> # Merge orders by address onto one site (default: true)
   --Number: string # Order/Invoice/Job/Waybill number (nullable, e.g. cv30001-2)
   --Id: string # Unique identifier in user accounting system (nullable, e.g. 10000345)
   --Date: string # Order date, yyyy-MM-dd (nullable, format: date-time, e.g. 2019-02-01)
@@ -1653,8 +1652,8 @@ export def "route-id-order AddOrderToRouteById" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --updateAddressGps: string@bool-completer # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
-  --mergeAddresses: string@bool-completer # Merge orders by address onto one site (default: true)
+  --updateAddressGps: oneof<nothing, bool> # Force update existing Lat/Lon in the Addresses directory from the payload data. (default: false)
+  --mergeAddresses: oneof<nothing, bool> # Merge orders by address onto one site (default: true)
   --Number: string # Order/Invoice/Job/Waybill number (nullable, e.g. cv30001-2)
   --Id: string # Unique identifier in user accounting system (nullable, e.g. 10000345)
   --Date: string # Order date, yyyy-MM-dd (nullable, format: date-time, e.g. 2019-02-01)
@@ -1718,8 +1717,8 @@ export def "route-code-order-number MoveOrderToRouteByCodeByNumber" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --allowTransfer: string@bool-completer # If true allows transferring order (without delivery status) from another route (default: false)
-  --allowReschedule: string@bool-completer # If true allows rescheduling, transferring order (with failed delivery status) from another route and clears old status (default: false)
+  --allowTransfer: oneof<nothing, bool> # If true allows transferring order (without delivery status) from another route (default: false)
+  --allowReschedule: oneof<nothing, bool> # If true allows rescheduling, transferring order (with failed delivery status) from another route and clears old status (default: false)
 ]: nothing -> record<Status: int, Title: string, Detail: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1745,8 +1744,8 @@ export def "route-code-order-id MoveOrderToRouteByCodeById" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --allowTransfer: string@bool-completer # If true allows transferring order (without delivery status) from another route (default: false)
-  --allowReschedule: string@bool-completer # If true allows rescheduling, transferring order (with failed delivery status) from another route and clears old status (default: false)
+  --allowTransfer: oneof<nothing, bool> # If true allows transferring order (without delivery status) from another route (default: false)
+  --allowReschedule: oneof<nothing, bool> # If true allows rescheduling, transferring order (with failed delivery status) from another route and clears old status (default: false)
 ]: nothing -> record<Status: int, Title: string, Detail: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1772,8 +1771,8 @@ export def "route-id-order-number MoveOrderToRouteByIdByNumber" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --allowTransfer: string@bool-completer # If true allows transferring order (without delivery status) from another route (default: false)
-  --allowReschedule: string@bool-completer # If true allows rescheduling, transferring order (with failed delivery status) from another route and clears old status (default: false)
+  --allowTransfer: oneof<nothing, bool> # If true allows transferring order (without delivery status) from another route (default: false)
+  --allowReschedule: oneof<nothing, bool> # If true allows rescheduling, transferring order (with failed delivery status) from another route and clears old status (default: false)
 ]: nothing -> record<Status: int, Title: string, Detail: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1799,8 +1798,8 @@ export def "route-id-order-id MoveOrderToRouteByIdById" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --allowTransfer: string@bool-completer # If true allows transferring order (without delivery status) from another route (default: false)
-  --allowReschedule: string@bool-completer # If true allows rescheduling, transferring order (with failed delivery status) from another route and clears old status (default: false)
+  --allowTransfer: oneof<nothing, bool> # If true allows transferring order (without delivery status) from another route (default: false)
+  --allowReschedule: oneof<nothing, bool> # If true allows rescheduling, transferring order (with failed delivery status) from another route and clears old status (default: false)
 ]: nothing -> record<Status: int, Title: string, Detail: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.getlago.com/api/v1" "https://api.eu.getlago.com/api/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -198,7 +197,7 @@ export def "billing-entities updateBillingEntity" [
   --default-currency: string@default-currency-completer # e.g. USD
   --document-numbering: string@document-numbering-completer # The type of document numbering for this billing entity: - `per_customer`: document numbers are unique per customer - `per_billing_entity`: document numbers are unique per billing entity
   --document-number-prefix: string # The prefix used in document numbers for this billing entity (nullable, e.g. ABC-123)
-  --finalize-zero-amount-invoice: string@bool-completer # Whether to finalize invoices with zero amount for this billing entity (e.g. true)
+  --finalize-zero-amount-invoice: oneof<nothing, bool> # Whether to finalize invoices with zero amount for this billing entity (e.g. true)
   --billing-configuration: record # shape: {invoice_footer?: string, document_locale?: string, invoice_grace_period?: int, subscription_invoice_issuing_date_anchor?: "current_period_end"|"next_period_start", subscription_invoice_issuing_date_adjustment?: "align_with_finalization_date"|"keep_anchor"}
   --net-payment-term: int # The net payment term (in days) for this billing entity (e.g. 0)
   --address-line1: string # The first line of the billing address (nullable, e.g. 5230 Penfield Ave)
@@ -214,7 +213,7 @@ export def "billing-entities updateBillingEntity" [
   --timezone: string@timezone-completer # e.g. America/Los_Angeles
   --tax-codes: list # List of unique code used to identify the taxes. (e.g. [french_standard_vat])
   --email-settings: list # The email notification settings for this billing entity
-  --eu-tax-management: string@bool-completer # Whether EU tax management is enabled for this billing entity (e.g. false)
+  --eu-tax-management: oneof<nothing, bool> # Whether EU tax management is enabled for this billing entity (e.g. false)
   --logo: string # The base64 encoded logo image for the billing entity. Sending "null" will remove the logo, if any exist. (nullable, format: uri, e.g. data:image/png;base64,...)
   --invoice-custom-section-codes: list # The codes of the invoice custom section that should be associated with this billing entity (e.g. [custom_section_1, custom_section_2])
 ]: any -> record<lago_id: string, code: string, name: string, default_currency: string, document_locale: string, document_numbering: string, document_number_prefix: string, finalize_zero_amount_invoice: bool, invoice_footer: string, invoice_grace_period: int, subscription_invoice_issuing_date_anchor: string, subscription_invoice_issuing_date_adjustment: string, is_default: bool, net_payment_term: int, address_line1: string, address_line2: string, city: string, state: string, country: string, zipcode: string, email: string, legal_name: string, legal_number: string, tax_identification_number: string, timezone: string, email_settings: list<string>, eu_tax_management: bool, logo_url: string, created_at: string, updated_at: string, taxes: table<lago_id: string, name: string, code: string, description: string, rate: float, applied_to_organization: bool, created_at: string>, selected_invoice_custom_sections: table<lago_id: string, name: string, code: string, description: string, details: string, display_name: string, applied_to_organization: bool, organization_id: string, created_at: string>> {
@@ -599,7 +598,7 @@ export def "analytics-usage findAllUsages" [
   --external-customer-id: string # The external identifier of the customer for which the usage analytics is calculated. (e.g. ext-customer-123)
   --customer-country: string # The country of the customer for which the usage analytics is calculated.
   --external-subscription-id: string # The external identifier of the subscription for which the usage analytics is calculated. (e.g. ext-subscription-123)
-  --is-billable-metric-recurring: string@bool-completer # Indicates whether the billable metric associated with the usage is recurring. (e.g. true)
+  --is-billable-metric-recurring: oneof<nothing, bool> # Indicates whether the billable metric associated with the usage is recurring. (e.g. true)
   --plan-code: string # The code of the plan for which the usage analytics is calculated. (e.g. plan-code-123)
   --billable-metric-code: string # The code of the usage-based billable metrics for which the usage analytics is calculated. (e.g. code1)
 ]: nothing -> record<usages: table<organization_id: string, start_of_period_dt: string, end_of_period_dt: string, amount_currency: string, amount_cents: int, billable_metric_code: string, units: string, is_billable_metric_deleted: bool>> {
@@ -1129,7 +1128,7 @@ export def "credit-notes findAllCreditNotes" [
   --invoice-number: string # Filter credit notes by their related invoice number. (e.g. INV-001-002)
   --amount-from: int # Filter credit notes of at least a specific amount. This parameter must be defined in cents to ensure consistent handling for all currency types. (e.g. 9000)
   --amount-to: int # Filter credit notes up to a specific amount. This parameter must be defined in cents to ensure consistent handling for all currency types. (e.g. 100000)
-  --self-billed: string@bool-completer # Filter credit notes belonging to a self billed invoice. Possible values are `true` or `false`. (e.g. true)
+  --self-billed: oneof<nothing, bool> # Filter credit notes belonging to a self billed invoice. Possible values are `true` or `false`. (e.g. true)
   --billing-entity-codes: list # Filter credit notes by billing entity codes. (e.g. [billing_entity_code_1, billing_entity_code_2])
 ]: nothing -> record<credit_notes: table<lago_id: string, billing_entity_code: string, sequential_id: int, number: string, lago_invoice_id: string, invoice_number: string, issuing_date: string, credit_status: string, refund_status: string, reason: string, description: string, currency: string, total_amount_cents: int, taxes_amount_cents: int, taxes_rate: float, sub_total_excluding_taxes_amount_cents: int, balance_amount_cents: int, credit_amount_cents: int, refund_amount_cents: int, offset_amount_cents: int, coupons_adjustment_amount_cents: int, created_at: string, updated_at: string, file_url: string, items: list, applied_taxes: list, self_billed: bool, customer: record, metadata: record, error_details: list>, meta: record<current_page: int, next_page: int, prev_page: int, total_pages: int, total_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1404,10 +1403,10 @@ export def "customers findAllCustomers" [
   --states: list # Filter customers by states. (e.g. [CA, Paris])
   --zipcodes: list # Filter customers by zipcodes. (e.g. [10115, 75001])
   --currencies: list # Filter customers by currencies. (e.g. [USD, EUR])
-  --has-tax-identification-number: string@bool-completer # Filter customers by whether they have a tax identification number or not. (e.g. true)
+  --has-tax-identification-number: oneof<nothing, bool> # Filter customers by whether they have a tax identification number or not. (e.g. true)
   --metadatakey: string # Filter customers by metadata. Replace `key` with the actual metadata key you want to match, and provide the corresponding value. Providing empty value will search for customers without given metadata key. For example, `metadata[is_synced]=true&metadata[last_synced_at]=`. (e.g. value)
   --customer-type: string@customer-type-completer # Filter customers by customer type. (e.g. company)
-  --has-customer-type: string@bool-completer # Filter customers by whether they have a customer type or not. (e.g. true)
+  --has-customer-type: oneof<nothing, bool> # Filter customers by whether they have a customer type or not. (e.g. true)
 ]: nothing -> record<customers: table<metadata: list, taxes: list, applicable_invoice_custom_sections: list, error_details: list>, meta: record<current_page: int, next_page: int, prev_page: int, total_pages: int, total_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1536,7 +1535,7 @@ export def "customers-credit-notes findAllCustomerCreditNotes" [
   --invoice-number: string # Filter credit notes by their related invoice number. (e.g. INV-001-002)
   --amount-from: int # Filter credit notes of at least a specific amount. This parameter must be defined in cents to ensure consistent handling for all currency types. (e.g. 9000)
   --amount-to: int # Filter credit notes up to a specific amount. This parameter must be defined in cents to ensure consistent handling for all currency types. (e.g. 100000)
-  --self-billed: string@bool-completer # Filter credit notes belonging to a self billed invoice. Possible values are `true` or `false`. (e.g. true)
+  --self-billed: oneof<nothing, bool> # Filter credit notes belonging to a self billed invoice. Possible values are `true` or `false`. (e.g. true)
 ]: nothing -> record<credit_notes: table<lago_id: string, billing_entity_code: string, sequential_id: int, number: string, lago_invoice_id: string, invoice_number: string, issuing_date: string, credit_status: string, refund_status: string, reason: string, description: string, currency: string, total_amount_cents: int, taxes_amount_cents: int, taxes_rate: float, sub_total_excluding_taxes_amount_cents: int, balance_amount_cents: int, credit_amount_cents: int, refund_amount_cents: int, offset_amount_cents: int, coupons_adjustment_amount_cents: int, created_at: string, updated_at: string, file_url: string, items: list, applied_taxes: list, self_billed: bool, customer: record, metadata: record, error_details: list>, meta: record<current_page: int, next_page: int, prev_page: int, total_pages: int, total_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1568,11 +1567,11 @@ export def "customers-invoices findAllCustomerInvoices" [
   --issuing-date-to: string # Filter invoices up to a specific date. (format: date, e.g. 2022-08-09)
   --status: string@status-completer-1 # Filter invoices by status. Possible values are `draft` or `finalized`.
   --payment-status: string@payment-status-completer # Filter invoices by payment status. Possible values are `pending`, `failed` or `succeeded`.
-  --payment-overdue: string@bool-completer # Filter invoices by payment_overdue. Possible values are `true` or `false`. (e.g. true)
+  --payment-overdue: oneof<nothing, bool> # Filter invoices by payment_overdue. Possible values are `true` or `false`. (e.g. true)
   --search-term: string # Search invoices by id, number, customer name, customer external_id or customer email. (e.g. Jane)
-  --payment-dispute-lost: string@bool-completer # Filter invoices with a payment dispute lost. Possible values are `true` or `false`. (e.g. true)
+  --payment-dispute-lost: oneof<nothing, bool> # Filter invoices with a payment dispute lost. Possible values are `true` or `false`. (e.g. true)
   --invoice-type: string@invoice-type-completer # Filter invoices by invoice type. Possible values are `subscription`, `add_on`, `credit`, `one_off`, `advance_charges` or `progressive_billing`.
-  --self-billed: string@bool-completer # Filter invoices by self billed. Possible values are `true` or `false`. (e.g. true)
+  --self-billed: oneof<nothing, bool> # Filter invoices by self billed. Possible values are `true` or `false`. (e.g. true)
   --metadatakey: string # Filter invoices by metadata. Replace `key` with the actual metadata key you want to match, and provide the corresponding value. Providing empty value will search for invoice without given metadata key. For example, `metadata[color]=blue`. (e.g. someValue)
 ]: nothing -> record<invoices: table<lago_id: string, billing_entity_code: string, sequential_id: int, number: string, issuing_date: string, payment_dispute_lost_at: string, payment_due_date: string, payment_overdue: bool, net_payment_term: int, invoice_type: string, status: string, payment_status: string, currency: string, fees_amount_cents: int, coupons_amount_cents: int, credit_notes_amount_cents: int, sub_total_excluding_taxes_amount_cents: int, taxes_amount_cents: int, sub_total_including_taxes_amount_cents: int, prepaid_credit_amount_cents: int, prepaid_granted_credit_amount_cents: int, prepaid_purchased_credit_amount_cents: int, progressive_billing_credit_amount_cents: int, total_amount_cents: int, version_number: int, self_billed: bool, file_url: string, created_at: string, updated_at: string, customer: record, metadata: list, applied_taxes: list, applied_invoice_custom_sections: list, applied_usage_thresholds: list>, meta: record<current_page: int, next_page: int, prev_page: int, total_pages: int, total_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2080,7 +2079,7 @@ export def "customers-current-usage findCustomerCurrentUsage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --external-subscription-id: string # The unique identifier of the subscription within your application. (e.g. sub_1234567890)
-  --apply-taxes: string@bool-completer # Optional flag to determine if taxes should be applied. Defaults to `true` if not provided or if null.  (default: true, e.g. true)
+  --apply-taxes: oneof<nothing, bool> # Optional flag to determine if taxes should be applied. Defaults to `true` if not provided or if null.  (default: true, e.g. true)
   --charge-id: string # Filter usage to a specific charge by its Lago ID (UUID). Replaces deprecated `filter_by_charge_id`. (format: uuid, e.g. 1a901a90-1a90-1a90-1a90-1a901a901a90)
   --charge-code: string # Filter usage to a specific charge by its code. Replaces deprecated `filter_by_charge_code`. (e.g. storage)
   --billable-metric-code: string # Filter usage to a specific billable metric by its code. (e.g. storage)
@@ -2088,7 +2087,7 @@ export def "customers-current-usage findCustomerCurrentUsage" [
   --filter-by-charge-id: string # Filter usage to a specific charge by its Lago ID (UUID). (DEPRECATED, format: uuid, e.g. 1a901a90-1a90-1a90-1a90-1a901a901a90)
   --filter-by-charge-code: string # Filter usage to a specific charge by its code. (DEPRECATED, e.g. storage)
   --filter-by-group: record # Filter usage by pricing group. Pass key/value pairs as query parameters, e.g. `filter_by_group[cloud]=aws`.  (DEPRECATED, e.g. {cloud: aws})
-  --full-usage: string@bool-completer # When `true`, returns usage since subscription start instead of the current billing period. Requires one of `charge_id`, `charge_code`, `group` (or their deprecated `filter_by_*` equivalents) to be set.  (default: false, e.g. true)
+  --full-usage: oneof<nothing, bool> # When `true`, returns usage since subscription start instead of the current billing period. Requires one of `charge_id`, `charge_code`, `group` (or their deprecated `filter_by_*` equivalents) to be set.  (default: false, e.g. true)
   --filter-by-presentation: string # Filter `presentation_breakdowns` by a JSON-encoded array of presentation group key values. Only breakdowns matching the provided values will be returned. Pass an empty array to disable `presentation_breakdowns` entirely.  (e.g. ["engineering", "operations"])
 ]: nothing -> record<customer_usage: record<from_datetime: string, to_datetime: string, issuing_date: string, lago_invoice_id: string, currency: string, amount_cents: int, taxes_amount_cents: int, total_amount_cents: int, charges_usage: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2114,7 +2113,7 @@ export def "customers-projected-usage findCustomerProjectedUsage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --external-subscription-id: string # The unique identifier of the subscription within your application. (e.g. sub_1234567890)
-  --apply-taxes: string@bool-completer # Optional flag to determine if taxes should be applied. Defaults to `true` if not provided or if null.  (default: true, e.g. true)
+  --apply-taxes: oneof<nothing, bool> # Optional flag to determine if taxes should be applied. Defaults to `true` if not provided or if null.  (default: true, e.g. true)
 ]: nothing -> record<customer_projected_usage: record<from_datetime: string, to_datetime: string, issuing_date: string, lago_invoice_id: string, currency: string, amount_cents: int, projected_amount_cents: int, taxes_amount_cents: int, total_amount_cents: int, charges_usage: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2288,7 +2287,7 @@ export def "events findAllEvents" [
   --per-page: int # Number of records per page. (e.g. 20)
   --external-subscription-id: string # External subscription ID (e.g. 5eb02857-a71e-4ea2-bcf9-57d3a41bc6ba)
   --code: string # Filter events by its code. (e.g. event-123)
-  --timestamp-from-started-at: string@bool-completer # Requires `external_subscription_id` to be set. Filter events by timestamp after the subscription started at datetime. (e.g. true)
+  --timestamp-from-started-at: oneof<nothing, bool> # Requires `external_subscription_id` to be set. Filter events by timestamp after the subscription started at datetime. (e.g. true)
   --timestamp-from: string # Filter events by timestamp starting from a specific date. (format: date-time, e.g. 2022-08-08T00:00:00Z)
   --timestamp-to: string # Filter events by timestamp up to a specific date. (format: date-time, e.g. 2022-08-08T00:00:00Z)
 ]: nothing -> record<events: table<lago_id: string, transaction_id: string, lago_customer_id: string, code: string, timestamp: string, precise_total_amount_cents: string, properties: record, lago_subscription_id: string, external_subscription_id: string, created_at: string>, meta: record<current_page: int, next_page: int, prev_page: int, total_pages: int, total_count: int>> {
@@ -2584,12 +2583,12 @@ export def "invoices findAllInvoices" [
   --issuing-date-to: string # Filter invoices up to a specific date. (format: date, e.g. 2022-08-09)
   --statuses: list # Filter invoices by statuses. Possible values are `draft`, `failed`, `finalized`, `pending` and `voided`.
   --payment-statuses: list # Filter invoices by payment statuses. Possible values are `pending`, `failed` or `succeeded`.
-  --payment-overdue: string@bool-completer # Filter invoices by payment_overdue. Possible values are `true` or `false`. (e.g. true)
+  --payment-overdue: oneof<nothing, bool> # Filter invoices by payment_overdue. Possible values are `true` or `false`. (e.g. true)
   --search-term: string # Search invoices by id, number, customer name, customer external_id or customer email. (e.g. Jane)
   --currency: string # Filter invoices by currency. Possible values ISO 4217 currency codes. (e.g. EUR)
-  --payment-dispute-lost: string@bool-completer # Filter invoices with a payment dispute lost. Possible values are `true` or `false`. (e.g. true)
+  --payment-dispute-lost: oneof<nothing, bool> # Filter invoices with a payment dispute lost. Possible values are `true` or `false`. (e.g. true)
   --invoice-type: string@invoice-type-completer # Filter invoices by invoice type. Possible values are `subscription`, `add_on`, `credit`, `one_off`, `advance_charges` or `progressive_billing`.
-  --self-billed: string@bool-completer # Filter invoices by self billed. Possible values are `true` or `false`. (e.g. true)
+  --self-billed: oneof<nothing, bool> # Filter invoices by self billed. Possible values are `true` or `false`. (e.g. true)
   --billing-entity-codes: list # Filter invoices by billing entity codes. Possible values are the billing entity codes you have created. (e.g. [acme_corp, foo_bar])
   --metadatakey: string # Filter invoices by metadata. Replace `key` with the actual metadata key you want to match, and provide the corresponding value. Providing empty value will search for invoice without given metadata key. For example, `metadata[color]=blue`. (e.g. someValue)
 ]: nothing -> record<invoices: table<lago_id: string, billing_entity_code: string, sequential_id: int, number: string, issuing_date: string, payment_dispute_lost_at: string, payment_due_date: string, payment_overdue: bool, net_payment_term: int, invoice_type: string, status: string, payment_status: string, currency: string, fees_amount_cents: int, coupons_amount_cents: int, credit_notes_amount_cents: int, sub_total_excluding_taxes_amount_cents: int, taxes_amount_cents: int, sub_total_including_taxes_amount_cents: int, prepaid_credit_amount_cents: int, prepaid_granted_credit_amount_cents: int, prepaid_purchased_credit_amount_cents: int, progressive_billing_credit_amount_cents: int, total_amount_cents: int, version_number: int, self_billed: bool, file_url: string, created_at: string, updated_at: string, customer: record, metadata: list, applied_taxes: list, applied_invoice_custom_sections: list, applied_usage_thresholds: list>, meta: record<current_page: int, next_page: int, prev_page: int, total_pages: int, total_count: int>> {
@@ -2857,7 +2856,7 @@ export def "invoices-void voidInvoice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --generate-credit-note: string@bool-completer # Set to `true` to force voiding the invoice and generate a credit note. (e.g. true)
+  --generate-credit-note: oneof<nothing, bool> # Set to `true` to force voiding the invoice and generate a credit note. (e.g. true)
   --refund-amount: int # Portion of the invoice amount (in cents) to be refunded to the customer in the generated credit note. (e.g. 2000)
   --credit-amount: int # Portion of the invoice amount (in cents) to be credited to the customer's balance in the generated credit note. (e.g. 1150)
 ]: any -> record<invoice: record<billing_periods: list<record>, credits: list<record>, fees: list<record>, subscriptions: list<record>, error_details: list<record>>> {

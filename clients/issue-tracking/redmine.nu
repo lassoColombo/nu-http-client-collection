@@ -64,7 +64,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["basic" "x-redmine-api-key" "query-key" "bearer"] }
 
@@ -955,7 +954,7 @@ export def "users-format createUser" [
   --allow-errors(-e) # Return full response without error handling
   --X-Redmine-Switch-User: string # e.g. jsmith
   user: record # shape: {login: string, admin?: bool, password?: string, firstname: string, lastname: string, mail: string, language?: string, auth_source_id?: int, mail_notification?: "all"|"selected"|"only_my_events"|"only_assigned"|"only_owner"|"none", notified_project_ids?: list, must_change_passwd?: bool, generate_password?: bool, status?: int, custom_fields?: list, custom_field_values?: record}
-  --send-information: string@bool-completer # Set to true to send an account information email to the user. Not stored; only triggers email delivery.
+  --send-information: oneof<nothing, bool> # Set to true to send an account information email to the user. Not stored; only triggers email delivery.
   --pref: record # shape: {hide_mail?: bool, time_zone?: string, comments_sorting?: "asc"|"desc", warn_on_leaving_unsaved?: bool, no_self_notified?: bool, notify_about_high_priority_issues?: bool, textarea_font?: "monospace"|"proportional", recently_used_projects?: int, history_default_tab?: "notes"|"history"|"properties"|"time_entries"|"changesets"|"last_tab_visited", toolbar_language_options?: string, default_issue_query?: int, default_project_query?: int, auto_watch_on?: list}
 ]: any -> record<user: record<id: int, login: string, admin: bool, firstname: string, lastname: string, mail: string, created_on: string, updated_on: string, last_login_on: string, passwd_changed_on: string, avatar_url: string, twofa_scheme: string, api_key: string, status: int, custom_fields: list<record>, auth_source: record<id: int, name: string>, groups: list<record>, memberships: list<record>>> {
   let input = $in
@@ -1019,7 +1018,7 @@ export def "users updateUser" [
   --allow-errors(-e) # Return full response without error handling
   --X-Redmine-Switch-User: string # e.g. jsmith
   --user: record # shape: {login?: string, admin?: bool, password?: string, firstname?: string, lastname?: string, mail?: string, language?: string, auth_source_id?: int, mail_notification?: "all"|"selected"|"only_my_events"|"only_assigned"|"only_owner"|"none", notified_project_ids?: list, must_change_passwd?: bool, generate_password?: bool, status?: int, custom_fields?: list, custom_field_values?: record, group_ids?: list}
-  --send-information: string@bool-completer # Set to true to send an account information email to the user. Not stored; only triggers email delivery.
+  --send-information: oneof<nothing, bool> # Set to true to send an account information email to the user. Not stored; only triggers email delivery.
   --pref: record # shape: {hide_mail?: bool, time_zone?: string, comments_sorting?: "asc"|"desc", warn_on_leaving_unsaved?: bool, no_self_notified?: bool, notify_about_high_priority_issues?: bool, textarea_font?: "monospace"|"proportional", recently_used_projects?: int, history_default_tab?: "notes"|"history"|"properties"|"time_entries"|"changesets"|"last_tab_visited", toolbar_language_options?: string, default_issue_query?: int, default_project_query?: int, auto_watch_on?: list}
 ]: any -> any {
   let input = $in

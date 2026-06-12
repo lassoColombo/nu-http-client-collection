@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.firehydrant.io"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -155,14 +154,14 @@ export def "ai-preferences updateAiPreferences" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ai: string@bool-completer # Whether to enable AI features
-  --summaries: string@bool-completer # Whether to enable incident summaries
-  --description: string@bool-completer # Whether to enable incident descriptions
-  --impact: string@bool-completer # Whether to enable incident impact
-  --updates: string@bool-completer # Whether to enable incident updates
-  --retros: string@bool-completer # Whether to enable incident retrospectives
-  --followups: string@bool-completer # Whether to enable incident followups
-  --similar-incidents: string@bool-completer # Whether to enable similar incidents
+  --ai: oneof<nothing, bool> # Whether to enable AI features
+  --summaries: oneof<nothing, bool> # Whether to enable incident summaries
+  --description: oneof<nothing, bool> # Whether to enable incident descriptions
+  --impact: oneof<nothing, bool> # Whether to enable incident impact
+  --updates: oneof<nothing, bool> # Whether to enable incident updates
+  --retros: oneof<nothing, bool> # Whether to enable incident retrospectives
+  --followups: oneof<nothing, bool> # Whether to enable incident followups
+  --similar-incidents: oneof<nothing, bool> # Whether to enable similar incidents
 ]: any -> record<ai: bool, description: bool, followups: bool, impact: bool, retros: bool, similar_incidents: bool, summaries: bool, updates: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -848,7 +847,7 @@ export def "checklist-templates updateChecklistTemplate" [
   --checks: list # An array of checks for the checklist template — item shape: {id?: string, description?: string, name: string}
   --team-id: string # The ID of the Team that owns the checklist template
   --connected-services: list # Array of service IDs to attach checklist template to — item shape: {id: string, remove?: bool}
-  --remove-remaining-connected-services: string@bool-completer # If set to true, any services tagged on the checklist that are not included in the given array will be removed. Set this to true if you want to do a replacement operation for the services
+  --remove-remaining-connected-services: oneof<nothing, bool> # If set to true, any services tagged on the checklist that are not included in the given array will be removed. Set this to true if you want to do a replacement operation for the services
 ]: any -> record<id: string, name: string, description: string, created_at: string, updated_at: string, checks: table<id: string, name: string, description: string, status: bool>, owner: record<id: string, name: string, description: string, slug: string, created_at: string, updated_at: string, signals_ical_url: string, created_by: record<id: string, name: string, source: string, email: string>, in_support_hours: bool>, connected_services: table<id: string, name: string, description: string, slug: string, service_tier: int, created_at: string, updated_at: string, allowed_params: list, labels: record, alert_on_add: bool, auto_add_responding_team: bool, completed_checks: int, owner: record, service_checklist_updated_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1118,7 +1117,7 @@ export def "custom-fields-definitions createCustomFieldDefinition" [
   --description: string
   field_type: string
   --permissible-values: list
-  --required: string@bool-completer
+  --required: oneof<nothing, bool>
   --required-at-milestone-id: string # An optional milestone ID to specify when the field should become required, if `required` is set to `true`. If not provided, required fields are always required.
 ]: any -> record<display_name: string, field_id: string, field_type: string, slug: string, description: string, required: bool, required_at_milestone_id: string, permissible_values: string> {
   let input = $in
@@ -1170,7 +1169,7 @@ export def "custom-fields-definitions updateCustomFieldDefinition" [
   --description: string
   --display-name: string
   --permissible-values: list
-  --required: string@bool-completer
+  --required: oneof<nothing, bool>
   --required-at-milestone-id: string # An optional milestone ID to specify when the field should become required, if `required` is set to `true`. If not provided, required fields are always required.
 ]: any -> record<display_name: string, field_id: string, field_type: string, slug: string, description: string, required: bool, required_at_milestone_id: string, permissible_values: string> {
   let input = $in
@@ -1198,7 +1197,7 @@ export def "custom-fields-definitions-select-options get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string # Text string of a query for filtering values.
-  --all-versions: string@bool-completer # If true, return all versions of the custom field definition.
+  --all-versions: oneof<nothing, bool> # If true, return all versions of the custom field definition.
 ]: nothing -> record<display_name: string, field_id: string, field_type: string, slug: string, description: string, required: bool, required_at_milestone_id: string, permissible_values: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1395,7 +1394,7 @@ export def "functionalities listFunctionalities" [
   --impacted: string # A query to search services by if they are impacted with active incidents
   --labels: string # A comma separated list of label key / values in the format of 'key=value,key2=value2'. To filter change events that have a key (with no specific value), omit the value
   --owner: string # A query to search functionalities by their owning team ID
-  --lite: string@bool-completer # Boolean to determine whether to return a slimified version of the functionalities object
+  --lite: oneof<nothing, bool> # Boolean to determine whether to return a slimified version of the functionalities object
   --page: int # format: int32
   --per-page: int # format: int32
 ]: nothing -> record<data: table<id: string, name: string, slug: string, description: string, created_at: string, updated_at: string, labels: record, active_incidents: list, links: list, owner: record, alert_on_add: bool, auto_add_responding_team: bool, updated_by: record, services: list, external_resources: list, teams: list>, pagination: record<count: int, page: int, items: int, pages: int, last: int, prev: int, next: int>> {
@@ -1429,8 +1428,8 @@ export def "functionalities createFunctionality" [
   --description: string
   --services: list # item shape: {id: string}
   --labels: record # A hash of label keys and values
-  --alert-on-add: string@bool-completer
-  --auto-add-responding-team: string@bool-completer
+  --alert-on-add: oneof<nothing, bool>
+  --auto-add-responding-team: oneof<nothing, bool>
   --external-resources: list # An array of external resources to attach to this service. — item shape: {remote_id: string, connection_type?: string}
   --links: list # An array of links to associate with this service — item shape: {name: string, href_url: string, icon_url?: string}
   --owner: record # An object representing a Team that owns the service — shape: {id: string}
@@ -1514,15 +1513,15 @@ export def "functionalities updateFunctionality" [
   --services: list # item shape: {id: string, remove?: bool}
   --links: list # An array of links to associate with this functionality. This will remove all links not present in the patch. Only acts if 'links' key is included in the payload. — item shape: {href_url: string, name: string, icon_url?: string, remove?: bool, id?: string}
   --owner: record # An object representing a Team that owns the functionality — shape: {id: string}
-  --remove-owner: string@bool-completer # If you are trying to remove a team as an owner from a functionality, set this to 'true'
+  --remove-owner: oneof<nothing, bool> # If you are trying to remove a team as an owner from a functionality, set this to 'true'
   --teams: list # An array of teams to attach to this functionality. — item shape: {id: string, remove?: bool}
-  --remove-remaining-teams: string@bool-completer # If set to true, any teams tagged on the service that are not included in the given array will be removed. Set this to true if you want to do a replacement operation for the teams
+  --remove-remaining-teams: oneof<nothing, bool> # If set to true, any teams tagged on the service that are not included in the given array will be removed. Set this to true if you want to do a replacement operation for the teams
   --external-resources: list # An array of external resources to attach to this service. — item shape: {remote_id: string, connection_type?: string, remove?: bool}
-  --remove-remaining-external-resources: string@bool-completer # If set to true, any external_resources tagged on the service that are not included in the given array will be removed. Set this to true if you want to do a replacement operation for the external_resources
+  --remove-remaining-external-resources: oneof<nothing, bool> # If set to true, any external_resources tagged on the service that are not included in the given array will be removed. Set this to true if you want to do a replacement operation for the external_resources
   --labels: record # A hash of label keys and values
-  --alert-on-add: string@bool-completer
-  --auto-add-responding-team: string@bool-completer
-  --remove-remaining-services: string@bool-completer # Set this to true if you want to remove all of the services that are not included in the services array from the functionality (default: false)
+  --alert-on-add: oneof<nothing, bool>
+  --auto-add-responding-team: oneof<nothing, bool>
+  --remove-remaining-services: oneof<nothing, bool> # Set this to true if you want to remove all of the services that are not included in the services array from the functionality (default: false)
 ]: any -> record<id: string, name: string, slug: string, description: string, created_at: string, updated_at: string, labels: record, active_incidents: list<string>, links: table<id: string, href_url: string, icon_url: string, name: string>, owner: record<id: string, name: string, description: string, slug: string, created_at: string, updated_at: string, signals_ical_url: string, created_by: record<id: string, name: string, source: string, email: string>, in_support_hours: bool>, alert_on_add: bool, auto_add_responding_team: bool, updated_by: record<id: string, name: string, source: string, email: string>, services: table<id: string, name: string, description: string, slug: string, service_tier: int, created_at: string, updated_at: string, allowed_params: list, labels: record, alert_on_add: bool, auto_add_responding_team: bool>, external_resources: table<connection_type: string, connection_name: string, connection_id: string, remote_id: string, remote_url: string, created_at: string, updated_at: string, name: string>, teams: table<id: string, name: string, description: string, slug: string, created_at: string, updated_at: string, signals_ical_url: string, created_by: record, in_support_hours: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1883,13 +1882,13 @@ export def "incidents listIncidents" [
   --name: string # A query to search incidents by their name
   --saved-search-id: string # The id of a previously saved search.
   --priorities: string # A text value of priority
-  --priority-not-set: string@bool-completer # Flag for including incidents where priority has not been set
+  --priority-not-set: oneof<nothing, bool> # Flag for including incidents where priority has not been set
   --severities: string # A text value of severity
-  --severity-not-set: string@bool-completer # Flag for including incidents where severity has not been set
+  --severity-not-set: oneof<nothing, bool> # Flag for including incidents where severity has not been set
   --current-milestones: string # A comma separated list of current milestones
   --tags: string # A comma separated list of tags
   --tag-match-strategy: string@tag-match-strategy-completer # A matching strategy for the tags provided
-  --archived: string@bool-completer # Return archived incidents
+  --archived: oneof<nothing, bool> # Return archived incidents
   --updated-after: string # Filters for incidents that were updated after this date (format: date-time)
   --updated-before: string # Filters for incidents that were updated before this date (format: date-time)
   --incident-type-id: string # A comma separated list of incident type IDs
@@ -1932,11 +1931,11 @@ export def "incidents createIncident" [
   --tag-list: list # List of tags for the incident
   --impacts: list # An array of impacted infrastructure — item shape: {type: string, id: string, condition_id: string}
   --milestones: list # An array of milestones to set on an incident. This can be used to create an already-resolved incident. — item shape: {type: string, occurred_at: string}
-  --restricted: string@bool-completer
+  --restricted: oneof<nothing, bool>
   --team-ids: list # IDs of teams you wish to assign to this incident.
   --custom-fields: list # An array of custom fields to set on the incident. — item shape: {field_id: string, value_string?: string, value_array?: list}
   --external-links: string
-  --skip-incident-type-values: string@bool-completer # If true, the incident type values will not be copied to the incident. This is useful when creating an incident from an incident type, but you want to set the values manually. (default: false)
+  --skip-incident-type-values: oneof<nothing, bool> # If true, the incident type values will not be copied to the incident. This is useful when creating an incident from an incident type, but you want to set the values manually. (default: false)
 ]: any -> record<id: string, name: string, created_at: string, started_at: string, discarded_at: string, summary: string, customer_impact_summary: string, description: string, current_milestone: string, number: int, priority: string, severity: string, severity_color: string, severity_impact: string, severity_condition: string, tag_list: list<string>, severity_impact_object: record<id: string, name: string, type: string, affects_id: string, position: int>, severity_condition_object: record<id: string, name: string, position: int>, private_id: string, organization_id: string, milestones: table<id: string, type: string, duration: string, occurred_at: string, created_at: string, updated_at: string>, lifecycle_phases: table<id: string, name: string, description: string, type: string, position: int, milestones: list>, lifecycle_measurements: table<id: string, name: string, description: string, slug: string, starts_at_milestone: string, ends_at_milestone: string, value: string, calculated_at: string>, active: bool, labels: record, role_assignments: table<id: string, status: string, created_at: string, updated_at: string, incident_role: record, user: record>, status_pages: table<id: string, url: string, external_id: string, name: string, display_name: string, integration: record>, incident_url: string, private_status_page_url: string, organization: record<name: string, id: string>, customers_impacted: int, monetary_impact: int, monetary_impact_cents: int, last_update: string, last_note: record<id: string, body: string, created_at: string, status_pages: list<record>, conversations: list<record>>, report_id: string, ai_incident_summary: string, services: table<id: string, name: string>, environments: table<id: string, name: string>, functionalities: table<id: string, name: string>, channel_name: string, channel_reference: string, channel_id: string, channel_status: string, incident_tickets: table<id: string, summary: string, description: string, state: string, type: string, assignees: list, priority: record, created_by: record, attachments: list, created_at: string, updated_at: string, tag_list: list, incident_id: string, incident_name: string, incident_current_milestone: string, task_id: string, due_at: string, link: record>, ticket: record<id: string, summary: string, description: string, state: string, type: string, assignees: list<record>, priority: record<id: string, name: string, position: int, created_at: string, updated_at: string>, created_by: record<id: string, name: string, source: string, email: string>, attachments: list<record>, created_at: string, updated_at: string, tag_list: list<string>, incident_id: string, incident_name: string, incident_current_milestone: string, task_id: string, due_at: string, link: record<id: string, type: string, display_text: string, href_url: string, icon_url: string, editable: bool, deletable: bool>>, impacts: table<id: string, type: string, impact: record, condition: record, conversations: list>, conference_bridges: table<id: string, attachments: list>, incident_channels: table<id: string, name: string, source: string, source_name: string, source_id: string, url: string, icon_url: string, status: string>, retro_exports: list<record>, created_by: record<id: string, name: string, source: string, email: string>, context_object: record<object_type: string, object_id: string, context_tag: string, context_description: string>, team_assignments: table<id: string, status: string, created_at: string, updated_at: string, team: record>, conversations: table<id: string, resource_class: string, resource_id: string, field: string, comments_url: string, channel: record>, custom_fields: table<name: string, value_type: string, display_name: string, description: string, slug: string, field_id: string, value_array: string, value_string: string, value: string>, field_requirements: table<field_id: string, required_at_milestone_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2112,7 +2111,7 @@ export def "incidents-alerts-primary setIncidentAlertAsPrimary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --primary: string@bool-completer
+  --primary: oneof<nothing, bool>
 ]: any -> record<id: string, alert: record<id: string, summary: string, description: string, priority: string, integration_name: string, starts_at: string, ends_at: string, duration_ms: int, duration_iso8601: string, status: string, remote_id: string, remote_url: string, labels: record, environments: list<record>, services: list<record>, tags: list<string>, source_icon: string, signal_id: string, signal_rule: record<id: string, name: string, expression: string, team_id: string, target: record, created_by: record, created_at: string, updated_at: string, incident_type: record, notification_priority_override: string>, team_name: string, team_id: string, position: int, incidents: list<record>, events: list<record>, is_expired: bool>, primary: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4466,13 +4465,13 @@ export def "metrics-milestone-funnel get" [
   --name: string # A query to search incidents by their name
   --saved-search-id: string # The id of a previously saved search.
   --priorities: string # A text value of priority
-  --priority-not-set: string@bool-completer # Flag for including incidents where priority has not been set
+  --priority-not-set: oneof<nothing, bool> # Flag for including incidents where priority has not been set
   --severities: string # A text value of severity
-  --severity-not-set: string@bool-completer # Flag for including incidents where severity has not been set
+  --severity-not-set: oneof<nothing, bool> # Flag for including incidents where severity has not been set
   --current-milestones: string # A comma separated list of current milestones
   --tags: string # A comma separated list of tags
   --tag-match-strategy: string@tag-match-strategy-completer # A matching strategy for the tags provided
-  --archived: string@bool-completer # Return archived incidents
+  --archived: oneof<nothing, bool> # Return archived incidents
   --updated-after: string # Filters for incidents that were updated after this date (format: date-time)
   --updated-before: string # Filters for incidents that were updated before this date (format: date-time)
   --incident-type-id: string # A comma separated list of incident type IDs
@@ -4522,13 +4521,13 @@ export def "metrics-mttx get" [
   --name: string # A query to search incidents by their name
   --saved-search-id: string # The id of a previously saved search.
   --priorities: string # A text value of priority
-  --priority-not-set: string@bool-completer # Flag for including incidents where priority has not been set
+  --priority-not-set: oneof<nothing, bool> # Flag for including incidents where priority has not been set
   --severities: string # A text value of severity
-  --severity-not-set: string@bool-completer # Flag for including incidents where severity has not been set
+  --severity-not-set: oneof<nothing, bool> # Flag for including incidents where severity has not been set
   --current-milestones: string # A comma separated list of current milestones
   --tags: string # A comma separated list of tags
   --tag-match-strategy: string@tag-match-strategy-completer # A matching strategy for the tags provided
-  --archived: string@bool-completer # Return archived incidents
+  --archived: oneof<nothing, bool> # Return archived incidents
   --updated-after: string # Filters for incidents that were updated after this date (format: date-time)
   --updated-before: string # Filters for incidents that were updated before this date (format: date-time)
   --incident-type-id: string # A comma separated list of incident type IDs
@@ -4603,13 +4602,13 @@ export def "metrics-ticket-funnel get" [
   --name: string # A query to search incidents by their name
   --saved-search-id: string # The id of a previously saved search.
   --priorities: string # A text value of priority
-  --priority-not-set: string@bool-completer # Flag for including incidents where priority has not been set
+  --priority-not-set: oneof<nothing, bool> # Flag for including incidents where priority has not been set
   --severities: string # A text value of severity
-  --severity-not-set: string@bool-completer # Flag for including incidents where severity has not been set
+  --severity-not-set: oneof<nothing, bool> # Flag for including incidents where severity has not been set
   --current-milestones: string # A comma separated list of current milestones
   --tags: string # A comma separated list of tags
   --tag-match-strategy: string@tag-match-strategy-completer # A matching strategy for the tags provided
-  --archived: string@bool-completer # Return archived incidents
+  --archived: oneof<nothing, bool> # Return archived incidents
   --updated-after: string # Filters for incidents that were updated after this date (format: date-time)
   --updated-before: string # Filters for incidents that were updated before this date (format: date-time)
   --incident-type-id: string # A comma separated list of incident type IDs
@@ -4823,7 +4822,7 @@ export def "nunc-connections createStatusPage" [
   --primary-color: string
   --secondary-color: string
   --exposed-fields: list
-  --enable-histogram: string@bool-completer
+  --enable-histogram: oneof<nothing, bool>
   --ui-version: int # format: int32
 ]: any -> record<id: string, domain: string, company_name: string, company_website: string, cname: string, greeting_title: string, greeting_body: string, operational_message: string, company_tos_url: string, primary_color: string, secondary_color: string, button_background_color: string, button_text_color: string, link_color: string, title: string, exposed_fields: string, conditions: record<nunc_condition: string, condition_name: string, condition_id: string>, components: record<infrastructure_type: string, infrastructure_id: string, label: string, position: int, component_group_id: string>, component_groups: record<id: string, component_group_id: string, name: string, position: int>, logo: record<original_url: string, versions_urls: record>, cover_image: record<original_url: string, versions_urls: record>, favicon: record<original_url: string, versions_urls: record>, open_graph_image: record<original_url: string, versions_urls: record>, dark_logo: record<original_url: string, versions_urls: record>, enable_histogram: bool, ui_version: int, links: table<id: string, href_url: string, icon_url: string, name: string>> {
   let input = $in
@@ -4886,7 +4885,7 @@ export def "nunc-connections updateStatusPage" [
   --primary-color: string
   --secondary-color: string
   --exposed-fields: list
-  --enable-histogram: string@bool-completer
+  --enable-histogram: oneof<nothing, bool>
   --ui-version: int # format: int32
 ]: any -> record<id: string, domain: string, company_name: string, company_website: string, cname: string, greeting_title: string, greeting_body: string, operational_message: string, company_tos_url: string, primary_color: string, secondary_color: string, button_background_color: string, button_text_color: string, link_color: string, title: string, exposed_fields: string, conditions: record<nunc_condition: string, condition_name: string, condition_id: string>, components: record<infrastructure_type: string, infrastructure_id: string, label: string, position: int, component_group_id: string>, component_groups: record<id: string, component_group_id: string, name: string, position: int>, logo: record<original_url: string, versions_urls: record>, cover_image: record<original_url: string, versions_urls: record>, favicon: record<original_url: string, versions_urls: record>, open_graph_image: record<original_url: string, versions_urls: record>, dark_logo: record<original_url: string, versions_urls: record>, enable_histogram: bool, ui_version: int, links: table<id: string, href_url: string, icon_url: string, name: string>> {
   let input = $in
@@ -5615,7 +5614,7 @@ export def "priorities createPriority" [
   --allow-errors(-e) # Return full response without error handling
   slug: string
   --description: string
-  --default: string@bool-completer
+  --default: oneof<nothing, bool>
 ]: any -> record<slug: string, description: string, position: int, created_at: string, updated_at: string, default: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5687,7 +5686,7 @@ export def "priorities updatePriority" [
   --allow-errors(-e) # Return full response without error handling
   --slug: string
   --description: string
-  --default: string@bool-completer
+  --default: oneof<nothing, bool>
 ]: any -> record<slug: string, description: string, position: int, created_at: string, updated_at: string, default: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5749,9 +5748,9 @@ export def "reports-mean-time get" [
   --qp-query: string # A text query for an incident that searches on name, summary, and desciption
   --saved-search-id: string # The id of a previously saved search.
   --priorities: string # A comma separated list of priorities
-  --priority-not-set: string@bool-completer # Flag for including incidents where priority has not been set
+  --priority-not-set: oneof<nothing, bool> # Flag for including incidents where priority has not been set
   --severities: string # A comma separated list of severities
-  --severity-not-set: string@bool-completer # Flag for including incidents where severity has not been set
+  --severity-not-set: oneof<nothing, bool> # Flag for including incidents where severity has not been set
   --current-milestones: string # A comma separated list of current milestones
 ]: nothing -> record<data: table<bucket: string, points: list>, start_date: string, end_date: string, bucket_period: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5835,8 +5834,8 @@ export def "runbooks createRunbook" [
   type: string@type-completer-2 # Deprecated, but still required. Please just use 'incident'
   --summary: string # Deprecated. Use description
   --description: string # A longer description about the Runbook. Supports markdown format
-  --auto-attach-to-restricted-incidents: string@bool-completer # Whether or not this runbook should be automatically attached to restricted incidents. Note that setting this to `true` will prevent it from being attached to public incidents, even manually. Defaults to `false`.
-  --tutorial: string@bool-completer # Whether or not this runbook is a tutorial runbook
+  --auto-attach-to-restricted-incidents: oneof<nothing, bool> # Whether or not this runbook should be automatically attached to restricted incidents. Note that setting this to `true` will prevent it from being attached to public incidents, even manually. Defaults to `false`.
+  --tutorial: oneof<nothing, bool> # Whether or not this runbook is a tutorial runbook
   --owner: record # An object representing a Team that owns the runbook — shape: {id: string}
   --attachment-rule: record # shape: {logic: string, user_data?: string}
   --steps: list # item shape: {name: string, action_id: string, rule?: record}
@@ -5867,7 +5866,7 @@ export def "runbooks-actions listRunbookActions" [
   --page: int # format: int32
   --per-page: int # format: int32
   --type: string # List actions supporting this specific Runbook type
-  --lite: string@bool-completer # Boolean to determine whether to return a slimified version of the action object's integration
+  --lite: oneof<nothing, bool> # Boolean to determine whether to return a slimified version of the action object's integration
 ]: nothing -> record<data: table<id: string, name: string, slug: string, description: string, config: record, category: string, prerequisites: record, integration: record, supported_runbook_types: list, created_at: string, updated_at: string, automatable: bool, rerunnable: bool, repeatable: bool, default_logic: record, default_rule_data: record>, pagination: record<count: int, page: int, items: int, pages: int, last: int, prev: int, next: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6221,14 +6220,14 @@ export def "runbooks updateRunbook" [
   --name: string
   --summary: string
   --description: string
-  --tutorial: string@bool-completer # Whether or not this runbook is a tutorial runbook
+  --tutorial: oneof<nothing, bool> # Whether or not this runbook is a tutorial runbook
   --owner: record # An object representing a Team that owns the runbook — shape: {id?: string}
   --severities: list # item shape: {id?: string}
   --services: list # item shape: {id?: string}
   --environments: list # item shape: {id?: string}
   --attachment-rule: record # shape: {logic: string, user_data?: string}
   --steps: list # item shape: {step_id?: string, name: string, action_id: string, rule?: record}
-  --auto-attach-to-restricted-incidents: string@bool-completer # Whether or not this runbook should be automatically attached to restricted incidents. Note that setting this to `true` will prevent it from being attached to public incidents, even manually. Defaults to `false`.
+  --auto-attach-to-restricted-incidents: oneof<nothing, bool> # Whether or not this runbook should be automatically attached to restricted incidents. Note that setting this to `true` will prevent it from being attached to public incidents, even manually. Defaults to `false`.
 ]: any -> record<id: string, name: string, summary: string, description: string, type: string, runbook_template_id: string, created_at: string, updated_at: string, created_by: record<id: string, name: string, source: string, email: string>, updated_by: record<id: string, name: string, source: string, email: string>, steps: record<name: string, action_id: string, step_id: string, config: record, action_elements: list<record>, step_elements: list<record>, automatic: bool, delay_duration: string, action: record<id: string, name: string, slug: string, description: string, config: record, category: string, prerequisites: record, integration: record, supported_runbook_types: list, created_at: string, updated_at: string, automatable: bool, rerunnable: bool, repeatable: bool, default_logic: record, default_rule_data: record>, reruns: bool, repeats: bool, repeats_duration: string, votes: record<voted: bool, liked: bool, disliked: bool, likes: int, dislikes: int>, rule: record<logic: record, user_data: record>>, attachment_rule: record<logic: record, user_data: record<type: string, value: string, label: string>>, votes: record<voted: bool, liked: bool, disliked: bool, likes: int, dislikes: int>, is_editable: bool, owner: record<id: string, name: string, description: string, slug: string, created_at: string, updated_at: string, signals_ical_url: string, created_by: record<id: string, name: string, source: string, email: string>, in_support_hours: bool>, categories: string, auto_attach_to_restricted_incidents: bool, tutorial: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6304,7 +6303,7 @@ export def "saved-searches createSavedSearch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --is-private: string@bool-completer
+  --is-private: oneof<nothing, bool>
   filter_values: record
 ]: any -> record<id: string, name: string, resource_type: string, user_id: string, is_private: bool, created_at: string, updated_at: string, filter_values: record> {
   let input = $in
@@ -6378,7 +6377,7 @@ export def "saved-searches updateSavedSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-private: string@bool-completer
+  --is-private: oneof<nothing, bool>
   --name: string
   --filter-values: record
 ]: any -> record<id: string, name: string, resource_type: string, user_id: string, is_private: bool, created_at: string, updated_at: string, filter_values: record> {
@@ -6938,7 +6937,7 @@ export def "services listServices" [
   --functionalities: string # A comma separated list of functionality ids
   --available-downstream-dependencies-for-id: string # A query to find services that are available to be downstream dependencies for the passed service ID
   --available-upstream-dependencies-for-id: string # A query to find services that are available to be upstream dependencies for the passed service ID
-  --lite: string@bool-completer # Boolean to determine whether to return a slimified version of the services object
+  --lite: oneof<nothing, bool> # Boolean to determine whether to return a slimified version of the services object
   --include: list # Use in conjunction with lite param to specify additional attributes to include
 ]: nothing -> record<data: table<id: string, name: string, description: string, slug: string, service_tier: int, created_at: string, updated_at: string, allowed_params: list, labels: record, alert_on_add: bool, auto_add_responding_team: bool, active_incidents: list, checklists: list, completed_checks: int, external_resources: list, functionalities: list, last_import: record, links: list, managed_by: string, managed_by_settings: record, owner: record, service_checklist_updated_at: string, teams: list, updated_by: record>, pagination: record<count: int, page: int, items: int, pages: int, last: int, prev: int, next: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6975,8 +6974,8 @@ export def "services createService" [
   --links: list # An array of links to associate with this service — item shape: {name: string, href_url: string, icon_url?: string}
   --owner: record # An object representing a Team that owns the service — shape: {id: string}
   --teams: list # An array of teams to attach to this service. — item shape: {id: string}
-  --alert-on-add: string@bool-completer
-  --auto-add-responding-team: string@bool-completer
+  --alert-on-add: oneof<nothing, bool>
+  --auto-add-responding-team: oneof<nothing, bool>
   --external-resources: list # An array of external resources to attach to this service. — item shape: {remote_id: string, connection_type?: string}
 ]: any -> record<id: string, name: string, description: string, slug: string, service_tier: int, created_at: string, updated_at: string, allowed_params: list<string>, labels: record, alert_on_add: bool, auto_add_responding_team: bool, active_incidents: list<string>, checklists: table<id: string, name: string, description: string, created_at: string, updated_at: string, checks: list, owner: record, connected_services: list>, completed_checks: int, external_resources: table<connection_type: string, connection_name: string, connection_id: string, remote_id: string, remote_url: string, created_at: string, updated_at: string, name: string>, functionalities: table<id: string, name: string, slug: string, description: string, created_at: string, updated_at: string, labels: record, active_incidents: list, links: list, owner: record, alert_on_add: bool, auto_add_responding_team: bool, updated_by: record, services: list, external_resources: list, teams: list>, last_import: record<import_errors: list<record>, imported_at: string, remote_id: string, state: string>, links: table<id: string, href_url: string, icon_url: string, name: string>, managed_by: string, managed_by_settings: record, owner: record<id: string, name: string, description: string, slug: string, created_at: string, updated_at: string, signals_ical_url: string, created_by: record<id: string, name: string, source: string, email: string>, in_support_hours: bool>, service_checklist_updated_at: string, teams: table<id: string, name: string, description: string, slug: string, created_at: string, updated_at: string, signals_ical_url: string, created_by: record, in_support_hours: bool>, updated_by: record<id: string, name: string, source: string, email: string>> {
   let input = $in
@@ -7080,8 +7079,8 @@ export def "services updateService" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --alert-on-add: string@bool-completer
-  --auto-add-responding-team: string@bool-completer
+  --alert-on-add: oneof<nothing, bool>
+  --auto-add-responding-team: oneof<nothing, bool>
   --checklists: list # Array of checklist IDs to attach to the service — item shape: {id: string, remove?: bool}
   --description: string
   --external-resources: list # An array of external resources to attach to this service. — item shape: {remote_id: string, connection_type?: string, remove?: bool}
@@ -7090,11 +7089,11 @@ export def "services updateService" [
   --links: list # An array of links to associate with this service. This will remove all links not present in the patch. Only acts if 'links' key is included in the payload. — item shape: {href_url: string, name: string, icon_url?: string, remove?: bool, id?: string}
   --name: string
   --owner: record # An object representing a Team that owns the service — shape: {id: string}
-  --remove-owner: string@bool-completer # If you are trying to remove a team as an owner from a service, set this to 'true'
-  --remove-remaining-checklists: string@bool-completer # If set to true, any checklists tagged on the service that are not included in the given array will be removed. Set this to true if you want to do a replacement operation for the checklists
-  --remove-remaining-external-resources: string@bool-completer # If set to true, any external_resources tagged on the service that are not included in the given array will be removed. Set this to true if you want to do a replacement operation for the external_resources
-  --remove-remaining-functionalities: string@bool-completer # If set to true, any functionalities tagged on the service that are not included in the given array will be removed. Set this to true if you want to do a replacement operation for the functionalities
-  --remove-remaining-teams: string@bool-completer # If set to true, any teams tagged on the service that are not included in the given array will be removed. Set this to true if you want to do a replacement operation for the teams
+  --remove-owner: oneof<nothing, bool> # If you are trying to remove a team as an owner from a service, set this to 'true'
+  --remove-remaining-checklists: oneof<nothing, bool> # If set to true, any checklists tagged on the service that are not included in the given array will be removed. Set this to true if you want to do a replacement operation for the checklists
+  --remove-remaining-external-resources: oneof<nothing, bool> # If set to true, any external_resources tagged on the service that are not included in the given array will be removed. Set this to true if you want to do a replacement operation for the external_resources
+  --remove-remaining-functionalities: oneof<nothing, bool> # If set to true, any functionalities tagged on the service that are not included in the given array will be removed. Set this to true if you want to do a replacement operation for the functionalities
+  --remove-remaining-teams: oneof<nothing, bool> # If set to true, any teams tagged on the service that are not included in the given array will be removed. Set this to true if you want to do a replacement operation for the teams
   --service-tier: int@service-tier-completer # Integer representing service tier (format: int32)
   --teams: list # An array of teams to attach to this service. — item shape: {id: string, remove?: bool}
 ]: any -> record<id: string, name: string, description: string, slug: string, service_tier: int, created_at: string, updated_at: string, allowed_params: list<string>, labels: record, alert_on_add: bool, auto_add_responding_team: bool, active_incidents: list<string>, checklists: table<id: string, name: string, description: string, created_at: string, updated_at: string, checks: list, owner: record, connected_services: list>, completed_checks: int, external_resources: table<connection_type: string, connection_name: string, connection_id: string, remote_id: string, remote_url: string, created_at: string, updated_at: string, name: string>, functionalities: table<id: string, name: string, slug: string, description: string, created_at: string, updated_at: string, labels: record, active_incidents: list, links: list, owner: record, alert_on_add: bool, auto_add_responding_team: bool, updated_by: record, services: list, external_resources: list, teams: list>, last_import: record<import_errors: list<record>, imported_at: string, remote_id: string, state: string>, links: table<id: string, href_url: string, icon_url: string, name: string>, managed_by: string, managed_by_settings: record, owner: record<id: string, name: string, description: string, slug: string, created_at: string, updated_at: string, signals_ical_url: string, created_by: record<id: string, name: string, source: string, email: string>, in_support_hours: bool>, service_checklist_updated_at: string, teams: table<id: string, name: string, description: string, slug: string, created_at: string, updated_at: string, signals_ical_url: string, created_by: record, in_support_hours: bool>, updated_by: record<id: string, name: string, source: string, email: string>> {
@@ -7168,7 +7167,7 @@ export def "services-checklist-response createServiceChecklistResponse" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   check_id: string
-  --status: string@bool-completer # Status of the check. 'true' if it's complete, 'false' if incomplete, or blank if not yet interacted with
+  --status: oneof<nothing, bool> # Status of the check. 'true' if it's complete, 'false' if incomplete, or blank if not yet interacted with
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7194,7 +7193,7 @@ export def "services-dependencies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --flatten: string@bool-completer # If true, returns all dependencies in one array. If false, splits dependencies into different arrays for child and parent dependencies
+  --flatten: oneof<nothing, bool> # If true, returns all dependencies in one array. If false, splits dependencies into different arrays for child and parent dependencies
 ]: nothing -> record<child_service_dependencies: table<id: string, notes: string, created_at: string, updated_at: string, service: record, type: string>, parent_service_dependencies: table<id: string, notes: string, created_at: string, updated_at: string, service: record, type: string>, service_dependencies: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8371,7 +8370,7 @@ export def "teams listTeams" [
   --name: string # A query to search teams by their name
   --services: string # A comma separated list of service IDs
   --default-incident-role: string # Filter by teams that have or do not have members with a default incident role asssigned. Value may be 'present', 'blank', or the ID of an incident role.
-  --lite: string@bool-completer # Boolean to determine whether to return a slimified version of the teams object
+  --lite: oneof<nothing, bool> # Boolean to determine whether to return a slimified version of the teams object
 ]: nothing -> record<data: table<id: string, name: string, description: string, slug: string, created_at: string, updated_at: string, signals_ical_url: string, created_by: record, in_support_hours: bool, slack_channel: record, ms_teams_channel: record, memberships: list, owned_checklist_templates: list, owned_functionalities: list, owned_services: list, owned_runbooks: list, responding_services: list, services: list, functionalities: list>, pagination: record<count: int, page: int, items: int, pages: int, last: int, prev: int, next: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8427,7 +8426,7 @@ export def "teams get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --lite: string@bool-completer # Boolean to determine whether to return a slimified version of the teams object
+  --lite: oneof<nothing, bool> # Boolean to determine whether to return a slimified version of the teams object
 ]: nothing -> record<id: string, name: string, description: string, slug: string, created_at: string, updated_at: string, signals_ical_url: string, created_by: record<id: string, name: string, source: string, email: string>, in_support_hours: bool, slack_channel: record<id: string, name: string, slack_channel_id: string>, ms_teams_channel: record<id: string, channel_id: string, channel_name: string, ms_team_id: string, team_name: string, channel_url: string, status: string, incident: record<id: string, name: string, created_at: string, started_at: string, discarded_at: string, summary: string, customer_impact_summary: string, description: string, current_milestone: string, number: int, priority: string, severity: string, severity_color: string, severity_impact: string, severity_condition: string, tag_list: list, severity_impact_object: record, severity_condition_object: record, private_id: string, organization_id: string, milestones: list, lifecycle_phases: list, lifecycle_measurements: list, active: bool, labels: record, role_assignments: list, status_pages: list, incident_url: string, private_status_page_url: string, organization: record, customers_impacted: int, monetary_impact: int, monetary_impact_cents: int, last_update: string, last_note: record, report_id: string, ai_incident_summary: string, services: list, environments: list, functionalities: list, channel_name: string, channel_reference: string, channel_id: string, channel_status: string, incident_tickets: list, ticket: record, impacts: list, conference_bridges: list, incident_channels: list, retro_exports: list, created_by: record, context_object: record, team_assignments: list, conversations: list, custom_fields: list, field_requirements: list>>, memberships: table<user: record, schedule: record, signals_on_call_schedule: record, default_incident_role: record>, owned_checklist_templates: table<id: string, name: string, description: string, created_at: string, updated_at: string, checks: list, owner: record, connected_services: list>, owned_functionalities: table<id: string, name: string, slug: string, description: string, created_at: string, updated_at: string, labels: record, active_incidents: list, links: list, owner: record, alert_on_add: bool, auto_add_responding_team: bool, updated_by: record>, owned_services: table<id: string, name: string, description: string, slug: string, service_tier: int, created_at: string, updated_at: string, allowed_params: list, labels: record, alert_on_add: bool, auto_add_responding_team: bool>, owned_runbooks: table<id: string, name: string, summary: string, description: string, type: string, created_at: string, updated_at: string, attachment_rule: record, owner: record, categories: string>, responding_services: table<id: string, name: string, description: string, slug: string, service_tier: int, created_at: string, updated_at: string, allowed_params: list, labels: record, alert_on_add: bool, auto_add_responding_team: bool>, services: table<id: string, name: string, description: string, slug: string, service_tier: int, created_at: string, updated_at: string, allowed_params: list, labels: record, alert_on_add: bool, auto_add_responding_team: bool>, functionalities: table<id: string, name: string, slug: string, description: string, created_at: string, updated_at: string, labels: record, active_incidents: list, links: list, owner: record, alert_on_add: bool, auto_add_responding_team: bool, updated_by: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8537,7 +8536,7 @@ export def "teams-escalation-policies createTeamEscalationPolicy" [
   name: string # The escalation policy's name.
   --description: string # A detailed description of the escalation policy.
   --repetitions: int # The number of times that the escalation policy should repeat before an alert is dropped. (format: int32, default: 0)
-  --default: string@bool-completer # Whether this escalation policy should be the default for the team. (default: false)
+  --default: oneof<nothing, bool> # Whether this escalation policy should be the default for the team. (default: false)
   steps: list # A list of steps that define how an alert should escalate through the policy. — item shape: {targets: list, timeout: string}
   --handoff-step: record # A step that defines where an alert should be sent when the policy is exhausted and the alert is still unacknowledged. — shape: {target_type: "EscalationPolicy"|"Team", target_id: string}
 ]: any -> any {
@@ -8617,7 +8616,7 @@ export def "teams-escalation-policies updateTeamEscalationPolicy" [
   --name: string # The escalation policy's name.
   --description: string # A detailed description of the escalation policy.
   --repetitions: int # The number of times that the escalation policy should repeat before an alert is dropped. (format: int32, default: 0)
-  --default: string@bool-completer # Whether this escalation policy should be the default for the team. (default: false)
+  --default: oneof<nothing, bool> # Whether this escalation policy should be the default for the team. (default: false)
   --steps: list # A list of steps that define how an alert should escalate through the policy. — item shape: {targets?: list, timeout: string}
   --handoff-step: record # A step that defines where an alert should be sent when the policy is exhausted and the alert is still unacknowledged. — shape: {target_type: "EscalationPolicy"|"Team", target_id: string}
 ]: any -> any {
@@ -9157,7 +9156,7 @@ export def "ticketing-projects listTicketingProjects" [
   --supports-ticket-types: string
   --providers: string
   --connection-ids: string
-  --configured-projects: string@bool-completer
+  --configured-projects: oneof<nothing, bool>
   --qp-query: string
   --page: int # format: int32
   --per-page: int # format: int32

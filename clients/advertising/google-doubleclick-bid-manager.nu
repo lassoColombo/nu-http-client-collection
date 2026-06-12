@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://doubleclickbidmanager.googleapis.com/doubleclickbidmanager/v1.1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -112,7 +111,7 @@ export def "queries doubleclickbidmanagerquerieslistqueries" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
@@ -148,7 +147,7 @@ export def "queries-reports doubleclickbidmanagerreportslistreports" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
@@ -186,11 +185,11 @@ export def "query doubleclickbidmanagerqueriescreatequery" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --asynchronous: string@bool-completer # If true, tries to run the query asynchronously. Only applicable when the frequency is ONE_TIME.
+  --asynchronous: oneof<nothing, bool> # If true, tries to run the query asynchronously. Only applicable when the frequency is ONE_TIME.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "doubleclickbidmanager#query".
   --metadata: record # Query metadata. — shape: {dataRange?: "CUSTOM_DATES"|"CURRENT_DAY"|"PREVIOUS_DAY"|"WEEK_TO_DATE"|"MONTH_TO_DATE"|"QUARTER_TO_DATE"|"YEAR_TO_DATE"|"PREVIOUS_WEEK"|"PREVIOUS_HALF_MONTH"|"PREVIOUS_MONTH"|"PREVIOUS_QUARTER"|"PREVIOUS_YEAR"|"LAST_7_DAYS"|"LAST_30_DAYS"|"LAST_90_DAYS"|"LAST_365_DAYS"|"ALL_TIME"|"LAST_14_DAYS"|"TYPE_NOT_SUPPORTED"|"LAST_60_DAYS", format?: "CSV"|"EXCEL_CSV"|"XLSX", googleCloudStoragePathForLatestReport?: string, googleDrivePathForLatestReport?: string, latestReportRunTimeMs?: string, locale?: string, reportCount?: int, running?: bool, sendNotification?: bool, shareEmailAddress?: list, title?: string}
   --params: record # Parameters of a query or report. — shape: {filters?: list, groupBys?: list, includeInviteData?: bool, metrics?: list, options?: record, type?: "TYPE_GENERAL"|"TYPE_AUDIENCE_PERFORMANCE"|"TYPE_INVENTORY_AVAILABILITY"|"TYPE_KEYWORD"|"TYPE_PIXEL_LOAD"|"TYPE_AUDIENCE_COMPOSITION"|"TYPE_CROSS_PARTNER"|"TYPE_PAGE_CATEGORY"|"TYPE_THIRD_PARTY_DATA_PROVIDER"|"TYPE_CROSS_PARTNER_THIRD_PARTY_DATA_PROVIDER"|"TYPE_CLIENT_SAFE"|"TYPE_ORDER_ID"|"TYPE_FEE"|"TYPE_CROSS_FEE"|"TYPE_ACTIVE_GRP"|"TYPE_YOUTUBE_VERTICAL"|"TYPE_COMSCORE_VCE"|"TYPE_TRUEVIEW"|"TYPE_NIELSEN_AUDIENCE_PROFILE"|"TYPE_NIELSEN_DAILY_REACH_BUILD"|"TYPE_NIELSEN_SITE"|"TYPE_REACH_AND_FREQUENCY"|"TYPE_ESTIMATED_CONVERSION"|"TYPE_VERIFICATION"|"TYPE_TRUEVIEW_IAR"|"TYPE_NIELSEN_ONLINE_GLOBAL_MARKET"|"TYPE_PETRA_NIELSEN_AUDIENCE_PROFILE"|"TYPE_PETRA_NIELSEN_DAILY_REACH_BUILD"|"TYPE_PETRA_NIELSEN_ONLINE_GLOBAL_MARKET"|"TYPE_NOT_SUPPORTED"|"TYPE_REACH_AUDIENCE"|"TYPE_LINEAR_TV_SEARCH_LIFT"|"TYPE_PATH"|"TYPE_PATH_ATTRIBUTION"}
@@ -232,7 +231,7 @@ export def "query doubleclickbidmanagerqueriesdeletequery" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
@@ -266,7 +265,7 @@ export def "query doubleclickbidmanagerqueriesgetquery" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
@@ -300,11 +299,11 @@ export def "query doubleclickbidmanagerqueriesrunquery" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --asynchronous: string@bool-completer # If true, tries to run the query asynchronously.
+  --asynchronous: oneof<nothing, bool> # If true, tries to run the query asynchronously.
   --dataRange: string@dataRange-completer # Report data range used to generate the report.
   --reportDataEndTimeMs: string # The ending time for the data that is shown in the report. Note, reportDataEndTimeMs is required if dataRange is CUSTOM_DATES and ignored otherwise. (format: int64)
   --reportDataStartTimeMs: string # The starting time for the data that is shown in the report. Note, reportDataStartTimeMs is required if dataRange is CUSTOM_DATES and ignored otherwise. (format: int64)

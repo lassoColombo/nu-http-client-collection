@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost/v1" "https://localhost/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -513,17 +512,17 @@ export def "identifications list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --current-taxon: string@bool-completer # ID's taxon is the same it's observation's taxon
-  --own-observation: string@bool-completer # ID was added by the observer
-  --is-change: string@bool-completer # ID was created as a results of a taxon change
-  --taxon-active: string@bool-completer # ID's taxon is currently an active taxon
-  --observation-taxon-active: string@bool-completer # Observation's taxon is currently an active taxon
+  --current-taxon: oneof<nothing, bool> # ID's taxon is the same it's observation's taxon
+  --own-observation: oneof<nothing, bool> # ID was added by the observer
+  --is-change: oneof<nothing, bool> # ID was created as a results of a taxon change
+  --taxon-active: oneof<nothing, bool> # ID's taxon is currently an active taxon
+  --observation-taxon-active: oneof<nothing, bool> # Observation's taxon is currently an active taxon
   --id: list # Identification ID
   --rank: list@rank-completer # ID's taxon must have this rank
   --observation-rank: list@observation-rank-completer # Observation's taxon must have this rank
   --user-id: list # Identifier must have this user ID
   --user-login: list # Identifier must have this login
-  --current: string@bool-completer # Most recent ID on a observation by a user (default: true)
+  --current: oneof<nothing, bool> # Most recent ID on a observation by a user (default: true)
   --category: list@category-completer # Type of identification
   --place-id: list # Observation must occur in this place
   --quality-grade: list@quality-grade-completer # Observation must have this quality grade
@@ -550,7 +549,7 @@ export def "identifications list" [
   --per-page: string # Number of results to return in a `page`. The maximum value is generally 200 unless otherwise noted
   --order: string@order-completer # Sort order (default: desc)
   --order-by: string@order-by-completer # Sort field (default: created_at)
-  --only-id: string@bool-completer # Return only the record IDs
+  --only-id: oneof<nothing, bool> # Return only the record IDs
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -572,17 +571,17 @@ export def "identifications-categories get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --current-taxon: string@bool-completer # ID's taxon is the same it's observation's taxon
-  --own-observation: string@bool-completer # ID was added by the observer
-  --is-change: string@bool-completer # ID was created as a results of a taxon change
-  --taxon-active: string@bool-completer # ID's taxon is currently an active taxon
-  --observation-taxon-active: string@bool-completer # Observation's taxon is currently an active taxon
+  --current-taxon: oneof<nothing, bool> # ID's taxon is the same it's observation's taxon
+  --own-observation: oneof<nothing, bool> # ID was added by the observer
+  --is-change: oneof<nothing, bool> # ID was created as a results of a taxon change
+  --taxon-active: oneof<nothing, bool> # ID's taxon is currently an active taxon
+  --observation-taxon-active: oneof<nothing, bool> # Observation's taxon is currently an active taxon
   --id: list # Identification ID
   --rank: list@rank-completer # ID's taxon must have this rank
   --observation-rank: list@observation-rank-completer # Observation's taxon must have this rank
   --user-id: list # Identifier must have this user ID
   --user-login: list # Identifier must have this login
-  --current: string@bool-completer # Most recent ID on a observation by a user (default: true)
+  --current: oneof<nothing, bool> # Most recent ID on a observation by a user (default: true)
   --category: list@category-completer # Type of identification
   --place-id: list # Observation must occur in this place
   --quality-grade: list@quality-grade-completer # Observation must have this quality grade
@@ -609,7 +608,7 @@ export def "identifications-categories get" [
   --per-page: string # Number of results to return in a `page`. The maximum value is generally 200 unless otherwise noted
   --order: string@order-completer # Sort order (default: desc)
   --order-by: string@order-by-completer # Sort field (default: created_at)
-  --only-id: string@bool-completer # Return only the record IDs
+  --only-id: oneof<nothing, bool> # Return only the record IDs
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -631,17 +630,17 @@ export def "identifications-species-counts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --current-taxon: string@bool-completer # ID's taxon is the same it's observation's taxon
-  --own-observation: string@bool-completer # ID was added by the observer
-  --is-change: string@bool-completer # ID was created as a results of a taxon change
-  --taxon-active: string@bool-completer # ID's taxon is currently an active taxon
-  --observation-taxon-active: string@bool-completer # Observation's taxon is currently an active taxon
+  --current-taxon: oneof<nothing, bool> # ID's taxon is the same it's observation's taxon
+  --own-observation: oneof<nothing, bool> # ID was added by the observer
+  --is-change: oneof<nothing, bool> # ID was created as a results of a taxon change
+  --taxon-active: oneof<nothing, bool> # ID's taxon is currently an active taxon
+  --observation-taxon-active: oneof<nothing, bool> # Observation's taxon is currently an active taxon
   --id: list # Identification ID
   --rank: list@rank-completer # ID's taxon must have this rank
   --observation-rank: list@observation-rank-completer # Observation's taxon must have this rank
   --user-id: list # Identifier must have this user ID
   --user-login: list # Identifier must have this login
-  --current: string@bool-completer # Most recent ID on a observation by a user (default: true)
+  --current: oneof<nothing, bool> # Most recent ID on a observation by a user (default: true)
   --category: list@category-completer # Type of identification
   --place-id: list # Observation must occur in this place
   --quality-grade: list@quality-grade-completer # Observation must have this quality grade
@@ -668,7 +667,7 @@ export def "identifications-species-counts get" [
   --per-page: string # Number of results to return in a `page`. The maximum value is generally 200 unless otherwise noted
   --order: string@order-completer # Sort order (default: desc)
   --order-by: string@order-by-completer # Sort field (default: created_at)
-  --only-id: string@bool-completer # Return only the record IDs
+  --only-id: oneof<nothing, bool> # Return only the record IDs
   --taxon-of: string@taxon-of-completer # Source of the taxon for counting (default: identification)
   --order: string@order-completer # Sort order (default: desc)
 ]: nothing -> record<total_results: int, page: int, per_page: int, results: table<count: int, taxon: record>> {
@@ -692,17 +691,17 @@ export def "identifications-identifiers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --current-taxon: string@bool-completer # ID's taxon is the same it's observation's taxon
-  --own-observation: string@bool-completer # ID was added by the observer
-  --is-change: string@bool-completer # ID was created as a results of a taxon change
-  --taxon-active: string@bool-completer # ID's taxon is currently an active taxon
-  --observation-taxon-active: string@bool-completer # Observation's taxon is currently an active taxon
+  --current-taxon: oneof<nothing, bool> # ID's taxon is the same it's observation's taxon
+  --own-observation: oneof<nothing, bool> # ID was added by the observer
+  --is-change: oneof<nothing, bool> # ID was created as a results of a taxon change
+  --taxon-active: oneof<nothing, bool> # ID's taxon is currently an active taxon
+  --observation-taxon-active: oneof<nothing, bool> # Observation's taxon is currently an active taxon
   --id: list # Identification ID
   --rank: list@rank-completer # ID's taxon must have this rank
   --observation-rank: list@observation-rank-completer # Observation's taxon must have this rank
   --user-id: list # Identifier must have this user ID
   --user-login: list # Identifier must have this login
-  --current: string@bool-completer # Most recent ID on a observation by a user (default: true)
+  --current: oneof<nothing, bool> # Most recent ID on a observation by a user (default: true)
   --category: list@category-completer # Type of identification
   --place-id: list # Observation must occur in this place
   --quality-grade: list@quality-grade-completer # Observation must have this quality grade
@@ -729,7 +728,7 @@ export def "identifications-identifiers get" [
   --per-page: string # Number of results to return in a `page`. The maximum value is generally 200 unless otherwise noted
   --order: string@order-completer # Sort order (default: desc)
   --order-by: string@order-by-completer # Sort field (default: created_at)
-  --only-id: string@bool-completer # Return only the record IDs
+  --only-id: oneof<nothing, bool> # Return only the record IDs
 ]: nothing -> record<total_results: int, page: int, per_page: int, results: table<count: int, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -751,17 +750,17 @@ export def "identifications-observers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --current-taxon: string@bool-completer # ID's taxon is the same it's observation's taxon
-  --own-observation: string@bool-completer # ID was added by the observer
-  --is-change: string@bool-completer # ID was created as a results of a taxon change
-  --taxon-active: string@bool-completer # ID's taxon is currently an active taxon
-  --observation-taxon-active: string@bool-completer # Observation's taxon is currently an active taxon
+  --current-taxon: oneof<nothing, bool> # ID's taxon is the same it's observation's taxon
+  --own-observation: oneof<nothing, bool> # ID was added by the observer
+  --is-change: oneof<nothing, bool> # ID was created as a results of a taxon change
+  --taxon-active: oneof<nothing, bool> # ID's taxon is currently an active taxon
+  --observation-taxon-active: oneof<nothing, bool> # Observation's taxon is currently an active taxon
   --id: list # Identification ID
   --rank: list@rank-completer # ID's taxon must have this rank
   --observation-rank: list@observation-rank-completer # Observation's taxon must have this rank
   --user-id: list # Identifier must have this user ID
   --user-login: list # Identifier must have this login
-  --current: string@bool-completer # Most recent ID on a observation by a user (default: true)
+  --current: oneof<nothing, bool> # Most recent ID on a observation by a user (default: true)
   --category: list@category-completer # Type of identification
   --place-id: list # Observation must occur in this place
   --quality-grade: list@quality-grade-completer # Observation must have this quality grade
@@ -788,7 +787,7 @@ export def "identifications-observers get" [
   --per-page: string # Number of results to return in a `page`. The maximum value is generally 200 unless otherwise noted
   --order: string@order-completer # Sort order (default: desc)
   --order-by: string@order-by-completer # Sort field (default: created_at)
-  --only-id: string@bool-completer # Return only the record IDs
+  --only-id: oneof<nothing, bool> # Return only the record IDs
 ]: nothing -> record<total_results: int, page: int, per_page: int, results: table<count: int, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -810,17 +809,17 @@ export def "identifications-recent-taxa get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --current-taxon: string@bool-completer # ID's taxon is the same it's observation's taxon
-  --own-observation: string@bool-completer # ID was added by the observer
-  --is-change: string@bool-completer # ID was created as a results of a taxon change
-  --taxon-active: string@bool-completer # ID's taxon is currently an active taxon
-  --observation-taxon-active: string@bool-completer # Observation's taxon is currently an active taxon
+  --current-taxon: oneof<nothing, bool> # ID's taxon is the same it's observation's taxon
+  --own-observation: oneof<nothing, bool> # ID was added by the observer
+  --is-change: oneof<nothing, bool> # ID was created as a results of a taxon change
+  --taxon-active: oneof<nothing, bool> # ID's taxon is currently an active taxon
+  --observation-taxon-active: oneof<nothing, bool> # Observation's taxon is currently an active taxon
   --id: list # Identification ID
   --rank: list@rank-completer # ID's taxon must have this rank
   --observation-rank: list@observation-rank-completer # Observation's taxon must have this rank
   --user-id: list # Identifier must have this user ID
   --user-login: list # Identifier must have this login
-  --current: string@bool-completer # Most recent ID on a observation by a user (default: true)
+  --current: oneof<nothing, bool> # Most recent ID on a observation by a user (default: true)
   --category: list@category-completer # Type of identification
   --place-id: list # Observation must occur in this place
   --quality-grade: list@quality-grade-completer # Observation must have this quality grade
@@ -847,7 +846,7 @@ export def "identifications-recent-taxa get" [
   --per-page: string # Number of results to return in a `page`. The maximum value is generally 200 unless otherwise noted
   --order: string@order-completer # Sort order (default: desc)
   --order-by: string@order-by-completer # Sort field (default: created_at)
-  --only-id: string@bool-completer # Return only the record IDs
+  --only-id: oneof<nothing, bool> # Return only the record IDs
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -869,26 +868,26 @@ export def "identifications-similar-species get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acc: string@bool-completer # Whether or not positional accuracy / coordinate uncertainty has been specified
-  --captive: string@bool-completer # Captive or cultivated observations
-  --endemic: string@bool-completer # Observations whose taxa are endemic to their location
-  --geo: string@bool-completer # Observations that are georeferenced
-  --id-please: string@bool-completer # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
-  --identified: string@bool-completer # Observations that have community identifications
-  --introduced: string@bool-completer # Observations whose taxa are introduced in their location
-  --mappable: string@bool-completer # Observations that show on map tiles
-  --native: string@bool-completer # Observations whose taxa are native to their location
-  --out-of-range: string@bool-completer # Observations whose taxa are outside their known ranges
-  --pcid: string@bool-completer # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
-  --photos: string@bool-completer # Observations with photos
-  --popular: string@bool-completer # Observations that have been favorited by at least one user
-  --sounds: string@bool-completer # Observations with sounds
-  --taxon-is-active: string@bool-completer # Observations of active taxon concepts
-  --threatened: string@bool-completer # Observations whose taxa are threatened in their location
-  --verifiable: string@bool-completer # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
-  --licensed: string@bool-completer # License attribute of an observation must not be null
-  --photo-licensed: string@bool-completer # License attribute of at least one photo of an observation must not be null
-  --expected-nearby: string@bool-completer # Observation taxon is expected nearby
+  --acc: oneof<nothing, bool> # Whether or not positional accuracy / coordinate uncertainty has been specified
+  --captive: oneof<nothing, bool> # Captive or cultivated observations
+  --endemic: oneof<nothing, bool> # Observations whose taxa are endemic to their location
+  --geo: oneof<nothing, bool> # Observations that are georeferenced
+  --id-please: oneof<nothing, bool> # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
+  --identified: oneof<nothing, bool> # Observations that have community identifications
+  --introduced: oneof<nothing, bool> # Observations whose taxa are introduced in their location
+  --mappable: oneof<nothing, bool> # Observations that show on map tiles
+  --native: oneof<nothing, bool> # Observations whose taxa are native to their location
+  --out-of-range: oneof<nothing, bool> # Observations whose taxa are outside their known ranges
+  --pcid: oneof<nothing, bool> # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
+  --photos: oneof<nothing, bool> # Observations with photos
+  --popular: oneof<nothing, bool> # Observations that have been favorited by at least one user
+  --sounds: oneof<nothing, bool> # Observations with sounds
+  --taxon-is-active: oneof<nothing, bool> # Observations of active taxon concepts
+  --threatened: oneof<nothing, bool> # Observations whose taxa are threatened in their location
+  --verifiable: oneof<nothing, bool> # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
+  --licensed: oneof<nothing, bool> # License attribute of an observation must not be null
+  --photo-licensed: oneof<nothing, bool> # License attribute of at least one photo of an observation must not be null
+  --expected-nearby: oneof<nothing, bool> # Observation taxon is expected nearby
   --id: list # Must have this ID
   --not-id: list # Must not have this ID
   --license: list@license-completer # Observation must have this license
@@ -951,20 +950,20 @@ export def "identifications-similar-species get" [
   --not-in-project: string # Must not be in the project with this ID or slug
   --not-matching-project-rules-for: string # Must not match the rules of the project with this ID or slug
   --observation-accuracy-experiment-id: list # Must included in this observation accuracy experiment
-  --fails-dqa-accurate: string@bool-completer # Must be voted as not accurately depicting an organism or scene
-  --fails-dqa-date: string@bool-completer # Must be voted as not having an accurate date
-  --fails-dqa-evidence: string@bool-completer # Must be voted as not evidence of an organism
-  --fails-dqa-location: string@bool-completer # Must be voted as not having an accurate location
-  --fails-dqa-needs-id: string@bool-completer # Must be voted as the community ID cannot be improved
-  --fails-dqa-recent: string@bool-completer # Must be voted as not recent evidence of an organism
-  --fails-dqa-subject: string@bool-completer # Must be voted as not having evidence related to a single subject
-  --fails-dqa-wild: string@bool-completer # Must be voted as not wild
+  --fails-dqa-accurate: oneof<nothing, bool> # Must be voted as not accurately depicting an organism or scene
+  --fails-dqa-date: oneof<nothing, bool> # Must be voted as not having an accurate date
+  --fails-dqa-evidence: oneof<nothing, bool> # Must be voted as not evidence of an organism
+  --fails-dqa-location: oneof<nothing, bool> # Must be voted as not having an accurate location
+  --fails-dqa-needs-id: oneof<nothing, bool> # Must be voted as the community ID cannot be improved
+  --fails-dqa-recent: oneof<nothing, bool> # Must be voted as not recent evidence of an organism
+  --fails-dqa-subject: oneof<nothing, bool> # Must be voted as not having evidence related to a single subject
+  --fails-dqa-wild: oneof<nothing, bool> # Must be voted as not wild
   --q: string # Search observation properties. Can be combined with `search_on`
   --search-on: string@search-on-completer # Properties to search on, when combined with `q`. Searches across all properties by default
   --quality-grade: string@quality-grade-completer # Must have this quality grade
   --updated-since: string # Must be updated since this time
   --viewer-id: string # See `reviewed`
-  --reviewed: string@bool-completer # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
+  --reviewed: oneof<nothing, bool> # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
   --taxon-id: int # Only show observations of these taxa and their descendants
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -991,7 +990,7 @@ export def "messages list" [
   --box: string@box-completer # Whether to view messages the user has received (default) or messages the user has sent (default: inbox)
   --q: string # Search query for subject and body
   --user-id: string # User ID or username of correspondent to filter by
-  --threads: string@bool-completer # Groups results by `thread_id`, only shows the latest message per thread, and includes a `thread_messages_count` attribute showing the total number of messages in that thread. Note that this will not work with the `q` param, and it probably should only be used with `box=any` because the `thread_messages_count` will be inaccurate when you restrict it to `inbox` or `sent`.  (default: false)
+  --threads: oneof<nothing, bool> # Groups results by `thread_id`, only shows the latest message per thread, and includes a `thread_messages_count` attribute showing the total number of messages in that thread. Note that this will not work with the `q` param, and it probably should only be used with `box=any` because the `thread_messages_count` will be inaccurate when you restrict it to `inbox` or `sent`.  (default: false)
 ]: nothing -> record<total_results: int, page: int, per_page: int, results: table<id: int, subject: string, body: string, user_id: int, to_user: record, from_user: record, thread_id: int, thread_messages_count: int, thread_flags: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1275,7 +1274,7 @@ export def "observations-quality post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --agree: string@bool-completer
+  --agree: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1415,26 +1414,26 @@ export def "observations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acc: string@bool-completer # Whether or not positional accuracy / coordinate uncertainty has been specified
-  --captive: string@bool-completer # Captive or cultivated observations
-  --endemic: string@bool-completer # Observations whose taxa are endemic to their location
-  --geo: string@bool-completer # Observations that are georeferenced
-  --id-please: string@bool-completer # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
-  --identified: string@bool-completer # Observations that have community identifications
-  --introduced: string@bool-completer # Observations whose taxa are introduced in their location
-  --mappable: string@bool-completer # Observations that show on map tiles
-  --native: string@bool-completer # Observations whose taxa are native to their location
-  --out-of-range: string@bool-completer # Observations whose taxa are outside their known ranges
-  --pcid: string@bool-completer # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
-  --photos: string@bool-completer # Observations with photos
-  --popular: string@bool-completer # Observations that have been favorited by at least one user
-  --sounds: string@bool-completer # Observations with sounds
-  --taxon-is-active: string@bool-completer # Observations of active taxon concepts
-  --threatened: string@bool-completer # Observations whose taxa are threatened in their location
-  --verifiable: string@bool-completer # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
-  --licensed: string@bool-completer # License attribute of an observation must not be null
-  --photo-licensed: string@bool-completer # License attribute of at least one photo of an observation must not be null
-  --expected-nearby: string@bool-completer # Observation taxon is expected nearby
+  --acc: oneof<nothing, bool> # Whether or not positional accuracy / coordinate uncertainty has been specified
+  --captive: oneof<nothing, bool> # Captive or cultivated observations
+  --endemic: oneof<nothing, bool> # Observations whose taxa are endemic to their location
+  --geo: oneof<nothing, bool> # Observations that are georeferenced
+  --id-please: oneof<nothing, bool> # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
+  --identified: oneof<nothing, bool> # Observations that have community identifications
+  --introduced: oneof<nothing, bool> # Observations whose taxa are introduced in their location
+  --mappable: oneof<nothing, bool> # Observations that show on map tiles
+  --native: oneof<nothing, bool> # Observations whose taxa are native to their location
+  --out-of-range: oneof<nothing, bool> # Observations whose taxa are outside their known ranges
+  --pcid: oneof<nothing, bool> # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
+  --photos: oneof<nothing, bool> # Observations with photos
+  --popular: oneof<nothing, bool> # Observations that have been favorited by at least one user
+  --sounds: oneof<nothing, bool> # Observations with sounds
+  --taxon-is-active: oneof<nothing, bool> # Observations of active taxon concepts
+  --threatened: oneof<nothing, bool> # Observations whose taxa are threatened in their location
+  --verifiable: oneof<nothing, bool> # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
+  --licensed: oneof<nothing, bool> # License attribute of an observation must not be null
+  --photo-licensed: oneof<nothing, bool> # License attribute of at least one photo of an observation must not be null
+  --expected-nearby: oneof<nothing, bool> # Observation taxon is expected nearby
   --id: list # Must have this ID
   --not-id: list # Must not have this ID
   --license: list@license-completer # Observation must have this license
@@ -1498,20 +1497,20 @@ export def "observations list" [
   --not-in-project: string # Must not be in the project with this ID or slug
   --not-matching-project-rules-for: string # Must not match the rules of the project with this ID or slug
   --observation-accuracy-experiment-id: list # Must included in this observation accuracy experiment
-  --fails-dqa-accurate: string@bool-completer # Must be voted as not accurately depicting an organism or scene
-  --fails-dqa-date: string@bool-completer # Must be voted as not having an accurate date
-  --fails-dqa-evidence: string@bool-completer # Must be voted as not evidence of an organism
-  --fails-dqa-location: string@bool-completer # Must be voted as not having an accurate location
-  --fails-dqa-needs-id: string@bool-completer # Must be voted as the community ID cannot be improved
-  --fails-dqa-recent: string@bool-completer # Must be voted as not recent evidence of an organism
-  --fails-dqa-subject: string@bool-completer # Must be voted as not having evidence related to a single subject
-  --fails-dqa-wild: string@bool-completer # Must be voted as not wild
+  --fails-dqa-accurate: oneof<nothing, bool> # Must be voted as not accurately depicting an organism or scene
+  --fails-dqa-date: oneof<nothing, bool> # Must be voted as not having an accurate date
+  --fails-dqa-evidence: oneof<nothing, bool> # Must be voted as not evidence of an organism
+  --fails-dqa-location: oneof<nothing, bool> # Must be voted as not having an accurate location
+  --fails-dqa-needs-id: oneof<nothing, bool> # Must be voted as the community ID cannot be improved
+  --fails-dqa-recent: oneof<nothing, bool> # Must be voted as not recent evidence of an organism
+  --fails-dqa-subject: oneof<nothing, bool> # Must be voted as not having evidence related to a single subject
+  --fails-dqa-wild: oneof<nothing, bool> # Must be voted as not wild
   --q: string # Search observation properties. Can be combined with `search_on`
   --search-on: string@search-on-completer # Properties to search on, when combined with `q`. Searches across all properties by default
   --quality-grade: string@quality-grade-completer # Must have this quality grade
   --updated-since: string # Must be updated since this time
   --viewer-id: string # See `reviewed`
-  --reviewed: string@bool-completer # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
+  --reviewed: oneof<nothing, bool> # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
   --locale: string # Locale preference for taxon common names
   --preferred-place-id: int # Place preference for regional taxon common names
   --ttl: string # Set the `Cache-Control` HTTP header with this value as `max-age`, in seconds. This means subsequent identical requests will be cached on iNaturalist servers, and commonly within web browsers
@@ -1519,7 +1518,7 @@ export def "observations list" [
   --per-page: string # Number of results to return in a `page`. The maximum value is generally 200 unless otherwise noted
   --order: string@order-completer # Sort order (default: desc)
   --order-by: string@order-by-completer-1 # Sort field (default: created_at)
-  --only-id: string@bool-completer # Return only the record IDs
+  --only-id: oneof<nothing, bool> # Return only the record IDs
 ]: nothing -> record<total_results: int, page: int, per_page: int, results: table<annotations: list, id: int, cached_votes_total: int, captive: bool, comments: list, comments_count: int, created_at: string, created_at_details: record, created_time_zone: string, description: string, faves_count: int, geojson: record, geoprivacy: string, taxon_geoprivacy: string, id_please: bool, identifications_count: int, identifications_most_agree: bool, identifications_most_disagree: bool, identifications_some_agree: bool, license_code: string, location: string, private_location: string, mappable: bool, non_owner_ids: list, num_identification_agreements: int, num_identification_disagreements: int, obscured: bool, observed_on: string, observed_on_details: record, observed_on_string: string, observed_time_zone: string, ofvs: list, out_of_range: bool, photos: list, place_guess: string, private_place_guess: string, place_ids: list, private_place_ids: list, positional_accuracy: int, private_geojson: record, project_ids: list, project_ids_with_curator_id: list, project_ids_without_curator_id: list, public_positional_accuracy: int, quality_grade: string, reviewed_by: list, site_id: int, sounds: list, species_guess: string, tags: list, taxon: record, time_observed_at: string, time_zone_offset: string, updated_at: string, uri: string, user: record, uuid: string, verifiable: bool, observation_photos: list, quality_metrics: list, flags: list, community_taxon_id: int, faves: list, identifications: list, oauth_application_id: int, outlinks: list, owners_identification_from_vision: bool, preferences: record, project_observations: list, spam: bool, votes: list, identification_disagreements_count: int, ident_taxon_ids: list, map_scale: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1588,26 +1587,26 @@ export def "observations-histogram get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acc: string@bool-completer # Whether or not positional accuracy / coordinate uncertainty has been specified
-  --captive: string@bool-completer # Captive or cultivated observations
-  --endemic: string@bool-completer # Observations whose taxa are endemic to their location
-  --geo: string@bool-completer # Observations that are georeferenced
-  --id-please: string@bool-completer # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
-  --identified: string@bool-completer # Observations that have community identifications
-  --introduced: string@bool-completer # Observations whose taxa are introduced in their location
-  --mappable: string@bool-completer # Observations that show on map tiles
-  --native: string@bool-completer # Observations whose taxa are native to their location
-  --out-of-range: string@bool-completer # Observations whose taxa are outside their known ranges
-  --pcid: string@bool-completer # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
-  --photos: string@bool-completer # Observations with photos
-  --popular: string@bool-completer # Observations that have been favorited by at least one user
-  --sounds: string@bool-completer # Observations with sounds
-  --taxon-is-active: string@bool-completer # Observations of active taxon concepts
-  --threatened: string@bool-completer # Observations whose taxa are threatened in their location
-  --verifiable: string@bool-completer # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
-  --licensed: string@bool-completer # License attribute of an observation must not be null
-  --photo-licensed: string@bool-completer # License attribute of at least one photo of an observation must not be null
-  --expected-nearby: string@bool-completer # Observation taxon is expected nearby
+  --acc: oneof<nothing, bool> # Whether or not positional accuracy / coordinate uncertainty has been specified
+  --captive: oneof<nothing, bool> # Captive or cultivated observations
+  --endemic: oneof<nothing, bool> # Observations whose taxa are endemic to their location
+  --geo: oneof<nothing, bool> # Observations that are georeferenced
+  --id-please: oneof<nothing, bool> # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
+  --identified: oneof<nothing, bool> # Observations that have community identifications
+  --introduced: oneof<nothing, bool> # Observations whose taxa are introduced in their location
+  --mappable: oneof<nothing, bool> # Observations that show on map tiles
+  --native: oneof<nothing, bool> # Observations whose taxa are native to their location
+  --out-of-range: oneof<nothing, bool> # Observations whose taxa are outside their known ranges
+  --pcid: oneof<nothing, bool> # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
+  --photos: oneof<nothing, bool> # Observations with photos
+  --popular: oneof<nothing, bool> # Observations that have been favorited by at least one user
+  --sounds: oneof<nothing, bool> # Observations with sounds
+  --taxon-is-active: oneof<nothing, bool> # Observations of active taxon concepts
+  --threatened: oneof<nothing, bool> # Observations whose taxa are threatened in their location
+  --verifiable: oneof<nothing, bool> # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
+  --licensed: oneof<nothing, bool> # License attribute of an observation must not be null
+  --photo-licensed: oneof<nothing, bool> # License attribute of at least one photo of an observation must not be null
+  --expected-nearby: oneof<nothing, bool> # Observation taxon is expected nearby
   --id: list # Must have this ID
   --not-id: list # Must not have this ID
   --license: list@license-completer # Observation must have this license
@@ -1671,20 +1670,20 @@ export def "observations-histogram get" [
   --not-in-project: string # Must not be in the project with this ID or slug
   --not-matching-project-rules-for: string # Must not match the rules of the project with this ID or slug
   --observation-accuracy-experiment-id: list # Must included in this observation accuracy experiment
-  --fails-dqa-accurate: string@bool-completer # Must be voted as not accurately depicting an organism or scene
-  --fails-dqa-date: string@bool-completer # Must be voted as not having an accurate date
-  --fails-dqa-evidence: string@bool-completer # Must be voted as not evidence of an organism
-  --fails-dqa-location: string@bool-completer # Must be voted as not having an accurate location
-  --fails-dqa-needs-id: string@bool-completer # Must be voted as the community ID cannot be improved
-  --fails-dqa-recent: string@bool-completer # Must be voted as not recent evidence of an organism
-  --fails-dqa-subject: string@bool-completer # Must be voted as not having evidence related to a single subject
-  --fails-dqa-wild: string@bool-completer # Must be voted as not wild
+  --fails-dqa-accurate: oneof<nothing, bool> # Must be voted as not accurately depicting an organism or scene
+  --fails-dqa-date: oneof<nothing, bool> # Must be voted as not having an accurate date
+  --fails-dqa-evidence: oneof<nothing, bool> # Must be voted as not evidence of an organism
+  --fails-dqa-location: oneof<nothing, bool> # Must be voted as not having an accurate location
+  --fails-dqa-needs-id: oneof<nothing, bool> # Must be voted as the community ID cannot be improved
+  --fails-dqa-recent: oneof<nothing, bool> # Must be voted as not recent evidence of an organism
+  --fails-dqa-subject: oneof<nothing, bool> # Must be voted as not having evidence related to a single subject
+  --fails-dqa-wild: oneof<nothing, bool> # Must be voted as not wild
   --q: string # Search observation properties. Can be combined with `search_on`
   --search-on: string@search-on-completer # Properties to search on, when combined with `q`. Searches across all properties by default
   --quality-grade: string@quality-grade-completer # Must have this quality grade
   --updated-since: string # Must be updated since this time
   --viewer-id: string # See `reviewed`
-  --reviewed: string@bool-completer # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
+  --reviewed: oneof<nothing, bool> # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
   --locale: string # Locale preference for taxon common names
   --preferred-place-id: int # Place preference for regional taxon common names
   --ttl: string # Set the `Cache-Control` HTTP header with this value as `max-age`, in seconds. This means subsequent identical requests will be cached on iNaturalist servers, and commonly within web browsers
@@ -1711,26 +1710,26 @@ export def "observations-identifiers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acc: string@bool-completer # Whether or not positional accuracy / coordinate uncertainty has been specified
-  --captive: string@bool-completer # Captive or cultivated observations
-  --endemic: string@bool-completer # Observations whose taxa are endemic to their location
-  --geo: string@bool-completer # Observations that are georeferenced
-  --id-please: string@bool-completer # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
-  --identified: string@bool-completer # Observations that have community identifications
-  --introduced: string@bool-completer # Observations whose taxa are introduced in their location
-  --mappable: string@bool-completer # Observations that show on map tiles
-  --native: string@bool-completer # Observations whose taxa are native to their location
-  --out-of-range: string@bool-completer # Observations whose taxa are outside their known ranges
-  --pcid: string@bool-completer # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
-  --photos: string@bool-completer # Observations with photos
-  --popular: string@bool-completer # Observations that have been favorited by at least one user
-  --sounds: string@bool-completer # Observations with sounds
-  --taxon-is-active: string@bool-completer # Observations of active taxon concepts
-  --threatened: string@bool-completer # Observations whose taxa are threatened in their location
-  --verifiable: string@bool-completer # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
-  --licensed: string@bool-completer # License attribute of an observation must not be null
-  --photo-licensed: string@bool-completer # License attribute of at least one photo of an observation must not be null
-  --expected-nearby: string@bool-completer # Observation taxon is expected nearby
+  --acc: oneof<nothing, bool> # Whether or not positional accuracy / coordinate uncertainty has been specified
+  --captive: oneof<nothing, bool> # Captive or cultivated observations
+  --endemic: oneof<nothing, bool> # Observations whose taxa are endemic to their location
+  --geo: oneof<nothing, bool> # Observations that are georeferenced
+  --id-please: oneof<nothing, bool> # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
+  --identified: oneof<nothing, bool> # Observations that have community identifications
+  --introduced: oneof<nothing, bool> # Observations whose taxa are introduced in their location
+  --mappable: oneof<nothing, bool> # Observations that show on map tiles
+  --native: oneof<nothing, bool> # Observations whose taxa are native to their location
+  --out-of-range: oneof<nothing, bool> # Observations whose taxa are outside their known ranges
+  --pcid: oneof<nothing, bool> # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
+  --photos: oneof<nothing, bool> # Observations with photos
+  --popular: oneof<nothing, bool> # Observations that have been favorited by at least one user
+  --sounds: oneof<nothing, bool> # Observations with sounds
+  --taxon-is-active: oneof<nothing, bool> # Observations of active taxon concepts
+  --threatened: oneof<nothing, bool> # Observations whose taxa are threatened in their location
+  --verifiable: oneof<nothing, bool> # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
+  --licensed: oneof<nothing, bool> # License attribute of an observation must not be null
+  --photo-licensed: oneof<nothing, bool> # License attribute of at least one photo of an observation must not be null
+  --expected-nearby: oneof<nothing, bool> # Observation taxon is expected nearby
   --id: list # Must have this ID
   --not-id: list # Must not have this ID
   --license: list@license-completer # Observation must have this license
@@ -1794,20 +1793,20 @@ export def "observations-identifiers get" [
   --not-in-project: string # Must not be in the project with this ID or slug
   --not-matching-project-rules-for: string # Must not match the rules of the project with this ID or slug
   --observation-accuracy-experiment-id: list # Must included in this observation accuracy experiment
-  --fails-dqa-accurate: string@bool-completer # Must be voted as not accurately depicting an organism or scene
-  --fails-dqa-date: string@bool-completer # Must be voted as not having an accurate date
-  --fails-dqa-evidence: string@bool-completer # Must be voted as not evidence of an organism
-  --fails-dqa-location: string@bool-completer # Must be voted as not having an accurate location
-  --fails-dqa-needs-id: string@bool-completer # Must be voted as the community ID cannot be improved
-  --fails-dqa-recent: string@bool-completer # Must be voted as not recent evidence of an organism
-  --fails-dqa-subject: string@bool-completer # Must be voted as not having evidence related to a single subject
-  --fails-dqa-wild: string@bool-completer # Must be voted as not wild
+  --fails-dqa-accurate: oneof<nothing, bool> # Must be voted as not accurately depicting an organism or scene
+  --fails-dqa-date: oneof<nothing, bool> # Must be voted as not having an accurate date
+  --fails-dqa-evidence: oneof<nothing, bool> # Must be voted as not evidence of an organism
+  --fails-dqa-location: oneof<nothing, bool> # Must be voted as not having an accurate location
+  --fails-dqa-needs-id: oneof<nothing, bool> # Must be voted as the community ID cannot be improved
+  --fails-dqa-recent: oneof<nothing, bool> # Must be voted as not recent evidence of an organism
+  --fails-dqa-subject: oneof<nothing, bool> # Must be voted as not having evidence related to a single subject
+  --fails-dqa-wild: oneof<nothing, bool> # Must be voted as not wild
   --q: string # Search observation properties. Can be combined with `search_on`
   --search-on: string@search-on-completer # Properties to search on, when combined with `q`. Searches across all properties by default
   --quality-grade: string@quality-grade-completer # Must have this quality grade
   --updated-since: string # Must be updated since this time
   --viewer-id: string # See `reviewed`
-  --reviewed: string@bool-completer # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
+  --reviewed: oneof<nothing, bool> # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
   --locale: string # Locale preference for taxon common names
   --preferred-place-id: int # Place preference for regional taxon common names
   --ttl: string # Set the `Cache-Control` HTTP header with this value as `max-age`, in seconds. This means subsequent identical requests will be cached on iNaturalist servers, and commonly within web browsers
@@ -1832,26 +1831,26 @@ export def "observations-observers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acc: string@bool-completer # Whether or not positional accuracy / coordinate uncertainty has been specified
-  --captive: string@bool-completer # Captive or cultivated observations
-  --endemic: string@bool-completer # Observations whose taxa are endemic to their location
-  --geo: string@bool-completer # Observations that are georeferenced
-  --id-please: string@bool-completer # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
-  --identified: string@bool-completer # Observations that have community identifications
-  --introduced: string@bool-completer # Observations whose taxa are introduced in their location
-  --mappable: string@bool-completer # Observations that show on map tiles
-  --native: string@bool-completer # Observations whose taxa are native to their location
-  --out-of-range: string@bool-completer # Observations whose taxa are outside their known ranges
-  --pcid: string@bool-completer # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
-  --photos: string@bool-completer # Observations with photos
-  --popular: string@bool-completer # Observations that have been favorited by at least one user
-  --sounds: string@bool-completer # Observations with sounds
-  --taxon-is-active: string@bool-completer # Observations of active taxon concepts
-  --threatened: string@bool-completer # Observations whose taxa are threatened in their location
-  --verifiable: string@bool-completer # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
-  --licensed: string@bool-completer # License attribute of an observation must not be null
-  --photo-licensed: string@bool-completer # License attribute of at least one photo of an observation must not be null
-  --expected-nearby: string@bool-completer # Observation taxon is expected nearby
+  --acc: oneof<nothing, bool> # Whether or not positional accuracy / coordinate uncertainty has been specified
+  --captive: oneof<nothing, bool> # Captive or cultivated observations
+  --endemic: oneof<nothing, bool> # Observations whose taxa are endemic to their location
+  --geo: oneof<nothing, bool> # Observations that are georeferenced
+  --id-please: oneof<nothing, bool> # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
+  --identified: oneof<nothing, bool> # Observations that have community identifications
+  --introduced: oneof<nothing, bool> # Observations whose taxa are introduced in their location
+  --mappable: oneof<nothing, bool> # Observations that show on map tiles
+  --native: oneof<nothing, bool> # Observations whose taxa are native to their location
+  --out-of-range: oneof<nothing, bool> # Observations whose taxa are outside their known ranges
+  --pcid: oneof<nothing, bool> # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
+  --photos: oneof<nothing, bool> # Observations with photos
+  --popular: oneof<nothing, bool> # Observations that have been favorited by at least one user
+  --sounds: oneof<nothing, bool> # Observations with sounds
+  --taxon-is-active: oneof<nothing, bool> # Observations of active taxon concepts
+  --threatened: oneof<nothing, bool> # Observations whose taxa are threatened in their location
+  --verifiable: oneof<nothing, bool> # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
+  --licensed: oneof<nothing, bool> # License attribute of an observation must not be null
+  --photo-licensed: oneof<nothing, bool> # License attribute of at least one photo of an observation must not be null
+  --expected-nearby: oneof<nothing, bool> # Observation taxon is expected nearby
   --id: list # Must have this ID
   --not-id: list # Must not have this ID
   --license: list@license-completer # Observation must have this license
@@ -1915,20 +1914,20 @@ export def "observations-observers get" [
   --not-in-project: string # Must not be in the project with this ID or slug
   --not-matching-project-rules-for: string # Must not match the rules of the project with this ID or slug
   --observation-accuracy-experiment-id: list # Must included in this observation accuracy experiment
-  --fails-dqa-accurate: string@bool-completer # Must be voted as not accurately depicting an organism or scene
-  --fails-dqa-date: string@bool-completer # Must be voted as not having an accurate date
-  --fails-dqa-evidence: string@bool-completer # Must be voted as not evidence of an organism
-  --fails-dqa-location: string@bool-completer # Must be voted as not having an accurate location
-  --fails-dqa-needs-id: string@bool-completer # Must be voted as the community ID cannot be improved
-  --fails-dqa-recent: string@bool-completer # Must be voted as not recent evidence of an organism
-  --fails-dqa-subject: string@bool-completer # Must be voted as not having evidence related to a single subject
-  --fails-dqa-wild: string@bool-completer # Must be voted as not wild
+  --fails-dqa-accurate: oneof<nothing, bool> # Must be voted as not accurately depicting an organism or scene
+  --fails-dqa-date: oneof<nothing, bool> # Must be voted as not having an accurate date
+  --fails-dqa-evidence: oneof<nothing, bool> # Must be voted as not evidence of an organism
+  --fails-dqa-location: oneof<nothing, bool> # Must be voted as not having an accurate location
+  --fails-dqa-needs-id: oneof<nothing, bool> # Must be voted as the community ID cannot be improved
+  --fails-dqa-recent: oneof<nothing, bool> # Must be voted as not recent evidence of an organism
+  --fails-dqa-subject: oneof<nothing, bool> # Must be voted as not having evidence related to a single subject
+  --fails-dqa-wild: oneof<nothing, bool> # Must be voted as not wild
   --q: string # Search observation properties. Can be combined with `search_on`
   --search-on: string@search-on-completer # Properties to search on, when combined with `q`. Searches across all properties by default
   --quality-grade: string@quality-grade-completer # Must have this quality grade
   --updated-since: string # Must be updated since this time
   --viewer-id: string # See `reviewed`
-  --reviewed: string@bool-completer # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
+  --reviewed: oneof<nothing, bool> # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
   --locale: string # Locale preference for taxon common names
   --preferred-place-id: int # Place preference for regional taxon common names
   --ttl: string # Set the `Cache-Control` HTTP header with this value as `max-age`, in seconds. This means subsequent identical requests will be cached on iNaturalist servers, and commonly within web browsers
@@ -1953,26 +1952,26 @@ export def "observations-popular-field-values get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acc: string@bool-completer # Whether or not positional accuracy / coordinate uncertainty has been specified
-  --captive: string@bool-completer # Captive or cultivated observations
-  --endemic: string@bool-completer # Observations whose taxa are endemic to their location
-  --geo: string@bool-completer # Observations that are georeferenced
-  --id-please: string@bool-completer # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
-  --identified: string@bool-completer # Observations that have community identifications
-  --introduced: string@bool-completer # Observations whose taxa are introduced in their location
-  --mappable: string@bool-completer # Observations that show on map tiles
-  --native: string@bool-completer # Observations whose taxa are native to their location
-  --out-of-range: string@bool-completer # Observations whose taxa are outside their known ranges
-  --pcid: string@bool-completer # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
-  --photos: string@bool-completer # Observations with photos
-  --popular: string@bool-completer # Observations that have been favorited by at least one user
-  --sounds: string@bool-completer # Observations with sounds
-  --taxon-is-active: string@bool-completer # Observations of active taxon concepts
-  --threatened: string@bool-completer # Observations whose taxa are threatened in their location
-  --verifiable: string@bool-completer # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
-  --licensed: string@bool-completer # License attribute of an observation must not be null
-  --photo-licensed: string@bool-completer # License attribute of at least one photo of an observation must not be null
-  --expected-nearby: string@bool-completer # Observation taxon is expected nearby
+  --acc: oneof<nothing, bool> # Whether or not positional accuracy / coordinate uncertainty has been specified
+  --captive: oneof<nothing, bool> # Captive or cultivated observations
+  --endemic: oneof<nothing, bool> # Observations whose taxa are endemic to their location
+  --geo: oneof<nothing, bool> # Observations that are georeferenced
+  --id-please: oneof<nothing, bool> # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
+  --identified: oneof<nothing, bool> # Observations that have community identifications
+  --introduced: oneof<nothing, bool> # Observations whose taxa are introduced in their location
+  --mappable: oneof<nothing, bool> # Observations that show on map tiles
+  --native: oneof<nothing, bool> # Observations whose taxa are native to their location
+  --out-of-range: oneof<nothing, bool> # Observations whose taxa are outside their known ranges
+  --pcid: oneof<nothing, bool> # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
+  --photos: oneof<nothing, bool> # Observations with photos
+  --popular: oneof<nothing, bool> # Observations that have been favorited by at least one user
+  --sounds: oneof<nothing, bool> # Observations with sounds
+  --taxon-is-active: oneof<nothing, bool> # Observations of active taxon concepts
+  --threatened: oneof<nothing, bool> # Observations whose taxa are threatened in their location
+  --verifiable: oneof<nothing, bool> # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
+  --licensed: oneof<nothing, bool> # License attribute of an observation must not be null
+  --photo-licensed: oneof<nothing, bool> # License attribute of at least one photo of an observation must not be null
+  --expected-nearby: oneof<nothing, bool> # Observation taxon is expected nearby
   --id: list # Must have this ID
   --not-id: list # Must not have this ID
   --license: list@license-completer # Observation must have this license
@@ -2036,20 +2035,20 @@ export def "observations-popular-field-values get" [
   --not-in-project: string # Must not be in the project with this ID or slug
   --not-matching-project-rules-for: string # Must not match the rules of the project with this ID or slug
   --observation-accuracy-experiment-id: list # Must included in this observation accuracy experiment
-  --fails-dqa-accurate: string@bool-completer # Must be voted as not accurately depicting an organism or scene
-  --fails-dqa-date: string@bool-completer # Must be voted as not having an accurate date
-  --fails-dqa-evidence: string@bool-completer # Must be voted as not evidence of an organism
-  --fails-dqa-location: string@bool-completer # Must be voted as not having an accurate location
-  --fails-dqa-needs-id: string@bool-completer # Must be voted as the community ID cannot be improved
-  --fails-dqa-recent: string@bool-completer # Must be voted as not recent evidence of an organism
-  --fails-dqa-subject: string@bool-completer # Must be voted as not having evidence related to a single subject
-  --fails-dqa-wild: string@bool-completer # Must be voted as not wild
+  --fails-dqa-accurate: oneof<nothing, bool> # Must be voted as not accurately depicting an organism or scene
+  --fails-dqa-date: oneof<nothing, bool> # Must be voted as not having an accurate date
+  --fails-dqa-evidence: oneof<nothing, bool> # Must be voted as not evidence of an organism
+  --fails-dqa-location: oneof<nothing, bool> # Must be voted as not having an accurate location
+  --fails-dqa-needs-id: oneof<nothing, bool> # Must be voted as the community ID cannot be improved
+  --fails-dqa-recent: oneof<nothing, bool> # Must be voted as not recent evidence of an organism
+  --fails-dqa-subject: oneof<nothing, bool> # Must be voted as not having evidence related to a single subject
+  --fails-dqa-wild: oneof<nothing, bool> # Must be voted as not wild
   --q: string # Search observation properties. Can be combined with `search_on`
   --search-on: string@search-on-completer # Properties to search on, when combined with `q`. Searches across all properties by default
   --quality-grade: string@quality-grade-completer # Must have this quality grade
   --updated-since: string # Must be updated since this time
   --viewer-id: string # See `reviewed`
-  --reviewed: string@bool-completer # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
+  --reviewed: oneof<nothing, bool> # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
   --locale: string # Locale preference for taxon common names
   --preferred-place-id: int # Place preference for regional taxon common names
   --ttl: string # Set the `Cache-Control` HTTP header with this value as `max-age`, in seconds. This means subsequent identical requests will be cached on iNaturalist servers, and commonly within web browsers
@@ -2074,26 +2073,26 @@ export def "observations-species-counts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acc: string@bool-completer # Whether or not positional accuracy / coordinate uncertainty has been specified
-  --captive: string@bool-completer # Captive or cultivated observations
-  --endemic: string@bool-completer # Observations whose taxa are endemic to their location
-  --geo: string@bool-completer # Observations that are georeferenced
-  --id-please: string@bool-completer # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
-  --identified: string@bool-completer # Observations that have community identifications
-  --introduced: string@bool-completer # Observations whose taxa are introduced in their location
-  --mappable: string@bool-completer # Observations that show on map tiles
-  --native: string@bool-completer # Observations whose taxa are native to their location
-  --out-of-range: string@bool-completer # Observations whose taxa are outside their known ranges
-  --pcid: string@bool-completer # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
-  --photos: string@bool-completer # Observations with photos
-  --popular: string@bool-completer # Observations that have been favorited by at least one user
-  --sounds: string@bool-completer # Observations with sounds
-  --taxon-is-active: string@bool-completer # Observations of active taxon concepts
-  --threatened: string@bool-completer # Observations whose taxa are threatened in their location
-  --verifiable: string@bool-completer # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
-  --licensed: string@bool-completer # License attribute of an observation must not be null
-  --photo-licensed: string@bool-completer # License attribute of at least one photo of an observation must not be null
-  --expected-nearby: string@bool-completer # Observation taxon is expected nearby
+  --acc: oneof<nothing, bool> # Whether or not positional accuracy / coordinate uncertainty has been specified
+  --captive: oneof<nothing, bool> # Captive or cultivated observations
+  --endemic: oneof<nothing, bool> # Observations whose taxa are endemic to their location
+  --geo: oneof<nothing, bool> # Observations that are georeferenced
+  --id-please: oneof<nothing, bool> # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
+  --identified: oneof<nothing, bool> # Observations that have community identifications
+  --introduced: oneof<nothing, bool> # Observations whose taxa are introduced in their location
+  --mappable: oneof<nothing, bool> # Observations that show on map tiles
+  --native: oneof<nothing, bool> # Observations whose taxa are native to their location
+  --out-of-range: oneof<nothing, bool> # Observations whose taxa are outside their known ranges
+  --pcid: oneof<nothing, bool> # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
+  --photos: oneof<nothing, bool> # Observations with photos
+  --popular: oneof<nothing, bool> # Observations that have been favorited by at least one user
+  --sounds: oneof<nothing, bool> # Observations with sounds
+  --taxon-is-active: oneof<nothing, bool> # Observations of active taxon concepts
+  --threatened: oneof<nothing, bool> # Observations whose taxa are threatened in their location
+  --verifiable: oneof<nothing, bool> # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
+  --licensed: oneof<nothing, bool> # License attribute of an observation must not be null
+  --photo-licensed: oneof<nothing, bool> # License attribute of at least one photo of an observation must not be null
+  --expected-nearby: oneof<nothing, bool> # Observation taxon is expected nearby
   --id: list # Must have this ID
   --not-id: list # Must not have this ID
   --license: list@license-completer # Observation must have this license
@@ -2157,24 +2156,24 @@ export def "observations-species-counts get" [
   --not-in-project: string # Must not be in the project with this ID or slug
   --not-matching-project-rules-for: string # Must not match the rules of the project with this ID or slug
   --observation-accuracy-experiment-id: list # Must included in this observation accuracy experiment
-  --fails-dqa-accurate: string@bool-completer # Must be voted as not accurately depicting an organism or scene
-  --fails-dqa-date: string@bool-completer # Must be voted as not having an accurate date
-  --fails-dqa-evidence: string@bool-completer # Must be voted as not evidence of an organism
-  --fails-dqa-location: string@bool-completer # Must be voted as not having an accurate location
-  --fails-dqa-needs-id: string@bool-completer # Must be voted as the community ID cannot be improved
-  --fails-dqa-recent: string@bool-completer # Must be voted as not recent evidence of an organism
-  --fails-dqa-subject: string@bool-completer # Must be voted as not having evidence related to a single subject
-  --fails-dqa-wild: string@bool-completer # Must be voted as not wild
+  --fails-dqa-accurate: oneof<nothing, bool> # Must be voted as not accurately depicting an organism or scene
+  --fails-dqa-date: oneof<nothing, bool> # Must be voted as not having an accurate date
+  --fails-dqa-evidence: oneof<nothing, bool> # Must be voted as not evidence of an organism
+  --fails-dqa-location: oneof<nothing, bool> # Must be voted as not having an accurate location
+  --fails-dqa-needs-id: oneof<nothing, bool> # Must be voted as the community ID cannot be improved
+  --fails-dqa-recent: oneof<nothing, bool> # Must be voted as not recent evidence of an organism
+  --fails-dqa-subject: oneof<nothing, bool> # Must be voted as not having evidence related to a single subject
+  --fails-dqa-wild: oneof<nothing, bool> # Must be voted as not wild
   --q: string # Search observation properties. Can be combined with `search_on`
   --search-on: string@search-on-completer # Properties to search on, when combined with `q`. Searches across all properties by default
   --quality-grade: string@quality-grade-completer # Must have this quality grade
   --updated-since: string # Must be updated since this time
   --viewer-id: string # See `reviewed`
-  --reviewed: string@bool-completer # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
+  --reviewed: oneof<nothing, bool> # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
   --locale: string # Locale preference for taxon common names
   --preferred-place-id: int # Place preference for regional taxon common names
   --ttl: string # Set the `Cache-Control` HTTP header with this value as `max-age`, in seconds. This means subsequent identical requests will be cached on iNaturalist servers, and commonly within web browsers
-  --include-ancestors: string@bool-completer # Include taxon ancestors in the response (default: false)
+  --include-ancestors: oneof<nothing, bool> # Include taxon ancestors in the response (default: false)
   --page: string # Pagination `page` number
   --per-page: string # Number of results to return in a `page`. The maximum value is 500
 ]: nothing -> record<total_results: int, page: int, per_page: int, results: table<count: int, taxon: record>> {
@@ -2199,7 +2198,7 @@ export def "observations-updates get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --created-after: string # Must be created at or after this time (format: date-time)
-  --viewed: string@bool-completer # Notification has been viewed by the user before
+  --viewed: oneof<nothing, bool> # Notification has been viewed by the user before
   --observations-by: string@observations-by-completer # Only show updates on observations owned by the currently authenticated user or on observations the authenticated user is following but does not own.
   --page: string # Pagination `page` number
   --per-page: string # Number of results to return in a `page`. The maximum value is generally 200 unless otherwise noted
@@ -2698,8 +2697,8 @@ export def "projects list" [
   --rule-details: string@rule-details-completer # Return more information about project rules, for example return a full taxon object instead of simply an ID
   --type: list@type-completer # Projects must be of this type
   --member-id: int # Project must have member with this user ID
-  --has-params: string@bool-completer # Must have search parameter requirements
-  --has-posts: string@bool-completer # Must have posts
+  --has-params: oneof<nothing, bool> # Must have search parameter requirements
+  --has-posts: oneof<nothing, bool> # Must have posts
   --per-page: string # Number of results to return in a `page`. The maximum value is generally 200 unless otherwise noted
   --order-by: string@order-by-completer-3 # Sort field
 ]: nothing -> record<total_results: int, page: int, per_page: int, results: table<id: int, title: string, description: string, slug: string>> {
@@ -2790,7 +2789,7 @@ export def "projects-members get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --role: string@role-completer # Membership role
-  --skip-counts: string@bool-completer # If counts are not needed, consider setting this to true to save on processing time, resulting in faster responses  (default: false)
+  --skip-counts: oneof<nothing, bool> # If counts are not needed, consider setting this to true to save on processing time, resulting in faster responses  (default: false)
   --page: string # Pagination `page` number
   --per-page: string # Number of results to return in a `page`. The maximum value is generally 200 unless otherwise noted
 ]: nothing -> record<total_results: int, page: int, per_page: int, results: table<id: int, project_id: int, created_at: string, updated_at: string, role: string, observations_count: int, taxa_count: int, user: record>> {
@@ -2921,8 +2920,8 @@ export def "projects-autocomplete get" [
   --rule-details: string@rule-details-completer # Return more information about project rules, for example return a full taxon object instead of simply an ID
   --type: list@type-completer # Projects must be of this type
   --member-id: int # Project must have member with this user ID
-  --has-params: string@bool-completer # Must have search parameter requirements
-  --has-posts: string@bool-completer # Must have posts
+  --has-params: oneof<nothing, bool> # Must have search parameter requirements
+  --has-posts: oneof<nothing, bool> # Must have posts
   --per-page: string # Number of results to return in a `page`. The maximum value is generally 200 unless otherwise noted
 ]: nothing -> record<total_results: int, page: int, per_page: int, results: table<id: int, title: string, description: string, slug: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2948,7 +2947,7 @@ export def "search get" [
   --q: string # Search object properties
   --sources: list@sources-completer # Must be of this type
   --place-id: list # Must be associated with this place
-  --include-taxon-ancestors: string@bool-completer # Include taxon ancestors in the response (default: false)
+  --include-taxon-ancestors: oneof<nothing, bool> # Include taxon ancestors in the response (default: false)
   --per-page: string # Number of results to return in a `page`. The maximum value is generally 200 unless otherwise noted
   --locale: string # Locale preference for taxon common names
   --preferred-place-id: int # Place preference for regional taxon common names
@@ -3018,7 +3017,7 @@ export def "taxa list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --q: string # Search by name (must start with this value) or by ID (exact match).
-  --is-active: string@bool-completer # Taxon is `active`
+  --is-active: oneof<nothing, bool> # Taxon is `active`
   --id: list # Comma-separated list of taxon IDs
   --parent-id: int # Taxon's parent must have this ID
   --rank: list@rank-completer # Taxon must have this rank
@@ -3028,8 +3027,8 @@ export def "taxa list" [
   --per-page: string # Number of results to return in a `page`. The maximum value is generally 200 unless otherwise noted
   --locale: string # Locale preference for taxon common names
   --preferred-place-id: int # Place preference for regional taxon common names
-  --only-id: string@bool-completer # Return only the record IDs
-  --all-names: string@bool-completer # Include all taxon names in the response
+  --only-id: oneof<nothing, bool> # Return only the record IDs
+  --all-names: oneof<nothing, bool> # Include all taxon names in the response
   --order: string@order-completer # Sort order (default: desc)
   --order-by: string@order-by-completer-4 # Sort field (default: observations_count)
 ]: nothing -> record<total_results: int, page: int, per_page: int, results: table<id: int, iconic_taxon_id: int, iconic_taxon_name: string, is_active: bool, name: string, preferred_common_name: string, rank: string, rank_level: float, ancestor_ids: list, colors: list, conservation_status: record, conservation_statuses: list, default_photo: record, establishment_means: record, observations_count: int, preferred_establishment_means: string>> {
@@ -3054,14 +3053,14 @@ export def "taxa-autocomplete get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --q: string # Search by name (must start with this value) or by ID (exact match).
-  --is-active: string@bool-completer # Taxon is `active`
+  --is-active: oneof<nothing, bool> # Taxon is `active`
   --taxon-id: list # Only show taxa with this ID, or its descendants
   --rank: list@rank-completer # Taxon must have this rank
   --rank-level: float # Taxon must have this rank level. Some example values are 70 (kingdom), 60 (phylum), 50 (class), 40 (order), 30 (family), 20 (genus), 10 (species), 5 (subspecies)
   --per-page: string # Number of results to return in a `page`. The maximum value is 30 for this endpoint
   --locale: string # Locale preference for taxon common names
   --preferred-place-id: int # Place preference for regional taxon common names
-  --all-names: string@bool-completer # Include all taxon names in the response
+  --all-names: oneof<nothing, bool> # Include all taxon names in the response
 ]: nothing -> record<total_results: int, page: int, per_page: int, results: table<id: int, iconic_taxon_id: int, iconic_taxon_name: string, is_active: bool, name: string, preferred_common_name: string, rank: string, rank_level: float, default_photo: record, matched_term: string, observations_count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3257,17 +3256,17 @@ export def "users-update-session put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --preferred-taxon-page-ancestors-shown: string@bool-completer
+  --preferred-taxon-page-ancestors-shown: oneof<nothing, bool>
   --preferred-taxon-page-place-id: int
   --preferred-taxon-page-tab: string
-  --prefers-skip-coarer-id-modal: string@bool-completer
-  --prefers-hide-obs-show-annotations: string@bool-completer
-  --prefers-hide-obs-show-projects: string@bool-completer
-  --prefers-hide-obs-show-tags: string@bool-completer
-  --prefers-hide-obs-show-observation-fields: string@bool-completer
-  --prefers-hide-obs-show-identifiers: string@bool-completer
-  --prefers-hide-obs-show-copyright: string@bool-completer
-  --prefers-hide-obs-show-quality-metrics: string@bool-completer
+  --prefers-skip-coarer-id-modal: oneof<nothing, bool>
+  --prefers-hide-obs-show-annotations: oneof<nothing, bool>
+  --prefers-hide-obs-show-projects: oneof<nothing, bool>
+  --prefers-hide-obs-show-tags: oneof<nothing, bool>
+  --prefers-hide-obs-show-observation-fields: oneof<nothing, bool>
+  --prefers-hide-obs-show-identifiers: oneof<nothing, bool>
+  --prefers-hide-obs-show-copyright: oneof<nothing, bool>
+  --prefers-hide-obs-show-quality-metrics: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3295,26 +3294,26 @@ export def "colored-heatmap get-by-zoom-x-y" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --color: string # Primary color to use in tile creation. Accepts common colors by string (e.g. `color=blue`), and accepts escaped color HEX codes (e.g. `color=%2386a91c`)
-  --acc: string@bool-completer # Whether or not positional accuracy / coordinate uncertainty has been specified
-  --captive: string@bool-completer # Captive or cultivated observations
-  --endemic: string@bool-completer # Observations whose taxa are endemic to their location
-  --geo: string@bool-completer # Observations that are georeferenced
-  --id-please: string@bool-completer # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
-  --identified: string@bool-completer # Observations that have community identifications
-  --introduced: string@bool-completer # Observations whose taxa are introduced in their location
-  --mappable: string@bool-completer # Observations that show on map tiles
-  --native: string@bool-completer # Observations whose taxa are native to their location
-  --out-of-range: string@bool-completer # Observations whose taxa are outside their known ranges
-  --pcid: string@bool-completer # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
-  --photos: string@bool-completer # Observations with photos
-  --popular: string@bool-completer # Observations that have been favorited by at least one user
-  --sounds: string@bool-completer # Observations with sounds
-  --taxon-is-active: string@bool-completer # Observations of active taxon concepts
-  --threatened: string@bool-completer # Observations whose taxa are threatened in their location
-  --verifiable: string@bool-completer # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
-  --licensed: string@bool-completer # License attribute of an observation must not be null
-  --photo-licensed: string@bool-completer # License attribute of at least one photo of an observation must not be null
-  --expected-nearby: string@bool-completer # Observation taxon is expected nearby
+  --acc: oneof<nothing, bool> # Whether or not positional accuracy / coordinate uncertainty has been specified
+  --captive: oneof<nothing, bool> # Captive or cultivated observations
+  --endemic: oneof<nothing, bool> # Observations whose taxa are endemic to their location
+  --geo: oneof<nothing, bool> # Observations that are georeferenced
+  --id-please: oneof<nothing, bool> # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
+  --identified: oneof<nothing, bool> # Observations that have community identifications
+  --introduced: oneof<nothing, bool> # Observations whose taxa are introduced in their location
+  --mappable: oneof<nothing, bool> # Observations that show on map tiles
+  --native: oneof<nothing, bool> # Observations whose taxa are native to their location
+  --out-of-range: oneof<nothing, bool> # Observations whose taxa are outside their known ranges
+  --pcid: oneof<nothing, bool> # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
+  --photos: oneof<nothing, bool> # Observations with photos
+  --popular: oneof<nothing, bool> # Observations that have been favorited by at least one user
+  --sounds: oneof<nothing, bool> # Observations with sounds
+  --taxon-is-active: oneof<nothing, bool> # Observations of active taxon concepts
+  --threatened: oneof<nothing, bool> # Observations whose taxa are threatened in their location
+  --verifiable: oneof<nothing, bool> # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
+  --licensed: oneof<nothing, bool> # License attribute of an observation must not be null
+  --photo-licensed: oneof<nothing, bool> # License attribute of at least one photo of an observation must not be null
+  --expected-nearby: oneof<nothing, bool> # Observation taxon is expected nearby
   --id: list # Must have this ID
   --not-id: list # Must not have this ID
   --license: list@license-completer # Observation must have this license
@@ -3378,20 +3377,20 @@ export def "colored-heatmap get-by-zoom-x-y" [
   --not-in-project: string # Must not be in the project with this ID or slug
   --not-matching-project-rules-for: string # Must not match the rules of the project with this ID or slug
   --observation-accuracy-experiment-id: list # Must included in this observation accuracy experiment
-  --fails-dqa-accurate: string@bool-completer # Must be voted as not accurately depicting an organism or scene
-  --fails-dqa-date: string@bool-completer # Must be voted as not having an accurate date
-  --fails-dqa-evidence: string@bool-completer # Must be voted as not evidence of an organism
-  --fails-dqa-location: string@bool-completer # Must be voted as not having an accurate location
-  --fails-dqa-needs-id: string@bool-completer # Must be voted as the community ID cannot be improved
-  --fails-dqa-recent: string@bool-completer # Must be voted as not recent evidence of an organism
-  --fails-dqa-subject: string@bool-completer # Must be voted as not having evidence related to a single subject
-  --fails-dqa-wild: string@bool-completer # Must be voted as not wild
+  --fails-dqa-accurate: oneof<nothing, bool> # Must be voted as not accurately depicting an organism or scene
+  --fails-dqa-date: oneof<nothing, bool> # Must be voted as not having an accurate date
+  --fails-dqa-evidence: oneof<nothing, bool> # Must be voted as not evidence of an organism
+  --fails-dqa-location: oneof<nothing, bool> # Must be voted as not having an accurate location
+  --fails-dqa-needs-id: oneof<nothing, bool> # Must be voted as the community ID cannot be improved
+  --fails-dqa-recent: oneof<nothing, bool> # Must be voted as not recent evidence of an organism
+  --fails-dqa-subject: oneof<nothing, bool> # Must be voted as not having evidence related to a single subject
+  --fails-dqa-wild: oneof<nothing, bool> # Must be voted as not wild
   --q: string # Search observation properties. Can be combined with `search_on`
   --search-on: string@search-on-completer # Properties to search on, when combined with `q`. Searches across all properties by default
   --quality-grade: string@quality-grade-completer # Must have this quality grade
   --updated-since: string # Must be updated since this time
   --viewer-id: string # See `reviewed`
-  --reviewed: string@bool-completer # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
+  --reviewed: oneof<nothing, bool> # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3417,26 +3416,26 @@ export def "colored-heatmap get-by-zoom-x-y-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --color: string # Primary color to use in tile creation. Accepts common colors by string (e.g. `color=blue`), and accepts escaped color HEX codes (e.g. `color=%2386a91c`)
-  --acc: string@bool-completer # Whether or not positional accuracy / coordinate uncertainty has been specified
-  --captive: string@bool-completer # Captive or cultivated observations
-  --endemic: string@bool-completer # Observations whose taxa are endemic to their location
-  --geo: string@bool-completer # Observations that are georeferenced
-  --id-please: string@bool-completer # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
-  --identified: string@bool-completer # Observations that have community identifications
-  --introduced: string@bool-completer # Observations whose taxa are introduced in their location
-  --mappable: string@bool-completer # Observations that show on map tiles
-  --native: string@bool-completer # Observations whose taxa are native to their location
-  --out-of-range: string@bool-completer # Observations whose taxa are outside their known ranges
-  --pcid: string@bool-completer # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
-  --photos: string@bool-completer # Observations with photos
-  --popular: string@bool-completer # Observations that have been favorited by at least one user
-  --sounds: string@bool-completer # Observations with sounds
-  --taxon-is-active: string@bool-completer # Observations of active taxon concepts
-  --threatened: string@bool-completer # Observations whose taxa are threatened in their location
-  --verifiable: string@bool-completer # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
-  --licensed: string@bool-completer # License attribute of an observation must not be null
-  --photo-licensed: string@bool-completer # License attribute of at least one photo of an observation must not be null
-  --expected-nearby: string@bool-completer # Observation taxon is expected nearby
+  --acc: oneof<nothing, bool> # Whether or not positional accuracy / coordinate uncertainty has been specified
+  --captive: oneof<nothing, bool> # Captive or cultivated observations
+  --endemic: oneof<nothing, bool> # Observations whose taxa are endemic to their location
+  --geo: oneof<nothing, bool> # Observations that are georeferenced
+  --id-please: oneof<nothing, bool> # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
+  --identified: oneof<nothing, bool> # Observations that have community identifications
+  --introduced: oneof<nothing, bool> # Observations whose taxa are introduced in their location
+  --mappable: oneof<nothing, bool> # Observations that show on map tiles
+  --native: oneof<nothing, bool> # Observations whose taxa are native to their location
+  --out-of-range: oneof<nothing, bool> # Observations whose taxa are outside their known ranges
+  --pcid: oneof<nothing, bool> # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
+  --photos: oneof<nothing, bool> # Observations with photos
+  --popular: oneof<nothing, bool> # Observations that have been favorited by at least one user
+  --sounds: oneof<nothing, bool> # Observations with sounds
+  --taxon-is-active: oneof<nothing, bool> # Observations of active taxon concepts
+  --threatened: oneof<nothing, bool> # Observations whose taxa are threatened in their location
+  --verifiable: oneof<nothing, bool> # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
+  --licensed: oneof<nothing, bool> # License attribute of an observation must not be null
+  --photo-licensed: oneof<nothing, bool> # License attribute of at least one photo of an observation must not be null
+  --expected-nearby: oneof<nothing, bool> # Observation taxon is expected nearby
   --id: list # Must have this ID
   --not-id: list # Must not have this ID
   --license: list@license-completer # Observation must have this license
@@ -3500,20 +3499,20 @@ export def "colored-heatmap get-by-zoom-x-y-1" [
   --not-in-project: string # Must not be in the project with this ID or slug
   --not-matching-project-rules-for: string # Must not match the rules of the project with this ID or slug
   --observation-accuracy-experiment-id: list # Must included in this observation accuracy experiment
-  --fails-dqa-accurate: string@bool-completer # Must be voted as not accurately depicting an organism or scene
-  --fails-dqa-date: string@bool-completer # Must be voted as not having an accurate date
-  --fails-dqa-evidence: string@bool-completer # Must be voted as not evidence of an organism
-  --fails-dqa-location: string@bool-completer # Must be voted as not having an accurate location
-  --fails-dqa-needs-id: string@bool-completer # Must be voted as the community ID cannot be improved
-  --fails-dqa-recent: string@bool-completer # Must be voted as not recent evidence of an organism
-  --fails-dqa-subject: string@bool-completer # Must be voted as not having evidence related to a single subject
-  --fails-dqa-wild: string@bool-completer # Must be voted as not wild
+  --fails-dqa-accurate: oneof<nothing, bool> # Must be voted as not accurately depicting an organism or scene
+  --fails-dqa-date: oneof<nothing, bool> # Must be voted as not having an accurate date
+  --fails-dqa-evidence: oneof<nothing, bool> # Must be voted as not evidence of an organism
+  --fails-dqa-location: oneof<nothing, bool> # Must be voted as not having an accurate location
+  --fails-dqa-needs-id: oneof<nothing, bool> # Must be voted as the community ID cannot be improved
+  --fails-dqa-recent: oneof<nothing, bool> # Must be voted as not recent evidence of an organism
+  --fails-dqa-subject: oneof<nothing, bool> # Must be voted as not having evidence related to a single subject
+  --fails-dqa-wild: oneof<nothing, bool> # Must be voted as not wild
   --q: string # Search observation properties. Can be combined with `search_on`
   --search-on: string@search-on-completer # Properties to search on, when combined with `q`. Searches across all properties by default
   --quality-grade: string@quality-grade-completer # Must have this quality grade
   --updated-since: string # Must be updated since this time
   --viewer-id: string # See `reviewed`
-  --reviewed: string@bool-completer # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
+  --reviewed: oneof<nothing, bool> # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
 ]: nothing -> record<grid: list<string>, keys: list<string>, data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3539,26 +3538,26 @@ export def "grid get-by-zoom-x-y" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --color: string # Primary color to use in tile creation. Accepts common colors by string (e.g. `color=blue`), and accepts escaped color HEX codes (e.g. `color=%2386a91c`)
-  --acc: string@bool-completer # Whether or not positional accuracy / coordinate uncertainty has been specified
-  --captive: string@bool-completer # Captive or cultivated observations
-  --endemic: string@bool-completer # Observations whose taxa are endemic to their location
-  --geo: string@bool-completer # Observations that are georeferenced
-  --id-please: string@bool-completer # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
-  --identified: string@bool-completer # Observations that have community identifications
-  --introduced: string@bool-completer # Observations whose taxa are introduced in their location
-  --mappable: string@bool-completer # Observations that show on map tiles
-  --native: string@bool-completer # Observations whose taxa are native to their location
-  --out-of-range: string@bool-completer # Observations whose taxa are outside their known ranges
-  --pcid: string@bool-completer # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
-  --photos: string@bool-completer # Observations with photos
-  --popular: string@bool-completer # Observations that have been favorited by at least one user
-  --sounds: string@bool-completer # Observations with sounds
-  --taxon-is-active: string@bool-completer # Observations of active taxon concepts
-  --threatened: string@bool-completer # Observations whose taxa are threatened in their location
-  --verifiable: string@bool-completer # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
-  --licensed: string@bool-completer # License attribute of an observation must not be null
-  --photo-licensed: string@bool-completer # License attribute of at least one photo of an observation must not be null
-  --expected-nearby: string@bool-completer # Observation taxon is expected nearby
+  --acc: oneof<nothing, bool> # Whether or not positional accuracy / coordinate uncertainty has been specified
+  --captive: oneof<nothing, bool> # Captive or cultivated observations
+  --endemic: oneof<nothing, bool> # Observations whose taxa are endemic to their location
+  --geo: oneof<nothing, bool> # Observations that are georeferenced
+  --id-please: oneof<nothing, bool> # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
+  --identified: oneof<nothing, bool> # Observations that have community identifications
+  --introduced: oneof<nothing, bool> # Observations whose taxa are introduced in their location
+  --mappable: oneof<nothing, bool> # Observations that show on map tiles
+  --native: oneof<nothing, bool> # Observations whose taxa are native to their location
+  --out-of-range: oneof<nothing, bool> # Observations whose taxa are outside their known ranges
+  --pcid: oneof<nothing, bool> # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
+  --photos: oneof<nothing, bool> # Observations with photos
+  --popular: oneof<nothing, bool> # Observations that have been favorited by at least one user
+  --sounds: oneof<nothing, bool> # Observations with sounds
+  --taxon-is-active: oneof<nothing, bool> # Observations of active taxon concepts
+  --threatened: oneof<nothing, bool> # Observations whose taxa are threatened in their location
+  --verifiable: oneof<nothing, bool> # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
+  --licensed: oneof<nothing, bool> # License attribute of an observation must not be null
+  --photo-licensed: oneof<nothing, bool> # License attribute of at least one photo of an observation must not be null
+  --expected-nearby: oneof<nothing, bool> # Observation taxon is expected nearby
   --id: list # Must have this ID
   --not-id: list # Must not have this ID
   --license: list@license-completer # Observation must have this license
@@ -3622,20 +3621,20 @@ export def "grid get-by-zoom-x-y" [
   --not-in-project: string # Must not be in the project with this ID or slug
   --not-matching-project-rules-for: string # Must not match the rules of the project with this ID or slug
   --observation-accuracy-experiment-id: list # Must included in this observation accuracy experiment
-  --fails-dqa-accurate: string@bool-completer # Must be voted as not accurately depicting an organism or scene
-  --fails-dqa-date: string@bool-completer # Must be voted as not having an accurate date
-  --fails-dqa-evidence: string@bool-completer # Must be voted as not evidence of an organism
-  --fails-dqa-location: string@bool-completer # Must be voted as not having an accurate location
-  --fails-dqa-needs-id: string@bool-completer # Must be voted as the community ID cannot be improved
-  --fails-dqa-recent: string@bool-completer # Must be voted as not recent evidence of an organism
-  --fails-dqa-subject: string@bool-completer # Must be voted as not having evidence related to a single subject
-  --fails-dqa-wild: string@bool-completer # Must be voted as not wild
+  --fails-dqa-accurate: oneof<nothing, bool> # Must be voted as not accurately depicting an organism or scene
+  --fails-dqa-date: oneof<nothing, bool> # Must be voted as not having an accurate date
+  --fails-dqa-evidence: oneof<nothing, bool> # Must be voted as not evidence of an organism
+  --fails-dqa-location: oneof<nothing, bool> # Must be voted as not having an accurate location
+  --fails-dqa-needs-id: oneof<nothing, bool> # Must be voted as the community ID cannot be improved
+  --fails-dqa-recent: oneof<nothing, bool> # Must be voted as not recent evidence of an organism
+  --fails-dqa-subject: oneof<nothing, bool> # Must be voted as not having evidence related to a single subject
+  --fails-dqa-wild: oneof<nothing, bool> # Must be voted as not wild
   --q: string # Search observation properties. Can be combined with `search_on`
   --search-on: string@search-on-completer # Properties to search on, when combined with `q`. Searches across all properties by default
   --quality-grade: string@quality-grade-completer # Must have this quality grade
   --updated-since: string # Must be updated since this time
   --viewer-id: string # See `reviewed`
-  --reviewed: string@bool-completer # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
+  --reviewed: oneof<nothing, bool> # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3661,26 +3660,26 @@ export def "grid get-by-zoom-x-y-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --color: string # Primary color to use in tile creation. Accepts common colors by string (e.g. `color=blue`), and accepts escaped color HEX codes (e.g. `color=%2386a91c`)
-  --acc: string@bool-completer # Whether or not positional accuracy / coordinate uncertainty has been specified
-  --captive: string@bool-completer # Captive or cultivated observations
-  --endemic: string@bool-completer # Observations whose taxa are endemic to their location
-  --geo: string@bool-completer # Observations that are georeferenced
-  --id-please: string@bool-completer # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
-  --identified: string@bool-completer # Observations that have community identifications
-  --introduced: string@bool-completer # Observations whose taxa are introduced in their location
-  --mappable: string@bool-completer # Observations that show on map tiles
-  --native: string@bool-completer # Observations whose taxa are native to their location
-  --out-of-range: string@bool-completer # Observations whose taxa are outside their known ranges
-  --pcid: string@bool-completer # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
-  --photos: string@bool-completer # Observations with photos
-  --popular: string@bool-completer # Observations that have been favorited by at least one user
-  --sounds: string@bool-completer # Observations with sounds
-  --taxon-is-active: string@bool-completer # Observations of active taxon concepts
-  --threatened: string@bool-completer # Observations whose taxa are threatened in their location
-  --verifiable: string@bool-completer # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
-  --licensed: string@bool-completer # License attribute of an observation must not be null
-  --photo-licensed: string@bool-completer # License attribute of at least one photo of an observation must not be null
-  --expected-nearby: string@bool-completer # Observation taxon is expected nearby
+  --acc: oneof<nothing, bool> # Whether or not positional accuracy / coordinate uncertainty has been specified
+  --captive: oneof<nothing, bool> # Captive or cultivated observations
+  --endemic: oneof<nothing, bool> # Observations whose taxa are endemic to their location
+  --geo: oneof<nothing, bool> # Observations that are georeferenced
+  --id-please: oneof<nothing, bool> # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
+  --identified: oneof<nothing, bool> # Observations that have community identifications
+  --introduced: oneof<nothing, bool> # Observations whose taxa are introduced in their location
+  --mappable: oneof<nothing, bool> # Observations that show on map tiles
+  --native: oneof<nothing, bool> # Observations whose taxa are native to their location
+  --out-of-range: oneof<nothing, bool> # Observations whose taxa are outside their known ranges
+  --pcid: oneof<nothing, bool> # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
+  --photos: oneof<nothing, bool> # Observations with photos
+  --popular: oneof<nothing, bool> # Observations that have been favorited by at least one user
+  --sounds: oneof<nothing, bool> # Observations with sounds
+  --taxon-is-active: oneof<nothing, bool> # Observations of active taxon concepts
+  --threatened: oneof<nothing, bool> # Observations whose taxa are threatened in their location
+  --verifiable: oneof<nothing, bool> # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
+  --licensed: oneof<nothing, bool> # License attribute of an observation must not be null
+  --photo-licensed: oneof<nothing, bool> # License attribute of at least one photo of an observation must not be null
+  --expected-nearby: oneof<nothing, bool> # Observation taxon is expected nearby
   --id: list # Must have this ID
   --not-id: list # Must not have this ID
   --license: list@license-completer # Observation must have this license
@@ -3744,20 +3743,20 @@ export def "grid get-by-zoom-x-y-1" [
   --not-in-project: string # Must not be in the project with this ID or slug
   --not-matching-project-rules-for: string # Must not match the rules of the project with this ID or slug
   --observation-accuracy-experiment-id: list # Must included in this observation accuracy experiment
-  --fails-dqa-accurate: string@bool-completer # Must be voted as not accurately depicting an organism or scene
-  --fails-dqa-date: string@bool-completer # Must be voted as not having an accurate date
-  --fails-dqa-evidence: string@bool-completer # Must be voted as not evidence of an organism
-  --fails-dqa-location: string@bool-completer # Must be voted as not having an accurate location
-  --fails-dqa-needs-id: string@bool-completer # Must be voted as the community ID cannot be improved
-  --fails-dqa-recent: string@bool-completer # Must be voted as not recent evidence of an organism
-  --fails-dqa-subject: string@bool-completer # Must be voted as not having evidence related to a single subject
-  --fails-dqa-wild: string@bool-completer # Must be voted as not wild
+  --fails-dqa-accurate: oneof<nothing, bool> # Must be voted as not accurately depicting an organism or scene
+  --fails-dqa-date: oneof<nothing, bool> # Must be voted as not having an accurate date
+  --fails-dqa-evidence: oneof<nothing, bool> # Must be voted as not evidence of an organism
+  --fails-dqa-location: oneof<nothing, bool> # Must be voted as not having an accurate location
+  --fails-dqa-needs-id: oneof<nothing, bool> # Must be voted as the community ID cannot be improved
+  --fails-dqa-recent: oneof<nothing, bool> # Must be voted as not recent evidence of an organism
+  --fails-dqa-subject: oneof<nothing, bool> # Must be voted as not having evidence related to a single subject
+  --fails-dqa-wild: oneof<nothing, bool> # Must be voted as not wild
   --q: string # Search observation properties. Can be combined with `search_on`
   --search-on: string@search-on-completer # Properties to search on, when combined with `q`. Searches across all properties by default
   --quality-grade: string@quality-grade-completer # Must have this quality grade
   --updated-since: string # Must be updated since this time
   --viewer-id: string # See `reviewed`
-  --reviewed: string@bool-completer # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
+  --reviewed: oneof<nothing, bool> # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
 ]: nothing -> record<grid: list<string>, keys: list<string>, data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3783,26 +3782,26 @@ export def "heatmap get-by-zoom-x-y" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --color: string # Primary color to use in tile creation. Accepts common colors by string (e.g. `color=blue`), and accepts escaped color HEX codes (e.g. `color=%2386a91c`)
-  --acc: string@bool-completer # Whether or not positional accuracy / coordinate uncertainty has been specified
-  --captive: string@bool-completer # Captive or cultivated observations
-  --endemic: string@bool-completer # Observations whose taxa are endemic to their location
-  --geo: string@bool-completer # Observations that are georeferenced
-  --id-please: string@bool-completer # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
-  --identified: string@bool-completer # Observations that have community identifications
-  --introduced: string@bool-completer # Observations whose taxa are introduced in their location
-  --mappable: string@bool-completer # Observations that show on map tiles
-  --native: string@bool-completer # Observations whose taxa are native to their location
-  --out-of-range: string@bool-completer # Observations whose taxa are outside their known ranges
-  --pcid: string@bool-completer # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
-  --photos: string@bool-completer # Observations with photos
-  --popular: string@bool-completer # Observations that have been favorited by at least one user
-  --sounds: string@bool-completer # Observations with sounds
-  --taxon-is-active: string@bool-completer # Observations of active taxon concepts
-  --threatened: string@bool-completer # Observations whose taxa are threatened in their location
-  --verifiable: string@bool-completer # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
-  --licensed: string@bool-completer # License attribute of an observation must not be null
-  --photo-licensed: string@bool-completer # License attribute of at least one photo of an observation must not be null
-  --expected-nearby: string@bool-completer # Observation taxon is expected nearby
+  --acc: oneof<nothing, bool> # Whether or not positional accuracy / coordinate uncertainty has been specified
+  --captive: oneof<nothing, bool> # Captive or cultivated observations
+  --endemic: oneof<nothing, bool> # Observations whose taxa are endemic to their location
+  --geo: oneof<nothing, bool> # Observations that are georeferenced
+  --id-please: oneof<nothing, bool> # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
+  --identified: oneof<nothing, bool> # Observations that have community identifications
+  --introduced: oneof<nothing, bool> # Observations whose taxa are introduced in their location
+  --mappable: oneof<nothing, bool> # Observations that show on map tiles
+  --native: oneof<nothing, bool> # Observations whose taxa are native to their location
+  --out-of-range: oneof<nothing, bool> # Observations whose taxa are outside their known ranges
+  --pcid: oneof<nothing, bool> # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
+  --photos: oneof<nothing, bool> # Observations with photos
+  --popular: oneof<nothing, bool> # Observations that have been favorited by at least one user
+  --sounds: oneof<nothing, bool> # Observations with sounds
+  --taxon-is-active: oneof<nothing, bool> # Observations of active taxon concepts
+  --threatened: oneof<nothing, bool> # Observations whose taxa are threatened in their location
+  --verifiable: oneof<nothing, bool> # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
+  --licensed: oneof<nothing, bool> # License attribute of an observation must not be null
+  --photo-licensed: oneof<nothing, bool> # License attribute of at least one photo of an observation must not be null
+  --expected-nearby: oneof<nothing, bool> # Observation taxon is expected nearby
   --id: list # Must have this ID
   --not-id: list # Must not have this ID
   --license: list@license-completer # Observation must have this license
@@ -3866,20 +3865,20 @@ export def "heatmap get-by-zoom-x-y" [
   --not-in-project: string # Must not be in the project with this ID or slug
   --not-matching-project-rules-for: string # Must not match the rules of the project with this ID or slug
   --observation-accuracy-experiment-id: list # Must included in this observation accuracy experiment
-  --fails-dqa-accurate: string@bool-completer # Must be voted as not accurately depicting an organism or scene
-  --fails-dqa-date: string@bool-completer # Must be voted as not having an accurate date
-  --fails-dqa-evidence: string@bool-completer # Must be voted as not evidence of an organism
-  --fails-dqa-location: string@bool-completer # Must be voted as not having an accurate location
-  --fails-dqa-needs-id: string@bool-completer # Must be voted as the community ID cannot be improved
-  --fails-dqa-recent: string@bool-completer # Must be voted as not recent evidence of an organism
-  --fails-dqa-subject: string@bool-completer # Must be voted as not having evidence related to a single subject
-  --fails-dqa-wild: string@bool-completer # Must be voted as not wild
+  --fails-dqa-accurate: oneof<nothing, bool> # Must be voted as not accurately depicting an organism or scene
+  --fails-dqa-date: oneof<nothing, bool> # Must be voted as not having an accurate date
+  --fails-dqa-evidence: oneof<nothing, bool> # Must be voted as not evidence of an organism
+  --fails-dqa-location: oneof<nothing, bool> # Must be voted as not having an accurate location
+  --fails-dqa-needs-id: oneof<nothing, bool> # Must be voted as the community ID cannot be improved
+  --fails-dqa-recent: oneof<nothing, bool> # Must be voted as not recent evidence of an organism
+  --fails-dqa-subject: oneof<nothing, bool> # Must be voted as not having evidence related to a single subject
+  --fails-dqa-wild: oneof<nothing, bool> # Must be voted as not wild
   --q: string # Search observation properties. Can be combined with `search_on`
   --search-on: string@search-on-completer # Properties to search on, when combined with `q`. Searches across all properties by default
   --quality-grade: string@quality-grade-completer # Must have this quality grade
   --updated-since: string # Must be updated since this time
   --viewer-id: string # See `reviewed`
-  --reviewed: string@bool-completer # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
+  --reviewed: oneof<nothing, bool> # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3905,26 +3904,26 @@ export def "heatmap get-by-zoom-x-y-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --color: string # Primary color to use in tile creation. Accepts common colors by string (e.g. `color=blue`), and accepts escaped color HEX codes (e.g. `color=%2386a91c`)
-  --acc: string@bool-completer # Whether or not positional accuracy / coordinate uncertainty has been specified
-  --captive: string@bool-completer # Captive or cultivated observations
-  --endemic: string@bool-completer # Observations whose taxa are endemic to their location
-  --geo: string@bool-completer # Observations that are georeferenced
-  --id-please: string@bool-completer # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
-  --identified: string@bool-completer # Observations that have community identifications
-  --introduced: string@bool-completer # Observations whose taxa are introduced in their location
-  --mappable: string@bool-completer # Observations that show on map tiles
-  --native: string@bool-completer # Observations whose taxa are native to their location
-  --out-of-range: string@bool-completer # Observations whose taxa are outside their known ranges
-  --pcid: string@bool-completer # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
-  --photos: string@bool-completer # Observations with photos
-  --popular: string@bool-completer # Observations that have been favorited by at least one user
-  --sounds: string@bool-completer # Observations with sounds
-  --taxon-is-active: string@bool-completer # Observations of active taxon concepts
-  --threatened: string@bool-completer # Observations whose taxa are threatened in their location
-  --verifiable: string@bool-completer # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
-  --licensed: string@bool-completer # License attribute of an observation must not be null
-  --photo-licensed: string@bool-completer # License attribute of at least one photo of an observation must not be null
-  --expected-nearby: string@bool-completer # Observation taxon is expected nearby
+  --acc: oneof<nothing, bool> # Whether or not positional accuracy / coordinate uncertainty has been specified
+  --captive: oneof<nothing, bool> # Captive or cultivated observations
+  --endemic: oneof<nothing, bool> # Observations whose taxa are endemic to their location
+  --geo: oneof<nothing, bool> # Observations that are georeferenced
+  --id-please: oneof<nothing, bool> # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
+  --identified: oneof<nothing, bool> # Observations that have community identifications
+  --introduced: oneof<nothing, bool> # Observations whose taxa are introduced in their location
+  --mappable: oneof<nothing, bool> # Observations that show on map tiles
+  --native: oneof<nothing, bool> # Observations whose taxa are native to their location
+  --out-of-range: oneof<nothing, bool> # Observations whose taxa are outside their known ranges
+  --pcid: oneof<nothing, bool> # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
+  --photos: oneof<nothing, bool> # Observations with photos
+  --popular: oneof<nothing, bool> # Observations that have been favorited by at least one user
+  --sounds: oneof<nothing, bool> # Observations with sounds
+  --taxon-is-active: oneof<nothing, bool> # Observations of active taxon concepts
+  --threatened: oneof<nothing, bool> # Observations whose taxa are threatened in their location
+  --verifiable: oneof<nothing, bool> # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
+  --licensed: oneof<nothing, bool> # License attribute of an observation must not be null
+  --photo-licensed: oneof<nothing, bool> # License attribute of at least one photo of an observation must not be null
+  --expected-nearby: oneof<nothing, bool> # Observation taxon is expected nearby
   --id: list # Must have this ID
   --not-id: list # Must not have this ID
   --license: list@license-completer # Observation must have this license
@@ -3988,20 +3987,20 @@ export def "heatmap get-by-zoom-x-y-1" [
   --not-in-project: string # Must not be in the project with this ID or slug
   --not-matching-project-rules-for: string # Must not match the rules of the project with this ID or slug
   --observation-accuracy-experiment-id: list # Must included in this observation accuracy experiment
-  --fails-dqa-accurate: string@bool-completer # Must be voted as not accurately depicting an organism or scene
-  --fails-dqa-date: string@bool-completer # Must be voted as not having an accurate date
-  --fails-dqa-evidence: string@bool-completer # Must be voted as not evidence of an organism
-  --fails-dqa-location: string@bool-completer # Must be voted as not having an accurate location
-  --fails-dqa-needs-id: string@bool-completer # Must be voted as the community ID cannot be improved
-  --fails-dqa-recent: string@bool-completer # Must be voted as not recent evidence of an organism
-  --fails-dqa-subject: string@bool-completer # Must be voted as not having evidence related to a single subject
-  --fails-dqa-wild: string@bool-completer # Must be voted as not wild
+  --fails-dqa-accurate: oneof<nothing, bool> # Must be voted as not accurately depicting an organism or scene
+  --fails-dqa-date: oneof<nothing, bool> # Must be voted as not having an accurate date
+  --fails-dqa-evidence: oneof<nothing, bool> # Must be voted as not evidence of an organism
+  --fails-dqa-location: oneof<nothing, bool> # Must be voted as not having an accurate location
+  --fails-dqa-needs-id: oneof<nothing, bool> # Must be voted as the community ID cannot be improved
+  --fails-dqa-recent: oneof<nothing, bool> # Must be voted as not recent evidence of an organism
+  --fails-dqa-subject: oneof<nothing, bool> # Must be voted as not having evidence related to a single subject
+  --fails-dqa-wild: oneof<nothing, bool> # Must be voted as not wild
   --q: string # Search observation properties. Can be combined with `search_on`
   --search-on: string@search-on-completer # Properties to search on, when combined with `q`. Searches across all properties by default
   --quality-grade: string@quality-grade-completer # Must have this quality grade
   --updated-since: string # Must be updated since this time
   --viewer-id: string # See `reviewed`
-  --reviewed: string@bool-completer # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
+  --reviewed: oneof<nothing, bool> # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
 ]: nothing -> record<grid: list<string>, keys: list<string>, data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4027,26 +4026,26 @@ export def "points get-by-zoom-x-y" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --color: string # Primary color to use in tile creation. Accepts common colors by string (e.g. `color=blue`), and accepts escaped color HEX codes (e.g. `color=%2386a91c`)
-  --acc: string@bool-completer # Whether or not positional accuracy / coordinate uncertainty has been specified
-  --captive: string@bool-completer # Captive or cultivated observations
-  --endemic: string@bool-completer # Observations whose taxa are endemic to their location
-  --geo: string@bool-completer # Observations that are georeferenced
-  --id-please: string@bool-completer # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
-  --identified: string@bool-completer # Observations that have community identifications
-  --introduced: string@bool-completer # Observations whose taxa are introduced in their location
-  --mappable: string@bool-completer # Observations that show on map tiles
-  --native: string@bool-completer # Observations whose taxa are native to their location
-  --out-of-range: string@bool-completer # Observations whose taxa are outside their known ranges
-  --pcid: string@bool-completer # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
-  --photos: string@bool-completer # Observations with photos
-  --popular: string@bool-completer # Observations that have been favorited by at least one user
-  --sounds: string@bool-completer # Observations with sounds
-  --taxon-is-active: string@bool-completer # Observations of active taxon concepts
-  --threatened: string@bool-completer # Observations whose taxa are threatened in their location
-  --verifiable: string@bool-completer # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
-  --licensed: string@bool-completer # License attribute of an observation must not be null
-  --photo-licensed: string@bool-completer # License attribute of at least one photo of an observation must not be null
-  --expected-nearby: string@bool-completer # Observation taxon is expected nearby
+  --acc: oneof<nothing, bool> # Whether or not positional accuracy / coordinate uncertainty has been specified
+  --captive: oneof<nothing, bool> # Captive or cultivated observations
+  --endemic: oneof<nothing, bool> # Observations whose taxa are endemic to their location
+  --geo: oneof<nothing, bool> # Observations that are georeferenced
+  --id-please: oneof<nothing, bool> # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
+  --identified: oneof<nothing, bool> # Observations that have community identifications
+  --introduced: oneof<nothing, bool> # Observations whose taxa are introduced in their location
+  --mappable: oneof<nothing, bool> # Observations that show on map tiles
+  --native: oneof<nothing, bool> # Observations whose taxa are native to their location
+  --out-of-range: oneof<nothing, bool> # Observations whose taxa are outside their known ranges
+  --pcid: oneof<nothing, bool> # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
+  --photos: oneof<nothing, bool> # Observations with photos
+  --popular: oneof<nothing, bool> # Observations that have been favorited by at least one user
+  --sounds: oneof<nothing, bool> # Observations with sounds
+  --taxon-is-active: oneof<nothing, bool> # Observations of active taxon concepts
+  --threatened: oneof<nothing, bool> # Observations whose taxa are threatened in their location
+  --verifiable: oneof<nothing, bool> # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
+  --licensed: oneof<nothing, bool> # License attribute of an observation must not be null
+  --photo-licensed: oneof<nothing, bool> # License attribute of at least one photo of an observation must not be null
+  --expected-nearby: oneof<nothing, bool> # Observation taxon is expected nearby
   --id: list # Must have this ID
   --not-id: list # Must not have this ID
   --license: list@license-completer # Observation must have this license
@@ -4110,20 +4109,20 @@ export def "points get-by-zoom-x-y" [
   --not-in-project: string # Must not be in the project with this ID or slug
   --not-matching-project-rules-for: string # Must not match the rules of the project with this ID or slug
   --observation-accuracy-experiment-id: list # Must included in this observation accuracy experiment
-  --fails-dqa-accurate: string@bool-completer # Must be voted as not accurately depicting an organism or scene
-  --fails-dqa-date: string@bool-completer # Must be voted as not having an accurate date
-  --fails-dqa-evidence: string@bool-completer # Must be voted as not evidence of an organism
-  --fails-dqa-location: string@bool-completer # Must be voted as not having an accurate location
-  --fails-dqa-needs-id: string@bool-completer # Must be voted as the community ID cannot be improved
-  --fails-dqa-recent: string@bool-completer # Must be voted as not recent evidence of an organism
-  --fails-dqa-subject: string@bool-completer # Must be voted as not having evidence related to a single subject
-  --fails-dqa-wild: string@bool-completer # Must be voted as not wild
+  --fails-dqa-accurate: oneof<nothing, bool> # Must be voted as not accurately depicting an organism or scene
+  --fails-dqa-date: oneof<nothing, bool> # Must be voted as not having an accurate date
+  --fails-dqa-evidence: oneof<nothing, bool> # Must be voted as not evidence of an organism
+  --fails-dqa-location: oneof<nothing, bool> # Must be voted as not having an accurate location
+  --fails-dqa-needs-id: oneof<nothing, bool> # Must be voted as the community ID cannot be improved
+  --fails-dqa-recent: oneof<nothing, bool> # Must be voted as not recent evidence of an organism
+  --fails-dqa-subject: oneof<nothing, bool> # Must be voted as not having evidence related to a single subject
+  --fails-dqa-wild: oneof<nothing, bool> # Must be voted as not wild
   --q: string # Search observation properties. Can be combined with `search_on`
   --search-on: string@search-on-completer # Properties to search on, when combined with `q`. Searches across all properties by default
   --quality-grade: string@quality-grade-completer # Must have this quality grade
   --updated-since: string # Must be updated since this time
   --viewer-id: string # See `reviewed`
-  --reviewed: string@bool-completer # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
+  --reviewed: oneof<nothing, bool> # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4149,26 +4148,26 @@ export def "points get-by-zoom-x-y-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --color: string # Primary color to use in tile creation. Accepts common colors by string (e.g. `color=blue`), and accepts escaped color HEX codes (e.g. `color=%2386a91c`)
-  --acc: string@bool-completer # Whether or not positional accuracy / coordinate uncertainty has been specified
-  --captive: string@bool-completer # Captive or cultivated observations
-  --endemic: string@bool-completer # Observations whose taxa are endemic to their location
-  --geo: string@bool-completer # Observations that are georeferenced
-  --id-please: string@bool-completer # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
-  --identified: string@bool-completer # Observations that have community identifications
-  --introduced: string@bool-completer # Observations whose taxa are introduced in their location
-  --mappable: string@bool-completer # Observations that show on map tiles
-  --native: string@bool-completer # Observations whose taxa are native to their location
-  --out-of-range: string@bool-completer # Observations whose taxa are outside their known ranges
-  --pcid: string@bool-completer # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
-  --photos: string@bool-completer # Observations with photos
-  --popular: string@bool-completer # Observations that have been favorited by at least one user
-  --sounds: string@bool-completer # Observations with sounds
-  --taxon-is-active: string@bool-completer # Observations of active taxon concepts
-  --threatened: string@bool-completer # Observations whose taxa are threatened in their location
-  --verifiable: string@bool-completer # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
-  --licensed: string@bool-completer # License attribute of an observation must not be null
-  --photo-licensed: string@bool-completer # License attribute of at least one photo of an observation must not be null
-  --expected-nearby: string@bool-completer # Observation taxon is expected nearby
+  --acc: oneof<nothing, bool> # Whether or not positional accuracy / coordinate uncertainty has been specified
+  --captive: oneof<nothing, bool> # Captive or cultivated observations
+  --endemic: oneof<nothing, bool> # Observations whose taxa are endemic to their location
+  --geo: oneof<nothing, bool> # Observations that are georeferenced
+  --id-please: oneof<nothing, bool> # Observations with the deprecated `ID, Please!` flag. Note that this will return observations, but that this attribute is no longer used.
+  --identified: oneof<nothing, bool> # Observations that have community identifications
+  --introduced: oneof<nothing, bool> # Observations whose taxa are introduced in their location
+  --mappable: oneof<nothing, bool> # Observations that show on map tiles
+  --native: oneof<nothing, bool> # Observations whose taxa are native to their location
+  --out-of-range: oneof<nothing, bool> # Observations whose taxa are outside their known ranges
+  --pcid: oneof<nothing, bool> # Observations identified by the curator of a project. If the `project_id` parameter is also specified, this will only consider observations identified by curators of the specified project(s)
+  --photos: oneof<nothing, bool> # Observations with photos
+  --popular: oneof<nothing, bool> # Observations that have been favorited by at least one user
+  --sounds: oneof<nothing, bool> # Observations with sounds
+  --taxon-is-active: oneof<nothing, bool> # Observations of active taxon concepts
+  --threatened: oneof<nothing, bool> # Observations whose taxa are threatened in their location
+  --verifiable: oneof<nothing, bool> # Observations with a `quality_grade` of either `needs_id` or `research`. Equivalent to `quality_grade=needs_id,research`
+  --licensed: oneof<nothing, bool> # License attribute of an observation must not be null
+  --photo-licensed: oneof<nothing, bool> # License attribute of at least one photo of an observation must not be null
+  --expected-nearby: oneof<nothing, bool> # Observation taxon is expected nearby
   --id: list # Must have this ID
   --not-id: list # Must not have this ID
   --license: list@license-completer # Observation must have this license
@@ -4232,20 +4231,20 @@ export def "points get-by-zoom-x-y-1" [
   --not-in-project: string # Must not be in the project with this ID or slug
   --not-matching-project-rules-for: string # Must not match the rules of the project with this ID or slug
   --observation-accuracy-experiment-id: list # Must included in this observation accuracy experiment
-  --fails-dqa-accurate: string@bool-completer # Must be voted as not accurately depicting an organism or scene
-  --fails-dqa-date: string@bool-completer # Must be voted as not having an accurate date
-  --fails-dqa-evidence: string@bool-completer # Must be voted as not evidence of an organism
-  --fails-dqa-location: string@bool-completer # Must be voted as not having an accurate location
-  --fails-dqa-needs-id: string@bool-completer # Must be voted as the community ID cannot be improved
-  --fails-dqa-recent: string@bool-completer # Must be voted as not recent evidence of an organism
-  --fails-dqa-subject: string@bool-completer # Must be voted as not having evidence related to a single subject
-  --fails-dqa-wild: string@bool-completer # Must be voted as not wild
+  --fails-dqa-accurate: oneof<nothing, bool> # Must be voted as not accurately depicting an organism or scene
+  --fails-dqa-date: oneof<nothing, bool> # Must be voted as not having an accurate date
+  --fails-dqa-evidence: oneof<nothing, bool> # Must be voted as not evidence of an organism
+  --fails-dqa-location: oneof<nothing, bool> # Must be voted as not having an accurate location
+  --fails-dqa-needs-id: oneof<nothing, bool> # Must be voted as the community ID cannot be improved
+  --fails-dqa-recent: oneof<nothing, bool> # Must be voted as not recent evidence of an organism
+  --fails-dqa-subject: oneof<nothing, bool> # Must be voted as not having evidence related to a single subject
+  --fails-dqa-wild: oneof<nothing, bool> # Must be voted as not wild
   --q: string # Search observation properties. Can be combined with `search_on`
   --search-on: string@search-on-completer # Properties to search on, when combined with `q`. Searches across all properties by default
   --quality-grade: string@quality-grade-completer # Must have this quality grade
   --updated-since: string # Must be updated since this time
   --viewer-id: string # See `reviewed`
-  --reviewed: string@bool-completer # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
+  --reviewed: oneof<nothing, bool> # Observations have been reviewed by the user with ID equal to the value of the `viewer_id` parameter
 ]: nothing -> record<grid: list<string>, keys: list<string>, data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

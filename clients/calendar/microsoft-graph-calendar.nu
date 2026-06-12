@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://graph.microsoft.com/v1.0"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -143,7 +142,7 @@ export def "groups-calendar-calendar-permissions ListCalendarPermission" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -174,8 +173,8 @@ export def "groups-calendar-calendar-permissions CreateCalendarPermission" [
   --id: string # The unique identifier for an entity. Read-only.
   --allowedRoles: list # List of allowed sharing or delegating permission levels for the calendar. The possible values are: none, freeBusyRead, limitedRead, read, write, delegateWithoutPrivateEventAccess, delegateWithPrivateEventAccess, custom.
   --emailAddress: record # shape: {address?: string, name?: string}
-  --isInsideOrganization: string@bool-completer # True if the user in context (recipient or delegate) is inside the same organization as the calendar owner. (nullable)
-  --isRemovable: string@bool-completer # True if the user can be removed from the list of recipients or delegates for the specified calendar, false otherwise. The 'My organization' user determines the permissions other people within your organization have to the given calendar. You can't remove 'My organization' as a share recipient to a calendar. (nullable)
+  --isInsideOrganization: oneof<nothing, bool> # True if the user in context (recipient or delegate) is inside the same organization as the calendar owner. (nullable)
+  --isRemovable: oneof<nothing, bool> # True if the user can be removed from the list of recipients or delegates for the specified calendar, false otherwise. The 'My organization' user determines the permissions other people within your organization have to the given calendar. You can't remove 'My organization' as a share recipient to a calendar. (nullable)
   --role: string@role-completer
 ]: any -> record<id: string, allowedRoles: list<string>, emailAddress: record<address: string, name: string>, isInsideOrganization: bool, isRemovable: bool, role: string> {
   let input = $in
@@ -233,8 +232,8 @@ export def "groups-calendar-calendar-permissions UpdateCalendarPermission" [
   --id: string # The unique identifier for an entity. Read-only.
   --allowedRoles: list # List of allowed sharing or delegating permission levels for the calendar. The possible values are: none, freeBusyRead, limitedRead, read, write, delegateWithoutPrivateEventAccess, delegateWithPrivateEventAccess, custom.
   --emailAddress: record # shape: {address?: string, name?: string}
-  --isInsideOrganization: string@bool-completer # True if the user in context (recipient or delegate) is inside the same organization as the calendar owner. (nullable)
-  --isRemovable: string@bool-completer # True if the user can be removed from the list of recipients or delegates for the specified calendar, false otherwise. The 'My organization' user determines the permissions other people within your organization have to the given calendar. You can't remove 'My organization' as a share recipient to a calendar. (nullable)
+  --isInsideOrganization: oneof<nothing, bool> # True if the user in context (recipient or delegate) is inside the same organization as the calendar owner. (nullable)
+  --isRemovable: oneof<nothing, bool> # True if the user can be removed from the list of recipients or delegates for the specified calendar, false otherwise. The 'My organization' user determines the permissions other people within your organization have to the given calendar. You can't remove 'My organization' as a share recipient to a calendar. (nullable)
   --role: string@role-completer
 ]: any -> record<id: string, allowedRoles: list<string>, emailAddress: record<address: string, name: string>, isInsideOrganization: bool, isRemovable: bool, role: string> {
   let input = $in
@@ -318,7 +317,7 @@ export def "groups-calendar-calendar-view ListCalendarView" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -352,7 +351,7 @@ export def "groups-calendar-calendar-view-microsoftgraphdelta delta" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities
@@ -383,7 +382,7 @@ export def "groups-calendar-events ListEvent" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -426,22 +425,22 @@ export def "groups-calendar-events CreateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowNewTimeProposals: string@bool-completer # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
+  --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
   --bodyPreview: string # The preview of the message associated with the event. It's in text format. (nullable)
   --cancelledOccurrences: list # Contains occurrenceId property values of canceled instances in a recurring series, if the event is the series master. Instances in a recurring series that are canceled are called canceled occurences.Requires $select to retrieve. Only returned in a Get operation that specifies the ID (seriesMasterId property value) of a series master event.
   --end: record # shape: {dateTime?: string, timeZone?: string}
-  --hasAttachments: string@bool-completer # Set to true if the event has attachments. (nullable)
-  --hideAttendees: string@bool-completer # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
+  --hasAttachments: oneof<nothing, bool> # Set to true if the event has attachments. (nullable)
+  --hideAttendees: oneof<nothing, bool> # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
   --iCalUId: string # A unique identifier for an event across calendars. This ID is different for each occurrence in a recurring series. Read-only. (nullable)
   --importance: string@importance-completer
-  --isAllDay: string@bool-completer # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
-  --isCancelled: string@bool-completer # Set to true if the event has been canceled. (nullable)
-  --isDraft: string@bool-completer # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
-  --isOnlineMeeting: string@bool-completer # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
-  --isOrganizer: string@bool-completer # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
-  --isReminderOn: string@bool-completer # Set to true if an alert is set to remind the user of the event. (nullable)
+  --isAllDay: oneof<nothing, bool> # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
+  --isCancelled: oneof<nothing, bool> # Set to true if the event has been canceled. (nullable)
+  --isDraft: oneof<nothing, bool> # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
+  --isOnlineMeeting: oneof<nothing, bool> # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
+  --isOrganizer: oneof<nothing, bool> # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
+  --isReminderOn: oneof<nothing, bool> # Set to true if an alert is set to remind the user of the event. (nullable)
   --location: record # shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --locations: list # The locations where the event is held or attended from. The location and locations properties always correspond with each other. If you update the location property, any prior locations in the locations collection are removed and replaced by the new location value. — item shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --onlineMeeting: record # shape: {conferenceId?: string, joinUrl?: string, phones?: list, quickDial?: string, tollFreeNumbers?: list, tollNumber?: string}
@@ -453,7 +452,7 @@ export def "groups-calendar-events CreateEvent" [
   --originalStartTimeZone: string # The start time zone that was set when the event was created. A value of tzone://Microsoft/Custom indicates that a legacy custom time zone was set in desktop Outlook. (nullable)
   --recurrence: record # shape: {pattern?: record, range?: record}
   --reminderMinutesBeforeStart: float # The number of minutes before the event start time that the reminder alert occurs. (nullable, format: int32)
-  --responseRequested: string@bool-completer # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
+  --responseRequested: oneof<nothing, bool> # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
   --responseStatus: record # shape: {response?: "none"|"organizer"|"tentativelyAccepted"|"accepted"|"declined"|"notResponded", time?: string}
   --sensitivity: string@sensitivity-completer
   --seriesMasterId: string # The ID for the recurring series master item, if this event is part of a recurring series. (nullable)
@@ -539,22 +538,22 @@ export def "groups-calendar-events UpdateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowNewTimeProposals: string@bool-completer # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
+  --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
   --bodyPreview: string # The preview of the message associated with the event. It's in text format. (nullable)
   --cancelledOccurrences: list # Contains occurrenceId property values of canceled instances in a recurring series, if the event is the series master. Instances in a recurring series that are canceled are called canceled occurences.Requires $select to retrieve. Only returned in a Get operation that specifies the ID (seriesMasterId property value) of a series master event.
   --end: record # shape: {dateTime?: string, timeZone?: string}
-  --hasAttachments: string@bool-completer # Set to true if the event has attachments. (nullable)
-  --hideAttendees: string@bool-completer # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
+  --hasAttachments: oneof<nothing, bool> # Set to true if the event has attachments. (nullable)
+  --hideAttendees: oneof<nothing, bool> # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
   --iCalUId: string # A unique identifier for an event across calendars. This ID is different for each occurrence in a recurring series. Read-only. (nullable)
   --importance: string@importance-completer
-  --isAllDay: string@bool-completer # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
-  --isCancelled: string@bool-completer # Set to true if the event has been canceled. (nullable)
-  --isDraft: string@bool-completer # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
-  --isOnlineMeeting: string@bool-completer # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
-  --isOrganizer: string@bool-completer # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
-  --isReminderOn: string@bool-completer # Set to true if an alert is set to remind the user of the event. (nullable)
+  --isAllDay: oneof<nothing, bool> # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
+  --isCancelled: oneof<nothing, bool> # Set to true if the event has been canceled. (nullable)
+  --isDraft: oneof<nothing, bool> # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
+  --isOnlineMeeting: oneof<nothing, bool> # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
+  --isOrganizer: oneof<nothing, bool> # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
+  --isReminderOn: oneof<nothing, bool> # Set to true if an alert is set to remind the user of the event. (nullable)
   --location: record # shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --locations: list # The locations where the event is held or attended from. The location and locations properties always correspond with each other. If you update the location property, any prior locations in the locations collection are removed and replaced by the new location value. — item shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --onlineMeeting: record # shape: {conferenceId?: string, joinUrl?: string, phones?: list, quickDial?: string, tollFreeNumbers?: list, tollNumber?: string}
@@ -566,7 +565,7 @@ export def "groups-calendar-events UpdateEvent" [
   --originalStartTimeZone: string # The start time zone that was set when the event was created. A value of tzone://Microsoft/Custom indicates that a legacy custom time zone was set in desktop Outlook. (nullable)
   --recurrence: record # shape: {pattern?: record, range?: record}
   --reminderMinutesBeforeStart: float # The number of minutes before the event start time that the reminder alert occurs. (nullable, format: int32)
-  --responseRequested: string@bool-completer # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
+  --responseRequested: oneof<nothing, bool> # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
   --responseStatus: record # shape: {response?: "none"|"organizer"|"tentativelyAccepted"|"accepted"|"declined"|"notResponded", time?: string}
   --sensitivity: string@sensitivity-completer
   --seriesMasterId: string # The ID for the recurring series master item, if this event is part of a recurring series. (nullable)
@@ -639,7 +638,7 @@ export def "groups-calendar-events-attachments ListAttachment" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -669,7 +668,7 @@ export def "groups-calendar-events-attachments CreateAttachment" [
   --allow-errors(-e) # Return full response without error handling
   --id: string # The unique identifier for an entity. Read-only.
   --contentType: string # The MIME type. (nullable)
-  --isInline: string@bool-completer # true if the attachment is an inline attachment; otherwise, false.
+  --isInline: oneof<nothing, bool> # true if the attachment is an inline attachment; otherwise, false.
   --lastModifiedDateTime: string # The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --name: string # The attachment's file name. (nullable)
   --size: float # The length of the attachment in bytes. (format: int32)
@@ -838,7 +837,7 @@ export def "groups-calendar-events-extensions ListExtension" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -1007,7 +1006,7 @@ export def "groups-calendar-events-instances ListInstance" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -1042,7 +1041,7 @@ export def "groups-calendar-events-instances-microsoftgraphdelta delta" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities
@@ -1071,7 +1070,7 @@ export def "groups-calendar-events-microsoftgraphaccept accept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --SendResponse: string@bool-completer # nullable, default: false
+  --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -1130,7 +1129,7 @@ export def "groups-calendar-events-microsoftgraphdecline decline" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ProposedNewTime: record # shape: {end?: record, start?: record}
-  --SendResponse: string@bool-completer # nullable, default: false
+  --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -1267,7 +1266,7 @@ export def "groups-calendar-events-microsoftgraphtentatively-accept tentativelyA
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ProposedNewTime: record # shape: {end?: record, start?: record}
-  --SendResponse: string@bool-completer # nullable, default: false
+  --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -1326,7 +1325,7 @@ export def "groups-calendar-events-microsoftgraphdelta delta" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities
@@ -1358,7 +1357,7 @@ export def "groups-calendar-microsoftgraphallowed-calendar-sharing-roles-user-us
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
 ]: nothing -> record<value: list<string>, _odata_nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1443,7 +1442,7 @@ export def "groups-calendar-view ListCalendarView" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -1477,7 +1476,7 @@ export def "groups-calendar-view-microsoftgraphdelta delta" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities
@@ -1509,7 +1508,7 @@ export def "groups-events ListEvent" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -1553,22 +1552,22 @@ export def "groups-events CreateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowNewTimeProposals: string@bool-completer # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
+  --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
   --bodyPreview: string # The preview of the message associated with the event. It's in text format. (nullable)
   --cancelledOccurrences: list # Contains occurrenceId property values of canceled instances in a recurring series, if the event is the series master. Instances in a recurring series that are canceled are called canceled occurences.Requires $select to retrieve. Only returned in a Get operation that specifies the ID (seriesMasterId property value) of a series master event.
   --end: record # shape: {dateTime?: string, timeZone?: string}
-  --hasAttachments: string@bool-completer # Set to true if the event has attachments. (nullable)
-  --hideAttendees: string@bool-completer # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
+  --hasAttachments: oneof<nothing, bool> # Set to true if the event has attachments. (nullable)
+  --hideAttendees: oneof<nothing, bool> # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
   --iCalUId: string # A unique identifier for an event across calendars. This ID is different for each occurrence in a recurring series. Read-only. (nullable)
   --importance: string@importance-completer
-  --isAllDay: string@bool-completer # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
-  --isCancelled: string@bool-completer # Set to true if the event has been canceled. (nullable)
-  --isDraft: string@bool-completer # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
-  --isOnlineMeeting: string@bool-completer # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
-  --isOrganizer: string@bool-completer # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
-  --isReminderOn: string@bool-completer # Set to true if an alert is set to remind the user of the event. (nullable)
+  --isAllDay: oneof<nothing, bool> # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
+  --isCancelled: oneof<nothing, bool> # Set to true if the event has been canceled. (nullable)
+  --isDraft: oneof<nothing, bool> # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
+  --isOnlineMeeting: oneof<nothing, bool> # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
+  --isOrganizer: oneof<nothing, bool> # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
+  --isReminderOn: oneof<nothing, bool> # Set to true if an alert is set to remind the user of the event. (nullable)
   --location: record # shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --locations: list # The locations where the event is held or attended from. The location and locations properties always correspond with each other. If you update the location property, any prior locations in the locations collection are removed and replaced by the new location value. — item shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --onlineMeeting: record # shape: {conferenceId?: string, joinUrl?: string, phones?: list, quickDial?: string, tollFreeNumbers?: list, tollNumber?: string}
@@ -1580,7 +1579,7 @@ export def "groups-events CreateEvent" [
   --originalStartTimeZone: string # The start time zone that was set when the event was created. A value of tzone://Microsoft/Custom indicates that a legacy custom time zone was set in desktop Outlook. (nullable)
   --recurrence: record # shape: {pattern?: record, range?: record}
   --reminderMinutesBeforeStart: float # The number of minutes before the event start time that the reminder alert occurs. (nullable, format: int32)
-  --responseRequested: string@bool-completer # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
+  --responseRequested: oneof<nothing, bool> # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
   --responseStatus: record # shape: {response?: "none"|"organizer"|"tentativelyAccepted"|"accepted"|"declined"|"notResponded", time?: string}
   --sensitivity: string@sensitivity-completer
   --seriesMasterId: string # The ID for the recurring series master item, if this event is part of a recurring series. (nullable)
@@ -1666,22 +1665,22 @@ export def "groups-events UpdateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowNewTimeProposals: string@bool-completer # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
+  --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
   --bodyPreview: string # The preview of the message associated with the event. It's in text format. (nullable)
   --cancelledOccurrences: list # Contains occurrenceId property values of canceled instances in a recurring series, if the event is the series master. Instances in a recurring series that are canceled are called canceled occurences.Requires $select to retrieve. Only returned in a Get operation that specifies the ID (seriesMasterId property value) of a series master event.
   --end: record # shape: {dateTime?: string, timeZone?: string}
-  --hasAttachments: string@bool-completer # Set to true if the event has attachments. (nullable)
-  --hideAttendees: string@bool-completer # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
+  --hasAttachments: oneof<nothing, bool> # Set to true if the event has attachments. (nullable)
+  --hideAttendees: oneof<nothing, bool> # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
   --iCalUId: string # A unique identifier for an event across calendars. This ID is different for each occurrence in a recurring series. Read-only. (nullable)
   --importance: string@importance-completer
-  --isAllDay: string@bool-completer # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
-  --isCancelled: string@bool-completer # Set to true if the event has been canceled. (nullable)
-  --isDraft: string@bool-completer # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
-  --isOnlineMeeting: string@bool-completer # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
-  --isOrganizer: string@bool-completer # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
-  --isReminderOn: string@bool-completer # Set to true if an alert is set to remind the user of the event. (nullable)
+  --isAllDay: oneof<nothing, bool> # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
+  --isCancelled: oneof<nothing, bool> # Set to true if the event has been canceled. (nullable)
+  --isDraft: oneof<nothing, bool> # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
+  --isOnlineMeeting: oneof<nothing, bool> # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
+  --isOrganizer: oneof<nothing, bool> # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
+  --isReminderOn: oneof<nothing, bool> # Set to true if an alert is set to remind the user of the event. (nullable)
   --location: record # shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --locations: list # The locations where the event is held or attended from. The location and locations properties always correspond with each other. If you update the location property, any prior locations in the locations collection are removed and replaced by the new location value. — item shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --onlineMeeting: record # shape: {conferenceId?: string, joinUrl?: string, phones?: list, quickDial?: string, tollFreeNumbers?: list, tollNumber?: string}
@@ -1693,7 +1692,7 @@ export def "groups-events UpdateEvent" [
   --originalStartTimeZone: string # The start time zone that was set when the event was created. A value of tzone://Microsoft/Custom indicates that a legacy custom time zone was set in desktop Outlook. (nullable)
   --recurrence: record # shape: {pattern?: record, range?: record}
   --reminderMinutesBeforeStart: float # The number of minutes before the event start time that the reminder alert occurs. (nullable, format: int32)
-  --responseRequested: string@bool-completer # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
+  --responseRequested: oneof<nothing, bool> # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
   --responseStatus: record # shape: {response?: "none"|"organizer"|"tentativelyAccepted"|"accepted"|"declined"|"notResponded", time?: string}
   --sensitivity: string@sensitivity-completer
   --seriesMasterId: string # The ID for the recurring series master item, if this event is part of a recurring series. (nullable)
@@ -1767,7 +1766,7 @@ export def "groups-events-attachments ListAttachment" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -1797,7 +1796,7 @@ export def "groups-events-attachments CreateAttachment" [
   --allow-errors(-e) # Return full response without error handling
   --id: string # The unique identifier for an entity. Read-only.
   --contentType: string # The MIME type. (nullable)
-  --isInline: string@bool-completer # true if the attachment is an inline attachment; otherwise, false.
+  --isInline: oneof<nothing, bool> # true if the attachment is an inline attachment; otherwise, false.
   --lastModifiedDateTime: string # The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --name: string # The attachment's file name. (nullable)
   --size: float # The length of the attachment in bytes. (format: int32)
@@ -1966,7 +1965,7 @@ export def "groups-events-extensions ListExtension" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -2137,7 +2136,7 @@ export def "groups-events-instances ListInstance" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -2172,7 +2171,7 @@ export def "groups-events-instances-microsoftgraphdelta delta" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities
@@ -2201,7 +2200,7 @@ export def "groups-events-microsoftgraphaccept accept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --SendResponse: string@bool-completer # nullable, default: false
+  --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -2260,7 +2259,7 @@ export def "groups-events-microsoftgraphdecline decline" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ProposedNewTime: record # shape: {end?: record, start?: record}
-  --SendResponse: string@bool-completer # nullable, default: false
+  --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -2397,7 +2396,7 @@ export def "groups-events-microsoftgraphtentatively-accept tentativelyAccept" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ProposedNewTime: record # shape: {end?: record, start?: record}
-  --SendResponse: string@bool-completer # nullable, default: false
+  --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -2456,7 +2455,7 @@ export def "groups-events-microsoftgraphdelta delta" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities
@@ -2490,7 +2489,7 @@ export def "places CreatePlace" [
   --address: record # shape: {city?: string, countryOrRegion?: string, postalCode?: string, state?: string, street?: string}
   --displayName: string # The name that is associated with the place.
   --geoCoordinates: record # shape: {accuracy?: float, altitude?: float, altitudeAccuracy?: float, latitude?: float, longitude?: float}
-  --isWheelChairAccessible: string@bool-completer # Indicates whether the place is wheelchair accessible. (nullable)
+  --isWheelChairAccessible: oneof<nothing, bool> # Indicates whether the place is wheelchair accessible. (nullable)
   --label: string # User-defined description of the place. (nullable)
   --parentId: string # The ID of a parent place. (nullable)
   --phone: string # The phone number of the place. (nullable)
@@ -2529,7 +2528,7 @@ export def "places UpdatePlace" [
   --address: record # shape: {city?: string, countryOrRegion?: string, postalCode?: string, state?: string, street?: string}
   --displayName: string # The name that is associated with the place.
   --geoCoordinates: record # shape: {accuracy?: float, altitude?: float, altitudeAccuracy?: float, latitude?: float, longitude?: float}
-  --isWheelChairAccessible: string@bool-completer # Indicates whether the place is wheelchair accessible. (nullable)
+  --isWheelChairAccessible: oneof<nothing, bool> # Indicates whether the place is wheelchair accessible. (nullable)
   --label: string # User-defined description of the place. (nullable)
   --parentId: string # The ID of a parent place. (nullable)
   --phone: string # The phone number of the place. (nullable)
@@ -2590,7 +2589,7 @@ export def "places-check-ins ListCheckIn" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -2783,7 +2782,7 @@ export def "places-microsoftgraphbuilding-check-ins ListCheckIn" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -3030,7 +3029,7 @@ export def "places-microsoftgraphbuilding-map-footprints ListFootprint" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -3190,7 +3189,7 @@ export def "places-microsoftgraphbuilding-map-levels ListLevel" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -3340,7 +3339,7 @@ export def "places-microsoftgraphbuilding-map-levels-fixtures ListFixture" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -3510,7 +3509,7 @@ export def "places-microsoftgraphbuilding-map-levels-sections ListSection" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -3678,7 +3677,7 @@ export def "places-microsoftgraphbuilding-map-levels-units ListUnit" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -3871,7 +3870,7 @@ export def "places-microsoftgraphdescendants descendant" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities
@@ -3928,7 +3927,7 @@ export def "places-microsoftgraphdesk-check-ins ListCheckIn" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -4119,7 +4118,7 @@ export def "places-microsoftgraphfloor-check-ins ListCheckIn" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -4310,7 +4309,7 @@ export def "places-microsoftgraphroom-check-ins ListCheckIn" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -4501,7 +4500,7 @@ export def "places-microsoftgraphroom-list-check-ins ListCheckIn" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -4666,7 +4665,7 @@ export def "places-microsoftgraphroom-list-rooms ListRoom" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -4825,7 +4824,7 @@ export def "places-microsoftgraphroom-list-rooms-check-ins ListCheckIn" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -5020,7 +5019,7 @@ export def "places-microsoftgraphroom-list-workspaces ListWorkspace" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -5167,7 +5166,7 @@ export def "places-microsoftgraphroom-list-workspaces-check-ins ListCheckIn" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -5388,7 +5387,7 @@ export def "places-microsoftgraphsection-check-ins ListCheckIn" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -5579,7 +5578,7 @@ export def "places-microsoftgraphworkspace-check-ins ListCheckIn" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -5768,7 +5767,7 @@ export def "places-microsoftgraphbuilding ListPlaceAsBuilding" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -5823,7 +5822,7 @@ export def "places-microsoftgraphdesk ListPlaceAsDesk" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -5878,7 +5877,7 @@ export def "places-microsoftgraphfloor ListPlaceAsFloor" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -5933,7 +5932,7 @@ export def "places-microsoftgraphroom ListPlaceAsRoom" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -5988,7 +5987,7 @@ export def "places-microsoftgraphroom-list ListPlaceAsRoomList" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -6043,7 +6042,7 @@ export def "places-microsoftgraphsection ListPlaceAsSection" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -6098,7 +6097,7 @@ export def "places-microsoftgraphworkspace ListPlaceAsWorkspace" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -6182,16 +6181,16 @@ export def "users-calendar UpdateCalendar" [
   --allow-errors(-e) # Return full response without error handling
   --id: string # The unique identifier for an entity. Read-only.
   --allowedOnlineMeetingProviders: list # Represent the online meeting service providers that can be used to create online meetings in this calendar. The possible values are: unknown, skypeForBusiness, skypeForConsumer, teamsForBusiness.
-  --canEdit: string@bool-completer # true if the user can write to the calendar, false otherwise. This property is true for the user who created the calendar. This property is also true for a user who shared a calendar and granted write access. (nullable)
-  --canShare: string@bool-completer # true if the user has permission to share the calendar, false otherwise. Only the user who created the calendar can share it. (nullable)
-  --canViewPrivateItems: string@bool-completer # If true, the user can read calendar items that have been marked private, false otherwise. (nullable)
+  --canEdit: oneof<nothing, bool> # true if the user can write to the calendar, false otherwise. This property is true for the user who created the calendar. This property is also true for a user who shared a calendar and granted write access. (nullable)
+  --canShare: oneof<nothing, bool> # true if the user has permission to share the calendar, false otherwise. Only the user who created the calendar can share it. (nullable)
+  --canViewPrivateItems: oneof<nothing, bool> # If true, the user can read calendar items that have been marked private, false otherwise. (nullable)
   --changeKey: string # Identifies the version of the calendar object. Every time the calendar is changed, changeKey changes as well. This allows Exchange to apply changes to the correct version of the object. Read-only. (nullable)
   --color: string@color-completer
   --defaultOnlineMeetingProvider: string@defaultOnlineMeetingProvider-completer
   --hexColor: string # The calendar color, expressed in a hex color code of three hexadecimal values, each ranging from 00 to FF and representing the red, green, or blue components of the color in the RGB color space. If the user has never explicitly set a color for the calendar, this property is empty. Read-only. (nullable)
-  --isDefaultCalendar: string@bool-completer # true if this is the default calendar where new events are created by default, false otherwise. (nullable)
-  --isRemovable: string@bool-completer # Indicates whether this user calendar can be deleted from the user mailbox. (nullable)
-  --isTallyingResponses: string@bool-completer # Indicates whether this user calendar supports tracking of meeting responses. Only meeting invites sent from users' primary calendars support tracking of meeting responses. (nullable)
+  --isDefaultCalendar: oneof<nothing, bool> # true if this is the default calendar where new events are created by default, false otherwise. (nullable)
+  --isRemovable: oneof<nothing, bool> # Indicates whether this user calendar can be deleted from the user mailbox. (nullable)
+  --isTallyingResponses: oneof<nothing, bool> # Indicates whether this user calendar supports tracking of meeting responses. Only meeting invites sent from users' primary calendars support tracking of meeting responses. (nullable)
   --name: string # The calendar name. (nullable)
   --owner: record # shape: {address?: string, name?: string}
   --calendarPermissions: list # The permissions of the users with whom the calendar is shared. — item shape: {id?: string, allowedRoles?: list, emailAddress?: record, isInsideOrganization?: bool, isRemovable?: bool, role?: "none"|"freeBusyRead"|"limitedRead"|"read"|"write"|"delegateWithoutPrivateEventAccess"|"delegateWithPrivateEventAccess"|"custom"}
@@ -6229,7 +6228,7 @@ export def "users-calendar-calendar-permissions ListCalendarPermission" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -6260,8 +6259,8 @@ export def "users-calendar-calendar-permissions CreateCalendarPermission" [
   --id: string # The unique identifier for an entity. Read-only.
   --allowedRoles: list # List of allowed sharing or delegating permission levels for the calendar. The possible values are: none, freeBusyRead, limitedRead, read, write, delegateWithoutPrivateEventAccess, delegateWithPrivateEventAccess, custom.
   --emailAddress: record # shape: {address?: string, name?: string}
-  --isInsideOrganization: string@bool-completer # True if the user in context (recipient or delegate) is inside the same organization as the calendar owner. (nullable)
-  --isRemovable: string@bool-completer # True if the user can be removed from the list of recipients or delegates for the specified calendar, false otherwise. The 'My organization' user determines the permissions other people within your organization have to the given calendar. You can't remove 'My organization' as a share recipient to a calendar. (nullable)
+  --isInsideOrganization: oneof<nothing, bool> # True if the user in context (recipient or delegate) is inside the same organization as the calendar owner. (nullable)
+  --isRemovable: oneof<nothing, bool> # True if the user can be removed from the list of recipients or delegates for the specified calendar, false otherwise. The 'My organization' user determines the permissions other people within your organization have to the given calendar. You can't remove 'My organization' as a share recipient to a calendar. (nullable)
   --role: string@role-completer
 ]: any -> record<id: string, allowedRoles: list<string>, emailAddress: record<address: string, name: string>, isInsideOrganization: bool, isRemovable: bool, role: string> {
   let input = $in
@@ -6321,8 +6320,8 @@ export def "users-calendar-calendar-permissions UpdateCalendarPermission" [
   --id: string # The unique identifier for an entity. Read-only.
   --allowedRoles: list # List of allowed sharing or delegating permission levels for the calendar. The possible values are: none, freeBusyRead, limitedRead, read, write, delegateWithoutPrivateEventAccess, delegateWithPrivateEventAccess, custom.
   --emailAddress: record # shape: {address?: string, name?: string}
-  --isInsideOrganization: string@bool-completer # True if the user in context (recipient or delegate) is inside the same organization as the calendar owner. (nullable)
-  --isRemovable: string@bool-completer # True if the user can be removed from the list of recipients or delegates for the specified calendar, false otherwise. The 'My organization' user determines the permissions other people within your organization have to the given calendar. You can't remove 'My organization' as a share recipient to a calendar. (nullable)
+  --isInsideOrganization: oneof<nothing, bool> # True if the user in context (recipient or delegate) is inside the same organization as the calendar owner. (nullable)
+  --isRemovable: oneof<nothing, bool> # True if the user can be removed from the list of recipients or delegates for the specified calendar, false otherwise. The 'My organization' user determines the permissions other people within your organization have to the given calendar. You can't remove 'My organization' as a share recipient to a calendar. (nullable)
   --role: string@role-completer
 ]: any -> record<id: string, allowedRoles: list<string>, emailAddress: record<address: string, name: string>, isInsideOrganization: bool, isRemovable: bool, role: string> {
   let input = $in
@@ -6407,7 +6406,7 @@ export def "users-calendar-calendar-view ListCalendarView" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -6441,7 +6440,7 @@ export def "users-calendar-calendar-view-microsoftgraphdelta delta" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities
@@ -6472,7 +6471,7 @@ export def "users-calendar-events ListEvent" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -6515,22 +6514,22 @@ export def "users-calendar-events CreateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowNewTimeProposals: string@bool-completer # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
+  --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
   --bodyPreview: string # The preview of the message associated with the event. It's in text format. (nullable)
   --cancelledOccurrences: list # Contains occurrenceId property values of canceled instances in a recurring series, if the event is the series master. Instances in a recurring series that are canceled are called canceled occurences.Requires $select to retrieve. Only returned in a Get operation that specifies the ID (seriesMasterId property value) of a series master event.
   --end: record # shape: {dateTime?: string, timeZone?: string}
-  --hasAttachments: string@bool-completer # Set to true if the event has attachments. (nullable)
-  --hideAttendees: string@bool-completer # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
+  --hasAttachments: oneof<nothing, bool> # Set to true if the event has attachments. (nullable)
+  --hideAttendees: oneof<nothing, bool> # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
   --iCalUId: string # A unique identifier for an event across calendars. This ID is different for each occurrence in a recurring series. Read-only. (nullable)
   --importance: string@importance-completer
-  --isAllDay: string@bool-completer # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
-  --isCancelled: string@bool-completer # Set to true if the event has been canceled. (nullable)
-  --isDraft: string@bool-completer # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
-  --isOnlineMeeting: string@bool-completer # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
-  --isOrganizer: string@bool-completer # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
-  --isReminderOn: string@bool-completer # Set to true if an alert is set to remind the user of the event. (nullable)
+  --isAllDay: oneof<nothing, bool> # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
+  --isCancelled: oneof<nothing, bool> # Set to true if the event has been canceled. (nullable)
+  --isDraft: oneof<nothing, bool> # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
+  --isOnlineMeeting: oneof<nothing, bool> # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
+  --isOrganizer: oneof<nothing, bool> # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
+  --isReminderOn: oneof<nothing, bool> # Set to true if an alert is set to remind the user of the event. (nullable)
   --location: record # shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --locations: list # The locations where the event is held or attended from. The location and locations properties always correspond with each other. If you update the location property, any prior locations in the locations collection are removed and replaced by the new location value. — item shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --onlineMeeting: record # shape: {conferenceId?: string, joinUrl?: string, phones?: list, quickDial?: string, tollFreeNumbers?: list, tollNumber?: string}
@@ -6542,7 +6541,7 @@ export def "users-calendar-events CreateEvent" [
   --originalStartTimeZone: string # The start time zone that was set when the event was created. A value of tzone://Microsoft/Custom indicates that a legacy custom time zone was set in desktop Outlook. (nullable)
   --recurrence: record # shape: {pattern?: record, range?: record}
   --reminderMinutesBeforeStart: float # The number of minutes before the event start time that the reminder alert occurs. (nullable, format: int32)
-  --responseRequested: string@bool-completer # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
+  --responseRequested: oneof<nothing, bool> # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
   --responseStatus: record # shape: {response?: "none"|"organizer"|"tentativelyAccepted"|"accepted"|"declined"|"notResponded", time?: string}
   --sensitivity: string@sensitivity-completer
   --seriesMasterId: string # The ID for the recurring series master item, if this event is part of a recurring series. (nullable)
@@ -6627,22 +6626,22 @@ export def "users-calendar-events UpdateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowNewTimeProposals: string@bool-completer # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
+  --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
   --bodyPreview: string # The preview of the message associated with the event. It's in text format. (nullable)
   --cancelledOccurrences: list # Contains occurrenceId property values of canceled instances in a recurring series, if the event is the series master. Instances in a recurring series that are canceled are called canceled occurences.Requires $select to retrieve. Only returned in a Get operation that specifies the ID (seriesMasterId property value) of a series master event.
   --end: record # shape: {dateTime?: string, timeZone?: string}
-  --hasAttachments: string@bool-completer # Set to true if the event has attachments. (nullable)
-  --hideAttendees: string@bool-completer # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
+  --hasAttachments: oneof<nothing, bool> # Set to true if the event has attachments. (nullable)
+  --hideAttendees: oneof<nothing, bool> # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
   --iCalUId: string # A unique identifier for an event across calendars. This ID is different for each occurrence in a recurring series. Read-only. (nullable)
   --importance: string@importance-completer
-  --isAllDay: string@bool-completer # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
-  --isCancelled: string@bool-completer # Set to true if the event has been canceled. (nullable)
-  --isDraft: string@bool-completer # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
-  --isOnlineMeeting: string@bool-completer # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
-  --isOrganizer: string@bool-completer # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
-  --isReminderOn: string@bool-completer # Set to true if an alert is set to remind the user of the event. (nullable)
+  --isAllDay: oneof<nothing, bool> # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
+  --isCancelled: oneof<nothing, bool> # Set to true if the event has been canceled. (nullable)
+  --isDraft: oneof<nothing, bool> # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
+  --isOnlineMeeting: oneof<nothing, bool> # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
+  --isOrganizer: oneof<nothing, bool> # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
+  --isReminderOn: oneof<nothing, bool> # Set to true if an alert is set to remind the user of the event. (nullable)
   --location: record # shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --locations: list # The locations where the event is held or attended from. The location and locations properties always correspond with each other. If you update the location property, any prior locations in the locations collection are removed and replaced by the new location value. — item shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --onlineMeeting: record # shape: {conferenceId?: string, joinUrl?: string, phones?: list, quickDial?: string, tollFreeNumbers?: list, tollNumber?: string}
@@ -6654,7 +6653,7 @@ export def "users-calendar-events UpdateEvent" [
   --originalStartTimeZone: string # The start time zone that was set when the event was created. A value of tzone://Microsoft/Custom indicates that a legacy custom time zone was set in desktop Outlook. (nullable)
   --recurrence: record # shape: {pattern?: record, range?: record}
   --reminderMinutesBeforeStart: float # The number of minutes before the event start time that the reminder alert occurs. (nullable, format: int32)
-  --responseRequested: string@bool-completer # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
+  --responseRequested: oneof<nothing, bool> # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
   --responseStatus: record # shape: {response?: "none"|"organizer"|"tentativelyAccepted"|"accepted"|"declined"|"notResponded", time?: string}
   --sensitivity: string@sensitivity-completer
   --seriesMasterId: string # The ID for the recurring series master item, if this event is part of a recurring series. (nullable)
@@ -6727,7 +6726,7 @@ export def "users-calendar-events-attachments ListAttachment" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -6757,7 +6756,7 @@ export def "users-calendar-events-attachments CreateAttachment" [
   --allow-errors(-e) # Return full response without error handling
   --id: string # The unique identifier for an entity. Read-only.
   --contentType: string # The MIME type. (nullable)
-  --isInline: string@bool-completer # true if the attachment is an inline attachment; otherwise, false.
+  --isInline: oneof<nothing, bool> # true if the attachment is an inline attachment; otherwise, false.
   --lastModifiedDateTime: string # The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --name: string # The attachment's file name. (nullable)
   --size: float # The length of the attachment in bytes. (format: int32)
@@ -6926,7 +6925,7 @@ export def "users-calendar-events-extensions ListExtension" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -7095,7 +7094,7 @@ export def "users-calendar-events-instances ListInstance" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -7130,7 +7129,7 @@ export def "users-calendar-events-instances-microsoftgraphdelta delta" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities
@@ -7159,7 +7158,7 @@ export def "users-calendar-events-microsoftgraphaccept accept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --SendResponse: string@bool-completer # nullable, default: false
+  --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -7218,7 +7217,7 @@ export def "users-calendar-events-microsoftgraphdecline decline" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ProposedNewTime: record # shape: {end?: record, start?: record}
-  --SendResponse: string@bool-completer # nullable, default: false
+  --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -7355,7 +7354,7 @@ export def "users-calendar-events-microsoftgraphtentatively-accept tentativelyAc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ProposedNewTime: record # shape: {end?: record, start?: record}
-  --SendResponse: string@bool-completer # nullable, default: false
+  --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -7414,7 +7413,7 @@ export def "users-calendar-events-microsoftgraphdelta delta" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities
@@ -7446,7 +7445,7 @@ export def "users-calendar-microsoftgraphallowed-calendar-sharing-roles-user-use
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
 ]: nothing -> record<value: list<string>, _odata_nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7528,7 +7527,7 @@ export def "users-calendar-groups ListCalendarGroup" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -7675,7 +7674,7 @@ export def "users-calendar-groups-calendars ListCalendar" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -7711,16 +7710,16 @@ export def "users-calendar-groups-calendars CreateCalendar" [
   --allow-errors(-e) # Return full response without error handling
   --id: string # The unique identifier for an entity. Read-only.
   --allowedOnlineMeetingProviders: list # Represent the online meeting service providers that can be used to create online meetings in this calendar. The possible values are: unknown, skypeForBusiness, skypeForConsumer, teamsForBusiness.
-  --canEdit: string@bool-completer # true if the user can write to the calendar, false otherwise. This property is true for the user who created the calendar. This property is also true for a user who shared a calendar and granted write access. (nullable)
-  --canShare: string@bool-completer # true if the user has permission to share the calendar, false otherwise. Only the user who created the calendar can share it. (nullable)
-  --canViewPrivateItems: string@bool-completer # If true, the user can read calendar items that have been marked private, false otherwise. (nullable)
+  --canEdit: oneof<nothing, bool> # true if the user can write to the calendar, false otherwise. This property is true for the user who created the calendar. This property is also true for a user who shared a calendar and granted write access. (nullable)
+  --canShare: oneof<nothing, bool> # true if the user has permission to share the calendar, false otherwise. Only the user who created the calendar can share it. (nullable)
+  --canViewPrivateItems: oneof<nothing, bool> # If true, the user can read calendar items that have been marked private, false otherwise. (nullable)
   --changeKey: string # Identifies the version of the calendar object. Every time the calendar is changed, changeKey changes as well. This allows Exchange to apply changes to the correct version of the object. Read-only. (nullable)
   --color: string@color-completer
   --defaultOnlineMeetingProvider: string@defaultOnlineMeetingProvider-completer
   --hexColor: string # The calendar color, expressed in a hex color code of three hexadecimal values, each ranging from 00 to FF and representing the red, green, or blue components of the color in the RGB color space. If the user has never explicitly set a color for the calendar, this property is empty. Read-only. (nullable)
-  --isDefaultCalendar: string@bool-completer # true if this is the default calendar where new events are created by default, false otherwise. (nullable)
-  --isRemovable: string@bool-completer # Indicates whether this user calendar can be deleted from the user mailbox. (nullable)
-  --isTallyingResponses: string@bool-completer # Indicates whether this user calendar supports tracking of meeting responses. Only meeting invites sent from users' primary calendars support tracking of meeting responses. (nullable)
+  --isDefaultCalendar: oneof<nothing, bool> # true if this is the default calendar where new events are created by default, false otherwise. (nullable)
+  --isRemovable: oneof<nothing, bool> # Indicates whether this user calendar can be deleted from the user mailbox. (nullable)
+  --isTallyingResponses: oneof<nothing, bool> # Indicates whether this user calendar supports tracking of meeting responses. Only meeting invites sent from users' primary calendars support tracking of meeting responses. (nullable)
   --name: string # The calendar name. (nullable)
   --owner: record # shape: {address?: string, name?: string}
   --calendarPermissions: list # The permissions of the users with whom the calendar is shared. — item shape: {id?: string, allowedRoles?: list, emailAddress?: record, isInsideOrganization?: bool, isRemovable?: bool, role?: "none"|"freeBusyRead"|"limitedRead"|"read"|"write"|"delegateWithoutPrivateEventAccess"|"delegateWithPrivateEventAccess"|"custom"}
@@ -7790,16 +7789,16 @@ export def "users-calendar-groups-calendars UpdateCalendar" [
   --allow-errors(-e) # Return full response without error handling
   --id: string # The unique identifier for an entity. Read-only.
   --allowedOnlineMeetingProviders: list # Represent the online meeting service providers that can be used to create online meetings in this calendar. The possible values are: unknown, skypeForBusiness, skypeForConsumer, teamsForBusiness.
-  --canEdit: string@bool-completer # true if the user can write to the calendar, false otherwise. This property is true for the user who created the calendar. This property is also true for a user who shared a calendar and granted write access. (nullable)
-  --canShare: string@bool-completer # true if the user has permission to share the calendar, false otherwise. Only the user who created the calendar can share it. (nullable)
-  --canViewPrivateItems: string@bool-completer # If true, the user can read calendar items that have been marked private, false otherwise. (nullable)
+  --canEdit: oneof<nothing, bool> # true if the user can write to the calendar, false otherwise. This property is true for the user who created the calendar. This property is also true for a user who shared a calendar and granted write access. (nullable)
+  --canShare: oneof<nothing, bool> # true if the user has permission to share the calendar, false otherwise. Only the user who created the calendar can share it. (nullable)
+  --canViewPrivateItems: oneof<nothing, bool> # If true, the user can read calendar items that have been marked private, false otherwise. (nullable)
   --changeKey: string # Identifies the version of the calendar object. Every time the calendar is changed, changeKey changes as well. This allows Exchange to apply changes to the correct version of the object. Read-only. (nullable)
   --color: string@color-completer
   --defaultOnlineMeetingProvider: string@defaultOnlineMeetingProvider-completer
   --hexColor: string # The calendar color, expressed in a hex color code of three hexadecimal values, each ranging from 00 to FF and representing the red, green, or blue components of the color in the RGB color space. If the user has never explicitly set a color for the calendar, this property is empty. Read-only. (nullable)
-  --isDefaultCalendar: string@bool-completer # true if this is the default calendar where new events are created by default, false otherwise. (nullable)
-  --isRemovable: string@bool-completer # Indicates whether this user calendar can be deleted from the user mailbox. (nullable)
-  --isTallyingResponses: string@bool-completer # Indicates whether this user calendar supports tracking of meeting responses. Only meeting invites sent from users' primary calendars support tracking of meeting responses. (nullable)
+  --isDefaultCalendar: oneof<nothing, bool> # true if this is the default calendar where new events are created by default, false otherwise. (nullable)
+  --isRemovable: oneof<nothing, bool> # Indicates whether this user calendar can be deleted from the user mailbox. (nullable)
+  --isTallyingResponses: oneof<nothing, bool> # Indicates whether this user calendar supports tracking of meeting responses. Only meeting invites sent from users' primary calendars support tracking of meeting responses. (nullable)
   --name: string # The calendar name. (nullable)
   --owner: record # shape: {address?: string, name?: string}
   --calendarPermissions: list # The permissions of the users with whom the calendar is shared. — item shape: {id?: string, allowedRoles?: list, emailAddress?: record, isInsideOrganization?: bool, isRemovable?: bool, role?: "none"|"freeBusyRead"|"limitedRead"|"read"|"write"|"delegateWithoutPrivateEventAccess"|"delegateWithPrivateEventAccess"|"custom"}
@@ -7865,7 +7864,7 @@ export def "users-calendar-groups-calendars-calendar-permissions ListCalendarPer
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -7898,8 +7897,8 @@ export def "users-calendar-groups-calendars-calendar-permissions CreateCalendarP
   --id: string # The unique identifier for an entity. Read-only.
   --allowedRoles: list # List of allowed sharing or delegating permission levels for the calendar. The possible values are: none, freeBusyRead, limitedRead, read, write, delegateWithoutPrivateEventAccess, delegateWithPrivateEventAccess, custom.
   --emailAddress: record # shape: {address?: string, name?: string}
-  --isInsideOrganization: string@bool-completer # True if the user in context (recipient or delegate) is inside the same organization as the calendar owner. (nullable)
-  --isRemovable: string@bool-completer # True if the user can be removed from the list of recipients or delegates for the specified calendar, false otherwise. The 'My organization' user determines the permissions other people within your organization have to the given calendar. You can't remove 'My organization' as a share recipient to a calendar. (nullable)
+  --isInsideOrganization: oneof<nothing, bool> # True if the user in context (recipient or delegate) is inside the same organization as the calendar owner. (nullable)
+  --isRemovable: oneof<nothing, bool> # True if the user can be removed from the list of recipients or delegates for the specified calendar, false otherwise. The 'My organization' user determines the permissions other people within your organization have to the given calendar. You can't remove 'My organization' as a share recipient to a calendar. (nullable)
   --role: string@role-completer
 ]: any -> record<id: string, allowedRoles: list<string>, emailAddress: record<address: string, name: string>, isInsideOrganization: bool, isRemovable: bool, role: string> {
   let input = $in
@@ -7961,8 +7960,8 @@ export def "users-calendar-groups-calendars-calendar-permissions UpdateCalendarP
   --id: string # The unique identifier for an entity. Read-only.
   --allowedRoles: list # List of allowed sharing or delegating permission levels for the calendar. The possible values are: none, freeBusyRead, limitedRead, read, write, delegateWithoutPrivateEventAccess, delegateWithPrivateEventAccess, custom.
   --emailAddress: record # shape: {address?: string, name?: string}
-  --isInsideOrganization: string@bool-completer # True if the user in context (recipient or delegate) is inside the same organization as the calendar owner. (nullable)
-  --isRemovable: string@bool-completer # True if the user can be removed from the list of recipients or delegates for the specified calendar, false otherwise. The 'My organization' user determines the permissions other people within your organization have to the given calendar. You can't remove 'My organization' as a share recipient to a calendar. (nullable)
+  --isInsideOrganization: oneof<nothing, bool> # True if the user in context (recipient or delegate) is inside the same organization as the calendar owner. (nullable)
+  --isRemovable: oneof<nothing, bool> # True if the user can be removed from the list of recipients or delegates for the specified calendar, false otherwise. The 'My organization' user determines the permissions other people within your organization have to the given calendar. You can't remove 'My organization' as a share recipient to a calendar. (nullable)
   --role: string@role-completer
 ]: any -> record<id: string, allowedRoles: list<string>, emailAddress: record<address: string, name: string>, isInsideOrganization: bool, isRemovable: bool, role: string> {
   let input = $in
@@ -8052,7 +8051,7 @@ export def "users-calendar-groups-calendars-calendar-view ListCalendarView" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -8088,7 +8087,7 @@ export def "users-calendar-groups-calendars-calendar-view-microsoftgraphdelta de
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities
@@ -8121,7 +8120,7 @@ export def "users-calendar-groups-calendars-events ListEvent" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -8166,22 +8165,22 @@ export def "users-calendar-groups-calendars-events CreateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowNewTimeProposals: string@bool-completer # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
+  --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
   --bodyPreview: string # The preview of the message associated with the event. It's in text format. (nullable)
   --cancelledOccurrences: list # Contains occurrenceId property values of canceled instances in a recurring series, if the event is the series master. Instances in a recurring series that are canceled are called canceled occurences.Requires $select to retrieve. Only returned in a Get operation that specifies the ID (seriesMasterId property value) of a series master event.
   --end: record # shape: {dateTime?: string, timeZone?: string}
-  --hasAttachments: string@bool-completer # Set to true if the event has attachments. (nullable)
-  --hideAttendees: string@bool-completer # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
+  --hasAttachments: oneof<nothing, bool> # Set to true if the event has attachments. (nullable)
+  --hideAttendees: oneof<nothing, bool> # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
   --iCalUId: string # A unique identifier for an event across calendars. This ID is different for each occurrence in a recurring series. Read-only. (nullable)
   --importance: string@importance-completer
-  --isAllDay: string@bool-completer # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
-  --isCancelled: string@bool-completer # Set to true if the event has been canceled. (nullable)
-  --isDraft: string@bool-completer # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
-  --isOnlineMeeting: string@bool-completer # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
-  --isOrganizer: string@bool-completer # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
-  --isReminderOn: string@bool-completer # Set to true if an alert is set to remind the user of the event. (nullable)
+  --isAllDay: oneof<nothing, bool> # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
+  --isCancelled: oneof<nothing, bool> # Set to true if the event has been canceled. (nullable)
+  --isDraft: oneof<nothing, bool> # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
+  --isOnlineMeeting: oneof<nothing, bool> # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
+  --isOrganizer: oneof<nothing, bool> # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
+  --isReminderOn: oneof<nothing, bool> # Set to true if an alert is set to remind the user of the event. (nullable)
   --location: record # shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --locations: list # The locations where the event is held or attended from. The location and locations properties always correspond with each other. If you update the location property, any prior locations in the locations collection are removed and replaced by the new location value. — item shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --onlineMeeting: record # shape: {conferenceId?: string, joinUrl?: string, phones?: list, quickDial?: string, tollFreeNumbers?: list, tollNumber?: string}
@@ -8193,7 +8192,7 @@ export def "users-calendar-groups-calendars-events CreateEvent" [
   --originalStartTimeZone: string # The start time zone that was set when the event was created. A value of tzone://Microsoft/Custom indicates that a legacy custom time zone was set in desktop Outlook. (nullable)
   --recurrence: record # shape: {pattern?: record, range?: record}
   --reminderMinutesBeforeStart: float # The number of minutes before the event start time that the reminder alert occurs. (nullable, format: int32)
-  --responseRequested: string@bool-completer # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
+  --responseRequested: oneof<nothing, bool> # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
   --responseStatus: record # shape: {response?: "none"|"organizer"|"tentativelyAccepted"|"accepted"|"declined"|"notResponded", time?: string}
   --sensitivity: string@sensitivity-completer
   --seriesMasterId: string # The ID for the recurring series master item, if this event is part of a recurring series. (nullable)
@@ -8282,22 +8281,22 @@ export def "users-calendar-groups-calendars-events UpdateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowNewTimeProposals: string@bool-completer # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
+  --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
   --bodyPreview: string # The preview of the message associated with the event. It's in text format. (nullable)
   --cancelledOccurrences: list # Contains occurrenceId property values of canceled instances in a recurring series, if the event is the series master. Instances in a recurring series that are canceled are called canceled occurences.Requires $select to retrieve. Only returned in a Get operation that specifies the ID (seriesMasterId property value) of a series master event.
   --end: record # shape: {dateTime?: string, timeZone?: string}
-  --hasAttachments: string@bool-completer # Set to true if the event has attachments. (nullable)
-  --hideAttendees: string@bool-completer # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
+  --hasAttachments: oneof<nothing, bool> # Set to true if the event has attachments. (nullable)
+  --hideAttendees: oneof<nothing, bool> # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
   --iCalUId: string # A unique identifier for an event across calendars. This ID is different for each occurrence in a recurring series. Read-only. (nullable)
   --importance: string@importance-completer
-  --isAllDay: string@bool-completer # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
-  --isCancelled: string@bool-completer # Set to true if the event has been canceled. (nullable)
-  --isDraft: string@bool-completer # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
-  --isOnlineMeeting: string@bool-completer # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
-  --isOrganizer: string@bool-completer # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
-  --isReminderOn: string@bool-completer # Set to true if an alert is set to remind the user of the event. (nullable)
+  --isAllDay: oneof<nothing, bool> # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
+  --isCancelled: oneof<nothing, bool> # Set to true if the event has been canceled. (nullable)
+  --isDraft: oneof<nothing, bool> # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
+  --isOnlineMeeting: oneof<nothing, bool> # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
+  --isOrganizer: oneof<nothing, bool> # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
+  --isReminderOn: oneof<nothing, bool> # Set to true if an alert is set to remind the user of the event. (nullable)
   --location: record # shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --locations: list # The locations where the event is held or attended from. The location and locations properties always correspond with each other. If you update the location property, any prior locations in the locations collection are removed and replaced by the new location value. — item shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --onlineMeeting: record # shape: {conferenceId?: string, joinUrl?: string, phones?: list, quickDial?: string, tollFreeNumbers?: list, tollNumber?: string}
@@ -8309,7 +8308,7 @@ export def "users-calendar-groups-calendars-events UpdateEvent" [
   --originalStartTimeZone: string # The start time zone that was set when the event was created. A value of tzone://Microsoft/Custom indicates that a legacy custom time zone was set in desktop Outlook. (nullable)
   --recurrence: record # shape: {pattern?: record, range?: record}
   --reminderMinutesBeforeStart: float # The number of minutes before the event start time that the reminder alert occurs. (nullable, format: int32)
-  --responseRequested: string@bool-completer # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
+  --responseRequested: oneof<nothing, bool> # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
   --responseStatus: record # shape: {response?: "none"|"organizer"|"tentativelyAccepted"|"accepted"|"declined"|"notResponded", time?: string}
   --sensitivity: string@sensitivity-completer
   --seriesMasterId: string # The ID for the recurring series master item, if this event is part of a recurring series. (nullable)
@@ -8386,7 +8385,7 @@ export def "users-calendar-groups-calendars-events-attachments ListAttachment" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -8418,7 +8417,7 @@ export def "users-calendar-groups-calendars-events-attachments CreateAttachment"
   --allow-errors(-e) # Return full response without error handling
   --id: string # The unique identifier for an entity. Read-only.
   --contentType: string # The MIME type. (nullable)
-  --isInline: string@bool-completer # true if the attachment is an inline attachment; otherwise, false.
+  --isInline: oneof<nothing, bool> # true if the attachment is an inline attachment; otherwise, false.
   --lastModifiedDateTime: string # The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --name: string # The attachment's file name. (nullable)
   --size: float # The length of the attachment in bytes. (format: int32)
@@ -8599,7 +8598,7 @@ export def "users-calendar-groups-calendars-events-extensions ListExtension" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -8780,7 +8779,7 @@ export def "users-calendar-groups-calendars-events-instances ListInstance" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -8817,7 +8816,7 @@ export def "users-calendar-groups-calendars-events-instances-microsoftgraphdelta
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities
@@ -8848,7 +8847,7 @@ export def "users-calendar-groups-calendars-events-microsoftgraphaccept accept" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --SendResponse: string@bool-completer # nullable, default: false
+  --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -8911,7 +8910,7 @@ export def "users-calendar-groups-calendars-events-microsoftgraphdecline decline
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ProposedNewTime: record # shape: {end?: record, start?: record}
-  --SendResponse: string@bool-completer # nullable, default: false
+  --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -9058,7 +9057,7 @@ export def "users-calendar-groups-calendars-events-microsoftgraphtentatively-acc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ProposedNewTime: record # shape: {end?: record, start?: record}
-  --SendResponse: string@bool-completer # nullable, default: false
+  --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -9121,7 +9120,7 @@ export def "users-calendar-groups-calendars-events-microsoftgraphdelta delta" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities
@@ -9155,7 +9154,7 @@ export def "users-calendar-groups-calendars-microsoftgraphallowed-calendar-shari
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
 ]: nothing -> record<value: list<string>, _odata_nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9292,7 +9291,7 @@ export def "users-calendars ListCalendar" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -9327,16 +9326,16 @@ export def "users-calendars CreateCalendar" [
   --allow-errors(-e) # Return full response without error handling
   --id: string # The unique identifier for an entity. Read-only.
   --allowedOnlineMeetingProviders: list # Represent the online meeting service providers that can be used to create online meetings in this calendar. The possible values are: unknown, skypeForBusiness, skypeForConsumer, teamsForBusiness.
-  --canEdit: string@bool-completer # true if the user can write to the calendar, false otherwise. This property is true for the user who created the calendar. This property is also true for a user who shared a calendar and granted write access. (nullable)
-  --canShare: string@bool-completer # true if the user has permission to share the calendar, false otherwise. Only the user who created the calendar can share it. (nullable)
-  --canViewPrivateItems: string@bool-completer # If true, the user can read calendar items that have been marked private, false otherwise. (nullable)
+  --canEdit: oneof<nothing, bool> # true if the user can write to the calendar, false otherwise. This property is true for the user who created the calendar. This property is also true for a user who shared a calendar and granted write access. (nullable)
+  --canShare: oneof<nothing, bool> # true if the user has permission to share the calendar, false otherwise. Only the user who created the calendar can share it. (nullable)
+  --canViewPrivateItems: oneof<nothing, bool> # If true, the user can read calendar items that have been marked private, false otherwise. (nullable)
   --changeKey: string # Identifies the version of the calendar object. Every time the calendar is changed, changeKey changes as well. This allows Exchange to apply changes to the correct version of the object. Read-only. (nullable)
   --color: string@color-completer
   --defaultOnlineMeetingProvider: string@defaultOnlineMeetingProvider-completer
   --hexColor: string # The calendar color, expressed in a hex color code of three hexadecimal values, each ranging from 00 to FF and representing the red, green, or blue components of the color in the RGB color space. If the user has never explicitly set a color for the calendar, this property is empty. Read-only. (nullable)
-  --isDefaultCalendar: string@bool-completer # true if this is the default calendar where new events are created by default, false otherwise. (nullable)
-  --isRemovable: string@bool-completer # Indicates whether this user calendar can be deleted from the user mailbox. (nullable)
-  --isTallyingResponses: string@bool-completer # Indicates whether this user calendar supports tracking of meeting responses. Only meeting invites sent from users' primary calendars support tracking of meeting responses. (nullable)
+  --isDefaultCalendar: oneof<nothing, bool> # true if this is the default calendar where new events are created by default, false otherwise. (nullable)
+  --isRemovable: oneof<nothing, bool> # Indicates whether this user calendar can be deleted from the user mailbox. (nullable)
+  --isTallyingResponses: oneof<nothing, bool> # Indicates whether this user calendar supports tracking of meeting responses. Only meeting invites sent from users' primary calendars support tracking of meeting responses. (nullable)
   --name: string # The calendar name. (nullable)
   --owner: record # shape: {address?: string, name?: string}
   --calendarPermissions: list # The permissions of the users with whom the calendar is shared. — item shape: {id?: string, allowedRoles?: list, emailAddress?: record, isInsideOrganization?: bool, isRemovable?: bool, role?: "none"|"freeBusyRead"|"limitedRead"|"read"|"write"|"delegateWithoutPrivateEventAccess"|"delegateWithPrivateEventAccess"|"custom"}
@@ -9404,16 +9403,16 @@ export def "users-calendars UpdateCalendar" [
   --allow-errors(-e) # Return full response without error handling
   --id: string # The unique identifier for an entity. Read-only.
   --allowedOnlineMeetingProviders: list # Represent the online meeting service providers that can be used to create online meetings in this calendar. The possible values are: unknown, skypeForBusiness, skypeForConsumer, teamsForBusiness.
-  --canEdit: string@bool-completer # true if the user can write to the calendar, false otherwise. This property is true for the user who created the calendar. This property is also true for a user who shared a calendar and granted write access. (nullable)
-  --canShare: string@bool-completer # true if the user has permission to share the calendar, false otherwise. Only the user who created the calendar can share it. (nullable)
-  --canViewPrivateItems: string@bool-completer # If true, the user can read calendar items that have been marked private, false otherwise. (nullable)
+  --canEdit: oneof<nothing, bool> # true if the user can write to the calendar, false otherwise. This property is true for the user who created the calendar. This property is also true for a user who shared a calendar and granted write access. (nullable)
+  --canShare: oneof<nothing, bool> # true if the user has permission to share the calendar, false otherwise. Only the user who created the calendar can share it. (nullable)
+  --canViewPrivateItems: oneof<nothing, bool> # If true, the user can read calendar items that have been marked private, false otherwise. (nullable)
   --changeKey: string # Identifies the version of the calendar object. Every time the calendar is changed, changeKey changes as well. This allows Exchange to apply changes to the correct version of the object. Read-only. (nullable)
   --color: string@color-completer
   --defaultOnlineMeetingProvider: string@defaultOnlineMeetingProvider-completer
   --hexColor: string # The calendar color, expressed in a hex color code of three hexadecimal values, each ranging from 00 to FF and representing the red, green, or blue components of the color in the RGB color space. If the user has never explicitly set a color for the calendar, this property is empty. Read-only. (nullable)
-  --isDefaultCalendar: string@bool-completer # true if this is the default calendar where new events are created by default, false otherwise. (nullable)
-  --isRemovable: string@bool-completer # Indicates whether this user calendar can be deleted from the user mailbox. (nullable)
-  --isTallyingResponses: string@bool-completer # Indicates whether this user calendar supports tracking of meeting responses. Only meeting invites sent from users' primary calendars support tracking of meeting responses. (nullable)
+  --isDefaultCalendar: oneof<nothing, bool> # true if this is the default calendar where new events are created by default, false otherwise. (nullable)
+  --isRemovable: oneof<nothing, bool> # Indicates whether this user calendar can be deleted from the user mailbox. (nullable)
+  --isTallyingResponses: oneof<nothing, bool> # Indicates whether this user calendar supports tracking of meeting responses. Only meeting invites sent from users' primary calendars support tracking of meeting responses. (nullable)
   --name: string # The calendar name. (nullable)
   --owner: record # shape: {address?: string, name?: string}
   --calendarPermissions: list # The permissions of the users with whom the calendar is shared. — item shape: {id?: string, allowedRoles?: list, emailAddress?: record, isInsideOrganization?: bool, isRemovable?: bool, role?: "none"|"freeBusyRead"|"limitedRead"|"read"|"write"|"delegateWithoutPrivateEventAccess"|"delegateWithPrivateEventAccess"|"custom"}
@@ -9477,7 +9476,7 @@ export def "users-calendars-calendar-permissions ListCalendarPermission" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -9509,8 +9508,8 @@ export def "users-calendars-calendar-permissions CreateCalendarPermission" [
   --id: string # The unique identifier for an entity. Read-only.
   --allowedRoles: list # List of allowed sharing or delegating permission levels for the calendar. The possible values are: none, freeBusyRead, limitedRead, read, write, delegateWithoutPrivateEventAccess, delegateWithPrivateEventAccess, custom.
   --emailAddress: record # shape: {address?: string, name?: string}
-  --isInsideOrganization: string@bool-completer # True if the user in context (recipient or delegate) is inside the same organization as the calendar owner. (nullable)
-  --isRemovable: string@bool-completer # True if the user can be removed from the list of recipients or delegates for the specified calendar, false otherwise. The 'My organization' user determines the permissions other people within your organization have to the given calendar. You can't remove 'My organization' as a share recipient to a calendar. (nullable)
+  --isInsideOrganization: oneof<nothing, bool> # True if the user in context (recipient or delegate) is inside the same organization as the calendar owner. (nullable)
+  --isRemovable: oneof<nothing, bool> # True if the user can be removed from the list of recipients or delegates for the specified calendar, false otherwise. The 'My organization' user determines the permissions other people within your organization have to the given calendar. You can't remove 'My organization' as a share recipient to a calendar. (nullable)
   --role: string@role-completer
 ]: any -> record<id: string, allowedRoles: list<string>, emailAddress: record<address: string, name: string>, isInsideOrganization: bool, isRemovable: bool, role: string> {
   let input = $in
@@ -9570,8 +9569,8 @@ export def "users-calendars-calendar-permissions UpdateCalendarPermission" [
   --id: string # The unique identifier for an entity. Read-only.
   --allowedRoles: list # List of allowed sharing or delegating permission levels for the calendar. The possible values are: none, freeBusyRead, limitedRead, read, write, delegateWithoutPrivateEventAccess, delegateWithPrivateEventAccess, custom.
   --emailAddress: record # shape: {address?: string, name?: string}
-  --isInsideOrganization: string@bool-completer # True if the user in context (recipient or delegate) is inside the same organization as the calendar owner. (nullable)
-  --isRemovable: string@bool-completer # True if the user can be removed from the list of recipients or delegates for the specified calendar, false otherwise. The 'My organization' user determines the permissions other people within your organization have to the given calendar. You can't remove 'My organization' as a share recipient to a calendar. (nullable)
+  --isInsideOrganization: oneof<nothing, bool> # True if the user in context (recipient or delegate) is inside the same organization as the calendar owner. (nullable)
+  --isRemovable: oneof<nothing, bool> # True if the user can be removed from the list of recipients or delegates for the specified calendar, false otherwise. The 'My organization' user determines the permissions other people within your organization have to the given calendar. You can't remove 'My organization' as a share recipient to a calendar. (nullable)
   --role: string@role-completer
 ]: any -> record<id: string, allowedRoles: list<string>, emailAddress: record<address: string, name: string>, isInsideOrganization: bool, isRemovable: bool, role: string> {
   let input = $in
@@ -9658,7 +9657,7 @@ export def "users-calendars-calendar-view ListCalendarView" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -9693,7 +9692,7 @@ export def "users-calendars-calendar-view-microsoftgraphdelta delta" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities
@@ -9725,7 +9724,7 @@ export def "users-calendars-events ListEvent" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -9769,22 +9768,22 @@ export def "users-calendars-events CreateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowNewTimeProposals: string@bool-completer # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
+  --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
   --bodyPreview: string # The preview of the message associated with the event. It's in text format. (nullable)
   --cancelledOccurrences: list # Contains occurrenceId property values of canceled instances in a recurring series, if the event is the series master. Instances in a recurring series that are canceled are called canceled occurences.Requires $select to retrieve. Only returned in a Get operation that specifies the ID (seriesMasterId property value) of a series master event.
   --end: record # shape: {dateTime?: string, timeZone?: string}
-  --hasAttachments: string@bool-completer # Set to true if the event has attachments. (nullable)
-  --hideAttendees: string@bool-completer # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
+  --hasAttachments: oneof<nothing, bool> # Set to true if the event has attachments. (nullable)
+  --hideAttendees: oneof<nothing, bool> # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
   --iCalUId: string # A unique identifier for an event across calendars. This ID is different for each occurrence in a recurring series. Read-only. (nullable)
   --importance: string@importance-completer
-  --isAllDay: string@bool-completer # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
-  --isCancelled: string@bool-completer # Set to true if the event has been canceled. (nullable)
-  --isDraft: string@bool-completer # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
-  --isOnlineMeeting: string@bool-completer # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
-  --isOrganizer: string@bool-completer # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
-  --isReminderOn: string@bool-completer # Set to true if an alert is set to remind the user of the event. (nullable)
+  --isAllDay: oneof<nothing, bool> # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
+  --isCancelled: oneof<nothing, bool> # Set to true if the event has been canceled. (nullable)
+  --isDraft: oneof<nothing, bool> # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
+  --isOnlineMeeting: oneof<nothing, bool> # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
+  --isOrganizer: oneof<nothing, bool> # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
+  --isReminderOn: oneof<nothing, bool> # Set to true if an alert is set to remind the user of the event. (nullable)
   --location: record # shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --locations: list # The locations where the event is held or attended from. The location and locations properties always correspond with each other. If you update the location property, any prior locations in the locations collection are removed and replaced by the new location value. — item shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --onlineMeeting: record # shape: {conferenceId?: string, joinUrl?: string, phones?: list, quickDial?: string, tollFreeNumbers?: list, tollNumber?: string}
@@ -9796,7 +9795,7 @@ export def "users-calendars-events CreateEvent" [
   --originalStartTimeZone: string # The start time zone that was set when the event was created. A value of tzone://Microsoft/Custom indicates that a legacy custom time zone was set in desktop Outlook. (nullable)
   --recurrence: record # shape: {pattern?: record, range?: record}
   --reminderMinutesBeforeStart: float # The number of minutes before the event start time that the reminder alert occurs. (nullable, format: int32)
-  --responseRequested: string@bool-completer # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
+  --responseRequested: oneof<nothing, bool> # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
   --responseStatus: record # shape: {response?: "none"|"organizer"|"tentativelyAccepted"|"accepted"|"declined"|"notResponded", time?: string}
   --sensitivity: string@sensitivity-completer
   --seriesMasterId: string # The ID for the recurring series master item, if this event is part of a recurring series. (nullable)
@@ -9883,22 +9882,22 @@ export def "users-calendars-events UpdateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowNewTimeProposals: string@bool-completer # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
+  --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
   --bodyPreview: string # The preview of the message associated with the event. It's in text format. (nullable)
   --cancelledOccurrences: list # Contains occurrenceId property values of canceled instances in a recurring series, if the event is the series master. Instances in a recurring series that are canceled are called canceled occurences.Requires $select to retrieve. Only returned in a Get operation that specifies the ID (seriesMasterId property value) of a series master event.
   --end: record # shape: {dateTime?: string, timeZone?: string}
-  --hasAttachments: string@bool-completer # Set to true if the event has attachments. (nullable)
-  --hideAttendees: string@bool-completer # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
+  --hasAttachments: oneof<nothing, bool> # Set to true if the event has attachments. (nullable)
+  --hideAttendees: oneof<nothing, bool> # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
   --iCalUId: string # A unique identifier for an event across calendars. This ID is different for each occurrence in a recurring series. Read-only. (nullable)
   --importance: string@importance-completer
-  --isAllDay: string@bool-completer # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
-  --isCancelled: string@bool-completer # Set to true if the event has been canceled. (nullable)
-  --isDraft: string@bool-completer # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
-  --isOnlineMeeting: string@bool-completer # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
-  --isOrganizer: string@bool-completer # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
-  --isReminderOn: string@bool-completer # Set to true if an alert is set to remind the user of the event. (nullable)
+  --isAllDay: oneof<nothing, bool> # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
+  --isCancelled: oneof<nothing, bool> # Set to true if the event has been canceled. (nullable)
+  --isDraft: oneof<nothing, bool> # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
+  --isOnlineMeeting: oneof<nothing, bool> # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
+  --isOrganizer: oneof<nothing, bool> # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
+  --isReminderOn: oneof<nothing, bool> # Set to true if an alert is set to remind the user of the event. (nullable)
   --location: record # shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --locations: list # The locations where the event is held or attended from. The location and locations properties always correspond with each other. If you update the location property, any prior locations in the locations collection are removed and replaced by the new location value. — item shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --onlineMeeting: record # shape: {conferenceId?: string, joinUrl?: string, phones?: list, quickDial?: string, tollFreeNumbers?: list, tollNumber?: string}
@@ -9910,7 +9909,7 @@ export def "users-calendars-events UpdateEvent" [
   --originalStartTimeZone: string # The start time zone that was set when the event was created. A value of tzone://Microsoft/Custom indicates that a legacy custom time zone was set in desktop Outlook. (nullable)
   --recurrence: record # shape: {pattern?: record, range?: record}
   --reminderMinutesBeforeStart: float # The number of minutes before the event start time that the reminder alert occurs. (nullable, format: int32)
-  --responseRequested: string@bool-completer # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
+  --responseRequested: oneof<nothing, bool> # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
   --responseStatus: record # shape: {response?: "none"|"organizer"|"tentativelyAccepted"|"accepted"|"declined"|"notResponded", time?: string}
   --sensitivity: string@sensitivity-completer
   --seriesMasterId: string # The ID for the recurring series master item, if this event is part of a recurring series. (nullable)
@@ -9985,7 +9984,7 @@ export def "users-calendars-events-attachments ListAttachment" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -10016,7 +10015,7 @@ export def "users-calendars-events-attachments CreateAttachment" [
   --allow-errors(-e) # Return full response without error handling
   --id: string # The unique identifier for an entity. Read-only.
   --contentType: string # The MIME type. (nullable)
-  --isInline: string@bool-completer # true if the attachment is an inline attachment; otherwise, false.
+  --isInline: oneof<nothing, bool> # true if the attachment is an inline attachment; otherwise, false.
   --lastModifiedDateTime: string # The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --name: string # The attachment's file name. (nullable)
   --size: float # The length of the attachment in bytes. (format: int32)
@@ -10191,7 +10190,7 @@ export def "users-calendars-events-extensions ListExtension" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -10366,7 +10365,7 @@ export def "users-calendars-events-instances ListInstance" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -10402,7 +10401,7 @@ export def "users-calendars-events-instances-microsoftgraphdelta delta" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities
@@ -10432,7 +10431,7 @@ export def "users-calendars-events-microsoftgraphaccept accept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --SendResponse: string@bool-completer # nullable, default: false
+  --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -10493,7 +10492,7 @@ export def "users-calendars-events-microsoftgraphdecline decline" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ProposedNewTime: record # shape: {end?: record, start?: record}
-  --SendResponse: string@bool-completer # nullable, default: false
+  --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -10635,7 +10634,7 @@ export def "users-calendars-events-microsoftgraphtentatively-accept tentativelyA
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ProposedNewTime: record # shape: {end?: record, start?: record}
-  --SendResponse: string@bool-completer # nullable, default: false
+  --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -10696,7 +10695,7 @@ export def "users-calendars-events-microsoftgraphdelta delta" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities
@@ -10729,7 +10728,7 @@ export def "users-calendars-microsoftgraphallowed-calendar-sharing-roles-user-us
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
 ]: nothing -> record<value: list<string>, _odata_nextLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10840,7 +10839,7 @@ export def "users-calendar-view ListCalendarView" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -10874,7 +10873,7 @@ export def "users-calendar-view-microsoftgraphdelta delta" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities
@@ -10905,7 +10904,7 @@ export def "users-events ListEvent" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -10948,22 +10947,22 @@ export def "users-events CreateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowNewTimeProposals: string@bool-completer # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
+  --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
   --bodyPreview: string # The preview of the message associated with the event. It's in text format. (nullable)
   --cancelledOccurrences: list # Contains occurrenceId property values of canceled instances in a recurring series, if the event is the series master. Instances in a recurring series that are canceled are called canceled occurences.Requires $select to retrieve. Only returned in a Get operation that specifies the ID (seriesMasterId property value) of a series master event.
   --end: record # shape: {dateTime?: string, timeZone?: string}
-  --hasAttachments: string@bool-completer # Set to true if the event has attachments. (nullable)
-  --hideAttendees: string@bool-completer # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
+  --hasAttachments: oneof<nothing, bool> # Set to true if the event has attachments. (nullable)
+  --hideAttendees: oneof<nothing, bool> # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
   --iCalUId: string # A unique identifier for an event across calendars. This ID is different for each occurrence in a recurring series. Read-only. (nullable)
   --importance: string@importance-completer
-  --isAllDay: string@bool-completer # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
-  --isCancelled: string@bool-completer # Set to true if the event has been canceled. (nullable)
-  --isDraft: string@bool-completer # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
-  --isOnlineMeeting: string@bool-completer # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
-  --isOrganizer: string@bool-completer # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
-  --isReminderOn: string@bool-completer # Set to true if an alert is set to remind the user of the event. (nullable)
+  --isAllDay: oneof<nothing, bool> # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
+  --isCancelled: oneof<nothing, bool> # Set to true if the event has been canceled. (nullable)
+  --isDraft: oneof<nothing, bool> # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
+  --isOnlineMeeting: oneof<nothing, bool> # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
+  --isOrganizer: oneof<nothing, bool> # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
+  --isReminderOn: oneof<nothing, bool> # Set to true if an alert is set to remind the user of the event. (nullable)
   --location: record # shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --locations: list # The locations where the event is held or attended from. The location and locations properties always correspond with each other. If you update the location property, any prior locations in the locations collection are removed and replaced by the new location value. — item shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --onlineMeeting: record # shape: {conferenceId?: string, joinUrl?: string, phones?: list, quickDial?: string, tollFreeNumbers?: list, tollNumber?: string}
@@ -10975,7 +10974,7 @@ export def "users-events CreateEvent" [
   --originalStartTimeZone: string # The start time zone that was set when the event was created. A value of tzone://Microsoft/Custom indicates that a legacy custom time zone was set in desktop Outlook. (nullable)
   --recurrence: record # shape: {pattern?: record, range?: record}
   --reminderMinutesBeforeStart: float # The number of minutes before the event start time that the reminder alert occurs. (nullable, format: int32)
-  --responseRequested: string@bool-completer # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
+  --responseRequested: oneof<nothing, bool> # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
   --responseStatus: record # shape: {response?: "none"|"organizer"|"tentativelyAccepted"|"accepted"|"declined"|"notResponded", time?: string}
   --sensitivity: string@sensitivity-completer
   --seriesMasterId: string # The ID for the recurring series master item, if this event is part of a recurring series. (nullable)
@@ -11060,22 +11059,22 @@ export def "users-events UpdateEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allowNewTimeProposals: string@bool-completer # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
+  --allowNewTimeProposals: oneof<nothing, bool> # true if the meeting organizer allows invitees to propose a new time when responding; otherwise, false. Optional. The default is true. (nullable)
   --attendees: list # The collection of attendees for the event. — item shape: {proposedNewTime?: record, status?: record}
   --body-body: record # shape: {content?: string, contentType?: "text"|"html"}
   --bodyPreview: string # The preview of the message associated with the event. It's in text format. (nullable)
   --cancelledOccurrences: list # Contains occurrenceId property values of canceled instances in a recurring series, if the event is the series master. Instances in a recurring series that are canceled are called canceled occurences.Requires $select to retrieve. Only returned in a Get operation that specifies the ID (seriesMasterId property value) of a series master event.
   --end: record # shape: {dateTime?: string, timeZone?: string}
-  --hasAttachments: string@bool-completer # Set to true if the event has attachments. (nullable)
-  --hideAttendees: string@bool-completer # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
+  --hasAttachments: oneof<nothing, bool> # Set to true if the event has attachments. (nullable)
+  --hideAttendees: oneof<nothing, bool> # When set to true, each attendee only sees themselves in the meeting request and meeting Tracking list. The default is false. (nullable)
   --iCalUId: string # A unique identifier for an event across calendars. This ID is different for each occurrence in a recurring series. Read-only. (nullable)
   --importance: string@importance-completer
-  --isAllDay: string@bool-completer # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
-  --isCancelled: string@bool-completer # Set to true if the event has been canceled. (nullable)
-  --isDraft: string@bool-completer # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
-  --isOnlineMeeting: string@bool-completer # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
-  --isOrganizer: string@bool-completer # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
-  --isReminderOn: string@bool-completer # Set to true if an alert is set to remind the user of the event. (nullable)
+  --isAllDay: oneof<nothing, bool> # Set to true if the event lasts all day. If true, regardless of whether it's a single-day or multi-day event, start, and endtime must be set to midnight and be in the same time zone. (nullable)
+  --isCancelled: oneof<nothing, bool> # Set to true if the event has been canceled. (nullable)
+  --isDraft: oneof<nothing, bool> # Set to true if the user has updated the meeting in Outlook but hasn't sent the updates to attendees. Set to false if all changes are sent, or if the event is an appointment without any attendees. (nullable)
+  --isOnlineMeeting: oneof<nothing, bool> # True if this event has online meeting information (that is, onlineMeeting points to an onlineMeetingInfo resource), false otherwise. Default is false (onlineMeeting is null). Optional.  After you set isOnlineMeeting to true, Microsoft Graph initializes onlineMeeting. Subsequently, Outlook ignores any further changes to isOnlineMeeting, and the meeting remains available online. (nullable)
+  --isOrganizer: oneof<nothing, bool> # Set to true if the calendar owner (specified by the owner property of the calendar) is the organizer of the event (specified by the organizer property of the event). It also applies if a delegate organized the event on behalf of the owner. (nullable)
+  --isReminderOn: oneof<nothing, bool> # Set to true if an alert is set to remind the user of the event. (nullable)
   --location: record # shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --locations: list # The locations where the event is held or attended from. The location and locations properties always correspond with each other. If you update the location property, any prior locations in the locations collection are removed and replaced by the new location value. — item shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --onlineMeeting: record # shape: {conferenceId?: string, joinUrl?: string, phones?: list, quickDial?: string, tollFreeNumbers?: list, tollNumber?: string}
@@ -11087,7 +11086,7 @@ export def "users-events UpdateEvent" [
   --originalStartTimeZone: string # The start time zone that was set when the event was created. A value of tzone://Microsoft/Custom indicates that a legacy custom time zone was set in desktop Outlook. (nullable)
   --recurrence: record # shape: {pattern?: record, range?: record}
   --reminderMinutesBeforeStart: float # The number of minutes before the event start time that the reminder alert occurs. (nullable, format: int32)
-  --responseRequested: string@bool-completer # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
+  --responseRequested: oneof<nothing, bool> # Default is true, which represents the organizer would like an invitee to send a response to the event. (nullable)
   --responseStatus: record # shape: {response?: "none"|"organizer"|"tentativelyAccepted"|"accepted"|"declined"|"notResponded", time?: string}
   --sensitivity: string@sensitivity-completer
   --seriesMasterId: string # The ID for the recurring series master item, if this event is part of a recurring series. (nullable)
@@ -11160,7 +11159,7 @@ export def "users-events-attachments ListAttachment" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -11190,7 +11189,7 @@ export def "users-events-attachments CreateAttachment" [
   --allow-errors(-e) # Return full response without error handling
   --id: string # The unique identifier for an entity. Read-only.
   --contentType: string # The MIME type. (nullable)
-  --isInline: string@bool-completer # true if the attachment is an inline attachment; otherwise, false.
+  --isInline: oneof<nothing, bool> # true if the attachment is an inline attachment; otherwise, false.
   --lastModifiedDateTime: string # The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --name: string # The attachment's file name. (nullable)
   --size: float # The length of the attachment in bytes. (format: int32)
@@ -11359,7 +11358,7 @@ export def "users-events-extensions ListExtension" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -11528,7 +11527,7 @@ export def "users-events-instances ListInstance" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -11563,7 +11562,7 @@ export def "users-events-instances-microsoftgraphdelta delta" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities
@@ -11592,7 +11591,7 @@ export def "users-events-microsoftgraphaccept accept" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --SendResponse: string@bool-completer # nullable, default: false
+  --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -11651,7 +11650,7 @@ export def "users-events-microsoftgraphdecline decline" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ProposedNewTime: record # shape: {end?: record, start?: record}
-  --SendResponse: string@bool-completer # nullable, default: false
+  --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -11788,7 +11787,7 @@ export def "users-events-microsoftgraphtentatively-accept tentativelyAccept" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ProposedNewTime: record # shape: {end?: record, start?: record}
-  --SendResponse: string@bool-completer # nullable, default: false
+  --SendResponse: oneof<nothing, bool> # nullable, default: false
   --Comment: string # nullable
 ]: any -> any {
   let input = $in
@@ -11847,7 +11846,7 @@ export def "users-events-microsoftgraphdelta delta" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities

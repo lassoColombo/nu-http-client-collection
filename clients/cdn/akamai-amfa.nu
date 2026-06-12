@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://{hostname}/amfa/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -330,7 +329,7 @@ export def "users get-users" [
   --page: int # The page number index starting at the default value of `1`. (default: 1, e.g. 2)
   --pageSize: int # The number of records displayed on each page. The default value is `25`. (default: 25, e.g. 50)
   --status: string@status-completer # __Enum__ Filter user records by the specific status and display a list of user accounts that have this status. (e.g. ACTIVE)
-  --includeDevices: string@bool-completer # Whether the response should include device details for listed users. The default value is `false`. (default: false, e.g. true)
+  --includeDevices: oneof<nothing, bool> # Whether the response should include device details for listed users. The default value is `false`. (default: false, e.g. true)
   --policyId: string # Optionally filter users subject to a specific policy. (e.g. policy_4HZnCV)
   --policyName: string # Optionally filter users subject to a specific policy, referred to by name. (e.g. Policy-A)
   --contractId: string # Unique identifier for the contract. (e.g. C-0N7RAC71)

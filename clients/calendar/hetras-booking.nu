@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.hetras-certification.net"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -190,7 +189,7 @@ export def "booking-blocks GetBlocksAsync" [
   --qp-to: string # Return all blocks where the block's last_departure is less than specified date. (format: date-time)
   --status: string@status-completer # Return all blocks where the block status is one of the specified values.
   --ratePlanCodes: list # Return all blocks that have related the specified comma-separated rate plans.
-  --countDetails: string@bool-completer # If true it will include also details of block count per each room type.
+  --countDetails: oneof<nothing, bool> # If true it will include also details of block count per each room type.
   --skip: int # Amount of items to skip. (format: int32)
   --top: int # Amount of items to select. (format: int32)
   --inlinecount: string@inlinecount-completer # Return total number of items for a given filter criteria.
@@ -232,7 +231,7 @@ export def "booking-blocks-count GetBlocksCountAsync" [
   --qp-to: string # Return all blocks where the block's last_departure is less than specified date. (format: date-time)
   --status: string@status-completer # Return all blocks where the block status is one of the specified values.
   --ratePlanCodes: list # Return all blocks that have related the specified comma-separated rate plans.
-  --countDetails: string@bool-completer # If true it will include also details of block count per each room type.
+  --countDetails: oneof<nothing, bool> # If true it will include also details of block count per each room type.
   --App-Id: string # Application identifier
   --App-Key: string # Application key.
   --WaitHandle: record # shape: {Handle?: record, SafeWaitHandle?: record}
@@ -354,7 +353,7 @@ export def "booking-bookings CreateBooking" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --sendConfirmation: string@bool-completer # Whether to send a confirmation email to the primary guest
+  --sendConfirmation: oneof<nothing, bool> # Whether to send a confirmation email to the primary guest
   --App-Id: string # Application identifier
   --App-Key: string # Application key.
   --addons: list # A list of addon service codes that should be booked for all reservations of this booking
@@ -552,9 +551,9 @@ export def "booking-bookings-reservations-assign-room PostRoomAssignment" [
   --App-Key: string # Application key.
   --amenities: list # Ensure the assigned room will have all the amenities specified. You can provide a comma seperated list of amenity codes.
   --condition: string@condition-completer # Here you can define to limit the list of assignable rooms based on their current condition. This is only applicable if the underlying reservation             is due to arrive on the current business day. If not set by default only clean rooms will be assigned.
-  --include-out-of-service: string@bool-completer # Sometimes you might want to assign rooms which are out of service (small repair needed) if no other rooms are available anymore. If you set             include_out_of_service to true even those rooms will be considered. The default is false.
+  --include-out-of-service: oneof<nothing, bool> # Sometimes you might want to assign rooms which are out of service (small repair needed) if no other rooms are available anymore. If you set             include_out_of_service to true even those rooms will be considered. The default is false.
   --locations: list # Ensure the assigned room will have at least one of the specified locations. You can provide a comma seperated list of location codes.
-  --respect-guest-preferences: string@bool-completer # Defines if the preferences for locations, amenities and views of the primary guest should be taken into account. All defined preferences in the guest             profile override any of the criteria defined in the request body. The default is false.
+  --respect-guest-preferences: oneof<nothing, bool> # Defines if the preferences for locations, amenities and views of the primary guest should be taken into account. All defined preferences in the guest             profile override any of the criteria defined in the request body. The default is false.
   --room-number: string # If you define a specific room number this room will be assigned if not assigned to another reservation, has proper room type and is not OutOfOrder              or OutOfInventory for the stay duration of the underlying reservaton. If set all other filter criteria will be ignored.
   --views: list # Ensure the assigned room will have at least one of the specified views. You can provide a comma seperated list of view codes.
 ]: any -> record<_warnings: list<string>, room_number: string> {
@@ -586,7 +585,7 @@ export def "booking-bookings-reservations-cancel CancelReservation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --sendConfirmation: string@bool-completer # Whether to send a confirmation email to the primary guest
+  --sendConfirmation: oneof<nothing, bool> # Whether to send a confirmation email to the primary guest
   --App-Id: string # Application identifier
   --App-Key: string # Application key.
 ]: nothing -> record<_warnings: list<string>, balance: float, cancellation_fee: float, cancellation_id: string> {
@@ -680,7 +679,7 @@ export def "booking-bookings-reservations-payment-token PaymentToken" [
   --App-Id: string # Application identifier
   --App-Key: string # Application key.
   --authorization: record # shape: {amount?: float, expiry_date?: string, merchant_reference: string, reference: string, shopper_reference: string}
-  --no-authorization-required: string@bool-completer # Whether hetras should skip authorization using the provided token when no authorization details are supplied.             Optional flag, defaults to false.
+  --no-authorization-required: oneof<nothing, bool> # Whether hetras should skip authorization using the provided token when no authorization details are supplied.             Optional flag, defaults to false.
   payment_token: string # The token you get from the payment service provider
 ]: any -> record<_warnings: list<string>> {
   let input = $in

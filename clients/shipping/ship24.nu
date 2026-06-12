@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.ship24.com"] }
 def auth-scheme-completer [] { ["bearer your_api_key"] }
 
@@ -281,7 +280,7 @@ export def "public-trackers update-tracker-by-trackerId" [
   --searchBy: string@searchBy-completer # Parameter allowing to search either by `trackerId`or `clientTrackerId`. Default behavior is by `trackerId`. (e.g. trackerId)
   --Content-Type: string # application/json; charset=utf-8 (e.g. application/json; charset=utf-8)
   --Authorization: string # Your `api_key` prefixed with `Bearer`. (e.g. Bearer your_api_key)
-  --isSubscribed: string@bool-completer # Setting at `false` will unsubscribe you from the `Tracker`. Once unsubscribed, you will still be able to fetch the existing tracking results but Ship24 won't search for new data or send webhook notifications. `Trackers` are automatically disabled after the parcel delivery or after a long period without any new events. Manually unsubscribing your tracker is not useful, except if you wish to stop receiving webhooks on it or if you need to reuse the `clientTrackerId` value in a new `Tracker`. (e.g. false)
+  --isSubscribed: oneof<nothing, bool> # Setting at `false` will unsubscribe you from the `Tracker`. Once unsubscribed, you will still be able to fetch the existing tracking results but Ship24 won't search for new data or send webhook notifications. `Trackers` are automatically disabled after the parcel delivery or after a long period without any new events. Manually unsubscribing your tracker is not useful, except if you wish to stop receiving webhooks on it or if you need to reuse the `clientTrackerId` value in a new `Tracker`. (e.g. false)
   --courierCode: list # Code of the courier(s) handling the shipment (Up to 3 max) (see Couriers list section)  - 📌 Recommended to improve tracking accuracy (e.g. [us-post])
   --originCountryCode: string # Sender country code. (format: ISO 3166-1 alpha-2/alpha-3, e.g. CN)
   --destinationCountryCode: string # Recipient country code - 📌 Recommended to improve tracking accuracy (format: ISO 3166-1 alpha-2/alpha-3, e.g. US)

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost:8080/v1" "http://localhost:8080"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -207,7 +206,7 @@ export def "vaults-items CreateVaultItem" [
   vault: record # shape: {id: string}
   category: string@category-completer
   --urls: list # e.g. [{primary: true, href: https://example.com}, {href: https://example.org}] — item shape: {label?: string, primary?: bool, href: string}
-  --favorite: string@bool-completer # default: false
+  --favorite: oneof<nothing, bool> # default: false
   --tags: list
   --version: int
   --sections: list # item shape: {id?: string, label?: string}
@@ -272,7 +271,7 @@ export def "vaults-items UpdateVaultItem" [
   vault: record # shape: {id: string}
   category: string@category-completer
   --urls: list # e.g. [{primary: true, href: https://example.com}, {href: https://example.org}] — item shape: {label?: string, primary?: bool, href: string}
-  --favorite: string@bool-completer # default: false
+  --favorite: oneof<nothing, bool> # default: false
   --tags: list
   --version: int
   --sections: list # item shape: {id?: string, label?: string}
@@ -353,7 +352,7 @@ export def "vaults-items-files GetItemFiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --inline-files: string@bool-completer # Tells server to return the base64-encoded file contents in the response. (e.g. true)
+  --inline-files: oneof<nothing, bool> # Tells server to return the base64-encoded file contents in the response. (e.g. true)
 ]: nothing -> table<id: string, name: string, size: int, content_path: string, section: record<id: string>, content: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -379,7 +378,7 @@ export def "vaults-items-files GetDetailsOfFileById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --inline-files: string@bool-completer # Tells server to return the base64-encoded file contents in the response. (e.g. true)
+  --inline-files: oneof<nothing, bool> # Tells server to return the base64-encoded file contents in the response. (e.g. true)
 ]: nothing -> record<id: string, name: string, size: int, content_path: string, section: record<id: string>, content: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

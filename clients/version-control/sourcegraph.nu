@@ -71,7 +71,6 @@ def unwrap-graphql [resp: any, field: string] {
   $resp.data? | get -o $field | default $resp.data?
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://sourcegraph.com/.api/graphql"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -395,16 +394,16 @@ export def "query repositories" [
   --after: string # An opaque cursor that is used for pagination.
   --before: string # An opaque cursor that is used for pagination.
   --names: string # Return repositories whose names are in the list.
-  --cloned: string@bool-completer # Include cloned repositories.
+  --cloned: oneof<nothing, bool> # Include cloned repositories.
   --clone-status: string@clone-status-completer # Include only repositories of the given clone status.
-  --not-cloned: string@bool-completer # Include repositories that are not yet cloned and for which cloning is not in progress.
-  --indexed: string@bool-completer # Include repositories that have a text search index.
-  --not-indexed: string@bool-completer # Include repositories that do not have a text search index.
-  --failed-fetch: string@bool-completer # Include only repositories that have encountered errors when cloning or fetching
-  --corrupted: string@bool-completer # Include repositories that are corrupt
+  --not-cloned: oneof<nothing, bool> # Include repositories that are not yet cloned and for which cloning is not in progress.
+  --indexed: oneof<nothing, bool> # Include repositories that have a text search index.
+  --not-indexed: oneof<nothing, bool> # Include repositories that do not have a text search index.
+  --failed-fetch: oneof<nothing, bool> # Include only repositories that have encountered errors when cloning or fetching
+  --corrupted: oneof<nothing, bool> # Include repositories that are corrupt
   --external-service: string # Return repositories that are associated with the given external service.
   --order-by: string@order-by-completer # Sort field.
-  --descending: string@bool-completer # Sort direction.
+  --descending: oneof<nothing, bool> # Sort direction.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -662,8 +661,8 @@ export def "query highlight-code" [
   --query: string # Raw GraphQL query (overrides auto-generated)
   code: string
   fuzzy_language: string
-  --disable-timeout: string@bool-completer
-  --is-light-theme: string@bool-completer
+  --disable-timeout: oneof<nothing, bool>
+  --is-light-theme: oneof<nothing, bool>
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -1066,7 +1065,7 @@ export def "query out-of-band-migrations" [
   --allow-errors(-e) # Return full response without error handling
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
-  --exclude-deprecated-before-first-version: string@bool-completer
+  --exclude-deprecated-before-first-version: oneof<nothing, bool>
 ]: any -> list {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -1346,12 +1345,12 @@ export def "query webhook-logs" [
   --query: string # Raw GraphQL query (overrides auto-generated)
   --first: int # Returns the first n webhook logs.
   --after: string # Opaque pagination cursor.
-  --only-errors: string@bool-completer # Only include webhook logs that resulted in errors.
-  --only-unmatched: string@bool-completer # Only include webhook logs that were not matched to an external service.
+  --only-errors: oneof<nothing, bool> # Only include webhook logs that resulted in errors.
+  --only-unmatched: oneof<nothing, bool> # Only include webhook logs that were not matched to an external service.
   --since: string # Only include webhook logs on or after this time.
   --until: string # Only include webhook logs on or before this time.
   --webhook-id: string # Only include webhook logs of given webhook ID.
-  --legacy-only: string@bool-completer # Only include webhook logs that have no webhook ID set.
+  --legacy-only: oneof<nothing, bool> # Only include webhook logs that have no webhook ID set.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -1765,7 +1764,7 @@ export def "query executors" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --qp-query: string # An (optional) search query that searches over the hostname, queue name, os, architecture, and version properties.
-  --active: string@bool-completer # Whether to show only executors that have sent a heartbeat in the last fifteen minutes.
+  --active: oneof<nothing, bool> # Whether to show only executors that have sent a heartbeat in the last fifteen minutes.
   --first: int # Returns the first n executors.
   --after: string # Opaque pagination cursor.
 ]: any -> record {
@@ -2244,7 +2243,7 @@ export def "query precise-indexes" [
   --index-source: string@index-source-completer # If supplied, only precise indexes of the given source are returned.
   --dependency-of: string # If supplied, only precise indexes that are a dependency of the specified index are returned.
   --dependent-of: string # If supplied, only precise indexes that are a dependent of the specified index are returned.
-  --include-deleted: string@bool-completer # When specified, merges the list of existing uploads with data from uploads that have been deleted but for which audit logs still exist. Only makes sense when state filter is unset or equal to 'DELETED'.
+  --include-deleted: oneof<nothing, bool> # When specified, merges the list of existing uploads with data from uploads that have been deleted but for which audit logs still exist. Only makes sense when state filter is unset or equal to 'DELETED'.
   --first: int # If specified, this limits the number of results per request.
   --after: string # If specified, this indicates that the request should be paginated and to fetch results starting at this cursor.  A future request can be made for more results by passing in the 'PreciseIndexConnection.pageInfo.endCursor' that is returned.
 ]: any -> record {
@@ -2476,10 +2475,10 @@ export def "query code-intelligence-configuration-policies" [
   --query: string # Raw GraphQL query (overrides auto-generated)
   --repository: string # If repository is supplied, then only the configuration policies that apply to repository are returned. If repository is not supplied, then all policies are returned.
   --qp-query: string # An (optional) search query that searches over the name property.
-  --for-data-retention: string@bool-completer # If set to true, then only configuration policies with SCIP data retention enabled are returned. If set to false, then configuration policies with SCIP data retention enabled are filtered out.
-  --for-precise-indexing: string@bool-completer # If set to true, then only configuration policies with precise indexing enabled are returned. If set to false, then configuration policies with precise indexing enabled are filtered out.
-  --for-syntactic-indexing: string@bool-completer # If set to true, then only configuration policies with syntactic indexing enabled are returned. If set to false, then configuration policies with syntactic indexing enabled are filtered out.
-  --protected: string@bool-completer # If set to true, then only protected configuration policies are returned. If set to false, then only un-protected configuration policies are returned. If unset, policies are returned regardless if they're protected or not.
+  --for-data-retention: oneof<nothing, bool> # If set to true, then only configuration policies with SCIP data retention enabled are returned. If set to false, then configuration policies with SCIP data retention enabled are filtered out.
+  --for-precise-indexing: oneof<nothing, bool> # If set to true, then only configuration policies with precise indexing enabled are returned. If set to false, then configuration policies with precise indexing enabled are filtered out.
+  --for-syntactic-indexing: oneof<nothing, bool> # If set to true, then only configuration policies with syntactic indexing enabled are returned. If set to false, then configuration policies with syntactic indexing enabled are filtered out.
+  --protected: oneof<nothing, bool> # If set to true, then only protected configuration policies are returned. If set to false, then only un-protected configuration policies are returned. If unset, policies are returned regardless if they're protected or not.
   --first: int # When specified, indicates that this request should be paginated and the first N results (relative to the cursor) should be returned. i.e. how many results to return per page.
   --after: string # When specified, indicates that this request should be paginated and to fetch results starting at this cursor.  A future request can be made for more results by passing in the 'CodeIntelligenceConfigurationPolicyConnection.pageInfo.endCursor' that is returned.
 ]: any -> record {
@@ -2583,7 +2582,7 @@ export def "query insight-views" [
   --id: string
   --exclude-ids: string # Allow you to exclude subset of insights by their ids.
   --find: string # Allow you to search insight views by their title or data series labels.
-  --is-frozen: string@bool-completer
+  --is-frozen: oneof<nothing, bool>
   --filters-includeRepoRegex: string # A regex string for which to include repositories in a filter.
   --filters-excludeRepoRegex: string # A regex string for which to exclude repositories in a filter.
   --filters-searchContexts: string # A list of query based search contexts to include in the filters for the view.
@@ -2628,7 +2627,7 @@ export def "query search-insight-live-preview" [
   --input-label: string # The desired label for the series. Will be overwritten when series are dynamically generated.
   --input-repositoryScope: record # The scope of repositories. — shape: {repositories: string, repositoryCriteria?: string}
   --input-timeScope: record # The scope of time. — shape: {stepInterval?: record}
-  --input-generatedFromCaptureGroups: string@bool-completer # Whether or not to generate the timeseries results from the query capture groups.
+  --input-generatedFromCaptureGroups: oneof<nothing, bool> # Whether or not to generate the timeseries results from the query capture groups.
   --input-groupBy: string@input-groupBy-completer # Use this field to specify a compute insight.
 ]: any -> list {
   let input = $in
@@ -2863,7 +2862,7 @@ export def "query insight-admin-backfill-queue" [
   --after: string # An opaque cursor that is used for pagination.
   --before: string # An opaque cursor that is used for pagination.
   --order-by: string@order-by-completer-1 # How to order the list.
-  --descending: string@bool-completer # Sort direction.
+  --descending: oneof<nothing, bool> # Sort direction.
   --states: string@states-completer-1 # List of states to filter list by.
   --text-search: string # Text to filter the list, checking the Insight Title and Series Label
 ]: any -> record {
@@ -2970,7 +2969,7 @@ export def "query permissions-sync-jobs" [
   --qp-query: string # Term used to search for permissions sync jobs.
   --user-id: string # Optional filter to find permissions sync jobs for a user. Please provide either this or repoID, but not both.
   --repo-id: string # Optional filter to find permissions sync jobs for a repository. Please provide either this or userID, but not both.
-  --partial: string@bool-completer # Optional filter to filter only partially successful sync jobs.
+  --partial: oneof<nothing, bool> # Optional filter to filter only partially successful sync jobs.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -3099,8 +3098,8 @@ export def "query saved-searches" [
   --query: string # Raw GraphQL query (overrides auto-generated)
   --qp-query: string # Filter saved searches by text in their description and query.
   --owner: string # Filter by saved search owner (a namespace, either a user or organization).
-  --viewer-is-affiliated: string@bool-completer # Filter to only saved searches owned by the viewer or one of viewer's organizations. All public saved searches are also included. If null or false, no such filtering is performed.
-  --include-drafts: string@bool-completer # Whether to include draft saved searches.
+  --viewer-is-affiliated: oneof<nothing, bool> # Filter to only saved searches owned by the viewer or one of viewer's organizations. All public saved searches are also included. If null or false, no such filtering is performed.
+  --include-drafts: oneof<nothing, bool> # Whether to include draft saved searches.
   --first: int # The limit argument for forward pagination.
   --last: int # The limit argument for backward pagination.
   --after: string # The cursor argument for forward pagination.
@@ -3296,7 +3295,7 @@ export def "query search-contexts" [
   --qp-query: string # Free-form query to filter search contexts by spec, namespace, or name.
   --namespaces: string # Include search contexts matching the provided namespaces. A union of all matching search contexts is returned. ID can either be a user ID, org ID, or nil to match instance-level contexts. Empty namespaces list defaults to returning all available search contexts. Example: `namespaces: [user1, org1, org2, nil]` will return search contexts created by user1 + contexts created by org1 + contexts created by org2 + all instance-level contexts.
   --order-by: string@order-by-completer-3 # Sort field. Despite the value, the results are always sorted with the global context first, user's default context next, followed by the user's starred contexts, followed by the rest of the contexts. This controls the order of these internal groups.
-  --descending: string@bool-completer # Sort direction.
+  --descending: oneof<nothing, bool> # Sort direction.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -3591,7 +3590,7 @@ export def "query completions" [
   --allow-errors(-e) # Return full response without error handling
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
-  --fast: string@bool-completer
+  --fast: oneof<nothing, bool>
   --input-messages: record # List of conversation messages — item shape: {speaker: "HUMAN"|"ASSISTANT", text: string}
   --input-temperature: float # Temperature for sampling - higher means more random completions
   --input-maxTokensToSample: int # Maximum number of tokens to sample
@@ -3659,7 +3658,7 @@ export def "query entitlements" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --type: string@type-completer # The type of the entitlement.
-  --is-default: string@bool-completer # Whether this is the default entitlement for its type.
+  --is-default: oneof<nothing, bool> # Whether this is the default entitlement for its type.
   --first: int # The limit argument for forward pagination.
   --last: int # The limit argument for backward pagination.
   --after: string # The cursor argument for forward pagination.
@@ -3788,12 +3787,12 @@ export def "query prompts" [
   --query: string # Raw GraphQL query (overrides auto-generated)
   --qp-query: string # Search prompts by name, description, or prompt template text.
   --owner: string # Filter by prompt owner (a namespace, either a user or organization).
-  --viewer-is-affiliated: string@bool-completer # Filter to only prompts owned by the viewer or one of viewer's organizations. All public prompts are also included. If null or false, no such filtering is performed.
-  --include-drafts: string@bool-completer # Whether to include draft prompts.
-  --recommended-only: string@bool-completer # Whether to include only recommended prompts.
-  --builtin-only: string@bool-completer # Whether to include only builtin prompts.
-  --include-builtin: string@bool-completer # Whether to include builtin prompts.
-  --include-viewer-drafts: string@bool-completer # Whether to include draft prompts owned by the viewer.
+  --viewer-is-affiliated: oneof<nothing, bool> # Filter to only prompts owned by the viewer or one of viewer's organizations. All public prompts are also included. If null or false, no such filtering is performed.
+  --include-drafts: oneof<nothing, bool> # Whether to include draft prompts.
+  --recommended-only: oneof<nothing, bool> # Whether to include only recommended prompts.
+  --builtin-only: oneof<nothing, bool> # Whether to include only builtin prompts.
+  --include-builtin: oneof<nothing, bool> # Whether to include builtin prompts.
+  --include-viewer-drafts: oneof<nothing, bool> # Whether to include draft prompts owned by the viewer.
   --first: int # The limit argument for forward pagination.
   --last: int # The limit argument for backward pagination.
   --after: string # The cursor argument for forward pagination.
@@ -4353,7 +4352,7 @@ export def "mutation delete-external-service" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   external_service: string
-  --async: string@bool-completer
+  --async: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -4543,8 +4542,8 @@ export def "mutation create-user" [
   --query: string # Raw GraphQL query (overrides auto-generated)
   username: string # The new user's username.
   --email: string # The new user's optional email address. If given, it must be verified by the user.
-  --verified-email: string@bool-completer # Whether or not to mark the provided email address as verified. If unset or set to true, then the email address is immediately marked as verified - otherwise, the email may be marked as unverified if SMTP and password resets are enabled.
-  --is-service-account: string@bool-completer # Whether this is a service account for automation rather than a regular user account. Service accounts don't have an email or password.
+  --verified-email: oneof<nothing, bool> # Whether or not to mark the provided email address as verified. If unset or set to true, then the email address is immediately marked as verified - otherwise, the email may be marked as unverified if SMTP and password resets are enabled.
+  --is-service-account: oneof<nothing, bool> # Whether this is a service account for automation rather than a regular user account. Service accounts don't have an email or password.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -4704,7 +4703,7 @@ export def "mutation set-user-email-verified" [
   --query: string # Raw GraphQL query (overrides auto-generated)
   user: string
   email: string
-  --verified: string@bool-completer
+  --verified: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -4768,7 +4767,7 @@ export def "mutation delete-user" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user: string
-  --hard: string@bool-completer
+  --hard: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -4800,7 +4799,7 @@ export def "mutation delete-users" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   users: string
-  --hard: string@bool-completer
+  --hard: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -5621,7 +5620,7 @@ export def "mutation validate-smtp-configuration" [
   --smtp-username: string # The username for authentication (required if authentication is not "none").
   --smtp-password: string # The password for authentication (required if authentication is not "none").
   --smtp-domain: string # The domain to use for the HELO command.
-  --smtp-noVerifyTLS: string@bool-completer # If true, skip TLS certificate verification (not recommended for production).
+  --smtp-noVerifyTLS: oneof<nothing, bool> # If true, skip TLS certificate verification (not recommended for production).
   --smtp-additionalHeaders: record # Additional headers to include on SMTP messages. — item shape: {key: string, value: string}
 ]: any -> string {
   let input = $in
@@ -5688,8 +5687,8 @@ export def "mutation set-signup-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
-  --input-enableUsernameChanges: string@bool-completer # Whether users can change their own usernames.
-  --input-accessRequestEnabled: string@bool-completer # Whether access requests are enabled for users who cannot sign up.
+  --input-enableUsernameChanges: oneof<nothing, bool> # Whether users can change their own usernames.
+  --input-accessRequestEnabled: oneof<nothing, bool> # Whether access requests are enabled for users who cannot sign up.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -5722,10 +5721,10 @@ export def "mutation set-password-policy-configuration" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-minPasswordLength: int # Minimum password length required.
-  --input-enabled: string@bool-completer # Whether password complexity requirements are enabled.
+  --input-enabled: oneof<nothing, bool> # Whether password complexity requirements are enabled.
   --input-numberOfSpecialCharacters: int # Number of special characters required in passwords.
-  --input-requireAtLeastOneNumber: string@bool-completer # Whether at least one number is required.
-  --input-requireUpperandLowerCase: string@bool-completer # Whether mixed case (upper and lower) is required.
+  --input-requireAtLeastOneNumber: oneof<nothing, bool> # Whether at least one number is required.
+  --input-requireUpperandLowerCase: oneof<nothing, bool> # Whether mixed case (upper and lower) is required.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -5757,8 +5756,8 @@ export def "mutation set-access-restrictions-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
-  --input-enforceForSiteAdmins: string@bool-completer # Whether repository permissions are enforced for site admins.
-  --input-ipAllowlistEnabled: string@bool-completer # Whether IP allowlist is enabled.
+  --input-enforceForSiteAdmins: oneof<nothing, bool> # Whether repository permissions are enforced for site admins.
+  --input-ipAllowlistEnabled: oneof<nothing, bool> # Whether IP allowlist is enabled.
   --input-userIpAddress: string # Allowed user IP addresses (CIDR notation supported).
   --input-clientIpAddress: string # Allowed client IP addresses (e.g., load balancer ranges).
   --input-trustedClientIpAddress: string # Trusted client IP addresses that bypass user IP checks.
@@ -5827,7 +5826,7 @@ export def "mutation set-builtin-auth-enabled" [
   --allow-errors(-e) # Return full response without error handling
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
-  --enabled: string@bool-completer # Whether builtin authentication should be enabled.
+  --enabled: oneof<nothing, bool> # Whether builtin authentication should be enabled.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -5860,7 +5859,7 @@ export def "mutation set-auth-provider-sign-in" [
   --query: string # Raw GraphQL query (overrides auto-generated)
   service_type: string # The service type of the auth provider.
   config_id: string # The stable configuration identifier of the auth provider.
-  --enabled: string@bool-completer # Whether sign-in should be enabled for this provider.
+  --enabled: oneof<nothing, bool> # Whether sign-in should be enabled for this provider.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -5924,7 +5923,7 @@ export def "mutation set-user-is-site-admin" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user_id: string
-  --site-admin: string@bool-completer
+  --site-admin: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -6149,7 +6148,7 @@ export def "mutation set-migration-direction" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
-  --apply-reverse: string@bool-completer
+  --apply-reverse: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -6181,7 +6180,7 @@ export def "mutation create-feature-flag" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   name: string # The name of the feature flag
-  --value: string@bool-completer # The value of the feature flag. Only set if the new feature flag will be a concrete boolean flag. Mutually exclusive with rolloutBasisPoints.
+  --value: oneof<nothing, bool> # The value of the feature flag. Only set if the new feature flag will be a concrete boolean flag. Mutually exclusive with rolloutBasisPoints.
   --rollout-basis-points: int # The ratio of users the feature flag will apply to, expressed in basis points (0.01%). Only set if the new feature flag will be a rollout flag. Mutually exclusive with value.
 ]: any -> record {
   let input = $in
@@ -6245,7 +6244,7 @@ export def "mutation update-feature-flag" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   name: string # The name of the feature flag
-  --value: string@bool-completer # The value of the feature flag. Only set if the new feature flag will be a concrete boolean flag. Mutually exclusive with rollout.
+  --value: oneof<nothing, bool> # The value of the feature flag. Only set if the new feature flag will be a concrete boolean flag. Mutually exclusive with rollout.
   --rollout-basis-points: int # The ratio of users the feature flag will apply to, expressed in basis points (0.01%). Mutually exclusive with value.
 ]: any -> record {
   let input = $in
@@ -6279,7 +6278,7 @@ export def "mutation create-feature-flag-override" [
   --query: string # Raw GraphQL query (overrides auto-generated)
   namespace: string # The namespace for this feature flag. Must be either a user ID or an org ID.
   flag_name: string # The name of the feature flag this override applies to
-  --value: string@bool-completer # The overridden value
+  --value: oneof<nothing, bool> # The overridden value
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -6342,7 +6341,7 @@ export def "mutation update-feature-flag-override" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string # The ID of the feature flag override to update
-  --value: string@bool-completer # The updated value of the feature flag override
+  --value: oneof<nothing, bool> # The updated value of the feature flag override
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -7179,7 +7178,7 @@ export def "mutation set-slack-allow-deep-search" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
-  --allow: string@bool-completer
+  --allow: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -7314,7 +7313,7 @@ export def "mutation validate-external-tls-configuration" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --validate-endpoint: string # Optional URL or host:port to validate TLS connectivity against.
-  --input-insecureSkipVerify: string@bool-completer # If true, skip TLS certificate verification for all outgoing connections. WARNING: This makes TLS susceptible to man-in-the-middle attacks.
+  --input-insecureSkipVerify: oneof<nothing, bool> # If true, skip TLS certificate verification for all outgoing connections. WARNING: This makes TLS susceptible to man-in-the-middle attacks.
   --input-certificates: record # CA certificates to trust in addition to system CAs. — item shape: {pem: string, fingerprint?: string}
   --input-mtlsConfigurations: record # Mutual TLS (mTLS) configurations for specific hosts. — item shape: {host: string, clientCertificate: string, clientCertificateFingerprint?: string, clientKey?: string}
 ]: any -> record {
@@ -7350,7 +7349,7 @@ export def "mutation set-external-tls-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
-  --input-insecureSkipVerify: string@bool-completer # If true, skip TLS certificate verification for all outgoing connections. WARNING: This makes TLS susceptible to man-in-the-middle attacks.
+  --input-insecureSkipVerify: oneof<nothing, bool> # If true, skip TLS certificate verification for all outgoing connections. WARNING: This makes TLS susceptible to man-in-the-middle attacks.
   --input-certificates: record # CA certificates to trust in addition to system CAs. — item shape: {pem: string, fingerprint?: string}
   --input-mtlsConfigurations: record # Mutual TLS (mTLS) configurations for specific hosts. — item shape: {host: string, clientCertificate: string, clientCertificateFingerprint?: string, clientKey?: string}
 ]: any -> record {
@@ -7418,7 +7417,7 @@ export def "mutation delete-precise-indexes" [
   --qp-query: string # An (optional) search query that filters the state, repository name, commit, root, and indexer properties.
   --states: string@states-completer # The index state.
   --indexer-key: string # If supplied, only precise indexes created by an indexer with the given key are modified.
-  --is-latest-for-repo: string@bool-completer # When specified, only deletes indexes that are latest for the given repository.
+  --is-latest-for-repo: oneof<nothing, bool> # When specified, only deletes indexes that are latest for the given repository.
   --repository: string # The repository.
   --index-source: string@index-source-completer # If supplied, only deletes indexes from the given source (AUTO_INDEX or UPLOAD).
 ]: any -> record {
@@ -7547,8 +7546,8 @@ export def "mutation update-managed-indexing-settings" [
   --allow-errors(-e) # Return full response without error handling
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
-  --precise-indexing-enabled: string@bool-completer # Whether precise indexing should be enabled.
-  --syntactic-indexing-enabled: string@bool-completer # Whether syntactic indexing should be enabled. Note: If syntactic indexing is disabled at the site config level (codeintelSyntacticIndexing.enabled is false), this value will be ignored and syntactic indexing will remain disabled.
+  --precise-indexing-enabled: oneof<nothing, bool> # Whether precise indexing should be enabled.
+  --syntactic-indexing-enabled: oneof<nothing, bool> # Whether syntactic indexing should be enabled. Note: If syntactic indexing is disabled at the site config level (codeintelSyntacticIndexing.enabled is false), this value will be ignored and syntactic indexing will remain disabled.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -7584,13 +7583,13 @@ export def "mutation create-code-intelligence-configuration-policy" [
   name: string
   type: string@type-completer-1
   pattern: string
-  --retention-enabled: string@bool-completer
+  --retention-enabled: oneof<nothing, bool>
   --retention-duration-hours: int
-  --retain-intermediate-commits: string@bool-completer
-  --indexing-enabled: string@bool-completer # Does this policy enable precise auto-indexing?
-  --syntactic-indexing-enabled: string@bool-completer
+  --retain-intermediate-commits: oneof<nothing, bool>
+  --indexing-enabled: oneof<nothing, bool> # Does this policy enable precise auto-indexing?
+  --syntactic-indexing-enabled: oneof<nothing, bool>
   --index-commit-max-age-hours: int
-  --index-intermediate-commits: string@bool-completer
+  --index-intermediate-commits: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -7626,13 +7625,13 @@ export def "mutation update-code-intelligence-configuration-policy" [
   name: string
   type: string@type-completer-1
   pattern: string
-  --retention-enabled: string@bool-completer
+  --retention-enabled: oneof<nothing, bool>
   --retention-duration-hours: int
-  --retain-intermediate-commits: string@bool-completer
-  --indexing-enabled: string@bool-completer # Does this policy enable precise auto-indexing?
-  --syntactic-indexing-enabled: string@bool-completer
+  --retain-intermediate-commits: oneof<nothing, bool>
+  --indexing-enabled: oneof<nothing, bool> # Does this policy enable precise auto-indexing?
+  --syntactic-indexing-enabled: oneof<nothing, bool>
   --index-commit-max-age-hours: int
-  --index-intermediate-commits: string@bool-completer
+  --index-intermediate-commits: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -7893,7 +7892,7 @@ export def "mutation update-insight-series" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-seriesId: string # Unique ID for the series.
-  --input-enabled: string@bool-completer # The desired activity state (enabled or disabled) for the series.
+  --input-enabled: oneof<nothing, bool> # The desired activity state (enabled or disabled) for the series.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -8363,7 +8362,7 @@ export def "mutation add-repository-permission-for-user" [
   --query: string # Raw GraphQL query (overrides auto-generated)
   user_id: string # The user identifier and permission level to add.
   --permission-repository: string # The repository ID to grant permission for. Mutually exclusive with wildcard.
-  --permission-wildcard: string@bool-completer # Whether to grant unrestricted access to all repositories. Mutually exclusive with repository.
+  --permission-wildcard: oneof<nothing, bool> # Whether to grant unrestricted access to all repositories. Mutually exclusive with repository.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -8428,7 +8427,7 @@ export def "mutation set-repository-permissions-unrestricted" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   repositories: string # The repository ids we want to set unrestricted permissions on. Must not contain duplicates.
-  --unrestricted: string@bool-completer # true: Any user can view the repo false: Use existing repo permissions
+  --unrestricted: oneof<nothing, bool> # true: Any user can view the repo false: Use existing repo permissions
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -8491,7 +8490,7 @@ export def "mutation schedule-user-permissions-sync" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user: string # User to schedule a sync for.
-  --options-invalidateCaches: string@bool-completer # Indicate that any caches added for optimization encountered during this permissions sync should be invalidated.
+  --options-invalidateCaches: oneof<nothing, bool> # Indicate that any caches added for optimization encountered during this permissions sync should be invalidated.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -8560,7 +8559,7 @@ export def "mutation set-repository-permissions-for-bitbucket-project" [
   project_key: string # Bitbucket project key of which all repository permissions will be updated.
   code_host: string # The bitbucket code host's GraphQL ID where this project is located.
   --user-permissions: record # A list of user identifiers and their repository permissions, which defines the set of users who may view the repository. All users not included in the list will not be permitted to view the repository on Sourcegraph. — item shape: {bindID: string, permission?: "READ"}
-  --unrestricted: string@bool-completer # Flag to indicate if ALL repositories under the project will allow unrestricted access to all users who have access to the code host.
+  --unrestricted: oneof<nothing, bool> # Flag to indicate if ALL repositories under the project will allow unrestricted access to all users who have access to the code host.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -8658,7 +8657,7 @@ export def "mutation update-auth-provider-wizard-draft" [
   id: string
   --input-displayName: string # Optional display name for this draft.
   --input-stepConfiguration: string # The step configuration as a JSON string. This stores all the configuration values collected during the auth provider wizard process.
-  --input-clearValidationResult: string@bool-completer # If true, clears the last validation result and timestamp.
+  --input-clearValidationResult: oneof<nothing, bool> # If true, clears the last validation result and timestamp.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -8722,7 +8721,7 @@ export def "mutation record-auth-provider-wizard-validation-result" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
-  --result-success: string@bool-completer # Whether the validation was successful.
+  --result-success: oneof<nothing, bool> # Whether the validation was successful.
   --result-errorMessage: string # Error message if the validation failed.
   --result-subject: string # The authenticated subject identifier.
   --result-email: string # The authenticated user's email.
@@ -8797,7 +8796,7 @@ export def "mutation create-saved-search" [
   --input-owner: string # The owner of the saved search, either a user or organization.
   --input-description: string # A description of the saved search.
   --input-query: string # The search query.
-  --input-draft: string@bool-completer # Whether the saved search is a draft.
+  --input-draft: oneof<nothing, bool> # Whether the saved search is a draft.
   --input-visibility: string@input-visibility-completer # The visibility state for the saved search.
 ]: any -> record {
   let input = $in
@@ -8833,7 +8832,7 @@ export def "mutation update-saved-search" [
   id: string
   --input-description: string # A description of the saved search.
   --input-query: string # The search query.
-  --input-draft: string@bool-completer # Whether the saved search is a draft.
+  --input-draft: oneof<nothing, bool> # Whether the saved search is a draft.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -9160,7 +9159,7 @@ export def "mutation create-search-context" [
   --repositories: record # List of search context repository revisions. — item shape: {repositoryID: string, revisions: string}
   --search-context-name: string # Search context name. Not the same as the search context spec. Search context namespace and search context name are used to construct the fully-qualified search context spec. Example mappings from search context spec to search context name: global -> global, @user -> user, @org -> org, @user/ctx1 -> ctx1, @org/ctxs/ctx -> ctxs/ctx.
   --search-context-description: string # Search context description.
-  --search-context-public: string@bool-completer # Public property controls the visibility of the search context. Public search context is available to any user on the instance. If a public search context contains private repositories, those are filtered out for unauthorized users. Private search contexts are only available to their owners. Private user search context is available only to the user, private org search context is available only to the members of the org, and private instance-level search contexts are available only to users with SEARCH_CONTEXTS#WRITE_GLOBAL permission.
+  --search-context-public: oneof<nothing, bool> # Public property controls the visibility of the search context. Public search context is available to any user on the instance. If a public search context contains private repositories, those are filtered out for unauthorized users. Private search contexts are only available to their owners. Private user search context is available only to the user, private org search context is available only to the members of the org, and private instance-level search contexts are available only to users with SEARCH_CONTEXTS#WRITE_GLOBAL permission.
   --search-context-namespace: string # Namespace of the search context (user or org). If not set, search context is considered instance-level.
   --search-context-query: string # Sourcegraph search query that defines the search context. e.g. "r:^github\.com/org (rev:bar or rev:HEAD) file:^sub/dir"
 ]: any -> record {
@@ -9230,7 +9229,7 @@ export def "mutation update-search-context" [
   --repositories: record # List of search context repository revisions. — item shape: {repositoryID: string, revisions: string}
   --search-context-name: string # Search context name. Not the same as the search context spec. Search context namespace and search context name are used to construct the fully-qualified search context spec. Example mappings from search context spec to search context name: global -> global, @user -> user, @org -> org, @user/ctx1 -> ctx1, @org/ctxs/ctx -> ctxs/ctx.
   --search-context-description: string # Search context description.
-  --search-context-public: string@bool-completer # Public property controls the visibility of the search context. Public search context is available to any user on the instance. If a public search context contains private repositories, those are filtered out for unauthorized users. Private search contexts are only available to their owners. Private user search context is available only to the user, private org search context is available only to the members of the org, and private instance-level search contexts are available only to users with SEARCH_CONTEXTS#WRITE_GLOBAL permission.
+  --search-context-public: oneof<nothing, bool> # Public property controls the visibility of the search context. Public search context is available to any user on the instance. If a public search context contains private repositories, those are filtered out for unauthorized users. Private search contexts are only available to their owners. Private user search context is available only to the user, private org search context is available only to the members of the org, and private instance-level search contexts are available only to users with SEARCH_CONTEXTS#WRITE_GLOBAL permission.
   --search-context-query: string # Sourcegraph search query that defines the search context. e.g. "r:^github\.com/org (rev:bar or rev:HEAD) file:^sub/dir"
 ]: any -> record {
   let input = $in
@@ -9490,7 +9489,7 @@ export def "mutation create-entitlement" [
   type: string@type-completer # The type of the entitlement.
   limit: int # The limit value for this entitlement.
   window: string@window-completer # The window to enforce this entitlement over.
-  --is-default: string@bool-completer # Whether this is the default entitlement for its type.
+  --is-default: oneof<nothing, bool> # Whether this is the default entitlement for its type.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -9525,7 +9524,7 @@ export def "mutation update-entitlement" [
   name: string # The name of the entitlement.
   limit: int # The limit value for this entitlement.
   window: string@window-completer # The window to enforce this entitlement over.
-  --is-default: string@bool-completer # Whether this is the default entitlement for its type.
+  --is-default: oneof<nothing, bool> # Whether this is the default entitlement for its type.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -9717,11 +9716,11 @@ export def "mutation create-prompt" [
   --input-name: string # The name of the prompt.
   --input-description: string # The description of the prompt.
   --input-definitionText: string # The prompt template definition.
-  --input-draft: string@bool-completer # Whether the prompt is a draft.
+  --input-draft: oneof<nothing, bool> # Whether the prompt is a draft.
   --input-visibility: string@input-visibility-completer # The visibility state for the prompt.
-  --input-autoSubmit: string@bool-completer # Whether the prompt should be automatically executed in one click.
+  --input-autoSubmit: oneof<nothing, bool> # Whether the prompt should be automatically executed in one click.
   --input-mode: string@input-mode-completer # Whether to execute prompt as chat, edit or insert command.
-  --input-recommended: string@bool-completer # Whether the prompt is recommended.
+  --input-recommended: oneof<nothing, bool> # Whether the prompt is recommended.
   --input-tags: string # The tags for the prompt.
 ]: any -> record {
   let input = $in
@@ -9758,10 +9757,10 @@ export def "mutation update-prompt" [
   --input-name: string # The name of the prompt.
   --input-description: string # The description of the prompt.
   --input-definitionText: string # The prompt template definition.
-  --input-draft: string@bool-completer # Whether the prompt is a draft.
-  --input-autoSubmit: string@bool-completer # Whether the prompt should be automatically executed in one click.
+  --input-draft: oneof<nothing, bool> # Whether the prompt is a draft.
+  --input-autoSubmit: oneof<nothing, bool> # Whether the prompt should be automatically executed in one click.
   --input-mode: string@input-mode-completer # Whether to execute prompt as chat, edit or insert command.
-  --input-recommended: string@bool-completer # Whether the prompt is recommended.
+  --input-recommended: oneof<nothing, bool> # Whether the prompt is recommended.
   --input-tags: string # The new tags delete and override any existing tags.
 ]: any -> record {
   let input = $in
@@ -9989,7 +9988,7 @@ export def "mutation create-idp-client" [
   --description: string # A detailed description of what this client does and why it needs access. Will be shown to users on consent screens.
   redirect_ur_is: string # The list of permitted redirect URIs.
   scopes: string # The list of scopes this client can request.
-  --public: string@bool-completer # Whether this is a public client.  Public clients don't need to present a client secret. This is suitable for single-page applications, mobile apps, and CLI tools. The client supports device flow authentication.  Private clients need to provide the client secret for authorization flows. Suitable for server-side applications, internal services, and M2M use-cases.  This setting cannot be changed after creation.
+  --public: oneof<nothing, bool> # Whether this is a public client.  Public clients don't need to present a client secret. This is suitable for single-page applications, mobile apps, and CLI tools. The client supports device flow authentication.  Private clients need to provide the client secret for authorization flows. Suitable for server-side applications, internal services, and M2M use-cases.  This setting cannot be changed after creation.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -10087,7 +10086,7 @@ export def "mutation resolve-device-authorization" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   user_code: string # The user code associated with the authorization request to respond to.
-  --approve: string@bool-completer # Whether to approve the request.
+  --approve: oneof<nothing, bool> # Whether to approve the request.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))

@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost:8787" "https://localhost:8787"] }
 def auth-scheme-completer [] { ["x-api-key" "query-apikey"] }
 
@@ -252,7 +251,7 @@ export def "author post" [
   --path: string # nullable
   --qualityProfileId: int # format: int32
   --metadataProfileId: int # format: int32
-  --monitored: string@bool-completer
+  --monitored: oneof<nothing, bool>
   --monitorNewItems: string@monitorNewItems-completer
   --rootFolderPath: string # nullable
   --folder: string # nullable
@@ -296,7 +295,7 @@ export def "author put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --moveFiles: string@bool-completer # default: false
+  --moveFiles: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --authorMetadataId: int # format: int32
   --status: string@status-completer
@@ -314,7 +313,7 @@ export def "author put" [
   --path: string # nullable
   --qualityProfileId: int # format: int32
   --metadataProfileId: int # format: int32
-  --monitored: string@bool-completer
+  --monitored: oneof<nothing, bool>
   --monitorNewItems: string@monitorNewItems-completer
   --rootFolderPath: string # nullable
   --folder: string # nullable
@@ -350,8 +349,8 @@ export def "author delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deleteFiles: string@bool-completer # default: false
-  --addImportListExclusion: string@bool-completer # default: false
+  --deleteFiles: oneof<nothing, bool> # default: false
+  --addImportListExclusion: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -391,15 +390,15 @@ export def "author-editor put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --authorIds: list # nullable
-  --monitored: string@bool-completer # nullable
+  --monitored: oneof<nothing, bool> # nullable
   --monitorNewItems: string@monitorNewItems-completer
   --qualityProfileId: int # nullable, format: int32
   --metadataProfileId: int # nullable, format: int32
   --rootFolderPath: string # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --moveFiles: string@bool-completer
-  --deleteFiles: string@bool-completer
+  --moveFiles: oneof<nothing, bool>
+  --deleteFiles: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -422,15 +421,15 @@ export def "author-editor delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --authorIds: list # nullable
-  --monitored: string@bool-completer # nullable
+  --monitored: oneof<nothing, bool> # nullable
   --monitorNewItems: string@monitorNewItems-completer
   --qualityProfileId: int # nullable, format: int32
   --metadataProfileId: int # nullable, format: int32
   --rootFolderPath: string # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --moveFiles: string@bool-completer
-  --deleteFiles: string@bool-completer
+  --moveFiles: oneof<nothing, bool>
+  --deleteFiles: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -615,7 +614,7 @@ export def "book list" [
   --authorId: int # format: int32
   --bookIds: list
   --titleSlug: string
-  --includeAllAuthorBooks: string@bool-completer # default: false
+  --includeAllAuthorBooks: oneof<nothing, bool> # default: false
 ]: nothing -> table<id: int, title: string, authorTitle: string, seriesTitle: string, disambiguation: string, overview: string, authorId: int, foreignBookId: string, foreignEditionId: string, titleSlug: string, monitored: bool, anyEditionOk: bool, ratings: record<votes: int, value: float, popularity: float>, releaseDate: string, pageCount: int, genres: list<string>, author: record<id: int, authorMetadataId: int, status: string, ended: bool, authorName: string, authorNameLastFirst: string, foreignAuthorId: string, titleSlug: string, overview: string, disambiguation: string, links: list, nextBook: record, lastBook: record, images: list, remotePoster: string, path: string, qualityProfileId: int, metadataProfileId: int, monitored: bool, monitorNewItems: string, rootFolderPath: string, folder: string, genres: list, cleanName: string, sortName: string, sortNameLastFirst: string, tags: list, added: string, addOptions: record, ratings: record, statistics: record>, images: list<record>, links: list<record>, statistics: record<bookFileCount: int, bookCount: int, totalBookCount: int, sizeOnDisk: int, percentOfBooks: float>, added: string, addOptions: record<addType: string, searchForNewBook: bool>, remoteCover: string, lastSearchTime: string, editions: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -654,8 +653,8 @@ export def "book post" [
   --foreignBookId: string # nullable
   --foreignEditionId: string # nullable
   --titleSlug: string # nullable
-  --monitored: string@bool-completer
-  --anyEditionOk: string@bool-completer
+  --monitored: oneof<nothing, bool>
+  --anyEditionOk: oneof<nothing, bool>
   --ratings: record # shape: {votes?: int, value?: float}
   --releaseDate: string # nullable, format: date-time
   --pageCount: int # format: int32
@@ -729,8 +728,8 @@ export def "book put" [
   --foreignBookId: string # nullable
   --foreignEditionId: string # nullable
   --titleSlug: string # nullable
-  --monitored: string@bool-completer
-  --anyEditionOk: string@bool-completer
+  --monitored: oneof<nothing, bool>
+  --anyEditionOk: oneof<nothing, bool>
   --ratings: record # shape: {votes?: int, value?: float}
   --releaseDate: string # nullable, format: date-time
   --pageCount: int # format: int32
@@ -766,8 +765,8 @@ export def "book delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deleteFiles: string@bool-completer # default: false
-  --addImportListExclusion: string@bool-completer # default: false
+  --deleteFiles: oneof<nothing, bool> # default: false
+  --addImportListExclusion: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -807,7 +806,7 @@ export def "book-monitor put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --bookIds: list # nullable
-  --monitored: string@bool-completer
+  --monitored: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -830,9 +829,9 @@ export def "book-editor put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --bookIds: list # nullable
-  --monitored: string@bool-completer # nullable
-  --deleteFiles: string@bool-completer # nullable
-  --addImportListExclusion: string@bool-completer # nullable
+  --monitored: oneof<nothing, bool> # nullable
+  --deleteFiles: oneof<nothing, bool> # nullable
+  --addImportListExclusion: oneof<nothing, bool> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -855,9 +854,9 @@ export def "book-editor delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --bookIds: list # nullable
-  --monitored: string@bool-completer # nullable
-  --deleteFiles: string@bool-completer # nullable
-  --addImportListExclusion: string@bool-completer # nullable
+  --monitored: oneof<nothing, bool> # nullable
+  --deleteFiles: oneof<nothing, bool> # nullable
+  --addImportListExclusion: oneof<nothing, bool> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -883,7 +882,7 @@ export def "bookfile list" [
   --authorId: int # format: int32
   --bookFileIds: list
   --bookId: list
-  --unmapped: string@bool-completer
+  --unmapped: oneof<nothing, bool>
 ]: nothing -> table<id: int, authorId: int, bookId: int, path: string, size: int, dateAdded: string, quality: record<quality: record, revision: record>, qualityWeight: int, indexerFlags: int, mediaInfo: record<id: int, audioChannels: float, audioBitRate: string, audioCodec: string, audioBits: string, audioSampleRate: string>, qualityCutoffNotMet: bool, audioTags: record<title: string, cleanTitle: string, authors: list, authorTitle: string, bookTitle: string, seriesTitle: string, seriesIndex: string, isbn: string, asin: string, goodreadsId: string, authorMBId: string, bookMBId: string, releaseMBId: string, recordingMBId: string, trackMBId: string, discNumber: int, discCount: int, country: record, year: int, publisher: string, label: string, source: string, catalogNumber: string, disambiguation: string, duration: string, quality: record, mediaInfo: record, trackNumbers: list, language: string, releaseGroup: string, releaseHash: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -919,7 +918,7 @@ export def "bookfile put" [
   --qualityWeight: int # format: int32
   --indexerFlags: int # nullable, format: int32
   --mediaInfo: record # shape: {id?: int, audioChannels?: float, audioBitRate?: string, audioCodec?: string, audioBits?: string, audioSampleRate?: string}
-  --qualityCutoffNotMet: string@bool-completer
+  --qualityCutoffNotMet: oneof<nothing, bool>
   --audioTags: record # shape: {title?: string, cleanTitle?: string, authors?: list, bookTitle?: string, seriesTitle?: string, seriesIndex?: string, isbn?: string, asin?: string, goodreadsId?: string, authorMBId?: string, bookMBId?: string, releaseMBId?: string, recordingMBId?: string, trackMBId?: string, discNumber?: int, discCount?: int, country?: record, year?: int, publisher?: string, label?: string, source?: string, catalogNumber?: string, disambiguation?: string, duration?: string, quality?: record, mediaInfo?: record, trackNumbers?: list, language?: string, releaseGroup?: string, releaseHash?: string}
 ]: any -> record<id: int, authorId: int, bookId: int, path: string, size: int, dateAdded: string, quality: record<quality: record<id: int, name: string>, revision: record<version: int, real: int, isRepack: bool>>, qualityWeight: int, indexerFlags: int, mediaInfo: record<id: int, audioChannels: float, audioBitRate: string, audioCodec: string, audioBits: string, audioSampleRate: string>, qualityCutoffNotMet: bool, audioTags: record<title: string, cleanTitle: string, authors: list<string>, authorTitle: string, bookTitle: string, seriesTitle: string, seriesIndex: string, isbn: string, asin: string, goodreadsId: string, authorMBId: string, bookMBId: string, releaseMBId: string, recordingMBId: string, trackMBId: string, discNumber: int, discCount: int, country: record<twoLetterCode: string, name: string>, year: int, publisher: string, label: string, source: string, catalogNumber: string, disambiguation: string, duration: string, quality: record<quality: record, revision: record>, mediaInfo: record<audioFormat: string, audioBitrate: int, audioChannels: int, audioBits: int, audioSampleRate: int>, trackNumbers: list<int>, language: string, releaseGroup: string, releaseHash: string>> {
   let input = $in
@@ -1080,8 +1079,8 @@ export def "calendar list" [
   --accept: string@accept-completer # Response content type
   --start: string # format: date-time
   --end: string # format: date-time
-  --unmonitored: string@bool-completer # default: false
-  --includeAuthor: string@bool-completer # default: false
+  --unmonitored: oneof<nothing, bool> # default: false
+  --includeAuthor: oneof<nothing, bool> # default: false
 ]: nothing -> table<id: int, title: string, authorTitle: string, seriesTitle: string, disambiguation: string, overview: string, authorId: int, foreignBookId: string, foreignEditionId: string, titleSlug: string, monitored: bool, anyEditionOk: bool, ratings: record<votes: int, value: float, popularity: float>, releaseDate: string, pageCount: int, genres: list<string>, author: record<id: int, authorMetadataId: int, status: string, ended: bool, authorName: string, authorNameLastFirst: string, foreignAuthorId: string, titleSlug: string, overview: string, disambiguation: string, links: list, nextBook: record, lastBook: record, images: list, remotePoster: string, path: string, qualityProfileId: int, metadataProfileId: int, monitored: bool, monitorNewItems: string, rootFolderPath: string, folder: string, genres: list, cleanName: string, sortName: string, sortNameLastFirst: string, tags: list, added: string, addOptions: record, ratings: record, statistics: record>, images: list<record>, links: list<record>, statistics: record<bookFileCount: int, bookCount: int, totalBookCount: int, sizeOnDisk: int, percentOfBooks: float>, added: string, addOptions: record<addType: string, searchForNewBook: bool>, remoteCover: string, lastSearchTime: string, editions: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1123,7 +1122,7 @@ export def "feed-calendar-readarrics get" [
   --pastDays: int # format: int32, default: 7
   --futureDays: int # format: int32, default: 28
   --tagList: string # default: 
-  --unmonitored: string@bool-completer # default: false
+  --unmonitored: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1162,8 +1161,8 @@ export def "command post" [
   --trigger: string@trigger-completer
   --clientUserAgent: string # nullable
   --stateChangeTime: string # nullable, format: date-time
-  --sendUpdatesToClient: string@bool-completer
-  --updateScheduledTask: string@bool-completer
+  --sendUpdatesToClient: oneof<nothing, bool>
+  --updateScheduledTask: oneof<nothing, bool>
   --lastExecutionTime: string # nullable, format: date-time
 ]: any -> record<id: int, name: string, commandName: string, message: string, body: record<sendUpdatesToClient: bool, updateScheduledTask: bool, completionMessage: string, requiresDiskAccess: bool, isExclusive: bool, isTypeExclusive: bool, isLongRunning: bool, name: string, lastExecutionTime: string, lastStartTime: string, trigger: string, suppressMessages: bool, clientUserAgent: string>, priority: string, status: string, result: string, queued: string, started: string, ended: string, duration: string, exception: string, trigger: string, clientUserAgent: string, stateChangeTime: string, sendUpdatesToClient: bool, updateScheduledTask: bool, lastExecutionTime: string> {
   let input = $in
@@ -1358,7 +1357,7 @@ export def "customformat post" [
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
   --name: string # nullable
-  --includeCustomFormatWhenRenaming: string@bool-completer # nullable
+  --includeCustomFormatWhenRenaming: oneof<nothing, bool> # nullable
   --specifications: list # nullable — item shape: {id?: int, name?: string, implementation?: string, implementationName?: string, infoLink?: string, negate?: bool, required?: bool, fields?: list, presets?: list}
 ]: any -> record<id: int, name: string, includeCustomFormatWhenRenaming: bool, specifications: table<id: int, name: string, implementation: string, implementationName: string, infoLink: string, negate: bool, required: bool, fields: list, presets: list>> {
   let input = $in
@@ -1405,7 +1404,7 @@ export def "customformat put" [
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
   --name: string # nullable
-  --includeCustomFormatWhenRenaming: string@bool-completer # nullable
+  --includeCustomFormatWhenRenaming: oneof<nothing, bool> # nullable
   --specifications: list # nullable — item shape: {id?: int, name?: string, implementation?: string, implementationName?: string, infoLink?: string, negate?: bool, required?: bool, fields?: list, presets?: list}
 ]: any -> record<id: int, name: string, includeCustomFormatWhenRenaming: bool, specifications: table<id: int, name: string, implementation: string, implementationName: string, infoLink: string, negate: bool, required: bool, fields: list, presets: list>> {
   let input = $in
@@ -1489,8 +1488,8 @@ export def "wanted-cutoff list" [
   --pageSize: int # format: int32, default: 10
   --sortKey: string
   --sortDirection: string@sortDirection-completer
-  --includeAuthor: string@bool-completer # default: false
-  --monitored: string@bool-completer # default: true
+  --includeAuthor: oneof<nothing, bool> # default: false
+  --monitored: oneof<nothing, bool> # default: true
 ]: nothing -> record<page: int, pageSize: int, sortKey: string, sortDirection: string, totalRecords: int, records: table<id: int, title: string, authorTitle: string, seriesTitle: string, disambiguation: string, overview: string, authorId: int, foreignBookId: string, foreignEditionId: string, titleSlug: string, monitored: bool, anyEditionOk: bool, ratings: record, releaseDate: string, pageCount: int, genres: list, author: record, images: list, links: list, statistics: record, added: string, addOptions: record, remoteCover: string, lastSearchTime: string, editions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1531,13 +1530,13 @@ export def "delayprofile post" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
-  --enableUsenet: string@bool-completer
-  --enableTorrent: string@bool-completer
+  --enableUsenet: oneof<nothing, bool>
+  --enableTorrent: oneof<nothing, bool>
   --preferredProtocol: string@preferredProtocol-completer
   --usenetDelay: int # format: int32
   --torrentDelay: int # format: int32
-  --bypassIfHighestQuality: string@bool-completer
-  --bypassIfAboveCustomFormatScore: string@bool-completer
+  --bypassIfHighestQuality: oneof<nothing, bool>
+  --bypassIfAboveCustomFormatScore: oneof<nothing, bool>
   --minimumCustomFormatScore: int # format: int32
   --order: int # format: int32
   --tags: list # nullable
@@ -1603,13 +1602,13 @@ export def "delayprofile put" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
-  --enableUsenet: string@bool-completer
-  --enableTorrent: string@bool-completer
+  --enableUsenet: oneof<nothing, bool>
+  --enableTorrent: oneof<nothing, bool>
   --preferredProtocol: string@preferredProtocol-completer
   --usenetDelay: int # format: int32
   --torrentDelay: int # format: int32
-  --bypassIfHighestQuality: string@bool-completer
-  --bypassIfAboveCustomFormatScore: string@bool-completer
+  --bypassIfHighestQuality: oneof<nothing, bool>
+  --bypassIfAboveCustomFormatScore: oneof<nothing, bool>
   --minimumCustomFormatScore: int # format: int32
   --order: int # format: int32
   --tags: list # nullable
@@ -1698,9 +1697,9 @@ export def "config-development put" [
   --body-id: int # format: int32
   --metadataSource: string # nullable
   --consoleLogLevel: string # nullable
-  --logSql: string@bool-completer
+  --logSql: oneof<nothing, bool>
   --logRotate: int # format: int32
-  --filterSentryEvents: string@bool-completer
+  --filterSentryEvents: oneof<nothing, bool>
 ]: any -> record<id: int, metadataSource: string, consoleLogLevel: string, logSql: bool, logRotate: int, filterSentryEvents: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1782,7 +1781,7 @@ export def "downloadclient post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, placeholder?: string, isFloat?: bool}
@@ -1793,11 +1792,11 @@ export def "downloadclient post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, removeCompletedDownloads?: bool, removeFailedDownloads?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
-  --removeCompletedDownloads: string@bool-completer
-  --removeFailedDownloads: string@bool-completer
+  --removeCompletedDownloads: oneof<nothing, bool>
+  --removeFailedDownloads: oneof<nothing, bool>
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool, protocol: string, priority: int, removeCompletedDownloads: bool, removeFailedDownloads: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1825,7 +1824,7 @@ export def "downloadclient put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, placeholder?: string, isFloat?: bool}
@@ -1836,11 +1835,11 @@ export def "downloadclient put" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, removeCompletedDownloads?: bool, removeFailedDownloads?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
-  --removeCompletedDownloads: string@bool-completer
-  --removeFailedDownloads: string@bool-completer
+  --removeCompletedDownloads: oneof<nothing, bool>
+  --removeFailedDownloads: oneof<nothing, bool>
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool, protocol: string, priority: int, removeCompletedDownloads: bool, removeFailedDownloads: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1904,10 +1903,10 @@ export def "downloadclient-bulk put" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enable: string@bool-completer # nullable
+  --enable: oneof<nothing, bool> # nullable
   --priority: int # nullable, format: int32
-  --removeCompletedDownloads: string@bool-completer # nullable
-  --removeFailedDownloads: string@bool-completer # nullable
+  --removeCompletedDownloads: oneof<nothing, bool> # nullable
+  --removeFailedDownloads: oneof<nothing, bool> # nullable
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool, protocol: string, priority: int, removeCompletedDownloads: bool, removeFailedDownloads: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1932,10 +1931,10 @@ export def "downloadclient-bulk delete" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enable: string@bool-completer # nullable
+  --enable: oneof<nothing, bool> # nullable
   --priority: int # nullable, format: int32
-  --removeCompletedDownloads: string@bool-completer # nullable
-  --removeFailedDownloads: string@bool-completer # nullable
+  --removeCompletedDownloads: oneof<nothing, bool> # nullable
+  --removeFailedDownloads: oneof<nothing, bool> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1979,7 +1978,7 @@ export def "downloadclient-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, placeholder?: string, isFloat?: bool}
@@ -1990,11 +1989,11 @@ export def "downloadclient-test post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, removeCompletedDownloads?: bool, removeFailedDownloads?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
-  --removeCompletedDownloads: string@bool-completer
-  --removeFailedDownloads: string@bool-completer
+  --removeCompletedDownloads: oneof<nothing, bool>
+  --removeFailedDownloads: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2050,11 +2049,11 @@ export def "downloadclient-action post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, removeCompletedDownloads?: bool, removeFailedDownloads?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
-  --removeCompletedDownloads: string@bool-completer
-  --removeFailedDownloads: string@bool-completer
+  --removeCompletedDownloads: oneof<nothing, bool>
+  --removeFailedDownloads: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2099,9 +2098,9 @@ export def "config-downloadclient put" [
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
   --downloadClientWorkingFolders: string # nullable
-  --enableCompletedDownloadHandling: string@bool-completer
-  --autoRedownloadFailed: string@bool-completer
-  --autoRedownloadFailedFromInteractiveSearch: string@bool-completer
+  --enableCompletedDownloadHandling: oneof<nothing, bool>
+  --autoRedownloadFailed: oneof<nothing, bool>
+  --autoRedownloadFailedFromInteractiveSearch: oneof<nothing, bool>
 ]: any -> record<id: int, downloadClientWorkingFolders: string, enableCompletedDownloadHandling: bool, autoRedownloadFailed: bool, autoRedownloadFailedFromInteractiveSearch: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2164,8 +2163,8 @@ export def "filesystem get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --path: string
-  --includeFiles: string@bool-completer # default: false
-  --allowFoldersWithoutTrailingSlashes: string@bool-completer # default: false
+  --includeFiles: oneof<nothing, bool> # default: false
+  --allowFoldersWithoutTrailingSlashes: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2248,8 +2247,8 @@ export def "history get" [
   --pageSize: int # format: int32, default: 10
   --sortKey: string
   --sortDirection: string@sortDirection-completer
-  --includeAuthor: string@bool-completer
-  --includeBook: string@bool-completer
+  --includeAuthor: oneof<nothing, bool>
+  --includeBook: oneof<nothing, bool>
   --eventType: list
   --bookId: int # format: int32
   --downloadId: string
@@ -2275,8 +2274,8 @@ export def "history-since get" [
   --accept: string@accept-completer # Response content type
   --date: string # format: date-time
   --eventType: string@eventType-completer
-  --includeAuthor: string@bool-completer # default: false
-  --includeBook: string@bool-completer # default: false
+  --includeAuthor: oneof<nothing, bool> # default: false
+  --includeBook: oneof<nothing, bool> # default: false
 ]: nothing -> table<id: int, bookId: int, authorId: int, sourceTitle: string, quality: record<quality: record, revision: record>, customFormats: list<record>, customFormatScore: int, qualityCutoffNotMet: bool, date: string, downloadId: string, eventType: string, data: record, book: record<id: int, title: string, authorTitle: string, seriesTitle: string, disambiguation: string, overview: string, authorId: int, foreignBookId: string, foreignEditionId: string, titleSlug: string, monitored: bool, anyEditionOk: bool, ratings: record, releaseDate: string, pageCount: int, genres: list, author: record, images: list, links: list, statistics: record, added: string, addOptions: record, remoteCover: string, lastSearchTime: string, editions: list>, author: record<id: int, authorMetadataId: int, status: string, ended: bool, authorName: string, authorNameLastFirst: string, foreignAuthorId: string, titleSlug: string, overview: string, disambiguation: string, links: list, nextBook: record, lastBook: record, images: list, remotePoster: string, path: string, qualityProfileId: int, metadataProfileId: int, monitored: bool, monitorNewItems: string, rootFolderPath: string, folder: string, genres: list, cleanName: string, sortName: string, sortNameLastFirst: string, tags: list, added: string, addOptions: record, ratings: record, statistics: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2300,8 +2299,8 @@ export def "history-author get" [
   --authorId: int # format: int32
   --bookId: int # format: int32
   --eventType: string@eventType-completer
-  --includeAuthor: string@bool-completer # default: false
-  --includeBook: string@bool-completer # default: false
+  --includeAuthor: oneof<nothing, bool> # default: false
+  --includeBook: oneof<nothing, bool> # default: false
 ]: nothing -> table<id: int, bookId: int, authorId: int, sourceTitle: string, quality: record<quality: record, revision: record>, customFormats: list<record>, customFormatScore: int, qualityCutoffNotMet: bool, date: string, downloadId: string, eventType: string, data: record, book: record<id: int, title: string, authorTitle: string, seriesTitle: string, disambiguation: string, overview: string, authorId: int, foreignBookId: string, foreignEditionId: string, titleSlug: string, monitored: bool, anyEditionOk: bool, ratings: record, releaseDate: string, pageCount: int, genres: list, author: record, images: list, links: list, statistics: record, added: string, addOptions: record, remoteCover: string, lastSearchTime: string, editions: list>, author: record<id: int, authorMetadataId: int, status: string, ended: bool, authorName: string, authorNameLastFirst: string, foreignAuthorId: string, titleSlug: string, overview: string, disambiguation: string, links: list, nextBook: record, lastBook: record, images: list, remotePoster: string, path: string, qualityProfileId: int, metadataProfileId: int, monitored: bool, monitorNewItems: string, rootFolderPath: string, folder: string, genres: list, cleanName: string, sortName: string, sortNameLastFirst: string, tags: list, added: string, addOptions: record, ratings: record, statistics: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2365,11 +2364,11 @@ export def "config-host put" [
   --bindAddress: string # nullable
   --port: int # format: int32
   --sslPort: int # format: int32
-  --enableSsl: string@bool-completer
-  --launchBrowser: string@bool-completer
+  --enableSsl: oneof<nothing, bool>
+  --launchBrowser: oneof<nothing, bool>
   --authenticationMethod: string@authenticationMethod-completer
   --authenticationRequired: string@authenticationRequired-completer
-  --analyticsEnabled: string@bool-completer
+  --analyticsEnabled: oneof<nothing, bool>
   --username: string # nullable
   --password: string # nullable
   --passwordConfirmation: string # nullable
@@ -2382,22 +2381,22 @@ export def "config-host put" [
   --urlBase: string # nullable
   --instanceName: string # nullable
   --applicationUrl: string # nullable
-  --updateAutomatically: string@bool-completer
+  --updateAutomatically: oneof<nothing, bool>
   --updateMechanism: string@updateMechanism-completer
   --updateScriptPath: string # nullable
-  --proxyEnabled: string@bool-completer
+  --proxyEnabled: oneof<nothing, bool>
   --proxyType: string@proxyType-completer
   --proxyHostname: string # nullable
   --proxyPort: int # format: int32
   --proxyUsername: string # nullable
   --proxyPassword: string # nullable
   --proxyBypassFilter: string # nullable
-  --proxyBypassLocalAddresses: string@bool-completer
+  --proxyBypassLocalAddresses: oneof<nothing, bool>
   --certificateValidation: string@certificateValidation-completer
   --backupFolder: string # nullable
   --backupInterval: int # format: int32
   --backupRetention: int # format: int32
-  --trustCgnatIpAddresses: string@bool-completer
+  --trustCgnatIpAddresses: oneof<nothing, bool>
 ]: any -> record<id: int, bindAddress: string, port: int, sslPort: int, enableSsl: bool, launchBrowser: bool, authenticationMethod: string, authenticationRequired: string, analyticsEnabled: bool, username: string, password: string, passwordConfirmation: string, logLevel: string, consoleLogLevel: string, branch: string, apiKey: string, sslCertPath: string, sslCertPassword: string, urlBase: string, instanceName: string, applicationUrl: string, updateAutomatically: bool, updateMechanism: string, updateScriptPath: string, proxyEnabled: bool, proxyType: string, proxyHostname: string, proxyPort: int, proxyUsername: string, proxyPassword: string, proxyBypassFilter: string, proxyBypassLocalAddresses: bool, certificateValidation: string, backupFolder: string, backupInterval: int, backupRetention: int, trustCgnatIpAddresses: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -2460,7 +2459,7 @@ export def "importlist post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, placeholder?: string, isFloat?: bool}
@@ -2471,10 +2470,10 @@ export def "importlist post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableAutomaticAdd?: bool, shouldMonitor?: "none"|"specificBook"|"entireAuthor", shouldMonitorExisting?: bool, shouldSearch?: bool, rootFolderPath?: string, monitorNewItems?: "all"|"none"|"new", qualityProfileId?: int, metadataProfileId?: int, listType?: "program"|"goodreads"|"other", listOrder?: int, minRefreshInterval?: string}
-  --enableAutomaticAdd: string@bool-completer
+  --enableAutomaticAdd: oneof<nothing, bool>
   --shouldMonitor: string@shouldMonitor-completer
-  --shouldMonitorExisting: string@bool-completer
-  --shouldSearch: string@bool-completer
+  --shouldMonitorExisting: oneof<nothing, bool>
+  --shouldSearch: oneof<nothing, bool>
   --rootFolderPath: string # nullable
   --monitorNewItems: string@monitorNewItems-completer
   --qualityProfileId: int # format: int32
@@ -2509,7 +2508,7 @@ export def "importlist put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, placeholder?: string, isFloat?: bool}
@@ -2520,10 +2519,10 @@ export def "importlist put" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableAutomaticAdd?: bool, shouldMonitor?: "none"|"specificBook"|"entireAuthor", shouldMonitorExisting?: bool, shouldSearch?: bool, rootFolderPath?: string, monitorNewItems?: "all"|"none"|"new", qualityProfileId?: int, metadataProfileId?: int, listType?: "program"|"goodreads"|"other", listOrder?: int, minRefreshInterval?: string}
-  --enableAutomaticAdd: string@bool-completer
+  --enableAutomaticAdd: oneof<nothing, bool>
   --shouldMonitor: string@shouldMonitor-completer
-  --shouldMonitorExisting: string@bool-completer
-  --shouldSearch: string@bool-completer
+  --shouldMonitorExisting: oneof<nothing, bool>
+  --shouldSearch: oneof<nothing, bool>
   --rootFolderPath: string # nullable
   --monitorNewItems: string@monitorNewItems-completer
   --qualityProfileId: int # format: int32
@@ -2594,7 +2593,7 @@ export def "importlist-bulk put" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enableAutomaticAdd: string@bool-completer # nullable
+  --enableAutomaticAdd: oneof<nothing, bool> # nullable
   --rootFolderPath: string # nullable
   --qualityProfileId: int # nullable, format: int32
   --metadataProfileId: int # nullable, format: int32
@@ -2622,7 +2621,7 @@ export def "importlist-bulk delete" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enableAutomaticAdd: string@bool-completer # nullable
+  --enableAutomaticAdd: oneof<nothing, bool> # nullable
   --rootFolderPath: string # nullable
   --qualityProfileId: int # nullable, format: int32
   --metadataProfileId: int # nullable, format: int32
@@ -2669,7 +2668,7 @@ export def "importlist-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, placeholder?: string, isFloat?: bool}
@@ -2680,10 +2679,10 @@ export def "importlist-test post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableAutomaticAdd?: bool, shouldMonitor?: "none"|"specificBook"|"entireAuthor", shouldMonitorExisting?: bool, shouldSearch?: bool, rootFolderPath?: string, monitorNewItems?: "all"|"none"|"new", qualityProfileId?: int, metadataProfileId?: int, listType?: "program"|"goodreads"|"other", listOrder?: int, minRefreshInterval?: string}
-  --enableAutomaticAdd: string@bool-completer
+  --enableAutomaticAdd: oneof<nothing, bool>
   --shouldMonitor: string@shouldMonitor-completer
-  --shouldMonitorExisting: string@bool-completer
-  --shouldSearch: string@bool-completer
+  --shouldMonitorExisting: oneof<nothing, bool>
+  --shouldSearch: oneof<nothing, bool>
   --rootFolderPath: string # nullable
   --monitorNewItems: string@monitorNewItems-completer
   --qualityProfileId: int # format: int32
@@ -2746,10 +2745,10 @@ export def "importlist-action post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableAutomaticAdd?: bool, shouldMonitor?: "none"|"specificBook"|"entireAuthor", shouldMonitorExisting?: bool, shouldSearch?: bool, rootFolderPath?: string, monitorNewItems?: "all"|"none"|"new", qualityProfileId?: int, metadataProfileId?: int, listType?: "program"|"goodreads"|"other", listOrder?: int, minRefreshInterval?: string}
-  --enableAutomaticAdd: string@bool-completer
+  --enableAutomaticAdd: oneof<nothing, bool>
   --shouldMonitor: string@shouldMonitor-completer
-  --shouldMonitorExisting: string@bool-completer
-  --shouldSearch: string@bool-completer
+  --shouldMonitorExisting: oneof<nothing, bool>
+  --shouldSearch: oneof<nothing, bool>
   --rootFolderPath: string # nullable
   --monitorNewItems: string@monitorNewItems-completer
   --qualityProfileId: int # format: int32
@@ -2908,7 +2907,7 @@ export def "indexer post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, placeholder?: string, isFloat?: bool}
@@ -2919,11 +2918,11 @@ export def "indexer post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableRss?: bool, enableAutomaticSearch?: bool, enableInteractiveSearch?: bool, supportsRss?: bool, supportsSearch?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, downloadClientId?: int}
-  --enableRss: string@bool-completer
-  --enableAutomaticSearch: string@bool-completer
-  --enableInteractiveSearch: string@bool-completer
-  --supportsRss: string@bool-completer
-  --supportsSearch: string@bool-completer
+  --enableRss: oneof<nothing, bool>
+  --enableAutomaticSearch: oneof<nothing, bool>
+  --enableInteractiveSearch: oneof<nothing, bool>
+  --supportsRss: oneof<nothing, bool>
+  --supportsSearch: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
   --downloadClientId: int # format: int32
@@ -2954,7 +2953,7 @@ export def "indexer put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, placeholder?: string, isFloat?: bool}
@@ -2965,11 +2964,11 @@ export def "indexer put" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableRss?: bool, enableAutomaticSearch?: bool, enableInteractiveSearch?: bool, supportsRss?: bool, supportsSearch?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, downloadClientId?: int}
-  --enableRss: string@bool-completer
-  --enableAutomaticSearch: string@bool-completer
-  --enableInteractiveSearch: string@bool-completer
-  --supportsRss: string@bool-completer
-  --supportsSearch: string@bool-completer
+  --enableRss: oneof<nothing, bool>
+  --enableAutomaticSearch: oneof<nothing, bool>
+  --enableInteractiveSearch: oneof<nothing, bool>
+  --supportsRss: oneof<nothing, bool>
+  --supportsSearch: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
   --downloadClientId: int # format: int32
@@ -3036,9 +3035,9 @@ export def "indexer-bulk put" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enableRss: string@bool-completer # nullable
-  --enableAutomaticSearch: string@bool-completer # nullable
-  --enableInteractiveSearch: string@bool-completer # nullable
+  --enableRss: oneof<nothing, bool> # nullable
+  --enableAutomaticSearch: oneof<nothing, bool> # nullable
+  --enableInteractiveSearch: oneof<nothing, bool> # nullable
   --priority: int # nullable, format: int32
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enableRss: bool, enableAutomaticSearch: bool, enableInteractiveSearch: bool, supportsRss: bool, supportsSearch: bool, protocol: string, priority: int, downloadClientId: int> {
   let input = $in
@@ -3064,9 +3063,9 @@ export def "indexer-bulk delete" [
   --ids: list # nullable
   --tags: list # nullable
   --applyTags: string@applyTags-completer
-  --enableRss: string@bool-completer # nullable
-  --enableAutomaticSearch: string@bool-completer # nullable
-  --enableInteractiveSearch: string@bool-completer # nullable
+  --enableRss: oneof<nothing, bool> # nullable
+  --enableAutomaticSearch: oneof<nothing, bool> # nullable
+  --enableInteractiveSearch: oneof<nothing, bool> # nullable
   --priority: int # nullable, format: int32
 ]: any -> any {
   let input = $in
@@ -3111,7 +3110,7 @@ export def "indexer-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, placeholder?: string, isFloat?: bool}
@@ -3122,11 +3121,11 @@ export def "indexer-test post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableRss?: bool, enableAutomaticSearch?: bool, enableInteractiveSearch?: bool, supportsRss?: bool, supportsSearch?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, downloadClientId?: int}
-  --enableRss: string@bool-completer
-  --enableAutomaticSearch: string@bool-completer
-  --enableInteractiveSearch: string@bool-completer
-  --supportsRss: string@bool-completer
-  --supportsSearch: string@bool-completer
+  --enableRss: oneof<nothing, bool>
+  --enableAutomaticSearch: oneof<nothing, bool>
+  --enableInteractiveSearch: oneof<nothing, bool>
+  --supportsRss: oneof<nothing, bool>
+  --supportsSearch: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
   --downloadClientId: int # format: int32
@@ -3185,11 +3184,11 @@ export def "indexer-action post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enableRss?: bool, enableAutomaticSearch?: bool, enableInteractiveSearch?: bool, supportsRss?: bool, supportsSearch?: bool, protocol?: "unknown"|"usenet"|"torrent", priority?: int, downloadClientId?: int}
-  --enableRss: string@bool-completer
-  --enableAutomaticSearch: string@bool-completer
-  --enableInteractiveSearch: string@bool-completer
-  --supportsRss: string@bool-completer
-  --supportsSearch: string@bool-completer
+  --enableRss: oneof<nothing, bool>
+  --enableAutomaticSearch: oneof<nothing, bool>
+  --enableInteractiveSearch: oneof<nothing, bool>
+  --supportsRss: oneof<nothing, bool>
+  --supportsSearch: oneof<nothing, bool>
   --protocol: string@protocol-completer
   --priority: int # format: int32
   --downloadClientId: int # format: int32
@@ -3443,8 +3442,8 @@ export def "manualimport get" [
   --folder: string
   --downloadId: string
   --authorId: int # format: int32
-  --filterExistingFiles: string@bool-completer # default: true
-  --replaceExistingFiles: string@bool-completer # default: true
+  --filterExistingFiles: oneof<nothing, bool> # default: true
+  --replaceExistingFiles: oneof<nothing, bool> # default: true
 ]: nothing -> table<id: int, path: string, name: string, size: int, author: record<id: int, authorMetadataId: int, status: string, ended: bool, authorName: string, authorNameLastFirst: string, foreignAuthorId: string, titleSlug: string, overview: string, disambiguation: string, links: list, nextBook: record, lastBook: record, images: list, remotePoster: string, path: string, qualityProfileId: int, metadataProfileId: int, monitored: bool, monitorNewItems: string, rootFolderPath: string, folder: string, genres: list, cleanName: string, sortName: string, sortNameLastFirst: string, tags: list, added: string, addOptions: record, ratings: record, statistics: record>, book: record<id: int, title: string, authorTitle: string, seriesTitle: string, disambiguation: string, overview: string, authorId: int, foreignBookId: string, foreignEditionId: string, titleSlug: string, monitored: bool, anyEditionOk: bool, ratings: record, releaseDate: string, pageCount: int, genres: list, author: record, images: list, links: list, statistics: record, added: string, addOptions: record, remoteCover: string, lastSearchTime: string, editions: list>, foreignEditionId: string, quality: record<quality: record, revision: record>, releaseGroup: string, qualityWeight: int, downloadId: string, indexerFlags: int, rejections: list<record>, audioTags: record<title: string, cleanTitle: string, authors: list, authorTitle: string, bookTitle: string, seriesTitle: string, seriesIndex: string, isbn: string, asin: string, goodreadsId: string, authorMBId: string, bookMBId: string, releaseMBId: string, recordingMBId: string, trackMBId: string, discNumber: int, discCount: int, country: record, year: int, publisher: string, label: string, source: string, catalogNumber: string, disambiguation: string, duration: string, quality: record, mediaInfo: record, trackNumbers: list, language: string, releaseGroup: string, releaseHash: string>, additionalFile: bool, replaceExistingFiles: bool, disableReleaseSwitching: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3526,23 +3525,23 @@ export def "config-mediamanagement put" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
-  --autoUnmonitorPreviouslyDownloadedBooks: string@bool-completer
+  --autoUnmonitorPreviouslyDownloadedBooks: oneof<nothing, bool>
   --recycleBin: string # nullable
   --recycleBinCleanupDays: int # format: int32
   --downloadPropersAndRepacks: string@downloadPropersAndRepacks-completer
-  --createEmptyAuthorFolders: string@bool-completer
-  --deleteEmptyFolders: string@bool-completer
+  --createEmptyAuthorFolders: oneof<nothing, bool>
+  --deleteEmptyFolders: oneof<nothing, bool>
   --fileDate: string@fileDate-completer
-  --watchLibraryForChanges: string@bool-completer
+  --watchLibraryForChanges: oneof<nothing, bool>
   --rescanAfterRefresh: string@rescanAfterRefresh-completer
   --allowFingerprinting: string@allowFingerprinting-completer
-  --setPermissionsLinux: string@bool-completer
+  --setPermissionsLinux: oneof<nothing, bool>
   --chmodFolder: string # nullable
   --chownGroup: string # nullable
-  --skipFreeSpaceCheckWhenImporting: string@bool-completer
+  --skipFreeSpaceCheckWhenImporting: oneof<nothing, bool>
   --minimumFreeSpaceWhenImporting: int # format: int32
-  --copyUsingHardlinks: string@bool-completer
-  --importExtraFiles: string@bool-completer
+  --copyUsingHardlinks: oneof<nothing, bool>
+  --importExtraFiles: oneof<nothing, bool>
   --extraFileExtensions: string # nullable
 ]: any -> record<id: int, autoUnmonitorPreviouslyDownloadedBooks: bool, recycleBin: string, recycleBinCleanupDays: int, downloadPropersAndRepacks: string, createEmptyAuthorFolders: bool, deleteEmptyFolders: bool, fileDate: string, watchLibraryForChanges: bool, rescanAfterRefresh: string, allowFingerprinting: string, setPermissionsLinux: bool, chmodFolder: string, chownGroup: string, skipFreeSpaceCheckWhenImporting: bool, minimumFreeSpaceWhenImporting: int, copyUsingHardlinks: bool, importExtraFiles: bool, extraFileExtensions: string> {
   let input = $in
@@ -3606,7 +3605,7 @@ export def "metadata post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, placeholder?: string, isFloat?: bool}
@@ -3617,7 +3616,7 @@ export def "metadata post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3645,7 +3644,7 @@ export def "metadata put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, placeholder?: string, isFloat?: bool}
@@ -3656,7 +3655,7 @@ export def "metadata put" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, enable: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3739,7 +3738,7 @@ export def "metadata-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, placeholder?: string, isFloat?: bool}
@@ -3750,7 +3749,7 @@ export def "metadata-test post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3806,7 +3805,7 @@ export def "metadata-action post" [
   --message: record # shape: {message?: string, type?: "info"|"warning"|"error"}
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, enable?: bool}
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3832,10 +3831,10 @@ export def "metadataprofile post" [
   --id: int # format: int32
   --name: string # nullable
   --minPopularity: float # format: double
-  --skipMissingDate: string@bool-completer
-  --skipMissingIsbn: string@bool-completer
-  --skipPartsAndSets: string@bool-completer
-  --skipSeriesSecondary: string@bool-completer
+  --skipMissingDate: oneof<nothing, bool>
+  --skipMissingIsbn: oneof<nothing, bool>
+  --skipPartsAndSets: oneof<nothing, bool>
+  --skipSeriesSecondary: oneof<nothing, bool>
   --allowedLanguages: string # nullable
   --minPages: int # format: int32
   --ignored: list # nullable
@@ -3903,10 +3902,10 @@ export def "metadataprofile put" [
   --body-id: int # format: int32
   --name: string # nullable
   --minPopularity: float # format: double
-  --skipMissingDate: string@bool-completer
-  --skipMissingIsbn: string@bool-completer
-  --skipPartsAndSets: string@bool-completer
-  --skipSeriesSecondary: string@bool-completer
+  --skipMissingDate: oneof<nothing, bool>
+  --skipMissingIsbn: oneof<nothing, bool>
+  --skipPartsAndSets: oneof<nothing, bool>
+  --skipSeriesSecondary: oneof<nothing, bool>
   --allowedLanguages: string # nullable
   --minPages: int # format: int32
   --ignored: list # nullable
@@ -3992,10 +3991,10 @@ export def "config-metadataprovider put" [
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
   --writeAudioTags: string@writeAudioTags-completer
-  --scrubAudioTags: string@bool-completer
+  --scrubAudioTags: oneof<nothing, bool>
   --writeBookTags: string@writeBookTags-completer
-  --updateCovers: string@bool-completer
-  --embedMetadata: string@bool-completer
+  --updateCovers: oneof<nothing, bool>
+  --embedMetadata: oneof<nothing, bool>
 ]: any -> record<id: int, writeAudioTags: string, scrubAudioTags: bool, writeBookTags: string, updateCovers: bool, embedMetadata: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -4041,8 +4040,8 @@ export def "wanted-missing list" [
   --pageSize: int # format: int32, default: 10
   --sortKey: string
   --sortDirection: string@sortDirection-completer
-  --includeAuthor: string@bool-completer # default: false
-  --monitored: string@bool-completer # default: true
+  --includeAuthor: oneof<nothing, bool> # default: false
+  --monitored: oneof<nothing, bool> # default: true
 ]: nothing -> record<page: int, pageSize: int, sortKey: string, sortDirection: string, totalRecords: int, records: table<id: int, title: string, authorTitle: string, seriesTitle: string, disambiguation: string, overview: string, authorId: int, foreignBookId: string, foreignEditionId: string, titleSlug: string, monitored: bool, anyEditionOk: bool, ratings: record, releaseDate: string, pageCount: int, genres: list, author: record, images: list, links: list, statistics: record, added: string, addOptions: record, remoteCover: string, lastSearchTime: string, editions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4103,15 +4102,15 @@ export def "config-naming put" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
-  --renameBooks: string@bool-completer
-  --replaceIllegalCharacters: string@bool-completer
+  --renameBooks: oneof<nothing, bool>
+  --replaceIllegalCharacters: oneof<nothing, bool>
   --colonReplacementFormat: int # format: int32
   --standardBookFormat: string # nullable
   --authorFolderFormat: string # nullable
-  --includeAuthorName: string@bool-completer
-  --includeBookTitle: string@bool-completer
-  --includeQuality: string@bool-completer
-  --replaceSpaces: string@bool-completer
+  --includeAuthorName: oneof<nothing, bool>
+  --includeBookTitle: oneof<nothing, bool>
+  --includeQuality: oneof<nothing, bool>
+  --replaceSpaces: oneof<nothing, bool>
   --separator: string # nullable
   --numberStyle: string # nullable
 ]: any -> record<id: int, renameBooks: bool, replaceIllegalCharacters: bool, colonReplacementFormat: int, standardBookFormat: string, authorFolderFormat: string, includeAuthorName: bool, includeBookTitle: bool, includeQuality: bool, replaceSpaces: bool, separator: string, numberStyle: string> {
@@ -4154,15 +4153,15 @@ export def "config-naming-examples get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --renameBooks: string@bool-completer
-  --replaceIllegalCharacters: string@bool-completer
+  --renameBooks: oneof<nothing, bool>
+  --replaceIllegalCharacters: oneof<nothing, bool>
   --colonReplacementFormat: int # format: int32
   --standardBookFormat: string
   --authorFolderFormat: string
-  --includeAuthorName: string@bool-completer
-  --includeBookTitle: string@bool-completer
-  --includeQuality: string@bool-completer
-  --replaceSpaces: string@bool-completer
+  --includeAuthorName: oneof<nothing, bool>
+  --includeBookTitle: oneof<nothing, bool>
+  --includeQuality: oneof<nothing, bool>
+  --replaceSpaces: oneof<nothing, bool>
   --separator: string
   --numberStyle: string
   --id: int # format: int32
@@ -4208,7 +4207,7 @@ export def "notification post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, placeholder?: string, isFloat?: bool}
@@ -4220,35 +4219,35 @@ export def "notification post" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onGrab?: bool, onReleaseImport?: bool, onUpgrade?: bool, onRename?: bool, onAuthorAdded?: bool, onAuthorDelete?: bool, onBookDelete?: bool, onBookFileDelete?: bool, onBookFileDeleteForUpgrade?: bool, onHealthIssue?: bool, onDownloadFailure?: bool, onImportFailure?: bool, onBookRetag?: bool, onApplicationUpdate?: bool, supportsOnGrab?: bool, supportsOnReleaseImport?: bool, supportsOnUpgrade?: bool, supportsOnRename?: bool, supportsOnAuthorAdded?: bool, supportsOnAuthorDelete?: bool, supportsOnBookDelete?: bool, supportsOnBookFileDelete?: bool, supportsOnBookFileDeleteForUpgrade?: bool, supportsOnHealthIssue?: bool, includeHealthWarnings?: bool, supportsOnDownloadFailure?: bool, supportsOnImportFailure?: bool, supportsOnBookRetag?: bool, supportsOnApplicationUpdate?: bool, testCommand?: string}
   --link: string # nullable
-  --onGrab: string@bool-completer
-  --onReleaseImport: string@bool-completer
-  --onUpgrade: string@bool-completer
-  --onRename: string@bool-completer
-  --onAuthorAdded: string@bool-completer
-  --onAuthorDelete: string@bool-completer
-  --onBookDelete: string@bool-completer
-  --onBookFileDelete: string@bool-completer
-  --onBookFileDeleteForUpgrade: string@bool-completer
-  --onHealthIssue: string@bool-completer
-  --onDownloadFailure: string@bool-completer
-  --onImportFailure: string@bool-completer
-  --onBookRetag: string@bool-completer
-  --onApplicationUpdate: string@bool-completer
-  --supportsOnGrab: string@bool-completer
-  --supportsOnReleaseImport: string@bool-completer
-  --supportsOnUpgrade: string@bool-completer
-  --supportsOnRename: string@bool-completer
-  --supportsOnAuthorAdded: string@bool-completer
-  --supportsOnAuthorDelete: string@bool-completer
-  --supportsOnBookDelete: string@bool-completer
-  --supportsOnBookFileDelete: string@bool-completer
-  --supportsOnBookFileDeleteForUpgrade: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
-  --supportsOnDownloadFailure: string@bool-completer
-  --supportsOnImportFailure: string@bool-completer
-  --supportsOnBookRetag: string@bool-completer
-  --supportsOnApplicationUpdate: string@bool-completer
+  --onGrab: oneof<nothing, bool>
+  --onReleaseImport: oneof<nothing, bool>
+  --onUpgrade: oneof<nothing, bool>
+  --onRename: oneof<nothing, bool>
+  --onAuthorAdded: oneof<nothing, bool>
+  --onAuthorDelete: oneof<nothing, bool>
+  --onBookDelete: oneof<nothing, bool>
+  --onBookFileDelete: oneof<nothing, bool>
+  --onBookFileDeleteForUpgrade: oneof<nothing, bool>
+  --onHealthIssue: oneof<nothing, bool>
+  --onDownloadFailure: oneof<nothing, bool>
+  --onImportFailure: oneof<nothing, bool>
+  --onBookRetag: oneof<nothing, bool>
+  --onApplicationUpdate: oneof<nothing, bool>
+  --supportsOnGrab: oneof<nothing, bool>
+  --supportsOnReleaseImport: oneof<nothing, bool>
+  --supportsOnUpgrade: oneof<nothing, bool>
+  --supportsOnRename: oneof<nothing, bool>
+  --supportsOnAuthorAdded: oneof<nothing, bool>
+  --supportsOnAuthorDelete: oneof<nothing, bool>
+  --supportsOnBookDelete: oneof<nothing, bool>
+  --supportsOnBookFileDelete: oneof<nothing, bool>
+  --supportsOnBookFileDeleteForUpgrade: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
+  --supportsOnDownloadFailure: oneof<nothing, bool>
+  --supportsOnImportFailure: oneof<nothing, bool>
+  --supportsOnBookRetag: oneof<nothing, bool>
+  --supportsOnApplicationUpdate: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, link: string, onGrab: bool, onReleaseImport: bool, onUpgrade: bool, onRename: bool, onAuthorAdded: bool, onAuthorDelete: bool, onBookDelete: bool, onBookFileDelete: bool, onBookFileDeleteForUpgrade: bool, onHealthIssue: bool, onDownloadFailure: bool, onImportFailure: bool, onBookRetag: bool, onApplicationUpdate: bool, supportsOnGrab: bool, supportsOnReleaseImport: bool, supportsOnUpgrade: bool, supportsOnRename: bool, supportsOnAuthorAdded: bool, supportsOnAuthorDelete: bool, supportsOnBookDelete: bool, supportsOnBookFileDelete: bool, supportsOnBookFileDeleteForUpgrade: bool, supportsOnHealthIssue: bool, includeHealthWarnings: bool, supportsOnDownloadFailure: bool, supportsOnImportFailure: bool, supportsOnBookRetag: bool, supportsOnApplicationUpdate: bool, testCommand: string> {
   let input = $in
@@ -4277,7 +4276,7 @@ export def "notification put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceSave: string@bool-completer # default: false
+  --forceSave: oneof<nothing, bool> # default: false
   --body-id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, placeholder?: string, isFloat?: bool}
@@ -4289,35 +4288,35 @@ export def "notification put" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onGrab?: bool, onReleaseImport?: bool, onUpgrade?: bool, onRename?: bool, onAuthorAdded?: bool, onAuthorDelete?: bool, onBookDelete?: bool, onBookFileDelete?: bool, onBookFileDeleteForUpgrade?: bool, onHealthIssue?: bool, onDownloadFailure?: bool, onImportFailure?: bool, onBookRetag?: bool, onApplicationUpdate?: bool, supportsOnGrab?: bool, supportsOnReleaseImport?: bool, supportsOnUpgrade?: bool, supportsOnRename?: bool, supportsOnAuthorAdded?: bool, supportsOnAuthorDelete?: bool, supportsOnBookDelete?: bool, supportsOnBookFileDelete?: bool, supportsOnBookFileDeleteForUpgrade?: bool, supportsOnHealthIssue?: bool, includeHealthWarnings?: bool, supportsOnDownloadFailure?: bool, supportsOnImportFailure?: bool, supportsOnBookRetag?: bool, supportsOnApplicationUpdate?: bool, testCommand?: string}
   --link: string # nullable
-  --onGrab: string@bool-completer
-  --onReleaseImport: string@bool-completer
-  --onUpgrade: string@bool-completer
-  --onRename: string@bool-completer
-  --onAuthorAdded: string@bool-completer
-  --onAuthorDelete: string@bool-completer
-  --onBookDelete: string@bool-completer
-  --onBookFileDelete: string@bool-completer
-  --onBookFileDeleteForUpgrade: string@bool-completer
-  --onHealthIssue: string@bool-completer
-  --onDownloadFailure: string@bool-completer
-  --onImportFailure: string@bool-completer
-  --onBookRetag: string@bool-completer
-  --onApplicationUpdate: string@bool-completer
-  --supportsOnGrab: string@bool-completer
-  --supportsOnReleaseImport: string@bool-completer
-  --supportsOnUpgrade: string@bool-completer
-  --supportsOnRename: string@bool-completer
-  --supportsOnAuthorAdded: string@bool-completer
-  --supportsOnAuthorDelete: string@bool-completer
-  --supportsOnBookDelete: string@bool-completer
-  --supportsOnBookFileDelete: string@bool-completer
-  --supportsOnBookFileDeleteForUpgrade: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
-  --supportsOnDownloadFailure: string@bool-completer
-  --supportsOnImportFailure: string@bool-completer
-  --supportsOnBookRetag: string@bool-completer
-  --supportsOnApplicationUpdate: string@bool-completer
+  --onGrab: oneof<nothing, bool>
+  --onReleaseImport: oneof<nothing, bool>
+  --onUpgrade: oneof<nothing, bool>
+  --onRename: oneof<nothing, bool>
+  --onAuthorAdded: oneof<nothing, bool>
+  --onAuthorDelete: oneof<nothing, bool>
+  --onBookDelete: oneof<nothing, bool>
+  --onBookFileDelete: oneof<nothing, bool>
+  --onBookFileDeleteForUpgrade: oneof<nothing, bool>
+  --onHealthIssue: oneof<nothing, bool>
+  --onDownloadFailure: oneof<nothing, bool>
+  --onImportFailure: oneof<nothing, bool>
+  --onBookRetag: oneof<nothing, bool>
+  --onApplicationUpdate: oneof<nothing, bool>
+  --supportsOnGrab: oneof<nothing, bool>
+  --supportsOnReleaseImport: oneof<nothing, bool>
+  --supportsOnUpgrade: oneof<nothing, bool>
+  --supportsOnRename: oneof<nothing, bool>
+  --supportsOnAuthorAdded: oneof<nothing, bool>
+  --supportsOnAuthorDelete: oneof<nothing, bool>
+  --supportsOnBookDelete: oneof<nothing, bool>
+  --supportsOnBookFileDelete: oneof<nothing, bool>
+  --supportsOnBookFileDeleteForUpgrade: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
+  --supportsOnDownloadFailure: oneof<nothing, bool>
+  --supportsOnImportFailure: oneof<nothing, bool>
+  --supportsOnBookRetag: oneof<nothing, bool>
+  --supportsOnApplicationUpdate: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> record<id: int, name: string, fields: table<order: int, name: string, label: string, unit: string, helpText: string, helpTextWarning: string, helpLink: string, value: any, type: string, advanced: bool, selectOptions: list, selectOptionsProviderAction: string, section: string, hidden: string, placeholder: string, isFloat: bool>, implementationName: string, implementation: string, configContract: string, infoLink: string, message: record<message: string, type: string>, tags: list<int>, presets: list<any>, link: string, onGrab: bool, onReleaseImport: bool, onUpgrade: bool, onRename: bool, onAuthorAdded: bool, onAuthorDelete: bool, onBookDelete: bool, onBookFileDelete: bool, onBookFileDeleteForUpgrade: bool, onHealthIssue: bool, onDownloadFailure: bool, onImportFailure: bool, onBookRetag: bool, onApplicationUpdate: bool, supportsOnGrab: bool, supportsOnReleaseImport: bool, supportsOnUpgrade: bool, supportsOnRename: bool, supportsOnAuthorAdded: bool, supportsOnAuthorDelete: bool, supportsOnBookDelete: bool, supportsOnBookFileDelete: bool, supportsOnBookFileDeleteForUpgrade: bool, supportsOnHealthIssue: bool, includeHealthWarnings: bool, supportsOnDownloadFailure: bool, supportsOnImportFailure: bool, supportsOnBookRetag: bool, supportsOnApplicationUpdate: bool, testCommand: string> {
   let input = $in
@@ -4401,7 +4400,7 @@ export def "notification-test post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTest: string@bool-completer # default: false
+  --forceTest: oneof<nothing, bool> # default: false
   --id: int # format: int32
   --name: string # nullable
   --body-fields: list # nullable — item shape: {order?: int, name?: string, label?: string, unit?: string, helpText?: string, helpTextWarning?: string, helpLink?: string, value?: any, type?: string, advanced?: bool, selectOptions?: list, selectOptionsProviderAction?: string, section?: string, hidden?: string, placeholder?: string, isFloat?: bool}
@@ -4413,35 +4412,35 @@ export def "notification-test post" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onGrab?: bool, onReleaseImport?: bool, onUpgrade?: bool, onRename?: bool, onAuthorAdded?: bool, onAuthorDelete?: bool, onBookDelete?: bool, onBookFileDelete?: bool, onBookFileDeleteForUpgrade?: bool, onHealthIssue?: bool, onDownloadFailure?: bool, onImportFailure?: bool, onBookRetag?: bool, onApplicationUpdate?: bool, supportsOnGrab?: bool, supportsOnReleaseImport?: bool, supportsOnUpgrade?: bool, supportsOnRename?: bool, supportsOnAuthorAdded?: bool, supportsOnAuthorDelete?: bool, supportsOnBookDelete?: bool, supportsOnBookFileDelete?: bool, supportsOnBookFileDeleteForUpgrade?: bool, supportsOnHealthIssue?: bool, includeHealthWarnings?: bool, supportsOnDownloadFailure?: bool, supportsOnImportFailure?: bool, supportsOnBookRetag?: bool, supportsOnApplicationUpdate?: bool, testCommand?: string}
   --link: string # nullable
-  --onGrab: string@bool-completer
-  --onReleaseImport: string@bool-completer
-  --onUpgrade: string@bool-completer
-  --onRename: string@bool-completer
-  --onAuthorAdded: string@bool-completer
-  --onAuthorDelete: string@bool-completer
-  --onBookDelete: string@bool-completer
-  --onBookFileDelete: string@bool-completer
-  --onBookFileDeleteForUpgrade: string@bool-completer
-  --onHealthIssue: string@bool-completer
-  --onDownloadFailure: string@bool-completer
-  --onImportFailure: string@bool-completer
-  --onBookRetag: string@bool-completer
-  --onApplicationUpdate: string@bool-completer
-  --supportsOnGrab: string@bool-completer
-  --supportsOnReleaseImport: string@bool-completer
-  --supportsOnUpgrade: string@bool-completer
-  --supportsOnRename: string@bool-completer
-  --supportsOnAuthorAdded: string@bool-completer
-  --supportsOnAuthorDelete: string@bool-completer
-  --supportsOnBookDelete: string@bool-completer
-  --supportsOnBookFileDelete: string@bool-completer
-  --supportsOnBookFileDeleteForUpgrade: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
-  --supportsOnDownloadFailure: string@bool-completer
-  --supportsOnImportFailure: string@bool-completer
-  --supportsOnBookRetag: string@bool-completer
-  --supportsOnApplicationUpdate: string@bool-completer
+  --onGrab: oneof<nothing, bool>
+  --onReleaseImport: oneof<nothing, bool>
+  --onUpgrade: oneof<nothing, bool>
+  --onRename: oneof<nothing, bool>
+  --onAuthorAdded: oneof<nothing, bool>
+  --onAuthorDelete: oneof<nothing, bool>
+  --onBookDelete: oneof<nothing, bool>
+  --onBookFileDelete: oneof<nothing, bool>
+  --onBookFileDeleteForUpgrade: oneof<nothing, bool>
+  --onHealthIssue: oneof<nothing, bool>
+  --onDownloadFailure: oneof<nothing, bool>
+  --onImportFailure: oneof<nothing, bool>
+  --onBookRetag: oneof<nothing, bool>
+  --onApplicationUpdate: oneof<nothing, bool>
+  --supportsOnGrab: oneof<nothing, bool>
+  --supportsOnReleaseImport: oneof<nothing, bool>
+  --supportsOnUpgrade: oneof<nothing, bool>
+  --supportsOnRename: oneof<nothing, bool>
+  --supportsOnAuthorAdded: oneof<nothing, bool>
+  --supportsOnAuthorDelete: oneof<nothing, bool>
+  --supportsOnBookDelete: oneof<nothing, bool>
+  --supportsOnBookFileDelete: oneof<nothing, bool>
+  --supportsOnBookFileDeleteForUpgrade: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
+  --supportsOnDownloadFailure: oneof<nothing, bool>
+  --supportsOnImportFailure: oneof<nothing, bool>
+  --supportsOnBookRetag: oneof<nothing, bool>
+  --supportsOnApplicationUpdate: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> any {
   let input = $in
@@ -4499,35 +4498,35 @@ export def "notification-action post" [
   --tags: list # nullable
   --presets: list # nullable — item shape: {id?: int, name?: string, fields?: list, implementationName?: string, implementation?: string, configContract?: string, infoLink?: string, message?: record, tags?: list, presets?: list, link?: string, onGrab?: bool, onReleaseImport?: bool, onUpgrade?: bool, onRename?: bool, onAuthorAdded?: bool, onAuthorDelete?: bool, onBookDelete?: bool, onBookFileDelete?: bool, onBookFileDeleteForUpgrade?: bool, onHealthIssue?: bool, onDownloadFailure?: bool, onImportFailure?: bool, onBookRetag?: bool, onApplicationUpdate?: bool, supportsOnGrab?: bool, supportsOnReleaseImport?: bool, supportsOnUpgrade?: bool, supportsOnRename?: bool, supportsOnAuthorAdded?: bool, supportsOnAuthorDelete?: bool, supportsOnBookDelete?: bool, supportsOnBookFileDelete?: bool, supportsOnBookFileDeleteForUpgrade?: bool, supportsOnHealthIssue?: bool, includeHealthWarnings?: bool, supportsOnDownloadFailure?: bool, supportsOnImportFailure?: bool, supportsOnBookRetag?: bool, supportsOnApplicationUpdate?: bool, testCommand?: string}
   --link: string # nullable
-  --onGrab: string@bool-completer
-  --onReleaseImport: string@bool-completer
-  --onUpgrade: string@bool-completer
-  --onRename: string@bool-completer
-  --onAuthorAdded: string@bool-completer
-  --onAuthorDelete: string@bool-completer
-  --onBookDelete: string@bool-completer
-  --onBookFileDelete: string@bool-completer
-  --onBookFileDeleteForUpgrade: string@bool-completer
-  --onHealthIssue: string@bool-completer
-  --onDownloadFailure: string@bool-completer
-  --onImportFailure: string@bool-completer
-  --onBookRetag: string@bool-completer
-  --onApplicationUpdate: string@bool-completer
-  --supportsOnGrab: string@bool-completer
-  --supportsOnReleaseImport: string@bool-completer
-  --supportsOnUpgrade: string@bool-completer
-  --supportsOnRename: string@bool-completer
-  --supportsOnAuthorAdded: string@bool-completer
-  --supportsOnAuthorDelete: string@bool-completer
-  --supportsOnBookDelete: string@bool-completer
-  --supportsOnBookFileDelete: string@bool-completer
-  --supportsOnBookFileDeleteForUpgrade: string@bool-completer
-  --supportsOnHealthIssue: string@bool-completer
-  --includeHealthWarnings: string@bool-completer
-  --supportsOnDownloadFailure: string@bool-completer
-  --supportsOnImportFailure: string@bool-completer
-  --supportsOnBookRetag: string@bool-completer
-  --supportsOnApplicationUpdate: string@bool-completer
+  --onGrab: oneof<nothing, bool>
+  --onReleaseImport: oneof<nothing, bool>
+  --onUpgrade: oneof<nothing, bool>
+  --onRename: oneof<nothing, bool>
+  --onAuthorAdded: oneof<nothing, bool>
+  --onAuthorDelete: oneof<nothing, bool>
+  --onBookDelete: oneof<nothing, bool>
+  --onBookFileDelete: oneof<nothing, bool>
+  --onBookFileDeleteForUpgrade: oneof<nothing, bool>
+  --onHealthIssue: oneof<nothing, bool>
+  --onDownloadFailure: oneof<nothing, bool>
+  --onImportFailure: oneof<nothing, bool>
+  --onBookRetag: oneof<nothing, bool>
+  --onApplicationUpdate: oneof<nothing, bool>
+  --supportsOnGrab: oneof<nothing, bool>
+  --supportsOnReleaseImport: oneof<nothing, bool>
+  --supportsOnUpgrade: oneof<nothing, bool>
+  --supportsOnRename: oneof<nothing, bool>
+  --supportsOnAuthorAdded: oneof<nothing, bool>
+  --supportsOnAuthorDelete: oneof<nothing, bool>
+  --supportsOnBookDelete: oneof<nothing, bool>
+  --supportsOnBookFileDelete: oneof<nothing, bool>
+  --supportsOnBookFileDeleteForUpgrade: oneof<nothing, bool>
+  --supportsOnHealthIssue: oneof<nothing, bool>
+  --includeHealthWarnings: oneof<nothing, bool>
+  --supportsOnDownloadFailure: oneof<nothing, bool>
+  --supportsOnImportFailure: oneof<nothing, bool>
+  --supportsOnBookRetag: oneof<nothing, bool>
+  --supportsOnApplicationUpdate: oneof<nothing, bool>
   --testCommand: string # nullable
 ]: any -> any {
   let input = $in
@@ -4703,7 +4702,7 @@ export def "qualityprofile post" [
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
   --name: string # nullable
-  --upgradeAllowed: string@bool-completer
+  --upgradeAllowed: oneof<nothing, bool>
   --cutoff: int # format: int32
   --items: list # nullable — item shape: {id?: int, name?: string, quality?: record, items?: list, allowed?: bool}
   --minFormatScore: int # format: int32
@@ -4775,7 +4774,7 @@ export def "qualityprofile put" [
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
   --name: string # nullable
-  --upgradeAllowed: string@bool-completer
+  --upgradeAllowed: oneof<nothing, bool>
   --cutoff: int # format: int32
   --items: list # nullable — item shape: {id?: int, name?: string, quality?: record, items?: list, allowed?: bool}
   --minFormatScore: int # format: int32
@@ -4841,10 +4840,10 @@ export def "queue delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --removeFromClient: string@bool-completer # default: true
-  --blocklist: string@bool-completer # default: false
-  --skipRedownload: string@bool-completer # default: false
-  --changeCategory: string@bool-completer # default: false
+  --removeFromClient: oneof<nothing, bool> # default: true
+  --blocklist: oneof<nothing, bool> # default: false
+  --skipRedownload: oneof<nothing, bool> # default: false
+  --changeCategory: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4864,10 +4863,10 @@ export def "queue-bulk delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --removeFromClient: string@bool-completer # default: true
-  --blocklist: string@bool-completer # default: false
-  --skipRedownload: string@bool-completer # default: false
-  --changeCategory: string@bool-completer # default: false
+  --removeFromClient: oneof<nothing, bool> # default: true
+  --blocklist: oneof<nothing, bool> # default: false
+  --skipRedownload: oneof<nothing, bool> # default: false
+  --changeCategory: oneof<nothing, bool> # default: false
   --ids: list # nullable
 ]: any -> any {
   let input = $in
@@ -4895,9 +4894,9 @@ export def "queue get" [
   --pageSize: int # format: int32, default: 10
   --sortKey: string
   --sortDirection: string@sortDirection-completer
-  --includeUnknownAuthorItems: string@bool-completer # default: false
-  --includeAuthor: string@bool-completer # default: false
-  --includeBook: string@bool-completer # default: false
+  --includeUnknownAuthorItems: oneof<nothing, bool> # default: false
+  --includeAuthor: oneof<nothing, bool> # default: false
+  --includeBook: oneof<nothing, bool> # default: false
 ]: nothing -> record<page: int, pageSize: int, sortKey: string, sortDirection: string, totalRecords: int, records: table<id: int, authorId: int, bookId: int, author: record, book: record, quality: record, customFormats: list, customFormatScore: int, size: float, title: string, sizeleft: float, timeleft: string, estimatedCompletionTime: string, status: string, trackedDownloadStatus: string, trackedDownloadState: string, statusMessages: list, errorMessage: string, downloadId: string, protocol: string, downloadClient: string, downloadClientHasPostImportCategory: bool, indexer: string, outputPath: string, downloadForced: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4961,8 +4960,8 @@ export def "queue-details get" [
   --accept: string@accept-completer # Response content type
   --authorId: int # format: int32
   --bookIds: list
-  --includeAuthor: string@bool-completer # default: false
-  --includeBook: string@bool-completer # default: true
+  --includeAuthor: oneof<nothing, bool> # default: false
+  --includeBook: oneof<nothing, bool> # default: true
 ]: nothing -> table<id: int, authorId: int, bookId: int, author: record<id: int, authorMetadataId: int, status: string, ended: bool, authorName: string, authorNameLastFirst: string, foreignAuthorId: string, titleSlug: string, overview: string, disambiguation: string, links: list, nextBook: record, lastBook: record, images: list, remotePoster: string, path: string, qualityProfileId: int, metadataProfileId: int, monitored: bool, monitorNewItems: string, rootFolderPath: string, folder: string, genres: list, cleanName: string, sortName: string, sortNameLastFirst: string, tags: list, added: string, addOptions: record, ratings: record, statistics: record>, book: record<id: int, title: string, authorTitle: string, seriesTitle: string, disambiguation: string, overview: string, authorId: int, foreignBookId: string, foreignEditionId: string, titleSlug: string, monitored: bool, anyEditionOk: bool, ratings: record, releaseDate: string, pageCount: int, genres: list, author: record, images: list, links: list, statistics: record, added: string, addOptions: record, remoteCover: string, lastSearchTime: string, editions: list>, quality: record<quality: record, revision: record>, customFormats: list<record>, customFormatScore: int, size: float, title: string, sizeleft: float, timeleft: string, estimatedCompletionTime: string, status: string, trackedDownloadStatus: string, trackedDownloadState: string, statusMessages: list<record>, errorMessage: string, downloadId: string, protocol: string, downloadClient: string, downloadClientHasPostImportCategory: bool, indexer: string, outputPath: string, downloadForced: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5019,20 +5018,20 @@ export def "release post" [
   --subGroup: string # nullable
   --releaseHash: string # nullable
   --title: string # nullable
-  --discography: string@bool-completer
-  --sceneSource: string@bool-completer
+  --discography: oneof<nothing, bool>
+  --sceneSource: oneof<nothing, bool>
   --airDate: string # nullable
   --authorName: string # nullable
   --bookTitle: string # nullable
-  --approved: string@bool-completer
-  --temporarilyRejected: string@bool-completer
-  --rejected: string@bool-completer
+  --approved: oneof<nothing, bool>
+  --temporarilyRejected: oneof<nothing, bool>
+  --rejected: oneof<nothing, bool>
   --rejections: list # nullable
   --publishDate: string # format: date-time
   --commentUrl: string # nullable
   --downloadUrl: string # nullable
   --infoUrl: string # nullable
-  --downloadAllowed: string@bool-completer
+  --downloadAllowed: oneof<nothing, bool>
   --releaseWeight: int # format: int32
   --customFormats: list # nullable — item shape: {id?: int, name?: string, includeCustomFormatWhenRenaming?: bool, specifications?: list}
   --customFormatScore: int # format: int32
@@ -5110,7 +5109,7 @@ export def "releaseprofile post" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --id: int # format: int32
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --required: list # nullable
   --ignored: list # nullable
   --indexerId: int # format: int32
@@ -5139,7 +5138,7 @@ export def "releaseprofile put" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int32
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --required: list # nullable
   --ignored: list # nullable
   --indexerId: int # format: int32
@@ -5221,20 +5220,20 @@ export def "release-push post" [
   --subGroup: string # nullable
   --releaseHash: string # nullable
   --title: string # nullable
-  --discography: string@bool-completer
-  --sceneSource: string@bool-completer
+  --discography: oneof<nothing, bool>
+  --sceneSource: oneof<nothing, bool>
   --airDate: string # nullable
   --authorName: string # nullable
   --bookTitle: string # nullable
-  --approved: string@bool-completer
-  --temporarilyRejected: string@bool-completer
-  --rejected: string@bool-completer
+  --approved: oneof<nothing, bool>
+  --temporarilyRejected: oneof<nothing, bool>
+  --rejected: oneof<nothing, bool>
   --rejections: list # nullable
   --publishDate: string # format: date-time
   --commentUrl: string # nullable
   --downloadUrl: string # nullable
   --infoUrl: string # nullable
-  --downloadAllowed: string@bool-completer
+  --downloadAllowed: oneof<nothing, bool>
   --releaseWeight: int # format: int32
   --customFormats: list # nullable — item shape: {id?: int, name?: string, includeCustomFormatWhenRenaming?: bool, specifications?: list}
   --customFormatScore: int # format: int32
@@ -5431,7 +5430,7 @@ export def "rootfolder post" [
   --defaultMonitorOption: string@defaultMonitorOption-completer
   --defaultNewItemMonitorOption: string@defaultNewItemMonitorOption-completer
   --defaultTags: list # nullable
-  --isCalibreLibrary: string@bool-completer
+  --isCalibreLibrary: oneof<nothing, bool>
   --host: string # nullable
   --port: int # format: int32
   --urlBase: string # nullable
@@ -5440,8 +5439,8 @@ export def "rootfolder post" [
   --library: string # nullable
   --outputFormat: string # nullable
   --outputProfile: string # nullable
-  --useSsl: string@bool-completer
-  --accessible: string@bool-completer
+  --useSsl: oneof<nothing, bool>
+  --accessible: oneof<nothing, bool>
   --freeSpace: int # nullable, format: int64
   --totalSpace: int # nullable, format: int64
 ]: any -> record<id: int, name: string, path: string, defaultMetadataProfileId: int, defaultQualityProfileId: int, defaultMonitorOption: string, defaultNewItemMonitorOption: string, defaultTags: list<int>, isCalibreLibrary: bool, host: string, port: int, urlBase: string, username: string, password: string, library: string, outputFormat: string, outputProfile: string, useSsl: bool, accessible: bool, freeSpace: int, totalSpace: int> {
@@ -5494,7 +5493,7 @@ export def "rootfolder put" [
   --defaultMonitorOption: string@defaultMonitorOption-completer
   --defaultNewItemMonitorOption: string@defaultNewItemMonitorOption-completer
   --defaultTags: list # nullable
-  --isCalibreLibrary: string@bool-completer
+  --isCalibreLibrary: oneof<nothing, bool>
   --host: string # nullable
   --port: int # format: int32
   --urlBase: string # nullable
@@ -5503,8 +5502,8 @@ export def "rootfolder put" [
   --library: string # nullable
   --outputFormat: string # nullable
   --outputProfile: string # nullable
-  --useSsl: string@bool-completer
-  --accessible: string@bool-completer
+  --useSsl: oneof<nothing, bool>
+  --accessible: oneof<nothing, bool>
   --freeSpace: int # nullable, format: int64
   --totalSpace: int # nullable, format: int64
 ]: any -> record<id: int, name: string, path: string, defaultMetadataProfileId: int, defaultQualityProfileId: int, defaultMonitorOption: string, defaultNewItemMonitorOption: string, defaultTags: list<int>, isCalibreLibrary: bool, host: string, port: int, urlBase: string, username: string, password: string, library: string, outputFormat: string, outputProfile: string, useSsl: bool, accessible: bool, freeSpace: int, totalSpace: int> {
@@ -5945,8 +5944,8 @@ export def "config-ui put" [
   --shortDateFormat: string # nullable
   --longDateFormat: string # nullable
   --timeFormat: string # nullable
-  --showRelativeDates: string@bool-completer
-  --enableColorImpairedMode: string@bool-completer
+  --showRelativeDates: oneof<nothing, bool>
+  --enableColorImpairedMode: oneof<nothing, bool>
   --uiLanguage: int # format: int32
   --theme: string # nullable
 ]: any -> record<id: int, firstDayOfWeek: int, calendarWeekColumnHeader: string, shortDateFormat: string, longDateFormat: string, timeFormat: string, showRelativeDates: bool, enableColorImpairedMode: bool, uiLanguage: int, theme: string> {

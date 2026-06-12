@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -236,7 +235,7 @@ export def "rollouts-promote PromoteRollout" [
   --allow-errors(-e) # Return full response without error handling
   --body-name: string
   --body-namespace: string
-  --full: string@bool-completer
+  --full: oneof<nothing, bool>
 ]: any -> record<metadata: record<name: string, generateName: string, namespace: string, selfLink: string, uid: string, resourceVersion: string, generation: string, creationTimestamp: record<seconds: string, nanos: int>, deletionTimestamp: record<seconds: string, nanos: int>, deletionGracePeriodSeconds: string, labels: record, annotations: record, ownerReferences: list<record>, finalizers: list<string>, managedFields: list<record>>, spec: record<replicas: int, selector: record<matchLabels: record, matchExpressions: list>, template: record<metadata: record, spec: record>, workloadRef: record<apiVersion: string, kind: string, name: string, scaleDown: string>, minReadySeconds: int, rollbackWindow: record<revisions: int>, strategy: record<blueGreen: record, canary: record>, revisionHistoryLimit: int, paused: bool, progressDeadlineSeconds: int, progressDeadlineAbort: bool, restartAt: record<seconds: string, nanos: int>, analysis: record<successfulRunHistoryLimit: int, unsuccessfulRunHistoryLimit: int>>, status: record<abort: bool, pauseConditions: list<record>, controllerPause: bool, abortedAt: record<seconds: string, nanos: int>, currentPodHash: string, currentStepHash: string, replicas: int, updatedReplicas: int, readyReplicas: int, availableReplicas: int, currentStepIndex: int, collisionCount: int, observedGeneration: string, conditions: list<record>, canary: record<currentStepAnalysisRunStatus: record, currentBackgroundAnalysisRunStatus: record, currentExperiment: string, weights: record, stablePingPong: string, stepPluginStatuses: list>, blueGreen: record<previewSelector: string, activeSelector: string, scaleUpPreviewCheckPoint: bool, prePromotionAnalysisRunStatus: record, postPromotionAnalysisRunStatus: record>, HPAReplicas: int, selector: string, stableRS: string, restartedAt: record<seconds: string, nanos: int>, promoteFull: bool, phase: string, message: string, workloadObservedGeneration: string, alb: record<loadBalancer: record, canaryTargetGroup: record, stableTargetGroup: record, ingress: string>, albs: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

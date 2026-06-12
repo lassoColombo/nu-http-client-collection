@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.opencagedata.com/geocode"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -106,21 +105,21 @@ export def "v-version get" [
   --accept: string@accept-completer # Response content type
   --q: string # string or lat,lng to be geocoded.
   --key: string # an application key.
-  --abbrv: string@bool-completer # when true we attempt to abbreviate the formatted field of results.
-  --address-only: string@bool-completer # when true we include only address details in the formatted field of results.
-  --add-request: string@bool-completer # if true the request is included in the response.
+  --abbrv: oneof<nothing, bool> # when true we attempt to abbreviate the formatted field of results.
+  --address-only: oneof<nothing, bool> # when true we include only address details in the formatted field of results.
+  --add-request: oneof<nothing, bool> # if true the request is included in the response.
   --bounds: string # four coordinate points forming the south-west and north-east corners of a bounding box (min long, min lat, max long, max lat).
   --countrycode: string # two letter code ISO 3166-1 Alpha 2 code to limit results to that country.
   --jsonp: string # wraps the returned JSON with a function name.
   --language: string # an IETF format language code (ex: 'es' or 'pt-BR').
   --limit: int # maximum number of results to return. Default is 10. Maximum is 100.
   --min-confidence: int # integer from 1-10. Only results with at least this confidence are returned.
-  --no-annotations: string@bool-completer # when true annotations are not added to results.
-  --no-dedupe: string@bool-completer # when true results are not deduplicated.
-  --no-record: string@bool-completer # when true query content is not logged.
-  --pretty: string@bool-completer # when true results are pretty printed. Useful for debugging.
+  --no-annotations: oneof<nothing, bool> # when true annotations are not added to results.
+  --no-dedupe: oneof<nothing, bool> # when true results are not deduplicated.
+  --no-record: oneof<nothing, bool> # when true query content is not logged.
+  --pretty: oneof<nothing, bool> # when true results are pretty printed. Useful for debugging.
   --proximity: string # lat,lng to bias results.
-  --roadinfo: string@bool-completer # match nearest road, include roadinfo annotation
+  --roadinfo: oneof<nothing, bool> # match nearest road, include roadinfo annotation
 ]: nothing -> record<documentation: string, licenses: table<name: string, url: string>, rate: record<limit: int, remaining: int, reset: int>, results: table<annotations: record, bounds: record, components: record, confidence: int, formatted: string, geometry: record>, status: record<code: int, message: string>, stay_informed: record<blog: string, twitter: string>, thanks: string, timestamp: record<created_http: string, created_unix: int>, total_results: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.stadiamaps.com" "https://api-eu.stadiamaps.com"] }
 def auth-scheme-completer [] { ["query-api_key"] }
 
@@ -123,13 +122,13 @@ export def "route route" [
   --exclude-polygons: list # One or multiple exterior rings of polygons in the form of nested JSON arrays. Roads intersecting these rings will be avoided during path finding. Open rings will be closed automatically. If you only need to avoid a few specific roads, it's much more efficient to use `exclude_locations`. (e.g. [[[30, 10], [40, 40], [20, 40], [10, 20], [30, 10]]])
   --alternates: int # How many alternate routes are desired. Note that fewer or no alternates may be returned. Alternates are not yet supported on routes with more than 2 locations or on time-dependent routes.
   --elevation-interval: float # If greater than zero, attempts to include elevation along the route at regular intervals. The "native" internal resolution is 30m, so we recommend you use this when possible. This number is interpreted as either meters or feet depending on the unit parameter. Elevation for route sections containing a bridge or tunnel is interpolated linearly. This doesn't always match the true elevation of the bridge/tunnel, but it prevents sharp artifacts from the surrounding terrain. This functionality is unique to the routing endpoints and is not available via the elevation API. NOTE: This has no effect on the OSRM response format. (format: float, default: 0.0)
-  --roundabout-exits: string@bool-completer # Determines whether the output should include roundabout exit instructions. (default: true)
+  --roundabout-exits: oneof<nothing, bool> # Determines whether the output should include roundabout exit instructions. (default: true)
   --units: string@units-completer # default: km
   --language: string@language-completer # default: en-US
   --directions-type: string@directions-type-completer # The level of directional narrative to include. Locations and times will always be returned, but narrative generation verbosity can be controlled with this parameter. (default: instructions)
   --format: string@format-completer # The output response format. The default JSON format is extremely compact and ideal for web or data-constrained use cases where you want to fetch additional attributes on demand in small chunks. The OSRM format is much richer and is configurable with significantly more info for turn-by-turn navigation use cases.
-  --banner-instructions: string@bool-completer # Optionally includes helpful banners with timing information for turn-by-turn navigation. This is only available in the OSRM format.
-  --voice-instructions: string@bool-completer # Optionally includes voice instructions with timing information for turn-by-turn navigation. This is only available in the OSRM format.
+  --banner-instructions: oneof<nothing, bool> # Optionally includes helpful banners with timing information for turn-by-turn navigation. This is only available in the OSRM format.
+  --voice-instructions: oneof<nothing, bool> # Optionally includes voice instructions with timing information for turn-by-turn navigation. This is only available in the OSRM format.
   --filters: record # shape: {action?: "include"|"exclude", attributes?: list}
 ]: any -> any {
   let input = $in
@@ -160,7 +159,7 @@ export def "nearest-roads nearest-roads" [
   locations: list # item shape: {lat: float, lon: float}
   --costing: string@costing-completer-1 # A routing profile that determines which roads are eligible for matching (e.g. trucks probably aren't on sidewalks, so the search will snap to the nearest truck-accessible road).
   --costing-options: record # shape: {auto?: any, bus?: any, taxi?: any, truck?: any, bicycle?: any, motor_scooter?: any, motorcycle?: any, pedestrian?: record, low_speed_vehicle?: any}
-  --verbose: string@bool-completer # default: false
+  --verbose: oneof<nothing, bool> # default: false
 ]: any -> table<id: string, input_lat: float, input_lon: float, nodes: list<record>, edges: list<record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
@@ -232,10 +231,10 @@ export def "isochrone isochrone" [
   --costing-options: record # shape: {auto?: any, bus?: any, taxi?: any, truck?: any, bicycle?: any, motor_scooter?: any, motorcycle?: any, pedestrian?: record, low_speed_vehicle?: any}
   --date-time: record # Specifies the time context for time-dependent routing (e.g., to account for traffic patterns or time-based access restrictions). Defaults to depart_now for traffic-influenced routing profiles like `auto_traffic`. — shape: {type: "depart_now"|"depart_at"|"arrive_at", value?: string}
   contours: list # item shape: {time?: float, distance?: float, color?: string}
-  --polygons: string@bool-completer # If true, the generated GeoJSON will use polygons. The default is to use LineStrings. Polygon output makes it easier to render overlapping areas in some visualization tools (such as MapLibre renderers). (default: false)
+  --polygons: oneof<nothing, bool> # If true, the generated GeoJSON will use polygons. The default is to use LineStrings. Polygon output makes it easier to render overlapping areas in some visualization tools (such as MapLibre renderers). (default: false)
   --denoise: float # A value in the range [0, 1] which will be used to smooth out or remove smaller contours. A value of 1 will only return the largest contour for a given time value. A value of 0.5 drops any contours that are less than half the area of the largest contour in the set of contours for that same time value. (format: double, default: 1)
   --generalize: float # The value in meters to be used as a tolerance for Douglas-Peucker generalization. (format: double, default: 200.0)
-  --show-locations: string@bool-completer # If true, then the output GeoJSON will include the input locations as two MultiPoint features: one for the exact input coordinates, and a second for the route network node location that the point was snapped to. (default: false)
+  --show-locations: oneof<nothing, bool> # If true, then the output GeoJSON will include the input locations as two MultiPoint features: one for the exact input coordinates, and a second for the route network node location that the point was snapped to. (default: false)
 ]: any -> record<id: string, features: table<properties: record, geometry: record, type: string>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
@@ -274,8 +273,8 @@ export def "optimized-route optimized-route" [
   --language: string@language-completer # default: en-US
   --directions-type: string@directions-type-completer # The level of directional narrative to include. Locations and times will always be returned, but narrative generation verbosity can be controlled with this parameter. (default: instructions)
   --format: string@format-completer # The output response format. The default JSON format is extremely compact and ideal for web or data-constrained use cases where you want to fetch additional attributes on demand in small chunks. The OSRM format is much richer and is configurable with significantly more info for turn-by-turn navigation use cases.
-  --banner-instructions: string@bool-completer # Optionally includes helpful banners with timing information for turn-by-turn navigation. This is only available in the OSRM format.
-  --voice-instructions: string@bool-completer # Optionally includes voice instructions with timing information for turn-by-turn navigation. This is only available in the OSRM format.
+  --banner-instructions: oneof<nothing, bool> # Optionally includes helpful banners with timing information for turn-by-turn navigation. This is only available in the OSRM format.
+  --voice-instructions: oneof<nothing, bool> # Optionally includes voice instructions with timing information for turn-by-turn navigation. This is only available in the OSRM format.
   --filters: record # shape: {action?: "include"|"exclude", attributes?: list}
 ]: any -> any {
   let input = $in
@@ -307,14 +306,14 @@ export def "map-match map-match" [
   --language: string@language-completer # default: en-US
   --directions-type: string@directions-type-completer # The level of directional narrative to include. Locations and times will always be returned, but narrative generation verbosity can be controlled with this parameter. (default: instructions)
   --format: string@format-completer # The output response format. The default JSON format is extremely compact and ideal for web or data-constrained use cases where you want to fetch additional attributes on demand in small chunks. The OSRM format is much richer and is configurable with significantly more info for turn-by-turn navigation use cases.
-  --banner-instructions: string@bool-completer # Optionally includes helpful banners with timing information for turn-by-turn navigation. This is only available in the OSRM format.
-  --voice-instructions: string@bool-completer # Optionally includes voice instructions with timing information for turn-by-turn navigation. This is only available in the OSRM format.
+  --banner-instructions: oneof<nothing, bool> # Optionally includes helpful banners with timing information for turn-by-turn navigation. This is only available in the OSRM format.
+  --voice-instructions: oneof<nothing, bool> # Optionally includes voice instructions with timing information for turn-by-turn navigation. This is only available in the OSRM format.
   --filters: record # shape: {action?: "include"|"exclude", attributes?: list}
   --begin-time: int # The timestamp at the start of the trace. Combined with `durations`, this provides a way to include timing information for an `encoded_polyline` trace.
   --durations: int # A list of durations (in seconds) between each successive pair of points in a polyline.
-  --use-timestamps: string@bool-completer # If true, the input timestamps or durations should be used when computing elapsed time for each edge along the matched path rather than the routing algorithm estimates. (default: false)
+  --use-timestamps: oneof<nothing, bool> # If true, the input timestamps or durations should be used when computing elapsed time for each edge along the matched path rather than the routing algorithm estimates. (default: false)
   --trace-options: record # shape: {search_radius?: int, gps_accuracy?: float, breakage_distance?: float, interpolation_distance?: float, turn_penalty_factor?: int}
-  --linear-references: string@bool-completer # If true, the response will include a `linear_references` value that contains an array of base64-encoded [OpenLR location references](https://www.openlr-association.com/fileadmin/user_upload/openlr-whitepaper_v1.5.pdf), one for each graph edge of the road network matched by the trace. (default: false)
+  --linear-references: oneof<nothing, bool> # If true, the response will include a `linear_references` value that contains an array of base64-encoded [OpenLR location references](https://www.openlr-association.com/fileadmin/user_upload/openlr-whitepaper_v1.5.pdf), one for each graph edge of the road network matched by the trace. (default: false)
   --elevation-interval: float # If greater than zero, attempts to include elevation along the route at regular intervals. The "native" internal resolution is 30m, so we recommend you use this when possible. This number is interpreted as either meters or feet depending on the unit parameter. Elevation for route sections containing a bridge or tunnel is interpolated linearly. This doesn't always match the true elevation of the bridge/tunnel, but it prevents sharp artifacts from the surrounding terrain. This functionality is unique to the routing endpoints and is not available via the elevation API. NOTE: This has no effect on the OSRM response format. (format: float, default: 0.0)
 ]: any -> record<id: string, trip: record<status: int, status_message: string, units: string, language: string, locations: list<record>, legs: list<record>, summary: record<time: float, length: float, min_lat: float, max_lat: float, min_lon: float, max_lon: float>>, alternates: table<trip: record>, linear_references: list<string>> {
   let input = $in
@@ -625,7 +624,7 @@ export def "elevation elevation" [
   --shape: list # The path to get the height along, expressed as a sequence of coordinates.  REQUIRED if `encoded_polyline` is not present. (nullable) — item shape: {lat: float, lon: float}
   --encoded-polyline: any
   --shape-format: string@shape-format-completer # Specifies the precision of an encoded polyline.
-  --range: string@bool-completer # Controls whether the returned array is one-dimensional (height only) or two-dimensional (with a range and height). The range dimension can be used to generate a graph or steepness gradient along a route.
+  --range: oneof<nothing, bool> # Controls whether the returned array is one-dimensional (height only) or two-dimensional (with a range and height). The range dimension can be used to generate a graph or steepness gradient along a route.
   --height-precision: any
   --resample-distance: any
 ]: any -> record<id: string, shape: table<lat: float, lon: float>, encoded_polyline: string, height: list<float>, range_height: list<list<float>>> {

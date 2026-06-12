@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://test-api.service.hmrc.gov.uk" "https://api.service.hmrc.gov.uk"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -260,8 +259,8 @@ export def "organisations-pillar-two-uk-tax-return amendUKTR" [
   --Accept: string # Specifies the expected response format as versioned JSON from the HMRC API (v1.0). If not provided, it will default to application/vnd.hmrc.1.0+json. (e.g. application/vnd.hmrc.1.0+json)
   --accountingPeriodFrom: string # The calendar date upon which a business' accounting period begins. (format: date)
   --accountingPeriodTo: string # The calendar date upon which a business' accounting period ends. (format: date)
-  --obligationMTT: string@bool-completer # Specifies whether a multinational group owes IIR or UTPR Pillar 2 tax. In the case where a group is 'domestic only', then the value must be `false`. Where a group is 'multinational', the value can be `true` or `false`.
-  --electionUKGAAP: string@bool-completer # A means of calculating tax liability and profit. For domestic-only groups, the value can be `true` or `false`. For multinational groups, it must be `false`.
+  --obligationMTT: oneof<nothing, bool> # Specifies whether a multinational group owes IIR or UTPR Pillar 2 tax. In the case where a group is 'domestic only', then the value must be `false`. Where a group is 'multinational', the value can be `true` or `false`.
+  --electionUKGAAP: oneof<nothing, bool> # A means of calculating tax liability and profit. For domestic-only groups, the value can be `true` or `false`. For multinational groups, it must be `false`.
   --liabilities: record # A liability is a return for UKTR per accounting period which needs to be submitted (unless a BTN has been submitted). This is to be returned annually, and certain groups will need to submit this, whereas others will not. For the groups which do not need to submit a liability return, the value will be nil. For the groups which do need to submit an annual liability return, then the information found in the array will need to be populated. — shape: {electionDTTSingleMember: bool, electionUTPRSingleMember: bool, numberSubGroupDTT: int, numberSubGroupUTPR: int, totalLiability: float, totalLiabilityDTT: float, totalLiabilityIIR: float, totalLiabilityUTPR: float, liableEntities: list}
 ]: any -> record<processingDate: string, formBundleNumber: string, chargeReference: string> {
   let input = $in
@@ -295,8 +294,8 @@ export def "organisations-pillar-two-uk-tax-return submitUKTR" [
   --Accept: string # Specifies the expected response format as versioned JSON from the HMRC API (v1.0). If not provided, it will default to application/vnd.hmrc.1.0+json. (e.g. application/vnd.hmrc.1.0+json)
   --accountingPeriodFrom: string # The calendar date upon which a business' accounting period begins. (format: date)
   --accountingPeriodTo: string # The calendar date upon which a business' accounting period ends. (format: date)
-  --obligationMTT: string@bool-completer # Specifies whether a multinational group owes IIR or UTPR Pillar 2 tax. In the case where a group is 'domestic only', then the value must be `false`. Where a group is 'multinational', the value can be `true` or `false`.
-  --electionUKGAAP: string@bool-completer # A means of calculating tax liability and profit. For domestic-only groups, the value can be `true` or `false`. For multinational groups, it must be `false`.
+  --obligationMTT: oneof<nothing, bool> # Specifies whether a multinational group owes IIR or UTPR Pillar 2 tax. In the case where a group is 'domestic only', then the value must be `false`. Where a group is 'multinational', the value can be `true` or `false`.
+  --electionUKGAAP: oneof<nothing, bool> # A means of calculating tax liability and profit. For domestic-only groups, the value can be `true` or `false`. For multinational groups, it must be `false`.
   --liabilities: record # A liability is a return for UKTR per accounting period which needs to be submitted (unless a BTN has been submitted). This is to be returned annually, and certain groups will need to submit this, whereas others will not. For the groups which do not need to submit a liability return, the value will be nil. For the groups which do need to submit an annual liability return, then the information found in the array will need to be populated. — shape: {electionDTTSingleMember: bool, electionUTPRSingleMember: bool, numberSubGroupDTT: int, numberSubGroupUTPR: int, totalLiability: float, totalLiabilityDTT: float, totalLiabilityIIR: float, totalLiabilityUTPR: float, liableEntities: list}
 ]: any -> record<processingDate: string, formBundleNumber: string, chargeReference: string> {
   let input = $in

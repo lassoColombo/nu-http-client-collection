@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.dhl.com/location-finder/v1"] }
 def auth-scheme-completer [] { ["dhl-api-key"] }
 
@@ -113,7 +112,7 @@ export def "find-by-address findByAddress" [
   --locationType: string@locationType-completer
   --radius: int # default: 5000
   --limit: int
-  --hideClosedShops: string@bool-completer
+  --hideClosedShops: oneof<nothing, bool>
 ]: nothing -> record<url: string, locations: table<url: string, location: record, name: string, place: record>> {
   let auth = (build-auth $token ($auth_scheme | default "dhl-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -143,7 +142,7 @@ export def "find-by-geo findByGeo" [
   --locationType: string@locationType-completer
   --radius: int # default: 5000
   --limit: int
-  --hideClosedShops: string@bool-completer
+  --hideClosedShops: oneof<nothing, bool>
   --countryCode: string
 ]: nothing -> record<url: string, locations: table<url: string, location: record, name: string, place: record>> {
   let auth = (build-auth $token ($auth_scheme | default "dhl-api-key"))

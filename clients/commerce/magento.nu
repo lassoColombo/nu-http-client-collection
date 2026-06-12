@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://example.com/rest/default"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -993,7 +992,7 @@ export def "v1-carts-mine-billing-address quoteBillingAddressManagementV1AssignP
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   address: record # Interface AddressInterface — shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list, suffix?: string, telephone: string, vat_id?: string}
-  --useForShipping: string@bool-completer
+  --useForShipping: oneof<nothing, bool>
 ]: any -> int {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1974,7 +1973,7 @@ export def "v1-carts-billing-address post" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   address: record # Interface AddressInterface — shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list, suffix?: string, telephone: string, vat_id?: string}
-  --useForShipping: string@bool-completer
+  --useForShipping: oneof<nothing, bool>
 ]: any -> int {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3642,7 +3641,7 @@ export def "v1-company-credits companyCreditCreditLimitRepositoryV1GetGet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --reload: string@bool-completer # [optional]
+  --reload: oneof<nothing, bool> # [optional]
 ]: nothing -> record<available_limit: float, balance: float, company_id: int, credit_comment: string, credit_limit: float, currency_code: string, exceed_limit: bool, extension_attributes: record, id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4017,7 +4016,7 @@ export def "v1-coupons-delete-by-codes salesRuleCouponManagementV1DeleteByCodesP
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   codes: list
-  --ignoreInvalidCoupons: string@bool-completer
+  --ignoreInvalidCoupons: oneof<nothing, bool>
 ]: any -> record<failed_items: list<string>, missing_items: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4044,7 +4043,7 @@ export def "v1-coupons-delete-by-ids salesRuleCouponManagementV1DeleteByIdsPost"
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   ids: list
-  --ignoreInvalidCoupons: string@bool-completer
+  --ignoreInvalidCoupons: oneof<nothing, bool>
 ]: any -> record<failed_items: list<string>, missing_items: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4230,7 +4229,7 @@ export def "v1-creditmemo-refund salesCreditmemoManagementV1RefundPost" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   creditmemo: record # Credit memo interface. After a customer places and pays for an order and an invoice has been issued, the merchant can create a credit memo to refund all or part of the amount paid for any returned or undelivered items. The memo restores funds to the customer account so that the customer can make future purchases. — shape: {adjustment?: float, adjustment_negative?: float, adjustment_positive?: float, base_adjustment?: float, base_adjustment_negative?: float, base_adjustment_positive?: float, base_currency_code?: string, base_discount_amount?: float, base_discount_tax_compensation_amount?: float, base_grand_total?: float, base_shipping_amount?: float, base_shipping_discount_tax_compensation_amnt?: float, base_shipping_incl_tax?: float, base_shipping_tax_amount?: float, base_subtotal?: float, base_subtotal_incl_tax?: float, base_tax_amount?: float, base_to_global_rate?: float, base_to_order_rate?: float, billing_address_id?: int, comments?: list, created_at?: string, creditmemo_status?: int, discount_amount?: float, discount_description?: string, discount_tax_compensation_amount?: float, email_sent?: int, entity_id?: int, extension_attributes?: record, global_currency_code?: string, grand_total?: float, increment_id?: string, invoice_id?: int, items: list, order_currency_code?: string, order_id: int, shipping_address_id?: int, shipping_amount?: float, shipping_discount_tax_compensation_amount?: float, shipping_incl_tax?: float, shipping_tax_amount?: float, state?: int, store_currency_code?: string, store_id?: int, store_to_base_rate?: float, store_to_order_rate?: float, subtotal?: float, subtotal_incl_tax?: float, tax_amount?: float, transaction_id?: string, updated_at?: string}
-  --offlineRequested: string@bool-completer
+  --offlineRequested: oneof<nothing, bool>
 ]: any -> record<adjustment: float, adjustment_negative: float, adjustment_positive: float, base_adjustment: float, base_adjustment_negative: float, base_adjustment_positive: float, base_currency_code: string, base_discount_amount: float, base_discount_tax_compensation_amount: float, base_grand_total: float, base_shipping_amount: float, base_shipping_discount_tax_compensation_amnt: float, base_shipping_incl_tax: float, base_shipping_tax_amount: float, base_subtotal: float, base_subtotal_incl_tax: float, base_tax_amount: float, base_to_global_rate: float, base_to_order_rate: float, billing_address_id: int, comments: table<comment: string, created_at: string, entity_id: int, extension_attributes: record, is_customer_notified: int, is_visible_on_front: int, parent_id: int>, created_at: string, creditmemo_status: int, discount_amount: float, discount_description: string, discount_tax_compensation_amount: float, email_sent: int, entity_id: int, extension_attributes: record<base_customer_balance_amount: float, base_gift_cards_amount: float, customer_balance_amount: float, gift_cards_amount: float, gw_base_price: string, gw_base_tax_amount: string, gw_card_base_price: string, gw_card_base_tax_amount: string, gw_card_price: string, gw_card_tax_amount: string, gw_items_base_price: string, gw_items_base_tax_amount: string, gw_items_price: string, gw_items_tax_amount: string, gw_price: string, gw_tax_amount: string>, global_currency_code: string, grand_total: float, increment_id: string, invoice_id: int, items: table<additional_data: string, base_cost: float, base_discount_amount: float, base_discount_tax_compensation_amount: float, base_price: float, base_price_incl_tax: float, base_row_total: float, base_row_total_incl_tax: float, base_tax_amount: float, base_weee_tax_applied_amount: float, base_weee_tax_applied_row_amnt: float, base_weee_tax_disposition: float, base_weee_tax_row_disposition: float, description: string, discount_amount: float, discount_tax_compensation_amount: float, entity_id: int, extension_attributes: record, name: string, order_item_id: int, parent_id: int, price: float, price_incl_tax: float, product_id: int, qty: float, row_total: float, row_total_incl_tax: float, sku: string, tax_amount: float, weee_tax_applied: string, weee_tax_applied_amount: float, weee_tax_applied_row_amount: float, weee_tax_disposition: float, weee_tax_row_disposition: float>, order_currency_code: string, order_id: int, shipping_address_id: int, shipping_amount: float, shipping_discount_tax_compensation_amount: float, shipping_incl_tax: float, shipping_tax_amount: float, state: int, store_currency_code: string, store_id: int, store_to_base_rate: float, store_to_order_rate: float, subtotal: float, subtotal_incl_tax: float, tax_amount: float, transaction_id: string, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5692,7 +5691,7 @@ export def "v1-guest-carts-billing-address quoteGuestBillingAddressManagementV1A
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   address: record # Interface AddressInterface — shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list, suffix?: string, telephone: string, vat_id?: string}
-  --useForShipping: string@bool-completer
+  --useForShipping: oneof<nothing, bool>
 ]: any -> int {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6636,12 +6635,12 @@ export def "v1-invoice-refund salesRefundInvoiceV1ExecutePost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --appendComment: string@bool-completer
+  --appendComment: oneof<nothing, bool>
   --arguments: record # Interface CreditmemoCreationArgumentsInterface — shape: {adjustment_negative?: float, adjustment_positive?: float, extension_attributes?: record, shipping_amount?: float}
   --comment: record # Interface CreditmemoCommentCreationInterface — shape: {comment: string, extension_attributes?: record, is_visible_on_front: int}
-  --isOnline: string@bool-completer
+  --isOnline: oneof<nothing, bool>
   --items: list # item shape: {extension_attributes?: record, order_item_id: int, qty: float}
-  --notify: string@bool-completer
+  --notify: oneof<nothing, bool>
 ]: any -> int {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6914,7 +6913,7 @@ export def "v1-negotiable-carts-billing-address negotiableQuoteBillingAddressMan
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   address: record # Interface AddressInterface — shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list, suffix?: string, telephone: string, vat_id?: string}
-  --useForShipping: string@bool-completer
+  --useForShipping: oneof<nothing, bool>
 ]: any -> int {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7446,12 +7445,12 @@ export def "v1-order-invoice salesInvoiceOrderV1ExecutePost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --appendComment: string@bool-completer
+  --appendComment: oneof<nothing, bool>
   --arguments: record # Interface for creation arguments for Invoice. — shape: {extension_attributes?: record}
-  --capture: string@bool-completer
+  --capture: oneof<nothing, bool>
   --comment: record # Interface InvoiceCommentCreationInterface — shape: {comment: string, extension_attributes?: record, is_visible_on_front: int}
   --items: list # item shape: {extension_attributes?: record, order_item_id: int, qty: float}
-  --notify: string@bool-completer
+  --notify: oneof<nothing, bool>
 ]: any -> int {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7481,11 +7480,11 @@ export def "v1-order-refund salesRefundOrderV1ExecutePost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --appendComment: string@bool-completer
+  --appendComment: oneof<nothing, bool>
   --arguments: record # Interface CreditmemoCreationArgumentsInterface — shape: {adjustment_negative?: float, adjustment_positive?: float, extension_attributes?: record, shipping_amount?: float}
   --comment: record # Interface CreditmemoCommentCreationInterface — shape: {comment: string, extension_attributes?: record, is_visible_on_front: int}
   --items: list # item shape: {extension_attributes?: record, order_item_id: int, qty: float}
-  --notify: string@bool-completer
+  --notify: oneof<nothing, bool>
 ]: any -> int {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7517,11 +7516,11 @@ export def "v1-order-ship salesShipOrderV1ExecutePost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --appendComment: string@bool-completer
+  --appendComment: oneof<nothing, bool>
   --arguments: record # Interface for creation arguments for Shipment. — shape: {extension_attributes?: record}
   --comment: record # Interface ShipmentCommentCreationInterface — shape: {comment: string, extension_attributes?: record, is_visible_on_front: int}
   --items: list # item shape: {extension_attributes?: record, order_item_id: int, qty: float}
-  --notify: string@bool-completer
+  --notify: oneof<nothing, bool>
   --packages: list # item shape: {extension_attributes?: record}
   --tracks: list # item shape: {carrier_code: string, extension_attributes?: record, title: string, track_number: string}
 ]: any -> int {
@@ -7935,7 +7934,7 @@ export def "v1-products catalogProductRepositoryV1SavePost" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   product: record # shape: {attribute_set_id?: int, created_at?: string, custom_attributes?: list, extension_attributes?: record, id?: int, media_gallery_entries?: list, name?: string, options?: list, price?: float, product_links?: list, sku: string, status?: int, tier_prices?: list, type_id?: string, updated_at?: string, visibility?: int, weight?: float}
-  --saveOptions: string@bool-completer
+  --saveOptions: oneof<nothing, bool>
 ]: any -> record<attribute_set_id: int, created_at: string, custom_attributes: table<attribute_code: string, value: string>, extension_attributes: record<bundle_product_options: list<record>, category_links: list<record>, configurable_product_links: list<int>, configurable_product_options: list<record>, downloadable_product_links: list<record>, downloadable_product_samples: list<record>, giftcard_amounts: list<record>, stock_item: record<backorders: int, enable_qty_increments: bool, extension_attributes: record, is_decimal_divided: bool, is_in_stock: bool, is_qty_decimal: bool, item_id: int, low_stock_date: string, manage_stock: bool, max_sale_qty: float, min_qty: float, min_sale_qty: float, notify_stock_qty: float, product_id: int, qty: float, qty_increments: float, show_default_notification_message: bool, stock_id: int, stock_status_changed_auto: int, use_config_backorders: bool, use_config_enable_qty_inc: bool, use_config_manage_stock: bool, use_config_max_sale_qty: bool, use_config_min_qty: bool, use_config_min_sale_qty: int, use_config_notify_stock_qty: bool, use_config_qty_increments: bool>, website_ids: list<int>>, id: int, media_gallery_entries: table<content: record, disabled: bool, extension_attributes: record, file: string, id: int, label: string, media_type: string, position: int, types: list>, name: string, options: table<extension_attributes: record, file_extension: string, image_size_x: int, image_size_y: int, is_require: bool, max_characters: int, option_id: int, price: float, price_type: string, product_sku: string, sku: string, sort_order: int, title: string, type: string, values: list>, price: float, product_links: table<extension_attributes: record, link_type: string, linked_product_sku: string, linked_product_type: string, position: int, sku: string>, sku: string, status: int, tier_prices: table<customer_group_id: int, extension_attributes: record, qty: float, value: float>, type_id: string, updated_at: string, visibility: int, weight: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9122,9 +9121,9 @@ export def "v1-products catalogProductRepositoryV1GetGet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --editMode: string@bool-completer
+  --editMode: oneof<nothing, bool>
   --storeId: int
-  --forceReload: string@bool-completer
+  --forceReload: oneof<nothing, bool>
 ]: nothing -> record<attribute_set_id: int, created_at: string, custom_attributes: table<attribute_code: string, value: string>, extension_attributes: record<bundle_product_options: list<record>, category_links: list<record>, configurable_product_links: list<int>, configurable_product_options: list<record>, downloadable_product_links: list<record>, downloadable_product_samples: list<record>, giftcard_amounts: list<record>, stock_item: record<backorders: int, enable_qty_increments: bool, extension_attributes: record, is_decimal_divided: bool, is_in_stock: bool, is_qty_decimal: bool, item_id: int, low_stock_date: string, manage_stock: bool, max_sale_qty: float, min_qty: float, min_sale_qty: float, notify_stock_qty: float, product_id: int, qty: float, qty_increments: float, show_default_notification_message: bool, stock_id: int, stock_status_changed_auto: int, use_config_backorders: bool, use_config_enable_qty_inc: bool, use_config_manage_stock: bool, use_config_max_sale_qty: bool, use_config_min_qty: bool, use_config_min_sale_qty: int, use_config_notify_stock_qty: bool, use_config_qty_increments: bool>, website_ids: list<int>>, id: int, media_gallery_entries: table<content: record, disabled: bool, extension_attributes: record, file: string, id: int, label: string, media_type: string, position: int, types: list>, name: string, options: table<extension_attributes: record, file_extension: string, image_size_x: int, image_size_y: int, is_require: bool, max_characters: int, option_id: int, price: float, price_type: string, product_sku: string, sku: string, sort_order: int, title: string, type: string, values: list>, price: float, product_links: table<extension_attributes: record, link_type: string, linked_product_sku: string, linked_product_type: string, position: int, sku: string>, sku: string, status: int, tier_prices: table<customer_group_id: int, extension_attributes: record, qty: float, value: float>, type_id: string, updated_at: string, visibility: int, weight: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9151,7 +9150,7 @@ export def "v1-products catalogProductRepositoryV1SavePut" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   product: record # shape: {attribute_set_id?: int, created_at?: string, custom_attributes?: list, extension_attributes?: record, id?: int, media_gallery_entries?: list, name?: string, options?: list, price?: float, product_links?: list, sku: string, status?: int, tier_prices?: list, type_id?: string, updated_at?: string, visibility?: int, weight?: float}
-  --saveOptions: string@bool-completer
+  --saveOptions: oneof<nothing, bool>
 ]: any -> record<attribute_set_id: int, created_at: string, custom_attributes: table<attribute_code: string, value: string>, extension_attributes: record<bundle_product_options: list<record>, category_links: list<record>, configurable_product_links: list<int>, configurable_product_options: list<record>, downloadable_product_links: list<record>, downloadable_product_samples: list<record>, giftcard_amounts: list<record>, stock_item: record<backorders: int, enable_qty_increments: bool, extension_attributes: record, is_decimal_divided: bool, is_in_stock: bool, is_qty_decimal: bool, item_id: int, low_stock_date: string, manage_stock: bool, max_sale_qty: float, min_qty: float, min_sale_qty: float, notify_stock_qty: float, product_id: int, qty: float, qty_increments: float, show_default_notification_message: bool, stock_id: int, stock_status_changed_auto: int, use_config_backorders: bool, use_config_enable_qty_inc: bool, use_config_manage_stock: bool, use_config_max_sale_qty: bool, use_config_min_qty: bool, use_config_min_sale_qty: int, use_config_notify_stock_qty: bool, use_config_qty_increments: bool>, website_ids: list<int>>, id: int, media_gallery_entries: table<content: record, disabled: bool, extension_attributes: record, file: string, id: int, label: string, media_type: string, position: int, types: list>, name: string, options: table<extension_attributes: record, file_extension: string, image_size_x: int, image_size_y: int, is_require: bool, max_characters: int, option_id: int, price: float, price_type: string, product_sku: string, sku: string, sort_order: int, title: string, type: string, values: list>, price: float, product_links: table<extension_attributes: record, link_type: string, linked_product_sku: string, linked_product_type: string, position: int, sku: string>, sku: string, status: int, tier_prices: table<customer_group_id: int, extension_attributes: record, qty: float, value: float>, type_id: string, updated_at: string, visibility: int, weight: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9202,7 +9201,7 @@ export def "v1-products-downloadable-links downloadableLinkRepositoryV1SavePost"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --isGlobalScopeContent: string@bool-completer
+  --isGlobalScopeContent: oneof<nothing, bool>
   link: record # shape: {extension_attributes?: record, id?: int, is_shareable: int, link_file?: string, link_file_content?: record, link_type: string, link_url?: string, number_of_downloads?: int, price: float, sample_file?: string, sample_file_content?: record, sample_type: string, sample_url?: string, sort_order: int, title?: string}
 ]: any -> int {
   let input = $in
@@ -9254,7 +9253,7 @@ export def "v1-products-downloadable-links-samples downloadableSampleRepositoryV
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --isGlobalScopeContent: string@bool-completer
+  --isGlobalScopeContent: oneof<nothing, bool>
   sample: record # shape: {extension_attributes?: record, id?: int, sample_file?: string, sample_file_content?: record, sample_type: string, sample_url?: string, sort_order: int, title: string}
 ]: any -> int {
   let input = $in
@@ -9284,7 +9283,7 @@ export def "v1-products-downloadable-links-samples downloadableSampleRepositoryV
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --isGlobalScopeContent: string@bool-completer
+  --isGlobalScopeContent: oneof<nothing, bool>
   sample: record # shape: {extension_attributes?: record, id?: int, sample_file?: string, sample_file_content?: record, sample_type: string, sample_url?: string, sort_order: int, title: string}
 ]: any -> int {
   let input = $in
@@ -9314,7 +9313,7 @@ export def "v1-products-downloadable-links downloadableLinkRepositoryV1SavePut" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --isGlobalScopeContent: string@bool-completer
+  --isGlobalScopeContent: oneof<nothing, bool>
   link: record # shape: {extension_attributes?: record, id?: int, is_shareable: int, link_file?: string, link_file_content?: record, link_type: string, link_url?: string, number_of_downloads?: int, price: float, sample_file?: string, sample_file_content?: record, sample_type: string, sample_url?: string, sort_order: int, title?: string}
 ]: any -> int {
   let input = $in

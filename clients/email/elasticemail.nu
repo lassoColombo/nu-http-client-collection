@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.elasticemail.com/v4"] }
 def auth-scheme-completer [] { ["x-elasticemail-apikey" "x-auth-token"] }
 
@@ -519,7 +518,7 @@ export def "domains domainsPost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Domain: string # Name of selected domain. (format: string, e.g. example.com)
-  --SetAsDefault: string@bool-completer # format: boolean
+  --SetAsDefault: oneof<nothing, bool> # format: boolean
 ]: any -> record<Domain: string, DefaultDomain: bool, Spf: bool, Dkim: bool, MX: bool, DMARC: bool, IsRewriteDomainValid: bool, Verify: bool, Type: string, TrackingStatus: string, CertificateStatus: string, CertificateValidationError: string, TrackingTypeUserRequest: string, VERP: bool, CustomBouncesDomain: string, IsCustomBouncesDomainDefault: bool, IsMarkedForDeletion: bool, Ownership: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
@@ -590,9 +589,9 @@ export def "domains domainsByDomainPut" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --CertificateStatus: string@CertificateStatus-completer # default: ErrorOccured
-  --VERP: string@bool-completer # format: boolean
+  --VERP: oneof<nothing, bool> # format: boolean
   --CustomBouncesDomain: string # format: string
-  --IsCustomBouncesDomainDefault: string@bool-completer # format: boolean
+  --IsCustomBouncesDomainDefault: oneof<nothing, bool> # format: boolean
 ]: any -> record<Domain: string, DefaultDomain: bool, Spf: bool, Dkim: bool, MX: bool, DMARC: bool, IsRewriteDomainValid: bool, Verify: bool, Type: string, TrackingStatus: string, CertificateStatus: string, CertificateValidationError: string, TrackingTypeUserRequest: string, VERP: bool, CustomBouncesDomain: string, IsCustomBouncesDomainDefault: bool, IsMarkedForDeletion: bool, Ownership: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
@@ -739,16 +738,16 @@ export def "emails-status emailsByTransactionidStatusGet" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --showFailed: string@bool-completer # Include Bounced email addresses. (format: boolean, default: false)
-  --showSent: string@bool-completer # Include Sent email addresses. (format: boolean, default: false)
-  --showDelivered: string@bool-completer # Include all delivered email addresses. (format: boolean, default: false)
-  --showPending: string@bool-completer # Include Ready to send email addresses. (format: boolean, default: false)
-  --showOpened: string@bool-completer # Include Opened email addresses. (format: boolean, default: false)
-  --showClicked: string@bool-completer # Include Clicked email addresses. (format: boolean, default: false)
-  --showAbuse: string@bool-completer # Include Reported as abuse email addresses. (format: boolean, default: false)
-  --showUnsubscribed: string@bool-completer # Include Unsubscribed email addresses. (format: boolean, default: false)
-  --showErrors: string@bool-completer # Include error messages for bounced emails. (format: boolean, default: false)
-  --showMessageIDs: string@bool-completer # Include all MessageIDs for this transaction (format: boolean, default: false)
+  --showFailed: oneof<nothing, bool> # Include Bounced email addresses. (format: boolean, default: false)
+  --showSent: oneof<nothing, bool> # Include Sent email addresses. (format: boolean, default: false)
+  --showDelivered: oneof<nothing, bool> # Include all delivered email addresses. (format: boolean, default: false)
+  --showPending: oneof<nothing, bool> # Include Ready to send email addresses. (format: boolean, default: false)
+  --showOpened: oneof<nothing, bool> # Include Opened email addresses. (format: boolean, default: false)
+  --showClicked: oneof<nothing, bool> # Include Clicked email addresses. (format: boolean, default: false)
+  --showAbuse: oneof<nothing, bool> # Include Reported as abuse email addresses. (format: boolean, default: false)
+  --showUnsubscribed: oneof<nothing, bool> # Include Unsubscribed email addresses. (format: boolean, default: false)
+  --showErrors: oneof<nothing, bool> # Include error messages for bounced emails. (format: boolean, default: false)
+  --showMessageIDs: oneof<nothing, bool> # Include all MessageIDs for this transaction (format: boolean, default: false)
 ]: nothing -> record<ID: string, Status: string, RecipientsCount: int, Failed: table<Address: string, Error: string, ErrorCode: int, Category: string>, FailedCount: int, Sent: list<string>, SentCount: int, Delivered: list<string>, DeliveredCount: int, Pending: list<string>, PendingCount: int, Opened: list<string>, OpenedCount: int, Clicked: list<string>, ClickedCount: int, Unsubscribed: list<string>, UnsubscribedCount: int, AbuseReports: list<string>, AbuseReportsCount: int, MessageIDs: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -1311,7 +1310,7 @@ export def "lists listsPost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   ListName: string # Name of your list. (format: string, e.g. My List 1)
-  --AllowUnsubscribe: string@bool-completer # True: Allow unsubscribing from this list. Otherwise, false (format: boolean, e.g. false)
+  --AllowUnsubscribe: oneof<nothing, bool> # True: Allow unsubscribing from this list. Otherwise, false (format: boolean, e.g. false)
   --Emails: list # Comma delimited list of existing contact emails that should be added to this list. Leave empty for all contacts (e.g. [john.doe@sample.com])
 ]: any -> record<ListName: string, PublicListID: string, DateAdded: string, AllowUnsubscribe: bool> {
   let input = $in
@@ -1408,7 +1407,7 @@ export def "lists listsByNamePut" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --NewListName: string # Name of your list if you want to change it. (format: string, e.g. My List 2)
-  --AllowUnsubscribe: string@bool-completer # True: Allow unsubscribing from this list. Otherwise, false (format: boolean, e.g. false)
+  --AllowUnsubscribe: oneof<nothing, bool> # True: Allow unsubscribing from this list. Otherwise, false (format: boolean, e.g. false)
 ]: any -> record<ListName: string, PublicListID: string, DateAdded: string, AllowUnsubscribe: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
@@ -2009,7 +2008,7 @@ export def "subaccounts subaccountsPost" [
   --allow-errors(-e) # Return full response without error handling
   Email: string # Proper email address. (format: string, e.g. mail@example.com)
   Password: string # Current password. (format: string, e.g. ********)
-  --SendActivation: string@bool-completer # True, if you want to send activation email to this Account to confirm the creation of a new SubAccount. Otherwise, false (SubAccount will immediately be Active). (format: boolean)
+  --SendActivation: oneof<nothing, bool> # True, if you want to send activation email to this Account to confirm the creation of a new SubAccount. Otherwise, false (SubAccount will immediately be Active). (format: boolean)
   --Settings: record # SubAccount settings (e.g. {Email: {PoolName: My Custom Pool, RequiresEmailCredits: true, ValidSenderDomainOnly: true, EmailSizeLimit: 10, DailySendLimit: 100000, MaxContacts: 0, EnablePrivateIPPurchase: true}}) — shape: {Email?: record}
 ]: any -> record<PublicAccountID: string, Email: string, Settings: record<Email: record<MonthlyRefillCredits: int, RequiresEmailCredits: bool, EmailSizeLimit: int, DailySendLimit: int, MaxContacts: int, EnablePrivateIPPurchase: bool, PoolName: string, ValidSenderDomainOnly: bool>>, LastActivity: string, EmailCredits: int, TotalEmailsSent: int, Reputation: float, Status: string, ContactsCount: int> {
   let input = $in
@@ -2108,13 +2107,13 @@ export def "subaccounts-settings-email subaccountsByEmailSettingsEmailPut" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --MonthlyRefillCredits: int # Amount of credits added to Account automatically (format: int32, e.g. 1000)
-  --RequiresEmailCredits: string@bool-completer # True, if Account needs credits to send emails. Otherwise, false (format: boolean, e.g. true)
+  --RequiresEmailCredits: oneof<nothing, bool> # True, if Account needs credits to send emails. Otherwise, false (format: boolean, e.g. true)
   --EmailSizeLimit: int # Maximum size of email including attachments in MB's (format: int32, e.g. 10)
   --DailySendLimit: int # Amount of emails Account can send daily (format: int32, e.g. 100000)
   --MaxContacts: int # Maximum number of contacts the Account can have. 0 means that parent account's limit is used. (format: int32)
-  --EnablePrivateIPPurchase: string@bool-completer # Can the SubAccount purchase Private IP for themselves (format: boolean)
+  --EnablePrivateIPPurchase: oneof<nothing, bool> # Can the SubAccount purchase Private IP for themselves (format: boolean)
   --PoolName: string # Name of your custom IP Pool to be used in the sending process (format: string, e.g. My Custom Pool)
-  --ValidSenderDomainOnly: string@bool-completer # nullable, format: boolean
+  --ValidSenderDomainOnly: oneof<nothing, bool> # nullable, format: boolean
 ]: any -> record<MonthlyRefillCredits: int, RequiresEmailCredits: bool, EmailSizeLimit: int, DailySendLimit: int, MaxContacts: int, EnablePrivateIPPurchase: bool, PoolName: string, ValidSenderDomainOnly: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
@@ -2811,13 +2810,13 @@ export def "webhook webhookPost" [
   --allow-errors(-e) # Return full response without error handling
   Name: string # Filename (format: string, e.g. attachment.txt)
   URL: string # URL of notification. (format: string, e.g. http://address.for.notification.com)
-  --NotifyOncePerEmail: string@bool-completer # format: boolean
-  --NotificationForSent: string@bool-completer # format: boolean
-  --NotificationForOpened: string@bool-completer # format: boolean
-  --NotificationForClicked: string@bool-completer # format: boolean
-  --NotificationForUnsubscribed: string@bool-completer # format: boolean
-  --NotificationForAbuseReport: string@bool-completer # format: boolean
-  --NotificationForError: string@bool-completer # format: boolean
+  --NotifyOncePerEmail: oneof<nothing, bool> # format: boolean
+  --NotificationForSent: oneof<nothing, bool> # format: boolean
+  --NotificationForOpened: oneof<nothing, bool> # format: boolean
+  --NotificationForClicked: oneof<nothing, bool> # format: boolean
+  --NotificationForUnsubscribed: oneof<nothing, bool> # format: boolean
+  --NotificationForAbuseReport: oneof<nothing, bool> # format: boolean
+  --NotificationForError: oneof<nothing, bool> # format: boolean
 ]: any -> record<WebhookID: string, Name: string, DateCreated: string, DateUpdated: string, URL: string, NotifyOncePerEmail: bool, NotificationForSent: bool, NotificationForOpened: bool, NotificationForClicked: bool, NotificationForUnsubscribed: bool, NotificationForAbuseReport: bool, NotificationForError: bool, IsEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
@@ -2889,14 +2888,14 @@ export def "webhook webhookByPublicidPut" [
   --allow-errors(-e) # Return full response without error handling
   --Name: string # Filename (format: string, e.g. attachment.txt)
   --URL: string # URL of notification. (format: string, e.g. http://address.for.notification.com)
-  --NotifyOncePerEmail: string@bool-completer # nullable, format: boolean
-  --NotificationForSent: string@bool-completer # nullable, format: boolean
-  --NotificationForOpened: string@bool-completer # nullable, format: boolean
-  --NotificationForClicked: string@bool-completer # nullable, format: boolean
-  --NotificationForUnsubscribed: string@bool-completer # nullable, format: boolean
-  --NotificationForAbuseReport: string@bool-completer # nullable, format: boolean
-  --NotificationForError: string@bool-completer # nullable, format: boolean
-  --IsEnabled: string@bool-completer # nullable, format: boolean
+  --NotifyOncePerEmail: oneof<nothing, bool> # nullable, format: boolean
+  --NotificationForSent: oneof<nothing, bool> # nullable, format: boolean
+  --NotificationForOpened: oneof<nothing, bool> # nullable, format: boolean
+  --NotificationForClicked: oneof<nothing, bool> # nullable, format: boolean
+  --NotificationForUnsubscribed: oneof<nothing, bool> # nullable, format: boolean
+  --NotificationForAbuseReport: oneof<nothing, bool> # nullable, format: boolean
+  --NotificationForError: oneof<nothing, bool> # nullable, format: boolean
+  --IsEnabled: oneof<nothing, bool> # nullable, format: boolean
 ]: any -> record<WebhookID: string, Name: string, DateCreated: string, DateUpdated: string, URL: string, NotifyOncePerEmail: bool, NotificationForSent: bool, NotificationForOpened: bool, NotificationForClicked: bool, NotificationForUnsubscribed: bool, NotificationForAbuseReport: bool, NotificationForError: bool, IsEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))

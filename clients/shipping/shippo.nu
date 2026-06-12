@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.goshippo.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -157,9 +156,9 @@ export def "addresses CreateAddress" [
   country: string # ISO 3166-1 alpha-2 country codes and country names can be used. For most consistent results, we recommend using country codes like `US` or `DE`. If using country names, please ensure they are spelled correctly and in English. Country names are converted to country codes. Refer to this <a href="https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#Officially_assigned_code_elements" target="_blank">guide</a> for a list of country codes. Sending a country is always required. (e.g. US)
   --phone: string # Addresses containing a phone number allow carriers to call the recipient when delivering the Parcel. This increases the probability of delivery and helps to avoid accessorial charges after a Parcel has been shipped.  **Carrier-Specific Constraints:** | Carrier | Constraints | |:---|:---| | FedEx | Required; Min 1, max 15 characters | | USPS | Sender phone required for shipments during label purchase; Min 8, max 15 digits | (e.g. +1 555 341 9393)
   --email: string # E-mail address of the contact person, RFC3696/5321-compliant.  **Carrier-Specific Constraints:** | Carrier | Constraints | |:---|:---| | FedEx | Max 80 characters | | USPS | Sender email required for shipments during label purchase | (e.g. shippotle@shippo.com)
-  --is-residential: string@bool-completer # e.g. true
+  --is-residential: oneof<nothing, bool> # e.g. true
   --metadata: string # A string of up to 100 characters that can be filled with any additional information you want  to attach to the object. (e.g. Customer ID 123456)
-  --validate: string@bool-completer # Set to true to validate Address object. (e.g. true)
+  --validate: oneof<nothing, bool> # Set to true to validate Address object. (e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -378,7 +377,7 @@ export def "carrier-accounts ListCarrierAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --service-levels: string@bool-completer # Appends the property `service_levels` to each returned carrier account
+  --service-levels: oneof<nothing, bool> # Appends the property `service_levels` to each returned carrier account
   --carrier: string@carrier-completer # Filter the response by the specified carrier
   --account-id: string # Filter the response by the specified carrier account Id
   --page: int # The page number you want to select (format: int64, default: 1)
@@ -410,11 +409,11 @@ export def "carrier-accounts CreateCarrierAccount" [
   --allow-errors(-e) # Return full response without error handling
   --SHIPPO-API-VERSION: string # Optional string used to pick a non-default API version to use. See our <a href="https://docs.goshippo.com/docs/api_concepts/apiversioning/">API version</a> guide. (e.g. 2018-02-08)
   account_id: string # e.g. 321123
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   carrier: string # e.g. fedex
   --metadata: string # e.g. FEDEX Account
   parameters: any
-  --test: string@bool-completer # e.g. false
+  --test: oneof<nothing, bool> # e.g. false
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -469,7 +468,7 @@ export def "carrier-accounts UpdateCarrierAccount" [
   --allow-errors(-e) # Return full response without error handling
   --SHIPPO-API-VERSION: string # Optional string used to pick a non-default API version to use. See our <a href="https://docs.goshippo.com/docs/api_concepts/apiversioning/">API version</a> guide. (e.g. 2018-02-08)
   account_id: string # Unique identifier of the account. Please check the <a href="https://docs.goshippo.com/docs/carriers/carrieraccounts/">carrier accounts tutorial</a>  page for the `account_id` per carrier.<br>  To protect account information, this field will be masked in any API response. (e.g. ****)
-  --active: string@bool-completer # Determines whether the account is active. When creating a shipment, if no `carrier_accounts` are explicitly  passed Shippo will query all carrier accounts that have this field set. By default, this is set to True.
+  --active: oneof<nothing, bool> # Determines whether the account is active. When creating a shipment, if no `carrier_accounts` are explicitly  passed Shippo will query all carrier accounts that have this field set. By default, this is set to True.
   carrier: string # Carrier token, see <a href="/shippoapi/public-api/carriers">Carriers</a><br> Please check the <a href="https://docs.goshippo.com/docs/carriers/carrieraccounts/">carrier accounts tutorial</a> page for all supported carriers. (e.g. usps)
   --parameters: any
 ]: any -> any {
@@ -619,16 +618,16 @@ export def "customs-declarations CreateCustomsDeclaration" [
   --b13a-filing-option: any
   --b13a-number: string # **must be provided if and only if b13a_filing_option is provided**<br> Represents:<br> the Proof of Report (POR) Number when b13a_filing_option is `FILED_ELECTRONICALLY`;<br>  the Summary ID Number when b13a_filing_option is `SUMMARY_REPORTING`;<br>  or the Exemption Number when b13a_filing_option is `NOT_REQUIRED`.
   --certificate: string # Certificate reference of the shipment.
-  --certify: string@bool-completer # Expresses that the certify_signer has provided all information of this customs declaration truthfully. (e.g. true)
+  --certify: oneof<nothing, bool> # Expresses that the certify_signer has provided all information of this customs declaration truthfully. (e.g. true)
   certify_signer: string # Name of the person who created the customs declaration and is responsible for the validity of all  information provided. (e.g. Shawn Ippotle)
-  --commercial-invoice: string@bool-completer
+  --commercial-invoice: oneof<nothing, bool>
   --contents-explanation: string # **required if contents_type is `OTHER`**<br> Explanation of the type of goods of the shipment. (e.g. T-Shirt purchase)
   --disclaimer: string # Disclaimer for the shipment and customs information that have been provided.  **Carrier-Specific Constraints:** | Carrier | Constraints | |:---|:---| | FedEx | Max 554 characters |
   --duties-payor: record # Specifies who will pay the duties for the shipment. Only accepted for FedEx shipments. — shape: {account?: string, type?: "SENDER"|"RECIPIENT"|"THIRD_PARTY", address?: record}
   --exporter-identification: record # Additional exporter identification that may be required to ship in certain countries — shape: {eori_number?: string, tax_id?: record}
   --exporter-reference: string # Exporter reference of an export shipment.
   --importer-reference: string # Importer reference of an import shipment.
-  --is-vat-collected: string@bool-completer # Indicates whether the shipment's destination VAT has been collected. May be required for some destinations.
+  --is-vat-collected: oneof<nothing, bool> # Indicates whether the shipment's destination VAT has been collected. May be required for some destinations.
   --invoice: string # Invoice reference of the shipment. (e.g. #123123)
   --license: string # License reference of the shipment.
   --metadata: string # A string of up to 100 characters that can be filled with any additional information you  want to attach to the object. (e.g. Order ID #123123)
@@ -639,7 +638,7 @@ export def "customs-declarations CreateCustomsDeclaration" [
   --incoterm: any
   items: list # item shape: {description: string, eccn_ear99?: string, mass_unit: "g"|"kg"|"lb"|"oz", metadata?: string, net_weight: string, origin_country: string, quantity: int, sku_code?: string, hs_code?: string, tariff_number?: string, value_amount: string, value_currency: string}
   non_delivery_option: any
-  --test: string@bool-completer # e.g. true
+  --test: oneof<nothing, bool> # e.g. true
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -926,7 +925,7 @@ export def "manifests CreateManifest" [
   shipment_date: string # All shipments to be submitted on this day will be closed out.  Must be in the format `2014-01-18T00:35:03.463Z` (ISO 8601 date). (e.g. 2014-05-16T23:59:59Z)
   --transactions: list # IDs transactions to use. If you set this to null or not send this parameter,  Shippo will automatically assign all applicable transactions. (e.g. [adcfdddf8ec64b84ad22772bce3ea37a])
   address_from: any
-  --async: string@bool-completer
+  --async: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1269,7 +1268,7 @@ export def "refunds CreateRefund" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --SHIPPO-API-VERSION: string # Optional string used to pick a non-default API version to use. See our <a href="https://docs.goshippo.com/docs/api_concepts/apiversioning/">API version</a> guide. (e.g. 2018-02-08)
-  --async: string@bool-completer # e.g. false
+  --async: oneof<nothing, bool> # e.g. false
   transaction: string # e.g. 915d94940ea54c3a80cbfa328722f5a1
 ]: any -> any {
   let input = $in
@@ -1418,7 +1417,7 @@ export def "service-groups UpdateServiceGroup" [
   --rate-adjustment: int # The amount in percent (%) that the service group's returned rate should be adjusted. For example, if this field is set to 5 and the matched rate price is $5.00, the returned value of the service group will be $5.25. Negative integers are also accepted and will discount the rate price by the defined percentage amount. (format: int64, e.g. 15)
   type: string@type-completer # The type of the service group.<br>  `LIVE_RATE` - Shippo will make a rating request and return real-time rates for the shipping group, only falling back to the specified flat rate amount if no rates match a service level in the service group.<br>  `FLAT_RATE` - Returns a shipping option with the specified flat rate amount.<br>  `FREE_SHIPPING` - Returns a shipping option with a price of $0 only if the total cost of items exceeds the amount defined by `free_shipping_threshold_min` (e.g. FLAT_RATE)
   object_id: string # The unique identifier of the given Service Group object. (e.g. 80feb1633d4a43c898f005850)
-  --is-active: string@bool-completer # True if the service group is enabled, false otherwise. (e.g. true)
+  --is-active: oneof<nothing, bool> # True if the service group is enabled, false otherwise. (e.g. true)
   service_levels: list # item shape: {account_object_id?: string, service_level_token?: string}
 ]: any -> any {
   let input = $in
@@ -1512,7 +1511,7 @@ export def "shipments CreateShipment" [
   --address-return: any
   address_to: any
   --customs-declaration: any
-  --async: string@bool-completer
+  --async: oneof<nothing, bool>
   --carrier-accounts: list # List of <a href="/shippoapi/public-api/carrier-accounts">Carrier Accounts</a> `object_id`s used to filter  the returned rates.  If set, only rates from these carriers will be returned. (e.g. [065a4a8c10d24a34ab932163a1b87f52, 73f706f4bdb94b54a337563840ce52b0])
   parcels: list # List of parcels to be shipped.  **Carrier-Specific Constraints:** | Carrier | Constraints | |:---|:---| | FedEx | Max 30 items |
 ]: any -> any {
@@ -1710,7 +1709,7 @@ export def "transactions CreateTransaction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --SHIPPO-API-VERSION: string # Optional string used to pick a non-default API version to use. See our <a href="https://docs.goshippo.com/docs/api_concepts/apiversioning/">API version</a> guide. (e.g. 2018-02-08)
-  --async: string@bool-completer # default: true, e.g. false
+  --async: oneof<nothing, bool> # default: true, e.g. false
   --label-file-type: string@label-file-type-completer # Print format of the <a href="https://docs.goshippo.com/docs/shipments/shippinglabelsizes/">label</a>. If empty, will use the default format set from  <a href="https://apps.goshippo.com/settings/labels">the Shippo dashboard.</a> (e.g. PDF_4x6)
   --metadata: string # e.g. Order ID #12345
   --rate: string # e.g. ec9f0d3adc9441449c85d315f0997fd5
@@ -2025,8 +2024,8 @@ export def "webhooks createWebhook" [
   --allow-errors(-e) # Return full response without error handling
   event: string@event-completer # Type of event that triggered the webhook.
   --body-url: string # URL webhook events are sent to. (e.g. https://example.com/shippo-webhook)
-  --active: string@bool-completer # Determines whether the webhook is active or not. (e.g. true)
-  --is-test: string@bool-completer # Determines whether the webhook is a test webhook or not. (e.g. false)
+  --active: oneof<nothing, bool> # Determines whether the webhook is active or not. (e.g. true)
+  --is-test: oneof<nothing, bool> # Determines whether the webhook is a test webhook or not. (e.g. false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2097,8 +2096,8 @@ export def "webhooks updateWebhook" [
   --allow-errors(-e) # Return full response without error handling
   event: string@event-completer # Type of event that triggered the webhook.
   --body-url: string # URL webhook events are sent to. (e.g. https://example.com/shippo-webhook)
-  --active: string@bool-completer # Determines whether the webhook is active or not. (e.g. true)
-  --is-test: string@bool-completer # Determines whether the webhook is a test webhook or not. (e.g. false)
+  --active: oneof<nothing, bool> # Determines whether the webhook is active or not. (e.g. true)
+  --is-test: oneof<nothing, bool> # Determines whether the webhook is a test webhook or not. (e.g. false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

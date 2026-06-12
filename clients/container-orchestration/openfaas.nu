@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost:8080"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -226,7 +225,7 @@ export def "system-functions UpdateFunction" [
   --annotations: record # A map of annotations for management, orchestration, events and build tasks (nullable, e.g. {topics: awesome-kafka-topic, foo: bar})
   --limits: any # nullable
   --requests: any # nullable
-  --readOnlyRootFilesystem: string@bool-completer # Make the root filesystem of the function read-only
+  --readOnlyRootFilesystem: oneof<nothing, bool> # Make the root filesystem of the function read-only
   --registryAuth: string # Deprecated: Private registry base64-encoded basic auth (as present in ~/.docker/config.json)  Use a Kubernetes Secret with registry-auth secret type to provide this value instead.  This value is completely ignored.  (DEPRECATED, e.g. dXNlcjpwYXNzd29yZA==)
   --network: string # Deprecated: Network, usually func_functions for Swarm.  This value is completely ignored.  (DEPRECATED, e.g. func_functions)
 ]: any -> any {
@@ -266,7 +265,7 @@ export def "system-functions DeployFunction" [
   --annotations: record # A map of annotations for management, orchestration, events and build tasks (nullable, e.g. {topics: awesome-kafka-topic, foo: bar})
   --limits: any # nullable
   --requests: any # nullable
-  --readOnlyRootFilesystem: string@bool-completer # Make the root filesystem of the function read-only
+  --readOnlyRootFilesystem: oneof<nothing, bool> # Make the root filesystem of the function read-only
   --registryAuth: string # Deprecated: Private registry base64-encoded basic auth (as present in ~/.docker/config.json)  Use a Kubernetes Secret with registry-auth secret type to provide this value instead.  This value is completely ignored.  (DEPRECATED, e.g. dXNlcjpwYXNzd29yZA==)
   --network: string # Deprecated: Network, usually func_functions for Swarm.  This value is completely ignored.  (DEPRECATED, e.g. func_functions)
 ]: any -> any {
@@ -477,7 +476,7 @@ export def "system-logs GetFunctionLogs" [
   --namespace: string # Namespace of the function
   --instance: string # Instance of the function
   --tail: int # Sets the maximum number of log messages to return, <=0 means unlimited
-  --follow: string@bool-completer # When true, the request will stream logs until the request timeout
+  --follow: oneof<nothing, bool> # When true, the request will stream logs until the request timeout
   --since: string # Only return logs after a specific date (RFC3339) (format: date-time)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))

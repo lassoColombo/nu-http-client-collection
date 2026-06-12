@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.eu.onfido.com/v3.6" "https://api.us.onfido.com/v3.6" "https://api.ca.onfido.com/v3.6"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -113,7 +112,7 @@ export def "applicants applicants" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # The page to return. The first page is `page=1` (default: 1)
   --per-page: int # The number of objects per page. (default: 20)
-  --include-deleted: string@bool-completer # Whether to also include applicants scheduled for deletion. (default: false)
+  --include-deleted: oneof<nothing, bool> # Whether to also include applicants scheduled for deletion. (default: false)
 ]: nothing -> record<applicants: table<email: string, dob: string, id_numbers: list, phone_number: string, first_name: string, last_name: string, id: string, created_at: string, delete_at: string, href: string, sandbox: bool, address: record, location: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -454,7 +453,7 @@ export def "documents document" [
   --issuing-country: string # The issuing country of the document, a 3-letter ISO code.
   applicant_id: string # The ID of the applicant whose document is being uploaded. (format: uuid)
   file: string # The file to be uploaded. (format: binary)
-  --validate-image-quality: string@bool-completer # Defaults to false. When true the submitted image will undergo an image quality validation which may take up to 5 seconds.
+  --validate-image-quality: oneof<nothing, bool> # Defaults to false. When true the submitted image will undergo an image quality validation which may take up to 5 seconds.
   --location: any
 ]: any -> record<file_type: string, type: string, side: string, issuing_country: string, applicant_id: string, id: string, created_at: string, href: string, download_href: string, file_name: string, file_size: int> {
   let input = $in
@@ -690,7 +689,7 @@ export def "live-photos photo" [
   --allow-errors(-e) # Return full response without error handling
   applicant_id: string # The ID of the applicant whose live photo is being uploaded. (format: uuid)
   file: string # The file to be uploaded. (format: binary)
-  --advanced-validation: string@bool-completer # Validates that the live photo contains exactly one face. (default: true)
+  --advanced-validation: oneof<nothing, bool> # Validates that the live photo contains exactly one face. (default: true)
 ]: any -> record<id: string, created_at: string, href: string, download_href: string, file_name: string, file_type: string, file_size: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1015,7 +1014,7 @@ export def "watchlist-monitors monitors" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --applicant-id: string # The id of the applicant the watchlist monitors belong to. If omitted, all monitors for the account will be listed. (format: uuid)
-  --include-deleted: string@bool-completer # Whether to also include deleted (inactive) monitors. (default: false)
+  --include-deleted: oneof<nothing, bool> # Whether to also include deleted (inactive) monitors. (default: false)
 ]: nothing -> record<monitors: table<applicant_id: string, report_name: string, tags: list, id: string, created_at: string, deleted_at: string, is_sandbox: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1555,11 +1554,11 @@ export def "webhooks webhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Determine if the webhook is active.
+  --enabled: oneof<nothing, bool> # Determine if the webhook is active.
   --events: list # The events that will be published to the webhook. If the events parameter is omitted all the events will be subscribed.
   --environments: list # The environments from which the webhook will receive events. Allowed values are “sandbox” and “live”. If the environments parameter is omitted the webhook will receive events from both environments.
   --payload-version: int # Webhook version used to control the payload object when sending webhooks.
-  --oauth-enabled: string@bool-completer # Determines if the webhook will fetch OAuth access tokens to send in the Authorization header.
+  --oauth-enabled: oneof<nothing, bool> # Determines if the webhook will fetch OAuth access tokens to send in the Authorization header.
   --oauth-server-url: string # The url to fetch the OAuth access token using client credentials grant.
   --oauth-server-client-id: string # The client id to authenticate the client credentials grant.
   --oauth-server-client-secret: string # The client secret to authenticate the client credentials grant.
@@ -1635,11 +1634,11 @@ export def "webhooks webhook-by-webhook_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Determine if the webhook is active.
+  --enabled: oneof<nothing, bool> # Determine if the webhook is active.
   --events: list # The events that will be published to the webhook. If the events parameter is omitted all the events will be subscribed.
   --environments: list # The environments from which the webhook will receive events. Allowed values are “sandbox” and “live”. If the environments parameter is omitted the webhook will receive events from both environments.
   --payload-version: int # Webhook version used to control the payload object when sending webhooks.
-  --oauth-enabled: string@bool-completer # Determines if the webhook will fetch OAuth access tokens to send in the Authorization header.
+  --oauth-enabled: oneof<nothing, bool> # Determines if the webhook will fetch OAuth access tokens to send in the Authorization header.
   --oauth-server-url: string # The url to fetch the OAuth access token using client credentials grant.
   --oauth-server-client-id: string # The client id to authenticate the client credentials grant.
   --oauth-server-client-secret: string # The client secret to authenticate the client credentials grant.
@@ -1849,14 +1848,14 @@ export def "checks check" [
   --allow-errors(-e) # Return full response without error handling
   --webhook-ids: list # An array of webhook ids describing which webhooks to trigger for this check.
   applicant_id: string # The ID of the applicant to do the check on. (format: uuid)
-  --applicant-provides-data: string@bool-completer # Send an applicant form to applicant to complete to proceed with check. Defaults to false. (default: false)
+  --applicant-provides-data: oneof<nothing, bool> # Send an applicant form to applicant to complete to proceed with check. Defaults to false. (default: false)
   --tags: list # Array of tags being assigned to this check.
   --redirect-uri: string # For checks where `applicant_provides_data` is `true`, redirect to this URI when the applicant has submitted their data.
-  --privacy-notices-read-consent-given: string@bool-completer
+  --privacy-notices-read-consent-given: oneof<nothing, bool>
   report_names: list # An array of report names (strings).
   --document-ids: list # Optional. An array of document ids, for use with Document reports only. If omitted, the Document report will use the most recently uploaded document by default.
-  --asynchronous: string@bool-completer # Defaults to `true`. If set to `false`, you will only receive a response when all reports in your check have completed.  (default: true)
-  --suppress-form-emails: string@bool-completer # For checks where `applicant_provides_data` is `true`, applicant form will not be automatically sent if `suppress_form_emails` is set to `true`. You can manually send the form at any time after the check has been created, using the link found in the form_uri attribute of the check object. Write-only. Defaults to false.
+  --asynchronous: oneof<nothing, bool> # Defaults to `true`. If set to `false`, you will only receive a response when all reports in your check have completed.  (default: true)
+  --suppress-form-emails: oneof<nothing, bool> # For checks where `applicant_provides_data` is `true`, applicant form will not be automatically sent if `suppress_form_emails` is set to `true`. You can manually send the form at any time after the check has been created, using the link found in the form_uri attribute of the check object. Write-only. Defaults to false.
   --sub-result: string # Triggers responses for particular sub-results for sandbox Document reports.
   --consider: list # Array of names of particular reports to return consider as their results. This is a feature available in sandbox testing
   --us-driving-licence: any

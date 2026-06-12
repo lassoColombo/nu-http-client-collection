@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.mistral.ai"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -189,7 +188,7 @@ export def "conversations start" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   inputs: any
-  --stream: string@bool-completer # default: false
+  --stream: oneof<nothing, bool> # default: false
   --store: any
   --handoff-execution: any
   --instructions: any
@@ -298,8 +297,8 @@ export def "conversations append" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --inputs: any
-  --stream: string@bool-completer # default: false
-  --store: string@bool-completer # Whether to store the results into our servers or not. (default: true)
+  --stream: oneof<nothing, bool> # default: false
+  --store: oneof<nothing, bool> # Whether to store the results into our servers or not. (default: true)
   --handoff-execution: string@handoff-execution-completer # default: server
   --completion-args: record # White-listed arguments from the completion API — shape: {stop?: any, presence_penalty?: any, frequency_penalty?: any, temperature?: any, top_p?: any, max_tokens?: any, random_seed?: any, prediction?: any, response_format?: any, tool_choice?: "auto"|"none"|"any"|"required", reasoning_effort?: any}
   --tool-confirmations: any
@@ -374,8 +373,8 @@ export def "conversations-restart restart" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --inputs: any
-  --stream: string@bool-completer # default: false
-  --store: string@bool-completer # Whether to store the results into our servers or not. (default: true)
+  --stream: oneof<nothing, bool> # default: false
+  --store: oneof<nothing, bool> # Whether to store the results into our servers or not. (default: true)
   --handoff-execution: string@handoff-execution-completer # default: server
   --completion-args: record # White-listed arguments from the completion API — shape: {stop?: any, presence_penalty?: any, frequency_penalty?: any, temperature?: any, top_p?: any, max_tokens?: any, random_seed?: any, prediction?: any, response_format?: any, tool_choice?: "auto"|"none"|"any"|"required", reasoning_effort?: any}
   --guardrails: any
@@ -698,7 +697,7 @@ export def "conversationsstream stream" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   inputs: any
-  --stream: string@bool-completer # default: true
+  --stream: oneof<nothing, bool> # default: true
   --store: any
   --handoff-execution: any
   --instructions: any
@@ -738,8 +737,8 @@ export def "conversations stream" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --inputs: any
-  --stream: string@bool-completer # default: true
-  --store: string@bool-completer # Whether to store the results into our servers or not. (default: true)
+  --stream: oneof<nothing, bool> # default: true
+  --store: oneof<nothing, bool> # Whether to store the results into our servers or not. (default: true)
   --handoff-execution: string@handoff-execution-completer # default: server
   --completion-args: record # White-listed arguments from the completion API — shape: {stop?: any, presence_penalty?: any, frequency_penalty?: any, temperature?: any, top_p?: any, max_tokens?: any, random_seed?: any, prediction?: any, response_format?: any, tool_choice?: "auto"|"none"|"any"|"required", reasoning_effort?: any}
   --tool-confirmations: any
@@ -770,8 +769,8 @@ export def "conversations-restartstream stream" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --inputs: any
-  --stream: string@bool-completer # default: true
-  --store: string@bool-completer # Whether to store the results into our servers or not. (default: true)
+  --stream: oneof<nothing, bool> # default: true
+  --store: oneof<nothing, bool> # Whether to store the results into our servers or not. (default: true)
   --handoff-execution: string@handoff-execution-completer # default: server
   --completion-args: record # White-listed arguments from the completion API — shape: {stop?: any, presence_penalty?: any, frequency_penalty?: any, temperature?: any, top_p?: any, max_tokens?: any, random_seed?: any, prediction?: any, response_format?: any, tool_choice?: "auto"|"none"|"any"|"required", reasoning_effort?: any}
   --guardrails: any
@@ -832,7 +831,7 @@ export def "files files" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # default: 0
   --page-size: int # default: 100
-  --include-total: string@bool-completer # default: true
+  --include-total: oneof<nothing, bool> # default: true
   --sample-type: string
   --qp-source: string
   --search: string
@@ -955,7 +954,7 @@ export def "fine-tuning-jobs jobs" [
   --model: string # The model name used for fine-tuning to filter on. When set, the other results are not displayed.
   --created-after: string # The date/time to filter on. When set, the results for previous creation times are not displayed.
   --created-before: string
-  --created-by-me: string@bool-completer # When set, only return results for jobs created by the API caller. Other results are not displayed. (default: false)
+  --created-by-me: oneof<nothing, bool> # When set, only return results for jobs created by the API caller. Other results are not displayed. (default: false)
   --status: string # The current job state to filter on. When set, the other results are not displayed.
   --wandb-project: string # The Weights and Biases project to filter on. When set, the other results are not displayed.
   --wandb-name: string # The Weight and Biases run name to filter on. When set, the other results are not displayed.
@@ -989,7 +988,7 @@ export def "fine-tuning-jobs job" [
   --validation-files: any # A list containing the IDs of uploaded files that contain validation data. If you provide these files, the data is used to generate validation metrics periodically during fine-tuning. These metrics can be viewed in `checkpoints` when getting the status of a running fine-tuning job. The same data should not be present in both train and validation files.
   --suffix: any # A string that will be added to your fine-tuning model name. For example, a suffix of "my-great-model" would produce a model name like `ft:open-mistral-7b:my-great-model:xxx...`
   --integrations: any # A list of integrations to enable for your fine-tuning job.
-  --auto-start: string@bool-completer # This field will be required in a future release.
+  --auto-start: oneof<nothing, bool> # This field will be required in a future release.
   --invalid-sample-skip-percentage: float # default: 0
   --job-type: any
   hyperparameters: any
@@ -1167,7 +1166,7 @@ export def "batch-jobs jobs" [
   --agent-id: string
   --metadata: string
   --created-after: string
-  --created-by-me: string@bool-completer # default: false
+  --created-by-me: oneof<nothing, bool> # default: false
   --status: string
   --order-by: string@order-by-completer # default: -created
 ]: nothing -> record<data: table<id: string, object: string, input_files: list, metadata: any, endpoint: string, model: any, agent_id: any, output_file: any, error_file: any, errors: list, outputs: any, status: string, created_at: int, total_requests: int, completed_requests: int, succeeded_requests: int, failed_requests: int, started_at: any, completed_at: any>, object: string, total: int> {
@@ -1276,7 +1275,7 @@ export def "chat-completions post" [
   --temperature: any # What sampling temperature to use, we recommend between 0.0 and 0.7. Higher values like 0.7 will make the output more random, while lower values like 0.2 will make it more focused and deterministic. We generally recommend altering this or `top_p` but not both. The default value varies depending on the model you are targeting. Call the `/models` endpoint to retrieve the appropriate value.
   --top-p: float # Nucleus sampling, where the model considers the results of the tokens with `top_p` probability mass. So 0.1 means only the tokens comprising the top 10% probability mass are considered. We generally recommend altering this or `temperature` but not both. (default: 1.0)
   --max-tokens: any # The maximum number of tokens to generate in the completion. The token count of your prompt plus `max_tokens` cannot exceed the model's context length.
-  --stream: string@bool-completer # Whether to stream back partial progress. If set, tokens will be sent as data-only server-side events as they become available, with the stream terminated by a data: [DONE] message. Otherwise, the server will hold the request open until the timeout or until completion, with the response containing the full result as JSON. (default: false)
+  --stream: oneof<nothing, bool> # Whether to stream back partial progress. If set, tokens will be sent as data-only server-side events as they become available, with the stream terminated by a data: [DONE] message. Otherwise, the server will hold the request open until the timeout or until completion, with the response containing the full result as JSON. (default: false)
   --stop: any # Stop generation if this token is detected. Or if one of these tokens is detected when providing an array
   --random-seed: any # The seed to use for random sampling. If set, different calls will generate deterministic results.
   --metadata: any
@@ -1288,12 +1287,12 @@ export def "chat-completions post" [
   --frequency-penalty: float # The `frequency_penalty` penalizes the repetition of words based on their frequency in the generated text. A higher frequency penalty discourages the model from repeating words that have already appeared frequently in the output, promoting diversity and reducing repetition. (default: 0.0)
   --n: any # Number of completions to return for each request, input tokens are only billed once.
   --prediction: record # Enable users to specify an expected completion, optimizing response times by leveraging known or predictable content. — shape: {type?: string, content?: string}
-  --parallel-tool-calls: string@bool-completer # Whether to enable parallel function calling during tool use, when enabled the model can call multiple tools in parallel. (default: true)
+  --parallel-tool-calls: oneof<nothing, bool> # Whether to enable parallel function calling during tool use, when enabled the model can call multiple tools in parallel. (default: true)
   --prompt-mode: any # Allows toggling between the reasoning mode and no system prompt. When set to `reasoning` the system prompt for reasoning models will be used. **Deprecated for reasoning models - use `reasoning_effort` parameter instead.**
   --reasoning-effort: string@reasoning-effort-completer # Controls the reasoning effort level for reasoning models. "high" enables comprehensive reasoning traces, "none" disables reasoning effort.
   --guardrails: any # A list of guardrail configurations to apply to this request. Each guardrail specifies a moderation type, categories with thresholds to evaluate, and an action to take on violation.
   --prompt-cache-key: any # A cache key to enable prompt caching. When provided, the API will attempt to reuse previously computed tokens for requests sharing the same prefix (e.g. multi-turn conversations or requests with a similar system prompt). Cached tokens are billed at 10% of the standard input token price.
-  --safe-prompt: string@bool-completer # Whether to inject a safety prompt before all conversations. (default: false)
+  --safe-prompt: oneof<nothing, bool> # Whether to inject a safety prompt before all conversations. (default: false)
 ]: any -> record<choices: table<index: int, message: record, finish_reason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1323,7 +1322,7 @@ export def "fim-completions post" [
   --temperature: any # What sampling temperature to use, we recommend between 0.0 and 0.7. Higher values like 0.7 will make the output more random, while lower values like 0.2 will make it more focused and deterministic. We generally recommend altering this or `top_p` but not both. The default value varies depending on the model you are targeting. Call the `/models` endpoint to retrieve the appropriate value.
   --top-p: float # Nucleus sampling, where the model considers the results of the tokens with `top_p` probability mass. So 0.1 means only the tokens comprising the top 10% probability mass are considered. We generally recommend altering this or `temperature` but not both. (default: 1.0)
   --max-tokens: any # The maximum number of tokens to generate in the completion. The token count of your prompt plus `max_tokens` cannot exceed the model's context length.
-  --stream: string@bool-completer # Whether to stream back partial progress. If set, tokens will be sent as data-only server-side events as they become available, with the stream terminated by a data: [DONE] message. Otherwise, the server will hold the request open until the timeout or until completion, with the response containing the full result as JSON. (default: false)
+  --stream: oneof<nothing, bool> # Whether to stream back partial progress. If set, tokens will be sent as data-only server-side events as they become available, with the stream terminated by a data: [DONE] message. Otherwise, the server will hold the request open until the timeout or until completion, with the response containing the full result as JSON. (default: false)
   --stop: any # Stop generation if this token is detected. Or if one of these tokens is detected when providing an array
   --random-seed: any # The seed to use for random sampling. If set, different calls will generate deterministic results.
   --metadata: any
@@ -1360,7 +1359,7 @@ export def "agents-completions post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --max-tokens: any # The maximum number of tokens to generate in the completion. The token count of your prompt plus `max_tokens` cannot exceed the model's context length.
-  --stream: string@bool-completer # Whether to stream back partial progress. If set, tokens will be sent as data-only server-side events as they become available, with the stream terminated by a data: [DONE] message. Otherwise, the server will hold the request open until the timeout or until completion, with the response containing the full result as JSON. (default: false)
+  --stream: oneof<nothing, bool> # Whether to stream back partial progress. If set, tokens will be sent as data-only server-side events as they become available, with the stream terminated by a data: [DONE] message. Otherwise, the server will hold the request open until the timeout or until completion, with the response containing the full result as JSON. (default: false)
   --stop: any # Stop generation if this token is detected. Or if one of these tokens is detected when providing an array
   --random-seed: any # The seed to use for random sampling. If set, different calls will generate deterministic results.
   --metadata: any
@@ -1372,7 +1371,7 @@ export def "agents-completions post" [
   --frequency-penalty: float # The `frequency_penalty` penalizes the repetition of words based on their frequency in the generated text. A higher frequency penalty discourages the model from repeating words that have already appeared frequently in the output, promoting diversity and reducing repetition. (default: 0.0)
   --n: any # Number of completions to return for each request, input tokens are only billed once.
   --prediction: record # Enable users to specify an expected completion, optimizing response times by leveraging known or predictable content. — shape: {type?: string, content?: string}
-  --parallel-tool-calls: string@bool-completer # default: true
+  --parallel-tool-calls: oneof<nothing, bool> # default: true
   --prompt-mode: any # Allows toggling between the reasoning mode and no system prompt. When set to `reasoning` the system prompt for reasoning models will be used. **Deprecated for reasoning models - use `reasoning_effort` parameter instead.**
   --reasoning-effort: string@reasoning-effort-completer # Controls the reasoning effort level for reasoning models. "high" enables comprehensive reasoning traces, "none" disables reasoning effort.
   --prompt-cache-key: any # A cache key to enable prompt caching. When provided, the API will attempt to reuse previously computed tokens for requests sharing the same prefix (e.g. multi-turn conversations or requests with a similar system prompt). Cached tokens are billed at 10% of the standard input token price.
@@ -1495,8 +1494,8 @@ export def "ocr post" [
   --document-annotation-format: any # Structured output class for extracting useful information from the entire document. Only json_schema is valid for this field
   --document-annotation-prompt: any # Optional prompt to guide the model in extracting structured output from the entire document. A document_annotation_format must be provided.
   --table-format: any
-  --extract-header: string@bool-completer # default: false
-  --extract-footer: string@bool-completer # default: false
+  --extract-header: oneof<nothing, bool> # default: false
+  --extract-footer: oneof<nothing, bool> # default: false
   --confidence-scores-granularity: any # Granularity for confidence scores: 'word' (per-word scores) or 'page' (aggregate only). Defaults to None (no confidence scores) to keep response payload small.
 ]: any -> record<pages: table<index: int, markdown: string, images: list, tables: list, hyperlinks: list, header: any, footer: any, dimensions: any, confidence_scores: any>, model: string, document_annotation: any, usage_info: record<pages_processed: int, doc_size_bytes: any>> {
   let input = $in
@@ -1581,8 +1580,8 @@ export def "audio-transcriptions post" [
   --file-id: any # ID of a file uploaded to /v1/files
   --language: any # Language of the audio, e.g. 'en'. Providing the language can boost accuracy.
   --temperature: any
-  --stream: string@bool-completer # default: false
-  --diarize: string@bool-completer # default: false
+  --stream: oneof<nothing, bool> # default: false
+  --diarize: oneof<nothing, bool> # default: false
   --context-bias: list # default: []
   --timestamp-granularities: list # Granularities of timestamps to include in the response.
 ]: any -> record<model: string, text: string, language: any, segments: table<type: string, text: string, start: float, end: float, score: any, speaker_id: any>, usage: record<prompt_tokens: int, completion_tokens: int, total_tokens: int, prompt_audio_seconds: any, num_cached_tokens: any, prompt_tokens_details: any, prompt_token_details: any>> {
@@ -1615,8 +1614,8 @@ export def "audio-transcriptionsstream stream" [
   --file-id: any # ID of a file uploaded to /v1/files
   --language: any # Language of the audio, e.g. 'en'. Providing the language can boost accuracy.
   --temperature: any
-  --stream: string@bool-completer # default: true
-  --diarize: string@bool-completer # default: false
+  --stream: oneof<nothing, bool> # default: true
+  --diarize: oneof<nothing, bool> # default: false
   --context-bias: list # default: []
   --timestamp-granularities: list # Granularities of timestamps to include in the response.
 ]: any -> any {
@@ -1645,7 +1644,7 @@ export def "audio-speech post" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --model: any
-  --stream: string@bool-completer # default: false
+  --stream: oneof<nothing, bool> # default: false
   --voice-id: any # The preset or custom voice to use for generating the speech.
   --ref-audio: any # The base64-encoded audio reference for zero-shot voice cloning.
   input: string # Text to generate speech from.
@@ -3322,7 +3321,7 @@ export def "workflows-executions-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --decode-payloads: string@bool-completer # default: false
+  --decode-payloads: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3496,8 +3495,8 @@ export def "workflows-executions-reset post" [
   --allow-errors(-e) # Return full response without error handling
   event_id: int # The event ID to reset the workflow execution to
   --reason: any # Reason for resetting the workflow execution
-  --exclude-signals: string@bool-completer # Whether to exclude signals that happened after the reset point (default: false)
-  --exclude-updates: string@bool-completer # Whether to exclude updates that happened after the reset point (default: false)
+  --exclude-signals: oneof<nothing, bool> # Whether to exclude signals that happened after the reset point (default: false)
+  --exclude-updates: oneof<nothing, bool> # Whether to exclude updates that happened after the reset point (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3594,8 +3593,8 @@ export def "workflows-executions-trace-events events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --merge-same-id-events: string@bool-completer # default: false
-  --include-internal-events: string@bool-completer # default: false
+  --merge-same-id-events: oneof<nothing, bool> # default: false
+  --include-internal-events: oneof<nothing, bool> # default: false
 ]: nothing -> record<workflow_name: string, execution_id: string, parent_execution_id: any, root_execution_id: string, status: any, start_time: string, end_time: any, total_duration_ms: any, result: any, events: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3718,7 +3717,7 @@ export def "workflows-runs-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --decode-payloads: string@bool-completer # default: false
+  --decode-payloads: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3901,7 +3900,7 @@ export def "workflows-deployments list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active-only: string@bool-completer # default: true
+  --active-only: oneof<nothing, bool> # default: true
   --workflow-name: string
 ]: nothing -> record<deployments: table<id: string, name: string, is_active: bool, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3949,11 +3948,11 @@ export def "workflows-registrations list" [
   --allow-errors(-e) # Return full response without error handling
   --workflow-id: string # The workflow ID to filter by
   --task-queue: string # The task queue to filter by
-  --active-only: string@bool-completer # Whether to only return active workflows versions (default: false)
-  --include-shared: string@bool-completer # Whether to include shared workflow versions (default: true)
+  --active-only: oneof<nothing, bool> # Whether to only return active workflows versions (default: false)
+  --include-shared: oneof<nothing, bool> # Whether to include shared workflow versions (default: true)
   --workflow-search: string # The workflow name to filter by
   --archived: string # Filter by archived state. False=exclude archived, True=only archived, None=include all
-  --with-workflow: string@bool-completer # Whether to include the workflow definition (default: false)
+  --with-workflow: oneof<nothing, bool> # Whether to include the workflow definition (default: false)
   --available-in-chat-assistant: string # Whether to only return workflows compatible with chat assistant
   --limit: int # The maximum number of workflows versions to return (default: 50)
   --cursor: string # The cursor for pagination
@@ -3984,7 +3983,7 @@ export def "workflows-execute post" [
   --execution-id: any # Allows you to specify a custom execution ID. If not provided, a random ID will be generated.
   --input: any # The input to the workflow. This should be a dictionary that matches the workflow's input schema.
   --encoded-input: any # Encoded input to the workflow, used when payload encoding is enabled.
-  --wait-for-result: string@bool-completer # If true, wait for the workflow to complete and return the result directly. (default: false)
+  --wait-for-result: oneof<nothing, bool> # If true, wait for the workflow to complete and return the result directly. (default: false)
   --timeout-seconds: any # Maximum time to wait for completion when wait_for_result is true.
   --custom-tracing-attributes: any
   --task-queue: any # Deprecated. Use deployment_name instead. (DEPRECATED)
@@ -4020,7 +4019,7 @@ export def "workflows-registrations-execute post" [
   --execution-id: any # Allows you to specify a custom execution ID. If not provided, a random ID will be generated.
   --input: any # The input to the workflow. This should be a dictionary that matches the workflow's input schema.
   --encoded-input: any # Encoded input to the workflow, used when payload encoding is enabled.
-  --wait-for-result: string@bool-completer # If true, wait for the workflow to complete and return the result directly. (default: false)
+  --wait-for-result: oneof<nothing, bool> # If true, wait for the workflow to complete and return the result directly. (default: false)
   --timeout-seconds: any # Maximum time to wait for completion when wait_for_result is true.
   --custom-tracing-attributes: any
   --task-queue: any # Deprecated. Use deployment_name instead. (DEPRECATED)
@@ -4100,8 +4099,8 @@ export def "workflows-registrations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-workflow: string@bool-completer # Whether to include the workflow definition (default: false)
-  --include-shared: string@bool-completer # Whether to include shared workflow versions (default: true)
+  --with-workflow: oneof<nothing, bool> # Whether to include the workflow definition (default: false)
+  --include-shared: oneof<nothing, bool> # Whether to include shared workflow versions (default: true)
 ]: nothing -> record<workflow_registration: record<id: string, task_queue: string, definition: record<input_schema: record, output_schema: any, signals: list, queries: list, updates: list, enforce_determinism: bool, execution_timeout: float>, workflow_id: string, workflow: any, compatible_with_chat_assistant: bool, active: bool>, workflow_version: record<id: string, task_queue: string, definition: record<input_schema: record, output_schema: any, signals: list, queries: list, updates: list, enforce_determinism: bool, execution_timeout: float>, workflow_id: string, workflow: any, compatible_with_chat_assistant: bool, active: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4282,8 +4281,8 @@ export def "connectors-tools v1" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # default: 1
   --page-size: int # default: 100
-  --refresh: string@bool-completer # default: false
-  --pretty: string@bool-completer # Return a simplified payload with only name, description, annotations, and a compact inputSchema. (default: false)
+  --refresh: oneof<nothing, bool> # default: false
+  --pretty: oneof<nothing, bool> # Return a simplified payload with only name, description, annotations, and a compact inputSchema. (default: false)
   --credentials-name: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4331,7 +4330,7 @@ export def "connectors-organization-credentials v1-by-connector_id_or_name" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --auth-type: string
-  --fetch-default: string@bool-completer # default: false
+  --fetch-default: oneof<nothing, bool> # default: false
 ]: nothing -> record<credentials: table<name: string, authentication_type: string, is_default: bool>, connector_preset_credentials_for_auth: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4384,7 +4383,7 @@ export def "connectors-workspace-credentials v1-by-connector_id_or_name" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --auth-type: string
-  --fetch-default: string@bool-completer # default: false
+  --fetch-default: oneof<nothing, bool> # default: false
 ]: nothing -> record<credentials: table<name: string, authentication_type: string, is_default: bool>, connector_preset_credentials_for_auth: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4437,7 +4436,7 @@ export def "connectors-user-credentials v1-by-connector_id_or_name" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --auth-type: string
-  --fetch-default: string@bool-completer # default: false
+  --fetch-default: oneof<nothing, bool> # default: false
 ]: nothing -> record<credentials: table<name: string, authentication_type: string, is_default: bool>, connector_preset_credentials_for_auth: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4558,8 +4557,8 @@ export def "connectors v1-by-connector_id_or_name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --fetch-customer-data: string@bool-completer # Fetch the customer data associated with the connector (e.g. customer secrets / config). (default: false)
-  --fetch-connection-secrets: string@bool-completer # Fetch the general connection secrets associated with the connector. (default: false)
+  --fetch-customer-data: oneof<nothing, bool> # Fetch the customer data associated with the connector (e.g. customer secrets / config). (default: false)
+  --fetch-connection-secrets: oneof<nothing, bool> # Fetch the general connection secrets associated with the connector. (default: false)
 ]: nothing -> record<id: string, name: string, description: string, created_at: string, modified_at: string, server: any, auth_type: any, tools: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

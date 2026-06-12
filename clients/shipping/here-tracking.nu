@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://tracking.api.here.com"] }
 def auth-scheme-completer [] { ["bearer" "oauth"] }
 
@@ -1119,7 +1118,7 @@ export def "c2c-connectors post" [
   --X-Request-Id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting.  Must be a valid UUIDv4.
   --description: string # Brief description of the connector.
   driverId: string # Identifier of the driver to be used with this connector.
-  --enabled: string@bool-completer # Enabled state of the connector. If set to false then the connector will not execute periodically.
+  --enabled: oneof<nothing, bool> # Enabled state of the connector. If set to false then the connector will not execute periodically.
   externalCloudInfo: record # An external cloud-specific object that the driver will use to login to the external cloud. The structure of this object varies per driver implementation. It is recommended to have dedicated credentials for logging in to the external cloud in order not to violate possible concurrent users policies of the external cloud. In case of the HERE Tracking loopback driver, the maximum allowed concurrent user account tokens is 3 per account, therefore it is recommended to create a separate HERE account and grant it the required privilege to update the connector's project, and use that account in externalCloudInfo.
   name: string # Name of the connector.
   --refreshIntervalS: int # This is the interval (in seconds) to execute the sync process between the connector's external cloud and HERE Tracking project. The maximum and at the same time default value for callback-type connectors is 900 seconds. The default value for other type of connectors is 3600 seconds and there is no maximum value set.
@@ -1176,7 +1175,7 @@ export def "c2c-connectors delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deleteDevices: string@bool-completer # Unclaim and unprovision devices
+  --deleteDevices: oneof<nothing, bool> # Unclaim and unprovision devices
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1222,7 +1221,7 @@ export def "c2c-connectors put" [
   --allow-errors(-e) # Return full response without error handling
   --description: string # Brief description of the connector.
   driverId: string # Identifier of the driver to be used with this connector.
-  --enabled: string@bool-completer # Enabled state of the connector. If set to false then the connector will not execute periodically.
+  --enabled: oneof<nothing, bool> # Enabled state of the connector. If set to false then the connector will not execute periodically.
   externalCloudInfo: record # An external cloud-specific object that the driver will use to login to the external cloud. The structure of this object varies per driver implementation. It is recommended to have dedicated credentials for logging in to the external cloud in order not to violate possible concurrent users policies of the external cloud. In case of the HERE Tracking loopback driver, the maximum allowed concurrent user account tokens is 3 per account, therefore it is recommended to create a separate HERE account and grant it the required privilege to update the connector's project, and use that account in externalCloudInfo.
   name: string # Name of the connector.
   --refreshIntervalS: int # This is the interval (in seconds) to execute the sync process between the connector's external cloud and HERE Tracking project. The maximum and at the same time default value for callback-type connectors is 900 seconds. The default value for other type of connectors is 3600 seconds and there is no maximum value set.
@@ -1527,7 +1526,7 @@ export def "events list" [
   --eventSource: string
   --eventType: string
   --ruleId: string
-  --initialState: string@bool-completer
+  --initialState: oneof<nothing, bool>
   --pageToken: string # A token from the previously returned response to retrieve the specified page.
   --count: int # The number of items to return per page. (default: 1000)
   --appId: string # Application identifier. Used together with an external ID to identify a virtual device.
@@ -1581,7 +1580,7 @@ export def "events-statuses get" [
   --trackingId: string
   --ruleId: string
   --geofenceId: string
-  --shipments: string@bool-completer
+  --shipments: oneof<nothing, bool>
   --before: float # Milliseconds elapsed since 1 January 1970 00:00:00 UTC. The accepted range is from 1 to the current time.
   --after: float # Milliseconds elapsed since 1 January 1970 00:00:00 UTC. The accepted range is from 0 to the current time.
   --pageToken: string # A token from the previously returned response to retrieve the specified page.
@@ -1617,7 +1616,7 @@ export def "events-statuses-device-counts get" [
   --trackingId: string
   --ruleId: string
   --geofenceId: string
-  --shipments: string@bool-completer
+  --shipments: oneof<nothing, bool>
   --pageToken: string # A token from the previously returned response to retrieve the specified page.
   --count: int # The number of items to return per page. (default: 1000)
   --appId: string # Application identifier. Used together with an external ID to identify a virtual device.
@@ -1671,7 +1670,7 @@ export def "events get" [
   --eventSource: string
   --eventType: string
   --ruleId: string
-  --initialState: string@bool-completer
+  --initialState: oneof<nothing, bool>
   --pageToken: string # A token from the previously returned response to retrieve the specified page.
   --count: int # The number of items to return per page. (default: 1000)
   --appId: string # Application identifier. Used together with an external ID to identify a virtual device.
@@ -2523,7 +2522,7 @@ export def "largedata post-by-dataId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --abort: string@bool-completer # default: false
+  --abort: oneof<nothing, bool> # default: false
   --X-Request-Id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting.  Must be a valid UUIDv4.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3300,7 +3299,7 @@ export def "notifications-registration put" [
   channelType: string@channelType-completer # The type of notification channel.
   --eventSource: string@eventSource-completer # The event source rule type.
   --eventType: string@eventType-completer # Type of the event.  An event is created every time an associated rule or geofence is triggered by a device ingestion. The event type depends on the data the device sends.  Sensors that report numerical data (such as battery, humidity, pressure and temperature sensors), generate an event when the reported sensor reading of the device goes in or out of range, which is configured in the rule. This produces events of BELOW_RANGE, IN_RANGE and ABOVE_RANGE types.  Sensors that report boolean data (such as attach and tamper sensors), generate events when the device  transitions from one state to another, either from `false` to `true` or vice versa. This produces events of FALSE_TO_TRUE and TRUE_TO_FALSE types. The same event types are also generated by the online rule when the device state changes from `offline`  (when the device has stopped ingesting data) to `online` (when the device data ingestion has resumed)  or vice versa.  The acceleration sensor generates events whenever the reported sensor reading  crosses the acceleration threshold (for example, when the device was dropped). This produces events of the type EVENT.  Such events are stateless.  Events of INSIDE_GEOFENCE and OUTSIDE_GEOFENCE types are generated when the device enters or exits a geofence associated with the device.  Events of DWELLING_STARTED type are generated when the device has stayed inside an associated geofence for longer than the threshold duration.  DWELLING_ENDED type events are generated when dwelling of the device has ended.  Events of DETENTION_STARTED type are generated when the device has been stationary for longer than the threshold duration, regardless whether the device is inside  or outside of any geofence.  DETENTION_ENDED type events will be generated when the device starts moving again.  Events of UNUTILIZED type are generated when the device has been stationary for longer than the threshold duration. UTILIZED type events are generated when the device starts moving again after having been stationary.  Events of OVERSTOCK, NORMAL_VOLUME and UNDERSTOCK types are generated when the number of assets inside a geofence crosses the `minVolume` and `maxVolume` thresholds of an associated stock rule.  Events of SHIPMENT_EARLY, SHIPMENT_ON_TIME and SHIPMENT_DELAYED types are generated when a shipment is too early, on time or delayed.
-  --initialState: string@bool-completer # Events with the `initialState` property set as `true` are generated when the rule is  evaluated for the first time. It indicates the fact that this is the initial evaluation  state, which would serve as a starting point for the subsequent rule evaluations. The rest of the rule events would represent a transition of a device or a shipment or  a geofence from one state to another and their `initialState` property will be set to `false`.
+  --initialState: oneof<nothing, bool> # Events with the `initialState` property set as `true` are generated when the rule is  evaluated for the first time. It indicates the fact that this is the initial evaluation  state, which would serve as a starting point for the subsequent rule evaluations. The rest of the rule events would represent a transition of a device or a shipment or  a geofence from one state to another and their `initialState` property will be set to `false`.
   --ruleId: string # Must be a valid UUIDv4.  (format: uuid)
   --body-url: string # A webhook URL that will receive notifications POST requests.
 ]: any -> record<registration: any> {
@@ -3359,7 +3358,7 @@ export def "notifications-registrations get" [
   --projectId: string
   --channelType: list # Filter result by channelType.  Example: `channelType[]=webhook`, `channelType[]=browserPull,email`
   --userId: string # User ID. Can be used by the project admin to filter email and browser pull notification channels by subscriber.
-  --emailBounce: string@bool-completer # Filters by `emailBounce` property. When set to `true`, returns the email channels which are not active anymore due to email bounce. When set to `false`, returns all the channels which are active (and not only email channels).
+  --emailBounce: oneof<nothing, bool> # Filters by `emailBounce` property. When set to `true`, returns the email channels which are not active anymore due to email bounce. When set to `false`, returns all the channels which are active (and not only email channels).
   --X-Request-Id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting.  Must be a valid UUIDv4.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3390,7 +3389,7 @@ export def "notifications-registrations post" [
   channelType: string@channelType-completer # The type of notification channel.
   --eventSource: string@eventSource-completer # The event source rule type.
   --eventType: string@eventType-completer # Type of the event.  An event is created every time an associated rule or geofence is triggered by a device ingestion. The event type depends on the data the device sends.  Sensors that report numerical data (such as battery, humidity, pressure and temperature sensors), generate an event when the reported sensor reading of the device goes in or out of range, which is configured in the rule. This produces events of BELOW_RANGE, IN_RANGE and ABOVE_RANGE types.  Sensors that report boolean data (such as attach and tamper sensors), generate events when the device  transitions from one state to another, either from `false` to `true` or vice versa. This produces events of FALSE_TO_TRUE and TRUE_TO_FALSE types. The same event types are also generated by the online rule when the device state changes from `offline`  (when the device has stopped ingesting data) to `online` (when the device data ingestion has resumed)  or vice versa.  The acceleration sensor generates events whenever the reported sensor reading  crosses the acceleration threshold (for example, when the device was dropped). This produces events of the type EVENT.  Such events are stateless.  Events of INSIDE_GEOFENCE and OUTSIDE_GEOFENCE types are generated when the device enters or exits a geofence associated with the device.  Events of DWELLING_STARTED type are generated when the device has stayed inside an associated geofence for longer than the threshold duration.  DWELLING_ENDED type events are generated when dwelling of the device has ended.  Events of DETENTION_STARTED type are generated when the device has been stationary for longer than the threshold duration, regardless whether the device is inside  or outside of any geofence.  DETENTION_ENDED type events will be generated when the device starts moving again.  Events of UNUTILIZED type are generated when the device has been stationary for longer than the threshold duration. UTILIZED type events are generated when the device starts moving again after having been stationary.  Events of OVERSTOCK, NORMAL_VOLUME and UNDERSTOCK types are generated when the number of assets inside a geofence crosses the `minVolume` and `maxVolume` thresholds of an associated stock rule.  Events of SHIPMENT_EARLY, SHIPMENT_ON_TIME and SHIPMENT_DELAYED types are generated when a shipment is too early, on time or delayed.
-  --initialState: string@bool-completer # Events with the `initialState` property set as `true` are generated when the rule is  evaluated for the first time. It indicates the fact that this is the initial evaluation  state, which would serve as a starting point for the subsequent rule evaluations. The rest of the rule events would represent a transition of a device or a shipment or  a geofence from one state to another and their `initialState` property will be set to `false`.
+  --initialState: oneof<nothing, bool> # Events with the `initialState` property set as `true` are generated when the rule is  evaluated for the first time. It indicates the fact that this is the initial evaluation  state, which would serve as a starting point for the subsequent rule evaluations. The rest of the rule events would represent a transition of a device or a shipment or  a geofence from one state to another and their `initialState` property will be set to `false`.
   --ruleId: string # Must be a valid UUIDv4.  (format: uuid)
   --body-url: string # A webhook URL that will receive notifications POST requests.
 ]: any -> record<registration: any> {
@@ -3619,7 +3618,7 @@ export def "registry-devices post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoclaim: string@bool-completer # If set to `true`, the licenses are created and devices are immediately claimed by the same user. Supported only with `deviceId` array in body, and not with the `count` parameter. (default: false)
+  --autoclaim: oneof<nothing, bool> # If set to `true`, the licenses are created and devices are immediately claimed by the same user. Supported only with `deviceId` array in body, and not with the `count` parameter. (default: false)
   --X-Request-Id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting.  Must be a valid UUIDv4.
   --count: int # Number of device credentials requested
   --devices: list # item shape: {id?: string}
@@ -3674,7 +3673,7 @@ export def "registry-one-device post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoclaim: string@bool-completer # If set to `true`, the device license is created and the device is immediately claimed by the same user. (default: false)
+  --autoclaim: oneof<nothing, bool> # If set to `true`, the device license is created and the device is immediately claimed by the same user. (default: false)
   --X-Request-Id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting.  Must be a valid UUIDv4.
 ]: nothing -> record<deviceId: string, deviceSecret: string, trackingId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4429,8 +4428,8 @@ export def "shadows delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --appId: string # Application identifier. Used together with an external ID to identify a virtual device.
-  --desired: string@bool-completer # If `true`, all the values of the `desired` shadow will be cleared (default: true)
-  --reported: string@bool-completer # If `true`, all the values of the `reported` shadow will be cleared (default: true)
+  --desired: oneof<nothing, bool> # If `true`, all the values of the `desired` shadow will be cleared (default: true)
+  --reported: oneof<nothing, bool> # If `true`, all the values of the `reported` shadow will be cleared (default: true)
   --X-Request-Id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting.  Must be a valid UUIDv4.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4777,7 +4776,7 @@ export def "shipments get" [
   --name: string # Filter shipments by name. Matching is case-insensitive. The following wildcards can be used: '*' matches any number of any characters, '?' matches any single character.  (e.g. *portugal*)
   --shipmentPlanId: string # Return only shipments that have been instantiated from the specified `shipmentPlanId`
   --shipmentId: string # Filter shipments by `shipmentId` Matching is case-insensitive. The following wildcards can be used: '*' matches any number of any characters, '?' matches any single character.
-  --isSubShipment: string@bool-completer # Returns only shipments marked as subShipments
+  --isSubShipment: oneof<nothing, bool> # Returns only shipments marked as subShipments
   --createdBefore: string # Return only shipments that have been created before specified timestamp (format: date-time)
   --createdAfter: string # Return only shipments that have been created after specified timestamp (format: date-time)
   --qp-sort: string # A paramater to specify field to sort by and order. The following format can be used: 'name:asc' sort by name in ascending order, 'shipmentId:desc' sort by shipmentId in descending order. Allowed fields to sort by: shipmentId, name, status, startedAt, createdAt, endedAt, providedEtd, providedEta, calculatedEtd.  (e.g. name:asc)
@@ -4808,14 +4807,14 @@ export def "shipments post" [
   --allow-errors(-e) # Return full response without error handling
   --projectId: string
   --X-Request-Id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting.  Must be a valid UUIDv4.
-  --autoStart: string@bool-completer # A boolean parameter defining whether the shipment starts upon exiting the first origin location.  (default: true)
+  --autoStart: oneof<nothing, bool> # A boolean parameter defining whether the shipment starts upon exiting the first origin location.  (default: true)
   --description: string # Description of the shipment
   --name: string # Name of the shipment
   --providedEta: string # ETA for the shipment (format: date-time)
   --providedEtd: string # ETD for the shipment (format: date-time)
   --ruleIds: list # Array of `ruleId`s to associate with the shipment
   --segments: list # Array of objects each defining the origin and destination of the segment — item shape: {description?: string, destination: string, name?: string, origin: string, providedEta?: string, providedEtd?: string, trackingId?: string, transportMode: "car"|"truck"|"sea"|"air"|"undefined"}
-  --subShipment: string@bool-completer # Flag telling if shipment is a subShipment. (default: false)
+  --subShipment: oneof<nothing, bool> # Flag telling if shipment is a subShipment. (default: false)
   --shipmentDeparture: string # ETD of the shipment instance. Used to calculate the ETDs and ETAs of all the segments based on the segment durations defined in the plan. (format: date-time)
   --shipmentPlanId: string # Shipment plan ID
 ]: any -> record<shipmentId: string> {
@@ -4898,7 +4897,7 @@ export def "shipments-plans get" [
   --locationId: string # Return only shipments that have been instantiated from the specified `locationId`
   --createdBefore: string # Return only shipments that have been created before specified timestamp (format: date-time)
   --createdAfter: string # Return only shipments that have been created after specified timestamp (format: date-time)
-  --isSubShipment: string@bool-completer # Returns only shipments marked as subShipments
+  --isSubShipment: oneof<nothing, bool> # Returns only shipments marked as subShipments
   --qp-sort: string # A paramater to specify field to sort by and order. Allowed fields to sort by: shipmentPlanId, name, createdAt  (e.g. name:asc)
   --X-Request-Id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting.  Must be a valid UUIDv4.
 ]: nothing -> record<count: int, items: table<autoStart: bool, createdAt: string, description: string, name: string, ruleIds: list, segments: list, shipmentPlanId: string, subShipment: bool>, limit: int, nextPageToken: string, total: int> {
@@ -4928,12 +4927,12 @@ export def "shipments-plans post" [
   --allow-errors(-e) # Return full response without error handling
   --projectId: string
   --X-Request-Id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting.  Must be a valid UUIDv4.
-  --autoStart: string@bool-completer # A boolean parameter defining whether the shipment starts upon exiting the first origin location.  (default: true)
+  --autoStart: oneof<nothing, bool> # A boolean parameter defining whether the shipment starts upon exiting the first origin location.  (default: true)
   --description: string # Description of the shipment
   --name: string # Name of the shipment
   --ruleIds: list # Array of `ruleId`s to associate with the shipment
   --segments: list # Array of objects each defining the origin and destination of the segment — item shape: {description?: string, destination: string, durationS?: int, name?: string, origin: string, trackingId?: string, transportMode: "car"|"truck"|"sea"|"air"|"undefined"}
-  --subShipment: string@bool-completer # Flag telling if shipment is a subShipment. (default: false)
+  --subShipment: oneof<nothing, bool> # Flag telling if shipment is a subShipment. (default: false)
   --options: record # Optional parameters for plan creation — shape: {calculateDurationsFrom?: "actuals"|"providedEstimate"|"calculatedEstimate", copyTrackingIds?: bool}
   --shipmentId: string # Shipment ID
 ]: any -> record<shipmentPlanId: string> {
@@ -5005,11 +5004,11 @@ export def "shipments-plans patch-by-shipmentPlanId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoStart: string@bool-completer # A boolean parameter defining whether the shipment starts upon exiting the first origin location.
+  --autoStart: oneof<nothing, bool> # A boolean parameter defining whether the shipment starts upon exiting the first origin location.
   --description: string # Description of the shipment
   --name: string # Name of the shipment
   --ruleIds: list # Array of `ruleId`s to associate with the shipment
-  --subShipment: string@bool-completer # Flag telling if shipment is a subShipment.
+  --subShipment: oneof<nothing, bool> # Flag telling if shipment is a subShipment.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5149,7 +5148,7 @@ export def "shipments patch-by-shipmentId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoStart: string@bool-completer # A boolean parameter defining whether the shipment starts upon exiting the first origin location.
+  --autoStart: oneof<nothing, bool> # A boolean parameter defining whether the shipment starts upon exiting the first origin location.
   --description: string # Description of the shipment
   --name: string # Name of the shipment
   --providedEta: string # ETA for the shipment (format: date-time)
@@ -5157,7 +5156,7 @@ export def "shipments patch-by-shipmentId" [
   --ruleIds: list # Array of `ruleId`s to associate with the shipment
   --segments: list # Array of objects each defining the origin and destination of the segment — item shape: {description?: string, destination: string, name?: string, origin: string, providedEta?: string, providedEtd?: string, trackingId?: string, transportMode: "car"|"truck"|"sea"|"air"|"undefined"}
   --status: string@status-completer # Status of the shipment
-  --subShipment: string@bool-completer # Flag telling if shipment is a subShipment.
+  --subShipment: oneof<nothing, bool> # Flag telling if shipment is a subShipment.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5330,9 +5329,9 @@ export def "traces get" [
   --appId: string # Application identifier. Used together with an external ID to identify a virtual device.
   --before: float # Milliseconds elapsed since 1 January 1970 00:00:00 UTC. The accepted range is from 1 to the current time.
   --after: float # Milliseconds elapsed since 1 January 1970 00:00:00 UTC. The accepted range is from 0 to the current time.
-  --outliers: string@bool-completer # Flag specifying if only outliers (`true`) or only nonoutliers (`false`) are to be returned. If the parameter is not present both nonoutlier and outlier traces are returned.
+  --outliers: oneof<nothing, bool> # Flag specifying if only outliers (`true`) or only nonoutliers (`false`) are to be returned. If the parameter is not present both nonoutlier and outlier traces are returned.
   --mode: string@mode-completer # Tracker mode.
-  --smooth: string@bool-completer # Flag telling if smoothed traces (true) or non-smoothed (false) traces should get returned. By default the traces are not smoothed.  The smoothing will have an effect on to the stationary trace points only.
+  --smooth: oneof<nothing, bool> # Flag telling if smoothed traces (true) or non-smoothed (false) traces should get returned. By default the traces are not smoothed.  The smoothing will have an effect on to the stationary trace points only.
   --pageToken: string # A token from the previously returned response to retrieve the specified page.
   --count: int # The number of records per page. (default: 1000)
   --X-Request-Id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting.  Must be a valid UUIDv4.
@@ -5587,7 +5586,7 @@ export def "ingestion post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --async: string@bool-completer # If set to `true`, ingests the device data and responds immediately with an empty response body. (default: false)
+  --async: oneof<nothing, bool> # If set to `true`, ingests the device data and responds immediately with an empty response body. (default: false)
   --X-Request-Id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting.  Must be a valid UUIDv4.
   --authorization: string # e.g. Bearer h1.yxPIksZ0ViLq77f1Nh-9cg.NVgGBZVlCU8G7kjV_...
   --body: record
@@ -5704,7 +5703,7 @@ export def "ingestion post-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --async: string@bool-completer # If set to `true`, ingests the device data and responds immediately with an empty response body. (default: false)
+  --async: oneof<nothing, bool> # If set to `true`, ingests the device data and responds immediately with an empty response body. (default: false)
   --X-Request-Id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting.  Must be a valid UUIDv4.
   --authorization: string # e.g. Bearer h1.yxPIksZ0ViLq77f1Nh-9cg.NVgGBZVlCU8G7kjV_...
   --appId: string # The user's project appId. Used together with an external ID to identify the virtual device.

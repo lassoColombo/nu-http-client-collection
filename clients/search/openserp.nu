@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://127.0.0.1:7000"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -116,9 +115,9 @@ export def "search searchWeb" [
   --site: string # Site/domain filter. (e.g. github.com)
   --limit: int # Maximum organic results to return (1-100). Ads may be returned in addition. Omitted or small limits (<=10) parse only the first SERP page; larger limits may paginate when an engine supports it. (default: 10, e.g. 10)
   --start: int # Pagination offset (must be >= 0). (default: 0, e.g. 20)
-  --filter: string@bool-completer # Duplicate filtering flag (primarily used by Google parser behavior). (default: true)
-  --features: string@bool-completer # Populate the top-level serp_features array (AI summaries, answer boxes, people-also-ask, related searches) from the live browser search when supported by the engine.  (default: true)
-  --extract: string@bool-completer # Fetch and embed cleaned target-page content for top web results. (default: false)
+  --filter: oneof<nothing, bool> # Duplicate filtering flag (primarily used by Google parser behavior). (default: true)
+  --features: oneof<nothing, bool> # Populate the top-level serp_features array (AI summaries, answer boxes, people-also-ask, related searches) from the live browser search when supported by the engine.  (default: true)
+  --extract: oneof<nothing, bool> # Fetch and embed cleaned target-page content for top web results. (default: false)
   --extract-top: int # Number of top organic results to enrich when `extract=true`. (default: 3)
   --extract-mode: string@extract-mode-completer # Extraction strategy for target pages. (default: auto)
   --min-runes: int # Auto-mode escalation floor: if the fast (raw) pass yields fewer extracted-text runes than this, escalate to a browser render. `0` (default) uses the built-in floor. Ignored in `fast` and `rendered` modes.
@@ -163,8 +162,8 @@ export def "image searchImages" [
   --site: string # Site/domain filter. (e.g. github.com)
   --limit: int # Maximum organic results to return (1-100). Ads may be returned in addition. Omitted or small limits (<=10) parse only the first SERP page; larger limits may paginate when an engine supports it. (default: 10, e.g. 10)
   --start: int # Pagination offset (must be >= 0). (default: 0, e.g. 20)
-  --filter: string@bool-completer # Duplicate filtering flag (primarily used by Google parser behavior). (default: true)
-  --features: string@bool-completer # Populate the top-level serp_features array (AI summaries, answer boxes, people-also-ask, related searches) from the live browser search when supported by the engine.  (default: true)
+  --filter: oneof<nothing, bool> # Duplicate filtering flag (primarily used by Google parser behavior). (default: true)
+  --features: oneof<nothing, bool> # Populate the top-level serp_features array (AI summaries, answer boxes, people-also-ask, related searches) from the live browser search when supported by the engine.  (default: true)
   --format: string@format-completer # Output format. `json` (default) returns the envelope. `markdown` returns a Markdown document suitable for Slack/email. `text` returns a minimal plain-text block optimised for LLM context windows. `ndjson` returns one result object per line with no envelope. The `Accept` header is also checked (`text/markdown`, `text/plain`, `application/x-ndjson`).  (default: json)
   --X-Use-Proxy: string # Request-scoped proxy override. Use `direct` to disable proxy or a tag name to force a specific proxy pool.
   --X-Proxy-URL: string # Per-request proxy URL supplied by an upstream balancer. Honored only when `proxies.allow_request_proxy_url: true` is set on the worker; otherwise the request is rejected with `400 bad_request` and `reason=REQUEST_PROXY_URL_DISABLED`. Authenticated SOCKS proxies are rejected in browser mode (`reason=UNSUPPORTED_PROXY_SCHEME`). Credentials are never logged or returned. Precedence: `X-Use-Proxy: direct` > `X-Proxy-URL` > `X-Use-Proxy: <tag>` > per-engine configured tag > `proxies.global` > direct.  (e.g. http://user:pass@proxy.example:8080)
@@ -260,13 +259,13 @@ export def "mega-search megaSearch" [
   --site: string # Site/domain filter. (e.g. github.com)
   --limit: int # Maximum organic results to return (1-100). Ads may be returned in addition. Omitted or small limits (<=10) parse only the first SERP page; larger limits may paginate when an engine supports it. (default: 10, e.g. 10)
   --start: int # Pagination offset (must be >= 0). (default: 0, e.g. 20)
-  --filter: string@bool-completer # Duplicate filtering flag (primarily used by Google parser behavior). (default: true)
-  --features: string@bool-completer # Populate the top-level serp_features array (AI summaries, answer boxes, people-also-ask, related searches) from the live browser search when supported by the engine.  (default: true)
+  --filter: oneof<nothing, bool> # Duplicate filtering flag (primarily used by Google parser behavior). (default: true)
+  --features: oneof<nothing, bool> # Populate the top-level serp_features array (AI summaries, answer boxes, people-also-ask, related searches) from the live browser search when supported by the engine.  (default: true)
   --engines: string # Comma-separated engine list for mega endpoints. If omitted, all available engines are used.  (e.g. google,bing,duckduckgo)
   --mode: string@mode-completer # Mega execution mode. `balanced` (default) runs all selected engines in parallel. `any` runs selected engines sequentially in request order until first success. `fast` runs only one engine: the fastest by circuit-breaker average response time.  (default: balanced)
-  --dedupe: string@bool-completer # Enable deduplication by normalized URL. Default `true`.  (default: true)
-  --merge: string@bool-completer # Merge results from all successful engines into one flat list. Default `true`. When `false`, only the first requested engine that returned results is kept.  (default: true)
-  --extract: string@bool-completer # Fetch and embed cleaned target-page content for top web results. (default: false)
+  --dedupe: oneof<nothing, bool> # Enable deduplication by normalized URL. Default `true`.  (default: true)
+  --merge: oneof<nothing, bool> # Merge results from all successful engines into one flat list. Default `true`. When `false`, only the first requested engine that returned results is kept.  (default: true)
+  --extract: oneof<nothing, bool> # Fetch and embed cleaned target-page content for top web results. (default: false)
   --extract-top: int # Number of top organic results to enrich when `extract=true`. (default: 3)
   --extract-mode: string@extract-mode-completer # Extraction strategy for target pages. (default: auto)
   --min-runes: int # Auto-mode escalation floor: if the fast (raw) pass yields fewer extracted-text runes than this, escalate to a browser render. `0` (default) uses the built-in floor. Ignored in `fast` and `rendered` modes.
@@ -310,12 +309,12 @@ export def "mega-image megaImageSearch" [
   --site: string # Site/domain filter. (e.g. github.com)
   --limit: int # Maximum organic results to return (1-100). Ads may be returned in addition. Omitted or small limits (<=10) parse only the first SERP page; larger limits may paginate when an engine supports it. (default: 10, e.g. 10)
   --start: int # Pagination offset (must be >= 0). (default: 0, e.g. 20)
-  --filter: string@bool-completer # Duplicate filtering flag (primarily used by Google parser behavior). (default: true)
-  --features: string@bool-completer # Populate the top-level serp_features array (AI summaries, answer boxes, people-also-ask, related searches) from the live browser search when supported by the engine.  (default: true)
+  --filter: oneof<nothing, bool> # Duplicate filtering flag (primarily used by Google parser behavior). (default: true)
+  --features: oneof<nothing, bool> # Populate the top-level serp_features array (AI summaries, answer boxes, people-also-ask, related searches) from the live browser search when supported by the engine.  (default: true)
   --engines: string # Comma-separated engine list for mega endpoints. If omitted, all available engines are used.  (e.g. google,bing,duckduckgo)
   --mode: string@mode-completer # Mega execution mode. `balanced` (default) runs all selected engines in parallel. `any` runs selected engines sequentially in request order until first success. `fast` runs only one engine: the fastest by circuit-breaker average response time.  (default: balanced)
-  --dedupe: string@bool-completer # Enable deduplication by normalized URL. Default `true`.  (default: true)
-  --merge: string@bool-completer # Merge results from all successful engines into one flat list. Default `true`. When `false`, only the first requested engine that returned results is kept.  (default: true)
+  --dedupe: oneof<nothing, bool> # Enable deduplication by normalized URL. Default `true`.  (default: true)
+  --merge: oneof<nothing, bool> # Merge results from all successful engines into one flat list. Default `true`. When `false`, only the first requested engine that returned results is kept.  (default: true)
   --format: string@format-completer # Output format. `json` (default) returns the envelope. `markdown` returns a Markdown document suitable for Slack/email. `text` returns a minimal plain-text block optimised for LLM context windows. `ndjson` returns one result object per line with no envelope. The `Accept` header is also checked (`text/markdown`, `text/plain`, `application/x-ndjson`).  (default: json)
   --X-Use-Proxy: string # Request-scoped proxy override. Use `direct` to disable proxy or a tag name to force a specific proxy pool.
   --X-Proxy-URL: string # Per-request proxy URL supplied by an upstream balancer. Honored only when `proxies.allow_request_proxy_url: true` is set on the worker; otherwise the request is rejected with `400 bad_request` and `reason=REQUEST_PROXY_URL_DISABLED`. Authenticated SOCKS proxies are rejected in browser mode (`reason=UNSUPPORTED_PROXY_SCHEME`). Credentials are never logged or returned. Precedence: `X-Use-Proxy: direct` > `X-Proxy-URL` > `X-Use-Proxy: <tag>` > per-engine configured tag > `proxies.global` > direct.  (e.g. http://user:pass@proxy.example:8080)
@@ -374,8 +373,8 @@ export def "extract extractURL" [
   --mode: string@mode-completer-1 # Extraction strategy for one URL. (default: auto)
   --min-runes: int # Auto-mode escalation floor: if the fast (raw) pass yields fewer extracted-text runes than this, escalate to a browser render. `0` (default) uses the built-in floor. Ignored in `fast` and `rendered` modes.
   --lang: string # Language code (engine-specific behavior). (e.g. EN)
-  --clean: string@bool-completer # Article-only extraction (default). Set `false` for whole-readable-body extraction that keeps nav/feature/landing content trafilatura would otherwise strip — useful for landing pages, doc indexes, and dashboards.  (default: true)
-  --use-llms-txt: string@bool-completer # When the URL is a site root, probe `/llms-full.txt` then `/llms.txt` and return that LLM-optimized markdown instead of scraping HTML (see https://llmstxt.org/). Falls through to normal extraction when absent. Ignored for non-root URLs, where it would miss the requested page's own content.  (default: false)
+  --clean: oneof<nothing, bool> # Article-only extraction (default). Set `false` for whole-readable-body extraction that keeps nav/feature/landing content trafilatura would otherwise strip — useful for landing pages, doc indexes, and dashboards.  (default: true)
+  --use-llms-txt: oneof<nothing, bool> # When the URL is a site root, probe `/llms-full.txt` then `/llms.txt` and return that LLM-optimized markdown instead of scraping HTML (see https://llmstxt.org/). Falls through to normal extraction when absent. Ignored for non-root URLs, where it would miss the requested page's own content.  (default: false)
   --format: string@format-completer # Output format. `json` (default) returns the envelope. `markdown` returns a Markdown document suitable for Slack/email. `text` returns a minimal plain-text block optimised for LLM context windows. `ndjson` returns one result object per line with no envelope. The `Accept` header is also checked (`text/markdown`, `text/plain`, `application/x-ndjson`).  (default: json)
   --X-Use-Proxy: string # Request-scoped proxy override. Use `direct` to disable proxy or a tag name to force a specific proxy pool.
   --X-Proxy-URL: string # Per-request proxy URL supplied by an upstream balancer. Honored only when `proxies.allow_request_proxy_url: true` is set on the worker; otherwise the request is rejected with `400 bad_request` and `reason=REQUEST_PROXY_URL_DISABLED`. Authenticated SOCKS proxies are rejected in browser mode (`reason=UNSUPPORTED_PROXY_SCHEME`). Credentials are never logged or returned. Precedence: `X-Use-Proxy: direct` > `X-Proxy-URL` > `X-Use-Proxy: <tag>` > per-engine configured tag > `proxies.global` > direct.  (e.g. http://user:pass@proxy.example:8080)
@@ -405,8 +404,8 @@ export def "extract extractURLPost" [
   --allow-errors(-e) # Return full response without error handling
   --body-url: string # format: uri
   --mode: string@mode-completer-1 # default: auto
-  --clean: string@bool-completer # Article-only extraction (default). Set `false` for whole-readable-body extraction that keeps nav/feature/landing content trafilatura would otherwise strip.  (default: true)
-  --use-llms-txt: string@bool-completer # When the URL is a site root, probe `/llms-full.txt` then `/llms.txt` and return that LLM-optimized markdown instead of scraping HTML. Falls through to normal extraction when absent.  (default: false)
+  --clean: oneof<nothing, bool> # Article-only extraction (default). Set `false` for whole-readable-body extraction that keeps nav/feature/landing content trafilatura would otherwise strip.  (default: true)
+  --use-llms-txt: oneof<nothing, bool> # When the URL is a site root, probe `/llms-full.txt` then `/llms.txt` and return that LLM-optimized markdown instead of scraping HTML. Falls through to normal extraction when absent.  (default: false)
   --min-runes: int # Auto-mode escalation floor: if the fast (raw) pass yields fewer extracted-text runes than this, escalate to a browser render. `0` (default) uses the built-in floor. Ignored in `fast` and `rendered` modes.
 ]: any -> record<url: string, title: string, description: string, markdown: string, text: string, headings: table<level: int, text: string>, links: table<text: string, url: string>, canonical: string, lang: string, schema_org: list<record>, og_tags: record, meta: record<mode_used: string, fetched_at: string, bytes: int, took_ms: int>> {
   let input = $in

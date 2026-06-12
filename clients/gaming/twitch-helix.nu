@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.twitch.tv/helix"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -369,7 +368,7 @@ export def "channels modify-channel-information" [
   --delay: int # The number of seconds you want your broadcast buffered before streaming it live. The delay helps ensure fairness during competitive play. Only users with Partner status may set this field. The maximum delay is 900 seconds (15 minutes). (format: int32)
   --tags: list # A list of channel-defined tags to apply to the channel. To remove all tags from the channel, set tags to an empty array. Tags help identify the content that the channel streams. [Learn More](https://help.twitch.tv/s/article/guide-to-tags)      A channel may specify a maximum of 10 tags. Each tag is limited to a maximum of 25 characters and may not be an empty string or contain spaces or special characters. Tags are case insensitive. For readability, consider using camelCasing or PascalCasing.
   --content-classification-labels: list # List of labels that should be set as the Channel’s CCLs. — item shape: {id: "DebatedSocialIssuesAndPolitics"|"DrugsIntoxication"|"SexualThemes"|"ViolentGraphic"|"Gambling"|"ProfanityVulgarity", is_enabled: bool}
-  --is-branded-content: string@bool-completer # Boolean flag indicating if the channel has branded content.
+  --is-branded-content: oneof<nothing, bool> # Boolean flag indicating if the channel has branded content.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -478,16 +477,16 @@ export def "channel-points-custom-rewards create-custom-rewards" [
   title: string # The custom reward’s title. The title may contain a maximum of 45 characters and it must be unique amongst all of the broadcaster’s custom rewards.
   cost: int # The cost of the reward, in Channel Points. The minimum is 1 point. (format: int64)
   --prompt: string # The prompt shown to the viewer when they redeem the reward. Specify a prompt if `is_user_input_required` is **true**. The prompt is limited to a maximum of 200 characters.
-  --is-enabled: string@bool-completer # A Boolean value that determines whether the reward is enabled. Viewers see only enabled rewards. The default is **true**.
+  --is-enabled: oneof<nothing, bool> # A Boolean value that determines whether the reward is enabled. Viewers see only enabled rewards. The default is **true**.
   --background-color: string # The background color to use for the reward. Specify the color using Hex format (for example, #9147FF).
-  --is-user-input-required: string@bool-completer # A Boolean value that determines whether the user needs to enter information when redeeming the reward. See the `prompt` field. The default is **false**.
-  --is-max-per-stream-enabled: string@bool-completer # A Boolean value that determines whether to limit the maximum number of redemptions allowed per live stream (see the `max_per_stream` field). The default is **false**.
+  --is-user-input-required: oneof<nothing, bool> # A Boolean value that determines whether the user needs to enter information when redeeming the reward. See the `prompt` field. The default is **false**.
+  --is-max-per-stream-enabled: oneof<nothing, bool> # A Boolean value that determines whether to limit the maximum number of redemptions allowed per live stream (see the `max_per_stream` field). The default is **false**.
   --max-per-stream: int # The maximum number of redemptions allowed per live stream. Applied only if `is_max_per_stream_enabled` is **true**. The minimum value is 1. (format: int32)
-  --is-max-per-user-per-stream-enabled: string@bool-completer # A Boolean value that determines whether to limit the maximum number of redemptions allowed per user per stream (see the `max_per_user_per_stream` field). The default is **false**.
+  --is-max-per-user-per-stream-enabled: oneof<nothing, bool> # A Boolean value that determines whether to limit the maximum number of redemptions allowed per user per stream (see the `max_per_user_per_stream` field). The default is **false**.
   --max-per-user-per-stream: int # The maximum number of redemptions allowed per user per stream. Applied only if `is_max_per_user_per_stream_enabled` is **true**. The minimum value is 1. (format: int32)
-  --is-global-cooldown-enabled: string@bool-completer # A Boolean value that determines whether to apply a cooldown period between redemptions (see the `global_cooldown_seconds` field for the duration of the cooldown period). The default is **false**.
+  --is-global-cooldown-enabled: oneof<nothing, bool> # A Boolean value that determines whether to apply a cooldown period between redemptions (see the `global_cooldown_seconds` field for the duration of the cooldown period). The default is **false**.
   --global-cooldown-seconds: int # The cooldown period, in seconds. Applied only if the `is_global_cooldown_enabled` field is **true**. The minimum value is 1; however, the minimum value is 60 for it to be shown in the Twitch UX. (format: int32)
-  --should-redemptions-skip-request-queue: string@bool-completer # A Boolean value that determines whether redemptions should be set to FULFILLED status immediately when a reward is redeemed. If **false**, status is set to UNFULFILLED and follows the normal request queue process. The default is **false**.
+  --should-redemptions-skip-request-queue: oneof<nothing, bool> # A Boolean value that determines whether redemptions should be set to FULFILLED status immediately when a reward is redeemed. If **false**, status is set to UNFULFILLED and follows the normal request queue process. The default is **false**.
 ]: any -> record<data: table<broadcaster_id: string, broadcaster_login: string, broadcaster_name: string, id: string, title: string, prompt: string, cost: int, image: record, default_image: record, background_color: string, is_enabled: bool, is_user_input_required: bool, max_per_stream_setting: record, max_per_user_per_stream_setting: record, global_cooldown_setting: record, is_paused: bool, is_in_stock: bool, should_redemptions_skip_request_queue: bool, redemptions_redeemed_current_stream: int, cooldown_expires_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -541,7 +540,7 @@ export def "channel-points-custom-rewards get-custom-reward" [
   --allow-errors(-e) # Return full response without error handling
   --broadcaster-id: string # The ID of the broadcaster whose custom rewards you want to get. This ID must match the user ID found in the OAuth token.
   --id: list # A list of IDs to filter the rewards by. To specify more than one ID, include this parameter for each reward you want to get. For example, `id=1234&id=5678`. You may specify a maximum of 50 IDs.      Duplicate IDs are ignored. The response contains only the IDs that were found. If none of the IDs were found, the response is 404 Not Found.
-  --only-manageable-rewards: string@bool-completer # A Boolean value that determines whether the response contains only the custom rewards that the app may manage (the app is identified by the ID in the Client-Id header). Set to **true** to get only the custom rewards that the app may manage. The default is **false**.
+  --only-manageable-rewards: oneof<nothing, bool> # A Boolean value that determines whether the response contains only the custom rewards that the app may manage (the app is identified by the ID in the Client-Id header). Set to **true** to get only the custom rewards that the app may manage. The default is **false**.
 ]: nothing -> record<data: table<broadcaster_id: string, broadcaster_login: string, broadcaster_name: string, id: string, title: string, prompt: string, cost: int, image: record, default_image: record, background_color: string, is_enabled: bool, is_user_input_required: bool, max_per_stream_setting: record, max_per_user_per_stream_setting: record, global_cooldown_setting: record, is_paused: bool, is_in_stock: bool, should_redemptions_skip_request_queue: bool, redemptions_redeemed_current_stream: int, cooldown_expires_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -571,16 +570,16 @@ export def "channel-points-custom-rewards update-custom-reward" [
   --prompt: string # The prompt shown to the viewer when they redeem the reward. Specify a prompt if `is_user_input_required` is **true**. The prompt is limited to a maximum of 200 characters.
   --cost: int # The cost of the reward, in channel points. The minimum is 1 point. (format: int64)
   --background-color: string # The background color to use for the reward. Specify the color using Hex format (for example, \\#00E5CB).
-  --is-enabled: string@bool-completer # A Boolean value that indicates whether the reward is enabled. Set to **true** to enable the reward. Viewers see only enabled rewards.
-  --is-user-input-required: string@bool-completer # A Boolean value that determines whether users must enter information to redeem the reward. Set to **true** if user input is required. See the `prompt` field.
-  --is-max-per-stream-enabled: string@bool-completer # A Boolean value that determines whether to limit the maximum number of redemptions allowed per live stream (see the `max_per_stream` field). Set to **true** to limit redemptions.
+  --is-enabled: oneof<nothing, bool> # A Boolean value that indicates whether the reward is enabled. Set to **true** to enable the reward. Viewers see only enabled rewards.
+  --is-user-input-required: oneof<nothing, bool> # A Boolean value that determines whether users must enter information to redeem the reward. Set to **true** if user input is required. See the `prompt` field.
+  --is-max-per-stream-enabled: oneof<nothing, bool> # A Boolean value that determines whether to limit the maximum number of redemptions allowed per live stream (see the `max_per_stream` field). Set to **true** to limit redemptions.
   --max-per-stream: int # The maximum number of redemptions allowed per live stream. Applied only if `is_max_per_stream_enabled` is **true**. The minimum value is 1. (format: int64)
-  --is-max-per-user-per-stream-enabled: string@bool-completer # A Boolean value that determines whether to limit the maximum number of redemptions allowed per user per stream (see `max_per_user_per_stream`). The minimum value is 1\. Set to **true** to limit redemptions.
+  --is-max-per-user-per-stream-enabled: oneof<nothing, bool> # A Boolean value that determines whether to limit the maximum number of redemptions allowed per user per stream (see `max_per_user_per_stream`). The minimum value is 1\. Set to **true** to limit redemptions.
   --max-per-user-per-stream: int # The maximum number of redemptions allowed per user per stream. Applied only if `is_max_per_user_per_stream_enabled` is **true**. (format: int64)
-  --is-global-cooldown-enabled: string@bool-completer # A Boolean value that determines whether to apply a cooldown period between redemptions. Set to **true** to apply a cooldown period. For the duration of the cooldown period, see `global_cooldown_seconds`.
+  --is-global-cooldown-enabled: oneof<nothing, bool> # A Boolean value that determines whether to apply a cooldown period between redemptions. Set to **true** to apply a cooldown period. For the duration of the cooldown period, see `global_cooldown_seconds`.
   --global-cooldown-seconds: int # The cooldown period, in seconds. Applied only if `is_global_cooldown_enabled` is **true**. The minimum value is 1; however, for it to be shown in the Twitch UX, the minimum value is 60. (format: int64)
-  --is-paused: string@bool-completer # A Boolean value that determines whether to pause the reward. Set to **true** to pause the reward. Viewers can’t redeem paused rewards..
-  --should-redemptions-skip-request-queue: string@bool-completer # A Boolean value that determines whether redemptions should be set to FULFILLED status immediately when a reward is redeemed. If **false**, status is set to UNFULFILLED and follows the normal request queue process.
+  --is-paused: oneof<nothing, bool> # A Boolean value that determines whether to pause the reward. Set to **true** to pause the reward. Viewers can’t redeem paused rewards..
+  --should-redemptions-skip-request-queue: oneof<nothing, bool> # A Boolean value that determines whether redemptions should be set to FULFILLED status immediately when a reward is redeemed. If **false**, status is set to UNFULFILLED and follows the normal request queue process.
 ]: any -> record<data: table<broadcaster_id: string, broadcaster_login: string, broadcaster_name: string, id: string, title: string, prompt: string, cost: int, image: record, default_image: record, background_color: string, is_enabled: bool, is_user_input_required: bool, max_per_stream_setting: record, max_per_user_per_stream_setting: record, global_cooldown_setting: record, is_paused: bool, is_in_stock: bool, should_redemptions_skip_request_queue: bool, redemptions_redeemed_current_stream: int, cooldown_expires_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -887,15 +886,15 @@ export def "chat-settings update-chat-settings" [
   --allow-errors(-e) # Return full response without error handling
   --broadcaster-id: string # The ID of the broadcaster whose chat settings you want to update.
   --moderator-id: string # The ID of a user that has permission to moderate the broadcaster’s chat room, or the broadcaster’s ID if they’re making the update. This ID must match the user ID in the user access token.
-  --emote-mode: string@bool-completer # A Boolean value that determines whether chat messages must contain only emotes.      Set to **true** if only emotes are allowed; otherwise, **false**. The default is **false**.
-  --follower-mode: string@bool-completer # A Boolean value that determines whether the broadcaster restricts the chat room to followers only.      Set to **true** if the broadcaster restricts the chat room to followers only; otherwise, **false**. The default is **true**.      To specify how long users must follow the broadcaster before being able to participate in the chat room, see the `follower_mode_duration` field.
+  --emote-mode: oneof<nothing, bool> # A Boolean value that determines whether chat messages must contain only emotes.      Set to **true** if only emotes are allowed; otherwise, **false**. The default is **false**.
+  --follower-mode: oneof<nothing, bool> # A Boolean value that determines whether the broadcaster restricts the chat room to followers only.      Set to **true** if the broadcaster restricts the chat room to followers only; otherwise, **false**. The default is **true**.      To specify how long users must follow the broadcaster before being able to participate in the chat room, see the `follower_mode_duration` field.
   --follower-mode-duration: int # The length of time, in minutes, that users must follow the broadcaster before being able to participate in the chat room. Set only if `follower_mode` is **true**. Possible values are: 0 (no restriction) through 129600 (3 months). The default is 0. (format: int32)
-  --non-moderator-chat-delay: string@bool-completer # A Boolean value that determines whether the broadcaster adds a short delay before chat messages appear in the chat room. This gives chat moderators and bots a chance to remove them before viewers can see the message.      Set to **true** if the broadcaster applies a delay; otherwise, **false**. The default is **false**.      To specify the length of the delay, see the `non_moderator_chat_delay_duration` field.
+  --non-moderator-chat-delay: oneof<nothing, bool> # A Boolean value that determines whether the broadcaster adds a short delay before chat messages appear in the chat room. This gives chat moderators and bots a chance to remove them before viewers can see the message.      Set to **true** if the broadcaster applies a delay; otherwise, **false**. The default is **false**.      To specify the length of the delay, see the `non_moderator_chat_delay_duration` field.
   --non-moderator-chat-delay-duration: int@non-moderator-chat-delay-duration-completer # The amount of time, in seconds, that messages are delayed before appearing in chat. Set only if `non_moderator_chat_delay` is **true**. Possible values are:      * 2 — 2 second delay (recommended) * 4 — 4 second delay * 6 — 6 second delay (format: int32)
-  --slow-mode: string@bool-completer # A Boolean value that determines whether the broadcaster limits how often users in the chat room are allowed to send messages. Set to **true** if the broadcaster applies a wait period between messages; otherwise, **false**. The default is **false**.      To specify the delay, see the `slow_mode_wait_time` field.
+  --slow-mode: oneof<nothing, bool> # A Boolean value that determines whether the broadcaster limits how often users in the chat room are allowed to send messages. Set to **true** if the broadcaster applies a wait period between messages; otherwise, **false**. The default is **false**.      To specify the delay, see the `slow_mode_wait_time` field.
   --slow-mode-wait-time: int # The amount of time, in seconds, that users must wait between sending messages. Set only if `slow_mode` is **true**.      Possible values are: 3 (3 second delay) through 120 (2 minute delay). The default is 30 seconds. (format: int32)
-  --subscriber-mode: string@bool-completer # A Boolean value that determines whether only users that subscribe to the broadcaster’s channel may talk in the chat room.      Set to **true** if the broadcaster restricts the chat room to subscribers only; otherwise, **false**. The default is **false**.
-  --unique-chat-mode: string@bool-completer # A Boolean value that determines whether the broadcaster requires users to post only unique messages in the chat room.      Set to **true** if the broadcaster allows only unique messages; otherwise, **false**. The default is **false**.
+  --subscriber-mode: oneof<nothing, bool> # A Boolean value that determines whether only users that subscribe to the broadcaster’s channel may talk in the chat room.      Set to **true** if the broadcaster restricts the chat room to subscribers only; otherwise, **false**. The default is **false**.
+  --unique-chat-mode: oneof<nothing, bool> # A Boolean value that determines whether the broadcaster requires users to post only unique messages in the chat room.      Set to **true** if the broadcaster allows only unique messages; otherwise, **false**. The default is **false**.
 ]: any -> record<data: table<broadcaster_id: string, emote_mode: bool, follower_mode: bool, follower_mode_duration: int, moderator_id: string, non_moderator_chat_delay: bool, non_moderator_chat_delay_duration: int, slow_mode: bool, slow_mode_wait_time: int, subscriber_mode: bool, unique_chat_mode: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -976,7 +975,7 @@ export def "chat-announcements send-chat-announcement" [
   --moderator-id: string # The ID of a user who has permission to moderate the broadcaster’s chat room, or the broadcaster’s ID if they’re sending the announcement. This ID must match the user ID in the user access token.
   message: string # The announcement to make in the broadcaster’s chat room. Announcements are limited to a maximum of 500 characters; announcements longer than 500 characters are truncated.
   --color: string@color-completer # The color used to highlight the announcement. Possible case-sensitive values are:      * blue * green * orange * purple * primary (default)    If `color` is set to _primary_ or is not set, the channel’s accent color is used to highlight the announcement (see **Profile Accent Color** under [profile settings](https://www.twitch.tv/settings/profile), **Channel and Videos**, and **Brand**). (default: primary)
-  --source-only: string@bool-completer # Determines if the chat announcement is sent only to the source channel defined by broadcaster\_id during a shared chat session. This has no effect if the announcement is not sent sent during a shared chat session. The default value is `false`. NOTE: This parameter can only be set when utilizing an App Access Token. It cannot be specified when a User Access Token is used, and will instead result in an HTTP 400 error.
+  --source-only: oneof<nothing, bool> # Determines if the chat announcement is sent only to the source channel defined by broadcaster\_id during a shared chat session. This has no effect if the announcement is not sent sent during a shared chat session. The default value is `false`. NOTE: This parameter can only be set when utilizing an App Access Token. It cannot be specified when a User Access Token is used, and will instead result in an HTTP 400 error.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1033,7 +1032,7 @@ export def "chat-messages send-chat-message" [
   sender_id: string # The ID of the user sending the message. This ID must match the user ID in the user access token.
   message: string # The message to send. The message is limited to a maximum of 500 characters. Chat messages can also include emoticons. To include emoticons, use the name of the emote. The names are case sensitive. Don’t include colons around the name (e.g., :bleedPurple:). If Twitch recognizes the name, Twitch converts the name to the emote before writing the chat message to the chat room
   --reply-parent-message-id: string # The ID of the chat message being replied to.
-  --for-source-only: string@bool-completer # **NOTE:** This parameter can only be set when utilizing an App Access Token. It cannot be specified when a User Access Token is used, and will instead result in an HTTP 400 error.      Determines if the chat message is sent only to the source channel (defined by _broadcaster\_id_) during a shared chat session. This has no effect if the message is not sent during a shared chat session.      If this parameter is not set, the default value when using an App Access Token is `false`. On May 19, 2025 the default value for this parameter will be updated to `true`, and chat messages sent using an App Access Token will only be shared with the source channel by default. If you prefer to send a chat message to both channels in a shared chat session, make sure this parameter is explicitly set to `false` in your API request before May 19.
+  --for-source-only: oneof<nothing, bool> # **NOTE:** This parameter can only be set when utilizing an App Access Token. It cannot be specified when a User Access Token is used, and will instead result in an HTTP 400 error.      Determines if the chat message is sent only to the source channel (defined by _broadcaster\_id_) during a shared chat session. This has no effect if the message is not sent during a shared chat session.      If this parameter is not set, the default value when using an App Access Token is `false`. On May 19, 2025 the default value for this parameter will be updated to `true`, and chat messages sent using an App Access Token will only be shared with the source channel by default. If you prefer to send a chat message to both channels in a shared chat session, make sure this parameter is explicitly set to `false` in your API request before May 19.
 ]: any -> record<data: table<message_id: string, is_sent: bool, drop_reason: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1142,7 +1141,7 @@ export def "clips get-clips" [
   --first: int # The maximum number of clips to return per page in the response. The minimum page size is 1 clip per page and the maximum is 100\. The default is 20. (format: int32)
   --before: string # The cursor used to get the previous page of results. The **Pagination** object in the response contains the cursor’s value. [Read More](https://dev.twitch.tv/docs/api/guide#pagination)
   --after: string # The cursor used to get the next page of results. The **Pagination** object in the response contains the cursor’s value. [Read More](https://dev.twitch.tv/docs/api/guide#pagination)
-  --is-featured: string@bool-completer # A Boolean value that determines whether the response includes featured clips. If **true**, returns only clips that are featured. If **false**, returns only clips that aren’t featured. All clips are returned if this parameter is not present.
+  --is-featured: oneof<nothing, bool> # A Boolean value that determines whether the response includes featured clips. If **true**, returns only clips that are featured. If **false**, returns only clips that aren’t featured. All clips are returned if this parameter is not present.
 ]: nothing -> record<data: table<id: string, url: string, embed_url: string, broadcaster_id: string, broadcaster_name: string, creator_id: string, creator_name: string, video_id: string, game_id: string, language: string, title: string, view_count: int, created_at: string, thumbnail_url: string, duration: float, vod_offset: int, is_featured: bool>, pagination: record<cursor: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1542,7 +1541,7 @@ export def "extensions-pubsub send-extension-pubsub-message" [
   --allow-errors(-e) # Return full response without error handling
   target: list # The target of the message. Possible values are:      * broadcast * global * whisper-<user-id>    If `is_global_broadcast` is **true**, you must set this field to global. The broadcast and global values are mutually exclusive; specify only one of them.
   broadcaster_id: string # The ID of the broadcaster to send the message to. Don’t include this field if `is_global_broadcast` is set to **true**.
-  --is-global-broadcast: string@bool-completer # A Boolean value that determines whether the message should be sent to all channels where your extension is active. Set to **true** if the message should be sent to all channels. The default is **false**.
+  --is-global-broadcast: oneof<nothing, bool> # A Boolean value that determines whether the message should be sent to all channels where your extension is active. Set to **true** if the message should be sent to all channels. The default is **false**.
   message: string # The message to send. The message can be a plain-text string or a string-encoded JSON object. The message is limited to a maximum of 5 KB.
 ]: any -> any {
   let input = $in
@@ -1722,7 +1721,7 @@ export def "bits-extensions get-extension-bits-products" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --should-include-all: string@bool-completer # A Boolean value that determines whether to include disabled or expired Bits products in the response. The default is **false**.
+  --should-include-all: oneof<nothing, bool> # A Boolean value that determines whether to include disabled or expired Bits products in the response. The default is **false**.
 ]: nothing -> record<data: table<sku: string, cost: record, in_development: bool, display_name: string, expiration: string, is_broadcast: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1750,9 +1749,9 @@ export def "bits-extensions update-extension-bits-product" [
   sku: string # The product's SKU. The SKU must be unique within an extension. The product's SKU cannot be changed. The SKU may contain only alphanumeric characters, dashes (-), underscores (\_), and periods (.) and is limited to a maximum of 255 characters. No spaces.
   cost: record # An object that contains the product's cost information. — shape: {amount: int, type: "bits"}
   display_name: string # The product's name as displayed in the extension. The maximum length is 255 characters.
-  --in-development: string@bool-completer # A Boolean value that indicates whether the product is in development. Set to **true** if the product is in development and not available for public use. The default is **false**.
+  --in-development: oneof<nothing, bool> # A Boolean value that indicates whether the product is in development. Set to **true** if the product is in development and not available for public use. The default is **false**.
   --expiration: string # The date and time, in RFC3339 format, when the product expires. If not set, the product does not expire. To disable the product, set the expiration date to a date in the past. (format: date-time)
-  --is-broadcast: string@bool-completer # A Boolean value that determines whether Bits product purchase events are broadcast to all instances of the extension on a channel. The events are broadcast via the `onTransactionComplete` helper callback. The default is **false**.
+  --is-broadcast: oneof<nothing, bool> # A Boolean value that determines whether Bits product purchase events are broadcast to all instances of the extension on a channel. The events are broadcast via the `onTransactionComplete` helper callback. The default is **false**.
 ]: any -> record<data: table<sku: string, cost: record, in_development: bool, display_name: string, expiration: string, is_broadcast: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1962,11 +1961,11 @@ export def "guest-star-channel-settings update-channel-guest-star-settings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --broadcaster-id: string # The ID of the broadcaster you want to update Guest Star settings for.
-  --is-moderator-send-live-enabled: string@bool-completer # Flag determining if Guest Star moderators have access to control whether a guest is live once assigned to a slot.
+  --is-moderator-send-live-enabled: oneof<nothing, bool> # Flag determining if Guest Star moderators have access to control whether a guest is live once assigned to a slot.
   --slot-count: int # Number of slots the Guest Star call interface will allow the host to add to a call. Required to be between 1 and 6. (format: int32)
-  --is-browser-source-audio-enabled: string@bool-completer # Flag determining if Browser Sources subscribed to sessions on this channel should output audio
+  --is-browser-source-audio-enabled: oneof<nothing, bool> # Flag determining if Browser Sources subscribed to sessions on this channel should output audio
   --group-layout: string@group-layout-completer # This setting determines how the guests within a session should be laid out within the browser source. Can be one of the following values:       * `TILED_LAYOUT`: All live guests are tiled within the browser source with the same size. * `SCREENSHARE_LAYOUT`: All live guests are tiled within the browser source with the same size. If there is an active screen share, it is sized larger than the other guests. * `HORIZONTAL_LAYOUT`: All live guests are arranged in a horizontal bar within the browser source * `VERTICAL_LAYOUT`: All live guests are arranged in a vertical bar within the browser source
-  --regenerate-browser-sources: string@bool-completer # Flag determining if Guest Star should regenerate the auth token associated with the channel’s browser sources. Providing a true value for this will immediately invalidate all browser sources previously configured in your streaming software.
+  --regenerate-browser-sources: oneof<nothing, bool> # Flag determining if Guest Star should regenerate the auth token associated with the channel’s browser sources. Providing a true value for this will immediately invalidate all browser sources previously configured in your streaming software.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2236,9 +2235,9 @@ export def "guest-star-slot-settings update-guest-star-slot-settings" [
   --moderator-id: string # The ID of the broadcaster or a user that has permission to moderate the broadcaster’s chat room. This ID must match the user ID in the user access token.
   --session-id: string # The ID of the Guest Star session in which to update a slot’s settings.
   --slot-id: string # The slot assignment that has previously been assigned to a user.
-  --is-audio-enabled: string@bool-completer # Flag indicating whether the slot is allowed to share their audio with the rest of the session. If false, the slot will be muted in any views containing the slot.
-  --is-video-enabled: string@bool-completer # Flag indicating whether the slot is allowed to share their video with the rest of the session. If false, the slot will have no video shared in any views containing the slot.
-  --is-live: string@bool-completer # Flag indicating whether the user assigned to this slot is visible/can be heard from any public subscriptions. Generally, this determines whether or not the slot is enabled in any broadcasting software integrations.
+  --is-audio-enabled: oneof<nothing, bool> # Flag indicating whether the slot is allowed to share their audio with the rest of the session. If false, the slot will be muted in any views containing the slot.
+  --is-video-enabled: oneof<nothing, bool> # Flag indicating whether the slot is allowed to share their video with the rest of the session. If false, the slot will have no video shared in any views containing the slot.
+  --is-live: oneof<nothing, bool> # Flag indicating whether the user assigned to this slot is visible/can be heard from any public subscriptions. Generally, this determines whether or not the slot is enabled in any broadcasting software integrations.
   --volume: int # Value from 0-100 that controls the audio volume for shared views containing the slot. (format: int32)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2837,7 +2836,7 @@ export def "moderation-shield-mode update-shield-mode-status" [
   --allow-errors(-e) # Return full response without error handling
   --broadcaster-id: string # The ID of the broadcaster whose Shield Mode you want to activate or deactivate.
   --moderator-id: string # The ID of the broadcaster or a user that is one of the broadcaster’s moderators. This ID must match the user ID in the access token.
-  --is-active: string@bool-completer # A Boolean value that determines whether to activate Shield Mode. Set to **true** to activate Shield Mode; otherwise, **false** to deactivate Shield Mode.
+  --is-active: oneof<nothing, bool> # A Boolean value that determines whether to activate Shield Mode. Set to **true** to activate Shield Mode; otherwise, **false** to deactivate Shield Mode.
 ]: any -> record<data: table<is_active: bool, moderator_id: string, moderator_login: string, moderator_name: string, last_activated_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3007,7 +3006,7 @@ export def "polls create-poll" [
   title: string # The question that viewers will vote on. For example, _What game should I play next?_ The question may contain a maximum of 60 characters.
   choices: list # A list of choices that viewers may choose from. The list must contain a minimum of 2 choices and up to a maximum of 5 choices. — item shape: {title: string}
   duration: int # The length of time (in seconds) that the poll will run for. The minimum is 15 seconds and the maximum is 1800 seconds (30 minutes). (format: int32)
-  --channel-points-voting-enabled: string@bool-completer # A Boolean value that indicates whether viewers may cast additional votes using Channel Points. If **true**, the viewer may cast more than one vote but each additional vote costs the number of Channel Points specified in `channel_points_per_vote`. The default is **false** (viewers may cast only one vote). For information about Channel Points, see [Channel Points Guide](https://help.twitch.tv/s/article/channel-points-guide).
+  --channel-points-voting-enabled: oneof<nothing, bool> # A Boolean value that indicates whether viewers may cast additional votes using Channel Points. If **true**, the viewer may cast more than one vote but each additional vote costs the number of Channel Points specified in `channel_points_per_vote`. The default is **false** (viewers may cast only one vote). For information about Channel Points, see [Channel Points Guide](https://help.twitch.tv/s/article/channel-points-guide).
   --channel-points-per-vote: int # The number of points that the viewer must spend to cast one additional vote. The minimum is 1 and the maximum is 1000000\. Set only if `ChannelPointsVotingEnabled` is **true**. (format: int32)
 ]: any -> record<data: table<id: string, broadcaster_id: string, broadcaster_name: string, broadcaster_login: string, title: string, choices: list, bits_voting_enabled: bool, bits_per_vote: int, channel_points_voting_enabled: bool, channel_points_per_vote: int, status: string, duration: int, started_at: string, ended_at: string>> {
   let input = $in
@@ -3251,7 +3250,7 @@ export def "schedule-settings update-channel-stream-schedule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --broadcaster-id: string # The ID of the broadcaster whose schedule settings you want to update. The ID must match the user ID in the user access token.
-  --is-vacation-enabled: string@bool-completer # A Boolean value that indicates whether the broadcaster has scheduled a vacation. Set to **true** to enable Vacation Mode and add vacation dates, or **false** to cancel a previously scheduled vacation.
+  --is-vacation-enabled: oneof<nothing, bool> # A Boolean value that indicates whether the broadcaster has scheduled a vacation. Set to **true** to enable Vacation Mode and add vacation dates, or **false** to cancel a previously scheduled vacation.
   --vacation-start-time: string # The UTC date and time of when the broadcaster’s vacation starts. Specify the date and time in RFC3339 format (for example, 2021-05-16T00:00:00Z). Required if _is\_vacation\_enabled_ is **true**. (format: date-time)
   --vacation-end-time: string # The UTC date and time of when the broadcaster’s vacation ends. Specify the date and time in RFC3339 format (for example, 2021-05-30T23:59:59Z). Required if _is\_vacation\_enabled_ is **true**. (format: date-time)
   --timezone: string # The time zone that the broadcaster broadcasts from. Specify the time zone using [IANA time zone database](https://www.iana.org/time-zones) format (for example, America/New\_York). Required if _is\_vacation\_enabled_ is **true**.
@@ -3282,7 +3281,7 @@ export def "schedule-segment create-channel-stream-schedule-segment" [
   start_time: string # The date and time that the broadcast segment starts. Specify the date and time in RFC3339 format (for example, 2021-07-01T18:00:00Z). (format: date-time)
   timezone: string # The time zone where the broadcast takes place. Specify the time zone using [IANA time zone database](https://www.iana.org/time-zones) format (for example, America/New\_York).
   duration: string # The length of time, in minutes, that the broadcast is scheduled to run. The duration must be in the range 30 through 1380 (23 hours).
-  --is-recurring: string@bool-completer # A Boolean value that determines whether the broadcast recurs weekly. Is **true** if the broadcast recurs weekly. Only partners and affiliates may add non-recurring broadcasts.
+  --is-recurring: oneof<nothing, bool> # A Boolean value that determines whether the broadcast recurs weekly. Is **true** if the broadcast recurs weekly. Only partners and affiliates may add non-recurring broadcasts.
   --category-id: string # The ID of the category that best represents the broadcast’s content. To get the category ID, use the [Search Categories](https://dev.twitch.tv/docs/api/reference#search-categories) endpoint.
   --title: string # The broadcast’s title. The title may contain a maximum of 140 characters.
 ]: any -> record<data: record<segments: list<record>, broadcaster_id: string, broadcaster_name: string, broadcaster_login: string, vacation: record<start_time: string, end_time: string>>> {
@@ -3317,7 +3316,7 @@ export def "schedule-segment update-channel-stream-schedule-segment" [
   --duration: string # The length of time, in minutes, that the broadcast is scheduled to run. The duration must be in the range 30 through 1380 (23 hours).
   --category-id: string # The ID of the category that best represents the broadcast’s content. To get the category ID, use the [Search Categories](https://dev.twitch.tv/docs/api/reference#search-categories) endpoint.
   --title: string # The broadcast’s title. The title may contain a maximum of 140 characters.
-  --is-canceled: string@bool-completer # A Boolean value that indicates whether the broadcast is canceled. Set to **true** to cancel the segment.      **NOTE**: For recurring segments, the API cancels the first segment after the current UTC date and time and not the specified segment (unless the specified segment is the next segment after the current UTC date and time).
+  --is-canceled: oneof<nothing, bool> # A Boolean value that indicates whether the broadcast is canceled. Set to **true** to cancel the segment.      **NOTE**: For recurring segments, the API cancels the first segment after the current UTC date and time and not the specified segment (unless the specified segment is the next segment after the current UTC date and time).
   --timezone: string # The time zone where the broadcast takes place. Specify the time zone using [IANA time zone database](https://www.iana.org/time-zones) format (for example, America/New\_York).
 ]: any -> record<data: record<segments: list<record>, broadcaster_id: string, broadcaster_name: string, broadcaster_login: string, vacation: record<start_time: string, end_time: string>>> {
   let input = $in
@@ -3397,7 +3396,7 @@ export def "search-channels search-channels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string # The URI-encoded search string. For example, encode search strings like _angel of death_ as `angel%20of%20death`.
-  --live-only: string@bool-completer # A Boolean value that determines whether the response includes only channels that are currently streaming live. Set to **true** to get only channels that are streaming live; otherwise, **false** to get live and offline channels. The default is **false**.
+  --live-only: oneof<nothing, bool> # A Boolean value that determines whether the response includes only channels that are currently streaming live. Set to **true** to get only channels that are streaming live; otherwise, **false** to get live and offline channels. The default is **false**.
   --first: int # The maximum number of items to return per page in the response. The minimum page size is 1 item per page and the maximum is 100 items per page. The default is 20. (format: int32)
   --after: string # The cursor used to get the next page of results. The **Pagination** object in the response contains the cursor’s value. [Read More](https://dev.twitch.tv/docs/api/guide#pagination)
 ]: nothing -> record<data: table<broadcaster_language: string, broadcaster_login: string, display_name: string, game_id: string, game_name: string, id: string, is_live: bool, tag_ids: list, tags: list, thumbnail_url: string, title: string, started_at: string>, pagination: record<cursor: string>> {

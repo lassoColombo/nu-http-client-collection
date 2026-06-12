@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://{hostname}/appsec/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -223,7 +222,7 @@ export def "api-discovery get-api-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeHidden: string@bool-completer # If `true`, includes all discovered APIs including ones you have hidden. By default, `false` returns only the visible APIs. (default: false, e.g. true)
+  --includeHidden: oneof<nothing, bool> # If `true`, includes all discovered APIs including ones you have hidden. By default, `false` returns only the visible APIs. (default: false, e.g. true)
   --search: string # Filter results by hostname or basepath. You can also match on substrings. (e.g. www.example.com)
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<apis: table<basePath: string, encodedBasePath: string, encodedHost: string, host: string, lastModified: string, type: string, visibility: string>> {
@@ -251,7 +250,7 @@ export def "api-discovery-host-basepath get-api-details" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeHidden: string@bool-completer # If `true`, includes all discovered APIs including ones you have hidden. By default, `false` returns only the visible APIs. (default: false, e.g. true)
+  --includeHidden: oneof<nothing, bool> # If `true`, includes all discovered APIs including ones you have hidden. By default, `false` returns only the visible APIs. (default: false, e.g. true)
   --search: string # Filter results by name, description, or ID. You can match on substrings. (e.g. SQL Injection)
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<apiEndpointIds: list<int>, basePath: string, discoveryType: string, enrichment: record<options: int, browsers: int, clientErrors: int, clientReputation: float, dateFirstSeen: string, dateLastModified: string, dateLastSeen: string, deletes: int, dosAttackers: float, formats: list<string>, gets: int, hostSamples: list<string>, mobiles: int, newlyDiscovered: bool, paths: list<record>, posts: int, puts: int, redirects: int, requests: int, requestsBadReputation: float, requestsLastDay: int, scanningTools: float, serverErrors: int, successes: int, totalDailyRequests: list<record>, totalErrors: int, trend: string, webAttackers: float, webScrapers: float>, host: string, visibility: string> {
@@ -280,7 +279,7 @@ export def "api-discovery-host-basepath put-api-visibility" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
-  --hidden: string@bool-completer # Describes an API's visibility status.
+  --hidden: oneof<nothing, bool> # Describes an API's visibility status.
   --reason: string@reason-completer # The reason you've decided to hide the API from the API list. Use `NOT_ELIGIBLE` if you want to hide it for now and choose what to do with the API at a later time. Use `FALSE_POSITIVE` for APIs you feel are incorrectly included in the data.
 ]: any -> record<hidden: bool, reason: string> {
   let input = $in
@@ -429,7 +428,7 @@ export def "configs get-config" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeHostnames: string@bool-completer # If `true`, include the list of hostnames protected by this security configuration in the production network.  If `false`, exclude the list of hostnames protected by this security configuration in the production network. (default: false, e.g. false)
+  --includeHostnames: oneof<nothing, bool> # If `true`, include the list of hostnames protected by this security configuration in the production network.  If `false`, exclude the list of hostnames protected by this security configuration in the production network. (default: false, e.g. false)
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<description: string, id: int, latestVersion: int, name: string, productionHostnames: list<string>, productionVersion: int, stagingVersion: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -543,16 +542,16 @@ export def "configs-custom-rules post-config-custom-rules" [
   --description: string # The custom rule description.
   --effectiveTimePeriod: record # The time period during which the custom rule is active. — shape: {endDate: string, startDate: string, status?: "active"|"inactive"|"expiring"|"expired"}
   --id: int # Uniquely identifies the rule.
-  --inspectRequest: string@bool-completer # Whether to inspect the HTTP request for unstructured custom rules.
-  --inspectResponse: string@bool-completer # Whether to inspect the HTTP response for unstructured custom rules.
+  --inspectRequest: oneof<nothing, bool> # Whether to inspect the HTTP request for unstructured custom rules.
+  --inspectResponse: oneof<nothing, bool> # Whether to inspect the HTTP response for unstructured custom rules.
   --loggingOptions: list # The specific conditions to be logged. — item shape: {id: "CLIENT_TLS_FINGERPRINT_MATCH"|"HEADER_ORDER_MATCH"|"REQUEST_HEADER_MATCH"|"COOKIE_MATCH"|"URI_QUERY_MATCH"|"ARGS_POST_MATCH", name?: string, value?: string}
   --metadata: string # The metadata you provided for unstructured custom rules.
   name: string # The custom rule name.
   operation: string@operation-completer # Specify `AND` logic to require all conditions, or `OR` logic to require at least one condition to match.
-  --ruleActivated: string@bool-completer # Whether the rule is active in the configuration.
+  --ruleActivated: oneof<nothing, bool> # Whether the rule is active in the configuration.
   --samplingRate: int # The portion of traffic to sample, expressed as a percent.
-  --stagingOnly: string@bool-completer # Whether to show traffic from only the staging network, or all traffic. The default setting is `false` and only shows in the response when `true`. (default: false)
-  --structured: string@bool-completer # Whether you created the rule with the structured custom rule builder or free-form XML. This needs to be `true`.
+  --stagingOnly: oneof<nothing, bool> # Whether to show traffic from only the staging network, or all traffic. The default setting is `false` and only shows in the response when `true`. (default: false)
+  --structured: oneof<nothing, bool> # Whether you created the rule with the structured custom rule builder or free-form XML. This needs to be `true`.
   --tag: list # The list of labels you assigned to the custom rule.
   --version: int # The custom rule version.
 ]: any -> record<conditions: table<name: any, nameCase: bool, nameWildcard: bool, positiveMatch: bool, type: string, useXForwardForHeaders: bool, value: string, valueCase: bool, valueExactMatch: bool, valueIgnoreSegment: bool, valueNormalize: bool, valueRecursive: bool, valueWildcard: bool>, description: string, effectiveTimePeriod: record<endDate: string, startDate: string, status: string>, id: int, inspectRequest: bool, inspectResponse: bool, loggingOptions: table<id: string, name: string, value: string>, metadata: string, name: string, operation: string, ruleActivated: bool, samplingRate: int, stagingOnly: bool, structured: bool, tag: list<string>, version: int> {
@@ -642,16 +641,16 @@ export def "configs-custom-rules put-config-custom-rule" [
   --description: string # The custom rule description.
   --effectiveTimePeriod: record # The time period during which the custom rule is active. — shape: {endDate: string, startDate: string, status?: "active"|"inactive"|"expiring"|"expired"}
   --id: int # Uniquely identifies the rule.
-  --inspectRequest: string@bool-completer # Whether to inspect the HTTP request for unstructured custom rules.
-  --inspectResponse: string@bool-completer # Whether to inspect the HTTP response for unstructured custom rules.
+  --inspectRequest: oneof<nothing, bool> # Whether to inspect the HTTP request for unstructured custom rules.
+  --inspectResponse: oneof<nothing, bool> # Whether to inspect the HTTP response for unstructured custom rules.
   --loggingOptions: list # The specific conditions to be logged. — item shape: {id: "CLIENT_TLS_FINGERPRINT_MATCH"|"HEADER_ORDER_MATCH"|"REQUEST_HEADER_MATCH"|"COOKIE_MATCH"|"URI_QUERY_MATCH"|"ARGS_POST_MATCH", name?: string, value?: string}
   --metadata: string # The metadata you provided for unstructured custom rules.
   name: string # The custom rule name.
   operation: string@operation-completer # Specify `AND` logic to require all conditions, or `OR` logic to require at least one condition to match.
-  --ruleActivated: string@bool-completer # Whether the rule is active in the configuration.
+  --ruleActivated: oneof<nothing, bool> # Whether the rule is active in the configuration.
   --samplingRate: int # The portion of traffic to sample, expressed as a percent.
-  --stagingOnly: string@bool-completer # Whether to show traffic from only the staging network, or all traffic. The default setting is `false` and only shows in the response when `true`. (default: false)
-  --structured: string@bool-completer # Whether you created the rule with the structured custom rule builder or free-form XML. This needs to be `true`.
+  --stagingOnly: oneof<nothing, bool> # Whether to show traffic from only the staging network, or all traffic. The default setting is `false` and only shows in the response when `true`. (default: false)
+  --structured: oneof<nothing, bool> # Whether you created the rule with the structured custom rule builder or free-form XML. This needs to be `true`.
   --tag: list # The list of labels you assigned to the custom rule.
   --version: int # The custom rule version.
 ]: any -> record<conditions: table<name: any, nameCase: bool, nameWildcard: bool, positiveMatch: bool, type: string, useXForwardForHeaders: bool, value: string, valueCase: bool, valueExactMatch: bool, valueIgnoreSegment: bool, valueNormalize: bool, valueRecursive: bool, valueWildcard: bool>, description: string, effectiveTimePeriod: record<endDate: string, startDate: string, status: string>, id: int, inspectRequest: bool, inspectResponse: bool, loggingOptions: table<id: string, name: string, value: string>, metadata: string, name: string, operation: string, ruleActivated: bool, samplingRate: int, stagingOnly: bool, structured: bool, tag: list<string>, version: int> {
@@ -791,7 +790,7 @@ export def "configs-versions post-config-versions" [
   --allow-errors(-e) # Return full response without error handling
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   createFromVersion: int # The configuration version to clone from.
-  --ruleUpdate: string@bool-completer # Specifies whether the application rules should be migrated to the latest version.
+  --ruleUpdate: oneof<nothing, bool> # Specifies whether the application rules should be migrated to the latest version.
 ]: any -> record<basedOn: int, configId: int, configName: string, createDate: string, createdBy: string, production: record<action: string, status: string, time: string>, staging: record<action: string, status: string, time: string>, version: int, versionNotes: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -821,7 +820,7 @@ export def "configs-versions get-config-versions" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # The index of the result page. If the value is `-1`, then pagination is ignored.  The default value is `1`. (default: 1, e.g. 2)
   --pageSize: int # The number of items on each result page. The default value is `25`. (default: 25, e.g. 10)
-  --detail: string@bool-completer # When `true`, the results contain detailed information on versions. With the default `false`, the results contain summary information on versions. (default: false, e.g. true)
+  --detail: oneof<nothing, bool> # When `true`, the results contain detailed information on versions. With the default `false`, the results contain summary information on versions. (default: false, e.g. true)
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<configId: int, configName: string, lastCreatedVersion: int, page: int, pageSize: int, productionActiveVersion: int, productionExpediteRequestId: int, stagingActiveVersion: int, stagingExpediteRequestId: int, totalSize: int, versionList: table<basedOn: int, createDate: string, createdBy: string, production: record, staging: record, version: int, versionNotes: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -959,7 +958,7 @@ export def "configs-versions-advanced-settings-cookie-settings put-advanced-sett
   --allow-errors(-e) # Return full response without error handling
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   --cookieDomain: string@cookieDomain-completer # Choose the type of domain. The default recommended type is `automatic`. Otherwise, choose `fqdn` to use the current Fully Qualified Domain name, `legacy` to use the original way in which the domain was selected, or `psl` to use the public suffix list to identify a private domain.
-  --useAllSecureTraffic: string@bool-completer # If all of your traffic uses HTTPS, specify `true`. This option sets the Secure flag on all security product cookies, which are then only included with HTTPS traffic. It also adds `SameSite=None` to most bot management cookies, ensuring that recent browser versions submit the cookies with protected requests. The `SameSite=None` cookie setting is necessary for site architectures that involve cross-domain form submission or inclusion of cross-domain iframes.
+  --useAllSecureTraffic: oneof<nothing, bool> # If all of your traffic uses HTTPS, specify `true`. This option sets the Secure flag on all security product cookies, which are then only included with HTTPS traffic. It also adds `SameSite=None` to most bot management cookies, ensuring that recent browser versions submit the cookies with protected requests. The `SameSite=None` cookie setting is necessary for site architectures that involve cross-domain form submission or inclusion of cross-domain iframes.
 ]: any -> record<cookieDomain: string, useAllSecureTraffic: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1015,7 +1014,7 @@ export def "configs-versions-advanced-settings-evasive-path-match put-evasive-pa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
-  --enablePathMatch: string@bool-completer # When enabled, evaluates requests with the following list of characters removed ` & ! $ ' ( ) + , [ ] * @ ^ \ "` and `.` only when it appears as a trailing character at the end of the URL.
+  --enablePathMatch: oneof<nothing, bool> # When enabled, evaluates requests with the following list of characters removed ` & ! $ ' ( ) + , [ ] * @ ^ \ "` and `.` only when it appears as a trailing character at the end of the URL.
 ]: any -> record<enablePathMatch: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1130,7 +1129,7 @@ export def "configs-versions-advanced-settings-logging put-advanced-settings-log
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
-  --allowSampling: string@bool-completer # Whether to enable HTTP Header logging.
+  --allowSampling: oneof<nothing, bool> # Whether to enable HTTP Header logging.
   --cookies: record # Settings for cookie headers. — shape: {type: "all"|"none"|"exclude"|"only", values?: list}
   --customHeaders: record # Settings for custom headers. — shape: {type: "all"|"none"|"exclude"|"only", values?: list}
   --standardHeaders: record # Settings for standard headers. — shape: {type: "all"|"none"|"exclude"|"only", values?: list}
@@ -1191,7 +1190,7 @@ export def "configs-versions-advanced-settings-logging-attack-payload put-advanc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
-  --enabled: string@bool-completer # Whether attack payload logging is enabled.
+  --enabled: oneof<nothing, bool> # Whether attack payload logging is enabled.
   requestBody: record # Settings for request body. — shape: {type: "ATTACK_PAYLOAD"|"NONE"}
   responseBody: record # Settings for response body. — shape: {type: "ATTACK_PAYLOAD"|"NONE"}
 ]: any -> record<enabled: bool, requestBody: record<type: string>, responseBody: record<type: string>> {
@@ -1249,7 +1248,7 @@ export def "configs-versions-advanced-settings-pii-learning put-advanced-setting
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
-  --enablePiiLearning: string@bool-completer # Enables PII learning.
+  --enablePiiLearning: oneof<nothing, bool> # Enables PII learning.
 ]: any -> record<enablePiiLearning: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1309,7 +1308,7 @@ export def "configs-versions-advanced-settings-pragma-header put-advanced-settin
   action: string@action-completer-2 # The action to perform when a user passes a `Pragma` header. The only action currently supported is `REMOVE`.
   --conditionOperator: string@conditionOperator-completer # Use `OR` to match any condition, or `AND` to match on all conditions.
   --excludeCondition: list # The conditions to exclude from the default `remove` action. Any condition you set in this object appears in the `Pragma` header debug response object. — item shape: {header?: string, name?: string, positiveMatch: bool, type: "requestHeaderValueMatch"|"ipMatch"|"networkList"|"queryParamNameValueMatch", useHeaders?: bool, value: list, valueCase?: bool, valueWildcard?: bool}
-  --override: string@bool-completer # Whether `Pragma` header override is enabled or disabled.
+  --override: oneof<nothing, bool> # Whether `Pragma` header override is enabled or disabled.
 ]: any -> record<action: string, conditionOperator: string, excludeCondition: table<header: string, name: string, positiveMatch: bool, type: string, useHeaders: bool, value: list, valueCase: bool, valueWildcard: bool>, override: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1365,9 +1364,9 @@ export def "configs-versions-advanced-settings-prefetch put-advanced-settings-pr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
-  --allExtensions: string@bool-completer # Whether to enable prefetch requests for all extensions.
-  --enableAppLayer: string@bool-completer # Whether to enable Prefetch Requests.
-  --enableRateControls: string@bool-completer # Whether to enable Prefetch Requests for rate controls.
+  --allExtensions: oneof<nothing, bool> # Whether to enable prefetch requests for all extensions.
+  --enableAppLayer: oneof<nothing, bool> # Whether to enable Prefetch Requests.
+  --enableRateControls: oneof<nothing, bool> # Whether to enable Prefetch Requests for rate controls.
   --extensions: list # List of extensions.
 ]: any -> record<allExtensions: bool, enableAppLayer: bool, enableRateControls: bool, extensions: list<string>> {
   let input = $in
@@ -1995,7 +1994,7 @@ export def "configs-versions-malware-policies post-malware-policies" [
   --contentTypes: list # The content types and encodings to match. — item shape: {encodedContentAttributes?: list, name: string}
   --description: string # Descriptive text you provide about a policy.
   hostnames: list # The hostnames to match. This is where you want the malware detections to focus.
-  --logFilename: string@bool-completer # Whether to log the name of the file that triggered an `alert` or `deny` action. (default: false)
+  --logFilename: oneof<nothing, bool> # Whether to log the name of the file that triggered an `alert` or `deny` action. (default: false)
   name: string # The name you assign to a malware policy.
   paths: list # The paths to match. You can use the `?` and `*` wildcards anywhere in a path.
 ]: any -> record<allowListId: string, blockListId: string, contentTypes: table<encodedContentAttributes: list, name: string>, description: string, hostnames: list<string>, id: int, logFilename: bool, name: string, paths: list<string>> {
@@ -2113,7 +2112,7 @@ export def "configs-versions-malware-policies put-malware-policy" [
   --contentTypes: list # The content types and encodings to match. — item shape: {encodedContentAttributes?: list, name: string}
   --description: string # Descriptive text you provide about a policy.
   hostnames: list # The hostnames to match. This is where you want the malware detections to focus.
-  --logFilename: string@bool-completer # Whether to log the name of the file that triggered an `alert` or `deny` action. (default: false)
+  --logFilename: oneof<nothing, bool> # Whether to log the name of the file that triggered an `alert` or `deny` action. (default: false)
   name: string # The name you assign to a malware policy.
   paths: list # The paths to match. You can use the `?` and `*` wildcards anywhere in a path.
 ]: any -> record<allowListId: string, blockListId: string, contentTypes: table<encodedContentAttributes: list, name: string>, description: string, hostnames: list<string>, id: int, logFilename: bool, name: string, paths: list<string>> {
@@ -2185,8 +2184,8 @@ export def "configs-versions-match-targets post-match-targets" [
   --fileExtensions: list # Contains a list of file extensions.
   --filePaths: list # Contains a list of file paths.
   --hostnames: list # Contains a list of hostnames to protect.
-  --isNegativeFileExtensionMatch: string@bool-completer # Describes whether the match target applies when a match is found in the specified `fileExtensions` or when a match isn't found.
-  --isNegativePathMatch: string@bool-completer # Describes whether the match target applies when a match is found in the specified paths or when a match isn't found.
+  --isNegativeFileExtensionMatch: oneof<nothing, bool> # Describes whether the match target applies when a match is found in the specified `fileExtensions` or when a match isn't found.
+  --isNegativePathMatch: oneof<nothing, bool> # Describes whether the match target applies when a match is found in the specified paths or when a match isn't found.
   securityPolicy: record # The security policy associated with the match target. — shape: {policyId: string}
   --sequence: int # The position in the sequence of match targets.
   --targetId: int # Uniquely identifies the match target.
@@ -2220,7 +2219,7 @@ export def "configs-versions-match-targets get-match-targets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --policyId: string # Specifies the security policy to filter match targets. (e.g. abc_123456)
-  --includeChildObjectName: string@bool-completer # Specify whether to return the object name in the payload, true` by default. (default: true, e.g. false)
+  --includeChildObjectName: oneof<nothing, bool> # Specify whether to return the object name in the payload, true` by default. (default: true, e.g. false)
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<matchTargets: record<apiTargets: list<record>, websiteTargets: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2280,7 +2279,7 @@ export def "configs-versions-match-targets get-match-target" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeChildObjectName: string@bool-completer # Specify whether to return the object name in the payload, true` by default. (default: true, e.g. false)
+  --includeChildObjectName: oneof<nothing, bool> # Specify whether to return the object name in the payload, true` by default. (default: true, e.g. false)
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<apis: table<id: int, name: string>, bypassNetworkLists: table<id: string, name: string>, configId: int, configVersion: int, defaultFile: string, effectiveSecurityControls: record<applyApiConstraints: bool, applyApplicationLayerControls: bool, applyBotmanControls: bool, applyNetworkLayerControls: bool, applyRateControls: bool, applyReputationControls: bool, applySlowPostControls: bool>, fileExtensions: list<string>, filePaths: list<string>, hostnames: list<string>, isNegativeFileExtensionMatch: bool, isNegativePathMatch: bool, securityPolicy: record<policyId: string>, sequence: int, targetId: int, type: string, validations: record<errors: list<record>, notices: list<record>, warnings: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2322,8 +2321,8 @@ export def "configs-versions-match-targets put-match-target" [
   --fileExtensions: list # Contains a list of file extensions.
   --filePaths: list # Contains a list of file paths.
   --hostnames: list # Contains a list of hostnames to protect.
-  --isNegativeFileExtensionMatch: string@bool-completer # Describes whether the match target applies when a match is found in the specified `fileExtensions` or when a match isn't found.
-  --isNegativePathMatch: string@bool-completer # Describes whether the match target applies when a match is found in the specified paths or when a match isn't found.
+  --isNegativeFileExtensionMatch: oneof<nothing, bool> # Describes whether the match target applies when a match is found in the specified `fileExtensions` or when a match isn't found.
+  --isNegativePathMatch: oneof<nothing, bool> # Describes whether the match target applies when a match is found in the specified paths or when a match isn't found.
   securityPolicy: record # The security policy associated with the match target. — shape: {policyId: string}
   --sequence: int # The position in the sequence of match targets.
   --body-targetId: int # Uniquely identifies the match target.
@@ -2443,13 +2442,13 @@ export def "configs-versions-rate-policies post-rate-policies" [
   name: string # The name you assign to a rate policy.
   --path: record # Contains details about the path match criteria. — shape: {positiveMatch: bool, values: list}
   pathMatchType: string@pathMatchType-completer # The type of paths to match in incoming requests. Either `AllRequests` to match an empty path or any path that ends in a trailing slash (`/`), `TopLevel` to match top-level hostnames only, or `Custom` to match a specific path or path component. This applies only when the corresponding `matchType` member is `path`. Specify `RequestDisabled` to bypass matching on a path.
-  --pathUriPositiveMatch: string@bool-completer # Whether the condition should trigger on a match (`true`) or a lack of match (`false`).
+  --pathUriPositiveMatch: oneof<nothing, bool> # Whether the condition should trigger on a match (`true`) or a lack of match (`false`).
   --penaltyBoxDuration: string@penaltyBoxDuration-completer # The duration of the penalty box. Either `TEN_MINUTES`, `THIRTY_MINUTES`, `ONE_HOUR`, `FOUR_HOURS`, `SIX_HOURS`, `TWELVE_HOURS`, or `TWENTY_FOUR_HOURS`. Only applicable when the `counterType` is `region_aggregated`. (default: TEN_MINUTES)
   --queryParameters: list # The list of query parameter objects to match on. — item shape: {name: string, positiveMatch: bool, valueInRange?: bool, values: list}
   requestType: string@requestType-completer # The type of requests to count towards the rate policy's thresholds. Either `ClientRequest` to count client requests to edge servers, `ClientResponse` to count edge responses to the client, `ForwardResponse` to count origin responses to the client, or `ForwardRequest` to count edge requests to your origin.
-  --sameActionOnIpv6: string@bool-completer # Whether to apply the same action to the IPv6 traffic as to the IPv4 traffic.
+  --sameActionOnIpv6: oneof<nothing, bool> # Whether to apply the same action to the IPv6 traffic as to the IPv4 traffic.
   type: string@type-completer-2 # The rate policy type. Either `WAF` for Web Application Firewall, or `BOTMAN` for Bot Manager.
-  --useXForwardForHeaders: string@bool-completer # Whether to check the contents of the `X-Forwarded-For` header in incoming requests.
+  --useXForwardForHeaders: oneof<nothing, bool> # Whether to check the contents of the `X-Forwarded-For` header in incoming requests.
 ]: any -> record<additionalMatchOptions: table<positiveMatch: bool, type: string, values: list>, apiSelectors: table<apiDefinitionId: int, definedResources: bool, resourceIds: list, undefinedResources: bool>, averageThreshold: int, bodyParameters: table<name: string, positiveMatch: bool, valueInRange: bool, values: list>, burstThreshold: int, burstWindow: int, clientIdentifier: string, clientIdentifiers: list<string>, condition: record<atomicConditions: list<any>, positiveMatch: bool>, counterType: string, createDate: string, description: string, evaluation: record<averageThreshold: int, burstThreshold: int, burstWindow: int, counterType: string, endDate: string, evaluationId: int, evaluationStatus: string, startDate: string, version: int>, fileExtensions: record<positiveMatch: bool, values: list<string>>, hostnames: list<string>, hosts: record<positiveMatch: bool, values: list<string>>, id: int, matchType: string, name: string, path: record<positiveMatch: bool, values: list<string>>, pathMatchType: string, pathUriPositiveMatch: bool, penaltyBoxDuration: string, queryParameters: table<name: string, positiveMatch: bool, valueInRange: bool, values: list>, requestType: string, sameActionOnIpv6: bool, type: string, updateDate: string, useXForwardForHeaders: bool, used: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2561,13 +2560,13 @@ export def "configs-versions-rate-policies put-rate-policy" [
   name: string # The name you assign to a rate policy.
   --path: record # Contains details about the path match criteria. — shape: {positiveMatch: bool, values: list}
   pathMatchType: string@pathMatchType-completer # The type of paths to match in incoming requests. Either `AllRequests` to match an empty path or any path that ends in a trailing slash (`/`), `TopLevel` to match top-level hostnames only, or `Custom` to match a specific path or path component. This applies only when the corresponding `matchType` member is `path`. Specify `RequestDisabled` to bypass matching on a path.
-  --pathUriPositiveMatch: string@bool-completer # Whether the condition should trigger on a match (`true`) or a lack of match (`false`).
+  --pathUriPositiveMatch: oneof<nothing, bool> # Whether the condition should trigger on a match (`true`) or a lack of match (`false`).
   --penaltyBoxDuration: string@penaltyBoxDuration-completer # The duration of the penalty box. Either `TEN_MINUTES`, `THIRTY_MINUTES`, `ONE_HOUR`, `FOUR_HOURS`, `SIX_HOURS`, `TWELVE_HOURS`, or `TWENTY_FOUR_HOURS`. Only applicable when the `counterType` is `region_aggregated`. (default: TEN_MINUTES)
   --queryParameters: list # The list of query parameter objects to match on. — item shape: {name: string, positiveMatch: bool, valueInRange?: bool, values: list}
   requestType: string@requestType-completer # The type of requests to count towards the rate policy's thresholds. Either `ClientRequest` to count client requests to edge servers, `ClientResponse` to count edge responses to the client, `ForwardResponse` to count origin responses to the client, or `ForwardRequest` to count edge requests to your origin.
-  --sameActionOnIpv6: string@bool-completer # Whether to apply the same action to the IPv6 traffic as to the IPv4 traffic.
+  --sameActionOnIpv6: oneof<nothing, bool> # Whether to apply the same action to the IPv6 traffic as to the IPv4 traffic.
   type: string@type-completer-2 # The rate policy type. Either `WAF` for Web Application Firewall, or `BOTMAN` for Bot Manager.
-  --useXForwardForHeaders: string@bool-completer # Whether to check the contents of the `X-Forwarded-For` header in incoming requests.
+  --useXForwardForHeaders: oneof<nothing, bool> # Whether to check the contents of the `X-Forwarded-For` header in incoming requests.
 ]: any -> record<additionalMatchOptions: table<positiveMatch: bool, type: string, values: list>, apiSelectors: table<apiDefinitionId: int, definedResources: bool, resourceIds: list, undefinedResources: bool>, averageThreshold: int, bodyParameters: table<name: string, positiveMatch: bool, valueInRange: bool, values: list>, burstThreshold: int, burstWindow: int, clientIdentifier: string, clientIdentifiers: list<string>, condition: record<atomicConditions: list<any>, positiveMatch: bool>, counterType: string, createDate: string, description: string, evaluation: record<averageThreshold: int, burstThreshold: int, burstWindow: int, counterType: string, endDate: string, evaluationId: int, evaluationStatus: string, startDate: string, version: int>, fileExtensions: record<positiveMatch: bool, values: list<string>>, hostnames: list<string>, hosts: record<positiveMatch: bool, values: list<string>>, id: int, matchType: string, name: string, path: record<positiveMatch: bool, values: list<string>>, pathMatchType: string, pathUriPositiveMatch: bool, penaltyBoxDuration: string, queryParameters: table<name: string, positiveMatch: bool, valueInRange: bool, values: list>, requestType: string, sameActionOnIpv6: bool, type: string, updateDate: string, useXForwardForHeaders: bool, used: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2809,7 +2808,7 @@ export def "configs-versions-response-actions-challenge-actions post-challenge-a
   --allow-errors(-e) # Return full response without error handling
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   actionName: string # The action's unique name.
-  --allowFullCpuUtilization: string@bool-completer # Set to `true` to let the client use 100 percent CPU to resolve the challenge. If more humans than bots see this challenge, set to `false`. (nullable)
+  --allowFullCpuUtilization: oneof<nothing, bool> # Set to `true` to let the client use 100 percent CPU to resolve the challenge. If more humans than bots see this challenge, set to `false`. (nullable)
   challengeIntervalInSeconds: int # Time between challenges. Set according to how long users interact with the resource you're protecting. A short period interrupts users more often.
   challengeType: string@challengeType-completer # Specify the type of challenge. Choose `GOOGLE_RECAPTCHA` to make users solve a CAPTCHA puzzle. You can also choose `AKAMAI_WEB_CRYPTO` or `AKAMAI_MOBILE_CRYPTO` to make web requesting clients or mobile requesting clients solve a proof-of-work cryptographic challenge.
   --cryptoChallengeDurationInSeconds: int # Specify how many seconds the client machine should spend on the challenge. The longer the duration, the more difficult the challenge. (nullable)
@@ -2903,7 +2902,7 @@ export def "configs-versions-response-actions-challenge-actions put-challenge-ac
   --allow-errors(-e) # Return full response without error handling
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   actionName: string # The action's unique name.
-  --allowFullCpuUtilization: string@bool-completer # Set to `true` to let the client use 100 percent CPU to resolve the challenge. If more humans than bots see this challenge, set to `false`. (nullable)
+  --allowFullCpuUtilization: oneof<nothing, bool> # Set to `true` to let the client use 100 percent CPU to resolve the challenge. If more humans than bots see this challenge, set to `false`. (nullable)
   challengeIntervalInSeconds: int # Time between challenges. Set according to how long users interact with the resource you're protecting. A short period interrupts users more often.
   challengeType: string@challengeType-completer # Specify the type of challenge. Choose `GOOGLE_RECAPTCHA` to make users solve a CAPTCHA puzzle. You can also choose `AKAMAI_WEB_CRYPTO` or `AKAMAI_MOBILE_CRYPTO` to make web requesting clients or mobile requesting clients solve a proof-of-work cryptographic challenge.
   --cryptoChallengeDurationInSeconds: int # Specify how many seconds the client machine should spend on the challenge. The longer the duration, the more difficult the challenge. (nullable)
@@ -3033,8 +3032,8 @@ export def "configs-versions-security-policies get-policies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notMatched: string@bool-completer # If `true`, returns all security policies in the configuration version that don't have a match target.  If `false`, returns all security policies in the configuration version. (e.g. true)
-  --detail: string@bool-completer # When `true`, the results contain detailed information on versions. With the default `false`, the results contain summary information on versions. (default: false, e.g. true)
+  --notMatched: oneof<nothing, bool> # If `true`, returns all security policies in the configuration version that don't have a match target.  If `false`, returns all security policies in the configuration version. (e.g. true)
+  --detail: oneof<nothing, bool> # When `true`, the results contain detailed information on versions. With the default `false`, the results contain summary information on versions. (default: false, e.g. true)
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
 ]: nothing -> record<configId: int, policies: table<configId: int, hasRatePolicyWithApiKey: bool, policyId: string, policyName: string, policySecurityControls: record, version: int>, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3175,7 +3174,7 @@ export def "configs-versions-security-policies-advanced-settings-evasive-path-ma
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
-  --enablePathMatch: string@bool-completer # When enabled, evaluates requests with the following list of characters removed ` & ! $ ' ( ) + , [ ] * @ ^ \ "` and `.` only when it appears as a trailing character at the end of the URL.
+  --enablePathMatch: oneof<nothing, bool> # When enabled, evaluates requests with the following list of characters removed ` & ! $ ' ( ) + , [ ] * @ ^ \ "` and `.` only when it appears as a trailing character at the end of the URL.
 ]: any -> record<enablePathMatch: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3236,10 +3235,10 @@ export def "configs-versions-security-policies-advanced-settings-logging put-pol
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
-  --allowSampling: string@bool-completer # Whether you enabled the header data sampling.
+  --allowSampling: oneof<nothing, bool> # Whether you enabled the header data sampling.
   --cookies: record # When enabled, filter requests whose headers you log by cookie. — shape: {type: "all"|"none"|"exclude"|"only", values?: list}
   --customHeaders: record # When enabled, filter requests you log by custom headers you specify. — shape: {type: "all"|"none"|"exclude"|"only", values?: list}
-  --override: string@bool-completer # When enabled, your security configuration won't log any header data for security events triggered by settings in the security configuration.
+  --override: oneof<nothing, bool> # When enabled, your security configuration won't log any header data for security events triggered by settings in the security configuration.
   --standardHeaders: record # When enabled, filter requests you log by standard headers you specify. — shape: {type: "all"|"none"|"exclude"|"only", values?: list}
 ]: any -> record<allowSampling: bool, cookies: record<type: string, values: list<string>>, customHeaders: record<type: string, values: list<string>>, override: bool, standardHeaders: record<type: string, values: list<string>>> {
   let input = $in
@@ -3300,8 +3299,8 @@ export def "configs-versions-security-policies-advanced-settings-logging-attack-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
-  --enabled: string@bool-completer # When enabled, log attack payloads in requests and responses.
-  --override: string@bool-completer # When `true`, use the security policy's attack payload logging settings instead of the settings at the configuration level. Note that when `type` is `NONE`, the request body and response body show as redacted in the log. For example, `JSON_PAIRS:redacted`.
+  --enabled: oneof<nothing, bool> # When enabled, log attack payloads in requests and responses.
+  --override: oneof<nothing, bool> # When `true`, use the security policy's attack payload logging settings instead of the settings at the configuration level. Note that when `type` is `NONE`, the request body and response body show as redacted in the log. For example, `JSON_PAIRS:redacted`.
   requestBody: record # The settings for how Akamai's network logs attack payloads in request bodies. — shape: {type: "ATTACK_PAYLOAD"|"NONE"}
   responseBody: record # The settings for how Akamai's network logs attack payloads in response bodies. — shape: {type: "ATTACK_PAYLOAD"|"NONE"}
 ]: any -> record<enabled: bool, override: bool, requestBody: record<type: string>, responseBody: record<type: string>> {
@@ -3365,7 +3364,7 @@ export def "configs-versions-security-policies-advanced-settings-pragma-header p
   action: string@action-completer-2 # The action to perform when a user passes a `Pragma` header. The only action currently supported is `REMOVE`.
   --conditionOperator: string@conditionOperator-completer # Use `OR` to match any condition, or `AND` to match on all conditions.
   --excludeCondition: list # The conditions to exclude from the default `remove` action. Any condition you set in this object appears in the `Pragma` header debug response object. — item shape: {header?: string, name?: string, positiveMatch: bool, type: "requestHeaderValueMatch"|"ipMatch"|"networkList"|"queryParamNameValueMatch", useHeaders?: bool, value: list, valueCase?: bool, valueWildcard?: bool}
-  --override: string@bool-completer # Whether `Pragma` header override is enabled or disabled.
+  --override: oneof<nothing, bool> # Whether `Pragma` header override is enabled or disabled.
 ]: any -> record<action: string, conditionOperator: string, excludeCondition: table<header: string, name: string, positiveMatch: bool, type: string, useHeaders: bool, value: list, valueCase: bool, valueWildcard: bool>, override: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4233,7 +4232,7 @@ export def "configs-versions-security-policies-eval-penalty-box put-eval-policy-
   --allow-errors(-e) # Return full response without error handling
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   action: any
-  --penaltyBoxProtection: string@bool-completer # Specifies whether penalty box protection is enabled for the security policy. When set to `true` the `action` occurs if triggered by a request.
+  --penaltyBoxProtection: oneof<nothing, bool> # Specifies whether penalty box protection is enabled for the security policy. When set to `true` the `action` occurs if triggered by a request.
 ]: any -> record<action: any, penaltyBoxProtection: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4689,7 +4688,7 @@ export def "configs-versions-security-policies-penalty-box put-policy-penalty-bo
   --allow-errors(-e) # Return full response without error handling
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   action: any
-  --penaltyBoxProtection: string@bool-completer # Specifies whether penalty box protection is enabled for the security policy. When set to `true` the `action` occurs if triggered by a request.
+  --penaltyBoxProtection: oneof<nothing, bool> # Specifies whether penalty box protection is enabled for the security policy. When set to `true` the `action` occurs if triggered by a request.
 ]: any -> record<action: any, penaltyBoxProtection: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4839,14 +4838,14 @@ export def "configs-versions-security-policies-protections put-policy-protection
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
-  --applyApiConstraints: string@bool-completer # When enabled, this protection responds to triggers with a specified action.
-  --applyApplicationLayerControls: string@bool-completer # When enabled, your security policy applies the Web Application Firewall controls to your traffic.
-  --applyCpcControls: string@bool-completer # When enabled, your security policy applies Client-Side Protection & Compliance controls to your match target. (default: false)
-  --applyMalwareControls: string@bool-completer # When enabled, your security policy applies file malware scanning controls to your traffic.
-  --applyNetworkLayerControls: string@bool-completer # When enabled, your security policy applies the network layer control settings to your traffic.
-  --applyRateControls: string@bool-completer # When enabled, your security policy applies the rate control settings to your traffic. Rate controls monitor and flag traffic too fast to be from a human.
-  --applyReputationControls: string@bool-completer # When enabled, your security policy applies the reputation profile settings to your traffic. Reputation profile analyses IP addresses based on their prior interactions with Akamai customers, then alerts on or blocks potentially malicious IP addresses from issuing requests.
-  --applySlowPostControls: string@bool-completer # When enabled, your security policy applies slow POST controls to your traffic.
+  --applyApiConstraints: oneof<nothing, bool> # When enabled, this protection responds to triggers with a specified action.
+  --applyApplicationLayerControls: oneof<nothing, bool> # When enabled, your security policy applies the Web Application Firewall controls to your traffic.
+  --applyCpcControls: oneof<nothing, bool> # When enabled, your security policy applies Client-Side Protection & Compliance controls to your match target. (default: false)
+  --applyMalwareControls: oneof<nothing, bool> # When enabled, your security policy applies file malware scanning controls to your traffic.
+  --applyNetworkLayerControls: oneof<nothing, bool> # When enabled, your security policy applies the network layer control settings to your traffic.
+  --applyRateControls: oneof<nothing, bool> # When enabled, your security policy applies the rate control settings to your traffic. Rate controls monitor and flag traffic too fast to be from a human.
+  --applyReputationControls: oneof<nothing, bool> # When enabled, your security policy applies the reputation profile settings to your traffic. Reputation profile analyses IP addresses based on their prior interactions with Akamai customers, then alerts on or blocks potentially malicious IP addresses from issuing requests.
+  --applySlowPostControls: oneof<nothing, bool> # When enabled, your security policy applies slow POST controls to your traffic.
 ]: any -> record<applyApiConstraints: bool, applyApplicationLayerControls: bool, applyCpcControls: bool, applyMalwareControls: bool, applyNetworkLayerControls: bool, applyRateControls: bool, applyReputationControls: bool, applySlowPostControls: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4989,7 +4988,7 @@ export def "configs-versions-security-policies-rapid-rules-status put-policy-rap
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
-  --enabled: string@bool-completer # Whether the rapid rule is active.
+  --enabled: oneof<nothing, bool> # Whether the rapid rule is active.
 ]: any -> record<enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5114,7 +5113,7 @@ export def "configs-versions-security-policies-rapid-rules-lock put-policy-rapid
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
-  --enabled: string@bool-completer # Whether you've locked the rapid rule's action. When locked, future versions of this rule continue to use the action you originally selected.
+  --enabled: oneof<nothing, bool> # Whether you've locked the rapid rule's action. When locked, future versions of this rule continue to use the action you originally selected.
 ]: any -> record<enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5413,8 +5412,8 @@ export def "configs-versions-security-policies-reputation-analysis put-reputatio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
-  --forwardSharedIPToHTTPHeaderAndSIEM: string@bool-completer # Whether to enable the option to add value indicating that shared IPs are included in HTTP header and SIEM integration when used.
-  --forwardToHTTPHeader: string@bool-completer # Whether to enable the option to add client reputation details to requests forwarded to origin in an HTTP header.
+  --forwardSharedIPToHTTPHeaderAndSIEM: oneof<nothing, bool> # Whether to enable the option to add value indicating that shared IPs are included in HTTP header and SIEM integration when used.
+  --forwardToHTTPHeader: oneof<nothing, bool> # Whether to enable the option to add client reputation details to requests forwarded to origin in an HTTP header.
 ]: any -> record<forwardSharedIPToHTTPHeaderAndSIEM: bool, forwardToHTTPHeader: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5559,7 +5558,7 @@ export def "configs-versions-security-policies-rules put-policy-rules" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
-  --upgrade: string@bool-completer # Whether the upgrade is enabled.
+  --upgrade: oneof<nothing, bool> # Whether the upgrade is enabled.
 ]: any -> record<current: string, eval: string, evaluating: string, expires: string, mode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6211,12 +6210,12 @@ export def "configs-versions-siem put-siem" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
-  --enableForAllPolicies: string@bool-completer # Whether you enabled SIEM for all the security policies in the configuration version.
-  --enableSiem: string@bool-completer # Whether you enabled SIEM in a security configuration version.
-  --enabledBotmanSiemEvents: string@bool-completer # __Deprecated__ Whether you enabled SIEM for the Bot Manager events. Use `exceptions` parameter instead to set botman siem events exception. (DEPRECATED)
+  --enableForAllPolicies: oneof<nothing, bool> # Whether you enabled SIEM for all the security policies in the configuration version.
+  --enableSiem: oneof<nothing, bool> # Whether you enabled SIEM in a security configuration version.
+  --enabledBotmanSiemEvents: oneof<nothing, bool> # __Deprecated__ Whether you enabled SIEM for the Bot Manager events. Use `exceptions` parameter instead to set botman siem events exception. (DEPRECATED)
   --exceptions: list # Describes all attack type exceptions that will be ignored in SIEM events. — item shape: {actionTypes?: list, protection?: "ipgeo"|"rate"|"urlProtection"|"slowpost"|"customrules"|"waf"|"apirequestconstraints"|"clientrep"|"malwareprotection"|"botmanagement"|"aprProtection"|"aifirewallprotection"}
   --firewallPolicyIds: list # The list of security policy identifiers for which to enable the SIEM integration.
-  --includeJA4FingerprintToSiem: string@bool-completer # Whether you enabled JA4 header forwarding for SIEM.
+  --includeJA4FingerprintToSiem: oneof<nothing, bool> # Whether you enabled JA4 header forwarding for SIEM.
   --siemDefinitionId: int # Uniquely identifies the SIEM settings.
 ]: any -> record<enableForAllPolicies: bool, enableSiem: bool, enabledBotmanSiemEvents: bool, exceptions: table<actionTypes: list, protection: string>, firewallPolicyIds: list<string>, includeJA4FingerprintToSiem: bool, siemDefinitionId: int> {
   let input = $in
@@ -6257,7 +6256,7 @@ export def "configs-versions-url-protections post-url-protection-policies" [
   --configVersion: int # The security configuration version.
   --description: string # A description of the rate policy.
   --hostnamePaths: list # The hostname and path combinations to match on. — item shape: {hostname: string, paths: list}
-  --intelligentLoadShedding: string@bool-completer # Enable or disable intelligent load shedding. If enabled, traffic that matches the load shedding categories is eligible for shedding if the origin rate exceeds the load shedding threshold.
+  --intelligentLoadShedding: oneof<nothing, bool> # Enable or disable intelligent load shedding. If enabled, traffic that matches the load shedding categories is eligible for shedding if the origin rate exceeds the load shedding threshold.
   name: string # The rate policy's unique name.
   --protectionType: string@protectionType-completer # If matching on `hostnamePaths`, specify `SINGLE` to match on a hostname and path, or `MULTIPLE` to match on hostname and path combinations.
   rateThreshold: int # The allowed hits per second during any five-second interval.
@@ -6355,7 +6354,7 @@ export def "configs-versions-url-protections put-url-protection-policy" [
   --configVersion: int # The security configuration version.
   --description: string # A description of the rate policy.
   --hostnamePaths: list # The hostname and path combinations to match on. — item shape: {hostname: string, paths: list}
-  --intelligentLoadShedding: string@bool-completer # Enable or disable intelligent load shedding. If enabled, traffic that matches the load shedding categories is eligible for shedding if the origin rate exceeds the load shedding threshold.
+  --intelligentLoadShedding: oneof<nothing, bool> # Enable or disable intelligent load shedding. If enabled, traffic that matches the load shedding categories is eligible for shedding if the origin rate exceeds the load shedding threshold.
   name: string # The rate policy's unique name.
   --protectionType: string@protectionType-completer # If matching on `hostnamePaths`, specify `SINGLE` to match on a hostname and path, or `MULTIPLE` to match on hostname and path combinations.
   rateThreshold: int # The allowed hits per second during any five-second interval.
@@ -6596,7 +6595,7 @@ export def "cves-unsubscribe post-unsubscribe" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all: string@bool-completer # Whether to unsubscribe from all CVEs, `false` by default. (default: false, e.g. true)
+  --all: oneof<nothing, bool> # Whether to unsubscribe from all CVEs, `false` by default. (default: false, e.g. true)
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   --cveIds: list # The identifiers for the CVEs you want to unsubscribe from.
 ]: any -> record<cveIds: list<string>> {
@@ -6725,7 +6724,7 @@ export def "onboardings post-onboarding" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --createNewResourcesOnly: string@bool-completer # This creates an onboarding with a new CPS certificate and security protections. If your contract limits how many certificates you create, the API responds with an error. (default: false, e.g. true)
+  --createNewResourcesOnly: oneof<nothing, bool> # This creates an onboarding with a new CPS certificate and security protections. If your contract limits how many certificates you create, the API responds with an error. (default: false, e.g. true)
   --accountSwitchKey: string # For customers who manage more than one account, this [runs the operation from another account](https://techdocs.akamai.com/developer/docs/manage-many-accounts-with-one-api-client). The Identity and Access Management API provides a [list of available account switch keys](https://techdocs.akamai.com/iam-api/reference/get-client-account-switch-keys). (e.g. 1-5C0YLB:1-8BYUX)
   contractId: string # A unique identifier for a contract. Run [List contracts and groups](https://techdocs.akamai.com/application-security/docs/get-contracts-groups) to get the `contractId` if you don't have one already.
   groupId: int # A unique identifier for a group. (format: int32)

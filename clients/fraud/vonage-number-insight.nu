@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.nexmo.com/ni"] }
 def auth-scheme-completer [] { ["query-api_key" "query-api_secret"] }
 
@@ -110,7 +109,7 @@ export def "advanced-async get" [
   --callback: string # The callback URL (format: uriref, e.g. https://example.com/callback)
   --number: string # A single phone number that you need insight about in national or international format. (e.g. 447700900000)
   --country: string # If a number does not have a country code or is uncertain, set the two-character country code. This code must be in ISO 3166-1 alpha-2 format and in upper case. For example, GB or US. If you set country and number is already in [E.164](https://en.wikipedia.org/wiki/E.164) format, country must match the country code in number. (e.g. GB)
-  --cnam: string@bool-completer # Indicates if the name of the person who owns the phone number should be looked up and returned in the response. Set to true to receive phone number owner name in the response. This features is available for US numbers only and incurs an additional charge. (default: false, e.g. true)
+  --cnam: oneof<nothing, bool> # Indicates if the name of the person who owns the phone number should be looked up and returned in the response. Set to true to receive phone number owner name in the response. This features is available for US numbers only and incurs an additional charge. (default: false, e.g. true)
   --ip: string # This parameter is deprecated as we are no longer able to retrieve reliable IP data globally from carriers.  (DEPRECATED, e.g. 123.0.0.255)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
@@ -137,10 +136,10 @@ export def "advanced get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --real-time-data: string@bool-completer # A boolean to choose whether to get real time data back in the response. (e.g. true)
+  --real-time-data: oneof<nothing, bool> # A boolean to choose whether to get real time data back in the response. (e.g. true)
   --number: string # A single phone number that you need insight about in national or international format. (e.g. 447700900000)
   --country: string # If a number does not have a country code or is uncertain, set the two-character country code. This code must be in ISO 3166-1 alpha-2 format and in upper case. For example, GB or US. If you set country and number is already in [E.164](https://en.wikipedia.org/wiki/E.164) format, country must match the country code in number. (e.g. GB)
-  --cnam: string@bool-completer # Indicates if the name of the person who owns the phone number should be looked up and returned in the response. Set to true to receive phone number owner name in the response. This features is available for US numbers only and incurs an additional charge. (default: false, e.g. true)
+  --cnam: oneof<nothing, bool> # Indicates if the name of the person who owns the phone number should be looked up and returned in the response. Set to true to receive phone number owner name in the response. This features is available for US numbers only and incurs an additional charge. (default: false, e.g. true)
   --ip: string # This parameter is deprecated as we are no longer able to retrieve reliable IP data globally from carriers.  (DEPRECATED, e.g. 123.0.0.255)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
@@ -194,7 +193,7 @@ export def "standard get" [
   --accept: string@accept-completer # Response content type
   --number: string # A single phone number that you need insight about in national or international format. (e.g. 447700900000)
   --country: string # If a number does not have a country code or is uncertain, set the two-character country code. This code must be in ISO 3166-1 alpha-2 format and in upper case. For example, GB or US. If you set country and number is already in [E.164](https://en.wikipedia.org/wiki/E.164) format, country must match the country code in number. (e.g. GB)
-  --cnam: string@bool-completer # Indicates if the name of the person who owns the phone number should be looked up and returned in the response. Set to true to receive phone number owner name in the response. This features is available for US numbers only and incurs an additional charge. (default: false, e.g. true)
+  --cnam: oneof<nothing, bool> # Indicates if the name of the person who owns the phone number should be looked up and returned in the response. Set to true to receive phone number owner name in the response. This features is available for US numbers only and incurs an additional charge. (default: false, e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)

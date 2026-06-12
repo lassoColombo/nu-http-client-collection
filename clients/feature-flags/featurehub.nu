@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -108,7 +107,7 @@ export def "mr-api-dacha1-cache cacheRefresh" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allTheThings: string@bool-completer # refresh the whole cache (nullable)
+  --allTheThings: oneof<nothing, bool> # refresh the whole cache (nullable)
   --applicationId: list # if provided these applications will be refreshed (nullable)
   --portfolioId: list # nullable
 ]: any -> record<applicationsRefreshed: int, portfoliosRefreshed: int, environmentsRefreshed: int, serviceAccountsRefreshed: int> {
@@ -135,8 +134,8 @@ export def "mr-api-portfolio findPortfolios" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeGroups: string@bool-completer # Include groups for this this portfolio in results
-  --includeApplications: string@bool-completer # Include applications for this portfolio in results
+  --includeGroups: oneof<nothing, bool> # Include groups for this this portfolio in results
+  --includeApplications: oneof<nothing, bool> # Include applications for this portfolio in results
   --order: string@order-completer # how to order the results (nullable)
   --filter: string # What to filter the results by
   --parentPortfolioId: string # The parent portfolio to search under. If none is provided, use the top level one
@@ -162,8 +161,8 @@ export def "mr-api-portfolio createPortfolio" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeGroups: string@bool-completer # Include groups for this this portfolio in results
-  --includeApplications: string@bool-completer # Include applications for this portfolio in results
+  --includeGroups: oneof<nothing, bool> # Include groups for this this portfolio in results
+  --includeApplications: oneof<nothing, bool> # Include applications for this portfolio in results
   name: string
   --description: string # nullable
 ]: any -> record<createdBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<record>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, updatedBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<record>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, whenCreated: string, whenUpdated: string, id: string, name: string, description: string, version: int, organizationId: string, groups: table<createdBy: record, updatedBy: record, whenCreated: string, whenUpdated: string, id: string, admin: bool, portfolioId: string, organizationId: string, version: int, name: string, superMembers: list, simpleMembers: list, members: list, applicationRoles: list, environmentRoles: list, whenArchived: string>, applications: table<createdBy: record, updatedBy: record, whenCreated: string, whenUpdated: string, id: string, name: string, description: string, portfolioId: string, version: int, groups: list, features: list, environments: list, whenArchived: string>, whenArchived: string> {
@@ -193,9 +192,9 @@ export def "mr-api-portfolio updatePortfolioOnOrganisation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeGroups: string@bool-completer # Include groups for this this portfolio in results
-  --includeApplications: string@bool-completer # Include applications for this portfolio in results
-  --includeEnvironments: string@bool-completer # Include environments for the included applications this portfolio in results
+  --includeGroups: oneof<nothing, bool> # Include groups for this this portfolio in results
+  --includeApplications: oneof<nothing, bool> # Include applications for this portfolio in results
+  --includeEnvironments: oneof<nothing, bool> # Include environments for the included applications this portfolio in results
   --createdBy: any # nullable
   --updatedBy: any # nullable
   --whenCreated: string # nullable, format: date-time
@@ -234,9 +233,9 @@ export def "mr-api-portfolio get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeGroups: string@bool-completer # Include groups for this this portfolio in results
-  --includeApplications: string@bool-completer # Include applications for this portfolio in results
-  --includeEnvironments: string@bool-completer # Include the environments inside the applications
+  --includeGroups: oneof<nothing, bool> # Include groups for this this portfolio in results
+  --includeApplications: oneof<nothing, bool> # Include applications for this portfolio in results
+  --includeEnvironments: oneof<nothing, bool> # Include the environments inside the applications
 ]: nothing -> record<createdBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<record>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, updatedBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<record>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, whenCreated: string, whenUpdated: string, id: string, name: string, description: string, version: int, organizationId: string, groups: table<createdBy: record, updatedBy: record, whenCreated: string, whenUpdated: string, id: string, admin: bool, portfolioId: string, organizationId: string, version: int, name: string, superMembers: list, simpleMembers: list, members: list, applicationRoles: list, environmentRoles: list, whenArchived: string>, applications: table<createdBy: record, updatedBy: record, whenCreated: string, whenUpdated: string, id: string, name: string, description: string, portfolioId: string, version: int, groups: list, features: list, environments: list, whenArchived: string>, whenArchived: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -264,9 +263,9 @@ export def "mr-api-portfolio updatePortfolio" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeGroups: string@bool-completer # Include groups for this this portfolio in results
-  --includeApplications: string@bool-completer # Include applications for this portfolio in results
-  --includeEnvironments: string@bool-completer # Include the environments inside the applications
+  --includeGroups: oneof<nothing, bool> # Include groups for this this portfolio in results
+  --includeApplications: oneof<nothing, bool> # Include applications for this portfolio in results
+  --includeEnvironments: oneof<nothing, bool> # Include the environments inside the applications
   --createdBy: any # nullable
   --updatedBy: any # nullable
   --whenCreated: string # nullable, format: date-time
@@ -305,9 +304,9 @@ export def "mr-api-portfolio delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeGroups: string@bool-completer # Include groups for this this portfolio in results
-  --includeApplications: string@bool-completer # Include applications for this portfolio in results
-  --includeEnvironments: string@bool-completer # Include the environments inside the applications
+  --includeGroups: oneof<nothing, bool> # Include groups for this this portfolio in results
+  --includeApplications: oneof<nothing, bool> # Include applications for this portfolio in results
+  --includeEnvironments: oneof<nothing, bool> # Include the environments inside the applications
 ]: nothing -> bool {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -331,8 +330,8 @@ export def "mr-api-portfolio-application findApplications" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeEnvironments: string@bool-completer # Include the environments in the result
-  --includeFeatures: string@bool-completer # Include the features in the result
+  --includeEnvironments: oneof<nothing, bool> # Include the environments in the result
+  --includeFeatures: oneof<nothing, bool> # Include the features in the result
   --order: string@order-completer # how to order the results (nullable)
   --filter: string # What to filter the results by
 ]: nothing -> table<createdBy: record<id: record, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list>, updatedBy: record<id: record, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list>, whenCreated: string, whenUpdated: string, id: string, name: string, description: string, portfolioId: string, version: int, groups: list<record>, features: list<record>, environments: list<record>, whenArchived: string> {
@@ -358,8 +357,8 @@ export def "mr-api-portfolio-application createApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeEnvironments: string@bool-completer # Include the environments in the result
-  --includeFeatures: string@bool-completer # Include the features in the result
+  --includeEnvironments: oneof<nothing, bool> # Include the environments in the result
+  --includeFeatures: oneof<nothing, bool> # Include the features in the result
   name: string
   description: string
 ]: any -> record<createdBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<record>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, updatedBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<record>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, whenCreated: string, whenUpdated: string, id: string, name: string, description: string, portfolioId: string, version: int, groups: table<createdBy: record, updatedBy: record, whenCreated: string, whenUpdated: string, id: string, admin: bool, portfolioId: string, organizationId: string, version: int, name: string, superMembers: list, simpleMembers: list, members: list, applicationRoles: list, environmentRoles: list, whenArchived: string>, features: table<id: string, key: string, alias: string, link: string, name: string, valueType: any, version: int, whenArchived: string, secret: bool, description: string, metaData: string, featureFilter: list>, environments: table<createdBy: record, updatedBy: record, whenCreated: string, whenUpdated: string, id: string, applicationId: string, name: string, priorEnvironmentId: string, version: int, description: string, production: bool, groupRoles: list, features: list, environmentInfo: any, webhookEnvironmentInfo: any, serviceAccountPermission: list, whenArchived: string>, whenArchived: string> {
@@ -391,8 +390,8 @@ export def "mr-api-portfolio-application updateApplicationOnPortfolio" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeEnvironments: string@bool-completer # Include the environments in the result
-  --includeFeatures: string@bool-completer # Include the features in the result
+  --includeEnvironments: oneof<nothing, bool> # Include the environments in the result
+  --includeFeatures: oneof<nothing, bool> # Include the features in the result
   --createdBy: any # nullable
   --updatedBy: any # nullable
   --whenCreated: string # nullable, format: date-time
@@ -432,7 +431,7 @@ export def "mr-api-portfolio-group findGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includePeople: string@bool-completer # include people in each group
+  --includePeople: oneof<nothing, bool> # include people in each group
   --order: string@order-completer # how to order the results (nullable)
   --filter: string # What to filter the results by
 ]: nothing -> table<createdBy: record<id: record, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list>, updatedBy: record<id: record, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list>, whenCreated: string, whenUpdated: string, id: string, admin: bool, portfolioId: string, organizationId: string, version: int, name: string, superMembers: list<string>, simpleMembers: list<record>, members: list<record>, applicationRoles: list<record>, environmentRoles: list<record>, whenArchived: string> {
@@ -459,9 +458,9 @@ export def "mr-api-portfolio-group createGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includePeople: string@bool-completer # include people in each group
+  --includePeople: oneof<nothing, bool> # include people in each group
   --name: string
-  --admin: string@bool-completer # is this an admin group? (nullable)
+  --admin: oneof<nothing, bool> # is this an admin group? (nullable)
   --applicationRoles: list # nullable, default: [] — item shape: {applicationId: string, groupId: string, roles: list}
 ]: any -> record<createdBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<any>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, updatedBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<any>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, whenCreated: string, whenUpdated: string, id: string, admin: bool, portfolioId: string, organizationId: string, version: int, name: string, superMembers: list<string>, simpleMembers: table<id: string, name: string, email: string, type: string>, members: table<id: record, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list>, applicationRoles: table<applicationId: string, groupId: string, roles: list>, environmentRoles: table<environmentId: string, groupId: string, roles: list>, whenArchived: string> {
   let input = $in
@@ -491,12 +490,12 @@ export def "mr-api-portfolio-group updateGroupOnPortfolio" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includePeople: string@bool-completer # include people in each group
-  --includeMembers: string@bool-completer # include people in each group
-  --includeMembersV2: string@bool-completer # include anemic people in each group with superuser
-  --includeGroupRoles: string@bool-completer # include environment and application roles in each group
-  --updateEnvironmentGroupRoles: string@bool-completer # update environment group roles, deleting any not passed
-  --updateApplicationGroupRoles: string@bool-completer # update application group roles, deleting any not passed
+  --includePeople: oneof<nothing, bool> # include people in each group
+  --includeMembers: oneof<nothing, bool> # include people in each group
+  --includeMembersV2: oneof<nothing, bool> # include anemic people in each group with superuser
+  --includeGroupRoles: oneof<nothing, bool> # include environment and application roles in each group
+  --updateEnvironmentGroupRoles: oneof<nothing, bool> # update environment group roles, deleting any not passed
+  --updateApplicationGroupRoles: oneof<nothing, bool> # update application group roles, deleting any not passed
   --applicationId: string # if updating the application group roles, and the application id is passed, then the changes are limited to that application (format: uuid)
   --body-id: string # format: uuid
   --name: string # nullable
@@ -528,14 +527,14 @@ export def "mr-api-person findPeople" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeGroups: string@bool-completer # Include groups in result
-  --countGroups: string@bool-completer # Return the number of groups
+  --includeGroups: oneof<nothing, bool> # Include groups in result
+  --countGroups: oneof<nothing, bool> # Return the number of groups
   --order: string@order-completer # how to order the results (nullable)
   --filter: string # What to filter the results by
   --startAt: int # Where in the results to start
   --pageSize: int # How many results to return
-  --includeLastLoggedIn: string@bool-completer # Include last logged in timestamp
-  --includeDeactivated: string@bool-completer # Include people who are no longer active
+  --includeLastLoggedIn: oneof<nothing, bool> # Include last logged in timestamp
+  --includeDeactivated: oneof<nothing, bool> # Include people who are no longer active
   --personTypes: list # Filter by person types
   --sortBy: string@sortBy-completer
 ]: nothing -> record<max: int, people: table<id: record, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list>, summarisedPeople: table<id: string, name: string, email: string, version: int, personType: string, whenLastAuthenticated: string, whenLastSeen: string, whenDeactivated: string, groupCount: int>, outstandingRegistrations: table<id: string, token: string, expired: bool>> {
@@ -560,7 +559,7 @@ export def "mr-api-person createPerson" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeGroups: string@bool-completer # Include groups in result
+  --includeGroups: oneof<nothing, bool> # Include groups in result
   --email: string # Can be null if a service account (nullable, format: email)
   personType: string@personType-completer # default: person
   --name: string # Can be null if a service account (nullable)
@@ -617,7 +616,7 @@ export def "mr-api-person updatePersonV2" [
   --email: string # nullable, format: email
   version: int # This keeps track of which person version we are updating in case the user tries to update an old record (format: int64)
   --groups: list # nullable
-  --unarchive: string@bool-completer # nullable
+  --unarchive: oneof<nothing, bool> # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -643,8 +642,8 @@ export def "mr-api-person get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeGroups: string@bool-completer # Include groups in result
-  --includeAcls: string@bool-completer # include acls for each group
+  --includeGroups: oneof<nothing, bool> # Include groups in result
+  --includeAcls: oneof<nothing, bool> # include acls for each group
 ]: nothing -> record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: table<createdBy: record, updatedBy: record, whenCreated: string, whenUpdated: string, id: string, admin: bool, portfolioId: string, organizationId: string, version: int, name: string, superMembers: list, simpleMembers: list, members: list, applicationRoles: list, environmentRoles: list, whenArchived: string>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: table<key: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -670,8 +669,8 @@ export def "mr-api-person updatePerson" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeGroups: string@bool-completer # Include groups in result
-  --includeAcls: string@bool-completer # include acls for each group
+  --includeGroups: oneof<nothing, bool> # Include groups in result
+  --includeAcls: oneof<nothing, bool> # include acls for each group
   --body-id: any # nullable
   --name: string # nullable
   --email: string # nullable, format: email
@@ -679,7 +678,7 @@ export def "mr-api-person updatePerson" [
   --other: string # nullable
   --body-source: string # nullable
   --version: int # nullable, format: int64
-  --passwordRequiresReset: string@bool-completer # nullable
+  --passwordRequiresReset: oneof<nothing, bool> # nullable
   --groups: list # default: [] — item shape: {createdBy?: any, updatedBy?: any, whenCreated?: string, whenUpdated?: string, id: string, admin?: bool, portfolioId?: string, organizationId?: string, version?: int, name: string, superMembers?: list, simpleMembers?: list, members?: list, applicationRoles?: list, environmentRoles?: list, whenArchived?: string}
   --whenArchived: string # nullable, format: date-time
   --whenLastAuthenticated: string # This is the timestamp in UTC when they last logged into the system (nullable, format: date-time)
@@ -711,8 +710,8 @@ export def "mr-api-person delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeGroups: string@bool-completer # Include groups in result
-  --includeAcls: string@bool-completer # include acls for each group
+  --includeGroups: oneof<nothing, bool> # Include groups in result
+  --includeAcls: oneof<nothing, bool> # include acls for each group
 ]: nothing -> bool {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -835,7 +834,7 @@ export def "mr-api-authentication-replace-temp-password replaceTempPassword" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   password: string
-  --reactivate: string@bool-completer # default: false
+  --reactivate: oneof<nothing, bool> # default: false
 ]: any -> record<accessToken: string, refreshToken: string, redirectUrl: string, capabilityInfo: any, person: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<record>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -933,7 +932,7 @@ export def "mr-api-authentication-reset-password resetPassword" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   password: string
-  --reactivate: string@bool-completer # default: false
+  --reactivate: oneof<nothing, bool> # default: false
 ]: any -> record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: table<createdBy: record, updatedBy: record, whenCreated: string, whenUpdated: string, id: string, admin: bool, portfolioId: string, organizationId: string, version: int, name: string, superMembers: list, simpleMembers: list, members: list, applicationRoles: list, environmentRoles: list, whenArchived: string>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: table<key: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -959,7 +958,7 @@ export def "mr-api-application get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeEnvironments: string@bool-completer # Include the environments in the result
+  --includeEnvironments: oneof<nothing, bool> # Include the environments in the result
 ]: nothing -> record<createdBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<record>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, updatedBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<record>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, whenCreated: string, whenUpdated: string, id: string, name: string, description: string, portfolioId: string, version: int, groups: table<createdBy: record, updatedBy: record, whenCreated: string, whenUpdated: string, id: string, admin: bool, portfolioId: string, organizationId: string, version: int, name: string, superMembers: list, simpleMembers: list, members: list, applicationRoles: list, environmentRoles: list, whenArchived: string>, features: table<id: string, key: string, alias: string, link: string, name: string, valueType: any, version: int, whenArchived: string, secret: bool, description: string, metaData: string, featureFilter: list>, environments: table<createdBy: record, updatedBy: record, whenCreated: string, whenUpdated: string, id: string, applicationId: string, name: string, priorEnvironmentId: string, version: int, description: string, production: bool, groupRoles: list, features: list, environmentInfo: any, webhookEnvironmentInfo: any, serviceAccountPermission: list, whenArchived: string>, whenArchived: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -988,7 +987,7 @@ export def "mr-api-application updateApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeEnvironments: string@bool-completer # Include the environments in the result
+  --includeEnvironments: oneof<nothing, bool> # Include the environments in the result
   --createdBy: any # nullable
   --updatedBy: any # nullable
   --whenCreated: string # nullable, format: date-time
@@ -1028,7 +1027,7 @@ export def "mr-api-application delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeEnvironments: string@bool-completer # Include the environments in the result
+  --includeEnvironments: oneof<nothing, bool> # Include the environments in the result
 ]: nothing -> bool {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1074,7 +1073,7 @@ export def "mr-api-application-features list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeMetaData: string@bool-completer # Include the metadata in the returned feature objects. Can be large.
+  --includeMetaData: oneof<nothing, bool> # Include the metadata in the returned feature objects. Can be large.
 ]: nothing -> table<id: string, key: string, alias: string, link: string, name: string, valueType: any, version: int, whenArchived: string, secret: bool, description: string, metaData: string, featureFilter: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1098,13 +1097,13 @@ export def "mr-api-application-features createFeaturesForApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeMetaData: string@bool-completer # Include the metadata in the returned feature objects. Can be large.
+  --includeMetaData: oneof<nothing, bool> # Include the metadata in the returned feature objects. Can be large.
   key: string # Unique within this application
   --alias: string # use this in code, as then people cannot guess your new features from their names (nullable)
   --link: string # nullable
   name: string # description if any
   valueType: any
-  --secret: string@bool-completer # should the config remain invisible to users without secret permission (nullable)
+  --secret: oneof<nothing, bool> # should the config remain invisible to users without secret permission (nullable)
   --description: string # nullable
   --metaData: string # Metadata that may need to be stored. Intended for ADK use. No data limit on FHOS. 10k on SaaS. (stored as CLOB) (nullable)
   --featureFilter: list # The ID's of Filters associated with this feature (nullable)
@@ -1134,8 +1133,8 @@ export def "mr-api-application-features updateFeatureForApplicationOnFeature" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeMetaData: string@bool-completer # Include the metadata in the returned feature objects. Can be large.
-  --returnAllFeatures: string@bool-completer # default: true
+  --includeMetaData: oneof<nothing, bool> # Include the metadata in the returned feature objects. Can be large.
+  --returnAllFeatures: oneof<nothing, bool> # default: true
   --body-id: string # nullable, format: uuid
   --key: string # Unique within this application
   --alias: string # use this in code, as then people cannot guess your new features from their names (nullable)
@@ -1144,7 +1143,7 @@ export def "mr-api-application-features updateFeatureForApplicationOnFeature" [
   --valueType: any
   --version: int # used for optimistic locking when renaming a feature (format: int64)
   --whenArchived: string # nullable, format: date-time
-  --secret: string@bool-completer # should the config remain invisible to users without secret permission (nullable)
+  --secret: oneof<nothing, bool> # should the config remain invisible to users without secret permission (nullable)
   --description: string # nullable
   --metaData: string # Metadata that may need to be stored. Intended for ADK use. No data limit on FHOS. 10k on SaaS. (stored as CLOB) (nullable)
   --featureFilter: list # The ID's of Filters associated with this feature (nullable)
@@ -1175,8 +1174,8 @@ export def "mr-api-application-features get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeMetaData: string@bool-completer # Include the metadata in the returned feature objects. Can be large.
-  --includeFilters: string@bool-completer # Include the filters associated with the flag
+  --includeMetaData: oneof<nothing, bool> # Include the metadata in the returned feature objects. Can be large.
+  --includeFilters: oneof<nothing, bool> # Include the filters associated with the flag
 ]: nothing -> record<id: string, key: string, alias: string, link: string, name: string, valueType: any, version: int, whenArchived: string, secret: bool, description: string, metaData: string, featureFilter: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1201,8 +1200,8 @@ export def "mr-api-application-features updateFeatureForApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeMetaData: string@bool-completer # Include the metadata in the returned feature objects. Can be large.
-  --includeFilters: string@bool-completer # Include the filters associated with the flag
+  --includeMetaData: oneof<nothing, bool> # Include the metadata in the returned feature objects. Can be large.
+  --includeFilters: oneof<nothing, bool> # Include the filters associated with the flag
   --body-id: string # nullable, format: uuid
   --body-key: string # Unique within this application
   --alias: string # use this in code, as then people cannot guess your new features from their names (nullable)
@@ -1211,7 +1210,7 @@ export def "mr-api-application-features updateFeatureForApplication" [
   --valueType: any
   --version: int # used for optimistic locking when renaming a feature (format: int64)
   --whenArchived: string # nullable, format: date-time
-  --secret: string@bool-completer # should the config remain invisible to users without secret permission (nullable)
+  --secret: oneof<nothing, bool> # should the config remain invisible to users without secret permission (nullable)
   --description: string # nullable
   --metaData: string # Metadata that may need to be stored. Intended for ADK use. No data limit on FHOS. 10k on SaaS. (stored as CLOB) (nullable)
   --featureFilter: list # The ID's of Filters associated with this feature (nullable)
@@ -1242,8 +1241,8 @@ export def "mr-api-application-features delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeMetaData: string@bool-completer # Include the metadata in the returned feature objects. Can be large.
-  --includeFilters: string@bool-completer # Include the filters associated with the flag
+  --includeMetaData: oneof<nothing, bool> # Include the metadata in the returned feature objects. Can be large.
+  --includeFilters: oneof<nothing, bool> # Include the filters associated with the flag
 ]: nothing -> table<id: string, key: string, alias: string, link: string, name: string, valueType: any, version: int, whenArchived: string, secret: bool, description: string, metaData: string, featureFilter: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1291,7 +1290,7 @@ export def "mr-api-application-feature-environments updateAllFeatureValuesByAppl
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --removeValuesNotPassed: string@bool-completer # The id of the application to find
+  --removeValuesNotPassed: oneof<nothing, bool> # The id of the application to find
   --body: record
 ]: any -> table<environment: record<createdBy: record, updatedBy: record, whenCreated: string, whenUpdated: string, id: string, applicationId: string, name: string, priorEnvironmentId: string, version: int, description: string, production: bool, groupRoles: list, features: list, environmentInfo: any, webhookEnvironmentInfo: any, serviceAccountPermission: list, whenArchived: string>, roles: list<any>, featureValue: record<id: string, key: string, locked: bool, value: any, valueString: string, valueNumber: float, valueBoolean: bool, valueJson: string, retired: bool, rolloutStrategyInstances: list, rolloutStrategies: list, sharedRolloutStrategies: list, featureGroupStrategies: list, environmentId: string, version: int, whoUpdated: record, whenUpdated: string, whatUpdated: string>, serviceAccounts: list<record>> {
   let input = $in
@@ -1375,9 +1374,9 @@ export def "mr-api-application-environment findEnvironments" [
   --allow-errors(-e) # Return full response without error handling
   --order: string@order-completer-1 # how to order the results
   --filter: string # What to filter the results by
-  --includeAcls: string@bool-completer # Include the acls attached to this environment
-  --includeFeatures: string@bool-completer # Include the features attached to this environment
-  --includeDetails: string@bool-completer # Include all environment details
+  --includeAcls: oneof<nothing, bool> # Include the acls attached to this environment
+  --includeFeatures: oneof<nothing, bool> # Include the features attached to this environment
+  --includeDetails: oneof<nothing, bool> # Include all environment details
 ]: nothing -> table<createdBy: record<id: record, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list>, updatedBy: record<id: record, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list>, whenCreated: string, whenUpdated: string, id: string, applicationId: string, name: string, priorEnvironmentId: string, version: int, description: string, production: bool, groupRoles: list<record>, features: list<record>, environmentInfo: any, webhookEnvironmentInfo: any, serviceAccountPermission: list<record>, whenArchived: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1405,7 +1404,7 @@ export def "mr-api-application-environment createEnvironmentOnApplication" [
   --priorEnvironmentId: string # nullable, format: uuid
   description: string
   --environmentInfo: any # nullable
-  --production: string@bool-completer # is this a production environment? (default: false)
+  --production: oneof<nothing, bool> # is this a production environment? (default: false)
 ]: any -> record<createdBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<record>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, updatedBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<record>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, whenCreated: string, whenUpdated: string, id: string, applicationId: string, name: string, priorEnvironmentId: string, version: int, description: string, production: bool, groupRoles: table<environmentId: string, groupId: string, roles: list>, features: table<id: string, key: string, alias: string, link: string, name: string, valueType: any, version: int, whenArchived: string, secret: bool, description: string, metaData: string, featureFilter: list>, environmentInfo: any, webhookEnvironmentInfo: any, serviceAccountPermission: table<id: string, permissions: list, serviceAccount: record, environmentId: string, sdkUrlClientEval: string, sdkUrlServerEval: string>, whenArchived: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1431,11 +1430,11 @@ export def "mr-api-application-environment updateEnvironmentOnApplication" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDetails: string@bool-completer # Include all environment details
+  --includeDetails: oneof<nothing, bool> # Include all environment details
   version: int # Version of the record, included for attempting to update out of date records (format: int64)
   --name: string # nullable
   --description: string # nullable
-  --production: string@bool-completer # is this a production environment? (nullable)
+  --production: oneof<nothing, bool> # is this a production environment? (nullable)
   --environmentInfo: any # Allows some settings that affect the behaviour of this environment. Currently `cacheControl` if set will be passed and set on the responses to GET requests. (nullable)
   --webhookEnvironmentInfo: any # Environment webhook url and headers (nullable)
   --priorEnvironmentId: string # nullable, format: uuid
@@ -1494,7 +1493,7 @@ export def "mr-api-application-permissions createEnvironment" [
   --priorEnvironmentId: string # nullable, format: uuid
   description: string
   --environmentInfo: any # nullable
-  --production: string@bool-completer # is this a production environment? (default: false)
+  --production: oneof<nothing, bool> # is this a production environment? (default: false)
 ]: any -> record<createdBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<record>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, updatedBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<record>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, whenCreated: string, whenUpdated: string, id: string, applicationId: string, name: string, priorEnvironmentId: string, version: int, description: string, production: bool, groupRoles: table<environmentId: string, groupId: string, roles: list>, features: table<id: string, key: string, alias: string, link: string, name: string, valueType: any, version: int, whenArchived: string, secret: bool, description: string, metaData: string, featureFilter: list>, environmentInfo: any, webhookEnvironmentInfo: any, serviceAccountPermission: table<id: string, permissions: list, serviceAccount: record, environmentId: string, sdkUrlClientEval: string, sdkUrlServerEval: string>, whenArchived: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1522,13 +1521,13 @@ export def "mr-api-environment updateEnvironmentV2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeAcls: string@bool-completer # Include the acls attached to this environment
-  --includeFeatures: string@bool-completer # Include the features attached to this environment
-  --includeDetails: string@bool-completer # Include all environment details
+  --includeAcls: oneof<nothing, bool> # Include the acls attached to this environment
+  --includeFeatures: oneof<nothing, bool> # Include the features attached to this environment
+  --includeDetails: oneof<nothing, bool> # Include all environment details
   version: int # Version of the record, included for attempting to update out of date records (format: int64)
   --name: string # nullable
   --description: string # nullable
-  --production: string@bool-completer # is this a production environment? (nullable)
+  --production: oneof<nothing, bool> # is this a production environment? (nullable)
   --environmentInfo: any # Allows some settings that affect the behaviour of this environment. Currently `cacheControl` if set will be passed and set on the responses to GET requests. (nullable)
   --webhookEnvironmentInfo: any # Environment webhook url and headers (nullable)
   --priorEnvironmentId: string # nullable, format: uuid
@@ -1558,12 +1557,12 @@ export def "mr-api-environment get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeAcls: string@bool-completer # Include the acls attached to this environment
-  --includeFeatures: string@bool-completer # Include the features attached to this environment
-  --includeDetails: string@bool-completer # Include all environment details
-  --decryptWebhookDetails: string@bool-completer # Decrypt all webhook env details
-  --includeSdkUrl: string@bool-completer # include the sdk url
-  --includeServiceAccounts: string@bool-completer # Include the service accounts attached to this environment
+  --includeAcls: oneof<nothing, bool> # Include the acls attached to this environment
+  --includeFeatures: oneof<nothing, bool> # Include the features attached to this environment
+  --includeDetails: oneof<nothing, bool> # Include all environment details
+  --decryptWebhookDetails: oneof<nothing, bool> # Decrypt all webhook env details
+  --includeSdkUrl: oneof<nothing, bool> # include the sdk url
+  --includeServiceAccounts: oneof<nothing, bool> # Include the service accounts attached to this environment
 ]: nothing -> record<createdBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<record>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, updatedBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<record>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, whenCreated: string, whenUpdated: string, id: string, applicationId: string, name: string, priorEnvironmentId: string, version: int, description: string, production: bool, groupRoles: table<environmentId: string, groupId: string, roles: list>, features: table<id: string, key: string, alias: string, link: string, name: string, valueType: any, version: int, whenArchived: string, secret: bool, description: string, metaData: string, featureFilter: list>, environmentInfo: any, webhookEnvironmentInfo: any, serviceAccountPermission: table<id: string, permissions: list, serviceAccount: record, environmentId: string, sdkUrlClientEval: string, sdkUrlServerEval: string>, whenArchived: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1592,10 +1591,10 @@ export def "mr-api-environment updateEnvironment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeAcls: string@bool-completer # Include the acls attached to this environment
-  --includeFeatures: string@bool-completer # Include the features attached to this environment
-  --includeDetails: string@bool-completer # Include all environment details
-  --decryptWebhookDetails: string@bool-completer # Decrypt all webhook env details
+  --includeAcls: oneof<nothing, bool> # Include the acls attached to this environment
+  --includeFeatures: oneof<nothing, bool> # Include the features attached to this environment
+  --includeDetails: oneof<nothing, bool> # Include all environment details
+  --decryptWebhookDetails: oneof<nothing, bool> # Decrypt all webhook env details
   --createdBy: any # nullable
   --updatedBy: any # nullable
   --whenCreated: string # nullable, format: date-time
@@ -1606,7 +1605,7 @@ export def "mr-api-environment updateEnvironment" [
   --priorEnvironmentId: string # nullable, format: uuid
   --version: int # format: int64
   --description: string # nullable
-  --production: string@bool-completer # is this a production environment? (nullable)
+  --production: oneof<nothing, bool> # is this a production environment? (nullable)
   --groupRoles: list # nullable, default: [] — item shape: {environmentId: string, groupId: string, roles: list}
   --features: list # nullable, default: [] — item shape: {id?: string, key?: string, alias?: string, link?: string, name: string, valueType?: any, version?: int, whenArchived?: string, secret?: bool, description?: string, metaData?: string, featureFilter?: list}
   --environmentInfo: any # nullable, default: {}
@@ -1639,10 +1638,10 @@ export def "mr-api-environment delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeAcls: string@bool-completer # Include the acls attached to this environment
-  --includeFeatures: string@bool-completer # Include the features attached to this environment
-  --includeDetails: string@bool-completer # Include all environment details
-  --decryptWebhookDetails: string@bool-completer # Decrypt all webhook env details
+  --includeAcls: oneof<nothing, bool> # Include the acls attached to this environment
+  --includeFeatures: oneof<nothing, bool> # Include the features attached to this environment
+  --includeDetails: oneof<nothing, bool> # Include all environment details
+  --decryptWebhookDetails: oneof<nothing, bool> # Decrypt all webhook env details
 ]: nothing -> bool {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1666,7 +1665,7 @@ export def "mr-api-features get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeFeatures: string@bool-completer # include the features in the result
+  --includeFeatures: oneof<nothing, bool> # include the features in the result
   --filter: string # Filter the feature names by this filter.
 ]: nothing -> record<featureValues: table<id: string, key: string, locked: bool, value: any, valueString: string, valueNumber: float, valueBoolean: bool, valueJson: string, retired: bool, rolloutStrategyInstances: list, rolloutStrategies: list, sharedRolloutStrategies: list, featureGroupStrategies: list, environmentId: string, version: int, whoUpdated: record, whenUpdated: string, whatUpdated: string>, environments: table<createdBy: record, updatedBy: record, whenCreated: string, whenUpdated: string, id: string, applicationId: string, name: string, priorEnvironmentId: string, version: int, description: string, production: bool, groupRoles: list, features: list, environmentInfo: any, webhookEnvironmentInfo: any, serviceAccountPermission: list, whenArchived: string>, applications: table<createdBy: record, updatedBy: record, whenCreated: string, whenUpdated: string, id: string, name: string, description: string, portfolioId: string, version: int, groups: list, features: list, environments: list, whenArchived: string>, features: table<id: string, key: string, alias: string, link: string, name: string, valueType: any, version: int, whenArchived: string, secret: bool, description: string, metaData: string, featureFilter: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1750,13 +1749,13 @@ export def "mr-api-features-feature updateFeatureForEnvironment" [
   --allow-errors(-e) # Return full response without error handling
   --id: string # nullable, format: uuid
   --body-key: string
-  --locked: string@bool-completer
+  --locked: oneof<nothing, bool>
   --value: any # Preferred now, please don't use valueX fields
   --valueString: string # default value if no strategy matches. interpreted by type in parent (DEPRECATED, nullable)
   --valueNumber: float # DEPRECATED, nullable
-  --valueBoolean: string@bool-completer # DEPRECATED, nullable
+  --valueBoolean: oneof<nothing, bool> # DEPRECATED, nullable
   --valueJson: string # DEPRECATED, nullable
-  --retired: string@bool-completer # if false or null, this feature will visible on edge. if true, it will not be passed to the client (default: false)
+  --retired: oneof<nothing, bool> # if false or null, this feature will visible on edge. if true, it will not be passed to the client (default: false)
   --rolloutStrategyInstances: list # nullable, default: [] — item shape: {name?: string, strategyId?: string, value?: any, disabled?: bool}
   --rolloutStrategies: list # These are custom rollout strategies that only apply to this feature value. (nullable, default: []) — item shape: {id?: string}
   --sharedRolloutStrategies: list # This is list is either provided empty (when publishing) or anemic so the MR will client will understand which shared strategies are attached without having to back-call. If provided then it will mirror rolloutStrategyInstances and only enabled ones will be passed back. The value from the rolloutStrategyInstance will be embedded. This field will _always_ be ignored when being sent back to the server, only rolloutStrategyInstances is used. (nullable, default: []) — item shape: {id?: string}
@@ -1802,13 +1801,13 @@ export def "mr-api-features-feature createFeatureForEnvironment" [
   --allow-errors(-e) # Return full response without error handling
   --id: string # nullable, format: uuid
   --body-key: string
-  --locked: string@bool-completer
+  --locked: oneof<nothing, bool>
   --value: any # Preferred now, please don't use valueX fields
   --valueString: string # default value if no strategy matches. interpreted by type in parent (DEPRECATED, nullable)
   --valueNumber: float # DEPRECATED, nullable
-  --valueBoolean: string@bool-completer # DEPRECATED, nullable
+  --valueBoolean: oneof<nothing, bool> # DEPRECATED, nullable
   --valueJson: string # DEPRECATED, nullable
-  --retired: string@bool-completer # if false or null, this feature will visible on edge. if true, it will not be passed to the client (default: false)
+  --retired: oneof<nothing, bool> # if false or null, this feature will visible on edge. if true, it will not be passed to the client (default: false)
   --rolloutStrategyInstances: list # nullable, default: [] — item shape: {name?: string, strategyId?: string, value?: any, disabled?: bool}
   --rolloutStrategies: list # These are custom rollout strategies that only apply to this feature value. (nullable, default: []) — item shape: {id?: string}
   --sharedRolloutStrategies: list # This is list is either provided empty (when publishing) or anemic so the MR will client will understand which shared strategies are attached without having to back-call. If provided then it will mirror rolloutStrategyInstances and only enabled ones will be passed back. The value from the rolloutStrategyInstance will be embedded. This field will _always_ be ignored when being sent back to the server, only rolloutStrategyInstances is used. (nullable, default: []) — item shape: {id?: string}
@@ -1866,9 +1865,9 @@ export def "mr-api-group get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeMembers: string@bool-completer # include people in each group (v1) - uses Members
-  --includeMembersV2: string@bool-completer # include people in each group (v2) - uses GroupMember instead of Members
-  --includeGroupRoles: string@bool-completer # include environment and application roles in each group
+  --includeMembers: oneof<nothing, bool> # include people in each group (v1) - uses Members
+  --includeMembersV2: oneof<nothing, bool> # include people in each group (v2) - uses GroupMember instead of Members
+  --includeGroupRoles: oneof<nothing, bool> # include environment and application roles in each group
   --byApplicationId: string # format: uuid
 ]: nothing -> record<createdBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<any>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, updatedBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<any>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, whenCreated: string, whenUpdated: string, id: string, admin: bool, portfolioId: string, organizationId: string, version: int, name: string, superMembers: list<string>, simpleMembers: table<id: string, name: string, email: string, type: string>, members: table<id: record, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list>, applicationRoles: table<applicationId: string, groupId: string, roles: list>, environmentRoles: table<environmentId: string, groupId: string, roles: list>, whenArchived: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1893,9 +1892,9 @@ export def "mr-api-group delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeMembers: string@bool-completer # include people in each group (v1) - uses Members
-  --includeMembersV2: string@bool-completer # include people in each group (v2) - uses GroupMember instead of Members
-  --includeGroupRoles: string@bool-completer # include environment and application roles in each group
+  --includeMembers: oneof<nothing, bool> # include people in each group (v1) - uses Members
+  --includeMembersV2: oneof<nothing, bool> # include people in each group (v2) - uses GroupMember instead of Members
+  --includeGroupRoles: oneof<nothing, bool> # include environment and application roles in each group
 ]: nothing -> bool {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1919,7 +1918,7 @@ export def "mr-api-group-person addPersonsToGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeMembersV2: string@bool-completer # include anemic people in each group with superuser info
+  --includeMembersV2: oneof<nothing, bool> # include anemic people in each group with superuser info
   --personId: list
   --email: list
 ]: nothing -> record<createdBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<any>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, updatedBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<any>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, whenCreated: string, whenUpdated: string, id: string, admin: bool, portfolioId: string, organizationId: string, version: int, name: string, superMembers: list<string>, simpleMembers: table<id: string, name: string, email: string, type: string>, members: table<id: record, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list>, applicationRoles: table<applicationId: string, groupId: string, roles: list>, environmentRoles: table<environmentId: string, groupId: string, roles: list>, whenArchived: string> {
@@ -1946,8 +1945,8 @@ export def "mr-api-group-person addPersonToGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeMembers: string@bool-completer # include people in each group
-  --includeMembersV2: string@bool-completer # include anemic people in each group with superuser info
+  --includeMembers: oneof<nothing, bool> # include people in each group
+  --includeMembersV2: oneof<nothing, bool> # include anemic people in each group with superuser info
 ]: nothing -> record<createdBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<any>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, updatedBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<any>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, whenCreated: string, whenUpdated: string, id: string, admin: bool, portfolioId: string, organizationId: string, version: int, name: string, superMembers: list<string>, simpleMembers: table<id: string, name: string, email: string, type: string>, members: table<id: record, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list>, applicationRoles: table<applicationId: string, groupId: string, roles: list>, environmentRoles: table<environmentId: string, groupId: string, roles: list>, whenArchived: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1972,8 +1971,8 @@ export def "mr-api-group-person delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeMembers: string@bool-completer # include people in each group
-  --includeMembersV2: string@bool-completer # include anemic people in each group with superuser info
+  --includeMembers: oneof<nothing, bool> # include people in each group
+  --includeMembersV2: oneof<nothing, bool> # include anemic people in each group with superuser info
 ]: nothing -> record<createdBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<any>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, updatedBy: record<id: record<id: string>, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list<any>, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list<record>>, whenCreated: string, whenUpdated: string, id: string, admin: bool, portfolioId: string, organizationId: string, version: int, name: string, superMembers: list<string>, simpleMembers: table<id: string, name: string, email: string, type: string>, members: table<id: record, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list>, applicationRoles: table<applicationId: string, groupId: string, roles: list>, environmentRoles: table<environmentId: string, groupId: string, roles: list>, whenArchived: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1997,10 +1996,10 @@ export def "mr-api-portfolio-service-account searchServiceAccountsInPortfolio" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includePermissions: string@bool-completer # include permissions in return
+  --includePermissions: oneof<nothing, bool> # include permissions in return
   --filter: string # include environments for each account
   --applicationId: string # Application ID to filter on (format: uuid)
-  --includeSdkUrls: string@bool-completer # Include the SDKs for environments the user has access to
+  --includeSdkUrls: oneof<nothing, bool> # Include the SDKs for environments the user has access to
 ]: nothing -> table<id: string, name: string, portfolioId: string, description: string, version: int, apiKeyClientSide: string, apiKeyServerSide: string, featureFilters: list<string>, permsInvalid: bool, permissions: list<record>, whenArchived: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2025,7 +2024,7 @@ export def "mr-api-portfolio-service-account createServiceAccountInPortfolio" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includePermissions: string@bool-completer # include permissions in return
+  --includePermissions: oneof<nothing, bool> # include permissions in return
   name: string
   --description: string # nullable
   --featureFilter: list # The ID's of Filters associated with this service account (nullable)
@@ -2057,7 +2056,7 @@ export def "mr-api-portfolio-service-account updateServiceAccountOnPortfolio" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includePermissions: string@bool-completer # include permissions in return
+  --includePermissions: oneof<nothing, bool> # include permissions in return
   --appId: string # limit removals to this application id (format: uuid)
   --body-id: string # format: uuid
   name: string
@@ -2067,7 +2066,7 @@ export def "mr-api-portfolio-service-account updateServiceAccountOnPortfolio" [
   --apiKeyClientSide: string # this is a read only field, it denotes an api key where the eval is done client side (nullable)
   --apiKeyServerSide: string # this is a read only field, it denotes an api key where the eval is done server side (nullable)
   --featureFilters: list # nullable
-  --permsInvalid: string@bool-completer # If this is true, then the permissions does not hold the actual permissions of the service account and should be ignored on update. It is set by the server and can be set on the client when calling update methods for service accounts. This is because the permissions field is always an array, it is not nullable. NULL or FALSE means the permissions field is valid and is the default behaviour. TRUE is new and is recognized by the server to not try and update permissions. (nullable)
+  --permsInvalid: oneof<nothing, bool> # If this is true, then the permissions does not hold the actual permissions of the service account and should be ignored on update. It is set by the server and can be set on the client when calling update methods for service accounts. This is because the permissions field is always an array, it is not nullable. NULL or FALSE means the permissions field is valid and is the default behaviour. TRUE is new and is recognized by the server to not try and update permissions. (nullable)
   --permissions: list # default: [] — item shape: {id?: string, permissions: list, serviceAccount?: any, environmentId: string, sdkUrlClientEval?: string, sdkUrlServerEval?: string}
   --whenArchived: string # nullable, format: date-time
 ]: any -> record<id: string, name: string, portfolioId: string, description: string, version: int, apiKeyClientSide: string, apiKeyServerSide: string, featureFilters: list<string>, permsInvalid: bool, permissions: table<id: string, permissions: list, serviceAccount: record, environmentId: string, sdkUrlClientEval: string, sdkUrlServerEval: string>, whenArchived: string> {
@@ -2096,8 +2095,8 @@ export def "mr-api-service-account get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includePermissions: string@bool-completer # include permissions in return
-  --includeFilters: string@bool-completer # include filters in return
+  --includePermissions: oneof<nothing, bool> # include permissions in return
+  --includeFilters: oneof<nothing, bool> # include filters in return
   --byApplicationId: string # format: uuid
 ]: nothing -> record<id: string, name: string, portfolioId: string, description: string, version: int, apiKeyClientSide: string, apiKeyServerSide: string, featureFilters: list<string>, permsInvalid: bool, permissions: table<id: string, permissions: list, serviceAccount: record, environmentId: string, sdkUrlClientEval: string, sdkUrlServerEval: string>, whenArchived: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2125,7 +2124,7 @@ export def "mr-api-service-account updateServiceAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includePermissions: string@bool-completer # include permissions in return
+  --includePermissions: oneof<nothing, bool> # include permissions in return
   --body-id: string # format: uuid
   name: string
   --portfolioId: string # nullable, format: uuid
@@ -2134,7 +2133,7 @@ export def "mr-api-service-account updateServiceAccount" [
   --apiKeyClientSide: string # this is a read only field, it denotes an api key where the eval is done client side (nullable)
   --apiKeyServerSide: string # this is a read only field, it denotes an api key where the eval is done server side (nullable)
   --featureFilters: list # nullable
-  --permsInvalid: string@bool-completer # If this is true, then the permissions does not hold the actual permissions of the service account and should be ignored on update. It is set by the server and can be set on the client when calling update methods for service accounts. This is because the permissions field is always an array, it is not nullable. NULL or FALSE means the permissions field is valid and is the default behaviour. TRUE is new and is recognized by the server to not try and update permissions. (nullable)
+  --permsInvalid: oneof<nothing, bool> # If this is true, then the permissions does not hold the actual permissions of the service account and should be ignored on update. It is set by the server and can be set on the client when calling update methods for service accounts. This is because the permissions field is always an array, it is not nullable. NULL or FALSE means the permissions field is valid and is the default behaviour. TRUE is new and is recognized by the server to not try and update permissions. (nullable)
   --permissions: list # default: [] — item shape: {id?: string, permissions: list, serviceAccount?: any, environmentId: string, sdkUrlClientEval?: string, sdkUrlServerEval?: string}
   --whenArchived: string # nullable, format: date-time
 ]: any -> record<id: string, name: string, portfolioId: string, description: string, version: int, apiKeyClientSide: string, apiKeyServerSide: string, featureFilters: list<string>, permsInvalid: bool, permissions: table<id: string, permissions: list, serviceAccount: record, environmentId: string, sdkUrlClientEval: string, sdkUrlServerEval: string>, whenArchived: string> {

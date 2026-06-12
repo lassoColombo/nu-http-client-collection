@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.xero.com/assets.xro/1.0"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -207,10 +206,10 @@ export def "assets createAsset" [
   --assetTypeId: string # The Xero-generated Id for the asset type (format: uuid, e.g. 3b5b3a38-5649-495f-87a1-14a4e5918634)
   --bookDepreciationDetail: any # shape: {costLimit?: float, currentAccumDepreciationAmount?: float, currentCapitalGain?: float, currentGainLoss?: float, depreciationStartDate?: string, priorAccumDepreciationAmount?: float, residualValue?: float}
   --bookDepreciationSetting: any # shape: {averagingMethod?: "FullMonth"|"ActualDays", bookEffectiveDateOfChangeId?: string, depreciableObjectId?: string, depreciableObjectType?: string, depreciationCalculationMethod?: "Rate"|"Life"|"None", depreciationMethod?: "NoDepreciation"|"StraightLine"|"DiminishingValue100"|"DiminishingValue150"|"DiminishingValue200"|"FullDepreciation", depreciationRate?: float, effectiveLifeYears?: int}
-  --canRollback: string@bool-completer # Boolean to indicate whether depreciation can be rolled back for this asset individually. This is true if it doesn't have 'legacy' journal entries and if there is no lock period that would prevent this asset from rolling back. (e.g. true)
+  --canRollback: oneof<nothing, bool> # Boolean to indicate whether depreciation can be rolled back for this asset individually. This is true if it doesn't have 'legacy' journal entries and if there is no lock period that would prevent this asset from rolling back. (e.g. true)
   --disposalDate: string # The date the asset was disposed (format: date, e.g. 2020-07-01T00:00:00)
   --disposalPrice: float # The price the asset was disposed at (format: double, e.g. 1.0000)
-  --isDeleteEnabledForDate: string@bool-completer # Boolean to indicate whether delete is enabled (e.g. true)
+  --isDeleteEnabledForDate: oneof<nothing, bool> # Boolean to indicate whether delete is enabled (e.g. true)
   --purchaseDate: string # The date the asset was purchased YYYY-MM-DD (format: date, e.g. 2015-07-01T00:00:00)
   --purchasePrice: float # The purchase price of the asset (format: double, e.g. 1000.0000)
   --serialNumber: string # The asset's serial number (e.g. ca4c6b39-4f4f-43e8-98da-5e1f350a6694)

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://storage.googleapis.com/storage/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -112,7 +111,7 @@ export def "b storagebucketslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -162,7 +161,7 @@ export def "b storagebucketsinsert" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -176,7 +175,7 @@ export def "b storagebucketsinsert" [
   --billing: record # The bucket's billing configuration. — shape: {requesterPays?: bool}
   --cors: list # The bucket's Cross-Origin Resource Sharing (CORS) configuration. — item shape: {maxAgeSeconds?: int, method?: list, origin?: list, responseHeader?: list}
   --customPlacementConfig: record # The bucket's custom placement configuration for Custom Dual Regions. — shape: {dataLocations?: list}
-  --defaultEventBasedHold: string@bool-completer # The default value for event-based hold on newly created objects in this bucket. Event-based hold is a way to retain objects indefinitely until an event occurs, signified by the hold's release. After being released, such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false. Objects under event-based hold cannot be deleted, overwritten or archived until the hold is removed.
+  --defaultEventBasedHold: oneof<nothing, bool> # The default value for event-based hold on newly created objects in this bucket. Event-based hold is a way to retain objects indefinitely until an event occurs, signified by the hold's release. After being released, such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false. Objects under event-based hold cannot be deleted, overwritten or archived until the hold is removed.
   --defaultObjectAcl: list # Default access controls to apply to new objects when no ACL is provided. — item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
   --encryption: record # Encryption configuration for a bucket. — shape: {defaultKmsKeyName?: string}
   --etag: string # HTTP 1.1 Entity tag for the bucket.
@@ -194,7 +193,7 @@ export def "b storagebucketsinsert" [
   --projectNumber: string # The project number of the project the bucket belongs to. (format: uint64)
   --retentionPolicy: record # The bucket's retention policy. The retention policy enforces a minimum retention time for all objects contained in the bucket, based on their creation time. Any attempt to overwrite or delete objects younger than the retention period will result in a PERMISSION_DENIED error. An unlocked retention policy can be modified or removed from the bucket via a storage.buckets.update operation. A locked retention policy cannot be removed or shortened in duration for the lifetime of the bucket. Attempting to remove or decrease period of a locked retention policy will result in a PERMISSION_DENIED error. — shape: {effectiveTime?: string, isLocked?: bool, retentionPeriod?: string}
   --rpo: string # The Recovery Point Objective (RPO) of this bucket. Set to ASYNC_TURBO to turn on Turbo Replication on a bucket.
-  --satisfiesPZS: string@bool-completer # Reserved for future use.
+  --satisfiesPZS: oneof<nothing, bool> # Reserved for future use.
   --selfLink: string # The URI of this bucket.
   --storageClass: string # The bucket's default storage class, used whenever no storageClass is specified for a newly-created object. This defines how objects in the bucket are stored and determines the SLA and the cost of storage. Values include MULTI_REGIONAL, REGIONAL, STANDARD, NEARLINE, COLDLINE, ARCHIVE, and DURABLE_REDUCED_AVAILABILITY. If this value is not specified when the bucket is created, it will default to STANDARD. For more information, see storage classes.
   --timeCreated: string # The creation time of the bucket in RFC 3339 format. (format: date-time)
@@ -231,7 +230,7 @@ export def "b storagebucketsdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -265,7 +264,7 @@ export def "b storagebucketsget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -314,7 +313,7 @@ export def "b storagebucketspatch" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -329,7 +328,7 @@ export def "b storagebucketspatch" [
   --billing: record # The bucket's billing configuration. — shape: {requesterPays?: bool}
   --cors: list # The bucket's Cross-Origin Resource Sharing (CORS) configuration. — item shape: {maxAgeSeconds?: int, method?: list, origin?: list, responseHeader?: list}
   --customPlacementConfig: record # The bucket's custom placement configuration for Custom Dual Regions. — shape: {dataLocations?: list}
-  --defaultEventBasedHold: string@bool-completer # The default value for event-based hold on newly created objects in this bucket. Event-based hold is a way to retain objects indefinitely until an event occurs, signified by the hold's release. After being released, such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false. Objects under event-based hold cannot be deleted, overwritten or archived until the hold is removed.
+  --defaultEventBasedHold: oneof<nothing, bool> # The default value for event-based hold on newly created objects in this bucket. Event-based hold is a way to retain objects indefinitely until an event occurs, signified by the hold's release. After being released, such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false. Objects under event-based hold cannot be deleted, overwritten or archived until the hold is removed.
   --defaultObjectAcl: list # Default access controls to apply to new objects when no ACL is provided. — item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
   --encryption: record # Encryption configuration for a bucket. — shape: {defaultKmsKeyName?: string}
   --etag: string # HTTP 1.1 Entity tag for the bucket.
@@ -347,7 +346,7 @@ export def "b storagebucketspatch" [
   --projectNumber: string # The project number of the project the bucket belongs to. (format: uint64)
   --retentionPolicy: record # The bucket's retention policy. The retention policy enforces a minimum retention time for all objects contained in the bucket, based on their creation time. Any attempt to overwrite or delete objects younger than the retention period will result in a PERMISSION_DENIED error. An unlocked retention policy can be modified or removed from the bucket via a storage.buckets.update operation. A locked retention policy cannot be removed or shortened in duration for the lifetime of the bucket. Attempting to remove or decrease period of a locked retention policy will result in a PERMISSION_DENIED error. — shape: {effectiveTime?: string, isLocked?: bool, retentionPeriod?: string}
   --rpo: string # The Recovery Point Objective (RPO) of this bucket. Set to ASYNC_TURBO to turn on Turbo Replication on a bucket.
-  --satisfiesPZS: string@bool-completer # Reserved for future use.
+  --satisfiesPZS: oneof<nothing, bool> # Reserved for future use.
   --selfLink: string # The URI of this bucket.
   --storageClass: string # The bucket's default storage class, used whenever no storageClass is specified for a newly-created object. This defines how objects in the bucket are stored and determines the SLA and the cost of storage. Values include MULTI_REGIONAL, REGIONAL, STANDARD, NEARLINE, COLDLINE, ARCHIVE, and DURABLE_REDUCED_AVAILABILITY. If this value is not specified when the bucket is created, it will default to STANDARD. For more information, see storage classes.
   --timeCreated: string # The creation time of the bucket in RFC 3339 format. (format: date-time)
@@ -398,7 +397,7 @@ export def "b storagebucketsupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -413,7 +412,7 @@ export def "b storagebucketsupdate" [
   --billing: record # The bucket's billing configuration. — shape: {requesterPays?: bool}
   --cors: list # The bucket's Cross-Origin Resource Sharing (CORS) configuration. — item shape: {maxAgeSeconds?: int, method?: list, origin?: list, responseHeader?: list}
   --customPlacementConfig: record # The bucket's custom placement configuration for Custom Dual Regions. — shape: {dataLocations?: list}
-  --defaultEventBasedHold: string@bool-completer # The default value for event-based hold on newly created objects in this bucket. Event-based hold is a way to retain objects indefinitely until an event occurs, signified by the hold's release. After being released, such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false. Objects under event-based hold cannot be deleted, overwritten or archived until the hold is removed.
+  --defaultEventBasedHold: oneof<nothing, bool> # The default value for event-based hold on newly created objects in this bucket. Event-based hold is a way to retain objects indefinitely until an event occurs, signified by the hold's release. After being released, such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false. Objects under event-based hold cannot be deleted, overwritten or archived until the hold is removed.
   --defaultObjectAcl: list # Default access controls to apply to new objects when no ACL is provided. — item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
   --encryption: record # Encryption configuration for a bucket. — shape: {defaultKmsKeyName?: string}
   --etag: string # HTTP 1.1 Entity tag for the bucket.
@@ -431,7 +430,7 @@ export def "b storagebucketsupdate" [
   --projectNumber: string # The project number of the project the bucket belongs to. (format: uint64)
   --retentionPolicy: record # The bucket's retention policy. The retention policy enforces a minimum retention time for all objects contained in the bucket, based on their creation time. Any attempt to overwrite or delete objects younger than the retention period will result in a PERMISSION_DENIED error. An unlocked retention policy can be modified or removed from the bucket via a storage.buckets.update operation. A locked retention policy cannot be removed or shortened in duration for the lifetime of the bucket. Attempting to remove or decrease period of a locked retention policy will result in a PERMISSION_DENIED error. — shape: {effectiveTime?: string, isLocked?: bool, retentionPeriod?: string}
   --rpo: string # The Recovery Point Objective (RPO) of this bucket. Set to ASYNC_TURBO to turn on Turbo Replication on a bucket.
-  --satisfiesPZS: string@bool-completer # Reserved for future use.
+  --satisfiesPZS: oneof<nothing, bool> # Reserved for future use.
   --selfLink: string # The URI of this bucket.
   --storageClass: string # The bucket's default storage class, used whenever no storageClass is specified for a newly-created object. This defines how objects in the bucket are stored and determines the SLA and the cost of storage. Values include MULTI_REGIONAL, REGIONAL, STANDARD, NEARLINE, COLDLINE, ARCHIVE, and DURABLE_REDUCED_AVAILABILITY. If this value is not specified when the bucket is created, it will default to STANDARD. For more information, see storage classes.
   --timeCreated: string # The creation time of the bucket in RFC 3339 format. (format: date-time)
@@ -468,7 +467,7 @@ export def "b-acl storagebucketAccessControlslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -501,7 +500,7 @@ export def "b-acl storagebucketAccessControlsinsert" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -548,7 +547,7 @@ export def "b-acl storagebucketAccessControlsdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -581,7 +580,7 @@ export def "b-acl storagebucketAccessControlsget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -615,7 +614,7 @@ export def "b-acl storagebucketAccessControlspatch" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -663,7 +662,7 @@ export def "b-acl storagebucketAccessControlsupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -709,7 +708,7 @@ export def "b-default-object-acl storagedefaultObjectAccessControlslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -744,7 +743,7 @@ export def "b-default-object-acl storagedefaultObjectAccessControlsinsert" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -793,7 +792,7 @@ export def "b-default-object-acl storagedefaultObjectAccessControlsdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -826,7 +825,7 @@ export def "b-default-object-acl storagedefaultObjectAccessControlsget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -860,7 +859,7 @@ export def "b-default-object-acl storagedefaultObjectAccessControlspatch" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -910,7 +909,7 @@ export def "b-default-object-acl storagedefaultObjectAccessControlsupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -958,7 +957,7 @@ export def "b-iam storagebucketsgetIamPolicy" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -992,7 +991,7 @@ export def "b-iam storagebucketssetIamPolicy" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -1032,7 +1031,7 @@ export def "b-iam-test-permissions storagebucketstestIamPermissions" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -1065,7 +1064,7 @@ export def "b-lock-retention-policy storagebucketslockRetentionPolicy" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -1098,7 +1097,7 @@ export def "b-notification-configs storagenotificationslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -1130,7 +1129,7 @@ export def "b-notification-configs storagenotificationsinsert" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -1175,7 +1174,7 @@ export def "b-notification-configs storagenotificationsdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -1208,7 +1207,7 @@ export def "b-notification-configs storagenotificationsget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -1240,13 +1239,13 @@ export def "b-o storageobjectslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
   --delimiter: string # Returns results in a directory-like mode. items will contain only objects whose names, aside from the prefix, do not contain delimiter. Objects whose names, aside from the prefix, contain delimiter will have their name, truncated after the delimiter, returned in prefixes. Duplicate prefixes are omitted.
   --endOffset: string # Filter results to objects whose names are lexicographically before endOffset. If startOffset is also set, the objects listed will have names between startOffset (inclusive) and endOffset (exclusive).
-  --includeTrailingDelimiter: string@bool-completer # If true, objects that end in exactly one instance of delimiter will have their metadata included in items in addition to prefixes.
+  --includeTrailingDelimiter: oneof<nothing, bool> # If true, objects that end in exactly one instance of delimiter will have their metadata included in items in addition to prefixes.
   --matchGlob: string # Filter results to objects and prefixes that match this glob pattern.
   --maxResults: int # Maximum number of items plus prefixes to return in a single page of responses. As duplicate prefixes are omitted, fewer total results may be returned than requested. The service will use this parameter or 1,000 items, whichever is smaller.
   --pageToken: string # A previously-returned page token representing part of the larger set of results to view.
@@ -1254,7 +1253,7 @@ export def "b-o storageobjectslist" [
   --projection: string@projection-completer # Set of properties to return. Defaults to noAcl.
   --startOffset: string # Filter results to objects whose names are lexicographically equal to or after startOffset. If endOffset is also set, the objects listed will have names between startOffset (inclusive) and endOffset (exclusive).
   --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
-  --versions: string@bool-completer # If true, lists all versions of an object as distinct results. The default is false. For more information, see Object Versioning.
+  --versions: oneof<nothing, bool> # If true, lists all versions of an object as distinct results. The default is false. For more information, see Object Versioning.
 ]: nothing -> record<items: table<acl: list, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, kind: string, nextPageToken: string, prefixes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1282,7 +1281,7 @@ export def "b-o storageobjectsinsert" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -1326,26 +1325,26 @@ export def "b-o-watch storageobjectswatchAll" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
   --delimiter: string # Returns results in a directory-like mode. items will contain only objects whose names, aside from the prefix, do not contain delimiter. Objects whose names, aside from the prefix, contain delimiter will have their name, truncated after the delimiter, returned in prefixes. Duplicate prefixes are omitted.
   --endOffset: string # Filter results to objects whose names are lexicographically before endOffset. If startOffset is also set, the objects listed will have names between startOffset (inclusive) and endOffset (exclusive).
-  --includeTrailingDelimiter: string@bool-completer # If true, objects that end in exactly one instance of delimiter will have their metadata included in items in addition to prefixes.
+  --includeTrailingDelimiter: oneof<nothing, bool> # If true, objects that end in exactly one instance of delimiter will have their metadata included in items in addition to prefixes.
   --maxResults: int # Maximum number of items plus prefixes to return in a single page of responses. As duplicate prefixes are omitted, fewer total results may be returned than requested. The service will use this parameter or 1,000 items, whichever is smaller.
   --pageToken: string # A previously-returned page token representing part of the larger set of results to view.
   --prefix: string # Filter results to objects whose names begin with this prefix.
   --projection: string@projection-completer # Set of properties to return. Defaults to noAcl.
   --startOffset: string # Filter results to objects whose names are lexicographically equal to or after startOffset. If endOffset is also set, the objects listed will have names between startOffset (inclusive) and endOffset (exclusive).
   --userProject: string # The project to be billed for this request. Required for Requester Pays buckets.
-  --versions: string@bool-completer # If true, lists all versions of an object as distinct results. The default is false. For more information, see Object Versioning.
+  --versions: oneof<nothing, bool> # If true, lists all versions of an object as distinct results. The default is false. For more information, see Object Versioning.
   --address: string # The address where notifications are delivered for this channel.
   --expiration: string # Date and time of notification channel expiration, expressed as a Unix timestamp, in milliseconds. Optional. (format: int64)
   --id: string # A UUID or similar unique string that identifies this channel.
   --kind: string # Identifies this as a notification channel used to watch for changes to a resource, which is "api#channel". (default: api#channel)
   --params: record # Additional parameters controlling delivery channel behavior. Optional.
-  --payload: string@bool-completer # A Boolean value to indicate whether payload is wanted. Optional.
+  --payload: oneof<nothing, bool> # A Boolean value to indicate whether payload is wanted. Optional.
   --resourceId: string # An opaque ID that identifies the resource being watched on this channel. Stable across different API versions.
   --resourceUri: string # A version-specific identifier for the watched resource.
   --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional.
@@ -1381,7 +1380,7 @@ export def "b-o storageobjectsdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -1419,7 +1418,7 @@ export def "b-o storageobjectsget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -1461,7 +1460,7 @@ export def "b-o storageobjectspatch" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -1485,7 +1484,7 @@ export def "b-o storageobjectspatch" [
   --customTime: string # A timestamp in RFC 3339 format specified by the user for an object. (format: date-time)
   --customerEncryption: record # Metadata of customer-supplied encryption key, if the object is encrypted by such a key. — shape: {encryptionAlgorithm?: string, keySha256?: string}
   --etag: string # HTTP 1.1 Entity tag for the object.
-  --eventBasedHold: string@bool-completer # Whether an object is under event-based hold. Event-based hold is a way to retain objects until an event occurs, which is signified by the hold's release (i.e. this value is set to false). After being released (set to false), such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is the loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false.
+  --eventBasedHold: oneof<nothing, bool> # Whether an object is under event-based hold. Event-based hold is a way to retain objects until an event occurs, which is signified by the hold's release (i.e. this value is set to false). After being released (set to false), such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is the loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false.
   --generation: string # The content generation of this object. Used for object versioning. (format: int64)
   --id: string # The ID of the object, including the bucket name, object name, and generation number.
   --kind: string # The kind of item this is. For objects, this is always storage#object. (default: storage#object)
@@ -1500,7 +1499,7 @@ export def "b-o storageobjectspatch" [
   --selfLink: string # The link to this object.
   --size: string # Content-Length of the data in bytes. (format: uint64)
   --storageClass: string # Storage class of the object.
-  --temporaryHold: string@bool-completer # Whether an object is under temporary hold. While this flag is set to true, the object is protected against deletion and overwrites. A common use case of this flag is regulatory investigations where objects need to be retained while the investigation is ongoing. Note that unlike event-based hold, temporary hold does not impact retention expiration time of an object.
+  --temporaryHold: oneof<nothing, bool> # Whether an object is under temporary hold. While this flag is set to true, the object is protected against deletion and overwrites. A common use case of this flag is regulatory investigations where objects need to be retained while the investigation is ongoing. Note that unlike event-based hold, temporary hold does not impact retention expiration time of an object.
   --timeCreated: string # The creation time of the object in RFC 3339 format. (format: date-time)
   --timeDeleted: string # The deletion time of the object in RFC 3339 format. Will be returned if and only if this version of the object has been deleted. (format: date-time)
   --timeStorageClassUpdated: string # The time at which the object's storage class was last changed. When the object is initially created, it will be set to timeCreated. (format: date-time)
@@ -1539,7 +1538,7 @@ export def "b-o storageobjectsupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -1563,7 +1562,7 @@ export def "b-o storageobjectsupdate" [
   --customTime: string # A timestamp in RFC 3339 format specified by the user for an object. (format: date-time)
   --customerEncryption: record # Metadata of customer-supplied encryption key, if the object is encrypted by such a key. — shape: {encryptionAlgorithm?: string, keySha256?: string}
   --etag: string # HTTP 1.1 Entity tag for the object.
-  --eventBasedHold: string@bool-completer # Whether an object is under event-based hold. Event-based hold is a way to retain objects until an event occurs, which is signified by the hold's release (i.e. this value is set to false). After being released (set to false), such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is the loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false.
+  --eventBasedHold: oneof<nothing, bool> # Whether an object is under event-based hold. Event-based hold is a way to retain objects until an event occurs, which is signified by the hold's release (i.e. this value is set to false). After being released (set to false), such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is the loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false.
   --generation: string # The content generation of this object. Used for object versioning. (format: int64)
   --id: string # The ID of the object, including the bucket name, object name, and generation number.
   --kind: string # The kind of item this is. For objects, this is always storage#object. (default: storage#object)
@@ -1578,7 +1577,7 @@ export def "b-o storageobjectsupdate" [
   --selfLink: string # The link to this object.
   --size: string # Content-Length of the data in bytes. (format: uint64)
   --storageClass: string # Storage class of the object.
-  --temporaryHold: string@bool-completer # Whether an object is under temporary hold. While this flag is set to true, the object is protected against deletion and overwrites. A common use case of this flag is regulatory investigations where objects need to be retained while the investigation is ongoing. Note that unlike event-based hold, temporary hold does not impact retention expiration time of an object.
+  --temporaryHold: oneof<nothing, bool> # Whether an object is under temporary hold. While this flag is set to true, the object is protected against deletion and overwrites. A common use case of this flag is regulatory investigations where objects need to be retained while the investigation is ongoing. Note that unlike event-based hold, temporary hold does not impact retention expiration time of an object.
   --timeCreated: string # The creation time of the object in RFC 3339 format. (format: date-time)
   --timeDeleted: string # The deletion time of the object in RFC 3339 format. Will be returned if and only if this version of the object has been deleted. (format: date-time)
   --timeStorageClassUpdated: string # The time at which the object's storage class was last changed. When the object is initially created, it will be set to timeCreated. (format: date-time)
@@ -1614,7 +1613,7 @@ export def "b-o-acl storageobjectAccessControlslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -1649,7 +1648,7 @@ export def "b-o-acl storageobjectAccessControlsinsert" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -1700,7 +1699,7 @@ export def "b-o-acl storageobjectAccessControlsdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -1735,7 +1734,7 @@ export def "b-o-acl storageobjectAccessControlsget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -1771,7 +1770,7 @@ export def "b-o-acl storageobjectAccessControlspatch" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -1823,7 +1822,7 @@ export def "b-o-acl storageobjectAccessControlsupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -1873,7 +1872,7 @@ export def "b-o-iam storageobjectsgetIamPolicy" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -1908,7 +1907,7 @@ export def "b-o-iam storageobjectssetIamPolicy" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -1950,7 +1949,7 @@ export def "b-o-iam-test-permissions storageobjectstestIamPermissions" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -1987,7 +1986,7 @@ export def "b-o-compose storageobjectscompose" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -2035,7 +2034,7 @@ export def "b-o-copy-to-b-o storageobjectscopy" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -2064,7 +2063,7 @@ export def "b-o-copy-to-b-o storageobjectscopy" [
   --customTime: string # A timestamp in RFC 3339 format specified by the user for an object. (format: date-time)
   --customerEncryption: record # Metadata of customer-supplied encryption key, if the object is encrypted by such a key. — shape: {encryptionAlgorithm?: string, keySha256?: string}
   --etag: string # HTTP 1.1 Entity tag for the object.
-  --eventBasedHold: string@bool-completer # Whether an object is under event-based hold. Event-based hold is a way to retain objects until an event occurs, which is signified by the hold's release (i.e. this value is set to false). After being released (set to false), such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is the loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false.
+  --eventBasedHold: oneof<nothing, bool> # Whether an object is under event-based hold. Event-based hold is a way to retain objects until an event occurs, which is signified by the hold's release (i.e. this value is set to false). After being released (set to false), such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is the loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false.
   --generation: string # The content generation of this object. Used for object versioning. (format: int64)
   --id: string # The ID of the object, including the bucket name, object name, and generation number.
   --kind: string # The kind of item this is. For objects, this is always storage#object. (default: storage#object)
@@ -2079,7 +2078,7 @@ export def "b-o-copy-to-b-o storageobjectscopy" [
   --selfLink: string # The link to this object.
   --size: string # Content-Length of the data in bytes. (format: uint64)
   --storageClass: string # Storage class of the object.
-  --temporaryHold: string@bool-completer # Whether an object is under temporary hold. While this flag is set to true, the object is protected against deletion and overwrites. A common use case of this flag is regulatory investigations where objects need to be retained while the investigation is ongoing. Note that unlike event-based hold, temporary hold does not impact retention expiration time of an object.
+  --temporaryHold: oneof<nothing, bool> # Whether an object is under temporary hold. While this flag is set to true, the object is protected against deletion and overwrites. A common use case of this flag is regulatory investigations where objects need to be retained while the investigation is ongoing. Note that unlike event-based hold, temporary hold does not impact retention expiration time of an object.
   --timeCreated: string # The creation time of the object in RFC 3339 format. (format: date-time)
   --timeDeleted: string # The deletion time of the object in RFC 3339 format. Will be returned if and only if this version of the object has been deleted. (format: date-time)
   --timeStorageClassUpdated: string # The time at which the object's storage class was last changed. When the object is initially created, it will be set to timeCreated. (format: date-time)
@@ -2120,7 +2119,7 @@ export def "b-o-rewrite-to-b-o storageobjectsrewrite" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -2151,7 +2150,7 @@ export def "b-o-rewrite-to-b-o storageobjectsrewrite" [
   --customTime: string # A timestamp in RFC 3339 format specified by the user for an object. (format: date-time)
   --customerEncryption: record # Metadata of customer-supplied encryption key, if the object is encrypted by such a key. — shape: {encryptionAlgorithm?: string, keySha256?: string}
   --etag: string # HTTP 1.1 Entity tag for the object.
-  --eventBasedHold: string@bool-completer # Whether an object is under event-based hold. Event-based hold is a way to retain objects until an event occurs, which is signified by the hold's release (i.e. this value is set to false). After being released (set to false), such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is the loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false.
+  --eventBasedHold: oneof<nothing, bool> # Whether an object is under event-based hold. Event-based hold is a way to retain objects until an event occurs, which is signified by the hold's release (i.e. this value is set to false). After being released (set to false), such objects will be subject to bucket-level retention (if any). One sample use case of this flag is for banks to hold loan documents for at least 3 years after loan is paid in full. Here, bucket-level retention is 3 years and the event is the loan being paid in full. In this example, these objects will be held intact for any number of years until the event has occurred (event-based hold on the object is released) and then 3 more years after that. That means retention duration of the objects begins from the moment event-based hold transitioned from true to false.
   --generation: string # The content generation of this object. Used for object versioning. (format: int64)
   --id: string # The ID of the object, including the bucket name, object name, and generation number.
   --kind: string # The kind of item this is. For objects, this is always storage#object. (default: storage#object)
@@ -2166,7 +2165,7 @@ export def "b-o-rewrite-to-b-o storageobjectsrewrite" [
   --selfLink: string # The link to this object.
   --size: string # Content-Length of the data in bytes. (format: uint64)
   --storageClass: string # Storage class of the object.
-  --temporaryHold: string@bool-completer # Whether an object is under temporary hold. While this flag is set to true, the object is protected against deletion and overwrites. A common use case of this flag is regulatory investigations where objects need to be retained while the investigation is ongoing. Note that unlike event-based hold, temporary hold does not impact retention expiration time of an object.
+  --temporaryHold: oneof<nothing, bool> # Whether an object is under temporary hold. While this flag is set to true, the object is protected against deletion and overwrites. A common use case of this flag is regulatory investigations where objects need to be retained while the investigation is ongoing. Note that unlike event-based hold, temporary hold does not impact retention expiration time of an object.
   --timeCreated: string # The creation time of the object in RFC 3339 format. (format: date-time)
   --timeDeleted: string # The deletion time of the object in RFC 3339 format. Will be returned if and only if this version of the object has been deleted. (format: date-time)
   --timeStorageClassUpdated: string # The time at which the object's storage class was last changed. When the object is initially created, it will be set to timeCreated. (format: date-time)
@@ -2200,7 +2199,7 @@ export def "channels-stop storagechannelsstop" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -2209,7 +2208,7 @@ export def "channels-stop storagechannelsstop" [
   --id: string # A UUID or similar unique string that identifies this channel.
   --kind: string # Identifies this as a notification channel used to watch for changes to a resource, which is "api#channel". (default: api#channel)
   --params: record # Additional parameters controlling delivery channel behavior. Optional.
-  --payload: string@bool-completer # A Boolean value to indicate whether payload is wanted. Optional.
+  --payload: oneof<nothing, bool> # A Boolean value to indicate whether payload is wanted. Optional.
   --resourceId: string # An opaque ID that identifies the resource being watched on this channel. Stable across different API versions.
   --resourceUri: string # A version-specific identifier for the watched resource.
   --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional.
@@ -2244,14 +2243,14 @@ export def "projects-hmac-keys storageprojectshmacKeyslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
   --maxResults: int # Maximum number of items to return in a single page of responses. The service uses this parameter or 250 items, whichever is smaller. The max number of items per page will also be limited by the number of distinct service accounts in the response. If the number of service accounts in a single response is too high, the page will truncated and a next page token will be returned.
   --pageToken: string # A previously-returned page token representing part of the larger set of results to view.
   --serviceAccountEmail: string # If present, only keys for the given service account are returned.
-  --showDeletedKeys: string@bool-completer # Whether or not to show keys in the DELETED state.
+  --showDeletedKeys: oneof<nothing, bool> # Whether or not to show keys in the DELETED state.
   --userProject: string # The project to be billed for this request.
 ]: nothing -> record<items: table<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, kind: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2280,7 +2279,7 @@ export def "projects-hmac-keys storageprojectshmacKeyscreate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -2314,7 +2313,7 @@ export def "projects-hmac-keys storageprojectshmacKeysdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -2347,7 +2346,7 @@ export def "projects-hmac-keys storageprojectshmacKeysget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -2380,7 +2379,7 @@ export def "projects-hmac-keys storageprojectshmacKeysupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.
@@ -2425,7 +2424,7 @@ export def "projects-service-account storageprojectsserviceAccountget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --uploadType: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --userIp: string # Deprecated. Please use quotaUser instead.

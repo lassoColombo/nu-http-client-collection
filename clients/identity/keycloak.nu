@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://keycloak.local"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -146,15 +145,15 @@ export def "realms-admin post" [
   --accountTheme: string
   --actionTokenGeneratedByAdminLifespan: int # format: int32
   --actionTokenGeneratedByUserLifespan: int # format: int32
-  --adminEventsDetailsEnabled: string@bool-completer
-  --adminEventsEnabled: string@bool-completer
+  --adminEventsDetailsEnabled: oneof<nothing, bool>
+  --adminEventsEnabled: oneof<nothing, bool>
   --adminTheme: string
   --attributes: record
   --authenticationFlows: list # item shape: {alias?: string, authenticationExecutions?: list, builtIn?: bool, description?: string, id?: string, providerId?: string, topLevel?: bool}
   --authenticatorConfig: list # item shape: {alias?: string, config?: record, id?: string}
   --browserFlow: string
   --browserSecurityHeaders: record
-  --bruteForceProtected: string@bool-completer
+  --bruteForceProtected: oneof<nothing, bool>
   --clientAuthenticationFlow: string
   --clientScopeMappings: record
   --clientScopes: list # item shape: {attributes?: record, description?: string, id?: string, name?: string, protocol?: string, protocolMappers?: list}
@@ -172,12 +171,12 @@ export def "realms-admin post" [
   --displayName: string
   --displayNameHtml: string
   --dockerAuthenticationFlow: string
-  --duplicateEmailsAllowed: string@bool-completer
-  --editUsernameAllowed: string@bool-completer
+  --duplicateEmailsAllowed: oneof<nothing, bool>
+  --editUsernameAllowed: oneof<nothing, bool>
   --emailTheme: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --enabledEventTypes: list
-  --eventsEnabled: string@bool-completer
+  --eventsEnabled: oneof<nothing, bool>
   --eventsExpiration: int # format: int64
   --eventsListeners: list
   --failureFactor: int # format: int32
@@ -186,17 +185,17 @@ export def "realms-admin post" [
   --id: string
   --identityProviderMappers: list # item shape: {config?: record, id?: string, identityProviderAlias?: string, identityProviderMapper?: string, name?: string}
   --identityProviders: list # item shape: {addReadTokenRoleOnCreate?: bool, alias?: string, config?: record, displayName?: string, enabled?: bool, firstBrokerLoginFlowAlias?: string, internalId?: string, linkOnly?: bool, postBrokerLoginFlowAlias?: string, providerId?: string, storeToken?: bool, trustEmail?: bool}
-  --internationalizationEnabled: string@bool-completer
+  --internationalizationEnabled: oneof<nothing, bool>
   --keycloakVersion: string
   --loginTheme: string
-  --loginWithEmailAllowed: string@bool-completer
+  --loginWithEmailAllowed: oneof<nothing, bool>
   --maxDeltaTimeSeconds: int # format: int32
   --maxFailureWaitSeconds: int # format: int32
   --minimumQuickLoginWaitSeconds: int # format: int32
   --notBefore: int # format: int32
   --offlineSessionIdleTimeout: int # format: int32
   --offlineSessionMaxLifespan: int # format: int32
-  --offlineSessionMaxLifespanEnabled: string@bool-completer
+  --offlineSessionMaxLifespanEnabled: oneof<nothing, bool>
   --otpPolicyAlgorithm: string
   --otpPolicyDigits: int # format: int32
   --otpPolicyInitialCounter: int # format: int32
@@ -205,19 +204,19 @@ export def "realms-admin post" [
   --otpPolicyType: string
   --otpSupportedApplications: list
   --passwordPolicy: string
-  --permanentLockout: string@bool-completer
+  --permanentLockout: oneof<nothing, bool>
   --protocolMappers: list # item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
   --quickLoginCheckMilliSeconds: int # format: int64
   --realm: string
   --refreshTokenMaxReuse: int # format: int32
-  --registrationAllowed: string@bool-completer
-  --registrationEmailAsUsername: string@bool-completer
+  --registrationAllowed: oneof<nothing, bool>
+  --registrationEmailAsUsername: oneof<nothing, bool>
   --registrationFlow: string
-  --rememberMe: string@bool-completer
+  --rememberMe: oneof<nothing, bool>
   --requiredActions: list # item shape: {alias?: string, config?: record, defaultAction?: bool, enabled?: bool, name?: string, priority?: int, providerId?: string}
   --resetCredentialsFlow: string
-  --resetPasswordAllowed: string@bool-completer
-  --revokeRefreshToken: string@bool-completer
+  --resetPasswordAllowed: oneof<nothing, bool>
+  --revokeRefreshToken: oneof<nothing, bool>
   --roles: record # shape: {client?: record, realm?: list}
   --scopeMappings: list # item shape: {client?: string, clientScope?: string, roles?: list, self?: string}
   --smtpServer: record
@@ -229,19 +228,19 @@ export def "realms-admin post" [
   --supportedLocales: list
   --userFederationMappers: list # item shape: {config?: record, federationMapperType?: string, federationProviderDisplayName?: string, id?: string, name?: string}
   --userFederationProviders: list # item shape: {changedSyncPeriod?: int, config?: record, displayName?: string, fullSyncPeriod?: int, id?: string, lastSync?: int, priority?: int, providerName?: string}
-  --userManagedAccessAllowed: string@bool-completer
+  --userManagedAccessAllowed: oneof<nothing, bool>
   --users: list # item shape: {access?: record, attributes?: record, clientConsents?: list, clientRoles?: record, createdTimestamp?: int, credentials?: list, disableableCredentialTypes?: list, email?: string, emailVerified?: bool, enabled?: bool, federatedIdentities?: list, federationLink?: string, firstName?: string, groups?: list, id?: string, lastName?: string, notBefore?: int, origin?: string, realmRoles?: list, requiredActions?: list, self?: string, serviceAccountClientId?: string, username?: string}
-  --verifyEmail: string@bool-completer
+  --verifyEmail: oneof<nothing, bool>
   --waitIncrementSeconds: int # format: int32
   --webAuthnPolicyAcceptableAaguids: list
   --webAuthnPolicyAttestationConveyancePreference: string
   --webAuthnPolicyAuthenticatorAttachment: string
-  --webAuthnPolicyAvoidSameAuthenticatorRegister: string@bool-completer
+  --webAuthnPolicyAvoidSameAuthenticatorRegister: oneof<nothing, bool>
   --webAuthnPolicyCreateTimeout: int # format: int32
   --webAuthnPolicyPasswordlessAcceptableAaguids: list
   --webAuthnPolicyPasswordlessAttestationConveyancePreference: string
   --webAuthnPolicyPasswordlessAuthenticatorAttachment: string
-  --webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister: string@bool-completer
+  --webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister: oneof<nothing, bool>
   --webAuthnPolicyPasswordlessCreateTimeout: int # format: int32
   --webAuthnPolicyPasswordlessRequireResidentKey: string
   --webAuthnPolicyPasswordlessRpEntityName: string
@@ -364,15 +363,15 @@ export def "realms-admin put" [
   --accountTheme: string
   --actionTokenGeneratedByAdminLifespan: int # format: int32
   --actionTokenGeneratedByUserLifespan: int # format: int32
-  --adminEventsDetailsEnabled: string@bool-completer
-  --adminEventsEnabled: string@bool-completer
+  --adminEventsDetailsEnabled: oneof<nothing, bool>
+  --adminEventsEnabled: oneof<nothing, bool>
   --adminTheme: string
   --attributes: record
   --authenticationFlows: list # item shape: {alias?: string, authenticationExecutions?: list, builtIn?: bool, description?: string, id?: string, providerId?: string, topLevel?: bool}
   --authenticatorConfig: list # item shape: {alias?: string, config?: record, id?: string}
   --browserFlow: string
   --browserSecurityHeaders: record
-  --bruteForceProtected: string@bool-completer
+  --bruteForceProtected: oneof<nothing, bool>
   --clientAuthenticationFlow: string
   --clientScopeMappings: record
   --clientScopes: list # item shape: {attributes?: record, description?: string, id?: string, name?: string, protocol?: string, protocolMappers?: list}
@@ -390,12 +389,12 @@ export def "realms-admin put" [
   --displayName: string
   --displayNameHtml: string
   --dockerAuthenticationFlow: string
-  --duplicateEmailsAllowed: string@bool-completer
-  --editUsernameAllowed: string@bool-completer
+  --duplicateEmailsAllowed: oneof<nothing, bool>
+  --editUsernameAllowed: oneof<nothing, bool>
   --emailTheme: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --enabledEventTypes: list
-  --eventsEnabled: string@bool-completer
+  --eventsEnabled: oneof<nothing, bool>
   --eventsExpiration: int # format: int64
   --eventsListeners: list
   --failureFactor: int # format: int32
@@ -404,17 +403,17 @@ export def "realms-admin put" [
   --id: string
   --identityProviderMappers: list # item shape: {config?: record, id?: string, identityProviderAlias?: string, identityProviderMapper?: string, name?: string}
   --identityProviders: list # item shape: {addReadTokenRoleOnCreate?: bool, alias?: string, config?: record, displayName?: string, enabled?: bool, firstBrokerLoginFlowAlias?: string, internalId?: string, linkOnly?: bool, postBrokerLoginFlowAlias?: string, providerId?: string, storeToken?: bool, trustEmail?: bool}
-  --internationalizationEnabled: string@bool-completer
+  --internationalizationEnabled: oneof<nothing, bool>
   --keycloakVersion: string
   --loginTheme: string
-  --loginWithEmailAllowed: string@bool-completer
+  --loginWithEmailAllowed: oneof<nothing, bool>
   --maxDeltaTimeSeconds: int # format: int32
   --maxFailureWaitSeconds: int # format: int32
   --minimumQuickLoginWaitSeconds: int # format: int32
   --notBefore: int # format: int32
   --offlineSessionIdleTimeout: int # format: int32
   --offlineSessionMaxLifespan: int # format: int32
-  --offlineSessionMaxLifespanEnabled: string@bool-completer
+  --offlineSessionMaxLifespanEnabled: oneof<nothing, bool>
   --otpPolicyAlgorithm: string
   --otpPolicyDigits: int # format: int32
   --otpPolicyInitialCounter: int # format: int32
@@ -423,19 +422,19 @@ export def "realms-admin put" [
   --otpPolicyType: string
   --otpSupportedApplications: list
   --passwordPolicy: string
-  --permanentLockout: string@bool-completer
+  --permanentLockout: oneof<nothing, bool>
   --protocolMappers: list # item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
   --quickLoginCheckMilliSeconds: int # format: int64
   --body-realm: string
   --refreshTokenMaxReuse: int # format: int32
-  --registrationAllowed: string@bool-completer
-  --registrationEmailAsUsername: string@bool-completer
+  --registrationAllowed: oneof<nothing, bool>
+  --registrationEmailAsUsername: oneof<nothing, bool>
   --registrationFlow: string
-  --rememberMe: string@bool-completer
+  --rememberMe: oneof<nothing, bool>
   --requiredActions: list # item shape: {alias?: string, config?: record, defaultAction?: bool, enabled?: bool, name?: string, priority?: int, providerId?: string}
   --resetCredentialsFlow: string
-  --resetPasswordAllowed: string@bool-completer
-  --revokeRefreshToken: string@bool-completer
+  --resetPasswordAllowed: oneof<nothing, bool>
+  --revokeRefreshToken: oneof<nothing, bool>
   --roles: record # shape: {client?: record, realm?: list}
   --scopeMappings: list # item shape: {client?: string, clientScope?: string, roles?: list, self?: string}
   --smtpServer: record
@@ -447,19 +446,19 @@ export def "realms-admin put" [
   --supportedLocales: list
   --userFederationMappers: list # item shape: {config?: record, federationMapperType?: string, federationProviderDisplayName?: string, id?: string, name?: string}
   --userFederationProviders: list # item shape: {changedSyncPeriod?: int, config?: record, displayName?: string, fullSyncPeriod?: int, id?: string, lastSync?: int, priority?: int, providerName?: string}
-  --userManagedAccessAllowed: string@bool-completer
+  --userManagedAccessAllowed: oneof<nothing, bool>
   --users: list # item shape: {access?: record, attributes?: record, clientConsents?: list, clientRoles?: record, createdTimestamp?: int, credentials?: list, disableableCredentialTypes?: list, email?: string, emailVerified?: bool, enabled?: bool, federatedIdentities?: list, federationLink?: string, firstName?: string, groups?: list, id?: string, lastName?: string, notBefore?: int, origin?: string, realmRoles?: list, requiredActions?: list, self?: string, serviceAccountClientId?: string, username?: string}
-  --verifyEmail: string@bool-completer
+  --verifyEmail: oneof<nothing, bool>
   --waitIncrementSeconds: int # format: int32
   --webAuthnPolicyAcceptableAaguids: list
   --webAuthnPolicyAttestationConveyancePreference: string
   --webAuthnPolicyAuthenticatorAttachment: string
-  --webAuthnPolicyAvoidSameAuthenticatorRegister: string@bool-completer
+  --webAuthnPolicyAvoidSameAuthenticatorRegister: oneof<nothing, bool>
   --webAuthnPolicyCreateTimeout: int # format: int32
   --webAuthnPolicyPasswordlessAcceptableAaguids: list
   --webAuthnPolicyPasswordlessAttestationConveyancePreference: string
   --webAuthnPolicyPasswordlessAuthenticatorAttachment: string
-  --webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister: string@bool-completer
+  --webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister: oneof<nothing, bool>
   --webAuthnPolicyPasswordlessCreateTimeout: int # format: int32
   --webAuthnPolicyPasswordlessRequireResidentKey: string
   --webAuthnPolicyPasswordlessRpEntityName: string
@@ -752,8 +751,8 @@ export def "authentication-executions post" [
   --allow-errors(-e) # Return full response without error handling
   --authenticator: string
   --authenticatorConfig: string
-  --authenticatorFlow: string@bool-completer
-  --autheticatorFlow: string@bool-completer
+  --authenticatorFlow: oneof<nothing, bool>
+  --autheticatorFlow: oneof<nothing, bool>
   --flowId: string
   --id: string
   --parentFlow: string
@@ -923,11 +922,11 @@ export def "authentication-flows post" [
   --allow-errors(-e) # Return full response without error handling
   --alias: string
   --authenticationExecutions: list # item shape: {authenticator?: string, authenticatorConfig?: string, authenticatorFlow?: bool, autheticatorFlow?: bool, flowAlias?: string, priority?: int, requirement?: string, userSetupAllowed?: bool}
-  --builtIn: string@bool-completer
+  --builtIn: oneof<nothing, bool>
   --description: string
   --id: string
   --providerId: string
-  --topLevel: string@bool-completer
+  --topLevel: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1002,8 +1001,8 @@ export def "authentication-flows-executions put" [
   --allow-errors(-e) # Return full response without error handling
   --alias: string
   --authenticationConfig: string
-  --authenticationFlow: string@bool-completer
-  --configurable: string@bool-completer
+  --authenticationFlow: oneof<nothing, bool>
+  --configurable: oneof<nothing, bool>
   --displayName: string
   --flowId: string
   --id: string
@@ -1134,11 +1133,11 @@ export def "authentication-flows put" [
   --allow-errors(-e) # Return full response without error handling
   --alias: string
   --authenticationExecutions: list # item shape: {authenticator?: string, authenticatorConfig?: string, authenticatorFlow?: bool, autheticatorFlow?: bool, flowAlias?: string, priority?: int, requirement?: string, userSetupAllowed?: bool}
-  --builtIn: string@bool-completer
+  --builtIn: oneof<nothing, bool>
   --description: string
   --body-id: string
   --providerId: string
-  --topLevel: string@bool-completer
+  --topLevel: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1318,8 +1317,8 @@ export def "authentication-required-actions put" [
   --allow-errors(-e) # Return full response without error handling
   --body-alias: string
   --config: record
-  --defaultAction: string@bool-completer
-  --enabled: string@bool-completer
+  --defaultAction: oneof<nothing, bool>
+  --enabled: oneof<nothing, bool>
   --name: string
   --priority: int # format: int32
   --providerId: string
@@ -2108,8 +2107,8 @@ export def "clients list" [
   --clientId: string # filter by clientId
   --first: int # the first result (format: int32)
   --max: int # the max results to return (format: int32)
-  --search: string@bool-completer # whether this is a search query or a getClientById query
-  --viewableOnly: string@bool-completer # filter clients that cannot be viewed in full by admin
+  --search: oneof<nothing, bool> # whether this is a search query or a getClientById query
+  --viewableOnly: oneof<nothing, bool> # filter clients that cannot be viewed in full by admin
 ]: nothing -> table<access: record, adminUrl: string, alwaysDisplayInConsole: bool, attributes: record, authenticationFlowBindingOverrides: record, authorizationServicesEnabled: bool, authorizationSettings: record<allowRemoteResourceManagement: bool, clientId: string, decisionStrategy: string, id: string, name: string, policies: list, policyEnforcementMode: string, resources: list, scopes: list>, baseUrl: string, bearerOnly: bool, clientAuthenticatorType: string, clientId: string, consentRequired: bool, defaultClientScopes: list<string>, defaultRoles: list<string>, description: string, directAccessGrantsEnabled: bool, enabled: bool, frontchannelLogout: bool, fullScopeAllowed: bool, id: string, implicitFlowEnabled: bool, name: string, nodeReRegistrationTimeout: int, notBefore: int, optionalClientScopes: list<string>, origin: string, protocol: string, protocolMappers: list<record>, publicClient: bool, redirectUris: list<string>, registeredNodes: record, registrationAccessToken: string, rootUrl: string, secret: string, serviceAccountsEnabled: bool, standardFlowEnabled: bool, surrogateAuthRequired: bool, webOrigins: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2136,25 +2135,25 @@ export def "clients post" [
   --allow-errors(-e) # Return full response without error handling
   --access: record
   --adminUrl: string
-  --alwaysDisplayInConsole: string@bool-completer
+  --alwaysDisplayInConsole: oneof<nothing, bool>
   --attributes: record
   --authenticationFlowBindingOverrides: record
-  --authorizationServicesEnabled: string@bool-completer
+  --authorizationServicesEnabled: oneof<nothing, bool>
   --authorizationSettings: record # shape: {allowRemoteResourceManagement?: bool, clientId?: string, decisionStrategy?: "AFFIRMATIVE"|"UNANIMOUS"|"CONSENSUS", id?: string, name?: string, policies?: list, policyEnforcementMode?: "ENFORCING"|"PERMISSIVE"|"DISABLED", resources?: list, scopes?: list}
   --baseUrl: string
-  --bearerOnly: string@bool-completer
+  --bearerOnly: oneof<nothing, bool>
   --clientAuthenticatorType: string
   --clientId: string
-  --consentRequired: string@bool-completer
+  --consentRequired: oneof<nothing, bool>
   --defaultClientScopes: list
   --defaultRoles: list
   --description: string
-  --directAccessGrantsEnabled: string@bool-completer
-  --enabled: string@bool-completer
-  --frontchannelLogout: string@bool-completer
-  --fullScopeAllowed: string@bool-completer
+  --directAccessGrantsEnabled: oneof<nothing, bool>
+  --enabled: oneof<nothing, bool>
+  --frontchannelLogout: oneof<nothing, bool>
+  --fullScopeAllowed: oneof<nothing, bool>
   --id: string
-  --implicitFlowEnabled: string@bool-completer
+  --implicitFlowEnabled: oneof<nothing, bool>
   --name: string
   --nodeReRegistrationTimeout: int # format: int32
   --notBefore: int # format: int32
@@ -2162,15 +2161,15 @@ export def "clients post" [
   --origin: string
   --protocol: string
   --protocolMappers: list # item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
-  --publicClient: string@bool-completer
+  --publicClient: oneof<nothing, bool>
   --redirectUris: list
   --registeredNodes: record
   --registrationAccessToken: string
   --rootUrl: string
   --secret: string
-  --serviceAccountsEnabled: string@bool-completer
-  --standardFlowEnabled: string@bool-completer
-  --surrogateAuthRequired: string@bool-completer
+  --serviceAccountsEnabled: oneof<nothing, bool>
+  --standardFlowEnabled: oneof<nothing, bool>
+  --surrogateAuthRequired: oneof<nothing, bool>
   --webOrigins: list
 ]: any -> any {
   let input = $in
@@ -2387,25 +2386,25 @@ export def "clients put" [
   --allow-errors(-e) # Return full response without error handling
   --access: record
   --adminUrl: string
-  --alwaysDisplayInConsole: string@bool-completer
+  --alwaysDisplayInConsole: oneof<nothing, bool>
   --attributes: record
   --authenticationFlowBindingOverrides: record
-  --authorizationServicesEnabled: string@bool-completer
+  --authorizationServicesEnabled: oneof<nothing, bool>
   --authorizationSettings: record # shape: {allowRemoteResourceManagement?: bool, clientId?: string, decisionStrategy?: "AFFIRMATIVE"|"UNANIMOUS"|"CONSENSUS", id?: string, name?: string, policies?: list, policyEnforcementMode?: "ENFORCING"|"PERMISSIVE"|"DISABLED", resources?: list, scopes?: list}
   --baseUrl: string
-  --bearerOnly: string@bool-completer
+  --bearerOnly: oneof<nothing, bool>
   --clientAuthenticatorType: string
   --clientId: string
-  --consentRequired: string@bool-completer
+  --consentRequired: oneof<nothing, bool>
   --defaultClientScopes: list
   --defaultRoles: list
   --description: string
-  --directAccessGrantsEnabled: string@bool-completer
-  --enabled: string@bool-completer
-  --frontchannelLogout: string@bool-completer
-  --fullScopeAllowed: string@bool-completer
+  --directAccessGrantsEnabled: oneof<nothing, bool>
+  --enabled: oneof<nothing, bool>
+  --frontchannelLogout: oneof<nothing, bool>
+  --fullScopeAllowed: oneof<nothing, bool>
   --body-id: string
-  --implicitFlowEnabled: string@bool-completer
+  --implicitFlowEnabled: oneof<nothing, bool>
   --name: string
   --nodeReRegistrationTimeout: int # format: int32
   --notBefore: int # format: int32
@@ -2413,15 +2412,15 @@ export def "clients put" [
   --origin: string
   --protocol: string
   --protocolMappers: list # item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
-  --publicClient: string@bool-completer
+  --publicClient: oneof<nothing, bool>
   --redirectUris: list
   --registeredNodes: record
   --registrationAccessToken: string
   --rootUrl: string
   --secret: string
-  --serviceAccountsEnabled: string@bool-completer
-  --standardFlowEnabled: string@bool-completer
-  --surrogateAuthRequired: string@bool-completer
+  --serviceAccountsEnabled: oneof<nothing, bool>
+  --standardFlowEnabled: oneof<nothing, bool>
+  --surrogateAuthRequired: oneof<nothing, bool>
   --webOrigins: list
 ]: any -> any {
   let input = $in
@@ -2476,7 +2475,7 @@ export def "clients-certificates-download post" [
   --keyAlias: string
   --keyPassword: string
   --realmAlias: string
-  --realmCertificate: string@bool-completer
+  --realmCertificate: oneof<nothing, bool>
   --storePassword: string
 ]: any -> any {
   let input = $in
@@ -2531,7 +2530,7 @@ export def "clients-certificates-generate-and-download post" [
   --keyAlias: string
   --keyPassword: string
   --realmAlias: string
-  --realmCertificate: string@bool-completer
+  --realmCertificate: oneof<nothing, bool>
   --storePassword: string
 ]: any -> any {
   let input = $in
@@ -2854,7 +2853,7 @@ export def "clients-management-permissions put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --resource: string
   --scopePermissions: record
 ]: any -> record<enabled: bool, resource: string, scopePermissions: record> {
@@ -3185,7 +3184,7 @@ export def "clients-roles list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --briefRepresentation: string@bool-completer
+  --briefRepresentation: oneof<nothing, bool>
   --first: int # format: int32
   --max: int # format: int32
   --search: string
@@ -3214,8 +3213,8 @@ export def "clients-roles post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --attributes: record
-  --clientRole: string@bool-completer
-  --composite: string@bool-completer
+  --clientRole: oneof<nothing, bool>
+  --composite: oneof<nothing, bool>
   --composites: record # shape: {client?: record, realm?: list}
   --containerId: string
   --description: string
@@ -3295,8 +3294,8 @@ export def "clients-roles put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --attributes: record
-  --clientRole: string@bool-completer
-  --composite: string@bool-completer
+  --clientRole: oneof<nothing, bool>
+  --composite: oneof<nothing, bool>
   --composites: record # shape: {client?: record, realm?: list}
   --containerId: string
   --description: string
@@ -3450,7 +3449,7 @@ export def "clients-roles-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --briefRepresentation: string@bool-completer # if false, return a full representation of the GroupRepresentation objects
+  --briefRepresentation: oneof<nothing, bool> # if false, return a full representation of the GroupRepresentation objects
   --first: int # format: int32
   --max: int # format: int32
 ]: nothing -> table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>> {
@@ -3500,7 +3499,7 @@ export def "clients-roles-management-permissions put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --resource: string
   --scopePermissions: record
 ]: any -> record<enabled: bool, resource: string, scopePermissions: record> {
@@ -4327,10 +4326,10 @@ export def "events-config put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --adminEventsDetailsEnabled: string@bool-completer
-  --adminEventsEnabled: string@bool-completer
+  --adminEventsDetailsEnabled: oneof<nothing, bool>
+  --adminEventsEnabled: oneof<nothing, bool>
   --enabledEventTypes: list
-  --eventsEnabled: string@bool-completer
+  --eventsEnabled: oneof<nothing, bool>
   --eventsExpiration: int # format: int64
   --eventsListeners: list
 ]: any -> any {
@@ -4377,7 +4376,7 @@ export def "groups list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --briefRepresentation: string@bool-completer
+  --briefRepresentation: oneof<nothing, bool>
   --first: int # format: int32
   --max: int # format: int32
   --search: string
@@ -4437,7 +4436,7 @@ export def "groups-count get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --search: string
-  --top: string@bool-completer
+  --top: oneof<nothing, bool>
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4591,7 +4590,7 @@ export def "groups-management-permissions put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --resource: string
   --scopePermissions: record
 ]: any -> record<enabled: bool, resource: string, scopePermissions: record> {
@@ -4619,7 +4618,7 @@ export def "groups-members get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --briefRepresentation: string@bool-completer # Only return basic information (only guaranteed to return id, username, created, first and last name,  email, enabled state, email verification state, federation link, and access.  Note that it means that namely user attributes, required actions, and not before are not returned.)
+  --briefRepresentation: oneof<nothing, bool> # Only return basic information (only guaranteed to return id, username, created, first and last name,  email, enabled state, email verification state, federation link, and access.  Note that it means that namely user attributes, required actions, and not before are not returned.)
   --first: int # Pagination offset (format: int32)
   --max: int # Maximum results size (defaults to 100) (format: int32)
 ]: nothing -> table<access: record, attributes: record, clientConsents: list<record>, clientRoles: record, createdTimestamp: int, credentials: list<record>, disableableCredentialTypes: list<string>, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list<record>, federationLink: string, firstName: string, groups: list<string>, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list<string>, requiredActions: list<string>, self: string, serviceAccountClientId: string, username: string> {
@@ -4945,18 +4944,18 @@ export def "identity-provider-instances post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --addReadTokenRoleOnCreate: string@bool-completer
+  --addReadTokenRoleOnCreate: oneof<nothing, bool>
   --alias: string
   --config: record
   --displayName: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --firstBrokerLoginFlowAlias: string
   --internalId: string
-  --linkOnly: string@bool-completer
+  --linkOnly: oneof<nothing, bool>
   --postBrokerLoginFlowAlias: string
   --providerId: string
-  --storeToken: string@bool-completer
-  --trustEmail: string@bool-completer
+  --storeToken: oneof<nothing, bool>
+  --trustEmail: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5026,18 +5025,18 @@ export def "identity-provider-instances put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --addReadTokenRoleOnCreate: string@bool-completer
+  --addReadTokenRoleOnCreate: oneof<nothing, bool>
   --body-alias: string
   --config: record
   --displayName: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --firstBrokerLoginFlowAlias: string
   --internalId: string
-  --linkOnly: string@bool-completer
+  --linkOnly: oneof<nothing, bool>
   --postBrokerLoginFlowAlias: string
   --providerId: string
-  --storeToken: string@bool-completer
-  --trustEmail: string@bool-completer
+  --storeToken: oneof<nothing, bool>
+  --trustEmail: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5109,7 +5108,7 @@ export def "identity-provider-instances-management-permissions put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --resource: string
   --scopePermissions: record
 ]: any -> record<enabled: bool, resource: string, scopePermissions: record> {
@@ -5349,8 +5348,8 @@ export def "partial-export post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --exportClients: string@bool-completer
-  --exportGroupsAndRoles: string@bool-completer
+  --exportClients: oneof<nothing, bool>
+  --exportGroupsAndRoles: oneof<nothing, bool>
 ]: nothing -> record<accessCodeLifespan: int, accessCodeLifespanLogin: int, accessCodeLifespanUserAction: int, accessTokenLifespan: int, accessTokenLifespanForImplicitFlow: int, accountTheme: string, actionTokenGeneratedByAdminLifespan: int, actionTokenGeneratedByUserLifespan: int, adminEventsDetailsEnabled: bool, adminEventsEnabled: bool, adminTheme: string, attributes: record, authenticationFlows: table<alias: string, authenticationExecutions: list, builtIn: bool, description: string, id: string, providerId: string, topLevel: bool>, authenticatorConfig: table<alias: string, config: record, id: string>, browserFlow: string, browserSecurityHeaders: record, bruteForceProtected: bool, clientAuthenticationFlow: string, clientScopeMappings: record, clientScopes: table<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: list>, clientSessionIdleTimeout: int, clientSessionMaxLifespan: int, clients: table<access: record, adminUrl: string, alwaysDisplayInConsole: bool, attributes: record, authenticationFlowBindingOverrides: record, authorizationServicesEnabled: bool, authorizationSettings: record, baseUrl: string, bearerOnly: bool, clientAuthenticatorType: string, clientId: string, consentRequired: bool, defaultClientScopes: list, defaultRoles: list, description: string, directAccessGrantsEnabled: bool, enabled: bool, frontchannelLogout: bool, fullScopeAllowed: bool, id: string, implicitFlowEnabled: bool, name: string, nodeReRegistrationTimeout: int, notBefore: int, optionalClientScopes: list, origin: string, protocol: string, protocolMappers: list, publicClient: bool, redirectUris: list, registeredNodes: record, registrationAccessToken: string, rootUrl: string, secret: string, serviceAccountsEnabled: bool, standardFlowEnabled: bool, surrogateAuthRequired: bool, webOrigins: list>, components: record<empty: bool, loadFactor: float, threshold: int>, defaultDefaultClientScopes: list<string>, defaultGroups: list<string>, defaultLocale: string, defaultOptionalClientScopes: list<string>, defaultRoles: list<string>, defaultSignatureAlgorithm: string, directGrantFlow: string, displayName: string, displayNameHtml: string, dockerAuthenticationFlow: string, duplicateEmailsAllowed: bool, editUsernameAllowed: bool, emailTheme: string, enabled: bool, enabledEventTypes: list<string>, eventsEnabled: bool, eventsExpiration: int, eventsListeners: list<string>, failureFactor: int, federatedUsers: table<access: record, attributes: record, clientConsents: list, clientRoles: record, createdTimestamp: int, credentials: list, disableableCredentialTypes: list, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list, federationLink: string, firstName: string, groups: list, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list, requiredActions: list, self: string, serviceAccountClientId: string, username: string>, groups: table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list, subGroups: list>, id: string, identityProviderMappers: table<config: record, id: string, identityProviderAlias: string, identityProviderMapper: string, name: string>, identityProviders: table<addReadTokenRoleOnCreate: bool, alias: string, config: record, displayName: string, enabled: bool, firstBrokerLoginFlowAlias: string, internalId: string, linkOnly: bool, postBrokerLoginFlowAlias: string, providerId: string, storeToken: bool, trustEmail: bool>, internationalizationEnabled: bool, keycloakVersion: string, loginTheme: string, loginWithEmailAllowed: bool, maxDeltaTimeSeconds: int, maxFailureWaitSeconds: int, minimumQuickLoginWaitSeconds: int, notBefore: int, offlineSessionIdleTimeout: int, offlineSessionMaxLifespan: int, offlineSessionMaxLifespanEnabled: bool, otpPolicyAlgorithm: string, otpPolicyDigits: int, otpPolicyInitialCounter: int, otpPolicyLookAheadWindow: int, otpPolicyPeriod: int, otpPolicyType: string, otpSupportedApplications: list<string>, passwordPolicy: string, permanentLockout: bool, protocolMappers: table<config: record, id: string, name: string, protocol: string, protocolMapper: string>, quickLoginCheckMilliSeconds: int, realm: string, refreshTokenMaxReuse: int, registrationAllowed: bool, registrationEmailAsUsername: bool, registrationFlow: string, rememberMe: bool, requiredActions: table<alias: string, config: record, defaultAction: bool, enabled: bool, name: string, priority: int, providerId: string>, resetCredentialsFlow: string, resetPasswordAllowed: bool, revokeRefreshToken: bool, roles: record<client: record, realm: list<record>>, scopeMappings: table<client: string, clientScope: string, roles: list, self: string>, smtpServer: record, sslRequired: string, ssoSessionIdleTimeout: int, ssoSessionIdleTimeoutRememberMe: int, ssoSessionMaxLifespan: int, ssoSessionMaxLifespanRememberMe: int, supportedLocales: list<string>, userFederationMappers: table<config: record, federationMapperType: string, federationProviderDisplayName: string, id: string, name: string>, userFederationProviders: table<changedSyncPeriod: int, config: record, displayName: string, fullSyncPeriod: int, id: string, lastSync: int, priority: int, providerName: string>, userManagedAccessAllowed: bool, users: table<access: record, attributes: record, clientConsents: list, clientRoles: record, createdTimestamp: int, credentials: list, disableableCredentialTypes: list, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list, federationLink: string, firstName: string, groups: list, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list, requiredActions: list, self: string, serviceAccountClientId: string, username: string>, verifyEmail: bool, waitIncrementSeconds: int, webAuthnPolicyAcceptableAaguids: list<string>, webAuthnPolicyAttestationConveyancePreference: string, webAuthnPolicyAuthenticatorAttachment: string, webAuthnPolicyAvoidSameAuthenticatorRegister: bool, webAuthnPolicyCreateTimeout: int, webAuthnPolicyPasswordlessAcceptableAaguids: list<string>, webAuthnPolicyPasswordlessAttestationConveyancePreference: string, webAuthnPolicyPasswordlessAuthenticatorAttachment: string, webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister: bool, webAuthnPolicyPasswordlessCreateTimeout: int, webAuthnPolicyPasswordlessRequireResidentKey: string, webAuthnPolicyPasswordlessRpEntityName: string, webAuthnPolicyPasswordlessRpId: string, webAuthnPolicyPasswordlessSignatureAlgorithms: list<string>, webAuthnPolicyPasswordlessUserVerificationRequirement: string, webAuthnPolicyRequireResidentKey: string, webAuthnPolicyRpEntityName: string, webAuthnPolicyRpId: string, webAuthnPolicySignatureAlgorithms: list<string>, webAuthnPolicyUserVerificationRequirement: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5430,7 +5429,7 @@ export def "roles list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --briefRepresentation: string@bool-completer
+  --briefRepresentation: oneof<nothing, bool>
   --first: int # format: int32
   --max: int # format: int32
   --search: string
@@ -5458,8 +5457,8 @@ export def "roles post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --attributes: record
-  --clientRole: string@bool-completer
-  --composite: string@bool-completer
+  --clientRole: oneof<nothing, bool>
+  --composite: oneof<nothing, bool>
   --composites: record # shape: {client?: record, realm?: list}
   --containerId: string
   --description: string
@@ -5536,8 +5535,8 @@ export def "roles-by-id put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --attributes: record
-  --clientRole: string@bool-completer
-  --composite: string@bool-completer
+  --clientRole: oneof<nothing, bool>
+  --composite: oneof<nothing, bool>
   --composites: record # shape: {client?: record, realm?: list}
   --containerId: string
   --description: string
@@ -5707,7 +5706,7 @@ export def "roles-by-id-management-permissions put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --resource: string
   --scopePermissions: record
 ]: any -> record<enabled: bool, resource: string, scopePermissions: record> {
@@ -5781,8 +5780,8 @@ export def "roles put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --attributes: record
-  --clientRole: string@bool-completer
-  --composite: string@bool-completer
+  --clientRole: oneof<nothing, bool>
+  --composite: oneof<nothing, bool>
   --composites: record # shape: {client?: record, realm?: list}
   --containerId: string
   --description: string
@@ -5930,7 +5929,7 @@ export def "roles-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --briefRepresentation: string@bool-completer # if false, return a full representation of the GroupRepresentation objects
+  --briefRepresentation: oneof<nothing, bool> # if false, return a full representation of the GroupRepresentation objects
   --first: int # format: int32
   --max: int # format: int32
 ]: nothing -> table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>> {
@@ -5978,7 +5977,7 @@ export def "roles-management-permissions put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --resource: string
   --scopePermissions: record
 ]: any -> record<enabled: bool, resource: string, scopePermissions: record> {
@@ -6221,7 +6220,7 @@ export def "users list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --briefRepresentation: string@bool-completer
+  --briefRepresentation: oneof<nothing, bool>
   --email: string
   --first: int # format: int32
   --firstName: string
@@ -6262,8 +6261,8 @@ export def "users post" [
   --credentials: list # item shape: {createdDate?: int, credentialData?: string, id?: string, priority?: int, secretData?: string, temporary?: bool, type?: string, userLabel?: string, value?: string}
   --disableableCredentialTypes: list
   --email: string
-  --emailVerified: string@bool-completer
-  --enabled: string@bool-completer
+  --emailVerified: oneof<nothing, bool>
+  --enabled: oneof<nothing, bool>
   --federatedIdentities: list # item shape: {identityProvider?: string, userId?: string, userName?: string}
   --federationLink: string
   --firstName: string
@@ -6318,7 +6317,7 @@ export def "users-management-permissions put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --resource: string
   --scopePermissions: record
 ]: any -> record<enabled: bool, resource: string, scopePermissions: record> {
@@ -6428,8 +6427,8 @@ export def "users put" [
   --credentials: list # item shape: {createdDate?: int, credentialData?: string, id?: string, priority?: int, secretData?: string, temporary?: bool, type?: string, userLabel?: string, value?: string}
   --disableableCredentialTypes: list
   --email: string
-  --emailVerified: string@bool-completer
-  --enabled: string@bool-completer
+  --emailVerified: oneof<nothing, bool>
+  --enabled: oneof<nothing, bool>
   --federatedIdentities: list # item shape: {identityProvider?: string, userId?: string, userName?: string}
   --federationLink: string
   --firstName: string
@@ -6777,7 +6776,7 @@ export def "users-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --briefRepresentation: string@bool-completer
+  --briefRepresentation: oneof<nothing, bool>
   --first: int # format: int32
   --max: int # format: int32
   --search: string
@@ -6940,7 +6939,7 @@ export def "users-reset-password put" [
   --body-id: string
   --priority: int # format: int32
   --secretData: string
-  --temporary: string@bool-completer
+  --temporary: oneof<nothing, bool>
   --type: string
   --userLabel: string
   --value: string

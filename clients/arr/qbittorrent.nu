@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost:8080/api/v2"] }
 def auth-scheme-completer [] { ["cookie-SID"] }
 
@@ -316,10 +315,10 @@ export def "log-main logMainPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --normal: string@bool-completer # Include normal messages (default: `true`) (default: true)
-  --info: string@bool-completer # Include info messages (default: `true`) (default: true)
-  --warning: string@bool-completer # Include warning messages (default: `true`) (default: true)
-  --critical: string@bool-completer # Include critical messages (default: `true`) (default: true)
+  --normal: oneof<nothing, bool> # Include normal messages (default: `true`) (default: true)
+  --info: oneof<nothing, bool> # Include info messages (default: `true`) (default: true)
+  --warning: oneof<nothing, bool> # Include warning messages (default: `true`) (default: true)
+  --critical: oneof<nothing, bool> # Include critical messages (default: `true`) (default: true)
   last_known_id: int # Exclude messages with "message id" <= `last_known_id` (default: `-1`) (format: int64, default: -1)
 ]: any -> table<id: int, message: string, timestamp: int, type: int> {
   let input = $in
@@ -617,7 +616,7 @@ export def "torrents-info torrentsInfoPost" [
   --category: string # Get torrents with the given category (empty string means "without category"; no "category" parameter means "any category" <- broken until [#11748](https://github.com/qbittorrent/qBittorrent/issues/11748) is resolved). Remember to URL-encode the category name. For example, `My category` becomes `My%20category`
   --tag: string # Get torrents with the given tag (empty string means "without tag"; no "tag" parameter means "any tag". Remember to URL-encode the category name. For example, `My tag` becomes `My%20tag`
   --body-sort: string # Sort torrents by given key. They can be sorted using any field of the response's JSON array (which are documented below) as the sort key.
-  --reverse: string@bool-completer # Enable reverse sorting. Defaults to `false` (default: false)
+  --reverse: oneof<nothing, bool> # Enable reverse sorting. Defaults to `false` (default: false)
   --limit: int # Limit the number of torrents returned (format: int64)
   --offset: int # Set offset (if less than 0, offset from end) (format: int64)
   --hashes: list # Filter by hashes. Can contain multiple hashes separated by `|`
@@ -856,7 +855,7 @@ export def "torrents-delete torrentsDeletePost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   hashes: list
-  --deleteFiles: string@bool-completer # If set to `true`, the downloaded data will also be deleted, otherwise has no effect.
+  --deleteFiles: oneof<nothing, bool> # If set to `true`, the downloaded data will also be deleted, otherwise has no effect.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))
@@ -1646,7 +1645,7 @@ export def "torrents-set-auto-management torrentsSetAutoManagementPost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   hashes: list
-  --enable: string@bool-completer # `enable` is a boolean, affects the torrents listed in `hashes`, default is `false` (default: false)
+  --enable: oneof<nothing, bool> # `enable` is a boolean, affects the torrents listed in `hashes`, default is `false` (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))
@@ -1725,7 +1724,7 @@ export def "torrents-set-force-start torrentsSetForceStartPost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   hashes: list
-  --value: string@bool-completer # `value` is a boolean, affects the torrents listed in `hashes`, default is `false` (default: false)
+  --value: oneof<nothing, bool> # `value` is a boolean, affects the torrents listed in `hashes`, default is `false` (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))
@@ -1752,7 +1751,7 @@ export def "torrents-set-super-seeding torrentsSetSuperSeedingPost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   hashes: list
-  --value: string@bool-completer # `value` is a boolean, affects the torrents listed in `hashes`, default is `false` (default: false)
+  --value: oneof<nothing, bool> # `value` is a boolean, affects the torrents listed in `hashes`, default is `false` (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))
@@ -1940,7 +1939,7 @@ export def "rss-items rssItemsPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --withData: string@bool-completer # True if you need current feed articles
+  --withData: oneof<nothing, bool> # True if you need current feed articles
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))
@@ -2357,7 +2356,7 @@ export def "search-enable-plugin searchEnablePluginPost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   names: list # Name of the plugin to enable/disable (e.g. "legittorrents"). Supports multiple names separated by `|`
-  --enable: string@bool-completer # Whether the plugins should be enabled
+  --enable: oneof<nothing, bool> # Whether the plugins should be enabled
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-SID"))

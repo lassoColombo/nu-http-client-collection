@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.jikan.moe/v4"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -454,8 +453,8 @@ export def "anime-reviews get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --page: int
-  --preliminary: string@bool-completer # Any reviews left during an ongoing anime/manga, those reviews are tagged as preliminary. NOTE: Preliminary reviews are not returned by default so if the entry is airing/publishing you need to add this otherwise you will get an empty list. e.g usage: `?preliminary=true`
-  --spoilers: string@bool-completer # Any reviews that are tagged as a spoiler. Spoiler reviews are not returned by default. e.g usage: `?spoiler=true`
+  --preliminary: oneof<nothing, bool> # Any reviews left during an ongoing anime/manga, those reviews are tagged as preliminary. NOTE: Preliminary reviews are not returned by default so if the entry is airing/publishing you need to add this otherwise you will get an empty list. e.g usage: `?preliminary=true`
+  --spoilers: oneof<nothing, bool> # Any reviews that are tagged as a spoiler. Spoiler reviews are not returned by default. e.g usage: `?spoiler=true`
 ]: nothing -> record<data: list<record>, pagination: record<last_visible_page: int, has_next_page: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1062,8 +1061,8 @@ export def "manga-reviews get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --page: int
-  --preliminary: string@bool-completer # Any reviews left during an ongoing anime/manga, those reviews are tagged as preliminary. NOTE: Preliminary reviews are not returned by default so if the entry is airing/publishing you need to add this otherwise you will get an empty list. e.g usage: `?preliminary=true`
-  --spoilers: string@bool-completer # Any reviews that are tagged as a spoiler. Spoiler reviews are not returned by default. e.g usage: `?spoiler=true`
+  --preliminary: oneof<nothing, bool> # Any reviews left during an ongoing anime/manga, those reviews are tagged as preliminary. NOTE: Preliminary reviews are not returned by default so if the entry is airing/publishing you need to add this otherwise you will get an empty list. e.g usage: `?preliminary=true`
+  --spoilers: oneof<nothing, bool> # Any reviews that are tagged as a spoiler. Spoiler reviews are not returned by default. e.g usage: `?spoiler=true`
 ]: nothing -> record<data: list<record>, pagination: record<last_visible_page: int, has_next_page: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1461,8 +1460,8 @@ export def "reviews-anime get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --page: int
-  --preliminary: string@bool-completer # Any reviews left during an ongoing anime/manga, those reviews are tagged as preliminary. NOTE: Preliminary reviews are not returned by default so if the entry is airing/publishing you need to add this otherwise you will get an empty list. e.g usage: `?preliminary=true`
-  --spoilers: string@bool-completer # Any reviews that are tagged as a spoiler. Spoiler reviews are not returned by default. e.g usage: `?spoiler=true`
+  --preliminary: oneof<nothing, bool> # Any reviews left during an ongoing anime/manga, those reviews are tagged as preliminary. NOTE: Preliminary reviews are not returned by default so if the entry is airing/publishing you need to add this otherwise you will get an empty list. e.g usage: `?preliminary=true`
+  --spoilers: oneof<nothing, bool> # Any reviews that are tagged as a spoiler. Spoiler reviews are not returned by default. e.g usage: `?spoiler=true`
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1485,8 +1484,8 @@ export def "reviews-manga get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --page: int
-  --preliminary: string@bool-completer # Any reviews left during an ongoing anime/manga, those reviews are tagged as preliminary. NOTE: Preliminary reviews are not returned by default so if the entry is airing/publishing you need to add this otherwise you will get an empty list. e.g usage: `?preliminary=true`
-  --spoilers: string@bool-completer # Any reviews that are tagged as a spoiler. Spoiler reviews are not returned by default. e.g usage: `?spoiler=true`
+  --preliminary: oneof<nothing, bool> # Any reviews left during an ongoing anime/manga, those reviews are tagged as preliminary. NOTE: Preliminary reviews are not returned by default so if the entry is airing/publishing you need to add this otherwise you will get an empty list. e.g usage: `?preliminary=true`
+  --spoilers: oneof<nothing, bool> # Any reviews that are tagged as a spoiler. Spoiler reviews are not returned by default. e.g usage: `?spoiler=true`
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1511,7 +1510,7 @@ export def "schedules get" [
   --filter: string@filter-completer-2 # Filter by day
   --kids: string@kids-completer # When supplied, it will filter entries with the `Kids` Genre Demographic. When supplied as `kids=true`, it will return only Kid entries and when supplied as `kids=false`, it will filter out any Kid entries. Defaults to `false`.
   --sfw: string@sfw-completer # 'Safe For Work'. When supplied, it will filter entries with the `Hentai` Genre. When supplied as `sfw=true`, it will return only SFW entries and when supplied as `sfw=false`, it will filter out any Hentai entries. Defaults to `false`.
-  --unapproved: string@bool-completer # This is a flag. When supplied it will include entries which are unapproved. Unapproved entries on MyAnimeList are those that are user submitted and have not yet been approved by MAL to show up on other pages. They will have their own specifc pages and are often removed resulting in a 404 error. You do not need to pass a value to it. e.g usage: `?unapproved`
+  --unapproved: oneof<nothing, bool> # This is a flag. When supplied it will include entries which are unapproved. Unapproved entries on MyAnimeList are those that are user submitted and have not yet been approved by MAL to show up on other pages. They will have their own specifc pages and are often removed resulting in a 404 error. You do not need to pass a value to it. e.g usage: `?unapproved`
   --page: int
   --limit: int
 ]: nothing -> record<data: table<mal_id: int, url: string, images: record, trailer: record, approved: bool, titles: list, title: string, title_english: string, title_japanese: string, title_synonyms: list, type: record, source: string, episodes: int, status: string, airing: bool, aired: record, duration: string, rating: string, score: float, scored_by: int, rank: int, popularity: int, members: int, favorites: int, synopsis: string, background: string, season: string, year: int, broadcast: record, producers: list, licensors: list, studios: list, genres: list, explicit_genres: list, themes: list, demographics: list>, pagination: record<last_visible_page: int, has_next_page: bool, current_page: int, items: record<count: int, total: int, per_page: int>>> {
@@ -1535,7 +1534,7 @@ export def "anime list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --unapproved: string@bool-completer # This is a flag. When supplied it will include entries which are unapproved. Unapproved entries on MyAnimeList are those that are user submitted and have not yet been approved by MAL to show up on other pages. They will have their own specifc pages and are often removed resulting in a 404 error. You do not need to pass a value to it. e.g usage: `?unapproved`
+  --unapproved: oneof<nothing, bool> # This is a flag. When supplied it will include entries which are unapproved. Unapproved entries on MyAnimeList are those that are user submitted and have not yet been approved by MAL to show up on other pages. They will have their own specifc pages and are often removed resulting in a 404 error. You do not need to pass a value to it. e.g usage: `?unapproved`
   --page: int
   --limit: int
   --q: string
@@ -1545,7 +1544,7 @@ export def "anime list" [
   --max-score: float # Set a maximum score for results
   --status: string@status-completer
   --rating: string@rating-completer
-  --sfw: string@bool-completer # Filter out Adult entries
+  --sfw: oneof<nothing, bool> # Filter out Adult entries
   --genres: string # Filter by genre(s) IDs. Can pass multiple with a comma as a delimiter. e.g 1,2,3
   --genres-exclude: string # Exclude genre(s) IDs. Can pass multiple with a comma as a delimiter. e.g 1,2,3
   --order-by: string@order-by-completer-1
@@ -1575,7 +1574,7 @@ export def "manga list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --unapproved: string@bool-completer # This is a flag. When supplied it will include entries which are unapproved. Unapproved entries on MyAnimeList are those that are user submitted and have not yet been approved by MAL to show up on other pages. They will have their own specifc pages and are often removed resulting in a 404 error. You do not need to pass a value to it. e.g usage: `?unapproved`
+  --unapproved: oneof<nothing, bool> # This is a flag. When supplied it will include entries which are unapproved. Unapproved entries on MyAnimeList are those that are user submitted and have not yet been approved by MAL to show up on other pages. They will have their own specifc pages and are often removed resulting in a 404 error. You do not need to pass a value to it. e.g usage: `?unapproved`
   --page: int
   --limit: int
   --q: string
@@ -1584,7 +1583,7 @@ export def "manga list" [
   --min-score: float # Set a minimum score for results.
   --max-score: float # Set a maximum score for results
   --status: string@status-completer-1
-  --sfw: string@bool-completer # Filter out Adult entries
+  --sfw: oneof<nothing, bool> # Filter out Adult entries
   --genres: string # Filter by genre(s) IDs. Can pass multiple with a comma as a delimiter. e.g 1,2,3
   --genres-exclude: string # Exclude genre(s) IDs. Can pass multiple with a comma as a delimiter. e.g 1,2,3
   --order-by: string@order-by-completer-2
@@ -1774,9 +1773,9 @@ export def "seasons-now get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string@filter-completer-3 # Entry types
-  --sfw: string@bool-completer # 'Safe For Work'. This is a flag. When supplied it will filter out entries according to the SFW Policy. You do not need to pass a value to it. e.g usage: `?sfw`
-  --unapproved: string@bool-completer # This is a flag. When supplied it will include entries which are unapproved. Unapproved entries on MyAnimeList are those that are user submitted and have not yet been approved by MAL to show up on other pages. They will have their own specifc pages and are often removed resulting in a 404 error. You do not need to pass a value to it. e.g usage: `?unapproved`
-  --continuing: string@bool-completer # This is a flag. When supplied it will include entries which are continuing from previous seasons. MAL includes these items on the seasons view in the &#8243;TV (continuing)&#8243; section. (Example: https://myanimelist.net/anime/season/2024/winter) <br />Example usage: `?continuing`
+  --sfw: oneof<nothing, bool> # 'Safe For Work'. This is a flag. When supplied it will filter out entries according to the SFW Policy. You do not need to pass a value to it. e.g usage: `?sfw`
+  --unapproved: oneof<nothing, bool> # This is a flag. When supplied it will include entries which are unapproved. Unapproved entries on MyAnimeList are those that are user submitted and have not yet been approved by MAL to show up on other pages. They will have their own specifc pages and are often removed resulting in a 404 error. You do not need to pass a value to it. e.g usage: `?unapproved`
+  --continuing: oneof<nothing, bool> # This is a flag. When supplied it will include entries which are continuing from previous seasons. MAL includes these items on the seasons view in the &#8243;TV (continuing)&#8243; section. (Example: https://myanimelist.net/anime/season/2024/winter) <br />Example usage: `?continuing`
   --page: int
   --limit: int
 ]: nothing -> record<data: table<mal_id: int, url: string, images: record, trailer: record, approved: bool, titles: list, title: string, title_english: string, title_japanese: string, title_synonyms: list, type: record, source: string, episodes: int, status: string, airing: bool, aired: record, duration: string, rating: string, score: float, scored_by: int, rank: int, popularity: int, members: int, favorites: int, synopsis: string, background: string, season: string, year: int, broadcast: record, producers: list, licensors: list, studios: list, genres: list, explicit_genres: list, themes: list, demographics: list>, pagination: record<last_visible_page: int, has_next_page: bool, current_page: int, items: record<count: int, total: int, per_page: int>>> {
@@ -1803,9 +1802,9 @@ export def "seasons get-by-year-season" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string@filter-completer-3 # Entry types
-  --sfw: string@bool-completer # 'Safe For Work'. This is a flag. When supplied it will filter out entries according to the SFW Policy. You do not need to pass a value to it. e.g usage: `?sfw`
-  --unapproved: string@bool-completer # This is a flag. When supplied it will include entries which are unapproved. Unapproved entries on MyAnimeList are those that are user submitted and have not yet been approved by MAL to show up on other pages. They will have their own specifc pages and are often removed resulting in a 404 error. You do not need to pass a value to it. e.g usage: `?unapproved`
-  --continuing: string@bool-completer # This is a flag. When supplied it will include entries which are continuing from previous seasons. MAL includes these items on the seasons view in the &#8243;TV (continuing)&#8243; section. (Example: https://myanimelist.net/anime/season/2024/winter) <br />Example usage: `?continuing`
+  --sfw: oneof<nothing, bool> # 'Safe For Work'. This is a flag. When supplied it will filter out entries according to the SFW Policy. You do not need to pass a value to it. e.g usage: `?sfw`
+  --unapproved: oneof<nothing, bool> # This is a flag. When supplied it will include entries which are unapproved. Unapproved entries on MyAnimeList are those that are user submitted and have not yet been approved by MAL to show up on other pages. They will have their own specifc pages and are often removed resulting in a 404 error. You do not need to pass a value to it. e.g usage: `?unapproved`
+  --continuing: oneof<nothing, bool> # This is a flag. When supplied it will include entries which are continuing from previous seasons. MAL includes these items on the seasons view in the &#8243;TV (continuing)&#8243; section. (Example: https://myanimelist.net/anime/season/2024/winter) <br />Example usage: `?continuing`
   --page: int
   --limit: int
 ]: nothing -> record<data: table<mal_id: int, url: string, images: record, trailer: record, approved: bool, titles: list, title: string, title_english: string, title_japanese: string, title_synonyms: list, type: record, source: string, episodes: int, status: string, airing: bool, aired: record, duration: string, rating: string, score: float, scored_by: int, rank: int, popularity: int, members: int, favorites: int, synopsis: string, background: string, season: string, year: int, broadcast: record, producers: list, licensors: list, studios: list, genres: list, explicit_genres: list, themes: list, demographics: list>, pagination: record<last_visible_page: int, has_next_page: bool, current_page: int, items: record<count: int, total: int, per_page: int>>> {
@@ -1850,9 +1849,9 @@ export def "seasons-upcoming get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string@filter-completer-3 # Entry types
-  --sfw: string@bool-completer # 'Safe For Work'. This is a flag. When supplied it will filter out entries according to the SFW Policy. You do not need to pass a value to it. e.g usage: `?sfw`
-  --unapproved: string@bool-completer # This is a flag. When supplied it will include entries which are unapproved. Unapproved entries on MyAnimeList are those that are user submitted and have not yet been approved by MAL to show up on other pages. They will have their own specifc pages and are often removed resulting in a 404 error. You do not need to pass a value to it. e.g usage: `?unapproved`
-  --continuing: string@bool-completer # This is a flag. When supplied it will include entries which are continuing from previous seasons. MAL includes these items on the seasons view in the &#8243;TV (continuing)&#8243; section. (Example: https://myanimelist.net/anime/season/2024/winter) <br />Example usage: `?continuing`
+  --sfw: oneof<nothing, bool> # 'Safe For Work'. This is a flag. When supplied it will filter out entries according to the SFW Policy. You do not need to pass a value to it. e.g usage: `?sfw`
+  --unapproved: oneof<nothing, bool> # This is a flag. When supplied it will include entries which are unapproved. Unapproved entries on MyAnimeList are those that are user submitted and have not yet been approved by MAL to show up on other pages. They will have their own specifc pages and are often removed resulting in a 404 error. You do not need to pass a value to it. e.g usage: `?unapproved`
+  --continuing: oneof<nothing, bool> # This is a flag. When supplied it will include entries which are continuing from previous seasons. MAL includes these items on the seasons view in the &#8243;TV (continuing)&#8243; section. (Example: https://myanimelist.net/anime/season/2024/winter) <br />Example usage: `?continuing`
   --page: int
   --limit: int
 ]: nothing -> record<data: table<mal_id: int, url: string, images: record, trailer: record, approved: bool, titles: list, title: string, title_english: string, title_japanese: string, title_synonyms: list, type: record, source: string, episodes: int, status: string, airing: bool, aired: record, duration: string, rating: string, score: float, scored_by: int, rank: int, popularity: int, members: int, favorites: int, synopsis: string, background: string, season: string, year: int, broadcast: record, producers: list, licensors: list, studios: list, genres: list, explicit_genres: list, themes: list, demographics: list>, pagination: record<last_visible_page: int, has_next_page: bool, current_page: int, items: record<count: int, total: int, per_page: int>>> {
@@ -1879,7 +1878,7 @@ export def "top-anime get" [
   --type: string
   --filter: string@filter-completer-4
   --rating: string@rating-completer
-  --sfw: string@bool-completer # Filter out Adult entries
+  --sfw: oneof<nothing, bool> # Filter out Adult entries
   --page: int
   --limit: int
 ]: nothing -> record<data: table<mal_id: int, url: string, images: record, trailer: record, approved: bool, titles: list, title: string, title_english: string, title_japanese: string, title_synonyms: list, type: record, source: string, episodes: int, status: string, airing: bool, aired: record, duration: string, rating: string, score: float, scored_by: int, rank: int, popularity: int, members: int, favorites: int, synopsis: string, background: string, season: string, year: int, broadcast: record, producers: list, licensors: list, studios: list, genres: list, explicit_genres: list, themes: list, demographics: list>, pagination: record<last_visible_page: int, has_next_page: bool, current_page: int, items: record<count: int, total: int, per_page: int>>> {
@@ -1976,8 +1975,8 @@ export def "top-reviews get" [
   --allow-errors(-e) # Return full response without error handling
   --page: int
   --type: string@type-completer-2
-  --preliminary: string@bool-completer # Whether the results include preliminary reviews or not. Defaults to true.
-  --spoilers: string@bool-completer # Whether the results include reviews with spoilers or not. Defaults to true.
+  --preliminary: oneof<nothing, bool> # Whether the results include preliminary reviews or not. Defaults to true.
+  --spoilers: oneof<nothing, bool> # Whether the results include reviews with spoilers or not. Defaults to true.
 ]: nothing -> record<data: record<data: list<any>, pagination: record<last_visible_page: int, has_next_page: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

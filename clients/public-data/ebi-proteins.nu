@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -211,7 +210,7 @@ export def "coordinates get-by-taxonomy-locations" [
   --accept: string@accept-completer # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
-  --in-range: string@bool-completer # When it is set to true for location search, only those entries that are in the range will be retrieved
+  --in-range: oneof<nothing, bool> # When it is set to true for location search, only those entries that are in the range will be retrieved
 ]: nothing -> table<accession: string, name: string, taxid: int, sequence: string, protein: record<accession: string, entryType: string>, gene: list<record>, gnCoordinate: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -239,7 +238,7 @@ export def "coordinates-feature get" [
   --accept: string@accept-completer # Response content type
   --offset: int # Off set, page starting point, with default value 0 (format: int32, default: 0, e.g. 0)
   --size: int # Page size with default value 100. When page size is -1, it returns all records and offset will be ignored (format: int32, default: 100, e.g. 100)
-  --in-range: string@bool-completer # When it is set to true for location search, only those entries that are in the range will be retrieved
+  --in-range: oneof<nothing, bool> # When it is set to true for location search, only those entries that are in the range will be retrieved
 ]: nothing -> table<accession: string, name: string, taxid: int, sequence: string, protein: record<accession: string, entryType: string>, gene: list<record>, gnCoordinate: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -826,7 +825,7 @@ export def "info get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # default: false
+  --qp-raw: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

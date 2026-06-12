@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://peertube2.cpy.re" "https://peertube3.cpy.re" "https://peertube.cpy.re"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -218,7 +217,7 @@ export def "static-streaming-playlists-hls-private get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --videoFileToken: string # Video file token [generated](#operation/requestVideoToken) by PeerTube so you don't need to provide an OAuth token in the request header.
-  --reinjectVideoFileToken: string@bool-completer # Ask the server to reinject videoFileToken in URLs in m3u8 playlist
+  --reinjectVideoFileToken: oneof<nothing, bool> # Ask the server to reinject videoFileToken in URLs in m3u8 playlist
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -302,11 +301,11 @@ export def "feeds-videos-format get" [
   --videoChannelName: string # limit listing to a specific video channel
   --qp-sort: string # Sort column (e.g. -createdAt)
   --nsfw: string@nsfw-completer # whether to include nsfw videos, if any
-  --isLocal: string@bool-completer # **PeerTube >= 4.0** Display only local or remote objects
+  --isLocal: oneof<nothing, bool> # **PeerTube >= 4.0** Display only local or remote objects
   --include: int@include-completer # **Only administrators and moderators can use this parameter**  Include additional videos in results (can be combined using bitwise or operator) - `0` NONE - `1` NOT_PUBLISHED_STATE - `2` BLACKLISTED - `4` BLOCKED_OWNER - `8` FILES - `16` CAPTIONS - `32` VIDEO SOURCE
   --privacyOneOf: int@privacyOneOf-completer # **PeerTube >= 4.0** Display only videos in this specific privacy/privacies
-  --hasHLSFiles: string@bool-completer # **PeerTube >= 4.0** Display only videos that have HLS files
-  --hasWebVideoFiles: string@bool-completer # **PeerTube >= 6.0** Display only videos that have Web Video files
+  --hasHLSFiles: oneof<nothing, bool> # **PeerTube >= 4.0** Display only videos that have HLS files
+  --hasWebVideoFiles: oneof<nothing, bool> # **PeerTube >= 6.0** Display only videos that have Web Video files
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -335,11 +334,11 @@ export def "feeds-subscriptions-format get" [
   --qp-token: string # private token allowing access
   --qp-sort: string # Sort column (e.g. -createdAt)
   --nsfw: string@nsfw-completer # whether to include nsfw videos, if any
-  --isLocal: string@bool-completer # **PeerTube >= 4.0** Display only local or remote objects
+  --isLocal: oneof<nothing, bool> # **PeerTube >= 4.0** Display only local or remote objects
   --include: int@include-completer # **Only administrators and moderators can use this parameter**  Include additional videos in results (can be combined using bitwise or operator) - `0` NONE - `1` NOT_PUBLISHED_STATE - `2` BLACKLISTED - `4` BLOCKED_OWNER - `8` FILES - `16` CAPTIONS - `32` VIDEO SOURCE
   --privacyOneOf: int@privacyOneOf-completer # **PeerTube >= 4.0** Display only videos in this specific privacy/privacies
-  --hasHLSFiles: string@bool-completer # **PeerTube >= 4.0** Display only videos that have HLS files
-  --hasWebVideoFiles: string@bool-completer # **PeerTube >= 6.0** Display only videos that have Web Video files
+  --hasHLSFiles: oneof<nothing, bool> # **PeerTube >= 4.0** Display only videos that have HLS files
+  --hasWebVideoFiles: oneof<nothing, bool> # **PeerTube >= 6.0** Display only videos that have Web Video files
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -415,22 +414,22 @@ export def "accounts-videos get" [
   --nsfw: string@nsfw-completer # whether to include nsfw videos, if any
   --nsfwFlagsIncluded: int@nsfwFlagsIncluded-completer
   --nsfwFlagsExcluded: int@nsfwFlagsExcluded-completer
-  --isLive: string@bool-completer # whether or not the video is a live
-  --includeScheduledLive: string@bool-completer # whether or not include live that are scheduled for later
+  --isLive: oneof<nothing, bool> # whether or not the video is a live
+  --includeScheduledLive: oneof<nothing, bool> # whether or not include live that are scheduled for later
   --categoryOneOf: string # category id of the video (see [/videos/categories](#operation/getCategories))
   --licenceOneOf: string # licence id of the video (see [/videos/licences](#operation/getLicences))
   --languageOneOf: string # language id of the video (see [/videos/languages](#operation/getLanguages)). Use `_unknown` to filter on videos that don't have a video language
   --tagsOneOf: string # tag(s) of the video
   --tagsAllOf: string # tag(s) of the video, where all should be present in the video
-  --isLocal: string@bool-completer # **PeerTube >= 4.0** Display only local or remote objects
+  --isLocal: oneof<nothing, bool> # **PeerTube >= 4.0** Display only local or remote objects
   --include: int@include-completer # **Only administrators and moderators can use this parameter**  Include additional videos in results (can be combined using bitwise or operator) - `0` NONE - `1` NOT_PUBLISHED_STATE - `2` BLACKLISTED - `4` BLOCKED_OWNER - `8` FILES - `16` CAPTIONS - `32` VIDEO SOURCE
-  --hasHLSFiles: string@bool-completer # **PeerTube >= 4.0** Display only videos that have HLS files
-  --hasWebVideoFiles: string@bool-completer # **PeerTube >= 6.0** Display only videos that have Web Video files
+  --hasHLSFiles: oneof<nothing, bool> # **PeerTube >= 4.0** Display only videos that have HLS files
+  --hasWebVideoFiles: oneof<nothing, bool> # **PeerTube >= 6.0** Display only videos that have Web Video files
   --host: string # Find elements owned by this host
   --autoTagOneOf: string # **PeerTube >= 6.2** **Admins and moderators only** filter on videos that contain one of these automatic tags
   --stateOneOf: string # **PeerTube >= 8.2** **Admins and moderators only** filter on videos that have one of these states
   --privacyOneOf: int@privacyOneOf-completer # **PeerTube >= 4.0** Display only videos in this specific privacy/privacies
-  --excludeAlreadyWatched: string@bool-completer # Whether or not to exclude videos that are in the user's video history
+  --excludeAlreadyWatched: oneof<nothing, bool> # Whether or not to exclude videos that are in the user's video history
   --search: string # Plain text search, applied to various parts of the model depending on endpoint
 ]: nothing -> record<total: int, data: table<id: record, uuid: record, shortUUID: record, isLive: bool, liveSchedules: list, createdAt: string, publishedAt: string, updatedAt: string, originallyPublishedAt: string, category: record, licence: record, language: record, privacy: record, truncatedDescription: string, duration: int, aspectRatio: float, isLocal: bool, name: string, thumbnailPath: string, previewPath: string, thumbnails: list, embedPath: string, views: int, likes: int, dislikes: int, comments: int, nsfw: bool, nsfwFlags: record, nsfwSummary: string, waitTranscoding: bool, state: record, scheduledUpdate: record, blacklisted: bool, blacklistedReason: string, account: record, channel: record, userHistory: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1050,7 +1049,7 @@ export def "users list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --search: string # Plain text search that will match with user usernames or emails
-  --blocked: string@bool-completer # Filter results down to (un)banned users
+  --blocked: oneof<nothing, bool> # Filter results down to (un)banned users
   --role: int@role-completer # Filter results down to users with a specific role (e.g. 2)
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
@@ -1100,7 +1099,7 @@ export def "users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --withStats: string@bool-completer # include statistics about the user (only available as a moderator/admin)
+  --withStats: oneof<nothing, bool> # include statistics about the user (only available as a moderator/admin)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1125,7 +1124,7 @@ export def "users put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --email: any # The updated email of the user
-  --emailVerified: string@bool-completer # Set the email as verified
+  --emailVerified: oneof<nothing, bool> # Set the email as verified
   --videoQuota: int # The updated video quota of the user in bytes
   --videoQuotaDaily: int # The updated daily video quota of the user in bytes
   --pluginAuth: string # The auth plugin to use to authenticate the user (nullable, e.g. peertube-plugin-auth-saml2)
@@ -1367,7 +1366,7 @@ export def "users-verify-email verifyUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   verificationString: string # format: url
-  --isPendingEmail: string@bool-completer
+  --isPendingEmail: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1658,7 +1657,7 @@ export def "users-exports-request requestUserExport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --withVideoFiles: string@bool-completer # Whether to include video files in the archive
+  --withVideoFiles: oneof<nothing, bool> # Whether to include video files in the archive
 ]: any -> record<export: record<id: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1758,17 +1757,17 @@ export def "users-me put" [
   --nsfwFlagsHidden: int@nsfwFlagsHidden-completer #  NSFW flags (can be combined using bitwise or operator) - `0` NONE - `1` VIOLENT - `2` EXPLICIT_SEX
   --nsfwFlagsWarned: int@nsfwFlagsWarned-completer #  NSFW flags (can be combined using bitwise or operator) - `0` NONE - `1` VIOLENT - `2` EXPLICIT_SEX
   --nsfwFlagsBlurred: int@nsfwFlagsBlurred-completer #  NSFW flags (can be combined using bitwise or operator) - `0` NONE - `1` VIOLENT - `2` EXPLICIT_SEX
-  --p2pEnabled: string@bool-completer # whether to enable P2P in the player or not
-  --autoPlayVideo: string@bool-completer # new preference regarding playing videos automatically
-  --autoPlayNextVideo: string@bool-completer # new preference regarding playing following videos automatically
-  --autoPlayNextVideoPlaylist: string@bool-completer # new preference regarding playing following playlist videos automatically
-  --videosHistoryEnabled: string@bool-completer # whether to keep track of watched history or not
+  --p2pEnabled: oneof<nothing, bool> # whether to enable P2P in the player or not
+  --autoPlayVideo: oneof<nothing, bool> # new preference regarding playing videos automatically
+  --autoPlayNextVideo: oneof<nothing, bool> # new preference regarding playing following videos automatically
+  --autoPlayNextVideoPlaylist: oneof<nothing, bool> # new preference regarding playing following playlist videos automatically
+  --videosHistoryEnabled: oneof<nothing, bool> # whether to keep track of watched history or not
   --videoLanguages: list # list of languages to filter videos down to
   --language: string # default language for this user
   --theme: string
-  --noInstanceConfigWarningModal: string@bool-completer
-  --noAccountSetupWarningModal: string@bool-completer
-  --noWelcomeModal: string@bool-completer
+  --noInstanceConfigWarningModal: oneof<nothing, bool>
+  --noAccountSetupWarningModal: oneof<nothing, bool>
+  --noWelcomeModal: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1819,8 +1818,8 @@ export def "users-me-videos-comments get" [
   --videoId: int # Limit results on this specific video
   --videoChannelId: int # Limit results on this specific video channel
   --autoTagOneOf: string # **PeerTube >= 6.2** filter on comments that contain one of these automatic tags
-  --isHeldForReview: string@bool-completer # only display comments that are held for review
-  --includeCollaborations: string@bool-completer # **PeerTube >= 8.0** Include objects from collaborated channels
+  --isHeldForReview: oneof<nothing, bool> # only display comments that are held for review
+  --includeCollaborations: oneof<nothing, bool> # **PeerTube >= 8.0** Include objects from collaborated channels
 ]: nothing -> record<total: int, data: table<id: int, url: any, text: any, heldForReview: any, threadId: any, inReplyToCommentId: any, createdAt: any, updatedAt: any, account: any, video: record, automaticTags: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1845,7 +1844,7 @@ export def "users-me-videos-imports get" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --qp-sort: string # Sort column (e.g. -createdAt)
-  --includeCollaborations: string@bool-completer # **PeerTube >= 8.0** Include objects from collaborated channels
+  --includeCollaborations: oneof<nothing, bool> # **PeerTube >= 8.0** Include objects from collaborated channels
   --videoId: int # Filter on import video ID
   --targetUrl: string # Filter on import target URL
   --videoChannelSyncId: float # Filter on imports created by a specific channel synchronization
@@ -1920,24 +1919,24 @@ export def "users-me-videos get" [
   --nsfw: string@nsfw-completer # whether to include nsfw videos, if any
   --nsfwFlagsIncluded: int@nsfwFlagsIncluded-completer
   --nsfwFlagsExcluded: int@nsfwFlagsExcluded-completer
-  --isLive: string@bool-completer # whether or not the video is a live
-  --includeScheduledLive: string@bool-completer # whether or not include live that are scheduled for later
+  --isLive: oneof<nothing, bool> # whether or not the video is a live
+  --includeScheduledLive: oneof<nothing, bool> # whether or not include live that are scheduled for later
   --categoryOneOf: string # category id of the video (see [/videos/categories](#operation/getCategories))
   --licenceOneOf: string # licence id of the video (see [/videos/licences](#operation/getLicences))
   --languageOneOf: string # language id of the video (see [/videos/languages](#operation/getLanguages)). Use `_unknown` to filter on videos that don't have a video language
   --tagsOneOf: string # tag(s) of the video
   --tagsAllOf: string # tag(s) of the video, where all should be present in the video
-  --isLocal: string@bool-completer # **PeerTube >= 4.0** Display only local or remote objects
+  --isLocal: oneof<nothing, bool> # **PeerTube >= 4.0** Display only local or remote objects
   --include: int@include-completer # **Only administrators and moderators can use this parameter**  Include additional videos in results (can be combined using bitwise or operator) - `0` NONE - `1` NOT_PUBLISHED_STATE - `2` BLACKLISTED - `4` BLOCKED_OWNER - `8` FILES - `16` CAPTIONS - `32` VIDEO SOURCE
-  --hasHLSFiles: string@bool-completer # **PeerTube >= 4.0** Display only videos that have HLS files
-  --hasWebVideoFiles: string@bool-completer # **PeerTube >= 6.0** Display only videos that have Web Video files
+  --hasHLSFiles: oneof<nothing, bool> # **PeerTube >= 4.0** Display only videos that have HLS files
+  --hasWebVideoFiles: oneof<nothing, bool> # **PeerTube >= 6.0** Display only videos that have Web Video files
   --host: string # Find elements owned by this host
   --autoTagOneOf: string # **PeerTube >= 6.2** **Admins and moderators only** filter on videos that contain one of these automatic tags
   --stateOneOf: string # **PeerTube >= 8.2** **Admins and moderators only** filter on videos that have one of these states
   --privacyOneOf: int@privacyOneOf-completer # **PeerTube >= 4.0** Display only videos in this specific privacy/privacies
-  --excludeAlreadyWatched: string@bool-completer # Whether or not to exclude videos that are in the user's video history
+  --excludeAlreadyWatched: oneof<nothing, bool> # Whether or not to exclude videos that are in the user's video history
   --search: string # Plain text search, applied to various parts of the model depending on endpoint
-  --includeCollaborations: string@bool-completer # **PeerTube >= 8.0** Include objects from collaborated channels
+  --includeCollaborations: oneof<nothing, bool> # **PeerTube >= 8.0** Include objects from collaborated channels
 ]: nothing -> record<total: int, data: table<id: record, uuid: record, shortUUID: record, isLive: bool, liveSchedules: list, createdAt: string, publishedAt: string, updatedAt: string, originallyPublishedAt: string, category: record, licence: record, language: record, privacy: record, truncatedDescription: string, duration: int, aspectRatio: float, isLocal: bool, name: string, thumbnailPath: string, previewPath: string, thumbnails: list, embedPath: string, views: int, likes: int, dislikes: int, comments: int, nsfw: bool, nsfwFlags: record, nsfwSummary: string, waitTranscoding: bool, state: record, scheduledUpdate: record, blacklisted: bool, blacklistedReason: string, account: record, channel: record, userHistory: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2036,22 +2035,22 @@ export def "users-me-subscriptions-videos get" [
   --nsfw: string@nsfw-completer # whether to include nsfw videos, if any
   --nsfwFlagsIncluded: int@nsfwFlagsIncluded-completer
   --nsfwFlagsExcluded: int@nsfwFlagsExcluded-completer
-  --isLive: string@bool-completer # whether or not the video is a live
-  --includeScheduledLive: string@bool-completer # whether or not include live that are scheduled for later
+  --isLive: oneof<nothing, bool> # whether or not the video is a live
+  --includeScheduledLive: oneof<nothing, bool> # whether or not include live that are scheduled for later
   --categoryOneOf: string # category id of the video (see [/videos/categories](#operation/getCategories))
   --licenceOneOf: string # licence id of the video (see [/videos/licences](#operation/getLicences))
   --languageOneOf: string # language id of the video (see [/videos/languages](#operation/getLanguages)). Use `_unknown` to filter on videos that don't have a video language
   --tagsOneOf: string # tag(s) of the video
   --tagsAllOf: string # tag(s) of the video, where all should be present in the video
-  --isLocal: string@bool-completer # **PeerTube >= 4.0** Display only local or remote objects
+  --isLocal: oneof<nothing, bool> # **PeerTube >= 4.0** Display only local or remote objects
   --include: int@include-completer # **Only administrators and moderators can use this parameter**  Include additional videos in results (can be combined using bitwise or operator) - `0` NONE - `1` NOT_PUBLISHED_STATE - `2` BLACKLISTED - `4` BLOCKED_OWNER - `8` FILES - `16` CAPTIONS - `32` VIDEO SOURCE
-  --hasHLSFiles: string@bool-completer # **PeerTube >= 4.0** Display only videos that have HLS files
-  --hasWebVideoFiles: string@bool-completer # **PeerTube >= 6.0** Display only videos that have Web Video files
+  --hasHLSFiles: oneof<nothing, bool> # **PeerTube >= 4.0** Display only videos that have HLS files
+  --hasWebVideoFiles: oneof<nothing, bool> # **PeerTube >= 6.0** Display only videos that have Web Video files
   --host: string # Find elements owned by this host
   --autoTagOneOf: string # **PeerTube >= 6.2** **Admins and moderators only** filter on videos that contain one of these automatic tags
   --stateOneOf: string # **PeerTube >= 8.2** **Admins and moderators only** filter on videos that have one of these states
   --privacyOneOf: int@privacyOneOf-completer # **PeerTube >= 4.0** Display only videos in this specific privacy/privacies
-  --excludeAlreadyWatched: string@bool-completer # Whether or not to exclude videos that are in the user's video history
+  --excludeAlreadyWatched: oneof<nothing, bool> # Whether or not to exclude videos that are in the user's video history
   --search: string # Plain text search, applied to various parts of the model depending on endpoint
 ]: nothing -> record<total: int, data: table<id: record, uuid: record, shortUUID: record, isLive: bool, liveSchedules: list, createdAt: string, publishedAt: string, updatedAt: string, originallyPublishedAt: string, category: record, licence: record, language: record, privacy: record, truncatedDescription: string, duration: int, aspectRatio: float, isLocal: bool, name: string, thumbnailPath: string, previewPath: string, thumbnails: list, embedPath: string, views: int, likes: int, dislikes: int, comments: int, nsfw: bool, nsfwFlags: record, nsfwSummary: string, waitTranscoding: bool, state: record, scheduledUpdate: record, blacklisted: bool, blacklistedReason: string, account: record, channel: record, userHistory: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2117,7 +2116,7 @@ export def "users-me-notifications get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --typeOneOf: list # only list notifications of these types
-  --unread: string@bool-completer # only list unread notifications
+  --unread: oneof<nothing, bool> # only list unread notifications
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --qp-sort: string # Sort column (e.g. -createdAt)
@@ -2428,7 +2427,7 @@ export def "users-registrations-accept acceptRegistration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   moderationResponse: string # Moderation response to send to the user
-  --preventEmailDelivery: string@bool-completer # Set it to true if you don't want PeerTube to send an email to the user
+  --preventEmailDelivery: oneof<nothing, bool> # Set it to true if you don't want PeerTube to send an email to the user
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2455,7 +2454,7 @@ export def "users-registrations-reject rejectRegistration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   moderationResponse: string # Moderation response to send to the user
-  --preventEmailDelivery: string@bool-completer # Set it to true if you don't want PeerTube to send an email to the user
+  --preventEmailDelivery: oneof<nothing, bool> # Set it to true if you don't want PeerTube to send an email to the user
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2865,22 +2864,22 @@ export def "videos list" [
   --nsfw: string@nsfw-completer # whether to include nsfw videos, if any
   --nsfwFlagsIncluded: int@nsfwFlagsIncluded-completer
   --nsfwFlagsExcluded: int@nsfwFlagsExcluded-completer
-  --isLive: string@bool-completer # whether or not the video is a live
-  --includeScheduledLive: string@bool-completer # whether or not include live that are scheduled for later
+  --isLive: oneof<nothing, bool> # whether or not the video is a live
+  --includeScheduledLive: oneof<nothing, bool> # whether or not include live that are scheduled for later
   --categoryOneOf: string # category id of the video (see [/videos/categories](#operation/getCategories))
   --licenceOneOf: string # licence id of the video (see [/videos/licences](#operation/getLicences))
   --languageOneOf: string # language id of the video (see [/videos/languages](#operation/getLanguages)). Use `_unknown` to filter on videos that don't have a video language
   --tagsOneOf: string # tag(s) of the video
   --tagsAllOf: string # tag(s) of the video, where all should be present in the video
-  --isLocal: string@bool-completer # **PeerTube >= 4.0** Display only local or remote objects
+  --isLocal: oneof<nothing, bool> # **PeerTube >= 4.0** Display only local or remote objects
   --include: int@include-completer # **Only administrators and moderators can use this parameter**  Include additional videos in results (can be combined using bitwise or operator) - `0` NONE - `1` NOT_PUBLISHED_STATE - `2` BLACKLISTED - `4` BLOCKED_OWNER - `8` FILES - `16` CAPTIONS - `32` VIDEO SOURCE
-  --hasHLSFiles: string@bool-completer # **PeerTube >= 4.0** Display only videos that have HLS files
-  --hasWebVideoFiles: string@bool-completer # **PeerTube >= 6.0** Display only videos that have Web Video files
+  --hasHLSFiles: oneof<nothing, bool> # **PeerTube >= 4.0** Display only videos that have HLS files
+  --hasWebVideoFiles: oneof<nothing, bool> # **PeerTube >= 6.0** Display only videos that have Web Video files
   --host: string # Find elements owned by this host
   --autoTagOneOf: string # **PeerTube >= 6.2** **Admins and moderators only** filter on videos that contain one of these automatic tags
   --stateOneOf: string # **PeerTube >= 8.2** **Admins and moderators only** filter on videos that have one of these states
   --privacyOneOf: int@privacyOneOf-completer # **PeerTube >= 4.0** Display only videos in this specific privacy/privacies
-  --excludeAlreadyWatched: string@bool-completer # Whether or not to exclude videos that are in the user's video history
+  --excludeAlreadyWatched: oneof<nothing, bool> # Whether or not to exclude videos that are in the user's video history
   --search: string # Plain text search, applied to various parts of the model depending on endpoint
 ]: nothing -> record<total: int, data: table<id: record, uuid: record, shortUUID: record, isLive: bool, liveSchedules: list, createdAt: string, publishedAt: string, updatedAt: string, originallyPublishedAt: string, category: record, licence: record, language: record, privacy: record, truncatedDescription: string, duration: int, aspectRatio: float, isLocal: bool, name: string, thumbnailPath: string, previewPath: string, thumbnails: list, embedPath: string, views: int, likes: int, dislikes: int, comments: int, nsfw: bool, nsfwFlags: record, nsfwSummary: string, waitTranscoding: bool, state: record, scheduledUpdate: record, blacklisted: bool, blacklistedReason: string, account: record, channel: record, userHistory: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3003,13 +3002,13 @@ export def "videos put" [
   --description: string # Video description
   --waitTranscoding: string # Whether or not we wait transcoding before publish the video
   --support: string # A text tell the audience how to support the video creator (e.g. Please support our work on https://soutenir.framasoft.org/en/ <3)
-  --nsfw: string@bool-completer # Whether or not this video contains sensitive content
+  --nsfw: oneof<nothing, bool> # Whether or not this video contains sensitive content
   --nsfwSummary: any # More information about the sensitive content of the video
   --nsfwFlags: int@nsfwFlags-completer #  NSFW flags (can be combined using bitwise or operator) - `0` NONE - `1` VIOLENT - `2` EXPLICIT_SEX
   --name: string # Video name
   --tags: list # Video tags (maximum 5 tags each between 2 and 30 characters)
   --commentsPolicy: int@commentsPolicy-completer # Comments policy of the video (Enabled = `1`, Disabled = `2`, Requires Approval = `3`)
-  --downloadEnabled: string@bool-completer # Enable or disable downloading for this video
+  --downloadEnabled: oneof<nothing, bool> # Enable or disable downloading for this video
   --originallyPublishedAt: string # Date when the content was originally published (nullable, format: date-time)
   --scheduleUpdate: any # shape: {privacy?: "1"|"2"|"3"|"4"|"5", updateAt: string}
   --videoPasswords: list
@@ -3218,15 +3217,15 @@ export def "videos-upload uploadLegacy" [
   --licence: int # licence id of the video (see [/videos/licences](#operation/getLicences)) (e.g. 2)
   --language: string # language id of the video (see [/videos/languages](#operation/getLanguages)) (e.g. en)
   --description: string # Video description (e.g. **[Want to help to translate this video?](https://weblate.framasoft.org/projects/what-is-peertube-video/)**\r\n\r\n**Take back the control of your videos! [#JoinPeertube](https://joinpeertube.org)** )
-  --waitTranscoding: string@bool-completer # Whether or not we wait transcoding before publish the video
-  --generateTranscription: string@bool-completer # **PeerTube >= 6.2** If enabled by the admin, automatically generate a subtitle of the video
+  --waitTranscoding: oneof<nothing, bool> # Whether or not we wait transcoding before publish the video
+  --generateTranscription: oneof<nothing, bool> # **PeerTube >= 6.2** If enabled by the admin, automatically generate a subtitle of the video
   --support: string # A text tell the audience how to support the video creator (e.g. Please support our work on https://soutenir.framasoft.org/en/ <3)
-  --nsfw: string@bool-completer # Whether or not this video contains sensitive content
+  --nsfw: oneof<nothing, bool> # Whether or not this video contains sensitive content
   --nsfwSummary: any # More information about the sensitive content of the video
   --nsfwFlags: int@nsfwFlags-completer #  NSFW flags (can be combined using bitwise or operator) - `0` NONE - `1` VIOLENT - `2` EXPLICIT_SEX
   --tags: list # Video tags (maximum 5 tags each between 2 and 30 characters) (e.g. [framasoft, peertube])
   --commentsPolicy: int@commentsPolicy-completer # Comments policy of the video (Enabled = `1`, Disabled = `2`, Requires Approval = `3`)
-  --downloadEnabled: string@bool-completer # Enable or disable downloading for this video
+  --downloadEnabled: oneof<nothing, bool> # Enable or disable downloading for this video
   --originallyPublishedAt: string # Date when the content was originally published (format: date-time)
   --scheduleUpdate: any # shape: {privacy?: "1"|"2"|"3"|"4"|"5", updateAt: string}
   --thumbnailfile: string # Video thumbnail file (format: binary)
@@ -3268,15 +3267,15 @@ export def "videos-upload-resumable uploadResumableInit" [
   --licence: int # licence id of the video (see [/videos/licences](#operation/getLicences)) (e.g. 2)
   --language: string # language id of the video (see [/videos/languages](#operation/getLanguages)) (e.g. en)
   --description: string # Video description (e.g. **[Want to help to translate this video?](https://weblate.framasoft.org/projects/what-is-peertube-video/)**\r\n\r\n**Take back the control of your videos! [#JoinPeertube](https://joinpeertube.org)** )
-  --waitTranscoding: string@bool-completer # Whether or not we wait transcoding before publish the video
-  --generateTranscription: string@bool-completer # **PeerTube >= 6.2** If enabled by the admin, automatically generate a subtitle of the video
+  --waitTranscoding: oneof<nothing, bool> # Whether or not we wait transcoding before publish the video
+  --generateTranscription: oneof<nothing, bool> # **PeerTube >= 6.2** If enabled by the admin, automatically generate a subtitle of the video
   --support: string # A text tell the audience how to support the video creator (e.g. Please support our work on https://soutenir.framasoft.org/en/ <3)
-  --nsfw: string@bool-completer # Whether or not this video contains sensitive content
+  --nsfw: oneof<nothing, bool> # Whether or not this video contains sensitive content
   --nsfwSummary: any # More information about the sensitive content of the video
   --nsfwFlags: int@nsfwFlags-completer #  NSFW flags (can be combined using bitwise or operator) - `0` NONE - `1` VIOLENT - `2` EXPLICIT_SEX
   --tags: list # Video tags (maximum 5 tags each between 2 and 30 characters) (e.g. [framasoft, peertube])
   --commentsPolicy: int@commentsPolicy-completer # Comments policy of the video (Enabled = `1`, Disabled = `2`, Requires Approval = `3`)
-  --downloadEnabled: string@bool-completer # Enable or disable downloading for this video
+  --downloadEnabled: oneof<nothing, bool> # Enable or disable downloading for this video
   --originallyPublishedAt: string # Date when the content was originally published (format: date-time)
   --scheduleUpdate: any # shape: {privacy?: "1"|"2"|"3"|"4"|"5", updateAt: string}
   --thumbnailfile: string # Video thumbnail file (format: binary)
@@ -3374,15 +3373,15 @@ export def "videos-imports importVideo" [
   --licence: int # licence id of the video (see [/videos/licences](#operation/getLicences)) (e.g. 2)
   --language: string # language id of the video (see [/videos/languages](#operation/getLanguages)) (e.g. en)
   --description: string # Video description (e.g. **[Want to help to translate this video?](https://weblate.framasoft.org/projects/what-is-peertube-video/)**\r\n\r\n**Take back the control of your videos! [#JoinPeertube](https://joinpeertube.org)** )
-  --waitTranscoding: string@bool-completer # Whether or not we wait transcoding before publish the video
-  --generateTranscription: string@bool-completer # **PeerTube >= 6.2** If enabled by the admin, automatically generate a subtitle of the video
+  --waitTranscoding: oneof<nothing, bool> # Whether or not we wait transcoding before publish the video
+  --generateTranscription: oneof<nothing, bool> # **PeerTube >= 6.2** If enabled by the admin, automatically generate a subtitle of the video
   --support: string # A text tell the audience how to support the video creator (e.g. Please support our work on https://soutenir.framasoft.org/en/ <3)
-  --nsfw: string@bool-completer # Whether or not this video contains sensitive content
+  --nsfw: oneof<nothing, bool> # Whether or not this video contains sensitive content
   --nsfwSummary: any # More information about the sensitive content of the video
   --nsfwFlags: int@nsfwFlags-completer #  NSFW flags (can be combined using bitwise or operator) - `0` NONE - `1` VIOLENT - `2` EXPLICIT_SEX
   --tags: list # Video tags (maximum 5 tags each between 2 and 30 characters) (e.g. [framasoft, peertube])
   --commentsPolicy: int@commentsPolicy-completer # Comments policy of the video (Enabled = `1`, Disabled = `2`, Requires Approval = `3`)
-  --downloadEnabled: string@bool-completer # Enable or disable downloading for this video
+  --downloadEnabled: oneof<nothing, bool> # Enable or disable downloading for this video
   --originallyPublishedAt: string # Date when the content was originally published (format: date-time)
   --scheduleUpdate: any # shape: {privacy?: "1"|"2"|"3"|"4"|"5", updateAt: string}
   --thumbnailfile: string # Video thumbnail file (format: binary)
@@ -3479,9 +3478,9 @@ export def "videos-live addLive" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   channelId: int # Channel id that will contain this live video
-  --saveReplay: string@bool-completer
+  --saveReplay: oneof<nothing, bool>
   --replaySettings: record # shape: {privacy?: "1"|"2"|"3"|"4"|"5"}
-  --permanentLive: string@bool-completer # User can stream multiple times in a permanent live
+  --permanentLive: oneof<nothing, bool> # User can stream multiple times in a permanent live
   --latencyMode: any # User can select live latency mode if enabled by the instance
   --thumbnailfile: string # Live video/replay thumbnail file (format: binary)
   --previewfile: string # Deprecated in PeerTube v8.1, use thumbnailfile instead (DEPRECATED, format: binary)
@@ -3491,13 +3490,13 @@ export def "videos-live addLive" [
   --language: string # language id of the video (see [/videos/languages](#operation/getLanguages)) (e.g. en)
   --description: string # Live video/replay description
   --support: string # A text tell the audience how to support the creator (e.g. Please support our work on https://soutenir.framasoft.org/en/ <3)
-  --nsfw: string@bool-completer # Whether or not this live video/replay contains sensitive content
+  --nsfw: oneof<nothing, bool> # Whether or not this live video/replay contains sensitive content
   --nsfwSummary: any # More information about the sensitive content of the video
   --nsfwFlags: int@nsfwFlags-completer #  NSFW flags (can be combined using bitwise or operator) - `0` NONE - `1` VIOLENT - `2` EXPLICIT_SEX
   name: string # Live video/replay name
   --tags: list # Live video/replay tags (maximum 5 tags each between 2 and 30 characters)
   --commentsPolicy: int@commentsPolicy-completer # Comments policy of the video (Enabled = `1`, Disabled = `2`, Requires Approval = `3`)
-  --downloadEnabled: string@bool-completer # Enable or disable downloading for the replay of this live video
+  --downloadEnabled: oneof<nothing, bool> # Enable or disable downloading for the replay of this live video
   --schedules: list # item shape: {startAt?: string}
 ]: any -> record<video: record<id: int, uuid: any, shortUUID: string>> {
   let input = $in
@@ -3548,9 +3547,9 @@ export def "videos-live updateLiveId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --saveReplay: string@bool-completer
+  --saveReplay: oneof<nothing, bool>
   --replaySettings: record # shape: {privacy?: "1"|"2"|"3"|"4"|"5"}
-  --permanentLive: string@bool-completer # User can stream multiple times in a permanent live
+  --permanentLive: oneof<nothing, bool> # User can stream multiple times in a permanent live
   --latencyMode: any # User can select live latency mode if enabled by the instance
   --schedules: list # item shape: {startAt?: string}
 ]: any -> any {
@@ -4083,7 +4082,7 @@ export def "videos-captions-generate generateVideoCaption" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceTranscription: string@bool-completer # default: false
+  --forceTranscription: oneof<nothing, bool> # default: false
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4463,7 +4462,7 @@ export def "video-channels put" [
   --displayName: any # Channel display name
   --description: any # Channel description
   --support: any # How to support/fund the channel
-  --bulkVideosSupportUpdate: string@bool-completer # Update the support field for all videos of this channel
+  --bulkVideosSupportUpdate: oneof<nothing, bool> # Update the support field for all videos of this channel
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4518,22 +4517,22 @@ export def "video-channels-videos get" [
   --nsfw: string@nsfw-completer # whether to include nsfw videos, if any
   --nsfwFlagsIncluded: int@nsfwFlagsIncluded-completer
   --nsfwFlagsExcluded: int@nsfwFlagsExcluded-completer
-  --isLive: string@bool-completer # whether or not the video is a live
-  --includeScheduledLive: string@bool-completer # whether or not include live that are scheduled for later
+  --isLive: oneof<nothing, bool> # whether or not the video is a live
+  --includeScheduledLive: oneof<nothing, bool> # whether or not include live that are scheduled for later
   --categoryOneOf: string # category id of the video (see [/videos/categories](#operation/getCategories))
   --licenceOneOf: string # licence id of the video (see [/videos/licences](#operation/getLicences))
   --languageOneOf: string # language id of the video (see [/videos/languages](#operation/getLanguages)). Use `_unknown` to filter on videos that don't have a video language
   --tagsOneOf: string # tag(s) of the video
   --tagsAllOf: string # tag(s) of the video, where all should be present in the video
-  --isLocal: string@bool-completer # **PeerTube >= 4.0** Display only local or remote objects
+  --isLocal: oneof<nothing, bool> # **PeerTube >= 4.0** Display only local or remote objects
   --include: int@include-completer # **Only administrators and moderators can use this parameter**  Include additional videos in results (can be combined using bitwise or operator) - `0` NONE - `1` NOT_PUBLISHED_STATE - `2` BLACKLISTED - `4` BLOCKED_OWNER - `8` FILES - `16` CAPTIONS - `32` VIDEO SOURCE
-  --hasHLSFiles: string@bool-completer # **PeerTube >= 4.0** Display only videos that have HLS files
-  --hasWebVideoFiles: string@bool-completer # **PeerTube >= 6.0** Display only videos that have Web Video files
+  --hasHLSFiles: oneof<nothing, bool> # **PeerTube >= 4.0** Display only videos that have HLS files
+  --hasWebVideoFiles: oneof<nothing, bool> # **PeerTube >= 6.0** Display only videos that have Web Video files
   --host: string # Find elements owned by this host
   --autoTagOneOf: string # **PeerTube >= 6.2** **Admins and moderators only** filter on videos that contain one of these automatic tags
   --stateOneOf: string # **PeerTube >= 8.2** **Admins and moderators only** filter on videos that have one of these states
   --privacyOneOf: int@privacyOneOf-completer # **PeerTube >= 4.0** Display only videos in this specific privacy/privacies
-  --excludeAlreadyWatched: string@bool-completer # Whether or not to exclude videos that are in the user's video history
+  --excludeAlreadyWatched: oneof<nothing, bool> # Whether or not to exclude videos that are in the user's video history
   --search: string # Plain text search, applied to various parts of the model depending on endpoint
 ]: nothing -> record<total: int, data: table<id: record, uuid: record, shortUUID: record, isLive: bool, liveSchedules: list, createdAt: string, publishedAt: string, updatedAt: string, originallyPublishedAt: string, category: record, licence: record, language: record, privacy: record, truncatedDescription: string, duration: int, aspectRatio: float, isLocal: bool, name: string, thumbnailPath: string, previewPath: string, thumbnails: list, embedPath: string, views: int, likes: int, dislikes: int, comments: int, nsfw: bool, nsfwFlags: record, nsfwSummary: string, waitTranscoding: bool, state: record, scheduledUpdate: record, blacklisted: bool, blacklistedReason: string, account: record, channel: record, userHistory: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4853,7 +4852,7 @@ export def "player-settings-videos get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Return raw settings without merging channel defaults (default: false)
+  --qp-raw: oneof<nothing, bool> # Return raw settings without merging channel defaults (default: false)
 ]: nothing -> record<theme: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4903,7 +4902,7 @@ export def "player-settings-video-channels get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-raw: string@bool-completer # Return raw settings without applying instance defaults (default: false)
+  --qp-raw: oneof<nothing, bool> # Return raw settings without applying instance defaults (default: false)
 ]: nothing -> record<theme: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5258,7 +5257,7 @@ export def "accounts-video-playlists get" [
   --qp-sort: string # Sort column (e.g. -createdAt)
   --search: string # Plain text search, applied to various parts of the model depending on endpoint
   --playlistType: int@playlistType-completer
-  --includeCollaborations: string@bool-completer # **PeerTube >= 8.0** Include objects from collaborated channels
+  --includeCollaborations: oneof<nothing, bool> # **PeerTube >= 8.0** Include objects from collaborated channels
   --channelNameOneOf: string # **PeerTube >= 8.0** Filter on playlists that are published on a channel with one of these names
 ]: nothing -> record<total: int, data: table<id: int, uuid: string, shortUUID: record, createdAt: string, updatedAt: string, description: string, displayName: string, isLocal: bool, videoLength: int, thumbnailPath: string, thumbnails: list, privacy: record, type: record, ownerAccount: record, videoChannel: record, videoChannelPosition: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5282,12 +5281,12 @@ export def "accounts-video-channels get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --withStats: string@bool-completer # include daily view statistics for the last 30 days and total views (only if authenticated as the account user)
+  --withStats: oneof<nothing, bool> # include daily view statistics for the last 30 days and total views (only if authenticated as the account user)
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --search: string # Plain text search, applied to various parts of the model depending on endpoint
   --qp-sort: string # Sort column (e.g. -createdAt)
-  --includeCollaborations: string@bool-completer # **PeerTube >= 8.0** Include objects from collaborated channels
+  --includeCollaborations: oneof<nothing, bool> # **PeerTube >= 8.0** Include objects from collaborated channels
 ]: nothing -> record<total: int, data: table<id: int, url: string, name: record, avatars: list, host: string, hostRedundancyAllowed: bool, followingCount: int, followersCount: int, createdAt: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5313,7 +5312,7 @@ export def "accounts-video-channel-syncs get" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --qp-sort: string # Sort column (e.g. -createdAt)
-  --includeCollaborations: string@bool-completer # **PeerTube >= 8.0** Include objects from collaborated channels
+  --includeCollaborations: oneof<nothing, bool> # **PeerTube >= 8.0** Include objects from collaborated channels
 ]: nothing -> record<total: int, data: table<id: int, state: record, externalChannelUrl: string, createdAt: string, lastSyncAt: string, channel: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5445,9 +5444,9 @@ export def "videos-comments get" [
   --videoId: int # Limit results on this specific video
   --videoChannelId: int # Limit results on this specific video channel
   --autoTagOneOf: string # **PeerTube >= 6.2** filter on comments that contain one of these automatic tags
-  --isLocal: string@bool-completer # **PeerTube >= 4.0** Display only local or remote objects
-  --onLocalVideo: string@bool-completer # Display only objects of local or remote videos
-  --includeMuted: string@bool-completer # **PeerTube >= 8.2** Include comments from muted accounts
+  --isLocal: oneof<nothing, bool> # **PeerTube >= 4.0** Display only local or remote objects
+  --onLocalVideo: oneof<nothing, bool> # Display only objects of local or remote videos
+  --includeMuted: oneof<nothing, bool> # **PeerTube >= 8.2** Include comments from muted accounts
 ]: nothing -> record<total: int, data: table<id: int, url: any, text: any, heldForReview: any, threadId: any, inReplyToCommentId: any, createdAt: any, updatedAt: any, account: any, video: record, automaticTags: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5617,7 +5616,7 @@ export def "videos-transcoding createVideoTranscoding" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   transcodingType: string@transcodingType-completer
-  --forceTranscoding: string@bool-completer # If the video is stuck in transcoding state, do it anyway (default: false)
+  --forceTranscoding: oneof<nothing, bool> # If the video is stuck in transcoding state, do it anyway (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5652,22 +5651,22 @@ export def "search-videos searchVideos" [
   --nsfw: string@nsfw-completer # whether to include nsfw videos, if any
   --nsfwFlagsIncluded: int@nsfwFlagsIncluded-completer
   --nsfwFlagsExcluded: int@nsfwFlagsExcluded-completer
-  --isLive: string@bool-completer # whether or not the video is a live
-  --includeScheduledLive: string@bool-completer # whether or not include live that are scheduled for later
+  --isLive: oneof<nothing, bool> # whether or not the video is a live
+  --includeScheduledLive: oneof<nothing, bool> # whether or not include live that are scheduled for later
   --categoryOneOf: string # category id of the video (see [/videos/categories](#operation/getCategories))
   --licenceOneOf: string # licence id of the video (see [/videos/licences](#operation/getLicences))
   --languageOneOf: string # language id of the video (see [/videos/languages](#operation/getLanguages)). Use `_unknown` to filter on videos that don't have a video language
   --tagsOneOf: string # tag(s) of the video
   --tagsAllOf: string # tag(s) of the video, where all should be present in the video
-  --isLocal: string@bool-completer # **PeerTube >= 4.0** Display only local or remote objects
+  --isLocal: oneof<nothing, bool> # **PeerTube >= 4.0** Display only local or remote objects
   --include: int@include-completer # **Only administrators and moderators can use this parameter**  Include additional videos in results (can be combined using bitwise or operator) - `0` NONE - `1` NOT_PUBLISHED_STATE - `2` BLACKLISTED - `4` BLOCKED_OWNER - `8` FILES - `16` CAPTIONS - `32` VIDEO SOURCE
-  --hasHLSFiles: string@bool-completer # **PeerTube >= 4.0** Display only videos that have HLS files
-  --hasWebVideoFiles: string@bool-completer # **PeerTube >= 6.0** Display only videos that have Web Video files
+  --hasHLSFiles: oneof<nothing, bool> # **PeerTube >= 4.0** Display only videos that have HLS files
+  --hasWebVideoFiles: oneof<nothing, bool> # **PeerTube >= 6.0** Display only videos that have Web Video files
   --host: string # Find elements owned by this host
   --autoTagOneOf: string # **PeerTube >= 6.2** **Admins and moderators only** filter on videos that contain one of these automatic tags
   --stateOneOf: string # **PeerTube >= 8.2** **Admins and moderators only** filter on videos that have one of these states
   --privacyOneOf: int@privacyOneOf-completer # **PeerTube >= 4.0** Display only videos in this specific privacy/privacies
-  --excludeAlreadyWatched: string@bool-completer # Whether or not to exclude videos that are in the user's video history
+  --excludeAlreadyWatched: oneof<nothing, bool> # Whether or not to exclude videos that are in the user's video history
   --startDate: string # Get videos that are published after this date (format: date-time)
   --endDate: string # Get videos that are published before this date (format: date-time)
   --originallyPublishedStartDate: string # Get videos that are originally published after this date (format: date-time)
@@ -6061,7 +6060,7 @@ export def "server-redundancy put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --redundancyAllowed: string@bool-completer # allow mirroring of the host's local videos
+  --redundancyAllowed: oneof<nothing, bool> # allow mirroring of the host's local videos
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6328,7 +6327,7 @@ export def "plugins list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --pluginType: int
-  --uninstalled: string@bool-completer
+  --uninstalled: oneof<nothing, bool>
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --qp-sort: string # Sort column (e.g. -createdAt)
@@ -6550,7 +6549,7 @@ export def "metrics-playback post" [
   playerMode: string@playerMode-completer
   --resolution: float # Current player video resolution
   --fps: float # Current player video fps
-  --p2pEnabled: string@bool-completer
+  --p2pEnabled: oneof<nothing, bool>
   --p2pPeers: float # P2P peers connected (doesn't include WebSeed peers)
   resolutionChanges: float # How many resolution changes occurred since the last metric creation
   --bufferStalled: float # How many times buffer has been stalled since the last metric creation

@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.europeana.eu"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -137,9 +136,9 @@ export def "record-searchjson searchRecords" [
   --facet: list # facet
   --hitfl: string # hit.fl
   --hitselectors: string # hit.selectors
-  --landingpage: string@bool-completer # landingpage
+  --landingpage: oneof<nothing, bool> # landingpage
   --lang: string # lang
-  --media: string@bool-completer # media
+  --media: oneof<nothing, bool> # media
   --profile: string # profile (default: standard)
   --qsource: string # q.source
   --qtarget: string # q.target
@@ -149,9 +148,9 @@ export def "record-searchjson searchRecords" [
   --rows: int # rows (format: int32, default: 12)
   --qp-sort: string # sort
   --start: int # start (format: int32, default: 1)
-  --text-fulltext: string@bool-completer # text_fulltext
+  --text-fulltext: oneof<nothing, bool> # text_fulltext
   --theme: string # theme
-  --thumbnail: string@bool-completer # thumbnail
+  --thumbnail: oneof<nothing, bool> # thumbnail
   --wskey: string # wskey
 ]: nothing -> record<empty: bool, model: record, modelMap: record, reference: bool, status: string, view: record<contentType: string>, viewName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -183,8 +182,8 @@ export def "record-searchjson searchRecordsPost" [
   --cursor: string
   --facet: list
   --hit: record # shape: {fl?: string, selectors?: string}
-  --landingPage: string@bool-completer
-  --media: string@bool-completer
+  --landingPage: oneof<nothing, bool>
+  --media: oneof<nothing, bool>
   --profile: list
   --qf: list
   --body-query: string
@@ -192,9 +191,9 @@ export def "record-searchjson searchRecordsPost" [
   --rows: int # format: int32
   --body-sort: list
   --start: int # format: int32
-  --textFulltext: string@bool-completer
+  --textFulltext: oneof<nothing, bool>
   --theme: string
-  --thumbnail: string@bool-completer
+  --thumbnail: oneof<nothing, bool>
 ]: any -> record<empty: bool, model: record, modelMap: record, reference: bool, status: string, view: record<contentType: string>, viewName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

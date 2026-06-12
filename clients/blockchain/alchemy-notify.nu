@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://dashboard.alchemy.com/api"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -365,7 +364,7 @@ export def "update-webhook update-webhook" [
   --allow-errors(-e) # Return full response without error handling
   --X-Alchemy-Token: string # Alchemy Auth token to use the Notify API. (e.g. your-X-Alchemy-Token)
   --webhook-id: string # ID of the address activity webhook
-  --is-active: string@bool-completer # True - set webhook to active state False - set webhook to inactive state
+  --is-active: oneof<nothing, bool> # True - set webhook to active state False - set webhook to inactive state
 ]: any -> record<data: record<id: string, network: string, webhook_type: string, webhook_url: string, is_active: bool, time_created: int, addresses: list<string>, version: string, signing_key: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

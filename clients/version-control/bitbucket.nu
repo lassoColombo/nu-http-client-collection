@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.bitbucket.org/2.0"] }
 def auth-scheme-completer [] { ["basic" "bearer"] }
 
@@ -525,7 +524,7 @@ export def "repositories post" [
   --links: record # shape: {self?: record, html?: record, avatar?: record, pullrequests?: record, commits?: record, forks?: record, watchers?: record, downloads?: record, clone?: list, hooks?: record}
   --uuid: string # The repository's immutable id. This can be used as a substitute for the slug segment in URLs. Doing this guarantees your URLs will survive renaming of the repository by its owner, or even transfer of the repository to a different user.
   --full-name: string # The concatenation of the repository owner's username and the slugified name, e.g. "evzijst/interruptingcow". This is the same string used in Bitbucket URLs.
-  --is-private: string@bool-completer
+  --is-private: oneof<nothing, bool>
   --parent: any
   --scm: string@scm-completer
   --owner: any
@@ -535,8 +534,8 @@ export def "repositories post" [
   --updated-on: string # format: date-time
   --size: int
   --language: string
-  --has-issues: string@bool-completer #  The issue tracker for this repository is enabled. Issue Tracker features are not supported for repositories in workspaces administered through admin.atlassian.com.
-  --has-wiki: string@bool-completer #  The wiki for this repository is enabled. Wiki features are not supported for repositories in workspaces administered through admin.atlassian.com.
+  --has-issues: oneof<nothing, bool> #  The issue tracker for this repository is enabled. Issue Tracker features are not supported for repositories in workspaces administered through admin.atlassian.com.
+  --has-wiki: oneof<nothing, bool> #  The wiki for this repository is enabled. Wiki features are not supported for repositories in workspaces administered through admin.atlassian.com.
   --fork-policy: string@fork-policy-completer #  Controls the rules for forking this repository.  * **allow_forks**: unrestricted forking * **no_public_forks**: restrict forking to private forks (forks cannot   be made public later) * **no_forks**: deny all forking
   --project: any
   --mainbranch: any
@@ -570,7 +569,7 @@ export def "repositories put" [
   --links: record # shape: {self?: record, html?: record, avatar?: record, pullrequests?: record, commits?: record, forks?: record, watchers?: record, downloads?: record, clone?: list, hooks?: record}
   --uuid: string # The repository's immutable id. This can be used as a substitute for the slug segment in URLs. Doing this guarantees your URLs will survive renaming of the repository by its owner, or even transfer of the repository to a different user.
   --full-name: string # The concatenation of the repository owner's username and the slugified name, e.g. "evzijst/interruptingcow". This is the same string used in Bitbucket URLs.
-  --is-private: string@bool-completer
+  --is-private: oneof<nothing, bool>
   --parent: any
   --scm: string@scm-completer
   --owner: any
@@ -580,8 +579,8 @@ export def "repositories put" [
   --updated-on: string # format: date-time
   --size: int
   --language: string
-  --has-issues: string@bool-completer #  The issue tracker for this repository is enabled. Issue Tracker features are not supported for repositories in workspaces administered through admin.atlassian.com.
-  --has-wiki: string@bool-completer #  The wiki for this repository is enabled. Wiki features are not supported for repositories in workspaces administered through admin.atlassian.com.
+  --has-issues: oneof<nothing, bool> #  The issue tracker for this repository is enabled. Issue Tracker features are not supported for repositories in workspaces administered through admin.atlassian.com.
+  --has-wiki: oneof<nothing, bool> #  The wiki for this repository is enabled. Wiki features are not supported for repositories in workspaces administered through admin.atlassian.com.
   --fork-policy: string@fork-policy-completer #  Controls the rules for forking this repository.  * **allow_forks**: unrestricted forking * **no_public_forks**: restrict forking to private forks (forks cannot   be made public later) * **no_forks**: deny all forking
   --project: any
   --mainbranch: any
@@ -1166,7 +1165,7 @@ export def "repositories-commit-reports createOrUpdateReport" [
   --external-id: string # ID of the report provided by the report creator. It can be used to identify the report as an alternative to it's generated uuid. It is not used by Bitbucket, but only by the report creator for updating or deleting this specific report. Needs to be unique.
   --reporter: string # A string to describe the tool or company who created the report.
   --link: string # A URL linking to the results of the report in an external tool. (format: uri)
-  --remote-link-enabled: string@bool-completer # If enabled, a remote link is created in Jira for the work item associated with the commit the report belongs to.
+  --remote-link-enabled: oneof<nothing, bool> # If enabled, a remote link is created in Jira for the work item associated with the commit the report belongs to.
   --logo-url: string # A URL to the report logo. If none is provided, the default insights logo will be used. (format: uri)
   --report-type: string@report-type-completer # The type of the report.
   --body-result: string@result-completer # The state of the report. May be set to PENDING and later updated.
@@ -1941,7 +1940,7 @@ export def "repositories-deployments-config-environments-variables createDeploym
   --uuid: string # The UUID identifying the variable.
   --key: string # The unique name of the variable.
   --value: string # The value of the variable. If the variable is secured, this will be empty.
-  --secured: string@bool-completer # If true, this variable will be treated as secured. The value will never be exposed in the logs or the REST API.
+  --secured: oneof<nothing, bool> # If true, this variable will be treated as secured. The value will never be exposed in the logs or the REST API.
 ]: any -> record<type: string, uuid: string, key: string, value: string, secured: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1974,7 +1973,7 @@ export def "repositories-deployments-config-environments-variables updateDeploym
   --uuid: string # The UUID identifying the variable.
   --key: string # The unique name of the variable.
   --value: string # The value of the variable. If the variable is secured, this will be empty.
-  --secured: string@bool-completer # If true, this variable will be treated as secured. The value will never be exposed in the logs or the REST API.
+  --secured: oneof<nothing, bool> # If true, this variable will be treated as secured. The value will never be exposed in the logs or the REST API.
 ]: any -> record<type: string, uuid: string, key: string, value: string, secured: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2028,11 +2027,11 @@ export def "repositories-diff get" [
   --allow-errors(-e) # Return full response without error handling
   --context: int # Generate diffs with <n> lines of context instead of the usual three.
   --path: string # Limit the diff to a particular file (this parameter can be repeated for multiple paths).
-  --ignore-whitespace: string@bool-completer # Generate diffs that ignore whitespace.
-  --binary: string@bool-completer # Generate diffs that include binary files, true if omitted.
-  --renames: string@bool-completer # Whether to perform rename detection, true if omitted.
-  --merge: string@bool-completer # This parameter is deprecated. The 'topic' parameter should be used instead. The 'merge' and 'topic' parameters cannot be both used at the same time.  If true, the source commit is merged into the destination commit, and then a diff from the destination to the merge result is returned. If false, a simple 'two dot' diff between the source and destination is returned. True if omitted.
-  --topic: string@bool-completer # If true, returns 2-way 'three-dot' diff. This is a diff between the source commit and the merge base of the source commit and the destination commit. If false, a simple 'two dot' diff between the source and destination is returned.  If omitted, defaults to true, ie. a 2 way 'three-dot' diff is returned.
+  --ignore-whitespace: oneof<nothing, bool> # Generate diffs that ignore whitespace.
+  --binary: oneof<nothing, bool> # Generate diffs that include binary files, true if omitted.
+  --renames: oneof<nothing, bool> # Whether to perform rename detection, true if omitted.
+  --merge: oneof<nothing, bool> # This parameter is deprecated. The 'topic' parameter should be used instead. The 'merge' and 'topic' parameters cannot be both used at the same time.  If true, the source commit is merged into the destination commit, and then a diff from the destination to the merge result is returned. If false, a simple 'two dot' diff between the source and destination is returned. True if omitted.
+  --topic: oneof<nothing, bool> # If true, returns 2-way 'three-dot' diff. This is a diff between the source commit and the merge base of the source commit and the destination commit. If false, a simple 'two dot' diff between the source and destination is returned.  If omitted, defaults to true, ie. a 2 way 'three-dot' diff is returned.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2057,11 +2056,11 @@ export def "repositories-diffstat get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ignore-whitespace: string@bool-completer # Generate diffs that ignore whitespace
-  --merge: string@bool-completer # This parameter is deprecated. The 'topic' parameter should be used instead. The 'merge' and 'topic' parameters cannot be both used at the same time.  If true, the source commit is merged into the destination commit, and then a diffstat from the destination to the merge result is returned. If false, a simple 'two dot' diffstat between the source and destination is returned. True if omitted.
+  --ignore-whitespace: oneof<nothing, bool> # Generate diffs that ignore whitespace
+  --merge: oneof<nothing, bool> # This parameter is deprecated. The 'topic' parameter should be used instead. The 'merge' and 'topic' parameters cannot be both used at the same time.  If true, the source commit is merged into the destination commit, and then a diffstat from the destination to the merge result is returned. If false, a simple 'two dot' diffstat between the source and destination is returned. True if omitted.
   --path: string # Limit the diffstat to a particular file (this parameter can be repeated for multiple paths).
-  --renames: string@bool-completer # Whether to perform rename detection, true if omitted.
-  --topic: string@bool-completer # If true, returns 2-way 'three-dot' diff. This is a diff between the source commit and the merge base of the source commit and the destination commit. If false, a simple 'two dot' diff between the source and destination is returned.
+  --renames: oneof<nothing, bool> # Whether to perform rename detection, true if omitted.
+  --topic: oneof<nothing, bool> # If true, returns 2-way 'three-dot' diff. This is a diff between the source commit and the merge base of the source commit and the destination commit. If false, a simple 'two dot' diff between the source and destination is returned.
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, status: string, lines_added: int, lines_removed: int, old: record, new: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2425,7 +2424,7 @@ export def "repositories-forks post" [
   --links: record # shape: {self?: record, html?: record, avatar?: record, pullrequests?: record, commits?: record, forks?: record, watchers?: record, downloads?: record, clone?: list, hooks?: record}
   --uuid: string # The repository's immutable id. This can be used as a substitute for the slug segment in URLs. Doing this guarantees your URLs will survive renaming of the repository by its owner, or even transfer of the repository to a different user.
   --full-name: string # The concatenation of the repository owner's username and the slugified name, e.g. "evzijst/interruptingcow". This is the same string used in Bitbucket URLs.
-  --is-private: string@bool-completer
+  --is-private: oneof<nothing, bool>
   --parent: any
   --scm: string@scm-completer
   --owner: any
@@ -2435,8 +2434,8 @@ export def "repositories-forks post" [
   --updated-on: string # format: date-time
   --size: int
   --language: string
-  --has-issues: string@bool-completer #  The issue tracker for this repository is enabled. Issue Tracker features are not supported for repositories in workspaces administered through admin.atlassian.com.
-  --has-wiki: string@bool-completer #  The wiki for this repository is enabled. Wiki features are not supported for repositories in workspaces administered through admin.atlassian.com.
+  --has-issues: oneof<nothing, bool> #  The issue tracker for this repository is enabled. Issue Tracker features are not supported for repositories in workspaces administered through admin.atlassian.com.
+  --has-wiki: oneof<nothing, bool> #  The wiki for this repository is enabled. Wiki features are not supported for repositories in workspaces administered through admin.atlassian.com.
   --fork-policy: string@fork-policy-completer #  Controls the rules for forking this repository.  * **allow_forks**: unrestricted forking * **no_public_forks**: restrict forking to private forks (forks cannot   be made public later) * **no_forks**: deny all forking
   --project: any
   --mainbranch: any
@@ -2654,8 +2653,8 @@ export def "repositories-issues-export post" [
   type: string
   --project-key: string
   --project-name: string
-  --send-email: string@bool-completer
-  --include-attachments: string@bool-completer
+  --send-email: oneof<nothing, bool>
+  --include-attachments: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4184,7 +4183,7 @@ export def "repositories-pipelines-config updateRepositoryPipelineConfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   type: string
-  --enabled: string@bool-completer # Whether Pipelines is enabled for the repository.
+  --enabled: oneof<nothing, bool> # Whether Pipelines is enabled for the repository.
   --repository: any
 ]: any -> record<type: string, enabled: bool, repository: record<type: string, links: record<self: record, html: record, avatar: record, pullrequests: record, commits: record, forks: record, watchers: record, downloads: record, clone: list, hooks: record>, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record<type: string, links: record, uuid: string, key: string, owner: record, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool>, mainbranch: record<type: string, links: record, name: string, target: record, merge_strategies: list, default_merge_strategy: string>>> {
   let input = $in
@@ -4243,7 +4242,7 @@ export def "repositories-pipelines-config-schedules createRepositoryPipelineSche
   --allow-errors(-e) # Return full response without error handling
   type: string
   target: record # The target on which the schedule will be executed. — shape: {selector: any, ref_name: string, ref_type: "branch"}
-  --enabled: string@bool-completer # Whether the schedule is enabled.
+  --enabled: oneof<nothing, bool> # Whether the schedule is enabled.
   cron_pattern: string # The cron expression with second precision (7 fields) that the schedule applies. For example, for expression: 0 0 12 * * ? *, will execute at 12pm UTC every day.
 ]: any -> record<type: string, uuid: string, enabled: bool, target: record<ref_type: string, ref_name: string, commit: record<repository: record, participants: list>, selector: record<type: string, pattern: string>>, cron_pattern: string, created_on: string, updated_on: string> {
   let input = $in
@@ -4320,7 +4319,7 @@ export def "repositories-pipelines-config-schedules updateRepositoryPipelineSche
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   type: string
-  --enabled: string@bool-completer # Whether the schedule is enabled.
+  --enabled: oneof<nothing, bool> # Whether the schedule is enabled.
 ]: any -> record<type: string, uuid: string, enabled: bool, target: record<ref_type: string, ref_name: string, commit: record<repository: record, participants: list>, selector: record<type: string, pattern: string>>, cron_pattern: string, created_on: string, updated_on: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4629,7 +4628,7 @@ export def "repositories-pipelines-config-variables createRepositoryPipelineVari
   --uuid: string # The UUID identifying the variable.
   --key: string # The unique name of the variable.
   --value: string # The value of the variable. If the variable is secured, this will be empty.
-  --secured: string@bool-completer # If true, this variable will be treated as secured. The value will never be exposed in the logs or the REST API.
+  --secured: oneof<nothing, bool> # If true, this variable will be treated as secured. The value will never be exposed in the logs or the REST API.
 ]: any -> record<type: string, uuid: string, key: string, value: string, secured: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4685,7 +4684,7 @@ export def "repositories-pipelines-config-variables updateRepositoryPipelineVari
   --uuid: string # The UUID identifying the variable.
   --key: string # The unique name of the variable.
   --value: string # The value of the variable. If the variable is secured, this will be empty.
-  --secured: string@bool-completer # If true, this variable will be treated as secured. The value will never be exposed in the logs or the REST API.
+  --secured: oneof<nothing, bool> # If true, this variable will be treated as secured. The value will never be exposed in the logs or the REST API.
 ]: any -> record<type: string, uuid: string, key: string, value: string, secured: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4859,16 +4858,16 @@ export def "repositories-pullrequests post" [
   --merge-commit: record # shape: {hash?: string}
   --comment-count: int # The number of comments for a specific pull request.
   --task-count: int # The number of open tasks for a specific pull request.
-  --close-source-branch: string@bool-completer # A boolean flag indicating if merging the pull request closes the source branch.
+  --close-source-branch: oneof<nothing, bool> # A boolean flag indicating if merging the pull request closes the source branch.
   --closed-by: any
   --reason: string # Explains why a pull request was declined. This field is only applicable to pull requests in rejected state.
   --created-on: string # The ISO8601 timestamp the request was created. (format: date-time)
   --updated-on: string # The ISO8601 timestamp the request was last updated. (format: date-time)
   --reviewers: list # The list of users that were added as reviewers on this pull request when it was created. For performance reasons, the API only includes this list on a pull request's `self` URL. — item shape: {type: string, links?: record, created_on?: string, display_name?: string, uuid?: string}
   --participants: list #         The list of users that are collaborating on this pull request.         Collaborators are user that:          * are added to the pull request as a reviewer (part of the reviewers           list)         * are not explicit reviewers, but have commented on the pull request         * are not explicit reviewers, but have approved the pull request          Each user is wrapped in an object that indicates the user's role and         whether they have approved the pull request. For performance reasons,         the API only returns this list when an API requests a pull request by         id.          — item shape: {type: string, user?: any, role?: "PARTICIPANT"|"REVIEWER", approved?: bool, state?: "approved"|"changes_requested"|"", participated_on?: string}
-  --draft: string@bool-completer # A boolean flag indicating whether the pull request is a draft.
-  --queued: string@bool-completer # A boolean flag indicating whether the pull request is queued
-  --mergeable: string@bool-completer # A boolean flag indicating whether the pull request passes all merge checks
+  --draft: oneof<nothing, bool> # A boolean flag indicating whether the pull request is a draft.
+  --queued: oneof<nothing, bool> # A boolean flag indicating whether the pull request is queued
+  --mergeable: oneof<nothing, bool> # A boolean flag indicating whether the pull request passes all merge checks
 ]: any -> record<type: string, links: record<self: record<href: string, name: string>, html: record<href: string, name: string>, commits: record<href: string, name: string>, approve: record<href: string, name: string>, diff: record<href: string, name: string>, diffstat: record<href: string, name: string>, comments: record<href: string, name: string>, activity: record<href: string, name: string>, merge: record<href: string, name: string>, decline: record<href: string, name: string>>, id: int, title: string, rendered: record<title: record<raw: string, markup: string, html: string>, description: record<raw: string, markup: string, html: string>, reason: record<raw: string, markup: string, html: string>>, summary: record<raw: string, markup: string, html: string>, state: string, author: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, source: record<repository: record<type: string, links: record, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record, mainbranch: record>, branch: record<name: string, merge_strategies: list, default_merge_strategy: string>, commit: record<hash: string>>, destination: record<repository: record<type: string, links: record, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record, mainbranch: record>, branch: record<name: string, merge_strategies: list, default_merge_strategy: string>, commit: record<hash: string>>, merge_commit: record<hash: string>, comment_count: int, task_count: int, close_source_branch: bool, closed_by: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, reason: string, created_on: string, updated_on: string, reviewers: table<type: string, links: record, created_on: string, display_name: string, uuid: string>, participants: table<type: string, user: record, role: string, approved: bool, state: string, participated_on: string>, draft: bool, queued: bool, mergeable: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4961,16 +4960,16 @@ export def "repositories-pullrequests put" [
   --merge-commit: record # shape: {hash?: string}
   --comment-count: int # The number of comments for a specific pull request.
   --task-count: int # The number of open tasks for a specific pull request.
-  --close-source-branch: string@bool-completer # A boolean flag indicating if merging the pull request closes the source branch.
+  --close-source-branch: oneof<nothing, bool> # A boolean flag indicating if merging the pull request closes the source branch.
   --closed-by: any
   --reason: string # Explains why a pull request was declined. This field is only applicable to pull requests in rejected state.
   --created-on: string # The ISO8601 timestamp the request was created. (format: date-time)
   --updated-on: string # The ISO8601 timestamp the request was last updated. (format: date-time)
   --reviewers: list # The list of users that were added as reviewers on this pull request when it was created. For performance reasons, the API only includes this list on a pull request's `self` URL. — item shape: {type: string, links?: record, created_on?: string, display_name?: string, uuid?: string}
   --participants: list #         The list of users that are collaborating on this pull request.         Collaborators are user that:          * are added to the pull request as a reviewer (part of the reviewers           list)         * are not explicit reviewers, but have commented on the pull request         * are not explicit reviewers, but have approved the pull request          Each user is wrapped in an object that indicates the user's role and         whether they have approved the pull request. For performance reasons,         the API only returns this list when an API requests a pull request by         id.          — item shape: {type: string, user?: any, role?: "PARTICIPANT"|"REVIEWER", approved?: bool, state?: "approved"|"changes_requested"|"", participated_on?: string}
-  --draft: string@bool-completer # A boolean flag indicating whether the pull request is a draft.
-  --queued: string@bool-completer # A boolean flag indicating whether the pull request is queued
-  --mergeable: string@bool-completer # A boolean flag indicating whether the pull request passes all merge checks
+  --draft: oneof<nothing, bool> # A boolean flag indicating whether the pull request is a draft.
+  --queued: oneof<nothing, bool> # A boolean flag indicating whether the pull request is queued
+  --mergeable: oneof<nothing, bool> # A boolean flag indicating whether the pull request passes all merge checks
 ]: any -> record<type: string, links: record<self: record<href: string, name: string>, html: record<href: string, name: string>, commits: record<href: string, name: string>, approve: record<href: string, name: string>, diff: record<href: string, name: string>, diffstat: record<href: string, name: string>, comments: record<href: string, name: string>, activity: record<href: string, name: string>, merge: record<href: string, name: string>, decline: record<href: string, name: string>>, id: int, title: string, rendered: record<title: record<raw: string, markup: string, html: string>, description: record<raw: string, markup: string, html: string>, reason: record<raw: string, markup: string, html: string>>, summary: record<raw: string, markup: string, html: string>, state: string, author: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, source: record<repository: record<type: string, links: record, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record, mainbranch: record>, branch: record<name: string, merge_strategies: list, default_merge_strategy: string>, commit: record<hash: string>>, destination: record<repository: record<type: string, links: record, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record, mainbranch: record>, branch: record<name: string, merge_strategies: list, default_merge_strategy: string>, commit: record<hash: string>>, merge_commit: record<hash: string>, comment_count: int, task_count: int, close_source_branch: bool, closed_by: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, reason: string, created_on: string, updated_on: string, reviewers: table<type: string, links: record, created_on: string, display_name: string, uuid: string>, participants: table<type: string, user: record, role: string, approved: bool, state: string, participated_on: string>, draft: bool, queued: bool, mergeable: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5092,7 +5091,7 @@ export def "repositories-pullrequests-comments post" [
   --allow-errors(-e) # Return full response without error handling
   --pullrequest: any
   --resolution: record # The resolution object for a Comment. — shape: {type: string, user?: any, created_on?: string}
-  --pending: string@bool-completer
+  --pending: oneof<nothing, bool>
 ]: any -> record<pullrequest: record<type: string, links: record<self: record, html: record, commits: record, approve: record, diff: record, diffstat: record, comments: record, activity: record, merge: record, decline: record>, id: int, title: string, rendered: record<title: record, description: record, reason: record>, summary: record<raw: string, markup: string, html: string>, state: string, author: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, source: record<repository: record, branch: record, commit: record>, destination: record<repository: record, branch: record, commit: record>, merge_commit: record<hash: string>, comment_count: int, task_count: int, close_source_branch: bool, closed_by: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, reason: string, created_on: string, updated_on: string, reviewers: list<record>, participants: list<record>, draft: bool, queued: bool, mergeable: bool>, resolution: record<type: string, user: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, created_on: string>, pending: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5171,7 +5170,7 @@ export def "repositories-pullrequests-comments put" [
   --allow-errors(-e) # Return full response without error handling
   --pullrequest: any
   --resolution: record # The resolution object for a Comment. — shape: {type: string, user?: any, created_on?: string}
-  --pending: string@bool-completer
+  --pending: oneof<nothing, bool>
 ]: any -> record<pullrequest: record<type: string, links: record<self: record, html: record, commits: record, approve: record, diff: record, diffstat: record, comments: record, activity: record, merge: record, decline: record>, id: int, title: string, rendered: record<title: record, description: record, reason: record>, summary: record<raw: string, markup: string, html: string>, state: string, author: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, source: record<repository: record, branch: record, commit: record>, destination: record<repository: record, branch: record, commit: record>, merge_commit: record<hash: string>, comment_count: int, task_count: int, close_source_branch: bool, closed_by: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, reason: string, created_on: string, updated_on: string, reviewers: list<record>, participants: list<record>, draft: bool, queued: bool, mergeable: bool>, resolution: record<type: string, user: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, created_on: string>, pending: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5361,10 +5360,10 @@ export def "repositories-pullrequests-merge post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --async: string@bool-completer # Default value is false.   When set to true, runs merge asynchronously and immediately returns a 202 with polling link to the task-status API in the Location header.   When set to false, runs merge and waits for it to complete, returning 200 when it succeeds. If the duration of the merge exceeds a timeout threshold, the API returns a 202 with polling link to the task-status API in the Location header.
+  --async: oneof<nothing, bool> # Default value is false.   When set to true, runs merge asynchronously and immediately returns a 202 with polling link to the task-status API in the Location header.   When set to false, runs merge and waits for it to complete, returning 200 when it succeeds. If the duration of the merge exceeds a timeout threshold, the API returns a 202 with polling link to the task-status API in the Location header.
   type: string
   --message: string # The commit message that will be used on the resulting commit. Note that the size of the message is limited to 128 KiB.
-  --close-source-branch: string@bool-completer # Whether the source branch should be deleted. If this is not provided, we fallback to the value used when the pull request was created, which defaults to False
+  --close-source-branch: oneof<nothing, bool> # Whether the source branch should be deleted. If this is not provided, we fallback to the value used when the pull request was created, which defaults to False
   --merge-strategy: string@merge-strategy-completer # The merge strategy that will be used to merge the pull request. (default: merge_commit)
 ]: any -> record<type: string, links: record<self: record<href: string, name: string>, html: record<href: string, name: string>, commits: record<href: string, name: string>, approve: record<href: string, name: string>, diff: record<href: string, name: string>, diffstat: record<href: string, name: string>, comments: record<href: string, name: string>, activity: record<href: string, name: string>, merge: record<href: string, name: string>, decline: record<href: string, name: string>>, id: int, title: string, rendered: record<title: record<raw: string, markup: string, html: string>, description: record<raw: string, markup: string, html: string>, reason: record<raw: string, markup: string, html: string>>, summary: record<raw: string, markup: string, html: string>, state: string, author: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, source: record<repository: record<type: string, links: record, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record, mainbranch: record>, branch: record<name: string, merge_strategies: list, default_merge_strategy: string>, commit: record<hash: string>>, destination: record<repository: record<type: string, links: record, uuid: string, full_name: string, is_private: bool, parent: any, scm: string, owner: record, name: string, description: string, created_on: string, updated_on: string, size: int, language: string, has_issues: bool, has_wiki: bool, fork_policy: string, project: record, mainbranch: record>, branch: record<name: string, merge_strategies: list, default_merge_strategy: string>, commit: record<hash: string>>, merge_commit: record<hash: string>, comment_count: int, task_count: int, close_source_branch: bool, closed_by: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, reason: string, created_on: string, updated_on: string, reviewers: table<type: string, links: record, created_on: string, display_name: string, uuid: string>, participants: table<type: string, user: record, role: string, approved: bool, state: string, participated_on: string>, draft: bool, queued: bool, mergeable: bool> {
   let input = $in
@@ -5542,7 +5541,7 @@ export def "repositories-pullrequests-tasks post" [
   --allow-errors(-e) # Return full response without error handling
   content: record # task raw content — shape: {raw: string}
   --comment: any
-  --pending: string@bool-completer
+  --pending: oneof<nothing, bool>
 ]: any -> record<comment: record<type: string, id: int, created_on: string, updated_on: string, content: record<raw: string, markup: string, html: string>, user: record<type: string, links: record, created_on: string, display_name: string, uuid: string>, deleted: bool, parent: any, inline: record<from: int, to: int, start_from: int, start_to: int, path: string>, links: record<self: record, html: record, code: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6132,7 +6131,7 @@ export def "snippets post" [
   --updated-on: string # format: date-time
   --owner: any
   --creator: any
-  --is-private: string@bool-completer
+  --is-private: oneof<nothing, bool>
 ]: any -> record<type: string, id: int, title: string, scm: string, created_on: string, updated_on: string, owner: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, creator: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, is_private: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6188,7 +6187,7 @@ export def "snippets post-by-workspace" [
   --updated-on: string # format: date-time
   --owner: any
   --creator: any
-  --is-private: string@bool-completer
+  --is-private: oneof<nothing, bool>
 ]: any -> record<type: string, id: int, title: string, scm: string, created_on: string, updated_on: string, owner: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, creator: record<type: string, links: record<avatar: record>, created_on: string, display_name: string, uuid: string>, is_private: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6740,7 +6739,7 @@ export def "teams-pipelines-config-variables createPipelineVariableForTeam" [
   --uuid: string # The UUID identifying the variable.
   --key: string # The unique name of the variable.
   --value: string # The value of the variable. If the variable is secured, this will be empty.
-  --secured: string@bool-completer # If true, this variable will be treated as secured. The value will never be exposed in the logs or the REST API.
+  --secured: oneof<nothing, bool> # If true, this variable will be treated as secured. The value will never be exposed in the logs or the REST API.
 ]: any -> record<type: string, uuid: string, key: string, value: string, secured: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6798,7 +6797,7 @@ export def "teams-pipelines-config-variables updatePipelineVariableForTeam" [
   --uuid: string # The UUID identifying the variable.
   --key: string # The unique name of the variable.
   --value: string # The value of the variable. If the variable is secured, this will be empty.
-  --secured: string@bool-completer # If true, this variable will be treated as secured. The value will never be exposed in the logs or the REST API.
+  --secured: oneof<nothing, bool> # If true, this variable will be treated as secured. The value will never be exposed in the logs or the REST API.
 ]: any -> record<type: string, uuid: string, key: string, value: string, secured: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6987,7 +6986,7 @@ export def "user-workspaces get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-sort: string # Name of a response property to sort results (only slug is supported).
-  --administrator: string@bool-completer # Filter workspaces based on which ones the caller has admin permissions or not.
+  --administrator: oneof<nothing, bool> # Filter workspaces based on which ones the caller has admin permissions or not.
 ]: nothing -> record<size: int, page: int, pagelen: int, next: string, previous: string, values: table<type: string, administrator: bool, workspace: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7211,7 +7210,7 @@ export def "users-pipelines-config-variables createPipelineVariableForUser" [
   --uuid: string # The UUID identifying the variable.
   --key: string # The unique name of the variable.
   --value: string # The value of the variable. If the variable is secured, this will be empty.
-  --secured: string@bool-completer # If true, this variable will be treated as secured. The value will never be exposed in the logs or the REST API.
+  --secured: oneof<nothing, bool> # If true, this variable will be treated as secured. The value will never be exposed in the logs or the REST API.
 ]: any -> record<type: string, uuid: string, key: string, value: string, secured: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7269,7 +7268,7 @@ export def "users-pipelines-config-variables updatePipelineVariableForUser" [
   --uuid: string # The UUID identifying the variable.
   --key: string # The unique name of the variable.
   --value: string # The value of the variable. If the variable is secured, this will be empty.
-  --secured: string@bool-completer # If true, this variable will be treated as secured. The value will never be exposed in the logs or the REST API.
+  --secured: oneof<nothing, bool> # If true, this variable will be treated as secured. The value will never be exposed in the logs or the REST API.
 ]: any -> record<type: string, uuid: string, key: string, value: string, secured: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7999,7 +7998,7 @@ export def "workspaces-pipelines-config-variables createPipelineVariableForWorks
   --uuid: string # The UUID identifying the variable.
   --key: string # The unique name of the variable.
   --value: string # The value of the variable. If the variable is secured, this will be empty.
-  --secured: string@bool-completer # If true, this variable will be treated as secured. The value will never be exposed in the logs or the REST API.
+  --secured: oneof<nothing, bool> # If true, this variable will be treated as secured. The value will never be exposed in the logs or the REST API.
 ]: any -> record<type: string, uuid: string, key: string, value: string, secured: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8053,7 +8052,7 @@ export def "workspaces-pipelines-config-variables updatePipelineVariableForWorks
   --uuid: string # The UUID identifying the variable.
   --key: string # The unique name of the variable.
   --value: string # The value of the variable. If the variable is secured, this will be empty.
-  --secured: string@bool-completer # If true, this variable will be treated as secured. The value will never be exposed in the logs or the REST API.
+  --secured: oneof<nothing, bool> # If true, this variable will be treated as secured. The value will never be exposed in the logs or the REST API.
 ]: any -> record<type: string, uuid: string, key: string, value: string, secured: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8130,10 +8129,10 @@ export def "workspaces-projects post" [
   --owner: any
   --name: string # The name of the project.
   --description: string
-  --is-private: string@bool-completer #  Indicates whether the project is publicly accessible, or whether it is private to the team and consequently only visible to team members. Note that private projects cannot contain public repositories.
+  --is-private: oneof<nothing, bool> #  Indicates whether the project is publicly accessible, or whether it is private to the team and consequently only visible to team members. Note that private projects cannot contain public repositories.
   --created-on: string # format: date-time
   --updated-on: string # format: date-time
-  --has-publicly-visible-repos: string@bool-completer #  Indicates whether the project contains publicly visible repositories. Note that private projects cannot contain public repositories.
+  --has-publicly-visible-repos: oneof<nothing, bool> #  Indicates whether the project contains publicly visible repositories. Note that private projects cannot contain public repositories.
 ]: any -> record<type: string, links: record<html: record<href: string, name: string>, avatar: record<href: string, name: string>>, uuid: string, key: string, owner: record<links: record<avatar: record, self: record, html: record, members: record, projects: record, repositories: record>>, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8211,10 +8210,10 @@ export def "workspaces-projects put" [
   --owner: any
   --name: string # The name of the project.
   --description: string
-  --is-private: string@bool-completer #  Indicates whether the project is publicly accessible, or whether it is private to the team and consequently only visible to team members. Note that private projects cannot contain public repositories.
+  --is-private: oneof<nothing, bool> #  Indicates whether the project is publicly accessible, or whether it is private to the team and consequently only visible to team members. Note that private projects cannot contain public repositories.
   --created-on: string # format: date-time
   --updated-on: string # format: date-time
-  --has-publicly-visible-repos: string@bool-completer #  Indicates whether the project contains publicly visible repositories. Note that private projects cannot contain public repositories.
+  --has-publicly-visible-repos: oneof<nothing, bool> #  Indicates whether the project contains publicly visible repositories. Note that private projects cannot contain public repositories.
 ]: any -> record<type: string, links: record<html: record<href: string, name: string>, avatar: record<href: string, name: string>>, uuid: string, key: string, owner: record<links: record<avatar: record, self: record, html: record, members: record, projects: record, repositories: record>>, name: string, description: string, is_private: bool, created_on: string, updated_on: string, has_publicly_visible_repos: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

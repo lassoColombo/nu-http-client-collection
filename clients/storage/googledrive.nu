@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://www.googleapis.com/drive/v3"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -108,7 +107,7 @@ export def "about driveaboutget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<appInstalled: bool, canCreateDrives: bool, canCreateTeamDrives: bool, driveThemes: table<backgroundImageLink: string, colorRgb: string, id: string>, exportFormats: record, folderColorPalette: list<string>, importFormats: record, kind: string, maxImportSizes: record, maxUploadSize: string, storageQuota: record<limit: string, usage: string, usageInDrive: string, usageInDriveTrash: string>, teamDriveThemes: table<backgroundImageLink: string, colorRgb: string, id: string>, user: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>> {
@@ -137,22 +136,22 @@ export def "changes drivechangeslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --pageToken: string # The token for continuing a previous list request on the next page. This should be set to the value of 'nextPageToken' from the previous response or to the response from the getStartPageToken method.
   --driveId: string # The shared drive from which changes are returned. If specified the change IDs will be reflective of the shared drive; use the combined drive ID and change ID as an identifier.
-  --includeCorpusRemovals: string@bool-completer # Whether changes should include the file resource if the file is still accessible by the user at the time of the request, even when a file was removed from the list of changes and there will be no further change entries for this file.
-  --includeItemsFromAllDrives: string@bool-completer # Whether both My Drive and shared drive items should be included in results.
+  --includeCorpusRemovals: oneof<nothing, bool> # Whether changes should include the file resource if the file is still accessible by the user at the time of the request, even when a file was removed from the list of changes and there will be no further change entries for this file.
+  --includeItemsFromAllDrives: oneof<nothing, bool> # Whether both My Drive and shared drive items should be included in results.
   --includeLabels: string # A comma-separated list of IDs of labels to include in the labelInfo part of the response.
   --includePermissionsForView: string # Specifies which additional view's permissions to include in the response. Only 'published' is supported.
-  --includeRemoved: string@bool-completer # Whether to include changes indicating that items have been removed from the list of changes, for example by deletion or loss of access.
-  --includeTeamDriveItems: string@bool-completer # Deprecated use includeItemsFromAllDrives instead.
+  --includeRemoved: oneof<nothing, bool> # Whether to include changes indicating that items have been removed from the list of changes, for example by deletion or loss of access.
+  --includeTeamDriveItems: oneof<nothing, bool> # Deprecated use includeItemsFromAllDrives instead.
   --pageSize: int # The maximum number of changes to return per page.
-  --restrictToMyDrive: string@bool-completer # Whether to restrict the results to changes inside the My Drive hierarchy. This omits changes to files such as those in the Application Data folder or shared files which have not been added to My Drive.
+  --restrictToMyDrive: oneof<nothing, bool> # Whether to restrict the results to changes inside the My Drive hierarchy. This omits changes to files such as those in the Application Data folder or shared files which have not been added to My Drive.
   --spaces: string # A comma-separated list of spaces to query within the corpora. Supported values are 'drive' and 'appDataFolder'.
-  --supportsAllDrives: string@bool-completer # Whether the requesting application supports both My Drives and shared drives.
-  --supportsTeamDrives: string@bool-completer # Deprecated use supportsAllDrives instead.
+  --supportsAllDrives: oneof<nothing, bool> # Whether the requesting application supports both My Drives and shared drives.
+  --supportsTeamDrives: oneof<nothing, bool> # Deprecated use supportsAllDrives instead.
   --teamDriveId: string # Deprecated use driveId instead.
 ]: nothing -> record<changes: table<changeType: string, drive: record, driveId: string, file: record, fileId: string, kind: string, removed: bool, teamDrive: record, teamDriveId: string, time: string, type: string>, kind: string, newStartPageToken: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -180,12 +179,12 @@ export def "changes-start-page-token drivechangesgetStartPageToken" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --driveId: string # The ID of the shared drive for which the starting pageToken for listing future changes from that shared drive is returned.
-  --supportsAllDrives: string@bool-completer # Whether the requesting application supports both My Drives and shared drives.
-  --supportsTeamDrives: string@bool-completer # Deprecated use supportsAllDrives instead.
+  --supportsAllDrives: oneof<nothing, bool> # Whether the requesting application supports both My Drives and shared drives.
+  --supportsTeamDrives: oneof<nothing, bool> # Deprecated use supportsAllDrives instead.
   --teamDriveId: string # Deprecated use driveId instead.
 ]: nothing -> record<kind: string, startPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -213,29 +212,29 @@ export def "changes-watch drivechangeswatch" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --pageToken: string # The token for continuing a previous list request on the next page. This should be set to the value of 'nextPageToken' from the previous response or to the response from the getStartPageToken method.
   --driveId: string # The shared drive from which changes are returned. If specified the change IDs will be reflective of the shared drive; use the combined drive ID and change ID as an identifier.
-  --includeCorpusRemovals: string@bool-completer # Whether changes should include the file resource if the file is still accessible by the user at the time of the request, even when a file was removed from the list of changes and there will be no further change entries for this file.
-  --includeItemsFromAllDrives: string@bool-completer # Whether both My Drive and shared drive items should be included in results.
+  --includeCorpusRemovals: oneof<nothing, bool> # Whether changes should include the file resource if the file is still accessible by the user at the time of the request, even when a file was removed from the list of changes and there will be no further change entries for this file.
+  --includeItemsFromAllDrives: oneof<nothing, bool> # Whether both My Drive and shared drive items should be included in results.
   --includeLabels: string # A comma-separated list of IDs of labels to include in the labelInfo part of the response.
   --includePermissionsForView: string # Specifies which additional view's permissions to include in the response. Only 'published' is supported.
-  --includeRemoved: string@bool-completer # Whether to include changes indicating that items have been removed from the list of changes, for example by deletion or loss of access.
-  --includeTeamDriveItems: string@bool-completer # Deprecated use includeItemsFromAllDrives instead.
+  --includeRemoved: oneof<nothing, bool> # Whether to include changes indicating that items have been removed from the list of changes, for example by deletion or loss of access.
+  --includeTeamDriveItems: oneof<nothing, bool> # Deprecated use includeItemsFromAllDrives instead.
   --pageSize: int # The maximum number of changes to return per page.
-  --restrictToMyDrive: string@bool-completer # Whether to restrict the results to changes inside the My Drive hierarchy. This omits changes to files such as those in the Application Data folder or shared files which have not been added to My Drive.
+  --restrictToMyDrive: oneof<nothing, bool> # Whether to restrict the results to changes inside the My Drive hierarchy. This omits changes to files such as those in the Application Data folder or shared files which have not been added to My Drive.
   --spaces: string # A comma-separated list of spaces to query within the corpora. Supported values are 'drive' and 'appDataFolder'.
-  --supportsAllDrives: string@bool-completer # Whether the requesting application supports both My Drives and shared drives.
-  --supportsTeamDrives: string@bool-completer # Deprecated use supportsAllDrives instead.
+  --supportsAllDrives: oneof<nothing, bool> # Whether the requesting application supports both My Drives and shared drives.
+  --supportsTeamDrives: oneof<nothing, bool> # Deprecated use supportsAllDrives instead.
   --teamDriveId: string # Deprecated use driveId instead.
   --address: string # The address where notifications are delivered for this channel.
   --expiration: string # Date and time of notification channel expiration, expressed as a Unix timestamp, in milliseconds. Optional. (format: int64)
   --id: string # A UUID or similar unique string that identifies this channel.
   --kind: string # Identifies this as a notification channel used to watch for changes to a resource, which is "api#channel". (default: api#channel)
   --params: record # Additional parameters controlling delivery channel behavior. Optional.
-  --payload: string@bool-completer # A Boolean value to indicate whether payload is wanted. Optional.
+  --payload: oneof<nothing, bool> # A Boolean value to indicate whether payload is wanted. Optional.
   --resourceId: string # An opaque ID that identifies the resource being watched on this channel. Stable across different API versions.
   --resourceUri: string # A version-specific identifier for the watched resource.
   --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional.
@@ -269,7 +268,7 @@ export def "channels-stop drivechannelsstop" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --address: string # The address where notifications are delivered for this channel.
@@ -277,7 +276,7 @@ export def "channels-stop drivechannelsstop" [
   --id: string # A UUID or similar unique string that identifies this channel.
   --kind: string # Identifies this as a notification channel used to watch for changes to a resource, which is "api#channel". (default: api#channel)
   --params: record # Additional parameters controlling delivery channel behavior. Optional.
-  --payload: string@bool-completer # A Boolean value to indicate whether payload is wanted. Optional.
+  --payload: oneof<nothing, bool> # A Boolean value to indicate whether payload is wanted. Optional.
   --resourceId: string # An opaque ID that identifies the resource being watched on this channel. Stable across different API versions.
   --resourceUri: string # A version-specific identifier for the watched resource.
   --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional.
@@ -311,13 +310,13 @@ export def "drives drivedriveslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --pageSize: int # Maximum number of shared drives to return per page.
   --pageToken: string # Page token for shared drives.
   --q: string # Query string for searching shared drives.
-  --useDomainAdminAccess: string@bool-completer # Issue the request as a domain administrator; if set to true, then all shared drives of the domain in which the requester is an administrator are returned.
+  --useDomainAdminAccess: oneof<nothing, bool> # Issue the request as a domain administrator; if set to true, then all shared drives of the domain in which the requester is an administrator are returned.
 ]: nothing -> record<drives: table<backgroundImageFile: record, backgroundImageLink: string, capabilities: record, colorRgb: string, createdTime: string, hidden: bool, id: string, kind: string, name: string, orgUnitId: string, restrictions: record, themeId: string>, kind: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -347,7 +346,7 @@ export def "drives drivedrivescreate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --requestId: string # An ID, such as a random UUID, which uniquely identifies this user's request for idempotent creation of a shared drive. A repeated request by the same user and with the same request ID will avoid creating duplicates by attempting to create the same shared drive. If the shared drive already exists a 409 error will be returned.
@@ -356,7 +355,7 @@ export def "drives drivedrivescreate" [
   --capabilities: record # Capabilities the current user has on this shared drive. — shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeDriveBackground?: bool, canChangeDriveMembersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRename?: bool, canRenameDrive?: bool, canResetDriveRestrictions?: bool, canShare?: bool, canTrashChildren?: bool}
   --colorRgb: string # The color of this shared drive as an RGB hex string. It can only be set on drive.drives.update requests that don't set themeId.
   --createdTime: string # The time at which the shared drive was created (RFC 3339 date-time). (format: date-time)
-  --hidden: string@bool-completer # Whether the shared drive is hidden from default view.
+  --hidden: oneof<nothing, bool> # Whether the shared drive is hidden from default view.
   --id: string # The ID of this shared drive which is also the ID of the top level folder of this shared drive.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "drive#drive". (default: drive#drive)
   --name: string # The name of this shared drive.
@@ -393,11 +392,11 @@ export def "drives drivedrivesdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --allowItemDeletion: string@bool-completer # Whether any items inside the shared drive should also be deleted. This option is only supported when useDomainAdminAccess is also set to true.
-  --useDomainAdminAccess: string@bool-completer # Issue the request as a domain administrator; if set to true, then the requester will be granted access if they are an administrator of the domain to which the shared drive belongs.
+  --allowItemDeletion: oneof<nothing, bool> # Whether any items inside the shared drive should also be deleted. This option is only supported when useDomainAdminAccess is also set to true.
+  --useDomainAdminAccess: oneof<nothing, bool> # Issue the request as a domain administrator; if set to true, then the requester will be granted access if they are an administrator of the domain to which the shared drive belongs.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -425,10 +424,10 @@ export def "drives drivedrivesget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --useDomainAdminAccess: string@bool-completer # Issue the request as a domain administrator; if set to true, then the requester will be granted access if they are an administrator of the domain to which the shared drive belongs.
+  --useDomainAdminAccess: oneof<nothing, bool> # Issue the request as a domain administrator; if set to true, then the requester will be granted access if they are an administrator of the domain to which the shared drive belongs.
 ]: nothing -> record<backgroundImageFile: record<id: string, width: float, xCoordinate: float, yCoordinate: float>, backgroundImageLink: string, capabilities: record<canAddChildren: bool, canChangeCopyRequiresWriterPermissionRestriction: bool, canChangeDomainUsersOnlyRestriction: bool, canChangeDriveBackground: bool, canChangeDriveMembersOnlyRestriction: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction: bool, canComment: bool, canCopy: bool, canDeleteChildren: bool, canDeleteDrive: bool, canDownload: bool, canEdit: bool, canListChildren: bool, canManageMembers: bool, canReadRevisions: bool, canRename: bool, canRenameDrive: bool, canResetDriveRestrictions: bool, canShare: bool, canTrashChildren: bool>, colorRgb: string, createdTime: string, hidden: bool, id: string, kind: string, name: string, orgUnitId: string, restrictions: record<adminManagedRestrictions: bool, copyRequiresWriterPermission: bool, domainUsersOnly: bool, driveMembersOnly: bool, sharingFoldersRequiresOrganizerPermission: bool>, themeId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -459,16 +458,16 @@ export def "drives drivedrivesupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --useDomainAdminAccess: string@bool-completer # Issue the request as a domain administrator. If set to true, then the requester is granted access if they're an administrator of the domain to which the shared drive belongs.
+  --useDomainAdminAccess: oneof<nothing, bool> # Issue the request as a domain administrator. If set to true, then the requester is granted access if they're an administrator of the domain to which the shared drive belongs.
   --backgroundImageFile: record # An image file and cropping parameters from which a background image for this shared drive is set. This is a write-only field; it can only be set on drive.drives.update requests that don't set themeId. When specified, all fields of the backgroundImageFile must be set. — shape: {id?: string, width?: float, xCoordinate?: float, yCoordinate?: float}
   --backgroundImageLink: string # A short-lived link to this shared drive's background image.
   --capabilities: record # Capabilities the current user has on this shared drive. — shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeDriveBackground?: bool, canChangeDriveMembersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRename?: bool, canRenameDrive?: bool, canResetDriveRestrictions?: bool, canShare?: bool, canTrashChildren?: bool}
   --colorRgb: string # The color of this shared drive as an RGB hex string. It can only be set on drive.drives.update requests that don't set themeId.
   --createdTime: string # The time at which the shared drive was created (RFC 3339 date-time). (format: date-time)
-  --hidden: string@bool-completer # Whether the shared drive is hidden from default view.
+  --hidden: oneof<nothing, bool> # Whether the shared drive is hidden from default view.
   --id: string # The ID of this shared drive which is also the ID of the top level folder of this shared drive.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "drive#drive". (default: drive#drive)
   --name: string # The name of this shared drive.
@@ -505,7 +504,7 @@ export def "drives-hide drivedriveshide" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<backgroundImageFile: record<id: string, width: float, xCoordinate: float, yCoordinate: float>, backgroundImageLink: string, capabilities: record<canAddChildren: bool, canChangeCopyRequiresWriterPermissionRestriction: bool, canChangeDomainUsersOnlyRestriction: bool, canChangeDriveBackground: bool, canChangeDriveMembersOnlyRestriction: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction: bool, canComment: bool, canCopy: bool, canDeleteChildren: bool, canDeleteDrive: bool, canDownload: bool, canEdit: bool, canListChildren: bool, canManageMembers: bool, canReadRevisions: bool, canRename: bool, canRenameDrive: bool, canResetDriveRestrictions: bool, canShare: bool, canTrashChildren: bool>, colorRgb: string, createdTime: string, hidden: bool, id: string, kind: string, name: string, orgUnitId: string, restrictions: record<adminManagedRestrictions: bool, copyRequiresWriterPermission: bool, domainUsersOnly: bool, driveMembersOnly: bool, sharingFoldersRequiresOrganizerPermission: bool>, themeId: string> {
@@ -535,7 +534,7 @@ export def "drives-unhide drivedrivesunhide" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> record<backgroundImageFile: record<id: string, width: float, xCoordinate: float, yCoordinate: float>, backgroundImageLink: string, capabilities: record<canAddChildren: bool, canChangeCopyRequiresWriterPermissionRestriction: bool, canChangeDomainUsersOnlyRestriction: bool, canChangeDriveBackground: bool, canChangeDriveMembersOnlyRestriction: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction: bool, canComment: bool, canCopy: bool, canDeleteChildren: bool, canDeleteDrive: bool, canDownload: bool, canEdit: bool, canListChildren: bool, canManageMembers: bool, canReadRevisions: bool, canRename: bool, canRenameDrive: bool, canResetDriveRestrictions: bool, canShare: bool, canTrashChildren: bool>, colorRgb: string, createdTime: string, hidden: bool, id: string, kind: string, name: string, orgUnitId: string, restrictions: record<adminManagedRestrictions: bool, copyRequiresWriterPermission: bool, domainUsersOnly: bool, driveMembersOnly: bool, sharingFoldersRequiresOrganizerPermission: bool>, themeId: string> {
@@ -564,23 +563,23 @@ export def "files drivefileslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --corpora: string # Groupings of files to which the query applies. Supported groupings are: 'user' (files created by, opened by, or shared directly with the user), 'drive' (files in the specified shared drive as indicated by the 'driveId'), 'domain' (files shared to the user's domain), and 'allDrives' (A combination of 'user' and 'drive' for all drives where the user is a member). When able, use 'user' or 'drive', instead of 'allDrives', for efficiency.
   --corpus: string@corpus-completer # The source of files to list. Deprecated: use 'corpora' instead.
   --driveId: string # ID of the shared drive to search.
-  --includeItemsFromAllDrives: string@bool-completer # Whether both My Drive and shared drive items should be included in results.
+  --includeItemsFromAllDrives: oneof<nothing, bool> # Whether both My Drive and shared drive items should be included in results.
   --includeLabels: string # A comma-separated list of IDs of labels to include in the labelInfo part of the response.
   --includePermissionsForView: string # Specifies which additional view's permissions to include in the response. Only 'published' is supported.
-  --includeTeamDriveItems: string@bool-completer # Deprecated use includeItemsFromAllDrives instead.
+  --includeTeamDriveItems: oneof<nothing, bool> # Deprecated use includeItemsFromAllDrives instead.
   --orderBy: string # A comma-separated list of sort keys. Valid keys are 'createdTime', 'folder', 'modifiedByMeTime', 'modifiedTime', 'name', 'name_natural', 'quotaBytesUsed', 'recency', 'sharedWithMeTime', 'starred', and 'viewedByMeTime'. Each key sorts ascending by default, but may be reversed with the 'desc' modifier. Example usage: ?orderBy=folder,modifiedTime desc,name. Please note that there is a current limitation for users with approximately one million files in which the requested sort order is ignored.
   --pageSize: int # The maximum number of files to return per page. Partial or empty result pages are possible even before the end of the files list has been reached.
   --pageToken: string # The token for continuing a previous list request on the next page. This should be set to the value of 'nextPageToken' from the previous response.
   --q: string # A query for filtering the file results. See the "Search for Files" guide for supported syntax.
   --spaces: string # A comma-separated list of spaces to query within the corpora. Supported values are 'drive' and 'appDataFolder'.
-  --supportsAllDrives: string@bool-completer # Whether the requesting application supports both My Drives and shared drives.
-  --supportsTeamDrives: string@bool-completer # Deprecated use supportsAllDrives instead.
+  --supportsAllDrives: oneof<nothing, bool> # Whether the requesting application supports both My Drives and shared drives.
+  --supportsTeamDrives: oneof<nothing, bool> # Deprecated use supportsAllDrives instead.
   --teamDriveId: string # Deprecated use driveId instead.
 ]: nothing -> record<files: table<appProperties: record, capabilities: record, contentHints: record, contentRestrictions: list, copyRequiresWriterPermission: bool, createdTime: string, description: string, driveId: string, explicitlyTrashed: bool, exportLinks: record, fileExtension: string, folderColorRgb: string, fullFileExtension: string, hasAugmentedPermissions: bool, hasThumbnail: bool, headRevisionId: string, iconLink: string, id: string, imageMediaMetadata: record, isAppAuthorized: bool, kind: string, labelInfo: record, lastModifyingUser: record, linkShareMetadata: record, md5Checksum: string, mimeType: string, modifiedByMe: bool, modifiedByMeTime: string, modifiedTime: string, name: string, originalFilename: string, ownedByMe: bool, owners: list, parents: list, permissionIds: list, permissions: list, properties: record, quotaBytesUsed: string, resourceKey: string, sha1Checksum: string, sha256Checksum: string, shared: bool, sharedWithMeTime: string, sharingUser: record, shortcutDetails: record, size: string, spaces: list, starred: bool, teamDriveId: string, thumbnailLink: string, thumbnailVersion: string, trashed: bool, trashedTime: string, trashingUser: record, version: string, videoMediaMetadata: record, viewedByMe: bool, viewedByMeTime: string, viewersCanCopyContent: bool, webContentLink: string, webViewLink: string, writersCanShare: bool>, incompleteSearch: bool, kind: string, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -608,18 +607,18 @@ export def "files drivefilescreate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --enforceSingleParent: string@bool-completer # Deprecated. Creating files in multiple folders is no longer supported.
-  --ignoreDefaultVisibility: string@bool-completer # Whether to ignore the domain's default visibility settings for the created file. Domain administrators can choose to make all uploaded files visible to the domain by default; this parameter bypasses that behavior for the request. Permissions are still inherited from parent folders.
+  --enforceSingleParent: oneof<nothing, bool> # Deprecated. Creating files in multiple folders is no longer supported.
+  --ignoreDefaultVisibility: oneof<nothing, bool> # Whether to ignore the domain's default visibility settings for the created file. Domain administrators can choose to make all uploaded files visible to the domain by default; this parameter bypasses that behavior for the request. Permissions are still inherited from parent folders.
   --includeLabels: string # A comma-separated list of IDs of labels to include in the labelInfo part of the response.
   --includePermissionsForView: string # Specifies which additional view's permissions to include in the response. Only 'published' is supported.
-  --keepRevisionForever: string@bool-completer # Whether to set the 'keepForever' field in the new head revision. This is only applicable to files with binary content in Google Drive. Only 200 revisions for the file can be kept forever. If the limit is reached, try deleting pinned revisions.
+  --keepRevisionForever: oneof<nothing, bool> # Whether to set the 'keepForever' field in the new head revision. This is only applicable to files with binary content in Google Drive. Only 200 revisions for the file can be kept forever. If the limit is reached, try deleting pinned revisions.
   --ocrLanguage: string # A language hint for OCR processing during image import (ISO 639-1 code).
-  --supportsAllDrives: string@bool-completer # Whether the requesting application supports both My Drives and shared drives.
-  --supportsTeamDrives: string@bool-completer # Deprecated use supportsAllDrives instead.
-  --useContentAsIndexableText: string@bool-completer # Whether to use the uploaded content as indexable text.
+  --supportsAllDrives: oneof<nothing, bool> # Whether the requesting application supports both My Drives and shared drives.
+  --supportsTeamDrives: oneof<nothing, bool> # Deprecated use supportsAllDrives instead.
+  --useContentAsIndexableText: oneof<nothing, bool> # Whether to use the uploaded content as indexable text.
   --body: record
 ]: any -> record<appProperties: record, capabilities: record<canAcceptOwnership: bool, canAddChildren: bool, canAddFolderFromAnotherDrive: bool, canAddMyDriveParent: bool, canChangeCopyRequiresWriterPermission: bool, canChangeSecurityUpdateEnabled: bool, canChangeViewersCanCopyContent: bool, canComment: bool, canCopy: bool, canDelete: bool, canDeleteChildren: bool, canDownload: bool, canEdit: bool, canListChildren: bool, canModifyContent: bool, canModifyContentRestriction: bool, canModifyLabels: bool, canMoveChildrenOutOfDrive: bool, canMoveChildrenOutOfTeamDrive: bool, canMoveChildrenWithinDrive: bool, canMoveChildrenWithinTeamDrive: bool, canMoveItemIntoTeamDrive: bool, canMoveItemOutOfDrive: bool, canMoveItemOutOfTeamDrive: bool, canMoveItemWithinDrive: bool, canMoveItemWithinTeamDrive: bool, canMoveTeamDriveItem: bool, canReadDrive: bool, canReadLabels: bool, canReadRevisions: bool, canReadTeamDrive: bool, canRemoveChildren: bool, canRemoveMyDriveParent: bool, canRename: bool, canShare: bool, canTrash: bool, canTrashChildren: bool, canUntrash: bool>, contentHints: record<indexableText: string, thumbnail: record<image: string, mimeType: string>>, contentRestrictions: table<readOnly: bool, reason: string, restrictingUser: record, restrictionTime: string, type: string>, copyRequiresWriterPermission: bool, createdTime: string, description: string, driveId: string, explicitlyTrashed: bool, exportLinks: record, fileExtension: string, folderColorRgb: string, fullFileExtension: string, hasAugmentedPermissions: bool, hasThumbnail: bool, headRevisionId: string, iconLink: string, id: string, imageMediaMetadata: record<aperture: float, cameraMake: string, cameraModel: string, colorSpace: string, exposureBias: float, exposureMode: string, exposureTime: float, flashUsed: bool, focalLength: float, height: int, isoSpeed: int, lens: string, location: record<altitude: float, latitude: float, longitude: float>, maxApertureValue: float, meteringMode: string, rotation: int, sensor: string, subjectDistance: int, time: string, whiteBalance: string, width: int>, isAppAuthorized: bool, kind: string, labelInfo: record<labels: list<record>>, lastModifyingUser: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, linkShareMetadata: record<securityUpdateEligible: bool, securityUpdateEnabled: bool>, md5Checksum: string, mimeType: string, modifiedByMe: bool, modifiedByMeTime: string, modifiedTime: string, name: string, originalFilename: string, ownedByMe: bool, owners: table<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, parents: list<string>, permissionIds: list<string>, permissions: table<allowFileDiscovery: bool, deleted: bool, displayName: string, domain: string, emailAddress: string, expirationTime: string, id: string, kind: string, pendingOwner: bool, permissionDetails: list, photoLink: string, role: string, teamDrivePermissionDetails: list, type: string, view: string>, properties: record, quotaBytesUsed: string, resourceKey: string, sha1Checksum: string, sha256Checksum: string, shared: bool, sharedWithMeTime: string, sharingUser: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, shortcutDetails: record<targetId: string, targetMimeType: string, targetResourceKey: string>, size: string, spaces: list<string>, starred: bool, teamDriveId: string, thumbnailLink: string, thumbnailVersion: string, trashed: bool, trashedTime: string, trashingUser: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, version: string, videoMediaMetadata: record<durationMillis: string, height: int, width: int>, viewedByMe: bool, viewedByMeTime: string, viewersCanCopyContent: bool, webContentLink: string, webViewLink: string, writersCanShare: bool> {
   let input = $in
@@ -649,7 +648,7 @@ export def "files-generate-ids drivefilesgenerateIds" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --count: int # The number of IDs to return.
@@ -681,11 +680,11 @@ export def "files-trash drivefilesemptyTrash" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --driveId: string # If set, empties the trash of the provided shared drive.
-  --enforceSingleParent: string@bool-completer # Deprecated. If an item is not in a shared drive and its last parent is deleted but the item itself is not, the item will be placed under its owner's root.
+  --enforceSingleParent: oneof<nothing, bool> # Deprecated. If an item is not in a shared drive and its last parent is deleted but the item itself is not, the item will be placed under its owner's root.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -713,12 +712,12 @@ export def "files drivefilesdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --enforceSingleParent: string@bool-completer # Deprecated. If an item is not in a shared drive and its last parent is deleted but the item itself is not, the item will be placed under its owner's root.
-  --supportsAllDrives: string@bool-completer # Whether the requesting application supports both My Drives and shared drives.
-  --supportsTeamDrives: string@bool-completer # Deprecated use supportsAllDrives instead.
+  --enforceSingleParent: oneof<nothing, bool> # Deprecated. If an item is not in a shared drive and its last parent is deleted but the item itself is not, the item will be placed under its owner's root.
+  --supportsAllDrives: oneof<nothing, bool> # Whether the requesting application supports both My Drives and shared drives.
+  --supportsTeamDrives: oneof<nothing, bool> # Deprecated use supportsAllDrives instead.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -746,14 +745,14 @@ export def "files drivefilesget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --acknowledgeAbuse: string@bool-completer # Whether the user is acknowledging the risk of downloading known malware or other abusive files. This is only applicable when alt=media.
+  --acknowledgeAbuse: oneof<nothing, bool> # Whether the user is acknowledging the risk of downloading known malware or other abusive files. This is only applicable when alt=media.
   --includeLabels: string # A comma-separated list of IDs of labels to include in the labelInfo part of the response.
   --includePermissionsForView: string # Specifies which additional view's permissions to include in the response. Only 'published' is supported.
-  --supportsAllDrives: string@bool-completer # Whether the requesting application supports both My Drives and shared drives.
-  --supportsTeamDrives: string@bool-completer # Deprecated use supportsAllDrives instead.
+  --supportsAllDrives: oneof<nothing, bool> # Whether the requesting application supports both My Drives and shared drives.
+  --supportsTeamDrives: oneof<nothing, bool> # Deprecated use supportsAllDrives instead.
 ]: nothing -> record<appProperties: record, capabilities: record<canAcceptOwnership: bool, canAddChildren: bool, canAddFolderFromAnotherDrive: bool, canAddMyDriveParent: bool, canChangeCopyRequiresWriterPermission: bool, canChangeSecurityUpdateEnabled: bool, canChangeViewersCanCopyContent: bool, canComment: bool, canCopy: bool, canDelete: bool, canDeleteChildren: bool, canDownload: bool, canEdit: bool, canListChildren: bool, canModifyContent: bool, canModifyContentRestriction: bool, canModifyLabels: bool, canMoveChildrenOutOfDrive: bool, canMoveChildrenOutOfTeamDrive: bool, canMoveChildrenWithinDrive: bool, canMoveChildrenWithinTeamDrive: bool, canMoveItemIntoTeamDrive: bool, canMoveItemOutOfDrive: bool, canMoveItemOutOfTeamDrive: bool, canMoveItemWithinDrive: bool, canMoveItemWithinTeamDrive: bool, canMoveTeamDriveItem: bool, canReadDrive: bool, canReadLabels: bool, canReadRevisions: bool, canReadTeamDrive: bool, canRemoveChildren: bool, canRemoveMyDriveParent: bool, canRename: bool, canShare: bool, canTrash: bool, canTrashChildren: bool, canUntrash: bool>, contentHints: record<indexableText: string, thumbnail: record<image: string, mimeType: string>>, contentRestrictions: table<readOnly: bool, reason: string, restrictingUser: record, restrictionTime: string, type: string>, copyRequiresWriterPermission: bool, createdTime: string, description: string, driveId: string, explicitlyTrashed: bool, exportLinks: record, fileExtension: string, folderColorRgb: string, fullFileExtension: string, hasAugmentedPermissions: bool, hasThumbnail: bool, headRevisionId: string, iconLink: string, id: string, imageMediaMetadata: record<aperture: float, cameraMake: string, cameraModel: string, colorSpace: string, exposureBias: float, exposureMode: string, exposureTime: float, flashUsed: bool, focalLength: float, height: int, isoSpeed: int, lens: string, location: record<altitude: float, latitude: float, longitude: float>, maxApertureValue: float, meteringMode: string, rotation: int, sensor: string, subjectDistance: int, time: string, whiteBalance: string, width: int>, isAppAuthorized: bool, kind: string, labelInfo: record<labels: list<record>>, lastModifyingUser: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, linkShareMetadata: record<securityUpdateEligible: bool, securityUpdateEnabled: bool>, md5Checksum: string, mimeType: string, modifiedByMe: bool, modifiedByMeTime: string, modifiedTime: string, name: string, originalFilename: string, ownedByMe: bool, owners: table<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, parents: list<string>, permissionIds: list<string>, permissions: table<allowFileDiscovery: bool, deleted: bool, displayName: string, domain: string, emailAddress: string, expirationTime: string, id: string, kind: string, pendingOwner: bool, permissionDetails: list, photoLink: string, role: string, teamDrivePermissionDetails: list, type: string, view: string>, properties: record, quotaBytesUsed: string, resourceKey: string, sha1Checksum: string, sha256Checksum: string, shared: bool, sharedWithMeTime: string, sharingUser: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, shortcutDetails: record<targetId: string, targetMimeType: string, targetResourceKey: string>, size: string, spaces: list<string>, starred: bool, teamDriveId: string, thumbnailLink: string, thumbnailVersion: string, trashed: bool, trashedTime: string, trashingUser: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, version: string, videoMediaMetadata: record<durationMillis: string, height: int, width: int>, viewedByMe: bool, viewedByMeTime: string, viewersCanCopyContent: bool, webContentLink: string, webViewLink: string, writersCanShare: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -781,19 +780,19 @@ export def "files drivefilesupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --addParents: string # A comma-separated list of parent IDs to add.
-  --enforceSingleParent: string@bool-completer # Deprecated. Adding files to multiple folders is no longer supported. Use shortcuts instead.
+  --enforceSingleParent: oneof<nothing, bool> # Deprecated. Adding files to multiple folders is no longer supported. Use shortcuts instead.
   --includeLabels: string # A comma-separated list of IDs of labels to include in the labelInfo part of the response.
   --includePermissionsForView: string # Specifies which additional view's permissions to include in the response. Only 'published' is supported.
-  --keepRevisionForever: string@bool-completer # Whether to set the 'keepForever' field in the new head revision. This is only applicable to files with binary content in Google Drive. Only 200 revisions for the file can be kept forever. If the limit is reached, try deleting pinned revisions.
+  --keepRevisionForever: oneof<nothing, bool> # Whether to set the 'keepForever' field in the new head revision. This is only applicable to files with binary content in Google Drive. Only 200 revisions for the file can be kept forever. If the limit is reached, try deleting pinned revisions.
   --ocrLanguage: string # A language hint for OCR processing during image import (ISO 639-1 code).
   --removeParents: string # A comma-separated list of parent IDs to remove.
-  --supportsAllDrives: string@bool-completer # Whether the requesting application supports both My Drives and shared drives.
-  --supportsTeamDrives: string@bool-completer # Deprecated use supportsAllDrives instead.
-  --useContentAsIndexableText: string@bool-completer # Whether to use the uploaded content as indexable text.
+  --supportsAllDrives: oneof<nothing, bool> # Whether the requesting application supports both My Drives and shared drives.
+  --supportsTeamDrives: oneof<nothing, bool> # Deprecated use supportsAllDrives instead.
+  --useContentAsIndexableText: oneof<nothing, bool> # Whether to use the uploaded content as indexable text.
   --body: record
 ]: any -> record<appProperties: record, capabilities: record<canAcceptOwnership: bool, canAddChildren: bool, canAddFolderFromAnotherDrive: bool, canAddMyDriveParent: bool, canChangeCopyRequiresWriterPermission: bool, canChangeSecurityUpdateEnabled: bool, canChangeViewersCanCopyContent: bool, canComment: bool, canCopy: bool, canDelete: bool, canDeleteChildren: bool, canDownload: bool, canEdit: bool, canListChildren: bool, canModifyContent: bool, canModifyContentRestriction: bool, canModifyLabels: bool, canMoveChildrenOutOfDrive: bool, canMoveChildrenOutOfTeamDrive: bool, canMoveChildrenWithinDrive: bool, canMoveChildrenWithinTeamDrive: bool, canMoveItemIntoTeamDrive: bool, canMoveItemOutOfDrive: bool, canMoveItemOutOfTeamDrive: bool, canMoveItemWithinDrive: bool, canMoveItemWithinTeamDrive: bool, canMoveTeamDriveItem: bool, canReadDrive: bool, canReadLabels: bool, canReadRevisions: bool, canReadTeamDrive: bool, canRemoveChildren: bool, canRemoveMyDriveParent: bool, canRename: bool, canShare: bool, canTrash: bool, canTrashChildren: bool, canUntrash: bool>, contentHints: record<indexableText: string, thumbnail: record<image: string, mimeType: string>>, contentRestrictions: table<readOnly: bool, reason: string, restrictingUser: record, restrictionTime: string, type: string>, copyRequiresWriterPermission: bool, createdTime: string, description: string, driveId: string, explicitlyTrashed: bool, exportLinks: record, fileExtension: string, folderColorRgb: string, fullFileExtension: string, hasAugmentedPermissions: bool, hasThumbnail: bool, headRevisionId: string, iconLink: string, id: string, imageMediaMetadata: record<aperture: float, cameraMake: string, cameraModel: string, colorSpace: string, exposureBias: float, exposureMode: string, exposureTime: float, flashUsed: bool, focalLength: float, height: int, isoSpeed: int, lens: string, location: record<altitude: float, latitude: float, longitude: float>, maxApertureValue: float, meteringMode: string, rotation: int, sensor: string, subjectDistance: int, time: string, whiteBalance: string, width: int>, isAppAuthorized: bool, kind: string, labelInfo: record<labels: list<record>>, lastModifyingUser: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, linkShareMetadata: record<securityUpdateEligible: bool, securityUpdateEnabled: bool>, md5Checksum: string, mimeType: string, modifiedByMe: bool, modifiedByMeTime: string, modifiedTime: string, name: string, originalFilename: string, ownedByMe: bool, owners: table<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, parents: list<string>, permissionIds: list<string>, permissions: table<allowFileDiscovery: bool, deleted: bool, displayName: string, domain: string, emailAddress: string, expirationTime: string, id: string, kind: string, pendingOwner: bool, permissionDetails: list, photoLink: string, role: string, teamDrivePermissionDetails: list, type: string, view: string>, properties: record, quotaBytesUsed: string, resourceKey: string, sha1Checksum: string, sha256Checksum: string, shared: bool, sharedWithMeTime: string, sharingUser: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, shortcutDetails: record<targetId: string, targetMimeType: string, targetResourceKey: string>, size: string, spaces: list<string>, starred: bool, teamDriveId: string, thumbnailLink: string, thumbnailVersion: string, trashed: bool, trashedTime: string, trashingUser: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, version: string, videoMediaMetadata: record<durationMillis: string, height: int, width: int>, viewedByMe: bool, viewedByMeTime: string, viewersCanCopyContent: bool, webContentLink: string, webViewLink: string, writersCanShare: bool> {
   let input = $in
@@ -824,10 +823,10 @@ export def "files-comments drivecommentslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --includeDeleted: string@bool-completer # Whether to include deleted comments. Deleted comments will not include their original content.
+  --includeDeleted: oneof<nothing, bool> # Whether to include deleted comments. Deleted comments will not include their original content.
   --pageSize: int # The maximum number of comments to return per page.
   --pageToken: string # The token for continuing a previous list request on the next page. This should be set to the value of 'nextPageToken' from the previous response.
   --startModifiedTime: string # The minimum value of 'modifiedTime' for the result comments (RFC 3339 date-time).
@@ -861,21 +860,21 @@ export def "files-comments drivecommentscreate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --anchor: string # A region of the document represented as a JSON string. For details on defining anchor properties, refer to  Add comments and replies.
   --author: record # Information about a Drive user. — shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
   --content: string # The plain text content of the comment. This field is used for setting the content, while htmlContent should be displayed.
   --createdTime: string # The time at which the comment was created (RFC 3339 date-time). (format: date-time)
-  --deleted: string@bool-completer # Whether the comment has been deleted. A deleted comment has no content.
+  --deleted: oneof<nothing, bool> # Whether the comment has been deleted. A deleted comment has no content.
   --htmlContent: string # The content of the comment with HTML formatting.
   --id: string # The ID of the comment.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "drive#comment". (default: drive#comment)
   --modifiedTime: string # The last time the comment or any of its replies was modified (RFC 3339 date-time). (format: date-time)
   --quotedFileContent: record # The file content to which the comment refers, typically within the anchor region. For a text file, for example, this would be the text at the location of the comment. — shape: {mimeType?: string, value?: string}
   --replies: list # The full list of replies to the comment in chronological order. — item shape: {action?: string, author?: record, content?: string, createdTime?: string, deleted?: bool, htmlContent?: string, id?: string, kind?: string, modifiedTime?: string}
-  --resolved: string@bool-completer # Whether the comment has been resolved by one of its replies.
+  --resolved: oneof<nothing, bool> # Whether the comment has been resolved by one of its replies.
 ]: any -> record<anchor: string, author: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, content: string, createdTime: string, deleted: bool, htmlContent: string, id: string, kind: string, modifiedTime: string, quotedFileContent: record<mimeType: string, value: string>, replies: table<action: string, author: record, content: string, createdTime: string, deleted: bool, htmlContent: string, id: string, kind: string, modifiedTime: string>, resolved: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -907,7 +906,7 @@ export def "files-comments drivecommentsdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
@@ -938,10 +937,10 @@ export def "files-comments drivecommentsget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --includeDeleted: string@bool-completer # Whether to return deleted comments. Deleted comments will not include their original content.
+  --includeDeleted: oneof<nothing, bool> # Whether to return deleted comments. Deleted comments will not include their original content.
 ]: nothing -> record<anchor: string, author: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, content: string, createdTime: string, deleted: bool, htmlContent: string, id: string, kind: string, modifiedTime: string, quotedFileContent: record<mimeType: string, value: string>, replies: table<action: string, author: record, content: string, createdTime: string, deleted: bool, htmlContent: string, id: string, kind: string, modifiedTime: string>, resolved: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -973,21 +972,21 @@ export def "files-comments drivecommentsupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --anchor: string # A region of the document represented as a JSON string. For details on defining anchor properties, refer to  Add comments and replies.
   --author: record # Information about a Drive user. — shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
   --content: string # The plain text content of the comment. This field is used for setting the content, while htmlContent should be displayed.
   --createdTime: string # The time at which the comment was created (RFC 3339 date-time). (format: date-time)
-  --deleted: string@bool-completer # Whether the comment has been deleted. A deleted comment has no content.
+  --deleted: oneof<nothing, bool> # Whether the comment has been deleted. A deleted comment has no content.
   --htmlContent: string # The content of the comment with HTML formatting.
   --id: string # The ID of the comment.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "drive#comment". (default: drive#comment)
   --modifiedTime: string # The last time the comment or any of its replies was modified (RFC 3339 date-time). (format: date-time)
   --quotedFileContent: record # The file content to which the comment refers, typically within the anchor region. For a text file, for example, this would be the text at the location of the comment. — shape: {mimeType?: string, value?: string}
   --replies: list # The full list of replies to the comment in chronological order. — item shape: {action?: string, author?: record, content?: string, createdTime?: string, deleted?: bool, htmlContent?: string, id?: string, kind?: string, modifiedTime?: string}
-  --resolved: string@bool-completer # Whether the comment has been resolved by one of its replies.
+  --resolved: oneof<nothing, bool> # Whether the comment has been resolved by one of its replies.
 ]: any -> record<anchor: string, author: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, content: string, createdTime: string, deleted: bool, htmlContent: string, id: string, kind: string, modifiedTime: string, quotedFileContent: record<mimeType: string, value: string>, replies: table<action: string, author: record, content: string, createdTime: string, deleted: bool, htmlContent: string, id: string, kind: string, modifiedTime: string>, resolved: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1019,10 +1018,10 @@ export def "files-comments-replies drivereplieslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --includeDeleted: string@bool-completer # Whether to include deleted replies. Deleted replies will not include their original content.
+  --includeDeleted: oneof<nothing, bool> # Whether to include deleted replies. Deleted replies will not include their original content.
   --pageSize: int # The maximum number of replies to return per page.
   --pageToken: string # The token for continuing a previous list request on the next page. This should be set to the value of 'nextPageToken' from the previous response.
 ]: nothing -> record<kind: string, nextPageToken: string, replies: table<action: string, author: record, content: string, createdTime: string, deleted: bool, htmlContent: string, id: string, kind: string, modifiedTime: string>> {
@@ -1054,14 +1053,14 @@ export def "files-comments-replies driverepliescreate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --action: string # The action the reply performed to the parent comment. Valid values are:   - resolve  - reopen
   --author: record # Information about a Drive user. — shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
   --content: string # The plain text content of the reply. This field is used for setting the content, while htmlContent should be displayed. This is required on creates if no action is specified.
   --createdTime: string # The time at which the reply was created (RFC 3339 date-time). (format: date-time)
-  --deleted: string@bool-completer # Whether the reply has been deleted. A deleted reply has no content.
+  --deleted: oneof<nothing, bool> # Whether the reply has been deleted. A deleted reply has no content.
   --htmlContent: string # The content of the reply with HTML formatting.
   --id: string # The ID of the reply.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "drive#reply". (default: drive#reply)
@@ -1098,7 +1097,7 @@ export def "files-comments-replies driverepliesdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
@@ -1130,10 +1129,10 @@ export def "files-comments-replies driverepliesget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --includeDeleted: string@bool-completer # Whether to return deleted replies. Deleted replies will not include their original content.
+  --includeDeleted: oneof<nothing, bool> # Whether to return deleted replies. Deleted replies will not include their original content.
 ]: nothing -> record<action: string, author: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, content: string, createdTime: string, deleted: bool, htmlContent: string, id: string, kind: string, modifiedTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1164,14 +1163,14 @@ export def "files-comments-replies driverepliesupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --action: string # The action the reply performed to the parent comment. Valid values are:   - resolve  - reopen
   --author: record # Information about a Drive user. — shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
   --content: string # The plain text content of the reply. This field is used for setting the content, while htmlContent should be displayed. This is required on creates if no action is specified.
   --createdTime: string # The time at which the reply was created (RFC 3339 date-time). (format: date-time)
-  --deleted: string@bool-completer # Whether the reply has been deleted. A deleted reply has no content.
+  --deleted: oneof<nothing, bool> # Whether the reply has been deleted. A deleted reply has no content.
   --htmlContent: string # The content of the reply with HTML formatting.
   --id: string # The ID of the reply.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "drive#reply". (default: drive#reply)
@@ -1219,48 +1218,48 @@ export def "files-copy drivefilescopy" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --enforceSingleParent: string@bool-completer # Deprecated. Copying files into multiple folders is no longer supported. Use shortcuts instead.
-  --ignoreDefaultVisibility: string@bool-completer # Whether to ignore the domain's default visibility settings for the created file. Domain administrators can choose to make all uploaded files visible to the domain by default; this parameter bypasses that behavior for the request. Permissions are still inherited from parent folders.
+  --enforceSingleParent: oneof<nothing, bool> # Deprecated. Copying files into multiple folders is no longer supported. Use shortcuts instead.
+  --ignoreDefaultVisibility: oneof<nothing, bool> # Whether to ignore the domain's default visibility settings for the created file. Domain administrators can choose to make all uploaded files visible to the domain by default; this parameter bypasses that behavior for the request. Permissions are still inherited from parent folders.
   --includeLabels: string # A comma-separated list of IDs of labels to include in the labelInfo part of the response.
   --includePermissionsForView: string # Specifies which additional view's permissions to include in the response. Only 'published' is supported.
-  --keepRevisionForever: string@bool-completer # Whether to set the 'keepForever' field in the new head revision. This is only applicable to files with binary content in Google Drive. Only 200 revisions for the file can be kept forever. If the limit is reached, try deleting pinned revisions.
+  --keepRevisionForever: oneof<nothing, bool> # Whether to set the 'keepForever' field in the new head revision. This is only applicable to files with binary content in Google Drive. Only 200 revisions for the file can be kept forever. If the limit is reached, try deleting pinned revisions.
   --ocrLanguage: string # A language hint for OCR processing during image import (ISO 639-1 code).
-  --supportsAllDrives: string@bool-completer # Whether the requesting application supports both My Drives and shared drives.
-  --supportsTeamDrives: string@bool-completer # Deprecated use supportsAllDrives instead.
+  --supportsAllDrives: oneof<nothing, bool> # Whether the requesting application supports both My Drives and shared drives.
+  --supportsTeamDrives: oneof<nothing, bool> # Deprecated use supportsAllDrives instead.
   --appProperties: record # A collection of arbitrary key-value pairs that are private to the requesting app. Entries with null values are cleared in update and copy requests. These properties can only be retrieved using an authenticated request. An authenticated request uses an access token obtained with an OAuth 2 client ID. You cannot use an API key to retrieve private properties.
   --capabilities: record # Capabilities the current user has on this file. Each capability corresponds to a fine-grained action that a user can take. — shape: {canAcceptOwnership?: bool, canAddChildren?: bool, canAddFolderFromAnotherDrive?: bool, canAddMyDriveParent?: bool, canChangeCopyRequiresWriterPermission?: bool, canChangeSecurityUpdateEnabled?: bool, canChangeViewersCanCopyContent?: bool, canComment?: bool, canCopy?: bool, canDelete?: bool, canDeleteChildren?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canModifyContent?: bool, canModifyContentRestriction?: bool, canModifyLabels?: bool, canMoveChildrenOutOfDrive?: bool, canMoveChildrenOutOfTeamDrive?: bool, canMoveChildrenWithinDrive?: bool, canMoveChildrenWithinTeamDrive?: bool, canMoveItemIntoTeamDrive?: bool, canMoveItemOutOfDrive?: bool, canMoveItemOutOfTeamDrive?: bool, canMoveItemWithinDrive?: bool, canMoveItemWithinTeamDrive?: bool, canMoveTeamDriveItem?: bool, canReadDrive?: bool, canReadLabels?: bool, canReadRevisions?: bool, canReadTeamDrive?: bool, canRemoveChildren?: bool, canRemoveMyDriveParent?: bool, canRename?: bool, canShare?: bool, canTrash?: bool, canTrashChildren?: bool, canUntrash?: bool}
   --contentHints: record # Additional information about the content of the file. These fields are never populated in responses. — shape: {indexableText?: string, thumbnail?: record}
   --contentRestrictions: list # Restrictions for accessing the content of the file. Only populated if such a restriction exists. — item shape: {readOnly?: bool, reason?: string, restrictingUser?: record, restrictionTime?: string, type?: string}
-  --copyRequiresWriterPermission: string@bool-completer # Whether the options to copy, print, or download this file, should be disabled for readers and commenters.
+  --copyRequiresWriterPermission: oneof<nothing, bool> # Whether the options to copy, print, or download this file, should be disabled for readers and commenters.
   --createdTime: string # The time at which the file was created (RFC 3339 date-time). (format: date-time)
   --description: string # A short description of the file.
   --driveId: string # ID of the shared drive the file resides in. Only populated for items in shared drives.
-  --explicitlyTrashed: string@bool-completer # Whether the file has been explicitly trashed, as opposed to recursively trashed from a parent folder.
+  --explicitlyTrashed: oneof<nothing, bool> # Whether the file has been explicitly trashed, as opposed to recursively trashed from a parent folder.
   --fileExtension: string # The final component of fullFileExtension. This is only available for files with binary content in Google Drive.
   --folderColorRgb: string # The color for a folder or shortcut to a folder as an RGB hex string. The supported colors are published in the folderColorPalette field of the About resource. If an unsupported color is specified, the closest color in the palette will be used instead.
   --fullFileExtension: string # The full file extension extracted from the name field. Can contain multiple concatenated extensions, such as "tar.gz". This is only available for files with binary content in Google Drive. This is automatically updated when the name field changes, however it's not cleared if the new name does not contain a valid extension.
-  --hasAugmentedPermissions: string@bool-completer # Whether there are permissions directly on this file. This field is only populated for items in shared drives.
-  --hasThumbnail: string@bool-completer # Whether this file has a thumbnail. This does not indicate whether the requesting app has access to the thumbnail. To check access, look for the presence of the thumbnailLink field.
+  --hasAugmentedPermissions: oneof<nothing, bool> # Whether there are permissions directly on this file. This field is only populated for items in shared drives.
+  --hasThumbnail: oneof<nothing, bool> # Whether this file has a thumbnail. This does not indicate whether the requesting app has access to the thumbnail. To check access, look for the presence of the thumbnailLink field.
   --headRevisionId: string # The ID of the file's head revision. This is only available for files with binary content in Google Drive.
   --iconLink: string # A static, unauthenticated link to the file's icon.
   --id: string # The ID of the file.
   --imageMediaMetadata: record # Additional metadata about image media, if available. — shape: {aperture?: float, cameraMake?: string, cameraModel?: string, colorSpace?: string, exposureBias?: float, exposureMode?: string, exposureTime?: float, flashUsed?: bool, focalLength?: float, height?: int, isoSpeed?: int, lens?: string, location?: record, maxApertureValue?: float, meteringMode?: string, rotation?: int, sensor?: string, subjectDistance?: int, time?: string, whiteBalance?: string, width?: int}
-  --isAppAuthorized: string@bool-completer # Whether the requesting app created or opened the file.
+  --isAppAuthorized: oneof<nothing, bool> # Whether the requesting app created or opened the file.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "drive#file". (default: drive#file)
   --labelInfo: record # An overview of the labels on the file. — shape: {labels?: list}
   --lastModifyingUser: record # Information about a Drive user. — shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
   --linkShareMetadata: record # Contains details about the link URLs that clients are using to refer to this item. — shape: {securityUpdateEligible?: bool, securityUpdateEnabled?: bool}
   --md5Checksum: string # The MD5 checksum for the content of the file. This is only applicable to files with binary content in Google Drive.
   --mimeType: string # The MIME type of the file. Google Drive will attempt to automatically detect an appropriate value from uploaded content if no value is provided. The value cannot be changed unless a new revision is uploaded. If a file is created with a Google Doc MIME type, the uploaded content will be imported if possible. The supported import formats are published in the About resource.
-  --modifiedByMe: string@bool-completer # Whether this user has modified the file.
+  --modifiedByMe: oneof<nothing, bool> # Whether this user has modified the file.
   --modifiedByMeTime: string # The last time the user modified the file (RFC 3339 date-time). (format: date-time)
   --modifiedTime: string # The last time anyone modified the file (RFC 3339 date-time). Note that setting modifiedTime will also update modifiedByMeTime for the user. (format: date-time)
   --name: string # The name of the file. This isn't necessarily unique within a folder. Note that for immutable items such as the top-level folders of shared drives, My Drive root folder, and Application Data folder the name is constant.
   --originalFilename: string # The original filename of the uploaded content if available, or else the original value of the name field. This is only available for files with binary content in Google Drive.
-  --ownedByMe: string@bool-completer # Whether the user owns the file. Not populated for items in shared drives.
+  --ownedByMe: oneof<nothing, bool> # Whether the user owns the file. Not populated for items in shared drives.
   --owners: list # The owner of this file. Only certain legacy files might have more than one owner. This field isn't populated for items in shared drives. — item shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
   --parents: list # The IDs of the parent folders that contain the file. If not specified as part of a create request, the file will be placed directly in the user's My Drive folder. If not specified as part of a copy request, the file will inherit any discoverable parents of the source file. Update requests must use the addParents and removeParents parameters to modify the parents list.
   --permissionIds: list # List of permission IDs for users with access to this file.
@@ -1270,27 +1269,27 @@ export def "files-copy drivefilescopy" [
   --resourceKey: string # A key needed to access the item via a shared link.
   --sha1Checksum: string # The SHA1 checksum associated with this file, if available. This field is only populated for files with content stored in Google Drive; it's not populated for Docs Editors or shortcut files.
   --sha256Checksum: string # The SHA256 checksum associated with this file, if available. This field is only populated for files with content stored in Google Drive; it's not populated for Docs Editors or shortcut files.
-  --shared: string@bool-completer # Whether the file has been shared. Not populated for items in shared drives.
+  --shared: oneof<nothing, bool> # Whether the file has been shared. Not populated for items in shared drives.
   --sharedWithMeTime: string # The time at which the file was shared with the user, if applicable (RFC 3339 date-time). (format: date-time)
   --sharingUser: record # Information about a Drive user. — shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
   --shortcutDetails: record # Shortcut file details. Only populated for shortcut files, which have the mimeType field set to application/vnd.google-apps.shortcut. — shape: {targetId?: string, targetMimeType?: string, targetResourceKey?: string}
   --size: string # The size of the file's content in bytes. This field is populated for files with binary content stored in Google Drive and for Docs Editors files; it's not populated for shortcuts or folders. (format: int64)
   --spaces: list # The list of spaces that contain the file. The currently supported values are 'drive', 'appDataFolder' and 'photos'.
-  --starred: string@bool-completer # Whether the user has starred the file.
+  --starred: oneof<nothing, bool> # Whether the user has starred the file.
   --teamDriveId: string # Deprecated - use driveId instead.
   --thumbnailLink: string # A short-lived link to the file's thumbnail, if available. Typically lasts on the order of hours. Only populated when the requesting app can access the file's content. If the file isn't shared publicly, the URL returned in Files.thumbnailLink must be fetched using a credentialed request.
   --thumbnailVersion: string # The thumbnail version for use in thumbnail cache invalidation. (format: int64)
-  --trashed: string@bool-completer # Whether the file has been trashed, either explicitly or from a trashed parent folder. Only the owner can trash a file. The trashed item is excluded from all files.list responses returned for any user who does not own the file. However, all users with access to the file can see the trashed item metadata in an API response. All users with access can copy, download, export, and share the file.
+  --trashed: oneof<nothing, bool> # Whether the file has been trashed, either explicitly or from a trashed parent folder. Only the owner can trash a file. The trashed item is excluded from all files.list responses returned for any user who does not own the file. However, all users with access to the file can see the trashed item metadata in an API response. All users with access can copy, download, export, and share the file.
   --trashedTime: string # The time that the item was trashed (RFC 3339 date-time). Only populated for items in shared drives. (format: date-time)
   --trashingUser: record # Information about a Drive user. — shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
   --version: string # A monotonically increasing version number for the file. This reflects every change made to the file on the server, even those not visible to the user. (format: int64)
   --videoMediaMetadata: record # Additional metadata about video media. This might not be available immediately upon upload. — shape: {durationMillis?: string, height?: int, width?: int}
-  --viewedByMe: string@bool-completer # Whether this user has viewed the file.
+  --viewedByMe: oneof<nothing, bool> # Whether this user has viewed the file.
   --viewedByMeTime: string # The last time the user viewed the file (RFC 3339 date-time). (format: date-time)
-  --viewersCanCopyContent: string@bool-completer # Deprecated - use copyRequiresWriterPermission instead.
+  --viewersCanCopyContent: oneof<nothing, bool> # Deprecated - use copyRequiresWriterPermission instead.
   --webContentLink: string # A link for downloading the content of the file in a browser. This is only available for files with binary content in Google Drive.
   --webViewLink: string # A link for opening the file in a relevant Google editor or viewer in a browser.
-  --writersCanShare: string@bool-completer # Whether users with only writer permission can modify the file's permissions. Not populated for items in shared drives.
+  --writersCanShare: oneof<nothing, bool> # Whether users with only writer permission can modify the file's permissions. Not populated for items in shared drives.
 ]: any -> record<appProperties: record, capabilities: record<canAcceptOwnership: bool, canAddChildren: bool, canAddFolderFromAnotherDrive: bool, canAddMyDriveParent: bool, canChangeCopyRequiresWriterPermission: bool, canChangeSecurityUpdateEnabled: bool, canChangeViewersCanCopyContent: bool, canComment: bool, canCopy: bool, canDelete: bool, canDeleteChildren: bool, canDownload: bool, canEdit: bool, canListChildren: bool, canModifyContent: bool, canModifyContentRestriction: bool, canModifyLabels: bool, canMoveChildrenOutOfDrive: bool, canMoveChildrenOutOfTeamDrive: bool, canMoveChildrenWithinDrive: bool, canMoveChildrenWithinTeamDrive: bool, canMoveItemIntoTeamDrive: bool, canMoveItemOutOfDrive: bool, canMoveItemOutOfTeamDrive: bool, canMoveItemWithinDrive: bool, canMoveItemWithinTeamDrive: bool, canMoveTeamDriveItem: bool, canReadDrive: bool, canReadLabels: bool, canReadRevisions: bool, canReadTeamDrive: bool, canRemoveChildren: bool, canRemoveMyDriveParent: bool, canRename: bool, canShare: bool, canTrash: bool, canTrashChildren: bool, canUntrash: bool>, contentHints: record<indexableText: string, thumbnail: record<image: string, mimeType: string>>, contentRestrictions: table<readOnly: bool, reason: string, restrictingUser: record, restrictionTime: string, type: string>, copyRequiresWriterPermission: bool, createdTime: string, description: string, driveId: string, explicitlyTrashed: bool, exportLinks: record, fileExtension: string, folderColorRgb: string, fullFileExtension: string, hasAugmentedPermissions: bool, hasThumbnail: bool, headRevisionId: string, iconLink: string, id: string, imageMediaMetadata: record<aperture: float, cameraMake: string, cameraModel: string, colorSpace: string, exposureBias: float, exposureMode: string, exposureTime: float, flashUsed: bool, focalLength: float, height: int, isoSpeed: int, lens: string, location: record<altitude: float, latitude: float, longitude: float>, maxApertureValue: float, meteringMode: string, rotation: int, sensor: string, subjectDistance: int, time: string, whiteBalance: string, width: int>, isAppAuthorized: bool, kind: string, labelInfo: record<labels: list<record>>, lastModifyingUser: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, linkShareMetadata: record<securityUpdateEligible: bool, securityUpdateEnabled: bool>, md5Checksum: string, mimeType: string, modifiedByMe: bool, modifiedByMeTime: string, modifiedTime: string, name: string, originalFilename: string, ownedByMe: bool, owners: table<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, parents: list<string>, permissionIds: list<string>, permissions: table<allowFileDiscovery: bool, deleted: bool, displayName: string, domain: string, emailAddress: string, expirationTime: string, id: string, kind: string, pendingOwner: bool, permissionDetails: list, photoLink: string, role: string, teamDrivePermissionDetails: list, type: string, view: string>, properties: record, quotaBytesUsed: string, resourceKey: string, sha1Checksum: string, sha256Checksum: string, shared: bool, sharedWithMeTime: string, sharingUser: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, shortcutDetails: record<targetId: string, targetMimeType: string, targetResourceKey: string>, size: string, spaces: list<string>, starred: bool, teamDriveId: string, thumbnailLink: string, thumbnailVersion: string, trashed: bool, trashedTime: string, trashingUser: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, version: string, videoMediaMetadata: record<durationMillis: string, height: int, width: int>, viewedByMe: bool, viewedByMeTime: string, viewersCanCopyContent: bool, webContentLink: string, webViewLink: string, writersCanShare: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1321,7 +1320,7 @@ export def "files-export drivefilesexport" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --mimeType: string # The MIME type of the format requested for this export.
@@ -1352,7 +1351,7 @@ export def "files-list-labels drivefileslistLabels" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --maxResults: int # The maximum number of labels to return per page. When not set, this defaults to 100.
@@ -1385,7 +1384,7 @@ export def "files-modify-labels drivefilesmodifyLabels" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --kind: string # This is always drive#modifyLabelsRequest (default: drive#modifyLabelsRequest)
@@ -1420,15 +1419,15 @@ export def "files-permissions drivepermissionslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --includePermissionsForView: string # Specifies which additional view's permissions to include in the response. Only 'published' is supported.
   --pageSize: int # The maximum number of permissions to return per page. When not set for files in a shared drive, at most 100 results will be returned. When not set for files that are not in a shared drive, the entire list will be returned.
   --pageToken: string # The token for continuing a previous list request on the next page. This should be set to the value of 'nextPageToken' from the previous response.
-  --supportsAllDrives: string@bool-completer # Whether the requesting application supports both My Drives and shared drives.
-  --supportsTeamDrives: string@bool-completer # Deprecated use supportsAllDrives instead.
-  --useDomainAdminAccess: string@bool-completer # Issue the request as a domain administrator; if set to true, then the requester will be granted access if the file ID parameter refers to a shared drive and the requester is an administrator of the domain to which the shared drive belongs.
+  --supportsAllDrives: oneof<nothing, bool> # Whether the requesting application supports both My Drives and shared drives.
+  --supportsTeamDrives: oneof<nothing, bool> # Deprecated use supportsAllDrives instead.
+  --useDomainAdminAccess: oneof<nothing, bool> # Issue the request as a domain administrator; if set to true, then the requester will be granted access if the file ID parameter refers to a shared drive and the requester is an administrator of the domain to which the shared drive belongs.
 ]: nothing -> record<kind: string, nextPageToken: string, permissions: table<allowFileDiscovery: bool, deleted: bool, displayName: string, domain: string, emailAddress: string, expirationTime: string, id: string, kind: string, pendingOwner: bool, permissionDetails: list, photoLink: string, role: string, teamDrivePermissionDetails: list, type: string, view: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1458,26 +1457,26 @@ export def "files-permissions drivepermissionscreate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --emailMessage: string # A plain text custom message to include in the notification email.
-  --enforceSingleParent: string@bool-completer # Deprecated. See moveToNewOwnersRoot for details.
-  --moveToNewOwnersRoot: string@bool-completer # This parameter will only take effect if the item is not in a shared drive and the request is attempting to transfer the ownership of the item. If set to true, the item will be moved to the new owner's My Drive root folder and all prior parents removed. If set to false, parents are not changed.
-  --sendNotificationEmail: string@bool-completer # Whether to send a notification email when sharing to users or groups. This defaults to true for users and groups, and is not allowed for other requests. It must not be disabled for ownership transfers.
-  --supportsAllDrives: string@bool-completer # Whether the requesting application supports both My Drives and shared drives.
-  --supportsTeamDrives: string@bool-completer # Deprecated use supportsAllDrives instead.
-  --transferOwnership: string@bool-completer # Whether to transfer ownership to the specified user and downgrade the current owner to a writer. This parameter is required as an acknowledgement of the side effect. File owners can only transfer ownership of files existing on My Drive. Files existing in a shared drive are owned by the organization that owns that shared drive. Ownership transfers are not supported for files and folders in shared drives. Organizers of a shared drive can move items from that shared drive into their My Drive which transfers the ownership to them.
-  --useDomainAdminAccess: string@bool-completer # Issue the request as a domain administrator; if set to true, then the requester will be granted access if the file ID parameter refers to a shared drive and the requester is an administrator of the domain to which the shared drive belongs.
-  --allowFileDiscovery: string@bool-completer # Whether the permission allows the file to be discovered through search. This is only applicable for permissions of type domain or anyone.
-  --deleted: string@bool-completer # Whether the account associated with this permission has been deleted. This field only pertains to user and group permissions.
+  --enforceSingleParent: oneof<nothing, bool> # Deprecated. See moveToNewOwnersRoot for details.
+  --moveToNewOwnersRoot: oneof<nothing, bool> # This parameter will only take effect if the item is not in a shared drive and the request is attempting to transfer the ownership of the item. If set to true, the item will be moved to the new owner's My Drive root folder and all prior parents removed. If set to false, parents are not changed.
+  --sendNotificationEmail: oneof<nothing, bool> # Whether to send a notification email when sharing to users or groups. This defaults to true for users and groups, and is not allowed for other requests. It must not be disabled for ownership transfers.
+  --supportsAllDrives: oneof<nothing, bool> # Whether the requesting application supports both My Drives and shared drives.
+  --supportsTeamDrives: oneof<nothing, bool> # Deprecated use supportsAllDrives instead.
+  --transferOwnership: oneof<nothing, bool> # Whether to transfer ownership to the specified user and downgrade the current owner to a writer. This parameter is required as an acknowledgement of the side effect. File owners can only transfer ownership of files existing on My Drive. Files existing in a shared drive are owned by the organization that owns that shared drive. Ownership transfers are not supported for files and folders in shared drives. Organizers of a shared drive can move items from that shared drive into their My Drive which transfers the ownership to them.
+  --useDomainAdminAccess: oneof<nothing, bool> # Issue the request as a domain administrator; if set to true, then the requester will be granted access if the file ID parameter refers to a shared drive and the requester is an administrator of the domain to which the shared drive belongs.
+  --allowFileDiscovery: oneof<nothing, bool> # Whether the permission allows the file to be discovered through search. This is only applicable for permissions of type domain or anyone.
+  --deleted: oneof<nothing, bool> # Whether the account associated with this permission has been deleted. This field only pertains to user and group permissions.
   --displayName: string # The "pretty" name of the value of the permission. The following is a list of examples for each type of permission:   - user - User's full name, as defined for their Google Account, such as "Joe Smith."  - group - Name of the Google Group, such as "The Company Administrators."  - domain - String domain name, such as "your-company.com."  - anyone - No displayName is present.
   --domain: string # The domain to which this permission refers. The following options are currently allowed:   - The entire domain, such as "your-company.com."  - A target audience, such as "ID.audience.googledomains.com."
   --emailAddress: string # The email address of the user or group to which this permission refers.
   --expirationTime: string # The time at which this permission will expire (RFC 3339 date-time). Expiration times have the following restrictions:   - They cannot be set on shared drive items.  - They can only be set on user and group permissions.  - The time must be in the future.  - The time cannot be more than one year in the future. (format: date-time)
   --id: string # The ID of this permission. This is a unique identifier for the grantee, and is published in User resources as permissionId. IDs should be treated as opaque values.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "drive#permission". (default: drive#permission)
-  --pendingOwner: string@bool-completer # Whether the account associated with this permission is a pending owner. Only populated for user type permissions for files that aren't in a shared drive.
+  --pendingOwner: oneof<nothing, bool> # Whether the account associated with this permission is a pending owner. Only populated for user type permissions for files that aren't in a shared drive.
   --photoLink: string # A link to the user's profile photo, if available.
   --role: string # The role granted by this permission. While new values may be supported in the future, the following are currently allowed:   - owner  - organizer  - fileOrganizer  - writer  - commenter  - reader
   --type: string # The type of the grantee. Valid values are:   - user  - group  - domain  - anyone  When creating a permission, if type is user or group, you must provide an emailAddress for the user or group. When type is domain, you must provide a domain. There isn't extra information required for the anyone type.
@@ -1513,12 +1512,12 @@ export def "files-permissions drivepermissionsdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --supportsAllDrives: string@bool-completer # Whether the requesting application supports both My Drives and shared drives.
-  --supportsTeamDrives: string@bool-completer # Deprecated use supportsAllDrives instead.
-  --useDomainAdminAccess: string@bool-completer # Issue the request as a domain administrator; if set to true, then the requester will be granted access if the file ID parameter refers to a shared drive and the requester is an administrator of the domain to which the shared drive belongs.
+  --supportsAllDrives: oneof<nothing, bool> # Whether the requesting application supports both My Drives and shared drives.
+  --supportsTeamDrives: oneof<nothing, bool> # Deprecated use supportsAllDrives instead.
+  --useDomainAdminAccess: oneof<nothing, bool> # Issue the request as a domain administrator; if set to true, then the requester will be granted access if the file ID parameter refers to a shared drive and the requester is an administrator of the domain to which the shared drive belongs.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1547,12 +1546,12 @@ export def "files-permissions drivepermissionsget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --supportsAllDrives: string@bool-completer # Whether the requesting application supports both My Drives and shared drives.
-  --supportsTeamDrives: string@bool-completer # Deprecated use supportsAllDrives instead.
-  --useDomainAdminAccess: string@bool-completer # Issue the request as a domain administrator; if set to true, then the requester will be granted access if the file ID parameter refers to a shared drive and the requester is an administrator of the domain to which the shared drive belongs.
+  --supportsAllDrives: oneof<nothing, bool> # Whether the requesting application supports both My Drives and shared drives.
+  --supportsTeamDrives: oneof<nothing, bool> # Deprecated use supportsAllDrives instead.
+  --useDomainAdminAccess: oneof<nothing, bool> # Issue the request as a domain administrator; if set to true, then the requester will be granted access if the file ID parameter refers to a shared drive and the requester is an administrator of the domain to which the shared drive belongs.
 ]: nothing -> record<allowFileDiscovery: bool, deleted: bool, displayName: string, domain: string, emailAddress: string, expirationTime: string, id: string, kind: string, pendingOwner: bool, permissionDetails: table<inherited: bool, inheritedFrom: string, permissionType: string, role: string>, photoLink: string, role: string, teamDrivePermissionDetails: table<inherited: bool, inheritedFrom: string, role: string, teamDrivePermissionType: string>, type: string, view: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1583,23 +1582,23 @@ export def "files-permissions drivepermissionsupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --removeExpiration: string@bool-completer # Whether to remove the expiration date.
-  --supportsAllDrives: string@bool-completer # Whether the requesting application supports both My Drives and shared drives.
-  --supportsTeamDrives: string@bool-completer # Deprecated use supportsAllDrives instead.
-  --transferOwnership: string@bool-completer # Whether to transfer ownership to the specified user and downgrade the current owner to a writer. This parameter is required as an acknowledgement of the side effect. File owners can only transfer ownership of files existing on My Drive. Files existing in a shared drive are owned by the organization that owns that shared drive. Ownership transfers are not supported for files and folders in shared drives. Organizers of a shared drive can move items from that shared drive into their My Drive which transfers the ownership to them.
-  --useDomainAdminAccess: string@bool-completer # Issue the request as a domain administrator; if set to true, then the requester will be granted access if the file ID parameter refers to a shared drive and the requester is an administrator of the domain to which the shared drive belongs.
-  --allowFileDiscovery: string@bool-completer # Whether the permission allows the file to be discovered through search. This is only applicable for permissions of type domain or anyone.
-  --deleted: string@bool-completer # Whether the account associated with this permission has been deleted. This field only pertains to user and group permissions.
+  --removeExpiration: oneof<nothing, bool> # Whether to remove the expiration date.
+  --supportsAllDrives: oneof<nothing, bool> # Whether the requesting application supports both My Drives and shared drives.
+  --supportsTeamDrives: oneof<nothing, bool> # Deprecated use supportsAllDrives instead.
+  --transferOwnership: oneof<nothing, bool> # Whether to transfer ownership to the specified user and downgrade the current owner to a writer. This parameter is required as an acknowledgement of the side effect. File owners can only transfer ownership of files existing on My Drive. Files existing in a shared drive are owned by the organization that owns that shared drive. Ownership transfers are not supported for files and folders in shared drives. Organizers of a shared drive can move items from that shared drive into their My Drive which transfers the ownership to them.
+  --useDomainAdminAccess: oneof<nothing, bool> # Issue the request as a domain administrator; if set to true, then the requester will be granted access if the file ID parameter refers to a shared drive and the requester is an administrator of the domain to which the shared drive belongs.
+  --allowFileDiscovery: oneof<nothing, bool> # Whether the permission allows the file to be discovered through search. This is only applicable for permissions of type domain or anyone.
+  --deleted: oneof<nothing, bool> # Whether the account associated with this permission has been deleted. This field only pertains to user and group permissions.
   --displayName: string # The "pretty" name of the value of the permission. The following is a list of examples for each type of permission:   - user - User's full name, as defined for their Google Account, such as "Joe Smith."  - group - Name of the Google Group, such as "The Company Administrators."  - domain - String domain name, such as "your-company.com."  - anyone - No displayName is present.
   --domain: string # The domain to which this permission refers. The following options are currently allowed:   - The entire domain, such as "your-company.com."  - A target audience, such as "ID.audience.googledomains.com."
   --emailAddress: string # The email address of the user or group to which this permission refers.
   --expirationTime: string # The time at which this permission will expire (RFC 3339 date-time). Expiration times have the following restrictions:   - They cannot be set on shared drive items.  - They can only be set on user and group permissions.  - The time must be in the future.  - The time cannot be more than one year in the future. (format: date-time)
   --id: string # The ID of this permission. This is a unique identifier for the grantee, and is published in User resources as permissionId. IDs should be treated as opaque values.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "drive#permission". (default: drive#permission)
-  --pendingOwner: string@bool-completer # Whether the account associated with this permission is a pending owner. Only populated for user type permissions for files that aren't in a shared drive.
+  --pendingOwner: oneof<nothing, bool> # Whether the account associated with this permission is a pending owner. Only populated for user type permissions for files that aren't in a shared drive.
   --photoLink: string # A link to the user's profile photo, if available.
   --role: string # The role granted by this permission. While new values may be supported in the future, the following are currently allowed:   - owner  - organizer  - fileOrganizer  - writer  - commenter  - reader
   --type: string # The type of the grantee. Valid values are:   - user  - group  - domain  - anyone  When creating a permission, if type is user or group, you must provide an emailAddress for the user or group. When type is domain, you must provide a domain. There isn't extra information required for the anyone type.
@@ -1634,7 +1633,7 @@ export def "files-revisions driverevisionslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --pageSize: int # The maximum number of revisions to return per page.
@@ -1667,7 +1666,7 @@ export def "files-revisions driverevisionsdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
@@ -1698,10 +1697,10 @@ export def "files-revisions driverevisionsget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --acknowledgeAbuse: string@bool-completer # Whether the user is acknowledging the risk of downloading known malware or other abusive files. This is only applicable when alt=media.
+  --acknowledgeAbuse: oneof<nothing, bool> # Whether the user is acknowledging the risk of downloading known malware or other abusive files. This is only applicable when alt=media.
 ]: nothing -> record<exportLinks: record, id: string, keepForever: bool, kind: string, lastModifyingUser: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, md5Checksum: string, mimeType: string, modifiedTime: string, originalFilename: string, publishAuto: bool, published: bool, publishedLink: string, publishedOutsideDomain: bool, size: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1731,22 +1730,22 @@ export def "files-revisions driverevisionsupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --exportLinks: record # Links for exporting Docs Editors files to specific formats.
   --id: string # The ID of the revision.
-  --keepForever: string@bool-completer # Whether to keep this revision forever, even if it is no longer the head revision. If not set, the revision will be automatically purged 30 days after newer content is uploaded. This can be set on a maximum of 200 revisions for a file. This field is only applicable to files with binary content in Drive.
+  --keepForever: oneof<nothing, bool> # Whether to keep this revision forever, even if it is no longer the head revision. If not set, the revision will be automatically purged 30 days after newer content is uploaded. This can be set on a maximum of 200 revisions for a file. This field is only applicable to files with binary content in Drive.
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "drive#revision". (default: drive#revision)
   --lastModifyingUser: record # Information about a Drive user. — shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
   --md5Checksum: string # The MD5 checksum of the revision's content. This is only applicable to files with binary content in Drive.
   --mimeType: string # The MIME type of the revision.
   --modifiedTime: string # The last time the revision was modified (RFC 3339 date-time). (format: date-time)
   --originalFilename: string # The original filename used to create this revision. This is only applicable to files with binary content in Drive.
-  --publishAuto: string@bool-completer # Whether subsequent revisions will be automatically republished. This is only applicable to Docs Editors files.
-  --published: string@bool-completer # Whether this revision is published. This is only applicable to Docs Editors files.
+  --publishAuto: oneof<nothing, bool> # Whether subsequent revisions will be automatically republished. This is only applicable to Docs Editors files.
+  --published: oneof<nothing, bool> # Whether this revision is published. This is only applicable to Docs Editors files.
   --publishedLink: string # A link to the published revision. This is only populated for Google Sites files.
-  --publishedOutsideDomain: string@bool-completer # Whether this revision is published outside the domain. This is only applicable to Docs Editors files.
+  --publishedOutsideDomain: oneof<nothing, bool> # Whether this revision is published outside the domain. This is only applicable to Docs Editors files.
   --size: string # The size of the revision's content in bytes. This is only applicable to files with binary content in Drive. (format: int64)
 ]: any -> record<exportLinks: record, id: string, keepForever: bool, kind: string, lastModifyingUser: record<displayName: string, emailAddress: string, kind: string, me: bool, permissionId: string, photoLink: string>, md5Checksum: string, mimeType: string, modifiedTime: string, originalFilename: string, publishAuto: bool, published: bool, publishedLink: string, publishedOutsideDomain: bool, size: string> {
   let input = $in
@@ -1778,20 +1777,20 @@ export def "files-watch drivefileswatch" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --acknowledgeAbuse: string@bool-completer # Whether the user is acknowledging the risk of downloading known malware or other abusive files. This is only applicable when alt=media.
+  --acknowledgeAbuse: oneof<nothing, bool> # Whether the user is acknowledging the risk of downloading known malware or other abusive files. This is only applicable when alt=media.
   --includeLabels: string # A comma-separated list of IDs of labels to include in the labelInfo part of the response.
   --includePermissionsForView: string # Specifies which additional view's permissions to include in the response. Only 'published' is supported.
-  --supportsAllDrives: string@bool-completer # Whether the requesting application supports both My Drives and shared drives.
-  --supportsTeamDrives: string@bool-completer # Deprecated use supportsAllDrives instead.
+  --supportsAllDrives: oneof<nothing, bool> # Whether the requesting application supports both My Drives and shared drives.
+  --supportsTeamDrives: oneof<nothing, bool> # Deprecated use supportsAllDrives instead.
   --address: string # The address where notifications are delivered for this channel.
   --expiration: string # Date and time of notification channel expiration, expressed as a Unix timestamp, in milliseconds. Optional. (format: int64)
   --id: string # A UUID or similar unique string that identifies this channel.
   --kind: string # Identifies this as a notification channel used to watch for changes to a resource, which is "api#channel". (default: api#channel)
   --params: record # Additional parameters controlling delivery channel behavior. Optional.
-  --payload: string@bool-completer # A Boolean value to indicate whether payload is wanted. Optional.
+  --payload: oneof<nothing, bool> # A Boolean value to indicate whether payload is wanted. Optional.
   --resourceId: string # An opaque ID that identifies the resource being watched on this channel. Stable across different API versions.
   --resourceUri: string # A version-specific identifier for the watched resource.
   --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional.
@@ -1825,13 +1824,13 @@ export def "teamdrives driveteamdriveslist" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --pageSize: int # Maximum number of Team Drives to return.
   --pageToken: string # Page token for Team Drives.
   --q: string # Query string for searching Team Drives.
-  --useDomainAdminAccess: string@bool-completer # Issue the request as a domain administrator; if set to true, then all Team Drives of the domain in which the requester is an administrator are returned.
+  --useDomainAdminAccess: oneof<nothing, bool> # Issue the request as a domain administrator; if set to true, then all Team Drives of the domain in which the requester is an administrator are returned.
 ]: nothing -> record<kind: string, nextPageToken: string, teamDrives: table<backgroundImageFile: record, backgroundImageLink: string, capabilities: record, colorRgb: string, createdTime: string, id: string, kind: string, name: string, orgUnitId: string, restrictions: record, themeId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1861,7 +1860,7 @@ export def "teamdrives driveteamdrivescreate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
   --requestId: string # An ID, such as a random UUID, which uniquely identifies this user's request for idempotent creation of a Team Drive. A repeated request by the same user and with the same request ID will avoid creating duplicates by attempting to create the same Team Drive. If the Team Drive already exists a 409 error will be returned.
@@ -1906,7 +1905,7 @@ export def "teamdrives driveteamdrivesdelete" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
@@ -1936,10 +1935,10 @@ export def "teamdrives driveteamdrivesget" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --useDomainAdminAccess: string@bool-completer # Issue the request as a domain administrator; if set to true, then the requester will be granted access if they are an administrator of the domain to which the Team Drive belongs.
+  --useDomainAdminAccess: oneof<nothing, bool> # Issue the request as a domain administrator; if set to true, then the requester will be granted access if they are an administrator of the domain to which the Team Drive belongs.
 ]: nothing -> record<backgroundImageFile: record<id: string, width: float, xCoordinate: float, yCoordinate: float>, backgroundImageLink: string, capabilities: record<canAddChildren: bool, canChangeCopyRequiresWriterPermissionRestriction: bool, canChangeDomainUsersOnlyRestriction: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction: bool, canChangeTeamDriveBackground: bool, canChangeTeamMembersOnlyRestriction: bool, canComment: bool, canCopy: bool, canDeleteChildren: bool, canDeleteTeamDrive: bool, canDownload: bool, canEdit: bool, canListChildren: bool, canManageMembers: bool, canReadRevisions: bool, canRemoveChildren: bool, canRename: bool, canRenameTeamDrive: bool, canResetTeamDriveRestrictions: bool, canShare: bool, canTrashChildren: bool>, colorRgb: string, createdTime: string, id: string, kind: string, name: string, orgUnitId: string, restrictions: record<adminManagedRestrictions: bool, copyRequiresWriterPermission: bool, domainUsersOnly: bool, sharingFoldersRequiresOrganizerPermission: bool, teamMembersOnly: bool>, themeId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1970,10 +1969,10 @@ export def "teamdrives driveteamdrivesupdate" [
   --qp-fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: string@bool-completer # Returns response with indentations and line breaks.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
   --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --userIp: string # Deprecated. Please use quotaUser instead.
-  --useDomainAdminAccess: string@bool-completer # Issue the request as a domain administrator; if set to true, then the requester will be granted access if they are an administrator of the domain to which the Team Drive belongs.
+  --useDomainAdminAccess: oneof<nothing, bool> # Issue the request as a domain administrator; if set to true, then the requester will be granted access if they are an administrator of the domain to which the Team Drive belongs.
   --backgroundImageFile: record # An image file and cropping parameters from which a background image for this Team Drive is set. This is a write only field; it can only be set on drive.teamdrives.update requests that don't set themeId. When specified, all fields of the backgroundImageFile must be set. — shape: {id?: string, width?: float, xCoordinate?: float, yCoordinate?: float}
   --backgroundImageLink: string # A short-lived link to this Team Drive's background image.
   --capabilities: record # Capabilities the current user has on this Team Drive. — shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canChangeTeamDriveBackground?: bool, canChangeTeamMembersOnlyRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteTeamDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRemoveChildren?: bool, canRename?: bool, canRenameTeamDrive?: bool, canResetTeamDriveRestrictions?: bool, canShare?: bool, canTrashChildren?: bool}

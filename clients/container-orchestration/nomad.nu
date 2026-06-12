@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://127.0.0.1:4646/v1" "https://127.0.0.1:4646/v1"] }
 def auth-scheme-completer [] { ["x-nomad-token"] }
 
@@ -362,7 +361,7 @@ export def "acl-token PostACLToken" [
   --CreateTime: string # format: date-time
   --ExpirationTTL: int # format: int64
   --ExpirationTime: string # format: date-time
-  --Global: string@bool-completer
+  --Global: oneof<nothing, bool>
   --ModifyIndex: int
   --Name: string
   --Policies: list
@@ -559,7 +558,7 @@ export def "allocation-stop PostAllocationStop" [
   --prefix: string # Constrains results to jobs that start with the defined prefix
   --per-page: int # Maximum number of results to return.
   --next-token: string # Indicates where to start paging for queries that support pagination.
-  --no-shutdown-delay: string@bool-completer # Flag indicating whether to delay shutdown when requesting an allocation stop.
+  --no-shutdown-delay: oneof<nothing, bool> # Flag indicating whether to delay shutdown when requesting an allocation stop.
   --index: int # If set, wait until query exceeds given index. Must be provided with WaitParam.
   --X-Nomad-Token: string # A Nomad ACL token.
 ]: nothing -> any {
@@ -592,8 +591,8 @@ export def "allocations GetAllocations" [
   --prefix: string # Constrains results to jobs that start with the defined prefix
   --per-page: int # Maximum number of results to return.
   --next-token: string # Indicates where to start paging for queries that support pagination.
-  --resources: string@bool-completer # Flag indicating whether to include resources in response.
-  --task-states: string@bool-completer # Flag indicating whether to include task states in response.
+  --resources: oneof<nothing, bool> # Flag indicating whether to include resources in response.
+  --task-states: oneof<nothing, bool> # Flag indicating whether to include task states in response.
   --index: int # If set, wait until query exceeds given index. Must be provided with WaitParam.
   --X-Nomad-Token: string # A Nomad ACL token.
 ]: nothing -> any {
@@ -757,7 +756,7 @@ export def "deployment-pause PostDeploymentPause" [
   --X-Nomad-Token: string # A Nomad ACL token.
   --DeploymentID: string
   --Namespace: string
-  --Pause: string@bool-completer
+  --Pause: oneof<nothing, bool>
   --Region: string
   --SecretID: string
 ]: any -> any {
@@ -791,7 +790,7 @@ export def "deployment-promote PostDeploymentPromote" [
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
   --X-Nomad-Token: string # A Nomad ACL token.
-  --All: string@bool-completer
+  --All: oneof<nothing, bool>
   --DeploymentID: string
   --Groups: list
   --Namespace: string
@@ -992,8 +991,8 @@ export def "job DeleteJob" [
   --region: string # Filters results based on the specified region.
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
-  --purge: string@bool-completer # Boolean flag indicating whether to purge allocations of the job after deleting.
-  --global: string@bool-completer # Boolean flag indicating whether the operation should apply to all instances of the job globally.
+  --purge: oneof<nothing, bool> # Boolean flag indicating whether to purge allocations of the job after deleting.
+  --global: oneof<nothing, bool> # Boolean flag indicating whether the operation should apply to all instances of the job globally.
   --X-Nomad-Token: string # A Nomad ACL token.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-nomad-token"))
@@ -1057,13 +1056,13 @@ export def "job PostJob" [
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
   --X-Nomad-Token: string # A Nomad ACL token.
-  --EnforceIndex: string@bool-completer
+  --EnforceIndex: oneof<nothing, bool>
   --EvalPriority: int
   --Job: record # shape: {Affinities?: list, AllAtOnce?: bool, Constraints?: list, ConsulNamespace?: string, ConsulToken?: string, CreateIndex?: int, Datacenters?: list, DispatchIdempotencyToken?: string, Dispatched?: bool, ID?: string, JobModifyIndex?: int, Meta?: record, Migrate?: record, ModifyIndex?: int, Multiregion?: record, Name?: string, Namespace?: string, NomadTokenID?: string, ParameterizedJob?: record, ParentID?: string, Payload?: string, Periodic?: record, Priority?: int, Region?: string, Reschedule?: record, Spreads?: list, Stable?: bool, Status?: string, StatusDescription?: string, Stop?: bool, SubmitTime?: int, TaskGroups?: list, Type?: string, Update?: record, VaultNamespace?: string, VaultToken?: string, Version?: int}
   --JobModifyIndex: int
   --Namespace: string
-  --PolicyOverride: string@bool-completer
-  --PreserveCounts: string@bool-completer
+  --PolicyOverride: oneof<nothing, bool>
+  --PreserveCounts: oneof<nothing, bool>
   --Region: string
   --SecretID: string
 ]: any -> any {
@@ -1100,7 +1099,7 @@ export def "job-allocations GetJobAllocations" [
   --prefix: string # Constrains results to jobs that start with the defined prefix
   --per-page: int # Maximum number of results to return.
   --next-token: string # Indicates where to start paging for queries that support pagination.
-  --all: string@bool-completer # Specifies whether the list of allocations should include allocations from a previously registered job with the same ID. This is possible if the job is deregistered and reregistered.
+  --all: oneof<nothing, bool> # Specifies whether the list of allocations should include allocations from a previously registered job with the same ID. This is possible if the job is deregistered and reregistered.
   --index: int # If set, wait until query exceeds given index. Must be provided with WaitParam.
   --X-Nomad-Token: string # A Nomad ACL token.
 ]: nothing -> any {
@@ -1331,10 +1330,10 @@ export def "job-plan PostJobPlan" [
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
   --X-Nomad-Token: string # A Nomad ACL token.
-  --Diff: string@bool-completer
+  --Diff: oneof<nothing, bool>
   --Job: record # shape: {Affinities?: list, AllAtOnce?: bool, Constraints?: list, ConsulNamespace?: string, ConsulToken?: string, CreateIndex?: int, Datacenters?: list, DispatchIdempotencyToken?: string, Dispatched?: bool, ID?: string, JobModifyIndex?: int, Meta?: record, Migrate?: record, ModifyIndex?: int, Multiregion?: record, Name?: string, Namespace?: string, NomadTokenID?: string, ParameterizedJob?: record, ParentID?: string, Payload?: string, Periodic?: record, Priority?: int, Region?: string, Reschedule?: record, Spreads?: list, Stable?: bool, Status?: string, StatusDescription?: string, Stop?: bool, SubmitTime?: int, TaskGroups?: list, Type?: string, Update?: record, VaultNamespace?: string, VaultToken?: string, Version?: int}
   --Namespace: string
-  --PolicyOverride: string@bool-completer
+  --PolicyOverride: oneof<nothing, bool>
   --Region: string
   --SecretID: string
 ]: any -> any {
@@ -1441,11 +1440,11 @@ export def "job-scale PostJobScalingRequest" [
   --idempotency-token: string # Can be used to ensure operations are only run once.
   --X-Nomad-Token: string # A Nomad ACL token.
   --Count: int # format: int64
-  --Error: string@bool-completer
+  --Error: oneof<nothing, bool>
   --Message: string
   --Meta: record
   --Namespace: string
-  --PolicyOverride: string@bool-completer
+  --PolicyOverride: oneof<nothing, bool>
   --Region: string
   --SecretID: string
   --Target: record
@@ -1485,7 +1484,7 @@ export def "job-stable PostJobStability" [
   --Namespace: string
   --Region: string
   --SecretID: string
-  --Stable: string@bool-completer
+  --Stable: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-nomad-token"))
@@ -1553,7 +1552,7 @@ export def "job-versions GetJobVersions" [
   --prefix: string # Constrains results to jobs that start with the defined prefix
   --per-page: int # Maximum number of results to return.
   --next-token: string # Indicates where to start paging for queries that support pagination.
-  --diffs: string@bool-completer # Boolean flag indicating whether to compute job diffs.
+  --diffs: oneof<nothing, bool> # Boolean flag indicating whether to compute job diffs.
   --index: int # If set, wait until query exceeds given index. Must be provided with WaitParam.
   --X-Nomad-Token: string # A Nomad ACL token.
 ]: nothing -> any {
@@ -1616,13 +1615,13 @@ export def "jobs RegisterJob" [
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
   --X-Nomad-Token: string # A Nomad ACL token.
-  --EnforceIndex: string@bool-completer
+  --EnforceIndex: oneof<nothing, bool>
   --EvalPriority: int
   --Job: record # shape: {Affinities?: list, AllAtOnce?: bool, Constraints?: list, ConsulNamespace?: string, ConsulToken?: string, CreateIndex?: int, Datacenters?: list, DispatchIdempotencyToken?: string, Dispatched?: bool, ID?: string, JobModifyIndex?: int, Meta?: record, Migrate?: record, ModifyIndex?: int, Multiregion?: record, Name?: string, Namespace?: string, NomadTokenID?: string, ParameterizedJob?: record, ParentID?: string, Payload?: string, Periodic?: record, Priority?: int, Region?: string, Reschedule?: record, Spreads?: list, Stable?: bool, Status?: string, StatusDescription?: string, Stop?: bool, SubmitTime?: int, TaskGroups?: list, Type?: string, Update?: record, VaultNamespace?: string, VaultToken?: string, Version?: int}
   --JobModifyIndex: int
   --Namespace: string
-  --PolicyOverride: string@bool-completer
-  --PreserveCounts: string@bool-completer
+  --PolicyOverride: oneof<nothing, bool>
+  --PreserveCounts: oneof<nothing, bool>
   --Region: string
   --SecretID: string
 ]: any -> any {
@@ -1651,9 +1650,9 @@ export def "jobs-parse PostJobParse" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Canonicalize: string@bool-completer
+  --Canonicalize: oneof<nothing, bool>
   --JobHCL: string
-  --hclv1: string@bool-completer
+  --hclv1: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-nomad-token"))
@@ -1936,7 +1935,7 @@ export def "node-drain UpdateNodeDrain" [
   --index: int # If set, wait until query exceeds given index. Must be provided with WaitParam.
   --X-Nomad-Token: string # A Nomad ACL token.
   --DrainSpec: record # shape: {Deadline?: int, IgnoreSystemJobs?: bool}
-  --MarkEligible: string@bool-completer
+  --MarkEligible: oneof<nothing, bool>
   --Meta: record
   --NodeID: string
 ]: any -> any {
@@ -2043,7 +2042,7 @@ export def "nodes GetNodes" [
   --prefix: string # Constrains results to jobs that start with the defined prefix
   --per-page: int # Maximum number of results to return.
   --next-token: string # Indicates where to start paging for queries that support pagination.
-  --resources: string@bool-completer # Whether or not to include the NodeResources and ReservedResources fields in the response.
+  --resources: oneof<nothing, bool> # Whether or not to include the NodeResources and ReservedResources fields in the response.
   --index: int # If set, wait until query exceeds given index. Must be provided with WaitParam.
   --X-Nomad-Token: string # A Nomad ACL token.
 ]: nothing -> any {
@@ -2105,11 +2104,11 @@ export def "operator-autopilot-configuration PutOperatorAutopilotConfiguration" 
   --namespace: string # Filters results based on the specified namespace.
   --idempotency-token: string # Can be used to ensure operations are only run once.
   --X-Nomad-Token: string # A Nomad ACL token.
-  --CleanupDeadServers: string@bool-completer
+  --CleanupDeadServers: oneof<nothing, bool>
   --CreateIndex: int
-  --DisableUpgradeMigration: string@bool-completer
-  --EnableCustomUpgrades: string@bool-completer
-  --EnableRedundancyZones: string@bool-completer
+  --DisableUpgradeMigration: oneof<nothing, bool>
+  --EnableCustomUpgrades: oneof<nothing, bool>
+  --EnableRedundancyZones: oneof<nothing, bool>
   --LastContactThreshold: string
   --MaxTrailingLogs: int
   --MinQuorum: int
@@ -2270,11 +2269,11 @@ export def "operator-scheduler-configuration PostOperatorSchedulerConfiguration"
   --idempotency-token: string # Can be used to ensure operations are only run once.
   --X-Nomad-Token: string # A Nomad ACL token.
   --CreateIndex: int
-  --MemoryOversubscriptionEnabled: string@bool-completer
+  --MemoryOversubscriptionEnabled: oneof<nothing, bool>
   --ModifyIndex: int
-  --PauseEvalBroker: string@bool-completer
+  --PauseEvalBroker: oneof<nothing, bool>
   --PreemptionConfig: record # shape: {BatchSchedulerEnabled?: bool, ServiceSchedulerEnabled?: bool, SysBatchSchedulerEnabled?: bool, SystemSchedulerEnabled?: bool}
-  --RejectJobRegistration: string@bool-completer
+  --RejectJobRegistration: oneof<nothing, bool>
   --SchedulerAlgorithm: string
 ]: any -> any {
   let input = $in
@@ -2627,7 +2626,7 @@ export def "search GetSearch" [
   --next-token: string # Indicates where to start paging for queries that support pagination.
   --index: int # If set, wait until query exceeds given index. Must be provided with WaitParam.
   --X-Nomad-Token: string # A Nomad ACL token.
-  --AllowStale: string@bool-completer
+  --AllowStale: oneof<nothing, bool>
   --AuthToken: string
   --Context: string
   --Filter: string
@@ -2638,7 +2637,7 @@ export def "search GetSearch" [
   --PerPage: int # format: int32
   --Prefix: string
   --Region: string
-  --Reverse: string@bool-completer
+  --Reverse: oneof<nothing, bool>
   --WaitIndex: int
   --WaitTime: int # format: int64
 ]: any -> any {
@@ -2676,7 +2675,7 @@ export def "search-fuzzy GetFuzzySearch" [
   --next-token: string # Indicates where to start paging for queries that support pagination.
   --index: int # If set, wait until query exceeds given index. Must be provided with WaitParam.
   --X-Nomad-Token: string # A Nomad ACL token.
-  --AllowStale: string@bool-completer
+  --AllowStale: oneof<nothing, bool>
   --AuthToken: string
   --Context: string
   --Filter: string
@@ -2687,7 +2686,7 @@ export def "search-fuzzy GetFuzzySearch" [
   --PerPage: int # format: int32
   --Prefix: string
   --Region: string
-  --Reverse: string@bool-completer
+  --Reverse: oneof<nothing, bool>
   --Text: string
   --WaitIndex: int
   --WaitTime: int # format: int64

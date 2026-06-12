@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.soundcloud.com"] }
 def auth-scheme-completer [] { ["bearer" "query-client_id"] }
 
@@ -535,7 +534,7 @@ export def "me-likes-tracks get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
-  --linked-partitioning: string@bool-completer # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
+  --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -603,7 +602,7 @@ export def "me-tracks list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
-  --linked-partitioning: string@bool-completer # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
+  --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -684,7 +683,7 @@ export def "playlists list" [
   --access: list # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details.  (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
-  --linked-partitioning: string@bool-completer # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
+  --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -828,7 +827,7 @@ export def "playlists-tracks get" [
   --allow-errors(-e) # Return full response without error handling
   --secret-token: string # A secret token to fetch private playlists/tracks
   --access: list # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details.  (default: playable,preview)
-  --linked-partitioning: string@bool-completer # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
+  --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -967,7 +966,7 @@ export def "tracks list" [
   --access: list # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details.  (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
-  --linked-partitioning: string@bool-completer # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
+  --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -991,9 +990,9 @@ export def "tracks post" [
   --allow-errors(-e) # Return full response without error handling
   --trackartwork-data: string # format: binary
   --trackasset-data: string # format: binary
-  --trackcommentable: string@bool-completer # default: true
+  --trackcommentable: oneof<nothing, bool> # default: true
   --trackdescription: string
-  --trackdownloadable: string@bool-completer # default: true
+  --trackdownloadable: oneof<nothing, bool> # default: true
   --trackembeddable-by: string@trackembeddable-by-completer # who can embed this track "all", "me", or "none"
   --trackgenre: string
   --trackisrc: string
@@ -1004,7 +1003,7 @@ export def "tracks post" [
   --trackrelease: string
   --trackrelease-date: string # string, formatted as yyyy-mm-dd, representing release date
   --tracksharing: string@tracksharing-completer # default: public
-  --trackstreamable: string@bool-completer # default: true
+  --trackstreamable: oneof<nothing, bool> # default: true
   --tracktag-list: string # The tag_list property contains a list of tags separated by spaces. Multiword tags are quoted in double quotes. We also support machine tags that follow the pattern NAMESPACE:KEY=VALUE. For example: geo:lat=43.555 camel:size=medium “machine:tag=with space” Machine tags are not revealed to the user on the track pages.
   --tracktitle: string
 ]: any -> any {
@@ -1104,7 +1103,7 @@ export def "tracks-comments get" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
-  --linked-partitioning: string@bool-completer # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
+  --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-client_id"))
   let base = ($base_url | default $BASE_URL)
@@ -1180,7 +1179,7 @@ export def "tracks-related get" [
   --access: list # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details.  (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
-  --linked-partitioning: string@bool-completer # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
+  --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-client_id"))
   let base = ($base_url | default $BASE_URL)
@@ -1253,7 +1252,7 @@ export def "users list" [
   --ids: string # A comma separated list of track ids to filter on (e.g. 1,2,3)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
-  --linked-partitioning: string@bool-completer # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
+  --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1325,7 +1324,7 @@ export def "users-favorites get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
-  --linked-partitioning: string@bool-completer # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
+  --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1420,7 +1419,7 @@ export def "users-likes-tracks get" [
   --allow-errors(-e) # Return full response without error handling
   --access: list # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details.  (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
-  --linked-partitioning: string@bool-completer # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
+  --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1445,7 +1444,7 @@ export def "users-playlists get" [
   --allow-errors(-e) # Return full response without error handling
   --access: list # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details.  (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
-  --linked-partitioning: string@bool-completer # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
+  --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1470,7 +1469,7 @@ export def "users-tracks get" [
   --allow-errors(-e) # Return full response without error handling
   --access: list # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details.  (default: playable,preview)
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
-  --linked-partitioning: string@bool-completer # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
+  --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

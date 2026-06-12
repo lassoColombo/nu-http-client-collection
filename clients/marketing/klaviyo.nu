@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://a.klaviyo.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -4332,7 +4331,7 @@ export def "image-upload file" [
   --revision: string # API endpoint revision (format: YYYY-MM-DD[.suffix])
   file: string # The image file to upload. Supported image formats: jpeg,png,gif. Maximum image size: 5MB. (format: binary)
   --name: string # A name for the image.  Defaults to the filename if not provided.  If the name matches an existing image, a suffix will be added.
-  --hidden: string@bool-completer # If true, this image is not shown in the asset library. (default: false)
+  --hidden: oneof<nothing, bool> # If true, this image is not shown in the asset library. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

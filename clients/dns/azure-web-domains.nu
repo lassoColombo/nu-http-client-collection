@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -234,7 +233,7 @@ export def "subscriptions-resource-groups-providers-microsoft-domain-registratio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceHardDeleteDomain: string@bool-completer # Specify <code>true</code> to delete the domain immediately. The default is <code>false</code> which deletes the domain after 24 hours.
+  --forceHardDeleteDomain: oneof<nothing, bool> # Specify <code>true</code> to delete the domain immediately. The default is <code>false</code> which deletes the domain after 24 hours.
   --api-version: string # API Version
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

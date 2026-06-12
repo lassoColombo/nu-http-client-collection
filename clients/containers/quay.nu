@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://quay.io"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -430,7 +429,7 @@ export def "discovery discovery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --internal: string@bool-completer # Whether to include internal APIs.
+  --internal: oneof<nothing, bool> # Whether to include internal APIs.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -767,7 +766,7 @@ export def "repository-manifest get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-modelcard: string@bool-completer # If specified, include modelcard markdown from image, if any
+  --include-modelcard: oneof<nothing, bool> # If specified, include modelcard markdown from image, if any
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -906,6 +905,35 @@ export def "organization createOrganization" [
   do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
 }
 
+# Change the details for the specified organization.
+#
+# PUT /api/v1/organization/{orgname}
+# operationId: changeOrganizationDetails
+export def "organization changeOrganizationDetails" [
+  orgname: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --email: string # Organization contact email
+  --invoice-email: oneof<nothing, bool> # Whether the organization desires to receive emails for invoices
+  --invoice-email-address: string # The email address at which to receive invoices (nullable)
+  --tag-expiration-s: int # The number of seconds for tag expiration
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organization/($orgname)")
+  let body = {email: $email, invoice_email: $invoice_email, invoice_email_address: $invoice_email_address, tag_expiration_s: $tag_expiration_s} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+}
+
 # Deletes the specified organization.
 #
 # DELETE /api/v1/organization/{orgname}
@@ -926,35 +954,6 @@ export def "organization delete" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# Change the details for the specified organization.
-#
-# PUT /api/v1/organization/{orgname}
-# operationId: changeOrganizationDetails
-export def "organization changeOrganizationDetails" [
-  orgname: string
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-  --email: string # Organization contact email
-  --invoice-email: string@bool-completer # Whether the organization desires to receive emails for invoices
-  --invoice-email-address: string # The email address at which to receive invoices (nullable)
-  --tag-expiration-s: int # The number of seconds for tag expiration
-]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/organization/($orgname)")
-  let body = {email: $email, invoice_email: $invoice_email, invoice_email_address: $invoice_email_address, tag_expiration_s: $tag_expiration_s} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
 }
 
 # Get the details for the specified organization.
@@ -1143,29 +1142,6 @@ export def "organization-applications list" [
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
-# Deletes the application under this organization.
-#
-# DELETE /api/v1/organization/{orgname}/applications/{client_id}
-# operationId: deleteOrganizationApplication
-export def "organization-applications delete" [
-  client_id: string
-  orgname: string
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/organization/($orgname)/applications/($client_id)")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
 # Updates an application under this organization.
 #
 # PUT /api/v1/organization/{orgname}/applications/{client_id}
@@ -1195,6 +1171,29 @@ export def "organization-applications updateOrganizationApplication" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+}
+
+# Deletes the application under this organization.
+#
+# DELETE /api/v1/organization/{orgname}/applications/{client_id}
+# operationId: deleteOrganizationApplication
+export def "organization-applications delete" [
+  client_id: string
+  orgname: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organization/($orgname)/applications/($client_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
 # Retrieves the application with the specified client_id under the specified organization.
@@ -1287,29 +1286,6 @@ export def "repository-permissions-user-transitive get" [
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
-# Delete the permission for the user.
-#
-# DELETE /api/v1/repository/{repository}/permissions/user/{username}
-# operationId: deleteUserPermissions
-export def "repository-permissions-user delete" [
-  username: string
-  repository: string
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/repository/($repository)/permissions/user/($username)")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
 # Update the perimssions for an existing repository.
 #
 # PUT /api/v1/repository/{repository}/permissions/user/{username}
@@ -1337,6 +1313,29 @@ export def "repository-permissions-user changeUserPermissions" [
   do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
 }
 
+# Delete the permission for the user.
+#
+# DELETE /api/v1/repository/{repository}/permissions/user/{username}
+# operationId: deleteUserPermissions
+export def "repository-permissions-user delete" [
+  username: string
+  repository: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/repository/($repository)/permissions/user/($username)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
 # Get the permission for the specified user.
 #
 # GET /api/v1/repository/{repository}/permissions/user/{username}
@@ -1358,29 +1357,6 @@ export def "repository-permissions-user get" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# Delete the permission for the specified team.
-#
-# DELETE /api/v1/repository/{repository}/permissions/team/{teamname}
-# operationId: deleteTeamPermissions
-export def "repository-permissions-team delete" [
-  teamname: string
-  repository: string
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/repository/($repository)/permissions/team/($teamname)")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
 # Update the existing team permission.
@@ -1408,6 +1384,29 @@ export def "repository-permissions-team changeTeamPermissions" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+}
+
+# Delete the permission for the specified team.
+#
+# DELETE /api/v1/repository/{repository}/permissions/team/{teamname}
+# operationId: deleteTeamPermissions
+export def "repository-permissions-team delete" [
+  teamname: string
+  repository: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/repository/($repository)/permissions/team/($teamname)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
 # Fetch the permission for the specified team.
@@ -1578,10 +1577,10 @@ export def "repository listRepos" [
   --allow-errors(-e) # Return full response without error handling
   --next-page: string # The page token for the next page
   --repo-kind: string # The kind of repositories to return
-  --popularity: string@bool-completer # Whether to include the repository's popularity metric.
-  --last-modified: string@bool-completer # Whether to include when the repository was last modified.
-  --public: string@bool-completer # Adds any repositories visible to the user by virtue of being public
-  --starred: string@bool-completer # Filters the repositories returned to those starred by the user
+  --popularity: oneof<nothing, bool> # Whether to include the repository's popularity metric.
+  --last-modified: oneof<nothing, bool> # Whether to include when the repository was last modified.
+  --public: oneof<nothing, bool> # Adds any repositories visible to the user by virtue of being public
+  --starred: oneof<nothing, bool> # Filters the repositories returned to those starred by the user
   --namespace: string # Filters the repositories returned to this namespace
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1591,28 +1590,6 @@ export def "repository listRepos" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# Delete a repository.
-#
-# DELETE /api/v1/repository/{repository}
-# operationId: deleteRepository
-export def "repository delete" [
-  repository: string
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/repository/($repository)")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
 # Update the description in the specified repository.
@@ -1641,6 +1618,28 @@ export def "repository updateRepo" [
   do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
 }
 
+# Delete a repository.
+#
+# DELETE /api/v1/repository/{repository}
+# operationId: deleteRepository
+export def "repository delete" [
+  repository: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/repository/($repository)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
 # Fetch the specified repository.
 #
 # GET /api/v1/repository/{repository}
@@ -1654,8 +1653,8 @@ export def "repository get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeTags: string@bool-completer # Whether to include repository tags
-  --includeStats: string@bool-completer # Whether to include action statistics
+  --includeTags: oneof<nothing, bool> # Whether to include repository tags
+  --includeStats: oneof<nothing, bool> # Whether to include action statistics
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1883,29 +1882,6 @@ export def "repository-tokens listRepoTokens" [
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
-# Delete the repository token.
-#
-# DELETE /api/v1/repository/{repository}/tokens/{code}
-# operationId: deleteToken
-export def "repository-tokens delete" [
-  code: string
-  repository: string
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/repository/($repository)/tokens/($code)")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
 # Update the permissions for the specified repository token.
 #
 # PUT /api/v1/repository/{repository}/tokens/{code}
@@ -1931,6 +1907,29 @@ export def "repository-tokens changeToken" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+}
+
+# Delete the repository token.
+#
+# DELETE /api/v1/repository/{repository}/tokens/{code}
+# operationId: deleteToken
+export def "repository-tokens delete" [
+  code: string
+  repository: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/repository/($repository)/tokens/($code)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
 # Fetch the specified repository token information.
@@ -1969,8 +1968,8 @@ export def "user-robots list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --limit: int # If specified, the number of robots to return.
-  --qp-token: string@bool-completer # If false, the robot's token is not returned.
-  --permissions: string@bool-completer # Whether to include repositories and teams in which the robots have permission.
+  --qp-token: oneof<nothing, bool> # If false, the robot's token is not returned.
+  --permissions: oneof<nothing, bool> # Whether to include repositories and teams in which the robots have permission.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1979,28 +1978,6 @@ export def "user-robots list" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# Delete an existing robot.
-#
-# DELETE /api/v1/user/robots/{robot_shortname}
-# operationId: deleteUserRobot
-export def "user-robots delete" [
-  robot_shortname: string
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/user/robots/($robot_shortname)")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
 # Create a new user robot with the specified name.
@@ -2028,6 +2005,28 @@ export def "user-robots createUserRobot" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+}
+
+# Delete an existing robot.
+#
+# DELETE /api/v1/user/robots/{robot_shortname}
+# operationId: deleteUserRobot
+export def "user-robots delete" [
+  robot_shortname: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/user/robots/($robot_shortname)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
 # Returns the user's robot with the specified name.
@@ -2066,8 +2065,8 @@ export def "organization-robots list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --limit: int # If specified, the number of robots to return.
-  --qp-token: string@bool-completer # If false, the robot's token is not returned.
-  --permissions: string@bool-completer # Whether to include repostories and teams in which the robots have permission.
+  --qp-token: oneof<nothing, bool> # If false, the robot's token is not returned.
+  --permissions: oneof<nothing, bool> # Whether to include repostories and teams in which the robots have permission.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2076,29 +2075,6 @@ export def "organization-robots list" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# Delete an existing organization robot.
-#
-# DELETE /api/v1/organization/{orgname}/robots/{robot_shortname}
-# operationId: deleteOrgRobot
-export def "organization-robots delete" [
-  robot_shortname: string
-  orgname: string
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/organization/($orgname)/robots/($robot_shortname)")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
 # Create a new robot in the organization.
@@ -2127,6 +2103,29 @@ export def "organization-robots createOrgRobot" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+}
+
+# Delete an existing organization robot.
+#
+# DELETE /api/v1/organization/{orgname}/robots/{robot_shortname}
+# operationId: deleteOrgRobot
+export def "organization-robots delete" [
+  robot_shortname: string
+  orgname: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organization/($orgname)/robots/($robot_shortname)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
 # Returns the organization's robot with the specified name.
@@ -2396,8 +2395,8 @@ export def "entities get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeOrgs: string@bool-completer # Whether to include orgs names.
-  --includeTeams: string@bool-completer # Whether to include team names.
+  --includeOrgs: oneof<nothing, bool> # Whether to include orgs names.
+  --includeTeams: oneof<nothing, bool> # Whether to include team names.
   --namespace: string # Namespace to use when querying for org entities.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2444,7 +2443,7 @@ export def "find-repositories conductRepoSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeUsage: string@bool-completer # Whether to include usage metadata
+  --includeUsage: oneof<nothing, bool> # Whether to include usage metadata
   --page: int # The page.
   --qp-query: string # The search query.
 ]: nothing -> any {
@@ -2470,7 +2469,7 @@ export def "repository-manifest-security get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --vulnerabilities: string@bool-completer # Include vulnerabilities informations
+  --vulnerabilities: oneof<nothing, bool> # Include vulnerabilities informations
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2493,7 +2492,7 @@ export def "repository-tag listRepoTags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --onlyActiveTags: string@bool-completer # Filter to only active tags.
+  --onlyActiveTags: oneof<nothing, bool> # Filter to only active tags.
   --page: int # Page index for the results. Default 1.
   --limit: int # Limit to the number of results to return per page. Max 100.
   --filter-tag-name: string # Syntax: <op>:<name> Filters the tag names based on the operation.<op> can be 'like' or 'eq'.
@@ -2524,7 +2523,7 @@ export def "repository-tag changeTag" [
   --allow-errors(-e) # Return full response without error handling
   --manifest-digest: string # (If specified) The manifest digest to which the tag should point (nullable)
   --expiration: float # (If specified) The expiration for the image (nullable)
-  --immutable: string@bool-completer # (If specified) Whether the tag should be immutable. Write permission required to set, admin permission required to unset.
+  --immutable: oneof<nothing, bool> # (If specified) Whether the tag should be immutable. Write permission required to set, admin permission required to unset.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2652,7 +2651,7 @@ export def "organization-team-members get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includePending: string@bool-completer # Whether to include pending members
+  --includePending: oneof<nothing, bool> # Whether to include pending members
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2716,8 +2715,8 @@ export def "organization-team-members delete" [
 # PUT /api/v1/organization/{orgname}/team/{teamname}/invite/{email}
 # operationId: inviteTeamMemberEmail
 export def "organization-team-invite inviteTeamMemberEmail" [
-  orgname: string
   email: string
+  orgname: string
   teamname: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2740,8 +2739,8 @@ export def "organization-team-invite inviteTeamMemberEmail" [
 # DELETE /api/v1/organization/{orgname}/team/{teamname}/invite/{email}
 # operationId: deleteTeamMemberEmailInvite
 export def "organization-team-invite delete" [
-  orgname: string
   email: string
+  orgname: string
   teamname: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2804,6 +2803,33 @@ export def "repository-trigger listBuildTriggers" [
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
+# Updates the specified build trigger.
+#
+# PUT /api/v1/repository/{repository}/trigger/{trigger_uuid}
+# operationId: updateBuildTrigger
+export def "repository-trigger updateBuildTrigger" [
+  trigger_uuid: string
+  repository: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --enabled: oneof<nothing, bool> # Whether the build trigger is enabled
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/repository/($repository)/trigger/($trigger_uuid)")
+  let body = {enabled: $enabled} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+}
+
 # Delete the specified build trigger.
 #
 # DELETE /api/v1/repository/{repository}/trigger/{trigger_uuid}
@@ -2825,33 +2851,6 @@ export def "repository-trigger delete" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
-# Updates the specified build trigger.
-#
-# PUT /api/v1/repository/{repository}/trigger/{trigger_uuid}
-# operationId: updateBuildTrigger
-export def "repository-trigger updateBuildTrigger" [
-  trigger_uuid: string
-  repository: string
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether the build trigger is enabled
-]: any -> any {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/repository/($repository)/trigger/($trigger_uuid)")
-  let body = {enabled: $enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
 }
 
 # Get information for the specified build trigger.

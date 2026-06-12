@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://controller.us-east1-gcp.pinecone.io" "https://controller.us-west1-gcp.pinecone.io" "https://controller.eu-west1-gcp.pinecone.io" "https://controller.us-east1-aws.pinecone.io" "https://example-abcd1234.svc.us-east1-gcp.pincone.io" "https://{index_name}-{project_id}.svc.{environment}.pincone.io"] }
 def auth-scheme-completer [] { ["api-key"] }
 
@@ -348,8 +347,8 @@ export def "query Query" [
   --allow-errors(-e) # Return full response without error handling
   --filter: record # If this parameter is present, the operation only affects vectors that satisfy the filter. See https://www.pinecone.io/docs/metadata-filtering/. (e.g. {hello: [alpha, bravo]})
   --id: string # The unique ID of a vector (format: VectorId, e.g. vector-0)
-  --includeMetadata: string@bool-completer # default: false
-  --includeValues: string@bool-completer # default: false
+  --includeMetadata: oneof<nothing, bool> # default: false
+  --includeValues: oneof<nothing, bool> # default: false
   --namespace: string # An index namespace name (format: NamespaceName, e.g. namespace-0)
   --sparseVector: record # Vector sparse data. Represented as a list of indices and a list of corresponded values, which must be the same length. — shape: {indices: list, values: list}
   topK: int # The number of results to return for each query. (format: int64, default: 100)
@@ -378,7 +377,7 @@ export def "vectors-delete Delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deleteAll: string@bool-completer # default: false
+  --deleteAll: oneof<nothing, bool> # default: false
   --filter: record # If this parameter is present, the operation only affects vectors that satisfy the filter. See https://www.pinecone.io/docs/metadata-filtering/. (e.g. {hello: [alpha, bravo]})
   --ids: list
   --namespace: string # An index namespace name (format: NamespaceName, e.g. namespace-0)

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost/api/v2"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -153,7 +152,7 @@ export def "repos list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # whether the repository has received an upload
+  --active: oneof<nothing, bool> # whether the repository has received an upload
   --names: list # list of repository names
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
@@ -1001,8 +1000,8 @@ export def "users list-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --activated: string@bool-completer
-  --is-admin: string@bool-completer
+  --activated: oneof<nothing, bool>
+  --is-admin: oneof<nothing, bool>
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --search: string # A search term.
@@ -1055,7 +1054,7 @@ export def "users patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --activated: string@bool-completer
+  --activated: oneof<nothing, bool>
 ]: any -> record<service: string, username: string, name: string, activated: bool, is_admin: bool, email: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

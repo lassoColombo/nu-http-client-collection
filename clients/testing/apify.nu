@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.apify.com"] }
 def auth-scheme-completer [] { ["bearer" "query-token"] }
 
@@ -113,10 +112,10 @@ export def "actors list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --my: string@bool-completer # If `true` or `1` then the returned list only contains Actors owned by the user. The default value is `false`.  (e.g. true)
+  --my: oneof<nothing, bool> # If `true` or `1` then the returned list only contains Actors owned by the user. The default value is `false`.  (e.g. true)
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
-  --desc: string@bool-completer # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
+  --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
   --sortBy: string@sortBy-completer # Field to sort the records by. The default is `createdAt`. You can also use `stats.lastRunStartedAt` to sort by the most recently ran Actors.  (e.g. createdAt)
 ]: nothing -> record<data: record<total: int, offset: int, limit: int, desc: bool, count: int, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -146,17 +145,17 @@ export def "actors post" [
   --name: string # nullable
   --description: string # nullable
   --title: string # nullable
-  --isPublic: string@bool-completer # nullable
+  --isPublic: oneof<nothing, bool> # nullable
   --seoTitle: string # nullable
   --seoDescription: string # nullable
-  --restartOnError: string@bool-completer # DEPRECATED
+  --restartOnError: oneof<nothing, bool> # DEPRECATED
   --versions: list # nullable — item shape: {versionNumber: string, sourceType: any, envVars?: list, applyEnvVarsToBuild?: bool, buildTag?: string, sourceFiles?: list, gitRepoUrl?: string, tarballUrl?: string, gitHubGistUrl?: string}
   --pricingInfos: list
   --categories: list # nullable
   --defaultRunOptions: record # shape: {build?: string, timeoutSecs?: int, memoryMbytes?: int, restartOnError?: bool, maxItems?: int, forcePermissionLevel?: any}
   --actorStandby: any
   --exampleRunInput: any
-  --isDeprecated: string@bool-completer # nullable
+  --isDeprecated: oneof<nothing, bool> # nullable
 ]: any -> record<data: record<id: string, userId: string, name: string, username: string, description: string, restartOnError: bool, isPublic: bool, actorPermissionLevel: string, createdAt: string, modifiedAt: string, stats: record<totalBuilds: int, totalRuns: int, totalUsers: int, totalUsers7Days: int, totalUsers30Days: int, totalUsers90Days: int, totalMetamorphs: int, lastRunStartedAt: string, actorReviewCount: int, actorReviewRating: float, bookmarkCount: int, publicActorRunStats30Days: record>, versions: list<record>, pricingInfos: list<any>, defaultRunOptions: record<build: string, timeoutSecs: int, memoryMbytes: int, restartOnError: bool, maxItems: int, forcePermissionLevel: any>, exampleRunInput: any, isDeprecated: bool, deploymentKey: string, title: string, taggedBuilds: any, actorStandby: any, readmeSummary: string, seoTitle: string, seoDescription: string, pictureUrl: string, standbyUrl: string, notice: string, categories: list<string>, isCritical: bool, isGeneric: bool, isSourceCodeHidden: bool, hasNoDataset: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -208,12 +207,12 @@ export def "actors put" [
   --allow-errors(-e) # Return full response without error handling
   --name: string
   --description: string # nullable
-  --isPublic: string@bool-completer
+  --isPublic: oneof<nothing, bool>
   --actorPermissionLevel: any
   --seoTitle: string # nullable
   --seoDescription: string # nullable
   --title: string # nullable
-  --restartOnError: string@bool-completer # DEPRECATED
+  --restartOnError: oneof<nothing, bool> # DEPRECATED
   --versions: list # item shape: {versionNumber?: string, sourceType?: any, envVars?: list, applyEnvVarsToBuild?: bool, buildTag?: string, sourceFiles?: list, gitRepoUrl?: string, tarballUrl?: string, gitHubGistUrl?: string}
   --pricingInfos: list
   --categories: list # nullable
@@ -221,7 +220,7 @@ export def "actors put" [
   --taggedBuilds: record # An object to modify tags on the Actor's builds. The key is the tag name (e.g., _latest_), and the value is either an object with a `buildId` or `null`.  This operation is a patch; any existing tags that you omit from this object will be preserved.  - **To create or reassign a tag**, provide the tag name with a `buildId`. e.g., to assign the _latest_ tag:    &nbsp;    ```json   {     "latest": {       "buildId": "z2EryhbfhgSyqj6Hn"     }   }   ```  - **To remove a tag**, provide the tag name with a `null` value. e.g., to remove the _beta_ tag:    &nbsp;    ```json   {     "beta": null   }   ```  - **To perform multiple operations**, combine them. The following reassigns _latest_ and removes _beta_, while preserving any other existing tags.    &nbsp;    ```json   {     "latest": {       "buildId": "z2EryhbfhgSyqj6Hn"     },     "beta": null   }   ```  (nullable, e.g. {latest: {buildId: z2EryhbfhgSyqj6Hn}, beta: })
   --actorStandby: any
   --exampleRunInput: any
-  --isDeprecated: string@bool-completer # nullable
+  --isDeprecated: oneof<nothing, bool> # nullable
 ]: any -> record<data: record<id: string, userId: string, name: string, username: string, description: string, restartOnError: bool, isPublic: bool, actorPermissionLevel: string, createdAt: string, modifiedAt: string, stats: record<totalBuilds: int, totalRuns: int, totalUsers: int, totalUsers7Days: int, totalUsers30Days: int, totalUsers90Days: int, totalMetamorphs: int, lastRunStartedAt: string, actorReviewCount: int, actorReviewRating: float, bookmarkCount: int, publicActorRunStats30Days: record>, versions: list<record>, pricingInfos: list<any>, defaultRunOptions: record<build: string, timeoutSecs: int, memoryMbytes: int, restartOnError: bool, maxItems: int, forcePermissionLevel: any>, exampleRunInput: any, isDeprecated: bool, deploymentKey: string, title: string, taggedBuilds: any, actorStandby: any, readmeSummary: string, seoTitle: string, seoDescription: string, pictureUrl: string, standbyUrl: string, notice: string, categories: list<string>, isCritical: bool, isGeneric: bool, isSourceCodeHidden: bool, hasNoDataset: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -295,7 +294,7 @@ export def "actors-versions post-by-actorId" [
   --versionNumber: string # nullable
   --sourceType: any
   --envVars: list # nullable — item shape: {name: string, value: string, isSecret?: bool}
-  --applyEnvVarsToBuild: string@bool-completer # nullable
+  --applyEnvVarsToBuild: oneof<nothing, bool> # nullable
   --buildTag: string # nullable
   --sourceFiles: list
   --gitRepoUrl: string # URL of the Git repository when sourceType is GIT_REPO. (nullable)
@@ -354,7 +353,7 @@ export def "actors-versions put" [
   --body-versionNumber: string # nullable
   --sourceType: any
   --envVars: list # nullable — item shape: {name: string, value: string, isSecret?: bool}
-  --applyEnvVarsToBuild: string@bool-completer # nullable
+  --applyEnvVarsToBuild: oneof<nothing, bool> # nullable
   --buildTag: string # nullable
   --sourceFiles: list
   --gitRepoUrl: string # URL of the Git repository when sourceType is GIT_REPO. (nullable)
@@ -390,7 +389,7 @@ export def "actors-versions post-by-actorId-versionNumber" [
   --body-versionNumber: string # nullable
   --sourceType: any
   --envVars: list # nullable — item shape: {name: string, value: string, isSecret?: bool}
-  --applyEnvVarsToBuild: string@bool-completer # nullable
+  --applyEnvVarsToBuild: oneof<nothing, bool> # nullable
   --buildTag: string # nullable
   --sourceFiles: list
   --gitRepoUrl: string # URL of the Git repository when sourceType is GIT_REPO. (nullable)
@@ -470,7 +469,7 @@ export def "actors-versions-env-vars post-by-actorId-versionNumber" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   value: string # The environment variable value. This field is absent in responses when `isSecret` is `true`, as secret values are never returned by the API.
-  --isSecret: string@bool-completer # nullable
+  --isSecret: oneof<nothing, bool> # nullable
 ]: any -> record<data: record<name: string, value: string, isSecret: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -524,7 +523,7 @@ export def "actors-versions-env-vars put" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   value: string # The environment variable value. This field is absent in responses when `isSecret` is `true`, as secret values are never returned by the API.
-  --isSecret: string@bool-completer # nullable
+  --isSecret: oneof<nothing, bool> # nullable
 ]: any -> record<data: record<name: string, value: string, isSecret: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -554,7 +553,7 @@ export def "actors-versions-env-vars post-by-actorId-versionNumber-envVarName" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   value: string # The environment variable value. This field is absent in responses when `isSecret` is `true`, as secret values are never returned by the API.
-  --isSecret: string@bool-completer # nullable
+  --isSecret: oneof<nothing, bool> # nullable
 ]: any -> record<data: record<name: string, value: string, isSecret: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -606,7 +605,7 @@ export def "actors-webhooks get" [
   --allow-errors(-e) # Return full response without error handling
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
-  --desc: string@bool-completer # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
+  --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
 ]: nothing -> record<data: record<total: int, offset: int, limit: int, desc: bool, count: int, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -632,7 +631,7 @@ export def "actors-builds list" [
   --allow-errors(-e) # Return full response without error handling
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
-  --desc: string@bool-completer # If `true` or `1` then the objects are sorted by the `startedAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
+  --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `startedAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
 ]: nothing -> record<data: record<total: int, offset: int, limit: int, desc: bool, count: int, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -657,8 +656,8 @@ export def "actors-builds post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --version: string # Actor version number to be built. (e.g. 0.0)
-  --useCache: string@bool-completer # If `true` or `1`, the system will use a cache to speed up the build process. By default, cache is not used.  (e.g. true)
-  --betaPackages: string@bool-completer # If `true` or `1` then the Actor is built with beta versions of Apify NPM packages. By default, the build uses `latest` packages.  (e.g. true)
+  --useCache: oneof<nothing, bool> # If `true` or `1`, the system will use a cache to speed up the build process. By default, cache is not used.  (e.g. true)
+  --betaPackages: oneof<nothing, bool> # If `true` or `1` then the Actor is built with beta versions of Apify NPM packages. By default, the build uses `latest` packages.  (e.g. true)
   --tag: string # Tag to be applied to the build on success. By default, the tag is taken from Actor version's `buildTag` property.  (e.g. latest)
   --waitForFinish: float # The maximum number of seconds the server waits for the build to finish. By default it is `0`, the maximum value is `60`. <!-- MAX_ACTOR_JOB_ASYNC_WAIT_SECS --> If the build finishes in time then the returned build object will have a terminal status (e.g. `SUCCEEDED`), otherwise it will have a transitional status (e.g. `RUNNING`).  (format: double, e.g. 60)
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, startedAt: string, finishedAt: string, status: string, meta: record<origin: string, clientIp: string, userAgent: string>, stats: any, options: any, usage: any, usageTotalUsd: float, usageUsd: any, inputSchema: string, readme: string, buildNumber: string, actVersion: record<sourceType: string, buildTag: string, versionNumber: string, gitRepoUrl: string, sourceFiles: list>, actorDefinition: any>> {
@@ -785,7 +784,7 @@ export def "actors-runs list" [
   --allow-errors(-e) # Return full response without error handling
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
-  --desc: string@bool-completer # If `true` or `1` then the objects are sorted by the `startedAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
+  --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `startedAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
   --status: list # Single status or comma-separated list of statuses, see ([available statuses](https://docs.apify.com/platform/actors/running/runs-and-builds#lifecycle)). Used to filter runs by the specified statuses only.  (e.g. [SUCCEEDED])
   --startedAfter: string # Filter runs that started after the specified date and time (inclusive). The value must be a valid ISO 8601 datetime string (UTC).  (format: date-time, e.g. 2025-09-01T00:00:00.000Z)
   --startedBefore: string # Filter runs that started before the specified date and time (inclusive). The value must be a valid ISO 8601 datetime string (UTC).  (format: date-time, e.g. 2025-09-17T23:59:59.000Z)
@@ -816,7 +815,7 @@ export def "actors-runs post" [
   --memory: float # Memory limit for the run, in megabytes. The amount of memory can be set to a power of 2 with a minimum of 128. By default, the run uses the memory limit from its configuration.  (format: double, e.g. 256)
   --maxItems: float # Specifies the maximum number of dataset items that will be charged for pay-per-result Actors. This does NOT guarantee that the Actor will return only this many items. It only ensures you won't be charged for more than this number of items. Only works for pay-per-result Actors. Value can be accessed in the actor run using `ACTOR_MAX_PAID_DATASET_ITEMS` environment variable.  (format: double, e.g. 1000)
   --maxTotalChargeUsd: float # Specifies the maximum cost of the run. This parameter is useful for pay-per-event Actors, as it allows you to limit the amount charged to your subscription. You can access the maximum cost in your Actor by using the `ACTOR_MAX_TOTAL_CHARGE_USD` environment variable.  (format: double, e.g. 5)
-  --restartOnError: string@bool-completer # Determines whether the run will be restarted if it fails.  (e.g. false)
+  --restartOnError: oneof<nothing, bool> # Determines whether the run will be restarted if it fails.  (e.g. false)
   --build: string # Specifies the Actor build to run. It can be either a build tag or build number. By default, the run uses the build from its configuration (typically `latest`).  (e.g. 0.1.234)
   --waitForFinish: float # The maximum number of seconds the server waits for the run to finish. By default it is `0`, the maximum value is `60`. <!-- MAX_ACTOR_JOB_ASYNC_WAIT_SECS --> If the run finishes in time then the returned run object will have a terminal status (e.g. `SUCCEEDED`), otherwise it will have a transitional status (e.g. `RUNNING`).  (format: double, e.g. 60)
   --webhooks: string # Specifies optional webhooks associated with the Actor run, which can be used to receive a notification e.g. when the Actor finished or failed. The value is a Base64-encoded JSON array whose items follow the WebhookRepresentation schema. For more information, see [Webhooks documentation](https://docs.apify.com/platform/integrations/webhooks).  (e.g. dGhpcyBpcyBqdXN0IGV4YW1wbGUK...)
@@ -852,7 +851,7 @@ export def "actors-run-sync post" [
   --memory: float # Memory limit for the run, in megabytes. The amount of memory can be set to a power of 2 with a minimum of 128. By default, the run uses the memory limit from its configuration.  (format: double, e.g. 256)
   --maxItems: float # Specifies the maximum number of dataset items that will be charged for pay-per-result Actors. This does NOT guarantee that the Actor will return only this many items. It only ensures you won't be charged for more than this number of items. Only works for pay-per-result Actors. Value can be accessed in the actor run using `ACTOR_MAX_PAID_DATASET_ITEMS` environment variable.  (format: double, e.g. 1000)
   --maxTotalChargeUsd: float # Specifies the maximum cost of the run. This parameter is useful for pay-per-event Actors, as it allows you to limit the amount charged to your subscription. You can access the maximum cost in your Actor by using the `ACTOR_MAX_TOTAL_CHARGE_USD` environment variable.  (format: double, e.g. 5)
-  --restartOnError: string@bool-completer # Determines whether the run will be restarted if it fails.  (e.g. false)
+  --restartOnError: oneof<nothing, bool> # Determines whether the run will be restarted if it fails.  (e.g. false)
   --build: string # Specifies the Actor build to run. It can be either a build tag or build number. By default, the run uses the build from its configuration (typically `latest`).  (e.g. 0.1.234)
   --webhooks: string # Specifies optional webhooks associated with the Actor run, which can be used to receive a notification e.g. when the Actor finished or failed. The value is a Base64-encoded JSON array whose items follow the WebhookRepresentation schema. For more information, see [Webhooks documentation](https://docs.apify.com/platform/integrations/webhooks).  (e.g. dGhpcyBpcyBqdXN0IGV4YW1wbGUK...)
   --body: record
@@ -886,7 +885,7 @@ export def "actors-run-sync get" [
   --memory: float # Memory limit for the run, in megabytes. The amount of memory can be set to a power of 2 with a minimum of 128. By default, the run uses the memory limit from its configuration.  (format: double, e.g. 256)
   --maxItems: float # Specifies the maximum number of dataset items that will be charged for pay-per-result Actors. This does NOT guarantee that the Actor will return only this many items. It only ensures you won't be charged for more than this number of items. Only works for pay-per-result Actors. Value can be accessed in the actor run using `ACTOR_MAX_PAID_DATASET_ITEMS` environment variable.  (format: double, e.g. 1000)
   --maxTotalChargeUsd: float # Specifies the maximum cost of the run. This parameter is useful for pay-per-event Actors, as it allows you to limit the amount charged to your subscription. You can access the maximum cost in your Actor by using the `ACTOR_MAX_TOTAL_CHARGE_USD` environment variable.  (format: double, e.g. 5)
-  --restartOnError: string@bool-completer # Determines whether the run will be restarted if it fails.  (e.g. false)
+  --restartOnError: oneof<nothing, bool> # Determines whether the run will be restarted if it fails.  (e.g. false)
   --build: string # Specifies the Actor build to run. It can be either a build tag or build number. By default, the run uses the build from its configuration (typically `latest`).  (e.g. 0.1.234)
   --webhooks: string # Specifies optional webhooks associated with the Actor run, which can be used to receive a notification e.g. when the Actor finished or failed. The value is a Base64-encoded JSON array whose items follow the WebhookRepresentation schema. For more information, see [Webhooks documentation](https://docs.apify.com/platform/integrations/webhooks).  (e.g. dGhpcyBpcyBqdXN0IGV4YW1wbGUK...)
 ]: nothing -> record {
@@ -916,11 +915,11 @@ export def "actors-run-sync-get-dataset-items post" [
   --memory: float # Memory limit for the run, in megabytes. The amount of memory can be set to a power of 2 with a minimum of 128. By default, the run uses the memory limit from its configuration.  (format: double, e.g. 256)
   --maxItems: float # Specifies the maximum number of dataset items that will be charged for pay-per-result Actors. This does NOT guarantee that the Actor will return only this many items. It only ensures you won't be charged for more than this number of items. Only works for pay-per-result Actors. Value can be accessed in the actor run using `ACTOR_MAX_PAID_DATASET_ITEMS` environment variable.  (format: double, e.g. 1000)
   --maxTotalChargeUsd: float # Specifies the maximum cost of the run. This parameter is useful for pay-per-event Actors, as it allows you to limit the amount charged to your subscription. You can access the maximum cost in your Actor by using the `ACTOR_MAX_TOTAL_CHARGE_USD` environment variable.  (format: double, e.g. 5)
-  --restartOnError: string@bool-completer # Determines whether the run will be restarted if it fails.  (e.g. false)
+  --restartOnError: oneof<nothing, bool> # Determines whether the run will be restarted if it fails.  (e.g. false)
   --build: string # Specifies the Actor build to run. It can be either a build tag or build number. By default, the run uses the build from its configuration (typically `latest`).  (e.g. 0.1.234)
   --webhooks: string # Specifies optional webhooks associated with the Actor run, which can be used to receive a notification e.g. when the Actor finished or failed. The value is a Base64-encoded JSON array whose items follow the WebhookRepresentation schema. For more information, see [Webhooks documentation](https://docs.apify.com/platform/integrations/webhooks).  (e.g. dGhpcyBpcyBqdXN0IGV4YW1wbGUK...)
   --format: string # Format of the results, possible values are: `json`, `jsonl`, `csv`, `html`, `xlsx`, `xml` and `rss`. The default value is `json`.  (e.g. json)
-  --clean: string@bool-completer # If `true` or `1` then the API endpoint returns only non-empty items and skips hidden fields (i.e. fields starting with the # character). The `clean` parameter is just a shortcut for `skipHidden=true` and `skipEmpty=true` parameters. Note that since some objects might be skipped from the output, that the result might contain less items than the `limit` value.  (e.g. false)
+  --clean: oneof<nothing, bool> # If `true` or `1` then the API endpoint returns only non-empty items and skips hidden fields (i.e. fields starting with the # character). The `clean` parameter is just a shortcut for `skipHidden=true` and `skipEmpty=true` parameters. Note that since some objects might be skipped from the output, that the result might contain less items than the `limit` value.  (e.g. false)
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. By default there is no limit. (format: double)
   --qp-fields: string # A comma-separated list of fields which should be picked from the items, only these fields will remain in the resulting record objects. Note that the fields in the outputted items are sorted the same way as they are specified in the `fields` query parameter. You can use this feature to effectively fix the output format.  (e.g. myValue,myOtherValue)
@@ -928,18 +927,18 @@ export def "actors-run-sync-get-dataset-items post" [
   --omit: string # A comma-separated list of fields which should be omitted from the items. (e.g. myValue,myOtherValue)
   --unwind: string # A comma-separated list of fields which should be unwound, in order which they should be processed. Each field should be either an array or an object. If the field is an array then every element of the array will become a separate record and merged with parent object. If the unwound field is an object then it is merged with the parent object. If the unwound field is missing or its value is neither an array nor an object and therefore cannot be merged with a parent object then the item gets preserved as it is. Note that the unwound items ignore the `desc` parameter.  (e.g. myValue,myOtherValue)
   --flatten: string # A comma-separated list of fields which should transform nested objects into flat structures.  For example, with `flatten="foo"` the object `{"foo":{"bar": "hello"}}` is turned into `{"foo.bar": "hello"}`.  The original object with properties is replaced with the flattened object.  (e.g. myValue)
-  --desc: string@bool-completer # By default, results are returned in the same order as they were stored. To reverse the order, set this parameter to `true` or `1`.  (e.g. true)
-  --attachment: string@bool-completer # If `true` or `1` then the response will define the `Content-Disposition: attachment` header, forcing a web browser to download the file rather than to display it. By default this header is not present.  (e.g. true)
+  --desc: oneof<nothing, bool> # By default, results are returned in the same order as they were stored. To reverse the order, set this parameter to `true` or `1`.  (e.g. true)
+  --attachment: oneof<nothing, bool> # If `true` or `1` then the response will define the `Content-Disposition: attachment` header, forcing a web browser to download the file rather than to display it. By default this header is not present.  (e.g. true)
   --delimiter: string # A delimiter character for CSV files, only used if `format=csv`. You might need to URL-encode the character (e.g. use `%09` for tab or `%3B` for semicolon). The default delimiter is a simple comma (`,`).  (e.g. ;)
-  --bom: string@bool-completer # All text responses are encoded in UTF-8 encoding. By default, the `format=csv` files are prefixed with the UTF-8 Byte Order Mark (BOM), while `json`, `jsonl`, `xml`, `html` and `rss` files are not.  If you want to override this default behavior, specify `bom=1` query parameter to include the BOM or `bom=0` to skip it.  (e.g. false)
+  --bom: oneof<nothing, bool> # All text responses are encoded in UTF-8 encoding. By default, the `format=csv` files are prefixed with the UTF-8 Byte Order Mark (BOM), while `json`, `jsonl`, `xml`, `html` and `rss` files are not.  If you want to override this default behavior, specify `bom=1` query parameter to include the BOM or `bom=0` to skip it.  (e.g. false)
   --xmlRoot: string # Overrides default root element name of `xml` output. By default the root element is `items`.  (e.g. items)
   --xmlRow: string # Overrides default element name that wraps each page or page function result object in `xml` output. By default the element name is `item`.  (e.g. item)
-  --skipHeaderRow: string@bool-completer # If `true` or `1` then header row in the `csv` format is skipped. (e.g. true)
-  --skipHidden: string@bool-completer # If `true` or `1` then hidden fields are skipped from the output, i.e. fields starting with the `#` character.  (e.g. false)
-  --skipEmpty: string@bool-completer # If `true` or `1` then empty items are skipped from the output.  Note that if used, the results might contain less items than the limit value.  (e.g. false)
-  --simplified: string@bool-completer # If `true` or `1` then, the endpoint applies the `fields=url,pageFunctionResult,errorInfo` and `unwind=pageFunctionResult` query parameters. This feature is used to emulate simplified results provided by the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
+  --skipHeaderRow: oneof<nothing, bool> # If `true` or `1` then header row in the `csv` format is skipped. (e.g. true)
+  --skipHidden: oneof<nothing, bool> # If `true` or `1` then hidden fields are skipped from the output, i.e. fields starting with the `#` character.  (e.g. false)
+  --skipEmpty: oneof<nothing, bool> # If `true` or `1` then empty items are skipped from the output.  Note that if used, the results might contain less items than the limit value.  (e.g. false)
+  --simplified: oneof<nothing, bool> # If `true` or `1` then, the endpoint applies the `fields=url,pageFunctionResult,errorInfo` and `unwind=pageFunctionResult` query parameters. This feature is used to emulate simplified results provided by the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
   --view: string # Defines the view configuration for dataset items based on the schema definition. This parameter determines how the data will be filtered and presented. For complete specification details, see the [dataset schema documentation](/platform/actors/development/actor-definition/dataset-schema).  (e.g. overview)
-  --skipFailedPages: string@bool-completer # If `true` or `1` then, the all the items with errorInfo property will be skipped from the output.  This feature is here to emulate functionality of API version 1 used for the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
+  --skipFailedPages: oneof<nothing, bool> # If `true` or `1` then, the all the items with errorInfo property will be skipped from the output.  This feature is here to emulate functionality of API version 1 used for the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
   --feedTitle: string # Overrides the auto-generated RSS channel `<title>` element. Only used when `format=rss`. If not provided, the title defaults to `Dataset <label>`.  (e.g. Latest posts from r/pasta)
   --feedDescription: string # Overrides the auto-generated RSS channel `<description>` element. Only used when `format=rss`. If not provided, the description defaults to `Items in dataset with id "<datasetId>".`  (e.g. Scraped forum posts)
   --body: record
@@ -972,11 +971,11 @@ export def "actors-run-sync-get-dataset-items get" [
   --memory: float # Memory limit for the run, in megabytes. The amount of memory can be set to a power of 2 with a minimum of 128. By default, the run uses the memory limit from its configuration.  (format: double, e.g. 256)
   --maxItems: float # Specifies the maximum number of dataset items that will be charged for pay-per-result Actors. This does NOT guarantee that the Actor will return only this many items. It only ensures you won't be charged for more than this number of items. Only works for pay-per-result Actors. Value can be accessed in the actor run using `ACTOR_MAX_PAID_DATASET_ITEMS` environment variable.  (format: double, e.g. 1000)
   --maxTotalChargeUsd: float # Specifies the maximum cost of the run. This parameter is useful for pay-per-event Actors, as it allows you to limit the amount charged to your subscription. You can access the maximum cost in your Actor by using the `ACTOR_MAX_TOTAL_CHARGE_USD` environment variable.  (format: double, e.g. 5)
-  --restartOnError: string@bool-completer # Determines whether the run will be restarted if it fails.  (e.g. false)
+  --restartOnError: oneof<nothing, bool> # Determines whether the run will be restarted if it fails.  (e.g. false)
   --build: string # Specifies the Actor build to run. It can be either a build tag or build number. By default, the run uses the build from its configuration (typically `latest`).  (e.g. 0.1.234)
   --webhooks: string # Specifies optional webhooks associated with the Actor run, which can be used to receive a notification e.g. when the Actor finished or failed. The value is a Base64-encoded JSON array whose items follow the WebhookRepresentation schema. For more information, see [Webhooks documentation](https://docs.apify.com/platform/integrations/webhooks).  (e.g. dGhpcyBpcyBqdXN0IGV4YW1wbGUK...)
   --format: string # Format of the results, possible values are: `json`, `jsonl`, `csv`, `html`, `xlsx`, `xml` and `rss`. The default value is `json`.  (e.g. json)
-  --clean: string@bool-completer # If `true` or `1` then the API endpoint returns only non-empty items and skips hidden fields (i.e. fields starting with the # character). The `clean` parameter is just a shortcut for `skipHidden=true` and `skipEmpty=true` parameters. Note that since some objects might be skipped from the output, that the result might contain less items than the `limit` value.  (e.g. false)
+  --clean: oneof<nothing, bool> # If `true` or `1` then the API endpoint returns only non-empty items and skips hidden fields (i.e. fields starting with the # character). The `clean` parameter is just a shortcut for `skipHidden=true` and `skipEmpty=true` parameters. Note that since some objects might be skipped from the output, that the result might contain less items than the `limit` value.  (e.g. false)
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. By default there is no limit. (format: double)
   --qp-fields: string # A comma-separated list of fields which should be picked from the items, only these fields will remain in the resulting record objects. Note that the fields in the outputted items are sorted the same way as they are specified in the `fields` query parameter. You can use this feature to effectively fix the output format.  (e.g. myValue,myOtherValue)
@@ -984,18 +983,18 @@ export def "actors-run-sync-get-dataset-items get" [
   --omit: string # A comma-separated list of fields which should be omitted from the items. (e.g. myValue,myOtherValue)
   --unwind: string # A comma-separated list of fields which should be unwound, in order which they should be processed. Each field should be either an array or an object. If the field is an array then every element of the array will become a separate record and merged with parent object. If the unwound field is an object then it is merged with the parent object. If the unwound field is missing or its value is neither an array nor an object and therefore cannot be merged with a parent object then the item gets preserved as it is. Note that the unwound items ignore the `desc` parameter.  (e.g. myValue,myOtherValue)
   --flatten: string # A comma-separated list of fields which should transform nested objects into flat structures.  For example, with `flatten="foo"` the object `{"foo":{"bar": "hello"}}` is turned into `{"foo.bar": "hello"}`.  The original object with properties is replaced with the flattened object.  (e.g. myValue)
-  --desc: string@bool-completer # By default, results are returned in the same order as they were stored. To reverse the order, set this parameter to `true` or `1`.  (e.g. true)
-  --attachment: string@bool-completer # If `true` or `1` then the response will define the `Content-Disposition: attachment` header, forcing a web browser to download the file rather than to display it. By default this header is not present.  (e.g. true)
+  --desc: oneof<nothing, bool> # By default, results are returned in the same order as they were stored. To reverse the order, set this parameter to `true` or `1`.  (e.g. true)
+  --attachment: oneof<nothing, bool> # If `true` or `1` then the response will define the `Content-Disposition: attachment` header, forcing a web browser to download the file rather than to display it. By default this header is not present.  (e.g. true)
   --delimiter: string # A delimiter character for CSV files, only used if `format=csv`. You might need to URL-encode the character (e.g. use `%09` for tab or `%3B` for semicolon). The default delimiter is a simple comma (`,`).  (e.g. ;)
-  --bom: string@bool-completer # All text responses are encoded in UTF-8 encoding. By default, the `format=csv` files are prefixed with the UTF-8 Byte Order Mark (BOM), while `json`, `jsonl`, `xml`, `html` and `rss` files are not.  If you want to override this default behavior, specify `bom=1` query parameter to include the BOM or `bom=0` to skip it.  (e.g. false)
+  --bom: oneof<nothing, bool> # All text responses are encoded in UTF-8 encoding. By default, the `format=csv` files are prefixed with the UTF-8 Byte Order Mark (BOM), while `json`, `jsonl`, `xml`, `html` and `rss` files are not.  If you want to override this default behavior, specify `bom=1` query parameter to include the BOM or `bom=0` to skip it.  (e.g. false)
   --xmlRoot: string # Overrides default root element name of `xml` output. By default the root element is `items`.  (e.g. items)
   --xmlRow: string # Overrides default element name that wraps each page or page function result object in `xml` output. By default the element name is `item`.  (e.g. item)
-  --skipHeaderRow: string@bool-completer # If `true` or `1` then header row in the `csv` format is skipped. (e.g. true)
-  --skipHidden: string@bool-completer # If `true` or `1` then hidden fields are skipped from the output, i.e. fields starting with the `#` character.  (e.g. false)
-  --skipEmpty: string@bool-completer # If `true` or `1` then empty items are skipped from the output.  Note that if used, the results might contain less items than the limit value.  (e.g. false)
-  --simplified: string@bool-completer # If `true` or `1` then, the endpoint applies the `fields=url,pageFunctionResult,errorInfo` and `unwind=pageFunctionResult` query parameters. This feature is used to emulate simplified results provided by the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
+  --skipHeaderRow: oneof<nothing, bool> # If `true` or `1` then header row in the `csv` format is skipped. (e.g. true)
+  --skipHidden: oneof<nothing, bool> # If `true` or `1` then hidden fields are skipped from the output, i.e. fields starting with the `#` character.  (e.g. false)
+  --skipEmpty: oneof<nothing, bool> # If `true` or `1` then empty items are skipped from the output.  Note that if used, the results might contain less items than the limit value.  (e.g. false)
+  --simplified: oneof<nothing, bool> # If `true` or `1` then, the endpoint applies the `fields=url,pageFunctionResult,errorInfo` and `unwind=pageFunctionResult` query parameters. This feature is used to emulate simplified results provided by the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
   --view: string # Defines the view configuration for dataset items based on the schema definition. This parameter determines how the data will be filtered and presented. For complete specification details, see the [dataset schema documentation](/platform/actors/development/actor-definition/dataset-schema).  (e.g. overview)
-  --skipFailedPages: string@bool-completer # If `true` or `1` then, the all the items with errorInfo property will be skipped from the output.  This feature is here to emulate functionality of API version 1 used for the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
+  --skipFailedPages: oneof<nothing, bool> # If `true` or `1` then, the all the items with errorInfo property will be skipped from the output.  This feature is here to emulate functionality of API version 1 used for the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
   --feedTitle: string # Overrides the auto-generated RSS channel `<title>` element. Only used when `format=rss`. If not provided, the title defaults to `Dataset <label>`.  (e.g. Latest posts from r/pasta)
   --feedDescription: string # Overrides the auto-generated RSS channel `<description>` element. Only used when `format=rss`. If not provided, the description defaults to `Items in dataset with id "<datasetId>".`  (e.g. Scraped forum posts)
 ]: nothing -> list<record> {
@@ -1052,7 +1051,7 @@ export def "actors-runs-resurrect post" [
   --build: string # Specifies the Actor build to run. It can be either a build tag or build number. By default, the run is resurrected with the same build it originally used. Specifically, if a run was first started with the `latest` tag, which resolves to version `0.0.3` at the time, a run resurrected without this parameter will continue running with `0.0.3`, even if `latest` already points to a newer build.  (e.g. 0.1.234)
   --timeout: float # Optional timeout for the run, in seconds. By default, the run uses the timeout specified in the run that is being resurrected.  (format: double, e.g. 60)
   --memory: float # Memory limit for the run, in megabytes. The amount of memory can be set to a power of 2 with a minimum of 128. By default, the run uses the memory limit specified in the run that is being resurrected.  (format: double, e.g. 256)
-  --restartOnError: string@bool-completer # Determines whether the resurrected run will be restarted if it fails. By default, the resurrected run uses the same setting as before.  (e.g. false)
+  --restartOnError: oneof<nothing, bool> # Determines whether the resurrected run will be restarted if it fails. By default, the resurrected run uses the same setting as before.  (e.g. false)
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, actorTaskId: string, startedAt: string, finishedAt: string, status: string, statusMessage: string, isStatusMessageTerminal: bool, meta: record<origin: string, clientIp: string, userAgent: string, scheduleId: string, scheduledAt: string>, pricingInfo: any, stats: record<inputBodyLen: int, migrationCount: int, rebootCount: int, restartCount: int, resurrectCount: int, memAvgBytes: float, memMaxBytes: int, memCurrentBytes: int, cpuAvgUsage: float, cpuMaxUsage: float, cpuCurrentUsage: float, netRxBytes: int, netTxBytes: int, durationMillis: int, runTimeSecs: float, metamorph: int, computeUnits: float>, chargedEventCounts: record, options: record<build: string, timeoutSecs: int, memoryMbytes: int, diskMbytes: int, maxItems: int, maxTotalChargeUsd: float>, buildId: string, exitCode: int, generalAccess: string, defaultKeyValueStoreId: string, defaultDatasetId: string, defaultRequestQueueId: string, storageIds: record<datasets: record, keyValueStores: record, requestQueues: record>, buildNumber: string, containerUrl: string, isContainerServerReady: bool, gitBranchName: string, usage: any, usageTotalUsd: float, usageUsd: any, metamorphs: any, platformUsageBillingModel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1181,7 +1180,7 @@ export def "actors-runs-last-dataset-items get" [
   --accept: string@accept-completer # Response content type
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --format: string # Format of the results, possible values are: `json`, `jsonl`, `csv`, `html`, `xlsx`, `xml` and `rss`. The default value is `json`.  (e.g. json)
-  --clean: string@bool-completer # If `true` or `1` then the API endpoint returns only non-empty items and skips hidden fields (i.e. fields starting with the # character). The `clean` parameter is just a shortcut for `skipHidden=true` and `skipEmpty=true` parameters. Note that since some objects might be skipped from the output, that the result might contain less items than the `limit` value.  (e.g. false)
+  --clean: oneof<nothing, bool> # If `true` or `1` then the API endpoint returns only non-empty items and skips hidden fields (i.e. fields starting with the # character). The `clean` parameter is just a shortcut for `skipHidden=true` and `skipEmpty=true` parameters. Note that since some objects might be skipped from the output, that the result might contain less items than the `limit` value.  (e.g. false)
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. By default there is no limit. (format: double)
   --qp-fields: string # A comma-separated list of fields which should be picked from the items, only these fields will remain in the resulting record objects. Note that the fields in the outputted items are sorted the same way as they are specified in the `fields` query parameter. You can use this feature to effectively fix the output format.  (e.g. myValue,myOtherValue)
@@ -1189,18 +1188,18 @@ export def "actors-runs-last-dataset-items get" [
   --omit: string # A comma-separated list of fields which should be omitted from the items. (e.g. myValue,myOtherValue)
   --unwind: string # A comma-separated list of fields which should be unwound, in order which they should be processed. Each field should be either an array or an object. If the field is an array then every element of the array will become a separate record and merged with parent object. If the unwound field is an object then it is merged with the parent object. If the unwound field is missing or its value is neither an array nor an object and therefore cannot be merged with a parent object then the item gets preserved as it is. Note that the unwound items ignore the `desc` parameter.  (e.g. myValue,myOtherValue)
   --flatten: string # A comma-separated list of fields which should transform nested objects into flat structures.  For example, with `flatten="foo"` the object `{"foo":{"bar": "hello"}}` is turned into `{"foo.bar": "hello"}`.  The original object with properties is replaced with the flattened object.  (e.g. myValue)
-  --desc: string@bool-completer # By default, results are returned in the same order as they were stored. To reverse the order, set this parameter to `true` or `1`.  (e.g. true)
-  --attachment: string@bool-completer # If `true` or `1` then the response will define the `Content-Disposition: attachment` header, forcing a web browser to download the file rather than to display it. By default this header is not present.  (e.g. true)
+  --desc: oneof<nothing, bool> # By default, results are returned in the same order as they were stored. To reverse the order, set this parameter to `true` or `1`.  (e.g. true)
+  --attachment: oneof<nothing, bool> # If `true` or `1` then the response will define the `Content-Disposition: attachment` header, forcing a web browser to download the file rather than to display it. By default this header is not present.  (e.g. true)
   --delimiter: string # A delimiter character for CSV files, only used if `format=csv`. You might need to URL-encode the character (e.g. use `%09` for tab or `%3B` for semicolon). The default delimiter is a simple comma (`,`).  (e.g. ;)
-  --bom: string@bool-completer # All text responses are encoded in UTF-8 encoding. By default, the `format=csv` files are prefixed with the UTF-8 Byte Order Mark (BOM), while `json`, `jsonl`, `xml`, `html` and `rss` files are not.  If you want to override this default behavior, specify `bom=1` query parameter to include the BOM or `bom=0` to skip it.  (e.g. false)
+  --bom: oneof<nothing, bool> # All text responses are encoded in UTF-8 encoding. By default, the `format=csv` files are prefixed with the UTF-8 Byte Order Mark (BOM), while `json`, `jsonl`, `xml`, `html` and `rss` files are not.  If you want to override this default behavior, specify `bom=1` query parameter to include the BOM or `bom=0` to skip it.  (e.g. false)
   --xmlRoot: string # Overrides default root element name of `xml` output. By default the root element is `items`.  (e.g. items)
   --xmlRow: string # Overrides default element name that wraps each page or page function result object in `xml` output. By default the element name is `item`.  (e.g. item)
-  --skipHeaderRow: string@bool-completer # If `true` or `1` then header row in the `csv` format is skipped. (e.g. true)
-  --skipHidden: string@bool-completer # If `true` or `1` then hidden fields are skipped from the output, i.e. fields starting with the `#` character.  (e.g. false)
-  --skipEmpty: string@bool-completer # If `true` or `1` then empty items are skipped from the output.  Note that if used, the results might contain less items than the limit value.  (e.g. false)
-  --simplified: string@bool-completer # If `true` or `1` then, the endpoint applies the `fields=url,pageFunctionResult,errorInfo` and `unwind=pageFunctionResult` query parameters. This feature is used to emulate simplified results provided by the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
+  --skipHeaderRow: oneof<nothing, bool> # If `true` or `1` then header row in the `csv` format is skipped. (e.g. true)
+  --skipHidden: oneof<nothing, bool> # If `true` or `1` then hidden fields are skipped from the output, i.e. fields starting with the `#` character.  (e.g. false)
+  --skipEmpty: oneof<nothing, bool> # If `true` or `1` then empty items are skipped from the output.  Note that if used, the results might contain less items than the limit value.  (e.g. false)
+  --simplified: oneof<nothing, bool> # If `true` or `1` then, the endpoint applies the `fields=url,pageFunctionResult,errorInfo` and `unwind=pageFunctionResult` query parameters. This feature is used to emulate simplified results provided by the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
   --view: string # Defines the view configuration for dataset items based on the schema definition. This parameter determines how the data will be filtered and presented. For complete specification details, see the [dataset schema documentation](/platform/actors/development/actor-definition/dataset-schema).  (e.g. overview)
-  --skipFailedPages: string@bool-completer # If `true` or `1` then, the all the items with errorInfo property will be skipped from the output.  This feature is here to emulate functionality of API version 1 used for the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
+  --skipFailedPages: oneof<nothing, bool> # If `true` or `1` then, the all the items with errorInfo property will be skipped from the output.  This feature is here to emulate functionality of API version 1 used for the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
   --feedTitle: string # Overrides the auto-generated RSS channel `<title>` element. Only used when `format=rss`. If not provided, the title defaults to `Dataset <label>`.  (e.g. Latest posts from r/pasta)
   --feedDescription: string # Overrides the auto-generated RSS channel `<description>` element. Only used when `format=rss`. If not provided, the description defaults to `Items in dataset with id "<datasetId>".`  (e.g. Scraped forum posts)
   --signature: string # Signature used for the access. (e.g. 2wTI46Bg8qWQrV7tavlPI)
@@ -1415,7 +1414,7 @@ export def "actors-runs-last-key-value-store-records get" [
   --accept: string@accept-completer-1 # Response content type
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --signature: string # Signature used for the access. (e.g. 2wTI46Bg8qWQrV7tavlPI)
-  --attachment: string@bool-completer # If `true` or `1`, the response will be served with `Content-Disposition: attachment` header, causing web browsers to offer downloading HTML records instead of displaying them.  (e.g. true)
+  --attachment: oneof<nothing, bool> # If `true` or `1`, the response will be served with `Content-Disposition: attachment` header, causing web browsers to offer downloading HTML records instead of displaying them.  (e.g. true)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1644,7 +1643,7 @@ export def "actors-runs-last-request-queue-requests post" [
   --payload: string # The request payload, typically used with POST or PUT requests. (nullable)
   --headers: record # HTTP headers sent with the request. (nullable)
   --userData: record # Custom user data attached to the request. Can contain arbitrary fields. (e.g. {label: DETAIL, customField: custom-value})
-  --noRetry: string@bool-completer # Indicates whether the request should not be retried if processing fails. (nullable)
+  --noRetry: oneof<nothing, bool> # Indicates whether the request should not be retried if processing fails. (nullable)
   --errorMessages: list # Error messages recorded from failed processing attempts. (nullable)
   --handledAt: string # The timestamp when the request was marked as handled, if applicable. (nullable, format: date-time)
 ]: any -> record<data: record<requestId: string, wasAlreadyPresent: bool, wasAlreadyHandled: bool>> {
@@ -1795,7 +1794,7 @@ export def "actors-runs-last-request-queue-requests put" [
   --payload: string # The request payload, typically used with POST or PUT requests. (nullable)
   --headers: record # HTTP headers sent with the request. (nullable)
   --userData: record # Custom user data attached to the request. Can contain arbitrary fields. (e.g. {label: DETAIL, customField: custom-value})
-  --noRetry: string@bool-completer # Indicates whether the request should not be retried if processing fails. (nullable)
+  --noRetry: oneof<nothing, bool> # Indicates whether the request should not be retried if processing fails. (nullable)
   --errorMessages: list # Error messages recorded from failed processing attempts. (nullable)
   --handledAt: string # The timestamp when the request was marked as handled, if applicable. (nullable, format: date-time)
   --id: string # A unique identifier assigned to the request.
@@ -1959,9 +1958,9 @@ export def "actors-runs-last-log get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --stream: string@bool-completer # If `true` or `1` then the logs will be streamed as long as the run or build is running.  (e.g. false)
-  --download: string@bool-completer # If `true` or `1` then the web browser will download the log file rather than open it in a tab.  (e.g. false)
-  --qp-raw: string@bool-completer # If `true` or `1`, the logs will be kept verbatim. By default, the API removes ANSI escape codes from the logs, keeping only printable characters.  (e.g. false)
+  --stream: oneof<nothing, bool> # If `true` or `1` then the logs will be streamed as long as the run or build is running.  (e.g. false)
+  --download: oneof<nothing, bool> # If `true` or `1` then the web browser will download the log file rather than open it in a tab.  (e.g. false)
+  --qp-raw: oneof<nothing, bool> # If `true` or `1`, the logs will be kept verbatim. By default, the API removes ANSI escape codes from the logs, keeping only printable characters.  (e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1986,7 +1985,7 @@ export def "actors-runs-last-abort post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
-  --gracefully: string@bool-completer # If true passed, the Actor run will abort gracefully. It will send `aborting` and `persistState` event into run and force-stop the run after 30 seconds. It is helpful in cases where you plan to resurrect the run later.  (e.g. true)
+  --gracefully: oneof<nothing, bool> # If true passed, the Actor run will abort gracefully. It will send `aborting` and `persistState` event into run and force-stop the run after 30 seconds. It is helpful in cases where you plan to resurrect the run later.  (e.g. true)
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, actorTaskId: string, startedAt: string, finishedAt: string, status: string, statusMessage: string, isStatusMessageTerminal: bool, meta: record<origin: string, clientIp: string, userAgent: string, scheduleId: string, scheduledAt: string>, pricingInfo: any, stats: record<inputBodyLen: int, migrationCount: int, rebootCount: int, restartCount: int, resurrectCount: int, memAvgBytes: float, memMaxBytes: int, memCurrentBytes: int, cpuAvgUsage: float, cpuMaxUsage: float, cpuCurrentUsage: float, netRxBytes: int, netTxBytes: int, durationMillis: int, runTimeSecs: float, metamorph: int, computeUnits: float>, chargedEventCounts: record, options: record<build: string, timeoutSecs: int, memoryMbytes: int, diskMbytes: int, maxItems: int, maxTotalChargeUsd: float>, buildId: string, exitCode: int, generalAccess: string, defaultKeyValueStoreId: string, defaultDatasetId: string, defaultRequestQueueId: string, storageIds: record<datasets: record, keyValueStores: record, requestQueues: record>, buildNumber: string, containerUrl: string, isContainerServerReady: bool, gitBranchName: string, usage: any, usageTotalUsd: float, usageUsd: any, metamorphs: any, platformUsageBillingModel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2090,7 +2089,7 @@ export def "actors-runs-abort post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --gracefully: string@bool-completer # If true passed, the Actor run will abort gracefully. It will send `aborting` and `persistState` event into run and force-stop the run after 30 seconds. It is helpful in cases where you plan to resurrect the run later.  (e.g. true)
+  --gracefully: oneof<nothing, bool> # If true passed, the Actor run will abort gracefully. It will send `aborting` and `persistState` event into run and force-stop the run after 30 seconds. It is helpful in cases where you plan to resurrect the run later.  (e.g. true)
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, actorTaskId: string, startedAt: string, finishedAt: string, status: string, statusMessage: string, isStatusMessageTerminal: bool, meta: record<origin: string, clientIp: string, userAgent: string, scheduleId: string, scheduledAt: string>, pricingInfo: any, stats: record<inputBodyLen: int, migrationCount: int, rebootCount: int, restartCount: int, resurrectCount: int, memAvgBytes: float, memMaxBytes: int, memCurrentBytes: int, cpuAvgUsage: float, cpuMaxUsage: float, cpuCurrentUsage: float, netRxBytes: int, netTxBytes: int, durationMillis: int, runTimeSecs: float, metamorph: int, computeUnits: float>, chargedEventCounts: record, options: record<build: string, timeoutSecs: int, memoryMbytes: int, diskMbytes: int, maxItems: int, maxTotalChargeUsd: float>, buildId: string, exitCode: int, generalAccess: string, defaultKeyValueStoreId: string, defaultDatasetId: string, defaultRequestQueueId: string, storageIds: record<datasets: record, keyValueStores: record, requestQueues: record>, buildNumber: string, containerUrl: string, isContainerServerReady: bool, gitBranchName: string, usage: any, usageTotalUsd: float, usageUsd: any, metamorphs: any, platformUsageBillingModel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2143,7 +2142,7 @@ export def "actor-tasks list" [
   --allow-errors(-e) # Return full response without error handling
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
-  --desc: string@bool-completer # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
+  --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
 ]: nothing -> record<data: record<total: int, offset: int, limit: int, desc: bool, count: int, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2320,7 +2319,7 @@ export def "actor-tasks-webhooks get" [
   --allow-errors(-e) # Return full response without error handling
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
-  --desc: string@bool-completer # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
+  --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
 ]: nothing -> record<data: record<total: int, offset: int, limit: int, desc: bool, count: int, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2346,7 +2345,7 @@ export def "actor-tasks-runs get" [
   --allow-errors(-e) # Return full response without error handling
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
-  --desc: string@bool-completer # If `true` or `1` then the objects are sorted by the `startedAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
+  --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `startedAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
   --status: list # Single status or comma-separated list of statuses, see ([available statuses](https://docs.apify.com/platform/actors/running/runs-and-builds#lifecycle)). Used to filter runs by the specified statuses only.  (e.g. [SUCCEEDED])
 ]: nothing -> record<data: record<total: int, offset: int, limit: int, desc: bool, count: int, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2375,7 +2374,7 @@ export def "actor-tasks-runs post" [
   --memory: float # Memory limit for the run, in megabytes. The amount of memory can be set to a power of 2 with a minimum of 128. By default, the run uses the memory limit from its configuration.  (format: double, e.g. 256)
   --maxItems: float # Specifies the maximum number of dataset items that will be charged for pay-per-result Actors. This does NOT guarantee that the Actor will return only this many items. It only ensures you won't be charged for more than this number of items. Only works for pay-per-result Actors. Value can be accessed in the actor run using `ACTOR_MAX_PAID_DATASET_ITEMS` environment variable.  (format: double, e.g. 1000)
   --maxTotalChargeUsd: float # Specifies the maximum cost of the run. This parameter is useful for pay-per-event Actors, as it allows you to limit the amount charged to your subscription. You can access the maximum cost in your Actor by using the `ACTOR_MAX_TOTAL_CHARGE_USD` environment variable.  (format: double, e.g. 5)
-  --restartOnError: string@bool-completer # Determines whether the run will be restarted if it fails.  (e.g. false)
+  --restartOnError: oneof<nothing, bool> # Determines whether the run will be restarted if it fails.  (e.g. false)
   --build: string # Specifies the Actor build to run. It can be either a build tag or build number. By default, the run uses the build from its configuration (typically `latest`).  (e.g. 0.1.234)
   --waitForFinish: float # The maximum number of seconds the server waits for the run to finish. By default it is `0`, the maximum value is `60`. <!-- MAX_ACTOR_JOB_ASYNC_WAIT_SECS --> If the run finishes in time then the returned run object will have a terminal status (e.g. `SUCCEEDED`), otherwise it will have a transitional status (e.g. `RUNNING`).  (format: double, e.g. 60)
   --webhooks: string # Specifies optional webhooks associated with the Actor run, which can be used to receive a notification e.g. when the Actor finished or failed. The value is a Base64-encoded JSON array whose items follow the WebhookRepresentation schema. For more information, see [Webhooks documentation](https://docs.apify.com/platform/integrations/webhooks).  (e.g. dGhpcyBpcyBqdXN0IGV4YW1wbGUK...)
@@ -2438,7 +2437,7 @@ export def "actor-tasks-run-sync post" [
   --memory: float # Memory limit for the run, in megabytes. The amount of memory can be set to a power of 2 with a minimum of 128. By default, the run uses the memory limit from its configuration.  (format: double, e.g. 256)
   --maxItems: float # Specifies the maximum number of dataset items that will be charged for pay-per-result Actors. This does NOT guarantee that the Actor will return only this many items. It only ensures you won't be charged for more than this number of items. Only works for pay-per-result Actors. Value can be accessed in the actor run using `ACTOR_MAX_PAID_DATASET_ITEMS` environment variable.  (format: double, e.g. 1000)
   --maxTotalChargeUsd: float # Specifies the maximum cost of the run. This parameter is useful for pay-per-event Actors, as it allows you to limit the amount charged to your subscription. You can access the maximum cost in your Actor by using the `ACTOR_MAX_TOTAL_CHARGE_USD` environment variable.  (format: double, e.g. 5)
-  --restartOnError: string@bool-completer # Determines whether the run will be restarted if it fails.  (e.g. false)
+  --restartOnError: oneof<nothing, bool> # Determines whether the run will be restarted if it fails.  (e.g. false)
   --build: string # Specifies the Actor build to run. It can be either a build tag or build number. By default, the run uses the build from its configuration (typically `latest`).  (e.g. 0.1.234)
   --outputRecordKey: string # Key of the record from run's default key-value store to be returned in the response. By default, it is `OUTPUT`.  (e.g. OUTPUT)
   --webhooks: string # Specifies optional webhooks associated with the Actor run, which can be used to receive a notification e.g. when the Actor finished or failed. The value is a Base64-encoded JSON array whose items follow the WebhookRepresentation schema. For more information, see [Webhooks documentation](https://docs.apify.com/platform/integrations/webhooks).  (e.g. dGhpcyBpcyBqdXN0IGV4YW1wbGUK...)
@@ -2474,7 +2473,7 @@ export def "actor-tasks-run-sync-get-dataset-items get" [
   --build: string # Specifies the Actor build to run. It can be either a build tag or build number. By default, the run uses the build from its configuration (typically `latest`).  (e.g. 0.1.234)
   --webhooks: string # Specifies optional webhooks associated with the Actor run, which can be used to receive a notification e.g. when the Actor finished or failed. The value is a Base64-encoded JSON array whose items follow the WebhookRepresentation schema. For more information, see [Webhooks documentation](https://docs.apify.com/platform/integrations/webhooks).  (e.g. dGhpcyBpcyBqdXN0IGV4YW1wbGUK...)
   --format: string # Format of the results, possible values are: `json`, `jsonl`, `csv`, `html`, `xlsx`, `xml` and `rss`. The default value is `json`.  (e.g. json)
-  --clean: string@bool-completer # If `true` or `1` then the API endpoint returns only non-empty items and skips hidden fields (i.e. fields starting with the # character). The `clean` parameter is just a shortcut for `skipHidden=true` and `skipEmpty=true` parameters. Note that since some objects might be skipped from the output, that the result might contain less items than the `limit` value.  (e.g. false)
+  --clean: oneof<nothing, bool> # If `true` or `1` then the API endpoint returns only non-empty items and skips hidden fields (i.e. fields starting with the # character). The `clean` parameter is just a shortcut for `skipHidden=true` and `skipEmpty=true` parameters. Note that since some objects might be skipped from the output, that the result might contain less items than the `limit` value.  (e.g. false)
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. By default there is no limit. (format: double)
   --qp-fields: string # A comma-separated list of fields which should be picked from the items, only these fields will remain in the resulting record objects. Note that the fields in the outputted items are sorted the same way as they are specified in the `fields` query parameter. You can use this feature to effectively fix the output format.  (e.g. myValue,myOtherValue)
@@ -2482,18 +2481,18 @@ export def "actor-tasks-run-sync-get-dataset-items get" [
   --omit: string # A comma-separated list of fields which should be omitted from the items. (e.g. myValue,myOtherValue)
   --unwind: string # A comma-separated list of fields which should be unwound, in order which they should be processed. Each field should be either an array or an object. If the field is an array then every element of the array will become a separate record and merged with parent object. If the unwound field is an object then it is merged with the parent object. If the unwound field is missing or its value is neither an array nor an object and therefore cannot be merged with a parent object then the item gets preserved as it is. Note that the unwound items ignore the `desc` parameter.  (e.g. myValue,myOtherValue)
   --flatten: string # A comma-separated list of fields which should transform nested objects into flat structures.  For example, with `flatten="foo"` the object `{"foo":{"bar": "hello"}}` is turned into `{"foo.bar": "hello"}`.  The original object with properties is replaced with the flattened object.  (e.g. myValue)
-  --desc: string@bool-completer # By default, results are returned in the same order as they were stored. To reverse the order, set this parameter to `true` or `1`.  (e.g. true)
-  --attachment: string@bool-completer # If `true` or `1` then the response will define the `Content-Disposition: attachment` header, forcing a web browser to download the file rather than to display it. By default this header is not present.  (e.g. true)
+  --desc: oneof<nothing, bool> # By default, results are returned in the same order as they were stored. To reverse the order, set this parameter to `true` or `1`.  (e.g. true)
+  --attachment: oneof<nothing, bool> # If `true` or `1` then the response will define the `Content-Disposition: attachment` header, forcing a web browser to download the file rather than to display it. By default this header is not present.  (e.g. true)
   --delimiter: string # A delimiter character for CSV files, only used if `format=csv`. You might need to URL-encode the character (e.g. use `%09` for tab or `%3B` for semicolon). The default delimiter is a simple comma (`,`).  (e.g. ;)
-  --bom: string@bool-completer # All text responses are encoded in UTF-8 encoding. By default, the `format=csv` files are prefixed with the UTF-8 Byte Order Mark (BOM), while `json`, `jsonl`, `xml`, `html` and `rss` files are not.  If you want to override this default behavior, specify `bom=1` query parameter to include the BOM or `bom=0` to skip it.  (e.g. false)
+  --bom: oneof<nothing, bool> # All text responses are encoded in UTF-8 encoding. By default, the `format=csv` files are prefixed with the UTF-8 Byte Order Mark (BOM), while `json`, `jsonl`, `xml`, `html` and `rss` files are not.  If you want to override this default behavior, specify `bom=1` query parameter to include the BOM or `bom=0` to skip it.  (e.g. false)
   --xmlRoot: string # Overrides default root element name of `xml` output. By default the root element is `items`.  (e.g. items)
   --xmlRow: string # Overrides default element name that wraps each page or page function result object in `xml` output. By default the element name is `item`.  (e.g. item)
-  --skipHeaderRow: string@bool-completer # If `true` or `1` then header row in the `csv` format is skipped. (e.g. true)
-  --skipHidden: string@bool-completer # If `true` or `1` then hidden fields are skipped from the output, i.e. fields starting with the `#` character.  (e.g. false)
-  --skipEmpty: string@bool-completer # If `true` or `1` then empty items are skipped from the output.  Note that if used, the results might contain less items than the limit value.  (e.g. false)
-  --simplified: string@bool-completer # If `true` or `1` then, the endpoint applies the `fields=url,pageFunctionResult,errorInfo` and `unwind=pageFunctionResult` query parameters. This feature is used to emulate simplified results provided by the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
+  --skipHeaderRow: oneof<nothing, bool> # If `true` or `1` then header row in the `csv` format is skipped. (e.g. true)
+  --skipHidden: oneof<nothing, bool> # If `true` or `1` then hidden fields are skipped from the output, i.e. fields starting with the `#` character.  (e.g. false)
+  --skipEmpty: oneof<nothing, bool> # If `true` or `1` then empty items are skipped from the output.  Note that if used, the results might contain less items than the limit value.  (e.g. false)
+  --simplified: oneof<nothing, bool> # If `true` or `1` then, the endpoint applies the `fields=url,pageFunctionResult,errorInfo` and `unwind=pageFunctionResult` query parameters. This feature is used to emulate simplified results provided by the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
   --view: string # Defines the view configuration for dataset items based on the schema definition. This parameter determines how the data will be filtered and presented. For complete specification details, see the [dataset schema documentation](/platform/actors/development/actor-definition/dataset-schema).  (e.g. overview)
-  --skipFailedPages: string@bool-completer # If `true` or `1` then, the all the items with errorInfo property will be skipped from the output.  This feature is here to emulate functionality of API version 1 used for the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
+  --skipFailedPages: oneof<nothing, bool> # If `true` or `1` then, the all the items with errorInfo property will be skipped from the output.  This feature is here to emulate functionality of API version 1 used for the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
   --feedTitle: string # Overrides the auto-generated RSS channel `<title>` element. Only used when `format=rss`. If not provided, the title defaults to `Dataset <label>`.  (e.g. Latest posts from r/pasta)
   --feedDescription: string # Overrides the auto-generated RSS channel `<description>` element. Only used when `format=rss`. If not provided, the description defaults to `Items in dataset with id "<datasetId>".`  (e.g. Scraped forum posts)
 ]: nothing -> record {
@@ -2523,11 +2522,11 @@ export def "actor-tasks-run-sync-get-dataset-items post" [
   --memory: float # Memory limit for the run, in megabytes. The amount of memory can be set to a power of 2 with a minimum of 128. By default, the run uses the memory limit from its configuration.  (format: double, e.g. 256)
   --maxItems: float # Specifies the maximum number of dataset items that will be charged for pay-per-result Actors. This does NOT guarantee that the Actor will return only this many items. It only ensures you won't be charged for more than this number of items. Only works for pay-per-result Actors. Value can be accessed in the actor run using `ACTOR_MAX_PAID_DATASET_ITEMS` environment variable.  (format: double, e.g. 1000)
   --maxTotalChargeUsd: float # Specifies the maximum cost of the run. This parameter is useful for pay-per-event Actors, as it allows you to limit the amount charged to your subscription. You can access the maximum cost in your Actor by using the `ACTOR_MAX_TOTAL_CHARGE_USD` environment variable.  (format: double, e.g. 5)
-  --restartOnError: string@bool-completer # Determines whether the run will be restarted if it fails.  (e.g. false)
+  --restartOnError: oneof<nothing, bool> # Determines whether the run will be restarted if it fails.  (e.g. false)
   --build: string # Specifies the Actor build to run. It can be either a build tag or build number. By default, the run uses the build from its configuration (typically `latest`).  (e.g. 0.1.234)
   --webhooks: string # Specifies optional webhooks associated with the Actor run, which can be used to receive a notification e.g. when the Actor finished or failed. The value is a Base64-encoded JSON array whose items follow the WebhookRepresentation schema. For more information, see [Webhooks documentation](https://docs.apify.com/platform/integrations/webhooks).  (e.g. dGhpcyBpcyBqdXN0IGV4YW1wbGUK...)
   --format: string # Format of the results, possible values are: `json`, `jsonl`, `csv`, `html`, `xlsx`, `xml` and `rss`. The default value is `json`.  (e.g. json)
-  --clean: string@bool-completer # If `true` or `1` then the API endpoint returns only non-empty items and skips hidden fields (i.e. fields starting with the # character). The `clean` parameter is just a shortcut for `skipHidden=true` and `skipEmpty=true` parameters. Note that since some objects might be skipped from the output, that the result might contain less items than the `limit` value.  (e.g. false)
+  --clean: oneof<nothing, bool> # If `true` or `1` then the API endpoint returns only non-empty items and skips hidden fields (i.e. fields starting with the # character). The `clean` parameter is just a shortcut for `skipHidden=true` and `skipEmpty=true` parameters. Note that since some objects might be skipped from the output, that the result might contain less items than the `limit` value.  (e.g. false)
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. By default there is no limit. (format: double)
   --qp-fields: string # A comma-separated list of fields which should be picked from the items, only these fields will remain in the resulting record objects. Note that the fields in the outputted items are sorted the same way as they are specified in the `fields` query parameter. You can use this feature to effectively fix the output format.  (e.g. myValue,myOtherValue)
@@ -2535,18 +2534,18 @@ export def "actor-tasks-run-sync-get-dataset-items post" [
   --omit: string # A comma-separated list of fields which should be omitted from the items. (e.g. myValue,myOtherValue)
   --unwind: string # A comma-separated list of fields which should be unwound, in order which they should be processed. Each field should be either an array or an object. If the field is an array then every element of the array will become a separate record and merged with parent object. If the unwound field is an object then it is merged with the parent object. If the unwound field is missing or its value is neither an array nor an object and therefore cannot be merged with a parent object then the item gets preserved as it is. Note that the unwound items ignore the `desc` parameter.  (e.g. myValue,myOtherValue)
   --flatten: string # A comma-separated list of fields which should transform nested objects into flat structures.  For example, with `flatten="foo"` the object `{"foo":{"bar": "hello"}}` is turned into `{"foo.bar": "hello"}`.  The original object with properties is replaced with the flattened object.  (e.g. myValue)
-  --desc: string@bool-completer # By default, results are returned in the same order as they were stored. To reverse the order, set this parameter to `true` or `1`.  (e.g. true)
-  --attachment: string@bool-completer # If `true` or `1` then the response will define the `Content-Disposition: attachment` header, forcing a web browser to download the file rather than to display it. By default this header is not present.  (e.g. true)
+  --desc: oneof<nothing, bool> # By default, results are returned in the same order as they were stored. To reverse the order, set this parameter to `true` or `1`.  (e.g. true)
+  --attachment: oneof<nothing, bool> # If `true` or `1` then the response will define the `Content-Disposition: attachment` header, forcing a web browser to download the file rather than to display it. By default this header is not present.  (e.g. true)
   --delimiter: string # A delimiter character for CSV files, only used if `format=csv`. You might need to URL-encode the character (e.g. use `%09` for tab or `%3B` for semicolon). The default delimiter is a simple comma (`,`).  (e.g. ;)
-  --bom: string@bool-completer # All text responses are encoded in UTF-8 encoding. By default, the `format=csv` files are prefixed with the UTF-8 Byte Order Mark (BOM), while `json`, `jsonl`, `xml`, `html` and `rss` files are not.  If you want to override this default behavior, specify `bom=1` query parameter to include the BOM or `bom=0` to skip it.  (e.g. false)
+  --bom: oneof<nothing, bool> # All text responses are encoded in UTF-8 encoding. By default, the `format=csv` files are prefixed with the UTF-8 Byte Order Mark (BOM), while `json`, `jsonl`, `xml`, `html` and `rss` files are not.  If you want to override this default behavior, specify `bom=1` query parameter to include the BOM or `bom=0` to skip it.  (e.g. false)
   --xmlRoot: string # Overrides default root element name of `xml` output. By default the root element is `items`.  (e.g. items)
   --xmlRow: string # Overrides default element name that wraps each page or page function result object in `xml` output. By default the element name is `item`.  (e.g. item)
-  --skipHeaderRow: string@bool-completer # If `true` or `1` then header row in the `csv` format is skipped. (e.g. true)
-  --skipHidden: string@bool-completer # If `true` or `1` then hidden fields are skipped from the output, i.e. fields starting with the `#` character.  (e.g. false)
-  --skipEmpty: string@bool-completer # If `true` or `1` then empty items are skipped from the output.  Note that if used, the results might contain less items than the limit value.  (e.g. false)
-  --simplified: string@bool-completer # If `true` or `1` then, the endpoint applies the `fields=url,pageFunctionResult,errorInfo` and `unwind=pageFunctionResult` query parameters. This feature is used to emulate simplified results provided by the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
+  --skipHeaderRow: oneof<nothing, bool> # If `true` or `1` then header row in the `csv` format is skipped. (e.g. true)
+  --skipHidden: oneof<nothing, bool> # If `true` or `1` then hidden fields are skipped from the output, i.e. fields starting with the `#` character.  (e.g. false)
+  --skipEmpty: oneof<nothing, bool> # If `true` or `1` then empty items are skipped from the output.  Note that if used, the results might contain less items than the limit value.  (e.g. false)
+  --simplified: oneof<nothing, bool> # If `true` or `1` then, the endpoint applies the `fields=url,pageFunctionResult,errorInfo` and `unwind=pageFunctionResult` query parameters. This feature is used to emulate simplified results provided by the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
   --view: string # Defines the view configuration for dataset items based on the schema definition. This parameter determines how the data will be filtered and presented. For complete specification details, see the [dataset schema documentation](/platform/actors/development/actor-definition/dataset-schema).  (e.g. overview)
-  --skipFailedPages: string@bool-completer # If `true` or `1` then, the all the items with errorInfo property will be skipped from the output.  This feature is here to emulate functionality of API version 1 used for the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
+  --skipFailedPages: oneof<nothing, bool> # If `true` or `1` then, the all the items with errorInfo property will be skipped from the output.  This feature is here to emulate functionality of API version 1 used for the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
   --feedTitle: string # Overrides the auto-generated RSS channel `<title>` element. Only used when `format=rss`. If not provided, the title defaults to `Dataset <label>`.  (e.g. Latest posts from r/pasta)
   --feedDescription: string # Overrides the auto-generated RSS channel `<description>` element. Only used when `format=rss`. If not provided, the description defaults to `Items in dataset with id "<datasetId>".`  (e.g. Scraped forum posts)
   --body: record
@@ -2600,9 +2599,9 @@ export def "actor-tasks-runs-last-log get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --stream: string@bool-completer # If `true` or `1` then the logs will be streamed as long as the run or build is running.  (e.g. false)
-  --download: string@bool-completer # If `true` or `1` then the web browser will download the log file rather than open it in a tab.  (e.g. false)
-  --qp-raw: string@bool-completer # If `true` or `1`, the logs will be kept verbatim. By default, the API removes ANSI escape codes from the logs, keeping only printable characters.  (e.g. false)
+  --stream: oneof<nothing, bool> # If `true` or `1` then the logs will be streamed as long as the run or build is running.  (e.g. false)
+  --download: oneof<nothing, bool> # If `true` or `1` then the web browser will download the log file rather than open it in a tab.  (e.g. false)
+  --qp-raw: oneof<nothing, bool> # If `true` or `1`, the logs will be kept verbatim. By default, the API removes ANSI escape codes from the logs, keeping only printable characters.  (e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2627,7 +2626,7 @@ export def "actor-tasks-runs-last-abort post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
-  --gracefully: string@bool-completer # If true passed, the Actor run will abort gracefully. It will send `aborting` and `persistState` event into run and force-stop the run after 30 seconds. It is helpful in cases where you plan to resurrect the run later.  (e.g. true)
+  --gracefully: oneof<nothing, bool> # If true passed, the Actor run will abort gracefully. It will send `aborting` and `persistState` event into run and force-stop the run after 30 seconds. It is helpful in cases where you plan to resurrect the run later.  (e.g. true)
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, actorTaskId: string, startedAt: string, finishedAt: string, status: string, statusMessage: string, isStatusMessageTerminal: bool, meta: record<origin: string, clientIp: string, userAgent: string, scheduleId: string, scheduledAt: string>, pricingInfo: any, stats: record<inputBodyLen: int, migrationCount: int, rebootCount: int, restartCount: int, resurrectCount: int, memAvgBytes: float, memMaxBytes: int, memCurrentBytes: int, cpuAvgUsage: float, cpuMaxUsage: float, cpuCurrentUsage: float, netRxBytes: int, netTxBytes: int, durationMillis: int, runTimeSecs: float, metamorph: int, computeUnits: float>, chargedEventCounts: record, options: record<build: string, timeoutSecs: int, memoryMbytes: int, diskMbytes: int, maxItems: int, maxTotalChargeUsd: float>, buildId: string, exitCode: int, generalAccess: string, defaultKeyValueStoreId: string, defaultDatasetId: string, defaultRequestQueueId: string, storageIds: record<datasets: record, keyValueStores: record, requestQueues: record>, buildNumber: string, containerUrl: string, isContainerServerReady: bool, gitBranchName: string, usage: any, usageTotalUsd: float, usageUsd: any, metamorphs: any, platformUsageBillingModel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2781,7 +2780,7 @@ export def "actor-tasks-runs-last-dataset-items get" [
   --accept: string@accept-completer # Response content type
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --format: string # Format of the results, possible values are: `json`, `jsonl`, `csv`, `html`, `xlsx`, `xml` and `rss`. The default value is `json`.  (e.g. json)
-  --clean: string@bool-completer # If `true` or `1` then the API endpoint returns only non-empty items and skips hidden fields (i.e. fields starting with the # character). The `clean` parameter is just a shortcut for `skipHidden=true` and `skipEmpty=true` parameters. Note that since some objects might be skipped from the output, that the result might contain less items than the `limit` value.  (e.g. false)
+  --clean: oneof<nothing, bool> # If `true` or `1` then the API endpoint returns only non-empty items and skips hidden fields (i.e. fields starting with the # character). The `clean` parameter is just a shortcut for `skipHidden=true` and `skipEmpty=true` parameters. Note that since some objects might be skipped from the output, that the result might contain less items than the `limit` value.  (e.g. false)
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. By default there is no limit. (format: double)
   --qp-fields: string # A comma-separated list of fields which should be picked from the items, only these fields will remain in the resulting record objects. Note that the fields in the outputted items are sorted the same way as they are specified in the `fields` query parameter. You can use this feature to effectively fix the output format.  (e.g. myValue,myOtherValue)
@@ -2789,18 +2788,18 @@ export def "actor-tasks-runs-last-dataset-items get" [
   --omit: string # A comma-separated list of fields which should be omitted from the items. (e.g. myValue,myOtherValue)
   --unwind: string # A comma-separated list of fields which should be unwound, in order which they should be processed. Each field should be either an array or an object. If the field is an array then every element of the array will become a separate record and merged with parent object. If the unwound field is an object then it is merged with the parent object. If the unwound field is missing or its value is neither an array nor an object and therefore cannot be merged with a parent object then the item gets preserved as it is. Note that the unwound items ignore the `desc` parameter.  (e.g. myValue,myOtherValue)
   --flatten: string # A comma-separated list of fields which should transform nested objects into flat structures.  For example, with `flatten="foo"` the object `{"foo":{"bar": "hello"}}` is turned into `{"foo.bar": "hello"}`.  The original object with properties is replaced with the flattened object.  (e.g. myValue)
-  --desc: string@bool-completer # By default, results are returned in the same order as they were stored. To reverse the order, set this parameter to `true` or `1`.  (e.g. true)
-  --attachment: string@bool-completer # If `true` or `1` then the response will define the `Content-Disposition: attachment` header, forcing a web browser to download the file rather than to display it. By default this header is not present.  (e.g. true)
+  --desc: oneof<nothing, bool> # By default, results are returned in the same order as they were stored. To reverse the order, set this parameter to `true` or `1`.  (e.g. true)
+  --attachment: oneof<nothing, bool> # If `true` or `1` then the response will define the `Content-Disposition: attachment` header, forcing a web browser to download the file rather than to display it. By default this header is not present.  (e.g. true)
   --delimiter: string # A delimiter character for CSV files, only used if `format=csv`. You might need to URL-encode the character (e.g. use `%09` for tab or `%3B` for semicolon). The default delimiter is a simple comma (`,`).  (e.g. ;)
-  --bom: string@bool-completer # All text responses are encoded in UTF-8 encoding. By default, the `format=csv` files are prefixed with the UTF-8 Byte Order Mark (BOM), while `json`, `jsonl`, `xml`, `html` and `rss` files are not.  If you want to override this default behavior, specify `bom=1` query parameter to include the BOM or `bom=0` to skip it.  (e.g. false)
+  --bom: oneof<nothing, bool> # All text responses are encoded in UTF-8 encoding. By default, the `format=csv` files are prefixed with the UTF-8 Byte Order Mark (BOM), while `json`, `jsonl`, `xml`, `html` and `rss` files are not.  If you want to override this default behavior, specify `bom=1` query parameter to include the BOM or `bom=0` to skip it.  (e.g. false)
   --xmlRoot: string # Overrides default root element name of `xml` output. By default the root element is `items`.  (e.g. items)
   --xmlRow: string # Overrides default element name that wraps each page or page function result object in `xml` output. By default the element name is `item`.  (e.g. item)
-  --skipHeaderRow: string@bool-completer # If `true` or `1` then header row in the `csv` format is skipped. (e.g. true)
-  --skipHidden: string@bool-completer # If `true` or `1` then hidden fields are skipped from the output, i.e. fields starting with the `#` character.  (e.g. false)
-  --skipEmpty: string@bool-completer # If `true` or `1` then empty items are skipped from the output.  Note that if used, the results might contain less items than the limit value.  (e.g. false)
-  --simplified: string@bool-completer # If `true` or `1` then, the endpoint applies the `fields=url,pageFunctionResult,errorInfo` and `unwind=pageFunctionResult` query parameters. This feature is used to emulate simplified results provided by the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
+  --skipHeaderRow: oneof<nothing, bool> # If `true` or `1` then header row in the `csv` format is skipped. (e.g. true)
+  --skipHidden: oneof<nothing, bool> # If `true` or `1` then hidden fields are skipped from the output, i.e. fields starting with the `#` character.  (e.g. false)
+  --skipEmpty: oneof<nothing, bool> # If `true` or `1` then empty items are skipped from the output.  Note that if used, the results might contain less items than the limit value.  (e.g. false)
+  --simplified: oneof<nothing, bool> # If `true` or `1` then, the endpoint applies the `fields=url,pageFunctionResult,errorInfo` and `unwind=pageFunctionResult` query parameters. This feature is used to emulate simplified results provided by the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
   --view: string # Defines the view configuration for dataset items based on the schema definition. This parameter determines how the data will be filtered and presented. For complete specification details, see the [dataset schema documentation](/platform/actors/development/actor-definition/dataset-schema).  (e.g. overview)
-  --skipFailedPages: string@bool-completer # If `true` or `1` then, the all the items with errorInfo property will be skipped from the output.  This feature is here to emulate functionality of API version 1 used for the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
+  --skipFailedPages: oneof<nothing, bool> # If `true` or `1` then, the all the items with errorInfo property will be skipped from the output.  This feature is here to emulate functionality of API version 1 used for the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
   --feedTitle: string # Overrides the auto-generated RSS channel `<title>` element. Only used when `format=rss`. If not provided, the title defaults to `Dataset <label>`.  (e.g. Latest posts from r/pasta)
   --feedDescription: string # Overrides the auto-generated RSS channel `<description>` element. Only used when `format=rss`. If not provided, the description defaults to `Items in dataset with id "<datasetId>".`  (e.g. Scraped forum posts)
   --signature: string # Signature used for the access. (e.g. 2wTI46Bg8qWQrV7tavlPI)
@@ -3015,7 +3014,7 @@ export def "actor-tasks-runs-last-key-value-store-records get" [
   --accept: string@accept-completer-1 # Response content type
   --status: string # Filter for the run status. (e.g. SUCCEEDED)
   --signature: string # Signature used for the access. (e.g. 2wTI46Bg8qWQrV7tavlPI)
-  --attachment: string@bool-completer # If `true` or `1`, the response will be served with `Content-Disposition: attachment` header, causing web browsers to offer downloading HTML records instead of displaying them.  (e.g. true)
+  --attachment: oneof<nothing, bool> # If `true` or `1`, the response will be served with `Content-Disposition: attachment` header, causing web browsers to offer downloading HTML records instead of displaying them.  (e.g. true)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3297,7 +3296,7 @@ export def "actor-tasks-runs-last-request-queue-requests post" [
   --payload: string # The request payload, typically used with POST or PUT requests. (nullable)
   --headers: record # HTTP headers sent with the request. (nullable)
   --userData: record # Custom user data attached to the request. Can contain arbitrary fields. (e.g. {label: DETAIL, customField: custom-value})
-  --noRetry: string@bool-completer # Indicates whether the request should not be retried if processing fails. (nullable)
+  --noRetry: oneof<nothing, bool> # Indicates whether the request should not be retried if processing fails. (nullable)
   --errorMessages: list # Error messages recorded from failed processing attempts. (nullable)
   --handledAt: string # The timestamp when the request was marked as handled, if applicable. (nullable, format: date-time)
 ]: any -> record<data: record<requestId: string, wasAlreadyPresent: bool, wasAlreadyHandled: bool>> {
@@ -3448,7 +3447,7 @@ export def "actor-tasks-runs-last-request-queue-requests put" [
   --payload: string # The request payload, typically used with POST or PUT requests. (nullable)
   --headers: record # HTTP headers sent with the request. (nullable)
   --userData: record # Custom user data attached to the request. Can contain arbitrary fields. (e.g. {label: DETAIL, customField: custom-value})
-  --noRetry: string@bool-completer # Indicates whether the request should not be retried if processing fails. (nullable)
+  --noRetry: oneof<nothing, bool> # Indicates whether the request should not be retried if processing fails. (nullable)
   --errorMessages: list # Error messages recorded from failed processing attempts. (nullable)
   --handledAt: string # The timestamp when the request was marked as handled, if applicable. (nullable, format: date-time)
   --id: string # A unique identifier assigned to the request.
@@ -3560,7 +3559,7 @@ export def "actor-runs list" [
   --allow-errors(-e) # Return full response without error handling
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
-  --desc: string@bool-completer # If `true` or `1` then the objects are sorted by the `startedAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
+  --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `startedAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
   --status: list # Single status or comma-separated list of statuses, see ([available statuses](https://docs.apify.com/platform/actors/running/runs-and-builds#lifecycle)). Used to filter runs by the specified statuses only.  (e.g. [SUCCEEDED])
   --startedAfter: string # Filter runs that started after the specified date and time (inclusive). The value must be a valid ISO 8601 datetime string (UTC).  (format: date-time, e.g. 2025-09-01T00:00:00.000Z)
   --startedBefore: string # Filter runs that started before the specified date and time (inclusive). The value must be a valid ISO 8601 datetime string (UTC).  (format: date-time, e.g. 2025-09-17T23:59:59.000Z)
@@ -3613,7 +3612,7 @@ export def "actor-runs put" [
   --allow-errors(-e) # Return full response without error handling
   --body-runId: string
   --statusMessage: string
-  --isStatusMessageTerminal: string@bool-completer
+  --isStatusMessageTerminal: oneof<nothing, bool>
   --generalAccess: string@generalAccess-completer # Defines the general access level for the resource.
 ]: any -> record<data: record<id: string, actId: string, userId: string, actorTaskId: string, startedAt: string, finishedAt: string, status: string, statusMessage: string, isStatusMessageTerminal: bool, meta: record<origin: string, clientIp: string, userAgent: string, scheduleId: string, scheduledAt: string>, pricingInfo: any, stats: record<inputBodyLen: int, migrationCount: int, rebootCount: int, restartCount: int, resurrectCount: int, memAvgBytes: float, memMaxBytes: int, memCurrentBytes: int, cpuAvgUsage: float, cpuMaxUsage: float, cpuCurrentUsage: float, netRxBytes: int, netTxBytes: int, durationMillis: int, runTimeSecs: float, metamorph: int, computeUnits: float>, chargedEventCounts: record, options: record<build: string, timeoutSecs: int, memoryMbytes: int, diskMbytes: int, maxItems: int, maxTotalChargeUsd: float>, buildId: string, exitCode: int, generalAccess: string, defaultKeyValueStoreId: string, defaultDatasetId: string, defaultRequestQueueId: string, storageIds: record<datasets: record, keyValueStores: record, requestQueues: record>, buildNumber: string, containerUrl: string, isContainerServerReady: bool, gitBranchName: string, usage: any, usageTotalUsd: float, usageUsd: any, metamorphs: any, platformUsageBillingModel: string>> {
   let input = $in
@@ -3662,7 +3661,7 @@ export def "actor-runs-abort post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --gracefully: string@bool-completer # If true passed, the Actor run will abort gracefully. It will send `aborting` and `persistState` event into run and force-stop the run after 30 seconds. It is helpful in cases where you plan to resurrect the run later.  (e.g. true)
+  --gracefully: oneof<nothing, bool> # If true passed, the Actor run will abort gracefully. It will send `aborting` and `persistState` event into run and force-stop the run after 30 seconds. It is helpful in cases where you plan to resurrect the run later.  (e.g. true)
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, actorTaskId: string, startedAt: string, finishedAt: string, status: string, statusMessage: string, isStatusMessageTerminal: bool, meta: record<origin: string, clientIp: string, userAgent: string, scheduleId: string, scheduledAt: string>, pricingInfo: any, stats: record<inputBodyLen: int, migrationCount: int, rebootCount: int, restartCount: int, resurrectCount: int, memAvgBytes: float, memMaxBytes: int, memCurrentBytes: int, cpuAvgUsage: float, cpuMaxUsage: float, cpuCurrentUsage: float, netRxBytes: int, netTxBytes: int, durationMillis: int, runTimeSecs: float, metamorph: int, computeUnits: float>, chargedEventCounts: record, options: record<build: string, timeoutSecs: int, memoryMbytes: int, diskMbytes: int, maxItems: int, maxTotalChargeUsd: float>, buildId: string, exitCode: int, generalAccess: string, defaultKeyValueStoreId: string, defaultDatasetId: string, defaultRequestQueueId: string, storageIds: record<datasets: record, keyValueStores: record, requestQueues: record>, buildNumber: string, containerUrl: string, isContainerServerReady: bool, gitBranchName: string, usage: any, usageTotalUsd: float, usageUsd: any, metamorphs: any, platformUsageBillingModel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3738,7 +3737,7 @@ export def "actor-runs-resurrect PostResurrectRun" [
   --memory: float # Memory limit for the run, in megabytes. The amount of memory can be set to a power of 2 with a minimum of 128. By default, the run uses the memory limit specified in the run that is being resurrected.  (format: double, e.g. 256)
   --maxItems: float # Specifies the maximum number of dataset items that will be charged for pay-per-result Actors. This does NOT guarantee that the Actor will return only this many items. It only ensures you won't be charged for more than this number of items. Only works for pay-per-result Actors. Value can be accessed in the actor run using `ACTOR_MAX_PAID_DATASET_ITEMS` environment variable.  (format: double, e.g. 1000)
   --maxTotalChargeUsd: float # Specifies the maximum cost of the run. This parameter is useful for pay-per-event Actors, as it allows you to limit the amount charged to your subscription. You can access the maximum cost in your Actor by using the `ACTOR_MAX_TOTAL_CHARGE_USD` environment variable.  (format: double, e.g. 5)
-  --restartOnError: string@bool-completer # Determines whether the resurrected run will be restarted if it fails. By default, the resurrected run uses the same setting as before.  (e.g. false)
+  --restartOnError: oneof<nothing, bool> # Determines whether the resurrected run will be restarted if it fails. By default, the resurrected run uses the same setting as before.  (e.g. false)
 ]: nothing -> record<data: record<id: string, actId: string, userId: string, actorTaskId: string, startedAt: string, finishedAt: string, status: string, statusMessage: string, isStatusMessageTerminal: bool, meta: record<origin: string, clientIp: string, userAgent: string, scheduleId: string, scheduledAt: string>, pricingInfo: any, stats: record<inputBodyLen: int, migrationCount: int, rebootCount: int, restartCount: int, resurrectCount: int, memAvgBytes: float, memMaxBytes: int, memCurrentBytes: int, cpuAvgUsage: float, cpuMaxUsage: float, cpuCurrentUsage: float, netRxBytes: int, netTxBytes: int, durationMillis: int, runTimeSecs: float, metamorph: int, computeUnits: float>, chargedEventCounts: record, options: record<build: string, timeoutSecs: int, memoryMbytes: int, diskMbytes: int, maxItems: int, maxTotalChargeUsd: float>, buildId: string, exitCode: int, generalAccess: string, defaultKeyValueStoreId: string, defaultDatasetId: string, defaultRequestQueueId: string, storageIds: record<datasets: record, keyValueStores: record, requestQueues: record>, buildNumber: string, containerUrl: string, isContainerServerReady: bool, gitBranchName: string, usage: any, usageTotalUsd: float, usageUsd: any, metamorphs: any, platformUsageBillingModel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3865,7 +3864,7 @@ export def "actor-runs-dataset-items get" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --format: string # Format of the results, possible values are: `json`, `jsonl`, `csv`, `html`, `xlsx`, `xml` and `rss`. The default value is `json`.  (e.g. json)
-  --clean: string@bool-completer # If `true` or `1` then the API endpoint returns only non-empty items and skips hidden fields (i.e. fields starting with the # character). The `clean` parameter is just a shortcut for `skipHidden=true` and `skipEmpty=true` parameters. Note that since some objects might be skipped from the output, that the result might contain less items than the `limit` value.  (e.g. false)
+  --clean: oneof<nothing, bool> # If `true` or `1` then the API endpoint returns only non-empty items and skips hidden fields (i.e. fields starting with the # character). The `clean` parameter is just a shortcut for `skipHidden=true` and `skipEmpty=true` parameters. Note that since some objects might be skipped from the output, that the result might contain less items than the `limit` value.  (e.g. false)
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. By default there is no limit. (format: double)
   --qp-fields: string # A comma-separated list of fields which should be picked from the items, only these fields will remain in the resulting record objects. Note that the fields in the outputted items are sorted the same way as they are specified in the `fields` query parameter. You can use this feature to effectively fix the output format.  (e.g. myValue,myOtherValue)
@@ -3873,18 +3872,18 @@ export def "actor-runs-dataset-items get" [
   --omit: string # A comma-separated list of fields which should be omitted from the items. (e.g. myValue,myOtherValue)
   --unwind: string # A comma-separated list of fields which should be unwound, in order which they should be processed. Each field should be either an array or an object. If the field is an array then every element of the array will become a separate record and merged with parent object. If the unwound field is an object then it is merged with the parent object. If the unwound field is missing or its value is neither an array nor an object and therefore cannot be merged with a parent object then the item gets preserved as it is. Note that the unwound items ignore the `desc` parameter.  (e.g. myValue,myOtherValue)
   --flatten: string # A comma-separated list of fields which should transform nested objects into flat structures.  For example, with `flatten="foo"` the object `{"foo":{"bar": "hello"}}` is turned into `{"foo.bar": "hello"}`.  The original object with properties is replaced with the flattened object.  (e.g. myValue)
-  --desc: string@bool-completer # By default, results are returned in the same order as they were stored. To reverse the order, set this parameter to `true` or `1`.  (e.g. true)
-  --attachment: string@bool-completer # If `true` or `1` then the response will define the `Content-Disposition: attachment` header, forcing a web browser to download the file rather than to display it. By default this header is not present.  (e.g. true)
+  --desc: oneof<nothing, bool> # By default, results are returned in the same order as they were stored. To reverse the order, set this parameter to `true` or `1`.  (e.g. true)
+  --attachment: oneof<nothing, bool> # If `true` or `1` then the response will define the `Content-Disposition: attachment` header, forcing a web browser to download the file rather than to display it. By default this header is not present.  (e.g. true)
   --delimiter: string # A delimiter character for CSV files, only used if `format=csv`. You might need to URL-encode the character (e.g. use `%09` for tab or `%3B` for semicolon). The default delimiter is a simple comma (`,`).  (e.g. ;)
-  --bom: string@bool-completer # All text responses are encoded in UTF-8 encoding. By default, the `format=csv` files are prefixed with the UTF-8 Byte Order Mark (BOM), while `json`, `jsonl`, `xml`, `html` and `rss` files are not.  If you want to override this default behavior, specify `bom=1` query parameter to include the BOM or `bom=0` to skip it.  (e.g. false)
+  --bom: oneof<nothing, bool> # All text responses are encoded in UTF-8 encoding. By default, the `format=csv` files are prefixed with the UTF-8 Byte Order Mark (BOM), while `json`, `jsonl`, `xml`, `html` and `rss` files are not.  If you want to override this default behavior, specify `bom=1` query parameter to include the BOM or `bom=0` to skip it.  (e.g. false)
   --xmlRoot: string # Overrides default root element name of `xml` output. By default the root element is `items`.  (e.g. items)
   --xmlRow: string # Overrides default element name that wraps each page or page function result object in `xml` output. By default the element name is `item`.  (e.g. item)
-  --skipHeaderRow: string@bool-completer # If `true` or `1` then header row in the `csv` format is skipped. (e.g. true)
-  --skipHidden: string@bool-completer # If `true` or `1` then hidden fields are skipped from the output, i.e. fields starting with the `#` character.  (e.g. false)
-  --skipEmpty: string@bool-completer # If `true` or `1` then empty items are skipped from the output.  Note that if used, the results might contain less items than the limit value.  (e.g. false)
-  --simplified: string@bool-completer # If `true` or `1` then, the endpoint applies the `fields=url,pageFunctionResult,errorInfo` and `unwind=pageFunctionResult` query parameters. This feature is used to emulate simplified results provided by the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
+  --skipHeaderRow: oneof<nothing, bool> # If `true` or `1` then header row in the `csv` format is skipped. (e.g. true)
+  --skipHidden: oneof<nothing, bool> # If `true` or `1` then hidden fields are skipped from the output, i.e. fields starting with the `#` character.  (e.g. false)
+  --skipEmpty: oneof<nothing, bool> # If `true` or `1` then empty items are skipped from the output.  Note that if used, the results might contain less items than the limit value.  (e.g. false)
+  --simplified: oneof<nothing, bool> # If `true` or `1` then, the endpoint applies the `fields=url,pageFunctionResult,errorInfo` and `unwind=pageFunctionResult` query parameters. This feature is used to emulate simplified results provided by the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
   --view: string # Defines the view configuration for dataset items based on the schema definition. This parameter determines how the data will be filtered and presented. For complete specification details, see the [dataset schema documentation](/platform/actors/development/actor-definition/dataset-schema).  (e.g. overview)
-  --skipFailedPages: string@bool-completer # If `true` or `1` then, the all the items with errorInfo property will be skipped from the output.  This feature is here to emulate functionality of API version 1 used for the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
+  --skipFailedPages: oneof<nothing, bool> # If `true` or `1` then, the all the items with errorInfo property will be skipped from the output.  This feature is here to emulate functionality of API version 1 used for the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
   --feedTitle: string # Overrides the auto-generated RSS channel `<title>` element. Only used when `format=rss`. If not provided, the title defaults to `Dataset <label>`.  (e.g. Latest posts from r/pasta)
   --feedDescription: string # Overrides the auto-generated RSS channel `<description>` element. Only used when `format=rss`. If not provided, the description defaults to `Items in dataset with id "<datasetId>".`  (e.g. Scraped forum posts)
   --signature: string # Signature used for the access. (e.g. 2wTI46Bg8qWQrV7tavlPI)
@@ -4086,7 +4085,7 @@ export def "actor-runs-key-value-store-records get" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
   --signature: string # Signature used for the access. (e.g. 2wTI46Bg8qWQrV7tavlPI)
-  --attachment: string@bool-completer # If `true` or `1`, the response will be served with `Content-Disposition: attachment` header, causing web browsers to offer downloading HTML records instead of displaying them.  (e.g. true)
+  --attachment: oneof<nothing, bool> # If `true` or `1`, the response will be served with `Content-Disposition: attachment` header, causing web browsers to offer downloading HTML records instead of displaying them.  (e.g. true)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4301,7 +4300,7 @@ export def "actor-runs-request-queue-requests post" [
   --payload: string # The request payload, typically used with POST or PUT requests. (nullable)
   --headers: record # HTTP headers sent with the request. (nullable)
   --userData: record # Custom user data attached to the request. Can contain arbitrary fields. (e.g. {label: DETAIL, customField: custom-value})
-  --noRetry: string@bool-completer # Indicates whether the request should not be retried if processing fails. (nullable)
+  --noRetry: oneof<nothing, bool> # Indicates whether the request should not be retried if processing fails. (nullable)
   --errorMessages: list # Error messages recorded from failed processing attempts. (nullable)
   --handledAt: string # The timestamp when the request was marked as handled, if applicable. (nullable, format: date-time)
 ]: any -> record<data: record<requestId: string, wasAlreadyPresent: bool, wasAlreadyHandled: bool>> {
@@ -4446,7 +4445,7 @@ export def "actor-runs-request-queue-requests put" [
   --payload: string # The request payload, typically used with POST or PUT requests. (nullable)
   --headers: record # HTTP headers sent with the request. (nullable)
   --userData: record # Custom user data attached to the request. Can contain arbitrary fields. (e.g. {label: DETAIL, customField: custom-value})
-  --noRetry: string@bool-completer # Indicates whether the request should not be retried if processing fails. (nullable)
+  --noRetry: oneof<nothing, bool> # Indicates whether the request should not be retried if processing fails. (nullable)
   --errorMessages: list # Error messages recorded from failed processing attempts. (nullable)
   --handledAt: string # The timestamp when the request was marked as handled, if applicable. (nullable, format: date-time)
   --id: string # A unique identifier assigned to the request.
@@ -4605,9 +4604,9 @@ export def "actor-runs-log get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --stream: string@bool-completer # If `true` or `1` then the logs will be streamed as long as the run or build is running.  (e.g. false)
-  --download: string@bool-completer # If `true` or `1` then the web browser will download the log file rather than open it in a tab.  (e.g. false)
-  --qp-raw: string@bool-completer # If `true` or `1`, the logs will be kept verbatim. By default, the API removes ANSI escape codes from the logs, keeping only printable characters.  (e.g. false)
+  --stream: oneof<nothing, bool> # If `true` or `1` then the logs will be streamed as long as the run or build is running.  (e.g. false)
+  --download: oneof<nothing, bool> # If `true` or `1` then the web browser will download the log file rather than open it in a tab.  (e.g. false)
+  --qp-raw: oneof<nothing, bool> # If `true` or `1`, the logs will be kept verbatim. By default, the API removes ANSI escape codes from the logs, keeping only printable characters.  (e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4632,7 +4631,7 @@ export def "actor-builds list" [
   --allow-errors(-e) # Return full response without error handling
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
-  --desc: string@bool-completer # If `true` or `1` then the objects are sorted by the `startedAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
+  --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `startedAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
 ]: nothing -> record<data: record<total: int, offset: int, limit: int, desc: bool, count: int, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4724,8 +4723,8 @@ export def "actor-builds-log get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --stream: string@bool-completer # If `true` or `1` then the logs will be streamed as long as the run or build is running.  (e.g. false)
-  --download: string@bool-completer # If `true` or `1` then the web browser will download the log file rather than open it in a tab.  (e.g. false)
+  --stream: oneof<nothing, bool> # If `true` or `1` then the logs will be streamed as long as the run or build is running.  (e.g. false)
+  --download: oneof<nothing, bool> # If `true` or `1` then the web browser will download the log file rather than open it in a tab.  (e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4772,8 +4771,8 @@ export def "key-value-stores list" [
   --allow-errors(-e) # Return full response without error handling
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
-  --desc: string@bool-completer # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
-  --unnamed: string@bool-completer # If `true` or `1` then all the storages are returned. By default, only named storages are returned.  (e.g. true)
+  --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
+  --unnamed: oneof<nothing, bool> # If `true` or `1` then all the storages are returned. By default, only named storages are returned.  (e.g. true)
   --ownership: string@ownership-completer # Filter by ownership. If this parameter is omitted, all accessible key-value stores are returned.  - `ownedByMe`: Return only key-value stores owned by the user. - `sharedWithMe`: Return only key-value stores shared with the user by other users.
 ]: nothing -> record<data: record<total: int, offset: int, limit: int, desc: bool, count: int, unnamed: bool, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4948,7 +4947,7 @@ export def "key-value-stores-records get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --attachment: string@bool-completer # If `true` or `1`, the response will be served with `Content-Disposition: attachment` header, causing web browsers to offer downloading HTML records instead of displaying them.  (e.g. true)
+  --attachment: oneof<nothing, bool> # If `true` or `1`, the response will be served with `Content-Disposition: attachment` header, causing web browsers to offer downloading HTML records instead of displaying them.  (e.g. true)
   --signature: string # Signature used for the access. (e.g. 2wTI46Bg8qWQrV7tavlPI)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5078,8 +5077,8 @@ export def "datasets list" [
   --allow-errors(-e) # Return full response without error handling
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
-  --desc: string@bool-completer # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
-  --unnamed: string@bool-completer # If `true` or `1` then all the storages are returned. By default, only named storages are returned.  (e.g. true)
+  --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
+  --unnamed: oneof<nothing, bool> # If `true` or `1` then all the storages are returned. By default, only named storages are returned.  (e.g. true)
   --ownership: string@ownership-completer # Filter by ownership. If this parameter is omitted, all accessible datasets are returned.  - `ownedByMe`: Return only datasets owned by the user. - `sharedWithMe`: Return only datasets shared with the user by other users.
 ]: nothing -> record<data: record<total: int, offset: int, limit: int, desc: bool, count: int, unnamed: bool, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5200,7 +5199,7 @@ export def "datasets-items get" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --format: string # Format of the results, possible values are: `json`, `jsonl`, `csv`, `html`, `xlsx`, `xml` and `rss`. The default value is `json`.  (e.g. json)
-  --clean: string@bool-completer # If `true` or `1` then the API endpoint returns only non-empty items and skips hidden fields (i.e. fields starting with the # character). The `clean` parameter is just a shortcut for `skipHidden=true` and `skipEmpty=true` parameters. Note that since some objects might be skipped from the output, that the result might contain less items than the `limit` value.  (e.g. false)
+  --clean: oneof<nothing, bool> # If `true` or `1` then the API endpoint returns only non-empty items and skips hidden fields (i.e. fields starting with the # character). The `clean` parameter is just a shortcut for `skipHidden=true` and `skipEmpty=true` parameters. Note that since some objects might be skipped from the output, that the result might contain less items than the `limit` value.  (e.g. false)
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. By default there is no limit. (format: double)
   --qp-fields: string # A comma-separated list of fields which should be picked from the items, only these fields will remain in the resulting record objects. Note that the fields in the outputted items are sorted the same way as they are specified in the `fields` query parameter. You can use this feature to effectively fix the output format.  (e.g. myValue,myOtherValue)
@@ -5208,18 +5207,18 @@ export def "datasets-items get" [
   --omit: string # A comma-separated list of fields which should be omitted from the items. (e.g. myValue,myOtherValue)
   --unwind: string # A comma-separated list of fields which should be unwound, in order which they should be processed. Each field should be either an array or an object. If the field is an array then every element of the array will become a separate record and merged with parent object. If the unwound field is an object then it is merged with the parent object. If the unwound field is missing or its value is neither an array nor an object and therefore cannot be merged with a parent object then the item gets preserved as it is. Note that the unwound items ignore the `desc` parameter.  (e.g. myValue,myOtherValue)
   --flatten: string # A comma-separated list of fields which should transform nested objects into flat structures.  For example, with `flatten="foo"` the object `{"foo":{"bar": "hello"}}` is turned into `{"foo.bar": "hello"}`.  The original object with properties is replaced with the flattened object.  (e.g. myValue)
-  --desc: string@bool-completer # By default, results are returned in the same order as they were stored. To reverse the order, set this parameter to `true` or `1`.  (e.g. true)
-  --attachment: string@bool-completer # If `true` or `1` then the response will define the `Content-Disposition: attachment` header, forcing a web browser to download the file rather than to display it. By default this header is not present.  (e.g. true)
+  --desc: oneof<nothing, bool> # By default, results are returned in the same order as they were stored. To reverse the order, set this parameter to `true` or `1`.  (e.g. true)
+  --attachment: oneof<nothing, bool> # If `true` or `1` then the response will define the `Content-Disposition: attachment` header, forcing a web browser to download the file rather than to display it. By default this header is not present.  (e.g. true)
   --delimiter: string # A delimiter character for CSV files, only used if `format=csv`. You might need to URL-encode the character (e.g. use `%09` for tab or `%3B` for semicolon). The default delimiter is a simple comma (`,`).  (e.g. ;)
-  --bom: string@bool-completer # All text responses are encoded in UTF-8 encoding. By default, the `format=csv` files are prefixed with the UTF-8 Byte Order Mark (BOM), while `json`, `jsonl`, `xml`, `html` and `rss` files are not.  If you want to override this default behavior, specify `bom=1` query parameter to include the BOM or `bom=0` to skip it.  (e.g. false)
+  --bom: oneof<nothing, bool> # All text responses are encoded in UTF-8 encoding. By default, the `format=csv` files are prefixed with the UTF-8 Byte Order Mark (BOM), while `json`, `jsonl`, `xml`, `html` and `rss` files are not.  If you want to override this default behavior, specify `bom=1` query parameter to include the BOM or `bom=0` to skip it.  (e.g. false)
   --xmlRoot: string # Overrides default root element name of `xml` output. By default the root element is `items`.  (e.g. items)
   --xmlRow: string # Overrides default element name that wraps each page or page function result object in `xml` output. By default the element name is `item`.  (e.g. item)
-  --skipHeaderRow: string@bool-completer # If `true` or `1` then header row in the `csv` format is skipped. (e.g. true)
-  --skipHidden: string@bool-completer # If `true` or `1` then hidden fields are skipped from the output, i.e. fields starting with the `#` character.  (e.g. false)
-  --skipEmpty: string@bool-completer # If `true` or `1` then empty items are skipped from the output.  Note that if used, the results might contain less items than the limit value.  (e.g. false)
-  --simplified: string@bool-completer # If `true` or `1` then, the endpoint applies the `fields=url,pageFunctionResult,errorInfo` and `unwind=pageFunctionResult` query parameters. This feature is used to emulate simplified results provided by the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
+  --skipHeaderRow: oneof<nothing, bool> # If `true` or `1` then header row in the `csv` format is skipped. (e.g. true)
+  --skipHidden: oneof<nothing, bool> # If `true` or `1` then hidden fields are skipped from the output, i.e. fields starting with the `#` character.  (e.g. false)
+  --skipEmpty: oneof<nothing, bool> # If `true` or `1` then empty items are skipped from the output.  Note that if used, the results might contain less items than the limit value.  (e.g. false)
+  --simplified: oneof<nothing, bool> # If `true` or `1` then, the endpoint applies the `fields=url,pageFunctionResult,errorInfo` and `unwind=pageFunctionResult` query parameters. This feature is used to emulate simplified results provided by the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
   --view: string # Defines the view configuration for dataset items based on the schema definition. This parameter determines how the data will be filtered and presented. For complete specification details, see the [dataset schema documentation](/platform/actors/development/actor-definition/dataset-schema).  (e.g. overview)
-  --skipFailedPages: string@bool-completer # If `true` or `1` then, the all the items with errorInfo property will be skipped from the output.  This feature is here to emulate functionality of API version 1 used for the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
+  --skipFailedPages: oneof<nothing, bool> # If `true` or `1` then, the all the items with errorInfo property will be skipped from the output.  This feature is here to emulate functionality of API version 1 used for the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
   --feedTitle: string # Overrides the auto-generated RSS channel `<title>` element. Only used when `format=rss`. If not provided, the title defaults to `Dataset <label>`.  (e.g. Latest posts from r/pasta)
   --feedDescription: string # Overrides the auto-generated RSS channel `<description>` element. Only used when `format=rss`. If not provided, the description defaults to `Items in dataset with id "<datasetId>".`  (e.g. Scraped forum posts)
   --signature: string # Signature used for the access. (e.g. 2wTI46Bg8qWQrV7tavlPI)
@@ -5247,7 +5246,7 @@ export def "datasets-items head" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --format: string # Format of the results, possible values are: `json`, `jsonl`, `csv`, `html`, `xlsx`, `xml` and `rss`. The default value is `json`.  (e.g. json)
-  --clean: string@bool-completer # If `true` or `1` then the API endpoint returns only non-empty items and skips hidden fields (i.e. fields starting with the # character). The `clean` parameter is just a shortcut for `skipHidden=true` and `skipEmpty=true` parameters. Note that since some objects might be skipped from the output, that the result might contain less items than the `limit` value.  (e.g. false)
+  --clean: oneof<nothing, bool> # If `true` or `1` then the API endpoint returns only non-empty items and skips hidden fields (i.e. fields starting with the # character). The `clean` parameter is just a shortcut for `skipHidden=true` and `skipEmpty=true` parameters. Note that since some objects might be skipped from the output, that the result might contain less items than the `limit` value.  (e.g. false)
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. By default there is no limit. (format: double)
   --qp-fields: string # A comma-separated list of fields which should be picked from the items, only these fields will remain in the resulting record objects. Note that the fields in the outputted items are sorted the same way as they are specified in the `fields` query parameter. You can use this feature to effectively fix the output format.  (e.g. myValue,myOtherValue)
@@ -5255,18 +5254,18 @@ export def "datasets-items head" [
   --omit: string # A comma-separated list of fields which should be omitted from the items. (e.g. myValue,myOtherValue)
   --unwind: string # A comma-separated list of fields which should be unwound, in order which they should be processed. Each field should be either an array or an object. If the field is an array then every element of the array will become a separate record and merged with parent object. If the unwound field is an object then it is merged with the parent object. If the unwound field is missing or its value is neither an array nor an object and therefore cannot be merged with a parent object then the item gets preserved as it is. Note that the unwound items ignore the `desc` parameter.  (e.g. myValue,myOtherValue)
   --flatten: string # A comma-separated list of fields which should transform nested objects into flat structures.  For example, with `flatten="foo"` the object `{"foo":{"bar": "hello"}}` is turned into `{"foo.bar": "hello"}`.  The original object with properties is replaced with the flattened object.  (e.g. myValue)
-  --desc: string@bool-completer # By default, results are returned in the same order as they were stored. To reverse the order, set this parameter to `true` or `1`.  (e.g. true)
-  --attachment: string@bool-completer # If `true` or `1` then the response will define the `Content-Disposition: attachment` header, forcing a web browser to download the file rather than to display it. By default this header is not present.  (e.g. true)
+  --desc: oneof<nothing, bool> # By default, results are returned in the same order as they were stored. To reverse the order, set this parameter to `true` or `1`.  (e.g. true)
+  --attachment: oneof<nothing, bool> # If `true` or `1` then the response will define the `Content-Disposition: attachment` header, forcing a web browser to download the file rather than to display it. By default this header is not present.  (e.g. true)
   --delimiter: string # A delimiter character for CSV files, only used if `format=csv`. You might need to URL-encode the character (e.g. use `%09` for tab or `%3B` for semicolon). The default delimiter is a simple comma (`,`).  (e.g. ;)
-  --bom: string@bool-completer # All text responses are encoded in UTF-8 encoding. By default, the `format=csv` files are prefixed with the UTF-8 Byte Order Mark (BOM), while `json`, `jsonl`, `xml`, `html` and `rss` files are not.  If you want to override this default behavior, specify `bom=1` query parameter to include the BOM or `bom=0` to skip it.  (e.g. false)
+  --bom: oneof<nothing, bool> # All text responses are encoded in UTF-8 encoding. By default, the `format=csv` files are prefixed with the UTF-8 Byte Order Mark (BOM), while `json`, `jsonl`, `xml`, `html` and `rss` files are not.  If you want to override this default behavior, specify `bom=1` query parameter to include the BOM or `bom=0` to skip it.  (e.g. false)
   --xmlRoot: string # Overrides default root element name of `xml` output. By default the root element is `items`.  (e.g. items)
   --xmlRow: string # Overrides default element name that wraps each page or page function result object in `xml` output. By default the element name is `item`.  (e.g. item)
-  --skipHeaderRow: string@bool-completer # If `true` or `1` then header row in the `csv` format is skipped. (e.g. true)
-  --skipHidden: string@bool-completer # If `true` or `1` then hidden fields are skipped from the output, i.e. fields starting with the `#` character.  (e.g. false)
-  --skipEmpty: string@bool-completer # If `true` or `1` then empty items are skipped from the output.  Note that if used, the results might contain less items than the limit value.  (e.g. false)
-  --simplified: string@bool-completer # If `true` or `1` then, the endpoint applies the `fields=url,pageFunctionResult,errorInfo` and `unwind=pageFunctionResult` query parameters. This feature is used to emulate simplified results provided by the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
+  --skipHeaderRow: oneof<nothing, bool> # If `true` or `1` then header row in the `csv` format is skipped. (e.g. true)
+  --skipHidden: oneof<nothing, bool> # If `true` or `1` then hidden fields are skipped from the output, i.e. fields starting with the `#` character.  (e.g. false)
+  --skipEmpty: oneof<nothing, bool> # If `true` or `1` then empty items are skipped from the output.  Note that if used, the results might contain less items than the limit value.  (e.g. false)
+  --simplified: oneof<nothing, bool> # If `true` or `1` then, the endpoint applies the `fields=url,pageFunctionResult,errorInfo` and `unwind=pageFunctionResult` query parameters. This feature is used to emulate simplified results provided by the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
   --view: string # Defines the view configuration for dataset items based on the schema definition. This parameter determines how the data will be filtered and presented. For complete specification details, see the [dataset schema documentation](/platform/actors/development/actor-definition/dataset-schema).  (e.g. overview)
-  --skipFailedPages: string@bool-completer # If `true` or `1` then, the all the items with errorInfo property will be skipped from the output.  This feature is here to emulate functionality of API version 1 used for the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
+  --skipFailedPages: oneof<nothing, bool> # If `true` or `1` then, the all the items with errorInfo property will be skipped from the output.  This feature is here to emulate functionality of API version 1 used for the legacy Apify Crawler product and it's not recommended to use it in new integrations.  (e.g. false)
   --feedTitle: string # Overrides the auto-generated RSS channel `<title>` element. Only used when `format=rss`. If not provided, the title defaults to `Dataset <label>`.  (e.g. Latest posts from r/pasta)
   --feedDescription: string # Overrides the auto-generated RSS channel `<description>` element. Only used when `format=rss`. If not provided, the description defaults to `Items in dataset with id "<datasetId>".`  (e.g. Scraped forum posts)
   --signature: string # Signature used for the access. (e.g. 2wTI46Bg8qWQrV7tavlPI)
@@ -5341,8 +5340,8 @@ export def "request-queues list" [
   --allow-errors(-e) # Return full response without error handling
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
-  --desc: string@bool-completer # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
-  --unnamed: string@bool-completer # If `true` or `1` then all the storages are returned. By default, only named storages are returned.  (e.g. true)
+  --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
+  --unnamed: oneof<nothing, bool> # If `true` or `1` then all the storages are returned. By default, only named storages are returned.  (e.g. true)
   --ownership: string@ownership-completer # Filter by ownership. If this parameter is omitted, all accessible request queues are returned.  - `ownedByMe`: Return only request queues owned by the user. - `sharedWithMe`: Return only request queues shared with the user by other users.
 ]: nothing -> record<data: record<total: int, offset: int, limit: int, desc: bool, count: int, unnamed: bool, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5582,7 +5581,7 @@ export def "request-queues-requests post" [
   --payload: string # The request payload, typically used with POST or PUT requests. (nullable)
   --headers: record # HTTP headers sent with the request. (nullable)
   --userData: record # Custom user data attached to the request. Can contain arbitrary fields. (e.g. {label: DETAIL, customField: custom-value})
-  --noRetry: string@bool-completer # Indicates whether the request should not be retried if processing fails. (nullable)
+  --noRetry: oneof<nothing, bool> # Indicates whether the request should not be retried if processing fails. (nullable)
   --errorMessages: list # Error messages recorded from failed processing attempts. (nullable)
   --handledAt: string # The timestamp when the request was marked as handled, if applicable. (nullable, format: date-time)
 ]: any -> record<data: record<requestId: string, wasAlreadyPresent: bool, wasAlreadyHandled: bool>> {
@@ -5645,7 +5644,7 @@ export def "request-queues-requests put" [
   --payload: string # The request payload, typically used with POST or PUT requests. (nullable)
   --headers: record # HTTP headers sent with the request. (nullable)
   --userData: record # Custom user data attached to the request. Can contain arbitrary fields. (e.g. {label: DETAIL, customField: custom-value})
-  --noRetry: string@bool-completer # Indicates whether the request should not be retried if processing fails. (nullable)
+  --noRetry: oneof<nothing, bool> # Indicates whether the request should not be retried if processing fails. (nullable)
   --errorMessages: list # Error messages recorded from failed processing attempts. (nullable)
   --handledAt: string # The timestamp when the request was marked as handled, if applicable. (nullable, format: date-time)
   --id: string # A unique identifier assigned to the request.
@@ -5805,7 +5804,7 @@ export def "webhooks list" [
   --allow-errors(-e) # Return full response without error handling
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
-  --desc: string@bool-completer # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
+  --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
 ]: nothing -> record<data: record<total: int, offset: int, limit: int, desc: bool, count: int, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5829,17 +5828,17 @@ export def "webhooks post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isAdHoc: string@bool-completer # nullable
+  --isAdHoc: oneof<nothing, bool> # nullable
   eventTypes: list
   condition: record # shape: {actorId?: string, actorTaskId?: string, actorRunId?: string}
   --idempotencyKey: string # nullable
-  --ignoreSslErrors: string@bool-completer # nullable
-  --doNotRetry: string@bool-completer # nullable
+  --ignoreSslErrors: oneof<nothing, bool> # nullable
+  --doNotRetry: oneof<nothing, bool> # nullable
   requestUrl: string
   --payloadTemplate: string # nullable
   --headersTemplate: string # nullable
   --description: string # nullable
-  --shouldInterpolateStrings: string@bool-completer # nullable
+  --shouldInterpolateStrings: oneof<nothing, bool> # nullable
 ]: any -> record<data: record<id: string, createdAt: string, modifiedAt: string, userId: string, isAdHoc: bool, shouldInterpolateStrings: bool, eventTypes: list<string>, condition: record<actorId: string, actorTaskId: string, actorRunId: string>, ignoreSslErrors: bool, doNotRetry: bool, requestUrl: string, payloadTemplate: string, headersTemplate: string, description: string, lastDispatch: any, stats: any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5887,16 +5886,16 @@ export def "webhooks put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isAdHoc: string@bool-completer # nullable
+  --isAdHoc: oneof<nothing, bool> # nullable
   --eventTypes: list # nullable
   --condition: any
-  --ignoreSslErrors: string@bool-completer # nullable
-  --doNotRetry: string@bool-completer # nullable
+  --ignoreSslErrors: oneof<nothing, bool> # nullable
+  --doNotRetry: oneof<nothing, bool> # nullable
   --requestUrl: string # nullable, format: uri
   --payloadTemplate: string # nullable
   --headersTemplate: string # nullable
   --description: string # nullable
-  --shouldInterpolateStrings: string@bool-completer # nullable
+  --shouldInterpolateStrings: oneof<nothing, bool> # nullable
 ]: any -> record<data: record<id: string, createdAt: string, modifiedAt: string, userId: string, isAdHoc: bool, shouldInterpolateStrings: bool, eventTypes: list<string>, condition: record<actorId: string, actorTaskId: string, actorRunId: string>, ignoreSslErrors: bool, doNotRetry: bool, requestUrl: string, payloadTemplate: string, headersTemplate: string, description: string, lastDispatch: any, stats: any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5989,7 +5988,7 @@ export def "webhook-dispatches list" [
   --allow-errors(-e) # Return full response without error handling
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
-  --desc: string@bool-completer # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
+  --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
 ]: nothing -> record<data: record<total: int, offset: int, limit: int, desc: bool, count: int, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6036,7 +6035,7 @@ export def "schedules list" [
   --allow-errors(-e) # Return full response without error handling
   --offset: float # Number of items that should be skipped at the start. The default value is `0`.  (format: double, e.g. 0)
   --limit: float # Maximum number of items to return. The default value as well as the maximum is `1000`.  (format: double, e.g. 1000)
-  --desc: string@bool-completer # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
+  --desc: oneof<nothing, bool> # If `true` or `1` then the objects are sorted by the `createdAt` field in descending order. By default, they are sorted in ascending order.  (e.g. true)
 ]: nothing -> record<data: record<total: int, offset: int, limit: int, desc: bool, count: int, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6060,8 +6059,8 @@ export def "schedules post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # nullable
-  --isEnabled: string@bool-completer # nullable
-  --isExclusive: string@bool-completer # nullable
+  --isEnabled: oneof<nothing, bool> # nullable
+  --isExclusive: oneof<nothing, bool> # nullable
   --cronExpression: string # nullable
   --timezone: string # nullable
   --description: string # nullable
@@ -6115,8 +6114,8 @@ export def "schedules put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # nullable
-  --isEnabled: string@bool-completer # nullable
-  --isExclusive: string@bool-completer # nullable
+  --isEnabled: oneof<nothing, bool> # nullable
+  --isExclusive: oneof<nothing, bool> # nullable
   --cronExpression: string # nullable
   --timezone: string # nullable
   --description: string # nullable
@@ -6197,9 +6196,9 @@ export def "store get" [
   --category: string # Filters the results by the specified category. (e.g. 'AI')
   --username: string # Filters the results by the specified username. (e.g. 'apify')
   --pricingModel: string@pricingModel-completer # Only return Actors with the specified pricing model.  (e.g. FREE)
-  --allowsAgenticUsers: string@bool-completer # If true, only return Actors that allow agentic users. If false, only return Actors that do not allow agentic users.  (e.g. true)
+  --allowsAgenticUsers: oneof<nothing, bool> # If true, only return Actors that allow agentic users. If false, only return Actors that do not allow agentic users.  (e.g. true)
   --responseFormat: string@responseFormat-completer # Controls the shape of the response. Use `full` (default) for the complete response including image URLs and all fields. Use `agent` for a reduced field set optimized for LLM consumers, which only includes `id`, `title`, `name`, `username`, `description`, `notice`, `badge`, `categories`, and minimal `stats`.  (default: full, e.g. agent)
-  --includeUnrunnableActors: string@bool-completer # By default, search results exclude Actors that are not safe to run automatically (e.g. Actors from developers who haven't passed KYC, or full-permission Actors without a large user base). Set to `true` to bypass this safety filtering and include all Actors in the results.  (default: false, e.g. true)
+  --includeUnrunnableActors: oneof<nothing, bool> # By default, search results exclude Actors that are not safe to run automatically (e.g. Actors from developers who haven't passed KYC, or full-permission Actors without a large user base). Set to `true` to bypass this safety filtering and include all Actors in the results.  (default: false, e.g. true)
 ]: nothing -> record<data: record<total: int, offset: int, limit: int, desc: bool, count: int, items: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6223,9 +6222,9 @@ export def "logs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --stream: string@bool-completer # If `true` or `1` then the logs will be streamed as long as the run or build is running.  (e.g. false)
-  --download: string@bool-completer # If `true` or `1` then the web browser will download the log file rather than open it in a tab.  (e.g. false)
-  --qp-raw: string@bool-completer # If `true` or `1`, the logs will be kept verbatim. By default, the API removes ANSI escape codes from the logs, keeping only printable characters.  (e.g. false)
+  --stream: oneof<nothing, bool> # If `true` or `1` then the logs will be streamed as long as the run or build is running.  (e.g. false)
+  --download: oneof<nothing, bool> # If `true` or `1` then the web browser will download the log file rather than open it in a tab.  (e.g. false)
+  --qp-raw: oneof<nothing, bool> # If `true` or `1`, the logs will be kept verbatim. By default, the API removes ANSI escape codes from the logs, keeping only printable characters.  (e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6361,8 +6360,8 @@ export def "browser-info get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --skipHeaders: string@bool-completer # If `true` or `1`, the response omits the `headers` field.
-  --rawHeaders: string@bool-completer # If `true` or `1`, the response includes the `rawHeaders` field with the raw request headers.
+  --skipHeaders: oneof<nothing, bool> # If `true` or `1`, the response omits the `headers` field.
+  --rawHeaders: oneof<nothing, bool> # If `true` or `1`, the response includes the `rawHeaders` field with the raw request headers.
 ]: nothing -> record<method: string, clientIp: string, countryCode: string, bodyLength: int, headers: record, rawHeaders: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6385,8 +6384,8 @@ export def "browser-info post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --skipHeaders: string@bool-completer # If `true` or `1`, the response omits the `headers` field.
-  --rawHeaders: string@bool-completer # If `true` or `1`, the response includes the `rawHeaders` field with the raw request headers.
+  --skipHeaders: oneof<nothing, bool> # If `true` or `1`, the response omits the `headers` field.
+  --rawHeaders: oneof<nothing, bool> # If `true` or `1`, the response includes the `rawHeaders` field with the raw request headers.
 ]: nothing -> record<method: string, clientIp: string, countryCode: string, bodyLength: int, headers: record, rawHeaders: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6409,8 +6408,8 @@ export def "browser-info put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --skipHeaders: string@bool-completer # If `true` or `1`, the response omits the `headers` field.
-  --rawHeaders: string@bool-completer # If `true` or `1`, the response includes the `rawHeaders` field with the raw request headers.
+  --skipHeaders: oneof<nothing, bool> # If `true` or `1`, the response omits the `headers` field.
+  --rawHeaders: oneof<nothing, bool> # If `true` or `1`, the response includes the `rawHeaders` field with the raw request headers.
 ]: nothing -> record<method: string, clientIp: string, countryCode: string, bodyLength: int, headers: record, rawHeaders: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6433,8 +6432,8 @@ export def "browser-info delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --skipHeaders: string@bool-completer # If `true` or `1`, the response omits the `headers` field.
-  --rawHeaders: string@bool-completer # If `true` or `1`, the response includes the `rawHeaders` field with the raw request headers.
+  --skipHeaders: oneof<nothing, bool> # If `true` or `1`, the response omits the `headers` field.
+  --rawHeaders: oneof<nothing, bool> # If `true` or `1`, the response includes the `rawHeaders` field with the raw request headers.
 ]: nothing -> record<method: string, clientIp: string, countryCode: string, bodyLength: int, headers: record, rawHeaders: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

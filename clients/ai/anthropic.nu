@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.anthropic.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -125,7 +124,7 @@ export def "messages post" [
   --output-config: record # shape: {effort?: any, format?: any}
   --service-tier: string@service-tier-completer # Determines whether to use priority capacity (if available) or standard capacity for this request.  Anthropic offers different levels of service for your API requests. See [service-tiers](https://docs.claude.com/en/api/service-tiers) for details.
   --stop-sequences: list # Custom text sequences that will cause the model to stop generating.  Our models will normally stop when they have naturally completed their turn, which will result in a response `stop_reason` of `"end_turn"`.  If you want the model to stop generating when it encounters custom strings of text, you can use the `stop_sequences` parameter. If the model encounters one of the custom sequences, the response `stop_reason` value will be `"stop_sequence"` and the response `stop_sequence` value will contain the matched stop sequence.
-  --stream: string@bool-completer # Whether to incrementally stream the response using server-sent events.  See [streaming](https://docs.claude.com/en/api/messages-streaming) for details.
+  --stream: oneof<nothing, bool> # Whether to incrementally stream the response using server-sent events.  See [streaming](https://docs.claude.com/en/api/messages-streaming) for details.
   --system: any # System prompt.  A system prompt is a way of providing context and instructions to Claude, such as specifying a particular goal or role. See our [guide to system prompts](https://docs.claude.com/en/docs/system-prompts).
   --temperature: float # Amount of randomness injected into the response.  Defaults to `1.0`. Ranges from `0.0` to `1.0`. Use `temperature` closer to `0.0` for analytical / multiple choice, and closer to `1.0` for creative and generative tasks.  Note that even with `temperature` of `0.0`, the results will not be fully deterministic. (DEPRECATED)
   --thinking: any # Configuration for enabling Claude's extended thinking.  When enabled, responses include `thinking` content blocks showing Claude's thinking process before the final answer. Requires a minimum budget of 1,024 tokens and counts towards your `max_tokens` limit.  See [extended thinking](https://docs.claude.com/en/docs/build-with-claude/extended-thinking) for details.
@@ -173,7 +172,7 @@ export def "complete post" [
   --top-p: float # Use nucleus sampling.  In nucleus sampling, we compute the cumulative distribution over all the options for each subsequent token in decreasing probability order and cut it off once it reaches a particular probability specified by `top_p`.  Recommended for advanced use cases only. (DEPRECATED)
   --top-k: int # Only sample from the top K options for each subsequent token.  Used to remove "long tail" low probability responses. [Learn more technical details here](https://towardsdatascience.com/how-to-sample-from-language-models-682bceb97277).  Recommended for advanced use cases only. (DEPRECATED)
   --metadata: record # shape: {user_id?: any}
-  --stream: string@bool-completer # Whether to incrementally stream the response using server-sent events.  See [streaming](https://docs.claude.com/en/api/streaming) for details.
+  --stream: oneof<nothing, bool> # Whether to incrementally stream the response using server-sent events.  See [streaming](https://docs.claude.com/en/api/streaming) for details.
 ]: any -> record<completion: string, id: string, model: any, stop_reason: any, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -482,7 +481,7 @@ export def "messages-betatrue post" [
   --service-tier: string@service-tier-completer # Determines whether to use priority capacity (if available) or standard capacity for this request.  Anthropic offers different levels of service for your API requests. See [service-tiers](https://docs.claude.com/en/api/service-tiers) for details.
   --speed: any # The inference speed mode for this request. `"fast"` enables high output-tokens-per-second inference.
   --stop-sequences: list # Custom text sequences that will cause the model to stop generating.  Our models will normally stop when they have naturally completed their turn, which will result in a response `stop_reason` of `"end_turn"`.  If you want the model to stop generating when it encounters custom strings of text, you can use the `stop_sequences` parameter. If the model encounters one of the custom sequences, the response `stop_reason` value will be `"stop_sequence"` and the response `stop_sequence` value will contain the matched stop sequence.
-  --stream: string@bool-completer # Whether to incrementally stream the response using server-sent events.  See [streaming](https://docs.claude.com/en/api/messages-streaming) for details.
+  --stream: oneof<nothing, bool> # Whether to incrementally stream the response using server-sent events.  See [streaming](https://docs.claude.com/en/api/messages-streaming) for details.
   --system: any # System prompt.  A system prompt is a way of providing context and instructions to Claude, such as specifying a particular goal or role. See our [guide to system prompts](https://docs.claude.com/en/docs/system-prompts).
   --temperature: float # Amount of randomness injected into the response.  Defaults to `1.0`. Ranges from `0.0` to `1.0`. Use `temperature` closer to `0.0` for analytical / multiple choice, and closer to `1.0` for creative and generative tasks.  Note that even with `temperature` of `0.0`, the results will not be fully deterministic. (DEPRECATED)
   --thinking: any # Configuration for enabling Claude's extended thinking.  When enabled, responses include `thinking` content blocks showing Claude's thinking process before the final answer. Requires a minimum budget of 1,024 tokens and counts towards your `max_tokens` limit.  See [extended thinking](https://docs.claude.com/en/docs/build-with-claude/extended-thinking) for details.
@@ -1219,7 +1218,7 @@ export def "environments-betatrue get" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Maximum number of environments to return (default: 20)
   --page: string # Opaque cursor from previous response for pagination. Pass the `next_page` value from the previous response.
-  --include-archived: string@bool-completer # Include archived environments in the response (default: false)
+  --include-archived: oneof<nothing, bool> # Include archived environments in the response (default: false)
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --x-api-key: string
@@ -1484,7 +1483,7 @@ export def "environments-work-stop-betatrue post" [
   --anthropic-beta: string # Optional header to specify the beta version(s) you want to use.  To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
   --anthropic-version: string # The version of the Claude API you want to use.  Read more about versioning and our version history [here](https://docs.claude.com/en/api/versioning).
   --authorization: string
-  --force: string@bool-completer # If true, immediately stop work without graceful shutdown (default: false)
+  --force: oneof<nothing, bool> # If true, immediately stop work without graceful shutdown (default: false)
 ]: any -> record<acknowledged_at: any, created_at: string, data: record<id: string, type: string>, environment_id: string, id: string, latest_heartbeat_at: any, metadata: record, started_at: any, state: string, stop_requested_at: any, stopped_at: any, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1891,7 +1890,7 @@ export def "memory-stores-betatrue BetaListMemoryStores" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Maximum number of stores to return per page. Must be between 1 and 100. Defaults to 20 when omitted. (format: int32)
   --page: string # Opaque pagination cursor (a `page_...` value). Pass the `next_page` value from a previous response to fetch the next page; omit for the first page.
-  --include-archived: string@bool-completer # When `true`, archived stores are included in the results. Defaults to `false` (archived stores are excluded).
+  --include-archived: oneof<nothing, bool> # When `true`, archived stores are included in the results. Defaults to `false` (archived stores are excluded).
   --created-atgte: string # Return only stores whose `created_at` is at or after this time (inclusive). Sent on the wire as `created_at[gte]`. (format: date-time)
   --created-atlte: string # Return only stores whose `created_at` is at or before this time (inclusive). Sent on the wire as `created_at[lte]`. (format: date-time)
   --x-api-key: string
@@ -2221,7 +2220,7 @@ export def "sessions-betatrue BetaListSessions" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Maximum number of results to return. (format: int32)
   --page: string # Opaque pagination cursor from a previous response.
-  --include-archived: string@bool-completer # When true, includes archived sessions. Default: false (exclude archived).
+  --include-archived: oneof<nothing, bool> # When true, includes archived sessions. Default: false (exclude archived).
   --created-atgte: string # Return sessions created at or after this time (inclusive). (format: date-time)
   --created-atgt: string # Return sessions created after this time (exclusive). (format: date-time)
   --created-atlte: string # Return sessions created at or before this time (inclusive). (format: date-time)
@@ -2804,7 +2803,7 @@ export def "agents-betatrue BetaListAgents" [
   --page: string # Opaque pagination cursor from a previous response.
   --created-atgte: string # Return agents created at or after this time (inclusive). (format: date-time)
   --created-atlte: string # Return agents created at or before this time (inclusive). (format: date-time)
-  --include-archived: string@bool-completer # Include archived agents in results. Defaults to false.
+  --include-archived: oneof<nothing, bool> # Include archived agents in results. Defaults to false.
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -2999,7 +2998,7 @@ export def "deployments-betatrue BetaListDeployments" [
   --status: string@status-completer # Filter by status: active or paused. Omit for both. To include archived deployments, use include_archived instead; the two cannot be combined.
   --created-atgte: string # Return deployments created at or after this time (inclusive). (format: date-time)
   --created-atlte: string # Return deployments created at or before this time (inclusive). (format: date-time)
-  --include-archived: string@bool-completer # When true, includes archived deployments. Default: false (exclude archived).
+  --include-archived: oneof<nothing, bool> # When true, includes archived deployments. Default: false (exclude archived).
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -3200,7 +3199,7 @@ export def "deployment-runs-betatrue BetaListDeploymentRuns" [
   --page: string # Opaque pagination cursor. Pass next_page from the previous response. Invalid or expired cursors return 400.
   --deployment-id: string # Filter to a specific deployment. Omit to list across all deployments in the workspace. Filtering by a non-existent deployment_id returns 200 with empty data.
   --trigger-type: string@trigger-type-completer # Filter runs by what triggered them. Omit to return all runs.
-  --has-error: string@bool-completer # Filter: true for runs with non-null error, false for runs with non-null session_id. Omit for all.
+  --has-error: oneof<nothing, bool> # Filter: true for runs with non-null error, false for runs with non-null session_id. Omit for all.
   --created-atgte: string # Return runs created at or after this time (inclusive). (format: date-time)
   --created-atlte: string # Return runs created at or before this time (inclusive). (format: date-time)
   --created-atgt: string # Return runs created strictly after this time (exclusive). (format: date-time)
@@ -3291,7 +3290,7 @@ export def "vaults-betatrue BetaListVaults" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Maximum number of vaults to return per page. Defaults to 20, maximum 100. (format: int32)
   --page: string # Opaque pagination token from a previous `list_vaults` response.
-  --include-archived: string@bool-completer # Whether to include archived vaults in the results.
+  --include-archived: oneof<nothing, bool> # Whether to include archived vaults in the results.
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -3465,7 +3464,7 @@ export def "vaults-credentials-betatrue BetaListCredentials" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Maximum number of credentials to return per page. Defaults to 20, maximum 100. (format: int32)
   --page: string # Opaque pagination token from a previous `list_credentials` response.
-  --include-archived: string@bool-completer # Whether to include archived credentials in the results.
+  --include-archived: oneof<nothing, bool> # Whether to include archived credentials in the results.
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string

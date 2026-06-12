@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://lemmy.ml/api/v3" "https://enterprise.lemmy.ml/api/v3" "https://ds9.lemmy.ml/api/v3" "https://voyager.lemmy.ml/api/v3"] }
 def auth-scheme-completer [] { ["bearer" "cookie-auth"] }
 
@@ -135,18 +134,18 @@ export def "site post" [
   --description: string
   --icon: string
   --banner: string
-  --enable-downvotes: string@bool-completer
-  --enable-nsfw: string@bool-completer
-  --community-creation-admin-only: string@bool-completer
-  --require-email-verification: string@bool-completer
+  --enable-downvotes: oneof<nothing, bool>
+  --enable-nsfw: oneof<nothing, bool>
+  --community-creation-admin-only: oneof<nothing, bool>
+  --require-email-verification: oneof<nothing, bool>
   --application-question: string
-  --private-instance: string@bool-completer
+  --private-instance: oneof<nothing, bool>
   --default-theme: string
   --default-post-listing-type: string@default-post-listing-type-completer
   --default-sort-type: string@default-sort-type-completer
   --legal-information: string
-  --application-email-admins: string@bool-completer
-  --hide-modlog-mod-names: string@bool-completer
+  --application-email-admins: oneof<nothing, bool>
+  --hide-modlog-mod-names: oneof<nothing, bool>
   --discussion-languages: list
   --slur-filter-regex: string
   --actor-name-max-length: int
@@ -162,9 +161,9 @@ export def "site post" [
   --rate-limit-comment-per-second: int
   --rate-limit-search: int
   --rate-limit-search-per-second: int
-  --federation-enabled: string@bool-completer
-  --federation-debug: string@bool-completer
-  --captcha-enabled: string@bool-completer
+  --federation-enabled: oneof<nothing, bool>
+  --federation-debug: oneof<nothing, bool>
+  --captcha-enabled: oneof<nothing, bool>
   --captcha-difficulty: string
   --allowed-instances: list
   --blocked-instances: list
@@ -200,18 +199,18 @@ export def "site put" [
   --description: string
   --icon: string
   --banner: string
-  --enable-downvotes: string@bool-completer
-  --enable-nsfw: string@bool-completer
-  --community-creation-admin-only: string@bool-completer
-  --require-email-verification: string@bool-completer
+  --enable-downvotes: oneof<nothing, bool>
+  --enable-nsfw: oneof<nothing, bool>
+  --community-creation-admin-only: oneof<nothing, bool>
+  --require-email-verification: oneof<nothing, bool>
   --application-question: string
-  --private-instance: string@bool-completer
+  --private-instance: oneof<nothing, bool>
   --default-theme: string
   --default-post-listing-type: string@default-post-listing-type-completer
   --default-sort-type: string@default-sort-type-completer
   --legal-information: string
-  --application-email-admins: string@bool-completer
-  --hide-modlog-mod-names: string@bool-completer
+  --application-email-admins: oneof<nothing, bool>
+  --hide-modlog-mod-names: oneof<nothing, bool>
   --discussion-languages: list
   --slur-filter-regex: string
   --actor-name-max-length: int
@@ -227,16 +226,16 @@ export def "site put" [
   --rate-limit-comment-per-second: int
   --rate-limit-search: int
   --rate-limit-search-per-second: int
-  --federation-enabled: string@bool-completer
-  --federation-debug: string@bool-completer
-  --captcha-enabled: string@bool-completer
+  --federation-enabled: oneof<nothing, bool>
+  --federation-debug: oneof<nothing, bool>
+  --captcha-enabled: oneof<nothing, bool>
   --captcha-difficulty: string
   --allowed-instances: list
   --blocked-instances: list
   --blocked-urls: list
   --taglines: list
   --registration-mode: string@registration-mode-completer
-  --reports-email-admins: string@bool-completer
+  --reports-email-admins: oneof<nothing, bool>
   --content-warning: string
   --default-post-listing-mode: string@default-post-listing-mode-completer
 ]: any -> record<site_view: record<site: record<id: int, name: string, sidebar: string, published: string, updated: string, icon: string, banner: string, description: string, actor_id: string, last_refreshed_at: string, inbox_url: string, public_key: string, instance_id: int, content_warning: string>, local_site: record<id: int, site_id: int, site_setup: bool, enable_downvotes: bool, enable_nsfw: bool, community_creation_admin_only: bool, require_email_verification: bool, application_question: string, private_instance: bool, default_theme: string, default_post_listing_type: string, legal_information: string, hide_modlog_mod_names: bool, application_email_admins: bool, slur_filter_regex: string, actor_name_max_length: int, federation_enabled: bool, captcha_enabled: bool, captcha_difficulty: string, published: string, updated: string, registration_mode: string, reports_email_admins: bool, federation_signed_fetch: bool, default_post_listing_mode: string, default_sort_type: string>, local_site_rate_limit: record<local_site_id: int, message: int, message_per_second: int, post: int, post_per_second: int, register: int, register_per_second: int, image: int, image_per_second: int, comment: int, comment_per_second: int, search: int, search_per_second: int, published: string, updated: string, import_user_settings: int, import_user_settings_per_second: int>, counts: record<site_id: int, users: int, posts: int, comments: int, communities: int, users_active_day: int, users_active_week: int, users_active_month: int, users_active_half_year: int>>, taglines: table<id: int, local_site_id: int, content: string, published: string, updated: string>> {
@@ -355,8 +354,8 @@ export def "community post" [
   --description: string
   --icon: string
   --banner: string
-  --nsfw: string@bool-completer
-  --posting-restricted-to-mods: string@bool-completer
+  --nsfw: oneof<nothing, bool>
+  --posting-restricted-to-mods: oneof<nothing, bool>
   --discussion-languages: list
   --visibility: string@visibility-completer
 ]: any -> record<community_view: record<community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, subscribed: string, blocked: bool, counts: record<community_id: int, subscribers: int, posts: int, comments: int, published: string, users_active_day: int, users_active_week: int, users_active_month: int, users_active_half_year: int, subscribers_local: int>, banned_from_community: bool>, discussion_languages: list<int>> {
@@ -387,8 +386,8 @@ export def "community put" [
   --description: string
   --icon: string
   --banner: string
-  --nsfw: string@bool-completer
-  --posting-restricted-to-mods: string@bool-completer
+  --nsfw: oneof<nothing, bool>
+  --posting-restricted-to-mods: oneof<nothing, bool>
   --discussion-languages: list
   --visibility: string@visibility-completer
 ]: any -> record<community_view: record<community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, subscribed: string, blocked: bool, counts: record<community_id: int, subscribers: int, posts: int, comments: int, published: string, users_active_day: int, users_active_week: int, users_active_month: int, users_active_half_year: int, subscribers_local: int>, banned_from_community: bool>, discussion_languages: list<int>> {
@@ -415,7 +414,7 @@ export def "community-hide put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   community_id: int
-  --hidden: string@bool-completer
+  --hidden: oneof<nothing, bool>
   --reason: string
 ]: any -> any {
   let input = $in
@@ -463,7 +462,7 @@ export def "community-follow post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   community_id: int
-  --follow: string@bool-completer
+  --follow: oneof<nothing, bool>
 ]: any -> record<community_view: record<community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, subscribed: string, blocked: bool, counts: record<community_id: int, subscribers: int, posts: int, comments: int, published: string, users_active_day: int, users_active_week: int, users_active_month: int, users_active_half_year: int, subscribers_local: int>, banned_from_community: bool>, discussion_languages: list<int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -488,7 +487,7 @@ export def "community-block post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   community_id: int
-  --block: string@bool-completer
+  --block: oneof<nothing, bool>
 ]: any -> record<community_view: record<community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, subscribed: string, blocked: bool, counts: record<community_id: int, subscribers: int, posts: int, comments: int, published: string, users_active_day: int, users_active_week: int, users_active_month: int, users_active_half_year: int, subscribers_local: int>, banned_from_community: bool>, blocked: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -513,7 +512,7 @@ export def "community-delete post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   community_id: int
-  --deleted: string@bool-completer
+  --deleted: oneof<nothing, bool>
 ]: any -> record<community_view: record<community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, subscribed: string, blocked: bool, counts: record<community_id: int, subscribers: int, posts: int, comments: int, published: string, users_active_day: int, users_active_week: int, users_active_month: int, users_active_half_year: int, subscribers_local: int>, banned_from_community: bool>, discussion_languages: list<int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -538,7 +537,7 @@ export def "community-remove post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   community_id: int
-  --removed: string@bool-completer
+  --removed: oneof<nothing, bool>
   --reason: string
 ]: any -> record<community_view: record<community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, subscribed: string, blocked: bool, counts: record<community_id: int, subscribers: int, posts: int, comments: int, published: string, users_active_day: int, users_active_week: int, users_active_month: int, users_active_half_year: int, subscribers_local: int>, banned_from_community: bool>, discussion_languages: list<int>> {
   let input = $in
@@ -590,8 +589,8 @@ export def "community-ban-user post" [
   --allow-errors(-e) # Return full response without error handling
   community_id: int
   person_id: int
-  --ban: string@bool-completer
-  --remove-data: string@bool-completer
+  --ban: oneof<nothing, bool>
+  --remove-data: oneof<nothing, bool>
   --reason: string
   --expires: int
 ]: any -> record<person_view: record<person: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, counts: record<person_id: int, post_count: int, comment_count: int>, is_admin: bool>, banned: bool> {
@@ -619,7 +618,7 @@ export def "community-mod post" [
   --allow-errors(-e) # Return full response without error handling
   community_id: int
   person_id: int
-  --added: string@bool-completer
+  --added: oneof<nothing, bool>
 ]: any -> record<moderators: table<community: record, moderator: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -690,7 +689,7 @@ export def "post put" [
   --body-url: string
   --body-body: string
   --alt-text: string
-  --nsfw: string@bool-completer
+  --nsfw: oneof<nothing, bool>
   --language-id: int
   --custom-thumbnail: string
 ]: any -> record<post_view: record<post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, image_details: record<link: string, width: int, height: int, content_type: string>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record<post_id: int, comments: int, score: int, upvotes: int, downvotes: int, published: string, newest_comment_time: string>, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>> {
@@ -722,7 +721,7 @@ export def "post post" [
   --body-body: string
   --alt-text: string
   --honeypot: string
-  --nsfw: string@bool-completer
+  --nsfw: oneof<nothing, bool>
   --language-id: int
   --custom-thumbnail: string
 ]: any -> record<post_view: record<post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, image_details: record<link: string, width: int, height: int, content_type: string>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record<post_id: int, comments: int, score: int, upvotes: int, downvotes: int, published: string, newest_comment_time: string>, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>> {
@@ -771,7 +770,7 @@ export def "post-delete post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   post_id: int
-  --deleted: string@bool-completer
+  --deleted: oneof<nothing, bool>
 ]: any -> record<post_view: record<post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, image_details: record<link: string, width: int, height: int, content_type: string>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record<post_id: int, comments: int, score: int, upvotes: int, downvotes: int, published: string, newest_comment_time: string>, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -796,7 +795,7 @@ export def "post-remove post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   post_id: int
-  --removed: string@bool-completer
+  --removed: oneof<nothing, bool>
   --reason: string
 ]: any -> record<post_view: record<post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, image_details: record<link: string, width: int, height: int, content_type: string>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record<post_id: int, comments: int, score: int, upvotes: int, downvotes: int, published: string, newest_comment_time: string>, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>> {
   let input = $in
@@ -822,7 +821,7 @@ export def "post-mark-as-read post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   post_ids: list
-  --read: string@bool-completer
+  --read: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -847,7 +846,7 @@ export def "post-lock post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   post_id: int
-  --locked: string@bool-completer
+  --locked: oneof<nothing, bool>
 ]: any -> record<post_view: record<post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, image_details: record<link: string, width: int, height: int, content_type: string>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record<post_id: int, comments: int, score: int, upvotes: int, downvotes: int, published: string, newest_comment_time: string>, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -872,7 +871,7 @@ export def "post-feature post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   post_id: int
-  --featured: string@bool-completer
+  --featured: oneof<nothing, bool>
   feature_type: string@feature-type-completer
 ]: any -> record<post_view: record<post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, image_details: record<link: string, width: int, height: int, content_type: string>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record<post_id: int, comments: int, score: int, upvotes: int, downvotes: int, published: string, newest_comment_time: string>, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>> {
   let input = $in
@@ -923,7 +922,7 @@ export def "post-save put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   post_id: int
-  --body-save: string@bool-completer
+  --body-save: oneof<nothing, bool>
 ]: any -> record<post_view: record<post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, image_details: record<link: string, width: int, height: int, content_type: string>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record<post_id: int, comments: int, score: int, upvotes: int, downvotes: int, published: string, newest_comment_time: string>, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -973,7 +972,7 @@ export def "post-report-resolve put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   report_id: int
-  --resolved: string@bool-completer
+  --resolved: oneof<nothing, bool>
 ]: any -> record<post_report_view: record<post_report: record<id: int, creator_id: int, post_id: int, original_post_name: string, original_post_url: string, original_post_body: string, reason: string, resolved: bool, resolver_id: int, published: string, updated: string>, post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, post_creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, creator_banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int, counts: record<post_id: int, comments: int, score: int, upvotes: int, downvotes: int, published: string, newest_comment_time: string>, resolver: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1139,7 +1138,7 @@ export def "comment-delete post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   comment_id: int
-  --deleted: string@bool-completer
+  --deleted: oneof<nothing, bool>
 ]: any -> record<comment_view: record<comment: record<id: int, creator_id: int, post_id: int, content: string, removed: bool, published: string, updated: string, deleted: bool, ap_id: string, local: bool, path: string, distinguished: bool, language_id: int>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, counts: record<comment_id: int, score: int, upvotes: int, downvotes: int, published: string, child_count: int>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>, recipient_ids: list<int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1164,7 +1163,7 @@ export def "comment-remove post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   comment_id: int
-  --removed: string@bool-completer
+  --removed: oneof<nothing, bool>
   --reason: string
 ]: any -> record<comment_view: record<comment: record<id: int, creator_id: int, post_id: int, content: string, removed: bool, published: string, updated: string, deleted: bool, ap_id: string, local: bool, path: string, distinguished: bool, language_id: int>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, counts: record<comment_id: int, score: int, upvotes: int, downvotes: int, published: string, child_count: int>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>, recipient_ids: list<int>> {
   let input = $in
@@ -1190,7 +1189,7 @@ export def "comment-mark-as-read post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   comment_reply_id: int
-  --read: string@bool-completer
+  --read: oneof<nothing, bool>
 ]: any -> record<comment_reply_view: record<comment_reply: record<id: int, recipient_id: int, comment_id: int, read: bool, published: string>, comment: record<id: int, creator_id: int, post_id: int, content: string, removed: bool, published: string, updated: string, deleted: bool, ap_id: string, local: bool, path: string, distinguished: bool, language_id: int>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, recipient: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, counts: record<comment_id: int, score: int, upvotes: int, downvotes: int, published: string, child_count: int>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1215,7 +1214,7 @@ export def "comment-distinguish post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   comment_id: int
-  --distinguished: string@bool-completer
+  --distinguished: oneof<nothing, bool>
 ]: any -> record<comment_view: record<comment: record<id: int, creator_id: int, post_id: int, content: string, removed: bool, published: string, updated: string, deleted: bool, ap_id: string, local: bool, path: string, distinguished: bool, language_id: int>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, counts: record<comment_id: int, score: int, upvotes: int, downvotes: int, published: string, child_count: int>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>, recipient_ids: list<int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1265,7 +1264,7 @@ export def "comment-save put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   comment_id: int
-  --body-save: string@bool-completer
+  --body-save: oneof<nothing, bool>
 ]: any -> record<comment_view: record<comment: record<id: int, creator_id: int, post_id: int, content: string, removed: bool, published: string, updated: string, deleted: bool, ap_id: string, local: bool, path: string, distinguished: bool, language_id: int>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, counts: record<comment_id: int, score: int, upvotes: int, downvotes: int, published: string, child_count: int>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>, recipient_ids: list<int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1315,7 +1314,7 @@ export def "comment-report-resolve put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   report_id: int
-  --resolved: string@bool-completer
+  --resolved: oneof<nothing, bool>
 ]: any -> record<comment_report_view: record<comment_report: record<id: int, creator_id: int, comment_id: int, original_comment_text: string, reason: string, resolved: bool, resolver_id: int, published: string, updated: string>, comment: record<id: int, creator_id: int, post_id: int, content: string, removed: bool, published: string, updated: string, deleted: bool, ap_id: string, local: bool, path: string, distinguished: bool, language_id: int>, post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, comment_creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, counts: record<comment_id: int, score: int, upvotes: int, downvotes: int, published: string, child_count: int>, creator_banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, creator_blocked: bool, subscribed: string, saved: bool, my_vote: int, resolver: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1434,7 +1433,7 @@ export def "private-message-delete post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   private_message_id: int
-  --deleted: string@bool-completer
+  --deleted: oneof<nothing, bool>
 ]: any -> record<private_message_view: record<private_message: record<id: int, creator_id: int, recipient_id: int, content: string, deleted: bool, read: bool, published: string, updated: string, ap_id: string, local: bool>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, recipient: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1459,7 +1458,7 @@ export def "private-message-mark-as-read post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   private_message_id: int
-  --read: string@bool-completer
+  --read: oneof<nothing, bool>
 ]: any -> record<private_message_view: record<private_message: record<id: int, creator_id: int, recipient_id: int, content: string, deleted: bool, read: bool, published: string, updated: string, ap_id: string, local: bool>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, recipient: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1509,7 +1508,7 @@ export def "private-message-report-resolve put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   report_id: int
-  --resolved: string@bool-completer
+  --resolved: oneof<nothing, bool>
 ]: any -> record<private_message_report_view: record<private_message_report: record<id: int, creator_id: int, private_message_id: int, original_pm_text: string, reason: string, resolved: bool, resolver_id: int, published: string, updated: string>, private_message: record<id: int, creator_id: int, recipient_id: int, content: string, deleted: bool, read: bool, published: string, updated: string, ap_id: string, local: bool>, private_message_creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, resolver: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1580,7 +1579,7 @@ export def "user-register post" [
   username: string
   password: string
   password_verify: string
-  --show-nsfw: string@bool-completer
+  --show-nsfw: oneof<nothing, bool>
   --email: string
   --captcha-uuid: string
   --captcha-answer: string
@@ -1652,7 +1651,7 @@ export def "user-mention-mark-as-read post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   person_mention_id: int
-  --read: string@bool-completer
+  --read: oneof<nothing, bool>
 ]: any -> record<person_mention_view: record<person_mention: record<id: int, recipient_id: int, comment_id: int, read: bool, published: string>, comment: record<id: int, creator_id: int, post_id: int, content: string, removed: bool, published: string, updated: string, deleted: bool, ap_id: string, local: bool, path: string, distinguished: bool, language_id: int>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, recipient: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, counts: record<comment_id: int, score: int, upvotes: int, downvotes: int, published: string, child_count: int>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1699,8 +1698,8 @@ export def "user-ban post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   person_id: int
-  --ban: string@bool-completer
-  --remove-data: string@bool-completer
+  --ban: oneof<nothing, bool>
+  --remove-data: oneof<nothing, bool>
   --reason: string
   --expires: int
 ]: any -> record<person_view: record<person: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, counts: record<person_id: int, post_count: int, comment_count: int>, is_admin: bool>, banned: bool> {
@@ -1748,7 +1747,7 @@ export def "user-block post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   person_id: int
-  --block: string@bool-completer
+  --block: oneof<nothing, bool>
 ]: any -> record<person_view: record<person: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, counts: record<person_id: int, post_count: int, comment_count: int>, is_admin: bool>, blocked: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1799,7 +1798,7 @@ export def "user-delete-account post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   password: string
-  --delete-content: string@bool-completer
+  --delete-content: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1896,9 +1895,9 @@ export def "user-save-user-settings put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --show-nsfw: string@bool-completer
-  --blur-nsfw: string@bool-completer
-  --auto-expand: string@bool-completer
+  --show-nsfw: oneof<nothing, bool>
+  --blur-nsfw: oneof<nothing, bool>
+  --auto-expand: oneof<nothing, bool>
   --theme: string
   --default-sort-type: string@default-sort-type-completer
   --default-listing-type: string@default-listing-type-completer
@@ -1909,22 +1908,22 @@ export def "user-save-user-settings put" [
   --email: string
   --bio: string
   --matrix-user-id: string
-  --show-avatars: string@bool-completer
-  --send-notifications-to-email: string@bool-completer
-  --bot-account: string@bool-completer
-  --show-bot-accounts: string@bool-completer
-  --show-read-posts: string@bool-completer
+  --show-avatars: oneof<nothing, bool>
+  --send-notifications-to-email: oneof<nothing, bool>
+  --bot-account: oneof<nothing, bool>
+  --show-bot-accounts: oneof<nothing, bool>
+  --show-read-posts: oneof<nothing, bool>
   --discussion-languages: list
-  --open-links-in-new-tab: string@bool-completer
-  --infinite-scroll-enabled: string@bool-completer
+  --open-links-in-new-tab: oneof<nothing, bool>
+  --infinite-scroll-enabled: oneof<nothing, bool>
   --post-listing-mode: string@post-listing-mode-completer
-  --enable-keyboard-navigation: string@bool-completer
-  --enable-animated-images: string@bool-completer
-  --collapse-bot-comments: string@bool-completer
-  --show-scores: string@bool-completer
-  --show-upvotes: string@bool-completer
-  --show-downvotes: string@bool-completer
-  --show-upvote-percentage: string@bool-completer
+  --enable-keyboard-navigation: oneof<nothing, bool>
+  --enable-animated-images: oneof<nothing, bool>
+  --collapse-bot-comments: oneof<nothing, bool>
+  --show-scores: oneof<nothing, bool>
+  --show-upvotes: oneof<nothing, bool>
+  --show-downvotes: oneof<nothing, bool>
+  --show-upvote-percentage: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2084,7 +2083,7 @@ export def "admin-add post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   person_id: int
-  --added: string@bool-completer
+  --added: oneof<nothing, bool>
 ]: any -> record<admins: table<person: record, counts: record, is_admin: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2151,7 +2150,7 @@ export def "admin-registration-application-approve put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   id: int
-  --approve: string@bool-completer
+  --approve: oneof<nothing, bool>
   --deny-reason: string
 ]: any -> record<registration_application: record<registration_application: record<id: int, local_user_id: int, answer: string, admin_id: int, deny_reason: string, published: string>, creator_local_user: record<id: int, person_id: int, email: string, show_nsfw: bool, theme: string, default_sort_type: string, default_listing_type: string, interface_language: string, show_avatars: bool, send_notifications_to_email: bool, show_scores: bool, show_bot_accounts: bool, show_read_posts: bool, email_verified: bool, accepted_application: bool, open_links_in_new_tab: bool, blur_nsfw: bool, auto_expand: bool, infinite_scroll_enabled: bool, admin: bool, post_listing_mode: string, totp_2fa_enabled: bool, enable_keyboard_navigation: bool, enable_animated_images: bool, collapse_bot_comments: bool, last_donation_notification: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, admin: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>>> {
   let input = $in
@@ -2357,7 +2356,7 @@ export def "site-block post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   instance_id: int
-  --block: string@bool-completer
+  --block: oneof<nothing, bool>
 ]: any -> record<blocked: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2402,7 +2401,7 @@ export def "user-totp-update post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   totp_token: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2636,7 +2635,7 @@ export def "post-hide post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   post_ids: list
-  --hide: string@bool-completer
+  --hide: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

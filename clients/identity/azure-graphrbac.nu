@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://graph.windows.net"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -147,29 +146,29 @@ export def "applications Create" [
   --api-version: string # Client API version.
   displayName: string # The display name of the application.
   --identifierUris: list # A collection of URIs for the application.
-  --allowGuestsSignIn: string@bool-completer # A property on the application to indicate if the application accepts other IDPs or not or partially accepts.
-  --allowPassthroughUsers: string@bool-completer # Indicates that the application supports pass through users who have no presence in the resource tenant.
+  --allowGuestsSignIn: oneof<nothing, bool> # A property on the application to indicate if the application accepts other IDPs or not or partially accepts.
+  --allowPassthroughUsers: oneof<nothing, bool> # Indicates that the application supports pass through users who have no presence in the resource tenant.
   --appLogoUrl: string # The url for the application logo image stored in a CDN.
   --appPermissions: list # The application permissions.
   --appRoles: list # The collection of application roles that an application may declare. These roles can be assigned to users, groups or service principals. — item shape: {allowedMemberTypes?: list, description?: string, displayName?: string, id?: string, isEnabled?: bool, value?: string}
-  --availableToOtherTenants: string@bool-completer # Whether the application is available to other tenants.
+  --availableToOtherTenants: oneof<nothing, bool> # Whether the application is available to other tenants.
   --errorUrl: string # A URL provided by the author of the application to report errors when using the application.
   --groupMembershipClaims: string@groupMembershipClaims-completer # Configures the groups claim issued in a user or OAuth 2.0 access token that the app expects.
   --homepage: string # The home page of the application.
   --informationalUrls: record # Represents a group of URIs that provide terms of service, marketing, support and privacy policy information about an application. The default value for each string is null. — shape: {marketing?: string, privacy?: string, support?: string, termsOfService?: string}
-  --isDeviceOnlyAuthSupported: string@bool-completer # Specifies whether this application supports device authentication without a user. The default is false.
+  --isDeviceOnlyAuthSupported: oneof<nothing, bool> # Specifies whether this application supports device authentication without a user. The default is false.
   --keyCredentials: list # A collection of KeyCredential objects. — item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, type?: string, usage?: string, value?: string}
   --knownClientApplications: list # Client applications that are tied to this resource application. Consent to any of the known client applications will result in implicit consent to the resource application through a combined consent dialog (showing the OAuth permission scopes required by the client and the resource).
   --logoutUrl: string # the url of the logout page
-  --oauth2AllowImplicitFlow: string@bool-completer # Whether to allow implicit grant flow for OAuth2
-  --oauth2AllowUrlPathMatching: string@bool-completer # Specifies whether during a token Request Azure AD will allow path matching of the redirect URI against the applications collection of replyURLs. The default is false.
+  --oauth2AllowImplicitFlow: oneof<nothing, bool> # Whether to allow implicit grant flow for OAuth2
+  --oauth2AllowUrlPathMatching: oneof<nothing, bool> # Specifies whether during a token Request Azure AD will allow path matching of the redirect URI against the applications collection of replyURLs. The default is false.
   --oauth2Permissions: list # The collection of OAuth 2.0 permission scopes that the web API (resource) application exposes to client applications. These permission scopes may be granted to client applications during consent. — item shape: {adminConsentDescription?: string, adminConsentDisplayName?: string, id?: string, isEnabled?: bool, type?: string, userConsentDescription?: string, userConsentDisplayName?: string, value?: string}
-  --oauth2RequirePostResponse: string@bool-completer # Specifies whether, as part of OAuth 2.0 token requests, Azure AD will allow POST requests, as opposed to GET requests. The default is false, which specifies that only GET requests will be allowed.
+  --oauth2RequirePostResponse: oneof<nothing, bool> # Specifies whether, as part of OAuth 2.0 token requests, Azure AD will allow POST requests, as opposed to GET requests. The default is false, which specifies that only GET requests will be allowed.
   --optionalClaims: record # Specifying the claims to be included in the token. — shape: {accessToken?: list, idToken?: list, samlToken?: list}
   --orgRestrictions: list # A list of tenants allowed to access application.
   --passwordCredentials: list # A collection of PasswordCredential objects — item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, value?: string}
   --preAuthorizedApplications: list # list of pre-authorized applications. — item shape: {appId?: string, extensions?: list, permissions?: list}
-  --publicClient: string@bool-completer # Specifies whether this application is a public client (such as an installed application running on a mobile device). Default is false.
+  --publicClient: oneof<nothing, bool> # Specifies whether this application is a public client (such as an installed application running on a mobile device). Default is false.
   --publisherDomain: string # Reliable domain which can be used to identify an application.
   --replyUrls: list # A collection of reply URLs for the application.
   --requiredResourceAccess: list # Specifies resources that this application requires access to and the set of OAuth permission scopes and application roles that it needs under each of those resources. This pre-configuration of required resource access drives the consent experience. — item shape: {resourceAccess: list, resourceAppId?: string}
@@ -267,29 +266,29 @@ export def "applications Patch" [
   --api-version: string # Client API version.
   --displayName: string # The display name of the application.
   --identifierUris: list # A collection of URIs for the application.
-  --allowGuestsSignIn: string@bool-completer # A property on the application to indicate if the application accepts other IDPs or not or partially accepts.
-  --allowPassthroughUsers: string@bool-completer # Indicates that the application supports pass through users who have no presence in the resource tenant.
+  --allowGuestsSignIn: oneof<nothing, bool> # A property on the application to indicate if the application accepts other IDPs or not or partially accepts.
+  --allowPassthroughUsers: oneof<nothing, bool> # Indicates that the application supports pass through users who have no presence in the resource tenant.
   --appLogoUrl: string # The url for the application logo image stored in a CDN.
   --appPermissions: list # The application permissions.
   --appRoles: list # The collection of application roles that an application may declare. These roles can be assigned to users, groups or service principals. — item shape: {allowedMemberTypes?: list, description?: string, displayName?: string, id?: string, isEnabled?: bool, value?: string}
-  --availableToOtherTenants: string@bool-completer # Whether the application is available to other tenants.
+  --availableToOtherTenants: oneof<nothing, bool> # Whether the application is available to other tenants.
   --errorUrl: string # A URL provided by the author of the application to report errors when using the application.
   --groupMembershipClaims: string@groupMembershipClaims-completer # Configures the groups claim issued in a user or OAuth 2.0 access token that the app expects.
   --homepage: string # The home page of the application.
   --informationalUrls: record # Represents a group of URIs that provide terms of service, marketing, support and privacy policy information about an application. The default value for each string is null. — shape: {marketing?: string, privacy?: string, support?: string, termsOfService?: string}
-  --isDeviceOnlyAuthSupported: string@bool-completer # Specifies whether this application supports device authentication without a user. The default is false.
+  --isDeviceOnlyAuthSupported: oneof<nothing, bool> # Specifies whether this application supports device authentication without a user. The default is false.
   --keyCredentials: list # A collection of KeyCredential objects. — item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, type?: string, usage?: string, value?: string}
   --knownClientApplications: list # Client applications that are tied to this resource application. Consent to any of the known client applications will result in implicit consent to the resource application through a combined consent dialog (showing the OAuth permission scopes required by the client and the resource).
   --logoutUrl: string # the url of the logout page
-  --oauth2AllowImplicitFlow: string@bool-completer # Whether to allow implicit grant flow for OAuth2
-  --oauth2AllowUrlPathMatching: string@bool-completer # Specifies whether during a token Request Azure AD will allow path matching of the redirect URI against the applications collection of replyURLs. The default is false.
+  --oauth2AllowImplicitFlow: oneof<nothing, bool> # Whether to allow implicit grant flow for OAuth2
+  --oauth2AllowUrlPathMatching: oneof<nothing, bool> # Specifies whether during a token Request Azure AD will allow path matching of the redirect URI against the applications collection of replyURLs. The default is false.
   --oauth2Permissions: list # The collection of OAuth 2.0 permission scopes that the web API (resource) application exposes to client applications. These permission scopes may be granted to client applications during consent. — item shape: {adminConsentDescription?: string, adminConsentDisplayName?: string, id?: string, isEnabled?: bool, type?: string, userConsentDescription?: string, userConsentDisplayName?: string, value?: string}
-  --oauth2RequirePostResponse: string@bool-completer # Specifies whether, as part of OAuth 2.0 token requests, Azure AD will allow POST requests, as opposed to GET requests. The default is false, which specifies that only GET requests will be allowed.
+  --oauth2RequirePostResponse: oneof<nothing, bool> # Specifies whether, as part of OAuth 2.0 token requests, Azure AD will allow POST requests, as opposed to GET requests. The default is false, which specifies that only GET requests will be allowed.
   --optionalClaims: record # Specifying the claims to be included in the token. — shape: {accessToken?: list, idToken?: list, samlToken?: list}
   --orgRestrictions: list # A list of tenants allowed to access application.
   --passwordCredentials: list # A collection of PasswordCredential objects — item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, value?: string}
   --preAuthorizedApplications: list # list of pre-authorized applications. — item shape: {appId?: string, extensions?: list, permissions?: list}
-  --publicClient: string@bool-completer # Specifies whether this application is a public client (such as an installed application running on a mobile device). Default is false.
+  --publicClient: oneof<nothing, bool> # Specifies whether this application is a public client (such as an installed application running on a mobile device). Default is false.
   --publisherDomain: string # Reliable domain which can be used to identify an application.
   --replyUrls: list # A collection of reply URLs for the application.
   --requiredResourceAccess: list # Specifies resources that this application requires access to and the set of OAuth permission scopes and application roles that it needs under each of those resources. This pre-configuration of required resource access drives the consent experience. — item shape: {resourceAccess: list, resourceAppId?: string}
@@ -651,7 +650,7 @@ export def "get-objects-by-object-ids GetObjectsByObjectIds" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version.
-  --includeDirectoryObjectReferences: string@bool-completer # If true, also searches for object IDs in the partner tenant.
+  --includeDirectoryObjectReferences: oneof<nothing, bool> # If true, also searches for object IDs in the partner tenant.
   --objectIds: list # The requested object IDs.
   --types: list # The requested object types.
 ]: any -> record<odata_nextLink: string, value: table<deletionTimestamp: string, objectId: string, objectType: string>> {
@@ -709,9 +708,9 @@ export def "groups Create" [
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version.
   displayName: string # Group display name
-  --mailEnabled: string@bool-completer # Whether the group is mail-enabled. Must be false. This is because only pure security groups can be created using the Graph API.
+  --mailEnabled: oneof<nothing, bool> # Whether the group is mail-enabled. Must be false. This is because only pure security groups can be created using the Graph API.
   mailNickname: string # Mail nickname
-  --securityEnabled: string@bool-completer # Whether the group is a security group. Must be true. This is because only pure security groups can be created using the Graph API.
+  --securityEnabled: oneof<nothing, bool> # Whether the group is a security group. Must be true. This is because only pure security groups can be created using the Graph API.
 ]: any -> record<displayName: string, mail: string, mailEnabled: bool, mailNickname: string, securityEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -907,7 +906,7 @@ export def "groups-get-member-groups GetMemberGroups" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version.
-  --securityEnabledOnly: string@bool-completer # If true, only membership in security-enabled groups should be checked. Otherwise, membership in all groups should be checked.
+  --securityEnabledOnly: oneof<nothing, bool> # If true, only membership in security-enabled groups should be checked. Otherwise, membership in all groups should be checked.
 ]: any -> record<value: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1184,8 +1183,8 @@ export def "service-principals Create" [
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version.
   appId: string # The application ID.
-  --accountEnabled: string@bool-completer # whether or not the service principal account is enabled
-  --appRoleAssignmentRequired: string@bool-completer # Specifies whether an AppRoleAssignment to a user or group is required before Azure AD will issue a user or access token to the application.
+  --accountEnabled: oneof<nothing, bool> # whether or not the service principal account is enabled
+  --appRoleAssignmentRequired: oneof<nothing, bool> # Specifies whether an AppRoleAssignment to a user or group is required before Azure AD will issue a user or access token to the application.
   --keyCredentials: list # The collection of key credentials associated with the service principal. — item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, type?: string, usage?: string, value?: string}
   --passwordCredentials: list # The collection of password credentials associated with the service principal. — item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, value?: string}
   --servicePrincipalType: string # the type of the service principal
@@ -1273,8 +1272,8 @@ export def "service-principals Update" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version.
-  --accountEnabled: string@bool-completer # whether or not the service principal account is enabled
-  --appRoleAssignmentRequired: string@bool-completer # Specifies whether an AppRoleAssignment to a user or group is required before Azure AD will issue a user or access token to the application.
+  --accountEnabled: oneof<nothing, bool> # whether or not the service principal account is enabled
+  --appRoleAssignmentRequired: oneof<nothing, bool> # Specifies whether an AppRoleAssignment to a user or group is required before Azure AD will issue a user or access token to the application.
   --keyCredentials: list # The collection of key credentials associated with the service principal. — item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, type?: string, usage?: string, value?: string}
   --passwordCredentials: list # The collection of password credentials associated with the service principal. — item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, value?: string}
   --servicePrincipalType: string # the type of the service principal
@@ -1611,7 +1610,7 @@ export def "users Create" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version.
-  --accountEnabled: string@bool-completer # Whether the account is enabled.
+  --accountEnabled: oneof<nothing, bool> # Whether the account is enabled.
   displayName: string # The display name of the user.
   --mail: string # The primary email address of the user.
   mailNickname: string # The mail alias for the user.
@@ -1651,7 +1650,7 @@ export def "users-get-member-groups GetMemberGroups" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version.
-  --securityEnabledOnly: string@bool-completer # If true, only membership in security-enabled groups should be checked. Otherwise, membership in all groups should be checked.
+  --securityEnabledOnly: oneof<nothing, bool> # If true, only membership in security-enabled groups should be checked. Otherwise, membership in all groups should be checked.
 ]: any -> record<value: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1734,7 +1733,7 @@ export def "users Update" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version.
-  --accountEnabled: string@bool-completer # Whether the account is enabled.
+  --accountEnabled: oneof<nothing, bool> # Whether the account is enabled.
   --displayName: string # The display name of the user.
   --mail: string # The primary email address of the user.
   --mailNickname: string # The mail alias for the user.

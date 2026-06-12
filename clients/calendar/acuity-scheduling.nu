@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://acuityscheduling.com/api/v1"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -107,7 +106,7 @@ export def "appointments listAppointments" [
   --max: string # Maximum date (format: date-time)
   --calendarID: int # Calendar ID filter
   --appointmentTypeID: int # Appointment type filter
-  --canceled: string@bool-completer # Include canceled
+  --canceled: oneof<nothing, bool> # Include canceled
   --direction: string@direction-completer
 ]: nothing -> table<id: int, firstName: string, lastName: string, email: string, phone: string, datetime: string, endTime: string, type: string, typeID: int, calendarID: int, calendar: string, duration: string, price: string, paid: string, canceled: bool, canClientCancel: bool, canClientReschedule: bool, location: string, notes: string, timezone: string, confirmationPage: string, labels: list<record>, forms: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -222,7 +221,7 @@ export def "appointments-cancel cancelAppointment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --cancelNote: string
-  --noEmail: string@bool-completer
+  --noEmail: oneof<nothing, bool>
 ]: any -> record<id: int, firstName: string, lastName: string, email: string, phone: string, datetime: string, endTime: string, type: string, typeID: int, calendarID: int, calendar: string, duration: string, price: string, paid: string, canceled: bool, canClientCancel: bool, canClientReschedule: bool, location: string, notes: string, timezone: string, confirmationPage: string, labels: list<record>, forms: list<record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -317,7 +316,7 @@ export def "appointment-types listAppointmentTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deleted: string@bool-completer # Include deleted types
+  --deleted: oneof<nothing, bool> # Include deleted types
 ]: nothing -> table<id: int, name: string, description: string, duration: int, price: string, category: string, color: string, private: bool, type: string, classSize: int, paddingAfter: int, paddingBefore: int, calendarIDs: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)

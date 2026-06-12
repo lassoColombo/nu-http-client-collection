@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.netlify.com/api/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -147,7 +146,7 @@ export def "sites createSite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --configure-dns: string@bool-completer
+  --configure-dns: oneof<nothing, bool>
   --id: string
   --state: string
   --plan: string
@@ -166,9 +165,9 @@ export def "sites createSite" [
   --updated-at: string # format: dateTime
   --user-id: string
   --session-id: string
-  --ssl: string@bool-completer
-  --force-ssl: string@bool-completer
-  --managed-dns: string@bool-completer
+  --ssl: oneof<nothing, bool>
+  --force-ssl: oneof<nothing, bool>
+  --managed-dns: oneof<nothing, bool>
   --deploy-url: string
   --published-deploy: record # shape: {id?: string, site_id?: string, user_id?: string, build_id?: string, state?: string, name?: string, url?: string, ssl_url?: string, admin_url?: string, deploy_url?: string, deploy_ssl_url?: string, screenshot_url?: string, review_id?: float, draft?: bool, required?: list, required_functions?: list, error_message?: string, branch?: string, commit_ref?: string, commit_url?: string, skipped?: bool, created_at?: string, updated_at?: string, published_at?: string, title?: string, context?: string, locked?: bool, review_url?: string, framework?: string, skew_protection_token?: string, function_schedules?: list, functions_region?: string, functions_region_overrides?: list}
   --account-id: string
@@ -184,7 +183,7 @@ export def "sites createSite" [
   --build-image: string
   --prerender: string
   --functions-region: string
-  --prevent-non-git-prod-deploys: string@bool-completer # default: false
+  --prevent-non-git-prod-deploys: oneof<nothing, bool> # default: false
   --repo: record # shape: {id?: int, provider?: string, deploy_key_id?: string, repo_path?: string, repo_branch?: string, dir?: string, functions_dir?: string, cmd?: string, allowed_branches?: list, public_repo?: bool, private_logs?: bool, repo_url?: string, env?: record, installation_id?: int, stop_builds?: bool}
 ]: any -> record<id: string, state: string, plan: string, name: string, custom_domain: string, domain_aliases: list<string>, branch_deploy_custom_domain: string, deploy_preview_custom_domain: string, password: string, notification_email: string, url: string, ssl_url: string, admin_url: string, screenshot_url: string, created_at: string, updated_at: string, user_id: string, session_id: string, ssl: bool, force_ssl: bool, managed_dns: bool, deploy_url: string, published_deploy: record<id: string, site_id: string, user_id: string, build_id: string, state: string, name: string, url: string, ssl_url: string, admin_url: string, deploy_url: string, deploy_ssl_url: string, screenshot_url: string, review_id: float, draft: bool, required: list<string>, required_functions: list<string>, error_message: string, branch: string, commit_ref: string, commit_url: string, skipped: bool, created_at: string, updated_at: string, published_at: string, title: string, context: string, locked: bool, review_url: string, framework: string, skew_protection_token: string, function_schedules: list<record>, functions_region: string, functions_region_overrides: list<record>>, account_id: string, account_name: string, account_slug: string, git_provider: string, deploy_hook: string, capabilities: record, processing_settings: record<html: record<pretty_urls: bool>>, build_settings: record<id: int, provider: string, deploy_key_id: string, repo_path: string, repo_branch: string, dir: string, functions_dir: string, cmd: string, allowed_branches: list<string>, public_repo: bool, private_logs: bool, repo_url: string, env: record, installation_id: int, stop_builds: bool>, id_domain: string, default_hooks_data: record<access_token: string>, build_image: string, prerender: string, functions_region: string, prevent_non_git_prod_deploys: bool> {
   let input = $in
@@ -257,9 +256,9 @@ export def "sites updateSite" [
   --updated-at: string # format: dateTime
   --user-id: string
   --session-id: string
-  --ssl: string@bool-completer
-  --force-ssl: string@bool-completer
-  --managed-dns: string@bool-completer
+  --ssl: oneof<nothing, bool>
+  --force-ssl: oneof<nothing, bool>
+  --managed-dns: oneof<nothing, bool>
   --deploy-url: string
   --published-deploy: record # shape: {id?: string, site_id?: string, user_id?: string, build_id?: string, state?: string, name?: string, url?: string, ssl_url?: string, admin_url?: string, deploy_url?: string, deploy_ssl_url?: string, screenshot_url?: string, review_id?: float, draft?: bool, required?: list, required_functions?: list, error_message?: string, branch?: string, commit_ref?: string, commit_url?: string, skipped?: bool, created_at?: string, updated_at?: string, published_at?: string, title?: string, context?: string, locked?: bool, review_url?: string, framework?: string, skew_protection_token?: string, function_schedules?: list, functions_region?: string, functions_region_overrides?: list}
   --account-id: string
@@ -275,7 +274,7 @@ export def "sites updateSite" [
   --build-image: string
   --prerender: string
   --functions-region: string
-  --prevent-non-git-prod-deploys: string@bool-completer # default: false
+  --prevent-non-git-prod-deploys: oneof<nothing, bool> # default: false
   --repo: record # shape: {id?: int, provider?: string, deploy_key_id?: string, repo_path?: string, repo_branch?: string, dir?: string, functions_dir?: string, cmd?: string, allowed_branches?: list, public_repo?: bool, private_logs?: bool, repo_url?: string, env?: record, installation_id?: int, stop_builds?: bool}
 ]: any -> record<id: string, state: string, plan: string, name: string, custom_domain: string, domain_aliases: list<string>, branch_deploy_custom_domain: string, deploy_preview_custom_domain: string, password: string, notification_email: string, url: string, ssl_url: string, admin_url: string, screenshot_url: string, created_at: string, updated_at: string, user_id: string, session_id: string, ssl: bool, force_ssl: bool, managed_dns: bool, deploy_url: string, published_deploy: record<id: string, site_id: string, user_id: string, build_id: string, state: string, name: string, url: string, ssl_url: string, admin_url: string, deploy_url: string, deploy_ssl_url: string, screenshot_url: string, review_id: float, draft: bool, required: list<string>, required_functions: list<string>, error_message: string, branch: string, commit_ref: string, commit_url: string, skipped: bool, created_at: string, updated_at: string, published_at: string, title: string, context: string, locked: bool, review_url: string, framework: string, skew_protection_token: string, function_schedules: list<record>, functions_region: string, functions_region_overrides: list<record>>, account_id: string, account_name: string, account_slug: string, git_provider: string, deploy_hook: string, capabilities: record, processing_settings: record<html: record<pretty_urls: bool>>, build_settings: record<id: int, provider: string, deploy_key_id: string, repo_path: string, repo_branch: string, dir: string, functions_dir: string, cmd: string, allowed_branches: list<string>, public_repo: bool, private_logs: bool, repo_url: string, env: record, installation_id: int, stop_builds: bool>, id_domain: string, default_hooks_data: record<access_token: string>, build_image: string, prerender: string, functions_region: string, prevent_non_git_prod_deploys: bool> {
   let input = $in
@@ -502,7 +501,7 @@ export def "accounts-env updateEnvVar" [
   --body-key: string # The existing or new name of the key, if you wish to rename it (case-sensitive)
   --scopes: list # The scopes that this environment variable is set to (Pro plans and above)
   --values: list # item shape: {id?: string, value?: string, context?: "all"|"dev"|"dev-server"|"branch-deploy"|"deploy-preview"|"production"|"branch", context_parameter?: string}
-  --is-secret: string@bool-completer # Secret values are only readable by code running on Netlify's systems. With secrets, only the local development context values are readable from the UI, API, and CLI. By default, environment variable values are not secret.
+  --is-secret: oneof<nothing, bool> # Secret values are only readable by code running on Netlify's systems. With secrets, only the local development context values are readable from the UI, API, and CLI. By default, environment variable values are not secret.
 ]: any -> record<key: string, scopes: list<string>, values: table<id: string, value: string, context: string, context_parameter: string>, is_secret: bool, updated_at: string, updated_by: record<id: string, full_name: string, email: string, avatar_url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1198,11 +1197,11 @@ export def "sites-deploys listSiteDeploys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deploy-previews: string@bool-completer
-  --production: string@bool-completer
+  --deploy-previews: oneof<nothing, bool>
+  --production: oneof<nothing, bool>
   --state: string@state-completer
   --branch: string
-  --latest-published: string@bool-completer
+  --latest-published: oneof<nothing, bool>
   --page: int # format: int32
   --per-page: int # format: int32
 ]: nothing -> table<id: string, site_id: string, user_id: string, build_id: string, state: string, name: string, url: string, ssl_url: string, admin_url: string, deploy_url: string, deploy_ssl_url: string, screenshot_url: string, review_id: float, draft: bool, required: list<string>, required_functions: list<string>, error_message: string, branch: string, commit_ref: string, commit_url: string, skipped: bool, created_at: string, updated_at: string, published_at: string, title: string, context: string, locked: bool, review_url: string, framework: string, skew_protection_token: string, function_schedules: list<record>, functions_region: string, functions_region_overrides: list<record>> {
@@ -1229,16 +1228,16 @@ export def "sites-deploys createSiteDeploy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --deploy-previews: string@bool-completer
-  --production: string@bool-completer
+  --deploy-previews: oneof<nothing, bool>
+  --production: oneof<nothing, bool>
   --state: string@state-completer
   --branch: string
-  --latest-published: string@bool-completer
+  --latest-published: oneof<nothing, bool>
   --title: string
   --files: record # A hash mapping file paths to SHA1 digests of the file contents.
   --zip: string # A zip file containing the site files to deploy. Alternative to 'files'. To use this field, set Content-Type to 'application/json' and include the zip content here. Alternatively, you can set Content-Type to 'application/zip' and send the zip as the raw request body (not as JSON).  (format: binary)
-  --draft: string@bool-completer
-  --async: string@bool-completer
+  --draft: oneof<nothing, bool>
+  --async: oneof<nothing, bool>
   --functions: record
   --function-schedules: list # item shape: {name?: string, cron?: string}
   --functions-config: record
@@ -1299,8 +1298,8 @@ export def "sites-deploys updateSiteDeploy" [
   --commit-ref: string
   --files: record # A hash mapping file paths to SHA1 digests of the file contents.
   --zip: string # A zip file containing the site files to deploy. Alternative to 'files'. To use this field, set Content-Type to 'application/json' and include the zip content here. Alternatively, you can set Content-Type to 'application/zip' and send the zip as the raw request body (not as JSON).  (format: binary)
-  --draft: string@bool-completer
-  --async: string@bool-completer
+  --draft: oneof<nothing, bool>
+  --async: oneof<nothing, bool>
   --functions: record
   --function-schedules: list # item shape: {name?: string, cron?: string}
   --functions-config: record
@@ -1424,7 +1423,7 @@ export def "sites-builds createSiteBuild" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --branch: string # If no branch is specified, it is treated as a production deploy If a branch IS specified and matches the main branch, it is also production If a branch is specified and doesn't match the main branch, it is a branch deploy
-  --clear-cache: string@bool-completer # Whether to clear the build cache before building
+  --clear-cache: oneof<nothing, bool> # Whether to clear the build cache before building
   --image: string # The build image tag to use for the build
   --template-id: string # The build template to use for the build
   --title: string # The title of the build
@@ -1891,7 +1890,7 @@ export def "hooks createHookBySiteId" [
   --data: record
   --created-at: string # format: dateTime
   --updated-at: string # format: dateTime
-  --disabled: string@bool-completer
+  --disabled: oneof<nothing, bool>
 ]: any -> record<id: string, site_id: string, type: string, event: string, data: record, created_at: string, updated_at: string, disabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1945,7 +1944,7 @@ export def "hooks updateHook" [
   --data: record
   --created-at: string # format: dateTime
   --updated-at: string # format: dateTime
-  --disabled: string@bool-completer
+  --disabled: oneof<nothing, bool>
 ]: any -> record<id: string, site_id: string, type: string, event: string, data: record, created_at: string, updated_at: string, disabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2188,7 +2187,7 @@ export def "sites createSiteInTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --configure-dns: string@bool-completer
+  --configure-dns: oneof<nothing, bool>
   --id: string
   --state: string
   --plan: string
@@ -2207,9 +2206,9 @@ export def "sites createSiteInTeam" [
   --updated-at: string # format: dateTime
   --user-id: string
   --session-id: string
-  --ssl: string@bool-completer
-  --force-ssl: string@bool-completer
-  --managed-dns: string@bool-completer
+  --ssl: oneof<nothing, bool>
+  --force-ssl: oneof<nothing, bool>
+  --managed-dns: oneof<nothing, bool>
   --deploy-url: string
   --published-deploy: record # shape: {id?: string, site_id?: string, user_id?: string, build_id?: string, state?: string, name?: string, url?: string, ssl_url?: string, admin_url?: string, deploy_url?: string, deploy_ssl_url?: string, screenshot_url?: string, review_id?: float, draft?: bool, required?: list, required_functions?: list, error_message?: string, branch?: string, commit_ref?: string, commit_url?: string, skipped?: bool, created_at?: string, updated_at?: string, published_at?: string, title?: string, context?: string, locked?: bool, review_url?: string, framework?: string, skew_protection_token?: string, function_schedules?: list, functions_region?: string, functions_region_overrides?: list}
   --account-id: string
@@ -2225,7 +2224,7 @@ export def "sites createSiteInTeam" [
   --build-image: string
   --prerender: string
   --functions-region: string
-  --prevent-non-git-prod-deploys: string@bool-completer # default: false
+  --prevent-non-git-prod-deploys: oneof<nothing, bool> # default: false
   --repo: record # shape: {id?: int, provider?: string, deploy_key_id?: string, repo_path?: string, repo_branch?: string, dir?: string, functions_dir?: string, cmd?: string, allowed_branches?: list, public_repo?: bool, private_logs?: bool, repo_url?: string, env?: record, installation_id?: int, stop_builds?: bool}
 ]: any -> record<id: string, state: string, plan: string, name: string, custom_domain: string, domain_aliases: list<string>, branch_deploy_custom_domain: string, deploy_preview_custom_domain: string, password: string, notification_email: string, url: string, ssl_url: string, admin_url: string, screenshot_url: string, created_at: string, updated_at: string, user_id: string, session_id: string, ssl: bool, force_ssl: bool, managed_dns: bool, deploy_url: string, published_deploy: record<id: string, site_id: string, user_id: string, build_id: string, state: string, name: string, url: string, ssl_url: string, admin_url: string, deploy_url: string, deploy_ssl_url: string, screenshot_url: string, review_id: float, draft: bool, required: list<string>, required_functions: list<string>, error_message: string, branch: string, commit_ref: string, commit_url: string, skipped: bool, created_at: string, updated_at: string, published_at: string, title: string, context: string, locked: bool, review_url: string, framework: string, skew_protection_token: string, function_schedules: list<record>, functions_region: string, functions_region_overrides: list<record>>, account_id: string, account_name: string, account_slug: string, git_provider: string, deploy_hook: string, capabilities: record, processing_settings: record<html: record<pretty_urls: bool>>, build_settings: record<id: int, provider: string, deploy_key_id: string, repo_path: string, repo_branch: string, dir: string, functions_dir: string, cmd: string, allowed_branches: list<string>, public_repo: bool, private_logs: bool, repo_url: string, env: record, installation_id: int, stop_builds: bool>, id_domain: string, default_hooks_data: record<access_token: string>, build_image: string, prerender: string, functions_region: string, prevent_non_git_prod_deploys: bool> {
   let input = $in
@@ -2806,7 +2805,7 @@ export def "agent-runners-sessions updateAgentRunnerSession" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-published: string@bool-completer
+  --is-published: oneof<nothing, bool>
 ]: nothing -> record<id: string, agent_runner_id: string, dev_server_id: string, state: string, created_at: string, updated_at: string, done_at: string, title: string, prompt: string, agent_config: record<agent: string, model: string>, result: string, result_diff: string, commit_sha: string, deploy_id: string, deploy_url: string, duration: int, steps: table<title: string, message: string>, user: record<id: string, full_name: string, email: string, avatar_url: string>, attached_file_keys: list<string>, result_zip_file_name: string, is_published: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3926,7 +3925,7 @@ export def "sites-database-branch-reset resetSiteDatabaseBranch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # If true, resets the branch even when it is already in sync with the source.
+  --force: oneof<nothing, bool> # If true, resets the branch even when it is already in sync with the source.
   --role: string@role-completer-1 # The database role to use for the returned connection string. Defaults to netlifydb_owner if not specified.
   --source-branch-id: string # The ID of the branch to re-fork the target branch from. Defaults to "production" if not specified.
 ]: any -> record<reset: bool, connection_string: string, metadata: record> {
@@ -4106,7 +4105,7 @@ export def "sites-database-migrations runSiteDatabaseMigrations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dry-run: string@bool-completer # If true, validates migrations without applying them.
+  --dry-run: oneof<nothing, bool> # If true, validates migrations without applying them.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

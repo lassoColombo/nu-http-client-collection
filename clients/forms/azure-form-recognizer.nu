@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://azure.local"] }
 def auth-scheme-completer [] { ["ocp-apim-subscription-key"] }
 
@@ -129,7 +128,7 @@ export def "custom-models TrainCustomModelAsync" [
   --allow-errors(-e) # Return full response without error handling
   --body-source: string # Source path containing the training documents.
   --sourceFilter: record # Filter to apply to the documents in the source path for training. — shape: {includeSubFolders?: bool, prefix?: string}
-  --useLabelFile: string@bool-completer # Use label file for training a model. (default: false)
+  --useLabelFile: oneof<nothing, bool> # Use label file for training a model. (default: false)
 ]: any -> record<error: record<code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
@@ -177,7 +176,7 @@ export def "custom-models GetCustomModel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeKeys: string@bool-completer # Include list of extracted keys in model information. (default: false)
+  --includeKeys: oneof<nothing, bool> # Include list of extracted keys in model information. (default: false)
 ]: nothing -> record<keys: record<clusters: record>, modelInfo: record<createdDateTime: string, lastUpdatedDateTime: string, modelId: string, status: string>, trainResult: record<averageModelAccuracy: float, errors: list<record>, fields: list<record>, trainingDocuments: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -201,7 +200,7 @@ export def "custom-models-analyze AnalyzeWithCustomModel" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeTextDetails: string@bool-completer # Include text lines and element references in the result. (default: false)
+  --includeTextDetails: oneof<nothing, bool> # Include text lines and element references in the result. (default: false)
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -290,7 +289,7 @@ export def "prebuilt-receipt-analyze AnalyzeReceiptAsync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeTextDetails: string@bool-completer # Include text lines and element references in the result. (default: false)
+  --includeTextDetails: oneof<nothing, bool> # Include text lines and element references in the result. (default: false)
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)

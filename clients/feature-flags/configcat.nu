@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.configcat.com"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -885,26 +884,26 @@ export def "permissions update-permission-group" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --accessType: string@accessType-completer
-  --canCreateOrUpdateConfig: string@bool-completer # nullable
-  --canCreateOrUpdateEnvironment: string@bool-completer # nullable
-  --canCreateOrUpdateSegments: string@bool-completer # nullable
-  --canCreateOrUpdateSetting: string@bool-completer # nullable
-  --canCreateOrUpdateTag: string@bool-completer # nullable
-  --canDeleteConfig: string@bool-completer # nullable
-  --canDeleteEnvironment: string@bool-completer # nullable
-  --canDeleteSegments: string@bool-completer # nullable
-  --canDeleteSetting: string@bool-completer # nullable
-  --canDeleteTag: string@bool-completer # nullable
-  --canManageIntegrations: string@bool-completer # nullable
-  --canManageMembers: string@bool-completer # nullable
-  --canManageProductPreferences: string@bool-completer # nullable
-  --canManageWebhook: string@bool-completer # nullable
-  --canRotateSdkKey: string@bool-completer # nullable
-  --canTagSetting: string@bool-completer # nullable
-  --canUseExportImport: string@bool-completer # nullable
-  --canViewProductAuditLog: string@bool-completer # nullable
-  --canViewProductStatistics: string@bool-completer # nullable
-  --canViewSdkKey: string@bool-completer # nullable
+  --canCreateOrUpdateConfig: oneof<nothing, bool> # nullable
+  --canCreateOrUpdateEnvironment: oneof<nothing, bool> # nullable
+  --canCreateOrUpdateSegments: oneof<nothing, bool> # nullable
+  --canCreateOrUpdateSetting: oneof<nothing, bool> # nullable
+  --canCreateOrUpdateTag: oneof<nothing, bool> # nullable
+  --canDeleteConfig: oneof<nothing, bool> # nullable
+  --canDeleteEnvironment: oneof<nothing, bool> # nullable
+  --canDeleteSegments: oneof<nothing, bool> # nullable
+  --canDeleteSetting: oneof<nothing, bool> # nullable
+  --canDeleteTag: oneof<nothing, bool> # nullable
+  --canManageIntegrations: oneof<nothing, bool> # nullable
+  --canManageMembers: oneof<nothing, bool> # nullable
+  --canManageProductPreferences: oneof<nothing, bool> # nullable
+  --canManageWebhook: oneof<nothing, bool> # nullable
+  --canRotateSdkKey: oneof<nothing, bool> # nullable
+  --canTagSetting: oneof<nothing, bool> # nullable
+  --canUseExportImport: oneof<nothing, bool> # nullable
+  --canViewProductAuditLog: oneof<nothing, bool> # nullable
+  --canViewProductStatistics: oneof<nothing, bool> # nullable
+  --canViewSdkKey: oneof<nothing, bool> # nullable
   --environmentAccesses: list # nullable — item shape: {color?: string, description?: string, environmentAccessType?: "full"|"readOnly"|"none", environmentId?: string, name?: string, order?: int, reasonRequired?: bool}
   --name: string # nullable
   --newEnvironmentAccessType: string@newEnvironmentAccessType-completer
@@ -1259,26 +1258,26 @@ export def "products-permissions create-permission-group" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --accessType: string@accessType-completer
-  --canCreateOrUpdateConfig: string@bool-completer
-  --canCreateOrUpdateEnvironment: string@bool-completer
-  --canCreateOrUpdateSegments: string@bool-completer
-  --canCreateOrUpdateSetting: string@bool-completer
-  --canCreateOrUpdateTag: string@bool-completer
-  --canDeleteConfig: string@bool-completer
-  --canDeleteEnvironment: string@bool-completer
-  --canDeleteSegments: string@bool-completer
-  --canDeleteSetting: string@bool-completer
-  --canDeleteTag: string@bool-completer
-  --canManageIntegrations: string@bool-completer
-  --canManageMembers: string@bool-completer
-  --canManageProductPreferences: string@bool-completer
-  --canManageWebhook: string@bool-completer
-  --canRotateSdkKey: string@bool-completer
-  --canTagSetting: string@bool-completer
-  --canUseExportImport: string@bool-completer
-  --canViewProductAuditLog: string@bool-completer
-  --canViewProductStatistics: string@bool-completer
-  --canViewSdkKey: string@bool-completer
+  --canCreateOrUpdateConfig: oneof<nothing, bool>
+  --canCreateOrUpdateEnvironment: oneof<nothing, bool>
+  --canCreateOrUpdateSegments: oneof<nothing, bool>
+  --canCreateOrUpdateSetting: oneof<nothing, bool>
+  --canCreateOrUpdateTag: oneof<nothing, bool>
+  --canDeleteConfig: oneof<nothing, bool>
+  --canDeleteEnvironment: oneof<nothing, bool>
+  --canDeleteSegments: oneof<nothing, bool>
+  --canDeleteSetting: oneof<nothing, bool>
+  --canDeleteTag: oneof<nothing, bool>
+  --canManageIntegrations: oneof<nothing, bool>
+  --canManageMembers: oneof<nothing, bool>
+  --canManageProductPreferences: oneof<nothing, bool>
+  --canManageWebhook: oneof<nothing, bool>
+  --canRotateSdkKey: oneof<nothing, bool>
+  --canTagSetting: oneof<nothing, bool>
+  --canUseExportImport: oneof<nothing, bool>
+  --canViewProductAuditLog: oneof<nothing, bool>
+  --canViewProductStatistics: oneof<nothing, bool>
+  --canViewSdkKey: oneof<nothing, bool>
   --environmentAccesses: list # nullable — item shape: {color?: string, description?: string, environmentAccessType?: "full"|"readOnly"|"none", environmentId?: string, name?: string, order?: int, reasonRequired?: bool}
   name: string
   --newEnvironmentAccessType: string@newEnvironmentAccessType-completer

@@ -1,4 +1,4 @@
-# Auto-generated client for Tuleap API v17.5.99.1781099705-1
+# Auto-generated client for Tuleap API v17.5.99.1781179977-1
 # Source: https://tuleap.net/api/explorer/swagger.json
 # Auth: --token flag or $env.TULEAP_API_TOKEN
 
@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://tuleap.net/api"] }
 def auth-scheme-completer [] { ["x-auth-accesskey" "bearer"] }
 
@@ -142,12 +141,12 @@ export def "projects createTuleapProjectRESTv1ProjectResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --dry-run: string@bool-completer
+  --dry-run: oneof<nothing, bool>
   shortname: string # Name of the project
   --description: string # Full description of the project
   label: string # LA short description of the project
-  --is-public: string@bool-completer # Define the visibility of the project
-  --allow-restricted: string@bool-completer # | null Define if the project should accept restricted users
+  --is-public: oneof<nothing, bool> # Define the visibility of the project
+  --allow-restricted: oneof<nothing, bool> # | null Define if the project should accept restricted users
   --template-id: int # Template for this project. (format: int64)
   --xml-template-name: string # Template name provided by the platform
   --categories: list # Categories to be set a project creation
@@ -1178,7 +1177,7 @@ export def "projects-program-backlog tuleapProgramManagementRESTv1ProjectResourc
   --accept: string@accept-completer # Response content type
   add: list
   remove: list
-  --remove-from-program-increment-to-add-to-the-backlog: string@bool-completer
+  --remove-from-program-increment-to-add-to-the-backlog: oneof<nothing, bool>
   --order: any # shape: {ids: list, direction: "after"|"before", compared_to: int}
 ]: any -> string {
   let input = $in
@@ -2015,7 +2014,7 @@ export def "project-services tuleapProjectRESTv1ServiceResourceUpdateId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --is-enabled: string@bool-completer # Enable or disable the service
+  --is-enabled: oneof<nothing, bool> # Enable or disable the service
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -2164,7 +2163,7 @@ export def "docman-items tuleapDocmanRESTv1DocmanItemsResourceRetrieveId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --with-size: string@bool-completer # <b>Only for folders</b>. When true, the size of the folder in Bytes is returned in the representation. <div class="tlp-alert-info"> Please note <ul> <li>The size of a folder is computed on the documents of type "file", that is to say files and embedded files.</li> <li>The number of files is the sum of the number of files, embedded files and folders.</li> </ul> </div>
+  --with-size: oneof<nothing, bool> # <b>Only for folders</b>. When true, the size of the folder in Bytes is returned in the representation. <div class="tlp-alert-info"> Please note <ul> <li>The size of a folder is computed on the documents of type "file", that is to say files and embedded files.</li> <li>The number of files is the sum of the number of files, embedded files and folders.</li> </ul> </div>
 ]: nothing -> record<id: int, title: string, description: string, post_processed_description: string, owner: string, last_update_date: string, creation_date: string, user_can_write: bool, user_can_delete: bool, type: string, file_properties: string, embedded_file_properties: string, link_properties: string, wiki_properties: string, parent_id: int, is_expanded: bool, can_user_manage: bool, lock_info: string, metadata: list<any>, has_approval_table: bool, is_approval_table_enabled: bool, approval_table: string, permissions_for_groups: record<can_read: list<any>, can_write: list<any>, can_manage: list<any>>, folder_properties: string, other_type_properties: string, item_icon: string, move_uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
   let base = ($base_url | default $BASE_URL)
@@ -2430,7 +2429,7 @@ export def "docman-items-approval-table-review tuleapDocmanRESTv1DocmanItemsAppr
   --accept: string@accept-completer # Response content type
   review: string@review-completer # Review state of user
   --comment: string # Review comment
-  --notification: string@bool-completer # Receive email whenever the item is updated
+  --notification: oneof<nothing, bool> # Receive email whenever the item is updated
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -2628,7 +2627,7 @@ export def "docman-files-versions tuleapDocmanRESTv1DocmanFilesResourceCreateVer
   --version-title: string # Title of version
   --change-log: string # Description of changes
   file_properties: any # shape: {file_name: string, file_size: int}
-  --should-lock-file: string@bool-completer # Lock file while updating
+  --should-lock-file: oneof<nothing, bool> # Lock file while updating
   --approval-table-action: string@approval-table-action-completer # | null action for approval table when an item is updated
 ]: any -> record<upload_href: string> {
   let input = $in
@@ -3078,7 +3077,7 @@ export def "docman-folders-permissions tuleapDocmanRESTv1DocmanFoldersResourceUp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --apply-permissions-on-children: string@bool-completer
+  --apply-permissions-on-children: oneof<nothing, bool>
   can_read: list
   can_write: list
   can_manage: list
@@ -3235,7 +3234,7 @@ export def "docman-embedded-files-versions tuleapDocmanRESTv1DocmanEmbeddedFiles
   --version-title: string # Title of version
   --change-log: string # Description of changes
   embedded_properties: any # shape: {content?: string}
-  --should-lock-file: string@bool-completer # Lock file while updating
+  --should-lock-file: oneof<nothing, bool> # Lock file while updating
   --approval-table-action: string@approval-table-action-completer # | null action for approval table when an item is updated
 ]: any -> string {
   let input = $in
@@ -3352,7 +3351,7 @@ export def "docman-wikis removeTuleapDocmanRESTv1DocmanWikiResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --delete-associated-wiki-page: string@bool-completer
+  --delete-associated-wiki-page: oneof<nothing, bool>
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
   let base = ($base_url | default $BASE_URL)
@@ -3381,7 +3380,7 @@ export def "docman-wikis-versions tuleapDocmanRESTv1DocmanWikiResourceCreateVers
   --version-title: string # Title of version
   --change-log: string # Description of changes
   wiki_properties: any # shape: {page_name: string}
-  --should-lock-file: string@bool-completer # Lock file while updating
+  --should-lock-file: oneof<nothing, bool> # Lock file while updating
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -3616,7 +3615,7 @@ export def "docman-links-versions tuleapDocmanRESTv1DocmanLinksResourceCreateVer
   --version-title: string # Title of version
   --change-log: string # Description of changes
   link_properties: any # shape: {link_url: string}
-  --should-lock-file: string@bool-completer # Lock file while updating
+  --should-lock-file: oneof<nothing, bool> # Lock file while updating
   --approval-table-action: string@approval-table-action-completer # | null action for approval table when an item is updated
 ]: any -> string {
   let input = $in
@@ -5084,7 +5083,7 @@ export def "tracker-reports tuleapTrackerRESTv1ReportsResourceRetrieveId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --with-unsaved-changes: string@bool-completer # Enable to take into account unsaved changes made to the report on your ongoing session
+  --with-unsaved-changes: oneof<nothing, bool> # Enable to take into account unsaved changes made to the report on your ongoing session
 ]: nothing -> record<id: int, uri: string, label: string, is_public: bool, is_default: bool, resources: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
   let base = ($base_url | default $BASE_URL)
@@ -5109,7 +5108,7 @@ export def "tracker-reports-artifacts tuleapTrackerRESTv1ReportsResourceRetrieve
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --with-unsaved-changes: string@bool-completer # Enable to take into account unsaved changes made to the report on your ongoing session
+  --with-unsaved-changes: oneof<nothing, bool> # Enable to take into account unsaved changes made to the report on your ongoing session
   --values: string@values-completer-1 # Which fields to include in the response. Default is no field values
   --table-renderer-id: int # null $table_renderer_id Which table renderer to use when values=from_table_renderer (format: int64)
   --output-format: string@output-format-completer # Format of the response: nested (default) or a simplified and incomplete flat format (default: nested)
@@ -5144,7 +5143,7 @@ export def "tracker-fields modifyTuleapTrackerRESTv1TrackerFieldsResource" [
   --description: string # | null The new description of the form element
   --name: string # | null The new name of the form element
   --new-values: list # | null The new values for list field
-  --use-it: string@bool-completer # | null Unuse or use the form element
+  --use-it: oneof<nothing, bool> # | null Unuse or use the form element
   --move: any # shape: {parent_id?: int, next_sibling_id?: int}
 ]: any -> record<field_id: int, label: string, name: string, type: string, values: list<any>, required: bool, collapsed: bool, bindings: list<string>, permissions: list<any>, permissions_for_groups: string, default_value: string, has_notifications: bool, is_used: bool, description: string, specific_properties: list<string>, label_decorators: list<string>> {
   let input = $in
@@ -5278,7 +5277,7 @@ export def "tracker-workflow-transitions tuleapTrackerRESTv1WorkflowTransitionsR
   --accept: string@accept-completer # Response content type
   authorized_user_group_ids: list # Authorized user group id
   not_empty_field_ids: list # Ids of not empty fields
-  --is-comment-required: string@bool-completer
+  --is-comment-required: oneof<nothing, bool>
 ]: any -> list<string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -6786,7 +6785,7 @@ export def "crosstracker-query updateTuleapCrossTrackerRESTv1CrossTrackerQueryRe
   title: string # The query title
   --description: string # The query description
   widget_id: int # The id of the widget the query belongs to (format: int64)
-  --is-default: string@bool-completer # The query is displayed by default or not
+  --is-default: oneof<nothing, bool> # The query is displayed by default or not
 ]: any -> record<id: string, tql_query: string, title: string, description: string, is_default: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -6839,7 +6838,7 @@ export def "crosstracker-query createTuleapCrossTrackerRESTv1CrossTrackerQueryRe
   tql_query: string # The TQL query
   title: string # The query title
   --description: string # The query description
-  --is-default: string@bool-completer # The query is displayed by default or not
+  --is-default: oneof<nothing, bool> # The query is displayed by default or not
 ]: any -> record<id: string, tql_query: string, title: string, description: string, is_default: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -6949,7 +6948,7 @@ export def "svn updateTuleapSVNRESTv1RepositoryResource" [
   immutable_tags: any # shape: {paths: list, whitelist: list}
   email_notifications: list # notifications representations
   --access-file: string # access file content
-  --has-default-permissions: string@bool-completer # If true, Tuleap generates default permissions for [/]
+  --has-default-permissions: oneof<nothing, bool> # If true, Tuleap generates default permissions for [/]
 ]: any -> record<settings: record<commit_rules: record<is_reference_mandatory: string, is_commit_message_change_allowed: string>, immutable_tags: record<paths: list, whitelist: list>, access_file: string, email_notifications: list<any>, has_default_permissions: bool>, id: int, project: record<id: int, uri: string, label: string, label_without_icon: string, shortname: string, status: string, access: string, is_template: bool>, uri: string, name: string, svn_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -7326,7 +7325,7 @@ export def "testmanagement-executions tuleapTestManagementRESTv1ExecutionsResour
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --force-use-latest-definition-version: string@bool-completer # True to update the execution to use latest version of definition
+  --force-use-latest-definition-version: oneof<nothing, bool> # True to update the execution to use latest version of definition
   --steps-results: list # Results of steps
 ]: any -> string {
   let input = $in
@@ -7699,10 +7698,10 @@ export def "kanban TuleapKanbanRESTv1KanbanResourceModifyId" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --label: string # The new label
-  --is-promoted: string@bool-completer # Is the kanban promoted?
+  --is-promoted: oneof<nothing, bool> # Is the kanban promoted?
   --collapse-column: any # shape: {column_id: int, value: bool}
-  --collapse-archive: string@bool-completer # True to collapse the archive (save in user prefs)
-  --collapse-backlog: string@bool-completer # True to collapse the backlog (save in user prefs)
+  --collapse-archive: oneof<nothing, bool> # True to collapse the archive (save in user prefs)
+  --collapse-backlog: oneof<nothing, bool> # True to collapse the backlog (save in user prefs)
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -8565,7 +8564,7 @@ export def "gitlab-repositories tuleapGitlabRESTv1GitlabRepositoryResourceCreate
   gitlab_server_url: string
   gitlab_bot_api_token: string
   gitlab_repository_id: int # format: int64
-  --allow-artifact-closure: string@bool-completer
+  --allow-artifact-closure: oneof<nothing, bool>
 ]: any -> record<id: int, gitlab_repository_id: int, name: string, description: string, gitlab_repository_url: string, last_push_date: string, project: string, allow_artifact_closure: bool, is_webhook_configured: bool, create_branch_prefix: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -8617,8 +8616,8 @@ export def "gitlab-repositories tuleapGitlabRESTv1GitlabRepositoryResourceModify
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --update-bot-api-token: any # shape: {gitlab_api_token: string}
-  --generate-new-secret: string@bool-completer # | null
-  --allow-artifact-closure: string@bool-completer # | null
+  --generate-new-secret: oneof<nothing, bool> # | null
+  --allow-artifact-closure: oneof<nothing, bool> # | null
   --create-branch-prefix: string # | null
 ]: any -> record<id: int, gitlab_repository_id: int, name: string, description: string, gitlab_repository_url: string, last_push_date: string, project: string, allow_artifact_closure: bool, is_webhook_configured: bool, create_branch_prefix: string> {
   let input = $in
@@ -8729,7 +8728,7 @@ export def "gitlab-groups tuleapGitlabRESTv1GitlabGroupResourceCreateGroup" [
   project_id: int # format: int64
   gitlab_group_id: int # format: int64
   gitlab_token: string
-  --allow-artifact-closure: string@bool-completer
+  --allow-artifact-closure: oneof<nothing, bool>
 ]: any -> record<id: int, number_of_integrations: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-accesskey"))
@@ -8757,7 +8756,7 @@ export def "gitlab-groups tuleapGitlabRESTv1GitlabGroupResourceUpdateGroupLink" 
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --create-branch-prefix: string # | null
-  --allow-artifact-closure: string@bool-completer # | null
+  --allow-artifact-closure: oneof<nothing, bool> # | null
   --gitlab-token: string # | null
 ]: any -> record<last_synchronization_date: string, id: int, gitlab_group_id: int, project_id: int, name: string, full_path: string, web_url: string, avatar_url: string, allow_artifact_closure: bool, create_branch_prefix: string> {
   let input = $in

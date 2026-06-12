@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -1150,9 +1149,9 @@ export def "ui-api-organizations-api-keys key-by-organization" [
   scopes: list
   --claims: record # shape: {project:gateway_proxy?: record}
   project_id: any
-  --all-projects: string@bool-completer
+  --all-projects: oneof<nothing, bool>
   --expires-at: any
-  --is-personal: string@bool-completer
+  --is-personal: oneof<nothing, bool>
 ]: any -> record<api_key: record<id: string, organization_id: string, name: string, description: any, scopes: list<string>, project_id: any, project_name: any, all_projects: bool, created_by: any, created_by_name: any, created_at: string, last_used_at: any, expires_at: any, user_id: any, active: bool, updated_at: any, updated_by: any, claims: record<project_gateway_proxy: record>>, token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1299,7 +1298,7 @@ export def "ui-api-organizations-gateway-admin-promo-codes code" [
   --allow-errors(-e) # Return full response without error handling
   code: string
   credit_amount_cents: int
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --expires-at: any
   --max-redemptions: any
 ]: any -> record<id: string, code: string, credit_amount_cents: int, active: bool, expires_at: any, max_redemptions: any, created_at: string, updated_at: string> {
@@ -1354,8 +1353,8 @@ export def "ui-api-organizations-gateway-admin-built-in-providers provider-by-or
   --body-base-url: string
   credentials: string
   description: any
-  --inject-cost: string@bool-completer
-  --block-on-error: string@bool-completer
+  --inject-cost: oneof<nothing, bool>
+  --block-on-error: oneof<nothing, bool>
 ]: any -> record<id: string, organization_id: any, description: any, provider_type: string, slug: string, base_url: string, inject_cost: bool, is_built_in: bool, block_on_error: bool, created_at: string, created_by: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1607,7 +1606,7 @@ export def "ui-api-organizations-gateway-admin-built-in-routing-groups-members g
   provider_id: string # format: uuid
   priority: int
   weight: float
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
 ]: any -> record<id: string, provider_id: string, routing_group_id: string, priority: int, weight: float, active: bool, created_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2588,8 +2587,8 @@ export def "ui-api-organizations-ai-settings settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ai-enabled: string@bool-completer
-  --ai-training-enabled: string@bool-completer
+  --ai-enabled: oneof<nothing, bool>
+  --ai-training-enabled: oneof<nothing, bool>
 ]: any -> record<ai_enabled: bool, ai_training_enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2794,7 +2793,7 @@ export def "ui-api-organizations-identity-providers-group-mapping mapping" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   group_mapping: list # item shape: {group_id: string, organization_role: string, project_roles?: list}
-  --restrict-login-to-mapped-groups: string@bool-completer
+  --restrict-login-to-mapped-groups: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3589,7 +3588,7 @@ export def "ui-api-organizations-oauth-clients-secrets secrets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-inactive: string@bool-completer # default: false
+  --include-inactive: oneof<nothing, bool> # default: false
 ]: nothing -> table<id: string, oauth_client_id: string, token_prefix: any, is_active: bool, expires_at: any, created_at: string, created_by: any, last_used_at: any, notes: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4085,7 +4084,7 @@ export def "ui-api-organizations-gateway-balance-auto-recharge settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --threshold-amount-cents: int
   --recharge-to-amount-cents: int
 ]: any -> record<balance_cents: int, balance_dollars: float, auto_recharge_enabled: bool, auto_recharge_threshold_cents: any, auto_recharge_to_cents: any, metronome_billing_configured: bool> {
@@ -4138,7 +4137,7 @@ export def "ui-api-organizations-gateway-guardrail-connections connection-by-org
   name: string
   provider: string
   --body-base-url: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --body-auth: any
   --timeout-ms: int
 ]: any -> record<id: string, organization_id: string, name: string, provider: string, base_url: string, auth: record<type: string, has_secret: bool>, timeout_ms: int, enabled: bool, dependent_guardrail_count: int, warning: string, created_at: string, updated_at: string, created_by: any> {
@@ -4193,7 +4192,7 @@ export def "ui-api-organizations-gateway-guardrail-connections connection-by-con
   --name: string
   --provider: string
   --body-base-url: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --body-auth: any
   --timeout-ms: int
 ]: any -> record<id: string, organization_id: string, name: string, provider: string, base_url: string, auth: record<type: string, has_secret: bool>, timeout_ms: int, enabled: bool, dependent_guardrail_count: int, warning: string, created_at: string, updated_at: string, created_by: any> {
@@ -4267,7 +4266,7 @@ export def "ui-api-organizations-gateway-guardrails guardrails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled-only: string@bool-completer # default: false
+  --enabled-only: oneof<nothing, bool> # default: false
 ]: nothing -> table<id: string, organization_id: string, name: string, description: any, enabled: bool, stage: string, on_error: string, executor: any, source: string, template_slug: any, effective_status: string, inactive_reason: any, created_at: string, updated_at: string, created_by: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4293,7 +4292,7 @@ export def "ui-api-organizations-gateway-guardrails guardrail-by-organization" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   --description: any
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   stage: string
   on_error: string@on-error-completer
   executor: any
@@ -4346,7 +4345,7 @@ export def "ui-api-organizations-gateway-guardrails-templates-install template" 
   --allow-errors(-e) # Return full response without error handling
   template_slug: string
   --action: string@action-completer
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --target-route-slug: any
   --target-route-slugs: list
 ]: any -> record<id: string, organization_id: string, name: string, description: any, enabled: bool, stage: string, on_error: string, executor: any, source: string, template_slug: any, effective_status: string, inactive_reason: any, created_at: string, updated_at: string, created_by: any> {
@@ -4727,7 +4726,7 @@ export def "ui-api-organizations-gateway-guardrails-prebuilt-policies-test sampl
   target: any
   action: string@action-completer
   text: string
-  --include-redacted-text: string@bool-completer
+  --include-redacted-text: oneof<nothing, bool>
 ]: any -> record<ok: bool, action: string, entities: table<type: string, count: int>, redacted_text: string, error: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4813,7 +4812,7 @@ export def "ui-api-organizations-gateway-guardrails-presidio-policies-test-sampl
   connection_id: string # format: uuid
   config: record # shape: {language: string, entities: record, score_threshold?: float}
   text: string
-  --include-redacted-text: string@bool-completer
+  --include-redacted-text: oneof<nothing, bool>
 ]: any -> record<ok: bool, action: string, entities: table<type: string, count: int>, redacted_text: string, error: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4994,7 +4993,7 @@ export def "ui-api-organizations-gateway-guardrails guardrail-by-guardrail_id-or
   --allow-errors(-e) # Return full response without error handling
   name: string
   --description: any
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   stage: string
   on_error: string@on-error-completer
   executor: any
@@ -5048,7 +5047,7 @@ export def "ui-api-organizations-gateway-guardrails-test sample" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   text: string
-  --include-redacted-text: string@bool-completer
+  --include-redacted-text: oneof<nothing, bool>
 ]: any -> record<ok: bool, action: string, entities: table<type: string, count: int>, redacted_text: string, error: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5098,7 +5097,7 @@ export def "ui-api-organizations-gateway-guardrails-bindings binding-by-guardrai
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --project-id: any
   --api-key-id: any
   --target-provider-slug: any
@@ -5469,7 +5468,7 @@ export def "ui-api-organizations-gateway-providers providers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-built-in: string@bool-completer # default: true
+  --include-built-in: oneof<nothing, bool> # default: true
 ]: nothing -> table<id: string, organization_id: any, description: any, provider_type: string, slug: string, base_url: string, inject_cost: bool, is_built_in: bool, block_on_error: bool, created_at: string, created_by: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5498,8 +5497,8 @@ export def "ui-api-organizations-gateway-providers provider-by-organization" [
   --body-base-url: string
   credentials: string
   description: any
-  --inject-cost: string@bool-completer
-  --block-on-error: string@bool-completer
+  --inject-cost: oneof<nothing, bool>
+  --block-on-error: oneof<nothing, bool>
 ]: any -> record<id: string, organization_id: any, description: any, provider_type: string, slug: string, base_url: string, inject_cost: bool, is_built_in: bool, block_on_error: bool, created_at: string, created_by: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5773,7 +5772,7 @@ export def "ui-api-organizations-gateway-routing-groups-members group-by-routing
   provider_id: string # format: uuid
   priority: int
   weight: float
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
 ]: any -> record<id: string, provider_id: string, routing_group_id: string, priority: int, weight: float, active: bool, created_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5875,7 +5874,7 @@ export def "ui-api-organizations-gateway-settings settings-by-organization-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --gateway-enabled: string@bool-completer
+  --gateway-enabled: oneof<nothing, bool>
   --gateway-service-name: string
   --gateway-spending-limit-daily: any
   --gateway-spending-limit-weekly: any
@@ -5905,7 +5904,7 @@ export def "ui-api-organizations-gateway-settings-built-in-providers preference"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<gateway_enabled: bool, billing_status: string, builtin_providers_access_status: string, builtin_providers_enabled: bool, organization_name: string, is_personal_organization: bool, gateway_service_name: string, gateway_spending_limit_daily: any, gateway_spending_limit_weekly: any, gateway_spending_limit_monthly: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6373,7 +6372,7 @@ export def "ui-api-organizations-oidc-trust-policies-active active" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
 ]: any -> record<id: string, organization_id: string, project_id: any, project_name: any, name: string, provider: any, claims: record, allowed_algorithms: list<string>, scopes: list<string>, token_ttl_seconds: int, active: bool, created_by: any, created_at: string, updated_at: string, scope_claims: record<project_gateway_proxy: record<spending_limit_daily: any, spending_limit_weekly: any, spending_limit_monthly: any, spending_limit_total: any, cache_enabled: any>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7061,7 +7060,7 @@ export def "ui-api-organizations-projects-api-keys key-by-organization-project" 
   scopes: list
   --claims: record # shape: {project:gateway_proxy?: record}
   --expires-at: any
-  --is-personal: string@bool-completer
+  --is-personal: oneof<nothing, bool>
 ]: any -> record<api_key: record<id: string, organization_id: string, name: string, description: any, scopes: list<string>, project_id: any, project_name: any, all_projects: bool, created_by: any, created_by_name: any, created_at: string, last_used_at: any, expires_at: any, user_id: any, active: bool, updated_at: any, updated_by: any, claims: record<project_gateway_proxy: record>>, token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7247,7 +7246,7 @@ export def "ui-api-organizations-projects-alerts alert-by-organization-project" 
   time_window: string # format: duration
   frequency: string # format: duration
   watermark: string # format: duration
-  --active: string@bool-completer # Whether the alert starts enabled. (default: true)
+  --active: oneof<nothing, bool> # Whether the alert starts enabled. (default: true)
   --channel-ids: any # Legacy shorthand for assigning channels without schedules.
   --channel-assignments: any # Schedule-aware channel configuration. When both `channel_assignments` and `channel_ids` are provided, `channel_assignments` is used.
   notify_when: string@notify-when-completer
@@ -7284,7 +7283,7 @@ export def "ui-api-organizations-projects-alerts alert-by-alert_id-organization-
   --time-window: string # format: duration
   --frequency: string # format: duration
   --watermark: string # format: duration
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --body-query: string
   --channel-ids: any # Legacy shorthand for assigning channels without schedules.
   --channel-assignments: list # Schedule-aware channel configuration. When both `channel_assignments` and `channel_ids` are provided, `channel_assignments` is used. — item shape: {channel_id: string, schedule_id?: any}
@@ -7393,7 +7392,7 @@ export def "ui-api-organizations-projects-alerts-history history" [
   --end-timestamp: string # format: date-time
   --limit: int # default: 100
   --offset: int # default: 0
-  --filter-matches: string@bool-completer # default: false
+  --filter-matches: oneof<nothing, bool> # default: false
 ]: nothing -> record<filtered_alert_runs: table<id: string, alert_id: string, created_at: string, channels: list, query: string, window_min: string, window_max: string, status: string, run_started_at: any, run_finished_at: any, result: any, has_matches: any, has_errors: any>, total_runs: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7470,7 +7469,7 @@ export def "ui-api-organizations-projects-alerts-notifications notification-by-a
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-muted: string@bool-completer
+  --is-muted: oneof<nothing, bool>
 ]: any -> record<is_muted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8294,7 +8293,7 @@ export def "ui-api-organizations-projects-fetch-query records" [
   --allow-errors(-e) # Return full response without error handling
   --columns: list # List of columns to select, optionally as an expression with an alias (e.g. `select attributes->>'foo' as foo` -> [('foo', 'attributes->>'foo')] — item shape: {name: string, expression?: any}
   --body-where: string # SQL WHERE clause to filter the records. The clause should be in the form of a SQL expression, e.g. `service_name = 'my-service'` (default: true)
-  --tab-hidden: string@bool-completer
+  --tab-hidden: oneof<nothing, bool>
   --min-start-timestamp: string # format: date-time
   --max-start-timestamp: string # format: date-time
   order: string@order-completer
@@ -8302,7 +8301,7 @@ export def "ui-api-organizations-projects-fetch-query records" [
   --timezone: string
   --trace-limit: int
   --last-span: list
-  --include-ancestors: string@bool-completer
+  --include-ancestors: oneof<nothing, bool>
   --deployment-environment: list
   --table: string
   --exclude-trace-ids: list
@@ -8335,7 +8334,7 @@ export def "ui-api-organizations-projects-fetch-ancestors records" [
   --allow-errors(-e) # Return full response without error handling
   --columns: list # List of columns to select, optionally as an expression with an alias (e.g. `select attributes->>'foo' as foo` -> [('foo', 'attributes->>'foo')] — item shape: {name: string, expression?: any}
   --body-where: string # SQL WHERE clause to filter the records. The clause should be in the form of a SQL expression, e.g. `service_name = 'my-service'` (default: true)
-  --tab-hidden: string@bool-completer
+  --tab-hidden: oneof<nothing, bool>
   ancestors: list
   min_start_timestamp: string # format: date-time
   --max-start-timestamp: string # format: date-time
@@ -8444,7 +8443,7 @@ export def "ui-api-organizations-projects-fetch-trace-counts counts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --tab-hidden: string@bool-completer
+  --tab-hidden: oneof<nothing, bool>
   trace_ids: list
   --body-where: string
   --min-start-timestamp: string # format: date-time
@@ -8478,7 +8477,7 @@ export def "ui-api-organizations-projects-fetch-trace-graph graph" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --tab-hidden: string@bool-completer
+  --tab-hidden: oneof<nothing, bool>
   trace_ids: list
   --deployment-environment: list
   --min-start-timestamp: string # format: date-time
@@ -8575,7 +8574,7 @@ export def "ui-api-organizations-projects-fetch-trace-annotations-counts counts"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --tab-hidden: string@bool-completer
+  --tab-hidden: oneof<nothing, bool>
   trace_ids: list
   --min-start-timestamp: any
   --max-start-timestamp: any
@@ -8635,7 +8634,7 @@ export def "ui-api-organizations-projects-datasets dataset-by-organization-proje
   --output-schema: any
   --metadata-schema: any
   --guidance: any
-  --ai-managed-guidance: string@bool-completer # default: false
+  --ai-managed-guidance: oneof<nothing, bool> # default: false
   --evaluators: any
   --report-evaluators: any
 ]: any -> record<id: string, project_id: string, name: string, description: any, input_schema: any, output_schema: any, metadata_schema: any, guidance: any, ai_managed_guidance: bool, evaluators: any, report_evaluators: any, case_count: int, created_at: string, updated_at: string, created_by: any> {
@@ -9121,7 +9120,7 @@ export def "ui-api-organizations-projects-experiments experiment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --experiment-name: string
-  --archived: string@bool-completer
+  --archived: oneof<nothing, bool>
 ]: any -> record<id: string, created_at: string, updated_at: string, organization_id: string, project_id: string, experiment_name: any, dataset_name: any, task_name: any, archived: bool, metadata: any, trace_id: any, span_id: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10323,7 +10322,7 @@ export def "ui-api-organizations-projects-prompts-settings settings-by-prompt_sl
   --route: any
   --model: any
   --model-settings: any
-  --stream: string@bool-completer
+  --stream: oneof<nothing, bool>
   --tools: list # item shape: {name: string, description: any, parameters: record}
 ]: any -> record<api_format: string, route: any, model: any, model_settings: record, stream: bool, tools: table<name: string, description: any, parameters: record>> {
   let input = $in
@@ -10616,7 +10615,7 @@ export def "ui-api-organizations-projects-prompts-run prompt" [
   --scenario-variables: record
   scenario_id: string # format: uuid
   --baseline-version-id: any
-  --includes-unsaved-edits: string@bool-completer
+  --includes-unsaved-edits: oneof<nothing, bool>
   --api-key-id: any
   --variable-targeting-key: any
   --variable-attributes: any
@@ -10659,7 +10658,7 @@ export def "ui-api-organizations-projects-prompts-run-stream stream" [
   --scenario-variables: record
   scenario_id: string # format: uuid
   --baseline-version-id: any
-  --includes-unsaved-edits: string@bool-completer
+  --includes-unsaved-edits: oneof<nothing, bool>
   --api-key-id: any
   --variable-targeting-key: any
   --variable-attributes: any
@@ -10703,7 +10702,7 @@ export def "ui-api-organizations-projects-prompts-batch-run batch" [
   --scenario-variables: record
   scenario_id: string # format: uuid
   --baseline-version-id: any
-  --includes-unsaved-edits: string@bool-completer
+  --includes-unsaved-edits: oneof<nothing, bool>
   --api-key-id: any
   --max-cases: any
   --variable-targeting-key: any
@@ -10824,7 +10823,7 @@ export def "ui-api-organizations-projects-playground-run playground" [
   route: string
   model: string
   --api-key-id: any
-  --stream: string@bool-completer # default: false
+  --stream: oneof<nothing, bool> # default: false
 ]: any -> record<output_message: record<parts: list<any>, usage: record<input_tokens: int, cache_write_tokens: int, cache_read_tokens: int, output_tokens: int, input_audio_tokens: int, cache_audio_read_tokens: int, output_audio_tokens: int, details: record>, model_name: any, timestamp: string, kind: string, provider_name: any, provider_url: any, provider_details: any, provider_response_id: any, finish_reason: any, run_id: any, conversation_id: any, metadata: any, state: string>, usage: any, model: string, finish_reason: any, response_id: any, latency_ms: int, cost_estimate: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10860,7 +10859,7 @@ export def "ui-api-organizations-projects-playground-run-stream stream" [
   route: string
   model: string
   --api-key-id: any
-  --stream: string@bool-completer # default: false
+  --stream: oneof<nothing, bool> # default: false
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11047,7 +11046,7 @@ export def "ui-api-organizations-projects-query query" [
   --timezone: string
   --body-query: string
   --body-variables: record
-  --materialized: string@bool-completer
+  --materialized: oneof<nothing, bool>
   --dashboard-slug: string
   --query-source: string
 ]: any -> record<columns: table<name: string, type: any, nullable: bool>, data: list<list<any>>, duration: float> {
@@ -11084,7 +11083,7 @@ export def "ui-api-organizations-projects-query-validate validate" [
   --timezone: string
   --body-query: string
   --body-variables: record
-  --materialized: string@bool-completer
+  --materialized: oneof<nothing, bool>
   --dashboard-slug: string
   --query-source: string
 ]: any -> record<valid: bool, error: any> {
@@ -11296,7 +11295,7 @@ export def "ui-api-organizations-projects-saved-searches search-by-project-organ
   --allow-errors(-e) # Return full response without error handling
   name: string
   where_clause: string
-  --is-private: string@bool-completer
+  --is-private: oneof<nothing, bool>
   filter_alert: any # Optional filter-alert configuration. Within `filter_alert`, `channel_assignments` is the schedule-aware form and takes precedence over `channel_ids` when both are provided.
 ]: any -> record<id: string, project_id: string, created_at: string, created_by_name: any, updated_at: string, updated_by_name: any, name: string, where_clause: string, is_private: bool, filter_alert: any> {
   let input = $in
@@ -11374,7 +11373,7 @@ export def "ui-api-organizations-projects-saved-searches search-by-saved_search_
   --allow-errors(-e) # Return full response without error handling
   name: string
   where_clause: string
-  --is-private: string@bool-completer
+  --is-private: oneof<nothing, bool>
   filter_alert: any # Optional filter-alert configuration. Within `filter_alert`, `channel_assignments` is the schedule-aware form and takes precedence over `channel_ids` when both are provided.
 ]: any -> record<id: string, project_id: string, created_at: string, created_by_name: any, updated_at: string, updated_by_name: any, name: string, where_clause: string, is_private: bool, filter_alert: any> {
   let input = $in
@@ -11451,7 +11450,7 @@ export def "ui-api-organizations-projects-saved-searches-notifications notificat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-muted: string@bool-completer
+  --is-muted: oneof<nothing, bool>
 ]: any -> record<is_muted: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11509,7 +11508,7 @@ export def "ui-api-organizations-projects-saved-searches-check search" [
   --min-start-timestamp: string # format: date-time
   name: string
   where_clause: string
-  --is-private: string@bool-completer
+  --is-private: oneof<nothing, bool>
   filter_alert: any # Optional filter-alert configuration. Within `filter_alert`, `channel_assignments` is the schedule-aware form and takes precedence over `channel_ids` when both are provided.
 ]: any -> any {
   let input = $in
@@ -11859,7 +11858,7 @@ export def "ui-api-organizations-projects-variables definition-by-organization-p
   overrides: list # item shape: {name?: any, description?: any, conditions: list, rollout: record}
   --aliases: list
   --example: any
-  --external: string@bool-completer
+  --external: oneof<nothing, bool>
   --labels: record
 ]: any -> record<id: string, project_id: string, type_id: any, type_name: any, kind: string, name: string, display_name: any, prompt_slug: any, description: any, json_schema: any, template_inputs_schema: any, labels: record, latest_version: any, rollout: record<labels: record, latest_weight: float>, overrides: table<name: any, description: any, conditions: list, rollout: record>, aliases: any, example: any, external: bool, created_at: string, updated_at: string, created_by_name: any, updated_by_name: any> {
   let input = $in
@@ -11947,7 +11946,7 @@ export def "ui-api-organizations-projects-variables definition-by-variable_id-or
   --overrides: list # item shape: {name?: any, description?: any, conditions: list, rollout: record}
   --aliases: any
   --example: any
-  --external: string@bool-completer
+  --external: oneof<nothing, bool>
   --labels: record
 ]: any -> record<id: string, project_id: string, type_id: any, type_name: any, kind: string, name: string, display_name: any, prompt_slug: any, description: any, json_schema: any, template_inputs_schema: any, labels: record, latest_version: any, rollout: record<labels: record, latest_weight: float>, overrides: table<name: any, description: any, conditions: list, rollout: record>, aliases: any, example: any, external: bool, created_at: string, updated_at: string, created_by_name: any, updated_by_name: any> {
   let input = $in
@@ -12477,7 +12476,7 @@ export def "ui-api-organizations-projects-workflows workflow-by-project-organiza
   --description: any
   --notification-channel-ids: list
   --repository-resource-ids: list
-  --manual-runs-enabled: string@bool-completer
+  --manual-runs-enabled: oneof<nothing, bool>
 ]: any -> record<id: string, organization_id: string, project_id: string, display_name: string, slug: string, description: any, instructions: string, kind: string, enabled: bool, notification_channel_ids: list<string>, repository_resource_ids: list<string>, manual_runs_enabled: bool, created_by: any, created_at: string, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12532,10 +12531,10 @@ export def "ui-api-organizations-projects-workflows workflow-by-workflow_slug-pr
   --display-name: string
   --description: any
   --instructions: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --notification-channel-ids: list
   --repository-resource-ids: list
-  --manual-runs-enabled: string@bool-completer
+  --manual-runs-enabled: oneof<nothing, bool>
 ]: any -> record<id: string, organization_id: string, project_id: string, display_name: string, slug: string, description: any, instructions: string, kind: string, enabled: bool, notification_channel_ids: list<string>, repository_resource_ids: list<string>, manual_runs_enabled: bool, created_by: any, created_at: string, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12766,7 +12765,7 @@ export def "ui-api-organizations-projects-workflows-triggers trigger-by-workflow
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   config: any
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<id: string, workflow_id: string, kind: string, config: record, enabled: bool, created_by: any, created_at: string, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12795,7 +12794,7 @@ export def "ui-api-organizations-projects-workflows-triggers trigger-by-workflow
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --config: any
 ]: any -> record<id: string, workflow_id: string, kind: string, config: record, enabled: bool, created_by: any, created_at: string, updated_at: string> {
   let input = $in
@@ -13718,7 +13717,7 @@ export def "ui-api-public-traces-fetch-query query" [
   --allow-errors(-e) # Return full response without error handling
   --columns: list # List of columns to select, optionally as an expression with an alias (e.g. `select attributes->>'foo' as foo` -> [('foo', 'attributes->>'foo')] — item shape: {name: string, expression?: any}
   --body-where: string # SQL WHERE clause to filter the records. The clause should be in the form of a SQL expression, e.g. `service_name = 'my-service'` (default: true)
-  --tab-hidden: string@bool-completer
+  --tab-hidden: oneof<nothing, bool>
   --min-start-timestamp: string # format: date-time
   --max-start-timestamp: string # format: date-time
   order: string@order-completer
@@ -13726,7 +13725,7 @@ export def "ui-api-public-traces-fetch-query query" [
   --timezone: string
   --trace-limit: int
   --last-span: list
-  --include-ancestors: string@bool-completer
+  --include-ancestors: oneof<nothing, bool>
   --deployment-environment: list
   --table: string
   --exclude-trace-ids: list

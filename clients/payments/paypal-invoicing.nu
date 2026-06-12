@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api-m.paypal.com" "https://api-m.sandbox.paypal.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -158,7 +157,7 @@ export def "invoicing-invoices invoiceslist" [
   --accept: string@accept-completer # Response content type
   --page: int # The page number to be retrieved, for the list of templates. So, a combination of `page=1` and `page_size=20` returns the first 20 templates. A combination of `page=2` and `page_size=20` returns the next 20 templates. (default: 1)
   --page-size: int # The maximum number of templates to return in the response. (default: 20)
-  --total-required: string@bool-completer # Indicates whether the to show <code>total_pages</code> and <code>total_items</code> in the response. (default: false)
+  --total-required: oneof<nothing, bool> # Indicates whether the to show <code>total_pages</code> and <code>total_items</code> in the response. (default: false)
   --qp-fields: string # The fields to return in the response. Value is `all` or `none`. To return only the template name, ID, and default attributes, specify `none`. (default: all)
 ]: nothing -> record<total_pages: int, total_items: int, items: table<id: string, parent_id: string, status: string, detail: record, invoicer: record, primary_recipients: list, additional_recipients: list, items: list, configuration: record, amount: record, due_amount: record, gratuity: record, payments: record, refunds: record, links: list>, links: table<href: string, rel: string, method: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -186,8 +185,8 @@ export def "invoicing-invoices-send invoicessend" [
   --accept: string@accept-completer # Response content type
   --subject: string # The subject of the email that is sent as a notification to the recipient.<blockquote><strong>Note:</strong> User-provided values for this field will not be honored and the subject will always be defaulted to a system-defined value.</blockquote>
   --note: string # A note to the payer.<blockquote><strong>Note:</strong> User-provided values for this field will not be honored and the note will always be defaulted to a system-defined value.</blockquote>
-  --send-to-invoicer: string@bool-completer # Indicates whether to send a copy of the email to the merchant. (default: false)
-  --send-to-recipient: string@bool-completer # Indicates whether to send a copy of the email to the recipient. (default: true)
+  --send-to-invoicer: oneof<nothing, bool> # Indicates whether to send a copy of the email to the merchant. (default: false)
+  --send-to-recipient: oneof<nothing, bool> # Indicates whether to send a copy of the email to the recipient. (default: true)
   --additional-recipients: list # An array of one or more CC: emails to which notifications are sent. If you omit this parameter, a notification is sent to all CC: email addresses that are part of the invoice.<blockquote><strong>Note:</strong> Valid values are email addresses in the `additional_recipients` value associated with the invoice.</blockquote>
 ]: any -> record<href: string, rel: string, method: string> {
   let input = $in
@@ -216,8 +215,8 @@ export def "invoicing-invoices-remind invoicesremind" [
   --allow-errors(-e) # Return full response without error handling
   --subject: string # The subject of the email that is sent as a notification to the recipient.<blockquote><strong>Note:</strong> User-provided values for this field will not be honored and the subject will always be defaulted to a system-defined value.</blockquote>
   --note: string # A note to the payer.<blockquote><strong>Note:</strong> User-provided values for this field will not be honored and the note will always be defaulted to a system-defined value.</blockquote>
-  --send-to-invoicer: string@bool-completer # Indicates whether to send a copy of the email to the merchant. (default: false)
-  --send-to-recipient: string@bool-completer # Indicates whether to send a copy of the email to the recipient. (default: true)
+  --send-to-invoicer: oneof<nothing, bool> # Indicates whether to send a copy of the email to the merchant. (default: false)
+  --send-to-recipient: oneof<nothing, bool> # Indicates whether to send a copy of the email to the recipient. (default: true)
   --additional-recipients: list # An array of one or more CC: emails to which notifications are sent. If you omit this parameter, a notification is sent to all CC: email addresses that are part of the invoice.<blockquote><strong>Note:</strong> Valid values are email addresses in the `additional_recipients` value associated with the invoice.</blockquote>
 ]: any -> any {
   let input = $in
@@ -246,8 +245,8 @@ export def "invoicing-invoices-cancel invoicescancel" [
   --allow-errors(-e) # Return full response without error handling
   --subject: string # The subject of the email that is sent as a notification to the recipient.<blockquote><strong>Note:</strong> User-provided values for this field will not be honored and the subject will always be defaulted to a system-defined value.</blockquote>
   --note: string # A note to the payer.<blockquote><strong>Note:</strong> User-provided values for this field will not be honored and the note will always be defaulted to a system-defined value.</blockquote>
-  --send-to-invoicer: string@bool-completer # Indicates whether to send a copy of the email to the merchant. (default: false)
-  --send-to-recipient: string@bool-completer # Indicates whether to send a copy of the email to the recipient. (default: true)
+  --send-to-invoicer: oneof<nothing, bool> # Indicates whether to send a copy of the email to the merchant. (default: false)
+  --send-to-recipient: oneof<nothing, bool> # Indicates whether to send a copy of the email to the recipient. (default: true)
   --additional-recipients: list # An array of one or more CC: emails to which notifications are sent. If you omit this parameter, a notification is sent to all CC: email addresses that are part of the invoice.<blockquote><strong>Note:</strong> Valid values are email addresses in the `additional_recipients` value associated with the invoice.</blockquote>
 ]: any -> any {
   let input = $in
@@ -413,7 +412,7 @@ export def "invoicing-generate-next-invoice-number invoicinggenerate-next-invoic
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --fetch-id: string@bool-completer # Optional to decide the number or ID. (default: false)
+  --fetch-id: oneof<nothing, bool> # Optional to decide the number or ID. (default: false)
 ]: any -> record<invoice_number: string, invoice_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -473,8 +472,8 @@ export def "invoicing-invoices invoicesupdate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --send-to-recipient: string@bool-completer # Indicates whether to send the invoice update notification to the recipient. (default: true)
-  --send-to-invoicer: string@bool-completer # Indicates whether to send the invoice update notification to the merchant. (default: true)
+  --send-to-recipient: oneof<nothing, bool> # Indicates whether to send the invoice update notification to the recipient. (default: true)
+  --send-to-invoicer: oneof<nothing, bool> # Indicates whether to send the invoice update notification to the merchant. (default: true)
   --status: string@status-completer # The status of the invoice.
   detail: record # The details of the invoice. Includes invoice number, date, payment terms, and audit metadata. — shape: {reference?: string, currency_code: string, note?: string, terms_and_conditions?: string, memo?: string, attachments?: list, invoice_number?: string, invoice_date?: string, payment_term?: record, metadata?: record}
   --invoicer: record # The invoicer business information that appears on the invoice. — shape: {email_address?: string, phones?: list, website?: string, tax_id?: string, additional_notes?: string, logo_url?: string}
@@ -542,7 +541,7 @@ export def "invoicing-search-invoices invoicessearch-invoices" [
   --accept: string@accept-completer # Response content type
   --page: int # The page number to be retrieved, for the list of templates. So, a combination of `page=1` and `page_size=20` returns the first 20 templates. A combination of `page=2` and `page_size=20` returns the next 20 templates. (default: 1)
   --page-size: int # The maximum number of templates to return in the response. (default: 20)
-  --total-required: string@bool-completer # Indicates whether the to show <code>total_pages</code> and <code>total_items</code> in the response. (default: false)
+  --total-required: oneof<nothing, bool> # Indicates whether the to show <code>total_pages</code> and <code>total_items</code> in the response. (default: false)
   --recipient-email: string # Filters the search by the email address.
   --recipient-first-name: string # Filters the search by the recipient first name.
   --recipient-last-name: string # Filters the search by the recipient last name.
@@ -557,7 +556,7 @@ export def "invoicing-search-invoices invoicessearch-invoices" [
   --due-date-range: record # The date range. Filters invoices by creation date, invoice date, due date, and payment date. — shape: {start: string, end: string}
   --payment-date-range: record # The date and time range. Filters invoices by creation date, invoice date, due date, and payment date. — shape: {start: string, end: string}
   --creation-date-range: record # The date and time range. Filters invoices by creation date, invoice date, due date, and payment date. — shape: {start: string, end: string}
-  --archived: string@bool-completer # Indicates whether to list merchant-archived invoices in the response. Value is:<ul><li><code>true</code>. Response lists only merchant-archived invoices.</li><li><code>false</code>. Response lists only unarchived invoices.</li><li><code>null</code>. Response lists all invoices.</li></ul>
+  --archived: oneof<nothing, bool> # Indicates whether to list merchant-archived invoices in the response. Value is:<ul><li><code>true</code>. Response lists only merchant-archived invoices.</li><li><code>false</code>. Response lists only unarchived invoices.</li><li><code>null</code>. Response lists all invoices.</li></ul>
   --body-fields: list # A CSV file of fields to return for the user, if available. Because the invoice object can be very large, field filtering is required. Valid collection fields are <code>items</code>, <code>payments</code>, <code>refunds</code>, <code>additional_recipients_info</code>, and <code>attachments</code>.
 ]: any -> record<total_pages: int, total_items: int, items: table<id: string, parent_id: string, status: string, detail: record, invoicer: record, primary_recipients: list, additional_recipients: list, items: list, configuration: record, amount: record, due_amount: record, gratuity: record, payments: record, refunds: record, links: list>, links: table<href: string, rel: string, method: string>> {
   let input = $in
@@ -615,7 +614,7 @@ export def "invoicing-templates templatescreate" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --name: string # The template name.<blockquote><strong>Note:</strong> The template name must be unique.</blockquote>
-  --default-template: string@bool-completer # Indicates whether this template is the default template. A invoicer can have one default template.
+  --default-template: oneof<nothing, bool> # Indicates whether this template is the default template. A invoicer can have one default template.
   --template-info: record # The template details. Includes invoicer business information, invoice recipients, items, and configuration. — shape: {detail?: record, invoicer?: record, primary_recipients?: list, additional_recipients?: list, items?: list, configuration?: record, amount?: record, due_amount?: record}
   --settings: record # The template settings. Sets a template as the default template or edit template. — shape: {template_item_settings?: list, template_subtotal_settings?: list}
   --unit-of-measure: string@unit-of-measure-completer # The unit of measure for the invoiced item.
@@ -671,7 +670,7 @@ export def "invoicing-templates templatesupdate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # The template name.<blockquote><strong>Note:</strong> The template name must be unique.</blockquote>
-  --default-template: string@bool-completer # Indicates whether this template is the default template. A invoicer can have one default template.
+  --default-template: oneof<nothing, bool> # Indicates whether this template is the default template. A invoicer can have one default template.
   --template-info: record # The template details. Includes invoicer business information, invoice recipients, items, and configuration. — shape: {detail?: record, invoicer?: record, primary_recipients?: list, additional_recipients?: list, items?: list, configuration?: record, amount?: record, due_amount?: record}
   --settings: record # The template settings. Sets a template as the default template or edit template. — shape: {template_item_settings?: list, template_subtotal_settings?: list}
   --unit-of-measure: string@unit-of-measure-completer # The unit of measure for the invoiced item.

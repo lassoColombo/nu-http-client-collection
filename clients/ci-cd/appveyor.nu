@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://ci.appveyor.com/api"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -238,7 +237,7 @@ export def "builds reRunBuild" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   buildId: int
-  --reRunIncomplete: string@bool-completer # Set `reRunIncomplete` set to `false` (default value) for full build re-run. Set it set to `true` to rerun only failed or cancelled jobs in multijob build.
+  --reRunIncomplete: oneof<nothing, bool> # Set `reRunIncomplete` set to `false` (default value) for full build re-run. Set it set to `true` to rerun only failed or cancelled jobs in multijob build.
 ]: any -> record<branch: string, buildId: int, message: string, version: string, created: string, updated: string, authorName: string, authorUsername: string, buildNumber: int, commitId: string, committed: string, committerName: string, committerUsername: string, finished: string, isTag: bool, jobs: table<allowFailure: bool, artifactsCount: int, compilationErrorsCount: int, compilationMessagesCount: int, compilationWarningsCount: int, failedTestsCount: int, messagesCount: int, osType: string, passedTestsCount: int, testsCount: int>, messageExtended: string, messages: table<category: string, created: string, message: string>, projectId: int, pullRequestId: int, pullRequestName: string, started: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -688,7 +687,7 @@ export def "projects updateProject" [
   --buildPriority: int
   configuration: record # shape: {afterBuildScripts?: list, afterDeployScripts?: list, afterTestScripts?: list, artifacts?: list, assemblyFileVersionFormat?: string, assemblyInfoFile?: string, assemblyInformationalVersionFormat?: string, assemblyVersionFormat?: string, beforeBuildScripts?: list, beforeDeployScripts?: list, beforePackageScripts?: list, beforeTestScripts?: list, branchesMode?: "exclude"|"include", buildCloud?: list, buildMode?: "msbuild"|"none"|"script", buildScripts?: list, cacheEntries?: list, cloneDepth?: int, cloneFolder?: string, cloneScripts?: list, configuration?: list, configureNuGetAccountSource?: bool, configureNuGetProjectSource?: bool, deployMode?: "providers"|"none"|"script", deployScripts?: list, deployments?: list, disableNuGetPublishForOctopusPackages?: bool, disableNuGetPublishOnPullRequests?: bool, doNotIncrementBuildNumberOnPullRequests?: bool, dotnetCsprojAssemblyVersionFormat?: string, dotnetCsprojFile?: string, dotnetCsprojFileVersionFormat?: string, dotnetCsprojInformationalVersionFormat?: string, dotnetCsprojPackageVersionFormat?: string, dotnetCsprojVersionFormat?: string, environmentVariables?: list, environmentVariablesMatrix?: list, excludeBranches?: list, forceHttpsClone?: bool, hostsEntries?: list, hotFixScripts?: list, includeBranches?: list, includeNuGetReferences?: bool, initScripts?: list, installScripts?: list, matrixAllowFailures?: list, matrixExcept?: list, matrixExclude?: list, matrixFastFinish?: bool, matrixOnly?: list, maxJobs?: int, msBuildInParallel?: bool, msBuildProjectFileName?: string, msBuildVerbosity?: "quiet"|"minimal"|"normal"|"detailed", notifications?: list, onBuildErrorScripts?: list, onBuildFinishScripts?: list, onBuildSuccessScripts?: list, onlyCommitsFiles?: list, operatingSystem?: list, packageAspNetCoreProjects?: bool, packageAzureCloudServiceProjects?: bool, packageDotnetConsoleProjects?: bool, packageNuGetProjects?: bool, packageNuGetSymbols?: bool, packageWebApplicationProjects?: bool, packageWebApplicationProjectsBeanstalk?: bool, packageWebApplicationProjectsOctopus?: bool, packageWebApplicationProjectsXCopy?: bool, patchAssemblyInfo?: bool, patchDotnetCsproj?: bool, platform?: list, services?: list, shallowClone?: bool, skipBranchWithPullRequests?: bool, skipCommitsFiles?: list, skipNonTags?: bool, skipTags?: bool, stacks?: list, testAssemblies?: list, testCategories?: list, testCategoriesMatrix?: list, testCategoriesMode?: "exclude"|"include", testMode?: "auto"|"none"|"script", testScripts?: list, xamarinRegisterAndroidProduct?: bool, xamarinRegisterIosProduct?: bool}
   --customYmlName: string
-  --ignoreAppveyorYml: string@bool-completer
+  --ignoreAppveyorYml: oneof<nothing, bool>
   --nextBuildNumber: int
   --repositoryAuthentication: string@repositoryAuthentication-completer
   --repositoryUsername: string
@@ -728,8 +727,8 @@ export def "projects-status get-by-badgeRepoProvider-repoAccountName-repoSlug" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
   --branch: string # Repository Branch
-  --svg: string@bool-completer # Return an SVG image instead of PNG?  Exclusive with `retina`. (default: false)
-  --retina: string@bool-completer # Return a larger image suitable for retina displays?  Exclusive with `svg`. (default: false)
+  --svg: oneof<nothing, bool> # Return an SVG image instead of PNG?  Exclusive with `retina`. (default: false)
+  --retina: oneof<nothing, bool> # Return a larger image suitable for retina displays?  Exclusive with `svg`. (default: false)
   --passingText: string # Text to show in badge when build is passing.
   --failingText: string # Text to show in badge when build is failing.
   --pendingText: string # Text to show in badge when build is pending.
@@ -758,8 +757,8 @@ export def "projects-status get-by-statusBadgeId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --svg: string@bool-completer # Return an SVG image instead of PNG?  Exclusive with `retina`. (default: false)
-  --retina: string@bool-completer # Return a larger image suitable for retina displays?  Exclusive with `svg`. (default: false)
+  --svg: oneof<nothing, bool> # Return an SVG image instead of PNG?  Exclusive with `retina`. (default: false)
+  --retina: oneof<nothing, bool> # Return a larger image suitable for retina displays?  Exclusive with `svg`. (default: false)
   --passingText: string # Text to show in badge when build is passing.
   --failingText: string # Text to show in badge when build is failing.
   --pendingText: string # Text to show in badge when build is pending.
@@ -789,8 +788,8 @@ export def "projects-status-branch get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --svg: string@bool-completer # Return an SVG image instead of PNG?  Exclusive with `retina`. (default: false)
-  --retina: string@bool-completer # Return a larger image suitable for retina displays?  Exclusive with `svg`. (default: false)
+  --svg: oneof<nothing, bool> # Return an SVG image instead of PNG?  Exclusive with `retina`. (default: false)
+  --retina: oneof<nothing, bool> # Return a larger image suitable for retina displays?  Exclusive with `svg`. (default: false)
   --passingText: string # Text to show in badge when build is passing.
   --failingText: string # Text to show in badge when build is failing.
   --pendingText: string # Text to show in badge when build is pending.
@@ -873,8 +872,8 @@ export def "projects-artifacts get" [
   --branch: string # Repository Branch
   --tag: string # A git (or other VCS) tag
   --job: string # Name of the build job.
-  --all: string@bool-completer # Include not only `successful`, but also jobs with `failed`, and `cancelled` status. (default: false)
-  --pr: string@bool-completer # Include PR builds in the search results? `true` - take artifact from PR builds only; `false` - do not look for artifact in PR builds; default/unspecified - look for artifact in both PR an non-PR builds.
+  --all: oneof<nothing, bool> # Include not only `successful`, but also jobs with `failed`, and `cancelled` status. (default: false)
+  --pr: oneof<nothing, bool> # Include PR builds in the search results? `true` - take artifact from PR builds only; `false` - do not look for artifact in PR builds; default/unspecified - look for artifact in both PR an non-PR builds.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1370,7 +1369,7 @@ export def "users updateUser" [
   fullName: string
   --password: string # format: password
   --roleId: int
-  --twoFactorAuthEnabled: string@bool-completer
+  --twoFactorAuthEnabled: oneof<nothing, bool>
   --userId: int
 ]: any -> any {
   let input = $in

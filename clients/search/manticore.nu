@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://127.0.0.1:9308"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -114,10 +113,10 @@ export def "search search" [
   --max-matches: int # Maximum number of matches allowed in the result
   --offset: int # Starting point for pagination of the result
   --options: record # Additional search options
-  --profile: string@bool-completer # Enable or disable profiling of the search request
+  --profile: oneof<nothing, bool> # Enable or disable profiling of the search request
   --body-sort: any
   --body-source: any
-  --track-scores: string@bool-completer # Enable or disable result weight calculation used for sorting
+  --track-scores: oneof<nothing, bool> # Enable or disable result weight calculation used for sorting
 ]: any -> record<took: int, timed_out: bool, aggregations: record, hits: record<max_score: int, total: int, total_relation: string, hits: list<record>>, profile: record, scroll: string, warning: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -311,7 +310,7 @@ export def "sql sql" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --raw-response: string@bool-completer # Optional parameter, defines a format of response. Can be set to `False` for Select only queries and set to `True` for any type of queries. Default value is 'True'.  (default: true)
+  --raw-response: oneof<nothing, bool> # Optional parameter, defines a format of response. Can be set to `False` for Select only queries and set to `True` for any type of queries. Default value is 'True'.  (default: true)
   --body: record
 ]: any -> any {
   let input = $in

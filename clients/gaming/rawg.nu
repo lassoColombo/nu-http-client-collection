@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.rawg.io/api"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -219,8 +218,8 @@ export def "games list" [
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --search: string # Search query.
-  --search-precise: string@bool-completer # Disable fuzziness for the search query.
-  --search-exact: string@bool-completer # Mark the search query as exact.
+  --search-precise: oneof<nothing, bool> # Disable fuzziness for the search query.
+  --search-exact: oneof<nothing, bool> # Mark the search query as exact.
   --parent-platforms: string # Filter by parent platforms, for example: `1,2,3`.
   --platforms: string # Filter by platforms, for example: `4,5`.
   --stores: string # Filter by stores, for example: `5,6`.
@@ -234,9 +233,9 @@ export def "games list" [
   --platforms-count: int # Filter by platforms count, for example: `1`.
   --metacritic: string # Filter by a metacritic rating, for example: `80,100`.
   --exclude-collection: int # Exclude games from a particular collection, for example: `123`.
-  --exclude-additions: string@bool-completer # Exclude additions.
-  --exclude-parents: string@bool-completer # Exclude games which have additions.
-  --exclude-game-series: string@bool-completer # Exclude games which included in a game series.
+  --exclude-additions: oneof<nothing, bool> # Exclude additions.
+  --exclude-parents: oneof<nothing, bool> # Exclude games which have additions.
+  --exclude-game-series: oneof<nothing, bool> # Exclude games which included in a game series.
   --exclude-stores: string # Exclude stores, for example: `5,6`.
   --ordering: string # Available fields: `name`, `released`, `added`, `created`, `updated`, `rating`, `metacritic`. You can reverse the sort order adding a hyphen, for example: `-released`.
 ]: nothing -> record<count: int, next: string, previous: string, results: table<added: int, added_by_status: record, background_image: string, esrb_rating: record, id: int, metacritic: int, name: string, platforms: list, playtime: int, rating: float, rating_top: int, ratings: record, ratings_count: int, released: string, reviews_text_count: string, slug: string, suggestions_count: int, tba: bool, updated: string>> {

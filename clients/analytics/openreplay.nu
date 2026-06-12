@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -224,7 +223,7 @@ export def "events-search get" [
   --q: string
   --type: string
   --key: string
-  --live: string@bool-completer # default: false
+  --live: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -251,7 +250,7 @@ export def "autocomplete get" [
   --q: string
   --type: string
   --key: string
-  --live: string@bool-completer # default: false
+  --live: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -681,7 +680,7 @@ export def "integrations-newrelic post" [
   --allow-errors(-e) # Return full response without error handling
   applicationId: string
   xQueryKey: string
-  --region: string@bool-completer # default: false
+  --region: oneof<nothing, bool> # default: false
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1544,9 +1543,9 @@ export def "gdpr post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --maskEmails: string@bool-completer
+  --maskEmails: oneof<nothing, bool>
   sampleRate: int
-  --maskNumbers: string@bool-completer
+  --maskNumbers: oneof<nothing, bool>
   defaultInputMode: string
 ]: any -> any {
   let input = $in
@@ -1721,7 +1720,7 @@ export def "sample-rate post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   rate: int
-  --captureAll: string@bool-completer # default: false
+  --captureAll: oneof<nothing, bool> # default: false
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1749,7 +1748,7 @@ export def "conditions post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   rate: int
-  --conditionalCapture: string@bool-completer # default: false
+  --conditionalCapture: oneof<nothing, bool> # default: false
   --conditions: list # item shape: {conditionId?: any, name: string, captureRate: int, filters?: list}
 ]: any -> any {
   let input = $in
@@ -2041,7 +2040,7 @@ export def "config-weekly-report post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --weeklyReport: string@bool-completer # default: true
+  --weeklyReport: oneof<nothing, bool> # default: true
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2291,7 +2290,7 @@ export def "users-modules post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-module: string@module-completer
-  --status: string@bool-completer
+  --status: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2774,7 +2773,7 @@ export def "client-members put" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   email: string # format: email
-  --admin: string@bool-completer # default: false
+  --admin: oneof<nothing, bool> # default: false
   roleId: int
 ]: any -> any {
   let input = $in
@@ -2969,8 +2968,8 @@ export def "tags post" [
   --allow-errors(-e) # Return full response without error handling
   name: string
   selector: string
-  --ignoreClickRage: string@bool-completer # default: false
-  --ignoreDeadClick: string@bool-completer # default: false
+  --ignoreClickRage: oneof<nothing, bool> # default: false
+  --ignoreDeadClick: oneof<nothing, bool> # default: false
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3569,8 +3568,8 @@ export def "errors-sessions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --action: string
-  --startDate: int # default: 1780569651990
-  --endDate: int # default: 1781174451990
+  --startDate: int # default: 1780569648874
+  --endDate: int # default: 1781174448874
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3746,7 +3745,7 @@ export def "feature-flags-status post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isActive: string@bool-completer
+  --isActive: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3795,7 +3794,7 @@ export def "client-roles put" [
   name: string
   --description: any
   permissions: list
-  --allProjects: string@bool-completer # default: true
+  --allProjects: oneof<nothing, bool> # default: true
   --projects: list # default: []
 ]: any -> any {
   let input = $in
@@ -3824,7 +3823,7 @@ export def "client-roles post" [
   name: string
   --description: any
   permissions: list
-  --allProjects: string@bool-completer # default: true
+  --allProjects: oneof<nothing, bool> # default: true
   --projects: list # default: []
 ]: any -> any {
   let input = $in
@@ -3854,7 +3853,7 @@ export def "client-roles put-by-roleId" [
   name: string
   --description: any
   permissions: list
-  --allProjects: string@bool-completer # default: true
+  --allProjects: oneof<nothing, bool> # default: true
   --projects: list # default: []
 ]: any -> any {
   let input = $in
@@ -3884,7 +3883,7 @@ export def "client-roles post-by-roleId" [
   name: string
   --description: any
   permissions: list
-  --allProjects: string@bool-completer # default: true
+  --allProjects: oneof<nothing, bool> # default: true
   --projects: list # default: []
 ]: any -> any {
   let input = $in
@@ -3979,8 +3978,8 @@ export def "trails post" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # default: 200
   --page: int # default: 1
-  --startDate: int # default: 1780569623916
-  --endDate: int # default: 1781260823916
+  --startDate: int # default: 1780569622058
+  --endDate: int # default: 1781260822058
   --userId: any
   --body-query: any
   --action: any
@@ -4395,7 +4394,7 @@ export def "pa-properties-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --en: string # event name
-  --ac: string@bool-completer # auto captured
+  --ac: oneof<nothing, bool> # auto captured
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4530,8 +4529,8 @@ export def "pa-properties-autocomplete get" [
   --userId: string
   --qp-source: string
   --q: string
-  --ac: string@bool-completer # auto captured
-  --live: string@bool-completer # default: false
+  --ac: oneof<nothing, bool> # auto captured
+  --live: oneof<nothing, bool> # default: false
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5383,7 +5382,7 @@ export def "os-signup put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   edition: string
-  --tracking: string@bool-completer
+  --tracking: oneof<nothing, bool>
   version: string
   user_id: string
   --owner-email: any
@@ -5417,7 +5416,7 @@ export def "os-signup post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   edition: string
-  --tracking: string@bool-completer
+  --tracking: oneof<nothing, bool>
   version: string
   user_id: string
   --owner-email: any

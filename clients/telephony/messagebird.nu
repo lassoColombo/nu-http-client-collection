@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://rest.messagebird.com/messages"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -116,7 +115,7 @@ export def "messages post" [
   --typeDetails: record # A hashmap with extra information. (e.g. {"udh":"050003340201"})
   --datacoding: string # The datacoding used, defaults to plain (GSM 03.38 characters only), or it can be set to unicode (contains non-GSM 03.38 characters) or set to auto and we will set unicode or plain depending on the body content. (e.g. unicode)
   --mclass: int # Indicated the message type. 1 is a normal message, 0 is a flash message. (0-3 are valid values). (e.g. 1)
-  --shortenUrls: string@bool-completer # \*beta\* Shorten all the URLs present in the message body. (e.g. false)
+  --shortenUrls: oneof<nothing, bool> # \*beta\* Shorten all the URLs present in the message body. (e.g. false)
   --scheduledDatetime: int # The scheduled date and time of the message in RFC3339 format (Y-m-d\TH:i:sP), when you want to schedule a message in the future. Don't set this value when message needs to be send directly. (e.g. 2022-05-20T12:50:28Z)
 ]: any -> record {
   let input = $in

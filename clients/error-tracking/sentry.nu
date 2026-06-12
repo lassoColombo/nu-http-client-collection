@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://us.sentry.io" "https://de.sentry.io" "https://{region}.sentry.io"] }
 def auth-scheme-completer [] { ["bearer" "dsn"] }
 
@@ -153,7 +152,7 @@ export def "0-organizations List-Your-Organizations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --owner: string@bool-completer # Specify `true` to restrict results to organizations in which you are an owner.
+  --owner: oneof<nothing, bool> # Specify `true` to restrict results to organizations in which you are an owner.
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
   --qp-query: string # Filters results by using [query syntax](/product/sentry-basics/search/).  Valid query fields include: - `id`: The organization ID - `slug`: The organization slug - `status`: The organization's current status (one of `active`, `pending_deletion`, or `deletion_in_progress`) - `email` or `member_id`: Filter your organizations by the emails or [organization member IDs](/api/organizations/list-an-organizations-members/) of specific members included - `query`: Filter your organizations by name, slug, and members that contain this substring  Example: `query=(slug:foo AND status:active) OR (email:[thing-one@example.com,thing-two@example.com] AND query:bar)`
   --sortBy: string # The field to sort results by, in descending order. If not specified the results are sorted by the date they were created.  Valid fields include: - `members`: By number of members - `events`: By number of events in the past 24 hours
@@ -207,34 +206,34 @@ export def "0-organizations Update-an-Organization" [
   --allow-errors(-e) # Return full response without error handling
   --slug: string # The new slug for the organization, which needs to be unique.
   --name: string # The new name for the organization.
-  --isEarlyAdopter: string@bool-completer # Specify `true` to opt-in to new features before they're released to the public.
-  --hideAiFeatures: string@bool-completer # Specify `true` to hide AI features from the organization.
+  --isEarlyAdopter: oneof<nothing, bool> # Specify `true` to opt-in to new features before they're released to the public.
+  --hideAiFeatures: oneof<nothing, bool> # Specify `true` to hide AI features from the organization.
   --defaultRole: string@defaultRole-completer # The default role new members will receive.  * `member` - Member * `admin` - Admin * `manager` - Manager * `owner` - Owner
-  --openMembership: string@bool-completer # Specify `true` to allow organization members to freely join any team.
-  --eventsMemberAdmin: string@bool-completer # Specify `true` to allow members to delete events (including the delete & discard action) by granting them the `event:admin` scope.
-  --alertsMemberWrite: string@bool-completer # Specify `true` to allow members to create, edit, and delete alert rules by granting them the `alerts:write` scope.
+  --openMembership: oneof<nothing, bool> # Specify `true` to allow organization members to freely join any team.
+  --eventsMemberAdmin: oneof<nothing, bool> # Specify `true` to allow members to delete events (including the delete & discard action) by granting them the `event:admin` scope.
+  --alertsMemberWrite: oneof<nothing, bool> # Specify `true` to allow members to create, edit, and delete alert rules by granting them the `alerts:write` scope.
   --attachmentsRole: string@attachmentsRole-completer # The role required to download event attachments, such as native crash reports or log files.  * `member` - Member * `admin` - Admin * `manager` - Manager * `owner` - Owner
   --debugFilesRole: string@debugFilesRole-completer # The role required to download debug information files, ProGuard mappings and source maps.  * `member` - Member * `admin` - Admin * `manager` - Manager * `owner` - Owner
-  --hasGranularReplayPermissions: string@bool-completer # Specify `true` to enable granular replay permissions, allowing per-member access control for replay data.
+  --hasGranularReplayPermissions: oneof<nothing, bool> # Specify `true` to enable granular replay permissions, allowing per-member access control for replay data.
   --replayAccessMembers: list # A list of user IDs who have permission to access replay data. Requires the hasGranularReplayPermissions flag to be true to be enforced. (nullable)
   --avatarType: string@avatarType-completer # The type of display picture for the organization.  * `letter_avatar` - Use initials * `upload` - Upload an image
   --avatar: string # The image to upload as the organization avatar, in base64. Required if `avatarType` is `upload`.
-  --require2FA: string@bool-completer # Specify `true` to require and enforce two-factor authentication for all members.
-  --allowSharedIssues: string@bool-completer # Specify `true` to allow sharing of limited details on issues to anonymous users.
-  --enhancedPrivacy: string@bool-completer # Specify `true` to enable enhanced privacy controls to limit personally identifiable information (PII) as well as source code in things like notifications.
-  --scrapeJavaScript: string@bool-completer # Specify `true` to allow Sentry to scrape missing JavaScript source context when possible.
+  --require2FA: oneof<nothing, bool> # Specify `true` to require and enforce two-factor authentication for all members.
+  --allowSharedIssues: oneof<nothing, bool> # Specify `true` to allow sharing of limited details on issues to anonymous users.
+  --enhancedPrivacy: oneof<nothing, bool> # Specify `true` to enable enhanced privacy controls to limit personally identifiable information (PII) as well as source code in things like notifications.
+  --scrapeJavaScript: oneof<nothing, bool> # Specify `true` to allow Sentry to scrape missing JavaScript source context when possible.
   --storeCrashReports: int@storeCrashReports-completer # How many native crash reports (such as Minidumps for improved processing and download in issue details) to store per issue.  * `0` - Disabled * `1` - 1 per issue * `5` - 5 per issue * `10` - 10 per issue * `20` - 20 per issue * `50` - 50 per issue * `100` - 100 per issue * `-1` - Unlimited
-  --allowJoinRequests: string@bool-completer # Specify `true` to allow users to request to join your organization.
-  --dataScrubber: string@bool-completer # Specify `true` to require server-side data scrubbing for all projects.
-  --dataScrubberDefaults: string@bool-completer # Specify `true` to apply the default scrubbers to prevent things like passwords and credit cards from being stored for all projects.
+  --allowJoinRequests: oneof<nothing, bool> # Specify `true` to allow users to request to join your organization.
+  --dataScrubber: oneof<nothing, bool> # Specify `true` to require server-side data scrubbing for all projects.
+  --dataScrubberDefaults: oneof<nothing, bool> # Specify `true` to apply the default scrubbers to prevent things like passwords and credit cards from being stored for all projects.
   --sensitiveFields: list # A list of additional global field names to match against when scrubbing data for all projects.
   --safeFields: list # A list of global field names which data scrubbers should ignore.
-  --scrubIPAddresses: string@bool-completer # Specify `true` to prevent IP addresses from being stored for new events on all projects.
+  --scrubIPAddresses: oneof<nothing, bool> # Specify `true` to prevent IP addresses from being stored for new events on all projects.
   --relayPiiConfig: string # Advanced data scrubbing rules that can be configured for each project as a JSON string. The new rules will only apply to new incoming events. For more details on advanced data scrubbing, see our [full documentation](/security-legal-pii/scrubbing/advanced-datascrubbing/).  > Warning: Calling this endpoint with this field fully overwrites the advanced data scrubbing rules.  Below is an example of a payload for a set of advanced data scrubbing rules for masking credit card numbers from the log message (equivalent to `[Mask] [Credit card numbers] from [$message]` in the Sentry app) and removing a specific key called `foo` (equivalent to `[Remove] [Anything] from [extra.foo]` in the Sentry app): ```json {     relayPiiConfig: "{\"rules":{\"0\":{\"type\":\"creditcard\",\"redaction\":{\"method\":\"mask\"}},\"1\":{\"type\":\"anything\",\"redaction\":{\"method\":\"remove\"}}},\"applications\":{\"$message\":[\"0\"],\"extra.foo\":[\"1\"]}}" } ```         
   --trustedRelays: list # A list of local Relays (the name, public key, and description as a JSON) registered for the organization. This feature is only available for organizations on the Business and Enterprise plans. Read more about Relay [here](/product/relay/).                                            Below is an example of a list containing a single local Relay registered for the organization:                                           ```json                                           {                                             trustedRelays: [                                                 {                                                     name: "my-relay",                                                     publicKey: "eiwr9fdruw4erfh892qy4493reyf89ur34wefd90h",                                                     description: "Configuration for my-relay."                                                 }                                             ]                                           }                                           ```                                           
-  --issueAlertsThreadFlag: string@bool-completer # Specify `true` to allow the Sentry Slack integration to post replies in threads for an Issue Alert notification. Requires a Slack integration.
-  --metricAlertsThreadFlag: string@bool-completer # Specify `true` to allow the Sentry Slack integration to post replies in threads for a Metric Alert notification. Requires a Slack integration.
-  --cancelDeletion: string@bool-completer # Specify `true` to restore an organization that is pending deletion.
+  --issueAlertsThreadFlag: oneof<nothing, bool> # Specify `true` to allow the Sentry Slack integration to post replies in threads for an Issue Alert notification. Requires a Slack integration.
+  --metricAlertsThreadFlag: oneof<nothing, bool> # Specify `true` to allow the Sentry Slack integration to post replies in threads for a Metric Alert notification. Requires a Slack integration.
+  --cancelDeletion: oneof<nothing, bool> # Specify `true` to restore an organization that is pending deletion.
 ]: any -> record<features: list<string>, extraOptions: record, access: list<string>, onboardingTasks: table<task: string, status: string, completionSeen: string, dateCompleted: string, data: any>, id: string, slug: string, status: record<id: string, name: string>, name: string, dateCreated: string, isEarlyAdopter: bool, require2FA: bool, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, links: record<organizationUrl: string, regionUrl: string>, hasAuthProvider: bool, allowMemberInvite: bool, allowMemberProjectCreation: bool, allowSuperuserAccess: bool, role: any, orgRole: string, targetSampleRate: float, samplingMode: string, planSampleRate: float, desiredSampleRate: float, experiments: record, isDefault: bool, defaultRole: string, orgRoleList: table<id: string, name: string, desc: string, scopes: list, allowed: bool, isAllowed: bool, isRetired: bool, isTeamRolesAllowed: bool, is_global: bool, isGlobal: bool, minimumTeamRole: string>, teamRoleList: table<id: string, name: string, desc: string, scopes: list, allowed: bool, isAllowed: bool, isRetired: bool, isTeamRolesAllowed: bool, isMinimumRoleFor: string>, openMembership: bool, allowSharedIssues: bool, enhancedPrivacy: bool, dataScrubber: bool, dataScrubberDefaults: bool, sensitiveFields: list<string>, safeFields: list<string>, storeCrashReports: int, attachmentsRole: string, debugFilesRole: string, eventsMemberAdmin: bool, alertsMemberWrite: bool, scrubIPAddresses: bool, scrapeJavaScript: bool, allowJoinRequests: bool, relayPiiConfig: string, trustedRelays: table<name: string, description: string, publicKey: string, created: string, lastModified: string>, pendingAccessRequests: int, hideAiFeatures: bool, aggregatedDataConsent: bool, isDynamicallySampled: bool, issueAlertsThreadFlag: bool, metricAlertsThreadFlag: bool, requiresSso: bool, defaultAutofixAutomationTuning: string, defaultSeerScannerAutomation: bool, enableSeerCoding: bool, defaultCodingAgent: string, defaultCodingAgentIntegrationId: string, defaultAutomatedRunStoppingPoint: string, autoEnableCodeReview: bool, autoOpenPrs: bool, defaultCodeReviewTriggers: list<string>, teams: table<id: string, slug: string, name: string, dateCreated: string, isMember: bool, teamRole: string, flags: record, access: list, hasAccess: bool, isPending: bool, memberCount: int, avatar: record, externalTeams: list, organization: record, projects: list>, projects: table<latestDeploys: record, options: record, stats: any, transactionStats: any, sessionStats: any, id: string, slug: string, name: string, platform: string, dateCreated: string, isBookmarked: bool, isMember: bool, features: list, firstEvent: string, firstTransactionEvent: bool, access: list, hasAccess: bool, hasFeedbacks: bool, hasFlags: bool, hasMinifiedStackTrace: bool, hasMonitors: bool, hasNewFeedbacks: bool, hasProfiles: bool, hasReplays: bool, hasSessions: bool, hasInsightsHttp: bool, hasInsightsDb: bool, hasInsightsAssets: bool, hasInsightsAppStart: bool, hasInsightsScreenLoad: bool, hasInsightsVitals: bool, hasInsightsCaches: bool, hasInsightsQueues: bool, hasInsightsAgentMonitoring: bool, hasInsightsMCP: bool, hasLogs: bool, hasTraceMetrics: bool, team: record, teams: list, platforms: list, hasUserReports: bool, environments: list, latestRelease: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -319,9 +318,9 @@ export def "0-organizations-dashboards createOrganizationDashboard" [
   --start: string # The saved start time for this dashboard. (nullable, format: date-time)
   --end: string # The saved end time for this dashboard. (nullable, format: date-time)
   --filters: record # The saved filters for this dashboard.
-  --utc: string@bool-completer # Setting that lets you display saved time range for this dashboard in UTC.
+  --utc: oneof<nothing, bool> # Setting that lets you display saved time range for this dashboard in UTC.
   --permissions: any # Permissions that restrict users from editing dashboards (nullable)
-  --is-favorited: string@bool-completer # Favorite the dashboard automatically for the request user (default: false)
+  --is-favorited: oneof<nothing, bool> # Favorite the dashboard automatically for the request user (default: false)
 ]: any -> record<environment: list<string>, period: string, utc: string, expired: bool, start: string, end: string, id: string, title: string, dateCreated: string, createdBy: record<identities: list<record>, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, authenticators: list<any>, canReset2fa: bool, id: string, name: string, username: string, email: string, avatarUrl: string, isActive: bool, isSuspended: bool, hasPasswordAuth: bool, isManaged: bool, dateJoined: string, lastLogin: string, has2fa: bool, lastActive: string, isSuperuser: bool, isStaff: bool, experiments: record, emails: list<record>>, widgets: table<id: string, title: string, description: string, displayType: string, thresholds: record, interval: string, dateCreated: string, dashboardId: string, queries: list, limit: int, widgetType: string, layout: record, axisRange: string, legendType: string, datasetSource: string, exploreUrls: list, changedReason: list>, projects: list<int>, filters: record<release: list<string>, releaseId: list<string>, globalFilter: list<record>>, permissions: record<isEditableByEveryone: bool, teamsWithEditAccess: list<int>>, isFavorited: bool, prebuiltId: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -381,7 +380,7 @@ export def "0-organizations-dashboards updateOrganizationDashboard" [
   --start: string # The saved start time for this dashboard. (nullable, format: date-time)
   --end: string # The saved end time for this dashboard. (nullable, format: date-time)
   --filters: record # The saved filters for this dashboard.
-  --utc: string@bool-completer # Setting that lets you display saved time range for this dashboard in UTC.
+  --utc: oneof<nothing, bool> # Setting that lets you display saved time range for this dashboard in UTC.
   --permissions: any # Permissions that restrict users from editing dashboards (nullable)
 ]: any -> record<environment: list<string>, period: string, utc: string, expired: bool, start: string, end: string, id: string, title: string, dateCreated: string, createdBy: record<identities: list<record>, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, authenticators: list<any>, canReset2fa: bool, id: string, name: string, username: string, email: string, avatarUrl: string, isActive: bool, isSuspended: bool, hasPasswordAuth: bool, isManaged: bool, dateJoined: string, lastLogin: string, has2fa: bool, lastActive: string, isSuperuser: bool, isStaff: bool, experiments: record, emails: list<record>>, widgets: table<id: string, title: string, description: string, displayType: string, thresholds: record, interval: string, dateCreated: string, dashboardId: string, queries: list, limit: int, widgetType: string, layout: record, axisRange: string, legendType: string, datasetSource: string, exploreUrls: list, changedReason: list>, projects: list<int>, filters: record<release: list<string>, releaseId: list<string>, globalFilter: list<record>>, permissions: record<isEditableByEveryone: bool, teamsWithEditAccess: list<int>>, isFavorited: bool, prebuiltId: int> {
   let input = $in
@@ -461,7 +460,7 @@ export def "0-organizations-detectors Mutate-an-Organizations-Monitors" [
   --project: list # The IDs of projects to filter by. `-1` means all available projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=-1`
   --qp-query: string # An optional search query for filtering monitors.  Available fields are: - `name` - `type`: e.g. `error`, `metric_issue`, `issue_stream` - `assignee`: email, username, #team, me, none         
   --id: list # The ID of the monitor you'd like to query.
-  --enabled: string@bool-completer # Whether to enable or disable the monitors
+  --enabled: oneof<nothing, bool> # Whether to enable or disable the monitors
 ]: any -> table<owner: record<type: string, id: string, name: string, email: string>, createdBy: string, latestGroup: record, description: string, id: string, projectId: string, name: string, type: string, workflowIds: list<string>, dateCreated: string, dateUpdated: string, dataSources: list<record>, conditionGroup: record, config: record, enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -547,7 +546,7 @@ export def "0-organizations-detectors Update-a-Monitor-by-ID" [
   --condition-group: any #              Issue detection configuration for when to create an issue and at what priority level.               - `logicType`: `any`             - `type`: Any of `gt` (greater than), `lte` (less than or equal), or `anomaly_detection` (dynamic)             - `comparison`: Any positive integer. This is threshold that must be crossed for the monitor to create an issue, e.g. "Create a metric issue when there are more than 5 unresolved error events".                 - If creating a **dynamic** monitor, see the options below.                     - `seasonality`: `auto`                     - `sensitivity`: Level of responsiveness. Options are one of `low`, `medium`, or `high`                     - `thresholdType`: If you want to be alerted to anomalies that are moving above, below, or in both directions in relation to your threshold.                         - `0`: Above                         - `1`: Below                         - `2`: Above and below              - `conditionResult`: The issue state change when the threshold is crossed.                 - `75`: High priority                 - `50`: Low priority                 - `0`: Resolved               **Threshold and Change Monitor**             ```json                 "logicType": "any",                 "conditions": [                     {                         "type": "gt",                         "comparison": 10,                         "conditionResult": 75                     },                     {                         "type": "lte",                         "comparison": 10,                         "conditionResult": 0                     }                 ],                 "actions": []             ```              **Threshold Monitor with Medium Priority**             ```json                 "logicType": "any",                 "conditions": [                     {                         type: "gt",                         comparison: 5,                         conditionResult: 75                     },                     {                         type: "gt",                         comparison: 2,                         conditionResult: 50                     },                     {                         type: "lte",                         comparison: 2,                         conditionResult: 0                     }                 ],                 "actions": []             ```              **Dynamic Monitor**             ```json                 "logicType": "any",                 "conditions": [                     {                         "type": "anomaly_detection",                         "comparison": {                             "seasonality": "auto",                             "sensitivity": "medium",                             "thresholdType": 2                         },                         "conditionResult": 75                     }                 ],                 "actions": []             ```         
   --owner: string #              The ID user or team who owns the monitor or alert prefaced by the string 'user' or 'team'.              **User**             ```json                 "user:123456"             ```              **Team**             ```json                 "team:456789"             ```          (nullable)
   --description: string # A description of the monitor. Will be used in the resulting issue. (nullable)
-  --enabled: string@bool-completer # Set to False if you want to disable the monitor.
+  --enabled: oneof<nothing, bool> # Set to False if you want to disable the monitor.
 ]: any -> record<owner: record<type: string, id: string, name: string, email: string>, createdBy: string, latestGroup: record, description: string, id: string, projectId: string, name: string, type: string, workflowIds: list<string>, dateCreated: string, dateUpdated: string, dataSources: list<record>, conditionGroup: record, config: record, enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -805,7 +804,7 @@ export def "0-organizations-events Query-Explore-Events-in-Table-Format" [
   --per-page: int # Limit the number of rows to return in the result. Default and maximum allowed is 100.
   --qp-query: string # Filters results by using [query syntax](/product/sentry-basics/search/).  Example: `query=(transaction:foo AND release:abc) OR (transaction:[bar,baz] AND release:def)`
   --qp-sort: string # What to order the results of the query by. Must be something in the `field` list, excluding equations.
-  --allowAggregateConditions: string@bool-completer # If false, aggregate conditions in the query string are disallowed. Defaults to true.
+  --allowAggregateConditions: oneof<nothing, bool> # If false, aggregate conditions in the query string are disallowed. Defaults to true.
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> record<data: list<record>, meta: record<fields: record, units: record, tips: record, datasetReason: string, isMetricsData: bool, isMetricsExtractedData: bool, dataset: string, discoverSplitDecision: any, dataScanned: string, bytesScanned: int, debug_info: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -977,8 +976,8 @@ export def "0-organizations-forwarding Create-a-Data-Forwarder-for-an-Organizati
   --allow-errors(-e) # Return full response without error handling
   organization_id: int # The ID of the organization related to the data forwarder.
   provider: string@provider-completer-1 # The provider of the data forwarder. One of "segment", "sqs", or "splunk".  * `segment` - Segment * `sqs` - Amazon SQS * `splunk` - Splunk
-  --is-enabled: string@bool-completer # Whether the data forwarder is enabled. (default: true)
-  --enroll-new-projects: string@bool-completer # Whether to enroll new projects automatically, after they're created. (default: false)
+  --is-enabled: oneof<nothing, bool> # Whether the data forwarder is enabled. (default: true)
+  --enroll-new-projects: oneof<nothing, bool> # Whether to enroll new projects automatically, after they're created. (default: false)
   --config: record # The configuration for the data forwarder, specific to the provider type.  For a 'sqs' provider, the required keys are queue_url, region, access_key, secret_key. If using a FIFO queue, you must also provide a message_group_id, though s3_bucket is optional.  For a 'segment' provider, the required keys are write_key.  For a 'splunk' provider, the required keys are instance_url, index, source, token.
   --project-ids: list # The IDs of the projects connected to the data forwarder. Missing project IDs will be unenrolled if previously enrolled.
 ]: any -> record<id: string, organizationId: string, isEnabled: bool, enrollNewProjects: bool, enrolledProjects: table<id: string, slug: string, platform: string>, provider: string, config: record, projectConfigs: table<id: string, isEnabled: bool, dataForwarderId: string, project: record, overrides: record, effectiveConfig: record, dateAdded: string, dateUpdated: string>, dateAdded: string, dateUpdated: string> {
@@ -1009,8 +1008,8 @@ export def "0-organizations-forwarding Update-a-Data-Forwarder-for-an-Organizati
   --allow-errors(-e) # Return full response without error handling
   organization_id: int # The ID of the organization related to the data forwarder.
   provider: string@provider-completer-1 # The provider of the data forwarder. One of "segment", "sqs", or "splunk".  * `segment` - Segment * `sqs` - Amazon SQS * `splunk` - Splunk
-  --is-enabled: string@bool-completer # Whether the data forwarder is enabled. (default: true)
-  --enroll-new-projects: string@bool-completer # Whether to enroll new projects automatically, after they're created. (default: false)
+  --is-enabled: oneof<nothing, bool> # Whether the data forwarder is enabled. (default: true)
+  --enroll-new-projects: oneof<nothing, bool> # Whether to enroll new projects automatically, after they're created. (default: false)
   --config: record # The configuration for the data forwarder, specific to the provider type.  For a 'sqs' provider, the required keys are queue_url, region, access_key, secret_key. If using a FIFO queue, you must also provide a message_group_id, though s3_bucket is optional.  For a 'segment' provider, the required keys are write_key.  For a 'splunk' provider, the required keys are instance_url, index, source, token.
   --project-ids: list # The IDs of the projects connected to the data forwarder. Missing project IDs will be unenrolled if previously enrolled.
 ]: any -> record<id: string, organizationId: string, isEnabled: bool, enrollNewProjects: bool, enrolledProjects: table<id: string, slug: string, platform: string>, provider: string, config: record, projectConfigs: table<id: string, isEnabled: bool, dataForwarderId: string, project: record, overrides: record, effectiveConfig: record, dateAdded: string, dateUpdated: string>, dateAdded: string, dateUpdated: string> {
@@ -1063,7 +1062,7 @@ export def "0-organizations-integrations List-an-Organizations-Available-Integra
   --allow-errors(-e) # Return full response without error handling
   --providerKey: string # Specific integration provider to filter by such as `slack`. See our [Integrations Documentation](/product/integrations/) for an updated list of providers.
   --features: list # Integration features to filter by. See our [Integrations Documentation](/product/integrations/) for an updated list of features. Current available ones are: - `alert-rule` - `chat-unfurl` - `codeowners` - `commits` - `data-forwarding` - `deployment` - `enterprise-alert-rule` - `enterprise-incident-management` - `incident-management` - `issue-basic` - `issue-sync` - `mobile` - `serverless` - `session-replay` - `stacktrace-link` - `ticket-rules`     
-  --includeConfig: string@bool-completer # Specify `True` to fetch third-party integration configurations. Note that this can add several seconds to the response time.
+  --includeConfig: oneof<nothing, bool> # Specify `True` to fetch third-party integration configurations. Note that this can add several seconds to the response time.
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<id: string, name: string, icon: string, domainName: string, accountType: string, scopes: list<string>, status: string, provider: any, configOrganization: any, configData: any, externalId: string, organizationId: int, organizationIntegrationStatus: string, gracePeriodEnd: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1178,16 +1177,16 @@ export def "0-organizations-issues Bulk-Mutate-an-Organizations-Issues" [
   --viewId: string # The ID of the view to use. If no query is present, the view's query and filters will be applied.
   --qp-sort: string@sort-completer # The sort order of the view. Options include 'Last Seen' (`date`), 'First Seen' (`new`), 'Trends' (`trends`), 'Events' (`freq`), 'Users' (`user`), 'Date Added' (`inbox`), and 'Recommended' (`recommended`). (default: date)
   --limit: int # The maximum number of issues to affect. The maximum is 100. (default: 100)
-  --inbox: string@bool-completer # If true, marks the issue as reviewed by the requestor.
+  --inbox: oneof<nothing, bool> # If true, marks the issue as reviewed by the requestor.
   status: string@status-completer # Limit mutations to only issues with the given status.  * `resolved` * `unresolved` * `ignored` * `resolvedInNextRelease` * `muted`
   statusDetails: any # Additional details about the resolution. Status detail updates that include release data are only allowed for issues within a single project.
   --substatus: string@substatus-completer # The new substatus of the issue.  * `archived_until_escalating` * `archived_until_condition_met` * `archived_forever` * `escalating` * `ongoing` * `regressed` * `new` (nullable)
-  --hasSeen: string@bool-completer # If true, marks the issue as seen by the requestor.
-  --isBookmarked: string@bool-completer # If true, bookmarks the issue for the requestor.
-  --isPublic: string@bool-completer # If true, publishes the issue.
-  --isSubscribed: string@bool-completer # If true, subscribes the requestor to the issue.
-  --merge: string@bool-completer # If true, merges the issues together.
-  --discard: string@bool-completer # If true, discards the issues instead of updating them.
+  --hasSeen: oneof<nothing, bool> # If true, marks the issue as seen by the requestor.
+  --isBookmarked: oneof<nothing, bool> # If true, bookmarks the issue for the requestor.
+  --isPublic: oneof<nothing, bool> # If true, publishes the issue.
+  --isSubscribed: oneof<nothing, bool> # If true, subscribes the requestor to the issue.
+  --merge: oneof<nothing, bool> # If true, merges the issues together.
+  --discard: oneof<nothing, bool> # If true, discards the issues instead of updating them.
   assignedTo: string # The user or team that should be assigned to the issues. Values take the form of `<user_id>`, `user:<user_id>`, `<username>`, `<user_primary_email>`, or `team:<team_id>`.
   priority: string@priority-completer # The priority that should be set for the issues  * `low` * `medium` * `high`
 ]: any -> record<assignedTo: record<type: string, id: string, name: string, email: string>, discard: bool, hasSeen: bool, inbox: bool, isBookmarked: bool, isPublic: bool, isSubscribed: bool, merge: record<parent: string, children: list<string>>, priority: string, shareId: string, status: string, statusDetails: record<inNextRelease: bool, inRelease: string, inCommit: record<commit: string, repository: string>, ignoreDuration: int, ignoreCount: int, ignoreWindow: int, ignoreUserCount: int, ignoreUserWindow: int>, subscriptionDetails: record<disabled: bool, reason: string>, substatus: string> {
@@ -1273,8 +1272,8 @@ export def "0-organizations-members Add-a-Member-to-an-Organization" [
   email: string # The email address to send the invitation to. (format: email)
   --orgRole: string@orgRole-completer # The organization-level role of the new member. Roles include:  * `billing` - Can manage payment and compliance details. * `member` - Can view and act on events, as well as view most other data within the organization. * `manager` - Has full management access to all teams and projects. Can also manage         the organization's membership. * `owner` - Has unrestricted access to the organization, its data, and its         settings. Can add, modify, and delete projects and members, as well as         make billing and plan changes. * `admin` - Can edit global integrations, manage projects, and add/remove teams.         They automatically assume the Team Admin role for teams they join.         Note: This role can no longer be assigned in Business and Enterprise plans. Use `TeamRoles` instead.          (default: member)
   --teamRoles: list # The team and team-roles assigned to the member. Team roles can be either:         - `contributor` - Can view and act on issues. Depending on organization settings, they can also add team members.         - `admin` - Has full management access to their team's membership and projects. (nullable)
-  --sendInvite: string@bool-completer # Whether or not to send an invite notification through email. Defaults to True. (default: true)
-  --reinvite: string@bool-completer # Whether or not to re-invite a user who has already been invited to the organization. Defaults to True.
+  --sendInvite: oneof<nothing, bool> # Whether or not to send an invite notification through email. Defaults to True. (default: true)
+  --reinvite: oneof<nothing, bool> # Whether or not to re-invite a user who has already been invited to the organization. Defaults to True.
 ]: any -> record<externalUsers: table<externalId: string, userId: string, teamId: string, id: string, provider: string, externalName: string, integrationId: string>, id: string, email: string, name: string, user: record<identities: list<record>, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, authenticators: list<any>, canReset2fa: bool, id: string, name: string, username: string, email: string, avatarUrl: string, isActive: bool, isSuspended: bool, hasPasswordAuth: bool, isManaged: bool, dateJoined: string, lastLogin: string, has2fa: bool, lastActive: string, isSuperuser: bool, isStaff: bool, experiments: record, emails: list<record>>, orgRole: string, pending: bool, expired: bool, flags: record<idp_provisioned: bool, idp_role_restricted: bool, sso_linked: bool, sso_invalid: bool, member_limit_restricted: bool, partnership_restricted: bool>, dateCreated: string, inviteStatus: string, inviterName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1483,7 +1482,7 @@ export def "0-organizations-monitors Create-a-Monitor" [
   --slug: string # Uniquely identifies your monitor within your organization. Changing this slug will require updates to any instrumented check-in calls.
   --status: string@status-completer-1 # Status of the monitor. Disabled monitors will not accept events and will not count towards the monitor quota.  * `active` * `disabled` (default: active)
   --owner: string # The ID of the team or user that owns the monitor. (eg. user:51 or team:6) (nullable)
-  --is-muted: string@bool-completer # Disable creation of monitor incidents
+  --is-muted: oneof<nothing, bool> # Disable creation of monitor incidents
 ]: any -> record<alertRule: record<targets: list<record>, environment: string>, id: string, name: string, slug: string, status: string, isMuted: bool, isUpserting: bool, config: record<schedule_type: string, schedule: any, checkin_margin: int, max_runtime: int, timezone: string, failure_issue_threshold: int, recovery_threshold: int, alert_rule_id: int>, dateCreated: string, project: record<stats: any, transactionStats: any, sessionStats: any, id: string, slug: string, name: string, platform: string, dateCreated: string, isBookmarked: bool, isMember: bool, features: list<string>, firstEvent: string, firstTransactionEvent: bool, access: list<string>, hasAccess: bool, hasFeedbacks: bool, hasFlags: bool, hasMinifiedStackTrace: bool, hasMonitors: bool, hasNewFeedbacks: bool, hasProfiles: bool, hasReplays: bool, hasSessions: bool, hasInsightsHttp: bool, hasInsightsDb: bool, hasInsightsAssets: bool, hasInsightsAppStart: bool, hasInsightsScreenLoad: bool, hasInsightsVitals: bool, hasInsightsCaches: bool, hasInsightsQueues: bool, hasInsightsAgentMonitoring: bool, hasInsightsMCP: bool, hasLogs: bool, hasTraceMetrics: bool, isInternal: bool, isPublic: bool, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, color: string, status: string>, environments: record<name: string, status: string, isMuted: bool, dateCreated: string, lastCheckIn: string, nextCheckIn: string, nextCheckInLatest: string, activeIncident: record<startingTimestamp: string, resolvingTimestamp: string, brokenNotice: record>>, owner: record<type: string, id: string, name: string, email: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1541,7 +1540,7 @@ export def "0-organizations-monitors Update-a-Monitor" [
   --slug: string # Uniquely identifies your monitor within your organization. Changing this slug will require updates to any instrumented check-in calls.
   --status: string@status-completer-1 # Status of the monitor. Disabled monitors will not accept events and will not count towards the monitor quota.  * `active` * `disabled` (default: active)
   --owner: string # The ID of the team or user that owns the monitor. (eg. user:51 or team:6) (nullable)
-  --is-muted: string@bool-completer # Disable creation of monitor incidents
+  --is-muted: oneof<nothing, bool> # Disable creation of monitor incidents
 ]: any -> record<alertRule: record<targets: list<record>, environment: string>, id: string, name: string, slug: string, status: string, isMuted: bool, isUpserting: bool, config: record<schedule_type: string, schedule: any, checkin_margin: int, max_runtime: int, timezone: string, failure_issue_threshold: int, recovery_threshold: int, alert_rule_id: int>, dateCreated: string, project: record<stats: any, transactionStats: any, sessionStats: any, id: string, slug: string, name: string, platform: string, dateCreated: string, isBookmarked: bool, isMember: bool, features: list<string>, firstEvent: string, firstTransactionEvent: bool, access: list<string>, hasAccess: bool, hasFeedbacks: bool, hasFlags: bool, hasMinifiedStackTrace: bool, hasMonitors: bool, hasNewFeedbacks: bool, hasProfiles: bool, hasReplays: bool, hasSessions: bool, hasInsightsHttp: bool, hasInsightsDb: bool, hasInsightsAssets: bool, hasInsightsAppStart: bool, hasInsightsScreenLoad: bool, hasInsightsVitals: bool, hasInsightsCaches: bool, hasInsightsQueues: bool, hasInsightsAgentMonitoring: bool, hasInsightsMCP: bool, hasLogs: bool, hasTraceMetrics: bool, isInternal: bool, isPublic: bool, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, color: string, status: string>, environments: record<name: string, status: string, isMuted: bool, dateCreated: string, lastCheckIn: string, nextCheckIn: string, nextCheckInLatest: string, activeIncident: record<startingTimestamp: string, resolvingTimestamp: string, brokenNotice: record>>, owner: record<type: string, id: string, name: string, email: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2014,7 +2013,7 @@ export def "0-organizations-projects Create-a-Project-for-an-Organization" [
   name: string # The name for the project.
   --slug: string # Uniquely identifies a project and is used for the interface.         If not provided, it is automatically generated from the name. (nullable)
   --platform: string # The platform for the project. (nullable)
-  --default-rules: string@bool-completer #  Defaults to true where the behavior is to alert the user on every new issue. Setting this to false will turn this off and the user must create their own alerts to be notified of new issues.         
+  --default-rules: oneof<nothing, bool> #  Defaults to true where the behavior is to alert the user on every new issue. Setting this to false will turn this off and the user must create their own alerts to be notified of new issues.         
 ]: any -> record<latestDeploys: record, options: record, stats: any, transactionStats: any, sessionStats: any, id: string, slug: string, name: string, platform: string, dateCreated: string, isBookmarked: bool, isMember: bool, features: list<string>, firstEvent: string, firstTransactionEvent: bool, access: list<string>, hasAccess: bool, hasFeedbacks: bool, hasFlags: bool, hasMinifiedStackTrace: bool, hasMonitors: bool, hasNewFeedbacks: bool, hasProfiles: bool, hasReplays: bool, hasSessions: bool, hasInsightsHttp: bool, hasInsightsDb: bool, hasInsightsAssets: bool, hasInsightsAppStart: bool, hasInsightsScreenLoad: bool, hasInsightsVitals: bool, hasInsightsCaches: bool, hasInsightsQueues: bool, hasInsightsAgentMonitoring: bool, hasInsightsMCP: bool, hasLogs: bool, hasTraceMetrics: bool, team: record<id: string, name: string, slug: string>, teams: table<id: string, name: string, slug: string>, platforms: list<string>, hasUserReports: bool, environments: list<string>, latestRelease: record<version: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2049,7 +2048,7 @@ export def "0-organizations-projects-detectors Create-a-Monitor-for-a-Project" [
   --condition-group: any #              Issue detection configuration for when to create an issue and at what priority level.               - `logicType`: `any`             - `type`: Any of `gt` (greater than), `lte` (less than or equal), or `anomaly_detection` (dynamic)             - `comparison`: Any positive integer. This is threshold that must be crossed for the monitor to create an issue, e.g. "Create a metric issue when there are more than 5 unresolved error events".                 - If creating a **dynamic** monitor, see the options below.                     - `seasonality`: `auto`                     - `sensitivity`: Level of responsiveness. Options are one of `low`, `medium`, or `high`                     - `thresholdType`: If you want to be alerted to anomalies that are moving above, below, or in both directions in relation to your threshold.                         - `0`: Above                         - `1`: Below                         - `2`: Above and below              - `conditionResult`: The issue state change when the threshold is crossed.                 - `75`: High priority                 - `50`: Low priority                 - `0`: Resolved               **Threshold and Change Monitor**             ```json                 "logicType": "any",                 "conditions": [                     {                         "type": "gt",                         "comparison": 10,                         "conditionResult": 75                     },                     {                         "type": "lte",                         "comparison": 10,                         "conditionResult": 0                     }                 ],                 "actions": []             ```              **Threshold Monitor with Medium Priority**             ```json                 "logicType": "any",                 "conditions": [                     {                         type: "gt",                         comparison: 5,                         conditionResult: 75                     },                     {                         type: "gt",                         comparison: 2,                         conditionResult: 50                     },                     {                         type: "lte",                         comparison: 2,                         conditionResult: 0                     }                 ],                 "actions": []             ```              **Dynamic Monitor**             ```json                 "logicType": "any",                 "conditions": [                     {                         "type": "anomaly_detection",                         "comparison": {                             "seasonality": "auto",                             "sensitivity": "medium",                             "thresholdType": 2                         },                         "conditionResult": 75                     }                 ],                 "actions": []             ```         
   --owner: string #              The ID user or team who owns the monitor or alert prefaced by the string 'user' or 'team'.              **User**             ```json                 "user:123456"             ```              **Team**             ```json                 "team:456789"             ```          (nullable)
   --description: string # A description of the monitor. Will be used in the resulting issue. (nullable)
-  --enabled: string@bool-completer # Set to False if you want to disable the monitor.
+  --enabled: oneof<nothing, bool> # Set to False if you want to disable the monitor.
 ]: any -> record<owner: record<type: string, id: string, name: string, email: string>, createdBy: string, latestGroup: record, description: string, id: string, projectId: string, name: string, type: string, workflowIds: list<string>, dateCreated: string, dateUpdated: string, dataSources: list<record>, conditionGroup: record, config: record, enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2127,8 +2126,8 @@ export def "0-organizations-releases Retrieve-an-Organizations-Release" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --project-id: string # The project ID to filter by.
-  --health: string@bool-completer # Whether or not to include health data with the release. By default, this is false.
-  --adoptionStages: string@bool-completer # Whether or not to include adoption stages with the release. By default, this is false.
+  --health: oneof<nothing, bool> # Whether or not to include health data with the release. By default, this is false.
+  --adoptionStages: oneof<nothing, bool> # Whether or not to include adoption stages with the release. By default, this is false.
   --summaryStatsPeriod: string@summaryStatsPeriod-completer # The period of time used to query summary stats for the release. By default, this is 14d.
   --healthStatsPeriod: string@healthStatsPeriod-completer # The period of time used to query health stats for the release. By default, this is 24h if health is enabled.
   --qp-sort: string@sort-completer-1 # The field used to sort results by. By default, this is `date`.
@@ -2278,7 +2277,7 @@ export def "0-organizations-replay-count get" [
   --project-id-or-slug: list # The project slugs to filter by. Use `$all` to include all available projects. For example, the following are valid parameters: - `/?projectSlug=$all` - `/?projectSlug=android&projectSlug=javascript-react`
   --qp-query: string # Filters results by using [query syntax](/product/sentry-basics/search/).  Example: `query=(transaction:foo AND release:abc) OR (transaction:[bar,baz] AND release:def)`
   --data-source: string@data-source-completer # The data source to query replays from. Defaults to 'discover'.
-  --returnIds: string@bool-completer # If true, return issue IDs rather than counts.
+  --returnIds: oneof<nothing, bool> # If true, return issue IDs rather than counts.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2810,7 +2809,7 @@ export def "0-organizations-stats-summary Retrieve-an-Organizations-Events-Count
   --category: string@category-completer # If filtering by attachments, you cannot filter by any other category due to quantity values becoming nonsensical (combining bytes and event counts).  If filtering by `error`, it will automatically add `default` and `security` as we currently roll those two categories into `error` for displaying.  * `error` * `transaction` * `attachment` * `replays` * `profiles`
   --outcome: string@outcome-completer # See https://docs.sentry.io/product/stats/ for more information on outcome statuses.  * `accepted` * `filtered` * `rate_limited` * `invalid` * `abuse` * `client_discard` * `cardinality_limited`
   --reason: string # The reason field will contain why an event was filtered/dropped.
-  --download: string@bool-completer # Download the API response in as a csv file
+  --download: oneof<nothing, bool> # Download the API response in as a csv file
 ]: nothing -> record<start: string, end: string, projects: table<id: string, slug: string, stats: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3096,7 +3095,7 @@ export def "0-organizations-workflows Create-an-Alert-for-an-Organization" [
   --allow-errors(-e) # Return full response without error handling
   name: string # The name of the alert
   --id: string # The ID of the existing alert
-  --enabled: string@bool-completer # Whether the alert is enabled or disabled (default: true)
+  --enabled: oneof<nothing, bool> # Whether the alert is enabled or disabled (default: true)
   --detector-ids: list # The IDs of the monitors to connect this alert to. Use 'Fetch an Organization's Monitors' to find the IDs.
   --config: record #          Typically the frequency at which the alert will fire, in minutes.          - `0`: 0 minutes         - `5`: 5 minutes         - `10`: 10 minutes         - `30`: 30 minutes         - `60`: 1 hour         - `180`: 3 hours         - `720`: 12 hours         - `1440`: 24 hours          ```json             {                 "frequency":3600             }         ```         
   --environment: string # The name of the environment for the alert to evaluate in (nullable)
@@ -3131,7 +3130,7 @@ export def "0-organizations-workflows Mutate-an-Organizations-Alerts" [
   --qp-query: string # An optional search query for filtering alerts.
   --id: list # The ID of the alert you'd like to query.
   --project: list # The IDs of projects to filter by. `-1` means all available projects. For example, the following are valid parameters: - `/?project=1234&project=56789` - `/?project=-1`
-  --enabled: string@bool-completer # Whether to enable or disable the alerts
+  --enabled: oneof<nothing, bool> # Whether to enable or disable the alerts
 ]: any -> table<id: string, name: string, organizationId: string, createdBy: string, dateCreated: string, dateUpdated: string, triggers: record<id: string, organizationId: string, logicType: string, conditions: any, actions: any>, actionFilters: list<record>, environment: string, config: record, detectorIds: list<string>, enabled: bool, lastTriggered: string, owner: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3210,7 +3209,7 @@ export def "0-organizations-workflows Update-an-Alert-by-ID" [
   --allow-errors(-e) # Return full response without error handling
   name: string # The name of the alert
   --id: string # The ID of the existing alert
-  --enabled: string@bool-completer # Whether the alert is enabled or disabled (default: true)
+  --enabled: oneof<nothing, bool> # Whether the alert is enabled or disabled (default: true)
   --detector-ids: list # The IDs of the monitors to connect this alert to. Use 'Fetch an Organization's Monitors' to find the IDs.
   --config: record #          Typically the frequency at which the alert will fire, in minutes.          - `0`: 0 minutes         - `5`: 5 minutes         - `10`: 10 minutes         - `30`: 30 minutes         - `60`: 1 hour         - `180`: 3 hours         - `720`: 12 hours         - `1440`: 24 hours          ```json             {                 "frequency":3600             }         ```         
   --environment: string # The name of the environment for the alert to evaluate in (nullable)
@@ -3289,7 +3288,7 @@ export def "0-projects Update-a-Project" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isBookmarked: string@bool-completer # Enables starring the project within the projects tab. Can be updated with **`project:read`** permission.
+  --isBookmarked: oneof<nothing, bool> # Enables starring the project within the projects tab. Can be updated with **`project:read`** permission.
   --name: string # The name for the project
   --slug: string # Uniquely identifies a project and is used for the interface.
   --platform: string # The platform for the project (nullable)
@@ -3298,7 +3297,7 @@ export def "0-projects Update-a-Project" [
   --resolveAge: int # Automatically resolve an issue if it hasn't been seen for this many hours. Set to `0` to disable auto-resolve. (nullable)
   --highlightContext: record # A JSON mapping of context types to lists of strings for their keys. E.g. `{'user': ['id', 'email']}`
   --highlightTags: list # A list of strings with tag keys to highlight on this project's issues. E.g. `['release', 'environment']`
-  --scmSourceContextEnabled: string@bool-completer # Enable on-demand source context fetching from SCM integrations for stack traces.
+  --scmSourceContextEnabled: oneof<nothing, bool> # Enable on-demand source context fetching from SCM integrations for stack traces.
 ]: any -> record<stats: any, transactionStats: any, sessionStats: any, id: string, slug: string, name: string, platform: string, dateCreated: string, isBookmarked: bool, isMember: bool, features: list<string>, firstEvent: string, firstTransactionEvent: bool, access: list<string>, hasAccess: bool, hasFeedbacks: bool, hasFlags: bool, hasMinifiedStackTrace: bool, hasMonitors: bool, hasNewFeedbacks: bool, hasProfiles: bool, hasReplays: bool, hasSessions: bool, hasInsightsHttp: bool, hasInsightsDb: bool, hasInsightsAssets: bool, hasInsightsAppStart: bool, hasInsightsScreenLoad: bool, hasInsightsVitals: bool, hasInsightsCaches: bool, hasInsightsQueues: bool, hasInsightsAgentMonitoring: bool, hasInsightsMCP: bool, hasLogs: bool, hasTraceMetrics: bool, isInternal: bool, isPublic: bool, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, color: string, status: string, team: record<id: string, name: string, slug: string>, teams: table<id: string, name: string, slug: string>, latestRelease: record<version: string>, options: record, digestsMinDelay: int, digestsMaxDelay: int, subjectPrefix: string, allowedDomains: list<string>, resolveAge: int, dataScrubber: bool, dataScrubberDefaults: bool, safeFields: list<string>, storeCrashReports: int, sensitiveFields: list<string>, subjectTemplate: string, securityToken: string, securityTokenHeader: string, verifySSL: bool, scrubIPAddresses: bool, scrapeJavaScript: bool, highlightTags: list<string>, highlightContext: record, highlightPreset: record<tags: list<string>, context: record>, groupingConfig: string, derivedGroupingEnhancements: string, groupingEnhancements: string, secondaryGroupingExpiry: int, secondaryGroupingConfig: string, fingerprintingRules: string, organization: record<features: list<string>, extraOptions: record, access: list<string>, onboardingTasks: list<record>, id: string, slug: string, status: record<id: string, name: string>, name: string, dateCreated: string, isEarlyAdopter: bool, require2FA: bool, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, links: record<organizationUrl: string, regionUrl: string>, hasAuthProvider: bool, allowMemberInvite: bool, allowMemberProjectCreation: bool, allowSuperuserAccess: bool>, plugins: table<id: string, name: string, slug: string, shortName: string, type: string, canDisable: bool, isTestable: bool, hasConfiguration: bool, metadata: record, contexts: list, status: string, assets: list, doc: string, firstPartyAlternative: any, deprecationDate: any, altIsSentryApp: any, enabled: bool, version: string, author: record, isDeprecated: bool, isHidden: bool, description: string, features: list, featureDescriptions: list, resourceLinks: list>, platforms: list<string>, processingIssues: int, defaultEnvironment: string, relayPiiConfig: string, builtinSymbolSources: list<string>, dynamicSamplingBiases: list<record>, symbolSources: string, isDynamicallySampled: bool, tempestFetchScreenshots: bool, autofixAutomationTuning: string, seerScannerAutomation: bool, seerNightshiftTweaks: any, scmSourceContextEnabled: bool, debugFilesRole: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3374,7 +3373,7 @@ export def "0-projects-environments Bulk-Update-Project-Environments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   environmentNames: list # List of environment names to update. Maximum 1000.
-  --isHidden: string@bool-completer # Specify `true` to hide or `false` to show the specified environments.
+  --isHidden: oneof<nothing, bool> # Specify `true` to hide or `false` to show the specified environments.
 ]: any -> table<id: string, name: string, isHidden: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3426,7 +3425,7 @@ export def "0-projects-environments Update-a-Project-Environment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isHidden: string@bool-completer # Specify `true` to make the environment visible or `false` to make the environment hidden.
+  --isHidden: oneof<nothing, bool> # Specify `true` to make the environment visible or `false` to make the environment hidden.
 ]: any -> record<id: string, name: string, isHidden: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3457,8 +3456,8 @@ export def "0-projects-events List-a-Projects-Error-Events" [
   --start: string # The start of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
   --end: string # The end of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
-  --full: string@bool-completer # Specify true to include the full event body, including the stacktrace, in the event payload. (default: false)
-  --sample: string@bool-completer # Return events in pseudo-random order. This is deterministic so an identical query will always return the same events in the same order. (default: false)
+  --full: oneof<nothing, bool> # Specify true to include the full event body, including the stacktrace, in the event payload. (default: false)
+  --sample: oneof<nothing, bool> # Return events in pseudo-random order. This is deterministic so an identical query will always return the same events in the same order. (default: false)
 ]: nothing -> table<id: string, event_type: string, groupID: string, eventID: string, projectID: string, message: string, title: string, location: string, culprit: string, user: record<id: string, email: string, username: string, ip_address: string, name: string, geo: record, data: record>, tags: list<record>, platform: string, dateCreated: string, crashFile: string, metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3638,7 +3637,7 @@ export def "0-projects-filters Update-an-Inbound-Data-Filter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Toggle the browser-extensions, localhost, filtered-transaction, or web-crawlers filter on or off.
+  --active: oneof<nothing, bool> # Toggle the browser-extensions, localhost, filtered-transaction, or web-crawlers filter on or off.
   --subfilters: list #  Specifies which legacy browser filters should be active. Anything excluded from the list will be disabled. The options are: - `ie` - Internet Explorer Version 11 and lower - `edge` - Edge Version 110 and lower - `safari` - Safari Version 15 and lower - `firefox` - Firefox Version 110 and lower - `chrome` - Chrome Version 110 and lower - `opera` - Opera Version 99 and lower - `android` - Android Version 3 and lower - `opera_mini` - Opera Mini Version 34 and lower  Deprecated options: - `ie_pre_9` - Internet Explorer Version 8 and lower - `ie9` - Internet Explorer Version 9 - `ie10` - Internet Explorer Version 10 - `ie11` - Internet Explorer Version 11 - `safari_pre_6` - Safari Version 5 and lower - `opera_pre_15` - Opera Version 14 and lower - `opera_mini_pre_8` - Opera Mini Version 8 and lower - `android_pre_4` - Android Version 3 and lower - `edge_pre_79` - Edge Version 18 and lower (non Chromium based)
 ]: any -> any {
   let input = $in
@@ -3750,7 +3749,7 @@ export def "0-projects-keys Update-a-Client-Key" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name for the client key
-  --isActive: string@bool-completer # Activate or deactivate the client key.
+  --isActive: oneof<nothing, bool> # Activate or deactivate the client key.
   --rateLimit: record # Applies a rate limit to cap the number of errors accepted during a given time window. To disable entirely set `rateLimit` to null. ```json {     "rateLimit": {         "window": 7200, // time in seconds         "count": 1000 // error cap     } } ``` — shape: {count?: int, window?: int}
   --browserSdkVersion: string@browserSdkVersion-completer # The Sentry Javascript SDK version to use. The currently supported options are:  * `latest` - Most recent version * `7.x` - Version 7 releases
   --dynamicSdkLoaderOptions: record # Configures multiple options for the Javascript Loader Script. - `Performance Monitoring` - `Debug Bundles & Logging` - `Session Replay` - Note that the loader will load the ES6 bundle instead of the ES5 bundle. - `User Feedback` - Note that the loader will load the ES6 bundle instead of the ES5 bundle. - `Logs and Metrics` - Note that the loader will load the ES6 bundle instead of the ES5 bundle. Requires SDK >= 10.0.0. ```json {     "dynamicSdkLoaderOptions": {         "hasReplay": true,         "hasPerformance": true,         "hasDebug": true,         "hasFeedback": true,         "hasLogsAndMetrics": true     } } ``` — shape: {hasReplay?: bool, hasPerformance?: bool, hasDebug?: bool, hasFeedback?: bool, hasLogsAndMetrics?: bool}
@@ -3858,7 +3857,7 @@ export def "0-projects-monitors Update-a-Monitor-for-a-Project" [
   --slug: string # Uniquely identifies your monitor within your organization. Changing this slug will require updates to any instrumented check-in calls.
   --status: string@status-completer-1 # Status of the monitor. Disabled monitors will not accept events and will not count towards the monitor quota.  * `active` * `disabled` (default: active)
   --owner: string # The ID of the team or user that owns the monitor. (eg. user:51 or team:6) (nullable)
-  --is-muted: string@bool-completer # Disable creation of monitor incidents
+  --is-muted: oneof<nothing, bool> # Disable creation of monitor incidents
 ]: any -> record<alertRule: record<targets: list<record>, environment: string>, id: string, name: string, slug: string, status: string, isMuted: bool, isUpserting: bool, config: record<schedule_type: string, schedule: any, checkin_margin: int, max_runtime: int, timezone: string, failure_issue_threshold: int, recovery_threshold: int, alert_rule_id: int>, dateCreated: string, project: record<stats: any, transactionStats: any, sessionStats: any, id: string, slug: string, name: string, platform: string, dateCreated: string, isBookmarked: bool, isMember: bool, features: list<string>, firstEvent: string, firstTransactionEvent: bool, access: list<string>, hasAccess: bool, hasFeedbacks: bool, hasFlags: bool, hasMinifiedStackTrace: bool, hasMonitors: bool, hasNewFeedbacks: bool, hasProfiles: bool, hasReplays: bool, hasSessions: bool, hasInsightsHttp: bool, hasInsightsDb: bool, hasInsightsAssets: bool, hasInsightsAppStart: bool, hasInsightsScreenLoad: bool, hasInsightsVitals: bool, hasInsightsCaches: bool, hasInsightsQueues: bool, hasInsightsAgentMonitoring: bool, hasInsightsMCP: bool, hasLogs: bool, hasTraceMetrics: bool, isInternal: bool, isPublic: bool, avatar: record<avatarType: string, avatarUuid: string, avatarUrl: string>, color: string, status: string>, environments: record<name: string, status: string, isMuted: bool, dateCreated: string, lastCheckIn: string, nextCheckIn: string, nextCheckInLatest: string, activeIncident: record<startingTimestamp: string, resolvingTimestamp: string, brokenNotice: record>>, owner: record<type: string, id: string, name: string, email: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3959,9 +3958,9 @@ export def "0-projects-ownership Update-Ownership-Configuration-for-a-Project" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-raw: string # Raw input for ownership configuration. See the [Ownership Rules Documentation](/product/issues/ownership-rules/) to learn more.
-  --fallthrough: string@bool-completer # A boolean determining who to assign ownership to when an ownership rule has no match. If set to `True`, all project members are made owners. Otherwise, no owners are set.
+  --fallthrough: oneof<nothing, bool> # A boolean determining who to assign ownership to when an ownership rule has no match. If set to `True`, all project members are made owners. Otherwise, no owners are set.
   --autoAssignment: string # Auto-assignment settings. The available options are: - Auto Assign to Issue Owner - Auto Assign to Suspect Commits - Turn off Auto-Assignment
-  --codeownersAutoSync: string@bool-completer # Set to `True` to sync issue owners with CODEOWNERS updates in a release. (default: true)
+  --codeownersAutoSync: oneof<nothing, bool> # Set to `True` to sync issue owners with CODEOWNERS updates in a release. (default: true)
 ]: any -> record<schema: record<_version: int, rules: list<record>>, raw: string, fallthrough: bool, dateCreated: string, lastUpdated: string, isActive: bool, autoAssignment: string, codeownersAutoSync: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4685,10 +4684,10 @@ export def "0-sentry-apps Update-an-existing-custom-integration" [
   --schema: record # The UI components schema, used to render the custom integration's configuration UI elements. See our [schema docs](https://docs.sentry.io/organization/integrations/integration-platform/ui-components/) for more information. (nullable)
   --webhookUrl: string # The webhook destination URL. (nullable, format: uri)
   --redirectUrl: string # The post-installation redirect URL. (nullable, format: uri)
-  --isInternal: string@bool-completer # Whether or not the integration is internal only. False means the integration is public. (default: false)
-  --isAlertable: string@bool-completer # Marks whether or not the custom integration can be used in an alert rule. (default: false)
+  --isInternal: oneof<nothing, bool> # Whether or not the integration is internal only. False means the integration is public. (default: false)
+  --isAlertable: oneof<nothing, bool> # Marks whether or not the custom integration can be used in an alert rule. (default: false)
   --overview: string # The custom integration's description. (nullable)
-  --verifyInstall: string@bool-completer # Whether or not an installation of the custom integration should be verified. (default: true)
+  --verifyInstall: oneof<nothing, bool> # Whether or not an installation of the custom integration should be verified. (default: true)
   --allowedOrigins: list # The list of allowed origins for CORS.
 ]: any -> record<allowedOrigins: list<string>, avatars: table<avatarType: string, avatarUuid: string, avatarUrl: string, color: bool, photoType: string>, events: list<string>, featureData: list<string>, isAlertable: bool, metadata: string, name: string, schema: string, scopes: list<string>, slug: string, status: string, uuid: string, verifyInstall: bool, isDisabled: bool, author: string, overview: string, popularity: int, redirectUrl: string, webhookUrl: string, clientSecret: string, datePublished: string, clientId: string, owner: record<id: int, slug: string>> {
   let input = $in
@@ -4952,7 +4951,7 @@ export def "0-teams-projects Create-a-New-Project" [
   name: string # The name for the project.
   --slug: string # Uniquely identifies a project and is used for the interface.         If not provided, it is automatically generated from the name. (nullable)
   --platform: string # The platform for the project. (nullable)
-  --default-rules: string@bool-completer #  Defaults to true where the behavior is to alert the user on every new issue. Setting this to false will turn this off and the user must create their own alerts to be notified of new issues.         
+  --default-rules: oneof<nothing, bool> #  Defaults to true where the behavior is to alert the user on every new issue. Setting this to false will turn this off and the user must create their own alerts to be notified of new issues.         
 ]: any -> record<latestDeploys: record, options: record, stats: any, transactionStats: any, sessionStats: any, id: string, slug: string, name: string, platform: string, dateCreated: string, isBookmarked: bool, isMember: bool, features: list<string>, firstEvent: string, firstTransactionEvent: bool, access: list<string>, hasAccess: bool, hasFeedbacks: bool, hasFlags: bool, hasMinifiedStackTrace: bool, hasMonitors: bool, hasNewFeedbacks: bool, hasProfiles: bool, hasReplays: bool, hasSessions: bool, hasInsightsHttp: bool, hasInsightsDb: bool, hasInsightsAssets: bool, hasInsightsAppStart: bool, hasInsightsScreenLoad: bool, hasInsightsVitals: bool, hasInsightsCaches: bool, hasInsightsQueues: bool, hasInsightsAgentMonitoring: bool, hasInsightsMCP: bool, hasLogs: bool, hasTraceMetrics: bool, team: record<id: string, name: string, slug: string>, teams: table<id: string, name: string, slug: string>, platforms: list<string>, hasUserReports: bool, environments: list<string>, latestRelease: record<version: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5191,7 +5190,7 @@ export def "0-projects-issues List-a-Projects-Issues" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --statsPeriod: string # An optional stat period (can be one of `"24h"`, `"14d"`, and `""`), defaults to "24h" if not provided.
-  --shortIdLookup: string@bool-completer # If this is set to true then short IDs are looked up by this function as well. This can cause the return value of the function to return an event issue of a different project which is why this is an opt-in. Set to 1 to enable.
+  --shortIdLookup: oneof<nothing, bool> # If this is set to true then short IDs are looked up by this function as well. This can cause the return value of the function to return an event issue of a different project which is why this is an opt-in. Set to 1 to enable.
   --qp-query: string # An optional Sentry structured search query. If not provided an implied `"is:unresolved"` is assumed.
   --hashes: string # A list of hashes of groups to return. Is not compatible with 'query' parameter. The maximum number of hashes that can be sent is 100. If more are sent, only the first 100 will be used.
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
@@ -5225,11 +5224,11 @@ export def "0-projects-issues Bulk-Mutate-a-List-of-Issues" [
   --status: string # The new status for the issues. Valid values are `"resolved"`, `"resolvedInNextRelease"`, `"unresolved"`, and `"ignored"`.
   --statusDetails: record # Additional details about the resolution. Valid values are `"inRelease"`, `"inNextRelease"`, `"inCommit"`, `"ignoreDuration"`, `"ignoreCount"`, `"ignoreWindow"`, `"ignoreUserCount"`, and `"ignoreUserWindow"`. — shape: {inRelease?: string, inNextRelease?: bool, inCommit?: string, ignoreDuration?: int, ignoreCount?: int, ignoreWindow?: int, ignoreUserCount?: int, ignoreUserWindow?: int}
   --ignoreDuration: int # The number of minutes to ignore this issue.
-  --isPublic: string@bool-completer # Sets the issue to public or private.
-  --merge: string@bool-completer # Allows to merge or unmerge different issues.
+  --isPublic: oneof<nothing, bool> # Sets the issue to public or private.
+  --merge: oneof<nothing, bool> # Allows to merge or unmerge different issues.
   --assignedTo: string # The actor ID (or username) of the user or team that should be assigned to this issue.
-  --hasSeen: string@bool-completer # In case this API call is invoked with a user context this allows changing of the flag that indicates if the user has seen the event.
-  --isBookmarked: string@bool-completer # In case this API call is invoked with a user context this allows changing of the bookmark flag.
+  --hasSeen: oneof<nothing, bool> # In case this API call is invoked with a user context this allows changing of the flag that indicates if the user has seen the event.
+  --isBookmarked: oneof<nothing, bool> # In case this API call is invoked with a user context this allows changing of the bookmark flag.
 ]: any -> record<isPublic: bool, status: string, statusDetails: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5481,7 +5480,7 @@ export def "0-organizations-releases-files Retrieve-an-Organization-Releases-Fil
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --download: string@bool-completer # If this is set to true, then the response payload will be the raw file contents. Otherwise, the response will be the file metadata as JSON.
+  --download: oneof<nothing, bool> # If this is set to true, then the response payload will be the raw file contents. Otherwise, the response will be the file metadata as JSON.
 ]: nothing -> record<sha1: string, dist: string, name: string, dateCreated: string, headers: record<Content_Type: string>, id: string, size: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5561,7 +5560,7 @@ export def "0-projects-releases-files Retrieve-a-Project-Releases-File" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --download: string@bool-completer # If this is set to true, then the response payload will be the raw file contents. Otherwise, the response will be the file metadata as JSON.
+  --download: oneof<nothing, bool> # If this is set to true, then the response payload will be the raw file contents. Otherwise, the response will be the file metadata as JSON.
 ]: nothing -> record<sha1: string, dist: string, name: string, dateCreated: string, headers: record<Content_Type: string>, id: string, size: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5870,16 +5869,16 @@ export def "0-organizations-issues Update-an-Issue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --inbox: string@bool-completer # If true, marks the issue as reviewed by the requestor.
+  --inbox: oneof<nothing, bool> # If true, marks the issue as reviewed by the requestor.
   status: string@status-completer # Limit mutations to only issues with the given status.  * `resolved` * `unresolved` * `ignored` * `resolvedInNextRelease` * `muted`
   statusDetails: any # Additional details about the resolution. Status detail updates that include release data are only allowed for issues within a single project.
   --substatus: string@substatus-completer # The new substatus of the issue.  * `archived_until_escalating` * `archived_until_condition_met` * `archived_forever` * `escalating` * `ongoing` * `regressed` * `new` (nullable)
-  --hasSeen: string@bool-completer # If true, marks the issue as seen by the requestor.
-  --isBookmarked: string@bool-completer # If true, bookmarks the issue for the requestor.
-  --isPublic: string@bool-completer # If true, publishes the issue.
-  --isSubscribed: string@bool-completer # If true, subscribes the requestor to the issue.
-  --merge: string@bool-completer # If true, merges the issues together.
-  --discard: string@bool-completer # If true, discards the issues instead of updating them.
+  --hasSeen: oneof<nothing, bool> # If true, marks the issue as seen by the requestor.
+  --isBookmarked: oneof<nothing, bool> # If true, bookmarks the issue for the requestor.
+  --isPublic: oneof<nothing, bool> # If true, publishes the issue.
+  --isSubscribed: oneof<nothing, bool> # If true, subscribes the requestor to the issue.
+  --merge: oneof<nothing, bool> # If true, merges the issues together.
+  --discard: oneof<nothing, bool> # If true, discards the issues instead of updating them.
   assignedTo: string # The user or team that should be assigned to the issues. Values take the form of `<user_id>`, `user:<user_id>`, `<username>`, `<user_primary_email>`, or `team:<team_id>`.
   priority: string@priority-completer # The priority that should be set for the issues  * `low` * `medium` * `high`
 ]: any -> record<isUnhandled: bool, count: string, userCount: int, firstSeen: string, lastSeen: string, id: string, shareId: string, shortId: string, title: string, culprit: string, permalink: string, logger: string, level: string, status: string, statusDetails: record<autoResolved: bool, ignoreCount: int, ignoreUntil: string, ignoreUserCount: int, ignoreUserWindow: int, ignoreWindow: int, actor: record<identities: list, avatar: record, authenticators: list, canReset2fa: bool, id: string, name: string, username: string, email: string, avatarUrl: string, isActive: bool, isSuspended: bool, hasPasswordAuth: bool, isManaged: bool, dateJoined: string, lastLogin: string, has2fa: bool, lastActive: string, isSuperuser: bool, isStaff: bool, experiments: record, emails: list>, inNextRelease: bool, inRelease: string, inCommit: string, pendingEvents: int, info: any>, substatus: string, isPublic: bool, platform: string, priority: string, priorityLockedAt: string, seerFixabilityScore: float, seerAutofixLastTriggered: string, seerExplorerAutofixLastTriggered: string, project: record<id: string, name: string, slug: string, platform: string>, type: string, issueType: string, issueCategory: string, metadata: record, numComments: int, assignedTo: record<type: string, id: string, name: string, email: string>, isBookmarked: bool, isSubscribed: bool, subscriptionDetails: record<disabled: bool, reason: string>, hasSeen: bool, annotations: table<displayName: string, url: string>> {
@@ -5993,8 +5992,8 @@ export def "0-organizations-issues-events List-an-Issues-Events" [
   --end: string # The end of the period of time for the query, expected in ISO-8601 format. For example, `2001-12-14T12:34:56.7890`. (format: date-time)
   --statsPeriod: string # The period of time for the query, will override the start & end parameters, a number followed by one of: - `d` for days - `h` for hours - `m` for minutes - `s` for seconds - `w` for weeks  For example, `24h`, to mean query data starting from 24 hours ago to now.
   --environment: list # The name of environments to filter by.
-  --full: string@bool-completer # Specify true to include the full event body, including the stacktrace, in the event payload. (default: false)
-  --sample: string@bool-completer # Return events in pseudo-random order. This is deterministic so an identical query will always return the same events in the same order. (default: false)
+  --full: oneof<nothing, bool> # Specify true to include the full event body, including the stacktrace, in the event payload. (default: false)
+  --sample: oneof<nothing, bool> # Return events in pseudo-random order. This is deterministic so an identical query will always return the same events in the same order. (default: false)
   --qp-query: string # An optional search query for filtering events. See [search syntax](https://docs.sentry.io/concepts/search/) and queryable event properties at [Sentry Search Documentation](https://docs.sentry.io/concepts/search/searchable-properties/events/) for more information. An example query might be `query=transaction:foo AND release:abc`
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<id: string, event_type: string, groupID: string, eventID: string, projectID: string, message: string, title: string, location: string, culprit: string, user: record<id: string, email: string, username: string, ip_address: string, name: string, geo: record, data: record>, tags: list<record>, platform: string, dateCreated: string, crashFile: string, metadata: record> {
@@ -6070,7 +6069,7 @@ export def "0-organizations-issues-hashes List-an-Issues-Hashes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --full: string@bool-completer # Specify true to include the full event body, including the stacktrace, in the event payload. (default: true)
+  --full: oneof<nothing, bool> # Specify true to include the full event body, including the stacktrace, in the event payload. (default: true)
   --cursor: string # A pointer to the last object fetched and its sort order; used to retrieve the next or previous results.
 ]: nothing -> table<id: string, latestEvent: any, mergedBySeer: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

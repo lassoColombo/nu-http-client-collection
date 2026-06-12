@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://org-account.snowflakecomputing.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -101,7 +100,7 @@ export def "accounts listAccounts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --history: string@bool-completer # Optionally includes dropped accounts that have not yet been purged.
+  --history: oneof<nothing, bool> # Optionally includes dropped accounts that have not yet been purged.
 ]: nothing -> table<organization_name: string, name: any, region_group: string, region: string, edition: string, created_on: string, account_url: string, account_locator: string, account_locator_url: string, managed_accounts: int, consumption_billing_entity_name: string, marketplace_consumer_billing_entity_name: string, marketplace_provider_billing_entity_name: string, old_account_url: string, comment: string, is_org_admin: bool, retention_time: int, dropped_on: string, scheduled_deletion_time: string, restored_on: string, account_old_url_saved_on: string, account_old_url_last_used: string, organization_old_url: string, organization_old_url_saved_on: string, organization_old_url_last_used: string, organization_URL_expiration_on: string, moved_on: string, is_events_account: bool, moved_to_organization: string, admin_name: string, admin_password: string, admin_rsa_public_key: string, admin_user_type: string, first_name: string, last_name: string, email: string, must_change_password: bool, polaris: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -136,8 +135,8 @@ export def "accounts createAccount" [
   --first-name: string # First name of the account administrator.
   --last-name: string # Last name of the account administrator.
   --email: string # Email address of the account administrator. (nullable)
-  --must-change-password: string@bool-completer # Indicates whether the account administrator must change the password at the next login. (default: false)
-  --polaris: string@bool-completer # Indicates whether the account is a Polaris account. (default: false)
+  --must-change-password: oneof<nothing, bool> # Indicates whether the account administrator must change the password at the next login. (default: false)
+  --polaris: oneof<nothing, bool> # Indicates whether the account is a Polaris account. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

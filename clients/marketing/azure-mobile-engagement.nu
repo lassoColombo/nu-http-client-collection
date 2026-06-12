@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -134,7 +133,7 @@ export def "subscriptions-providers-microsoft-mobile-engagement-check-app-collec
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --api-version: string # Client Api Version.
-  --available: string@bool-completer # Available.
+  --available: oneof<nothing, bool> # Available.
   --name: string # Name.
   --unavailabilityReason: string # UnavailabilityReason.
 ]: any -> record<available: bool, name: string, unavailabilityReason: string> {
@@ -261,12 +260,12 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   --endTime: string # The date at which the campaign should be finished. The date shall conform to the following format: `yyyy-MM-ddTHH:mm:ssZ`. Example: `2011-11-21 15:23Z`
   --localization: record # Push campaigns can be localized using an optional JSON object. The JSON key is a two-character language code as specified by the ISO 639-1 standard. The corresponding value is an object containing the localizable properties.
   --name: string # Unique name of the campaign.
-  --notificationBadge: string@bool-completer # A flag indicating whether or not you want the native Apple Push notification to update the badge icon to the number of unread messages. The `deliveryTime` property must be set to `any` or `background`.  (default: false)
-  --notificationCloseable: string@bool-completer # A flag indicating whether or not you want the notification to be closeable. (default: true)
-  --notificationIcon: string@bool-completer # A flag indicating whether or not you want to display the resource icon in notification content. (default: true)
-  --notificationSound: string@bool-completer # * `Android`: A flag indicating whether or not you want the system notification to make a sound. The `notificationType` property must be set to `system`. * `iOS`: A flag indicating whether or not you want the native Apple Push notification to make a sound. The `deliveryTime` property must be set to `any` or `background`. This will play the 'default' sound. If you want to play a custom sound, see the `notificationOptions` property. * `Windows`: A flag indicating whether or not you want the native Windows Notification Service to make a sound. The `deliveryTime` property must be set to `any`.  (default: false)
+  --notificationBadge: oneof<nothing, bool> # A flag indicating whether or not you want the native Apple Push notification to update the badge icon to the number of unread messages. The `deliveryTime` property must be set to `any` or `background`.  (default: false)
+  --notificationCloseable: oneof<nothing, bool> # A flag indicating whether or not you want the notification to be closeable. (default: true)
+  --notificationIcon: oneof<nothing, bool> # A flag indicating whether or not you want to display the resource icon in notification content. (default: true)
+  --notificationSound: oneof<nothing, bool> # * `Android`: A flag indicating whether or not you want the system notification to make a sound. The `notificationType` property must be set to `system`. * `iOS`: A flag indicating whether or not you want the native Apple Push notification to make a sound. The `deliveryTime` property must be set to `any` or `background`. This will play the 'default' sound. If you want to play a custom sound, see the `notificationOptions` property. * `Windows`: A flag indicating whether or not you want the native Windows Notification Service to make a sound. The `deliveryTime` property must be set to `any`.  (default: false)
   --notificationType: string@notificationType-completer # Android only. Defines how the notification should be displayed. Valid values are: * `system`: Display the notification using a standard system notification. * `popup`: Display the notification using a in-app banner notification.  (default: popup)
-  --notificationVibrate: string@bool-completer # Android only. A flag indicating whether or not you want the system notification to make a vibration. The notificationType property must be set to system. (default: false)
+  --notificationVibrate: oneof<nothing, bool> # Android only. A flag indicating whether or not you want the system notification to make a vibration. The notificationType property must be set to system. (default: false)
   --pushMode: string@pushMode-completer # Announcements/polls only. Defines how the campaign is pushed. Valid values are: * `real-time`: Never ending campaign, the campaign will be delivered  to your existing users and also to your new users. * `one-shot`: In this mode, the campaign will be delivered only to your existing users (campaign will stop after that). * `manual`: In this mode, the campaign will not be pushed automatically to devices. You will have to use the Push campaign command to push the campaign to your end-users. Campaigns can be pushed multiple times to the same device.  (default: real-time)
   --questions: list # Poll questions. — item shape: {choices?: list, id?: int, localization?: record, title?: string}
   --startTime: string # The date at which the campaign should be started. The date shall conform to the following format: `yyyy-MM-ddTHH:mm:ssZ`. * If you set pushMode property to manual, this attribute will be ignored. * If you set pushMode property to one-shot, then the timezone attribute must be specified. Example: `2011-11-21 15:23Z`
@@ -417,12 +416,12 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   --endTime: string # The date at which the campaign should be finished. The date shall conform to the following format: `yyyy-MM-ddTHH:mm:ssZ`. Example: `2011-11-21 15:23Z`
   --localization: record # Push campaigns can be localized using an optional JSON object. The JSON key is a two-character language code as specified by the ISO 639-1 standard. The corresponding value is an object containing the localizable properties.
   --name: string # Unique name of the campaign.
-  --notificationBadge: string@bool-completer # A flag indicating whether or not you want the native Apple Push notification to update the badge icon to the number of unread messages. The `deliveryTime` property must be set to `any` or `background`.  (default: false)
-  --notificationCloseable: string@bool-completer # A flag indicating whether or not you want the notification to be closeable. (default: true)
-  --notificationIcon: string@bool-completer # A flag indicating whether or not you want to display the resource icon in notification content. (default: true)
-  --notificationSound: string@bool-completer # * `Android`: A flag indicating whether or not you want the system notification to make a sound. The `notificationType` property must be set to `system`. * `iOS`: A flag indicating whether or not you want the native Apple Push notification to make a sound. The `deliveryTime` property must be set to `any` or `background`. This will play the 'default' sound. If you want to play a custom sound, see the `notificationOptions` property. * `Windows`: A flag indicating whether or not you want the native Windows Notification Service to make a sound. The `deliveryTime` property must be set to `any`.  (default: false)
+  --notificationBadge: oneof<nothing, bool> # A flag indicating whether or not you want the native Apple Push notification to update the badge icon to the number of unread messages. The `deliveryTime` property must be set to `any` or `background`.  (default: false)
+  --notificationCloseable: oneof<nothing, bool> # A flag indicating whether or not you want the notification to be closeable. (default: true)
+  --notificationIcon: oneof<nothing, bool> # A flag indicating whether or not you want to display the resource icon in notification content. (default: true)
+  --notificationSound: oneof<nothing, bool> # * `Android`: A flag indicating whether or not you want the system notification to make a sound. The `notificationType` property must be set to `system`. * `iOS`: A flag indicating whether or not you want the native Apple Push notification to make a sound. The `deliveryTime` property must be set to `any` or `background`. This will play the 'default' sound. If you want to play a custom sound, see the `notificationOptions` property. * `Windows`: A flag indicating whether or not you want the native Windows Notification Service to make a sound. The `deliveryTime` property must be set to `any`.  (default: false)
   --notificationType: string@notificationType-completer # Android only. Defines how the notification should be displayed. Valid values are: * `system`: Display the notification using a standard system notification. * `popup`: Display the notification using a in-app banner notification.  (default: popup)
-  --notificationVibrate: string@bool-completer # Android only. A flag indicating whether or not you want the system notification to make a vibration. The notificationType property must be set to system. (default: false)
+  --notificationVibrate: oneof<nothing, bool> # Android only. A flag indicating whether or not you want the system notification to make a vibration. The notificationType property must be set to system. (default: false)
   --pushMode: string@pushMode-completer # Announcements/polls only. Defines how the campaign is pushed. Valid values are: * `real-time`: Never ending campaign, the campaign will be delivered  to your existing users and also to your new users. * `one-shot`: In this mode, the campaign will be delivered only to your existing users (campaign will stop after that). * `manual`: In this mode, the campaign will not be pushed automatically to devices. You will have to use the Push campaign command to push the campaign to your end-users. Campaigns can be pushed multiple times to the same device.  (default: real-time)
   --questions: list # Poll questions. — item shape: {choices?: list, id?: int, localization?: record, title?: string}
   --startTime: string # The date at which the campaign should be started. The date shall conform to the following format: `yyyy-MM-ddTHH:mm:ssZ`. * If you set pushMode property to manual, this attribute will be ignored. * If you set pushMode property to one-shot, then the timezone attribute must be specified. Example: `2011-11-21 15:23Z`
@@ -1206,7 +1205,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --api-version: string # Client Api Version.
-  --deleteOnNull: string@bool-completer # If this parameter is `true`, tags with a null value will be deleted. (default: false)
+  --deleteOnNull: oneof<nothing, bool> # If this parameter is `true`, tags with a null value will be deleted. (default: false)
   tags: any # A JSON object describing the set of tags to record for a set of users. Each key is a device/user identifier, each value is itself a key/value set: the tags to set for the specified device/user identifier.
 ]: any -> record<invalidIds: list<string>> {
   let input = $in
@@ -1266,7 +1265,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --api-version: string # Client Api Version.
-  --deleteOnNull: string@bool-completer # If this parameter is `true`, tags with a null value will be deleted. (default: false)
+  --deleteOnNull: oneof<nothing, bool> # If this parameter is `true`, tags with a null value will be deleted. (default: false)
   tags: any # A JSON object describing the set of tags to record for a set of users. Each key is a device/user identifier, each value is itself a key/value set: the tags to set for the specified device/user identifier.
 ]: any -> record<invalidIds: list<string>> {
   let input = $in

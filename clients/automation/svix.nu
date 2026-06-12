@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.eu.svix.com" "https://api.us.svix.com" "https://api.ca.svix.com" "https://api.au.svix.com" "https://api.in.svix.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -114,9 +113,9 @@ export def "app v1applicationlist" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --exclude-apps-with-no-endpoints: string@bool-completer # Exclude applications that have no endpoints. Default is false. (default: false)
-  --exclude-apps-with-disabled-endpoints: string@bool-completer # Exclude applications that have only disabled endpoints. Default is false. (default: false)
-  --exclude-apps-with-svix-play-endpoints: string@bool-completer # Exclude applications that only have Svix Play endpoints. Default is false. (default: false)
+  --exclude-apps-with-no-endpoints: oneof<nothing, bool> # Exclude applications that have no endpoints. Default is false. (default: false)
+  --exclude-apps-with-disabled-endpoints: oneof<nothing, bool> # Exclude applications that have only disabled endpoints. Default is false. (default: false)
+  --exclude-apps-with-svix-play-endpoints: oneof<nothing, bool> # Exclude applications that only have Svix Play endpoints. Default is false. (default: false)
   --limit: int # Limit the number of returned items (format: uint64)
   --iterator: string # The iterator returned from a prior invocation (nullable, e.g. app_1srOrx2ZWZBpBUvZwXKQmoEYga2)
   --order: string@order-completer # The sorting order of the returned items
@@ -143,7 +142,7 @@ export def "app v1applicationcreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --get-if-exists: string@bool-completer # Get an existing application, or create a new one if doesn't exist. It's two separate functions in the libs. (default: false)
+  --get-if-exists: oneof<nothing, bool> # Get an existing application, or create a new one if doesn't exist. It's two separate functions in the libs. (default: false)
   --idempotency-key: string # The request's idempotency key
   --metadata: record # default: {}
   name: string # Application name for human consumption. (e.g. My first application)
@@ -293,9 +292,9 @@ export def "app-attempt-endpoint v1message-attemptlist-by-endpoint" [
   --tag: string # Filter response based on the tag (nullable, e.g. project_1337)
   --before: string # Only include items created before a certain date (nullable, format: date-time)
   --after: string # Only include items created after a certain date (nullable, format: date-time)
-  --with-content: string@bool-completer # When `true` attempt content is included in the response (default: true)
-  --with-msg: string@bool-completer # When `true`, the message information is included in the response  Note that message payloads are never included in the response, regardless of this flag. (default: false)
-  --expanded-statuses: string@bool-completer # When `true`, return the Canceled (4) status in attempts.  If `false`, canceled attempts are returned as Success (0) for backwards compatibility. (default: false)
+  --with-content: oneof<nothing, bool> # When `true` attempt content is included in the response (default: true)
+  --with-msg: oneof<nothing, bool> # When `true`, the message information is included in the response  Note that message payloads are never included in the response, regardless of this flag. (default: false)
+  --expanded-statuses: oneof<nothing, bool> # When `true`, return the Canceled (4) status in attempts.  If `false`, canceled attempts are returned as Success (0) for backwards compatibility. (default: false)
   --event-types: list # Filter response based on the event type (nullable)
 ]: nothing -> record<data: table<endpointId: string, id: string, msg: record, msgId: string, response: string, responseDurationMs: int, responseStatusCode: int, status: int, statusText: string, timestamp: string, triggerType: int, url: string>, done: bool, iterator: string, prevIterator: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -330,8 +329,8 @@ export def "app-attempt-msg v1message-attemptlist-by-msg" [
   --endpoint-id: string # Filter the attempts based on the attempted endpoint (nullable, e.g. unique-identifier)
   --before: string # Only include items created before a certain date (nullable, format: date-time)
   --after: string # Only include items created after a certain date (nullable, format: date-time)
-  --with-content: string@bool-completer # When `true` attempt content is included in the response (default: true)
-  --expanded-statuses: string@bool-completer # When `true`, return the Canceled (4) status in attempts.  If `false`, canceled attempts are returned as Success (0) for backwards compatibility. (default: false)
+  --with-content: oneof<nothing, bool> # When `true` attempt content is included in the response (default: true)
+  --expanded-statuses: oneof<nothing, bool> # When `true`, return the Canceled (4) status in attempts.  If `false`, canceled attempts are returned as Success (0) for backwards compatibility. (default: false)
   --event-types: list # Filter response based on the event type (nullable)
 ]: nothing -> record<data: table<endpointId: string, id: string, msg: record, msgId: string, response: string, responseDurationMs: int, responseStatusCode: int, status: int, statusText: string, timestamp: string, triggerType: int, url: string>, done: bool, iterator: string, prevIterator: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -386,7 +385,7 @@ export def "app-endpoint v1endpointcreate" [
   --idempotency-key: string # The request's idempotency key
   --channels: list # List of message channels this endpoint listens to (omit for all). (nullable, e.g. [project_123, group_2])
   --description: string # default: , e.g. An example endpoint name
-  --disabled: string@bool-completer # default: false, e.g. false
+  --disabled: oneof<nothing, bool> # default: false, e.g. false
   --filterTypes: list # nullable, e.g. [user.signup, user.deleted]
   --headers: record # nullable, e.g. {X-Example: 123, X-Foobar: Bar}
   --metadata: record # default: {}
@@ -449,7 +448,7 @@ export def "app-endpoint v1endpointupdate" [
   --allow-errors(-e) # Return full response without error handling
   --channels: list # List of message channels this endpoint listens to (omit for all). (nullable, e.g. [project_123, group_2])
   --description: string # default: , e.g. An example endpoint name
-  --disabled: string@bool-completer # default: false, e.g. false
+  --disabled: oneof<nothing, bool> # default: false, e.g. false
   --filterTypes: list # nullable, e.g. [user.signup, user.deleted]
   --metadata: record # default: {}
   --rateLimit: int # Deprecated, use `throttleRate` instead. (DEPRECATED, nullable, format: uint16)
@@ -508,7 +507,7 @@ export def "app-endpoint v1endpointpatch" [
   --allow-errors(-e) # Return full response without error handling
   --channels: list # nullable
   --description: string
-  --disabled: string@bool-completer
+  --disabled: oneof<nothing, bool>
   --filterTypes: list # nullable
   --metadata: record
   --rateLimit: int # Deprecated, use `throttleRate` instead. (DEPRECATED, nullable, format: uint16)
@@ -662,8 +661,8 @@ export def "app-endpoint-msg v1message-attemptlist-attempted-messages" [
   --status: int@status-completer # Filter response based on the status of the attempt: Success (0), Pending (1), Failed (2), Sending (3), or Canceled (4)
   --before: string # Only include items created before a certain date (nullable, format: date-time)
   --after: string # Only include items created after a certain date (nullable, format: date-time)
-  --with-content: string@bool-completer # When `true` message payloads are included in the response (default: true)
-  --expanded-statuses: string@bool-completer # When `true`, return the Canceled (4) status in attempts.  If `false`, canceled attempts are returned as Success (0) for backwards compatibility. (default: false)
+  --with-content: oneof<nothing, bool> # When `true` message payloads are included in the response (default: true)
+  --expanded-statuses: oneof<nothing, bool> # When `true`, return the Canceled (4) status in attempts.  If `false`, canceled attempts are returned as Success (0) for backwards compatibility. (default: false)
   --event-types: list # Filter response based on the event type (nullable)
 ]: nothing -> record<data: table<channels: list, deliverAt: string, eventId: string, eventType: string, id: string, nextAttempt: string, payload: record, status: int, statusText: string, tags: list, timestamp: string>, done: bool, iterator: string, prevIterator: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -885,7 +884,7 @@ export def "app-endpoint-transformation v1endpointpatch-transformation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --code: string # nullable, e.g. function handler(webhook) { /* ... */ }
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --body-variables: record # nullable
 ]: any -> any {
   let input = $in
@@ -1098,7 +1097,7 @@ export def "app-msg v1messagelist" [
   --channel: string # Filter response based on the channel. (nullable, e.g. project_1337)
   --before: string # Only include items created before a certain date. (nullable, format: date-time)
   --after: string # Only include items created after a certain date. (nullable, format: date-time)
-  --with-content: string@bool-completer # When `true` message payloads are included in the response. (default: true)
+  --with-content: oneof<nothing, bool> # When `true` message payloads are included in the response. (default: true)
   --tag: string # Filter messages matching the provided tag. (nullable, e.g. project_1337)
   --event-types: list # Filter response based on the event type (nullable)
 ]: nothing -> record<data: table<channels: list, deliverAt: string, eventId: string, eventType: string, id: string, payload: record, tags: list, timestamp: string>, done: bool, iterator: string, prevIterator: string> {
@@ -1125,7 +1124,7 @@ export def "app-msg v1messagecreate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-content: string@bool-completer # When `true`, message payloads are included in the response. (default: true)
+  --with-content: oneof<nothing, bool> # When `true`, message payloads are included in the response. (default: true)
   --idempotency-key: string # The request's idempotency key
   --application: record # shape: {metadata?: record, name: string, rateLimit?: int, throttleRate?: int, uid?: string}
   --channels: list # List of free-form identifiers that endpoints can filter by (nullable, e.g. [project_123, group_2])
@@ -1221,7 +1220,7 @@ export def "app-msg v1messageget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-content: string@bool-completer # When `true` message payloads are included in the response. (default: true)
+  --with-content: oneof<nothing, bool> # When `true` message payloads are included in the response. (default: true)
 ]: nothing -> record<channels: list<string>, deliverAt: string, eventId: string, eventType: string, id: string, payload: record, tags: list<string>, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1247,7 +1246,7 @@ export def "app-msg-attempt v1message-attemptget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --expanded-statuses: string@bool-completer # When `true`, return the Canceled (4) status in attempts.  If `false`, canceled attempts are returned as Success (0) for backwards compatibility. (default: false)
+  --expanded-statuses: oneof<nothing, bool> # When `true`, return the Canceled (4) status in attempts.  If `false`, canceled attempts are returned as Success (0) for backwards compatibility. (default: false)
 ]: nothing -> record<endpointId: string, id: string, msg: record<channels: list<string>, deliverAt: string, eventId: string, eventType: string, id: string, payload: record, tags: list<string>, timestamp: string>, msgId: string, response: string, responseDurationMs: int, responseStatusCode: int, status: int, statusText: string, timestamp: string, triggerType: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1465,7 +1464,7 @@ export def "auth-app-portal-access v1authenticationapp-portal-access" [
   --capabilities: list # Custom capabilities attached to the token, You can combine as many capabilities as necessary.  The `ViewBase` capability is always required  - `ViewBase`: Basic read only permissions, does not allow the user to see the endpoint secret.  - `ViewEndpointSecret`: Allows user to view the endpoint secret.  - `ManageEndpointSecret`: Allows user to rotate and view the endpoint secret.  - `ManageTransformations`: Allows user to modify the endpoint transformations.  - `CreateAttempts`: Allows user to replay missing messages and send example messages.  - `ManageEndpoint`: Allows user to read/modify any field or configuration of an endpoint (including secrets)  By default, the token will get all capabilities if the capabilities are not explicitly specified. (nullable, e.g. [ViewBase, ViewEndpointSecret])
   --expiry: int # How long the token will be valid for, in seconds.  Valid values are between 1 hour and 7 days. The default is 7 days. (nullable, format: uint64, default: 604800)
   --featureFlags: list # The set of feature flags the created token will have access to. (e.g. [])
-  --readOnly: string@bool-completer # Whether the app portal should be in read-only mode. (DEPRECATED, nullable)
+  --readOnly: oneof<nothing, bool> # Whether the app portal should be in read-only mode. (DEPRECATED, nullable)
   --sessionId: string # An optional session ID to attach to the token.  When expiring tokens with "Expire All", you can include the session ID to only expire tokens that were created with that session ID. (nullable, e.g. user_1FB8)
 ]: any -> record<token: string, url: string> {
   let input = $in
@@ -1967,8 +1966,8 @@ export def "event-type v1event-typelist" [
   --limit: int # Limit the number of returned items (format: uint64)
   --iterator: string # The iterator returned from a prior invocation (nullable, e.g. user.signup)
   --order: string@order-completer # The sorting order of the returned items
-  --include-archived: string@bool-completer # When `true` archived (deleted but not expunged) items are included in the response. (default: false)
-  --with-content: string@bool-completer # When `true` the full item (including the schema) is included in the response. (default: false)
+  --include-archived: oneof<nothing, bool> # When `true` archived (deleted but not expunged) items are included in the response. (default: false)
+  --with-content: oneof<nothing, bool> # When `true` the full item (including the schema) is included in the response. (default: false)
 ]: nothing -> record<data: table<archived: bool, createdAt: string, deprecated: bool, description: string, featureFlag: string, featureFlags: list, groupName: string, name: string, schemas: record, updatedAt: string>, done: bool, iterator: string, prevIterator: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1993,8 +1992,8 @@ export def "event-type v1event-typecreate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --idempotency-key: string # The request's idempotency key
-  --archived: string@bool-completer # default: false, e.g. false
-  --deprecated: string@bool-completer # default: false
+  --archived: oneof<nothing, bool> # default: false, e.g. false
+  --deprecated: oneof<nothing, bool> # default: false
   description: string # e.g. A user has signed up
   --featureFlag: string # Deprecated, use `featureFlags` instead. (DEPRECATED, nullable)
   --featureFlags: list # nullable, e.g. [cool-new-feature]
@@ -2028,8 +2027,8 @@ export def "event-type-import-openapi v1event-typeimport-openapi" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --idempotency-key: string # The request's idempotency key
-  --dryRun: string@bool-completer # If `true`, return the event types that would be modified without actually modifying them. (default: false)
-  --replaceAll: string@bool-completer # If `true`, all existing event types that are not in the spec will be archived. (default: false)
+  --dryRun: oneof<nothing, bool> # If `true`, return the event types that would be modified without actually modifying them. (default: false)
+  --replaceAll: oneof<nothing, bool> # If `true`, all existing event types that are not in the spec will be archived. (default: false)
   --spec: record # A pre-parsed JSON spec. (nullable, e.g. {info: {title: Webhook Example, version: 1.0.0}, openapi: 3.1.0, webhooks: {pet.new: {post: {requestBody: {content: {application/json: {schema: {properties: {id: {format: int64, type: integer}, name: {type: string}, tag: {type: string}}, required: [id, name]}}}, description: Information about a new pet in the system}, responses: {200: {description: Return a 200 status to indicate that the data was received successfully}}}}}})
   --specRaw: string # A string, parsed by the server as YAML or JSON. (nullable, e.g.  # Both YAML and JSON are supported openapi: 3.1.0 info:   title: Webhook Example   version: 1.0.0 # Since OAS 3.1.0 the paths element isn't necessary. Now a valid OpenAPI Document can describe only paths, webhooks, or even only reusable components webhooks:   # Each webhook needs a name   "pet.new":     # This is a Path Item Object, the only difference is that the request is initiated by the API provider     post:       requestBody:         description: Information about a new pet in the system         content:           application/json:             schema:               $ref: "#/components/schemas/Pet"       responses:         "200":           description: Return a 200 status to indicate that the data was received successfully  components:   schemas:     Pet:       required:         - id         - name       properties:         id:           type: integer           format: int64         name:           type: string         tag:           type: string )
 ]: any -> record<data: record<modified: list<string>, to_modify: list<record>>> {
@@ -2082,8 +2081,8 @@ export def "event-type v1event-typeupdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # default: false, e.g. false
-  --deprecated: string@bool-completer # default: false
+  --archived: oneof<nothing, bool> # default: false, e.g. false
+  --deprecated: oneof<nothing, bool> # default: false
   description: string # e.g. A user has signed up
   --featureFlag: string # Deprecated, use `featureFlags` instead. (DEPRECATED, nullable)
   --featureFlags: list # nullable, e.g. [cool-new-feature]
@@ -2114,7 +2113,7 @@ export def "event-type v1event-typedelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --expunge: string@bool-completer # By default event types are archived when "deleted". Passing this to `true` deletes them entirely. (default: false)
+  --expunge: oneof<nothing, bool> # By default event types are archived when "deleted". Passing this to `true` deletes them entirely. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2139,8 +2138,8 @@ export def "event-type v1event-typepatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer
-  --deprecated: string@bool-completer
+  --archived: oneof<nothing, bool>
+  --deprecated: oneof<nothing, bool>
   --description: string
   --featureFlag: string # Deprecated, use `featureFlags` instead. (DEPRECATED, nullable)
   --featureFlags: list # nullable, e.g. [cool-new-feature]
@@ -2219,7 +2218,7 @@ export def "operational-webhook-endpoint v1operational-webhookendpointcreate" [
   --allow-errors(-e) # Return full response without error handling
   --idempotency-key: string # The request's idempotency key
   --description: string # default: , e.g. An example endpoint name
-  --disabled: string@bool-completer # default: false, e.g. false
+  --disabled: oneof<nothing, bool> # default: false, e.g. false
   --filterTypes: list # nullable, e.g. [message.attempt.failing]
   --metadata: record # default: {}
   --rateLimit: int # Deprecated, use `throttleRate` instead. (DEPRECATED, nullable, format: uint16)
@@ -2278,7 +2277,7 @@ export def "operational-webhook-endpoint v1operational-webhookendpointupdate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # default: , e.g. An example endpoint name
-  --disabled: string@bool-completer # default: false, e.g. false
+  --disabled: oneof<nothing, bool> # default: false, e.g. false
   --filterTypes: list # nullable, e.g. [message.attempt.failing]
   --metadata: record # default: {}
   --rateLimit: int # Deprecated, use `throttleRate` instead. (DEPRECATED, nullable, format: uint16)
@@ -2539,7 +2538,7 @@ export def "stream-event-type v1streamingevent-typelist" [
   --limit: int # Limit the number of returned items (format: uint64)
   --iterator: string # The iterator returned from a prior invocation (nullable, e.g. user.signup)
   --order: string@order-completer # The sorting order of the returned items
-  --include-archived: string@bool-completer # Include archived (deleted but not expunged) items in the response. (default: false)
+  --include-archived: oneof<nothing, bool> # Include archived (deleted but not expunged) items in the response. (default: false)
 ]: nothing -> record<data: table<archived: bool, createdAt: string, deprecated: bool, description: string, featureFlags: list, name: string, updatedAt: string>, done: bool, iterator: string, prevIterator: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2563,8 +2562,8 @@ export def "stream-event-type v1streamingevent-typecreate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --idempotency-key: string # The request's idempotency key
-  --archived: string@bool-completer # default: false
-  --deprecated: string@bool-completer # default: false
+  --archived: oneof<nothing, bool> # default: false
+  --deprecated: oneof<nothing, bool> # default: false
   --description: string # nullable
   --featureFlags: list # nullable, e.g. [cool-new-feature]
   name: string # The event type's name (e.g. user.signup)
@@ -2617,8 +2616,8 @@ export def "stream-event-type v1streamingevent-typeupdate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # default: false
-  --deprecated: string@bool-completer # default: false
+  --archived: oneof<nothing, bool> # default: false
+  --deprecated: oneof<nothing, bool> # default: false
   --description: string # nullable
   --featureFlags: list # nullable, e.g. [cool-new-feature]
   --body-name: string # The event type's name (e.g. user.signup)
@@ -2647,7 +2646,7 @@ export def "stream-event-type v1streamingevent-typedelete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --expunge: string@bool-completer # By default, event types are archived when "deleted". With this flag, they are deleted entirely. (default: false)
+  --expunge: oneof<nothing, bool> # By default, event types are archived when "deleted". With this flag, they are deleted entirely. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2671,8 +2670,8 @@ export def "stream-event-type v1streamingevent-typepatch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer
-  --deprecated: string@bool-completer
+  --archived: oneof<nothing, bool>
+  --deprecated: oneof<nothing, bool>
   --description: string # nullable
   --featureFlags: list # nullable, e.g. [cool-new-feature]
 ]: any -> record<archived: bool, createdAt: string, deprecated: bool, description: string, featureFlags: list<string>, name: string, updatedAt: string> {
@@ -3333,7 +3332,7 @@ export def "ingest-source-dashboard v1ingestdashboard" [
   --allow-errors(-e) # Return full response without error handling
   --idempotency-key: string # The request's idempotency key
   --expiry: int # How long the token will be valid for, in seconds.  Valid values are between 1 hour and 7 days. The default is 7 days. (nullable, format: uint64)
-  --readOnly: string@bool-completer # Whether the app portal should be in read-only mode. (nullable)
+  --readOnly: oneof<nothing, bool> # Whether the app portal should be in read-only mode. (nullable)
 ]: any -> record<token: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3389,7 +3388,7 @@ export def "ingest-source-endpoint v1ingestendpointcreate" [
   --allow-errors(-e) # Return full response without error handling
   --idempotency-key: string # The request's idempotency key
   --description: string # default: , e.g. An example endpoint name
-  --disabled: string@bool-completer # default: false, e.g. false
+  --disabled: oneof<nothing, bool> # default: false, e.g. false
   --metadata: record # default: {}
   --rateLimit: int # nullable, format: uint16
   --secret: string # The endpoint's verification secret.  Format: `base64` encoded random bytes optionally prefixed with `whsec_`. It is recommended to not set this and let the server generate the secret. (nullable, e.g. whsec_C2FVsBQIhrscChlQIMV+b5sSYspob7oD)
@@ -3447,7 +3446,7 @@ export def "ingest-source-endpoint v1ingestendpointupdate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # default: , e.g. An example endpoint name
-  --disabled: string@bool-completer # default: false, e.g. false
+  --disabled: oneof<nothing, bool> # default: false, e.g. false
   --metadata: record # default: {}
   --rateLimit: int # nullable, format: uint16
   --uid: string # Optional unique identifier for the endpoint. (nullable, e.g. unique-identifier)
@@ -3628,7 +3627,7 @@ export def "ingest-source-endpoint-transformation v1ingestendpointset-transforma
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --code: string # nullable
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

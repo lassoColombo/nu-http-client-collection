@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.together.ai/v1" "https://api.together.ai/v2"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -646,7 +645,7 @@ export def "videos createVideo" [
   --output-format: string@output-format-completer
   --output-quality: int # Compression quality. Defaults to 20.
   --negative-prompt: string # Similar to prompt, but specifies what to avoid instead of what to include
-  --generate-audio: string@bool-completer # Whether to generate audio for the video.
+  --generate-audio: oneof<nothing, bool> # Whether to generate audio for the video.
   --media: record # Contains all media inputs for video generation. Accepted fields depend on the model type. — shape: {frame_images?: list, frame_videos?: list, reference_images?: list, reference_videos?: list, source_video?: any, audio_inputs?: list}
   --frame-images: list # Deprecated: use media.frame_images instead. Array of images to guide video generation, similar to keyframes. (DEPRECATED, e.g. [[{input_image: aac49721-1964-481a-ae78-8a4e29b91402, frame: 0}, {input_image: c00abf5f-6cdb-4642-a01d-1bfff7bc3cf7, frame: 48}, {input_image: 3ad204c3-a9de-4963-8a1a-c3911e3afafe, frame: last}]]) — item shape: {input_image: string, frame?: any}
   --reference-images: list # Deprecated: use media.reference_images instead. Unlike frame_images which constrain specific timeline positions, reference images guide the general appearance that should appear consistently across the video. (DEPRECATED)
@@ -686,9 +685,9 @@ export def "chat-completions chat-completions" [
   --top-k: int # An integer that's used to limit the number of choices for the next predicted word or token. It specifies the maximum number of tokens to consider at each step, based on their probability of occurrence. This technique helps to speed up the generation process and can improve the quality of the generated text by focusing on the most likely options. (format: int32)
   --context-length-exceeded-behavior: string@context-length-exceeded-behavior-completer # Defines the behavior of the API when max_tokens exceed the maximum context length of the model. When set to 'error', the API returns 400 with an appropriate error message. When set to 'truncate', overrides max_tokens with the maximum context length of the model. (default: error)
   --repetition-penalty: float # A number that controls the diversity of generated text by reducing the likelihood of repeated sequences. Higher values decrease repetition.
-  --stream: string@bool-completer # If true, stream tokens as Server-Sent Events as the model generates them instead of waiting for the full model response. The stream terminates with `data: [DONE]`. If false, return a single JSON object containing the results.
+  --stream: oneof<nothing, bool> # If true, stream tokens as Server-Sent Events as the model generates them instead of waiting for the full model response. The stream terminates with `data: [DONE]`. If false, return a single JSON object containing the results.
   --logprobs: int # An integer between 0 and 20 of the top k tokens to return log probabilities for at each generation step, instead of only the sampled token. Log probabilities help assess model confidence in token predictions.
-  --echo: string@bool-completer # If true, the response contains the prompt. Can be used with `logprobs` to return prompt logprobs.
+  --echo: oneof<nothing, bool> # If true, the response contains the prompt. Can be used with `logprobs` to return prompt logprobs.
   --n: int # The number of completions to generate for each prompt.
   --min-p: float # A number between 0 and 1 that can be used as an alternative to top_p and top-k. (format: float)
   --presence-penalty: float # A number between -2.0 and 2.0 where a positive value increases the likelihood of a model talking about new topics. (format: float)
@@ -737,9 +736,9 @@ export def "completions completions" [
   --top-p: float # A percentage (also called the nucleus parameter) that's used to dynamically adjust the number of choices for each predicted token based on the cumulative probabilities. It specifies a probability threshold below which all less likely tokens are filtered out. This technique helps maintain diversity and generate more fluent and natural-sounding text. (format: float)
   --top-k: int # An integer that's used to limit the number of choices for the next predicted word or token. It specifies the maximum number of tokens to consider at each step, based on their probability of occurrence. This technique helps to speed up the generation process and can improve the quality of the generated text by focusing on the most likely options. (format: int32)
   --repetition-penalty: float # A number that controls the diversity of generated text by reducing the likelihood of repeated sequences. Higher values decrease repetition. (format: float)
-  --stream: string@bool-completer # If true, stream tokens as Server-Sent Events as the model generates them instead of waiting for the full model response. The stream terminates with `data: [DONE]`. If false, return a single JSON object containing the results.
+  --stream: oneof<nothing, bool> # If true, stream tokens as Server-Sent Events as the model generates them instead of waiting for the full model response. The stream terminates with `data: [DONE]`. If false, return a single JSON object containing the results.
   --logprobs: int # An integer between 0 and 20 of the top k tokens to return log probabilities for at each generation step, instead of only the sampled token. Log probabilities help assess model confidence in token predictions.
-  --echo: string@bool-completer # If true, the response contains the prompt. Can be used with `logprobs` to return prompt logprobs.
+  --echo: oneof<nothing, bool> # If true, the response contains the prompt. Can be used with `logprobs` to return prompt logprobs.
   --n: int # The number of completions to generate for each prompt.
   --safety-model: string # The name of the moderation model used to validate tokens. Choose from the available moderation models found [here](https://docs.together.ai/docs/inference-models#moderation-models). (e.g. safety_model_name)
   --min-p: float # A number between 0 and 1 that can be used as an alternative to top-p and top-k. (format: float)
@@ -797,7 +796,7 @@ export def "models models" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dedicated: string@bool-completer
+  --dedicated: oneof<nothing, bool>
 ]: nothing -> table<id: string, object: any, created: int, type: any, display_name: string, organization: string, link: string, license: string, context_length: int, pricing: record<base: float, finetune: float, hourly: float, input: float, output: float, cached_input: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -908,7 +907,7 @@ export def "images-generations post" [
   --output-format: string@output-format-completer-1 # The format of the image response. Can be either be `jpeg` or `png`. Defaults to `jpeg`. (default: jpeg)
   --image-loras: list # An array of objects that define LoRAs (Low-Rank Adaptations) to influence the generated image. — item shape: {path: string, scale: float}
   --reference-images: list # An array of image URLs that guide the overall appearance and style of the generated image. These reference images influence the visual characteristics consistently across the generation.
-  --disable-safety-checker: string@bool-completer # If true, disables the safety checker for image generation.
+  --disable-safety-checker: oneof<nothing, bool> # If true, disables the safety checker for image generation.
 ]: any -> record<id: string, model: string, object: any, data: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1049,7 +1048,7 @@ export def "fine-tunes post" [
   --allow-errors(-e) # Return full response without error handling
   training_file: string # File-ID of a training file uploaded to the Together API
   --validation-file: string # File-ID of a validation file uploaded to the Together API
-  --packing: string@bool-completer # Whether to use sequence packing for training. This flag has no effect if the training data is in Parquet format. (default: true)
+  --packing: oneof<nothing, bool> # Whether to use sequence packing for training. This flag has no effect if the training data is in Parquet format. (default: true)
   --max-seq-length: int # Maximum sequence length to use for training. If not specified, the maximum allowed for the model and training method will be used.
   model: string # Name of the base model to run fine-tune job on
   --n-epochs: int # Number of complete passes through the training dataset (higher values may improve results but increase cost and risk of overfitting) (default: 1)
@@ -1069,7 +1068,7 @@ export def "fine-tunes post" [
   --wandb-project-name: string # The Weights & Biases project for your run. If not specified, uses `together` as the project name.
   --wandb-name: string # The Weights & Biases name for your run.
   --wandb-entity: string # The Weights & Biases entity for your run.
-  --train-on-inputs: string@bool-completer # Whether to mask user messages in conversational data or prompts in instruction data. (DEPRECATED, default: auto)
+  --train-on-inputs: oneof<nothing, bool> # Whether to mask user messages in conversational data or prompts in instruction data. (DEPRECATED, default: auto)
   --training-method: record # The training method to use. 'sft' for Supervised Fine-Tuning or 'dpo' for Direct Preference Optimization. — shape: {method?: "sft", train_on_inputs?: bool, dpo_beta?: float, rpo_alpha?: float, dpo_normalize_logratios_by_length?: bool, dpo_reference_free?: bool, simpo_gamma?: float}
   --training-type: record # The training type to use. Defaults to LoRA if not provided. (nullable) — shape: {type?: "Full", lora_r?: int, lora_alpha?: int, lora_dropout?: float, lora_trainable_modules?: string}
   --multimodal-params: record # shape: {train_vision?: bool}
@@ -1177,7 +1176,7 @@ export def "fine-tunes delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # DEPRECATED, default: false
+  --force: oneof<nothing, bool> # DEPRECATED, default: false
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1360,7 +1359,7 @@ export def "rerank rerank" [
   --body-query: string # The search query to be used for ranking. (e.g. What animals can I find near Peru?)
   documents: any # List of documents, which can be either strings or objects. (e.g. [{title: Llama, text: The llama is a domesticated South American camelid, widely used as a meat and pack animal by Andean cultures since the pre-Columbian era.}, {title: Panda, text: The giant panda (Ailuropoda melanoleuca), also known as the panda bear or simply panda, is a bear species endemic to China.}, {title: Guanaco, text: The guanaco is a camelid native to South America, closely related to the llama. Guanacos are one of two wild South American camelids; the other species is the vicuña, which lives at higher elevations.}, {title: Wild Bactrian camel, text: The wild Bactrian camel (Camelus ferus) is an endangered species of camel endemic to Northwest China and southwestern Mongolia.}])
   --top-n: int # The number of top results to return. (e.g. 2)
-  --return-documents: string@bool-completer # Whether to return supplied documents with the response. (e.g. true)
+  --return-documents: oneof<nothing, bool> # Whether to return supplied documents with the response. (e.g. true)
   --rank-fields: list # List of keys in the JSON Object document to rank by. Defaults to use all supplied keys for ranking. (e.g. [title, text])
 ]: any -> record<object: any, id: string, model: string, results: table<index: int, relevance_score: float, document: record>, usage: record<prompt_tokens: int, completion_tokens: int, total_tokens: int>> {
   let input = $in
@@ -1396,7 +1395,7 @@ export def "audio-speech audio-speech" [
   --response-encoding: string@response-encoding-completer # Audio encoding of response. Only applicable when response_format is raw or pcm. Cartesia models respect this parameter and support all values. Orpheus, Kokoro, and Minimax models always return pcm_s16le regardless of this setting. (default: pcm_f32le)
   --sample-rate: int # Sampling rate in Hz for the output audio. Cartesia and Minimax models respect this parameter. Orpheus and Kokoro models always output at 24000 Hz regardless of this setting. (default: 44100)
   --bit-rate: int@bit-rate-completer # Bitrate of the MP3 audio output in bits per second. Only applicable when response_format is mp3. Higher values produce better audio quality at larger file sizes. Default is 128000. Currently supported on Cartesia models. (default: 128000)
-  --stream: string@bool-completer # If true, output is streamed for several characters at a time instead of waiting for the full response. The stream terminates with `data: [DONE]`. If false, return the encoded audio as octet stream (default: false)
+  --stream: oneof<nothing, bool> # If true, output is streamed for several characters at a time instead of waiting for the full response. The stream terminates with `data: [DONE]`. If false, return the encoded audio as octet stream (default: false)
   --extra-params: record # Additional model-specific parameters that fine-tune speech generation behavior. — shape: {pronunciation_dict?: list}
 ]: any -> any {
   let input = $in
@@ -1455,7 +1454,7 @@ export def "audio-transcriptions audio-transcriptions" [
   --response-format: string@response-format-completer-2 # The format of the response (default: json)
   --temperature: float # Sampling temperature between 0.0 and 1.0 (format: float, default: 0)
   --timestamp-granularities: any # Controls level of timestamp detail in verbose_json. Only used when response_format is verbose_json. Can be a single granularity or an array to get multiple levels. (default: segment, e.g. [word, segment])
-  --diarize: string@bool-completer # Whether to enable speaker diarization. When enabled, you will get the speaker id for each word in the transcription. In the response, in the words array, you will get the speaker id for each word. In addition, we also return the speaker_segments array which contains the speaker id for each speaker segment along with the start and end time of the segment along with all the words in the segment. <br> <br> For eg - ... "speaker_segments": [   "speaker_id": "SPEAKER_00",   "start": 0,   "end": 30.02,   "words": [     {       "id": 0,       "word": "Tijana",       "start": 0,       "end": 11.475,       "speaker_id": "SPEAKER_00"     },     ...  (default: false)
+  --diarize: oneof<nothing, bool> # Whether to enable speaker diarization. When enabled, you will get the speaker id for each word in the transcription. In the response, in the words array, you will get the speaker id for each word. In addition, we also return the speaker_segments array which contains the speaker id for each speaker segment along with the start and end time of the segment along with all the words in the segment. <br> <br> For eg - ... "speaker_segments": [   "speaker_id": "SPEAKER_00",   "start": 0,   "end": 30.02,   "words": [     {       "id": 0,       "word": "Tijana",       "start": 0,       "end": 11.475,       "speaker_id": "SPEAKER_00"     },     ...  (default: false)
   --min-speakers: int # Minimum number of speakers expected in the audio. Used to improve diarization accuracy when the approximate number of speakers is known.
   --max-speakers: int # Maximum number of speakers expected in the audio. Used to improve diarization accuracy when the approximate number of speakers is known.
 ]: any -> any {
@@ -1551,13 +1550,13 @@ export def "compute-clusters Create" [
   --shared-volume: record # shape: {volume_name: string, size_tib: int, region: string, is_lifecycle_independent?: bool}
   --volume-id: string # ID of an existing volume to use with the cluster creation.
   billing_type: string@billing-type-completer # RESERVED billing types allow you to specify the duration of the cluster reservation via the duration_days field. ON_DEMAND billing types will give you ownership of the cluster until you delete it. SCHEDULED_CAPACITY billing types allow you to reserve capacity for a scheduled time window. You must specify the reservation_start_time and reservation_end_time with this request.
-  --auto-scaled: string@bool-completer # Whether GPU cluster should be auto-scaled based on the workload. By default, it is not auto-scaled. (DEPRECATED, default: false)
+  --auto-scaled: oneof<nothing, bool> # Whether GPU cluster should be auto-scaled based on the workload. By default, it is not auto-scaled. (DEPRECATED, default: false)
   --auto-scale-max-gpus: int # Maximum number of GPUs to which the cluster can be auto-scaled up. This field is required if auto_scaled is true.
   --slurm-shm-size-gib: int # Shared memory size in GiB for Slurm cluster. This field is required if cluster_type is SLURM.
   --capacity-pool-id: string # ID of the capacity pool to use for the cluster. This field is optional and only applicable if the cluster is created from a capacity pool.
   --reservation-start-time: string # Reservation start time of the cluster. This field is required for SCHEDULED billing to specify the reservation start time for the cluster. If not provided, the cluster provisions immediately. (format: date-time)
   --reservation-end-time: string # Reservation end time of the cluster. This field is required for SCHEDULED billing to specify the reservation end time for the cluster. (format: date-time)
-  --install-traefik: string@bool-completer # Whether to install Traefik ingress controller in the cluster. This field is only applicable for Kubernetes clusters and is false by default. (default: false)
+  --install-traefik: oneof<nothing, bool> # Whether to install Traefik ingress controller in the cluster. This field is only applicable for Kubernetes clusters and is false by default. (default: false)
   cuda_version: string # CUDA version for this cluster. For example, 12.5
   nvidia_driver_version: string # Nvidia driver version for this cluster. For example, 550. Only some combination of cuda_version and nvidia_driver_version are supported.
   --slurm-image: string # Custom Slurm image for Slurm clusters.
@@ -1566,7 +1565,7 @@ export def "compute-clusters Create" [
   --acceptance-tests-params: record # AcceptanceTestsParams groups all GPU acceptance test options when enabled is true. — shape: {enabled?: bool, dcgm_diag_level?: "DCGM_DIAG_LEVEL_SHORT"|"DCGM_DIAG_LEVEL_MEDIUM"|"DCGM_DIAG_LEVEL_LONG"|"DCGM_DIAG_LEVEL_EXTENDED", gpu_burn_duration?: int, nccl_single_node_skipped?: bool, gpu_burn_skipped?: bool, dcgm_diag_skipped?: bool, nccl_multi_node_skipped?: bool}
   --cluster-config: record # shape: {load_balancer: "NONE"|"TRAEFIK"|"NGINX"|"ISTIO", kubernetes_dashboard_enabled?: bool, jumphost_enabled?: bool, slurm_startup_scripts?: record, ingress?: record, observability?: record, gpu_operator_version?: string}
   --num-capacity-pool-gpus: int # Number of GPUs to allocate from the capacity pool. Must be a multiple of 8 and not exceed num_gpus. (format: int32)
-  --auto-scale: string@bool-completer # Whether to enable auto-scaling for the cluster. If true, the cluster will automatically scale the number of GPU worker nodes between num_gpus and auto_scale_max_gpus based on the workload.
+  --auto-scale: oneof<nothing, bool> # Whether to enable auto-scaling for the cluster. If true, the cluster will automatically scale the number of GPU worker nodes between num_gpus and auto_scale_max_gpus based on the workload.
   --num-preemptible-gpus: int # Number of preemptible GPUs to request alongside on-demand capacity. Must be a multiple of 8. Preemptible nodes are cheaper but may be reclaimed when on-demand capacity is needed elsewhere; the system fulfills this asynchronously and surfaces the actual count in allocated_preemptible_gpus. (format: int32)
   --num-reserved-gpus: int # Number of prepaid (PLG) reserved GPUs for this cluster. When omitted for RESERVED billing on create, the server defaults this to num_gpus.
   --add-ons: list # Add-ons to enable on the cluster at creation time. — item shape: {name: string, add_on_type: string, config?: record}
@@ -1745,7 +1744,7 @@ export def "compute-clusters-storage-volumes Create" [
   volume_name: string # User provided name of the volume.
   size_tib: int # Volume size in whole tebibytes (TiB).
   region: string # Region name. Usable regions can be found from `clusters.list_regions()`
-  --is-lifecycle-independent: string@bool-completer # When true, the shared volume is not deleted when the cluster is decommissioned.
+  --is-lifecycle-independent: oneof<nothing, bool> # When true, the shared volume is not deleted when the cluster is decommissioned.
 ]: any -> record<volume_id: string, volume_name: string, size_tib: int, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1837,7 +1836,7 @@ export def "endpoints listEndpoints" [
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer
   --usage-type: string@usage-type-completer
-  --mine: string@bool-completer
+  --mine: oneof<nothing, bool>
 ]: nothing -> record<object: any, data: table<object: any, id: string, name: string, model: string, type: string, owner: string, state: string, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1866,8 +1865,8 @@ export def "endpoints createEndpoint" [
   model: string # The model to deploy on this endpoint (e.g. deepseek-ai/DeepSeek-R1)
   hardware: string # The hardware configuration to use for this endpoint (e.g. 1x_nvidia_a100_80gb_sxm)
   autoscaling: record # Configuration for automatic scaling of replicas based on demand. — shape: {min_replicas: int, max_replicas: int}
-  --disable-prompt-cache: string@bool-completer # This parameter is deprecated and no longer has any effect. (DEPRECATED, default: false)
-  --disable-speculative-decoding: string@bool-completer # Whether to disable speculative decoding for this endpoint (default: false)
+  --disable-prompt-cache: oneof<nothing, bool> # This parameter is deprecated and no longer has any effect. (DEPRECATED, default: false)
+  --disable-speculative-decoding: oneof<nothing, bool> # Whether to disable speculative decoding for this endpoint (default: false)
   --state: string@state-completer # The desired state of the endpoint (default: STARTED, e.g. STARTED)
   --inactive-timeout: int # The number of minutes of inactivity after which the endpoint stops automatically. Set to null, omit, or set to 0 to disable automatic timeout. (nullable, e.g. 60)
   --availability-zone: string # Create the endpoint in a specified availability zone (e.g., us-central-4b)
@@ -2401,7 +2400,7 @@ export def "rl-model-resources createModelResources" [
   --allow-errors(-e) # Return full response without error handling
   base_model: string # Base model to provision the resource for (e.g. Qwen/Qwen3-0.6B)
   --type: string@type-completer-2 # Type of a training session. TRAINER_AND_GENERATOR provisions both trainer and generator; TRAINER_ONLY provisions only the trainer and rejects generator-dependent operations such as sample. (default: SESSION_TYPE_UNSPECIFIED)
-  --lora-enabled: string@bool-completer # Whether the resource hosts LoRA sessions or a single full-weight session (default: true, e.g. true)
+  --lora-enabled: oneof<nothing, bool> # Whether the resource hosts LoRA sessions or a single full-weight session (default: true, e.g. true)
 ]: any -> record<id: string, status: string, base_model: string, type: string, lora_enabled: bool, created_at: string, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

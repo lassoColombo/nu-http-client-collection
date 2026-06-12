@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.weather.gov"] }
 def auth-scheme-completer [] { ["user-agent" "api-key"] }
 
@@ -109,7 +108,7 @@ export def "alerts query" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # List only active alerts (use /alerts/active endpoints instead) (DEPRECATED)
+  --active: oneof<nothing, bool> # List only active alerts (use /alerts/active endpoints instead) (DEPRECATED)
   --start: string # Start time (format: date-time)
   --end: string # End time (format: date-time)
   --status: list # Status (actual, exercise, system, test, draft)
@@ -743,7 +742,7 @@ export def "stations-observations-latest latest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --require-qc: string@bool-completer # Require QC
+  --require-qc: oneof<nothing, bool> # Require QC
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "user-agent"))
   let base = ($base_url | default $BASE_URL)
@@ -1570,7 +1569,7 @@ export def "zones list" [
   --region: list # Region code
   --type: list # Zone type
   --point: string # Point (latitude,longitude)
-  --include-geometry: string@bool-completer # Include geometry in results (true/false)
+  --include-geometry: oneof<nothing, bool> # Include geometry in results (true/false)
   --limit: int # Limit
   --effective: string # Effective date/time (format: date-time)
 ]: nothing -> any {
@@ -1602,7 +1601,7 @@ export def "zones type" [
   --region: list # Region code
   --type: list # Zone type
   --point: string # Point (latitude,longitude)
-  --include-geometry: string@bool-completer # Include geometry in results (true/false)
+  --include-geometry: oneof<nothing, bool> # Include geometry in results (true/false)
   --limit: int # Limit
   --effective: string # Effective date/time (format: date-time)
 ]: nothing -> any {

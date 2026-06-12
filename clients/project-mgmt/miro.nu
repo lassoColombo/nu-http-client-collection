@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.miro.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -251,7 +250,7 @@ export def "orgs-teams-data-classification enterprise-dataclassification-team-bo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --labelId: int # Data classification label id for team (format: int64, e.g. 3000457366756291000)
-  --notClassifiedOnly: string@bool-completer # Assign data classification label to not-classified only or to all boards of team (e.g. true)
+  --notClassifiedOnly: oneof<nothing, bool> # Assign data classification label to not-classified only or to all boards of team (e.g. true)
 ]: any -> record<numberUpdatedBoards: int, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -302,7 +301,7 @@ export def "orgs-teams-data-classification-settings enterprise-dataclassificatio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --defaultLabelId: int # Data classification default label id (format: int64, e.g. 3000457366756291000)
-  --enabled: string@bool-completer # Data classification enabled for team (e.g. true)
+  --enabled: oneof<nothing, bool> # Data classification enabled for team (e.g. true)
 ]: any -> record<defaultLabelId: string, enabled: bool, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1042,7 +1041,7 @@ export def "users createUser" [
   --name: record # Structured object for the person’s name. This includes the family name (last name), and given name (first name). — shape: {formatted?: string, familyName: string, givenName: string}
   --displayName: string # A human-readable name for the user, typically the full name. This attribute is used if the value is not empty. <br><br> Maximum length: 60 characters (e.g. John Doe)
   --userType: string # Free-form string to indicate the user license type in the organization. <br><br> Only supported values for license types are allowed. Supported license types can vary per organization. An organization can have one or more of the following license type values: Full, Free, Free Restricted, Full (Trial), Basic, Standard, Advanced. <br><br> Note: When `userType` is specified, the `userType` license is set per the value provided. When `userType` is not specified, the user license is set according to internal Miro logic, which depends on the organization plan. (e.g. Full)
-  --active: string@bool-completer # Indicates whether the user is active or deactivated in the organization.
+  --active: oneof<nothing, bool> # Indicates whether the user is active or deactivated in the organization.
   --photos: list # An array of display picture for the user in the organization. Contains photo value and type. <br><br> Notes: Must be a text URL to the image. Supported file types: jpg, jpeg, bmp, png, gif. <br><br> To define file type, you should have defined file extension in url (e.g. https://host.com/avatar_user1.jpg) or request to url should return together with a file content a header Content-Type (e.g. Content-Type = image/jpeg) <br><br> Maximum file size to download is: 31457280 bytes. <br><br> Example (Okta): photos.^[type==photo].value <br> Example (Azure): photos[type eq "photo"].value — item shape: {type?: string, value?: string}
   --roles: list # An array of roles assigned to the user in the organization. Contains role value, display, type, and primary flag. <br><br> organization_user_role supported values include: ORGANIZATION_INTERNAL_ADMIN and ORGANIZATION_INTERNAL_USER. organization_admin_role supported values include: Content Admin, User Admin, Security Admin, or names of custom admin roles. <br><br> Example (Okta) for organization_user_role: roles.^[primary==true].value <br> Example (Azure) for organization_user_role: roles[primary eq "True"].value <br> Example (Okta) for organization_admin_role: roles.^[primary==false].value <br> Example (Azure) for organization_admin_role: roles[primary eq "False"].value <br> — item shape: {type?: string, value?: string, display?: string, primary?: bool}
   --preferredLanguage: string # Specifies the user's preferred language. <br><br> Example: en_US for English. (e.g. en_US)
@@ -1112,7 +1111,7 @@ export def "users replaceUser" [
   --name: record # Structured object for the person’s name. This includes the family name (last name), and given name (first name). — shape: {formatted?: string, familyName?: string, givenName?: string}
   --displayName: string # A human-readable name for the user, typically the full name. (e.g. John Doe)
   --userType: string # Free-form string to indicate the user license type in the organization. (e.g. Full)
-  --active: string@bool-completer # Indicates whether the user is active or deactivated in the organization.
+  --active: oneof<nothing, bool> # Indicates whether the user is active or deactivated in the organization.
   --emails: list # An array of email addresses, each an object with a value, display and primary flag. — item shape: {value?: string, type?: string, primary?: bool}
   --photos: list # An array for profile pictures, contains type. — item shape: {type?: string, value?: string}
   --groups: list # An array of groups (teams) the user belongs to in the organization. Contains id and display name of the team. — item shape: {value?: string, display?: string}
@@ -1417,7 +1416,7 @@ export def "orgs-members enterprise-get-organization-members" [
   --emails: string # e.g. someEmail1@miro.com
   --role: string@role-completer
   --license: string@license-completer
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --cursor: string # e.g. 3055557345821141000
   --limit: int # format: int32, default: 100, e.g. 100
 ]: nothing -> any {
@@ -3839,7 +3838,7 @@ export def "boards-groups unGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete-items: string@bool-completer # Indicates whether the items should be removed. By default, false.
+  --delete-items: oneof<nothing, bool> # Indicates whether the items should be removed. By default, false.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3894,7 +3893,7 @@ export def "boards-groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete-items: string@bool-completer # Indicates whether the items should be removed. Set to `true` to delete items in the group.
+  --delete-items: oneof<nothing, bool> # Indicates whether the items should be removed. Set to `true` to delete items in the group.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

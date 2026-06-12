@@ -65,7 +65,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.datadoghq.com" "https://api.us3.datadoghq.com" "https://api.us5.datadoghq.com" "https://api.ap1.datadoghq.com" "https://api.ap2.datadoghq.com" "https://api.datadoghq.eu" "https://api.ddog-gov.com" "https://api.us2.ddog-gov.com" "https://ip-ranges.datadoghq.com" "https://http-intake.logs.datadoghq.com" "https://{subdomain}.{site}"] }
 def auth-scheme-completer [] { ["bearer" "dd-api-key" "query-api_key" "dd-application-key" "query-application_key"] }
 
@@ -492,8 +491,8 @@ export def "dashboard ListDashboards" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --filtershared: string@bool-completer # When `true`, this query only returns shared custom created or cloned dashboards.
-  --filterdeleted: string@bool-completer # When `true`, this query returns only deleted custom-created or cloned dashboards. This parameter is incompatible with `filter[shared]`.
+  --filtershared: oneof<nothing, bool> # When `true`, this query only returns shared custom created or cloned dashboards.
+  --filterdeleted: oneof<nothing, bool> # When `true`, this query returns only deleted custom-created or cloned dashboards. This parameter is incompatible with `filter[shared]`.
   --count: int # The maximum number of dashboards returned in the list. (format: int64, default: 100)
   --start: int # The specific offset to use as the beginning of the returned response. (format: int64)
 ]: nothing -> record<dashboards: table<author_handle: string, created_at: string, description: string, id: string, is_read_only: bool, layout_type: string, modified_at: string, title: string, url: string>> {
@@ -550,7 +549,7 @@ export def "dashboard CreateDashboard" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # Description of the dashboard. (nullable)
-  --is-read-only: string@bool-completer # Whether this dashboard is read-only. If True, only the author and admins can make changes to it.  This property is deprecated; please use the [Restriction Policies API](https://docs.datadoghq.com/api/latest/restriction-policies/) instead to manage write authorization for individual dashboards. (DEPRECATED, e.g. false)
+  --is-read-only: oneof<nothing, bool> # Whether this dashboard is read-only. If True, only the author and admins can make changes to it.  This property is deprecated; please use the [Restriction Policies API](https://docs.datadoghq.com/api/latest/restriction-policies/) instead to manage write authorization for individual dashboards. (DEPRECATED, e.g. false)
   layout_type: string@layout-type-completer # Layout type of the dashboard. (e.g. ordered)
   --notify-list: list # List of handles of users to notify when changes are made to this dashboard. (nullable)
   --reflow-type: string@reflow-type-completer # Reflow type for a **new dashboard layout** dashboard. Set this only when layout type is 'ordered'. If set to 'fixed', the dashboard expects all widgets to have a layout, and if it's set to 'auto', widgets should not have layouts.
@@ -713,7 +712,7 @@ export def "dashboard-public CreatePublicDashboard" [
   --embeddable-domains: list # The `SharedDashboard` `embeddable_domains`. (e.g. [https://domain.atlassian.net/, http://myserver.com/])
   --expiration: string # The time when an OPEN shared dashboard becomes publicly unavailable. (nullable, format: date-time)
   --global-time: record # Object containing the live span selection for the dashboard. — shape: {live_span?: "15m"|"1h"|"4h"|"1d"|"2d"|"1w"|"1mo"|"3mo"}
-  --global-time-selectable-enabled: string@bool-completer # Whether to allow viewers to select a different global time setting for the shared dashboard. (nullable)
+  --global-time-selectable-enabled: oneof<nothing, bool> # Whether to allow viewers to select a different global time setting for the shared dashboard. (nullable)
   --invitees: list # The `SharedDashboard` `invitees`. (e.g. [{access_expiration: 2030-01-01T12:00:00.00Z, email: test@datadoghq.com}, {access_expiration: , email: test2@datadoghq.com}]) — item shape: {access_expiration?: string, email: string}
   --selectable-template-vars: list # List of objects representing template variables on the shared dashboard which can have selectable values. (nullable, e.g. [{default_value: *, name: exampleVar, prefix: test, visible_tags: [selectableValue1, selectableValue2]}]) — item shape: {default_value?: string, name?: string, prefix?: string, type?: string, visible_tags?: list}
   --share-list: list # List of email addresses that can receive an invitation to access to the shared dashboard. (DEPRECATED, nullable, e.g. [test@datadoghq.com, test2@email.com])
@@ -798,7 +797,7 @@ export def "dashboard-public UpdatePublicDashboard" [
   --embeddable-domains: list # The `SharedDashboard` `embeddable_domains`. (e.g. [https://domain.atlassian.net/, http://myserver.com/])
   --expiration: string # The time when an OPEN shared dashboard becomes publicly unavailable. (nullable, format: date-time)
   --global-time: record # Timeframe setting for the shared dashboard. (nullable, e.g. {live_span: 1h}) — shape: {live_span?: "15m"|"1h"|"4h"|"1d"|"2d"|"1w"|"1mo"|"3mo"}
-  --global-time-selectable-enabled: string@bool-completer # Whether to allow viewers to select a different global time setting for the shared dashboard. (nullable)
+  --global-time-selectable-enabled: oneof<nothing, bool> # Whether to allow viewers to select a different global time setting for the shared dashboard. (nullable)
   --invitees: list # The `SharedDashboard` `invitees`. (e.g. [{access_expiration: 2030-01-01T12:00:00.00Z, email: test@datadoghq.com}, {access_expiration: , email: test2@datadoghq.com}]) — item shape: {access_expiration?: string, email: string}
   --selectable-template-vars: list # List of objects representing template variables on the shared dashboard which can have selectable values. (nullable, e.g. [{default_value: *, name: exampleVar, prefix: test, visible_tags: [selectableValue1, selectableValue2]}]) — item shape: {default_value?: string, name?: string, prefix?: string, type?: string, visible_tags?: list}
   --share-list: list # List of email addresses that can be given access to the shared dashboard. (DEPRECATED, nullable, e.g. [test@datadoghq.com, test2@email.com])
@@ -960,7 +959,7 @@ export def "dashboard UpdateDashboard" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # Description of the dashboard. (nullable)
-  --is-read-only: string@bool-completer # Whether this dashboard is read-only. If True, only the author and admins can make changes to it.  This property is deprecated; please use the [Restriction Policies API](https://docs.datadoghq.com/api/latest/restriction-policies/) instead to manage write authorization for individual dashboards. (DEPRECATED, e.g. false)
+  --is-read-only: oneof<nothing, bool> # Whether this dashboard is read-only. If True, only the author and admins can make changes to it.  This property is deprecated; please use the [Restriction Policies API](https://docs.datadoghq.com/api/latest/restriction-policies/) instead to manage write authorization for individual dashboards. (DEPRECATED, e.g. false)
   layout_type: string@layout-type-completer # Layout type of the dashboard. (e.g. ordered)
   --notify-list: list # List of handles of users to notify when changes are made to this dashboard. (nullable)
   --reflow-type: string@reflow-type-completer # Reflow type for a **new dashboard layout** dashboard. Set this only when layout type is 'ordered'. If set to 'fixed', the dashboard expects all widgets to have a layout, and if it's set to 'auto', widgets should not have layouts.
@@ -1024,8 +1023,8 @@ export def "downtime ListDowntimes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --current-only: string@bool-completer # Only return downtimes that are active when the request is made.
-  --with-creator: string@bool-completer # Return creator information.
+  --current-only: oneof<nothing, bool> # Only return downtimes that are active when the request is made.
+  --with-creator: oneof<nothing, bool> # Return creator information.
 ]: nothing -> table<active: bool, active_child: record<active: bool, canceled: int, creator_id: int, disabled: bool, downtime_type: int, end: int, id: int, message: string, monitor_id: int, monitor_tags: list, mute_first_recovery_notification: bool, notify_end_states: list, notify_end_types: list, parent_id: int, recurrence: record, scope: list, start: int, timezone: string, updater_id: int>, canceled: int, creator_id: int, disabled: bool, downtime_type: int, end: int, id: int, message: string, monitor_id: int, monitor_tags: list<string>, mute_first_recovery_notification: bool, notify_end_states: list<string>, notify_end_types: list<string>, parent_id: int, recurrence: record<period: int, rrule: string, type: string, until_date: int, until_occurrences: int, week_days: list>, scope: list<string>, start: int, timezone: string, updater_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1052,12 +1051,12 @@ export def "downtime CreateDowntime" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --disabled: string@bool-completer # If a downtime has been disabled. (e.g. false)
+  --disabled: oneof<nothing, bool> # If a downtime has been disabled. (e.g. false)
   --end: int # POSIX timestamp to end the downtime. If not provided, the downtime is in effect indefinitely until you cancel it. (nullable, format: int64, e.g. 1412793983)
   --message: string # A message to include with notifications for this downtime. Email notifications can be sent to specific users by using the same `@username` notation as events. (nullable, e.g. Message on the downtime)
   --monitor-id: int # A single monitor to which the downtime applies. If not provided, the downtime applies to all monitors. (nullable, format: int64, e.g. 123456)
   --monitor-tags: list # A comma-separated list of monitor tags. For example, tags that are applied directly to monitors, not tags that are used in monitor queries (which are filtered by the scope parameter), to which the downtime applies. The resulting downtime applies to monitors that match ALL provided monitor tags. For example, `service:postgres` **AND** `team:frontend`. (e.g. [*])
-  --mute-first-recovery-notification: string@bool-completer # If the first recovery notification during a downtime should be muted. (e.g. false)
+  --mute-first-recovery-notification: oneof<nothing, bool> # If the first recovery notification during a downtime should be muted. (e.g. false)
   --notify-end-states: list # States for which `notify_end_types` sends out notifications for. (default: [alert, no data, warn], e.g. [alert, no data, warn])
   --notify-end-types: list # If set, notifies if a monitor is in an alert-worthy state (`ALERT`, `WARNING`, or `NO DATA`) when this downtime expires or is canceled. Applied to monitors that change states during the downtime (such as from `OK` to `ALERT`, `WARNING`, or `NO DATA`), and to monitors that already have an alert-worthy state when downtime begins. (default: [expired], e.g. [canceled, expired])
   --parent-id: int # ID of the parent Downtime. (nullable, format: int64, e.g. 123)
@@ -1169,12 +1168,12 @@ export def "downtime UpdateDowntime" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --disabled: string@bool-completer # If a downtime has been disabled. (e.g. false)
+  --disabled: oneof<nothing, bool> # If a downtime has been disabled. (e.g. false)
   --end: int # POSIX timestamp to end the downtime. If not provided, the downtime is in effect indefinitely until you cancel it. (nullable, format: int64, e.g. 1412793983)
   --message: string # A message to include with notifications for this downtime. Email notifications can be sent to specific users by using the same `@username` notation as events. (nullable, e.g. Message on the downtime)
   --monitor-id: int # A single monitor to which the downtime applies. If not provided, the downtime applies to all monitors. (nullable, format: int64, e.g. 123456)
   --monitor-tags: list # A comma-separated list of monitor tags. For example, tags that are applied directly to monitors, not tags that are used in monitor queries (which are filtered by the scope parameter), to which the downtime applies. The resulting downtime applies to monitors that match ALL provided monitor tags. For example, `service:postgres` **AND** `team:frontend`. (e.g. [*])
-  --mute-first-recovery-notification: string@bool-completer # If the first recovery notification during a downtime should be muted. (e.g. false)
+  --mute-first-recovery-notification: oneof<nothing, bool> # If the first recovery notification during a downtime should be muted. (e.g. false)
   --notify-end-states: list # States for which `notify_end_types` sends out notifications for. (default: [alert, no data, warn], e.g. [alert, no data, warn])
   --notify-end-types: list # If set, notifies if a monitor is in an alert-worthy state (`ALERT`, `WARNING`, or `NO DATA`) when this downtime expires or is canceled. Applied to monitors that change states during the downtime (such as from `OK` to `ALERT`, `WARNING`, or `NO DATA`), and to monitors that already have an alert-worthy state when downtime begins. (default: [expired], e.g. [canceled, expired])
   --parent-id: int # ID of the parent Downtime. (nullable, format: int64, e.g. 123)
@@ -1211,8 +1210,8 @@ export def "events ListEvents" [
   --priority: string@priority-completer # Priority of your events, either `low` or `normal`. (nullable, e.g. normal)
   --sources: string # A comma separated string of sources.
   --tags: string # A comma separated list indicating what tags, if any, should be used to filter the list of events. (e.g. host:host0)
-  --unaggregated: string@bool-completer # Set unaggregated to `true` to return all events within the specified [`start`,`end`] timeframe. Otherwise if an event is aggregated to a parent event with a timestamp outside of the timeframe, it won't be available in the output. Aggregated events with `is_aggregate=true` in the response will still be returned unless exclude_aggregate is set to `true.`
-  --exclude-aggregate: string@bool-completer # Set `exclude_aggregate` to `true` to only return unaggregated events where `is_aggregate=false` in the response. If the `exclude_aggregate` parameter is set to `true`, then the unaggregated parameter is ignored and will be `true` by default.
+  --unaggregated: oneof<nothing, bool> # Set unaggregated to `true` to return all events within the specified [`start`,`end`] timeframe. Otherwise if an event is aggregated to a parent event with a timestamp outside of the timeframe, it won't be available in the output. Aggregated events with `is_aggregate=true` in the response will still be returned unless exclude_aggregate is set to `true.`
+  --exclude-aggregate: oneof<nothing, bool> # Set `exclude_aggregate` to `true` to only return unaggregated events where `is_aggregate=false` in the response. If the `exclude_aggregate` parameter is set to `true`, then the unaggregated parameter is ignored and will be `true` by default.
   --page: int # By default 1000 results are returned per request. Set page to the number of the page to return with `0` being the first page. The page parameter can only be used when either unaggregated or exclude_aggregate is set to `true.` (format: int32)
 ]: nothing -> record<events: table<alert_type: string, date_happened: int, device_name: string, host: string, id: int, id_str: string, payload: string, priority: string, source_type_name: string, tags: list, text: string, title: string, url: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
@@ -1326,7 +1325,7 @@ export def "host-mute MuteHost" [
   --allow-errors(-e) # Return full response without error handling
   --end: int # POSIX timestamp in seconds when the host is unmuted. If omitted, the host remains muted until explicitly unmuted. (format: int64, e.g. 1579098130)
   --message: string # Message to associate with the muting of this host. (e.g. Muting this host for a test!)
-  --override: string@bool-completer # If true and the host is already muted, replaces existing host mute settings. (e.g. false)
+  --override: oneof<nothing, bool> # If true and the host is already muted, replaces existing host mute settings. (e.g. false)
 ]: any -> record<action: string, end: int, hostname: string, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
@@ -1379,8 +1378,8 @@ export def "hosts ListHosts" [
   --start: int # Specify the starting point for the host search results. For example, if you set `count` to 100 and the first 100 results have already been returned, you can set `start` to `101` to get the next 100 results. (format: int64)
   --count: int # Number of hosts to return. Max 1000. (format: int64)
   --qp-from: int # Number of seconds since UNIX epoch from which you want to search your hosts. (format: int64)
-  --include-muted-hosts-data: string@bool-completer # Include information on the muted status of hosts and when the mute expires.
-  --include-hosts-metadata: string@bool-completer # Include additional metadata about the hosts (agent_version, machine, platform, processor, etc.).
+  --include-muted-hosts-data: oneof<nothing, bool> # Include information on the muted status of hosts and when the mute expires.
+  --include-hosts-metadata: oneof<nothing, bool> # Include additional metadata about the hosts (agent_version, machine, platform, processor, etc.).
 ]: nothing -> record<host_list: table<aliases: list, apps: list, aws_name: string, host_name: string, id: int, is_muted: bool, last_reported_time: int, meta: record, metrics: record, mute_timeout: int, name: string, sources: list, tags_by_source: record, up: bool>, total_matching: int, total_returned: int> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1488,13 +1487,13 @@ export def "integration-aws CreateAWSAccount" [
   --access-key-id: string # Your AWS access key ID. Only required if your AWS account is a GovCloud or China account.
   --account-id: string # Your AWS Account ID without dashes. (e.g. 123456789012)
   --account-specific-namespace-rules: record # An object (in the form `{"namespace1":true/false, "namespace2":true/false}`) containing user-supplied overrides for AWS namespace metric collection. **Important**: This field only contains namespaces explicitly configured through API calls, not the comprehensive enabled or disabled status of all namespaces. If a namespace is absent from this field, it uses Datadog's internal defaults (all namespaces enabled by default, except `AWS/SQS`, `AWS/ElasticMapReduce`, and `AWS/Usage`). For a complete view of all namespace statuses, use the V2 AWS Integration API instead. (e.g. {auto_scaling: false, opswork: false})
-  --cspm-resource-collection-enabled: string@bool-completer # Whether Datadog collects cloud security posture management resources from your AWS account. This includes additional resources not covered under the general `resource_collection`. (default: false, e.g. true)
+  --cspm-resource-collection-enabled: oneof<nothing, bool> # Whether Datadog collects cloud security posture management resources from your AWS account. This includes additional resources not covered under the general `resource_collection`. (default: false, e.g. true)
   --excluded-regions: list # An array of [AWS regions](https://docs.aws.amazon.com/general/latest/gr/rande.html#regional-endpoints) to exclude from metrics collection. (e.g. [us-east-1, us-west-2])
-  --extended-resource-collection-enabled: string@bool-completer # Whether Datadog collects additional attributes and configuration information about the resources in your AWS account. Required for `cspm_resource_collection`. (default: false, e.g. true)
+  --extended-resource-collection-enabled: oneof<nothing, bool> # Whether Datadog collects additional attributes and configuration information about the resources in your AWS account. Required for `cspm_resource_collection`. (default: false, e.g. true)
   --filter-tags: list # The array of EC2 tags (in the form `key:value`) defines a filter that Datadog uses when collecting metrics from EC2. Wildcards, such as `?` (for single characters) and `*` (for multiple characters) can also be used. Only hosts that match one of the defined tags will be imported into Datadog. The rest will be ignored. Host matching a given tag can also be excluded by adding `!` before the tag. For example, `env:production,instance-type:c1.*,!region:us-east-1` (e.g. [$KEY:$VALUE])
   --host-tags: list # Array of tags (in the form `key:value`) to add to all hosts and metrics reporting through this integration. (e.g. [$KEY:$VALUE])
-  --metrics-collection-enabled: string@bool-completer # Whether Datadog collects metrics for this AWS account. (default: true, e.g. false)
-  --resource-collection-enabled: string@bool-completer # Deprecated in favor of 'extended_resource_collection_enabled'. Whether Datadog collects a standard set of resources from your AWS account. (DEPRECATED, default: false, e.g. true)
+  --metrics-collection-enabled: oneof<nothing, bool> # Whether Datadog collects metrics for this AWS account. (default: true, e.g. false)
+  --resource-collection-enabled: oneof<nothing, bool> # Deprecated in favor of 'extended_resource_collection_enabled'. Whether Datadog collects a standard set of resources from your AWS account. (DEPRECATED, default: false, e.g. true)
   --role-name: string # Your Datadog role delegation name. (e.g. DatadogAWSIntegrationRole)
   --secret-access-key: string # Your AWS secret access key. Only required if your AWS account is a GovCloud or China account.
 ]: any -> record<external_id: string> {
@@ -1530,13 +1529,13 @@ export def "integration-aws UpdateAWSAccount" [
   --access-key-id: string # Your AWS access key ID. Only required if your AWS account is a GovCloud or China account.
   --account-id: string # Your AWS Account ID without dashes. (e.g. 123456789012)
   --account-specific-namespace-rules: record # An object (in the form `{"namespace1":true/false, "namespace2":true/false}`) containing user-supplied overrides for AWS namespace metric collection. **Important**: This field only contains namespaces explicitly configured through API calls, not the comprehensive enabled or disabled status of all namespaces. If a namespace is absent from this field, it uses Datadog's internal defaults (all namespaces enabled by default, except `AWS/SQS`, `AWS/ElasticMapReduce`, and `AWS/Usage`). For a complete view of all namespace statuses, use the V2 AWS Integration API instead. (e.g. {auto_scaling: false, opswork: false})
-  --cspm-resource-collection-enabled: string@bool-completer # Whether Datadog collects cloud security posture management resources from your AWS account. This includes additional resources not covered under the general `resource_collection`. (default: false, e.g. true)
+  --cspm-resource-collection-enabled: oneof<nothing, bool> # Whether Datadog collects cloud security posture management resources from your AWS account. This includes additional resources not covered under the general `resource_collection`. (default: false, e.g. true)
   --excluded-regions: list # An array of [AWS regions](https://docs.aws.amazon.com/general/latest/gr/rande.html#regional-endpoints) to exclude from metrics collection. (e.g. [us-east-1, us-west-2])
-  --extended-resource-collection-enabled: string@bool-completer # Whether Datadog collects additional attributes and configuration information about the resources in your AWS account. Required for `cspm_resource_collection`. (default: false, e.g. true)
+  --extended-resource-collection-enabled: oneof<nothing, bool> # Whether Datadog collects additional attributes and configuration information about the resources in your AWS account. Required for `cspm_resource_collection`. (default: false, e.g. true)
   --filter-tags: list # The array of EC2 tags (in the form `key:value`) defines a filter that Datadog uses when collecting metrics from EC2. Wildcards, such as `?` (for single characters) and `*` (for multiple characters) can also be used. Only hosts that match one of the defined tags will be imported into Datadog. The rest will be ignored. Host matching a given tag can also be excluded by adding `!` before the tag. For example, `env:production,instance-type:c1.*,!region:us-east-1` (e.g. [$KEY:$VALUE])
   --host-tags: list # Array of tags (in the form `key:value`) to add to all hosts and metrics reporting through this integration. (e.g. [$KEY:$VALUE])
-  --metrics-collection-enabled: string@bool-completer # Whether Datadog collects metrics for this AWS account. (default: true, e.g. false)
-  --resource-collection-enabled: string@bool-completer # Deprecated in favor of 'extended_resource_collection_enabled'. Whether Datadog collects a standard set of resources from your AWS account. (DEPRECATED, default: false, e.g. true)
+  --metrics-collection-enabled: oneof<nothing, bool> # Whether Datadog collects metrics for this AWS account. (default: true, e.g. false)
+  --resource-collection-enabled: oneof<nothing, bool> # Deprecated in favor of 'extended_resource_collection_enabled'. Whether Datadog collects a standard set of resources from your AWS account. (DEPRECATED, default: false, e.g. true)
   --role-name: string # Your Datadog role delegation name. (e.g. DatadogAWSIntegrationRole)
   --secret-access-key: string # Your AWS secret access key. Only required if your AWS account is a GovCloud or China account.
 ]: any -> record {
@@ -1642,7 +1641,7 @@ export def "integration-aws-event-bridge CreateAWSEventBridgeSource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --account-id: string # Your AWS Account ID without dashes. (e.g. 123456789012)
-  --create-event-bus: string@bool-completer # True if Datadog should create the event bus in addition to the event source. Requires the `events:CreateEventBus` permission. (e.g. true)
+  --create-event-bus: oneof<nothing, bool> # True if Datadog should create the event bus in addition to the event source. Requires the `events:CreateEventBus` permission. (e.g. true)
   --event-generator-name: string # The given part of the event source name, which is then combined with an assigned suffix to form the full name. (e.g. app-alerts)
   --region: string # The event source's [AWS region](https://docs.aws.amazon.com/general/latest/gr/rande.html#regional-endpoints). (e.g. us-east-1)
 ]: any -> record<event_source_name: string, has_bus: bool, region: string, status: string> {
@@ -1757,13 +1756,13 @@ export def "integration-aws-generate-new-external-id CreateNewAWSExternalID" [
   --access-key-id: string # Your AWS access key ID. Only required if your AWS account is a GovCloud or China account.
   --account-id: string # Your AWS Account ID without dashes. (e.g. 123456789012)
   --account-specific-namespace-rules: record # An object (in the form `{"namespace1":true/false, "namespace2":true/false}`) containing user-supplied overrides for AWS namespace metric collection. **Important**: This field only contains namespaces explicitly configured through API calls, not the comprehensive enabled or disabled status of all namespaces. If a namespace is absent from this field, it uses Datadog's internal defaults (all namespaces enabled by default, except `AWS/SQS`, `AWS/ElasticMapReduce`, and `AWS/Usage`). For a complete view of all namespace statuses, use the V2 AWS Integration API instead. (e.g. {auto_scaling: false, opswork: false})
-  --cspm-resource-collection-enabled: string@bool-completer # Whether Datadog collects cloud security posture management resources from your AWS account. This includes additional resources not covered under the general `resource_collection`. (default: false, e.g. true)
+  --cspm-resource-collection-enabled: oneof<nothing, bool> # Whether Datadog collects cloud security posture management resources from your AWS account. This includes additional resources not covered under the general `resource_collection`. (default: false, e.g. true)
   --excluded-regions: list # An array of [AWS regions](https://docs.aws.amazon.com/general/latest/gr/rande.html#regional-endpoints) to exclude from metrics collection. (e.g. [us-east-1, us-west-2])
-  --extended-resource-collection-enabled: string@bool-completer # Whether Datadog collects additional attributes and configuration information about the resources in your AWS account. Required for `cspm_resource_collection`. (default: false, e.g. true)
+  --extended-resource-collection-enabled: oneof<nothing, bool> # Whether Datadog collects additional attributes and configuration information about the resources in your AWS account. Required for `cspm_resource_collection`. (default: false, e.g. true)
   --filter-tags: list # The array of EC2 tags (in the form `key:value`) defines a filter that Datadog uses when collecting metrics from EC2. Wildcards, such as `?` (for single characters) and `*` (for multiple characters) can also be used. Only hosts that match one of the defined tags will be imported into Datadog. The rest will be ignored. Host matching a given tag can also be excluded by adding `!` before the tag. For example, `env:production,instance-type:c1.*,!region:us-east-1` (e.g. [$KEY:$VALUE])
   --host-tags: list # Array of tags (in the form `key:value`) to add to all hosts and metrics reporting through this integration. (e.g. [$KEY:$VALUE])
-  --metrics-collection-enabled: string@bool-completer # Whether Datadog collects metrics for this AWS account. (default: true, e.g. false)
-  --resource-collection-enabled: string@bool-completer # Deprecated in favor of 'extended_resource_collection_enabled'. Whether Datadog collects a standard set of resources from your AWS account. (DEPRECATED, default: false, e.g. true)
+  --metrics-collection-enabled: oneof<nothing, bool> # Whether Datadog collects metrics for this AWS account. (default: true, e.g. false)
+  --resource-collection-enabled: oneof<nothing, bool> # Deprecated in favor of 'extended_resource_collection_enabled'. Whether Datadog collects a standard set of resources from your AWS account. (DEPRECATED, default: false, e.g. true)
   --role-name: string # Your Datadog role delegation name. (e.g. DatadogAWSIntegrationRole)
   --secret-access-key: string # Your AWS secret access key. Only required if your AWS account is a GovCloud or China account.
 ]: any -> record<external_id: string> {
@@ -1970,23 +1969,23 @@ export def "integration-azure DeleteAzureIntegration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --app-service-plan-filters: string # Limit the Azure app service plans that are pulled into Datadog using tags. Only app service plans that match one of the defined tags are imported into Datadog. (e.g. key:value,filter:example)
-  --automute: string@bool-completer # Silence monitors for expected Azure VM shutdowns. (e.g. true)
+  --automute: oneof<nothing, bool> # Silence monitors for expected Azure VM shutdowns. (e.g. true)
   --client-id: string # Your Azure web application ID. (e.g. testc7f6-1234-5678-9101-3fcbf464test)
   --client-secret: string # Your Azure web application secret key. (e.g. TestingRh2nx664kUy5dIApvM54T4AtO)
   --container-app-filters: string # Limit the Azure container apps that are pulled into Datadog using tags. Only container apps that match one of the defined tags are imported into Datadog. (e.g. key:value,filter:example)
-  --cspm-enabled: string@bool-completer # When enabled, Datadog’s Cloud Security Management product scans resource configurations monitored by this app registration. Note: This requires resource_collection_enabled to be set to true. (e.g. true)
-  --custom-metrics-enabled: string@bool-completer # Enable custom metrics for your organization. (e.g. true)
+  --cspm-enabled: oneof<nothing, bool> # When enabled, Datadog’s Cloud Security Management product scans resource configurations monitored by this app registration. Note: This requires resource_collection_enabled to be set to true. (e.g. true)
+  --custom-metrics-enabled: oneof<nothing, bool> # Enable custom metrics for your organization. (e.g. true)
   --errors: list # Errors in your configuration. (e.g. [*])
   --host-filters: string # Limit the Azure instances that are pulled into Datadog by using tags. Only hosts that match one of the defined tags are imported into Datadog. (e.g. key:value,filter:example)
-  --metrics-enabled: string@bool-completer # Enable Azure metrics for your organization. (e.g. true)
-  --metrics-enabled-default: string@bool-completer # Enable Azure metrics for your organization for resource providers where no resource provider config is specified. (e.g. true)
+  --metrics-enabled: oneof<nothing, bool> # Enable Azure metrics for your organization. (e.g. true)
+  --metrics-enabled-default: oneof<nothing, bool> # Enable Azure metrics for your organization for resource providers where no resource provider config is specified. (e.g. true)
   --new-client-id: string # Your New Azure web application ID. (e.g. new1c7f6-1234-5678-9101-3fcbf464test)
   --new-tenant-name: string # Your New Azure Active Directory ID. (e.g. new1c44-1234-5678-9101-cc00736ftest)
-  --resource-collection-enabled: string@bool-completer # When enabled, Datadog collects metadata and configuration info from cloud resources (compute instances, databases, load balancers, etc.) monitored by this app registration. (e.g. true)
+  --resource-collection-enabled: oneof<nothing, bool> # When enabled, Datadog collects metadata and configuration info from cloud resources (compute instances, databases, load balancers, etc.) monitored by this app registration. (e.g. true)
   --resource-provider-configs: list # Configuration settings applied to resources from the specified Azure resource providers. — item shape: {metrics_enabled?: bool, namespace?: string}
-  --secretless-auth-enabled: string@bool-completer # (Preview) When enabled, Datadog authenticates with this app registration using federated workload identity credentials instead of a client secret. (e.g. true)
+  --secretless-auth-enabled: oneof<nothing, bool> # (Preview) When enabled, Datadog authenticates with this app registration using federated workload identity credentials instead of a client secret. (e.g. true)
   --tenant-name: string # Your Azure Active Directory ID. (e.g. testc44-1234-5678-9101-cc00736ftest)
-  --usage-metrics-enabled: string@bool-completer # Enable azure.usage metrics for your organization. (e.g. true)
+  --usage-metrics-enabled: oneof<nothing, bool> # Enable azure.usage metrics for your organization. (e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
@@ -2034,23 +2033,23 @@ export def "integration-azure CreateAzureIntegration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --app-service-plan-filters: string # Limit the Azure app service plans that are pulled into Datadog using tags. Only app service plans that match one of the defined tags are imported into Datadog. (e.g. key:value,filter:example)
-  --automute: string@bool-completer # Silence monitors for expected Azure VM shutdowns. (e.g. true)
+  --automute: oneof<nothing, bool> # Silence monitors for expected Azure VM shutdowns. (e.g. true)
   --client-id: string # Your Azure web application ID. (e.g. testc7f6-1234-5678-9101-3fcbf464test)
   --client-secret: string # Your Azure web application secret key. (e.g. TestingRh2nx664kUy5dIApvM54T4AtO)
   --container-app-filters: string # Limit the Azure container apps that are pulled into Datadog using tags. Only container apps that match one of the defined tags are imported into Datadog. (e.g. key:value,filter:example)
-  --cspm-enabled: string@bool-completer # When enabled, Datadog’s Cloud Security Management product scans resource configurations monitored by this app registration. Note: This requires resource_collection_enabled to be set to true. (e.g. true)
-  --custom-metrics-enabled: string@bool-completer # Enable custom metrics for your organization. (e.g. true)
+  --cspm-enabled: oneof<nothing, bool> # When enabled, Datadog’s Cloud Security Management product scans resource configurations monitored by this app registration. Note: This requires resource_collection_enabled to be set to true. (e.g. true)
+  --custom-metrics-enabled: oneof<nothing, bool> # Enable custom metrics for your organization. (e.g. true)
   --errors: list # Errors in your configuration. (e.g. [*])
   --host-filters: string # Limit the Azure instances that are pulled into Datadog by using tags. Only hosts that match one of the defined tags are imported into Datadog. (e.g. key:value,filter:example)
-  --metrics-enabled: string@bool-completer # Enable Azure metrics for your organization. (e.g. true)
-  --metrics-enabled-default: string@bool-completer # Enable Azure metrics for your organization for resource providers where no resource provider config is specified. (e.g. true)
+  --metrics-enabled: oneof<nothing, bool> # Enable Azure metrics for your organization. (e.g. true)
+  --metrics-enabled-default: oneof<nothing, bool> # Enable Azure metrics for your organization for resource providers where no resource provider config is specified. (e.g. true)
   --new-client-id: string # Your New Azure web application ID. (e.g. new1c7f6-1234-5678-9101-3fcbf464test)
   --new-tenant-name: string # Your New Azure Active Directory ID. (e.g. new1c44-1234-5678-9101-cc00736ftest)
-  --resource-collection-enabled: string@bool-completer # When enabled, Datadog collects metadata and configuration info from cloud resources (compute instances, databases, load balancers, etc.) monitored by this app registration. (e.g. true)
+  --resource-collection-enabled: oneof<nothing, bool> # When enabled, Datadog collects metadata and configuration info from cloud resources (compute instances, databases, load balancers, etc.) monitored by this app registration. (e.g. true)
   --resource-provider-configs: list # Configuration settings applied to resources from the specified Azure resource providers. — item shape: {metrics_enabled?: bool, namespace?: string}
-  --secretless-auth-enabled: string@bool-completer # (Preview) When enabled, Datadog authenticates with this app registration using federated workload identity credentials instead of a client secret. (e.g. true)
+  --secretless-auth-enabled: oneof<nothing, bool> # (Preview) When enabled, Datadog authenticates with this app registration using federated workload identity credentials instead of a client secret. (e.g. true)
   --tenant-name: string # Your Azure Active Directory ID. (e.g. testc44-1234-5678-9101-cc00736ftest)
-  --usage-metrics-enabled: string@bool-completer # Enable azure.usage metrics for your organization. (e.g. true)
+  --usage-metrics-enabled: oneof<nothing, bool> # Enable azure.usage metrics for your organization. (e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
@@ -2077,23 +2076,23 @@ export def "integration-azure UpdateAzureIntegration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --app-service-plan-filters: string # Limit the Azure app service plans that are pulled into Datadog using tags. Only app service plans that match one of the defined tags are imported into Datadog. (e.g. key:value,filter:example)
-  --automute: string@bool-completer # Silence monitors for expected Azure VM shutdowns. (e.g. true)
+  --automute: oneof<nothing, bool> # Silence monitors for expected Azure VM shutdowns. (e.g. true)
   --client-id: string # Your Azure web application ID. (e.g. testc7f6-1234-5678-9101-3fcbf464test)
   --client-secret: string # Your Azure web application secret key. (e.g. TestingRh2nx664kUy5dIApvM54T4AtO)
   --container-app-filters: string # Limit the Azure container apps that are pulled into Datadog using tags. Only container apps that match one of the defined tags are imported into Datadog. (e.g. key:value,filter:example)
-  --cspm-enabled: string@bool-completer # When enabled, Datadog’s Cloud Security Management product scans resource configurations monitored by this app registration. Note: This requires resource_collection_enabled to be set to true. (e.g. true)
-  --custom-metrics-enabled: string@bool-completer # Enable custom metrics for your organization. (e.g. true)
+  --cspm-enabled: oneof<nothing, bool> # When enabled, Datadog’s Cloud Security Management product scans resource configurations monitored by this app registration. Note: This requires resource_collection_enabled to be set to true. (e.g. true)
+  --custom-metrics-enabled: oneof<nothing, bool> # Enable custom metrics for your organization. (e.g. true)
   --errors: list # Errors in your configuration. (e.g. [*])
   --host-filters: string # Limit the Azure instances that are pulled into Datadog by using tags. Only hosts that match one of the defined tags are imported into Datadog. (e.g. key:value,filter:example)
-  --metrics-enabled: string@bool-completer # Enable Azure metrics for your organization. (e.g. true)
-  --metrics-enabled-default: string@bool-completer # Enable Azure metrics for your organization for resource providers where no resource provider config is specified. (e.g. true)
+  --metrics-enabled: oneof<nothing, bool> # Enable Azure metrics for your organization. (e.g. true)
+  --metrics-enabled-default: oneof<nothing, bool> # Enable Azure metrics for your organization for resource providers where no resource provider config is specified. (e.g. true)
   --new-client-id: string # Your New Azure web application ID. (e.g. new1c7f6-1234-5678-9101-3fcbf464test)
   --new-tenant-name: string # Your New Azure Active Directory ID. (e.g. new1c44-1234-5678-9101-cc00736ftest)
-  --resource-collection-enabled: string@bool-completer # When enabled, Datadog collects metadata and configuration info from cloud resources (compute instances, databases, load balancers, etc.) monitored by this app registration. (e.g. true)
+  --resource-collection-enabled: oneof<nothing, bool> # When enabled, Datadog collects metadata and configuration info from cloud resources (compute instances, databases, load balancers, etc.) monitored by this app registration. (e.g. true)
   --resource-provider-configs: list # Configuration settings applied to resources from the specified Azure resource providers. — item shape: {metrics_enabled?: bool, namespace?: string}
-  --secretless-auth-enabled: string@bool-completer # (Preview) When enabled, Datadog authenticates with this app registration using federated workload identity credentials instead of a client secret. (e.g. true)
+  --secretless-auth-enabled: oneof<nothing, bool> # (Preview) When enabled, Datadog authenticates with this app registration using federated workload identity credentials instead of a client secret. (e.g. true)
   --tenant-name: string # Your Azure Active Directory ID. (e.g. testc44-1234-5678-9101-cc00736ftest)
-  --usage-metrics-enabled: string@bool-completer # Enable azure.usage metrics for your organization. (e.g. true)
+  --usage-metrics-enabled: oneof<nothing, bool> # Enable azure.usage metrics for your organization. (e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
@@ -2120,23 +2119,23 @@ export def "integration-azure-host-filters UpdateAzureHostFilters" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --app-service-plan-filters: string # Limit the Azure app service plans that are pulled into Datadog using tags. Only app service plans that match one of the defined tags are imported into Datadog. (e.g. key:value,filter:example)
-  --automute: string@bool-completer # Silence monitors for expected Azure VM shutdowns. (e.g. true)
+  --automute: oneof<nothing, bool> # Silence monitors for expected Azure VM shutdowns. (e.g. true)
   --client-id: string # Your Azure web application ID. (e.g. testc7f6-1234-5678-9101-3fcbf464test)
   --client-secret: string # Your Azure web application secret key. (e.g. TestingRh2nx664kUy5dIApvM54T4AtO)
   --container-app-filters: string # Limit the Azure container apps that are pulled into Datadog using tags. Only container apps that match one of the defined tags are imported into Datadog. (e.g. key:value,filter:example)
-  --cspm-enabled: string@bool-completer # When enabled, Datadog’s Cloud Security Management product scans resource configurations monitored by this app registration. Note: This requires resource_collection_enabled to be set to true. (e.g. true)
-  --custom-metrics-enabled: string@bool-completer # Enable custom metrics for your organization. (e.g. true)
+  --cspm-enabled: oneof<nothing, bool> # When enabled, Datadog’s Cloud Security Management product scans resource configurations monitored by this app registration. Note: This requires resource_collection_enabled to be set to true. (e.g. true)
+  --custom-metrics-enabled: oneof<nothing, bool> # Enable custom metrics for your organization. (e.g. true)
   --errors: list # Errors in your configuration. (e.g. [*])
   --host-filters: string # Limit the Azure instances that are pulled into Datadog by using tags. Only hosts that match one of the defined tags are imported into Datadog. (e.g. key:value,filter:example)
-  --metrics-enabled: string@bool-completer # Enable Azure metrics for your organization. (e.g. true)
-  --metrics-enabled-default: string@bool-completer # Enable Azure metrics for your organization for resource providers where no resource provider config is specified. (e.g. true)
+  --metrics-enabled: oneof<nothing, bool> # Enable Azure metrics for your organization. (e.g. true)
+  --metrics-enabled-default: oneof<nothing, bool> # Enable Azure metrics for your organization for resource providers where no resource provider config is specified. (e.g. true)
   --new-client-id: string # Your New Azure web application ID. (e.g. new1c7f6-1234-5678-9101-3fcbf464test)
   --new-tenant-name: string # Your New Azure Active Directory ID. (e.g. new1c44-1234-5678-9101-cc00736ftest)
-  --resource-collection-enabled: string@bool-completer # When enabled, Datadog collects metadata and configuration info from cloud resources (compute instances, databases, load balancers, etc.) monitored by this app registration. (e.g. true)
+  --resource-collection-enabled: oneof<nothing, bool> # When enabled, Datadog collects metadata and configuration info from cloud resources (compute instances, databases, load balancers, etc.) monitored by this app registration. (e.g. true)
   --resource-provider-configs: list # Configuration settings applied to resources from the specified Azure resource providers. — item shape: {metrics_enabled?: bool, namespace?: string}
-  --secretless-auth-enabled: string@bool-completer # (Preview) When enabled, Datadog authenticates with this app registration using federated workload identity credentials instead of a client secret. (e.g. true)
+  --secretless-auth-enabled: oneof<nothing, bool> # (Preview) When enabled, Datadog authenticates with this app registration using federated workload identity credentials instead of a client secret. (e.g. true)
   --tenant-name: string # Your Azure Active Directory ID. (e.g. testc44-1234-5678-9101-cc00736ftest)
-  --usage-metrics-enabled: string@bool-completer # Enable azure.usage metrics for your organization. (e.g. true)
+  --usage-metrics-enabled: oneof<nothing, bool> # Enable azure.usage metrics for your organization. (e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
@@ -2168,21 +2167,21 @@ export def "integration-gcp DeleteGCPIntegration" [
   --allow-errors(-e) # Return full response without error handling
   --auth-provider-x509-cert-url: string # Should be `https://www.googleapis.com/oauth2/v1/certs`. (e.g. https://www.googleapis.com/oauth2/v1/certs)
   --auth-uri: string # Should be `https://accounts.google.com/o/oauth2/auth`. (e.g. https://accounts.google.com/o/oauth2/auth)
-  --automute: string@bool-completer # Silence monitors for expected GCE instance shutdowns.
+  --automute: oneof<nothing, bool> # Silence monitors for expected GCE instance shutdowns.
   --client-email: string # Your email found in your JSON service account key. (e.g. api-dev@datadog-sandbox.iam.gserviceaccount.com)
   --client-id: string # Your ID found in your JSON service account key. (e.g. 123456712345671234567)
   --client-x509-cert-url: string # Should be `https://www.googleapis.com/robot/v1/metadata/x509/$CLIENT_EMAIL` where `$CLIENT_EMAIL` is the email found in your JSON service account key. (e.g. https://www.googleapis.com/robot/v1/metadata/x509/$CLIENT_EMAIL)
   --cloud-run-revision-filters: list # List of filters to limit the Cloud Run revisions that are pulled into Datadog by using tags. Only Cloud Run revision resources that apply to specified filters are imported into Datadog. **Note:** This field is deprecated. Instead, use `monitored_resource_configs` with `type=cloud_run_revision` (DEPRECATED, e.g. [$KEY:$VALUE])
   --errors: list # An array of errors. (e.g. [*])
   --host-filters: string # A comma-separated list of filters to limit the VM instances that are pulled into Datadog by using tags. Only VM instance resources that apply to specified filters are imported into Datadog. **Note:** This field is deprecated. Instead, use `monitored_resource_configs` with `type=gce_instance` (DEPRECATED, e.g. $KEY1:$VALUE1,$KEY2:$VALUE2)
-  --is-cspm-enabled: string@bool-completer # When enabled, Datadog will activate the Cloud Security Monitoring product for this service account. Note: This requires resource_collection_enabled to be set to true. (e.g. true)
-  --is-resource-change-collection-enabled: string@bool-completer # When enabled, Datadog scans for all resource change data in your Google Cloud environment. (default: false, e.g. true)
-  --is-security-command-center-enabled: string@bool-completer # When enabled, Datadog will attempt to collect Security Command Center Findings. Note: This requires additional permissions on the service account. (default: false, e.g. true)
+  --is-cspm-enabled: oneof<nothing, bool> # When enabled, Datadog will activate the Cloud Security Monitoring product for this service account. Note: This requires resource_collection_enabled to be set to true. (e.g. true)
+  --is-resource-change-collection-enabled: oneof<nothing, bool> # When enabled, Datadog scans for all resource change data in your Google Cloud environment. (default: false, e.g. true)
+  --is-security-command-center-enabled: oneof<nothing, bool> # When enabled, Datadog will attempt to collect Security Command Center Findings. Note: This requires additional permissions on the service account. (default: false, e.g. true)
   --monitored-resource-configs: list # Configurations for GCP monitored resources. (e.g. [{filters: [$KEY:$VALUE], type: gce_instance}]) — item shape: {filters?: list, type?: "cloud_function"|"cloud_run_revision"|"gce_instance"}
   --private-key: string # Your private key name found in your JSON service account key. (e.g. private_key)
   --private-key-id: string # Your private key ID found in your JSON service account key. (e.g. 123456789abcdefghi123456789abcdefghijklm)
   --project-id: string # Your Google Cloud project ID found in your JSON service account key. (e.g. datadog-apitest)
-  --resource-collection-enabled: string@bool-completer # When enabled, Datadog scans for all resources in your GCP environment. (e.g. true)
+  --resource-collection-enabled: oneof<nothing, bool> # When enabled, Datadog scans for all resources in your GCP environment. (e.g. true)
   --token-uri: string # Should be `https://accounts.google.com/o/oauth2/token`. (e.g. https://accounts.google.com/o/oauth2/token)
   --type: string # The value for service_account found in your JSON service account key. (e.g. service_account)
 ]: any -> record {
@@ -2239,21 +2238,21 @@ export def "integration-gcp CreateGCPIntegration" [
   --allow-errors(-e) # Return full response without error handling
   --auth-provider-x509-cert-url: string # Should be `https://www.googleapis.com/oauth2/v1/certs`. (e.g. https://www.googleapis.com/oauth2/v1/certs)
   --auth-uri: string # Should be `https://accounts.google.com/o/oauth2/auth`. (e.g. https://accounts.google.com/o/oauth2/auth)
-  --automute: string@bool-completer # Silence monitors for expected GCE instance shutdowns.
+  --automute: oneof<nothing, bool> # Silence monitors for expected GCE instance shutdowns.
   --client-email: string # Your email found in your JSON service account key. (e.g. api-dev@datadog-sandbox.iam.gserviceaccount.com)
   --client-id: string # Your ID found in your JSON service account key. (e.g. 123456712345671234567)
   --client-x509-cert-url: string # Should be `https://www.googleapis.com/robot/v1/metadata/x509/$CLIENT_EMAIL` where `$CLIENT_EMAIL` is the email found in your JSON service account key. (e.g. https://www.googleapis.com/robot/v1/metadata/x509/$CLIENT_EMAIL)
   --cloud-run-revision-filters: list # List of filters to limit the Cloud Run revisions that are pulled into Datadog by using tags. Only Cloud Run revision resources that apply to specified filters are imported into Datadog. **Note:** This field is deprecated. Instead, use `monitored_resource_configs` with `type=cloud_run_revision` (DEPRECATED, e.g. [$KEY:$VALUE])
   --errors: list # An array of errors. (e.g. [*])
   --host-filters: string # A comma-separated list of filters to limit the VM instances that are pulled into Datadog by using tags. Only VM instance resources that apply to specified filters are imported into Datadog. **Note:** This field is deprecated. Instead, use `monitored_resource_configs` with `type=gce_instance` (DEPRECATED, e.g. $KEY1:$VALUE1,$KEY2:$VALUE2)
-  --is-cspm-enabled: string@bool-completer # When enabled, Datadog will activate the Cloud Security Monitoring product for this service account. Note: This requires resource_collection_enabled to be set to true. (e.g. true)
-  --is-resource-change-collection-enabled: string@bool-completer # When enabled, Datadog scans for all resource change data in your Google Cloud environment. (default: false, e.g. true)
-  --is-security-command-center-enabled: string@bool-completer # When enabled, Datadog will attempt to collect Security Command Center Findings. Note: This requires additional permissions on the service account. (default: false, e.g. true)
+  --is-cspm-enabled: oneof<nothing, bool> # When enabled, Datadog will activate the Cloud Security Monitoring product for this service account. Note: This requires resource_collection_enabled to be set to true. (e.g. true)
+  --is-resource-change-collection-enabled: oneof<nothing, bool> # When enabled, Datadog scans for all resource change data in your Google Cloud environment. (default: false, e.g. true)
+  --is-security-command-center-enabled: oneof<nothing, bool> # When enabled, Datadog will attempt to collect Security Command Center Findings. Note: This requires additional permissions on the service account. (default: false, e.g. true)
   --monitored-resource-configs: list # Configurations for GCP monitored resources. (e.g. [{filters: [$KEY:$VALUE], type: gce_instance}]) — item shape: {filters?: list, type?: "cloud_function"|"cloud_run_revision"|"gce_instance"}
   --private-key: string # Your private key name found in your JSON service account key. (e.g. private_key)
   --private-key-id: string # Your private key ID found in your JSON service account key. (e.g. 123456789abcdefghi123456789abcdefghijklm)
   --project-id: string # Your Google Cloud project ID found in your JSON service account key. (e.g. datadog-apitest)
-  --resource-collection-enabled: string@bool-completer # When enabled, Datadog scans for all resources in your GCP environment. (e.g. true)
+  --resource-collection-enabled: oneof<nothing, bool> # When enabled, Datadog scans for all resources in your GCP environment. (e.g. true)
   --token-uri: string # Should be `https://accounts.google.com/o/oauth2/token`. (e.g. https://accounts.google.com/o/oauth2/token)
   --type: string # The value for service_account found in your JSON service account key. (e.g. service_account)
 ]: any -> record {
@@ -2287,21 +2286,21 @@ export def "integration-gcp UpdateGCPIntegration" [
   --allow-errors(-e) # Return full response without error handling
   --auth-provider-x509-cert-url: string # Should be `https://www.googleapis.com/oauth2/v1/certs`. (e.g. https://www.googleapis.com/oauth2/v1/certs)
   --auth-uri: string # Should be `https://accounts.google.com/o/oauth2/auth`. (e.g. https://accounts.google.com/o/oauth2/auth)
-  --automute: string@bool-completer # Silence monitors for expected GCE instance shutdowns.
+  --automute: oneof<nothing, bool> # Silence monitors for expected GCE instance shutdowns.
   --client-email: string # Your email found in your JSON service account key. (e.g. api-dev@datadog-sandbox.iam.gserviceaccount.com)
   --client-id: string # Your ID found in your JSON service account key. (e.g. 123456712345671234567)
   --client-x509-cert-url: string # Should be `https://www.googleapis.com/robot/v1/metadata/x509/$CLIENT_EMAIL` where `$CLIENT_EMAIL` is the email found in your JSON service account key. (e.g. https://www.googleapis.com/robot/v1/metadata/x509/$CLIENT_EMAIL)
   --cloud-run-revision-filters: list # List of filters to limit the Cloud Run revisions that are pulled into Datadog by using tags. Only Cloud Run revision resources that apply to specified filters are imported into Datadog. **Note:** This field is deprecated. Instead, use `monitored_resource_configs` with `type=cloud_run_revision` (DEPRECATED, e.g. [$KEY:$VALUE])
   --errors: list # An array of errors. (e.g. [*])
   --host-filters: string # A comma-separated list of filters to limit the VM instances that are pulled into Datadog by using tags. Only VM instance resources that apply to specified filters are imported into Datadog. **Note:** This field is deprecated. Instead, use `monitored_resource_configs` with `type=gce_instance` (DEPRECATED, e.g. $KEY1:$VALUE1,$KEY2:$VALUE2)
-  --is-cspm-enabled: string@bool-completer # When enabled, Datadog will activate the Cloud Security Monitoring product for this service account. Note: This requires resource_collection_enabled to be set to true. (e.g. true)
-  --is-resource-change-collection-enabled: string@bool-completer # When enabled, Datadog scans for all resource change data in your Google Cloud environment. (default: false, e.g. true)
-  --is-security-command-center-enabled: string@bool-completer # When enabled, Datadog will attempt to collect Security Command Center Findings. Note: This requires additional permissions on the service account. (default: false, e.g. true)
+  --is-cspm-enabled: oneof<nothing, bool> # When enabled, Datadog will activate the Cloud Security Monitoring product for this service account. Note: This requires resource_collection_enabled to be set to true. (e.g. true)
+  --is-resource-change-collection-enabled: oneof<nothing, bool> # When enabled, Datadog scans for all resource change data in your Google Cloud environment. (default: false, e.g. true)
+  --is-security-command-center-enabled: oneof<nothing, bool> # When enabled, Datadog will attempt to collect Security Command Center Findings. Note: This requires additional permissions on the service account. (default: false, e.g. true)
   --monitored-resource-configs: list # Configurations for GCP monitored resources. (e.g. [{filters: [$KEY:$VALUE], type: gce_instance}]) — item shape: {filters?: list, type?: "cloud_function"|"cloud_run_revision"|"gce_instance"}
   --private-key: string # Your private key name found in your JSON service account key. (e.g. private_key)
   --private-key-id: string # Your private key ID found in your JSON service account key. (e.g. 123456789abcdefghi123456789abcdefghijklm)
   --project-id: string # Your Google Cloud project ID found in your JSON service account key. (e.g. datadog-apitest)
-  --resource-collection-enabled: string@bool-completer # When enabled, Datadog scans for all resources in your GCP environment. (e.g. true)
+  --resource-collection-enabled: oneof<nothing, bool> # When enabled, Datadog scans for all resources in your GCP environment. (e.g. true)
   --token-uri: string # Should be `https://accounts.google.com/o/oauth2/token`. (e.g. https://accounts.google.com/o/oauth2/token)
   --type: string # The value for service_account found in your JSON service account key. (e.g. service_account)
 ]: any -> record {
@@ -2549,7 +2548,7 @@ export def "integration-webhooks-configuration-custom-variables CreateWebhooksIn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-secret: string@bool-completer # Make custom variable is secret or not. If the custom variable is secret, the value is not returned in the response payload. (e.g. true)
+  --is-secret: oneof<nothing, bool> # Make custom variable is secret or not. If the custom variable is secret, the value is not returned in the response payload. (e.g. true)
   name: string # The name of the variable. It corresponds with `<CUSTOM_VARIABLE_NAME>`. (e.g. CUSTOM_VARIABLE_NAME)
   value: string # Value of the custom variable. (e.g. CUSTOM_VARIABLE_VALUE)
 ]: any -> record<is_secret: bool, name: string, value: string> {
@@ -2621,7 +2620,7 @@ export def "integration-webhooks-configuration-custom-variables UpdateWebhooksIn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-secret: string@bool-completer # Make custom variable is secret or not. If the custom variable is secret, the value is not returned in the response payload.
+  --is-secret: oneof<nothing, bool> # Make custom variable is secret or not. If the custom variable is secret, the value is not returned in the response payload.
   --name: string # The name of the variable. It corresponds with `<CUSTOM_VARIABLE_NAME>`. It must only contains upper-case characters, integers or underscores. (e.g. CUSTOM_VARIABLE_NAME)
   --value: string # Value of the custom variable. (e.g. CUSTOM_VARIABLE_VALUE)
 ]: any -> record<is_secret: bool, name: string, value: string> {
@@ -2936,7 +2935,7 @@ export def "logs-config-indexes UpdateLogsIndex" [
   --daily-limit: int # The number of log events you can send in this index per day before you are rate-limited. (format: int64, e.g. 300000000)
   --daily-limit-reset: record # Object containing options to override the default daily limit reset time. — shape: {reset_time?: string, reset_utc_offset?: string}
   --daily-limit-warning-threshold-percentage: float # A percentage threshold of the daily quota at which a Datadog warning event is generated. (format: double, e.g. 70)
-  --disable-daily-limit: string@bool-completer # If true, sets the `daily_limit` value to null and the index is not limited on a daily basis (any specified `daily_limit` value in the request is ignored). If false or omitted, the index's current `daily_limit` is maintained. (e.g. false)
+  --disable-daily-limit: oneof<nothing, bool> # If true, sets the `daily_limit` value to null and the index is not limited on a daily basis (any specified `daily_limit` value in the request is ignored). If false or omitted, the index's current `daily_limit` is maintained. (e.g. false)
   --exclusion-filters: list # An array of exclusion objects. The logs are tested against the query of each filter, following the order of the array. Only the first matching active exclusion matters, others (if any) are ignored. — item shape: {filter?: record, is_enabled?: bool, name: string}
   filter: record # Filter for logs. — shape: {query?: string}
   --num-flex-logs-retention-days: int # The total number of days logs are stored in Standard and Flex Tier before being deleted from the index. If Standard Tier is enabled on this index, logs are first retained in Standard Tier for the number of days specified through `num_retention_days`, and then stored in Flex Tier until the number of days specified in `num_flex_logs_retention_days` is reached. The available values depend on retention plans specified in your organization's contract/subscriptions.  **Note**: Changing this value affects all logs already in this index. It may also affect billing. (format: int64, e.g. 360)
@@ -3036,7 +3035,7 @@ export def "logs-config-pipelines CreateLogsPipeline" [
   --allow-errors(-e) # Return full response without error handling
   --description: string # A description of the pipeline.
   --filter: record # Filter for logs. — shape: {query?: string}
-  --is-enabled: string@bool-completer # Whether or not the pipeline is enabled.
+  --is-enabled: oneof<nothing, bool> # Whether or not the pipeline is enabled.
   name: string # Name of the pipeline. (e.g. )
   --processors: list # Ordered list of processors in this pipeline.
   --tags: list # A list of tags associated with the pipeline.
@@ -3112,7 +3111,7 @@ export def "logs-config-pipelines UpdateLogsPipeline" [
   --allow-errors(-e) # Return full response without error handling
   --description: string # A description of the pipeline.
   --filter: record # Filter for logs. — shape: {query?: string}
-  --is-enabled: string@bool-completer # Whether or not the pipeline is enabled.
+  --is-enabled: oneof<nothing, bool> # Whether or not the pipeline is enabled.
   name: string # Name of the pipeline. (e.g. )
   --processors: list # Ordered list of processors in this pipeline.
   --tags: list # A list of tags associated with the pipeline.
@@ -3222,7 +3221,7 @@ export def "monitor ListMonitors" [
   --name: string # A string to filter monitors by name.
   --tags: string # A comma separated list indicating what tags, if any, should be used to filter the list of monitors by scope. For example, `host:host0`. (e.g. host:host0)
   --monitor-tags: string # A comma separated list indicating what service and/or custom tags, if any, should be used to filter the list of monitors. Tags created in the Datadog UI automatically have the service key prepended. For example, `service:my-app`. (e.g. service:my-app)
-  --with-downtimes: string@bool-completer # If this argument is set to true, then the returned data includes all current active downtimes for each monitor.
+  --with-downtimes: oneof<nothing, bool> # If this argument is set to true, then the returned data includes all current active downtimes for each monitor.
   --id-offset: int # Use this parameter for paginating through large sets of monitors. Start with a value of zero, make a request, set the value to the last ID of result set, and then repeat until the response is empty. (format: int64)
   --page: int # The page to start paginating from. If this argument is not specified, the request returns all monitors without pagination. (format: int64, e.g. 0)
   --page-size: int # The number of monitors to return per page. If the page argument is not specified, the default behavior returns all monitors without a `page_size` limit. However, if page is specified and `page_size` is not, the argument defaults to 100. (format: int32, default: 100, e.g. 20)
@@ -3429,8 +3428,8 @@ export def "monitor GetMonitor" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --group-states: string # When specified, shows additional information about the group states. Choose one or more from `all`, `alert`, `warn`, and `no data`.
-  --with-downtimes: string@bool-completer # If this argument is set to true, then the returned data includes all current active downtimes for the monitor.
-  --with-assets: string@bool-completer # If this argument is set to `true`, the returned data includes all assets tied to this monitor.
+  --with-downtimes: oneof<nothing, bool> # If this argument is set to true, then the returned data includes all current active downtimes for the monitor.
+  --with-assets: oneof<nothing, bool> # If this argument is set to `true`, the returned data includes all assets tied to this monitor.
 ]: nothing -> record<assets: table<category: string, name: string, resource_key: string, resource_type: string, url: string>, created: string, creator: record<email: string, handle: string, name: string>, deleted: string, draft_status: string, id: int, matching_downtimes: table<end: int, id: int, scope: list, start: int>, message: string, modified: string, multi: bool, name: string, options: record<aggregation: record<group_by: string, metric: string, type: string>, device_ids: list<string>, enable_logs_sample: bool, enable_samples: bool, escalation_message: string, evaluation_delay: int, group_retention_duration: string, groupby_simple_monitor: bool, include_tags: bool, locked: bool, min_failure_duration: int, min_location_failed: int, new_group_delay: int, new_host_delay: int, no_data_timeframe: int, notification_preset_name: string, notify_audit: bool, notify_by: list<string>, notify_no_data: bool, on_missing_data: string, renotify_interval: int, renotify_occurrences: int, renotify_statuses: list<string>, require_full_window: bool, scheduling_options: record<custom_schedule: record, evaluation_window: record>, silenced: record, synthetics_check_id: string, threshold_windows: record<recovery_window: string, trigger_window: string>, thresholds: record<critical: float, critical_query: string, critical_recovery: float, critical_recovery_query: string, ok: float, unknown: float, warning: float, warning_recovery: float>, timeout_h: int, variables: list<any>>, overall_state: string, priority: int, query: string, restricted_roles: list<string>, state: record<groups: record>, tags: list<string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3616,8 +3615,8 @@ export def "notebooks ListNotebooks" [
   --sort-field: string # Sort by field `modified`, `name`, or `created`. (default: modified, e.g. modified)
   --sort-dir: string # Sort by direction `asc` or `desc`. (default: desc, e.g. desc)
   --qp-query: string # Return only notebooks with `query` string in notebook name or author handle. (e.g. postmortem)
-  --include-cells: string@bool-completer # Value of `false` excludes the `cells` and global `time` for each notebook. (default: true, e.g. false)
-  --is-template: string@bool-completer # True value returns only template notebooks. Default is false (returns only non-template notebooks). (default: false, e.g. false)
+  --include-cells: oneof<nothing, bool> # Value of `false` excludes the `cells` and global `time` for each notebook. (default: true, e.g. false)
+  --is-template: oneof<nothing, bool> # True value returns only template notebooks. Default is false (returns only non-template notebooks). (default: false, e.g. false)
   --type: string # If type is provided, returns only notebooks with that metadata type. Default does not have type filtering. (e.g. investigation)
 ]: nothing -> record<data: table<attributes: record, id: int, type: string>, meta: record<page: record<total_count: int, total_filtered_count: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
@@ -3824,7 +3823,7 @@ export def "org UpdateOrg" [
   --body-public-id: string # The `public_id` of the organization you are operating within. (e.g. abcdef12345)
   --settings: record # A JSON array of settings. — shape: {private_widget_share?: bool, saml?: record, saml_autocreate_access_role?: "st"|"adm"|"ro"|"ERROR", saml_autocreate_users_domains?: record, saml_can_be_enabled?: bool, saml_idp_endpoint?: string, saml_idp_initiated_login?: record, saml_idp_metadata_uploaded?: bool, saml_login_url?: string, saml_strict_mode?: record}
   --subscription: record # Subscription definition. (DEPRECATED, e.g. {type: pro}) — shape: {type?: string}
-  --trial: string@bool-completer # Only available for MSP customers. Allows child organizations to be created on a trial plan. (e.g. false)
+  --trial: oneof<nothing, bool> # Only available for MSP customers. Allows child organizations to be created on a trial plan. (e.g. false)
 ]: any -> record<org: record<billing: record<type: string>, created: string, description: string, name: string, public_id: string, settings: record<private_widget_share: bool, saml: record, saml_autocreate_access_role: string, saml_autocreate_users_domains: record, saml_can_be_enabled: bool, saml_idp_endpoint: string, saml_idp_initiated_login: record, saml_idp_metadata_uploaded: bool, saml_login_url: string, saml_strict_mode: record>, subscription: record<type: string>, trial: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
@@ -3948,7 +3947,7 @@ export def "security-analytics-signals-add-to-incident AddSecurityMonitoringSign
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --add-to-signal-timeline: string@bool-completer # Whether to post the signal on the incident timeline.
+  --add-to-signal-timeline: oneof<nothing, bool> # Whether to post the signal on the incident timeline.
   incident_id: int # Public ID attribute of the incident to which the signal will be added. (format: int64, e.g. 2066)
   --version: int # Version of the updated signal. If server side version is higher, update will be rejected. (format: int64, e.g. 0)
 ]: any -> record<status: string> {
@@ -4299,7 +4298,7 @@ export def "slo-search SearchSLO" [
   --qp-query: string # The query string to filter results based on SLO names. Some examples of queries include `service:<service-name>` and `<slo-name>`.
   --pagesize: int # The number of files to return in the response `[default=10]`. (format: int64)
   --pagenumber: int # The identifier of the first page to return. This parameter is used for the pagination feature `[default=0]`. (format: int64)
-  --include-facets: string@bool-completer # Whether or not to return facet information in the response `[default=false]`.
+  --include-facets: oneof<nothing, bool> # Whether or not to return facet information in the response `[default=false]`.
 ]: nothing -> record<data: record<attributes: record<facets: record, slos: list>, type: string>, links: record<first: string, last: string, next: string, prev: string, self: string>, meta: record<pagination: record<first_number: int, last_number: int, next_number: int, number: int, prev_number: int, size: int, total: int, type: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4347,7 +4346,7 @@ export def "slo GetSLO" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-configured-alert-ids: string@bool-completer # Get the IDs of SLO monitors that reference this SLO. (e.g. true)
+  --with-configured-alert-ids: oneof<nothing, bool> # Get the IDs of SLO monitors that reference this SLO. (e.g. true)
 ]: nothing -> record<data: record<configured_alert_ids: list<int>, created_at: int, creator: record<email: string, handle: string, name: string>, description: string, groups: list<string>, id: string, modified_at: int, monitor_ids: list<int>, monitor_tags: list<string>, name: string, query: record<denominator: string, numerator: string>, sli_specification: any, tags: list<string>, target_threshold: float, thresholds: list<record>, timeframe: string, type: string, warning_threshold: float>, errors: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4437,7 +4436,7 @@ export def "slo-history GetSLOHistory" [
   --from-ts: int # The `from` timestamp for the query window in epoch seconds. (format: int64)
   --to-ts: int # The `to` timestamp for the query window in epoch seconds. (format: int64)
   --target: float # The SLO target. If `target` is passed in, the response will include the remaining error budget and a timeframe value of `custom`. (format: double)
-  --apply-correction: string@bool-completer # Defaults to `true`. If any SLO corrections are applied and this parameter is set to `false`, then the corrections will not be applied and the SLI values will not be affected.
+  --apply-correction: oneof<nothing, bool> # Defaults to `true`. If any SLO corrections are applied and this parameter is set to `false`, then the corrections will not be applied and the SLI values will not be affected.
 ]: nothing -> record<data: record<from_ts: int, group_by: list<string>, groups: list<record>, monitors: list<record>, overall: record<error_budget_remaining: record, errors: list, group: string, history: list, monitor_modified: int, monitor_type: string, name: string, precision: record, preview: bool, sli_value: float, span_precision: float, uptime: float>, series: record<denominator: record, interval: int, message: string, numerator: record, query: string, res_type: string, resp_version: int, times: list>, thresholds: record, to_ts: int, type: string, type_id: int>, errors: table<error: string>> {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4890,7 +4889,7 @@ export def "synthetics-tests-delete DeleteTests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force-delete-dependencies: string@bool-completer # Delete the Synthetic test even if it's referenced by other resources (for example, SLOs and composite monitors). (e.g. false)
+  --force-delete-dependencies: oneof<nothing, bool> # Delete the Synthetic test even if it's referenced by other resources (for example, SLOs and composite monitors). (e.g. false)
   --public-ids: list # An array of Synthetic test IDs you want to delete. (e.g. [])
 ]: any -> record<deleted_tests: table<deleted_at: string, public_id: string>> {
   let input = $in
@@ -5012,8 +5011,8 @@ export def "synthetics-tests-search SearchTests" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --text: string # The search query.
-  --include-full-config: string@bool-completer # If true, include the full configuration for each test in the response.
-  --facets-only: string@bool-completer # If true, return only facets instead of full test details.
+  --include-full-config: oneof<nothing, bool> # If true, include the full configuration for each test in the response.
+  --facets-only: oneof<nothing, bool> # If true, return only facets instead of full test details.
   --start: int # The offset from which to start returning results. (format: int64, default: 0)
   --count: int # The maximum number of results to return. (format: int64, default: 50)
   --qp-sort: string # The sort order for the results (e.g., `name,asc` or `name,desc`). (default: name,asc)
@@ -5268,8 +5267,8 @@ export def "synthetics-variables CreateGlobalVariable" [
   --allow-errors(-e) # Return full response without error handling
   --attributes: record # Attributes of the global variable. — shape: {restricted_roles?: list}
   description: string # Description of the global variable. (e.g. Example description)
-  --is-fido: string@bool-completer # Determines if the global variable is a FIDO variable.
-  --is-totp: string@bool-completer # Determines if the global variable is a TOTP/MFA variable.
+  --is-fido: oneof<nothing, bool> # Determines if the global variable is a FIDO variable.
+  --is-totp: oneof<nothing, bool> # Determines if the global variable is a TOTP/MFA variable.
   name: string # Name of the global variable. Unique across Synthetic global variables. (e.g. MY_VARIABLE)
   --parse-test-options: record # Parser options to use for retrieving a Synthetic global variable from a Synthetic test. Used in conjunction with `parse_test_public_id`. — shape: {field?: string, localVariableName?: string, parser?: record, type: "http_body"|"http_header"|"http_status_code"|"local_variable"}
   --parse-test-public-id: string # A Synthetic test ID to use as a test to generate the variable value. (e.g. abc-def-123)
@@ -5349,8 +5348,8 @@ export def "synthetics-variables EditGlobalVariable" [
   --allow-errors(-e) # Return full response without error handling
   --attributes: record # Attributes of the global variable. — shape: {restricted_roles?: list}
   description: string # Description of the global variable. (e.g. Example description)
-  --is-fido: string@bool-completer # Determines if the global variable is a FIDO variable.
-  --is-totp: string@bool-completer # Determines if the global variable is a TOTP/MFA variable.
+  --is-fido: oneof<nothing, bool> # Determines if the global variable is a FIDO variable.
+  --is-totp: oneof<nothing, bool> # Determines if the global variable is a TOTP/MFA variable.
   name: string # Name of the global variable. Unique across Synthetic global variables. (e.g. MY_VARIABLE)
   --parse-test-options: record # Parser options to use for retrieving a Synthetic global variable from a Synthetic test. Used in conjunction with `parse_test_public_id`. — shape: {field?: string, localVariableName?: string, parser?: record, type: "http_body"|"http_header"|"http_status_code"|"local_variable"}
   --parse-test-public-id: string # A Synthetic test ID to use as a test to generate the variable value. (e.g. abc-def-123)
@@ -5588,7 +5587,7 @@ export def "usage-billable-summary GetUsageBillableSummary" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --month: string # Datetime in ISO-8601 format, UTC, precise to month: `[YYYY-MM]` for usage starting this month. (format: date-time)
-  --include-connected-accounts: string@bool-completer # Boolean to specify whether to include accounts connected to the current account as partner customers in the Datadog partner network program. Defaults to `false`. (default: false)
+  --include-connected-accounts: oneof<nothing, bool> # Boolean to specify whether to include accounts connected to the current account as partner customers in the Datadog partner network program. Defaults to `false`. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5772,7 +5771,7 @@ export def "usage-hourly-attribution GetHourlyUsageAttribution" [
   --usage-type: string@usage-type-completer # Usage type to retrieve. Usage types are in the format `<usage_type>_usage`. Example: `infra_host_usage` To obtain the complete list of active usage types that can be used to replace `<usage_type>` in the field names, make a request to the [Get usage attribution types API](https://docs.datadoghq.com/api/latest/usage-metering/#get-usage-attribution-types).
   --next-record-id: string # List following results with a next_record_id provided in the previous query.
   --tag-breakdown-keys: string # Comma separated list of tags used to group usage. If no value is provided the usage will not be broken down by tags.  To see which tags are available, look for the value of `tag_config_source` in the API response.
-  --include-descendants: string@bool-completer # Include child org usage in the response. Defaults to `true`. (default: true)
+  --include-descendants: oneof<nothing, bool> # Include child org usage in the response. Defaults to `true`. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5983,7 +5982,7 @@ export def "usage-monthly-attribution GetMonthlyUsageAttribution" [
   --sort-name: string@sort-name-completer # The field to sort by. Sort fields are in the format `<usage_type>_usage`. Example: `infra_host_usage` To obtain the complete list of usage attribution types that can be used to replace `<usage_type>` in the field names, make a request to the [Get usage attribution types API](https://docs.datadoghq.com/api/latest/usage-metering/#get-usage-attribution-types).
   --tag-breakdown-keys: string # Comma separated list of tag keys used to group usage. If no value is provided the usage will not be broken down by tags.  To see which tags are available, look for the value of `tag_config_source` in the API response.
   --next-record-id: string # List following results with a next_record_id provided in the previous query.
-  --include-descendants: string@bool-completer # Include child org usage in the response. Defaults to `true`. (default: true)
+  --include-descendants: oneof<nothing, bool> # Include child org usage in the response. Defaults to `true`. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6217,8 +6216,8 @@ export def "usage-summary GetUsageSummary" [
   --allow-errors(-e) # Return full response without error handling
   --start-month: string # Datetime in ISO-8601 format, UTC, precise to month: `[YYYY-MM]` for usage beginning in this month. Maximum of 15 months ago. (format: date-time)
   --end-month: string # Datetime in ISO-8601 format, UTC, precise to month: `[YYYY-MM]` for usage ending this month. (format: date-time)
-  --include-org-details: string@bool-completer # Include usage summaries for each sub-org.
-  --include-connected-accounts: string@bool-completer # Boolean to specify whether to include accounts connected to the current account as partner customers in the Datadog partner network program. Defaults to `false`. (default: false)
+  --include-org-details: oneof<nothing, bool> # Include usage summaries for each sub-org.
+  --include-connected-accounts: oneof<nothing, bool> # Boolean to specify whether to include accounts connected to the current account as partner customers in the Datadog partner network program. Defaults to `false`. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -6394,7 +6393,7 @@ export def "user CreateUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --access-role: string@access-role-completer # The access role of the user. Options are **st** (standard user), **adm** (admin user), or **ro** (read-only user). (nullable, e.g. ro)
-  --disabled: string@bool-completer # The new disabled status of the user. (e.g. false)
+  --disabled: oneof<nothing, bool> # The new disabled status of the user. (e.g. false)
   --email: string # The new email of the user. (e.g. test@datadoghq.com)
   --handle: string # The user handle, must be a valid email. (e.g. test@datadoghq.com)
   --name: string # The name of the user. (e.g. test user)
@@ -6468,7 +6467,7 @@ export def "user UpdateUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --access-role: string@access-role-completer # The access role of the user. Options are **st** (standard user), **adm** (admin user), or **ro** (read-only user). (nullable, e.g. ro)
-  --disabled: string@bool-completer # The new disabled status of the user. (e.g. false)
+  --disabled: oneof<nothing, bool> # The new disabled status of the user. (e.g. false)
   --email: string # The new email of the user. (e.g. test@datadoghq.com)
   --handle: string # The user handle, must be a valid email. (e.g. test@datadoghq.com)
   --name: string # The name of the user. (e.g. test user)

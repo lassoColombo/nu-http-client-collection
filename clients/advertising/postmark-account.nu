@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.postmarkapp.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -589,11 +588,11 @@ export def "servers createServer" [
   --InboundSpamThreshold: int
   --Name: string
   --OpenHookUrl: string
-  --PostFirstOpenOnly: string@bool-completer
-  --RawEmailEnabled: string@bool-completer
-  --SmtpApiActivated: string@bool-completer
+  --PostFirstOpenOnly: oneof<nothing, bool>
+  --RawEmailEnabled: oneof<nothing, bool>
+  --SmtpApiActivated: oneof<nothing, bool>
   --TrackLinks: string@TrackLinks-completer
-  --TrackOpens: string@bool-completer
+  --TrackOpens: oneof<nothing, bool>
 ]: any -> record<ApiTokens: list<string>, BounceHookUrl: string, ClickHookUrl: string, Color: string, DeliveryHookUrl: string, ID: int, InboundAddress: string, InboundDomain: string, InboundHash: string, InboundHookUrl: string, InboundSpamThreshold: int, Name: string, OpenHookUrl: string, PostFirstOpenOnly: bool, RawEmailEnabled: bool, ServerLink: string, SmtpApiActivated: bool, TrackLinks: string, TrackOpens: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -681,11 +680,11 @@ export def "servers editServerInformation" [
   --InboundSpamThreshold: int
   --Name: string
   --OpenHookUrl: string
-  --PostFirstOpenOnly: string@bool-completer
-  --RawEmailEnabled: string@bool-completer
-  --SmtpApiActivated: string@bool-completer
+  --PostFirstOpenOnly: oneof<nothing, bool>
+  --RawEmailEnabled: oneof<nothing, bool>
+  --SmtpApiActivated: oneof<nothing, bool>
   --TrackLinks: string@TrackLinks-completer
-  --TrackOpens: string@bool-completer
+  --TrackOpens: oneof<nothing, bool>
 ]: any -> record<ApiTokens: list<string>, BounceHookUrl: string, ClickHookUrl: string, Color: string, DeliveryHookUrl: string, ID: int, InboundAddress: string, InboundDomain: string, InboundHash: string, InboundHookUrl: string, InboundSpamThreshold: int, Name: string, OpenHookUrl: string, PostFirstOpenOnly: bool, RawEmailEnabled: bool, ServerLink: string, SmtpApiActivated: bool, TrackLinks: string, TrackOpens: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -714,7 +713,7 @@ export def "templates-push pushTemplates" [
   --allow-errors(-e) # Return full response without error handling
   --X-Postmark-Account-Token: string # The token associated with the Account on which this request will operate.
   --DestinationServerId: int
-  --PerformChanges: string@bool-completer
+  --PerformChanges: oneof<nothing, bool>
   --SourceServerId: int
 ]: any -> record<Templates: table<Action: string, Alias: string, Name: string, TemplateId: int>, TotalCount: int> {
   let input = $in

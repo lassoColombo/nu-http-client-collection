@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://verify.twilio.com"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -313,17 +312,17 @@ export def "services CreateService" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --CodeLength: int # The length of the verification code to generate. Must be an integer value between 4 and 10, inclusive.
-  --CustomCodeEnabled: string@bool-completer # Whether to allow sending verifications with a custom code instead of a randomly generated one. Not available for all customers.
+  --CustomCodeEnabled: oneof<nothing, bool> # Whether to allow sending verifications with a custom code instead of a randomly generated one. Not available for all customers.
   --DefaultTemplateSid: string # The default message [template](https://www.twilio.com/docs/verify/api/templates). Will be used for all SMS verifications unless explicitly overriden. SMS channel only.
-  --DoNotShareWarningEnabled: string@bool-completer # Whether to add a security warning at the end of an SMS verification body. Disabled by default and applies only to SMS. Example SMS body: `Your AppName verification code is: 1234. Don’t share this code with anyone; our employees will never ask for the code`
-  --DtmfInputRequired: string@bool-completer # Whether to ask the user to press a number before delivering the verify code in a phone call.
+  --DoNotShareWarningEnabled: oneof<nothing, bool> # Whether to add a security warning at the end of an SMS verification body. Disabled by default and applies only to SMS. Example SMS body: `Your AppName verification code is: 1234. Don’t share this code with anyone; our employees will never ask for the code`
+  --DtmfInputRequired: oneof<nothing, bool> # Whether to ask the user to press a number before delivering the verify code in a phone call.
   FriendlyName: string # A descriptive string that you create to describe the verification service. It can be up to 32 characters long. **This value should not contain PII.**
-  --LookupEnabled: string@bool-completer # Whether to perform a lookup with each verification started and return info about the phone number.
-  --Psd2Enabled: string@bool-completer # Whether to pass PSD2 transaction parameters when starting a verification.
+  --LookupEnabled: oneof<nothing, bool> # Whether to perform a lookup with each verification started and return info about the phone number.
+  --Psd2Enabled: oneof<nothing, bool> # Whether to pass PSD2 transaction parameters when starting a verification.
   --PushApnCredentialSid: string # Optional configuration for the Push factors. Set the APN Credential for this service. This will allow to send push notifications to iOS devices. See [Credential Resource](https://www.twilio.com/docs/notify/api/credential-resource)
   --PushFcmCredentialSid: string # Optional configuration for the Push factors. Set the FCM Credential for this service. This will allow to send push notifications to Android devices. See [Credential Resource](https://www.twilio.com/docs/notify/api/credential-resource)
-  --PushIncludeDate: string@bool-completer # Optional configuration for the Push factors. If true, include the date in the Challenge's response. Otherwise, the date is omitted from the response. See [Challenge](https://www.twilio.com/docs/verify/api/challenge) resource’s details parameter for more info. Default: false. **Deprecated** do not use this parameter. This timestamp value is the same one as the one found in `date_created`, please use that one instead.
-  --SkipSmsToLandlines: string@bool-completer # Whether to skip sending SMS verifications to landlines. Requires `lookup_enabled`.
+  --PushIncludeDate: oneof<nothing, bool> # Optional configuration for the Push factors. If true, include the date in the Challenge's response. Otherwise, the date is omitted from the response. See [Challenge](https://www.twilio.com/docs/verify/api/challenge) resource’s details parameter for more info. Default: false. **Deprecated** do not use this parameter. This timestamp value is the same one as the one found in `date_created`, please use that one instead.
+  --SkipSmsToLandlines: oneof<nothing, bool> # Whether to skip sending SMS verifications to landlines. Requires `lookup_enabled`.
   --TotpCodeLength: int # Optional configuration for the TOTP factors. Number of digits for generated TOTP codes. Must be between 3 and 8, inclusive. Defaults to 6
   --TotpIssuer: string # Optional configuration for the TOTP factors. Set TOTP Issuer for this service. This will allow to configure the issuer of the TOTP URI. Defaults to the service friendly name if not provided.
   --TotpSkew: int # Optional configuration for the TOTP factors. The number of time-steps, past and future, that are valid for validation of TOTP codes. Must be between 0 and 2, inclusive. Defaults to 1
@@ -1479,17 +1478,17 @@ export def "services UpdateService" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --CodeLength: int # The length of the verification code to generate. Must be an integer value between 4 and 10, inclusive.
-  --CustomCodeEnabled: string@bool-completer # Whether to allow sending verifications with a custom code instead of a randomly generated one. Not available for all customers.
+  --CustomCodeEnabled: oneof<nothing, bool> # Whether to allow sending verifications with a custom code instead of a randomly generated one. Not available for all customers.
   --DefaultTemplateSid: string # The default message [template](https://www.twilio.com/docs/verify/api/templates). Will be used for all SMS verifications unless explicitly overriden. SMS channel only.
-  --DoNotShareWarningEnabled: string@bool-completer # Whether to add a privacy warning at the end of an SMS. **Disabled by default and applies only for SMS.**
-  --DtmfInputRequired: string@bool-completer # Whether to ask the user to press a number before delivering the verify code in a phone call.
+  --DoNotShareWarningEnabled: oneof<nothing, bool> # Whether to add a privacy warning at the end of an SMS. **Disabled by default and applies only for SMS.**
+  --DtmfInputRequired: oneof<nothing, bool> # Whether to ask the user to press a number before delivering the verify code in a phone call.
   --FriendlyName: string # A descriptive string that you create to describe the verification service. It can be up to 32 characters long. **This value should not contain PII.**
-  --LookupEnabled: string@bool-completer # Whether to perform a lookup with each verification started and return info about the phone number.
-  --Psd2Enabled: string@bool-completer # Whether to pass PSD2 transaction parameters when starting a verification.
+  --LookupEnabled: oneof<nothing, bool> # Whether to perform a lookup with each verification started and return info about the phone number.
+  --Psd2Enabled: oneof<nothing, bool> # Whether to pass PSD2 transaction parameters when starting a verification.
   --PushApnCredentialSid: string # Optional configuration for the Push factors. Set the APN Credential for this service. This will allow to send push notifications to iOS devices. See [Credential Resource](https://www.twilio.com/docs/notify/api/credential-resource)
   --PushFcmCredentialSid: string # Optional configuration for the Push factors. Set the FCM Credential for this service. This will allow to send push notifications to Android devices. See [Credential Resource](https://www.twilio.com/docs/notify/api/credential-resource)
-  --PushIncludeDate: string@bool-completer # Optional configuration for the Push factors. If true, include the date in the Challenge's response. Otherwise, the date is omitted from the response. See [Challenge](https://www.twilio.com/docs/verify/api/challenge) resource’s details parameter for more info. Default: false. **Deprecated** do not use this parameter.
-  --SkipSmsToLandlines: string@bool-completer # Whether to skip sending SMS verifications to landlines. Requires `lookup_enabled`.
+  --PushIncludeDate: oneof<nothing, bool> # Optional configuration for the Push factors. If true, include the date in the Challenge's response. Otherwise, the date is omitted from the response. See [Challenge](https://www.twilio.com/docs/verify/api/challenge) resource’s details parameter for more info. Default: false. **Deprecated** do not use this parameter.
+  --SkipSmsToLandlines: oneof<nothing, bool> # Whether to skip sending SMS verifications to landlines. Requires `lookup_enabled`.
   --TotpCodeLength: int # Optional configuration for the TOTP factors. Number of digits for generated TOTP codes. Must be between 3 and 8, inclusive. Defaults to 6
   --TotpIssuer: string # Optional configuration for the TOTP factors. Set TOTP Issuer for this service. This will allow to configure the issuer of the TOTP URI.
   --TotpSkew: int # Optional configuration for the TOTP factors. The number of time-steps, past and future, that are valid for validation of TOTP codes. Must be between 0 and 2, inclusive. Defaults to 1

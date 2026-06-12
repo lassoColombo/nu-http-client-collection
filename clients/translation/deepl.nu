@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.deepl.com" "https://api-free.deepl.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -305,9 +304,9 @@ export def "translate translateText" [
   --source-lang: string # Language of the text to be translated. If this parameter is omitted, the API will attempt to detect the language of the text and translate it.  For the full list of supported source languages, see [supported languages](https://developers.deepl.com/docs/getting-started/supported-languages) or query the [`GET /v3/languages` endpoint](https://developers.deepl.com/api-reference/languages/retrieve-supported-languages-by-resource). (e.g. EN)
   target_lang: string # The language into which the text should be translated.  For the full list of supported target languages, see [supported languages](https://developers.deepl.com/docs/getting-started/supported-languages) or query the [`GET /v3/languages` endpoint](https://developers.deepl.com/api-reference/languages/retrieve-supported-languages-by-resource). (e.g. DE)
   --context: string # Additional context that can influence a translation but is not translated itself.  Characters included in the `context` parameter will not be counted toward billing. (e.g. This is context.)
-  --show-billed-characters: string@bool-completer # When true, the response will include the billed_characters parameter, giving the number of characters from the request that will be counted by DeepL for billing purposes.
+  --show-billed-characters: oneof<nothing, bool> # When true, the response will include the billed_characters parameter, giving the number of characters from the request that will be counted by DeepL for billing purposes.
   --split-sentences: string@split-sentences-completer # Sets whether the translation engine should first split the input into sentences.  Possible values are:   * 0 - no splitting at all, whole input is treated as one sentence   * 1 (default when tag_handling is not set to html) - splits on punctuation and on newlines   * nonewlines (default when tag_handling=html) - splits on punctuation only, ignoring newlines (default: 1, e.g. 1)
-  --preserve-formatting: string@bool-completer # Sets whether the translation engine should respect the original formatting, even if it would usually correct some aspects. (default: false)
+  --preserve-formatting: oneof<nothing, bool> # Sets whether the translation engine should respect the original formatting, even if it would usually correct some aspects. (default: false)
   --formality: string@formality-completer # Sets whether the translated text should lean towards formal or informal language. This feature is only available for certain target languages. Setting this parameter with a target language that does not support formality will fail, unless one of the `prefer_...` options are used. Possible options are:   * `default` (default)   * `more` - for a more formal language   * `less` - for a more informal language   * `prefer_more` - for a more formal language if available, otherwise fallback to default formality   * `prefer_less` - for a more informal language if available, otherwise fallback to default formality (default: default, e.g. prefer_more)
   --model-type: string@model-type-completer # Specifies which DeepL model should be used for translation.
   --glossary-id: string # Specify the glossary to use for the translation. **Important:** This requires the `source_lang` parameter to be set. The language pair of the glossary has to match the language pair of the request. (e.g. def3a26b-3e84-45b3-84ae-0c0aaf3525f7)
@@ -317,8 +316,8 @@ export def "translate translateText" [
   --custom-instructions: list # Specify a list of instructions to customize the translation behavior. Up to 10 custom instructions can be specified, each with a maximum of 300 characters.  **Important:**  The target language must be `de`, `en`, `es`, `fr`, `it`, `ja`, `ko`, `zh` or any variants of these languages.  **Note:** Any request with the `custom_instructions` parameter enabled will default to use the `quality_optimized` model type. Requests combining `custom_instructions` and `model_type: latency_optimized` will be rejected.
   --tag-handling: string@tag-handling-completer # Sets which kind of tags should be handled. Options currently available:  * `xml`  * `html` (e.g. html)
   --tag-handling-version: string@tag-handling-version-completer # Sets which version of the tag handling algorithm should be used. Options currently available: * `v1`: Traditional algorithm (currently the default, will become deprecated in the future). * `v2`: Improved algorithm released in October 2025 (will become the default in the future).
-  --outline-detection: string@bool-completer # Disable the automatic detection of XML structure by setting the `outline_detection` parameter to `false` and selecting the tags that should be considered structure tags. This will split sentences using the `splitting_tags` parameter. (default: true)
-  --enable-beta-languages: string@bool-completer # This parameter is maintained for backward compatibility and has no effect. (DEPRECATED, default: false)
+  --outline-detection: oneof<nothing, bool> # Disable the automatic detection of XML structure by setting the `outline_detection` parameter to `false` and selecting the tags that should be considered structure tags. This will split sentences using the `splitting_tags` parameter. (default: true)
+  --enable-beta-languages: oneof<nothing, bool> # This parameter is maintained for backward compatibility and has no effect. (DEPRECATED, default: false)
   --non-splitting-tags: list # Comma-separated list of XML tags which never split sentences.
   --splitting-tags: list # Comma-separated list of XML tags which always cause splits.
   --ignore-tags: list # Comma-separated list of XML tags that indicate text not to be translated.
@@ -357,7 +356,7 @@ export def "document translateDocument" [
   --style-id: string # Specify the [style rule list](/api-reference/style-rules) to use for the translation.  **Important:** The target language has to match the language of the style rule list. (e.g. 7ff9bfd6-cd85-4190-8503-d6215a321519)
   --translation-memory-id: string # A unique ID assigned to a translation memory.  **Note:** Requests with the `translation_memory_id` parameter must use the `quality_optimized` model type. Requests combining `translation_memory_id` and `model_type: latency_optimized` will be rejected. (format: uuid, e.g. a74d88fb-ed2a-4943-a664-a4512398b994)
   --translation-memory-threshold: int # The minimum matching percentage required for a translation memory segment to be applied (recommended to be 75% or higher). (default: 75, e.g. 75)
-  --enable-beta-languages: string@bool-completer # This parameter is maintained for backward compatibility and has no effect. (DEPRECATED, default: false)
+  --enable-beta-languages: oneof<nothing, bool> # This parameter is maintained for backward compatibility and has no effect. (DEPRECATED, default: false)
 ]: any -> record<document_id: string, document_key: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -946,7 +945,7 @@ export def "style-rules list" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # The index of the first page to return. Use with `page_size` to get the next page of rule lists (default: 0)
   --page-size: int # The maximum number of style rule lists to return. (default: 10)
-  --detailed: string@bool-completer # Determines if the rule list's `configured_rules` and `custom_instructions` should be included in the response body. (default: false)
+  --detailed: oneof<nothing, bool> # Determines if the rule list's `configured_rules` and `custom_instructions` should be included in the response body. (default: false)
 ]: nothing -> record<style_rules: table<style_id: string, name: string, creation_time: string, updated_time: string, language: string, version: int, configured_rules: record, custom_instructions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

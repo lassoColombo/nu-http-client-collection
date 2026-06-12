@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -127,7 +126,7 @@ export def "subscriptions-providers-microsoft-notification-hubs-check-namespace-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --api-version: string # Client Api Version.
-  --isAvailiable: string@bool-completer # True if the name is available and can be used to create new Namespace/NotificationHub. Otherwise false.
+  --isAvailiable: oneof<nothing, bool> # True if the name is available and can be used to create new Namespace/NotificationHub. Otherwise false.
   --location: string # Resource location
   name: string # Resource name
   --sku: any # The Sku description for a namespace — shape: {capacity?: int, family?: string, name: "Free"|"Basic"|"Standard", size?: string, tier?: string}
@@ -502,7 +501,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --api-version: string # Client Api Version.
-  --isAvailiable: string@bool-completer # True if the name is available and can be used to create new Namespace/NotificationHub. Otherwise false.
+  --isAvailiable: oneof<nothing, bool> # True if the name is available and can be used to create new Namespace/NotificationHub. Otherwise false.
   --location: string # Resource location
   name: string # Resource name
   --sku: any # The Sku description for a namespace — shape: {capacity?: int, family?: string, name: "Free"|"Basic"|"Standard", size?: string, tier?: string}

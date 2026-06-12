@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://test-api.service.hmrc.gov.uk" "https://api.service.hmrc.gov.uk"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -104,8 +103,8 @@ export def "individuals-person-itsa-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --futureYears: string@bool-completer # The status of future tax years. When set to true, the API will return the future tax years from the specified tax years if present. The default is false (e.g. false)
-  --history: string@bool-completer # The history status of the specified tax year. When set to true, the API will return history of the specified tax year (and future years if the futureYear flag is set to true). The default is false (e.g. false)
+  --futureYears: oneof<nothing, bool> # The status of future tax years. When set to true, the API will return the future tax years from the specified tax years if present. The default is false (e.g. false)
+  --history: oneof<nothing, bool> # The history status of the specified tax year. When set to true, the API will return history of the specified tax year (and future years if the futureYear flag is set to true). The default is false (e.g. false)
   --Accept: string@Accept-completer # Specifies the response format and the version of the API to be used.
   --Authorization: string # An OAuth 2.0 Bearer Token with the *read:self-assessment* scope.  (e.g. Bearer bb7fed3fe10dd235a2ccda3d50fb)
   --Gov-Test-Scenario: string # Only in sandbox environment. See Test Data table for all header values.  (e.g. -)

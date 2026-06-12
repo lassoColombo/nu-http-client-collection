@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://signer.us-east-1.amazonaws.com" "http://signer.us-east-2.amazonaws.com" "http://signer.us-west-1.amazonaws.com" "http://signer.us-west-2.amazonaws.com" "http://signer.us-gov-west-1.amazonaws.com" "http://signer.us-gov-east-1.amazonaws.com" "http://signer.ca-central-1.amazonaws.com" "http://signer.eu-north-1.amazonaws.com" "http://signer.eu-west-1.amazonaws.com" "http://signer.eu-west-2.amazonaws.com" "http://signer.eu-west-3.amazonaws.com" "http://signer.eu-central-1.amazonaws.com" "http://signer.eu-south-1.amazonaws.com" "http://signer.af-south-1.amazonaws.com" "http://signer.ap-northeast-1.amazonaws.com" "http://signer.ap-northeast-2.amazonaws.com" "http://signer.ap-northeast-3.amazonaws.com" "http://signer.ap-southeast-1.amazonaws.com" "http://signer.ap-southeast-2.amazonaws.com" "http://signer.ap-east-1.amazonaws.com" "http://signer.ap-south-1.amazonaws.com" "http://signer.sa-east-1.amazonaws.com" "http://signer.me-south-1.amazonaws.com" "https://signer.us-east-1.amazonaws.com" "https://signer.us-east-2.amazonaws.com" "https://signer.us-west-1.amazonaws.com" "https://signer.us-west-2.amazonaws.com" "https://signer.us-gov-west-1.amazonaws.com" "https://signer.us-gov-east-1.amazonaws.com" "https://signer.ca-central-1.amazonaws.com" "https://signer.eu-north-1.amazonaws.com" "https://signer.eu-west-1.amazonaws.com" "https://signer.eu-west-2.amazonaws.com" "https://signer.eu-west-3.amazonaws.com" "https://signer.eu-central-1.amazonaws.com" "https://signer.eu-south-1.amazonaws.com" "https://signer.af-south-1.amazonaws.com" "https://signer.ap-northeast-1.amazonaws.com" "https://signer.ap-northeast-2.amazonaws.com" "https://signer.ap-northeast-3.amazonaws.com" "https://signer.ap-southeast-1.amazonaws.com" "https://signer.ap-southeast-2.amazonaws.com" "https://signer.ap-east-1.amazonaws.com" "https://signer.ap-south-1.amazonaws.com" "https://signer.sa-east-1.amazonaws.com" "https://signer.me-south-1.amazonaws.com" "http://signer.cn-north-1.amazonaws.com.cn" "http://signer.cn-northwest-1.amazonaws.com.cn" "https://signer.cn-north-1.amazonaws.com.cn" "https://signer.cn-northwest-1.amazonaws.com.cn"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -349,7 +348,7 @@ export def "signing-jobs ListSigningJobs" [
   --requestedBy: string # The IAM principal that requested the signing job.
   --maxResults: int # Specifies the maximum number of items to return in the response. Use this parameter when paginating results. If additional items exist beyond the number you specify, the <code>nextToken</code> element is set in the response. Use the <code>nextToken</code> value in a subsequent request to retrieve additional items. 
   --nextToken: string # String for specifying the next set of paginated results to return. After you receive a response with truncated results, use this parameter in a subsequent request. Set it to the value of <code>nextToken</code> from the response that you just received.
-  --isRevoked: string@bool-completer # Filters results to return only signing jobs with revoked signatures.
+  --isRevoked: oneof<nothing, bool> # Filters results to return only signing jobs with revoked signatures.
   --signatureExpiresBefore: string # Filters results to return only signing jobs with signatures expiring before a specified timestamp. (format: date-time)
   --signatureExpiresAfter: string # Filters results to return only signing jobs with signatures expiring after a specified timestamp. (format: date-time)
   --jobInvoker: string # Filters results to return only signing jobs initiated by a specified IAM entity.
@@ -460,7 +459,7 @@ export def "signing-profiles ListSigningProfiles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeCanceled: string@bool-completer # Designates whether to include profiles with the status of <code>CANCELED</code>.
+  --includeCanceled: oneof<nothing, bool> # Designates whether to include profiles with the status of <code>CANCELED</code>.
   --maxResults: int # The maximum number of profiles to be returned.
   --nextToken: string # Value for specifying the next set of paginated results to return. After you receive a response with truncated results, use this parameter in a subsequent request. Set it to the value of <code>nextToken</code> from the response that you just received.
   --platformId: string # Filters results to return only signing jobs initiated for a specified signing platform.

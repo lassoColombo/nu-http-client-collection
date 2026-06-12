@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost:9011" "https://sandbox.fusionauth.io"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -2993,13 +2992,13 @@ export def "identity-provider-login identityProviderLoginWithId" [
   --connectionTestId: string
   --data: record
   --identityProviderId: string # format: uuid
-  --noLink: string@bool-completer
+  --noLink: oneof<nothing, bool>
   --encodedJWT: string
   --applicationId: string # format: uuid
   --ipAddress: string
   --metaData: record # shape: {data?: record, device?: record, resources?: list, scopes?: list}
-  --newDevice: string@bool-completer
-  --noJWT: string@bool-completer
+  --newDevice: oneof<nothing, bool>
+  --noJWT: oneof<nothing, bool>
 ]: any -> record<actions: table<actionId: string, actionerUserId: string, expiry: int, localizedName: string, localizedOption: string, localizedReason: string, name: string, option: string, reason: string, reasonCode: string>, changePasswordId: string, changePasswordReason: string, configurableMethods: list<string>, emailVerificationId: string, identityVerificationId: string, methods: table<authenticator: record, email: string, id: string, lastUsed: bool, method: string, mobilePhone: string, secret: string>, pendingIdPLinkId: string, refreshToken: string, refreshTokenId: string, registrationVerificationId: string, state: record, threatsDetected: list<any>, token: string, tokenExpirationInstant: int, trustToken: string, twoFactorId: string, twoFactorTrustId: string, user: record<preferredLanguages: list<string>, active: bool, birthDate: string, cleanSpeakId: string, data: record, email: string, expiry: int, firstName: string, fullName: string, imageUrl: string, insertInstant: int, lastName: string, legacyIdentifier: string, lastUpdateInstant: int, middleName: string, mobilePhone: string, parentEmail: string, phoneNumber: string, tenantId: string, timezone: string, twoFactor: record<methods: list, recoveryCodes: list>, memberships: list<record>, registrations: list<record>, identities: list<record>, breachedPasswordLastCheckedInstant: int, breachedPasswordStatus: string, connectorId: string, encryptionScheme: string, factor: int, id: string, lastLoginInstant: int, password: string, passwordChangeReason: string, passwordChangeRequired: bool, passwordLastUpdateInstant: int, salt: string, uniqueUsername: string, username: string, usernameStatus: string, verified: bool, verifiedInstant: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3086,8 +3085,8 @@ export def "identity-provider-start startIdentityProviderLoginWithId" [
   --applicationId: string # format: uuid
   --ipAddress: string
   --metaData: record # shape: {data?: record, device?: record, resources?: list, scopes?: list}
-  --newDevice: string@bool-completer
-  --noJWT: string@bool-completer
+  --newDevice: oneof<nothing, bool>
+  --noJWT: oneof<nothing, bool>
 ]: any -> record<code: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3675,13 +3674,13 @@ export def "jwt-reconcile reconcileJWTWithId" [
   --connectionTestId: string
   --data: record
   --identityProviderId: string # format: uuid
-  --noLink: string@bool-completer
+  --noLink: oneof<nothing, bool>
   --encodedJWT: string
   --applicationId: string # format: uuid
   --ipAddress: string
   --metaData: record # shape: {data?: record, device?: record, resources?: list, scopes?: list}
-  --newDevice: string@bool-completer
-  --noJWT: string@bool-completer
+  --newDevice: oneof<nothing, bool>
+  --noJWT: oneof<nothing, bool>
 ]: any -> record<actions: table<actionId: string, actionerUserId: string, expiry: int, localizedName: string, localizedOption: string, localizedReason: string, name: string, option: string, reason: string, reasonCode: string>, changePasswordId: string, changePasswordReason: string, configurableMethods: list<string>, emailVerificationId: string, identityVerificationId: string, methods: table<authenticator: record, email: string, id: string, lastUsed: bool, method: string, mobilePhone: string, secret: string>, pendingIdPLinkId: string, refreshToken: string, refreshTokenId: string, registrationVerificationId: string, state: record, threatsDetected: list<any>, token: string, tokenExpirationInstant: int, trustToken: string, twoFactorId: string, twoFactorTrustId: string, user: record<preferredLanguages: list<string>, active: bool, birthDate: string, cleanSpeakId: string, data: record, email: string, expiry: int, firstName: string, fullName: string, imageUrl: string, insertInstant: int, lastName: string, legacyIdentifier: string, lastUpdateInstant: int, middleName: string, mobilePhone: string, parentEmail: string, phoneNumber: string, tenantId: string, timezone: string, twoFactor: record<methods: list, recoveryCodes: list>, memberships: list<record>, registrations: list<record>, identities: list<record>, breachedPasswordLastCheckedInstant: int, breachedPasswordStatus: string, connectorId: string, encryptionScheme: string, factor: int, id: string, lastLoginInstant: int, password: string, passwordChangeReason: string, passwordChangeRequired: bool, passwordLastUpdateInstant: int, salt: string, uniqueUsername: string, username: string, usernameStatus: string, verified: bool, verifiedInstant: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4317,8 +4316,8 @@ export def "login loginWithId" [
   --applicationId: string # format: uuid
   --ipAddress: string
   --metaData: record # shape: {data?: record, device?: record, resources?: list, scopes?: list}
-  --newDevice: string@bool-completer
-  --noJWT: string@bool-completer
+  --newDevice: oneof<nothing, bool>
+  --noJWT: oneof<nothing, bool>
 ]: any -> record<actions: table<actionId: string, actionerUserId: string, expiry: int, localizedName: string, localizedOption: string, localizedReason: string, name: string, option: string, reason: string, reasonCode: string>, changePasswordId: string, changePasswordReason: string, configurableMethods: list<string>, emailVerificationId: string, identityVerificationId: string, methods: table<authenticator: record, email: string, id: string, lastUsed: bool, method: string, mobilePhone: string, secret: string>, pendingIdPLinkId: string, refreshToken: string, refreshTokenId: string, registrationVerificationId: string, state: record, threatsDetected: list<any>, token: string, tokenExpirationInstant: int, trustToken: string, twoFactorId: string, twoFactorTrustId: string, user: record<preferredLanguages: list<string>, active: bool, birthDate: string, cleanSpeakId: string, data: record, email: string, expiry: int, firstName: string, fullName: string, imageUrl: string, insertInstant: int, lastName: string, legacyIdentifier: string, lastUpdateInstant: int, middleName: string, mobilePhone: string, parentEmail: string, phoneNumber: string, tenantId: string, timezone: string, twoFactor: record<methods: list, recoveryCodes: list>, memberships: list<record>, registrations: list<record>, identities: list<record>, breachedPasswordLastCheckedInstant: int, breachedPasswordStatus: string, connectorId: string, encryptionScheme: string, factor: int, id: string, lastLoginInstant: int, password: string, passwordChangeReason: string, passwordChangeRequired: bool, passwordLastUpdateInstant: int, salt: string, uniqueUsername: string, username: string, usernameStatus: string, verified: bool, verifiedInstant: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4351,8 +4350,8 @@ export def "login loginPingWithRequestWithId" [
   --applicationId: string # format: uuid
   --ipAddress: string
   --metaData: record # shape: {data?: record, device?: record, resources?: list, scopes?: list}
-  --newDevice: string@bool-completer
-  --noJWT: string@bool-completer
+  --newDevice: oneof<nothing, bool>
+  --noJWT: oneof<nothing, bool>
 ]: any -> record<actions: table<actionId: string, actionerUserId: string, expiry: int, localizedName: string, localizedOption: string, localizedReason: string, name: string, option: string, reason: string, reasonCode: string>, changePasswordId: string, changePasswordReason: string, configurableMethods: list<string>, emailVerificationId: string, identityVerificationId: string, methods: table<authenticator: record, email: string, id: string, lastUsed: bool, method: string, mobilePhone: string, secret: string>, pendingIdPLinkId: string, refreshToken: string, refreshTokenId: string, registrationVerificationId: string, state: record, threatsDetected: list<any>, token: string, tokenExpirationInstant: int, trustToken: string, twoFactorId: string, twoFactorTrustId: string, user: record<preferredLanguages: list<string>, active: bool, birthDate: string, cleanSpeakId: string, data: record, email: string, expiry: int, firstName: string, fullName: string, imageUrl: string, insertInstant: int, lastName: string, legacyIdentifier: string, lastUpdateInstant: int, middleName: string, mobilePhone: string, parentEmail: string, phoneNumber: string, tenantId: string, timezone: string, twoFactor: record<methods: list, recoveryCodes: list>, memberships: list<record>, registrations: list<record>, identities: list<record>, breachedPasswordLastCheckedInstant: int, breachedPasswordStatus: string, connectorId: string, encryptionScheme: string, factor: int, id: string, lastLoginInstant: int, password: string, passwordChangeReason: string, passwordChangeRequired: bool, passwordLastUpdateInstant: int, salt: string, uniqueUsername: string, username: string, usernameStatus: string, verified: bool, verifiedInstant: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4410,7 +4409,7 @@ export def "logout createLogout" [
   --allow-errors(-e) # Return full response without error handling
   --global: string # When this value is set to true all the refresh tokens issued to the owner of the provided token will be revoked.
   --refreshToken: string # The refresh_token as a request parameter instead of coming in via a cookie. If provided this takes precedence over the cookie.
-  --global: string@bool-completer
+  --global: oneof<nothing, bool>
   --refreshToken: string
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
 ]: any -> any {
@@ -4795,8 +4794,8 @@ export def "passwordless-login passwordlessLoginWithId" [
   --applicationId: string # format: uuid
   --ipAddress: string
   --metaData: record # shape: {data?: record, device?: record, resources?: list, scopes?: list}
-  --newDevice: string@bool-completer
-  --noJWT: string@bool-completer
+  --newDevice: oneof<nothing, bool>
+  --noJWT: oneof<nothing, bool>
 ]: any -> record<actions: table<actionId: string, actionerUserId: string, expiry: int, localizedName: string, localizedOption: string, localizedReason: string, name: string, option: string, reason: string, reasonCode: string>, changePasswordId: string, changePasswordReason: string, configurableMethods: list<string>, emailVerificationId: string, identityVerificationId: string, methods: table<authenticator: record, email: string, id: string, lastUsed: bool, method: string, mobilePhone: string, secret: string>, pendingIdPLinkId: string, refreshToken: string, refreshTokenId: string, registrationVerificationId: string, state: record, threatsDetected: list<any>, token: string, tokenExpirationInstant: int, trustToken: string, twoFactorId: string, twoFactorTrustId: string, user: record<preferredLanguages: list<string>, active: bool, birthDate: string, cleanSpeakId: string, data: record, email: string, expiry: int, firstName: string, fullName: string, imageUrl: string, insertInstant: int, lastName: string, legacyIdentifier: string, lastUpdateInstant: int, middleName: string, mobilePhone: string, parentEmail: string, phoneNumber: string, tenantId: string, timezone: string, twoFactor: record<methods: list, recoveryCodes: list>, memberships: list<record>, registrations: list<record>, identities: list<record>, breachedPasswordLastCheckedInstant: int, breachedPasswordStatus: string, connectorId: string, encryptionScheme: string, factor: int, id: string, lastLoginInstant: int, password: string, passwordChangeReason: string, passwordChangeRequired: bool, passwordLastUpdateInstant: int, salt: string, uniqueUsername: string, username: string, usernameStatus: string, verified: bool, verifiedInstant: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5249,7 +5248,7 @@ export def "system-login-record-search searchLoginRecordsWithId" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --retrieveTotal: string@bool-completer
+  --retrieveTotal: oneof<nothing, bool>
   --search: record # shape: {applicationId?: string, end?: int, start?: int, userId?: string, numberOfResults?: int, orderBy?: string, startRow?: int}
 ]: any -> record<logins: table<applicationName: string, location: record, loginId: string, loginIdType: record, applicationId: string, instant: int, ipAddress: string, userId: string>, total: int> {
   let input = $in
@@ -5686,7 +5685,7 @@ export def "tenant delete" [
   --allow-errors(-e) # Return full response without error handling
   --async: string
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
-  --async: string@bool-completer
+  --async: oneof<nothing, bool>
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
 ]: any -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let input = $in
@@ -5991,14 +5990,14 @@ export def "two-factor-login twoFactorLoginWithId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --code: string
-  --trustComputer: string@bool-completer
+  --trustComputer: oneof<nothing, bool>
   --twoFactorId: string
   --userId: string # format: uuid
   --applicationId: string # format: uuid
   --ipAddress: string
   --metaData: record # shape: {data?: record, device?: record, resources?: list, scopes?: list}
-  --newDevice: string@bool-completer
-  --noJWT: string@bool-completer
+  --newDevice: oneof<nothing, bool>
+  --noJWT: oneof<nothing, bool>
 ]: any -> record<actions: table<actionId: string, actionerUserId: string, expiry: int, localizedName: string, localizedOption: string, localizedReason: string, name: string, option: string, reason: string, reasonCode: string>, changePasswordId: string, changePasswordReason: string, configurableMethods: list<string>, emailVerificationId: string, identityVerificationId: string, methods: table<authenticator: record, email: string, id: string, lastUsed: bool, method: string, mobilePhone: string, secret: string>, pendingIdPLinkId: string, refreshToken: string, refreshTokenId: string, registrationVerificationId: string, state: record, threatsDetected: list<any>, token: string, tokenExpirationInstant: int, trustToken: string, twoFactorId: string, twoFactorTrustId: string, user: record<preferredLanguages: list<string>, active: bool, birthDate: string, cleanSpeakId: string, data: record, email: string, expiry: int, firstName: string, fullName: string, imageUrl: string, insertInstant: int, lastName: string, legacyIdentifier: string, lastUpdateInstant: int, middleName: string, mobilePhone: string, parentEmail: string, phoneNumber: string, tenantId: string, timezone: string, twoFactor: record<methods: list, recoveryCodes: list>, memberships: list<record>, registrations: list<record>, identities: list<record>, breachedPasswordLastCheckedInstant: int, breachedPasswordStatus: string, connectorId: string, encryptionScheme: string, factor: int, id: string, lastLoginInstant: int, password: string, passwordChangeReason: string, passwordChangeRequired: bool, passwordLastUpdateInstant: int, salt: string, uniqueUsername: string, username: string, usernameStatus: string, verified: bool, verifiedInstant: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6199,10 +6198,10 @@ export def "user createUser" [
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --applicationId: string # format: uuid
   --currentPassword: string
-  --disableDomainBlock: string@bool-completer
-  --sendSetPasswordEmail: string@bool-completer
+  --disableDomainBlock: oneof<nothing, bool>
+  --sendSetPasswordEmail: oneof<nothing, bool>
   --sendSetPasswordIdentityType: string@sendSetPasswordIdentityType-completer # Used to indicate which identity type a password "request" might go to. It could be  used for send set passwords or send password resets.
-  --skipVerification: string@bool-completer
+  --skipVerification: oneof<nothing, bool>
   --user: record # The public, global view of a User. This object contains all global information about the user including birthdate, registration information  preferred languages, global attributes, etc. — shape: {preferredLanguages?: list, active?: bool, birthDate?: string, cleanSpeakId?: string, data?: record, email?: string, expiry?: int, firstName?: string, fullName?: string, imageUrl?: string, insertInstant?: int, lastName?: string, legacyIdentifier?: string, lastUpdateInstant?: int, middleName?: string, mobilePhone?: string, parentEmail?: string, phoneNumber?: string, tenantId?: string, timezone?: string, twoFactor?: record, memberships?: list, registrations?: list, identities?: list, breachedPasswordLastCheckedInstant?: int, breachedPasswordStatus?: "None"|"ExactMatch"|"SubAddressMatch"|"PasswordOnly"|"CommonPassword", connectorId?: string, encryptionScheme?: string, factor?: int, id?: string, lastLoginInstant?: int, password?: string, passwordChangeReason?: "Administrative"|"Breached"|"Expired"|"Validation", passwordChangeRequired?: bool, passwordLastUpdateInstant?: int, salt?: string, uniqueUsername?: string, username?: string, usernameStatus?: "ACTIVE"|"PENDING"|"REJECTED", verified?: bool, verifiedInstant?: int}
   --verificationIds: list
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
@@ -6637,7 +6636,7 @@ export def "user-action actionUserWithId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --action: record # shape: {actioneeUserId?: string, actionerUserId?: string, applicationIds?: list, comment?: string, emailUser?: bool, expiry?: int, notifyUser?: bool, option?: string, reasonId?: string, userActionId?: string}
-  --broadcast: string@bool-completer
+  --broadcast: oneof<nothing, bool>
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
 ]: any -> record<action: record<actioneeUserId: string, actionerUserId: string, applicationIds: list<string>, comment: string, emailUserOnEnd: bool, endEventSent: bool, expiry: int, history: record<historyItems: list>, id: string, insertInstant: int, localizedName: string, localizedOption: string, localizedReason: string, name: string, notifyUserOnEnd: bool, option: string, reason: string, reasonCode: string, userActionId: string>, actions: table<actioneeUserId: string, actionerUserId: string, applicationIds: list, comment: string, emailUserOnEnd: bool, endEventSent: bool, expiry: int, history: record, id: string, insertInstant: int, localizedName: string, localizedOption: string, localizedReason: string, name: string, notifyUserOnEnd: bool, option: string, reason: string, reasonCode: string, userActionId: string>> {
   let input = $in
@@ -6692,7 +6691,7 @@ export def "user-action cancelActionWithId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --action: record # shape: {actioneeUserId?: string, actionerUserId?: string, applicationIds?: list, comment?: string, emailUser?: bool, expiry?: int, notifyUser?: bool, option?: string, reasonId?: string, userActionId?: string}
-  --broadcast: string@bool-completer
+  --broadcast: oneof<nothing, bool>
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
 ]: any -> record<action: record<actioneeUserId: string, actionerUserId: string, applicationIds: list<string>, comment: string, emailUserOnEnd: bool, endEventSent: bool, expiry: int, history: record<historyItems: list>, id: string, insertInstant: int, localizedName: string, localizedOption: string, localizedReason: string, name: string, notifyUserOnEnd: bool, option: string, reason: string, reasonCode: string, userActionId: string>, actions: table<actioneeUserId: string, actionerUserId: string, applicationIds: list, comment: string, emailUserOnEnd: bool, endEventSent: bool, expiry: int, history: record, id: string, insertInstant: int, localizedName: string, localizedOption: string, localizedReason: string, name: string, notifyUserOnEnd: bool, option: string, reason: string, reasonCode: string, userActionId: string>> {
   let input = $in
@@ -6722,7 +6721,7 @@ export def "user-action modifyActionWithId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --action: record # shape: {actioneeUserId?: string, actionerUserId?: string, applicationIds?: list, comment?: string, emailUser?: bool, expiry?: int, notifyUser?: bool, option?: string, reasonId?: string, userActionId?: string}
-  --broadcast: string@bool-completer
+  --broadcast: oneof<nothing, bool>
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
 ]: any -> record<action: record<actioneeUserId: string, actionerUserId: string, applicationIds: list<string>, comment: string, emailUserOnEnd: bool, endEventSent: bool, expiry: int, history: record<historyItems: list>, id: string, insertInstant: int, localizedName: string, localizedOption: string, localizedReason: string, name: string, notifyUserOnEnd: bool, option: string, reason: string, reasonCode: string, userActionId: string>, actions: table<actioneeUserId: string, actionerUserId: string, applicationIds: list, comment: string, emailUserOnEnd: bool, endEventSent: bool, expiry: int, history: record, id: string, insertInstant: int, localizedName: string, localizedOption: string, localizedReason: string, name: string, notifyUserOnEnd: bool, option: string, reason: string, reasonCode: string, userActionId: string>> {
   let input = $in
@@ -6774,8 +6773,8 @@ export def "user-bulk delete" [
   --userIds: string # The ids of the users to deactivate.
   --dryRun: string
   --hardDelete: string
-  --dryRun: string@bool-completer
-  --hardDelete: string@bool-completer
+  --dryRun: oneof<nothing, bool>
+  --hardDelete: oneof<nothing, bool>
   --limit: int
   --body-query: string
   --queryString: string
@@ -7399,8 +7398,8 @@ export def "user-forgot-password forgotPasswordWithId" [
   --changePasswordId: string
   --loginId: string
   --loginIdTypes: list
-  --sendForgotPasswordEmail: string@bool-completer
-  --sendForgotPasswordMessage: string@bool-completer
+  --sendForgotPasswordEmail: oneof<nothing, bool>
+  --sendForgotPasswordMessage: oneof<nothing, bool>
   --state: record
   --email: string
   --username: string
@@ -7434,7 +7433,7 @@ export def "user-import importUsersWithId" [
   --encryptionScheme: string
   --factor: int
   --users: list # item shape: {preferredLanguages?: list, active?: bool, birthDate?: string, cleanSpeakId?: string, data?: record, email?: string, expiry?: int, firstName?: string, fullName?: string, imageUrl?: string, insertInstant?: int, lastName?: string, legacyIdentifier?: string, lastUpdateInstant?: int, middleName?: string, mobilePhone?: string, parentEmail?: string, phoneNumber?: string, tenantId?: string, timezone?: string, twoFactor?: record, memberships?: list, registrations?: list, identities?: list, breachedPasswordLastCheckedInstant?: int, breachedPasswordStatus?: "None"|"ExactMatch"|"SubAddressMatch"|"PasswordOnly"|"CommonPassword", connectorId?: string, encryptionScheme?: string, factor?: int, id?: string, lastLoginInstant?: int, password?: string, passwordChangeReason?: "Administrative"|"Breached"|"Expired"|"Validation", passwordChangeRequired?: bool, passwordLastUpdateInstant?: int, salt?: string, uniqueUsername?: string, username?: string, usernameStatus?: "ACTIVE"|"PENDING"|"REJECTED", verified?: bool, verifiedInstant?: int}
-  --validateDbConstraints: string@bool-completer
+  --validateDbConstraints: oneof<nothing, bool>
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
 ]: any -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let input = $in
@@ -7487,7 +7486,7 @@ export def "user-refresh-token-import importRefreshTokensWithId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --refreshTokens: list # item shape: {applicationId?: string, data?: record, id?: string, insertInstant?: int, metaData?: record, startInstant?: int, tenantId?: string, token?: string, userId?: string}
-  --validateDbConstraints: string@bool-completer
+  --validateDbConstraints: oneof<nothing, bool>
 ]: any -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7516,13 +7515,13 @@ export def "user-registration register" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
-  --disableDomainBlock: string@bool-completer
-  --generateAuthenticationToken: string@bool-completer
+  --disableDomainBlock: oneof<nothing, bool>
+  --generateAuthenticationToken: oneof<nothing, bool>
   --registration: record # User registration information for a single application. — shape: {data?: record, preferredLanguages?: list, tokens?: record, applicationId?: string, authenticationToken?: string, cleanSpeakId?: string, id?: string, insertInstant?: int, lastLoginInstant?: int, lastUpdateInstant?: int, roles?: list, timezone?: string, username?: string, usernameStatus?: "ACTIVE"|"PENDING"|"REJECTED", verified?: bool, verifiedInstant?: int}
-  --sendSetPasswordEmail: string@bool-completer
+  --sendSetPasswordEmail: oneof<nothing, bool>
   --sendSetPasswordIdentityType: string@sendSetPasswordIdentityType-completer # Used to indicate which identity type a password "request" might go to. It could be  used for send set passwords or send password resets.
-  --skipRegistrationVerification: string@bool-completer
-  --skipVerification: string@bool-completer
+  --skipRegistrationVerification: oneof<nothing, bool>
+  --skipVerification: oneof<nothing, bool>
   --user: record # The public, global view of a User. This object contains all global information about the user including birthdate, registration information  preferred languages, global attributes, etc. — shape: {preferredLanguages?: list, active?: bool, birthDate?: string, cleanSpeakId?: string, data?: record, email?: string, expiry?: int, firstName?: string, fullName?: string, imageUrl?: string, insertInstant?: int, lastName?: string, legacyIdentifier?: string, lastUpdateInstant?: int, middleName?: string, mobilePhone?: string, parentEmail?: string, phoneNumber?: string, tenantId?: string, timezone?: string, twoFactor?: record, memberships?: list, registrations?: list, identities?: list, breachedPasswordLastCheckedInstant?: int, breachedPasswordStatus?: "None"|"ExactMatch"|"SubAddressMatch"|"PasswordOnly"|"CommonPassword", connectorId?: string, encryptionScheme?: string, factor?: int, id?: string, lastLoginInstant?: int, password?: string, passwordChangeReason?: "Administrative"|"Breached"|"Expired"|"Validation", passwordChangeRequired?: bool, passwordLastUpdateInstant?: int, salt?: string, uniqueUsername?: string, username?: string, usernameStatus?: "ACTIVE"|"PENDING"|"REJECTED", verified?: bool, verifiedInstant?: int}
   --verificationIds: list
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
@@ -7557,13 +7556,13 @@ export def "user-registration patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
-  --disableDomainBlock: string@bool-completer
-  --generateAuthenticationToken: string@bool-completer
+  --disableDomainBlock: oneof<nothing, bool>
+  --generateAuthenticationToken: oneof<nothing, bool>
   --registration: record # User registration information for a single application. — shape: {data?: record, preferredLanguages?: list, tokens?: record, applicationId?: string, authenticationToken?: string, cleanSpeakId?: string, id?: string, insertInstant?: int, lastLoginInstant?: int, lastUpdateInstant?: int, roles?: list, timezone?: string, username?: string, usernameStatus?: "ACTIVE"|"PENDING"|"REJECTED", verified?: bool, verifiedInstant?: int}
-  --sendSetPasswordEmail: string@bool-completer
+  --sendSetPasswordEmail: oneof<nothing, bool>
   --sendSetPasswordIdentityType: string@sendSetPasswordIdentityType-completer # Used to indicate which identity type a password "request" might go to. It could be  used for send set passwords or send password resets.
-  --skipRegistrationVerification: string@bool-completer
-  --skipVerification: string@bool-completer
+  --skipRegistrationVerification: oneof<nothing, bool>
+  --skipVerification: oneof<nothing, bool>
   --user: record # The public, global view of a User. This object contains all global information about the user including birthdate, registration information  preferred languages, global attributes, etc. — shape: {preferredLanguages?: list, active?: bool, birthDate?: string, cleanSpeakId?: string, data?: record, email?: string, expiry?: int, firstName?: string, fullName?: string, imageUrl?: string, insertInstant?: int, lastName?: string, legacyIdentifier?: string, lastUpdateInstant?: int, middleName?: string, mobilePhone?: string, parentEmail?: string, phoneNumber?: string, tenantId?: string, timezone?: string, twoFactor?: record, memberships?: list, registrations?: list, identities?: list, breachedPasswordLastCheckedInstant?: int, breachedPasswordStatus?: "None"|"ExactMatch"|"SubAddressMatch"|"PasswordOnly"|"CommonPassword", connectorId?: string, encryptionScheme?: string, factor?: int, id?: string, lastLoginInstant?: int, password?: string, passwordChangeReason?: "Administrative"|"Breached"|"Expired"|"Validation", passwordChangeRequired?: bool, passwordLastUpdateInstant?: int, salt?: string, uniqueUsername?: string, username?: string, usernameStatus?: "ACTIVE"|"PENDING"|"REJECTED", verified?: bool, verifiedInstant?: int}
   --verificationIds: list
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
@@ -7598,13 +7597,13 @@ export def "user-registration registerWithId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
-  --disableDomainBlock: string@bool-completer
-  --generateAuthenticationToken: string@bool-completer
+  --disableDomainBlock: oneof<nothing, bool>
+  --generateAuthenticationToken: oneof<nothing, bool>
   --registration: record # User registration information for a single application. — shape: {data?: record, preferredLanguages?: list, tokens?: record, applicationId?: string, authenticationToken?: string, cleanSpeakId?: string, id?: string, insertInstant?: int, lastLoginInstant?: int, lastUpdateInstant?: int, roles?: list, timezone?: string, username?: string, usernameStatus?: "ACTIVE"|"PENDING"|"REJECTED", verified?: bool, verifiedInstant?: int}
-  --sendSetPasswordEmail: string@bool-completer
+  --sendSetPasswordEmail: oneof<nothing, bool>
   --sendSetPasswordIdentityType: string@sendSetPasswordIdentityType-completer # Used to indicate which identity type a password "request" might go to. It could be  used for send set passwords or send password resets.
-  --skipRegistrationVerification: string@bool-completer
-  --skipVerification: string@bool-completer
+  --skipRegistrationVerification: oneof<nothing, bool>
+  --skipVerification: oneof<nothing, bool>
   --user: record # The public, global view of a User. This object contains all global information about the user including birthdate, registration information  preferred languages, global attributes, etc. — shape: {preferredLanguages?: list, active?: bool, birthDate?: string, cleanSpeakId?: string, data?: record, email?: string, expiry?: int, firstName?: string, fullName?: string, imageUrl?: string, insertInstant?: int, lastName?: string, legacyIdentifier?: string, lastUpdateInstant?: int, middleName?: string, mobilePhone?: string, parentEmail?: string, phoneNumber?: string, tenantId?: string, timezone?: string, twoFactor?: record, memberships?: list, registrations?: list, identities?: list, breachedPasswordLastCheckedInstant?: int, breachedPasswordStatus?: "None"|"ExactMatch"|"SubAddressMatch"|"PasswordOnly"|"CommonPassword", connectorId?: string, encryptionScheme?: string, factor?: int, id?: string, lastLoginInstant?: int, password?: string, passwordChangeReason?: "Administrative"|"Breached"|"Expired"|"Validation", passwordChangeRequired?: bool, passwordLastUpdateInstant?: int, salt?: string, uniqueUsername?: string, username?: string, usernameStatus?: "ACTIVE"|"PENDING"|"REJECTED", verified?: bool, verifiedInstant?: int}
   --verificationIds: list
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
@@ -7639,13 +7638,13 @@ export def "user-registration updateRegistrationWithId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
-  --disableDomainBlock: string@bool-completer
-  --generateAuthenticationToken: string@bool-completer
+  --disableDomainBlock: oneof<nothing, bool>
+  --generateAuthenticationToken: oneof<nothing, bool>
   --registration: record # User registration information for a single application. — shape: {data?: record, preferredLanguages?: list, tokens?: record, applicationId?: string, authenticationToken?: string, cleanSpeakId?: string, id?: string, insertInstant?: int, lastLoginInstant?: int, lastUpdateInstant?: int, roles?: list, timezone?: string, username?: string, usernameStatus?: "ACTIVE"|"PENDING"|"REJECTED", verified?: bool, verifiedInstant?: int}
-  --sendSetPasswordEmail: string@bool-completer
+  --sendSetPasswordEmail: oneof<nothing, bool>
   --sendSetPasswordIdentityType: string@sendSetPasswordIdentityType-completer # Used to indicate which identity type a password "request" might go to. It could be  used for send set passwords or send password resets.
-  --skipRegistrationVerification: string@bool-completer
-  --skipVerification: string@bool-completer
+  --skipRegistrationVerification: oneof<nothing, bool>
+  --skipVerification: oneof<nothing, bool>
   --user: record # The public, global view of a User. This object contains all global information about the user including birthdate, registration information  preferred languages, global attributes, etc. — shape: {preferredLanguages?: list, active?: bool, birthDate?: string, cleanSpeakId?: string, data?: record, email?: string, expiry?: int, firstName?: string, fullName?: string, imageUrl?: string, insertInstant?: int, lastName?: string, legacyIdentifier?: string, lastUpdateInstant?: int, middleName?: string, mobilePhone?: string, parentEmail?: string, phoneNumber?: string, tenantId?: string, timezone?: string, twoFactor?: record, memberships?: list, registrations?: list, identities?: list, breachedPasswordLastCheckedInstant?: int, breachedPasswordStatus?: "None"|"ExactMatch"|"SubAddressMatch"|"PasswordOnly"|"CommonPassword", connectorId?: string, encryptionScheme?: string, factor?: int, id?: string, lastLoginInstant?: int, password?: string, passwordChangeReason?: "Administrative"|"Breached"|"Expired"|"Validation", passwordChangeRequired?: bool, passwordLastUpdateInstant?: int, salt?: string, uniqueUsername?: string, username?: string, usernameStatus?: "ACTIVE"|"PENDING"|"REJECTED", verified?: bool, verifiedInstant?: int}
   --verificationIds: list
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
@@ -8008,10 +8007,10 @@ export def "user createUserWithId" [
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --applicationId: string # format: uuid
   --currentPassword: string
-  --disableDomainBlock: string@bool-completer
-  --sendSetPasswordEmail: string@bool-completer
+  --disableDomainBlock: oneof<nothing, bool>
+  --sendSetPasswordEmail: oneof<nothing, bool>
   --sendSetPasswordIdentityType: string@sendSetPasswordIdentityType-completer # Used to indicate which identity type a password "request" might go to. It could be  used for send set passwords or send password resets.
-  --skipVerification: string@bool-completer
+  --skipVerification: oneof<nothing, bool>
   --user: record # The public, global view of a User. This object contains all global information about the user including birthdate, registration information  preferred languages, global attributes, etc. — shape: {preferredLanguages?: list, active?: bool, birthDate?: string, cleanSpeakId?: string, data?: record, email?: string, expiry?: int, firstName?: string, fullName?: string, imageUrl?: string, insertInstant?: int, lastName?: string, legacyIdentifier?: string, lastUpdateInstant?: int, middleName?: string, mobilePhone?: string, parentEmail?: string, phoneNumber?: string, tenantId?: string, timezone?: string, twoFactor?: record, memberships?: list, registrations?: list, identities?: list, breachedPasswordLastCheckedInstant?: int, breachedPasswordStatus?: "None"|"ExactMatch"|"SubAddressMatch"|"PasswordOnly"|"CommonPassword", connectorId?: string, encryptionScheme?: string, factor?: int, id?: string, lastLoginInstant?: int, password?: string, passwordChangeReason?: "Administrative"|"Breached"|"Expired"|"Validation", passwordChangeRequired?: bool, passwordLastUpdateInstant?: int, salt?: string, uniqueUsername?: string, username?: string, usernameStatus?: "ACTIVE"|"PENDING"|"REJECTED", verified?: bool, verifiedInstant?: int}
   --verificationIds: list
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
@@ -8045,7 +8044,7 @@ export def "user delete" [
   --allow-errors(-e) # Return full response without error handling
   --hardDelete: string
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
-  --hardDelete: string@bool-completer
+  --hardDelete: oneof<nothing, bool>
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
 ]: any -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let input = $in
@@ -8080,10 +8079,10 @@ export def "user patch" [
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --applicationId: string # format: uuid
   --currentPassword: string
-  --disableDomainBlock: string@bool-completer
-  --sendSetPasswordEmail: string@bool-completer
+  --disableDomainBlock: oneof<nothing, bool>
+  --sendSetPasswordEmail: oneof<nothing, bool>
   --sendSetPasswordIdentityType: string@sendSetPasswordIdentityType-completer # Used to indicate which identity type a password "request" might go to. It could be  used for send set passwords or send password resets.
-  --skipVerification: string@bool-completer
+  --skipVerification: oneof<nothing, bool>
   --user: record # The public, global view of a User. This object contains all global information about the user including birthdate, registration information  preferred languages, global attributes, etc. — shape: {preferredLanguages?: list, active?: bool, birthDate?: string, cleanSpeakId?: string, data?: record, email?: string, expiry?: int, firstName?: string, fullName?: string, imageUrl?: string, insertInstant?: int, lastName?: string, legacyIdentifier?: string, lastUpdateInstant?: int, middleName?: string, mobilePhone?: string, parentEmail?: string, phoneNumber?: string, tenantId?: string, timezone?: string, twoFactor?: record, memberships?: list, registrations?: list, identities?: list, breachedPasswordLastCheckedInstant?: int, breachedPasswordStatus?: "None"|"ExactMatch"|"SubAddressMatch"|"PasswordOnly"|"CommonPassword", connectorId?: string, encryptionScheme?: string, factor?: int, id?: string, lastLoginInstant?: int, password?: string, passwordChangeReason?: "Administrative"|"Breached"|"Expired"|"Validation", passwordChangeRequired?: bool, passwordLastUpdateInstant?: int, salt?: string, uniqueUsername?: string, username?: string, usernameStatus?: "ACTIVE"|"PENDING"|"REJECTED", verified?: bool, verifiedInstant?: int}
   --verificationIds: list
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
@@ -8120,10 +8119,10 @@ export def "user updateUserWithId" [
   --X-FusionAuth-TenantId: string # The unique Id of the tenant used to scope this API request. Only required when there is more than one tenant and the API key is not tenant-scoped.
   --applicationId: string # format: uuid
   --currentPassword: string
-  --disableDomainBlock: string@bool-completer
-  --sendSetPasswordEmail: string@bool-completer
+  --disableDomainBlock: oneof<nothing, bool>
+  --sendSetPasswordEmail: oneof<nothing, bool>
   --sendSetPasswordIdentityType: string@sendSetPasswordIdentityType-completer # Used to indicate which identity type a password "request" might go to. It could be  used for send set passwords or send password resets.
-  --skipVerification: string@bool-completer
+  --skipVerification: oneof<nothing, bool>
   --user: record # The public, global view of a User. This object contains all global information about the user including birthdate, registration information  preferred languages, global attributes, etc. — shape: {preferredLanguages?: list, active?: bool, birthDate?: string, cleanSpeakId?: string, data?: record, email?: string, expiry?: int, firstName?: string, fullName?: string, imageUrl?: string, insertInstant?: int, lastName?: string, legacyIdentifier?: string, lastUpdateInstant?: int, middleName?: string, mobilePhone?: string, parentEmail?: string, phoneNumber?: string, tenantId?: string, timezone?: string, twoFactor?: record, memberships?: list, registrations?: list, identities?: list, breachedPasswordLastCheckedInstant?: int, breachedPasswordStatus?: "None"|"ExactMatch"|"SubAddressMatch"|"PasswordOnly"|"CommonPassword", connectorId?: string, encryptionScheme?: string, factor?: int, id?: string, lastLoginInstant?: int, password?: string, passwordChangeReason?: "Administrative"|"Breached"|"Expired"|"Validation", passwordChangeRequired?: bool, passwordLastUpdateInstant?: int, salt?: string, uniqueUsername?: string, username?: string, usernameStatus?: "ACTIVE"|"PENDING"|"REJECTED", verified?: bool, verifiedInstant?: int}
   --verificationIds: list
   --eventInfo: record # Information about a user event (login, register, etc) that helps identify the source of the event (location, device type, OS, etc). — shape: {data?: record, deviceDescription?: string, deviceName?: string, deviceType?: string, ipAddress?: string, location?: record, os?: string, userAgent?: string}
@@ -8234,8 +8233,8 @@ export def "webauthn-assert completeWebAuthnAssertionWithId" [
   --applicationId: string # format: uuid
   --ipAddress: string
   --metaData: record # shape: {data?: record, device?: record, resources?: list, scopes?: list}
-  --newDevice: string@bool-completer
-  --noJWT: string@bool-completer
+  --newDevice: oneof<nothing, bool>
+  --noJWT: oneof<nothing, bool>
 ]: any -> record<credential: record<algorithm: string, attestationType: string, authenticatorSupportsUserVerification: bool, credentialId: string, data: record, discoverable: bool, displayName: string, id: string, insertInstant: int, lastUseInstant: int, name: string, publicKey: string, relyingPartyId: string, signCount: int, tenantId: string, transports: list<string>, userAgent: string, userId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8262,7 +8261,7 @@ export def "webauthn-import importWebAuthnCredentialWithId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --credentials: list # item shape: {algorithm?: "ES256"|"ES384"|"ES512"|"RS256"|"RS384"|"RS512"|"PS256"|"PS384"|"PS512", attestationType?: "basic"|"self"|"attestationCa"|"anonymizationCa"|"none", authenticatorSupportsUserVerification?: bool, credentialId?: string, data?: record, discoverable?: bool, displayName?: string, id?: string, insertInstant?: int, lastUseInstant?: int, name?: string, publicKey?: string, relyingPartyId?: string, signCount?: int, tenantId?: string, transports?: list, userAgent?: string, userId?: string}
-  --validateDbConstraints: string@bool-completer
+  --validateDbConstraints: oneof<nothing, bool>
 ]: any -> record<fieldErrors: table<code: string, data: record, message: string>, generalErrors: table<code: string, data: record, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8296,8 +8295,8 @@ export def "webauthn-login completeWebAuthnLoginWithId" [
   --applicationId: string # format: uuid
   --ipAddress: string
   --metaData: record # shape: {data?: record, device?: record, resources?: list, scopes?: list}
-  --newDevice: string@bool-completer
-  --noJWT: string@bool-completer
+  --newDevice: oneof<nothing, bool>
+  --noJWT: oneof<nothing, bool>
 ]: any -> record<actions: table<actionId: string, actionerUserId: string, expiry: int, localizedName: string, localizedOption: string, localizedReason: string, name: string, option: string, reason: string, reasonCode: string>, changePasswordId: string, changePasswordReason: string, configurableMethods: list<string>, emailVerificationId: string, identityVerificationId: string, methods: table<authenticator: record, email: string, id: string, lastUsed: bool, method: string, mobilePhone: string, secret: string>, pendingIdPLinkId: string, refreshToken: string, refreshTokenId: string, registrationVerificationId: string, state: record, threatsDetected: list<any>, token: string, tokenExpirationInstant: int, trustToken: string, twoFactorId: string, twoFactorTrustId: string, user: record<preferredLanguages: list<string>, active: bool, birthDate: string, cleanSpeakId: string, data: record, email: string, expiry: int, firstName: string, fullName: string, imageUrl: string, insertInstant: int, lastName: string, legacyIdentifier: string, lastUpdateInstant: int, middleName: string, mobilePhone: string, parentEmail: string, phoneNumber: string, tenantId: string, timezone: string, twoFactor: record<methods: list, recoveryCodes: list>, memberships: list<record>, registrations: list<record>, identities: list<record>, breachedPasswordLastCheckedInstant: int, breachedPasswordStatus: string, connectorId: string, encryptionScheme: string, factor: int, id: string, lastLoginInstant: int, password: string, passwordChangeReason: string, passwordChangeRequired: bool, passwordLastUpdateInstant: int, salt: string, uniqueUsername: string, username: string, usernameStatus: string, verified: bool, verifiedInstant: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

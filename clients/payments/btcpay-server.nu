@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer" "basic"] }
 
@@ -588,9 +587,9 @@ export def "api-keys-authorize Authorize" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --permissions: list # The permissions to request. (See API Key authentication) (nullable)
-  --strict: string@bool-completer # If permissions are specified, and strict is set to false, it will allow the user to reject some of permissions the application is requesting. (nullable, default: true)
+  --strict: oneof<nothing, bool> # If permissions are specified, and strict is set to false, it will allow the user to reject some of permissions the application is requesting. (nullable, default: true)
   --applicationIdentifier: string # If specified, BTCPay Server will check if there is an existing API key associated with the user that also has this application identifier, redirect host AND the permissions required match(takes selectiveStores and strict into account). `applicationIdentifier` is ignored if redirect is not specified. (nullable)
-  --selectiveStores: string@bool-completer # If the application is requesting the CanModifyStoreSettings permission and selectiveStores is set to true, this allows the user to only grant permissions to selected stores under the user's control. (nullable, default: false)
+  --selectiveStores: oneof<nothing, bool> # If the application is requesting the CanModifyStoreSettings permission and selectiveStores is set to true, this allows the user to only grant permissions to selected stores under the user's control. (nullable, default: false)
   --applicationName: string # The name of your application (nullable)
   --redirect: string # The url to redirect to after the user consents, with the query parameters appended to it: permissions, user-id, api-key. If not specified, user is redirected to their API Key list. (nullable, format: url)
 ]: nothing -> any {
@@ -731,7 +730,7 @@ export def "stores-invoices GetInvoices" [
   --textSearch: string # A term that can help locating specific invoices.
   --status: string@status-completer # Array of statuses of invoices to be fetched
   --endDate: float # End date of the period to retrieve invoices (format: int32, e.g. 1592312018)
-  --includePaymentMethods: string@bool-completer # Includes payment methods available to the response (default: false)
+  --includePaymentMethods: oneof<nothing, bool> # Includes payment methods available to the response (default: false)
   --take: float # Number of records returned in response (nullable)
   --skip: float # Number of records to skip (nullable)
   --startDate: float # Start date of the period to retrieve invoices (format: int32, e.g. 1592312018)
@@ -867,8 +866,8 @@ export def "stores-invoices-payment-methods GetInvoicePaymentMethods" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeSensitive: string@bool-completer # If `true`, `additionalData` might include sensitive data (such as xpub). Requires the permission `btcpay.store.canmodifystoresettings`. (default: false)
-  --onlyAccountedPayments: string@bool-completer # If default or true, only returns payments which are accounted (in Bitcoin, this mean not returning RBF'd or double spent payments) (default: true)
+  --includeSensitive: oneof<nothing, bool> # If `true`, `additionalData` might include sensitive data (such as xpub). Requires the permission `btcpay.store.canmodifystoresettings`. (default: false)
+  --onlyAccountedPayments: oneof<nothing, bool> # If default or true, only returns payments which are accounted (in Bitcoin, this mean not returning RBF'd or double spent payments) (default: true)
 ]: nothing -> table<paymentMethodId: string, currency: string, destination: string, paymentLink: string, rate: string, paymentMethodPaid: string, totalPaid: string, due: string, amount: string, paymentMethodFee: string, payments: list<record>, activated: bool, additionalData: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1263,7 +1262,7 @@ export def "server-lightning-invoices GetInvoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --pendingOnly: string@bool-completer # Limit to pending invoices only (nullable, default: false)
+  --pendingOnly: oneof<nothing, bool> # Limit to pending invoices only (nullable, default: false)
   --offsetIndex: float # The index of an invoice that will be used as the start of the list (nullable, default: 0)
 ]: nothing -> table<id: string, status: string, BOLT11: string, paidAt: float, expiresAt: record, amount: string, amountReceived: string, paymentHash: string, preimage: string, customRecords: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1290,9 +1289,9 @@ export def "server-lightning-invoices CreateInvoice" [
   --allow-errors(-e) # Return full response without error handling
   --amount: string # Amount wrapped in a string, represented in a millisatoshi string. (1000 millisatoshi = 1 satoshi)
   --description: string # Description of the invoice in the BOLT11 (nullable)
-  --descriptionHashOnly: string@bool-completer # If `descriptionHashOnly` is `true` (default is `false`), then the BOLT11 returned contains a hash of the `description`, rather than the `description`, itself. This allows for much longer descriptions, but they must be communicated via some other mechanism. (nullable, default: false)
+  --descriptionHashOnly: oneof<nothing, bool> # If `descriptionHashOnly` is `true` (default is `false`), then the BOLT11 returned contains a hash of the `description`, rather than the `description`, itself. This allows for much longer descriptions, but they must be communicated via some other mechanism. (nullable, default: false)
   --expiry: any # Expiration time in seconds
-  --privateRouteHints: string@bool-completer # True if the invoice should include private route hints (nullable, default: false)
+  --privateRouteHints: oneof<nothing, bool> # True if the invoice should include private route hints (nullable, default: false)
 ]: any -> record<id: string, status: string, BOLT11: string, paidAt: float, expiresAt: record, amount: string, amountReceived: string, paymentHash: string, preimage: string, customRecords: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1318,7 +1317,7 @@ export def "server-lightning-payments GetPayments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includePending: string@bool-completer # Also include pending payments (nullable, default: false)
+  --includePending: oneof<nothing, bool> # Also include pending payments (nullable, default: false)
   --offsetIndex: float # The index of a payment that will be used as the start of the list (nullable, default: 0)
 ]: nothing -> table<id: string, status: string, BOLT11: string, paymentHash: string, preimage: string, createdAt: float, totalAmount: string, feeAmount: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1594,7 +1593,7 @@ export def "stores-lightning-invoices GetInvoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --pendingOnly: string@bool-completer # Limit to pending invoices only (nullable, default: false)
+  --pendingOnly: oneof<nothing, bool> # Limit to pending invoices only (nullable, default: false)
   --offsetIndex: float # The index of an invoice that will be used as the start of the list (nullable, default: 0)
 ]: nothing -> table<id: string, status: string, BOLT11: string, paidAt: float, expiresAt: record, amount: string, amountReceived: string, paymentHash: string, preimage: string, customRecords: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1622,9 +1621,9 @@ export def "stores-lightning-invoices CreateInvoice" [
   --allow-errors(-e) # Return full response without error handling
   --amount: string # Amount wrapped in a string, represented in a millisatoshi string. (1000 millisatoshi = 1 satoshi)
   --description: string # Description of the invoice in the BOLT11 (nullable)
-  --descriptionHashOnly: string@bool-completer # If `descriptionHashOnly` is `true` (default is `false`), then the BOLT11 returned contains a hash of the `description`, rather than the `description`, itself. This allows for much longer descriptions, but they must be communicated via some other mechanism. (nullable, default: false)
+  --descriptionHashOnly: oneof<nothing, bool> # If `descriptionHashOnly` is `true` (default is `false`), then the BOLT11 returned contains a hash of the `description`, rather than the `description`, itself. This allows for much longer descriptions, but they must be communicated via some other mechanism. (nullable, default: false)
   --expiry: any # Expiration time in seconds
-  --privateRouteHints: string@bool-completer # True if the invoice should include private route hints (nullable, default: false)
+  --privateRouteHints: oneof<nothing, bool> # True if the invoice should include private route hints (nullable, default: false)
 ]: any -> record<id: string, status: string, BOLT11: string, paidAt: float, expiresAt: record, amount: string, amountReceived: string, paymentHash: string, preimage: string, customRecords: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1651,7 +1650,7 @@ export def "stores-lightning-payments GetPayments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includePending: string@bool-completer # Also include pending payments (nullable, default: false)
+  --includePending: oneof<nothing, bool> # Also include pending payments (nullable, default: false)
   --offsetIndex: float # The index of an invoice that will be used as the start of the list (nullable, default: 0)
 ]: nothing -> table<id: string, status: string, BOLT11: string, paymentHash: string, preimage: string, createdAt: float, totalAmount: string, feeAmount: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1811,7 +1810,7 @@ export def "users-me-notifications UpdateNotification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --seen: string@bool-completer # Sets the notification as seen/unseen. If left null, sets it to the opposite value (nullable)
+  --seen: oneof<nothing, bool> # Sets the notification as seen/unseen. If left null, sets it to the opposite value (nullable)
 ]: any -> record<id: string, identifier: string, type: string, body: string, storeId: string, link: string, createdTime: record, seen: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1934,7 +1933,7 @@ export def "stores-payment-requests CreatePaymentRequest" [
   --description: string # The description of the payment request (nullable, format: html)
   --expiryDate: float # The expiry date of the payment request (nullable)
   --referenceId: string # An optional user-defined identifier for this payment request. (nullable, e.g. INV-123493)
-  --allowCustomPaymentAmounts: string@bool-completer # Whether to allow users to create invoices that partially pay the payment request  (nullable)
+  --allowCustomPaymentAmounts: oneof<nothing, bool> # Whether to allow users to create invoices that partially pay the payment request  (nullable)
   --formId: string # Form ID to request customer data (nullable)
   --formResponse: record # Form data response (nullable)
 ]: any -> record<amount: string, title: string, currency: string, email: string, description: string, expiryDate: float, referenceId: string, allowCustomPaymentAmounts: bool, formId: string, formResponse: record, id: string, storeId: string, status: string, createdTime: float> {
@@ -2016,7 +2015,7 @@ export def "stores-payment-requests UpdatePaymentRequest" [
   --description: string # The description of the payment request (nullable, format: html)
   --expiryDate: float # The expiry date of the payment request (nullable)
   --referenceId: string # An optional user-defined identifier for this payment request. (nullable, e.g. INV-123493)
-  --allowCustomPaymentAmounts: string@bool-completer # Whether to allow users to create invoices that partially pay the payment request  (nullable)
+  --allowCustomPaymentAmounts: oneof<nothing, bool> # Whether to allow users to create invoices that partially pay the payment request  (nullable)
   --formId: string # Form ID to request customer data (nullable)
   --formResponse: record # Form data response (nullable)
 ]: any -> record<amount: string, title: string, currency: string, email: string, description: string, expiryDate: float, referenceId: string, allowCustomPaymentAmounts: bool, formId: string, formResponse: record, id: string, storeId: string, status: string, createdTime: float> {
@@ -2046,7 +2045,7 @@ export def "stores-payment-requests-pay Pay" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --amount: string # The amount of the invoice. If `null` or `unspecified`, it will be set to the payment request's due amount. Note that the payment's request `allowCustomPaymentAmounts` must be `true`, or a 422 error will be sent back.' (nullable, format: decimal, e.g. 0.1)
-  --allowPendingInvoiceReuse: string@bool-completer # If `true`, this endpoint will not necessarily create a new invoice, and instead attempt to give back a pending one for this payment request. (nullable, default: false)
+  --allowPendingInvoiceReuse: oneof<nothing, bool> # If `true`, this endpoint will not necessarily create a new invoice, and instead attempt to give back a pending one for this payment request. (nullable, default: false)
 ]: any -> record<metadata: record, checkout: record, receipt: record, id: string, storeId: record, amount: string, paidAmount: string, currency: string, type: string, checkoutLink: string, createdTime: record, expirationTime: record, monitoringExpiration: record, status: string, additionalStatus: string, availableStatusesForManualMarking: list<string>, archived: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2166,7 +2165,7 @@ export def "stores-payout-processors-on-chain-automated-payout-sender-factory Up
   --feeTargetBlock: float # How many blocks should the fee rate calculation target to confirm in. Set to 1 if not provided (nullable)
   --intervalSeconds: any # How often should the processor run
   --threshold: string # Only process payouts when this payout sum is reached. (format: decimal, e.g. 0.1)
-  --processNewPayoutsInstantly: string@bool-completer # Skip the interval when ane eligible payout has been approved (or created with pre-approval) (default: false)
+  --processNewPayoutsInstantly: oneof<nothing, bool> # Skip the interval when ane eligible payout has been approved (or created with pre-approval) (default: false)
 ]: any -> record<payoutMethodId: string, feeTargetBlock: float, intervalSeconds: record, threshold: string, processNewPayoutsInstantly: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2218,7 +2217,7 @@ export def "stores-payout-processors-lightning-automated-payout-sender-factory U
   --allow-errors(-e) # Return full response without error handling
   --intervalSeconds: any # How often should the processor run
   --cancelPayoutAfterFailures: float # How many failures should the processor tolerate before cancelling the payout (nullable)
-  --processNewPayoutsInstantly: string@bool-completer # Skip the interval when ane eligible payout has been approved (or created with pre-approval) (default: false)
+  --processNewPayoutsInstantly: oneof<nothing, bool> # Skip the interval when ane eligible payout has been approved (or created with pre-approval) (default: false)
 ]: any -> record<payoutMethodId: string, intervalSeconds: record, cancelPayoutAfterFailures: float, processNewPayoutsInstantly: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2269,7 +2268,7 @@ export def "stores-payout-processors-on-chain-automated-transfer-sender-factory 
   --feeTargetBlock: float # How many blocks should the fee rate calculation target to confirm in. Set to 1 if not provided (nullable)
   --intervalSeconds: any # How often should the processor run
   --threshold: string # Only process payouts when this payout sum is reached. (format: decimal, e.g. 0.1)
-  --processNewPayoutsInstantly: string@bool-completer # Skip the interval when ane eligible payout has been approved (or created with pre-approval) (default: false)
+  --processNewPayoutsInstantly: oneof<nothing, bool> # Skip the interval when ane eligible payout has been approved (or created with pre-approval) (default: false)
 ]: any -> record<payoutMethodId: string, feeTargetBlock: float, intervalSeconds: record, threshold: string, processNewPayoutsInstantly: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2344,7 +2343,7 @@ export def "stores-pull-payments GetPullPayments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeArchived: string@bool-completer # Whether this should list archived pull payments (default: false)
+  --includeArchived: oneof<nothing, bool> # Whether this should list archived pull payments (default: false)
 ]: nothing -> table<id: string, name: string, description: string, currency: string, amount: string, BOLT11Expiration: string, autoApproveClaims: bool, archived: bool, viewLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2373,7 +2372,7 @@ export def "stores-pull-payments CreatePullPayment" [
   --amount: string # The amount in `currency` of this pull payment as a decimal string (format: decimal, e.g. 0.1)
   --currency: string # The currency of the amount. (e.g. BTC)
   --BOLT11Expiration: string # If lightning is activated, do not accept BOLT11 invoices with expiration less than … days (nullable, default: 30, e.g. 30)
-  --autoApproveClaims: string@bool-completer # Any payouts created for this pull payment will skip the approval phase upon creation (nullable, default: false, e.g. false)
+  --autoApproveClaims: oneof<nothing, bool> # Any payouts created for this pull payment will skip the approval phase upon creation (nullable, default: false, e.g. false)
   --startsAt: int # When this pull payment is effective. Already started if null or unspecified. (nullable, format: unix timestamp in seconds, e.g. 1592312018)
   --expiresAt: int # When this pull payment expires. Never expires if null or unspecified. (nullable, format: unix timestamp in seconds, e.g. 1593129600)
   --payoutMethods: list # The list of supported payout methods supported by this pull payment. Available options can be queried from the `StorePaymentMethods_GetStorePaymentMethods` endpoint. If `null`, all available payout methods will be supported. (nullable)
@@ -2447,7 +2446,7 @@ export def "pull-payments-payouts GetPayouts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeCancelled: string@bool-completer # Whether this should list cancelled payouts (default: false)
+  --includeCancelled: oneof<nothing, bool> # Whether this should list cancelled payouts (default: false)
 ]: nothing -> table<id: string, revision: int, pullPaymentId: string, date: string, destination: string, originalCurrency: string, originalAmount: string, payoutCurrency: string, payoutAmount: string, payoutMethodId: string, state: string, paymentProof: record<proofType: string>, metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2548,7 +2547,7 @@ export def "stores-payouts CreatePayoutThroughStore" [
   --amount: string # The amount of the payout in the currency of the pull payment (eg. USD). (format: decimal, e.g. 10399.18)
   --payoutMethodId: string # Payout method IDs. Available payment method IDs for Bitcoin are:   - `"BTC-CHAIN"`: Onchain    -`"BTC-LN"`: Lightning (e.g. BTC-LN)
   --pullPaymentId: string # The pull payment to create this for. Optional.
-  --approved: string@bool-completer # Whether to approve this payout automatically upon creation
+  --approved: oneof<nothing, bool> # Whether to approve this payout automatically upon creation
   --metadata: record # Additional metadata to store with the payout
 ]: any -> record<id: string, revision: int, pullPaymentId: string, date: string, destination: string, originalCurrency: string, originalAmount: string, payoutCurrency: string, payoutAmount: string, payoutMethodId: string, state: string, paymentProof: record<proofType: string>, metadata: record> {
   let input = $in
@@ -2575,7 +2574,7 @@ export def "stores-payouts GetStorePayouts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeCancelled: string@bool-completer # Whether this should list cancelled payouts (default: false)
+  --includeCancelled: oneof<nothing, bool> # Whether this should list cancelled payouts (default: false)
 ]: nothing -> table<id: string, revision: int, pullPaymentId: string, date: string, destination: string, originalCurrency: string, originalAmount: string, payoutCurrency: string, payoutAmount: string, payoutMethodId: string, state: string, paymentProof: record<proofType: string>, metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2745,7 +2744,7 @@ export def "server-email UpdateSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enableStoresToUseServerEmailSettings: string@bool-completer # Indicates if stores can use server email settings
+  --enableStoresToUseServerEmailSettings: oneof<nothing, bool> # Indicates if stores can use server email settings
 ]: any -> record<enableStoresToUseServerEmailSettings: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2839,7 +2838,7 @@ export def "stores-email UpdateStoreEmailSettings" [
   --server: string # SMTP server host (e.g. smtp.gmail.com)
   --port: int # SMTP server port (e.g. 587)
   --login: string # SMTP username (e.g. John.Smith)
-  --disableCertificateCheck: string@bool-completer # Disable TLS certificate security checks (e.g. false)
+  --disableCertificateCheck: oneof<nothing, bool> # Disable TLS certificate security checks (e.g. false)
   --password: string # SMTP password. Keep null or empty to not update it. (nullable, e.g. MyS3cr3t)
 ]: any -> record<from: string, server: string, port: int, login: string, disableCertificateCheck: bool, passwordSet: bool> {
   let input = $in
@@ -2993,8 +2992,8 @@ export def "stores-payment-methods GetStorePaymentMethods" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --onlyEnabled: string@bool-completer # Fetch payment methods that are enabled/disabled only
-  --includeConfig: string@bool-completer # Fetch the config of the payment methods, if `true`, the permission `btcpay.store.canmodifystoresettings` is required.
+  --onlyEnabled: oneof<nothing, bool> # Fetch payment methods that are enabled/disabled only
+  --includeConfig: oneof<nothing, bool> # Fetch the config of the payment methods, if `true`, the permission `btcpay.store.canmodifystoresettings` is required.
 ]: nothing -> table<enabled: bool, paymentMethodId: string, config: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3019,7 +3018,7 @@ export def "stores-payment-methods GetStorePaymentMethod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeConfig: string@bool-completer # Fetch the config of the payment methods, if `true`, the permission `btcpay.store.canmodifystoresettings` is required.
+  --includeConfig: oneof<nothing, bool> # Fetch the config of the payment methods, if `true`, the permission `btcpay.store.canmodifystoresettings` is required.
 ]: nothing -> record<enabled: bool, paymentMethodId: string, config: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3045,7 +3044,7 @@ export def "stores-payment-methods UpdateStorePaymentMethod" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether the payment method is enabled, leave null or unspecified to not change current setting (nullable, e.g. true)
+  --enabled: oneof<nothing, bool> # Whether the payment method is enabled, leave null or unspecified to not change current setting (nullable, e.g. true)
   --config: record # The new payment method config, leave null or unspecified to not change current setting (nullable) — shape: {useBech32Scheme?: bool, lud12Enabled?: bool, lud21Enabled?: bool, connectionString?: string, derivationScheme?: string, label?: string, accountKeyPath?: string}
 ]: any -> record<enabled: bool, paymentMethodId: string, config: record> {
   let input = $in
@@ -3145,7 +3144,7 @@ export def "stores-rates-configuration UpdateStoreRateConfiguration" [
   --allow-errors(-e) # Return full response without error handling
   --spread: string # A spread applies to the rate fetched in `%`. Must be `>= 0` or `<= 100`
   --preferredSource: string # When `isCustomScript` is `false`, uses this source in the default `effectiveScript`. When `isCustomScript` is `true`, this field is ignored (set to `null`). See `/misc/rate-sources` for available sources.
-  --isCustomScript: string@bool-completer # Whether to use `preferredSource` with default script or a custom `effectiveScript`.
+  --isCustomScript: oneof<nothing, bool> # Whether to use `preferredSource` with default script or a custom `effectiveScript`.
   --effectiveScript: string # When `isCustomScript` is `true`, this represent the custom script used to calculate a currency pair's exchange rate. Else, it represent the script generated by the default rules and `preferredSource`.
 ]: any -> record<spread: string, preferredSource: string, isCustomScript: bool, effectiveScript: string> {
   let input = $in
@@ -3175,7 +3174,7 @@ export def "stores-rates-configuration-preview PreviewStoreRateConfiguration" [
   --currencyPair: list # The currency pairs to preview (nullable)
   --spread: string # A spread applies to the rate fetched in `%`. Must be `>= 0` or `<= 100`
   --preferredSource: string # When `isCustomScript` is `false`, uses this source in the default `effectiveScript`. When `isCustomScript` is `true`, this field is ignored (set to `null`). See `/misc/rate-sources` for available sources.
-  --isCustomScript: string@bool-completer # Whether to use `preferredSource` with default script or a custom `effectiveScript`.
+  --isCustomScript: oneof<nothing, bool> # Whether to use `preferredSource` with default script or a custom `effectiveScript`.
   --effectiveScript: string # When `isCustomScript` is `true`, this represent the custom script used to calculate a currency pair's exchange rate. Else, it represent the script generated by the default rules and `preferredSource`.
 ]: any -> table<currencyPair: string, errors: list<string>, rate: string> {
   let input = $in
@@ -3232,12 +3231,12 @@ export def "stores-users AddStoreUser" [
   --name: string # The name of the user (nullable)
   --imageUrl: string # The profile picture URL of the user (nullable)
   --invitationUrl: string # The pending invitation URL of the user (nullable)
-  --emailConfirmed: string@bool-completer # True if the email has been confirmed by the user
-  --requiresEmailConfirmation: string@bool-completer # True if the email requires confirmation to log in
-  --approved: string@bool-completer # True if an admin has approved the user
-  --requiresApproval: string@bool-completer # True if the instance requires approval to log in
+  --emailConfirmed: oneof<nothing, bool> # True if the email has been confirmed by the user
+  --requiresEmailConfirmation: oneof<nothing, bool> # True if the email requires confirmation to log in
+  --approved: oneof<nothing, bool> # True if an admin has approved the user
+  --requiresApproval: oneof<nothing, bool> # True if the instance requires approval to log in
   --created: float # The creation date of the user as a unix timestamp. Null if created before v1.0.5.6 (nullable)
-  --disabled: string@bool-completer # True if an admin has disabled the user
+  --disabled: oneof<nothing, bool> # True if an admin has disabled the user
   --roles: list # The roles of the user
   --userId: string # The id of the user (Deprecated, use `id` instead) (DEPRECATED)
   --role: string # The role of the user. Default roles are `Owner`, `Manager`, `Employee` and `Guest` (Deprecated, use `storeRole` instead) (DEPRECATED)
@@ -3275,12 +3274,12 @@ export def "stores-users UpdateStoreUser" [
   --name: string # The name of the user (nullable)
   --imageUrl: string # The profile picture URL of the user (nullable)
   --invitationUrl: string # The pending invitation URL of the user (nullable)
-  --emailConfirmed: string@bool-completer # True if the email has been confirmed by the user
-  --requiresEmailConfirmation: string@bool-completer # True if the email requires confirmation to log in
-  --approved: string@bool-completer # True if an admin has approved the user
-  --requiresApproval: string@bool-completer # True if the instance requires approval to log in
+  --emailConfirmed: oneof<nothing, bool> # True if the email has been confirmed by the user
+  --requiresEmailConfirmation: oneof<nothing, bool> # True if the email requires confirmation to log in
+  --approved: oneof<nothing, bool> # True if an admin has approved the user
+  --requiresApproval: oneof<nothing, bool> # True if the instance requires approval to log in
   --created: float # The creation date of the user as a unix timestamp. Null if created before v1.0.5.6 (nullable)
-  --disabled: string@bool-completer # True if an admin has disabled the user
+  --disabled: oneof<nothing, bool> # True if an admin has disabled the user
   --roles: list # The roles of the user
   --userId: string # The id of the user (Deprecated, use `id` instead) (DEPRECATED)
   --role: string # The role of the user. Default roles are `Owner`, `Manager`, `Employee` and `Guest` (Deprecated, use `storeRole` instead) (DEPRECATED)
@@ -3405,7 +3404,7 @@ export def "stores-payment-methods-wallet-address GetOnChainWalletReceiveAddress
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceGenerate: string@bool-completer # Whether to generate a new address for this request even if the previous one was not used (default: false)
+  --forceGenerate: oneof<nothing, bool> # Whether to generate a new address for this request even if the previous one was not used (default: false)
 ]: nothing -> record<address: string, keyPath: string, paymentLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3484,12 +3483,12 @@ export def "stores-payment-methods-wallet-transactions CreateOnChainTransaction"
   --allow-errors(-e) # Return full response without error handling
   --destinations: list # What and where to send money — item shape: {destination?: string, amount?: string, subtractFromAmount?: bool}
   --feerate: float # Transaction fee. (format: decimal or long (sats/byte))
-  --proceedWithPayjoin: string@bool-completer # Whether to attempt to do a BIP78 payjoin if one of the destinations is a BIP21 with payjoin enabled (nullable, default: true)
-  --proceedWithBroadcast: string@bool-completer # Whether to broadcast the transaction after creating it or to simply return the transaction in hex format. (nullable, default: true)
-  --signWithSeed: string@bool-completer # If false, build an unsigned PSBT and skip server-side signing (use the CreateOnChainTransactionPSBT client helper). (nullable, default: true)
-  --noChange: string@bool-completer # Whether to send all the spent coins to the destinations (THIS CAN COST YOU SIGNIFICANT AMOUNTS OF MONEY, LEAVE FALSE UNLESS YOU KNOW WHAT YOU ARE DOING). (nullable, default: false)
-  --rbf: string@bool-completer # Whether to enable RBF for the transaction. Leave blank to have it random (beneficial to privacy) (nullable)
-  --excludeUnconfirmed: string@bool-completer # Whether to exclude unconfirmed UTXOs from the transaction. (nullable, default: false)
+  --proceedWithPayjoin: oneof<nothing, bool> # Whether to attempt to do a BIP78 payjoin if one of the destinations is a BIP21 with payjoin enabled (nullable, default: true)
+  --proceedWithBroadcast: oneof<nothing, bool> # Whether to broadcast the transaction after creating it or to simply return the transaction in hex format. (nullable, default: true)
+  --signWithSeed: oneof<nothing, bool> # If false, build an unsigned PSBT and skip server-side signing (use the CreateOnChainTransactionPSBT client helper). (nullable, default: true)
+  --noChange: oneof<nothing, bool> # Whether to send all the spent coins to the destinations (THIS CAN COST YOU SIGNIFICANT AMOUNTS OF MONEY, LEAVE FALSE UNLESS YOU KNOW WHAT YOU ARE DOING). (nullable, default: false)
+  --rbf: oneof<nothing, bool> # Whether to enable RBF for the transaction. Leave blank to have it random (beneficial to privacy) (nullable)
+  --excludeUnconfirmed: oneof<nothing, bool> # Whether to exclude unconfirmed UTXOs from the transaction. (nullable, default: false)
   --selectedInputs: list # Restrict the creation of the transactions from the outpoints provided ONLY (coin selection) (nullable)
 ]: any -> any {
   let input = $in
@@ -3627,7 +3626,7 @@ export def "stores-payment-methods-wallet-generate GenerateOnChainWallet" [
   --existingMnemonic: string # A BIP39 mnemonic (e.g. quality warfare scatter zone report forest potato local swing solve upon candy garment boost lab)
   --passphrase: string # A passphrase for the BIP39 mnemonic seed
   --accountNumber: float # The account to derive from the BIP39 mnemonic seed (default: 0)
-  --savePrivateKeys: string@bool-completer # Whether to store the seed inside BTCPay Server to enable some additional services. IF `false` AND `existingMnemonic` IS NOT SPECIFIED, BE SURE TO SECURELY STORE THE SEED IN THE RESPONSE! (default: false)
+  --savePrivateKeys: oneof<nothing, bool> # Whether to store the seed inside BTCPay Server to enable some additional services. IF `false` AND `existingMnemonic` IS NOT SPECIFIED, BE SURE TO SECURELY STORE THE SEED IN THE RESPONSE! (default: false)
   --wordList: string@wordList-completer # If `existingMnemonic` is not set, a mnemonic is generated using the specified wordList. (default: English)
   --wordCount: float@wordCount-completer # If `existingMnemonic` is not set, a mnemonic is generated using the specified wordCount. (default: 12)
   --scriptPubKeyType: string@scriptPubKeyType-completer # the type of wallet to generate (default: Segwit)
@@ -3715,7 +3714,7 @@ export def "stores-payment-methods-wallet-objects GetOnChainWalletObjects" [
   --allow-errors(-e) # Return full response without error handling
   --ids: list # The ids of objects to fetch, if used, type should be specified (e.g. 03abcde...)
   --type: string # The type of object to fetch (e.g. tx)
-  --includeNeighbourData: string@bool-completer # Whether or not you should include neighbour's node data in the result (ie, `links.objectData`) (default: true)
+  --includeNeighbourData: oneof<nothing, bool> # Whether or not you should include neighbour's node data in the result (ie, `links.objectData`) (default: true)
 ]: nothing -> table<data: record, links: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3773,7 +3772,7 @@ export def "stores-payment-methods-wallet-objects GetOnChainWalletObject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeNeighbourData: string@bool-completer # Whether or not you should include neighbour's node data in the result (ie, `links.objectData`) (default: true)
+  --includeNeighbourData: oneof<nothing, bool> # Whether or not you should include neighbour's node data in the result (ie, `links.objectData`) (default: true)
 ]: nothing -> record<data: record, links: table<type: string, id: string, linkData: record, objectData: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3908,7 +3907,7 @@ export def "stores CreateStore" [
   --cssUrl: string # Absolute URL to CSS file to customize the public/customer-facing pages of the store. (Invoice, Payment Request, Pull Payment, etc.) or a reference to an uploaded file id with `fileid:ID` (nullable, format: uri)
   --paymentSoundUrl: string # Absolute URL to a sound file or a reference to an uploaded file id with `fileid:ID` (nullable, format: uri)
   --brandColor: string # The brand color of the store in HEX format (nullable, e.g. #F7931A)
-  --applyBrandColorToBackend: string@bool-completer # Apply the brand color to the store's backend as well (default: false)
+  --applyBrandColorToBackend: oneof<nothing, bool> # Apply the brand color to the store's backend as well (default: false)
   --defaultCurrency: string # The default currency of the store (default: USD, e.g. USD)
   --additionalTrackedRates: list # Additional rates to track. The rates of those currencies, in addition to the default currency, will be recorded when a new invoice is created. The rates will then be accessible through reports. (default: [], e.g. [EUR, JPY])
   --invoiceExpiration: any # The time after which an invoice is considered expired if not paid. The value will be rounded down to a minute. (default: 900)
@@ -3918,25 +3917,25 @@ export def "stores CreateStore" [
   --speedPolicy: string@speedPolicy-completer # This is a risk mitigation parameter for the merchant to configure how they want to fulfill orders depending on the number of block confirmations for the transaction made by the consumer on the selected cryptocurrency. `"HighSpeed"`: 0 confirmations (1 confirmation if RBF enabled in transaction)    `"MediumSpeed"`: 1 confirmation    `"LowMediumSpeed"`: 2 confirmations    `"LowSpeed"`: 6 confirmations
   --lightningDescriptionTemplate: string # The BOLT11 description of the lightning invoice in the checkout. You can use placeholders '{StoreName}', '{ItemDescription}' and '{OrderId}'. (nullable)
   --paymentTolerance: float # Consider an invoice fully paid, even if the payment is missing 'x' % of the full amount. (format: double, default: 0.0)
-  --archived: string@bool-completer # If true, the store does not appear in the stores list by default. (default: false)
-  --anyoneCanCreateInvoice: string@bool-completer # If true, then no authentication is needed to create invoices on this store. (default: false)
+  --archived: oneof<nothing, bool> # If true, the store does not appear in the stores list by default. (default: false)
+  --anyoneCanCreateInvoice: oneof<nothing, bool> # If true, then no authentication is needed to create invoices on this store. (default: false)
   --receipt: record # Additional settings to customize the public receipt (nullable) — shape: {enabled?: bool, showQR?: bool, showPayments?: bool}
-  --lightningAmountInSatoshi: string@bool-completer # If true, lightning payment methods show amount in satoshi in the checkout page. (default: false)
-  --lightningPrivateRouteHints: string@bool-completer # Should private route hints be included in the lightning payment of the checkout page. (default: false)
-  --onChainWithLnInvoiceFallback: string@bool-completer # Unify on-chain and lightning payment URL. (default: false)
-  --redirectAutomatically: string@bool-completer # After successful payment, should the checkout page redirect the user automatically to the redirect URL of the invoice? (default: false)
-  --showRecommendedFee: string@bool-completer # default: true
+  --lightningAmountInSatoshi: oneof<nothing, bool> # If true, lightning payment methods show amount in satoshi in the checkout page. (default: false)
+  --lightningPrivateRouteHints: oneof<nothing, bool> # Should private route hints be included in the lightning payment of the checkout page. (default: false)
+  --onChainWithLnInvoiceFallback: oneof<nothing, bool> # Unify on-chain and lightning payment URL. (default: false)
+  --redirectAutomatically: oneof<nothing, bool> # After successful payment, should the checkout page redirect the user automatically to the redirect URL of the invoice? (default: false)
+  --showRecommendedFee: oneof<nothing, bool> # default: true
   --recommendedFeeBlockTarget: int # The fee rate recommendation in the checkout page for the on-chain payment to be confirmed after 'x' blocks. (format: int32, default: 1)
   --defaultLang: string # The default language to use in the checkout page. (The different translations available are listed [here](https://github.com/btcpayserver/btcpayserver/tree/master/BTCPayServer/wwwroot/locales) (default: en)
   --htmlTitle: string # The HTML title of the checkout page (when you over the tab in your browser) (nullable)
   --networkFeeMode: string@networkFeeMode-completer # Check whether network fee should be added to the invoice if on-chain payment is used. ([More information](https://docs.btcpayserver.org/FAQ/Stores/#add-network-fee-to-invoice-vary-with-mining-fees))
-  --payJoinEnabled: string@bool-completer # If true, payjoin will be proposed in the checkout page if possible. ([More information](https://docs.btcpayserver.org/Payjoin/)) (default: false)
-  --autoDetectLanguage: string@bool-completer # If true, the language on the checkout page will adapt to the language defined by the user's browser settings (default: false)
-  --showPayInWalletButton: string@bool-completer # If true, the "Pay in wallet" button will be shown on the checkout page (Checkout V2) (default: true)
-  --showStoreHeader: string@bool-completer # If true, the store header will be shown on the checkout page (Checkout V2) (default: true)
-  --celebratePayment: string@bool-completer # If true, payments on the checkout page will be celebrated with confetti (Checkout V2) (default: true)
-  --playSoundOnPayment: string@bool-completer # If true, sounds on the checkout page will be enabled (Checkout V2) (default: false)
-  --lazyPaymentMethods: string@bool-completer # If true, payment methods are enabled individually upon user interaction in the invoice (default: false)
+  --payJoinEnabled: oneof<nothing, bool> # If true, payjoin will be proposed in the checkout page if possible. ([More information](https://docs.btcpayserver.org/Payjoin/)) (default: false)
+  --autoDetectLanguage: oneof<nothing, bool> # If true, the language on the checkout page will adapt to the language defined by the user's browser settings (default: false)
+  --showPayInWalletButton: oneof<nothing, bool> # If true, the "Pay in wallet" button will be shown on the checkout page (Checkout V2) (default: true)
+  --showStoreHeader: oneof<nothing, bool> # If true, the store header will be shown on the checkout page (Checkout V2) (default: true)
+  --celebratePayment: oneof<nothing, bool> # If true, payments on the checkout page will be celebrated with confetti (Checkout V2) (default: true)
+  --playSoundOnPayment: oneof<nothing, bool> # If true, sounds on the checkout page will be enabled (Checkout V2) (default: false)
+  --lazyPaymentMethods: oneof<nothing, bool> # If true, payment methods are enabled individually upon user interaction in the invoice (default: false)
   --defaultPaymentMethod: string # Payment method IDs. Available payment method IDs for Bitcoin are:   - `"BTC-CHAIN"`: Onchain    -`"BTC-LN"`: Lightning    - `"BTC-LNURL"`: LNURL (e.g. BTC-CHAIN)
   --paymentMethodCriteria: record # The criteria required to activate specific payment methods. (nullable)
 ]: any -> record<name: string, website: string, supportUrl: string, logoUrl: string, cssUrl: string, paymentSoundUrl: string, brandColor: string, applyBrandColorToBackend: bool, defaultCurrency: string, additionalTrackedRates: list<string>, invoiceExpiration: record, refundBOLT11Expiration: record, displayExpirationTimer: record, monitoringExpiration: record, speedPolicy: string, lightningDescriptionTemplate: string, paymentTolerance: float, archived: bool, anyoneCanCreateInvoice: bool, receipt: record, lightningAmountInSatoshi: bool, lightningPrivateRouteHints: bool, onChainWithLnInvoiceFallback: bool, redirectAutomatically: bool, showRecommendedFee: bool, recommendedFeeBlockTarget: int, defaultLang: string, htmlTitle: string, networkFeeMode: string, payJoinEnabled: bool, autoDetectLanguage: bool, showPayInWalletButton: bool, showStoreHeader: bool, celebratePayment: bool, playSoundOnPayment: bool, lazyPaymentMethods: bool, defaultPaymentMethod: string, paymentMethodCriteria: record, id: string> {
@@ -3994,7 +3993,7 @@ export def "stores UpdateStore" [
   --cssUrl: string # Absolute URL to CSS file to customize the public/customer-facing pages of the store. (Invoice, Payment Request, Pull Payment, etc.) or a reference to an uploaded file id with `fileid:ID` (nullable, format: uri)
   --paymentSoundUrl: string # Absolute URL to a sound file or a reference to an uploaded file id with `fileid:ID` (nullable, format: uri)
   --brandColor: string # The brand color of the store in HEX format (nullable, e.g. #F7931A)
-  --applyBrandColorToBackend: string@bool-completer # Apply the brand color to the store's backend as well (default: false)
+  --applyBrandColorToBackend: oneof<nothing, bool> # Apply the brand color to the store's backend as well (default: false)
   --defaultCurrency: string # The default currency of the store (default: USD, e.g. USD)
   --additionalTrackedRates: list # Additional rates to track. The rates of those currencies, in addition to the default currency, will be recorded when a new invoice is created. The rates will then be accessible through reports. (default: [], e.g. [EUR, JPY])
   --invoiceExpiration: any # The time after which an invoice is considered expired if not paid. The value will be rounded down to a minute. (default: 900)
@@ -4004,25 +4003,25 @@ export def "stores UpdateStore" [
   --speedPolicy: string@speedPolicy-completer # This is a risk mitigation parameter for the merchant to configure how they want to fulfill orders depending on the number of block confirmations for the transaction made by the consumer on the selected cryptocurrency. `"HighSpeed"`: 0 confirmations (1 confirmation if RBF enabled in transaction)    `"MediumSpeed"`: 1 confirmation    `"LowMediumSpeed"`: 2 confirmations    `"LowSpeed"`: 6 confirmations
   --lightningDescriptionTemplate: string # The BOLT11 description of the lightning invoice in the checkout. You can use placeholders '{StoreName}', '{ItemDescription}' and '{OrderId}'. (nullable)
   --paymentTolerance: float # Consider an invoice fully paid, even if the payment is missing 'x' % of the full amount. (format: double, default: 0.0)
-  --archived: string@bool-completer # If true, the store does not appear in the stores list by default. (default: false)
-  --anyoneCanCreateInvoice: string@bool-completer # If true, then no authentication is needed to create invoices on this store. (default: false)
+  --archived: oneof<nothing, bool> # If true, the store does not appear in the stores list by default. (default: false)
+  --anyoneCanCreateInvoice: oneof<nothing, bool> # If true, then no authentication is needed to create invoices on this store. (default: false)
   --receipt: record # Additional settings to customize the public receipt (nullable) — shape: {enabled?: bool, showQR?: bool, showPayments?: bool}
-  --lightningAmountInSatoshi: string@bool-completer # If true, lightning payment methods show amount in satoshi in the checkout page. (default: false)
-  --lightningPrivateRouteHints: string@bool-completer # Should private route hints be included in the lightning payment of the checkout page. (default: false)
-  --onChainWithLnInvoiceFallback: string@bool-completer # Unify on-chain and lightning payment URL. (default: false)
-  --redirectAutomatically: string@bool-completer # After successful payment, should the checkout page redirect the user automatically to the redirect URL of the invoice? (default: false)
-  --showRecommendedFee: string@bool-completer # default: true
+  --lightningAmountInSatoshi: oneof<nothing, bool> # If true, lightning payment methods show amount in satoshi in the checkout page. (default: false)
+  --lightningPrivateRouteHints: oneof<nothing, bool> # Should private route hints be included in the lightning payment of the checkout page. (default: false)
+  --onChainWithLnInvoiceFallback: oneof<nothing, bool> # Unify on-chain and lightning payment URL. (default: false)
+  --redirectAutomatically: oneof<nothing, bool> # After successful payment, should the checkout page redirect the user automatically to the redirect URL of the invoice? (default: false)
+  --showRecommendedFee: oneof<nothing, bool> # default: true
   --recommendedFeeBlockTarget: int # The fee rate recommendation in the checkout page for the on-chain payment to be confirmed after 'x' blocks. (format: int32, default: 1)
   --defaultLang: string # The default language to use in the checkout page. (The different translations available are listed [here](https://github.com/btcpayserver/btcpayserver/tree/master/BTCPayServer/wwwroot/locales) (default: en)
   --htmlTitle: string # The HTML title of the checkout page (when you over the tab in your browser) (nullable)
   --networkFeeMode: string@networkFeeMode-completer # Check whether network fee should be added to the invoice if on-chain payment is used. ([More information](https://docs.btcpayserver.org/FAQ/Stores/#add-network-fee-to-invoice-vary-with-mining-fees))
-  --payJoinEnabled: string@bool-completer # If true, payjoin will be proposed in the checkout page if possible. ([More information](https://docs.btcpayserver.org/Payjoin/)) (default: false)
-  --autoDetectLanguage: string@bool-completer # If true, the language on the checkout page will adapt to the language defined by the user's browser settings (default: false)
-  --showPayInWalletButton: string@bool-completer # If true, the "Pay in wallet" button will be shown on the checkout page (Checkout V2) (default: true)
-  --showStoreHeader: string@bool-completer # If true, the store header will be shown on the checkout page (Checkout V2) (default: true)
-  --celebratePayment: string@bool-completer # If true, payments on the checkout page will be celebrated with confetti (Checkout V2) (default: true)
-  --playSoundOnPayment: string@bool-completer # If true, sounds on the checkout page will be enabled (Checkout V2) (default: false)
-  --lazyPaymentMethods: string@bool-completer # If true, payment methods are enabled individually upon user interaction in the invoice (default: false)
+  --payJoinEnabled: oneof<nothing, bool> # If true, payjoin will be proposed in the checkout page if possible. ([More information](https://docs.btcpayserver.org/Payjoin/)) (default: false)
+  --autoDetectLanguage: oneof<nothing, bool> # If true, the language on the checkout page will adapt to the language defined by the user's browser settings (default: false)
+  --showPayInWalletButton: oneof<nothing, bool> # If true, the "Pay in wallet" button will be shown on the checkout page (Checkout V2) (default: true)
+  --showStoreHeader: oneof<nothing, bool> # If true, the store header will be shown on the checkout page (Checkout V2) (default: true)
+  --celebratePayment: oneof<nothing, bool> # If true, payments on the checkout page will be celebrated with confetti (Checkout V2) (default: true)
+  --playSoundOnPayment: oneof<nothing, bool> # If true, sounds on the checkout page will be enabled (Checkout V2) (default: false)
+  --lazyPaymentMethods: oneof<nothing, bool> # If true, payment methods are enabled individually upon user interaction in the invoice (default: false)
   --defaultPaymentMethod: string # Payment method IDs. Available payment method IDs for Bitcoin are:   - `"BTC-CHAIN"`: Onchain    -`"BTC-LN"`: Lightning    - `"BTC-LNURL"`: LNURL (e.g. BTC-CHAIN)
   --paymentMethodCriteria: record # The criteria required to activate specific payment methods. (nullable)
   --id: string # The id of the store
@@ -4254,9 +4253,9 @@ export def "stores-offerings-plans CreateOfferingPlan" [
   --description: string # Short description of the plan. (e.g. Standard monthly subscription.)
   --currency: string # Currency code for the plan price. (e.g. USD)
   --gracePeriodDays: int # Number of grace period days after expiry. (nullable, e.g. 7)
-  --optimisticActivation: string@bool-completer # Indicates if the plan is activated before payment confirmation. (nullable, e.g. true)
+  --optimisticActivation: oneof<nothing, bool> # Indicates if the plan is activated before payment confirmation. (nullable, e.g. true)
   --price: string # Price of the plan as a numeric string. (nullable, e.g. 19.99)
-  --renewable: string@bool-completer # Indicates if the plan can be renewed. (nullable, e.g. true)
+  --renewable: oneof<nothing, bool> # Indicates if the plan can be renewed. (nullable, e.g. true)
   --trialDays: int # Number of trial days before billing. (nullable, e.g. 14)
   --metadata: record # Custom metadata for the plan. (e.g. {tier: standard})
   --recurringType: string@recurringType-completer # Recurring interval for billing. (nullable, e.g. Monthly)
@@ -4316,9 +4315,9 @@ export def "stores-offerings-plans UpdateOfferingPlan" [
   --description: string # Short description of the plan. (e.g. Standard monthly subscription.)
   --currency: string # Currency code for the plan price. (e.g. USD)
   --gracePeriodDays: int # Number of grace period days after expiry. (nullable, e.g. 7)
-  --optimisticActivation: string@bool-completer # Indicates if the plan is activated before payment confirmation. (nullable, e.g. true)
+  --optimisticActivation: oneof<nothing, bool> # Indicates if the plan is activated before payment confirmation. (nullable, e.g. true)
   --price: string # Price of the plan as a numeric string. (nullable, e.g. 19.99)
-  --renewable: string@bool-completer # Indicates if the plan can be renewed. (nullable, e.g. true)
+  --renewable: oneof<nothing, bool> # Indicates if the plan can be renewed. (nullable, e.g. true)
   --trialDays: int # Number of trial days before billing. (nullable, e.g. 14)
   --metadata: record # Custom metadata for the plan. (e.g. {tier: standard})
   --recurringType: string@recurringType-completer # Recurring interval for billing. (nullable, e.g. Monthly)
@@ -4427,7 +4426,7 @@ export def "stores-offerings-subscribers-credits UpdateCredit" [
   --credit: string # Amount of credit to add as a numeric string. (e.g. 25.00)
   --charge: string # Amount to deduct as a numeric string. (e.g. 10.00)
   --description: string # Short description explaining the credit change. (e.g. Monthly reward bonus)
-  --allowOverdraft: string@bool-completer # Indicates if the credit balance is allowed to go negative. (e.g. false)
+  --allowOverdraft: oneof<nothing, bool> # Indicates if the credit balance is allowed to go negative. (e.g. false)
 ]: any -> record<currency: string, value: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4588,7 +4587,7 @@ export def "plan-checkout CreatePlanCheckout" [
   --newSubscriberMetadata: record # Metadata used when creating a new subscriber. (e.g. {locale: en-US})
   --invoiceMetadata: record # Metadata attached to the created invoice. (e.g. {campaign: winter-sale})
   --metadata: record # Custom metadata for the checkout session. (e.g. {flow: upgrade})
-  --isTrial: string@bool-completer # Indicates if the checkout starts a trial. (nullable, e.g. false)
+  --isTrial: oneof<nothing, bool> # Indicates if the checkout starts a trial. (nullable, e.g. false)
   --creditPurchase: string # Amount of credit to purchase. (nullable, e.g. 20.00)
   --successRedirectLink: string # URL to redirect the user after checkout success. (This default to offering's successRedirectLink, also, the `checkoutPlanId` query parameter will be added to the URL.) (e.g. https://example.com/thank-you)
   --newSubscriberEmail: string # Email address for creating a new subscriber. Keep `null` to let the user choose an email address in the checkout page. (nullable, e.g. user@example.com)
@@ -4808,8 +4807,8 @@ export def "users CreateUser" [
   --name: string # The name of the new user (nullable)
   --imageUrl: string # The profile picture URL of the new user (nullable)
   --password: string # The password of the new user (if no password is set, an email will be sent to the user requiring him to set the password) (nullable)
-  --isAdministrator: string@bool-completer # Make this user administrator (only if you have the `unrestricted` permission of a server administrator) (nullable, default: false)
-  --sendInvitationEmail: string@bool-completer # Flag to specify if an email invitation should be sent to the user (nullable, default: true)
+  --isAdministrator: oneof<nothing, bool> # Make this user administrator (only if you have the `unrestricted` permission of a server administrator) (nullable, default: false)
+  --sendInvitationEmail: oneof<nothing, bool> # Flag to specify if an email invitation should be sent to the user (nullable, default: true)
 ]: any -> record<id: string, email: string, name: string, imageUrl: string, invitationUrl: string, emailConfirmed: bool, requiresEmailConfirmation: bool, approved: bool, requiresApproval: bool, created: float, disabled: bool, roles: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4879,7 +4878,7 @@ export def "users-lock ToggleUserLock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --locked: string@bool-completer # Whether to lock or unlock the user
+  --locked: oneof<nothing, bool> # Whether to lock or unlock the user
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4905,7 +4904,7 @@ export def "users-approve ToggleUserApproval" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --approved: string@bool-completer # Whether to approve or unapprove the user
+  --approved: oneof<nothing, bool> # Whether to approve or unapprove the user
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4954,8 +4953,8 @@ export def "stores-webhooks CreateWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether this webhook is enabled or not (default: true)
-  --automaticRedelivery: string@bool-completer # If true, BTCPay Server will retry to redeliver any failed delivery after 10 seconds, 1 minutes and up to 6 times after 10 minutes. (default: true)
+  --enabled: oneof<nothing, bool> # Whether this webhook is enabled or not (default: true)
+  --automaticRedelivery: oneof<nothing, bool> # If true, BTCPay Server will retry to redeliver any failed delivery after 10 seconds, 1 minutes and up to 6 times after 10 minutes. (default: true)
   --body-url: string # The endpoint where BTCPay Server will make the POST request with the webhook body
   --authorizedEvents: record # Which event should be received by this endpoint — shape: {everything?: bool, specificEvents?: list}
   --secret: string # Must be used by the callback receiver to ensure the delivery comes from BTCPay Server. BTCPay Server includes the `BTCPay-Sig` HTTP header, whose format is `sha256=HMAC256(UTF8(webhook's secret), body)`. The pattern to authenticate the webhook is similar to [how to secure webhooks in Github](https://docs.github.com/webhooks/securing/). If left out, null, or empty, the secret will be auto-generated. (nullable)
@@ -5009,8 +5008,8 @@ export def "stores-webhooks UpdateWebhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Whether this webhook is enabled or not (default: true)
-  --automaticRedelivery: string@bool-completer # If true, BTCPay Server will retry to redeliver any failed delivery after 10 seconds, 1 minutes and up to 6 times after 10 minutes. (default: true)
+  --enabled: oneof<nothing, bool> # Whether this webhook is enabled or not (default: true)
+  --automaticRedelivery: oneof<nothing, bool> # If true, BTCPay Server will retry to redeliver any failed delivery after 10 seconds, 1 minutes and up to 6 times after 10 minutes. (default: true)
   --body-url: string # The endpoint where BTCPay Server will make the POST request with the webhook body
   --authorizedEvents: record # Which event should be received by this endpoint — shape: {everything?: bool, specificEvents?: list}
   --secret: string # Must be used by the callback receiver to ensure the delivery comes from BTCPay Server. BTCPay Server includes the `BTCPay-Sig` HTTP header, whose format is `sha256=HMAC256(UTF8(webhook's secret), body)`. The pattern to authenticate the webhook is similar to [how to secure webhooks in Github](https://docs.github.com/webhooks/securing/). If left out, null, or empty, the secret will not be changed. (nullable)

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.twilio.com"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -253,8 +252,8 @@ export def "2010-04-01-accounts-addressesjson CreateAddress" [
   PostalCode: string # The postal code of the new address.
   IsoCountry: string # The ISO country code of the new address. (format: iso-country-code)
   --FriendlyName: string # A descriptive string that you create to describe the new address. It can be up to 64 characters long for Regulatory Compliance addresses and 32 characters long for Emergency addresses.
-  --EmergencyEnabled: string@bool-completer # Whether to enable emergency calling on the new address. Can be: `true` or `false`.
-  --AutoCorrectAddress: string@bool-completer # Whether we should automatically correct the address. Can be: `true` or `false` and the default is `true`. If empty or `true`, we will correct the address you provide if necessary. If `false`, we won't alter the address you provide.
+  --EmergencyEnabled: oneof<nothing, bool> # Whether to enable emergency calling on the new address. Can be: `true` or `false`.
+  --AutoCorrectAddress: oneof<nothing, bool> # Whether we should automatically correct the address. Can be: `true` or `false` and the default is `true`. If empty or `true`, we will correct the address you provide if necessary. If `false`, we won't alter the address you provide.
   --StreetSecondary: string # The additional number and street address of the address.
 ]: any -> record<account_sid: string, city: string, customer_name: string, date_created: string, date_updated: string, friendly_name: string, iso_country: string, postal_code: string, region: string, sid: string, street: string, uri: string, emergency_enabled: bool, validated: bool, verified: bool, street_secondary: string> {
   let input = $in
@@ -282,7 +281,7 @@ export def "2010-04-01-accounts-addressesjson ListAddress" [
   --allow-errors(-e) # Return full response without error handling
   --CustomerName: string # The `customer_name` of the Address resources to read.
   --FriendlyName: string # The string that identifies the Address resources to read.
-  --EmergencyEnabled: string@bool-completer # Whether the address can be associated to a number for emergency calling.
+  --EmergencyEnabled: oneof<nothing, bool> # Whether the address can be associated to a number for emergency calling.
   --IsoCountry: string # The ISO country code of the Address resources to read. (format: iso-country-code)
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
@@ -360,8 +359,8 @@ export def "2010-04-01-accounts-addresses UpdateAddress" [
   --City: string # The city of the address.
   --Region: string # The state or region of the address.
   --PostalCode: string # The postal code of the address.
-  --EmergencyEnabled: string@bool-completer # Whether to enable emergency calling on the address. Can be: `true` or `false`.
-  --AutoCorrectAddress: string@bool-completer # Whether we should automatically correct the address. Can be: `true` or `false` and the default is `true`. If empty or `true`, we will correct the address you provide if necessary. If `false`, we won't alter the address you provide.
+  --EmergencyEnabled: oneof<nothing, bool> # Whether to enable emergency calling on the address. Can be: `true` or `false`.
+  --AutoCorrectAddress: oneof<nothing, bool> # Whether we should automatically correct the address. Can be: `true` or `false` and the default is `true`. If empty or `true`, we will correct the address you provide if necessary. If `false`, we won't alter the address you provide.
   --StreetSecondary: string # The additional number and street address of the address.
 ]: any -> record<account_sid: string, city: string, customer_name: string, date_created: string, date_updated: string, friendly_name: string, iso_country: string, postal_code: string, region: string, sid: string, street: string, uri: string, emergency_enabled: bool, validated: bool, verified: bool, street_secondary: string> {
   let input = $in
@@ -395,7 +394,7 @@ export def "2010-04-01-accounts-applicationsjson CreateApplication" [
   --VoiceFallbackMethod: string@VoiceFallbackMethod-completer # The HTTP method we should use to call `voice_fallback_url`. Can be: `GET` or `POST`. (format: http-method)
   --StatusCallback: string # The URL we should call using the `status_callback_method` to send status information to your application. (format: uri)
   --StatusCallbackMethod: string@StatusCallbackMethod-completer # The HTTP method we should use to call `status_callback`. Can be: `GET` or `POST`. (format: http-method)
-  --VoiceCallerIdLookup: string@bool-completer # Whether we should look up the caller's caller-ID name from the CNAM database (additional charges apply). Can be: `true` or `false`.
+  --VoiceCallerIdLookup: oneof<nothing, bool> # Whether we should look up the caller's caller-ID name from the CNAM database (additional charges apply). Can be: `true` or `false`.
   --SmsUrl: string # The URL we should call when the phone number receives an incoming SMS message. (format: uri)
   --SmsMethod: string@SmsMethod-completer # The HTTP method we should use to call `sms_url`. Can be: `GET` or `POST`. (format: http-method)
   --SmsFallbackUrl: string # The URL that we should call when an error occurs while retrieving or executing the TwiML from `sms_url`. (format: uri)
@@ -403,7 +402,7 @@ export def "2010-04-01-accounts-applicationsjson CreateApplication" [
   --SmsStatusCallback: string # The URL we should call using a POST method to send status information about SMS messages sent by the application. (format: uri)
   --MessageStatusCallback: string # The URL we should call using a POST method to send message status information to your application. (format: uri)
   --FriendlyName: string # A descriptive string that you create to describe the new application. It can be up to 64 characters long.
-  --PublicApplicationConnectEnabled: string@bool-completer # Whether to allow other Twilio accounts to dial this applicaton using Dial verb. Can be: `true` or `false`.
+  --PublicApplicationConnectEnabled: oneof<nothing, bool> # Whether to allow other Twilio accounts to dial this applicaton using Dial verb. Can be: `true` or `false`.
 ]: any -> record<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, message_status_callback: string, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_status_callback: string, sms_url: string, status_callback: string, status_callback_method: string, uri: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string, public_application_connect_enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -511,14 +510,14 @@ export def "2010-04-01-accounts-applications UpdateApplication" [
   --VoiceFallbackMethod: string@VoiceFallbackMethod-completer # The HTTP method we should use to call `voice_fallback_url`. Can be: `GET` or `POST`. (format: http-method)
   --StatusCallback: string # The URL we should call using the `status_callback_method` to send status information to your application. (format: uri)
   --StatusCallbackMethod: string@StatusCallbackMethod-completer # The HTTP method we should use to call `status_callback`. Can be: `GET` or `POST`. (format: http-method)
-  --VoiceCallerIdLookup: string@bool-completer # Whether we should look up the caller's caller-ID name from the CNAM database (additional charges apply). Can be: `true` or `false`.
+  --VoiceCallerIdLookup: oneof<nothing, bool> # Whether we should look up the caller's caller-ID name from the CNAM database (additional charges apply). Can be: `true` or `false`.
   --SmsUrl: string # The URL we should call when the phone number receives an incoming SMS message. (format: uri)
   --SmsMethod: string@SmsMethod-completer # The HTTP method we should use to call `sms_url`. Can be: `GET` or `POST`. (format: http-method)
   --SmsFallbackUrl: string # The URL that we should call when an error occurs while retrieving or executing the TwiML from `sms_url`. (format: uri)
   --SmsFallbackMethod: string@SmsFallbackMethod-completer # The HTTP method we should use to call `sms_fallback_url`. Can be: `GET` or `POST`. (format: http-method)
   --SmsStatusCallback: string # Same as message_status_callback: The URL we should call using a POST method to send status information about SMS messages sent by the application. Deprecated, included for backwards compatibility. (format: uri)
   --MessageStatusCallback: string # The URL we should call using a POST method to send message status information to your application. (format: uri)
-  --PublicApplicationConnectEnabled: string@bool-completer # Whether to allow other Twilio accounts to dial this applicaton using Dial verb. Can be: `true` or `false`.
+  --PublicApplicationConnectEnabled: oneof<nothing, bool> # Whether to allow other Twilio accounts to dial this applicaton using Dial verb. Can be: `true` or `false`.
 ]: any -> record<account_sid: string, api_version: string, date_created: string, date_updated: string, friendly_name: string, message_status_callback: string, sid: string, sms_fallback_method: string, sms_fallback_url: string, sms_method: string, sms_status_callback: string, sms_url: string, status_callback: string, status_callback_method: string, uri: string, voice_caller_id_lookup: bool, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_url: string, public_application_connect_enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -642,13 +641,13 @@ export def "2010-04-01-accounts-available-phone-numbers-localjson ListAvailableP
   --allow-errors(-e) # Return full response without error handling
   --AreaCode: int # The area code of the phone numbers to read. Applies to only phone numbers in the US and Canada.
   --Contains: string # Matching pattern to identify phone numbers. This pattern can be between 2 and 16 characters long and allows all digits (0-9) and all non-diacritic latin alphabet letters (a-z, A-Z). It accepts four meta-characters: `*`, `%`, `+`, `$`. The `*` and `%` meta-characters can appear multiple times in the pattern. To match wildcards at the beginning or end of the pattern, use `*` to match any single character or `%` to match a sequence of characters. If you use the wildcard patterns, it must include at least two non-meta-characters, and wildcards cannot be used between non-meta-characters. To match the beginning of a pattern, start the pattern with `+`. To match the end of the pattern, append the pattern with `$`. These meta-characters can't be adjacent to each other.
-  --SmsEnabled: string@bool-completer # Whether the phone numbers can receive text messages. Can be: `true` or `false`.
-  --MmsEnabled: string@bool-completer # Whether the phone numbers can receive MMS messages. Can be: `true` or `false`.
-  --VoiceEnabled: string@bool-completer # Whether the phone numbers can receive calls. Can be: `true` or `false`.
-  --ExcludeAllAddressRequired: string@bool-completer # Whether to exclude phone numbers that require an [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
-  --ExcludeLocalAddressRequired: string@bool-completer # Whether to exclude phone numbers that require a local [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
-  --ExcludeForeignAddressRequired: string@bool-completer # Whether to exclude phone numbers that require a foreign [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
-  --Beta: string@bool-completer # Whether to read phone numbers that are new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
+  --SmsEnabled: oneof<nothing, bool> # Whether the phone numbers can receive text messages. Can be: `true` or `false`.
+  --MmsEnabled: oneof<nothing, bool> # Whether the phone numbers can receive MMS messages. Can be: `true` or `false`.
+  --VoiceEnabled: oneof<nothing, bool> # Whether the phone numbers can receive calls. Can be: `true` or `false`.
+  --ExcludeAllAddressRequired: oneof<nothing, bool> # Whether to exclude phone numbers that require an [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
+  --ExcludeLocalAddressRequired: oneof<nothing, bool> # Whether to exclude phone numbers that require a local [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
+  --ExcludeForeignAddressRequired: oneof<nothing, bool> # Whether to exclude phone numbers that require a foreign [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
+  --Beta: oneof<nothing, bool> # Whether to read phone numbers that are new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
   --NearNumber: string # Given a phone number, find a geographically close number within `distance` miles. Distance defaults to 25 miles. Applies to only phone numbers in the US and Canada. (format: phone-number)
   --NearLatLong: string # Given a latitude/longitude pair `lat,long` find geographically close numbers within `distance` miles. Applies to only phone numbers in the US and Canada.
   --Distance: int # The search radius, in miles, for a `near_` query.  Can be up to `500` and the default is `25`. Applies to only phone numbers in the US and Canada.
@@ -657,7 +656,7 @@ export def "2010-04-01-accounts-available-phone-numbers-localjson ListAvailableP
   --InRateCenter: string # Limit results to a specific rate center, or given a phone number search within the same rate center as that number. Requires `in_lata` to be set as well. Applies to only phone numbers in the US and Canada.
   --InLata: string # Limit results to a specific local access and transport area ([LATA](https://en.wikipedia.org/wiki/Local_access_and_transport_area)). Given a phone number, search within the same [LATA](https://en.wikipedia.org/wiki/Local_access_and_transport_area) as that number. Applies to only phone numbers in the US and Canada.
   --InLocality: string # Limit results to a particular locality or city. Given a phone number, search within the same Locality as that number.
-  --FaxEnabled: string@bool-completer # Whether the phone numbers can receive faxes. Can be: `true` or `false`.
+  --FaxEnabled: oneof<nothing, bool> # Whether the phone numbers can receive faxes. Can be: `true` or `false`.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -686,13 +685,13 @@ export def "2010-04-01-accounts-available-phone-numbers-machine-to-machinejson L
   --allow-errors(-e) # Return full response without error handling
   --AreaCode: int # The area code of the phone numbers to read. Applies to only phone numbers in the US and Canada.
   --Contains: string # Matching pattern to identify phone numbers. This pattern can be between 2 and 16 characters long and allows all digits (0-9) and all non-diacritic latin alphabet letters (a-z, A-Z). It accepts four meta-characters: `*`, `%`, `+`, `$`. The `*` and `%` meta-characters can appear multiple times in the pattern. To match wildcards at the beginning or end of the pattern, use `*` to match any single character or `%` to match a sequence of characters. If you use the wildcard patterns, it must include at least two non-meta-characters, and wildcards cannot be used between non-meta-characters. To match the beginning of a pattern, start the pattern with `+`. To match the end of the pattern, append the pattern with `$`. These meta-characters can't be adjacent to each other.
-  --SmsEnabled: string@bool-completer # Whether the phone numbers can receive text messages. Can be: `true` or `false`.
-  --MmsEnabled: string@bool-completer # Whether the phone numbers can receive MMS messages. Can be: `true` or `false`.
-  --VoiceEnabled: string@bool-completer # Whether the phone numbers can receive calls. Can be: `true` or `false`.
-  --ExcludeAllAddressRequired: string@bool-completer # Whether to exclude phone numbers that require an [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
-  --ExcludeLocalAddressRequired: string@bool-completer # Whether to exclude phone numbers that require a local [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
-  --ExcludeForeignAddressRequired: string@bool-completer # Whether to exclude phone numbers that require a foreign [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
-  --Beta: string@bool-completer # Whether to read phone numbers that are new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
+  --SmsEnabled: oneof<nothing, bool> # Whether the phone numbers can receive text messages. Can be: `true` or `false`.
+  --MmsEnabled: oneof<nothing, bool> # Whether the phone numbers can receive MMS messages. Can be: `true` or `false`.
+  --VoiceEnabled: oneof<nothing, bool> # Whether the phone numbers can receive calls. Can be: `true` or `false`.
+  --ExcludeAllAddressRequired: oneof<nothing, bool> # Whether to exclude phone numbers that require an [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
+  --ExcludeLocalAddressRequired: oneof<nothing, bool> # Whether to exclude phone numbers that require a local [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
+  --ExcludeForeignAddressRequired: oneof<nothing, bool> # Whether to exclude phone numbers that require a foreign [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
+  --Beta: oneof<nothing, bool> # Whether to read phone numbers that are new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
   --NearNumber: string # Given a phone number, find a geographically close number within `distance` miles. Distance defaults to 25 miles. Applies to only phone numbers in the US and Canada. (format: phone-number)
   --NearLatLong: string # Given a latitude/longitude pair `lat,long` find geographically close numbers within `distance` miles. Applies to only phone numbers in the US and Canada.
   --Distance: int # The search radius, in miles, for a `near_` query.  Can be up to `500` and the default is `25`. Applies to only phone numbers in the US and Canada.
@@ -701,7 +700,7 @@ export def "2010-04-01-accounts-available-phone-numbers-machine-to-machinejson L
   --InRateCenter: string # Limit results to a specific rate center, or given a phone number search within the same rate center as that number. Requires `in_lata` to be set as well. Applies to only phone numbers in the US and Canada.
   --InLata: string # Limit results to a specific local access and transport area ([LATA](https://en.wikipedia.org/wiki/Local_access_and_transport_area)). Given a phone number, search within the same [LATA](https://en.wikipedia.org/wiki/Local_access_and_transport_area) as that number. Applies to only phone numbers in the US and Canada.
   --InLocality: string # Limit results to a particular locality or city. Given a phone number, search within the same Locality as that number.
-  --FaxEnabled: string@bool-completer # Whether the phone numbers can receive faxes. Can be: `true` or `false`.
+  --FaxEnabled: oneof<nothing, bool> # Whether the phone numbers can receive faxes. Can be: `true` or `false`.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -730,13 +729,13 @@ export def "2010-04-01-accounts-available-phone-numbers-mobilejson ListAvailable
   --allow-errors(-e) # Return full response without error handling
   --AreaCode: int # The area code of the phone numbers to read. Applies to only phone numbers in the US and Canada.
   --Contains: string # Matching pattern to identify phone numbers. This pattern can be between 2 and 16 characters long and allows all digits (0-9) and all non-diacritic latin alphabet letters (a-z, A-Z). It accepts four meta-characters: `*`, `%`, `+`, `$`. The `*` and `%` meta-characters can appear multiple times in the pattern. To match wildcards at the beginning or end of the pattern, use `*` to match any single character or `%` to match a sequence of characters. If you use the wildcard patterns, it must include at least two non-meta-characters, and wildcards cannot be used between non-meta-characters. To match the beginning of a pattern, start the pattern with `+`. To match the end of the pattern, append the pattern with `$`. These meta-characters can't be adjacent to each other.
-  --SmsEnabled: string@bool-completer # Whether the phone numbers can receive text messages. Can be: `true` or `false`.
-  --MmsEnabled: string@bool-completer # Whether the phone numbers can receive MMS messages. Can be: `true` or `false`.
-  --VoiceEnabled: string@bool-completer # Whether the phone numbers can receive calls. Can be: `true` or `false`.
-  --ExcludeAllAddressRequired: string@bool-completer # Whether to exclude phone numbers that require an [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
-  --ExcludeLocalAddressRequired: string@bool-completer # Whether to exclude phone numbers that require a local [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
-  --ExcludeForeignAddressRequired: string@bool-completer # Whether to exclude phone numbers that require a foreign [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
-  --Beta: string@bool-completer # Whether to read phone numbers that are new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
+  --SmsEnabled: oneof<nothing, bool> # Whether the phone numbers can receive text messages. Can be: `true` or `false`.
+  --MmsEnabled: oneof<nothing, bool> # Whether the phone numbers can receive MMS messages. Can be: `true` or `false`.
+  --VoiceEnabled: oneof<nothing, bool> # Whether the phone numbers can receive calls. Can be: `true` or `false`.
+  --ExcludeAllAddressRequired: oneof<nothing, bool> # Whether to exclude phone numbers that require an [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
+  --ExcludeLocalAddressRequired: oneof<nothing, bool> # Whether to exclude phone numbers that require a local [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
+  --ExcludeForeignAddressRequired: oneof<nothing, bool> # Whether to exclude phone numbers that require a foreign [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
+  --Beta: oneof<nothing, bool> # Whether to read phone numbers that are new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
   --NearNumber: string # Given a phone number, find a geographically close number within `distance` miles. Distance defaults to 25 miles. Applies to only phone numbers in the US and Canada. (format: phone-number)
   --NearLatLong: string # Given a latitude/longitude pair `lat,long` find geographically close numbers within `distance` miles. Applies to only phone numbers in the US and Canada.
   --Distance: int # The search radius, in miles, for a `near_` query.  Can be up to `500` and the default is `25`. Applies to only phone numbers in the US and Canada.
@@ -745,7 +744,7 @@ export def "2010-04-01-accounts-available-phone-numbers-mobilejson ListAvailable
   --InRateCenter: string # Limit results to a specific rate center, or given a phone number search within the same rate center as that number. Requires `in_lata` to be set as well. Applies to only phone numbers in the US and Canada.
   --InLata: string # Limit results to a specific local access and transport area ([LATA](https://en.wikipedia.org/wiki/Local_access_and_transport_area)). Given a phone number, search within the same [LATA](https://en.wikipedia.org/wiki/Local_access_and_transport_area) as that number. Applies to only phone numbers in the US and Canada.
   --InLocality: string # Limit results to a particular locality or city. Given a phone number, search within the same Locality as that number.
-  --FaxEnabled: string@bool-completer # Whether the phone numbers can receive faxes. Can be: `true` or `false`.
+  --FaxEnabled: oneof<nothing, bool> # Whether the phone numbers can receive faxes. Can be: `true` or `false`.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -774,13 +773,13 @@ export def "2010-04-01-accounts-available-phone-numbers-nationaljson ListAvailab
   --allow-errors(-e) # Return full response without error handling
   --AreaCode: int # The area code of the phone numbers to read. Applies to only phone numbers in the US and Canada.
   --Contains: string # Matching pattern to identify phone numbers. This pattern can be between 2 and 16 characters long and allows all digits (0-9) and all non-diacritic latin alphabet letters (a-z, A-Z). It accepts four meta-characters: `*`, `%`, `+`, `$`. The `*` and `%` meta-characters can appear multiple times in the pattern. To match wildcards at the beginning or end of the pattern, use `*` to match any single character or `%` to match a sequence of characters. If you use the wildcard patterns, it must include at least two non-meta-characters, and wildcards cannot be used between non-meta-characters. To match the beginning of a pattern, start the pattern with `+`. To match the end of the pattern, append the pattern with `$`. These meta-characters can't be adjacent to each other.
-  --SmsEnabled: string@bool-completer # Whether the phone numbers can receive text messages. Can be: `true` or `false`.
-  --MmsEnabled: string@bool-completer # Whether the phone numbers can receive MMS messages. Can be: `true` or `false`.
-  --VoiceEnabled: string@bool-completer # Whether the phone numbers can receive calls. Can be: `true` or `false`.
-  --ExcludeAllAddressRequired: string@bool-completer # Whether to exclude phone numbers that require an [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
-  --ExcludeLocalAddressRequired: string@bool-completer # Whether to exclude phone numbers that require a local [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
-  --ExcludeForeignAddressRequired: string@bool-completer # Whether to exclude phone numbers that require a foreign [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
-  --Beta: string@bool-completer # Whether to read phone numbers that are new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
+  --SmsEnabled: oneof<nothing, bool> # Whether the phone numbers can receive text messages. Can be: `true` or `false`.
+  --MmsEnabled: oneof<nothing, bool> # Whether the phone numbers can receive MMS messages. Can be: `true` or `false`.
+  --VoiceEnabled: oneof<nothing, bool> # Whether the phone numbers can receive calls. Can be: `true` or `false`.
+  --ExcludeAllAddressRequired: oneof<nothing, bool> # Whether to exclude phone numbers that require an [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
+  --ExcludeLocalAddressRequired: oneof<nothing, bool> # Whether to exclude phone numbers that require a local [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
+  --ExcludeForeignAddressRequired: oneof<nothing, bool> # Whether to exclude phone numbers that require a foreign [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
+  --Beta: oneof<nothing, bool> # Whether to read phone numbers that are new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
   --NearNumber: string # Given a phone number, find a geographically close number within `distance` miles. Distance defaults to 25 miles. Applies to only phone numbers in the US and Canada. (format: phone-number)
   --NearLatLong: string # Given a latitude/longitude pair `lat,long` find geographically close numbers within `distance` miles. Applies to only phone numbers in the US and Canada.
   --Distance: int # The search radius, in miles, for a `near_` query.  Can be up to `500` and the default is `25`. Applies to only phone numbers in the US and Canada.
@@ -789,7 +788,7 @@ export def "2010-04-01-accounts-available-phone-numbers-nationaljson ListAvailab
   --InRateCenter: string # Limit results to a specific rate center, or given a phone number search within the same rate center as that number. Requires `in_lata` to be set as well. Applies to only phone numbers in the US and Canada.
   --InLata: string # Limit results to a specific local access and transport area ([LATA](https://en.wikipedia.org/wiki/Local_access_and_transport_area)). Given a phone number, search within the same [LATA](https://en.wikipedia.org/wiki/Local_access_and_transport_area) as that number. Applies to only phone numbers in the US and Canada.
   --InLocality: string # Limit results to a particular locality or city. Given a phone number, search within the same Locality as that number.
-  --FaxEnabled: string@bool-completer # Whether the phone numbers can receive faxes. Can be: `true` or `false`.
+  --FaxEnabled: oneof<nothing, bool> # Whether the phone numbers can receive faxes. Can be: `true` or `false`.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -818,13 +817,13 @@ export def "2010-04-01-accounts-available-phone-numbers-shared-costjson ListAvai
   --allow-errors(-e) # Return full response without error handling
   --AreaCode: int # The area code of the phone numbers to read. Applies to only phone numbers in the US and Canada.
   --Contains: string # Matching pattern to identify phone numbers. This pattern can be between 2 and 16 characters long and allows all digits (0-9) and all non-diacritic latin alphabet letters (a-z, A-Z). It accepts four meta-characters: `*`, `%`, `+`, `$`. The `*` and `%` meta-characters can appear multiple times in the pattern. To match wildcards at the beginning or end of the pattern, use `*` to match any single character or `%` to match a sequence of characters. If you use the wildcard patterns, it must include at least two non-meta-characters, and wildcards cannot be used between non-meta-characters. To match the beginning of a pattern, start the pattern with `+`. To match the end of the pattern, append the pattern with `$`. These meta-characters can't be adjacent to each other.
-  --SmsEnabled: string@bool-completer # Whether the phone numbers can receive text messages. Can be: `true` or `false`.
-  --MmsEnabled: string@bool-completer # Whether the phone numbers can receive MMS messages. Can be: `true` or `false`.
-  --VoiceEnabled: string@bool-completer # Whether the phone numbers can receive calls. Can be: `true` or `false`.
-  --ExcludeAllAddressRequired: string@bool-completer # Whether to exclude phone numbers that require an [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
-  --ExcludeLocalAddressRequired: string@bool-completer # Whether to exclude phone numbers that require a local [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
-  --ExcludeForeignAddressRequired: string@bool-completer # Whether to exclude phone numbers that require a foreign [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
-  --Beta: string@bool-completer # Whether to read phone numbers that are new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
+  --SmsEnabled: oneof<nothing, bool> # Whether the phone numbers can receive text messages. Can be: `true` or `false`.
+  --MmsEnabled: oneof<nothing, bool> # Whether the phone numbers can receive MMS messages. Can be: `true` or `false`.
+  --VoiceEnabled: oneof<nothing, bool> # Whether the phone numbers can receive calls. Can be: `true` or `false`.
+  --ExcludeAllAddressRequired: oneof<nothing, bool> # Whether to exclude phone numbers that require an [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
+  --ExcludeLocalAddressRequired: oneof<nothing, bool> # Whether to exclude phone numbers that require a local [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
+  --ExcludeForeignAddressRequired: oneof<nothing, bool> # Whether to exclude phone numbers that require a foreign [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
+  --Beta: oneof<nothing, bool> # Whether to read phone numbers that are new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
   --NearNumber: string # Given a phone number, find a geographically close number within `distance` miles. Distance defaults to 25 miles. Applies to only phone numbers in the US and Canada. (format: phone-number)
   --NearLatLong: string # Given a latitude/longitude pair `lat,long` find geographically close numbers within `distance` miles. Applies to only phone numbers in the US and Canada.
   --Distance: int # The search radius, in miles, for a `near_` query.  Can be up to `500` and the default is `25`. Applies to only phone numbers in the US and Canada.
@@ -833,7 +832,7 @@ export def "2010-04-01-accounts-available-phone-numbers-shared-costjson ListAvai
   --InRateCenter: string # Limit results to a specific rate center, or given a phone number search within the same rate center as that number. Requires `in_lata` to be set as well. Applies to only phone numbers in the US and Canada.
   --InLata: string # Limit results to a specific local access and transport area ([LATA](https://en.wikipedia.org/wiki/Local_access_and_transport_area)). Given a phone number, search within the same [LATA](https://en.wikipedia.org/wiki/Local_access_and_transport_area) as that number. Applies to only phone numbers in the US and Canada.
   --InLocality: string # Limit results to a particular locality or city. Given a phone number, search within the same Locality as that number.
-  --FaxEnabled: string@bool-completer # Whether the phone numbers can receive faxes. Can be: `true` or `false`.
+  --FaxEnabled: oneof<nothing, bool> # Whether the phone numbers can receive faxes. Can be: `true` or `false`.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -862,13 +861,13 @@ export def "2010-04-01-accounts-available-phone-numbers-toll-freejson ListAvaila
   --allow-errors(-e) # Return full response without error handling
   --AreaCode: int # The area code of the phone numbers to read. Applies to only phone numbers in the US and Canada.
   --Contains: string # Matching pattern to identify phone numbers. This pattern can be between 2 and 16 characters long and allows all digits (0-9) and all non-diacritic latin alphabet letters (a-z, A-Z). It accepts four meta-characters: `*`, `%`, `+`, `$`. The `*` and `%` meta-characters can appear multiple times in the pattern. To match wildcards at the beginning or end of the pattern, use `*` to match any single character or `%` to match a sequence of characters. If you use the wildcard patterns, it must include at least two non-meta-characters, and wildcards cannot be used between non-meta-characters. To match the beginning of a pattern, start the pattern with `+`. To match the end of the pattern, append the pattern with `$`. These meta-characters can't be adjacent to each other.
-  --SmsEnabled: string@bool-completer # Whether the phone numbers can receive text messages. Can be: `true` or `false`.
-  --MmsEnabled: string@bool-completer # Whether the phone numbers can receive MMS messages. Can be: `true` or `false`.
-  --VoiceEnabled: string@bool-completer # Whether the phone numbers can receive calls. Can be: `true` or `false`.
-  --ExcludeAllAddressRequired: string@bool-completer # Whether to exclude phone numbers that require an [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
-  --ExcludeLocalAddressRequired: string@bool-completer # Whether to exclude phone numbers that require a local [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
-  --ExcludeForeignAddressRequired: string@bool-completer # Whether to exclude phone numbers that require a foreign [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
-  --Beta: string@bool-completer # Whether to read phone numbers that are new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
+  --SmsEnabled: oneof<nothing, bool> # Whether the phone numbers can receive text messages. Can be: `true` or `false`.
+  --MmsEnabled: oneof<nothing, bool> # Whether the phone numbers can receive MMS messages. Can be: `true` or `false`.
+  --VoiceEnabled: oneof<nothing, bool> # Whether the phone numbers can receive calls. Can be: `true` or `false`.
+  --ExcludeAllAddressRequired: oneof<nothing, bool> # Whether to exclude phone numbers that require an [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
+  --ExcludeLocalAddressRequired: oneof<nothing, bool> # Whether to exclude phone numbers that require a local [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
+  --ExcludeForeignAddressRequired: oneof<nothing, bool> # Whether to exclude phone numbers that require a foreign [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
+  --Beta: oneof<nothing, bool> # Whether to read phone numbers that are new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
   --NearNumber: string # Given a phone number, find a geographically close number within `distance` miles. Distance defaults to 25 miles. Applies to only phone numbers in the US and Canada. (format: phone-number)
   --NearLatLong: string # Given a latitude/longitude pair `lat,long` find geographically close numbers within `distance` miles. Applies to only phone numbers in the US and Canada.
   --Distance: int # The search radius, in miles, for a `near_` query.  Can be up to `500` and the default is `25`. Applies to only phone numbers in the US and Canada.
@@ -877,7 +876,7 @@ export def "2010-04-01-accounts-available-phone-numbers-toll-freejson ListAvaila
   --InRateCenter: string # Limit results to a specific rate center, or given a phone number search within the same rate center as that number. Requires `in_lata` to be set as well. Applies to only phone numbers in the US and Canada.
   --InLata: string # Limit results to a specific local access and transport area ([LATA](https://en.wikipedia.org/wiki/Local_access_and_transport_area)). Given a phone number, search within the same [LATA](https://en.wikipedia.org/wiki/Local_access_and_transport_area) as that number. Applies to only phone numbers in the US and Canada.
   --InLocality: string # Limit results to a particular locality or city. Given a phone number, search within the same Locality as that number.
-  --FaxEnabled: string@bool-completer # Whether the phone numbers can receive faxes. Can be: `true` or `false`.
+  --FaxEnabled: oneof<nothing, bool> # Whether the phone numbers can receive faxes. Can be: `true` or `false`.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -906,13 +905,13 @@ export def "2010-04-01-accounts-available-phone-numbers-voipjson ListAvailablePh
   --allow-errors(-e) # Return full response without error handling
   --AreaCode: int # The area code of the phone numbers to read. Applies to only phone numbers in the US and Canada.
   --Contains: string # Matching pattern to identify phone numbers. This pattern can be between 2 and 16 characters long and allows all digits (0-9) and all non-diacritic latin alphabet letters (a-z, A-Z). It accepts four meta-characters: `*`, `%`, `+`, `$`. The `*` and `%` meta-characters can appear multiple times in the pattern. To match wildcards at the beginning or end of the pattern, use `*` to match any single character or `%` to match a sequence of characters. If you use the wildcard patterns, it must include at least two non-meta-characters, and wildcards cannot be used between non-meta-characters. To match the beginning of a pattern, start the pattern with `+`. To match the end of the pattern, append the pattern with `$`. These meta-characters can't be adjacent to each other.
-  --SmsEnabled: string@bool-completer # Whether the phone numbers can receive text messages. Can be: `true` or `false`.
-  --MmsEnabled: string@bool-completer # Whether the phone numbers can receive MMS messages. Can be: `true` or `false`.
-  --VoiceEnabled: string@bool-completer # Whether the phone numbers can receive calls. Can be: `true` or `false`.
-  --ExcludeAllAddressRequired: string@bool-completer # Whether to exclude phone numbers that require an [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
-  --ExcludeLocalAddressRequired: string@bool-completer # Whether to exclude phone numbers that require a local [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
-  --ExcludeForeignAddressRequired: string@bool-completer # Whether to exclude phone numbers that require a foreign [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
-  --Beta: string@bool-completer # Whether to read phone numbers that are new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
+  --SmsEnabled: oneof<nothing, bool> # Whether the phone numbers can receive text messages. Can be: `true` or `false`.
+  --MmsEnabled: oneof<nothing, bool> # Whether the phone numbers can receive MMS messages. Can be: `true` or `false`.
+  --VoiceEnabled: oneof<nothing, bool> # Whether the phone numbers can receive calls. Can be: `true` or `false`.
+  --ExcludeAllAddressRequired: oneof<nothing, bool> # Whether to exclude phone numbers that require an [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
+  --ExcludeLocalAddressRequired: oneof<nothing, bool> # Whether to exclude phone numbers that require a local [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
+  --ExcludeForeignAddressRequired: oneof<nothing, bool> # Whether to exclude phone numbers that require a foreign [Address](https://www.twilio.com/docs/usage/api/address). Can be: `true` or `false` and the default is `false`.
+  --Beta: oneof<nothing, bool> # Whether to read phone numbers that are new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
   --NearNumber: string # Given a phone number, find a geographically close number within `distance` miles. Distance defaults to 25 miles. Applies to only phone numbers in the US and Canada. (format: phone-number)
   --NearLatLong: string # Given a latitude/longitude pair `lat,long` find geographically close numbers within `distance` miles. Applies to only phone numbers in the US and Canada.
   --Distance: int # The search radius, in miles, for a `near_` query.  Can be up to `500` and the default is `25`. Applies to only phone numbers in the US and Canada.
@@ -921,7 +920,7 @@ export def "2010-04-01-accounts-available-phone-numbers-voipjson ListAvailablePh
   --InRateCenter: string # Limit results to a specific rate center, or given a phone number search within the same rate center as that number. Requires `in_lata` to be set as well. Applies to only phone numbers in the US and Canada.
   --InLata: string # Limit results to a specific local access and transport area ([LATA](https://en.wikipedia.org/wiki/Local_access_and_transport_area)). Given a phone number, search within the same [LATA](https://en.wikipedia.org/wiki/Local_access_and_transport_area) as that number. Applies to only phone numbers in the US and Canada.
   --InLocality: string # Limit results to a particular locality or city. Given a phone number, search within the same Locality as that number.
-  --FaxEnabled: string@bool-completer # Whether the phone numbers can receive faxes. Can be: `true` or `false`.
+  --FaxEnabled: oneof<nothing, bool> # Whether the phone numbers can receive faxes. Can be: `true` or `false`.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -980,7 +979,7 @@ export def "2010-04-01-accounts-callsjson CreateCall" [
   --StatusCallbackMethod: string@StatusCallbackMethod-completer # The HTTP method we should use when calling the `status_callback` URL. Can be: `GET` or `POST` and the default is `POST`. If an `application_sid` parameter is present, this parameter is ignored. (format: http-method)
   --SendDigits: string # The string of keys to dial after connecting to the number, with a maximum length of 32 digits. Valid digits in the string include any digit (`0`-`9`), '`A`', '`B`', '`C`', '`D`', '`#`', and '`*`'. You can also use '`w`' to insert a half-second pause and '`W`' to insert a one-second pause. For example, to pause for one second after connecting and then dial extension 1234 followed by the # key, set this parameter to `W1234#`. Be sure to URL-encode this string because the '`#`' character has special meaning in a URL. If both `SendDigits` and `MachineDetection` parameters are provided, then `MachineDetection` will be ignored.
   --Timeout: int # The integer number of seconds that we should allow the phone to ring before assuming there is no answer. The default is `60` seconds and the maximum is `600` seconds. For some call flows, we will add a 5-second buffer to the timeout value you provide. For this reason, a timeout value of 10 seconds could result in an actual timeout closer to 15 seconds. You can set this to a short time, such as `15` seconds, to hang up before reaching an answering machine or voicemail.
-  --Record: string@bool-completer # Whether to record the call. Can be `true` to record the phone call, or `false` to not. The default is `false`. The `recording_url` is sent to the `status_callback` URL.
+  --Record: oneof<nothing, bool> # Whether to record the call. Can be `true` to record the phone call, or `false` to not. The default is `false`. The `recording_url` is sent to the `status_callback` URL.
   --RecordingChannels: string # The number of channels in the final recording. Can be: `mono` or `dual`. The default is `mono`. `mono` records both legs of the call in a single channel of the recording file. `dual` records each leg to a separate channel of the recording file. The first channel of a dual-channel recording contains the parent call and the second channel contains the child call.
   --RecordingStatusCallback: string # The URL that we call when the recording is available to be accessed.
   --RecordingStatusCallbackMethod: string@RecordingStatusCallbackMethod-completer # The HTTP method we should use when calling the `recording_status_callback` URL. Can be: `GET` or `POST` and the default is `POST`. (format: http-method)
@@ -1705,7 +1704,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers UpdateIncomingPhoneNumber
   --StatusCallback: string # The URL we should call using the `status_callback_method` to send status information to your application. (format: uri)
   --StatusCallbackMethod: string@StatusCallbackMethod-completer # The HTTP method we should use to call `status_callback`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --VoiceApplicationSid: string # The SID of the application we should use to handle phone calls to the phone number. If a `voice_application_sid` is present, we ignore all of the voice urls and use only those set on the application. Setting a `voice_application_sid` will automatically delete your `trunk_sid` and vice versa.
-  --VoiceCallerIdLookup: string@bool-completer # Whether to lookup the caller's name from the CNAM database and post it to your app. Can be: `true` or `false` and defaults to `false`.
+  --VoiceCallerIdLookup: oneof<nothing, bool> # Whether to lookup the caller's name from the CNAM database and post it to your app. Can be: `true` or `false` and defaults to `false`.
   --VoiceFallbackMethod: string@VoiceFallbackMethod-completer # The HTTP method that we should use to call `voice_fallback_url`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --VoiceFallbackUrl: string # The URL that we should call when an error occurs retrieving or executing the TwiML requested by `url`. (format: uri)
   --VoiceMethod: string@VoiceMethod-completer # The HTTP method that we should use to call `voice_url`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
@@ -1788,7 +1787,7 @@ export def "2010-04-01-accounts-incoming-phone-numbersjson ListIncomingPhoneNumb
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Beta: string@bool-completer # Whether to include phone numbers new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
+  --Beta: oneof<nothing, bool> # Whether to include phone numbers new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
   --FriendlyName: string # A string that identifies the IncomingPhoneNumber resources to read.
   --PhoneNumber: string # The phone numbers of the IncomingPhoneNumber resources to read. You can specify partial numbers and use '*' as a wildcard for any digit. (format: phone-number)
   --Origin: string # Whether to include phone numbers based on their origin. Can be: `twilio` or `hosted`. By default, phone numbers of all origin are included.
@@ -1828,7 +1827,7 @@ export def "2010-04-01-accounts-incoming-phone-numbersjson CreateIncomingPhoneNu
   --StatusCallback: string # The URL we should call using the `status_callback_method` to send status information to your application. (format: uri)
   --StatusCallbackMethod: string@StatusCallbackMethod-completer # The HTTP method we should use to call `status_callback`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --VoiceApplicationSid: string # The SID of the application we should use to handle calls to the new phone number. If a `voice_application_sid` is present, we ignore all of the voice urls and use only those set on the application. Setting a `voice_application_sid` will automatically delete your `trunk_sid` and vice versa.
-  --VoiceCallerIdLookup: string@bool-completer # Whether to lookup the caller's name from the CNAM database and post it to your app. Can be: `true` or `false` and defaults to `false`.
+  --VoiceCallerIdLookup: oneof<nothing, bool> # Whether to lookup the caller's name from the CNAM database and post it to your app. Can be: `true` or `false` and defaults to `false`.
   --VoiceFallbackMethod: string@VoiceFallbackMethod-completer # The HTTP method that we should use to call `voice_fallback_url`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --VoiceFallbackUrl: string # The URL that we should call when an error occurs retrieving or executing the TwiML requested by `url`. (format: uri)
   --VoiceMethod: string@VoiceMethod-completer # The HTTP method that we should use to call `voice_url`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
@@ -2021,7 +2020,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-localjson ListIncomingPho
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Beta: string@bool-completer # Whether to include phone numbers new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
+  --Beta: oneof<nothing, bool> # Whether to include phone numbers new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
   --FriendlyName: string # A string that identifies the resources to read.
   --PhoneNumber: string # The phone numbers of the IncomingPhoneNumber resources to read. You can specify partial numbers and use '*' as a wildcard for any digit. (format: phone-number)
   --Origin: string # Whether to include phone numbers based on their origin. Can be: `twilio` or `hosted`. By default, phone numbers of all origin are included.
@@ -2061,7 +2060,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-localjson CreateIncomingP
   --StatusCallback: string # The URL we should call using the `status_callback_method` to send status information to your application. (format: uri)
   --StatusCallbackMethod: string@StatusCallbackMethod-completer # The HTTP method we should use to call `status_callback`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --VoiceApplicationSid: string # The SID of the application we should use to handle calls to the new phone number. If a `voice_application_sid` is present, we ignore all of the voice urls and use only those set on the application. Setting a `voice_application_sid` will automatically delete your `trunk_sid` and vice versa.
-  --VoiceCallerIdLookup: string@bool-completer # Whether to lookup the caller's name from the CNAM database and post it to your app. Can be: `true` or `false` and defaults to `false`.
+  --VoiceCallerIdLookup: oneof<nothing, bool> # Whether to lookup the caller's name from the CNAM database and post it to your app. Can be: `true` or `false` and defaults to `false`.
   --VoiceFallbackMethod: string@VoiceFallbackMethod-completer # The HTTP method that we should use to call `voice_fallback_url`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --VoiceFallbackUrl: string # The URL that we should call when an error occurs retrieving or executing the TwiML requested by `url`. (format: uri)
   --VoiceMethod: string@VoiceMethod-completer # The HTTP method that we should use to call `voice_url`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
@@ -2097,7 +2096,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-mobilejson ListIncomingPh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Beta: string@bool-completer # Whether to include phone numbers new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
+  --Beta: oneof<nothing, bool> # Whether to include phone numbers new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
   --FriendlyName: string # A string that identifies the resources to read.
   --PhoneNumber: string # The phone numbers of the IncomingPhoneNumber resources to read. You can specify partial numbers and use '*' as a wildcard for any digit. (format: phone-number)
   --Origin: string # Whether to include phone numbers based on their origin. Can be: `twilio` or `hosted`. By default, phone numbers of all origin are included.
@@ -2137,7 +2136,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-mobilejson CreateIncoming
   --StatusCallback: string # The URL we should call using the `status_callback_method` to send status information to your application. (format: uri)
   --StatusCallbackMethod: string@StatusCallbackMethod-completer # The HTTP method we should use to call `status_callback`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --VoiceApplicationSid: string # The SID of the application we should use to handle calls to the new phone number. If a `voice_application_sid` is present, we ignore all of the voice urls and use only those set on the application. Setting a `voice_application_sid` will automatically delete your `trunk_sid` and vice versa.
-  --VoiceCallerIdLookup: string@bool-completer # Whether to lookup the caller's name from the CNAM database and post it to your app. Can be: `true` or `false` and defaults to `false`.
+  --VoiceCallerIdLookup: oneof<nothing, bool> # Whether to lookup the caller's name from the CNAM database and post it to your app. Can be: `true` or `false` and defaults to `false`.
   --VoiceFallbackMethod: string@VoiceFallbackMethod-completer # The HTTP method that we should use to call `voice_fallback_url`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --VoiceFallbackUrl: string # The URL that we should call when an error occurs retrieving or executing the TwiML requested by `url`. (format: uri)
   --VoiceMethod: string@VoiceMethod-completer # The HTTP method that we should use to call `voice_url`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
@@ -2173,7 +2172,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-toll-freejson ListIncomin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Beta: string@bool-completer # Whether to include phone numbers new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
+  --Beta: oneof<nothing, bool> # Whether to include phone numbers new to the Twilio platform. Can be: `true` or `false` and the default is `true`.
   --FriendlyName: string # A string that identifies the resources to read.
   --PhoneNumber: string # The phone numbers of the IncomingPhoneNumber resources to read. You can specify partial numbers and use '*' as a wildcard for any digit. (format: phone-number)
   --Origin: string # Whether to include phone numbers based on their origin. Can be: `twilio` or `hosted`. By default, phone numbers of all origin are included.
@@ -2213,7 +2212,7 @@ export def "2010-04-01-accounts-incoming-phone-numbers-toll-freejson CreateIncom
   --StatusCallback: string # The URL we should call using the `status_callback_method` to send status information to your application. (format: uri)
   --StatusCallbackMethod: string@StatusCallbackMethod-completer # The HTTP method we should use to call `status_callback`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --VoiceApplicationSid: string # The SID of the application we should use to handle calls to the new phone number. If a `voice_application_sid` is present, we ignore all of the voice urls and use those set on the application. Setting a `voice_application_sid` will automatically delete your `trunk_sid` and vice versa.
-  --VoiceCallerIdLookup: string@bool-completer # Whether to lookup the caller's name from the CNAM database and post it to your app. Can be: `true` or `false` and defaults to `false`.
+  --VoiceCallerIdLookup: oneof<nothing, bool> # Whether to lookup the caller's name from the CNAM database and post it to your app. Can be: `true` or `false` and defaults to `false`.
   --VoiceFallbackMethod: string@VoiceFallbackMethod-completer # The HTTP method that we should use to call `voice_fallback_url`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --VoiceFallbackUrl: string # The URL that we should call when an error occurs retrieving or executing the TwiML requested by `url`. (format: uri)
   --VoiceMethod: string@VoiceMethod-completer # The HTTP method that we should use to call `voice_url`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
@@ -2532,19 +2531,19 @@ export def "2010-04-01-accounts-messagesjson CreateMessage" [
   --StatusCallback: string # The URL of the endpoint to which Twilio sends [Message status callback requests](https://www.twilio.com/docs/sms/api/message-resource#twilios-request-to-the-statuscallback-url). URL must contain a valid hostname and underscores are not allowed. If you include this parameter with the `messaging_service_sid`, Twilio uses this URL instead of the Status Callback URL of the [Messaging Service](https://www.twilio.com/docs/messaging/api/service-resource).  (format: uri)
   --ApplicationSid: string # The SID of the associated [TwiML Application](https://www.twilio.com/docs/usage/api/applications). [Message status callback requests](https://www.twilio.com/docs/sms/api/message-resource#twilios-request-to-the-statuscallback-url) are sent to the TwiML App's `message_status_callback` URL. Note that the `status_callback` parameter of a request takes priority over the `application_sid` parameter; if both are included `application_sid` is ignored.
   --MaxPrice: float # [OBSOLETE] This parameter will no longer have any effect as of 2024-06-03.
-  --ProvideFeedback: string@bool-completer # Boolean indicating whether or not you intend to provide delivery confirmation feedback to Twilio (used in conjunction with the [Message Feedback subresource](https://www.twilio.com/docs/sms/api/message-feedback-resource)). Default value is `false`.
+  --ProvideFeedback: oneof<nothing, bool> # Boolean indicating whether or not you intend to provide delivery confirmation feedback to Twilio (used in conjunction with the [Message Feedback subresource](https://www.twilio.com/docs/sms/api/message-feedback-resource)). Default value is `false`.
   --Attempt: int # Total number of attempts made (including this request) to send the message regardless of the provider used
   --ValidityPeriod: int # The maximum length in seconds that the Message can remain in Twilio's outgoing message queue. If a queued Message exceeds the `validity_period`, the Message is not sent. Accepted values are integers from `1` to `36000`. Default value is `36000`. A `validity_period` greater than `5` is recommended. [Learn more about the validity period](https://www.twilio.com/blog/take-more-control-of-outbound-messages-using-validity-period-html)
-  --ForceDelivery: string@bool-completer # Reserved
+  --ForceDelivery: oneof<nothing, bool> # Reserved
   --ContentRetention: string@ContentRetention-completer # Determines if the message content can be stored or redacted based on privacy settings
   --AddressRetention: string@AddressRetention-completer # Determines if the address can be stored or obfuscated based on privacy settings
-  --SmartEncoded: string@bool-completer # Whether to detect Unicode characters that have a similar GSM-7 character and replace them. Can be: `true` or `false`.
+  --SmartEncoded: oneof<nothing, bool> # Whether to detect Unicode characters that have a similar GSM-7 character and replace them. Can be: `true` or `false`.
   --PersistentAction: list # Rich actions for non-SMS/MMS channels. Used for [sending location in WhatsApp messages](https://www.twilio.com/docs/whatsapp/message-features#location-messages-with-whatsapp).
   --TrafficType: string@TrafficType-completer
-  --ShortenUrls: string@bool-completer # For Messaging Services with [Link Shortening configured](https://www.twilio.com/docs/messaging/features/link-shortening) only: A Boolean indicating whether or not Twilio should shorten links in the `body` of the Message. Default value is `false`. If `true`, the `messaging_service_sid` parameter must also be provided.
+  --ShortenUrls: oneof<nothing, bool> # For Messaging Services with [Link Shortening configured](https://www.twilio.com/docs/messaging/features/link-shortening) only: A Boolean indicating whether or not Twilio should shorten links in the `body` of the Message. Default value is `false`. If `true`, the `messaging_service_sid` parameter must also be provided.
   --ScheduleType: string@ScheduleType-completer # For Messaging Services only: Include this parameter with a value of `fixed` in conjuction with the `send_time` parameter in order to [schedule a Message](https://www.twilio.com/docs/messaging/features/message-scheduling).
   --SendAt: string # The time that Twilio will send the message. Must be in ISO 8601 format. (format: date-time)
-  --SendAsMms: string@bool-completer # If set to `true`, Twilio delivers the message as a single MMS message, regardless of the presence of media.
+  --SendAsMms: oneof<nothing, bool> # If set to `true`, Twilio delivers the message as a single MMS message, regardless of the presence of media.
   --ContentVariables: string # For [Content Editor/API](https://www.twilio.com/docs/content) only: Key-value pairs of [Template variables](https://www.twilio.com/docs/content/using-variables-with-content-api) and their substitution values. `content_sid` parameter must also be provided. If values are not defined in the `content_variables` parameter, the [Template's default placeholder values](https://www.twilio.com/docs/content/content-api-resources#create-templates) are used.
   --RiskCheck: string@RiskCheck-completer # Include this parameter with a value of `disable` to skip any kind of risk check on the respective message request.
   --From: string # The sender's Twilio phone number (in [E.164](https://en.wikipedia.org/wiki/E.164) format), [alphanumeric sender ID](https://www.twilio.com/docs/sms/quickstart), [Wireless SIM](https://www.twilio.com/docs/iot/wireless/programmable-wireless-send-machine-machine-sms-commands), [short code](https://www.twilio.com/en-us/messaging/channels/sms/short-codes), or [channel address](https://www.twilio.com/docs/messaging/channels) (e.g., `whatsapp:+15554449999`). The value of the `from` parameter must be a sender that is hosted within Twilio and belongs to the Account creating the Message. If you are using `messaging_service_sid`, this parameter can be empty (Twilio assigns a `from` value from the Messaging Service's Sender Pool) or you can provide a specific sender from your Sender Pool. (format: phone-number)
@@ -2971,17 +2970,17 @@ export def "2010-04-01-accounts-conferences-participants UpdateParticipant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Muted: string@bool-completer # Whether the participant should be muted. Can be `true` or `false`. `true` will mute the participant, and `false` will un-mute them. Anything value other than `true` or `false` is interpreted as `false`.
-  --Hold: string@bool-completer # Whether the participant should be on hold. Can be: `true` or `false`. `true` puts the participant on hold, and `false` lets them rejoin the conference.
+  --Muted: oneof<nothing, bool> # Whether the participant should be muted. Can be `true` or `false`. `true` will mute the participant, and `false` will un-mute them. Anything value other than `true` or `false` is interpreted as `false`.
+  --Hold: oneof<nothing, bool> # Whether the participant should be on hold. Can be: `true` or `false`. `true` puts the participant on hold, and `false` lets them rejoin the conference.
   --HoldUrl: string # The URL we call using the `hold_method` for music that plays when the participant is on hold. The URL may return an MP3 file, a WAV file, or a TwiML document that contains `<Play>`, `<Say>`, `<Pause>`, or `<Redirect>` verbs. (format: uri)
   --HoldMethod: string@HoldMethod-completer # The HTTP method we should use to call `hold_url`. Can be: `GET` or `POST` and the default is `GET`. (format: http-method)
   --AnnounceUrl: string # The URL we call using the `announce_method` for an announcement to the participant. The URL may return an MP3 file, a WAV file, or a TwiML document that contains `<Play>`, `<Say>`, `<Pause>`, or `<Redirect>` verbs. (format: uri)
   --AnnounceMethod: string@AnnounceMethod-completer # The HTTP method we should use to call `announce_url`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --WaitUrl: string # The URL that Twilio calls using the `wait_method` before the conference has started. The URL may return an MP3 file, a WAV file, or a TwiML document. The default value is the URL of our standard hold music. If you do not want anything to play while waiting for the conference to start, specify an empty string by setting `wait_url` to `''`. For more details on the allowable verbs within the `waitUrl`, see the `waitUrl` attribute in the [<Conference> TwiML instruction](https://www.twilio.com/docs/voice/twiml/conference#attributes-waiturl). (format: uri)
   --WaitMethod: string@WaitMethod-completer # The HTTP method we should use to call `wait_url`. Can be `GET` or `POST` and the default is `POST`. When using a static audio file, this should be `GET` so that we can cache the file. (format: http-method)
-  --BeepOnExit: string@bool-completer # Whether to play a notification beep to the conference when the participant exits. Can be: `true` or `false`.
-  --EndConferenceOnExit: string@bool-completer # Whether to end the conference when the participant leaves. Can be: `true` or `false` and defaults to `false`.
-  --Coaching: string@bool-completer # Whether the participant is coaching another call. Can be: `true` or `false`. If not present, defaults to `false` unless `call_sid_to_coach` is defined. If `true`, `call_sid_to_coach` must be defined.
+  --BeepOnExit: oneof<nothing, bool> # Whether to play a notification beep to the conference when the participant exits. Can be: `true` or `false`.
+  --EndConferenceOnExit: oneof<nothing, bool> # Whether to end the conference when the participant leaves. Can be: `true` or `false` and defaults to `false`.
+  --Coaching: oneof<nothing, bool> # Whether the participant is coaching another call. Can be: `true` or `false`. If not present, defaults to `false` unless `call_sid_to_coach` is defined. If `true`, `call_sid_to_coach` must be defined.
   --CallSidToCoach: string # The SID of the participant who is being `coached`. The participant being coached is the only participant who can hear the participant who is `coaching`.
 ]: any -> record<account_sid: string, call_sid: string, label: string, call_sid_to_coach: string, coaching: bool, conference_sid: string, date_created: string, date_updated: string, end_conference_on_exit: bool, muted: bool, hold: bool, start_conference_on_enter: bool, status: string, queue_time: string, uri: string> {
   let input = $in
@@ -3039,14 +3038,14 @@ export def "2010-04-01-accounts-conferences-participantsjson CreateParticipant" 
   --StatusCallbackEvent: list # The conference state changes that should generate a call to `status_callback`. Can be: `initiated`, `ringing`, `answered`, and `completed`. Separate multiple values with a space. The default value is `completed`.
   --Label: string # A label for this participant. If one is supplied, it may subsequently be used to fetch, update or delete the participant.
   --Timeout: int # The number of seconds that we should allow the phone to ring before assuming there is no answer. Can be an integer between `5` and `600`, inclusive. The default value is `60`. We always add a 5-second timeout buffer to outgoing calls, so  value of 10 would result in an actual timeout that was closer to 15 seconds.
-  --Record: string@bool-completer # Whether to record the participant and their conferences, including the time between conferences. Can be `true` or `false` and the default is `false`.
-  --Muted: string@bool-completer # Whether the agent is muted in the conference. Can be `true` or `false` and the default is `false`.
+  --Record: oneof<nothing, bool> # Whether to record the participant and their conferences, including the time between conferences. Can be `true` or `false` and the default is `false`.
+  --Muted: oneof<nothing, bool> # Whether the agent is muted in the conference. Can be `true` or `false` and the default is `false`.
   --Beep: string # Whether to play a notification beep to the conference when the participant joins. Can be: `true`, `false`, `onEnter`, or `onExit`. The default value is `true`.
-  --StartConferenceOnEnter: string@bool-completer # Whether to start the conference when the participant joins, if it has not already started. Can be: `true` or `false` and the default is `true`. If `false` and the conference has not started, the participant is muted and hears background music until another participant starts the conference.
-  --EndConferenceOnExit: string@bool-completer # Whether to end the conference when the participant leaves. Can be: `true` or `false` and defaults to `false`.
+  --StartConferenceOnEnter: oneof<nothing, bool> # Whether to start the conference when the participant joins, if it has not already started. Can be: `true` or `false` and the default is `true`. If `false` and the conference has not started, the participant is muted and hears background music until another participant starts the conference.
+  --EndConferenceOnExit: oneof<nothing, bool> # Whether to end the conference when the participant leaves. Can be: `true` or `false` and defaults to `false`.
   --WaitUrl: string # The URL that Twilio calls using the `wait_method` before the conference has started. The URL may return an MP3 file, a WAV file, or a TwiML document. The default value is the URL of our standard hold music. If you do not want anything to play while waiting for the conference to start, specify an empty string by setting `wait_url` to `''`. For more details on the allowable verbs within the `waitUrl`, see the `waitUrl` attribute in the [<Conference> TwiML instruction](https://www.twilio.com/docs/voice/twiml/conference#attributes-waiturl). (format: uri)
   --WaitMethod: string@WaitMethod-completer # The HTTP method we should use to call `wait_url`. Can be `GET` or `POST` and the default is `POST`. When using a static audio file, this should be `GET` so that we can cache the file. (format: http-method)
-  --EarlyMedia: string@bool-completer # Whether to allow an agent to hear the state of the outbound call, including ringing or disconnect messages. Can be: `true` or `false` and defaults to `true`.
+  --EarlyMedia: oneof<nothing, bool> # Whether to allow an agent to hear the state of the outbound call, including ringing or disconnect messages. Can be: `true` or `false` and defaults to `true`.
   --MaxParticipants: int # The maximum number of participants in the conference. Can be a positive integer from `2` to `250`. The default value is `250`.
   --ConferenceRecord: string # Whether to record the conference the participant is joining. Can be: `true`, `false`, `record-from-start`, and `do-not-record`. The default value is `false`.
   --ConferenceTrim: string # Whether to trim leading and trailing silence from the conference recording. Can be: `trim-silence` or `do-not-trim` and defaults to `trim-silence`.
@@ -3063,7 +3062,7 @@ export def "2010-04-01-accounts-conferences-participantsjson CreateParticipant" 
   --ConferenceRecordingStatusCallbackMethod: string@ConferenceRecordingStatusCallbackMethod-completer # The HTTP method we should use to call `conference_recording_status_callback`. Can be: `GET` or `POST` and defaults to `POST`. (format: http-method)
   --RecordingStatusCallbackEvent: list # The recording state changes that should generate a call to `recording_status_callback`. Can be: `started`, `in-progress`, `paused`, `resumed`, `stopped`, `completed`, `failed`, and `absent`. Separate multiple values with a space, ex: `'in-progress completed failed'`.
   --ConferenceRecordingStatusCallbackEvent: list # The conference recording state changes that generate a call to `conference_recording_status_callback`. Can be: `in-progress`, `completed`, `failed`, and `absent`. Separate multiple values with a space, ex: `'in-progress completed failed'`
-  --Coaching: string@bool-completer # Whether the participant is coaching another call. Can be: `true` or `false`. If not present, defaults to `false` unless `call_sid_to_coach` is defined. If `true`, `call_sid_to_coach` must be defined.
+  --Coaching: oneof<nothing, bool> # Whether the participant is coaching another call. Can be: `true` or `false`. If not present, defaults to `false` unless `call_sid_to_coach` is defined. If `true`, `call_sid_to_coach` must be defined.
   --CallSidToCoach: string # The SID of the participant who is being `coached`. The participant being coached is the only participant who can hear the participant who is `coaching`.
   --JitterBufferSize: string # Jitter buffer size for the connecting participant. Twilio will use this setting to apply Jitter Buffer before participant's audio is mixed into the conference. Can be: `off`, `small`, `medium`, and `large`. Default to `large`.
   --Byoc: string # The SID of a BYOC (Bring Your Own Carrier) trunk to route this call with. Note that `byoc` is only meaningful when `to` is a phone number; it will otherwise be ignored. (Beta)
@@ -3109,9 +3108,9 @@ export def "2010-04-01-accounts-conferences-participantsjson ListParticipant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Muted: string@bool-completer # Whether to return only participants that are muted. Can be: `true` or `false`.
-  --Hold: string@bool-completer # Whether to return only participants that are on hold. Can be: `true` or `false`.
-  --Coaching: string@bool-completer # Whether to return only participants who are coaching another call. Can be: `true` or `false`.
+  --Muted: oneof<nothing, bool> # Whether to return only participants that are muted. Can be: `true` or `false`.
+  --Hold: oneof<nothing, bool> # Whether to return only participants that are on hold. Can be: `true` or `false`.
+  --Coaching: oneof<nothing, bool> # Whether to return only participants who are coaching another call. Can be: `true` or `false`.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -3150,8 +3149,8 @@ export def "2010-04-01-accounts-calls-paymentsjson CreatePayments" [
   --Parameter: any # A single-level JSON object used to pass custom parameters to payment processors. (Required for ACH payments). The information that has to be included here depends on the <Pay> Connector. [Read more](https://www.twilio.com/console/voice/pay-connectors).
   --PaymentConnector: string # This is the unique name corresponding to the Pay Connector installed in the Twilio Add-ons. Learn more about [<Pay> Connectors](https://www.twilio.com/console/voice/pay-connectors). The default value is `Default`.
   --PaymentMethod: string@PaymentMethod-completer # Type of payment being captured. One of `credit-card` or `ach-debit`. The default value is `credit-card`.
-  --PostalCode: string@bool-completer # Indicates whether the credit card postal code (zip code) is a required piece of payment information that must be provided by the caller. The default is `true`.
-  --SecurityCode: string@bool-completer # Indicates whether the credit card security code is a required piece of payment information that must be provided by the caller. The default is `true`.
+  --PostalCode: oneof<nothing, bool> # Indicates whether the credit card postal code (zip code) is a required piece of payment information that must be provided by the caller. The default is `true`.
+  --SecurityCode: oneof<nothing, bool> # Indicates whether the credit card security code is a required piece of payment information that must be provided by the caller. The default is `true`.
   --Timeout: int # The number of seconds that <Pay> should wait for the caller to press a digit between each subsequent digit, after the first one, before moving on to validate the digits captured. The default is `5`, maximum is `600`.
   --TokenType: string@TokenType-completer # Indicates whether the payment method should be tokenized as a `one-time`, `reusable`, or `payment-method` token. The default value is `reusable`. Do not enter a charge amount when tokenizing. If a charge amount is entered, the payment method will be charged and not tokenized.
   --ValidCardTypes: string # Credit card types separated by space that Pay should accept. The default value is `visa mastercard amex`
@@ -3347,18 +3346,18 @@ export def "2010-04-01-accounts-calls-transcriptionsjson CreateRealtimeTranscrip
   --StatusCallbackMethod: string@StatusCallbackMethod-completer # The http method for the status_callback (one of GET, POST). (format: http-method)
   --InboundTrackLabel: string # Friendly name given to the Inbound Track
   --OutboundTrackLabel: string # Friendly name given to the Outbound Track
-  --PartialResults: string@bool-completer # Indicates if partial results are going to be sent to the customer
+  --PartialResults: oneof<nothing, bool> # Indicates if partial results are going to be sent to the customer
   --LanguageCode: string # Language code used by the transcription engine, specified in [BCP-47](https://www.rfc-editor.org/rfc/bcp/bcp47.txt) format
   --TranscriptionEngine: string # Definition of the transcription engine to be used, among those supported by Twilio
-  --ProfanityFilter: string@bool-completer # indicates if the server will attempt to filter out profanities, replacing all but the initial character in each filtered word with asterisks
+  --ProfanityFilter: oneof<nothing, bool> # indicates if the server will attempt to filter out profanities, replacing all but the initial character in each filtered word with asterisks
   --SpeechModel: string # Recognition model used by the transcription engine, among those supported by the provider
   --Hints: string # A Phrase contains words and phrase "hints" so that the speech recognition engine is more likely to recognize them.
-  --EnableAutomaticPunctuation: string@bool-completer # The provider will add punctuation to recognition result
+  --EnableAutomaticPunctuation: oneof<nothing, bool> # The provider will add punctuation to recognition result
   --IntelligenceService: string # The SID or unique name of the [Intelligence Service](https://www.twilio.com/docs/conversational-intelligence/api/service-resource) for persisting transcripts and running post-call Language Operators
   --ConversationConfiguration: string # The ID of the Conversations Configuration for customizing conversation behavior in Intelligence Service
   --ConversationId: string # The ID of the Conversation for associating this Transcription with an existing Conversation in Intelligence Service
   --TranscriptionConfigurationId: string # The ID of the RealTimeTranscription Configuration for configuring all the non-default behaviors in one go.
-  --EnableProviderData: string@bool-completer # Whether the callback includes raw provider data.
+  --EnableProviderData: oneof<nothing, bool> # Whether the callback includes raw provider data.
 ]: any -> record<sid: string, account_sid: string, call_sid: string, name: string, status: string, date_updated: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3413,7 +3412,7 @@ export def "2010-04-01-accounts-recordings FetchRecording" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --IncludeSoftDeleted: string@bool-completer # A boolean parameter indicating whether to retrieve soft deleted recordings or not. Recordings metadata are kept after deletion for a retention period of 40 days.
+  --IncludeSoftDeleted: oneof<nothing, bool> # A boolean parameter indicating whether to retrieve soft deleted recordings or not. Recordings metadata are kept after deletion for a retention period of 40 days.
 ]: nothing -> record<account_sid: string, api_version: string, call_sid: string, conference_sid: string, date_created: string, date_updated: string, start_time: string, duration: string, sid: string, price: string, price_unit: string, status: string, channels: int, source: string, error_code: int, uri: string, encryption_details: any, subresource_uris: record, media_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://api.twilio.com")
@@ -3465,7 +3464,7 @@ export def "2010-04-01-accounts-recordingsjson ListRecording" [
   --DateCreated>: string # Only include recordings that were created on this date. Specify a date as `YYYY-MM-DD` in GMT, for example: `2009-07-06`, to read recordings that were created on this date. You can also specify an inequality, such as `DateCreated<=YYYY-MM-DD`, to read recordings that were created on or before midnight of this date, and `DateCreated>=YYYY-MM-DD` to read recordings that were created on or after midnight of this date. (format: date-time)
   --CallSid: string # The [Call](https://www.twilio.com/docs/voice/api/call-resource) SID of the resources to read.
   --ConferenceSid: string # The Conference SID that identifies the conference associated with the recording to read.
-  --IncludeSoftDeleted: string@bool-completer # A boolean parameter indicating whether to retrieve soft deleted recordings or not. Recordings metadata are kept after deletion for a retention period of 40 days.
+  --IncludeSoftDeleted: oneof<nothing, bool> # A boolean parameter indicating whether to retrieve soft deleted recordings or not. Recordings metadata are kept after deletion for a retention period of 40 days.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -4593,9 +4592,9 @@ export def "2010-04-01-accounts-sip-domainsjson CreateSipDomain" [
   --VoiceFallbackMethod: string@VoiceFallbackMethod-completer # The HTTP method we should use to call `voice_fallback_url`. Can be: `GET` or `POST`. (format: http-method)
   --VoiceStatusCallbackUrl: string # The URL that we should call to pass status parameters (such as call ended) to your application. (format: uri)
   --VoiceStatusCallbackMethod: string@VoiceStatusCallbackMethod-completer # The HTTP method we should use to call `voice_status_callback_url`. Can be: `GET` or `POST`. (format: http-method)
-  --SipRegistration: string@bool-completer # Whether to allow SIP Endpoints to register with the domain to receive calls. Can be `true` or `false`. `true` allows SIP Endpoints to register with the domain to receive calls, `false` does not.
-  --EmergencyCallingEnabled: string@bool-completer # Whether emergency calling is enabled for the domain. If enabled, allows emergency calls on the domain from phone numbers with validated addresses.
-  --Secure: string@bool-completer # Whether secure SIP is enabled for the domain. If enabled, TLS will be enforced and SRTP will be negotiated on all incoming calls to this sip domain.
+  --SipRegistration: oneof<nothing, bool> # Whether to allow SIP Endpoints to register with the domain to receive calls. Can be `true` or `false`. `true` allows SIP Endpoints to register with the domain to receive calls, `false` does not.
+  --EmergencyCallingEnabled: oneof<nothing, bool> # Whether emergency calling is enabled for the domain. If enabled, allows emergency calls on the domain from phone numbers with validated addresses.
+  --Secure: oneof<nothing, bool> # Whether secure SIP is enabled for the domain. If enabled, TLS will be enforced and SRTP will be negotiated on all incoming calls to this sip domain.
   --ByocTrunkSid: string # The SID of the BYOC Trunk(Bring Your Own Carrier) resource that the Sip Domain will be associated with.
   --EmergencyCallerSid: string # Whether an emergency caller sid is configured for the domain. If present, this phone number will be used as the callback for the emergency call.
 ]: any -> record<account_sid: string, api_version: string, auth_type: string, date_created: string, date_updated: string, domain_name: string, friendly_name: string, sid: string, uri: string, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_status_callback_method: string, voice_status_callback_url: string, voice_url: string, subresource_uris: record, sip_registration: bool, emergency_calling_enabled: bool, secure: bool, byoc_trunk_sid: string, emergency_caller_sid: string> {
@@ -4654,10 +4653,10 @@ export def "2010-04-01-accounts-sip-domains UpdateSipDomain" [
   --VoiceStatusCallbackMethod: string@VoiceStatusCallbackMethod-completer # The HTTP method we should use to call `voice_status_callback_url`. Can be: `GET` or `POST`. (format: http-method)
   --VoiceStatusCallbackUrl: string # The URL that we should call to pass status parameters (such as call ended) to your application. (format: uri)
   --VoiceUrl: string # The URL we should call when the domain receives a call. (format: uri)
-  --SipRegistration: string@bool-completer # Whether to allow SIP Endpoints to register with the domain to receive calls. Can be `true` or `false`. `true` allows SIP Endpoints to register with the domain to receive calls, `false` does not.
+  --SipRegistration: oneof<nothing, bool> # Whether to allow SIP Endpoints to register with the domain to receive calls. Can be `true` or `false`. `true` allows SIP Endpoints to register with the domain to receive calls, `false` does not.
   --DomainName: string # The unique address you reserve on Twilio to which you route your SIP traffic. Domain names can contain letters, digits, and "-" and must end with `sip.twilio.com`.
-  --EmergencyCallingEnabled: string@bool-completer # Whether emergency calling is enabled for the domain. If enabled, allows emergency calls on the domain from phone numbers with validated addresses.
-  --Secure: string@bool-completer # Whether secure SIP is enabled for the domain. If enabled, TLS will be enforced and SRTP will be negotiated on all incoming calls to this sip domain.
+  --EmergencyCallingEnabled: oneof<nothing, bool> # Whether emergency calling is enabled for the domain. If enabled, allows emergency calls on the domain from phone numbers with validated addresses.
+  --Secure: oneof<nothing, bool> # Whether secure SIP is enabled for the domain. If enabled, TLS will be enforced and SRTP will be negotiated on all incoming calls to this sip domain.
   --ByocTrunkSid: string # The SID of the BYOC Trunk(Bring Your Own Carrier) resource that the Sip Domain will be associated with.
   --EmergencyCallerSid: string # Whether an emergency caller sid is configured for the domain. If present, this phone number will be used as the callback for the emergency call.
 ]: any -> record<account_sid: string, api_version: string, auth_type: string, date_created: string, date_updated: string, domain_name: string, friendly_name: string, sid: string, uri: string, voice_fallback_method: string, voice_fallback_url: string, voice_method: string, voice_status_callback_method: string, voice_status_callback_url: string, voice_url: string, subresource_uris: record, sip_registration: bool, emergency_calling_enabled: bool, secure: bool, byoc_trunk_sid: string, emergency_caller_sid: string> {
@@ -5684,7 +5683,7 @@ export def "2010-04-01-accounts-usage-recordsjson ListUsageRecord" [
   --Category: string # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --StartDate: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
   --EndDate: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
-  --IncludeSubaccounts: string@bool-completer # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
+  --IncludeSubaccounts: oneof<nothing, bool> # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -5713,7 +5712,7 @@ export def "2010-04-01-accounts-usage-records-all-timejson ListUsageRecordAllTim
   --Category: string # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --StartDate: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
   --EndDate: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
-  --IncludeSubaccounts: string@bool-completer # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
+  --IncludeSubaccounts: oneof<nothing, bool> # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -5742,7 +5741,7 @@ export def "2010-04-01-accounts-usage-records-dailyjson ListUsageRecordDaily" [
   --Category: string # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --StartDate: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
   --EndDate: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
-  --IncludeSubaccounts: string@bool-completer # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
+  --IncludeSubaccounts: oneof<nothing, bool> # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -5771,7 +5770,7 @@ export def "2010-04-01-accounts-usage-records-last-monthjson ListUsageRecordLast
   --Category: string # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --StartDate: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
   --EndDate: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
-  --IncludeSubaccounts: string@bool-completer # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
+  --IncludeSubaccounts: oneof<nothing, bool> # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -5800,7 +5799,7 @@ export def "2010-04-01-accounts-usage-records-monthlyjson ListUsageRecordMonthly
   --Category: string # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --StartDate: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
   --EndDate: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
-  --IncludeSubaccounts: string@bool-completer # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
+  --IncludeSubaccounts: oneof<nothing, bool> # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -5829,7 +5828,7 @@ export def "2010-04-01-accounts-usage-records-this-monthjson ListUsageRecordThis
   --Category: string # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --StartDate: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
   --EndDate: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
-  --IncludeSubaccounts: string@bool-completer # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
+  --IncludeSubaccounts: oneof<nothing, bool> # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -5858,7 +5857,7 @@ export def "2010-04-01-accounts-usage-records-todayjson ListUsageRecordToday" [
   --Category: string # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --StartDate: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
   --EndDate: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
-  --IncludeSubaccounts: string@bool-completer # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
+  --IncludeSubaccounts: oneof<nothing, bool> # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -5887,7 +5886,7 @@ export def "2010-04-01-accounts-usage-records-yearlyjson ListUsageRecordYearly" 
   --Category: string # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --StartDate: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
   --EndDate: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
-  --IncludeSubaccounts: string@bool-completer # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
+  --IncludeSubaccounts: oneof<nothing, bool> # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -5916,7 +5915,7 @@ export def "2010-04-01-accounts-usage-records-yesterdayjson ListUsageRecordYeste
   --Category: string # The [usage category](https://www.twilio.com/docs/usage/api/usage-record#usage-categories) of the UsageRecord resources to read. Only UsageRecord resources in the specified category are retrieved.
   --StartDate: string # Only include usage that has occurred on or after this date. Specify the date in GMT and format as `YYYY-MM-DD`. You can also specify offsets from the current date, such as: `-30days`, which will set the start date to be 30 days before the current date. (format: date)
   --EndDate: string # Only include usage that occurred on or before this date. Specify the date in GMT and format as `YYYY-MM-DD`.  You can also specify offsets from the current date, such as: `+30days`, which will set the end date to 30 days from the current date. (format: date)
-  --IncludeSubaccounts: string@bool-completer # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
+  --IncludeSubaccounts: oneof<nothing, bool> # Whether to include usage from the master account and all its subaccounts. Can be: `true` (the default) to include usage from the master account and all subaccounts or `false` to retrieve usage from only the specified account.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.

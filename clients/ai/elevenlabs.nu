@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -286,7 +285,7 @@ export def "sound-generation generation" [
   --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   text: string # The text that will get converted into a sound effect.
-  --body-loop: string@bool-completer # Whether to create a sound effect that loops smoothly. Only available for the 'eleven_text_to_sound_v2 model'. (default: false)
+  --body-loop: oneof<nothing, bool> # Whether to create a sound effect that loops smoothly. Only available for the 'eleven_text_to_sound_v2 model'. (default: false)
   --duration-seconds: any # The duration of the sound which will be generated in seconds. Must be at least 0.5 and at most 30. If set to None we will guess the optimal duration using the prompt. Defaults to None.
   --prompt-influence: any # A higher prompt influence makes your generation follow the prompt more closely while also making generations less variable. Must be a value between 0 and 1. Defaults to 0.3. (default: 0.3)
   --model-id: string # The model ID to use for the sound generation. (default: eleven_text_to_sound_v2)
@@ -484,7 +483,7 @@ export def "text-to-speech full" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-logging: string@bool-completer # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
+  --enable-logging: oneof<nothing, bool> # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
   --optimize-streaming-latency: string # You can turn on latency optimizations at some cost of quality. The best possible final latency varies by model. Possible values: 0 - default mode (no latency optimizations) 1 - normal latency optimizations (about 50% of possible latency improvement of option 3) 2 - strong latency optimizations (about 75% of possible latency improvement of option 3) 3 - max latency optimizations 4 - max latency optimizations, but also with text normalizer turned off for even more latency savings (best latency, but can mispronounce eg numbers and dates).  Defaults to None.  (DEPRECATED)
   --output-format: string@output-format-completer-1 # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM and WAV formats with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -498,9 +497,9 @@ export def "text-to-speech full" [
   --next-text: any # The text that comes after the text of the current request. Can be used to improve the speech's continuity when concatenating together multiple generations or to influence the speech's continuity in the current generation.
   --previous-request-ids: any # A list of request_id of the samples that were generated before this generation. Can be used to improve the speech's continuity when splitting up a large task into multiple requests. The results will be best when the same model is used across the generations. In case both previous_text and previous_request_ids is send, previous_text will be ignored. A maximum of 3 request_ids can be send.
   --next-request-ids: any # A list of request_id of the samples that come after this generation. next_request_ids is especially useful for maintaining the speech's continuity when regenerating a sample that has had some audio quality issues. For example, if you have generated 3 speech clips, and you want to improve clip 2, passing the request id of clip 3 as a next_request_id (and that of clip 1 as a previous_request_id) will help maintain natural flow in the combined speech. The results will be best when the same model is used across the generations. In case both next_text and next_request_ids is send, next_text will be ignored. A maximum of 3 request_ids can be send.
-  --use-pvc-as-ivc: string@bool-completer # If true, we won't use PVC version of the voice for the generation but the IVC version. This is a temporary workaround for higher latency in PVC versions. (DEPRECATED, default: false)
+  --use-pvc-as-ivc: oneof<nothing, bool> # If true, we won't use PVC version of the voice for the generation but the IVC version. This is a temporary workaround for higher latency in PVC versions. (DEPRECATED, default: false)
   --apply-text-normalization: string@apply-text-normalization-completer # This parameter controls text normalization with three modes: 'auto', 'on', and 'off'. When set to 'auto', the system will automatically decide whether to apply text normalization (e.g., spelling out numbers). With 'on', text normalization will always be applied, while with 'off', it will be skipped. (default: auto)
-  --apply-language-text-normalization: string@bool-completer # This parameter controls language text normalization. This helps with proper pronunciation of text in some supported languages. WARNING: This parameter can heavily increase the latency of the request. Currently only supported for Japanese. (default: false)
+  --apply-language-text-normalization: oneof<nothing, bool> # This parameter controls language text normalization. This helps with proper pronunciation of text in some supported languages. WARNING: This parameter can heavily increase the latency of the request. Currently only supported for Japanese. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -532,7 +531,7 @@ export def "text-to-speech-with-timestamps timestamps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-logging: string@bool-completer # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
+  --enable-logging: oneof<nothing, bool> # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
   --optimize-streaming-latency: string # You can turn on latency optimizations at some cost of quality. The best possible final latency varies by model. Possible values: 0 - default mode (no latency optimizations) 1 - normal latency optimizations (about 50% of possible latency improvement of option 3) 2 - strong latency optimizations (about 75% of possible latency improvement of option 3) 3 - max latency optimizations 4 - max latency optimizations, but also with text normalizer turned off for even more latency savings (best latency, but can mispronounce eg numbers and dates).  Defaults to None.  (DEPRECATED)
   --output-format: string@output-format-completer-1 # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM and WAV formats with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -546,9 +545,9 @@ export def "text-to-speech-with-timestamps timestamps" [
   --next-text: any # The text that comes after the text of the current request. Can be used to improve the speech's continuity when concatenating together multiple generations or to influence the speech's continuity in the current generation.
   --previous-request-ids: list # A list of request_id of the samples that were generated before this generation. Can be used to improve the speech's continuity when splitting up a large task into multiple requests. The results will be best when the same model is used across the generations. In case both previous_text and previous_request_ids is send, previous_text will be ignored. A maximum of 3 request_ids can be send.
   --next-request-ids: list # A list of request_id of the samples that come after this generation. next_request_ids is especially useful for maintaining the speech's continuity when regenerating a sample that has had some audio quality issues. For example, if you have generated 3 speech clips, and you want to improve clip 2, passing the request id of clip 3 as a next_request_id (and that of clip 1 as a previous_request_id) will help maintain natural flow in the combined speech. The results will be best when the same model is used across the generations. In case both next_text and next_request_ids is send, next_text will be ignored. A maximum of 3 request_ids can be send.
-  --use-pvc-as-ivc: string@bool-completer # If true, we won't use PVC version of the voice for the generation but the IVC version. This is a temporary workaround for higher latency in PVC versions. (DEPRECATED, default: false)
+  --use-pvc-as-ivc: oneof<nothing, bool> # If true, we won't use PVC version of the voice for the generation but the IVC version. This is a temporary workaround for higher latency in PVC versions. (DEPRECATED, default: false)
   --apply-text-normalization: string@apply-text-normalization-completer # This parameter controls text normalization with three modes: 'auto', 'on', and 'off'. When set to 'auto', the system will automatically decide whether to apply text normalization (e.g., spelling out numbers). With 'on', text normalization will always be applied, while with 'off', it will be skipped. (default: auto)
-  --apply-language-text-normalization: string@bool-completer # This parameter controls language text normalization. This helps with proper pronunciation of text in some supported languages. WARNING: This parameter can heavily increase the latency of the request. Currently only supported for Japanese. (default: false)
+  --apply-language-text-normalization: oneof<nothing, bool> # This parameter controls language text normalization. This helps with proper pronunciation of text in some supported languages. WARNING: This parameter can heavily increase the latency of the request. Currently only supported for Japanese. (default: false)
 ]: any -> record<audio_base64: string, alignment: any, normalized_alignment: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -579,7 +578,7 @@ export def "text-to-speech-stream stream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-logging: string@bool-completer # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
+  --enable-logging: oneof<nothing, bool> # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
   --optimize-streaming-latency: string # You can turn on latency optimizations at some cost of quality. The best possible final latency varies by model. Possible values: 0 - default mode (no latency optimizations) 1 - normal latency optimizations (about 50% of possible latency improvement of option 3) 2 - strong latency optimizations (about 75% of possible latency improvement of option 3) 3 - max latency optimizations 4 - max latency optimizations, but also with text normalizer turned off for even more latency savings (best latency, but can mispronounce eg numbers and dates).  Defaults to None.  (DEPRECATED)
   --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -593,9 +592,9 @@ export def "text-to-speech-stream stream" [
   --next-text: any # The text that comes after the text of the current request. Can be used to improve the speech's continuity when concatenating together multiple generations or to influence the speech's continuity in the current generation.
   --previous-request-ids: any # A list of request_id of the samples that were generated before this generation. Can be used to improve the speech's continuity when splitting up a large task into multiple requests. The results will be best when the same model is used across the generations. In case both previous_text and previous_request_ids is send, previous_text will be ignored. A maximum of 3 request_ids can be send.
   --next-request-ids: any # A list of request_id of the samples that come after this generation. next_request_ids is especially useful for maintaining the speech's continuity when regenerating a sample that has had some audio quality issues. For example, if you have generated 3 speech clips, and you want to improve clip 2, passing the request id of clip 3 as a next_request_id (and that of clip 1 as a previous_request_id) will help maintain natural flow in the combined speech. The results will be best when the same model is used across the generations. In case both next_text and next_request_ids is send, next_text will be ignored. A maximum of 3 request_ids can be send.
-  --use-pvc-as-ivc: string@bool-completer # If true, we won't use PVC version of the voice for the generation but the IVC version. This is a temporary workaround for higher latency in PVC versions. (DEPRECATED, default: false)
+  --use-pvc-as-ivc: oneof<nothing, bool> # If true, we won't use PVC version of the voice for the generation but the IVC version. This is a temporary workaround for higher latency in PVC versions. (DEPRECATED, default: false)
   --apply-text-normalization: string@apply-text-normalization-completer # This parameter controls text normalization with three modes: 'auto', 'on', and 'off'. When set to 'auto', the system will automatically decide whether to apply text normalization (e.g., spelling out numbers). With 'on', text normalization will always be applied, while with 'off', it will be skipped. (default: auto)
-  --apply-language-text-normalization: string@bool-completer # This parameter controls language text normalization. This helps with proper pronunciation of text in some supported languages. WARNING: This parameter can heavily increase the latency of the request. Currently only supported for Japanese. (default: false)
+  --apply-language-text-normalization: oneof<nothing, bool> # This parameter controls language text normalization. This helps with proper pronunciation of text in some supported languages. WARNING: This parameter can heavily increase the latency of the request. Currently only supported for Japanese. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -626,7 +625,7 @@ export def "text-to-speech-stream-with-timestamps timestamps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-logging: string@bool-completer # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
+  --enable-logging: oneof<nothing, bool> # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
   --optimize-streaming-latency: string # You can turn on latency optimizations at some cost of quality. The best possible final latency varies by model. Possible values: 0 - default mode (no latency optimizations) 1 - normal latency optimizations (about 50% of possible latency improvement of option 3) 2 - strong latency optimizations (about 75% of possible latency improvement of option 3) 3 - max latency optimizations 4 - max latency optimizations, but also with text normalizer turned off for even more latency savings (best latency, but can mispronounce eg numbers and dates).  Defaults to None.  (DEPRECATED)
   --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -640,9 +639,9 @@ export def "text-to-speech-stream-with-timestamps timestamps" [
   --next-text: any # The text that comes after the text of the current request. Can be used to improve the speech's continuity when concatenating together multiple generations or to influence the speech's continuity in the current generation.
   --previous-request-ids: any # A list of request_id of the samples that were generated before this generation. Can be used to improve the speech's continuity when splitting up a large task into multiple requests. The results will be best when the same model is used across the generations. In case both previous_text and previous_request_ids is send, previous_text will be ignored. A maximum of 3 request_ids can be send.
   --next-request-ids: any # A list of request_id of the samples that come after this generation. next_request_ids is especially useful for maintaining the speech's continuity when regenerating a sample that has had some audio quality issues. For example, if you have generated 3 speech clips, and you want to improve clip 2, passing the request id of clip 3 as a next_request_id (and that of clip 1 as a previous_request_id) will help maintain natural flow in the combined speech. The results will be best when the same model is used across the generations. In case both next_text and next_request_ids is send, next_text will be ignored. A maximum of 3 request_ids can be send.
-  --use-pvc-as-ivc: string@bool-completer # If true, we won't use PVC version of the voice for the generation but the IVC version. This is a temporary workaround for higher latency in PVC versions. (DEPRECATED, default: false)
+  --use-pvc-as-ivc: oneof<nothing, bool> # If true, we won't use PVC version of the voice for the generation but the IVC version. This is a temporary workaround for higher latency in PVC versions. (DEPRECATED, default: false)
   --apply-text-normalization: string@apply-text-normalization-completer # This parameter controls text normalization with three modes: 'auto', 'on', and 'off'. When set to 'auto', the system will automatically decide whether to apply text normalization (e.g., spelling out numbers). With 'on', text normalization will always be applied, while with 'off', it will be skipped. (default: auto)
-  --apply-language-text-normalization: string@bool-completer # This parameter controls language text normalization. This helps with proper pronunciation of text in some supported languages. WARNING: This parameter can heavily increase the latency of the request. Currently only supported for Japanese. (default: false)
+  --apply-language-text-normalization: oneof<nothing, bool> # This parameter controls language text normalization. This helps with proper pronunciation of text in some supported languages. WARNING: This parameter can heavily increase the latency of the request. Currently only supported for Japanese. (default: false)
 ]: any -> record<audio_base64: string, alignment: any, normalized_alignment: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -672,7 +671,7 @@ export def "text-to-dialogue dialogue" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --output-format: string@output-format-completer-1 # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM and WAV formats with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
-  --enable-logging: string@bool-completer # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
+  --enable-logging: oneof<nothing, bool> # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   inputs: list # A list of dialogue inputs, each containing text and a voice ID which will be converted into speech. The maximum number of unique voice IDs is 10. For reliable generation, keep the total character count across all `inputs[].text` values at or below 2,000 characters per request. Longer requests can terminate early in streaming responses or return a validation error. — item shape: {text: string, voice_id: string}
   --model-id: string # Identifier of the model that will be used, you can query them using GET /v1/models. The model needs to have support for text to speech, you can check this using the can_do_text_to_speech property. (default: eleven_v3)
@@ -710,7 +709,7 @@ export def "text-to-dialogue-stream stream" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
-  --enable-logging: string@bool-completer # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
+  --enable-logging: oneof<nothing, bool> # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   inputs: list # A list of dialogue inputs, each containing text and a voice ID which will be converted into speech. The maximum number of unique voice IDs is 10. For reliable generation, keep the total character count across all `inputs[].text` values at or below 2,000 characters per request. Longer requests can terminate early in streaming responses or return a validation error. — item shape: {text: string, voice_id: string}
   --model-id: string # Identifier of the model that will be used, you can query them using GET /v1/models. The model needs to have support for text to speech, you can check this using the can_do_text_to_speech property. (default: eleven_v3)
@@ -748,7 +747,7 @@ export def "text-to-dialogue-stream-with-timestamps timestamps" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
-  --enable-logging: string@bool-completer # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
+  --enable-logging: oneof<nothing, bool> # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   inputs: list # A list of dialogue inputs, each containing text and a voice ID which will be converted into speech. The maximum number of unique voice IDs is 10. For reliable generation, keep the total character count across all `inputs[].text` values at or below 2,000 characters per request. Longer requests can terminate early in streaming responses or return a validation error. — item shape: {text: string, voice_id: string}
   --model-id: string # Identifier of the model that will be used, you can query them using GET /v1/models. The model needs to have support for text to speech, you can check this using the can_do_text_to_speech property. (default: eleven_v3)
@@ -786,7 +785,7 @@ export def "text-to-dialogue-with-timestamps timestamps" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --output-format: string@output-format-completer-1 # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM and WAV formats with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
-  --enable-logging: string@bool-completer # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
+  --enable-logging: oneof<nothing, bool> # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   inputs: list # A list of dialogue inputs, each containing text and a voice ID which will be converted into speech. The maximum number of unique voice IDs is 10. For reliable generation, keep the total character count across all `inputs[].text` values at or below 2,000 characters per request. Longer requests can terminate early in streaming responses or return a validation error. — item shape: {text: string, voice_id: string}
   --model-id: string # Identifier of the model that will be used, you can query them using GET /v1/models. The model needs to have support for text to speech, you can check this using the can_do_text_to_speech property. (default: eleven_v3)
@@ -824,7 +823,7 @@ export def "speech-to-speech full" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-logging: string@bool-completer # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
+  --enable-logging: oneof<nothing, bool> # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
   --optimize-streaming-latency: string # You can turn on latency optimizations at some cost of quality. The best possible final latency varies by model. Possible values: 0 - default mode (no latency optimizations) 1 - normal latency optimizations (about 50% of possible latency improvement of option 3) 2 - strong latency optimizations (about 75% of possible latency improvement of option 3) 3 - max latency optimizations 4 - max latency optimizations, but also with text normalizer turned off for even more latency savings (best latency, but can mispronounce eg numbers and dates).  Defaults to None.  (DEPRECATED)
   --output-format: string@output-format-completer-1 # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM and WAV formats with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -832,7 +831,7 @@ export def "speech-to-speech full" [
   --model-id: string # Identifier of the model that will be used, you can query them using GET /v1/models. The model needs to have support for speech to speech, you can check this using the can_do_voice_conversion property. (default: eleven_english_sts_v2)
   --voice-settings: any # Voice settings overriding stored settings for the given voice. They are applied only on the given request. Needs to be send as a JSON encoded string.
   --seed: any # If specified, our system will make a best effort to sample deterministically, such that repeated requests with the same seed and parameters should return the same result. Determinism is not guaranteed. Must be integer between 0 and 4294967295.
-  --remove-background-noise: string@bool-completer # If set, will remove the background noise from your audio input using our audio isolation model. Only applies to Voice Changer. (default: false)
+  --remove-background-noise: oneof<nothing, bool> # If set, will remove the background noise from your audio input using our audio isolation model. Only applies to Voice Changer. (default: false)
   --file-format: any # The format of input audio. Options are 'pcm_s16le_16' or 'other' For `pcm_s16le_16`, the input audio must be 16-bit PCM at a 16kHz sample rate, single channel (mono), and little-endian byte order. Latency will be lower than with passing an encoded waveform. (default: other)
 ]: any -> any {
   let input = $in
@@ -863,7 +862,7 @@ export def "speech-to-speech-stream stream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-logging: string@bool-completer # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
+  --enable-logging: oneof<nothing, bool> # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
   --optimize-streaming-latency: string # You can turn on latency optimizations at some cost of quality. The best possible final latency varies by model. Possible values: 0 - default mode (no latency optimizations) 1 - normal latency optimizations (about 50% of possible latency improvement of option 3) 2 - strong latency optimizations (about 75% of possible latency improvement of option 3) 3 - max latency optimizations 4 - max latency optimizations, but also with text normalizer turned off for even more latency savings (best latency, but can mispronounce eg numbers and dates).  Defaults to None.  (DEPRECATED)
   --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -871,7 +870,7 @@ export def "speech-to-speech-stream stream" [
   --model-id: string # Identifier of the model that will be used, you can query them using GET /v1/models. The model needs to have support for speech to speech, you can check this using the can_do_voice_conversion property. (default: eleven_english_sts_v2)
   --voice-settings: any # Voice settings overriding stored settings for the given voice. They are applied only on the given request. Needs to be send as a JSON encoded string.
   --seed: any # If specified, our system will make a best effort to sample deterministically, such that repeated requests with the same seed and parameters should return the same result. Determinism is not guaranteed. Must be integer between 0 and 4294967295.
-  --remove-background-noise: string@bool-completer # If set, will remove the background noise from your audio input using our audio isolation model. Only applies to Voice Changer. (default: false)
+  --remove-background-noise: oneof<nothing, bool> # If set, will remove the background noise from your audio input using our audio isolation model. Only applies to Voice Changer. (default: false)
   --file-format: any # The format of input audio. Options are 'pcm_s16le_16' or 'other' For `pcm_s16le_16`, the input audio must be 16-bit PCM at a 16kHz sample rate, single channel (mono), and little-endian byte order. Latency will be lower than with passing an encoded waveform. (default: other)
 ]: any -> any {
   let input = $in
@@ -906,12 +905,12 @@ export def "text-to-voice-create-previews voice" [
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   voice_description: string # Description to use for the created voice.
   --text: any # Text to generate, text length has to be between 100 and 1000.
-  --auto-generate-text: string@bool-completer # Whether to automatically generate a text suitable for the voice description. (default: false)
+  --auto-generate-text: oneof<nothing, bool> # Whether to automatically generate a text suitable for the voice description. (default: false)
   --loudness: float # Controls the volume level of the generated voice. -1 is quietest, 1 is loudest, 0 corresponds to roughly -24 LUFS. (default: 0.5)
   --quality: float # Higher quality results in better voice output but less variety. (default: 0.9)
   --seed: any # Random number that controls the voice generation. Same seed with same inputs produces same voice.
   --guidance-scale: float # Controls how closely the AI follows the prompt. Lower numbers give the AI more freedom to be creative, while higher numbers force it to stick more to the prompt. High numbers can cause voice to sound artificial or robotic. We recommend to use longer, more detailed prompts at lower Guidance Scale. (default: 5)
-  --should-enhance: string@bool-completer # Whether to enhance the voice description using AI to add more detail and improve voice generation quality. When enabled, the system will automatically expand simple prompts into more detailed voice descriptions. Defaults to False (default: false)
+  --should-enhance: oneof<nothing, bool> # Whether to enhance the voice description using AI to add more detail and improve voice generation quality. When enabled, the system will automatically expand simple prompts into more detailed voice descriptions. Defaults to False (default: false)
 ]: any -> record<previews: table<audio_base_64: string, generated_voice_id: string, media_type: string, duration_secs: float, language: any>, text: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -976,12 +975,12 @@ export def "text-to-voice-design design" [
   voice_description: string # Description to use for the created voice.
   --model-id: string@model-id-completer # Model to use for the voice generation. Possible values: eleven_multilingual_ttv_v2, eleven_ttv_v3. (default: eleven_multilingual_ttv_v2)
   --text: any # Text to generate, text length has to be between 100 and 1000.
-  --auto-generate-text: string@bool-completer # Whether to automatically generate a text suitable for the voice description. (default: false)
+  --auto-generate-text: oneof<nothing, bool> # Whether to automatically generate a text suitable for the voice description. (default: false)
   --loudness: float # Controls the volume level of the generated voice. -1 is quietest, 1 is loudest, 0 corresponds to roughly -24 LUFS. (default: 0.5)
   --seed: any # Random number that controls the voice generation. Same seed with same inputs produces same voice.
   --guidance-scale: float # Controls how closely the AI follows the prompt. Lower numbers give the AI more freedom to be creative, while higher numbers force it to stick more to the prompt. High numbers can cause voice to sound artificial or robotic. We recommend to use longer, more detailed prompts at lower Guidance Scale. (default: 5)
-  --stream-previews: string@bool-completer # Determines whether the Text to Voice previews should be included in the response. If true, only the generated IDs will be returned which can then be streamed via the /v1/text-to-voice/:generated_voice_id/stream endpoint. (default: false)
-  --should-enhance: string@bool-completer # Whether to enhance the voice description using AI to add more detail and improve voice generation quality. When enabled, the system will automatically expand simple prompts into more detailed voice descriptions. Defaults to False (default: false)
+  --stream-previews: oneof<nothing, bool> # Determines whether the Text to Voice previews should be included in the response. If true, only the generated IDs will be returned which can then be streamed via the /v1/text-to-voice/:generated_voice_id/stream endpoint. (default: false)
+  --should-enhance: oneof<nothing, bool> # Whether to enhance the voice description using AI to add more detail and improve voice generation quality. When enabled, the system will automatically expand simple prompts into more detailed voice descriptions. Defaults to False (default: false)
   --remixing-session-id: any # The remixing session id.
   --remixing-session-iteration-id: any # The id of the remixing session iteration where these generations should be attached to. If not provided, a new iteration will be created.
   --quality: any # Higher quality results in better voice output but less variety.
@@ -1019,11 +1018,11 @@ export def "text-to-voice-remix remix" [
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   voice_description: string # Description of the changes to make to the voice.
   --text: any # Text to generate, text length has to be between 100 and 1000.
-  --auto-generate-text: string@bool-completer # Whether to automatically generate a text suitable for the voice description. (default: false)
+  --auto-generate-text: oneof<nothing, bool> # Whether to automatically generate a text suitable for the voice description. (default: false)
   --loudness: float # Controls the volume level of the generated voice. -1 is quietest, 1 is loudest, 0 corresponds to roughly -24 LUFS. (default: 0.5)
   --seed: any # Random number that controls the voice generation. Same seed with same inputs produces same voice.
   --guidance-scale: float # Controls how closely the AI follows the prompt. Lower numbers give the AI more freedom to be creative, while higher numbers force it to stick more to the prompt. High numbers can cause voice to sound artificial or robotic. We recommend to use longer, more detailed prompts at lower Guidance Scale. (default: 2)
-  --stream-previews: string@bool-completer # Determines whether the Text to Voice previews should be included in the response. If true, only the generated IDs will be returned which can then be streamed via the /v1/text-to-voice/:generated_voice_id/stream endpoint. (default: false)
+  --stream-previews: oneof<nothing, bool> # Determines whether the Text to Voice previews should be included in the response. If true, only the generated IDs will be returned which can then be streamed via the /v1/text-to-voice/:generated_voice_id/stream endpoint. (default: false)
   --remixing-session-id: any # The remixing session id.
   --remixing-session-iteration-id: any # The id of the remixing session iteration where these generations should be attached to. If not provided, a new iteration will be created.
   --prompt-strength: any # Controls the balance of prompt versus reference audio when generating voice samples. 0 means almost no prompt influence, 1 means almost no reference audio influence. Only supported when using the eleven_ttv_v3 model.
@@ -1208,7 +1207,7 @@ export def "voices id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-settings: string@bool-completer # This parameter is now deprecated. It is ignored and will be removed in a future version. (DEPRECATED, default: true)
+  --with-settings: oneof<nothing, bool> # This parameter is now deprecated. It is ignored and will be removed in a future version. (DEPRECATED, default: true)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<voice_id: string, name: string, samples: any, category: string, fine_tuning: any, labels: record, description: any, preview_url: any, available_for_tiers: list<string>, settings: any, sharing: any, high_quality_base_model_ids: list<string>, verified_languages: any, collection_ids: any, safety_control: any, voice_verification: any, permission_on_resource: any, is_owner: any, is_legacy: bool, is_mixed: bool, favorited_at_unix: any, created_at_unix: any, is_bookmarked: any, recording_quality: any, labelling_status: any, recording_quality_reason: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1294,7 +1293,7 @@ export def "voices v2" [
   --category: string # Category of the voice to filter by. One of 'premade', 'cloned', 'generated', 'professional'
   --fine-tuning-state: string # State of the voice's fine tuning to filter by. Applicable only to professional voices clones. One of 'draft', 'not_verified', 'not_started', 'queued', 'fine_tuning', 'fine_tuned', 'failed', 'delayed'
   --collection-id: string # Collection ID to filter voices by.
-  --include-total-count: string@bool-completer # Whether to include the total count of voices found in the response. NOTE: The total_count value is a live snapshot and may change between requests as users create, modify, or delete voices. For pagination, rely on the has_more flag instead. Only enable this when you actually need the total count (e.g., for display purposes), as it incurs a performance cost. (default: true)
+  --include-total-count: oneof<nothing, bool> # Whether to include the total count of voices found in the response. NOTE: The total_count value is a live snapshot and may change between requests as users create, modify, or delete voices. For pagination, rely on the has_more flag instead. Only enable this when you actually need the total count (e.g., for display purposes), as it incurs a performance cost. (default: true)
   --voice-ids: string # Voice IDs to lookup by. Maximum 100 voice IDs.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<voices: table<voice_id: string, name: string, samples: any, category: string, fine_tuning: any, labels: record, description: any, preview_url: any, available_for_tiers: list, settings: any, sharing: any, high_quality_base_model_ids: list, verified_languages: any, collection_ids: any, safety_control: any, voice_verification: any, permission_on_resource: any, is_owner: any, is_legacy: bool, is_mixed: bool, favorited_at_unix: any, created_at_unix: any, is_bookmarked: any, recording_quality: any, labelling_status: any, recording_quality_reason: any>, has_more: bool, total_count: int, next_page_token: any> {
@@ -1324,7 +1323,7 @@ export def "voices-add voice" [
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   name: string # The name that identifies this voice. This will be displayed in the dropdown of the website.
   files: list # A list of file paths to audio recordings intended for voice cloning.
-  --remove-background-noise: string@bool-completer # If set will remove background noise for voice samples using our audio isolation model. If the samples do not include background noise, it can make the quality worse. (default: false)
+  --remove-background-noise: oneof<nothing, bool> # If set will remove background noise for voice samples using our audio isolation model. If the samples do not include background noise, it can make the quality worse. (default: false)
   --description: any # A description of the voice.
   --labels: any # Labels for the voice. Keys can be language, accent, gender, or age.
 ]: any -> record<voice_id: string, requires_verification: bool> {
@@ -1357,10 +1356,10 @@ export def "voices-edit voice" [
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   name: string # The name that identifies this voice. This will be displayed in the dropdown of the website.
   --files: list # Audio files to add to the voice
-  --remove-background-noise: string@bool-completer # If set will remove background noise for voice samples using our audio isolation model. If the samples do not include background noise, it can make the quality worse. (default: false)
+  --remove-background-noise: oneof<nothing, bool> # If set will remove background noise for voice samples using our audio isolation model. If the samples do not include background noise, it can make the quality worse. (default: false)
   --description: any # A description of the voice.
   --labels: any # Labels for the voice. Keys can be language, accent, gender, or age.
-  --moderate-metadata: string@bool-completer # Run synchronous LLM moderation over the voice name and description when they change. Has no effect unless the voice_library_metadata_moderation feature flag is enabled for the user. (default: false)
+  --moderate-metadata: oneof<nothing, bool> # Run synchronous LLM moderation over the voice name and description when they change. Has no effect unless the voice_library_metadata_moderation feature flag is enabled for the user. (default: false)
 ]: any -> record<status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1391,7 +1390,7 @@ export def "voices-add voice-by-public_user_id-voice_id" [
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   new_name: string # The name that identifies this voice. This will be displayed in the dropdown of the website.
-  --bookmarked: string@bool-completer # default: true
+  --bookmarked: oneof<nothing, bool> # default: true
 ]: any -> record<voice_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1464,7 +1463,7 @@ export def "music-video-to-music music" [
   --description: any # Optional text description of the music you want. A maximum of 1000 characters is allowed.
   --tags: list # Optional list of style tags (e.g. ['upbeat', 'cinematic']). A maximum of 10 tags is allowed. (default: [])
   --model-id: string@model-id-completer-1 # The model to use for the generation. (default: music_v1)
-  --sign-with-c2pa: string@bool-completer # Whether to sign the generated song with C2PA. Applicable only for mp3 files. (default: false)
+  --sign-with-c2pa: oneof<nothing, bool> # Whether to sign the generated song with C2PA. Applicable only for mp3 files. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1496,7 +1495,7 @@ export def "studio-projects-pronunciation-dictionaries dictionaries" [
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   pronunciation_dictionary_locators: list # A list of pronunciation dictionary locators (pronunciation_dictionary_id, version_id) encoded as a list of JSON strings for pronunciation dictionaries to be applied to the text. A list of json encoded strings is required as adding projects may occur through formData as opposed to jsonBody. To specify multiple dictionaries use multiple --form lines in your curl, such as --form 'pronunciation_dictionary_locators="{\"pronunciation_dictionary_id\":\"Vmd4Zor6fplcA7WrINey\",\"version_id\":\"hRPaxjlTdR7wFMhV4w0b\"}"' --form 'pronunciation_dictionary_locators="{\"pronunciation_dictionary_id\":\"JzWtcGQMJ6bnlWwyMo7e\",\"version_id\":\"lbmwxiLu4q6txYxgdZqn\"}"'. — item shape: {pronunciation_dictionary_id: string, version_id: any}
-  --invalidate-affected-text: string@bool-completer # This will automatically mark text in this project for reconversion when the new dictionary applies or the old one no longer does. (default: true)
+  --invalidate-affected-text: oneof<nothing, bool> # This will automatically mark text in this project for reconversion when the new dictionary applies or the old one no longer does. (default: true)
 ]: any -> record<status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1566,13 +1565,13 @@ export def "studio-projects project" [
   --original-publication-date: any # An optional original publication date of the Studio project, in the format YYYY-MM-DD or YYYY.
   --mature-content: any # An optional specification of whether this Studio project contains mature content. (default: false)
   --isbn-number: any # An optional ISBN number of the Studio project you want to create, this will be added as metadata to the mp3 file on Studio project or chapter download.
-  --acx-volume-normalization: string@bool-completer # [Deprecated] When the Studio project is downloaded, should the returned audio have postprocessing in order to make it compliant with audiobook normalized volume requirements (default: false)
-  --volume-normalization: string@bool-completer # When the Studio project is downloaded, should the returned audio have postprocessing in order to make it compliant with audiobook normalized volume requirements (default: false)
+  --acx-volume-normalization: oneof<nothing, bool> # [Deprecated] When the Studio project is downloaded, should the returned audio have postprocessing in order to make it compliant with audiobook normalized volume requirements (default: false)
+  --volume-normalization: oneof<nothing, bool> # When the Studio project is downloaded, should the returned audio have postprocessing in order to make it compliant with audiobook normalized volume requirements (default: false)
   --pronunciation-dictionary-locators: list # A list of pronunciation dictionary locators (pronunciation_dictionary_id, version_id) encoded as a list of JSON strings for pronunciation dictionaries to be applied to the text. A list of json encoded strings is required as adding projects may occur through formData as opposed to jsonBody. To specify multiple dictionaries use multiple --form lines in your curl, such as --form 'pronunciation_dictionary_locators="{\"pronunciation_dictionary_id\":\"Vmd4Zor6fplcA7WrINey\",\"version_id\":\"hRPaxjlTdR7wFMhV4w0b\"}"' --form 'pronunciation_dictionary_locators="{\"pronunciation_dictionary_id\":\"JzWtcGQMJ6bnlWwyMo7e\",\"version_id\":\"lbmwxiLu4q6txYxgdZqn\"}"'.
   --callback-url: any #      A url that will be called by our service when the Studio project is converted. Request will contain a json blob containing the status of the conversion     Messages:     1. When project was converted successfully:     {       type: "project_conversion_status",       event_timestamp: 1234567890,       data: {         request_id: "1234567890",         project_id: "21m00Tcm4TlvDq8ikWAM",         conversion_status: "success",         project_snapshot_id: "22m00Tcm4TlvDq8ikMAT",         error_details: None,       }     }     2. When project conversion failed:     {       type: "project_conversion_status",       event_timestamp: 1234567890,       data: {         request_id: "1234567890",         project_id: "21m00Tcm4TlvDq8ikWAM",         conversion_status: "error",         project_snapshot_id: None,         error_details: "Error details if conversion failed"       }     }      3. When chapter was converted successfully:     {       type: "chapter_conversion_status",       event_timestamp: 1234567890,       data: {         request_id: "1234567890",         project_id: "21m00Tcm4TlvDq8ikWAM",         chapter_id: "22m00Tcm4TlvDq8ikMAT",         conversion_status: "success",         chapter_snapshot_id: "23m00Tcm4TlvDq8ikMAV",         error_details: None,       }     }     4. When chapter conversion failed:     {       type: "chapter_conversion_status",       event_timestamp: 1234567890,       data: {         request_id: "1234567890",         project_id: "21m00Tcm4TlvDq8ikWAM",         chapter_id: "22m00Tcm4TlvDq8ikMAT",         conversion_status: "error",         chapter_snapshot_id: None,         error_details: "Error details if conversion failed"       }     }     
   --fiction: any # An optional specification of whether the content of this Studio project is fiction.
   --apply-text-normalization: any #      This parameter controls text normalization with four modes: 'auto', 'on', 'apply_english' and 'off'.     When set to 'auto', the system will automatically decide whether to apply text normalization     (e.g., spelling out numbers). With 'on', text normalization will always be applied, while     with 'off', it will be skipped. 'apply_english' is the same as 'on' but will assume that text is in English.     
-  --auto-convert: string@bool-completer # Whether to auto convert the Studio project to audio or not. (default: false)
+  --auto-convert: oneof<nothing, bool> # Whether to auto convert the Studio project to audio or not. (default: false)
   --auto-assign-voices: any # [Alpha Feature] Whether automatically assign voices to phrases in the create Project. (default: false)
   --source-type: any # The type of Studio project to create.
   --voice-settings: list #     Optional voice settings overrides for the project, encoded as a list of JSON strings.      Example:     ["{\"voice_id\": \"21m00Tcm4TlvDq8ikWAM\", \"stability\": 0.7, \"similarity_boost\": 0.8, \"style\": 0.5, \"speed\": 1.0, \"use_speaker_boost\": true}"]     
@@ -1611,7 +1610,7 @@ export def "studio-projects project-by-project_id" [
   --title: any # An optional name of the author of the Studio project, this will be added as metadata to the mp3 file on Studio project or chapter download.
   --author: any # An optional name of the author of the Studio project, this will be added as metadata to the mp3 file on Studio project or chapter download.
   --isbn-number: any # An optional ISBN number of the Studio project you want to create, this will be added as metadata to the mp3 file on Studio project or chapter download.
-  --volume-normalization: string@bool-completer # When the Studio project is downloaded, should the returned audio have postprocessing in order to make it compliant with audiobook normalized volume requirements (default: false)
+  --volume-normalization: oneof<nothing, bool> # When the Studio project is downloaded, should the returned audio have postprocessing in order to make it compliant with audiobook normalized volume requirements (default: false)
 ]: any -> record<project: record<project_id: string, name: string, create_date_unix: int, created_by_user_id: any, default_title_voice_ref_id: string, default_paragraph_voice_ref_id: string, default_model_id: string, last_conversion_date_unix: any, can_be_downloaded: bool, title: any, author: any, description: any, genres: any, cover_image_url: any, target_audience: any, language: any, content_type: any, original_publication_date: any, mature_content: any, isbn_number: any, volume_normalization: bool, state: string, access_level: string, fiction: any, quality_check_on: bool, quality_check_on_when_bulk_convert: bool, creation_meta: any, source_type: any, chapters_enabled: any, captions_enabled: any, caption_style: any, caption_style_template_overrides: any, public_share_id: any, aspect_ratio: any, agent_settings: any, default_title_voice_id: string, default_paragraph_voice_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1695,7 +1694,7 @@ export def "studio-projects-content content" [
   --from-url: any # An optional URL from which we will extract content to initialize the Studio project. If this is set, 'from_url' and 'from_content' must be null. If neither 'from_url', 'from_document', 'from_content' are provided we will initialize the Studio project as blank.
   --from-document: any # An optional .epub, .pdf, .txt or similar file can be provided. If provided, we will initialize the Studio project with its content. If this is set, 'from_url' and 'from_content' must be null. If neither 'from_url', 'from_document', 'from_content' are provided we will initialize the Studio project as blank.
   --from-content-json: string #      An optional content to initialize the Studio project with. If this is set, 'from_url' and 'from_document' must be null. If neither 'from_url', 'from_document', 'from_content' are provided we will initialize the Studio project as blank.      Example:     [{"name": "Chapter A", "blocks": [{"sub_type": "p", "nodes": [{"voice_id": "6lCwbsX1yVjD49QmpkT0", "text": "A", "type": "tts_node"}, {"voice_id": "6lCwbsX1yVjD49QmpkT1", "text": "B", "type": "tts_node"}]}, {"sub_type": "h1", "nodes": [{"voice_id": "6lCwbsX1yVjD49QmpkT0", "text": "C", "type": "tts_node"}, {"voice_id": "6lCwbsX1yVjD49QmpkT1", "text": "D", "type": "tts_node"}]}]}, {"name": "Chapter B", "blocks": [{"sub_type": "p", "nodes": [{"voice_id": "6lCwbsX1yVjD49QmpkT0", "text": "E", "type": "tts_node"}, {"voice_id": "6lCwbsX1yVjD49QmpkT1", "text": "F", "type": "tts_node"}]}, {"sub_type": "h2", "nodes": [{"voice_id": "6lCwbsX1yVjD49QmpkT0", "text": "G", "type": "tts_node"}, {"voice_id": "6lCwbsX1yVjD49QmpkT1", "text": "H", "type": "tts_node"}]}]}]     
-  --auto-convert: string@bool-completer # Whether to auto convert the Studio project to audio or not. (default: false)
+  --auto-convert: oneof<nothing, bool> # Whether to auto convert the Studio project to audio or not. (default: false)
 ]: any -> record<project: record<project_id: string, name: string, create_date_unix: int, created_by_user_id: any, default_title_voice_ref_id: string, default_paragraph_voice_ref_id: string, default_model_id: string, last_conversion_date_unix: any, can_be_downloaded: bool, title: any, author: any, description: any, genres: any, cover_image_url: any, target_audience: any, language: any, content_type: any, original_publication_date: any, mature_content: any, isbn_number: any, volume_normalization: bool, state: string, access_level: string, fiction: any, quality_check_on: bool, quality_check_on_when_bulk_convert: bool, creation_meta: any, source_type: any, chapters_enabled: any, captions_enabled: any, caption_style: any, caption_style_template_overrides: any, public_share_id: any, aspect_ratio: any, agent_settings: any, default_title_voice_id: string, default_paragraph_voice_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1801,7 +1800,7 @@ export def "studio-projects-snapshots-stream endpoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
-  --convert-to-mpeg: string@bool-completer # Whether to convert the audio to mpeg format. (default: false)
+  --convert-to-mpeg: oneof<nothing, bool> # Whether to convert the audio to mpeg format. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2075,7 +2074,7 @@ export def "studio-projects-chapters-snapshots-stream audio" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
-  --convert-to-mpeg: string@bool-completer # Whether to convert the audio to mpeg format. (default: false)
+  --convert-to-mpeg: oneof<nothing, bool> # Whether to convert the audio to mpeg format. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2585,14 +2584,14 @@ export def "dubbing dubbing" [
   --target-lang: any # The Target language to dub the content into. Expects a valid iso639-1 or iso639-3 language code.
   --target-accent: any # [Experimental] An accent to apply when selecting voices from the library and to use to inform translation of the dialect to prefer.
   --num-speakers: int # Number of speakers to use for the dubbing. Set to 0 to automatically detect the number of speakers (default: 0)
-  --watermark: string@bool-completer # Whether to apply watermark to the output video. (default: false)
+  --watermark: oneof<nothing, bool> # Whether to apply watermark to the output video. (default: false)
   --start-time: any # Start time of the source video/audio file.
   --end-time: any # End time of the source video/audio file.
-  --highest-resolution: string@bool-completer # Whether to use the highest resolution available. (default: false)
-  --drop-background-audio: string@bool-completer # An advanced setting. Whether to drop background audio from the final dub. This can improve dub quality where it's known that audio shouldn't have a background track such as for speeches or monologues. (default: false)
+  --highest-resolution: oneof<nothing, bool> # Whether to use the highest resolution available. (default: false)
+  --drop-background-audio: oneof<nothing, bool> # An advanced setting. Whether to drop background audio from the final dub. This can improve dub quality where it's known that audio shouldn't have a background track such as for speeches or monologues. (default: false)
   --use-profanity-filter: any # [BETA] Whether transcripts should have profanities censored with the words '[censored]'
-  --dubbing-studio: string@bool-completer # Whether to prepare dub for edits in dubbing studio or edits as a dubbing resource. (default: false)
-  --disable-voice-cloning: string@bool-completer # Instead of using a voice clone in dubbing, use a similar voice from the ElevenLabs Voice Library. Voices used from the library will contribute towards a workspace's custom voices limit, and if there aren't enough available slots the dub will fail. Using this feature requires the caller to have the 'add_voice_from_voice_library' permission on their workspace to access new voices. (default: false)
+  --dubbing-studio: oneof<nothing, bool> # Whether to prepare dub for edits in dubbing studio or edits as a dubbing resource. (default: false)
+  --disable-voice-cloning: oneof<nothing, bool> # Instead of using a voice clone in dubbing, use a similar voice from the ElevenLabs Voice Library. Voices used from the library will contribute towards a workspace's custom voices limit, and if there aren't enough available slots the dub will fail. Using this feature requires the caller to have the 'add_voice_from_voice_library' permission on their workspace to access new voices. (default: false)
   --mode: string@mode-completer # The mode in which to run this Dubbing job. Defaults to automatic, use manual if specifically providing a CSV transcript to use. Note that manual mode is experimental and production use is strongly discouraged. (default: automatic)
   --csv-fps: any # Frames per second to use when parsing a CSV file for dubbing. If not provided, FPS will be inferred from timecodes.
 ]: any -> record<dubbing_id: string, expected_duration_sec: float> {
@@ -2788,14 +2787,14 @@ export def "audio-native project" [
   --image: any # (Deprecated) Image URL used in the player. If not provided, default image set in the Player settings is used. (DEPRECATED)
   --author: any # Author used in the player and inserted at the start of the uploaded article. If not provided, the default author set in the Player settings is used.
   --title: any # Title used in the player and inserted at the top of the uploaded article. If not provided, the default title set in the Player settings is used.
-  --small: string@bool-completer # (Deprecated) Whether to use small player or not. If not provided, default value set in the Player settings is used. (DEPRECATED, default: false)
+  --small: oneof<nothing, bool> # (Deprecated) Whether to use small player or not. If not provided, default value set in the Player settings is used. (DEPRECATED, default: false)
   --text-color: any # Text color used in the player. If not provided, default text color set in the Player settings is used.
   --background-color: any # Background color used in the player. If not provided, default background color set in the Player settings is used.
   --sessionization: int # (Deprecated) Specifies for how many minutes to persist the session across page reloads. If not provided, default sessionization set in the Player settings is used. (DEPRECATED, default: 0)
   --voice-id: any # Voice ID used to voice the content. If not provided, default voice ID set in the Player settings is used.
   --model-id: any # TTS Model ID used in the player. If not provided, default model ID set in the Player settings is used.
   --file: string # Either txt or HTML input file containing the article content. HTML should be formatted as follows '&lt;html&gt;&lt;body&gt;&lt;div&gt;&lt;p&gt;Your content&lt;/p&gt;&lt;h3&gt;More of your content&lt;/h3&gt;&lt;p&gt;Some more of your content&lt;/p&gt;&lt;/div&gt;&lt;/body&gt;&lt;/html&gt;' (format: binary)
-  --auto-convert: string@bool-completer # Whether to auto convert the project to audio or not. (default: false)
+  --auto-convert: oneof<nothing, bool> # Whether to auto convert the project to audio or not. (default: false)
   --apply-text-normalization: any #      This parameter controls text normalization with four modes: 'auto', 'on', 'apply_english' and 'off'.     When set to 'auto', the system will automatically decide whether to apply text normalization     (e.g., spelling out numbers). With 'on', text normalization will always be applied, while     with 'off', it will be skipped. 'apply_english' is the same as 'on' but will assume that text is in English.     
   --pronunciation-dictionary-locators: list # A list of pronunciation dictionary locators (pronunciation_dictionary_id, version_id) encoded as a list of JSON strings for pronunciation dictionaries to be applied to the text. A list of json encoded strings is required as adding projects may occur through formData as opposed to jsonBody. To specify multiple dictionaries use multiple --form lines in your curl, such as --form 'pronunciation_dictionary_locators="{\"pronunciation_dictionary_id\":\"Vmd4Zor6fplcA7WrINey\",\"version_id\":\"hRPaxjlTdR7wFMhV4w0b\"}"' --form 'pronunciation_dictionary_locators="{\"pronunciation_dictionary_id\":\"JzWtcGQMJ6bnlWwyMo7e\",\"version_id\":\"lbmwxiLu4q6txYxgdZqn\"}"'.
 ]: any -> record<project_id: string, converting: bool, html_snippet: string> {
@@ -2852,8 +2851,8 @@ export def "audio-native-content endpoint" [
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --file: string # Either txt or HTML input file containing the article content. HTML should be formatted as follows '&lt;html&gt;&lt;body&gt;&lt;div&gt;&lt;p&gt;Your content&lt;/p&gt;&lt;h5&gt;More of your content&lt;/h5&gt;&lt;p&gt;Some more of your content&lt;/p&gt;&lt;/div&gt;&lt;/body&gt;&lt;/html&gt;' (format: binary)
-  --auto-convert: string@bool-completer # Whether to auto convert the project to audio or not. (default: false)
-  --auto-publish: string@bool-completer # Whether to auto publish the new project snapshot after it's converted. (default: false)
+  --auto-convert: oneof<nothing, bool> # Whether to auto convert the project to audio or not. (default: false)
+  --auto-publish: oneof<nothing, bool> # Whether to auto publish the new project snapshot after it's converted. (default: false)
 ]: any -> record<project_id: string, converting: bool, publishing: bool, html_snippet: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2920,11 +2919,11 @@ export def "shared-voices voices" [
   --search: string # Search term used for filtering
   --use-cases: string # Use-case used for filtering
   --descriptives: string # Search term used for filtering
-  --featured: string@bool-completer # Filter featured voices (default: false)
+  --featured: oneof<nothing, bool> # Filter featured voices (default: false)
   --min-notice-period-days: string # Filter voices with a minimum notice period of the given number of days.
   --include-custom-rates: string # Include/exclude voices with custom rates
   --include-live-moderated: string # Include/exclude voices that are live moderated
-  --reader-app-enabled: string@bool-completer # Filter voices that are enabled for the reader app (default: false)
+  --reader-app-enabled: oneof<nothing, bool> # Filter voices that are enabled for the reader app (default: false)
   --owner-id: string # Filter voices by public owner ID
   --qp-sort: string # Sort criteria
   --page: int # default: 0
@@ -2987,7 +2986,7 @@ export def "usage-character-stats characters" [
   --allow-errors(-e) # Return full response without error handling
   --start-unix: int # UTC Unix timestamp for the start of the usage window, in milliseconds. To include the first day of the window, the timestamp should be at 00:00:00 of that day.
   --end-unix: int # UTC Unix timestamp for the end of the usage window, in milliseconds. To include the last day of the window, the timestamp should be at 23:59:59 of that day.
-  --include-workspace-metrics: string@bool-completer # Whether or not to include the statistics of the entire workspace. (default: false)
+  --include-workspace-metrics: oneof<nothing, bool> # Whether or not to include the statistics of the entire workspace. (default: false)
   --breakdown-type: string@breakdown-type-completer # How to break down the information. Cannot be "user" if include_workspace_metrics is False.
   --aggregation-interval: string@aggregation-interval-completer # How to aggregate usage data over time. Can be "hour", "day", "week", "month", or "cumulative".
   --aggregation-bucket-size: string # Aggregation bucket size in seconds. Overrides the aggregation interval.
@@ -3081,7 +3080,7 @@ export def "pronunciation-dictionaries dictionary" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
-  --archived: string@bool-completer # Whether to archive the pronunciation dictionary.
+  --archived: oneof<nothing, bool> # Whether to archive the pronunciation dictionary.
   --name: string # The name of the pronunciation dictionary, used for identification only.
 ]: any -> record<id: string, latest_version_id: string, latest_version_rules_num: int, name: string, permission_on_resource: any, created_by: string, creation_time_unix: int, archived_time_unix: any, description: any> {
   let input = $in
@@ -3460,7 +3459,7 @@ export def "workspace-auth-connections connection" [
   --token-url: string
   --scopes: list # default: []
   --extra-params: record # default: {}
-  --basic-auth-in-header: string@bool-completer # If True, send client credentials in Authorization header as Basic Auth instead of request body (default: false)
+  --basic-auth-in-header: oneof<nothing, bool> # If True, send client credentials in Authorization header as Basic Auth instead of request body (default: false)
   --client-secret: string
   --custom-headers: record # default: {}
   --header-name: string # The name of the header to use for authentication (e.g., 'x-api-key')
@@ -3947,7 +3946,7 @@ export def "workspace-webhooks route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-usages: string@bool-completer # Whether to include active usages of the webhook, only usable by admins (default: false)
+  --include-usages: oneof<nothing, bool> # Whether to include active usages of the webhook, only usable by admins (default: false)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<webhooks: table<name: string, webhook_id: string, webhook_url: string, is_disabled: bool, is_auto_disabled: bool, created_at_unix: int, auth_type: string, usage: any, most_recent_failure_error_code: any, most_recent_failure_timestamp: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4004,7 +4003,7 @@ export def "workspace-webhooks route-by-webhook_id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
-  --is-disabled: string@bool-completer # Whether to disable or enable the webhook
+  --is-disabled: oneof<nothing, bool> # Whether to disable or enable the webhook
   name: string # The display name of the webhook (used for display purposes only).
   --retry-enabled: any # Whether to enable automatic retries for transient failures (5xx, 429, timeout)
   --request-headers: any # A list of request headers to include with the webhook delivery (optional)
@@ -4060,29 +4059,29 @@ export def "speech-to-text text" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-logging: string@bool-completer # When enable_logging is set to false zero retention mode will be used for the request. This will mean log and transcript storage features are unavailable for this request. Zero retention mode may only be used by enterprise customers. (default: true)
+  --enable-logging: oneof<nothing, bool> # When enable_logging is set to false zero retention mode will be used for the request. This will mean log and transcript storage features are unavailable for this request. Zero retention mode may only be used by enterprise customers. (default: true)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   model_id: string@model-id-completer-2 # The ID of the model to use for transcription.
   --file: any # The file to transcribe (100ms minimum audio length). All major audio and video formats are supported. Exactly one of the file or cloud_storage_url parameters must be provided. The file size must be less than 5.0GB.
   --language-code: any # An ISO-639-1 or ISO-639-3 language_code corresponding to the language of the audio file. Can sometimes improve transcription performance if known beforehand. Defaults to null, in this case the language is predicted automatically.
-  --tag-audio-events: string@bool-completer # Whether to tag audio events like (laughter), (footsteps), etc. in the transcription. (default: true)
+  --tag-audio-events: oneof<nothing, bool> # Whether to tag audio events like (laughter), (footsteps), etc. in the transcription. (default: true)
   --num-speakers: any # The maximum amount of speakers talking in the uploaded file. Can help with predicting who speaks when. The maximum amount of speakers that can be predicted is 32. Defaults to null, in this case the amount of speakers is set to the maximum value the model supports.
   --timestamps-granularity: string@timestamps-granularity-completer # The granularity of the timestamps in the transcription. 'word' provides word-level timestamps and 'character' provides character-level timestamps per word. (default: word)
-  --diarize: string@bool-completer # Whether to annotate which speaker is currently talking in the uploaded file. (default: false)
+  --diarize: oneof<nothing, bool> # Whether to annotate which speaker is currently talking in the uploaded file. (default: false)
   --diarization-threshold: any # Diarization threshold to apply during speaker diarization. A higher value means there will be a lower chance of one speaker being diarized as two different speakers but also a higher chance of two different speakers being diarized as one speaker (less total speakers predicted). A low value means there will be a higher chance of one speaker being diarized as two different speakers but also a lower chance of two different speakers being diarized as one speaker (more total speakers predicted). Can only be set when diarize=True and num_speakers=None. Defaults to None, in which case we will choose a threshold based on the model_id (0.22 usually).
   --additional-formats: list
   --file-format: string@file-format-completer # The format of input audio. Options are 'pcm_s16le_16' or 'other' For `pcm_s16le_16`, the input audio must be 16-bit PCM at a 16kHz sample rate, single channel (mono), and little-endian byte order. Latency will be lower than with passing an encoded waveform. (default: other)
   --cloud-storage-url: any # [Deprecated] This parameter is deprecated and will be removed in the future. Use 'source_url' instead.The HTTPS URL of the file to transcribe. Exactly one of the file or cloud_storage_url parameters must be provided. The file must be accessible via HTTPS and the file size must be less than 2GB. Any valid HTTPS URL is accepted, including URLs from cloud storage providers (AWS S3, Google Cloud Storage, Cloudflare R2, etc.), CDNs, or any other HTTPS source. URLs can be pre-signed or include authentication tokens in query parameters. (DEPRECATED)
   --source-url: any # The URL of an audio or video file to transcribe. Supports hosted video or audio files, YouTube video URLs, TikTok video URLs, and other video hosting services.
-  --webhook: string@bool-completer # Whether to send the transcription result to configured speech-to-text webhooks.  If set the request will return early without the transcription, which will be delivered later via webhook. (default: false)
+  --webhook: oneof<nothing, bool> # Whether to send the transcription result to configured speech-to-text webhooks.  If set the request will return early without the transcription, which will be delivered later via webhook. (default: false)
   --webhook-id: any # Optional specific webhook ID to send the transcription result to. Only valid when webhook is set to true. If not provided, transcription will be sent to all configured speech-to-text webhooks.
   --temperature: any # Controls the randomness of the transcription output. Accepts values between 0.0 and 2.0, where higher values result in more diverse and less deterministic results. If omitted, we will use a temperature based on the model you selected which is usually 0.
   --seed: any # If specified, our system will make a best effort to sample deterministically, such that repeated requests with the same seed and parameters should return the same result. Determinism is not guaranteed. Must be an integer between 0 and 2147483647.
-  --use-multi-channel: string@bool-completer # Whether the audio file contains multiple channels where each channel contains a single speaker. When enabled, each channel will be transcribed independently and the results will be combined. Each word in the response will include a 'channel_index' field indicating which channel it was spoken on. A maximum of 5 channels is supported. Each channel is billed independently at the full audio duration, so cost scales linearly with the number of channels. (default: false)
+  --use-multi-channel: oneof<nothing, bool> # Whether the audio file contains multiple channels where each channel contains a single speaker. When enabled, each channel will be transcribed independently and the results will be combined. Each word in the response will include a 'channel_index' field indicating which channel it was spoken on. A maximum of 5 channels is supported. Each channel is billed independently at the full audio duration, so cost scales linearly with the number of channels. (default: false)
   --webhook-metadata: any # Optional metadata to be included in the webhook response. This should be a JSON string representing an object with a maximum depth of 2 levels and maximum size of 16KB. Useful for tracking internal IDs, job references, or other contextual information.
   --entity-detection: any # Detect entities in the transcript. Can be 'all' to detect all entities, a single entity type or category string, or a list of entity types/categories. Categories include 'pii', 'phi', 'pci', 'other', 'offensive_language'. When enabled, detected entities will be returned in the 'entities' field with their text, type, and character positions. Usage of this parameter will incur an additional 30% surcharge on the base transcription cost.
-  --no-verbatim: string@bool-completer # If true, the transcription will not have any filler words, false starts and non-speech sounds. Only supported with scribe_v2 model. (default: false)
-  --detect-speaker-roles: string@bool-completer # Whether to detect speaker roles (agent vs customer). Requires diarize=true. Cannot be used with use_multi_channel=true. When enabled, speaker_id values will be 'agent' and 'customer' instead of 'speaker_0', 'speaker_1', etc. Usage incurs an additional 10% surcharge on base transcription cost. (default: false)
+  --no-verbatim: oneof<nothing, bool> # If true, the transcription will not have any filler words, false starts and non-speech sounds. Only supported with scribe_v2 model. (default: false)
+  --detect-speaker-roles: oneof<nothing, bool> # Whether to detect speaker roles (agent vs customer). Requires diarize=true. Cannot be used with use_multi_channel=true. When enabled, speaker_id values will be 'agent' and 'customer' instead of 'speaker_0', 'speaker_1', etc. Usage incurs an additional 10% surcharge on base transcription cost. (default: false)
   --entity-redaction: any # Redact entities from the transcript text. Accepts the same format as entity_detection: 'all', a category ('pii', 'phi'), or specific entity types. Must be a subset of entity_detection. When redaction is enabled, the entities field will not be returned. Usage of this parameter will incur an additional 30% surcharge on the base transcription cost.
   --entity-redaction-mode: string # How to format redacted entities. 'redacted' replaces with {REDACTED}, 'entity_type' replaces with {ENTITY_TYPE}, 'enumerated_entity_type' replaces with {ENTITY_TYPE_N} where N enumerates each occurrence. Only used when entity_redaction is set. (default: enumerated_entity_type)
   --keyterms: list # A list of keyterms to bias the transcription towards.           The keyterms are words or phrases you want the model to recognise more accurately.           The number of keyterms cannot exceed 1000.           The length of each keyterm must be less than 50 characters.           Keyterms can contain at most 5 words (after normalisation).           For example ["hello", "world", "technical term"].           The following characters are not supported: `<`, `>`, `{`, `}`, `[`, `]`, `\`.           Usage of this parameter will incur an additional 20% surcharge on the base transcription cost.           When more than 100 keyterms are provided, a minimum billable duration of 20 seconds applies per request. (default: [])
@@ -4218,7 +4217,7 @@ export def "convai-conversation-get-signed-url link" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --agent-id: string # Agent id (agent_…) or speech engine external id (seng_), resolved to the same underlying resource.
-  --include-conversation-id: string@bool-completer # Whether to include a conversation_id with the response. If included, the conversation_signature cannot be used again. (default: false)
+  --include-conversation-id: oneof<nothing, bool> # Whether to include a conversation_id with the response. If included, the conversation_signature cannot be used again. (default: false)
   --branch-id: string # The ID of the branch to use
   --environment: string # The environment to use for resolving environment variables (e.g. 'production', 'staging'). Defaults to 'production'.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -4249,7 +4248,7 @@ export def "convai-conversation-get-signed-url deprecated" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --agent-id: string # Agent id (agent_…) or speech engine external id (seng_), resolved to the same underlying resource.
-  --include-conversation-id: string@bool-completer # Whether to include a conversation_id with the response. If included, the conversation_signature cannot be used again. (default: false)
+  --include-conversation-id: oneof<nothing, bool> # Whether to include a conversation_id with the response. If included, the conversation_signature cannot be used again. (default: false)
   --branch-id: string # The ID of the branch to use
   --environment: string # The environment to use for resolving environment variables (e.g. 'production', 'staging'). Defaults to 'production'.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -4475,7 +4474,7 @@ export def "convai-agents-create route" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-versioning: string@bool-completer # Deprecated: all agents are versioned. This parameter is ignored. (DEPRECATED, default: true)
+  --enable-versioning: oneof<nothing, bool> # Deprecated: all agents are versioned. This parameter is ignored. (DEPRECATED, default: true)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   conversation_config: record # shape: {asr?: record, turn?: record, tts?: record, conversation?: record, language_presets?: record, vad?: record, agent?: record}
   --platform-settings: any # Platform settings for the agent are all settings that aren't related to the conversation orchestration and content.
@@ -4566,7 +4565,7 @@ export def "convai-agents route-by-agent_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-versioning-if-not-enabled: string@bool-completer # Deprecated: all agents are versioned. This parameter is ignored. (DEPRECATED, default: true)
+  --enable-versioning-if-not-enabled: oneof<nothing, bool> # Deprecated: all agents are versioned. This parameter is ignored. (DEPRECATED, default: true)
   --branch-id: string # The ID of the branch to use
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --conversation-config: any # Conversation configuration for an agent
@@ -4712,7 +4711,7 @@ export def "convai-agents route" [
   --page-size: int # How many Agents to return at maximum. Can not exceed 100, defaults to 30. (default: 30)
   --search: string # Search by agents name.
   --archived: string # Filter agents by archived status (default: false)
-  --show-only-owned-agents: string@bool-completer # If set to true, the endpoint will omit any agents that were shared with you by someone else and include only the ones you own. Deprecated: use created_by_user_id instead. (DEPRECATED, default: false)
+  --show-only-owned-agents: oneof<nothing, bool> # If set to true, the endpoint will omit any agents that were shared with you by someone else and include only the ones you own. Deprecated: use created_by_user_id instead. (DEPRECATED, default: false)
   --created-by-user-id: string # Filter agents by creator user ID. When set, only agents created by this user are returned. Takes precedence over show_only_owned_agents. Use '@me' to refer to the authenticated user.
   --sort-direction: string@sort-direction-completer # The direction to sort the results
   --sort-by: string # The field to sort the results by
@@ -5024,7 +5023,7 @@ export def "convai-agent-testing-folders route-by-folder_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # Force delete. Required for deleting non-empty folders. (default: false)
+  --force: oneof<nothing, bool> # Force delete. Required for deleting non-empty folders. (default: false)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5853,8 +5852,8 @@ export def "convai-phone-numbers route" [
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --phone-number: string # Phone number
   --label: string # Label for the phone number
-  --supports-inbound: string@bool-completer # This field is deprecated and will be removed in the future. Whether this phone number supports inbound calls (DEPRECATED, default: true)
-  --supports-outbound: string@bool-completer # This field is deprecated and will be removed in the future. Whether this phone number supports outbound calls (DEPRECATED, default: true)
+  --supports-inbound: oneof<nothing, bool> # This field is deprecated and will be removed in the future. Whether this phone number supports inbound calls (DEPRECATED, default: true)
+  --supports-outbound: oneof<nothing, bool> # This field is deprecated and will be removed in the future. Whether this phone number supports outbound calls (DEPRECATED, default: true)
   --provider: string # default: twilio
   --sid: string # Twilio Account SID
   --body-token: string # Twilio Auth Token
@@ -6039,7 +6038,7 @@ export def "convai-llm-usage-calculate calculation" [
   --allow-errors(-e) # Return full response without error handling
   prompt_length: int # Length of the prompt in characters.
   number_of_pages: int # Pages of content in PDF documents or URLs in the agent's knowledge base.
-  --rag-enabled: string@bool-completer # Whether RAG is enabled.
+  --rag-enabled: oneof<nothing, bool> # Whether RAG is enabled.
 ]: any -> record<llm_prices: table<llm: string, price_per_minute: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6232,12 +6231,12 @@ export def "convai-knowledge-base route" [
   --allow-errors(-e) # Return full response without error handling
   --page-size: int # How many documents to return at maximum. Can not exceed 100, defaults to 30. (default: 30)
   --search: string # If specified, the endpoint returns only such knowledge base documents whose names start with this string.
-  --show-only-owned-documents: string@bool-completer # If set to true, the endpoint will return only documents owned by you (and not shared from somebody else). Deprecated: use created_by_user_id instead. (DEPRECATED, default: false)
+  --show-only-owned-documents: oneof<nothing, bool> # If set to true, the endpoint will return only documents owned by you (and not shared from somebody else). Deprecated: use created_by_user_id instead. (DEPRECATED, default: false)
   --created-by-user-id: string # Filter documents by creator user ID. When set, only documents created by this user are returned. Takes precedence over show_only_owned_documents. Use '@me' to refer to the authenticated user.
   --types: string # If present, the endpoint will return only documents of the given types.
   --parent-folder-id: string # If set, the endpoint will return only documents that are direct children of the given folder.
   --ancestor-folder-id: string # If set, the endpoint will return only documents that are descendants of the given folder.
-  --folders-first: string@bool-completer # Whether folders should be returned first in the list of documents. (default: false)
+  --folders-first: oneof<nothing, bool> # Whether folders should be returned first in the list of documents. (default: false)
   --sort-direction: string@sort-direction-completer # The direction to sort the results
   --sort-by: string # The field to sort the results by
   --cursor: string # Used for fetching next page. Cursor is returned in the response.
@@ -6270,8 +6269,8 @@ export def "convai-knowledge-base-url route" [
   --body-url: string # URL to a page of documentation that the agent will have access to in order to interact with users.
   --name: any # A custom, human-readable name for the document.
   --parent-folder-id: any # If set, the created document or folder will be placed inside the given folder.
-  --enable-auto-sync: string@bool-completer # Whether to enable auto-sync for this URL document. (default: false)
-  --auto-remove: string@bool-completer # Whether to automatically remove the document if the URL becomes unavailable. Only applicable when auto-sync is enabled. (default: false)
+  --enable-auto-sync: oneof<nothing, bool> # Whether to enable auto-sync for this URL document. (default: false)
+  --auto-remove: oneof<nothing, bool> # Whether to automatically remove the document if the URL becomes unavailable. Only applicable when auto-sync is enabled. (default: false)
 ]: any -> record<id: string, name: string, folder_path: table<id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6361,8 +6360,8 @@ export def "convai-knowledge-base-folder route" [
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   name: string # A custom, human-readable name for the document.
   --parent-folder-id: any # If set, the created document or folder will be placed inside the given folder.
-  --enable-auto-sync: string@bool-completer # Whether to enable auto-sync for this URL document. (default: false)
-  --auto-remove: string@bool-completer # Whether to automatically remove the document if the URL becomes unavailable. Only applicable when auto-sync is enabled. (default: false)
+  --enable-auto-sync: oneof<nothing, bool> # Whether to enable auto-sync for this URL document. (default: false)
+  --auto-remove: oneof<nothing, bool> # Whether to automatically remove the document if the URL becomes unavailable. Only applicable when auto-sync is enabled. (default: false)
 ]: any -> record<id: string, name: string, folder_path: table<id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6449,7 +6448,7 @@ export def "convai-knowledge-base document" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # If set to true, the document or folder will be deleted regardless of whether it is used by any agents and it will be removed from the dependent agents. For non-empty folders, this will also delete all child documents and folders. (default: false)
+  --force: oneof<nothing, bool> # If set to true, the document or folder will be deleted regardless of whether it is used by any agents and it will be removed from the dependent agents. For non-empty folders, this will also delete all child documents and folders. (default: false)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6944,7 +6943,7 @@ export def "convai-tools route-1" [
   --allow-errors(-e) # Return full response without error handling
   --search: string # If specified, the endpoint returns only tools whose names start with this string.
   --page-size: string # How many documents to return at maximum. Can not exceed 100, defaults to 30.
-  --show-only-owned-documents: string@bool-completer # If set to true, the endpoint will return only tools owned by you (and not shared from somebody else). Deprecated: use created_by_user_id instead. (DEPRECATED, default: false)
+  --show-only-owned-documents: oneof<nothing, bool> # If set to true, the endpoint will return only tools owned by you (and not shared from somebody else). Deprecated: use created_by_user_id instead. (DEPRECATED, default: false)
   --created-by-user-id: string # Filter tools by creator user ID. When set, only tools created by this user are returned. Takes precedence over show_only_owned_documents. Use '@me' to refer to the authenticated user.
   --types: string # If present, the endpoint will return only tools of the given types.
   --sort-direction: string@sort-direction-completer # The direction to sort the results
@@ -7031,7 +7030,7 @@ export def "convai-tools route-by-tool_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # If set to true, the tool will be deleted regardless of whether it is used by any agents and it will be removed from the dependent agents and branches. (default: false)
+  --force: oneof<nothing, bool> # If set to true, the tool will be deleted regardless of whether it is used by any agents and it will be removed from the dependent agents and branches. (default: false)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7146,7 +7145,7 @@ export def "convai-settings route-1" [
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --conversation-initiation-client-data-webhook: any
   --webhooks: record # shape: {post_call_webhook_id?: any, events?: list, transcript_format?: "json"|"opentelemetry", send_audio?: any}
-  --can-use-mcp-servers: string@bool-completer # Whether the workspace can use MCP servers (default: false)
+  --can-use-mcp-servers: oneof<nothing, bool> # Whether the workspace can use MCP servers (default: false)
   --rag-retention-period-days: int # default: 10
   --conversation-embedding-retention-days: any # Days to retain conversation embeddings. None means use the system default (30 days).
   --default-livekit-stack: string@default-livekit-stack-completer # default: standard
@@ -8128,7 +8127,7 @@ export def "convai-agents-branches route-by-agent_id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-archived: string@bool-completer # Whether archived branches should be included (default: false)
+  --include-archived: oneof<nothing, bool> # Whether archived branches should be included (default: false)
   --limit: int # How many results at most should be returned (default: 100)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<meta: record<total: any, page: any, page_size: any>, results: table<id: string, name: string, agent_id: string, description: string, created_at: int, last_committed_at: int, is_archived: bool, protection_status: string, access_info: any, current_live_percentage: float, parent_branch_id: any, draft_exists: bool>> {
@@ -8243,8 +8242,8 @@ export def "convai-agents-branches-merge target" [
   --allow-errors(-e) # Return full response without error handling
   --target-branch-id: string # The ID of the target branch to merge into.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
-  --archive-source-branch: string@bool-completer # Whether to archive the source branch after merging (default: true)
-  --force: string@bool-completer # Force source branch changes onto the target, overriding timestamp-based conflict resolution (default: false)
+  --archive-source-branch: oneof<nothing, bool> # Whether to archive the source branch after merging (default: true)
+  --force: oneof<nothing, bool> # Force source branch changes onto the target, overriding timestamp-based conflict resolution (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8712,13 +8711,13 @@ export def "music generate" [
   --music-length-ms: any # The length of the song to generate in milliseconds. Used only in conjunction with `prompt`. Must be between 3000ms and 600000ms. Optional - if not provided, the model will choose a length based on the prompt.
   --model-id: string@model-id-completer-1 # The model to use for the generation. (default: music_v1)
   --seed: any # Random seed to initialize the music generation process. Providing the same seed with the same parameters can help achieve more consistent results, but exact reproducibility is not guaranteed and outputs may change across system updates. Cannot be used in conjunction with prompt.
-  --force-instrumental: string@bool-completer # If true, guarantees that the generated song will be instrumental. If false, the song may or may not be instrumental depending on the `prompt`. Can only be used with `prompt`. (default: false)
+  --force-instrumental: oneof<nothing, bool> # If true, guarantees that the generated song will be instrumental. If false, the song may or may not be instrumental depending on the `prompt`. Can only be used with `prompt`. (default: false)
   --finetune-id: any # The ID of the finetune to use for the generation
   --finetune-strength: float # How strongly the finetune influences the generation. Defaults to 1.0 (full strength). Lower values soften the influence of the finetune, leaving more room for prompt-level steering. Only meaningful when `finetune_id` is also provided. (default: 1.0)
-  --use-phonetic-names: string@bool-completer # If true, proper names in the prompt will be phonetically spelled in the lyrics for better pronunciation by the music model. The original names will be restored in word timestamps. (default: false)
-  --respect-sections-durations: string@bool-completer # Controls how strictly section durations in the `composition_plan` are enforced. Only used with `composition_plan`. When set to true, the model will precisely respect each section's `duration_ms` from the plan. When set to false, the model may adjust individual section durations which will generally lead to better generation quality and improved latency, while always preserving the total song duration from the plan. (default: true)
-  --store-for-inpainting: string@bool-completer # Whether to store the generated song for inpainting. Only available to enterprise clients with access to the inpainting feature. (default: false)
-  --sign-with-c2pa: string@bool-completer # Whether to sign the generated song with C2PA. Applicable only for mp3 files. (default: false)
+  --use-phonetic-names: oneof<nothing, bool> # If true, proper names in the prompt will be phonetically spelled in the lyrics for better pronunciation by the music model. The original names will be restored in word timestamps. (default: false)
+  --respect-sections-durations: oneof<nothing, bool> # Controls how strictly section durations in the `composition_plan` are enforced. Only used with `composition_plan`. When set to true, the model will precisely respect each section's `duration_ms` from the plan. When set to false, the model may adjust individual section durations which will generally lead to better generation quality and improved latency, while always preserving the total song duration from the plan. (default: true)
+  --store-for-inpainting: oneof<nothing, bool> # Whether to store the generated song for inpainting. Only available to enterprise clients with access to the inpainting feature. (default: false)
+  --sign-with-c2pa: oneof<nothing, bool> # Whether to sign the generated song with C2PA. Applicable only for mp3 files. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8757,14 +8756,14 @@ export def "music-detailed detailed" [
   --music-length-ms: any # The length of the song to generate in milliseconds. Used only in conjunction with `prompt`. Must be between 3000ms and 600000ms. Optional - if not provided, the model will choose a length based on the prompt.
   --model-id: string@model-id-completer-1 # The model to use for the generation. (default: music_v1)
   --seed: any # Random seed to initialize the music generation process. Providing the same seed with the same parameters can help achieve more consistent results, but exact reproducibility is not guaranteed and outputs may change across system updates. Cannot be used in conjunction with prompt.
-  --force-instrumental: string@bool-completer # If true, guarantees that the generated song will be instrumental. If false, the song may or may not be instrumental depending on the `prompt`. Can only be used with `prompt`. (default: false)
+  --force-instrumental: oneof<nothing, bool> # If true, guarantees that the generated song will be instrumental. If false, the song may or may not be instrumental depending on the `prompt`. Can only be used with `prompt`. (default: false)
   --finetune-id: any # The ID of the finetune to use for the generation
   --finetune-strength: float # How strongly the finetune influences the generation. Defaults to 1.0 (full strength). Lower values soften the influence of the finetune, leaving more room for prompt-level steering. Only meaningful when `finetune_id` is also provided. (default: 1.0)
-  --use-phonetic-names: string@bool-completer # If true, proper names in the prompt will be phonetically spelled in the lyrics for better pronunciation by the music model. The original names will be restored in word timestamps. (default: false)
-  --respect-sections-durations: string@bool-completer # Controls how strictly section durations in the `composition_plan` are enforced. Only used with `composition_plan`. When set to true, the model will precisely respect each section's `duration_ms` from the plan. When set to false, the model may adjust individual section durations which will generally lead to better generation quality and improved latency, while always preserving the total song duration from the plan. (default: true)
-  --store-for-inpainting: string@bool-completer # Whether to store the generated song for inpainting. Only available to enterprise clients with access to the inpainting feature. (default: false)
-  --with-timestamps: string@bool-completer # Whether to return the timestamps of the words in the generated song. (default: false)
-  --sign-with-c2pa: string@bool-completer # Whether to sign the generated song with C2PA. Applicable only for mp3 files. (default: false)
+  --use-phonetic-names: oneof<nothing, bool> # If true, proper names in the prompt will be phonetically spelled in the lyrics for better pronunciation by the music model. The original names will be restored in word timestamps. (default: false)
+  --respect-sections-durations: oneof<nothing, bool> # Controls how strictly section durations in the `composition_plan` are enforced. Only used with `composition_plan`. When set to true, the model will precisely respect each section's `duration_ms` from the plan. When set to false, the model may adjust individual section durations which will generally lead to better generation quality and improved latency, while always preserving the total song duration from the plan. (default: true)
+  --store-for-inpainting: oneof<nothing, bool> # Whether to store the generated song for inpainting. Only available to enterprise clients with access to the inpainting feature. (default: false)
+  --with-timestamps: oneof<nothing, bool> # Whether to return the timestamps of the words in the generated song. (default: false)
+  --sign-with-c2pa: oneof<nothing, bool> # Whether to sign the generated song with C2PA. Applicable only for mp3 files. (default: false)
   --model-style-prefix: string@model-style-prefix-completer # default: music
 ]: any -> any {
   let input = $in
@@ -8804,11 +8803,11 @@ export def "music-stream compose" [
   --music-length-ms: any # The length of the song to generate in milliseconds. Used only in conjunction with `prompt`. Must be between 3000ms and 600000ms. Optional - if not provided, the model will choose a length based on the prompt.
   --model-id: string@model-id-completer-1 # The model to use for the generation. (default: music_v1)
   --seed: any # Random seed to initialize the music generation process. Providing the same seed with the same parameters can help achieve more consistent results, but exact reproducibility is not guaranteed and outputs may change across system updates. Cannot be used in conjunction with prompt.
-  --force-instrumental: string@bool-completer # If true, guarantees that the generated song will be instrumental. If false, the song may or may not be instrumental depending on the `prompt`. Can only be used with `prompt`. (default: false)
+  --force-instrumental: oneof<nothing, bool> # If true, guarantees that the generated song will be instrumental. If false, the song may or may not be instrumental depending on the `prompt`. Can only be used with `prompt`. (default: false)
   --finetune-id: any # The ID of the finetune to use for the generation
   --finetune-strength: float # How strongly the finetune influences the generation. Defaults to 1.0 (full strength). Lower values soften the influence of the finetune, leaving more room for prompt-level steering. Only meaningful when `finetune_id` is also provided. (default: 1.0)
-  --use-phonetic-names: string@bool-completer # If true, proper names in the prompt will be phonetically spelled in the lyrics for better pronunciation by the music model. The original names will be restored in word timestamps. (default: false)
-  --store-for-inpainting: string@bool-completer # Whether to store the generated song for inpainting. Only available to enterprise clients with access to the inpainting feature. (default: false)
+  --use-phonetic-names: oneof<nothing, bool> # If true, proper names in the prompt will be phonetically spelled in the lyrics for better pronunciation by the music model. The original names will be restored in word timestamps. (default: false)
+  --store-for-inpainting: oneof<nothing, bool> # Whether to store the generated song for inpainting. Only available to enterprise clients with access to the inpainting feature. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8838,8 +8837,8 @@ export def "music-upload song" [
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   file: string # The audio file to upload. (format: binary)
-  --extract-composition-plan: string@bool-completer # Whether to generate and return the composition plan for the uploaded song. If True, the response will include the composition_plan but will increase the latency. (default: false)
-  --with-timestamps: string@bool-completer # Whether to transcribe the uploaded song and return word-level timestamps. If True, the response will include words_timestamps but will increase the latency. (default: false)
+  --extract-composition-plan: oneof<nothing, bool> # Whether to generate and return the composition plan for the uploaded song. If True, the response will include the composition_plan but will increase the latency. (default: false)
+  --with-timestamps: oneof<nothing, bool> # Whether to transcribe the uploaded song and return word-level timestamps. If True, the response will include words_timestamps but will increase the latency. (default: false)
 ]: any -> record<song_id: string, composition_plan: any, words_timestamps: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8870,7 +8869,7 @@ export def "music-stem-separation stems" [
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   file: string # The audio file to separate into stems. (format: binary)
   --stem-variation-id: string@stem-variation-id-completer # The id of the stem variation to use. (default: six_stems_v1)
-  --sign-with-c2pa: string@bool-completer # Whether to sign the generated song with C2PA. Applicable only for mp3 files. (default: false)
+  --sign-with-c2pa: oneof<nothing, bool> # Whether to sign the generated song with C2PA. Applicable only for mp3 files. (default: false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8899,7 +8898,7 @@ export def "productions-orders order" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
-  --sandbox: string@bool-completer # When true, creates a sandbox order that auto-progresses without producer intervention. (default: false)
+  --sandbox: oneof<nothing, bool> # When true, creates a sandbox order that auto-progresses without producer intervention. (default: false)
 ]: any -> record<order_id: string, sandbox: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9268,7 +9267,7 @@ export def "voices-pvc-samples samples" [
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   files: list # Audio files used to create the voice.
-  --remove-background-noise: string@bool-completer # If set will remove background noise for voice samples using our audio isolation model. If the samples do not include background noise, it can make the quality worse. (default: false)
+  --remove-background-noise: oneof<nothing, bool> # If set will remove background noise for voice samples using our audio isolation model. If the samples do not include background noise, it can make the quality worse. (default: false)
 ]: any -> table<sample_id: string, file_name: string, mime_type: string, size_bytes: int, hash: string, duration_secs: any, remove_background_noise: any, has_isolated_audio: any, has_isolated_audio_preview: any, speaker_separation: any, trim_start: any, trim_end: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9298,7 +9297,7 @@ export def "voices-pvc-samples sample-by-voice_id-sample_id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
-  --remove-background-noise: string@bool-completer # If set will remove background noise for voice samples using our audio isolation model. If the samples do not include background noise, it can make the quality worse. (default: false)
+  --remove-background-noise: oneof<nothing, bool> # If set will remove background noise for voice samples using our audio isolation model. If the samples do not include background noise, it can make the quality worse. (default: false)
   --selected-speaker-ids: any # Speaker IDs to be used for PVC training. Make sure you send all the speaker IDs you want to use for PVC training in one request because the last request will override the previous ones.
   --trim-start-time: any # The start time of the audio to be used for PVC training. Time should be in milliseconds
   --trim-end-time: any # The end time of the audio to be used for PVC training. Time should be in milliseconds
@@ -9357,7 +9356,7 @@ export def "voices-pvc-samples-audio audio" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --remove-background-noise: string@bool-completer # If set will remove background noise for voice samples using our audio isolation model. If the samples do not include background noise, it can make the quality worse. (default: false)
+  --remove-background-noise: oneof<nothing, bool> # If set will remove background noise for voice samples using our audio isolation model. If the samples do not include background noise, it can make the quality worse. (default: false)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<audio_base_64: string, voice_id: string, sample_id: string, media_type: string, duration_secs: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

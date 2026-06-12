@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost/v1"] }
 def auth-scheme-completer [] { ["x-api-key" "query-api_key"] }
 
@@ -114,8 +113,8 @@ export def "audit-case get" [
   --audit-case-id: list #  Primary/foreign key for audit tables
   --cycle: list #  Filter records to only those that are applicable to a given two-year period. This cycle follows the traditional House election cycle and subdivides the presidential and Senate elections into comparable two-year blocks. The cycle begins with an odd year and is named for its ending, even year.
   --sub-category-id: string #  The finding id of an audit. Finding are a category of broader issues. Each category has an unique ID.  (default: all)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --min-election-cycle: int #  Filter records to only those that are applicable to a given two-year period. This cycle follows the traditional House election cycle and subdivides the presidential and Senate elections into comparable two-year blocks. The cycle begins with an odd year and is named for its ending, even year.  (format: int32)
   --audit-id: list #  The audit issue. Each subcategory has an unique ID
   --q: list # The name of the committee. If a committee changes its name,     the most recent name will be shown. Committee names are not unique. Use committee_id     for looking up records.
@@ -129,7 +128,7 @@ export def "audit-case get" [
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --committee-designation: string # Type of committee:         - H or S - Congressional         - P - Presidential         - X or Y or Z - Party         - N or Q - PAC         - I - Independent expenditure         - O - Super PAC 
   --primary-category-id: string #  Audit category ID (table PK)  (default: all)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --qp-sort: list #  Provide a field to sort by. Use `-` for descending order. ex: `-case_no`  (default: [-cycle, committee_name])
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<audit_case_id: string, audit_id: int, candidate_id: string, candidate_name: string, committee_description: string, committee_designation: string, committee_id: string, committee_name: string, committee_type: string, cycle: int, far_release_date: string, link_to_report: string, primary_category_list: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -152,13 +151,13 @@ export def "audit-category get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --primary-category-name: list # Primary Audit Category     - No Findings or Issues/Not a Committee     - Net Outstanding Campaign/Convention Expenditures/Obligations     - Payments/Disgorgements     - Allocation Issues     - Prohibited Contributions     - Disclosure     - Recordkeeping     - Repayment to US Treasury     - Other     - Misstatement of Financial Activity     - Excessive Contributions     - Failure to File Reports/Schedules/Notices     - Loans     - Referred Findings Not Listed
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --primary-category-id: list #  Audit category ID (table PK)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: primary_category_name)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<primary_category_id: string, primary_category_name: string, sub_category_list: list>> {
@@ -182,13 +181,13 @@ export def "audit-primary-category get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --primary-category-name: list # Primary Audit Category     - No Findings or Issues/Not a Committee     - Net Outstanding Campaign/Convention Expenditures/Obligations     - Payments/Disgorgements     - Allocation Issues     - Prohibited Contributions     - Disclosure     - Recordkeeping     - Repayment to US Treasury     - Other     - Misstatement of Financial Activity     - Excessive Contributions     - Failure to File Reports/Schedules/Notices     - Loans     - Referred Findings Not Listed
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --primary-category-id: list #  Audit category ID (table PK)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: primary_category_name)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<primary_category_id: string, primary_category_name: string>> {
@@ -212,15 +211,15 @@ export def "calendar-dates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --min-start-date: string #  The minimum start date.(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --calendar-category-id: list #  Each type of event has a calendar category with an integer id. Options are: Open Meetings: 32, Executive Sessions: 39, Public Hearings: 40, Conferences: 33, Roundtables: 34, Election Dates: 36, Federal Holidays: 37, FEA Periods: 38, Commission Meetings: 20, Reporting Deadlines: 21, Conferences and Outreach: 22, AOs and Rules: 23, Other: 24, Quarterly: 25, Monthly: 26, Pre and Post-Elections: 27, EC Periods:28, and IE Periods: 29
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --min-end-date: string #  The minimum end date.(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --event-id: int # An unique ID for an event. Useful for downloading a single event to your calendar. This ID is not a permanent, persistent ID. (format: int32)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --description: list # Brief description of event
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -start_date)
@@ -249,15 +248,15 @@ export def "calendar-dates-export get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --renderer: string@renderer-completer # default: ics
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --min-start-date: string #  The minimum start date.(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --calendar-category-id: list #  Each type of event has a calendar category with an integer id. Options are: Open Meetings: 32, Executive Sessions: 39, Public Hearings: 40, Conferences: 33, Roundtables: 34, Election Dates: 36, Federal Holidays: 37, FEA Periods: 38, Commission Meetings: 20, Reporting Deadlines: 21, Conferences and Outreach: 22, AOs and Rules: 23, Other: 24, Quarterly: 25, Monthly: 26, Pre and Post-Elections: 27, EC Periods:28, and IE Periods: 29
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --min-end-date: string #  The minimum end date.(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --event-id: int # An unique ID for an event. Useful for downloading a single event to your calendar. This ID is not a permanent, persistent ID. (format: int32)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --description: list # Brief description of event
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -start_date)
@@ -289,20 +288,20 @@ export def "candidate get" [
   --office: list # Federal office candidate runs for: H, S or P
   --candidate-status: list # One-letter code explaining if the candidate is:         - C present candidate         - F future candidate         - N not yet a candidate         - P prior candidate
   --cycle: list #  Two-year election cycle in which a candidate runs for office. Calculated from Form 2. The cycle begins with an odd year and is named for its ending, even year. This cycle follows the traditional house election cycle and subdivides the presidential and Senate elections into comparable two-year blocks. To retrieve data for the entire four years of a presidential term or six years of a senatorial term, you will need the `election_full` flag.
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --state: list # US state or territory where a candidate runs for office
   --district: list # Two-digit US House distirict of the office the candidate is running for. Presidential, Senate and House at-large candidates will have District 00.
   --year: string # Retrieve records pertaining to a particular election year. The list of election years is based on a candidate filing a statement of candidacy (F2) for that year.
   --name: list # Name (candidate or committee) to search for. Alias for 'q'.
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --federal-funds-flag: string@bool-completer # A boolean the describes if a presidential candidate has accepted federal funds. The flag will be false for House and Senate candidates.
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --federal-funds-flag: oneof<nothing, bool> # A boolean the describes if a presidential candidate has accepted federal funds. The flag will be false for House and Senate candidates.
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: name)
-  --has-raised-funds: string@bool-completer # A boolean that describes if a candidate's committee has ever received any receipts for their campaign for this particular office. (Candidates have separate candidate IDs for each office.)
+  --has-raised-funds: oneof<nothing, bool> # A boolean that describes if a candidate's committee has ever received any receipts for their campaign for this particular office. (Candidates have separate candidate IDs for each office.)
   --election-year: list # Year of election
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --incumbent-challenge: list # One-letter code ('I', 'C', 'O') explaining if the candidate is an incumbent, a challenger, or if the seat is open.
   --party: list # Three-letter code for the party affiliated with a candidate or committee. For example, DEM for Democratic Party and REP for Republican Party.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<active_through: int, address_city: string, address_state: string, address_street_1: string, address_street_2: string, address_zip: string, candidate_id: string, candidate_inactive: bool, candidate_status: string, cycles: list, district: string, district_number: int, election_districts: list, election_years: list, federal_funds_flag: bool, first_file_date: string, flags: string, has_raised_funds: bool, incumbent_challenge: string, incumbent_challenge_full: string, last_f2_date: string, last_file_date: string, load_date: string, name: string, office: string, office_full: string, party: string, party_full: string, state: string>> {
@@ -332,11 +331,11 @@ export def "candidate-committees get" [
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --filing-frequency: list # The one-letter      code of the filing frequency:          - A Administratively terminated          - D Debt          - M Monthly filer          - Q Quarterly filer          - T Terminated          - W Waived
   --cycle: list #  A two year election cycle that the committee was active- (after original registration date but before expiration date in Form 1s) The cycle begins with an odd year and is named for its ending, even year.
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --year: list # A year that the committee was active— (after original registration date     or filing but before expiration date)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --organization-type: list # The one-letter code for the kind for organization:         - C corporation         - L labor organization         - M membership organization         - T trade association         - V cooperative         - W corporation without capital stock
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: name)
@@ -363,12 +362,12 @@ export def "candidate-committees-history list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --designation: list # The one-letter designation code of the organization:          - A authorized by a candidate          - J joint fundraising committee          - P principal campaign committee of a candidate          - U unauthorized          - B lobbyist/registrant PAC          - D leadership PAC
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -cycle)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<affiliated_committee_name: string, candidate_ids: list, city: string, committee_id: string, committee_label: string, committee_type: string, committee_type_full: string, convert_to_pac_flag: bool, cycle: int, cycles: list, cycles_has_activity: list, cycles_has_financial: list, designation: string, designation_full: string, filing_frequency: string, first_f1_date: string, first_file_date: string, former_candidate_election_year: int, former_candidate_id: string, former_candidate_name: string, former_committee_name: string, is_active: bool, jfc_committee: list, last_cycle_has_activity: int, last_cycle_has_financial: int, last_f1_date: string, last_file_date: string, name: string, organization_type: string, organization_type_full: string, party: string, party_full: string, sponsor_candidate_ids: list, state: string, state_full: string, street_1: string, street_2: string, treasurer_name: string, zip: string>> {
@@ -395,12 +394,12 @@ export def "candidate-committees-history get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --designation: list # The one-letter designation code of the organization:          - A authorized by a candidate          - J joint fundraising committee          - P principal campaign committee of a candidate          - U unauthorized          - B lobbyist/registrant PAC          - D leadership PAC
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -cycle)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<affiliated_committee_name: string, candidate_ids: list, city: string, committee_id: string, committee_label: string, committee_type: string, committee_type_full: string, convert_to_pac_flag: bool, cycle: int, cycles: list, cycles_has_activity: list, cycles_has_financial: list, designation: string, designation_full: string, filing_frequency: string, first_f1_date: string, first_file_date: string, former_candidate_election_year: int, former_candidate_id: string, former_candidate_name: string, former_committee_name: string, is_active: bool, jfc_committee: list, last_cycle_has_activity: int, last_cycle_has_financial: int, last_f1_date: string, last_file_date: string, name: string, organization_type: string, organization_type_full: string, party: string, party_full: string, sponsor_candidate_ids: list, state: string, state_full: string, street_1: string, street_2: string, treasurer_name: string, zip: string>> {
@@ -431,11 +430,11 @@ export def "candidate-filings get" [
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
   --district: list # Two-digit US House distirict of the office the candidate is running for. Presidential, Senate and House at-large candidates will have District 00.
   --document-type: list #  The type of document for documents other than reports:     - 2 24 Hour Contribution Notice     - 4 48 Hour Contribution Notice     - A Debt Settlement Statement     - B Acknowledgment of Receipt of Debt Settlement Statement     - C RFAI: Debt Settlement First Notice     - D Commission Debt Settlement Review     - E Commission Response TO Debt Settlement Request     - F Administrative Termination     - G Debt Settlement Plan Amendment     - H Disavowal Notice     - I Disavowal Response     - J Conduit Report     - K Termination Approval     - L Repeat Non-Filer Notice     - M Filing Frequency Change Notice     - N Paper Amendment to Electronic Report     - O Acknowledgment of Filing Frequency Change     - S RFAI: Debt Settlement Second     - T Miscellaneous Report TO FEC     - V Repeat Violation Notice (441A OR 441B)     - P Notice of Paper Filing     - R F3L Filing Frequency Change Notice     - Q Acknowledgment of F3L Filing Frequency Change     - U Unregistered Committee Notice
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --state: list # US state or territory where a candidate runs for office
   --amendment-indicator: list # Amendent types:     -N   new     -A   amendment     -T   terminated     -C   consolidated     -M   multi-candidate     -S   secondary  NULL might be new or amendment. If amendment indicator is null and the filings is the first or first in a chain treat it as if it was a new. If it is not the first or first in a chain then treat the filing as an amendment.
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
-  --is-amended: string@bool-completer #  False indicates that a report is the most recent. True indicates that the report has been superseded by an amendment.
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
+  --is-amended: oneof<nothing, bool> #  False indicates that a report is the most recent. True indicates that the report has been superseded by an amendment.
   --filer-type: string@filer-type-completer # The method used to file with the FEC, either electronic or on paper.
   --max-receipt-date: string #  Selects all filings received before this date(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
@@ -449,11 +448,11 @@ export def "candidate-filings get" [
   --qp-sort: list #  Provide a field to sort by. Use `-` for descending order. ex: `-case_no`  (default: [-receipt_date])
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --min-receipt-date: string #  Selects all filings received after this date(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --q-filer: list #  Keyword search for filer name or ID
   --report-type: list # Name of report where the underlying data comes from:     - 10D Pre-Election     - 10G Pre-General     - 10P Pre-Primary     - 10R Pre-Run-Off     - 10S Pre-Special     - 12C Pre-Convention     - 12G Pre-General     - 12P Pre-Primary     - 12R Pre-Run-Off     - 12S Pre-Special     - 30D Post-Election     - 30G Post-General     - 30P Post-Primary     - 30R Post-Run-Off     - 30S Post-Special     - 60D Post-Convention     - M1  January Monthly     - M10 October Monthly     - M11 November Monthly     - M12 December Monthly     - M2  February Monthly     - M3  March Monthly     - M4  April Monthly     - M5  May Monthly     - M6  June Monthly     - M7  July Monthly     - M8  August Monthly     - M9  September Monthly     - MY  Mid-Year Report     - Q1  April Quarterly     - Q2  July Quarterly     - Q3  October Quarterly     - TER Termination Report     - YE  Year-End     - ADJ COMP ADJUST AMEND     - CA  COMPREHENSIVE AMEND     - 90S Post Inaugural Supplement     - 90D Post Inaugural     - 48  48 Hour Notification     - 24  24 Hour Notification     - M7S July Monthly/Semi-Annual     - MSA Monthly Semi-Annual (MY)     - MYS Monthly Year End/Semi-Annual     - Q2S July Quarterly/Semi-Annual     - QSA Quarterly Semi-Annual (MY)     - QYS Quarterly Year End/Semi-Annual     - QYE Quarterly Semi-Annual (YE)     - QMS Quarterly Mid-Year/ Semi-Annual     - MSY Monthly Semi-Annual (YE)
   --party: list # Three-letter code for the party affiliated with a candidate or committee. For example, DEM for Democratic Party and REP for Republican Party.
-  --most-recent: string@bool-completer #  Report is either new or is the most-recently filed amendment
+  --most-recent: oneof<nothing, bool> #  Report is either new or is the most-recently filed amendment
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<additional_bank_names: list, amendment_chain: list, amendment_indicator: string, amendment_version: int, bank_depository_city: string, bank_depository_name: string, bank_depository_state: string, bank_depository_street_1: string, bank_depository_street_2: string, bank_depository_zip: string, beginning_image_number: string, candidate_id: string, candidate_name: string, cash_on_hand_beginning_period: float, cash_on_hand_end_period: float, committee_id: string, committee_name: string, committee_type: string, coverage_end_date: string, coverage_start_date: string, csv_url: string, cycle: int, debts_owed_by_committee: float, debts_owed_to_committee: float, document_description: string, document_type: string, document_type_full: string, election_year: int, ending_image_number: string, fec_file_id: string, fec_url: string, file_number: int, form_category: string, form_type: string, house_personal_funds: float, html_url: string, is_amended: bool, means_filed: string, most_recent: bool, most_recent_file_number: int, net_donations: float, office: string, opposition_personal_funds: float, pages: int, party: string, pdf_url: string, previous_file_number: int, primary_general_indicator: string, receipt_date: string, report_type: string, report_type_full: string, report_year: int, request_type: string, senate_personal_funds: float, state: string, sub_id: string, total_communication_cost: float, total_disbursements: float, total_independent_expenditures: float, total_individual_contributions: float, total_receipts: float, treasurer_name: string, update_date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -477,12 +476,12 @@ export def "candidate-history list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -two_year_period)
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<active_through: int, address_city: string, address_state: string, address_street_1: string, address_street_2: string, address_zip: string, candidate_election_year: int, candidate_id: string, candidate_inactive: bool, candidate_status: string, cycles: list, district: string, district_number: int, election_districts: list, election_years: list, fec_cycles_in_election: list, first_file_date: string, flags: string, incumbent_challenge: string, incumbent_challenge_full: string, last_f2_date: string, last_file_date: string, load_date: string, name: string, office: string, office_full: string, party: string, party_full: string, rounded_election_years: list, state: string, two_year_period: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -508,12 +507,12 @@ export def "candidate-history get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -two_year_period)
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<active_through: int, address_city: string, address_state: string, address_street_1: string, address_street_2: string, address_zip: string, candidate_election_year: int, candidate_id: string, candidate_inactive: bool, candidate_status: string, cycles: list, district: string, district_number: int, election_districts: list, election_years: list, fec_cycles_in_election: list, first_file_date: string, flags: string, incumbent_challenge: string, incumbent_challenge_full: string, last_f2_date: string, last_file_date: string, load_date: string, name: string, office: string, office_full: string, party: string, party_full: string, rounded_election_years: list, state: string, two_year_period: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -537,13 +536,13 @@ export def "candidate-totals get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle.
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle.
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -cycle)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<all_loans_received: float, all_other_loans: float, allocated_federal_election_levin_share: float, candidate_contribution: float, cash_on_hand_beginning_period: float, committee_designation: string, committee_designation_full: string, committee_id: string, committee_name: string, committee_state: string, committee_type: string, committee_type_full: string, contribution_refunds: float, contributions: float, contributions_ie_and_party_expenditures_made_percent: float, convention_exp: float, coordinated_expenditures_by_party_committee: float, coverage_end_date: string, coverage_start_date: string, cycle: int, disbursements: float, exempt_legal_accounting_disbursement: float, exp_prior_years_subject_limits: float, exp_subject_limits: float, fed_candidate_committee_contributions: float, fed_candidate_contribution_refunds: float, fed_disbursements: float, fed_election_activity: float, fed_operating_expenditures: float, fed_receipts: float, federal_funds: float, filing_frequency: string, filing_frequency_full: string, first_f1_date: string, first_file_date: string, fundraising_disbursements: float, independent_expenditures: float, individual_contributions: float, individual_contributions_percent: float, individual_itemized_contributions: float, individual_unitemized_contributions: float, itemized_convention_exp: float, itemized_other_disb: float, itemized_other_income: float, itemized_other_refunds: float, itemized_refunds_relating_convention_exp: float, last_beginning_image_number: string, last_cash_on_hand_end_period: float, last_debts_owed_by_committee: float, last_debts_owed_to_committee: float, last_report_type_full: string, last_report_year: int, loan_repayments: float, loan_repayments_candidate_loans: float, loan_repayments_made: float, loan_repayments_other_loans: float, loan_repayments_received: float, loans: float, loans_and_loan_repayments_made: float, loans_and_loan_repayments_received: float, loans_made: float, loans_made_by_candidate: float, loans_received: float, loans_received_from_candidate: float, net_contributions: float, net_operating_expenditures: float, non_allocated_fed_election_activity: float, offsets_to_fundraising_expenditures: float, offsets_to_legal_accounting: float, offsets_to_operating_expenditures: float, operating_expenditures: float, operating_expenditures_percent: float, organization_type: string, organization_type_full: string, other_disbursements: float, other_fed_operating_expenditures: float, other_fed_receipts: float, other_loans_received: float, other_political_committee_contributions: float, other_receipts: float, other_refunds: float, party_and_other_committee_contributions_percent: float, party_full: string, pdf_url: string, political_party_committee_contributions: float, receipts: float, refunded_individual_contributions: float, refunded_other_political_committee_contributions: float, refunded_political_party_committee_contributions: float, refunds_relating_convention_exp: float, repayments_loans_made_by_candidate: float, repayments_other_loans: float, report_form: string, shared_fed_activity: float, shared_fed_activity_nonfed: float, shared_fed_operating_expenditures: float, shared_nonfed_operating_expenditures: float, total_exp_subject_limits: float, total_independent_contributions: float, total_independent_expenditures: float, total_offsets_to_operating_expenditures: float, total_transfers: float, transaction_coverage_date: string, transfers_from_affiliated_committee: float, transfers_from_affiliated_party: float, transfers_from_nonfed_account: float, transfers_from_nonfed_levin: float, transfers_from_other_authorized_committee: float, transfers_to_affiliated_committee: float, transfers_to_other_authorized_committee: float, treasurer_name: string, unitemized_convention_exp: float, unitemized_other_disb: float, unitemized_other_income: float, unitemized_other_refunds: float, unitemized_refunds_relating_convention_exp: float>> {
@@ -571,24 +570,24 @@ export def "candidates get" [
   --candidate-status: list # One-letter code explaining if the candidate is:         - C present candidate         - F future candidate         - N not yet a candidate         - P prior candidate
   --cycle: list #  Two-year election cycle in which a candidate runs for office. Calculated from Form 2. The cycle begins with an odd year and is named for its ending, even year. This cycle follows the traditional house election cycle and subdivides the presidential and Senate elections into comparable two-year blocks. To retrieve data for the entire four years of a presidential term or six years of a senatorial term, you will need the `election_full` flag.
   --district: list # Two-digit US House distirict of the office the candidate is running for. Presidential, Senate and House at-large candidates will have District 00.
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --year: string # Retrieve records pertaining to a particular election year. The list of election years is based on a candidate filing a statement of candidacy (F2) for that year.
   --state: list # US state or territory where a candidate runs for office
   --name: list # Name (candidate or committee) to search for. Alias for 'q'.
-  --is-active-candidate: string@bool-completer #  Candidates who are actively seeking office. If no value is specified, all candidates are returned. When True is specified, only active candidates are returned. When False is specified, only inactive candidates are returned.
+  --is-active-candidate: oneof<nothing, bool> #  Candidates who are actively seeking office. If no value is specified, all candidates are returned. When True is specified, only active candidates are returned. When False is specified, only inactive candidates are returned.
   --q: list # Name of candidate running for office
-  --federal-funds-flag: string@bool-completer # A boolean the describes if a presidential candidate has accepted federal funds. The flag will be false for House and Senate candidates.
+  --federal-funds-flag: oneof<nothing, bool> # A boolean the describes if a presidential candidate has accepted federal funds. The flag will be false for House and Senate candidates.
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
   --min-first-file-date: string # Selects all candidates whose first filing was received by the FEC after this date. (format: date)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: name)
-  --has-raised-funds: string@bool-completer # A boolean that describes if a candidate's committee has ever received any receipts for their campaign for this particular office. (Candidates have separate candidate IDs for each office.)
+  --has-raised-funds: oneof<nothing, bool> # A boolean that describes if a candidate's committee has ever received any receipts for their campaign for this particular office. (Candidates have separate candidate IDs for each office.)
   --election-year: list # Year of election
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --incumbent-challenge: list # One-letter code ('I', 'C', 'O') explaining if the candidate is an incumbent, a challenger, or if the seat is open.
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --max-first-file-date: string # Selects all candidates whose first filing was received by the FEC before this date. (format: date)
   --party: list # Three-letter code for the party affiliated with a candidate or committee. For example, DEM for Democratic Party and REP for Republican Party.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<active_through: int, candidate_id: string, candidate_inactive: bool, candidate_status: string, cycles: list, district: string, district_number: int, election_districts: list, election_years: list, federal_funds_flag: bool, first_file_date: string, has_raised_funds: bool, inactive_election_years: list, incumbent_challenge: string, incumbent_challenge_full: string, last_f2_date: string, last_file_date: string, load_date: string, name: string, office: string, office_full: string, party: string, party_full: string, principal_committees: list, state: string>> {
@@ -616,24 +615,24 @@ export def "candidates-search get" [
   --candidate-status: list # One-letter code explaining if the candidate is:         - C present candidate         - F future candidate         - N not yet a candidate         - P prior candidate
   --cycle: list #  Two-year election cycle in which a candidate runs for office. Calculated from Form 2. The cycle begins with an odd year and is named for its ending, even year. This cycle follows the traditional house election cycle and subdivides the presidential and Senate elections into comparable two-year blocks. To retrieve data for the entire four years of a presidential term or six years of a senatorial term, you will need the `election_full` flag.
   --district: list # Two-digit US House distirict of the office the candidate is running for. Presidential, Senate and House at-large candidates will have District 00.
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --year: string # Retrieve records pertaining to a particular election year. The list of election years is based on a candidate filing a statement of candidacy (F2) for that year.
   --state: list # US state or territory where a candidate runs for office
   --name: list # Name (candidate or committee) to search for. Alias for 'q'.
-  --is-active-candidate: string@bool-completer #  Candidates who are actively seeking office. If no value is specified, all candidates are returned. When True is specified, only active candidates are returned. When False is specified, only inactive candidates are returned.
+  --is-active-candidate: oneof<nothing, bool> #  Candidates who are actively seeking office. If no value is specified, all candidates are returned. When True is specified, only active candidates are returned. When False is specified, only inactive candidates are returned.
   --q: list # Name of candidate running for office
-  --federal-funds-flag: string@bool-completer # A boolean the describes if a presidential candidate has accepted federal funds. The flag will be false for House and Senate candidates.
+  --federal-funds-flag: oneof<nothing, bool> # A boolean the describes if a presidential candidate has accepted federal funds. The flag will be false for House and Senate candidates.
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
   --min-first-file-date: string # Selects all candidates whose first filing was received by the FEC after this date. (format: date)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: name)
-  --has-raised-funds: string@bool-completer # A boolean that describes if a candidate's committee has ever received any receipts for their campaign for this particular office. (Candidates have separate candidate IDs for each office.)
+  --has-raised-funds: oneof<nothing, bool> # A boolean that describes if a candidate's committee has ever received any receipts for their campaign for this particular office. (Candidates have separate candidate IDs for each office.)
   --election-year: list # Year of election
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --incumbent-challenge: list # One-letter code ('I', 'C', 'O') explaining if the candidate is an incumbent, a challenger, or if the seat is open.
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --max-first-file-date: string # Selects all candidates whose first filing was received by the FEC before this date. (format: date)
   --party: list # Three-letter code for the party affiliated with a candidate or committee. For example, DEM for Democratic Party and REP for Republican Party.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<active_through: int, candidate_id: string, candidate_inactive: bool, candidate_status: string, cycles: list, district: string, district_number: int, election_districts: list, election_years: list, federal_funds_flag: bool, first_file_date: string, has_raised_funds: bool, inactive_election_years: list, incumbent_challenge: string, incumbent_challenge_full: string, last_f2_date: string, last_file_date: string, load_date: string, name: string, office: string, office_full: string, party: string, party_full: string, principal_committees: list, state: string>> {
@@ -662,24 +661,24 @@ export def "candidates-totals get" [
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
   --district: list # District of candidate
   --max-receipts: string # Maximum aggregated receipts
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --state: list # State of candidate
   --max-debts-owed-by-committee: string # Maximum debt
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --min-debts-owed-by-committee: string # Minimum debt
-  --is-active-candidate: string@bool-completer #  Candidates who are actively seeking office. If no value is specified, all candidates are returned. When True is specified, only active candidates are returned. When False is specified, only inactive candidates are returned.
+  --is-active-candidate: oneof<nothing, bool> #  Candidates who are actively seeking office. If no value is specified, all candidates are returned. When True is specified, only active candidates are returned. When False is specified, only inactive candidates are returned.
   --q: list # Name of candidate running for office
-  --federal-funds-flag: string@bool-completer # A boolean the describes if a presidential candidate has accepted federal funds. The flag will be false for House and Senate candidates.
+  --federal-funds-flag: oneof<nothing, bool> # A boolean the describes if a presidential candidate has accepted federal funds. The flag will be false for House and Senate candidates.
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --max-cash-on-hand-end-period: string # Maximum cash on hand
   --max-disbursements: string # Maximum aggregated disbursements
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
-  --has-raised-funds: string@bool-completer # A boolean that describes if a candidate's committee has ever received any receipts for their campaign for this particular office. (Candidates have separate candidate IDs for each office.)
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --has-raised-funds: oneof<nothing, bool> # A boolean that describes if a candidate's committee has ever received any receipts for their campaign for this particular office. (Candidates have separate candidate IDs for each office.)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
   --election-year: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --min-cash-on-hand-end-period: string # Minimum cash on hand
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
   --party: list # Three-letter party code
@@ -706,20 +705,20 @@ export def "candidates-totals-aggregates get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --office: string@office-completer # Federal office candidate runs for: H, S or P
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --district: list # Two-digit US House distirict of the office the candidate is running for. Presidential, Senate and House at-large candidates will have District 00.
   --state: list # US state or territory where a candidate runs for office
   --min-election-cycle: int #  Filter records to only those that are applicable to a given two-year period. This cycle follows the traditional House election cycle and subdivides the presidential and Senate elections into comparable two-year blocks. The cycle begins with an odd year and is named for its ending, even year.  (format: int32)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --is-active-candidate: string@bool-completer #  Candidates who are actively seeking office. If no value is specified, all candidates are returned. When True is specified, only active candidates are returned. When False is specified, only inactive candidates are returned.
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --is-active-candidate: oneof<nothing, bool> #  Candidates who are actively seeking office. If no value is specified, all candidates are returned. When True is specified, only active candidates are returned. When False is specified, only inactive candidates are returned.
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --max-election-cycle: int #  Filter records to only those that are applicable to a given two-year period. This cycle follows the traditional House election cycle and subdivides the presidential and Senate elections into comparable two-year blocks. The cycle begins with an odd year and is named for its ending, even year.  (format: int32)
   --aggregate-by: string@aggregate-by-completer # Candidate totals aggregate_by (Chose one of dropdown options):         - ' ' grouped by election year         - office grouped by election year, by office         - office-state grouped by election year, by office, by state         - office-state-district grouped by election year, by office, by state, by district         - office-party grouped by election year, by office, by party
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --election-year: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --qp-sort: list #  Provide a field to sort by. Use `-` for descending order. ex: `-case_no`  (default: [-election_year])
   --party: string@party-completer # Three-letter code for the party affiliated with a candidate or committee. For example, DEM for Democratic Party and REP for Republican Party.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<district: string, district_number: int, election_year: int, office: string, party: string, state: string, total_cash_on_hand_end_period: float, total_debts_owed_by_committee: float, total_disbursements: float, total_individual_itemized_contributions: float, total_other_political_committee_contributions: float, total_receipts: float, total_transfers_from_other_authorized_committee: float>> {
@@ -744,15 +743,15 @@ export def "candidates-totals-by-office get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --office: string@office-completer # Federal office candidate runs for: H, S or P
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --min-election-cycle: int #  Filter records to only those that are applicable to a given two-year period. This cycle follows the traditional House election cycle and subdivides the presidential and Senate elections into comparable two-year blocks. The cycle begins with an odd year and is named for its ending, even year.  (format: int32)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --election-year: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --is-active-candidate: string@bool-completer #  Candidates who are actively seeking office. If no value is specified, all candidates are returned. When True is specified, only active candidates are returned. When False is specified, only inactive candidates are returned.
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --is-active-candidate: oneof<nothing, bool> #  Candidates who are actively seeking office. If no value is specified, all candidates are returned. When True is specified, only active candidates are returned. When False is specified, only inactive candidates are returned.
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --max-election-cycle: int #  Filter records to only those that are applicable to a given two-year period. This cycle follows the traditional House election cycle and subdivides the presidential and Senate elections into comparable two-year blocks. The cycle begins with an odd year and is named for its ending, even year.  (format: int32)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
@@ -778,14 +777,14 @@ export def "candidates-totals-by-office-by-party get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --office: string@office-completer # Federal office candidate runs for: H, S or P
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --election-year: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --is-active-candidate: string@bool-completer #  Candidates who are actively seeking office. If no value is specified, all candidates are returned. When True is specified, only active candidates are returned. When False is specified, only inactive candidates are returned.
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --is-active-candidate: oneof<nothing, bool> #  Candidates who are actively seeking office. If no value is specified, all candidates are returned. When True is specified, only active candidates are returned. When False is specified, only inactive candidates are returned.
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<election_year: int, office: string, party: string, total_disbursements: float, total_receipts: float>> {
@@ -815,11 +814,11 @@ export def "committee get" [
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --filing-frequency: list # The one-letter      code of the filing frequency:          - A Administratively terminated          - D Debt          - M Monthly filer          - Q Quarterly filer          - T Terminated          - W Waived
   --cycle: list #  A two year election cycle that the committee was active- (after original registration date but before expiration date in Form 1s) The cycle begins with an odd year and is named for its ending, even year.
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --year: list # A year that the committee was active— (after original registration date     or filing but before expiration date)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --organization-type: list # The one-letter code for the kind for organization:         - C corporation         - L labor organization         - M membership organization         - T trade association         - V cooperative         - W corporation without capital stock
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: name)
@@ -848,20 +847,20 @@ export def "committee-candidates get" [
   --office: list # Federal office candidate runs for: H, S or P
   --candidate-status: list # One-letter code explaining if the candidate is:         - C present candidate         - F future candidate         - N not yet a candidate         - P prior candidate
   --cycle: list #  Two-year election cycle in which a candidate runs for office. Calculated from Form 2. The cycle begins with an odd year and is named for its ending, even year. This cycle follows the traditional house election cycle and subdivides the presidential and Senate elections into comparable two-year blocks. To retrieve data for the entire four years of a presidential term or six years of a senatorial term, you will need the `election_full` flag.
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --state: list # US state or territory where a candidate runs for office
   --district: list # Two-digit US House distirict of the office the candidate is running for. Presidential, Senate and House at-large candidates will have District 00.
   --year: string # Retrieve records pertaining to a particular election year. The list of election years is based on a candidate filing a statement of candidacy (F2) for that year.
   --name: list # Name (candidate or committee) to search for. Alias for 'q'.
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --federal-funds-flag: string@bool-completer # A boolean the describes if a presidential candidate has accepted federal funds. The flag will be false for House and Senate candidates.
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --federal-funds-flag: oneof<nothing, bool> # A boolean the describes if a presidential candidate has accepted federal funds. The flag will be false for House and Senate candidates.
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: name)
-  --has-raised-funds: string@bool-completer # A boolean that describes if a candidate's committee has ever received any receipts for their campaign for this particular office. (Candidates have separate candidate IDs for each office.)
+  --has-raised-funds: oneof<nothing, bool> # A boolean that describes if a candidate's committee has ever received any receipts for their campaign for this particular office. (Candidates have separate candidate IDs for each office.)
   --election-year: list # Year of election
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --incumbent-challenge: list # One-letter code ('I', 'C', 'O') explaining if the candidate is an incumbent, a challenger, or if the seat is open.
   --party: list # Three-letter code for the party affiliated with a candidate or committee. For example, DEM for Democratic Party and REP for Republican Party.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<active_through: int, address_city: string, address_state: string, address_street_1: string, address_street_2: string, address_zip: string, candidate_id: string, candidate_inactive: bool, candidate_status: string, cycles: list, district: string, district_number: int, election_districts: list, election_years: list, federal_funds_flag: bool, first_file_date: string, flags: string, has_raised_funds: bool, incumbent_challenge: string, incumbent_challenge_full: string, last_f2_date: string, last_file_date: string, load_date: string, name: string, office: string, office_full: string, party: string, party_full: string, state: string>> {
@@ -887,12 +886,12 @@ export def "committee-candidates-history list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -two_year_period)
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<active_through: int, address_city: string, address_state: string, address_street_1: string, address_street_2: string, address_zip: string, candidate_election_year: int, candidate_id: string, candidate_inactive: bool, candidate_status: string, cycles: list, district: string, district_number: int, election_districts: list, election_years: list, fec_cycles_in_election: list, first_file_date: string, flags: string, incumbent_challenge: string, incumbent_challenge_full: string, last_f2_date: string, last_file_date: string, load_date: string, name: string, office: string, office_full: string, party: string, party_full: string, rounded_election_years: list, state: string, two_year_period: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -918,12 +917,12 @@ export def "committee-candidates-history get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -two_year_period)
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<active_through: int, address_city: string, address_state: string, address_street_1: string, address_street_2: string, address_zip: string, candidate_election_year: int, candidate_id: string, candidate_inactive: bool, candidate_status: string, cycles: list, district: string, district_number: int, election_districts: list, election_years: list, fec_cycles_in_election: list, first_file_date: string, flags: string, incumbent_challenge: string, incumbent_challenge_full: string, last_f2_date: string, last_file_date: string, load_date: string, name: string, office: string, office_full: string, party: string, party_full: string, rounded_election_years: list, state: string, two_year_period: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -953,11 +952,11 @@ export def "committee-filings get" [
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
   --district: list # Two-digit US House distirict of the office the candidate is running for. Presidential, Senate and House at-large candidates will have District 00.
   --document-type: list #  The type of document for documents other than reports:     - 2 24 Hour Contribution Notice     - 4 48 Hour Contribution Notice     - A Debt Settlement Statement     - B Acknowledgment of Receipt of Debt Settlement Statement     - C RFAI: Debt Settlement First Notice     - D Commission Debt Settlement Review     - E Commission Response TO Debt Settlement Request     - F Administrative Termination     - G Debt Settlement Plan Amendment     - H Disavowal Notice     - I Disavowal Response     - J Conduit Report     - K Termination Approval     - L Repeat Non-Filer Notice     - M Filing Frequency Change Notice     - N Paper Amendment to Electronic Report     - O Acknowledgment of Filing Frequency Change     - S RFAI: Debt Settlement Second     - T Miscellaneous Report TO FEC     - V Repeat Violation Notice (441A OR 441B)     - P Notice of Paper Filing     - R F3L Filing Frequency Change Notice     - Q Acknowledgment of F3L Filing Frequency Change     - U Unregistered Committee Notice
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --state: list # US state or territory where a candidate runs for office
   --amendment-indicator: list # Amendent types:     -N   new     -A   amendment     -T   terminated     -C   consolidated     -M   multi-candidate     -S   secondary  NULL might be new or amendment. If amendment indicator is null and the filings is the first or first in a chain treat it as if it was a new. If it is not the first or first in a chain then treat the filing as an amendment.
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
-  --is-amended: string@bool-completer #  False indicates that a report is the most recent. True indicates that the report has been superseded by an amendment.
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
+  --is-amended: oneof<nothing, bool> #  False indicates that a report is the most recent. True indicates that the report has been superseded by an amendment.
   --filer-type: string@filer-type-completer # The method used to file with the FEC, either electronic or on paper.
   --max-receipt-date: string #  Selects all filings received before this date(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
@@ -971,11 +970,11 @@ export def "committee-filings get" [
   --qp-sort: list #  Provide a field to sort by. Use `-` for descending order. ex: `-case_no`  (default: [-receipt_date])
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --min-receipt-date: string #  Selects all filings received after this date(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --q-filer: list #  Keyword search for filer name or ID
   --report-type: list # Name of report where the underlying data comes from:     - 10D Pre-Election     - 10G Pre-General     - 10P Pre-Primary     - 10R Pre-Run-Off     - 10S Pre-Special     - 12C Pre-Convention     - 12G Pre-General     - 12P Pre-Primary     - 12R Pre-Run-Off     - 12S Pre-Special     - 30D Post-Election     - 30G Post-General     - 30P Post-Primary     - 30R Post-Run-Off     - 30S Post-Special     - 60D Post-Convention     - M1  January Monthly     - M10 October Monthly     - M11 November Monthly     - M12 December Monthly     - M2  February Monthly     - M3  March Monthly     - M4  April Monthly     - M5  May Monthly     - M6  June Monthly     - M7  July Monthly     - M8  August Monthly     - M9  September Monthly     - MY  Mid-Year Report     - Q1  April Quarterly     - Q2  July Quarterly     - Q3  October Quarterly     - TER Termination Report     - YE  Year-End     - ADJ COMP ADJUST AMEND     - CA  COMPREHENSIVE AMEND     - 90S Post Inaugural Supplement     - 90D Post Inaugural     - 48  48 Hour Notification     - 24  24 Hour Notification     - M7S July Monthly/Semi-Annual     - MSA Monthly Semi-Annual (MY)     - MYS Monthly Year End/Semi-Annual     - Q2S July Quarterly/Semi-Annual     - QSA Quarterly Semi-Annual (MY)     - QYS Quarterly Year End/Semi-Annual     - QYE Quarterly Semi-Annual (YE)     - QMS Quarterly Mid-Year/ Semi-Annual     - MSY Monthly Semi-Annual (YE)
   --party: list # Three-letter code for the party affiliated with a candidate or committee. For example, DEM for Democratic Party and REP for Republican Party.
-  --most-recent: string@bool-completer #  Report is either new or is the most-recently filed amendment
+  --most-recent: oneof<nothing, bool> #  Report is either new or is the most-recently filed amendment
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<additional_bank_names: list, amendment_chain: list, amendment_indicator: string, amendment_version: int, bank_depository_city: string, bank_depository_name: string, bank_depository_state: string, bank_depository_street_1: string, bank_depository_street_2: string, bank_depository_zip: string, beginning_image_number: string, candidate_id: string, candidate_name: string, cash_on_hand_beginning_period: float, cash_on_hand_end_period: float, committee_id: string, committee_name: string, committee_type: string, coverage_end_date: string, coverage_start_date: string, csv_url: string, cycle: int, debts_owed_by_committee: float, debts_owed_to_committee: float, document_description: string, document_type: string, document_type_full: string, election_year: int, ending_image_number: string, fec_file_id: string, fec_url: string, file_number: int, form_category: string, form_type: string, house_personal_funds: float, html_url: string, is_amended: bool, means_filed: string, most_recent: bool, most_recent_file_number: int, net_donations: float, office: string, opposition_personal_funds: float, pages: int, party: string, pdf_url: string, previous_file_number: int, primary_general_indicator: string, receipt_date: string, report_type: string, report_type_full: string, report_year: int, request_type: string, senate_personal_funds: float, state: string, sub_id: string, total_communication_cost: float, total_disbursements: float, total_independent_expenditures: float, total_individual_contributions: float, total_receipts: float, treasurer_name: string, update_date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -999,12 +998,12 @@ export def "committee-history list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --designation: list # The one-letter designation code of the organization:          - A authorized by a candidate          - J joint fundraising committee          - P principal campaign committee of a candidate          - U unauthorized          - B lobbyist/registrant PAC          - D leadership PAC
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -cycle)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<affiliated_committee_name: string, candidate_ids: list, city: string, committee_id: string, committee_label: string, committee_type: string, committee_type_full: string, convert_to_pac_flag: bool, cycle: int, cycles: list, cycles_has_activity: list, cycles_has_financial: list, designation: string, designation_full: string, filing_frequency: string, first_f1_date: string, first_file_date: string, former_candidate_election_year: int, former_candidate_id: string, former_candidate_name: string, former_committee_name: string, is_active: bool, jfc_committee: list, last_cycle_has_activity: int, last_cycle_has_financial: int, last_f1_date: string, last_file_date: string, name: string, organization_type: string, organization_type_full: string, party: string, party_full: string, sponsor_candidate_ids: list, state: string, state_full: string, street_1: string, street_2: string, treasurer_name: string, zip: string>> {
@@ -1031,12 +1030,12 @@ export def "committee-history get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --designation: list # The one-letter designation code of the organization:          - A authorized by a candidate          - J joint fundraising committee          - P principal campaign committee of a candidate          - U unauthorized          - B lobbyist/registrant PAC          - D leadership PAC
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -cycle)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<affiliated_committee_name: string, candidate_ids: list, city: string, committee_id: string, committee_label: string, committee_type: string, committee_type_full: string, convert_to_pac_flag: bool, cycle: int, cycles: list, cycles_has_activity: list, cycles_has_financial: list, designation: string, designation_full: string, filing_frequency: string, first_f1_date: string, first_file_date: string, former_candidate_election_year: int, former_candidate_id: string, former_candidate_name: string, former_committee_name: string, is_active: bool, jfc_committee: list, last_cycle_has_activity: int, last_cycle_has_financial: int, last_f1_date: string, last_file_date: string, name: string, organization_type: string, organization_type_full: string, party: string, party_full: string, sponsor_candidate_ids: list, state: string, state_full: string, street_1: string, street_2: string, treasurer_name: string, zip: string>> {
@@ -1066,12 +1065,12 @@ export def "committee-reports get" [
   --max-total-contributions: string #  Filter for all amounts less than a value.
   --max-debts-owed-expenditures: string #  Filter for all amounts less than a value.
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --year: list #  Forms with coverage date -      year from the coverage ending date. Forms without coverage date -      year from the receipt date.
   --max-receipts-amount: string #  Filter for all amounts less than a value.
   --max-cash-on-hand-end-period-amount: string #  Filter for all amounts less than a value.
-  --is-amended: string@bool-completer #  False indicates that a report is the most recent. True indicates that the report has been superseded by an amendment.
+  --is-amended: oneof<nothing, bool> #  False indicates that a report is the most recent. True indicates that the report has been superseded by an amendment.
   --min-disbursements-amount: string #  Filter for all amounts greater than a value.
   --max-party-coordinated-expenditures: string #  Filter for all amounts less than a value.
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
@@ -1086,7 +1085,7 @@ export def "committee-reports get" [
   --min-total-contributions: string #  Filter for all amounts greater than a value.
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --min-cash-on-hand-end-period-amount: string #  Filter for all amounts greater than a value.
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --min-independent-expenditures: string #  Filter for all amounts greater than a value.
   --report-type: list # Report type; prefix with "-" to exclude. Name of report where the underlying data comes from:     - 10D Pre-Election     - 10G Pre-General     - 10P Pre-Primary     - 10R Pre-Run-Off     - 10S Pre-Special     - 12C Pre-Convention     - 12G Pre-General     - 12P Pre-Primary     - 12R Pre-Run-Off     - 12S Pre-Special     - 30D Post-Election     - 30G Post-General     - 30P Post-Primary     - 30R Post-Run-Off     - 30S Post-Special     - 60D Post-Convention     - M1  January Monthly     - M10 October Monthly     - M11 November Monthly     - M12 December Monthly     - M2  February Monthly     - M3  March Monthly     - M4  April Monthly     - M5  May Monthly     - M6  June Monthly     - M7  July Monthly     - M8  August Monthly     - M9  September Monthly     - MY  Mid-Year Report     - Q1  April Quarterly     - Q2  July Quarterly     - Q3  October Quarterly     - TER Termination Report     - YE  Year-End     - ADJ COMP ADJUST AMEND     - CA  COMPREHENSIVE AMEND
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<aggregate_amount_personal_contributions_general: float, aggregate_contributions_personal_funds_primary: float, all_loans_received_period: float, all_loans_received_ytd: float, all_other_loans_period: float, all_other_loans_ytd: float, allocated_federal_election_levin_share_period: float, amendment_chain: list, amendment_indicator: string, amendment_indicator_full: string, beginning_image_number: string, calendar_ytd: int, candidate_contribution_period: float, candidate_contribution_ytd: float, cash_on_hand_beginning_calendar_ytd: float, cash_on_hand_beginning_period: float, cash_on_hand_close_ytd: float, cash_on_hand_end_period: float, committee_id: string, committee_name: string, committee_type: string, coordinated_expenditures_by_party_committee_period: float, coordinated_expenditures_by_party_committee_ytd: float, coverage_end_date: string, coverage_start_date: string, csv_url: string, cycle: int, debts_owed_by_committee: float, debts_owed_to_committee: float, document_description: string, end_image_number: string, exempt_legal_accounting_disbursement_period: float, exempt_legal_accounting_disbursement_ytd: float, expenditure_subject_to_limits: float, fec_file_id: string, fec_url: string, fed_candidate_committee_contribution_refunds_ytd: float, fed_candidate_committee_contributions_period: float, fed_candidate_committee_contributions_ytd: float, fed_candidate_contribution_refunds_period: float, federal_funds_period: float, federal_funds_ytd: float, file_number: int, fundraising_disbursements_period: float, fundraising_disbursements_ytd: float, gross_receipt_authorized_committee_general: float, gross_receipt_authorized_committee_primary: float, gross_receipt_minus_personal_contribution_general: float, gross_receipt_minus_personal_contributions_primary: float, html_url: string, independent_contributions_period: float, independent_expenditures_period: float, independent_expenditures_ytd: float, individual_itemized_contributions_period: float, individual_itemized_contributions_ytd: float, individual_unitemized_contributions_period: float, individual_unitemized_contributions_ytd: float, is_amended: bool, items_on_hand_liquidated: float, loan_repayments_candidate_loans_period: float, loan_repayments_candidate_loans_ytd: float, loan_repayments_made_period: float, loan_repayments_made_ytd: float, loan_repayments_other_loans_period: float, loan_repayments_other_loans_ytd: float, loan_repayments_received_period: float, loan_repayments_received_ytd: float, loans_made_by_candidate_period: float, loans_made_by_candidate_ytd: float, loans_made_period: float, loans_made_ytd: float, loans_received_from_candidate_period: float, loans_received_from_candidate_ytd: float, means_filed: string, most_recent: bool, most_recent_file_number: float, net_contributions_cycle_to_date: float, net_contributions_period: float, net_contributions_ytd: float, net_operating_expenditures_cycle_to_date: float, net_operating_expenditures_period: float, net_operating_expenditures_ytd: float, non_allocated_fed_election_activity_period: float, non_allocated_fed_election_activity_ytd: float, nonfed_share_allocated_disbursements_period: float, offsets_to_fundraising_expenditures_period: float, offsets_to_fundraising_expenditures_ytd: float, offsets_to_legal_accounting_period: float, offsets_to_legal_accounting_ytd: float, offsets_to_operating_expenditures_period: float, offsets_to_operating_expenditures_ytd: float, operating_expenditures_period: float, operating_expenditures_ytd: float, other_disbursements_period: float, other_disbursements_ytd: float, other_fed_operating_expenditures_period: float, other_fed_operating_expenditures_ytd: float, other_fed_receipts_period: float, other_fed_receipts_ytd: float, other_loans_received_period: float, other_loans_received_ytd: float, other_political_committee_contributions_period: float, other_political_committee_contributions_ytd: float, other_receipts_period: float, other_receipts_ytd: float, pdf_url: string, political_party_committee_contributions_period: float, political_party_committee_contributions_ytd: float, previous_file_number: float, receipt_date: string, refunded_individual_contributions_period: float, refunded_individual_contributions_ytd: float, refunded_other_political_committee_contributions_period: float, refunded_other_political_committee_contributions_ytd: float, refunded_political_party_committee_contributions_period: float, refunded_political_party_committee_contributions_ytd: float, refunds_total_contributions_col_total_ytd: float, repayments_loans_made_by_candidate_period: float, repayments_loans_made_candidate_ytd: float, repayments_other_loans_period: float, repayments_other_loans_ytd: float, report_form: string, report_type: string, report_type_full: string, report_year: int, shared_fed_activity_nonfed_ytd: float, shared_fed_activity_period: float, shared_fed_activity_ytd: float, shared_fed_operating_expenditures_period: float, shared_fed_operating_expenditures_ytd: float, shared_nonfed_operating_expenditures_period: float, shared_nonfed_operating_expenditures_ytd: float, subtotal_period: float, subtotal_summary_page_period: float, subtotal_summary_period: float, subtotal_summary_ytd: float, total_contribution_refunds_col_total_period: float, total_contribution_refunds_period: float, total_contribution_refunds_ytd: float, total_contributions_column_total_period: float, total_contributions_period: float, total_contributions_ytd: float, total_disbursements_period: float, total_disbursements_ytd: float, total_fed_disbursements_period: float, total_fed_disbursements_ytd: float, total_fed_election_activity_period: float, total_fed_election_activity_ytd: float, total_fed_operating_expenditures_period: float, total_fed_operating_expenditures_ytd: float, total_fed_receipts_period: float, total_fed_receipts_ytd: float, total_individual_contributions_period: float, total_individual_contributions_ytd: float, total_loan_repayments_made_period: float, total_loan_repayments_made_ytd: float, total_loans_received_period: float, total_loans_received_ytd: float, total_nonfed_transfers_period: float, total_nonfed_transfers_ytd: float, total_offsets_to_operating_expenditures_period: float, total_offsets_to_operating_expenditures_ytd: float, total_operating_expenditures_period: float, total_operating_expenditures_ytd: float, total_period: float, total_receipts_period: float, total_receipts_ytd: float, total_ytd: float, transfers_from_affiliated_committee_period: float, transfers_from_affiliated_committee_ytd: float, transfers_from_affiliated_party_period: float, transfers_from_affiliated_party_ytd: float, transfers_from_nonfed_account_period: float, transfers_from_nonfed_account_ytd: float, transfers_from_nonfed_levin_period: float, transfers_from_nonfed_levin_ytd: float, transfers_from_other_authorized_committee_period: float, transfers_from_other_authorized_committee_ytd: float, transfers_to_affiliated_committee_period: float, transfers_to_affilitated_committees_ytd: float, transfers_to_other_authorized_committee_period: float, transfers_to_other_authorized_committee_ytd: float>> {
@@ -1112,10 +1111,10 @@ export def "committee-totals get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -cycle)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -1145,8 +1144,8 @@ export def "committees get" [
   --min-first-f1-date: string # Filter for committees whose first Form 1 was received on or after this date. (format: date)
   --cycle: list #  A two year election cycle that the committee was active- (after original registration date but before expiration date in Form 1s) The cycle begins with an odd year and is named for its ending, even year.
   --filing-frequency: list # The one-letter      code of the filing frequency:          - A Administratively terminated          - D Debt          - M Monthly filer          - Q Quarterly filer          - T Terminated          - W Waived
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --year: list # A year that the committee was active— (after original registration date     or filing but before expiration date)
   --state: list # US state or territory
   --sponsor-candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office. This is a filter for Leadership PAC sponsor.
@@ -1160,7 +1159,7 @@ export def "committees get" [
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: name)
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --max-last-f1-date: string # Filter for committees whose latest Form 1 was received on or before this date. (format: date)
   --treasurer-name: list # Name of the Committee's treasurer. If multiple treasurers for the committee, the most recent treasurer will be shown.
   --organization-type: list # The one-letter code for the kind for organization:         - C corporation         - L labor organization         - M membership organization         - T trade association         - V cooperative         - W corporation without capital stock
@@ -1189,9 +1188,9 @@ export def "communication-costs get" [
   --allow-errors(-e) # Return full response without error handling
   --max-amount: string # Filter for all amounts less than a value.
   --max-image-number: string # Maxium image number of the page where the schedule item is reported
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --support-oppose-indicator: list # Support or opposition
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --line-number: string # Filter for form and line number using the following format: `FORM-LINENUMBER`.  For example an argument such as `F3X-16` would filter down to all entries from form `F3X` line number `16`.
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
@@ -1201,7 +1200,7 @@ export def "communication-costs get" [
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --min-amount: string # Filter for all amounts greater than a value.
   --min-image-number: string # Minium image number of the page where the schedule item is reported
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --image-number: list #  An unique identifier for each page where the electronic or paper filing is reported.
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
   --max-date: string # Maximum date (format: date)
@@ -1230,11 +1229,11 @@ export def "communication-costs-aggregates get" [
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
   --support-oppose-indicator: string@support-oppose-indicator-completer # Support or opposition
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<candidate: string, candidate_id: string, candidate_name: string, committee: string, committee_id: string, committee_name: string, count: int, cycle: int, support_oppose_indicator: string, total: float>> {
@@ -1265,11 +1264,11 @@ export def "communication-costs-by-candidate get" [
   --state: string # US state or territory where a candidate runs for office
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --support-oppose: string@support-oppose-completer # Support or opposition
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<candidate: string, candidate_id: string, candidate_name: string, committee: string, committee_id: string, committee_name: string, count: int, cycle: int, support_oppose_indicator: string, total: float>> {
@@ -1294,13 +1293,13 @@ export def "communication-costs-totals-by-candidate get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<candidate_id: string, cycle: int, support_oppose_indicator: string, total: float>> {
@@ -1325,16 +1324,16 @@ export def "efile-filings get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --file-number: list # Filing ID number
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --min-receipt-date: string #  Selects all filings received after this date(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --max-receipt-date: string #  Selects all filings received before this date(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --q-filer: list #  Keyword search for filer name or ID
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -receipt_date)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<amended_by: int, amendment_chain: list, amendment_number: int, amends_file: int, beginning_image_number: string, committee_id: string, committee_name: string, coverage_end_date: string, coverage_start_date: string, csv_url: string, document_description: string, ending_image_number: string, fec_file_id: string, fec_url: string, file_number: int, filed_date: string, form_type: string, html_url: string, is_amended: bool, load_timestamp: string, most_recent: bool, most_recent_filing: int, pdf_url: string, receipt_date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1358,16 +1357,16 @@ export def "efile-reports-house-senate get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --file-number: list # Filing ID number
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --min-receipt-date: string #  Selects all filings received after this date(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --max-receipt-date: string #  Selects all filings received before this date(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --q-filer: list #  Keyword search for filer name or ID
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -receipt_date)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<amended_address: string, amended_by: int, amendment: string, amendment_chain: list, beginning_image_number: string, candidate_first_name: string, candidate_id: string, candidate_last_name: string, candidate_middle_name: string, candidate_name: string, candidate_prefix: string, candidate_suffix: string, cash_on_hand_beginning_period: int, city: string, committee_id: string, committee_name: string, coverage_end_date: string, coverage_start_date: string, csv_url: string, district: int, document_description: string, election_date: string, election_state: string, f3z1: int, fec_file_id: string, fec_url: string, file_number: int, general_election: string, is_amended: bool, most_recent: bool, most_recent_filing: int, pdf_url: string, prefix: string, primary_election: string, receipt_date: string, report: string, report_type: string, report_year: int, rpt_pgi: string, runoff_election: string, sign_date: string, special_election: string, state: string, street_1: string, street_2: string, suffix: string, summary_lines: string, treasurer_first_name: string, treasurer_last_name: string, treasurer_middle_name: string, treasurer_name: string, zip: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1391,16 +1390,16 @@ export def "efile-reports-pac-party get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --file-number: list # Filing ID number
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --min-receipt-date: string #  Selects all filings received after this date(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --max-receipt-date: string #  Selects all filings received before this date(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --q-filer: list #  Keyword search for filer name or ID
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -receipt_date)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<amend_address: string, amended_by: int, amendment: string, amendment_chain: list, beginning_image_number: string, city: string, committee_id: string, committee_name: string, coverage_end_date: string, coverage_start_date: string, csv_url: string, document_description: string, election_date: string, election_state: string, fec_file_id: string, fec_url: string, file_number: int, is_amended: bool, most_recent: bool, most_recent_filing: int, pdf_url: string, qualified_multicandidate_committee: string, receipt_date: string, report: string, report_type: string, report_year: int, rpt_pgi: string, sign_date: string, state: string, street_1: string, street_2: string, summary_lines: string, zip: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1424,16 +1423,16 @@ export def "efile-reports-presidential get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --file-number: list # Filing ID number
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --min-receipt-date: string #  Selects all filings received after this date(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --max-receipt-date: string #  Selects all filings received before this date(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --q-filer: list #  Keyword search for filer name or ID
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -receipt_date)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<amended_by: int, amendment: string, amendment_chain: list, beginning_image_number: string, cash_on_hand_beginning_period: float, cash_on_hand_end_period: float, city: string, committee_id: string, committee_name: string, coverage_end_date: string, coverage_start_date: string, csv_url: string, debts_owed_by_committee: float, debts_owed_to_committee: float, document_description: string, election_date: string, election_state: string, expenditure_subject_to_limits: float, fec_file_id: string, fec_url: string, file_number: int, general_election: string, is_amended: bool, most_recent: bool, most_recent_filing: int, net_contributions_cycle_to_date: float, net_operating_expenditures_cycle_to_date: float, pdf_url: string, prefix: string, primary_election: string, receipt_date: string, report: string, report_type: string, report_year: int, rpt_pgi: string, sign_date: string, state: string, street_1: string, street_2: string, subtotal_summary_period: string, suffix: string, summary_lines: string, treasurer_first_name: string, treasurer_last_name: string, treasurer_middle_name: string, treasurer_name: string, zip: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -1457,8 +1456,8 @@ export def "election-dates get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --max-update-date: string #  The maximum date this record was last updated.(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --max-primary-general-date: string #  The maximum date of primary or general election.(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --min-update-date: string #  The minimum date this record was last updated.(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --max-create-date: string #  The maximum date this record was added to the system.(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
@@ -1473,7 +1472,7 @@ export def "election-dates get" [
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --election-district: list #  House district of the office sought, if applicable.
   --office-sought: list #  House, Senate or presidential office.
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --max-election-date: string #  The maximum date of election.  (format: date)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -election_date)
   --election-state: list #  State or territory of the office sought.
@@ -1500,15 +1499,15 @@ export def "electioneering get" [
   --allow-errors(-e) # Return full response without error handling
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
   --max-amount: string # Filter for all amounts less than a value.
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
   --min-date: string # Minimum disbursement date (format: date)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --min-amount: string # Filter for all amounts greater than a value.
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --description: string
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
   --report-year: list #  Forms with coverage date -      year from the coverage ending date. Forms without coverage date -      year from the receipt date.
@@ -1536,13 +1535,13 @@ export def "electioneering-aggregates get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<candidate: string, candidate_id: string, candidate_name: string, committee: string, committee_id: string, committee_name: string, count: int, cycle: int, total: float>> {
@@ -1572,11 +1571,11 @@ export def "electioneering-by-candidate get" [
   --district: string # Two-digit US House distirict of the office the candidate is running for. Presidential, Senate and House at-large candidates will have District 00.
   --state: string # US state or territory where a candidate runs for office
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<candidate: string, candidate_id: string, candidate_name: string, committee: string, committee_id: string, committee_name: string, count: int, cycle: int, total: float>> {
@@ -1601,13 +1600,13 @@ export def "electioneering-totals-by-candidate get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<candidate_id: string, cycle: int, total: float>> {
@@ -1636,11 +1635,11 @@ export def "elections get" [
   --district: string # Two-digit US House distirict of the office the candidate is running for. Presidential, Senate and House at-large candidates will have District 00.
   --state: string # US state or territory where a candidate runs for office
   --cycle: int #  Two-year election cycle in which a candidate runs for office. Calculated from Form 2. The cycle begins with an odd year and is named for its ending, even year. This cycle follows the traditional house election cycle and subdivides the presidential and Senate elections into comparable two-year blocks. To retrieve data for the entire four years of a presidential term or six years of a senatorial term, you will need the `election_full` flag.  (format: int32)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -total_receipts)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<candidate_election_year: int, candidate_id: string, candidate_name: string, candidate_pcc_id: string, candidate_pcc_name: string, cash_on_hand_end_period: float, committee_ids: list, coverage_end_date: string, incumbent_challenge_full: string, party_full: string, total_disbursements: float, total_receipts: float>> {
@@ -1669,11 +1668,11 @@ export def "elections-search get" [
   --district: list # Two-digit US House distirict of the office the candidate is running for. Presidential, Senate and House at-large candidates will have District 00.
   --zip: list # Zip code
   --state: list # US state or territory where a candidate runs for office
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: list #  Provide a field to sort by. Use `-` for descending order. ex: `-case_no`  (default: [sort_order, district])
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<cycle: int, district: string, office: string, state: string>> {
@@ -1702,7 +1701,7 @@ export def "elections-summary get" [
   --district: string # Two-digit US House distirict of the office the candidate is running for. Presidential, Senate and House at-large candidates will have District 00.
   --state: string # US state or territory where a candidate runs for office
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
 ]: nothing -> record<count: int, disbursements: float, independent_expenditures: float, receipts: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1730,11 +1729,11 @@ export def "filings get" [
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
   --district: list # Two-digit US House distirict of the office the candidate is running for. Presidential, Senate and House at-large candidates will have District 00.
   --document-type: list #  The type of document for documents other than reports:     - 2 24 Hour Contribution Notice     - 4 48 Hour Contribution Notice     - A Debt Settlement Statement     - B Acknowledgment of Receipt of Debt Settlement Statement     - C RFAI: Debt Settlement First Notice     - D Commission Debt Settlement Review     - E Commission Response TO Debt Settlement Request     - F Administrative Termination     - G Debt Settlement Plan Amendment     - H Disavowal Notice     - I Disavowal Response     - J Conduit Report     - K Termination Approval     - L Repeat Non-Filer Notice     - M Filing Frequency Change Notice     - N Paper Amendment to Electronic Report     - O Acknowledgment of Filing Frequency Change     - S RFAI: Debt Settlement Second     - T Miscellaneous Report TO FEC     - V Repeat Violation Notice (441A OR 441B)     - P Notice of Paper Filing     - R F3L Filing Frequency Change Notice     - Q Acknowledgment of F3L Filing Frequency Change     - U Unregistered Committee Notice
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --state: list # US state or territory where a candidate runs for office
   --amendment-indicator: list # Amendent types:     -N   new     -A   amendment     -T   terminated     -C   consolidated     -M   multi-candidate     -S   secondary  NULL might be new or amendment. If amendment indicator is null and the filings is the first or first in a chain treat it as if it was a new. If it is not the first or first in a chain then treat the filing as an amendment.
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
-  --is-amended: string@bool-completer #  False indicates that a report is the most recent. True indicates that the report has been superseded by an amendment.
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
+  --is-amended: oneof<nothing, bool> #  False indicates that a report is the most recent. True indicates that the report has been superseded by an amendment.
   --filer-type: string@filer-type-completer # The method used to file with the FEC, either electronic or on paper.
   --max-receipt-date: string #  Selects all filings received before this date(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
@@ -1750,11 +1749,11 @@ export def "filings get" [
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --min-receipt-date: string #  Selects all filings received after this date(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --q-filer: list #  Keyword search for filer name or ID
   --report-type: list # Name of report where the underlying data comes from:     - 10D Pre-Election     - 10G Pre-General     - 10P Pre-Primary     - 10R Pre-Run-Off     - 10S Pre-Special     - 12C Pre-Convention     - 12G Pre-General     - 12P Pre-Primary     - 12R Pre-Run-Off     - 12S Pre-Special     - 30D Post-Election     - 30G Post-General     - 30P Post-Primary     - 30R Post-Run-Off     - 30S Post-Special     - 60D Post-Convention     - M1  January Monthly     - M10 October Monthly     - M11 November Monthly     - M12 December Monthly     - M2  February Monthly     - M3  March Monthly     - M4  April Monthly     - M5  May Monthly     - M6  June Monthly     - M7  July Monthly     - M8  August Monthly     - M9  September Monthly     - MY  Mid-Year Report     - Q1  April Quarterly     - Q2  July Quarterly     - Q3  October Quarterly     - TER Termination Report     - YE  Year-End     - ADJ COMP ADJUST AMEND     - CA  COMPREHENSIVE AMEND     - 90S Post Inaugural Supplement     - 90D Post Inaugural     - 48  48 Hour Notification     - 24  24 Hour Notification     - M7S July Monthly/Semi-Annual     - MSA Monthly Semi-Annual (MY)     - MYS Monthly Year End/Semi-Annual     - Q2S July Quarterly/Semi-Annual     - QSA Quarterly Semi-Annual (MY)     - QYS Quarterly Year End/Semi-Annual     - QYE Quarterly Semi-Annual (YE)     - QMS Quarterly Mid-Year/ Semi-Annual     - MSY Monthly Semi-Annual (YE)
   --party: list # Three-letter code for the party affiliated with a candidate or committee. For example, DEM for Democratic Party and REP for Republican Party.
-  --most-recent: string@bool-completer #  Report is either new or is the most-recently filed amendment
+  --most-recent: oneof<nothing, bool> #  Report is either new or is the most-recently filed amendment
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<additional_bank_names: list, amendment_chain: list, amendment_indicator: string, amendment_version: int, bank_depository_city: string, bank_depository_name: string, bank_depository_state: string, bank_depository_street_1: string, bank_depository_street_2: string, bank_depository_zip: string, beginning_image_number: string, candidate_id: string, candidate_name: string, cash_on_hand_beginning_period: float, cash_on_hand_end_period: float, committee_id: string, committee_name: string, committee_type: string, coverage_end_date: string, coverage_start_date: string, csv_url: string, cycle: int, debts_owed_by_committee: float, debts_owed_to_committee: float, document_description: string, document_type: string, document_type_full: string, election_year: int, ending_image_number: string, fec_file_id: string, fec_url: string, file_number: int, form_category: string, form_type: string, house_personal_funds: float, html_url: string, is_amended: bool, means_filed: string, most_recent: bool, most_recent_file_number: int, net_donations: float, office: string, opposition_personal_funds: float, pages: int, party: string, pdf_url: string, previous_file_number: int, primary_general_indicator: string, receipt_date: string, report_type: string, report_type_full: string, report_year: int, request_type: string, senate_personal_funds: float, state: string, sub_id: string, total_communication_cost: float, total_disbursements: float, total_independent_expenditures: float, total_individual_contributions: float, total_receipts: float, treasurer_name: string, update_date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1797,13 +1796,13 @@ export def "legal-search get" [
   --ao-regulatory-citation: list #  Regulatory citations
   --af-committee-id: string #  Admin fine committee ID
   --ao-requestor: string #  The requestor of the advisory opinion
-  --case-citation-require-all: string@bool-completer #  Require all citations to be in document (default behavior is any)
+  --case-citation-require-all: oneof<nothing, bool> #  Require all citations to be in document (default behavior is any)
   --af-min-fd-date: string #  The earliest Final Determination date  (format: date)
-  --ao-is-pending: string@bool-completer #  AO is pending
+  --ao-is-pending: oneof<nothing, bool> #  AO is pending
   --af-rtb-fine-amount: int #  Reason to Believe fine amount  (format: int32)
   --case-election-cycles: int #  Cases election cycles  (format: int32)
   --ao-category: list #  Category of the document
-  --ao-citation-require-all: string@bool-completer #  Require all citations to be in document (default behavior is any)
+  --ao-citation-require-all: oneof<nothing, bool> #  Require all citations to be in document (default behavior is any)
   --case-dispositions: list #  Cases dispositions
   --af-max-rtb-date: string #  The latest Reason to Believe date  (format: date)
   --case-min-open-date: string #  The earliest date opened of case  (format: date)
@@ -1933,9 +1932,9 @@ export def "operations-log get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --max-coverage-end-date: string #  Ending date of the reporting period before this date(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --amendment-indicator: list # Amendent types:     -N   new     -A   amendment     -T   terminated     -C   consolidated     -M   multi-candidate     -S   secondary  NULL might be new or amendment. If amendment indicator is null and the filings is the first or first in a chain treat it as if it was a new. If it is not the first or first in a chain then treat the filing as an amendment.
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --max-receipt-date: string #  Selects all filings received before this date(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --min-transaction-data-complete-date: string #  Select all filings processed completely after this date(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
@@ -1947,7 +1946,7 @@ export def "operations-log get" [
   --qp-sort: list #  Provide a field to sort by. Use `-` for descending order. ex: `-case_no`  (default: [-report_year])
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --min-receipt-date: string #  Selects all filings received after this date(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --candidate-committee-id: list #  A unique identifier of the registered filer.
   --report-type: list # Name of report where the underlying data comes from:     - 10D Pre-Election     - 10G Pre-General     - 10P Pre-Primary     - 10R Pre-Run-Off     - 10S Pre-Special     - 12C Pre-Convention     - 12G Pre-General     - 12P Pre-Primary     - 12R Pre-Run-Off     - 12S Pre-Special     - 30D Post-Election     - 30G Post-General     - 30P Post-Primary     - 30R Post-Run-Off     - 30S Post-Special     - 60D Post-Convention     - M1  January Monthly     - M10 October Monthly     - M11 November Monthly     - M12 December Monthly     - M2  February Monthly     - M3  March Monthly     - M4  April Monthly     - M5  May Monthly     - M6  June Monthly     - M7  July Monthly     - M8  August Monthly     - M9  September Monthly     - MY  Mid-Year Report     - Q1  April Quarterly     - Q2  July Quarterly     - Q3  October Quarterly     - TER Termination Report     - YE  Year-End     - ADJ COMP ADJUST AMEND     - CA  COMPREHENSIVE AMEND     - 90S Post Inaugural Supplement     - 90D Post Inaugural     - 48  48 Hour Notification     - 24  24 Hour Notification     - M7S July Monthly/Semi-Annual     - MSA Monthly Semi-Annual (MY)     - MYS Monthly Year End/Semi-Annual     - Q2S July Quarterly/Semi-Annual     - QSA Quarterly Semi-Annual (MY)     - QYS Quarterly Year End/Semi-Annual     - QYE Quarterly Semi-Annual (YE)     - QMS Quarterly Mid-Year/ Semi-Annual     - MSY Monthly Semi-Annual (YE)
   --report-year: list #  Forms with coverage date -      year from the coverage ending date. Forms without coverage date -      year from the receipt date.
@@ -1974,12 +1973,12 @@ export def "presidential-contributions-by-candidate get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --contributor-state: list # State of contributor
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --election-year: list # Year of election
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -net_receipts)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<candidate_id: string, candidate_last_name: string, candidate_party_affiliation: string, contributor_state: string, election_year: int, net_receipts: float, rounded_net_receipts: float>> {
@@ -2004,13 +2003,13 @@ export def "presidential-contributions-by-size get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.   -P00000001    All candidates   -P00000002    Democrasts   -P00000003    Republicans
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --election-year: list # Year of election
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --size: list #  The total all contributions in the following ranges: ```   -0    $200 and under   -200  $200.01 - $499.99   -500  $500 - $999.99   -1000 $1000 - $1999.99   -2000 $2000 + ``` Unitemized contributions are included in the `0` category.
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: size)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<candidate_id: string, contribution_receipt_amount: float, election_year: int, size: int, size_range_id: int>> {
@@ -2035,12 +2034,12 @@ export def "presidential-contributions-by-state get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.   -P00000001    All candidates   -P00000002    Democrasts   -P00000003    Republicans
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --election-year: list # Year of election
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -contribution_receipt_amount)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<candidate_id: string, contribution_receipt_amount: float, contribution_state: string, election_year: int>> {
@@ -2065,12 +2064,12 @@ export def "presidential-coverage-end-date get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.   -P00000001    All candidates   -P00000002    Democrasts   -P00000003    Republicans
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --election-year: list # Year of election
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: candidate_id)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<candidate_id: string, coverage_end_date: string, election_year: int>> {
@@ -2095,12 +2094,12 @@ export def "presidential-financial-summary get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.   -P00000001    All candidates   -P00000002    Democrasts   -P00000003    Republicans
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --election-year: list # Year of election
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -net_receipts)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<candidate_contributions_less_repayments: float, candidate_id: string, candidate_last_name: string, candidate_name: string, candidate_party_affiliation: string, cash_on_hand_end: float, committee_designation: string, committee_id: string, committee_name: string, committee_type: string, debts_owed_by_committee: float, disbursements_less_offsets: float, election_year: int, exempt_legal_accounting_disbursement: float, federal_funds: float, fundraising_disbursements: float, individual_contributions_less_refunds: float, net_receipts: float, offsets_to_operating_expenditures: float, operating_expenditures: float, other_disbursements: float, pac_contributions_less_refunds: float, party_contributions_less_refunds: float, repayments_loans_made_by_candidate: float, repayments_other_loans: float, rounded_net_receipts: float, total_contribution_refunds: float, total_loan_repayments_made: float, transfers_from_affiliated_committees: float, transfers_to_other_authorized_committees: float>> {
@@ -2129,15 +2128,15 @@ export def "rad-analyst get" [
   --analyst-short-id: list # Short ID of RAD analyst
   --email: list # Email of RAD analyst
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --title: list # Title of RAD analyst
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
   --name: list # Name of RAD analyst
   --telephone-ext: list # Telephone extension of RAD analyst
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --analyst-id: list # ID of RAD analyst
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<analyst_id: float, analyst_short_id: float, assignment_update_date: string, committee_id: string, committee_name: string, email: string, first_name: string, last_name: string, rad_branch: string, telephone_ext: float, title: string>> {
@@ -2166,13 +2165,13 @@ export def "reporting-dates get" [
   --max-due-date: string #  The maximum date the report is due.(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --min-create-date: string #  The minimum date this record was added to the system.(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --min-due-date: string #  The minimum date the report is due.(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --min-update-date: string #  The minimum date this record was last updated.(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --max-create-date: string #  The maximum date this record was added to the system.(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -due_date)
   --report-year: list #  Forms with coverage date -      year from the coverage ending date. Forms without coverage date -      year from the receipt date.
   --report-type: list # Name of report where the underlying data comes from:     - 10D Pre-Election     - 10G Pre-General     - 10P Pre-Primary     - 10R Pre-Run-Off     - 10S Pre-Special     - 12C Pre-Convention     - 12G Pre-General     - 12P Pre-Primary     - 12R Pre-Run-Off     - 12S Pre-Special     - 30D Post-Election     - 30G Post-General     - 30P Post-Primary     - 30R Post-Run-Off     - 30S Post-Special     - 60D Post-Convention     - M1  January Monthly     - M10 October Monthly     - M11 November Monthly     - M12 December Monthly     - M2  February Monthly     - M3  March Monthly     - M4  April Monthly     - M5  May Monthly     - M6  June Monthly     - M7  July Monthly     - M8  August Monthly     - M9  September Monthly     - MY  Mid-Year Report     - Q1  April Quarterly     - Q2  July Quarterly     - Q3  October Quarterly     - TER Termination Report     - YE  Year-End     - ADJ COMP ADJUST AMEND     - CA  COMPREHENSIVE AMEND     - 90S Post Inaugural Supplement     - 90D Post Inaugural     - 48  48 Hour Notification     - 24  24 Hour Notification     - M7S July Monthly/Semi-Annual     - MSA Monthly Semi-Annual (MY)     - MYS Monthly Year End/Semi-Annual     - Q2S July Quarterly/Semi-Annual     - QSA Quarterly Semi-Annual (MY)     - QYS Quarterly Year End/Semi-Annual     - QYE Quarterly Semi-Annual (YE)     - QMS Quarterly Mid-Year/ Semi-Annual     - MSY Monthly Semi-Annual (YE)
@@ -2200,7 +2199,7 @@ export def "reports get" [
   --allow-errors(-e) # Return full response without error handling
   --min-debts-owed-amount: string #  Filter for all amounts greater than a value.
   --max-debts-owed-expenditures: string #  Filter for all amounts less than a value.
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --year: list #  Forms with coverage date -      year from the coverage ending date. Forms without coverage date -      year from the receipt date.
   --max-cash-on-hand-end-period-amount: string #  Filter for all amounts less than a value.
   --filer-type: string@filer-type-completer # The method used to file with the FEC, either electronic or on paper.
@@ -2216,16 +2215,16 @@ export def "reports get" [
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --min-cash-on-hand-end-period-amount: string #  Filter for all amounts greater than a value.
   --min-receipt-date: string #  Selects all items received by FEC after this date(MM/DD/YYYY or YYYY-MM-DD)  (format: date)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --min-independent-expenditures: string #  Filter for all amounts greater than a value.
   --q-filer: list #  Keyword search for filer name or ID
   --max-disbursements-amount: string #  Filter for all amounts less than a value.
   --max-total-contributions: string #  Filter for all amounts less than a value.
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
   --amendment-indicator: list # Amendent types:     -N   new     -A   amendment     -T   terminated     -C   consolidated     -M   multi-candidate     -S   secondary  NULL might be new or amendment. If amendment indicator is null and the filings is the first or first in a chain treat it as if it was a new. If it is not the first or first in a chain then treat the filing as an amendment.
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --max-receipts-amount: string #  Filter for all amounts less than a value.
-  --is-amended: string@bool-completer #  False indicates that a report is the most recent. True indicates that the report has been superseded by an amendment.
+  --is-amended: oneof<nothing, bool> #  False indicates that a report is the most recent. True indicates that the report has been superseded by an amendment.
   --min-disbursements-amount: string #  Filter for all amounts greater than a value.
   --min-receipts-amount: string #  Filter for all amounts greater than a value.
   --candidate-id: string #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
@@ -2233,7 +2232,7 @@ export def "reports get" [
   --qp-sort: list #  Provide a field to sort by. Use `-` for descending order. ex: `-case_no`  (default: [-coverage_end_date])
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
   --report-type: list # Report type; prefix with "-" to exclude. Name of report where the underlying data comes from:     - 10D Pre-Election     - 10G Pre-General     - 10P Pre-Primary     - 10R Pre-Run-Off     - 10S Pre-Special     - 12C Pre-Convention     - 12G Pre-General     - 12P Pre-Primary     - 12R Pre-Run-Off     - 12S Pre-Special     - 30D Post-Election     - 30G Post-General     - 30P Post-Primary     - 30R Post-Run-Off     - 30S Post-Special     - 60D Post-Convention     - M1  January Monthly     - M10 October Monthly     - M11 November Monthly     - M12 December Monthly     - M2  February Monthly     - M3  March Monthly     - M4  April Monthly     - M5  May Monthly     - M6  June Monthly     - M7  July Monthly     - M8  August Monthly     - M9  September Monthly     - MY  Mid-Year Report     - Q1  April Quarterly     - Q2  July Quarterly     - Q3  October Quarterly     - TER Termination Report     - YE  Year-End     - ADJ COMP ADJUST AMEND     - CA  COMPREHENSIVE AMEND
-  --most-recent: string@bool-completer #  Report is either new or is the most-recently filed amendment
+  --most-recent: oneof<nothing, bool> #  Report is either new or is the most-recently filed amendment
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<aggregate_amount_personal_contributions_general: float, aggregate_contributions_personal_funds_primary: float, all_loans_received_period: float, all_loans_received_ytd: float, all_other_loans_period: float, all_other_loans_ytd: float, allocated_federal_election_levin_share_period: float, amendment_chain: list, amendment_indicator: string, amendment_indicator_full: string, beginning_image_number: string, calendar_ytd: int, candidate_contribution_period: float, candidate_contribution_ytd: float, cash_on_hand_beginning_calendar_ytd: float, cash_on_hand_beginning_period: float, cash_on_hand_close_ytd: float, cash_on_hand_end_period: float, committee_id: string, committee_name: string, committee_type: string, coordinated_expenditures_by_party_committee_period: float, coordinated_expenditures_by_party_committee_ytd: float, coverage_end_date: string, coverage_start_date: string, csv_url: string, cycle: int, debts_owed_by_committee: float, debts_owed_to_committee: float, document_description: string, end_image_number: string, exempt_legal_accounting_disbursement_period: float, exempt_legal_accounting_disbursement_ytd: float, expenditure_subject_to_limits: float, fec_file_id: string, fec_url: string, fed_candidate_committee_contribution_refunds_ytd: float, fed_candidate_committee_contributions_period: float, fed_candidate_committee_contributions_ytd: float, fed_candidate_contribution_refunds_period: float, federal_funds_period: float, federal_funds_ytd: float, file_number: int, fundraising_disbursements_period: float, fundraising_disbursements_ytd: float, gross_receipt_authorized_committee_general: float, gross_receipt_authorized_committee_primary: float, gross_receipt_minus_personal_contribution_general: float, gross_receipt_minus_personal_contributions_primary: float, html_url: string, independent_contributions_period: float, independent_expenditures_period: float, independent_expenditures_ytd: float, individual_itemized_contributions_period: float, individual_itemized_contributions_ytd: float, individual_unitemized_contributions_period: float, individual_unitemized_contributions_ytd: float, is_amended: bool, items_on_hand_liquidated: float, loan_repayments_candidate_loans_period: float, loan_repayments_candidate_loans_ytd: float, loan_repayments_made_period: float, loan_repayments_made_ytd: float, loan_repayments_other_loans_period: float, loan_repayments_other_loans_ytd: float, loan_repayments_received_period: float, loan_repayments_received_ytd: float, loans_made_by_candidate_period: float, loans_made_by_candidate_ytd: float, loans_made_period: float, loans_made_ytd: float, loans_received_from_candidate_period: float, loans_received_from_candidate_ytd: float, means_filed: string, most_recent: bool, most_recent_file_number: float, net_contributions_cycle_to_date: float, net_contributions_period: float, net_contributions_ytd: float, net_operating_expenditures_cycle_to_date: float, net_operating_expenditures_period: float, net_operating_expenditures_ytd: float, non_allocated_fed_election_activity_period: float, non_allocated_fed_election_activity_ytd: float, nonfed_share_allocated_disbursements_period: float, offsets_to_fundraising_expenditures_period: float, offsets_to_fundraising_expenditures_ytd: float, offsets_to_legal_accounting_period: float, offsets_to_legal_accounting_ytd: float, offsets_to_operating_expenditures_period: float, offsets_to_operating_expenditures_ytd: float, operating_expenditures_period: float, operating_expenditures_ytd: float, other_disbursements_period: float, other_disbursements_ytd: float, other_fed_operating_expenditures_period: float, other_fed_operating_expenditures_ytd: float, other_fed_receipts_period: float, other_fed_receipts_ytd: float, other_loans_received_period: float, other_loans_received_ytd: float, other_political_committee_contributions_period: float, other_political_committee_contributions_ytd: float, other_receipts_period: float, other_receipts_ytd: float, pdf_url: string, political_party_committee_contributions_period: float, political_party_committee_contributions_ytd: float, previous_file_number: float, receipt_date: string, refunded_individual_contributions_period: float, refunded_individual_contributions_ytd: float, refunded_other_political_committee_contributions_period: float, refunded_other_political_committee_contributions_ytd: float, refunded_political_party_committee_contributions_period: float, refunded_political_party_committee_contributions_ytd: float, refunds_total_contributions_col_total_ytd: float, repayments_loans_made_by_candidate_period: float, repayments_loans_made_candidate_ytd: float, repayments_other_loans_period: float, repayments_other_loans_ytd: float, report_form: string, report_type: string, report_type_full: string, report_year: int, shared_fed_activity_nonfed_ytd: float, shared_fed_activity_period: float, shared_fed_activity_ytd: float, shared_fed_operating_expenditures_period: float, shared_fed_operating_expenditures_ytd: float, shared_nonfed_operating_expenditures_period: float, shared_nonfed_operating_expenditures_ytd: float, subtotal_period: float, subtotal_summary_page_period: float, subtotal_summary_period: float, subtotal_summary_ytd: float, total_contribution_refunds_col_total_period: float, total_contribution_refunds_period: float, total_contribution_refunds_ytd: float, total_contributions_column_total_period: float, total_contributions_period: float, total_contributions_ytd: float, total_disbursements_period: float, total_disbursements_ytd: float, total_fed_disbursements_period: float, total_fed_disbursements_ytd: float, total_fed_election_activity_period: float, total_fed_election_activity_ytd: float, total_fed_operating_expenditures_period: float, total_fed_operating_expenditures_ytd: float, total_fed_receipts_period: float, total_fed_receipts_ytd: float, total_individual_contributions_period: float, total_individual_contributions_ytd: float, total_loan_repayments_made_period: float, total_loan_repayments_made_ytd: float, total_loans_received_period: float, total_loans_received_ytd: float, total_nonfed_transfers_period: float, total_nonfed_transfers_ytd: float, total_offsets_to_operating_expenditures_period: float, total_offsets_to_operating_expenditures_ytd: float, total_operating_expenditures_period: float, total_operating_expenditures_ytd: float, total_period: float, total_receipts_period: float, total_receipts_ytd: float, total_ytd: float, transfers_from_affiliated_committee_period: float, transfers_from_affiliated_committee_ytd: float, transfers_from_affiliated_party_period: float, transfers_from_affiliated_party_ytd: float, transfers_from_nonfed_account_period: float, transfers_from_nonfed_account_ytd: float, transfers_from_nonfed_levin_period: float, transfers_from_nonfed_levin_ytd: float, transfers_from_other_authorized_committee_period: float, transfers_from_other_authorized_committee_ytd: float, transfers_to_affiliated_committee_period: float, transfers_to_affilitated_committees_ytd: float, transfers_to_other_authorized_committee_period: float, transfers_to_other_authorized_committee_ytd: float>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2260,8 +2259,8 @@ export def "schedules-schedule-a list" [
   --max-image-number: string # Maxium image number of the page where the schedule item is reported
   --contributor-occupation: list # Occupation of contributor, filers need to make an effort to gather this information
   --recipient-committee-designation: list # The one-letter designation code of the organization:          - A authorized by a candidate          - J joint fundraising committee          - P principal campaign committee of a candidate          - U unauthorized          - B lobbyist/registrant PAC          - D leadership PAC
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --is-individual: string@bool-completer # Restrict to non-earmarked individual contributions where memo code is true. Filtering individuals is useful to make sure contributions are not double reported and in creating breakdowns of the amount of money coming from individuals.
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --is-individual: oneof<nothing, bool> # Restrict to non-earmarked individual contributions where memo code is true. Filtering individuals is useful to make sure contributions are not double reported and in creating breakdowns of the amount of money coming from individuals.
   --line-number: string # Filter for form and line number using the following format: `FORM-LINENUMBER`.  For example an argument such as `F3X-16` would filter down to all entries from form `F3X` line number `16`.
   --contributor-type: list # Filters individual or committee contributions based on line number
   --recipient-committee-type: list # The one-letter type code of the organization:         - C communication cost         - D delegate         - E electioneering communication         - H House         - I independent expenditure filer (not a committee)         - N PAC - nonqualified         - O independent expenditure-only (super PACs)         - P presidential         - Q PAC - qualified         - S Senate         - U single candidate independent expenditure         - V PAC with non-contribution account, nonqualified         - W PAC with non-contribution account, qualified         - X party, nonqualified         - Y party, qualified         - Z national party non-federal account
@@ -2283,7 +2282,7 @@ export def "schedules-schedule-a list" [
   --last-contribution-receipt-date: string # When sorting by `contribution_receipt_date`, this is populated with the         `contribution_receipt_date` of the last result. However, you will need to pass the index         of that last result to `last_index` to get the next page. (format: date)
   --min-image-number: string # Minium image number of the page where the schedule item is reported
   --contributor-name: list # Name of contributor
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --image-number: list #  An unique identifier for each page where the electronic or paper filing is reported.
   --min-amount: string # Filter for all amounts greater than a value.
   --max-date: string # Maximum date (format: date)
@@ -2310,12 +2309,12 @@ export def "schedules-schedule-a-by-employer get" [
   --allow-errors(-e) # Return full response without error handling
   --employer: list # Employer of contributor as reported on the committee's filing
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<committee_id: string, count: int, cycle: int, employer: string, total: float>> {
@@ -2341,12 +2340,12 @@ export def "schedules-schedule-a-by-occupation get" [
   --allow-errors(-e) # Return full response without error handling
   --occupation: list # Occupation of contributor as reported on the committee's filing
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<committee_id: string, count: int, cycle: int, occupation: string, total: float>> {
@@ -2370,14 +2369,14 @@ export def "schedules-schedule-a-by-size get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --size: list #  The total all contributions in the following ranges: ```   -0    $200 and under   -200  $200.01 - $499.99   -500  $500 - $999.99   -1000 $1000 - $1999.99   -2000 $2000 + ``` Unitemized contributions are included in the `0` category.
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<committee_id: string, count: int, cycle: int, size: int, total: float>> {
@@ -2402,13 +2401,13 @@ export def "schedules-schedule-a-by-size-by-candidate get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<candidate_id: string, count: int, cycle: int, size: int, total: float>> {
@@ -2432,15 +2431,15 @@ export def "schedules-schedule-a-by-state get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --hide-null: string@bool-completer # Exclude values with missing state (default: false)
+  --hide-null: oneof<nothing, bool> # Exclude values with missing state (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
   --state: list # State of contributor
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -total)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<committee_id: string, count: int, cycle: int, state: string, state_full: string, total: float>> {
@@ -2465,13 +2464,13 @@ export def "schedules-schedule-a-by-state-by-candidate get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<candidate_id: string, count: int, cycle: int, state: string, state_full: string, total: float>> {
@@ -2496,13 +2495,13 @@ export def "schedules-schedule-a-by-state-by-candidate-totals get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<candidate_id: string, count: int, cycle: int, state: string, state_full: string, total: float>> {
@@ -2530,10 +2529,10 @@ export def "schedules-schedule-a-by-state-totals get" [
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --state: list # US state or territory
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: cycle)
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<committee_type: string, committee_type_full: string, count: int, cycle: int, state: string, state_full: string, total: float>> {
@@ -2560,12 +2559,12 @@ export def "schedules-schedule-a-by-zip get" [
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
   --zip: list # Zip code of contributor
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --state: list # State of contributor
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<committee_id: string, count: int, cycle: int, state: string, state_full: string, total: float, zip: string>> {
@@ -2592,8 +2591,8 @@ export def "schedules-schedule-a-efile get" [
   --max-amount: string # Filter for all amounts less than a value.
   --contributor-occupation: list # Occupation of contributor, filers need to make an effort to gather this information
   --max-image-number: string # Maxium image number of the page where the schedule item is reported
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --line-number: string # Filter for form and line number using the following format: `FORM-LINENUMBER`.  For example an argument such as `F3X-16` would filter down to all entries from form `F3X` line number `16`.
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --contributor-city: list # City of contributor
@@ -2606,7 +2605,7 @@ export def "schedules-schedule-a-efile get" [
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --contributor-name: list # Name of contributor
   --min-image-number: string # Minium image number of the page where the schedule item is reported
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --image-number: list #  An unique identifier for each page where the electronic or paper filing is reported.
   --min-amount: string # Filter for all amounts greater than a value.
   --max-date: string # Maximum date (format: date)
@@ -2637,8 +2636,8 @@ export def "schedules-schedule-a get" [
   --max-image-number: string # Maxium image number of the page where the schedule item is reported
   --contributor-occupation: list # Occupation of contributor, filers need to make an effort to gather this information
   --recipient-committee-designation: list # The one-letter designation code of the organization:          - A authorized by a candidate          - J joint fundraising committee          - P principal campaign committee of a candidate          - U unauthorized          - B lobbyist/registrant PAC          - D leadership PAC
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --is-individual: string@bool-completer # Restrict to non-earmarked individual contributions where memo code is true. Filtering individuals is useful to make sure contributions are not double reported and in creating breakdowns of the amount of money coming from individuals.
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --is-individual: oneof<nothing, bool> # Restrict to non-earmarked individual contributions where memo code is true. Filtering individuals is useful to make sure contributions are not double reported and in creating breakdowns of the amount of money coming from individuals.
   --line-number: string # Filter for form and line number using the following format: `FORM-LINENUMBER`.  For example an argument such as `F3X-16` would filter down to all entries from form `F3X` line number `16`.
   --contributor-type: list # Filters individual or committee contributions based on line number
   --recipient-committee-type: list # The one-letter type code of the organization:         - C communication cost         - D delegate         - E electioneering communication         - H House         - I independent expenditure filer (not a committee)         - N PAC - nonqualified         - O independent expenditure-only (super PACs)         - P presidential         - Q PAC - qualified         - S Senate         - U single candidate independent expenditure         - V PAC with non-contribution account, nonqualified         - W PAC with non-contribution account, qualified         - X party, nonqualified         - Y party, qualified         - Z national party non-federal account
@@ -2660,7 +2659,7 @@ export def "schedules-schedule-a get" [
   --last-contribution-receipt-date: string # When sorting by `contribution_receipt_date`, this is populated with the         `contribution_receipt_date` of the last result. However, you will need to pass the index         of that last result to `last_index` to get the next page. (format: date)
   --min-image-number: string # Minium image number of the page where the schedule item is reported
   --contributor-name: list # Name of contributor
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --image-number: list #  An unique identifier for each page where the electronic or paper filing is reported.
   --min-amount: string # Filter for all amounts greater than a value.
   --max-date: string # Maximum date (format: date)
@@ -2689,7 +2688,7 @@ export def "schedules-schedule-b list" [
   --max-amount: string # Filter for all amounts less than a value.
   --max-image-number: string # Maxium image number of the page where the schedule item is reported
   --image-number: list #  An unique identifier for each page where the electronic or paper filing is reported.
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --last-disbursement-date: string # When sorting by `disbursement_date`, this is populated with the `disbursement_date` of the last result. However, you will need to pass the index of that last result to `last_index` to get the next page. (format: date)
   --line-number: string # Filter for form and line number using the following format: `FORM-LINENUMBER`.  For example an argument such as `F3X-16` would filter down to all entries from form `F3X` line number `16`.
   --spender-committee-designation: list # The one-letter designation code of the organization:          - A authorized by a candidate          - J joint fundraising committee          - P principal campaign committee of a candidate          - U unauthorized          - B lobbyist/registrant PAC          - D leadership PAC
@@ -2708,7 +2707,7 @@ export def "schedules-schedule-b list" [
   --recipient-city: list # City of recipient
   --min-image-number: string # Minium image number of the page where the schedule item is reported
   --spender-committee-org-type: list # The one-letter code for the kind for organization:         - C corporation         - L labor organization         - M membership organization         - T trade association         - V cooperative         - W corporation without capital stock
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --recipient-committee-id: list # The FEC identifier should be represented here if the contributor is registered with the FEC.
   --min-amount: string # Filter for all amounts greater than a value.
   --max-date: string # Maximum date (format: date)
@@ -2734,13 +2733,13 @@ export def "schedules-schedule-b-by-purpose get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --purpose: list # Disbursement purpose category
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<committee_id: string, count: int, cycle: int, memo_count: int, memo_total: float, purpose: string, total: float>> {
@@ -2764,14 +2763,14 @@ export def "schedules-schedule-b-by-recipient get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --recipient-name: list # Name of the entity receiving the disbursement
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
 ]: nothing -> record<pagination: record<count: int, last_indexes: string, pages: int, per_page: int>, results: table<committee_id: string, committee_total_disbursements: float, count: int, cycle: int, memo_count: int, memo_total: float, recipient_disbursement_percent: float, recipient_name: string, total: float>> {
@@ -2795,13 +2794,13 @@ export def "schedules-schedule-b-by-recipient-id get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --recipient-id: list # The FEC identifier should be represented here if the entity receiving the disbursement is registered with the FEC.
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
@@ -2829,15 +2828,15 @@ export def "schedules-schedule-b-efile get" [
   --disbursement-description: list # Description of disbursement
   --max-amount: string # Filter for all amounts less than a value.
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -disbursement_date)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
   --min-date: string # When sorting by `disbursement_date`, this is populated with the         `disbursement_date` of the last result. However, you will need to pass the index         of that last result to `last_index` to get the next page. (format: date)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --recipient-state: list # State of recipient
   --recipient-city: list # City of recipient
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --image-number: list #  An unique identifier for each page where the electronic or paper filing is reported.
   --min-amount: string # Filter for all amounts less than a value.
@@ -2868,7 +2867,7 @@ export def "schedules-schedule-b get" [
   --max-amount: string # Filter for all amounts less than a value.
   --max-image-number: string # Maxium image number of the page where the schedule item is reported
   --image-number: list #  An unique identifier for each page where the electronic or paper filing is reported.
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --last-disbursement-date: string # When sorting by `disbursement_date`, this is populated with the `disbursement_date` of the last result. However, you will need to pass the index of that last result to `last_index` to get the next page. (format: date)
   --line-number: string # Filter for form and line number using the following format: `FORM-LINENUMBER`.  For example an argument such as `F3X-16` would filter down to all entries from form `F3X` line number `16`.
   --spender-committee-designation: list # The one-letter designation code of the organization:          - A authorized by a candidate          - J joint fundraising committee          - P principal campaign committee of a candidate          - U unauthorized          - B lobbyist/registrant PAC          - D leadership PAC
@@ -2887,7 +2886,7 @@ export def "schedules-schedule-b get" [
   --recipient-city: list # City of recipient
   --min-image-number: string # Minium image number of the page where the schedule item is reported
   --spender-committee-org-type: list # The one-letter code for the kind for organization:         - C corporation         - L labor organization         - M membership organization         - T trade association         - V cooperative         - W corporation without capital stock
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --recipient-committee-id: list # The FEC identifier should be represented here if the contributor is registered with the FEC.
   --min-amount: string # Filter for all amounts greater than a value.
   --max-date: string # Maximum date (format: date)
@@ -2916,8 +2915,8 @@ export def "schedules-schedule-c list" [
   --candidate-name: list # Name of candidate running for office
   --max-amount: string #  Filter for all amounts less than a value.
   --max-image-number: string # Maxium image number of the page where the schedule item is reported
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: true)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: true)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --line-number: string #  Filter for form and line number using the following format: `FORM-LINENUMBER`.  For example an argument such as `F3X-16` would filter down to all entries from form `F3X` line number `16`.
   --max-incurred-date: string #  Maximum incurred date  (format: date)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
@@ -2930,7 +2929,7 @@ export def "schedules-schedule-c list" [
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --min-image-number: string # Minium image number of the page where the schedule item is reported
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --image-number: list #  An unique identifier for each page where the electronic or paper filing is reported.
   --min-amount: string #  Filter for all amounts greater than a value.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<action_code: string, action_code_full: string, candidate_first_name: string, candidate_id: string, candidate_last_name: string, candidate_middle_name: string, candidate_name: string, candidate_office: string, candidate_office_district: string, candidate_office_full: string, candidate_office_state: string, candidate_office_state_full: string, candidate_prefix: string, candidate_suffix: string, committee: record, committee_id: string, cycle: int, due_date_terms: string, election_type: string, election_type_full: string, entity_type: string, entity_type_full: string, fec_committee_id: string, fec_election_type_full: string, fec_election_type_year: string, file_number: int, filing_form: string, image_number: string, incurred_date: string, interest_rate_terms: string, line_number: string, link_id: int, load_date: string, loan_balance: float, loan_source_city: string, loan_source_first_name: string, loan_source_last_name: string, loan_source_middle_name: string, loan_source_name: string, loan_source_prefix: string, loan_source_state: string, loan_source_street_1: string, loan_source_street_2: string, loan_source_suffix: string, loan_source_zip: int, memo_code: string, memo_text: string, original_loan_amount: float, original_sub_id: int, payment_to_date: float, pdf_url: string, personally_funded: string, report_type: string, report_year: int, schedule_a_line_number: int, schedule_type: string, schedule_type_full: string, secured_ind: string, sub_id: string, transaction_id: string>> {
@@ -2955,10 +2954,10 @@ export def "schedules-schedule-c get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -2985,9 +2984,9 @@ export def "schedules-schedule-d list" [
   --allow-errors(-e) # Return full response without error handling
   --creditor-debtor-name: list
   --max-image-number: string # Maxium image number of the page where the schedule item is reported
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --max-amount-outstanding-beginning: float # format: float
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --min-payment-period: float # format: float
   --max-amount-incurred: float # format: float
   --nature-of-debt: string
@@ -3002,7 +3001,7 @@ export def "schedules-schedule-d list" [
   --max-payment-period: float # format: float
   --min-image-number: string # Minium image number of the page where the schedule item is reported
   --min-amount-incurred: float # format: float
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --image-number: list #  An unique identifier for each page where the electronic or paper filing is reported.
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: load_date)
   --min-amount-outstanding-beginning: float # format: float
@@ -3029,10 +3028,10 @@ export def "schedules-schedule-d get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: load_date)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -3058,7 +3057,7 @@ export def "schedules-schedule-e get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --max-dissemination-date: string # Selects all items distributed by this committee before this date (format: date)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --payee-name: list #  Name of the entity that received the payment.
   --q-spender: list #  Keyword search for spender name or ID
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
@@ -3067,12 +3066,12 @@ export def "schedules-schedule-e get" [
   --candidate-office-state: list # US state or territory
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --filing-form: list # The form where the underlying data comes from, for example, Form 1 would appear as F1:     - F1   Statement of Organization     - F1M  Notification of Multicandidate Status     - F2   Statement of Candidacy     - F3   Report of Receipts and Disbursements for an Authorized Committee     - F3P  Report of Receipts and Disbursements by an Authorized Committee of a Candidate for     The Office of President or Vice President     - F3L  Report of Contributions Bundled by Lobbyists/Registrants and Lobbyist/Registrant PACs     - F3X  Report of Receipts and Disbursements for other than an Authorized Committee     - F4   Report of Receipts and Disbursements for a Committee or Organization Supporting a Nomination Convention     - F5   Report of Independent Expenditures Made and Contributions Received     - F6   48 Hour Notice of Contributions/Loans Received     - F7   Report of Communication Costs by Corporations and Membership Organizations     - F8   Debt Settlement Plan     - F9   24 Hour Notice of Disbursements for Electioneering Communications     - F13  Report of Donations Accepted for Inaugural Committee     - F99  Miscellaneous Text     - FRQ  Request for Additional Information
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --max-amount: string # Filter for all amounts less than a value.
   --max-image-number: string # Maxium image number of the page where the schedule item is reported
   --min-filing-date: string #  Selects all filings received after this date  (format: date)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --support-oppose-indicator: list # Explains if the money was spent in order to support or oppose a candidate or candidates. (Coded S or O for support or oppose.) This indicator applies to independent expenditures and communication costs.
   --candidate-office: list # Federal office candidate runs for: H, S or P
   --is-notice: list #  Record filed as 24- or 48-hour notice.
@@ -3092,7 +3091,7 @@ export def "schedules-schedule-e get" [
   --image-number: list #  An unique identifier for each page where the electronic or paper filing is reported.
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -expenditure_date)
   --max-date: string # Maximum date (format: date)
-  --most-recent: string@bool-completer #  The report associated with the transaction is either new or is the most-recently filed amendment. Undetermined version (`null`) is always included.
+  --most-recent: oneof<nothing, bool> #  The report associated with the transaction is either new or is the most-recently filed amendment. Undetermined version (`null`) is always included.
 ]: nothing -> record<pagination: record<count: int, last_indexes: string, pages: int, per_page: int>, results: table<action_code: string, action_code_full: string, amendment_indicator: string, amendment_number: int, back_reference_schedule_name: string, back_reference_transaction_id: string, candidate: string, candidate_first_name: string, candidate_id: string, candidate_last_name: string, candidate_middle_name: string, candidate_name: string, candidate_office: string, candidate_office_district: string, candidate_office_state: string, candidate_party: string, candidate_prefix: string, candidate_suffix: string, category_code: string, category_code_full: string, committee: record, committee_id: string, conduit_committee_city: string, conduit_committee_id: string, conduit_committee_name: string, conduit_committee_state: string, conduit_committee_street1: string, conduit_committee_street2: string, conduit_committee_zip: int, dissemination_date: string, election_type: string, election_type_full: string, expenditure_amount: float, expenditure_date: string, expenditure_description: string, file_number: int, filer_first_name: string, filer_last_name: string, filer_middle_name: string, filer_prefix: string, filer_suffix: string, filing_date: string, filing_form: string, image_number: string, independent_sign_date: string, independent_sign_name: string, is_notice: bool, line_number: string, link_id: int, memo_code: string, memo_code_full: string, memo_text: string, memoed_subtotal: bool, most_recent: bool, notary_commission_expiration_date: string, notary_sign_date: string, notary_sign_name: string, office_total_ytd: float, original_sub_id: string, payee_city: string, payee_first_name: string, payee_last_name: string, payee_middle_name: string, payee_name: string, payee_prefix: string, payee_state: string, payee_street_1: string, payee_street_2: string, payee_suffix: string, payee_zip: string, pdf_url: string, previous_file_number: int, report_type: string, report_year: int, schedule_type: string, schedule_type_full: string, sub_id: string, support_oppose_indicator: string, transaction_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3121,12 +3120,12 @@ export def "schedules-schedule-e-by-candidate get" [
   --state: string # US state or territory where a candidate runs for office
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --support-oppose: string@support-oppose-completer # Support or opposition
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<candidate_id: string, candidate_name: string, committee_id: string, committee_name: string, count: int, cycle: int, support_oppose_indicator: string, total: float>> {
@@ -3152,12 +3151,12 @@ export def "schedules-schedule-e-efile get" [
   --allow-errors(-e) # Return full response without error handling
   --spender-name: list # The name of the committee. If a committee changes its name,     the most recent name will be shown. Committee names are not unique. Use committee_id     for looking up records.
   --min-expenditure-date: string # Selects all items expended by this committee after this date (format: date)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --max-dissemination-date: string # Selects all items distributed by this committee before this date (format: date)
   --support-oppose-indicator: list # Explains if the money was spent in order to support or oppose a candidate or candidates. (Coded S or O for support or oppose.) This indicator applies to independent expenditures and communication costs.
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --candidate-office: string@candidate-office-completer # Federal office candidate runs for: H, S or P
-  --is-notice: string@bool-completer #  Record filed as 24- or 48-hour notice.
+  --is-notice: oneof<nothing, bool> #  Record filed as 24- or 48-hour notice.
   --payee-name: list #  Name of the entity that received the payment.
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --candidate-search: list #  Search for candidates by candiate id or candidate first or last name
@@ -3174,11 +3173,11 @@ export def "schedules-schedule-e-efile get" [
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --max-expenditure-date: string # Selects all items expended by this committee before this date (format: date)
   --filing-form: list # The form where the underlying data comes from, for example, Form 1 would appear as F1:     - F1   Statement of Organization     - F1M  Notification of Multicandidate Status     - F2   Statement of Candidacy     - F3   Report of Receipts and Disbursements for an Authorized Committee     - F3P  Report of Receipts and Disbursements by an Authorized Committee of a Candidate for     The Office of President or Vice President     - F3L  Report of Contributions Bundled by Lobbyists/Registrants and Lobbyist/Registrant PACs     - F3X  Report of Receipts and Disbursements for other than an Authorized Committee     - F4   Report of Receipts and Disbursements for a Committee or Organization Supporting a Nomination Convention     - F5   Report of Independent Expenditures Made and Contributions Received     - F6   48 Hour Notice of Contributions/Loans Received     - F7   Report of Communication Costs by Corporations and Membership Organizations     - F8   Debt Settlement Plan     - F9   24 Hour Notice of Disbursements for Electioneering Communications     - F13  Report of Donations Accepted for Inaugural Committee     - F99  Miscellaneous Text     - FRQ  Request for Additional Information
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --candidate-office-district: list # Two-digit US House distirict of the office the candidate is running for. Presidential, Senate and House at-large candidates will have District 00.
   --image-number: list #  An unique identifier for each page where the electronic or paper filing is reported.
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -expenditure_date)
-  --most-recent: string@bool-completer #  The report associated with the transaction is either new or is the most-recently filed amendment. Undetermined version (`null`) is always included.
+  --most-recent: oneof<nothing, bool> #  The report associated with the transaction is either new or is the most-recently filed amendment. Undetermined version (`null`) is always included.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<amendment_indicator: string, back_reference_schedule_name: string, back_reference_transaction_id: string, beginning_image_number: string, candidate_first_name: string, candidate_id: string, candidate_middle_name: string, candidate_name: string, candidate_office: string, candidate_office_district: string, candidate_office_state: string, candidate_party: string, candidate_prefix: string, candidate_suffix: string, category_code: string, committee: record, committee_id: string, csv_url: string, dissemination_date: string, entity_type: string, expenditure_amount: int, expenditure_date: string, expenditure_description: string, fec_url: string, file_number: int, filer_first_name: string, filer_last_name: string, filer_middle_name: string, filer_prefix: string, filer_suffix: string, filing: record, filing_form: string, image_number: string, is_notice: bool, line_number: string, load_timestamp: string, memo_code: string, memo_text: string, most_recent: bool, notary_sign_date: string, office_total_ytd: float, payee_city: string, payee_first_name: string, payee_last_name: string, payee_middle_name: string, payee_name: string, payee_prefix: string, payee_state: string, payee_street_1: string, payee_street_2: string, payee_suffix: string, payee_zip: string, pdf_url: string, related_line_number: int, report_type: string, support_oppose_indicator: string, transaction_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3201,13 +3200,13 @@ export def "schedules-schedule-e-totals-by-candidate get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --candidate-id: list #  A unique identifier assigned to each candidate registered with the FEC. If a person runs for several offices, that person will have separate candidate IDs for each office.
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --election-full: string@bool-completer # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --election-full: oneof<nothing, bool> # `True` indicates that full election period of a candidate. `False` indicates that two year election cycle. (default: true)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
 ]: nothing -> record<pagination: record<count: int, page: int, pages: int, per_page: int>, results: table<candidate_id: string, cycle: int, support_oppose_indicator: string, total: float>> {
@@ -3234,8 +3233,8 @@ export def "schedules-schedule-f list" [
   --max-amount: string # Filter for all amounts less than a value.
   --max-image-number: string # Maxium image number of the page where the schedule item is reported
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --line-number: string # Filter for form and line number using the following format: `FORM-LINENUMBER`.  For example an argument such as `F3X-16` would filter down to all entries from form `F3X` line number `16`.
   --payee-name: list
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
@@ -3246,7 +3245,7 @@ export def "schedules-schedule-f list" [
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --min-amount: string # Filter for all amounts greater than a value.
   --min-image-number: string # Minium image number of the page where the schedule item is reported
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --image-number: list #  An unique identifier for each page where the electronic or paper filing is reported.
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: expenditure_date)
   --max-date: string # Maximum date (format: date)
@@ -3296,11 +3295,11 @@ export def "state-election-office get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
   --state: string #  Enter a state (Ex: AK, TX, VA etc..) to find the local election offices contact information. 
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -3326,10 +3325,10 @@ export def "totals-by-entity get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --cycle: int #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.  (format: int32)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --per-page: int # The number of results returned per page. Defaults to 20. (format: int32, default: 20)
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: end_date)
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --page: int # For paginating through results, starting at page 1 (format: int32, default: 1)
@@ -3360,8 +3359,8 @@ export def "totals get" [
   --cycle: list #  Filter records to only those that were applicable to a given two-year period.The cycle begins with an odd year and is named for its ending, even year.
   --filing-frequency: list # The one-letter      code of the filing frequency:          - A Administratively terminated          - D Debt          - M Monthly filer          - Q Quarterly filer          - T Terminated          - W Waived
   --max-receipts: string #  Filter for all amounts less than a value.
-  --sort-hide-null: string@bool-completer # Hide null values on sorted column(s). (default: false)
-  --sort-nulls-last: string@bool-completer # Toggle that sorts null values last (default: false)
+  --sort-hide-null: oneof<nothing, bool> # Hide null values on sorted column(s). (default: false)
+  --sort-nulls-last: oneof<nothing, bool> # Toggle that sorts null values last (default: false)
   --min-last-debts-owed-by-committee: string #  Filter for all amounts greater than a value.
   --max-last-cash-on-hand-end-period: string #  Filter for all amounts less than a value.
   --treasurer-name: list # Name of the Committee's treasurer. If multiple treasurers for the committee, the most recent treasurer will be shown.
@@ -3375,7 +3374,7 @@ export def "totals get" [
   --committee-id: list #  A unique identifier assigned to each committee or filer registered with the FEC. In general committee id's begin with the letter C which is followed by eight digits.
   --api-key: string #  API key for https://api.data.gov. Get one at https://api.data.gov/signup.  (default: DEMO_KEY)
   --committee-designation: list # The one-letter designation code of the organization:          - A authorized by a candidate          - J joint fundraising committee          - P principal campaign committee of a candidate          - U unauthorized          - B lobbyist/registrant PAC          - D leadership PAC
-  --sort-null-only: string@bool-completer # Toggle that filters out all rows having sort column that is non-null (default: false)
+  --sort-null-only: oneof<nothing, bool> # Toggle that filters out all rows having sort column that is non-null (default: false)
   --min-first-f1-date: string # Filter for committees whose first Form 1 was received on or after this date. (format: date)
   --organization-type: list # The one-letter code for the kind for organization:         - C corporation         - L labor organization         - M membership organization         - T trade association         - V cooperative         - W corporation without capital stock
   --qp-sort: string # Provide a field to sort by. Use `-` for descending order.  (default: -cycle)

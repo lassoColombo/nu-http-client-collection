@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://users.roblox.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -453,7 +452,7 @@ export def "usernames-users post" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --usernames: list # The usernames.
-  --excludeBannedUsers: string@bool-completer # Whether the response should exclude banned users
+  --excludeBannedUsers: oneof<nothing, bool> # Whether the response should exclude banned users
 ]: any -> record<data: table<requestedUsername: string, hasVerifiedBadge: bool, id: int, name: string, displayName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -479,7 +478,7 @@ export def "users post" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --userIds: list # The user ids.
-  --excludeBannedUsers: string@bool-completer # Whether the response should exclude banned users
+  --excludeBannedUsers: oneof<nothing, bool> # Whether the response should exclude banned users
 ]: any -> record<data: table<hasVerifiedBadge: bool, id: int, name: string, displayName: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

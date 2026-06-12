@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.checklyhq.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -463,12 +462,12 @@ export def "alert-channels post" [
   --subscriptions: list # All checks subscribed to this channel. (e.g. []) — item shape: {id?: float, checkId?: string, groupId?: float, activated: bool}
   type: string@type-completer-1 # e.g. SMS
   config: record
-  --sendRecovery: string@bool-completer
-  --sendFailure: string@bool-completer
-  --sendDegraded: string@bool-completer
-  --sslExpiry: string@bool-completer # Determines if an alert should be sent for expiring SSL certificates. (default: false)
+  --sendRecovery: oneof<nothing, bool>
+  --sendFailure: oneof<nothing, bool>
+  --sendDegraded: oneof<nothing, bool>
+  --sslExpiry: oneof<nothing, bool> # Determines if an alert should be sent for expiring SSL certificates. (default: false)
   --sslExpiryThreshold: int # At what moment in time to start alerting on SSL certificates. (default: 30)
-  --autoSubscribe: string@bool-completer # Automatically subscribe newly created checks to this alert channel. (default: false)
+  --autoSubscribe: oneof<nothing, bool> # Automatically subscribe newly created checks to this alert channel. (default: false)
 ]: any -> record<id: float, type: string, config: record, subscriptions: table<id: float, checkId: string, groupId: float, activated: bool>, sendRecovery: bool, sendFailure: bool, sendDegraded: bool, sslExpiry: bool, sslExpiryThreshold: int, autoSubscribe: bool, created_at: string, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -551,12 +550,12 @@ export def "alert-channels put" [
   --subscriptions: list # All checks subscribed to this channel. (e.g. []) — item shape: {id?: float, checkId?: string, groupId?: float, activated: bool}
   type: string@type-completer-1 # e.g. SMS
   config: record
-  --sendRecovery: string@bool-completer
-  --sendFailure: string@bool-completer
-  --sendDegraded: string@bool-completer
-  --sslExpiry: string@bool-completer # Determines if an alert should be sent for expiring SSL certificates. (default: false)
+  --sendRecovery: oneof<nothing, bool>
+  --sendFailure: oneof<nothing, bool>
+  --sendDegraded: oneof<nothing, bool>
+  --sslExpiry: oneof<nothing, bool> # Determines if an alert should be sent for expiring SSL certificates. (default: false)
   --sslExpiryThreshold: int # At what moment in time to start alerting on SSL certificates. (default: 30)
-  --autoSubscribe: string@bool-completer # Automatically subscribe newly created checks to this alert channel. (default: false)
+  --autoSubscribe: oneof<nothing, bool> # Automatically subscribe newly created checks to this alert channel. (default: false)
 ]: any -> record<id: float, type: string, config: record, subscriptions: table<id: float, checkId: string, groupId: float, activated: bool>, sendRecovery: bool, sendFailure: bool, sendDegraded: bool, sslExpiry: bool, sslExpiryThreshold: int, autoSubscribe: bool, created_at: string, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -587,7 +586,7 @@ export def "alert-channels-subscriptions put" [
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --checkId: string # You can either pass a checkId or a groupId, but not both. (nullable, e.g. 0bbfc00c-44df-46a7-a4d9-ba38deca8bfd)
   --groupId: float # You can either pass a checkId or a groupId, but not both. (nullable)
-  --activated: string@bool-completer
+  --activated: oneof<nothing, bool>
 ]: any -> record<id: float, checkId: string, groupId: float, activated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -619,7 +618,7 @@ export def "alert-notifications get" [
   --qp-from: string # Select records up from this UNIX timestamp (>= date). Defaults to now - 6 hours. (format: date)
   --qp-to: string # Optional. Select records up to this UNIX timestamp (< date). Defaults to 6 hours after "from". (format: date)
   --alertChannelId: int # Limit results to an alert channel
-  --hasFailures: string@bool-completer # Sending the alert notification was unsuccessful
+  --hasFailures: oneof<nothing, bool> # Sending the alert notification was unsuccessful
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> table<id: string, type: string, status: string, alertConfig: record, notificationResult: string, timestamp: string, checkType: string, checkId: string, checkAlertId: string, alertChannelId: float, checkResultId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1017,7 +1016,7 @@ export def "badges-checks get" [
   --allow-errors(-e) # Return full response without error handling
   --style: string@style-completer # default: flat
   --theme: string@theme-completer # default: default
-  --responseTime: string@bool-completer # default: false
+  --responseTime: oneof<nothing, bool> # default: false
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1043,7 +1042,7 @@ export def "badges-groups get" [
   --allow-errors(-e) # Return full response without error handling
   --style: string@style-completer # default: flat
   --theme: string@theme-completer # default: default
-  --responseTime: string@bool-completer # default: false
+  --responseTime: oneof<nothing, bool> # default: false
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1160,11 +1159,11 @@ export def "check-groups post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoAssignAlerts: string@bool-completer # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
+  --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check group. (e.g. Check group)
-  --activated: string@bool-completer # Determines if the checks in the group are running or not. (default: true)
-  --muted: string@bool-completer # Determines if any notifications will be send out when a check in this group fails and/or recovers. (default: false)
+  --activated: oneof<nothing, bool> # Determines if the checks in the group are running or not. (default: true)
+  --muted: oneof<nothing, bool> # Determines if any notifications will be send out when a check in this group fails and/or recovers. (default: false)
   --tags: list # Tags for organizing and filtering checks. (e.g. [production])
   --locations: list # An array of one or more data center locations where to run the checks. (e.g. [us-east-1, eu-central-1])
   --concurrency: float # Determines how many checks are invoked concurrently when triggering a check group from CI/CD or through the API. (default: 3)
@@ -1172,8 +1171,8 @@ export def "check-groups post" [
   --browserCheckDefaults: string
   --runtimeId: string@runtimeId-completer # The runtime version, i.e. fixed set of runtime dependencies, used to execute checks in this group. (nullable)
   --environmentVariables: list # nullable — item shape: {key?: string, value: string, locked?: bool, secret?: bool}
-  --doubleCheck: string@bool-completer # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
-  --useGlobalAlertSettings: string@bool-completer # When true, the account level alert setting will be used, not the alert setting defined on this check group. (default: true)
+  --doubleCheck: oneof<nothing, bool> # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
+  --useGlobalAlertSettings: oneof<nothing, bool> # When true, the account level alert setting will be used, not the alert setting defined on this check group. (default: true)
   --alertSettings: record # Alert settings. (default: {escalationType: RUN_BASED, runBasedEscalation: {failedRunThreshold: 1}, reminders: {amount: 0, interval: 5}, parallelRunFailureThreshold: {enabled: false, percentage: 10}}) — shape: {escalationType?: "RUN_BASED"|"TIME_BASED", reminders?: record, sslCertificates?: record, runBasedEscalation?: record, timeBasedEscalation?: record, parallelRunFailureThreshold?: record}
   --alertChannelSubscriptions: list # List of alert channel subscriptions. (e.g. []) — item shape: {alertChannelId: float, activated: bool}
   --setupSnippetId: float # An ID reference to a snippet to use in the setup phase of an API check in this group. (nullable)
@@ -1181,7 +1180,7 @@ export def "check-groups post" [
   --localSetupScript: string # A valid piece of Node.js code to run in the setup phase of an API check in this group. (nullable)
   --localTearDownScript: string # A valid piece of Node.js code to run in the teardown phase of an API check in this group. (nullable)
   --privateLocations: list # An array of one or more private locations where to run the checks. (nullable, e.g. [data-center-eu])
-  --runParallel: string@bool-completer # When true, the checks in the group will run in parallel in all selected locations. (default: false)
+  --runParallel: oneof<nothing, bool> # When true, the checks in the group will run in parallel in all selected locations. (default: false)
   --retryStrategy: any # Either a retry strategy object or the literal string "FALLBACK".
 ]: any -> record<id: float, name: string, activated: bool, muted: bool, tags: list<string>, locations: list<string>, concurrency: float, apiCheckDefaults: record<url: string, headers: list<record>, queryParameters: list<record>, assertions: list<record>, basicAuth: record<username: string, password: string>>, browserCheckDefaults: string, environmentVariables: table<key: string, value: string, locked: bool, secret: bool>, doubleCheck: bool, useGlobalAlertSettings: bool, alertSettings: record<escalationType: string, reminders: record<amount: float, interval: float>, sslCertificates: record<enabled: bool, alertThreshold: int>, runBasedEscalation: record<failedRunThreshold: float>, timeBasedEscalation: record<minutesFailingThreshold: float>, parallelRunFailureThreshold: record<enabled: bool, percentage: float>>, alertChannelSubscriptions: table<alertChannelId: float, activated: bool>, setupSnippetId: float, tearDownSnippetId: float, localSetupScript: string, localTearDownScript: string, runtimeId: string, privateLocations: list<string>, retryStrategy: any, created_at: string, updated_at: string, runParallel: bool> {
   let input = $in
@@ -1293,11 +1292,11 @@ export def "check-groups put-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoAssignAlerts: string@bool-completer # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
+  --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --name: string # The name of the check group. (e.g. Check group)
-  --activated: string@bool-completer # Determines if the checks in the group are running or not. (default: true)
-  --muted: string@bool-completer # Determines if any notifications will be send out when a check in this group fails and/or recovers. (default: false)
+  --activated: oneof<nothing, bool> # Determines if the checks in the group are running or not. (default: true)
+  --muted: oneof<nothing, bool> # Determines if any notifications will be send out when a check in this group fails and/or recovers. (default: false)
   --tags: list # Tags for organizing and filtering checks. (e.g. [production])
   --locations: list # An array of one or more data center locations where to run the checks. (e.g. [us-east-1, eu-central-1])
   --concurrency: float # Determines how many checks are invoked concurrently when triggering a check group from CI/CD or through the API. (default: 3)
@@ -1305,8 +1304,8 @@ export def "check-groups put-by-id" [
   --browserCheckDefaults: string
   --runtimeId: string@runtimeId-completer # The runtime version, i.e. fixed set of runtime dependencies, used to execute checks in this group. (nullable)
   --environmentVariables: list # nullable — item shape: {key?: string, value: string, locked?: bool, secret?: bool}
-  --doubleCheck: string@bool-completer # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
-  --useGlobalAlertSettings: string@bool-completer # When true, the account level alert setting will be used, not the alert setting defined on this check group. (default: true)
+  --doubleCheck: oneof<nothing, bool> # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
+  --useGlobalAlertSettings: oneof<nothing, bool> # When true, the account level alert setting will be used, not the alert setting defined on this check group. (default: true)
   --alertSettings: record # Alert settings. (default: {escalationType: RUN_BASED, runBasedEscalation: {failedRunThreshold: 1}, reminders: {amount: 0, interval: 5}, parallelRunFailureThreshold: {enabled: false, percentage: 10}}) — shape: {escalationType?: "RUN_BASED"|"TIME_BASED", reminders?: record, sslCertificates?: record, runBasedEscalation?: record, timeBasedEscalation?: record, parallelRunFailureThreshold?: record}
   --alertChannelSubscriptions: list # List of alert channel subscriptions. (e.g. []) — item shape: {alertChannelId: float, activated: bool}
   --setupSnippetId: float # An ID reference to a snippet to use in the setup phase of an API check in this group. (nullable)
@@ -1314,7 +1313,7 @@ export def "check-groups put-by-id" [
   --localSetupScript: string # A valid piece of Node.js code to run in the setup phase of an API check in this group. (nullable)
   --localTearDownScript: string # A valid piece of Node.js code to run in the teardown phase of an API check in this group. (nullable)
   --privateLocations: list # An array of one or more private locations where to run the checks. (nullable, e.g. [data-center-eu])
-  --runParallel: string@bool-completer # When true, the checks in the group will run in parallel in all selected locations. (default: false)
+  --runParallel: oneof<nothing, bool> # When true, the checks in the group will run in parallel in all selected locations. (default: false)
   --retryStrategy: any # Either a retry strategy object or the literal string "FALLBACK".
 ]: any -> record<id: float, name: string, activated: bool, muted: bool, tags: list<string>, locations: list<string>, concurrency: float, apiCheckDefaults: record<url: string, headers: list<record>, queryParameters: list<record>, assertions: list<record>, basicAuth: record<username: string, password: string>>, browserCheckDefaults: string, environmentVariables: table<key: string, value: string, locked: bool, secret: bool>, doubleCheck: bool, useGlobalAlertSettings: bool, alertSettings: record<escalationType: string, reminders: record<amount: float, interval: float>, sslCertificates: record<enabled: bool, alertThreshold: int>, runBasedEscalation: record<failedRunThreshold: float>, timeBasedEscalation: record<minutesFailingThreshold: float>, parallelRunFailureThreshold: record<enabled: bool, percentage: float>>, alertChannelSubscriptions: table<alertChannelId: float, activated: bool>, setupSnippetId: float, tearDownSnippetId: float, localSetupScript: string, localTearDownScript: string, runtimeId: string, privateLocations: list<string>, retryStrategy: any, created_at: string, updated_at: string, runParallel: bool> {
   let input = $in
@@ -1380,7 +1379,7 @@ export def "check-results get-by-checkId" [
   --qp-to: string # Optional. Select records up to this UNIX timestamp (< date). Defaults to 6 hours after "from". (format: date)
   --location: string@location-completer # Provide a data center location, e.g. "eu-west-1" to filter by location
   --checkType: string@checkType-completer # The type of the check
-  --hasFailures: string@bool-completer # Check result has one or more failures
+  --hasFailures: oneof<nothing, bool> # Check result has one or more failures
   --resultType: string@resultType-completer # The check result type (FINAL,ATTEMPT,ALL) (default: FINAL)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> table<id: string, name: string, checkId: string, hasFailures: bool, hasErrors: bool, isDegraded: bool, isCancelled: bool, overMaxResponseTime: bool, runLocation: string, startedAt: string, stoppedAt: string, created_at: string, responseTime: float, apiCheckResult: record<assertions: list, request: record, response: record, requestError: string, jobLog: record, jobAssets: list, pcapDataUrl: string>, browserCheckResult: record<type: string, traceSummary: record, pages: list, playwrightTestVideos: list, errors: list, endTime: float, startTime: float, runtimeVersion: string, jobLog: list, jobAssets: list, playwrightTestTraces: list, playwrightTestJsonReportFile: string>, multiStepCheckResult: record<errors: list, endTime: float, startTime: float, runtimeVersion: string, jobLog: list, jobAssets: list, playwrightTestTraces: list, playwrightTestJsonReportFile: string>, agenticCheckResult: record<summary: string, prompt: string, assertions: list, suggestions: list, steps: list, errors: list, artifactManifest: record>, playwrightCheckResult: record<errors: list, playwrightTraceFiles: list, jobLog: list, jobAssets: list, playwrightTestVideos: list, playwrightTestTraces: list, playwrightTestJsonReportFile: string>, checkRunId: float, attempts: float, resultType: string, sequenceId: string, traceId: string, errorGroupIds: list<string>> {
@@ -1466,7 +1465,7 @@ export def "check-sessions-trigger post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --target: record # shape: {matchTags?: list, checkId?: list}
-  --refreshCache: string@bool-completer # If true, the runner will skip existing caches and install dependencies from scratch. This applies only to Playwright Check Suites. (default: false)
+  --refreshCache: oneof<nothing, bool> # If true, the runner will skip existing caches and install dependencies from scratch. This applies only to Playwright Check Suites. (default: false)
 ]: any -> record<sessions: table<checkSessionId: string, checkSessionLink: string, checkId: string, checkType: string, name: string, status: string, startedAt: string, stoppedAt: string, timeElapsed: float, runLocations: list, runSource: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1626,7 +1625,7 @@ export def "checks list" [
   --checkType: string@checkType-completer # Filters checks by type. Returns checks that match the specified type.
   --search: string # Filters checks by name using a case-insensitive partial match.
   --status: string@status-completer-1 # Filters checks by current status.
-  --applyGroupSettings: string@bool-completer # Checks that belong to a group are returned with group settings applied. (default: false)
+  --applyGroupSettings: oneof<nothing, bool> # Checks that belong to a group are returned with group settings applied. (default: false)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> table<id: string, checkType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1660,24 +1659,24 @@ export def "checks post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoAssignAlerts: string@bool-completer # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
+  --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check. (e.g. Check)
-  --activated: string@bool-completer # Determines if the check is running or not. (default: true)
-  --muted: string@bool-completer # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
-  --doubleCheck: string@bool-completer # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
-  --shouldFail: string@bool-completer # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
+  --activated: oneof<nothing, bool> # Determines if the check is running or not. (default: true)
+  --muted: oneof<nothing, bool> # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
+  --doubleCheck: oneof<nothing, bool> # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
+  --shouldFail: oneof<nothing, bool> # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
   --locations: list # An array of one or more data center locations where to run this check. (nullable, e.g. [us-east-1, eu-central-1])
   --tags: list # Tags for organizing and filtering checks. (e.g. [production])
   --alertSettings: record # Alert settings. (nullable, default: {escalationType: RUN_BASED, runBasedEscalation: {failedRunThreshold: 1}, reminders: {amount: 0, interval: 5}, parallelRunFailureThreshold: {enabled: false, percentage: 10}}) — shape: {escalationType?: "RUN_BASED"|"TIME_BASED", reminders?: record, sslCertificates?: record, runBasedEscalation?: record, timeBasedEscalation?: record, parallelRunFailureThreshold?: record}
-  --useGlobalAlertSettings: string@bool-completer # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
+  --useGlobalAlertSettings: oneof<nothing, bool> # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
   --groupId: float # The id of the check group this check is part of. (nullable)
   --groupOrder: float # The position of this check in a check group. It determines in what order checks are run when a group is triggered from the API or from CI/CD. (nullable)
   --runtimeId: string@runtimeId-completer # The runtime version, i.e. fixed set of runtime dependencies, used to execute this check. (nullable)
   --alertChannelSubscriptions: list # List of alert channel subscriptions. (e.g. []) — item shape: {alertChannelId: float, activated: bool}
   --retryStrategy: record # The strategy to determine how failed checks are retried. (nullable) — shape: {type: "FIXED"|"LINEAR"|"EXPONENTIAL"|"SINGLE_RETRY", baseBackoffSeconds?: float, sameRegion?: bool, maxRetries?: float, maxDurationSeconds?: float, onlyOn?: list}
   --triggerIncident: record # Determines whether the check or monitor should create and resolve an incident based on its alert configuration. Useful for status page automation. (nullable) — shape: {serviceId: string, severity: "CRITICAL"|"MAJOR"|"MEDIUM"|"MINOR", name: string, description: string, notifySubscribers: bool}
-  --runParallel: string@bool-completer # When true, the check will run in parallel in all selected locations. (default: false)
+  --runParallel: oneof<nothing, bool> # When true, the check will run in parallel in all selected locations. (default: false)
   --description: string # A description of the check. (nullable)
   checkType: string@checkType-completer # The type of the check.
   --frequency: int # How often the check should run in minutes. (default: 10)
@@ -1728,24 +1727,24 @@ export def "checks post-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoAssignAlerts: string@bool-completer # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
+  --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check. (e.g. Check)
-  --activated: string@bool-completer # Determines if the check is running or not. (default: true)
-  --muted: string@bool-completer # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
-  --doubleCheck: string@bool-completer # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
-  --shouldFail: string@bool-completer # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
+  --activated: oneof<nothing, bool> # Determines if the check is running or not. (default: true)
+  --muted: oneof<nothing, bool> # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
+  --doubleCheck: oneof<nothing, bool> # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
+  --shouldFail: oneof<nothing, bool> # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
   --locations: list # An array of one or more data center locations where to run this check. (nullable, e.g. [us-east-1, eu-central-1])
   --tags: list # Tags for organizing and filtering checks. (e.g. [production])
   --alertSettings: record # Alert settings. (default: {escalationType: RUN_BASED, runBasedEscalation: {failedRunThreshold: 1}, reminders: {amount: 0, interval: 5}, parallelRunFailureThreshold: {enabled: false, percentage: 10}}) — shape: {escalationType?: "RUN_BASED"|"TIME_BASED", reminders?: record, sslCertificates?: record, runBasedEscalation?: record, timeBasedEscalation?: record, parallelRunFailureThreshold?: record}
-  --useGlobalAlertSettings: string@bool-completer # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
+  --useGlobalAlertSettings: oneof<nothing, bool> # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
   --groupId: float # The id of the check group this check is part of. (nullable)
   --groupOrder: float # The position of this check in a check group. It determines in what order checks are run when a group is triggered from the API or from CI/CD. (nullable)
   --runtimeId: string@runtimeId-completer # The runtime version, i.e. fixed set of runtime dependencies, used to execute this check. (nullable)
   --alertChannelSubscriptions: list # List of alert channel subscriptions. (e.g. []) — item shape: {alertChannelId: float, activated: bool}
   --retryStrategy: record # The strategy to determine how failed checks are retried. (nullable) — shape: {type: "FIXED"|"LINEAR"|"EXPONENTIAL"|"SINGLE_RETRY", baseBackoffSeconds?: float, sameRegion?: bool, maxRetries?: float, maxDurationSeconds?: float, onlyOn?: list}
   --triggerIncident: record # Determines whether the check or monitor should create and resolve an incident based on its alert configuration. Useful for status page automation. (nullable) — shape: {serviceId: string, severity: "CRITICAL"|"MAJOR"|"MEDIUM"|"MINOR", name: string, description: string, notifySubscribers: bool}
-  --runParallel: string@bool-completer # When true, the check will run in parallel in all selected locations. (default: false)
+  --runParallel: oneof<nothing, bool> # When true, the check will run in parallel in all selected locations. (default: false)
   --description: string # A description of the check. (nullable)
   request: record # Determines the request that the check is going to run. — shape: {method: "GET"|"POST"|"PUT"|"HEAD"|"DELETE"|"PATCH", url: string, followRedirects?: bool, skipSSL?: bool, ipFamily?: "IPv4"|"IPv6", body?: string, bodyType?: "JSON"|"FORM"|"RAW"|"GRAPHQL"|"NONE", headers?: list, queryParameters?: list, assertions?: list, basicAuth?: record}
   --frequency: int@frequency-completer # How often the check should run in minutes. (default: 10)
@@ -1790,24 +1789,24 @@ export def "checks put-by-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoAssignAlerts: string@bool-completer # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
+  --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --name: string # The name of the check. (e.g. Check)
-  --activated: string@bool-completer # Determines if the check is running or not. (default: true)
-  --muted: string@bool-completer # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
-  --doubleCheck: string@bool-completer # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
-  --shouldFail: string@bool-completer # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
+  --activated: oneof<nothing, bool> # Determines if the check is running or not. (default: true)
+  --muted: oneof<nothing, bool> # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
+  --doubleCheck: oneof<nothing, bool> # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
+  --shouldFail: oneof<nothing, bool> # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
   --locations: list # An array of one or more data center locations where to run this check. (nullable, e.g. [us-east-1, eu-central-1])
   --tags: list # Tags for organizing and filtering checks. (e.g. [production])
   --alertSettings: record # Alert settings. (default: {escalationType: RUN_BASED, runBasedEscalation: {failedRunThreshold: 1}, reminders: {amount: 0, interval: 5}, parallelRunFailureThreshold: {enabled: false, percentage: 10}}) — shape: {escalationType?: "RUN_BASED"|"TIME_BASED", reminders?: record, sslCertificates?: record, runBasedEscalation?: record, timeBasedEscalation?: record, parallelRunFailureThreshold?: record}
-  --useGlobalAlertSettings: string@bool-completer # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
+  --useGlobalAlertSettings: oneof<nothing, bool> # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
   --groupId: float # The id of the check group this check is part of. (nullable)
   --groupOrder: float # The position of this check in a check group. It determines in what order checks are run when a group is triggered from the API or from CI/CD. (nullable)
   --runtimeId: string@runtimeId-completer # The runtime version, i.e. fixed set of runtime dependencies, used to execute this check. (nullable)
   --alertChannelSubscriptions: list # List of alert channel subscriptions. (e.g. []) — item shape: {alertChannelId: float, activated: bool}
   --retryStrategy: record # The strategy to determine how failed checks are retried. (nullable) — shape: {type: "FIXED"|"LINEAR"|"EXPONENTIAL"|"SINGLE_RETRY", baseBackoffSeconds?: float, sameRegion?: bool, maxRetries?: float, maxDurationSeconds?: float, onlyOn?: list}
   --triggerIncident: record # Determines whether the check or monitor should create and resolve an incident based on its alert configuration. Useful for status page automation. (nullable) — shape: {serviceId: string, severity: "CRITICAL"|"MAJOR"|"MEDIUM"|"MINOR", name: string, description: string, notifySubscribers: bool}
-  --runParallel: string@bool-completer # When true, the check will run in parallel in all selected locations. (default: false)
+  --runParallel: oneof<nothing, bool> # When true, the check will run in parallel in all selected locations. (default: false)
   --description: string # A description of the check. (nullable)
   --request: record # Determines the request that the check is going to run. — shape: {method: "GET"|"POST"|"PUT"|"HEAD"|"DELETE"|"PATCH", url: string, followRedirects?: bool, skipSSL?: bool, ipFamily?: "IPv4"|"IPv6", body?: string, bodyType?: "JSON"|"FORM"|"RAW"|"GRAPHQL"|"NONE", headers?: list, queryParameters?: list, assertions?: list, basicAuth?: record}
   --frequency: int@frequency-completer # How often the check should run in minutes. (default: 10)
@@ -1852,24 +1851,24 @@ export def "checks-browser post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoAssignAlerts: string@bool-completer # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
+  --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check. (e.g. Check)
-  --activated: string@bool-completer # Determines if the check is running or not. (default: true)
-  --muted: string@bool-completer # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
-  --doubleCheck: string@bool-completer # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
-  --shouldFail: string@bool-completer # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
+  --activated: oneof<nothing, bool> # Determines if the check is running or not. (default: true)
+  --muted: oneof<nothing, bool> # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
+  --doubleCheck: oneof<nothing, bool> # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
+  --shouldFail: oneof<nothing, bool> # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
   --locations: list # An array of one or more data center locations where to run this check. (nullable, e.g. [us-east-1, eu-central-1])
   --tags: list # Tags for organizing and filtering checks. (e.g. [production])
   --alertSettings: record # Alert settings. (default: {escalationType: RUN_BASED, runBasedEscalation: {failedRunThreshold: 1}, reminders: {amount: 0, interval: 5}, parallelRunFailureThreshold: {enabled: false, percentage: 10}}) — shape: {escalationType?: "RUN_BASED"|"TIME_BASED", reminders?: record, sslCertificates?: record, runBasedEscalation?: record, timeBasedEscalation?: record, parallelRunFailureThreshold?: record}
-  --useGlobalAlertSettings: string@bool-completer # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
+  --useGlobalAlertSettings: oneof<nothing, bool> # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
   --groupId: float # The id of the check group this check is part of. (nullable)
   --groupOrder: float # The position of this check in a check group. It determines in what order checks are run when a group is triggered from the API or from CI/CD. (nullable)
   --runtimeId: string@runtimeId-completer # The runtime version, i.e. fixed set of runtime dependencies, used to execute this check. (nullable)
   --alertChannelSubscriptions: list # List of alert channel subscriptions. (e.g. []) — item shape: {alertChannelId: float, activated: bool}
   --retryStrategy: record # The strategy to determine how failed checks are retried. (nullable) — shape: {type: "FIXED"|"LINEAR"|"EXPONENTIAL"|"SINGLE_RETRY", baseBackoffSeconds?: float, sameRegion?: bool, maxRetries?: float, maxDurationSeconds?: float, onlyOn?: list}
   --triggerIncident: record # Determines whether the check or monitor should create and resolve an incident based on its alert configuration. Useful for status page automation. (nullable) — shape: {serviceId: string, severity: "CRITICAL"|"MAJOR"|"MEDIUM"|"MINOR", name: string, description: string, notifySubscribers: bool}
-  --runParallel: string@bool-completer # When true, the check will run in parallel in all selected locations. (default: false)
+  --runParallel: oneof<nothing, bool> # When true, the check will run in parallel in all selected locations. (default: false)
   --description: string # A description of the check. (nullable)
   --environmentVariables: list # Key/value pairs for setting environment variables during check execution. Use global environment variables whenever possible. (nullable, e.g. []) — item shape: {key: string, value: string, locked?: bool, secret?: bool}
   --frequency: int@frequency-completer-1 # How often the check should run in minutes. (default: 10)
@@ -1912,24 +1911,24 @@ export def "checks-browser put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoAssignAlerts: string@bool-completer # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
+  --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --name: string # The name of the check. (e.g. Check)
-  --activated: string@bool-completer # Determines if the check is running or not. (default: true)
-  --muted: string@bool-completer # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
-  --doubleCheck: string@bool-completer # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
-  --shouldFail: string@bool-completer # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
+  --activated: oneof<nothing, bool> # Determines if the check is running or not. (default: true)
+  --muted: oneof<nothing, bool> # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
+  --doubleCheck: oneof<nothing, bool> # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
+  --shouldFail: oneof<nothing, bool> # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
   --locations: list # An array of one or more data center locations where to run this check. (nullable, e.g. [us-east-1, eu-central-1])
   --tags: list # Tags for organizing and filtering checks. (e.g. [production])
   --alertSettings: record # Alert settings. (default: {escalationType: RUN_BASED, runBasedEscalation: {failedRunThreshold: 1}, reminders: {amount: 0, interval: 5}, parallelRunFailureThreshold: {enabled: false, percentage: 10}}) — shape: {escalationType?: "RUN_BASED"|"TIME_BASED", reminders?: record, sslCertificates?: record, runBasedEscalation?: record, timeBasedEscalation?: record, parallelRunFailureThreshold?: record}
-  --useGlobalAlertSettings: string@bool-completer # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
+  --useGlobalAlertSettings: oneof<nothing, bool> # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
   --groupId: float # The id of the check group this check is part of. (nullable)
   --groupOrder: float # The position of this check in a check group. It determines in what order checks are run when a group is triggered from the API or from CI/CD. (nullable)
   --runtimeId: string@runtimeId-completer # The runtime version, i.e. fixed set of runtime dependencies, used to execute this check. (nullable)
   --alertChannelSubscriptions: list # List of alert channel subscriptions. (e.g. []) — item shape: {alertChannelId: float, activated: bool}
   --retryStrategy: record # The strategy to determine how failed checks are retried. (nullable) — shape: {type: "FIXED"|"LINEAR"|"EXPONENTIAL"|"SINGLE_RETRY", baseBackoffSeconds?: float, sameRegion?: bool, maxRetries?: float, maxDurationSeconds?: float, onlyOn?: list}
   --triggerIncident: record # Determines whether the check or monitor should create and resolve an incident based on its alert configuration. Useful for status page automation. (nullable) — shape: {serviceId: string, severity: "CRITICAL"|"MAJOR"|"MEDIUM"|"MINOR", name: string, description: string, notifySubscribers: bool}
-  --runParallel: string@bool-completer # When true, the check will run in parallel in all selected locations. (default: false)
+  --runParallel: oneof<nothing, bool> # When true, the check will run in parallel in all selected locations. (default: false)
   --description: string # A description of the check. (nullable)
   --environmentVariables: list # Key/value pairs for setting environment variables during check execution. Use global environment variables whenever possible. (nullable, e.g. []) — item shape: {key: string, value: string, locked?: bool, secret?: bool}
   --frequency: int@frequency-completer-1 # How often the check should run in minutes. (default: 10)
@@ -1971,24 +1970,24 @@ export def "checks-dns post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoAssignAlerts: string@bool-completer # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
+  --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check. (e.g. Check)
-  --activated: string@bool-completer # Determines if the check is running or not. (default: true)
-  --muted: string@bool-completer # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
-  --doubleCheck: string@bool-completer # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
-  --shouldFail: string@bool-completer # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
+  --activated: oneof<nothing, bool> # Determines if the check is running or not. (default: true)
+  --muted: oneof<nothing, bool> # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
+  --doubleCheck: oneof<nothing, bool> # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
+  --shouldFail: oneof<nothing, bool> # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
   --locations: list # An array of one or more data center locations where to run this check. (nullable, e.g. [us-east-1, eu-central-1])
   --tags: list # Tags for organizing and filtering checks. (e.g. [production])
   --alertSettings: record # Alert settings. (default: {escalationType: RUN_BASED, runBasedEscalation: {failedRunThreshold: 1}, reminders: {amount: 0, interval: 5}, parallelRunFailureThreshold: {enabled: false, percentage: 10}}) — shape: {escalationType?: "RUN_BASED"|"TIME_BASED", reminders?: record, sslCertificates?: record, runBasedEscalation?: record, timeBasedEscalation?: record, parallelRunFailureThreshold?: record}
-  --useGlobalAlertSettings: string@bool-completer # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
+  --useGlobalAlertSettings: oneof<nothing, bool> # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
   --groupId: float # The id of the check group this check is part of. (nullable)
   --groupOrder: float # The position of this check in a check group. It determines in what order checks are run when a group is triggered from the API or from CI/CD. (nullable)
   --runtimeId: string@runtimeId-completer # The runtime version, i.e. fixed set of runtime dependencies, used to execute this check. (nullable)
   --alertChannelSubscriptions: list # List of alert channel subscriptions. (e.g. []) — item shape: {alertChannelId: float, activated: bool}
   --retryStrategy: record # The strategy to determine how failed checks are retried. (nullable) — shape: {type: "FIXED"|"LINEAR"|"EXPONENTIAL"|"SINGLE_RETRY", baseBackoffSeconds?: float, sameRegion?: bool, maxRetries?: float, maxDurationSeconds?: float, onlyOn?: list}
   --triggerIncident: record # Determines whether the check or monitor should create and resolve an incident based on its alert configuration. Useful for status page automation. (nullable) — shape: {serviceId: string, severity: "CRITICAL"|"MAJOR"|"MEDIUM"|"MINOR", name: string, description: string, notifySubscribers: bool}
-  --runParallel: string@bool-completer # When true, the check will run in parallel in all selected locations. (default: false)
+  --runParallel: oneof<nothing, bool> # When true, the check will run in parallel in all selected locations. (default: false)
   --description: string # A description of the check. (nullable)
   --frequency: int@frequency-completer # How often the check should run in minutes. (default: 10)
   --frequencyOffset: int # Used for setting seconds for check frequencies under 1 minutes (only for API & TCP checks) and spreading checks over a time range for frequencies over 1 minute. This works as follows: Checks with a frequency of 0 can have a frequencyOffset of 10, 20 or 30 meaning they will run every 10, 20 or 30 seconds. Checks with a frequency lower than and equal to 60 can have a frequencyOffset between 1 and a max value based on the formula "Math.floor(frequency * 10)", i.e. for a check that runs every 5 minutes the max frequencyOffset is 50. Checks with a frequency higher than 60 can have a frequencyOffset between 1 and a max value based on the formula "Math.ceil(frequency / 60)", i.e. for a check that runs every 720 minutes, the max frequencyOffset is 12. 
@@ -2039,25 +2038,25 @@ export def "checks-dns put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoAssignAlerts: string@bool-completer # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
+  --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --body-id: string # e.g. 9d6df684-0bc3-4a38-a094-4e97627dd93e
   name: string # The name of the check. (e.g. Check)
-  --activated: string@bool-completer # Determines if the check is running or not. (default: true)
-  --muted: string@bool-completer # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
-  --doubleCheck: string@bool-completer # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
-  --shouldFail: string@bool-completer # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
+  --activated: oneof<nothing, bool> # Determines if the check is running or not. (default: true)
+  --muted: oneof<nothing, bool> # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
+  --doubleCheck: oneof<nothing, bool> # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
+  --shouldFail: oneof<nothing, bool> # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
   --locations: list # An array of one or more data center locations where to run this check. (nullable, e.g. [us-east-1, eu-central-1])
   --tags: list # Tags for organizing and filtering checks. (e.g. [production])
   --alertSettings: record # Alert settings. (nullable, default: {escalationType: RUN_BASED, runBasedEscalation: {failedRunThreshold: 1}, reminders: {amount: 0, interval: 5}, parallelRunFailureThreshold: {enabled: false, percentage: 10}}) — shape: {escalationType?: "RUN_BASED"|"TIME_BASED", reminders?: record, sslCertificates?: record, runBasedEscalation?: record, timeBasedEscalation?: record, parallelRunFailureThreshold?: record}
-  --useGlobalAlertSettings: string@bool-completer # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
+  --useGlobalAlertSettings: oneof<nothing, bool> # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
   --groupId: float # The id of the check group this check is part of. (nullable)
   --groupOrder: float # The position of this check in a check group. It determines in what order checks are run when a group is triggered from the API or from CI/CD. (nullable)
   --runtimeId: string@runtimeId-completer # The runtime version, i.e. fixed set of runtime dependencies, used to execute this check. (nullable)
   --alertChannelSubscriptions: list # item shape: {alertChannelId: float, activated: bool}
   --retryStrategy: record # The strategy to determine how failed checks are retried. (nullable) — shape: {type: "FIXED"|"LINEAR"|"EXPONENTIAL"|"SINGLE_RETRY", baseBackoffSeconds?: float, sameRegion?: bool, maxRetries?: float, maxDurationSeconds?: float, onlyOn?: list}
   --triggerIncident: record # Determines whether the check or monitor should create and resolve an incident based on its alert configuration. Useful for status page automation. (nullable) — shape: {serviceId: string, severity: "CRITICAL"|"MAJOR"|"MEDIUM"|"MINOR", name: string, description: string, notifySubscribers: bool}
-  --runParallel: string@bool-completer # When true, the check will run in parallel in all selected locations. (default: false)
+  --runParallel: oneof<nothing, bool> # When true, the check will run in parallel in all selected locations. (default: false)
   --description: string # A description of the check. (nullable)
   --frequency: int@frequency-completer # How often the check should run in minutes. (default: 10)
   --frequencyOffset: int # Used for setting seconds for check frequencies under 1 minutes (only for API & TCP checks) and spreading checks over a time range for frequencies over 1 minute. This works as follows: Checks with a frequency of 0 can have a frequencyOffset of 10, 20 or 30 meaning they will run every 10, 20 or 30 seconds. Checks with a frequency lower than and equal to 60 can have a frequencyOffset between 1 and a max value based on the formula "Math.floor(frequency * 10)", i.e. for a check that runs every 5 minutes the max frequencyOffset is 50. Checks with a frequency higher than 60 can have a frequencyOffset between 1 and a max value based on the formula "Math.ceil(frequency / 60)", i.e. for a check that runs every 720 minutes, the max frequencyOffset is 12. 
@@ -2101,23 +2100,23 @@ export def "checks-heartbeat post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoAssignAlerts: string@bool-completer # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
+  --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check. (e.g. Check)
-  --activated: string@bool-completer # Determines if the check is running or not. (default: true)
-  --muted: string@bool-completer # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
-  --doubleCheck: string@bool-completer # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
-  --shouldFail: string@bool-completer # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
+  --activated: oneof<nothing, bool> # Determines if the check is running or not. (default: true)
+  --muted: oneof<nothing, bool> # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
+  --doubleCheck: oneof<nothing, bool> # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
+  --shouldFail: oneof<nothing, bool> # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
   --locations: list # An array of one or more data center locations where to run this check. (nullable, e.g. [us-east-1, eu-central-1])
   --tags: list # Tags for organizing and filtering checks. (e.g. [production])
   --alertSettings: record # Alert settings. (default: {escalationType: RUN_BASED, runBasedEscalation: {failedRunThreshold: 1}, reminders: {amount: 0, interval: 5}, parallelRunFailureThreshold: {enabled: false, percentage: 10}}) — shape: {escalationType?: "RUN_BASED"|"TIME_BASED", reminders?: record, sslCertificates?: record, runBasedEscalation?: record, timeBasedEscalation?: record, parallelRunFailureThreshold?: record}
-  --useGlobalAlertSettings: string@bool-completer # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
+  --useGlobalAlertSettings: oneof<nothing, bool> # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
   --groupId: float # The id of the check group this check is part of. (nullable)
   --groupOrder: float # The position of this check in a check group. It determines in what order checks are run when a group is triggered from the API or from CI/CD. (nullable)
   --runtimeId: string@runtimeId-completer # The runtime version, i.e. fixed set of runtime dependencies, used to execute this check. (nullable)
   --alertChannelSubscriptions: list # List of alert channel subscriptions. (e.g. []) — item shape: {alertChannelId: float, activated: bool}
   --triggerIncident: record # Determines whether the check or monitor should create and resolve an incident based on its alert configuration. Useful for status page automation. (nullable) — shape: {serviceId: string, severity: "CRITICAL"|"MAJOR"|"MEDIUM"|"MINOR", name: string, description: string, notifySubscribers: bool}
-  --runParallel: string@bool-completer # When true, the check will run in parallel in all selected locations. (default: false)
+  --runParallel: oneof<nothing, bool> # When true, the check will run in parallel in all selected locations. (default: false)
   --description: string # A description of the check. (nullable)
   --frequency: int # How often the check should run in minutes. (default: 10)
   --frequencyOffset: int
@@ -2166,23 +2165,23 @@ export def "checks-heartbeat put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoAssignAlerts: string@bool-completer # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
+  --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --name: string # The name of the check. (e.g. Check)
-  --activated: string@bool-completer # Determines if the check is running or not. (default: true)
-  --muted: string@bool-completer # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
-  --doubleCheck: string@bool-completer # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
-  --shouldFail: string@bool-completer # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
+  --activated: oneof<nothing, bool> # Determines if the check is running or not. (default: true)
+  --muted: oneof<nothing, bool> # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
+  --doubleCheck: oneof<nothing, bool> # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
+  --shouldFail: oneof<nothing, bool> # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
   --locations: list # An array of one or more data center locations where to run this check. (nullable, e.g. [us-east-1, eu-central-1])
   --tags: list # Tags for organizing and filtering checks. (e.g. [production])
   --alertSettings: record # Alert settings. (default: {escalationType: RUN_BASED, runBasedEscalation: {failedRunThreshold: 1}, reminders: {amount: 0, interval: 5}, parallelRunFailureThreshold: {enabled: false, percentage: 10}}) — shape: {escalationType?: "RUN_BASED"|"TIME_BASED", reminders?: record, sslCertificates?: record, runBasedEscalation?: record, timeBasedEscalation?: record, parallelRunFailureThreshold?: record}
-  --useGlobalAlertSettings: string@bool-completer # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
+  --useGlobalAlertSettings: oneof<nothing, bool> # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
   --groupId: float # The id of the check group this check is part of. (nullable)
   --groupOrder: float # The position of this check in a check group. It determines in what order checks are run when a group is triggered from the API or from CI/CD. (nullable)
   --runtimeId: string@runtimeId-completer # The runtime version, i.e. fixed set of runtime dependencies, used to execute this check. (nullable)
   --alertChannelSubscriptions: list # List of alert channel subscriptions. (e.g. []) — item shape: {alertChannelId: float, activated: bool}
   --triggerIncident: record # Determines whether the check or monitor should create and resolve an incident based on its alert configuration. Useful for status page automation. (nullable) — shape: {serviceId: string, severity: "CRITICAL"|"MAJOR"|"MEDIUM"|"MINOR", name: string, description: string, notifySubscribers: bool}
-  --runParallel: string@bool-completer # When true, the check will run in parallel in all selected locations. (default: false)
+  --runParallel: oneof<nothing, bool> # When true, the check will run in parallel in all selected locations. (default: false)
   --description: string # A description of the check. (nullable)
   --frequency: int # How often the check should run in minutes. (default: 10)
   --frequencyOffset: int
@@ -2226,8 +2225,8 @@ export def "checks-heartbeats-availability get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --startTime: string # format: date, default: 2026-06-10T21:04:36.064Z
-  --endTime: string # format: date, default: 2026-06-11T21:04:36.065Z
+  --startTime: string # format: date, default: 2026-06-11T09:39:53.706Z
+  --endTime: string # format: date, default: 2026-06-12T09:39:53.707Z
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<successRatio: record<previousPeriod: float, currentPeriod: float>, totalEntitiesCurrentPeriod: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2254,8 +2253,8 @@ export def "checks-heartbeats-events list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --startTime: string # format: date, default: 2026-06-10T21:04:36.068Z
-  --endTime: string # format: date, default: 2026-06-11T21:04:36.068Z
+  --startTime: string # format: date, default: 2026-06-11T09:39:53.709Z
+  --endTime: string # format: date, default: 2026-06-12T09:39:53.710Z
   --limit: float # default: 10
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> table<events: list<record>, stats: record<last24Hours: record, last7Days: record>> {
@@ -2314,24 +2313,24 @@ export def "checks-icmp post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoAssignAlerts: string@bool-completer # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
+  --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check. (e.g. Check)
-  --activated: string@bool-completer # Determines if the check is running or not. (default: true)
-  --muted: string@bool-completer # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
-  --doubleCheck: string@bool-completer # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
-  --shouldFail: string@bool-completer # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
+  --activated: oneof<nothing, bool> # Determines if the check is running or not. (default: true)
+  --muted: oneof<nothing, bool> # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
+  --doubleCheck: oneof<nothing, bool> # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
+  --shouldFail: oneof<nothing, bool> # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
   --locations: list # An array of one or more data center locations where to run this check. (nullable, e.g. [us-east-1, eu-central-1])
   --tags: list # Tags for organizing and filtering checks. (e.g. [production])
   --alertSettings: record # Alert settings. (default: {escalationType: RUN_BASED, runBasedEscalation: {failedRunThreshold: 1}, reminders: {amount: 0, interval: 5}, parallelRunFailureThreshold: {enabled: false, percentage: 10}}) — shape: {escalationType?: "RUN_BASED"|"TIME_BASED", reminders?: record, sslCertificates?: record, runBasedEscalation?: record, timeBasedEscalation?: record, parallelRunFailureThreshold?: record}
-  --useGlobalAlertSettings: string@bool-completer # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
+  --useGlobalAlertSettings: oneof<nothing, bool> # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
   --groupId: float # The id of the check group this check is part of. (nullable)
   --groupOrder: float # The position of this check in a check group. It determines in what order checks are run when a group is triggered from the API or from CI/CD. (nullable)
   --runtimeId: string@runtimeId-completer # The runtime version, i.e. fixed set of runtime dependencies, used to execute this check. (nullable)
   --alertChannelSubscriptions: list # List of alert channel subscriptions. (e.g. []) — item shape: {alertChannelId: float, activated: bool}
   --retryStrategy: record # The strategy to determine how failed checks are retried. (nullable) — shape: {type: "FIXED"|"LINEAR"|"EXPONENTIAL"|"SINGLE_RETRY", baseBackoffSeconds?: float, sameRegion?: bool, maxRetries?: float, maxDurationSeconds?: float, onlyOn?: list}
   --triggerIncident: record # Determines whether the check or monitor should create and resolve an incident based on its alert configuration. Useful for status page automation. (nullable) — shape: {serviceId: string, severity: "CRITICAL"|"MAJOR"|"MEDIUM"|"MINOR", name: string, description: string, notifySubscribers: bool}
-  --runParallel: string@bool-completer # When true, the check will run in parallel in all selected locations. (default: false)
+  --runParallel: oneof<nothing, bool> # When true, the check will run in parallel in all selected locations. (default: false)
   --description: string # A description of the check. (nullable)
   --frequency: int@frequency-completer # How often the check should run in minutes. (default: 10)
   --frequencyOffset: int # Used for setting seconds for check frequencies under 1 minutes (only for API & TCP checks) and spreading checks over a time range for frequencies over 1 minute. This works as follows: Checks with a frequency of 0 can have a frequencyOffset of 10, 20 or 30 meaning they will run every 10, 20 or 30 seconds. Checks with a frequency lower than and equal to 60 can have a frequencyOffset between 1 and a max value based on the formula "Math.floor(frequency * 10)", i.e. for a check that runs every 5 minutes the max frequencyOffset is 50. Checks with a frequency higher than 60 can have a frequencyOffset between 1 and a max value based on the formula "Math.ceil(frequency / 60)", i.e. for a check that runs every 720 minutes, the max frequencyOffset is 12. 
@@ -2384,24 +2383,24 @@ export def "checks-icmp put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoAssignAlerts: string@bool-completer # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
+  --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --name: string # The name of the check. (e.g. Check)
-  --activated: string@bool-completer # Determines if the check is running or not. (default: true)
-  --muted: string@bool-completer # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
-  --doubleCheck: string@bool-completer # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
-  --shouldFail: string@bool-completer # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
+  --activated: oneof<nothing, bool> # Determines if the check is running or not. (default: true)
+  --muted: oneof<nothing, bool> # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
+  --doubleCheck: oneof<nothing, bool> # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
+  --shouldFail: oneof<nothing, bool> # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
   --locations: list # An array of one or more data center locations where to run this check. (nullable, e.g. [us-east-1, eu-central-1])
   --tags: list # Tags for organizing and filtering checks. (e.g. [production])
   --alertSettings: record # Alert settings. (default: {escalationType: RUN_BASED, runBasedEscalation: {failedRunThreshold: 1}, reminders: {amount: 0, interval: 5}, parallelRunFailureThreshold: {enabled: false, percentage: 10}}) — shape: {escalationType?: "RUN_BASED"|"TIME_BASED", reminders?: record, sslCertificates?: record, runBasedEscalation?: record, timeBasedEscalation?: record, parallelRunFailureThreshold?: record}
-  --useGlobalAlertSettings: string@bool-completer # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
+  --useGlobalAlertSettings: oneof<nothing, bool> # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
   --groupId: float # The id of the check group this check is part of. (nullable)
   --groupOrder: float # The position of this check in a check group. It determines in what order checks are run when a group is triggered from the API or from CI/CD. (nullable)
   --runtimeId: string@runtimeId-completer # The runtime version, i.e. fixed set of runtime dependencies, used to execute this check. (nullable)
   --alertChannelSubscriptions: list # List of alert channel subscriptions. (e.g. []) — item shape: {alertChannelId: float, activated: bool}
   --retryStrategy: record # The strategy to determine how failed checks are retried. (nullable) — shape: {type: "FIXED"|"LINEAR"|"EXPONENTIAL"|"SINGLE_RETRY", baseBackoffSeconds?: float, sameRegion?: bool, maxRetries?: float, maxDurationSeconds?: float, onlyOn?: list}
   --triggerIncident: record # Determines whether the check or monitor should create and resolve an incident based on its alert configuration. Useful for status page automation. (nullable) — shape: {serviceId: string, severity: "CRITICAL"|"MAJOR"|"MEDIUM"|"MINOR", name: string, description: string, notifySubscribers: bool}
-  --runParallel: string@bool-completer # When true, the check will run in parallel in all selected locations. (default: false)
+  --runParallel: oneof<nothing, bool> # When true, the check will run in parallel in all selected locations. (default: false)
   --description: string # A description of the check. (nullable)
   --frequency: int@frequency-completer # How often the check should run in minutes. (default: 10)
   --frequencyOffset: int # Used for setting seconds for check frequencies under 1 minutes (only for API & TCP checks) and spreading checks over a time range for frequencies over 1 minute. This works as follows: Checks with a frequency of 0 can have a frequencyOffset of 10, 20 or 30 meaning they will run every 10, 20 or 30 seconds. Checks with a frequency lower than and equal to 60 can have a frequencyOffset between 1 and a max value based on the formula "Math.floor(frequency * 10)", i.e. for a check that runs every 5 minutes the max frequencyOffset is 50. Checks with a frequency higher than 60 can have a frequencyOffset between 1 and a max value based on the formula "Math.ceil(frequency / 60)", i.e. for a check that runs every 720 minutes, the max frequencyOffset is 12. 
@@ -2453,24 +2452,24 @@ export def "checks-multistep post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoAssignAlerts: string@bool-completer # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
+  --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check. (e.g. Check)
-  --activated: string@bool-completer # Determines if the check is running or not. (default: true)
-  --muted: string@bool-completer # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
-  --doubleCheck: string@bool-completer # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
-  --shouldFail: string@bool-completer # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
+  --activated: oneof<nothing, bool> # Determines if the check is running or not. (default: true)
+  --muted: oneof<nothing, bool> # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
+  --doubleCheck: oneof<nothing, bool> # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
+  --shouldFail: oneof<nothing, bool> # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
   --locations: list # An array of one or more data center locations where to run this check. (nullable, e.g. [us-east-1, eu-central-1])
   --tags: list # Tags for organizing and filtering checks. (e.g. [production])
   --alertSettings: record # Alert settings. (default: {escalationType: RUN_BASED, runBasedEscalation: {failedRunThreshold: 1}, reminders: {amount: 0, interval: 5}, parallelRunFailureThreshold: {enabled: false, percentage: 10}}) — shape: {escalationType?: "RUN_BASED"|"TIME_BASED", reminders?: record, sslCertificates?: record, runBasedEscalation?: record, timeBasedEscalation?: record, parallelRunFailureThreshold?: record}
-  --useGlobalAlertSettings: string@bool-completer # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
+  --useGlobalAlertSettings: oneof<nothing, bool> # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
   --groupId: float # The id of the check group this check is part of. (nullable)
   --groupOrder: float # The position of this check in a check group. It determines in what order checks are run when a group is triggered from the API or from CI/CD. (nullable)
   --runtimeId: string@runtimeId-completer # The runtime version, i.e. fixed set of runtime dependencies, used to execute this check. (nullable)
   --alertChannelSubscriptions: list # List of alert channel subscriptions. (e.g. []) — item shape: {alertChannelId: float, activated: bool}
   --retryStrategy: record # The strategy to determine how failed checks are retried. (nullable) — shape: {type: "FIXED"|"LINEAR"|"EXPONENTIAL"|"SINGLE_RETRY", baseBackoffSeconds?: float, sameRegion?: bool, maxRetries?: float, maxDurationSeconds?: float, onlyOn?: list}
   --triggerIncident: record # Determines whether the check or monitor should create and resolve an incident based on its alert configuration. Useful for status page automation. (nullable) — shape: {serviceId: string, severity: "CRITICAL"|"MAJOR"|"MEDIUM"|"MINOR", name: string, description: string, notifySubscribers: bool}
-  --runParallel: string@bool-completer # When true, the check will run in parallel in all selected locations. (default: false)
+  --runParallel: oneof<nothing, bool> # When true, the check will run in parallel in all selected locations. (default: false)
   --description: string # A description of the check. (nullable)
   --checkType: string@checkType-completer-2 # default: MULTI_STEP
   --environmentVariables: list # Key/value pairs for setting environment variables during check execution. Use global environment variables whenever possible. (nullable, e.g. []) — item shape: {key: string, value: string, locked?: bool, secret?: bool}
@@ -2513,24 +2512,24 @@ export def "checks-multistep put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoAssignAlerts: string@bool-completer # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
+  --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --name: string # The name of the check. (e.g. Check)
-  --activated: string@bool-completer # Determines if the check is running or not. (default: true)
-  --muted: string@bool-completer # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
-  --doubleCheck: string@bool-completer # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
-  --shouldFail: string@bool-completer # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
+  --activated: oneof<nothing, bool> # Determines if the check is running or not. (default: true)
+  --muted: oneof<nothing, bool> # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
+  --doubleCheck: oneof<nothing, bool> # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
+  --shouldFail: oneof<nothing, bool> # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
   --locations: list # An array of one or more data center locations where to run this check. (nullable, e.g. [us-east-1, eu-central-1])
   --tags: list # Tags for organizing and filtering checks. (e.g. [production])
   --alertSettings: record # Alert settings. (default: {escalationType: RUN_BASED, runBasedEscalation: {failedRunThreshold: 1}, reminders: {amount: 0, interval: 5}, parallelRunFailureThreshold: {enabled: false, percentage: 10}}) — shape: {escalationType?: "RUN_BASED"|"TIME_BASED", reminders?: record, sslCertificates?: record, runBasedEscalation?: record, timeBasedEscalation?: record, parallelRunFailureThreshold?: record}
-  --useGlobalAlertSettings: string@bool-completer # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
+  --useGlobalAlertSettings: oneof<nothing, bool> # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
   --groupId: float # The id of the check group this check is part of. (nullable)
   --groupOrder: float # The position of this check in a check group. It determines in what order checks are run when a group is triggered from the API or from CI/CD. (nullable)
   --runtimeId: string@runtimeId-completer # The runtime version, i.e. fixed set of runtime dependencies, used to execute this check. (nullable)
   --alertChannelSubscriptions: list # List of alert channel subscriptions. (e.g. []) — item shape: {alertChannelId: float, activated: bool}
   --retryStrategy: record # The strategy to determine how failed checks are retried. (nullable) — shape: {type: "FIXED"|"LINEAR"|"EXPONENTIAL"|"SINGLE_RETRY", baseBackoffSeconds?: float, sameRegion?: bool, maxRetries?: float, maxDurationSeconds?: float, onlyOn?: list}
   --triggerIncident: record # Determines whether the check or monitor should create and resolve an incident based on its alert configuration. Useful for status page automation. (nullable) — shape: {serviceId: string, severity: "CRITICAL"|"MAJOR"|"MEDIUM"|"MINOR", name: string, description: string, notifySubscribers: bool}
-  --runParallel: string@bool-completer # When true, the check will run in parallel in all selected locations. (default: false)
+  --runParallel: oneof<nothing, bool> # When true, the check will run in parallel in all selected locations. (default: false)
   --description: string # A description of the check. (nullable)
   --checkType: string@checkType-completer-2 # default: MULTI_STEP
   --environmentVariables: list # Key/value pairs for setting environment variables during check execution. Use global environment variables whenever possible. (nullable, e.g. []) — item shape: {key: string, value: string, locked?: bool, secret?: bool}
@@ -2571,24 +2570,24 @@ export def "checks-tcp post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoAssignAlerts: string@bool-completer # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
+  --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check. (e.g. Check)
-  --activated: string@bool-completer # Determines if the check is running or not. (default: true)
-  --muted: string@bool-completer # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
-  --doubleCheck: string@bool-completer # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
-  --shouldFail: string@bool-completer # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
+  --activated: oneof<nothing, bool> # Determines if the check is running or not. (default: true)
+  --muted: oneof<nothing, bool> # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
+  --doubleCheck: oneof<nothing, bool> # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
+  --shouldFail: oneof<nothing, bool> # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
   --locations: list # An array of one or more data center locations where to run this check. (nullable, e.g. [us-east-1, eu-central-1])
   --tags: list # Tags for organizing and filtering checks. (e.g. [production])
   --alertSettings: record # Alert settings. (default: {escalationType: RUN_BASED, runBasedEscalation: {failedRunThreshold: 1}, reminders: {amount: 0, interval: 5}, parallelRunFailureThreshold: {enabled: false, percentage: 10}}) — shape: {escalationType?: "RUN_BASED"|"TIME_BASED", reminders?: record, sslCertificates?: record, runBasedEscalation?: record, timeBasedEscalation?: record, parallelRunFailureThreshold?: record}
-  --useGlobalAlertSettings: string@bool-completer # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
+  --useGlobalAlertSettings: oneof<nothing, bool> # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
   --groupId: float # The id of the check group this check is part of. (nullable)
   --groupOrder: float # The position of this check in a check group. It determines in what order checks are run when a group is triggered from the API or from CI/CD. (nullable)
   --runtimeId: string@runtimeId-completer # The runtime version, i.e. fixed set of runtime dependencies, used to execute this check. (nullable)
   --alertChannelSubscriptions: list # List of alert channel subscriptions. (e.g. []) — item shape: {alertChannelId: float, activated: bool}
   --retryStrategy: record # The strategy to determine how failed checks are retried. (nullable) — shape: {type: "FIXED"|"LINEAR"|"EXPONENTIAL"|"SINGLE_RETRY", baseBackoffSeconds?: float, sameRegion?: bool, maxRetries?: float, maxDurationSeconds?: float, onlyOn?: list}
   --triggerIncident: record # Determines whether the check or monitor should create and resolve an incident based on its alert configuration. Useful for status page automation. (nullable) — shape: {serviceId: string, severity: "CRITICAL"|"MAJOR"|"MEDIUM"|"MINOR", name: string, description: string, notifySubscribers: bool}
-  --runParallel: string@bool-completer # When true, the check will run in parallel in all selected locations. (default: false)
+  --runParallel: oneof<nothing, bool> # When true, the check will run in parallel in all selected locations. (default: false)
   --description: string # A description of the check. (nullable)
   request: record # shape: {hostname?: string, port: float, data?: string, assertions?: list, ipFamily?: "IPv4"|"IPv6"}
   --frequency: int@frequency-completer # How often the check should run in minutes. (default: 10)
@@ -2629,24 +2628,24 @@ export def "checks-tcp put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoAssignAlerts: string@bool-completer # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
+  --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --name: string # The name of the check. (e.g. Check)
-  --activated: string@bool-completer # Determines if the check is running or not. (default: true)
-  --muted: string@bool-completer # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
-  --doubleCheck: string@bool-completer # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
-  --shouldFail: string@bool-completer # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
+  --activated: oneof<nothing, bool> # Determines if the check is running or not. (default: true)
+  --muted: oneof<nothing, bool> # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
+  --doubleCheck: oneof<nothing, bool> # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
+  --shouldFail: oneof<nothing, bool> # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
   --locations: list # An array of one or more data center locations where to run this check. (nullable, e.g. [us-east-1, eu-central-1])
   --tags: list # Tags for organizing and filtering checks. (e.g. [production])
   --alertSettings: record # Alert settings. (default: {escalationType: RUN_BASED, runBasedEscalation: {failedRunThreshold: 1}, reminders: {amount: 0, interval: 5}, parallelRunFailureThreshold: {enabled: false, percentage: 10}}) — shape: {escalationType?: "RUN_BASED"|"TIME_BASED", reminders?: record, sslCertificates?: record, runBasedEscalation?: record, timeBasedEscalation?: record, parallelRunFailureThreshold?: record}
-  --useGlobalAlertSettings: string@bool-completer # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
+  --useGlobalAlertSettings: oneof<nothing, bool> # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
   --groupId: float # The id of the check group this check is part of. (nullable)
   --groupOrder: float # The position of this check in a check group. It determines in what order checks are run when a group is triggered from the API or from CI/CD. (nullable)
   --runtimeId: string@runtimeId-completer # The runtime version, i.e. fixed set of runtime dependencies, used to execute this check. (nullable)
   --alertChannelSubscriptions: list # List of alert channel subscriptions. (e.g. []) — item shape: {alertChannelId: float, activated: bool}
   --retryStrategy: record # The strategy to determine how failed checks are retried. (nullable) — shape: {type: "FIXED"|"LINEAR"|"EXPONENTIAL"|"SINGLE_RETRY", baseBackoffSeconds?: float, sameRegion?: bool, maxRetries?: float, maxDurationSeconds?: float, onlyOn?: list}
   --triggerIncident: record # Determines whether the check or monitor should create and resolve an incident based on its alert configuration. Useful for status page automation. (nullable) — shape: {serviceId: string, severity: "CRITICAL"|"MAJOR"|"MEDIUM"|"MINOR", name: string, description: string, notifySubscribers: bool}
-  --runParallel: string@bool-completer # When true, the check will run in parallel in all selected locations. (default: false)
+  --runParallel: oneof<nothing, bool> # When true, the check will run in parallel in all selected locations. (default: false)
   --description: string # A description of the check. (nullable)
   --request: record # shape: {hostname?: string, port: float, data?: string, assertions?: list, ipFamily?: "IPv4"|"IPv6"}
   --frequency: int@frequency-completer # How often the check should run in minutes. (default: 10)
@@ -2686,24 +2685,24 @@ export def "checks-url post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoAssignAlerts: string@bool-completer # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
+  --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check. (e.g. Check)
-  --activated: string@bool-completer # Determines if the check is running or not. (default: true)
-  --muted: string@bool-completer # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
-  --doubleCheck: string@bool-completer # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
-  --shouldFail: string@bool-completer # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
+  --activated: oneof<nothing, bool> # Determines if the check is running or not. (default: true)
+  --muted: oneof<nothing, bool> # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
+  --doubleCheck: oneof<nothing, bool> # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
+  --shouldFail: oneof<nothing, bool> # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
   --locations: list # An array of one or more data center locations where to run this check. (nullable, e.g. [us-east-1, eu-central-1])
   --tags: list # Tags for organizing and filtering checks. (e.g. [production])
   --alertSettings: record # Alert settings. (default: {escalationType: RUN_BASED, runBasedEscalation: {failedRunThreshold: 1}, reminders: {amount: 0, interval: 5}, parallelRunFailureThreshold: {enabled: false, percentage: 10}}) — shape: {escalationType?: "RUN_BASED"|"TIME_BASED", reminders?: record, sslCertificates?: record, runBasedEscalation?: record, timeBasedEscalation?: record, parallelRunFailureThreshold?: record}
-  --useGlobalAlertSettings: string@bool-completer # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
+  --useGlobalAlertSettings: oneof<nothing, bool> # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
   --groupId: float # The id of the check group this check is part of. (nullable)
   --groupOrder: float # The position of this check in a check group. It determines in what order checks are run when a group is triggered from the API or from CI/CD. (nullable)
   --runtimeId: string@runtimeId-completer # The runtime version, i.e. fixed set of runtime dependencies, used to execute this check. (nullable)
   --alertChannelSubscriptions: list # List of alert channel subscriptions. (e.g. []) — item shape: {alertChannelId: float, activated: bool}
   --retryStrategy: record # The strategy to determine how failed checks are retried. (nullable) — shape: {type: "FIXED"|"LINEAR"|"EXPONENTIAL"|"SINGLE_RETRY", baseBackoffSeconds?: float, sameRegion?: bool, maxRetries?: float, maxDurationSeconds?: float, onlyOn?: list}
   --triggerIncident: record # Determines whether the check or monitor should create and resolve an incident based on its alert configuration. Useful for status page automation. (nullable) — shape: {serviceId: string, severity: "CRITICAL"|"MAJOR"|"MEDIUM"|"MINOR", name: string, description: string, notifySubscribers: bool}
-  --runParallel: string@bool-completer # When true, the check will run in parallel in all selected locations. (default: false)
+  --runParallel: oneof<nothing, bool> # When true, the check will run in parallel in all selected locations. (default: false)
   --description: string # A description of the check. (nullable)
   request: record # Determines the request that the check is going to run. — shape: {method?: "GET", url: string, followRedirects?: bool, skipSSL?: bool, ipFamily?: "IPv4"|"IPv6", assertions?: list}
   --frequency: int@frequency-completer # How often the check should run in minutes. (default: 10)
@@ -2744,24 +2743,24 @@ export def "checks-url put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoAssignAlerts: string@bool-completer # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
+  --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --name: string # The name of the check. (e.g. Check)
-  --activated: string@bool-completer # Determines if the check is running or not. (default: true)
-  --muted: string@bool-completer # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
-  --doubleCheck: string@bool-completer # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
-  --shouldFail: string@bool-completer # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
+  --activated: oneof<nothing, bool> # Determines if the check is running or not. (default: true)
+  --muted: oneof<nothing, bool> # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
+  --doubleCheck: oneof<nothing, bool> # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
+  --shouldFail: oneof<nothing, bool> # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
   --locations: list # An array of one or more data center locations where to run this check. (nullable, e.g. [us-east-1, eu-central-1])
   --tags: list # Tags for organizing and filtering checks. (e.g. [production])
   --alertSettings: record # Alert settings. (default: {escalationType: RUN_BASED, runBasedEscalation: {failedRunThreshold: 1}, reminders: {amount: 0, interval: 5}, parallelRunFailureThreshold: {enabled: false, percentage: 10}}) — shape: {escalationType?: "RUN_BASED"|"TIME_BASED", reminders?: record, sslCertificates?: record, runBasedEscalation?: record, timeBasedEscalation?: record, parallelRunFailureThreshold?: record}
-  --useGlobalAlertSettings: string@bool-completer # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
+  --useGlobalAlertSettings: oneof<nothing, bool> # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
   --groupId: float # The id of the check group this check is part of. (nullable)
   --groupOrder: float # The position of this check in a check group. It determines in what order checks are run when a group is triggered from the API or from CI/CD. (nullable)
   --runtimeId: string@runtimeId-completer # The runtime version, i.e. fixed set of runtime dependencies, used to execute this check. (nullable)
   --alertChannelSubscriptions: list # List of alert channel subscriptions. (e.g. []) — item shape: {alertChannelId: float, activated: bool}
   --retryStrategy: record # The strategy to determine how failed checks are retried. (nullable) — shape: {type: "FIXED"|"LINEAR"|"EXPONENTIAL"|"SINGLE_RETRY", baseBackoffSeconds?: float, sameRegion?: bool, maxRetries?: float, maxDurationSeconds?: float, onlyOn?: list}
   --triggerIncident: record # Determines whether the check or monitor should create and resolve an incident based on its alert configuration. Useful for status page automation. (nullable) — shape: {serviceId: string, severity: "CRITICAL"|"MAJOR"|"MEDIUM"|"MINOR", name: string, description: string, notifySubscribers: bool}
-  --runParallel: string@bool-completer # When true, the check will run in parallel in all selected locations. (default: false)
+  --runParallel: oneof<nothing, bool> # When true, the check will run in parallel in all selected locations. (default: false)
   --description: string # A description of the check. (nullable)
   --request: record # Determines the request that the check is going to run. — shape: {method?: "GET", url: string, followRedirects?: bool, skipSSL?: bool, ipFamily?: "IPv4"|"IPv6", assertions?: list}
   --frequency: int@frequency-completer # How often the check should run in minutes. (default: 10)
@@ -2822,8 +2821,8 @@ export def "checks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeDependencies: string@bool-completer # Include check dependencies in the response
-  --applyGroupSettings: string@bool-completer # Checks that belong to a group are returned with group settings applied. (default: false)
+  --includeDependencies: oneof<nothing, bool> # Include check dependencies in the response
+  --applyGroupSettings: oneof<nothing, bool> # Checks that belong to a group are returned with group settings applied. (default: false)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<id: string, checkType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2858,24 +2857,24 @@ export def "checks put-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoAssignAlerts: string@bool-completer # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
+  --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --name: string # The name of the check. (e.g. Check)
-  --activated: string@bool-completer # Determines if the check is running or not. (default: true)
-  --muted: string@bool-completer # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
-  --doubleCheck: string@bool-completer # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
-  --shouldFail: string@bool-completer # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
+  --activated: oneof<nothing, bool> # Determines if the check is running or not. (default: true)
+  --muted: oneof<nothing, bool> # Determines if any notifications will be send out when a check fails and/or recovers. (default: false)
+  --doubleCheck: oneof<nothing, bool> # [Deprecated] Retry failed check runs. This property is deprecated, and `retryStrategy` can be used instead. (default: true)
+  --shouldFail: oneof<nothing, bool> # Allows to invert the behaviour of when a check is considered to fail. Allows for validating error status like 404. (default: false)
   --locations: list # An array of one or more data center locations where to run this check. (nullable, e.g. [us-east-1, eu-central-1])
   --tags: list # Tags for organizing and filtering checks. (e.g. [production])
   --alertSettings: record # Alert settings. (nullable, default: {escalationType: RUN_BASED, runBasedEscalation: {failedRunThreshold: 1}, reminders: {amount: 0, interval: 5}, parallelRunFailureThreshold: {enabled: false, percentage: 10}}) — shape: {escalationType?: "RUN_BASED"|"TIME_BASED", reminders?: record, sslCertificates?: record, runBasedEscalation?: record, timeBasedEscalation?: record, parallelRunFailureThreshold?: record}
-  --useGlobalAlertSettings: string@bool-completer # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
+  --useGlobalAlertSettings: oneof<nothing, bool> # When true, the account level alert setting will be used, not the alert setting defined on this check. (default: true)
   --groupId: float # The id of the check group this check is part of. (nullable)
   --groupOrder: float # The position of this check in a check group. It determines in what order checks are run when a group is triggered from the API or from CI/CD. (nullable)
   --runtimeId: string@runtimeId-completer # The runtime version, i.e. fixed set of runtime dependencies, used to execute this check. (nullable)
   --alertChannelSubscriptions: list # List of alert channel subscriptions. (e.g. []) — item shape: {alertChannelId: float, activated: bool}
   --retryStrategy: record # The strategy to determine how failed checks are retried. (nullable) — shape: {type: "FIXED"|"LINEAR"|"EXPONENTIAL"|"SINGLE_RETRY", baseBackoffSeconds?: float, sameRegion?: bool, maxRetries?: float, maxDurationSeconds?: float, onlyOn?: list}
   --triggerIncident: record # Determines whether the check or monitor should create and resolve an incident based on its alert configuration. Useful for status page automation. (nullable) — shape: {serviceId: string, severity: "CRITICAL"|"MAJOR"|"MEDIUM"|"MINOR", name: string, description: string, notifySubscribers: bool}
-  --runParallel: string@bool-completer # When true, the check will run in parallel in all selected locations. (default: false)
+  --runParallel: oneof<nothing, bool> # When true, the check will run in parallel in all selected locations. (default: false)
   --description: string # A description of the check. (nullable)
   --checkType: string@checkType-completer # The type of the check.
   --frequency: int # How often the check should run in minutes. (default: 10)
@@ -3065,21 +3064,21 @@ export def "dashboards post" [
   --description: string # A piece of text displayed below the header or title of your dashboard. (nullable, e.g. My dashboard description)
   --width: string@width-completer # Determines whether to use the full screen or focus in the center. (default: FULL)
   --refreshRate: float@refreshRate-completer # How often to refresh the dashboard in seconds. (default: 60)
-  --paginate: string@bool-completer # Determines of pagination is on or off. (default: true)
+  --paginate: oneof<nothing, bool> # Determines of pagination is on or off. (default: true)
   --paginationRate: float@paginationRate-completer # How often to trigger pagination in seconds. (default: 60)
   --checksPerPage: float # Number of checks displayed per page. (nullable, default: 15)
-  --useTagsAndOperator: string@bool-completer # When to use AND operator for tags lookup. (nullable, default: false)
-  --hideTags: string@bool-completer # Show or hide the tags on the dashboard. (default: false)
-  --enableIncidents: string@bool-completer # Enable or disable incidents on the dashboard. (default: false)
-  --expandChecks: string@bool-completer # Expand or collapse checks on the dashboard. (default: false)
+  --useTagsAndOperator: oneof<nothing, bool> # When to use AND operator for tags lookup. (nullable, default: false)
+  --hideTags: oneof<nothing, bool> # Show or hide the tags on the dashboard. (default: false)
+  --enableIncidents: oneof<nothing, bool> # Enable or disable incidents on the dashboard. (default: false)
+  --expandChecks: oneof<nothing, bool> # Expand or collapse checks on the dashboard. (default: false)
   --tags: list # A list of one or more tags that filter which checks to display on the dashboard. (e.g. [production])
-  --showHeader: string@bool-completer # Show or hide header and description on the dashboard. (default: true)
-  --showCheckRunLinks: string@bool-completer # Show or hide check run links on the dashboard. (default: false)
-  --showGroupNames: string@bool-completer # Show or hide group names on the dashboard. (default: true)
+  --showHeader: oneof<nothing, bool> # Show or hide header and description on the dashboard. (default: true)
+  --showCheckRunLinks: oneof<nothing, bool> # Show or hide check run links on the dashboard. (default: false)
+  --showGroupNames: oneof<nothing, bool> # Show or hide group names on the dashboard. (default: true)
   --customCSS: string # Custom CSS to be applied to the dashboard. (nullable, default: )
-  --isPrivate: string@bool-completer # Determines if the dashboard is public or private. (default: false)
-  --showP95: string@bool-completer # Show or hide the P95 stats on the dashboard. (default: true)
-  --showP99: string@bool-completer # Show or hide the P99 stats on the dashboard. (default: true)
+  --isPrivate: oneof<nothing, bool> # Determines if the dashboard is public or private. (default: false)
+  --showP95: oneof<nothing, bool> # Show or hide the P95 stats on the dashboard. (default: true)
+  --showP99: oneof<nothing, bool> # Show or hide the P99 stats on the dashboard. (default: true)
   --keys: list # Show key for private dashboard. — item shape: {id: string, rawKey: string, maskedKey: string, created_at: string, updated_at?: string}
 ]: any -> record<customDomain: string, customUrl: string, logo: string, favicon: string, link: string, description: string, width: string, refreshRate: float, paginate: bool, paginationRate: float, checksPerPage: float, useTagsAndOperator: bool, hideTags: bool, enableIncidents: bool, expandChecks: bool, tags: list<string>, showHeader: bool, showCheckRunLinks: bool, showGroupNames: bool, customCSS: string, isPrivate: bool, showP95: bool, showP99: bool, keys: table<id: string, rawKey: string, maskedKey: string, created_at: string, updated_at: string>, id: float, dashboardId: string, created_at: string, header: string> {
   let input = $in
@@ -3167,21 +3166,21 @@ export def "dashboards put" [
   --description: string # A piece of text displayed below the header or title of your dashboard. (nullable, e.g. My dashboard description)
   --width: string@width-completer # Determines whether to use the full screen or focus in the center. (default: FULL)
   --refreshRate: float@refreshRate-completer # How often to refresh the dashboard in seconds. (default: 60)
-  --paginate: string@bool-completer # Determines of pagination is on or off. (default: true)
+  --paginate: oneof<nothing, bool> # Determines of pagination is on or off. (default: true)
   --paginationRate: float@paginationRate-completer # How often to trigger pagination in seconds. (default: 60)
   --checksPerPage: float # Number of checks displayed per page. (nullable, default: 15)
-  --useTagsAndOperator: string@bool-completer # When to use AND operator for tags lookup. (nullable, default: false)
-  --hideTags: string@bool-completer # Show or hide the tags on the dashboard. (default: false)
-  --enableIncidents: string@bool-completer # Enable or disable incidents on the dashboard. (default: false)
-  --expandChecks: string@bool-completer # Expand or collapse checks on the dashboard. (default: false)
+  --useTagsAndOperator: oneof<nothing, bool> # When to use AND operator for tags lookup. (nullable, default: false)
+  --hideTags: oneof<nothing, bool> # Show or hide the tags on the dashboard. (default: false)
+  --enableIncidents: oneof<nothing, bool> # Enable or disable incidents on the dashboard. (default: false)
+  --expandChecks: oneof<nothing, bool> # Expand or collapse checks on the dashboard. (default: false)
   --tags: list # A list of one or more tags that filter which checks to display on the dashboard. (e.g. [production])
-  --showHeader: string@bool-completer # Show or hide header and description on the dashboard. (default: true)
-  --showCheckRunLinks: string@bool-completer # Show or hide check run links on the dashboard. (default: false)
-  --showGroupNames: string@bool-completer # Show or hide group names on the dashboard. (default: true)
+  --showHeader: oneof<nothing, bool> # Show or hide header and description on the dashboard. (default: true)
+  --showCheckRunLinks: oneof<nothing, bool> # Show or hide check run links on the dashboard. (default: false)
+  --showGroupNames: oneof<nothing, bool> # Show or hide group names on the dashboard. (default: true)
   --customCSS: string # Custom CSS to be applied to the dashboard. (nullable, default: )
-  --isPrivate: string@bool-completer # Determines if the dashboard is public or private. (default: false)
-  --showP95: string@bool-completer # Show or hide the P95 stats on the dashboard. (default: true)
-  --showP99: string@bool-completer # Show or hide the P99 stats on the dashboard. (default: true)
+  --isPrivate: oneof<nothing, bool> # Determines if the dashboard is public or private. (default: false)
+  --showP95: oneof<nothing, bool> # Show or hide the P95 stats on the dashboard. (default: true)
+  --showP99: oneof<nothing, bool> # Show or hide the P99 stats on the dashboard. (default: true)
   --keys: list # Show key for private dashboard. — item shape: {id: string, rawKey: string, maskedKey: string, created_at: string, updated_at?: string}
   --header: string # A piece of text displayed at the top of your dashboard. (e.g. My company status)
 ]: any -> record<customDomain: string, customUrl: string, logo: string, favicon: string, link: string, description: string, width: string, refreshRate: float, paginate: bool, paginationRate: float, checksPerPage: float, useTagsAndOperator: bool, hideTags: bool, enableIncidents: bool, expandChecks: bool, tags: list<string>, showHeader: bool, showCheckRunLinks: bool, showGroupNames: bool, customCSS: string, isPrivate: bool, showP95: bool, showP99: bool, keys: table<id: string, rawKey: string, maskedKey: string, created_at: string, updated_at: string>, id: float, dashboardId: string, created_at: string, header: string> {
@@ -3292,8 +3291,8 @@ export def "error-groups patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
-  --archiveForEver: string@bool-completer
-  --archivedUntilNextEvent: string@bool-completer
+  --archiveForEver: oneof<nothing, bool>
+  --archivedUntilNextEvent: oneof<nothing, bool>
 ]: any -> record<id: string, checkId: string, errorHash: string, rawErrorMessage: string, cleanedErrorMessage: string, firstSeen: string, lastSeen: string, archivedUntilNextEvent: bool, rootCauseAnalyses: list<record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3380,7 +3379,7 @@ export def "incidents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeAllIncidentUpdates: string@bool-completer # You use it to include all the incident updates. (default: false, e.g. true)
+  --includeAllIncidentUpdates: oneof<nothing, bool> # You use it to include all the incident updates. (default: false, e.g. true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<name: string, impact: string, startedAt: string, stoppedAt: string, dashboardId: float, id: string, created_at: string, updated_at: string, incidentUpdates: table<status: string, description: string, id: string, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3407,7 +3406,7 @@ export def "incidents put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --probe: string@bool-completer
+  --probe: oneof<nothing, bool>
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # A name used to describe the incident. (e.g. Service outage)
   impact: string@impact-completer # Used to indicate the impact or severity. (default: MINOR, e.g. MINOR)
@@ -3588,9 +3587,9 @@ export def "maintenance-windows post" [
   --repeatInterval: float # The repeat interval of the maintenance window from the first occurance. (nullable)
   repeatUnit: string # The repeat strategy for the maintenance window. (e.g. DAY)
   --repeatEndsAt: string # The end date where the maintenance window should stop repeating. (nullable, format: date)
-  --pauseAllChecks: string@bool-completer # Whether to pause all checks in the account (overrides tag scope). (default: false)
+  --pauseAllChecks: oneof<nothing, bool> # Whether to pause all checks in the account (overrides tag scope). (default: false)
   --silenceAlertsTags: list # Tags defining which checks have alerts silenced (when silenceAllAlerts is false).
-  --silenceAllAlerts: string@bool-completer # Whether to silence alerts for all checks (overrides silenceAlertsTags scope). (default: false)
+  --silenceAllAlerts: oneof<nothing, bool> # Whether to silence alerts for all checks (overrides silenceAlertsTags scope). (default: false)
   --description: string # A description of the maintenance window. When the window is visible on status pages, this description is shown there too. (nullable)
   --statusPageVisibility: record # Status page visibility and subscriber-facing maintenance settings. (default: {}) — shape: {enabled?: bool, severity?: "MINOR"|"MEDIUM"|"MAJOR"|"CRITICAL", affectAllServices?: bool, notifyOnStart?: bool, notifyOnEnd?: bool, suppressAutoIncidents?: bool, reminderMinutesBefore?: list, autoStart?: bool, autoEnd?: bool, statusPageIds?: list, serviceIds?: list}
 ]: any -> record<id: float, name: string, tags: list<string>, startsAt: string, endsAt: string, repeatInterval: float, repeatUnit: string, repeatEndsAt: string, description: string, statusPageVisibility: record<enabled: bool, severity: string, affectAllServices: bool, suppressAutoIncidents: bool, notifyOnStart: bool, notifyOnEnd: bool, reminderMinutesBefore: list<int>, autoStart: bool, autoEnd: bool, statusPageIds: list<string>, serviceIds: list<string>>, pauseAllChecks: bool, silenceAlertsTags: list<string>, silenceAllAlerts: bool, created_at: string, updated_at: string> {
@@ -3678,9 +3677,9 @@ export def "maintenance-windows put" [
   --endsAt: string # The end date of the maintenance window. (format: date, e.g. 2022-08-25)
   --repeatInterval: float # The repeat interval of the maintenance window from the first occurance. (nullable)
   --repeatEndsAt: string # The end date where the maintenance window should stop repeating. (nullable, format: date)
-  --pauseAllChecks: string@bool-completer # Whether to pause all checks in the account (overrides tag scope). (default: false)
+  --pauseAllChecks: oneof<nothing, bool> # Whether to pause all checks in the account (overrides tag scope). (default: false)
   --silenceAlertsTags: list # Tags defining which checks have alerts silenced (when silenceAllAlerts is false).
-  --silenceAllAlerts: string@bool-completer # Whether to silence alerts for all checks (overrides silenceAlertsTags scope). (default: false)
+  --silenceAllAlerts: oneof<nothing, bool> # Whether to silence alerts for all checks (overrides silenceAlertsTags scope). (default: false)
   --description: string # A description of the maintenance window. When the window is visible on status pages, this description is shown there too. (nullable)
   --statusPageVisibility: record # Status page visibility and subscriber-facing maintenance settings. (default: {}) — shape: {enabled?: bool, severity?: "MINOR"|"MEDIUM"|"MAJOR"|"CRITICAL", affectAllServices?: bool, notifyOnStart?: bool, notifyOnEnd?: bool, suppressAutoIncidents?: bool, reminderMinutesBefore?: list, autoStart?: bool, autoEnd?: bool, statusPageIds?: list, serviceIds?: list}
   --repeatUnit: string@repeatUnit-completer # nullable
@@ -3826,7 +3825,7 @@ export def "maintenance-windows-maintenances-updates post" [
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   status: string@status-completer-3 # The lifecycle status of this update.
   description: string # A description of the update.
-  --notifySubscribers: string@bool-completer # Whether to notify status page subscribers about this update. (default: false)
+  --notifySubscribers: oneof<nothing, bool> # Whether to notify status page subscribers about this update. (default: false)
 ]: any -> record<id: string, maintenanceWindowId: float, maintenanceId: string, status: string, description: string, notifySubscribers: bool, created_at: string, previousStatus: string, previousStartsAt: string, previousEndsAt: string, dateAdjustments: record<startsAt: string, endsAt: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3912,7 +3911,7 @@ export def "private-locations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --versions: string@bool-completer # default: false
+  --versions: oneof<nothing, bool> # default: false
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> table<id: string, name: string, slugName: string, icon: string, created_at: string, updated_at: string, keys: list<record>, proxyUrl: string, lastSeen: string, agentCount: float, minAgentVersion: string, runningAgents: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4133,7 +4132,7 @@ export def "reporting get" [
   --qp-to: string # Custom end time of reporting window in unix timestamp format. Setting a custom "to" timestamp overrides the use of any "quickRange". (format: date)
   --quickRange: string@quickRange-completer-2 # Preset reporting windows are used for quickly generating report on commonly used windows. Can be overridden by using a custom "to" and "from" timestamp. (default: last24Hrs)
   --filterByTags: list # Use tags to filter the checks you want to see in your report. (e.g. [production])
-  --deactivated: string@bool-completer # Filter checks by activated status. When set to true, only deactivated checks are returned. When set to false, only activated checks are returned. When omitted, all checks are returned. (nullable)
+  --deactivated: oneof<nothing, bool> # Filter checks by activated status. When set to true, only deactivated checks are returned. When set to false, only activated checks are returned. When omitted, all checks are returned. (nullable)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> table<name: string, checkId: string, checkType: string, deactivated: bool, tags: list<string>, aggregate: record<successRatio: float, avg: float, p95: float, p99: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4819,9 +4818,9 @@ export def "status-pages-incidents-incident-updates post" [
   --id: string
   description: string
   --status: string@status-completer-4
-  --publicIncidentUpdateDate: string # format: date-time, default: 2026-06-11T21:04:37.568Z
+  --publicIncidentUpdateDate: string # format: date-time, default: 2026-06-12T09:39:54.993Z
   --created-at: string # format: date
-  --notifySubscribers: string@bool-completer # default: false
+  --notifySubscribers: oneof<nothing, bool> # default: false
 ]: any -> record<id: string, description: string, status: string, publicIncidentUpdateDate: string, created_at: string, notifySubscribers: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4906,9 +4905,9 @@ export def "status-pages-incidents-incident-updates put" [
   --id: string
   description: string
   --status: string@status-completer-4
-  --publicIncidentUpdateDate: string # format: date-time, default: 2026-06-11T21:04:37.568Z
+  --publicIncidentUpdateDate: string # format: date-time, default: 2026-06-12T09:39:54.993Z
   --created-at: string # format: date
-  --notifySubscribers: string@bool-completer # default: false
+  --notifySubscribers: oneof<nothing, bool> # default: false
 ]: any -> record<id: string, description: string, status: string, publicIncidentUpdateDate: string, created_at: string, notifySubscribers: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4937,7 +4936,7 @@ export def "status-pages-services list" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # default: 20
   --nextId: string
-  --paginated: string@bool-completer # default: true
+  --paginated: oneof<nothing, bool> # default: true
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<length: int, entries: table<name: string, id: string, accountId: string, created_at: string, updated_at: string>, nextId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5320,8 +5319,8 @@ export def "test-session-error-groups patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
-  --archiveForEver: string@bool-completer
-  --archivedUntilNextEvent: string@bool-completer
+  --archiveForEver: oneof<nothing, bool>
+  --archivedUntilNextEvent: oneof<nothing, bool>
 ]: any -> record<id: string, projectId: string, environments: list<string>, errorHash: string, rawErrorMessage: string, cleanedErrorMessage: string, firstSeen: string, lastSeen: string, archivedUntilNextEvent: bool, pwtMetadata: table<projectName: string, specId: string, testFile: string, testTitle: string, suitePath: list>, rootCauseAnalyses: table<id: string, created_at: string, analysis: any, provider: string, model: string, durationMs: float, userContext: any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5355,7 +5354,7 @@ export def "test-sessions list" [
   --branches: list # Filter by Git branch name. (default: [])
   --users: list # Filter by commit owner or invoking user ID. (default: [])
   --providers: list # Filter by test session provider. (default: [])
-  --noUsers: string@bool-completer # Include sessions with no commit owner and no invoking user. (default: false)
+  --noUsers: oneof<nothing, bool> # Include sessions with no commit owner and no invoking user. (default: false)
   --nextId: string # Opaque cursor returned from a previous list response.
   --textSearch: string # Search test session text fields.
   --errorGroupId: string # Filter by test-session error group ID. (nullable)
@@ -5392,7 +5391,7 @@ export def "test-sessions-trigger post" [
   --target: record # shape: {matchTags?: list, checkId?: list, allowDeactivated?: bool}
   --environmentVariables: list
   --retryStrategy: any
-  --refreshCache: string@bool-completer # Skip existing caches and install dependencies from scratch. (default: false)
+  --refreshCache: oneof<nothing, bool> # Skip existing caches and install dependencies from scratch. (default: false)
   --metadata: record # shape: {environment?: string, repoUrl?: string, commitId?: string, commitOwner?: string, commitMessage?: string, branchName?: string}
 ]: any -> record<testSessionId: string, testSessionLink: string, name: string, status: string, errorGroupIds: list<string>, startedAt: string, stoppedAt: string, timeElapsed: float, metadata: record<environment: string, repoUrl: string, commitId: string, commitOwner: string, commitMessage: string, branchName: string>, results: table<testSessionResultId: string, testSessionResultLink: string, checkId: string, checkType: string, name: string, runLocation: string, errorGroupIds: list, resultType: string, status: string, hasErrors: bool, hasFailures: bool, isDegraded: bool, aborted: bool>> {
   let input = $in
@@ -5748,8 +5747,8 @@ export def "variables post" [
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   key: string # The key of the environment variable (this value cannot be changed). (e.g. API_KEY)
   value: string
-  --locked: string@bool-completer # Used only in the UI to hide the value like a password. (default: false)
-  --secret: string@bool-completer # Set an environment variable as secret. Once set, its value cannot be unlocked. (default: false)
+  --locked: oneof<nothing, bool> # Used only in the UI to hide the value like a password. (default: false)
+  --secret: oneof<nothing, bool> # Set an environment variable as secret. Once set, its value cannot be unlocked. (default: false)
 ]: any -> record<key: string, value: string, locked: bool, secret: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5830,8 +5829,8 @@ export def "variables put" [
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --body-key: string # The key of the environment variable (this value cannot be changed). (e.g. API_KEY)
   value: string # The value of the environment variable. (e.g. bAxD7biGCZL6K60Q)
-  --locked: string@bool-completer # Used only in the UI to hide the value like a password. (default: false)
-  --secret: string@bool-completer # Set an environment variable as secret. Once set, its value cannot be unlocked. (default: false)
+  --locked: oneof<nothing, bool> # Used only in the UI to hide the value like a password. (default: false)
+  --secret: oneof<nothing, bool> # Set an environment variable as secret. Once set, its value cannot be unlocked. (default: false)
 ]: any -> record<key: string, value: string, locked: bool, secret: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5862,11 +5861,11 @@ export def "check-groups post-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoAssignAlerts: string@bool-completer # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
+  --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check group. (e.g. Check group)
-  --activated: string@bool-completer # Determines if the checks in the group are running or not. (default: true)
-  --muted: string@bool-completer # Determines if any notifications will be send out when a check in this group fails and/or recovers. (default: false)
+  --activated: oneof<nothing, bool> # Determines if the checks in the group are running or not. (default: true)
+  --muted: oneof<nothing, bool> # Determines if any notifications will be send out when a check in this group fails and/or recovers. (default: false)
   --tags: list # Tags for organizing and filtering checks. (e.g. [production])
   --locations: list # An array of one or more data center locations where to run the checks. (e.g. [us-east-1, eu-central-1])
   --concurrency: float # Determines how many checks are invoked concurrently when triggering a check group from CI/CD or through the API. (default: 3)
@@ -5880,11 +5879,11 @@ export def "check-groups post-1" [
   --localSetupScript: string # A valid piece of Node.js code to run in the setup phase of an API check in this group. (nullable)
   --localTearDownScript: string # A valid piece of Node.js code to run in the teardown phase of an API check in this group. (nullable)
   --privateLocations: list # An array of one or more private locations where to run the checks. (nullable, e.g. [data-center-eu])
-  --runParallel: string@bool-completer # When true, the checks in the group will run in parallel in all selected locations. (nullable)
+  --runParallel: oneof<nothing, bool> # When true, the checks in the group will run in parallel in all selected locations. (nullable)
   --alertSettings: record # nullable — shape: {escalationType?: "RUN_BASED"|"TIME_BASED", runBasedEscalation?: record, timeBasedEscalation?: record, reminders?: record, parallelRunFailureThreshold?: record}
   --retryStrategy: any # Either a retry strategy object or the literal string "FALLBACK". (default: FALLBACK)
-  --useGlobalAlertSettings: string@bool-completer # When true, the checks in the group will use the alert settings that are configured on the account (nullable)
-  --doubleCheck: string@bool-completer # default: false
+  --useGlobalAlertSettings: oneof<nothing, bool> # When true, the checks in the group will use the alert settings that are configured on the account (nullable)
+  --doubleCheck: oneof<nothing, bool> # default: false
 ]: any -> record<id: float, name: string, activated: bool, muted: bool, tags: list<string>, locations: list<string>, concurrency: float, apiCheckDefaults: record<url: string, headers: list<record>, queryParameters: list<record>, assertions: list<record>, basicAuth: record<username: string, password: string>>, browserCheckDefaults: string, environmentVariables: table<key: string, value: string, locked: bool, secret: bool>, doubleCheck: bool, useGlobalAlertSettings: bool, alertSettings: record<escalationType: string, reminders: record<amount: float, interval: float>, sslCertificates: record<enabled: bool, alertThreshold: int>, runBasedEscalation: record<failedRunThreshold: float>, timeBasedEscalation: record<minutesFailingThreshold: float>, parallelRunFailureThreshold: record<enabled: bool, percentage: float>>, alertChannelSubscriptions: table<alertChannelId: float, activated: bool>, setupSnippetId: float, tearDownSnippetId: float, localSetupScript: string, localTearDownScript: string, runtimeId: string, privateLocations: list<string>, retryStrategy: any, created_at: string, updated_at: string, runParallel: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5917,11 +5916,11 @@ export def "check-groups put-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --autoAssignAlerts: string@bool-completer # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
+  --autoAssignAlerts: oneof<nothing, bool> # Determines whether a new check will automatically be added as a subscriber to all existing alert channels when it gets created. (default: true)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   name: string # The name of the check group. (e.g. Check group)
-  --activated: string@bool-completer # Determines if the checks in the group are running or not. (default: true)
-  --muted: string@bool-completer # Determines if any notifications will be send out when a check in this group fails and/or recovers. (default: false)
+  --activated: oneof<nothing, bool> # Determines if the checks in the group are running or not. (default: true)
+  --muted: oneof<nothing, bool> # Determines if any notifications will be send out when a check in this group fails and/or recovers. (default: false)
   --tags: list # Tags for organizing and filtering checks. (e.g. [production])
   --locations: list # An array of one or more data center locations where to run the checks. (e.g. [us-east-1, eu-central-1])
   --concurrency: float # Determines how many checks are invoked concurrently when triggering a check group from CI/CD or through the API. (default: 3)
@@ -5935,11 +5934,11 @@ export def "check-groups put-by-id-1" [
   --localSetupScript: string # A valid piece of Node.js code to run in the setup phase of an API check in this group. (nullable)
   --localTearDownScript: string # A valid piece of Node.js code to run in the teardown phase of an API check in this group. (nullable)
   --privateLocations: list # An array of one or more private locations where to run the checks. (nullable, e.g. [data-center-eu])
-  --runParallel: string@bool-completer # When true, the checks in the group will run in parallel in all selected locations. (nullable)
+  --runParallel: oneof<nothing, bool> # When true, the checks in the group will run in parallel in all selected locations. (nullable)
   --alertSettings: record # nullable — shape: {escalationType?: "RUN_BASED"|"TIME_BASED", runBasedEscalation?: record, timeBasedEscalation?: record, reminders?: record, parallelRunFailureThreshold?: record}
   --retryStrategy: any # Either a retry strategy object or the literal string "FALLBACK". (default: FALLBACK)
-  --useGlobalAlertSettings: string@bool-completer # When true, the checks in the group will use the alert settings that are configured on the account (nullable)
-  --doubleCheck: string@bool-completer # default: false
+  --useGlobalAlertSettings: oneof<nothing, bool> # When true, the checks in the group will use the alert settings that are configured on the account (nullable)
+  --doubleCheck: oneof<nothing, bool> # default: false
 ]: any -> record<id: float, name: string, activated: bool, muted: bool, tags: list<string>, locations: list<string>, concurrency: float, apiCheckDefaults: record<url: string, headers: list<record>, queryParameters: list<record>, assertions: list<record>, basicAuth: record<username: string, password: string>>, browserCheckDefaults: string, environmentVariables: table<key: string, value: string, locked: bool, secret: bool>, doubleCheck: bool, useGlobalAlertSettings: bool, alertSettings: record<escalationType: string, reminders: record<amount: float, interval: float>, sslCertificates: record<enabled: bool, alertThreshold: int>, runBasedEscalation: record<failedRunThreshold: float>, timeBasedEscalation: record<minutesFailingThreshold: float>, parallelRunFailureThreshold: record<enabled: bool, percentage: float>>, alertChannelSubscriptions: table<alertChannelId: float, activated: bool>, setupSnippetId: float, tearDownSnippetId: float, localSetupScript: string, localTearDownScript: string, runtimeId: string, privateLocations: list<string>, retryStrategy: any, created_at: string, updated_at: string, runParallel: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5974,7 +5973,7 @@ export def "check-results get-by-checkId-1" [
   --qp-to: string # Optional. Select records up to this UNIX timestamp (< date). (format: date)
   --location: string@location-completer # Provide a data center location, e.g. "eu-west-1" to filter by location
   --checkType: string@checkType-completer # The type of the check
-  --hasFailures: string@bool-completer # Check result has one or more failures
+  --hasFailures: oneof<nothing, bool> # Check result has one or more failures
   --resultType: string@resultType-completer # The check result type (FINAL,ATTEMPT,ALL) (default: FINAL)
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<length: float, entries: table<id: string, name: string, checkId: string, hasFailures: bool, hasErrors: bool, isDegraded: bool, isCancelled: bool, overMaxResponseTime: bool, runLocation: string, startedAt: string, stoppedAt: string, created_at: string, responseTime: float, apiCheckResult: record, browserCheckResult: record, multiStepCheckResult: record, agenticCheckResult: record, playwrightCheckResult: record, checkRunId: float, attempts: float, resultType: string, sequenceId: string, traceId: string, errorGroupIds: list>, nextId: string> {
@@ -6004,7 +6003,7 @@ export def "check-sessions-trigger post-1" [
   --allow-errors(-e) # Return full response without error handling
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
   --target: record # Optional filters selecting which checks to trigger. — shape: {matchTags?: list, checkId?: list}
-  --refreshCache: string@bool-completer # Refresh the selected checks cache before triggering the sessions. (default: false)
+  --refreshCache: oneof<nothing, bool> # Refresh the selected checks cache before triggering the sessions. (default: false)
 ]: any -> record<sessions: table<checkSessionId: string, checkSessionLink: string, checkId: string, checkType: string, name: string, status: string, startedAt: string, stoppedAt: string, timeElapsed: float, runLocations: list, runSource: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

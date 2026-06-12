@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.resend.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -408,8 +407,8 @@ export def "domains post" [
   name: string # The name of the domain you want to create.
   --region: string@region-completer # The region where emails will be sent from. Possible values are us-east-1 | eu-west-1 | sa-east-1 | ap-northeast-1 (default: us-east-1)
   --custom-return-path: string # For advanced use cases, choose a subdomain for the Return-Path address. Defaults to 'send' (i.e., send.yourdomain.tld).
-  --open-tracking: string@bool-completer # Track the open rate of each email.
-  --click-tracking: string@bool-completer # Track clicks within the body of each HTML email.
+  --open-tracking: oneof<nothing, bool> # Track the open rate of each email.
+  --click-tracking: oneof<nothing, bool> # Track clicks within the body of each HTML email.
   --tls: string@tls-completer # TLS mode. Opportunistic attempts secure connection but falls back to unencrypted. Enforced requires TLS or email won't be sent. (default: opportunistic)
   --capabilities: record # Configure the domain capabilities for sending and receiving emails. At least one capability must be enabled. — shape: {sending?: "enabled"|"disabled", receiving?: "enabled"|"disabled"}
   --tracking-subdomain: string # The subdomain to use for click and open tracking.
@@ -483,8 +482,8 @@ export def "domains patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --open-tracking: string@bool-completer # Track the open rate of each email.
-  --click-tracking: string@bool-completer # Track clicks within the body of each HTML email.
+  --open-tracking: oneof<nothing, bool> # Track the open rate of each email.
+  --click-tracking: oneof<nothing, bool> # Track clicks within the body of each HTML email.
   --tls: string # enforced | opportunistic. (default: opportunistic)
   --capabilities: record # Configure the domain capabilities for sending and receiving emails. At least one capability must be enabled. — shape: {sending?: "enabled"|"disabled", receiving?: "enabled"|"disabled"}
   --tracking-subdomain: string # The subdomain to use for click and open tracking.
@@ -896,7 +895,7 @@ export def "contacts post" [
   email: string # Email address of the contact. (e.g. steve.wozniak@gmail.com)
   --first-name: string # First name of the contact. (e.g. Steve)
   --last-name: string # Last name of the contact. (e.g. Wozniak)
-  --unsubscribed: string@bool-completer # The Contact's global subscription status. If set to true, the contact will be unsubscribed from all Broadcasts. (e.g. false)
+  --unsubscribed: oneof<nothing, bool> # The Contact's global subscription status. If set to true, the contact will be unsubscribed from all Broadcasts. (e.g. false)
   --properties: record # A map of custom property keys and values to create.
   --segments: list # Array of segment IDs to add the contact to.
   --topics: list # Array of topic subscriptions for the contact. — item shape: {id?: string, subscription?: "opt_in"|"opt_out"}
@@ -1048,7 +1047,7 @@ export def "contacts patch" [
   --email: string # Email address of the contact. (e.g. steve.wozniak@gmail.com)
   --first-name: string # First name of the contact. (e.g. Steve)
   --last-name: string # Last name of the contact. (e.g. Wozniak)
-  --unsubscribed: string@bool-completer # The Contact's global subscription status. If set to true, the contact will be unsubscribed from all Broadcasts. (e.g. false)
+  --unsubscribed: oneof<nothing, bool> # The Contact's global subscription status. If set to true, the contact will be unsubscribed from all Broadcasts. (e.g. false)
   --properties: record # A map of custom property keys and values to update.
 ]: any -> record<object: string, id: string> {
   let input = $in
@@ -1105,7 +1104,7 @@ export def "broadcasts post" [
   --html: string # The HTML version of the message.
   --text: string # The plain text version of the message.
   --topic-id: string # The topic ID that the broadcast will be scoped to.
-  --send: string@bool-completer # Whether to send the broadcast immediately or keep it as a draft.
+  --send: oneof<nothing, bool> # Whether to send the broadcast immediately or keep it as a draft.
   --scheduled-at: string # Schedule time to send the broadcast. Can only be used if `send` is true.
 ]: any -> record<id: string, object: string> {
   let input = $in

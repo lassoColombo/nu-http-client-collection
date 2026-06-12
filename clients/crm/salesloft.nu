@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.salesloft.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -106,8 +105,8 @@ export def "account-stagesjson get" [
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -156,8 +155,8 @@ export def "account-tiersjson get" [
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -210,7 +209,7 @@ export def "account-upsertsjson post" [
   --crm-id-type: string # The CRM that the provided crm_id is for. Must be one of: salesforce
   --custom-fields: list # Custom fields are defined by the user's team. Only fields with values are presented in the API.
   --description: string # Description
-  --do-not-contact: string@bool-completer # Whether this company can not be contacted. Values are either true or false. Setting this to true will remove all associated people from all active communications
+  --do-not-contact: oneof<nothing, bool> # Whether this company can not be contacted. Values are either true or false. Setting this to true will remove all associated people from all active communications
   domain: string # Website domain, not a fully qualified URI
   --founded: string # Date or year of founding
   --id: int # ID of the account to update. Used if the upsert_key=id. When id and another upsert_key are provided, the request will fail if the upsert record id and id parameter don't match.
@@ -260,12 +259,12 @@ export def "accountsjson get" [
   --updated-at: list # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
   --domain: string # Domain of the accounts to fetch. Domains are unique and lowercase
   --website: list # Filters accounts by website. Multiple websites can be applied. An additional value of "_is_null" can be passed to filter accounts that do not have a website.
-  --archived: string@bool-completer # Filters accounts by archived_at status. Returns only accounts where archived_at is not null if this field is true. Returns only accounts where archived_at is null if this field is false. Do not pass this parameter to return both archived and unarchived accounts. This filter is not applied if any value other than "true" or "false" is passed.
+  --archived: oneof<nothing, bool> # Filters accounts by archived_at status. Returns only accounts where archived_at is not null if this field is true. Returns only accounts where archived_at is null if this field is false. Do not pass this parameter to return both archived and unarchived accounts. This filter is not applied if any value other than "true" or "false" is passed.
   --name: list # Names of accounts to fetch. Name matches are exact and case sensitive. Multiple names can be fetched.
   --account-stage-id: list # Filters accounts by account_stage_id. Multiple account_stage_ids can be applied. An additional value of "_is_null" can be passed to filter accounts that do not have account_stage_id
   --account-tier-id: list # Filters accounts by account_tier_id. Multiple account tier ids can be applied
   --owner-id: list # Filters accounts by owner_id. Multiple owner_ids can be applied. An additional value of "_is_null" can be passed to filter accounts that are unowned
-  --owner-is-active: string@bool-completer # Filters accounts by whether the owner is active or not.
+  --owner-is-active: oneof<nothing, bool> # Filters accounts by whether the owner is active or not.
   --last-contacted: record # Equality filters that are applied to the last_contacted field. A single filter can be used by itself or combined with other filters to create a range. Additional values of "_is_null" or "_is_not_null" can be passed to filter records that either have no timestamp value or any timestamp value. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
   --custom-fields: record # Filters by accounts matching all given custom fields. The custom field names are case-sensitive, but the provided values are case-insensitive. Example: v2/accounts?custom_fields[custom_field_name]=custom_field_value
   --industry: list # Filters accounts by industry by exact match. Supports partial matching
@@ -279,8 +278,8 @@ export def "accountsjson get" [
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -312,7 +311,7 @@ export def "accountsjson post" [
   --crm-id-type: string # The CRM that the provided crm_id is for. Must be one of: salesforce
   --custom-fields: list # Custom fields are defined by the user's team. Only fields with values are presented in the API.
   --description: string # Description
-  --do-not-contact: string@bool-completer # Whether this company can not be contacted. Values are either true or false. Setting this to true will remove all associated people from all active communications
+  --do-not-contact: oneof<nothing, bool> # Whether this company can not be contacted. Values are either true or false. Setting this to true will remove all associated people from all active communications
   domain: string # Website domain, not a fully qualified URI
   --founded: string # Date or year of founding
   --industry: string # Industry
@@ -396,7 +395,7 @@ export def "accounts put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --account-tier-id: int # ID of the Account Tier for this Account
-  --archived: string@bool-completer # Whether this Account should be archived or not. Setting this to true sets archived_at to the current time if it's not already set. Setting this to false will set archived_at to null
+  --archived: oneof<nothing, bool> # Whether this Account should be archived or not. Setting this to true sets archived_at to the current time if it's not already set. Setting this to false will set archived_at to null
   --city: string # City
   --company-stage-id: int # ID of the CompanyStage assigned to this Account
   --company-type: string # Type of the Account's company
@@ -406,7 +405,7 @@ export def "accounts put" [
   --crm-id-type: string # The CRM that the provided crm_id is for. Must be one of: salesforce
   --custom-fields: list # Custom fields are defined by the user's team. Only fields with values are presented in the API.
   --description: string # Description
-  --do-not-contact: string@bool-completer # Whether this company can not be contacted. Values are either true or false. Setting this to true will remove all associated people from all active communications
+  --do-not-contact: oneof<nothing, bool> # Whether this company can not be contacted. Values are either true or false. Setting this to true will remove all associated people from all active communications
   domain: string # Website domain, not a fully qualified URI
   --founded: string # Date or year of founding
   --industry: string # Industry
@@ -451,8 +450,8 @@ export def "action-details-call-instructionsjson get" [
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -508,8 +507,8 @@ export def "actionsjson get" [
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -588,8 +587,8 @@ export def "activities-callsjson get" [
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -667,14 +666,14 @@ export def "activities-emailsjson get" [
   --allow-errors(-e) # Return full response without error handling
   --ids: list # IDs of emails to fetch. If a record can't be found, that record won't be returned and your request will be successful
   --updated-at: list # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
-  --bounced: string@bool-completer # Filters emails by whether they have bounced or not
+  --bounced: oneof<nothing, bool> # Filters emails by whether they have bounced or not
   --crm-activity-id: list # Filters emails by crm_activity_id. Multiple crm activty ids can be applied
   --action-id: list # Filters emails by action_id. Multiple action ids can be applied
   --user-id: list # Filters emails by user_id. Multiple User ids can be applied
   --status: list # Filters emails by status. Multiple status can be applied, possible values are sent, sent_from_gmail, sent_from_external, pending, pending_reply_check, scheduled, sending, delivering, failed, cancelled, pending_through_gmail, pending_through_external
   --cadence-id: list # Filters emails by cadence. Multiple cadence ids can be applied
   --step-id: list # Filters emails by step. Multiple step ids can be applied
-  --one-off: string@bool-completer # Filters emails by one-off only
+  --one-off: oneof<nothing, bool> # Filters emails by one-off only
   --scoped-fields: list # Specify explicit scoped fields desired on the Email Resource.
   --person-id: list # Filters emails by person_id. Multiple person ids can be applied
   --email-addresses: list # Filters emails by recipient email address. Multiple emails can be applied.
@@ -684,8 +683,8 @@ export def "activities-emailsjson get" [
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -730,13 +729,13 @@ export def "activity-histories get" [
   --allow-errors(-e) # Return full response without error handling
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --sort-by: string # Key to sort on, must be one of: occurred_at, updated_at. Defaults to occurred_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --type: string # Filter by the type of activity. Must be one of: added_to_cadence, completed_action, call, requested_email, sent_email, received_email, email_reply, note, success, dnc_event, residency_change, meeting, meeting_held, message_conversation, task, voicemail, opportunity_stage_change, opportunity_amount_change, opportunity_close_date_change. Can be provided as an array, or as an object of type[resource_type][]=type
   --resource: string # For internal use only. This field does not comply with our backwards compatibility policies. This filter is for authenticated users of Salesloft only and will not work for OAuth Applications. Filter by the {resource_type, resource_id} of activity. Provide this in the format resource[]=person,1234
   --occurred-at: record # Equality filters that are applied to the occurred_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"keys":[{"description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"gt","type":"iso8601 string"},{"description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"gte","type":"iso8601 string"},{"description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"lt","type":"iso8601 string"},{"description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"lte","type":"iso8601 string"}],"type":"object"}
-  --pinned: string@bool-completer # Filter by the pinned status of activity. Must be 'true' or 'false'
+  --pinned: oneof<nothing, bool> # Filter by the pinned status of activity. Must be 'true' or 'false'
   --resource-type: string # Filter by the resource type. A resource is a Salesloft object that the activity is attributed to. A valid resource types must be one of person, account, crm_opportunity. Can be provided as an array
   --resource-id: list # Filter by the resource id. "resource_type" filter is required to use this filter.
   --updated-at: record # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"keys":[{"description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"gt","type":"iso8601 string"},{"description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"gte","type":"iso8601 string"},{"description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"lt","type":"iso8601 string"},{"description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"lte","type":"iso8601 string"}],"type":"object"}
@@ -909,7 +908,7 @@ export def "bulk-jobs put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # Name for your bulk job
-  --ready-to-execute: string@bool-completer # Whether the job is ready to be executed. Must be true or false.
+  --ready-to-execute: oneof<nothing, bool> # Whether the job is ready to be executed. Must be true or false.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -984,13 +983,13 @@ export def "cadence-membershipsjson get" [
   --person-id: int # ID of the person to find cadence memberships for
   --cadence-id: int # ID of the cadence to find cadence memberships for
   --updated-at: list # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
-  --currently-on-cadence: string@bool-completer # If true, return only cadence memberships for people currently on cadences.  If false, return cadence memberships for people who have been removed from or have completed a cadence.
+  --currently-on-cadence: oneof<nothing, bool> # If true, return only cadence memberships for people currently on cadences.  If false, return cadence memberships for people who have been removed from or have completed a cadence.
   --sort-by: string # Key to sort on, must be one of: added_at, updated_at. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1081,19 +1080,19 @@ export def "cadencesjson get" [
   --allow-errors(-e) # Return full response without error handling
   --ids: list # IDs of cadences to fetch. If a record can't be found, that record won't be returned and your request will be successful
   --updated-at: list # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
-  --team-cadence: string@bool-completer # Filters cadences by whether they are a team cadence or not
-  --shared: string@bool-completer # Filters cadences by whether they are shared
+  --team-cadence: oneof<nothing, bool> # Filters cadences by whether they are a team cadence or not
+  --shared: oneof<nothing, bool> # Filters cadences by whether they are shared
   --owned-by-guid: list # Filters cadences by the owner's guid. Multiple owner guids can be applied
-  --people-addable: string@bool-completer # Filters cadences by whether they are able to have people added to them
+  --people-addable: oneof<nothing, bool> # Filters cadences by whether they are able to have people added to them
   --name: list # Filters cadences by name
   --group-ids: string # Filters by group ids. Also supports group ids passed in as a JSON array string
-  --archived: string@bool-completer # Filters by whether the Cadences have been archived. Excluding this field will result in both archived and unarchived Cadences to return.
+  --archived: oneof<nothing, bool> # Filters by whether the Cadences have been archived. Excluding this field will result in both archived and unarchived Cadences to return.
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at, name. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1138,7 +1137,7 @@ export def "calendar-events get" [
   --allow-errors(-e) # Return full response without error handling
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --sort-by: string # Key to sort on, must be one of: start_time. Defaults to start_time
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --start-time: string # Lower bound (inclusive) for a calendar event's end time to filter by. Must be in ISO 8601 format.  Example: `2022-02-14T10:12:59+00:00`.
@@ -1165,7 +1164,7 @@ export def "calendar-events-upsert post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --all-day: string@bool-completer # Should be set to `true` for all day calendar events.
+  --all-day: oneof<nothing, bool> # Should be set to `true` for all day calendar events.
   --attendees: record #   List of attendees of the calendar event.   Example:   ```     {       ...       "attendees": [         {           "name": "Alice",           "email": "alice@example.com",           "status": "accepted",           "organizer": true         },         {           "name": "Bob",           "email": "bob@example.com",           "status": "needsAction",           "organizer": false         }       ]     }   ```   `name`: full name of the attendee    `email`: email address of the attendee    `status`: one of the following - needsAction, accepted, tentative, declined    `organizer`: whether the attendee is the organizer of the calendar event
   calendar_id: string #   Calendar ID of the calendar event owner.   For the External Calendar connection use `external_{salesloft_user_guid}` format.   Example: `external_00210d1a-df8a-459f-af75-89b953b618b0`.
   --canceled-at: string #   Cancellation time of the calendar event, as a combined date-time value in the ISO 8601 format with a time zone offset.   Example: `2022-02-14T10:12:59+00:00`.
@@ -1175,7 +1174,7 @@ export def "calendar-events-upsert post" [
   id: string #   Id of the calendar event, different for each occurrence in a recurring series.    Used as an upsert key.
   --location: string # Location of the calendar event as free-form text.
   --organizer: string #   Email address of the organizer
-  --recurring: string@bool-completer # Should be set to `true` if this is one of recurring series calendar event.
+  --recurring: oneof<nothing, bool> # Should be set to `true` if this is one of recurring series calendar event.
   start_time: string #   Start time of the calendar event, as a combined date-time value in the ISO 8601 format with a time zone offset.   Example: `2022-02-14T10:12:59+00:00`.  (format: date)
   --status: string #   Status of the calendar event. Depending on the status, the calendar event will or will not impact user's availability.   Possible values: `confirmed`, `tentative`, `cancelled`.   Example: `confirmed`.
   --title: string # Title of the calendar event
@@ -1203,7 +1202,7 @@ export def "call-data-recordsjson get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ids: list # IDs of call data records to fetch. If a record can't be found, that record won't be returned and your request will be successful
-  --has-call: string@bool-completer # Return only call data records which have or do not have a call logged for them
+  --has-call: oneof<nothing, bool> # Return only call data records which have or do not have a call logged for them
   --created-at: list # Equality filters that are applied to the created_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
   --updated-at: list # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
   --user-guid: list # Filters list to only include guids
@@ -1212,8 +1211,8 @@ export def "call-data-recordsjson get" [
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1260,8 +1259,8 @@ export def "call-dispositionsjson get" [
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to ASC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1288,8 +1287,8 @@ export def "call-sentimentsjson get" [
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to ASC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1347,8 +1346,8 @@ export def "crm-activitiesjson get" [
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1396,8 +1395,8 @@ export def "crm-activity-fieldsjson get" [
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to ASC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1425,8 +1424,8 @@ export def "crm-usersjson get" [
   --user-guid: list # Filters crm users by user guids
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
   --sort-by: string # Key to sort on, must be one of: id, updated_at. Defaults to id
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
 ]: nothing -> any {
@@ -1456,8 +1455,8 @@ export def "custom-fieldsjson get" [
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1576,8 +1575,8 @@ export def "email-template-attachmentsjson get" [
   --email-template-id: list # Filters email template attachments by email template IDs
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1601,21 +1600,21 @@ export def "email-templatesjson get" [
   --allow-errors(-e) # Return full response without error handling
   --ids: list # IDs of email templates to fetch. If a record can't be found, that record won't be returned and your request will be successful
   --updated-at: list # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
-  --linked-to-team-template: string@bool-completer # Filters email templates by whether they are linked to a team template or not
+  --linked-to-team-template: oneof<nothing, bool> # Filters email templates by whether they are linked to a team template or not
   --search: string # Filters email templates by title or subject
   --tag-ids: list # Filters email templates by tags applied to the template by tag ID, not to exceed 100 IDs
   --tag: list # Filters email templates by tags applied to the template, not to exceed 100 tags
-  --filter-by-owner: string@bool-completer # Filters email templates by current authenticated user
+  --filter-by-owner: oneof<nothing, bool> # Filters email templates by current authenticated user
   --group-id: list # Filters email templates by groups applied to the template by group ID. Not to exceed 500 IDs. Returns templates that are assigned to any of the group ids.
-  --include-cadence-templates: string@bool-completer # Filters email templates based on whether or not the template has been used on a cadence
-  --include-archived-templates: string@bool-completer # Filters email templates to include archived templates or not
+  --include-cadence-templates: oneof<nothing, bool> # Filters email templates based on whether or not the template has been used on a cadence
+  --include-archived-templates: oneof<nothing, bool> # Filters email templates to include archived templates or not
   --cadence-id: list # Filters email templates to those belonging to the cadence. Not to exceed 100 IDs. If a record can't be found, that record won't be returned and your request will be successful
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at, last_used_at. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1638,7 +1637,7 @@ export def "email-templates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-signature: string@bool-completer # Optionally will return the templates with the current user's email signature
+  --include-signature: oneof<nothing, bool> # Optionally will return the templates with the current user's email signature
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1736,8 +1735,8 @@ export def "importsjson get" [
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1906,16 +1905,16 @@ export def "meetingsjson get" [
   --event-ids: list # Filters meetings by event IDs
   --i-cal-uids: list # Filters meetings by UIDs provided by calendar provider
   --task-ids: list # Filters meetings by task_id. Multiple task ids can be applied
-  --include-meetings-settings: string@bool-completer # Flag to indicate whether to include owned_by_meetings_settings and booked_by_meetings_settings objects
+  --include-meetings-settings: oneof<nothing, bool> # Flag to indicate whether to include owned_by_meetings_settings and booked_by_meetings_settings objects
   --start-time: list # Equality filters that are applied to the start_time field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
   --user-guids: list # Filters meetings by user_guid. Multiple user guids can be applied
-  --show-deleted: string@bool-completer # Whether to include deleted events in the result
+  --show-deleted: oneof<nothing, bool> # Whether to include deleted events in the result
   --sort-by: string # Key to sort on, must be one of: start_time, created_at, updated_at. Defaults to start_time
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1942,8 +1941,8 @@ export def "meetings-settings-searchesjson post" [
   --calendar-type: string # Filters meeting settings by calendar type
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1966,24 +1965,24 @@ export def "meetings-settings put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-booking-on-behalf: string@bool-completer # Allow other team members to schedule on you behalf.
-  --allow-booking-overtime: string@bool-completer # Allow team members to insert available time outside your working hours.
-  --allow-event-overlap: string@bool-completer # Allow team members to double book events on your calendar.
+  --allow-booking-on-behalf: oneof<nothing, bool> # Allow other team members to schedule on you behalf.
+  --allow-booking-overtime: oneof<nothing, bool> # Allow team members to insert available time outside your working hours.
+  --allow-event-overlap: oneof<nothing, bool> # Allow team members to double book events on your calendar.
   --availability-limit: int # The number of days out the user allows a prospect to schedule a meeting
-  --availability-limit-enabled: string@bool-completer # If Availability Limits have been turned on
+  --availability-limit-enabled: oneof<nothing, bool> # If Availability Limits have been turned on
   --buffer-time-duration: int # Default buffer duration in minutes set by a user
   --calendar-type: string # Calendar type
   --default-meeting-length: int # Default meeting length in minutes set by the user
   --description: string # Default description of the meeting
-  --enable-calendar-sync: string@bool-completer # Determines if a user enabled Calendar Sync feature
-  --enable-dynamic-location: string@bool-completer # Determines if location will be filled via third-party service (Zoom, GoToMeeting, etc.)
+  --enable-calendar-sync: oneof<nothing, bool> # Determines if a user enabled Calendar Sync feature
+  --enable-dynamic-location: oneof<nothing, bool> # Determines if location will be filled via third-party service (Zoom, GoToMeeting, etc.)
   --location: string # Default location of the meeting
-  --primary-calendar-connection-failed: string@bool-completer # Determines if the user lost calendar connection
+  --primary-calendar-connection-failed: oneof<nothing, bool> # Determines if the user lost calendar connection
   --primary-calendar-id: string # ID of the primary calendar
   --primary-calendar-name: string # Display name of the primary calendar
-  --schedule-buffer-enabled: string@bool-completer # Determines if meetings are scheduled with a 15 minute buffer between them
+  --schedule-buffer-enabled: oneof<nothing, bool> # Determines if meetings are scheduled with a 15 minute buffer between them
   --schedule-delay: int # The number of hours in advance a user requires someone to a book a meeting with them
-  --share-event-detail: string@bool-completer # Allow team members to see the details of events on your calendar.
+  --share-event-detail: oneof<nothing, bool> # Allow team members to see the details of events on your calendar.
   --time-zone: string # Time zone for current calendar
   --times-available: record # Times available set by a user that can be used to book meetings
   --title: string # Default title of the meeting
@@ -2013,7 +2012,7 @@ export def "meetings put" [
   --allow-errors(-e) # Return full response without error handling
   --event-id: string # Meeting ID from the calendar provider
   --i-cal-uid: string # Meeting unique identifier (iCalUID)
-  --no-show: string@bool-completer # Whether the meeting is a No Show meeting
+  --no-show: oneof<nothing, bool> # Whether the meeting is a No Show meeting
   --status: string # Status of the meeting creation progress. Possible values are: pending, booked, failed, retry
 ]: any -> any {
   let input = $in
@@ -2067,8 +2066,8 @@ export def "notesjson get" [
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2094,7 +2093,7 @@ export def "notesjson post" [
   associated_with_type: string # Case insensitive type of item with which the note is associated.  Value must be one of: person, account
   --call-id: int # ID of the call with which the note is associated. The call cannot already have a note
   content: string # The content of the note
-  --skip-crm-sync: string@bool-completer # Boolean indicating if the CRM sync should be skipped.  No syncing will occur if true
+  --skip-crm-sync: oneof<nothing, bool> # Boolean indicating if the CRM sync should be skipped.  No syncing will occur if true
   --subject: string # The subject of the note's crm activity, defaults to 'Note'
   --user-guid: string # The user to create the note for. Only team admins may create notes on behalf of other users. Defaults to the requesting user
 ]: any -> any {
@@ -2214,8 +2213,8 @@ export def "pending-emailsjson get" [
   --allow-errors(-e) # Return full response without error handling
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2272,30 +2271,30 @@ export def "peoplejson get" [
   --person-stage-id: list # Includes people that have a given person_stage. Multiple person stage ids can be applied. An additional value of "_is_null" can be passed to filter people that do not have a stage set.
   --crm-id: list # Filters people by crm_id. Multiple crm ids can be applied
   --owner-crm-id: list # Filters people by owner_crm_id. Multiple owner_crm_ids can be applied. An additional value of "_is_null" can be passed to filter people that are unowned. A "_not_in" modifier can be used to exclude specific owner_crm_ids. Example: v2/people?owner_crm_id[_not_in]=id
-  --do-not-contact: string@bool-completer # Includes people that have a given do_not_contact property
-  --can-email: string@bool-completer # Includes people that can be emailed given do_not_contact and contact_restrictions property
-  --can-call: string@bool-completer # Includes people that can be called given do_not_contact and contact_restrictions property
-  --can-text: string@bool-completer # Includes people that can be sent a text message given do_not_contact and contact_restrictions property
+  --do-not-contact: oneof<nothing, bool> # Includes people that have a given do_not_contact property
+  --can-email: oneof<nothing, bool> # Includes people that can be emailed given do_not_contact and contact_restrictions property
+  --can-call: oneof<nothing, bool> # Includes people that can be called given do_not_contact and contact_restrictions property
+  --can-text: oneof<nothing, bool> # Includes people that can be sent a text message given do_not_contact and contact_restrictions property
   --account-id: list # Filters people by the account they are linked to. Multiple account ids can be applied
   --custom-fields: record # Filters by people matching all given custom fields. The custom field names are case-sensitive, but the provided values are case-insensitive. Example: v2/people?custom_fields[custom_field_name]=custom_field_value
   --import-id: list # Filters people that were imported by the given import ids. Multiple import ids can be applied. An additional value of "_is_null" can be passed to filter people that were not imported.
   --job-seniority: list # Filters people by job seniorty. Multiple job seniorities can be applied. An additional value of "_is_null" can be passed to filter people do not have a job_seniority.
   --tag-id: list # Filters people by the tag ids applied to the person. Multiple tag ids can be applied.
-  --owner-is-active: string@bool-completer # Filters people by whether the owner is active or not.
+  --owner-is-active: oneof<nothing, bool> # Filters people by whether the owner is active or not.
   --cadence-id: list # Filters people by the cadence that they are currently on. Multiple cadence_ids can be applied. An additional value of "_is_null" can be passed to filter people that are not on a cadence.
   --starred-by-guid: list # Filters people who have been starred by the user guids given.
-  --replied: string@bool-completer # Filters people by whether or not they have replied to an email or not.
-  --bounced: string@bool-completer # Filters people by whether an email that was sent to them bounced or not.
-  --success: string@bool-completer # Filters people by whether or not they have been marked as a success or not.
-  --eu-resident: string@bool-completer # Filters people by whether or not they are marked as an European Union Resident or not.
+  --replied: oneof<nothing, bool> # Filters people by whether or not they have replied to an email or not.
+  --bounced: oneof<nothing, bool> # Filters people by whether an email that was sent to them bounced or not.
+  --success: oneof<nothing, bool> # Filters people by whether or not they have been marked as a success or not.
+  --eu-resident: oneof<nothing, bool> # Filters people by whether or not they are marked as an European Union Resident or not.
   --title: list # Filters people by their title by exact match. Supports partial matching
   --country: list # Filters people by their country by exact match. Supports partial matching
   --state: list # Filters people by their state by exact match. Supports partial matching
   --city: list # Filters people by their city by exact match. Supports partial matching
   --last-contacted: record # Equality filters that are applied to the last_contacted field. A single filter can be used by itself or combined with other filters to create a range. Additional values of "_is_null" or "_is_not_null" can be passed to filter records that either have no timestamp value or any timestamp value. ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
   --created-at: record # Equality filters that are applied to the last_contacted field. A single filter can be used by itself or combined with other filters to create a range.  ---CUSTOM--- {"type":"object","keys":[{"name":"gt","type":"iso8601 string","description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"gte","type":"iso8601 string","description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lt","type":"iso8601 string","description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision."},{"name":"lte","type":"iso8601 string","description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision."}]}
-  --new: string@bool-completer # Filters people by whether or not that person is on a cadence or if they have been contacted in any way.
-  --phone-number: string@bool-completer # Filter people by whether or not they have a phone number or not
+  --new: oneof<nothing, bool> # Filters people by whether or not that person is on a cadence or if they have been contacted in any way.
+  --phone-number: oneof<nothing, bool> # Filter people by whether or not they have a phone number or not
   --locales: list # Filters people by locales. Multiple locales can be applied. An additional value of "Null" can be passed to filter people that do not have a locale.
   --owner-id: list # Filters people by owner_id. Multiple owner_ids can be applied.
   --qp-query: string # For internal use only. This field does not comply with our backwards compatibility policies. This filter is for authenticated users of Salesloft only and will not work for OAuth Applications. Filters people by the string provided. Can search and filter by name, title, industry, email_address and linked account name.
@@ -2303,8 +2302,8 @@ export def "peoplejson get" [
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2327,14 +2326,14 @@ export def "peoplejson post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --account-id: int # ID of the Account to link this person to
-  --autotag-date: string@bool-completer # Whether the date should be added to this person as a tag. Default is false. The tag will be Y-m-d format.
+  --autotag-date: oneof<nothing, bool> # Whether the date should be added to this person as a tag. Default is false. The tag will be Y-m-d format.
   --city: string # City
   --contact-restrictions: list # Specific methods of communication to prevent for this person. This will prevent individual execution of these communication types as well as automatically skip cadence steps of this communication type for this person in SalesLoft. Values currently accepted: call, email, message
   --country: string # Country
   --crm-id: string # Requires Salesforce.  ID of the person in your external CRM. You must provide a crm_id_type if this is included.  Validations will be applied to the crm_id depending on the crm_id_type. A "salesforce" ID must be exactly 18 characters. A "salesforce" ID must be either a Lead (00Q) or Contact (003) object. The type will be validated using the 18 character ID.  This field can only be used if your application or API key has the "person:set_crm_id" scope. 
   --crm-id-type: string # The CRM that the provided crm_id is for. Must be one of: salesforce
   --custom-fields: record # Custom fields are defined by the user's team. Only fields with values are presented in the API.
-  --do-not-contact: string@bool-completer # Whether or not this person has opted out of all communication. Setting this value to true prevents this person from being called, emailed, or added to a cadence in SalesLoft. If this person is currently in a cadence, they will be removed.
+  --do-not-contact: oneof<nothing, bool> # Whether or not this person has opted out of all communication. Setting this value to true prevents this person from being called, emailed, or added to a cadence in SalesLoft. If this person is currently in a cadence, they will be removed.
   --email-address: string # Email address
   --first-name: string # First name
   --home-phone: string # Home phone without formatting
@@ -2434,7 +2433,7 @@ export def "people put" [
   --crm-id: string # Requires Salesforce.  ID of the person in your external CRM. You must provide a crm_id_type if this is included.  Validations will be applied to the crm_id depending on the crm_id_type. A "salesforce" ID must be exactly 18 characters. A "salesforce" ID must be either a Lead (00Q) or Contact (003) object. The type will be validated using the 18 character ID.  This field can only be used if your application or API key has the "person:set_crm_id" scope. 
   --crm-id-type: string # The CRM that the provided crm_id is for. Must be one of: salesforce
   --custom-fields: record # Custom fields are defined by the user's team. Only fields with values are presented in the API.
-  --do-not-contact: string@bool-completer # Whether or not this person has opted out of all communication. Setting this value to true prevents this person from being called, emailed, or added to a cadence in SalesLoft. If this person is currently in a cadence, they will be removed.
+  --do-not-contact: oneof<nothing, bool> # Whether or not this person has opted out of all communication. Setting this value to true prevents this person from being called, emailed, or added to a cadence in SalesLoft. If this person is currently in a cadence, they will be removed.
   --email-address: string # Email address
   --first-name: string # First name
   --home-phone: string # Home phone without formatting
@@ -2489,8 +2488,8 @@ export def "person-stagesjson get" [
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2610,7 +2609,7 @@ export def "person-upsertsjson post" [
   --crm-id: string # Requires Salesforce.  ID of the person in your external CRM. You must provide a crm_id_type if this is included.  Validations will be applied to the crm_id depending on the crm_id_type. A "salesforce" ID must be exactly 18 characters. A "salesforce" ID must be either a Lead (00Q) or Contact (003) object. The type will be validated using the 18 character ID.  This field can only be used if your application or API key has the "person:set_crm_id" scope. 
   --crm-id-type: string # The CRM that the provided crm_id is for. Must be one of: salesforce
   --custom-fields: record # Custom fields are defined by the user's team. Only fields with values are presented in the API.
-  --do-not-contact: string@bool-completer # Whether or not this person has opted out of all communication. Setting this value to true prevents this person from being called, emailed, or added to a cadence in SalesLoft. If this person is currently in a cadence, they will be removed.
+  --do-not-contact: oneof<nothing, bool> # Whether or not this person has opted out of all communication. Setting this value to true prevents this person from being called, emailed, or added to a cadence in SalesLoft. If this person is currently in a cadence, they will be removed.
   --email-address: string # Email address
   --first-name: string # First name
   --home-phone: string # Home phone without formatting
@@ -2667,8 +2666,8 @@ export def "phone-number-assignmentsjson get" [
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2760,8 +2759,8 @@ export def "saved-list-viewsjson get" [
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2783,7 +2782,7 @@ export def "saved-list-viewsjson post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-default: string@bool-completer # Whether the saved list view is the default
+  --is-default: oneof<nothing, bool> # Whether the saved list view is the default
   name: string # The name of the saved list view
   view: string # The type of objects in the saved list view.  Value must be one of: people, companies, or recordings
   --view-params: string # JSON object of list view parameters
@@ -2853,7 +2852,7 @@ export def "saved-list-views put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --is-default: string@bool-completer # Whether the saved list view is the default
+  --is-default: oneof<nothing, bool> # Whether the saved list view is the default
   --name: string # The name of the saved list view
   --view-params: string # JSON object of list view parameters
 ]: any -> any {
@@ -2882,13 +2881,13 @@ export def "stepsjson get" [
   --ids: list # IDs of steps to fetch.
   --cadence-id: int # Filter by cadence ID
   --type: string # Filter by step type
-  --has-due-actions: string@bool-completer # Filter by whether a step has due actions
+  --has-due-actions: oneof<nothing, bool> # Filter by whether a step has due actions
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2938,8 +2937,8 @@ export def "successesjson get" [
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2967,8 +2966,8 @@ export def "tagsjson get" [
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3003,8 +3002,8 @@ export def "tasksjson get" [
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to ASC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3083,7 +3082,7 @@ export def "tasks put" [
   --current-state: string # Current state of the task, valid options are: completed
   --description: string # A description of the task recorded for person at completion time
   --due-date: string # Date of when the Task is due, ISO-8601 date format required
-  --is-logged: string@bool-completer # A flag to indicate that the task should only be logged
+  --is-logged: oneof<nothing, bool> # A flag to indicate that the task should only be logged
   --remind-at: string # Datetime of when the user will be reminded of the task, ISO-8601 datetime format required
   --subject: string # Subject line of the task
 ]: any -> any {
@@ -3133,8 +3132,8 @@ export def "team-template-attachmentsjson get" [
   --team-template-id: list # Filters template attachments by team template IDs
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3161,13 +3160,13 @@ export def "team-templatesjson get" [
   --search: string # Filters email templates by title or subject
   --tag-ids: list # Filters email templates by tags applied to the template by tag ID, not to exceed 100 IDs
   --tag: list # Filters team templates by tags applied to the template, not to exceed 100 tags
-  --include-archived-templates: string@bool-completer # Filters email templates to include archived templates or not
+  --include-archived-templates: oneof<nothing, bool> # Filters email templates to include archived templates or not
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at, last_used_at. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
   --page: int # The current page to fetch results from. Defaults to 1
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --limit-paging-counts: string@bool-completer # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3190,7 +3189,7 @@ export def "team-templates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-signature: string@bool-completer # Optionally will return the templates with the current user's email signature
+  --include-signature: oneof<nothing, bool> # Optionally will return the templates with the current user's email signature
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3246,12 +3245,12 @@ export def "usersjson get" [
   --group-id: list # Filters users by group_id.  An additional value of "_is_null" can be passed to filter users that are not in a group
   --role-id: list # Filters users by role_id
   --search: string # Space-separated list of keywords used to find case-insensitive substring matches against First Name, Last Name, or Email
-  --active: string@bool-completer # Filters users based on active attribute. Defaults to not applied
-  --visible-only: string@bool-completer # Defaults to true.  When true, only shows users that are actionable based on the team's privacy settings. When false, shows all users on the team, even if you can't take action on that user. Deactivated users are also included when false.
+  --active: oneof<nothing, bool> # Filters users based on active attribute. Defaults to not applied
+  --visible-only: oneof<nothing, bool> # Defaults to true.  When true, only shows users that are actionable based on the team's privacy settings. When false, shows all users on the team, even if you can't take action on that user. Deactivated users are also included when false.
   --per-page: int # How many users to show per page in the range [1, 100]. Defaults to 25.  Results are only paginated if the page parameter is defined
   --page: int # The current page to fetch users from. Defaults to returning all users
-  --include-paging-counts: string@bool-completer # Whether to include total_pages and total_count in the metadata. Defaults to false
-  --has-crm-user: string@bool-completer # Filters users based on if they have a crm user mapped or not.
+  --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
+  --has-crm-user: oneof<nothing, bool> # Filters users based on if they have a crm user mapped or not.
   --work-country: list # Filters users based on assigned work_country.
   --sort-by: string # Key to sort on, must be one of: id, email, name, group, role. Defaults to id
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
@@ -3297,7 +3296,7 @@ export def "webhook-subscriptions list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Filters webhook subscriptions by whether is enabled or not.
+  --enabled: oneof<nothing, bool> # Filters webhook subscriptions by whether is enabled or not.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3388,7 +3387,7 @@ export def "webhook-subscriptions put" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enabled: string@bool-completer # Enable or disable the webhook subscription
+  --enabled: oneof<nothing, bool> # Enable or disable the webhook subscription
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

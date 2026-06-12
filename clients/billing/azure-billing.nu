@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -343,7 +342,7 @@ export def "providers-microsoft-billing-billing-accounts-billing-profiles Create
   --address: any # Address details. — shape: {addressLine1?: string, addressLine2?: string, addressLine3?: string, city?: string, companyName?: string, country?: string, firstName?: string, lastName?: string, postalCode?: string, region?: string}
   --displayName: string # The billing profile name.
   --enabledAzurePlans: list # Enabled azure plans for this billing profile. — item shape: {skuId?: string}
-  --invoiceEmailOptIn: string@bool-completer # If the billing profile is opted in to receive invoices via email.
+  --invoiceEmailOptIn: oneof<nothing, bool> # If the billing profile is opted in to receive invoices via email.
   --poNumber: string # Purchase order number.
 ]: any -> record<properties: record<address: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, country: string, firstName: string, lastName: string, postalCode: string, region: string>, currency: string, displayName: string, enabledAzurePlans: list<record>, invoiceDay: int, invoiceEmailOptIn: bool, invoiceSections: list<record>, poNumber: string>> {
   let input = $in

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://<KIBANA_URL>"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -510,7 +509,7 @@ export def "agent-builder-agents-consumption post-agent-builder-agents-agent-id-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --has-warnings: string@bool-completer # Filter to conversations with or without high-token warnings.
+  --has-warnings: oneof<nothing, bool> # Filter to conversations with or without high-token warnings.
   --search: string # Free-text search filter on conversation title.
   --search-after: list # Cursor for pagination. Pass the search_after value from the previous response.
   --size: float # Number of results per page. (default: 25)
@@ -749,7 +748,7 @@ export def "agent-builder-conversations-attachments get-agent-builder-conversati
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-deleted: string@bool-completer # Whether to include deleted attachments in the list.
+  --include-deleted: oneof<nothing, bool> # Whether to include deleted attachments in the list.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -776,7 +775,7 @@ export def "agent-builder-conversations-attachments post-agent-builder-conversat
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   --data: any # The attachment data/content. Required unless origin is provided. (nullable)
   --description: string # Human-readable description of the attachment.
-  --hidden: string@bool-completer # Whether the attachment should be hidden from the user.
+  --hidden: oneof<nothing, bool> # Whether the attachment should be hidden from the user.
   --id: string # Optional custom ID for the attachment.
   --origin: string # Origin string (for example, saved object ID) for by-reference attachments. When provided without data, the content is resolved once at creation time.
   type: string # The type of the attachment (e.g., text, esql, visualization).
@@ -808,7 +807,7 @@ export def "agent-builder-conversations-attachments delete-agent-builder-convers
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --permanent: string@bool-completer # If true, permanently removes the attachment (only for unreferenced attachments).
+  --permanent: oneof<nothing, bool> # If true, permanently removes the attachment (only for unreferenced attachments).
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1107,7 +1106,7 @@ export def "agent-builder-plugins delete-agent-builder-plugins-pluginid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # If true, removes the plugin skills from agents that use them and then deletes the plugin. If false and any agent uses the plugin skills, the request returns 409 Conflict with the list of agents. (default: false)
+  --force: oneof<nothing, bool> # If true, removes the plugin skills from agents that use them and then deletes the plugin. If false and any agent uses the plugin skills, the request returns 409 Conflict with the list of agents. (default: false)
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1184,7 +1183,7 @@ export def "agent-builder-skills get-agent-builder-skills" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-plugins: string@bool-completer # Set to true to include skills from plugins. (default: false)
+  --include-plugins: oneof<nothing, bool> # Set to true to include skills from plugins. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1242,7 +1241,7 @@ export def "agent-builder-skills delete-agent-builder-skills-skillid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # If true, removes the skill from agents that use it and then deletes it. If false and any agent uses the skill, the request returns 409 Conflict with the list of agents. (default: false)
+  --force: oneof<nothing, bool> # If true, removes the skill from agents that use it and then deletes it. If false and any agent uses the skill, the request returns 409 Conflict with the list of agents. (default: false)
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1408,7 +1407,7 @@ export def "agent-builder-tools delete-agent-builder-tools-toolid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # If true, removes the tool from agents that use it and then deletes it. If false and any agent uses the tool, the request returns 409 Conflict with the list of agents. (default: false)
+  --force: oneof<nothing, bool> # If true, removes the tool from agents that use it and then deletes it. If false and any agent uses the tool, the request returns 409 Conflict with the list of agents. (default: false)
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1544,7 +1543,7 @@ export def "alerting-rule post-alerting-rule-id" [
   --alert-delay: record # Indicates that an alert occurs only when the specified number of consecutive runs met the rule conditions. — shape: {active: float}
   --artifacts: record # shape: {dashboards?: list, investigation_guide?: record}
   --consumer: string # The name of the application or feature that owns the rule. For example: `alerts`, `apm`, `discover`, `infrastructure`, `logs`, `metrics`, `ml`, `monitoring`, `securitySolution`, `siem`, `stackAlerts`, or `uptime`.
-  --enabled: string@bool-completer # Indicates whether you want the rule to run on an interval basis after it is created. (default: true)
+  --enabled: oneof<nothing, bool> # Indicates whether you want the rule to run on an interval basis after it is created. (default: true)
   --flapping: any # nullable
   --name: string # The name of the rule. While this name does not have to be unique, a distinctive name can help you identify a rule.
   --notify-when: string@notify-when-completer # Indicates how frequently rule actions are triggered. Valid values include: `onActionGroupChange`: Actions run when the alert status changes; `onActiveAlert`: Actions run when the alert becomes active and at each check interval while the rule conditions are met; `onThrottleInterval`: Actions run when the alert becomes active and at the interval specified in the throttle property while the rule conditions are met. You cannot specify `notify_when` at both the rule and action level. The recommended approach is to set it for each action individually. If you set `notify_when` at the rule level and then edit the rule, it will automatically be converted to action-specific values. (nullable)
@@ -1623,7 +1622,7 @@ export def "alerting-rule-disable post-alerting-rule-id-disable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --untrack: string@bool-completer # Defines whether this rule's alerts should be untracked.
+  --untrack: oneof<nothing, bool> # Defines whether this rule's alerts should be untracked.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1807,7 +1806,7 @@ export def "alerting-rule-alert-mute post-alerting-rule-rule-id-alert-alert-id-m
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --validate-alerts-existence: string@bool-completer # Whether to validate the existence of the alert.
+  --validate-alerts-existence: oneof<nothing, bool> # Whether to validate the existence of the alert.
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2204,7 +2203,7 @@ export def "apm-settings-agent-configuration createUpdateAgentConfiguration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --overwrite: string@bool-completer # If the config exists ?overwrite=true is required
+  --overwrite: oneof<nothing, bool> # If the config exists ?overwrite=true is required
   --elastic-api-version: string@elastic-api-version-completer # The version of the API to use
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   --agent-name: string # The agent name is used by the UI to determine which settings to display.
@@ -2296,7 +2295,7 @@ export def "apm-settings-agent-configuration-search searchSingleConfiguration" [
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   --body-error: string # If provided, the agent configuration will be marked as error and `applied_by_agent` will be set to `false`. This is useful for cases where the agent configuration was not applied successfully.
   --etag: string # If etags match then `applied_by_agent` field will be set to `true` (e.g. 0bc3b5ebf18fba8163fe4c96f491e3767a358f85)
-  --mark-as-applied-by-agent: string@bool-completer # `markAsAppliedByAgent=true` means "force setting it to true regardless of etag". This is needed for Jaeger agent that doesn't have etags
+  --mark-as-applied-by-agent: oneof<nothing, bool> # `markAsAppliedByAgent=true` means "force setting it to true regardless of etag". This is needed for Jaeger agent that doesn't have etags
   service: record # Service — shape: {environment?: string, name?: string}
 ]: any -> record<_id: string, _index: string, _score: float, _source: record<_timestamp: float, agent_name: string, applied_by_agent: bool, etag: string, service: record<environment: string, name: string>, settings: record>> {
   let input = $in
@@ -2506,21 +2505,21 @@ export def "attack-discovery-find AttackDiscoveryFind" [
   --allow-errors(-e) # Return full response without error handling
   --alert-ids: list # Filter results to Attack discoveries that include any of the provided alert IDs
   --connector-names: list # Filter results to Attack discoveries created by any of the provided human readable connector names. Note that values must match the human readable `connector_name` property of an Attack discovery, e.g. "GPT-5 Chat", which are distinct from `connector_id` values used to generate Attack discoveries.
-  --enable-field-rendering: string@bool-completer # Enables a markdown syntax used to render pivot fields, for example `{{ user.name james }}`. When disabled, the same example would be rendered as `james`. This is primarily used for Attack Discovery views within Kibana. Defaults to `false`. (default: false, e.g. false)
+  --enable-field-rendering: oneof<nothing, bool> # Enables a markdown syntax used to render pivot fields, for example `{{ user.name james }}`. When disabled, the same example would be rendered as `james`. This is primarily used for Attack Discovery views within Kibana. Defaults to `false`. (default: false, e.g. false)
   --end: string # End of the time range for the search. Accepts absolute timestamps (ISO 8601) or relative date math (e.g. "now", "now-24h"). (e.g. now)
   --ids: list # Filter results to the Attack discoveries with the specified IDs
-  --include-unique-alert-ids: string@bool-completer # If `true`, the response will include `unique_alert_ids` and `unique_alert_ids_count` aggregated across the matched Attack discoveries (e.g. false)
+  --include-unique-alert-ids: oneof<nothing, bool> # If `true`, the response will include `unique_alert_ids` and `unique_alert_ids_count` aggregated across the matched Attack discoveries (e.g. false)
   --page: int # Page number to return (used for pagination). Defaults to 1. (default: 1, e.g. 1)
   --per-page: int # Number of Attack discoveries to return per page (used for pagination). Defaults to 10. (default: 10, e.g. 10)
   --search: string # Free-text search query applied to relevant text fields of Attack discoveries (title, description, tags, etc.) (e.g. )
-  --shared: string@bool-completer # Whether to filter by shared visibility. If omitted, both shared and privately visible Attack discoveries are returned. Use `true` to return only shared discoveries, `false` to return only those visible to the current user. Mutually exclusive with `include_all_authors`.
-  --include-all-authors: string@bool-completer # If `true`, the response will include all attack discoveries matching other criteria regardless of who created them. Mutually exclusive with `shared`.
-  --scheduled: string@bool-completer # Whether to filter by scheduled or ad-hoc attack discoveries. If omitted, both types of attack discoveries are returned. Use `true` to return only scheduled discoveries or `false` to return only ad-hoc discoveries.
+  --shared: oneof<nothing, bool> # Whether to filter by shared visibility. If omitted, both shared and privately visible Attack discoveries are returned. Use `true` to return only shared discoveries, `false` to return only those visible to the current user. Mutually exclusive with `include_all_authors`.
+  --include-all-authors: oneof<nothing, bool> # If `true`, the response will include all attack discoveries matching other criteria regardless of who created them. Mutually exclusive with `shared`.
+  --scheduled: oneof<nothing, bool> # Whether to filter by scheduled or ad-hoc attack discoveries. If omitted, both types of attack discoveries are returned. Use `true` to return only scheduled discoveries or `false` to return only ad-hoc discoveries.
   --sort-field: string@sort-field-completer-3 # Field used to sort results. See `AttackDiscoveryFindSortField` for allowed values. (e.g. @timestamp)
   --sort-order: string@sort-order-completer # Sort order direction `asc` for ascending or `desc` for descending. Defaults to `desc`. (e.g. asc)
   --start: string # Start of the time range for the search. Accepts absolute timestamps (ISO 8601) or relative date math (e.g. "now-7d"). (e.g. now-24h)
   --status: list # Filter by alert workflow status. Provide one or more of the allowed workflow states. (e.g. [open, acknowledged])
-  --with-replacements: string@bool-completer # When true, return the created Attack discoveries with text replacements applied to the detailsMarkdown, entitySummaryMarkdown, summaryMarkdown, and title fields. Defaults to `true`. (default: true, e.g. true)
+  --with-replacements: oneof<nothing, bool> # When true, return the created Attack discoveries with text replacements applied to the detailsMarkdown, entitySummaryMarkdown, summaryMarkdown, and title fields. Defaults to `true`. (default: true, e.g. true)
 ]: nothing -> record<connector_names: list<string>, data: table<alert_ids: list, alert_rule_uuid: string, alert_start: string, alert_updated_at: string, alert_updated_by_user_id: string, alert_updated_by_user_name: string, alert_workflow_status: string, alert_workflow_status_updated_at: string, assignees: list, connector_id: string, connector_name: string, details_markdown: string, entity_summary_markdown: string, generation_uuid: string, id: string, index: string, mitre_attack_tactics: list, replacements: record, risk_score: int, summary_markdown: string, tags: list, timestamp: string, title: string, user_id: string, user_name: string, users: list>, page: int, per_page: int, total: int, unique_alert_ids: list<string>, unique_alert_ids_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2606,8 +2605,8 @@ export def "attack-discovery-generations GetAttackDiscoveryGeneration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-field-rendering: string@bool-completer # Enables a markdown syntax used to render pivot fields, for example `{{ user.name james }}`. When disabled, the same example would be rendered as `james`. This is primarily used for Attack Discovery views within Kibana. Defaults to `false`. (default: false, e.g. false)
-  --with-replacements: string@bool-completer # When true, return the created Attack discoveries with text replacements applied to the detailsMarkdown, entitySummaryMarkdown, summaryMarkdown, and title fields. Defaults to `true`. (default: true, e.g. true)
+  --enable-field-rendering: oneof<nothing, bool> # Enables a markdown syntax used to render pivot fields, for example `{{ user.name james }}`. When disabled, the same example would be rendered as `james`. This is primarily used for Attack Discovery views within Kibana. Defaults to `false`. (default: false, e.g. false)
+  --with-replacements: oneof<nothing, bool> # When true, return the created Attack discoveries with text replacements applied to the detailsMarkdown, entitySummaryMarkdown, summaryMarkdown, and title fields. Defaults to `true`. (default: true, e.g. true)
 ]: nothing -> record<data: table<alert_ids: list, alert_rule_uuid: string, alert_start: string, alert_updated_at: string, alert_updated_by_user_id: string, alert_updated_by_user_name: string, alert_workflow_status: string, alert_workflow_status_updated_at: string, assignees: list, connector_id: string, connector_name: string, details_markdown: string, entity_summary_markdown: string, generation_uuid: string, id: string, index: string, mitre_attack_tactics: list, replacements: record, risk_score: int, summary_markdown: string, tags: list, timestamp: string, title: string, user_id: string, user_name: string, users: list>, generation: record<alerts_context_count: float, connector_id: string, connector_stats: record<average_successful_duration_nanoseconds: float, successful_generations: float>, discoveries: float, end: string, execution_uuid: string, loading_message: string, reason: string, start: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2655,7 +2654,7 @@ export def "attack-discovery-schedules CreateAttackDiscoverySchedules" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --actions: list # The Attack Discovery schedule actions
-  --enabled: string@bool-completer # Indicates whether the schedule is enabled
+  --enabled: oneof<nothing, bool> # Indicates whether the schedule is enabled
   name: string # The name of the schedule
   params: record # An Attack Discovery schedule params — shape: {alerts_index_pattern: string, api_config: any, combined_filter?: record, end?: string, filters?: list, query?: record, size: float, start?: string}
   schedule: record # shape: {interval: string}
@@ -3035,7 +3034,7 @@ export def "data-views-data-view createDataViewDefaultw" [
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # Cross-site request forgery protection
   data_view: record # The data view object. — shape: {allowNoIndex?: bool, fieldAttrs?: record, fieldFormats?: record, fields?: record, id?: string, name?: string, namespaces?: list, runtimeFieldMap?: record, sourceFilters?: list, timeFieldName?: string, title: string, type?: string, typeMeta?: record, version?: string}
-  --override: string@bool-completer # Override an existing data view if a data view with the provided title already exists. (default: false)
+  --override: oneof<nothing, bool> # Override an existing data view if a data view with the provided title already exists. (default: false)
 ]: any -> record<data_view: record<allowNoIndex: bool, fieldAttrs: record, fieldFormats: record, fields: record, id: string, name: string, namespaces: list<string>, runtimeFieldMap: record, sourceFilters: list<record>, timeFieldName: string, title: string, typeMeta: record<aggs: record, params: record>, version: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3113,7 +3112,7 @@ export def "data-views-data-view updateDataViewDefault" [
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # Cross-site request forgery protection
   data_view: record # The data view properties you want to update. Only the specified properties are updated in the data view. Unspecified fields stay as they are persisted. — shape: {allowNoIndex?: bool, fieldFormats?: record, fields?: record, name?: string, runtimeFieldMap?: record, sourceFilters?: list, timeFieldName?: string, title?: string, type?: string, typeMeta?: record}
-  --refresh-fields: string@bool-completer # Reloads the data view fields after the data view is updated. (default: false)
+  --refresh-fields: oneof<nothing, bool> # Reloads the data view fields after the data view is updated. (default: false)
 ]: any -> record<data_view: record<allowNoIndex: bool, fieldAttrs: record, fieldFormats: record, fields: record, id: string, name: string, namespaces: list<string>, runtimeFieldMap: record, sourceFilters: list<record>, timeFieldName: string, title: string, typeMeta: record<aggs: record, params: record>, version: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3325,7 +3324,7 @@ export def "data-views-default setDefaultDatailViewDefault" [
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # Cross-site request forgery protection
   --data-view-id: string # The data view identifier. NOTE: The API does not validate whether it is a valid identifier. Use `null` to unset the default data view.  (nullable)
-  --force: string@bool-completer # Update an existing default data view identifier. (default: false)
+  --force: oneof<nothing, bool> # Update an existing default data view identifier. (default: false)
 ]: any -> record<acknowledged: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3353,7 +3352,7 @@ export def "data-views-swap-references swapDataViewsDefault" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # Cross-site request forgery protection
-  --delete: string@bool-completer # Deletes referenced saved object if all references are removed.
+  --delete: oneof<nothing, bool> # Deletes referenced saved object if all references are removed.
   --forId: any # Limit the affected saved objects to one or more by identifier.
   --forType: string # Limit the affected saved objects by type.
   fromId: string # The saved object reference to change.
@@ -3386,7 +3385,7 @@ export def "data-views-swap-references-preview previewSwapDataViewsDefault" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # Cross-site request forgery protection
-  --delete: string@bool-completer # Deletes referenced saved object if all references are removed.
+  --delete: oneof<nothing, bool> # Deletes referenced saved object if all references are removed.
   --forId: any # Limit the affected saved objects to one or more by identifier.
   --forType: string # Limit the affected saved objects by type.
   fromId: string # The saved object reference to change.
@@ -3567,7 +3566,7 @@ export def "detection-engine-rules-bulk-action PerformRulesBulkAction" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dry-run: string@bool-completer # Enables dry run mode for the request call.  Enable dry run mode to verify that bulk actions can be applied to specified rules. Certain rules, such as prebuilt Elastic rules on a Basic subscription, can’t be edited and will return errors in the request response. Error details will contain an explanation, the rule name and/or ID, and additional troubleshooting information.  To enable dry run mode on a request, add the query parameter `dry_run=true` to the end of the request URL. Rules specified in the request will be temporarily updated. These updates won’t be written to Elasticsearch. > info > Dry run mode is not supported for the `export` bulk action. A 400 error will be returned in the request response.
+  --dry-run: oneof<nothing, bool> # Enables dry run mode for the request call.  Enable dry run mode to verify that bulk actions can be applied to specified rules. Certain rules, such as prebuilt Elastic rules on a Basic subscription, can’t be edited and will return errors in the request response. Error details will contain an explanation, the rule name and/or ID, and additional troubleshooting information.  To enable dry run mode on a request, add the query parameter `dry_run=true` to the end of the request URL. Rules specified in the request will be temporarily updated. These updates won’t be written to Elasticsearch. > info > Dry run mode is not supported for the `export` bulk action. A 400 error will be returned in the request response.
   --action: string@action-completer-1
   --gap-auto-fill-scheduler-id: string # Gap auto fill scheduler ID used to determine gap fill status for rules
   --gap-fill-statuses: list # Gap fill statuses to filter rules with gaps by status (used together with gaps_range_*).
@@ -3605,7 +3604,7 @@ export def "detection-engine-rules-export ExportRules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --exclude-export-details: string@bool-completer # Determines whether a summary of the exported rules is returned. (default: false)
+  --exclude-export-details: oneof<nothing, bool> # Determines whether a summary of the exported rules is returned. (default: false)
   --file-name: string # File name for saving the exported rules. > info > When using cURL to export rules to a file, use the -O and -J options to save the rules to the file name specified in the URL.  (default: export.ndjson)
   objects: list # Array of objects with a rule's `rule_id` field. Do not use rule's `id` here. Exports all rules when unspecified. — item shape: {rule_id: string}
 ]: any -> any {
@@ -3665,10 +3664,10 @@ export def "detection-engine-rules-import ImportRules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --overwrite: string@bool-completer # Determines whether existing rules with the same `rule_id` are overwritten. (default: false)
-  --overwrite-exceptions: string@bool-completer # Determines whether existing exception lists with the same `list_id` are overwritten. Both the exception list container and its items are overwritten. (default: false)
-  --overwrite-action-connectors: string@bool-completer # Determines whether existing actions with the same `kibana.alert.rule.actions.id` are overwritten. (default: false)
-  --as-new-list: string@bool-completer # Generates a new list ID for each imported exception list. (default: false)
+  --overwrite: oneof<nothing, bool> # Determines whether existing rules with the same `rule_id` are overwritten. (default: false)
+  --overwrite-exceptions: oneof<nothing, bool> # Determines whether existing exception lists with the same `list_id` are overwritten. Both the exception list container and its items are overwritten. (default: false)
+  --overwrite-action-connectors: oneof<nothing, bool> # Determines whether existing actions with the same `kibana.alert.rule.actions.id` are overwritten. (default: false)
+  --as-new-list: oneof<nothing, bool> # Generates a new list ID for each imported exception list. (default: false)
   --file: string # The `.ndjson` file containing the rules. (format: binary)
 ]: any -> record<action_connectors_errors: table<error: record, id: string, item_id: string, list_id: string, rule_id: string>, action_connectors_success: bool, action_connectors_success_count: int, action_connectors_warnings: table<actionPath: string, buttonLabel: string, message: string, type: string>, errors: table<error: record, id: string, item_id: string, list_id: string, rule_id: string>, exceptions_errors: table<error: record, id: string, item_id: string, list_id: string, rule_id: string>, exceptions_success: bool, exceptions_success_count: int, rules_count: int, success: bool, success_count: int> {
   let input = $in
@@ -3723,7 +3722,7 @@ export def "detection-engine-rules-preview RulePreview" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-logged-requests: string@bool-completer # Enables logging and returning in response ES queries, performed during rule execution
+  --enable-logged-requests: oneof<nothing, bool> # Enables logging and returning in response ES queries, performed during rule execution
   --body: record
 ]: any -> record<isAborted: bool, logs: table<duration: int, errors: list, requests: list, startedAt: string, warnings: list>, previewId: string> {
   let input = $in
@@ -3783,7 +3782,7 @@ export def "detection-engine-signals-search SearchAlerts" [
   --runtime-mappings: record
   --size: int
   --body-sort: any
-  --track-total-hits: string@bool-completer
+  --track-total-hits: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4713,7 +4712,7 @@ export def "endpoint-scripts-library EndpointScriptLibraryCreateScript" [
   name: string # Name of the script
   --pathToExecutable: string # Used only for when the uploaded script is an archive (.zip file for example). This property defines the relative path to the file included in the archive that should be executed once its contents are extracted. The path should be relative to the root of the archive. (e.g. ./bin/script.sh)
   platform: list # Platforms supported by the the script
-  --requiresInput: string@bool-completer # Whether the script requires input arguments
+  --requiresInput: oneof<nothing, bool> # Whether the script requires input arguments
   --tags: list # Tags to categorize the script
 ]: any -> record<data: record<createdAt: string, createdBy: string, description: string, downloadUri: string, example: string, fileHash: string, fileName: string, fileSize: int, id: string, instructions: string, name: string, pathToExecutable: string, platform: list<string>, requiresInput: bool, tags: list<string>, updatedAt: string, updatedBy: string, version: string>> {
   let input = $in
@@ -4792,7 +4791,7 @@ export def "endpoint-scripts-library EndpointScriptLibraryPatchUpdateScript" [
   --name: string # Name of the script
   --pathToExecutable: string # Used only for when the uploaded script is an archive (.zip file for example). This property defines the relative path to the file included in the archive that should be executed once its contents are extracted. The path should be relative to the root of the archive. (e.g. ./bin/script.sh)
   --platform: list # Platforms supported by the the script
-  --requiresInput: string@bool-completer # Whether the script requires input arguments
+  --requiresInput: oneof<nothing, bool> # Whether the script requires input arguments
   --tags: list # Tags to categorize the script
 ]: any -> record<data: record<createdAt: string, createdBy: string, description: string, downloadUri: string, example: string, fileHash: string, fileName: string, fileSize: int, id: string, instructions: string, name: string, pathToExecutable: string, platform: list<string>, requiresInput: bool, tags: list<string>, updatedAt: string, updatedBy: string, version: string>> {
   let input = $in
@@ -4840,7 +4839,7 @@ export def "entity-analytics-monitoring-engine-delete DeleteMonitoringEngine" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --data: string@bool-completer # Whether to delete all the privileged user data (default: false)
+  --data: oneof<nothing, bool> # Whether to delete all the privileged user data (default: false)
 ]: nothing -> record<deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5143,7 +5142,7 @@ export def "entity-analytics-watchlists CreateWatchlist" [
   --allow-errors(-e) # Return full response without error handling
   --description: string # Description of the watchlist
   --entitySources: list # Optional entity sources to create and link to the watchlist — item shape: {enabled?: bool, filter?: record, identifierField?: string, indexPattern?: string, integrationName?: string, matchers?: list, name: string, queryRule?: string, range?: record, type: "index"|"entity_analytics_integration"|"store"}
-  --managed: string@bool-completer # Indicates if the watchlist is managed by the system
+  --managed: oneof<nothing, bool> # Indicates if the watchlist is managed by the system
   name: string # Unique name for the watchlist
   riskModifier: float # Risk score modifier associated with the watchlist
 ]: any -> record<createdAt: string, description: string, entityCount: float, entitySourceIds: list<string>, id: string, managed: bool, name: string, riskModifier: float, updatedAt: string, entitySources: table<id: string>> {
@@ -5194,7 +5193,7 @@ export def "entity-analytics-watchlists UpdateWatchlist" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # Description of the watchlist
-  --managed: string@bool-completer # Indicates if the watchlist is managed by the system
+  --managed: oneof<nothing, bool> # Indicates if the watchlist is managed by the system
   name: string # Unique name of the watchlist
   riskModifier: float # Risk score modifier associated with the watchlist
 ]: any -> record<createdAt: string, description: string, entityCount: float, entitySourceIds: list<string>, id: string, managed: bool, name: string, riskModifier: float, updatedAt: string> {
@@ -5357,7 +5356,7 @@ export def "entity-store-engines DeleteEntityEngines" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --entityTypes: list # The entity type of the engine ('user', 'host', 'service', 'generic').
-  --delete-data: string@bool-completer # Control flag to also delete the entity data.
+  --delete-data: oneof<nothing, bool> # Control flag to also delete the entity data.
 ]: nothing -> record<deleted: list<string>, still_running: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5403,8 +5402,8 @@ export def "entity-store-engines DeleteEntityEngine" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delete-data: string@bool-completer # Control flag to also delete the entity data.
-  --data: string@bool-completer # Control flag to also delete the entity data. (DEPRECATED)
+  --delete-data: oneof<nothing, bool> # Control flag to also delete the entity data.
+  --data: oneof<nothing, bool> # Control flag to also delete the entity data. (DEPRECATED)
 ]: nothing -> record<deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5583,7 +5582,7 @@ export def "entity-store-entities UpsertEntity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # When true, allows updating protected fields. (default: false)
+  --force: oneof<nothing, bool> # When true, allows updating protected fields. (default: false)
   --timestamp: string # The time the entity record was last updated. (format: date-time)
   --asset: record # Asset metadata associated with the entity. — shape: {business_unit?: string, criticality?: "low_impact"|"medium_impact"|"high_impact"|"extreme_impact", environment?: string, id?: string, model?: string, name?: string, owner?: string, serial_number?: string, vendor?: string}
   --entity: record # Core entity fields shared across all entity types. The `entity` namespace is a root-level field in the Entity Store latest index. — shape: {attributes?: record, behaviors?: record, EngineMetadata?: record, id: string, lifecycle?: record, name?: string, relationships?: record, risk?: record, source?: string, sub_type?: string, type?: string}
@@ -5617,7 +5616,7 @@ export def "entity-store-entities-bulk UpsertEntitiesBulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # When true, allows updating protected fields. (default: false)
+  --force: oneof<nothing, bool> # When true, allows updating protected fields. (default: false)
   entities: list # The entities to create or update. — item shape: {record: any, type: "user"|"host"|"service"|"generic"}
 ]: any -> any {
   let input = $in
@@ -5672,7 +5671,7 @@ export def "entity-store-status GetEntityStoreStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-components: string@bool-completer # If true, returns a detailed status of each engine including all its components. (e.g. true)
+  --include-components: oneof<nothing, bool> # If true, returns a detailed status of each engine including all its components. (e.g. true)
 ]: nothing -> record<engines: table<delay: string, docsPerSecond: int, error: record, fieldHistoryLength: int, filter: string, frequency: string, indexPattern: string, lookbackPeriod: string, status: string, timeout: string, timestampField: string, type: string, components: list>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5892,8 +5891,8 @@ export def "exception-lists-import ImportExceptionList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --overwrite: string@bool-completer # Determines whether existing exception lists with the same `list_id` are overwritten. If any exception items have the same `item_id`, those are also overwritten.  (default: false, e.g. false)
-  --as-new-list: string@bool-completer # Determines whether the list being imported will have a new `list_id` generated. Additional `item_id`'s are generated for each exception item. Both the exception list and its items are overwritten.  (default: false, e.g. false)
+  --overwrite: oneof<nothing, bool> # Determines whether existing exception lists with the same `list_id` are overwritten. If any exception items have the same `item_id`, those are also overwritten.  (default: false, e.g. false)
+  --as-new-list: oneof<nothing, bool> # Determines whether the list being imported will have a new `list_id` generated. Additional `item_id`'s are generated for each exception item. Both the exception list and its items are overwritten.  (default: false, e.g. false)
   --file: string # A `.ndjson` file containing the exception list (format: binary, e.g. {"_version":"WzExNDU5LDFd","created_at":"2025-01-09T16:18:17.757Z","created_by":"elastic","description":"This is a sample detection type exception","id":"c86c2da0-2ab6-4343-b81c-216ef27e8d75","immutable":false,"list_id":"simple_list","name":"Sample Detection Exception List","namespace_type":"single","os_types":[],"tags":["user added string for a tag","malware"],"tie_breaker_id":"cf4a7b92-732d-47f0-a0d5-49a35a1736bf","type":"detection","updated_at":"2025-01-09T16:18:17.757Z","updated_by":"elastic","version":1} {"_version":"WzExNDYxLDFd","comments":[],"created_at":"2025-01-09T16:18:42.308Z","created_by":"elastic","description":"This is a sample endpoint type exception","entries":[{"type":"exists","field":"actingProcess.file.signer","operator":"excluded"},{"type":"match_any","field":"host.name","value":["some host","another host"],"operator":"included"}],"id":"f37597ce-eaa7-4b64-9100-4301118f6806","item_id":"simple_list_item","list_id":"simple_list","name":"Sample Endpoint Exception List","namespace_type":"single","os_types":["linux"],"tags":["user added string for a tag","malware"],"tie_breaker_id":"4ca3ef3e-9721-42c0-8107-cf47e094d40f","type":"simple","updated_at":"2025-01-09T16:18:42.308Z","updated_by":"elastic"} )
 ]: any -> record<errors: table<error: record, id: string, item_id: string, list_id: string>, success: bool, success_count: int, success_count_exception_list_items: int, success_count_exception_lists: int, success_exception_list_items: bool, success_exception_lists: bool> {
   let input = $in
@@ -6128,7 +6127,7 @@ export def "fleet-agent-download-sources post-fleet-agent-download-sources" [
   --body-auth: record # nullable — shape: {api_key?: string, headers?: list, password?: string, username?: string}
   host: string # format: uri
   --id: string
-  --is-default: string@bool-completer # default: false
+  --is-default: oneof<nothing, bool> # default: false
   name: string
   --proxy-id: string # The ID of the proxy to use for this download source. See the proxies API for more information. (nullable)
   --secrets: record # shape: {auth?: record, ssl?: record}
@@ -6214,7 +6213,7 @@ export def "fleet-agent-download-sources put-fleet-agent-download-sources-source
   --body-auth: record # nullable — shape: {api_key?: string, headers?: list, password?: string, username?: string}
   host: string # format: uri
   --id: string
-  --is-default: string@bool-completer # default: false
+  --is-default: oneof<nothing, bool> # default: false
   name: string
   --proxy-id: string # The ID of the proxy to use for this download source. See the proxies API for more information. (nullable)
   --secrets: record # shape: {auth?: record, ssl?: record}
@@ -6249,11 +6248,11 @@ export def "fleet-agent-policies get-fleet-agent-policies" [
   --perPage: float # Number of results per page
   --sortField: string # Field to sort results by
   --sortOrder: string@sortOrder-completer # Sort order, ascending or descending
-  --showUpgradeable: string@bool-completer # When true, only show policies with upgradeable agents
+  --showUpgradeable: oneof<nothing, bool> # When true, only show policies with upgradeable agents
   --kuery: string # A KQL query string to filter results
-  --noAgentCount: string@bool-completer # use withAgentCount instead
-  --withAgentCount: string@bool-completer # get policies with agent count
-  --full: string@bool-completer # get full policies with package policies populated
+  --noAgentCount: oneof<nothing, bool> # use withAgentCount instead
+  --withAgentCount: oneof<nothing, bool> # get policies with agent count
+  --full: oneof<nothing, bool> # get full policies with package policies populated
   --format: string@format-completer # Format for the response: simplified or legacy
 ]: nothing -> record<items: table<advanced_settings: record, agent_features: list, agentless: record, agents: float, agents_per_version: list, created_at: string, data_output_id: string, description: string, download_source_id: string, fips_agents: float, fleet_server_host_id: string, global_data_tags: list, has_agent_version_conditions: bool, has_fleet_server: bool, id: string, inactivity_timeout: float, is_default: bool, is_default_fleet_server: bool, is_managed: bool, is_preconfigured: bool, is_protected: bool, is_verifier: bool, keep_monitoring_alive: bool, min_agent_version: string, monitoring_diagnostics: record, monitoring_enabled: list, monitoring_http: record, monitoring_output_id: string, monitoring_pprof_enabled: bool, name: string, namespace: string, overrides: record, package_agent_version_conditions: list, package_policies: any, required_versions: list, revision: float, schema_version: string, space_ids: list, status: string, supports_agentless: bool, unenroll_timeout: float, unprivileged_agents: float, updated_at: string, updated_by: string, version: string>, page: float, perPage: float, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6286,41 +6285,41 @@ export def "fleet-agent-policies post-fleet-agent-policies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --sys-monitoring: string@bool-completer # Whether to add the system integration to the new agent policy
+  --sys-monitoring: oneof<nothing, bool> # Whether to add the system integration to the new agent policy
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   --advanced-settings: record # shape: {agent_download_target_directory?: any, agent_download_timeout?: any, agent_features_disable_policy_change_acks_enabled?: any, agent_internal?: any, agent_limits_go_max_procs?: any, agent_logging_files_interval?: any, agent_logging_files_keepfiles?: any, agent_logging_files_rotateeverybytes?: any, agent_logging_level?: any, agent_logging_metrics_period?: any, agent_logging_to_files?: any, agent_monitoring_runtime_experimental?: any}
   --agent-features: list # item shape: {enabled: bool, name: string}
   --agentless: record # shape: {cloud_connectors?: record, cluster_id?: string, resources?: record}
-  --bumpRevision: string@bool-completer
+  --bumpRevision: oneof<nothing, bool>
   --data-output-id: string # nullable
   --description: string
   --download-source-id: string # nullable
   --fleet-server-host-id: string # nullable
-  --force: string@bool-completer
+  --force: oneof<nothing, bool>
   --global-data-tags: list # User defined data tags that are added to all of the inputs. The values can be strings or numbers. — item shape: {name: string, value: any}
-  --has-agent-version-conditions: string@bool-completer
-  --has-fleet-server: string@bool-completer
+  --has-agent-version-conditions: oneof<nothing, bool>
+  --has-fleet-server: oneof<nothing, bool>
   --id: string
   --inactivity-timeout: float # default: 1209600
-  --is-default: string@bool-completer
-  --is-default-fleet-server: string@bool-completer
-  --is-managed: string@bool-completer
-  --is-protected: string@bool-completer
-  --is-verifier: string@bool-completer
-  --keep-monitoring-alive: string@bool-completer # When set to true, monitoring will be enabled but logs/metrics collection will be disabled (nullable)
+  --is-default: oneof<nothing, bool>
+  --is-default-fleet-server: oneof<nothing, bool>
+  --is-managed: oneof<nothing, bool>
+  --is-protected: oneof<nothing, bool>
+  --is-verifier: oneof<nothing, bool>
+  --keep-monitoring-alive: oneof<nothing, bool> # When set to true, monitoring will be enabled but logs/metrics collection will be disabled (nullable)
   --min-agent-version: string # nullable
   --monitoring-diagnostics: record # shape: {limit?: record, uploader?: record}
   --monitoring-enabled: list
   --monitoring-http: record # shape: {buffer?: record, enabled?: bool, host?: string, port?: float}
   --monitoring-output-id: string # nullable
-  --monitoring-pprof-enabled: string@bool-completer
+  --monitoring-pprof-enabled: oneof<nothing, bool>
   name: string
   namespace: string
   --overrides: record # Override settings that are defined in the agent policy. Input settings cannot be overridden. The override option should be used only in unusual circumstances and not as a routine procedure. (nullable)
   --package-agent-version-conditions: list # nullable — item shape: {name: string, title: string, version_condition: string}
   --required-versions: list # nullable — item shape: {percentage: float, version: string}
   --space-ids: list
-  --supports-agentless: string@bool-completer # Indicates whether the agent policy supports agentless integrations. Deprecated in favor of the Fleet agentless policies API. (DEPRECATED, nullable)
+  --supports-agentless: oneof<nothing, bool> # Indicates whether the agent policy supports agentless integrations. Deprecated in favor of the Fleet agentless policies API. (DEPRECATED, nullable)
   --unenroll-timeout: float
 ]: any -> record<item: record<advanced_settings: record<agent_download_target_directory: any, agent_download_timeout: any, agent_features_disable_policy_change_acks_enabled: any, agent_internal: any, agent_limits_go_max_procs: any, agent_logging_files_interval: any, agent_logging_files_keepfiles: any, agent_logging_files_rotateeverybytes: any, agent_logging_level: any, agent_logging_metrics_period: any, agent_logging_to_files: any, agent_monitoring_runtime_experimental: any>, agent_features: list<record>, agentless: record<cloud_connectors: record, cluster_id: string, resources: record>, agents: float, agents_per_version: list<record>, created_at: string, data_output_id: string, description: string, download_source_id: string, fips_agents: float, fleet_server_host_id: string, global_data_tags: list<record>, has_agent_version_conditions: bool, has_fleet_server: bool, id: string, inactivity_timeout: float, is_default: bool, is_default_fleet_server: bool, is_managed: bool, is_preconfigured: bool, is_protected: bool, is_verifier: bool, keep_monitoring_alive: bool, min_agent_version: string, monitoring_diagnostics: record<limit: record, uploader: record>, monitoring_enabled: list<string>, monitoring_http: record<buffer: record, enabled: bool, host: string, port: float>, monitoring_output_id: string, monitoring_pprof_enabled: bool, name: string, namespace: string, overrides: record, package_agent_version_conditions: list<record>, package_policies: any, required_versions: list<record>, revision: float, schema_version: string, space_ids: list<string>, status: string, supports_agentless: bool, unenroll_timeout: float, unprivileged_agents: float, updated_at: string, updated_by: string, version: string>> {
   let input = $in
@@ -6351,9 +6350,9 @@ export def "fleet-agent-policies-bulk-get post-fleet-agent-policies-bulk-get" [
   --allow-errors(-e) # Return full response without error handling
   --format: string@format-completer # Format for the response: simplified or legacy
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --full: string@bool-completer # get full policies with package policies populated
+  --full: oneof<nothing, bool> # get full policies with package policies populated
   ids: list # list of package policy ids
-  --ignoreMissing: string@bool-completer
+  --ignoreMissing: oneof<nothing, bool>
 ]: any -> record<items: table<advanced_settings: record, agent_features: list, agentless: record, agents: float, agents_per_version: list, created_at: string, data_output_id: string, description: string, download_source_id: string, fips_agents: float, fleet_server_host_id: string, global_data_tags: list, has_agent_version_conditions: bool, has_fleet_server: bool, id: string, inactivity_timeout: float, is_default: bool, is_default_fleet_server: bool, is_managed: bool, is_preconfigured: bool, is_protected: bool, is_verifier: bool, keep_monitoring_alive: bool, min_agent_version: string, monitoring_diagnostics: record, monitoring_enabled: list, monitoring_http: record, monitoring_output_id: string, monitoring_pprof_enabled: bool, name: string, namespace: string, overrides: record, package_agent_version_conditions: list, package_policies: any, required_versions: list, revision: float, schema_version: string, space_ids: list, status: string, supports_agentless: bool, unenroll_timeout: float, unprivileged_agents: float, updated_at: string, updated_by: string, version: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6420,36 +6419,36 @@ export def "fleet-agent-policies put-fleet-agent-policies-agentpolicyid" [
   --advanced-settings: record # shape: {agent_download_target_directory?: any, agent_download_timeout?: any, agent_features_disable_policy_change_acks_enabled?: any, agent_internal?: any, agent_limits_go_max_procs?: any, agent_logging_files_interval?: any, agent_logging_files_keepfiles?: any, agent_logging_files_rotateeverybytes?: any, agent_logging_level?: any, agent_logging_metrics_period?: any, agent_logging_to_files?: any, agent_monitoring_runtime_experimental?: any}
   --agent-features: list # item shape: {enabled: bool, name: string}
   --agentless: record # shape: {cloud_connectors?: record, cluster_id?: string, resources?: record}
-  --bumpRevision: string@bool-completer
+  --bumpRevision: oneof<nothing, bool>
   --data-output-id: string # nullable
   --description: string
   --download-source-id: string # nullable
   --fleet-server-host-id: string # nullable
-  --force: string@bool-completer
+  --force: oneof<nothing, bool>
   --global-data-tags: list # User defined data tags that are added to all of the inputs. The values can be strings or numbers. — item shape: {name: string, value: any}
-  --has-agent-version-conditions: string@bool-completer
-  --has-fleet-server: string@bool-completer
+  --has-agent-version-conditions: oneof<nothing, bool>
+  --has-fleet-server: oneof<nothing, bool>
   --id: string
   --inactivity-timeout: float # default: 1209600
-  --is-default: string@bool-completer
-  --is-default-fleet-server: string@bool-completer
-  --is-managed: string@bool-completer
-  --is-protected: string@bool-completer
-  --is-verifier: string@bool-completer
-  --keep-monitoring-alive: string@bool-completer # When set to true, monitoring will be enabled but logs/metrics collection will be disabled (nullable)
+  --is-default: oneof<nothing, bool>
+  --is-default-fleet-server: oneof<nothing, bool>
+  --is-managed: oneof<nothing, bool>
+  --is-protected: oneof<nothing, bool>
+  --is-verifier: oneof<nothing, bool>
+  --keep-monitoring-alive: oneof<nothing, bool> # When set to true, monitoring will be enabled but logs/metrics collection will be disabled (nullable)
   --min-agent-version: string # nullable
   --monitoring-diagnostics: record # shape: {limit?: record, uploader?: record}
   --monitoring-enabled: list
   --monitoring-http: record # shape: {buffer?: record, enabled?: bool, host?: string, port?: float}
   --monitoring-output-id: string # nullable
-  --monitoring-pprof-enabled: string@bool-completer
+  --monitoring-pprof-enabled: oneof<nothing, bool>
   name: string
   namespace: string
   --overrides: record # Override settings that are defined in the agent policy. Input settings cannot be overridden. The override option should be used only in unusual circumstances and not as a routine procedure. (nullable)
   --package-agent-version-conditions: list # nullable — item shape: {name: string, title: string, version_condition: string}
   --required-versions: list # nullable — item shape: {percentage: float, version: string}
   --space-ids: list
-  --supports-agentless: string@bool-completer # Indicates whether the agent policy supports agentless integrations. Deprecated in favor of the Fleet agentless policies API. (DEPRECATED, nullable)
+  --supports-agentless: oneof<nothing, bool> # Indicates whether the agent policy supports agentless integrations. Deprecated in favor of the Fleet agentless policies API. (DEPRECATED, nullable)
   --unenroll-timeout: float
 ]: any -> record<item: record<advanced_settings: record<agent_download_target_directory: any, agent_download_timeout: any, agent_features_disable_policy_change_acks_enabled: any, agent_internal: any, agent_limits_go_max_procs: any, agent_logging_files_interval: any, agent_logging_files_keepfiles: any, agent_logging_files_rotateeverybytes: any, agent_logging_level: any, agent_logging_metrics_period: any, agent_logging_to_files: any, agent_monitoring_runtime_experimental: any>, agent_features: list<record>, agentless: record<cloud_connectors: record, cluster_id: string, resources: record>, agents: float, agents_per_version: list<record>, created_at: string, data_output_id: string, description: string, download_source_id: string, fips_agents: float, fleet_server_host_id: string, global_data_tags: list<record>, has_agent_version_conditions: bool, has_fleet_server: bool, id: string, inactivity_timeout: float, is_default: bool, is_default_fleet_server: bool, is_managed: bool, is_preconfigured: bool, is_protected: bool, is_verifier: bool, keep_monitoring_alive: bool, min_agent_version: string, monitoring_diagnostics: record<limit: record, uploader: record>, monitoring_enabled: list<string>, monitoring_http: record<buffer: record, enabled: bool, host: string, port: float>, monitoring_output_id: string, monitoring_pprof_enabled: bool, name: string, namespace: string, overrides: record, package_agent_version_conditions: list<record>, package_policies: any, required_versions: list<record>, revision: float, schema_version: string, space_ids: list<string>, status: string, supports_agentless: bool, unenroll_timeout: float, unprivileged_agents: float, updated_at: string, updated_by: string, version: string>> {
   let input = $in
@@ -6533,9 +6532,9 @@ export def "fleet-agent-policies-download get-fleet-agent-policies-agentpolicyid
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --download: string@bool-completer # If true, returns the policy as a downloadable file
-  --standalone: string@bool-completer # If true, returns the policy formatted for standalone agents
-  --kubernetes: string@bool-completer # If true, returns the policy formatted for Kubernetes deployment
+  --download: oneof<nothing, bool> # If true, returns the policy as a downloadable file
+  --standalone: oneof<nothing, bool> # If true, returns the policy formatted for standalone agents
+  --kubernetes: oneof<nothing, bool> # If true, returns the policy formatted for Kubernetes deployment
   --revision: float # If provided, returns the policy at the specified revision. Cannot be used with standalone or kubernetes flags.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6560,9 +6559,9 @@ export def "fleet-agent-policies-full get-fleet-agent-policies-agentpolicyid-ful
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --download: string@bool-completer # If true, returns the policy as a downloadable file
-  --standalone: string@bool-completer # If true, returns the policy formatted for standalone agents
-  --kubernetes: string@bool-completer # If true, returns the policy formatted for Kubernetes deployment
+  --download: oneof<nothing, bool> # If true, returns the policy as a downloadable file
+  --standalone: oneof<nothing, bool> # If true, returns the policy formatted for standalone agents
+  --kubernetes: oneof<nothing, bool> # If true, returns the policy formatted for Kubernetes deployment
   --revision: float # If provided, returns the policy at the specified revision. Cannot be used with standalone or kubernetes flags.
 ]: nothing -> record<item: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6610,7 +6609,7 @@ export def "fleet-agent-policies-delete post-fleet-agent-policies-delete" [
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   agentPolicyId: string # The ID of the agent policy
-  --force: string@bool-completer # bypass validation checks that can prevent agent policy deletion
+  --force: oneof<nothing, bool> # bypass validation checks that can prevent agent policy deletion
 ]: any -> record<id: string, name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6693,7 +6692,7 @@ export def "fleet-agent-status-data get-fleet-agent-status-data" [
   --agentsIds: list # Agent IDs to check data for, as an array or comma-separated string
   --pkgName: string # Filter by integration package name
   --pkgVersion: string # Filter by integration package version
-  --previewData: string@bool-completer # When true, return a preview of the ingested data (default: false)
+  --previewData: oneof<nothing, bool> # When true, return a preview of the ingested data (default: false)
 ]: nothing -> record<dataPreview: list<any>, items: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6724,9 +6723,9 @@ export def "fleet-agentless-policies post-fleet-agentless-policies" [
   --additional-datastreams-permissions: list # Additional data stream permissions that will be added to the agent policy. (nullable)
   --cloud-connector: record # shape: {cloud_connector_id?: string, enabled?: bool, name?: string, target_csp?: "aws"|"azure"|"gcp"}
   --condition: string # Agent condition expression to evaluate whether to apply this integration to its inputs. (nullable)
-  --create-dataset-templates: string@bool-completer # When true, install dedicated index templates for streams with a custom data_stream.dataset. Defaults to true for input packages, false for integration packages.
+  --create-dataset-templates: oneof<nothing, bool> # When true, install dedicated index templates for streams with a custom data_stream.dataset. Defaults to true for input packages, false for integration packages.
   --description: string # Policy description.
-  --force: string@bool-completer # Force package policy creation even if the package is not verified, or if the agent policy is managed.
+  --force: oneof<nothing, bool> # Force package policy creation even if the package is not verified, or if the agent policy is managed.
   --global-data-tags: list # item shape: {name: string, value: any}
   --id: string # Policy unique identifier.
   --inputs: record # Package policy inputs. Refer to the integration documentation to know which inputs are available.
@@ -6764,7 +6763,7 @@ export def "fleet-agentless-policies delete-fleet-agentless-policies-policyid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # Force delete the policy even if the policy is managed.
+  --force: oneof<nothing, bool> # Force delete the policy even if the policy is managed.
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6793,15 +6792,15 @@ export def "fleet-agents get-fleet-agents" [
   --page: float # Page number
   --perPage: float # Number of results per page (default: 20)
   --kuery: string # A KQL query string to filter results
-  --showAgentless: string@bool-completer # When true, include agentless agents in the results (default: true)
-  --showInactive: string@bool-completer # When true, include inactive agents in the results (default: false)
-  --withMetrics: string@bool-completer # When true, include CPU and memory metrics in the response (default: false)
-  --showUpgradeable: string@bool-completer # When true, only return agents that are upgradeable (default: false)
-  --getStatusSummary: string@bool-completer # When true, return a summary of agent statuses in the response (default: false)
+  --showAgentless: oneof<nothing, bool> # When true, include agentless agents in the results (default: true)
+  --showInactive: oneof<nothing, bool> # When true, include inactive agents in the results (default: false)
+  --withMetrics: oneof<nothing, bool> # When true, include CPU and memory metrics in the response (default: false)
+  --showUpgradeable: oneof<nothing, bool> # When true, only return agents that are upgradeable (default: false)
+  --getStatusSummary: oneof<nothing, bool> # When true, return a summary of agent statuses in the response (default: false)
   --sortField: string # Field to sort results by
   --sortOrder: string@sortOrder-completer # Sort order, ascending or descending
   --searchAfter: string # JSON-encoded array of sort values for `search_after` pagination
-  --openPit: string@bool-completer # When true, opens a new point-in-time for pagination
+  --openPit: oneof<nothing, bool> # When true, opens a new point-in-time for pagination
   --pitId: string # Point-in-time ID for pagination
   --pitKeepAlive: string # Duration to keep the point-in-time alive, for example, `1m`
 ]: nothing -> record<items: table<access_api_key: string, access_api_key_id: string, active: bool, agent: record, audit_unenrolled_reason: string, capabilities: list, components: list, default_api_key: string, default_api_key_history: list, default_api_key_id: string, effective_config: any, enrolled_at: string, health: record, id: string, identifying_attributes: record, last_checkin: string, last_checkin_message: string, last_checkin_status: string, last_known_status: string, local_metadata: record, metrics: record, namespaces: list, non_identifying_attributes: record, outputs: record, packages: list, pipeline_config: string, policy_id: string, policy_revision: float, sequence_num: float, signals: list, sort: list, status: string, tags: list, type: string, unenrolled_at: string, unenrollment_started_at: string, unhealthy_reason: list, upgrade: record, upgrade_attempts: list, upgrade_details: record, upgrade_started_at: string, upgraded_at: string, user_provided_metadata: record>, nextSearchAfter: string, page: float, perPage: float, pit: string, statusSummary: record, total: float> {
@@ -6880,7 +6879,7 @@ export def "fleet-agents get-fleet-agents-agentid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --withMetrics: string@bool-completer # When true, include CPU and memory metrics in the response (default: false)
+  --withMetrics: oneof<nothing, bool> # When true, include CPU and memory metrics in the response (default: false)
 ]: nothing -> record<item: record<access_api_key: string, access_api_key_id: string, active: bool, agent: record<id: string, type: string, version: string>, audit_unenrolled_reason: string, capabilities: list<string>, components: list<record>, default_api_key: string, default_api_key_history: list<record>, default_api_key_id: string, effective_config: any, enrolled_at: string, health: record, id: string, identifying_attributes: record, last_checkin: string, last_checkin_message: string, last_checkin_status: string, last_known_status: string, local_metadata: record, metrics: record<cpu_avg: float, memory_size_byte_avg: float>, namespaces: list<string>, non_identifying_attributes: record, outputs: record, packages: list<string>, pipeline_config: string, policy_id: string, policy_revision: float, sequence_num: float, signals: list<string>, sort: list<any>, status: string, tags: list<string>, type: string, unenrolled_at: string, unenrollment_started_at: string, unhealthy_reason: list<string>, upgrade: record<rollbacks: list>, upgrade_attempts: list<string>, upgrade_details: record<action_id: string, metadata: record, state: string, target_version: string>, upgrade_started_at: string, upgraded_at: string, user_provided_metadata: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7156,8 +7155,8 @@ export def "fleet-agents-unenroll post-fleet-agents-agentid-unenroll" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --force: string@bool-completer
-  --revoke: string@bool-completer
+  --force: oneof<nothing, bool>
+  --revoke: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7186,8 +7185,8 @@ export def "fleet-agents-upgrade post-fleet-agents-agentid-upgrade" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --force: string@bool-completer
-  --skipRateLimitCheck: string@bool-completer
+  --force: oneof<nothing, bool>
+  --skipRateLimitCheck: oneof<nothing, bool>
   --source-uri: string
   version: string
 ]: any -> record {
@@ -7381,7 +7380,7 @@ export def "fleet-agents-bulk-reassign post-fleet-agents-bulk-reassign" [
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   agents: any
   --batchSize: float
-  --includeInactive: string@bool-completer # default: false
+  --includeInactive: oneof<nothing, bool> # default: false
   policy_id: string
 ]: any -> record<actionId: string> {
   let input = $in
@@ -7411,7 +7410,7 @@ export def "fleet-agents-bulk-remove-collectors post-fleet-agents-bulk-remove-co
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   agents: any
-  --includeInactive: string@bool-completer # When passing collectors by KQL query, also removes inactive collectors
+  --includeInactive: oneof<nothing, bool> # When passing collectors by KQL query, also removes inactive collectors
 ]: any -> record<actionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7471,7 +7470,7 @@ export def "fleet-agents-bulk-rollback post-fleet-agents-bulk-rollback" [
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   agents: any
   --batchSize: float
-  --includeInactive: string@bool-completer # default: false
+  --includeInactive: oneof<nothing, bool> # default: false
 ]: any -> record<actionIds: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7501,9 +7500,9 @@ export def "fleet-agents-bulk-unenroll post-fleet-agents-bulk-unenroll" [
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   agents: any
   --batchSize: float
-  --force: string@bool-completer # Unenrolls hosted agents too
-  --includeInactive: string@bool-completer # When passing agents by KQL query, unenrolls inactive agents too
-  --revoke: string@bool-completer # Revokes API keys of agents
+  --force: oneof<nothing, bool> # Unenrolls hosted agents too
+  --includeInactive: oneof<nothing, bool> # When passing agents by KQL query, unenrolls inactive agents too
+  --revoke: oneof<nothing, bool> # Revokes API keys of agents
 ]: any -> record<actionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7533,7 +7532,7 @@ export def "fleet-agents-bulk-update-agent-tags post-fleet-agents-bulk-update-ag
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   agents: any
   --batchSize: float
-  --includeInactive: string@bool-completer # default: false
+  --includeInactive: oneof<nothing, bool> # default: false
   --tagsToAdd: list
   --tagsToRemove: list
 ]: any -> record<actionId: string> {
@@ -7565,10 +7564,10 @@ export def "fleet-agents-bulk-upgrade post-fleet-agents-bulk-upgrade" [
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   agents: any
   --batchSize: float
-  --force: string@bool-completer
-  --includeInactive: string@bool-completer # default: false
+  --force: oneof<nothing, bool>
+  --includeInactive: oneof<nothing, bool> # default: false
   --rollout-duration-seconds: float
-  --skipRateLimitCheck: string@bool-completer
+  --skipRateLimitCheck: oneof<nothing, bool>
   --source-uri: string
   --start-time: string
   version: string
@@ -7602,7 +7601,7 @@ export def "fleet-agents-collector-groups get-fleet-agents-collector-groups" [
   --kuery: string # A KQL query string to filter collectors before grouping
   --perPage: float # Number of groups per page (default: 20)
   --afterKey: string # After key is used for cursor-based pagination, use it to get the next page of results
-  --showInactive: string@bool-completer # When true, include inactive collectors in the results (default: false)
+  --showInactive: oneof<nothing, bool> # When true, include inactive collectors in the results (default: false)
 ]: nothing -> record<afterKey: string, items: table<docCount: float, group: string, groupDisplayName: string, isUngrouped: bool, signals: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7719,7 +7718,7 @@ export def "fleet-agents-tags get-fleet-agents-tags" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --kuery: string # A KQL query string to filter results
-  --showInactive: string@bool-completer # When true, include tags from inactive agents (default: false)
+  --showInactive: oneof<nothing, bool> # When true, include tags from inactive agents (default: false)
 ]: nothing -> record<items: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7742,7 +7741,7 @@ export def "fleet-check-permissions get-fleet-check-permissions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --fleetServerSetup: string@bool-completer # When true, check Fleet Server setup privileges in addition to standard Fleet privileges
+  --fleetServerSetup: oneof<nothing, bool> # When true, check Fleet Server setup privileges in addition to standard Fleet privileges
 ]: nothing -> record<error: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7822,7 +7821,7 @@ export def "fleet-cloud-connectors delete-fleet-cloud-connectors-cloudconnectori
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # If true, forces deletion even if the cloud connector is in use.
+  --force: oneof<nothing, bool> # If true, forces deletion even if the cloud connector is in use.
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8003,8 +8002,8 @@ export def "fleet-enrollment-api-keys-bulk-delete post-fleet-enrollment-api-keys
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --forceDelete: string@bool-completer # When false (default), invalidate the API key and mark the token as inactive. When true, also delete the token document. (default: false)
-  --includeHidden: string@bool-completer # When true, allow deletion of hidden enrollment tokens (managed/agentless policies). Defaults to false. (default: false)
+  --forceDelete: oneof<nothing, bool> # When false (default), invalidate the API key and mark the token as inactive. When true, also delete the token document. (default: false)
+  --includeHidden: oneof<nothing, bool> # When true, allow deletion of hidden enrollment tokens (managed/agentless policies). Defaults to false. (default: false)
   --kuery: string # KQL query to select enrollment tokens to delete.
   --tokenIds: list # List of enrollment token IDs to delete.
 ]: any -> record<action: string, count: float, errorCount: float, successCount: float> {
@@ -8034,8 +8033,8 @@ export def "fleet-enrollment-api-keys delete-fleet-enrollment-api-keys-keyid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --forceDelete: string@bool-completer # When false (default), invalidate the API key and mark the token as inactive. When true, also delete the token document. (default: false)
-  --includeHidden: string@bool-completer # When true, allow deletion of hidden enrollment tokens (managed/agentless policies). Defaults to false. (default: false)
+  --forceDelete: oneof<nothing, bool> # When false (default), invalidate the API key and mark the token as inactive. When true, also delete the token document. (default: false)
+  --includeHidden: oneof<nothing, bool> # When true, allow deletion of hidden enrollment tokens (managed/agentless policies). Defaults to false. (default: false)
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
 ]: nothing -> record<action: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8112,8 +8111,8 @@ export def "fleet-epm-categories get-fleet-epm-categories" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --prerelease: string@bool-completer # When true, include prerelease packages in the results
-  --include-policy-templates: string@bool-completer # When true, include categories that only contain policy templates
+  --prerelease: oneof<nothing, bool> # When true, include prerelease packages in the results
+  --include-policy-templates: oneof<nothing, bool> # When true, include categories that only contain policy templates
 ]: nothing -> record<items: table<count: float, id: string, parent_id: string, parent_title: string, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8139,7 +8138,7 @@ export def "fleet-epm-custom-integrations post-fleet-epm-custom-integrations" [
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   datasets: list # item shape: {name: string, type: "logs"|"metrics"|"traces"|"synthetics"|"profiling"}
-  --force: string@bool-completer
+  --force: oneof<nothing, bool>
   integrationName: string
 ]: any -> record<_meta: record<install_source: string, name: string>, items: list<any>> {
   let input = $in
@@ -8200,7 +8199,7 @@ export def "fleet-epm-data-streams get-fleet-epm-data-streams" [
   --type: string@type-completer-3 # Filter by data stream type
   --datasetQuery: string # Filter data streams by dataset name
   --sortOrder: string@sortOrder-completer # Sort order, ascending or descending (default: asc)
-  --uncategorisedOnly: string@bool-completer # When true, only return data streams that are not associated with a package (default: false)
+  --uncategorisedOnly: oneof<nothing, bool> # When true, only return data streams that are not associated with a package (default: false)
 ]: nothing -> record<items: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8224,9 +8223,9 @@ export def "fleet-epm-packages get-fleet-epm-packages" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --category: string # Filter packages by category
-  --prerelease: string@bool-completer # When true, include prerelease packages in the results
-  --excludeInstallStatus: string@bool-completer # When true, exclude the install status from the response
-  --withPackagePoliciesCount: string@bool-completer # When true, include the number of package policies per package
+  --prerelease: oneof<nothing, bool> # When true, include prerelease packages in the results
+  --excludeInstallStatus: oneof<nothing, bool> # When true, exclude the install status from the response
+  --withPackagePoliciesCount: oneof<nothing, bool> # When true, include the number of package policies per package
 ]: nothing -> record<items: table<categories: list, conditions: record, data_streams: list, deprecated: record, description: string, discovery: record, download: string, format_version: string, icons: list, id: string, installationInfo: record, integration: string, internal: bool, latestVersion: string, name: string, owner: record, path: string, policy_templates: list, readme: string, release: string, signature_path: string, source: record, status: string, title: string, type: any, var_groups: list, vars: list, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8250,8 +8249,8 @@ export def "fleet-epm-packages post-fleet-epm-packages" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --ignoreMappingUpdateErrors: string@bool-completer # When true, ignore mapping update errors during installation (default: false)
-  --skipDataStreamRollover: string@bool-completer # When true, skip data stream rollover after installation (default: false)
+  --ignoreMappingUpdateErrors: oneof<nothing, bool> # When true, ignore mapping update errors during installation (default: false)
+  --skipDataStreamRollover: oneof<nothing, bool> # When true, skip data stream rollover after installation (default: false)
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   --body: record
 ]: any -> any {
@@ -8280,9 +8279,9 @@ export def "fleet-epm-packages-bulk post-fleet-epm-packages-bulk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --prerelease: string@bool-completer # When true, allow installing prerelease versions
+  --prerelease: oneof<nothing, bool> # When true, allow installing prerelease versions
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --force: string@bool-completer # default: false
+  --force: oneof<nothing, bool> # default: false
   packages: list
 ]: any -> record<items: list<any>> {
   let input = $in
@@ -8394,7 +8393,7 @@ export def "fleet-epm-packages-bulk-uninstall post-fleet-epm-packages-bulk-unins
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --force: string@bool-completer # default: false
+  --force: oneof<nothing, bool> # default: false
   packages: list # item shape: {name: string, version: string}
 ]: any -> record<taskId: string> {
   let input = $in
@@ -8446,10 +8445,10 @@ export def "fleet-epm-packages-bulk-upgrade post-fleet-epm-packages-bulk-upgrade
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --force: string@bool-completer # default: false
+  --force: oneof<nothing, bool> # default: false
   packages: list # item shape: {name: string, version?: string}
-  --prerelease: string@bool-completer
-  --upgrade-package-policies: string@bool-completer # default: false
+  --prerelease: oneof<nothing, bool>
+  --upgrade-package-policies: oneof<nothing, bool> # default: false
 ]: any -> record<taskId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8499,7 +8498,7 @@ export def "fleet-epm-packages delete-fleet-epm-packages-pkgname" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # When true, delete the package even if it has active package policies
+  --force: oneof<nothing, bool> # When true, delete the package even if it has active package policies
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
 ]: nothing -> record<items: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8526,10 +8525,10 @@ export def "fleet-epm-packages get-fleet-epm-packages-pkgname" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ignoreUnverified: string@bool-completer # When true, returns the package even if the signature cannot be verified
-  --prerelease: string@bool-completer # When true, include prerelease versions
-  --full: string@bool-completer # When true, return the full package info including assets
-  --withMetadata: string@bool-completer # When true, include package metadata such as whether it has package policies (default: false)
+  --ignoreUnverified: oneof<nothing, bool> # When true, returns the package even if the signature cannot be verified
+  --prerelease: oneof<nothing, bool> # When true, include prerelease versions
+  --full: oneof<nothing, bool> # When true, return the full package info including assets
+  --withMetadata: oneof<nothing, bool> # When true, include package metadata such as whether it has package policies (default: false)
 ]: nothing -> record<item: record<agent: record<privileges: record>, asset_tags: list<record>, assets: record, categories: list<string>, conditions: record<deprecated: record, elastic: record, kibana: record>, data_streams: list<record>, deprecated: record<description: string, replaced_by: record, since: string>, description: string, discovery: record<datasets: list, fields: list>, download: string, elasticsearch: record, format_version: string, icons: list<record>, installationInfo: record<additional_spaces_installed_kibana: record, created_at: string, experimental_data_stream_features: list, install_format_schema_version: string, install_source: string, install_status: string, installed_es: list, installed_kibana: list, installed_kibana_space_id: string, is_rollback_ttl_expired: bool, latest_executed_state: record, latest_install_failed_attempts: list, name: string, namespaces: list, previous_version: string, rolled_back: bool, type: string, updated_at: string, verification_key_id: string, verification_status: string, version: string>, internal: bool, keepPoliciesUpToDate: bool, latestVersion: string, license: string, licensePath: string, name: string, notice: string, owner: record<github: string, type: string>, path: string, policy_templates: list<record>, readme: string, release: string, screenshots: list<record>, signature_path: string, source: record<license: string>, status: string, title: string, type: any, var_groups: list<record>, vars: list<record>, version: string>, metadata: record<has_policies: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8553,13 +8552,13 @@ export def "fleet-epm-packages post-fleet-epm-packages-pkgname" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --prerelease: string@bool-completer # When true, allow installing prerelease versions
-  --ignoreMappingUpdateErrors: string@bool-completer # When true, ignore mapping update errors during installation (default: false)
-  --skipDataStreamRollover: string@bool-completer # When true, skip data stream rollover after installation (default: false)
-  --skipDependencyCheck: string@bool-completer # Skip dependency validation when installing a package with dependencies (default: false)
+  --prerelease: oneof<nothing, bool> # When true, allow installing prerelease versions
+  --ignoreMappingUpdateErrors: oneof<nothing, bool> # When true, ignore mapping update errors during installation (default: false)
+  --skipDataStreamRollover: oneof<nothing, bool> # When true, skip data stream rollover after installation (default: false)
+  --skipDependencyCheck: oneof<nothing, bool> # Skip dependency validation when installing a package with dependencies (default: false)
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --force: string@bool-completer # default: false
-  --ignore-constraints: string@bool-completer # default: false
+  --force: oneof<nothing, bool> # default: false
+  --ignore-constraints: oneof<nothing, bool> # default: false
 ]: any -> record<_meta: record<install_source: string, name: string>, items: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8589,7 +8588,7 @@ export def "fleet-epm-packages put-fleet-epm-packages-pkgname" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --keepPoliciesUpToDate: string@bool-completer
+  --keepPoliciesUpToDate: oneof<nothing, bool>
   --namespace-customization-enabled-for: list # Namespaces for which namespace-level customization is enabled on this package.
 ]: any -> record<item: record<agent: record<privileges: record>, asset_tags: list<record>, assets: record, categories: list<string>, conditions: record<deprecated: record, elastic: record, kibana: record>, data_streams: list<record>, deprecated: record<description: string, replaced_by: record, since: string>, description: string, discovery: record<datasets: list, fields: list>, download: string, elasticsearch: record, format_version: string, icons: list<record>, installationInfo: record<additional_spaces_installed_kibana: record, created_at: string, experimental_data_stream_features: list, install_format_schema_version: string, install_source: string, install_status: string, installed_es: list, installed_kibana: list, installed_kibana_space_id: string, is_rollback_ttl_expired: bool, latest_executed_state: record, latest_install_failed_attempts: list, name: string, namespaces: list, previous_version: string, rolled_back: bool, type: string, updated_at: string, verification_key_id: string, verification_status: string, version: string>, internal: bool, keepPoliciesUpToDate: bool, latestVersion: string, license: string, licensePath: string, name: string, notice: string, owner: record<github: string, type: string>, path: string, policy_templates: list<record>, readme: string, release: string, screenshots: list<record>, signature_path: string, source: record<license: string>, status: string, title: string, type: any, var_groups: list<record>, vars: list<record>, version: string>> {
   let input = $in
@@ -8619,7 +8618,7 @@ export def "fleet-epm-packages delete-fleet-epm-packages-pkgname-pkgversion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # When true, delete the package even if it has active package policies
+  --force: oneof<nothing, bool> # When true, delete the package even if it has active package policies
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
 ]: nothing -> record<items: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8647,10 +8646,10 @@ export def "fleet-epm-packages get-fleet-epm-packages-pkgname-pkgversion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ignoreUnverified: string@bool-completer # When true, returns the package even if the signature cannot be verified
-  --prerelease: string@bool-completer # When true, include prerelease versions
-  --full: string@bool-completer # When true, return the full package info including assets
-  --withMetadata: string@bool-completer # When true, include package metadata such as whether it has package policies (default: false)
+  --ignoreUnverified: oneof<nothing, bool> # When true, returns the package even if the signature cannot be verified
+  --prerelease: oneof<nothing, bool> # When true, include prerelease versions
+  --full: oneof<nothing, bool> # When true, return the full package info including assets
+  --withMetadata: oneof<nothing, bool> # When true, include package metadata such as whether it has package policies (default: false)
 ]: nothing -> record<item: record<agent: record<privileges: record>, asset_tags: list<record>, assets: record, categories: list<string>, conditions: record<deprecated: record, elastic: record, kibana: record>, data_streams: list<record>, deprecated: record<description: string, replaced_by: record, since: string>, description: string, discovery: record<datasets: list, fields: list>, download: string, elasticsearch: record, format_version: string, icons: list<record>, installationInfo: record<additional_spaces_installed_kibana: record, created_at: string, experimental_data_stream_features: list, install_format_schema_version: string, install_source: string, install_status: string, installed_es: list, installed_kibana: list, installed_kibana_space_id: string, is_rollback_ttl_expired: bool, latest_executed_state: record, latest_install_failed_attempts: list, name: string, namespaces: list, previous_version: string, rolled_back: bool, type: string, updated_at: string, verification_key_id: string, verification_status: string, version: string>, internal: bool, keepPoliciesUpToDate: bool, latestVersion: string, license: string, licensePath: string, name: string, notice: string, owner: record<github: string, type: string>, path: string, policy_templates: list<record>, readme: string, release: string, screenshots: list<record>, signature_path: string, source: record<license: string>, status: string, title: string, type: any, var_groups: list<record>, vars: list<record>, version: string>, metadata: record<has_policies: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8675,13 +8674,13 @@ export def "fleet-epm-packages post-fleet-epm-packages-pkgname-pkgversion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --prerelease: string@bool-completer # When true, allow installing prerelease versions
-  --ignoreMappingUpdateErrors: string@bool-completer # When true, ignore mapping update errors during installation (default: false)
-  --skipDataStreamRollover: string@bool-completer # When true, skip data stream rollover after installation (default: false)
-  --skipDependencyCheck: string@bool-completer # Skip dependency validation when installing a package with dependencies (default: false)
+  --prerelease: oneof<nothing, bool> # When true, allow installing prerelease versions
+  --ignoreMappingUpdateErrors: oneof<nothing, bool> # When true, ignore mapping update errors during installation (default: false)
+  --skipDataStreamRollover: oneof<nothing, bool> # When true, skip data stream rollover after installation (default: false)
+  --skipDependencyCheck: oneof<nothing, bool> # Skip dependency validation when installing a package with dependencies (default: false)
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --force: string@bool-completer # default: false
-  --ignore-constraints: string@bool-completer # default: false
+  --force: oneof<nothing, bool> # default: false
+  --ignore-constraints: oneof<nothing, bool> # default: false
 ]: any -> record<_meta: record<install_source: string, name: string>, items: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8712,7 +8711,7 @@ export def "fleet-epm-packages put-fleet-epm-packages-pkgname-pkgversion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --keepPoliciesUpToDate: string@bool-completer
+  --keepPoliciesUpToDate: oneof<nothing, bool>
   --namespace-customization-enabled-for: list # Namespaces for which namespace-level customization is enabled on this package.
 ]: any -> record<item: record<agent: record<privileges: record>, asset_tags: list<record>, assets: record, categories: list<string>, conditions: record<deprecated: record, elastic: record, kibana: record>, data_streams: list<record>, deprecated: record<description: string, replaced_by: record, since: string>, description: string, discovery: record<datasets: list, fields: list>, download: string, elasticsearch: record, format_version: string, icons: list<record>, installationInfo: record<additional_spaces_installed_kibana: record, created_at: string, experimental_data_stream_features: list, install_format_schema_version: string, install_source: string, install_status: string, installed_es: list, installed_kibana: list, installed_kibana_space_id: string, is_rollback_ttl_expired: bool, latest_executed_state: record, latest_install_failed_attempts: list, name: string, namespaces: list, previous_version: string, rolled_back: bool, type: string, updated_at: string, verification_key_id: string, verification_status: string, version: string>, internal: bool, keepPoliciesUpToDate: bool, latestVersion: string, license: string, licensePath: string, name: string, notice: string, owner: record<github: string, type: string>, path: string, policy_templates: list<record>, readme: string, release: string, screenshots: list<record>, signature_path: string, source: record<license: string>, status: string, title: string, type: any, var_groups: list<record>, vars: list<record>, version: string>> {
   let input = $in
@@ -8844,7 +8843,7 @@ export def "fleet-epm-packages-kibana-assets post-fleet-epm-packages-pkgname-pkg
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --force: string@bool-completer
+  --force: oneof<nothing, bool>
   --space-ids: list # When provided, assets are installed in the specified spaces instead of the current space.
 ]: any -> record<success: bool> {
   let input = $in
@@ -8875,7 +8874,7 @@ export def "fleet-epm-packages-rule-assets post-fleet-epm-packages-pkgname-pkgve
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --force: string@bool-completer
+  --force: oneof<nothing, bool>
 ]: any -> record<success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8905,7 +8904,7 @@ export def "fleet-epm-packages-transforms-authorize post-fleet-epm-packages-pkgn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --prerelease: string@bool-completer # When true, allow prerelease versions
+  --prerelease: oneof<nothing, bool> # When true, allow prerelease versions
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   transforms: list # item shape: {transformId: string}
 ]: any -> table<error: any, success: bool, transformId: string> {
@@ -9013,7 +9012,7 @@ export def "fleet-epm-packages-installed get-fleet-epm-packages-installed" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dataStreamType: string@dataStreamType-completer # Filter by data stream type
-  --showOnlyActiveDataStreams: string@bool-completer # When true, only return packages with active data streams
+  --showOnlyActiveDataStreams: oneof<nothing, bool> # When true, only return packages with active data streams
   --nameQuery: string # Filter packages by name
   --searchAfter: list # Sort values from the previous page for `search_after` pagination
   --perPage: float # Number of results per page (default: 15)
@@ -9064,8 +9063,8 @@ export def "fleet-epm-templates-inputs get-fleet-epm-templates-pkgname-pkgversio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --format: string@format-completer-1 # Output format for the inputs template: json, yml, or yaml (default: json)
-  --prerelease: string@bool-completer # When true, allow prerelease versions
-  --ignoreUnverified: string@bool-completer # When true, return inputs even if the package signature cannot be verified
+  --prerelease: oneof<nothing, bool> # When true, allow prerelease versions
+  --ignoreUnverified: oneof<nothing, bool> # When true, return inputs even if the package signature cannot be verified
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9135,9 +9134,9 @@ export def "fleet-fleet-server-hosts post-fleet-fleet-server-hosts" [
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   host_urls: list
   --id: string
-  --is-default: string@bool-completer # default: false
-  --is-internal: string@bool-completer
-  --is-preconfigured: string@bool-completer # default: false
+  --is-default: oneof<nothing, bool> # default: false
+  --is-internal: oneof<nothing, bool>
+  --is-preconfigured: oneof<nothing, bool> # default: false
   name: string
   --proxy-id: string # nullable
   --secrets: record # shape: {ssl?: record}
@@ -9220,8 +9219,8 @@ export def "fleet-fleet-server-hosts put-fleet-fleet-server-hosts-itemid" [
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   --host-urls: list
-  --is-default: string@bool-completer
-  --is-internal: string@bool-completer
+  --is-default: oneof<nothing, bool>
+  --is-internal: oneof<nothing, bool>
   --name: string
   --proxy-id: string # nullable
   --secrets: record # shape: {ssl?: record}
@@ -9280,7 +9279,7 @@ export def "fleet-kubernetes get-fleet-kubernetes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --download: string@bool-completer # If true, returns the manifest as a downloadable file
+  --download: oneof<nothing, bool> # If true, returns the manifest as a downloadable file
   --fleetServer: string # Fleet Server host URL to include in the manifest
   --enrolToken: string # Enrollment token to include in the manifest
 ]: nothing -> record<item: string> {
@@ -9305,7 +9304,7 @@ export def "fleet-kubernetes-download get-fleet-kubernetes-download" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --download: string@bool-completer # If true, returns the manifest as a downloadable file
+  --download: oneof<nothing, bool> # If true, returns the manifest as a downloadable file
   --fleetServer: string # Fleet Server host URL to include in the manifest
   --enrolToken: string # Enrollment token to include in the manifest
 ]: nothing -> string {
@@ -9354,7 +9353,7 @@ export def "fleet-message-signing-service-rotate-key-pair post-fleet-message-sig
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acknowledge: string@bool-completer # Set to true to confirm you understand the risks of rotating the key pair (default: false)
+  --acknowledge: oneof<nothing, bool> # Set to true to confirm you understand the risks of rotating the key pair (default: false)
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9415,12 +9414,12 @@ export def "fleet-outputs post-fleet-outputs" [
   --config-yaml: string # nullable
   --hosts: list
   --id: string
-  --is-default: string@bool-completer # default: false
-  --is-default-monitoring: string@bool-completer # default: false
-  --is-internal: string@bool-completer
-  --is-preconfigured: string@bool-completer
+  --is-default: oneof<nothing, bool> # default: false
+  --is-default-monitoring: oneof<nothing, bool> # default: false
+  --is-internal: oneof<nothing, bool>
+  --is-preconfigured: oneof<nothing, bool>
   --name: string
-  --otel-disable-beatsauth: string@bool-completer # nullable
+  --otel-disable-beatsauth: oneof<nothing, bool> # nullable
   --otel-exporter-config-yaml: string # nullable
   --preset: string@preset-completer
   --proxy-id: string # nullable
@@ -9428,12 +9427,12 @@ export def "fleet-outputs post-fleet-outputs" [
   --shipper: any # nullable
   --ssl: any # nullable
   type: string@type-completer-4
-  --write-to-logs-streams: string@bool-completer # nullable
+  --write-to-logs-streams: oneof<nothing, bool> # nullable
   --kibana-api-key: string # nullable
   --kibana-url: string # nullable
   --service-token: string # nullable
-  --sync-integrations: string@bool-completer
-  --sync-uninstalled-integrations: string@bool-completer
+  --sync-integrations: oneof<nothing, bool>
+  --sync-uninstalled-integrations: oneof<nothing, bool>
   --auth-type: string@auth-type-completer
   --broker-timeout: float
   --client-id: string
@@ -9540,12 +9539,12 @@ export def "fleet-outputs put-fleet-outputs-outputid" [
   --config-yaml: string # nullable
   --hosts: list
   --id: string
-  --is-default: string@bool-completer
-  --is-default-monitoring: string@bool-completer
-  --is-internal: string@bool-completer
-  --is-preconfigured: string@bool-completer
+  --is-default: oneof<nothing, bool>
+  --is-default-monitoring: oneof<nothing, bool>
+  --is-internal: oneof<nothing, bool>
+  --is-preconfigured: oneof<nothing, bool>
   --name: string
-  --otel-disable-beatsauth: string@bool-completer # nullable
+  --otel-disable-beatsauth: oneof<nothing, bool> # nullable
   --otel-exporter-config-yaml: string # nullable
   --preset: string@preset-completer
   --proxy-id: string # nullable
@@ -9553,12 +9552,12 @@ export def "fleet-outputs put-fleet-outputs-outputid" [
   --shipper: any # nullable
   --ssl: any # nullable
   --type: string@type-completer-5
-  --write-to-logs-streams: string@bool-completer # nullable
+  --write-to-logs-streams: oneof<nothing, bool> # nullable
   --kibana-api-key: string # nullable
   --kibana-url: string # nullable
   --service-token: string # nullable
-  --sync-integrations: string@bool-completer
-  --sync-uninstalled-integrations: string@bool-completer
+  --sync-integrations: oneof<nothing, bool>
+  --sync-uninstalled-integrations: oneof<nothing, bool>
   --auth-type: string@auth-type-completer
   --broker-timeout: float
   --client-id: string
@@ -9630,10 +9629,10 @@ export def "fleet-package-policies get-fleet-package-policies" [
   --perPage: float # Number of results per page
   --sortField: string # Field to sort results by
   --sortOrder: string@sortOrder-completer # Sort order, ascending or descending
-  --showUpgradeable: string@bool-completer # When true, only show policies with available upgrades
+  --showUpgradeable: oneof<nothing, bool> # When true, only show policies with available upgrades
   --kuery: string # A KQL query string to filter results
   --format: string@format-completer # Format for the response: simplified or legacy
-  --withAgentCount: string@bool-completer # When true, include the agent count per package policy
+  --withAgentCount: oneof<nothing, bool> # When true, include the agent count per package policy
 ]: nothing -> record<items: table<additional_datastreams_permissions: list, agents: float, cloud_connector_id: string, cloud_connector_name: string, condition: string, created_at: string, created_by: string, description: string, elasticsearch: record, enabled: bool, global_data_tags: list, id: string, inputs: any, is_managed: bool, name: string, namespace: string, output_id: string, overrides: record, package: record, package_agent_version_condition: string, policy_id: string, policy_ids: list, revision: float, secret_references: list, spaceIds: list, supports_agentless: bool, supports_cloud_connector: bool, updated_at: string, updated_by: string, var_group_selections: record, vars: any, version: string>, page: float, perPage: float, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9669,14 +9668,14 @@ export def "fleet-package-policies post-fleet-package-policies" [
   --cloud-connector-id: string # ID of the cloud connector associated with this package policy. (nullable)
   --cloud-connector-name: string # Transient field for cloud connector name during creation. (nullable)
   --condition: string # Agent condition expression to evaluate whether to apply this integration to its inputs. (nullable)
-  --create-dataset-templates: string@bool-completer # When true, install dedicated index templates for streams with a custom data_stream.dataset. Defaults to true for input packages, false for integration packages.
+  --create-dataset-templates: oneof<nothing, bool> # When true, install dedicated index templates for streams with a custom data_stream.dataset. Defaults to true for input packages, false for integration packages.
   --description: string # Package policy description
-  --enabled: string@bool-completer
-  --force: string@bool-completer # Force package policy creation even if the package is not verified, or if the agent policy is managed.
+  --enabled: oneof<nothing, bool>
+  --force: oneof<nothing, bool> # Force package policy creation even if the package is not verified, or if the agent policy is managed.
   --global-data-tags: list # nullable — item shape: {name: string, value: any}
   --id: string # Package policy unique identifier
   --inputs: list # item shape: {condition?: string, config?: record, deprecated?: record, enabled: bool, id?: string, keep_enabled?: bool, migrate_from?: string, name?: string, policy_template?: string, streams?: list, type: string, var_group_selections?: record, vars?: record}
-  --is-managed: string@bool-completer
+  --is-managed: oneof<nothing, bool>
   --name: string # Unique name for the package policy.
   --namespace: string # The package policy namespace. Leave blank to inherit the agent policy's namespace.
   --output-id: string # nullable
@@ -9686,8 +9685,8 @@ export def "fleet-package-policies post-fleet-package-policies" [
   --policy-id: string # ID of the agent policy which the package policy will be added to. (DEPRECATED, nullable)
   --policy-ids: list
   --spaceIds: list
-  --supports-agentless: string@bool-completer # Indicates whether the package policy belongs to an agentless agent policy. Deprecated in favor of the Fleet agentless policies API. (DEPRECATED, nullable)
-  --supports-cloud-connector: string@bool-completer # Indicates whether the package policy supports cloud connectors. (nullable)
+  --supports-agentless: oneof<nothing, bool> # Indicates whether the package policy belongs to an agentless agent policy. Deprecated in favor of the Fleet agentless policies API. (DEPRECATED, nullable)
+  --supports-cloud-connector: oneof<nothing, bool> # Indicates whether the package policy supports cloud connectors. (nullable)
   --var-group-selections: record # Variable group selections. Maps var_group name to the selected option name within that group.
   --vars: record # Package variable (see integration documentation for more information)
   --cloud-connector: record # shape: {cloud_connector_id?: string, enabled?: bool, name?: string, target_csp?: "aws"|"azure"|"gcp"}
@@ -9722,7 +9721,7 @@ export def "fleet-package-policies-bulk-get post-fleet-package-policies-bulk-get
   --format: string@format-completer # Format for the response: simplified or legacy
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   ids: list # list of package policy ids
-  --ignoreMissing: string@bool-completer
+  --ignoreMissing: oneof<nothing, bool>
 ]: any -> record<items: table<additional_datastreams_permissions: list, agents: float, cloud_connector_id: string, cloud_connector_name: string, condition: string, created_at: string, created_by: string, description: string, elasticsearch: record, enabled: bool, global_data_tags: list, id: string, inputs: any, is_managed: bool, name: string, namespace: string, output_id: string, overrides: record, package: record, package_agent_version_condition: string, policy_id: string, policy_ids: list, revision: float, secret_references: list, spaceIds: list, supports_agentless: bool, supports_cloud_connector: bool, updated_at: string, updated_by: string, var_group_selections: record, vars: any, version: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9751,7 +9750,7 @@ export def "fleet-package-policies delete-fleet-package-policies-packagepolicyid
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # When true, delete the package policy even if it is managed
+  --force: oneof<nothing, bool> # When true, delete the package policy even if it is managed
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9815,11 +9814,11 @@ export def "fleet-package-policies put-fleet-package-policies-packagepolicyid" [
   --cloud-connector-name: string # Transient field for cloud connector name during creation. (nullable)
   --condition: string # Agent condition expression to evaluate whether to apply this integration to its inputs. (nullable)
   --description: string # Package policy description
-  --enabled: string@bool-completer
-  --force: string@bool-completer
+  --enabled: oneof<nothing, bool>
+  --force: oneof<nothing, bool>
   --global-data-tags: list # nullable — item shape: {name: string, value: any}
   --inputs: list # item shape: {condition?: string, config?: record, deprecated?: record, enabled: bool, id?: string, keep_enabled?: bool, migrate_from?: string, name?: string, policy_template?: string, streams?: list, type: string, var_group_selections?: record, vars?: record}
-  --is-managed: string@bool-completer
+  --is-managed: oneof<nothing, bool>
   --name: string
   --namespace: string # The package policy namespace. Leave blank to inherit the agent policy's namespace.
   --output-id: string # nullable
@@ -9829,13 +9828,13 @@ export def "fleet-package-policies put-fleet-package-policies-packagepolicyid" [
   --policy-id: string # ID of the agent policy which the package policy will be added to. (DEPRECATED, nullable)
   --policy-ids: list
   --spaceIds: list
-  --supports-agentless: string@bool-completer # Indicates whether the package policy belongs to an agentless agent policy. (nullable)
-  --supports-cloud-connector: string@bool-completer # Indicates whether the package policy supports cloud connectors. (nullable)
+  --supports-agentless: oneof<nothing, bool> # Indicates whether the package policy belongs to an agentless agent policy. (nullable)
+  --supports-cloud-connector: oneof<nothing, bool> # Indicates whether the package policy supports cloud connectors. (nullable)
   --var-group-selections: record # Variable group selections. Maps var_group name to the selected option name within that group.
   --vars: record # Package variable (see integration documentation for more information)
   --version: string
   --cloud-connector: record # shape: {cloud_connector_id?: string, enabled?: bool, name?: string, target_csp?: "aws"|"azure"|"gcp"}
-  --create-dataset-templates: string@bool-completer # When true, install dedicated index templates for streams with a custom data_stream.dataset. Defaults to true for input packages, false for integration packages.
+  --create-dataset-templates: oneof<nothing, bool> # When true, install dedicated index templates for streams with a custom data_stream.dataset. Defaults to true for input packages, false for integration packages.
   --id: string # Policy unique identifier.
   --policy-template: string # The policy template to use for the agentless package policy. If not provided, the default policy template will be used.
 ]: any -> record<item: record<additional_datastreams_permissions: list<string>, agents: float, cloud_connector_id: string, cloud_connector_name: string, condition: string, created_at: string, created_by: string, description: string, elasticsearch: record<privileges: record>, enabled: bool, global_data_tags: list<record>, id: string, inputs: any, is_managed: bool, name: string, namespace: string, output_id: string, overrides: record<inputs: record>, package: record<experimental_data_stream_features: list, fips_compatible: bool, name: string, requires_root: bool, title: string, version: string>, package_agent_version_condition: string, policy_id: string, policy_ids: list<string>, revision: float, secret_references: list<record>, spaceIds: list<string>, supports_agentless: bool, supports_cloud_connector: bool, updated_at: string, updated_by: string, var_group_selections: record, vars: any, version: string>> {
@@ -9866,7 +9865,7 @@ export def "fleet-package-policies-delete post-fleet-package-policies-delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --force: string@bool-completer
+  --force: oneof<nothing, bool>
   packagePolicyIds: list
 ]: any -> table<body: record<message: string>, id: string, name: string, statusCode: float, success: bool> {
   let input = $in
@@ -9977,7 +9976,7 @@ export def "fleet-proxies post-fleet-proxies" [
   --certificate-authorities: string # nullable
   --certificate-key: string # nullable
   --id: string
-  --is-preconfigured: string@bool-completer # default: false
+  --is-preconfigured: oneof<nothing, bool> # default: false
   name: string
   --proxy-headers: record # nullable
   --body-url: string
@@ -10089,7 +10088,7 @@ export def "fleet-service-tokens post-fleet-service-tokens" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --remote: string@bool-completer # default: false
+  --remote: oneof<nothing, bool> # default: false
 ]: any -> record<name: string, value: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10145,11 +10144,11 @@ export def "fleet-settings put-fleet-settings" [
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   --additional-yaml-config: string # DEPRECATED
   --delete-unenrolled-agents: record # shape: {enabled: bool, is_preconfigured: bool}
-  --has-seen-add-data-notice: string@bool-completer # DEPRECATED
-  --integration-knowledge-enabled: string@bool-completer
+  --has-seen-add-data-notice: oneof<nothing, bool> # DEPRECATED
+  --integration-knowledge-enabled: oneof<nothing, bool>
   --kibana-ca-sha256: string # DEPRECATED
   --kibana-urls: list # DEPRECATED
-  --prerelease-integrations-enabled: string@bool-completer
+  --prerelease-integrations-enabled: oneof<nothing, bool>
 ]: any -> record<item: record<action_secret_storage_requirements_met: bool, delete_unenrolled_agents: record<enabled: bool, is_preconfigured: bool>, download_source_auth_secret_storage_requirements_met: bool, has_seen_add_data_notice: bool, id: string, ilm_migration_status: record<logs: string, metrics: string, synthetics: string>, integration_knowledge_enabled: bool, output_secret_storage_requirements_met: bool, preconfigured_fields: list<string>, prerelease_integrations_enabled: bool, secret_storage_requirements_met: bool, ssl_secret_storage_requirements_met: bool, use_space_awareness_migration_started_at: string, use_space_awareness_migration_status: string, version: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10298,8 +10297,8 @@ export def "lists DeleteList" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: string # Value list identifier to delete, including all of its list items. (format: nonempty, e.g. 21b01cfb-058d-44b9-838c-282be16c91cd)
-  --deleteReferences: string@bool-completer # Determines whether exception items referencing this value list should be deleted. (default: false, e.g. false)
-  --ignoreReferences: string@bool-completer # Determines whether to delete value list without performing any additional checks of where this list may be utilized. (default: false, e.g. false)
+  --deleteReferences: oneof<nothing, bool> # Determines whether exception items referencing this value list should be deleted. (default: false, e.g. false)
+  --ignoreReferences: oneof<nothing, bool> # Determines whether to delete value list without performing any additional checks of where this list may be utilized. (default: false, e.g. false)
 ]: nothing -> record<_version: string, _timestamp: string, created_at: string, created_by: string, description: string, id: string, immutable: bool, meta: record, name: string, tie_breaker_id: string, type: string, updated_at: string, updated_by: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10770,7 +10769,7 @@ export def "maintenance-window post-maintenance-window" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --enabled: string@bool-completer # Whether the current maintenance window is enabled. Disabled maintenance windows do not suppress notifications.
+  --enabled: oneof<nothing, bool> # Whether the current maintenance window is enabled. Disabled maintenance windows do not suppress notifications.
   schedule: record # shape: {custom: record}
   --scope: record # shape: {alerting: record}
   title: string # The name of the maintenance window. While this name does not have to be unique, a distinctive name can help you identify a specific maintenance window.
@@ -10878,7 +10877,7 @@ export def "maintenance-window patch-maintenance-window-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --enabled: string@bool-completer # Whether the current maintenance window is enabled. Disabled maintenance windows do not suppress notifications.
+  --enabled: oneof<nothing, bool> # Whether the current maintenance window is enabled. Disabled maintenance windows do not suppress notifications.
   --schedule: record # shape: {custom: record}
   --scope: record # shape: {alerting: record}
   --title: string # The name of the maintenance window. While this name does not have to be unique, a distinctive name can help you identify a specific maintenance window.
@@ -10958,7 +10957,7 @@ export def "ml-saved-objects-sync mlSync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --simulate: string@bool-completer # When true, simulates the synchronization by returning only the list of actions that would be performed. (e.g. true)
+  --simulate: oneof<nothing, bool> # When true, simulates the synchronization by returning only the list of actions that would be performed. (e.g. true)
 ]: nothing -> record<datafeedsAdded: record, datafeedsRemoved: record, savedObjectsCreated: record<anomaly_detector: record, data_frame_analytics: record, trained_model: record>, savedObjectsDeleted: record<anomaly_detector: record, data_frame_analytics: record, trained_model: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11120,10 +11119,10 @@ export def "observability-ai-assistant-chat-complete observability-ai-assistant-
   --actions: list # item shape: {description?: string, name?: string, parameters?: record}
   connectorId: string # A unique identifier for the connector.
   --conversationId: string # A unique identifier for the conversation if you are continuing an existing conversation.
-  --disableFunctions: string@bool-completer # Flag indicating whether all function calls should be disabled for the conversation. If true, no calls to functions will be made.
+  --disableFunctions: oneof<nothing, bool> # Flag indicating whether all function calls should be disabled for the conversation. If true, no calls to functions will be made.
   --instructions: list # An array of instruction objects, which can be either simple strings or detailed objects.
   messages: list # An array of message objects containing the conversation history. — item shape: {@timestamp: string, message: record}
-  --persist: string@bool-completer # Indicates whether the conversation should be saved to storage. If true, the conversation will be saved and will be available in Kibana.
+  --persist: oneof<nothing, bool> # Indicates whether the conversation should be saved to storage. If true, the conversation will be saved and will be available in Kibana.
   --title: string # A title for the conversation.
 ]: any -> record {
   let input = $in
@@ -11206,7 +11205,7 @@ export def "osquery-live-queries OsqueryCreateLiveQuery" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --agent-all: string@bool-completer # When `true`, the query runs on all agents.
+  --agent-all: oneof<nothing, bool> # When `true`, the query runs on all agents.
   --agent-ids: list # A list of agent IDs to run the query on.
   --agent-platforms: list # A list of agent platforms to run the query on.
   --agent-policy-ids: list # A list of agent policy IDs to run the query on.
@@ -11322,7 +11321,7 @@ export def "osquery-packs OsqueryCreatePacks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # The pack description. (e.g. Pack description)
-  --enabled: string@bool-completer # Enables the pack. (e.g. true)
+  --enabled: oneof<nothing, bool> # Enables the pack. (e.g. true)
   --interval: int # Pack-level interval, in seconds. Used when `schedule_type` is `interval`. Mutually exclusive with `rrule_schedule`. (e.g. 60)
   --name: string # The pack name. (e.g. my_pack)
   --policy-ids: list # A list of agents policy IDs. (e.g. [policyId1, policyId2])
@@ -11401,7 +11400,7 @@ export def "osquery-packs OsqueryUpdatePacks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --description: string # The pack description. (e.g. Pack description)
-  --enabled: string@bool-completer # Enables the pack. (e.g. true)
+  --enabled: oneof<nothing, bool> # Enables the pack. (e.g. true)
   --interval: int # Pack-level interval, in seconds. Used when `schedule_type` is `interval`. Mutually exclusive with `rrule_schedule`. (e.g. 60)
   --name: string # The pack name. (e.g. my_pack)
   --policy-ids: list # A list of agents policy IDs. (e.g. [policyId1, policyId2])
@@ -11487,8 +11486,8 @@ export def "osquery-saved-queries OsqueryCreateSavedQuery" [
   --interval: string # An interval, in seconds, on which to run the query. (e.g. 60)
   --platform: string # Restricts the query to a specified platform. The default is all platforms. To specify multiple platforms, use commas. For example, `linux,darwin`. (e.g. linux,darwin)
   --body-query: string # The SQL query you want to run. (e.g. select * from uptime;)
-  --removed: string@bool-completer # Indicates whether the query is removed. (e.g. false)
-  --snapshot: string@bool-completer # Indicates whether the query is a snapshot. (e.g. true)
+  --removed: oneof<nothing, bool> # Indicates whether the query is removed. (e.g. false)
+  --snapshot: oneof<nothing, bool> # Indicates whether the query is a snapshot. (e.g. true)
   --version: string # Uses the Osquery versions greater than or equal to the specified version string. (e.g. 1.0.0)
 ]: any -> record<data: record<created_at: string, created_by: string, created_by_profile_uid: string, description: string, ecs_mapping: record, id: string, interval: any, platform: string, prebuilt: bool, query: string, removed: bool, saved_object_id: string, snapshot: bool, timeout: int, updated_at: string, updated_by: string, updated_by_profile_uid: string, version: any>> {
   let input = $in
@@ -11565,8 +11564,8 @@ export def "osquery-saved-queries OsqueryUpdateSavedQuery" [
   --interval: string # An interval, in seconds, on which to run the query. (e.g. 60)
   --platform: string # Restricts the query to a specified platform. The default is all platforms. To specify multiple platforms, use commas. For example, `linux,darwin`. (e.g. linux,darwin)
   --body-query: string # The SQL query you want to run. (e.g. select * from uptime;)
-  --removed: string@bool-completer # Indicates whether the query is removed. (e.g. false)
-  --snapshot: string@bool-completer # Indicates whether the query is a snapshot. (e.g. true)
+  --removed: oneof<nothing, bool> # Indicates whether the query is removed. (e.g. false)
+  --snapshot: oneof<nothing, bool> # Indicates whether the query is a snapshot. (e.g. true)
   --version: string # Uses the Osquery versions greater than or equal to the specified version string. (e.g. 1.0.0)
 ]: any -> record<data: record<created_at: string, created_by: string, created_by_profile_uid: string, description: string, ecs_mapping: record, id: string, interval: any, platform: string, prebuilt: bool, query: string, removed: bool, saved_object_id: string, snapshot: bool, timeout: int, updated_at: string, updated_by: string, updated_by_profile_uid: string, version: string>> {
   let input = $in
@@ -11723,7 +11722,7 @@ export def "risk-score-engine-saved-object-configure ConfigureRiskEngineSavedObj
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable-reset-to-zero: string@bool-completer
+  --enable-reset-to-zero: oneof<nothing, bool>
   --exclude-alert-statuses: list
   --exclude-alert-tags: list
   --filters: list # item shape: {entity_types: list, filter: string}
@@ -11779,9 +11778,9 @@ export def "saved-objects-export post-saved-objects-export" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --excludeExportDetails: string@bool-completer # Do not add export details entry at the end of the stream. (default: false)
+  --excludeExportDetails: oneof<nothing, bool> # Do not add export details entry at the end of the stream. (default: false)
   --hasReference: any
-  --includeReferencesDeep: string@bool-completer # Includes all of the referenced objects in the exported objects. (default: false)
+  --includeReferencesDeep: oneof<nothing, bool> # Includes all of the referenced objects in the exported objects. (default: false)
   --objects: list # A list of objects to export. NOTE: this optional parameter cannot be combined with the `types` option — item shape: {id: string, type: string}
   --search: string # Search for documents to export using the Elasticsearch Simple Query String syntax.
   --type: any # The saved object types to include in the export. Use `*` to export all the types. Valid options depend on enabled plugins, but may include `visualization`, `dashboard`, `search`, `index-pattern`, `tag`, `config`, `config-global`, `lens`, `map`, `event-annotation-group`, `query`, `url`, `action`, `alert`, `alerting_rule_template`, `apm-indices`, `cases-user-actions`, `cases`, `cases-comments`, `infrastructure-monitoring-log-view`, `ml-trained-model`, `osquery-saved-query`, `osquery-pack`, `osquery-pack-asset`.
@@ -11811,9 +11810,9 @@ export def "saved-objects-import post-saved-objects-import" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --overwrite: string@bool-completer # Overwrites saved objects when they already exist. When used, potential conflict errors are automatically resolved by overwriting the destination object. NOTE: This option cannot be used with the `createNewCopies` option. (default: false)
-  --createNewCopies: string@bool-completer # Creates copies of saved objects, regenerates each object ID, and resets the origin. When used, potential conflict errors are avoided. NOTE: This option cannot be used with the `overwrite` and `compatibilityMode` options. (default: false)
-  --compatibilityMode: string@bool-completer # Applies various adjustments to the saved objects that are being imported to maintain compatibility between different Kibana versions. Use this option only if you encounter issues with imported saved objects. NOTE: This option cannot be used with the `createNewCopies` option. (default: false)
+  --overwrite: oneof<nothing, bool> # Overwrites saved objects when they already exist. When used, potential conflict errors are automatically resolved by overwriting the destination object. NOTE: This option cannot be used with the `createNewCopies` option. (default: false)
+  --createNewCopies: oneof<nothing, bool> # Creates copies of saved objects, regenerates each object ID, and resets the origin. When used, potential conflict errors are avoided. NOTE: This option cannot be used with the `overwrite` and `compatibilityMode` options. (default: false)
+  --compatibilityMode: oneof<nothing, bool> # Applies various adjustments to the saved objects that are being imported to maintain compatibility between different Kibana versions. Use this option only if you encounter issues with imported saved objects. NOTE: This option cannot be used with the `createNewCopies` option. (default: false)
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   file: record # A file exported using the export API. Changing the contents of the exported file in any way before importing it can cause errors, crashes or data loss. NOTE: The `savedObjects.maxImportExportSize` configuration setting limits the number of saved objects which may be included in this file. Similarly, the `savedObjects.maxImportPayloadBytes` setting limits the overall size of the file that can be imported.
 ]: any -> record<errors: list<record>, success: bool, successCount: float, successResults: list<record>> {
@@ -11844,8 +11843,8 @@ export def "saved-objects-resolve-import-errors post-saved-objects-resolve-impor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --createNewCopies: string@bool-completer # Creates copies of saved objects, regenerates each object ID, and resets the origin. (default: false)
-  --compatibilityMode: string@bool-completer # Applies adjustments to maintain compatibility between different Kibana versions. (default: false)
+  --createNewCopies: oneof<nothing, bool> # Creates copies of saved objects, regenerates each object ID, and resets the origin. (default: false)
+  --compatibilityMode: oneof<nothing, bool> # Applies adjustments to maintain compatibility between different Kibana versions. (default: false)
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   file: record
   retries: list # item shape: {createNewCopy?: bool, destinationId?: string, id: string, ignoreMissingReferences?: bool, overwrite?: bool, replaceReferences?: list, type: string}
@@ -11912,7 +11911,7 @@ export def "security-ai-assistant-anonymization-fields-find FindAnonymizationFie
   --sort-order: string@sort-order-completer # Sort order (e.g. asc)
   --page: int # Page number (default: 1, e.g. 1)
   --per-page: int # AnonymizationFields per page (default: 20, e.g. 20)
-  --all-data: string@bool-completer # If true, additionally fetch all anonymization fields, otherwise fetch only the provided page
+  --all-data: oneof<nothing, bool> # If true, additionally fetch all anonymization fields, otherwise fetch only the provided page
 ]: nothing -> record<aggregations: record<field_status: record<buckets: record>>, all: table<allowed: bool, anonymized: bool, createdAt: string, createdBy: string, field: string, id: string, namespace: string, timestamp: string, updatedAt: string, updatedBy: string>, data: table<allowed: bool, anonymized: bool, createdAt: string, createdBy: string, field: string, id: string, namespace: string, timestamp: string, updatedAt: string, updatedBy: string>, page: int, perPage: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11936,15 +11935,15 @@ export def "security-ai-assistant-chat-complete ChatComplete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --content-references-disabled: string@bool-completer # If true, the response will not include content references. (default: false, e.g. false)
+  --content-references-disabled: oneof<nothing, bool> # If true, the response will not include content references. (default: false, e.g. false)
   connectorId: string # Required connector identifier to route the request. (e.g. conn-001)
   --conversationId: string # A string that does not contain only whitespace characters. (format: nonempty, e.g. I am a string)
-  --isStream: string@bool-completer # If true, the response will be streamed in chunks. (e.g. true)
+  --isStream: oneof<nothing, bool> # If true, the response will be streamed in chunks. (e.g. true)
   --langSmithApiKey: string # API key for LangSmith integration. (e.g. <LANGSMITH_API_KEY>)
   --langSmithProject: string # LangSmith project name for tracing. (e.g. security_ai_project)
   messages: list # List of chat messages exchanged so far. — item shape: {content?: string, data?: record, fields_to_anonymize?: list, role: "system"|"user"|"assistant"}
   --model: string # Model ID or name to use for the response. (e.g. gpt-4)
-  --persist: string@bool-completer # Whether to persist the chat and response to storage. (e.g. true)
+  --persist: oneof<nothing, bool> # Whether to persist the chat and response to storage. (e.g. true)
   --promptId: string # Prompt template identifier. (e.g. prompt_001)
   --responseLanguage: string # ISO language code for the assistant's response. (e.g. en)
 ]: any -> any {
@@ -12001,7 +12000,7 @@ export def "security-ai-assistant-current-user-conversations CreateConversation"
   --allow-errors(-e) # Return full response without error handling
   --apiConfig: record # shape: {actionTypeId: string, connectorId: string, defaultSystemPromptId?: string, model?: string, provider?: "OpenAI"|"Azure OpenAI"|"Other"}
   --category: string@category-completer # The conversation category. (e.g. assistant)
-  --excludeFromLastConversationStorage: string@bool-completer # Exclude from last conversation storage.
+  --excludeFromLastConversationStorage: oneof<nothing, bool> # Exclude from last conversation storage.
   --id: string # The conversation id. (e.g. conversation123)
   --messages: list # The conversation messages. — item shape: {content: string, id?: string, isError?: bool, metadata?: record, reader?: record, refusal?: string, role: "system"|"user"|"assistant", timestamp: string, traceData?: record, user?: record}
   --replacements: record # Replacements object used to anonymize/deanonymize messages
@@ -12036,7 +12035,7 @@ export def "security-ai-assistant-current-user-conversations-find FindConversati
   --sort-order: string@sort-order-completer # The order in which to sort the results. Can be either `asc` for ascending or `desc` for descending. (e.g. asc)
   --page: int # The page number of the results to retrieve. Default is 1. (default: 1, e.g. 1)
   --per-page: int # The number of conversations to return per page. Default is 20. (default: 20, e.g. 20)
-  --is-owner: string@bool-completer # Whether to return conversations that the current user owns. If true, only conversations owned by the user are returned. (default: false, e.g. true)
+  --is-owner: oneof<nothing, bool> # Whether to return conversations that the current user owns. If true, only conversations owned by the user are returned. (default: false, e.g. true)
 ]: nothing -> record<data: table<apiConfig: record, category: string, createdAt: string, createdBy: record, excludeFromLastConversationStorage: bool, id: string, messages: list, namespace: string, replacements: record, timestamp: string, title: string, updatedAt: string, users: list>, page: int, perPage: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12109,7 +12108,7 @@ export def "security-ai-assistant-current-user-conversations UpdateConversation"
   --allow-errors(-e) # Return full response without error handling
   --apiConfig: record # shape: {actionTypeId: string, connectorId: string, defaultSystemPromptId?: string, model?: string, provider?: "OpenAI"|"Azure OpenAI"|"Other"}
   --category: string@category-completer # The conversation category. (e.g. assistant)
-  --excludeFromLastConversationStorage: string@bool-completer # Exclude from last conversation storage.
+  --excludeFromLastConversationStorage: oneof<nothing, bool> # Exclude from last conversation storage.
   --body-id: string # A string that does not contain only whitespace characters. (format: nonempty, e.g. I am a string)
   --messages: list # The conversation messages. — item shape: {content: string, id?: string, isError?: bool, metadata?: record, reader?: record, refusal?: string, role: "system"|"user"|"assistant", timestamp: string, traceData?: record, user?: record}
   --replacements: record # Replacements object used to anonymize/deanonymize messages
@@ -12161,7 +12160,7 @@ export def "security-ai-assistant-knowledge-base PostKnowledgeBase" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --modelId: string # ELSER modelId to use when setting up the Knowledge Base. If not provided, a default model will be used. (e.g. elser-model-001)
-  --ignoreSecurityLabs: string@bool-completer # Indicates whether we should or should not install Security Labs docs when setting up the Knowledge Base. Defaults to `false`. (default: false, e.g. true)
+  --ignoreSecurityLabs: oneof<nothing, bool> # Indicates whether we should or should not install Security Labs docs when setting up the Knowledge Base. Defaults to `false`. (default: false, e.g. true)
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12208,7 +12207,7 @@ export def "security-ai-assistant-knowledge-base CreateKnowledgeBase" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --modelId: string # ELSER modelId to use when setting up the Knowledge Base. If not provided, a default model will be used. (e.g. elser-model-001)
-  --ignoreSecurityLabs: string@bool-completer # Indicates whether we should or should not install Security Labs docs when setting up the Knowledge Base. Defaults to `false`. (default: false, e.g. true)
+  --ignoreSecurityLabs: oneof<nothing, bool> # Indicates whether we should or should not install Security Labs docs when setting up the Knowledge Base. Defaults to `false`. (default: false, e.g. true)
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12877,7 +12876,7 @@ export def "security-role get-security-role" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --replaceDeprecatedPrivileges: string@bool-completer # If `true` and the response contains any privileges that are associated with deprecated features, they are omitted in favor of details about the appropriate replacement feature privileges.
+  --replaceDeprecatedPrivileges: oneof<nothing, bool> # If `true` and the response contains any privileges that are associated with deprecated features, they are omitted in favor of details about the appropriate replacement feature privileges.
 ]: nothing -> table<_transform_error: list<record>, _unrecognized_applications: list<string>, description: string, elasticsearch: record<cluster: list, indices: list, remote_cluster: list, remote_indices: list, run_as: list>, kibana: list<record>, metadata: record, name: string, transient_metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12960,7 +12959,7 @@ export def "security-role get-security-role-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --replaceDeprecatedPrivileges: string@bool-completer # If `true` and the response contains any privileges that are associated with deprecated features, they are omitted in favor of details about the appropriate replacement feature privileges.
+  --replaceDeprecatedPrivileges: oneof<nothing, bool> # If `true` and the response contains any privileges that are associated with deprecated features, they are omitted in favor of details about the appropriate replacement feature privileges.
 ]: nothing -> record<_transform_error: table<reason: string, state: list>, _unrecognized_applications: list<string>, description: string, elasticsearch: record<cluster: list<string>, indices: list<record>, remote_cluster: list<record>, remote_indices: list<record>, run_as: list<string>>, kibana: table<_reserved: list, base: list, feature: record, spaces: list>, metadata: record, name: string, transient_metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12986,7 +12985,7 @@ export def "security-role put-security-role-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --createOnly: string@bool-completer # When true, a role is not overwritten if it already exists. (default: false)
+  --createOnly: oneof<nothing, bool> # When true, a role is not overwritten if it already exists. (default: false)
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   --description: string # A description for the role.
   elasticsearch: record # The Elasticsearch cluster, index, and remote cluster security privileges for the role. — shape: {cluster?: list, indices?: list, remote_cluster?: list, remote_indices?: list, run_as?: list}
@@ -13048,7 +13047,7 @@ export def "spaces-space get-spaces-space" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --purpose: string@purpose-completer # Specifies which authorization checks are applied to the API call. The default value is `any`.
-  --include-authorized-purposes: string@bool-completer # When enabled, the API returns any spaces the user is authorized to access in any capacity, each including the purposes for which the user is authorized. This is useful for identifying spaces the user can read but is not authorized for a given purpose. Without the security plugin, this parameter has no effect, because no authorization checks are performed. This parameter cannot be used together with the `purpose` parameter.
+  --include-authorized-purposes: oneof<nothing, bool> # When enabled, the API returns any spaces the user is authorized to access in any capacity, each including the purposes for which the user is authorized. This is useful for identifying spaces the user can read but is not authorized for a given purpose. Without the security plugin, this parameter has no effect, because no authorization checks are performed. This parameter cannot be used together with the `purpose` parameter.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13072,7 +13071,7 @@ export def "spaces-space post-spaces-space" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --reserved: string@bool-completer
+  --reserved: oneof<nothing, bool>
   --color: string # The hexadecimal color code used in the space avatar. By default, the color is automatically generated from the space name.
   --description: string # A description for the space.
   --disabledFeatures: list # default: []
@@ -13156,7 +13155,7 @@ export def "spaces-space put-spaces-space-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --reserved: string@bool-completer
+  --reserved: oneof<nothing, bool>
   --color: string # The hexadecimal color code used in the space avatar. By default, the color is automatically generated from the space name.
   --description: string # A description for the space.
   --disabledFeatures: list # default: []
@@ -13191,8 +13190,8 @@ export def "status get-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --v7format: string@bool-completer # Set to "true" to get the response in v7 format.
-  --v8format: string@bool-completer # Set to "true" to get the response in v8 format.
+  --v7format: oneof<nothing, bool> # Set to "true" to get the response in v7 format.
+  --v8format: oneof<nothing, bool> # Set to "true" to get the response in v8 format.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13410,7 +13409,7 @@ export def "streams-fork post-streams-name-fork" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
-  --draft: string@bool-completer
+  --draft: oneof<nothing, bool>
   --status: string@status-completer
   stream: record # shape: {name: string}
   --body-where: any # The root condition object. It can be a simple filter or a combination of other conditions.
@@ -14358,7 +14357,7 @@ export def "workflows delete-workflows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # When true, permanently deletes the workflows (hard delete) instead of soft-deleting them. The workflow IDs become available for reuse. (default: false)
+  --force: oneof<nothing, bool> # When true, permanently deletes the workflows (hard delete) instead of soft-deleting them. The workflow IDs become available for reuse. (default: false)
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   ids: list # Array of workflow IDs to delete.
 ]: any -> any {
@@ -14418,7 +14417,7 @@ export def "workflows post-workflows" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --overwrite: string@bool-completer # Whether to overwrite existing workflows. (default: false)
+  --overwrite: oneof<nothing, bool> # Whether to overwrite existing workflows. (default: false)
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   workflows: list # item shape: {id?: string, yaml: string}
 ]: any -> any {
@@ -14494,8 +14493,8 @@ export def "workflows-executions get-workflows-executions-executionid" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeInput: string@bool-completer # Include execution input data. (default: false)
-  --includeOutput: string@bool-completer # Include execution output data. (default: false)
+  --includeInput: oneof<nothing, bool> # Include execution input data. (default: false)
+  --includeOutput: oneof<nothing, bool> # Include execution output data. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14676,7 +14675,7 @@ export def "workflows-managed-workflow put-workflows-managed-workflow-id" [
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   --description: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --name: string
   --tags: list
   --yaml: string
@@ -14735,7 +14734,7 @@ export def "workflows-schema get-workflows-schema" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --loose: string@bool-completer # When true, returns a permissive schema that allows additional properties. When false, returns a strict schema for full validation.
+  --loose: oneof<nothing, bool> # When true, returns a permissive schema that allows additional properties. When false, returns a strict schema for full validation.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14871,7 +14870,7 @@ export def "workflows-workflow delete-workflows-workflow-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --force: string@bool-completer # When true, permanently deletes the workflow (hard delete) instead of soft-deleting it. The workflow ID becomes available for reuse. (default: false)
+  --force: oneof<nothing, bool> # When true, permanently deletes the workflow (hard delete) instead of soft-deleting it. The workflow ID becomes available for reuse. (default: false)
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -14922,7 +14921,7 @@ export def "workflows-workflow put-workflows-workflow-id" [
   --allow-errors(-e) # Return full response without error handling
   --kbn-xsrf: string # A required header to protect against CSRF attacks (e.g. true)
   --description: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --name: string
   --tags: list
   --yaml: string
@@ -15012,7 +15011,7 @@ export def "workflows-workflow-executions get-workflows-workflow-workflowid-exec
   --executionTypes: list # Filter by execution type.
   --executedBy: list # Filter by the user who triggered the execution.
   --concurrencyGroupKey: string # Filter by evaluated concurrency group key.
-  --omitStepRuns: string@bool-completer # Whether to exclude step-level execution data.
+  --omitStepRuns: oneof<nothing, bool> # Whether to exclude step-level execution data.
   --finishedAfter: string # Datemath lower bound for filtering executions by finishedAt (inclusive when parsed).
   --finishedBefore: string # Datemath upper bound for filtering executions by finishedAt (inclusive when parsed with roundUp).
   --collapse: string@collapse-completer # Field to collapse execution results by.
@@ -15071,8 +15070,8 @@ export def "workflows-workflow-executions-steps get-workflows-workflow-workflowi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --stepId: string # Filter by step ID.
-  --includeInput: string@bool-completer # Include step input data.
-  --includeOutput: string@bool-completer # Include step output data.
+  --includeInput: oneof<nothing, bool> # Include step input data.
+  --includeOutput: oneof<nothing, bool> # Include step output data.
   --page: float # Page number for pagination.
   --size: float # Number of results per page.
   --startedAfter: string # Datemath lower bound for filtering step executions by startedAt (inclusive when parsed).
@@ -15107,7 +15106,7 @@ export def "s-observability-slos findSlosOp" [
   --perPage: int # Number of SLOs returned by page (default: 25, e.g. 25)
   --sortBy: string@sortBy-completer # Sort by field (default: status, e.g. status)
   --sortDirection: string@sortDirection-completer # Sort order (default: asc, e.g. asc)
-  --hideStale: string@bool-completer # Hide stale SLOs from the list as defined by stale SLO threshold in SLO settings
+  --hideStale: oneof<nothing, bool> # Hide stale SLOs from the list as defined by stale SLO threshold in SLO settings
   --kbn-xsrf: string # Cross-site request forgery protection
 ]: nothing -> record<page: float, perPage: float, results: table<budgetingMethod: string, createdAt: string, description: string, enabled: bool, groupBy: any, id: string, indicator: any, instanceId: string, name: string, objective: record, revision: float, settings: record, summary: record, tags: list, timeWindow: record, updatedAt: string, version: float>, searchAfter: string, size: float, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15468,8 +15467,8 @@ export def "s-internal-observability-slos-definitions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeOutdatedOnly: string@bool-completer # Indicates if the API returns only outdated SLO or all SLO definitions
-  --includeHealth: string@bool-completer # Indicates if the API returns SLO health data with definitions (e.g. true)
+  --includeOutdatedOnly: oneof<nothing, bool> # Indicates if the API returns only outdated SLO or all SLO definitions
+  --includeHealth: oneof<nothing, bool> # Indicates if the API returns SLO health data with definitions (e.g. true)
   --tags: string # Filters the SLOs by tag
   --search: string # Filters the SLOs by name (e.g. my service availability)
   --page: float # The page to use for pagination, must be greater or equal than 1 (e.g. 1)

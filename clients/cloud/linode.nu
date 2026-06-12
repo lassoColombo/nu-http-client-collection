@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.linode.com/v4" "https://api.linode.com/v4beta"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -636,7 +635,7 @@ export def "account-oauth-clients createClient" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   label: string # The name of this application.  This will be presented to users when they are asked to grant it access to their Account.  (e.g. Test_Client_1)
-  --public: string@bool-completer # If this is a public or private OAuth Client.  Public clients have a slightly different authentication workflow than private clients.  See the <a target="_top" href="https://oauth.net/2/">OAuth spec</a> for more details.  (default: false, e.g. false)
+  --public: oneof<nothing, bool> # If this is a public or private OAuth Client.  Public clients have a slightly different authentication workflow than private clients.  See the <a target="_top" href="https://oauth.net/2/">OAuth spec</a> for more details.  (default: false, e.g. false)
   redirect_uri: string # The location a successful log in from <a target="_top" href="https://login.linode.com">https://login.linode.com</a> should be redirected to for this client.  The receiver of this redirect should be ready to accept an OAuth exchange code and finish the OAuth exchange.  (format: url, e.g. https://example.org/oauth/callback)
 ]: any -> record<id: string, label: string, public: bool, redirect_uri: string, secret: string, status: string, thumbnail_url: string> {
   let input = $in
@@ -708,7 +707,7 @@ export def "account-oauth-clients updateClient" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --label: string # The name of this application.  This will be presented to users when they are asked to grant it access to their Account.  (e.g. Test_Client_1)
-  --public: string@bool-completer # If this is a public or private OAuth Client.  Public clients have a slightly different authentication workflow than private clients.  See the <a target="_top" href="https://oauth.net/2/">OAuth spec</a> for more details.  (default: false, e.g. false)
+  --public: oneof<nothing, bool> # If this is a public or private OAuth Client.  Public clients have a slightly different authentication workflow than private clients.  See the <a target="_top" href="https://oauth.net/2/">OAuth spec</a> for more details.  (default: false, e.g. false)
   --redirect-uri: string # The location a successful log in from <a target="_top" href="https://login.linode.com">https://login.linode.com</a> should be redirected to for this client.  The receiver of this redirect should be ready to accept an OAuth exchange code and finish the OAuth exchange.  (format: url, e.g. https://example.org/oauth/callback)
 ]: any -> record<id: string, label: string, public: bool, redirect_uri: string, secret: string, status: string, thumbnail_url: string> {
   let input = $in
@@ -1212,8 +1211,8 @@ export def "account-settings updateAccountSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --backups-enabled: string@bool-completer # Account-wide backups default.  If `true`, all Linodes created will automatically be enrolled in the Backups service.  If `false`, Linodes will not be enrolled by default, but may still be enrolled on creation or later.  (e.g. true)
-  --network-helper: string@bool-completer # Enables network helper across all users by default for new Linodes and Linode Configs.  (e.g. false)
+  --backups-enabled: oneof<nothing, bool> # Account-wide backups default.  If `true`, all Linodes created will automatically be enrolled in the Backups service.  If `false`, Linodes will not be enrolled by default, but may still be enrolled on creation or later.  (e.g. true)
+  --network-helper: oneof<nothing, bool> # Enables network helper across all users by default for new Linodes and Linode Configs.  (e.g. false)
 ]: any -> record<backups_enabled: bool, longview_subscription: string, managed: bool, network_helper: bool, object_storage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1305,7 +1304,7 @@ export def "account-users createUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   email: string # The email address for the User. Linode sends emails to this address for account management communications. May be used for other communications as configured.  (format: email, e.g. example_user@linode.com)
-  --restricted: string@bool-completer # If true, the User must be granted access to perform actions or access entities on this Account. See User Grants View ([GET /account/users/{username}/grants](/docs/api/account/#users-grants-view)) for details on how to configure grants for a restricted User.  (e.g. true)
+  --restricted: oneof<nothing, bool> # If true, the User must be granted access to perform actions or access entities on this Account. See User Grants View ([GET /account/users/{username}/grants](/docs/api/account/#users-grants-view)) for details on how to configure grants for a restricted User.  (e.g. true)
   username: string # The User's username. This is used for logging in, and may also be displayed alongside actions the User performs (for example, in Events or public StackScripts).  (e.g. example_user)
 ]: any -> record<email: string, restricted: bool, ssh_keys: list<string>, tfa_enabled: bool, username: string> {
   let input = $in
@@ -1377,7 +1376,7 @@ export def "account-users updateUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --email: string # The email address for the User. Linode sends emails to this address for account management communications. May be used for other communications as configured.  (format: email, e.g. example_user@linode.com)
-  --restricted: string@bool-completer # If true, the User must be granted access to perform actions or access entities on this Account. See User Grants View ([GET /account/users/{username}/grants](/docs/api/account/#users-grants-view)) for details on how to configure grants for a restricted User.  (e.g. true)
+  --restricted: oneof<nothing, bool> # If true, the User must be granted access to perform actions or access entities on this Account. See User Grants View ([GET /account/users/{username}/grants](/docs/api/account/#users-grants-view)) for details on how to configure grants for a restricted User.  (e.g. true)
   --body-username: string # The User's username. This is used for logging in, and may also be displayed alongside actions the User performs (for example, in Events or public StackScripts).  (e.g. example_user)
 ]: any -> record<email: string, restricted: bool, ssh_keys: list<string>, tfa_enabled: bool, username: string> {
   let input = $in
@@ -3107,17 +3106,17 @@ export def "linode-instances createLinodeInstance" [
   --allow-errors(-e) # Return full response without error handling
   --authorized-keys: any
   --authorized-users: any
-  --booted: string@bool-completer # This field defaults to `true` if the Linode is created with an Image or from a Backup. If it is deployed from an Image or a Backup and you wish it to remain `offline` after deployment, set this to `false`.  (default: true)
+  --booted: oneof<nothing, bool> # This field defaults to `true` if the Linode is created with an Image or from a Backup. If it is deployed from an Image or a Backup and you wish it to remain `offline` after deployment, set this to `false`.  (default: true)
   --image: any
   --root-pass: any
   --stackscript-data: any
   --stackscript-id: any
   --backup-id: int # A Backup ID from another Linode's available backups. Your User must have `read_write` access to that Linode, the Backup must have a `status` of `successful`, and the Linode must be deployed to the same `region` as the Backup. See [GET /linode/instances/{linodeId}/backups](/docs/api/linode-instances/#backups-list) for a Linode's available backups.  This field and the `image` field are mutually exclusive.  (e.g. 1234)
-  --backups-enabled: string@bool-completer # If this field is set to `true`, the created Linode will automatically be enrolled in the Linode Backup service. This will incur an additional charge. The cost for the Backup service is dependent on the Type of Linode deployed.  This option is always treated as `true` if the account-wide `backups_enabled` setting is `true`.  See [account settings](/docs/api/account/#account-settings-view) for more information.  Backup pricing is included in the response from [/linodes/types](/docs/api/linode-types/#types-list)
+  --backups-enabled: oneof<nothing, bool> # If this field is set to `true`, the created Linode will automatically be enrolled in the Linode Backup service. This will incur an additional charge. The cost for the Backup service is dependent on the Type of Linode deployed.  This option is always treated as `true` if the account-wide `backups_enabled` setting is `true`.  See [account settings](/docs/api/account/#account-settings-view) for more information.  Backup pricing is included in the response from [/linodes/types](/docs/api/linode-types/#types-list)
   --group: any
   --interfaces: list # An array of Network Interfaces to add to this Linode's Configuration Profile.  Up to three interface objects can be entered in this array. The position in the array determines the interface to which the settings apply:  - First/0:  eth0 - Second/1: eth1 - Third/2:  eth2  When updating a Linode's interfaces, *each interface must be redefined*. An empty interfaces array results in a default public interface configuration only.  If no public interface is configured, public IP addresses are still assigned to the Linode but will not be usable without manual configuration.  **Note:** Changes to Linode interface configurations can be enabled by rebooting the Linode.  **Note:** Only Next Generation Network (NGN) data centers support VLANs. Use the Regions ([/regions](/docs/api/regions/)) endpoint to view the capabilities of data center regions. If a VLAN is attached to your Linode and you attempt to migrate or clone it to a non-NGN data center, the migration or cloning will not initiate. If a Linode cannot be migrated because of an incompatibility, you will be prompted to select a different data center or contact support.  **Note:** See the [VLANs Overview](/docs/products/networking/vlans/#technical-specifications) guide to view additional specifications and limitations. — item shape: {ipam_address?: string, label?: string, purpose?: "public"|"vlan"}
   --label: any
-  --private-ip: string@bool-completer # If true, the created Linode will have private networking enabled and assigned a private IPv4 address.  (e.g. true)
+  --private-ip: oneof<nothing, bool> # If true, the created Linode will have private networking enabled and assigned a private IPv4 address.  (e.g. true)
   region: string # The [Region](/docs/api/regions/#regions-list) where the Linode will be located.  (e.g. us-east)
   --swap-size: int # When deploying from an Image, this field is optional, otherwise it is ignored. This is used to set the swap disk size for the newly-created Linode.  (default: 512, e.g. 512)
   --tags: any
@@ -3199,7 +3198,7 @@ export def "linode-instances updateLinodeInstance" [
   --group: string # A deprecated property denoting a group label for this Linode.  (DEPRECATED, e.g. Linode-Group)
   --label: string # The Linode's label is for display purposes only. If no label is provided for a Linode, a default will be assigned.  Linode labels have the following constraints:    * Must begin and end with an alphanumeric character.   * May only consist of alphanumeric characters, dashes (`-`), underscores (`_`) or periods (`.`).   * Cannot have two dashes (`--`), underscores (`__`) or periods (`..`) in a row.  (e.g. linode123)
   --tags: list # An array of tags applied to this object.  Tags are for organizational purposes only.  (e.g. [example tag, another example])
-  --watchdog-enabled: string@bool-completer # The watchdog, named Lassie, is a Shutdown Watchdog that monitors your Linode and will reboot it if it powers off unexpectedly. It works by issuing a boot job when your Linode powers off without a shutdown job being responsible. To prevent a loop, Lassie will give up if there have been more than 5 boot jobs issued within 15 minutes.  (e.g. true)
+  --watchdog-enabled: oneof<nothing, bool> # The watchdog, named Lassie, is a Shutdown Watchdog that monitors your Linode and will reboot it if it powers off unexpectedly. It works by issuing a boot job when your Linode powers off without a shutdown job being responsible. To prevent a loop, Lassie will give up if there have been more than 5 boot jobs issued within 15 minutes.  (e.g. true)
 ]: any -> record<alerts: record<cpu: int, io: int, network_in: int, network_out: int, transfer_quota: int>, backups: record<available: bool, enabled: bool, last_successful: string, schedule: record<day: string, window: string>>, created: string, group: string, host_uuid: string, hypervisor: string, id: int, image: record, ipv4: list<string>, ipv6: string, label: string, region: string, specs: record<disk: int, memory: int, transfer: int, vcpus: int>, status: string, tags: list<string>, type: string, updated: string, watchdog_enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3342,7 +3341,7 @@ export def "linode-instances-backups-restore restoreBackup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   linode_id: int # The ID of the Linode to restore a Backup to.  (e.g. 234)
-  --overwrite: string@bool-completer # If True, deletes all Disks and Configs on the target Linode before restoring.  If False, and the Disk image size is larger than the available space on the Linode, an error message indicating insufficient space is returned.  (e.g. true)
+  --overwrite: oneof<nothing, bool> # If True, deletes all Disks and Configs on the target Linode before restoring.  If False, and the Disk image size is larger than the available space on the Linode, an error message indicating insufficient space is returned.  (e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3395,13 +3394,13 @@ export def "linode-instances-clone cloneLinodeInstance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --backups-enabled: string@bool-completer # If this field is set to `true`, the created Linode will automatically be enrolled in the Linode Backup service. This will incur an additional charge. Pricing is included in the response from [/linodes/types](/docs/api/linode-types/#types-list).  * Can only be included when cloning to a new Linode.  (e.g. true)
+  --backups-enabled: oneof<nothing, bool> # If this field is set to `true`, the created Linode will automatically be enrolled in the Linode Backup service. This will incur an additional charge. Pricing is included in the response from [/linodes/types](/docs/api/linode-types/#types-list).  * Can only be included when cloning to a new Linode.  (e.g. true)
   --configs: list # An array of configuration profile IDs. * If the `configs` parameter **is not provided**, then **all configuration profiles and their associated disks will be cloned** from the source Linode. Any disks specified by the `disks` parameter will also be cloned. * **If an empty array is provided** for the `configs` parameter, then **no configuration profiles (nor their associated disks) will be cloned** from the source Linode. Any disks specified by the `disks` parameter will still be cloned. * **If a non-empty array is provided** for the `configs` parameter, then **the configuration profiles specified in the array (and their associated disks) will be cloned** from the source Linode. Any disks specified by the `disks` parameter will also be cloned.
   --disks: list # An array of disk IDs. * If the `disks` parameter **is not provided**, then **no extra disks will be cloned** from the source Linode. All disks associated with the configuration profiles specified by the `configs` parameter will still be cloned. * **If an empty array is provided** for the `disks` parameter, then **no extra disks will be cloned** from the source Linode. All disks associated with the configuration profiles specified by the `configs` parameter will still be cloned. * **If a non-empty array is provided** for the `disks` parameter, then **the disks specified in the array will be cloned** from the source Linode, in addition to any disks associated with the configuration profiles specified by the `configs` parameter.
   --group: string # A label used to group Linodes for display. Linodes are not required to have a group.  (DEPRECATED, e.g. Linode-Group)
   --label: string # The label to assign this Linode when cloning to a new Linode. * Can only be provided when cloning to a new Linode. * Defaults to "linode".  (e.g. cloned-linode)
   --linode-id: int # If an existing Linode is the target for the clone, the ID of that Linode. The existing Linode must have enough resources to accept the clone.  (e.g. 124)
-  --private-ip: string@bool-completer # If true, the created Linode will have private networking enabled and assigned a private IPv4 address. * Can only be provided when cloning to a new Linode.  (e.g. true)
+  --private-ip: oneof<nothing, bool> # If true, the created Linode will have private networking enabled and assigned a private IPv4 address. * Can only be provided when cloning to a new Linode.  (e.g. true)
   --region: string # This is the Region where the Linode will be deployed. To view all available Regions you can deploy to see [/regions](/docs/api/regions/#regions-list). * Region can only be provided and is required when cloning to a new Linode.  (e.g. us-east)
   --type: string # A Linode's Type determines what resources are available to it, including disk space, memory, and virtual cpus. The amounts available to a specific Linode are returned as `specs` on the Linode object.  To view all available Linode Types you can deploy with see [/linode/types](/docs/api/linode-types/#types-list).  * Type can only be provided and is required when cloning to a new Linode.  (e.g. g6-standard-2)
 ]: any -> record<alerts: record<cpu: int, io: int, network_in: int, network_out: int, transfer_quota: int>, backups: record<available: bool, enabled: bool, last_successful: string, schedule: record<day: string, window: string>>, created: string, group: string, host_uuid: string, hypervisor: string, id: int, image: record, ipv4: list<string>, ipv6: string, label: string, region: string, specs: record<disk: int, memory: int, transfer: int, vcpus: int>, status: string, tags: list<string>, type: string, updated: string, watchdog_enabled: bool> {
@@ -3835,7 +3834,7 @@ export def "linode-instances-ips addLinodeIP" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --public: string@bool-completer # Whether to create a public or private IPv4 address.  (e.g. true)
+  --public: oneof<nothing, bool> # Whether to create a public or private IPv4 address.  (e.g. true)
   type: string@type-completer-3 # The type of address you are allocating. Only IPv4 addresses may be allocated through this endpoint.  (e.g. ipv4)
 ]: any -> record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string> {
   let input = $in
@@ -3936,7 +3935,7 @@ export def "linode-instances-migrate migrateLinodeInstance" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --region: string # The region to which the Linode will be migrated. Must be a valid region slug. A list of regions can be viewed by using the [GET /regions](/docs/api/regions/#regions-list) endpoint. A cross data center migration will cancel a pending migration that has not yet been initiated. A cross data center migration will initiate a `linode_migrate_datacenter_create` event.  (e.g. us-east)
-  --upgrade: string@bool-completer # When initiating a cross DC migration, setting this value to true will also ensure that the Linode is upgraded to the latest generation of hardware that corresponds to your Linode's Type, if any free upgrades are available for it. If no free upgrades are available, and this value is set to true, then the endpoint will return a 400 error code and the migration will not be performed. If the data center set in the `region` field does not allow upgrades, then the endpoint will return a 400 error code and the migration will not be performed.  (default: false, e.g. false)
+  --upgrade: oneof<nothing, bool> # When initiating a cross DC migration, setting this value to true will also ensure that the Linode is upgraded to the latest generation of hardware that corresponds to your Linode's Type, if any free upgrades are available for it. If no free upgrades are available, and this value is set to true, then the endpoint will return a 400 error code and the migration will not be performed. If the data center set in the `region` field does not allow upgrades, then the endpoint will return a 400 error code and the migration will not be performed.  (default: false, e.g. false)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3962,7 +3961,7 @@ export def "linode-instances-mutate mutateLinodeInstance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-auto-disk-resize: string@bool-completer # Automatically resize disks when resizing a Linode. When resizing down to a smaller plan your Linode's data must fit within the smaller disk size.  (default: true, e.g. true)
+  --allow-auto-disk-resize: oneof<nothing, bool> # Automatically resize disks when resizing a Linode. When resizing down to a smaller plan your Linode's data must fit within the smaller disk size.  (default: true, e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4064,7 +4063,7 @@ export def "linode-instances-rebuild rebuildLinodeInstance" [
   --allow-errors(-e) # Return full response without error handling
   --authorized-keys: any
   --authorized-users: any
-  --booted: string@bool-completer # This field defaults to `true` if the Linode is created with an Image or from a Backup. If it is deployed from an Image or a Backup and you wish it to remain `offline` after deployment, set this to `false`.  (default: true)
+  --booted: oneof<nothing, bool> # This field defaults to `true` if the Linode is created with an Image or from a Backup. If it is deployed from an Image or a Backup and you wish it to remain `offline` after deployment, set this to `false`.  (default: true)
   image: any
   root_pass: any
   --stackscript-data: any
@@ -4121,7 +4120,7 @@ export def "linode-instances-resize resizeLinodeInstance" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-auto-disk-resize: string@bool-completer # Automatically resize disks when resizing a Linode. When resizing down to a smaller plan your Linode's data must fit within the smaller disk size.  (default: true, e.g. true)
+  --allow-auto-disk-resize: oneof<nothing, bool> # Automatically resize disks when resizing a Linode. When resizing down to a smaller plan your Linode's data must fit within the smaller disk size.  (default: true, e.g. true)
   type: string # The ID representing the Linode Type. (e.g. g6-standard-2)
 ]: any -> record {
   let input = $in
@@ -4358,7 +4357,7 @@ export def "linode-stackscripts addStackScript" [
   --allow-errors(-e) # Return full response without error handling
   --description: string # A description for the StackScript.  (e.g. This StackScript installs and configures MySQL )
   images: list # An array of Image IDs. These are the Images that can be deployed with this StackScript.  `any/all` indicates that all available Images, including private Images, are accepted.  (e.g. [linode/debian9, linode/debian8])
-  --is-public: string@bool-completer # This determines whether other users can use your StackScript. **Once a StackScript is made public, it cannot be made private.**  (e.g. true)
+  --is-public: oneof<nothing, bool> # This determines whether other users can use your StackScript. **Once a StackScript is made public, it cannot be made private.**  (e.g. true)
   label: string # The StackScript's label is for display purposes only.  (e.g. a-stackscript)
   --rev-note: string # This field allows you to add notes for the set of revisions made to this StackScript.  (e.g. Set up MySQL)
   script: string # The script to execute when provisioning a new Linode with this StackScript.  (e.g. "#!/bin/bash" )
@@ -4433,7 +4432,7 @@ export def "linode-stackscripts updateStackScript" [
   --allow-errors(-e) # Return full response without error handling
   --description: string # A description for the StackScript.  (e.g. This StackScript installs and configures MySQL )
   --images: list # An array of Image IDs. These are the Images that can be deployed with this StackScript.  `any/all` indicates that all available Images, including private Images, are accepted.  (e.g. [linode/debian9, linode/debian8])
-  --is-public: string@bool-completer # This determines whether other users can use your StackScript. **Once a StackScript is made public, it cannot be made private.**  (e.g. true)
+  --is-public: oneof<nothing, bool> # This determines whether other users can use your StackScript. **Once a StackScript is made public, it cannot be made private.**  (e.g. true)
   --label: string # The StackScript's label is for display purposes only.  (e.g. a-stackscript)
   --rev-note: string # This field allows you to add notes for the set of revisions made to this StackScript.  (e.g. Set up MySQL)
   --script: string # The script to execute when provisioning a new Linode with this StackScript.  (e.g. "#!/bin/bash" )
@@ -4961,8 +4960,8 @@ export def "lke-clusters-regenerate post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --kubeconfig: string@bool-completer # Whether to delete and regenerate the Kubeconfig file for this Cluster.  (default: false, e.g. true)
-  --servicetoken: string@bool-completer # Whether to delete and regenerate the service access token for this Cluster.  (default: false, e.g. true)
+  --kubeconfig: oneof<nothing, bool> # Whether to delete and regenerate the Kubeconfig file for this Cluster.  (default: false, e.g. true)
+  --servicetoken: oneof<nothing, bool> # Whether to delete and regenerate the service access token for this Cluster.  (default: false, e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6168,7 +6167,7 @@ export def "networking-ips allocateIP" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   linode_id: int # The ID of a Linode you you have access to that this address will be allocated to.  (e.g. 123)
-  --public: string@bool-completer # Whether to create a public or private IPv4 address.  (e.g. true)
+  --public: oneof<nothing, bool> # Whether to create a public or private IPv4 address.  (e.g. true)
   type: string@type-completer-3 # The type of address you are requesting. Only IPv4 addresses may be allocated through this endpoint.  (e.g. ipv4)
 ]: any -> record<address: string, gateway: string, linode_id: int, prefix: int, public: bool, rdns: string, region: string, subnet_mask: string, type: string> {
   let input = $in
@@ -6647,7 +6646,7 @@ export def "nodebalancers-configs createNodeBalancerConfig" [
   --check-attempts: int # How many times to attempt a check before considering a backend to be down.  (default: 3, e.g. 3)
   --check-body: string # This value must be present in the response body of the check in order for it to pass. If this value is not present in the response body of a check request, the backend is considered to be down.  (e.g. it works)
   --check-interval: int # How often, in seconds, to check that backends are up and serving requests.  Must be greater than `check_timeout`.  (default: 31, e.g. 90)
-  --check-passive: string@bool-completer # If true, any response from this backend with a `5xx` status code will be enough for it to be considered unhealthy and taken out of rotation.  (default: true, e.g. true)
+  --check-passive: oneof<nothing, bool> # If true, any response from this backend with a `5xx` status code will be enough for it to be considered unhealthy and taken out of rotation.  (default: true, e.g. true)
   --check-path: string # The URL path to check on each backend. If the backend does not respond to this request it is considered to be down.  (e.g. /test)
   --check-timeout: int # How long, in seconds, to wait for a check attempt before considering it failed.  Must be less than `check_interval`.  (default: 30, e.g. 10)
   --cipher-suite: string@cipher-suite-completer # What ciphers to use for SSL connections served by this NodeBalancer.  * `legacy` is considered insecure and should only be used if necessary.  (default: recommended, e.g. recommended)
@@ -6734,7 +6733,7 @@ export def "nodebalancers-configs updateNodeBalancerConfig" [
   --check-attempts: int # How many times to attempt a check before considering a backend to be down.  (default: 3, e.g. 3)
   --check-body: string # This value must be present in the response body of the check in order for it to pass. If this value is not present in the response body of a check request, the backend is considered to be down.  (e.g. it works)
   --check-interval: int # How often, in seconds, to check that backends are up and serving requests.  Must be greater than `check_timeout`.  (default: 31, e.g. 90)
-  --check-passive: string@bool-completer # If true, any response from this backend with a `5xx` status code will be enough for it to be considered unhealthy and taken out of rotation.  (default: true, e.g. true)
+  --check-passive: oneof<nothing, bool> # If true, any response from this backend with a `5xx` status code will be enough for it to be considered unhealthy and taken out of rotation.  (default: true, e.g. true)
   --check-path: string # The URL path to check on each backend. If the backend does not respond to this request it is considered to be down.  (e.g. /test)
   --check-timeout: int # How long, in seconds, to wait for a check attempt before considering it failed.  Must be less than `check_interval`.  (default: 30, e.g. 10)
   --cipher-suite: string@cipher-suite-completer # What ciphers to use for SSL connections served by this NodeBalancer.  * `legacy` is considered insecure and should only be used if necessary.  (default: recommended, e.g. recommended)
@@ -6911,7 +6910,7 @@ export def "nodebalancers-configs-rebuild rebuildNodeBalancerConfig" [
   --check-attempts: int # How many times to attempt a check before considering a backend to be down.  (default: 3, e.g. 3)
   --check-body: string # This value must be present in the response body of the check in order for it to pass. If this value is not present in the response body of a check request, the backend is considered to be down.  (e.g. it works)
   --check-interval: int # How often, in seconds, to check that backends are up and serving requests.  Must be greater than `check_timeout`.  (default: 31, e.g. 90)
-  --check-passive: string@bool-completer # If true, any response from this backend with a `5xx` status code will be enough for it to be considered unhealthy and taken out of rotation.  (default: true, e.g. true)
+  --check-passive: oneof<nothing, bool> # If true, any response from this backend with a `5xx` status code will be enough for it to be considered unhealthy and taken out of rotation.  (default: true, e.g. true)
   --check-path: string # The URL path to check on each backend. If the backend does not respond to this request it is considered to be down.  (e.g. /test)
   --check-timeout: int # How long, in seconds, to wait for a check attempt before considering it failed.  Must be less than `check_interval`.  (default: 30, e.g. 10)
   --cipher-suite: string@cipher-suite-completer # What ciphers to use for SSL connections served by this NodeBalancer.  * `legacy` is considered insecure and should only be used if necessary.  (default: recommended, e.g. recommended)
@@ -6990,7 +6989,7 @@ export def "object-storage-buckets createObjectStorageBucket" [
   --allow-errors(-e) # Return full response without error handling
   --acl: string@acl-completer # The Access Control Level of the bucket using a canned ACL string. For more fine-grained control of ACLs, use the S3 API directly.  (default: private, e.g. private)
   cluster: string # The ID of the Object Storage Cluster where this bucket should be created.  (e.g. us-east-1)
-  --cors-enabled: string@bool-completer # If true, the bucket will be created with CORS enabled for all origins. For more fine-grained controls of CORS, use the S3 API directly.  (default: false, e.g. true)
+  --cors-enabled: oneof<nothing, bool> # If true, the bucket will be created with CORS enabled for all origins. For more fine-grained controls of CORS, use the S3 API directly.  (default: false, e.g. true)
   label: string # The name for this bucket. Must be unique in the cluster you are creating the bucket in, or an error will be returned. Labels will be reserved only for the cluster that active buckets are created and stored in. If you want to reserve this bucket's label in another cluster, you must create a new bucket with the same label in the new cluster.  (e.g. example-bucket)
 ]: any -> record<cluster: string, created: string, hostname: string, label: string, objects: int, size: int> {
   let input = $in
@@ -7087,7 +7086,7 @@ export def "object-storage-buckets-access modifyObjectStorageBucketAccess" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --acl: string@acl-completer-1 # The Access Control Level of the bucket, as a canned ACL string. For more fine-grained control of ACLs, use the S3 API directly.  (e.g. private)
-  --cors-enabled: string@bool-completer # If true, the bucket will be created with CORS enabled for all origins. For more fine-grained controls of CORS, use the S3 API directly.  (e.g. true)
+  --cors-enabled: oneof<nothing, bool> # If true, the bucket will be created with CORS enabled for all origins. For more fine-grained controls of CORS, use the S3 API directly.  (e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7115,7 +7114,7 @@ export def "object-storage-buckets-access updateObjectStorageBucketAccess" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --acl: string@acl-completer-1 # The Access Control Level of the bucket, as a canned ACL string. For more fine-grained control of ACLs, use the S3 API directly.  (e.g. private)
-  --cors-enabled: string@bool-completer # If true, the bucket will be created with CORS enabled for all origins. For more fine-grained controls of CORS, use the S3 API directly.  (e.g. true)
+  --cors-enabled: oneof<nothing, bool> # If true, the bucket will be created with CORS enabled for all origins. For more fine-grained controls of CORS, use the S3 API directly.  (e.g. true)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7552,12 +7551,12 @@ export def "profile updateProfile" [
   --allow-errors(-e) # Return full response without error handling
   --authorized-keys: list # The list of SSH Keys authorized to use Lish for your User. This value is ignored if `lish_auth_method` is "disabled."  (nullable)
   --email: string # Your email address.  This address will be used for communication with Linode as necessary.  (format: email, e.g. example-user@gmail.com)
-  --email-notifications: string@bool-completer # If true, you will receive email notifications about account activity.  If false, you may still receive business-critical communications through email.  (e.g. true)
-  --ip-whitelist-enabled: string@bool-completer # If true, logins for your User will only be allowed from whitelisted IPs. This setting is currently deprecated, and cannot be enabled.  If you disable this setting, you will not be able to re-enable it.  (DEPRECATED, e.g. false)
+  --email-notifications: oneof<nothing, bool> # If true, you will receive email notifications about account activity.  If false, you may still receive business-critical communications through email.  (e.g. true)
+  --ip-whitelist-enabled: oneof<nothing, bool> # If true, logins for your User will only be allowed from whitelisted IPs. This setting is currently deprecated, and cannot be enabled.  If you disable this setting, you will not be able to re-enable it.  (DEPRECATED, e.g. false)
   --lish-auth-method: string@lish-auth-method-completer # The authentication methods that are allowed when connecting to [the Linode Shell (Lish)](/docs/guides/lish/). * `keys_only` is the most secure if you intend to use Lish. * `disabled` is recommended if you do not intend to use Lish at all. * If this account's Cloud Manager authentication type is set to a Third-Party Authentication method, `password_keys` cannot be used as your Lish authentication method. To view this account's Cloud Manager `authentication_type` field, send a request to the [View Profile](/docs/api/profile/#profile-view) endpoint.  (e.g. keys_only)
-  --restricted: string@bool-completer # If true, your User has restrictions on what can be accessed on your Account. To get details on what entities/actions you can access/perform, see [/profile/grants](/docs/api/profile/#grants-list).  (e.g. false)
+  --restricted: oneof<nothing, bool> # If true, your User has restrictions on what can be accessed on your Account. To get details on what entities/actions you can access/perform, see [/profile/grants](/docs/api/profile/#grants-list).  (e.g. false)
   --timezone: string # The timezone you prefer to see times in. This is not used by the API directly. It is provided for the benefit of clients such as the Linode Cloud Manager and other clients built on the API. All times returned by the API are in UTC.  (e.g. US/Eastern)
-  --two-factor-auth: string@bool-completer # If true, logins from untrusted computers will require Two Factor Authentication.  See [/profile/tfa-enable](/docs/api/profile/#two-factor-secret-create) to enable Two Factor Authentication.  (e.g. true)
+  --two-factor-auth: oneof<nothing, bool> # If true, logins from untrusted computers will require Two Factor Authentication.  See [/profile/tfa-enable](/docs/api/profile/#two-factor-secret-create) to enable Two Factor Authentication.  (e.g. true)
 ]: any -> record<authentication_type: string, authorized_keys: list<string>, email: string, email_notifications: bool, ip_whitelist_enabled: bool, lish_auth_method: string, referrals: record<code: string, completed: int, credit: int, pending: int, total: int, url: string>, restricted: bool, timezone: string, two_factor_auth: bool, uid: int, username: string, verified_phone_number: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8322,7 +8321,7 @@ export def "support-tickets createTicket" [
   --linode-id: int # The ID of the Linode this ticket is regarding, if relevant.  (e.g. 123)
   --lkecluster-id: int # The ID of the Kubernetes cluster this ticket is regarding, if relevant.  (e.g. 123)
   --longviewclient-id: int # The ID of the Longview client this ticket is regarding, if relevant.
-  --managed-issue: string@bool-completer # Designates if this ticket is related to a [Managed service](https://www.linode.com/products/managed/). If `true`, the following constraints will apply: * No ID attributes (i.e. `linode_id`, `domain_id`, etc.) should be provided with this request. * Your account must have a [Managed service enabled](/docs/api/managed/#managed-service-enable).  (e.g. false)
+  --managed-issue: oneof<nothing, bool> # Designates if this ticket is related to a [Managed service](https://www.linode.com/products/managed/). If `true`, the following constraints will apply: * No ID attributes (i.e. `linode_id`, `domain_id`, etc.) should be provided with this request. * Your account must have a [Managed service enabled](/docs/api/managed/#managed-service-enable).  (e.g. false)
   --nodebalancer-id: int # The ID of the NodeBalancer this ticket is regarding, if relevant.
   --region: string # The [Region](/docs/api/regions/) ID for the associated VLAN this ticket is regarding.  Only allowed when submitting a VLAN ticket.
   summary: string # The summary or title for this SupportTicket.  (e.g. Having trouble resetting root password on my Linode )
@@ -8705,7 +8704,7 @@ export def "volumes-attach attachVolume" [
   --allow-errors(-e) # Return full response without error handling
   --config-id: int # The ID of the Linode Config to include this Volume in. Must belong to the Linode referenced by `linode_id`. If not given, the last booted Config will be chosen.  (e.g. 23456)
   linode_id: int # The ID of the Linode to attach the volume to.
-  --persist-across-boots: string@bool-completer # Defaults to true, if false is provided, the Volume will not be attached to the Linode Config. In this case more than 8 Volumes may be attached to a Linode if a Linode has 16GB of RAM or more. The number of volumes that can be attached is equal to the number of GB of RAM that the Linode has, up to a maximum of 64. `config_id` should not be passed if this is set to false and linode_id must be passed. The Linode must be running.
+  --persist-across-boots: oneof<nothing, bool> # Defaults to true, if false is provided, the Volume will not be attached to the Linode Config. In this case more than 8 Volumes may be attached to a Linode if a Linode has 16GB of RAM or more. The number of volumes that can be attached is equal to the number of GB of RAM that the Linode has, up to a maximum of 64. `config_id` should not be passed if this is set to false and linode_id must be passed. The Linode must be running.
 ]: any -> record<created: string, filesystem_path: string, hardware_type: string, id: int, label: string, linode_id: int, linode_label: string, region: any, size: int, status: string, tags: list<string>, updated: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

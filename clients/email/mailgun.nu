@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.mailgun.net" "https://api.eu.mailgun.net"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -292,7 +291,7 @@ export def "domains GET-v4-domains" [
   --qp-sort: string # Valid sort options are `name` which defaults to asc order, `name:asc`, or `name:desc`. If sorting is not specified domains are returned in reverse creation date order.
   --authority: string # Get only domains with a specific authority. If state is specified then only state filtering will be proceed
   --search: string # Search domains by the given partial or complete name. Does not support wildcards
-  --include-subaccounts: string@bool-completer # Search on every domain that belongs to any subaccounts under this account. Default to false.
+  --include-subaccounts: oneof<nothing, bool> # Search on every domain that belongs to any subaccounts under this account. Default to false.
 ]: nothing -> record<total_count: int, items: table<archive_to: string, created_at: string, id: string, is_disabled: bool, name: string, require_tls: bool, skip_verification: bool, smtp_login: string, smtp_password: string, spam_action: string, subaccount_id: string, state: string, type: string, tracking_host: string, use_automatic_sender_security: bool, webhooks_redact_pii: bool, web_prefix: string, web_scheme: string, wildcard: bool, disabled: any, encrypt_incoming_message: bool, message_ttl: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -319,19 +318,19 @@ export def "domains POST-v4-domains" [
   --dkim-host-name: string # Set the DKIM host name for the domain that is being created. Note, the value must be a valid domain name, and can be the domain name being created or the root domain. This parameter cannot be used in conjunction with force_dkim_authority or force_root_dkim_host.
   --dkim-key-size: string # The size of the new domain's DKIM key. Shall be either 1024 or 2048.
   --dkim-selector: string # Explicitly set the value of the DKIM selector for the domain being created. If the domain key does not already exist, one will be created.  The selector must be a valid atom per RFC2822. e.g valid value `foobar`, invalid value `foo.bar`  https://datatracker.ietf.org/doc/html/rfc2822#section-3.2.4
-  --encrypt-incoming-message: string@bool-completer # Enable encrypting incoming messages for the given domain. This cannot be altered via API after being set for security purposes. Reach out to Support to disable if necessary. Default to false
-  --force-dkim-authority: string@bool-completer # If set to true, the domain will be the DKIM authority for itself even if the root domain is registered on the same mailgun account. If set to false, the domain will have the same DKIM authority as the root domain registered on the same mailgun account. Default to false.
-  --force-root-dkim-host: string@bool-completer # If set to true, the root domain will be the DKIM Host for the domain being created even if the root domain itself is not registered with Mailgun. The domain being created will still need to pass domain verification with valid spf records for the domain and valid DKIM record for the root domain.  This does not effect the smtp mail-from host for the domain being created. The mail-from host will remain the domain name being created, not the root domain.
-  --wildcard: string@bool-completer # Allows domain to accept inbound messages received on subdomains that have MX records pointed to Mailgun. Default is false.
+  --encrypt-incoming-message: oneof<nothing, bool> # Enable encrypting incoming messages for the given domain. This cannot be altered via API after being set for security purposes. Reach out to Support to disable if necessary. Default to false
+  --force-dkim-authority: oneof<nothing, bool> # If set to true, the domain will be the DKIM authority for itself even if the root domain is registered on the same mailgun account. If set to false, the domain will have the same DKIM authority as the root domain registered on the same mailgun account. Default to false.
+  --force-root-dkim-host: oneof<nothing, bool> # If set to true, the root domain will be the DKIM Host for the domain being created even if the root domain itself is not registered with Mailgun. The domain being created will still need to pass domain verification with valid spf records for the domain and valid DKIM record for the root domain.  This does not effect the smtp mail-from host for the domain being created. The mail-from host will remain the domain name being created, not the root domain.
+  --wildcard: oneof<nothing, bool> # Allows domain to accept inbound messages received on subdomains that have MX records pointed to Mailgun. Default is false.
   name: string # The name of the new domain
   --pool-id: string # Requested IP Pool to be assigned to the domain at creation.
   --ips: string # An optional, comma-separated list of IP addresses to be assigned to this domain. If not specified, all dedicated IP addresses on the account will be assigned. If the request cannot be fulfilled (e.g. a requested IP is not assigned to the account, etc), a 400 will be returned.
-  --require-tls: string@bool-completer # If set to true, this requires messages for the domain only be sent over a TLS connection. If a TLS connection cannot be established, Mailgun will not deliver the message.  If set to false, Mailgun will still try and upgrade the connection, but if Mailgun cannot, the message will be delivered over a plaintext SMTP connection.  The default value is false.
-  --skip-verification: string@bool-completer # If set to true, the certificate and hostname will not be verified when trying to establish a TLS connection and Mailgun will accept any certificate during delivery of a message.  If set to false, Mailgun will verify the certificate and hostname. If either one can not be verified, a TLS connection will not be established.  The default value is false.
+  --require-tls: oneof<nothing, bool> # If set to true, this requires messages for the domain only be sent over a TLS connection. If a TLS connection cannot be established, Mailgun will not deliver the message.  If set to false, Mailgun will still try and upgrade the connection, but if Mailgun cannot, the message will be delivered over a plaintext SMTP connection.  The default value is false.
+  --skip-verification: oneof<nothing, bool> # If set to true, the certificate and hostname will not be verified when trying to establish a TLS connection and Mailgun will accept any certificate during delivery of a message.  If set to false, Mailgun will verify the certificate and hostname. If either one can not be verified, a TLS connection will not be established.  The default value is false.
   --spam-action: string # Disabled, block or tag. Default to disabled. If disabled, no spam filtering will occur for inbound messages.  If block, inbound spam messages will not be delivered.  If tag, inbound messages will be tagged with a spam header. See Spam Filter.
   --smtp-password: string # Password for SMTP authentication
-  --use-automatic-sender-security: string@bool-completer # Enable Automatic Sender Security. This requires setting DNS CNAME entries for DKIM keys instead of a TXT record. Defaults to false.
-  --webhooks-redact-pii: string@bool-completer # If set to true, Personally Identifiable Information (PII) will be redacted from the payload of any webhook posted for this domain
+  --use-automatic-sender-security: oneof<nothing, bool> # Enable Automatic Sender Security. This requires setting DNS CNAME entries for DKIM keys instead of a TXT record. Defaults to false.
+  --webhooks-redact-pii: oneof<nothing, bool> # If set to true, Personally Identifiable Information (PII) will be redacted from the payload of any webhook posted for this domain
   --web-prefix: string # Sets your open, click and unsubscribe URLs domain name prefix. Links rewritten or added by Mailgun in your emails will look like <web_scheme>://<web_prefix>.<domain_name>/... Default to email
   --web-scheme: string # Sets your open, click and unsubscribe URLs to use http or https. Value either `http` or `https`. Defaults to http. In order for https to work, you must have a valid cert created for your domain. See Domain Tracking for TLS cert generation.
   --message-ttl: int # Specifies the time-to-live (TTL) in seconds for retrieving both incoming and outgoing messages. The maximum TTL value is determined by your subscription plan.
@@ -385,15 +384,15 @@ export def "domains PUT-v4-domains--name-" [
   --archive-to: string # If set to a URL, then each successfully delivered message will be submitted in an HTTP POST request to the URL. The Content-Type of the POST requests is application/mime and the request body is exactly what the recipient SMTP server received.
   --mailfrom-host: string # The hostname to update to. Must be in lower case
   --message-ttl: int # Specifies the time-to-live (TTL) in seconds for retrieving both incoming and outgoing messages. The maximum TTL value is determined by your subscription plan.
-  --require-tls: string@bool-completer # If set to true, this requires messages for the domain only be sent over a TLS connection. If a TLS connection cannot be established, Mailgun will not deliver the message.  If set to false, Mailgun will still try and upgrade the connection, but if Mailgun cannot, the message will be delivered over a plaintext SMTP connection.  The default value is false.
-  --skip-verification: string@bool-completer # If set to true, the certificate and hostname will not be verified when trying to establish a TLS connection and Mailgun will accept any certificate during delivery of a message.  If set to false, Mailgun will verify the certificate and hostname. If either one can not be verified, a TLS connection will not be established.  The default value is false.
+  --require-tls: oneof<nothing, bool> # If set to true, this requires messages for the domain only be sent over a TLS connection. If a TLS connection cannot be established, Mailgun will not deliver the message.  If set to false, Mailgun will still try and upgrade the connection, but if Mailgun cannot, the message will be delivered over a plaintext SMTP connection.  The default value is false.
+  --skip-verification: oneof<nothing, bool> # If set to true, the certificate and hostname will not be verified when trying to establish a TLS connection and Mailgun will accept any certificate during delivery of a message.  If set to false, Mailgun will verify the certificate and hostname. If either one can not be verified, a TLS connection will not be established.  The default value is false.
   --smtp-password: string # Updates the domain's SMTP credentials with the given string
   --spam-action: string # Updates the domain's spam action. Valid values are 'disabled', 'tag', and 'block'
-  --use-automatic-sender-security: string@bool-completer # Enable or disable Automatic Sender Security. If enabled, requires setting DNS CNAME entries for DKIM keys instead of a TXT record. Domain must be reverified after changing this field. Defaults to false
-  --webhooks-redact-pii: string@bool-completer # If set to true, Personally Identifiable Information (PII) will be redacted from the payload of any webhook posted for this domain
+  --use-automatic-sender-security: oneof<nothing, bool> # Enable or disable Automatic Sender Security. If enabled, requires setting DNS CNAME entries for DKIM keys instead of a TXT record. Domain must be reverified after changing this field. Defaults to false
+  --webhooks-redact-pii: oneof<nothing, bool> # If set to true, Personally Identifiable Information (PII) will be redacted from the payload of any webhook posted for this domain
   --web-scheme: string # Updates your open, click and unsubscribe URLs to use http or https. Value either `http` or `https`. Defaults to http. In order for https to work, you must have a valid cert created for your domain. See Domain Tracking for TLS cert generation.
   --web-prefix: string # This updates the web prefix used for a domain's tracking features.  Must be a valid atom. Nothing will be updated if omitted. This impacts click, open, and unsubscribe tracking features.    Note: Updating the web prefix for a domain will require also updating the domain's DNS to include the CNAME record to match. For example, if you set the web prefix to `zed` for the domain `my-domain.com`, the corresponding CNAME `zed.my-domain.com` will need to be created in your domain's dns zone.
-  --wildcard: string@bool-completer # Updates the domain's wildcard status with the given boolean
+  --wildcard: oneof<nothing, bool> # Updates the domain's wildcard status with the given boolean
 ]: any -> record<message: string, domain: any, receiving_dns_records: list<any>, sending_dns_records: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -711,8 +710,8 @@ export def "domains-tracking-open PUT-v3-domains--name--tracking-open" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # Set this param to true or false to toggle open tracking active status. Omit this param to keep current settings.
-  --place-at-the-top: string@bool-completer # Setting this param to true will place the open tracking pixel at the top of the HTML body when inserted into the email mime. Omit this param to keep current setting.
+  --active: oneof<nothing, bool> # Set this param to true or false to toggle open tracking active status. Omit this param to keep current settings.
+  --place-at-the-top: oneof<nothing, bool> # Setting this param to true will place the open tracking pixel at the top of the HTML body when inserted into the email mime. Omit this param to keep current setting.
 ]: any -> record<message: string, open: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -738,7 +737,7 @@ export def "domains-tracking-unsubscribe PUT-v3-domains--name--tracking-unsubscr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --active: string@bool-completer # This param will toggle the active status of unsubscribe tracking on the domain.
+  --active: oneof<nothing, bool> # This param will toggle the active status of unsubscribe tracking on the domain.
   --html-footer: string # Updates the html footer for the unsubscribe link inserted into the email html part of the mime.
   --text-footer: string # Updates the text footer for the unsubscribe link inserted into the email plain part of the mime.
 ]: any -> record<message: string, unsubscribe: record> {
@@ -914,7 +913,7 @@ export def "domains-dkim-authority PUT-v3-domains--name--dkim-authority" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --self: string@bool-completer # Change the DKIM authority for a domain. If set to true, the domain will be the DKIM authority for itself even if the root domain is registered on the same mailgun account  If set to false, the domain will have the same DKIM authority as the root domain registered on the same mailgun account.
+  --self: oneof<nothing, bool> # Change the DKIM authority for a domain. If set to true, the domain will be the DKIM authority for itself even if the root domain is registered on the same mailgun account  If set to false, the domain will have the same DKIM authority as the root domain registered on the same mailgun account.
 ]: any -> record<message: string, sending_dns_records: list<any>, changed: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1016,7 +1015,7 @@ export def "webhooks DELETE-v1-webhooks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --webhook-ids: string # Comma-separated list of webhook IDs to delete. If provided, only these specific webhooks will be deleted.
-  --all: string@bool-completer # Set to 'true' to delete all account-level webhooks. This acts as a safety mechanism to prevent accidental deletion of all webhooks.
+  --all: oneof<nothing, bool> # Set to 'true' to delete all account-level webhooks. This acts as a safety mechanism to prevent accidental deletion of all webhooks.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1134,7 +1133,7 @@ export def "dkim-management-domains-rotation PUT-v1-dkim-management-domains--nam
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --rotation-enabled: string@bool-completer # If true, enables DKIM Auto-Rotation. If false, disables it
+  --rotation-enabled: oneof<nothing, bool> # If true, enables DKIM Auto-Rotation. If false, disables it
   --rotation-interval: string # The interval at which to rotate keys. Example, '5d' for five days
 ]: any -> record<domain: record<id: string, account_id: string, sid: string, name: string, state: string, active_selector: string, rotation_enabled: string, rotation_interval: string, records: list<record>>> {
   let input = $in
@@ -1427,7 +1426,7 @@ export def "domains-all-dynamic-pools-enroll POST-v3-domains-all-dynamic-pools-e
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-subaccounts: string@bool-completer # If true, domains belonging to subaccounts will also be enrolled in Dynamic IP Pools (default: false)
+  --include-subaccounts: oneof<nothing, bool> # If true, domains belonging to subaccounts will also be enrolled in Dynamic IP Pools (default: false)
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1497,8 +1496,8 @@ export def "ips GET-v3-ips" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dedicated: string@bool-completer # Return only dedicated IPs
-  --enabled: string@bool-completer # Return only enabled IPs
+  --dedicated: oneof<nothing, bool> # Return only dedicated IPs
+  --enabled: oneof<nothing, bool> # Return only enabled IPs
 ]: nothing -> record<assignable_to_pools: list<string>, details: table<ip: string, is_on_warmup: bool, dedicated: bool, enabled: bool>, items: list<string>, total_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2338,7 +2337,7 @@ export def "dynamic-pools-history GET-v1-dynamic-pools-history" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Limit: int # The maximum number of events to return
-  --include-subaccounts: string@bool-completer # If true, includes events from all subaccounts in addition to events from the parent account
+  --include-subaccounts: oneof<nothing, bool> # If true, includes events from all subaccounts in addition to events from the parent account
   --domain: string # Filter events by domain name
   --before: string # Filter events emitted before a given timestamp (Format: Mon, 02 Jan 2006 15:04:05 MST)
   --after: string # Filter events emitted after a given timestamp (Format: Mon, 02 Jan 2006 15:04:05 MST)
@@ -2956,8 +2955,8 @@ export def "analytics-metrics POST-v1-analytics-metrics" [
   --dimensions: list # Attributes of the metric data such as 'subaccount'.  See [dimensions](https://documentation.mailgun.com/docs/mailgun/user-manual/reporting/dimensions)
   --metrics: list # Name of the metrics to receive the stats for such as 'processed_count'. See [metrics](https://documentation.mailgun.com/docs/mailgun/user-manual/reporting/metric-definitions)
   --filter: record # Filters to apply to the query. — shape: {AND: list}
-  --include-subaccounts: string@bool-completer # Include stats from all subaccounts.
-  --include-aggregates: string@bool-completer # Include top-level aggregate metrics.
+  --include-subaccounts: oneof<nothing, bool> # Include stats from all subaccounts.
+  --include-aggregates: oneof<nothing, bool> # Include top-level aggregate metrics.
 ]: any -> record<start: string, end: string, resolution: string, duration: string, dimensions: list<string>, pagination: record<sort: string, skip: int, limit: int, total: int>, items: table<dimensions: list, metrics: record>, aggregates: record<metrics: record<accepted_incoming_count: int, accepted_outgoing_count: int, accepted_count: int, delivered_smtp_count: int, delivered_http_count: int, delivered_optimized_count: int, delivered_count: int, stored_count: int, processed_count: int, sent_count: int, opened_count: int, clicked_count: int, unique_opened_count: int, unique_clicked_count: int, unsubscribed_count: int, complained_count: int, failed_count: int, temporary_failed_count: int, permanent_failed_count: int, temporary_failed_esp_block_count: int, permanent_failed_esp_block_count: int, rate_limit_count: int, webhook_count: int, permanent_failed_optimized_count: int, permanent_failed_old_count: int, bounced_count: int, hard_bounces_count: int, soft_bounces_count: int, delayed_bounce_count: int, suppressed_bounces_count: int, suppressed_unsubscribed_count: int, suppressed_complaints_count: int, delivered_first_attempt_count: int, delayed_first_attempt_count: int, delivered_subsequent_count: int, delivered_two_plus_attempts_count: int, delivered_rate: string, opened_rate: string, clicked_rate: string, unique_opened_rate: string, unique_clicked_rate: string, unsubscribed_rate: string, complained_rate: string, bounce_rate: string, fail_rate: string, permanent_fail_rate: string, temporary_fail_rate: string, delayed_rate: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -2990,8 +2989,8 @@ export def "analytics-usage-metrics POST-v1-analytics-usage-metrics" [
   --dimensions: list # Attributes of the metric data such as 'subaccount'.  See [dimensions](https://documentation.mailgun.com/docs/mailgun/user-manual/reporting/dimensions)
   --metrics: list # Name of the metrics to receive the stats for such as 'processed_count'.
   --filter: record # Filters to apply to the query. — shape: {AND: list}
-  --include-subaccounts: string@bool-completer # Include stats from all subaccounts.
-  --include-aggregates: string@bool-completer # Include top-level aggregate metrics.
+  --include-subaccounts: oneof<nothing, bool> # Include stats from all subaccounts.
+  --include-aggregates: oneof<nothing, bool> # Include top-level aggregate metrics.
 ]: any -> record<start: string, end: string, resolution: string, duration: string, dimensions: list<string>, pagination: record<sort: string, skip: int, limit: int, total: int>, items: table<dimensions: list, metrics: record>, aggregates: record<metrics: record<processed_count: int, email_validation_count: int, email_validation_public_count: int, email_validation_valid_count: int, email_validation_single_count: int, email_validation_bulk_count: int, email_validation_list_count: int, email_validation_mailgun_count: int, email_validation_mailjet_count: int, email_preview_count: int, email_preview_failed_count: int, link_validation_count: int, link_validation_failed_count: int, seed_test_count: int, ip_blocklist_monitoring_count: int, domain_blocklist_monitoring_count: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3024,8 +3023,8 @@ export def "analytics-logs POST-v1-analytics-logs" [
   --events: list # The set of events to include.
   --metric-events: list # Optional set of analytics metric events. Will be converted into corresponding events.
   --filter: record # Filters to apply to the query. — shape: {AND: list}
-  --include-subaccounts: string@bool-completer # Include logs from all subaccounts.
-  --include-totals: string@bool-completer # Include total number of log entries.
+  --include-subaccounts: oneof<nothing, bool> # Include logs from all subaccounts.
+  --include-totals: oneof<nothing, bool> # Include total number of log entries.
   --pagination: record # shape: {sort?: string, token?: string, limit?: int}
 ]: any -> record<start: string, end: string, items: table<id: string, event: string, _timestamp: string, account: any, campaigns: list, tags: list, method: string, originating_ip: string, api_key_id: string, delivered_at: string, delivery_status: any, i_delivery_optimizer: string, domain: any, recipient: string, recipient_domain: string, recipient_provider: string, envelope: any, storage: any, template: any, log_level: string, user_variables: string, message: any, flags: any, primary_dkim: string, ip: string, geolocation: any, client_info: any, severity: string, reason: string, routes: any, mailing_list: any, url: string>, pagination: record<previous: string, next: string, first: string, last: string, total: int>, aggregates: record<all: int, metrics: record>> {
   let input = $in
@@ -3079,8 +3078,8 @@ export def "analytics-tags POST-v1-analytics-tags" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --pagination: record # shape: {sort?: string, skip?: int, limit?: int, total?: int, include_total?: bool}
-  --include-subaccounts: string@bool-completer # Boolean indicating whether or not to include data from all subaccounts. Default false.
-  --include-metrics: string@bool-completer # Boolean indicating whether or not to include metrics for tags. Default false.  When true max limit is 20.
+  --include-subaccounts: oneof<nothing, bool> # Boolean indicating whether or not to include data from all subaccounts. Default false.
+  --include-metrics: oneof<nothing, bool> # Boolean indicating whether or not to include metrics for tags. Default false.  When true max limit is 20.
   --tag: string # The tag or tag prefix.
 ]: any -> record<items: table<account_id: string, parent_account_id: string, tag: string, description: string, first_seen: record, last_seen: record, metrics: record, account_name: string>, pagination: record<sort: string, skip: int, limit: int, total: int, include_total: bool>> {
   let input = $in
@@ -4584,7 +4583,7 @@ export def "lists-members address-members-by-list_address" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --address: string # A valid email address specification.
-  --subscribed: string@bool-completer # Filtering list on whether the member is subscribed or not.
+  --subscribed: oneof<nothing, bool> # Filtering list on whether the member is subscribed or not.
   --limit: int # Maximum number of records to return. Max is 100. Defaults to 100.
   --skip: int
 ]: nothing -> record<total_count: int, items: table<address: string, name: string, vars: record, subscribed: bool>> {
@@ -4613,8 +4612,8 @@ export def "lists-members address-members-by-list_address-1" [
   --address: string # Valid email address specification.
   --name: string # An optional member name.
   --vars: record # JSON-encoded dictionary string with arbitrary parameters.
-  --subscribed: string@bool-completer # Set the member as subscribed or not. Defaults to true.
-  --upsert: string@bool-completer # Set to True to update member if present, False to raise error in case of a duplicate member. Defaults to false.
+  --subscribed: oneof<nothing, bool> # Set the member as subscribed or not. Defaults to true.
+  --upsert: oneof<nothing, bool> # Set to True to update member if present, False to raise error in case of a duplicate member. Defaults to false.
 ]: any -> record<member: record<address: string, name: string, vars: record, subscribed: bool>, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4641,7 +4640,7 @@ export def "lists-membersjson address-membersjson" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --members: string # Mailing list recipients in JSON array format. Can be, either, an array of string addresses or an array of ListMemberRequest JSON objects.
-  --upsert: string@bool-completer # If true, an existing member will be updated. Defaults to false.
+  --upsert: oneof<nothing, bool> # If true, an existing member will be updated. Defaults to false.
 ]: nothing -> record<list: record<address: string, name: string, description: string, access_level: string, reply_preference: string, created_at: string, members_count: int>, task_id: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4665,8 +4664,8 @@ export def "lists-memberscsv address-memberscsv" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --subscribed: string@bool-completer
-  --upsert: string@bool-completer
+  --subscribed: oneof<nothing, bool>
+  --upsert: oneof<nothing, bool>
   --members: string # Absolute path to the CSV file
 ]: any -> record<list: record<address: string, name: string, description: string, access_level: string, reply_preference: string, created_at: string, members_count: int>, task_id: string, message: string> {
   let input = $in
@@ -4720,7 +4719,7 @@ export def "lists-members address-by-list_address-member_address-1" [
   --address: string # A valid email address specification.
   --name: string # An optional member name.
   --vars: record # JSON-encoded dictionary string with arbitrary parameters.
-  --subscribed: string@bool-completer # Set the member to subscribed or not. Defaults to True.
+  --subscribed: oneof<nothing, bool> # Set the member to subscribed or not. Defaults to True.
 ]: any -> record<member: record<address: string, name: string, vars: record, subscribed: bool>, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4867,7 +4866,7 @@ export def "lists-members-pages address-members-pages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --subscribed: string@bool-completer # Filtering list on whether the member is subscribed or not.
+  --subscribed: oneof<nothing, bool> # Filtering list on whether the member is subscribed or not.
   --limit: int # Set limit for the list length returned. Defaults to 100.
   --address: string # Use as pivot for pagination.
   --page: string # Could be either: first, last, next or prev
@@ -5830,8 +5829,8 @@ export def "accounts-subaccounts get-v5-accounts-subaccounts" [
   --filter: string # Name of account to filter by
   --limit: int # Number of subaccounts to return (default: 10)
   --skip: int # Number of subaccounts to skip (default: 0)
-  --enabled: string@bool-completer # Indicate to include enabled subaccounts (true) or disabled accounts (false). Leave unspecified to allow for either, depending on other parameters provided.
-  --closed: string@bool-completer # Indicate to include closed subaccounts (true) or exclude closed accounts (false). Leave unspecified to allow for either, depending on other parameters provided.
+  --enabled: oneof<nothing, bool> # Indicate to include enabled subaccounts (true) or disabled accounts (false). Leave unspecified to allow for either, depending on other parameters provided.
+  --closed: oneof<nothing, bool> # Indicate to include closed subaccounts (true) or exclude closed accounts (false). Leave unspecified to allow for either, depending on other parameters provided.
 ]: nothing -> record<subaccounts: table<id: string, name: string, created_at: string, updated_at: string, status: string, features: record>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6259,7 +6258,7 @@ export def "domains-credentials POST-v3-domains--domain-name--credentials" [
   --allow-errors(-e) # Return full response without error handling
   login: string # Email address of SMTP credential user; accepts multiple values
   --mailbox: string # Email address of SMTP credential user, may be used in place of 'login'; accepts multiple values
-  --system: string@bool-completer # Identify if these are system account credentials, defaults to false
+  --system: oneof<nothing, bool> # Identify if these are system account credentials, defaults to false
   --password: string # Supply desired password(s) for the new credentials if preferred over generated ones; accepts multiple values
 ]: any -> record<message: string, note: string, credentials: record> {
   let input = $in
@@ -6457,7 +6456,7 @@ export def "bounce-classification-stats GET-v1-bounce-classification-stats" [
   --allow-errors(-e) # Return full response without error handling
   --group: string # Group response by fields: subaccount.id, domain.name, entity-id, rule-id
   --limit: int # Limits the number of items returned in a response
-  --include-subaccounts: string@bool-completer # Include subaccounts (default: false)
+  --include-subaccounts: oneof<nothing, bool> # Include subaccounts (default: false)
 ]: nothing -> record<items: list<any>, _duration: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6485,7 +6484,7 @@ export def "bounce-classification-domains GET-v1-bounce-classification-domains" 
   --limit: int # Limits the number of items returned in a response
   --skip: int # Skips N items in a response
   --qp-query: string # Query filter, e.g.: 'domain.name:example.com'
-  --include-subaccounts: string@bool-completer # Include subaccounts (default: false)
+  --include-subaccounts: oneof<nothing, bool> # Include subaccounts (default: false)
 ]: nothing -> record<items: list<any>, total: int, req: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6511,7 +6510,7 @@ export def "bounce-classification-domains-entities GET-v1-bounce-classification-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-subaccounts: string@bool-completer # Include subaccounts (default: false)
+  --include-subaccounts: oneof<nothing, bool> # Include subaccounts (default: false)
 ]: nothing -> record<items: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6538,7 +6537,7 @@ export def "bounce-classification-domains-entities-rules GET-v1-bounce-classific
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-subaccounts: string@bool-completer # Include subaccounts (default: false)
+  --include-subaccounts: oneof<nothing, bool> # Include subaccounts (default: false)
 ]: nothing -> record<items: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6646,7 +6645,7 @@ export def "bounce-classification-metrics POST-v2-bounce-classification-metrics"
   --dimensions: list # Dimensions.
   --metrics: list # Metrics to return. See example.
   --filter: record # Filters to apply to the query. — shape: {AND: list}
-  --include-subaccounts: string@bool-completer # Include stats from all subaccounts.
+  --include-subaccounts: oneof<nothing, bool> # Include stats from all subaccounts.
   --pagination: record # Attributes used for pagination and sorting. — shape: {sort?: string, skip?: int, limit?: int}
 ]: any -> record<start: string, end: string, resolution: record, duration: string, dimensions: list<string>, pagination: record<sort: string, skip: int, limit: int, total: int>, items: list<any>> {
   let input = $in

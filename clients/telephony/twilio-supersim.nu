@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://supersim.twilio.com"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -143,7 +142,7 @@ export def "e-sim-profiles CreateEsimProfile" [
   --allow-errors(-e) # Return full response without error handling
   --CallbackUrl: string # The URL we should call using the `callback_method` when the status of the eSIM Profile changes. At this stage of the eSIM Profile pilot, the a request to the URL will only be called when the ESimProfile resource changes from `reserving` to `available`.
   --CallbackMethod: string@CallbackMethod-completer # The HTTP method we should use to call `callback_url`. Can be: `GET` or `POST` and the default is POST. (format: http-method)
-  --GenerateMatchingId: string@bool-completer # When set to `true`, a value for `Eid` does not need to be provided. Instead, when the eSIM profile is reserved, a matching ID will be generated and returned via the `matching_id` property. This identifies the specific eSIM profile that can be used by any capable device to claim and download the profile.
+  --GenerateMatchingId: oneof<nothing, bool> # When set to `true`, a value for `Eid` does not need to be provided. Instead, when the eSIM profile is reserved, a matching ID will be generated and returned via the `matching_id` property. This identifies the specific eSIM profile that can be used by any capable device to claim and download the profile.
   --Eid: string # Identifier of the eUICC that will claim the eSIM Profile.
 ]: any -> record<sid: string, account_sid: string, iccid: string, sim_sid: string, status: string, eid: string, smdp_plus_address: string, matching_id: string, activation_code: string, error_code: string, error_message: string, date_created: string, date_updated: string, url: string> {
   let input = $in
@@ -221,11 +220,11 @@ export def "fleets CreateFleet" [
   --allow-errors(-e) # Return full response without error handling
   NetworkAccessProfile: string # The SID or unique name of the Network Access Profile that will control which cellular networks the Fleet's SIMs can connect to.
   --UniqueName: string # An application-defined string that uniquely identifies the resource. It can be used in place of the resource's `sid` in the URL to address the resource.
-  --DataEnabled: string@bool-completer # Defines whether SIMs in the Fleet are capable of using 2G/3G/4G/LTE/CAT-M data connectivity. Defaults to `true`.
+  --DataEnabled: oneof<nothing, bool> # Defines whether SIMs in the Fleet are capable of using 2G/3G/4G/LTE/CAT-M data connectivity. Defaults to `true`.
   --DataLimit: int # The total data usage (download and upload combined) in Megabytes that each Super SIM assigned to the Fleet can consume during a billing period (normally one month). Value must be between 1MB (1) and 2TB (2,000,000). Defaults to 1GB (1,000).
   --IpCommandsUrl: string # The URL that will receive a webhook when a Super SIM in the Fleet is used to send an IP Command from your device to a special IP address. Your server should respond with an HTTP status code in the 200 range; any response body will be ignored. (format: uri)
   --IpCommandsMethod: string@IpCommandsMethod-completer # A string representing the HTTP method to use when making a request to `ip_commands_url`. Can be one of `POST` or `GET`. Defaults to `POST`. (format: http-method)
-  --SmsCommandsEnabled: string@bool-completer # Defines whether SIMs in the Fleet are capable of sending and receiving machine-to-machine SMS via Commands. Defaults to `true`.
+  --SmsCommandsEnabled: oneof<nothing, bool> # Defines whether SIMs in the Fleet are capable of sending and receiving machine-to-machine SMS via Commands. Defaults to `true`.
   --SmsCommandsUrl: string # The URL that will receive a webhook when a Super SIM in the Fleet is used to send an SMS from your device to the SMS Commands number. Your server should respond with an HTTP status code in the 200 range; any response body will be ignored. (format: uri)
   --SmsCommandsMethod: string@SmsCommandsMethod-completer # A string representing the HTTP method to use when making a request to `sms_commands_url`. Can be one of `POST` or `GET`. Defaults to `POST`. (format: http-method)
 ]: any -> record<account_sid: string, sid: string, unique_name: string, date_created: string, date_updated: string, url: string, data_enabled: bool, data_limit: int, data_metering: string, sms_commands_enabled: bool, sms_commands_url: string, sms_commands_method: string, network_access_profile_sid: string, ip_commands_url: string, ip_commands_method: string> {

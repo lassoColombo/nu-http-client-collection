@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.citrixonline.com/G2M/rest"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -184,7 +183,7 @@ export def "groups-meetings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --history: string@bool-completer # When 'true', returns all past meetings within date range
+  --history: oneof<nothing, bool> # When 'true', returns all past meetings within date range
   --startDate: string # If history=true, required start of date range, in ISO8601 UTC format, e.g. 2015-07-01T22:00:00Z (format: date-time)
   --endDate: string # If history=true, required end of date range, in ISO8601 UTC format, e.g. 2015-07-01T23:00:00Z (format: date-time)
   --Authorization: string # Access token
@@ -318,7 +317,7 @@ export def "meetings list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --history: string@bool-completer # When 'true', returns all past meetings within date range
+  --history: oneof<nothing, bool> # When 'true', returns all past meetings within date range
   --startDate: string # If history=true, required start of date range, in ISO8601 UTC format, e.g. 2015-07-01T22:00:00Z (format: date-time)
   --endDate: string # If history=true, required end of date range, in ISO8601 UTC format, e.g. 2015-07-01T23:00:00Z (format: date-time)
   --Authorization: string # Access token
@@ -349,7 +348,7 @@ export def "meetings post" [
   conferencecallinfo: string # A required string. Can be one of the following options: <br>PSTN (PSTN only), <br>Free (PSTN and VoIP), <br>Hybrid, (PSTN and VoIP), <br>Private (you provide numbers and access code), or <br>VoIP (VoIP only). <br>You may also enter plain text for numbers and access codes with a limit of 255 characters
   endtime: string # The ending time of the meeting. Required ISO8601 UTC string, e.g. 2015-07-01T23:00:00Z (format: date-time)
   meetingtype: string@meetingtype-completer # The meeting type
-  --passwordrequired: string@bool-completer # Indicates whether a password is required to join the meeting. Required parameter
+  --passwordrequired: oneof<nothing, bool> # Indicates whether a password is required to join the meeting. Required parameter
   starttime: string # The starting time of the meeting. Required ISO8601 UTC string, e.g. 2015-07-01T22:00:00Z (format: date-time)
   subject: string # The subject of the meeting. 100 characters maximum. The characters '&gt;' and '&lt;' have to be replaced with the corresponding html character code (&amp;gt; for &#39;&gt;&#39; and &amp;lt; for &#39;&lt;&#39;)
   timezonekey: string # DEPRECATED. Must be provided and set to empty string ''
@@ -431,7 +430,7 @@ export def "meetings put" [
   conferencecallinfo: string # A required string. Can be one of the following options: <br>PSTN (PSTN only), <br>Free (PSTN and VoIP), <br>Hybrid, (PSTN and VoIP), <br>Private (you provide numbers and access code), or <br>VoIP (VoIP only). <br>You may also enter plain text for numbers and access codes with a limit of 255 characters
   endtime: string # The ending time of the meeting. A required ISO8601 UTC string, e.g. 2015-07-01T22:00:00Z (format: date-time)
   meetingtype: string@meetingtype-completer # The meeting type
-  --passwordrequired: string@bool-completer # Indicates whether a password is required to join the meeting. Required parameter
+  --passwordrequired: oneof<nothing, bool> # Indicates whether a password is required to join the meeting. Required parameter
   starttime: string # The starting time of the meeting. A required ISO8601 UTC string, e.g. 2015-07-01T22:00:00Z (format: date-time)
   subject: string # A description of the meeting. 100 characters maximum. The characters '&gt;' and '&lt;' have to be replaced with the corresponding html character code (&amp;gt; for &#39;&gt;&#39; and &amp;lt; for &#39;&lt;&#39;)
   timezonekey: string # DEPRECATED. Must be provided and set to empty string ''
@@ -722,8 +721,8 @@ export def "organizers-meetings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --scheduled: string@bool-completer # When 'true', returns all future meetings. Date range not supported.
-  --history: string@bool-completer # When 'true', returns all past meetings within date range
+  --scheduled: oneof<nothing, bool> # When 'true', returns all future meetings. Date range not supported.
+  --history: oneof<nothing, bool> # When 'true', returns all past meetings within date range
   --startDate: string # If history is 'true', required start of date range, in ISO8601 UTC format, e.g. 2015-07-01T22:00:00Z (format: date-time)
   --endDate: string # If history is 'true', required end of date range, in ISO8601 UTC format, e.g. 2015-07-01T23:00:00Z (format: date-time)
   --Authorization: string # Access token

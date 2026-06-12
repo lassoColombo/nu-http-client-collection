@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost//api.ote-godaddy.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -103,7 +102,7 @@ export def "abuse-tickets list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string@type-completer # The type of abuse.
-  --closed: string@bool-completer # Is this abuse ticket closed? (default: false)
+  --closed: oneof<nothing, bool> # Is this abuse ticket closed? (default: false)
   --sourceDomainOrIp: string # The domain name or ip address the abuse originated from (format: host-name-or-ip-address)
   --target: string # The brand/company the abuse is targeting. ie: brand name/bank name
   --createdStart: string # The earliest abuse ticket creation date to pull abuse tickets for (format: iso-datetime)
@@ -134,7 +133,7 @@ export def "abuse-tickets createTicket" [
   --allow-errors(-e) # Return full response without error handling
   --info: string # Additional information that may assist the abuse investigator. ie: server logs or email headers/body for SPAM
   --infoUrl: string # Reporter URL if housing additional information that may assist the abuse investigator (format: url)
-  --intentional: string@bool-completer # Do you believe this is intentional abuse by the domain holder? (default: false)
+  --intentional: oneof<nothing, bool> # Do you believe this is intentional abuse by the domain holder? (default: false)
   --proxy: string # The Proxy information required to view the abuse being reported. ie: Specific IP used, or country of IP viewing from
   --body-source: string # The URL or IP where live abuse content is located at. ie: https://www.example.com/bad_stuff/bad.php
   --target: string # The brand/company the abuse is targeting. ie: brand name/bank name

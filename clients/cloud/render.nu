@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.render.com/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -799,8 +798,8 @@ export def "notification-settings-owners patch-owner-notification-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --emailEnabled: string@bool-completer
-  --previewNotificationsEnabled: string@bool-completer
+  --emailEnabled: oneof<nothing, bool>
+  --previewNotificationsEnabled: oneof<nothing, bool>
   --notificationsToSend: string@notificationsToSend-completer
 ]: any -> any {
   let input = $in
@@ -1047,7 +1046,7 @@ export def "services list-services" [
   --updatedBefore: string # Filter for resources updated before a certain time (specified as an ISO 8601 timestamp) (format: date-time, e.g. 2021-06-17T08:15:30Z)
   --updatedAfter: string # Filter for resources updated after a certain time (specified as an ISO 8601 timestamp) (format: date-time, e.g. 2021-06-17T08:15:30Z)
   --ownerId: list # The ID of the workspaces to return resources for
-  --includePreviews: string@bool-completer # Include previews in the response (default: true)
+  --includePreviews: oneof<nothing, bool> # Include previews in the response (default: true)
   --cursor: string # The position in the result list to start from when fetching paginated results. For details, see [Pagination](https://api-docs.render.com/reference/pagination).
   --limit: int # The maximum number of items to return. For details, see [Pagination](https://api-docs.render.com/reference/pagination). (default: 20)
 ]: nothing -> table<service: record<id: string, autoDeploy: string, branch: string, buildFilter: record, createdAt: string, dashboardUrl: string, environmentId: string, imagePath: string, name: string, notifyOnFail: string, ownerId: string, registryCredential: record, repo: string, rootDir: string, slug: string, suspended: string, suspenders: list, type: string, updatedAt: string, serviceDetails: any>, cursor: string> {
@@ -1425,7 +1424,7 @@ export def "services-env-vars update-env-var" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --value: string
-  --generateValue: string@bool-completer
+  --generateValue: oneof<nothing, bool>
 ]: any -> record<key: string, value: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3565,7 +3564,7 @@ export def "postgres list-postgres" [
   --updatedAfter: string # Filter for resources updated after a certain time (specified as an ISO 8601 timestamp) (format: date-time, e.g. 2021-06-17T08:15:30Z)
   --ownerId: list # The ID of the workspaces to return resources for
   --environmentId: list # Filter for resources that belong to an environment
-  --includeReplicas: string@bool-completer # Include replicas in the response (default: true)
+  --includeReplicas: oneof<nothing, bool> # Include replicas in the response (default: true)
   --cursor: string # The position in the result list to start from when fetching paginated results. For details, see [Pagination](https://api-docs.render.com/reference/pagination).
   --limit: int # The maximum number of items to return. For details, see [Pagination](https://api-docs.render.com/reference/pagination). (default: 20)
 ]: nothing -> table<postgres: record<id: string, ipAllowList: list, createdAt: string, updatedAt: string, expiresAt: string, databaseName: string, databaseUser: string, environmentId: string, highAvailabilityEnabled: bool, name: string, owner: record, plan: string, diskSizeGB: int, primaryPostgresID: string, region: string, readReplicas: list, role: string, status: string, version: string, suspended: string, suspenders: list, dashboardUrl: string, diskAutoscalingEnabled: bool>, cursor: string> {
@@ -3597,12 +3596,12 @@ export def "postgres create-postgres" [
   --datadogAPIKey: string # The Datadog API key for the Datadog agent to monitor the new database.
   --datadogSite: string # Datadog region to use for monitoring the new database. Defaults to 'US1'. (e.g. US1)
   name: string # The name of the database as it will appear in the Render Dashboard
-  --enableHighAvailability: string@bool-completer # default: false
+  --enableHighAvailability: oneof<nothing, bool> # default: false
   --environmentId: string
   ownerId: string # The ID of the workspace to create the database for
   plan: string@plan-completer # The instance type to use. Legacy variants (`*_legacy`) identify grandfathered plans no longer offered for new services. Note that base services on any paid instance type can't create preview instances with the `free` instance type. (e.g. starter)
   --diskSizeGB: int # The number of gigabytes of disk space to allocate for the database
-  --enableDiskAutoscaling: string@bool-completer # default: false
+  --enableDiskAutoscaling: oneof<nothing, bool> # default: false
   --region: string@region-completer # Defaults to "oregon" (default: oregon)
   --ipAllowList: list # item shape: {cidrBlock: string, description: string}
   --parameterOverrides: record
@@ -3660,8 +3659,8 @@ export def "postgres update-postgres" [
   --name: string
   --plan: string@plan-completer # The instance type to use. Legacy variants (`*_legacy`) identify grandfathered plans no longer offered for new services. Note that base services on any paid instance type can't create preview instances with the `free` instance type. (e.g. starter)
   --diskSizeGB: int # The number of gigabytes of disk space to allocate for the database
-  --enableDiskAutoscaling: string@bool-completer
-  --enableHighAvailability: string@bool-completer
+  --enableDiskAutoscaling: oneof<nothing, bool>
+  --enableHighAvailability: oneof<nothing, bool>
   --datadogAPIKey: string # The Datadog API key for the Datadog agent to monitor the database. Pass empty string to remove. Restarts Postgres on change.
   --datadogSite: string # Datadog region to use for monitoring the new database. Defaults to 'US1'. (e.g. US1)
   --ipAllowList: list # item shape: {cidrBlock: string, description: string}
@@ -4123,7 +4122,7 @@ export def "environments create-environment" [
   name: string
   projectId: string
   --protectedStatus: string@protectedStatus-completer # Indicates whether an environment is `unprotected` or `protected`. Only admin users can perform destructive actions in `protected` environments.
-  --networkIsolationEnabled: string@bool-completer # Indicates whether network connections across environments are allowed.
+  --networkIsolationEnabled: oneof<nothing, bool> # Indicates whether network connections across environments are allowed.
   --ipAllowList: list # item shape: {cidrBlock: string, description: string}
 ]: any -> record<id: string, name: string, projectId: string, databasesIds: list<string>, ipAllowList: table<cidrBlock: string, description: string>, redisIds: list<string>, serviceIds: list<string>, envGroupIds: list<string>, protectedStatus: string, networkIsolationEnabled: bool> {
   let input = $in
@@ -4206,7 +4205,7 @@ export def "environments update-environment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --networkIsolationEnabled: string@bool-completer # Indicates whether network connections across environments are allowed.
+  --networkIsolationEnabled: oneof<nothing, bool> # Indicates whether network connections across environments are allowed.
   --protectedStatus: string@protectedStatus-completer # Indicates whether an environment is `unprotected` or `protected`. Only admin users can perform destructive actions in `protected` environments.
   --ipAllowList: list # item shape: {cidrBlock: string, description: string}
 ]: any -> record<id: string, name: string, projectId: string, databasesIds: list<string>, ipAllowList: table<cidrBlock: string, description: string>, redisIds: list<string>, serviceIds: list<string>, envGroupIds: list<string>, protectedStatus: string, networkIsolationEnabled: bool> {
@@ -4509,7 +4508,7 @@ export def "env-groups-env-vars update-env-group-env-var" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --value: string
-  --generateValue: string@bool-completer
+  --generateValue: oneof<nothing, bool>
 ]: any -> record<id: string, name: string, ownerId: string, createdAt: string, updatedAt: string, serviceLinks: table<id: string, name: string, type: string>, environmentId: string, envVars: table<key: string, value: string>, secretFiles: table<name: string, content: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4728,7 +4727,7 @@ export def "webhooks create-webhook" [
   ownerId: string # The ID of the owner (team or personal user) whose resources should be returned
   --body-url: string
   name: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   eventFilter: any
 ]: any -> any {
   let input = $in
@@ -4804,7 +4803,7 @@ export def "webhooks update-webhook" [
   --allow-errors(-e) # Return full response without error handling
   --name: string
   --body-url: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
   --eventFilter: any
 ]: any -> any {
   let input = $in

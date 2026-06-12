@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://api.nytimes.com/svc/search/v2" "https://api.nytimes.com/svc/search/v2"] }
 def auth-scheme-completer [] { ["query-api-key"] }
 
@@ -108,10 +107,10 @@ export def "articlesearchjson get" [
   --end-date: string # "Format: YYYYMMDD   Restricts responses to results with publication dates of the date specified or earlier."
   --qp-sort: string@sort-completer # "By default, search results are sorted by their relevance to the query term (q). Use the sort parameter to sort by pub_date."
   --fl: string # "Comma-delimited list of fields (no limit)    Limits the fields returned in your search results. By default (unless you include an fl list in your request), the following fields are returned:       web_url      snippet      lead_paragraph      abstract      print_page      blog      source      multimedia      headline      keywords      pub_date      document_type      news_desk      byline      type_of_material      _id      word_count"
-  --hl: string@bool-completer # Enables highlighting in search results. When set to true, the query term (q) is highlighted in the headline and lead_paragraph fields.  Note: If highlighting is enabled, snippet will be returned even if it is not specified in your fl list."  (default: false)
+  --hl: oneof<nothing, bool> # Enables highlighting in search results. When set to true, the query term (q) is highlighted in the headline and lead_paragraph fields.  Note: If highlighting is enabled, snippet will be returned even if it is not specified in your fl list."  (default: false)
   --page: int # "The value of page corresponds to a set of 10 results (it does not indicate the starting number of the result set). For example, page=0 corresponds to records 0-9. To return records 10-19, set page to 1, not 10."  (default: 0)
   --facet-field: string # Comma-delimited list of facets  Specifies the sets of facet values to include in the facets array at the end of response, which collects the facet values from all the search results. By default no facet fields will be returned. Below is the list of valid facets:  section_name  document_type  type_of_material  source  day_of_week  To learn more about using facets, see Using Facets.
-  --facet-filter: string@bool-completer # When set to true, facet counts will respect any applied filters (fq, date range, etc.) in addition to the main query term. To filter facet counts, specifying at least one facet_field is required. To learn more about using facets, see Using Facets.  (default: false)
+  --facet-filter: oneof<nothing, bool> # When set to true, facet counts will respect any applied filters (fq, date range, etc.) in addition to the main query term. To filter facet counts, specifying at least one facet_field is required. To learn more about using facets, see Using Facets.  (default: false)
 ]: nothing -> record<response: record<docs: list<record>, meta: record<hits: int, offset: int, time: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)

@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://your-domain.atlassian.net"] }
 def auth-scheme-completer [] { ["bearer" "basic"] }
 
@@ -128,7 +127,7 @@ export def "rest-servicedeskapi-customer createCustomer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --strictConflictStatusCode: string@bool-completer # Optional boolean flag to return 409 Conflict status code for duplicate customer creation request
+  --strictConflictStatusCode: oneof<nothing, bool> # Optional boolean flag to return 409 Conflict status code for duplicate customer creation request
   --displayName: string # Customer's name for display in the UI.
   --email: string # Customer's email address.
   --fullName: string # Deprecated, please use 'displayName'.
@@ -225,11 +224,11 @@ export def "rest-servicedeskapi-knowledgebase-article get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string # The string used to filter the articles (required).
-  --highlight: string@bool-completer # If set to true matching query term in the title and excerpt will be highlighted using the `@@@hl@@@term@@@endhl@@@` syntax. Default: false. (default: false)
+  --highlight: oneof<nothing, bool> # If set to true matching query term in the title and excerpt will be highlighted using the `@@@hl@@@term@@@endhl@@@` syntax. Default: false. (default: false)
   --start: int # (Deprecated) The starting index of the returned objects. Base index: 0. (format: int32)
   --limit: int # The maximum number of items to return per page. Default: 50. (format: int32)
   --cursor: string # Pointer to a set of search results, returned as part of the next or prev URL from the previous search call.
-  --prev: string@bool-completer # Should navigate to the previous page. Defaulted to false. Set to true as part of prev URL from the previous search call. (default: false)
+  --prev: oneof<nothing, bool> # Should navigate to the previous page. Defaulted to false. Set to true as part of prev URL from the previous search call. (default: false)
 ]: nothing -> record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: table<content: record, excerpt: string, source: record, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -577,7 +576,7 @@ export def "rest-servicedeskapi-request createCustomerRequest" [
   --allow-errors(-e) # Return full response without error handling
   --channel: string # (Experimental) Shows extra information for the request channel.
   --form: any # Provides answers to the form associated with a request type that is attached to the request on creation. Jira fields should be omitted from `requestFieldValues` if they are linked to form answers. Form answers in ADF format should have `isAdfRequest` set to true. Form answers are not currently validated.
-  --isAdfRequest: string@bool-completer # (Experimental) Whether to accept rich text fields in Atlassian Document Format (ADF).
+  --isAdfRequest: oneof<nothing, bool> # (Experimental) Whether to accept rich text fields in Atlassian Document Format (ADF).
   --raiseOnBehalfOf: string # The `accountId` of the customer that the request is being raised on behalf of.
   --requestFieldValues: record # JSON map of Jira field IDs and their values representing the content of the request.
   --requestParticipants: list # List of customers to participate in the request, as a list of `accountId` values.
@@ -733,7 +732,7 @@ export def "rest-servicedeskapi-request-attachment createCommentWithAttachment" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --additionalComment: any # Additional content of the comment
-  --public: string@bool-completer # Controls whether the comment and its attachments are visible to customers
+  --public: oneof<nothing, bool> # Controls whether the comment and its attachments are visible to customers
   --temporaryAttachmentIds: list # List of IDs for the temporary attachments to be added to the customer request.
 ]: any -> record<attachments: record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: list<record>>, comment: record<_expands: list<string>, _links: record<self: string>, attachments: record<_expands: list, _links: record, isLastPage: bool, limit: int, size: int, start: int, values: list>, author: record<_links: record, accountId: string, active: bool, displayName: string, emailAddress: string, key: string, name: string, timeZone: string>, body: string, created: record<epochMillis: int, friendly: string, iso8601: string, jira: string>, id: string, public: bool, renderedBody: record<html: string>>> {
   let input = $in
@@ -806,8 +805,8 @@ export def "rest-servicedeskapi-request-comment list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --public: string@bool-completer # Specifies whether to return public comments or not. Default: true.
-  --internal: string@bool-completer # Specifies whether to return internal comments or not. Default: true.
+  --public: oneof<nothing, bool> # Specifies whether to return public comments or not. Default: true.
+  --internal: oneof<nothing, bool> # Specifies whether to return internal comments or not. Default: true.
   --expand: list # A multi-value parameter indicating which properties of the comment to expand:   *  `attachment` returns the attachment details, if any, for each comment. (If you want to get all attachments for a request, use [servicedeskapi/request/\{issueIdOrKey\}/attachment](#api-request-issueIdOrKey-attachment-get).)  *  `renderedBody` (Experimental) returns the rendered body in HTML format (in addition to the raw body) for each comment.
   --start: int # The starting index of the returned comments. Base index: 0. See the [Pagination](#pagination) section for more details. (format: int32)
   --limit: int # The maximum number of comments to return per page. Default: 50. See the [Pagination](#pagination) section for more details. (format: int32)
@@ -835,7 +834,7 @@ export def "rest-servicedeskapi-request-comment createRequestComment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-body: string # Content of the comment.
-  --public: string@bool-completer # Indicates whether the comment is public (true) or private/internal (false).
+  --public: oneof<nothing, bool> # Indicates whether the comment is public (true) or private/internal (false).
 ]: any -> record<_expands: list<string>, _links: record<self: string>, attachments: record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: list<record>>, author: record<_links: record<avatarUrls: record, jiraRest: string, self: string>, accountId: string, active: bool, displayName: string, emailAddress: string, key: string, name: string, timeZone: string>, body: string, created: record<epochMillis: int, friendly: string, iso8601: string, jira: string>, id: string, public: bool, renderedBody: record<html: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1258,7 +1257,7 @@ export def "rest-servicedeskapi-requesttype get" [
   --start: int # The starting index of the returned objects. Base index: 0. See the [Pagination](#pagination) section for more details. (format: int32)
   --limit: int # The maximum number of items to return per page. Default: 50. See the [Pagination](#pagination) section for more details. (format: int32)
   --expand: list
-  --includeHiddenRequestTypesInSearch: string@bool-completer # Whether to include hidden request types when searching with `searchQuery`. (default: false)
+  --includeHiddenRequestTypesInSearch: oneof<nothing, bool> # Whether to include hidden request types when searching with `searchQuery`. (default: false)
   --restrictionStatus: string # Request type restriction status (`open` or `restricted`) used to filter the results.
 ]: nothing -> record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: table<_expands: list, _links: record, canCreateRequest: bool, description: string, fields: record, groupIds: list, helpText: string, icon: record, id: string, issueTypeId: string, name: string, portalId: string, practice: string, restrictionStatus: string, serviceDeskId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1434,7 +1433,7 @@ export def "rest-servicedeskapi-servicedesk-customer-invite inviteCustomer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --strictConflictStatusCode: string@bool-completer # Optional boolean flag to return 409 Conflict status code when a customer with the same email already exists.
+  --strictConflictStatusCode: oneof<nothing, bool> # Optional boolean flag to return 409 Conflict status code when a customer with the same email already exists.
   --displayName: string # Customer's name for display in the UI.
   --email: string # Customer's email address.
 ]: any -> any {
@@ -1464,11 +1463,11 @@ export def "rest-servicedeskapi-servicedesk-knowledgebase-article get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string # The string used to filter the articles (required).
-  --highlight: string@bool-completer # If set to true matching query term in the title and excerpt will be highlighted using the `@@@hl@@@term@@@endhl@@@` syntax. Default: false. (default: false)
+  --highlight: oneof<nothing, bool> # If set to true matching query term in the title and excerpt will be highlighted using the `@@@hl@@@term@@@endhl@@@` syntax. Default: false. (default: false)
   --start: int # (Deprecated) The starting index of the returned objects. Base index: 0. (format: int32)
   --limit: int # The maximum number of items to return per page. Default: 50. See the section for more details. (format: int32)
   --cursor: string # Pointer to a set of search results, returned as part of the next or prev URL from the previous search call.
-  --prev: string@bool-completer # Should navigate to the previous page. Defaulted to false. Set to true as part of prev URL from the previous search call. (default: false)
+  --prev: oneof<nothing, bool> # Should navigate to the previous page. Defaulted to false. Set to true as part of prev URL from the previous search call. (default: false)
 ]: nothing -> record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: table<content: record, excerpt: string, source: record, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1572,7 +1571,7 @@ export def "rest-servicedeskapi-servicedesk-queue list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeCount: string@bool-completer # Specifies whether to include each queue's customer request (issue) count in the response. (default: false)
+  --includeCount: oneof<nothing, bool> # Specifies whether to include each queue's customer request (issue) count in the response. (default: false)
   --start: int # The starting index of the returned objects. Base index: 0. See the [Pagination](#pagination) section for more details. (format: int32)
   --limit: int # The maximum number of items to return per page. Default: 50. See the [Pagination](#pagination) section for more details. (format: int32)
 ]: nothing -> record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: table<_links: record, fields: list, id: string, issueCount: int, jql: string, name: string>> {
@@ -1599,7 +1598,7 @@ export def "rest-servicedeskapi-servicedesk-queue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeCount: string@bool-completer # Specifies whether to include each queue's customer request (issue) count in the response. (default: false)
+  --includeCount: oneof<nothing, bool> # Specifies whether to include each queue's customer request (issue) count in the response. (default: false)
 ]: nothing -> record<_links: record<self: string>, fields: list<string>, id: string, issueCount: int, jql: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1654,7 +1653,7 @@ export def "rest-servicedeskapi-servicedesk-requesttype list" [
   --searchQuery: string # The string to be used to filter the results.
   --start: int # The starting index of the returned objects. Base index: 0. See the [Pagination](#pagination) section for more details. (format: int32)
   --limit: int # The maximum number of items to return per page. Default: 50. See the [Pagination](#pagination) section for more details. (format: int32)
-  --includeHiddenRequestTypesInSearch: string@bool-completer # Whether to include hidden request types when searching with `searchQuery`. (default: false)
+  --includeHiddenRequestTypesInSearch: oneof<nothing, bool> # Whether to include hidden request types when searching with `searchQuery`. (default: false)
   --restrictionStatus: string # Request type restriction status (`open` or `restricted`) used to filter the results.
 ]: nothing -> record<_expands: list<string>, _links: record<base: string, context: string, next: string, prev: string, self: string>, isLastPage: bool, limit: int, size: int, start: int, values: table<_expands: list, _links: record, canCreateRequest: bool, description: string, fields: record, groupIds: list, helpText: string, icon: record, id: string, issueTypeId: string, name: string, portalId: string, practice: string, restrictionStatus: string, serviceDeskId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

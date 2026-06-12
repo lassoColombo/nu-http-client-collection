@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://cloud.mongodb.com"] }
 def auth-scheme-completer [] { ["digest" "bearer"] }
 
@@ -126,8 +125,8 @@ export def "atlas get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -150,8 +149,8 @@ export def "atlas-alert-configs-matchers-field-names listAlertConfigMatcherField
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -174,11 +173,11 @@ export def "atlas-clusters listClusterDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -201,10 +200,10 @@ export def "atlas-default-group-limits listDefaultGroupLimits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -228,8 +227,8 @@ export def "atlas-default-group-limits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -252,11 +251,11 @@ export def "atlas-event-types listEventTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -302,7 +301,7 @@ export def "atlas-federation-settings-connected-org-configs listFederationSettin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
 ]: nothing -> any {
@@ -329,7 +328,7 @@ export def "atlas-federation-settings-connected-org-configs removeFederationSett
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -354,7 +353,7 @@ export def "atlas-federation-settings-connected-org-configs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -379,7 +378,7 @@ export def "atlas-federation-settings-connected-org-configs updateFederationSett
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -407,7 +406,7 @@ export def "atlas-federation-settings-connected-org-configs-role-mappings listFe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -432,7 +431,7 @@ export def "atlas-federation-settings-connected-org-configs-role-mappings create
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -461,7 +460,7 @@ export def "atlas-federation-settings-connected-org-configs-role-mappings delete
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -487,7 +486,7 @@ export def "atlas-federation-settings-connected-org-configs-role-mappings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -513,7 +512,7 @@ export def "atlas-federation-settings-connected-org-configs-role-mappings update
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -540,7 +539,7 @@ export def "atlas-federation-settings-identity-providers listFederationSettingId
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
   --protocol: list # The protocols of the target identity providers.
@@ -568,7 +567,7 @@ export def "atlas-federation-settings-identity-providers createFederationSetting
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -597,7 +596,7 @@ export def "atlas-federation-settings-identity-providers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -623,7 +622,7 @@ export def "atlas-federation-settings-identity-providers get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -649,7 +648,7 @@ export def "atlas-federation-settings-identity-providers updateFederationSetting
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -678,7 +677,7 @@ export def "atlas-federation-settings-identity-providers-jwks revokeFederationSe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -724,11 +723,11 @@ export def "atlas-groups listGroups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -751,8 +750,8 @@ export def "atlas-groups createGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --projectOwnerId: string # Unique 24-hexadecimal digit string that identifies the MongoDB Cloud user to whom to grant the Project Owner role on the specified project. If you set this parameter, it overrides the default value of the oldest Organization Owner.
   --body: record
 ]: any -> any {
@@ -780,8 +779,8 @@ export def "atlas-groups-by-name get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -805,8 +804,8 @@ export def "atlas-groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -830,8 +829,8 @@ export def "atlas-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -855,8 +854,8 @@ export def "atlas-groups updateGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -885,8 +884,8 @@ export def "atlas-groups-access addGroupAccessUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -914,11 +913,11 @@ export def "atlas-groups-access-list listGroupAccessListEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -943,11 +942,11 @@ export def "atlas-groups-access-list createGroupAccessListEntry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -976,8 +975,8 @@ export def "atlas-groups-access-list delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1003,8 +1002,8 @@ export def "atlas-groups-access-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1029,8 +1028,8 @@ export def "atlas-groups-access-list-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1054,7 +1053,7 @@ export def "atlas-groups-activity-feed get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --eventType: list # Category of incident recorded at this moment in time.  **IMPORTANT**: The complete list of event type values changes frequently.
   --maxDate: string # End date and time for events to include in the activity feed link. ISO 8601 timestamp format in UTC. (format: date-time)
   --minDate: string # Start date and time for events to include in the activity feed link. ISO 8601 timestamp format in UTC. (format: date-time)
@@ -1084,8 +1083,8 @@ export def "atlas-groups-ai-model-api-keys listGroupAiModelApiKeys" [
   --allow-errors(-e) # Return full response without error handling
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1109,8 +1108,8 @@ export def "atlas-groups-ai-model-api-keys createGroupAiModelApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -1138,8 +1137,8 @@ export def "atlas-groups-ai-model-api-keys delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1164,8 +1163,8 @@ export def "atlas-groups-ai-model-api-keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1190,8 +1189,8 @@ export def "atlas-groups-ai-model-api-keys updateGroupAiModelApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -1220,8 +1219,8 @@ export def "atlas-groups-ai-model-rate-limits listGroupAiModelRateLimits" [
   --allow-errors(-e) # Return full response without error handling
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1246,8 +1245,8 @@ export def "atlas-groups-ai-model-rate-limits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1272,8 +1271,8 @@ export def "atlas-groups-ai-model-rate-limits updateGroupAiModelRateLimit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -1301,8 +1300,8 @@ export def "atlas-groups-ai-model-rate-limits resetGroupAiModelRateLimit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1326,8 +1325,8 @@ export def "atlas-groups-ai-model-rate-limits-reset resetGroupAiModelRateLimits"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1351,11 +1350,11 @@ export def "atlas-groups-alert-configs listGroupAlertConfigs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1379,8 +1378,8 @@ export def "atlas-groups-alert-configs createGroupAlertConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -1409,8 +1408,8 @@ export def "atlas-groups-alert-configs delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1436,8 +1435,8 @@ export def "atlas-groups-alert-configs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1463,8 +1462,8 @@ export def "atlas-groups-alert-configs toggleGroupAlertConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -1493,8 +1492,8 @@ export def "atlas-groups-alert-configs updateGroupAlertConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -1523,11 +1522,11 @@ export def "atlas-groups-alert-configs-alerts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1551,11 +1550,11 @@ export def "atlas-groups-alerts listGroupAlerts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --status: string@status-completer # Status of the alerts to return. Omit this parameter to return all alerts in all statuses. TRACKING indicates the alert condition exists but has not persisted for the minimum notification delay. OPEN indicates the alert condition currently exists. CLOSED indicates the alert condition has been resolved.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1582,8 +1581,8 @@ export def "atlas-groups-alerts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1610,8 +1609,8 @@ export def "atlas-groups-alerts acknowledgeGroupAlert" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -1640,9 +1639,9 @@ export def "atlas-groups-alerts-alert-configs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
 ]: nothing -> any {
@@ -1669,11 +1668,11 @@ export def "atlas-groups-api-keys listGroupApiKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1697,8 +1696,8 @@ export def "atlas-groups-api-keys createGroupApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -1727,8 +1726,8 @@ export def "atlas-groups-api-keys removeGroupApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1755,9 +1754,9 @@ export def "atlas-groups-api-keys updateGroupApiKeyRoles" [
   --allow-errors(-e) # Return full response without error handling
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -1785,8 +1784,8 @@ export def "atlas-groups-api-keys addGroupApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -1813,8 +1812,8 @@ export def "atlas-groups-audit-log get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1838,8 +1837,8 @@ export def "atlas-groups-audit-log updateGroupAuditLog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -1866,8 +1865,8 @@ export def "atlas-groups-aws-custom-dns get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1891,8 +1890,8 @@ export def "atlas-groups-aws-custom-dns toggleGroupAwsCustomDns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -1920,11 +1919,11 @@ export def "atlas-groups-backup-export-buckets listGroupBackupExportBuckets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1949,8 +1948,8 @@ export def "atlas-groups-backup-export-buckets createGroupBackupExportBucket" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -1978,7 +1977,7 @@ export def "atlas-groups-backup-export-buckets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2004,7 +2003,7 @@ export def "atlas-groups-backup-export-buckets get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2029,8 +2028,8 @@ export def "atlas-groups-backup-export-buckets updateGroupBackupExportBucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -2058,9 +2057,9 @@ export def "atlas-groups-backup-private-endpoints listGroupBackupPrivateEndpoint
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
 ]: nothing -> any {
@@ -2087,8 +2086,8 @@ export def "atlas-groups-backup-private-endpoints createGroupBackupPrivateEndpoi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -2117,8 +2116,8 @@ export def "atlas-groups-backup-private-endpoints delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2144,8 +2143,8 @@ export def "atlas-groups-backup-private-endpoints get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2169,8 +2168,8 @@ export def "atlas-groups-backup-compliance-policy disableGroupBackupCompliancePo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2195,8 +2194,8 @@ export def "atlas-groups-backup-compliance-policy get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-2 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2221,9 +2220,9 @@ export def "atlas-groups-backup-compliance-policy updateGroupBackupCompliancePol
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-2 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --overwriteBackupPolicies: string@bool-completer # Flag that indicates whether to overwrite non complying backup policies with the new data protection settings or not. (default: true)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --overwriteBackupPolicies: oneof<nothing, bool> # Flag that indicates whether to overwrite non complying backup policies with the new data protection settings or not. (default: true)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -2250,8 +2249,8 @@ export def "atlas-groups-cloud-provider-access listGroupCloudProviderAccess" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2276,8 +2275,8 @@ export def "atlas-groups-cloud-provider-access createGroupCloudProviderAccess" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -2306,8 +2305,8 @@ export def "atlas-groups-cloud-provider-access deauthorizeGroupCloudProviderAcce
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2332,8 +2331,8 @@ export def "atlas-groups-cloud-provider-access get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2359,8 +2358,8 @@ export def "atlas-groups-cloud-provider-access authorizeGroupCloudProviderAccess
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -2387,8 +2386,8 @@ export def "atlas-groups-cluster-configurations-validate validateGroupClusterCon
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -2417,13 +2416,13 @@ export def "atlas-groups-clusters listGroupClusters" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-3 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --includeDeletedWithRetainedBackups: string@bool-completer # Flag that indicates whether to return Clusters with retain backups. (default: false)
-  --Use-Effective-Instance-Fields: string@bool-completer # Controls how hardware specification fields are returned in the response. When set to true, returns the original client-specified values and provides separate effective fields showing current operational values. When false (default), hardware specification fields show current operational values directly. Primarily used for autoscaling compatibility.
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --includeDeletedWithRetainedBackups: oneof<nothing, bool> # Flag that indicates whether to return Clusters with retain backups. (default: false)
+  --Use-Effective-Instance-Fields: oneof<nothing, bool> # Controls how hardware specification fields are returned in the response. When set to true, returns the original client-specified values and provides separate effective fields showing current operational values. When false (default), hardware specification fields show current operational values directly. Primarily used for autoscaling compatibility.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2451,10 +2450,10 @@ export def "atlas-groups-clusters createGroupCluster" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-4 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --Use-Effective-Instance-Fields: string@bool-completer # Controls how hardware specification fields are returned in the response after cluster creation. When set to true, returns the original client-specified values and provides separate effective fields showing current operational values. When false (default), hardware specification fields show current operational values directly. Primarily used for autoscaling compatibility.
-  --Use-Effective-Fields-Replication-Specs: string@bool-completer # Controls how `replicationSpecs` fields are returned in the response. When set to `true`, stores the client's view of `replicationSpecs` and returns it in `replicationSpecs`, while the actual cluster state (including auto-scaled hardware and auto-added shards) is returned in `effectiveReplicationSpecs`. When `false` (default), `replicationSpecs` contains the actual cluster state.
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --Use-Effective-Instance-Fields: oneof<nothing, bool> # Controls how hardware specification fields are returned in the response after cluster creation. When set to true, returns the original client-specified values and provides separate effective fields showing current operational values. When false (default), hardware specification fields show current operational values directly. Primarily used for autoscaling compatibility.
+  --Use-Effective-Fields-Replication-Specs: oneof<nothing, bool> # Controls how `replicationSpecs` fields are returned in the response. When set to `true`, stores the client's view of `replicationSpecs` and returns it in `replicationSpecs`, while the actual cluster state (including auto-scaled hardware and auto-added shards) is returned in `effectiveReplicationSpecs`. When `false` (default), `replicationSpecs` contains the actual cluster state.
   --body: record
 ]: any -> any {
   let input = $in
@@ -2483,11 +2482,11 @@ export def "atlas-groups-clusters-provider-regions listGroupClusterProviderRegio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --providers: list # Cloud providers whose regions to retrieve. When you specify multiple providers, the response can return only tiers and regions that support multi-cloud clusters.
   --tier: string # Cluster tier for which to retrieve the regions.
 ]: nothing -> any {
@@ -2514,8 +2513,8 @@ export def "atlas-groups-clusters-tenant-upgrade upgradeGroupClusterTenantUpgrad
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -2545,8 +2544,8 @@ export def "atlas-groups-clusters-tenant-upgrade-to-serverless upgradeGroupClust
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -2576,9 +2575,9 @@ export def "atlas-groups-clusters delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-5 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --retainBackups: string@bool-completer # Flag that indicates whether to retain backup snapshots for the deleted dedicated cluster.
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --retainBackups: oneof<nothing, bool> # Flag that indicates whether to retain backup snapshots for the deleted dedicated cluster.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2605,10 +2604,10 @@ export def "atlas-groups-clusters get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-3 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --Use-Effective-Instance-Fields: string@bool-completer # Controls how hardware specification fields are returned in the response. When set to true, returns the original client-specified values and provides separate effective fields showing current operational values. When false (default), hardware specification fields show current operational values directly. Primarily used for autoscaling compatibility.
-  --Use-Effective-Fields-Replication-Specs: string@bool-completer # Controls how `replicationSpecs` are returned in the response. When set to `true`, returns the client-specified view in `replicationSpecs` and the actual cluster state in `effectiveReplicationSpecs`. When `false` (default), `replicationSpecs` contains the actual cluster state.
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --Use-Effective-Instance-Fields: oneof<nothing, bool> # Controls how hardware specification fields are returned in the response. When set to true, returns the original client-specified values and provides separate effective fields showing current operational values. When false (default), hardware specification fields show current operational values directly. Primarily used for autoscaling compatibility.
+  --Use-Effective-Fields-Replication-Specs: oneof<nothing, bool> # Controls how `replicationSpecs` are returned in the response. When set to `true`, returns the client-specified view in `replicationSpecs` and the actual cluster state in `effectiveReplicationSpecs`. When `false` (default), `replicationSpecs` contains the actual cluster state.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2636,10 +2635,10 @@ export def "atlas-groups-clusters updateGroupCluster" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-4 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --Use-Effective-Instance-Fields: string@bool-completer # Controls how hardware specification fields are returned in the response after cluster updates. When set to true, returns the original client-specified values and provides separate effective fields showing current operational values. When false (default), hardware specification fields show current operational values directly. Note: When using this header with autoscaling enabled, MongoDB ignores `replicationSpecs` changes during updates. To intentionally override the `replicationSpecs`, disable this header.
-  --Use-Effective-Fields-Replication-Specs: string@bool-completer # Controls how `replicationSpecs` fields are returned in the response. When set to `true`, stores the client's view of `replicationSpecs` and returns it in `replicationSpecs`, while the actual cluster state (including auto-scaled hardware and auto-added shards) is returned in `effectiveReplicationSpecs`. When `false` (default), `replicationSpecs` contains the actual cluster state.
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --Use-Effective-Instance-Fields: oneof<nothing, bool> # Controls how hardware specification fields are returned in the response after cluster updates. When set to true, returns the original client-specified values and provides separate effective fields showing current operational values. When false (default), hardware specification fields show current operational values directly. Note: When using this header with autoscaling enabled, MongoDB ignores `replicationSpecs` changes during updates. To intentionally override the `replicationSpecs`, disable this header.
+  --Use-Effective-Fields-Replication-Specs: oneof<nothing, bool> # Controls how `replicationSpecs` fields are returned in the response. When set to `true`, stores the client's view of `replicationSpecs` and returns it in `replicationSpecs`, while the actual cluster state (including auto-scaled hardware and auto-added shards) is returned in `effectiveReplicationSpecs`. When `false` (default), `replicationSpecs` contains the actual cluster state.
   --body: record
 ]: any -> any {
   let input = $in
@@ -2671,8 +2670,8 @@ export def "atlas-groups-clusters-auto-scaling-configuration autoGroupClusterSca
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2697,9 +2696,9 @@ export def "atlas-groups-clusters-backup-exports listGroupClusterBackupExports" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
 ]: nothing -> any {
@@ -2726,7 +2725,7 @@ export def "atlas-groups-clusters-backup-exports createGroupClusterBackupExport"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -2755,7 +2754,7 @@ export def "atlas-groups-clusters-backup-exports get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2780,11 +2779,11 @@ export def "atlas-groups-clusters-backup-restore-jobs listGroupClusterBackupRest
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2809,8 +2808,8 @@ export def "atlas-groups-clusters-backup-restore-jobs createGroupClusterBackupRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -2839,8 +2838,8 @@ export def "atlas-groups-clusters-backup-restore-jobs cancelGroupClusterBackupRe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2866,8 +2865,8 @@ export def "atlas-groups-clusters-backup-restore-jobs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2893,7 +2892,7 @@ export def "atlas-groups-clusters-backup-schedule delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-6 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2919,8 +2918,8 @@ export def "atlas-groups-clusters-backup-schedule get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-6 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2946,8 +2945,8 @@ export def "atlas-groups-clusters-backup-schedule updateGroupClusterBackupSchedu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-6 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -2975,11 +2974,11 @@ export def "atlas-groups-clusters-backup-snapshots listGroupClusterBackupSnapsho
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --pointInTimeUtcSeconds: int # Desired point in time, expressed as the number of seconds that have elapsed since the UNIX epoch. If specified, returns the closest snapshot created before that point in time. Mutually exclusive with `oplogTs` and `oplogInc`. (format: int64)
   --oplogTs: int # Oplog timestamp that represents the desired point in time. This is the first part of an Oplog timestamp. Must be used with `oplogInc`. Mutually exclusive with `pointInTimeUtcSeconds`. (format: int64)
   --oplogInc: int # Oplog operation number that represents the desired point in time. This is the second part of an Oplog timestamp. Must be used with `oplogTs`. Mutually exclusive with `pointInTimeUtcSeconds`. (format: int64)
@@ -3007,8 +3006,8 @@ export def "atlas-groups-clusters-backup-snapshots takeGroupClusterBackupSnapsho
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -3037,8 +3036,8 @@ export def "atlas-groups-clusters-backup-snapshots-sharded-cluster delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3064,8 +3063,8 @@ export def "atlas-groups-clusters-backup-snapshots-sharded-cluster get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3090,8 +3089,8 @@ export def "atlas-groups-clusters-backup-snapshots-sharded-clusters listGroupClu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3117,8 +3116,8 @@ export def "atlas-groups-clusters-backup-snapshots delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3144,8 +3143,8 @@ export def "atlas-groups-clusters-backup-snapshots get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3171,8 +3170,8 @@ export def "atlas-groups-clusters-backup-snapshots updateGroupClusterBackupSnaps
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -3201,11 +3200,11 @@ export def "atlas-groups-clusters-backup-snapshots-databases listGroupClusterBac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3232,8 +3231,8 @@ export def "atlas-groups-clusters-backup-snapshots-databases get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3260,11 +3259,11 @@ export def "atlas-groups-clusters-backup-snapshots-databases-collections listGro
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3292,8 +3291,8 @@ export def "atlas-groups-clusters-backup-snapshots-databases-collections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3320,11 +3319,11 @@ export def "atlas-groups-clusters-backup-checkpoints listGroupClusterBackupCheck
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3352,8 +3351,8 @@ export def "atlas-groups-clusters-backup-checkpoints get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3378,7 +3377,7 @@ export def "atlas-groups-clusters-coll-stats-pinned listGroupClusterCollStatPinn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3403,7 +3402,7 @@ export def "atlas-groups-clusters-coll-stats-pinned updateGroupClusterCollStatPi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -3431,7 +3430,7 @@ export def "atlas-groups-clusters-coll-stats-pinned pinGroupClusterCollStatPinne
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -3459,7 +3458,7 @@ export def "atlas-groups-clusters-coll-stats-unpin unpinGroupClusterCollStatUnpi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -3487,10 +3486,10 @@ export def "atlas-groups-clusters-collection-restore-jobs listGroupClusterCollec
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3515,8 +3514,8 @@ export def "atlas-groups-clusters-collection-restore-jobs createGroupClusterColl
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -3545,8 +3544,8 @@ export def "atlas-groups-clusters-collection-restore-jobs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3572,10 +3571,10 @@ export def "atlas-groups-clusters-collection-restore-jobs-collections listGroupC
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --state: string@state-completer # Collection-level state to filter by.
   --sourceNamespace: string # Source namespace to filter by (e.g. `db.collection`).
   --targetNamespace: string # Target namespace to filter by (e.g. `db.collection`).
@@ -3605,8 +3604,8 @@ export def "atlas-groups-clusters-collection-restore-jobs-collections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3634,8 +3633,8 @@ export def "atlas-groups-clusters-fts-indexes createGroupClusterFtsIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -3668,8 +3667,8 @@ export def "atlas-groups-clusters-fts-indexes listGroupClusterFtsIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3698,8 +3697,8 @@ export def "atlas-groups-clusters-fts-indexes delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3728,8 +3727,8 @@ export def "atlas-groups-clusters-fts-indexes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3758,8 +3757,8 @@ export def "atlas-groups-clusters-fts-indexes updateGroupClusterFtsIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -3789,8 +3788,8 @@ export def "atlas-groups-clusters-global-writes get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-3 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3817,8 +3816,8 @@ export def "atlas-groups-clusters-global-writes-custom-zone-mapping delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-3 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3845,8 +3844,8 @@ export def "atlas-groups-clusters-global-writes-custom-zone-mapping createGroupC
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-3 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -3876,8 +3875,8 @@ export def "atlas-groups-clusters-global-writes-managed-namespaces delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-3 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --db: string # Human-readable label that identifies the database that contains the collection.
   --collection: string # Human-readable label that identifies the collection associated with the managed namespace.
 ]: nothing -> any {
@@ -3906,8 +3905,8 @@ export def "atlas-groups-clusters-global-writes-managed-namespaces createGroupCl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-3 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -3936,8 +3935,8 @@ export def "atlas-groups-clusters-index createGroupClusterIndexRollingIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -3966,11 +3965,11 @@ export def "atlas-groups-clusters-online-archives listGroupClusterOnlineArchives
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3996,8 +3995,8 @@ export def "atlas-groups-clusters-online-archives createGroupClusterOnlineArchiv
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -4026,10 +4025,10 @@ export def "atlas-groups-clusters-online-archives-query-logsgz downloadGroupClus
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --startDate: int # Date and time that specifies the starting point for the range of log messages to return. This resource expresses this value in the number of seconds that have elapsed since the [UNIX epoch](https://en.wikipedia.org/wiki/Unix_time). (format: int64, e.g. 1636481348)
   --endDate: int # Date and time that specifies the end point for the range of log messages to return. This resource expresses this value in the number of seconds that have elapsed since the [UNIX epoch](https://en.wikipedia.org/wiki/Unix_time). (format: int64, e.g. 1636481348)
-  --archiveOnly: string@bool-completer # Flag that indicates whether to download logs for queries against your online archive only or both your online archive and cluster. (default: false)
+  --archiveOnly: oneof<nothing, bool> # Flag that indicates whether to download logs for queries against your online archive only or both your online archive and cluster. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4056,8 +4055,8 @@ export def "atlas-groups-clusters-online-archives delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4084,8 +4083,8 @@ export def "atlas-groups-clusters-online-archives get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4112,8 +4111,8 @@ export def "atlas-groups-clusters-online-archives updateGroupClusterOnlineArchiv
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -4142,8 +4141,8 @@ export def "atlas-groups-clusters-outage-simulation endGroupClusterOutageSimulat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4169,8 +4168,8 @@ export def "atlas-groups-clusters-outage-simulation get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4196,8 +4195,8 @@ export def "atlas-groups-clusters-outage-simulation startGroupClusterOutageSimul
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -4301,8 +4300,8 @@ export def "atlas-groups-clusters-process-args get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-6 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4329,8 +4328,8 @@ export def "atlas-groups-clusters-process-args updateGroupClusterProcessArgs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-6 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -4366,8 +4365,8 @@ export def "atlas-groups-clusters-query-shape-insights-summaries listGroupCluste
   --nSummaries: int # Maximum number of query statistic summaries to return. (format: int64, default: 100)
   --series: list # Query shape statistics data series to retrieve. A series represents a specific metric about query execution. To include multiple series, pass the parameter multiple times delimited with an ampersand (`&`) between each series. Omit this parameter to return results for all available series.
   --queryShapeHashes: list # A list of SHA256 hashes of desired query shapes, output by MongoDB commands like `$queryStats` and $explain or slow query logs. To include multiple series, pass the parameter multiple times delimited with an ampersand (`&`) between each series. Omit this parameter to return results for all available series.
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4393,8 +4392,8 @@ export def "atlas-groups-clusters-query-shape-insights-details get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --since: int # Date and time from which to retrieve query shape statistics. This parameter expresses its value in the number of milliseconds that have elapsed since the [UNIX epoch](https://en.wikipedia.org/wiki/Unix_time).  - If you don't specify the **until** parameter, the endpoint returns data covering from the **since** value and the current time. - If you specify neither the **since** nor the **until** parameters, the endpoint returns data from the previous 24 hours. (format: int64)
   --until: int # Date and time up until which to retrieve query shape statistics. This parameter expresses its value in the number of milliseconds that have elapsed since the [UNIX epoch](https://en.wikipedia.org/wiki/Unix_time).  - If you specify the **until** parameter, you must specify the **since** parameter. - If you specify neither the **since** nor the **until** parameters, the endpoint returns data from the previous 24 hours. (format: int64)
   --processIds: list # Process IDs from which to retrieve query shape statistics. A `processId` is a combination of host and port that serves the MongoDB process. The host must be the hostname, FQDN, IPv4 address, or IPv6 address of the host that runs the MongoDB process (`mongod` or `mongos`). The port must be the IANA port on which the MongoDB process listens for requests. To include multiple `processIds`, pass the parameter multiple times delimited with an ampersand (`&`) between each `processId`.
@@ -4423,11 +4422,11 @@ export def "atlas-groups-clusters-query-shapes listGroupClusterQueryShapes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --status: string@status-completer-1 # The status of query shapes to retrieve. Only REJECTED status is supported. If omitted, defaults to REJECTED. (default: REJECTED)
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4453,8 +4452,8 @@ export def "atlas-groups-clusters-query-shapes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4480,8 +4479,8 @@ export def "atlas-groups-clusters-query-shapes updateGroupClusterQueryShape" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -4510,8 +4509,8 @@ export def "atlas-groups-clusters-restart-primaries restartGroupClusterPrimaries
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-5 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4539,11 +4538,11 @@ export def "atlas-groups-clusters-restore-jobs listGroupClusterRestoreJobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --batchId: string # Unique 24-hexadecimal digit string that identifies the batch of restore jobs to return. Timestamp in ISO 8601 date and time format in UTC when creating a restore job for a sharded cluster, Application creates a separate job for each shard, plus another for the config host. Each of these jobs comprise one batch. A restore job for a replica set can't be part of a batch.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4572,8 +4571,8 @@ export def "atlas-groups-clusters-restore-jobs createGroupClusterRestoreJob" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -4605,8 +4604,8 @@ export def "atlas-groups-clusters-restore-jobs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4632,8 +4631,8 @@ export def "atlas-groups-clusters-search-deployment delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4659,8 +4658,8 @@ export def "atlas-groups-clusters-search-deployment get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-7 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4686,8 +4685,8 @@ export def "atlas-groups-clusters-search-deployment updateGroupClusterSearchDepl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -4716,8 +4715,8 @@ export def "atlas-groups-clusters-search-deployment createGroupClusterSearchDepl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -4746,8 +4745,8 @@ export def "atlas-groups-clusters-search-indexes listGroupClusterSearchIndexes" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4773,8 +4772,8 @@ export def "atlas-groups-clusters-search-indexes createGroupClusterSearchIndex" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -4805,8 +4804,8 @@ export def "atlas-groups-clusters-search-indexes listGroupClusterSearchIndex" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4835,8 +4834,8 @@ export def "atlas-groups-clusters-search-indexes delete-by-groupId-clusterName-c
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4865,8 +4864,8 @@ export def "atlas-groups-clusters-search-indexes get-by-groupId-clusterName-coll
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4895,8 +4894,8 @@ export def "atlas-groups-clusters-search-indexes updateGroupClusterSearchIndexBy
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -4926,8 +4925,8 @@ export def "atlas-groups-clusters-search-indexes delete-by-groupId-clusterName-i
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4954,8 +4953,8 @@ export def "atlas-groups-clusters-search-indexes get-by-groupId-clusterName-inde
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4982,8 +4981,8 @@ export def "atlas-groups-clusters-search-indexes updateGroupClusterSearchIndex" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -5014,8 +5013,8 @@ export def "atlas-groups-clusters-snapshot-schedule get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5043,8 +5042,8 @@ export def "atlas-groups-clusters-snapshot-schedule updateGroupClusterSnapshotSc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -5075,11 +5074,11 @@ export def "atlas-groups-clusters-snapshots listGroupClusterSnapshots" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --completed: string@completed-completer # Human-readable label that specifies whether to return only completed, incomplete, or all snapshots. By default, MongoDB Cloud only returns completed snapshots. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5109,8 +5108,8 @@ export def "atlas-groups-clusters-snapshots delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5139,8 +5138,8 @@ export def "atlas-groups-clusters-snapshots get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5169,8 +5168,8 @@ export def "atlas-groups-clusters-snapshots updateGroupClusterSnapshot" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -5198,8 +5197,8 @@ export def "atlas-groups-clusters-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5225,7 +5224,7 @@ export def "atlas-groups-clusters-coll-stats-namespaces get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --start: string # Date and time when MongoDB Cloud begins reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
   --end: string # Date and time when MongoDB Cloud stops reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
   --period: string # Duration over which Atlas reports the metrics. This parameter expresses its value in the ISO 8601 duration format in UTC. Include this parameter when you do not set **start** and **end**. (e.g. PT10H)
@@ -5256,7 +5255,7 @@ export def "atlas-groups-clusters-coll-stats-measurements listGroupClusterCollSt
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --metrics: list # List that contains the metrics that you want to retrieve for the associated data series. If you don't set this parameter, this resource returns data series for all Coll Stats Latency metrics.
   --start: string # Date and time when MongoDB Cloud begins reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
   --end: string # Date and time when MongoDB Cloud stops reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
@@ -5285,8 +5284,8 @@ export def "atlas-groups-clusters grantGroupClusterMongoDbEmployeeAccess" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -5314,8 +5313,8 @@ export def "atlas-groups-clusters pinGroupClusterFeatureCompatibilityVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -5343,8 +5342,8 @@ export def "atlas-groups-clusters revokeGroupClusterMongoDbEmployeeAccess" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5369,8 +5368,8 @@ export def "atlas-groups-clusters unpinGroupClusterFeatureCompatibilityVersion" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5397,7 +5396,7 @@ export def "atlas-groups-clusters-logs downloadGroupClusterLog" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-8 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --endDate: int # Specifies the date and time for the ending point of the range of log messages to retrieve, in the number of seconds that have elapsed since the UNIX epoch. This value will default to 24 hours after the start date. If the start date is also unspecified, the value will default to the time of the request. (format: int64)
   --startDate: int # Specifies the date and time for the starting point of the range of log messages to retrieve, in the number of seconds that have elapsed since the UNIX epoch. This value will default to 24 hours prior to the end date. If the end date is also unspecified, the value will default to 24 hours prior to the time of the request. (format: int64)
 ]: nothing -> any {
@@ -5423,7 +5422,7 @@ export def "atlas-groups-coll-stats-metrics listGroupCollStatMetrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5447,11 +5446,11 @@ export def "atlas-groups-containers listGroupContainers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --providerName: string@providerName-completer # Cloud service provider that serves the desired network peering containers. (default: AWS)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5476,8 +5475,8 @@ export def "atlas-groups-containers createGroupContainer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -5504,11 +5503,11 @@ export def "atlas-groups-containers-all listGroupContainerAll" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5533,8 +5532,8 @@ export def "atlas-groups-containers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5559,8 +5558,8 @@ export def "atlas-groups-containers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5585,8 +5584,8 @@ export def "atlas-groups-containers updateGroupContainer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -5613,8 +5612,8 @@ export def "atlas-groups-custom-db-roles-roles listGroupCustomDbRoleRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5638,8 +5637,8 @@ export def "atlas-groups-custom-db-roles-roles createGroupCustomDbRoleRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -5667,8 +5666,8 @@ export def "atlas-groups-custom-db-roles-roles delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5693,8 +5692,8 @@ export def "atlas-groups-custom-db-roles-roles get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5719,8 +5718,8 @@ export def "atlas-groups-custom-db-roles-roles updateGroupCustomDbRoleRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -5747,8 +5746,8 @@ export def "atlas-groups-data-federation listGroupDataFederation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --type: string@type-completer # Type of Federated Database Instances to return. (default: USER)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5773,9 +5772,9 @@ export def "atlas-groups-data-federation createGroupDataFederation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --skipRoleValidation: string@bool-completer # Flag that indicates whether this request should check if the requesting IAM role can read from the S3 bucket. AWS checks if the role can list the objects in the bucket before writing to it. Some IAM roles only need write permissions. This flag allows you to skip that check. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --skipRoleValidation: oneof<nothing, bool> # Flag that indicates whether this request should check if the requesting IAM role can read from the S3 bucket. AWS checks if the role can list the objects in the bucket before writing to it. Some IAM roles only need write permissions. This flag allows you to skip that check. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -5803,8 +5802,8 @@ export def "atlas-groups-data-federation delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5829,7 +5828,7 @@ export def "atlas-groups-data-federation get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5854,9 +5853,9 @@ export def "atlas-groups-data-federation updateGroupDataFederation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --skipRoleValidation: string@bool-completer # Flag that indicates whether this request should check if the requesting IAM role can read from the S3 bucket. AWS checks if the role can list the objects in the bucket before writing to it. Some IAM roles only need write permissions. This flag allows you to skip that check.
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --skipRoleValidation: oneof<nothing, bool> # Flag that indicates whether this request should check if the requesting IAM role can read from the S3 bucket. AWS checks if the role can list the objects in the bucket before writing to it. Some IAM roles only need write permissions. This flag allows you to skip that check.
   --body: record
 ]: any -> any {
   let input = $in
@@ -5884,8 +5883,8 @@ export def "atlas-groups-data-federation-limits listGroupDataFederationLimits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5911,7 +5910,7 @@ export def "atlas-groups-data-federation-limits delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5937,8 +5936,8 @@ export def "atlas-groups-data-federation-limits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5964,7 +5963,7 @@ export def "atlas-groups-data-federation-limits setGroupDataFederationLimit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -6017,11 +6016,11 @@ export def "atlas-groups-database-users listGroupDatabaseUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6046,8 +6045,8 @@ export def "atlas-groups-database-users createGroupDatabaseUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -6076,8 +6075,8 @@ export def "atlas-groups-database-users delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6103,8 +6102,8 @@ export def "atlas-groups-database-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6130,8 +6129,8 @@ export def "atlas-groups-database-users updateGroupDatabaseUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -6159,11 +6158,11 @@ export def "atlas-groups-database-users-certs listGroupDatabaseUserCerts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6189,8 +6188,8 @@ export def "atlas-groups-database-users-certs createGroupDatabaseUserCert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -6219,9 +6218,9 @@ export def "atlas-groups-db-access-history-clusters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --authResult: string@bool-completer # Flag that indicates whether the response returns the successful authentication attempts only.
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --authResult: oneof<nothing, bool> # Flag that indicates whether the response returns the successful authentication attempts only.
   --end: int # Date and time when to stop retrieving database history. If you specify **end**, you must also specify **start**. This parameter uses UNIX epoch time in milliseconds. (format: int64)
   --ipAddress: string # One Internet Protocol address that attempted to authenticate with the database.
   --nLogs: int # Maximum number of lines from the log to return. (format: int32, default: 20000)
@@ -6251,9 +6250,9 @@ export def "atlas-groups-db-access-history-processes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --authResult: string@bool-completer # Flag that indicates whether the response returns the successful authentication attempts only.
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --authResult: oneof<nothing, bool> # Flag that indicates whether the response returns the successful authentication attempts only.
   --end: int # Date and time when to stop retrieving database history. If you specify **end**, you must also specify **start**. This parameter uses UNIX epoch time in milliseconds. (format: int64)
   --ipAddress: string # One Internet Protocol address that attempted to authenticate with the database.
   --nLogs: int # Maximum number of lines from the log to return. (format: int32, default: 20000)
@@ -6281,8 +6280,8 @@ export def "atlas-groups-encryption-at-rest get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6306,8 +6305,8 @@ export def "atlas-groups-encryption-at-rest updateGroupEncryptionAtRest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -6335,9 +6334,9 @@ export def "atlas-groups-encryption-at-rest-private-endpoints listGroupEncryptio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
 ]: nothing -> any {
@@ -6364,8 +6363,8 @@ export def "atlas-groups-encryption-at-rest-private-endpoints createGroupEncrypt
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -6394,8 +6393,8 @@ export def "atlas-groups-encryption-at-rest-private-endpoints requestGroupEncryp
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6421,8 +6420,8 @@ export def "atlas-groups-encryption-at-rest-private-endpoints get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6446,15 +6445,15 @@ export def "atlas-groups-events listGroupEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --clusterNames: list # Human-readable label that identifies the cluster.
   --eventType: list # Category of incident recorded at this moment in time.  **IMPORTANT**: The complete list of event type values changes frequently.
   --excludedEventType: list # Category of event that you would like to exclude from query results, such as `CLUSTER_CREATED`.  **IMPORTANT**: Event type names change frequently. Verify that you specify the event type correctly by checking the complete list of event types.
-  --includeRaw: string@bool-completer # Flag that indicates whether to include the raw document in the output. The raw document contains additional meta information about the event. (default: false)
+  --includeRaw: oneof<nothing, bool> # Flag that indicates whether to include the raw document in the output. The raw document contains additional meta information about the event. (default: false)
   --maxDate: string # Date and time from when MongoDB Cloud stops returning events. This parameter uses the ISO 8601 timestamp format in UTC. (format: date-time)
   --minDate: string # Date and time from when MongoDB Cloud starts returning events. This parameter uses the ISO 8601 timestamp format in UTC. (format: date-time)
 ]: nothing -> any {
@@ -6482,9 +6481,9 @@ export def "atlas-groups-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --includeRaw: string@bool-completer # Flag that indicates whether to include the raw document in the output. The raw document contains additional meta information about the event. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --includeRaw: oneof<nothing, bool> # Flag that indicates whether to include the raw document in the output. The raw document contains additional meta information about the event. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6508,11 +6507,11 @@ export def "atlas-groups-flex-clusters listGroupFlexClusters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6536,8 +6535,8 @@ export def "atlas-groups-flex-clusters createGroupFlexCluster" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -6565,8 +6564,8 @@ export def "atlas-groups-flex-clusters delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6591,8 +6590,8 @@ export def "atlas-groups-flex-clusters get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6617,8 +6616,8 @@ export def "atlas-groups-flex-clusters updateGroupFlexCluster" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -6646,8 +6645,8 @@ export def "atlas-groups-flex-clusters-backup-download downloadGroupFlexClusterB
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -6675,11 +6674,11 @@ export def "atlas-groups-flex-clusters-backup-restore-jobs listGroupFlexClusterB
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6704,8 +6703,8 @@ export def "atlas-groups-flex-clusters-backup-restore-jobs createGroupFlexCluste
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -6734,8 +6733,8 @@ export def "atlas-groups-flex-clusters-backup-restore-jobs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6760,9 +6759,9 @@ export def "atlas-groups-flex-clusters-backup-snapshots listGroupFlexClusterBack
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
 ]: nothing -> any {
@@ -6790,7 +6789,7 @@ export def "atlas-groups-flex-clusters-backup-snapshots get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6814,8 +6813,8 @@ export def "atlas-groups-flex-clusters-tenant-upgrade tenantGroupFlexClusterUpgr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -6843,7 +6842,7 @@ export def "atlas-groups-hosts-fts-metrics listGroupHostFtsMetrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6874,7 +6873,7 @@ export def "atlas-groups-hosts-fts-metrics-indexes-measurements listGroupHostFts
   --period: string # Duration over which Atlas reports the metrics. This parameter expresses its value in the ISO 8601 duration format in UTC. Include this parameter when you do not set **start** and **end**. (e.g. PT10H)
   --start: string # Date and time when MongoDB Cloud begins reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
   --end: string # Date and time when MongoDB Cloud stops reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --metrics: list # List that contains the measurements that MongoDB Atlas reports for the associated data series.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6907,7 +6906,7 @@ export def "atlas-groups-hosts-fts-metrics-indexes-measurements get" [
   --period: string # Duration over which Atlas reports the metrics. This parameter expresses its value in the ISO 8601 duration format in UTC. Include this parameter when you do not set **start** and **end**. (e.g. PT10H)
   --start: string # Date and time when MongoDB Cloud begins reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
   --end: string # Date and time when MongoDB Cloud stops reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --metrics: list # List that contains the measurements that MongoDB Atlas reports for the associated data series.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6937,7 +6936,7 @@ export def "atlas-groups-hosts-fts-metrics-measurements listGroupHostFtsMetricMe
   --period: string # Duration over which Atlas reports the metrics. This parameter expresses its value in the ISO 8601 duration format in UTC. Include this parameter when you do not set **start** and **end**. (e.g. PT10H)
   --start: string # Date and time when MongoDB Cloud begins reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
   --end: string # Date and time when MongoDB Cloud stops reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --metrics: list # List that contains the metrics that you want MongoDB Atlas to report for the associated data series. If you don't set this parameter, this resource returns all hardware and status metrics for the associated data series.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6962,11 +6961,11 @@ export def "atlas-groups-integrations listGroupIntegrations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6991,8 +6990,8 @@ export def "atlas-groups-integrations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7017,8 +7016,8 @@ export def "atlas-groups-integrations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7043,11 +7042,11 @@ export def "atlas-groups-integrations createGroupIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -7075,11 +7074,11 @@ export def "atlas-groups-integrations updateGroupIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -7108,8 +7107,8 @@ export def "atlas-groups-invites listGroupInvites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --username: string # Email address of the user account invited to this project. (format: email)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7136,8 +7135,8 @@ export def "atlas-groups-invites updateGroupInvites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -7166,8 +7165,8 @@ export def "atlas-groups-invites createGroupInvite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -7197,7 +7196,7 @@ export def "atlas-groups-invites delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7224,8 +7223,8 @@ export def "atlas-groups-invites get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7252,7 +7251,7 @@ export def "atlas-groups-invites updateGroupInviteById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -7279,8 +7278,8 @@ export def "atlas-groups-ip-addresses get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7304,8 +7303,8 @@ export def "atlas-groups-limits listGroupLimits" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7330,8 +7329,8 @@ export def "atlas-groups-limits delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7356,8 +7355,8 @@ export def "atlas-groups-limits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7382,8 +7381,8 @@ export def "atlas-groups-limits setGroupLimit" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -7412,8 +7411,8 @@ export def "atlas-groups-live-migrations createGroupLiveMigration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -7441,8 +7440,8 @@ export def "atlas-groups-live-migrations-validate validateGroupLiveMigrations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -7470,7 +7469,7 @@ export def "atlas-groups-live-migrations-validate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7495,8 +7494,8 @@ export def "atlas-groups-live-migrations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7521,8 +7520,8 @@ export def "atlas-groups-live-migrations-cutover cutoverGroupLiveMigration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7546,11 +7545,11 @@ export def "atlas-groups-log-integrations listGroupLogIntegrations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --integrationType: string # Optional filter by integration type (e.g., `S3_LOG_EXPORT`).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7575,8 +7574,8 @@ export def "atlas-groups-log-integrations createGroupLogIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -7604,8 +7603,8 @@ export def "atlas-groups-log-integrations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7630,8 +7629,8 @@ export def "atlas-groups-log-integrations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7656,8 +7655,8 @@ export def "atlas-groups-log-integrations updateGroupLogIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -7684,7 +7683,7 @@ export def "atlas-groups-maintenance-window resetGroupMaintenanceWindow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7708,8 +7707,8 @@ export def "atlas-groups-maintenance-window get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7733,7 +7732,7 @@ export def "atlas-groups-maintenance-window updateGroupMaintenanceWindow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -7760,7 +7759,7 @@ export def "atlas-groups-maintenance-window-auto-defer toggleGroupMaintenanceWin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7784,7 +7783,7 @@ export def "atlas-groups-maintenance-window-defer deferGroupMaintenanceWindow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7808,8 +7807,8 @@ export def "atlas-groups-managed-slow-ms get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7833,8 +7832,8 @@ export def "atlas-groups-managed-slow-ms-disable disableGroupManagedSlowMs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7858,8 +7857,8 @@ export def "atlas-groups-managed-slow-ms-enable enableGroupManagedSlowMs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7883,11 +7882,11 @@ export def "atlas-groups-metric-integrations listGroupMetricIntegrations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --integrationType: string # Optional filter by integration type (e.g., `OTEL`). When specified, `providerType` must also be specified.
   --providerType: string # Optional filter by provider type (e.g., `CUSTOM`). When specified, `integrationType` must also be specified.
 ]: nothing -> any {
@@ -7913,8 +7912,8 @@ export def "atlas-groups-metric-integrations createGroupMetricIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -7942,8 +7941,8 @@ export def "atlas-groups-metric-integrations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7968,8 +7967,8 @@ export def "atlas-groups-metric-integrations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7994,8 +7993,8 @@ export def "atlas-groups-metric-integrations updateGroupMetricIntegration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -8022,8 +8021,8 @@ export def "atlas-groups-mongo-db-versions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --cloudProvider: string@cloudProvider-completer # Filter results to only one cloud provider.
   --instanceSize: string # Filter results to only one instance size. (e.g. M10)
   --defaultStatus: string@defaultStatus-completer # Filter results to only the default values per tier. This value must be DEFAULT.
@@ -8052,11 +8051,11 @@ export def "atlas-groups-peers listGroupPeers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --providerName: string@providerName-completer # Cloud service provider to use for this VPC peering connection. (default: AWS)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8082,8 +8081,8 @@ export def "atlas-groups-peers createGroupPeer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -8111,8 +8110,8 @@ export def "atlas-groups-peers delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8137,8 +8136,8 @@ export def "atlas-groups-peers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8163,8 +8162,8 @@ export def "atlas-groups-peers updateGroupPeer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -8193,7 +8192,7 @@ export def "atlas-groups-pipelines listGroupPipelines" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8220,7 +8219,7 @@ export def "atlas-groups-pipelines createGroupPipeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -8250,7 +8249,7 @@ export def "atlas-groups-pipelines delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8277,8 +8276,8 @@ export def "atlas-groups-pipelines get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8305,7 +8304,7 @@ export def "atlas-groups-pipelines updateGroupPipeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -8335,8 +8334,8 @@ export def "atlas-groups-pipelines-available-schedules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8363,11 +8362,11 @@ export def "atlas-groups-pipelines-available-snapshots get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --completedAfter: string # Date and time after which MongoDB Cloud created the snapshot. If specified, MongoDB Cloud returns available backup snapshots created after this time and date only. This parameter expresses its value in the ISO 8601 timestamp format in UTC. (format: date-time)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8395,8 +8394,8 @@ export def "atlas-groups-pipelines-pause pauseGroupPipeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8423,8 +8422,8 @@ export def "atlas-groups-pipelines-resume resumeGroupPipeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8451,11 +8450,11 @@ export def "atlas-groups-pipelines-runs listGroupPipelineRuns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --createdBefore: string # If specified, Atlas returns only Data Lake Pipeline runs initiated before this time and date. (format: date-time)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -8484,8 +8483,8 @@ export def "atlas-groups-pipelines-runs delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8513,8 +8512,8 @@ export def "atlas-groups-pipelines-runs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8541,8 +8540,8 @@ export def "atlas-groups-pipelines-trigger triggerGroupPipeline" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -8570,8 +8569,8 @@ export def "atlas-groups-private-endpoint-endpoint-service createGroupPrivateEnd
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -8599,8 +8598,8 @@ export def "atlas-groups-private-endpoint-endpoint-service updateGroupPrivateEnd
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -8627,8 +8626,8 @@ export def "atlas-groups-private-endpoint-regional-mode get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8652,8 +8651,8 @@ export def "atlas-groups-private-endpoint-regional-mode toggleGroupPrivateEndpoi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -8683,7 +8682,7 @@ export def "atlas-groups-private-endpoint-serverless-instance-endpoint listGroup
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8711,7 +8710,7 @@ export def "atlas-groups-private-endpoint-serverless-instance-endpoint createGro
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -8742,7 +8741,7 @@ export def "atlas-groups-private-endpoint-serverless-instance-endpoint delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8770,7 +8769,7 @@ export def "atlas-groups-private-endpoint-serverless-instance-endpoint get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8798,7 +8797,7 @@ export def "atlas-groups-private-endpoint-serverless-instance-endpoint updateGro
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -8826,8 +8825,8 @@ export def "atlas-groups-private-endpoint-endpoint-service listGroupPrivateEndpo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8853,8 +8852,8 @@ export def "atlas-groups-private-endpoint-endpoint-service delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8880,8 +8879,8 @@ export def "atlas-groups-private-endpoint-endpoint-service get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8907,8 +8906,8 @@ export def "atlas-groups-private-endpoint-endpoint-service-endpoint createGroupP
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -8938,8 +8937,8 @@ export def "atlas-groups-private-endpoint-endpoint-service-endpoint delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8966,8 +8965,8 @@ export def "atlas-groups-private-endpoint-endpoint-service-endpoint get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8994,8 +8993,8 @@ export def "atlas-groups-private-ip-mode verifyGroupPrivateIpMode" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9022,8 +9021,8 @@ export def "atlas-groups-private-ip-mode disableGroupPrivateIpModePeering" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -9050,11 +9049,11 @@ export def "atlas-groups-private-network-settings-endpoint-ids listGroupPrivateN
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9079,8 +9078,8 @@ export def "atlas-groups-private-network-settings-endpoint-ids createGroupPrivat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -9108,8 +9107,8 @@ export def "atlas-groups-private-network-settings-endpoint-ids delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9134,8 +9133,8 @@ export def "atlas-groups-private-network-settings-endpoint-ids get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9159,11 +9158,11 @@ export def "atlas-groups-processes listGroupProcesses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9188,8 +9187,8 @@ export def "atlas-groups-processes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9214,7 +9213,7 @@ export def "atlas-groups-processes-coll-stats-namespaces get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --start: string # Date and time when MongoDB Cloud begins reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
   --end: string # Date and time when MongoDB Cloud stops reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
   --period: string # Duration over which Atlas reports the metrics. This parameter expresses its value in the ISO 8601 duration format in UTC. Include this parameter when you do not set **start** and **end**. (e.g. PT10H)
@@ -9243,11 +9242,11 @@ export def "atlas-groups-processes-databases listGroupProcessDatabases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9273,8 +9272,8 @@ export def "atlas-groups-processes-databases get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9300,8 +9299,8 @@ export def "atlas-groups-processes-databases-measurements get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --m: list # One or more types of measurement to request for this MongoDB process. If omitted, the resource returns all measurements. To specify multiple values for `m`, repeat the `m` parameter for each value. Specify measurements that apply to the specified host. MongoDB Cloud returns an error if you specified any invalid measurements.
   --granularity: string # Duration that specifies the interval at which Atlas reports the metrics. This parameter expresses its value in the ISO 8601 duration format in UTC. (e.g. PT1M)
   --period: string # Duration over which Atlas reports the metrics. This parameter expresses its value in the ISO 8601 duration format in UTC. Include this parameter when you do not set **start** and **end**. (e.g. PT10H)
@@ -9331,11 +9330,11 @@ export def "atlas-groups-processes-disks listGroupProcessDisks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9361,7 +9360,7 @@ export def "atlas-groups-processes-disks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9387,8 +9386,8 @@ export def "atlas-groups-processes-disks-measurements get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --m: list # One or more types of measurement to request for this MongoDB process. If omitted, the resource returns all measurements. To specify multiple values for `m`, repeat the `m` parameter for each value. Specify measurements that apply to the specified host. MongoDB Cloud returns an error if you specified any invalid measurements.
   --granularity: string # Duration that specifies the interval at which Atlas reports the metrics. This parameter expresses its value in the ISO 8601 duration format in UTC. (e.g. PT1M)
   --period: string # Duration over which Atlas reports the metrics. This parameter expresses its value in the ISO 8601 duration format in UTC. Include this parameter when you do not set **start** and **end**. (e.g. PT10H)
@@ -9418,8 +9417,8 @@ export def "atlas-groups-processes-measurements get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --m: list # One or more types of measurement to request for this MongoDB process. If omitted, the resource returns all measurements. To specify multiple values for `m`, repeat the `m` parameter for each value. Specify measurements that apply to the specified host. MongoDB Cloud returns an error if you specified any invalid measurements.
   --period: string # Duration over which Atlas reports the metrics. This parameter expresses its value in the ISO 8601 duration format in UTC. Include this parameter when you do not set **start** and **end**. (e.g. PT10H)
   --granularity: string # Duration that specifies the interval at which Atlas reports the metrics. This parameter expresses its value in the ISO 8601 duration format in UTC. (e.g. PT1M)
@@ -9449,8 +9448,8 @@ export def "atlas-groups-processes-performance-advisor-namespaces listGroupProce
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --duration: int # Length of time expressed during which the query finds suggested indexes among the managed namespaces in the cluster. This parameter expresses its value in milliseconds.  - If you don't specify the **since** parameter, the endpoint returns data covering the duration before the current time. - If you specify neither the **duration** nor **since** parameters, the endpoint returns data from the previous 24 hours. (format: int64)
   --since: int # Date and time from which the query retrieves the suggested indexes. This parameter expresses its value in the number of milliseconds that have elapsed since the [UNIX epoch](https://en.wikipedia.org/wiki/Unix_time).  - If you don't specify the **duration** parameter, the endpoint returns data covering from the **since** value and the current time. - If you specify neither the **duration** nor the **since** parameters, the endpoint returns data from the previous 24 hours. (format: int64)
 ]: nothing -> any {
@@ -9477,15 +9476,15 @@ export def "atlas-groups-processes-performance-advisor-slow-query-logs listGroup
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --duration: int # Length of time expressed during which the query finds slow queries among the managed namespaces in the cluster. This parameter expresses its value in milliseconds.  - If you don't specify the **since** parameter, the endpoint returns data covering the duration before the current time. - If you specify neither the **duration** nor **since** parameters, the endpoint returns data from the previous 24 hours. (format: int64)
   --namespaces: list # Namespaces from which to retrieve slow queries. A namespace consists of one database and one collection resource written as `.`: `<database>.<collection>`. To include multiple namespaces, pass the parameter multiple times delimited with an ampersand (`&`) between each namespace. Omit this parameter to return results for all namespaces.
   --nLogs: int # Maximum number of lines from the log to return. (format: int64, default: 20000)
   --since: int # Date and time from which the query retrieves the slow queries. This parameter expresses its value in the number of milliseconds that have elapsed since the [UNIX epoch](https://en.wikipedia.org/wiki/Unix_time).  - If you don't specify the **duration** parameter, the endpoint returns data covering from the **since** value and the current time. - If you specify neither the **duration** nor the **since** parameters, the endpoint returns data from the previous 24 hours. (format: int64)
-  --includeMetrics: string@bool-completer # Whether or not to include metrics extracted from the slow query log as separate fields. (default: false)
-  --includeReplicaState: string@bool-completer # Whether or not to include the replica state of the host when the slow query log was generated as a separate field. (default: false)
-  --includeOpType: string@bool-completer # Whether or not to include the operation type (read/write/command) extracted from the slow query log as a separate field. (default: false)
+  --includeMetrics: oneof<nothing, bool> # Whether or not to include metrics extracted from the slow query log as separate fields. (default: false)
+  --includeReplicaState: oneof<nothing, bool> # Whether or not to include the replica state of the host when the slow query log was generated as a separate field. (default: false)
+  --includeOpType: oneof<nothing, bool> # Whether or not to include the operation type (read/write/command) extracted from the slow query log as a separate field. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9510,11 +9509,11 @@ export def "atlas-groups-processes-performance-advisor-suggested-indexes listGro
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --duration: int # Length of time expressed during which the query finds suggested indexes among the managed namespaces in the cluster. This parameter expresses its value in milliseconds.  - If you don't specify the **since** parameter, the endpoint returns data covering the duration before the current time. - If you specify neither the **duration** nor **since** parameters, the endpoint returns data from the previous 24 hours. (format: int64)
   --namespaces: list # Namespaces from which to retrieve suggested indexes. A namespace consists of one database and one collection resource written as `.`: `<database>.<collection>`. To include multiple namespaces, pass the parameter multiple times delimited with an ampersand (`&`) between each namespace. Omit this parameter to return results for all namespaces.
   --nExamples: int # Maximum number of example queries that benefit from the suggested index. (format: int64, default: 5)
@@ -9546,7 +9545,7 @@ export def "atlas-groups-processes-coll-stats-measurements listGroupProcessCollS
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --metrics: list # List that contains the metrics that you want to retrieve for the associated data series. If you don't set this parameter, this resource returns data series for all Coll Stats Latency metrics.
   --start: string # Date and time when MongoDB Cloud begins reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
   --end: string # Date and time when MongoDB Cloud stops reporting the metrics. This parameter expresses its value in the ISO 8601 timestamp format in UTC. Include this parameter when you do not set **period**. (format: date-time)
@@ -9576,8 +9575,8 @@ export def "atlas-groups-push-based-log-export delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9603,8 +9602,8 @@ export def "atlas-groups-push-based-log-export get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9630,8 +9629,8 @@ export def "atlas-groups-push-based-log-export updateGroupPushBasedLogExport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -9660,8 +9659,8 @@ export def "atlas-groups-push-based-log-export createGroupPushBasedLogExport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -9689,7 +9688,7 @@ export def "atlas-groups-sample-dataset-load requestGroupSampleDatasetLoad" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9714,7 +9713,7 @@ export def "atlas-groups-sample-dataset-load get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9739,8 +9738,8 @@ export def "atlas-groups-sandbox generateGroupSandboxClusterDescription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9767,11 +9766,11 @@ export def "atlas-groups-serverless listGroupServerlessInstances" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9799,11 +9798,11 @@ export def "atlas-groups-serverless-backup-restore-jobs listGroupServerlessBacku
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9831,8 +9830,8 @@ export def "atlas-groups-serverless-backup-restore-jobs createGroupServerlessBac
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -9864,8 +9863,8 @@ export def "atlas-groups-serverless-backup-restore-jobs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9893,9 +9892,9 @@ export def "atlas-groups-serverless-backup-snapshots listGroupServerlessBackupSn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
 ]: nothing -> any {
@@ -9926,7 +9925,7 @@ export def "atlas-groups-serverless-backup-snapshots get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9954,8 +9953,8 @@ export def "atlas-groups-serverless-performance-advisor-auto-indexing get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9983,8 +9982,8 @@ export def "atlas-groups-serverless-performance-advisor-auto-indexing setGroupSe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable: string@bool-completer # Value that we want to set for the Serverless Auto Indexing toggle.
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --enable: oneof<nothing, bool> # Value that we want to set for the Serverless Auto Indexing toggle.
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10012,8 +10011,8 @@ export def "atlas-groups-serverless get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10039,8 +10038,8 @@ export def "atlas-groups-service-accounts listGroupServiceAccounts" [
   --allow-errors(-e) # Return full response without error handling
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10064,8 +10063,8 @@ export def "atlas-groups-service-accounts createGroupServiceAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -10093,8 +10092,8 @@ export def "atlas-groups-service-accounts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10119,8 +10118,8 @@ export def "atlas-groups-service-accounts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10145,8 +10144,8 @@ export def "atlas-groups-service-accounts updateGroupServiceAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -10174,11 +10173,11 @@ export def "atlas-groups-service-accounts-access-list listGroupServiceAccountAcc
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10203,11 +10202,11 @@ export def "atlas-groups-service-accounts-access-list createGroupServiceAccountA
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -10236,8 +10235,8 @@ export def "atlas-groups-service-accounts-access-list delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10262,8 +10261,8 @@ export def "atlas-groups-service-accounts-secrets createGroupServiceAccountSecre
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -10292,8 +10291,8 @@ export def "atlas-groups-service-accounts-secrets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10318,8 +10317,8 @@ export def "atlas-groups-service-accounts inviteGroupServiceAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -10346,8 +10345,8 @@ export def "atlas-groups-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10371,8 +10370,8 @@ export def "atlas-groups-settings updateGroupSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -10399,10 +10398,10 @@ export def "atlas-groups-standby-links listGroupStandbyLinks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10426,7 +10425,7 @@ export def "atlas-groups-standby-links createGroupStandbyLink" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether to wrap the response in an envelope.
+  --envelope: oneof<nothing, bool> # Flag that indicates whether to wrap the response in an envelope.
   --body: record
 ]: any -> any {
   let input = $in
@@ -10454,7 +10453,7 @@ export def "atlas-groups-standby-links delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether to wrap the response in an envelope.
+  --envelope: oneof<nothing, bool> # Flag that indicates whether to wrap the response in an envelope.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10479,7 +10478,7 @@ export def "atlas-groups-standby-links get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether to wrap the response in an envelope.
+  --envelope: oneof<nothing, bool> # Flag that indicates whether to wrap the response in an envelope.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10504,10 +10503,10 @@ export def "atlas-groups-standby-links-failovers listGroupStandbyLinkFailovers" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10532,7 +10531,7 @@ export def "atlas-groups-standby-links-failovers createGroupStandbyLinkFailover"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether to wrap the response in an envelope.
+  --envelope: oneof<nothing, bool> # Flag that indicates whether to wrap the response in an envelope.
   --body: record
 ]: any -> any {
   let input = $in
@@ -10561,7 +10560,7 @@ export def "atlas-groups-standby-links-failovers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether to wrap the response in an envelope.
+  --envelope: oneof<nothing, bool> # Flag that indicates whether to wrap the response in an envelope.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10586,8 +10585,8 @@ export def "atlas-groups-standby-links inspectGroupStandbyLinkFailoverReadiness"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether to wrap the response in an envelope.
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether to wrap the response in an envelope.
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10611,10 +10610,10 @@ export def "atlas-groups-streams listGroupStreamWorkspaces" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10638,8 +10637,8 @@ export def "atlas-groups-streams createGroupStreamWorkspace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -10666,7 +10665,7 @@ export def "atlas-groups-streams-account-details get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --cloudProvider: string # One of "aws", "azure" or "gcp".
   --regionName: string # The cloud provider specific region name, i.e. "US_EAST_1" for cloud provider "aws".
 ]: nothing -> any {
@@ -10692,10 +10691,10 @@ export def "atlas-groups-streams-active-vpc-peering-connections listGroupStreamA
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10719,10 +10718,10 @@ export def "atlas-groups-streams-private-link-connections listGroupStreamPrivate
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10746,8 +10745,8 @@ export def "atlas-groups-streams-private-link-connections createGroupStreamPriva
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -10775,8 +10774,8 @@ export def "atlas-groups-streams-private-link-connections delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10801,7 +10800,7 @@ export def "atlas-groups-streams-private-link-connections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10826,10 +10825,10 @@ export def "atlas-groups-streams-vpc-peering-connections listGroupStreamVpcPeeri
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --requesterAccountId: string # The Account ID of the VPC Peering connection/s.
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10854,7 +10853,7 @@ export def "atlas-groups-streams-vpc-peering-connections delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10879,7 +10878,7 @@ export def "atlas-groups-streams-vpc-peering-connections acceptGroupStreamVpcPee
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -10907,7 +10906,7 @@ export def "atlas-groups-streams-vpc-peering-connections rejectGroupStreamVpcPee
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10932,8 +10931,8 @@ export def "atlas-groups-streams delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10958,8 +10957,8 @@ export def "atlas-groups-streams get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeConnections: string@bool-completer # Flag to indicate whether connections information should be included in the stream workspace.
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeConnections: oneof<nothing, bool> # Flag to indicate whether connections information should be included in the stream workspace.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10985,8 +10984,8 @@ export def "atlas-groups-streams updateGroupStreamWorkspace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-9 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -11014,7 +11013,7 @@ export def "atlas-groups-streams-audit-logs downloadGroupStreamAuditLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --endDate: int # Timestamp that specifies the end point for the range of log messages to download.  MongoDB Cloud expresses this timestamp in the number of seconds that have elapsed since the UNIX epoch. (format: int64, e.g. 1636481348)
   --startDate: int # Timestamp that specifies the starting point for the range of log messages to download. MongoDB Cloud expresses this timestamp in the number of seconds that have elapsed since the UNIX epoch. (format: int64, e.g. 1636466948)
   --spName: string # Name of the stream processor to download logs for. An empty string will download logs for all stream processors in the workspace.
@@ -11042,10 +11041,10 @@ export def "atlas-groups-streams-connections listGroupStreamConnections" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11070,8 +11069,8 @@ export def "atlas-groups-streams-connections createGroupStreamConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -11100,8 +11099,8 @@ export def "atlas-groups-streams-connections delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11127,7 +11126,7 @@ export def "atlas-groups-streams-connections get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11153,8 +11152,8 @@ export def "atlas-groups-streams-connections updateGroupStreamConnection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -11183,8 +11182,8 @@ export def "atlas-groups-streams-connections-failover-connections createGroupStr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -11212,8 +11211,8 @@ export def "atlas-groups-streams-processor createGroupStreamProcessor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -11242,8 +11241,8 @@ export def "atlas-groups-streams-processor delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11269,8 +11268,8 @@ export def "atlas-groups-streams-processor get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11296,8 +11295,8 @@ export def "atlas-groups-streams-processor updateGroupStreamProcessor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -11326,8 +11325,8 @@ export def "atlas-groups-streams-processor startGroupStreamProcessor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11354,8 +11353,8 @@ export def "atlas-groups-streams-processor startGroupStreamProcessorWith" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-10 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -11384,8 +11383,8 @@ export def "atlas-groups-streams-processor stopGroupStreamProcessor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11410,11 +11409,11 @@ export def "atlas-groups-streams-processors get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11439,7 +11438,7 @@ export def "atlas-groups-streams downloadGroupStreamOperationalLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --endDate: int # Timestamp that specifies the end point for the range of log messages to download.  MongoDB Cloud expresses this timestamp in the number of seconds that have elapsed since the UNIX epoch. (format: int64, e.g. 1636481348)
   --startDate: int # Timestamp that specifies the starting point for the range of log messages to download. MongoDB Cloud expresses this timestamp in the number of seconds that have elapsed since the UNIX epoch. (format: int64, e.g. 1636466948)
   --spName: string # Name of the stream processor to download logs for. An empty string will download logs for all stream processors in the workspace.
@@ -11466,8 +11465,8 @@ export def "atlas-groups-streams-with-sample-connections withGroupStreamSampleCo
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -11494,9 +11493,9 @@ export def "atlas-groups-teams listGroupTeams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
 ]: nothing -> any {
@@ -11523,8 +11522,8 @@ export def "atlas-groups-teams addGroupTeams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -11553,7 +11552,7 @@ export def "atlas-groups-teams removeGroupTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11578,8 +11577,8 @@ export def "atlas-groups-teams get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11605,8 +11604,8 @@ export def "atlas-groups-teams updateGroupTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -11633,8 +11632,8 @@ export def "atlas-groups-user-security get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11658,8 +11657,8 @@ export def "atlas-groups-user-security updateGroupUserSecurity" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -11686,7 +11685,7 @@ export def "atlas-groups-user-security-customer-x509 disableGroupUserSecurityCus
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11710,8 +11709,8 @@ export def "atlas-groups-user-security-ldap-user-to-dn-mapping delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11735,8 +11734,8 @@ export def "atlas-groups-user-security-ldap-verify verifyGroupUserSecurityLdap" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -11764,8 +11763,8 @@ export def "atlas-groups-user-security-ldap-verify get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11792,13 +11791,13 @@ export def "atlas-groups-users listGroupUsers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-11 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --flattenTeams: string@bool-completer # Flag that indicates whether the returned list should include users who belong to a team with a role in this project. You might not have assigned the individual users a role in this project. If `"flattenTeams" : false`, this resource returns only users with a role in the project.  If `"flattenTeams" : true`, this resource returns both users with roles in the project and users who belong to teams with roles in the project. (default: false)
-  --includeOrgUsers: string@bool-completer # Flag that indicates whether the returned list should include users with implicit access to the project, the Organization Owner or Organization Read Only role. You might not have assigned the individual users a role in this project. If `"includeOrgUsers": false`, this resource returns only users with a role in the project. If `"includeOrgUsers": true`, this resource returns both users with roles in the project and users who have implicit access to the project through their organization role. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --flattenTeams: oneof<nothing, bool> # Flag that indicates whether the returned list should include users who belong to a team with a role in this project. You might not have assigned the individual users a role in this project. If `"flattenTeams" : false`, this resource returns only users with a role in the project.  If `"flattenTeams" : true`, this resource returns both users with roles in the project and users who belong to teams with roles in the project. (default: false)
+  --includeOrgUsers: oneof<nothing, bool> # Flag that indicates whether the returned list should include users with implicit access to the project, the Organization Owner or Organization Read Only role. You might not have assigned the individual users a role in this project. If `"includeOrgUsers": false`, this resource returns only users with a role in the project. If `"includeOrgUsers": true`, this resource returns both users with roles in the project and users who have implicit access to the project through their organization role. (default: false)
   --orgMembershipStatus: string # Deprecated: Use `orgMembershipStatuses` instead. Organization membership status to filter users by. Allowed values: `ACTIVE`, `PENDING`, `INVITATION_EXPIRED`, `INVITATION_REJECTED`. If you exclude this parameter, this resource returns ACTIVE and PENDING users. Not supported in deprecated versions. (DEPRECATED, e.g. ACTIVE)
   --orgMembershipStatuses: list # Organization membership status to filter users by. You can supply this parameter multiple times. Allowed values: `ACTIVE`, `PENDING`, `INVITATION_EXPIRED`, `INVITATION_REJECTED`. Replaces the deprecated `orgMembershipStatus` parameter. If you exclude this parameter, this resource returns ACTIVE and PENDING users. Cannot be combined with `orgMembershipStatus`. Not supported in deprecated versions.
   --username: string # Email address to filter users by. Not supported in deprecated versions. (format: email)
@@ -11825,8 +11824,8 @@ export def "atlas-groups-users addGroupUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -11856,8 +11855,8 @@ export def "atlas-groups-users removeGroupUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-11 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11882,8 +11881,8 @@ export def "atlas-groups-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --orgMembershipStatuses: list # Organization membership status to filter users by. You can supply this parameter multiple times. Allowed values: `ACTIVE`, `PENDING`, `INVITATION_EXPIRED`, `INVITATION_REJECTED`. If you exclude this parameter, this resource returns ACTIVE and PENDING users. Not supported in deprecated versions.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11911,8 +11910,8 @@ export def "atlas-groups-users-roles updateGroupUserRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -11941,8 +11940,8 @@ export def "atlas-groups-users addGroupUserRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -11971,8 +11970,8 @@ export def "atlas-groups-users removeGroupUserRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -11999,7 +11998,7 @@ export def "atlas-groups migrateGroup" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -12025,11 +12024,11 @@ export def "atlas-orgs listOrgs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --name: string # Human-readable label of the organization to use to filter the returned list. Performs a case-insensitive search for an organization that starts with the specified name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12054,8 +12053,8 @@ export def "atlas-orgs createOrg" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -12082,7 +12081,7 @@ export def "atlas-orgs delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12106,8 +12105,8 @@ export def "atlas-orgs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12131,8 +12130,8 @@ export def "atlas-orgs updateOrg" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -12159,7 +12158,7 @@ export def "atlas-orgs-activity-feed get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --eventType: list # Category of incident recorded at this moment in time.  **IMPORTANT**: The complete list of event type values changes frequently.
   --maxDate: string # End date and time for events to include in the activity feed link. ISO 8601 timestamp format in UTC. (format: date-time)
   --minDate: string # Start date and time for events to include in the activity feed link. ISO 8601 timestamp format in UTC. (format: date-time)
@@ -12188,8 +12187,8 @@ export def "atlas-orgs-ai-model-api-keys listOrgAiModelApiKeys" [
   --allow-errors(-e) # Return full response without error handling
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12214,8 +12213,8 @@ export def "atlas-orgs-ai-model-api-keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12241,8 +12240,8 @@ export def "atlas-orgs-ai-model-rate-limits listOrgAiModelRateLimits" [
   --allow-errors(-e) # Return full response without error handling
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12267,8 +12266,8 @@ export def "atlas-orgs-ai-model-rate-limits get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12293,11 +12292,11 @@ export def "atlas-orgs-api-keys listOrgApiKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12322,8 +12321,8 @@ export def "atlas-orgs-api-keys createOrgApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -12352,8 +12351,8 @@ export def "atlas-orgs-api-keys delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12379,8 +12378,8 @@ export def "atlas-orgs-api-keys get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12406,8 +12405,8 @@ export def "atlas-orgs-api-keys updateOrgApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -12436,11 +12435,11 @@ export def "atlas-orgs-api-keys-access-list listOrgApiKeyAccessListEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12465,11 +12464,11 @@ export def "atlas-orgs-api-keys-access-list createOrgApiKeyAccessListEntry" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -12499,8 +12498,8 @@ export def "atlas-orgs-api-keys-access-list delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12527,8 +12526,8 @@ export def "atlas-orgs-api-keys-access-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12554,7 +12553,7 @@ export def "atlas-orgs-associated-invoices get" [
   --allow-errors(-e) # Return full response without error handling
   --month: int # The month for which to retrieve invoices (1-12). Defaults to current month. (format: int64)
   --year: int # The year for which to retrieve invoices. Defaults to current year. (format: int64)
-  --includeLinkedOrgs: string@bool-completer # Whether to include invoices from linked organizations. Defaults to false.
+  --includeLinkedOrgs: oneof<nothing, bool> # Whether to include invoices from linked organizations. Defaults to false.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12578,7 +12577,7 @@ export def "atlas-orgs-billing-cost-explorer-usage createOrgBillingCostExplorerU
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -12607,7 +12606,7 @@ export def "atlas-orgs-billing-cost-explorer-usage get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-12 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12631,13 +12630,13 @@ export def "atlas-orgs-events listOrgEvents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --eventType: list # Category of incident recorded at this moment in time.  **IMPORTANT**: The complete list of event type values changes frequently.
-  --includeRaw: string@bool-completer # Flag that indicates whether to include the raw document in the output. The raw document contains additional meta information about the event. (default: false)
+  --includeRaw: oneof<nothing, bool> # Flag that indicates whether to include the raw document in the output. The raw document contains additional meta information about the event. (default: false)
   --maxDate: string # Date and time from when MongoDB Cloud stops returning events. This parameter uses the ISO 8601 timestamp format in UTC. (format: date-time)
   --minDate: string # Date and time from when MongoDB Cloud starts returning events. This parameter uses the ISO 8601 timestamp format in UTC. (format: date-time)
 ]: nothing -> any {
@@ -12665,9 +12664,9 @@ export def "atlas-orgs-events get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --includeRaw: string@bool-completer # Flag that indicates whether to include the raw document in the output. The raw document contains additional meta information about the event. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --includeRaw: oneof<nothing, bool> # Flag that indicates whether to include the raw document in the output. The raw document contains additional meta information about the event. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12691,8 +12690,8 @@ export def "atlas-orgs-federation-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12716,11 +12715,11 @@ export def "atlas-orgs-groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --name: string # Human-readable label of the project to use to filter the returned list. Performs a case-insensitive search for a project within the organization which is prefixed by the specified name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12748,8 +12747,8 @@ export def "atlas-orgs-invites listOrgInvites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --username: string # Email address of the user account invited to this organization. If you exclude this parameter, this resource returns all pending invitations. (format: email)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12777,8 +12776,8 @@ export def "atlas-orgs-invites updateOrgInvites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -12808,8 +12807,8 @@ export def "atlas-orgs-invites createOrgInvite" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -12840,8 +12839,8 @@ export def "atlas-orgs-invites delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12869,7 +12868,7 @@ export def "atlas-orgs-invites get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12897,8 +12896,8 @@ export def "atlas-orgs-invites updateOrgInviteById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -12925,12 +12924,12 @@ export def "atlas-orgs-invoices listOrgInvoices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --viewLinkedInvoices: string@bool-completer # Flag that indicates whether to return linked invoices in the `linkedInvoices` field. (default: true)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --viewLinkedInvoices: oneof<nothing, bool> # Flag that indicates whether to return linked invoices in the `linkedInvoices` field. (default: true)
   --statusNames: list # Statuses of the invoice to be retrieved. Omit to return invoices of all statuses.
   --fromDate: string # Retrieve the invoices the `startDates` of which are greater than or equal to the `fromDate`. If omit, the invoices return will go back to earliest `startDate`. (format: date, e.g. 2023-01-01)
   --toDate: string # Retrieve the invoices the `endDates` of which are smaller than or equal to the `toDate`. If omit, the invoices return will go further to latest `endDate`. (format: date, e.g. 2023-01-01)
@@ -12959,8 +12958,8 @@ export def "atlas-orgs-invoices-pending listOrgInvoicePending" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12986,8 +12985,8 @@ export def "atlas-orgs-invoices get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-12 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13012,8 +13011,8 @@ export def "atlas-orgs-invoices-csv get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13038,7 +13037,7 @@ export def "atlas-orgs-invoices-line-items-search searchOrgInvoiceLineItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
   --body: record
@@ -13093,8 +13092,8 @@ export def "atlas-orgs-live-migrations-available-projects listOrgLiveMigrationAv
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13118,7 +13117,7 @@ export def "atlas-orgs-live-migrations-link-tokens delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13142,8 +13141,8 @@ export def "atlas-orgs-live-migrations-link-tokens createOrgLiveMigrationLinkTok
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -13171,8 +13170,8 @@ export def "atlas-orgs-non-compliant-resources get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13197,8 +13196,8 @@ export def "atlas-orgs-resource-policies listOrgResourcePolicies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13223,8 +13222,8 @@ export def "atlas-orgs-resource-policies createOrgResourcePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -13253,8 +13252,8 @@ export def "atlas-orgs-resource-policies delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13280,8 +13279,8 @@ export def "atlas-orgs-resource-policies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13307,8 +13306,8 @@ export def "atlas-orgs-resource-policies updateOrgResourcePolicy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -13336,8 +13335,8 @@ export def "atlas-orgs-resource-policies-validate validateOrgResourcePolicies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -13364,8 +13363,8 @@ export def "atlas-orgs-sandbox-config listOrgSandboxConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
 ]: nothing -> any {
@@ -13391,8 +13390,8 @@ export def "atlas-orgs-sandbox-config createOrgSandboxConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -13443,8 +13442,8 @@ export def "atlas-orgs-sandbox-config get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13469,8 +13468,8 @@ export def "atlas-orgs-sandbox-config updateOrgSandboxConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -13499,8 +13498,8 @@ export def "atlas-orgs-service-accounts listOrgServiceAccounts" [
   --allow-errors(-e) # Return full response without error handling
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13524,8 +13523,8 @@ export def "atlas-orgs-service-accounts createOrgServiceAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -13553,8 +13552,8 @@ export def "atlas-orgs-service-accounts delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13579,8 +13578,8 @@ export def "atlas-orgs-service-accounts get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13605,8 +13604,8 @@ export def "atlas-orgs-service-accounts updateOrgServiceAccount" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -13634,11 +13633,11 @@ export def "atlas-orgs-service-accounts-access-list listOrgServiceAccountAccessL
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13663,11 +13662,11 @@ export def "atlas-orgs-service-accounts-access-list createOrgServiceAccountAcces
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -13696,8 +13695,8 @@ export def "atlas-orgs-service-accounts-access-list delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13724,8 +13723,8 @@ export def "atlas-orgs-service-accounts-groups get" [
   --allow-errors(-e) # Return full response without error handling
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13750,8 +13749,8 @@ export def "atlas-orgs-service-accounts-secrets createOrgServiceAccountSecret" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -13780,8 +13779,8 @@ export def "atlas-orgs-service-accounts-secrets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13805,8 +13804,8 @@ export def "atlas-orgs-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13830,8 +13829,8 @@ export def "atlas-orgs-settings updateOrgSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -13859,11 +13858,11 @@ export def "atlas-orgs-teams listOrgTeams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13888,8 +13887,8 @@ export def "atlas-orgs-teams createOrgTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -13918,8 +13917,8 @@ export def "atlas-orgs-teams-by-name get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13945,8 +13944,8 @@ export def "atlas-orgs-teams delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13972,8 +13971,8 @@ export def "atlas-orgs-teams get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13999,8 +13998,8 @@ export def "atlas-orgs-teams renameOrgTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -14031,10 +14030,10 @@ export def "atlas-orgs-teams-users listOrgTeamUsers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-11 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --username: string # Email address to filter users by. Not supported in deprecated versions. (format: email)
   --orgMembershipStatus: string # Deprecated: Use `orgMembershipStatuses` instead. Organization membership status to filter users by. Allowed values: `ACTIVE`, `PENDING`, `INVITATION_EXPIRED`, `INVITATION_REJECTED`. If you exclude this parameter, this resource returns ACTIVE and PENDING users. Not supported in deprecated versions. (DEPRECATED, e.g. ACTIVE)
   --orgMembershipStatuses: list # Organization membership status to filter users by. You can supply this parameter multiple times. Allowed values: `ACTIVE`, `PENDING`, `INVITATION_EXPIRED`, `INVITATION_REJECTED`. Replaces the deprecated `orgMembershipStatus` parameter. If you exclude this parameter, this resource returns ACTIVE and PENDING users. Cannot be combined with `orgMembershipStatus`. Not supported in deprecated versions.
@@ -14066,8 +14065,8 @@ export def "atlas-orgs-teams-users addOrgTeamUsers" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -14099,8 +14098,8 @@ export def "atlas-orgs-teams-users removeOrgTeamUserFromTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14126,8 +14125,8 @@ export def "atlas-orgs-teams addOrgTeamUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -14156,8 +14155,8 @@ export def "atlas-orgs-teams removeOrgTeamUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -14187,9 +14186,9 @@ export def "atlas-orgs-users listOrgUsers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-11 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
   --username: string # Email address to filter users by. Not supported in deprecated versions. (format: email)
@@ -14218,8 +14217,8 @@ export def "atlas-orgs-users createOrgUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -14249,8 +14248,8 @@ export def "atlas-orgs-users removeOrgUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-11 # Response content type
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14275,8 +14274,8 @@ export def "atlas-orgs-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --orgMembershipStatuses: list # Organization membership status to filter users by. You can supply this parameter multiple times. Allowed values: `ACTIVE`, `PENDING`, `INVITATION_EXPIRED`, `INVITATION_REJECTED`. If you exclude this parameter, this resource returns ACTIVE and PENDING users. Not supported in deprecated versions.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -14303,8 +14302,8 @@ export def "atlas-orgs-users updateOrgUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -14334,8 +14333,8 @@ export def "atlas-orgs-users-roles updateOrgUserRoles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -14364,8 +14363,8 @@ export def "atlas-orgs-users addOrgUserRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -14394,8 +14393,8 @@ export def "atlas-orgs-users removeOrgUserRole" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -14424,8 +14423,8 @@ export def "atlas-rate-limits listRateLimits" [
   --accept: string@accept-completer-10 # Response content type
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --groupId: string # Unique 24-hexadecimal digit string that identifies the Atlas Project to request rate limits for. When this parameter is provided, only group scoped endpoint sets are returned and the limits returned are applicable to the specified project. The requesting user must have the Project Read Only role for the specified project. (e.g. 32b6e34b3d91647abb20e7b8)
   --orgId: string # Unique 24-hexadecimal digit string that identifies the Atlas Organization to request rate limits for. When this parameter is provided, only organization scoped endpoint sets are returned and the limits returned are applicable to the specified organization. The requesting user must have the Organization Read Only role for the specified organization. (e.g. 32b6e34b3d91647abb20e7b8)
   --userId: string # A string that identifies the Atlas user to request rate limits for. The ID can for example be the Service Account Client ID or the API Public Key. When this parameter is provided, only user scoped endpoint sets are returned and the limits returned are applicable to the specified user. The requesting user must be the same as the specified user. (e.g. mdb_sa_id_1234567890abcdef12345678)
@@ -14456,8 +14455,8 @@ export def "atlas-rate-limits get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-10 # Response content type
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
   --groupId: string # Unique 24-hexadecimal digit string that identifies the Atlas Project to request rate limits for. When this parameter is provided, the limits returned are applicable to the specified project. The requesting user must have the Project Read Only role for the specified project. (e.g. 32b6e34b3d91647abb20e7b8)
   --orgId: string # Unique 24-hexadecimal digit string that identifies the Atlas Organization to request rate limits for. When this parameter is provided, the limits returned are applicable to the specified organization. The requesting user must have the Organization Read Only role for the specified organization. (e.g. 32b6e34b3d91647abb20e7b8)
   --userId: string # A string that identifies the Atlas user to request rate limits for. The ID can for example be the Service Account Client ID or the API Public Key. When this parameter is provided, the limits returned are applicable to the specified  user. The requesting user must be the same as the specified user. (e.g. mdb_sa_id_1234567890abcdef12345678)
@@ -14484,11 +14483,11 @@ export def "atlas-skus listSkus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --includeCount: string@bool-completer # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --includeCount: oneof<nothing, bool> # Flag that indicates whether the response returns the total number of items (`totalCount`) in the response. (default: true)
   --itemsPerPage: int # Number of items that the response returns per page. (default: 100)
   --pageNum: int # Number of the page that displays the current set of the total objects that the response returns. (default: 1)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14512,8 +14511,8 @@ export def "atlas-skus get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14536,7 +14535,7 @@ export def "atlas-unauth-control-plane-ip-addresses listControlPlaneIpAddresses"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14561,8 +14560,8 @@ export def "atlas-users createUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -14592,8 +14591,8 @@ export def "atlas-users-by-name get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14620,8 +14619,8 @@ export def "atlas-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --envelope: string@bool-completer # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
-  --pretty: string@bool-completer # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
+  --envelope: oneof<nothing, bool> # Flag that indicates whether Application wraps the response in an `envelope` JSON object. Some API clients cannot access the HTTP response headers or status code. To remediate this, set envelope=true in the query. Endpoints that return a list of results use the results object as an envelope. Application adds the status parameter to the response body. (default: false)
+  --pretty: oneof<nothing, bool> # Flag that indicates whether the response body should be in the prettyprint format. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://app.launchdarkly.com/api/v2"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -491,8 +490,8 @@ export def "flags list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --env: list # By default, each feature will include configurations for each environment. You can filter environments with the env query parameter. For example, setting env=["production"] will restrict the returned configurations to just your production environment.
-  --summary: string@bool-completer # By default in api version >= 1, flags will _not_ include their list of prerequisites, targets or rules.  Set summary=0 to include these fields for each flag returned.
-  --archived: string@bool-completer # When set to 1, only archived flags will be included in the list of flags returned.  By default, archived flags are not included in the list of flags.
+  --summary: oneof<nothing, bool> # By default in api version >= 1, flags will _not_ include their list of prerequisites, targets or rules.  Set summary=0 to include these fields for each flag returned.
+  --archived: oneof<nothing, bool> # When set to 1, only archived flags will be included in the list of flags returned.  By default, archived flags are not included in the list of flags.
   --limit: float # The number of objects to return. Defaults to -1, which returns everything.
   --offset: float # Where to start in the list. This is for use with pagination. For example, an offset of 10 would skip the first 10 items and then return the next limit items.
   --filter: string # A comma-separated list of filters. Each filter is of the form field:value.
@@ -1844,7 +1843,7 @@ export def "tokens list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --showAll: string@bool-completer # If set to true, and the authentication access token has the "Admin" role, personal access tokens for all members will be retrieved.
+  --showAll: oneof<nothing, bool> # If set to true, and the authentication access token has the "Admin" role, personal access tokens for all members will be retrieved.
 ]: nothing -> record<_links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, items: table<_id: string, _links: record, _member: record, creationDate: int, customRoleIds: list, defaultApiVersion: int, inlineRole: list, lastModified: int, lastUsed: int, memberId: string, name: string, ownerId: string, role: string, serviceToken: bool, token: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

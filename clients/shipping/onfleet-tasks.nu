@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://onfleet.com/api/v2"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -110,7 +109,7 @@ export def "tasks createTask" [
   --recipients: list
   --completeAfter: int # format: int64
   --completeBefore: int # format: int64
-  --pickupTask: string@bool-completer
+  --pickupTask: oneof<nothing, bool>
   --dependencies: list
   --notes: string
   --quantity: int
@@ -227,7 +226,7 @@ export def "tasks updateTask" [
   --notes: string
   --completeAfter: int # format: int64
   --completeBefore: int # format: int64
-  --pickupTask: string@bool-completer
+  --pickupTask: oneof<nothing, bool>
   --quantity: int
   --serviceTime: int
   --metadata: list # item shape: {name: string, type: "boolean"|"number"|"string"|"object"|"array", value: any, visibility?: list}
@@ -350,7 +349,7 @@ export def "containers-workers assignTasksToWorker" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   tasks: list
-  --considerDependencies: string@bool-completer
+  --considerDependencies: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.pingone.com/v1" "https://api.pingone.eu/v1" "https://api.pingone.asia/v1" "https://api.pingone.com.au/v1" "https://api.pingone.ca/v1" "https://api.pingone.sg/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -1234,7 +1233,7 @@ export def "environments-flows-enabled updateEnabledByFlowId" [
   --allow-errors(-e) # Return full response without error handling
   --X-Ping-External-Session-ID: string
   --X-Ping-External-Transaction-ID: string
-  --enabled: string@bool-completer
+  --enabled: oneof<nothing, bool>
 ]: any -> record<_links: record<self: record<href: string, name: string, profile: string, title: string, type: string>>, enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1582,7 +1581,7 @@ export def "environments-variables createVariable" [
   name: string
   context: string@context-completer
   dataType: string@dataType-completer
-  --mutable: string@bool-completer
+  --mutable: oneof<nothing, bool>
   --displayName: string
   --flow: record # shape: {id: string}
   --max: int # default: 2000
@@ -1647,7 +1646,7 @@ export def "environments-variables replaceVariableById" [
   name: string
   context: string@context-completer
   dataType: string@dataType-completer
-  --mutable: string@bool-completer
+  --mutable: oneof<nothing, bool>
   --displayName: string
   --flow: record # shape: {id: string}
   --max: int # default: 2000

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.thesmsworks.co.uk/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -357,7 +356,7 @@ export def "messages post" [
   --skip: float # The number of results you would like to ignore before returning messages. In combination with the 'limit' parameter his can be used to page results, so that you can deal with a limited number in your logic at each time. (e.g. 2000)
   --status: string # The status of the messages you would like returned (either 'SENT', 'DELIVERED', 'EXPIRED', 'UNDELIVERABLE', 'REJECTED' or 'INCOMING') (e.g. SENT)
   --body-to: string # The date-time to which you would like matching messages (e.g. Wed Jul 19 2017 20:26:28 GMT+0100 (BST))
-  --unread: string@bool-completer # In queries for incoming messages ('status' is 'INCOMING'), specify whether you explicitly want unread messages (true) or read messages (false). Omit this parameter in other circumstances.
+  --unread: oneof<nothing, bool> # In queries for incoming messages ('status' is 'INCOMING'), specify whether you explicitly want unread messages (true) or read messages (false). Omit this parameter in other circumstances.
 ]: any -> table<batchid: string, content: string, created: string, customerid: string, deliveryreporturl: string, destination: float, failurereason: record<code: float, details: string, permanent: bool>, id: string, identifier: string, keyword: string, messageid: string, modified: string, schedule: string, sender: string, status: string, tag: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -391,7 +390,7 @@ export def "messages-failed post" [
   --skip: float # The number of results you would like to ignore before returning messages. In combination with the 'limit' parameter his can be used to page results, so that you can deal with a limited number in your logic at each time. (e.g. 2000)
   --status: string # The status of the messages you would like returned (either 'SENT', 'DELIVERED', 'EXPIRED', 'UNDELIVERABLE', 'REJECTED' or 'INCOMING') (e.g. SENT)
   --body-to: string # The date-time to which you would like matching messages (e.g. Wed Jul 19 2017 20:26:28 GMT+0100 (BST))
-  --unread: string@bool-completer # In queries for incoming messages ('status' is 'INCOMING'), specify whether you explicitly want unread messages (true) or read messages (false). Omit this parameter in other circumstances.
+  --unread: oneof<nothing, bool> # In queries for incoming messages ('status' is 'INCOMING'), specify whether you explicitly want unread messages (true) or read messages (false). Omit this parameter in other circumstances.
 ]: any -> table<batchid: string, content: string, created: string, customerid: string, deliveryreporturl: string, destination: float, failurereason: record<code: float, details: string, permanent: bool>, id: string, identifier: string, keyword: string, messageid: string, modified: string, schedule: string, sender: string, status: string, tag: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -425,7 +424,7 @@ export def "messages-inbox post" [
   --skip: float # The number of results you would like to ignore before returning messages. In combination with the 'limit' parameter his can be used to page results, so that you can deal with a limited number in your logic at each time. (e.g. 2000)
   --status: string # The status of the messages you would like returned (either 'SENT', 'DELIVERED', 'EXPIRED', 'UNDELIVERABLE', 'REJECTED' or 'INCOMING') (e.g. SENT)
   --body-to: string # The date-time to which you would like matching messages (e.g. Wed Jul 19 2017 20:26:28 GMT+0100 (BST))
-  --unread: string@bool-completer # In queries for incoming messages ('status' is 'INCOMING'), specify whether you explicitly want unread messages (true) or read messages (false). Omit this parameter in other circumstances.
+  --unread: oneof<nothing, bool> # In queries for incoming messages ('status' is 'INCOMING'), specify whether you explicitly want unread messages (true) or read messages (false). Omit this parameter in other circumstances.
 ]: any -> table<batchid: string, content: string, created: string, customerid: string, deliveryreporturl: string, destination: float, failurereason: record<code: float, details: string, permanent: bool>, id: string, identifier: string, keyword: string, messageid: string, modified: string, schedule: string, sender: string, status: string, tag: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

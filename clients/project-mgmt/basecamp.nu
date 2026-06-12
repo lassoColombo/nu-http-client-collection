@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -374,7 +373,7 @@ export def "buckets-webhooksjson CreateWebhook" [
   --allow-errors(-e) # Return full response without error handling
   payload_url: string
   types: list
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
 ]: any -> record<id: int, active: bool, created_at: string, updated_at: string, payload_url: string, types: list<string>, url: string, app_url: string, recent_deliveries: table<id: int, created_at: string, request: record, response: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -616,7 +615,7 @@ export def "card-tables-lists-cardsjson CreateCard" [
   title: string
   --content: string
   --due-on: string
-  --notify: string@bool-completer
+  --notify: oneof<nothing, bool>
 ]: any -> record<id: int, status: string, visible_to_clients: bool, created_at: string, updated_at: string, title: string, inherits_status: bool, type: string, url: string, app_url: string, bookmark_url: string, subscription_url: string, position: int, content: string, description: string, due_on: string, completed: bool, completed_at: string, comments_count: int, comments_url: string, completion_url: string, parent: record<id: int, title: string, type: string, url: string, app_url: string>, bucket: record<id: int, name: string, type: string>, creator: record<id: int, attachable_sgid: string, name: string, email_address: string, personable_type: string, title: string, bio: string, location: string, created_at: string, updated_at: string, admin: bool, owner: bool, client: bool, employee: bool, time_zone: string, avatar_url: string, company: record<id: int, name: string>, can_manage_projects: bool, can_manage_people: bool, can_ping: bool, can_access_timesheet: bool, can_access_hill_charts: bool>, completer: record<id: int, attachable_sgid: string, name: string, email_address: string, personable_type: string, title: string, bio: string, location: string, created_at: string, updated_at: string, admin: bool, owner: bool, client: bool, employee: bool, time_zone: string, avatar_url: string, company: record<id: int, name: string>, can_manage_projects: bool, can_manage_people: bool, can_ping: bool, can_access_timesheet: bool, can_access_hill_charts: bool>, assignees: table<id: int, attachable_sgid: string, name: string, email_address: string, personable_type: string, title: string, bio: string, location: string, created_at: string, updated_at: string, admin: bool, owner: bool, client: bool, employee: bool, time_zone: string, avatar_url: string, company: record, can_manage_projects: bool, can_manage_people: bool, can_ping: bool, can_access_timesheet: bool, can_access_hill_charts: bool>, completion_subscribers: table<id: int, attachable_sgid: string, name: string, email_address: string, personable_type: string, title: string, bio: string, location: string, created_at: string, updated_at: string, admin: bool, owner: bool, client: bool, employee: bool, time_zone: string, avatar_url: string, company: record, can_manage_projects: bool, can_manage_people: bool, can_ping: bool, can_access_timesheet: bool, can_access_hill_charts: bool>, steps: table<id: int, status: string, visible_to_clients: bool, created_at: string, updated_at: string, title: string, inherits_status: bool, type: string, url: string, app_url: string, bookmark_url: string, position: int, due_on: string, completed: bool, completed_at: string, parent: record, bucket: record, creator: record, completer: record, assignees: list, completion_url: string>, boosts_count: int, boosts_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2974,7 +2973,7 @@ export def "questions UpdateQuestion" [
   --allow-errors(-e) # Return full response without error handling
   --title: string
   --schedule: record # shape: {frequency?: string, days?: list, hour?: int, minute?: int, week_instance?: int, week_interval?: int, month_interval?: int, start_date?: string, end_date?: string}
-  --paused: string@bool-completer
+  --paused: oneof<nothing, bool>
 ]: any -> record<id: int, status: string, visible_to_clients: bool, created_at: string, updated_at: string, title: string, inherits_status: bool, type: string, url: string, app_url: string, bookmark_url: string, subscription_url: string, parent: record<id: int, title: string, type: string, url: string, app_url: string>, bucket: record<id: int, name: string, type: string>, creator: record<id: int, attachable_sgid: string, name: string, email_address: string, personable_type: string, title: string, bio: string, location: string, created_at: string, updated_at: string, admin: bool, owner: bool, client: bool, employee: bool, time_zone: string, avatar_url: string, company: record<id: int, name: string>, can_manage_projects: bool, can_manage_people: bool, can_ping: bool, can_access_timesheet: bool, can_access_hill_charts: bool>, paused: bool, schedule: record<frequency: string, days: list<int>, hour: int, minute: int, week_instance: int, week_interval: int, month_interval: int, start_date: string, end_date: string>, answers_count: int, answers_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3099,8 +3098,8 @@ export def "questions-notification-settingsjson UpdateQuestionNotificationSettin
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notify-on-answer: string@bool-completer # Notify when someone answers
-  --digest-include-unanswered: string@bool-completer # Include unanswered in digest
+  --notify-on-answer: oneof<nothing, bool> # Notify when someone answers
+  --digest-include-unanswered: oneof<nothing, bool> # Include unanswered in digest
 ]: any -> record<responding: bool, subscribed: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3292,7 +3291,7 @@ export def "recordings-client-visibilityjson SetClientVisibility" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --visible-to-clients: string@bool-completer
+  --visible-to-clients: oneof<nothing, bool>
 ]: any -> record<id: int, status: string, visible_to_clients: bool, created_at: string, updated_at: string, title: string, inherits_status: bool, type: string, url: string, app_url: string, bookmark_url: string, content: string, comments_count: int, comments_url: string, subscription_url: string, parent: record<id: int, title: string, type: string, url: string, app_url: string>, bucket: record<id: int, name: string, type: string>, creator: record<id: int, attachable_sgid: string, name: string, email_address: string, personable_type: string, title: string, bio: string, location: string, created_at: string, updated_at: string, admin: bool, owner: bool, client: bool, employee: bool, time_zone: string, avatar_url: string, company: record<id: int, name: string>, can_manage_projects: bool, can_manage_people: bool, can_ping: bool, can_access_timesheet: bool, can_access_hill_charts: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3957,8 +3956,8 @@ export def "schedule-entries UpdateScheduleEntry" [
   --ends-at: string
   --description: string
   --participant-ids: list
-  --all-day: string@bool-completer
-  --notify: string@bool-completer
+  --all-day: oneof<nothing, bool>
+  --notify: oneof<nothing, bool>
 ]: any -> record<id: int, status: string, visible_to_clients: bool, created_at: string, updated_at: string, title: string, inherits_status: bool, type: string, url: string, app_url: string, bookmark_url: string, subscription_url: string, comments_count: int, comments_url: string, parent: record<id: int, title: string, type: string, url: string, app_url: string>, bucket: record<id: int, name: string, type: string>, creator: record<id: int, attachable_sgid: string, name: string, email_address: string, personable_type: string, title: string, bio: string, location: string, created_at: string, updated_at: string, admin: bool, owner: bool, client: bool, employee: bool, time_zone: string, avatar_url: string, company: record<id: int, name: string>, can_manage_projects: bool, can_manage_people: bool, can_ping: bool, can_access_timesheet: bool, can_access_hill_charts: bool>, summary: string, description: string, all_day: bool, starts_at: string, ends_at: string, participants: table<id: int, attachable_sgid: string, name: string, email_address: string, personable_type: string, title: string, bio: string, location: string, created_at: string, updated_at: string, admin: bool, owner: bool, client: bool, employee: bool, time_zone: string, avatar_url: string, company: record, can_manage_projects: bool, can_manage_people: bool, can_ping: bool, can_access_timesheet: bool, can_access_hill_charts: bool>, boosts_count: int, boosts_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4032,7 +4031,7 @@ export def "schedules UpdateScheduleSettings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-due-assignments: string@bool-completer
+  --include-due-assignments: oneof<nothing, bool>
 ]: any -> record<id: int, status: string, visible_to_clients: bool, created_at: string, updated_at: string, title: string, inherits_status: bool, type: string, url: string, app_url: string, bookmark_url: string, position: int, bucket: record<id: int, name: string, type: string>, creator: record<id: int, attachable_sgid: string, name: string, email_address: string, personable_type: string, title: string, bio: string, location: string, created_at: string, updated_at: string, admin: bool, owner: bool, client: bool, employee: bool, time_zone: string, avatar_url: string, company: record<id: int, name: string>, can_manage_projects: bool, can_manage_people: bool, can_ping: bool, can_access_timesheet: bool, can_access_hill_charts: bool>, include_due_assignments: bool, entries_count: int, entries_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4089,8 +4088,8 @@ export def "schedules-entriesjson CreateScheduleEntry" [
   ends_at: string
   --description: string
   --participant-ids: list
-  --all-day: string@bool-completer
-  --notify: string@bool-completer
+  --all-day: oneof<nothing, bool>
+  --notify: oneof<nothing, bool>
   --subscriptions: list
 ]: any -> record<id: int, status: string, visible_to_clients: bool, created_at: string, updated_at: string, title: string, inherits_status: bool, type: string, url: string, app_url: string, bookmark_url: string, subscription_url: string, comments_count: int, comments_url: string, parent: record<id: int, title: string, type: string, url: string, app_url: string>, bucket: record<id: int, name: string, type: string>, creator: record<id: int, attachable_sgid: string, name: string, email_address: string, personable_type: string, title: string, bio: string, location: string, created_at: string, updated_at: string, admin: bool, owner: bool, client: bool, employee: bool, time_zone: string, avatar_url: string, company: record<id: int, name: string>, can_manage_projects: bool, can_manage_people: bool, can_ping: bool, can_access_timesheet: bool, can_access_hill_charts: bool>, summary: string, description: string, all_day: bool, starts_at: string, ends_at: string, participants: table<id: int, attachable_sgid: string, name: string, email_address: string, personable_type: string, title: string, bio: string, location: string, created_at: string, updated_at: string, admin: bool, owner: bool, client: bool, employee: bool, time_zone: string, avatar_url: string, company: record, can_manage_projects: bool, can_manage_people: bool, can_ping: bool, can_access_timesheet: bool, can_access_hill_charts: bool>, boosts_count: int, boosts_url: string> {
   let input = $in
@@ -4524,7 +4523,7 @@ export def "todolists-todosjson ListTodos" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --status: string # active|archived|trashed
-  --completed: string@bool-completer
+  --completed: oneof<nothing, bool>
 ]: nothing -> table<id: int, status: string, visible_to_clients: bool, created_at: string, updated_at: string, title: string, inherits_status: bool, type: string, url: string, app_url: string, bookmark_url: string, subscription_url: string, comments_count: int, comments_url: string, position: int, parent: record<id: int, title: string, type: string, url: string, app_url: string>, bucket: record<id: int, name: string, type: string>, creator: record<id: int, attachable_sgid: string, name: string, email_address: string, personable_type: string, title: string, bio: string, location: string, created_at: string, updated_at: string, admin: bool, owner: bool, client: bool, employee: bool, time_zone: string, avatar_url: string, company: record, can_manage_projects: bool, can_manage_people: bool, can_ping: bool, can_access_timesheet: bool, can_access_hill_charts: bool>, description: string, completed: bool, content: string, starts_on: string, due_on: string, assignees: list<record>, completion_subscribers: list<record>, completion_url: string, boosts_count: int, boosts_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4553,7 +4552,7 @@ export def "todolists-todosjson CreateTodo" [
   --description: string
   --assignee-ids: list
   --completion-subscriber-ids: list
-  --notify: string@bool-completer
+  --notify: oneof<nothing, bool>
   --due-on: string
   --starts-on: string
 ]: any -> record<id: int, status: string, visible_to_clients: bool, created_at: string, updated_at: string, title: string, inherits_status: bool, type: string, url: string, app_url: string, bookmark_url: string, subscription_url: string, comments_count: int, comments_url: string, position: int, parent: record<id: int, title: string, type: string, url: string, app_url: string>, bucket: record<id: int, name: string, type: string>, creator: record<id: int, attachable_sgid: string, name: string, email_address: string, personable_type: string, title: string, bio: string, location: string, created_at: string, updated_at: string, admin: bool, owner: bool, client: bool, employee: bool, time_zone: string, avatar_url: string, company: record<id: int, name: string>, can_manage_projects: bool, can_manage_people: bool, can_ping: bool, can_access_timesheet: bool, can_access_hill_charts: bool>, description: string, completed: bool, content: string, starts_on: string, due_on: string, assignees: table<id: int, attachable_sgid: string, name: string, email_address: string, personable_type: string, title: string, bio: string, location: string, created_at: string, updated_at: string, admin: bool, owner: bool, client: bool, employee: bool, time_zone: string, avatar_url: string, company: record, can_manage_projects: bool, can_manage_people: bool, can_ping: bool, can_access_timesheet: bool, can_access_hill_charts: bool>, completion_subscribers: table<id: int, attachable_sgid: string, name: string, email_address: string, personable_type: string, title: string, bio: string, location: string, created_at: string, updated_at: string, admin: bool, owner: bool, client: bool, employee: bool, time_zone: string, avatar_url: string, company: record, can_manage_projects: bool, can_manage_people: bool, can_ping: bool, can_access_timesheet: bool, can_access_hill_charts: bool>, completion_url: string, boosts_count: int, boosts_url: string> {
@@ -4632,7 +4631,7 @@ export def "todos UpdateTodo" [
   --description: string
   --assignee-ids: list
   --completion-subscriber-ids: list
-  --notify: string@bool-completer
+  --notify: oneof<nothing, bool>
   --due-on: string
   --starts-on: string
 ]: any -> record<id: int, status: string, visible_to_clients: bool, created_at: string, updated_at: string, title: string, inherits_status: bool, type: string, url: string, app_url: string, bookmark_url: string, subscription_url: string, comments_count: int, comments_url: string, position: int, parent: record<id: int, title: string, type: string, url: string, app_url: string>, bucket: record<id: int, name: string, type: string>, creator: record<id: int, attachable_sgid: string, name: string, email_address: string, personable_type: string, title: string, bio: string, location: string, created_at: string, updated_at: string, admin: bool, owner: bool, client: bool, employee: bool, time_zone: string, avatar_url: string, company: record<id: int, name: string>, can_manage_projects: bool, can_manage_people: bool, can_ping: bool, can_access_timesheet: bool, can_access_hill_charts: bool>, description: string, completed: bool, content: string, starts_on: string, due_on: string, assignees: table<id: int, attachable_sgid: string, name: string, email_address: string, personable_type: string, title: string, bio: string, location: string, created_at: string, updated_at: string, admin: bool, owner: bool, client: bool, employee: bool, time_zone: string, avatar_url: string, company: record, can_manage_projects: bool, can_manage_people: bool, can_ping: bool, can_access_timesheet: bool, can_access_hill_charts: bool>, completion_subscribers: table<id: int, attachable_sgid: string, name: string, email_address: string, personable_type: string, title: string, bio: string, location: string, created_at: string, updated_at: string, admin: bool, owner: bool, client: bool, employee: bool, time_zone: string, avatar_url: string, company: record, can_manage_projects: bool, can_manage_people: bool, can_ping: bool, can_access_timesheet: bool, can_access_hill_charts: bool>, completion_url: string, boosts_count: int, boosts_url: string> {
@@ -5190,7 +5189,7 @@ export def "webhooks UpdateWebhook" [
   --allow-errors(-e) # Return full response without error handling
   --payload-url: string
   --types: list
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
 ]: any -> record<id: int, active: bool, created_at: string, updated_at: string, payload_url: string, types: list<string>, url: string, app_url: string, recent_deliveries: table<id: int, created_at: string, request: record, response: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

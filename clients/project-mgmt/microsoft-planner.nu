@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://graph.microsoft.com/v1.0"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -190,7 +189,7 @@ export def "groups-planner-plans ListPlan" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -351,7 +350,7 @@ export def "groups-planner-plans-buckets ListBucket" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -503,7 +502,7 @@ export def "groups-planner-plans-buckets-tasks ListTask" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -547,7 +546,7 @@ export def "groups-planner-plans-buckets-tasks CreateTask" [
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
   --createdDateTime: string # Read-only. Date and time at which the task is created. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --dueDateTime: string # Date and time at which the task is due. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
-  --hasDescription: string@bool-completer # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
+  --hasDescription: oneof<nothing, bool> # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
   --orderHint: string # Hint used to order items of this type in a list view. The format is defined as outlined here. (nullable)
   --percentComplete: float # Percentage of task completion. When set to 100, the task is considered completed. (nullable, format: int32)
   --planId: string # Plan ID to which the task belongs. (nullable)
@@ -631,7 +630,7 @@ export def "groups-planner-plans-buckets-tasks UpdateTask" [
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
   --createdDateTime: string # Read-only. Date and time at which the task is created. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --dueDateTime: string # Date and time at which the task is due. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
-  --hasDescription: string@bool-completer # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
+  --hasDescription: oneof<nothing, bool> # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
   --orderHint: string # Hint used to order items of this type in a list view. The format is defined as outlined here. (nullable)
   --percentComplete: float # Percentage of task completion. When set to 100, the task is considered completed. (nullable, format: int32)
   --planId: string # Plan ID to which the task belongs. (nullable)
@@ -1200,7 +1199,7 @@ export def "groups-planner-plans-tasks ListTask" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -1243,7 +1242,7 @@ export def "groups-planner-plans-tasks CreateTask" [
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
   --createdDateTime: string # Read-only. Date and time at which the task is created. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --dueDateTime: string # Date and time at which the task is due. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
-  --hasDescription: string@bool-completer # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
+  --hasDescription: oneof<nothing, bool> # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
   --orderHint: string # Hint used to order items of this type in a list view. The format is defined as outlined here. (nullable)
   --percentComplete: float # Percentage of task completion. When set to 100, the task is considered completed. (nullable, format: int32)
   --planId: string # Plan ID to which the task belongs. (nullable)
@@ -1325,7 +1324,7 @@ export def "groups-planner-plans-tasks UpdateTask" [
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
   --createdDateTime: string # Read-only. Date and time at which the task is created. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --dueDateTime: string # Date and time at which the task is due. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
-  --hasDescription: string@bool-completer # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
+  --hasDescription: oneof<nothing, bool> # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
   --orderHint: string # Hint used to order items of this type in a list view. The format is defined as outlined here. (nullable)
   --percentComplete: float # Percentage of task completion. When set to 100, the task is considered completed. (nullable, format: int32)
   --planId: string # Plan ID to which the task belongs. (nullable)
@@ -1848,7 +1847,7 @@ export def "planner-buckets ListBucket" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -1998,7 +1997,7 @@ export def "planner-buckets-tasks ListTask" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -2040,7 +2039,7 @@ export def "planner-buckets-tasks CreateTask" [
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
   --createdDateTime: string # Read-only. Date and time at which the task is created. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --dueDateTime: string # Date and time at which the task is due. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
-  --hasDescription: string@bool-completer # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
+  --hasDescription: oneof<nothing, bool> # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
   --orderHint: string # Hint used to order items of this type in a list view. The format is defined as outlined here. (nullable)
   --percentComplete: float # Percentage of task completion. When set to 100, the task is considered completed. (nullable, format: int32)
   --planId: string # Plan ID to which the task belongs. (nullable)
@@ -2120,7 +2119,7 @@ export def "planner-buckets-tasks UpdateTask" [
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
   --createdDateTime: string # Read-only. Date and time at which the task is created. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --dueDateTime: string # Date and time at which the task is due. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
-  --hasDescription: string@bool-completer # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
+  --hasDescription: oneof<nothing, bool> # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
   --orderHint: string # Hint used to order items of this type in a list view. The format is defined as outlined here. (nullable)
   --percentComplete: float # Percentage of task completion. When set to 100, the task is considered completed. (nullable, format: int32)
   --planId: string # Plan ID to which the task belongs. (nullable)
@@ -2573,7 +2572,7 @@ export def "planner-plans ListPlan" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -2734,7 +2733,7 @@ export def "planner-plans-buckets ListBucket" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -2881,7 +2880,7 @@ export def "planner-plans-buckets-tasks ListTask" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -2924,7 +2923,7 @@ export def "planner-plans-buckets-tasks CreateTask" [
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
   --createdDateTime: string # Read-only. Date and time at which the task is created. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --dueDateTime: string # Date and time at which the task is due. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
-  --hasDescription: string@bool-completer # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
+  --hasDescription: oneof<nothing, bool> # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
   --orderHint: string # Hint used to order items of this type in a list view. The format is defined as outlined here. (nullable)
   --percentComplete: float # Percentage of task completion. When set to 100, the task is considered completed. (nullable, format: int32)
   --planId: string # Plan ID to which the task belongs. (nullable)
@@ -3006,7 +3005,7 @@ export def "planner-plans-buckets-tasks UpdateTask" [
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
   --createdDateTime: string # Read-only. Date and time at which the task is created. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --dueDateTime: string # Date and time at which the task is due. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
-  --hasDescription: string@bool-completer # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
+  --hasDescription: oneof<nothing, bool> # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
   --orderHint: string # Hint used to order items of this type in a list view. The format is defined as outlined here. (nullable)
   --percentComplete: float # Percentage of task completion. When set to 100, the task is considered completed. (nullable, format: int32)
   --planId: string # Plan ID to which the task belongs. (nullable)
@@ -3559,7 +3558,7 @@ export def "planner-plans-tasks ListTask" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -3601,7 +3600,7 @@ export def "planner-plans-tasks CreateTask" [
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
   --createdDateTime: string # Read-only. Date and time at which the task is created. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --dueDateTime: string # Date and time at which the task is due. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
-  --hasDescription: string@bool-completer # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
+  --hasDescription: oneof<nothing, bool> # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
   --orderHint: string # Hint used to order items of this type in a list view. The format is defined as outlined here. (nullable)
   --percentComplete: float # Percentage of task completion. When set to 100, the task is considered completed. (nullable, format: int32)
   --planId: string # Plan ID to which the task belongs. (nullable)
@@ -3681,7 +3680,7 @@ export def "planner-plans-tasks UpdateTask" [
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
   --createdDateTime: string # Read-only. Date and time at which the task is created. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --dueDateTime: string # Date and time at which the task is due. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
-  --hasDescription: string@bool-completer # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
+  --hasDescription: oneof<nothing, bool> # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
   --orderHint: string # Hint used to order items of this type in a list view. The format is defined as outlined here. (nullable)
   --percentComplete: float # Percentage of task completion. When set to 100, the task is considered completed. (nullable, format: int32)
   --planId: string # Plan ID to which the task belongs. (nullable)
@@ -4134,7 +4133,7 @@ export def "planner-tasks ListTask" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -4176,7 +4175,7 @@ export def "planner-tasks CreateTask" [
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
   --createdDateTime: string # Read-only. Date and time at which the task is created. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --dueDateTime: string # Date and time at which the task is due. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
-  --hasDescription: string@bool-completer # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
+  --hasDescription: oneof<nothing, bool> # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
   --orderHint: string # Hint used to order items of this type in a list view. The format is defined as outlined here. (nullable)
   --percentComplete: float # Percentage of task completion. When set to 100, the task is considered completed. (nullable, format: int32)
   --planId: string # Plan ID to which the task belongs. (nullable)
@@ -4257,7 +4256,7 @@ export def "planner-tasks UpdateTask" [
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
   --createdDateTime: string # Read-only. Date and time at which the task is created. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --dueDateTime: string # Date and time at which the task is due. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
-  --hasDescription: string@bool-completer # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
+  --hasDescription: oneof<nothing, bool> # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
   --orderHint: string # Hint used to order items of this type in a list view. The format is defined as outlined here. (nullable)
   --percentComplete: float # Percentage of task completion. When set to 100, the task is considered completed. (nullable, format: int32)
   --planId: string # Plan ID to which the task belongs. (nullable)
@@ -4766,7 +4765,7 @@ export def "users-planner-plans ListPlan" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -4927,7 +4926,7 @@ export def "users-planner-plans-buckets ListBucket" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -5079,7 +5078,7 @@ export def "users-planner-plans-buckets-tasks ListTask" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -5123,7 +5122,7 @@ export def "users-planner-plans-buckets-tasks CreateTask" [
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
   --createdDateTime: string # Read-only. Date and time at which the task is created. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --dueDateTime: string # Date and time at which the task is due. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
-  --hasDescription: string@bool-completer # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
+  --hasDescription: oneof<nothing, bool> # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
   --orderHint: string # Hint used to order items of this type in a list view. The format is defined as outlined here. (nullable)
   --percentComplete: float # Percentage of task completion. When set to 100, the task is considered completed. (nullable, format: int32)
   --planId: string # Plan ID to which the task belongs. (nullable)
@@ -5207,7 +5206,7 @@ export def "users-planner-plans-buckets-tasks UpdateTask" [
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
   --createdDateTime: string # Read-only. Date and time at which the task is created. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --dueDateTime: string # Date and time at which the task is due. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
-  --hasDescription: string@bool-completer # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
+  --hasDescription: oneof<nothing, bool> # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
   --orderHint: string # Hint used to order items of this type in a list view. The format is defined as outlined here. (nullable)
   --percentComplete: float # Percentage of task completion. When set to 100, the task is considered completed. (nullable, format: int32)
   --planId: string # Plan ID to which the task belongs. (nullable)
@@ -5776,7 +5775,7 @@ export def "users-planner-plans-tasks ListTask" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -5819,7 +5818,7 @@ export def "users-planner-plans-tasks CreateTask" [
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
   --createdDateTime: string # Read-only. Date and time at which the task is created. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --dueDateTime: string # Date and time at which the task is due. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
-  --hasDescription: string@bool-completer # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
+  --hasDescription: oneof<nothing, bool> # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
   --orderHint: string # Hint used to order items of this type in a list view. The format is defined as outlined here. (nullable)
   --percentComplete: float # Percentage of task completion. When set to 100, the task is considered completed. (nullable, format: int32)
   --planId: string # Plan ID to which the task belongs. (nullable)
@@ -5901,7 +5900,7 @@ export def "users-planner-plans-tasks UpdateTask" [
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
   --createdDateTime: string # Read-only. Date and time at which the task is created. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --dueDateTime: string # Date and time at which the task is due. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
-  --hasDescription: string@bool-completer # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
+  --hasDescription: oneof<nothing, bool> # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
   --orderHint: string # Hint used to order items of this type in a list view. The format is defined as outlined here. (nullable)
   --percentComplete: float # Percentage of task completion. When set to 100, the task is considered completed. (nullable, format: int32)
   --planId: string # Plan ID to which the task belongs. (nullable)
@@ -6369,7 +6368,7 @@ export def "users-planner-tasks ListTask" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -6411,7 +6410,7 @@ export def "users-planner-tasks CreateTask" [
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
   --createdDateTime: string # Read-only. Date and time at which the task is created. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --dueDateTime: string # Date and time at which the task is due. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
-  --hasDescription: string@bool-completer # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
+  --hasDescription: oneof<nothing, bool> # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
   --orderHint: string # Hint used to order items of this type in a list view. The format is defined as outlined here. (nullable)
   --percentComplete: float # Percentage of task completion. When set to 100, the task is considered completed. (nullable, format: int32)
   --planId: string # Plan ID to which the task belongs. (nullable)
@@ -6491,7 +6490,7 @@ export def "users-planner-tasks UpdateTask" [
   --createdBy: record # shape: {application?: record, device?: record, user?: record}
   --createdDateTime: string # Read-only. Date and time at which the task is created. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
   --dueDateTime: string # Date and time at which the task is due. The Timestamp type represents date and time information using ISO 8601 format and is always in UTC time. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z (nullable, format: date-time)
-  --hasDescription: string@bool-completer # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
+  --hasDescription: oneof<nothing, bool> # Read-only. Value is true if the details object of the task has a nonempty description and false otherwise. (nullable)
   --orderHint: string # Hint used to order items of this type in a list view. The format is defined as outlined here. (nullable)
   --percentComplete: float # Percentage of task completion. When set to 100, the task is considered completed. (nullable, format: int32)
   --planId: string # Plan ID to which the task belongs. (nullable)

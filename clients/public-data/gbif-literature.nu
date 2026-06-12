@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.gbif.org/v1" "https://api.gbif-uat.org/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -138,8 +137,8 @@ export def "literature-search search" [
   --gbifProgrammeAcronym: string # GBIF dataset referenced in publication.  *This parameter may be repeated to search for multiple values.* (format: uuid)
   --gbifTaxonKey: list # Key(s) from the GBIF backbone of taxa that are the focus of a paper.  *This parameter may be repeated to search for multiple values.*
   --literatureType: list # Type of literature, e.g. journal article.  *This parameter may be repeated to search for multiple values.*
-  --openAccess: string@bool-completer # Is the publication Open Access?
-  --peerReview: string@bool-completer # Has the publication undergone peer review?
+  --openAccess: oneof<nothing, bool> # Is the publication Open Access?
+  --peerReview: oneof<nothing, bool> # Has the publication undergone peer review?
   --publisher: list # Publisher of journal.  *This parameter may be repeated to search for multiple values.*
   --publishingOrganizationKey: list # Publisher whose dataset is referenced in publication.  *This parameter may be repeated to search for multiple values.*
   --publishingCountry: list # Country of the publisher whose dataset is referenced in publication. Country codes are listed in our [Country enum](https://api.gbif.org/v1/enumeration/country).  *This parameter may be repeated to search for multiple values.*
@@ -153,12 +152,12 @@ export def "literature-search search" [
   --published: string # Date or date range when the publication was published. Format is ISO 8601, e.g., '2024-02-22' or '2024-02-22,2024-03-22'. (format: date-time)
   --discovered: string # Date or date range when the publication was discovered. Format is ISO 8601, e.g., '2024-02-26' or '2024-02-26,2024-03-26'. (format: date-time)
   --modified: string # Date or date range when the publication was discovered. Format is ISO 8601, e.g., '2024-07-26' or '2024-07-26,2024-10-26'. (format: date-time)
-  --hl: string@bool-completer # Set `hl=true` to highlight terms matching the query when in fulltext search fields. The highlight will be an emphasis tag of class `gbifHl`.
+  --hl: oneof<nothing, bool> # Set `hl=true` to highlight terms matching the query when in fulltext search fields. The highlight will be an emphasis tag of class `gbifHl`.
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
   --facet: list # A facet name used to retrieve the most frequent values for a field. This parameter may be repeated to request multiple facets.
   --facetMinCount: int # Used in combination with the facet parameter. Set `facetMinCount={#}` to exclude facets with a count less than `{#}`. (format: int32)
-  --facetMultiselect: string@bool-completer # Used in combination with the facet parameter. Set `facetMultiselect=true` to still return counts for values that are not currently filtered.
+  --facetMultiselect: oneof<nothing, bool> # Used in combination with the facet parameter. Set `facetMultiselect=true` to still return counts for values that are not currently filtered.
   --facetLimit: int # Facet parameters allow paging requests using the parameters facetOffset and facetLimit (format: int32)
   --facetOffset: int # Facet parameters allow paging requests using the parameters facetOffset and facetLimit (format: int32)
   --q: string # Simple full text search parameter. The value for this parameter can be a simple word or a phrase. Wildcards are not supported
@@ -198,8 +197,8 @@ export def "literature-export export" [
   --gbifProgrammeAcronym: string # GBIF dataset referenced in publication.  *This parameter may be repeated to search for multiple values.* (format: uuid)
   --gbifTaxonKey: list # Key(s) from the GBIF backbone of taxa that are the focus of a paper.  *This parameter may be repeated to search for multiple values.*
   --literatureType: list # Type of literature, e.g. journal article.  *This parameter may be repeated to search for multiple values.*
-  --openAccess: string@bool-completer # Is the publication Open Access?
-  --peerReview: string@bool-completer # Has the publication undergone peer review?
+  --openAccess: oneof<nothing, bool> # Is the publication Open Access?
+  --peerReview: oneof<nothing, bool> # Has the publication undergone peer review?
   --publisher: list # Publisher of journal.  *This parameter may be repeated to search for multiple values.*
   --publishingOrganizationKey: list # Publisher whose dataset is referenced in publication.  *This parameter may be repeated to search for multiple values.*
   --publishingCountry: list # Country of the publisher whose dataset is referenced in publication. Country codes are listed in our [Country enum](https://api.gbif.org/v1/enumeration/country).  *This parameter may be repeated to search for multiple values.*

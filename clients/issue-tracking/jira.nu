@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://your-domain.atlassian.net"] }
 def auth-scheme-completer [] { ["bearer" "basic"] }
 
@@ -168,8 +167,8 @@ export def "rest-3-announcement-banner setBanner" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isDismissible: string@bool-completer # Flag indicating if the announcement banner can be dismissed by the user.
-  --isEnabled: string@bool-completer # Flag indicating if the announcement banner is enabled or not.
+  --isDismissible: oneof<nothing, bool> # Flag indicating if the announcement banner can be dismissed by the user.
+  --isEnabled: oneof<nothing, bool> # Flag indicating if the announcement banner is enabled or not.
   --message: string # The text on the announcement banner.
   --visibility: string # Visibility of the announcement banner. Can be public or private.
 ]: any -> any {
@@ -230,8 +229,8 @@ export def "rest-3-app-field-value updateMultipleCustomFieldValues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --generateChangelog: string@bool-completer # Whether to generate a changelog for this update. (default: true)
-  --generateAppEvents: string@bool-completer # Whether to generate app events for this update. Suppresses Forge, Connect, OAuth 2.0, and admin-configured webhooks (registered via the Jira admin UI). Note: Suppressing events means that "issue updated" events will not be emitted for your app or any other apps installed in Jira. This may cause other apps to retain stale data for the updated field, resulting in potentially confusing behaviour. We do not recommend using this flag in a Marketplace app as it may result in incompatibilities with other apps that depend on up-to-date issue data. (default: true)
+  --generateChangelog: oneof<nothing, bool> # Whether to generate a changelog for this update. (default: true)
+  --generateAppEvents: oneof<nothing, bool> # Whether to generate app events for this update. Suppresses Forge, Connect, OAuth 2.0, and admin-configured webhooks (registered via the Jira admin UI). Note: Suppressing events means that "issue updated" events will not be emitted for your app or any other apps installed in Jira. This may cause other apps to retain stale data for the updated field, resulting in potentially confusing behaviour. We do not recommend using this flag in a Marketplace app as it may result in incompatibilities with other apps that depend on up-to-date issue data. (default: true)
   --updates: list # item shape: {customField: string, issueIds: list, value: any}
 ]: any -> any {
   let input = $in
@@ -317,8 +316,8 @@ export def "rest-3-app-field-value updateCustomFieldValue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --generateChangelog: string@bool-completer # Whether to generate a changelog for this update. (default: true)
-  --generateAppEvents: string@bool-completer # Whether to generate app events for this update. Suppresses Forge, Connect, OAuth 2.0, and admin-configured webhooks (registered via the Jira admin UI). Note: Suppressing events means that "issue updated" events will not be emitted for your app or any other apps installed in Jira. This may cause other apps to retain stale data for the updated field, resulting in potentially confusing behaviour. We do not recommend using this flag in a Marketplace app as it may result in incompatibilities with other apps that depend on up-to-date issue data. (default: true)
+  --generateChangelog: oneof<nothing, bool> # Whether to generate a changelog for this update. (default: true)
+  --generateAppEvents: oneof<nothing, bool> # Whether to generate app events for this update. Suppresses Forge, Connect, OAuth 2.0, and admin-configured webhooks (registered via the Jira admin UI). Note: Suppressing events means that "issue updated" events will not be emitted for your app or any other apps installed in Jira. This may cause other apps to retain stale data for the updated field, resulting in potentially confusing behaviour. We do not recommend using this flag in a Marketplace app as it may result in incompatibilities with other apps that depend on up-to-date issue data. (default: true)
   --updates: list # The list of custom field update details. — item shape: {issueIds: list, value: any}
 ]: any -> any {
   let input = $in
@@ -462,7 +461,7 @@ export def "rest-3-attachment-content get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --redirect: string@bool-completer # Whether a redirect is provided for the attachment download. Clients that do not automatically follow redirects can set this to `false` to avoid making multiple requests to download the attachment. (default: true)
+  --redirect: oneof<nothing, bool> # Whether a redirect is provided for the attachment download. Clients that do not automatically follow redirects can set this to `false` to avoid making multiple requests to download the attachment. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -507,8 +506,8 @@ export def "rest-3-attachment-thumbnail get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --redirect: string@bool-completer # Whether a redirect is provided for the attachment download. Clients that do not automatically follow redirects can set this to `false` to avoid making multiple requests to download the attachment. (default: true)
-  --fallbackToDefault: string@bool-completer # Whether a default thumbnail is returned when the requested thumbnail is not found. (default: true)
+  --redirect: oneof<nothing, bool> # Whether a redirect is provided for the attachment download. Clients that do not automatically follow redirects can set this to `false` to avoid making multiple requests to download the attachment. (default: true)
+  --fallbackToDefault: oneof<nothing, bool> # Whether a default thumbnail is returned when the requested thumbnail is not found. (default: true)
   --width: int # The maximum width to scale the thumbnail to. (format: int32)
   --height: int # The maximum height to scale the thumbnail to. (format: int32)
 ]: nothing -> any {
@@ -671,7 +670,7 @@ export def "rest-3-bulk-issues-delete submitBulkDelete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   selectedIssueIdsOrKeys: list # List of issue IDs or keys which are to be bulk deleted. These IDs or keys can be from different projects and issue types.
-  --sendBulkNotification: string@bool-completer # A boolean value that indicates whether to send a bulk change notification when the issues are being deleted.  If `true`, dispatches a bulk notification email to users about the updates. (nullable, default: true)
+  --sendBulkNotification: oneof<nothing, bool> # A boolean value that indicates whether to send a bulk change notification when the issues are being deleted.  If `true`, dispatches a bulk notification email to users about the updates. (nullable, default: true)
 ]: any -> record<taskId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -725,7 +724,7 @@ export def "rest-3-bulk-issues-fields submitBulkEdit" [
   editedFieldsInput: any # An object that defines the values to be updated in specified fields of an issue. The structure and content of this parameter vary depending on the type of field being edited. Although the order is not significant, ensure that field IDs align with those in selectedActions.
   selectedActions: list # List of all the field IDs that are to be bulk edited. Each field ID in this list corresponds to a specific attribute of an issue that is set to be modified in the bulk edit operation. The relevant field ID can be obtained by calling the Bulk Edit Get Fields REST API (documentation available on this page itself).
   selectedIssueIdsOrKeys: list # List of issue IDs or keys which are to be bulk edited. These IDs or keys can be from different projects and issue types.
-  --sendBulkNotification: string@bool-completer # A boolean value that indicates whether to send a bulk change notification when the issues are being edited.  If `true`, dispatches a bulk notification email to users about the updates. (nullable, default: true)
+  --sendBulkNotification: oneof<nothing, bool> # A boolean value that indicates whether to send a bulk change notification when the issues are being edited.  If `true`, dispatches a bulk notification email to users about the updates. (nullable, default: true)
 ]: any -> record<taskId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -750,7 +749,7 @@ export def "rest-3-bulk-issues-move submitBulkMove" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --sendBulkNotification: string@bool-completer # A boolean value that indicates whether to send a bulk change notification when the issues are being moved.  If `true`, dispatches a bulk notification email to users about the updates. (nullable, default: true)
+  --sendBulkNotification: oneof<nothing, bool> # A boolean value that indicates whether to send a bulk change notification when the issues are being moved.  If `true`, dispatches a bulk notification email to users about the updates. (nullable, default: true)
   --targetToSourcesMapping: record # An object representing the mapping of issues and data related to destination entities, like fields and statuses, that are required during a bulk move.  The key is a string that is created by concatenating the following three entities in order, separated by commas. The format is `<project ID or key>,<issueType ID>,<parent ID or key>`. It should be unique across mappings provided in the payload. If you provide multiple mappings for the same key, only one will be processed. However, the operation won't fail, so the error may be hard to track down.   *  ***Destination project*** (Required): ID or key of the project to which the issues are being moved.  *  ***Destination issueType*** (Required): ID of the issueType to which the issues are being moved.  *  ***Destination parent ID or key*** (Optional): ID or key of the issue which will become the parent of the issues being moved. Only required when the destination issueType is a subtask.
 ]: any -> record<taskId: string> {
   let input = $in
@@ -803,7 +802,7 @@ export def "rest-3-bulk-issues-transition submitBulkTransition" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   bulkTransitionInputs: list # List of objects and each object has two properties:   *  Issues that will be bulk transitioned.  *  TransitionId that corresponds to a specific transition of issues that share the same workflow. — item shape: {selectedIssueIdsOrKeys: list, transitionId: string}
-  --sendBulkNotification: string@bool-completer # A boolean value that indicates whether to send a bulk change notification when the issues are being transitioned.  If `true`, dispatches a bulk notification email to users about the updates. (nullable, default: true)
+  --sendBulkNotification: oneof<nothing, bool> # A boolean value that indicates whether to send a bulk change notification when the issues are being transitioned.  If `true`, dispatches a bulk notification email to users about the updates. (nullable, default: true)
 ]: any -> record<taskId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1786,7 +1785,7 @@ export def "rest-3-dashboard createDashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --extendAdminPermissions: string@bool-completer # Whether admin level permissions are used. It should only be true if the user has *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) (default: false)
+  --extendAdminPermissions: oneof<nothing, bool> # Whether admin level permissions are used. It should only be true if the user has *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) (default: false)
   --description: string # The description of the dashboard.
   editPermissions: list # The edit permissions for the dashboard. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
   name: string # The name of the dashboard.
@@ -1819,7 +1818,7 @@ export def "rest-3-dashboard-bulk-edit bulkEditDashboards" [
   action: string@action-completer # Allowed action for bulk edit shareable entity
   --changeOwnerDetails: any # The details of change owner action.
   entityIds: list # The id list of shareable entities to be changed.
-  --extendAdminPermissions: string@bool-completer # Whether the actions are executed by users with Administer Jira global permission.
+  --extendAdminPermissions: oneof<nothing, bool> # Whether the actions are executed by users with Administer Jira global permission.
   --permissionDetails: any # The permission details to be changed.
 ]: any -> record<action: string, entityErrors: record> {
   let input = $in
@@ -1927,7 +1926,7 @@ export def "rest-3-dashboard-gadget addGadget" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --color: string # The color of the gadget. Should be one of `blue`, `red`, `yellow`, `green`, `cyan`, `purple`, `gray`, or `white`.
-  --ignoreUriAndModuleKeyValidation: string@bool-completer # Whether to ignore the validation of module key and URI. For example, when a gadget is created that is a part of an application that isn't installed.
+  --ignoreUriAndModuleKeyValidation: oneof<nothing, bool> # Whether to ignore the validation of module key and URI. For example, when a gadget is created that is a part of an application that isn't installed.
   --moduleKey: string # The module key of the gadget type. Can't be provided with `uri`.
   --position: any # The position of the gadget. When the gadget is placed into the position, other gadgets in the same column are moved down to accommodate it.
   --title: string # The title of the gadget.
@@ -2153,7 +2152,7 @@ export def "rest-3-dashboard updateDashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --extendAdminPermissions: string@bool-completer # Whether admin level permissions are used. It should only be true if the user has *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) (default: false)
+  --extendAdminPermissions: oneof<nothing, bool> # Whether admin level permissions are used. It should only be true if the user has *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) (default: false)
   --description: string # The description of the dashboard.
   editPermissions: list # The edit permissions for the dashboard. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
   name: string # The name of the dashboard.
@@ -2186,7 +2185,7 @@ export def "rest-3-dashboard-copy copyDashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --extendAdminPermissions: string@bool-completer # Whether admin level permissions are used. It should only be true if the user has *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) (default: false)
+  --extendAdminPermissions: oneof<nothing, bool> # Whether admin level permissions are used. It should only be true if the user has *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) (default: false)
   --description: string # The description of the dashboard.
   editPermissions: list # The edit permissions for the dashboard. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
   name: string # The name of the dashboard.
@@ -2584,8 +2583,8 @@ export def "rest-3-field-context get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isAnyIssueType: string@bool-completer # Whether to return contexts that apply to all issue types.
-  --isGlobalContext: string@bool-completer # Whether to return contexts that apply to all projects.
+  --isAnyIssueType: oneof<nothing, bool> # Whether to return contexts that apply to all issue types.
+  --isGlobalContext: oneof<nothing, bool> # Whether to return contexts that apply to all projects.
   --contextId: list # The list of context IDs. To include multiple contexts, separate IDs with ampersand: `contextId=10000&contextId=10001`.
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
@@ -2886,7 +2885,7 @@ export def "rest-3-field-context-option get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --optionId: int # The ID of the option. (format: int64)
-  --onlyOptions: string@bool-completer # Whether only options are returned. (default: false)
+  --onlyOptions: oneof<nothing, bool> # Whether only options are returned. (default: false)
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 100)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<disabled: bool, id: string, optionId: string, value: string>> {
@@ -3341,8 +3340,8 @@ export def "rest-3-field-option-issue replaceIssueFieldOption" [
   --allow-errors(-e) # Return full response without error handling
   --replaceWith: int # The ID of the option that will replace the currently selected option. (format: int64)
   --jql: string # A JQL query that specifies the issues to be updated. For example, *project=10000*.
-  --overrideScreenSecurity: string@bool-completer # Whether screen security is overridden to enable hidden fields to be edited. Available to Connect and Forge app users with admin permission. (default: false)
-  --overrideEditableFlag: string@bool-completer # Whether screen security is overridden to enable uneditable fields to be edited. Available to Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
+  --overrideScreenSecurity: oneof<nothing, bool> # Whether screen security is overridden to enable hidden fields to be edited. Available to Connect and Forge app users with admin permission. (default: false)
+  --overrideEditableFlag: oneof<nothing, bool> # Whether screen security is overridden to enable uneditable fields to be edited. Available to Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3436,7 +3435,7 @@ export def "rest-3-fieldconfiguration get" [
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --id: list # The list of field configuration IDs. To include multiple IDs, provide an ampersand-separated list. For example, `id=10000&id=10001`.
-  --isDefault: string@bool-completer # If *true* returns default field configurations only. (default: false)
+  --isDefault: oneof<nothing, bool> # If *true* returns default field configurations only. (default: false)
   --qp-query: string # The query string used to match against field configuration names and descriptions. (default: )
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<description: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3847,10 +3846,10 @@ export def "rest-3-filter createFilter" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --expand: string # Use [expand](#expansion) to include additional information about filter in the response. This parameter accepts a comma-separated list. Expand options include:   *  `sharedUsers` Returns the users that the filter is shared with. This includes users that can browse projects that the filter is shared with. If you don't specify `sharedUsers`, then the `sharedUsers` object is returned but it doesn't list any users. The list of users returned is limited to 1000, to access additional users append `[start-index:end-index]` to the expand request. For example, to access the next 1000 users, use `?expand=sharedUsers[1001:2000]`.  *  `subscriptions` Returns the users that are subscribed to the filter. If you don't specify `subscriptions`, the `subscriptions` object is returned but it doesn't list any subscriptions. The list of subscriptions returned is limited to 1000, to access additional subscriptions append `[start-index:end-index]` to the expand request. For example, to access the next 1000 subscriptions, use `?expand=subscriptions[1001:2000]`.
-  --overrideSharePermissions: string@bool-completer # EXPERIMENTAL: Whether share permissions are overridden to enable filters with any share permissions to be created. Available to users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
+  --overrideSharePermissions: oneof<nothing, bool> # EXPERIMENTAL: Whether share permissions are overridden to enable filters with any share permissions to be created. Available to users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
   --description: string # A description of the filter.
   --editPermissions: list # The groups and projects that can edit the filter. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
-  --favourite: string@bool-completer # Whether the filter is selected as a favorite.
+  --favourite: oneof<nothing, bool> # Whether the filter is selected as a favorite.
   --jql: string # The JQL query for the filter. For example, *project = SSP AND issuetype = Bug*.
   name: string # The name of the filter. Must be unique.
   --sharePermissions: list # The groups and projects that the filter is shared with. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
@@ -3949,7 +3948,7 @@ export def "rest-3-filter-my get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --expand: string # Use [expand](#expansion) to include additional information about filter in the response. This parameter accepts a comma-separated list. Expand options include:   *  `sharedUsers` Returns the users that the filter is shared with. This includes users that can browse projects that the filter is shared with. If you don't specify `sharedUsers`, then the `sharedUsers` object is returned but it doesn't list any users. The list of users returned is limited to 1000, to access additional users append `[start-index:end-index]` to the expand request. For example, to access the next 1000 users, use `?expand=sharedUsers[1001:2000]`.  *  `subscriptions` Returns the users that are subscribed to the filter. If you don't specify `subscriptions`, the `subscriptions` object is returned but it doesn't list any subscriptions. The list of subscriptions returned is limited to 1000, to access additional subscriptions append `[start-index:end-index]` to the expand request. For example, to access the next 1000 subscriptions, use `?expand=subscriptions[1001:2000]`.
-  --includeFavourites: string@bool-completer # Include the user's favorite filters in the response. (default: false)
+  --includeFavourites: oneof<nothing, bool> # Include the user's favorite filters in the response. (default: false)
 ]: nothing -> table<approximateLastUsed: string, description: string, editPermissions: list<record>, favourite: bool, favouritedCount: int, id: string, jql: string, name: string, owner: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, searchUrl: string, self: string, sharePermissions: list<record>, sharedUsers: record<end_index: int, items: list, max_results: int, size: int, start_index: int>, subscriptions: record<end_index: int, items: list, max_results: int, size: int, start_index: int>, viewUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3983,8 +3982,8 @@ export def "rest-3-filter-search get" [
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --expand: string # Use [expand](#expansion) to include additional information about filter in the response. This parameter accepts a comma-separated list. Expand options include:   *  `description` Returns the description of the filter.  *  `favourite` Returns an indicator of whether the user has set the filter as a favorite.  *  `favouritedCount` Returns a count of how many users have set this filter as a favorite.  *  `jql` Returns the JQL query that the filter uses.  *  `owner` Returns the owner of the filter.  *  `searchUrl` Returns a URL to perform the filter's JQL query.  *  `sharePermissions` Returns the share permissions defined for the filter.  *  `editPermissions` Returns the edit permissions defined for the filter.  *  `isWritable` Returns whether the current user has permission to edit the filter.  *  `approximateLastUsed` \[Experimental\] Returns the approximate date and time when the filter was last evaluated.  *  `subscriptions` Returns the users that are subscribed to the filter.  *  `viewUrl` Returns a URL to view the filter.
-  --overrideSharePermissions: string@bool-completer # EXPERIMENTAL: Whether share permissions are overridden to enable filters with any share permissions to be returned. Available to users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
-  --isSubstringMatch: string@bool-completer # When `true` this will perform a case-insensitive substring match for the provided `filterName`. When `false` the filter name will be searched using [full text search syntax](https://support.atlassian.com/jira-software-cloud/docs/search-for-issues-using-the-text-field/). (default: false)
+  --overrideSharePermissions: oneof<nothing, bool> # EXPERIMENTAL: Whether share permissions are overridden to enable filters with any share permissions to be returned. Available to users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
+  --isSubstringMatch: oneof<nothing, bool> # When `true` this will perform a case-insensitive substring match for the provided `filterName`. When `false` the filter name will be searched using [full text search syntax](https://support.atlassian.com/jira-software-cloud/docs/search-for-issues-using-the-text-field/). (default: false)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<approximateLastUsed: string, description: string, editPermissions: list, expand: string, favourite: bool, favouritedCount: int, id: string, jql: string, name: string, owner: record, searchUrl: string, self: string, sharePermissions: list, subscriptions: list, viewUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4031,7 +4030,7 @@ export def "rest-3-filter get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --expand: string # Use [expand](#expansion) to include additional information about filter in the response. This parameter accepts a comma-separated list. Expand options include:   *  `sharedUsers` Returns the users that the filter is shared with. This includes users that can browse projects that the filter is shared with. If you don't specify `sharedUsers`, then the `sharedUsers` object is returned but it doesn't list any users. The list of users returned is limited to 1000, to access additional users append `[start-index:end-index]` to the expand request. For example, to access the next 1000 users, use `?expand=sharedUsers[1001:2000]`.  *  `subscriptions` Returns the users that are subscribed to the filter. If you don't specify `subscriptions`, the `subscriptions` object is returned but it doesn't list any subscriptions. The list of subscriptions returned is limited to 1000, to access additional subscriptions append `[start-index:end-index]` to the expand request. For example, to access the next 1000 subscriptions, use `?expand=subscriptions[1001:2000]`.
-  --overrideSharePermissions: string@bool-completer # EXPERIMENTAL: Whether share permissions are overridden to enable filters with any share permissions to be returned. Available to users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
+  --overrideSharePermissions: oneof<nothing, bool> # EXPERIMENTAL: Whether share permissions are overridden to enable filters with any share permissions to be returned. Available to users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
 ]: nothing -> record<approximateLastUsed: string, description: string, editPermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, favourite: bool, favouritedCount: int, id: string, jql: string, name: string, owner: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, searchUrl: string, self: string, sharePermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, sharedUsers: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>, subscriptions: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>, viewUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4058,10 +4057,10 @@ export def "rest-3-filter updateFilter" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --expand: string # Use [expand](#expansion) to include additional information about filter in the response. This parameter accepts a comma-separated list. Expand options include:   *  `sharedUsers` Returns the users that the filter is shared with. This includes users that can browse projects that the filter is shared with. If you don't specify `sharedUsers`, then the `sharedUsers` object is returned but it doesn't list any users. The list of users returned is limited to 1000, to access additional users append `[start-index:end-index]` to the expand request. For example, to access the next 1000 users, use `?expand=sharedUsers[1001:2000]`.  *  `subscriptions` Returns the users that are subscribed to the filter. If you don't specify `subscriptions`, the `subscriptions` object is returned but it doesn't list any subscriptions. The list of subscriptions returned is limited to 1000, to access additional subscriptions append `[start-index:end-index]` to the expand request. For example, to access the next 1000 subscriptions, use `?expand=subscriptions[1001:2000]`.
-  --overrideSharePermissions: string@bool-completer # EXPERIMENTAL: Whether share permissions are overridden to enable the addition of any share permissions to filters. Available to users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
+  --overrideSharePermissions: oneof<nothing, bool> # EXPERIMENTAL: Whether share permissions are overridden to enable the addition of any share permissions to filters. Available to users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
   --description: string # A description of the filter.
   --editPermissions: list # The groups and projects that can edit the filter. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
-  --favourite: string@bool-completer # Whether the filter is selected as a favorite.
+  --favourite: oneof<nothing, bool> # Whether the filter is selected as a favorite.
   --jql: string # The JQL query for the filter. For example, *project = SSP AND issuetype = Bug*.
   name: string # The name of the filter. Must be unique.
   --sharePermissions: list # The groups and projects that the filter is shared with. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
@@ -4469,7 +4468,7 @@ export def "rest-3-group-member get" [
   --allow-errors(-e) # Return full response without error handling
   --groupname: string # As a group's name can change, use of `groupId` is recommended to identify a group.   The name of the group. This parameter cannot be used with the `groupId` parameter.
   --groupId: string # The ID of the group. This parameter cannot be used with the `groupName` parameter.
-  --includeInactiveUsers: string@bool-completer # Include inactive users. (default: false)
+  --includeInactiveUsers: oneof<nothing, bool> # Include inactive users. (default: false)
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
   --maxResults: int # The maximum number of items to return per page (number should be between 1 and 50). (format: int32, default: 50)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<accountId: string, accountType: string, active: bool, avatarUrls: record, displayName: string, emailAddress: string, key: string, name: string, self: string, timeZone: string>> {
@@ -4554,7 +4553,7 @@ export def "rest-3-groups-picker findGroups" [
   --exclude: list # As a group's name can change, use of `excludeGroupIds` is recommended to identify a group.   A group to exclude from the result. To exclude multiple groups, provide an ampersand-separated list. For example, `exclude=group1&exclude=group2`. This parameter cannot be used with the `excludeGroupIds` parameter.
   --excludeId: list # A group ID to exclude from the result. To exclude multiple groups, provide an ampersand-separated list. For example, `excludeId=group1-id&excludeId=group2-id`. This parameter cannot be used with the `excludeGroups` parameter.
   --maxResults: int # The maximum number of groups to return. The maximum number of groups that can be returned is limited by the system property `jira.ajax.autocomplete.limit`. (format: int32)
-  --caseInsensitive: string@bool-completer # Whether the search for groups should be case insensitive. (default: false)
+  --caseInsensitive: oneof<nothing, bool> # Whether the search for groups should be case insensitive. (default: false)
   --userName: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
 ]: nothing -> record<groups: table<avatarUrl: string, groupId: string, html: string, labels: list, managedBy: string, name: string, usageType: string>, header: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -4580,13 +4579,13 @@ export def "rest-3-groupuserpicker findUsersAndGroups" [
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string # The search string.
   --maxResults: int # The maximum number of items to return in each list. (format: int32, default: 50)
-  --showAvatar: string@bool-completer # Whether the user avatar should be returned. If an invalid value is provided, the default value is used. (default: false)
+  --showAvatar: oneof<nothing, bool> # Whether the user avatar should be returned. If an invalid value is provided, the default value is used. (default: false)
   --fieldId: string # The custom field ID of the field this request is for.
   --projectId: list # The ID of a project that returned users and groups must have permission to view. To include multiple projects, provide an ampersand-separated list. For example, `projectId=10000&projectId=10001`. This parameter is only used when `fieldId` is present.
   --issueTypeId: list # The ID of an issue type that returned users and groups must have permission to view. To include multiple issue types, provide an ampersand-separated list. For example, `issueTypeId=10000&issueTypeId=10001`. Special values, such as `-1` (all standard issue types) and `-2` (all subtask issue types), are supported. This parameter is only used when `fieldId` is present.
   --avatarSize: string@avatarSize-completer # The size of the avatar to return. If an invalid value is provided, the default value is used. (default: xsmall)
-  --caseInsensitive: string@bool-completer # Whether the search for groups should be case insensitive. (default: false)
-  --excludeConnectAddons: string@bool-completer # Whether Connect app users and groups should be excluded from the search results. If an invalid value is provided, the default value is used. (default: false)
+  --caseInsensitive: oneof<nothing, bool> # Whether the search for groups should be case insensitive. (default: false)
+  --excludeConnectAddons: oneof<nothing, bool> # Whether Connect app users and groups should be excluded from the search results. If an invalid value is provided, the default value is used. (default: false)
 ]: nothing -> record<groups: record<groups: list<record>, header: string, total: int>, users: record<header: string, total: int, users: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4631,7 +4630,7 @@ export def "rest-3-issue createIssue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --updateHistory: string@bool-completer # Whether the project in which the issue is created is added to the user's **Recently viewed** project list, as shown under **Projects** in Jira. When provided, the issue type and request type are added to the user's history for a project. These values are then used to provide defaults on the issue create screen. (default: false)
+  --updateHistory: oneof<nothing, bool> # Whether the project in which the issue is created is added to the user's **Recently viewed** project list, as shown under **Projects** in Jira. When provided, the issue type and request type are added to the user's history for a project. These values are then used to provide defaults on the issue create screen. (default: false)
   --body-fields: record # List of issue screen fields to update, specifying the sub-field to update and its value for each field. This field provides a straightforward option when setting a sub-field. When multiple sub-fields or other operations are required, use `update`. Fields included in here cannot be included in `update`.
   --historyMetadata: any # Additional issue history details.
   --properties: list # Details of issue properties to be add or update. — item shape: {key?: string, value?: any}
@@ -4740,7 +4739,7 @@ export def "rest-3-issue-bulkfetch bulkFetchIssues" [
   --allow-errors(-e) # Return full response without error handling
   --expand: list # Use [expand](#expansion) to include additional information about issues in the response. Note that, unlike the majority of instances where `expand` is specified, `expand` is defined as a list of values. The expand options are:   *  `renderedFields` Returns field values rendered in HTML format.  *  `names` Returns the display name of each field.  *  `schema` Returns the schema describing a field type.  *  `transitions` Returns all possible transitions for the issue.  *  `operations` Returns all possible operations for the issue.  *  `editmeta` Returns information about how each field can be edited.  *  `changelog` Returns a list of recent updates to an issue, sorted by date, starting from the most recent. This returns a maximum of 40 changelogs. If you require more, please refer to [Bulk fetch changelogs](#api-rest-api-3-changelog-bulkfetch-post).  *  `versionedRepresentations` Instead of `fields`, returns `versionedRepresentations` a JSON array containing each version of a field's value, with the highest numbered item representing the most recent version.
   --body-fields: list # A list of fields to return for each issue, use it to retrieve a subset of fields. This parameter accepts a comma-separated list. Expand options include:   *  `*all` Returns all fields.  *  `*navigable` Returns navigable fields.  *  Any issue field, prefixed with a minus to exclude.  The default is `*navigable`.  Examples:   *  `summary,comment` Returns the summary and comments fields only.  *  `-description` Returns all navigable (default) fields except description.  *  `*all,-comment` Returns all fields except comments.  Multiple `fields` parameters can be included in a request.  Note: All navigable fields are returned by default. This differs from [GET issue](#api-rest-api-3-issue-issueIdOrKey-get) where the default is all fields.
-  --fieldsByKeys: string@bool-completer # Reference fields by their key (rather than ID). The default is `false`.
+  --fieldsByKeys: oneof<nothing, bool> # Reference fields by their key (rather than ID). The default is `false`.
   issueIdsOrKeys: list # An array of issue IDs or issue keys to fetch. You can mix issue IDs and keys in the same query.
   --properties: list # A list of issue property keys of issue properties to be included in the results. A maximum of 5 issue property keys can be specified.
 ]: any -> record<issueErrors: table<errorMessage: string, id: string>, issues: table<changelog: record, editmeta: record, expand: string, fields: record, fieldsToInclude: record, id: string, key: string, names: record, operations: record, properties: record, renderedFields: record, schema: record, self: string, transitions: list, versionedRepresentations: record>> {
@@ -4847,7 +4846,7 @@ export def "rest-3-issue-limit-report get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isReturningKeys: string@bool-completer # Return issue keys instead of issue ids in the response.  Usage: Add `?isReturningKeys=true` to the end of the path to request issue keys. (default: false)
+  --isReturningKeys: oneof<nothing, bool> # Return issue keys instead of issue ids in the response.  Usage: Add `?isReturningKeys=true` to the end of the path to request issue keys. (default: false)
 ]: nothing -> record<issuesApproachingLimit: record, issuesBreachingLimit: record, limits: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4874,8 +4873,8 @@ export def "rest-3-issue-picker get" [
   --currentJQL: string # A JQL query defining a list of issues to search for the query term. Note that `username` and `userkey` cannot be used as search terms for this parameter, due to privacy reasons. Use `accountId` instead.
   --currentIssueKey: string # The key of an issue to exclude from search results. For example, the issue the user is viewing when they perform this query.
   --currentProjectId: string # The ID of a project that suggested issues must belong to.
-  --showSubTasks: string@bool-completer # Indicate whether to include subtasks in the suggestions list.
-  --showSubTaskParent: string@bool-completer # When `currentIssueKey` is a subtask, whether to include the parent issue in the suggestions if it matches the query.
+  --showSubTasks: oneof<nothing, bool> # Indicate whether to include subtasks in the suggestions list.
+  --showSubTaskParent: oneof<nothing, bool> # When `currentIssueKey` is a subtask, whether to include the parent issue in the suggestions if it matches the query.
 ]: nothing -> record<sections: table<id: string, issues: list, label: string, msg: string, sub: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5081,11 +5080,11 @@ export def "rest-3-issue get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: list # A list of fields to return for the issue. This parameter accepts a comma-separated list. Use it to retrieve a subset of fields. Allowed values:   *  `*all` Returns all fields.  *  `*navigable` Returns navigable fields.  *  Any issue field, prefixed with a minus to exclude.  Examples:   *  `summary,comment` Returns only the summary and comments fields.  *  `-description` Returns all (default) fields except description.  *  `*navigable,-comment` Returns all navigable fields except comment.  This parameter may be specified multiple times. For example, `fields=field1,field2& fields=field3`.  Note: All fields are returned by default. This differs from [Search for issues using JQL (GET)](#api-rest-api-3-search-get) and [Search for issues using JQL (POST)](#api-rest-api-3-search-post) where the default is all navigable fields.
-  --fieldsByKeys: string@bool-completer # Whether fields in `fields` are referenced by keys rather than IDs. This parameter is useful where fields have been added by a connect app and a field's key may differ from its ID. (default: false)
+  --fieldsByKeys: oneof<nothing, bool> # Whether fields in `fields` are referenced by keys rather than IDs. This parameter is useful where fields have been added by a connect app and a field's key may differ from its ID. (default: false)
   --expand: string # Use [expand](#expansion) to include additional information about the issues in the response. This parameter accepts a comma-separated list. Expand options include:   *  `renderedFields` Returns field values rendered in HTML format.  *  `names` Returns the display name of each field.  *  `schema` Returns the schema describing a field type.  *  `transitions` Returns all possible transitions for the issue.  *  `editmeta` Returns information about how each field can be edited.  *  `changelog` Returns a list of recent updates to an issue, sorted by date, starting from the most recent.  *  `versionedRepresentations` Returns a JSON array for each version of a field's value, with the highest number representing the most recent version. Note: When included in the request, the `fields` parameter is ignored.
   --properties: list # A list of issue properties to return for the issue. This parameter accepts a comma-separated list. Allowed values:   *  `*all` Returns all issue properties.  *  Any issue property key, prefixed with a minus to exclude.  Examples:   *  `*all` Returns all properties.  *  `*all,-prop1` Returns all properties except `prop1`.  *  `prop1,prop2` Returns `prop1` and `prop2` properties.  This parameter may be specified multiple times. For example, `properties=prop1,prop2& properties=prop3`.
-  --updateHistory: string@bool-completer # Whether the project in which the issue is created is added to the user's **Recently viewed** project list, as shown under **Projects** in Jira. This also populates the [JQL issues search](#api-rest-api-3-search-get) `lastViewed` field. (default: false)
-  --failFast: string@bool-completer # Whether to fail the request quickly in case of an error while loading fields for an issue. For `failFast=true`, if one field fails, the entire operation fails. For `failFast=false`, the operation will continue even if a field fails. It will return a valid response, but without values for the failed field(s). (default: false)
+  --updateHistory: oneof<nothing, bool> # Whether the project in which the issue is created is added to the user's **Recently viewed** project list, as shown under **Projects** in Jira. This also populates the [JQL issues search](#api-rest-api-3-search-get) `lastViewed` field. (default: false)
+  --failFast: oneof<nothing, bool> # Whether to fail the request quickly in case of an error while loading fields for an issue. For `failFast=true`, if one field fails, the entire operation fails. For `failFast=false`, the operation will continue even if a field fails. It will return a valid response, but without values for the failed field(s). (default: false)
 ]: nothing -> record<changelog: record<histories: list<record>, maxResults: int, startAt: int, total: int>, editmeta: record<fields: record>, expand: string, fields: record, fieldsToInclude: record<actuallyIncluded: list<string>, excluded: list<string>, included: list<string>>, id: string, key: string, names: record, operations: record<linkGroups: list<record>>, properties: record, renderedFields: record, schema: record, self: string, transitions: table<expand: string, fields: record, hasScreen: bool, id: string, isAvailable: bool, isConditional: bool, isGlobal: bool, isInitial: bool, looped: bool, name: string, to: record>, versionedRepresentations: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5110,10 +5109,10 @@ export def "rest-3-issue editIssue" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notifyUsers: string@bool-completer # Whether a notification email about the issue update is sent to all watchers. To disable the notification, administer Jira or administer project permissions are required. If the user doesn't have the necessary permission the request is ignored. (default: true)
-  --overrideScreenSecurity: string@bool-completer # Whether screen security is overridden to enable hidden fields to be edited. Available to Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
-  --overrideEditableFlag: string@bool-completer # Whether screen security is overridden to enable uneditable fields to be edited. Available to Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
-  --returnIssue: string@bool-completer # Whether the response should contain the issue with fields edited in this request. The returned issue will have the same format as in the [Get issue API](#api-rest-api-3-issue-issueidorkey-get). (default: false)
+  --notifyUsers: oneof<nothing, bool> # Whether a notification email about the issue update is sent to all watchers. To disable the notification, administer Jira or administer project permissions are required. If the user doesn't have the necessary permission the request is ignored. (default: true)
+  --overrideScreenSecurity: oneof<nothing, bool> # Whether screen security is overridden to enable hidden fields to be edited. Available to Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
+  --overrideEditableFlag: oneof<nothing, bool> # Whether screen security is overridden to enable uneditable fields to be edited. Available to Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
+  --returnIssue: oneof<nothing, bool> # Whether the response should contain the issue with fields edited in this request. The returned issue will have the same format as in the [Get issue API](#api-rest-api-3-issue-issueidorkey-get). (default: false)
   --expand: string # The Get issue API expand parameter to use in the response if the `returnIssue` parameter is `true`. (default: )
   --body-fields: record # List of issue screen fields to update, specifying the sub-field to update and its value for each field. This field provides a straightforward option when setting a sub-field. When multiple sub-fields or other operations are required, use `update`. Fields included in here cannot be included in `update`.
   --historyMetadata: any # Additional issue history details.
@@ -5358,8 +5357,8 @@ export def "rest-3-issue-comment updateComment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notifyUsers: string@bool-completer # Whether users are notified when a comment is updated. (default: true)
-  --overrideEditableFlag: string@bool-completer # Whether screen security is overridden to enable uneditable fields to be edited. Available to Connect app users with the *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
+  --notifyUsers: oneof<nothing, bool> # Whether users are notified when a comment is updated. (default: true)
+  --overrideEditableFlag: oneof<nothing, bool> # Whether screen security is overridden to enable uneditable fields to be edited. Available to Connect app users with the *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
   --expand: string # Use [expand](#expansion) to include additional information about comments in the response. This parameter accepts `renderedBody`, which returns the comment body rendered in HTML.
   --body-body: any # The comment text in [Atlassian Document Format](https://developer.atlassian.com/cloud/jira/platform/apis/document/structure/).
   --properties: list # A list of comment properties. Optional on create and update. — item shape: {key?: string, value?: any}
@@ -5390,8 +5389,8 @@ export def "rest-3-issue-editmeta get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --overrideScreenSecurity: string@bool-completer # Whether hidden fields are returned. Available to Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
-  --overrideEditableFlag: string@bool-completer # Whether non-editable fields are returned. Available to Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
+  --overrideScreenSecurity: oneof<nothing, bool> # Whether hidden fields are returned. Available to Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
+  --overrideEditableFlag: oneof<nothing, bool> # Whether non-editable fields are returned. Available to Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
 ]: nothing -> record<fields: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5694,9 +5693,9 @@ export def "rest-3-issue-transitions get" [
   --allow-errors(-e) # Return full response without error handling
   --expand: string # Use [expand](#expansion) to include additional information about transitions in the response. This parameter accepts `transitions.fields`, which returns information about the fields in the transition screen for each transition. Fields hidden from the screen are not returned. Use this information to populate the `fields` and `update` fields in [Transition issue](#api-rest-api-3-issue-issueIdOrKey-transitions-post).
   --transitionId: string # The ID of the transition.
-  --skipRemoteOnlyCondition: string@bool-completer # Whether transitions with the condition *Hide From User Condition* are included in the response. Available to Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
-  --includeUnavailableTransitions: string@bool-completer # Whether details of transitions that fail a condition are included in the response (default: false)
-  --sortByOpsBarAndStatus: string@bool-completer # Whether the transitions are sorted by ops-bar sequence value first then category order (Todo, In Progress, Done) or only by ops-bar sequence value. (default: false)
+  --skipRemoteOnlyCondition: oneof<nothing, bool> # Whether transitions with the condition *Hide From User Condition* are included in the response. Available to Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
+  --includeUnavailableTransitions: oneof<nothing, bool> # Whether details of transitions that fail a condition are included in the response (default: false)
+  --sortByOpsBarAndStatus: oneof<nothing, bool> # Whether the transitions are sorted by ops-bar sequence value first then category order (Todo, In Progress, Done) or only by ops-bar sequence value. (default: false)
 ]: nothing -> record<expand: string, transitions: table<expand: string, fields: record, hasScreen: bool, id: string, isAvailable: bool, isConditional: bool, isGlobal: bool, isInitial: bool, looped: bool, name: string, to: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5890,7 +5889,7 @@ export def "rest-3-issue-worklog bulkDeleteWorklogs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --adjustEstimate: string@adjustEstimate-completer # Defines how to update the issue's time estimate, the options are:   *  `leave` Leaves the estimate unchanged.  *  `auto` Reduces the estimate by the aggregate value of `timeSpent` across all worklogs being deleted. (default: auto)
-  --overrideEditableFlag: string@bool-completer # Whether the work log entries should be removed to the issue even if the issue is not editable, because jira.issue.editable set to false or missing. For example, the issue is closed. Connect and Forge app users with admin permission can use this flag. (default: false)
+  --overrideEditableFlag: oneof<nothing, bool> # Whether the work log entries should be removed to the issue even if the issue is not editable, because jira.issue.editable set to false or missing. For example, the issue is closed. Connect and Forge app users with admin permission can use this flag. (default: false)
   ids: list # A list of worklog IDs.
 ]: any -> any {
   let input = $in
@@ -5947,12 +5946,12 @@ export def "rest-3-issue-worklog addWorklog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notifyUsers: string@bool-completer # Whether users watching the issue are notified by email. (default: true)
+  --notifyUsers: oneof<nothing, bool> # Whether users watching the issue are notified by email. (default: true)
   --adjustEstimate: string@adjustEstimate-completer-1 # Defines how to update the issue's time estimate, the options are:   *  `new` Sets the estimate to a specific value, defined in `newEstimate`.  *  `leave` Leaves the estimate unchanged.  *  `manual` Reduces the estimate by amount specified in `reduceBy`.  *  `auto` Reduces the estimate by the value of `timeSpent` in the worklog. (default: auto)
   --newEstimate: string # The value to set as the issue's remaining time estimate, as days (\#d), hours (\#h), or minutes (\#m or \#). For example, *2d*. Required when `adjustEstimate` is `new`.
   --reduceBy: string # The amount to reduce the issue's remaining estimate by, as days (\#d), hours (\#h), or minutes (\#m). For example, *2d*. Required when `adjustEstimate` is `manual`.
   --expand: string # Use [expand](#expansion) to include additional information about work logs in the response. This parameter accepts `properties`, which returns worklog properties. (default: )
-  --overrideEditableFlag: string@bool-completer # Whether the worklog entry should be added to the issue even if the issue is not editable, because jira.issue.editable set to false or missing. For example, the issue is closed. Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) can use this flag. (default: false)
+  --overrideEditableFlag: oneof<nothing, bool> # Whether the worklog entry should be added to the issue even if the issue is not editable, because jira.issue.editable set to false or missing. For example, the issue is closed. Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) can use this flag. (default: false)
   --comment: any # A comment about the worklog in [Atlassian Document Format](https://developer.atlassian.com/cloud/jira/platform/apis/document/structure/). Optional when creating or updating a worklog.
   --properties: list # Details of properties for the worklog. Optional when creating or updating a worklog. — item shape: {key?: string, value?: any}
   --started: string # The datetime on which the worklog effort was started. Required when creating a worklog. Optional when updating a worklog. (format: date-time)
@@ -5986,7 +5985,7 @@ export def "rest-3-issue-worklog-move bulkMoveWorklogs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --adjustEstimate: string@adjustEstimate-completer # Defines how to update the issues' time estimate, the options are:   *  `leave` Leaves the estimate unchanged.  *  `auto` Reduces the estimate by the aggregate value of `timeSpent` across all worklogs being moved in the source issue, and increases it in the destination issue. (default: auto)
-  --overrideEditableFlag: string@bool-completer # Whether the work log entry should be moved to and from the issues even if the issues are not editable, because jira.issue.editable set to false or missing. For example, the issue is closed. Connect and Forge app users with admin permission can use this flag. (default: false)
+  --overrideEditableFlag: oneof<nothing, bool> # Whether the work log entry should be moved to and from the issues even if the issues are not editable, because jira.issue.editable set to false or missing. For example, the issue is closed. Connect and Forge app users with admin permission can use this flag. (default: false)
   --ids: list # A list of worklog IDs.
   --body-issueIdOrKey: string # The issue id or key of the destination issue
 ]: any -> any {
@@ -6016,11 +6015,11 @@ export def "rest-3-issue-worklog delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notifyUsers: string@bool-completer # Whether users watching the issue are notified by email. (default: true)
+  --notifyUsers: oneof<nothing, bool> # Whether users watching the issue are notified by email. (default: true)
   --adjustEstimate: string@adjustEstimate-completer-1 # Defines how to update the issue's time estimate, the options are:   *  `new` Sets the estimate to a specific value, defined in `newEstimate`.  *  `leave` Leaves the estimate unchanged.  *  `manual` Increases the estimate by amount specified in `increaseBy`.  *  `auto` Reduces the estimate by the value of `timeSpent` in the worklog. (default: auto)
   --newEstimate: string # The value to set as the issue's remaining time estimate, as days (\#d), hours (\#h), or minutes (\#m or \#). For example, *2d*. Required when `adjustEstimate` is `new`.
   --increaseBy: string # The amount to increase the issue's remaining estimate by, as days (\#d), hours (\#h), or minutes (\#m or \#). For example, *2d*. Required when `adjustEstimate` is `manual`.
-  --overrideEditableFlag: string@bool-completer # Whether the work log entry should be added to the issue even if the issue is not editable, because jira.issue.editable set to false or missing. For example, the issue is closed. Connect and Forge app users with admin permission can use this flag. (default: false)
+  --overrideEditableFlag: oneof<nothing, bool> # Whether the work log entry should be added to the issue even if the issue is not editable, because jira.issue.editable set to false or missing. For example, the issue is closed. Connect and Forge app users with admin permission can use this flag. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6071,11 +6070,11 @@ export def "rest-3-issue-worklog updateWorklog" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --notifyUsers: string@bool-completer # Whether users watching the issue are notified by email. (default: true)
+  --notifyUsers: oneof<nothing, bool> # Whether users watching the issue are notified by email. (default: true)
   --adjustEstimate: string@adjustEstimate-completer-1 # Defines how to update the issue's time estimate, the options are:   *  `new` Sets the estimate to a specific value, defined in `newEstimate`.  *  `leave` Leaves the estimate unchanged.  *  `auto` Updates the estimate by the difference between the original and updated value of `timeSpent` or `timeSpentSeconds`. (default: auto)
   --newEstimate: string # The value to set as the issue's remaining time estimate, as days (\#d), hours (\#h), or minutes (\#m or \#). For example, *2d*. Required when `adjustEstimate` is `new`.
   --expand: string # Use [expand](#expansion) to include additional information about worklogs in the response. This parameter accepts `properties`, which returns worklog properties. (default: )
-  --overrideEditableFlag: string@bool-completer # Whether the worklog should be added to the issue even if the issue is not editable. For example, because the issue is closed. Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) can use this flag. (default: false)
+  --overrideEditableFlag: oneof<nothing, bool> # Whether the worklog should be added to the issue even if the issue is not editable. For example, because the issue is closed. Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) can use this flag. (default: false)
   --comment: any # A comment about the worklog in [Atlassian Document Format](https://developer.atlassian.com/cloud/jira/platform/apis/document/structure/). Optional when creating or updating a worklog.
   --properties: list # Details of properties for the worklog. Optional when creating or updating a worklog. — item shape: {key?: string, value?: any}
   --started: string # The datetime on which the worklog effort was started. Required when creating a worklog. Optional when updating a worklog. (format: date-time)
@@ -6486,7 +6485,7 @@ export def "rest-3-issuesecurityschemes-level get" [
   --maxResults: string # The maximum number of items to return per page. (default: 50)
   --id: list # The list of issue security scheme level IDs. To include multiple issue security levels, separate IDs with an ampersand: `id=10000&id=10001`.
   --schemeId: list # The list of issue security scheme IDs. To include multiple issue security schemes, separate IDs with an ampersand: `schemeId=10000&schemeId=10001`.
-  --onlyDefault: string@bool-completer # When set to true, returns multiple default levels for each security scheme containing a default. If you provide scheme and level IDs not associated with the default, returns an empty page. The default value is false. (default: false)
+  --onlyDefault: oneof<nothing, bool> # When set to true, returns multiple default levels for each security scheme containing a default. If you provide scheme and level IDs not associated with the default, returns an empty page. The default value is false. (default: false)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<description: string, id: string, isDefault: bool, issueSecuritySchemeId: string, name: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7731,7 +7730,7 @@ export def "rest-3-jql-autocompletedata post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeCollapsedFields: string@bool-completer # Include collapsed fields for fields that have non-unique names. (default: false)
+  --includeCollapsedFields: oneof<nothing, bool> # Include collapsed fields for fields that have non-unique names. (default: false)
   --projectIds: list # List of project IDs used to filter the visible field details returned.
 ]: any -> record<jqlReservedWords: list<string>, visibleFieldNames: table<auto: string, cfid: string, deprecated: string, deprecatedSearcherKey: string, displayName: string, operators: list, orderable: string, searchable: string, types: list, value: string>, visibleFunctionNames: table<displayName: string, isList: string, supportsListAndSingleValueOperators: string, types: list, value: string>> {
   let input = $in
@@ -7810,7 +7809,7 @@ export def "rest-3-jql-function-computation updatePrecomputations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --skipNotFoundPrecomputations: string@bool-completer # default: false
+  --skipNotFoundPrecomputations: oneof<nothing, bool> # default: false
   --values: list # item shape: {error?: string, id: string, value?: string}
 ]: any -> record<notFoundPrecomputationIDs: list<string>> {
   let input = $in
@@ -8212,7 +8211,7 @@ export def "rest-3-notificationscheme list" [
   --maxResults: string # The maximum number of items to return per page. (default: 50)
   --id: list # The list of notification schemes IDs to be filtered by
   --projectId: list # The list of projects IDs to be filtered by
-  --onlyDefault: string@bool-completer # When set to true, returns only the default notification scheme. If you provide project IDs not associated with the default, returns an empty page. The default value is false. (default: false)
+  --onlyDefault: oneof<nothing, bool> # When set to true, returns only the default notification scheme. If you provide project IDs not associated with the default, returns an empty page. The default value is false. (default: false)
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts a comma-separated list. Expand options include:   *  `all` Returns all expandable information  *  `field` Returns information about any custom fields assigned to receive an event  *  `group` Returns information about any groups assigned to receive an event  *  `notificationSchemeEvents` Returns a list of event associations. This list is returned for all expandable information  *  `projectRole` Returns information about any project roles assigned to receive an event  *  `user` Returns information about any users assigned to receive an event
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<description: string, expand: string, id: int, name: string, notificationSchemeEvents: list, projects: list, scope: record, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -8720,8 +8719,8 @@ export def "rest-3-plans-plan list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeTrashed: string@bool-completer # Whether to include trashed plans in the results. (default: false)
-  --includeArchived: string@bool-completer # Whether to include archived plans in the results. (default: false)
+  --includeTrashed: oneof<nothing, bool> # Whether to include trashed plans in the results. (default: false)
+  --includeArchived: oneof<nothing, bool> # Whether to include archived plans in the results. (default: false)
   --cursor: string # The cursor to start from. If not provided, the first page will be returned. (default: )
   --maxResults: int # The maximum number of plans to return per page. The maximum value is 50. The default value is 50. (format: int32, default: 50)
 ]: nothing -> record<cursor: string, last: bool, nextPageCursor: string, size: int, total: int, values: table<id: string, issueSources: list, name: string, scenarioId: string, status: string>> {
@@ -8750,7 +8749,7 @@ export def "rest-3-plans-plan createPlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --useGroupId: string@bool-completer # Whether to accept group IDs instead of group names. Group names are deprecated. (default: false)
+  --useGroupId: oneof<nothing, bool> # Whether to accept group IDs instead of group names. Group names are deprecated. (default: false)
   --crossProjectReleases: list # The cross-project releases to include in the plan. — item shape: {name: string, releaseIds?: list}
   --customFields: list # The custom fields for the plan. — item shape: {customFieldId: int, filter?: bool}
   --exclusionRules: any # The exclusion rules for the plan.
@@ -8785,7 +8784,7 @@ export def "rest-3-plans-plan get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --useGroupId: string@bool-completer # Whether to return group IDs instead of group names. Group names are deprecated. (default: false)
+  --useGroupId: oneof<nothing, bool> # Whether to return group IDs instead of group names. Group names are deprecated. (default: false)
 ]: nothing -> record<crossProjectReleases: table<name: string, releaseIds: list>, customFields: table<customFieldId: int, filter: bool>, exclusionRules: record<issueIds: list<int>, issueTypeIds: list<int>, numberOfDaysToShowCompletedIssues: int, releaseIds: list<int>, workStatusCategoryIds: list<int>, workStatusIds: list<int>>, id: int, issueSources: table<type: string, value: int>, lastSaved: string, leadAccountId: string, name: string, permissions: table<holder: record, type: string>, scheduling: record<dependencies: string, endDate: record<dateCustomFieldId: int, type: string>, estimation: string, inferredDates: string, startDate: record<dateCustomFieldId: int, type: string>>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -8809,7 +8808,7 @@ export def "rest-3-plans-plan updatePlan" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --useGroupId: string@bool-completer # Whether to accept group IDs instead of group names. Group names are deprecated. (default: false)
+  --useGroupId: oneof<nothing, bool> # Whether to accept group IDs instead of group names. Group names are deprecated. (default: false)
   --body: record
 ]: any -> any {
   let input = $in
@@ -9248,7 +9247,7 @@ export def "rest-3-priority-search searchPriorities" [
   --id: list # The list of priority IDs. To include multiple IDs, provide an ampersand-separated list. For example, `id=2&id=3`.
   --projectId: list # The list of projects IDs. To include multiple IDs, provide an ampersand-separated list. For example, `projectId=10010&projectId=10111`.
   --priorityName: string # The name of priority to search for. (default: )
-  --onlyDefault: string@bool-completer # Whether only the default priority is returned. (default: false)
+  --onlyDefault: oneof<nothing, bool> # Whether only the default priority is returned. (default: false)
   --expand: string # Use `schemes` to return the associated priority schemes for each priority. Limited to returning first 15 priority schemes per priority. (default: )
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<avatarId: int, description: string, iconUrl: string, id: string, isDefault: bool, name: string, schemes: record, self: string, statusColor: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -9353,7 +9352,7 @@ export def "rest-3-priorityscheme get" [
   --priorityId: list # A set of priority IDs to filter by. To include multiple IDs, provide an ampersand-separated list. For example, `priorityId=10000&priorityId=10001`.
   --schemeId: list # A set of priority scheme IDs. To include multiple IDs, provide an ampersand-separated list. For example, `schemeId=10000&schemeId=10001`.
   --schemeName: string # The name of scheme to search for. (default: )
-  --onlyDefault: string@bool-completer # Whether only the default priority is returned. (default: false)
+  --onlyDefault: oneof<nothing, bool> # Whether only the default priority is returned. (default: false)
   --orderBy: string@orderBy-completer-7 # The ordering to return the priority schemes by. (default: +name)
   --expand: string # A comma separated list of additional information to return. "priorities" will return priorities associated with the priority scheme. "projects" will return projects associated with the priority scheme. `expand=priorities,projects`.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<default: bool, defaultPriorityId: string, description: string, id: string, isDefault: bool, name: string, priorities: record, projects: record, self: string>> {
@@ -9918,7 +9917,7 @@ export def "rest-3-project delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enableUndo: string@bool-completer # Whether this project is placed in the Jira recycle bin where it will be available for restoration. (default: true)
+  --enableUndo: oneof<nothing, bool> # Whether this project is placed in the Jira recycle bin where it will be available for restoration. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -10510,7 +10509,7 @@ export def "rest-3-project-role get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --excludeInactiveUsers: string@bool-completer # Exclude inactive users. (default: false)
+  --excludeInactiveUsers: oneof<nothing, bool> # Exclude inactive users. (default: false)
 ]: nothing -> record<actors: table<actorGroup: record, actorUser: record, avatarUrl: string, displayName: string, id: int, name: string, type: string>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, translatedName: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -10590,9 +10589,9 @@ export def "rest-3-project-roledetails get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --currentMember: string@bool-completer # Whether the roles should be filtered to include only those the user is assigned to. (default: false)
-  --excludeConnectAddons: string@bool-completer # default: false
-  --excludeOtherServiceRoles: string@bool-completer # Do not return the default JSM company-managed space from CSM spaces, or the default CSM roles from JSM spaces. (default: false)
+  --currentMember: oneof<nothing, bool> # Whether the roles should be filtered to include only those the user is assigned to. (default: false)
+  --excludeConnectAddons: oneof<nothing, bool> # default: false
+  --excludeOtherServiceRoles: oneof<nothing, bool> # Do not return the default JSM company-managed space from CSM spaces, or the default CSM roles from JSM spaces. (default: false)
 ]: nothing -> table<admin: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record, type: string>, self: string, translatedName: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -11247,7 +11246,7 @@ export def "rest-3-resolution-search searchResolutions" [
   --startAt: string # The index of the first item to return in a page of results (page offset). (default: 0)
   --maxResults: string # The maximum number of items to return per page. (default: 50)
   --id: list # The list of resolutions IDs to be filtered out
-  --onlyDefault: string@bool-completer # When set to true, return default only, when IDs provided, if none of them is default, return empty page. Default value is false (default: false)
+  --onlyDefault: oneof<nothing, bool> # When set to true, return default only, when IDs provided, if none of them is default, return empty page. Default value is false (default: false)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<default: bool, description: string, iconUrl: string, id: string, name: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -11866,7 +11865,7 @@ export def "rest-3-screens-tabs-fields addScreenTabField" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --skipFieldAssociation: string@bool-completer # default: false
+  --skipFieldAssociation: oneof<nothing, bool> # default: false
   fieldId: string # The ID of the field to add.
 ]: any -> record<id: string, name: string> {
   let input = $in
@@ -12084,8 +12083,8 @@ export def "rest-3-search searchForIssuesUsingJql" [
   --qp-fields: list # A list of fields to return for each issue, use it to retrieve a subset of fields. This parameter accepts a comma-separated list. Expand options include:   *  `*all` Returns all fields.  *  `*navigable` Returns navigable fields.  *  Any issue field, prefixed with a minus to exclude.  Examples:   *  `summary,comment` Returns only the summary and comments fields.  *  `-description` Returns all navigable (default) fields except description.  *  `*all,-comment` Returns all fields except comments.  This parameter may be specified multiple times. For example, `fields=field1,field2&fields=field3`.  Note: All navigable fields are returned by default. This differs from [GET issue](#api-rest-api-3-issue-issueIdOrKey-get) where the default is all fields.
   --expand: string # Use [expand](#expansion) to include additional information about issues in the response. This parameter accepts a comma-separated list. Expand options include:   *  `renderedFields` Returns field values rendered in HTML format.  *  `names` Returns the display name of each field.  *  `schema` Returns the schema describing a field type.  *  `transitions` Returns all possible transitions for the issue.  *  `operations` Returns all possible operations for the issue.  *  `editmeta` Returns information about how each field can be edited.  *  `changelog` Returns a list of recent updates to an issue, sorted by date, starting from the most recent.  *  `versionedRepresentations` Instead of `fields`, returns `versionedRepresentations` a JSON array containing each version of a field's value, with the highest numbered item representing the most recent version.
   --properties: list # A list of issue property keys for issue properties to include in the results. This parameter accepts a comma-separated list. Multiple properties can also be provided using an ampersand separated list. For example, `properties=prop1,prop2&properties=prop3`. A maximum of 5 issue property keys can be specified.
-  --fieldsByKeys: string@bool-completer # Reference fields by their key (rather than ID). (default: false)
-  --failFast: string@bool-completer # Whether to fail the request quickly in case of an error while loading fields for an issue. For `failFast=true`, if one field fails, the entire operation fails. For `failFast=false`, the operation will continue even if a field fails. It will return a valid response, but without values for the failed field(s). (default: false)
+  --fieldsByKeys: oneof<nothing, bool> # Reference fields by their key (rather than ID). (default: false)
+  --failFast: oneof<nothing, bool> # Whether to fail the request quickly in case of an error while loading fields for an issue. For `failFast=true`, if one field fails, the entire operation fails. For `failFast=false`, the operation will continue even if a field fails. It will return a valid response, but without values for the failed field(s). (default: false)
 ]: nothing -> record<expand: string, issues: table<changelog: record, editmeta: record, expand: string, fields: record, fieldsToInclude: record, id: string, key: string, names: record, operations: record, properties: record, renderedFields: record, schema: record, self: string, transitions: list, versionedRepresentations: record>, maxResults: int, names: record, schema: record, startAt: int, total: int, warningMessages: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -12112,7 +12111,7 @@ export def "rest-3-search searchForIssuesUsingJqlPost" [
   --allow-errors(-e) # Return full response without error handling
   --expand: list # Use [expand](#expansion) to include additional information about issues in the response. Note that, unlike the majority of instances where `expand` is specified, `expand` is defined as a list of values. The expand options are:   *  `renderedFields` Returns field values rendered in HTML format.  *  `names` Returns the display name of each field.  *  `schema` Returns the schema describing a field type.  *  `transitions` Returns all possible transitions for the issue.  *  `operations` Returns all possible operations for the issue.  *  `editmeta` Returns information about how each field can be edited.  *  `changelog` Returns a list of recent updates to an issue, sorted by date, starting from the most recent.  *  `versionedRepresentations` Instead of `fields`, returns `versionedRepresentations` a JSON array containing each version of a field's value, with the highest numbered item representing the most recent version.
   --body-fields: list # A list of fields to return for each issue, use it to retrieve a subset of fields. This parameter accepts a comma-separated list. Expand options include:   *  `*all` Returns all fields.  *  `*navigable` Returns navigable fields.  *  Any issue field, prefixed with a minus to exclude.  The default is `*navigable`.  Examples:   *  `summary,comment` Returns the summary and comments fields only.  *  `-description` Returns all navigable (default) fields except description.  *  `*all,-comment` Returns all fields except comments.  Multiple `fields` parameters can be included in a request.  Note: All navigable fields are returned by default. This differs from [GET issue](#api-rest-api-3-issue-issueIdOrKey-get) where the default is all fields.
-  --fieldsByKeys: string@bool-completer # Reference fields by their key (rather than ID). The default is `false`.
+  --fieldsByKeys: oneof<nothing, bool> # Reference fields by their key (rather than ID). The default is `false`.
   --jql: string # A [JQL](https://confluence.atlassian.com/x/egORLQ) expression.
   --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
   --properties: list # A list of up to 5 issue properties to include in the results. This parameter accepts a comma-separated list.
@@ -12173,8 +12172,8 @@ export def "rest-3-search-jql searchAndReconsileIssuesUsingJql" [
   --qp-fields: list # A list of fields to return for each issue, use it to retrieve a subset of fields. This parameter accepts a comma-separated list. Expand options include:   *  `*all` Returns all fields.  *  `*navigable` Returns navigable fields.  *  `id` Returns only issue IDs.  *  Any issue field, prefixed with a minus to exclude.  The default is `id`.  Examples:   *  `summary,comment` Returns only the summary and comments fields only.  *  `-description` Returns all navigable (default) fields except description.  *  `*all,-comment` Returns all fields except comments.  Multiple `fields` parameters can be included in a request.  Note: By default, this resource returns IDs only. This differs from [GET issue](#api-rest-api-3-issue-issueIdOrKey-get) where the default is all fields.
   --expand: string # Use [expand](#expansion) to include additional information about issues in the response. Note that, unlike the majority of instances where `expand` is specified, `expand` is defined as a comma-delimited string of values. The expand options are:   *  `renderedFields` Returns field values rendered in HTML format.  *  `names` Returns the display name of each field.  *  `schema` Returns the schema describing a field type.  *  `transitions` Returns all possible transitions for the issue.  *  `operations` Returns all possible operations for the issue.  *  `editmeta` Returns information about how each field can be edited.  *  `changelog` Returns a list of recent updates to an issue, sorted by date, starting from the most recent.  *  `versionedRepresentations` Instead of `fields`, returns `versionedRepresentations` a JSON array containing each version of a field's value, with the highest numbered item representing the most recent version.  Examples: `"names,changelog"` Returns the display name of each field as well as a list of recent updates to an issue. (e.g. <string>)
   --properties: list # A list of up to 5 issue properties to include in the results. This parameter accepts a comma-separated list.
-  --fieldsByKeys: string@bool-completer # Reference fields by their key (rather than ID). The default is `false`. (default: false)
-  --failFast: string@bool-completer # Fail this request early if we can't retrieve all field data. (default: false)
+  --fieldsByKeys: oneof<nothing, bool> # Reference fields by their key (rather than ID). The default is `false`. (default: false)
+  --failFast: oneof<nothing, bool> # Fail this request early if we can't retrieve all field data. (default: false)
   --reconcileIssues: list # Strong consistency issue ids to be reconciled with search results. Accepts max 50 ids. This list of ids should be consistent with each paginated request across different pages.
 ]: nothing -> record<isLast: bool, issues: table<changelog: record, editmeta: record, expand: string, fields: record, fieldsToInclude: record, id: string, key: string, names: record, operations: record, properties: record, renderedFields: record, schema: record, self: string, transitions: list, versionedRepresentations: record>, names: record, nextPageToken: string, schema: record, warnings: table<details: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -12200,7 +12199,7 @@ export def "rest-3-search-jql searchAndReconsileIssuesUsingJqlPost" [
   --allow-errors(-e) # Return full response without error handling
   --expand: string # Use [expand](#expansion) to include additional information about issues in the response. Note that, unlike the majority of instances where `expand` is specified, `expand` is defined as a comma-delimited string of values. The expand options are:   *  `renderedFields` Returns field values rendered in HTML format.  *  `names` Returns the display name of each field.  *  `schema` Returns the schema describing a field type.  *  `transitions` Returns all possible transitions for the issue.  *  `operations` Returns all possible operations for the issue.  *  `editmeta` Returns information about how each field can be edited.  *  `changelog` Returns a list of recent updates to an issue, sorted by date, starting from the most recent.  *  `versionedRepresentations` Instead of `fields`, returns `versionedRepresentations` a JSON array containing each version of a field's value, with the highest numbered item representing the most recent version.  Examples: `"names,changelog"` Returns the display name of each field as well as a list of recent updates to an issue.
   --body-fields: list # A list of fields to return for each issue. Use it to retrieve a subset of fields. This parameter accepts a comma-separated list. Expand options include:   *  `*all` Returns all fields.  *  `*navigable` Returns navigable fields.  *  `id` Returns only issue IDs.  *  Any issue field, prefixed with a dash to exclude.  The default is `id`.  Examples:   *  `summary,comment` Returns the summary and comments fields only.  *  `*all,-comment` Returns all fields except comments.  Multiple `fields` parameters can be included in a request.  Note: By default, this resource returns IDs only. This differs from [GET issue](#api-rest-api-3-issue-issueIdOrKey-get) where the default is all fields.
-  --fieldsByKeys: string@bool-completer # Reference fields by their key (rather than ID). The default is `false`.
+  --fieldsByKeys: oneof<nothing, bool> # Reference fields by their key (rather than ID). The default is `false`.
   --jql: string # A [JQL](https://confluence.atlassian.com/x/egORLQ) expression. For performance reasons, this parameter requires a bounded query. A bounded query is a query with a search restriction.   *  Example of an unbounded query: `order by key desc`.  *  Example of a bounded query: `assignee = currentUser() order by key`.  Additionally, `orderBy` clause can contain a maximum of 7 fields.
   --maxResults: int # The maximum number of items to return per page. To manage page size, API may return fewer items per page where a large number of fields are requested. The greatest number of items returned per page is achieved when requesting `id` or `key` only. It returns max 5000 issues. (format: int32, default: 50)
   --nextPageToken: string # The token for a page to fetch that is not the first page. The first page has a `nextPageToken` of `null`. Use the `nextPageToken` to fetch the next page of issues.
@@ -13059,7 +13058,7 @@ export def "rest-3-user-assignable-search findAssignableUsers" [
   --startAt: int # The index of the first item to return in a page of results (page offset). (format: int32, default: 0)
   --maxResults: int # The maximum number of items to return. This operation may return less than the maximum number of items even if more are available. The operation fetches users up to the maximum and then, from the fetched users, returns only the users that can be assigned to the issue. (format: int32, default: 50)
   --actionDescriptorId: int # The ID of the transition. (format: int32)
-  --recommend: string@bool-completer # default: false
+  --recommend: oneof<nothing, bool> # default: false
   --accountType: list
   --appType: list
 ]: nothing -> table<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string> {
@@ -13315,11 +13314,11 @@ export def "rest-3-user-picker findUsersForPicker" [
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string # A query string that is matched against user attributes, such as `displayName`, and `emailAddress`, to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*.
   --maxResults: int # The maximum number of items to return. The total number of matched users is returned in `total`. (format: int32, default: 50)
-  --showAvatar: string@bool-completer # Include the URI to the user's avatar. (default: false)
+  --showAvatar: oneof<nothing, bool> # Include the URI to the user's avatar. (default: false)
   --exclude: list # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --excludeAccountIds: list # A list of account IDs to exclude from the search results. This parameter accepts a comma-separated list. Multiple account IDs can also be provided using an ampersand-separated list. For example, `excludeAccountIds=5b10a2844c20165700ede21g,5b10a0effa615349cb016cd8&excludeAccountIds=5b10ac8d82e05b22cc7d4ef5`. Cannot be provided with `exclude`.
   --avatarSize: string
-  --excludeConnectUsers: string@bool-completer # default: false
+  --excludeConnectUsers: oneof<nothing, bool> # default: false
 ]: nothing -> record<header: string, total: int, users: table<accountId: string, accountType: string, avatarUrl: string, displayName: string, html: string, key: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -13606,7 +13605,7 @@ export def "rest-3-version createVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Indicates that the version is archived. Optional when creating or updating a version.
+  --archived: oneof<nothing, bool> # Indicates that the version is archived. Optional when creating or updating a version.
   --description: string # The description of the version. Optional when creating or updating a version. The maximum size is 16,384 bytes.
   --driver: string # The Atlassian account ID of the version driver. Optional when creating or updating a version. If the expand option `driver` is used, returns the Atlassian account ID of the driver.
   --expand: string # Use [expand](em>#expansion) to include additional information about version in the response. This parameter accepts a comma-separated list. Expand options include:   *  `operations` Returns the list of operations available for this version.  *  `issuesstatus` Returns the count of issues in this version for each of the status categories *to do*, *in progress*, *done*, and *unmapped*. The *unmapped* property contains a count of issues with a status other than *to do*, *in progress*, and *done*.  *  `driver` Returns the Atlassian account ID of the version driver.  *  `approvers` Returns a list containing approvers for this version.  Optional for create and update.
@@ -13615,7 +13614,7 @@ export def "rest-3-version createVersion" [
   --project: string # Deprecated. Use `projectId`.
   --projectId: int # The ID of the project to which this version is attached. Required when creating a version. Not applicable when updating a version. (format: int64)
   --releaseDate: string # The release date of the version. Expressed in ISO 8601 format (yyyy-mm-dd). Optional when creating or updating a version. (format: date)
-  --released: string@bool-completer # Indicates that the version is released. If the version is released a request to release again is ignored. Not applicable when creating a version. Optional when updating a version.
+  --released: oneof<nothing, bool> # Indicates that the version is released. If the version is released a request to release again is ignored. Not applicable when creating a version. Optional when updating a version.
   --startDate: string # The start date of the version. Expressed in ISO 8601 format (yyyy-mm-dd). Optional when creating or updating a version. (format: date)
 ]: any -> record<approvers: table<accountId: string, declineReason: string, description: string, status: string>, archived: bool, description: string, driver: string, expand: string, id: string, issuesStatusForFixVersion: record<done: int, inProgress: int, toDo: int, unmapped: int>, moveUnfixedIssuesTo: string, name: string, operations: table<href: string, iconClass: string, id: string, label: string, styleClass: string, title: string, weight: int>, overdue: bool, project: string, projectId: int, releaseDate: string, released: bool, self: string, startDate: string, userReleaseDate: string, userStartDate: string> {
   let input = $in
@@ -13694,7 +13693,7 @@ export def "rest-3-version updateVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --archived: string@bool-completer # Indicates that the version is archived. Optional when creating or updating a version.
+  --archived: oneof<nothing, bool> # Indicates that the version is archived. Optional when creating or updating a version.
   --description: string # The description of the version. Optional when creating or updating a version. The maximum size is 16,384 bytes.
   --driver: string # The Atlassian account ID of the version driver. Optional when creating or updating a version. If the expand option `driver` is used, returns the Atlassian account ID of the driver.
   --expand: string # Use [expand](em>#expansion) to include additional information about version in the response. This parameter accepts a comma-separated list. Expand options include:   *  `operations` Returns the list of operations available for this version.  *  `issuesstatus` Returns the count of issues in this version for each of the status categories *to do*, *in progress*, *done*, and *unmapped*. The *unmapped* property contains a count of issues with a status other than *to do*, *in progress*, and *done*.  *  `driver` Returns the Atlassian account ID of the version driver.  *  `approvers` Returns a list containing approvers for this version.  Optional for create and update.
@@ -13703,7 +13702,7 @@ export def "rest-3-version updateVersion" [
   --project: string # Deprecated. Use `projectId`.
   --projectId: int # The ID of the project to which this version is attached. Required when creating a version. Not applicable when updating a version. (format: int64)
   --releaseDate: string # The release date of the version. Expressed in ISO 8601 format (yyyy-mm-dd). Optional when creating or updating a version. (format: date)
-  --released: string@bool-completer # Indicates that the version is released. If the version is released a request to release again is ignored. Not applicable when creating a version. Optional when updating a version.
+  --released: oneof<nothing, bool> # Indicates that the version is released. If the version is released a request to release again is ignored. Not applicable when creating a version. Optional when updating a version.
   --startDate: string # The start date of the version. Expressed in ISO 8601 format (yyyy-mm-dd). Optional when creating or updating a version. (format: date)
 ]: any -> record<approvers: table<accountId: string, declineReason: string, description: string, status: string>, archived: bool, description: string, driver: string, expand: string, id: string, issuesStatusForFixVersion: record<done: int, inProgress: int, toDo: int, unmapped: int>, moveUnfixedIssuesTo: string, name: string, operations: table<href: string, iconClass: string, id: string, label: string, styleClass: string, title: string, weight: int>, overdue: bool, project: string, projectId: int, releaseDate: string, released: bool, self: string, startDate: string, userReleaseDate: string, userStartDate: string> {
   let input = $in
@@ -14137,7 +14136,7 @@ export def "rest-3-workflow-rule-config get" [
   --keys: list # The transition rule class keys, as defined in the Connect or the Forge app descriptor, of the transition rules to return.
   --workflowNames: list # The list of workflow names to filter by.
   --withTags: list # The list of `tags` to filter by.
-  --draft: string@bool-completer # **Deprecated:** Whether draft or published workflows are returned. If not provided, both workflow types are returned. The 'draft' parameter will be removed from this API on [November 2, 2026](https://developer.atlassian.com/cloud/jira/platform/changelog/#CHANGE-3147).
+  --draft: oneof<nothing, bool> # **Deprecated:** Whether draft or published workflows are returned. If not provided, both workflow types are returned. The 'draft' parameter will be removed from this API on [November 2, 2026](https://developer.atlassian.com/cloud/jira/platform/changelog/#CHANGE-3147).
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts `transition`, which, for each rule, returns information about the transition the rule is assigned to.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<conditions: list, postFunctions: list, validators: list, workflowId: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -14221,7 +14220,7 @@ export def "rest-3-workflow-search get" [
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts a comma-separated list. Expand options include:   *  `transitions` For each workflow, returns information about the transitions inside the workflow.  *  `transitions.rules` For each workflow transition, returns information about its rules. Transitions are included automatically if this expand is requested.  *  `transitions.properties` For each workflow transition, returns information about its properties. Transitions are included automatically if this expand is requested.  *  `statuses` For each workflow, returns information about the statuses inside the workflow.  *  `statuses.properties` For each workflow status, returns information about its properties. Statuses are included automatically if this expand is requested.  *  `default` For each workflow, returns information about whether this is the default workflow.  *  `schemes` For each workflow, returns information about the workflow schemes the workflow is assigned to.  *  `projects` For each workflow, returns information about the projects the workflow is assigned to, through workflow schemes.  *  `hasDraftWorkflow` For each workflow, returns information about whether the workflow has a draft version.  *  `operations` For each workflow, returns information about the actions that can be undertaken on the workflow.
   --queryString: string # String used to perform a case-insensitive partial match with workflow name.
   --orderBy: string@orderBy-completer-11 # [Order](#ordering) the results by a field:   *  `name` Sorts by workflow name.  *  `created` Sorts by create time.  *  `updated` Sorts by update time.
-  --isActive: string@bool-completer # Filters active and inactive workflows.
+  --isActive: oneof<nothing, bool> # Filters active and inactive workflows.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<created: string, description: string, hasDraftWorkflow: bool, id: record, isDefault: bool, operations: record, projects: list, schemes: list, statuses: list, transitions: list, updated: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -14275,7 +14274,7 @@ export def "rest-3-workflow-transitions-properties get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includeReservedKeys: string@bool-completer # Some properties with keys that have the *jira.* prefix are reserved, which means they are not editable. To include these properties in the results, set this parameter to *true*. (default: false)
+  --includeReservedKeys: oneof<nothing, bool> # Some properties with keys that have the *jira.* prefix are reserved, which means they are not editable. To include these properties in the results, set this parameter to *true*. (default: false)
   --key: string # The key of the property being returned, also known as the name of the property. If this parameter is not specified, all properties on the transition are returned.
   --workflowName: string # The name of the workflow that the transition belongs to.
   --workflowMode: string@workflowMode-completer # The workflow status. Set to *live* for active and inactive workflows, or *draft* for draft workflows. (default: live)
@@ -14629,7 +14628,7 @@ export def "rest-3-workflows-search searchWorkflows" [
   --queryString: string # String used to perform a case-insensitive partial match with workflow name.
   --orderBy: string # [Order](#ordering) the results by a field:   *  `name` Sorts by workflow name.  *  `created` Sorts by create time.  *  `updated` Sorts by update time.
   --scope: string # The scope of the workflow. Global for company-managed projects and Project for team-managed projects.
-  --isActive: string@bool-completer # Filters active and inactive workflows.
+  --isActive: oneof<nothing, bool> # Filters active and inactive workflows.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, statuses: table<description: string, id: string, name: string, scope: record, statusCategory: string, statusReference: string>, total: int, values: table<created: string, description: string, id: string, isEditable: bool, loopedTransitionContainerLayout: record, name: string, scope: record, startPointLayout: record, statuses: list, taskId: string, transitions: list, updated: string, version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -14736,7 +14735,7 @@ export def "rest-3-workflowscheme createWorkflowScheme" [
   --description: string # The description of the workflow scheme.
   --issueTypeMappings: record # The issue type to workflow mappings, where each mapping is an issue type ID and workflow name pair. Note that an issue type can only be mapped to one workflow in a workflow scheme.
   --name: string # The name of the workflow scheme. The name must be unique. The maximum length is 255 characters. Required when creating a workflow scheme.
-  --updateDraftIfNeeded: string@bool-completer # Whether to create or update a draft workflow scheme when updating an active workflow scheme. An active workflow scheme is a workflow scheme that is used by at least one project. The following examples show how this property works:   *  Update an active workflow scheme with `updateDraftIfNeeded` set to `true`: If a draft workflow scheme exists, it is updated. Otherwise, a draft workflow scheme is created.  *  Update an active workflow scheme with `updateDraftIfNeeded` set to `false`: An error is returned, as active workflow schemes cannot be updated.  *  Update an inactive workflow scheme with `updateDraftIfNeeded` set to `true`: The workflow scheme is updated, as inactive workflow schemes do not require drafts to update.  Defaults to `false`.
+  --updateDraftIfNeeded: oneof<nothing, bool> # Whether to create or update a draft workflow scheme when updating an active workflow scheme. An active workflow scheme is a workflow scheme that is used by at least one project. The following examples show how this property works:   *  Update an active workflow scheme with `updateDraftIfNeeded` set to `true`: If a draft workflow scheme exists, it is updated. Otherwise, a draft workflow scheme is created.  *  Update an active workflow scheme with `updateDraftIfNeeded` set to `false`: An error is returned, as active workflow schemes cannot be updated.  *  Update an inactive workflow scheme with `updateDraftIfNeeded` set to `true`: The workflow scheme is updated, as inactive workflow schemes do not require drafts to update.  Defaults to `false`.
 ]: any -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -14951,7 +14950,7 @@ export def "rest-3-workflowscheme get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --returnDraftIfExists: string@bool-completer # Returns the workflow scheme's draft rather than scheme itself, if set to true. If the workflow scheme does not have a draft, then the workflow scheme is returned. (default: false)
+  --returnDraftIfExists: oneof<nothing, bool> # Returns the workflow scheme's draft rather than scheme itself, if set to true. If the workflow scheme does not have a draft, then the workflow scheme is returned. (default: false)
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -14979,7 +14978,7 @@ export def "rest-3-workflowscheme updateWorkflowScheme" [
   --description: string # The description of the workflow scheme.
   --issueTypeMappings: record # The issue type to workflow mappings, where each mapping is an issue type ID and workflow name pair. Note that an issue type can only be mapped to one workflow in a workflow scheme.
   --name: string # The name of the workflow scheme. The name must be unique. The maximum length is 255 characters. Required when creating a workflow scheme.
-  --updateDraftIfNeeded: string@bool-completer # Whether to create or update a draft workflow scheme when updating an active workflow scheme. An active workflow scheme is a workflow scheme that is used by at least one project. The following examples show how this property works:   *  Update an active workflow scheme with `updateDraftIfNeeded` set to `true`: If a draft workflow scheme exists, it is updated. Otherwise, a draft workflow scheme is created.  *  Update an active workflow scheme with `updateDraftIfNeeded` set to `false`: An error is returned, as active workflow schemes cannot be updated.  *  Update an inactive workflow scheme with `updateDraftIfNeeded` set to `true`: The workflow scheme is updated, as inactive workflow schemes do not require drafts to update.  Defaults to `false`.
+  --updateDraftIfNeeded: oneof<nothing, bool> # Whether to create or update a draft workflow scheme when updating an active workflow scheme. An active workflow scheme is a workflow scheme that is used by at least one project. The following examples show how this property works:   *  Update an active workflow scheme with `updateDraftIfNeeded` set to `true`: If a draft workflow scheme exists, it is updated. Otherwise, a draft workflow scheme is created.  *  Update an active workflow scheme with `updateDraftIfNeeded` set to `false`: An error is returned, as active workflow schemes cannot be updated.  *  Update an inactive workflow scheme with `updateDraftIfNeeded` set to `true`: The workflow scheme is updated, as inactive workflow schemes do not require drafts to update.  Defaults to `false`.
 ]: any -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -15027,7 +15026,7 @@ export def "rest-3-workflowscheme-default delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --updateDraftIfNeeded: string@bool-completer # Set to true to create or update the draft of a workflow scheme and delete the mapping from the draft, when the workflow scheme cannot be edited. Defaults to `false`.
+  --updateDraftIfNeeded: oneof<nothing, bool> # Set to true to create or update the draft of a workflow scheme and delete the mapping from the draft, when the workflow scheme cannot be edited. Defaults to `false`.
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -15051,7 +15050,7 @@ export def "rest-3-workflowscheme-default get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --returnDraftIfExists: string@bool-completer # Set to `true` to return the default workflow for the workflow scheme's draft rather than scheme itself. If the workflow scheme does not have a draft, then the default workflow for the workflow scheme is returned. (default: false)
+  --returnDraftIfExists: oneof<nothing, bool> # Set to `true` to return the default workflow for the workflow scheme's draft rather than scheme itself. If the workflow scheme does not have a draft, then the default workflow for the workflow scheme is returned. (default: false)
 ]: nothing -> record<updateDraftIfNeeded: bool, workflow: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -15075,7 +15074,7 @@ export def "rest-3-workflowscheme-default updateDefaultWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --updateDraftIfNeeded: string@bool-completer # Whether a draft workflow scheme is created or updated when updating an active workflow scheme. The draft is updated with the new default workflow. Defaults to `false`.
+  --updateDraftIfNeeded: oneof<nothing, bool> # Whether a draft workflow scheme is created or updated when updating an active workflow scheme. The draft is updated with the new default workflow. Defaults to `false`.
   workflow: string # The name of the workflow to set as the default workflow.
 ]: any -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let input = $in
@@ -15150,7 +15149,7 @@ export def "rest-3-workflowscheme-draft updateWorkflowSchemeDraft" [
   --description: string # The description of the workflow scheme.
   --issueTypeMappings: record # The issue type to workflow mappings, where each mapping is an issue type ID and workflow name pair. Note that an issue type can only be mapped to one workflow in a workflow scheme.
   --name: string # The name of the workflow scheme. The name must be unique. The maximum length is 255 characters. Required when creating a workflow scheme.
-  --updateDraftIfNeeded: string@bool-completer # Whether to create or update a draft workflow scheme when updating an active workflow scheme. An active workflow scheme is a workflow scheme that is used by at least one project. The following examples show how this property works:   *  Update an active workflow scheme with `updateDraftIfNeeded` set to `true`: If a draft workflow scheme exists, it is updated. Otherwise, a draft workflow scheme is created.  *  Update an active workflow scheme with `updateDraftIfNeeded` set to `false`: An error is returned, as active workflow schemes cannot be updated.  *  Update an inactive workflow scheme with `updateDraftIfNeeded` set to `true`: The workflow scheme is updated, as inactive workflow schemes do not require drafts to update.  Defaults to `false`.
+  --updateDraftIfNeeded: oneof<nothing, bool> # Whether to create or update a draft workflow scheme when updating an active workflow scheme. An active workflow scheme is a workflow scheme that is used by at least one project. The following examples show how this property works:   *  Update an active workflow scheme with `updateDraftIfNeeded` set to `true`: If a draft workflow scheme exists, it is updated. Otherwise, a draft workflow scheme is created.  *  Update an active workflow scheme with `updateDraftIfNeeded` set to `false`: An error is returned, as active workflow schemes cannot be updated.  *  Update an inactive workflow scheme with `updateDraftIfNeeded` set to `true`: The workflow scheme is updated, as inactive workflow schemes do not require drafts to update.  Defaults to `false`.
 ]: any -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -15220,7 +15219,7 @@ export def "rest-3-workflowscheme-draft-default updateDraftDefaultWorkflow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --updateDraftIfNeeded: string@bool-completer # Whether a draft workflow scheme is created or updated when updating an active workflow scheme. The draft is updated with the new default workflow. Defaults to `false`.
+  --updateDraftIfNeeded: oneof<nothing, bool> # Whether a draft workflow scheme is created or updated when updating an active workflow scheme. The draft is updated with the new default workflow. Defaults to `false`.
   workflow: string # The name of the workflow to set as the default workflow.
 ]: any -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let input = $in
@@ -15295,7 +15294,7 @@ export def "rest-3-workflowscheme-draft-issuetype setWorkflowSchemeDraftIssueTyp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-issueType: string # The ID of the issue type. Not required if updating the issue type-workflow mapping.
-  --updateDraftIfNeeded: string@bool-completer # Set to true to create or update the draft of a workflow scheme and update the mapping in the draft, when the workflow scheme cannot be edited. Defaults to `false`. Only applicable when updating the workflow-issue types mapping.
+  --updateDraftIfNeeded: oneof<nothing, bool> # Set to true to create or update the draft of a workflow scheme and update the mapping in the draft, when the workflow scheme cannot be edited. Defaults to `false`. Only applicable when updating the workflow-issue types mapping.
   --workflow: string # The name of the workflow.
 ]: any -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let input = $in
@@ -15323,7 +15322,7 @@ export def "rest-3-workflowscheme-draft-publish publishDraftWorkflowScheme" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --validateOnly: string@bool-completer # Whether the request only performs a validation. (default: false)
+  --validateOnly: oneof<nothing, bool> # Whether the request only performs a validation. (default: false)
   --statusMappings: list # Mappings of statuses to new statuses for issue types. — item shape: {issueTypeId: string, newStatusId: string, statusId: string}
 ]: any -> any {
   let input = $in
@@ -15400,9 +15399,9 @@ export def "rest-3-workflowscheme-draft-workflow updateDraftWorkflowMapping" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --workflowName: string # The name of the workflow.
-  --defaultMapping: string@bool-completer # Whether the workflow is the default workflow for the workflow scheme.
+  --defaultMapping: oneof<nothing, bool> # Whether the workflow is the default workflow for the workflow scheme.
   --issueTypes: list # The list of issue type IDs.
-  --updateDraftIfNeeded: string@bool-completer # Whether a draft workflow scheme is created or updated when updating an active workflow scheme. The draft is updated with the new workflow-issue types mapping. Defaults to `false`.
+  --updateDraftIfNeeded: oneof<nothing, bool> # Whether a draft workflow scheme is created or updated when updating an active workflow scheme. The draft is updated with the new workflow-issue types mapping. Defaults to `false`.
   --workflow: string # The name of the workflow. Optional if updating the workflow-issue types mapping.
 ]: any -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let input = $in
@@ -15431,7 +15430,7 @@ export def "rest-3-workflowscheme-issuetype delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --updateDraftIfNeeded: string@bool-completer # Set to true to create or update the draft of a workflow scheme and update the mapping in the draft, when the workflow scheme cannot be edited. Defaults to `false`. (default: false)
+  --updateDraftIfNeeded: oneof<nothing, bool> # Set to true to create or update the draft of a workflow scheme and update the mapping in the draft, when the workflow scheme cannot be edited. Defaults to `false`. (default: false)
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -15456,7 +15455,7 @@ export def "rest-3-workflowscheme-issuetype get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --returnDraftIfExists: string@bool-completer # Returns the mapping from the workflow scheme's draft rather than the workflow scheme, if set to true. If no draft exists, the mapping from the workflow scheme is returned. (default: false)
+  --returnDraftIfExists: oneof<nothing, bool> # Returns the mapping from the workflow scheme's draft rather than the workflow scheme, if set to true. If no draft exists, the mapping from the workflow scheme is returned. (default: false)
 ]: nothing -> record<issueType: string, updateDraftIfNeeded: bool, workflow: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -15482,7 +15481,7 @@ export def "rest-3-workflowscheme-issuetype setWorkflowSchemeIssueType" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body-issueType: string # The ID of the issue type. Not required if updating the issue type-workflow mapping.
-  --updateDraftIfNeeded: string@bool-completer # Set to true to create or update the draft of a workflow scheme and update the mapping in the draft, when the workflow scheme cannot be edited. Defaults to `false`. Only applicable when updating the workflow-issue types mapping.
+  --updateDraftIfNeeded: oneof<nothing, bool> # Set to true to create or update the draft of a workflow scheme and update the mapping in the draft, when the workflow scheme cannot be edited. Defaults to `false`. Only applicable when updating the workflow-issue types mapping.
   --workflow: string # The name of the workflow.
 ]: any -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let input = $in
@@ -15510,7 +15509,7 @@ export def "rest-3-workflowscheme-workflow delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --workflowName: string # The name of the workflow.
-  --updateDraftIfNeeded: string@bool-completer # Set to true to create or update the draft of a workflow scheme and delete the mapping from the draft, when the workflow scheme cannot be edited. Defaults to `false`. (default: false)
+  --updateDraftIfNeeded: oneof<nothing, bool> # Set to true to create or update the draft of a workflow scheme and delete the mapping from the draft, when the workflow scheme cannot be edited. Defaults to `false`. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -15535,7 +15534,7 @@ export def "rest-3-workflowscheme-workflow get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --workflowName: string # The name of a workflow in the scheme. Limits the results to the workflow-issue type mapping for the specified workflow.
-  --returnDraftIfExists: string@bool-completer # Returns the mapping from the workflow scheme's draft rather than the workflow scheme, if set to true. If no draft exists, the mapping from the workflow scheme is returned. (default: false)
+  --returnDraftIfExists: oneof<nothing, bool> # Returns the mapping from the workflow scheme's draft rather than the workflow scheme, if set to true. If no draft exists, the mapping from the workflow scheme is returned. (default: false)
 ]: nothing -> record<defaultMapping: bool, issueTypes: list<string>, updateDraftIfNeeded: bool, workflow: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -15560,9 +15559,9 @@ export def "rest-3-workflowscheme-workflow updateWorkflowMapping" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --workflowName: string # The name of the workflow.
-  --defaultMapping: string@bool-completer # Whether the workflow is the default workflow for the workflow scheme.
+  --defaultMapping: oneof<nothing, bool> # Whether the workflow is the default workflow for the workflow scheme.
   --issueTypes: list # The list of issue type IDs.
-  --updateDraftIfNeeded: string@bool-completer # Whether a draft workflow scheme is created or updated when updating an active workflow scheme. The draft is updated with the new workflow-issue types mapping. Defaults to `false`.
+  --updateDraftIfNeeded: oneof<nothing, bool> # Whether a draft workflow scheme is created or updated when updating an active workflow scheme. The draft is updated with the new workflow-issue types mapping. Defaults to `false`.
   --workflow: string # The name of the workflow. Optional if updating the workflow-issue types mapping.
 ]: any -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, appType: string, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, guest: bool, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let input = $in

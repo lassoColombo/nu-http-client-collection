@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["basic" "bearer"] }
 
@@ -177,7 +176,7 @@ export def "admin-clients createOAuth2Client" [
   --authorization-code-grant-access-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
   --authorization-code-grant-id-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
   --authorization-code-grant-refresh-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
-  --backchannel-logout-session-required: string@bool-completer # OpenID Connect Back-Channel Logout Session Required  Boolean value specifying whether the RP requires that a sid (session ID) Claim be included in the Logout Token to identify the RP session with the OP when the backchannel_logout_uri is used. If omitted, the default value is false.
+  --backchannel-logout-session-required: oneof<nothing, bool> # OpenID Connect Back-Channel Logout Session Required  Boolean value specifying whether the RP requires that a sid (session ID) Claim be included in the Logout Token to identify the RP session with the OP when the backchannel_logout_uri is used. If omitted, the default value is false.
   --backchannel-logout-uri: string # OpenID Connect Back-Channel Logout URI  RP URL that will cause the RP to log itself out when sent a Logout Token by the OP.
   --client-credentials-grant-access-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
   --client-id: string # OAuth 2.0 Client ID  The ID is immutable. If no ID is provided, a UUID4 will be generated.
@@ -190,7 +189,7 @@ export def "admin-clients createOAuth2Client" [
   --device-authorization-grant-access-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
   --device-authorization-grant-id-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
   --device-authorization-grant-refresh-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
-  --frontchannel-logout-session-required: string@bool-completer # OpenID Connect Front-Channel Logout Session Required  Boolean value specifying whether the RP requires that iss (issuer) and sid (session ID) query parameters be included to identify the RP session with the OP when the frontchannel_logout_uri is used. If omitted, the default value is false.
+  --frontchannel-logout-session-required: oneof<nothing, bool> # OpenID Connect Front-Channel Logout Session Required  Boolean value specifying whether the RP requires that iss (issuer) and sid (session ID) query parameters be included to identify the RP session with the OP when the frontchannel_logout_uri is used. If omitted, the default value is false.
   --frontchannel-logout-uri: string # OpenID Connect Front-Channel Logout URI  RP URL that will cause the RP to log itself out when rendered in an iframe by the OP. An iss (issuer) query parameter and a sid (session ID) query parameter MAY be included by the OP to enable the RP to validate the request and to determine which of the potentially multiple sessions is to be logged out; if either is included, both MUST be.
   --grant-types: list # OAuth 2.0 Client Grant Types  An array of OAuth 2.0 grant types the client is allowed to use. Can be one of:  Client Credentials Grant: `client_credentials` Authorization Code Grant: `authorization_code` OpenID Connect Implicit Grant (deprecated!): `implicit` Refresh Token Grant: `refresh_token` OAuth 2.0 Token Exchange: `urn:ietf:params:oauth:grant-type:jwt-bearer` OAuth 2.0 Device Code Grant: `urn:ietf:params:oauth:grant-type:device_code`
   --implicit-grant-access-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
@@ -214,8 +213,8 @@ export def "admin-clients createOAuth2Client" [
   --response-types: list # OAuth 2.0 Client Response Types  An array of the OAuth 2.0 response type strings that the client can use at the authorization endpoint. Can be one of:  Needed for OpenID Connect Implicit Grant: Returns ID Token to redirect URI: `id_token` Returns Access token redirect URI: `token` Needed for Authorization Code Grant: `code`
   --scope: string # OAuth 2.0 Client Scope  Scope is a string containing a space-separated list of scope values (as described in Section 3.3 of OAuth 2.0 [RFC6749]) that the client can use when requesting access tokens. (e.g. scope1 scope-2 scope.3 scope:4)
   --sector-identifier-uri: string # OpenID Connect Sector Identifier URI  URL using the https scheme to be used in calculating Pseudonymous Identifiers by the OP. The URL references a file with a single JSON array of redirect_uri values.
-  --skip-consent: string@bool-completer # SkipConsent skips the consent screen for this client. This field can only be set from the admin API.
-  --skip-logout-consent: string@bool-completer # SkipLogoutConsent skips the logout consent screen for this client. This field can only be set from the admin API.
+  --skip-consent: oneof<nothing, bool> # SkipConsent skips the consent screen for this client. This field can only be set from the admin API.
+  --skip-logout-consent: oneof<nothing, bool> # SkipLogoutConsent skips the logout consent screen for this client. This field can only be set from the admin API.
   --subject-type: string # OpenID Connect Subject Type  The `subject_types_supported` Discovery parameter contains a list of the supported subject_type values for this server. Valid types include `pairwise` and `public`.
   --token-endpoint-auth-method: string # OAuth 2.0 Token Endpoint Authentication Method  Requested Client Authentication method for the Token Endpoint. The options are:  `client_secret_basic`: (default) Send `client_id` and `client_secret` as `application/x-www-form-urlencoded` encoded in the HTTP Authorization header. `client_secret_post`: Send `client_id` and `client_secret` as `application/x-www-form-urlencoded` in the HTTP body. `private_key_jwt`: Use JSON Web Tokens to authenticate the client. `none`: Used for public clients (native apps, mobile apps) which can not have secrets. (default: client_secret_basic)
   --token-endpoint-auth-signing-alg: string # OAuth 2.0 Token Endpoint Signing Algorithm  Requested Client Authentication signing algorithm for the Token Endpoint.
@@ -323,7 +322,7 @@ export def "admin-clients setOAuth2Client" [
   --authorization-code-grant-access-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
   --authorization-code-grant-id-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
   --authorization-code-grant-refresh-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
-  --backchannel-logout-session-required: string@bool-completer # OpenID Connect Back-Channel Logout Session Required  Boolean value specifying whether the RP requires that a sid (session ID) Claim be included in the Logout Token to identify the RP session with the OP when the backchannel_logout_uri is used. If omitted, the default value is false.
+  --backchannel-logout-session-required: oneof<nothing, bool> # OpenID Connect Back-Channel Logout Session Required  Boolean value specifying whether the RP requires that a sid (session ID) Claim be included in the Logout Token to identify the RP session with the OP when the backchannel_logout_uri is used. If omitted, the default value is false.
   --backchannel-logout-uri: string # OpenID Connect Back-Channel Logout URI  RP URL that will cause the RP to log itself out when sent a Logout Token by the OP.
   --client-credentials-grant-access-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
   --client-id: string # OAuth 2.0 Client ID  The ID is immutable. If no ID is provided, a UUID4 will be generated.
@@ -336,7 +335,7 @@ export def "admin-clients setOAuth2Client" [
   --device-authorization-grant-access-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
   --device-authorization-grant-id-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
   --device-authorization-grant-refresh-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
-  --frontchannel-logout-session-required: string@bool-completer # OpenID Connect Front-Channel Logout Session Required  Boolean value specifying whether the RP requires that iss (issuer) and sid (session ID) query parameters be included to identify the RP session with the OP when the frontchannel_logout_uri is used. If omitted, the default value is false.
+  --frontchannel-logout-session-required: oneof<nothing, bool> # OpenID Connect Front-Channel Logout Session Required  Boolean value specifying whether the RP requires that iss (issuer) and sid (session ID) query parameters be included to identify the RP session with the OP when the frontchannel_logout_uri is used. If omitted, the default value is false.
   --frontchannel-logout-uri: string # OpenID Connect Front-Channel Logout URI  RP URL that will cause the RP to log itself out when rendered in an iframe by the OP. An iss (issuer) query parameter and a sid (session ID) query parameter MAY be included by the OP to enable the RP to validate the request and to determine which of the potentially multiple sessions is to be logged out; if either is included, both MUST be.
   --grant-types: list # OAuth 2.0 Client Grant Types  An array of OAuth 2.0 grant types the client is allowed to use. Can be one of:  Client Credentials Grant: `client_credentials` Authorization Code Grant: `authorization_code` OpenID Connect Implicit Grant (deprecated!): `implicit` Refresh Token Grant: `refresh_token` OAuth 2.0 Token Exchange: `urn:ietf:params:oauth:grant-type:jwt-bearer` OAuth 2.0 Device Code Grant: `urn:ietf:params:oauth:grant-type:device_code`
   --implicit-grant-access-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
@@ -360,8 +359,8 @@ export def "admin-clients setOAuth2Client" [
   --response-types: list # OAuth 2.0 Client Response Types  An array of the OAuth 2.0 response type strings that the client can use at the authorization endpoint. Can be one of:  Needed for OpenID Connect Implicit Grant: Returns ID Token to redirect URI: `id_token` Returns Access token redirect URI: `token` Needed for Authorization Code Grant: `code`
   --scope: string # OAuth 2.0 Client Scope  Scope is a string containing a space-separated list of scope values (as described in Section 3.3 of OAuth 2.0 [RFC6749]) that the client can use when requesting access tokens. (e.g. scope1 scope-2 scope.3 scope:4)
   --sector-identifier-uri: string # OpenID Connect Sector Identifier URI  URL using the https scheme to be used in calculating Pseudonymous Identifiers by the OP. The URL references a file with a single JSON array of redirect_uri values.
-  --skip-consent: string@bool-completer # SkipConsent skips the consent screen for this client. This field can only be set from the admin API.
-  --skip-logout-consent: string@bool-completer # SkipLogoutConsent skips the logout consent screen for this client. This field can only be set from the admin API.
+  --skip-consent: oneof<nothing, bool> # SkipConsent skips the consent screen for this client. This field can only be set from the admin API.
+  --skip-logout-consent: oneof<nothing, bool> # SkipLogoutConsent skips the logout consent screen for this client. This field can only be set from the admin API.
   --subject-type: string # OpenID Connect Subject Type  The `subject_types_supported` Discovery parameter contains a list of the supported subject_type values for this server. Valid types include `pairwise` and `public`.
   --token-endpoint-auth-method: string # OAuth 2.0 Token Endpoint Authentication Method  Requested Client Authentication method for the Token Endpoint. The options are:  `client_secret_basic`: (default) Send `client_id` and `client_secret` as `application/x-www-form-urlencoded` encoded in the HTTP Authorization header. `client_secret_post`: Send `client_id` and `client_secret` as `application/x-www-form-urlencoded` in the HTTP body. `private_key_jwt`: Use JSON Web Tokens to authenticate the client. `none`: Used for public clients (native apps, mobile apps) which can not have secrets. (default: client_secret_basic)
   --token-endpoint-auth-signing-alg: string # OAuth 2.0 Token Endpoint Signing Algorithm  Requested Client Authentication signing algorithm for the Token Endpoint.
@@ -646,7 +645,7 @@ export def "admin-oauth2-auth-requests-consent-accept acceptOAuth2ConsentRequest
   --context: any
   --grant-access-token-audience: list # GrantedAudience sets the audience the user authorized the client to use. Should be a subset of `requested_access_token_audience`.
   --grant-scope: list # GrantScope sets the scope the user authorized the client to use. Should be a subset of `requested_scope`.
-  --remember: string@bool-completer # Remember, if set to true, tells ORY Hydra to remember this consent authorization and reuse it if the same client asks the same user for the same, or a subset of, scope.
+  --remember: oneof<nothing, bool> # Remember, if set to true, tells ORY Hydra to remember this consent authorization and reuse it if the same client asks the same user for the same, or a subset of, scope.
   --remember-for: int # RememberFor sets how long the consent authorization should be remembered for in seconds. If set to `0`, the authorization will be remembered indefinitely. (format: int64)
   --session: record # shape: {access_token?: any, id_token?: any}
 ]: any -> record<redirect_to: string> {
@@ -759,10 +758,10 @@ export def "admin-oauth2-auth-requests-login-accept acceptOAuth2LoginRequest" [
   --acr: string # ACR sets the Authentication AuthorizationContext Class Reference value for this authentication session. You can use it to express that, for example, a user authenticated using two-factor authentication.
   --amr: list # AMR sets the Authentication Methods References value for this authentication session. You can use it to specify the method a user used to authenticate. For example, if the acr indicates a user used two-factor authentication, the amr can express they used a software-secured key.
   --context: any
-  --extend-session-lifespan: string@bool-completer # Extend OAuth2 authentication session lifespan  If set to `true`, the OAuth2 authentication cookie lifespan is extended. This is for example useful if you want the user to be able to use `prompt=none` continuously.  This value can only be set to `true` if the user has an authentication, which is the case if the `skip` value is `true`.
+  --extend-session-lifespan: oneof<nothing, bool> # Extend OAuth2 authentication session lifespan  If set to `true`, the OAuth2 authentication cookie lifespan is extended. This is for example useful if you want the user to be able to use `prompt=none` continuously.  This value can only be set to `true` if the user has an authentication, which is the case if the `skip` value is `true`.
   --force-subject-identifier: string # ForceSubjectIdentifier forces the "pairwise" user ID of the end-user that authenticated. The "pairwise" user ID refers to the (Pairwise Identifier Algorithm)[http://openid.net/specs/openid-connect-core-1_0.html#PairwiseAlg] of the OpenID Connect specification. It allows you to set an obfuscated subject ("user") identifier that is unique to the client.  Please note that this changes the user ID on endpoint /userinfo and sub claim of the ID Token. It does not change the sub claim in the OAuth 2.0 Introspection.  Per default, ORY Hydra handles this value with its own algorithm. In case you want to set this yourself you can use this field. Please note that setting this field has no effect if `pairwise` is not configured in ORY Hydra or the OAuth 2.0 Client does not expect a pairwise identifier (set via `subject_type` key in the client's configuration).  Please also be aware that ORY Hydra is unable to properly compute this value during authentication. This implies that you have to compute this value on every authentication process (probably depending on the client ID or some other unique value).  If you fail to compute the proper value, then authentication processes which have id_token_hint set might fail.
   --identity-provider-session-id: string # IdentityProviderSessionID is the session ID of the end-user that authenticated. If specified, we will use this value to propagate the logout.
-  --remember: string@bool-completer # Remember, if set to true, tells Ory Hydra to remember this user by telling the user agent (browser) to store a cookie with authentication data. If the same user performs another OAuth 2.0 Authorization Request, they will not be asked to log in again.
+  --remember: oneof<nothing, bool> # Remember, if set to true, tells Ory Hydra to remember this user by telling the user agent (browser) to store a cookie with authentication data. If the same user performs another OAuth 2.0 Authorization Request, they will not be asked to log in again.
   --remember-for: int # RememberFor sets how long the authentication should be remembered for in seconds. If set to `0`, the authorization will be remembered for the duration of the browser session (using a session cookie). (format: int64)
   subject: string # Subject is the user ID of the end-user that authenticated.
 ]: any -> record<redirect_to: string> {
@@ -893,7 +892,7 @@ export def "admin-oauth2-auth-sessions-consent revokeOAuth2ConsentSessions" [
   --subject: string # OAuth 2.0 Consent Subject  The subject whose consent sessions should be deleted.
   --client: string # OAuth 2.0 Client ID  If set, deletes only those consent sessions that have been granted to the specified OAuth 2.0 Client ID.
   --consent-request-id: string # Consent Request ID  If set, revoke all token chains derived from this particular consent request ID.
-  --all: string@bool-completer # Revoke All Consent Sessions  If set to `true` deletes all consent sessions by the Subject that have been granted.
+  --all: oneof<nothing, bool> # Revoke All Consent Sessions  If set to `true` deletes all consent sessions by the Subject that have been granted.
 ]: nothing -> record<error: string, error_debug: string, error_description: string, error_hint: string, status_code: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1041,7 +1040,7 @@ export def "admin-trust-grants-jwt-bearer-issuers trustOAuth2JwtGrantIssuer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --allow-any-subject: string@bool-completer # The "allow_any_subject" indicates that the issuer is allowed to have any principal as the subject of the JWT.
+  --allow-any-subject: oneof<nothing, bool> # The "allow_any_subject" indicates that the issuer is allowed to have any principal as the subject of the JWT.
   expires_at: string # The "expires_at" indicates, when grant will expire, so we will reject assertion from "issuer" targeting "subject". (format: date-time)
   issuer: string # The "issuer" identifies the principal that issued the JWT assertion (same as "iss" claim in JWT). (e.g. https://jwt-idp.example.com)
   jwk: record # shape: {alg: string, crv?: string, d?: string, dp?: string, dq?: string, e?: string, k?: string, kid: string, kty: string, n?: string, p?: string, q?: string, qi?: string, use: string, x?: string, x5c?: list, y?: string}
@@ -1255,7 +1254,7 @@ export def "oauth2-register createOidcDynamicClient" [
   --authorization-code-grant-access-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
   --authorization-code-grant-id-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
   --authorization-code-grant-refresh-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
-  --backchannel-logout-session-required: string@bool-completer # OpenID Connect Back-Channel Logout Session Required  Boolean value specifying whether the RP requires that a sid (session ID) Claim be included in the Logout Token to identify the RP session with the OP when the backchannel_logout_uri is used. If omitted, the default value is false.
+  --backchannel-logout-session-required: oneof<nothing, bool> # OpenID Connect Back-Channel Logout Session Required  Boolean value specifying whether the RP requires that a sid (session ID) Claim be included in the Logout Token to identify the RP session with the OP when the backchannel_logout_uri is used. If omitted, the default value is false.
   --backchannel-logout-uri: string # OpenID Connect Back-Channel Logout URI  RP URL that will cause the RP to log itself out when sent a Logout Token by the OP.
   --client-credentials-grant-access-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
   --client-id: string # OAuth 2.0 Client ID  The ID is immutable. If no ID is provided, a UUID4 will be generated.
@@ -1268,7 +1267,7 @@ export def "oauth2-register createOidcDynamicClient" [
   --device-authorization-grant-access-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
   --device-authorization-grant-id-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
   --device-authorization-grant-refresh-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
-  --frontchannel-logout-session-required: string@bool-completer # OpenID Connect Front-Channel Logout Session Required  Boolean value specifying whether the RP requires that iss (issuer) and sid (session ID) query parameters be included to identify the RP session with the OP when the frontchannel_logout_uri is used. If omitted, the default value is false.
+  --frontchannel-logout-session-required: oneof<nothing, bool> # OpenID Connect Front-Channel Logout Session Required  Boolean value specifying whether the RP requires that iss (issuer) and sid (session ID) query parameters be included to identify the RP session with the OP when the frontchannel_logout_uri is used. If omitted, the default value is false.
   --frontchannel-logout-uri: string # OpenID Connect Front-Channel Logout URI  RP URL that will cause the RP to log itself out when rendered in an iframe by the OP. An iss (issuer) query parameter and a sid (session ID) query parameter MAY be included by the OP to enable the RP to validate the request and to determine which of the potentially multiple sessions is to be logged out; if either is included, both MUST be.
   --grant-types: list # OAuth 2.0 Client Grant Types  An array of OAuth 2.0 grant types the client is allowed to use. Can be one of:  Client Credentials Grant: `client_credentials` Authorization Code Grant: `authorization_code` OpenID Connect Implicit Grant (deprecated!): `implicit` Refresh Token Grant: `refresh_token` OAuth 2.0 Token Exchange: `urn:ietf:params:oauth:grant-type:jwt-bearer` OAuth 2.0 Device Code Grant: `urn:ietf:params:oauth:grant-type:device_code`
   --implicit-grant-access-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
@@ -1292,8 +1291,8 @@ export def "oauth2-register createOidcDynamicClient" [
   --response-types: list # OAuth 2.0 Client Response Types  An array of the OAuth 2.0 response type strings that the client can use at the authorization endpoint. Can be one of:  Needed for OpenID Connect Implicit Grant: Returns ID Token to redirect URI: `id_token` Returns Access token redirect URI: `token` Needed for Authorization Code Grant: `code`
   --scope: string # OAuth 2.0 Client Scope  Scope is a string containing a space-separated list of scope values (as described in Section 3.3 of OAuth 2.0 [RFC6749]) that the client can use when requesting access tokens. (e.g. scope1 scope-2 scope.3 scope:4)
   --sector-identifier-uri: string # OpenID Connect Sector Identifier URI  URL using the https scheme to be used in calculating Pseudonymous Identifiers by the OP. The URL references a file with a single JSON array of redirect_uri values.
-  --skip-consent: string@bool-completer # SkipConsent skips the consent screen for this client. This field can only be set from the admin API.
-  --skip-logout-consent: string@bool-completer # SkipLogoutConsent skips the logout consent screen for this client. This field can only be set from the admin API.
+  --skip-consent: oneof<nothing, bool> # SkipConsent skips the consent screen for this client. This field can only be set from the admin API.
+  --skip-logout-consent: oneof<nothing, bool> # SkipLogoutConsent skips the logout consent screen for this client. This field can only be set from the admin API.
   --subject-type: string # OpenID Connect Subject Type  The `subject_types_supported` Discovery parameter contains a list of the supported subject_type values for this server. Valid types include `pairwise` and `public`.
   --token-endpoint-auth-method: string # OAuth 2.0 Token Endpoint Authentication Method  Requested Client Authentication method for the Token Endpoint. The options are:  `client_secret_basic`: (default) Send `client_id` and `client_secret` as `application/x-www-form-urlencoded` encoded in the HTTP Authorization header. `client_secret_post`: Send `client_id` and `client_secret` as `application/x-www-form-urlencoded` in the HTTP body. `private_key_jwt`: Use JSON Web Tokens to authenticate the client. `none`: Used for public clients (native apps, mobile apps) which can not have secrets. (default: client_secret_basic)
   --token-endpoint-auth-signing-alg: string # OAuth 2.0 Token Endpoint Signing Algorithm  Requested Client Authentication signing algorithm for the Token Endpoint.
@@ -1376,7 +1375,7 @@ export def "oauth2-register setOidcDynamicClient" [
   --authorization-code-grant-access-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
   --authorization-code-grant-id-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
   --authorization-code-grant-refresh-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
-  --backchannel-logout-session-required: string@bool-completer # OpenID Connect Back-Channel Logout Session Required  Boolean value specifying whether the RP requires that a sid (session ID) Claim be included in the Logout Token to identify the RP session with the OP when the backchannel_logout_uri is used. If omitted, the default value is false.
+  --backchannel-logout-session-required: oneof<nothing, bool> # OpenID Connect Back-Channel Logout Session Required  Boolean value specifying whether the RP requires that a sid (session ID) Claim be included in the Logout Token to identify the RP session with the OP when the backchannel_logout_uri is used. If omitted, the default value is false.
   --backchannel-logout-uri: string # OpenID Connect Back-Channel Logout URI  RP URL that will cause the RP to log itself out when sent a Logout Token by the OP.
   --client-credentials-grant-access-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
   --client-id: string # OAuth 2.0 Client ID  The ID is immutable. If no ID is provided, a UUID4 will be generated.
@@ -1389,7 +1388,7 @@ export def "oauth2-register setOidcDynamicClient" [
   --device-authorization-grant-access-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
   --device-authorization-grant-id-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
   --device-authorization-grant-refresh-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
-  --frontchannel-logout-session-required: string@bool-completer # OpenID Connect Front-Channel Logout Session Required  Boolean value specifying whether the RP requires that iss (issuer) and sid (session ID) query parameters be included to identify the RP session with the OP when the frontchannel_logout_uri is used. If omitted, the default value is false.
+  --frontchannel-logout-session-required: oneof<nothing, bool> # OpenID Connect Front-Channel Logout Session Required  Boolean value specifying whether the RP requires that iss (issuer) and sid (session ID) query parameters be included to identify the RP session with the OP when the frontchannel_logout_uri is used. If omitted, the default value is false.
   --frontchannel-logout-uri: string # OpenID Connect Front-Channel Logout URI  RP URL that will cause the RP to log itself out when rendered in an iframe by the OP. An iss (issuer) query parameter and a sid (session ID) query parameter MAY be included by the OP to enable the RP to validate the request and to determine which of the potentially multiple sessions is to be logged out; if either is included, both MUST be.
   --grant-types: list # OAuth 2.0 Client Grant Types  An array of OAuth 2.0 grant types the client is allowed to use. Can be one of:  Client Credentials Grant: `client_credentials` Authorization Code Grant: `authorization_code` OpenID Connect Implicit Grant (deprecated!): `implicit` Refresh Token Grant: `refresh_token` OAuth 2.0 Token Exchange: `urn:ietf:params:oauth:grant-type:jwt-bearer` OAuth 2.0 Device Code Grant: `urn:ietf:params:oauth:grant-type:device_code`
   --implicit-grant-access-token-lifespan: string # Specify a time duration in milliseconds, seconds, minutes, hours.
@@ -1413,8 +1412,8 @@ export def "oauth2-register setOidcDynamicClient" [
   --response-types: list # OAuth 2.0 Client Response Types  An array of the OAuth 2.0 response type strings that the client can use at the authorization endpoint. Can be one of:  Needed for OpenID Connect Implicit Grant: Returns ID Token to redirect URI: `id_token` Returns Access token redirect URI: `token` Needed for Authorization Code Grant: `code`
   --scope: string # OAuth 2.0 Client Scope  Scope is a string containing a space-separated list of scope values (as described in Section 3.3 of OAuth 2.0 [RFC6749]) that the client can use when requesting access tokens. (e.g. scope1 scope-2 scope.3 scope:4)
   --sector-identifier-uri: string # OpenID Connect Sector Identifier URI  URL using the https scheme to be used in calculating Pseudonymous Identifiers by the OP. The URL references a file with a single JSON array of redirect_uri values.
-  --skip-consent: string@bool-completer # SkipConsent skips the consent screen for this client. This field can only be set from the admin API.
-  --skip-logout-consent: string@bool-completer # SkipLogoutConsent skips the logout consent screen for this client. This field can only be set from the admin API.
+  --skip-consent: oneof<nothing, bool> # SkipConsent skips the consent screen for this client. This field can only be set from the admin API.
+  --skip-logout-consent: oneof<nothing, bool> # SkipLogoutConsent skips the logout consent screen for this client. This field can only be set from the admin API.
   --subject-type: string # OpenID Connect Subject Type  The `subject_types_supported` Discovery parameter contains a list of the supported subject_type values for this server. Valid types include `pairwise` and `public`.
   --token-endpoint-auth-method: string # OAuth 2.0 Token Endpoint Authentication Method  Requested Client Authentication method for the Token Endpoint. The options are:  `client_secret_basic`: (default) Send `client_id` and `client_secret` as `application/x-www-form-urlencoded` encoded in the HTTP Authorization header. `client_secret_post`: Send `client_id` and `client_secret` as `application/x-www-form-urlencoded` in the HTTP body. `private_key_jwt`: Use JSON Web Tokens to authenticate the client. `none`: Used for public clients (native apps, mobile apps) which can not have secrets. (default: client_secret_basic)
   --token-endpoint-auth-signing-alg: string # OAuth 2.0 Token Endpoint Signing Algorithm  Requested Client Authentication signing algorithm for the Token Endpoint.

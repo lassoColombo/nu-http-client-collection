@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://graph.microsoft.com/v1.0"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -167,7 +166,7 @@ export def "solutions-booking-businesses ListBookingBusiness" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -362,7 +361,7 @@ export def "solutions-booking-businesses-appointments ListAppointment" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -406,12 +405,12 @@ export def "solutions-booking-businesses-appointments CreateAppointment" [
   --customers: list # A collection of customer properties for an appointment. An appointment contains a list of customer information and each unit will indicate the properties of a customer who is part of that appointment. Optional.
   --customerTimeZone: string # The time zone of the customer. For a list of possible values, see dateTimeTimeZone. (nullable)
   --endDateTime: record # shape: {dateTime?: string, timeZone?: string}
-  --isCustomerAllowedToManageBooking: string@bool-completer # Indicates that the customer can manage bookings created by the staff. The default value is false. (nullable)
-  --isLocationOnline: string@bool-completer # Indicates that the appointment is held online. The default value is false.
+  --isCustomerAllowedToManageBooking: oneof<nothing, bool> # Indicates that the customer can manage bookings created by the staff. The default value is false. (nullable)
+  --isLocationOnline: oneof<nothing, bool> # Indicates that the appointment is held online. The default value is false.
   --joinWebUrl: string # The URL of the online meeting for the appointment. (nullable)
   --lastUpdatedDateTime: string # The date, time, and time zone when the booking business was last updated. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
   --maximumAttendeesCount: float # The maximum number of customers allowed in an appointment. If maximumAttendeesCount of the service is greater than 1, pass valid customer IDs while creating or updating an appointment. To create a customer, use the Create bookingCustomer operation. (format: int32)
-  --optOutOfCustomerEmail: string@bool-completer # If true indicates that the bookingCustomer for this appointment doesn't wish to receive a confirmation for this appointment.
+  --optOutOfCustomerEmail: oneof<nothing, bool> # If true indicates that the bookingCustomer for this appointment doesn't wish to receive a confirmation for this appointment.
   --postBuffer: string # The amount of time to reserve after the appointment ends, for cleaning up, as an example. The value is expressed in ISO8601 format. (format: duration)
   --preBuffer: string # The amount of time to reserve before the appointment begins, for preparation, as an example. The value is expressed in ISO8601 format. (format: duration)
   --price: float # The regular price for an appointment for the specified bookingService. (nullable, format: double)
@@ -422,7 +421,7 @@ export def "solutions-booking-businesses-appointments CreateAppointment" [
   --serviceLocation: record # shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --serviceName: string # The name of the bookingService associated with this appointment.This property is optional when creating a new appointment. If not specified, it's computed from the service associated with the appointment by the serviceId property.
   --serviceNotes: string # Notes from a bookingStaffMember. The value of this property is available only when reading this bookingAppointment by its ID. (nullable)
-  --smsNotificationsEnabled: string@bool-completer # If true, indicates SMS notifications will be sent to the customers for the appointment. Default value is false.
+  --smsNotificationsEnabled: oneof<nothing, bool> # If true, indicates SMS notifications will be sent to the customers for the appointment. Default value is false.
   --staffMemberIds: list # The ID of each bookingStaffMember who is scheduled in this appointment.
   --startDateTime: record # shape: {dateTime?: string, timeZone?: string}
 ]: any -> record<id: string, additionalInformation: string, anonymousJoinWebUrl: string, appointmentLabel: string, createdDateTime: string, customerEmailAddress: string, customerName: string, customerNotes: string, customerPhone: string, customers: list<record>, customerTimeZone: string, duration: string, endDateTime: record<dateTime: string, timeZone: string>, filledAttendeesCount: float, isCustomerAllowedToManageBooking: bool, isLocationOnline: bool, joinWebUrl: string, lastUpdatedDateTime: string, maximumAttendeesCount: float, optOutOfCustomerEmail: bool, postBuffer: string, preBuffer: string, price: float, priceType: string, reminders: table<message: string, offset: string, recipients: string>, selfServiceAppointmentId: string, serviceId: string, serviceLocation: record<address: record<city: string, countryOrRegion: string, postalCode: string, state: string, street: string>, coordinates: record<accuracy: float, altitude: float, altitudeAccuracy: float, latitude: float, longitude: float>, displayName: string, locationEmailAddress: string, locationType: string, locationUri: string, uniqueId: string, uniqueIdType: string>, serviceName: string, serviceNotes: string, smsNotificationsEnabled: bool, staffMemberIds: list<string>, startDateTime: record<dateTime: string, timeZone: string>> {
@@ -495,12 +494,12 @@ export def "solutions-booking-businesses-appointments UpdateAppointment" [
   --customers: list # A collection of customer properties for an appointment. An appointment contains a list of customer information and each unit will indicate the properties of a customer who is part of that appointment. Optional.
   --customerTimeZone: string # The time zone of the customer. For a list of possible values, see dateTimeTimeZone. (nullable)
   --endDateTime: record # shape: {dateTime?: string, timeZone?: string}
-  --isCustomerAllowedToManageBooking: string@bool-completer # Indicates that the customer can manage bookings created by the staff. The default value is false. (nullable)
-  --isLocationOnline: string@bool-completer # Indicates that the appointment is held online. The default value is false.
+  --isCustomerAllowedToManageBooking: oneof<nothing, bool> # Indicates that the customer can manage bookings created by the staff. The default value is false. (nullable)
+  --isLocationOnline: oneof<nothing, bool> # Indicates that the appointment is held online. The default value is false.
   --joinWebUrl: string # The URL of the online meeting for the appointment. (nullable)
   --lastUpdatedDateTime: string # The date, time, and time zone when the booking business was last updated. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
   --maximumAttendeesCount: float # The maximum number of customers allowed in an appointment. If maximumAttendeesCount of the service is greater than 1, pass valid customer IDs while creating or updating an appointment. To create a customer, use the Create bookingCustomer operation. (format: int32)
-  --optOutOfCustomerEmail: string@bool-completer # If true indicates that the bookingCustomer for this appointment doesn't wish to receive a confirmation for this appointment.
+  --optOutOfCustomerEmail: oneof<nothing, bool> # If true indicates that the bookingCustomer for this appointment doesn't wish to receive a confirmation for this appointment.
   --postBuffer: string # The amount of time to reserve after the appointment ends, for cleaning up, as an example. The value is expressed in ISO8601 format. (format: duration)
   --preBuffer: string # The amount of time to reserve before the appointment begins, for preparation, as an example. The value is expressed in ISO8601 format. (format: duration)
   --price: float # The regular price for an appointment for the specified bookingService. (nullable, format: double)
@@ -511,7 +510,7 @@ export def "solutions-booking-businesses-appointments UpdateAppointment" [
   --serviceLocation: record # shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --serviceName: string # The name of the bookingService associated with this appointment.This property is optional when creating a new appointment. If not specified, it's computed from the service associated with the appointment by the serviceId property.
   --serviceNotes: string # Notes from a bookingStaffMember. The value of this property is available only when reading this bookingAppointment by its ID. (nullable)
-  --smsNotificationsEnabled: string@bool-completer # If true, indicates SMS notifications will be sent to the customers for the appointment. Default value is false.
+  --smsNotificationsEnabled: oneof<nothing, bool> # If true, indicates SMS notifications will be sent to the customers for the appointment. Default value is false.
   --staffMemberIds: list # The ID of each bookingStaffMember who is scheduled in this appointment.
   --startDateTime: record # shape: {dateTime?: string, timeZone?: string}
 ]: any -> record<id: string, additionalInformation: string, anonymousJoinWebUrl: string, appointmentLabel: string, createdDateTime: string, customerEmailAddress: string, customerName: string, customerNotes: string, customerPhone: string, customers: list<record>, customerTimeZone: string, duration: string, endDateTime: record<dateTime: string, timeZone: string>, filledAttendeesCount: float, isCustomerAllowedToManageBooking: bool, isLocationOnline: bool, joinWebUrl: string, lastUpdatedDateTime: string, maximumAttendeesCount: float, optOutOfCustomerEmail: bool, postBuffer: string, preBuffer: string, price: float, priceType: string, reminders: table<message: string, offset: string, recipients: string>, selfServiceAppointmentId: string, serviceId: string, serviceLocation: record<address: record<city: string, countryOrRegion: string, postalCode: string, state: string, street: string>, coordinates: record<accuracy: float, altitude: float, altitudeAccuracy: float, latitude: float, longitude: float>, displayName: string, locationEmailAddress: string, locationType: string, locationUri: string, uniqueId: string, uniqueIdType: string>, serviceName: string, serviceNotes: string, smsNotificationsEnabled: bool, staffMemberIds: list<string>, startDateTime: record<dateTime: string, timeZone: string>> {
@@ -626,7 +625,7 @@ export def "solutions-booking-businesses-calendar-view ListCalendarView" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -669,12 +668,12 @@ export def "solutions-booking-businesses-calendar-view CreateCalendarView" [
   --customers: list # A collection of customer properties for an appointment. An appointment contains a list of customer information and each unit will indicate the properties of a customer who is part of that appointment. Optional.
   --customerTimeZone: string # The time zone of the customer. For a list of possible values, see dateTimeTimeZone. (nullable)
   --endDateTime: record # shape: {dateTime?: string, timeZone?: string}
-  --isCustomerAllowedToManageBooking: string@bool-completer # Indicates that the customer can manage bookings created by the staff. The default value is false. (nullable)
-  --isLocationOnline: string@bool-completer # Indicates that the appointment is held online. The default value is false.
+  --isCustomerAllowedToManageBooking: oneof<nothing, bool> # Indicates that the customer can manage bookings created by the staff. The default value is false. (nullable)
+  --isLocationOnline: oneof<nothing, bool> # Indicates that the appointment is held online. The default value is false.
   --joinWebUrl: string # The URL of the online meeting for the appointment. (nullable)
   --lastUpdatedDateTime: string # The date, time, and time zone when the booking business was last updated. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
   --maximumAttendeesCount: float # The maximum number of customers allowed in an appointment. If maximumAttendeesCount of the service is greater than 1, pass valid customer IDs while creating or updating an appointment. To create a customer, use the Create bookingCustomer operation. (format: int32)
-  --optOutOfCustomerEmail: string@bool-completer # If true indicates that the bookingCustomer for this appointment doesn't wish to receive a confirmation for this appointment.
+  --optOutOfCustomerEmail: oneof<nothing, bool> # If true indicates that the bookingCustomer for this appointment doesn't wish to receive a confirmation for this appointment.
   --postBuffer: string # The amount of time to reserve after the appointment ends, for cleaning up, as an example. The value is expressed in ISO8601 format. (format: duration)
   --preBuffer: string # The amount of time to reserve before the appointment begins, for preparation, as an example. The value is expressed in ISO8601 format. (format: duration)
   --price: float # The regular price for an appointment for the specified bookingService. (nullable, format: double)
@@ -685,7 +684,7 @@ export def "solutions-booking-businesses-calendar-view CreateCalendarView" [
   --serviceLocation: record # shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --serviceName: string # The name of the bookingService associated with this appointment.This property is optional when creating a new appointment. If not specified, it's computed from the service associated with the appointment by the serviceId property.
   --serviceNotes: string # Notes from a bookingStaffMember. The value of this property is available only when reading this bookingAppointment by its ID. (nullable)
-  --smsNotificationsEnabled: string@bool-completer # If true, indicates SMS notifications will be sent to the customers for the appointment. Default value is false.
+  --smsNotificationsEnabled: oneof<nothing, bool> # If true, indicates SMS notifications will be sent to the customers for the appointment. Default value is false.
   --staffMemberIds: list # The ID of each bookingStaffMember who is scheduled in this appointment.
   --startDateTime: record # shape: {dateTime?: string, timeZone?: string}
 ]: any -> record<id: string, additionalInformation: string, anonymousJoinWebUrl: string, appointmentLabel: string, createdDateTime: string, customerEmailAddress: string, customerName: string, customerNotes: string, customerPhone: string, customers: list<record>, customerTimeZone: string, duration: string, endDateTime: record<dateTime: string, timeZone: string>, filledAttendeesCount: float, isCustomerAllowedToManageBooking: bool, isLocationOnline: bool, joinWebUrl: string, lastUpdatedDateTime: string, maximumAttendeesCount: float, optOutOfCustomerEmail: bool, postBuffer: string, preBuffer: string, price: float, priceType: string, reminders: table<message: string, offset: string, recipients: string>, selfServiceAppointmentId: string, serviceId: string, serviceLocation: record<address: record<city: string, countryOrRegion: string, postalCode: string, state: string, street: string>, coordinates: record<accuracy: float, altitude: float, altitudeAccuracy: float, latitude: float, longitude: float>, displayName: string, locationEmailAddress: string, locationType: string, locationUri: string, uniqueId: string, uniqueIdType: string>, serviceName: string, serviceNotes: string, smsNotificationsEnabled: bool, staffMemberIds: list<string>, startDateTime: record<dateTime: string, timeZone: string>> {
@@ -758,12 +757,12 @@ export def "solutions-booking-businesses-calendar-view UpdateCalendarView" [
   --customers: list # A collection of customer properties for an appointment. An appointment contains a list of customer information and each unit will indicate the properties of a customer who is part of that appointment. Optional.
   --customerTimeZone: string # The time zone of the customer. For a list of possible values, see dateTimeTimeZone. (nullable)
   --endDateTime: record # shape: {dateTime?: string, timeZone?: string}
-  --isCustomerAllowedToManageBooking: string@bool-completer # Indicates that the customer can manage bookings created by the staff. The default value is false. (nullable)
-  --isLocationOnline: string@bool-completer # Indicates that the appointment is held online. The default value is false.
+  --isCustomerAllowedToManageBooking: oneof<nothing, bool> # Indicates that the customer can manage bookings created by the staff. The default value is false. (nullable)
+  --isLocationOnline: oneof<nothing, bool> # Indicates that the appointment is held online. The default value is false.
   --joinWebUrl: string # The URL of the online meeting for the appointment. (nullable)
   --lastUpdatedDateTime: string # The date, time, and time zone when the booking business was last updated. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
   --maximumAttendeesCount: float # The maximum number of customers allowed in an appointment. If maximumAttendeesCount of the service is greater than 1, pass valid customer IDs while creating or updating an appointment. To create a customer, use the Create bookingCustomer operation. (format: int32)
-  --optOutOfCustomerEmail: string@bool-completer # If true indicates that the bookingCustomer for this appointment doesn't wish to receive a confirmation for this appointment.
+  --optOutOfCustomerEmail: oneof<nothing, bool> # If true indicates that the bookingCustomer for this appointment doesn't wish to receive a confirmation for this appointment.
   --postBuffer: string # The amount of time to reserve after the appointment ends, for cleaning up, as an example. The value is expressed in ISO8601 format. (format: duration)
   --preBuffer: string # The amount of time to reserve before the appointment begins, for preparation, as an example. The value is expressed in ISO8601 format. (format: duration)
   --price: float # The regular price for an appointment for the specified bookingService. (nullable, format: double)
@@ -774,7 +773,7 @@ export def "solutions-booking-businesses-calendar-view UpdateCalendarView" [
   --serviceLocation: record # shape: {address?: record, coordinates?: record, displayName?: string, locationEmailAddress?: string, locationType?: "default"|"conferenceRoom"|"homeAddress"|"businessAddress"|"geoCoordinates"|"streetAddress"|"hotel"|"restaurant"|"localBusiness"|"postalAddress", locationUri?: string, uniqueId?: string, uniqueIdType?: "unknown"|"locationStore"|"directory"|"private"|"bing"}
   --serviceName: string # The name of the bookingService associated with this appointment.This property is optional when creating a new appointment. If not specified, it's computed from the service associated with the appointment by the serviceId property.
   --serviceNotes: string # Notes from a bookingStaffMember. The value of this property is available only when reading this bookingAppointment by its ID. (nullable)
-  --smsNotificationsEnabled: string@bool-completer # If true, indicates SMS notifications will be sent to the customers for the appointment. Default value is false.
+  --smsNotificationsEnabled: oneof<nothing, bool> # If true, indicates SMS notifications will be sent to the customers for the appointment. Default value is false.
   --staffMemberIds: list # The ID of each bookingStaffMember who is scheduled in this appointment.
   --startDateTime: record # shape: {dateTime?: string, timeZone?: string}
 ]: any -> record<id: string, additionalInformation: string, anonymousJoinWebUrl: string, appointmentLabel: string, createdDateTime: string, customerEmailAddress: string, customerName: string, customerNotes: string, customerPhone: string, customers: list<record>, customerTimeZone: string, duration: string, endDateTime: record<dateTime: string, timeZone: string>, filledAttendeesCount: float, isCustomerAllowedToManageBooking: bool, isLocationOnline: bool, joinWebUrl: string, lastUpdatedDateTime: string, maximumAttendeesCount: float, optOutOfCustomerEmail: bool, postBuffer: string, preBuffer: string, price: float, priceType: string, reminders: table<message: string, offset: string, recipients: string>, selfServiceAppointmentId: string, serviceId: string, serviceLocation: record<address: record<city: string, countryOrRegion: string, postalCode: string, state: string, street: string>, coordinates: record<accuracy: float, altitude: float, altitudeAccuracy: float, latitude: float, longitude: float>, displayName: string, locationEmailAddress: string, locationType: string, locationUri: string, uniqueId: string, uniqueIdType: string>, serviceName: string, serviceNotes: string, smsNotificationsEnabled: bool, staffMemberIds: list<string>, startDateTime: record<dateTime: string, timeZone: string>> {
@@ -888,7 +887,7 @@ export def "solutions-booking-businesses-customers ListCustomer" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -1054,7 +1053,7 @@ export def "solutions-booking-businesses-custom-questions ListCustomQuestion" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -1307,7 +1306,7 @@ export def "solutions-booking-businesses-services ListService" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -1350,10 +1349,10 @@ export def "solutions-booking-businesses-services CreateService" [
   --defaultReminders: list # The default set of reminders for an appointment of this service. The value of this property is available only when reading this bookingService by its ID. — item shape: {message?: string, offset?: string, recipients?: "allAttendees"|"staff"|"customer"|"unknownFutureValue"}
   --description: string # A text description for the service. (nullable)
   --displayName: string # A service name.
-  --isAnonymousJoinEnabled: string@bool-completer # Indicates if an anonymousJoinWebUrl(webrtcUrl) is generated for the appointment booked for this service. The default value is false.
-  --isCustomerAllowedToManageBooking: string@bool-completer # Indicates that the customer can manage bookings created by the staff. The default value is false. (nullable)
-  --isHiddenFromCustomers: string@bool-completer # True indicates that this service isn't available to customers for booking.
-  --isLocationOnline: string@bool-completer # Indicates that the appointments for the service are held online. The default value is false.
+  --isAnonymousJoinEnabled: oneof<nothing, bool> # Indicates if an anonymousJoinWebUrl(webrtcUrl) is generated for the appointment booked for this service. The default value is false.
+  --isCustomerAllowedToManageBooking: oneof<nothing, bool> # Indicates that the customer can manage bookings created by the staff. The default value is false. (nullable)
+  --isHiddenFromCustomers: oneof<nothing, bool> # True indicates that this service isn't available to customers for booking.
+  --isLocationOnline: oneof<nothing, bool> # Indicates that the appointments for the service are held online. The default value is false.
   --languageTag: string # The language of the self-service booking page.
   --lastUpdatedDateTime: string # The date, time, and time zone when the service was last updated. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
   --maximumAttendeesCount: float # The maximum number of customers allowed in a service. If maximumAttendeesCount of the service is greater than 1, pass valid customer IDs while creating or updating an appointment. To create a customer, use the Create bookingCustomer operation. (format: int32)
@@ -1361,7 +1360,7 @@ export def "solutions-booking-businesses-services CreateService" [
   --postBuffer: string # The time to buffer after an appointment for this service ends, and before the next customer appointment can be booked. (format: duration)
   --preBuffer: string # The time to buffer before an appointment for this service can start. (format: duration)
   --schedulingPolicy: record # This type represents the set of policies that dictate how bookings can be created in a Booking Calendar. — shape: {allowStaffSelection?: bool, customAvailabilities?: list, generalAvailability?: record, isMeetingInviteToCustomersEnabled?: bool, maximumAdvance?: string, minimumLeadTime?: string, sendConfirmationsToOwner?: bool, timeSlotInterval?: string}
-  --smsNotificationsEnabled: string@bool-completer # True indicates SMS notifications can be sent to the customers for the appointment of the service. Default value is false.
+  --smsNotificationsEnabled: oneof<nothing, bool> # True indicates SMS notifications can be sent to the customers for the appointment of the service. Default value is false.
   --staffMemberIds: list # Represents those staff members who provide this service.
 ]: any -> record<id: string, additionalInformation: string, createdDateTime: string, customQuestions: table<isRequired: bool, questionId: string>, defaultDuration: string, defaultLocation: record<address: record<city: string, countryOrRegion: string, postalCode: string, state: string, street: string>, coordinates: record<accuracy: float, altitude: float, altitudeAccuracy: float, latitude: float, longitude: float>, displayName: string, locationEmailAddress: string, locationType: string, locationUri: string, uniqueId: string, uniqueIdType: string>, defaultPrice: float, defaultPriceType: string, defaultReminders: table<message: string, offset: string, recipients: string>, description: string, displayName: string, isAnonymousJoinEnabled: bool, isCustomerAllowedToManageBooking: bool, isHiddenFromCustomers: bool, isLocationOnline: bool, languageTag: string, lastUpdatedDateTime: string, maximumAttendeesCount: float, notes: string, postBuffer: string, preBuffer: string, schedulingPolicy: record<allowStaffSelection: bool, customAvailabilities: list<record>, generalAvailability: record<availabilityType: string, businessHours: list>, isMeetingInviteToCustomersEnabled: bool, maximumAdvance: string, minimumLeadTime: string, sendConfirmationsToOwner: bool, timeSlotInterval: string>, smsNotificationsEnabled: bool, staffMemberIds: list<string>, webUrl: string> {
   let input = $in
@@ -1432,10 +1431,10 @@ export def "solutions-booking-businesses-services UpdateService" [
   --defaultReminders: list # The default set of reminders for an appointment of this service. The value of this property is available only when reading this bookingService by its ID. — item shape: {message?: string, offset?: string, recipients?: "allAttendees"|"staff"|"customer"|"unknownFutureValue"}
   --description: string # A text description for the service. (nullable)
   --displayName: string # A service name.
-  --isAnonymousJoinEnabled: string@bool-completer # Indicates if an anonymousJoinWebUrl(webrtcUrl) is generated for the appointment booked for this service. The default value is false.
-  --isCustomerAllowedToManageBooking: string@bool-completer # Indicates that the customer can manage bookings created by the staff. The default value is false. (nullable)
-  --isHiddenFromCustomers: string@bool-completer # True indicates that this service isn't available to customers for booking.
-  --isLocationOnline: string@bool-completer # Indicates that the appointments for the service are held online. The default value is false.
+  --isAnonymousJoinEnabled: oneof<nothing, bool> # Indicates if an anonymousJoinWebUrl(webrtcUrl) is generated for the appointment booked for this service. The default value is false.
+  --isCustomerAllowedToManageBooking: oneof<nothing, bool> # Indicates that the customer can manage bookings created by the staff. The default value is false. (nullable)
+  --isHiddenFromCustomers: oneof<nothing, bool> # True indicates that this service isn't available to customers for booking.
+  --isLocationOnline: oneof<nothing, bool> # Indicates that the appointments for the service are held online. The default value is false.
   --languageTag: string # The language of the self-service booking page.
   --lastUpdatedDateTime: string # The date, time, and time zone when the service was last updated. The timestamp type represents date and time information using ISO 8601 format and is always in UTC. For example, midnight UTC on Jan 1, 2014 is 2014-01-01T00:00:00Z. (nullable, format: date-time)
   --maximumAttendeesCount: float # The maximum number of customers allowed in a service. If maximumAttendeesCount of the service is greater than 1, pass valid customer IDs while creating or updating an appointment. To create a customer, use the Create bookingCustomer operation. (format: int32)
@@ -1443,7 +1442,7 @@ export def "solutions-booking-businesses-services UpdateService" [
   --postBuffer: string # The time to buffer after an appointment for this service ends, and before the next customer appointment can be booked. (format: duration)
   --preBuffer: string # The time to buffer before an appointment for this service can start. (format: duration)
   --schedulingPolicy: record # This type represents the set of policies that dictate how bookings can be created in a Booking Calendar. — shape: {allowStaffSelection?: bool, customAvailabilities?: list, generalAvailability?: record, isMeetingInviteToCustomersEnabled?: bool, maximumAdvance?: string, minimumLeadTime?: string, sendConfirmationsToOwner?: bool, timeSlotInterval?: string}
-  --smsNotificationsEnabled: string@bool-completer # True indicates SMS notifications can be sent to the customers for the appointment of the service. Default value is false.
+  --smsNotificationsEnabled: oneof<nothing, bool> # True indicates SMS notifications can be sent to the customers for the appointment of the service. Default value is false.
   --staffMemberIds: list # Represents those staff members who provide this service.
 ]: any -> record<id: string, additionalInformation: string, createdDateTime: string, customQuestions: table<isRequired: bool, questionId: string>, defaultDuration: string, defaultLocation: record<address: record<city: string, countryOrRegion: string, postalCode: string, state: string, street: string>, coordinates: record<accuracy: float, altitude: float, altitudeAccuracy: float, latitude: float, longitude: float>, displayName: string, locationEmailAddress: string, locationType: string, locationUri: string, uniqueId: string, uniqueIdType: string>, defaultPrice: float, defaultPriceType: string, defaultReminders: table<message: string, offset: string, recipients: string>, description: string, displayName: string, isAnonymousJoinEnabled: bool, isCustomerAllowedToManageBooking: bool, isHiddenFromCustomers: bool, isLocationOnline: bool, languageTag: string, lastUpdatedDateTime: string, maximumAttendeesCount: float, notes: string, postBuffer: string, preBuffer: string, schedulingPolicy: record<allowStaffSelection: bool, customAvailabilities: list<record>, generalAvailability: record<availabilityType: string, businessHours: list>, isMeetingInviteToCustomersEnabled: bool, maximumAdvance: string, minimumLeadTime: string, sendConfirmationsToOwner: bool, timeSlotInterval: string>, smsNotificationsEnabled: bool, staffMemberIds: list<string>, webUrl: string> {
   let input = $in
@@ -1527,7 +1526,7 @@ export def "solutions-booking-businesses-staff-members ListStaffMember" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -1716,7 +1715,7 @@ export def "solutions-booking-currencies ListBookingCurrency" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -1953,7 +1952,7 @@ export def "solutions-virtual-events-events ListEvent" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -2189,7 +2188,7 @@ export def "solutions-virtual-events-events-presenters ListPresenter" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -2360,7 +2359,7 @@ export def "solutions-virtual-events-events-sessions ListSession" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -2505,7 +2504,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports ListAtte
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -2661,7 +2660,7 @@ export def "solutions-virtual-events-events-sessions-attendance-reports-attendan
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -2926,7 +2925,7 @@ export def "solutions-virtual-events-townhalls ListTownhall" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -2958,7 +2957,7 @@ export def "solutions-virtual-events-townhalls CreateTownhall" [
   --audience: string@audience-completer
   --coOrganizers: list # Identity information of the coorganizers of the town hall. — item shape: {displayName?: string, id?: string, tenantId?: string}
   --invitedAttendees: list # The attendees invited to the town hall. The supported identities are: communicationsUserIdentity and communicationsGuestIdentity. — item shape: {displayName?: string, id?: string}
-  --isInviteOnly: string@bool-completer # Indicates whether the town hall is only open to invited people and groups within your organization. The isInviteOnly property can only be true if the value of the audience property is set to organization. (nullable)
+  --isInviteOnly: oneof<nothing, bool> # Indicates whether the town hall is only open to invited people and groups within your organization. The isInviteOnly property can only be true if the value of the audience property is set to organization. (nullable)
 ]: any -> record<audience: string, coOrganizers: table<displayName: string, id: string, tenantId: string>, invitedAttendees: table<displayName: string, id: string>, isInviteOnly: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3016,7 +3015,7 @@ export def "solutions-virtual-events-townhalls UpdateTownhall" [
   --audience: string@audience-completer
   --coOrganizers: list # Identity information of the coorganizers of the town hall. — item shape: {displayName?: string, id?: string, tenantId?: string}
   --invitedAttendees: list # The attendees invited to the town hall. The supported identities are: communicationsUserIdentity and communicationsGuestIdentity. — item shape: {displayName?: string, id?: string}
-  --isInviteOnly: string@bool-completer # Indicates whether the town hall is only open to invited people and groups within your organization. The isInviteOnly property can only be true if the value of the audience property is set to organization. (nullable)
+  --isInviteOnly: oneof<nothing, bool> # Indicates whether the town hall is only open to invited people and groups within your organization. The isInviteOnly property can only be true if the value of the audience property is set to organization. (nullable)
 ]: any -> record<audience: string, coOrganizers: table<displayName: string, id: string, tenantId: string>, invitedAttendees: table<displayName: string, id: string>, isInviteOnly: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3072,7 +3071,7 @@ export def "solutions-virtual-events-townhalls-presenters ListPresenter" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -3246,7 +3245,7 @@ export def "solutions-virtual-events-townhalls-sessions ListSession" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -3392,7 +3391,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports ListA
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -3550,7 +3549,7 @@ export def "solutions-virtual-events-townhalls-sessions-attendance-reports-atten
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -3818,7 +3817,7 @@ export def "solutions-virtual-events-townhalls-microsoftgraphget-by-user-id-and-
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities
@@ -3850,7 +3849,7 @@ export def "solutions-virtual-events-townhalls-microsoftgraphget-by-user-rolerol
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities
@@ -3881,7 +3880,7 @@ export def "solutions-virtual-events-webinars ListWebinar" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -4026,7 +4025,7 @@ export def "solutions-virtual-events-webinars-presenters ListPresenter" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -4221,8 +4220,8 @@ export def "solutions-virtual-events-webinars-registration-configuration UpdateR
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --isManualApprovalEnabled: string@bool-completer # nullable
-  --isWaitlistEnabled: string@bool-completer # nullable
+  --isManualApprovalEnabled: oneof<nothing, bool> # nullable
+  --isWaitlistEnabled: oneof<nothing, bool> # nullable
 ]: any -> record<isManualApprovalEnabled: bool, isWaitlistEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4278,7 +4277,7 @@ export def "solutions-virtual-events-webinars-registration-configuration-questio
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -4308,7 +4307,7 @@ export def "solutions-virtual-events-webinars-registration-configuration-questio
   --allow-errors(-e) # Return full response without error handling
   --id: string # The unique identifier for an entity. Read-only.
   --displayName: string # Display name of the registration question. (nullable)
-  --isRequired: string@bool-completer # Indicates whether an answer to the question is required. The default value is false. (nullable)
+  --isRequired: oneof<nothing, bool> # Indicates whether an answer to the question is required. The default value is false. (nullable)
 ]: any -> record<id: string, displayName: string, isRequired: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4363,7 +4362,7 @@ export def "solutions-virtual-events-webinars-registration-configuration-questio
   --allow-errors(-e) # Return full response without error handling
   --id: string # The unique identifier for an entity. Read-only.
   --displayName: string # Display name of the registration question. (nullable)
-  --isRequired: string@bool-completer # Indicates whether an answer to the question is required. The default value is false. (nullable)
+  --isRequired: oneof<nothing, bool> # Indicates whether an answer to the question is required. The default value is false. (nullable)
 ]: any -> record<id: string, displayName: string, isRequired: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4446,7 +4445,7 @@ export def "solutions-virtual-events-webinars-registrations ListRegistration" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -4639,7 +4638,7 @@ export def "solutions-virtual-events-webinars-registrations-sessions ListSession
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -4985,7 +4984,7 @@ export def "solutions-virtual-events-webinars-sessions ListSession" [
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -5132,7 +5131,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports ListAt
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -5290,7 +5289,7 @@ export def "solutions-virtual-events-webinars-sessions-attendance-reports-attend
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --orderby: list # Order items by property values
   --select: list # Select properties to be returned
   --expand: list # Expand related entities
@@ -5558,7 +5557,7 @@ export def "solutions-virtual-events-webinars-microsoftgraphget-by-user-id-and-r
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities
@@ -5590,7 +5589,7 @@ export def "solutions-virtual-events-webinars-microsoftgraphget-by-user-rolerole
   --skip: int # Skip the first n items
   --search: string # Search items by search phrases
   --filter: string # Filter items by property values
-  --count: string@bool-completer # Include count of items
+  --count: oneof<nothing, bool> # Include count of items
   --select: list # Select properties to be returned
   --orderby: list # Order items by property values
   --expand: list # Expand related entities

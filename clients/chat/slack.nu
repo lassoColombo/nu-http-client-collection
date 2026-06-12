@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://slack.com/api"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -308,8 +307,8 @@ export def "adminconversationscreate create" [
   --hdr-token: string # Authentication token. Requires scope: `admin.conversations:write`
   name: string # Name of the public or private channel to create.
   --description: string # Description of the public or private channel to create.
-  --is-private: string@bool-completer # When `true`, creates a private channel instead of a public channel
-  --org-wide: string@bool-completer # When `true`, the channel will be available org-wide. Note: if the channel is not `org_wide=true`, you must specify a `team_id` for this channel
+  --is-private: oneof<nothing, bool> # When `true`, creates a private channel instead of a public channel
+  --org-wide: oneof<nothing, bool> # When `true`, the channel will be available org-wide. Note: if the channel is not `org_wide=true`, you must specify a `team_id` for this channel
   --team-id: string # The workspace to create the channel in. Note: this argument is required unless you set `org_wide=true`.
 ]: any -> record<channel_id: string, ok: bool> {
   let input = $in
@@ -692,7 +691,7 @@ export def "adminconversationsset-teams setTeams" [
   channel_id: string # The encoded `channel_id` to add or remove to workspaces.
   --team-id: string # The workspace to which the channel belongs. Omit this argument if the channel is a cross-workspace shared channel.
   --target-team-ids: string # A comma-separated list of workspaces to which the channel should be shared. Not required if the channel is being shared org-wide.
-  --org-channel: string@bool-completer # True if channel has to be converted to an org channel
+  --org-channel: oneof<nothing, bool> # True if channel has to be converted to an org channel
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1354,7 +1353,7 @@ export def "adminusergroupsadd-teams addTeams" [
   --hdr-token: string # Authentication token. Requires scope: `admin.teams:write`
   usergroup_id: string # An encoded usergroup (IDP Group) ID.
   team_ids: string # A comma separated list of encoded team (workspace) IDs. Each workspace *MUST* belong to the organization associated with the token.
-  --auto-provision: string@bool-completer # When `true`, this method automatically creates new workspace accounts for the IDP group members.
+  --auto-provision: oneof<nothing, bool> # When `true`, this method automatically creates new workspace accounts for the IDP group members.
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1384,7 +1383,7 @@ export def "adminusergroupslist-channels listChannels" [
   --allow-errors(-e) # Return full response without error handling
   --usergroup-id: string # ID of the IDP group to list default channels for.
   --team-id: string # ID of the the workspace.
-  --include-num-members: string@bool-completer # Flag to include or exclude the count of members per channel.
+  --include-num-members: oneof<nothing, bool> # Flag to include or exclude the count of members per channel.
   --hdr-token: string # Authentication token. Requires scope: `admin.usergroups:read`
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1444,8 +1443,8 @@ export def "adminusersassign assign" [
   --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
   team_id: string # The ID (`T1234`) of the workspace.
   user_id: string # The ID of the user to add to the workspace.
-  --is-restricted: string@bool-completer # True if user should be added to the workspace as a guest.
-  --is-ultra-restricted: string@bool-completer # True if user should be added to the workspace as a single-channel guest.
+  --is-restricted: oneof<nothing, bool> # True if user should be added to the workspace as a guest.
+  --is-ultra-restricted: oneof<nothing, bool> # True if user should be added to the workspace as a single-channel guest.
   --channel-ids: string # Comma separated values of channel IDs to add user in the new workspace.
 ]: any -> record<ok: bool> {
   let input = $in
@@ -1480,9 +1479,9 @@ export def "adminusersinvite invite" [
   channel_ids: string # A comma-separated list of `channel_id`s for this user to join. At least one channel is required.
   --custom-message: string # An optional message to send to the user in the invite email.
   --real-name: string # Full name of the user.
-  --resend: string@bool-completer # Allow this invite to be resent in the future if a user has not signed up yet. (default: false)
-  --is-restricted: string@bool-completer # Is this user a multi-channel guest user? (default: false)
-  --is-ultra-restricted: string@bool-completer # Is this user a single channel guest user? (default: false)
+  --resend: oneof<nothing, bool> # Allow this invite to be resent in the future if a user has not signed up yet. (default: false)
+  --is-restricted: oneof<nothing, bool> # Is this user a multi-channel guest user? (default: false)
+  --is-ultra-restricted: oneof<nothing, bool> # Is this user a single channel guest user? (default: false)
   --guest-expiration-ts: string # Timestamp when guest account should be disabled. Only include this timestamp if you are inviting a guest user and you want their account to expire on a certain date.
 ]: any -> record<ok: bool> {
   let input = $in
@@ -1602,8 +1601,8 @@ export def "adminuserssessionreset reset" [
   --allow-errors(-e) # Return full response without error handling
   --hdr-token: string # Authentication token. Requires scope: `admin.users:write`
   user_id: string # The ID of the user to wipe sessions for
-  --mobile-only: string@bool-completer # Only expire mobile sessions (default: false)
-  --web-only: string@bool-completer # Only expire web sessions (default: false)
+  --mobile-only: oneof<nothing, bool> # Only expire mobile sessions (default: false)
+  --web-only: oneof<nothing, bool> # Only expire web sessions (default: false)
 ]: any -> record<ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1986,7 +1985,7 @@ export def "authrevoke revoke" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-token: string # Authentication token. Requires scope: `none`
-  --test: string@bool-completer # Setting this parameter to `1` triggers a _testing mode_ where the specified token will not actually be revoked.
+  --test: oneof<nothing, bool> # Setting this parameter to `1` triggers a _testing mode_ where the specified token will not actually be revoked.
 ]: nothing -> record<ok: bool, revoked: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2248,7 +2247,7 @@ export def "chatdelete delete" [
   --hdr-token: string # Authentication token. Requires scope: `chat:write`
   --ts: float # Timestamp of the message to be deleted.
   --channel: string # Channel containing the message to be deleted.
-  --as-user: string@bool-completer # Pass true to delete the message as the authed user with `chat:write:user` scope. [Bot users](/bot-users) in this context are considered authed users. If unused or false, the message will be deleted with `chat:write:bot` scope.
+  --as-user: oneof<nothing, bool> # Pass true to delete the message as the authed user with `chat:write:user` scope. [Bot users](/bot-users) in this context are considered authed users. If unused or false, the message will be deleted with `chat:write:bot` scope.
 ]: any -> record<channel: string, ok: bool, ts: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2277,7 +2276,7 @@ export def "chatdelete-scheduled-message post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --hdr-token: string # Authentication token. Requires scope: `chat:write`
-  --as-user: string@bool-completer # Pass true to delete the message as the authed user with `chat:write:user` scope. [Bot users](/bot-users) in this context are considered authed users. If unused or false, the message will be deleted with `chat:write:bot` scope.
+  --as-user: oneof<nothing, bool> # Pass true to delete the message as the authed user with `chat:write:user` scope. [Bot users](/bot-users) in this context are considered authed users. If unused or false, the message will be deleted with `chat:write:bot` scope.
   channel: string # The channel the scheduled_message is posting to
   scheduled_message_id: string # `scheduled_message_id` returned from call to chat.scheduleMessage
 ]: any -> record<ok: bool> {
@@ -2364,13 +2363,13 @@ export def "chatpost-ephemeral post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --hdr-token: string # Authentication token. Requires scope: `chat:write`
-  --as-user: string@bool-completer # Pass true to post the message as the authed user. Defaults to true if the chat:write:bot scope is not included. Otherwise, defaults to false.
+  --as-user: oneof<nothing, bool> # Pass true to post the message as the authed user. Defaults to true if the chat:write:bot scope is not included. Otherwise, defaults to false.
   --attachments: string # A JSON-based array of structured attachments, presented as a URL-encoded string.
   --blocks: string # A JSON-based array of structured blocks, presented as a URL-encoded string.
   channel: string # Channel, private group, or IM channel to send message to. Can be an encoded ID, or a name.
   --icon-emoji: string # Emoji to use as the icon for this message. Overrides `icon_url`. Must be used in conjunction with `as_user` set to `false`, otherwise ignored. See [authorship](#authorship) below.
   --icon-url: string # URL to an image to use as the icon for this message. Must be used in conjunction with `as_user` set to false, otherwise ignored. See [authorship](#authorship) below.
-  --link-names: string@bool-completer # Find and link channel names and usernames.
+  --link-names: oneof<nothing, bool> # Find and link channel names and usernames.
   --parse: string # Change how messages are treated. Defaults to `none`. See [below](#formatting).
   --text: string # How this field works and whether it is required depends on other fields you use in your API call. [See below](#text_usage) for more detail.
   --thread-ts: string # Provide another message's `ts` value to post this message in a thread. Avoid using a reply's `ts` value; use its parent's value instead. Ephemeral messages in threads are only shown if there is already an active thread.
@@ -2410,14 +2409,14 @@ export def "chatpost-message post" [
   channel: string # Channel, private group, or IM channel to send message to. Can be an encoded ID, or a name. See [below](#channels) for more details.
   --icon-emoji: string # Emoji to use as the icon for this message. Overrides `icon_url`. Must be used in conjunction with `as_user` set to `false`, otherwise ignored. See [authorship](#authorship) below.
   --icon-url: string # URL to an image to use as the icon for this message. Must be used in conjunction with `as_user` set to false, otherwise ignored. See [authorship](#authorship) below.
-  --link-names: string@bool-completer # Find and link channel names and usernames.
-  --mrkdwn: string@bool-completer # Disable Slack markup parsing by setting to `false`. Enabled by default.
+  --link-names: oneof<nothing, bool> # Find and link channel names and usernames.
+  --mrkdwn: oneof<nothing, bool> # Disable Slack markup parsing by setting to `false`. Enabled by default.
   --parse: string # Change how messages are treated. Defaults to `none`. See [below](#formatting).
-  --reply-broadcast: string@bool-completer # Used in conjunction with `thread_ts` and indicates whether reply should be made visible to everyone in the channel or conversation. Defaults to `false`.
+  --reply-broadcast: oneof<nothing, bool> # Used in conjunction with `thread_ts` and indicates whether reply should be made visible to everyone in the channel or conversation. Defaults to `false`.
   --text: string # How this field works and whether it is required depends on other fields you use in your API call. [See below](#text_usage) for more detail.
   --thread-ts: string # Provide another message's `ts` value to make this message a reply. Avoid using a reply's `ts` value; use its parent instead.
-  --unfurl-links: string@bool-completer # Pass true to enable unfurling of primarily text-based content.
-  --unfurl-media: string@bool-completer # Pass false to disable unfurling of media content.
+  --unfurl-links: oneof<nothing, bool> # Pass true to enable unfurling of primarily text-based content.
+  --unfurl-media: oneof<nothing, bool> # Pass false to disable unfurling of media content.
   --username: string # Set your bot's user name. Must be used in conjunction with `as_user` set to false, otherwise ignored. See [authorship](#authorship) below.
 ]: any -> record<channel: string, message: record<attachments: list<record>, blocks: list<record>, bot_id: list<any>, bot_profile: record<app_id: string, deleted: bool, icons: record, id: string, name: string, team_id: string, updated: int>, client_msg_id: string, comment: record<comment: string, created: int, id: string, is_intro: bool, is_starred: bool, num_stars: int, pinned_info: record, pinned_to: list, reactions: list, timestamp: int, user: string>, display_as_bot: bool, file: record<channels: list, comments_count: int, created: int, date_delete: int, display_as_bot: bool, editable: bool, editor: string, external_id: string, external_type: string, external_url: string, filetype: string, groups: list, has_rich_preview: bool, id: string, image_exif_rotation: int, ims: list, is_external: bool, is_public: bool, is_starred: bool, is_tombstoned: bool, last_editor: string, mimetype: string, mode: string, name: string, non_owner_editable: bool, num_stars: int, original_h: int, original_w: int, permalink: string, permalink_public: string, pinned_info: record, pinned_to: list, pretty_type: string, preview: string, public_url_shared: bool, reactions: list, shares: record, size: int, source_team: string, state: string, thumb_1024: string, thumb_1024_h: int, thumb_1024_w: int, thumb_160: string, thumb_360: string, thumb_360_h: int, thumb_360_w: int, thumb_480: string, thumb_480_h: int, thumb_480_w: int, thumb_64: string, thumb_720: string, thumb_720_h: int, thumb_720_w: int, thumb_80: string, thumb_800: string, thumb_800_h: int, thumb_800_w: int, thumb_960: string, thumb_960_h: int, thumb_960_w: int, thumb_tiny: string, timestamp: int, title: string, updated: int, url_private: string, url_private_download: string, user: string, user_team: string, username: string>, files: list<record>, icons: record<emoji: string, image_64: string>, inviter: string, is_delayed_message: bool, is_intro: bool, is_starred: bool, last_read: string, latest_reply: string, name: string, old_name: string, parent_user_id: string, permalink: string, pinned_to: list<string>, purpose: string, reactions: list<record>, reply_count: int, reply_users: list<string>, reply_users_count: int, source_team: string, subscribed: bool, subtype: string, team: string, text: string, thread_ts: string, topic: string, ts: string, type: string, unread_count: int, upload: bool, user: string, user_profile: record<avatar_hash: string, display_name: string, display_name_normalized: string, first_name: string, image_72: string, is_restricted: bool, is_ultra_restricted: bool, name: string, real_name: string, real_name_normalized: string, team: string>, user_team: string, username: string>, ok: bool, ts: string> {
   let input = $in
@@ -2451,14 +2450,14 @@ export def "chatschedule-message scheduleMessage" [
   --text: string # How this field works and whether it is required depends on other fields you use in your API call. [See below](#text_usage) for more detail.
   --post-at: string # Unix EPOCH timestamp of time in future to send the message.
   --parse: string # Change how messages are treated. Defaults to `none`. See [chat.postMessage](chat.postMessage#formatting).
-  --as-user: string@bool-completer # Pass true to post the message as the authed user, instead of as a bot. Defaults to false. See [chat.postMessage](chat.postMessage#authorship).
-  --link-names: string@bool-completer # Find and link channel names and usernames.
+  --as-user: oneof<nothing, bool> # Pass true to post the message as the authed user, instead of as a bot. Defaults to false. See [chat.postMessage](chat.postMessage#authorship).
+  --link-names: oneof<nothing, bool> # Find and link channel names and usernames.
   --attachments: string # A JSON-based array of structured attachments, presented as a URL-encoded string.
   --blocks: string # A JSON-based array of structured blocks, presented as a URL-encoded string.
-  --unfurl-links: string@bool-completer # Pass true to enable unfurling of primarily text-based content.
-  --unfurl-media: string@bool-completer # Pass false to disable unfurling of media content.
+  --unfurl-links: oneof<nothing, bool> # Pass true to enable unfurling of primarily text-based content.
+  --unfurl-media: oneof<nothing, bool> # Pass false to disable unfurling of media content.
   --thread-ts: float # Provide another message's `ts` value to make this message a reply. Avoid using a reply's `ts` value; use its parent instead.
-  --reply-broadcast: string@bool-completer # Used in conjunction with `thread_ts` and indicates whether reply should be made visible to everyone in the channel or conversation. Defaults to `false`.
+  --reply-broadcast: oneof<nothing, bool> # Used in conjunction with `thread_ts` and indicates whether reply should be made visible to everyone in the channel or conversation. Defaults to `false`.
 ]: any -> record<channel: string, message: record<bot_id: string, bot_profile: record<app_id: string, deleted: bool, icons: record, id: string, name: string, team_id: string, updated: int>, team: string, text: string, type: string, user: string, username: string>, ok: bool, post_at: int, scheduled_message_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2522,7 +2521,7 @@ export def "chatunfurl unfurl" [
   ts: string # Timestamp of the message to add unfurl behavior to.
   --unfurls: string # URL-encoded JSON map with keys set to URLs featured in the the message, pointing to their unfurl blocks or message attachments.
   --user-auth-message: string # Provide a simply-formatted string to send as an ephemeral message to the user as invitation to authenticate further and enable full unfurling behavior
-  --user-auth-required: string@bool-completer # Set to `true` or `1` to indicate the user must install your Slack app to trigger unfurls for this domain
+  --user-auth-required: oneof<nothing, bool> # Set to `true` or `1` to indicate the user must install your Slack app to trigger unfurls for this domain
   --user-auth-url: string # Send users to this custom URL where they will complete authentication in your app to fully trigger unfurling. Value should be properly URL-encoded.
 ]: any -> record<ok: bool> {
   let input = $in
@@ -2647,7 +2646,7 @@ export def "conversationscreate create" [
   --allow-errors(-e) # Return full response without error handling
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --name: string # Name of the public or private channel to create
-  --is-private: string@bool-completer # Create a private channel instead of a public one
+  --is-private: oneof<nothing, bool> # Create a private channel instead of a public one
 ]: any -> record<channel: list<any>, ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2679,7 +2678,7 @@ export def "conversationshistory history" [
   --channel: string # Conversation ID to fetch history for.
   --latest: float # End of time range of messages to include in results.
   --oldest: float # Start of time range of messages to include in results.
-  --inclusive: string@bool-completer # Include messages with latest or oldest timestamp in results only when either timestamp is specified.
+  --inclusive: oneof<nothing, bool> # Include messages with latest or oldest timestamp in results only when either timestamp is specified.
   --limit: int # The maximum number of items to return. Fewer than the requested number of items may be returned, even if the end of the users list hasn't been reached.
   --cursor: string # Paginate through collections of data by setting the `cursor` parameter to a `next_cursor` attribute returned by a previous request's `response_metadata`. Default value fetches the first "page" of the collection. See [pagination](/docs/pagination) for more detail.
 ]: nothing -> record<channel_actions_count: int, channel_actions_ts: list<any>, has_more: bool, messages: table<attachments: list, blocks: list, bot_id: list, bot_profile: record, client_msg_id: string, comment: record, display_as_bot: bool, file: record, files: list, icons: record, inviter: string, is_delayed_message: bool, is_intro: bool, is_starred: bool, last_read: string, latest_reply: string, name: string, old_name: string, parent_user_id: string, permalink: string, pinned_to: list, purpose: string, reactions: list, reply_count: int, reply_users: list, reply_users_count: int, source_team: string, subscribed: bool, subtype: string, team: string, text: string, thread_ts: string, topic: string, ts: string, type: string, unread_count: int, upload: bool, user: string, user_profile: record, user_team: string, username: string>, ok: bool, pin_count: int> {
@@ -2707,8 +2706,8 @@ export def "conversationsinfo info" [
   --allow-errors(-e) # Return full response without error handling
   --qp-token: string # Authentication token. Requires scope: `conversations:read`
   --channel: string # Conversation ID to learn more about
-  --include-locale: string@bool-completer # Set this to `true` to receive the locale for this conversation. Defaults to `false`
-  --include-num-members: string@bool-completer # Set to `true` to include the member count for the specified conversation. Defaults to `false`
+  --include-locale: oneof<nothing, bool> # Set this to `true` to receive the locale for this conversation. Defaults to `false`
+  --include-num-members: oneof<nothing, bool> # Set to `true` to include the member count for the specified conversation. Defaults to `false`
 ]: nothing -> record<channel: list<any>, ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2851,7 +2850,7 @@ export def "conversationslist list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-token: string # Authentication token. Requires scope: `conversations:read`
-  --exclude-archived: string@bool-completer # Set to `true` to exclude archived channels from the list
+  --exclude-archived: oneof<nothing, bool> # Set to `true` to exclude archived channels from the list
   --types: string # Mix and match channel types by providing a comma-separated list of any combination of `public_channel`, `private_channel`, `mpim`, `im`
   --limit: int # The maximum number of items to return. Fewer than the requested number of items may be returned, even if the end of the list hasn't been reached. Must be an integer no larger than 1000.
   --cursor: string # Paginate through collections of data by setting the `cursor` parameter to a `next_cursor` attribute returned by a previous request's `response_metadata`. Default value fetches the first "page" of the collection. See [pagination](/docs/pagination) for more detail.
@@ -2938,7 +2937,7 @@ export def "conversationsopen open" [
   --hdr-token: string # Authentication token. Requires scope: `conversations:write`
   --channel: string # Resume a conversation by supplying an `im` or `mpim`'s ID. Or provide the `users` field instead.
   --users: string # Comma separated lists of users. If only one user is included, this creates a 1:1 DM.  The ordering of the users is preserved whenever a multi-person direct message is returned. Supply a `channel` when not supplying `users`.
-  --return-im: string@bool-completer # Boolean, indicates you want the full IM channel definition in the response.
+  --return-im: oneof<nothing, bool> # Boolean, indicates you want the full IM channel definition in the response.
 ]: any -> record<already_open: bool, channel: list<any>, no_op: bool, ok: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3001,7 +3000,7 @@ export def "conversationsreplies replies" [
   --ts: float # Unique identifier of a thread's parent message. `ts` must be the timestamp of an existing message with 0 or more replies. If there are no replies then just the single message referenced by `ts` will return - it is just an ordinary, unthreaded message.
   --latest: float # End of time range of messages to include in results.
   --oldest: float # Start of time range of messages to include in results.
-  --inclusive: string@bool-completer # Include messages with latest or oldest timestamp in results only when either timestamp is specified.
+  --inclusive: oneof<nothing, bool> # Include messages with latest or oldest timestamp in results only when either timestamp is specified.
   --limit: int # The maximum number of items to return. Fewer than the requested number of items may be returned, even if the end of the users list hasn't been reached.
   --cursor: string # Paginate through collections of data by setting the `cursor` parameter to a `next_cursor` attribute returned by a previous request's `response_metadata`. Default value fetches the first "page" of the collection. See [pagination](/docs/pagination) for more detail.
 ]: nothing -> record<has_more: bool, messages: list<list<any>>, ok: bool> {
@@ -3391,7 +3390,7 @@ export def "fileslist list" [
   --types: string # Filter files by type ([see below](#file_types)). You can pass multiple values in the types argument, like `types=spaces,snippets`.The default value is `all`, which does not filter the list.
   --count: string
   --page: string
-  --show-files-hidden-by-limit: string@bool-completer # Show truncated file info for files hidden due to being too old, and the team who owns the file being over the file limit.
+  --show-files-hidden-by-limit: oneof<nothing, bool> # Show truncated file info for files hidden due to being too old, and the team who owns the file being over the file limit.
 ]: nothing -> record<files: table<channels: list, comments_count: int, created: int, date_delete: int, display_as_bot: bool, editable: bool, editor: string, external_id: string, external_type: string, external_url: string, filetype: string, groups: list, has_rich_preview: bool, id: string, image_exif_rotation: int, ims: list, is_external: bool, is_public: bool, is_starred: bool, is_tombstoned: bool, last_editor: string, mimetype: string, mode: string, name: string, non_owner_editable: bool, num_stars: int, original_h: int, original_w: int, permalink: string, permalink_public: string, pinned_info: record, pinned_to: list, pretty_type: string, preview: string, public_url_shared: bool, reactions: list, shares: record, size: int, source_team: string, state: string, thumb_1024: string, thumb_1024_h: int, thumb_1024_w: int, thumb_160: string, thumb_360: string, thumb_360_h: int, thumb_360_w: int, thumb_480: string, thumb_480_h: int, thumb_480_w: int, thumb_64: string, thumb_720: string, thumb_720_h: int, thumb_720_w: int, thumb_80: string, thumb_800: string, thumb_800_h: int, thumb_800_w: int, thumb_960: string, thumb_960_h: int, thumb_960_w: int, thumb_tiny: string, timestamp: int, title: string, updated: int, url_private: string, url_private_download: string, user: string, user_team: string, username: string>, ok: bool, paging: record<count: int, page: int, pages: int, per_page: int, spill: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3685,7 +3684,7 @@ export def "migrationexchange exchange" [
   --qp-token: string # Authentication token. Requires scope: `tokens.basic`
   --users: string # A comma-separated list of user ids, up to 400 per request
   --team-id: string # Specify team_id starts with `T` in case of Org Token
-  --to-old: string@bool-completer # Specify `true` to convert `W` global user IDs to workspace-specific `U` IDs. Defaults to `false`.
+  --to-old: oneof<nothing, bool> # Specify `true` to convert `W` global user IDs to workspace-specific `U` IDs. Defaults to `false`.
 ]: nothing -> record<enterprise_id: string, invalid_user_ids: list<string>, ok: bool, team_id: string, user_id_map: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3713,7 +3712,7 @@ export def "oauthaccess access" [
   --client-secret: string # Issued when you created your application.
   --code: string # The `code` param returned via the OAuth callback.
   --redirect-uri: string # This must match the originally submitted URI (if one was sent).
-  --single-channel: string@bool-completer # Request the user to add your app only to a single channel. Only valid with a [legacy workspace app](https://api.slack.com/legacy-workspace-apps).
+  --single-channel: oneof<nothing, bool> # Request the user to add your app only to a single channel. Only valid with a [legacy workspace app](https://api.slack.com/legacy-workspace-apps).
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3741,7 +3740,7 @@ export def "oauthtoken token" [
   --client-secret: string # Issued when you created your application.
   --code: string # The `code` param returned via the OAuth callback.
   --redirect-uri: string # This must match the originally submitted URI (if one was sent).
-  --single-channel: string@bool-completer # Request the user to add your app only to a single channel.
+  --single-channel: oneof<nothing, bool> # Request the user to add your app only to a single channel.
 ]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3912,7 +3911,7 @@ export def "reactionsget get" [
   --channel: string # Channel where the message to get reactions for was posted.
   --file: string # File to get reactions for.
   --file-comment: string # File comment to get reactions for.
-  --full: string@bool-completer # If true always return the complete reaction list.
+  --full: oneof<nothing, bool> # If true always return the complete reaction list.
   --timestamp: string # Timestamp of the message to get reactions for.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3939,7 +3938,7 @@ export def "reactionslist list" [
   --allow-errors(-e) # Return full response without error handling
   --qp-token: string # Authentication token. Requires scope: `reactions:read`
   --user: string # Show reactions made by this user. Defaults to the authed user.
-  --full: string@bool-completer # If true always return the complete reaction list.
+  --full: oneof<nothing, bool> # If true always return the complete reaction list.
   --count: int
   --page: int
   --cursor: string # Parameter for pagination. Set `cursor` equal to the `next_cursor` attribute returned by the previous request's `response_metadata`. This parameter is optional, but pagination is mandatory: the default value simply fetches the first "page" of the collection. See [pagination](/docs/pagination) for more details.
@@ -4139,8 +4138,8 @@ export def "rtmconnect connect" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-token: string # Authentication token. Requires scope: `rtm:stream`
-  --batch-presence-aware: string@bool-completer # Batch presence deliveries via subscription. Enabling changes the shape of `presence_change` events. See [batch presence](/docs/presence-and-status#batching).
-  --presence-sub: string@bool-completer # Only deliver presence events when requested by subscription. See [presence subscriptions](/docs/presence-and-status#subscriptions).
+  --batch-presence-aware: oneof<nothing, bool> # Batch presence deliveries via subscription. Enabling changes the shape of `presence_change` events. See [batch presence](/docs/presence-and-status#batching).
+  --presence-sub: oneof<nothing, bool> # Only deliver presence events when requested by subscription. See [presence subscriptions](/docs/presence-and-status#subscriptions).
 ]: nothing -> record<ok: bool, self: record<id: string, name: string>, team: record<domain: string, id: string, name: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4166,7 +4165,7 @@ export def "searchmessages messages" [
   --allow-errors(-e) # Return full response without error handling
   --qp-token: string # Authentication token. Requires scope: `search:read`
   --count: int # Pass the number of results you want per "page". Maximum of `100`.
-  --highlight: string@bool-completer # Pass a value of `true` to enable query highlight markers (see below).
+  --highlight: oneof<nothing, bool> # Pass a value of `true` to enable query highlight markers (see below).
   --page: int
   --qp-query: string # Search query.
   --qp-sort: string # Return matches sorted by either `score` or `timestamp`.
@@ -4422,7 +4421,7 @@ export def "usergroupscreate create" [
   --channels: string # A comma separated string of encoded channel IDs for which the User Group uses as a default.
   --description: string # A short description of the User Group.
   --handle: string # A mention handle. Must be unique among channels, users and User Groups.
-  --include-count: string@bool-completer # Include the number of users in each User Group.
+  --include-count: oneof<nothing, bool> # Include the number of users in each User Group.
   name: string # A name for the User Group. Must be unique among User Groups.
 ]: any -> record<ok: bool, usergroup: record<auto_provision: bool, auto_type: list<any>, channel_count: int, created_by: string, date_create: int, date_delete: int, date_update: int, deleted_by: list<any>, description: string, enterprise_subteam_id: string, handle: string, id: string, is_external: bool, is_subteam: bool, is_usergroup: bool, name: string, prefs: record<channels: list, groups: list>, team_id: string, updated_by: string, user_count: int, users: list<string>>> {
   let input = $in
@@ -4452,7 +4451,7 @@ export def "usergroupsdisable disable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --hdr-token: string # Authentication token. Requires scope: `usergroups:write`
-  --include-count: string@bool-completer # Include the number of users in the User Group.
+  --include-count: oneof<nothing, bool> # Include the number of users in the User Group.
   usergroup: string # The encoded ID of the User Group to disable.
 ]: any -> record<ok: bool, usergroup: record<auto_provision: bool, auto_type: list<any>, channel_count: int, created_by: string, date_create: int, date_delete: int, date_update: int, deleted_by: list<any>, description: string, enterprise_subteam_id: string, handle: string, id: string, is_external: bool, is_subteam: bool, is_usergroup: bool, name: string, prefs: record<channels: list, groups: list>, team_id: string, updated_by: string, user_count: int, users: list<string>>> {
   let input = $in
@@ -4482,7 +4481,7 @@ export def "usergroupsenable enable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --hdr-token: string # Authentication token. Requires scope: `usergroups:write`
-  --include-count: string@bool-completer # Include the number of users in the User Group.
+  --include-count: oneof<nothing, bool> # Include the number of users in the User Group.
   usergroup: string # The encoded ID of the User Group to enable.
 ]: any -> record<ok: bool, usergroup: record<auto_provision: bool, auto_type: list<any>, channel_count: int, created_by: string, date_create: int, date_delete: int, date_update: int, deleted_by: list<any>, description: string, enterprise_subteam_id: string, handle: string, id: string, is_external: bool, is_subteam: bool, is_usergroup: bool, name: string, prefs: record<channels: list, groups: list>, team_id: string, updated_by: string, user_count: int, users: list<string>>> {
   let input = $in
@@ -4511,10 +4510,10 @@ export def "usergroupslist list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-users: string@bool-completer # Include the list of users for each User Group.
+  --include-users: oneof<nothing, bool> # Include the list of users for each User Group.
   --qp-token: string # Authentication token. Requires scope: `usergroups:read`
-  --include-count: string@bool-completer # Include the number of users in each User Group.
-  --include-disabled: string@bool-completer # Include disabled User Groups.
+  --include-count: oneof<nothing, bool> # Include the number of users in each User Group.
+  --include-disabled: oneof<nothing, bool> # Include disabled User Groups.
 ]: nothing -> record<ok: bool, usergroups: table<auto_provision: bool, auto_type: list, channel_count: int, created_by: string, date_create: int, date_delete: int, date_update: int, deleted_by: list, description: string, enterprise_subteam_id: string, handle: string, id: string, is_external: bool, is_subteam: bool, is_usergroup: bool, name: string, prefs: record, team_id: string, updated_by: string, user_count: int, users: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4542,7 +4541,7 @@ export def "usergroupsupdate update" [
   --handle: string # A mention handle. Must be unique among channels, users and User Groups.
   --description: string # A short description of the User Group.
   --channels: string # A comma separated string of encoded channel IDs for which the User Group uses as a default.
-  --include-count: string@bool-completer # Include the number of users in the User Group.
+  --include-count: oneof<nothing, bool> # Include the number of users in the User Group.
   usergroup: string # The encoded ID of the User Group to update.
   --name: string # A name for the User Group. Must be unique among User Groups.
 ]: any -> record<ok: bool, usergroup: record<auto_provision: bool, auto_type: list<any>, channel_count: int, created_by: string, date_create: int, date_delete: int, date_update: int, deleted_by: list<any>, description: string, enterprise_subteam_id: string, handle: string, id: string, is_external: bool, is_subteam: bool, is_usergroup: bool, name: string, prefs: record<channels: list, groups: list>, team_id: string, updated_by: string, user_count: int, users: list<string>>> {
@@ -4573,7 +4572,7 @@ export def "usergroupsuserslist list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-token: string # Authentication token. Requires scope: `usergroups:read`
-  --include-disabled: string@bool-completer # Allow results that involve disabled User Groups.
+  --include-disabled: oneof<nothing, bool> # Allow results that involve disabled User Groups.
   --usergroup: string # The encoded ID of the User Group to update.
 ]: nothing -> record<ok: bool, users: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4599,7 +4598,7 @@ export def "usergroupsusersupdate update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --hdr-token: string # Authentication token. Requires scope: `usergroups:write`
-  --include-count: string@bool-completer # Include the number of users in the User Group.
+  --include-count: oneof<nothing, bool> # Include the number of users in the User Group.
   usergroup: string # The encoded ID of the User Group to update.
   users: string # A comma separated string of encoded user IDs that represent the entire list of users for the User Group.
 ]: any -> record<ok: bool, usergroup: record<auto_provision: bool, auto_type: list<any>, channel_count: int, created_by: string, date_create: int, date_delete: int, date_update: int, deleted_by: list<any>, description: string, enterprise_subteam_id: string, handle: string, id: string, is_external: bool, is_subteam: bool, is_usergroup: bool, name: string, prefs: record<channels: list, groups: list>, team_id: string, updated_by: string, user_count: int, users: list<string>>> {
@@ -4632,7 +4631,7 @@ export def "usersconversations conversations" [
   --qp-token: string # Authentication token. Requires scope: `conversations:read`
   --user: string # Browse conversations by a specific user ID's membership. Non-public channels are restricted to those where the calling user shares membership.
   --types: string # Mix and match channel types by providing a comma-separated list of any combination of `public_channel`, `private_channel`, `mpim`, `im`
-  --exclude-archived: string@bool-completer # Set to `true` to exclude archived channels from the list
+  --exclude-archived: oneof<nothing, bool> # Set to `true` to exclude archived channels from the list
   --limit: int # The maximum number of items to return. Fewer than the requested number of items may be returned, even if the end of the list hasn't been reached. Must be an integer no larger than 1000.
   --cursor: string # Paginate through collections of data by setting the `cursor` parameter to a `next_cursor` attribute returned by a previous request's `response_metadata`. Default value fetches the first "page" of the collection. See [pagination](/docs/pagination) for more detail.
 ]: nothing -> record<channels: list<list<any>>, ok: bool, response_metadata: record<next_cursor: string>> {
@@ -4734,7 +4733,7 @@ export def "usersinfo info" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-token: string # Authentication token. Requires scope: `users:read`
-  --include-locale: string@bool-completer # Set this to `true` to receive the locale for this user. Defaults to `false`
+  --include-locale: oneof<nothing, bool> # Set this to `true` to receive the locale for this user. Defaults to `false`
   --user: string # User to get info on
 ]: nothing -> record<ok: bool, user: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4762,7 +4761,7 @@ export def "userslist list" [
   --qp-token: string # Authentication token. Requires scope: `users:read`
   --limit: int # The maximum number of items to return. Fewer than the requested number of items may be returned, even if the end of the users list hasn't been reached. Providing no `limit` value will result in Slack attempting to deliver you the entire result set. If the collection is too large you may experience `limit_required` or HTTP 500 errors.
   --cursor: string # Paginate through collections of data by setting the `cursor` parameter to a `next_cursor` attribute returned by a previous request's `response_metadata`. Default value fetches the first "page" of the collection. See [pagination](/docs/pagination) for more detail.
-  --include-locale: string@bool-completer # Set this to `true` to receive the locale for users. Defaults to `false`
+  --include-locale: oneof<nothing, bool> # Set this to `true` to receive the locale for users. Defaults to `false`
 ]: nothing -> record<cache_ts: int, members: list<list<any>>, ok: bool, response_metadata: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4812,7 +4811,7 @@ export def "usersprofileget get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-token: string # Authentication token. Requires scope: `users.profile:read`
-  --include-labels: string@bool-completer # Include labels for each ID in custom profile fields
+  --include-labels: oneof<nothing, bool> # Include labels for each ID in custom profile fields
   --user: string # User to retrieve profile info for
 ]: nothing -> record<ok: bool, profile: record<always_active: bool, api_app_id: string, avatar_hash: string, bot_id: string, display_name: string, display_name_normalized: string, email: string, fields: record, first_name: string, guest_expiration_ts: int, guest_invited_by: string, image_1024: string, image_192: string, image_24: string, image_32: string, image_48: string, image_512: string, image_72: string, image_original: string, is_app_user: bool, is_custom_image: bool, is_restricted: bool, is_ultra_restricted: bool, last_avatar_image_hash: string, last_name: string, memberships_count: int, name: string, phone: string, pronouns: string, real_name: string, real_name_normalized: string, skype: string, status_default_emoji: string, status_default_text: string, status_default_text_canonical: string, status_emoji: string, status_expiration: int, status_text: string, status_text_canonical: string, team: string, title: string, updated: int, user_id: string, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.billingo.hu/v3"] }
 def auth-scheme-completer [] { ["x-api-key"] }
 
@@ -139,7 +138,7 @@ export def "bank-accounts CreateBankAccount" [
   --account-number-iban: string
   currency: string@currency-completer
   name: string
-  --need-qr: string@bool-completer # default: false
+  --need-qr: oneof<nothing, bool> # default: false
   --swift: string
 ]: any -> record<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string> {
   let input = $in
@@ -214,7 +213,7 @@ export def "bank-accounts UpdateBankAccount" [
   --account-number-iban: string
   currency: string@currency-completer
   name: string
-  --need-qr: string@bool-completer # default: false
+  --need-qr: oneof<nothing, bool> # default: false
   --swift: string
 ]: any -> record<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string> {
   let input = $in
@@ -329,11 +328,11 @@ export def "documents CreateDocument" [
   --conversion-rate: float # format: float, default: 1
   currency: string@currency-completer
   due_date: string # format: date
-  --electronic: string@bool-completer # default: false
+  --electronic: oneof<nothing, bool> # default: false
   fulfillment_date: string # format: date
   --items: list
   language: string@language-completer
-  --paid: string@bool-completer # default: false
+  --paid: oneof<nothing, bool> # default: false
   partner_id: int
   payment_method: string@payment-method-completer
   --settings: record # shape: {mediated_service?: bool, online_payment?: ""|"Barion"|"SimplePay"|"no", place_id?: int, round?: "five"|"none"|"one"|"ten", without_financial_fulfillment?: bool}

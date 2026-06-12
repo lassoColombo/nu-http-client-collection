@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://sandbox-api.paddle.com" "https://api.paddle.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -580,7 +579,7 @@ export def "customers create-customer" [
   --allow-errors(-e) # Return full response without error handling
   --name: any # Full name of this customer. Required when creating transactions where `collection_mode` is `manual` (invoices).
   email: any # Email address for this customer.
-  --marketing-consent: string@bool-completer # Whether this customer opted into marketing from you. `false` unless customers check the marketing consent box when using Paddle Checkout. Set automatically by Paddle. (default: false)
+  --marketing-consent: oneof<nothing, bool> # Whether this customer opted into marketing from you. `false` unless customers check the marketing consent box when using Paddle Checkout. Set automatically by Paddle. (default: false)
   --custom-data: any # Your own structured key-value data.
   --locale: string # Valid IETF BCP 47 short form locale tag. If omitted, defaults to `en`. (default: en)
   --import-meta: any # Import information for this entity. `null` if this entity is not imported.
@@ -635,7 +634,7 @@ export def "customers update-customer" [
   --allow-errors(-e) # Return full response without error handling
   --name: any # Full name of this customer. Required when creating transactions where `collection_mode` is `manual` (invoices).
   --email: any # Email address for this customer.
-  --marketing-consent: string@bool-completer # Whether this customer opted into marketing from you. `false` unless customers check the marketing consent box when using Paddle Checkout. Set automatically by Paddle. (default: false)
+  --marketing-consent: oneof<nothing, bool> # Whether this customer opted into marketing from you. `false` unless customers check the marketing consent box when using Paddle Checkout. Set automatically by Paddle. (default: false)
   --status: string@status-completer # Whether this entity can be used in Paddle.
   --custom-data: any # Your own structured key-value data.
   --locale: string # Valid IETF BCP 47 short form locale tag. (default: en)
@@ -877,13 +876,13 @@ export def "discounts create-discount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   description: string # Short description for this discount for your reference. Not shown to customers.
-  --enabled-for-checkout: string@bool-completer # Whether this discount can be redeemed by customers at checkout (`true`) or not (`false`). (default: true)
+  --enabled-for-checkout: oneof<nothing, bool> # Whether this discount can be redeemed by customers at checkout (`true`) or not (`false`). (default: true)
   --code: any # Unique code that customers can use to redeem this discount at checkout. Use letters and numbers only, up to 32 characters. Not case-sensitive.  If omitted and `enabled_for_checkout` is `true`, Paddle generates a random 10-character code.
   type: any # Type of discount. Determines how this discount impacts the checkout or transaction total.
   --mode: any # Discount mode. Standard discounts are considered part of your catalog and are shown in the Paddle dashboard. If omitted, defaults to `standard`. (default: standard)
   amount: string # Amount to discount by. For `percentage` discounts, must be an amount between `0.01` and `100`. For `flat` and `flat_per_seat` discounts, amount in the lowest denomination for a currency.
   --currency-code: any # Supported three-letter ISO 4217 currency code. Required where discount type is `flat` or `flat_per_seat`.
-  --recur: string@bool-completer # Whether this discount applies for multiple subscription billing periods (`true`) or not (`false`). If omitted, defaults to `false`. (default: false)
+  --recur: oneof<nothing, bool> # Whether this discount applies for multiple subscription billing periods (`true`) or not (`false`). If omitted, defaults to `false`. (default: false)
   --maximum-recurring-intervals: any # Number of subscription billing periods that this discount recurs for. Requires `recur`. `null` if this discount recurs forever.  Subscription renewals, midcycle changes, and one-time charges billed to a subscription aren't considered a redemption. `times_used` is not incremented in these cases.
   --usage-limit: any # Maximum number of times this discount can be redeemed. This is an overall limit for this discount, rather than a per-customer limit. `null` if this discount can be redeemed an unlimited amount of times.  Paddle counts a usage as a redemption on a checkout, transaction, or the initial application against a subscription. Transactions created for subscription renewals, midcycle changes, and one-time charges aren't considered a redemption.
   --restrict-to: any # Product or price IDs that this discount is for. When including a product ID, all prices for that product can be discounted. `null` if this discount applies to all products and prices.
@@ -944,13 +943,13 @@ export def "discounts update-discount" [
   --allow-errors(-e) # Return full response without error handling
   --status: string@status-completer # Whether this entity can be used in Paddle.
   --description: string # Short description for this discount for your reference. Not shown to customers.
-  --enabled-for-checkout: string@bool-completer # Whether this discount can be redeemed by customers at checkout (`true`) or not (`false`). (default: true)
+  --enabled-for-checkout: oneof<nothing, bool> # Whether this discount can be redeemed by customers at checkout (`true`) or not (`false`). (default: true)
   --code: any # Unique code that customers can use to redeem this discount at checkout. Not case-sensitive.
   --type: any # Type of discount. Determines how this discount impacts the checkout or transaction total.
   --mode: any # Discount mode. Standard discounts are considered part of your catalog and are shown in the Paddle dashboard. (default: standard)
   --amount: string # Amount to discount by. For `percentage` discounts, must be an amount between `0.01` and `100`. For `flat` and `flat_per_seat` discounts, amount in the lowest denomination for a currency.
   --currency-code: any # Supported three-letter ISO 4217 currency code. Required where discount type is `flat` or `flat_per_seat`.
-  --recur: string@bool-completer # Whether this discount applies for multiple subscription billing periods (`true`) or not (`false`). (default: false)
+  --recur: oneof<nothing, bool> # Whether this discount applies for multiple subscription billing periods (`true`) or not (`false`). (default: false)
   --maximum-recurring-intervals: any # Number of subscription billing periods that this discount recurs for. Requires `recur`. `null` if this discount recurs forever.  Subscription renewals, midcycle changes, and one-time charges billed to a subscription aren't considered a redemption. `times_used` is not incremented in these cases.
   --usage-limit: any # Maximum number of times this discount can be redeemed. This is an overall limit for this discount, rather than a per-customer limit. `null` if this discount can be redeemed an unlimited amount of times.  Paddle counts a usage as a redemption on a checkout, transaction, or the initial application against a subscription. Transactions created for subscription renewals, midcycle changes, and one-time charges aren't considered a redemption.
   --restrict-to: any # Product or price IDs that this discount is for. When including a product ID, all prices for that product can be discounted. `null` if this discount applies to all products and prices.
@@ -1056,7 +1055,7 @@ export def "notification-settings list-notification-settings" [
   --after: string # Return entities after the specified Paddle ID when working with paginated endpoints. Used in the `meta.pagination.next` URL in responses for list operations.
   --per-page: int # Set how many entities are returned per page. Paddle returns the maximum number of results if a number greater than the maximum is requested. Check `meta.pagination.per_page` in the response to see how many were returned.  Default: `200`; Maximum: `200`. (default: 200)
   --order-by: string # Order returned entities by the specified field and direction (`[ASC]` or `[DESC]`). For example, `?order_by=id[ASC]`.  Valid fields for ordering: `id`. (default: id[DESC])
-  --active: string@bool-completer # Determine whether returned entities are active (`true`) or not (`false`).
+  --active: oneof<nothing, bool> # Determine whether returned entities are active (`true`) or not (`false`).
   --traffic-source: string@traffic-source-completer # Return entities that match the specified traffic source.
 ]: nothing -> record<data: table<id: record, description: string, type: record, destination: string, active: bool, api_version: int, include_sensitive_fields: bool, subscribed_events: list, endpoint_secret_key: string, traffic_source: record>, meta: record<request_id: string, pagination: record<per_page: int, next: string, has_more: bool, estimated_total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1085,7 +1084,7 @@ export def "notification-settings create-notification-setting" [
   type: any # Where notifications should be sent for this destination.
   destination: string # Webhook endpoint URL or email address.
   --api-version: int # API version that returned objects for events should conform to. Must be a valid version of the Paddle API. Can't be a version older than your account default. If omitted, defaults to your account default version.
-  --include-sensitive-fields: string@bool-completer # Whether potentially sensitive fields should be sent to this notification destination. If omitted, defaults to `false`. (default: false)
+  --include-sensitive-fields: oneof<nothing, bool> # Whether potentially sensitive fields should be sent to this notification destination. If omitted, defaults to `false`. (default: false)
   subscribed_events: list # Subscribed events for this notification destination. When creating or updating a notification destination, pass an array of event type names only. Paddle returns the complete event type object.
   --traffic-source: any # Whether Paddle should deliver real platform events, simulation events or both to this notification destination. If omitted, defaults to `platform`. (default: platform)
 ]: any -> record<data: record<id: record, description: string, type: record, destination: string, active: bool, api_version: int, include_sensitive_fields: bool, subscribed_events: list<record>, endpoint_secret_key: string, traffic_source: record>, meta: record<request_id: string>> {
@@ -1139,9 +1138,9 @@ export def "notification-settings update-notification-setting" [
   --allow-errors(-e) # Return full response without error handling
   --description: string # Short description for this notification destination. Shown in the Paddle Dashboard.
   --destination: string # Webhook endpoint URL or email address.
-  --active: string@bool-completer # Whether Paddle should try to deliver events to this notification destination. (default: true)
+  --active: oneof<nothing, bool> # Whether Paddle should try to deliver events to this notification destination. (default: true)
   --api-version: int # API version that returned objects for events should conform to. Must be a valid version of the Paddle API. Can't be a version older than your account default. Defaults to your account default if omitted.
-  --include-sensitive-fields: string@bool-completer # Whether potentially sensitive fields should be sent to this notification destination. (default: false)
+  --include-sensitive-fields: oneof<nothing, bool> # Whether potentially sensitive fields should be sent to this notification destination. (default: false)
   --subscribed-events: list # Subscribed events for this notification destination. When creating or updating a notification destination, pass an array of event type names only. Paddle returns the complete event type object.
   --traffic-source: any # Whether Paddle should deliver real platform events, simulation events or both to this notification destination.
 ]: any -> record<data: record<id: record, description: string, type: record, destination: string, active: bool, api_version: int, include_sensitive_fields: bool, subscribed_events: list<record>, endpoint_secret_key: string, traffic_source: record>, meta: record<request_id: string>> {
@@ -1301,7 +1300,7 @@ export def "customers-payment-methods list-customer-payment-methods" [
   --per-page: int # Set how many entities are returned per page. Paddle returns the maximum number of results if a number greater than the maximum is requested. Check `meta.pagination.per_page` in the response to see how many were returned.  Default: `50`; Maximum: `200`. (default: 50)
   --address-id: list # Return entities related to the specified address. Use a comma-separated list to specify multiple address IDs.
   --order-by: string # Order returned entities by the specified field and direction (`[ASC]` or `[DESC]`). For example, `?order_by=id[ASC]`.  Valid fields for ordering: `id`. (default: id[DESC])
-  --supports-checkout: string@bool-completer # Return entities that support being presented at checkout (`true`) or not (`false`).
+  --supports-checkout: oneof<nothing, bool> # Return entities that support being presented at checkout (`true`) or not (`false`).
 ]: nothing -> record<data: table<id: record, customer_id: record, address_id: record, type: record, card: any, paypal: any, underlying_details: any, south_korea_local_card: any, origin: record, saved_at: record, updated_at: record>, meta: record<request_id: string, pagination: record<per_page: int, next: string, has_more: bool, estimated_total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1380,7 +1379,7 @@ export def "prices list-prices" [
   --order-by: string # Order returned entities by the specified field and direction (`[ASC]` or `[DESC]`). For example, `?order_by=id[ASC]`.  Valid fields for ordering: `billing_cycle.frequency`, `billing_cycle.interval`, `id`, `product_id`, `quantity.maximum`, `quantity.minimum`, `status`, `tax_mode`, `unit_price.amount`, and `unit_price.currency_code`. (default: id[DESC])
   --product-id: list # Return entities related to the specified product. Use a comma-separated list to specify multiple product IDs.
   --status: list # Return entities that match the specified status. Use a comma-separated list to specify multiple status values. (default: [active])
-  --recurring: string@bool-completer # Determine whether returned entities are for recurring prices (`true`) or one-time prices (`false`).
+  --recurring: oneof<nothing, bool> # Determine whether returned entities are for recurring prices (`true`) or one-time prices (`false`).
   --type: string@type-completer # Return items that match the specified type.
 ]: nothing -> record<data: table<id: record, product_id: record, description: string, type: record, name: any, billing_cycle: any, trial_period: any, tax_mode: record, unit_price: record, unit_price_overrides: list, quantity: record, status: record, custom_data: any, import_meta: any, created_at: record, updated_at: record, product: record>, meta: record<request_id: string, pagination: record<per_page: int, next: string, has_more: bool, estimated_total: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2529,7 +2528,7 @@ export def "transactions-preview preview-transaction-create" [
   --customer-id: any # Paddle ID of the customer that this transaction preview is for, prefixed with `ctm_`.
   --currency-code: any # Supported three-letter ISO 4217 currency code.
   --discount-id: any # Paddle ID of the discount to apply to this transaction preview, prefixed with `dsc_`.
-  --ignore-trials: string@bool-completer # Whether trials should be ignored for transaction preview calculations.  By default, recurring items with trials are considered to have a zero charge when previewing. Set to `true` to disable this. (default: false)
+  --ignore-trials: oneof<nothing, bool> # Whether trials should be ignored for transaction preview calculations.  By default, recurring items with trials are considered to have a zero charge when previewing. Set to `true` to disable this. (default: false)
   --items: list # List of items to preview charging for. You can preview charging for items that you've added to your catalog by passing the Paddle ID of an existing price entity, or you can preview charging for non-catalog items by passing a price object.  Non-catalog items can be for existing products, or you can pass a product object as part of your price to preview charging for a non-catalog product.
   --address: any # Address for this transaction preview.
   --customer-ip-address: string # IP address for this transaction preview.

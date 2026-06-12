@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://analytics.adobe.io/api"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -164,17 +163,17 @@ export def "annotations createAnnotation-by-globalCompanyId" [
   --description: string
   --dateRange: string
   --color: string@color-completer
-  --applyToAllReports: string@bool-completer
+  --applyToAllReports: oneof<nothing, bool>
   --scope: record # shape: {metrics?: list, filters?: list}
   --createdDate: string # format: date-time
   --modifiedDate: string # format: date-time
   --modifiedById: string
   --tags: list
   --shares: list
-  --approved: string@bool-completer
-  --favorite: string@bool-completer
+  --approved: oneof<nothing, bool>
+  --favorite: oneof<nothing, bool>
   --usageSummary: record
-  --systemUserOwned: string@bool-completer
+  --systemUserOwned: oneof<nothing, bool>
   --owner: record # shape: {id: int, name?: string, login?: string}
   --companyId: int # format: int32
   --reportSuiteName: string
@@ -249,17 +248,17 @@ export def "annotations updateAnnotation-by-globalCompanyId-id" [
   --description: string
   --dateRange: string
   --color: string@color-completer
-  --applyToAllReports: string@bool-completer
+  --applyToAllReports: oneof<nothing, bool>
   --scope: record # shape: {metrics?: list, filters?: list}
   --createdDate: string # format: date-time
   --modifiedDate: string # format: date-time
   --modifiedById: string
   --tags: list
   --shares: list
-  --approved: string@bool-completer
-  --favorite: string@bool-completer
+  --approved: oneof<nothing, bool>
+  --favorite: oneof<nothing, bool>
   --usageSummary: record
-  --systemUserOwned: string@bool-completer
+  --systemUserOwned: oneof<nothing, bool>
   --owner: record # shape: {id: int, name?: string, login?: string}
   --companyId: int # format: int32
   --reportSuiteName: string
@@ -328,8 +327,8 @@ export def "calculatedmetrics findCalculatedMetrics" [
   --locale: string # Locale (default: en_US)
   --name: string # Filter list to only include calculated metrics that contains the Name
   --tagNames: string # Filter list to only include calculated metrics that contains one of the tags
-  --favorite: string@bool-completer # Filter list to only include calculated metrics that are favorites
-  --approved: string@bool-completer # Filter list to only include calculated metrics that are approved
+  --favorite: oneof<nothing, bool> # Filter list to only include calculated metrics that are favorites
+  --approved: oneof<nothing, bool> # Filter list to only include calculated metrics that are approved
   --limit: int # Number of results per page (default: 10)
   --page: int # Page number (base 0 - first page is "0") (default: 0)
   --sortDirection: string # Sort direction (ASC or DESC) (default: ASC)
@@ -469,7 +468,7 @@ export def "calculatedmetrics-validate validateCalculatedMetric" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --locale: string # Locale (default: en_US)
-  --migrating: string@bool-completer # Include migration functions in validation (default: false)
+  --migrating: oneof<nothing, bool> # Include migration functions in validation (default: false)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
   --name: string
@@ -690,7 +689,7 @@ export def "componentmetadata-shares modifyShares" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --locale: string # Locale (default: en_US)
-  --useCache: string@bool-completer # Use caching for faster requests (default: true)
+  --useCache: oneof<nothing, bool> # Use caching for faster requests (default: true)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
   --body: record
@@ -1105,7 +1104,7 @@ export def "dateranges get-by-globalCompanyId-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --expansion: list # Comma-delimited list of additional date range metadata fields to include on response.
-  --newDefinition: string@bool-completer # Use the new JSON def (default: false)
+  --newDefinition: oneof<nothing, bool> # Use the new JSON def (default: false)
   --locale: string # Locale (default: en_US)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
@@ -1136,7 +1135,7 @@ export def "dateranges put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --expansion: list # Comma-delimited list of additional date range metadata fields to include on response.
-  --newDefinition: string@bool-completer # Use the new JSON def (default: false)
+  --newDefinition: oneof<nothing, bool> # Use the new JSON def (default: false)
   --locale: string # Locale (default: en_US)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
@@ -1147,17 +1146,17 @@ export def "dateranges put" [
   --companyId: int # format: int32
   --owner: record
   --definition: record
-  --template: string@bool-completer
+  --template: oneof<nothing, bool>
   --createDate: string # format: date-time
   --disabledDate: string # format: date-time
   --alternateVariableNames: record # shape: {name?: string, baseName?: string, curatedName?: string}
-  --curatedItem: string@bool-completer
+  --curatedItem: oneof<nothing, bool>
   --imsOrgId: string
-  --systemUserOwned: string@bool-completer
+  --systemUserOwned: oneof<nothing, bool>
   --tags: list
   --shares: list
-  --approved: string@bool-completer
-  --favorite: string@bool-completer
+  --approved: oneof<nothing, bool>
+  --favorite: oneof<nothing, bool>
   --usageSummary: record
 ]: any -> record<id: string, name: string, description: string, modified: string, companyId: int, owner: record, definition: record, template: bool, createDate: string, disabledDate: string, alternateVariableNames: record<name: string, baseName: string, curatedName: string>, curatedItem: bool, imsOrgId: string, systemUserOwned: bool, tags: list<record>, shares: list<record>, approved: bool, favorite: bool, usageSummary: record> {
   let input = $in
@@ -1219,7 +1218,7 @@ export def "dateranges get-by-globalCompanyId" [
   --expansion: list # Comma-delimited list of additional date range metadata fields to include on response.
   --locale: string # Locale (default: en_US)
   --filterByIds: string # Filter list to only include date ranges in the specified list (comma-delimited list of IDs)
-  --newDefinition: string@bool-completer # Use the new JSON def (default: false)
+  --newDefinition: oneof<nothing, bool> # Use the new JSON def (default: false)
   --filterByModifiedAfter: string # Filter list to only include date ranges modified since this date (ISO8601 format)
   --curatedRsid: string # Include the curatedItem status for given Rsid
   --limit: int # Number of results per page (default: 10)
@@ -1252,7 +1251,7 @@ export def "dateranges post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --expansion: list # Comma-delimited list of additional date range metadata fields to include on response.
-  --newDefinition: string@bool-completer # Use the new JSON def (default: false)
+  --newDefinition: oneof<nothing, bool> # Use the new JSON def (default: false)
   --locale: string # Locale (default: en_US)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
@@ -1263,17 +1262,17 @@ export def "dateranges post" [
   --companyId: int # format: int32
   --owner: record
   --definition: record
-  --template: string@bool-completer
+  --template: oneof<nothing, bool>
   --createDate: string # format: date-time
   --disabledDate: string # format: date-time
   --alternateVariableNames: record # shape: {name?: string, baseName?: string, curatedName?: string}
-  --curatedItem: string@bool-completer
+  --curatedItem: oneof<nothing, bool>
   --imsOrgId: string
-  --systemUserOwned: string@bool-completer
+  --systemUserOwned: oneof<nothing, bool>
   --tags: list
   --shares: list
-  --approved: string@bool-completer
-  --favorite: string@bool-completer
+  --approved: oneof<nothing, bool>
+  --favorite: oneof<nothing, bool>
   --usageSummary: record
 ]: any -> record<id: string, name: string, description: string, modified: string, companyId: int, owner: record, definition: record, template: bool, createDate: string, disabledDate: string, alternateVariableNames: record<name: string, baseName: string, curatedName: string>, curatedItem: bool, imsOrgId: string, systemUserOwned: bool, tags: list<record>, shares: list<record>, approved: bool, favorite: bool, usageSummary: record> {
   let input = $in
@@ -1305,9 +1304,9 @@ export def "dimensions list" [
   --allow-errors(-e) # Return full response without error handling
   --rsid: string # A report suite ID
   --locale: string # Locale (default: en_US)
-  --segmentable: string@bool-completer # Only include dimensions that are valid within a segment.
-  --reportable: string@bool-completer # Only include dimensions that are valid within a report.
-  --classifiable: string@bool-completer # Only include classifiable dimensions. (default: false)
+  --segmentable: oneof<nothing, bool> # Only include dimensions that are valid within a segment.
+  --reportable: oneof<nothing, bool> # Only include dimensions that are valid within a report.
+  --classifiable: oneof<nothing, bool> # Only include classifiable dimensions. (default: false)
   --expansion: list@expansion-completer-1 # Add extra metadata to items (comma-delimited list)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
@@ -1369,7 +1368,7 @@ export def "metrics list" [
   --allow-errors(-e) # Return full response without error handling
   --rsid: string # ID of desired report suite
   --locale: string # Locale that system named metrics should be returned in (default: en_US)
-  --segmentable: string@bool-completer # Filter the metrics by if they are valid in a segment. (default: false)
+  --segmentable: oneof<nothing, bool> # Filter the metrics by if they are valid in a segment. (default: false)
   --expansion: list@expansion-completer-2 # Add extra metadata to items (comma-delimited list)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".
   --x-api-key: string # The API key copied from your AA API client integration. For more information on how to obtain this value, see [Getting started with the Analytics API](https://developer.adobe.com/analytics-apis/docs/2.0/guides/).
@@ -1470,8 +1469,8 @@ export def "projects updateProject" [
   --description: string
   --rsid: string # The report suite id for which the component was created/updated
   --migratedIds: list
-  --companyTemplate: string@bool-completer
-  --template: string@bool-completer
+  --companyTemplate: oneof<nothing, bool>
+  --template: oneof<nothing, bool>
   --type: string@type-completer-1
   --definition: record # shape: {valueNode?: bool, floatingPointNumber?: bool, containerNode?: bool, missingNode?: bool, pojo?: bool, integralNumber?: bool, short?: bool, int?: bool, long?: bool, double?: bool, bigDecimal?: bool, bigInteger?: bool, textual?: bool, binary?: bool, float?: bool, nodeType?: "ARRAY"|"BINARY"|"BOOLEAN"|"MISSING"|"NULL"|"NUMBER"|"OBJECT"|"POJO"|"STRING", boolean?: bool, number?: bool, object?: bool, array?: bool, null?: bool}
   --externalReferences: record
@@ -1479,8 +1478,8 @@ export def "projects updateProject" [
   --versionNotes: string
   --tags: list
   --shares: list
-  --approved: string@bool-completer
-  --favorite: string@bool-completer
+  --approved: oneof<nothing, bool>
+  --favorite: oneof<nothing, bool>
   --usageSummary: record
   --complexity: record
   --owner: record # shape: {id: int, name?: string, login?: string}
@@ -1553,8 +1552,8 @@ export def "projects-validate validateProject" [
   --description: string
   --rsid: string # The report suite id for which the component was created/updated
   --migratedIds: list
-  --companyTemplate: string@bool-completer
-  --template: string@bool-completer
+  --companyTemplate: oneof<nothing, bool>
+  --template: oneof<nothing, bool>
   --type: string@type-completer-1
   --definition: record # shape: {valueNode?: bool, floatingPointNumber?: bool, containerNode?: bool, missingNode?: bool, pojo?: bool, integralNumber?: bool, short?: bool, int?: bool, long?: bool, double?: bool, bigDecimal?: bool, bigInteger?: bool, textual?: bool, binary?: bool, float?: bool, nodeType?: "ARRAY"|"BINARY"|"BOOLEAN"|"MISSING"|"NULL"|"NUMBER"|"OBJECT"|"POJO"|"STRING", boolean?: bool, number?: bool, object?: bool, array?: bool, null?: bool}
   --externalReferences: record
@@ -1562,8 +1561,8 @@ export def "projects-validate validateProject" [
   --versionNotes: string
   --tags: list
   --shares: list
-  --approved: string@bool-completer
-  --favorite: string@bool-completer
+  --approved: oneof<nothing, bool>
+  --favorite: oneof<nothing, bool>
   --usageSummary: record
   --complexity: record
   --owner: record # shape: {id: int, name?: string, login?: string}
@@ -1643,8 +1642,8 @@ export def "projects createProject" [
   --description: string
   --rsid: string # The report suite id for which the component was created/updated
   --migratedIds: list
-  --companyTemplate: string@bool-completer
-  --template: string@bool-completer
+  --companyTemplate: oneof<nothing, bool>
+  --template: oneof<nothing, bool>
   --type: string@type-completer-1
   --definition: record # shape: {valueNode?: bool, floatingPointNumber?: bool, containerNode?: bool, missingNode?: bool, pojo?: bool, integralNumber?: bool, short?: bool, int?: bool, long?: bool, double?: bool, bigDecimal?: bool, bigInteger?: bool, textual?: bool, binary?: bool, float?: bool, nodeType?: "ARRAY"|"BINARY"|"BOOLEAN"|"MISSING"|"NULL"|"NUMBER"|"OBJECT"|"POJO"|"STRING", boolean?: bool, number?: bool, object?: bool, array?: bool, null?: bool}
   --externalReferences: record
@@ -1652,8 +1651,8 @@ export def "projects createProject" [
   --versionNotes: string
   --tags: list
   --shares: list
-  --approved: string@bool-completer
-  --favorite: string@bool-completer
+  --approved: oneof<nothing, bool>
+  --favorite: oneof<nothing, bool>
   --usageSummary: record
   --complexity: record
   --owner: record # shape: {id: int, name?: string, login?: string}
@@ -1791,7 +1790,7 @@ export def "reports-top-items runTopItemReport" [
   --searchOr: string # Search terms that will be OR-ed together. Space delimited.
   --searchNot: string # Search terms that will be treated as NOT including. Space delimited.
   --searchPhrase: string # A full search phrase that will be searched for.
-  --lookupNoneValues: string@bool-completer # Controls None values to be included (default: true)
+  --lookupNoneValues: oneof<nothing, bool> # Controls None values to be included (default: true)
   --limit: int # Number of results per page (default: 10)
   --page: int # Page number (base 0 - first page is "0") (default: 0)
   --Authorization: string # The access token copied from your AA API client integration, prefixed with "Bearer ".

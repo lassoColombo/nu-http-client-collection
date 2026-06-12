@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://vtex.local" "https://{accountName}.myvtex.com/reviews-and-ratings/api"] }
 def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 
@@ -223,7 +222,7 @@ export def "review EditReview" [
   --shopperId: string # Shopper email.
   text: string # Review's text.
   title: string # Review's title.
-  --verifiedPurchaser: string@bool-completer # If the reviewer is a verified purchaser (`true`) or not (`false`).
+  --verifiedPurchaser: oneof<nothing, bool> # If the reviewer is a verified purchaser (`true`) or not (`false`).
 ]: any -> record<approved: bool, id: string, locale: string, location: string, pastReviews: string, productId: string, rating: float, reviewDateTime: string, reviewerName: string, searchDate: string, shopperId: string, sku: string, text: string, title: string, verifiedPurchaser: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
@@ -282,7 +281,7 @@ export def "reviews GetalistofReviews" [
   --qp-from: string # Zero base starting record number, `0` is the default value. (e.g. 0)
   --qp-to: string # Zero base ending record number, `3` is the default value. (e.g. 3)
   --order-by: string # Case-sensitive fieldName to order records (optionally add `:asc` or `:desc`). (e.g. :asc)
-  --status: string@bool-completer # Status of the review, approved (`true`) or not (`false`). (e.g. true)
+  --status: oneof<nothing, bool> # Status of the review, approved (`true`) or not (`false`). (e.g. true)
   --product-id: string # Filter the reviews by product ID. (e.g. 1)
   --Content-Type: string # Describes the type of the content being sent.
   --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.

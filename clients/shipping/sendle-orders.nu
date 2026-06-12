@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.sendle.com/api" "https://sandbox.sendle.com/api"] }
 def auth-scheme-completer [] { ["basic"] }
 
@@ -126,7 +125,7 @@ export def "orders createOrder" [
   --pickup-date: string # format: date
   --packaging-type: string@packaging-type-completer
   --metadata: record
-  --hide-pickup-address: string@bool-completer
+  --hide-pickup-address: oneof<nothing, bool>
   --cover: record # shape: {total_cover?: record, price?: record}
   --parcel-contents: list # item shape: {description: string, value: string, quantity?: int, country_of_origin: string, hs_code: string, manufacturer_id?: string}
   --contents-type: string@contents-type-completer
